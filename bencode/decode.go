@@ -16,17 +16,14 @@ type decoder struct {
 }
 
 func (d *decoder) decode(v interface{}) (err error) {
-	var _ runtime.Error
-	/*
-		defer func() {
-			if e := recover(); e != nil {
-				if _, ok := e.(runtime.Error); ok {
-					panic(e)
-				}
-				err = e.(error)
+	defer func() {
+		if e := recover(); e != nil {
+			if _, ok := e.(runtime.Error); ok {
+				panic(e)
 			}
-		}()
-	*/
+			err = e.(error)
+		}
+	}()
 
 	pv := reflect.ValueOf(v)
 	if pv.Kind() != reflect.Ptr || pv.IsNil() {

@@ -16,6 +16,8 @@ var random_decode_tests = []random_decode_test{
 	{"d1:ai5e1:b5:helloe", map[string]interface{}{"a": int64(5), "b": "hello"}},
 	{"li5ei10ei15ei20e7:bencodee",
 		[]interface{}{int64(5), int64(10), int64(15), int64(20), "bencode"}},
+	{"ldedee", []interface{}{map[string]interface{}{}, map[string]interface{}{}}},
+	{"le", []interface{}{}},
 }
 
 func TestRandomDecode(t *testing.T) {

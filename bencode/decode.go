@@ -484,5 +484,8 @@ func (d *decoder) parse_list_interface() interface{} {
 
 		list = append(list, valuei)
 	}
+	if list == nil {
+		list = make([]interface{}, 0, 0)
+	}
 	return list
 }

@@ -4,6 +4,11 @@ import "bytes"
 import "bufio"
 import "reflect"
 import "strconv"
+import "io"
+
+//----------------------------------------------------------------------------
+// Errors
+//----------------------------------------------------------------------------
 
 // In case if marshaler cannot encode a type in bencode, it will return this
 // error. Typical example of such type is float32/float64 which has no bencode
@@ -67,6 +72,24 @@ func (e *SyntaxError) Error() string {
 		"): " + e.what
 }
 
+//----------------------------------------------------------------------------
+// Interfaces
+//----------------------------------------------------------------------------
+
+// unused for now (TODO)
+type Marshaler interface {
+	MarshalBencode() ([]byte, error)
+}
+
+// unused for now (TODO)
+type Unmarshaler interface {
+	UnmarshalBencode([]byte) error
+}
+
+//----------------------------------------------------------------------------
+// Stateless interface
+//----------------------------------------------------------------------------
+
 func Marshal(v interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	e := encoder{Writer: bufio.NewWriter(&buf)}
@@ -78,23 +101,39 @@ func Marshal(v interface{}) ([]byte, error) {
 	return buf.Bytes(), err
 }
 
-type Marshaler interface {
-	MarshalBencode() ([]byte, error)
-}
-
 func Unmarshal(data []byte, v interface{}) error {
 	e := decoder{Reader: bufio.NewReader(bytes.NewBuffer(data))}
 	return e.decode(v)
 }
 
-/*
-func Unmarshal(data []byte, v interface{}) error
+//----------------------------------------------------------------------------
+// Stateful interface
+//----------------------------------------------------------------------------
 
-type Decoder int
-func NewDecoder(r io.Reader) *Decoder
-func (dec *Decoder) Decode(v interface{}) error
+type Decoder struct {
+	d decoder
+}
 
-type Encoder int
-func NewEncoder(w io.Writer) *Encoder
-func (enc *Encoder) Encode(v interface{}) error
-*/
+func NewDecoder(r io.Reader) *Decoder {
+	return &Decoder{decoder{Reader: bufio.NewReader(r)}}
+}
+
+func (d *Decoder) Decode(v interface{}) error {
+	return d.d.decode(v)
+}
+
+type Encoder struct {
+	e encoder
+}
+
+func NewEncoder(w io.Writer) *Encoder {
+	return &Encoder{encoder{Writer: bufio.NewWriter(w)}}
+}
+
+func (e *Encoder) Encode(v interface{}) error {
+	err := e.e.encode(v)
+	if err != nil {
+		return err
+	}
+	return e.e.Flush()
+}

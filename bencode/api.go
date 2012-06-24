@@ -72,6 +72,15 @@ func (e *SyntaxError) Error() string {
 		"): " + e.what
 }
 
+type MarshalerError struct {
+	Type reflect.Type
+	Err  error
+}
+
+func (e *MarshalerError) Error() string {
+	return "bencode: error calling MarshalBencode for type " + e.Type.String() + ": " + e.Err.Error()
+}
+
 //----------------------------------------------------------------------------
 // Interfaces
 //----------------------------------------------------------------------------
@@ -97,8 +106,7 @@ func Marshal(v interface{}) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = e.Flush()
-	return buf.Bytes(), err
+	return buf.Bytes(), nil
 }
 
 func Unmarshal(data []byte, v interface{}) error {
@@ -135,5 +143,5 @@ func (e *Encoder) Encode(v interface{}) error {
 	if err != nil {
 		return err
 	}
-	return e.e.Flush()
+	return nil
 }

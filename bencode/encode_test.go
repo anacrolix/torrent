@@ -2,6 +2,7 @@ package bencode
 
 import "testing"
 import "bytes"
+import "fmt"
 
 type random_encode_test struct {
 	value    interface{}
@@ -12,6 +13,19 @@ type random_struct struct {
 	ABC         int    `bencode:"abc"`
 	SkipThisOne string `bencode:"-"`
 	CDE         string
+}
+
+type dummy struct {
+	a, b, c int
+}
+
+func (d *dummy) MarshalBencode() ([]byte, error) {
+	var b bytes.Buffer
+	_, err := fmt.Fprintf(&b, "i%dei%dei%de", d.a + 1, d.b + 1, d.c + 1)
+	if err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
 }
 
 var random_encode_tests = []random_encode_test{
@@ -37,6 +51,7 @@ var random_encode_tests = []random_encode_test{
 	{"", "0:"},
 	{[]int{}, "le"},
 	{map[string]int{}, "de"},
+	{&dummy{1, 2, 3}, "i2ei3ei4e"},
 }
 
 func TestRandomEncode(t *testing.T) {

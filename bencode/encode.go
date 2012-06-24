@@ -98,6 +98,7 @@ func (e *encoder) reflect_value(v reflect.Value) {
 			panic(&MarshalerError{v.Type(), err})
 		}
 		e.write(data)
+		return
 	}
 
 	switch v.Kind() {

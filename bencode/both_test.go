@@ -3,7 +3,6 @@ package bencode
 import "testing"
 import "bytes"
 import "io/ioutil"
-import "time"
 
 func load_file(name string, t *testing.T) []byte {
 	data, err := ioutil.ReadFile(name)
@@ -13,8 +12,8 @@ func load_file(name string, t *testing.T) []byte {
 	return data
 }
 
-func TestBothInterface(t *testing.T) {
-	data1 := load_file("_testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent", t)
+func test_file_interface(t *testing.T, filename string) {
+	data1 := load_file(filename, t)
 	var iface interface{}
 
 	err := Unmarshal(data1, &iface)
@@ -30,6 +29,12 @@ func TestBothInterface(t *testing.T) {
 	if !bytes.Equal(data1, data2) {
 		t.Fatalf("equality expected\n")
 	}
+
+}
+
+func TestBothInterface(t *testing.T) {
+	test_file_interface(t, "_testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent")
+	test_file_interface(t, "_testdata/continuum.torrent")
 }
 
 type torrent_file struct {
@@ -50,8 +55,8 @@ type torrent_file struct {
 	URLList      interface{} `bencode:"url-list,omitempty"`
 }
 
-func TestBoth(t *testing.T) {
-	data1 := load_file("_testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent", t)
+func test_file(t *testing.T, filename string) {
+	data1 := load_file(filename, t)
 	var f torrent_file
 
 	err := Unmarshal(data1, &f)
@@ -59,19 +64,17 @@ func TestBoth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Logf("Name: %s\n", f.Info.Name)
-	t.Logf("Length: %v bytes\n", f.Info.Length)
-	t.Logf("Announce: %s\n", f.Announce)
-	t.Logf("CreationDate: %s\n", time.Unix(f.CreationDate, 0).String())
-	t.Logf("CreatedBy: %s\n", f.CreatedBy)
-	t.Logf("Comment: %s\n", f.Comment)
-
 	data2, err := Marshal(&f)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if !bytes.Equal(data1, data2) {
+		println(string(data2))
 		t.Fatalf("equality expected")
 	}
+}
+
+func TestBoth(t *testing.T) {
+	test_file(t, "_testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent")
 }

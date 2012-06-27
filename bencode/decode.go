@@ -319,20 +319,105 @@ func (d *decoder) parse_list(v reflect.Value) {
 	}
 }
 
+func (d *decoder) read_one_value() bool {
+	b, err := d.ReadByte()
+	if err != nil {
+		panic(err)
+	}
+	if b == 'e' {
+		d.UnreadByte()
+		return false
+	} else {
+		d.offset++
+		d.buf.WriteByte(b)
+	}
+
+	switch b {
+	case 'd', 'l':
+		// read until there is nothing to read
+		for d.read_one_value() {}
+		// consume 'e' as well
+		b = d.read_byte()
+		d.buf.WriteByte(b)
+	case 'i':
+		d.read_until('e')
+		d.buf.WriteString("e")
+	default:
+		if b >= '0' && b <= '9' {
+			start := d.buf.Len() - 1
+			d.read_until(':')
+			length, err := strconv.ParseInt(d.buf.String()[start:], 10, 64)
+			check_for_int_parse_error(err, d.offset - 1)
+
+			d.buf.WriteString(":")
+			n, err := io.CopyN(&d.buf, d, length)
+			d.offset += n
+			if err != nil {
+				check_for_unexpected_eof(err, d.offset)
+				panic(&SyntaxError{
+					Offset: d.offset,
+					what:   "unexpected I/O error: " + err.Error(),
+				})
+			}
+			break
+		}
+
+		// unknown value
+		panic(&SyntaxError{
+			Offset: d.offset - 1,
+			what:   "unknown value type (invalid bencode?)",
+		})
+	}
+
+	return true
+
+}
+
+func (d *decoder) parse_unmarshaler(v reflect.Value) bool {
+	m, ok := v.Interface().(Unmarshaler)
+	if !ok {
+		// T doesn't work, try *T
+		if v.Kind() != reflect.Ptr && v.CanAddr() {
+			m, ok = v.Addr().Interface().(Unmarshaler)
+			if ok {
+				v = v.Addr()
+			}
+		}
+	}
+	if ok && (v.Kind() != reflect.Ptr || !v.IsNil()) {
+		if d.read_one_value() {
+			err := m.UnmarshalBencode(d.buf.Bytes())
+			d.buf.Reset()
+			if err != nil {
+				panic(err)
+			}
+			return true
+		}
+		d.buf.Reset()
+	}
+
+	return false
+}
+
 // returns true if there was a value and it's now stored in 'v', otherwise there
 // was an end symbol ("e") and no value was stored
 func (d *decoder) parse_value(v reflect.Value) bool {
-	if pv := v; pv.Kind() == reflect.Ptr {
+	// we support one level of indirection at the moment
+	if v.Kind() == reflect.Ptr {
 		// if the pointer is nil, allocate a new element of the type it
 		// points to
-		if pv.IsNil() {
-			pv.Set(reflect.New(pv.Type().Elem()))
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
 		}
-		v = pv.Elem()
+		v = v.Elem()
 	}
 
-	// common case
-	if v.Kind() == reflect.Interface {
+	if d.parse_unmarshaler(v) {
+		return true
+	}
+
+	// common case: interface{}
+	if v.Kind() == reflect.Interface && v.NumMethod() == 0 {
 		iface, _ := d.parse_value_interface()
 		v.Set(reflect.ValueOf(iface))
 		return true

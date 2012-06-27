@@ -78,13 +78,12 @@ func (e *encoder) reflect_byte_slice(s []byte) {
 	e.write(s)
 }
 
-func (e *encoder) reflect_value(v reflect.Value) {
-	if !v.IsValid() {
-		return
-	}
-
+// returns true if the value implements Marshaler interface and marshaling was
+// done successfully
+func (e *encoder) reflect_marshaler(v reflect.Value) bool {
 	m, ok := v.Interface().(Marshaler)
 	if !ok {
+		// T doesn't work, try *T
 		if v.Kind() != reflect.Ptr && v.CanAddr() {
 			m, ok = v.Addr().Interface().(Marshaler)
 			if ok {
@@ -98,6 +97,18 @@ func (e *encoder) reflect_value(v reflect.Value) {
 			panic(&MarshalerError{v.Type(), err})
 		}
 		e.write(data)
+		return true
+	}
+
+	return false
+}
+
+func (e *encoder) reflect_value(v reflect.Value) {
+	if !v.IsValid() {
+		return
+	}
+
+	if e.reflect_marshaler(v) {
 		return
 	}
 

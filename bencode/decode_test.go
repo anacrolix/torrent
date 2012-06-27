@@ -34,3 +34,44 @@ func TestRandomDecode(t *testing.T) {
 		}
 	}
 }
+
+func check_error(t *testing.T, err error) {
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func assert_equal(t *testing.T, x, y interface{}) {
+	if !reflect.DeepEqual(x, y) {
+		t.Errorf("got: %v (%T), expected: %v (%T)\n", x, x, y, y)
+	}
+}
+
+type unmarshaler_int struct {
+	x int
+}
+
+func (this *unmarshaler_int) UnmarshalBencode(data []byte) error {
+	return Unmarshal(data, &this.x)
+}
+
+type unmarshaler_string struct {
+	x string
+}
+
+func (this *unmarshaler_string) UnmarshalBencode(data []byte) error {
+	this.x = string(data)
+	return nil
+}
+
+func TestUnmarshalerBencode(t *testing.T) {
+	var i unmarshaler_int
+	var ss []unmarshaler_string
+	check_error(t, Unmarshal([]byte("i71e"), &i))
+	assert_equal(t, i.x, 71)
+	check_error(t, Unmarshal([]byte("l5:hello5:fruit3:waye"), &ss))
+	assert_equal(t, ss[0].x, "5:hello")
+	assert_equal(t, ss[1].x, "5:fruit")
+	assert_equal(t, ss[2].x, "3:way")
+
+}

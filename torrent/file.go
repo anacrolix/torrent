@@ -31,11 +31,8 @@ type FileInfo struct {
 //----------------------------------------------------------------------------
 
 type File struct {
-	// this will be returned as SingleFile or MultiFile, see Info method
-	name   string
-	length int64
-	files  []FileInfo
-
+	// the type is SingleFile or MultiFile
+	Info        interface{}
 	InfoHash    []byte
 	PieceLength int64
 	Pieces      []byte
@@ -49,16 +46,7 @@ type File struct {
 	URLList      []string
 }
 
-// the real type of this return value is SingleFile or MultiFile and it must be
-// checked by an API user
-func (f *File) Info() interface{} {
-	if len(f.files) > 0 {
-		return MultiFile{Name: f.name, Files: f.files}
-	}
-	return SingleFile{Name: f.name, Length: f.length}
-}
-
-func Open(r io.Reader) (*File, error) {
+func Load(r io.Reader) (*File, error) {
 	var file File
 	var data torrent_data
 	d := bencode.NewDecoder(r)
@@ -68,15 +56,22 @@ func Open(r io.Reader) (*File, error) {
 	}
 
 	// post-parse processing
-	file.name = data.Info.Name
-	file.length = data.Info.Length
 	if len(data.Info.Files) > 0 {
-		file.files = make([]FileInfo, len(data.Info.Files))
+		files := make([]FileInfo, len(data.Info.Files))
 		for i, fi := range data.Info.Files {
-			file.files[i] = FileInfo{
+			files[i] = FileInfo{
 				Length: fi.Length,
 				Path:   fi.Path,
 			}
+		}
+		file.Info = MultiFile{
+			Name:  data.Info.Name,
+			Files: files,
+		}
+	} else {
+		file.Info = SingleFile{
+			Name:   data.Info.Name,
+			Length: data.Info.Length,
 		}
 	}
 	file.InfoHash = data.Info.Hash
@@ -114,13 +109,13 @@ func Open(r io.Reader) (*File, error) {
 	return &file, nil
 }
 
-func OpenFromFile(filename string) (*File, error) {
+func LoadFromFile(filename string) (*File, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return Open(f)
+	return Load(f)
 }
 
 //----------------------------------------------------------------------------

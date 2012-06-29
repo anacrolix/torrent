@@ -4,12 +4,12 @@ import "testing"
 import "path"
 
 func test_file(t *testing.T, filename string) {
-	f, err := OpenFromFile(filename)
+	f, err := LoadFromFile(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	switch info := f.Info().(type) {
+	switch info := f.Info.(type) {
 	case SingleFile:
 		t.Logf("Single file: %s (length: %d)\n", info.Name, info.Length)
 	case MultiFile:

@@ -11,6 +11,8 @@ import (
 
 //----------------------------------------------------------------------------
 
+// SingleFile represents the specific data of the single file torrent file. That
+// includes length of the file and its recommended name.
 type SingleFile struct {
 	Name   string
 	Length int64
@@ -18,11 +20,15 @@ type SingleFile struct {
 
 //----------------------------------------------------------------------------
 
+// MultiFile represents the specific data of the multiple files torrent
+// file. That includes Name of the directory which will contain all the files
+// and the files information.
 type MultiFile struct {
 	Name  string
 	Files []FileInfo
 }
 
+// Information of a single file in multiple files torrent file.
 type FileInfo struct {
 	Length int64
 	Path   []string
@@ -30,8 +36,11 @@ type FileInfo struct {
 
 //----------------------------------------------------------------------------
 
+// File is the type you should use when reading torrent files. See Load and
+// LoadFromFile functions. All the fields are intended to be read-only. The
+// "Info" field has SingleFile or MultiFile type, use the type switch or type
+// assertion to determine the exact type.
 type File struct {
-	// the type is SingleFile or MultiFile
 	Info        interface{}
 	InfoHash    []byte
 	PieceLength int64
@@ -46,6 +55,7 @@ type File struct {
 	URLList      []string
 }
 
+// Load a File from an io.Reader. Returns a non-nil error in case of failure.
 func Load(r io.Reader) (*File, error) {
 	var file File
 	var data torrent_data
@@ -109,6 +119,7 @@ func Load(r io.Reader) (*File, error) {
 	return &file, nil
 }
 
+// Convenience function for loading a torrent.File from a file.
 func LoadFromFile(filename string) (*File, error) {
 	f, err := os.Open(filename)
 	if err != nil {

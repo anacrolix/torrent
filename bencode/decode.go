@@ -389,7 +389,7 @@ func (d *decoder) parse_unmarshaler(v reflect.Value) bool {
 			err := m.UnmarshalBencode(d.buf.Bytes())
 			d.buf.Reset()
 			if err != nil {
-				panic(err)
+				panic(&UnmarshalerError{v.Type(), err})
 			}
 			return true
 		}

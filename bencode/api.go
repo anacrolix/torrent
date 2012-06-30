@@ -10,9 +10,8 @@ import "io"
 // Errors
 //----------------------------------------------------------------------------
 
-// In case if marshaler cannot encode a type in bencode, it will return this
-// error. Typical example of such type is float32/float64 which has no bencode
-// representation
+// In case if marshaler cannot encode a type, it will return this error. Typical
+// example of such type is float32/float64 which has no bencode representation.
 type MarshalTypeError struct {
 	Type reflect.Type
 }
@@ -37,8 +36,7 @@ func (e *UnmarshalInvalidArgError) Error() string {
 	return "bencode: Unmarshal(nil " + e.Type.String() + ")"
 }
 
-// Unmarshaler spotted a value that was not appropriate for a given specific Go
-// value
+// Unmarshaler spotted a value that was not appropriate for a given Go value.
 type UnmarshalTypeError struct {
 	Value string
 	Type  reflect.Type
@@ -61,6 +59,7 @@ func (e *UnmarshalFieldError) Error() string {
 		e.Field.Name + "\" in type: " + e.Type.String()
 }
 
+// Malformed bencode input, unmarshaler failed to parse it.
 type SyntaxError struct {
 	Offset int64  // location of the error
 	what   string // error description
@@ -72,6 +71,8 @@ func (e *SyntaxError) Error() string {
 		"): " + e.what
 }
 
+// A non-nil error was returned after calling MarshalBencode on a type which
+// implements the Marshaler interface.
 type MarshalerError struct {
 	Type reflect.Type
 	Err  error
@@ -81,16 +82,29 @@ func (e *MarshalerError) Error() string {
 	return "bencode: error calling MarshalBencode for type " + e.Type.String() + ": " + e.Err.Error()
 }
 
+// A non-nil error was returned after calling UnmarshalBencode on a type which
+// implements the Unmarshaler interface.
+type UnmarshalerError struct {
+	Type reflect.Type
+	Err error
+}
+
+func (e *UnmarshalerError) Error() string {
+	return "bencode: error calling UnmarshalBencode for type " + e.Type.String() + ": " + e.Err.Error()
+}
+
 //----------------------------------------------------------------------------
 // Interfaces
 //----------------------------------------------------------------------------
 
-// unused for now (TODO)
+// Any type which implements this interface, will be marshaled using the
+// specified method.
 type Marshaler interface {
 	MarshalBencode() ([]byte, error)
 }
 
-// unused for now (TODO)
+// Any type which implements this interface, will be unmarshaled using the
+// specified method.
 type Unmarshaler interface {
 	UnmarshalBencode([]byte) error
 }
@@ -99,6 +113,8 @@ type Unmarshaler interface {
 // Stateless interface
 //----------------------------------------------------------------------------
 
+// Marshal the value 'v' to the bencode form, return the result as []byte and an
+// error if any.
 func Marshal(v interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	e := encoder{Writer: bufio.NewWriter(&buf)}
@@ -109,6 +125,8 @@ func Marshal(v interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Unmarshal the bencode value in the 'data' to a value pointed by the 'v'
+// pointer, return a non-nil error if any.
 func Unmarshal(data []byte, v interface{}) error {
 	e := decoder{Reader: bufio.NewReader(bytes.NewBuffer(data))}
 	return e.decode(v)

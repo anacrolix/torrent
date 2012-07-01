@@ -11,8 +11,8 @@ import (
 
 //----------------------------------------------------------------------------
 
-// SingleFile represents the specific data of the single file torrent file. That
-// includes length of the file and its recommended name.
+// SingleFile represents the specific data of the single file torrent
+// metainfo. That includes length of the file and its recommended name.
 type SingleFile struct {
 	Name   string
 	Length int64
@@ -21,14 +21,14 @@ type SingleFile struct {
 //----------------------------------------------------------------------------
 
 // MultiFile represents the specific data of the multiple files torrent
-// file. That includes Name of the directory which will contain all the files
-// and the files information.
+// metainfo. That includes the name of the directory which will contain all the
+// files and the files information.
 type MultiFile struct {
 	Name  string
 	Files []FileInfo
 }
 
-// Information of a single file in multiple files torrent file.
+// Information of a single file in multiple files torrent metainfo.
 type FileInfo struct {
 	Length int64
 	Path   []string
@@ -36,11 +36,11 @@ type FileInfo struct {
 
 //----------------------------------------------------------------------------
 
-// File is the type you should use when reading torrent files. See Load and
+// MetaInfo is the type you should use when reading torrent files. See Load and
 // LoadFromFile functions. All the fields are intended to be read-only. The
 // "Info" field has SingleFile or MultiFile type, use the type switch or type
 // assertion to determine the exact type.
-type File struct {
+type MetaInfo struct {
 	Info        interface{}
 	InfoHash    []byte
 	PieceLength int64
@@ -55,9 +55,10 @@ type File struct {
 	URLList      []string
 }
 
-// Load a File from an io.Reader. Returns a non-nil error in case of failure.
-func Load(r io.Reader) (*File, error) {
-	var file File
+// Load a MetaInfo from an io.Reader. Returns a non-nil error in case of
+// failure.
+func Load(r io.Reader) (*MetaInfo, error) {
+	var mi MetaInfo
 	var data torrent_data
 	d := bencode.NewDecoder(r)
 	err := d.Decode(&data)
@@ -74,34 +75,34 @@ func Load(r io.Reader) (*File, error) {
 				Path:   fi.Path,
 			}
 		}
-		file.Info = MultiFile{
+		mi.Info = MultiFile{
 			Name:  data.Info.Name,
 			Files: files,
 		}
 	} else {
-		file.Info = SingleFile{
+		mi.Info = SingleFile{
 			Name:   data.Info.Name,
 			Length: data.Info.Length,
 		}
 	}
-	file.InfoHash = data.Info.Hash
-	file.PieceLength = data.Info.PieceLength
-	file.Pieces = data.Info.Pieces
-	file.Private = data.Info.Private
+	mi.InfoHash = data.Info.Hash
+	mi.PieceLength = data.Info.PieceLength
+	mi.Pieces = data.Info.Pieces
+	mi.Private = data.Info.Private
 
 	if len(data.AnnounceList) > 0 {
-		file.AnnounceList = data.AnnounceList
+		mi.AnnounceList = data.AnnounceList
 	} else {
-		file.AnnounceList = [][]string{[]string{data.Announce}}
+		mi.AnnounceList = [][]string{[]string{data.Announce}}
 	}
-	file.CreationDate = time.Unix(data.CreationDate, 0)
-	file.Comment = data.Comment
-	file.CreatedBy = data.CreatedBy
-	file.Encoding = data.Encoding
+	mi.CreationDate = time.Unix(data.CreationDate, 0)
+	mi.Comment = data.Comment
+	mi.CreatedBy = data.CreatedBy
+	mi.Encoding = data.Encoding
 	if data.URLList != nil {
 		switch v := data.URLList.(type) {
 		case string:
-			file.URLList = []string{v}
+			mi.URLList = []string{v}
 		case []interface{}:
 			var ok bool
 			ss := make([]string, len(v))
@@ -111,16 +112,16 @@ func Load(r io.Reader) (*File, error) {
 					return nil, errors.New("bad url-list data type")
 				}
 			}
-			file.URLList = ss
+			mi.URLList = ss
 		default:
 			return nil, errors.New("bad url-list data type")
 		}
 	}
-	return &file, nil
+	return &mi, nil
 }
 
-// Convenience function for loading a torrent.File from a file.
-func LoadFromFile(filename string) (*File, error) {
+// Convenience function for loading a MetaInfo from a file.
+func LoadFromFile(filename string) (*MetaInfo, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err

@@ -4,12 +4,12 @@ import "testing"
 import "path"
 
 func test_file(t *testing.T, filename string) {
-	f, err := LoadFromFile(filename)
+	mi, err := LoadFromFile(filename)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	switch info := f.Info.(type) {
+	switch info := mi.Info.(type) {
 	case SingleFile:
 		t.Logf("Single file: %s (length: %d)\n", info.Name, info.Length)
 	case MultiFile:
@@ -19,12 +19,12 @@ func test_file(t *testing.T, filename string) {
 		}
 	}
 
-	for _, group := range f.AnnounceList {
+	for _, group := range mi.AnnounceList {
 		for _, tracker := range group {
 			t.Logf("Tracker: %s\n", tracker)
 		}
 	}
-	for _, url := range f.URLList {
+	for _, url := range mi.URLList {
 		t.Logf("URL: %s\n", url)
 	}
 

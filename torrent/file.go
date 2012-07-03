@@ -137,7 +137,6 @@ func LoadFromFile(filename string) (*MetaInfo, error) {
 type torrent_info_file struct {
 	Path   []string `bencode:"path"`
 	Length int64    `bencode:"length"`
-	MD5Sum []byte   `bencode:"md5sum,omitempty"`
 }
 
 type torrent_info struct {
@@ -145,7 +144,6 @@ type torrent_info struct {
 	Pieces      []byte              `bencode:"pieces"`
 	Name        string              `bencode:"name"`
 	Length      int64               `bencode:"length,omitempty"`
-	MD5Sum      []byte              `bencode:"md5sum,omitempty"`
 	Private     bool                `bencode:"private,omitempty"`
 	Files       []torrent_info_file `bencode:"files,omitempty"`
 }

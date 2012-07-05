@@ -118,6 +118,12 @@ func (b *Builder) Build(w io.Writer, nworkers int) (<-chan error, <-chan Builder
 	status := make(chan BuilderStatus)
 
 	go func() {
+		err := b.check_parameters()
+		if err != nil {
+			completion <- err
+			return
+		}
+
 		b.set_defaults()
 		err := b.prepare_files()
 		if err != nil {
@@ -380,10 +386,6 @@ func (s file_slice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 // 3. In case if the 'b.name' was empty, assigns an automatic value to it.
 // 4. Calculates the total size of all the files 'b.files_size'
 func (b *Builder) prepare_files() error {
-	if len(b.filesmap) == 0 {
-		return errors.New("no files were queued")
-	}
-
 	const non_regular = os.ModeDir | os.ModeSymlink |
 		os.ModeDevice | os.ModeNamedPipe | os.ModeSocket
 
@@ -493,4 +495,42 @@ func (b *Builder) write_torrent(w io.Writer) error {
 
 	e := bencode.NewEncoder(w)
 	return e.Encode(&td)
+}
+
+func remove_empty_strings(slice []string) []string {
+	j := 0
+	for i, n := 0, len(slice); i < n; i++ {
+		if slice[i] == "" {
+			continue
+		}
+		slice[j] = slice[i]
+		j++
+	}
+	return slice[:j+1]
+}
+
+func (b *Builder) check_parameters() error {
+	// should be at least one file
+	if len(b.filesmap) == 0 {
+		return errors.New("no files were queued")
+	}
+
+	// let's clean up the announce_list
+	newal := make([][]string, 0, len(b.announce_list))
+	for _, ag := b.announce_list {
+		ag = remove_empty_strings(ag)
+
+		// discard empty announce groups
+		if len(ag) == 0 {
+			continue
+		}
+		newal = append(newal, ag)
+	}
+	b.announce_list = newal
+	if len(b.announce_list) == 0 {
+		return errors.New("no announce groups were specified")
+	}
+
+	// and clean up the urls
+	b.urls = remove_empty_strings(b.urls)
 }

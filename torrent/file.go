@@ -160,6 +160,10 @@ func (this *torrent_info_ex) UnmarshalBencode(data []byte) error {
 	return bencode.Unmarshal(data, &this.torrent_info)
 }
 
+func (this *torrent_info_ex) MarshalBencode() ([]byte, error) {
+	return bencode.Marshal(&this.torrent_info)
+}
+
 type torrent_data struct {
 	Info         torrent_info_ex `bencode:"info"`
 	Announce     string          `bencode:"announce"`

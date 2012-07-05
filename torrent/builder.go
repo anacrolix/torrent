@@ -12,6 +12,9 @@ import (
 	"os"
 )
 
+// The Builder type is responsible for .torrent files construction. Just
+// instantiate it, call necessary methods and then call the .Build method. While
+// waiting for completion you can use 'status' channel to get status reports.
 type Builder struct {
 	filesmap      map[string]bool
 	files         []file

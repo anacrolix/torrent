@@ -125,7 +125,7 @@ func (b *Builder) Build(w io.Writer, nworkers int) (<-chan error, <-chan Builder
 		}
 
 		b.set_defaults()
-		err := b.prepare_files()
+		err = b.prepare_files()
 		if err != nil {
 			completion <- err
 			return
@@ -517,7 +517,7 @@ func (b *Builder) check_parameters() error {
 
 	// let's clean up the announce_list
 	newal := make([][]string, 0, len(b.announce_list))
-	for _, ag := b.announce_list {
+	for _, ag := range b.announce_list {
 		ag = remove_empty_strings(ag)
 
 		// discard empty announce groups
@@ -533,4 +533,6 @@ func (b *Builder) check_parameters() error {
 
 	// and clean up the urls
 	b.urls = remove_empty_strings(b.urls)
+
+	return nil
 }

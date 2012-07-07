@@ -94,7 +94,7 @@ func (b *Builder) SetEncoding(encoding string) {
 	b.encoding = encoding
 }
 
-func (b *Builder) AddURL(url string) {
+func (b *Builder) AddWebSeedURL(url string) {
 	b.urls = append(b.urls, url)
 }
 

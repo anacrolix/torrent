@@ -127,7 +127,6 @@ func (b *Builder) Submit() (*Batch, error) {
 		file.splitpath = split_path(f)
 		file.size = fi.Size()
 		batch.files = append(batch.files, file)
-
 		batch.TotalSize += file.size
 	}
 
@@ -163,7 +162,8 @@ func (b *Builder) Submit() (*Batch, error) {
 		batch.DefaultName = common[len(common)-1]
 
 		lcommon := len(common)
-		for _, f := range batch.files {
+		for i := range batch.files {
+			f := &batch.files[i]
 			f.splitpath = f.splitpath[lcommon:]
 		}
 

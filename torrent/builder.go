@@ -1,34 +1,27 @@
 package torrent
 
 import (
-	"github.com/nsf/libtorgo/bencode"
-	"path/filepath"
-	"errors"
-	"hash"
 	"crypto/sha1"
-	"time"
-	"sort"
+	"errors"
+	"github.com/nsf/libtorgo/bencode"
+	"hash"
 	"io"
 	"os"
+	"path/filepath"
+	"sort"
+	"time"
 )
+
+//----------------------------------------------------------------------------
+// Build
+//----------------------------------------------------------------------------
 
 // The Builder type is responsible for .torrent files construction. Just
 // instantiate it, call necessary methods and then call the .Build method. While
 // waiting for completion you can use 'status' channel to get status reports.
 type Builder struct {
-	filesmap      map[string]bool
-	files         []file
-	files_size    int64
-	name          string
-	piece_length  int64
-	pieces        []byte
-	private       bool
-	announce_list [][]string
-	creation_date time.Time
-	comment       string
-	created_by    string
-	encoding      string
-	urls          []string
+	batch_state
+	filesmap map[string]bool
 }
 
 // Adds a file to the builder queue. You may add one or more files.
@@ -68,7 +61,7 @@ func (b *Builder) SetPrivate(v bool) {
 	b.private = v
 }
 
-// Add announce group. TODO: better explanation.
+// Add announce URL group. TODO: better explanation.
 func (b *Builder) AddAnnounceGroup(group []string) {
 	b.announce_list = append(b.announce_list, group)
 }
@@ -94,43 +87,176 @@ func (b *Builder) SetEncoding(encoding string) {
 	b.encoding = encoding
 }
 
+// Add WebSeed URL to the list.
 func (b *Builder) AddWebSeedURL(url string) {
 	b.urls = append(b.urls, url)
 }
 
-// Status report structure for Builder.Build method.
-type BuilderStatus struct {
-	Size int64
-	Hashed int64
+// Finalizes the Builder state and makes a Batch out of it. After calling that
+// method, Builder becomes empty and you can use it to create another Batch if
+// you will.
+func (b *Builder) Submit() (*Batch, error) {
+	err := b.check_parameters()
+	if err != nil {
+		return nil, err
+	}
+	b.set_defaults()
+
+	batch := &Batch{
+		batch_state: b.batch_state,
+	}
+
+	const non_regular = os.ModeDir | os.ModeSymlink |
+		os.ModeDevice | os.ModeNamedPipe | os.ModeSocket
+
+	// convert a map to a slice, calculate sizes and split paths
+	batch.TotalSize = 0
+	batch.files = make([]file, 0, 10)
+	for f, _ := range b.filesmap {
+		var file file
+		fi, err := os.Stat(f)
+		if err != nil {
+			return nil, err
+		}
+
+		if fi.Mode()&non_regular != 0 {
+			return nil, errors.New(f + " is not a regular file")
+		}
+
+		file.abspath = f
+		file.splitpath = split_path(f)
+		file.size = fi.Size()
+		batch.files = append(batch.files, file)
+
+		batch.TotalSize += file.size
+	}
+
+	// find the rightmost common directory
+	if len(batch.files) == 1 {
+		sp := batch.files[0].splitpath
+		batch.DefaultName = sp[len(sp)-1]
+	} else {
+		common := batch.files[0].splitpath
+		for _, f := range batch.files {
+			if len(common) > len(f.splitpath) {
+				common = common[:len(f.splitpath)]
+			}
+
+			for i, n := 0, len(common); i < n; i++ {
+				if common[i] != f.splitpath[i] {
+					common = common[:i]
+					break
+				}
+			}
+
+			if len(common) == 0 {
+				break
+			}
+		}
+
+		if len(common) == 0 {
+			return nil, errors.New("no common rightmost folder was found for a set of queued files")
+		}
+
+		// found the common folder, let's strip that part from splitpath
+		// and setup the default name
+		batch.DefaultName = common[len(common)-1]
+
+		lcommon := len(common)
+		for _, f := range batch.files {
+			f.splitpath = f.splitpath[lcommon:]
+		}
+
+		// and finally sort the files
+		sort.Sort(file_slice(batch.files))
+	}
+
+	// reset the builder state
+	b.batch_state = batch_state{}
+	b.filesmap = nil
+
+	return batch, nil
 }
 
-// Builds a torrent file. This function does everything in a separate goroutine
-// and uses up to 'nworkers' of goroutines to perform SHA1 hashing. Therefore it
-// will return almost immedately. It returns two channels, the first one is for
-// completion awaiting, the second one is for getting status reports. You should
-// not call any other methods while the builder is working on the torrent file.
-func (b *Builder) Build(w io.Writer, nworkers int) (<-chan error, <-chan BuilderStatus) {
+func (b *Builder) set_defaults() {
+	if b.piece_length == 0 {
+		b.piece_length = 256 * 1024
+	}
+
+	if b.creation_date.IsZero() {
+		b.creation_date = time.Now()
+	}
+
+	if b.created_by == "" {
+		b.created_by = "libtorgo"
+	}
+
+	if b.encoding == "" {
+		b.encoding = "UTF-8"
+	}
+}
+
+func (b *Builder) check_parameters() error {
+	// should be at least one file
+	if len(b.filesmap) == 0 {
+		return errors.New("no files were queued")
+	}
+
+	// let's clean up the announce_list
+	newal := make([][]string, 0, len(b.announce_list))
+	for _, ag := range b.announce_list {
+		ag = remove_empty_strings(ag)
+
+		// discard empty announce groups
+		if len(ag) == 0 {
+			continue
+		}
+		newal = append(newal, ag)
+	}
+	b.announce_list = newal
+	if len(b.announce_list) == 0 {
+		return errors.New("no announce groups were specified")
+	}
+
+	// and clean up the urls
+	b.urls = remove_empty_strings(b.urls)
+
+	return nil
+}
+
+//----------------------------------------------------------------------------
+// Batch
+//----------------------------------------------------------------------------
+
+// Batch represents a snapshot of a builder state, ready for transforming it
+// into a torrent file. Note that Batch contains two exported fields you might
+// be interested in. The TotalSize is the total size of all the files queued for
+// hashing, you will use it for status reporting. The DefaultName is an
+// automatically determined name of the torrent metainfo, you might want to use
+// it for naming the .torrent file itself.
+type Batch struct {
+	batch_state
+	files       []file
+	TotalSize   int64
+	DefaultName string
+}
+
+// Starts a process of building the torrent file. This function does everything
+// in a separate goroutine and uses up to 'nworkers' of goroutines to perform
+// SHA1 hashing. Therefore it will return almost immedately. It returns two
+// channels, the first one is for completion awaiting, the second one is for
+// getting status reports. Status report is a number of bytes hashed, you can
+// get the total amount of bytes by inspecting the appropriate Batch structure
+// field.
+func (b *Batch) Start(w io.Writer, nworkers int) (<-chan error, <-chan int64) {
 	if nworkers <= 0 {
 		nworkers = 1
 	}
 
 	completion := make(chan error)
-	status := make(chan BuilderStatus)
+	status := make(chan int64)
 
 	go func() {
-		err := b.check_parameters()
-		if err != nil {
-			completion <- err
-			return
-		}
-
-		b.set_defaults()
-		err = b.prepare_files()
-		if err != nil {
-			completion <- err
-			return
-		}
-
 		// prepare workers
 		workers := make([]*worker, nworkers)
 		free_workers := make(chan *worker, nworkers)
@@ -148,9 +274,9 @@ func (b *Builder) Build(w io.Writer, nworkers int) (<-chan error, <-chan Builder
 
 		// prepare files for reading
 		fr := files_reader{files: b.files}
-		npieces := b.files_size / b.piece_length + 1
-		b.pieces = make([]byte, 20 * npieces)
-		bstatus := BuilderStatus{Size: b.files_size}
+		npieces := b.TotalSize/b.piece_length + 1
+		b.pieces = make([]byte, 20*npieces)
+		hashed := int64(0)
 
 		// read all the pieces passing them to workers for hashing
 		var data []byte
@@ -182,11 +308,11 @@ func (b *Builder) Build(w io.Writer, nworkers int) (<-chan error, <-chan Builder
 
 			// update and try to send the status report
 			if data != nil {
-				bstatus.Hashed += int64(len(data))
+				hashed += int64(len(data))
 				data = data[:cap(data)]
 
 				select {
-				case status <- bstatus:
+				case status <- hashed:
 				default:
 				}
 			}
@@ -195,7 +321,7 @@ func (b *Builder) Build(w io.Writer, nworkers int) (<-chan error, <-chan Builder
 
 		// at this point the hash was calculated and we're ready to
 		// write the torrent file
-		err = b.write_torrent(w)
+		err := b.write_torrent(w)
 		if err != nil {
 			completion <- err
 			return
@@ -205,13 +331,120 @@ func (b *Builder) Build(w io.Writer, nworkers int) (<-chan error, <-chan Builder
 	return completion, status
 }
 
+func (b *Batch) write_torrent(w io.Writer) error {
+	var td torrent_data
+	td.Announce = b.announce_list[0][0]
+	if len(b.announce_list) != 1 || len(b.announce_list[0]) != 1 {
+		td.AnnounceList = b.announce_list
+	}
+	td.CreationDate = b.creation_date.Unix()
+	td.Comment = b.comment
+	td.CreatedBy = b.created_by
+	td.Encoding = b.encoding
+	switch {
+	case len(b.urls) == 0:
+	case len(b.urls) == 1:
+		td.URLList = b.urls[0]
+	default:
+		td.URLList = b.urls
+	}
+
+	td.Info.PieceLength = b.piece_length
+	td.Info.Pieces = b.pieces
+	if b.name == "" {
+		td.Info.Name = b.DefaultName
+	} else {
+		td.Info.Name = b.name
+	}
+	if len(b.files) == 1 {
+		td.Info.Length = b.files[0].size
+	} else {
+		td.Info.Files = make([]torrent_info_file, len(b.files))
+		for i, f := range b.files {
+			td.Info.Files[i] = torrent_info_file{
+				Path:   f.splitpath,
+				Length: f.size,
+			}
+		}
+	}
+	td.Info.Private = b.private
+
+	e := bencode.NewEncoder(w)
+	return e.Encode(&td)
+}
+
+//----------------------------------------------------------------------------
+// misc stuff
+//----------------------------------------------------------------------------
+
+// splits path into components (dirs and files), works only on absolute paths
+func split_path(path string) []string {
+	var dir, file string
+	s := make([]string, 0, 5)
+
+	dir = path
+	for {
+		dir, file = filepath.Split(filepath.Clean(dir))
+		if file == "" {
+			break
+		}
+		s = append(s, file)
+	}
+
+	// reverse the slice
+	for i, n := 0, len(s)/2; i < n; i++ {
+		i2 := len(s) - i - 1
+		s[i], s[i2] = s[i2], s[i]
+	}
+
+	return s
+}
+
+// just a common data between the Builder and the Batch
+type batch_state struct {
+	name          string
+	piece_length  int64
+	pieces        []byte
+	private       bool
+	announce_list [][]string
+	creation_date time.Time
+	comment       string
+	created_by    string
+	encoding      string
+	urls          []string
+}
+
+type file struct {
+	abspath   string
+	splitpath []string
+	size      int64
+}
+
+type file_slice []file
+
+func (s file_slice) Len() int           { return len(s) }
+func (s file_slice) Less(i, j int) bool { return s[i].abspath < s[j].abspath }
+func (s file_slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
+func remove_empty_strings(slice []string) []string {
+	j := 0
+	for i, n := 0, len(slice); i < n; i++ {
+		if slice[i] == "" {
+			continue
+		}
+		slice[j] = slice[i]
+		j++
+	}
+	return slice[:j]
+}
+
 //----------------------------------------------------------------------------
 // worker
 //----------------------------------------------------------------------------
 
 type worker struct {
 	msgbox chan bool
-	hash hash.Hash
+	hash   hash.Hash
 
 	// request
 	sha1 []byte
@@ -238,7 +471,7 @@ func (w *worker) wait_for_stop() {
 func new_worker(out chan<- *worker) *worker {
 	w := &worker{
 		msgbox: make(chan bool),
-		hash: sha1.New(),
+		hash:   sha1.New(),
 	}
 	go func() {
 		var sha1 [20]byte
@@ -263,10 +496,10 @@ func new_worker(out chan<- *worker) *worker {
 //----------------------------------------------------------------------------
 
 type files_reader struct {
-	files []file
-	cur int
+	files   []file
+	cur     int
 	curfile *os.File
-	off int64
+	off     int64
 }
 
 func (f *files_reader) Read(data []byte) (int, error) {
@@ -293,7 +526,7 @@ func (f *files_reader) Read(data []byte) (int, error) {
 		n := int64(len(data))
 
 		// unless there is not enough data in this file
-		if file.size - f.off < n {
+		if file.size-f.off < n {
 			n = file.size - f.off
 		}
 
@@ -326,213 +559,4 @@ func (f *files_reader) Read(data []byte) (int, error) {
 	}
 
 	return read, nil
-}
-
-// splits path into components (dirs and files), works only on absolute paths
-func split_path(path string) []string {
-	var dir, file string
-	s := make([]string, 0, 5)
-
-	dir = path
-	for {
-		dir, file = filepath.Split(filepath.Clean(dir))
-		if file == "" {
-			break
-		}
-		s = append(s, file)
-	}
-
-	// reverse the slice
-	for i, n := 0, len(s) / 2; i < n; i++ {
-		i2 := len(s) - i - 1
-		s[i], s[i2] = s[i2], s[i]
-	}
-
-	return s
-}
-
-func (b *Builder) set_defaults() {
-	if b.piece_length == 0 {
-		b.piece_length = 256*1024
-	}
-
-	if b.creation_date.IsZero() {
-		b.creation_date = time.Now()
-	}
-
-	if b.created_by == "" {
-		b.created_by = "libtorgo"
-	}
-
-	if b.encoding == "" {
-		b.encoding = "UTF-8"
-	}
-}
-
-type file struct {
-	abspath string
-	splitpath []string
-	size int64
-}
-
-type file_slice []file
-func (s file_slice) Len() int { return len(s) }
-func (s file_slice) Less(i, j int) bool { return s[i].abspath < s[j].abspath }
-func (s file_slice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
-// 1. Creates a sorted slice of files 'b.files' out of 'b.filesmap'.
-// 2. Searches for a common rightmost dir and strips that part from 'splitpath'
-// of each file.
-// 3. In case if the 'b.name' was empty, assigns an automatic value to it.
-// 4. Calculates the total size of all the files 'b.files_size'
-func (b *Builder) prepare_files() error {
-	const non_regular = os.ModeDir | os.ModeSymlink |
-		os.ModeDevice | os.ModeNamedPipe | os.ModeSocket
-
-	// convert a map to a slice, calculate sizes and split paths
-	b.files_size = 0
-	b.files = make([]file, 0, 10)
-	for f, _ := range b.filesmap {
-		var file file
-		fi, err := os.Stat(f)
-		if err != nil {
-			return err
-		}
-
-		if fi.Mode() & non_regular != 0 {
-			return errors.New(f + " is not a regular file")
-		}
-
-		file.abspath = f
-		file.splitpath = split_path(f)
-		file.size = fi.Size()
-		b.files = append(b.files, file)
-
-		b.files_size += file.size
-	}
-
-	// find the rightmost common directory
-	if len(b.files) == 1 {
-		if b.name == "" {
-			sp := b.files[0].splitpath
-			b.name = sp[len(sp)-1]
-		}
-	} else {
-		common := b.files[0].splitpath
-		for _, f := range b.files {
-			if len(common) > len(f.splitpath) {
-				common = common[:len(f.splitpath)]
-			}
-
-			for i, n := 0, len(common); i < n; i++ {
-				if common[i] != f.splitpath[i] {
-					common = common[:i]
-					break
-				}
-			}
-
-			if len(common) == 0 {
-				break
-			}
-		}
-
-		if len(common) == 0 {
-			return errors.New("no common rightmost folder was found for a set of queued files")
-		}
-
-		// found the common folder, let's strip that part from splitpath
-		// and setup the name if it wasn't provided manually
-		if b.name == "" {
-			b.name = common[len(common)-1]
-		}
-
-		lcommon := len(common)
-		for _, f := range b.files {
-			f.splitpath = f.splitpath[lcommon:]
-		}
-
-		// and finally sort the files
-		sort.Sort(file_slice(b.files))
-	}
-
-	b.filesmap = nil
-	return nil
-}
-
-func (b *Builder) write_torrent(w io.Writer) error {
-	var td torrent_data
-	td.Announce = b.announce_list[0][0]
-	if len(b.announce_list) != 1 || len(b.announce_list[0]) != 1 {
-		td.AnnounceList = b.announce_list
-	}
-	td.CreationDate = b.creation_date.Unix()
-	td.Comment = b.comment
-	td.CreatedBy = b.created_by
-	td.Encoding = b.encoding
-	switch {
-	case len(b.urls) == 0:
-	case len(b.urls) == 1:
-		td.URLList = b.urls[0]
-	default:
-		td.URLList = b.urls
-	}
-
-	td.Info.PieceLength = b.piece_length
-	td.Info.Pieces = b.pieces
-	td.Info.Name = b.name
-	if len(b.files) == 1 {
-		td.Info.Length = b.files[0].size
-	} else {
-		td.Info.Files = make([]torrent_info_file, len(b.files))
-		for i, f := range b.files {
-			td.Info.Files[i] = torrent_info_file{
-				Path: f.splitpath,
-				Length: f.size,
-			}
-		}
-	}
-	td.Info.Private = b.private
-
-	e := bencode.NewEncoder(w)
-	return e.Encode(&td)
-}
-
-func remove_empty_strings(slice []string) []string {
-	j := 0
-	for i, n := 0, len(slice); i < n; i++ {
-		if slice[i] == "" {
-			continue
-		}
-		slice[j] = slice[i]
-		j++
-	}
-	return slice[:j+1]
-}
-
-func (b *Builder) check_parameters() error {
-	// should be at least one file
-	if len(b.filesmap) == 0 {
-		return errors.New("no files were queued")
-	}
-
-	// let's clean up the announce_list
-	newal := make([][]string, 0, len(b.announce_list))
-	for _, ag := range b.announce_list {
-		ag = remove_empty_strings(ag)
-
-		// discard empty announce groups
-		if len(ag) == 0 {
-			continue
-		}
-		newal = append(newal, ag)
-	}
-	b.announce_list = newal
-	if len(b.announce_list) == 0 {
-		return errors.New("no announce groups were specified")
-	}
-
-	// and clean up the urls
-	b.urls = remove_empty_strings(b.urls)
-
-	return nil
 }

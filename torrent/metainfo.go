@@ -9,50 +9,28 @@ import (
 	"time"
 )
 
-//----------------------------------------------------------------------------
-
-// SingleFile represents the specific data of the single file torrent
-// metainfo. That includes length of the file and its recommended name.
-type SingleFile struct {
-	Name   string
-	Length int64
-}
-
-//----------------------------------------------------------------------------
-
-// MultiFile represents the specific data of the multiple files torrent
-// metainfo. That includes the name of the directory which will contain all the
-// files and the files information.
-type MultiFile struct {
-	Name  string
-	Files []FileInfo
-}
-
-// Information of a single file in multiple files torrent metainfo.
+// Information specific to a single file inside the MetaInfo structure..
 type FileInfo struct {
 	Length int64
 	Path   []string
 }
 
-//----------------------------------------------------------------------------
-
 // MetaInfo is the type you should use when reading torrent files. See Load and
-// LoadFromFile functions. All the fields are intended to be read-only. The
-// "Info" field has SingleFile or MultiFile type, use the type switch or type
-// assertion to determine the exact type.
+// LoadFromFile functions. All the fields are intended to be read-only. If
+// 'len(Files) == 1', then the FileInfo.Path is nil in that entry.
 type MetaInfo struct {
-	Info        interface{}
-	InfoHash    []byte
-	PieceLength int64
-	Pieces      []byte
-	Private     bool
-
+	Name         string
+	Files        []FileInfo
+	InfoHash     []byte
+	PieceLength  int64
+	Pieces       []byte
+	Private      bool
 	AnnounceList [][]string
 	CreationDate time.Time
 	Comment      string
 	CreatedBy    string
 	Encoding     string
-	URLList      []string
+	WebSeedURLs  []string
 }
 
 // Load a MetaInfo from an io.Reader. Returns a non-nil error in case of
@@ -67,6 +45,7 @@ func Load(r io.Reader) (*MetaInfo, error) {
 	}
 
 	// post-parse processing
+	mi.Name = data.Info.Name
 	if len(data.Info.Files) > 0 {
 		files := make([]FileInfo, len(data.Info.Files))
 		for i, fi := range data.Info.Files {
@@ -75,15 +54,9 @@ func Load(r io.Reader) (*MetaInfo, error) {
 				Path:   fi.Path,
 			}
 		}
-		mi.Info = MultiFile{
-			Name:  data.Info.Name,
-			Files: files,
-		}
+		mi.Files = files
 	} else {
-		mi.Info = SingleFile{
-			Name:   data.Info.Name,
-			Length: data.Info.Length,
-		}
+		mi.Files = []FileInfo{{Length: data.Info.Length, Path: nil}}
 	}
 	mi.InfoHash = data.Info.Hash
 	mi.PieceLength = data.Info.PieceLength
@@ -102,7 +75,7 @@ func Load(r io.Reader) (*MetaInfo, error) {
 	if data.URLList != nil {
 		switch v := data.URLList.(type) {
 		case string:
-			mi.URLList = []string{v}
+			mi.WebSeedURLs = []string{v}
 		case []interface{}:
 			var ok bool
 			ss := make([]string, len(v))
@@ -112,7 +85,7 @@ func Load(r io.Reader) (*MetaInfo, error) {
 					return nil, errors.New("bad url-list data type")
 				}
 			}
-			mi.URLList = ss
+			mi.WebSeedURLs = ss
 		default:
 			return nil, errors.New("bad url-list data type")
 		}

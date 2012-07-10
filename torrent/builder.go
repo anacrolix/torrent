@@ -258,8 +258,8 @@ func (b *Batch) DefaultName() string {
 // SHA1 hashing. Therefore it will return almost immedately. It returns two
 // channels, the first one is for completion awaiting, the second one is for
 // getting status reports. Status report is a number of bytes hashed, you can
-// get the total amount of bytes by inspecting the appropriate Batch structure
-// field.
+// get the total amount of bytes by inspecting the Batch.TotalSize method return
+// value.
 func (b *Batch) Start(w io.Writer, nworkers int) (<-chan error, <-chan int64) {
 	if nworkers <= 0 {
 		nworkers = 1

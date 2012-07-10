@@ -110,7 +110,7 @@ func (b *Builder) Submit() (*Batch, error) {
 		os.ModeDevice | os.ModeNamedPipe | os.ModeSocket
 
 	// convert a map to a slice, calculate sizes and split paths
-	batch.TotalSize = 0
+	batch.total_size = 0
 	batch.files = make([]file, 0, 10)
 	for f, _ := range b.filesmap {
 		var file file
@@ -127,13 +127,13 @@ func (b *Builder) Submit() (*Batch, error) {
 		file.splitpath = split_path(f)
 		file.size = fi.Size()
 		batch.files = append(batch.files, file)
-		batch.TotalSize += file.size
+		batch.total_size += file.size
 	}
 
 	// find the rightmost common directory
 	if len(batch.files) == 1 {
 		sp := batch.files[0].splitpath
-		batch.DefaultName = sp[len(sp)-1]
+		batch.default_name = sp[len(sp)-1]
 	} else {
 		common := batch.files[0].splitpath
 		for _, f := range batch.files {
@@ -159,7 +159,7 @@ func (b *Builder) Submit() (*Batch, error) {
 
 		// found the common folder, let's strip that part from splitpath
 		// and setup the default name
-		batch.DefaultName = common[len(common)-1]
+		batch.default_name = common[len(common)-1]
 
 		lcommon := len(common)
 		for i := range batch.files {
@@ -229,16 +229,28 @@ func (b *Builder) check_parameters() error {
 //----------------------------------------------------------------------------
 
 // Batch represents a snapshot of a builder state, ready for transforming it
-// into a torrent file. Note that Batch contains two exported fields you might
+// into a torrent file. Note that Batch contains two accessor methods you might
 // be interested in. The TotalSize is the total size of all the files queued for
 // hashing, you will use it for status reporting. The DefaultName is an
 // automatically determined name of the torrent metainfo, you might want to use
 // it for naming the .torrent file itself.
 type Batch struct {
 	batch_state
-	files       []file
-	TotalSize   int64
-	DefaultName string
+	files        []file
+	total_size   int64
+	default_name string
+}
+
+// Get a total size of all the files queued for hashing. Useful in conjunction
+// with status reports.
+func (b *Batch) TotalSize() int64 {
+	return b.total_size
+}
+
+// Get an automatically determined name of the future torrent metainfo. You can
+// use it for a .torrent file in case user hasn't provided it specifically.
+func (b *Batch) DefaultName() string {
+	return b.default_name
 }
 
 // Starts a process of building the torrent file. This function does everything
@@ -274,7 +286,7 @@ func (b *Batch) Start(w io.Writer, nworkers int) (<-chan error, <-chan int64) {
 
 		// prepare files for reading
 		fr := files_reader{files: b.files}
-		npieces := b.TotalSize/b.piece_length + 1
+		npieces := b.total_size/b.piece_length + 1
 		b.pieces = make([]byte, 20*npieces)
 		hashed := int64(0)
 
@@ -352,7 +364,7 @@ func (b *Batch) write_torrent(w io.Writer) error {
 	td.Info.PieceLength = b.piece_length
 	td.Info.Pieces = b.pieces
 	if b.name == "" {
-		td.Info.Name = b.DefaultName
+		td.Info.Name = b.default_name
 	} else {
 		td.Info.Name = b.name
 	}

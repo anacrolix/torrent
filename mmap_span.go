@@ -5,33 +5,39 @@ import (
 	"launchpad.net/gommap"
 )
 
-type Mmap struct {
+type MMap struct {
 	gommap.MMap
 }
 
-func (me Mmap) Size() int64 {
+func (me MMap) Size() int64 {
 	return int64(len(me.MMap))
 }
 
-type MmapSpan []Mmap
+type MMapSpan []MMap
 
-func (me MmapSpan) span() (s span) {
+func (me MMapSpan) span() (s span) {
 	for _, mmap := range me {
 		s = append(s, mmap)
 	}
 	return
 }
 
-func (me MmapSpan) Size() (ret int64) {
+func (me MMapSpan) Close() {
+	for _, mMap := range me {
+		mMap.UnsafeUnmap()
+	}
+}
+
+func (me MMapSpan) Size() (ret int64) {
 	for _, mmap := range me {
 		ret += mmap.Size()
 	}
 	return
 }
 
-func (me MmapSpan) ReadAt(p []byte, off int64) (n int, err error) {
+func (me MMapSpan) ReadAt(p []byte, off int64) (n int, err error) {
 	me.span().ApplyTo(off, func(intervalOffset int64, interval sizer) (stop bool) {
-		_n := copy(p, interval.(Mmap).MMap[intervalOffset:])
+		_n := copy(p, interval.(MMap).MMap[intervalOffset:])
 		p = p[_n:]
 		n += _n
 		return len(p) == 0
@@ -42,9 +48,9 @@ func (me MmapSpan) ReadAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (me MmapSpan) WriteAt(p []byte, off int64) (n int, err error) {
+func (me MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
 	me.span().ApplyTo(off, func(iOff int64, i sizer) (stop bool) {
-		_n := copy(i.(Mmap).MMap[iOff:], p)
+		_n := copy(i.(MMap).MMap[iOff:], p)
 		p = p[_n:]
 		n += _n
 		return len(p) == 0

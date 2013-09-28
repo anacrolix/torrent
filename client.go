@@ -1,11 +1,15 @@
 package torrent
 
 import (
+	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"crypto"
+	"crypto/rand"
 	"errors"
 	metainfo "github.com/nsf/libtorgo/torrent"
 	"io"
 	"launchpad.net/gommap"
+	"log"
+	"net"
 	"os"
 	"path/filepath"
 )
@@ -14,7 +18,7 @@ const (
 	PieceHash = crypto.SHA1
 )
 
-type infoHash [20]byte
+type InfoHash [20]byte
 
 type pieceSum [20]byte
 
@@ -24,7 +28,7 @@ func copyHashSum(dst, src []byte) {
 	}
 }
 
-func BytesInfoHash(b []byte) (ih infoHash) {
+func BytesInfoHash(b []byte) (ih InfoHash) {
 	if len(b) != len(ih) {
 		panic("bad infohash bytes")
 	}
@@ -44,11 +48,33 @@ type piece struct {
 	Hash  pieceSum
 }
 
+type connection struct {
+	Socket net.Conn
+	post   chan peer_protocol.Message
+
+	Interested bool
+	Choked     bool
+	Requests   []peer_protocol.Request
+
+	PeerId         [20]byte
+	PeerInterested bool
+	PeerChoked     bool
+	PeerRequests   []peer_protocol.Request
+}
+
 type torrent struct {
-	InfoHash infoHash
+	InfoHash InfoHash
 	Pieces   []piece
 	Data     MMapSpan
 	MetaInfo *metainfo.MetaInfo
+	Conns    []connection
+	Peers    []Peer
+}
+
+type Peer struct {
+	Id   [20]byte
+	IP   net.IP
+	Port int
 }
 
 func (t torrent) PieceSize(piece int) (size int64) {
@@ -79,24 +105,34 @@ func (t torrent) HashPiece(piece int) (ps pieceSum) {
 }
 
 type client struct {
-	DataDir string
+	DataDir       string
+	HalfOpenLimit int
+	PeerId        [20]byte
+
+	halfOpen int
+	torrents map[InfoHash]*torrent
 
 	noTorrents      chan struct{}
 	addTorrent      chan *torrent
-	torrents        map[infoHash]*torrent
-	torrentFinished chan infoHash
+	torrentFinished chan InfoHash
 	actorTask       chan func()
 }
 
 func NewClient(dataDir string) *client {
 	c := &client{
-		DataDir: dataDir,
+		DataDir:       dataDir,
+		HalfOpenLimit: 10,
+
+		torrents: make(map[InfoHash]*torrent),
 
 		noTorrents:      make(chan struct{}),
 		addTorrent:      make(chan *torrent),
-		torrents:        make(map[infoHash]*torrent),
-		torrentFinished: make(chan infoHash),
+		torrentFinished: make(chan InfoHash),
 		actorTask:       make(chan func()),
+	}
+	_, err := rand.Read(c.PeerId[:])
+	if err != nil {
+		panic("error generating peer id")
 	}
 	go c.run()
 	return c
@@ -144,6 +180,67 @@ func mmapTorrentData(metaInfo *metainfo.MetaInfo, location string) (mms MMapSpan
 	return
 }
 
+func (me *client) torrent(ih InfoHash) *torrent {
+	for _, t := range me.torrents {
+		if t.InfoHash == ih {
+			return t
+		}
+	}
+	return nil
+}
+
+func (me *client) initiateConn(peer Peer, torrent *torrent) {
+	if peer.Id == me.PeerId {
+		return
+	}
+	me.halfOpen++
+	go func() {
+		conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{
+			IP:   peer.IP,
+			Port: peer.Port,
+		})
+		me.withContext(func() {
+			me.halfOpen--
+			me.openNewConns()
+		})
+		if err != nil {
+			log.Printf("error connecting to peer: %s", err)
+			return
+		}
+		me.runConnection(conn, torrent, peer.Id)
+	}()
+}
+
+func (me *client) runConnection(conn net.Conn, torrent *torrent, peerId [20]byte) {
+	log.Fatalf("connected to %s", conn)
+}
+
+func (me *client) openNewConns() {
+	for _, t := range me.torrents {
+		for len(t.Peers) != 0 {
+			if me.halfOpen >= me.HalfOpenLimit {
+				return
+			}
+			p := t.Peers[0]
+			t.Peers = t.Peers[1:]
+			me.initiateConn(p, t)
+		}
+	}
+}
+
+func (me *client) AddPeers(infoHash InfoHash, peers []Peer) (err error) {
+	me.withContext(func() {
+		t := me.torrent(infoHash)
+		if t == nil {
+			err = errors.New("no such torrent")
+			return
+		}
+		t.Peers = append(t.Peers, peers...)
+		me.openNewConns()
+	})
+	return
+}
+
 func (me *client) AddTorrent(metaInfo *metainfo.MetaInfo) error {
 	torrent := &torrent{
 		InfoHash: BytesInfoHash(metaInfo.InfoHash),
@@ -178,7 +275,7 @@ func (me *client) withContext(f func()) {
 	me.actorTask <- f
 }
 
-func (me *client) pieceHashed(ih infoHash, piece int, correct bool) {
+func (me *client) pieceHashed(ih InfoHash, piece int, correct bool) {
 	torrent := me.torrents[ih]
 	torrent.Pieces[piece].State = func() pieceState {
 		if correct {

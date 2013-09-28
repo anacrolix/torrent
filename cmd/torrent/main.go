@@ -5,6 +5,7 @@ import (
 	"flag"
 	metainfo "github.com/nsf/libtorgo/torrent"
 	"log"
+	"net"
 )
 
 var (
@@ -23,6 +24,13 @@ func main() {
 			log.Fatal(err)
 		}
 		err = client.AddTorrent(metaInfo)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = client.AddPeers(torrent.BytesInfoHash(metaInfo.InfoHash), []torrent.Peer{{
+			IP:   net.IPv4(127, 0, 0, 1),
+			Port: 63983,
+		}})
 		if err != nil {
 			log.Fatal(err)
 		}

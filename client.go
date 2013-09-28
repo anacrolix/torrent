@@ -111,15 +111,33 @@ func mmapTorrentData(metaInfo *metainfo.MetaInfo, location string) (mms MMapSpan
 	}()
 	for _, miFile := range metaInfo.Files {
 		fileName := filepath.Join(append([]string{location, metaInfo.Name}, miFile.Path...)...)
-		var file *os.File
-		file, err = os.Open(fileName)
+		err = os.MkdirAll(filepath.Dir(fileName), 0666)
 		if err != nil {
 			return
+		}
+		var file *os.File
+		file, err = os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0666)
+		if err != nil {
+			return
+		}
+		var fi os.FileInfo
+		fi, err = file.Stat()
+		if err != nil {
+			return
+		}
+		if fi.Size() < miFile.Length {
+			err = file.Truncate(miFile.Length)
+			if err != nil {
+				return
+			}
 		}
 		var mMap gommap.MMap
 		mMap, err = gommap.MapRegion(file.Fd(), 0, miFile.Length, gommap.PROT_READ|gommap.PROT_WRITE, gommap.MAP_SHARED)
 		if err != nil {
 			return
+		}
+		if int64(len(mMap)) != miFile.Length {
+			panic("mmap has wrong length")
 		}
 		mms = append(mms, MMap{mMap})
 	}

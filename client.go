@@ -192,7 +192,9 @@ func (me *client) pieceHashed(ih infoHash, piece int, correct bool) {
 			return
 		}
 	}
-	me.torrentFinished <- ih
+	go func() {
+		me.torrentFinished <- ih
+	}()
 }
 
 func (me *client) run() {

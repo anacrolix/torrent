@@ -220,6 +220,8 @@ func (me *client) run() {
 			}
 		case infoHash := <-me.torrentFinished:
 			delete(me.torrents, infoHash)
+		case task := <-me.actorTask:
+			task()
 		}
 	}
 }

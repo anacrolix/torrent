@@ -162,6 +162,7 @@ func (me *client) AddTorrent(metaInfo *metainfo.MetaInfo) error {
 	if err != nil {
 		return err
 	}
+	torrent.MetaInfo = metaInfo
 	me.addTorrent <- torrent
 	return nil
 }

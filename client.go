@@ -77,7 +77,7 @@ type Peer struct {
 	Port int
 }
 
-func (t torrent) PieceSize(piece int) (size int64) {
+func (t *torrent) PieceSize(piece int) (size int64) {
 	if piece == len(t.Pieces)-1 {
 		size = t.Data.Size() % t.MetaInfo.PieceLength
 	}
@@ -313,14 +313,15 @@ func (me *client) run() {
 				break
 			}
 			me.torrents[torrent.InfoHash] = torrent
-			for i := range torrent.Pieces {
-				go func(piece int) {
+			go func() {
+				for _piece := range torrent.Pieces {
+					piece := _piece
 					sum := torrent.HashPiece(piece)
 					me.withContext(func() {
 						me.pieceHashed(torrent.InfoHash, piece, sum == torrent.Pieces[piece].Hash)
 					})
-				}(i)
-			}
+				}
+			}()
 		case infoHash := <-me.torrentFinished:
 			delete(me.torrents, infoHash)
 		case task := <-me.actorTask:

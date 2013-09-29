@@ -29,7 +29,7 @@ func copyHashSum(dst, src []byte) {
 }
 
 func BytesInfoHash(b []byte) (ih InfoHash) {
-	if len(b) != len(ih) {
+	if len(b) != len(ih) || copy(ih[:], b) != len(ih) {
 		panic("bad infohash bytes")
 	}
 	return

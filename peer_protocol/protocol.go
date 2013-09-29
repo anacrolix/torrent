@@ -6,6 +6,10 @@ type (
 )
 
 const (
+	Protocol = "\x13BitTorrent protocol"
+)
+
+const (
 	Choke MessageType = iota
 	Unchoke
 	Interested
@@ -21,9 +25,12 @@ type Request struct {
 	Index, Begin, Length Integer
 }
 
-type Message struct {
-	KeepAlive bool
-	Type      MessageType
-	Bitfield  []bool
-	Piece     []byte
+type Message interface {
+	Encode() []byte
+}
+
+type Bytes []byte
+
+func (b Bytes) Encode() []byte {
+	return b
 }

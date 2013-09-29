@@ -87,11 +87,11 @@ func (t torrent) PieceSize(piece int) (size int64) {
 	return
 }
 
-func (t torrent) PieceReader(piece int) io.Reader {
+func (t *torrent) PieceReader(piece int) io.Reader {
 	return io.NewSectionReader(t.Data, int64(piece)*t.MetaInfo.PieceLength, t.MetaInfo.PieceLength)
 }
 
-func (t torrent) HashPiece(piece int) (ps pieceSum) {
+func (t *torrent) HashPiece(piece int) (ps pieceSum) {
 	hash := PieceHash.New()
 	n, err := io.Copy(hash, t.PieceReader(piece))
 	if err != nil {

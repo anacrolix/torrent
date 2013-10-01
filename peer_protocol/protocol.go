@@ -68,7 +68,11 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 	default:
 		err = errors.New("unknown message type")
 	}
-	data = buf.Bytes()
+	data = make([]byte, 4+buf.Len())
+	binary.BigEndian.PutUint32(data, uint32(buf.Len()))
+	if buf.Len() != copy(data[4:], buf.Bytes()) {
+		panic("bad copy")
+	}
 	return
 }
 
@@ -111,16 +115,6 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 		err = fmt.Errorf("unknown message type %#v", c)
 	}
 	return
-}
-
-func encodeMessage(type_ MessageType, data interface{}) []byte {
-	w := &bytes.Buffer{}
-	w.WriteByte(byte(type_))
-	err := binary.Write(w, binary.BigEndian, data)
-	if err != nil {
-		panic(err)
-	}
-	return w.Bytes()
 }
 
 type Bytes []byte

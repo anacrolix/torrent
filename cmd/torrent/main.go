@@ -30,7 +30,7 @@ func main() {
 		}
 		err = client.AddPeers(torrent.BytesInfoHash(metaInfo.InfoHash), []torrent.Peer{{
 			IP:   net.IPv4(127, 0, 0, 1),
-			Port: 53219,
+			Port: 50933,
 		}})
 		if err != nil {
 			log.Fatal(err)

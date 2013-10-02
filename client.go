@@ -21,6 +21,7 @@ const (
 	PieceHash   = crypto.SHA1
 	maxRequests = 10
 	chunkSize   = 0x4000 // 16KiB
+	BEP20       = "-GT0000-"
 )
 
 type InfoHash [20]byte
@@ -273,7 +274,8 @@ func NewClient(dataDir string) *client {
 		torrentFinished: make(chan InfoHash),
 		actorTask:       make(chan func()),
 	}
-	_, err := rand.Read(c.PeerId[:])
+	o := copy(c.PeerId[:], BEP20)
+	_, err := rand.Read(c.PeerId[o:])
 	if err != nil {
 		panic("error generating peer id")
 	}

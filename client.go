@@ -174,6 +174,11 @@ type torrent struct {
 	Peers    []Peer
 }
 
+func (t *torrent) WriteChunk(piece int, begin int64, data []byte) (err error) {
+	_, err = t.Data.WriteAt(data, int64(piece)*t.MetaInfo.PieceLength+begin)
+	return
+}
+
 func (t *torrent) bitfield() (bf []bool) {
 	for _, p := range t.Pieces {
 		bf = append(bf, p.State == pieceStateComplete)
@@ -500,22 +505,24 @@ func (me *client) runConnection(torrent *torrent, conn *connection) error {
 					}
 				}
 			case peer_protocol.Piece:
-				request := request{msg.Index, chunkSpec{msg.Begin, peer_protocol.Integer(len(msg.Piece))}}
-				if _, ok := conn.Requests[request]; !ok {
+				request_ := request{msg.Index, chunkSpec{msg.Begin, peer_protocol.Integer(len(msg.Piece))}}
+				if _, ok := conn.Requests[request_]; !ok {
 					err = errors.New("unexpected piece")
 					break
 				}
-				delete(conn.Requests, request)
-				me.replenishConnRequests(torrent, conn)
-				if _, ok := torrent.Pieces[request.Index].PendingChunkSpecs[request.chunkSpec]; !ok {
-					log.Printf("got unnecessary chunk: %s", request)
+				delete(conn.Requests, request_)
+				if _, ok := torrent.Pieces[request_.Index].PendingChunkSpecs[request_.chunkSpec]; !ok {
+					log.Printf("got unnecessary chunk: %s", request_)
 					break
 				}
-				log.Printf("need to implement write of chunk: %s", request)
-				delete(torrent.Pieces[request.Index].PendingChunkSpecs, request.chunkSpec)
-				if len(torrent.Pieces[request.Index].PendingChunkSpecs) == 0 {
-					torrent.Pieces[request.Index].State = pieceStateUnknown
-					go me.verifyPiece(torrent, int(request.Index))
+				err = torrent.WriteChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
+				if err != nil {
+					break
+				}
+				delete(torrent.Pieces[request_.Index].PendingChunkSpecs, request_.chunkSpec)
+				if len(torrent.Pieces[request_.Index].PendingChunkSpecs) == 0 {
+					torrent.Pieces[request_.Index].State = pieceStateUnknown
+					go me.verifyPiece(torrent, int(request_.Index))
 				}
 			default:
 				log.Printf("received unknown message type: %#v", msg.Type)
@@ -523,7 +530,9 @@ func (me *client) runConnection(torrent *torrent, conn *connection) error {
 			if err != nil {
 				log.Print(err)
 				me.dropConnection(torrent, conn)
+				return
 			}
+			me.replenishConnRequests(torrent, conn)
 		})
 	}
 }

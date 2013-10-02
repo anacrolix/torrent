@@ -56,7 +56,7 @@ func (me MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
 		return len(p) == 0
 	})
 	if len(p) != 0 {
-		err = io.EOF
+		err = io.ErrShortWrite
 	}
 	return
 }

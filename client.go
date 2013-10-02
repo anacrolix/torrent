@@ -465,7 +465,7 @@ func (me *client) runConnection(torrent *torrent, conn *connection) error {
 			continue
 		}
 		go me.withContext(func() {
-			log.Print(msg)
+			// log.Print(msg)
 			var err error
 			switch msg.Type {
 			case peer_protocol.Choke:
@@ -498,6 +498,24 @@ func (me *client) runConnection(torrent *torrent, conn *connection) error {
 					if has {
 						me.peerGotPiece(torrent, conn, index)
 					}
+				}
+			case peer_protocol.Piece:
+				request := request{msg.Index, chunkSpec{msg.Begin, peer_protocol.Integer(len(msg.Piece))}}
+				if _, ok := conn.Requests[request]; !ok {
+					err = errors.New("unexpected piece")
+					break
+				}
+				delete(conn.Requests, request)
+				me.replenishConnRequests(torrent, conn)
+				if _, ok := torrent.Pieces[request.Index].PendingChunkSpecs[request.chunkSpec]; !ok {
+					log.Printf("got unnecessary chunk: %s", request)
+					break
+				}
+				log.Printf("need to implement write of chunk: %s", request)
+				delete(torrent.Pieces[request.Index].PendingChunkSpecs, request.chunkSpec)
+				if len(torrent.Pieces[request.Index].PendingChunkSpecs) == 0 {
+					torrent.Pieces[request.Index].State = pieceStateUnknown
+					go me.verifyPiece(torrent, int(request.Index))
 				}
 			default:
 				log.Printf("received unknown message type: %#v", msg.Type)
@@ -652,7 +670,13 @@ func (me *client) pieceHashed(ih InfoHash, piece int, correct bool) {
 			}
 		}
 	}
+}
 
+func (me *client) verifyPiece(torrent *torrent, index int) {
+	sum := torrent.HashPiece(index)
+	me.withContext(func() {
+		me.pieceHashed(torrent.InfoHash, index, sum == torrent.Pieces[index].Hash)
+	})
 }
 
 func (me *client) run() {
@@ -669,12 +693,8 @@ func (me *client) run() {
 			}
 			me.torrents[torrent.InfoHash] = torrent
 			go func() {
-				for _piece := range torrent.Pieces {
-					piece := _piece
-					sum := torrent.HashPiece(piece)
-					me.withContext(func() {
-						me.pieceHashed(torrent.InfoHash, piece, sum == torrent.Pieces[piece].Hash)
-					})
+				for index := range torrent.Pieces {
+					me.verifyPiece(torrent, index)
 				}
 			}()
 		case infoHash := <-me.torrentFinished:

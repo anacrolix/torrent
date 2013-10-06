@@ -166,7 +166,7 @@ func (conn *connection) writeOptimizer() {
 	}
 }
 
-type torrent struct {
+type Torrent struct {
 	InfoHash InfoHash
 	Pieces   []piece
 	Data     MMapSpan
@@ -175,19 +175,19 @@ type torrent struct {
 	Peers    []Peer
 }
 
-func (t *torrent) WriteChunk(piece int, begin int64, data []byte) (err error) {
+func (t *Torrent) WriteChunk(piece int, begin int64, data []byte) (err error) {
 	_, err = t.Data.WriteAt(data, int64(piece)*t.MetaInfo.PieceLength+begin)
 	return
 }
 
-func (t *torrent) bitfield() (bf []bool) {
+func (t *Torrent) bitfield() (bf []bool) {
 	for _, p := range t.Pieces {
 		bf = append(bf, p.State == pieceStateComplete)
 	}
 	return
 }
 
-func (t *torrent) pieceChunkSpecs(index int) (cs map[chunkSpec]struct{}) {
+func (t *Torrent) pieceChunkSpecs(index int) (cs map[chunkSpec]struct{}) {
 	cs = make(map[chunkSpec]struct{}, (t.MetaInfo.PieceLength+chunkSize-1)/chunkSize)
 	c := chunkSpec{
 		Begin: 0,
@@ -203,7 +203,7 @@ func (t *torrent) pieceChunkSpecs(index int) (cs map[chunkSpec]struct{}) {
 	return
 }
 
-func (t *torrent) requestHeat() (ret map[request]int) {
+func (t *Torrent) requestHeat() (ret map[request]int) {
 	ret = make(map[request]int)
 	for _, conn := range t.Conns {
 		for req, _ := range conn.Requests {
@@ -219,7 +219,7 @@ type Peer struct {
 	Port int
 }
 
-func (t *torrent) PieceSize(piece int) (size int64) {
+func (t *Torrent) PieceSize(piece int) (size int64) {
 	if piece == len(t.Pieces)-1 {
 		size = t.Data.Size() % t.MetaInfo.PieceLength
 	}
@@ -229,11 +229,11 @@ func (t *torrent) PieceSize(piece int) (size int64) {
 	return
 }
 
-func (t *torrent) PieceReader(piece int) io.Reader {
+func (t *Torrent) PieceReader(piece int) io.Reader {
 	return io.NewSectionReader(t.Data, int64(piece)*t.MetaInfo.PieceLength, t.MetaInfo.PieceLength)
 }
 
-func (t *torrent) HashPiece(piece int) (ps pieceSum) {
+func (t *Torrent) HashPiece(piece int) (ps pieceSum) {
 	hash := PieceHash.New()
 	n, err := io.Copy(hash, t.PieceReader(piece))
 	if err != nil {
@@ -246,31 +246,29 @@ func (t *torrent) HashPiece(piece int) (ps pieceSum) {
 	return
 }
 
-// func (t *torrent) bitfield
-
-type client struct {
+type Client struct {
 	DataDir       string
 	HalfOpenLimit int
 	PeerId        [20]byte
 
 	halfOpen int
-	torrents map[InfoHash]*torrent
+	torrents map[InfoHash]*Torrent
 
 	noTorrents      chan struct{}
-	addTorrent      chan *torrent
+	addTorrent      chan *Torrent
 	torrentFinished chan InfoHash
 	actorTask       chan func()
 }
 
-func NewClient(dataDir string) *client {
-	c := &client{
+func NewClient(dataDir string) *Client {
+	c := &Client{
 		DataDir:       dataDir,
 		HalfOpenLimit: 10,
 
-		torrents: make(map[InfoHash]*torrent),
+		torrents: make(map[InfoHash]*Torrent),
 
 		noTorrents:      make(chan struct{}),
-		addTorrent:      make(chan *torrent),
+		addTorrent:      make(chan *Torrent),
 		torrentFinished: make(chan InfoHash),
 		actorTask:       make(chan func()),
 	}
@@ -331,7 +329,7 @@ func mmapTorrentData(metaInfo *metainfo.MetaInfo, location string) (mms MMapSpan
 	return
 }
 
-func (me *client) torrent(ih InfoHash) *torrent {
+func (me *Client) torrent(ih InfoHash) *Torrent {
 	for _, t := range me.torrents {
 		if t.InfoHash == ih {
 			return t
@@ -340,7 +338,7 @@ func (me *client) torrent(ih InfoHash) *torrent {
 	return nil
 }
 
-func (me *client) initiateConn(peer Peer, torrent *torrent) {
+func (me *Client) initiateConn(peer Peer, torrent *Torrent) {
 	if peer.Id == me.PeerId {
 		return
 	}
@@ -363,7 +361,7 @@ func (me *client) initiateConn(peer Peer, torrent *torrent) {
 	}()
 }
 
-func (me *torrent) haveAnyPieces() bool {
+func (me *Torrent) haveAnyPieces() bool {
 	for _, piece := range me.Pieces {
 		if piece.State == pieceStateComplete {
 			return true
@@ -372,7 +370,7 @@ func (me *torrent) haveAnyPieces() bool {
 	return false
 }
 
-func (me *client) handshake(sock net.Conn, torrent *torrent, peerId [20]byte) {
+func (me *Client) handshake(sock net.Conn, torrent *Torrent, peerId [20]byte) {
 	conn := &connection{
 		Socket:     sock,
 		Choked:     true,
@@ -438,7 +436,7 @@ func (me *client) handshake(sock net.Conn, torrent *torrent, peerId [20]byte) {
 	})
 }
 
-func (me *client) peerGotPiece(torrent *torrent, conn *connection, piece int) {
+func (me *Client) peerGotPiece(torrent *Torrent, conn *connection, piece int) {
 	if conn.PeerPieces == nil {
 		conn.PeerPieces = make([]bool, len(torrent.Pieces))
 	}
@@ -449,15 +447,15 @@ func (me *client) peerGotPiece(torrent *torrent, conn *connection, piece int) {
 	}
 }
 
-func (t *torrent) wantPiece(index int) bool {
+func (t *Torrent) wantPiece(index int) bool {
 	return t.Pieces[index].State == pieceStateIncomplete
 }
 
-func (me *client) peerUnchoked(torrent *torrent, conn *connection) {
+func (me *Client) peerUnchoked(torrent *Torrent, conn *connection) {
 	me.replenishConnRequests(torrent, conn)
 }
 
-func (me *client) runConnection(torrent *torrent, conn *connection) error {
+func (me *Client) runConnection(torrent *Torrent, conn *connection) error {
 	decoder := peer_protocol.Decoder{
 		R:         bufio.NewReader(conn.Socket),
 		MaxLength: 256 * 1024,
@@ -539,7 +537,7 @@ func (me *client) runConnection(torrent *torrent, conn *connection) error {
 	}
 }
 
-func (me *client) dropConnection(torrent *torrent, conn *connection) {
+func (me *Client) dropConnection(torrent *Torrent, conn *connection) {
 	conn.Socket.Close()
 	for i0, c := range torrent.Conns {
 		if c != conn {
@@ -555,7 +553,7 @@ func (me *client) dropConnection(torrent *torrent, conn *connection) {
 	panic("no such connection")
 }
 
-func (me *client) addConnection(t *torrent, c *connection) bool {
+func (me *Client) addConnection(t *Torrent, c *connection) bool {
 	for _, c := range t.Conns {
 		if c.PeerId == c.PeerId {
 			return false
@@ -565,7 +563,7 @@ func (me *client) addConnection(t *torrent, c *connection) bool {
 	return true
 }
 
-func (me *client) openNewConns() {
+func (me *Client) openNewConns() {
 	for _, t := range me.torrents {
 		for len(t.Peers) != 0 {
 			if me.halfOpen >= me.HalfOpenLimit {
@@ -578,7 +576,7 @@ func (me *client) openNewConns() {
 	}
 }
 
-func (me *client) AddPeers(infoHash InfoHash, peers []Peer) (err error) {
+func (me *Client) AddPeers(infoHash InfoHash, peers []Peer) (err error) {
 	me.withContext(func() {
 		t := me.torrent(infoHash)
 		if t == nil {
@@ -591,8 +589,8 @@ func (me *client) AddPeers(infoHash InfoHash, peers []Peer) (err error) {
 	return
 }
 
-func (me *client) AddTorrent(metaInfo *metainfo.MetaInfo) error {
-	torrent := &torrent{
+func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) error {
+	torrent := &Torrent{
 		InfoHash: BytesInfoHash(metaInfo.InfoHash),
 	}
 	for offset := 0; offset < len(metaInfo.Pieces); offset += PieceHash.Size() {
@@ -614,18 +612,18 @@ func (me *client) AddTorrent(metaInfo *metainfo.MetaInfo) error {
 	return nil
 }
 
-func (me *client) WaitAll() {
+func (me *Client) WaitAll() {
 	<-me.noTorrents
 }
 
-func (me *client) Close() {
+func (me *Client) Close() {
 }
 
-func (me *client) withContext(f func()) {
+func (me *Client) withContext(f func()) {
 	me.actorTask <- f
 }
 
-func (me *client) replenishConnRequests(torrent *torrent, conn *connection) {
+func (me *Client) replenishConnRequests(torrent *Torrent, conn *connection) {
 	if len(conn.Requests) >= maxRequests {
 		return
 	}
@@ -652,7 +650,7 @@ func (me *client) replenishConnRequests(torrent *torrent, conn *connection) {
 
 }
 
-func (me *client) pieceHashed(ih InfoHash, piece int, correct bool) {
+func (me *Client) pieceHashed(ih InfoHash, piece int, correct bool) {
 	torrent := me.torrents[ih]
 	newState := func() pieceState {
 		if correct {
@@ -683,14 +681,14 @@ func (me *client) pieceHashed(ih InfoHash, piece int, correct bool) {
 	}
 }
 
-func (me *client) verifyPiece(torrent *torrent, index int) {
+func (me *Client) verifyPiece(torrent *Torrent, index int) {
 	sum := torrent.HashPiece(index)
 	me.withContext(func() {
 		me.pieceHashed(torrent.InfoHash, index, sum == torrent.Pieces[index].Hash)
 	})
 }
 
-func (me *client) run() {
+func (me *Client) run() {
 	for {
 		noTorrents := me.noTorrents
 		if len(me.torrents) != 0 {
@@ -714,4 +712,16 @@ func (me *client) run() {
 			task()
 		}
 	}
+}
+
+func (me *Client) Torrents() (ret []*Torrent) {
+	done := make(chan struct{})
+	me.withContext(func() {
+		for _, t := range me.torrents {
+			ret = append(ret, t)
+		}
+		close(done)
+	})
+	<-done
+	return
 }

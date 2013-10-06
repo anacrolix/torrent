@@ -49,7 +49,7 @@ func TestHaveEncode(t *testing.T) {
 		t.Fatal(err)
 	}
 	actualString := string(actualBytes)
-	expected := "\x04\x00\x00\x00\x2a"
+	expected := "\x00\x00\x00\x05\x04\x00\x00\x00\x2a"
 	if actualString != expected {
 		t.Fatalf("expected %#v, got %#v", expected, actualString)
 	}

@@ -290,7 +290,7 @@ func mmapTorrentData(metaInfo *metainfo.MetaInfo, location string) (mms MMapSpan
 	}()
 	for _, miFile := range metaInfo.Files {
 		fileName := filepath.Join(append([]string{location, metaInfo.Name}, miFile.Path...)...)
-		err = os.MkdirAll(filepath.Dir(fileName), 0666)
+		err = os.MkdirAll(filepath.Dir(fileName), 0777)
 		if err != nil {
 			return
 		}

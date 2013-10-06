@@ -229,13 +229,9 @@ func (t *Torrent) PieceSize(piece int) (size int64) {
 	return
 }
 
-func (t *Torrent) PieceReader(piece int) io.Reader {
-	return io.NewSectionReader(t.Data, int64(piece)*t.MetaInfo.PieceLength, t.MetaInfo.PieceLength)
-}
-
 func (t *Torrent) HashPiece(piece int) (ps pieceSum) {
 	hash := PieceHash.New()
-	n, err := io.Copy(hash, t.PieceReader(piece))
+	n, err := t.Data.WriteSectionTo(hash, int64(piece)*t.MetaInfo.PieceLength, int64(piece)*t.MetaInfo.PieceLength)
 	if err != nil {
 		panic(err)
 	}

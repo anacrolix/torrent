@@ -5,8 +5,9 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"flag"
+	"fmt"
+	"github.com/davecheney/profile"
 	metainfo "github.com/nsf/libtorgo/torrent"
-	"io"
 	"launchpad.net/gommap"
 	"log"
 	"os"
@@ -23,6 +24,7 @@ func init() {
 }
 
 func main() {
+	defer profile.Start(profile.CPUProfile).Stop()
 	metaInfo, err := metainfo.LoadFromFile(*filePath)
 	if err != nil {
 		log.Fatal(err)
@@ -32,7 +34,7 @@ func main() {
 		log.Print(err)
 	}
 	defer devZero.Close()
-	var mmapSpan torrent.MmapSpan
+	var mMapSpan torrent.MMapSpan
 	for _, file := range metaInfo.Files {
 		filename := filepath.Join(append([]string{*dirPath, metaInfo.Name}, file.Path...)...)
 		osFile, err := os.Open(filename)
@@ -52,24 +54,21 @@ func main() {
 			log.Printf("file mmap has wrong size: %#v", filename)
 		}
 		osFile.Close()
-		mmapSpan = append(mmapSpan, torrent.Mmap{goMMap})
+		mMapSpan = append(mMapSpan, torrent.MMap{goMMap})
 	}
 	log.Println(len(metaInfo.Files))
-	log.Println(mmapSpan.Size())
+	log.Println(mMapSpan.Size())
 	log.Println(len(metaInfo.Pieces))
-	for piece := int64(0); ; piece++ {
+	for piece := 0; piece < (len(metaInfo.Pieces)+sha1.Size-1)/sha1.Size; piece++ {
 		expectedHash := metaInfo.Pieces[sha1.Size*piece : sha1.Size*(piece+1)]
 		if len(expectedHash) == 0 {
 			break
 		}
 		hash := sha1.New()
-		n, err := io.Copy(hash, io.NewSectionReader(mmapSpan, piece*metaInfo.PieceLength, metaInfo.PieceLength))
-		if n != metaInfo.PieceLength {
-			panic("oh no")
-		}
+		_, err := mMapSpan.WriteSectionTo(hash, int64(piece)*metaInfo.PieceLength, metaInfo.PieceLength)
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Println(piece, bytes.Equal(hash.Sum(nil), expectedHash))
+		fmt.Println(piece, bytes.Equal(hash.Sum(nil), expectedHash))
 	}
 }

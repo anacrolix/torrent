@@ -18,6 +18,10 @@ var (
 	mountDir    string
 )
 
+const (
+	defaultMode = 0555
+)
+
 func init() {
 	flag.StringVar(&downloadDir, "downloadDir", "", "location to save torrent data")
 	flag.StringVar(&torrentPath, "torrentPath", func() string {
@@ -38,13 +42,130 @@ type rootNode struct {
 	fs *TorrentFS
 }
 
+type node struct {
+	path     []string
+	metaInfo *metainfo.MetaInfo
+	client   *torrent.Client
+}
+
+type fileNode struct {
+	node
+	size uint64
+}
+
+func (fn fileNode) Attr() (attr fuse.Attr) {
+	attr.Size = fn.size
+	attr.Mode = defaultMode
+	return
+}
+
+type dirNode struct {
+	node
+}
+
+func isSubPath(parent, child []string) bool {
+	if len(child) <= len(parent) {
+		return false
+	}
+	for i := range parent {
+		if parent[i] != child[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (dn dirNode) ReadDir(intr fusefs.Intr) (des []fuse.Dirent, err fuse.Error) {
+	names := map[string]bool{}
+	for _, fi := range dn.metaInfo.Files {
+		if !isSubPath(dn.path, fi.Path) {
+			continue
+		}
+		name := fi.Path[len(dn.path)]
+		if names[name] {
+			continue
+		}
+		names[name] = true
+		de := fuse.Dirent{
+			Name: name,
+		}
+		if len(fi.Path) == len(dn.path)+1 {
+			de.Type = fuse.DT_File
+		} else {
+			de.Type = fuse.DT_Dir
+		}
+		des = append(des, de)
+	}
+	return
+}
+
+func (dn dirNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err fuse.Error) {
+	for _, fi := range dn.metaInfo.Files {
+		if !isSubPath(dn.path, fi.Path) {
+			continue
+		}
+		if fi.Path[len(dn.path)] != name {
+			continue
+		}
+		__node := node{
+			path:     append(dn.path, name),
+			metaInfo: dn.metaInfo,
+			client:   dn.client,
+		}
+		if len(fi.Path) == len(dn.path)+1 {
+			_node = fileNode{
+				node: __node,
+				size: uint64(fi.Length),
+			}
+		} else {
+			_node = dirNode{__node}
+		}
+		break
+	}
+	if _node == nil {
+		err = fuse.ENOENT
+	}
+	return
+}
+
+func (dn dirNode) Attr() (attr fuse.Attr) {
+	attr.Mode = os.ModeDir | defaultMode
+	return
+}
+
+func isSingleFileTorrent(mi *metainfo.MetaInfo) bool {
+	return len(mi.Files) == 1 && mi.Files[0].Path == nil
+}
+
+func (me rootNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err fuse.Error) {
+	for _, _torrent := range me.fs.Client.Torrents() {
+		metaInfo := _torrent.MetaInfo
+		if metaInfo.Name == name {
+			__node := node{
+				metaInfo: metaInfo,
+				client:   me.fs.Client,
+			}
+			if isSingleFileTorrent(metaInfo) {
+				_node = fileNode{__node, uint64(metaInfo.Files[0].Length)}
+			} else {
+				_node = dirNode{__node}
+			}
+			break
+		}
+	}
+	if _node == nil {
+		err = fuse.ENOENT
+	}
+	return
+}
+
 func (me rootNode) ReadDir(intr fusefs.Intr) (dirents []fuse.Dirent, err fuse.Error) {
 	for _, _torrent := range me.fs.Client.Torrents() {
 		metaInfo := _torrent.MetaInfo
 		dirents = append(dirents, fuse.Dirent{
 			Name: metaInfo.Name,
 			Type: func() fuse.DirentType {
-				if len(metaInfo.Files) == 1 && metaInfo.Files[0].Path == nil {
+				if isSingleFileTorrent(metaInfo) {
 					return fuse.DT_File
 				} else {
 					return fuse.DT_Dir
@@ -82,7 +203,10 @@ func main() {
 		if err != nil {
 			log.Print(err)
 		}
-		client.AddTorrent(metaInfo)
+		err = client.AddTorrent(metaInfo)
+		if err != nil {
+			log.Print(err)
+		}
 	}
 	conn, err := fuse.Mount(mountDir)
 	if err != nil {

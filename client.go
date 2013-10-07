@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding"
 	"errors"
+	"fmt"
 	metainfo "github.com/nsf/libtorgo/torrent"
 	"io"
 	"launchpad.net/gommap"
@@ -231,12 +232,12 @@ func (t *Torrent) PieceSize(piece int) (size int64) {
 
 func (t *Torrent) HashPiece(piece int) (ps pieceSum) {
 	hash := PieceHash.New()
-	n, err := t.Data.WriteSectionTo(hash, int64(piece)*t.MetaInfo.PieceLength, int64(piece)*t.MetaInfo.PieceLength)
+	n, err := t.Data.WriteSectionTo(hash, int64(piece)*t.MetaInfo.PieceLength, t.MetaInfo.PieceLength)
 	if err != nil {
 		panic(err)
 	}
 	if n != t.PieceSize(piece) {
-		panic("hashed wrong number of bytes")
+		panic(fmt.Sprintf("hashed wrong number of bytes: expected %d; did %d; piece %d", t.PieceSize(piece), n, piece))
 	}
 	copyHashSum(ps[:], hash.Sum(nil))
 	return

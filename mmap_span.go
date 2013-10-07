@@ -61,7 +61,7 @@ func (me MMapSpan) WriteSectionTo(w io.Writer, off, n int64) (written int64, err
 		if err != nil {
 			return true
 		}
-		return n != 0
+		return n == 0
 	})
 	return
 }

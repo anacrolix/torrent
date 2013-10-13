@@ -5,11 +5,16 @@ import (
 	fusefs "bazil.org/fuse/fs"
 	"bitbucket.org/anacrolix/go.torrent"
 	"flag"
+	"github.com/davecheney/profile"
 	metainfo "github.com/nsf/libtorgo/torrent"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/user"
 	"path/filepath"
+	"sync"
+	"syscall"
 )
 
 var (
@@ -35,7 +40,40 @@ func init() {
 }
 
 type TorrentFS struct {
-	Client *torrent.Client
+	Client   *torrent.Client
+	DataSubs map[chan torrent.DataSpec]struct{}
+	sync.Mutex
+}
+
+func (tfs *TorrentFS) publishData() {
+	for {
+		spec := <-tfs.Client.DataReady
+		log.Printf("ready data: %s", spec)
+		tfs.Lock()
+		for ds := range tfs.DataSubs {
+			ds <- spec
+		}
+		tfs.Unlock()
+	}
+}
+
+func (tfs *TorrentFS) SubscribeData() chan torrent.DataSpec {
+	ch := make(chan torrent.DataSpec)
+	tfs.Lock()
+	tfs.DataSubs[ch] = struct{}{}
+	tfs.Unlock()
+	return ch
+}
+
+func (tfs *TorrentFS) UnsubscribeData(ch chan torrent.DataSpec) {
+	go func() {
+		for _ = range ch {
+		}
+	}()
+	tfs.Lock()
+	delete(tfs.DataSubs, ch)
+	tfs.Unlock()
+	close(ch)
 }
 
 type rootNode struct {
@@ -45,12 +83,14 @@ type rootNode struct {
 type node struct {
 	path     []string
 	metaInfo *metainfo.MetaInfo
-	client   *torrent.Client
+	FS       *TorrentFS
+	InfoHash torrent.InfoHash
 }
 
 type fileNode struct {
 	node
-	size uint64
+	size          uint64
+	TorrentOffset int64
 }
 
 func (fn fileNode) Attr() (attr fuse.Attr) {
@@ -59,9 +99,48 @@ func (fn fileNode) Attr() (attr fuse.Attr) {
 	return
 }
 
+func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fusefs.Intr) fuse.Error {
+	if req.Dir {
+		panic("hodor")
+	}
+	dataSpecs := fn.FS.SubscribeData()
+	defer fn.FS.UnsubscribeData(dataSpecs)
+	data := make([]byte, func() int {
+		_len := int64(fn.size) - req.Offset
+		if int64(req.Size) < _len {
+			return req.Size
+		} else {
+			return int(_len)
+		}
+	}())
+	for {
+		n, err := fn.FS.Client.TorrentReadAt(torrent.BytesInfoHash(fn.metaInfo.InfoHash), fn.TorrentOffset+req.Offset, data)
+		switch err {
+		case nil:
+			resp.Data = data[:n]
+			return nil
+		case torrent.ErrDataNotReady:
+			select {
+			case <-dataSpecs:
+			case <-intr:
+				return fuse.Errno(syscall.EINTR)
+			}
+		default:
+			log.Print(err)
+			return fuse.EIO
+		}
+	}
+}
+
 type dirNode struct {
 	node
 }
+
+var (
+	_ fusefs.HandleReadDirer = dirNode{}
+
+	_ fusefs.HandleReader = fileNode{}
+)
 
 func isSubPath(parent, child []string) bool {
 	if len(child) <= len(parent) {
@@ -100,22 +179,23 @@ func (dn dirNode) ReadDir(intr fusefs.Intr) (des []fuse.Dirent, err fuse.Error) 
 }
 
 func (dn dirNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err fuse.Error) {
+	var torrentOffset int64
 	for _, fi := range dn.metaInfo.Files {
 		if !isSubPath(dn.path, fi.Path) {
+			torrentOffset += fi.Length
 			continue
 		}
 		if fi.Path[len(dn.path)] != name {
+			torrentOffset += fi.Length
 			continue
 		}
-		__node := node{
-			path:     append(dn.path, name),
-			metaInfo: dn.metaInfo,
-			client:   dn.client,
-		}
+		__node := dn.node
+		__node.path = append(__node.path, name)
 		if len(fi.Path) == len(dn.path)+1 {
 			_node = fileNode{
-				node: __node,
-				size: uint64(fi.Length),
+				node:          __node,
+				size:          uint64(fi.Length),
+				TorrentOffset: torrentOffset,
 			}
 		} else {
 			_node = dirNode{__node}
@@ -143,10 +223,11 @@ func (me rootNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err
 		if metaInfo.Name == name {
 			__node := node{
 				metaInfo: metaInfo,
-				client:   me.fs.Client,
+				FS:       me.fs,
+				InfoHash: torrent.BytesInfoHash(metaInfo.InfoHash),
 			}
 			if isSingleFileTorrent(metaInfo) {
-				_node = fileNode{__node, uint64(metaInfo.Files[0].Length)}
+				_node = fileNode{__node, uint64(metaInfo.Files[0].Length), 0}
 			} else {
 				_node = dirNode{__node}
 			}
@@ -187,8 +268,17 @@ func (tfs *TorrentFS) Root() (fusefs.Node, fuse.Error) {
 }
 
 func main() {
+	pprofAddr := flag.String("pprofAddr", "", "pprof HTTP server bind address")
 	flag.Parse()
-	client := torrent.NewClient(downloadDir)
+	if *pprofAddr != "" {
+		go http.ListenAndServe(*pprofAddr, nil)
+	}
+	defer profile.Start(profile.CPUProfile).Stop()
+	client := &torrent.Client{
+		DataDir:   downloadDir,
+		DataReady: make(chan torrent.DataSpec),
+	}
+	client.Start()
 	torrentDir, err := os.Open(torrentPath)
 	defer torrentDir.Close()
 	if err != nil {
@@ -212,6 +302,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fs := &TorrentFS{client}
+	fs := &TorrentFS{
+		Client:   client,
+		DataSubs: make(map[chan torrent.DataSpec]struct{}),
+	}
+	go fs.publishData()
 	fusefs.Serve(conn, fs)
 }

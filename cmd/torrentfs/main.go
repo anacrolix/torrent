@@ -8,13 +8,13 @@ import (
 	"github.com/davecheney/profile"
 	metainfo "github.com/nsf/libtorgo/torrent"
 	"log"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/user"
 	"path/filepath"
 	"sync"
-	"syscall"
 )
 
 var (
@@ -48,7 +48,6 @@ type TorrentFS struct {
 func (tfs *TorrentFS) publishData() {
 	for {
 		spec := <-tfs.Client.DataReady
-		log.Printf("ready data: %s", spec)
 		tfs.Lock()
 		for ds := range tfs.DataSubs {
 			ds <- spec
@@ -110,11 +109,15 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 		if int64(req.Size) < _len {
 			return req.Size
 		} else {
+			// limit read to the end of the file
 			return int(_len)
 		}
 	}())
+	infoHash := torrent.BytesInfoHash(fn.metaInfo.InfoHash)
+	torrentOff := fn.TorrentOffset + req.Offset
+	fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(len(data)))
 	for {
-		n, err := fn.FS.Client.TorrentReadAt(torrent.BytesInfoHash(fn.metaInfo.InfoHash), fn.TorrentOffset+req.Offset, data)
+		n, err := fn.FS.Client.TorrentReadAt(infoHash, torrentOff, data)
 		switch err {
 		case nil:
 			resp.Data = data[:n]
@@ -123,7 +126,7 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 			select {
 			case <-dataSpecs:
 			case <-intr:
-				return fuse.Errno(syscall.EINTR)
+				return fuse.EINTR
 			}
 		default:
 			log.Print(err)
@@ -270,6 +273,7 @@ func (tfs *TorrentFS) Root() (fusefs.Node, fuse.Error) {
 func main() {
 	pprofAddr := flag.String("pprofAddr", "", "pprof HTTP server bind address")
 	flag.Parse()
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	if *pprofAddr != "" {
 		go http.ListenAndServe(*pprofAddr, nil)
 	}
@@ -297,6 +301,10 @@ func main() {
 		if err != nil {
 			log.Print(err)
 		}
+		client.AddPeers(torrent.BytesInfoHash(metaInfo.InfoHash), []torrent.Peer{{
+			IP:   net.IPv4(127, 0, 0, 1),
+			Port: 3000,
+		}})
 	}
 	conn, err := fuse.Mount(mountDir)
 	if err != nil {

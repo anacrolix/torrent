@@ -118,6 +118,7 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 	fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(len(data)))
 	for {
 		n, err := fn.FS.Client.TorrentReadAt(infoHash, torrentOff, data)
+		// log.Println(torrentOff, len(data), n, err)
 		switch err {
 		case nil:
 			resp.Data = data[:n]

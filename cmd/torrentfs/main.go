@@ -5,7 +5,6 @@ import (
 	fusefs "bazil.org/fuse/fs"
 	"bitbucket.org/anacrolix/go.torrent"
 	"flag"
-	"github.com/davecheney/profile"
 	metainfo "github.com/nsf/libtorgo/torrent"
 	"log"
 	"net"
@@ -15,6 +14,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 var (
@@ -273,15 +273,17 @@ func (tfs *TorrentFS) Root() (fusefs.Node, fuse.Error) {
 
 func main() {
 	pprofAddr := flag.String("pprofAddr", "", "pprof HTTP server bind address")
+	testPeer := flag.String("testPeer", "", "the address for a test peer")
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	if *pprofAddr != "" {
 		go http.ListenAndServe(*pprofAddr, nil)
 	}
-	defer profile.Start(profile.CPUProfile).Stop()
+	// defer profile.Start(profile.CPUProfile).Stop()
 	client := &torrent.Client{
-		DataDir:   downloadDir,
-		DataReady: make(chan torrent.DataSpec),
+		DataDir:       downloadDir,
+		DataReady:     make(chan torrent.DataSpec),
+		HalfOpenLimit: 2,
 	}
 	client.Start()
 	torrentDir, err := os.Open(torrentPath)
@@ -293,6 +295,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	var testAddr *net.TCPAddr
+	if *testPeer != "" {
+		testAddr, err = net.ResolveTCPAddr("tcp4", *testPeer)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	for _, name := range names {
 		metaInfo, err := metainfo.LoadFromFile(filepath.Join(torrentPath, name))
 		if err != nil {
@@ -302,10 +311,6 @@ func main() {
 		if err != nil {
 			log.Print(err)
 		}
-		client.AddPeers(torrent.BytesInfoHash(metaInfo.InfoHash), []torrent.Peer{{
-			IP:   net.IPv4(127, 0, 0, 1),
-			Port: 3000,
-		}})
 	}
 	conn, err := fuse.Mount(mountDir)
 	if err != nil {
@@ -316,5 +321,19 @@ func main() {
 		DataSubs: make(map[chan torrent.DataSpec]struct{}),
 	}
 	go fs.publishData()
+	go func() {
+		for {
+			for _, t := range client.Torrents() {
+				if testAddr != nil {
+					client.AddPeers(t.InfoHash, []torrent.Peer{{
+						IP:   testAddr.IP,
+						Port: testAddr.Port,
+					}})
+				}
+			}
+			time.Sleep(10 * time.Second)
+			break
+		}
+	}()
 	fusefs.Serve(conn, fs)
 }

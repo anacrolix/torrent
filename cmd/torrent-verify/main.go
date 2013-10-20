@@ -6,7 +6,7 @@ import (
 	"crypto/sha1"
 	"flag"
 	"fmt"
-	"github.com/davecheney/profile"
+	// "github.com/davecheney/profile"
 	metainfo "github.com/nsf/libtorgo/torrent"
 	"launchpad.net/gommap"
 	"log"
@@ -24,7 +24,7 @@ func init() {
 }
 
 func main() {
-	defer profile.Start(profile.CPUProfile).Stop()
+	// defer profile.Start(profile.CPUProfile).Stop()
 	metaInfo, err := metainfo.LoadFromFile(*filePath)
 	if err != nil {
 		log.Fatal(err)

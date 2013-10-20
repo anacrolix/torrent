@@ -68,12 +68,17 @@ func (me MMapSpan) WriteSectionTo(w io.Writer, off, n int64) (written int64, err
 
 func (me MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
 	me.span().ApplyTo(off, func(iOff int64, i sizer) (stop bool) {
-		_n := copy(i.(MMap).MMap[iOff:], p)
+		mMap := i.(MMap)
+		_n := copy(mMap.MMap[iOff:], p)
+		// err = mMap.Sync(gommap.MS_ASYNC)
+		// if err != nil {
+		// 	return true
+		// }
 		p = p[_n:]
 		n += _n
 		return len(p) == 0
 	})
-	if len(p) != 0 {
+	if err != nil && len(p) != 0 {
 		err = io.ErrShortWrite
 	}
 	return

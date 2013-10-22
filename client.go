@@ -250,7 +250,10 @@ func (me pieceByBytesPendingSlice) Swap(i, j int) {
 }
 
 func (t *Torrent) piecesByPendingBytesDesc() (indices []peer_protocol.Integer) {
-	slice := pieceByBytesPendingSlice{}
+	slice := pieceByBytesPendingSlice{
+		Pending: make([]peer_protocol.Integer, 0, len(t.Pieces)),
+		Indices: make([]peer_protocol.Integer, 0, len(t.Pieces)),
+	}
 	for i := range t.Pieces {
 		slice.Pending = append(slice.Pending, t.PieceNumPendingBytes(peer_protocol.Integer(i)))
 		slice.Indices = append(slice.Indices, peer_protocol.Integer(i))

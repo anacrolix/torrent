@@ -818,6 +818,7 @@ func (me *Client) replenishConnRequests(torrent *Torrent, conn *Connection) {
 			}
 		}
 	}
+	conn.SetInterested(false)
 }
 
 func (me *Client) downloadedChunk(torrent *Torrent, msg *peer_protocol.Message) (err error) {

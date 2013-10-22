@@ -621,7 +621,8 @@ func (me *Client) peerGotPiece(torrent *Torrent, conn *Connection, piece int) {
 }
 
 func (t *Torrent) wantPiece(index int) bool {
-	return !t.Pieces[index].Complete()
+	p := t.Pieces[index]
+	return p.EverHashed && !p.Hashing && len(p.PendingChunkSpecs) != 0
 }
 
 func (me *Client) peerUnchoked(torrent *Torrent, conn *Connection) {

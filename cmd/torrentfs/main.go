@@ -323,16 +323,26 @@ func main() {
 	go fs.publishData()
 	go func() {
 		for {
+		torrentLoop:
 			for _, t := range client.Torrents() {
+				client.Lock()
+				for _, c := range t.Conns {
+					if c.Socket.RemoteAddr().String() == testAddr.String() {
+						client.Unlock()
+						continue torrentLoop
+					}
+				}
+				client.Unlock()
 				if testAddr != nil {
-					client.AddPeers(t.InfoHash, []torrent.Peer{{
+					if err := client.AddPeers(t.InfoHash, []torrent.Peer{{
 						IP:   testAddr.IP,
 						Port: testAddr.Port,
-					}})
+					}}); err != nil {
+						log.Print(err)
+					}
 				}
 			}
 			time.Sleep(10 * time.Second)
-			break
 		}
 	}()
 	fusefs.Serve(conn, fs)

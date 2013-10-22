@@ -220,7 +220,7 @@ type Torrent struct {
 	Pieces     []*piece
 	Data       MMapSpan
 	MetaInfo   *metainfo.MetaInfo
-	Conns      []*connection
+	Conns      []*Connection
 	Peers      []Peer
 	Priorities *list.List
 }
@@ -383,7 +383,8 @@ type Client struct {
 	PeerId        [20]byte
 	DataReady     chan DataSpec
 
-	mu    sync.Mutex
+	sync.Mutex
+	mu    *sync.Mutex
 	event sync.Cond
 
 	halfOpen int
@@ -435,6 +436,7 @@ func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err er
 }
 
 func (c *Client) Start() {
+	c.mu = &c.Mutex
 	c.torrents = make(map[InfoHash]*Torrent)
 	if c.HalfOpenLimit == 0 {
 		c.HalfOpenLimit = 10

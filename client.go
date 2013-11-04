@@ -161,6 +161,7 @@ var (
 
 func (conn *Connection) writer() {
 	timer := time.NewTimer(0)
+	defer timer.Stop()
 	for {
 		if !timer.Reset(time.Minute) {
 			<-timer.C

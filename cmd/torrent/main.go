@@ -3,13 +3,19 @@ package main
 import (
 	"bitbucket.org/anacrolix/go.torrent"
 	"flag"
+	"fmt"
 	metainfo "github.com/nsf/libtorgo/torrent"
 	"log"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
 )
 
 var (
 	downloadDir = flag.String("downloadDir", "", "directory to store download torrent data")
+	testPeer    = flag.String("testPeer", "", "bootstrap peer address")
+	profAddr    = flag.String("profAddr", "", "http serve address")
 )
 
 func init() {
@@ -18,7 +24,18 @@ func init() {
 }
 
 func main() {
-	client := torrent.NewClient(*downloadDir)
+	if *profAddr != "" {
+		go http.ListenAndServe(*profAddr, nil)
+	}
+	client := torrent.Client{
+		DataDir: *downloadDir,
+	}
+	client.Start()
+	defer client.Stop()
+	if flag.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "no torrents specified")
+		return
+	}
 	for _, arg := range flag.Args() {
 		metaInfo, err := metainfo.LoadFromFile(arg)
 		if err != nil {
@@ -28,14 +45,22 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = client.AddPeers(torrent.BytesInfoHash(metaInfo.InfoHash), []torrent.Peer{{
-			IP:   net.IPv4(127, 0, 0, 1),
-			Port: 50933,
-		}})
+		err = client.AddPeers(torrent.BytesInfoHash(metaInfo.InfoHash), func() []torrent.Peer {
+			if *testPeer == "" {
+				return nil
+			}
+			addr, err := net.ResolveTCPAddr("tcp", *testPeer)
+			if err != nil {
+				log.Fatal(err)
+			}
+			return []torrent.Peer{{
+				IP:   addr.IP,
+				Port: addr.Port,
+			}}
+		}())
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 	client.WaitAll()
-	client.Close()
 }

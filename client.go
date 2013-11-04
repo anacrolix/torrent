@@ -45,8 +45,6 @@ func BytesInfoHash(b []byte) (ih InfoHash) {
 	return
 }
 
-type pieceState uint8
-
 type piece struct {
 	Hash              pieceSum
 	PendingChunkSpecs map[ChunkSpec]struct{}

@@ -439,6 +439,7 @@ func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err er
 
 func (c *Client) Start() {
 	c.mu = &c.Mutex
+	c.event.L = c.mu
 	c.torrents = make(map[InfoHash]*Torrent)
 	if c.HalfOpenLimit == 0 {
 		c.HalfOpenLimit = 10

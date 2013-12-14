@@ -1,6 +1,7 @@
 package tracker
 
 import (
+	"errors"
 	"net"
 	"net/url"
 )
@@ -34,17 +35,33 @@ type Peer struct {
 
 const (
 	None AnnounceEvent = iota
+	Completed
+	Started
+	Stopped
 )
 
 type Client interface {
 	Announce(*AnnounceRequest) (AnnounceResponse, error)
+	Connect() error
 }
 
-var schemes = make(map[string]func(*url.URL) Client)
+var (
+	ErrNotConnected = errors.New("not connected")
+	ErrBadScheme    = errors.New("unknown scheme")
+
+	schemes = make(map[string]func(*url.URL) Client)
+)
 
 func RegisterClientScheme(scheme string, newFunc func(*url.URL) Client) {
+	schemes[scheme] = newFunc
 }
 
-func New(url *url.URL) Client {
-	return schemes[url.Scheme](url)
+func New(url *url.URL) (cl Client, err error) {
+	newFunc, ok := schemes[url.Scheme]
+	if !ok {
+		err = ErrBadScheme
+		return
+	}
+	cl = newFunc(url)
+	return
 }

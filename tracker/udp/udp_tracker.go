@@ -4,6 +4,7 @@ import (
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"io"
 	"math/rand"
 	"net"
@@ -57,7 +58,9 @@ func init() {
 }
 
 func newClient(url *url.URL) tracker.Client {
-	return &client{}
+	return &client{
+		url: url,
+	}
 }
 
 func newTransactionId() int32 {
@@ -80,11 +83,12 @@ type client struct {
 	connectionIdReceived time.Time
 	connectionId         int64
 	socket               net.Conn
+	url                  *url.URL
 }
 
 func (c *client) Announce(req *tracker.AnnounceRequest) (res tracker.AnnounceResponse, err error) {
-	err = c.connect()
-	if err != nil {
+	if !c.connected() {
+		err = tracker.ErrNotConnected
 		return
 	}
 	b, err := c.request(Announce, req)
@@ -124,9 +128,11 @@ func (c *client) write(h *RequestHeader, body interface{}) (err error) {
 	if err != nil {
 		panic(err)
 	}
-	err = binary.Write(buf, binary.BigEndian, body)
-	if err != nil {
-		panic(err)
+	if body != nil {
+		err = binary.Write(buf, binary.BigEndian, body)
+		if err != nil {
+			panic(err)
+		}
 	}
 	n, err := c.socket.Write(buf.Bytes())
 	if err != nil {
@@ -172,9 +178,6 @@ func (c *client) request(action Action, args interface{}) (responseBody *bytes.R
 		default:
 			return
 		}
-		if h.Action != action {
-			continue
-		}
 		if h.TransactionId != tid {
 			continue
 		}
@@ -197,11 +200,21 @@ func readBody(r *bytes.Reader, data ...interface{}) (err error) {
 	return
 }
 
-func (c *client) connect() (err error) {
-	if !c.connectionIdReceived.IsZero() && time.Now().Before(c.connectionIdReceived.Add(time.Minute)) {
+func (c *client) connected() bool {
+	return !c.connectionIdReceived.IsZero() && time.Now().Before(c.connectionIdReceived.Add(time.Minute))
+}
+
+func (c *client) Connect() (err error) {
+	if c.connected() {
 		return nil
 	}
 	c.connectionId = 0x41727101980
+	if c.socket == nil {
+		c.socket, err = net.Dial("udp", c.url.Host)
+		if err != nil {
+			return
+		}
+	}
 	b, err := c.request(Connect, nil)
 	if err != nil {
 		return

@@ -1,10 +1,14 @@
 package udp_tracker
 
 import (
+	"bitbucket.org/anacrolix/go.torrent/tracker"
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
+	"encoding/hex"
 	"io"
 	"net"
+	"net/url"
 	"syscall"
 	"testing"
 )
@@ -77,4 +81,37 @@ func TestConvertInt16ToInt(t *testing.T) {
 	if int(uint16(int16(i))) != 50000 {
 		t.FailNow()
 	}
+}
+
+func TestUDPTracker(t *testing.T) {
+	tr, err := tracker.New(func() *url.URL {
+		u, err := url.Parse("udp://tracker.openbittorrent.com:80/announce")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.Connect(); err != nil {
+		t.Fatal(err)
+	}
+	req := tracker.AnnounceRequest{
+		NumWant: -1,
+		Event:   tracker.Started,
+	}
+	rand.Read(req.PeerId[:])
+	n, err := hex.Decode(req.InfoHash[:], []byte("c833bb2b5e7bcb9c07f4c020b4be430c28ba7cdb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(req.InfoHash) {
+		panic("nope")
+	}
+	resp, err := tr.Announce(&req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(resp)
 }

@@ -91,18 +91,25 @@ func (c *client) Announce(req *tracker.AnnounceRequest) (res tracker.AnnounceRes
 	if err != nil {
 		return
 	}
-	var (
-		h  AnnounceResponseHeader
-		ps []Peer
-	)
-	err = readBody(b, &h, &ps)
+	var h AnnounceResponseHeader
+	err = readBody(b, &h)
 	if err != nil {
 		return
 	}
 	res.Interval = h.Interval
 	res.Leechers = h.Leechers
 	res.Seeders = h.Seeders
-	for _, p := range ps {
+	for {
+		var p Peer
+		err = binary.Read(b, binary.BigEndian, &p)
+		switch err {
+		case nil:
+		case io.EOF:
+			err = nil
+			fallthrough
+		default:
+			return
+		}
 		res.Peers = append(res.Peers, tracker.Peer{
 			IP:   p.IP[:],
 			Port: int(p.Port),
@@ -131,7 +138,7 @@ func (c *client) write(h *RequestHeader, body interface{}) (err error) {
 	return
 }
 
-func (c *client) request(action Action, args interface{}) (responseBody []byte, err error) {
+func (c *client) request(action Action, args interface{}) (responseBody *bytes.Reader, err error) {
 	tid := newTransactionId()
 	err = c.write(&RequestHeader{
 		ConnectionId:  c.connectionId,
@@ -172,13 +179,15 @@ func (c *client) request(action Action, args interface{}) (responseBody []byte, 
 			continue
 		}
 		c.contiguousTimeouts = 0
-		responseBody = buf.Bytes()
+		if h.Action == Error {
+			err = errors.New(buf.String())
+		}
+		responseBody = bytes.NewReader(buf.Bytes())
 		return
 	}
 }
 
-func readBody(b []byte, data ...interface{}) (err error) {
-	r := bytes.NewReader(b)
+func readBody(r *bytes.Reader, data ...interface{}) (err error) {
 	for _, datum := range data {
 		err = binary.Read(r, binary.BigEndian, datum)
 		if err != nil {

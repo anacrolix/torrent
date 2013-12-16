@@ -57,12 +57,17 @@ func RegisterClientScheme(scheme string, newFunc func(*url.URL) Client) {
 	schemes[scheme] = newFunc
 }
 
-func New(url *url.URL) (cl Client, err error) {
-	newFunc, ok := schemes[url.Scheme]
+// Returns ErrBadScheme if the tracker scheme isn't recognised.
+func New(rawurl string) (cl Client, err error) {
+	url_s, err := url.Parse(rawurl)
+	if err != nil {
+		return
+	}
+	newFunc, ok := schemes[url_s.Scheme]
 	if !ok {
 		err = ErrBadScheme
 		return
 	}
-	cl = newFunc(url)
+	cl = newFunc(url_s)
 	return
 }

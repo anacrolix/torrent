@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"io"
 	"net"
-	"net/url"
 	"syscall"
 	"testing"
 )
@@ -84,13 +83,7 @@ func TestConvertInt16ToInt(t *testing.T) {
 }
 
 func TestUDPTracker(t *testing.T) {
-	tr, err := tracker.New(func() *url.URL {
-		u, err := url.Parse("udp://tracker.openbittorrent.com:80/announce")
-		if err != nil {
-			t.Fatal(err)
-		}
-		return u
-	}())
+	tr, err := tracker.New("udp://tracker.openbittorrent.com:80/announce")
 	if err != nil {
 		t.Fatal(err)
 	}

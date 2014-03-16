@@ -5,13 +5,15 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
-	"encoding/hex"
 	"io"
 	"net"
+	"sync"
 	"syscall"
 	"testing"
 )
 
+// Ensure net.IPs are stored big-endian, to match the way they're read from
+// the wire.
 func TestNetIPv4Bytes(t *testing.T) {
 	ip := net.IP([]byte{127, 0, 0, 1})
 	if ip.String() != "127.0.0.1" {
@@ -95,16 +97,55 @@ func TestUDPTracker(t *testing.T) {
 		Event:   tracker.Started,
 	}
 	rand.Read(req.PeerId[:])
-	n, err := hex.Decode(req.InfoHash[:], []byte("c833bb2b5e7bcb9c07f4c020b4be430c28ba7cdb"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != len(req.InfoHash) {
-		panic("nope")
-	}
+	copy(req.InfoHash[:], []uint8{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1})
+	// TODO: Find out what torrent this info hash corresponds to.
+	// n, err := hex.Decode(req.InfoHash[:], []byte("c833bb2b5e7bcb9c07f4c020b4be430c28ba7cdb"))
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// if n != len(req.InfoHash) {
+	// 	panic("nope")
+	// }
 	resp, err := tr.Announce(&req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(resp)
+}
+
+func TestAnnounceRandomInfoHash(t *testing.T) {
+	wg := sync.WaitGroup{}
+	for _, url := range []string{
+		"udp://tracker.openbittorrent.com:80/announce",
+		"udp://tracker.publicbt.com:80",
+		"udp://tracker.istole.it:6969",
+		"udp://tracker.ccc.de:80",
+		"udp://tracker.open.demonii.com:1337",
+	} {
+		go func(url string) {
+			defer wg.Done()
+			tr, err := tracker.New(url)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tr.Connect(); err != nil {
+				t.Log(err)
+				return
+			}
+			req := tracker.AnnounceRequest{
+				Event: tracker.Stopped,
+			}
+			rand.Read(req.PeerId[:])
+			rand.Read(req.InfoHash[:])
+			resp, err := tr.Announce(&req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.Leechers != 0 || resp.Seeders != 0 || len(resp.Peers) != 0 {
+				t.Fatal(resp)
+			}
+		}(url)
+		wg.Add(1)
+	}
+	wg.Wait()
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bitbucket.org/anacrolix/go.torrent"
+	"bitbucket.org/anacrolix/go.torrent/tracker"
 	"flag"
 	"fmt"
 	metainfo "github.com/nsf/libtorgo/torrent"
@@ -29,6 +30,7 @@ func main() {
 	}
 	client := torrent.Client{
 		DataDir: *downloadDir,
+		// HalfOpenLimit: 2,
 	}
 	client.Start()
 	defer client.Stop()
@@ -54,9 +56,10 @@ func main() {
 				log.Fatal(err)
 			}
 			return []torrent.Peer{{
-				IP:   addr.IP,
-				Port: addr.Port,
-			}}
+				Peer: tracker.Peer{
+					IP:   addr.IP,
+					Port: addr.Port,
+				}}}
 		}())
 		if err != nil {
 			log.Fatal(err)

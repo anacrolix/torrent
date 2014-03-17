@@ -1,8 +1,26 @@
 package peer_protocol
 
 import (
+	"bytes"
 	"testing"
 )
+
+func TestBinaryReadSliceOfPointers(t *testing.T) {
+	var msg Message
+	r := bytes.NewBufferString("\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00@\x00")
+	if r.Len() != 12 {
+		t.Fatalf("expected 12 bytes left, but there %d", r.Len())
+	}
+	for _, data := range []*Integer{&msg.Index, &msg.Begin, &msg.Length} {
+		err := data.Read(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if r.Len() != 0 {
+		t.FailNow()
+	}
+}
 
 func TestConstants(t *testing.T) {
 	// check that iota works as expected in the const block

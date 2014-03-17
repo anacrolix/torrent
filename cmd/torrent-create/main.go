@@ -10,7 +10,11 @@ import (
 )
 
 var (
-	builtinAnnounceGroups = [][]string{{"udp://tracker.openbittorrent.com:80"}, {"udp://tracker.publicbt.com:80"}, {"udp://tracker.istole.it:6969"}}
+	builtinAnnounceList = [][]string{
+		{"udp://tracker.openbittorrent.com:80"},
+		{"udp://tracker.publicbt.com:80"},
+		{"udp://tracker.istole.it:6969"},
+	}
 )
 
 func init() {
@@ -32,7 +36,7 @@ func main() {
 			log.Print(err)
 		}
 	}
-	for _, group := range builtinAnnounceGroups {
+	for _, group := range builtinAnnounceList {
 		b.AddAnnounceGroup(group)
 	}
 	batch, err := b.Submit()

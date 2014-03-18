@@ -88,6 +88,7 @@ type Request struct {
 
 type Connection struct {
 	Socket net.Conn
+	Closed bool
 	post   chan encoding.BinaryMarshaler
 	write  chan []byte
 
@@ -106,8 +107,12 @@ type Connection struct {
 }
 
 func (c *Connection) Close() {
+	if c.Closed {
+		return
+	}
 	c.Socket.Close()
 	close(c.post)
+	c.Closed = true
 }
 
 func (c *Connection) PeerHasPiece(index peer_protocol.Integer) bool {
@@ -417,6 +422,7 @@ type Client struct {
 	sync.Mutex
 	mu    *sync.Mutex
 	event sync.Cond
+	quit  chan struct{}
 
 	halfOpen int
 	torrents map[InfoHash]*Torrent
@@ -487,14 +493,30 @@ func (c *Client) Start() {
 	if err != nil {
 		panic("error generating peer id")
 	}
+	c.quit = make(chan struct{})
 	if c.Listener != nil {
 		go c.acceptConnections()
+	}
+}
+
+func (me *Client) Stop() {
+	close(me.quit)
+	me.event.Broadcast()
+	for _, t := range me.torrents {
+		for _, c := range t.Conns {
+			c.Close()
+		}
 	}
 }
 
 func (cl *Client) acceptConnections() {
 	for {
 		conn, err := cl.Listener.Accept()
+		select {
+		case <-cl.quit:
+			return
+		default:
+		}
 		if err != nil {
 			log.Print(err)
 			return
@@ -956,9 +978,6 @@ func (me *Client) WaitAll() {
 		me.event.Wait()
 	}
 	me.mu.Unlock()
-}
-
-func (me *Client) Stop() {
 }
 
 func (me *Client) replenishConnRequests(torrent *Torrent, conn *Connection) {

@@ -1,6 +1,8 @@
 package torrentfs
 
 import (
+	"bazil.org/fuse"
+	fusefs "bazil.org/fuse/fs"
 	"bitbucket.org/anacrolix/go.torrent"
 	"bytes"
 	metainfo "github.com/nsf/libtorgo/torrent"
@@ -9,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -34,6 +37,8 @@ func TestTCPAddrString(t *testing.T) {
 	}
 }
 
+const dummyFileContents = "hello, world\n"
+
 func createDummyTorrentData(dirName string) string {
 	f, _ := os.Create(filepath.Join(dirName, "greeting"))
 	f.WriteString("hello, world\n")
@@ -53,6 +58,13 @@ func createMetaInfo(name string, w io.Writer) {
 }
 
 func TestDownloadOnDemand(t *testing.T) {
+	priorNumGoroutines := runtime.NumGoroutine()
+	defer func() {
+		n := runtime.NumGoroutine()
+		if n != priorNumGoroutines {
+			t.Fatalf("expected %d goroutines, but %d are running", priorNumGoroutines, n)
+		}
+	}()
 	dir, err := ioutil.TempDir("", "torrentfs")
 	if err != nil {
 		t.Fatal(err)
@@ -79,13 +91,16 @@ func TestDownloadOnDemand(t *testing.T) {
 			return conn
 		}(),
 	}
+	defer seeder.Listener.Close()
 	seeder.Start()
+	defer seeder.Stop()
 	seeder.AddTorrent(metaInfo)
 	leecher := torrent.Client{
 		DataDir:   filepath.Join(dir, "download"),
 		DataReady: make(chan torrent.DataSpec),
 	}
 	leecher.Start()
+	defer leecher.Stop()
 	leecher.AddTorrent(metaInfo)
 	leecher.AddPeers(torrent.BytesInfoHash(metaInfo.InfoHash), []torrent.Peer{func() torrent.Peer {
 		tcpAddr := seeder.Listener.Addr().(*net.TCPAddr)
@@ -96,8 +111,31 @@ func TestDownloadOnDemand(t *testing.T) {
 	}()})
 	mountDir := filepath.Join(dir, "mnt")
 	os.Mkdir(mountDir, 0777)
-	err = MountAndServe(mountDir, &leecher)
+	fs := New(&leecher)
+	fuseConn, err := fuse.Mount(mountDir)
 	if err != nil {
 		t.Fatal(err)
+	}
+	go func() {
+		if err := fusefs.Serve(fuseConn, fs); err != nil {
+			t.Fatal(err)
+		}
+		if err := fuseConn.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	<-fuseConn.Ready
+	if fuseConn.MountError != nil {
+		t.Fatal(fuseConn.MountError)
+	}
+	content, err := ioutil.ReadFile(filepath.Join(mountDir, "greeting"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fuse.Unmount(mountDir); err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != dummyFileContents {
+		t.FailNow()
 	}
 }

@@ -49,6 +49,8 @@ func (tfs *torrentFS) UnsubscribeData(ch chan torrent.DataSpec) {
 	close(ch)
 }
 
+var _ fusefs.NodeForgetter = rootNode{}
+
 type rootNode struct {
 	fs *torrentFS
 }
@@ -242,19 +244,18 @@ func (rootNode) Attr() fuse.Attr {
 	}
 }
 
+func (rootNode) Forget() {
+}
+
 func (tfs *torrentFS) Root() (fusefs.Node, fuse.Error) {
 	return rootNode{tfs}, nil
 }
 
-func MountAndServe(dir string, cl *torrent.Client) error {
-	conn, err := fuse.Mount(dir)
-	if err != nil {
-		return err
-	}
+func New(cl *torrent.Client) *torrentFS {
 	fs := &torrentFS{
 		Client:   cl,
 		DataSubs: make(map[chan torrent.DataSpec]struct{}),
 	}
 	go fs.publishData()
-	return fusefs.Serve(conn, fs)
+	return fs
 }

@@ -152,7 +152,9 @@ func (d *decoder) parse_string(v reflect.Value) {
 				Type:  v.Type(),
 			})
 		}
-		v.Set(reflect.ValueOf(d.buf.Bytes()))
+		sl := make([]byte, len(d.buf.Bytes()))
+		copy(sl, d.buf.Bytes())
+		v.Set(reflect.ValueOf(sl))
 	default:
 		panic(&UnmarshalTypeError{
 			Value: "string",
@@ -335,7 +337,8 @@ func (d *decoder) read_one_value() bool {
 	switch b {
 	case 'd', 'l':
 		// read until there is nothing to read
-		for d.read_one_value() {}
+		for d.read_one_value() {
+		}
 		// consume 'e' as well
 		b = d.read_byte()
 		d.buf.WriteByte(b)
@@ -347,7 +350,7 @@ func (d *decoder) read_one_value() bool {
 			start := d.buf.Len() - 1
 			d.read_until(':')
 			length, err := strconv.ParseInt(d.buf.String()[start:], 10, 64)
-			check_for_int_parse_error(err, d.offset - 1)
+			check_for_int_parse_error(err, d.offset-1)
 
 			d.buf.WriteString(":")
 			n, err := io.CopyN(&d.buf, d, length)

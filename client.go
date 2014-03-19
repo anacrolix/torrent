@@ -52,11 +52,12 @@ type piece struct {
 	Hash              pieceSum
 	PendingChunkSpecs map[ChunkSpec]struct{}
 	Hashing           bool
+	QueuedForHash     bool
 	EverHashed        bool
 }
 
 func (p *piece) Complete() bool {
-	return len(p.PendingChunkSpecs) == 0 && !p.Hashing && p.EverHashed
+	return len(p.PendingChunkSpecs) == 0 && p.EverHashed
 }
 
 func lastChunkSpec(pieceLength peer_protocol.Integer) (cs ChunkSpec) {
@@ -126,7 +127,11 @@ func (c *Connection) Post(msg encoding.BinaryMarshaler) {
 	c.post <- msg
 }
 
+// Returns true if more requests can be sent.
 func (c *Connection) Request(chunk Request) bool {
+	if !c.PeerPieces[chunk.Index] {
+		panic("peer doesn't have that piece!")
+	}
 	if len(c.Requests) >= maxRequests {
 		return false
 	}
@@ -291,20 +296,19 @@ func (t *Torrent) piecesByPendingBytesDesc() (indices []peer_protocol.Integer) {
 // Currently doesn't really queue, but should in the future.
 func (cl *Client) queuePieceCheck(t *Torrent, pieceIndex peer_protocol.Integer) {
 	piece := t.Pieces[pieceIndex]
-	if piece.Hashing {
+	if piece.QueuedForHash {
 		return
 	}
-	piece.Hashing = true
+	piece.QueuedForHash = true
 	go cl.verifyPiece(t, pieceIndex)
 }
 
 func (cl *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) {
-	log.Print(len_)
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	t := cl.torrent(ih)
 	newPriorities := make([]Request, 0, (len_+2*(chunkSize-1))/chunkSize)
-	for len_ != 0 {
+	for len_ > 0 {
 		// TODO: Write a function to return the Request for a given offset.
 		index := peer_protocol.Integer(off / t.MetaInfo.PieceLength)
 		pieceOff := peer_protocol.Integer(off % t.MetaInfo.PieceLength)
@@ -313,8 +317,8 @@ func (cl *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) {
 			cl.queuePieceCheck(t, index)
 		}
 		chunk := ChunkSpec{pieceOff / chunkSize * chunkSize, chunkSize}
-		if int64(chunk.Length) > len_ {
-			chunk.Length = peer_protocol.Integer(len_)
+		if chunk.Begin+chunk.Length > t.PieceLength(index) {
+			chunk.Length = t.PieceLength(index) - chunk.Begin
 		}
 		adv := int64(chunk.Length - pieceOff%chunkSize)
 		off += adv
@@ -324,7 +328,7 @@ func (cl *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) {
 		}
 		newPriorities = append(newPriorities, Request{index, chunk})
 	}
-	if len(newPriorities) < 1 {
+	if len(newPriorities) == 0 {
 		return
 	}
 	log.Print(newPriorities)
@@ -347,7 +351,7 @@ func (t *Torrent) WriteChunk(piece int, begin int64, data []byte) (err error) {
 
 func (t *Torrent) bitfield() (bf []bool) {
 	for _, p := range t.Pieces {
-		bf = append(bf, p.EverHashed && !p.Hashing && len(p.PendingChunkSpecs) == 0)
+		bf = append(bf, p.EverHashed && len(p.PendingChunkSpecs) == 0)
 	}
 	return
 }
@@ -413,19 +417,20 @@ type DataSpec struct {
 }
 
 type Client struct {
-	DataDir       string
-	HalfOpenLimit int
-	PeerId        [20]byte
-	DataReady     chan DataSpec
-	Listener      net.Listener
+	DataDir         string
+	HalfOpenLimit   int
+	PeerId          [20]byte
+	Listener        net.Listener
+	DisableTrackers bool
 
 	sync.Mutex
 	mu    *sync.Mutex
 	event sync.Cond
 	quit  chan struct{}
 
-	halfOpen int
-	torrents map[InfoHash]*Torrent
+	halfOpen   int
+	torrents   map[InfoHash]*Torrent
+	dataWaiter chan struct{}
 }
 
 var (
@@ -711,7 +716,7 @@ func (me *Client) peerGotPiece(torrent *Torrent, conn *Connection, piece int) {
 
 func (t *Torrent) wantPiece(index int) bool {
 	p := t.Pieces[index]
-	return p.EverHashed && !p.Hashing && len(p.PendingChunkSpecs) != 0
+	return p.EverHashed && len(p.PendingChunkSpecs) != 0
 }
 
 func (me *Client) peerUnchoked(torrent *Torrent, conn *Connection) {
@@ -731,7 +736,6 @@ func (me *Client) connectionLoop(torrent *Torrent, conn *Connection) error {
 		if err != nil {
 			return err
 		}
-		log.Print(msg.Type)
 		if msg.Keepalive {
 			continue
 		}
@@ -803,6 +807,7 @@ func (me *Client) connectionLoop(torrent *Torrent, conn *Connection) error {
 		if err != nil {
 			return err
 		}
+		log.Print("replenishing from loop")
 		me.replenishConnRequests(torrent, conn)
 	}
 }
@@ -915,7 +920,9 @@ func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) error {
 		return torrent.Close()
 	}
 	me.torrents[torrent.InfoHash] = torrent
-	go me.announceTorrent(torrent)
+	if !me.DisableTrackers {
+		go me.announceTorrent(torrent)
+	}
 	for i := range torrent.Pieces {
 		me.queuePieceCheck(torrent, peer_protocol.Integer(i))
 	}
@@ -985,23 +992,32 @@ func (me *Client) replenishConnRequests(torrent *Torrent, conn *Connection) {
 	addRequest := func(req Request) (again bool) {
 		piece := torrent.Pieces[req.Index]
 		if piece.Hashing {
+			// We can't be sure we want this.
+			log.Print("piece is hashing")
 			return true
 		}
 		if piece.Complete() {
+			log.Print("piece is complete")
+			// We already have this.
 			return true
 		}
 		if requestHeatMap[req] > 0 {
+			log.Print("piece is hot")
+			// We've already requested this.
 			return true
 		}
 		return conn.Request(req)
 	}
+	// First request prioritized chunks.
 	if torrent.Priorities != nil {
 		for e := torrent.Priorities.Front(); e != nil; e = e.Next() {
+			log.Print(e.Value.(Request))
 			if !addRequest(e.Value.(Request)) {
 				return
 			}
 		}
 	}
+	// Then finish of incomplete pieces in order of bytes remaining.
 	for _, index := range torrent.piecesByPendingBytesDesc() {
 		if torrent.PieceNumPendingBytes(index) == torrent.PieceLength(index) {
 			continue
@@ -1042,22 +1058,26 @@ func (me *Client) downloadedChunk(torrent *Torrent, msg *peer_protocol.Message) 
 }
 
 func (cl *Client) dataReady(ds DataSpec) {
-	if cl.DataReady == nil {
-		return
+	if cl.dataWaiter != nil {
+		close(cl.dataWaiter)
 	}
-	go func() {
-		cl.DataReady <- ds
-	}()
+	cl.dataWaiter = nil
+}
+
+func (cl *Client) DataWaiter() <-chan struct{} {
+	cl.Lock()
+	defer cl.Unlock()
+	if cl.dataWaiter == nil {
+		cl.dataWaiter = make(chan struct{})
+	}
+	return cl.dataWaiter
 }
 
 func (me *Client) pieceHashed(t *Torrent, piece peer_protocol.Integer, correct bool) {
 	p := t.Pieces[piece]
-	if !p.Hashing {
-		panic("invalid state")
-	}
-	p.Hashing = false
 	p.EverHashed = true
 	if correct {
+		log.Print("piece passed hash")
 		p.PendingChunkSpecs = nil
 		var next *list.Element
 		if t.Priorities != nil {
@@ -1076,6 +1096,7 @@ func (me *Client) pieceHashed(t *Torrent, piece peer_protocol.Integer, correct b
 			},
 		})
 	} else {
+		log.Print("piece failed hash")
 		if len(p.PendingChunkSpecs) == 0 {
 			p.PendingChunkSpecs = t.pieceChunkSpecs(piece)
 		}
@@ -1096,11 +1117,18 @@ func (me *Client) pieceHashed(t *Torrent, piece peer_protocol.Integer, correct b
 }
 
 func (cl *Client) verifyPiece(t *Torrent, index peer_protocol.Integer) {
+	cl.mu.Lock()
+	p := t.Pieces[index]
+	for p.Hashing {
+		cl.event.Wait()
+	}
+	p.Hashing = true
+	p.QueuedForHash = false
+	cl.mu.Unlock()
 	sum := t.HashPiece(index)
 	cl.mu.Lock()
-	piece := t.Pieces[index]
-	cl.pieceHashed(t, index, sum == piece.Hash)
-	piece.Hashing = false
+	p.Hashing = false
+	cl.pieceHashed(t, index, sum == p.Hash)
 	cl.mu.Unlock()
 }
 

@@ -4,6 +4,7 @@ import (
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
 	"bitbucket.org/anacrolix/go.torrent"
+	"bitbucket.org/anacrolix/go.torrent/fs"
 	"flag"
 	metainfo "github.com/nsf/libtorgo/torrent"
 	"log"
@@ -11,16 +12,21 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/signal"
 	"os/user"
 	"path/filepath"
-	"sync"
+	"syscall"
 	"time"
 )
 
 var (
-	downloadDir string
-	torrentPath string
-	mountDir    string
+	downloadDir     string
+	torrentPath     string
+	mountDir        string
+	disableTrackers = flag.Bool("disableTrackers", false, "disables trackers")
+	testPeer        = flag.String("testPeer", "", "the address for a test peer")
+	pprofAddr       = flag.String("pprofAddr", "", "pprof HTTP server bind address")
+	testPeerAddr    *net.TCPAddr
 )
 
 func init() {
@@ -35,17 +41,51 @@ func init() {
 	flag.StringVar(&mountDir, "mountDir", "", "location the torrent contents are made available")
 }
 
+func resolveTestPeerAddr() {
+	if *testPeer == "" {
+		return
+	}
+	var err error
+	testPeerAddr, err = net.ResolveTCPAddr("tcp4", *testPeer)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func setSignalHandlers() {
+	c := make(chan os.Signal)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-c
+		fuse.Unmount(mountDir)
+	}()
+}
+
 func main() {
-	pprofAddr := flag.String("pprofAddr", "", "pprof HTTP server bind address")
-	testPeer := flag.String("testPeer", "", "the address for a test peer")
 	flag.Parse()
+	if flag.NArg() != 0 {
+		os.Stderr.WriteString("one does not simply pass positional args\n")
+		os.Exit(2)
+	}
+	if mountDir == "" {
+		os.Stderr.WriteString("y u no specify mountpoint?\n")
+		os.Exit(2)
+	}
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	if *pprofAddr != "" {
 		go http.ListenAndServe(*pprofAddr, nil)
 	}
+	conn, err := fuse.Mount(mountDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer fuse.Unmount(mountDir)
+	// TODO: Think about the ramifications of exiting not due to a signal.
+	setSignalHandlers()
+	defer conn.Close()
 	client := &torrent.Client{
-		DataDir:       downloadDir,
-		HalfOpenLimit: 2,
+		DataDir:         downloadDir,
+		DisableTrackers: *disableTrackers,
 	}
 	client.Start()
 	torrentDir, err := os.Open(torrentPath)
@@ -57,13 +97,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var testAddr *net.TCPAddr
-	if *testPeer != "" {
-		testAddr, err = net.ResolveTCPAddr("tcp4", *testPeer)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
+	resolveTestPeerAddr()
 	for _, name := range names {
 		metaInfo, err := metainfo.LoadFromFile(filepath.Join(torrentPath, name))
 		if err != nil {
@@ -74,31 +108,23 @@ func main() {
 			log.Print(err)
 		}
 	}
-	conn, err := fuse.Mount(mountDir)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fs := &TorrentFS{
-		Client:   client,
-		DataSubs: make(map[chan torrent.DataSpec]struct{}),
-	}
-	go fs.publishData()
+	fs := torrentfs.New(client)
 	go func() {
 		for {
 		torrentLoop:
 			for _, t := range client.Torrents() {
 				client.Lock()
 				for _, c := range t.Conns {
-					if c.Socket.RemoteAddr().String() == testAddr.String() {
+					if c.Socket.RemoteAddr().String() == testPeerAddr.String() {
 						client.Unlock()
 						continue torrentLoop
 					}
 				}
 				client.Unlock()
-				if testAddr != nil {
+				if testPeerAddr != nil {
 					if err := client.AddPeers(t.InfoHash, []torrent.Peer{{
-						IP:   testAddr.IP,
-						Port: testAddr.Port,
+						IP:   testPeerAddr.IP,
+						Port: testPeerAddr.Port,
 					}}); err != nil {
 						log.Print(err)
 					}
@@ -107,5 +133,7 @@ func main() {
 			time.Sleep(10 * time.Second)
 		}
 	}()
-	fusefs.Serve(conn, fs)
+	if err := fusefs.Serve(conn, fs); err != nil {
+		log.Fatal(err)
+	}
 }

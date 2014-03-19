@@ -5,6 +5,7 @@ import (
 	fusefs "bazil.org/fuse/fs"
 	"bitbucket.org/anacrolix/go.torrent"
 	metainfo "github.com/nsf/libtorgo/torrent"
+	"log"
 	"os"
 	"sync"
 )
@@ -17,36 +18,6 @@ type torrentFS struct {
 	Client   *torrent.Client
 	DataSubs map[chan torrent.DataSpec]struct{}
 	sync.Mutex
-}
-
-func (tfs *torrentFS) publishData() {
-	for {
-		spec := <-tfs.Client.DataReady
-		tfs.Lock()
-		for ds := range tfs.DataSubs {
-			ds <- spec
-		}
-		tfs.Unlock()
-	}
-}
-
-func (tfs *torrentFS) SubscribeData() chan torrent.DataSpec {
-	ch := make(chan torrent.DataSpec)
-	tfs.Lock()
-	tfs.DataSubs[ch] = struct{}{}
-	tfs.Unlock()
-	return ch
-}
-
-func (tfs *torrentFS) UnsubscribeData(ch chan torrent.DataSpec) {
-	go func() {
-		for _ = range ch {
-		}
-	}()
-	tfs.Lock()
-	delete(tfs.DataSubs, ch)
-	tfs.Unlock()
-	close(ch)
 }
 
 var _ fusefs.NodeForgetter = rootNode{}
@@ -78,8 +49,6 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 	if req.Dir {
 		panic("hodor")
 	}
-	dataSpecs := fn.FS.SubscribeData()
-	defer fn.FS.UnsubscribeData(dataSpecs)
 	data := make([]byte, func() int {
 		_len := int64(fn.size) - req.Offset
 		if int64(req.Size) < _len {
@@ -94,8 +63,10 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 	}
 	infoHash := torrent.BytesInfoHash(fn.metaInfo.InfoHash)
 	torrentOff := fn.TorrentOffset + req.Offset
+	log.Print(torrentOff, len(data), fn.TorrentOffset)
 	fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(len(data)))
 	for {
+		dataWaiter := fn.FS.Client.DataWaiter()
 		n, err := fn.FS.Client.TorrentReadAt(infoHash, torrentOff, data)
 		switch err {
 		case nil:
@@ -103,11 +74,12 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 			return nil
 		case torrent.ErrDataNotReady:
 			select {
-			case <-dataSpecs:
+			case <-dataWaiter:
 			case <-intr:
 				return fuse.EINTR
 			}
 		default:
+			log.Print(err)
 			return fuse.EIO
 		}
 	}
@@ -256,6 +228,5 @@ func New(cl *torrent.Client) *torrentFS {
 		Client:   cl,
 		DataSubs: make(map[chan torrent.DataSpec]struct{}),
 	}
-	go fs.publishData()
 	return fs
 }

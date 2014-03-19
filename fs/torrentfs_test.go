@@ -96,8 +96,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	defer seeder.Stop()
 	seeder.AddTorrent(metaInfo)
 	leecher := torrent.Client{
-		DataDir:   filepath.Join(dir, "download"),
-		DataReady: make(chan torrent.DataSpec),
+		DataDir: filepath.Join(dir, "download"),
 	}
 	leecher.Start()
 	defer leecher.Stop()
@@ -116,6 +115,11 @@ func TestDownloadOnDemand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() {
+		if err := fuse.Unmount(mountDir); err != nil {
+			t.Fatal(err)
+		}
+	}()
 	go func() {
 		if err := fusefs.Serve(fuseConn, fs); err != nil {
 			t.Fatal(err)
@@ -130,9 +134,6 @@ func TestDownloadOnDemand(t *testing.T) {
 	}
 	content, err := ioutil.ReadFile(filepath.Join(mountDir, "greeting"))
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := fuse.Unmount(mountDir); err != nil {
 		t.Fatal(err)
 	}
 	if string(content) != dummyFileContents {

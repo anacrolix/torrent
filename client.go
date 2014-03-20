@@ -539,6 +539,7 @@ func (cl *Client) stopped() bool {
 }
 
 func (me *Client) Stop() {
+	me.Lock()
 	close(me.quit)
 	me.event.Broadcast()
 	for _, t := range me.torrents {
@@ -546,6 +547,7 @@ func (me *Client) Stop() {
 			c.Close()
 		}
 	}
+	me.Unlock()
 }
 
 func (cl *Client) acceptConnections() {
@@ -679,7 +681,13 @@ func (me *Client) runConnection(sock net.Conn, torrent *Torrent) (err error) {
 		write:      make(chan []byte),
 		post:       make(chan encoding.BinaryMarshaler),
 	}
-	defer conn.Close()
+	defer func() {
+		// There's a lock and deferred unlock later in this function. The
+		// client will not be locked when this deferred is invoked.
+		me.mu.Lock()
+		defer me.mu.Unlock()
+		conn.Close()
+	}()
 	go conn.writer()
 	go conn.writeOptimizer()
 	conn.post <- peer_protocol.Bytes(peer_protocol.Protocol)

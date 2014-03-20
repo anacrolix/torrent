@@ -1176,6 +1176,7 @@ func (me *Client) pieceHashed(t *Torrent, piece peer_protocol.Integer, correct b
 				Type:  peer_protocol.Have,
 				Index: peer_protocol.Integer(piece),
 			})
+			// TODO: Cancel requests for this piece.
 		} else {
 			if conn.PeerHasPiece(piece) {
 				me.replenishConnRequests(t, conn)

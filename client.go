@@ -976,10 +976,28 @@ func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) error {
 	return nil
 }
 
+func (cl *Client) listenerAnnouncePort() (port int16) {
+	l := cl.Listener
+	if l == nil {
+		return
+	}
+	addr := l.Addr()
+	switch data := addr.(type) {
+	case *net.TCPAddr:
+		return int16(data.Port)
+	case *net.UDPAddr:
+		return int16(data.Port)
+	default:
+		log.Printf("unknown listener addr type: %T", addr)
+	}
+	return
+}
+
 func (cl *Client) announceTorrent(t *Torrent) {
 	req := tracker.AnnounceRequest{
 		Event:   tracker.Started,
 		NumWant: -1,
+		Port:    cl.listenerAnnouncePort(),
 	}
 	req.PeerId = cl.PeerId
 	req.InfoHash = t.InfoHash

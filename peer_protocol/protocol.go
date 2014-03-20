@@ -93,7 +93,7 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 
 type Decoder struct {
 	R         *bufio.Reader
-	MaxLength Integer
+	MaxLength Integer // TODO: Should this include the length header or not?
 }
 
 func (d *Decoder) Decode(msg *Message) (err error) {
@@ -106,6 +106,14 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 		return errors.New("message too long")
 	}
 	r := bufio.NewReader(io.LimitReader(d.R, int64(length)))
+	defer func() {
+		written, _ := io.Copy(ioutil.Discard, r)
+		if written != 0 && err == nil {
+			err = fmt.Errorf("short read on message type %d, left %d bytes", msg.Type, written)
+		} else if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+	}()
 	if length == 0 {
 		msg.Keepalive = true
 		return
@@ -116,12 +124,6 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 		return
 	}
 	msg.Type = MessageType(c)
-	defer func() {
-		written, _ := io.Copy(ioutil.Discard, r)
-		if written != 0 && err != nil {
-			err = fmt.Errorf("short read on message type %d, left %d bytes", msg.Type, written)
-		}
-	}()
 	switch msg.Type {
 	case Choke, Unchoke, Interested, NotInterested:
 		return
@@ -151,9 +153,6 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 		msg.Piece, err = ioutil.ReadAll(r)
 	default:
 		err = fmt.Errorf("unknown message type %#v", c)
-	}
-	if err != nil {
-		err = fmt.Errorf("decoding type %d: %s", msg.Type, err)
 	}
 	return
 }

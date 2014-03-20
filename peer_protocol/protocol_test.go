@@ -1,7 +1,10 @@
 package peer_protocol
 
 import (
+	"bufio"
 	"bytes"
+	"io"
+	"strings"
 	"testing"
 )
 
@@ -70,5 +73,38 @@ func TestHaveEncode(t *testing.T) {
 	expected := "\x00\x00\x00\x05\x04\x00\x00\x00\x2a"
 	if actualString != expected {
 		t.Fatalf("expected %#v, got %#v", expected, actualString)
+	}
+}
+
+func TestShortRead(t *testing.T) {
+	dec := Decoder{
+		R:         bufio.NewReader(bytes.NewBufferString("\x00\x00\x00\x02\x00!")),
+		MaxLength: 2,
+	}
+	msg := new(Message)
+	err := dec.Decode(msg)
+	if !strings.Contains(err.Error(), "short read") {
+		t.Fatal(err)
+	}
+}
+
+func TestUnexpectedEOF(t *testing.T) {
+	msg := new(Message)
+	for _, stream := range []string{
+		"\x00\x00\x00",     // Header truncated.
+		"\x00\x00\x00\x01", // Expecting 1 more byte.
+		// Request with wrong length, and too short anyway.
+		"\x00\x00\x00\x06\x06\x00\x00\x00\x00\x00",
+		// Request truncated.
+		"\x00\x00\x00\x0b\x06\x00\x00\x00\x00\x00",
+	} {
+		dec := Decoder{
+			R:         bufio.NewReader(bytes.NewBufferString(stream)),
+			MaxLength: 42,
+		}
+		err := dec.Decode(msg)
+		if err != io.ErrUnexpectedEOF {
+			t.Fatal(err)
+		}
 	}
 }

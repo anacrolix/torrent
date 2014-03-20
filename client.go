@@ -1,9 +1,6 @@
 package torrent
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
-	"bitbucket.org/anacrolix/go.torrent/tracker"
-	_ "bitbucket.org/anacrolix/go.torrent/tracker/udp"
 	"bufio"
 	"container/list"
 	"crypto"
@@ -11,9 +8,7 @@ import (
 	"encoding"
 	"errors"
 	"fmt"
-	metainfo "github.com/nsf/libtorgo/torrent"
 	"io"
-	"launchpad.net/gommap"
 	"log"
 	mathRand "math/rand"
 	"net"
@@ -22,6 +17,13 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	metainfo "github.com/nsf/libtorgo/torrent"
+
+	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
+	"bitbucket.org/anacrolix/go.torrent/tracker"
+	_ "bitbucket.org/anacrolix/go.torrent/tracker/udp"
+	"launchpad.net/gommap"
 )
 
 const (
@@ -252,6 +254,10 @@ type Torrent struct {
 	Trackers [][]tracker.Client
 }
 
+func (t *Torrent) NumPieces() int {
+	return len(t.MetaInfo.Pieces) / PieceHash.Size()
+}
+
 func (t *Torrent) Length() int64 {
 	return int64(t.PieceLength(peer_protocol.Integer(len(t.Pieces)-1))) + int64(len(t.Pieces)-1)*int64(t.PieceLength(0))
 }
@@ -303,6 +309,25 @@ func (cl *Client) queuePieceCheck(t *Torrent, pieceIndex peer_protocol.Integer) 
 	go cl.verifyPiece(t, pieceIndex)
 }
 
+func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
+	req.Index = peer_protocol.Integer(off / t.MetaInfo.PieceLength)
+	if req.Index < 0 || int(req.Index) >= len(t.Pieces) {
+		return
+	}
+	off %= t.MetaInfo.PieceLength
+	pieceLeft := t.PieceLength(req.Index) - peer_protocol.Integer(off)
+	if pieceLeft <= 0 {
+		return
+	}
+	req.Begin = chunkSize * (peer_protocol.Integer(off) / chunkSize)
+	req.Length = chunkSize
+	if req.Length > pieceLeft {
+		req.Length = pieceLeft
+	}
+	ok = true
+	return
+}
+
 func (cl *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
@@ -310,23 +335,16 @@ func (cl *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) {
 	newPriorities := make([]Request, 0, (len_+2*(chunkSize-1))/chunkSize)
 	for len_ > 0 {
 		// TODO: Write a function to return the Request for a given offset.
-		index := peer_protocol.Integer(off / t.MetaInfo.PieceLength)
-		pieceOff := peer_protocol.Integer(off % t.MetaInfo.PieceLength)
-		piece := t.Pieces[index]
-		if !piece.EverHashed {
-			cl.queuePieceCheck(t, index)
+		req, ok := t.offsetRequest(off)
+		if !ok {
+			break
 		}
-		chunk := ChunkSpec{pieceOff / chunkSize * chunkSize, chunkSize}
-		if chunk.Begin+chunk.Length > t.PieceLength(index) {
-			chunk.Length = t.PieceLength(index) - chunk.Begin
-		}
-		adv := int64(chunk.Length - pieceOff%chunkSize)
-		off += adv
-		len_ -= adv
-		if _, ok := piece.PendingChunkSpecs[chunk]; !ok && !piece.Hashing {
+		off += int64(req.Length)
+		len_ -= int64(req.Length)
+		if _, ok = t.Pieces[req.Index].PendingChunkSpecs[req.ChunkSpec]; !ok {
 			continue
 		}
-		newPriorities = append(newPriorities, Request{index, chunk})
+		newPriorities = append(newPriorities, req)
 	}
 	if len(newPriorities) == 0 {
 		return
@@ -356,12 +374,19 @@ func (t *Torrent) bitfield() (bf []bool) {
 	return
 }
 
-func (t *Torrent) pieceChunkSpecs(index peer_protocol.Integer) (cs map[ChunkSpec]struct{}) {
-	cs = make(map[ChunkSpec]struct{}, (t.MetaInfo.PieceLength+chunkSize-1)/chunkSize)
+func (t *Torrent) pendAllChunkSpecs(index peer_protocol.Integer) {
+	piece := t.Pieces[index]
+	if piece.PendingChunkSpecs == nil {
+		piece.PendingChunkSpecs = make(
+			map[ChunkSpec]struct{},
+			(t.MetaInfo.PieceLength+chunkSize-1)/chunkSize)
+	}
 	c := ChunkSpec{
 		Begin: 0,
 	}
-	for left := peer_protocol.Integer(t.PieceLength(index)); left > 0; left -= c.Length {
+	cs := piece.PendingChunkSpecs
+	log.Print(index, t.PieceLength(index))
+	for left := peer_protocol.Integer(t.PieceLength(index)); left != 0; left -= c.Length {
 		c.Length = left
 		if c.Length > chunkSize {
 			c.Length = chunkSize
@@ -389,7 +414,7 @@ type Peer struct {
 }
 
 func (t *Torrent) PieceLength(piece peer_protocol.Integer) (len_ peer_protocol.Integer) {
-	if int(piece) == len(t.Pieces)-1 {
+	if int(piece) == t.NumPieces()-1 {
 		len_ = peer_protocol.Integer(t.Data.Size() % t.MetaInfo.PieceLength)
 	}
 	if len_ == 0 {
@@ -501,6 +526,15 @@ func (c *Client) Start() {
 	c.quit = make(chan struct{})
 	if c.Listener != nil {
 		go c.acceptConnections()
+	}
+}
+
+func (cl *Client) stopped() bool {
+	select {
+	case <-cl.quit:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -730,10 +764,14 @@ func (me *Client) connectionLoop(torrent *Torrent, conn *Connection) error {
 	}
 	for {
 		me.mu.Unlock()
+		// TODO: Can this be allocated on the stack?
 		msg := new(peer_protocol.Message)
 		err := decoder.Decode(msg)
 		me.mu.Lock()
 		if err != nil {
+			if me.stopped() {
+				return nil
+			}
 			return err
 		}
 		if msg.Keepalive {
@@ -872,6 +910,10 @@ func newTorrent(metaInfo *metainfo.MetaInfo, dataDir string) (torrent *Torrent, 
 		InfoHash: BytesInfoHash(metaInfo.InfoHash),
 		MetaInfo: metaInfo,
 	}
+	torrent.Data, err = mmapTorrentData(metaInfo, dataDir)
+	if err != nil {
+		return
+	}
 	for offset := 0; offset < len(metaInfo.Pieces); offset += PieceHash.Size() {
 		hash := metaInfo.Pieces[offset : offset+PieceHash.Size()]
 		if len(hash) != PieceHash.Size() {
@@ -881,10 +923,7 @@ func newTorrent(metaInfo *metainfo.MetaInfo, dataDir string) (torrent *Torrent, 
 		piece := &piece{}
 		copyHashSum(piece.Hash[:], hash)
 		torrent.Pieces = append(torrent.Pieces, piece)
-	}
-	torrent.Data, err = mmapTorrentData(metaInfo, dataDir)
-	if err != nil {
-		return
+		torrent.pendAllChunkSpecs(peer_protocol.Integer(len(torrent.Pieces) - 1))
 	}
 	torrent.Trackers = make([][]tracker.Client, len(metaInfo.AnnounceList))
 	for tierIndex := range metaInfo.AnnounceList {
@@ -1028,7 +1067,9 @@ func (me *Client) replenishConnRequests(torrent *Torrent, conn *Connection) {
 			}
 		}
 	}
-	conn.SetInterested(false)
+	if len(conn.Requests) == 0 {
+		conn.SetInterested(false)
+	}
 }
 
 func (me *Client) downloadedChunk(torrent *Torrent, msg *peer_protocol.Message) (err error) {
@@ -1098,7 +1139,7 @@ func (me *Client) pieceHashed(t *Torrent, piece peer_protocol.Integer, correct b
 	} else {
 		log.Print("piece failed hash")
 		if len(p.PendingChunkSpecs) == 0 {
-			p.PendingChunkSpecs = t.pieceChunkSpecs(piece)
+			t.pendAllChunkSpecs(piece)
 		}
 	}
 	for _, conn := range t.Conns {

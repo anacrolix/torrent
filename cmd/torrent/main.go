@@ -1,16 +1,17 @@
 package main
 
 import (
-	"bitbucket.org/anacrolix/go.torrent"
-	"bitbucket.org/anacrolix/go.torrent/tracker"
 	"flag"
 	"fmt"
-	metainfo "github.com/nsf/libtorgo/torrent"
 	"log"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+
+	metainfo "github.com/nsf/libtorgo/torrent"
+
+	"bitbucket.org/anacrolix/go.torrent"
 )
 
 var (
@@ -30,7 +31,6 @@ func main() {
 	}
 	client := torrent.Client{
 		DataDir: *downloadDir,
-		// HalfOpenLimit: 2,
 	}
 	client.Start()
 	defer client.Stop()
@@ -47,6 +47,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		client.PrioritizeDataRegion(torrent.BytesInfoHash(metaInfo.InfoHash), 0, 999999999)
 		err = client.AddPeers(torrent.BytesInfoHash(metaInfo.InfoHash), func() []torrent.Peer {
 			if *testPeer == "" {
 				return nil
@@ -56,10 +57,9 @@ func main() {
 				log.Fatal(err)
 			}
 			return []torrent.Peer{{
-				Peer: tracker.Peer{
-					IP:   addr.IP,
-					Port: addr.Port,
-				}}}
+				IP:   addr.IP,
+				Port: addr.Port,
+			}}
 		}())
 		if err != nil {
 			log.Fatal(err)

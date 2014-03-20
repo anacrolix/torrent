@@ -1,18 +1,20 @@
 package torrentfs
 
 import (
-	"bazil.org/fuse"
-	fusefs "bazil.org/fuse/fs"
-	"bitbucket.org/anacrolix/go.torrent"
 	"bytes"
-	metainfo "github.com/nsf/libtorgo/torrent"
-	"io"
 	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
+	"time"
+
+	"bitbucket.org/anacrolix/go.torrent/testutil"
+
+	"bazil.org/fuse"
+	fusefs "bazil.org/fuse/fs"
+	"bitbucket.org/anacrolix/go.torrent"
+	metainfo "github.com/nsf/libtorgo/torrent"
 )
 
 func TestTCPAddrString(t *testing.T) {
@@ -37,34 +39,7 @@ func TestTCPAddrString(t *testing.T) {
 	}
 }
 
-const dummyFileContents = "hello, world\n"
-
-func createDummyTorrentData(dirName string) string {
-	f, _ := os.Create(filepath.Join(dirName, "greeting"))
-	f.WriteString("hello, world\n")
-	return f.Name()
-}
-
-func createMetaInfo(name string, w io.Writer) {
-	builder := metainfo.Builder{}
-	builder.AddFile(name)
-	builder.AddAnnounceGroup([]string{"lol://cheezburger"})
-	batch, err := builder.Submit()
-	if err != nil {
-		panic(err)
-	}
-	errs, _ := batch.Start(w, 1)
-	<-errs
-}
-
 func TestDownloadOnDemand(t *testing.T) {
-	priorNumGoroutines := runtime.NumGoroutine()
-	defer func() {
-		n := runtime.NumGoroutine()
-		if n != priorNumGoroutines {
-			t.Fatalf("expected %d goroutines, but %d are running", priorNumGoroutines, n)
-		}
-	}()
 	dir, err := ioutil.TempDir("", "torrentfs")
 	if err != nil {
 		t.Fatal(err)
@@ -77,9 +52,9 @@ func TestDownloadOnDemand(t *testing.T) {
 	t.Logf("test directory: %s", dir)
 	finishedDir := filepath.Join(dir, "finished")
 	os.Mkdir(finishedDir, 0777)
-	name := createDummyTorrentData(finishedDir)
+	name := testutil.CreateDummyTorrentData(finishedDir)
 	metaInfoBuf := &bytes.Buffer{}
-	createMetaInfo(name, metaInfoBuf)
+	testutil.CreateMetaInfo(name, metaInfoBuf)
 	metaInfo, err := metainfo.Load(metaInfoBuf)
 	seeder := torrent.Client{
 		DataDir: finishedDir,
@@ -132,11 +107,15 @@ func TestDownloadOnDemand(t *testing.T) {
 	if fuseConn.MountError != nil {
 		t.Fatal(fuseConn.MountError)
 	}
+	go func() {
+		time.Sleep(10 * time.Second)
+		fuse.Unmount(mountDir)
+	}()
 	content, err := ioutil.ReadFile(filepath.Join(mountDir, "greeting"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(content) != dummyFileContents {
+	if string(content) != testutil.GreetingFileContents {
 		t.FailNow()
 	}
 }

@@ -98,19 +98,10 @@ func TestUDPTracker(t *testing.T) {
 	}
 	rand.Read(req.PeerId[:])
 	copy(req.InfoHash[:], []uint8{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1})
-	// TODO: Find out what torrent this info hash corresponds to.
-	// n, err := hex.Decode(req.InfoHash[:], []byte("c833bb2b5e7bcb9c07f4c020b4be430c28ba7cdb"))
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-	// if n != len(req.InfoHash) {
-	// 	panic("nope")
-	// }
-	resp, err := tr.Announce(&req)
+	_, err = tr.Announce(&req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log(resp)
 }
 
 func TestAnnounceRandomInfoHash(t *testing.T) {

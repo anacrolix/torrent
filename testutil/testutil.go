@@ -1,3 +1,8 @@
+// Package testutil contains stuff for testing torrent-related behaviour.
+//
+// "greeting" is a single-file torrent of a file called "greeting" that
+// "contains "hello, world\n".
+
 package testutil
 
 import (
@@ -31,6 +36,9 @@ func CreateMetaInfo(name string, w io.Writer) {
 	<-errs
 }
 
+// Gives a temporary directory containing the completed "greeting" torrent,
+// and a corresponding metainfo describing it. The temporary directory can be
+// cleaned away with os.RemoveAll.
 func GreetingTestTorrent() (tempDir string, metaInfo *metainfo.MetaInfo) {
 	tempDir, err := ioutil.TempDir(os.TempDir(), "")
 	if err != nil {

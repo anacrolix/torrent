@@ -29,7 +29,7 @@ func TestPieceHashSize(t *testing.T) {
 func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	tor, err := newTorrent(mi, "")
+	tor, err := newTorrent(mi, dir)
 	if err != nil {
 		t.Fatal(err)
 	}

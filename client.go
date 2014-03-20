@@ -131,11 +131,11 @@ func (c *Connection) Post(msg encoding.BinaryMarshaler) {
 
 // Returns true if more requests can be sent.
 func (c *Connection) Request(chunk Request) bool {
-	if !c.PeerPieces[chunk.Index] {
-		panic("peer doesn't have that piece!")
-	}
 	if len(c.Requests) >= maxRequests {
 		return false
+	}
+	if !c.PeerPieces[chunk.Index] {
+		return true
 	}
 	c.SetInterested(true)
 	if c.PeerChoked {

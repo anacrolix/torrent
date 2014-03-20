@@ -210,7 +210,6 @@ func (conn *Connection) writer() {
 		if n != len(b) {
 			panic("didn't write all bytes")
 		}
-		log.Printf("wrote %#v", string(b))
 	}
 }
 
@@ -256,6 +255,15 @@ type Torrent struct {
 
 func (t *Torrent) NumPieces() int {
 	return len(t.MetaInfo.Pieces) / PieceHash.Size()
+}
+
+func (t *Torrent) NumPiecesCompleted() (num int) {
+	for _, p := range t.Pieces {
+		if p.Complete() {
+			num++
+		}
+	}
+	return
 }
 
 func (t *Torrent) Length() int64 {
@@ -349,7 +357,6 @@ func (cl *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) {
 	if len(newPriorities) == 0 {
 		return
 	}
-	log.Print(newPriorities)
 	if t.Priorities == nil {
 		t.Priorities = list.New()
 	}
@@ -385,7 +392,6 @@ func (t *Torrent) pendAllChunkSpecs(index peer_protocol.Integer) {
 		Begin: 0,
 	}
 	cs := piece.PendingChunkSpecs
-	log.Print(index, t.PieceLength(index))
 	for left := peer_protocol.Integer(t.PieceLength(index)); left != 0; left -= c.Length {
 		c.Length = left
 		if c.Length > chunkSize {
@@ -698,6 +704,9 @@ func (me *Client) runConnection(sock net.Conn, torrent *Torrent) (err error) {
 	}
 	var b [28]byte
 	_, err = io.ReadFull(conn.Socket, b[:])
+	if err == io.EOF {
+		return nil
+	}
 	if err != nil {
 		err = fmt.Errorf("when reading protocol and extensions: %s", err)
 		return
@@ -709,7 +718,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *Torrent) (err error) {
 	if 8 != copy(conn.PeerExtensions[:], b[20:]) {
 		panic("wtf")
 	}
-	log.Printf("peer extensions: %#v", string(conn.PeerExtensions[:]))
+	// log.Printf("peer extensions: %#v", string(conn.PeerExtensions[:]))
 	var infoHash [20]byte
 	_, err = io.ReadFull(conn.Socket, infoHash[:])
 	if err != nil {
@@ -777,7 +786,7 @@ func (me *Client) connectionLoop(torrent *Torrent, conn *Connection) error {
 		err := decoder.Decode(msg)
 		me.mu.Lock()
 		if err != nil {
-			if me.stopped() {
+			if me.stopped() || err == io.EOF {
 				return nil
 			}
 			return err
@@ -853,7 +862,6 @@ func (me *Client) connectionLoop(torrent *Torrent, conn *Connection) error {
 		if err != nil {
 			return err
 		}
-		log.Print("replenishing from loop")
 		me.replenishConnRequests(torrent, conn)
 	}
 }
@@ -1058,16 +1066,13 @@ func (me *Client) replenishConnRequests(torrent *Torrent, conn *Connection) {
 		piece := torrent.Pieces[req.Index]
 		if piece.Hashing {
 			// We can't be sure we want this.
-			log.Print("piece is hashing")
 			return true
 		}
 		if piece.Complete() {
-			log.Print("piece is complete")
 			// We already have this.
 			return true
 		}
 		if requestHeatMap[req] > 0 {
-			log.Print("piece is hot")
 			// We've already requested this.
 			return true
 		}
@@ -1076,7 +1081,6 @@ func (me *Client) replenishConnRequests(torrent *Torrent, conn *Connection) {
 	// First request prioritized chunks.
 	if torrent.Priorities != nil {
 		for e := torrent.Priorities.Front(); e != nil; e = e.Next() {
-			log.Print(e.Value.(Request))
 			if !addRequest(e.Value.(Request)) {
 				return
 			}
@@ -1104,7 +1108,6 @@ func (me *Client) downloadedChunk(torrent *Torrent, msg *peer_protocol.Message) 
 		log.Printf("got unnecessary chunk: %s", request)
 		return
 	}
-	log.Printf("got chunk %s", request)
 	err = torrent.WriteChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
 	if err != nil {
 		return
@@ -1144,8 +1147,8 @@ func (me *Client) pieceHashed(t *Torrent, piece peer_protocol.Integer, correct b
 	p := t.Pieces[piece]
 	p.EverHashed = true
 	if correct {
-		log.Print("piece passed hash")
 		p.PendingChunkSpecs = nil
+		log.Printf("got piece %d, (%d/%d)", piece, t.NumPiecesCompleted(), t.NumPieces())
 		var next *list.Element
 		if t.Priorities != nil {
 			for e := t.Priorities.Front(); e != nil; e = next {
@@ -1163,7 +1166,6 @@ func (me *Client) pieceHashed(t *Torrent, piece peer_protocol.Integer, correct b
 			},
 		})
 	} else {
-		log.Print("piece failed hash")
 		if len(p.PendingChunkSpecs) == 0 {
 			t.pendAllChunkSpecs(piece)
 		}

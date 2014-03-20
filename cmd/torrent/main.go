@@ -77,4 +77,5 @@ func main() {
 		}
 	}
 	client.WaitAll()
+	log.Print("all torrents completed!")
 }

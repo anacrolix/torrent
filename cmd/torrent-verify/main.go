@@ -1,12 +1,12 @@
 package main
 
 import (
+	"bitbucket.org/anacrolix/go.torrent/mmap_span"
 	"bytes"
 	"crypto/sha1"
 	"flag"
 	"fmt"
 
-	"bitbucket.org/anacrolix/go.torrent"
 	// "github.com/davecheney/profile"
 	"log"
 	"os"
@@ -36,7 +36,7 @@ func main() {
 		log.Print(err)
 	}
 	defer devZero.Close()
-	var mMapSpan torrent.MMapSpan
+	var mMapSpan mmap_span.MMapSpan
 	for _, file := range metaInfo.Files {
 		filename := filepath.Join(append([]string{*dirPath, metaInfo.Name}, file.Path...)...)
 		osFile, err := os.Open(filename)
@@ -56,7 +56,7 @@ func main() {
 			log.Printf("file mmap has wrong size: %#v", filename)
 		}
 		osFile.Close()
-		mMapSpan = append(mMapSpan, torrent.MMap{goMMap})
+		mMapSpan = append(mMapSpan, goMMap)
 	}
 	log.Println(len(metaInfo.Files))
 	log.Println(mMapSpan.Size())

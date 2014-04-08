@@ -6,7 +6,7 @@ import (
 )
 
 func r(i, b, l peer_protocol.Integer) Request {
-	return Request{i, ChunkSpec{b, l}}
+	return Request{i, chunkSpec{b, l}}
 }
 
 // Check the given Request is correct for various torrent offsets.

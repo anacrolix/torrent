@@ -3,7 +3,6 @@ package torrentfs
 import (
 	"log"
 	"os"
-	"sync"
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
@@ -16,9 +15,7 @@ const (
 )
 
 type torrentFS struct {
-	Client   *torrent.Client
-	DataSubs map[chan torrent.DataSpec]struct{}
-	sync.Mutex
+	Client *torrent.Client
 }
 
 var _ fusefs.NodeForgetter = rootNode{}
@@ -229,8 +226,7 @@ func (tfs *torrentFS) Root() (fusefs.Node, fuse.Error) {
 
 func New(cl *torrent.Client) *torrentFS {
 	fs := &torrentFS{
-		Client:   cl,
-		DataSubs: make(map[chan torrent.DataSpec]struct{}),
+		Client: cl,
 	}
 	return fs
 }

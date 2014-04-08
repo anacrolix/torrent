@@ -12,7 +12,7 @@ import (
 )
 
 // Maintains the state of a connection with a peer.
-type Connection struct {
+type connection struct {
 	Socket net.Conn
 	closed bool
 	mu     sync.Mutex // Only for closing.
@@ -33,7 +33,7 @@ type Connection struct {
 	PeerPieces     []bool
 }
 
-func (c *Connection) Close() {
+func (c *connection) Close() {
 	c.mu.Lock()
 	if c.closed {
 		return
@@ -44,25 +44,25 @@ func (c *Connection) Close() {
 	c.mu.Unlock()
 }
 
-func (c *Connection) getClosed() bool {
+func (c *connection) getClosed() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.closed
 }
 
-func (c *Connection) PeerHasPiece(index peer_protocol.Integer) bool {
+func (c *connection) PeerHasPiece(index peer_protocol.Integer) bool {
 	if c.PeerPieces == nil {
 		return false
 	}
 	return c.PeerPieces[index]
 }
 
-func (c *Connection) Post(msg encoding.BinaryMarshaler) {
+func (c *connection) Post(msg encoding.BinaryMarshaler) {
 	c.post <- msg
 }
 
 // Returns true if more requests can be sent.
-func (c *Connection) Request(chunk Request) bool {
+func (c *connection) Request(chunk Request) bool {
 	if len(c.Requests) >= maxRequests {
 		return false
 	}
@@ -88,7 +88,7 @@ func (c *Connection) Request(chunk Request) bool {
 	return true
 }
 
-func (c *Connection) Unchoke() {
+func (c *connection) Unchoke() {
 	if !c.Choked {
 		return
 	}
@@ -98,7 +98,7 @@ func (c *Connection) Unchoke() {
 	c.Choked = false
 }
 
-func (c *Connection) SetInterested(interested bool) {
+func (c *connection) SetInterested(interested bool) {
 	if c.Interested == interested {
 		return
 	}
@@ -119,7 +119,7 @@ var (
 	keepAliveBytes [4]byte
 )
 
-func (conn *Connection) writer() {
+func (conn *connection) writer() {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	for {
@@ -146,7 +146,7 @@ func (conn *Connection) writer() {
 	}
 }
 
-func (conn *Connection) writeOptimizer() {
+func (conn *connection) writeOptimizer() {
 	pending := list.New()
 	var nextWrite []byte
 	defer close(conn.write)

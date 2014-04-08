@@ -1,4 +1,4 @@
-package torrent
+package mmap_span
 
 import (
 	"io"
@@ -6,19 +6,19 @@ import (
 	"launchpad.net/gommap"
 )
 
-type MMap struct {
+type segment struct {
 	gommap.MMap
 }
 
-func (me MMap) Size() int64 {
+func (me segment) Size() int64 {
 	return int64(len(me.MMap))
 }
 
-type MMapSpan []MMap
+type MMapSpan []gommap.MMap
 
 func (me MMapSpan) span() (s span) {
 	for _, mmap := range me {
-		s = append(s, mmap)
+		s = append(s, segment{mmap})
 	}
 	return
 }
@@ -30,15 +30,15 @@ func (me MMapSpan) Close() {
 }
 
 func (me MMapSpan) Size() (ret int64) {
-	for _, mmap := range me {
-		ret += mmap.Size()
+	for _, seg := range me.span() {
+		ret += seg.Size()
 	}
 	return
 }
 
 func (me MMapSpan) ReadAt(p []byte, off int64) (n int, err error) {
 	me.span().ApplyTo(off, func(intervalOffset int64, interval sizer) (stop bool) {
-		_n := copy(p, interval.(MMap).MMap[intervalOffset:])
+		_n := copy(p, interval.(segment).MMap[intervalOffset:])
 		p = p[_n:]
 		n += _n
 		return len(p) == 0
@@ -52,7 +52,7 @@ func (me MMapSpan) ReadAt(p []byte, off int64) (n int, err error) {
 func (me MMapSpan) WriteSectionTo(w io.Writer, off, n int64) (written int64, err error) {
 	me.span().ApplyTo(off, func(intervalOffset int64, interval sizer) (stop bool) {
 		var _n int
-		p := interval.(MMap).MMap[intervalOffset:]
+		p := interval.(segment).MMap[intervalOffset:]
 		if n < int64(len(p)) {
 			p = p[:n]
 		}
@@ -69,7 +69,7 @@ func (me MMapSpan) WriteSectionTo(w io.Writer, off, n int64) (written int64, err
 
 func (me MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
 	me.span().ApplyTo(off, func(iOff int64, i sizer) (stop bool) {
-		mMap := i.(MMap)
+		mMap := i.(segment)
 		_n := copy(mMap.MMap[iOff:], p)
 		// err = mMap.Sync(gommap.MS_ASYNC)
 		// if err != nil {

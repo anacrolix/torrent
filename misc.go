@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"bitbucket.org/anacrolix/go.torrent/mmap_span"
 	"crypto"
 	"errors"
 	"os"
@@ -13,10 +14,10 @@ import (
 )
 
 const (
-	PieceHash   = crypto.SHA1
+	pieceHash   = crypto.SHA1
 	maxRequests = 250
-	chunkSize   = 0x4000 // 16KiB
-	BEP20       = "-GT0000-"
+	chunkSize   = 0x4000     // 16KiB
+	BEP20       = "-GT0000-" // Peer ID client identifier prefix
 	dialTimeout = time.Second * 15
 )
 
@@ -39,7 +40,7 @@ func BytesInfoHash(b []byte) (ih InfoHash) {
 
 type piece struct {
 	Hash              pieceSum
-	PendingChunkSpecs map[ChunkSpec]struct{}
+	PendingChunkSpecs map[chunkSpec]struct{}
 	Hashing           bool
 	QueuedForHash     bool
 	EverHashed        bool
@@ -49,19 +50,19 @@ func (p *piece) Complete() bool {
 	return len(p.PendingChunkSpecs) == 0 && p.EverHashed
 }
 
-func lastChunkSpec(pieceLength peer_protocol.Integer) (cs ChunkSpec) {
+func lastChunkSpec(pieceLength peer_protocol.Integer) (cs chunkSpec) {
 	cs.Begin = (pieceLength - 1) / chunkSize * chunkSize
 	cs.Length = pieceLength - cs.Begin
 	return
 }
 
-type ChunkSpec struct {
+type chunkSpec struct {
 	Begin, Length peer_protocol.Integer
 }
 
 type Request struct {
 	Index peer_protocol.Integer
-	ChunkSpec
+	chunkSpec
 }
 
 type pieceByBytesPendingSlice struct {
@@ -81,10 +82,11 @@ func (me pieceByBytesPendingSlice) Swap(i, j int) {
 }
 
 var (
+	// Requested data not yet available.
 	ErrDataNotReady = errors.New("data not ready")
 )
 
-func mmapTorrentData(metaInfo *metainfo.MetaInfo, location string) (mms MMapSpan, err error) {
+func mmapTorrentData(metaInfo *metainfo.MetaInfo, location string) (mms mmap_span.MMapSpan, err error) {
 	defer func() {
 		if err != nil {
 			mms.Close()
@@ -123,7 +125,7 @@ func mmapTorrentData(metaInfo *metainfo.MetaInfo, location string) (mms MMapSpan
 			if int64(len(mMap)) != miFile.Length {
 				panic("mmap has wrong length")
 			}
-			mms = append(mms, MMap{mMap})
+			mms = append(mms, mMap)
 		}()
 		if err != nil {
 			return

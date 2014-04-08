@@ -76,6 +76,9 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	client.WaitAll()
-	log.Print("all torrents completed!")
+	if client.WaitAll() {
+		log.Print("all torrents completed!")
+	} else {
+		log.Fatal("y u no complete torrents?!")
+	}
 }

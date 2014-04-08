@@ -1,4 +1,4 @@
-package torrent
+package mmap_span
 
 type sizer interface {
 	Size() int64

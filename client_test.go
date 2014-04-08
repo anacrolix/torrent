@@ -21,7 +21,7 @@ func TestAddPeersToUnknownTorrent(t *testing.T) {
 }
 
 func TestPieceHashSize(t *testing.T) {
-	if PieceHash.Size() != 20 {
+	if pieceHash.Size() != 20 {
 		t.FailNow()
 	}
 }
@@ -40,7 +40,7 @@ func TestTorrentInitialState(t *testing.T) {
 	if len(p.PendingChunkSpecs) != 1 {
 		t.Fatalf("should only be 1 chunk: %s", p.PendingChunkSpecs)
 	}
-	if _, ok := p.PendingChunkSpecs[ChunkSpec{
+	if _, ok := p.PendingChunkSpecs[chunkSpec{
 		Length: 13,
 	}]; !ok {
 		t.Fatal("pending chunk spec is incorrect")

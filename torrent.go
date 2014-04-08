@@ -6,12 +6,13 @@ import (
 	"net"
 	"sort"
 
+	"bitbucket.org/anacrolix/go.torrent/mmap_span"
 	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	metainfo "github.com/nsf/libtorgo/torrent"
 )
 
-func (t *Torrent) PieceNumPendingBytes(index peer_protocol.Integer) (count peer_protocol.Integer) {
+func (t *torrent) PieceNumPendingBytes(index peer_protocol.Integer) (count peer_protocol.Integer) {
 	pendingChunks := t.Pieces[index].PendingChunkSpecs
 	count = peer_protocol.Integer(len(pendingChunks)) * chunkSize
 	_lastChunkSpec := lastChunkSpec(t.PieceLength(index))
@@ -23,12 +24,12 @@ func (t *Torrent) PieceNumPendingBytes(index peer_protocol.Integer) (count peer_
 	return
 }
 
-type Torrent struct {
+type torrent struct {
 	InfoHash   InfoHash
 	Pieces     []*piece
-	Data       MMapSpan
+	Data       mmap_span.MMapSpan
 	MetaInfo   *metainfo.MetaInfo
-	Conns      []*Connection
+	Conns      []*connection
 	Peers      []Peer
 	Priorities *list.List
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
@@ -36,11 +37,11 @@ type Torrent struct {
 	Trackers [][]tracker.Client
 }
 
-func (t *Torrent) NumPieces() int {
-	return len(t.MetaInfo.Pieces) / PieceHash.Size()
+func (t *torrent) NumPieces() int {
+	return len(t.MetaInfo.Pieces) / pieceHash.Size()
 }
 
-func (t *Torrent) NumPiecesCompleted() (num int) {
+func (t *torrent) NumPiecesCompleted() (num int) {
 	for _, p := range t.Pieces {
 		if p.Complete() {
 			num++
@@ -49,11 +50,11 @@ func (t *Torrent) NumPiecesCompleted() (num int) {
 	return
 }
 
-func (t *Torrent) Length() int64 {
+func (t *torrent) Length() int64 {
 	return int64(t.PieceLength(peer_protocol.Integer(len(t.Pieces)-1))) + int64(len(t.Pieces)-1)*int64(t.PieceLength(0))
 }
 
-func (t *Torrent) Close() (err error) {
+func (t *torrent) Close() (err error) {
 	t.Data.Close()
 	for _, conn := range t.Conns {
 		conn.Close()
@@ -61,7 +62,7 @@ func (t *Torrent) Close() (err error) {
 	return
 }
 
-func (t *Torrent) piecesByPendingBytesDesc() (indices []peer_protocol.Integer) {
+func (t *torrent) piecesByPendingBytesDesc() (indices []peer_protocol.Integer) {
 	slice := pieceByBytesPendingSlice{
 		Pending: make([]peer_protocol.Integer, 0, len(t.Pieces)),
 		Indices: make([]peer_protocol.Integer, 0, len(t.Pieces)),
@@ -100,35 +101,35 @@ func torrentRequestOffset(torrentLength, pieceSize int64, r Request) (off int64)
 	return
 }
 
-func (t *Torrent) requestOffset(r Request) int64 {
+func (t *torrent) requestOffset(r Request) int64 {
 	return torrentRequestOffset(t.Length(), t.MetaInfo.PieceLength, r)
 }
 
 // Return the request that would include the given offset into the torrent data.
-func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
+func (t *torrent) offsetRequest(off int64) (req Request, ok bool) {
 	return torrentOffsetRequest(t.Length(), t.MetaInfo.PieceLength, chunkSize, off)
 }
 
-func (t *Torrent) WriteChunk(piece int, begin int64, data []byte) (err error) {
+func (t *torrent) WriteChunk(piece int, begin int64, data []byte) (err error) {
 	_, err = t.Data.WriteAt(data, int64(piece)*t.MetaInfo.PieceLength+begin)
 	return
 }
 
-func (t *Torrent) bitfield() (bf []bool) {
+func (t *torrent) bitfield() (bf []bool) {
 	for _, p := range t.Pieces {
 		bf = append(bf, p.EverHashed && len(p.PendingChunkSpecs) == 0)
 	}
 	return
 }
 
-func (t *Torrent) pendAllChunkSpecs(index peer_protocol.Integer) {
+func (t *torrent) pendAllChunkSpecs(index peer_protocol.Integer) {
 	piece := t.Pieces[index]
 	if piece.PendingChunkSpecs == nil {
 		piece.PendingChunkSpecs = make(
-			map[ChunkSpec]struct{},
+			map[chunkSpec]struct{},
 			(t.MetaInfo.PieceLength+chunkSize-1)/chunkSize)
 	}
-	c := ChunkSpec{
+	c := chunkSpec{
 		Begin: 0,
 	}
 	cs := piece.PendingChunkSpecs
@@ -143,7 +144,7 @@ func (t *Torrent) pendAllChunkSpecs(index peer_protocol.Integer) {
 	return
 }
 
-func (t *Torrent) requestHeat() (ret map[Request]int) {
+func (t *torrent) requestHeat() (ret map[Request]int) {
 	ret = make(map[Request]int)
 	for _, conn := range t.Conns {
 		for req, _ := range conn.Requests {
@@ -159,7 +160,7 @@ type Peer struct {
 	Port int
 }
 
-func (t *Torrent) PieceLength(piece peer_protocol.Integer) (len_ peer_protocol.Integer) {
+func (t *torrent) PieceLength(piece peer_protocol.Integer) (len_ peer_protocol.Integer) {
 	if int(piece) == t.NumPieces()-1 {
 		len_ = peer_protocol.Integer(t.Data.Size() % t.MetaInfo.PieceLength)
 	}
@@ -169,8 +170,8 @@ func (t *Torrent) PieceLength(piece peer_protocol.Integer) (len_ peer_protocol.I
 	return
 }
 
-func (t *Torrent) HashPiece(piece peer_protocol.Integer) (ps pieceSum) {
-	hash := PieceHash.New()
+func (t *torrent) HashPiece(piece peer_protocol.Integer) (ps pieceSum) {
+	hash := pieceHash.New()
 	n, err := t.Data.WriteSectionTo(hash, int64(piece)*t.MetaInfo.PieceLength, t.MetaInfo.PieceLength)
 	if err != nil {
 		panic(err)
@@ -181,7 +182,7 @@ func (t *Torrent) HashPiece(piece peer_protocol.Integer) (ps pieceSum) {
 	copyHashSum(ps[:], hash.Sum(nil))
 	return
 }
-func (t *Torrent) haveAllPieces() bool {
+func (t *torrent) haveAllPieces() bool {
 	for _, piece := range t.Pieces {
 		if !piece.Complete() {
 			return false
@@ -190,7 +191,7 @@ func (t *Torrent) haveAllPieces() bool {
 	return true
 }
 
-func (me *Torrent) haveAnyPieces() bool {
+func (me *torrent) haveAnyPieces() bool {
 	for _, piece := range me.Pieces {
 		if piece.Complete() {
 			return true
@@ -199,7 +200,7 @@ func (me *Torrent) haveAnyPieces() bool {
 	return false
 }
 
-func (t *Torrent) wantPiece(index int) bool {
+func (t *torrent) wantPiece(index int) bool {
 	p := t.Pieces[index]
 	return p.EverHashed && len(p.PendingChunkSpecs) != 0
 }

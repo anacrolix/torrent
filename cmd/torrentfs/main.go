@@ -96,16 +96,7 @@ func addTorrentDir(c *torrent.Client, _path string) {
 }
 
 func addTestPeer(client *torrent.Client) {
-torrents:
 	for _, t := range client.Torrents() {
-		client.Lock()
-		for _, c := range t.Conns {
-			if c.Socket.RemoteAddr().String() == testPeerAddr.String() {
-				client.Unlock()
-				continue torrents
-			}
-		}
-		client.Unlock()
 		if testPeerAddr != nil {
 			if err := client.AddPeers(t.InfoHash, []torrent.Peer{{
 				IP:   testPeerAddr.IP,

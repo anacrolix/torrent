@@ -67,6 +67,56 @@ func setSignalHandlers() {
 	}()
 }
 
+func addTorrent(c *torrent.Client, file string) {
+	metaInfo, err := metainfo.LoadFromFile(file)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	err = c.AddTorrent(metaInfo)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+}
+
+func addTorrentDir(c *torrent.Client, _path string) {
+	torrentDir, err := os.Open(torrentPath)
+	defer torrentDir.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+	names, err := torrentDir.Readdirnames(-1)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, name := range names {
+		go addTorrent(c, filepath.Join(_path, name))
+	}
+}
+
+func addTestPeer(client *torrent.Client) {
+torrents:
+	for _, t := range client.Torrents() {
+		client.Lock()
+		for _, c := range t.Conns {
+			if c.Socket.RemoteAddr().String() == testPeerAddr.String() {
+				client.Unlock()
+				continue torrents
+			}
+		}
+		client.Unlock()
+		if testPeerAddr != nil {
+			if err := client.AddPeers(t.InfoHash, []torrent.Peer{{
+				IP:   testPeerAddr.IP,
+				Port: testPeerAddr.Port,
+			}}); err != nil {
+				log.Print(err)
+			}
+		}
+	}
+}
+
 func main() {
 	flag.Parse()
 	if flag.NArg() != 0 {
@@ -94,51 +144,16 @@ func main() {
 		DisableTrackers: *disableTrackers,
 	}
 	client.Start()
-	torrentDir, err := os.Open(torrentPath)
-	defer torrentDir.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
-	names, err := torrentDir.Readdirnames(-1)
-	if err != nil {
-		log.Fatal(err)
-	}
+	addTorrentDir(client, torrentPath)
 	resolveTestPeerAddr()
-	for _, name := range names {
-		metaInfo, err := metainfo.LoadFromFile(filepath.Join(torrentPath, name))
-		if err != nil {
-			log.Print(err)
-		}
-		err = client.AddTorrent(metaInfo)
-		if err != nil {
-			log.Print(err)
-		}
-	}
 	fs := torrentfs.New(client)
 	go func() {
 		for {
-		torrentLoop:
-			for _, t := range client.Torrents() {
-				client.Lock()
-				for _, c := range t.Conns {
-					if c.Socket.RemoteAddr().String() == testPeerAddr.String() {
-						client.Unlock()
-						continue torrentLoop
-					}
-				}
-				client.Unlock()
-				if testPeerAddr != nil {
-					if err := client.AddPeers(t.InfoHash, []torrent.Peer{{
-						IP:   testPeerAddr.IP,
-						Port: testPeerAddr.Port,
-					}}); err != nil {
-						log.Print(err)
-					}
-				}
-			}
+			addTestPeer(client)
 			time.Sleep(10 * time.Second)
 		}
 	}()
+
 	if err := fusefs.Serve(conn, fs); err != nil {
 		log.Fatal(err)
 	}

@@ -157,4 +157,8 @@ func main() {
 	if err := fusefs.Serve(conn, fs); err != nil {
 		log.Fatal(err)
 	}
+	<-conn.Ready
+	if err := conn.MountError; err != nil {
+		log.Fatal(err)
+	}
 }

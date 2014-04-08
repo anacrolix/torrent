@@ -46,6 +46,7 @@ func (cl *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) {
 		}
 		off += int64(req.Length)
 		len_ -= int64(req.Length)
+		// TODO(anacrolix): Determine if this check is satisfactory.
 		if _, ok = t.Pieces[req.Index].PendingChunkSpecs[req.ChunkSpec]; !ok {
 			continue
 		}
@@ -232,7 +233,7 @@ func (me *Client) initiateConn(peer Peer, torrent *Torrent) {
 				return
 			}
 			switch netOpErr.Err {
-			case syscall.ECONNREFUSED:
+			case syscall.ECONNREFUSED, syscall.EHOSTUNREACH:
 				return
 			}
 		}

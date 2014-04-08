@@ -57,8 +57,13 @@ func setSignalHandlers() {
 	c := make(chan os.Signal)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		<-c
-		fuse.Unmount(mountDir)
+		for {
+			<-c
+			err := fuse.Unmount(mountDir)
+			if err != nil {
+				log.Print(err)
+			}
+		}
 	}()
 }
 

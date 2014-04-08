@@ -2,11 +2,12 @@ package main
 
 import (
 	"flag"
-	"github.com/nsf/libtorgo/torrent"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/nsf/libtorgo/torrent"
 )
 
 var (

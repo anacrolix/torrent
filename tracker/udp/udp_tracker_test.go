@@ -1,7 +1,6 @@
 package udp_tracker
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/tracker"
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
@@ -10,6 +9,8 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+
+	"bitbucket.org/anacrolix/go.torrent/tracker"
 )
 
 // Ensure net.IPs are stored big-endian, to match the way they're read from

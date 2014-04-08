@@ -1,17 +1,19 @@
 package main
 
 import (
-	"bitbucket.org/anacrolix/go.torrent"
 	"bytes"
 	"crypto/sha1"
 	"flag"
 	"fmt"
+
+	"bitbucket.org/anacrolix/go.torrent"
 	// "github.com/davecheney/profile"
-	metainfo "github.com/nsf/libtorgo/torrent"
-	"launchpad.net/gommap"
 	"log"
 	"os"
 	"path/filepath"
+
+	metainfo "github.com/nsf/libtorgo/torrent"
+	"launchpad.net/gommap"
 )
 
 var (

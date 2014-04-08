@@ -1,12 +1,7 @@
 package main
 
 import (
-	"bazil.org/fuse"
-	fusefs "bazil.org/fuse/fs"
-	"bitbucket.org/anacrolix/go.torrent"
-	"bitbucket.org/anacrolix/go.torrent/fs"
 	"flag"
-	metainfo "github.com/nsf/libtorgo/torrent"
 	"log"
 	"net"
 	"net/http"
@@ -17,6 +12,12 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"bazil.org/fuse"
+	fusefs "bazil.org/fuse/fs"
+	"bitbucket.org/anacrolix/go.torrent"
+	"bitbucket.org/anacrolix/go.torrent/fs"
+	metainfo "github.com/nsf/libtorgo/torrent"
 )
 
 var (

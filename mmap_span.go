@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"io"
+
 	"launchpad.net/gommap"
 )
 

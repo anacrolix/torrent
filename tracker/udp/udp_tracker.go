@@ -1,7 +1,6 @@
 package udp_tracker
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/tracker"
 	"bytes"
 	"encoding/binary"
 	"errors"
@@ -10,6 +9,8 @@ import (
 	"net"
 	"net/url"
 	"time"
+
+	"bitbucket.org/anacrolix/go.torrent/tracker"
 )
 
 type Action int32

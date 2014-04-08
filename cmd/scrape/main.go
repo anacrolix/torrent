@@ -1,13 +1,14 @@
 package main
 
 import (
+	"flag"
+	"log"
+	"os"
+
 	"bitbucket.org/anacrolix/go.torrent"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	_ "bitbucket.org/anacrolix/go.torrent/tracker/udp"
-	"flag"
 	metainfo "github.com/nsf/libtorgo/torrent"
-	"log"
-	"os"
 )
 
 func main() {

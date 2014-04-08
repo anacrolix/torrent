@@ -3,8 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/nsf/libtorgo/torrent"
 	"log"
+
+	"github.com/nsf/libtorgo/torrent"
 )
 
 func main() {

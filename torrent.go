@@ -74,23 +74,27 @@ func (t *Torrent) piecesByPendingBytesDesc() (indices []peer_protocol.Integer) {
 	return slice.Indices
 }
 
-func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
-	req.Index = peer_protocol.Integer(off / t.MetaInfo.PieceLength)
-	if req.Index < 0 || int(req.Index) >= len(t.Pieces) {
+// Return the request that would include the given offset into the torrent data.
+func torrentOffsetRequest(torrentLength, pieceSize, chunkSize, offset int64) (
+	r Request, ok bool) {
+	if offset < 0 || offset >= torrentLength {
 		return
 	}
-	off %= t.MetaInfo.PieceLength
-	pieceLeft := t.PieceLength(req.Index) - peer_protocol.Integer(off)
-	if pieceLeft <= 0 {
-		return
-	}
-	req.Begin = chunkSize * (peer_protocol.Integer(off) / chunkSize)
-	req.Length = chunkSize
-	if req.Length > pieceLeft {
-		req.Length = pieceLeft
+	r.Index = peer_protocol.Integer(offset / pieceSize)
+	r.Begin = peer_protocol.Integer(offset % pieceSize / chunkSize * chunkSize)
+	left := torrentLength - int64(r.Index)*pieceSize - int64(r.Begin)
+	if chunkSize < left {
+		r.Length = peer_protocol.Integer(chunkSize)
+	} else {
+		r.Length = peer_protocol.Integer(left)
 	}
 	ok = true
 	return
+}
+
+// Return the request that would include the given offset into the torrent data.
+func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
+	return torrentOffsetRequest(t.Length(), t.MetaInfo.PieceLength, chunkSize, off)
 }
 
 func (t *Torrent) WriteChunk(piece int, begin int64, data []byte) (err error) {

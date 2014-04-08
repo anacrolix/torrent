@@ -92,6 +92,18 @@ func torrentOffsetRequest(torrentLength, pieceSize, chunkSize, offset int64) (
 	return
 }
 
+func torrentRequestOffset(torrentLength, pieceSize int64, r Request) (off int64) {
+	off = int64(r.Index)*pieceSize + int64(r.Begin)
+	if off < 0 || off >= torrentLength {
+		panic("invalid request")
+	}
+	return
+}
+
+func (t *Torrent) requestOffset(r Request) int64 {
+	return torrentRequestOffset(t.Length(), t.MetaInfo.PieceLength, r)
+}
+
 // Return the request that would include the given offset into the torrent data.
 func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
 	return torrentOffsetRequest(t.Length(), t.MetaInfo.PieceLength, chunkSize, off)

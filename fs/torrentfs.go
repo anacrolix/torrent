@@ -65,7 +65,9 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 	infoHash := torrent.BytesInfoHash(fn.metaInfo.InfoHash)
 	torrentOff := fn.TorrentOffset + req.Offset
 	log.Print(torrentOff, len(data), fn.TorrentOffset)
-	fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(len(data)))
+	if err := fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(len(data))); err != nil {
+		panic(err)
+	}
 	for {
 		dataWaiter := fn.FS.Client.DataWaiter()
 		n, err := fn.FS.Client.TorrentReadAt(infoHash, torrentOff, data)
@@ -217,6 +219,7 @@ func (rootNode) Attr() fuse.Attr {
 	}
 }
 
+// TODO(anacrolix): Why should rootNode implement this?
 func (rootNode) Forget() {
 }
 

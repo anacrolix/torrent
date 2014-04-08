@@ -33,27 +33,32 @@ func (cl *Client) queuePieceCheck(t *Torrent, pieceIndex peer_protocol.Integer) 
 	go cl.verifyPiece(t, pieceIndex)
 }
 
-func (cl *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) {
+func (cl *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) error {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	t := cl.torrent(ih)
-	newPriorities := make([]Request, 0, (len_+2*(chunkSize-1))/chunkSize)
+	if t == nil {
+		return errors.New("no such active torrent")
+	}
+	newPriorities := make([]Request, 0, (len_+chunkSize-1)/chunkSize)
 	for len_ > 0 {
-		// TODO: Write a function to return the Request for a given offset.
 		req, ok := t.offsetRequest(off)
 		if !ok {
-			break
+			return errors.New("bad offset")
 		}
-		off += int64(req.Length)
+		reqOff := t.requestOffset(req)
+		// Gain the alignment adjustment.
+		len_ += off - reqOff
+		// Lose the length of this block.
 		len_ -= int64(req.Length)
-		// TODO(anacrolix): Determine if this check is satisfactory.
-		if _, ok = t.Pieces[req.Index].PendingChunkSpecs[req.ChunkSpec]; !ok {
+		off = reqOff + int64(req.Length)
+		if !t.wantPiece(int(req.Index)) {
 			continue
 		}
 		newPriorities = append(newPriorities, req)
 	}
 	if len(newPriorities) == 0 {
-		return
+		return nil
 	}
 	if t.Priorities == nil {
 		t.Priorities = list.New()
@@ -65,6 +70,7 @@ func (cl *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) {
 	for _, cn := range t.Conns {
 		cl.replenishConnRequests(t, cn)
 	}
+	return nil
 }
 
 type DataSpec struct {

@@ -425,6 +425,11 @@ func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
 				Begin: msg.Begin,
 				Piece: p,
 			})
+		case peer_protocol.Cancel:
+			req := newRequest(msg.Index, msg.Begin, msg.Length)
+			if !conn.PeerCancel(req) {
+				log.Printf("received unexpected cancel: %v", req)
+			}
 		case peer_protocol.Bitfield:
 			if len(msg.Bitfield) < len(torrent.Pieces) {
 				err = errors.New("received invalid bitfield")

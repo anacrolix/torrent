@@ -88,6 +88,18 @@ func (c *connection) Request(chunk Request) bool {
 	return true
 }
 
+// Returns true if an unsatisfied request was canceled.
+func (c *connection) PeerCancel(r Request) bool {
+	if c.PeerRequests == nil {
+		return false
+	}
+	if _, ok := c.PeerRequests[r]; !ok {
+		return false
+	}
+	delete(c.PeerRequests, r)
+	return true
+}
+
 func (c *connection) Unchoke() {
 	if !c.Choked {
 		return

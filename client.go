@@ -58,7 +58,7 @@ func (me *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) error {
 	if t == nil {
 		return errors.New("no such active torrent")
 	}
-	newPriorities := make([]Request, 0, (len_+chunkSize-1)/chunkSize)
+	newPriorities := make([]request, 0, (len_+chunkSize-1)/chunkSize)
 	for len_ > 0 {
 		req, ok := t.offsetRequest(off)
 		if !ok {
@@ -93,7 +93,7 @@ func (me *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) error {
 
 type dataSpec struct {
 	InfoHash
-	Request
+	request
 }
 
 type Client struct {
@@ -403,9 +403,9 @@ func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
 			me.peerGotPiece(torrent, conn, int(msg.Index))
 		case peer_protocol.Request:
 			if conn.PeerRequests == nil {
-				conn.PeerRequests = make(map[Request]struct{}, maxRequests)
+				conn.PeerRequests = make(map[request]struct{}, maxRequests)
 			}
-			request := Request{
+			request := request{
 				Index:     msg.Index,
 				chunkSpec: chunkSpec{msg.Begin, msg.Length},
 			}
@@ -446,7 +446,7 @@ func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
 				}
 			}
 		case peer_protocol.Piece:
-			request_ := Request{msg.Index, chunkSpec{msg.Begin, peer_protocol.Integer(len(msg.Piece))}}
+			request_ := request{msg.Index, chunkSpec{msg.Begin, peer_protocol.Integer(len(msg.Piece))}}
 			if _, ok := conn.Requests[request_]; !ok {
 				err = fmt.Errorf("unexpected piece: %s", request_)
 				break
@@ -667,7 +667,7 @@ func (me *Client) WaitAll() bool {
 
 func (me *Client) replenishConnRequests(torrent *torrent, conn *connection) {
 	requestHeatMap := torrent.requestHeat()
-	addRequest := func(req Request) (again bool) {
+	addRequest := func(req request) (again bool) {
 		piece := torrent.Pieces[req.Index]
 		if piece.Hashing {
 			// We can't be sure we want this.
@@ -686,7 +686,7 @@ func (me *Client) replenishConnRequests(torrent *torrent, conn *connection) {
 	// First request prioritized chunks.
 	if torrent.Priorities != nil {
 		for e := torrent.Priorities.Front(); e != nil; e = e.Next() {
-			if !addRequest(e.Value.(Request)) {
+			if !addRequest(e.Value.(request)) {
 				return
 			}
 		}
@@ -697,7 +697,7 @@ func (me *Client) replenishConnRequests(torrent *torrent, conn *connection) {
 			continue
 		}
 		for chunkSpec := range torrent.Pieces[index].PendingChunkSpecs {
-			if !addRequest(Request{index, chunkSpec}) {
+			if !addRequest(request{index, chunkSpec}) {
 				return
 			}
 		}
@@ -708,27 +708,27 @@ func (me *Client) replenishConnRequests(torrent *torrent, conn *connection) {
 }
 
 func (me *Client) downloadedChunk(torrent *torrent, msg *peer_protocol.Message) (err error) {
-	request := Request{msg.Index, chunkSpec{msg.Begin, peer_protocol.Integer(len(msg.Piece))}}
-	if _, ok := torrent.Pieces[request.Index].PendingChunkSpecs[request.chunkSpec]; !ok {
-		log.Printf("got unnecessary chunk: %s", request)
+	req := request{msg.Index, chunkSpec{msg.Begin, peer_protocol.Integer(len(msg.Piece))}}
+	if _, ok := torrent.Pieces[req.Index].PendingChunkSpecs[req.chunkSpec]; !ok {
+		log.Printf("got unnecessary chunk: %s", req)
 		return
 	}
 	err = torrent.WriteChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
 	if err != nil {
 		return
 	}
-	delete(torrent.Pieces[request.Index].PendingChunkSpecs, request.chunkSpec)
-	if len(torrent.Pieces[request.Index].PendingChunkSpecs) == 0 {
-		me.queuePieceCheck(torrent, request.Index)
+	delete(torrent.Pieces[req.Index].PendingChunkSpecs, req.chunkSpec)
+	if len(torrent.Pieces[req.Index].PendingChunkSpecs) == 0 {
+		me.queuePieceCheck(torrent, req.Index)
 	}
 	var next *list.Element
 	for e := torrent.Priorities.Front(); e != nil; e = next {
 		next = e.Next()
-		if e.Value.(Request) == request {
+		if e.Value.(request) == req {
 			torrent.Priorities.Remove(e)
 		}
 	}
-	me.dataReady(dataSpec{torrent.InfoHash, request})
+	me.dataReady(dataSpec{torrent.InfoHash, req})
 	return
 }
 
@@ -760,14 +760,14 @@ func (me *Client) pieceHashed(t *torrent, piece peer_protocol.Integer, correct b
 		if t.Priorities != nil {
 			for e := t.Priorities.Front(); e != nil; e = next {
 				next = e.Next()
-				if e.Value.(Request).Index == piece {
+				if e.Value.(request).Index == piece {
 					t.Priorities.Remove(e)
 				}
 			}
 		}
 		me.dataReady(dataSpec{
 			t.InfoHash,
-			Request{
+			request{
 				peer_protocol.Integer(piece),
 				chunkSpec{0, peer_protocol.Integer(t.PieceLength(piece))},
 			},

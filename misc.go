@@ -60,13 +60,13 @@ type chunkSpec struct {
 	Begin, Length peer_protocol.Integer
 }
 
-type Request struct {
+type request struct {
 	Index peer_protocol.Integer
 	chunkSpec
 }
 
-func newRequest(index, begin, length peer_protocol.Integer) Request {
-	return Request{index, chunkSpec{begin, length}}
+func newRequest(index, begin, length peer_protocol.Integer) request {
+	return request{index, chunkSpec{begin, length}}
 }
 
 type pieceByBytesPendingSlice struct {

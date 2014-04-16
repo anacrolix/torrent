@@ -22,13 +22,13 @@ type connection struct {
 	// Stuff controlled by the local peer.
 	Interested bool
 	Choked     bool
-	Requests   map[Request]struct{}
+	Requests   map[request]struct{}
 
 	// Stuff controlled by the remote peer.
 	PeerId         [20]byte
 	PeerInterested bool
 	PeerChoked     bool
-	PeerRequests   map[Request]struct{}
+	PeerRequests   map[request]struct{}
 	PeerExtensions [8]byte
 	PeerPieces     []bool
 }
@@ -62,7 +62,7 @@ func (c *connection) Post(msg encoding.BinaryMarshaler) {
 }
 
 // Returns true if more requests can be sent.
-func (c *connection) Request(chunk Request) bool {
+func (c *connection) Request(chunk request) bool {
 	if len(c.Requests) >= maxRequests {
 		return false
 	}
@@ -82,14 +82,14 @@ func (c *connection) Request(chunk Request) bool {
 		})
 	}
 	if c.Requests == nil {
-		c.Requests = make(map[Request]struct{}, maxRequests)
+		c.Requests = make(map[request]struct{}, maxRequests)
 	}
 	c.Requests[chunk] = struct{}{}
 	return true
 }
 
 // Returns true if an unsatisfied request was canceled.
-func (c *connection) PeerCancel(r Request) bool {
+func (c *connection) PeerCancel(r request) bool {
 	if c.PeerRequests == nil {
 		return false
 	}

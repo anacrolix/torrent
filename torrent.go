@@ -77,7 +77,7 @@ func (t *torrent) piecesByPendingBytesDesc() (indices []peer_protocol.Integer) {
 
 // Return the request that would include the given offset into the torrent data.
 func torrentOffsetRequest(torrentLength, pieceSize, chunkSize, offset int64) (
-	r Request, ok bool) {
+	r request, ok bool) {
 	if offset < 0 || offset >= torrentLength {
 		return
 	}
@@ -93,7 +93,7 @@ func torrentOffsetRequest(torrentLength, pieceSize, chunkSize, offset int64) (
 	return
 }
 
-func torrentRequestOffset(torrentLength, pieceSize int64, r Request) (off int64) {
+func torrentRequestOffset(torrentLength, pieceSize int64, r request) (off int64) {
 	off = int64(r.Index)*pieceSize + int64(r.Begin)
 	if off < 0 || off >= torrentLength {
 		panic("invalid request")
@@ -101,12 +101,12 @@ func torrentRequestOffset(torrentLength, pieceSize int64, r Request) (off int64)
 	return
 }
 
-func (t *torrent) requestOffset(r Request) int64 {
+func (t *torrent) requestOffset(r request) int64 {
 	return torrentRequestOffset(t.Length(), t.MetaInfo.PieceLength, r)
 }
 
 // Return the request that would include the given offset into the torrent data.
-func (t *torrent) offsetRequest(off int64) (req Request, ok bool) {
+func (t *torrent) offsetRequest(off int64) (req request, ok bool) {
 	return torrentOffsetRequest(t.Length(), t.MetaInfo.PieceLength, chunkSize, off)
 }
 
@@ -144,8 +144,8 @@ func (t *torrent) pendAllChunkSpecs(index peer_protocol.Integer) {
 	return
 }
 
-func (t *torrent) requestHeat() (ret map[Request]int) {
-	ret = make(map[Request]int)
+func (t *torrent) requestHeat() (ret map[request]int) {
+	ret = make(map[request]int)
 	for _, conn := range t.Conns {
 		for req, _ := range conn.Requests {
 			ret[req]++

@@ -3,6 +3,7 @@ package torrentfs
 import (
 	"bytes"
 	"io/ioutil"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -39,25 +40,91 @@ func TestTCPAddrString(t *testing.T) {
 	}
 }
 
-func TestDownloadOnDemand(t *testing.T) {
-	dir, err := ioutil.TempDir("", "torrentfs")
+type testLayout struct {
+	BaseDir   string
+	MountDir  string
+	Completed string
+	Metainfo  *metainfo.MetaInfo
+}
+
+func (me *testLayout) Destroy() error {
+	return os.RemoveAll(me.BaseDir)
+}
+
+func newGreetingLayout() (tl testLayout, err error) {
+	tl.BaseDir, err = ioutil.TempDir("", "torrentfs")
+	if err != nil {
+		return
+	}
+	tl.Completed = filepath.Join(tl.BaseDir, "completed")
+	os.Mkdir(tl.Completed, 0777)
+	tl.MountDir = filepath.Join(tl.BaseDir, "mnt")
+	os.Mkdir(tl.MountDir, 0777)
+	name := testutil.CreateDummyTorrentData(tl.Completed)
+	metaInfoBuf := &bytes.Buffer{}
+	testutil.CreateMetaInfo(name, metaInfoBuf)
+	tl.Metainfo, err = metainfo.Load(metaInfoBuf)
+	return
+}
+
+func TestUnmountWedged(t *testing.T) {
+	layout, err := newGreetingLayout()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			t.Error(err)
+		err := layout.Destroy()
+		if err != nil {
+			t.Log(err)
 		}
 	}()
-	t.Logf("test directory: %s", dir)
-	finishedDir := filepath.Join(dir, "finished")
-	os.Mkdir(finishedDir, 0777)
-	name := testutil.CreateDummyTorrentData(finishedDir)
-	metaInfoBuf := &bytes.Buffer{}
-	testutil.CreateMetaInfo(name, metaInfoBuf)
-	metaInfo, err := metainfo.Load(metaInfoBuf)
+	client := torrent.Client{
+		DataDir:         filepath.Join(layout.BaseDir, "incomplete"),
+		DisableTrackers: true,
+	}
+	client.Start()
+	client.AddTorrent(layout.Metainfo)
+	fs := New(&client)
+	fuseConn, err := fuse.Mount(layout.MountDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		server := fusefs.Server{
+			FS: fs,
+			Debug: func(msg interface{}) {
+				log.Print(msg)
+			},
+		}
+		server.Serve(fuseConn)
+	}()
+	<-fuseConn.Ready
+	if err := fuseConn.MountError; err != nil {
+		log.Fatal(err)
+	}
+	go func() {
+		ioutil.ReadFile(filepath.Join(layout.MountDir, layout.Metainfo.Name))
+	}()
+	time.Sleep(time.Second)
+	fs.Destroy()
+	time.Sleep(time.Second)
+	err = fuse.Unmount(layout.MountDir)
+	if err != nil {
+		log.Print(err)
+	}
+	err = fuseConn.Close()
+	if err != nil {
+		t.Log(err)
+	}
+}
+
+func TestDownloadOnDemand(t *testing.T) {
+	layout, err := newGreetingLayout()
+	if err != nil {
+		t.Fatal(err)
+	}
 	seeder := torrent.Client{
-		DataDir: finishedDir,
+		DataDir: layout.Completed,
 		Listener: func() net.Listener {
 			conn, err := net.Listen("tcp", ":0")
 			if err != nil {
@@ -69,24 +136,23 @@ func TestDownloadOnDemand(t *testing.T) {
 	defer seeder.Listener.Close()
 	seeder.Start()
 	defer seeder.Stop()
-	seeder.AddTorrent(metaInfo)
+	seeder.AddTorrent(layout.Metainfo)
 	leecher := torrent.Client{
-		DataDir: filepath.Join(dir, "download"),
+		DataDir: filepath.Join(layout.BaseDir, "download"),
 	}
 	leecher.Start()
 	defer leecher.Stop()
-	leecher.AddTorrent(metaInfo)
-	leecher.AddPeers(torrent.BytesInfoHash(metaInfo.InfoHash), []torrent.Peer{func() torrent.Peer {
+	leecher.AddTorrent(layout.Metainfo)
+	leecher.AddPeers(torrent.BytesInfoHash(layout.Metainfo.InfoHash), []torrent.Peer{func() torrent.Peer {
 		tcpAddr := seeder.Listener.Addr().(*net.TCPAddr)
 		return torrent.Peer{
 			IP:   tcpAddr.IP,
 			Port: tcpAddr.Port,
 		}
 	}()})
-	mountDir := filepath.Join(dir, "mnt")
-	os.Mkdir(mountDir, 0777)
 	fs := New(&leecher)
-	fuseConn, err := fuse.Mount(mountDir)
+	mountDir := layout.MountDir
+	fuseConn, err := fuse.Mount(layout.MountDir)
 	if err != nil {
 		t.Fatal(err)
 	}

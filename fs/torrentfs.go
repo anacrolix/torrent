@@ -3,6 +3,7 @@ package torrentfs
 import (
 	"log"
 	"os"
+	"sync"
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
@@ -15,7 +16,9 @@ const (
 )
 
 type torrentFS struct {
-	Client *torrent.Client
+	Client    *torrent.Client
+	destroyed chan struct{}
+	mu        sync.Mutex
 }
 
 var _ fusefs.NodeForgetter = rootNode{}
@@ -75,6 +78,8 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 		case torrent.ErrDataNotReady:
 			select {
 			case <-dataWaiter:
+			case <-fn.FS.destroyed:
+				return fuse.EIO
 			case <-intr:
 				return fuse.EINTR
 			}
@@ -217,16 +222,30 @@ func (rootNode) Attr() fuse.Attr {
 }
 
 // TODO(anacrolix): Why should rootNode implement this?
-func (rootNode) Forget() {
+func (me rootNode) Forget() {
+	me.fs.Destroy()
 }
 
 func (tfs *torrentFS) Root() (fusefs.Node, fuse.Error) {
 	return rootNode{tfs}, nil
 }
 
+func (me *torrentFS) Destroy() {
+	me.mu.Lock()
+	select {
+	case <-me.destroyed:
+	default:
+		close(me.destroyed)
+	}
+	me.mu.Unlock()
+}
+
+var _ fusefs.FSDestroyer = &torrentFS{}
+
 func New(cl *torrent.Client) *torrentFS {
 	fs := &torrentFS{
-		Client: cl,
+		Client:    cl,
+		destroyed: make(chan struct{}),
 	}
 	return fs
 }

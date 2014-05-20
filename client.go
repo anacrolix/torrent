@@ -632,7 +632,7 @@ newAnnounce:
 					log.Print(err)
 					return
 				}
-				log.Printf("%d new peers from %s", len(peers), "TODO")
+				log.Printf("%s: %d new peers from %s", t, len(peers), tr)
 				tier[0], tier[trIndex] = tier[trIndex], tier[0]
 				time.Sleep(time.Second * time.Duration(resp.Interval))
 				continue newAnnounce
@@ -755,7 +755,7 @@ func (me *Client) pieceHashed(t *torrent, piece peer_protocol.Integer, correct b
 	p.EverHashed = true
 	if correct {
 		p.PendingChunkSpecs = nil
-		log.Printf("got piece %d, (%d/%d)", piece, t.NumPiecesCompleted(), t.NumPieces())
+		log.Printf("%s: got piece %d, (%d/%d)", t, piece, t.NumPiecesCompleted(), t.NumPieces())
 		var next *list.Element
 		if t.Priorities != nil {
 			for e := t.Priorities.Front(); e != nil; e = next {

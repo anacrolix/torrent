@@ -37,6 +37,10 @@ type torrent struct {
 	Trackers [][]tracker.Client
 }
 
+func (t *torrent) String() string {
+	return t.MetaInfo.Name
+}
+
 func (t *torrent) NumPieces() int {
 	return len(t.MetaInfo.Pieces) / pieceHash.Size()
 }

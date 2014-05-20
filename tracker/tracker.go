@@ -44,6 +44,7 @@ type Client interface {
 	// Returns ErrNotConnected if Connect needs to be called.
 	Announce(*AnnounceRequest) (AnnounceResponse, error)
 	Connect() error
+	String() string
 }
 
 var (

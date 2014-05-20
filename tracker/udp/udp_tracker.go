@@ -87,6 +87,10 @@ type client struct {
 	url                  *url.URL
 }
 
+func (c *client) String() string {
+	return c.url.String()
+}
+
 func (c *client) Announce(req *tracker.AnnounceRequest) (res tracker.AnnounceResponse, err error) {
 	if !c.connected() {
 		err = tracker.ErrNotConnected

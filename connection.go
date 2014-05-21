@@ -66,7 +66,7 @@ func (c *connection) Request(chunk request) bool {
 	if len(c.Requests) >= maxRequests {
 		return false
 	}
-	if !c.PeerPieces[chunk.Index] {
+	if !c.PeerHasPiece(chunk.Index) {
 		return true
 	}
 	c.SetInterested(true)

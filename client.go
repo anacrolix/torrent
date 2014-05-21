@@ -161,7 +161,8 @@ func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err er
 	return t.Data.ReadAt(p, off)
 }
 
-// Starts the client. Defaults are applied. The client will begin accepting connections and tracking.
+// Starts the client. Defaults are applied. The client will begin accepting
+// connections and tracking.
 func (c *Client) Start() {
 	c.event.L = &c.mu
 	c.torrents = make(map[InfoHash]*torrent)
@@ -406,10 +407,7 @@ func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
 			if conn.PeerRequests == nil {
 				conn.PeerRequests = make(map[request]struct{}, maxRequests)
 			}
-			request := request{
-				Index:     msg.Index,
-				chunkSpec: chunkSpec{msg.Begin, msg.Length},
-			}
+			request := newRequest(msg.Index, msg.Begin, msg.Length)
 			conn.PeerRequests[request] = struct{}{}
 			// TODO: Requests should be satisfied from a dedicated upload routine.
 			p := make([]byte, msg.Length)
@@ -455,7 +453,7 @@ func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
 			delete(conn.Requests, request_)
 			err = me.downloadedChunk(torrent, msg)
 		default:
-			log.Printf("received unknown message type: %#v", msg.Type)
+			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}
 		if err != nil {
 			return err
@@ -483,7 +481,7 @@ func (me *Client) dropConnection(torrent *torrent, conn *connection) {
 func (me *Client) addConnection(t *torrent, c *connection) bool {
 	for _, c0 := range t.Conns {
 		if c.PeerId == c0.PeerId {
-			log.Printf("%s and %s have the same ID: %s", c.Socket.RemoteAddr(), c0.Socket.RemoteAddr(), c.PeerId)
+			// Already connected to a client with that ID.
 			return false
 		}
 	}

@@ -75,7 +75,7 @@ func (t *torrent) piecesByPendingBytes() (indices []peer_protocol.Integer) {
 		slice.Pending = append(slice.Pending, t.PieceNumPendingBytes(peer_protocol.Integer(i)))
 		slice.Indices = append(slice.Indices, peer_protocol.Integer(i))
 	}
-	sort.Sort(sort.Reverse(slice))
+	sort.Sort(slice)
 	return slice.Indices
 }
 

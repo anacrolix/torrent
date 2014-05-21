@@ -19,7 +19,9 @@ var (
 	testPeer    = flag.String("testPeer", "", "bootstrap peer address")
 	profAddr    = flag.String("profAddr", "", "http serve address")
 	// TODO: Check the default torrent listen port.
-	listenAddr = flag.String("listenAddr", ":6882", "incoming connection address")
+	listenAddr      = flag.String("listenAddr", ":6882", "incoming connection address")
+	disableTrackers = flag.Bool("disableTrackers", false, "disable trackers")
+	seed            = flag.Bool("seed", false, "seed after downloading")
 )
 
 func init() {
@@ -40,8 +42,9 @@ func main() {
 		go http.ListenAndServe(*profAddr, nil)
 	}
 	client := torrent.Client{
-		DataDir:  *downloadDir,
-		Listener: makeListener(),
+		DataDir:         *downloadDir,
+		Listener:        makeListener(),
+		DisableTrackers: *disableTrackers,
 	}
 	client.Start()
 	defer client.Stop()
@@ -75,6 +78,9 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+	}
+	if *seed {
+		select {}
 	}
 	if client.WaitAll() {
 		log.Print("all torrents completed!")

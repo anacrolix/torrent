@@ -78,9 +78,6 @@ func (me *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) error {
 	if len(newPriorities) == 0 {
 		return nil
 	}
-	if t.Priorities == nil {
-		t.Priorities = list.New()
-	}
 	t.Priorities.PushFront(newPriorities[0])
 	for _, req := range newPriorities[1:] {
 		t.Priorities.PushBack(req)
@@ -577,9 +574,19 @@ func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) error {
 	if !me.DisableTrackers {
 		go me.announceTorrent(torrent)
 	}
-	for i := range torrent.Pieces {
-		me.queuePieceCheck(torrent, peer_protocol.Integer(i))
+	torrent.Priorities = list.New()
+
+	// Queue all pieces for hashing. This is done sequentially to avoid
+	// spamming goroutines.
+	for _, p := range torrent.Pieces {
+		p.QueuedForHash = true
 	}
+	go func() {
+		for i := range torrent.Pieces {
+			me.verifyPiece(torrent, peer_protocol.Integer(i))
+		}
+	}()
+
 	return nil
 }
 
@@ -684,11 +691,9 @@ func (me *Client) replenishConnRequests(torrent *torrent, conn *connection) {
 		return conn.Request(req)
 	}
 	// First request prioritized chunks.
-	if torrent.Priorities != nil {
-		for e := torrent.Priorities.Front(); e != nil; e = e.Next() {
-			if !addRequest(e.Value.(request)) {
-				return
-			}
+	for e := torrent.Priorities.Front(); e != nil; e = e.Next() {
+		if !addRequest(e.Value.(request)) {
+			return
 		}
 	}
 	// Then finish off incomplete pieces in order of bytes remaining.
@@ -757,12 +762,10 @@ func (me *Client) pieceHashed(t *torrent, piece peer_protocol.Integer, correct b
 		p.PendingChunkSpecs = nil
 		log.Printf("%s: got piece %d, (%d/%d)", t, piece, t.NumPiecesCompleted(), t.NumPieces())
 		var next *list.Element
-		if t.Priorities != nil {
-			for e := t.Priorities.Front(); e != nil; e = next {
-				next = e.Next()
-				if e.Value.(request).Index == piece {
-					t.Priorities.Remove(e)
-				}
+		for e := t.Priorities.Front(); e != nil; e = next {
+			next = e.Next()
+			if e.Value.(request).Index == piece {
+				t.Priorities.Remove(e)
 			}
 		}
 		me.dataReady(dataSpec{

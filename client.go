@@ -280,11 +280,12 @@ func (me *Client) initiateConn(peer Peer, torrent *torrent) {
 
 func (me *Client) runConnection(sock net.Conn, torrent *torrent) (err error) {
 	conn := &connection{
-		Socket:     sock,
-		Choked:     true,
-		PeerChoked: true,
-		write:      make(chan []byte),
-		post:       make(chan encoding.BinaryMarshaler),
+		Socket:          sock,
+		Choked:          true,
+		PeerChoked:      true,
+		write:           make(chan []byte),
+		post:            make(chan encoding.BinaryMarshaler),
+		PeerMaxRequests: 250,
 	}
 	defer func() {
 		// There's a lock and deferred unlock later in this function. The

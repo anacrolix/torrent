@@ -15,7 +15,7 @@ import (
 
 const (
 	pieceHash   = crypto.SHA1
-	maxRequests = 250
+	maxRequests = 250 // Maximum pending requests we allow peers to send us.
 	chunkSize   = 0x4000     // 16KiB
 	BEP20       = "-GT0000-" // Peer ID client identifier prefix
 	dialTimeout = time.Second * 15

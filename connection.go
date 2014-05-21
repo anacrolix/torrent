@@ -25,12 +25,13 @@ type connection struct {
 	Requests   map[request]struct{}
 
 	// Stuff controlled by the remote peer.
-	PeerId         [20]byte
-	PeerInterested bool
-	PeerChoked     bool
-	PeerRequests   map[request]struct{}
-	PeerExtensions [8]byte
-	PeerPieces     []bool
+	PeerId          [20]byte
+	PeerInterested  bool
+	PeerChoked      bool
+	PeerRequests    map[request]struct{}
+	PeerExtensions  [8]byte
+	PeerPieces      []bool
+	PeerMaxRequests int // Maximum pending requests the peer allows.
 }
 
 func (c *connection) Close() {
@@ -63,7 +64,7 @@ func (c *connection) Post(msg encoding.BinaryMarshaler) {
 
 // Returns true if more requests can be sent.
 func (c *connection) Request(chunk request) bool {
-	if len(c.Requests) >= maxRequests {
+	if len(c.Requests) >= c.PeerMaxRequests {
 		return false
 	}
 	if !c.PeerHasPiece(chunk.Index) {
@@ -82,7 +83,7 @@ func (c *connection) Request(chunk request) bool {
 		})
 	}
 	if c.Requests == nil {
-		c.Requests = make(map[request]struct{}, maxRequests)
+		c.Requests = make(map[request]struct{}, c.PeerMaxRequests)
 	}
 	c.Requests[chunk] = struct{}{}
 	return true

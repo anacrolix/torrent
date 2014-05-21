@@ -395,6 +395,7 @@ func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
 		case peer_protocol.Unchoke:
 			conn.PeerChoked = false
 			me.peerUnchoked(torrent, conn)
+			me.replenishConnRequests(torrent, conn)
 		case peer_protocol.Interested:
 			conn.PeerInterested = true
 			// TODO: This should be done from a dedicated unchoking routine.
@@ -453,7 +454,6 @@ func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
 		if err != nil {
 			return err
 		}
-		me.replenishConnRequests(torrent, conn)
 	}
 }
 

@@ -138,7 +138,8 @@ func TestDownloadOnDemand(t *testing.T) {
 	defer seeder.Stop()
 	seeder.AddTorrent(layout.Metainfo)
 	leecher := torrent.Client{
-		DataDir: filepath.Join(layout.BaseDir, "download"),
+		DataDir:          filepath.Join(layout.BaseDir, "download"),
+		DownloadStrategy: torrent.ResponsiveDownloadStrategy{},
 	}
 	leecher.Start()
 	defer leecher.Stop()

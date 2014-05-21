@@ -131,8 +131,9 @@ func main() {
 	setSignalHandlers()
 	defer conn.Close()
 	client := &torrent.Client{
-		DataDir:         downloadDir,
-		DisableTrackers: *disableTrackers,
+		DataDir:          downloadDir,
+		DisableTrackers:  *disableTrackers,
+		DownloadStrategy: torrent.ResponsiveDownloadStrategy{},
 	}
 	client.Start()
 	addTorrentDir(client, torrentPath)

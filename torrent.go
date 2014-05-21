@@ -66,7 +66,7 @@ func (t *torrent) Close() (err error) {
 	return
 }
 
-func (t *torrent) piecesByPendingBytesDesc() (indices []peer_protocol.Integer) {
+func (t *torrent) piecesByPendingBytes() (indices []peer_protocol.Integer) {
 	slice := pieceByBytesPendingSlice{
 		Pending: make([]peer_protocol.Integer, 0, len(t.Pieces)),
 		Indices: make([]peer_protocol.Integer, 0, len(t.Pieces)),

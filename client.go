@@ -369,9 +369,9 @@ func (me *Client) peerUnchoked(torrent *torrent, conn *connection) {
 	me.replenishConnRequests(torrent, conn)
 }
 
-func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
+func (me *Client) connectionLoop(t *torrent, c *connection) error {
 	decoder := peer_protocol.Decoder{
-		R:         bufio.NewReader(conn.Socket),
+		R:         bufio.NewReader(c.Socket),
 		MaxLength: 256 * 1024,
 	}
 	for {
@@ -390,37 +390,37 @@ func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
 		}
 		switch msg.Type {
 		case peer_protocol.Choke:
-			conn.PeerChoked = true
-			conn.Requests = nil
+			c.PeerChoked = true
+			c.Requests = nil
 		case peer_protocol.Unchoke:
-			conn.PeerChoked = false
-			me.peerUnchoked(torrent, conn)
-			me.replenishConnRequests(torrent, conn)
+			c.PeerChoked = false
+			me.peerUnchoked(t, c)
+			me.replenishConnRequests(t, c)
 		case peer_protocol.Interested:
-			conn.PeerInterested = true
+			c.PeerInterested = true
 			// TODO: This should be done from a dedicated unchoking routine.
-			conn.Unchoke()
+			c.Unchoke()
 		case peer_protocol.NotInterested:
-			conn.PeerInterested = false
-			conn.Choke()
+			c.PeerInterested = false
+			c.Choke()
 		case peer_protocol.Have:
-			me.peerGotPiece(torrent, conn, int(msg.Index))
+			me.peerGotPiece(t, c, int(msg.Index))
 		case peer_protocol.Request:
-			if conn.PeerRequests == nil {
-				conn.PeerRequests = make(map[request]struct{}, maxRequests)
+			if c.PeerRequests == nil {
+				c.PeerRequests = make(map[request]struct{}, maxRequests)
 			}
 			request := newRequest(msg.Index, msg.Begin, msg.Length)
-			conn.PeerRequests[request] = struct{}{}
+			c.PeerRequests[request] = struct{}{}
 			// TODO: Requests should be satisfied from a dedicated upload routine.
 			p := make([]byte, msg.Length)
-			n, err := torrent.Data.ReadAt(p, int64(torrent.PieceLength(0))*int64(msg.Index)+int64(msg.Begin))
+			n, err := t.Data.ReadAt(p, int64(t.PieceLength(0))*int64(msg.Index)+int64(msg.Begin))
 			if err != nil {
-				return fmt.Errorf("reading torrent data to serve request %s: %s", request, err)
+				return fmt.Errorf("reading t data to serve request %s: %s", request, err)
 			}
 			if n != int(msg.Length) {
 				return fmt.Errorf("bad request: %s", msg)
 			}
-			conn.Post(peer_protocol.Message{
+			c.Post(peer_protocol.Message{
 				Type:  peer_protocol.Piece,
 				Index: msg.Index,
 				Begin: msg.Begin,
@@ -428,26 +428,26 @@ func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
 			})
 		case peer_protocol.Cancel:
 			req := newRequest(msg.Index, msg.Begin, msg.Length)
-			if !conn.PeerCancel(req) {
+			if !c.PeerCancel(req) {
 				log.Printf("received unexpected cancel: %v", req)
 			}
 		case peer_protocol.Bitfield:
-			if len(msg.Bitfield) < len(torrent.Pieces) {
+			if len(msg.Bitfield) < len(t.Pieces) {
 				err = errors.New("received invalid bitfield")
 				break
 			}
-			if conn.PeerPieces != nil {
+			if c.PeerPieces != nil {
 				err = errors.New("received unexpected bitfield")
 				break
 			}
-			conn.PeerPieces = msg.Bitfield[:len(torrent.Pieces)]
-			for index, has := range conn.PeerPieces {
+			c.PeerPieces = msg.Bitfield[:len(t.Pieces)]
+			for index, has := range c.PeerPieces {
 				if has {
-					me.peerGotPiece(torrent, conn, index)
+					me.peerGotPiece(t, c, index)
 				}
 			}
 		case peer_protocol.Piece:
-			err = me.downloadedChunk(torrent, conn, &msg)
+			err = me.downloadedChunk(t, c, &msg)
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}

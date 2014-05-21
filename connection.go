@@ -90,6 +90,24 @@ func (c *connection) Request(chunk request) bool {
 }
 
 // Returns true if an unsatisfied request was canceled.
+func (c *connection) Cancel(r request) bool {
+	if c.Requests == nil {
+		return false
+	}
+	if _, ok := c.Requests[r]; !ok {
+		return false
+	}
+	delete(c.Requests, r)
+	c.Post(peer_protocol.Message{
+		Type:   peer_protocol.Cancel,
+		Index:  r.Index,
+		Begin:  r.Begin,
+		Length: r.Length,
+	})
+	return true
+}
+
+// Returns true if an unsatisfied request was canceled.
 func (c *connection) PeerCancel(r request) bool {
 	if c.PeerRequests == nil {
 		return false
@@ -99,6 +117,16 @@ func (c *connection) PeerCancel(r request) bool {
 	}
 	delete(c.PeerRequests, r)
 	return true
+}
+
+func (c *connection) Choke() {
+	if c.Choked {
+		return
+	}
+	c.Post(peer_protocol.Message{
+		Type: peer_protocol.Choke,
+	})
+	c.Choked = true
 }
 
 func (c *connection) Unchoke() {

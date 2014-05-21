@@ -401,6 +401,7 @@ func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
 			conn.Unchoke()
 		case peer_protocol.NotInterested:
 			conn.PeerInterested = false
+			conn.Choke()
 		case peer_protocol.Have:
 			me.peerGotPiece(torrent, conn, int(msg.Index))
 		case peer_protocol.Request:

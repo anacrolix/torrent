@@ -376,9 +376,8 @@ func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
 	}
 	for {
 		me.mu.Unlock()
-		// TODO: Can this be allocated on the stack?
-		msg := new(peer_protocol.Message)
-		err := decoder.Decode(msg)
+		var msg peer_protocol.Message
+		err := decoder.Decode(&msg)
 		me.mu.Lock()
 		if err != nil {
 			if me.stopped() || err == io.EOF {
@@ -446,13 +445,7 @@ func (me *Client) connectionLoop(torrent *torrent, conn *connection) error {
 				}
 			}
 		case peer_protocol.Piece:
-			request_ := request{msg.Index, chunkSpec{msg.Begin, peer_protocol.Integer(len(msg.Piece))}}
-			if _, ok := conn.Requests[request_]; !ok {
-				err = fmt.Errorf("unexpected piece: %s", request_)
-				break
-			}
-			delete(conn.Requests, request_)
-			err = me.downloadedChunk(torrent, msg)
+			err = me.downloadedChunk(torrent, conn, &msg)
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}

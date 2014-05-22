@@ -132,13 +132,6 @@ func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err er
 	}
 	t.lastReadPiece = int(index)
 	piece := t.Pieces[index]
-	if !piece.EverHashed {
-		cl.queuePieceCheck(t, index)
-	}
-	if piece.Hashing {
-		err = ErrDataNotReady
-		return
-	}
 	pieceOff := pp.Integer(off % int64(t.PieceLength(0)))
 	high := int(t.PieceLength(index) - pieceOff)
 	if high < len(p) {

@@ -105,7 +105,21 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 	if length > d.MaxLength {
 		return errors.New("message too long")
 	}
-	r := bufio.NewReader(io.LimitReader(d.R, int64(length)))
+	if length == 0 {
+		msg.Keepalive = true
+		return
+	}
+	msg.Keepalive = false
+	b := make([]byte, length)
+	_, err = io.ReadFull(d.R, b)
+	if err == io.EOF {
+		err = io.ErrUnexpectedEOF
+		return
+	}
+	if err != nil {
+		return
+	}
+	r := bytes.NewReader(b)
 	defer func() {
 		written, _ := io.Copy(ioutil.Discard, r)
 		if written != 0 && err == nil {
@@ -114,10 +128,6 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 			err = io.ErrUnexpectedEOF
 		}
 	}()
-	if length == 0 {
-		msg.Keepalive = true
-		return
-	}
 	msg.Keepalive = false
 	c, err := r.ReadByte()
 	if err != nil {

@@ -104,7 +104,7 @@ func TestUnexpectedEOF(t *testing.T) {
 		}
 		err := dec.Decode(msg)
 		if err != io.ErrUnexpectedEOF {
-			t.Fatal(err)
+			t.Fatalf("expected ErrUnexpectedEOF decoding %q, got %s", stream, err)
 		}
 	}
 }

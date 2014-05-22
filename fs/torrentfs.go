@@ -50,30 +50,26 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 	if req.Dir {
 		panic("hodor")
 	}
-	data := make([]byte, func() int {
-		_len := int64(fn.size) - req.Offset
-		if int64(req.Size) < _len {
-			return req.Size
-		} else {
-			// limit read to the end of the file
-			return int(_len)
-		}
-	}())
-	if len(data) == 0 {
+	size := req.Size
+	if int64(fn.size)-req.Offset < int64(size) {
+		size = int(int64(fn.size) - req.Offset)
+	}
+	if size == 0 {
 		return nil
 	}
 	infoHash := torrent.BytesInfoHash(fn.metaInfo.InfoHash)
 	torrentOff := fn.TorrentOffset + req.Offset
-	log.Print(torrentOff, len(data), fn.TorrentOffset)
-	if err := fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(len(data))); err != nil {
+	log.Print(torrentOff, size, fn.TorrentOffset)
+	if err := fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(size)); err != nil {
 		panic(err)
 	}
+	resp.Data = resp.Data[:size]
 	for {
 		dataWaiter := fn.FS.Client.DataWaiter()
-		n, err := fn.FS.Client.TorrentReadAt(infoHash, torrentOff, data)
+		n, err := fn.FS.Client.TorrentReadAt(infoHash, torrentOff, resp.Data)
 		switch err {
 		case nil:
-			resp.Data = data[:n]
+			resp.Data = resp.Data[:n]
 			return nil
 		case torrent.ErrDataNotReady:
 			select {

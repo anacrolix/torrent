@@ -42,6 +42,13 @@ func (t *torrent) String() string {
 	return t.MetaInfo.Name
 }
 
+func (t *torrent) BytesLeft() (left int64) {
+	for i := peer_protocol.Integer(0); i < peer_protocol.Integer(t.NumPieces()); i++ {
+		left += int64(t.PieceNumPendingBytes(i))
+	}
+	return
+}
+
 func (t *torrent) NumPieces() int {
 	return len(t.MetaInfo.Pieces) / pieceHash.Size()
 }

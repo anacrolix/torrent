@@ -607,14 +607,15 @@ func (cl *Client) listenerAnnouncePort() (port int16) {
 
 func (cl *Client) announceTorrent(t *torrent) {
 	req := tracker.AnnounceRequest{
-		Event:   tracker.Started,
-		NumWant: -1,
-		Port:    cl.listenerAnnouncePort(),
+		Event:    tracker.Started,
+		NumWant:  -1,
+		Port:     cl.listenerAnnouncePort(),
+		PeerId:   cl.PeerId,
+		InfoHash: t.InfoHash,
 	}
-	req.PeerId = cl.PeerId
-	req.InfoHash = t.InfoHash
 newAnnounce:
 	for {
+		req.Left = t.BytesLeft()
 		for _, tier := range t.Trackers {
 			for trIndex, tr := range tier {
 				if err := tr.Connect(); err != nil {
@@ -633,17 +634,19 @@ newAnnounce:
 						Port: peer.Port,
 					})
 				}
-				if err := cl.AddPeers(t.InfoHash, peers); err != nil {
+				err = cl.AddPeers(t.InfoHash, peers)
+				if err != nil {
 					log.Print(err)
-					return
+				} else {
+					log.Printf("%s: %d new peers from %s", t, len(peers), tr)
 				}
-				log.Printf("%s: %d new peers from %s", t, len(peers), tr)
 				tier[0], tier[trIndex] = tier[trIndex], tier[0]
 				time.Sleep(time.Second * time.Duration(resp.Interval))
+				req.Event = tracker.None
 				continue newAnnounce
 			}
 		}
-		time.Sleep(time.Second)
+		time.Sleep(5 * time.Second)
 	}
 }
 

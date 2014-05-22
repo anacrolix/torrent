@@ -21,6 +21,8 @@ type torrentFS struct {
 	mu        sync.Mutex
 }
 
+var _ fusefs.FSDestroyer = &torrentFS{}
+
 var _ fusefs.NodeForgetter = rootNode{}
 
 type rootNode struct {
@@ -235,8 +237,6 @@ func (me *torrentFS) Destroy() {
 	}
 	me.mu.Unlock()
 }
-
-var _ fusefs.FSDestroyer = &torrentFS{}
 
 func New(cl *torrent.Client) *torrentFS {
 	fs := &torrentFS{

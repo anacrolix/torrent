@@ -34,7 +34,8 @@ type torrent struct {
 	Priorities *list.List
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
 	// mirror their respective URLs from the announce-list key.
-	Trackers [][]tracker.Client
+	Trackers      [][]tracker.Client
+	lastReadPiece int
 }
 
 func (t *torrent) String() string {

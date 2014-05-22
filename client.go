@@ -130,6 +130,7 @@ func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err er
 		err = io.EOF
 		return
 	}
+	t.lastReadPiece = int(index)
 	piece := t.Pieces[index]
 	if !piece.EverHashed {
 		cl.queuePieceCheck(t, index)
@@ -714,7 +715,25 @@ type ResponsiveDownloadStrategy struct{}
 func (ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	for e := t.Priorities.Front(); e != nil; e = e.Next() {
 		if !c.Request(e.Value.(request)) {
+			return
+		}
+	}
+	for i := t.lastReadPiece; i < t.lastReadPiece+5 && i < t.NumPieces(); i++ {
+		for cs := range t.Pieces[i].PendingChunkSpecs {
+			if !c.Request(request{pp.Integer(i), cs}) {
+				return
+			}
+		}
+	}
+	// Then finish off incomplete pieces in order of bytes remaining.
+	for _, index := range t.piecesByPendingBytes() {
+		if t.PieceNumPendingBytes(index) == t.PieceLength(index) {
 			break
+		}
+		for chunkSpec := range t.Pieces[index].PendingChunkSpecs {
+			if !c.Request(request{index, chunkSpec}) {
+				return
+			}
 		}
 	}
 }

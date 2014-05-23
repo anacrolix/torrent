@@ -485,7 +485,7 @@ func (me *Client) dropConnection(torrent *torrent, conn *connection) {
 		torrent.Conns = torrent.Conns[:i1]
 		return
 	}
-	panic("no such Connection")
+	panic("connection not found")
 }
 
 func (me *Client) addConnection(t *torrent, c *connection) bool {

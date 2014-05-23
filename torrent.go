@@ -7,14 +7,14 @@ import (
 	"sort"
 
 	"bitbucket.org/anacrolix/go.torrent/mmap_span"
-	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
+	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	metainfo "github.com/nsf/libtorgo/torrent"
 )
 
-func (t *torrent) PieceNumPendingBytes(index peer_protocol.Integer) (count peer_protocol.Integer) {
+func (t *torrent) PieceNumPendingBytes(index pp.Integer) (count pp.Integer) {
 	pendingChunks := t.Pieces[index].PendingChunkSpecs
-	count = peer_protocol.Integer(len(pendingChunks)) * chunkSize
+	count = pp.Integer(len(pendingChunks)) * chunkSize
 	_lastChunkSpec := lastChunkSpec(t.PieceLength(index))
 	if _lastChunkSpec.Length != chunkSize {
 		if _, ok := pendingChunks[_lastChunkSpec]; ok {
@@ -43,7 +43,7 @@ func (t *torrent) String() string {
 }
 
 func (t *torrent) BytesLeft() (left int64) {
-	for i := peer_protocol.Integer(0); i < peer_protocol.Integer(t.NumPieces()); i++ {
+	for i := pp.Integer(0); i < pp.Integer(t.NumPieces()); i++ {
 		left += int64(t.PieceNumPendingBytes(i))
 	}
 	return
@@ -63,7 +63,7 @@ func (t *torrent) NumPiecesCompleted() (num int) {
 }
 
 func (t *torrent) Length() int64 {
-	return int64(t.PieceLength(peer_protocol.Integer(len(t.Pieces)-1))) + int64(len(t.Pieces)-1)*int64(t.PieceLength(0))
+	return int64(t.PieceLength(pp.Integer(len(t.Pieces)-1))) + int64(len(t.Pieces)-1)*int64(t.PieceLength(0))
 }
 
 func (t *torrent) Close() (err error) {
@@ -74,14 +74,14 @@ func (t *torrent) Close() (err error) {
 	return
 }
 
-func (t *torrent) piecesByPendingBytes() (indices []peer_protocol.Integer) {
+func (t *torrent) piecesByPendingBytes() (indices []pp.Integer) {
 	slice := pieceByBytesPendingSlice{
-		Pending: make([]peer_protocol.Integer, 0, len(t.Pieces)),
-		Indices: make([]peer_protocol.Integer, 0, len(t.Pieces)),
+		Pending: make([]pp.Integer, 0, len(t.Pieces)),
+		Indices: make([]pp.Integer, 0, len(t.Pieces)),
 	}
 	for i := range t.Pieces {
-		slice.Pending = append(slice.Pending, t.PieceNumPendingBytes(peer_protocol.Integer(i)))
-		slice.Indices = append(slice.Indices, peer_protocol.Integer(i))
+		slice.Pending = append(slice.Pending, t.PieceNumPendingBytes(pp.Integer(i)))
+		slice.Indices = append(slice.Indices, pp.Integer(i))
 	}
 	sort.Sort(slice)
 	return slice.Indices
@@ -93,13 +93,13 @@ func torrentOffsetRequest(torrentLength, pieceSize, chunkSize, offset int64) (
 	if offset < 0 || offset >= torrentLength {
 		return
 	}
-	r.Index = peer_protocol.Integer(offset / pieceSize)
-	r.Begin = peer_protocol.Integer(offset % pieceSize / chunkSize * chunkSize)
+	r.Index = pp.Integer(offset / pieceSize)
+	r.Begin = pp.Integer(offset % pieceSize / chunkSize * chunkSize)
 	left := torrentLength - int64(r.Index)*pieceSize - int64(r.Begin)
 	if chunkSize < left {
-		r.Length = peer_protocol.Integer(chunkSize)
+		r.Length = pp.Integer(chunkSize)
 	} else {
-		r.Length = peer_protocol.Integer(left)
+		r.Length = pp.Integer(left)
 	}
 	ok = true
 	return
@@ -134,7 +134,7 @@ func (t *torrent) bitfield() (bf []bool) {
 	return
 }
 
-func (t *torrent) pendAllChunkSpecs(index peer_protocol.Integer) {
+func (t *torrent) pendAllChunkSpecs(index pp.Integer) {
 	piece := t.Pieces[index]
 	if piece.PendingChunkSpecs == nil {
 		piece.PendingChunkSpecs = make(
@@ -145,7 +145,7 @@ func (t *torrent) pendAllChunkSpecs(index peer_protocol.Integer) {
 		Begin: 0,
 	}
 	cs := piece.PendingChunkSpecs
-	for left := peer_protocol.Integer(t.PieceLength(index)); left != 0; left -= c.Length {
+	for left := pp.Integer(t.PieceLength(index)); left != 0; left -= c.Length {
 		c.Length = left
 		if c.Length > chunkSize {
 			c.Length = chunkSize
@@ -172,23 +172,23 @@ type Peer struct {
 	Port int
 }
 
-func (t *torrent) PieceLength(piece peer_protocol.Integer) (len_ peer_protocol.Integer) {
+func (t *torrent) PieceLength(piece pp.Integer) (len_ pp.Integer) {
 	if int(piece) == t.NumPieces()-1 {
-		len_ = peer_protocol.Integer(t.Data.Size() % t.MetaInfo.PieceLength)
+		len_ = pp.Integer(t.Data.Size() % t.MetaInfo.PieceLength)
 	}
 	if len_ == 0 {
-		len_ = peer_protocol.Integer(t.MetaInfo.PieceLength)
+		len_ = pp.Integer(t.MetaInfo.PieceLength)
 	}
 	return
 }
 
-func (t *torrent) HashPiece(piece peer_protocol.Integer) (ps pieceSum) {
+func (t *torrent) HashPiece(piece pp.Integer) (ps pieceSum) {
 	hash := pieceHash.New()
 	n, err := t.Data.WriteSectionTo(hash, int64(piece)*t.MetaInfo.PieceLength, t.MetaInfo.PieceLength)
 	if err != nil {
 		panic(err)
 	}
-	if peer_protocol.Integer(n) != t.PieceLength(piece) {
+	if pp.Integer(n) != t.PieceLength(piece) {
 		panic(fmt.Sprintf("hashed wrong number of bytes: expected %d; did %d; piece %d", t.PieceLength(piece), n, piece))
 	}
 	copyHashSum(ps[:], hash.Sum(nil))

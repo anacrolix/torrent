@@ -630,7 +630,9 @@ func (cl *Client) announceTorrent(t *torrent) {
 	}
 newAnnounce:
 	for {
+		cl.mu.Lock()
 		req.Left = t.BytesLeft()
+		cl.mu.Unlock()
 		for _, tier := range t.Trackers {
 			for trIndex, tr := range tier {
 				if err := tr.Connect(); err != nil {

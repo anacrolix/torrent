@@ -49,6 +49,20 @@ func (t *torrent) BytesLeft() (left int64) {
 	return
 }
 
+func NumChunksForPiece(chunkSize int, pieceSize int) int {
+	return (pieceSize + chunkSize - 1) / chunkSize
+}
+
+func (t *torrent) ChunkCount() (num int) {
+	num += (t.NumPieces() - 1) * NumChunksForPiece(chunkSize, int(t.PieceLength(0)))
+	num += NumChunksForPiece(chunkSize, int(t.PieceLength(pp.Integer(t.NumPieces()-1))))
+	return
+}
+
+func (t *torrent) LastPieceSize() int {
+	return int(t.PieceLength(pp.Integer(t.NumPieces() - 1)))
+}
+
 func (t *torrent) NumPieces() int {
 	return len(t.MetaInfo.Pieces) / pieceHash.Size()
 }
@@ -152,16 +166,6 @@ func (t *torrent) pendAllChunkSpecs(index pp.Integer) {
 		}
 		cs[c] = struct{}{}
 		c.Begin += c.Length
-	}
-	return
-}
-
-func (t *torrent) requestHeat() (ret map[request]int) {
-	ret = make(map[request]int)
-	for _, conn := range t.Conns {
-		for req, _ := range conn.Requests {
-			ret[req]++
-		}
 	}
 	return
 }

@@ -62,6 +62,11 @@ func (c *connection) Post(msg encoding.BinaryMarshaler) {
 	c.post <- msg
 }
 
+func (c *connection) RequestPending(r request) bool {
+	_, ok := c.Requests[r]
+	return ok
+}
+
 // Returns true if more requests can be sent.
 func (c *connection) Request(chunk request) bool {
 	if len(c.Requests) >= c.PeerMaxRequests {
@@ -74,18 +79,19 @@ func (c *connection) Request(chunk request) bool {
 	if c.PeerChoked {
 		return false
 	}
-	if _, ok := c.Requests[chunk]; !ok {
-		c.Post(peer_protocol.Message{
-			Type:   peer_protocol.Request,
-			Index:  chunk.Index,
-			Begin:  chunk.Begin,
-			Length: chunk.Length,
-		})
+	if c.RequestPending(chunk) {
+		return true
 	}
 	if c.Requests == nil {
 		c.Requests = make(map[request]struct{}, c.PeerMaxRequests)
 	}
 	c.Requests[chunk] = struct{}{}
+	c.Post(peer_protocol.Message{
+		Type:   peer_protocol.Request,
+		Index:  chunk.Index,
+		Begin:  chunk.Begin,
+		Length: chunk.Length,
+	})
 	return true
 }
 

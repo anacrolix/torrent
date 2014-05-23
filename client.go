@@ -407,7 +407,6 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		case pp.Unchoke:
 			c.PeerChoked = false
 			me.peerUnchoked(t, c)
-			me.replenishConnRequests(t, c)
 		case pp.Interested:
 			c.PeerInterested = true
 			// TODO: This should be done from a dedicated unchoking routine.

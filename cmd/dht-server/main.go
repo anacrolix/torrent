@@ -15,10 +15,11 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	s := dht.Server{}
 	var err error
-	s.Socket, err = net.ListenPacket("udp4", "")
+	s.Socket, err = net.ListenUDP("udp4", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
+	s.Init()
 	log.Printf("dht server on %s", s.Socket.LocalAddr())
 	go func() {
 		err := s.Serve()
@@ -26,28 +27,9 @@ func main() {
 			log.Fatal(err)
 		}
 	}()
-	pingResponses := make(chan pingResponse)
-	pingStrAddrs := []string{
-		"router.utorrent.com:6881",
-		"router.bittorrent.com:6881",
+	err = s.Bootstrap()
+	if err != nil {
+		log.Fatal(err)
 	}
-	for _, netloc := range pingStrAddrs {
-		addr, err := net.ResolveUDPAddr("udp4", netloc)
-		if err != nil {
-			log.Fatal(err)
-		}
-		t, err := s.Ping(addr)
-		if err != nil {
-			log.Fatal(err)
-		}
-		go func(addr string) {
-			pingResponses <- pingResponse{
-				addr: addr,
-				krpc: <-t.Response,
-			}
-		}(netloc)
-	}
-	for _ = range pingStrAddrs {
-		log.Print(<-pingResponses)
-	}
+	select {}
 }

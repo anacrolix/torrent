@@ -23,7 +23,7 @@ func main() {
 	}
 	s := dht.Server{}
 	var err error
-	s.Socket, err = net.ListenPacket("udp4", "")
+	s.Socket, err = net.ListenUDP("udp4", nil)
 	if err != nil {
 		log.Fatal(err)
 	}

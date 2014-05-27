@@ -6,7 +6,7 @@ import (
 )
 
 func TestMarshalCompactNodeInfo(t *testing.T) {
-	cni := compactNodeInfo{
+	cni := NodeInfo{
 		ID: [20]byte{'a', 'b', 'c'},
 	}
 	var err error
@@ -14,8 +14,8 @@ func TestMarshalCompactNodeInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var b [compactAddrInfoLen]byte
-	cni.PutBinary(b[:])
+	var b [CompactNodeInfoLen]byte
+	cni.PutCompact(b[:])
 	if err != nil {
 		t.Fatal(err)
 	}

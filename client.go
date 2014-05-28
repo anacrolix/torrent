@@ -789,19 +789,24 @@ func (s *DefaultDownloadStrategy) DeleteRequest(t *torrent, r request) {
 	m[r]--
 }
 
-type ResponsiveDownloadStrategy struct{}
+type ResponsiveDownloadStrategy struct {
+	// How many bytes to preemptively download starting at the beginning of
+	// the last piece read for a given torrent.
+	Readahead int
+}
 
 func (ResponsiveDownloadStrategy) TorrentStarted(*torrent)         {}
 func (ResponsiveDownloadStrategy) TorrentStopped(*torrent)         {}
 func (ResponsiveDownloadStrategy) DeleteRequest(*torrent, request) {}
 
-func (ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
+func (me *ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	for e := t.Priorities.Front(); e != nil; e = e.Next() {
 		if !c.Request(e.Value.(request)) {
 			return
 		}
 	}
-	for i := t.lastReadPiece; i < t.lastReadPiece+5 && i < t.NumPieces(); i++ {
+	readaheadPieces := (me.Readahead + t.UsualPieceSize() - 1) / t.UsualPieceSize()
+	for i := t.lastReadPiece; i < t.lastReadPiece+readaheadPieces && i < t.NumPieces(); i++ {
 		for cs := range t.Pieces[i].PendingChunkSpecs {
 			if !c.Request(request{pp.Integer(i), cs}) {
 				return
@@ -810,6 +815,7 @@ func (ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	}
 	// Then finish off incomplete pieces in order of bytes remaining.
 	for _, index := range t.piecesByPendingBytes() {
+		// Stop when we're onto untouched pieces.
 		if t.PieceNumPendingBytes(index) == t.PieceLength(index) {
 			break
 		}

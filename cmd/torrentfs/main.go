@@ -133,7 +133,7 @@ func main() {
 	client := &torrent.Client{
 		DataDir:          downloadDir,
 		DisableTrackers:  *disableTrackers,
-		DownloadStrategy: torrent.ResponsiveDownloadStrategy{},
+		DownloadStrategy: &torrent.ResponsiveDownloadStrategy{2 * 1000 * 1024},
 	}
 	client.Start()
 	addTorrentDir(client, torrentPath)

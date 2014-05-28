@@ -4,6 +4,7 @@ import (
 	"bitbucket.org/anacrolix/go.torrent/mmap_span"
 	"crypto"
 	"errors"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
@@ -15,7 +16,7 @@ import (
 
 const (
 	pieceHash   = crypto.SHA1
-	maxRequests = 250 // Maximum pending requests we allow peers to send us.
+	maxRequests = 250        // Maximum pending requests we allow peers to send us.
 	chunkSize   = 0x4000     // 16KiB
 	BEP20       = "-GT0000-" // Peer ID client identifier prefix
 	dialTimeout = time.Second * 15
@@ -44,6 +45,18 @@ type piece struct {
 	Hashing           bool
 	QueuedForHash     bool
 	EverHashed        bool
+}
+
+func (p *piece) shuffledPendingChunkSpecs() (css []chunkSpec) {
+	css = make([]chunkSpec, 0, len(p.PendingChunkSpecs))
+	for cs := range p.PendingChunkSpecs {
+		css = append(css, cs)
+	}
+	for i := range css {
+		j := rand.Intn(i + 1)
+		css[i], css[j] = css[j], css[i]
+	}
+	return
 }
 
 func (p *piece) Complete() bool {

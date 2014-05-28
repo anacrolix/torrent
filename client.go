@@ -819,8 +819,10 @@ func (me *ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 		if t.PieceNumPendingBytes(index) == t.PieceLength(index) {
 			break
 		}
-		for chunkSpec := range t.Pieces[index].PendingChunkSpecs {
-			if !c.Request(request{index, chunkSpec}) {
+		// Request chunks in random order to reduce overlap with other
+		// connections.
+		for _, cs := range t.Pieces[index].shuffledPendingChunkSpecs() {
+			if !c.Request(request{index, cs}) {
 				return
 			}
 		}

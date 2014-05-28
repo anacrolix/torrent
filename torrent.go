@@ -59,6 +59,10 @@ func (t *torrent) ChunkCount() (num int) {
 	return
 }
 
+func (t *torrent) UsualPieceSize() int {
+	return int(t.MetaInfo.PieceLength)
+}
+
 func (t *torrent) LastPieceSize() int {
 	return int(t.PieceLength(pp.Integer(t.NumPieces() - 1)))
 }

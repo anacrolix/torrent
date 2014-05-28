@@ -16,7 +16,7 @@ type connection struct {
 	Socket net.Conn
 	closed bool
 	mu     sync.Mutex // Only for closing.
-	post   chan encoding.BinaryMarshaler
+	post   chan peer_protocol.Message
 	write  chan []byte
 
 	// Stuff controlled by the local peer.
@@ -58,7 +58,7 @@ func (c *connection) PeerHasPiece(index peer_protocol.Integer) bool {
 	return c.PeerPieces[index]
 }
 
-func (c *connection) Post(msg encoding.BinaryMarshaler) {
+func (c *connection) Post(msg peer_protocol.Message) {
 	c.post <- msg
 }
 
@@ -166,56 +166,71 @@ var (
 	keepAliveBytes [4]byte
 )
 
+// Writes buffers to the socket from the write channel.
 func (conn *connection) writer() {
-	timer := time.NewTimer(0)
-	defer timer.Stop()
-	for {
-		if !timer.Reset(time.Minute) {
-			<-timer.C
-		}
-		var b []byte
-		select {
-		case <-timer.C:
-			b = keepAliveBytes[:]
-		case b = <-conn.write:
-			if b == nil {
-				return
-			}
-		}
+	for b := range conn.write {
 		_, err := conn.Socket.Write(b)
-		if conn.getClosed() {
-			break
-		}
 		if err != nil {
-			log.Print(err)
+			if !conn.getClosed() {
+				log.Print(err)
+			}
 			break
 		}
 	}
 }
 
-func (conn *connection) writeOptimizer() {
-	pending := list.New()
-	var nextWrite []byte
-	defer close(conn.write)
+func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
+	defer close(conn.write) // Responsible for notifying downstream routines.
+	pending := list.New()   // Message queue.
+	var nextWrite []byte    // Set to nil if we need to need to marshal the next message.
+	timer := time.NewTimer(keepAliveDelay)
+	defer timer.Stop()
+	lastWrite := time.Now()
 	for {
-		write := conn.write
+		write := conn.write // Set to nil if there's nothing to write.
 		if pending.Len() == 0 {
 			write = nil
-		} else {
+		} else if nextWrite == nil {
 			var err error
 			nextWrite, err = pending.Front().Value.(encoding.BinaryMarshaler).MarshalBinary()
 			if err != nil {
 				panic(err)
 			}
 		}
+	event:
 		select {
+		case <-timer.C:
+			if pending.Len() != 0 {
+				break
+			}
+			keepAliveTime := lastWrite.Add(keepAliveDelay)
+			if time.Now().Before(keepAliveTime) {
+				timer.Reset(keepAliveTime.Sub(time.Now()))
+				break
+			}
+			pending.PushBack(peer_protocol.Message{Keepalive: true})
 		case msg, ok := <-conn.post:
 			if !ok {
 				return
 			}
+			if msg.Type == peer_protocol.Cancel {
+				for e := pending.Back(); e != nil; e = e.Prev() {
+					elemMsg := e.Value.(peer_protocol.Message)
+					if elemMsg.Type == peer_protocol.Request && msg.Index == elemMsg.Index && msg.Begin == elemMsg.Begin && msg.Length == elemMsg.Length {
+						pending.Remove(e)
+						log.Print("optimized cancel! %q", msg)
+						break event
+					}
+				}
+			}
 			pending.PushBack(msg)
 		case write <- nextWrite:
 			pending.Remove(pending.Front())
+			nextWrite = nil
+			lastWrite = time.Now()
+			if pending.Len() == 0 {
+				timer.Reset(keepAliveDelay)
+			}
 		}
 	}
 }

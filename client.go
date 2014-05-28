@@ -19,7 +19,6 @@ import (
 	"bufio"
 	"container/list"
 	"crypto/rand"
-	"encoding"
 	"errors"
 	"fmt"
 	"io"
@@ -278,7 +277,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent) (err error) {
 		Choked:          true,
 		PeerChoked:      true,
 		write:           make(chan []byte),
-		post:            make(chan encoding.BinaryMarshaler),
+		post:            make(chan pp.Message),
 		PeerMaxRequests: 250,
 	}
 	defer func() {
@@ -289,12 +288,12 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent) (err error) {
 		conn.Close()
 	}()
 	go conn.writer()
-	go conn.writeOptimizer()
-	conn.post <- pp.Bytes(pp.Protocol)
-	conn.post <- pp.Bytes("\x00\x00\x00\x00\x00\x00\x00\x00")
+	// go conn.writeOptimizer()
+	conn.write <- pp.Bytes(pp.Protocol)
+	conn.write <- pp.Bytes("\x00\x00\x00\x00\x00\x00\x00\x00")
 	if torrent != nil {
-		conn.post <- pp.Bytes(torrent.InfoHash[:])
-		conn.post <- pp.Bytes(me.PeerId[:])
+		conn.write <- pp.Bytes(torrent.InfoHash[:])
+		conn.write <- pp.Bytes(me.PeerId[:])
 	}
 	var b [28]byte
 	_, err = io.ReadFull(conn.Socket, b[:])
@@ -327,14 +326,15 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent) (err error) {
 		if torrent == nil {
 			return
 		}
-		conn.post <- pp.Bytes(torrent.InfoHash[:])
-		conn.post <- pp.Bytes(me.PeerId[:])
+		conn.write <- pp.Bytes(torrent.InfoHash[:])
+		conn.write <- pp.Bytes(me.PeerId[:])
 	}
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	if !me.addConnection(torrent, conn) {
 		return
 	}
+	go conn.writeOptimizer(time.Minute)
 	if torrent.haveAnyPieces() {
 		conn.Post(pp.Message{
 			Type:     pp.Bitfield,

@@ -108,3 +108,17 @@ func TestUnexpectedEOF(t *testing.T) {
 		}
 	}
 }
+
+func TestMarshalKeepalive(t *testing.T) {
+	b, err := (Message{
+		Keepalive: true,
+	}).MarshalBinary()
+	if err != nil {
+		t.Fatalf("error marshalling keepalive: %s", err)
+	}
+	bs := string(b)
+	const expected = "\x00\x00\x00\x00"
+	if bs != expected {
+		t.Fatalf("marshalled keepalive is %q, expected %q", bs, expected)
+	}
+}

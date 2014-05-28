@@ -45,43 +45,41 @@ type Message struct {
 
 func (msg Message) MarshalBinary() (data []byte, err error) {
 	buf := &bytes.Buffer{}
-	if msg.Keepalive {
-		data = buf.Bytes()
-		return
-	}
-	err = buf.WriteByte(byte(msg.Type))
-	if err != nil {
-		return
-	}
-	switch msg.Type {
-	case Choke, Unchoke, Interested, NotInterested:
-	case Have:
-		err = binary.Write(buf, binary.BigEndian, msg.Index)
-	case Request, Cancel:
-		for _, i := range []Integer{msg.Index, msg.Begin, msg.Length} {
-			err = binary.Write(buf, binary.BigEndian, i)
+	if !msg.Keepalive {
+		err = buf.WriteByte(byte(msg.Type))
+		if err != nil {
+			return
+		}
+		switch msg.Type {
+		case Choke, Unchoke, Interested, NotInterested:
+		case Have:
+			err = binary.Write(buf, binary.BigEndian, msg.Index)
+		case Request, Cancel:
+			for _, i := range []Integer{msg.Index, msg.Begin, msg.Length} {
+				err = binary.Write(buf, binary.BigEndian, i)
+				if err != nil {
+					break
+				}
+			}
+		case Bitfield:
+			_, err = buf.Write(marshalBitfield(msg.Bitfield))
+		case Piece:
+			for _, i := range []Integer{msg.Index, msg.Begin} {
+				err = binary.Write(buf, binary.BigEndian, i)
+				if err != nil {
+					return
+				}
+			}
+			n, err := buf.Write(msg.Piece)
 			if err != nil {
 				break
 			}
-		}
-	case Bitfield:
-		_, err = buf.Write(marshalBitfield(msg.Bitfield))
-	case Piece:
-		for _, i := range []Integer{msg.Index, msg.Begin} {
-			err = binary.Write(buf, binary.BigEndian, i)
-			if err != nil {
-				return
+			if n != len(msg.Piece) {
+				panic(n)
 			}
+		default:
+			err = fmt.Errorf("unknown message type: %s", msg.Type)
 		}
-		n, err := buf.Write(msg.Piece)
-		if err != nil {
-			break
-		}
-		if n != len(msg.Piece) {
-			panic(n)
-		}
-	default:
-		err = fmt.Errorf("unknown message type: %s", msg.Type)
 	}
 	data = make([]byte, 4+buf.Len())
 	binary.BigEndian.PutUint32(data, uint32(buf.Len()))

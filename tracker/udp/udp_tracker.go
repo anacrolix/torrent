@@ -159,7 +159,7 @@ func (c *client) request(action Action, args interface{}) (responseBody *bytes.R
 	if err != nil {
 		return
 	}
-	c.socket.SetDeadline(time.Now().Add(timeout(c.contiguousTimeouts)))
+	c.socket.SetReadDeadline(time.Now().Add(timeout(c.contiguousTimeouts)))
 	b := make([]byte, 0x10000) // IP limits packet size to 64KB
 	for {
 		var n int

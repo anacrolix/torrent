@@ -147,7 +147,7 @@ func (s *Server) reply(addr *net.UDPAddr, t string) {
 	if err != nil {
 		panic(err)
 	}
-	_, err = s.Socket.WriteTo(b, addr)
+	err = s.writeToNode(b, addr)
 	if err != nil {
 		panic(err)
 	}
@@ -167,6 +167,19 @@ func (s *Server) getNode(addr *net.UDPAddr) (n *Node) {
 		}
 		s.nodes[addr.String()] = n
 	}
+	return
+}
+
+func (s *Server) writeToNode(b []byte, node *net.UDPAddr) (err error) {
+	n, err := s.Socket.WriteTo(b, node)
+	if err != nil {
+		return
+	}
+	if n != len(b) {
+		err = io.ErrShortWrite
+		return
+	}
+	s.sentToNode(node)
 	return
 }
 
@@ -237,17 +250,10 @@ func (s *Server) query(node *net.UDPAddr, q string, a map[string]string) (t *tra
 	}
 	t.response = t.Response
 	s.addTransaction(t)
-	n, err := s.Socket.WriteTo(b, node)
+	err = s.writeToNode(b, node)
 	if err != nil {
 		s.removeTransaction(t)
-		return
 	}
-	if n != len(b) {
-		err = io.ErrShortWrite
-		s.removeTransaction(t)
-		return
-	}
-	s.sentToNode(node)
 	return
 }
 

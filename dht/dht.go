@@ -422,3 +422,29 @@ func (s *Server) GoodNodes() (nis []NodeInfo) {
 func (s *Server) StopServing() {
 	s.Socket.Close()
 }
+
+func idDistance(a, b string) (ret int) {
+	if len(a) != 20 {
+		panic(a)
+	}
+	if len(b) != 20 {
+		panic(b)
+	}
+	for i := 0; i < 20; i++ {
+		for j := uint(0); j < 8; j++ {
+			ret += int(a[i]>>j&1 ^ b[i]>>j&1)
+		}
+	}
+	return
+}
+
+// func (s *Server) closestNodes(k int) (ret *closestNodes) {
+// 	heap.Init(ret)
+// 	for _, node := range s.nodes {
+// 		heap.Push(ret, node)
+// 		if ret.Len() > k {
+// 			heap.Pop(ret)
+// 		}
+// 	}
+// 	return
+// }

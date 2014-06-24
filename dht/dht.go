@@ -330,11 +330,14 @@ func (me *findNodeResponse) UnmarshalKRPCMsg(m Msg) error {
 	return nil
 }
 
+// Sends a find_node query to addr. targetID is the node we're looking for.
 func (s *Server) FindNode(addr *net.UDPAddr, targetID string) (t *transaction, err error) {
 	t, err = s.query(addr, "find_node", map[string]string{"target": targetID})
 	if err != nil {
 		return
 	}
+	// Scrape peers from the response to put in the server's table before
+	// handing the response back to the caller.
 	ch := make(chan Msg)
 	t.response = ch
 	go func() {

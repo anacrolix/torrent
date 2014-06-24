@@ -60,10 +60,7 @@ func loadTable() error {
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	flag.Parse()
-	err := loadTable()
-	if err != nil {
-		log.Fatalf("error loading table: %s", err)
-	}
+	var err error
 	s.Socket, err = net.ListenUDP("udp4", func() *net.UDPAddr {
 		addr, err := net.ResolveUDPAddr("udp4", *serveAddr)
 		if err != nil {
@@ -74,8 +71,12 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("dht server on %s", s.Socket.LocalAddr())
 	s.Init()
+	err = loadTable()
+	if err != nil {
+		log.Fatalf("error loading table: %s", err)
+	}
+	log.Printf("dht server on %s, ID is %q", s.Socket.LocalAddr(), s.IDString())
 	setupSignals()
 }
 

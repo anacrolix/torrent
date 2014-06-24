@@ -1,7 +1,8 @@
 package dht
 
 import (
-	"crypto/rand"
+	"crypto"
+	_ "crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"sync"
 	"time"
 )
@@ -57,9 +59,18 @@ type transaction struct {
 func (s *Server) setDefaults() {
 	if s.ID == "" {
 		var id [20]byte
-		_, err := rand.Read(id[:])
+		h := crypto.SHA1.New()
+		ss, err := os.Hostname()
 		if err != nil {
-			panic(err)
+			log.Print(err)
+		}
+		ss += s.Socket.LocalAddr().String()
+		h.Write([]byte(ss))
+		if b := h.Sum(id[:0:20]); len(b) != 20 {
+			panic(len(b))
+		}
+		if len(id) != 20 {
+			panic(len(id))
 		}
 		s.ID = string(id[:])
 	}

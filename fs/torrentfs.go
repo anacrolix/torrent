@@ -56,8 +56,8 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 	if int64(fn.size)-req.Offset < int64(size) {
 		size = int(int64(fn.size) - req.Offset)
 	}
-	if size == 0 {
-		return nil
+	if size < 0 {
+		size = 0
 	}
 	infoHash := torrent.BytesInfoHash(fn.metaInfo.InfoHash)
 	torrentOff := fn.TorrentOffset + req.Offset

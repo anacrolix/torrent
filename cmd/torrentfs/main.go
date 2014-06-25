@@ -27,6 +27,7 @@ var (
 	disableTrackers = flag.Bool("disableTrackers", false, "disables trackers")
 	testPeer        = flag.String("testPeer", "", "the address for a test peer")
 	pprofAddr       = flag.String("pprofAddr", "", "pprof HTTP server bind address")
+	readaheadBytes  = flag.Int("readaheadBytes", 10*1024*1024, "bytes to readahead in each torrent from the last read piece")
 	testPeerAddr    *net.TCPAddr
 )
 
@@ -133,7 +134,7 @@ func main() {
 	client := &torrent.Client{
 		DataDir:          downloadDir,
 		DisableTrackers:  *disableTrackers,
-		DownloadStrategy: &torrent.ResponsiveDownloadStrategy{2 * 1000 * 1024},
+		DownloadStrategy: &torrent.ResponsiveDownloadStrategy{*readaheadBytes},
 	}
 	client.Start()
 	addTorrentDir(client, torrentPath)

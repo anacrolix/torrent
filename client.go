@@ -435,10 +435,10 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			p := make([]byte, msg.Length)
 			n, err := t.Data.ReadAt(p, int64(t.PieceLength(0))*int64(msg.Index)+int64(msg.Begin))
 			if err != nil {
-				return fmt.Errorf("reading t data to serve request %s: %s", request, err)
+				return fmt.Errorf("reading t data to serve request %q: %s", request, err)
 			}
 			if n != int(msg.Length) {
-				return fmt.Errorf("bad request: %s", msg)
+				return fmt.Errorf("bad request: %v", msg)
 			}
 			c.Post(pp.Message{
 				Type:  pp.Piece,
@@ -883,7 +883,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	// Cancel pending requests for this chunk.
 	for _, c := range t.Conns {
 		if me.connCancel(t, c, req) {
-			log.Print("cancelled concurrent request for %s", req)
+			log.Print("cancelled concurrent request for %v", req)
 			me.replenishConnRequests(t, c)
 		}
 	}

@@ -261,7 +261,7 @@ func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
 					elemMsg := e.Value.(peer_protocol.Message)
 					if elemMsg.Type == peer_protocol.Request && msg.Index == elemMsg.Index && msg.Begin == elemMsg.Begin && msg.Length == elemMsg.Length {
 						pending.Remove(e)
-						log.Print("optimized cancel! %q", msg)
+						log.Printf("optimized cancel! %v", msg)
 						break event
 					}
 				}

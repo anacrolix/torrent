@@ -39,8 +39,11 @@ func TestCancelRequestOptimized(t *testing.T) {
 		}
 	}
 	close(c.post)
-	_, ok := <-c.write
-	if ok {
-		t.Fatal("write channel didn't close")
+	// Drain the write channel until it closes.
+	for b := range c.write {
+		bs := string(b)
+		if bs != "\x00\x00\x00\x00" {
+			t.Fatal("got unexpected non-keepalive")
+		}
 	}
 }

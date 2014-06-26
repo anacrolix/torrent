@@ -463,7 +463,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				err = errors.New("received unexpected bitfield")
 				break
 			}
-			c.PeerPieces = msg.Bitfield[:len(t.NumPieces())]
+			c.PeerPieces = msg.Bitfield[:t.NumPieces()]
 			for index, has := range c.PeerPieces {
 				if has {
 					me.peerGotPiece(t, c, index)

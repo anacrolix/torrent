@@ -8,6 +8,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"strings"
 
 	metainfo "github.com/nsf/libtorgo/torrent"
 
@@ -53,16 +54,30 @@ func main() {
 		return
 	}
 	for _, arg := range flag.Args() {
-		metaInfo, err := metainfo.LoadFromFile(arg)
-		if err != nil {
-			log.Fatal(err)
+		var ih torrent.InfoHash
+		if strings.HasPrefix(arg, "magnet:") {
+			m, err := torrent.ParseMagnetURI(arg)
+			if err != nil {
+				log.Fatalf("error parsing magnet uri: %s", err)
+			}
+			ih = m.InfoHash
+			err = client.AddMagnet(arg)
+			if err != nil {
+				log.Fatalf("error adding magnet: %s", err)
+			}
+		} else {
+			metaInfo, err := metainfo.LoadFromFile(arg)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = client.AddTorrent(metaInfo)
+			if err != nil {
+				log.Fatal(err)
+			}
+			ih = torrent.BytesInfoHash(metaInfo.InfoHash)
 		}
-		err = client.AddTorrent(metaInfo)
-		if err != nil {
-			log.Fatal(err)
-		}
-		client.PrioritizeDataRegion(torrent.BytesInfoHash(metaInfo.InfoHash), 0, 999999999)
-		err = client.AddPeers(torrent.BytesInfoHash(metaInfo.InfoHash), func() []torrent.Peer {
+		client.PrioritizeDataRegion(ih, 0, 999999999)
+		err := client.AddPeers(ih, func() []torrent.Peer {
 			if *testPeer == "" {
 				return nil
 			}

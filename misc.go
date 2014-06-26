@@ -4,13 +4,13 @@ import (
 	"bitbucket.org/anacrolix/go.torrent/mmap_span"
 	"crypto"
 	"errors"
+	metainfo "github.com/nsf/libtorgo/torrent"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
 
 	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
-	metainfo "github.com/nsf/libtorgo/torrent"
 	"launchpad.net/gommap"
 )
 
@@ -103,15 +103,41 @@ var (
 	ErrDataNotReady = errors.New("data not ready")
 )
 
-func mmapTorrentData(metaInfo *metainfo.MetaInfo, location string) (mms mmap_span.MMapSpan, err error) {
+type metaInfoMetaData struct {
+	mi *metainfo.MetaInfo
+}
+
+func (me metaInfoMetaData) Files() []metainfo.FileInfo { return me.mi.Files }
+func (me metaInfoMetaData) Name() string               { return me.mi.Name }
+func (me metaInfoMetaData) PieceHashes() []string {
+	return nil
+}
+func (me metaInfoMetaData) PieceLength() int64 { return me.mi.PieceLength }
+func (me metaInfoMetaData) PieceCount() int {
+	return len(me.mi.Pieces) / pieceHash.Size()
+}
+
+func NewMetaDataFromMetaInfo(mi *metainfo.MetaInfo) MetaData {
+	return metaInfoMetaData{mi}
+}
+
+type MetaData interface {
+	PieceHashes() []string
+	Files() []metainfo.FileInfo
+	Name() string
+	PieceLength() int64
+	PieceCount() int
+}
+
+func mmapTorrentData(md MetaData, location string) (mms mmap_span.MMapSpan, err error) {
 	defer func() {
 		if err != nil {
 			mms.Close()
 			mms = nil
 		}
 	}()
-	for _, miFile := range metaInfo.Files {
-		fileName := filepath.Join(append([]string{location, metaInfo.Name}, miFile.Path...)...)
+	for _, miFile := range md.Files() {
+		fileName := filepath.Join(append([]string{location, md.Name()}, miFile.Path...)...)
 		err = os.MkdirAll(filepath.Dir(fileName), 0777)
 		if err != nil {
 			return
@@ -149,4 +175,12 @@ func mmapTorrentData(metaInfo *metainfo.MetaInfo, location string) (mms mmap_spa
 		}
 	}
 	return
+}
+
+func metadataPieceSize(totalSize int, piece int) int {
+	ret := totalSize - piece*(1<<14)
+	if ret > 1<<14 {
+		ret = 1 << 14
+	}
+	return ret
 }

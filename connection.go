@@ -27,13 +27,14 @@ type connection struct {
 	Requests   map[request]struct{}
 
 	// Stuff controlled by the remote peer.
-	PeerId          [20]byte
-	PeerInterested  bool
-	PeerChoked      bool
-	PeerRequests    map[request]struct{}
-	PeerExtensions  [8]byte
-	PeerPieces      []bool
-	PeerMaxRequests int // Maximum pending requests the peer allows.
+	PeerId           [20]byte
+	PeerInterested   bool
+	PeerChoked       bool
+	PeerRequests     map[request]struct{}
+	PeerExtensions   [8]byte
+	PeerPieces       []bool
+	PeerMaxRequests  int // Maximum pending requests the peer allows.
+	PeerExtensionIDs map[string]int64
 }
 
 func (cn *connection) completedString() string {

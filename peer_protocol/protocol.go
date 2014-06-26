@@ -33,6 +33,9 @@ const (
 	Request                   // 6
 	Piece                     // 7
 	Cancel                    // 8
+	Extended      = 20
+
+	HandshakeExtendedID = 0
 )
 
 type Message struct {
@@ -41,6 +44,8 @@ type Message struct {
 	Index, Begin, Length Integer
 	Piece                []byte
 	Bitfield             []bool
+	ExtendedID           byte
+	ExtendedPayload      []byte
 }
 
 func (msg Message) MarshalBinary() (data []byte, err error) {
@@ -77,8 +82,14 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 			if n != len(msg.Piece) {
 				panic(n)
 			}
+		case Extended:
+			err = buf.WriteByte(msg.ExtendedID)
+			if err != nil {
+				return
+			}
+			_, err = buf.Write(msg.ExtendedPayload)
 		default:
-			err = fmt.Errorf("unknown message type: %s", msg.Type)
+			err = fmt.Errorf("unknown message type: %v", msg.Type)
 		}
 	}
 	data = make([]byte, 4+buf.Len())
@@ -159,6 +170,12 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 			break
 		}
 		msg.Piece, err = ioutil.ReadAll(r)
+	case Extended:
+		msg.ExtendedID, err = r.ReadByte()
+		if err != nil {
+			break
+		}
+		msg.ExtendedPayload, err = ioutil.ReadAll(r)
 	default:
 		err = fmt.Errorf("unknown message type %#v", c)
 	}

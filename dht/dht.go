@@ -56,7 +56,18 @@ type transaction struct {
 	response   chan Msg
 }
 
-func (s *Server) setDefaults() {
+func (s *Server) setDefaults() (err error) {
+	if s.Socket == nil {
+		var addr *net.UDPAddr
+		addr, err = net.ResolveUDPAddr("", ":6882")
+		if err != nil {
+			return
+		}
+		s.Socket, err = net.ListenUDP("udp", addr)
+		if err != nil {
+			return
+		}
+	}
 	if s.ID == "" {
 		var id [20]byte
 		h := crypto.SHA1.New()
@@ -74,10 +85,12 @@ func (s *Server) setDefaults() {
 		}
 		s.ID = string(id[:])
 	}
+	return
 }
 
-func (s *Server) Init() {
-	s.setDefaults()
+func (s *Server) Init() error {
+	return s.setDefaults()
+	//s.nodes = make(map[string]*Node)
 }
 
 func (s *Server) Serve() error {
@@ -401,13 +414,13 @@ func (s *Server) Bootstrap() (err error) {
 	return
 }
 
-func (s *Server) GoodNodes() (nis []NodeInfo) {
+func (s *Server) Nodes() (nis []NodeInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, node := range s.nodes {
-		if !node.Good() {
-			continue
-		}
+		// if !node.Good() {
+		// 	continue
+		// }
 		ni := NodeInfo{
 			Addr: node.addr,
 		}

@@ -81,7 +81,7 @@ func init() {
 }
 
 func saveTable() error {
-	goodNodes := s.GoodNodes()
+	goodNodes := s.Nodes()
 	if *tableFileName == "" {
 		if len(goodNodes) != 0 {
 			log.Printf("discarding %d good nodes!", len(goodNodes))
@@ -123,6 +123,8 @@ func main() {
 		if err != nil {
 			log.Printf("error bootstrapping: %s", err)
 			s.StopServing()
+		} else {
+			log.Print("bootstrapping complete")
 		}
 	}()
 	err := s.Serve()

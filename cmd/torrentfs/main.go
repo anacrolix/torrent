@@ -26,7 +26,7 @@ var (
 	mountDir        string
 	disableTrackers = flag.Bool("disableTrackers", false, "disables trackers")
 	testPeer        = flag.String("testPeer", "", "the address for a test peer")
-	pprofAddr       = flag.String("pprofAddr", "", "pprof HTTP server bind address")
+	httpAddr        = flag.String("httpAddr", "", "HTTP server bind address")
 	readaheadBytes  = flag.Int("readaheadBytes", 10*1024*1024, "bytes to readahead in each torrent from the last read piece")
 	testPeerAddr    *net.TCPAddr
 )
@@ -120,8 +120,8 @@ func main() {
 		os.Exit(2)
 	}
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	if *pprofAddr != "" {
-		go http.ListenAndServe(*pprofAddr, nil)
+	if *httpAddr != "" {
+		go http.ListenAndServe(*httpAddr, nil)
 	}
 	conn, err := fuse.Mount(mountDir)
 	if err != nil {
@@ -136,6 +136,9 @@ func main() {
 		DisableTrackers:  *disableTrackers,
 		DownloadStrategy: &torrent.ResponsiveDownloadStrategy{*readaheadBytes},
 	}
+	http.DefaultServeMux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		client.WriteStatus(w)
+	})
 	client.Start()
 	addTorrentDir(client, torrentPath)
 	resolveTestPeerAddr()

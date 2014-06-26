@@ -3,6 +3,8 @@ package torrent
 import (
 	"container/list"
 	"encoding"
+	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -32,6 +34,47 @@ type connection struct {
 	PeerExtensions  [8]byte
 	PeerPieces      []bool
 	PeerMaxRequests int // Maximum pending requests the peer allows.
+}
+
+func (cn *connection) completedString() string {
+	if cn.PeerPieces == nil {
+		return "?"
+	}
+	f := float32(cn.piecesPeerHasCount()) / float32(cn.totalPiecesCount())
+	return fmt.Sprintf("%d%%", int(f*100))
+}
+
+func (cn *connection) totalPiecesCount() int {
+	return len(cn.PeerPieces)
+}
+
+func (cn *connection) piecesPeerHasCount() (count int) {
+	for _, has := range cn.PeerPieces {
+		if has {
+			count++
+		}
+	}
+	return
+}
+
+func (cn *connection) WriteStatus(w io.Writer) {
+	fmt.Fprintf(w, "%q: %s-%s: %s completed: ", cn.PeerId, cn.Socket.LocalAddr(), cn.Socket.RemoteAddr(), cn.completedString())
+	c := func(b byte) {
+		fmt.Fprintf(w, "%c", b)
+	}
+	// https://trac.transmissionbt.com/wiki/PeerStatusText
+	if len(cn.Requests) != 0 {
+		c('D')
+	} else if cn.Interested {
+		c('d')
+	}
+	if !cn.PeerChoked && !cn.Interested {
+		c('K')
+	}
+	if !cn.Choked && !cn.PeerInterested {
+		c('?')
+	}
+	fmt.Fprintln(w)
 }
 
 func (c *connection) Close() {

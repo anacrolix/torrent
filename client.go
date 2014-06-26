@@ -109,6 +109,15 @@ type Client struct {
 	dataWaiter chan struct{}
 }
 
+func (cl *Client) WriteStatus(w io.Writer) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	for _, t := range cl.torrents {
+		fmt.Fprintf(w, "%s: %f%%\n", t.MetaInfo.Name, 100*(1-float32(t.BytesLeft())/float32(t.Length())))
+		t.WriteStatus(w)
+	}
+}
+
 // Read torrent data at the given offset. Returns ErrDataNotReady if the data
 // isn't available.
 func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err error) {

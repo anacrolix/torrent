@@ -3,6 +3,7 @@ package torrent
 import (
 	"container/list"
 	"fmt"
+	"io"
 	"net"
 	"sort"
 
@@ -38,6 +39,37 @@ type torrent struct {
 	lastReadPiece int
 }
 
+func (t *torrent) pieceStatusChar(index int) byte {
+	p := t.Pieces[index]
+	switch {
+	case p.Complete():
+		return 'C'
+	case p.QueuedForHash:
+		return 'Q'
+	case p.Hashing:
+		return 'H'
+	case t.PiecePartiallyDownloaded(index):
+		return 'P'
+	default:
+		return '.'
+	}
+}
+
+func (t *torrent) WriteStatus(w io.Writer) {
+	fmt.Fprint(w, "Pieces: ")
+	for index := range t.Pieces {
+		fmt.Fprintf(w, "%c", t.pieceStatusChar(index))
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Priorities: ")
+	for e := t.Priorities.Front(); e != nil; e = e.Next() {
+		fmt.Fprintf(w, "\t%v\n", e.Value)
+	}
+	for _, c := range t.Conns {
+		c.WriteStatus(w)
+	}
+}
+
 func (t *torrent) String() string {
 	return t.MetaInfo.Name
 }
@@ -47,6 +79,10 @@ func (t *torrent) BytesLeft() (left int64) {
 		left += int64(t.PieceNumPendingBytes(i))
 	}
 	return
+}
+
+func (t *torrent) PiecePartiallyDownloaded(index int) bool {
+	return t.PieceNumPendingBytes(pp.Integer(index)) != t.PieceLength(pp.Integer(index))
 }
 
 func NumChunksForPiece(chunkSize int, pieceSize int) int {

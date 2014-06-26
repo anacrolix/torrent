@@ -398,6 +398,9 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		var msg pp.Message
 		err := decoder.Decode(&msg)
 		me.mu.Lock()
+		if c.closed {
+			return nil
+		}
 		if err != nil {
 			if me.stopped() || err == io.EOF {
 				return nil
@@ -452,7 +455,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				log.Printf("received unexpected cancel: %v", req)
 			}
 		case pp.Bitfield:
-			if len(msg.Bitfield) < len(t.Pieces) {
+			if len(msg.Bitfield) < t.NumPieces() {
 				err = errors.New("received invalid bitfield")
 				break
 			}
@@ -460,7 +463,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				err = errors.New("received unexpected bitfield")
 				break
 			}
-			c.PeerPieces = msg.Bitfield[:len(t.Pieces)]
+			c.PeerPieces = msg.Bitfield[:len(t.NumPieces())]
 			for index, has := range c.PeerPieces {
 				if has {
 					me.peerGotPiece(t, c, index)
@@ -497,6 +500,9 @@ func (me *Client) dropConnection(torrent *torrent, conn *connection) {
 }
 
 func (me *Client) addConnection(t *torrent, c *connection) bool {
+	if me.stopped() {
+		return false
+	}
 	for _, c0 := range t.Conns {
 		if c.PeerId == c0.PeerId {
 			// Already connected to a client with that ID.
@@ -760,7 +766,7 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	// Then finish off incomplete pieces in order of bytes remaining.
 	for _, heatThreshold := range []int{0, 4, 100} {
 		for _, pieceIndex := range ppbs {
-			for chunkSpec := range t.Pieces[pieceIndex].PendingChunkSpecs {
+			for _, chunkSpec := range t.Pieces[pieceIndex].shuffledPendingChunkSpecs() {
 				r := request{pieceIndex, chunkSpec}
 				if th[r] > heatThreshold {
 					continue
@@ -816,7 +822,7 @@ func (me *ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	}
 	readaheadPieces := (me.Readahead + t.UsualPieceSize() - 1) / t.UsualPieceSize()
 	for i := t.lastReadPiece; i < t.lastReadPiece+readaheadPieces && i < t.NumPieces(); i++ {
-		for cs := range t.Pieces[i].PendingChunkSpecs {
+		for _, cs := range t.Pieces[i].shuffledPendingChunkSpecs() {
 			if !c.Request(request{pp.Integer(i), cs}) {
 				return
 			}
@@ -825,7 +831,7 @@ func (me *ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	// Then finish off incomplete pieces in order of bytes remaining.
 	for _, index := range t.piecesByPendingBytes() {
 		// Stop when we're onto untouched pieces.
-		if t.PieceNumPendingBytes(index) == t.PieceLength(index) {
+		if !t.PiecePartiallyDownloaded(int(index)) {
 			break
 		}
 		// Request chunks in random order to reduce overlap with other
@@ -840,6 +846,7 @@ func (me *ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 
 func (me *Client) replenishConnRequests(t *torrent, c *connection) {
 	me.DownloadStrategy.FillRequests(t, c)
+	me.assertRequestHeat()
 	if len(c.Requests) == 0 {
 		c.SetInterested(false)
 	}
@@ -914,7 +921,7 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 	p.EverHashed = true
 	if correct {
 		p.PendingChunkSpecs = nil
-		log.Printf("%s: got piece %d, (%d/%d)", t, piece, t.NumPiecesCompleted(), t.NumPieces())
+		// log.Printf("%s: got piece %d, (%d/%d)", t, piece, t.NumPiecesCompleted(), t.NumPieces())
 		var next *list.Element
 		for e := t.Priorities.Front(); e != nil; e = next {
 			next = e.Next()

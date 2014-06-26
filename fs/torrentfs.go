@@ -61,7 +61,7 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 	}
 	infoHash := torrent.BytesInfoHash(fn.metaInfo.InfoHash)
 	torrentOff := fn.TorrentOffset + req.Offset
-	log.Print(torrentOff, size, fn.TorrentOffset)
+	// log.Print(torrentOff, size, fn.TorrentOffset)
 	if err := fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(size)); err != nil {
 		panic(err)
 	}

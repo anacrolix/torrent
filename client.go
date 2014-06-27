@@ -411,6 +411,9 @@ func (cl *Client) connDeleteRequest(t *torrent, cn *connection, r request) {
 }
 
 func (cl *Client) requestPendingMetadata(t *torrent, c *connection) {
+	if t.haveInfo() {
+		return
+	}
 	var pending []int
 	for index, have := range t.MetaDataHave {
 		if !have {
@@ -663,6 +666,7 @@ func (me *Client) AddPeers(infoHash InfoHash, peers []Peer) error {
 }
 
 func (cl *Client) setMetaData(t *torrent, md MetaData) (err error) {
+	t.Info = md
 	t.Data, err = mmapTorrentData(md, cl.DataDir)
 	if err != nil {
 		return
@@ -757,6 +761,8 @@ func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) (err error) {
 	if err != nil {
 		return
 	}
+	me.mu.Lock()
+	defer me.mu.Unlock()
 	err = me.addTorrent(t)
 	if err != nil {
 		return

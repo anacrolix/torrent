@@ -279,7 +279,7 @@ func (t *torrent) HashPiece(piece pp.Integer) (ps pieceSum) {
 	return
 }
 func (t *torrent) haveAllPieces() bool {
-	if t.Info == nil {
+	if !t.haveInfo() {
 		return false
 	}
 	for _, piece := range t.Pieces {

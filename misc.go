@@ -109,8 +109,11 @@ type metaInfoMetaData struct {
 
 func (me metaInfoMetaData) Files() []metainfo.FileInfo { return me.mi.Files }
 func (me metaInfoMetaData) Name() string               { return me.mi.Name }
-func (me metaInfoMetaData) PieceHashes() []string {
-	return nil
+func (me metaInfoMetaData) PieceHashes() (ret []string) {
+	for i := 0; i < len(me.mi.Pieces); i += 20 {
+		ret = append(ret, string(me.mi.Pieces[i:i+20]))
+	}
+	return
 }
 func (me metaInfoMetaData) PieceLength() int64 { return me.mi.PieceLength }
 func (me metaInfoMetaData) PieceCount() int {

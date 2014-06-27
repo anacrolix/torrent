@@ -18,7 +18,7 @@ import (
 var (
 	downloadDir = flag.String("downloadDir", "", "directory to store download torrent data")
 	testPeer    = flag.String("testPeer", "", "bootstrap peer address")
-	profAddr    = flag.String("profAddr", "", "http serve address")
+	httpAddr    = flag.String("httpAddr", "", "http serve address")
 	// TODO: Check the default torrent listen port.
 	listenAddr      = flag.String("listenAddr", ":6882", "incoming connection address")
 	disableTrackers = flag.Bool("disableTrackers", false, "disable trackers")
@@ -39,14 +39,17 @@ func makeListener() net.Listener {
 }
 
 func main() {
-	if *profAddr != "" {
-		go http.ListenAndServe(*profAddr, nil)
+	if *httpAddr != "" {
+		go http.ListenAndServe(*httpAddr, nil)
 	}
 	client := torrent.Client{
 		DataDir:         *downloadDir,
 		Listener:        makeListener(),
 		DisableTrackers: *disableTrackers,
 	}
+	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		client.WriteStatus(w)
+	})
 	client.Start()
 	defer client.Stop()
 	if flag.NArg() == 0 {

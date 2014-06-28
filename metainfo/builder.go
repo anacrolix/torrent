@@ -1,4 +1,4 @@
-package torrent
+package metainfo
 
 import (
 	"crypto/sha1"
@@ -371,9 +371,9 @@ func (b *Batch) write_torrent(w io.Writer) error {
 	if len(b.files) == 1 {
 		td.Info.Length = b.files[0].size
 	} else {
-		td.Info.Files = make([]torrent_info_file, len(b.files))
+		td.Info.Files = make([]FileInfo, len(b.files))
 		for i, f := range b.files {
-			td.Info.Files[i] = torrent_info_file{
+			td.Info.Files[i] = FileInfo{
 				Path:   f.splitpath,
 				Length: f.size,
 			}

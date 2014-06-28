@@ -1,4 +1,4 @@
-package torrent
+package metainfo
 
 import "testing"
 import "path"

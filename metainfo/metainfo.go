@@ -1,4 +1,4 @@
-package torrent
+package metainfo
 
 import (
 	"crypto/sha1"
@@ -11,26 +11,23 @@ import (
 
 // Information specific to a single file inside the MetaInfo structure..
 type FileInfo struct {
-	Length int64
-	Path   []string
+	Length int64    `bencode:"length"`
+	Path   []string `bencode:"path"`
 }
 
 // MetaInfo is the type you should use when reading torrent files. See Load and
 // LoadFromFile functions. All the fields are intended to be read-only. If
 // 'len(Files) == 1', then the FileInfo.Path is nil in that entry.
 type MetaInfo struct {
-	Name         string
-	Files        []FileInfo
+	Info
 	InfoHash     []byte
-	PieceLength  int64
-	Pieces       []byte
-	Private      bool
 	AnnounceList [][]string
 	CreationDate time.Time
 	Comment      string
 	CreatedBy    string
 	Encoding     string
 	WebSeedURLs  []string
+	InfoBytes    []byte
 }
 
 // Load a MetaInfo from an io.Reader. Returns a non-nil error in case of
@@ -44,25 +41,9 @@ func Load(r io.Reader) (*MetaInfo, error) {
 		return nil, err
 	}
 
-	// post-parse processing
-	mi.Name = data.Info.Name
-	if len(data.Info.Files) > 0 {
-		files := make([]FileInfo, len(data.Info.Files))
-		for i, fi := range data.Info.Files {
-			files[i] = FileInfo{
-				Length: fi.Length,
-				Path:   fi.Path,
-			}
-		}
-		mi.Files = files
-	} else {
-		mi.Files = []FileInfo{{Length: data.Info.Length, Path: nil}}
-	}
+	mi.Info = data.Info.Info
+	mi.InfoBytes = data.Info.Bytes
 	mi.InfoHash = data.Info.Hash
-	mi.PieceLength = data.Info.PieceLength
-	mi.Pieces = data.Info.Pieces
-	mi.Private = data.Info.Private
-
 	if len(data.AnnounceList) > 0 {
 		mi.AnnounceList = data.AnnounceList
 	} else {
@@ -103,38 +84,36 @@ func LoadFromFile(filename string) (*MetaInfo, error) {
 	return Load(f)
 }
 
+type Info struct {
+	PieceLength int64      `bencode:"piece length"`
+	Pieces      []byte     `bencode:"pieces"`
+	Name        string     `bencode:"name"`
+	Length      int64      `bencode:"length,omitempty"`
+	Private     bool       `bencode:"private,omitempty"`
+	Files       []FileInfo `bencode:"files,omitempty"`
+}
+
 //----------------------------------------------------------------------------
 // unmarshal structures
 //----------------------------------------------------------------------------
 
-type torrent_info_file struct {
-	Path   []string `bencode:"path"`
-	Length int64    `bencode:"length"`
-}
-
-type torrent_info struct {
-	PieceLength int64               `bencode:"piece length"`
-	Pieces      []byte              `bencode:"pieces"`
-	Name        string              `bencode:"name"`
-	Length      int64               `bencode:"length,omitempty"`
-	Private     bool                `bencode:"private,omitempty"`
-	Files       []torrent_info_file `bencode:"files,omitempty"`
-}
-
 type torrent_info_ex struct {
-	torrent_info
-	Hash []byte
+	Info
+	Hash  []byte
+	Bytes []byte
 }
 
 func (this *torrent_info_ex) UnmarshalBencode(data []byte) error {
+	this.Bytes = make([]byte, 0, len(data))
+	this.Bytes = append(this.Bytes, data...)
 	h := sha1.New()
-	h.Write(data)
+	h.Write(this.Bytes)
 	this.Hash = h.Sum(this.Hash)
-	return bencode.Unmarshal(data, &this.torrent_info)
+	return bencode.Unmarshal(data, &this.Info)
 }
 
 func (this *torrent_info_ex) MarshalBencode() ([]byte, error) {
-	return bencode.Marshal(&this.torrent_info)
+	return bencode.Marshal(&this.Info)
 }
 
 type torrent_data struct {

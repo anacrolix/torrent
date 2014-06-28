@@ -2,16 +2,15 @@ package torrent
 
 import (
 	"bitbucket.org/anacrolix/go.torrent/mmap_span"
+	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"crypto"
 	"errors"
-	metainfo "github.com/nsf/libtorgo/torrent"
+	"github.com/anacrolix/libtorgo/metainfo"
+	"launchpad.net/gommap"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
-
-	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
-	"launchpad.net/gommap"
 )
 
 const (
@@ -103,44 +102,22 @@ var (
 	ErrDataNotReady = errors.New("data not ready")
 )
 
-type metaInfoMetaData struct {
-	mi *metainfo.MetaInfo
-}
-
-func (me metaInfoMetaData) Files() []metainfo.FileInfo { return me.mi.Files }
-func (me metaInfoMetaData) Name() string               { return me.mi.Name }
-func (me metaInfoMetaData) PieceHashes() (ret []string) {
-	for i := 0; i < len(me.mi.Pieces); i += 20 {
-		ret = append(ret, string(me.mi.Pieces[i:i+20]))
+func upvertedSingleFileInfoFiles(info *metainfo.Info) []metainfo.FileInfo {
+	if len(info.Files) != 0 {
+		return info.Files
 	}
-	return
-}
-func (me metaInfoMetaData) PieceLength() int64 { return me.mi.PieceLength }
-func (me metaInfoMetaData) PieceCount() int {
-	return len(me.mi.Pieces) / pieceHash.Size()
+	return []metainfo.FileInfo{{Length: info.Length, Path: nil}}
 }
 
-func NewMetaDataFromMetaInfo(mi *metainfo.MetaInfo) MetaData {
-	return metaInfoMetaData{mi}
-}
-
-type MetaData interface {
-	PieceHashes() []string
-	Files() []metainfo.FileInfo
-	Name() string
-	PieceLength() int64
-	PieceCount() int
-}
-
-func mmapTorrentData(md MetaData, location string) (mms mmap_span.MMapSpan, err error) {
+func mmapTorrentData(md *metainfo.Info, location string) (mms mmap_span.MMapSpan, err error) {
 	defer func() {
 		if err != nil {
 			mms.Close()
 			mms = nil
 		}
 	}()
-	for _, miFile := range md.Files() {
-		fileName := filepath.Join(append([]string{location, md.Name()}, miFile.Path...)...)
+	for _, miFile := range upvertedSingleFileInfoFiles(md) {
+		fileName := filepath.Join(append([]string{location, md.Name}, miFile.Path...)...)
 		err = os.MkdirAll(filepath.Dir(fileName), 0777)
 		if err != nil {
 			return

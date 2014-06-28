@@ -6,14 +6,13 @@
 package testutil
 
 import (
+	"bytes"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 
-	metainfo "github.com/nsf/libtorgo/torrent"
-
-	"bytes"
+	"github.com/anacrolix/libtorgo/metainfo"
 )
 
 const GreetingFileContents = "hello, world\n"

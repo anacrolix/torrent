@@ -36,6 +36,10 @@ const (
 	Extended      = 20
 
 	HandshakeExtendedID = 0
+
+	RequestMetadataExtensionMsgType = 0
+	DataMetadataExtensionMsgType    = 1
+	RejectMetadataExtensionMsgType  = 2
 )
 
 type Message struct {

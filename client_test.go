@@ -29,7 +29,11 @@ func TestPieceHashSize(t *testing.T) {
 func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	tor, err := newTorrent(mi, dir)
+	tor, err := newTorrent(BytesInfoHash(mi.InfoHash), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = tor.setMetadata(mi.Info, dir, mi.InfoBytes)
 	if err != nil {
 		t.Fatal(err)
 	}

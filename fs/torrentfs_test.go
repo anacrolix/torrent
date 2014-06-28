@@ -2,6 +2,7 @@ package torrentfs
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -15,7 +16,7 @@ import (
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
 	"bitbucket.org/anacrolix/go.torrent"
-	metainfo "github.com/nsf/libtorgo/torrent"
+	"github.com/anacrolix/libtorgo/metainfo"
 )
 
 func TestTCPAddrString(t *testing.T) {
@@ -83,6 +84,7 @@ func TestUnmountWedged(t *testing.T) {
 		DisableTrackers: true,
 	}
 	client.Start()
+	log.Printf("%+v", *layout.Metainfo)
 	client.AddTorrent(layout.Metainfo)
 	fs := New(&client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
@@ -132,14 +134,19 @@ func TestDownloadOnDemand(t *testing.T) {
 			}
 			return conn
 		}(),
+		DisableTrackers: true,
 	}
 	defer seeder.Listener.Close()
 	seeder.Start()
 	defer seeder.Stop()
-	seeder.AddTorrent(layout.Metainfo)
+	err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%x", layout.Metainfo.InfoHash))
+	if err != nil {
+		t.Fatal(err)
+	}
 	leecher := torrent.Client{
 		DataDir:          filepath.Join(layout.BaseDir, "download"),
 		DownloadStrategy: &torrent.ResponsiveDownloadStrategy{},
+		DisableTrackers:  true,
 	}
 	leecher.Start()
 	defer leecher.Stop()
@@ -176,7 +183,9 @@ func TestDownloadOnDemand(t *testing.T) {
 	}
 	go func() {
 		time.Sleep(10 * time.Second)
-		fuse.Unmount(mountDir)
+		if err := fuse.Unmount(mountDir); err != nil {
+			t.Log(err)
+		}
 	}()
 	content, err := ioutil.ReadFile(filepath.Join(mountDir, "greeting"))
 	if err != nil {

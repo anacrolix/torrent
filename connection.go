@@ -119,12 +119,12 @@ func (c *connection) Request(chunk request) bool {
 	if !c.PeerHasPiece(chunk.Index) {
 		return true
 	}
+	if c.RequestPending(chunk) {
+		return true
+	}
 	c.SetInterested(true)
 	if c.PeerChoked {
 		return false
-	}
-	if c.RequestPending(chunk) {
-		return true
 	}
 	if c.Requests == nil {
 		c.Requests = make(map[request]struct{}, c.PeerMaxRequests)
@@ -214,6 +214,7 @@ var (
 func (conn *connection) writer() {
 	for b := range conn.write {
 		_, err := conn.Socket.Write(b)
+		// log.Printf("wrote %q to %s", b, conn.Socket.RemoteAddr())
 		if err != nil {
 			if !conn.getClosed() {
 				log.Print(err)

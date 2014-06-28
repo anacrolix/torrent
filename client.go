@@ -22,7 +22,6 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
-	"github.com/nsf/libtorgo/bencode"
 	"io"
 	"log"
 	mathRand "math/rand"
@@ -32,7 +31,8 @@ import (
 	"syscall"
 	"time"
 
-	metainfo "github.com/nsf/libtorgo/torrent"
+	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/nsf/libtorgo/bencode"
 
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
@@ -59,7 +59,7 @@ func (me *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) error {
 	if t == nil {
 		return errors.New("no such active torrent")
 	}
-	if t.Info == nil {
+	if !t.haveInfo() {
 		return errors.New("missing metadata")
 	}
 	newPriorities := make([]request, 0, (len_+chunkSize-1)/chunkSize)
@@ -133,7 +133,7 @@ func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err er
 		err = errors.New("unknown torrent")
 		return
 	}
-	index := pp.Integer(off / t.Info.PieceLength())
+	index := pp.Integer(off / int64(t.UsualPieceSize()))
 	// Reading outside the bounds of a file is an error.
 	if index < 0 {
 		err = os.ErrInvalid
@@ -354,11 +354,15 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent) (err error) {
 			Type:       pp.Extended,
 			ExtendedID: pp.HandshakeExtendedID,
 			ExtendedPayload: func() []byte {
-				b, err := bencode.Marshal(map[string]interface{}{
+				d := map[string]interface{}{
 					"m": map[string]int{
 						"ut_metadata": 1,
 					},
-				})
+				}
+				if torrent.metadataSizeKnown() {
+					d["metadata_size"] = torrent.metadataSize()
+				}
+				b, err := bencode.Marshal(d)
 				if err != nil {
 					panic(err)
 				}
@@ -415,8 +419,8 @@ func (cl *Client) requestPendingMetadata(t *torrent, c *connection) {
 		return
 	}
 	var pending []int
-	for index, have := range t.MetaDataHave {
-		if !have {
+	for index := 0; index < t.MetadataPieceCount(); index++ {
+		if !t.HaveMetadataPiece(index) {
 			pending = append(pending, index)
 		}
 	}
@@ -436,6 +440,63 @@ func (cl *Client) requestPendingMetadata(t *torrent, c *connection) {
 			}(),
 		})
 	}
+}
+
+func (cl *Client) completedMetadata(t *torrent) {
+	h := sha1.New()
+	h.Write(t.MetaData)
+	var ih InfoHash
+	copy(ih[:], h.Sum(nil)[:])
+	if ih != t.InfoHash {
+		log.Print("bad metadata")
+		t.InvalidateMetadata()
+		return
+	}
+	var info metainfo.Info
+	err := bencode.Unmarshal(t.MetaData, &info)
+	if err != nil {
+		log.Printf("error unmarshalling metadata: %s", err)
+		t.InvalidateMetadata()
+		return
+	}
+	cl.setMetaData(t, info, t.MetaData)
+}
+
+func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connection) (err error) {
+	var d map[string]int
+	err = bencode.Unmarshal(payload, &d)
+	if err != nil {
+		err = fmt.Errorf("error unmarshalling payload: %s", err)
+		return
+	}
+	msgType, ok := d["msg_type"]
+	if !ok {
+		err = errors.New("missing msg_type field")
+		return
+	}
+	piece := d["piece"]
+	log.Println(piece, d["total_size"], len(payload))
+	switch msgType {
+	case pp.DataMetadataExtensionMsgType:
+		if t.haveInfo() {
+			break
+		}
+		t.SaveMetadataPiece(piece, payload[len(payload)-metadataPieceSize(d["total_size"], piece):])
+		if !t.HaveAllMetadataPieces() {
+			break
+		}
+		cl.completedMetadata(t)
+	case pp.RequestMetadataExtensionMsgType:
+		if !t.HaveMetadataPiece(piece) {
+			c.Post(t.NewMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
+			break
+		}
+		c.Post(t.NewMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.MetaData[(1<<14)*piece:(1<<14)*piece+t.metadataPieceSize(piece)]))
+	case pp.RejectMetadataExtensionMsgType:
+	default:
+		err = errors.New("unknown msg_type value")
+	}
+	return
 }
 
 func (me *Client) connectionLoop(t *torrent, c *connection) error {
@@ -565,37 +626,17 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 						log.Printf("bad metadata_size type: %T", metadata_sizeUntyped)
 					} else {
 						log.Printf("metadata_size: %d", metadata_size)
-						t.SetMetaDataSize(metadata_size)
+						t.SetMetadataSize(metadata_size)
 					}
 				}
+				log.Println(metadata_sizeUntyped, c.PeerExtensionIDs)
 				if _, ok := c.PeerExtensionIDs["ut_metadata"]; ok {
 					me.requestPendingMetadata(t, c)
 				}
 			case 1:
-				var d map[string]int
-				err := bencode.Unmarshal(msg.ExtendedPayload, &d)
-				if err != nil {
-					err = fmt.Errorf("error unmarshalling extended payload: %s", err)
-					break
-				}
-				if d["msg_type"] != 1 {
-					break
-				}
-				piece := d["piece"]
-				log.Println(piece, d["total_size"], len(msg.ExtendedPayload))
-				copy(t.MetaData[(1<<14)*piece:], msg.ExtendedPayload[len(msg.ExtendedPayload)-metadataPieceSize(d["total_size"], piece):])
-				t.MetaDataHave[piece] = true
-				if !t.GotAllMetadataPieces() {
-					break
-				}
-				log.Printf("%q", t.MetaData)
-				h := sha1.New()
-				h.Write(t.MetaData)
-				var ih InfoHash
-				copy(ih[:], h.Sum(nil)[:])
-				if ih != t.InfoHash {
-					panic(ih)
-				}
+				err = me.gotMetadataExtensionMsg(msg.ExtendedPayload, t, c)
+			default:
+				err = fmt.Errorf("unexpected extended message ID: %s", msg.ExtendedID)
 			}
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
@@ -665,20 +706,11 @@ func (me *Client) AddPeers(infoHash InfoHash, peers []Peer) error {
 	return nil
 }
 
-func (cl *Client) setMetaData(t *torrent, md MetaData) (err error) {
-	t.Info = md
-	t.Data, err = mmapTorrentData(md, cl.DataDir)
+func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err error) {
+	err = t.setMetadata(md, cl.DataDir, bytes)
 	if err != nil {
 		return
 	}
-	for _, hash := range md.PieceHashes() {
-		piece := &piece{}
-		copyHashSum(piece.Hash[:], []byte(hash))
-		t.Pieces = append(t.Pieces, piece)
-		t.pendAllChunkSpecs(pp.Integer(len(t.Pieces) - 1))
-	}
-	t.Priorities = list.New()
-
 	// Queue all pieces for hashing. This is done sequentially to avoid
 	// spamming goroutines.
 	for _, p := range t.Pieces {
@@ -767,7 +799,7 @@ func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) (err error) {
 	if err != nil {
 		return
 	}
-	err = me.setMetaData(t, metaInfoMetaData{metaInfo})
+	err = me.setMetaData(t, metaInfo.Info, metaInfo.InfoBytes)
 	if err != nil {
 		return
 	}
@@ -921,7 +953,7 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	}
 	ppbs := t.piecesByPendingBytes()
 	// Then finish off incomplete pieces in order of bytes remaining.
-	for _, heatThreshold := range []int{0, 4, 100} {
+	for _, heatThreshold := range []int{0, 1, 4, 100} {
 		for _, pieceIndex := range ppbs {
 			for _, chunkSpec := range t.Pieces[pieceIndex].shuffledPendingChunkSpecs() {
 				r := request{pieceIndex, chunkSpec}
@@ -973,6 +1005,10 @@ func (ResponsiveDownloadStrategy) DeleteRequest(*torrent, request) {}
 
 func (me *ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	for e := t.Priorities.Front(); e != nil; e = e.Next() {
+		req := e.Value.(request)
+		if _, ok := t.Pieces[req.Index].PendingChunkSpecs[req.chunkSpec]; !ok {
+			panic(req)
+		}
 		if !c.Request(e.Value.(request)) {
 			return
 		}
@@ -1004,13 +1040,14 @@ func (me *ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 func (me *Client) replenishConnRequests(t *torrent, c *connection) {
 	me.DownloadStrategy.FillRequests(t, c)
 	me.assertRequestHeat()
-	if len(c.Requests) == 0 {
+	if len(c.Requests) == 0 && !c.PeerChoked {
 		c.SetInterested(false)
 	}
 }
 
 func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) error {
 	req := newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))
+	log.Println("got", req)
 
 	// Request has been satisfied.
 	me.connDeleteRequest(t, c, req)
@@ -1028,7 +1065,6 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	if err != nil {
 		return err
 	}
-	me.dataReady(dataSpec{t.InfoHash, req})
 
 	// Record that we have the chunk.
 	delete(t.Pieces[req.Index].PendingChunkSpecs, req.chunkSpec)
@@ -1053,6 +1089,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 		}
 	}
 
+	me.dataReady(dataSpec{t.InfoHash, req})
 	return nil
 }
 

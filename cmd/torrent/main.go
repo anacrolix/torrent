@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	metainfo "github.com/nsf/libtorgo/torrent"
+	"github.com/anacrolix/libtorgo/metainfo"
 
 	"bitbucket.org/anacrolix/go.torrent"
 )

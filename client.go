@@ -379,6 +379,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent) (err error) {
 				d := map[string]interface{}{
 					"m": map[string]int{
 						"ut_metadata": 1,
+						"ut_pex":      2,
 					},
 					"v": "go.torrent dev",
 				}
@@ -530,6 +531,31 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 	return
 }
 
+type peerExchangeMessage struct {
+	Added      compactPeers   `bencode:"added"`
+	AddedFlags []byte         `bencode:"added.f"`
+	Dropped    []tracker.Peer `bencode:"dropped"`
+}
+
+type compactPeers []tracker.CompactPeer
+
+func (me *compactPeers) UnmarshalBencode(bb []byte) (err error) {
+	var b []byte
+	err = bencode.Unmarshal(bb, &b)
+	if err != nil {
+		return
+	}
+	for i := 0; i < len(b); i += 6 {
+		var p tracker.CompactPeer
+		err = p.UnmarshalBinary([]byte(b[i : i+6]))
+		if err != nil {
+			return
+		}
+		*me = append(*me, p)
+	}
+	return
+}
+
 func (me *Client) connectionLoop(t *torrent, c *connection) error {
 	decoder := pp.Decoder{
 		R:         bufio.NewReader(c.Socket),
@@ -673,6 +699,33 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				}
 			case 1:
 				err = me.gotMetadataExtensionMsg(msg.ExtendedPayload, t, c)
+			case 2:
+				var pexMsg peerExchangeMessage
+				err := bencode.Unmarshal(msg.ExtendedPayload, &pexMsg)
+				if err != nil {
+					err = fmt.Errorf("error unmarshalling PEX message: %s", err)
+					break
+				}
+				go func() {
+					err := me.AddPeers(t.InfoHash, func() (ret []Peer) {
+						for _, cp := range pexMsg.Added {
+							p := Peer{
+								IP:   make([]byte, 4),
+								Port: int(cp.Port),
+							}
+							if n := copy(p.IP, cp.IP[:]); n != 4 {
+								panic(n)
+							}
+							ret = append(ret, p)
+						}
+						return
+					}())
+					if err != nil {
+						log.Printf("error adding PEX peers: %s", err)
+						return
+					}
+					log.Printf("added %d peers from PEX", len(pexMsg.Added))
+				}()
 			default:
 				err = fmt.Errorf("unexpected extended message ID: %s", msg.ExtendedID)
 			}

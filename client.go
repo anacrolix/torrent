@@ -118,7 +118,13 @@ func (cl *Client) WriteStatus(w io.Writer) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	for _, t := range cl.torrents {
-		fmt.Fprintf(w, "%s: %f%%\n", t.Name(), 100*(1-float32(t.BytesLeft())/float32(t.Length())))
+		fmt.Fprintf(w, "%s: %f%%\n", t.Name(), func() float32 {
+			if !t.haveInfo() {
+				return 0
+			} else {
+				return 100 * (1 - float32(t.BytesLeft())/float32(t.Length()))
+			}
+		}())
 		t.WriteStatus(w)
 	}
 }

@@ -459,7 +459,13 @@ func (cl *Client) completedMetadata(t *torrent) {
 		t.InvalidateMetadata()
 		return
 	}
-	cl.setMetaData(t, info, t.MetaData)
+	err = cl.setMetaData(t, info, t.MetaData)
+	if err != nil {
+		log.Printf("error setting metadata: %s", err)
+		t.InvalidateMetadata()
+		return
+	}
+	log.Printf("%s: got metadata from peers", t)
 }
 
 func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connection) (err error) {

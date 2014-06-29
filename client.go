@@ -1019,7 +1019,7 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	th := s.heat[t]
 	addRequest := func(req request) (again bool) {
 		piece := t.Pieces[req.Index]
-		if piece.Hashing {
+		if piece.Hashing || piece.QueuedForHash {
 			// We can't be sure we want this.
 			return true
 		}

@@ -475,7 +475,6 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 		return
 	}
 	piece := d["piece"]
-	log.Println(piece, d["total_size"], len(payload))
 	switch msgType {
 	case pp.DataMetadataExtensionMsgType:
 		if t.haveInfo() {
@@ -625,11 +624,9 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 					if !ok {
 						log.Printf("bad metadata_size type: %T", metadata_sizeUntyped)
 					} else {
-						log.Printf("metadata_size: %d", metadata_size)
 						t.SetMetadataSize(metadata_size)
 					}
 				}
-				log.Println(metadata_sizeUntyped, c.PeerExtensionIDs)
 				if _, ok := c.PeerExtensionIDs["ut_metadata"]; ok {
 					me.requestPendingMetadata(t, c)
 				}
@@ -1047,7 +1044,6 @@ func (me *Client) replenishConnRequests(t *torrent, c *connection) {
 
 func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) error {
 	req := newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))
-	log.Println("got", req)
 
 	// Request has been satisfied.
 	me.connDeleteRequest(t, c, req)

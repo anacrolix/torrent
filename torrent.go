@@ -176,8 +176,10 @@ func (t *torrent) WriteStatus(w io.Writer) {
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Priorities: ")
-	for e := t.Priorities.Front(); e != nil; e = e.Next() {
-		fmt.Fprintf(w, "\t%v\n", e.Value)
+	if t.Priorities != nil {
+		for e := t.Priorities.Front(); e != nil; e = e.Next() {
+			fmt.Fprintf(w, "\t%v\n", e.Value)
+		}
 	}
 	for _, c := range t.Conns {
 		c.WriteStatus(w)

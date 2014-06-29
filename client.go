@@ -314,7 +314,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent) (err error) {
 		PeerChoked:      true,
 		write:           make(chan []byte),
 		post:            make(chan pp.Message),
-		PeerMaxRequests: 64,
+		PeerMaxRequests: 250, // Default in libtorrent is 250.
 	}
 	defer func() {
 		// There's a lock and deferred unlock later in this function. The

@@ -52,17 +52,6 @@ func TestTorrentInitialState(t *testing.T) {
 	}
 }
 
-func TestUnmarshalCompactPeer(t *testing.T) {
-	var p Peer
-	err := bencode.Unmarshal([]byte("6:\x01\x02\x03\x04\x05\x06"), &p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.IP.String() != "1.2.3.4" {
-		t.FailNow()
-	}
-}
-
 func TestUnmarshalPEXMsg(t *testing.T) {
 	var m peerExchangeMessage
 	if err := bencode.Unmarshal([]byte("d5:added12:\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0ce"), &m); err != nil {

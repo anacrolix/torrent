@@ -240,7 +240,7 @@ func (t *torrent) NumPiecesCompleted() (num int) {
 }
 
 func (t *torrent) Length() int64 {
-	return int64(t.PieceLength(pp.Integer(len(t.Pieces)-1))) + int64(len(t.Pieces)-1)*int64(t.PieceLength(0))
+	return int64(t.LastPieceSize()) + int64(len(t.Pieces)-1)*int64(t.UsualPieceSize())
 }
 
 func (t *torrent) Close() (err error) {

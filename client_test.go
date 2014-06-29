@@ -1,11 +1,9 @@
 package torrent
 
 import (
+	"bitbucket.org/anacrolix/go.torrent/testutil"
 	"github.com/anacrolix/libtorgo/bencode"
 	"os"
-
-	"bitbucket.org/anacrolix/go.torrent/testutil"
-
 	"testing"
 )
 

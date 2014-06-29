@@ -35,6 +35,7 @@ type connection struct {
 	PeerPieces       []bool
 	PeerMaxRequests  int // Maximum pending requests the peer allows.
 	PeerExtensionIDs map[string]int64
+	PeerClientName   string
 }
 
 func (cn *connection) completedString() string {

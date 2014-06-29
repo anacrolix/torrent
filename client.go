@@ -291,6 +291,22 @@ func (me *Client) initiateConn(peer Peer, torrent *torrent) {
 	}()
 }
 
+func (cl *Client) incomingPeerPort() int {
+	if cl.Listener == nil {
+		return 0
+	}
+	_, p, err := net.SplitHostPort(cl.Listener.Addr().String())
+	if err != nil {
+		panic(err)
+	}
+	var i int
+	_, err = fmt.Sscanf(p, "%d", &i)
+	if err != nil {
+		panic(err)
+	}
+	return i
+}
+
 func (me *Client) runConnection(sock net.Conn, torrent *torrent) (err error) {
 	conn := &connection{
 		Socket:          sock,
@@ -364,9 +380,13 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent) (err error) {
 					"m": map[string]int{
 						"ut_metadata": 1,
 					},
+					"v": "go.torrent dev",
 				}
 				if torrent.metadataSizeKnown() {
 					d["metadata_size"] = torrent.metadataSize()
+				}
+				if p := me.incomingPeerPort(); p != 0 {
+					d["p"] = p
 				}
 				b, err := bencode.Marshal(d)
 				if err != nil {
@@ -599,11 +619,20 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		case pp.Extended:
 			switch msg.ExtendedID {
 			case pp.HandshakeExtendedID:
+				// TODO: Create a bencode struct for this.
 				var d map[string]interface{}
 				err = bencode.Unmarshal(msg.ExtendedPayload, &d)
 				if err != nil {
 					err = fmt.Errorf("error decoding extended message payload: %s", err)
 					break
+				}
+				if reqq, ok := d["reqq"]; ok {
+					if i, ok := reqq.(int64); ok {
+						c.PeerMaxRequests = int(i)
+					}
+				}
+				if v, ok := d["v"]; ok {
+					c.PeerClientName = v.(string)
 				}
 				m, ok := d["m"]
 				if !ok {

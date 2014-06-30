@@ -16,6 +16,14 @@ type DefaultDownloadStrategy struct {
 }
 
 func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
+	if c.Interested {
+		if c.PeerChoked {
+			return
+		}
+		if len(c.Requests) >= c.PeerMaxRequests {
+			return
+		}
+	}
 	th := s.heat[t]
 	addRequest := func(req request) (again bool) {
 		piece := t.Pieces[req.Index]

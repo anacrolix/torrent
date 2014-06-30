@@ -224,6 +224,7 @@ func (cl *Client) acceptConnections() {
 		conn, err := cl.Listener.Accept()
 		select {
 		case <-cl.quit:
+			conn.Close()
 			return
 		default:
 		}
@@ -231,6 +232,7 @@ func (cl *Client) acceptConnections() {
 			log.Print(err)
 			return
 		}
+		log.Printf("accepted connection from %s", conn.RemoteAddr())
 		go func() {
 			if err := cl.runConnection(conn, nil); err != nil {
 				log.Print(err)
@@ -309,6 +311,7 @@ func (cl *Client) incomingPeerPort() int {
 
 func (me *Client) runConnection(sock net.Conn, torrent *torrent) (err error) {
 	conn := &connection{
+		Incoming:        torrent == nil,
 		Socket:          sock,
 		Choked:          true,
 		PeerChoked:      true,

@@ -15,11 +15,12 @@ import (
 
 // Maintains the state of a connection with a peer.
 type connection struct {
-	Socket net.Conn
-	closed bool
-	mu     sync.Mutex // Only for closing.
-	post   chan peer_protocol.Message
-	write  chan []byte
+	Socket   net.Conn
+	Incoming bool
+	closed   bool
+	mu       sync.Mutex // Only for closing.
+	post     chan peer_protocol.Message
+	write    chan []byte
 
 	// Stuff controlled by the local peer.
 	Interested bool
@@ -75,6 +76,9 @@ func (cn *connection) WriteStatus(w io.Writer) {
 	}
 	if !cn.Choked && !cn.PeerInterested {
 		c('?')
+	}
+	if cn.Incoming {
+		c('I')
 	}
 	fmt.Fprintln(w)
 }

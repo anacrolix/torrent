@@ -502,7 +502,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 	var d map[string]int
 	err = bencode.Unmarshal(payload, &d)
 	if err != nil {
-		err = fmt.Errorf("error unmarshalling payload: %s", err)
+		err = fmt.Errorf("error unmarshalling payload: %s: %q", err, payload)
 		return
 	}
 	msgType, ok := d["msg_type"]
@@ -702,6 +702,9 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				}
 			case 1:
 				err = me.gotMetadataExtensionMsg(msg.ExtendedPayload, t, c)
+				if err != nil {
+					err = fmt.Errorf("error handling metadata extension message: %s", err)
+				}
 			case 2:
 				var pexMsg peerExchangeMessage
 				err := bencode.Unmarshal(msg.ExtendedPayload, &pexMsg)
@@ -1051,11 +1054,15 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	}
 
 	// Cancel pending requests for this chunk.
+	cancelled := false
 	for _, c := range t.Conns {
 		if me.connCancel(t, c, req) {
-			log.Print("cancelled concurrent request for %v", req)
+			cancelled = true
 			me.replenishConnRequests(t, c)
 		}
+	}
+	if cancelled {
+		log.Print("cancelled concurrent requests for %v", req)
 	}
 
 	me.dataReady(dataSpec{t.InfoHash, req})

@@ -104,6 +104,9 @@ func (c *connection) PeerHasPiece(index peer_protocol.Integer) bool {
 	if c.PeerPieces == nil {
 		return false
 	}
+	if int(index) >= len(c.PeerPieces) {
+		return false
+	}
 	return c.PeerPieces[index]
 }
 

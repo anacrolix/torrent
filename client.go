@@ -225,7 +225,9 @@ func (cl *Client) acceptConnections() {
 		conn, err := cl.Listener.Accept()
 		select {
 		case <-cl.quit:
-			conn.Close()
+			if conn != nil {
+				conn.Close()
+			}
 			return
 		default:
 		}

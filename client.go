@@ -16,6 +16,7 @@ Simple example:
 package torrent
 
 import (
+	"bitbucket.org/anacrolix/go.torrent/util"
 	"bufio"
 	"container/list"
 	"crypto/rand"
@@ -535,28 +536,9 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 }
 
 type peerExchangeMessage struct {
-	Added      compactPeers   `bencode:"added"`
-	AddedFlags []byte         `bencode:"added.f"`
-	Dropped    []tracker.Peer `bencode:"dropped"`
-}
-
-type compactPeers []tracker.CompactPeer
-
-func (me *compactPeers) UnmarshalBencode(bb []byte) (err error) {
-	var b []byte
-	err = bencode.Unmarshal(bb, &b)
-	if err != nil {
-		return
-	}
-	for i := 0; i < len(b); i += 6 {
-		var p tracker.CompactPeer
-		err = p.UnmarshalBinary([]byte(b[i : i+6]))
-		if err != nil {
-			return
-		}
-		*me = append(*me, p)
-	}
-	return
+	Added      util.CompactPeers `bencode:"added"`
+	AddedFlags []byte            `bencode:"added.f"`
+	Dropped    []tracker.Peer    `bencode:"dropped"`
 }
 
 func (me *Client) connectionLoop(t *torrent, c *connection) error {

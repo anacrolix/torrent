@@ -1,6 +1,8 @@
 package dht
 
 import (
+	"bitbucket.org/anacrolix/go.torrent/tracker"
+	"bitbucket.org/anacrolix/go.torrent/util"
 	"crypto"
 	_ "crypto/sha1"
 	"encoding/binary"
@@ -85,6 +87,7 @@ func (s *Server) setDefaults() (err error) {
 		}
 		s.ID = string(id[:])
 	}
+	s.nodes = make(map[string]*Node, 10000)
 	return
 }
 
@@ -95,7 +98,7 @@ func (s *Server) Init() error {
 
 func (s *Server) Serve() error {
 	for {
-		var b [1500]byte
+		var b [0x10000]byte
 		n, addr, err := s.Socket.ReadFromUDP(b[:])
 		if err != nil {
 			return err
@@ -103,7 +106,7 @@ func (s *Server) Serve() error {
 		var d map[string]interface{}
 		err = bencode.Unmarshal(b[:n], &d)
 		if err != nil {
-			log.Printf("bad krpc message: %s", err)
+			log.Printf("bad krpc message: %s: %q", err, b[:n])
 			continue
 		}
 		s.mu.Lock()
@@ -343,14 +346,7 @@ func (me *findNodeResponse) UnmarshalKRPCMsg(m Msg) error {
 	return nil
 }
 
-// Sends a find_node query to addr. targetID is the node we're looking for.
-func (s *Server) FindNode(addr *net.UDPAddr, targetID string) (t *transaction, err error) {
-	t, err = s.query(addr, "find_node", map[string]string{"target": targetID})
-	if err != nil {
-		return
-	}
-	// Scrape peers from the response to put in the server's table before
-	// handing the response back to the caller.
+func (t *transaction) onResponse(f func(m Msg)) {
 	ch := make(chan Msg)
 	t.response = ch
 	go func() {
@@ -359,22 +355,154 @@ func (s *Server) FindNode(addr *net.UDPAddr, targetID string) (t *transaction, e
 			close(t.Response)
 			return
 		}
-		if d["y"] == "r" {
-			var r findNodeResponse
-			err = r.UnmarshalKRPCMsg(d)
-			if err != nil {
-				log.Print(err)
-			} else {
-				s.mu.Lock()
-				for _, cni := range r.Nodes {
-					n := s.getNode(cni.Addr)
-					n.id = string(cni.ID[:])
-				}
-				s.mu.Unlock()
-			}
-		}
+		f(d)
 		t.Response <- d
 	}()
+}
+
+func (s *Server) liftNodes(d Msg) {
+	if d["y"] != "r" {
+		return
+	}
+	var r findNodeResponse
+	err := r.UnmarshalKRPCMsg(d)
+	if err != nil {
+		// log.Print(err)
+	} else {
+		s.mu.Lock()
+		for _, cni := range r.Nodes {
+			n := s.getNode(cni.Addr)
+			n.id = string(cni.ID[:])
+		}
+		s.mu.Unlock()
+		// log.Printf("lifted %d nodes", len(r.Nodes))
+	}
+}
+
+// Sends a find_node query to addr. targetID is the node we're looking for.
+func (s *Server) FindNode(addr *net.UDPAddr, targetID string) (t *transaction, err error) {
+	t, err = s.query(addr, "find_node", map[string]string{"target": targetID})
+	if err != nil {
+		return
+	}
+	// Scrape peers from the response to put in the server's table before
+	// handing the response back to the caller.
+	t.onResponse(func(d Msg) {
+		s.liftNodes(d)
+	})
+	return
+}
+
+type getPeersResponse struct {
+	Values []tracker.CompactPeer `bencode:"values"`
+	Nodes  util.CompactPeers     `bencode:"nodes"`
+}
+
+type peerStream struct {
+	mu     sync.Mutex
+	Values chan []tracker.CompactPeer
+	stop   chan struct{}
+}
+
+func (ps *peerStream) Close() {
+	ps.mu.Lock()
+	select {
+	case <-ps.stop:
+	default:
+		close(ps.stop)
+		close(ps.Values)
+	}
+	ps.mu.Unlock()
+}
+
+func extractValues(m Msg) (vs []tracker.CompactPeer) {
+	r, ok := m["r"]
+	if !ok {
+		return
+	}
+	rd, ok := r.(map[string]interface{})
+	if !ok {
+		return
+	}
+	v, ok := rd["values"]
+	if !ok {
+		return
+	}
+	// log.Fatal(m)
+	vl, ok := v.([]interface{})
+	if !ok {
+		panic(v)
+	}
+	vs = make([]tracker.CompactPeer, 0, len(vl))
+	for _, i := range vl {
+		// log.Printf("%T", i)
+		s, ok := i.(string)
+		if !ok {
+			panic(i)
+		}
+		var cp tracker.CompactPeer
+		err := cp.UnmarshalBinary([]byte(s))
+		if err != nil {
+			log.Printf("error decoding values list element: %s", err)
+			continue
+		}
+		vs = append(vs, cp)
+	}
+	return
+}
+
+func (s *Server) GetPeers(infoHash string) (ps *peerStream, err error) {
+	ps = &peerStream{
+		Values: make(chan []tracker.CompactPeer),
+		stop:   make(chan struct{}),
+	}
+	done := make(chan struct{})
+	pending := 0
+	s.mu.Lock()
+	for _, n := range s.nodes {
+		var t *transaction
+		t, err = s.getPeers(n.addr, infoHash)
+		if err != nil {
+			ps.Close()
+			break
+		}
+		go func() {
+			select {
+			case m := <-t.Response:
+				vs := extractValues(m)
+				if vs != nil {
+					ps.Values <- vs
+					// } else {
+					// log.Print("get_peers response had no values")
+				}
+			case <-ps.stop:
+			}
+			done <- struct{}{}
+		}()
+		pending++
+	}
+	s.mu.Unlock()
+	go func() {
+		for ; pending > 0; pending-- {
+			<-done
+		}
+		ps.Close()
+	}()
+	return
+}
+
+func (s *Server) getPeers(addr *net.UDPAddr, infoHash string) (t *transaction, err error) {
+	if len(infoHash) != 20 {
+		err = fmt.Errorf("infohash has bad length")
+		return
+	}
+	t, err = s.query(addr, "get_peers", map[string]string{"info_hash": infoHash})
+	if err != nil {
+		return
+	}
+	t.onResponse(func(m Msg) {
+		s.liftNodes(m)
+	})
 	return
 }
 
@@ -399,17 +527,24 @@ func (s *Server) Bootstrap() (err error) {
 			return
 		}
 	}
-	for _, node := range s.nodes {
-		var t *transaction
-		s.mu.Unlock()
-		t, err = s.FindNode(node.addr, s.ID)
-		s.mu.Lock()
-		if err != nil {
-			return
+	for {
+		for _, node := range s.nodes {
+			var t *transaction
+			s.mu.Unlock()
+			t, err = s.FindNode(node.addr, s.ID)
+			s.mu.Lock()
+			if err != nil {
+				return
+			}
+			go func() {
+				<-t.Response
+			}()
 		}
-		go func() {
-			<-t.Response
-		}()
+		time.Sleep(5 * time.Second)
+		log.Printf("now have %d nodes", len(s.nodes))
+		if len(s.nodes) >= 8*160 {
+			break
+		}
 	}
 	return
 }
@@ -424,7 +559,7 @@ func (s *Server) Nodes() (nis []NodeInfo) {
 		ni := NodeInfo{
 			Addr: node.addr,
 		}
-		if n := copy(ni.ID[:], node.id); n != 20 {
+		if n := copy(ni.ID[:], node.id); n != 20 && n != 0 {
 			panic(n)
 		}
 		nis = append(nis, ni)

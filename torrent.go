@@ -11,7 +11,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"sort"
 )
 
 func (t *torrent) PieceNumPendingBytes(index pp.Integer) (count pp.Integer) {
@@ -26,14 +25,24 @@ func (t *torrent) PieceNumPendingBytes(index pp.Integer) (count pp.Integer) {
 	return
 }
 
+type pieceBytesLeft struct {
+	Piece, BytesLeft int
+}
+
+type torrentPiece struct {
+	piece
+	bytesLeftElement *list.Element
+}
+
 type torrent struct {
-	InfoHash   InfoHash
-	Pieces     []*piece
-	Data       mmap_span.MMapSpan
-	Info       *metainfo.Info
-	Conns      []*connection
-	Peers      []Peer
-	Priorities *list.List
+	InfoHash          InfoHash
+	Pieces            []*torrentPiece
+	PiecesByBytesLeft *OrderedList
+	Data              mmap_span.MMapSpan
+	Info              *metainfo.Info
+	Conns             []*connection
+	Peers             []Peer
+	Priorities        *list.List
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
 	// mirror their respective URLs from the announce-list key.
 	Trackers      [][]tracker.Client
@@ -89,11 +98,23 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 	if err != nil {
 		return
 	}
-	for _, hash := range infoPieceHashes(&md) {
-		piece := &piece{}
+	t.PiecesByBytesLeft = NewList(func(a, b interface{}) bool {
+		apb := t.PieceNumPendingBytes(pp.Integer(a.(int)))
+		bpb := t.PieceNumPendingBytes(pp.Integer(b.(int)))
+		if apb < bpb {
+			return true
+		}
+		if apb > bpb {
+			return false
+		}
+		return a.(int) < b.(int)
+	})
+	for index, hash := range infoPieceHashes(&md) {
+		piece := &torrentPiece{}
 		copyHashSum(piece.Hash[:], []byte(hash))
 		t.Pieces = append(t.Pieces, piece)
-		t.pendAllChunkSpecs(pp.Integer(len(t.Pieces) - 1))
+		piece.bytesLeftElement = t.PiecesByBytesLeft.Insert(index)
+		t.pendAllChunkSpecs(pp.Integer(index))
 	}
 	t.Priorities = list.New()
 	return
@@ -170,6 +191,7 @@ func (t *torrent) NewMetadataExtensionMessage(c *connection, msgType int, piece 
 }
 
 func (t *torrent) WriteStatus(w io.Writer) {
+	fmt.Fprintf(w, "Infohash: %x\n", t.InfoHash)
 	fmt.Fprint(w, "Pieces: ")
 	for index := range t.Pieces {
 		fmt.Fprintf(w, "%c", t.pieceStatusChar(index))
@@ -251,19 +273,6 @@ func (t *torrent) Close() (err error) {
 	return
 }
 
-func (t *torrent) piecesByPendingBytes() (indices []pp.Integer) {
-	slice := pieceByBytesPendingSlice{
-		Pending: make([]pp.Integer, 0, len(t.Pieces)),
-		Indices: make([]pp.Integer, 0, len(t.Pieces)),
-	}
-	for i := range t.Pieces {
-		slice.Pending = append(slice.Pending, t.PieceNumPendingBytes(pp.Integer(i)))
-		slice.Indices = append(slice.Indices, pp.Integer(i))
-	}
-	sort.Sort(slice)
-	return slice.Indices
-}
-
 // Return the request that would include the given offset into the torrent data.
 func torrentOffsetRequest(torrentLength, pieceSize, chunkSize, offset int64) (
 	r request, ok bool) {
@@ -330,6 +339,7 @@ func (t *torrent) pendAllChunkSpecs(index pp.Integer) {
 		cs[c] = struct{}{}
 		c.Begin += c.Length
 	}
+	t.PiecesByBytesLeft.ValueChanged(piece.bytesLeftElement)
 	return
 }
 

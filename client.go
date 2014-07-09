@@ -1024,6 +1024,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 
 	// Record that we have the chunk.
 	delete(t.Pieces[req.Index].PendingChunkSpecs, req.chunkSpec)
+	t.PiecesByBytesLeft.ValueChanged(t.Pieces[req.Index].bytesLeftElement)
 	if len(t.Pieces[req.Index].PendingChunkSpecs) == 0 {
 		me.queuePieceCheck(t, req.Index)
 	}

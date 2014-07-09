@@ -50,16 +50,17 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 			return
 		}
 	}
-	ppbs := t.piecesByPendingBytes()
 	// Then finish off incomplete pieces in order of bytes remaining.
 	for _, heatThreshold := range []int{0, 4, 60} {
-		for _, pieceIndex := range ppbs {
-			for _, chunkSpec := range t.Pieces[pieceIndex].shuffledPendingChunkSpecs() {
+		for e := t.PiecesByBytesLeft.Front(); e != nil; e = e.Next() {
+			pieceIndex := pp.Integer(e.Value.(int))
+			// for _, chunkSpec := range t.Pieces[pieceIndex].shuffledPendingChunkSpecs() {
+			for chunkSpec := range t.Pieces[pieceIndex].PendingChunkSpecs {
 				r := request{pieceIndex, chunkSpec}
 				if th[r] > heatThreshold {
 					continue
 				}
-				if !addRequest(request{pieceIndex, chunkSpec}) {
+				if !addRequest(r) {
 					return
 				}
 			}
@@ -121,15 +122,16 @@ func (me *ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 		}
 	}
 	// Then finish off incomplete pieces in order of bytes remaining.
-	for _, index := range t.piecesByPendingBytes() {
+	for e := t.PiecesByBytesLeft.Front(); e != nil; e = e.Next() {
+		index := e.Value.(int)
 		// Stop when we're onto untouched pieces.
-		if !t.PiecePartiallyDownloaded(int(index)) {
+		if !t.PiecePartiallyDownloaded(index) {
 			break
 		}
 		// Request chunks in random order to reduce overlap with other
 		// connections.
 		for _, cs := range t.Pieces[index].shuffledPendingChunkSpecs() {
-			if !c.Request(request{index, cs}) {
+			if !c.Request(request{pp.Integer(index), cs}) {
 				return
 			}
 		}

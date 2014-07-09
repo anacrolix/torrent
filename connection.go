@@ -66,10 +66,19 @@ func (cn *connection) WriteStatus(w io.Writer) {
 		fmt.Fprintf(w, "%c", b)
 	}
 	// https://trac.transmissionbt.com/wiki/PeerStatusText
+	if cn.PeerInterested && !cn.Choked {
+		c('O')
+	}
 	if len(cn.Requests) != 0 {
 		c('D')
-	} else if cn.Interested {
+	}
+	if cn.PeerChoked && cn.Interested {
 		c('d')
+	}
+	if !cn.Choked && cn.PeerInterested {
+		c('U')
+	} else {
+		c('u')
 	}
 	if !cn.PeerChoked && !cn.Interested {
 		c('K')

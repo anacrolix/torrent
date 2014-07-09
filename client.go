@@ -717,7 +717,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 					log.Printf("added %d peers from PEX", len(pexMsg.Added))
 				}()
 			default:
-				err = fmt.Errorf("unexpected extended message ID: %s", msg.ExtendedID)
+				err = fmt.Errorf("unexpected extended message ID: %v", msg.ExtendedID)
 			}
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)

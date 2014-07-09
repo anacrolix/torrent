@@ -23,7 +23,7 @@ func (me *nodeMaxHeap) Push(val interface{}) {
 	me.IDs = append(me.IDs, val.(string))
 }
 func (me nodeMaxHeap) Swap(i, j int) {
-	me.IDs[i], me.IDs[j] = me.IDs[i], me.IDs[j]
+	me.IDs[i], me.IDs[j] = me.IDs[j], me.IDs[i]
 }
 
 type closestNodesSelector struct {

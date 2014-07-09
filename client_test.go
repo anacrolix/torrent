@@ -41,7 +41,7 @@ func TestTorrentInitialState(t *testing.T) {
 	}
 	p := tor.Pieces[0]
 	if len(p.PendingChunkSpecs) != 1 {
-		t.Fatalf("should only be 1 chunk: %s", p.PendingChunkSpecs)
+		t.Fatalf("should only be 1 chunk: %v", p.PendingChunkSpecs)
 	}
 	if _, ok := p.PendingChunkSpecs[chunkSpec{
 		Length: 13,

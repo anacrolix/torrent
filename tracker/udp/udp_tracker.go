@@ -124,7 +124,6 @@ func (c *client) Announce(req *tracker.AnnounceRequest) (res tracker.AnnounceRes
 			Port: int(p.Port),
 		})
 	}
-	return
 }
 
 func (c *client) write(h *RequestHeader, body interface{}) (err error) {

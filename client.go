@@ -1047,7 +1047,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 		}
 	}
 	if cancelled {
-		log.Print("cancelled concurrent requests for %v", req)
+		log.Printf("cancelled concurrent requests for %v", req)
 	}
 
 	me.dataReady(dataSpec{t.InfoHash, req})

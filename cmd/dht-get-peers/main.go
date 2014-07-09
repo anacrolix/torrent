@@ -2,6 +2,8 @@ package main
 
 import (
 	"bitbucket.org/anacrolix/go.torrent/dht"
+	"bitbucket.org/anacrolix/go.torrent/tracker"
+	_ "bitbucket.org/anacrolix/go.torrent/util/profile"
 	"flag"
 	"fmt"
 	"io"
@@ -64,7 +66,8 @@ func init() {
 	switch len(*infoHash) {
 	case 20:
 	case 40:
-		if _, err := fmt.Sscanf(*infoHash, "%x", infoHash); err != nil {
+		_, err := fmt.Sscanf(*infoHash, "%x", infoHash)
+		if err != nil {
 			log.Fatal(err)
 		}
 	default:
@@ -120,7 +123,7 @@ func saveTable() error {
 
 func setupSignals() {
 	ch := make(chan os.Signal)
-	signal.Notify(ch)
+	signal.Notify(ch, os.Interrupt)
 	go func() {
 		<-ch
 		s.StopServing()
@@ -128,18 +131,30 @@ func setupSignals() {
 }
 
 func main() {
-	// go s.Bootstrap()
 	go func() {
+		defer s.StopServing()
+		if err := s.Bootstrap(); err != nil {
+			log.Printf("error bootstrapping: %s", err)
+			return
+		}
+		saveTable()
 		ps, err := s.GetPeers(*infoHash)
 		if err != nil {
 			log.Fatal(err)
 		}
+		seen := make(map[tracker.CompactPeer]struct{})
 		for sl := range ps.Values {
 			for _, p := range sl {
-				fmt.Println(p)
+				if _, ok := seen[p]; ok {
+					continue
+				}
+				seen[p] = struct{}{}
+				fmt.Println((&net.UDPAddr{
+					IP:   p.IP[:],
+					Port: int(p.Port),
+				}).String())
 			}
 		}
-		s.StopServing()
 	}()
 	err := s.Serve()
 	if err := saveTable(); err != nil {

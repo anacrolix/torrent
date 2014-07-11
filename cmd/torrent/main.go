@@ -19,7 +19,7 @@ import (
 var (
 	downloadDir = flag.String("downloadDir", "", "directory to store download torrent data")
 	testPeer    = flag.String("testPeer", "", "bootstrap peer address")
-	httpAddr    = flag.String("httpAddr", "", "http serve address")
+	httpAddr    = flag.String("httpAddr", "localhost:0", "http serve address")
 	// TODO: Check the default torrent listen port.
 	listenAddr      = flag.String("listenAddr", ":6882", "incoming connection address")
 	disableTrackers = flag.Bool("disableTrackers", false, "disable trackers")
@@ -41,7 +41,22 @@ func makeListener() net.Listener {
 
 func main() {
 	if *httpAddr != "" {
-		go http.ListenAndServe(*httpAddr, nil)
+		addr, err := net.ResolveTCPAddr("tcp", *httpAddr)
+		if err != nil {
+			log.Fatalf("error resolving http addr: %s", err)
+		}
+		conn, err := net.ListenTCP("tcp", addr)
+		if err != nil {
+			log.Fatalf("error creating http conn: %s", err)
+		}
+		log.Printf("starting http server on http://%s", conn.Addr())
+		go func() {
+			defer conn.Close()
+			err = (&http.Server{}).Serve(conn)
+			if err != nil {
+				log.Fatalf("error serving http: %s", err)
+			}
+		}()
 	}
 	dhtServer := &dht.Server{
 		Socket: func() *net.UDPConn {

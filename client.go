@@ -16,6 +16,7 @@ Simple example:
 package torrent
 
 import (
+	"bitbucket.org/anacrolix/go.torrent/dht"
 	"bitbucket.org/anacrolix/go.torrent/util"
 	"bufio"
 	"container/list"
@@ -105,6 +106,7 @@ type Client struct {
 	Listener         net.Listener
 	DisableTrackers  bool
 	DownloadStrategy DownloadStrategy
+	DHT              *dht.Server
 
 	mu    sync.Mutex
 	event sync.Cond
@@ -865,6 +867,9 @@ func (me *Client) addTorrent(t *torrent) (err error) {
 	if !me.DisableTrackers {
 		go me.announceTorrent(t)
 	}
+	if me.DHT != nil {
+		go me.announceTorrentDHT(t)
+	}
 	return
 }
 
@@ -902,6 +907,47 @@ func (cl *Client) listenerAnnouncePort() (port int16) {
 		log.Printf("unknown listener addr type: %T", addr)
 	}
 	return
+}
+
+func (cl *Client) announceTorrentDHT(t *torrent) {
+	for {
+		ps, err := cl.DHT.GetPeers(string(t.InfoHash[:]))
+		if err != nil {
+			log.Printf("error getting peers from dht: %s", err)
+			return
+		}
+		nextScrape := time.After(1 * time.Minute)
+	getPeers:
+		for {
+			select {
+			case <-nextScrape:
+				break getPeers
+			case cps, ok := <-ps.Values:
+				if !ok {
+					break getPeers
+				}
+				err = cl.AddPeers(t.InfoHash, func() (ret []Peer) {
+					for _, cp := range cps {
+						ret = append(ret, Peer{
+							IP:   cp.IP[:],
+							Port: int(cp.Port),
+						})
+						log.Printf("peer from dht: %s", &net.UDPAddr{
+							IP:   cp.IP[:],
+							Port: int(cp.Port),
+						})
+					}
+					return
+				}())
+				if err != nil {
+					log.Printf("error adding peers from dht for torrent %q: %s", t, err)
+					break getPeers
+				}
+				log.Printf("got %d peers from dht for torrent %q", len(cps), t)
+			}
+		}
+		ps.Close()
+	}
 }
 
 func (cl *Client) announceTorrent(t *torrent) {

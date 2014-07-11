@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bitbucket.org/anacrolix/go.torrent/dht"
 	"flag"
 	"fmt"
 	"log"
@@ -42,10 +43,40 @@ func main() {
 	if *httpAddr != "" {
 		go http.ListenAndServe(*httpAddr, nil)
 	}
+	dhtServer := &dht.Server{
+		Socket: func() *net.UDPConn {
+			addr, err := net.ResolveUDPAddr("udp4", *listenAddr)
+			if err != nil {
+				log.Fatalf("error resolving dht listen addr: %s", err)
+			}
+			s, err := net.ListenUDP("udp4", addr)
+			if err != nil {
+				log.Fatalf("error creating dht socket: %s", err)
+			}
+			return s
+		}(),
+	}
+	err := dhtServer.Init()
+	if err != nil {
+		log.Fatalf("error initing dht server: %s", err)
+	}
+	go func() {
+		err := dhtServer.Serve()
+		if err != nil {
+			log.Fatalf("error serving dht: %s", err)
+		}
+	}()
+	go func() {
+		err := dhtServer.Bootstrap()
+		if err != nil {
+			log.Printf("error bootstrapping dht server: %s", err)
+		}
+	}()
 	client := torrent.Client{
 		DataDir:         *downloadDir,
 		Listener:        makeListener(),
 		DisableTrackers: *disableTrackers,
+		DHT:             dhtServer,
 	}
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)

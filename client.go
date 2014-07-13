@@ -875,7 +875,7 @@ func (me *Client) addTorrent(t *torrent) (err error) {
 
 // Adds the torrent to the client.
 func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) (err error) {
-	t, err := newTorrent(BytesInfoHash(metaInfo.InfoHash), metaInfo.AnnounceList)
+	t, err := newTorrent(BytesInfoHash(metaInfo.Info.Hash), metaInfo.AnnounceList)
 	if err != nil {
 		return
 	}
@@ -885,7 +885,7 @@ func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) (err error) {
 	if err != nil {
 		return
 	}
-	err = me.setMetaData(t, metaInfo.Info, metaInfo.InfoBytes)
+	err = me.setMetaData(t, metaInfo.Info.Info, metaInfo.Info.Bytes)
 	if err != nil {
 		return
 	}

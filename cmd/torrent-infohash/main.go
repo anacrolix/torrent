@@ -14,6 +14,6 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("%x: %s\n", mi.InfoHash, arg)
+		fmt.Printf("%x: %s\n", mi.Info.Hash, arg)
 	}
 }

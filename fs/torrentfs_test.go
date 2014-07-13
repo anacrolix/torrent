@@ -105,7 +105,7 @@ func TestUnmountWedged(t *testing.T) {
 		log.Fatal(err)
 	}
 	go func() {
-		ioutil.ReadFile(filepath.Join(layout.MountDir, layout.Metainfo.Name))
+		ioutil.ReadFile(filepath.Join(layout.MountDir, layout.Metainfo.Info.Name))
 	}()
 	time.Sleep(time.Second)
 	fs.Destroy()
@@ -139,7 +139,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	defer seeder.Listener.Close()
 	seeder.Start()
 	defer seeder.Stop()
-	err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%x", layout.Metainfo.InfoHash))
+	err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%x", layout.Metainfo.Info.Hash))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	leecher.Start()
 	defer leecher.Stop()
 	leecher.AddTorrent(layout.Metainfo)
-	leecher.AddPeers(torrent.BytesInfoHash(layout.Metainfo.InfoHash), []torrent.Peer{func() torrent.Peer {
+	leecher.AddPeers(torrent.BytesInfoHash(layout.Metainfo.Info.Hash), []torrent.Peer{func() torrent.Peer {
 		tcpAddr := seeder.Listener.Addr().(*net.TCPAddr)
 		return torrent.Peer{
 			IP:   tcpAddr.IP,

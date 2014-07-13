@@ -123,7 +123,7 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			ih = torrent.BytesInfoHash(metaInfo.InfoHash)
+			ih = torrent.BytesInfoHash(metaInfo.Info.Hash)
 		}
 		client.PrioritizeDataRegion(ih, 0, 999999999)
 		err := client.AddPeers(ih, func() []torrent.Peer {

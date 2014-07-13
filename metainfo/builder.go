@@ -344,7 +344,7 @@ func (b *Batch) Start(w io.Writer, nworkers int) (<-chan error, <-chan int64) {
 }
 
 func (b *Batch) write_torrent(w io.Writer) error {
-	var td torrent_data
+	var td MetaInfo
 	td.Announce = b.announce_list[0][0]
 	if len(b.announce_list) != 1 || len(b.announce_list[0]) != 1 {
 		td.AnnounceList = b.announce_list

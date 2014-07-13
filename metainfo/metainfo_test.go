@@ -9,11 +9,11 @@ func test_file(t *testing.T, filename string) {
 		t.Fatal(err)
 	}
 
-	if len(mi.Files) == 1 {
-		t.Logf("Single file: %s (length: %d)\n", mi.Name, mi.Files[0].Length)
+	if len(mi.Info.Files) == 1 {
+		t.Logf("Single file: %s (length: %d)\n", mi.Info.Name, mi.Info.Files[0].Length)
 	} else {
-		t.Logf("Multiple files: %s\n", mi.Name)
-		for _, f := range mi.Files {
+		t.Logf("Multiple files: %s\n", mi.Info.Name)
+		for _, f := range mi.Info.Files {
 			t.Logf(" - %s (length: %d)\n", path.Join(f.Path...), f.Length)
 		}
 	}
@@ -23,9 +23,9 @@ func test_file(t *testing.T, filename string) {
 			t.Logf("Tracker: %s\n", tracker)
 		}
 	}
-	for _, url := range mi.WebSeedURLs {
-		t.Logf("URL: %s\n", url)
-	}
+	// for _, url := range mi.WebSeedURLs {
+	// 	t.Logf("URL: %s\n", url)
+	// }
 
 }
 

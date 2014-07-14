@@ -494,6 +494,8 @@ func (cl *Client) completedMetadata(t *torrent) {
 		t.InvalidateMetadata()
 		return
 	}
+	// TODO(anacrolix): If this fails, I think something harsher should be
+	// done.
 	err = cl.setMetaData(t, info, t.MetaData)
 	if err != nil {
 		log.Printf("error setting metadata: %s", err)

@@ -53,14 +53,17 @@ type torrent struct {
 }
 
 func (t *torrent) InvalidateMetadata() {
-	for i := range t.metadataHave {
-		t.metadataHave[i] = false
-	}
+	t.MetaData = nil
+	t.metadataHave = nil
 	t.Info = nil
 }
 
 func (t *torrent) SaveMetadataPiece(index int, data []byte) {
 	if t.haveInfo() {
+		return
+	}
+	if index >= len(t.metadataHave) {
+		log.Printf("%s: ignoring metadata piece %d", t, index)
 		return
 	}
 	copy(t.MetaData[(1<<14)*index:], data)

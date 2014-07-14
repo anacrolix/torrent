@@ -1041,6 +1041,9 @@ func (cl *Client) assertRequestHeat() {
 }
 
 func (me *Client) replenishConnRequests(t *torrent, c *connection) {
+	if !t.haveInfo() {
+		return
+	}
 	me.DownloadStrategy.FillRequests(t, c)
 	//me.assertRequestHeat()
 	if len(c.Requests) == 0 && !c.PeerChoked {

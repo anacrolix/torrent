@@ -239,7 +239,7 @@ func (cl *Client) acceptConnections() {
 		}
 		log.Printf("accepted connection from %s", conn.RemoteAddr())
 		go func() {
-			if err := cl.runConnection(conn, nil); err != nil {
+			if err := cl.runConnection(conn, nil, peerSourceIncoming); err != nil {
 				log.Print(err)
 			}
 		}()
@@ -290,8 +290,8 @@ func (me *Client) initiateConn(peer Peer, torrent *torrent) {
 			log.Printf("error connecting to peer: %s %#v", err, err)
 			return
 		}
-		log.Printf("connected to %s", conn.RemoteAddr())
-		err = me.runConnection(conn, torrent)
+		// log.Printf("connected to %s", conn.RemoteAddr())
+		err = me.runConnection(conn, torrent, peer.Source)
 		if err != nil {
 			log.Print(err)
 		}
@@ -314,9 +314,9 @@ func (cl *Client) incomingPeerPort() int {
 	return i
 }
 
-func (me *Client) runConnection(sock net.Conn, torrent *torrent) (err error) {
+func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerSource) (err error) {
 	conn := &connection{
-		Incoming:        torrent == nil,
+		Discovery:       discovery,
 		Socket:          sock,
 		Choked:          true,
 		PeerChoked:      true,
@@ -704,8 +704,9 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 					err := me.AddPeers(t.InfoHash, func() (ret []Peer) {
 						for _, cp := range pexMsg.Added {
 							p := Peer{
-								IP:   make([]byte, 4),
-								Port: int(cp.Port),
+								IP:     make([]byte, 4),
+								Port:   int(cp.Port),
+								Source: peerSourcePEX,
 							}
 							if n := copy(p.IP, cp.IP[:]); n != 4 {
 								panic(n)
@@ -931,8 +932,9 @@ func (cl *Client) announceTorrentDHT(t *torrent) {
 				err = cl.AddPeers(t.InfoHash, func() (ret []Peer) {
 					for _, cp := range cps {
 						ret = append(ret, Peer{
-							IP:   cp.IP[:],
-							Port: int(cp.Port),
+							IP:     cp.IP[:],
+							Port:   int(cp.Port),
+							Source: peerSourceDHT,
 						})
 						log.Printf("peer from dht: %s", &net.UDPAddr{
 							IP:   cp.IP[:],

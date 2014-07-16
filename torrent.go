@@ -347,9 +347,10 @@ func (t *torrent) pendAllChunkSpecs(index pp.Integer) {
 }
 
 type Peer struct {
-	Id   [20]byte
-	IP   net.IP
-	Port int
+	Id     [20]byte
+	IP     net.IP
+	Port   int
+	Source peerSource
 }
 
 func (t *torrent) PieceLength(piece pp.Integer) (len_ pp.Integer) {

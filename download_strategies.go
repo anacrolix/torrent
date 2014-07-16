@@ -20,7 +20,7 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 		if c.PeerChoked {
 			return
 		}
-		if len(c.Requests) >= c.PeerMaxRequests {
+		if len(c.Requests) >= (c.PeerMaxRequests+1)/2 {
 			return
 		}
 	}
@@ -51,13 +51,13 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 		}
 	}
 	// Then finish off incomplete pieces in order of bytes remaining.
-	for _, heatThreshold := range []int{0, 4, 60} {
+	for _, heatThreshold := range []int{1, 4, 15, 60} {
 		for e := t.PiecesByBytesLeft.Front(); e != nil; e = e.Next() {
 			pieceIndex := pp.Integer(e.Value.(int))
-			// for _, chunkSpec := range t.Pieces[pieceIndex].shuffledPendingChunkSpecs() {
-			for chunkSpec := range t.Pieces[pieceIndex].PendingChunkSpecs {
+			for _, chunkSpec := range t.Pieces[pieceIndex].shuffledPendingChunkSpecs() {
+				// for chunkSpec := range t.Pieces[pieceIndex].PendingChunkSpecs {
 				r := request{pieceIndex, chunkSpec}
-				if th[r] > heatThreshold {
+				if th[r] >= heatThreshold {
 					continue
 				}
 				if !addRequest(r) {

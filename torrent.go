@@ -206,6 +206,7 @@ func (t *torrent) WriteStatus(w io.Writer) {
 			fmt.Fprintf(w, "\t%v\n", e.Value)
 		}
 	}
+	fmt.Fprintf(w, "Pending peers: %d\n", len(t.Peers))
 	for _, c := range t.Conns {
 		c.WriteStatus(w)
 	}

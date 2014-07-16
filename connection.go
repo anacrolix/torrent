@@ -69,7 +69,7 @@ func (cn *connection) piecesPeerHasCount() (count int) {
 }
 
 func (cn *connection) WriteStatus(w io.Writer) {
-	fmt.Fprintf(w, "%q: %s-%s: %s completed: ", cn.PeerId, cn.Socket.LocalAddr(), cn.Socket.RemoteAddr(), cn.completedString())
+	fmt.Fprintf(w, "%q: %s-%s: %s completed, reqs: %d-%d, flags: ", cn.PeerId, cn.Socket.LocalAddr(), cn.Socket.RemoteAddr(), cn.completedString(), len(cn.Requests), len(cn.PeerRequests))
 	c := func(b byte) {
 		fmt.Fprintf(w, "%c", b)
 	}

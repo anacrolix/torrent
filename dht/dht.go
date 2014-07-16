@@ -679,6 +679,12 @@ func (s *Server) Bootstrap() (err error) {
 	return
 }
 
+func (s *Server) NumNodes() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.nodes)
+}
+
 func (s *Server) Nodes() (nis []NodeInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -93,6 +93,7 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 	return
 }
 
+// Called when metadata for a torrent becomes available.
 func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte) (err error) {
 	t.Info = &md
 	t.MetaData = infoBytes
@@ -120,6 +121,12 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 		t.pendAllChunkSpecs(pp.Integer(index))
 	}
 	t.Priorities = list.New()
+	for _, conn := range t.Conns {
+		if err := conn.setNumPieces(t.NumPieces()); err != nil {
+			log.Printf("closing connection: %s", err)
+			conn.Close()
+		}
+	}
 	return
 }
 

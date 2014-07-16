@@ -3,6 +3,7 @@ package torrent
 import (
 	"container/list"
 	"encoding"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -36,11 +37,13 @@ type connection struct {
 	Requests   map[request]struct{}
 
 	// Stuff controlled by the remote peer.
-	PeerId           [20]byte
-	PeerInterested   bool
-	PeerChoked       bool
-	PeerRequests     map[request]struct{}
-	PeerExtensions   [8]byte
+	PeerId         [20]byte
+	PeerInterested bool
+	PeerChoked     bool
+	PeerRequests   map[request]struct{}
+	PeerExtensions [8]byte
+	// Whether the peer has the given piece. nil if they've not sent any
+	// related messages yet.
 	PeerPieces       []bool
 	PeerMaxRequests  int // Maximum pending requests the peer allows.
 	PeerExtensionIDs map[string]int64
@@ -66,6 +69,32 @@ func (cn *connection) piecesPeerHasCount() (count int) {
 		}
 	}
 	return
+}
+
+// Correct the PeerPieces slice length. Return false if the existing slice is
+// invalid, such as by receiving badly sized BITFIELD, or invalid HAVE
+// messages.
+func (cn *connection) setNumPieces(num int) error {
+	if cn.PeerPieces == nil {
+		return nil
+	}
+	if len(cn.PeerPieces) == num {
+	} else if len(cn.PeerPieces) < num {
+		cn.PeerPieces = append(cn.PeerPieces, make([]bool, num-len(cn.PeerPieces))...)
+	} else if len(cn.PeerPieces) < 8*(num+7)/8 {
+		for _, have := range cn.PeerPieces[num:] {
+			if have {
+				return errors.New("peer has invalid piece")
+			}
+		}
+		cn.PeerPieces = cn.PeerPieces[:num]
+	} else {
+		return errors.New("peer bitfield is excessively long")
+	}
+	if len(cn.PeerPieces) != num {
+		panic("wat")
+	}
+	return nil
 }
 
 func (cn *connection) WriteStatus(w io.Writer) {

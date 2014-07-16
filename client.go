@@ -595,8 +595,8 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				c.PeerRequests = make(map[request]struct{}, maxRequests)
 			}
 			request := newRequest(msg.Index, msg.Begin, msg.Length)
-			c.PeerRequests[request] = struct{}{}
 			// TODO: Requests should be satisfied from a dedicated upload routine.
+			// c.PeerRequests[request] = struct{}{}
 			p := make([]byte, msg.Length)
 			n, err := t.Data.ReadAt(p, int64(t.PieceLength(0))*int64(msg.Index)+int64(msg.Begin))
 			if err != nil {

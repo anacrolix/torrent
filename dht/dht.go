@@ -3,6 +3,7 @@ package dht
 import (
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	"bitbucket.org/anacrolix/go.torrent/util"
+	"bytes"
 	"crypto"
 	_ "crypto/sha1"
 	"encoding/binary"
@@ -140,7 +141,10 @@ func (s *Server) Serve() error {
 		var d Msg
 		err = bencode.Unmarshal(b[:n], &d)
 		if err != nil {
-			log.Printf("%s: received bad krpc message: %s: %q", s, err, b[:n])
+			// TODO: What are these messages?
+			if !bytes.HasPrefix(b[:], []byte("A\x00")) {
+				log.Printf("%s: received bad krpc message: %s: %q", s, err, b[:n])
+			}
 			continue
 		}
 		s.mu.Lock()
@@ -230,7 +234,10 @@ func (s *Server) handleQuery(source *net.UDPAddr, m Msg) {
 			"nodes": string(nodesBytes),
 		})
 	case "announce_peer":
-		log.Print(m)
+		// TODO(anacrolix): Implement this lolz.
+		// log.Print(m)
+	case "vote":
+		// TODO(anacrolix): Or reject, I don't think I want this.
 	default:
 		log.Printf("%s: not handling received query: q=%s", s, m["q"])
 		return

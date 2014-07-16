@@ -64,6 +64,15 @@ func (m Msg) String() string {
 	return fmt.Sprintf("%#v", m)
 }
 
+func (m Msg) T() (t string) {
+	tif, ok := m["t"]
+	if !ok {
+		return
+	}
+	t, _ = tif.(string)
+	return
+}
+
 type transaction struct {
 	remoteAddr net.Addr
 	t          string
@@ -128,7 +137,7 @@ func (s *Server) Serve() error {
 		if err != nil {
 			return err
 		}
-		var d map[string]interface{}
+		var d Msg
 		err = bencode.Unmarshal(b[:n], &d)
 		if err != nil {
 			log.Printf("%s: received bad krpc message: %s: %q", s, err, b[:n])
@@ -140,7 +149,7 @@ func (s *Server) Serve() error {
 			s.mu.Unlock()
 			continue
 		}
-		t := s.findResponseTransaction(d["t"].(string), addr)
+		t := s.findResponseTransaction(d.T(), addr)
 		if t == nil {
 			//log.Printf("unexpected message: %#v", d)
 			s.mu.Unlock()

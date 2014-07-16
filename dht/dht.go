@@ -671,7 +671,7 @@ func (s *Server) Bootstrap() (err error) {
 		case <-noOutstanding:
 		}
 		s.mu.Lock()
-		log.Printf("now have %d nodes", len(s.nodes))
+		// log.Printf("now have %d nodes", len(s.nodes))
 		if len(s.nodes) >= 8*160 {
 			break
 		}

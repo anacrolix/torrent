@@ -240,7 +240,7 @@ func (cl *Client) acceptConnections() {
 			log.Print(err)
 			return
 		}
-		log.Printf("accepted connection from %s", conn.RemoteAddr())
+		// log.Printf("accepted connection from %s", conn.RemoteAddr())
 		go func() {
 			if err := cl.runConnection(conn, nil, peerSourceIncoming); err != nil {
 				log.Print(err)
@@ -939,10 +939,10 @@ func (cl *Client) announceTorrentDHT(t *torrent) {
 							Port:   int(cp.Port),
 							Source: peerSourceDHT,
 						})
-						log.Printf("peer from dht: %s", &net.UDPAddr{
-							IP:   cp.IP[:],
-							Port: int(cp.Port),
-						})
+						// log.Printf("peer from dht: %s", &net.UDPAddr{
+						// 	IP:   cp.IP[:],
+						// 	Port: int(cp.Port),
+						// })
 					}
 					return
 				}())

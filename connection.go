@@ -54,8 +54,9 @@ func (cn *connection) completedString() string {
 	if cn.PeerPieces == nil {
 		return "?"
 	}
-	f := float32(cn.piecesPeerHasCount()) / float32(cn.totalPiecesCount())
-	return fmt.Sprintf("%d%%", int(f*100))
+	// f := float32(cn.piecesPeerHasCount()) / float32(cn.totalPiecesCount())
+	// return fmt.Sprintf("%d%%", int(f*100))
+	return fmt.Sprintf("%d/%d", cn.piecesPeerHasCount(), cn.totalPiecesCount())
 }
 
 func (cn *connection) totalPiecesCount() int {

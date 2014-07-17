@@ -131,13 +131,20 @@ func (cn *connection) WriteStatus(w io.Writer) {
 
 func (c *connection) Close() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.closed {
 		return
 	}
 	c.Socket.Close()
-	close(c.post)
+	if c.post == nil {
+		// writeOptimizer isn't running, so we need to signal the writer to
+		// stop.
+		close(c.write)
+	} else {
+		// This will kill the writeOptimizer, and it kills the writer.
+		close(c.post)
+	}
 	c.closed = true
-	c.mu.Unlock()
 }
 
 func (c *connection) getClosed() bool {

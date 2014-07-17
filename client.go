@@ -325,7 +325,6 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 		Choked:          true,
 		PeerChoked:      true,
 		write:           make(chan []byte),
-		post:            make(chan pp.Message),
 		PeerMaxRequests: 250, // Default in libtorrent is 250.
 	}
 	defer func() {
@@ -382,6 +381,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 	if !me.addConnection(torrent, conn) {
 		return
 	}
+	conn.post = make(chan pp.Message)
 	go conn.writeOptimizer(time.Minute)
 	if conn.PeerExtensions[5]&0x10 != 0 {
 		conn.Post(pp.Message{

@@ -1,0 +1,1 @@
+for a in /tmp/torrentfs*; do sudo umount -f "$a/mnt"; done

@@ -132,6 +132,7 @@ func (cl *Client) WriteStatus(w io.Writer) {
 			}
 		}())
 		t.WriteStatus(w)
+		fmt.Fprintln(w)
 	}
 }
 

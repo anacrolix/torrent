@@ -269,6 +269,8 @@ func (me *Client) initiateConn(peer Peer, torrent *torrent) {
 			IP:   peer.IP,
 			Port: peer.Port,
 		}
+		// TODO: Specify local address so that peers associate our address
+		// with our listen address.
 		conn, err := net.DialTimeout(addr.Network(), addr.String(), dialTimeout)
 
 		go func() {

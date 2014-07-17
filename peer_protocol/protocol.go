@@ -127,18 +127,18 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 	_, err = io.ReadFull(d.R, b)
 	if err == io.EOF {
 		err = io.ErrUnexpectedEOF
-		return
 	}
 	if err != nil {
 		return
 	}
 	r := bytes.NewReader(b)
+	// Check that all of r was utilized.
 	defer func() {
-		written, _ := io.Copy(ioutil.Discard, r)
-		if written != 0 && err == nil {
-			err = fmt.Errorf("short read on message type %d, left %d bytes", msg.Type, written)
-		} else if err == io.EOF {
-			err = io.ErrUnexpectedEOF
+		if err != nil {
+			return
+		}
+		if r.Len() != 0 {
+			err = fmt.Errorf("%d bytes unused in message type %d", r.Len(), msg.Type)
 		}
 	}()
 	msg.Keepalive = false

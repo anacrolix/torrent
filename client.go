@@ -353,7 +353,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 		return
 	}
 	if string(b[:20]) != pp.Protocol {
-		err = fmt.Errorf("wrong protocol: %#v", string(b[:20]))
+		// err = fmt.Errorf("wrong protocol: %#v", string(b[:20]))
 		return
 	}
 	if 8 != copy(conn.PeerExtensions[:], b[20:]) {
@@ -951,7 +951,7 @@ func (cl *Client) announceTorrentDHT(t *torrent) {
 					log.Printf("error adding peers from dht for torrent %q: %s", t, err)
 					break getPeers
 				}
-				log.Printf("got %d peers from dht for torrent %q", len(cps), t)
+				// log.Printf("got %d peers from dht for torrent %q", len(cps), t)
 			}
 		}
 		ps.Close()

@@ -3,7 +3,6 @@ package dht
 import (
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	"bitbucket.org/anacrolix/go.torrent/util"
-	"bytes"
 	"crypto"
 	_ "crypto/sha1"
 	"encoding/binary"
@@ -141,8 +140,7 @@ func (s *Server) Serve() error {
 		var d Msg
 		err = bencode.Unmarshal(b[:n], &d)
 		if err != nil {
-			// TODO: What are these messages?
-			if !bytes.HasPrefix(b[:], []byte("A\x00")) {
+			if se, ok := err.(*bencode.SyntaxError); !ok || se.Offset != 0 {
 				log.Printf("%s: received bad krpc message: %s: %q", s, err, b[:n])
 			}
 			continue
@@ -284,6 +282,7 @@ func (s *Server) getNode(addr *net.UDPAddr) (n *Node) {
 func (s *Server) writeToNode(b []byte, node *net.UDPAddr) (err error) {
 	n, err := s.Socket.WriteTo(b, node)
 	if err != nil {
+		err = fmt.Errorf("error writing %d bytes to %s: %s", len(b), node, err)
 		return
 	}
 	if n != len(b) {

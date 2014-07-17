@@ -326,9 +326,10 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 		Socket:          sock,
 		Choked:          true,
 		PeerChoked:      true,
-		write:           make(chan []byte),
+		writeCh:         make(chan []byte),
 		PeerMaxRequests: 250, // Default in libtorrent is 250.
 	}
+	go conn.writer()
 	defer func() {
 		// There's a lock and deferred unlock later in this function. The
 		// client will not be locked when this deferred is invoked.
@@ -336,13 +337,12 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 		defer me.mu.Unlock()
 		conn.Close()
 	}()
-	go conn.writer()
 	// go conn.writeOptimizer()
-	conn.write <- pp.Bytes(pp.Protocol)
-	conn.write <- pp.Bytes("\x00\x00\x00\x00\x00\x10\x00\x00")
+	conn.write(pp.Bytes(pp.Protocol))
+	conn.write(pp.Bytes("\x00\x00\x00\x00\x00\x10\x00\x00"))
 	if torrent != nil {
-		conn.write <- pp.Bytes(torrent.InfoHash[:])
-		conn.write <- pp.Bytes(me.PeerId[:])
+		conn.write(pp.Bytes(torrent.InfoHash[:]))
+		conn.write(pp.Bytes(me.PeerId[:]))
 	}
 	var b [28]byte
 	_, err = io.ReadFull(conn.Socket, b[:])
@@ -375,8 +375,8 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 		if torrent == nil {
 			return
 		}
-		conn.write <- pp.Bytes(torrent.InfoHash[:])
-		conn.write <- pp.Bytes(me.PeerId[:])
+		conn.write(pp.Bytes(torrent.InfoHash[:]))
+		conn.write(pp.Bytes(me.PeerId[:]))
 	}
 	me.mu.Lock()
 	defer me.mu.Unlock()

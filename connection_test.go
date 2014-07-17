@@ -11,7 +11,7 @@ func TestCancelRequestOptimized(t *testing.T) {
 		PeerMaxRequests: 1,
 		PeerPieces:      []bool{false, true},
 		post:            make(chan peer_protocol.Message),
-		write:           make(chan []byte),
+		writeCh:         make(chan []byte),
 	}
 	if len(c.Requests) != 0 {
 		t.FailNow()
@@ -33,14 +33,14 @@ func TestCancelRequestOptimized(t *testing.T) {
 		// Let a keep-alive through to verify there were no pending messages.
 		"\x00\x00\x00\x00",
 	} {
-		bb := string(<-c.write)
+		bb := string(<-c.writeCh)
 		if b != bb {
 			t.Fatalf("received message %q is not expected: %q", bb, b)
 		}
 	}
 	close(c.post)
 	// Drain the write channel until it closes.
-	for b := range c.write {
+	for b := range c.writeCh {
 		bs := string(b)
 		if bs != "\x00\x00\x00\x00" {
 			t.Fatal("got unexpected non-keepalive")

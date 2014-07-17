@@ -29,7 +29,7 @@ type connection struct {
 	closed    bool
 	mu        sync.Mutex // Only for closing.
 	post      chan peer_protocol.Message
-	write     chan []byte
+	writeCh   chan []byte
 
 	// Stuff controlled by the local peer.
 	Interested bool
@@ -48,6 +48,12 @@ type connection struct {
 	PeerMaxRequests  int // Maximum pending requests the peer allows.
 	PeerExtensionIDs map[string]int64
 	PeerClientName   string
+}
+
+func (cn *connection) write(b []byte) {
+	cn.mu.Lock()
+	cn.writeCh <- b
+	cn.mu.Unlock()
 }
 
 func (cn *connection) completedString() string {
@@ -140,7 +146,7 @@ func (c *connection) Close() {
 	if c.post == nil {
 		// writeOptimizer isn't running, so we need to signal the writer to
 		// stop.
-		close(c.write)
+		close(c.writeCh)
 	} else {
 		// This will kill the writeOptimizer, and it kills the writer.
 		close(c.post)
@@ -274,7 +280,7 @@ var (
 
 // Writes buffers to the socket from the write channel.
 func (conn *connection) writer() {
-	for b := range conn.write {
+	for b := range conn.writeCh {
 		_, err := conn.Socket.Write(b)
 		// log.Printf("wrote %q to %s", b, conn.Socket.RemoteAddr())
 		if err != nil {
@@ -284,17 +290,18 @@ func (conn *connection) writer() {
 			break
 		}
 	}
+	conn.Close()
 }
 
 func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
-	defer close(conn.write) // Responsible for notifying downstream routines.
-	pending := list.New()   // Message queue.
-	var nextWrite []byte    // Set to nil if we need to need to marshal the next message.
+	defer close(conn.writeCh) // Responsible for notifying downstream routines.
+	pending := list.New()     // Message queue.
+	var nextWrite []byte      // Set to nil if we need to need to marshal the next message.
 	timer := time.NewTimer(keepAliveDelay)
 	defer timer.Stop()
 	lastWrite := time.Now()
 	for {
-		write := conn.write // Set to nil if there's nothing to write.
+		write := conn.writeCh // Set to nil if there's nothing to write.
 		if pending.Len() == 0 {
 			write = nil
 		} else if nextWrite == nil {

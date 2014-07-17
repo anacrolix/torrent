@@ -220,6 +220,10 @@ func (s *Server) handleQuery(source *net.UDPAddr, m Msg) {
 		})
 	case "find_node":
 		targetID := args["target"].(string)
+		if len(targetID) != 20 {
+			log.Printf("bad DHT query: %v", m)
+			return
+		}
 		var rNodes []NodeInfo
 		if node := s.nodeByID(targetID); node != nil {
 			rNodes = append(rNodes, node.NodeInfo())
@@ -271,11 +275,16 @@ func (s *Server) reply(addr *net.UDPAddr, t string, r map[string]interface{}) {
 
 func (s *Server) heardFromNode(addr *net.UDPAddr, id string) {
 	n := s.getNode(addr)
-	n.id = id
+	if len(id) == 20 {
+		n.id = id
+	}
 	n.lastHeardFrom = time.Now()
 }
 
 func (s *Server) getNode(addr *net.UDPAddr) (n *Node) {
+	if addr.Port == 0 {
+		panic(addr)
+	}
 	n = s.nodes[addr.String()]
 	if n == nil {
 		n = &Node{
@@ -526,6 +535,10 @@ func (s *Server) liftNodes(d Msg) {
 		// log.Print(err)
 	} else {
 		for _, cni := range r.Nodes {
+			if cni.Addr.Port == 0 {
+				// TODO: Why would people even do this?
+				continue
+			}
 			n := s.getNode(cni.Addr)
 			n.id = string(cni.ID[:])
 		}

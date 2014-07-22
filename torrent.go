@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"sync"
 )
 
 func (t *torrent) PieceNumPendingBytes(index pp.Integer) (count pp.Integer) {
@@ -35,14 +36,17 @@ type torrentPiece struct {
 }
 
 type torrent struct {
+	closed            bool
 	InfoHash          InfoHash
 	Pieces            []*torrentPiece
 	PiecesByBytesLeft *OrderedList
 	Data              mmap_span.MMapSpan
-	Info              *metainfo.Info
-	Conns             []*connection
-	Peers             []Peer
-	Priorities        *list.List
+	// Prevent mutations to Data memory maps while in use as they're not safe.
+	dataLock   sync.RWMutex
+	Info       *metainfo.Info
+	Conns      []*connection
+	Peers      []Peer
+	Priorities *list.List
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
 	// mirror their respective URLs from the announce-list key.
 	Trackers      [][]tracker.Client
@@ -276,8 +280,16 @@ func (t *torrent) Length() int64 {
 	return int64(t.LastPieceSize()) + int64(len(t.Pieces)-1)*int64(t.UsualPieceSize())
 }
 
+func (t *torrent) isClosed() bool {
+	return t.closed
+}
+
 func (t *torrent) Close() (err error) {
+	t.closed = true
+	t.dataLock.Lock()
 	t.Data.Close()
+	t.Data = nil
+	t.dataLock.Unlock()
 	for _, conn := range t.Conns {
 		conn.Close()
 	}
@@ -373,12 +385,14 @@ func (t *torrent) PieceLength(piece pp.Integer) (len_ pp.Integer) {
 
 func (t *torrent) HashPiece(piece pp.Integer) (ps pieceSum) {
 	hash := pieceHash.New()
+	t.dataLock.RLock()
 	n, err := t.Data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, t.Info.PieceLength)
+	t.dataLock.RUnlock()
 	if err != nil {
 		panic(err)
 	}
 	if pp.Integer(n) != t.PieceLength(piece) {
-		log.Print(t.Info)
+		// log.Print(t.Info)
 		panic(fmt.Sprintf("hashed wrong number of bytes: expected %d; did %d; piece %d", t.PieceLength(piece), n, piece))
 	}
 	copyHashSum(ps[:], hash.Sum(nil))

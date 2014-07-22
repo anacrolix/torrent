@@ -895,6 +895,22 @@ func (cl *Client) AddMagnet(uri string) (err error) {
 	return
 }
 
+func (me *Client) DropTorrent(infoHash InfoHash) (err error) {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	t, ok := me.torrents[infoHash]
+	if !ok {
+		err = fmt.Errorf("no such torrent")
+		return
+	}
+	err = t.Close()
+	if err != nil {
+		panic(err)
+	}
+	delete(me.torrents, infoHash)
+	return
+}
+
 func (me *Client) addTorrent(t *torrent) (err error) {
 	if _, ok := me.torrents[t.InfoHash]; ok {
 		err = fmt.Errorf("torrent infohash collision")
@@ -927,6 +943,15 @@ func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) (err error) {
 		return
 	}
 	return
+}
+
+func (me *Client) AddTorrentFromFile(name string) (err error) {
+	mi, err := metainfo.LoadFromFile(name)
+	if err != nil {
+		err = fmt.Errorf("error loading metainfo from file: %s", err)
+		return
+	}
+	return me.AddTorrent(mi)
 }
 
 func (cl *Client) listenerAnnouncePort() (port int16) {
@@ -1205,6 +1230,10 @@ func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 	p := t.Pieces[index]
 	for p.Hashing {
 		cl.event.Wait()
+	}
+	if t.isClosed() {
+		cl.mu.Unlock()
+		return
 	}
 	p.Hashing = true
 	p.QueuedForHash = false

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bitbucket.org/anacrolix/go.torrent/util"
+	"bitbucket.org/anacrolix/go.torrent/util/dirwatch"
 	"flag"
 	"log"
 	"net"
@@ -17,7 +19,6 @@ import (
 	fusefs "bazil.org/fuse/fs"
 	"bitbucket.org/anacrolix/go.torrent"
 	"bitbucket.org/anacrolix/go.torrent/fs"
-	"github.com/anacrolix/libtorgo/metainfo"
 )
 
 var (
@@ -68,34 +69,6 @@ func setSignalHandlers() {
 	}()
 }
 
-func addTorrent(c *torrent.Client, file string) {
-	metaInfo, err := metainfo.LoadFromFile(file)
-	if err != nil {
-		log.Print(err)
-		return
-	}
-	err = c.AddTorrent(metaInfo)
-	if err != nil {
-		log.Print(err)
-		return
-	}
-}
-
-func addTorrentDir(c *torrent.Client, _path string) {
-	torrentDir, err := os.Open(torrentPath)
-	defer torrentDir.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
-	names, err := torrentDir.Readdirnames(-1)
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, name := range names {
-		go addTorrent(c, filepath.Join(_path, name))
-	}
-}
-
 func addTestPeer(client *torrent.Client) {
 	for _, t := range client.Torrents() {
 		if testPeerAddr != nil {
@@ -140,7 +113,33 @@ func main() {
 		client.WriteStatus(w)
 	})
 	client.Start()
-	addTorrentDir(client, torrentPath)
+	dw, err := dirwatch.New(torrentPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	go func() {
+		for ev := range dw.Events {
+			switch ev.Change {
+			case dirwatch.Added:
+				if ev.TorrentFilePath != "" {
+					err := client.AddTorrentFromFile(ev.TorrentFilePath)
+					if err != nil {
+						log.Printf("error adding torrent to client: %s", err)
+					}
+				} else if ev.Magnet != "" {
+					err := client.AddMagnet(ev.Magnet)
+					if err != nil {
+						log.Printf("error adding magnet: %s", err)
+					}
+				}
+			case dirwatch.Removed:
+				err := client.DropTorrent(ev.InfoHash)
+				if err != nil {
+					log.Printf("error dropping torrent: %s", err)
+				}
+			}
+		}
+	}()
 	resolveTestPeerAddr()
 	fs := torrentfs.New(client)
 	go func() {

@@ -259,6 +259,8 @@ func (me *Client) torrent(ih InfoHash) *torrent {
 	return nil
 }
 
+// Start the process of connecting to the given peer for the given torrent if
+// appropriate.
 func (me *Client) initiateConn(peer Peer, torrent *torrent) {
 	if peer.Id == me.PeerId {
 		return
@@ -269,10 +271,11 @@ func (me *Client) initiateConn(peer Peer, torrent *torrent) {
 			IP:   peer.IP,
 			Port: peer.Port,
 		}
-		// TODO: Specify local address so that peers associate our address
-		// with our listen address.
+		// Binding to the listener address and dialing via net.Dialer gives "address in use" error. It seems it's not possible to dial out from this address so that peers associate our local address with our listen address.
 		conn, err := net.DialTimeout(addr.Network(), addr.String(), dialTimeout)
 
+		// Whether or not the connection attempt succeeds, the half open
+		// counter should be decremented, and new connection attempts made.
 		go func() {
 			me.mu.Lock()
 			defer me.mu.Unlock()
@@ -318,6 +321,22 @@ func (cl *Client) incomingPeerPort() int {
 		panic(err)
 	}
 	return i
+}
+
+// Convert a net.Addr to its compact IP representation. Either 4 or 16 bytes per "yourip" field of http://www.bittorrent.org/beps/bep_0010.html.
+func addrCompactIP(addr net.Addr) (string, error) {
+	switch typed := addr.(type) {
+	case *net.TCPAddr:
+		if v4 := typed.IP.To4(); v4 != nil {
+			if len(v4) != 4 {
+				panic(v4)
+			}
+			return string(v4), nil
+		}
+		return string(typed.IP.To16()), nil
+	default:
+		return "", fmt.Errorf("unhandled type: %T", addr)
+	}
 }
 
 func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerSource) (err error) {
@@ -403,6 +422,13 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 				if p := me.incomingPeerPort(); p != 0 {
 					d["p"] = p
 				}
+				yourip, err := addrCompactIP(conn.Socket.RemoteAddr())
+				if err != nil {
+					log.Printf("error calculating yourip field value in extension handshake: %s", err)
+				} else {
+					d["yourip"] = yourip
+				}
+				log.Printf("sending %v", d)
 				b, err := bencode.Marshal(d)
 				if err != nil {
 					panic(err)

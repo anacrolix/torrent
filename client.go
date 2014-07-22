@@ -121,7 +121,9 @@ func (cl *Client) WriteStatus(w io.Writer) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	fmt.Fprintf(w, "Half open: %d\n", cl.halfOpen)
-	fmt.Fprintf(w, "DHT nodes: %d\n", cl.DHT.NumNodes())
+	if cl.DHT != nil {
+		fmt.Fprintf(w, "DHT nodes: %d\n", cl.DHT.NumNodes())
+	}
 	fmt.Fprintln(w)
 	for _, t := range cl.torrents {
 		fmt.Fprintf(w, "%s: %f%%\n", t.Name(), func() float32 {

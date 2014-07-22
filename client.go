@@ -816,13 +816,13 @@ func (me *Client) openNewConns() {
 // Adds peers to the swarm for the torrent corresponding to infoHash.
 func (me *Client) AddPeers(infoHash InfoHash, peers []Peer) error {
 	me.mu.Lock()
+	defer me.mu.Unlock()
 	t := me.torrent(infoHash)
 	if t == nil {
 		return errors.New("no such torrent")
 	}
 	t.Peers = append(t.Peers, peers...)
 	me.openNewConns()
-	me.mu.Unlock()
 	return nil
 }
 

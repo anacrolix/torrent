@@ -174,7 +174,7 @@ func isSingleFileTorrent(md *metainfo.Info) bool {
 
 func (me rootNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err fuse.Error) {
 	for _, t := range me.fs.Client.Torrents() {
-		if t.Name() != name {
+		if t.Name() != name || t.Info == nil {
 			continue
 		}
 		__node := node{
@@ -198,6 +198,9 @@ func (me rootNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err
 func (me rootNode) ReadDir(intr fusefs.Intr) (dirents []fuse.Dirent, err fuse.Error) {
 	for _, _torrent := range me.fs.Client.Torrents() {
 		metaInfo := _torrent.Info
+		if metaInfo == nil {
+			continue
+		}
 		dirents = append(dirents, fuse.Dirent{
 			Name: metaInfo.Name,
 			Type: func() fuse.DirentType {

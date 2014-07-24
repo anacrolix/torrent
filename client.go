@@ -397,7 +397,8 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 						"ut_metadata": 1,
 						"ut_pex":      2,
 					},
-					"v": "go.torrent dev",
+					"v":    "go.torrent dev",
+					"reqq": 1,
 				}
 				if torrent.metadataSizeKnown() {
 					d["metadata_size"] = torrent.metadataSize()

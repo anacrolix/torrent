@@ -96,7 +96,13 @@ type Client struct {
 func (cl *Client) WriteStatus(w io.Writer) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	fmt.Fprintf(w, "Half open: %d\n", cl.halfOpen)
+	if cl.Listener != nil {
+		fmt.Fprintf(w, "Listening on %s\n", cl.Listener.Addr())
+	} else {
+		fmt.Fprintf(w, "No listening torrent port!\n")
+	}
+	fmt.Fprintf(w, "Peer ID: %q\n", cl.PeerId)
+	fmt.Fprintf(w, "Half open outgoing connections: %d\n", cl.halfOpen)
 	if cl.DHT != nil {
 		fmt.Fprintf(w, "DHT nodes: %d\n", cl.DHT.NumNodes())
 	}

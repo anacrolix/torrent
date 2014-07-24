@@ -30,6 +30,7 @@ var (
 	httpAddr        = flag.String("httpAddr", "localhost:0", "HTTP server bind address")
 	readaheadBytes  = flag.Int("readaheadBytes", 10*1024*1024, "bytes to readahead in each torrent from the last read piece")
 	testPeerAddr    *net.TCPAddr
+	listenAddr      = flag.String("listenAddr", ":6882", "incoming connection address")
 )
 
 func init() {
@@ -42,6 +43,14 @@ func init() {
 		return filepath.Join(_user.HomeDir, ".config/transmission/torrents")
 	}(), "torrent files in this location describe the contents of the mounted filesystem")
 	flag.StringVar(&mountDir, "mountDir", "", "location the torrent contents are made available")
+}
+
+func makeListener() net.Listener {
+	l, err := net.Listen("tcp", *listenAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return l
 }
 
 func resolveTestPeerAddr() {
@@ -107,7 +116,8 @@ func main() {
 	client := &torrent.Client{
 		DataDir:          downloadDir,
 		DisableTrackers:  *disableTrackers,
-		DownloadStrategy: &torrent.ResponsiveDownloadStrategy{*readaheadBytes},
+		DownloadStrategy: torrent.NewResponsiveDownloadStrategy(*readaheadBytes),
+		Listener:         makeListener(),
 	}
 	http.DefaultServeMux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)

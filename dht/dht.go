@@ -626,7 +626,7 @@ func (s *Server) GetPeers(infoHash string) (ps *peerStream, err error) {
 	done := make(chan struct{})
 	pending := 0
 	s.mu.Lock()
-	for _, n := range s.nodes {
+	for _, n := range s.closestGoodNodes(160, infoHash) {
 		var t *transaction
 		t, err = s.getPeers(n.addr, infoHash)
 		if err != nil {
@@ -727,8 +727,17 @@ func (s *Server) Bootstrap() (err error) {
 		}
 		s.mu.Lock()
 		// log.Printf("now have %d nodes", len(s.nodes))
-		if len(s.nodes) >= 8*160 {
+		if s.numGoodNodes() >= 160 {
 			break
+		}
+	}
+	return
+}
+
+func (s *Server) numGoodNodes() (num int) {
+	for _, n := range s.nodes {
+		if n.Good() {
+			num++
 		}
 	}
 	return

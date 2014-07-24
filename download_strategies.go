@@ -2,6 +2,7 @@ package torrent
 
 import (
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
+	"container/list"
 )
 
 type DownloadStrategy interface {
@@ -9,6 +10,9 @@ type DownloadStrategy interface {
 	TorrentStarted(t *torrent)
 	TorrentStopped(t *torrent)
 	DeleteRequest(t *torrent, r request)
+	TorrentPrioritize(t *torrent, off, _len int64)
+	TorrentGotChunk(t *torrent, r request)
+	TorrentGotPiece(t *torrent, piece int)
 }
 
 type DefaultDownloadStrategy struct {
@@ -45,11 +49,11 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 		return
 	}
 	// First request prioritized chunks.
-	for e := t.Priorities.Front(); e != nil; e = e.Next() {
-		if !addRequest(e.Value.(request)) {
-			return
-		}
-	}
+	// for e := t.Priorities.Front(); e != nil; e = e.Next() {
+	// 	if !addRequest(e.Value.(request)) {
+	// 		return
+	// 	}
+	// }
 	// Then finish off incomplete pieces in order of bytes remaining.
 	for _, heatThreshold := range []int{1, 4, 15, 60} {
 		for e := t.PiecesByBytesLeft.Front(); e != nil; e = e.Next() {
@@ -93,31 +97,68 @@ func (s *DefaultDownloadStrategy) DeleteRequest(t *torrent, r request) {
 	m[r]--
 }
 
-type ResponsiveDownloadStrategy struct {
-	// How many bytes to preemptively download starting at the beginning of
-	// the last piece read for a given torrent.
-	Readahead int
+func (me *DefaultDownloadStrategy) TorrentGotChunk(t *torrent, c request)      {}
+func (me *DefaultDownloadStrategy) TorrentGotPiece(t *torrent, piece int)      {}
+func (*DefaultDownloadStrategy) TorrentPrioritize(t *torrent, off, _len int64) {}
+
+func NewResponsiveDownloadStrategy(readahead int) *responsiveDownloadStrategy {
+	return &responsiveDownloadStrategy{
+		Readahead:     readahead,
+		lastReadPiece: make(map[*torrent]int),
+		priorities:    make(map[*torrent]*list.List),
+	}
 }
 
-func (ResponsiveDownloadStrategy) TorrentStarted(*torrent)         {}
-func (ResponsiveDownloadStrategy) TorrentStopped(*torrent)         {}
-func (ResponsiveDownloadStrategy) DeleteRequest(*torrent, request) {}
+type responsiveDownloadStrategy struct {
+	// How many bytes to preemptively download starting at the beginning of
+	// the last piece read for a given torrent.
+	Readahead     int
+	lastReadPiece map[*torrent]int
+	priorities    map[*torrent]*list.List
+}
 
-func (me *ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
-	for e := t.Priorities.Front(); e != nil; e = e.Next() {
+func (me *responsiveDownloadStrategy) TorrentStarted(t *torrent) {
+	me.priorities[t] = list.New()
+}
+
+func (me *responsiveDownloadStrategy) TorrentStopped(t *torrent) {
+	delete(me.lastReadPiece, t)
+	delete(me.priorities, t)
+}
+func (responsiveDownloadStrategy) DeleteRequest(*torrent, request) {}
+
+func (me *responsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
+	if len(c.Requests) >= (c.PeerMaxRequests+1)/2 || len(c.Requests) >= 64 {
+		return
+	}
+
+	// Short circuit request fills at a level that might reduce receiving of
+	// unnecessary chunks.
+	requestWrapper := func(r request) bool {
+		if len(c.Requests) >= 64 {
+			return false
+		}
+		return c.Request(r)
+	}
+
+	prios := me.priorities[t]
+	for e := prios.Front(); e != nil; e = e.Next() {
 		req := e.Value.(request)
 		if _, ok := t.Pieces[req.Index].PendingChunkSpecs[req.chunkSpec]; !ok {
 			panic(req)
 		}
-		if !c.Request(e.Value.(request)) {
+		if !requestWrapper(e.Value.(request)) {
 			return
 		}
 	}
-	readaheadPieces := (me.Readahead + t.UsualPieceSize() - 1) / t.UsualPieceSize()
-	for i := t.lastReadPiece; i < t.lastReadPiece+readaheadPieces && i < t.NumPieces(); i++ {
-		for _, cs := range t.Pieces[i].shuffledPendingChunkSpecs() {
-			if !c.Request(request{pp.Integer(i), cs}) {
-				return
+
+	if lastReadPiece, ok := me.lastReadPiece[t]; ok {
+		readaheadPieces := (me.Readahead + t.UsualPieceSize() - 1) / t.UsualPieceSize()
+		for i := lastReadPiece; i < lastReadPiece+readaheadPieces && i < t.NumPieces(); i++ {
+			for _, cs := range t.Pieces[i].shuffledPendingChunkSpecs() {
+				if !requestWrapper(request{pp.Integer(i), cs}) {
+					return
+				}
 			}
 		}
 	}
@@ -131,9 +172,63 @@ func (me *ResponsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 		// Request chunks in random order to reduce overlap with other
 		// connections.
 		for _, cs := range t.Pieces[index].shuffledPendingChunkSpecs() {
-			if !c.Request(request{pp.Integer(index), cs}) {
+			if !requestWrapper(request{pp.Integer(index), cs}) {
 				return
 			}
+		}
+	}
+}
+
+func (me *responsiveDownloadStrategy) TorrentGotChunk(t *torrent, req request) {
+	prios := me.priorities[t]
+	var next *list.Element
+	for e := prios.Front(); e != nil; e = next {
+		next = e.Next()
+		if e.Value.(request) == req {
+			prios.Remove(e)
+		}
+	}
+}
+
+func (me *responsiveDownloadStrategy) TorrentGotPiece(t *torrent, piece int) {
+	var next *list.Element
+	prios := me.priorities[t]
+	for e := prios.Front(); e != nil; e = next {
+		next = e.Next()
+		if int(e.Value.(request).Index) == piece {
+			prios.Remove(e)
+		}
+	}
+}
+
+func (s *responsiveDownloadStrategy) TorrentPrioritize(t *torrent, off, _len int64) {
+	newPriorities := make([]request, 0, (_len+chunkSize-1)/chunkSize)
+	for _len > 0 {
+		req, ok := t.offsetRequest(off)
+		if !ok {
+			panic("bad offset")
+		}
+		reqOff := t.requestOffset(req)
+		// Gain the alignment adjustment.
+		_len += off - reqOff
+		// Lose the length of this block.
+		_len -= int64(req.Length)
+		off = reqOff + int64(req.Length)
+		if !t.wantPiece(int(req.Index)) {
+			continue
+		}
+		newPriorities = append(newPriorities, req)
+	}
+	if len(newPriorities) == 0 {
+		return
+	}
+	s.lastReadPiece[t] = int(newPriorities[0].Index)
+	if t.wantChunk(newPriorities[0]) {
+		s.priorities[t].PushFront(newPriorities[0])
+	}
+	for _, req := range newPriorities[1:] {
+		if t.wantChunk(req) {
+			s.priorities[t].PushBack(req)
 		}
 	}
 }

@@ -19,7 +19,6 @@ import (
 	"bitbucket.org/anacrolix/go.torrent/dht"
 	"bitbucket.org/anacrolix/go.torrent/util"
 	"bufio"
-	"container/list"
 	"crypto/rand"
 	"crypto/sha1"
 	"errors"
@@ -64,30 +63,7 @@ func (me *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) error {
 	if !t.haveInfo() {
 		return errors.New("missing metadata")
 	}
-	newPriorities := make([]request, 0, (len_+chunkSize-1)/chunkSize)
-	for len_ > 0 {
-		req, ok := t.offsetRequest(off)
-		if !ok {
-			return errors.New("bad offset")
-		}
-		reqOff := t.requestOffset(req)
-		// Gain the alignment adjustment.
-		len_ += off - reqOff
-		// Lose the length of this block.
-		len_ -= int64(req.Length)
-		off = reqOff + int64(req.Length)
-		if !t.wantPiece(int(req.Index)) {
-			continue
-		}
-		newPriorities = append(newPriorities, req)
-	}
-	if len(newPriorities) == 0 {
-		return nil
-	}
-	t.Priorities.PushFront(newPriorities[0])
-	for _, req := range newPriorities[1:] {
-		t.Priorities.PushBack(req)
-	}
+	me.DownloadStrategy.TorrentPrioritize(t, off, len_)
 	for _, cn := range t.Conns {
 		me.replenishConnRequests(t, cn)
 	}
@@ -158,7 +134,6 @@ func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err er
 		err = io.EOF
 		return
 	}
-	t.lastReadPiece = int(index)
 	piece := t.Pieces[index]
 	pieceOff := pp.Integer(off % int64(t.PieceLength(0)))
 	high := int(t.PieceLength(index) - pieceOff)
@@ -1142,13 +1117,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	}
 
 	// Unprioritize the chunk.
-	var next *list.Element
-	for e := t.Priorities.Front(); e != nil; e = next {
-		next = e.Next()
-		if e.Value.(request) == req {
-			t.Priorities.Remove(e)
-		}
-	}
+	me.DownloadStrategy.TorrentGotChunk(t, req)
 
 	// Cancel pending requests for this chunk.
 	cancelled := false
@@ -1189,14 +1158,7 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 	p.EverHashed = true
 	if correct {
 		p.PendingChunkSpecs = nil
-		// log.Printf("%s: got piece %d, (%d/%d)", t, piece, t.NumPiecesCompleted(), t.NumPieces())
-		var next *list.Element
-		for e := t.Priorities.Front(); e != nil; e = next {
-			next = e.Next()
-			if e.Value.(request).Index == piece {
-				t.Priorities.Remove(e)
-			}
-		}
+		me.DownloadStrategy.TorrentGotPiece(t, int(piece))
 		me.dataReady(dataSpec{
 			t.InfoHash,
 			request{

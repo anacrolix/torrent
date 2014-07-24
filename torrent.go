@@ -42,18 +42,16 @@ type torrent struct {
 	PiecesByBytesLeft *OrderedList
 	Data              mmap_span.MMapSpan
 	// Prevent mutations to Data memory maps while in use as they're not safe.
-	dataLock   sync.RWMutex
-	Info       *metainfo.Info
-	Conns      []*connection
-	Peers      []Peer
-	Priorities *list.List
+	dataLock sync.RWMutex
+	Info     *metainfo.Info
+	Conns    []*connection
+	Peers    []Peer
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
 	// mirror their respective URLs from the announce-list key.
-	Trackers      [][]tracker.Client
-	lastReadPiece int
-	DisplayName   string
-	MetaData      []byte
-	metadataHave  []bool
+	Trackers     [][]tracker.Client
+	DisplayName  string
+	MetaData     []byte
+	metadataHave []bool
 }
 
 func (t *torrent) InvalidateMetadata() {
@@ -124,7 +122,6 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 		piece.bytesLeftElement = t.PiecesByBytesLeft.Insert(index)
 		t.pendAllChunkSpecs(pp.Integer(index))
 	}
-	t.Priorities = list.New()
 	for _, conn := range t.Conns {
 		if err := conn.setNumPieces(t.NumPieces()); err != nil {
 			log.Printf("closing connection: %s", err)
@@ -211,12 +208,12 @@ func (t *torrent) WriteStatus(w io.Writer) {
 		fmt.Fprintf(w, "%c", t.pieceStatusChar(index))
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Priorities: ")
-	if t.Priorities != nil {
-		for e := t.Priorities.Front(); e != nil; e = e.Next() {
-			fmt.Fprintf(w, "\t%v\n", e.Value)
-		}
-	}
+	// fmt.Fprintln(w, "Priorities: ")
+	// if t.Priorities != nil {
+	// 	for e := t.Priorities.Front(); e != nil; e = e.Next() {
+	// 		fmt.Fprintf(w, "\t%v\n", e.Value)
+	// 	}
+	// }
 	fmt.Fprintf(w, "Pending peers: %d\n", len(t.Peers))
 	for _, c := range t.Conns {
 		c.WriteStatus(w)
@@ -417,6 +414,14 @@ func (me *torrent) haveAnyPieces() bool {
 		}
 	}
 	return false
+}
+
+func (t *torrent) wantChunk(r request) bool {
+	if !t.wantPiece(int(r.Index)) {
+		return false
+	}
+	_, ok := t.Pieces[r.Index].PendingChunkSpecs[r.chunkSpec]
+	return ok
 }
 
 func (t *torrent) wantPiece(index int) bool {

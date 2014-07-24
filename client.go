@@ -411,7 +411,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 				} else {
 					d["yourip"] = yourip
 				}
-				log.Printf("sending %v", d)
+				// log.Printf("sending %v", d)
 				b, err := bencode.Marshal(d)
 				if err != nil {
 					panic(err)
@@ -562,6 +562,8 @@ type peerExchangeMessage struct {
 	Dropped    []tracker.Peer    `bencode:"dropped"`
 }
 
+// Processes incoming bittorrent messages. The client lock is held upon entry
+// and exit.
 func (me *Client) connectionLoop(t *torrent, c *connection) error {
 	decoder := pp.Decoder{
 		R:         bufio.NewReader(c.Socket),
@@ -658,6 +660,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 					err = fmt.Errorf("error decoding extended message payload: %s", err)
 					break
 				}
+				// log.Printf("got handshake: %v", d)
 				if reqq, ok := d["reqq"]; ok {
 					if i, ok := reqq.(int64); ok {
 						c.PeerMaxRequests = int(i)
@@ -1027,7 +1030,7 @@ newAnnounce:
 				}
 				err = cl.AddPeers(t.InfoHash, peers)
 				if err != nil {
-					log.Print(err)
+					log.Printf("error adding peers to torrent %s: %s", t, err)
 				} else {
 					log.Printf("%s: %d new peers from %s", t, len(peers), tr)
 				}

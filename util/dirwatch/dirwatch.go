@@ -2,6 +2,7 @@ package dirwatch
 
 import (
 	"bitbucket.org/anacrolix/go.torrent"
+	"bufio"
 	"github.com/anacrolix/libtorgo/metainfo"
 	"github.com/go-fsnotify/fsnotify"
 	"log"
@@ -28,6 +29,7 @@ type Instance struct {
 	dirName               string
 	Events                chan Event
 	torrentFileInfoHashes map[string]torrent.InfoHash
+	magnetFileInfoHashes  map[string]map[torrent.InfoHash]struct{}
 }
 
 func (me *Instance) handleEvents() {
@@ -55,29 +57,80 @@ func torrentFileInfoHash(fileName string) (ih torrent.InfoHash, ok bool) {
 	return
 }
 
+func magnetFileURIs(name string) (uris []string, err error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		uris = append(uris, scanner.Text())
+	}
+	err = scanner.Err()
+	return
+}
+
+func (me *Instance) removeAllFileMagnets(name string) {
+	for ih := range me.magnetFileInfoHashes[name] {
+		me.Events <- Event{
+			InfoHash: ih,
+			Change:   Removed,
+		}
+	}
+}
+
+func (me *Instance) removeTorrent(ih torrent.InfoHash) {
+	me.Events <- Event{
+		InfoHash: ih,
+		Change:   Removed,
+	}
+}
+
 func (me *Instance) processFile(name string) {
 	name = filepath.Clean(name)
 	log.Print(name)
-	if filepath.Ext(name) != ".torrent" {
+	switch filepath.Ext(name) {
+	case ".torrent":
+		ih, ok := me.torrentFileInfoHashes[name]
+		if ok {
+			me.Events <- Event{
+				TorrentFilePath: name,
+				Change:          Removed,
+				InfoHash:        ih,
+			}
+		}
+		delete(me.torrentFileInfoHashes, name)
+		ih, ok = torrentFileInfoHash(name)
+		if ok {
+			me.torrentFileInfoHashes[name] = ih
+			me.Events <- Event{
+				TorrentFilePath: name,
+				Change:          Added,
+				InfoHash:        ih,
+			}
+		}
+	case ".magnet":
+		me.removeAllFileMagnets(name)
+		uris, err := magnetFileURIs(name)
+		if err != nil {
+			log.Print(err)
+			break
+		}
+		for _, uri := range uris {
+			m, err := torrent.ParseMagnetURI(uri)
+			if err != nil {
+				log.Printf("bad magnet uri in magnet file: %s", err)
+				continue
+			}
+			me.removeTorrent(m.InfoHash)
+			me.Events <- Event{
+				Magnet: uri,
+				Change: Added,
+			}
+		}
+	default:
 		return
-	}
-	ih, ok := me.torrentFileInfoHashes[name]
-	if ok {
-		me.Events <- Event{
-			TorrentFilePath: name,
-			Change:          Removed,
-			InfoHash:        ih,
-		}
-	}
-	delete(me.torrentFileInfoHashes, name)
-	ih, ok = torrentFileInfoHash(name)
-	if ok {
-		me.torrentFileInfoHashes[name] = ih
-		me.Events <- Event{
-			TorrentFilePath: name,
-			Change:          Added,
-			InfoHash:        ih,
-		}
 	}
 }
 

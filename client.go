@@ -1008,6 +1008,9 @@ func (cl *Client) announceTorrent(t *torrent) {
 newAnnounce:
 	for {
 		cl.mu.Lock()
+		if t.isClosed() {
+			return
+		}
 		req.Left = t.BytesLeft()
 		cl.mu.Unlock()
 		for _, tier := range t.Trackers {

@@ -53,6 +53,6 @@ func main() {
 		}(netloc)
 	}
 	for _ = range pingStrAddrs {
-		log.Print(<-pingResponses)
+		log.Printf("%q", <-pingResponses)
 	}
 }

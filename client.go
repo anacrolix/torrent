@@ -20,6 +20,7 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"errors"
+	"expvar"
 	"fmt"
 	"io"
 	"log"
@@ -39,6 +40,13 @@ import (
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	_ "bitbucket.org/anacrolix/go.torrent/tracker/udp"
+)
+
+var (
+	unusedDownloadedChunksCount = expvar.NewInt("unusedDownloadedChunksCount")
+	chunksDownloadedCount       = expvar.NewInt("chunksDownloadedCount")
+	peersFoundByDHT             = expvar.NewInt("peersFoundByDHT")
+	peersFoundByPEX             = expvar.NewInt("peersFoundByPEX")
 )
 
 const extensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x00"
@@ -818,7 +826,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 						log.Printf("error adding PEX peers: %s", err)
 						return
 					}
-					log.Printf("added %d peers from PEX", len(pexMsg.Added))
+					peersFoundByPEX.Add(int64(len(pexMsg.Added)))
 				}()
 			default:
 				err = fmt.Errorf("unexpected extended message ID: %v", msg.ExtendedID)
@@ -1066,6 +1074,7 @@ func (cl *Client) announceTorrentDHT(t *torrent) {
 				if !ok {
 					break getPeers
 				}
+				peersFoundByDHT.Add(int64(len(cps)))
 				err = cl.AddPeers(t.InfoHash, func() (ret []Peer) {
 					for _, cp := range cps {
 						ret = append(ret, Peer{
@@ -1073,10 +1082,6 @@ func (cl *Client) announceTorrentDHT(t *torrent) {
 							Port:   int(cp.Port),
 							Source: peerSourceDHT,
 						})
-						// log.Printf("peer from dht: %s", &net.UDPAddr{
-						// 	IP:   cp.IP[:],
-						// 	Port: int(cp.Port),
-						// })
 					}
 					return
 				}())
@@ -1084,7 +1089,6 @@ func (cl *Client) announceTorrentDHT(t *torrent) {
 					log.Printf("error adding peers from dht for torrent %q: %s", t, err)
 					break getPeers
 				}
-				// log.Printf("got %d peers from dht for torrent %q", len(cps), t)
 			}
 		}
 		ps.Close()
@@ -1196,6 +1200,8 @@ func (me *Client) replenishConnRequests(t *torrent, c *connection) {
 }
 
 func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) error {
+	chunksDownloadedCount.Add(1)
+
 	req := newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))
 
 	// Request has been satisfied.
@@ -1205,7 +1211,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 
 	// Do we actually want this chunk?
 	if _, ok := t.Pieces[req.Index].PendingChunkSpecs[req.chunkSpec]; !ok {
-		log.Printf("got unnecessary chunk from %v: %q", req, string(c.PeerId[:]))
+		unusedDownloadedChunksCount.Add(1)
 		return nil
 	}
 

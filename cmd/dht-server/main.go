@@ -108,7 +108,7 @@ func setupSignals() {
 	signal.Notify(ch)
 	go func() {
 		<-ch
-		s.StopServing()
+		s.Close()
 	}()
 }
 

@@ -45,6 +45,9 @@ func makeSocket(addr string) (socket *net.UDPConn, err error) {
 }
 
 func NewServer(c *ServerConfig) (s *Server, err error) {
+	if c == nil {
+		c = &ServerConfig{}
+	}
 	s = &Server{}
 	s.socket, err = makeSocket(c.Addr)
 	if err != nil {
@@ -55,7 +58,15 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		return
 	}
 	go func() {
-		panic(s.serve())
+		err := s.serve()
+		select {
+		case <-s.closed:
+			return
+		default:
+		}
+		if err != nil {
+			panic(err)
+		}
 	}()
 	go func() {
 		err := s.bootstrap()
@@ -787,13 +798,13 @@ func (s *Server) Nodes() (nis []NodeInfo) {
 	return
 }
 
-func (s *Server) StopServing() {
-	s.socket.Close()
+func (s *Server) Close() {
 	s.mu.Lock()
 	select {
 	case <-s.closed:
 	default:
 		close(s.closed)
+		s.socket.Close()
 	}
 	s.mu.Unlock()
 }

@@ -123,7 +123,7 @@ func setupSignals() {
 	signal.Notify(ch, os.Interrupt)
 	go func() {
 		<-ch
-		s.StopServing()
+		s.Close()
 	}()
 }
 

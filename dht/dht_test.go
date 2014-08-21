@@ -109,3 +109,11 @@ func TestClosestNodes(t *testing.T) {
 // 		t.FailNow()
 // 	}
 // }
+
+func TestDHTDefaultConfig(t *testing.T) {
+	s, err := NewServer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+}

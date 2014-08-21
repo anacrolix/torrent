@@ -21,22 +21,10 @@ const (
 	dialTimeout = time.Second * 15
 )
 
-type InfoHash [20]byte
-
-type pieceSum [20]byte
-
-func copyHashSum(dst, src []byte) {
-	if len(dst) != len(src) || copy(dst, src) != len(dst) {
-		panic("hash sum sizes differ")
-	}
-}
-
-func BytesInfoHash(b []byte) (ih InfoHash) {
-	if len(b) != len(ih) || copy(ih[:], b) != len(ih) {
-		panic("bad infohash bytes")
-	}
-	return
-}
+type (
+	InfoHash [20]byte
+	pieceSum [20]byte
+)
 
 type piece struct {
 	Hash              pieceSum

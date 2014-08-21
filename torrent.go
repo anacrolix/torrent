@@ -117,7 +117,7 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 	})
 	for index, hash := range infoPieceHashes(&md) {
 		piece := &torrentPiece{}
-		copyHashSum(piece.Hash[:], []byte(hash))
+		util.CopyExact(piece.Hash[:], hash)
 		t.Pieces = append(t.Pieces, piece)
 		piece.bytesLeftElement = t.PiecesByBytesLeft.Insert(index)
 		t.pendAllChunkSpecs(pp.Integer(index))
@@ -392,7 +392,7 @@ func (t *torrent) HashPiece(piece pp.Integer) (ps pieceSum) {
 		// log.Print(t.Info)
 		panic(fmt.Sprintf("hashed wrong number of bytes: expected %d; did %d; piece %d", t.PieceLength(piece), n, piece))
 	}
-	copyHashSum(ps[:], hash.Sum(nil))
+	util.CopyExact(ps[:], hash.Sum(nil))
 	return
 }
 func (t *torrent) haveAllPieces() bool {

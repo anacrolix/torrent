@@ -1,10 +1,12 @@
 package torrent
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/testutil"
-	"github.com/anacrolix/libtorgo/bencode"
 	"os"
 	"testing"
+
+	"bitbucket.org/anacrolix/go.torrent/testutil"
+	"bitbucket.org/anacrolix/go.torrent/util"
+	"github.com/anacrolix/libtorgo/bencode"
 )
 
 func TestClientDefault(t *testing.T) {
@@ -36,7 +38,10 @@ func TestPieceHashSize(t *testing.T) {
 func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	tor, err := newTorrent(BytesInfoHash(mi.Info.Hash), nil)
+	tor, err := newTorrent(func() (ih InfoHash) {
+		util.CopyExact(ih[:], mi.Info.Hash)
+		return
+	}(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

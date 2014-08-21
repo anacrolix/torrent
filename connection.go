@@ -100,7 +100,7 @@ func (cn *connection) setNumPieces(num int) error {
 	if len(cn.PeerPieces) == num {
 	} else if len(cn.PeerPieces) < num {
 		cn.PeerPieces = append(cn.PeerPieces, make([]bool, num-len(cn.PeerPieces))...)
-	} else if len(cn.PeerPieces) < 8*(num+7)/8 {
+	} else if len(cn.PeerPieces) <= (num+7)/8*8 {
 		for _, have := range cn.PeerPieces[num:] {
 			if have {
 				return errors.New("peer has invalid piece")
@@ -108,7 +108,7 @@ func (cn *connection) setNumPieces(num int) error {
 		}
 		cn.PeerPieces = cn.PeerPieces[:num]
 	} else {
-		return errors.New("peer bitfield is excessively long")
+		return fmt.Errorf("peer bitfield is excessively long: expected %d, have %d", num, len(cn.PeerPieces))
 	}
 	if len(cn.PeerPieces) != num {
 		panic("wat")

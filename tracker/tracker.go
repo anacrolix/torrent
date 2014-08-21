@@ -1,9 +1,6 @@
 package tracker
 
 import (
-	"bytes"
-	"encoding"
-	"encoding/binary"
 	"errors"
 	"net"
 	"net/url"
@@ -34,18 +31,6 @@ type AnnounceEvent int32
 type Peer struct {
 	IP   net.IP
 	Port int
-}
-
-type CompactPeer struct {
-	IP   [4]byte
-	Port uint16
-}
-
-var _ encoding.BinaryUnmarshaler = &CompactPeer{}
-
-func (cp *CompactPeer) UnmarshalBinary(b []byte) (err error) {
-	err = binary.Read(bytes.NewReader(b), binary.BigEndian, cp)
-	return
 }
 
 const (

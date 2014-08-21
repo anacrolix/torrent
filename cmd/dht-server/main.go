@@ -1,14 +1,14 @@
 package main
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/dht"
 	"flag"
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"os"
 	"os/signal"
+
+	"bitbucket.org/anacrolix/go.torrent/dht"
 )
 
 type pingResponse struct {
@@ -20,7 +20,7 @@ var (
 	tableFileName = flag.String("tableFile", "", "name of file for storing node info")
 	serveAddr     = flag.String("serveAddr", ":0", "local UDP address")
 
-	s dht.Server
+	s *dht.Server
 )
 
 func loadTable() error {
@@ -61,22 +61,17 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	flag.Parse()
 	var err error
-	s.Socket, err = net.ListenUDP("udp4", func() *net.UDPAddr {
-		addr, err := net.ResolveUDPAddr("udp4", *serveAddr)
-		if err != nil {
-			log.Fatalf("error resolving serve addr: %s", err)
-		}
-		return addr
-	}())
+	s, err = dht.NewServer(&dht.ServerConfig{
+		Addr: *serveAddr,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.Init()
 	err = loadTable()
 	if err != nil {
 		log.Fatalf("error loading table: %s", err)
 	}
-	log.Printf("dht server on %s, ID is %q", s.Socket.LocalAddr(), s.IDString())
+	log.Printf("dht server on %s, ID is %q", s.LocalAddr(), s.IDString())
 	setupSignals()
 }
 
@@ -118,20 +113,8 @@ func setupSignals() {
 }
 
 func main() {
-	go func() {
-		err := s.Bootstrap()
-		if err != nil {
-			log.Printf("error bootstrapping: %s", err)
-			s.StopServing()
-		} else {
-			log.Print("bootstrapping complete")
-		}
-	}()
-	err := s.Serve()
+	select {}
 	if err := saveTable(); err != nil {
 		log.Printf("error saving node table: %s", err)
-	}
-	if err != nil {
-		log.Fatalf("error serving dht: %s", err)
 	}
 }

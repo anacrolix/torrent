@@ -1,11 +1,12 @@
 package main
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/dht"
 	"flag"
 	"log"
 	"net"
 	"os"
+
+	"bitbucket.org/anacrolix/go.torrent/dht"
 )
 
 type pingResponse struct {
@@ -21,20 +22,11 @@ func main() {
 		os.Stderr.WriteString("u must specify addrs of nodes to ping e.g. router.bittorrent.com:6881\n")
 		os.Exit(2)
 	}
-	s := dht.Server{}
-	var err error
-	s.Socket, err = net.ListenUDP("udp4", nil)
+	s, err := dht.NewServer(nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("dht server on %s", s.Socket.LocalAddr())
-	s.Init()
-	go func() {
-		err := s.Serve()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}()
+	log.Printf("dht server on %s", s.LocalAddr())
 	pingResponses := make(chan pingResponse)
 	for _, netloc := range pingStrAddrs {
 		addr, err := net.ResolveUDPAddr("udp4", netloc)

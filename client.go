@@ -16,8 +16,6 @@ Simple example:
 package torrent
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/dht"
-	"bitbucket.org/anacrolix/go.torrent/util"
 	"bufio"
 	"crypto/rand"
 	"crypto/sha1"
@@ -31,6 +29,9 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"bitbucket.org/anacrolix/go.torrent/dht"
+	. "bitbucket.org/anacrolix/go.torrent/util"
 
 	"github.com/anacrolix/libtorgo/metainfo"
 	"github.com/nsf/libtorgo/bencode"
@@ -63,7 +64,7 @@ func (me *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) error {
 	if !t.haveInfo() {
 		return errors.New("missing metadata")
 	}
-	me.DownloadStrategy.TorrentPrioritize(t, off, len_)
+	me.downloadStrategy.TorrentPrioritize(t, off, len_)
 	for _, cn := range t.Conns {
 		me.replenishConnRequests(t, cn)
 	}
@@ -76,13 +77,13 @@ type dataSpec struct {
 }
 
 type Client struct {
-	DataDir          string
-	HalfOpenLimit    int
-	PeerId           [20]byte
-	Listener         net.Listener
-	DisableTrackers  bool
-	DownloadStrategy DownloadStrategy
-	DHT              *dht.Server
+	dataDir          string
+	halfOpenLimit    int
+	peerID           [20]byte
+	listener         net.Listener
+	disableTrackers  bool
+	downloadStrategy DownloadStrategy
+	dHT              *dht.Server
 
 	mu    sync.Mutex
 	event sync.Cond
@@ -93,18 +94,23 @@ type Client struct {
 	dataWaiter chan struct{}
 }
 
+func (me *Client) ListenAddr() net.Addr {
+	return me.listener.Addr()
+}
+
 func (cl *Client) WriteStatus(w io.Writer) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	if cl.Listener != nil {
-		fmt.Fprintf(w, "Listening on %s\n", cl.Listener.Addr())
+	if cl.listener != nil {
+		fmt.Fprintf(w, "Listening on %s\n", cl.listener.Addr())
 	} else {
 		fmt.Fprintf(w, "No listening torrent port!\n")
 	}
-	fmt.Fprintf(w, "Peer ID: %q\n", cl.PeerId)
+	fmt.Fprintf(w, "Peer ID: %q\n", cl.peerID)
 	fmt.Fprintf(w, "Half open outgoing connections: %d\n", cl.halfOpen)
-	if cl.DHT != nil {
-		fmt.Fprintf(w, "DHT nodes: %d\n", cl.DHT.NumNodes())
+	if cl.dHT != nil {
+		fmt.Fprintf(w, "DHT nodes: %d\n", cl.dHT.NumNodes())
+		fmt.Fprintf(w, "DHT Server ID: %x\n", cl.dHT.IDString())
 	}
 	fmt.Fprintln(w)
 	for _, t := range cl.torrents {
@@ -164,26 +170,50 @@ func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err er
 	return t.Data.ReadAt(p, off)
 }
 
-// Starts the client. Defaults are applied. The client will begin accepting
-// connections and tracking.
-func (c *Client) Start() {
-	c.event.L = &c.mu
-	c.torrents = make(map[InfoHash]*torrent)
-	if c.HalfOpenLimit == 0 {
-		c.HalfOpenLimit = 10
+func NewClient(cfg *Config) (cl *Client, err error) {
+	if cfg == nil {
+		cfg = &Config{}
 	}
-	o := copy(c.PeerId[:], BEP20)
-	_, err := rand.Read(c.PeerId[o:])
+
+	cl = &Client{
+		disableTrackers:  cfg.DisableTrackers,
+		downloadStrategy: cfg.DownloadStrategy,
+		halfOpenLimit:    100,
+		dataDir:          cfg.DataDir,
+
+		quit:     make(chan struct{}),
+		torrents: make(map[InfoHash]*torrent),
+	}
+	cl.event.L = &cl.mu
+
+	o := copy(cl.peerID[:], BEP20)
+	_, err = rand.Read(cl.peerID[o:])
 	if err != nil {
 		panic("error generating peer id")
 	}
-	c.quit = make(chan struct{})
-	if c.DownloadStrategy == nil {
-		c.DownloadStrategy = &DefaultDownloadStrategy{}
+
+	if cl.downloadStrategy == nil {
+		cl.downloadStrategy = &DefaultDownloadStrategy{}
 	}
-	if c.Listener != nil {
-		go c.acceptConnections()
+
+	cl.listener, err = net.Listen("tcp", cfg.ListenAddr)
+	if err != nil {
+		return
 	}
+	if cl.listener != nil {
+		go cl.acceptConnections()
+	}
+
+	if !cfg.NoDHT {
+		cl.dHT, err = dht.NewServer(&dht.ServerConfig{
+			Addr: cfg.ListenAddr,
+		})
+		if err != nil {
+			return
+		}
+	}
+
+	return
 }
 
 func (cl *Client) stopped() bool {
@@ -211,7 +241,7 @@ func (me *Client) Stop() {
 
 func (cl *Client) acceptConnections() {
 	for {
-		conn, err := cl.Listener.Accept()
+		conn, err := cl.listener.Accept()
 		select {
 		case <-cl.quit:
 			if conn != nil {
@@ -245,7 +275,7 @@ func (me *Client) torrent(ih InfoHash) *torrent {
 // Start the process of connecting to the given peer for the given torrent if
 // appropriate.
 func (me *Client) initiateConn(peer Peer, torrent *torrent) {
-	if peer.Id == me.PeerId {
+	if peer.Id == me.peerID {
 		return
 	}
 	me.halfOpen++
@@ -291,10 +321,10 @@ func (me *Client) initiateConn(peer Peer, torrent *torrent) {
 }
 
 func (cl *Client) incomingPeerPort() int {
-	if cl.Listener == nil {
+	if cl.listener == nil {
 		return 0
 	}
-	_, p, err := net.SplitHostPort(cl.Listener.Addr().String())
+	_, p, err := net.SplitHostPort(cl.listener.Addr().String())
 	if err != nil {
 		panic(err)
 	}
@@ -452,7 +482,7 @@ func (me *Client) peerUnchoked(torrent *torrent, conn *connection) {
 func (cl *Client) connCancel(t *torrent, cn *connection, r request) (ok bool) {
 	ok = cn.Cancel(r)
 	if ok {
-		cl.DownloadStrategy.DeleteRequest(t, r)
+		cl.downloadStrategy.DeleteRequest(t, r)
 	}
 	return
 }
@@ -461,7 +491,7 @@ func (cl *Client) connDeleteRequest(t *torrent, cn *connection, r request) {
 	if !cn.RequestPending(r) {
 		return
 	}
-	cl.DownloadStrategy.DeleteRequest(t, r)
+	cl.downloadStrategy.DeleteRequest(t, r)
 	delete(cn.Requests, r)
 }
 
@@ -788,7 +818,7 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 func (me *Client) openNewConns() {
 	for _, t := range me.torrents {
 		for len(t.Peers) != 0 {
-			if me.halfOpen >= me.HalfOpenLimit {
+			if me.halfOpen >= me.halfOpenLimit {
 				return
 			}
 			p := t.Peers[0]
@@ -812,7 +842,7 @@ func (me *Client) AddPeers(infoHash InfoHash, peers []Peer) error {
 }
 
 func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err error) {
-	err = t.setMetadata(md, cl.DataDir, bytes)
+	err = t.setMetadata(md, cl.dataDir, bytes)
 	if err != nil {
 		return
 	}
@@ -827,7 +857,7 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 		}
 	}()
 
-	cl.DownloadStrategy.TorrentStarted(t)
+	cl.downloadStrategy.TorrentStarted(t)
 	return
 }
 
@@ -902,10 +932,10 @@ func (me *Client) addTorrent(t *torrent) (err error) {
 		return
 	}
 	me.torrents[t.InfoHash] = t
-	if !me.DisableTrackers {
+	if !me.disableTrackers {
 		go me.announceTorrent(t)
 	}
-	if me.DHT != nil {
+	if me.dHT != nil {
 		go me.announceTorrentDHT(t)
 	}
 	return
@@ -940,7 +970,7 @@ func (me *Client) AddTorrentFromFile(name string) (err error) {
 }
 
 func (cl *Client) listenerAnnouncePort() (port int16) {
-	l := cl.Listener
+	l := cl.listener
 	if l == nil {
 		return
 	}
@@ -958,7 +988,7 @@ func (cl *Client) listenerAnnouncePort() (port int16) {
 
 func (cl *Client) announceTorrentDHT(t *torrent) {
 	for {
-		ps, err := cl.DHT.GetPeers(string(t.InfoHash[:]))
+		ps, err := cl.dHT.GetPeers(string(t.InfoHash[:]))
 		if err != nil {
 			log.Printf("error getting peers from dht: %s", err)
 			return
@@ -1003,7 +1033,7 @@ func (cl *Client) announceTorrent(t *torrent) {
 		Event:    tracker.Started,
 		NumWant:  -1,
 		Port:     cl.listenerAnnouncePort(),
-		PeerId:   cl.PeerId,
+		PeerId:   cl.peerID,
 		InfoHash: t.InfoHash,
 	}
 newAnnounce:
@@ -1072,7 +1102,7 @@ func (me *Client) WaitAll() bool {
 }
 
 func (cl *Client) assertRequestHeat() {
-	dds, ok := cl.DownloadStrategy.(*DefaultDownloadStrategy)
+	dds, ok := cl.downloadStrategy.(*DefaultDownloadStrategy)
 	if !ok {
 		return
 	}
@@ -1095,7 +1125,7 @@ func (me *Client) replenishConnRequests(t *torrent, c *connection) {
 	if !t.haveInfo() {
 		return
 	}
-	me.DownloadStrategy.FillRequests(t, c)
+	me.downloadStrategy.FillRequests(t, c)
 	//me.assertRequestHeat()
 	if len(c.Requests) == 0 && !c.PeerChoked {
 		c.SetInterested(false)
@@ -1130,7 +1160,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	}
 
 	// Unprioritize the chunk.
-	me.DownloadStrategy.TorrentGotChunk(t, req)
+	me.downloadStrategy.TorrentGotChunk(t, req)
 
 	// Cancel pending requests for this chunk.
 	cancelled := false
@@ -1171,7 +1201,7 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 	p.EverHashed = true
 	if correct {
 		p.PendingChunkSpecs = nil
-		me.DownloadStrategy.TorrentGotPiece(t, int(piece))
+		me.downloadStrategy.TorrentGotPiece(t, int(piece))
 		me.dataReady(dataSpec{
 			t.InfoHash,
 			request{

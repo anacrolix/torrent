@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/dht"
-	"bitbucket.org/anacrolix/go.torrent/util"
 	"flag"
 	"fmt"
 	"log"
@@ -11,6 +9,8 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"strings"
+
+	"bitbucket.org/anacrolix/go.torrent/util"
 
 	"github.com/anacrolix/libtorgo/metainfo"
 
@@ -32,57 +32,21 @@ func init() {
 	flag.Parse()
 }
 
-func makeListener() net.Listener {
-	l, err := net.Listen("tcp", *listenAddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return l
-}
-
 func main() {
 	if *httpAddr != "" {
 		util.LoggedHTTPServe(*httpAddr)
 	}
-	dhtServer := &dht.Server{
-		Socket: func() *net.UDPConn {
-			addr, err := net.ResolveUDPAddr("udp4", *listenAddr)
-			if err != nil {
-				log.Fatalf("error resolving dht listen addr: %s", err)
-			}
-			s, err := net.ListenUDP("udp4", addr)
-			if err != nil {
-				log.Fatalf("error creating dht socket: %s", err)
-			}
-			return s
-		}(),
-	}
-	err := dhtServer.Init()
-	if err != nil {
-		log.Fatalf("error initing dht server: %s", err)
-	}
-	go func() {
-		err := dhtServer.Serve()
-		if err != nil {
-			log.Fatalf("error serving dht: %s", err)
-		}
-	}()
-	go func() {
-		err := dhtServer.Bootstrap()
-		if err != nil {
-			log.Printf("error bootstrapping dht server: %s", err)
-		}
-	}()
-	client := torrent.Client{
+	client, err := torrent.NewClient(&torrent.Config{
 		DataDir:         *downloadDir,
-		Listener:        makeListener(),
 		DisableTrackers: *disableTrackers,
-		DHT:             dhtServer,
+		ListenAddr:      *listenAddr,
+	})
+	if err != nil {
+		log.Fatalf("error creating client: %s", err)
 	}
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})
-	client.Start()
 	defer client.Stop()
 	if flag.NArg() == 0 {
 		fmt.Fprintln(os.Stderr, "no torrents specified")

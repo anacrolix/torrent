@@ -45,14 +45,6 @@ func init() {
 	flag.StringVar(&mountDir, "mountDir", "", "location the torrent contents are made available")
 }
 
-func makeListener() net.Listener {
-	l, err := net.Listen("tcp", *listenAddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return l
-}
-
 func resolveTestPeerAddr() {
 	if *testPeer == "" {
 		return
@@ -113,16 +105,15 @@ func main() {
 	// TODO: Think about the ramifications of exiting not due to a signal.
 	setSignalHandlers()
 	defer conn.Close()
-	client := &torrent.Client{
+	client, err := torrent.NewClient(&torrent.Config{
 		DataDir:          downloadDir,
 		DisableTrackers:  *disableTrackers,
 		DownloadStrategy: torrent.NewResponsiveDownloadStrategy(*readaheadBytes),
-		Listener:         makeListener(),
-	}
+		ListenAddr:       *listenAddr,
+	})
 	http.DefaultServeMux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})
-	client.Start()
 	dw, err := dirwatch.New(torrentPath)
 	if err != nil {
 		log.Fatal(err)

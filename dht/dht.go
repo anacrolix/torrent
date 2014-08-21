@@ -1,25 +1,25 @@
 package dht
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/tracker"
-	"bitbucket.org/anacrolix/go.torrent/util"
 	"crypto"
 	_ "crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/nsf/libtorgo/bencode"
 	"io"
 	"log"
 	"net"
 	"os"
 	"sync"
 	"time"
+
+	"bitbucket.org/anacrolix/go.torrent/util"
+	"github.com/nsf/libtorgo/bencode"
 )
 
 type Server struct {
-	ID               string
-	Socket           *net.UDPConn
+	id               string
+	socket           *net.UDPConn
 	transactions     []*transaction
 	transactionIDInt uint64
 	nodes            map[string]*Node // Keyed by *net.UDPAddr.String().
@@ -27,8 +27,47 @@ type Server struct {
 	closed           chan struct{}
 }
 
+type ServerConfig struct {
+	Addr string
+}
+
+func (s *Server) LocalAddr() net.Addr {
+	return s.socket.LocalAddr()
+}
+
+func makeSocket(addr string) (socket *net.UDPConn, err error) {
+	addr_, err := net.ResolveUDPAddr("", addr)
+	if err != nil {
+		return
+	}
+	socket, err = net.ListenUDP("udp", addr_)
+	return
+}
+
+func NewServer(c *ServerConfig) (s *Server, err error) {
+	s = &Server{}
+	s.socket, err = makeSocket(c.Addr)
+	if err != nil {
+		return
+	}
+	err = s.init()
+	if err != nil {
+		return
+	}
+	go func() {
+		panic(s.serve())
+	}()
+	go func() {
+		err := s.bootstrap()
+		if err != nil {
+			panic(err)
+		}
+	}()
+	return
+}
+
 func (s *Server) String() string {
-	return fmt.Sprintf("dht server on %s", s.Socket.LocalAddr())
+	return fmt.Sprintf("dht server on %s", s.socket.LocalAddr())
 }
 
 type Node struct {
@@ -96,25 +135,14 @@ func (t *transaction) handleResponse(m Msg) {
 }
 
 func (s *Server) setDefaults() (err error) {
-	if s.Socket == nil {
-		var addr *net.UDPAddr
-		addr, err = net.ResolveUDPAddr("", ":6882")
-		if err != nil {
-			return
-		}
-		s.Socket, err = net.ListenUDP("udp", addr)
-		if err != nil {
-			return
-		}
-	}
-	if s.ID == "" {
+	if s.id == "" {
 		var id [20]byte
 		h := crypto.SHA1.New()
 		ss, err := os.Hostname()
 		if err != nil {
 			log.Print(err)
 		}
-		ss += s.Socket.LocalAddr().String()
+		ss += s.socket.LocalAddr().String()
 		h.Write([]byte(ss))
 		if b := h.Sum(id[:0:20]); len(b) != 20 {
 			panic(len(b))
@@ -122,13 +150,13 @@ func (s *Server) setDefaults() (err error) {
 		if len(id) != 20 {
 			panic(len(id))
 		}
-		s.ID = string(id[:])
+		s.id = string(id[:])
 	}
 	s.nodes = make(map[string]*Node, 10000)
 	return
 }
 
-func (s *Server) Init() (err error) {
+func (s *Server) init() (err error) {
 	err = s.setDefaults()
 	if err != nil {
 		return
@@ -137,10 +165,10 @@ func (s *Server) Init() (err error) {
 	return
 }
 
-func (s *Server) Serve() error {
+func (s *Server) serve() error {
 	for {
 		var b [0x10000]byte
-		n, addr, err := s.Socket.ReadFromUDP(b[:])
+		n, addr, err := s.socket.ReadFromUDP(b[:])
 		if err != nil {
 			return err
 		}
@@ -296,7 +324,7 @@ func (s *Server) getNode(addr *net.UDPAddr) (n *Node) {
 }
 
 func (s *Server) writeToNode(b []byte, node *net.UDPAddr) (err error) {
-	n, err := s.Socket.WriteTo(b, node)
+	n, err := s.socket.WriteTo(b, node)
 	if err != nil {
 		err = fmt.Errorf("error writing %d bytes to %s: %s", len(b), node, err)
 		return
@@ -347,10 +375,10 @@ func (s *Server) addTransaction(t *transaction) {
 }
 
 func (s *Server) IDString() string {
-	if len(s.ID) != 20 {
+	if len(s.id) != 20 {
 		panic("bad node id")
 	}
-	return s.ID
+	return s.id
 }
 
 func (s *Server) timeoutTransaction(t *transaction) {
@@ -560,14 +588,9 @@ func (s *Server) findNode(addr *net.UDPAddr, targetID string) (t *transaction, e
 	return
 }
 
-type getPeersResponse struct {
-	Values []tracker.CompactPeer `bencode:"values"`
-	Nodes  util.CompactPeers     `bencode:"nodes"`
-}
-
 type peerStream struct {
 	mu     sync.Mutex
-	Values chan []tracker.CompactPeer
+	Values chan []util.CompactPeer
 	stop   chan struct{}
 }
 
@@ -577,12 +600,11 @@ func (ps *peerStream) Close() {
 	case <-ps.stop:
 	default:
 		close(ps.stop)
-		close(ps.Values)
 	}
 	ps.mu.Unlock()
 }
 
-func extractValues(m Msg) (vs []tracker.CompactPeer) {
+func extractValues(m Msg) (vs []util.CompactPeer) {
 	r, ok := m["r"]
 	if !ok {
 		return
@@ -595,19 +617,17 @@ func extractValues(m Msg) (vs []tracker.CompactPeer) {
 	if !ok {
 		return
 	}
-	// log.Fatal(m)
 	vl, ok := v.([]interface{})
 	if !ok {
 		panic(v)
 	}
-	vs = make([]tracker.CompactPeer, 0, len(vl))
+	vs = make([]util.CompactPeer, 0, len(vl))
 	for _, i := range vl {
-		// log.Printf("%T", i)
 		s, ok := i.(string)
 		if !ok {
 			panic(i)
 		}
-		var cp tracker.CompactPeer
+		var cp util.CompactPeer
 		err := cp.UnmarshalBinary([]byte(s))
 		if err != nil {
 			log.Printf("error decoding values list element: %s", err)
@@ -620,7 +640,7 @@ func extractValues(m Msg) (vs []tracker.CompactPeer) {
 
 func (s *Server) GetPeers(infoHash string) (ps *peerStream, err error) {
 	ps = &peerStream{
-		Values: make(chan []tracker.CompactPeer),
+		Values: make(chan []util.CompactPeer),
 		stop:   make(chan struct{}),
 	}
 	done := make(chan struct{})
@@ -657,7 +677,7 @@ func (s *Server) GetPeers(infoHash string) (ps *peerStream, err error) {
 			case <-s.closed:
 			}
 		}
-		ps.Close()
+		close(ps.Values)
 	}()
 	return
 }
@@ -689,7 +709,7 @@ func (s *Server) addRootNode() error {
 }
 
 // Populates the node table.
-func (s *Server) Bootstrap() (err error) {
+func (s *Server) bootstrap() (err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.nodes) == 0 {
@@ -702,7 +722,7 @@ func (s *Server) Bootstrap() (err error) {
 		var outstanding sync.WaitGroup
 		for _, node := range s.nodes {
 			var t *transaction
-			t, err = s.findNode(node.addr, s.ID)
+			t, err = s.findNode(node.addr, s.id)
 			if err != nil {
 				return
 			}
@@ -768,7 +788,7 @@ func (s *Server) Nodes() (nis []NodeInfo) {
 }
 
 func (s *Server) StopServing() {
-	s.Socket.Close()
+	s.socket.Close()
 	s.mu.Lock()
 	select {
 	case <-s.closed:

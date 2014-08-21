@@ -7,6 +7,14 @@ import (
 	"testing"
 )
 
+func TestClientDefault(t *testing.T) {
+	cl, err := NewClient(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cl.Stop()
+}
+
 func TestAddTorrentNoSupportedTrackerSchemes(t *testing.T) {
 	t.SkipNow()
 }

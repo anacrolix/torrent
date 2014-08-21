@@ -1,9 +1,6 @@
 package main
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/dht"
-	"bitbucket.org/anacrolix/go.torrent/tracker"
-	_ "bitbucket.org/anacrolix/go.torrent/util/profile"
 	"flag"
 	"fmt"
 	"io"
@@ -11,6 +8,11 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"time"
+
+	"bitbucket.org/anacrolix/go.torrent/dht"
+	"bitbucket.org/anacrolix/go.torrent/util"
+	_ "bitbucket.org/anacrolix/go.torrent/util/profile"
 )
 
 type pingResponse struct {
@@ -23,7 +25,7 @@ var (
 	serveAddr     = flag.String("serveAddr", ":0", "local UDP address")
 	infoHash      = flag.String("infoHash", "", "torrent infohash")
 
-	s dht.Server
+	s *dht.Server
 )
 
 func loadTable() error {
@@ -74,22 +76,17 @@ func init() {
 		log.Fatal("require 20 byte infohash")
 	}
 	var err error
-	s.Socket, err = net.ListenUDP("udp4", func() *net.UDPAddr {
-		addr, err := net.ResolveUDPAddr("udp4", *serveAddr)
-		if err != nil {
-			log.Fatalf("error resolving serve addr: %s", err)
-		}
-		return addr
-	}())
+	s, err = dht.NewServer(&dht.ServerConfig{
+		Addr: *serveAddr,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.Init()
 	err = loadTable()
 	if err != nil {
 		log.Fatalf("error loading table: %s", err)
 	}
-	log.Printf("dht server on %s, ID is %q", s.Socket.LocalAddr(), s.IDString())
+	log.Printf("dht server on %s, ID is %q", s.LocalAddr(), s.IDString())
 	setupSignals()
 }
 
@@ -131,36 +128,29 @@ func setupSignals() {
 }
 
 func main() {
-	go func() {
-		defer s.StopServing()
-		if err := s.Bootstrap(); err != nil {
-			log.Printf("error bootstrapping: %s", err)
-			return
-		}
-		saveTable()
+	seen := make(map[util.CompactPeer]struct{})
+	for {
 		ps, err := s.GetPeers(*infoHash)
 		if err != nil {
 			log.Fatal(err)
 		}
-		seen := make(map[tracker.CompactPeer]struct{})
-		for sl := range ps.Values {
-			for _, p := range sl {
-				if _, ok := seen[p]; ok {
-					continue
+		go func() {
+			for sl := range ps.Values {
+				for _, p := range sl {
+					if _, ok := seen[p]; ok {
+						continue
+					}
+					seen[p] = struct{}{}
+					fmt.Println((&net.UDPAddr{
+						IP:   p.IP[:],
+						Port: int(p.Port),
+					}).String())
 				}
-				seen[p] = struct{}{}
-				fmt.Println((&net.UDPAddr{
-					IP:   p.IP[:],
-					Port: int(p.Port),
-				}).String())
 			}
-		}
-	}()
-	err := s.Serve()
+		}()
+		time.Sleep(15 * time.Second)
+	}
 	if err := saveTable(); err != nil {
 		log.Printf("error saving node table: %s", err)
-	}
-	if err != nil {
-		log.Fatalf("error serving dht: %s", err)
 	}
 }

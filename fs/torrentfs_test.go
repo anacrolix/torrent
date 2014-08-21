@@ -6,18 +6,25 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"bitbucket.org/anacrolix/go.torrent"
 	"bitbucket.org/anacrolix/go.torrent/testutil"
+	"bitbucket.org/anacrolix/go.torrent/util"
+	"github.com/anacrolix/libtorgo/metainfo"
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	"bitbucket.org/anacrolix/go.torrent"
-	"github.com/anacrolix/libtorgo/metainfo"
 )
+
+func init() {
+	go http.ListenAndServe(":6061", nil)
+}
 
 func TestTCPAddrString(t *testing.T) {
 	ta := &net.TCPAddr{
@@ -65,6 +72,7 @@ func newGreetingLayout() (tl testLayout, err error) {
 	metaInfoBuf := &bytes.Buffer{}
 	testutil.CreateMetaInfo(name, metaInfoBuf)
 	tl.Metainfo, err = metainfo.Load(metaInfoBuf)
+	log.Printf("%x", tl.Metainfo.Info.Pieces)
 	return
 }
 
@@ -79,14 +87,14 @@ func TestUnmountWedged(t *testing.T) {
 			t.Log(err)
 		}
 	}()
-	client := torrent.Client{
+	client, err := torrent.NewClient(&torrent.Config{
 		DataDir:         filepath.Join(layout.BaseDir, "incomplete"),
 		DisableTrackers: true,
-	}
-	client.Start()
+		NoDHT:           true,
+	})
 	log.Printf("%+v", *layout.Metainfo)
 	client.AddTorrent(layout.Metainfo)
-	fs := New(&client)
+	fs := New(client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
 	if err != nil {
 		t.Fatal(err)
@@ -125,40 +133,40 @@ func TestDownloadOnDemand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seeder := torrent.Client{
-		DataDir: layout.Completed,
-		Listener: func() net.Listener {
-			conn, err := net.Listen("tcp", ":0")
-			if err != nil {
-				panic(err)
-			}
-			return conn
-		}(),
+	seeder, err := torrent.NewClient(&torrent.Config{
+		DataDir:         layout.Completed,
 		DisableTrackers: true,
-	}
-	defer seeder.Listener.Close()
-	seeder.Start()
+		NoDHT:           true,
+	})
+	http.HandleFunc("/seeder", func(w http.ResponseWriter, req *http.Request) {
+		seeder.WriteStatus(w)
+	})
 	defer seeder.Stop()
 	err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%x", layout.Metainfo.Info.Hash))
 	if err != nil {
 		t.Fatal(err)
 	}
-	leecher := torrent.Client{
+	leecher, err := torrent.NewClient(&torrent.Config{
 		DataDir:          filepath.Join(layout.BaseDir, "download"),
-		DownloadStrategy: &torrent.ResponsiveDownloadStrategy{},
+		DownloadStrategy: torrent.NewResponsiveDownloadStrategy(0),
 		DisableTrackers:  true,
-	}
-	leecher.Start()
+		NoDHT:            true,
+	})
+	http.HandleFunc("/leecher", func(w http.ResponseWriter, req *http.Request) {
+		leecher.WriteStatus(w)
+	})
 	defer leecher.Stop()
 	leecher.AddTorrent(layout.Metainfo)
-	leecher.AddPeers(torrent.BytesInfoHash(layout.Metainfo.Info.Hash), []torrent.Peer{func() torrent.Peer {
-		tcpAddr := seeder.Listener.Addr().(*net.TCPAddr)
+	var ih torrent.InfoHash
+	util.CopyExact(ih[:], layout.Metainfo.Info.Hash)
+	leecher.AddPeers(ih, []torrent.Peer{func() torrent.Peer {
+		tcpAddr := seeder.ListenAddr().(*net.TCPAddr)
 		return torrent.Peer{
 			IP:   tcpAddr.IP,
 			Port: tcpAddr.Port,
 		}
 	}()})
-	fs := New(&leecher)
+	fs := New(leecher)
 	mountDir := layout.MountDir
 	fuseConn, err := fuse.Mount(layout.MountDir)
 	if err != nil {

@@ -358,24 +358,30 @@ func (t *torrent) bitfield() (bf []bool) {
 	return
 }
 
+func (t *torrent) pieceChunks(piece int) (css []chunkSpec) {
+	css = make([]chunkSpec, 0, (t.PieceLength(pp.Integer(piece))+chunkSize-1)/chunkSize)
+	var cs chunkSpec
+	for left := t.PieceLength(pp.Integer(piece)); left != 0; left -= cs.Length {
+		cs.Length = left
+		if cs.Length > chunkSize {
+			cs.Length = chunkSize
+		}
+		css = append(css, cs)
+		cs.Begin += cs.Length
+	}
+	return
+}
+
 func (t *torrent) pendAllChunkSpecs(index pp.Integer) {
 	piece := t.Pieces[index]
 	if piece.PendingChunkSpecs == nil {
 		piece.PendingChunkSpecs = make(
 			map[chunkSpec]struct{},
-			(t.Info.PieceLength+chunkSize-1)/chunkSize)
+			(t.PieceLength(index)+chunkSize-1)/chunkSize)
 	}
-	c := chunkSpec{
-		Begin: 0,
-	}
-	cs := piece.PendingChunkSpecs
-	for left := pp.Integer(t.PieceLength(index)); left != 0; left -= c.Length {
-		c.Length = left
-		if c.Length > chunkSize {
-			c.Length = chunkSize
-		}
-		cs[c] = struct{}{}
-		c.Begin += c.Length
+	pcss := piece.PendingChunkSpecs
+	for _, cs := range t.pieceChunks(int(index)) {
+		pcss[cs] = struct{}{}
 	}
 	t.PiecesByBytesLeft.ValueChanged(piece.bytesLeftElement)
 	return

@@ -41,6 +41,8 @@ import (
 	_ "bitbucket.org/anacrolix/go.torrent/tracker/udp"
 )
 
+const extensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x00"
+
 // Currently doesn't really queue, but should in the future.
 func (cl *Client) queuePieceCheck(t *torrent, pieceIndex pp.Integer) {
 	piece := t.Pieces[pieceIndex]
@@ -284,7 +286,10 @@ func (me *Client) initiateConn(peer Peer, torrent *torrent) {
 			IP:   peer.IP,
 			Port: peer.Port,
 		}
-		// Binding to the listener address and dialing via net.Dialer gives "address in use" error. It seems it's not possible to dial out from this address so that peers associate our local address with our listen address.
+		// Binding to the listener address and dialing via net.Dialer gives
+		// "address in use" error. It seems it's not possible to dial out from
+		// this address so that peers associate our local address with our
+		// listen address.
 		conn, err := net.DialTimeout(addr.Network(), addr.String(), dialTimeout)
 
 		// Whether or not the connection attempt succeeds, the half open
@@ -352,72 +357,115 @@ func addrCompactIP(addr net.Addr) (string, error) {
 	}
 }
 
-func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerSource) (err error) {
-	conn := &connection{
-		Discovery:       discovery,
-		Socket:          sock,
-		Choked:          true,
-		PeerChoked:      true,
-		writeCh:         make(chan []byte),
-		PeerMaxRequests: 250, // Default in libtorrent is 250.
+func handshakeWriter(w io.WriteCloser, bb <-chan []byte, done chan<- error) {
+	var err error
+	for b := range bb {
+		_, err = w.Write(b)
+		if err != nil {
+			w.Close()
+			break
+		}
 	}
-	go conn.writer()
+	done <- err
+}
+
+type peerExtensionBytes [8]byte
+type peerID [20]byte
+
+type handshakeResult struct {
+	peerExtensionBytes
+	peerID
+	InfoHash
+}
+
+func handshake(sock io.ReadWriteCloser, ih *InfoHash, peerID [20]byte) (res handshakeResult, ok bool, err error) {
+	// Bytes to be sent to the peer. Should never block the sender.
+	postCh := make(chan []byte, 4)
+	// A single error value sent when the writer completes.
+	writeDone := make(chan error, 1)
+	// Performs writes to the socket and ensures posts don't block.
+	go handshakeWriter(sock, postCh, writeDone)
+
 	defer func() {
-		// There's a lock and deferred unlock later in this function. The
-		// client will not be locked when this deferred is invoked.
-		me.mu.Lock()
-		defer me.mu.Unlock()
-		conn.Close()
+		close(postCh) // Done writing.
+		if !ok {
+			return
+		}
+		if err != nil {
+			panic(err)
+		}
+		// Wait until writes complete before returning from handshake.
+		err = <-writeDone
+		if err != nil {
+			err = fmt.Errorf("error writing during handshake: %s", err)
+		}
 	}()
-	// go conn.writeOptimizer()
-	conn.write(pp.Bytes(pp.Protocol))
-	conn.write(pp.Bytes("\x00\x00\x00\x00\x00\x10\x00\x00"))
-	if torrent != nil {
-		conn.write(pp.Bytes(torrent.InfoHash[:]))
-		conn.write(pp.Bytes(me.PeerId[:]))
+
+	post := func(bb []byte) {
+		select {
+		case postCh <- bb:
+		default:
+			panic("mustn't block while posting")
+		}
 	}
-	var b [28]byte
-	_, err = io.ReadFull(conn.Socket, b[:])
-	if err == io.EOF {
-		return nil
+
+	post([]byte(pp.Protocol))
+	post([]byte(extensionBytes))
+	if ih != nil { // We already know what we want.
+		post(ih[:])
+		post(peerID[:])
 	}
+	var b [68]byte
+	_, err = io.ReadFull(sock, b[:68])
 	if err != nil {
-		err = fmt.Errorf("when reading protocol and extensions: %s", err)
+		err = nil
 		return
 	}
 	if string(b[:20]) != pp.Protocol {
-		// err = fmt.Errorf("wrong protocol: %#v", string(b[:20]))
 		return
 	}
-	if 8 != copy(conn.PeerExtensions[:], b[20:]) {
-		panic("wtf")
+	copy(res.peerExtensionBytes[:], b[20:28])
+	copy(res.InfoHash[:], b[28:48])
+	copy(res.peerID[:], b[48:68])
+
+	if ih == nil { // We were waiting for the peer to tell us what they wanted.
+		post(res.InfoHash[:])
+		post(peerID[:])
 	}
-	// log.Printf("peer extensions: %#v", string(conn.PeerExtensions[:]))
-	var infoHash [20]byte
-	_, err = io.ReadFull(conn.Socket, infoHash[:])
-	if err != nil {
-		return fmt.Errorf("reading peer info hash: %s", err)
-	}
-	_, err = io.ReadFull(conn.Socket, conn.PeerId[:])
-	if err != nil {
-		return fmt.Errorf("reading peer id: %s", err)
-	}
-	if torrent == nil {
-		torrent = me.torrent(infoHash)
+
+	ok = true
+	return
+}
+
+func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerSource) (err error) {
+	defer sock.Close()
+	hsRes, ok, err := handshake(sock, func() *InfoHash {
 		if torrent == nil {
-			return
+			return nil
+		} else {
+			return &torrent.InfoHash
 		}
-		conn.write(pp.Bytes(torrent.InfoHash[:]))
-		conn.write(pp.Bytes(me.PeerId[:]))
+	}(), me.peerID)
+	if err != nil {
+		err = fmt.Errorf("error during handshake: %s", err)
+		return
+	}
+	if !ok {
+		return
 	}
 	me.mu.Lock()
 	defer me.mu.Unlock()
+	torrent = me.torrent(hsRes.InfoHash)
+	if torrent == nil {
+		return
+	}
+	conn := newConnection(sock, hsRes.peerExtensionBytes, hsRes.peerID)
+	defer conn.Close()
+	conn.Discovery = discovery
 	if !me.addConnection(torrent, conn) {
 		return
 	}
-	conn.post = make(chan pp.Message)
-	go conn.writeOptimizer(time.Minute)
-	if conn.PeerExtensions[5]&0x10 != 0 {
+	if conn.PeerExtensionBytes[5]&0x10 != 0 {
 		conn.Post(pp.Message{
 			Type:       pp.Extended,
 			ExtendedID: pp.HandshakeExtendedID,
@@ -459,7 +507,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 	}
 	err = me.connectionLoop(torrent, conn)
 	if err != nil {
-		err = fmt.Errorf("during Connection loop: %s", err)
+		err = fmt.Errorf("during Connection loop with peer %q: %s", conn.PeerID, err)
 	}
 	me.dropConnection(torrent, conn)
 	return
@@ -527,7 +575,7 @@ func (cl *Client) completedMetadata(t *torrent) {
 	h := sha1.New()
 	h.Write(t.MetaData)
 	var ih InfoHash
-	copy(ih[:], h.Sum(nil)[:])
+	CopyExact(&ih, h.Sum(nil))
 	if ih != t.InfoHash {
 		log.Print("bad metadata")
 		t.InvalidateMetadata()
@@ -551,6 +599,7 @@ func (cl *Client) completedMetadata(t *torrent) {
 	log.Printf("%s: got metadata from peers", t)
 }
 
+// Process incoming ut_metadata message.
 func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connection) (err error) {
 	var d map[string]int
 	err = bencode.Unmarshal(payload, &d)
@@ -579,7 +628,8 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 			c.Post(t.NewMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
 			break
 		}
-		c.Post(t.NewMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.MetaData[(1<<14)*piece:(1<<14)*piece+t.metadataPieceSize(piece)]))
+		start := (1 << 14) * piece
+		c.Post(t.NewMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.MetaData[start:start+t.metadataPieceSize(piece)]))
 	case pp.RejectMetadataExtensionMsgType:
 	default:
 		err = errors.New("unknown msg_type value")
@@ -588,9 +638,9 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 }
 
 type peerExchangeMessage struct {
-	Added      util.CompactPeers `bencode:"added"`
-	AddedFlags []byte            `bencode:"added.f"`
-	Dropped    []tracker.Peer    `bencode:"dropped"`
+	Added      CompactPeers   `bencode:"added"`
+	AddedFlags []byte         `bencode:"added.f"`
+	Dropped    []tracker.Peer `bencode:"dropped"`
 }
 
 // Processes incoming bittorrent messages. The client lock is held upon entry
@@ -605,7 +655,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		var msg pp.Message
 		err := decoder.Decode(&msg)
 		me.mu.Lock()
-		if c.closed {
+		if c.getClosed() {
 			return nil
 		}
 		if err != nil {
@@ -773,6 +823,9 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			default:
 				err = fmt.Errorf("unexpected extended message ID: %v", msg.ExtendedID)
 			}
+			if err != nil {
+				log.Printf("peer extension map: %#v", c.PeerExtensionIDs)
+			}
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}
@@ -806,7 +859,7 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 		return false
 	}
 	for _, c0 := range t.Conns {
-		if c.PeerId == c0.PeerId {
+		if c.PeerID == c0.PeerID {
 			// Already connected to a client with that ID.
 			return false
 		}

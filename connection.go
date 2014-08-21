@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
+	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 )
 
 type peerSource byte
@@ -26,9 +26,9 @@ const (
 type connection struct {
 	Socket    net.Conn
 	Discovery peerSource
-	closed    bool
+	closed    chan struct{}
 	mu        sync.Mutex // Only for closing.
-	post      chan peer_protocol.Message
+	post      chan pp.Message
 	writeCh   chan []byte
 
 	// Stuff controlled by the local peer.
@@ -37,11 +37,11 @@ type connection struct {
 	Requests   map[request]struct{}
 
 	// Stuff controlled by the remote peer.
-	PeerId         [20]byte
-	PeerInterested bool
-	PeerChoked     bool
-	PeerRequests   map[request]struct{}
-	PeerExtensions [8]byte
+	PeerID             [20]byte
+	PeerInterested     bool
+	PeerChoked         bool
+	PeerRequests       map[request]struct{}
+	PeerExtensionBytes peerExtensionBytes
 	// Whether the peer has the given piece. nil if they've not sent any
 	// related messages yet.
 	PeerPieces       []bool
@@ -50,10 +50,22 @@ type connection struct {
 	PeerClientName   string
 }
 
-func (cn *connection) write(b []byte) {
-	cn.mu.Lock()
-	cn.writeCh <- b
-	cn.mu.Unlock()
+func newConnection(sock net.Conn, peb peerExtensionBytes, peerID [20]byte) (c *connection) {
+	c = &connection{
+		Socket:             sock,
+		Choked:             true,
+		PeerChoked:         true,
+		PeerMaxRequests:    250,
+		PeerExtensionBytes: peb,
+		PeerID:             peerID,
+
+		closed:  make(chan struct{}),
+		writeCh: make(chan []byte),
+		post:    make(chan pp.Message),
+	}
+	go c.writer()
+	go c.writeOptimizer(time.Minute)
+	return
 }
 
 func (cn *connection) completedString() string {
@@ -105,7 +117,7 @@ func (cn *connection) setNumPieces(num int) error {
 }
 
 func (cn *connection) WriteStatus(w io.Writer) {
-	fmt.Fprintf(w, "%q: %s-%s: %s completed, reqs: %d-%d, flags: ", cn.PeerId, cn.Socket.LocalAddr(), cn.Socket.RemoteAddr(), cn.completedString(), len(cn.Requests), len(cn.PeerRequests))
+	fmt.Fprintf(w, "%q: %s-%s: %s completed, reqs: %d-%d, flags: ", cn.PeerID, cn.Socket.LocalAddr(), cn.Socket.RemoteAddr(), cn.completedString(), len(cn.Requests), len(cn.PeerRequests))
 	c := func(b byte) {
 		fmt.Fprintf(w, "%c", b)
 	}
@@ -139,28 +151,23 @@ func (cn *connection) WriteStatus(w io.Writer) {
 func (c *connection) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed {
+	if c.getClosed() {
 		return
 	}
+	close(c.closed)
 	c.Socket.Close()
-	if c.post == nil {
-		// writeOptimizer isn't running, so we need to signal the writer to
-		// stop.
-		close(c.writeCh)
-	} else {
-		// This will kill the writeOptimizer, and it kills the writer.
-		close(c.post)
-	}
-	c.closed = true
 }
 
 func (c *connection) getClosed() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.closed
+	select {
+	case <-c.closed:
+		return true
+	default:
+		return false
+	}
 }
 
-func (c *connection) PeerHasPiece(index peer_protocol.Integer) bool {
+func (c *connection) PeerHasPiece(index pp.Integer) bool {
 	if c.PeerPieces == nil {
 		return false
 	}
@@ -170,8 +177,11 @@ func (c *connection) PeerHasPiece(index peer_protocol.Integer) bool {
 	return c.PeerPieces[index]
 }
 
-func (c *connection) Post(msg peer_protocol.Message) {
-	c.post <- msg
+func (c *connection) Post(msg pp.Message) {
+	select {
+	case c.post <- msg:
+	case <-c.closed:
+	}
 }
 
 func (c *connection) RequestPending(r request) bool {
@@ -198,8 +208,8 @@ func (c *connection) Request(chunk request) bool {
 		c.Requests = make(map[request]struct{}, c.PeerMaxRequests)
 	}
 	c.Requests[chunk] = struct{}{}
-	c.Post(peer_protocol.Message{
-		Type:   peer_protocol.Request,
+	c.Post(pp.Message{
+		Type:   pp.Request,
 		Index:  chunk.Index,
 		Begin:  chunk.Begin,
 		Length: chunk.Length,
@@ -216,8 +226,8 @@ func (c *connection) Cancel(r request) bool {
 		return false
 	}
 	delete(c.Requests, r)
-	c.Post(peer_protocol.Message{
-		Type:   peer_protocol.Cancel,
+	c.Post(pp.Message{
+		Type:   pp.Cancel,
 		Index:  r.Index,
 		Begin:  r.Begin,
 		Length: r.Length,
@@ -241,8 +251,8 @@ func (c *connection) Choke() {
 	if c.Choked {
 		return
 	}
-	c.Post(peer_protocol.Message{
-		Type: peer_protocol.Choke,
+	c.Post(pp.Message{
+		Type: pp.Choke,
 	})
 	c.Choked = true
 }
@@ -251,8 +261,8 @@ func (c *connection) Unchoke() {
 	if !c.Choked {
 		return
 	}
-	c.Post(peer_protocol.Message{
-		Type: peer_protocol.Unchoke,
+	c.Post(pp.Message{
+		Type: pp.Unchoke,
 	})
 	c.Choked = false
 }
@@ -261,12 +271,12 @@ func (c *connection) SetInterested(interested bool) {
 	if c.Interested == interested {
 		return
 	}
-	c.Post(peer_protocol.Message{
-		Type: func() peer_protocol.MessageType {
+	c.Post(pp.Message{
+		Type: func() pp.MessageType {
 			if interested {
-				return peer_protocol.Interested
+				return pp.Interested
 			} else {
-				return peer_protocol.NotInterested
+				return pp.NotInterested
 			}
 		}(),
 	})
@@ -280,17 +290,21 @@ var (
 
 // Writes buffers to the socket from the write channel.
 func (conn *connection) writer() {
-	for b := range conn.writeCh {
-		_, err := conn.Socket.Write(b)
-		// log.Printf("wrote %q to %s", b, conn.Socket.RemoteAddr())
-		if err != nil {
-			if !conn.getClosed() {
-				log.Print(err)
+	for {
+		select {
+		case b, ok := <-conn.writeCh:
+			if !ok {
+				return
 			}
-			break
+			_, err := conn.Socket.Write(b)
+			if err != nil {
+				conn.Close()
+				return
+			}
+		case <-conn.closed:
+			return
 		}
 	}
-	conn.Close()
 }
 
 func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
@@ -322,15 +336,15 @@ func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
 				timer.Reset(keepAliveTime.Sub(time.Now()))
 				break
 			}
-			pending.PushBack(peer_protocol.Message{Keepalive: true})
+			pending.PushBack(pp.Message{Keepalive: true})
 		case msg, ok := <-conn.post:
 			if !ok {
 				return
 			}
-			if msg.Type == peer_protocol.Cancel {
+			if msg.Type == pp.Cancel {
 				for e := pending.Back(); e != nil; e = e.Prev() {
-					elemMsg := e.Value.(peer_protocol.Message)
-					if elemMsg.Type == peer_protocol.Request && msg.Index == elemMsg.Index && msg.Begin == elemMsg.Begin && msg.Length == elemMsg.Length {
+					elemMsg := e.Value.(pp.Message)
+					if elemMsg.Type == pp.Request && msg.Index == elemMsg.Index && msg.Begin == elemMsg.Begin && msg.Length == elemMsg.Length {
 						pending.Remove(e)
 						log.Printf("optimized cancel! %v", msg)
 						break event
@@ -345,6 +359,8 @@ func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
 			if pending.Len() == 0 {
 				timer.Reset(keepAliveDelay)
 			}
+		case <-conn.closed:
+			return
 		}
 	}
 }

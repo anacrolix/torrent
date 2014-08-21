@@ -49,10 +49,15 @@ func (fn fileNode) Attr() (attr fuse.Attr) {
 	return
 }
 
+func (n *node) fsPath() string {
+	return "/" + strings.Join(append([]string{n.metadata.Name}, n.path...), "/")
+}
+
 func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fusefs.Intr) fuse.Error {
 	if req.Dir {
 		panic("hodor")
 	}
+	log.Printf("read request for %s: offset=%d size=%d", fn.fsPath(), req.Offset, req.Size)
 	size := req.Size
 	if int64(fn.size)-req.Offset < int64(size) {
 		size = int(int64(fn.size) - req.Offset)
@@ -62,7 +67,6 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 	}
 	infoHash := fn.InfoHash
 	torrentOff := fn.TorrentOffset + req.Offset
-	log.Print(torrentOff, size, fn.TorrentOffset)
 	if err := fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(size)); err != nil {
 		panic(err)
 	}

@@ -91,7 +91,11 @@ func (t *torrent) MetadataPieceCount() int {
 }
 
 func (t *torrent) HaveMetadataPiece(piece int) bool {
-	return t.haveInfo() || t.metadataHave[piece]
+	if t.haveInfo() {
+		return (1<<14)*piece < len(t.MetaData)
+	} else {
+		return t.metadataHave[piece]
+	}
 }
 
 func (t *torrent) metadataSizeKnown() bool {

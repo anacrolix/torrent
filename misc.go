@@ -1,16 +1,17 @@
 package torrent
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/mmap_span"
-	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"crypto"
 	"errors"
-	"github.com/anacrolix/libtorgo/metainfo"
-	"launchpad.net/gommap"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
+
+	"bitbucket.org/anacrolix/go.torrent/mmap_span"
+	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
+	"github.com/anacrolix/libtorgo/metainfo"
+	"launchpad.net/gommap"
 )
 
 const (

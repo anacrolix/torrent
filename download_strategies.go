@@ -1,8 +1,9 @@
 package torrent
 
 import (
-	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"container/list"
+
+	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 )
 
 type DownloadStrategy interface {

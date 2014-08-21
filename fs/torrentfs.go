@@ -1,13 +1,15 @@
 package torrentfs
 
 import (
+	"log"
+	"os"
+	"strings"
+	"sync"
+
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
 	"bitbucket.org/anacrolix/go.torrent"
 	"github.com/anacrolix/libtorgo/metainfo"
-	"log"
-	"os"
-	"sync"
 )
 
 const (

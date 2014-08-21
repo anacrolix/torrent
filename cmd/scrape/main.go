@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 
-	"bitbucket.org/anacrolix/go.torrent"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	_ "bitbucket.org/anacrolix/go.torrent/tracker/udp"
 	"bitbucket.org/anacrolix/go.torrent/util"

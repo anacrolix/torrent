@@ -1,17 +1,20 @@
 package torrent
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/mmap_span"
-	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
-	"bitbucket.org/anacrolix/go.torrent/tracker"
 	"container/list"
 	"fmt"
-	"github.com/anacrolix/libtorgo/bencode"
-	"github.com/anacrolix/libtorgo/metainfo"
 	"io"
 	"log"
 	"net"
 	"sync"
+
+	"bitbucket.org/anacrolix/go.torrent/util"
+
+	"bitbucket.org/anacrolix/go.torrent/mmap_span"
+	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
+	"bitbucket.org/anacrolix/go.torrent/tracker"
+	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/libtorgo/metainfo"
 )
 
 func (t *torrent) PieceNumPendingBytes(index pp.Integer) (count pp.Integer) {

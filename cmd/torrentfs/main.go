@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/util"
-	"bitbucket.org/anacrolix/go.torrent/util/dirwatch"
 	"flag"
 	"log"
 	"net"
@@ -14,6 +12,9 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"bitbucket.org/anacrolix/go.torrent/util"
+	"bitbucket.org/anacrolix/go.torrent/util/dirwatch"
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"

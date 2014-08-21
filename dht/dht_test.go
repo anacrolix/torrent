@@ -45,6 +45,19 @@ var testIDs = []string{
 	"\x03" + zeroID[1:],
 	"\x03" + zeroID[1:18] + "\x55\xf0",
 	"\x55" + zeroID[1:17] + "\xff\x55\x0f",
+	"\x54" + zeroID[1:18] + "\x50\x0f",
+}
+
+func TestDistances(t *testing.T) {
+	if idDistance(testIDs[3], testIDs[0]) != 4+8+4+4 {
+		t.FailNow()
+	}
+	if idDistance(testIDs[3], testIDs[1]) != 4+8+4+4 {
+		t.FailNow()
+	}
+	if idDistance(testIDs[3], testIDs[2]) != 4+8+8 {
+		t.FailNow()
+	}
 }
 
 func TestBadIdStrings(t *testing.T) {
@@ -74,7 +87,7 @@ func TestBadIdStrings(t *testing.T) {
 }
 
 func TestClosestNodes(t *testing.T) {
-	cn := newKClosestNodesSelector(2, zeroID)
+	cn := newKClosestNodesSelector(2, testIDs[3])
 	for _, i := range rand.Perm(len(testIDs)) {
 		cn.Push(testIDs[i])
 	}
@@ -85,7 +98,7 @@ func TestClosestNodes(t *testing.T) {
 	for _, id := range cn.IDs() {
 		m[id] = true
 	}
-	if !m[zeroID] || !m[testIDs[1]] {
+	if !m[testIDs[3]] || !m[testIDs[4]] {
 		t.FailNow()
 	}
 }

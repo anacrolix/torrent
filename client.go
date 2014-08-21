@@ -874,8 +874,14 @@ func (me *Client) openNewConns() {
 			if me.halfOpen >= me.halfOpenLimit {
 				return
 			}
-			p := t.Peers[0]
-			t.Peers = t.Peers[1:]
+			var (
+				k peersKey
+				p Peer
+			)
+			for k, p = range t.Peers {
+				break
+			}
+			delete(t.Peers, k)
 			me.initiateConn(p, t)
 		}
 	}
@@ -889,7 +895,7 @@ func (me *Client) AddPeers(infoHash InfoHash, peers []Peer) error {
 	if t == nil {
 		return errors.New("no such torrent")
 	}
-	t.Peers = append(t.Peers, peers...)
+	t.AddPeers(peers)
 	me.openNewConns()
 	return nil
 }
@@ -920,6 +926,7 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 func newTorrent(ih InfoHash, announceList [][]string) (t *torrent, err error) {
 	t = &torrent{
 		InfoHash: ih,
+		Peers:    make(map[peersKey]Peer, 2000),
 	}
 	t.Trackers = make([][]tracker.Client, len(announceList))
 	for tierIndex := range announceList {

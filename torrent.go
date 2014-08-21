@@ -38,6 +38,11 @@ type torrentPiece struct {
 	bytesLeftElement *list.Element
 }
 
+type peersKey struct {
+	IPBytes string
+	Port    int
+}
+
 type torrent struct {
 	closed            bool
 	InfoHash          InfoHash
@@ -48,13 +53,19 @@ type torrent struct {
 	dataLock sync.RWMutex
 	Info     *metainfo.Info
 	Conns    []*connection
-	Peers    []Peer
+	Peers    map[peersKey]Peer
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
 	// mirror their respective URLs from the announce-list key.
 	Trackers     [][]tracker.Client
 	DisplayName  string
 	MetaData     []byte
 	metadataHave []bool
+}
+
+func (t *torrent) AddPeers(pp []Peer) {
+	for _, p := range pp {
+		t.Peers[peersKey{string(p.IP), p.Port}] = p
+	}
 }
 
 func (t *torrent) InvalidateMetadata() {

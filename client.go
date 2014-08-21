@@ -983,6 +983,7 @@ func (me *Client) DropTorrent(infoHash InfoHash) (err error) {
 		panic(err)
 	}
 	delete(me.torrents, infoHash)
+	me.downloadStrategy.TorrentStopped(t)
 	return
 }
 

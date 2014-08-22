@@ -53,12 +53,6 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 		}
 		return
 	}
-	// First request prioritized chunks.
-	// for e := t.Priorities.Front(); e != nil; e = e.Next() {
-	// 	if !addRequest(e.Value.(request)) {
-	// 		return
-	// 	}
-	// }
 	// Then finish off incomplete pieces in order of bytes remaining.
 	for _, heatThreshold := range []int{1, 4, 15, 60} {
 		for e := t.PiecesByBytesLeft.Front(); e != nil; e = e.Next() {
@@ -110,7 +104,7 @@ func NewResponsiveDownloadStrategy(readahead int) *responsiveDownloadStrategy {
 	return &responsiveDownloadStrategy{
 		Readahead:     readahead,
 		lastReadPiece: make(map[*torrent]int),
-		priorities:    make(map[*torrent]*list.List),
+		priorities:    make(map[*torrent]map[request]struct{}),
 	}
 }
 
@@ -134,7 +128,7 @@ func (me *responsiveDownloadStrategy) WriteStatus(w io.Writer) {
 }
 
 func (me *responsiveDownloadStrategy) TorrentStarted(t *torrent) {
-	me.priorities[t] = list.New()
+	me.priorities[t] = make(map[request]struct{})
 }
 
 func (me *responsiveDownloadStrategy) TorrentStopped(t *torrent) {
@@ -144,7 +138,16 @@ func (me *responsiveDownloadStrategy) TorrentStopped(t *torrent) {
 func (responsiveDownloadStrategy) DeleteRequest(*torrent, request) {}
 
 func (me *responsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
-	if len(c.Requests) >= (c.PeerMaxRequests+1)/2 || len(c.Requests) >= 64 {
+	for req := range me.priorities[t] {
+		if _, ok := t.Pieces[req.Index].PendingChunkSpecs[req.chunkSpec]; !ok {
+			panic(req)
+		}
+		if !c.Request(req) {
+			return
+		}
+	}
+
+	if len(c.Requests) >= 32 {
 		return
 	}
 
@@ -157,27 +160,27 @@ func (me *responsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 		return c.Request(r)
 	}
 
-	prios := me.priorities[t]
-	for e := prios.Front(); e != nil; e = e.Next() {
-		req := e.Value.(request)
-		if _, ok := t.Pieces[req.Index].PendingChunkSpecs[req.chunkSpec]; !ok {
-			panic(req)
+	requestPiece := func(piece int) bool {
+		if piece >= t.NumPieces() {
+			return true
 		}
-		if !requestWrapper(e.Value.(request)) {
-			return
+		for _, cs := range t.Pieces[piece].shuffledPendingChunkSpecs() {
+			if !requestWrapper(request{pp.Integer(piece), cs}) {
+				return false
+			}
 		}
+		return true
 	}
 
 	if lastReadPiece, ok := me.lastReadPiece[t]; ok {
 		readaheadPieces := (me.Readahead + t.UsualPieceSize() - 1) / t.UsualPieceSize()
-		for i := lastReadPiece; i < lastReadPiece+readaheadPieces && i < t.NumPieces(); i++ {
-			for _, cs := range t.Pieces[i].shuffledPendingChunkSpecs() {
-				if !requestWrapper(request{pp.Integer(i), cs}) {
-					return
-				}
+		for i := 0; i < readaheadPieces; i++ {
+			if !requestPiece(lastReadPiece + i) {
+				return
 			}
 		}
 	}
+
 	// Then finish off incomplete pieces in order of bytes remaining.
 	for e := t.PiecesByBytesLeft.Front(); e != nil; e = e.Next() {
 		index := e.Value.(int)
@@ -196,29 +199,17 @@ func (me *responsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 }
 
 func (me *responsiveDownloadStrategy) TorrentGotChunk(t *torrent, req request) {
-	prios := me.priorities[t]
-	var next *list.Element
-	for e := prios.Front(); e != nil; e = next {
-		next = e.Next()
-		if e.Value.(request) == req {
-			prios.Remove(e)
-		}
-	}
+	delete(me.priorities[t], req)
 }
 
 func (me *responsiveDownloadStrategy) TorrentGotPiece(t *torrent, piece int) {
-	var next *list.Element
-	prios := me.priorities[t]
-	for e := prios.Front(); e != nil; e = next {
-		next = e.Next()
-		if int(e.Value.(request).Index) == piece {
-			prios.Remove(e)
-		}
+	for _, cs := range t.pieceChunks(piece) {
+		delete(me.priorities[t], request{pp.Integer(piece), cs})
 	}
 }
 
 func (s *responsiveDownloadStrategy) TorrentPrioritize(t *torrent, off, _len int64) {
-	newPriorities := make([]request, 0, (_len+chunkSize-1)/chunkSize)
+	s.lastReadPiece[t] = int(off / int64(t.UsualPieceSize()))
 	for _len > 0 {
 		req, ok := t.offsetRequest(off)
 		if !ok {
@@ -230,21 +221,8 @@ func (s *responsiveDownloadStrategy) TorrentPrioritize(t *torrent, off, _len int
 		// Lose the length of this block.
 		_len -= int64(req.Length)
 		off = reqOff + int64(req.Length)
-		if !t.wantPiece(int(req.Index)) {
-			continue
-		}
-		newPriorities = append(newPriorities, req)
-	}
-	if len(newPriorities) == 0 {
-		return
-	}
-	s.lastReadPiece[t] = int(newPriorities[0].Index)
-	if t.wantChunk(newPriorities[0]) {
-		s.priorities[t].PushFront(newPriorities[0])
-	}
-	for _, req := range newPriorities[1:] {
 		if t.wantChunk(req) {
-			s.priorities[t].PushBack(req)
+			s.priorities[t][req] = struct{}{}
 		}
 	}
 }

@@ -3,7 +3,6 @@ package peer_protocol
 import (
 	"bufio"
 	"bytes"
-	"io"
 	"strings"
 	"testing"
 )
@@ -103,8 +102,8 @@ func TestUnexpectedEOF(t *testing.T) {
 			MaxLength: 42,
 		}
 		err := dec.Decode(msg)
-		if err != io.ErrUnexpectedEOF {
-			t.Fatalf("expected ErrUnexpectedEOF decoding %q, got %s", stream, err)
+		if err == nil {
+			t.Fatalf("expected an error decoding %q", stream)
 		}
 	}
 }

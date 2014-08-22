@@ -109,10 +109,14 @@ type Decoder struct {
 	MaxLength Integer // TODO: Should this include the length header or not?
 }
 
+// io.EOF is returned if the source terminates cleanly on a message boundary.
 func (d *Decoder) Decode(msg *Message) (err error) {
 	var length Integer
 	err = binary.Read(d.R, binary.BigEndian, &length)
 	if err != nil {
+		if err != io.EOF {
+			err = fmt.Errorf("error reading message length: %s", err)
+		}
 		return
 	}
 	if length > d.MaxLength {
@@ -125,10 +129,13 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 	msg.Keepalive = false
 	b := make([]byte, length)
 	_, err = io.ReadFull(d.R, b)
-	if err == io.EOF {
-		err = io.ErrUnexpectedEOF
-	}
 	if err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		if err != io.ErrUnexpectedEOF {
+			err = fmt.Errorf("error reading message: %s", err)
+		}
 		return
 	}
 	r := bytes.NewReader(b)

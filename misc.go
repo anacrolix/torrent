@@ -36,9 +36,15 @@ type piece struct {
 }
 
 func (p *piece) shuffledPendingChunkSpecs() (css []chunkSpec) {
+	if len(p.PendingChunkSpecs) == 0 {
+		return
+	}
 	css = make([]chunkSpec, 0, len(p.PendingChunkSpecs))
 	for cs := range p.PendingChunkSpecs {
 		css = append(css, cs)
+	}
+	if len(css) <= 1 {
+		return
 	}
 	for i := range css {
 		j := rand.Intn(i + 1)

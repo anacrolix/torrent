@@ -48,6 +48,7 @@ var (
 	peersFoundByDHT             = expvar.NewInt("peersFoundByDHT")
 	peersFoundByPEX             = expvar.NewInt("peersFoundByPEX")
 	uploadChunksPosted          = expvar.NewInt("uploadChunksPosted")
+	unexpectedCancels           = expvar.NewInt("unexpectedCancels")
 )
 
 const extensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x00"
@@ -720,7 +721,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		case pp.Cancel:
 			req := newRequest(msg.Index, msg.Begin, msg.Length)
 			if !c.PeerCancel(req) {
-				log.Printf("received unexpected cancel: %v", req)
+				unexpectedCancels.Add(1)
 			}
 		case pp.Bitfield:
 			if c.PeerPieces != nil {

@@ -19,6 +19,7 @@ const GreetingFileContents = "hello, world\n"
 
 func CreateDummyTorrentData(dirName string) string {
 	f, _ := os.Create(filepath.Join(dirName, "greeting"))
+	defer f.Close()
 	f.WriteString("hello, world\n")
 	return f.Name()
 }

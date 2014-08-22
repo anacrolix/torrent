@@ -1,7 +1,8 @@
 package torrent
 
 import (
-	"container/list"
+	"fmt"
+	"io"
 
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 )
@@ -14,11 +15,14 @@ type DownloadStrategy interface {
 	TorrentPrioritize(t *torrent, off, _len int64)
 	TorrentGotChunk(t *torrent, r request)
 	TorrentGotPiece(t *torrent, piece int)
+	WriteStatus(w io.Writer)
 }
 
 type DefaultDownloadStrategy struct {
 	heat map[*torrent]map[request]int
 }
+
+func (me *DefaultDownloadStrategy) WriteStatus(w io.Writer) {}
 
 func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	if c.Interested {
@@ -115,7 +119,18 @@ type responsiveDownloadStrategy struct {
 	// the last piece read for a given torrent.
 	Readahead     int
 	lastReadPiece map[*torrent]int
-	priorities    map[*torrent]*list.List
+	priorities    map[*torrent]map[request]struct{}
+}
+
+func (me *responsiveDownloadStrategy) WriteStatus(w io.Writer) {
+	fmt.Fprintf(w, "Priorities:\n")
+	for t, pp := range me.priorities {
+		fmt.Fprintf(w, "\t%s:", t.Name())
+		for r := range pp {
+			fmt.Fprintf(w, "%v ", r)
+		}
+		fmt.Fprintln(w)
+	}
 }
 
 func (me *responsiveDownloadStrategy) TorrentStarted(t *torrent) {

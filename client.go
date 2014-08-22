@@ -47,6 +47,7 @@ var (
 	chunksDownloadedCount       = expvar.NewInt("chunksDownloadedCount")
 	peersFoundByDHT             = expvar.NewInt("peersFoundByDHT")
 	peersFoundByPEX             = expvar.NewInt("peersFoundByPEX")
+	uploadChunksPosted          = expvar.NewInt("uploadChunksPosted")
 )
 
 const extensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x00"
@@ -122,6 +123,7 @@ func (cl *Client) WriteStatus(w io.Writer) {
 		fmt.Fprintf(w, "DHT nodes: %d\n", cl.dHT.NumNodes())
 		fmt.Fprintf(w, "DHT Server ID: %x\n", cl.dHT.IDString())
 	}
+	cl.downloadStrategy.WriteStatus(w)
 	fmt.Fprintln(w)
 	for _, t := range cl.torrents {
 		fmt.Fprintf(w, "%s: %f%%\n", t.Name(), func() float32 {
@@ -714,6 +716,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				Begin: msg.Begin,
 				Piece: p,
 			})
+			uploadChunksPosted.Add(1)
 		case pp.Cancel:
 			req := newRequest(msg.Index, msg.Begin, msg.Length)
 			if !c.PeerCancel(req) {

@@ -121,26 +121,19 @@ func (cn *connection) WriteStatus(w io.Writer) {
 	c := func(b byte) {
 		fmt.Fprintf(w, "%c", b)
 	}
-	// https://trac.transmissionbt.com/wiki/PeerStatusText
-	if cn.PeerInterested && !cn.Choked {
-		c('O')
-	}
+	// Inspired by https://trac.transmissionbt.com/wiki/PeerStatusText
 	if len(cn.Requests) != 0 {
 		c('D')
 	}
 	if cn.PeerChoked && cn.Interested {
 		c('d')
 	}
-	if !cn.Choked && cn.PeerInterested {
-		c('U')
-	} else {
-		c('u')
-	}
-	if !cn.PeerChoked && !cn.Interested {
-		c('K')
-	}
-	if !cn.Choked && !cn.PeerInterested {
-		c('?')
+	if !cn.Choked {
+		if cn.PeerInterested {
+			c('U')
+		} else {
+			c('u')
+		}
 	}
 	if cn.Discovery != 0 {
 		c(byte(cn.Discovery))

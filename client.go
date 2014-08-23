@@ -49,6 +49,7 @@ var (
 	peersFoundByPEX             = expvar.NewInt("peersFoundByPEX")
 	uploadChunksPosted          = expvar.NewInt("uploadChunksPosted")
 	unexpectedCancels           = expvar.NewInt("unexpectedCancels")
+	postedCancels               = expvar.NewInt("postedCancels")
 )
 
 const extensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x00"
@@ -541,6 +542,7 @@ func (me *Client) peerUnchoked(torrent *torrent, conn *connection) {
 func (cl *Client) connCancel(t *torrent, cn *connection, r request) (ok bool) {
 	ok = cn.Cancel(r)
 	if ok {
+		postedCancels.Add(1)
 		cl.downloadStrategy.DeleteRequest(t, r)
 	}
 	return

@@ -49,6 +49,7 @@ type torrent struct {
 	Pieces            []*torrentPiece
 	PiecesByBytesLeft *OrderedList
 	Data              mmap_span.MMapSpan
+	length            int64
 	// Prevent mutations to Data memory maps while in use as they're not safe.
 	dataLock sync.RWMutex
 	Info     *metainfo.Info
@@ -122,6 +123,7 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 	if err != nil {
 		return
 	}
+	t.length = t.Data.Size()
 	t.PiecesByBytesLeft = NewList(func(a, b interface{}) bool {
 		apb := t.PieceNumPendingBytes(pp.Integer(a.(int)))
 		bpb := t.PieceNumPendingBytes(pp.Integer(b.(int)))
@@ -216,7 +218,6 @@ func (t *torrent) NewMetadataExtensionMessage(c *connection, msgType int, piece 
 		ExtendedID:      byte(c.PeerExtensionIDs["ut_metadata"]),
 		ExtendedPayload: append(p, data...),
 	}
-
 }
 
 func (t *torrent) WriteStatus(w io.Writer) {
@@ -293,7 +294,12 @@ func (t *torrent) NumPiecesCompleted() (num int) {
 }
 
 func (t *torrent) Length() int64 {
-	return int64(t.LastPieceSize()) + int64(len(t.Pieces)-1)*int64(t.UsualPieceSize())
+	if t.Data == nil {
+		// Possibly the length might be available before the data is mmapped,
+		// I defer this decision to such a need arising.
+		panic("torrent length not known?")
+	}
+	return t.length
 }
 
 func (t *torrent) isClosed() bool {
@@ -397,7 +403,7 @@ type Peer struct {
 
 func (t *torrent) PieceLength(piece pp.Integer) (len_ pp.Integer) {
 	if int(piece) == t.NumPieces()-1 {
-		len_ = pp.Integer(t.Data.Size() % t.Info.PieceLength)
+		len_ = pp.Integer(t.Length() % t.Info.PieceLength)
 	}
 	if len_ == 0 {
 		len_ = pp.Integer(t.Info.PieceLength)

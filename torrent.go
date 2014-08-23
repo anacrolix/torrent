@@ -222,6 +222,7 @@ func (t *torrent) NewMetadataExtensionMessage(c *connection, msgType int, piece 
 
 func (t *torrent) WriteStatus(w io.Writer) {
 	fmt.Fprintf(w, "Infohash: %x\n", t.InfoHash)
+	fmt.Fprintf(w, "Piece length: %d\n", t.UsualPieceSize())
 	fmt.Fprint(w, "Pieces: ")
 	for index := range t.Pieces {
 		fmt.Fprintf(w, "%c", t.pieceStatusChar(index))

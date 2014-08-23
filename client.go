@@ -1228,6 +1228,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	// Record that we have the chunk.
 	delete(t.Pieces[req.Index].PendingChunkSpecs, req.chunkSpec)
 	t.PiecesByBytesLeft.ValueChanged(t.Pieces[req.Index].bytesLeftElement)
+	me.dataReady(dataSpec{t.InfoHash, req})
 	if len(t.Pieces[req.Index].PendingChunkSpecs) == 0 {
 		me.queuePieceCheck(t, req.Index)
 	}
@@ -1236,18 +1237,14 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	me.downloadStrategy.TorrentGotChunk(t, req)
 
 	// Cancel pending requests for this chunk.
-	cancelled := false
 	for _, c := range t.Conns {
 		if me.connCancel(t, c, req) {
-			cancelled = true
 			me.replenishConnRequests(t, c)
 		}
 	}
-	if cancelled {
-		log.Printf("cancelled concurrent requests for %v", req)
-	}
 
-	me.dataReady(dataSpec{t.InfoHash, req})
+	me.downloadStrategy.AssertNotRequested(t, req)
+
 	return nil
 }
 

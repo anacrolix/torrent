@@ -161,10 +161,14 @@ func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err er
 		return
 	}
 	piece := t.Pieces[index]
-	pieceOff := pp.Integer(off % int64(t.PieceLength(0)))
-	high := int(t.PieceLength(index) - pieceOff)
-	if high < len(p) {
-		p = p[:high]
+	pieceOff := pp.Integer(off % int64(t.UsualPieceSize()))
+	pieceLeft := int(t.PieceLength(index) - pieceOff)
+	if pieceLeft <= 0 {
+		err = io.EOF
+		return
+	}
+	if len(p) > pieceLeft {
+		p = p[:pieceLeft]
 	}
 	for cs, _ := range piece.PendingChunkSpecs {
 		chunkOff := int64(pieceOff) - int64(cs.Begin)
@@ -180,6 +184,9 @@ func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err er
 		if chunkOff < 0 && int64(len(p)) > -chunkOff {
 			p = p[:-chunkOff]
 		}
+	}
+	if len(p) == 0 {
+		panic(len(p))
 	}
 	return t.Data.ReadAt(p, off)
 }

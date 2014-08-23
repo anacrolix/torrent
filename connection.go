@@ -4,15 +4,17 @@ import (
 	"container/list"
 	"encoding"
 	"errors"
+	"expvar"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"sync"
 	"time"
 
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 )
+
+var optimizedCancels = expvar.NewInt("optimizedCancels")
 
 type peerSource byte
 
@@ -339,7 +341,7 @@ func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
 					elemMsg := e.Value.(pp.Message)
 					if elemMsg.Type == pp.Request && msg.Index == elemMsg.Index && msg.Begin == elemMsg.Begin && msg.Length == elemMsg.Length {
 						pending.Remove(e)
-						log.Printf("optimized cancel! %v", msg)
+						optimizedCancels.Add(1)
 						break event
 					}
 				}

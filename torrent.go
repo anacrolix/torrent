@@ -334,11 +334,19 @@ func (t *torrent) Length() int64 {
 }
 
 func (t *torrent) isClosed() bool {
-	return t.closed
+	select {
+	case <-t.closing:
+		return true
+	default:
+		return false
+	}
 }
 
 func (t *torrent) Close() (err error) {
-	t.closed = true
+	if t.isClosed() {
+		return
+	}
+	close(t.closing)
 	t.dataLock.Lock()
 	t.Data.Close()
 	t.Data = nil

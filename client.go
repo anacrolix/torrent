@@ -961,6 +961,8 @@ func newTorrent(ih InfoHash, announceList [][]string) (t *torrent, err error) {
 	t = &torrent{
 		InfoHash: ih,
 		Peers:    make(map[peersKey]Peer, 2000),
+
+		closing: make(chan struct{}),
 	}
 	t.Trackers = make([][]tracker.Client, len(announceList))
 	for tierIndex := range announceList {
@@ -1115,6 +1117,9 @@ func (cl *Client) announceTorrentDHT(t *torrent) {
 					log.Printf("error adding peers from dht for torrent %q: %s", t, err)
 					break getPeers
 				}
+			case <-t.closing:
+				ps.Close()
+				return
 			}
 		}
 		ps.Close()

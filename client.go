@@ -448,9 +448,9 @@ func handshake(sock io.ReadWriteCloser, ih *InfoHash, peerID [20]byte) (res hand
 	if string(b[:20]) != pp.Protocol {
 		return
 	}
-	copy(res.peerExtensionBytes[:], b[20:28])
-	copy(res.InfoHash[:], b[28:48])
-	copy(res.peerID[:], b[48:68])
+	CopyExact(&res.peerExtensionBytes, b[20:28])
+	CopyExact(&res.InfoHash, b[28:48])
+	CopyExact(&res.peerID, b[48:68])
 
 	if ih == nil { // We were waiting for the peer to tell us what they wanted.
 		post(res.InfoHash[:])

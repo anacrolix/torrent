@@ -104,9 +104,11 @@ type Client struct {
 	event sync.Cond
 	quit  chan struct{}
 
-	halfOpen   int
-	torrents   map[InfoHash]*torrent
-	dataWaiter chan struct{}
+	halfOpen int
+	torrents map[InfoHash]*torrent
+
+	dataWaiterMutex sync.Mutex
+	dataWaiter      chan struct{}
 }
 
 func (me *Client) ListenAddr() net.Addr {
@@ -1261,21 +1263,24 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 }
 
 func (cl *Client) dataReady(ds dataSpec) {
+	cl.dataWaiterMutex.Lock()
 	if cl.dataWaiter != nil {
 		close(cl.dataWaiter)
 	}
 	cl.dataWaiter = nil
+	cl.dataWaiterMutex.Unlock()
 }
 
 // Returns a channel that is closed when new data has become available in the
 // client.
-func (me *Client) DataWaiter() <-chan struct{} {
-	me.mu.Lock()
-	defer me.mu.Unlock()
+func (me *Client) DataWaiter() (ret <-chan struct{}) {
+	me.dataWaiterMutex.Lock()
 	if me.dataWaiter == nil {
 		me.dataWaiter = make(chan struct{})
 	}
-	return me.dataWaiter
+	ret = me.dataWaiter
+	me.dataWaiterMutex.Unlock()
+	return
 }
 
 func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {

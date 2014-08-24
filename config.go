@@ -6,4 +6,5 @@ type Config struct {
 	DisableTrackers  bool
 	DownloadStrategy DownloadStrategy
 	NoDHT            bool
+	NoUpload         bool
 }

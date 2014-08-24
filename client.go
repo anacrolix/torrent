@@ -92,6 +92,7 @@ type dataSpec struct {
 }
 
 type Client struct {
+	noUpload         bool
 	dataDir          string
 	halfOpenLimit    int
 	peerID           [20]byte
@@ -201,6 +202,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	}
 
 	cl = &Client{
+		noUpload:         cfg.NoUpload,
 		disableTrackers:  cfg.DisableTrackers,
 		downloadStrategy: cfg.DownloadStrategy,
 		halfOpenLimit:    100,
@@ -704,6 +706,9 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		case pp.Interested:
 			c.PeerInterested = true
 			// TODO: This should be done from a dedicated unchoking routine.
+			if me.noUpload {
+				break
+			}
 			c.Unchoke()
 		case pp.NotInterested:
 			c.PeerInterested = false
@@ -711,6 +716,9 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		case pp.Have:
 			me.peerGotPiece(t, c, int(msg.Index))
 		case pp.Request:
+			if me.noUpload {
+				break
+			}
 			if c.PeerRequests == nil {
 				c.PeerRequests = make(map[request]struct{}, maxRequests)
 			}

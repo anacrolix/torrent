@@ -111,6 +111,7 @@ func main() {
 		DisableTrackers:  *disableTrackers,
 		DownloadStrategy: torrent.NewResponsiveDownloadStrategy(*readaheadBytes),
 		ListenAddr:       *listenAddr,
+		NoUpload:         true, // Ensure that uploads are responsive.
 	})
 	http.DefaultServeMux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)

@@ -31,6 +31,8 @@ import (
 	"syscall"
 	"time"
 
+	"bitbucket.org/anacrolix/go.torrent/util/levelmu"
+
 	"bitbucket.org/anacrolix/go.torrent/dht"
 	. "bitbucket.org/anacrolix/go.torrent/util"
 
@@ -98,7 +100,7 @@ type Client struct {
 	downloadStrategy DownloadStrategy
 	dHT              *dht.Server
 
-	mu    sync.Mutex
+	mu    levelmu.LevelMutex
 	event sync.Cond
 	quit  chan struct{}
 
@@ -143,7 +145,7 @@ func (cl *Client) WriteStatus(w io.Writer) {
 // Read torrent data at the given offset. Returns ErrDataNotReady if the data
 // isn't available.
 func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err error) {
-	cl.mu.Lock()
+	cl.mu.LevelLock(1)
 	defer cl.mu.Unlock()
 	t := cl.torrent(ih)
 	if t == nil {
@@ -206,6 +208,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		torrents: make(map[InfoHash]*torrent),
 	}
 	cl.event.L = &cl.mu
+	cl.mu.Init(2)
 
 	o := copy(cl.peerID[:], BEP20)
 	_, err = rand.Read(cl.peerID[o:])

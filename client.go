@@ -1241,11 +1241,11 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 
 	// Record that we have the chunk.
 	delete(t.Pieces[req.Index].PendingChunkSpecs, req.chunkSpec)
-	t.PiecesByBytesLeft.ValueChanged(t.Pieces[req.Index].bytesLeftElement)
 	me.dataReady(dataSpec{t.InfoHash, req})
 	if len(t.Pieces[req.Index].PendingChunkSpecs) == 0 {
 		me.queuePieceCheck(t, req.Index)
 	}
+	t.PieceBytesLeftChanged(int(req.Index))
 
 	// Unprioritize the chunk.
 	me.downloadStrategy.TorrentGotChunk(t, req)
@@ -1301,6 +1301,7 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 			t.pendAllChunkSpecs(piece)
 		}
 	}
+	t.PieceBytesLeftChanged(int(piece))
 	for _, conn := range t.Conns {
 		if correct {
 			conn.Post(pp.Message{

@@ -38,3 +38,7 @@ func (me *OrderedList) Insert(value interface{}) (ret *list.Element) {
 func (me *OrderedList) Front() *list.Element {
 	return me.list.Front()
 }
+
+func (me *OrderedList) Remove(e *list.Element) interface{} {
+	return me.list.Remove(e)
+}

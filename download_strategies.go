@@ -62,7 +62,7 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	}
 	// Then finish off incomplete pieces in order of bytes remaining.
 	for _, heatThreshold := range []int{1, 4, 15, 60} {
-		for e := t.PiecesByBytesLeft.Front(); e != nil; e = e.Next() {
+		for e := t.IncompletePiecesByBytesLeft.Front(); e != nil; e = e.Next() {
 			pieceIndex := pp.Integer(e.Value.(int))
 			for _, chunkSpec := range t.Pieces[pieceIndex].shuffledPendingChunkSpecs() {
 				// for chunkSpec := range t.Pieces[pieceIndex].PendingChunkSpecs {
@@ -154,13 +154,14 @@ func (me *responsiveDownloadStrategy) DeleteRequest(t *torrent, r request) {
 }
 
 func (me *responsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
+	th := me.requestHeat[t]
 	requestWrapper := func(req request) bool {
 		if c.RequestPending(req) {
 			return true
 		}
 		again := c.Request(req)
 		if c.RequestPending(req) {
-			me.requestHeat[t][req]++
+			th[req]++
 		}
 		return again
 	}
@@ -189,18 +190,52 @@ func (me *responsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	}()
 
 	if lastReadOffset, ok := me.lastReadOffset[t]; ok {
-		for off := lastReadOffset; off < lastReadOffset+chunkSize-1+me.Readahead; off += chunkSize {
+		var nextAhead int64
+		for ahead := int64(0); ahead < me.Readahead; ahead = nextAhead {
+			off := lastReadOffset + ahead
 			req, ok := t.offsetRequest(off)
 			if !ok {
 				break
 			}
-			if me.requestHeat[t][req] >= 2 {
+			if !t.wantPiece(int(req.Index)) {
+				nextAhead = ahead + int64(t.PieceLength(req.Index))
 				continue
 			}
+			nextAhead = ahead + int64(req.Length)
 			if !t.wantChunk(req) {
 				continue
 			}
+			if th[req] >= func() int {
+				// Determine allowed redundancy based on how far into the
+				// readahead zone we're looking.
+				if ahead >= (2*me.Readahead+2)/3 {
+					return 1
+				} else if ahead >= (me.Readahead+2)/3 {
+					return 2
+				} else {
+					return 3
+				}
+			}() {
+				continue
+			}
 			if !requestWrapper(req) {
+				return
+			}
+		}
+	}
+
+	// t.assertIncompletePiecesByBytesLeftOrdering()
+	for e := t.IncompletePiecesByBytesLeft.Front(); e != nil; e = e.Next() {
+		p := e.Value.(int)
+		if !t.PiecePartiallyDownloaded(p) && int(t.PieceLength(pp.Integer(p))) == t.UsualPieceSize() {
+			break
+		}
+		for chunkSpec := range t.Pieces[p].PendingChunkSpecs {
+			r := request{pp.Integer(p), chunkSpec}
+			if th[r] >= 2 {
+				continue
+			}
+			if !requestWrapper(r) {
 				return
 			}
 		}

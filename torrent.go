@@ -44,23 +44,52 @@ type peersKey struct {
 }
 
 type torrent struct {
-	closed            bool
-	InfoHash          InfoHash
-	Pieces            []*torrentPiece
-	PiecesByBytesLeft *OrderedList
-	Data              mmap_span.MMapSpan
-	length            int64
+	closing                     chan struct{}
+	InfoHash                    InfoHash
+	Pieces                      []*torrentPiece
+	IncompletePiecesByBytesLeft *OrderedList
+	length                      int64
 	// Prevent mutations to Data memory maps while in use as they're not safe.
 	dataLock sync.RWMutex
-	Info     *metainfo.Info
-	Conns    []*connection
-	Peers    map[peersKey]Peer
+	Data     mmap_span.MMapSpan
+
+	Info  *metainfo.Info
+	Conns []*connection
+	Peers map[peersKey]Peer
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
 	// mirror their respective URLs from the announce-list key.
 	Trackers     [][]tracker.Client
 	DisplayName  string
 	MetaData     []byte
 	metadataHave []bool
+}
+
+func (t *torrent) assertIncompletePiecesByBytesLeftOrdering() {
+	allIndexes := make(map[int]struct{}, t.NumPieces())
+	for i := 0; i < t.NumPieces(); i++ {
+		allIndexes[i] = struct{}{}
+	}
+	var lastBytesLeft int
+	for e := t.IncompletePiecesByBytesLeft.Front(); e != nil; e = e.Next() {
+		i := e.Value.(int)
+		if _, ok := allIndexes[i]; !ok {
+			panic("duplicate entry")
+		}
+		delete(allIndexes, i)
+		if t.Pieces[i].Complete() {
+			panic("complete piece")
+		}
+		bytesLeft := int(t.PieceNumPendingBytes(pp.Integer(i)))
+		if bytesLeft < lastBytesLeft {
+			panic("ordering broken")
+		}
+		lastBytesLeft = bytesLeft
+	}
+	for i := range allIndexes {
+		if !t.Pieces[i].Complete() {
+			panic("leaked incomplete piece")
+		}
+	}
 }
 
 func (t *torrent) AddPeers(pp []Peer) {
@@ -124,7 +153,7 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 		return
 	}
 	t.length = t.Data.Size()
-	t.PiecesByBytesLeft = NewList(func(a, b interface{}) bool {
+	t.IncompletePiecesByBytesLeft = NewList(func(a, b interface{}) bool {
 		apb := t.PieceNumPendingBytes(pp.Integer(a.(int)))
 		bpb := t.PieceNumPendingBytes(pp.Integer(b.(int)))
 		if apb < bpb {
@@ -139,9 +168,10 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 		piece := &torrentPiece{}
 		util.CopyExact(piece.Hash[:], hash)
 		t.Pieces = append(t.Pieces, piece)
-		piece.bytesLeftElement = t.PiecesByBytesLeft.Insert(index)
+		piece.bytesLeftElement = t.IncompletePiecesByBytesLeft.Insert(index)
 		t.pendAllChunkSpecs(pp.Integer(index))
 	}
+	t.assertIncompletePiecesByBytesLeftOrdering()
 	for _, conn := range t.Conns {
 		if err := conn.setNumPieces(t.NumPieces()); err != nil {
 			log.Printf("closing connection: %s", err)
@@ -391,8 +421,17 @@ func (t *torrent) pendAllChunkSpecs(index pp.Integer) {
 	for _, cs := range t.pieceChunks(int(index)) {
 		pcss[cs] = struct{}{}
 	}
-	t.PiecesByBytesLeft.ValueChanged(piece.bytesLeftElement)
+	t.IncompletePiecesByBytesLeft.ValueChanged(piece.bytesLeftElement)
 	return
+}
+
+func (t *torrent) PieceBytesLeftChanged(index int) {
+	p := t.Pieces[index]
+	if p.Complete() {
+		t.IncompletePiecesByBytesLeft.Remove(p.bytesLeftElement)
+	} else {
+		t.IncompletePiecesByBytesLeft.ValueChanged(p.bytesLeftElement)
+	}
 }
 
 type Peer struct {

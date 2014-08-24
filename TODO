@@ -4,3 +4,5 @@
  * Make torrent read requests higher priority than everything else?
  * I think the high-low water is broken with responsive download strategy.
  * Properly encapsulate the mmap/span stuff.
+ * Implement keep-alive timeout when receiving.
+ * Wrap connection sockets to convert certain errors and timeout on inactivity with no keep-alives.

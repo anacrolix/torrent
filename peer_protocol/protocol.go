@@ -33,6 +33,7 @@ const (
 	Request                   // 6
 	Piece                     // 7
 	Cancel                    // 8
+	Port                      // 9
 	Extended      = 20
 
 	HandshakeExtendedID = 0
@@ -50,6 +51,7 @@ type Message struct {
 	Bitfield             []bool
 	ExtendedID           byte
 	ExtendedPayload      []byte
+	Port                 uint16
 }
 
 func (msg Message) MarshalBinary() (data []byte, err error) {
@@ -92,6 +94,8 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 				return
 			}
 			_, err = buf.Write(msg.ExtendedPayload)
+		case Port:
+			err = binary.Write(buf, binary.BigEndian, msg.Port)
 		default:
 			err = fmt.Errorf("unknown message type: %v", msg.Type)
 		}
@@ -187,6 +191,8 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 			break
 		}
 		msg.ExtendedPayload, err = ioutil.ReadAll(r)
+	case Port:
+		err = binary.Read(r, binary.BigEndian, &msg.Port)
 	default:
 		err = fmt.Errorf("unknown message type %#v", c)
 	}

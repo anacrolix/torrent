@@ -121,3 +121,34 @@ func TestMarshalKeepalive(t *testing.T) {
 		t.Fatalf("marshalled keepalive is %q, expected %q", bs, expected)
 	}
 }
+
+func TestMarshalPortMsg(t *testing.T) {
+	b, err := (Message{
+		Type: Port,
+		Port: 0xaabb,
+	}).MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != "\x00\x00\x00\x03\x09\xaa\xbb" {
+		t.FailNow()
+	}
+}
+
+func TestUnmarshalPortMsg(t *testing.T) {
+	var m Message
+	d := Decoder{
+		R:         bufio.NewReader(bytes.NewBufferString("\x00\x00\x00\x03\x09\xaa\xbb")),
+		MaxLength: 8,
+	}
+	err := d.Decode(&m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Type != Port {
+		t.FailNow()
+	}
+	if m.Port != 0xaabb {
+		t.FailNow()
+	}
+}

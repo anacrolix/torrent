@@ -54,7 +54,11 @@ var (
 	postedCancels               = expvar.NewInt("postedCancels")
 )
 
-const extensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x00"
+// Justification for set bits follows.
+//
+// Extension protocol: http://www.bittorrent.org/beps/bep_0010.html
+// DHT: http://www.bittorrent.org/beps/bep_0005.html
+const extensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x01"
 
 // Currently doesn't really queue, but should in the future.
 func (cl *Client) queuePieceCheck(t *torrent, pieceIndex pp.Integer) {
@@ -531,6 +535,13 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 			Bitfield: torrent.bitfield(),
 		})
 	}
+	if conn.PeerExtensionBytes[7]&0x01 != 0 && me.dHT != nil {
+		addr, _ := me.dHT.LocalAddr().(*net.UDPAddr)
+		conn.Post(pp.Message{
+			Type: pp.Port,
+			Port: uint16(addr.Port),
+		})
+	}
 	err = me.connectionLoop(torrent, conn)
 	if err != nil {
 		err = fmt.Errorf("during Connection loop with peer %q: %s", conn.PeerID, err)
@@ -860,6 +871,16 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			if err != nil {
 				log.Printf("peer extension map: %#v", c.PeerExtensionIDs)
 			}
+		case pp.Port:
+			if me.dHT == nil {
+				break
+			}
+			addr, _ := c.Socket.RemoteAddr().(*net.TCPAddr)
+			_, err = me.dHT.Ping(&net.UDPAddr{
+				IP:   addr.IP,
+				Zone: addr.Zone,
+				Port: int(msg.Port),
+			})
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}

@@ -505,7 +505,8 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 						"ut_metadata": 1,
 						"ut_pex":      2,
 					},
-					"v":    "go.torrent dev",
+					"v": "go.torrent dev 20140825", // Just the date
+					// No upload queue is implemented yet.
 					"reqq": 1,
 				}
 				if torrent.metadataSizeKnown() {

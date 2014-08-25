@@ -124,7 +124,7 @@ func (t *torrent) HaveMetadataPiece(piece int) bool {
 	if t.haveInfo() {
 		return (1<<14)*piece < len(t.MetaData)
 	} else {
-		return t.metadataHave[piece]
+		return piece < len(t.metadataHave) && t.metadataHave[piece]
 	}
 }
 
@@ -252,7 +252,13 @@ func (t *torrent) NewMetadataExtensionMessage(c *connection, msgType int, piece 
 
 func (t *torrent) WriteStatus(w io.Writer) {
 	fmt.Fprintf(w, "Infohash: %x\n", t.InfoHash)
-	fmt.Fprintf(w, "Piece length: %d\n", t.UsualPieceSize())
+	fmt.Fprintf(w, "Piece length: %s\n", func() string {
+		if t.haveInfo() {
+			return fmt.Sprint(t.UsualPieceSize())
+		} else {
+			return "?"
+		}
+	}())
 	fmt.Fprint(w, "Pieces: ")
 	for index := range t.Pieces {
 		fmt.Fprintf(w, "%c", t.pieceStatusChar(index))

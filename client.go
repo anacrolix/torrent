@@ -1271,7 +1271,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	// Write the chunk out.
 	err := t.WriteChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
 	if err != nil {
-		return err
+		return fmt.Errorf("error writing chunk: %s", err)
 	}
 
 	// Record that we have the chunk.

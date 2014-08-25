@@ -55,7 +55,7 @@ func (n *node) fsPath() string {
 
 func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fusefs.Intr) fuse.Error {
 	if req.Dir {
-		panic("hodor")
+		panic("read on directory")
 	}
 	log.Printf("read request for %s: offset=%d size=%d", fn.fsPath(), req.Offset, req.Size)
 	size := req.Size

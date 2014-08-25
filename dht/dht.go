@@ -141,7 +141,11 @@ func (t *transaction) handleResponse(m Msg) {
 	if t.onResponse != nil {
 		t.onResponse(m)
 	}
-	t.Response <- m
+	select {
+	case t.Response <- m:
+	default:
+		panic("blocked handling response")
+	}
 	close(t.Response)
 }
 

@@ -26,12 +26,9 @@ var (
 	seed            = flag.Bool("seed", false, "seed after downloading")
 )
 
-func init() {
+func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	flag.Parse()
-}
-
-func main() {
 	if *httpAddr != "" {
 		util.LoggedHTTPServe(*httpAddr)
 	}

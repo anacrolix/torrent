@@ -8,12 +8,12 @@ import (
 )
 
 type DownloadStrategy interface {
-	FillRequests(t *torrent, c *connection)
-	TorrentStarted(t *torrent)
-	TorrentStopped(t *torrent)
-	DeleteRequest(t *torrent, r request)
+	FillRequests(*torrent, *connection)
+	TorrentStarted(*torrent)
+	TorrentStopped(*torrent)
+	DeleteRequest(*torrent, request)
 	TorrentPrioritize(t *torrent, off, _len int64)
-	TorrentGotChunk(t *torrent, r request)
+	TorrentGotChunk(*torrent, request)
 	TorrentGotPiece(t *torrent, piece int)
 	WriteStatus(w io.Writer)
 	AssertNotRequested(*torrent, request)
@@ -130,7 +130,7 @@ func (me *responsiveDownloadStrategy) WriteStatus(w io.Writer) {
 	for t, pp := range me.priorities {
 		fmt.Fprintf(w, "\t%s:", t.Name())
 		for r := range pp {
-			fmt.Fprintf(w, "%v ", r)
+			fmt.Fprintf(w, " %v", r)
 		}
 		fmt.Fprintln(w)
 	}

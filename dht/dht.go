@@ -483,6 +483,8 @@ func (cni *NodeInfo) UnmarshalCompact(b []byte) error {
 }
 
 func (s *Server) Ping(node *net.UDPAddr) (*transaction, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.query(node, "ping", nil)
 }
 

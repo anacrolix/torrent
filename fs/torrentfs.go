@@ -59,18 +59,21 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 	}
 	log.Printf("read request for %s: offset=%d size=%d", fn.fsPath(), req.Offset, req.Size)
 	size := req.Size
-	if int64(fn.size)-req.Offset < int64(size) {
-		size = int(int64(fn.size) - req.Offset)
+	fileLeft := int64(fn.size) - req.Offset
+	if fileLeft < int64(size) {
+		size = int(fileLeft)
 	}
-	if size < 0 {
-		size = 0
+	resp.Data = resp.Data[:size]
+	if len(resp.Data) == 0 {
+		return nil
 	}
 	infoHash := fn.InfoHash
 	torrentOff := fn.TorrentOffset + req.Offset
-	if err := fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(size)); err != nil {
-		panic(err)
-	}
-	resp.Data = resp.Data[:size]
+	go func() {
+		if err := fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(size)); err != nil {
+			panic(err)
+		}
+	}()
 	for {
 		dataWaiter := fn.FS.Client.DataWaiter()
 		n, err := fn.FS.Client.TorrentReadAt(infoHash, torrentOff, resp.Data)
@@ -88,7 +91,7 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 			}
 		default:
 			log.Print(err)
-			return fuse.EIO
+			return err // bazil.org/fuse will convert generic errors appropriately.
 		}
 	}
 }

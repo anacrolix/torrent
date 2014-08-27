@@ -52,6 +52,7 @@ var (
 	uploadChunksPosted          = expvar.NewInt("uploadChunksPosted")
 	unexpectedCancels           = expvar.NewInt("unexpectedCancels")
 	postedCancels               = expvar.NewInt("postedCancels")
+	duplicateConnsAvoided       = expvar.NewInt("duplicateConnsAvoided")
 )
 
 // Justification for set bits follows.

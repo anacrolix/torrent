@@ -44,7 +44,10 @@ type peersKey struct {
 }
 
 type torrent struct {
-	closing                     chan struct{}
+	stateMu           sync.Mutex
+	closing           chan struct{}
+	ceasingNetworking chan struct{}
+
 	InfoHash                    InfoHash
 	Pieces                      []*torrentPiece
 	IncompletePiecesByBytesLeft *OrderedList
@@ -62,6 +65,20 @@ type torrent struct {
 	DisplayName  string
 	MetaData     []byte
 	metadataHave []bool
+}
+
+func (t *torrent) CeaseNetworking() {
+	t.stateMu.Lock()
+	defer t.stateMu.Unlock()
+	select {
+	case <-t.ceasingNetworking:
+		return
+	default:
+	}
+	close(t.ceasingNetworking)
+	for _, c := range t.Conns {
+		c.Close()
+	}
 }
 
 func (t *torrent) assertIncompletePiecesByBytesLeftOrdering() {
@@ -346,6 +363,7 @@ func (t *torrent) Close() (err error) {
 	if t.isClosed() {
 		return
 	}
+	t.CeaseNetworking()
 	close(t.closing)
 	t.dataLock.Lock()
 	t.Data.Close()

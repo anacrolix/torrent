@@ -924,6 +924,11 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 	if me.stopped() {
 		return false
 	}
+	select {
+	case <-t.ceasingNetworking:
+		return false
+	default:
+	}
 	for _, c0 := range t.Conns {
 		if c.PeerID == c0.PeerID {
 			// Already connected to a client with that ID.
@@ -936,6 +941,11 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 
 func (me *Client) openNewConns() {
 	for _, t := range me.torrents {
+		select {
+		case <-t.ceasingNetworking:
+			continue
+		default:
+		}
 		for len(t.Peers) != 0 {
 			if me.halfOpen >= me.halfOpenLimit {
 				return
@@ -994,7 +1004,8 @@ func newTorrent(ih InfoHash, announceList [][]string) (t *torrent, err error) {
 		InfoHash: ih,
 		Peers:    make(map[peersKey]Peer, 2000),
 
-		closing: make(chan struct{}),
+		closing:           make(chan struct{}),
+		ceasingNetworking: make(chan struct{}),
 	}
 	t.Trackers = make([][]tracker.Client, len(announceList))
 	for tierIndex := range announceList {
@@ -1149,7 +1160,7 @@ func (cl *Client) announceTorrentDHT(t *torrent) {
 					log.Printf("error adding peers from dht for torrent %q: %s", t, err)
 					break getPeers
 				}
-			case <-t.closing:
+			case <-t.ceasingNetworking:
 				ps.Close()
 				return
 			}
@@ -1168,10 +1179,12 @@ func (cl *Client) announceTorrent(t *torrent) {
 	}
 newAnnounce:
 	for {
-		cl.mu.Lock()
-		if t.isClosed() {
+		select {
+		case <-t.ceasingNetworking:
 			return
+		default:
 		}
+		cl.mu.Lock()
 		req.Left = t.BytesLeft()
 		cl.mu.Unlock()
 		for _, tier := range t.Trackers {
@@ -1364,6 +1377,9 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 				me.replenishConnRequests(t, conn)
 			}
 		}
+	}
+	if t.haveAllPieces() && me.noUpload {
+		t.CeaseNetworking()
 	}
 	me.event.Broadcast()
 }

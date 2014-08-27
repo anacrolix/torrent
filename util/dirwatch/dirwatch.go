@@ -90,7 +90,7 @@ func scanDir(dirName string) (ee map[torrent.InfoHash]entity) {
 	addEntity := func(e entity) {
 		e0, ok := ee[e.InfoHash]
 		if ok {
-			if e0.MagnetURI != "" && len(e.MagnetURI) < len(e0.MagnetURI) {
+			if e0.MagnetURI == "" || len(e.MagnetURI) < len(e0.MagnetURI) {
 				return
 			}
 		}
@@ -107,7 +107,7 @@ func scanDir(dirName string) (ee map[torrent.InfoHash]entity) {
 			e := entity{
 				TorrentFilePath: fullName,
 			}
-			util.CopyExact(e.InfoHash, ih)
+			util.CopyExact(&e.InfoHash, ih)
 			addEntity(e)
 		case ".magnet":
 			uris, err := magnetFileURIs(fullName)
@@ -138,6 +138,7 @@ func magnetFileURIs(name string) (uris []string, err error) {
 	}
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
+	scanner.Split(bufio.ScanWords)
 	for scanner.Scan() {
 		uris = append(uris, scanner.Text())
 	}

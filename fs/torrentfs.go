@@ -87,6 +87,9 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 	}()
 	size := req.Size
 	fileLeft := int64(fn.size) - req.Offset
+	if fileLeft < 0 {
+		fileLeft = 0
+	}
 	if fileLeft < int64(size) {
 		size = int(fileLeft)
 	}
@@ -98,7 +101,7 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 	torrentOff := fn.TorrentOffset + req.Offset
 	go func() {
 		if err := fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(size)); err != nil {
-			panic(err)
+			log.Printf("error prioritizing %s: %s", fn.fsPath(), err)
 		}
 	}()
 	delayed := false

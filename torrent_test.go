@@ -1,8 +1,10 @@
 package torrent
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
+	"sync"
 	"testing"
+
+	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
 )
 
 func r(i, b, l peer_protocol.Integer) request {
@@ -39,4 +41,20 @@ func TestTorrentRequest(t *testing.T) {
 			t.Fatalf("expected %v, got %v", _case.req, req)
 		}
 	}
+}
+
+func TestTorrentDoubleClose(t *testing.T) {
+	tt, err := newTorrent(InfoHash{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wg := sync.WaitGroup{}
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			tt.Close()
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 }

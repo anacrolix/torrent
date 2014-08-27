@@ -30,7 +30,18 @@ type torrentFS struct {
 	mu        sync.Mutex
 }
 
-var _ fusefs.FSDestroyer = &torrentFS{}
+var (
+	_ fusefs.FSDestroyer = &torrentFS{}
+	_ fusefs.FSIniter    = &torrentFS{}
+)
+
+func (fs *torrentFS) Init(req *fuse.InitRequest, resp *fuse.InitResponse, intr fusefs.Intr) fuse.Error {
+	log.Print(req)
+	log.Print(resp)
+	resp.MaxReadahead = req.MaxReadahead
+	resp.Flags |= fuse.InitAsyncRead
+	return nil
+}
 
 var _ fusefs.NodeForgetter = rootNode{}
 

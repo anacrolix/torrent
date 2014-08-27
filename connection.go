@@ -33,6 +33,13 @@ type connection struct {
 	post      chan pp.Message
 	writeCh   chan []byte
 
+	ChunksReceived       int
+	UsefulChunksReceived int
+
+	lastMessageReceived     time.Time
+	completedHandshake      time.Time
+	lastUsefulChunkReceived time.Time
+
 	// Stuff controlled by the local peer.
 	Interested bool
 	Choked     bool
@@ -64,6 +71,8 @@ func newConnection(sock net.Conn, peb peerExtensionBytes, peerID [20]byte) (c *c
 		closing: make(chan struct{}),
 		writeCh: make(chan []byte),
 		post:    make(chan pp.Message),
+
+		completedHandshake: time.Now(),
 	}
 	go c.writer()
 	go c.writeOptimizer(time.Minute)
@@ -119,7 +128,7 @@ func (cn *connection) setNumPieces(num int) error {
 }
 
 func (cn *connection) WriteStatus(w io.Writer) {
-	fmt.Fprintf(w, "%q: %s-%s: %s completed, reqs: %d-%d, flags: ", cn.PeerID, cn.Socket.LocalAddr(), cn.Socket.RemoteAddr(), cn.completedString(), len(cn.Requests), len(cn.PeerRequests))
+	fmt.Fprintf(w, "%-90s: %s completed, good chunks: %d/%d reqs: %d-%d, last msg: %.0fs ago age: %.1fmin last useful chunk: %s ago flags: ", fmt.Sprintf("%q: %s-%s", cn.PeerID, cn.Socket.LocalAddr(), cn.Socket.RemoteAddr()), cn.completedString(), cn.UsefulChunksReceived, cn.ChunksReceived, len(cn.Requests), len(cn.PeerRequests), time.Now().Sub(cn.lastMessageReceived).Seconds(), time.Now().Sub(cn.completedHandshake).Minutes(), time.Now().Sub(cn.lastUsefulChunkReceived))
 	c := func(b byte) {
 		fmt.Fprintf(w, "%c", b)
 	}

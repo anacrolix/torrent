@@ -1255,8 +1255,10 @@ func (me *Client) replenishConnRequests(t *torrent, c *connection) {
 	}
 }
 
+// Handle a received chunk from a peer.
 func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) error {
 	chunksDownloadedCount.Add(1)
+	c.ChunksReceived++
 
 	req := newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))
 
@@ -1270,6 +1272,9 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 		unusedDownloadedChunksCount.Add(1)
 		return nil
 	}
+
+	c.UsefulChunksReceived++
+	c.lastUsefulChunkReceived = time.Now()
 
 	// Write the chunk out.
 	err := t.WriteChunk(int(msg.Index), int64(msg.Begin), msg.Piece)

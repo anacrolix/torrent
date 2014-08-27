@@ -28,7 +28,7 @@ const (
 type connection struct {
 	Socket    net.Conn
 	Discovery peerSource
-	closed    chan struct{}
+	closing   chan struct{}
 	mu        sync.Mutex // Only for closing.
 	post      chan pp.Message
 	writeCh   chan []byte
@@ -61,7 +61,7 @@ func newConnection(sock net.Conn, peb peerExtensionBytes, peerID [20]byte) (c *c
 		PeerExtensionBytes: peb,
 		PeerID:             peerID,
 
-		closed:  make(chan struct{}),
+		closing: make(chan struct{}),
 		writeCh: make(chan []byte),
 		post:    make(chan pp.Message),
 	}
@@ -146,20 +146,13 @@ func (cn *connection) WriteStatus(w io.Writer) {
 func (c *connection) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.getClosed() {
-		return
-	}
-	close(c.closed)
-	c.Socket.Close()
-}
-
-func (c *connection) getClosed() bool {
 	select {
-	case <-c.closed:
-		return true
+	case <-c.closing:
+		return
 	default:
-		return false
 	}
+	close(c.closing)
+	c.Socket.Close()
 }
 
 func (c *connection) PeerHasPiece(index pp.Integer) bool {
@@ -175,7 +168,7 @@ func (c *connection) PeerHasPiece(index pp.Integer) bool {
 func (c *connection) Post(msg pp.Message) {
 	select {
 	case c.post <- msg:
-	case <-c.closed:
+	case <-c.closing:
 	}
 }
 
@@ -296,7 +289,7 @@ func (conn *connection) writer() {
 				conn.Close()
 				return
 			}
-		case <-conn.closed:
+		case <-conn.closing:
 			return
 		}
 	}
@@ -354,7 +347,7 @@ func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
 			if pending.Len() == 0 {
 				timer.Reset(keepAliveDelay)
 			}
-		case <-conn.closed:
+		case <-conn.closing:
 			return
 		}
 	}

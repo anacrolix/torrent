@@ -694,8 +694,11 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		var msg pp.Message
 		err := decoder.Decode(&msg)
 		me.mu.Lock()
-		if c.getClosed() {
+		c.lastMessageReceived = time.Now()
+		select {
+		case <-c.closing:
 			return nil
+		default:
 		}
 		if err != nil {
 			if me.stopped() || err == io.EOF {

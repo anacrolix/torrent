@@ -1,10 +1,12 @@
 package torrentfs
 
 import (
+	"expvar"
 	"log"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
@@ -14,6 +16,12 @@ import (
 
 const (
 	defaultMode = 0555
+)
+
+var (
+	torrentfsReadRequests        = expvar.NewInt("torrentfsReadRequests")
+	torrentfsDelayedReadRequests = expvar.NewInt("torrentfsDelayedReadRequests")
+	interruptedReads             = expvar.NewInt("interruptedReads")
 )
 
 type torrentFS struct {
@@ -54,10 +62,18 @@ func (n *node) fsPath() string {
 }
 
 func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fusefs.Intr) fuse.Error {
+	torrentfsReadRequests.Add(1)
+	started := time.Now()
 	if req.Dir {
 		panic("read on directory")
 	}
-	log.Printf("read request for %s: offset=%d size=%d", fn.fsPath(), req.Offset, req.Size)
+	defer func() {
+		ms := time.Now().Sub(started).Nanoseconds() / 1000000
+		if ms < 20 {
+			return
+		}
+		log.Printf("torrentfs read took %dms", ms)
+	}()
 	size := req.Size
 	fileLeft := int64(fn.size) - req.Offset
 	if fileLeft < int64(size) {
@@ -74,6 +90,7 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 			panic(err)
 		}
 	}()
+	delayed := false
 	for {
 		dataWaiter := fn.FS.Client.DataWaiter()
 		n, err := fn.FS.Client.TorrentReadAt(infoHash, torrentOff, resp.Data)
@@ -82,6 +99,10 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 			resp.Data = resp.Data[:n]
 			return nil
 		case torrent.ErrDataNotReady:
+			if !delayed {
+				torrentfsDelayedReadRequests.Add(1)
+				delayed = true
+			}
 			select {
 			case <-dataWaiter:
 			case <-fn.FS.destroyed:

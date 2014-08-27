@@ -310,12 +310,19 @@ func (me *Client) initiateConn(peer Peer, torrent *torrent) {
 	if peer.Id == me.peerID {
 		return
 	}
+	addr := &net.TCPAddr{
+		IP:   peer.IP,
+		Port: peer.Port,
+	}
+	// Don't connect to the same address twice for the same torrent.
+	for _, c := range torrent.Conns {
+		if c.Socket.RemoteAddr().String() == addr.String() {
+			duplicateConnsAvoided.Add(1)
+			return
+		}
+	}
 	me.halfOpen++
 	go func() {
-		addr := &net.TCPAddr{
-			IP:   peer.IP,
-			Port: peer.Port,
-		}
 		// Binding to the listener address and dialing via net.Dialer gives
 		// "address in use" error. It seems it's not possible to dial out from
 		// this address so that peers associate our local address with our

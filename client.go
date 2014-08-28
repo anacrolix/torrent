@@ -495,6 +495,9 @@ func (pc peerConn) Read(b []byte) (n int, err error) {
 }
 
 func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerSource) (err error) {
+	if tcpConn, ok := sock.(*net.TCPConn); ok {
+		tcpConn.SetLinger(0)
+	}
 	defer sock.Close()
 	me.mu.Lock()
 	me.handshaking++

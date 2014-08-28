@@ -1,8 +1,2 @@
- * Maybe a bug in read truncation by pending chunks causes that occasionally glitch in VLC?
- * Might need to reorder pieces by bytes left when hashes pass.
- * When a piece has zero bytes left, it could be removed from pieces by bytes left, removing O(n^2) overhead searching for incomplete pieces for every connection.
- * Make torrent read requests higher priority than everything else?
- * I think the high-low water is broken with responsive download strategy.
  * Properly encapsulate the mmap/span stuff.
- * Implement keep-alive timeout when receiving.
- * Wrap connection sockets to convert certain errors and timeout on inactivity with no keep-alives.
+ * Finish balancing socketsPerTorrent and half-open, handshakes and worst conns.

@@ -71,7 +71,7 @@ func main() {
 			}
 			util.CopyExact(&ih, metaInfo.Info.Hash)
 		}
-		client.PrioritizeDataRegion(ih, 0, 999999999)
+		// client.PrioritizeDataRegion(ih, 0, 999999999)
 		err := client.AddPeers(ih, func() []torrent.Peer {
 			if *testPeer == "" {
 				return nil
@@ -93,7 +93,7 @@ func main() {
 		select {}
 	}
 	if client.WaitAll() {
-		log.Print("all torrents completed!")
+		log.Print("downloaded ALL the torrents")
 	} else {
 		log.Fatal("y u no complete torrents?!")
 	}

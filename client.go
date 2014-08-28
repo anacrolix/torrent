@@ -123,7 +123,7 @@ func (me *Client) ListenAddr() net.Addr {
 }
 
 func (cl *Client) WriteStatus(w io.Writer) {
-	cl.mu.Lock()
+	cl.mu.LevelLock(1)
 	defer cl.mu.Unlock()
 	if cl.listener != nil {
 		fmt.Fprintf(w, "Listening on %s\n", cl.listener.Addr())
@@ -274,6 +274,8 @@ func (me *Client) Stop() {
 
 func (cl *Client) acceptConnections() {
 	for {
+		// We accept all connections immediately, because we don't what
+		// torrent they're for.
 		conn, err := cl.listener.Accept()
 		select {
 		case <-cl.quit:
@@ -287,7 +289,6 @@ func (cl *Client) acceptConnections() {
 			log.Print(err)
 			return
 		}
-		// log.Printf("accepted connection from %s", conn.RemoteAddr())
 		go func() {
 			if err := cl.runConnection(conn, nil, peerSourceIncoming); err != nil {
 				log.Print(err)
@@ -539,7 +540,14 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 					},
 					"v": "go.torrent dev 20140825", // Just the date
 					// No upload queue is implemented yet.
-					"reqq": 1,
+					"reqq": func() int {
+						if me.noUpload {
+							// No need to look strange if it costs us nothing.
+							return 250
+						} else {
+							return 1
+						}
+					}(),
 				}
 				if torrent.metadataSizeKnown() {
 					d["metadata_size"] = torrent.metadataSize()

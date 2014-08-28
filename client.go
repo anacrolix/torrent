@@ -267,9 +267,7 @@ func (me *Client) Stop() {
 	close(me.quit)
 	me.event.Broadcast()
 	for _, t := range me.torrents {
-		for _, c := range t.Conns {
-			c.Close()
-		}
+		t.Close()
 	}
 	me.mu.Unlock()
 }
@@ -929,10 +927,10 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 }
 
 func (me *Client) dropConnection(torrent *torrent, conn *connection) {
-	conn.Socket.Close()
 	for r := range conn.Requests {
 		me.connDeleteRequest(torrent, conn, r)
 	}
+	conn.Close()
 	for i0, c := range torrent.Conns {
 		if c != conn {
 			continue

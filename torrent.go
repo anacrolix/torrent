@@ -1,11 +1,13 @@
 package torrent
 
 import (
+	"container/heap"
 	"container/list"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"sort"
 	"sync"
 
 	"bitbucket.org/anacrolix/go.torrent/util"
@@ -65,6 +67,14 @@ type torrent struct {
 	DisplayName  string
 	MetaData     []byte
 	metadataHave []bool
+}
+
+func (t *torrent) worstConnsHeap() (wcs *worstConnsHeap) {
+	wcs = new(worstConnsHeap)
+	*wcs = make([]*connection, 0, len(t.Conns))
+	*wcs = append(*wcs, t.Conns...)
+	heap.Init(wcs)
+	return
 }
 
 func (t *torrent) CeaseNetworking() {
@@ -283,6 +293,9 @@ func (t *torrent) WriteStatus(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Pending peers: %d\n", len(t.Peers))
 	fmt.Fprintf(w, "Active peers: %d\n", len(t.Conns))
+	wcs := new(worstConnsHeap)
+	*wcs = t.Conns
+	sort.Sort(wcs)
 	for _, c := range t.Conns {
 		c.WriteStatus(w)
 	}

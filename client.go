@@ -17,6 +17,7 @@ package torrent
 
 import (
 	"bufio"
+	"container/heap"
 	"crypto/rand"
 	"crypto/sha1"
 	"errors"
@@ -55,11 +56,15 @@ var (
 	duplicateConnsAvoided       = expvar.NewInt("duplicateConnsAvoided")
 )
 
-// Justification for set bits follows.
-//
-// Extension protocol: http://www.bittorrent.org/beps/bep_0010.html
-// DHT: http://www.bittorrent.org/beps/bep_0005.html
-const extensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x01"
+const (
+	// Justification for set bits follows.
+	//
+	// Extension protocol: http://www.bittorrent.org/beps/bep_0010.html
+	// DHT: http://www.bittorrent.org/beps/bep_0005.html
+	extensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x01"
+
+	socketsPerTorrent = 40
+)
 
 // Currently doesn't really queue, but should in the future.
 func (cl *Client) queuePieceCheck(t *torrent, pieceIndex pp.Integer) {
@@ -969,6 +974,10 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 		}
 	}
 	t.Conns = append(t.Conns, c)
+	if len(t.Conns) > socketsPerTorrent {
+		wcs := t.worstConnsHeap()
+		heap.Pop(wcs).(*connection).Close()
+	}
 	return true
 }
 
@@ -982,6 +991,9 @@ func (me *Client) openNewConns() {
 		for len(t.Peers) != 0 {
 			if me.halfOpen >= me.halfOpenLimit {
 				return
+			}
+			if me.halfOpen+me.handshaking+len(t.Conns) >= socketsPerTorrent {
+				break
 			}
 			var (
 				k peersKey

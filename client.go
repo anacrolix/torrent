@@ -17,6 +17,7 @@ package torrent
 
 import (
 	"bufio"
+	"bytes"
 	"container/heap"
 	"crypto/rand"
 	"crypto/sha1"
@@ -921,7 +922,12 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				err = fmt.Errorf("unexpected extended message ID: %v", msg.ExtendedID)
 			}
 			if err != nil {
-				log.Printf("peer extension map: %#v", c.PeerExtensionIDs)
+				// That client uses its own extension IDs for outgoing message
+				// types, which is incorrect.
+				if bytes.HasPrefix(c.PeerID[:], []byte("-SD0100-")) {
+					return nil
+				}
+				// log.Printf("peer extension map: %#v", c.PeerExtensionIDs)
 			}
 		case pp.Port:
 			if me.dHT == nil {

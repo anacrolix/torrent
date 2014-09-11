@@ -219,20 +219,21 @@ func (me *requestFiller) completePartial() bool {
 	th := me.s.requestHeat[t]
 	for e := t.IncompletePiecesByBytesLeft.Front(); e != nil; e = e.Next() {
 		p := e.Value.(int)
+		// Stop when we reach pieces that aren't partial and aren't smaller
+		// than usual.
 		if !t.PiecePartiallyDownloaded(p) && int(t.PieceLength(pp.Integer(p))) == t.UsualPieceSize() {
 			break
-		}
-		if lastReadOffset, ok := me.s.lastReadOffset[t]; ok {
-			if p >= int(lastReadOffset/int64(t.UsualPieceSize())) {
-				if int64(p+1)*int64(t.UsualPieceSize()) < lastReadOffset+me.s.Readahead {
-					continue
-				}
-			}
 		}
 		for chunkSpec := range t.Pieces[p].PendingChunkSpecs {
 			r := request{pp.Integer(p), chunkSpec}
 			if th[r] >= 1 {
 				continue
+			}
+			if lastReadOffset, ok := me.s.lastReadOffset[t]; ok {
+				off := me.t.requestOffset(r)
+				if off >= lastReadOffset && off < lastReadOffset+me.s.Readahead {
+					continue
+				}
 			}
 			if !me.conservativelyRequest(r) {
 				return false

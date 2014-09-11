@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"bitbucket.org/anacrolix/go.torrent/util"
 
@@ -118,7 +119,7 @@ func scanDir(dirName string) (ee map[torrent.InfoHash]entity) {
 			for _, uri := range uris {
 				m, err := torrent.ParseMagnetURI(uri)
 				if err != nil {
-					log.Print(err)
+					log.Printf("error parsing %q in file %q: %s", uri, fullName, err)
 					continue
 				}
 				addEntity(entity{
@@ -140,6 +141,10 @@ func magnetFileURIs(name string) (uris []string, err error) {
 	scanner := bufio.NewScanner(f)
 	scanner.Split(bufio.ScanWords)
 	for scanner.Scan() {
+		// Allow magnet URIs to be "commented" out.
+		if strings.HasPrefix(scanner.Text(), "#") {
+			continue
+		}
 		uris = append(uris, scanner.Text())
 	}
 	err = scanner.Err()

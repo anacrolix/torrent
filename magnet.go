@@ -22,6 +22,10 @@ func ParseMagnetURI(uri string) (m Magnet, err error) {
 		err = fmt.Errorf("error parsing uri: %s", err)
 		return
 	}
+	if u.Scheme != "magnet" {
+		err = fmt.Errorf("unexpected scheme: %q", u.Scheme)
+		return
+	}
 	xt := u.Query().Get("xt")
 	if !strings.HasPrefix(xt, xtPrefix) {
 		err = fmt.Errorf("bad xt parameter")

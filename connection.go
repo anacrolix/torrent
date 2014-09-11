@@ -33,8 +33,8 @@ type connection struct {
 	post      chan pp.Message
 	writeCh   chan []byte
 
-	ChunksReceived       int
-	UsefulChunksReceived int
+	UnwantedChunksReceived int
+	UsefulChunksReceived   int
 
 	lastMessageReceived     time.Time
 	completedHandshake      time.Time
@@ -127,8 +127,15 @@ func (cn *connection) setNumPieces(num int) error {
 	return nil
 }
 
+func eventAgeString(t time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+	return fmt.Sprintf("%.2fs ago", time.Now().Sub(t).Seconds())
+}
+
 func (cn *connection) WriteStatus(w io.Writer) {
-	fmt.Fprintf(w, "%-90s: %s completed, good chunks: %d/%d reqs: %d-%d, last msg: %.0fs ago age: %.1fmin last useful chunk: %s ago flags: ", fmt.Sprintf("%q: %s-%s", cn.PeerID, cn.Socket.LocalAddr(), cn.Socket.RemoteAddr()), cn.completedString(), cn.UsefulChunksReceived, cn.ChunksReceived, len(cn.Requests), len(cn.PeerRequests), time.Now().Sub(cn.lastMessageReceived).Seconds(), time.Now().Sub(cn.completedHandshake).Minutes(), time.Now().Sub(cn.lastUsefulChunkReceived))
+	fmt.Fprintf(w, "%-90s: %s completed, good chunks: %d/%d reqs: %d-%d, last msg: %s, connected: %s, last useful chunk: %s, flags: ", fmt.Sprintf("%q: %s-%s", cn.PeerID, cn.Socket.LocalAddr(), cn.Socket.RemoteAddr()), cn.completedString(), cn.UsefulChunksReceived, cn.UnwantedChunksReceived+cn.UsefulChunksReceived, len(cn.Requests), len(cn.PeerRequests), eventAgeString(cn.lastMessageReceived), eventAgeString(cn.completedHandshake), eventAgeString(cn.lastUsefulChunkReceived))
 	c := func(b byte) {
 		fmt.Fprintf(w, "%c", b)
 	}

@@ -1332,7 +1332,6 @@ func (me *Client) replenishConnRequests(t *torrent, c *connection) {
 // Handle a received chunk from a peer.
 func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) error {
 	chunksDownloadedCount.Add(1)
-	c.ChunksReceived++
 
 	req := newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))
 
@@ -1344,6 +1343,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	// Do we actually want this chunk?
 	if _, ok := t.Pieces[req.Index].PendingChunkSpecs[req.chunkSpec]; !ok {
 		unusedDownloadedChunksCount.Add(1)
+		c.UnwantedChunksReceived++
 		return nil
 	}
 

@@ -58,3 +58,12 @@ func TestTorrentDoubleClose(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestAppendToCopySlice(t *testing.T) {
+	orig := []int{1, 2, 3}
+	dupe := append([]int{}, orig...)
+	dupe[0] = 4
+	if orig[0] != 1 {
+		t.FailNow()
+	}
+}

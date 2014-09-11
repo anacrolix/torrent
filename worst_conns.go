@@ -4,27 +4,13 @@ import (
 	"time"
 )
 
-type worstConnsHeap []*connection
+// Implements heap functions such that [0] is the worst connection.
+type worstConns []*connection
 
-func (me worstConnsHeap) Len() int      { return len(me) }
-func (me worstConnsHeap) Swap(i, j int) { me[i], me[j] = me[j], me[i] }
-func (me worstConnsHeap) last(c *connection) (ret time.Time) {
-	ret = c.lastUsefulChunkReceived
-	if !ret.IsZero() {
-		return
-	}
-	ret = c.completedHandshake
-	if time.Now().Sub(ret) >= 3*time.Minute {
-		return
-	}
-	ret = time.Now().Add(-3 * time.Minute)
-	return
-}
-func (me worstConnsHeap) Less(i, j int) bool {
-	return me.last(me[i]).Before(me.last(me[j]))
-}
+func (me worstConns) Len() int      { return len(me) }
+func (me worstConns) Swap(i, j int) { me[i], me[j] = me[j], me[i] }
 
-func (me *worstConnsHeap) Pop() (ret interface{}) {
+func (me *worstConns) Pop() (ret interface{}) {
 	old := *me
 	n := len(old)
 	ret = old[n-1]
@@ -32,6 +18,20 @@ func (me *worstConnsHeap) Pop() (ret interface{}) {
 	return
 }
 
-func (me *worstConnsHeap) Push(x interface{}) {
+func (me *worstConns) Push(x interface{}) {
 	*me = append(*me, x.(*connection))
+}
+
+func (me worstConns) key(i int) (ret time.Duration) {
+	c := me[i]
+	return time.Duration(1+c.UnwantedChunksReceived) * time.Now().Sub(func() time.Time {
+		if !c.lastUsefulChunkReceived.IsZero() {
+			return c.lastUsefulChunkReceived
+		}
+		return c.completedHandshake.Add(-time.Minute)
+	}()) / time.Duration(1+c.UsefulChunksReceived)
+}
+
+func (me worstConns) Less(i, j int) bool {
+	return me.key(i) > me.key(j)
 }

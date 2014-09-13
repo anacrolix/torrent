@@ -56,6 +56,7 @@ var (
 	unexpectedCancels           = expvar.NewInt("unexpectedCancels")
 	postedCancels               = expvar.NewInt("postedCancels")
 	duplicateConnsAvoided       = expvar.NewInt("duplicateConnsAvoided")
+	failedPieceHashes           = expvar.NewInt("failedPieceHashes")
 )
 
 const (
@@ -1451,6 +1452,10 @@ func (me *Client) DataWaiter(ih InfoHash, off int64) (ret <-chan struct{}) {
 
 func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 	p := t.Pieces[piece]
+	if p.EverHashed && !correct {
+		log.Printf("%s: piece %d failed hash", t, piece)
+		failedPieceHashes.Add(1)
+	}
 	p.EverHashed = true
 	if correct {
 		p.PendingChunkSpecs = nil

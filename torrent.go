@@ -250,6 +250,8 @@ func (t *torrent) pieceStatusChar(index int) byte {
 		return 'H'
 	case t.PiecePartiallyDownloaded(index):
 		return 'P'
+	case !p.EverHashed:
+		return '?'
 	default:
 		return '.'
 	}
@@ -287,8 +289,11 @@ func (t *torrent) WriteStatus(w io.Writer) {
 			return "?"
 		}
 	}())
-	fmt.Fprint(w, "Pieces: ")
+	fmt.Fprint(w, "Pieces:")
 	for index := range t.Pieces {
+		if index%100 == 0 {
+			fmt.Fprintln(w)
+		}
 		fmt.Fprintf(w, "%c", t.pieceStatusChar(index))
 	}
 	fmt.Fprintln(w)

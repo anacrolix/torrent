@@ -533,6 +533,19 @@ func (me *torrent) haveAnyPieces() bool {
 	return false
 }
 
+func (t *torrent) havePiece(index int) bool {
+	return t.haveInfo() && t.Pieces[index].Complete()
+}
+
+func (t *torrent) haveChunk(r request) bool {
+	p := t.Pieces[r.Index]
+	if !p.EverHashed {
+		return false
+	}
+	_, ok := p.PendingChunkSpecs[r.chunkSpec]
+	return !ok
+}
+
 func (t *torrent) wantChunk(r request) bool {
 	if !t.wantPiece(int(r.Index)) {
 		return false

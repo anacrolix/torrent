@@ -1460,12 +1460,9 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 	if correct {
 		p.PendingChunkSpecs = nil
 		me.downloadStrategy.TorrentGotPiece(t, int(piece))
-		me.dataReady(dataSpec{
-			t.InfoHash,
-			request{
-				pp.Integer(piece),
-				chunkSpec{0, pp.Integer(t.PieceLength(piece))},
-			},
+		me.dataReady(t, request{
+			pp.Integer(piece),
+			chunkSpec{0, pp.Integer(t.PieceLength(piece))},
 		})
 	} else {
 		if len(p.PendingChunkSpecs) == 0 {

@@ -1502,12 +1502,12 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 
 func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 	cl.mu.Lock()
+	defer cl.mu.Unlock()
 	p := t.Pieces[index]
 	for p.Hashing {
 		cl.event.Wait()
 	}
 	if t.isClosed() {
-		cl.mu.Unlock()
 		return
 	}
 	p.Hashing = true
@@ -1515,9 +1515,13 @@ func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 	cl.mu.Unlock()
 	sum := t.HashPiece(index)
 	cl.mu.Lock()
+	select {
+	case <-t.closing:
+		return
+	default:
+	}
 	p.Hashing = false
 	cl.pieceHashed(t, index, sum == p.Hash)
-	cl.mu.Unlock()
 }
 
 func (me *Client) Torrents() (ret []*torrent) {

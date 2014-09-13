@@ -964,7 +964,12 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			_, err = me.dHT.Ping(&net.UDPAddr{
 				IP:   addr.IP,
 				Zone: addr.Zone,
-				Port: int(msg.Port),
+				Port: func() int {
+					if msg.Port == 0 {
+						return addr.Port
+					}
+					return int(msg.Port)
+				}(),
 			})
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)

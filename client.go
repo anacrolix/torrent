@@ -492,6 +492,16 @@ func (pc peerConn) Read(b []byte) (n int, err error) {
 		return
 	}
 	n, err = pc.Conn.Read(b)
+	if err != nil {
+		if opError, ok := err.(*net.OpError); ok && opError.Op == "read" && opError.Err == syscall.ECONNRESET {
+			err = io.EOF
+		} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			if n != 0 {
+				panic(n)
+			}
+			err = io.EOF
+		}
+	}
 	return
 }
 

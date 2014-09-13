@@ -934,7 +934,8 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			if err != nil {
 				// That client uses its own extension IDs for outgoing message
 				// types, which is incorrect.
-				if bytes.HasPrefix(c.PeerID[:], []byte("-SD0100-")) {
+				if bytes.HasPrefix(c.PeerID[:], []byte("-SD0100-")) ||
+					strings.HasPrefix(string(c.PeerID[:]), "-XL0012-") {
 					return nil
 				}
 				// log.Printf("peer extension map: %#v", c.PeerExtensionIDs)

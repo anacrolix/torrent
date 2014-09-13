@@ -1,2 +1,6 @@
  * Properly encapsulate the mmap/span stuff.
  * Finish balancing socketsPerTorrent and half-open, handshakes and worst conns.
+ * Use big.Int, and it's Xor(), and SetBytes() functions for DHT node ID distances.
+ * Don't check entire torrent when its added.
+ * Add a coarse-responsive download strategy, that prioritizes pieces instead of chunks.
+ * Track upload and download data.

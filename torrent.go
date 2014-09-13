@@ -561,3 +561,19 @@ func (t *torrent) wantPiece(index int) bool {
 	p := t.Pieces[index]
 	return p.EverHashed && len(p.PendingChunkSpecs) != 0
 }
+
+func (t *torrent) connHasWantedPieces(c *connection) bool {
+	for p := range t.Pieces {
+		if t.wantPiece(p) && c.PeerHasPiece(pp.Integer(p)) {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *torrent) extentPieces(off, _len int64) (pieces []int) {
+	for i := off / int64(t.UsualPieceSize()); i*int64(t.UsualPieceSize()) < off+_len; i++ {
+		pieces = append(pieces, int(i))
+	}
+	return
+}

@@ -2,6 +2,7 @@ package torrentfs
 
 import (
 	"expvar"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -72,6 +73,35 @@ func (n *node) fsPath() string {
 	return "/" + strings.Join(append([]string{n.metadata.Name}, n.path...), "/")
 }
 
+func blockingRead(fs *torrentFS, ih torrent.InfoHash, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
+	dataWaiter := fs.Client.DataWaiter(ih, off)
+	select {
+	case <-dataWaiter:
+	case <-fs.destroyed:
+		err = fuse.EIO
+		return
+	case <-intr:
+		err = fuse.EINTR
+		return
+	}
+	n, err = fs.Client.TorrentReadAt(ih, off, p)
+	return
+}
+
+func readFull(fs *torrentFS, ih torrent.InfoHash, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
+	for len(p) != 0 {
+		var nn int
+		nn, err = blockingRead(fs, ih, off, p, intr)
+		if err != nil {
+			break
+		}
+		n += nn
+		off += int64(nn)
+		p = p[nn:]
+	}
+	return
+}
+
 func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fusefs.Intr) fuse.Error {
 	torrentfsReadRequests.Add(1)
 	started := time.Now()
@@ -104,31 +134,14 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 			log.Printf("error prioritizing %s: %s", fn.fsPath(), err)
 		}
 	}()
-	delayed := false
-	for {
-		dataWaiter := fn.FS.Client.DataWaiter()
-		n, err := fn.FS.Client.TorrentReadAt(infoHash, torrentOff, resp.Data)
-		switch err {
-		case nil:
-			resp.Data = resp.Data[:n]
-			return nil
-		case torrent.ErrDataNotReady:
-			if !delayed {
-				torrentfsDelayedReadRequests.Add(1)
-				delayed = true
-			}
-			select {
-			case <-dataWaiter:
-			case <-fn.FS.destroyed:
-				return fuse.EIO
-			case <-intr:
-				return fuse.EINTR
-			}
-		default:
-			log.Print(err)
-			return err // bazil.org/fuse will convert generic errors appropriately.
-		}
+	n, err := readFull(fn.FS, infoHash, torrentOff, resp.Data, intr)
+	if err != nil {
+		return err
 	}
+	if n != size {
+		panic(fmt.Sprintf("%d < %d", n, size))
+	}
+	return nil
 }
 
 type dirNode struct {

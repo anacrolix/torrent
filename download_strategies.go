@@ -167,6 +167,9 @@ func (me *requestFiller) request(req request) bool {
 	if me.c.RequestPending(req) {
 		return true
 	}
+	if !me.t.wantChunk(req) {
+		return true
+	}
 	again := me.c.Request(req)
 	if me.c.RequestPending(req) {
 		me.s.requestHeat[me.t][req]++
@@ -186,6 +189,7 @@ func (me *requestFiller) conservativelyRequest(req request) bool {
 // Fill priority requests.
 func (me *requestFiller) priorities() bool {
 	for req := range me.s.priorities[me.t] {
+		// TODO: Perhaps this filter should be applied to every request?
 		if _, ok := me.t.Pieces[req.Index].PendingChunkSpecs[req.chunkSpec]; !ok {
 			panic(req)
 		}
@@ -217,6 +221,7 @@ func (me requestFiller) Run() {
 func (me *requestFiller) completePartial() bool {
 	t := me.t
 	th := me.s.requestHeat[t]
+	lro, lroOk := me.s.lastReadOffset[t]
 	for e := t.IncompletePiecesByBytesLeft.Front(); e != nil; e = e.Next() {
 		p := e.Value.(int)
 		// Stop when we reach pieces that aren't partial and aren't smaller
@@ -224,14 +229,22 @@ func (me *requestFiller) completePartial() bool {
 		if !t.PiecePartiallyDownloaded(p) && int(t.PieceLength(pp.Integer(p))) == t.UsualPieceSize() {
 			break
 		}
+		// Skip pieces that are entirely inside the readahead zone.
+		if lroOk {
+			pieceOff := int64(p) * int64(t.UsualPieceSize())
+			pieceEndOff := pieceOff + int64(t.PieceLength(pp.Integer(p)))
+			if pieceOff >= lro && pieceEndOff < lro+me.s.Readahead {
+				continue
+			}
+		}
 		for chunkSpec := range t.Pieces[p].PendingChunkSpecs {
 			r := request{pp.Integer(p), chunkSpec}
 			if th[r] >= 1 {
 				continue
 			}
-			if lastReadOffset, ok := me.s.lastReadOffset[t]; ok {
+			if lroOk {
 				off := me.t.requestOffset(r)
-				if off >= lastReadOffset && off < lastReadOffset+me.s.Readahead {
+				if off >= lro && off < lro+me.s.Readahead {
 					continue
 				}
 			}
@@ -289,7 +302,9 @@ func (me *requestFiller) readahead() bool {
 	if len(rr) == 0 {
 		return true
 	}
-	// Produce a partially sorted random permutation into the readahead chunks to somewhat preserve order but reducing wasted chunks due to overlap with other peers.
+	// Produce a partially sorted random permutation into the readahead chunks
+	// to somewhat preserve order but reducing wasted chunks due to overlap
+	// with other peers.
 	ii := new(intHeap)
 	*ii = me.s.rand.Perm(len(rr))
 	heap.Init(ii)
@@ -328,7 +343,7 @@ func (s *responsiveDownloadStrategy) TorrentPrioritize(t *torrent, off, _len int
 		// Lose the length of this block.
 		_len -= int64(req.Length)
 		off = reqOff + int64(req.Length)
-		if t.wantChunk(req) {
+		if !t.haveChunk(req) {
 			s.priorities[t][req] = struct{}{}
 		}
 	}

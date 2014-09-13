@@ -631,7 +631,7 @@ func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) {
 		c.PeerPieces = append(c.PeerPieces, false)
 	}
 	c.PeerPieces[piece] = true
-	if t.wantPiece(piece) {
+	if !t.havePiece(piece) {
 		me.replenishConnRequests(t, c)
 	}
 }
@@ -1482,10 +1482,16 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 				Index: pp.Integer(piece),
 			})
 			// TODO: Cancel requests for this piece.
-		} else {
-			if conn.PeerHasPiece(piece) {
-				me.replenishConnRequests(t, conn)
+			for r := range conn.Requests {
+				if r.Index == piece {
+					panic("wat")
+				}
 			}
+		}
+		// Do this even if the piece is correct because new first-hashings may
+		// need to be scheduled.
+		if conn.PeerHasPiece(piece) {
+			me.replenishConnRequests(t, conn)
 		}
 	}
 	if t.haveAllPieces() && me.noUpload {

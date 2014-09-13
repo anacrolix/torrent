@@ -70,8 +70,10 @@ type torrent struct {
 }
 
 func (t *torrent) worstConnsHeap() (wcs *worstConns) {
-	wcs = new(worstConns)
-	*wcs = append([]*connection{}, t.Conns...)
+	wcs = &worstConns{
+		c: append([]*connection{}, t.Conns...),
+		t: t,
+	}
 	heap.Init(wcs)
 	return
 }
@@ -292,7 +294,10 @@ func (t *torrent) WriteStatus(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Pending peers: %d\n", len(t.Peers))
 	fmt.Fprintf(w, "Active peers: %d\n", len(t.Conns))
-	sort.Sort(worstConns(t.Conns))
+	sort.Sort(&worstConns{
+		c: t.Conns,
+		t: t,
+	})
 	for _, c := range t.Conns {
 		c.WriteStatus(w)
 	}

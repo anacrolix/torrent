@@ -745,7 +745,7 @@ type peerExchangeMessage struct {
 // and exit.
 func (me *Client) connectionLoop(t *torrent, c *connection) error {
 	decoder := pp.Decoder{
-		R:         bufio.NewReader(c.Socket),
+		R:         bufio.NewReaderSize(c.Socket, 20*1024),
 		MaxLength: 256 * 1024,
 	}
 	for {

@@ -1067,16 +1067,20 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 	if err != nil {
 		return
 	}
-	// Queue all pieces for hashing. This is done sequentially to avoid
-	// spamming goroutines.
-	for _, p := range t.Pieces {
-		p.QueuedForHash = true
-	}
-	go func() {
-		for i := range t.Pieces {
-			cl.verifyPiece(t, pp.Integer(i))
+	// If the client intends to upload, it needs to know what state pieces are
+	// in.
+	if !cl.noUpload {
+		// Queue all pieces for hashing. This is done sequentially to avoid
+		// spamming goroutines.
+		for _, p := range t.Pieces {
+			p.QueuedForHash = true
 		}
-	}()
+		go func() {
+			for i := range t.Pieces {
+				cl.verifyPiece(t, pp.Integer(i))
+			}
+		}()
+	}
 
 	cl.downloadStrategy.TorrentStarted(t)
 	return
@@ -1313,7 +1317,17 @@ newAnnounce:
 
 func (cl *Client) allTorrentsCompleted() bool {
 	for _, t := range cl.torrents {
-		if !t.haveAllPieces() {
+		if !t.haveInfo() {
+			return false
+		}
+		for e := t.IncompletePiecesByBytesLeft.Front(); e != nil; e = e.Next() {
+			i := e.Value.(int)
+			if t.Pieces[i].Complete() {
+				continue
+			}
+			// If the piece isn't complete, make sure it's not because it's
+			// never been hashed.
+			cl.queueFirstHash(t, i)
 			return false
 		}
 	}
@@ -1358,7 +1372,11 @@ func (me *Client) replenishConnRequests(t *torrent, c *connection) {
 	if !t.haveInfo() {
 		return
 	}
-	me.downloadStrategy.FillRequests(t, c)
+	for _, p := range me.downloadStrategy.FillRequests(t, c) {
+		// Make sure the state of pieces that would have been requested is
+		// known.
+		me.queueFirstHash(t, p)
+	}
 	//me.assertRequestHeat()
 	if len(c.Requests) == 0 && !c.PeerChoked {
 		c.SetInterested(false)

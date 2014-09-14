@@ -10,7 +10,10 @@ import (
 )
 
 type DownloadStrategy interface {
-	FillRequests(*torrent, *connection)
+	// Tops up the outgoing pending requests. Returns the indices of pieces
+	// that would be requested. This is used to determine if pieces require
+	// hashing so the completed state is known.
+	FillRequests(*torrent, *connection) (pieces []int)
 	TorrentStarted(*torrent)
 	TorrentStopped(*torrent)
 	DeleteRequest(*torrent, request)
@@ -33,7 +36,7 @@ func (me *DefaultDownloadStrategy) AssertNotRequested(t *torrent, r request) {
 
 func (me *DefaultDownloadStrategy) WriteStatus(w io.Writer) {}
 
-func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
+func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) (pieces []int) {
 	if c.Interested {
 		if c.PeerChoked {
 			return
@@ -66,6 +69,11 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	for _, heatThreshold := range []int{1, 4, 15, 60} {
 		for e := t.IncompletePiecesByBytesLeft.Front(); e != nil; e = e.Next() {
 			pieceIndex := pp.Integer(e.Value.(int))
+			piece := t.Pieces[pieceIndex]
+			if !piece.EverHashed {
+				pieces = append(pieces, int(pieceIndex))
+				return
+			}
 			for chunkSpec := range t.Pieces[pieceIndex].PendingChunkSpecs {
 				r := request{pieceIndex, chunkSpec}
 				if th[r] >= heatThreshold {
@@ -77,6 +85,7 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 			}
 		}
 	}
+	return
 }
 
 func (s *DefaultDownloadStrategy) TorrentStarted(t *torrent) {
@@ -160,10 +169,14 @@ type requestFiller struct {
 	c *connection
 	t *torrent
 	s *responsiveDownloadStrategy
+
+	// The set of pieces that were considered for requesting.
+	pieces map[int]struct{}
 }
 
 // Wrapper around connection.request that tracks request heat.
 func (me *requestFiller) request(req request) bool {
+	me.pieces[int(req.Index)] = struct{}{}
 	if me.c.RequestPending(req) {
 		return true
 	}
@@ -265,7 +278,7 @@ func (me *requestFiller) pendingReadaheadChunks() (ret []request) {
 	}
 	ret = make([]request, 0, (me.s.Readahead+chunkSize-1)/chunkSize)
 	for pi := int(lastReadOffset / int64(t.UsualPieceSize())); pi < t.NumPieces() && int64(pi)*int64(t.UsualPieceSize()) < lastReadOffset+me.s.Readahead; pi++ {
-		if !t.wantPiece(pi) || !me.c.PeerHasPiece(pp.Integer(pi)) {
+		if t.havePiece(pi) || !me.c.PeerHasPiece(pp.Integer(pi)) {
 			continue
 		}
 		for cs := range t.Pieces[pi].PendingChunkSpecs {
@@ -316,8 +329,13 @@ func (me *requestFiller) readahead() bool {
 	return true
 }
 
-func (me *responsiveDownloadStrategy) FillRequests(t *torrent, c *connection) {
-	(requestFiller{c, t, me}).Run()
+func (me *responsiveDownloadStrategy) FillRequests(t *torrent, c *connection) (pieces []int) {
+	rf := requestFiller{c, t, me, make(map[int]struct{}, t.NumPieces())}
+	rf.Run()
+	for p := range rf.pieces {
+		pieces = append(pieces, p)
+	}
+	return
 }
 
 func (me *responsiveDownloadStrategy) TorrentGotChunk(t *torrent, req request) {

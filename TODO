@@ -4,3 +4,4 @@
  * Don't check entire torrent when its added.
  * Add a coarse-responsive download strategy, that prioritizes pieces instead of chunks.
  * Track upload and download data.
+ * Remove non-deterministic stuff from unit tests, like the tracker UDP and fuse fs stuff.

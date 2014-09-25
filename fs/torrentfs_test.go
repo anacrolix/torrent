@@ -142,7 +142,7 @@ func TestDownloadOnDemand(t *testing.T) {
 		seeder.WriteStatus(w)
 	})
 	defer seeder.Stop()
-	err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%x", layout.Metainfo.Info.Hash))
+	_, err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%x", layout.Metainfo.Info.Hash))
 	if err != nil {
 		t.Fatal(err)
 	}

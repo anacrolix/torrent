@@ -67,6 +67,9 @@ type torrent struct {
 	DisplayName  string
 	MetaData     []byte
 	metadataHave []bool
+
+	gotMetainfo chan *metainfo.MetaInfo
+	GotMetainfo <-chan *metainfo.MetaInfo
 }
 
 func (t *torrent) worstConnsHeap() (wcs *worstConns) {

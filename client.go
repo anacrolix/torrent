@@ -1083,6 +1083,21 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 	}
 
 	cl.downloadStrategy.TorrentStarted(t)
+	select {
+	case t.gotMetainfo <- &metainfo.MetaInfo{
+		Info: metainfo.InfoEx{
+			Info: md,
+		},
+		CreationDate: time.Now().Unix(),
+		Comment:      "metadata set in client",
+		CreatedBy:    "go.torrent",
+		// TODO(anacrolix): Expose trackers given when torrent added.
+	}:
+	default:
+		panic("shouldn't block")
+	}
+	close(t.gotMetainfo)
+	t.gotMetainfo = nil
 	return
 }
 
@@ -1096,7 +1111,10 @@ func newTorrent(ih InfoHash, announceList [][]string) (t *torrent, err error) {
 
 		closing:           make(chan struct{}),
 		ceasingNetworking: make(chan struct{}),
+
+		gotMetainfo: make(chan *metainfo.MetaInfo, 1),
 	}
+	t.GotMetainfo = t.gotMetainfo
 	t.Trackers = make([][]tracker.Client, len(announceList))
 	for tierIndex := range announceList {
 		tier := t.Trackers[tierIndex]
@@ -1120,12 +1138,12 @@ func newTorrent(ih InfoHash, announceList [][]string) (t *torrent, err error) {
 	return
 }
 
-func (cl *Client) AddMagnet(uri string) (err error) {
+func (cl *Client) AddMagnet(uri string) (t *torrent, err error) {
 	m, err := ParseMagnetURI(uri)
 	if err != nil {
 		return
 	}
-	t, err := newTorrent(m.InfoHash, [][]string{m.Trackers})
+	t, err = newTorrent(m.InfoHash, [][]string{m.Trackers})
 	if err != nil {
 		return
 	}

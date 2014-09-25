@@ -130,7 +130,7 @@ func main() {
 						log.Printf("error adding torrent to client: %s", err)
 					}
 				} else if ev.MagnetURI != "" {
-					err := client.AddMagnet(ev.MagnetURI)
+					_, err := client.AddMagnet(ev.MagnetURI)
 					if err != nil {
 						log.Printf("error adding magnet: %s", err)
 					}

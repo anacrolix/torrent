@@ -56,7 +56,7 @@ func main() {
 				log.Fatalf("error parsing magnet uri: %s", err)
 			}
 			ih = m.InfoHash
-			err = client.AddMagnet(arg)
+			_, err = client.AddMagnet(arg)
 			if err != nil {
 				log.Fatalf("error adding magnet: %s", err)
 			}

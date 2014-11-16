@@ -44,7 +44,7 @@ func TestTorrentRequest(t *testing.T) {
 }
 
 func TestTorrentDoubleClose(t *testing.T) {
-	tt, err := newTorrent(InfoHash{}, nil)
+	tt, err := newTorrent(InfoHash{}, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

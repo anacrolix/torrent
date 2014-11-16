@@ -41,7 +41,7 @@ func TestTorrentInitialState(t *testing.T) {
 	tor, err := newTorrent(func() (ih InfoHash) {
 		util.CopyExact(ih[:], mi.Info.Hash)
 		return
-	}(), nil)
+	}(), nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

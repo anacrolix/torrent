@@ -58,9 +58,16 @@ type torrent struct {
 	dataLock sync.RWMutex
 	Data     mmap_span.MMapSpan
 
-	Info  *metainfo.Info
+	Info *metainfo.Info
+	// Active peer connections.
 	Conns []*connection
+	// Set of addrs to which we're attempting to connect.
+	HalfOpen map[string]struct{}
+	// Reserve of peers to connect to. A peer can be both here and in the
+	// active connections if were told about the peer after connecting with
+	// them. That encourages us to reconnect to peers that are well known.
 	Peers map[peersKey]Peer
+
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
 	// mirror their respective URLs from the announce-list key.
 	Trackers     [][]tracker.Client
@@ -70,6 +77,18 @@ type torrent struct {
 
 	gotMetainfo chan *metainfo.MetaInfo
 	GotMetainfo <-chan *metainfo.MetaInfo
+}
+
+func (t *torrent) addrActive(addr string) bool {
+	if _, ok := t.HalfOpen[addr]; ok {
+		return true
+	}
+	for _, c := range t.Conns {
+		if c.Socket.RemoteAddr().String() == addr {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *torrent) worstConnsHeap() (wcs *worstConns) {
@@ -301,6 +320,7 @@ func (t *torrent) WriteStatus(w io.Writer) {
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Pending peers: %d\n", len(t.Peers))
+	fmt.Fprintf(w, "Half open: %d\n", len(t.HalfOpen))
 	fmt.Fprintf(w, "Active peers: %d\n", len(t.Conns))
 	sort.Sort(&worstConns{
 		c: t.Conns,

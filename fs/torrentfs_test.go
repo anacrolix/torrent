@@ -10,6 +10,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -160,10 +161,17 @@ func TestDownloadOnDemand(t *testing.T) {
 	var ih torrent.InfoHash
 	util.CopyExact(ih[:], layout.Metainfo.Info.Hash)
 	leecher.AddPeers(ih, []torrent.Peer{func() torrent.Peer {
-		tcpAddr := seeder.ListenAddr().(*net.TCPAddr)
+		_, port, err := net.SplitHostPort(seeder.ListenAddr().String())
+		if err != nil {
+			panic(err)
+		}
+		portInt64, err := strconv.ParseInt(port, 0, 0)
+		if err != nil {
+			panic(err)
+		}
 		return torrent.Peer{
-			IP:   tcpAddr.IP,
-			Port: tcpAddr.Port,
+			IP:   net.IPv6loopback,
+			Port: int(portInt64),
 		}
 	}()})
 	fs := New(leecher)

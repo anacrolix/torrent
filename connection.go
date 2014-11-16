@@ -28,6 +28,7 @@ const (
 type connection struct {
 	Socket    net.Conn
 	Discovery peerSource
+	uTP       bool
 	closing   chan struct{}
 	mu        sync.Mutex // Only for closing.
 	post      chan pp.Message
@@ -59,9 +60,11 @@ type connection struct {
 	PeerClientName   string
 }
 
-func newConnection(sock net.Conn, peb peerExtensionBytes, peerID [20]byte) (c *connection) {
+func newConnection(sock net.Conn, peb peerExtensionBytes, peerID [20]byte, uTP bool) (c *connection) {
 	c = &connection{
-		Socket:             sock,
+		Socket: sock,
+		uTP:    uTP,
+
 		Choked:             true,
 		PeerChoked:         true,
 		PeerMaxRequests:    250,
@@ -155,6 +158,9 @@ func (cn *connection) WriteStatus(w io.Writer) {
 	}
 	if cn.Discovery != 0 {
 		c(byte(cn.Discovery))
+	}
+	if cn.uTP {
+		c('T')
 	}
 	fmt.Fprintln(w)
 }

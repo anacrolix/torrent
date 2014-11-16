@@ -383,10 +383,14 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 		// "address in use" error. It seems it's not possible to dial out from
 		// this address so that peers associate our local address with our
 		// listen address.
+		var (
+			conn net.Conn
+			err  error
+		)
 		if false {
-			conn, err := net.DialTimeout("tcp", addr, dialTimeout)
+			conn, err = net.DialTimeout("tcp", addr, dialTimeout)
 		} else {
-			conn, err := (&utp.Dialer{Timeout: dialTimeout}).Dial("utp", addr)
+			conn, err = (&utp.Dialer{Timeout: dialTimeout}).Dial("utp", addr)
 		}
 
 		// Whether or not the connection attempt succeeds, the half open

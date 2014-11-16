@@ -15,7 +15,7 @@ func CopyExact(dest interface{}, src interface{}) {
 		panic(fmt.Sprintf("dest not addressable: %T", dest))
 	}
 	if sV.Kind() == reflect.String {
-		sV = sV.Convert(dV.Type())
+		sV = sV.Convert(reflect.SliceOf(dV.Type().Elem()))
 	}
 	if dV.Len() != sV.Len() {
 		panic(fmt.Sprintf("dest len (%d) != src len (%d)", dV.Len(), sV.Len()))

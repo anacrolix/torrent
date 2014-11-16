@@ -44,3 +44,18 @@ func TestCopyLenMismatch(t *testing.T) {
 	}()
 	CopyExact(make([]byte, 2), "abc")
 }
+
+func TestCopySrcString(t *testing.T) {
+	dest := make([]byte, 3)
+	CopyExact(dest, "lol")
+	if string(dest) != "lol" {
+		t.FailNow()
+	}
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.FailNow()
+		}
+	}()
+	CopyExact(dest, "rofl")
+}

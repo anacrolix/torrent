@@ -27,6 +27,10 @@ type (
 	pieceSum [20]byte
 )
 
+func (ih *InfoHash) AsString() string {
+	return string(ih[:])
+}
+
 type piece struct {
 	Hash              pieceSum
 	PendingChunkSpecs map[chunkSpec]struct{}

@@ -1268,6 +1268,18 @@ func (cl *Client) announceTorrentDHT(t *torrent) {
 			}
 		}
 		ps.Close()
+
+		// After a GetPeers, we can announce on the best nodes that gave us an
+		// announce token.
+
+		port := cl.incomingPeerPort()
+		// If port is zero, then we're not listening, and there's nothing to
+		// announce.
+		if port != 0 {
+			// We can't allow the port to be implied as long as the UTP and
+			// DHT ports are different.
+			cl.dHT.AnnouncePeer(port, false, t.InfoHash.AsString())
+		}
 	}
 }
 

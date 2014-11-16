@@ -401,10 +401,10 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 			me.openNewConns()
 		}()
 
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			return
+		}
 		if netOpErr, ok := err.(*net.OpError); ok {
-			if netOpErr.Timeout() {
-				return
-			}
 			switch netOpErr.Err {
 			case syscall.ECONNREFUSED, syscall.EHOSTUNREACH:
 				return

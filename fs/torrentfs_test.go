@@ -152,6 +152,11 @@ func TestDownloadOnDemand(t *testing.T) {
 		DownloadStrategy: torrent.NewResponsiveDownloadStrategy(0),
 		DisableTrackers:  true,
 		NoDHT:            true,
+
+		// This can be used to check if clients can connect to other clients
+		// with the same ID.
+
+		// PeerID: seeder.PeerID(),
 	})
 	http.HandleFunc("/leecher", func(w http.ResponseWriter, req *http.Request) {
 		leecher.WriteStatus(w)

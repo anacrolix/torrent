@@ -134,6 +134,10 @@ type Client struct {
 	dataWaits map[*torrent][]dataWait
 }
 
+func (me *Client) PeerID() string {
+	return string(me.peerID[:])
+}
+
 func (me *Client) ListenAddr() (addr net.Addr) {
 	for _, l := range me.listeners {
 		if addr != nil && l.Addr().String() != addr.String() {
@@ -260,10 +264,14 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	cl.event.L = &cl.mu
 	cl.mu.Init(2)
 
-	o := copy(cl.peerID[:], BEP20)
-	_, err = rand.Read(cl.peerID[o:])
-	if err != nil {
-		panic("error generating peer id")
+	if cfg.PeerID != "" {
+		CopyExact(&cl.peerID, cfg.PeerID)
+	} else {
+		o := copy(cl.peerID[:], BEP20)
+		_, err = rand.Read(cl.peerID[o:])
+		if err != nil {
+			panic("error generating peer id")
+		}
 	}
 
 	if cl.downloadStrategy == nil {

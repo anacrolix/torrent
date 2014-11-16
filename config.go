@@ -7,4 +7,5 @@ type Config struct {
 	DownloadStrategy DownloadStrategy
 	NoDHT            bool
 	NoUpload         bool
+	PeerID           string
 }

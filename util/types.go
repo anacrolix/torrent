@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding"
 	"encoding/binary"
+	"fmt"
+
 	"github.com/anacrolix/libtorgo/bencode"
 )
 
@@ -39,6 +41,13 @@ type CompactPeer struct {
 var _ encoding.BinaryUnmarshaler = &CompactPeer{}
 
 func (cp *CompactPeer) UnmarshalBinary(b []byte) (err error) {
-	err = binary.Read(bytes.NewReader(b), binary.BigEndian, cp)
+	r := bytes.NewReader(b)
+	err = binary.Read(r, binary.BigEndian, cp)
+	if err != nil {
+		return
+	}
+	if r.Len() != 0 {
+		err = fmt.Errorf("%d bytes unused", r.Len())
+	}
 	return
 }

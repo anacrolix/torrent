@@ -586,6 +586,9 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 	if !ok {
 		return
 	}
+	if hsRes.peerID == me.peerID {
+		return
+	}
 	torrent = me.torrent(hsRes.InfoHash)
 	if torrent == nil {
 		return

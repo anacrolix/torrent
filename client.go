@@ -133,18 +133,20 @@ type Client struct {
 	dataWaits map[*torrent][]dataWait
 }
 
-func (me *Client) ListenAddr() net.Addr {
-	return me.listener.Addr()
+func (me *Client) ListenAddr() (addr net.Addr) {
+	for _, l := range me.listeners {
+		if addr != nil && l.Addr().String() != addr.String() {
+			panic("listeners exist on different addresses")
+		}
+		addr = l.Addr()
+	}
+	return
 }
 
 func (cl *Client) WriteStatus(w io.Writer) {
 	cl.mu.LevelLock(1)
 	defer cl.mu.Unlock()
-	if cl.listener != nil {
-		fmt.Fprintf(w, "Listening on %s\n", cl.listener.Addr())
-	} else {
-		fmt.Fprintf(w, "No listening torrent port!\n")
-	}
+	fmt.Fprintf(w, "Listening on %s\n", cl.ListenAddr())
 	fmt.Fprintf(w, "Peer ID: %q\n", cl.peerID)
 	fmt.Fprintf(w, "Half open outgoing connections: %d\n", cl.halfOpen)
 	fmt.Fprintf(w, "Handshaking: %d\n", cl.handshaking)
@@ -386,36 +388,31 @@ func (me *Client) initiateConn(peer Peer, torrent *torrent) {
 	}()
 }
 
+// The port number for incoming peer connections. 0 if the client isn't
+// listening.
 func (cl *Client) incomingPeerPort() int {
-	if cl.listener == nil {
+	listenAddr := cl.ListenAddr()
+	if listenAddr == nil {
 		return 0
 	}
-	_, p, err := net.SplitHostPort(cl.listener.Addr().String())
-	if err != nil {
-		panic(err)
-	}
-	var i int
-	_, err = fmt.Sscanf(p, "%d", &i)
-	if err != nil {
-		panic(err)
-	}
-	return i
+	return addrPort(listenAddr)
 }
 
-// Convert a net.Addr to its compact IP representation. Either 4 or 16 bytes per "yourip" field of http://www.bittorrent.org/beps/bep_0010.html.
+// Convert a net.Addr to its compact IP representation. Either 4 or 16 bytes
+// per "yourip" field of http://www.bittorrent.org/beps/bep_0010.html.
 func addrCompactIP(addr net.Addr) (string, error) {
-	switch typed := addr.(type) {
-	case *net.TCPAddr:
-		if v4 := typed.IP.To4(); v4 != nil {
-			if len(v4) != 4 {
-				panic(v4)
-			}
-			return string(v4), nil
-		}
-		return string(typed.IP.To16()), nil
-	default:
-		return "", fmt.Errorf("unhandled type: %T", addr)
+	host, _, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		return "", err
 	}
+	ip := net.ParseIP(host)
+	if v4 := ip.To4(); v4 != nil {
+		if len(v4) != 4 {
+			panic(v4)
+		}
+		return string(v4), nil
+	}
+	return string(ip.To16()), nil
 }
 
 func handshakeWriter(w io.WriteCloser, bb <-chan []byte, done chan<- error) {
@@ -757,6 +754,19 @@ type peerExchangeMessage struct {
 	Dropped    []tracker.Peer `bencode:"dropped"`
 }
 
+// Extracts the port as an integer from an address string.
+func addrPort(addr net.Addr) int {
+	_, port, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		panic(err)
+	}
+	i64, err := strconv.ParseInt(port, 0, 0)
+	if err != nil {
+		panic(err)
+	}
+	return int(i64)
+}
+
 // Processes incoming bittorrent messages. The client lock is held upon entry
 // and exit.
 func (me *Client) connectionLoop(t *torrent, c *connection) error {
@@ -960,17 +970,14 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			if me.dHT == nil {
 				break
 			}
-			addr, _ := c.Socket.RemoteAddr().(*net.TCPAddr)
-			_, err = me.dHT.Ping(&net.UDPAddr{
-				IP:   addr.IP,
-				Zone: addr.Zone,
-				Port: func() int {
-					if msg.Port == 0 {
-						return addr.Port
-					}
-					return int(msg.Port)
-				}(),
-			})
+			pingAddr, err := net.ResolveUDPAddr("", c.Socket.RemoteAddr().String())
+			if err != nil {
+				panic(err)
+			}
+			if msg.Port != 0 {
+				pingAddr.Port = int(msg.Port)
+			}
+			_, err = me.dHT.Ping(pingAddr)
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}
@@ -1223,23 +1230,6 @@ func (me *Client) AddTorrentFromFile(name string) (err error) {
 	return me.AddTorrent(mi)
 }
 
-func (cl *Client) listenerAnnouncePort() (port int16) {
-	l := cl.listener
-	if l == nil {
-		return
-	}
-	addr := l.Addr()
-	switch data := addr.(type) {
-	case *net.TCPAddr:
-		return int16(data.Port)
-	case *net.UDPAddr:
-		return int16(data.Port)
-	default:
-		log.Printf("unknown listener addr type: %T", addr)
-	}
-	return
-}
-
 func (cl *Client) announceTorrentDHT(t *torrent) {
 	for {
 		ps, err := cl.dHT.GetPeers(string(t.InfoHash[:]))
@@ -1285,7 +1275,7 @@ func (cl *Client) announceTorrent(t *torrent) {
 	req := tracker.AnnounceRequest{
 		Event:    tracker.Started,
 		NumWant:  -1,
-		Port:     cl.listenerAnnouncePort(),
+		Port:     int16(cl.incomingPeerPort()),
 		PeerId:   cl.peerID,
 		InfoHash: t.InfoHash,
 	}

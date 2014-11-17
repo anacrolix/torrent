@@ -2,6 +2,7 @@ package util
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -51,11 +52,29 @@ func TestCopySrcString(t *testing.T) {
 	if string(dest) != "lol" {
 		t.FailNow()
 	}
+	func() {
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.FailNow()
+			}
+		}()
+		CopyExact(dest, "rofl")
+	}()
+	var arr [5]byte
+	CopyExact(&arr, interface{}("hello"))
+	if string(arr[:]) != "hello" {
+		t.FailNow()
+	}
+}
+
+func TestCopySrcNilInterface(t *testing.T) {
+	var arr [3]byte
 	defer func() {
-		r := recover()
-		if r == nil {
+		r := recover().(string)
+		if !strings.Contains(r, "invalid source") {
 			t.FailNow()
 		}
 	}()
-	CopyExact(dest, "rofl")
+	CopyExact(&arr, nil)
 }

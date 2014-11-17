@@ -17,6 +17,9 @@ func CopyExact(dest interface{}, src interface{}) {
 	if sV.Kind() == reflect.String {
 		sV = sV.Convert(reflect.SliceOf(dV.Type().Elem()))
 	}
+	if !sV.IsValid() {
+		panic("invalid source, probably nil")
+	}
 	if dV.Len() != sV.Len() {
 		panic(fmt.Sprintf("dest len (%d) != src len (%d)", dV.Len(), sV.Len()))
 	}

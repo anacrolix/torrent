@@ -57,6 +57,8 @@ var (
 	postedCancels               = expvar.NewInt("postedCancels")
 	duplicateConnsAvoided       = expvar.NewInt("duplicateConnsAvoided")
 	failedPieceHashes           = expvar.NewInt("failedPieceHashes")
+	unsuccessfulDials           = expvar.NewInt("unsuccessfulDials")
+	successfulDials             = expvar.NewInt("successfulDials")
 )
 
 const (
@@ -365,6 +367,11 @@ type dialResult struct {
 func doDial(dial func() (net.Conn, error), ch chan dialResult, utp bool) {
 	conn, err := dial()
 	ch <- dialResult{conn, utp}
+	if err == nil {
+		successfulDials.Add(1)
+		return
+	}
+	unsuccessfulDials.Add(1)
 	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 		return
 	}

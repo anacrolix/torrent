@@ -11,9 +11,16 @@ func LoggedHTTPServe(addr string) {
 	if err != nil {
 		log.Fatalf("error resolving http addr: %s", err)
 	}
-	conn, err := net.ListenTCP("tcp", netAddr)
+	var conn net.Listener
+	for try := 0; try < 100; try++ {
+		conn, err = net.ListenTCP("tcp", netAddr)
+		if err == nil {
+			break
+		}
+		netAddr.Port++
+	}
 	if err != nil {
-		log.Fatalf("error creating http conn: %s", err)
+		log.Fatalf("error creating http conn: %#v", err)
 	}
 	log.Printf("starting http server on http://%s", conn.Addr())
 	go func() {

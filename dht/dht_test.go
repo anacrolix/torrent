@@ -1,10 +1,16 @@
 package dht
 
 import (
+	"math/big"
 	"math/rand"
 	"net"
 	"testing"
 )
+
+func TestSetNilBigInt(t *testing.T) {
+	i := new(big.Int)
+	i.SetBytes(make([]byte, 2))
+}
 
 func TestMarshalCompactNodeInfo(t *testing.T) {
 	cni := NodeInfo{
@@ -49,13 +55,13 @@ var testIDs = []string{
 }
 
 func TestDistances(t *testing.T) {
-	if idDistance(testIDs[3], testIDs[0]) != 4+8+4+4 {
+	if idDistance(testIDs[3], testIDs[0]).BitCount() != 4+8+4+4 {
 		t.FailNow()
 	}
-	if idDistance(testIDs[3], testIDs[1]) != 4+8+4+4 {
+	if idDistance(testIDs[3], testIDs[1]).BitCount() != 4+8+4+4 {
 		t.FailNow()
 	}
-	if idDistance(testIDs[3], testIDs[2]) != 4+8+8 {
+	if idDistance(testIDs[3], testIDs[2]).BitCount() != 4+8+8 {
 		t.FailNow()
 	}
 }
@@ -71,17 +77,17 @@ func TestBadIdStrings(t *testing.T) {
 	recoverPanicOrDie(t, func() {
 		idDistance(zeroID, b)
 	})
-	if idDistance(zeroID, zeroID) != 0 {
-		t.FailNow()
+	if !idDistance(zeroID, zeroID).IsZero() {
+		t.Fatal("identical IDs should have distance 0")
 	}
 	a = "\x03" + zeroID[1:]
 	b = zeroID
-	if idDistance(a, b) != 2 {
+	if idDistance(a, b).BitCount() != 2 {
 		t.FailNow()
 	}
 	a = "\x03" + zeroID[1:18] + "\x55\xf0"
 	b = "\x55" + zeroID[1:17] + "\xff\x55\x0f"
-	if c := idDistance(a, b); c != 20 {
+	if c := idDistance(a, b).BitCount(); c != 20 {
 		t.Fatal(c)
 	}
 }

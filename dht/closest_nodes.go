@@ -12,7 +12,7 @@ type nodeMaxHeap struct {
 func (me nodeMaxHeap) Len() int { return len(me.IDs) }
 
 func (me nodeMaxHeap) Less(i, j int) bool {
-	return idDistance(me.IDs[i], me.Target) > idDistance(me.IDs[j], me.Target)
+	return idDistance(me.IDs[i], me.Target).Cmp(idDistance(me.IDs[j], me.Target)) > 0
 }
 
 func (me *nodeMaxHeap) Pop() (ret interface{}) {

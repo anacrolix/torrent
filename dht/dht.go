@@ -41,6 +41,7 @@ func newDHTAddr(addr *net.UDPAddr) (ret dHTAddr) {
 
 type ServerConfig struct {
 	Addr string
+	Conn net.PacketConn
 }
 
 func (s *Server) LocalAddr() net.Addr {
@@ -61,9 +62,13 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		c = &ServerConfig{}
 	}
 	s = &Server{}
-	s.socket, err = makeSocket(c.Addr)
-	if err != nil {
-		return
+	if c.Conn != nil {
+		s.socket = c.Conn
+	} else {
+		s.socket, err = makeSocket(c.Addr)
+		if err != nil {
+			return
+		}
 	}
 	err = s.init()
 	if err != nil {
@@ -234,6 +239,7 @@ func (s *Server) serve() error {
 			}
 			continue
 		}
+		// log.Printf("received from %s: %#v", addr_, d)
 		addr := newDHTAddr(addr_.(*net.UDPAddr))
 		s.mu.Lock()
 		if d["y"] == "q" {

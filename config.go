@@ -8,4 +8,6 @@ type Config struct {
 	NoDHT            bool
 	NoUpload         bool
 	PeerID           string
+	DisableUTP       bool
+	DisableTCP       bool
 }

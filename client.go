@@ -1042,6 +1042,7 @@ func (me *Client) dropConnection(torrent *torrent, conn *connection) {
 			torrent.Conns[i0] = torrent.Conns[i1]
 		}
 		torrent.Conns = torrent.Conns[:i1]
+		me.openNewConns()
 		return
 	}
 	panic("connection not found")

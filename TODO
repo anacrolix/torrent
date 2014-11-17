@@ -5,4 +5,5 @@
  * Track upload and download data.
  * Remove non-deterministic stuff from unit tests, like the tracker UDP and fuse fs stuff.
  * Expose a public Torrent type bound to a given client or similar to work with common per-torrent operations.
- * Make use of github.com/h2so5/utp for uTP.
+ * Split scraping and announcing on DHT into separate routines.
+ * Ping nodes that stop being good.

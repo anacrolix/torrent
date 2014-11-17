@@ -805,15 +805,7 @@ type peerExchangeMessage struct {
 
 // Extracts the port as an integer from an address string.
 func addrPort(addr net.Addr) int {
-	_, port, err := net.SplitHostPort(addr.String())
-	if err != nil {
-		panic(err)
-	}
-	i64, err := strconv.ParseInt(port, 0, 0)
-	if err != nil {
-		panic(err)
-	}
-	return int(i64)
+	return AddrPort(addr)
 }
 
 // Processes incoming bittorrent messages. The client lock is held upon entry

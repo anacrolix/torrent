@@ -487,14 +487,14 @@ func (ni *NodeInfo) PutCompact(b []byte) error {
 	if n := copy(b[:], ni.ID[:]); n != 20 {
 		panic(n)
 	}
-	ip := ni.Addr.IP.To4()
+	ip := util.AddrIP(ni.Addr).To4()
 	if len(ip) != 4 {
 		panic(ip)
 	}
 	if n := copy(b[20:], ip); n != 4 {
 		panic(n)
 	}
-	binary.BigEndian.PutUint16(b[24:], uint16(ni.Addr.Port))
+	binary.BigEndian.PutUint16(b[24:], uint16(util.AddrPort(ni.Addr)))
 	return nil
 }
 
@@ -651,7 +651,7 @@ func (s *Server) liftNodes(d Msg) {
 		// log.Print(err)
 	} else {
 		for _, cni := range r.Nodes {
-			if cni.Addr.Port == 0 {
+			if util.AddrPort(cni.Addr) == 0 {
 				// TODO: Why would people even do this?
 				continue
 			}

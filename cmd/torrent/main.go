@@ -19,9 +19,9 @@ import (
 var (
 	downloadDir = flag.String("downloadDir", "", "directory to store download torrent data")
 	testPeer    = flag.String("testPeer", "", "bootstrap peer address")
-	httpAddr    = flag.String("httpAddr", "localhost:0", "http serve address")
+	httpAddr    = flag.String("httpAddr", "localhost:6061", "http serve address")
 	// TODO: Check the default torrent listen port.
-	listenAddr      = flag.String("listenAddr", ":6882", "incoming connection address")
+	listenAddr      = flag.String("listenAddr", ":50007", "incoming connection address")
 	disableTrackers = flag.Bool("disableTrackers", false, "disable trackers")
 	seed            = flag.Bool("seed", false, "seed after downloading")
 )

@@ -691,9 +691,14 @@ func (s *Server) findNode(addr dHTAddr, targetID string) (t *transaction, err er
 	return
 }
 
+type peerStreamValue struct {
+	Peers    []util.CompactPeer // Peers given in get_peers response.
+	NodeInfo                    // The node that gave the response.
+}
+
 type peerStream struct {
 	mu     sync.Mutex
-	Values chan []util.CompactPeer
+	Values chan peerStreamValue
 	stop   chan struct{}
 }
 
@@ -743,7 +748,7 @@ func extractValues(m Msg) (vs []util.CompactPeer) {
 
 func (s *Server) GetPeers(infoHash string) (ps *peerStream, err error) {
 	ps = &peerStream{
-		Values: make(chan []util.CompactPeer),
+		Values: make(chan peerStreamValue),
 		stop:   make(chan struct{}),
 	}
 	done := make(chan struct{})
@@ -761,8 +766,21 @@ func (s *Server) GetPeers(infoHash string) (ps *peerStream, err error) {
 			case m := <-t.Response:
 				vs := extractValues(m)
 				if vs != nil {
+					nodeInfo := NodeInfo{
+						Addr: t.remoteAddr,
+					}
+					id := func() string {
+						defer func() {
+							recover()
+						}()
+						return m["r"].(map[string]interface{})["id"].(string)
+					}()
+					copy(nodeInfo.ID[:], id)
 					select {
-					case ps.Values <- vs:
+					case ps.Values <- peerStreamValue{
+						Peers:    vs,
+						NodeInfo: nodeInfo,
+					}:
 					case <-ps.stop:
 					}
 				}

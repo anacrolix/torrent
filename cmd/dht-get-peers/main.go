@@ -87,7 +87,7 @@ func init() {
 	if err != nil {
 		log.Fatalf("error loading table: %s", err)
 	}
-	log.Printf("dht server on %s, ID is %q", s.LocalAddr(), s.IDString())
+	log.Printf("dht server on %s, ID is %x", s.LocalAddr(), s.IDString())
 	setupSignals()
 }
 
@@ -138,8 +138,9 @@ getPeers:
 			log.Fatal(err)
 		}
 		go func() {
-			for sl := range ps.Values {
-				for _, p := range sl {
+			for v := range ps.Values {
+				log.Printf("received %d peers from %x", len(v.Peers), v.NodeInfo.ID)
+				for _, p := range v.Peers {
 					if _, ok := seen[p]; ok {
 						continue
 					}

@@ -1310,13 +1310,13 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 			select {
 			case <-nextScrape:
 				break getPeers
-			case cps, ok := <-ps.Values:
+			case v, ok := <-ps.Values:
 				if !ok {
 					break getPeers
 				}
-				peersFoundByDHT.Add(int64(len(cps)))
+				peersFoundByDHT.Add(int64(len(v.Peers)))
 				err = cl.AddPeers(t.InfoHash, func() (ret []Peer) {
-					for _, cp := range cps {
+					for _, cp := range v.Peers {
 						ret = append(ret, Peer{
 							IP:     cp.IP[:],
 							Port:   int(cp.Port),

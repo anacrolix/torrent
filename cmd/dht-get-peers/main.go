@@ -25,7 +25,8 @@ var (
 	serveAddr     = flag.String("serveAddr", ":0", "local UDP address")
 	infoHash      = flag.String("infoHash", "", "torrent infohash")
 
-	s *dht.Server
+	s        *dht.Server
+	quitting = make(chan struct{})
 )
 
 func loadTable() error {
@@ -94,7 +95,7 @@ func saveTable() error {
 	goodNodes := s.Nodes()
 	if *tableFileName == "" {
 		if len(goodNodes) != 0 {
-			log.Printf("discarding %d good nodes!", len(goodNodes))
+			log.Print("good nodes were discarded because you didn't specify a table file")
 		}
 		return nil
 	}
@@ -123,12 +124,14 @@ func setupSignals() {
 	signal.Notify(ch, os.Interrupt)
 	go func() {
 		<-ch
+		close(quitting)
 		s.Close()
 	}()
 }
 
 func main() {
 	seen := make(map[util.CompactPeer]struct{})
+getPeers:
 	for {
 		ps, err := s.GetPeers(*infoHash)
 		if err != nil {
@@ -148,7 +151,11 @@ func main() {
 				}
 			}
 		}()
-		time.Sleep(15 * time.Second)
+		select {
+		case <-time.After(15 * time.Second):
+		case <-quitting:
+			break getPeers
+		}
 	}
 	if err := saveTable(); err != nil {
 		log.Printf("error saving node table: %s", err)

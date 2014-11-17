@@ -10,11 +10,11 @@ func TestMarshalCompactNodeInfo(t *testing.T) {
 	cni := NodeInfo{
 		ID: [20]byte{'a', 'b', 'c'},
 	}
-	var err error
-	cni.Addr, err = net.ResolveUDPAddr("udp4", "1.2.3.4:5")
+	addr, err := net.ResolveUDPAddr("udp4", "1.2.3.4:5")
 	if err != nil {
 		t.Fatal(err)
 	}
+	cni.Addr = newDHTAddr(addr)
 	var b [CompactNodeInfoLen]byte
 	cni.PutCompact(b[:])
 	if err != nil {

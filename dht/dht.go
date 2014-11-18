@@ -231,43 +231,43 @@ func (s *Server) init() (err error) {
 	return
 }
 
+func (s *Server) processPacket(b []byte, addr dHTAddr) {
+	var d Msg
+	err := bencode.Unmarshal(b, &d)
+	if err != nil {
+		if se, ok := err.(*bencode.SyntaxError); !ok || se.Offset != 0 {
+			log.Printf("%s: received bad krpc message: %s: %q", s, err, b)
+		}
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if d["y"] == "q" {
+		s.handleQuery(addr, d)
+		return
+	}
+	t := s.findResponseTransaction(d.T(), addr)
+	if t == nil {
+		//log.Printf("unexpected message: %#v", d)
+		return
+	}
+	t.handleResponse(d)
+	s.removeTransaction(t)
+	id := ""
+	if d["y"] == "r" {
+		id = d["r"].(map[string]interface{})["id"].(string)
+	}
+	s.heardFromNode(addr, id)
+}
+
 func (s *Server) serve() error {
 	for {
 		var b [0x10000]byte
-		n, addr_, err := s.socket.ReadFrom(b[:])
+		n, addr, err := s.socket.ReadFrom(b[:])
 		if err != nil {
 			return err
 		}
-		var d Msg
-		err = bencode.Unmarshal(b[:n], &d)
-		if err != nil {
-			if se, ok := err.(*bencode.SyntaxError); !ok || se.Offset != 0 {
-				log.Printf("%s: received bad krpc message: %s: %q", s, err, b[:n])
-			}
-			continue
-		}
-		// log.Printf("received from %s: %#v", addr_, d)
-		addr := newDHTAddr(addr_.(*net.UDPAddr))
-		s.mu.Lock()
-		if d["y"] == "q" {
-			s.handleQuery(addr, d)
-			s.mu.Unlock()
-			continue
-		}
-		t := s.findResponseTransaction(d.T(), addr)
-		if t == nil {
-			//log.Printf("unexpected message: %#v", d)
-			s.mu.Unlock()
-			continue
-		}
-		t.handleResponse(d)
-		s.removeTransaction(t)
-		id := ""
-		if d["y"] == "r" {
-			id = d["r"].(map[string]interface{})["id"].(string)
-		}
-		s.heardFromNode(addr, id)
-		s.mu.Unlock()
+		s.processPacket(b[:n], newDHTAddr(addr.(*net.UDPAddr)))
 	}
 }
 

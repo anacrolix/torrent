@@ -59,6 +59,7 @@ var (
 	failedPieceHashes           = expvar.NewInt("failedPieceHashes")
 	unsuccessfulDials           = expvar.NewInt("unsuccessfulDials")
 	successfulDials             = expvar.NewInt("successfulDials")
+	acceptedConns               = expvar.NewInt("acceptedConns")
 )
 
 const (
@@ -342,6 +343,7 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 			log.Print(err)
 			return
 		}
+		acceptedConns.Add(1)
 		go func() {
 			if err := cl.runConnection(conn, nil, peerSourceIncoming, utp); err != nil {
 				log.Print(err)

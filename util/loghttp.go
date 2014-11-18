@@ -7,7 +7,7 @@ import (
 	_ "net/http/pprof"
 )
 
-func LoggedHTTPServe(addr string) {
+func LoggedHTTPServe(addr string) *http.ServeMux {
 	if addr == "" {
 		addr = "localhost:6061"
 	}
@@ -27,11 +27,15 @@ func LoggedHTTPServe(addr string) {
 		log.Fatalf("error creating http conn: %#v", err)
 	}
 	log.Printf("starting http server on http://%s", conn.Addr())
+	mux := http.NewServeMux()
 	go func() {
 		defer conn.Close()
-		err = (&http.Server{}).Serve(conn)
+		err = (&http.Server{
+			Handler: mux,
+		}).Serve(conn)
 		if err != nil {
 			log.Fatalf("error serving http: %s", err)
 		}
 	}()
+	return mux
 }

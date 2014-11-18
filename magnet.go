@@ -43,7 +43,7 @@ func ParseMagnetURI(uri string) (m Magnet, err error) {
 		}
 	}()
 	if decode == nil {
-		err = fmt.Errorf("unhandled xt parameter encoding")
+		err = fmt.Errorf("unhandled xt parameter encoding: encoded length %d", len(xt))
 		return
 	}
 	n, err := decode(m.InfoHash[:], []byte(xt))

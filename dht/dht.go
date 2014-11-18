@@ -119,7 +119,13 @@ func (n *Node) Good() bool {
 	if len(n.id) != 20 {
 		return false
 	}
-	if time.Now().Sub(n.lastHeardFrom) >= 15*time.Minute {
+	if n.lastSentTo.IsZero() {
+		return true
+	}
+	if n.lastSentTo.Before(n.lastHeardFrom) {
+		return true
+	}
+	if time.Now().Sub(n.lastHeardFrom) >= 1*time.Minute {
 		return false
 	}
 	return true

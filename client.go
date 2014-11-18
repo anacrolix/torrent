@@ -1229,13 +1229,17 @@ func (cl *Client) AddMagnet(uri string) (t *torrent, err error) {
 	if err != nil {
 		return
 	}
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	t = cl.torrent(m.InfoHash)
+	if t != nil {
+		return
+	}
 	t, err = newTorrent(m.InfoHash, [][]string{m.Trackers}, cl.halfOpenLimit)
 	if err != nil {
 		return
 	}
 	t.DisplayName = m.DisplayName
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
 	err = cl.addTorrent(t)
 	if err != nil {
 		t.Close()

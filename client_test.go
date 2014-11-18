@@ -3,6 +3,7 @@ package torrent
 import (
 	"os"
 	"testing"
+	"time"
 
 	"bitbucket.org/anacrolix/go.torrent/testutil"
 	"bitbucket.org/anacrolix/go.torrent/util"
@@ -73,5 +74,26 @@ func TestUnmarshalPEXMsg(t *testing.T) {
 	}
 	if m.Added[0].Port != 0x506 {
 		t.FailNow()
+	}
+}
+
+func TestReducedDialTimeout(t *testing.T) {
+	for _, _case := range []struct {
+		Max             time.Duration
+		HalfOpenLimit   int
+		PendingPeers    int
+		ExpectedReduced time.Duration
+	}{
+		{dialTimeout, 40, 0, dialTimeout},
+		{dialTimeout, 40, 1, dialTimeout},
+		{dialTimeout, 40, 39, dialTimeout},
+		{dialTimeout, 40, 40, dialTimeout / 2},
+		{dialTimeout, 40, 80, dialTimeout / 3},
+		{dialTimeout, 40, 4000, dialTimeout / 101},
+	} {
+		reduced := reducedDialTimeout(_case.Max, _case.HalfOpenLimit, _case.PendingPeers)
+		if reduced != _case.ExpectedReduced {
+			t.Fatalf("expected %s, got %s", _case.ExpectedReduced, reduced)
+		}
 	}
 }

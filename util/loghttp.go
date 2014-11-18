@@ -4,9 +4,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	_ "net/http/pprof"
 )
 
 func LoggedHTTPServe(addr string) {
+	if addr == "" {
+		addr = "localhost:6061"
+	}
 	netAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		log.Fatalf("error resolving http addr: %s", err)

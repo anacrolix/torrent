@@ -130,6 +130,7 @@ func setupSignals() {
 }
 
 func main() {
+	util.LoggedHTTPServe("")
 	seen := make(map[util.CompactPeer]struct{})
 getPeers:
 	for {

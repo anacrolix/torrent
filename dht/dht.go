@@ -546,7 +546,7 @@ func (s *Server) Ping(node *net.UDPAddr) (*transaction, error) {
 func (s *Server) AnnouncePeer(port int, impliedPort bool, infoHash string) (err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, node := range s.closestNodes(10000, infoHash, func(n *Node) bool {
+	for _, node := range s.closestNodes(160, infoHash, func(n *Node) bool {
 		return n.Good() && n.announceToken != ""
 	}) {
 		err = s.announcePeer(node.addr, infoHash, port, node.announceToken, impliedPort)

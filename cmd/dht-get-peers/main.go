@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"time"
 
 	"bitbucket.org/anacrolix/go.torrent/dht"
 	"bitbucket.org/anacrolix/go.torrent/util"
@@ -24,6 +23,7 @@ var (
 	tableFileName = flag.String("tableFile", "", "name of file for storing node info")
 	serveAddr     = flag.String("serveAddr", ":0", "local UDP address")
 	infoHash      = flag.String("infoHash", "", "torrent infohash")
+	once          = flag.Bool("once", false, "only do one scrape iteration")
 
 	s        *dht.Server
 	quitting = make(chan struct{})
@@ -138,8 +138,13 @@ getPeers:
 		if err != nil {
 			log.Fatal(err)
 		}
-		go func() {
-			for v := range ps.Values {
+	values:
+		for {
+			select {
+			case v, ok := <-ps.Values:
+				if !ok {
+					break values
+				}
 				log.Printf("received %d peers from %x", len(v.Peers), v.NodeInfo.ID)
 				for _, p := range v.Peers {
 					if _, ok := seen[p]; ok {
@@ -151,12 +156,12 @@ getPeers:
 						Port: int(p.Port),
 					}).String())
 				}
+			case <-quitting:
+				break getPeers
 			}
-		}()
-		select {
-		case <-time.After(15 * time.Second):
-		case <-quitting:
-			break getPeers
+		}
+		if *once {
+			break
 		}
 	}
 	if err := saveTable(); err != nil {

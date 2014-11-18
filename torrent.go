@@ -58,7 +58,7 @@ type torrent struct {
 	dataLock sync.RWMutex
 	Data     mmap_span.MMapSpan
 
-	Info *metainfo.Info
+	Info *MetaInfo
 	// Active peer connections.
 	Conns []*connection
 	// Set of addrs to which we're attempting to connect.
@@ -195,7 +195,7 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 
 // Called when metadata for a torrent becomes available.
 func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte) (err error) {
-	t.Info = &md
+	t.Info = newMetaInfo(&md)
 	t.MetaData = infoBytes
 	t.metadataHave = nil
 	t.Data, err = mmapTorrentData(&md, dataDir)

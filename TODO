@@ -7,3 +7,4 @@
  * Expose a public Torrent type bound to a given client or similar to work with common per-torrent operations.
  * Split scraping and announcing on DHT into separate routines.
  * Ping nodes that stop being good.
+ * Merge duplicate magnet data.

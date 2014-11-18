@@ -12,7 +12,6 @@ import (
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
 	"bitbucket.org/anacrolix/go.torrent"
-	"github.com/anacrolix/libtorgo/metainfo"
 )
 
 const (
@@ -52,7 +51,7 @@ type rootNode struct {
 
 type node struct {
 	path     []string
-	metadata *metainfo.Info
+	metadata *torrent.MetaInfo
 	FS       *torrentFS
 	InfoHash torrent.InfoHash
 }
@@ -225,10 +224,6 @@ func (dn dirNode) Attr() (attr fuse.Attr) {
 	return
 }
 
-func isSingleFileTorrent(md *metainfo.Info) bool {
-	return len(md.Files) == 0
-}
-
 func (me rootNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err fuse.Error) {
 	for _, t := range me.fs.Client.Torrents() {
 		if t.Name() != name || t.Info == nil {
@@ -239,7 +234,7 @@ func (me rootNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err
 			FS:       me.fs,
 			InfoHash: t.InfoHash,
 		}
-		if isSingleFileTorrent(t.Info) {
+		if t.Info.SingleFile() {
 			_node = fileNode{__node, uint64(t.Info.Length), 0}
 		} else {
 			_node = dirNode{__node}
@@ -253,15 +248,14 @@ func (me rootNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err
 }
 
 func (me rootNode) ReadDir(intr fusefs.Intr) (dirents []fuse.Dirent, err fuse.Error) {
-	for _, _torrent := range me.fs.Client.Torrents() {
-		metaInfo := _torrent.Info
-		if metaInfo == nil {
+	for _, t := range me.fs.Client.Torrents() {
+		if t.Info == nil {
 			continue
 		}
 		dirents = append(dirents, fuse.Dirent{
-			Name: metaInfo.Name,
+			Name: t.Info.Name,
 			Type: func() fuse.DirentType {
-				if isSingleFileTorrent(metaInfo) {
+				if t.Info.SingleFile() {
 					return fuse.DT_File
 				} else {
 					return fuse.DT_Dir

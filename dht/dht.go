@@ -148,6 +148,14 @@ func (m Msg) T() (t string) {
 	return
 }
 
+func (m Msg) Nodes() []NodeInfo {
+	var r findNodeResponse
+	if err := r.UnmarshalKRPCMsg(m); err != nil {
+		return nil
+	}
+	return r.Nodes
+}
+
 type KRPCError struct {
 	Code int
 	Msg  string
@@ -159,12 +167,21 @@ func (me KRPCError) Error() string {
 
 var _ error = KRPCError{}
 
-func (m Msg) Error() *KRPCError {
+func (m Msg) Error() (ret *KRPCError) {
 	if m["y"] != "e" {
-		return nil
+		return
 	}
-	l := m["e"].([]interface{})
-	return &KRPCError{int(l[0].(int64)), l[1].(string)}
+	ret = &KRPCError{}
+	switch e := m["e"].(type) {
+	case []interface{}:
+		ret.Code = int(e[0].(int64))
+		ret.Msg = e[1].(string)
+	case string:
+		ret.Msg = e
+	default:
+		logonce.Stderr.Printf(`KRPC error "e" value has unexpected type: %T`, e)
+	}
+	return
 }
 
 // Returns the token given in response to a get_peers request for future
@@ -175,6 +192,7 @@ func (m Msg) AnnounceToken() string {
 }
 
 type transaction struct {
+	mu         sync.Mutex
 	remoteAddr dHTAddr
 	t          string
 	Response   chan Msg
@@ -183,12 +201,36 @@ type transaction struct {
 }
 
 func (t *transaction) timeout() {
+	t.Close()
+}
+
+func (t *transaction) closing() bool {
+	select {
+	case <-t.done:
+		return true
+	default:
+		return false
+	}
+}
+
+func (t *transaction) Close() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closing() {
+		return
+	}
 	close(t.Response)
 	close(t.done)
 }
 
 func (t *transaction) handleResponse(m Msg) {
+	t.mu.Lock()
+	if t.closing() {
+		t.mu.Unlock()
+		return
+	}
 	close(t.done)
+	t.mu.Unlock()
 	if t.onResponse != nil {
 		t.onResponse(m)
 	}
@@ -272,6 +314,8 @@ func (s *Server) serve() error {
 }
 
 func (s *Server) AddNode(ni NodeInfo) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.nodes == nil {
 		s.nodes = make(map[string]*Node)
 	}
@@ -697,27 +741,6 @@ func (s *Server) findNode(addr dHTAddr, targetID string) (t *transaction, err er
 	return
 }
 
-type peerStreamValue struct {
-	Peers    []util.CompactPeer // Peers given in get_peers response.
-	NodeInfo                    // The node that gave the response.
-}
-
-type peerStream struct {
-	mu     sync.Mutex
-	Values chan peerStreamValue
-	stop   chan struct{}
-}
-
-func (ps *peerStream) Close() {
-	ps.mu.Lock()
-	select {
-	case <-ps.stop:
-	default:
-		close(ps.stop)
-	}
-	ps.mu.Unlock()
-}
-
 func extractValues(m Msg) (vs []util.CompactPeer) {
 	r, ok := m["r"]
 	if !ok {
@@ -752,63 +775,6 @@ func extractValues(m Msg) (vs []util.CompactPeer) {
 	return
 }
 
-func (s *Server) GetPeers(infoHash string) (ps *peerStream, err error) {
-	ps = &peerStream{
-		Values: make(chan peerStreamValue),
-		stop:   make(chan struct{}),
-	}
-	done := make(chan struct{})
-	pending := 0
-	s.mu.Lock()
-	for _, n := range s.closestGoodNodes(160, infoHash) {
-		var t *transaction
-		t, err = s.getPeers(n.addr, infoHash)
-		if err != nil {
-			ps.Close()
-			break
-		}
-		go func() {
-			select {
-			case m := <-t.Response:
-				vs := extractValues(m)
-				if vs != nil {
-					nodeInfo := NodeInfo{
-						Addr: t.remoteAddr,
-					}
-					id := func() string {
-						defer func() {
-							recover()
-						}()
-						return m["r"].(map[string]interface{})["id"].(string)
-					}()
-					copy(nodeInfo.ID[:], id)
-					select {
-					case ps.Values <- peerStreamValue{
-						Peers:    vs,
-						NodeInfo: nodeInfo,
-					}:
-					case <-ps.stop:
-					}
-				}
-			case <-ps.stop:
-			}
-			done <- struct{}{}
-		}()
-		pending++
-	}
-	s.mu.Unlock()
-	go func() {
-		for ; pending > 0; pending-- {
-			select {
-			case <-done:
-			case <-s.closed:
-			}
-		}
-		close(ps.Values)
-	}()
-	return
-}
-
 func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *transaction, err error) {
 	if len(infoHash) != 20 {
 		err = fmt.Errorf("infohash has bad length")
@@ -823,6 +789,10 @@ func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *transaction, err er
 		s.getNode(addr).announceToken = m.AnnounceToken()
 	})
 	return
+}
+
+func bootstrapAddr() (net.Addr, error) {
+	return net.ResolveUDPAddr("udp4", "router.bittorrent.com:6881")
 }
 
 func (s *Server) addRootNode() error {

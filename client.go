@@ -366,6 +366,9 @@ type dialResult struct {
 
 func doDial(dial func() (net.Conn, error), ch chan dialResult, utp bool) {
 	conn, err := dial()
+	if err != nil {
+		conn = nil // Pedantic
+	}
 	ch <- dialResult{conn, utp}
 	if err == nil {
 		successfulDials.Add(1)

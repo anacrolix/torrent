@@ -165,13 +165,15 @@ func (cl *Client) WriteStatus(w io.Writer) {
 	cl.downloadStrategy.WriteStatus(w)
 	fmt.Fprintln(w)
 	for _, t := range cl.torrents {
-		fmt.Fprintf(w, "%s: %f%%\n", t.Name(), func() float32 {
-			if !t.haveInfo() {
-				return 0
-			} else {
-				return 100 * (1 - float32(t.BytesLeft())/float32(t.Length()))
-			}
-		}())
+		if t.Name() == "" {
+			fmt.Fprint(w, "<unknown name>")
+		} else {
+			fmt.Fprint(w, t.Name())
+		}
+		if t.haveInfo() {
+			fmt.Fprintf(w, ": %f%% of %d bytes", 100*(1-float32(t.BytesLeft())/float32(t.Length())), t.Length())
+		}
+		fmt.Fprint(w, "\n")
 		fmt.Fprint(w, "Blocked reads:")
 		for _, dw := range cl.dataWaits[t] {
 			fmt.Fprintf(w, " %d", dw.offset)

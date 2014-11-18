@@ -409,6 +409,7 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 		duplicateConnsAvoided.Add(1)
 		return
 	}
+	dialTimeout := reducedDialTimeout(dialTimeout, me.halfOpenLimit, len(t.Peers))
 	t.HalfOpen[addr] = struct{}{}
 	go func() {
 		// Binding to the listen address and dialing via net.Dialer gives
@@ -416,7 +417,6 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 		// this address so that peers associate our local address with our
 		// listen address.
 
-		dialTimeout := reducedDialTimeout(dialTimeout, me.halfOpenLimit, len(t.Peers))
 		// Initiate connections via TCP and UTP simultaneously. Use the first
 		// one that succeeds.
 		left := 2

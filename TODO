@@ -8,3 +8,6 @@
  * Split scraping and announcing on DHT into separate routines.
  * Ping nodes that stop being good.
  * Merge duplicate magnet data.
+ * Cache completed torrent files from magnet.
+ * Don't download the last piece preemptively because it appears partial.
+ * Make use of sparse file regions in download data for faster hashing.

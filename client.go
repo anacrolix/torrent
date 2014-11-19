@@ -26,9 +26,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	mathRand "math/rand"
 	"net"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -150,9 +152,39 @@ func (me *Client) ListenAddr() (addr net.Addr) {
 	return
 }
 
-func (cl *Client) WriteStatus(w io.Writer) {
+type hashSorter struct {
+	Hashes []InfoHash
+}
+
+func (me hashSorter) Len() int {
+	return len(me.Hashes)
+}
+
+func (me hashSorter) Less(a, b int) bool {
+	return (&big.Int{}).SetBytes(me.Hashes[a][:]).Cmp((&big.Int{}).SetBytes(me.Hashes[b][:])) < 0
+}
+
+func (me hashSorter) Swap(a, b int) {
+	me.Hashes[a], me.Hashes[b] = me.Hashes[b], me.Hashes[a]
+}
+
+func (cl *Client) sortedTorrents() (ret []*torrent) {
+	var hs hashSorter
+	for ih := range cl.torrents {
+		hs.Hashes = append(hs.Hashes, ih)
+	}
+	sort.Sort(hs)
+	for _, ih := range hs.Hashes {
+		ret = append(ret, cl.torrent(ih))
+	}
+	return
+}
+
+func (cl *Client) WriteStatus(_w io.Writer) {
 	cl.mu.LevelLock(1)
 	defer cl.mu.Unlock()
+	w := bufio.NewWriter(_w)
+	defer w.Flush()
 	fmt.Fprintf(w, "Listening on %s\n", cl.ListenAddr())
 	fmt.Fprintf(w, "Peer ID: %q\n", cl.peerID)
 	fmt.Fprintf(w, "Handshaking: %d\n", cl.handshaking)
@@ -164,7 +196,7 @@ func (cl *Client) WriteStatus(w io.Writer) {
 	}
 	cl.downloadStrategy.WriteStatus(w)
 	fmt.Fprintln(w)
-	for _, t := range cl.torrents {
+	for _, t := range cl.sortedTorrents() {
 		if t.Name() == "" {
 			fmt.Fprint(w, "<unknown name>")
 		} else {

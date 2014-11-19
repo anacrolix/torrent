@@ -278,7 +278,12 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 	err := bencode.Unmarshal(b, &d)
 	if err != nil {
 		if se, ok := err.(*bencode.SyntaxError); !ok || se.Offset != 0 {
-			log.Printf("%s: received bad krpc message: %s: %q", s, err, b)
+			log.Printf("%s: received bad krpc message: %s%s", s, err, func() string {
+				if se.What == io.ErrUnexpectedEOF {
+					return ""
+				}
+				return fmt.Sprintf(": %q", b)
+			}())
 		}
 		return
 	}
@@ -308,6 +313,10 @@ func (s *Server) serve() error {
 		n, addr, err := s.socket.ReadFrom(b[:])
 		if err != nil {
 			return err
+		}
+		if n == len(b) {
+			logonce.Stderr.Printf("received dht packet exceeds buffer size")
+			continue
 		}
 		s.processPacket(b[:n], newDHTAddr(addr.(*net.UDPAddr)))
 	}

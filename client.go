@@ -1265,23 +1265,39 @@ func newTorrent(ih InfoHash, announceList [][]string, halfOpenLimit int) (t *tor
 	return
 }
 
-func (cl *Client) AddMagnet(uri string) (t *torrent, err error) {
+type Torrent struct {
+	cl *Client
+	*torrent
+}
+
+func (me Torrent) ReadAt(p []byte, off int64) (n int, err error) {
+	err = me.cl.PrioritizeDataRegion(me.InfoHash, off, int64(len(p)))
+	if err != nil {
+		err = fmt.Errorf("error prioritizing: %s", err)
+		return
+	}
+	<-me.cl.DataWaiter(me.InfoHash, off)
+	return me.cl.TorrentReadAt(me.InfoHash, off, p)
+}
+
+func (cl *Client) AddMagnet(uri string) (t Torrent, err error) {
+	t.cl = cl
 	m, err := ParseMagnetURI(uri)
 	if err != nil {
 		return
 	}
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	t = cl.torrent(m.InfoHash)
-	if t != nil {
+	t.torrent = cl.torrent(m.InfoHash)
+	if t.torrent != nil {
 		return
 	}
-	t, err = newTorrent(m.InfoHash, [][]string{m.Trackers}, cl.halfOpenLimit)
+	t.torrent, err = newTorrent(m.InfoHash, [][]string{m.Trackers}, cl.halfOpenLimit)
 	if err != nil {
 		return
 	}
 	t.DisplayName = m.DisplayName
-	err = cl.addTorrent(t)
+	err = cl.addTorrent(t.torrent)
 	if err != nil {
 		t.Close()
 	}

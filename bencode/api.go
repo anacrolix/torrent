@@ -1,10 +1,12 @@
 package bencode
 
-import "bytes"
-import "bufio"
-import "reflect"
-import "strconv"
-import "io"
+import (
+	"bufio"
+	"bytes"
+	"fmt"
+	"io"
+	"reflect"
+)
 
 //----------------------------------------------------------------------------
 // Errors
@@ -61,14 +63,12 @@ func (e *UnmarshalFieldError) Error() string {
 
 // Malformed bencode input, unmarshaler failed to parse it.
 type SyntaxError struct {
-	Offset int64  // location of the error
-	what   string // error description
+	Offset int64 // location of the error
+	What   error // error description
 }
 
 func (e *SyntaxError) Error() string {
-	return "bencode: syntax error (offset: " +
-		strconv.FormatInt(e.Offset, 10) +
-		"): " + e.what
+	return fmt.Sprintf("bencode: syntax error (offset: %d): %s", e.Offset, e.What)
 }
 
 // A non-nil error was returned after calling MarshalBencode on a type which
@@ -86,7 +86,7 @@ func (e *MarshalerError) Error() string {
 // implements the Unmarshaler interface.
 type UnmarshalerError struct {
 	Type reflect.Type
-	Err error
+	Err  error
 }
 
 func (e *UnmarshalerError) Error() string {

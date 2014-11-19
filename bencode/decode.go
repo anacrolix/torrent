@@ -1,12 +1,15 @@
 package bencode
 
-import "reflect"
-import "runtime"
-import "bufio"
-import "bytes"
-import "strconv"
-import "strings"
-import "io"
+import (
+	"bufio"
+	"bytes"
+	"errors"
+	"io"
+	"reflect"
+	"runtime"
+	"strconv"
+	"strings"
+)
 
 type decoder struct {
 	*bufio.Reader
@@ -38,7 +41,7 @@ func check_for_unexpected_eof(err error, offset int64) {
 	if err == io.EOF {
 		panic(&SyntaxError{
 			Offset: offset,
-			what:   "unexpected EOF",
+			What:   io.ErrUnexpectedEOF,
 		})
 	}
 }
@@ -70,7 +73,7 @@ func check_for_int_parse_error(err error, offset int64) {
 	if err != nil {
 		panic(&SyntaxError{
 			Offset: offset,
-			what:   err.Error(),
+			What:   err,
 		})
 	}
 }
@@ -82,7 +85,7 @@ func (d *decoder) parse_int(v reflect.Value) {
 	if d.buf.Len() == 0 {
 		panic(&SyntaxError{
 			Offset: start,
-			what:   "empty integer value",
+			What:   errors.New("empty integer value"),
 		})
 	}
 
@@ -138,7 +141,7 @@ func (d *decoder) parse_string(v reflect.Value) {
 		check_for_unexpected_eof(err, d.offset)
 		panic(&SyntaxError{
 			Offset: d.offset,
-			what:   "unexpected I/O error: " + err.Error(),
+			What:   errors.New("unexpected I/O error: " + err.Error()),
 		})
 	}
 
@@ -254,7 +257,7 @@ func (d *decoder) parse_dict(v reflect.Value) {
 				if !ok {
 					panic(&SyntaxError{
 						Offset: d.offset,
-						what:   "unexpected end of dict, no matching value for a given key",
+						What:   errors.New("unexpected end of dict, no matching value for a given key"),
 					})
 				}
 				continue
@@ -265,7 +268,7 @@ func (d *decoder) parse_dict(v reflect.Value) {
 		if !d.parse_value(valuev) {
 			panic(&SyntaxError{
 				Offset: d.offset,
-				what:   "unexpected end of dict, no matching value for a given key",
+				What:   errors.New("unexpected end of dict, no matching value for a given key"),
 			})
 		}
 
@@ -359,7 +362,7 @@ func (d *decoder) read_one_value() bool {
 				check_for_unexpected_eof(err, d.offset)
 				panic(&SyntaxError{
 					Offset: d.offset,
-					what:   "unexpected I/O error: " + err.Error(),
+					What:   errors.New("unexpected I/O error: " + err.Error()),
 				})
 			}
 			break
@@ -368,7 +371,7 @@ func (d *decoder) read_one_value() bool {
 		// unknown value
 		panic(&SyntaxError{
 			Offset: d.offset - 1,
-			what:   "unknown value type (invalid bencode?)",
+			What:   errors.New("unknown value type (invalid bencode?)"),
 		})
 	}
 
@@ -453,7 +456,7 @@ func (d *decoder) parse_value(v reflect.Value) bool {
 		// unknown value
 		panic(&SyntaxError{
 			Offset: d.offset - 1,
-			what:   "unknown value type (invalid bencode?)",
+			What:   errors.New("unknown value type (invalid bencode?)"),
 		})
 	}
 
@@ -487,7 +490,7 @@ func (d *decoder) parse_value_interface() (interface{}, bool) {
 		// unknown value
 		panic(&SyntaxError{
 			Offset: d.offset - 1,
-			what:   "unknown value type (invalid bencode?)",
+			What:   errors.New("unknown value type (invalid bencode?)"),
 		})
 	}
 	panic("unreachable")
@@ -499,7 +502,7 @@ func (d *decoder) parse_int_interface() interface{} {
 	if d.buf.Len() == 0 {
 		panic(&SyntaxError{
 			Offset: start,
-			what:   "empty integer value",
+			What:   errors.New("empty integer value"),
 		})
 	}
 
@@ -524,7 +527,7 @@ func (d *decoder) parse_string_interface() interface{} {
 		check_for_unexpected_eof(err, d.offset)
 		panic(&SyntaxError{
 			Offset: d.offset,
-			what:   "unexpected I/O error: " + err.Error(),
+			What:   errors.New("unexpected I/O error: " + err.Error()),
 		})
 	}
 
@@ -545,7 +548,7 @@ func (d *decoder) parse_dict_interface() interface{} {
 		if !ok {
 			panic(&SyntaxError{
 				Offset: d.offset,
-				what:   "non-string key in a dict",
+				What:   errors.New("non-string key in a dict"),
 			})
 		}
 
@@ -553,7 +556,7 @@ func (d *decoder) parse_dict_interface() interface{} {
 		if !ok {
 			panic(&SyntaxError{
 				Offset: d.offset,
-				what:   "unexpected end of dict, no matching value for a given key",
+				What:   errors.New("unexpected end of dict, no matching value for a given key"),
 			})
 		}
 

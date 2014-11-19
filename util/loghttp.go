@@ -4,7 +4,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	_ "net/http/pprof"
 )
 
 func LoggedHTTPServe(addr string) *http.ServeMux {

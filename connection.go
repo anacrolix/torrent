@@ -174,7 +174,8 @@ func (c *connection) Close() {
 	default:
 	}
 	close(c.closing)
-	c.Socket.Close()
+	// TODO: This call blocks sometimes, why?
+	go c.Socket.Close()
 }
 
 func (c *connection) PeerHasPiece(index pp.Integer) bool {

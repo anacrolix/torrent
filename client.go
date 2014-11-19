@@ -1301,7 +1301,30 @@ func (cl *Client) AddMagnet(uri string) (t Torrent, err error) {
 	if err != nil {
 		t.Close()
 	}
+	go cl.connectionPruner(t.torrent)
 	return
+}
+
+func (cl *Client) connectionPruner(t *torrent) {
+	for {
+		time.Sleep(15 * time.Second)
+		cl.mu.Lock()
+		license := len(t.Conns) - (socketsPerTorrent+1)/2
+		for _, c := range t.Conns {
+			if license <= 0 {
+				break
+			}
+			if time.Now().Sub(c.lastUsefulChunkReceived) < time.Minute {
+				continue
+			}
+			if time.Now().Sub(c.completedHandshake) < time.Minute {
+				continue
+			}
+			c.Close()
+			license--
+		}
+		cl.mu.Unlock()
+	}
 }
 
 func (me *Client) DropTorrent(infoHash InfoHash) (err error) {

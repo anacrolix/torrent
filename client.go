@@ -846,7 +846,12 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 		if t.haveInfo() {
 			break
 		}
-		t.SaveMetadataPiece(piece, payload[len(payload)-metadataPieceSize(d["total_size"], piece):])
+		begin := len(payload) - metadataPieceSize(d["total_size"], piece)
+		if begin < 0 || begin >= len(payload) {
+			log.Printf("got bad metadata piece")
+			break
+		}
+		t.SaveMetadataPiece(piece, payload[begin:])
 		if !t.HaveAllMetadataPieces() {
 			break
 		}

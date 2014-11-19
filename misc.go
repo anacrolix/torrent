@@ -15,11 +15,12 @@ import (
 )
 
 const (
-	pieceHash   = crypto.SHA1
-	maxRequests = 250        // Maximum pending requests we allow peers to send us.
-	chunkSize   = 0x4000     // 16KiB
-	BEP20       = "-GT0000-" // Peer ID client identifier prefix
-	dialTimeout = time.Second * 30
+	pieceHash          = crypto.SHA1
+	maxRequests        = 250        // Maximum pending requests we allow peers to send us.
+	chunkSize          = 0x4000     // 16KiB
+	BEP20              = "-GT0000-" // Peer ID client identifier prefix
+	nominalDialTimeout = time.Second * 30
+	minDialTimeout     = 5 * time.Second
 )
 
 type (
@@ -156,6 +157,7 @@ func mmapTorrentData(md *metainfo.Info, location string) (mms mmap_span.MMapSpan
 	return
 }
 
+// The size in bytes of a metadata extension piece.
 func metadataPieceSize(totalSize int, piece int) int {
 	ret := totalSize - piece*(1<<14)
 	if ret > 1<<14 {

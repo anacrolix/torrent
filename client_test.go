@@ -84,15 +84,19 @@ func TestReducedDialTimeout(t *testing.T) {
 		PendingPeers    int
 		ExpectedReduced time.Duration
 	}{
-		{dialTimeout, 40, 0, dialTimeout},
-		{dialTimeout, 40, 1, dialTimeout},
-		{dialTimeout, 40, 39, dialTimeout},
-		{dialTimeout, 40, 40, dialTimeout / 2},
-		{dialTimeout, 40, 80, dialTimeout / 3},
-		{dialTimeout, 40, 4000, dialTimeout / 101},
+		{nominalDialTimeout, 40, 0, nominalDialTimeout},
+		{nominalDialTimeout, 40, 1, nominalDialTimeout},
+		{nominalDialTimeout, 40, 39, nominalDialTimeout},
+		{nominalDialTimeout, 40, 40, nominalDialTimeout / 2},
+		{nominalDialTimeout, 40, 80, nominalDialTimeout / 3},
+		{nominalDialTimeout, 40, 4000, nominalDialTimeout / 101},
 	} {
 		reduced := reducedDialTimeout(_case.Max, _case.HalfOpenLimit, _case.PendingPeers)
-		if reduced != _case.ExpectedReduced {
+		expected := _case.ExpectedReduced
+		if expected < minDialTimeout {
+			expected = minDialTimeout
+		}
+		if reduced != expected {
 			t.Fatalf("expected %s, got %s", _case.ExpectedReduced, reduced)
 		}
 	}

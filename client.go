@@ -394,8 +394,12 @@ func doDial(dial func() (net.Conn, error), ch chan dialResult, utp bool) {
 	}
 }
 
-func reducedDialTimeout(max time.Duration, halfOpenLimit int, pendingPeers int) time.Duration {
-	return max / time.Duration((pendingPeers+halfOpenLimit)/halfOpenLimit)
+func reducedDialTimeout(max time.Duration, halfOpenLimit int, pendingPeers int) (ret time.Duration) {
+	ret = max / time.Duration((pendingPeers+halfOpenLimit)/halfOpenLimit)
+	if ret < minDialTimeout {
+		ret = minDialTimeout
+	}
+	return
 }
 
 // Start the process of connecting to the given peer for the given torrent if
@@ -409,7 +413,7 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 		duplicateConnsAvoided.Add(1)
 		return
 	}
-	dialTimeout := reducedDialTimeout(dialTimeout, me.halfOpenLimit, len(t.Peers))
+	dialTimeout := reducedDialTimeout(nominalDialTimeout, me.halfOpenLimit, len(t.Peers))
 	t.HalfOpen[addr] = struct{}{}
 	go func() {
 		// Binding to the listen address and dialing via net.Dialer gives

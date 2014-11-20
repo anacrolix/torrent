@@ -912,7 +912,7 @@ type distance interface {
 }
 
 type bigIntDistance struct {
-	*big.Int
+	big.Int
 }
 
 // How many bits?
@@ -962,15 +962,16 @@ var bitCounts = []int8{
 }
 
 func (me bigIntDistance) BitCount() int {
-	return bitCount(me.Int)
+	return bitCount(&me.Int)
 }
 
-func (me bigIntDistance) Cmp(d distance) int {
-	return me.Int.Cmp(d.(bigIntDistance).Int)
+func (me bigIntDistance) Cmp(d bigIntDistance) int {
+	return me.Int.Cmp(&d.Int)
 }
 
 func (me bigIntDistance) IsZero() bool {
-	return me.Int.Cmp(big.NewInt(0)) == 0
+	var zero big.Int
+	return me.Int.Cmp(&zero) == 0
 }
 
 type bitCountDistance int
@@ -992,30 +993,31 @@ func (me bitCountDistance) IsZero() bool {
 	return me == 0
 }
 
-func idDistance(a, b string) distance {
-	if true {
-		if len(a) != 20 {
-			panic(a)
-		}
-		if len(b) != 20 {
-			panic(b)
-		}
-		x := new(big.Int)
-		y := new(big.Int)
-		x.SetBytes([]byte(a))
-		y.SetBytes([]byte(b))
-		dist := new(big.Int)
-		return bigIntDistance{dist.Xor(x, y)}
-	} else {
-		ret := 0
-		for i := 0; i < 20; i++ {
-			for j := uint(0); j < 8; j++ {
-				ret += int(a[i]>>j&1 ^ b[i]>>j&1)
-			}
-		}
-		return bitCountDistance(ret)
+// Below are 2 versions of idDistance. Only one can be active.
+
+func idDistance(a, b string) (ret bigIntDistance) {
+	if len(a) != 20 {
+		panic(a)
 	}
+	if len(b) != 20 {
+		panic(b)
+	}
+	var x, y big.Int
+	x.SetBytes([]byte(a))
+	y.SetBytes([]byte(b))
+	ret.Int.Xor(&x, &y)
+	return ret
 }
+
+// func idDistance(a, b string) bitCountDistance {
+// 	ret := 0
+// 	for i := 0; i < 20; i++ {
+// 		for j := uint(0); j < 8; j++ {
+// 			ret += int(a[i]>>j&1 ^ b[i]>>j&1)
+// 		}
+// 	}
+// 	return bitCountDistance(ret)
+// }
 
 func (s *Server) closestGoodNodes(k int, targetID string) []*Node {
 	return s.closestNodes(k, targetID, func(n *Node) bool { return n.Good() })

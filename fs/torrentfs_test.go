@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,11 +94,15 @@ func TestUnmountWedged(t *testing.T) {
 		DisableTrackers: true,
 		NoDHT:           true,
 	})
+	defer client.Stop()
 	log.Printf("%+v", *layout.Metainfo)
 	client.AddTorrent(layout.Metainfo)
 	fs := New(client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
 	if err != nil {
+		if strings.Contains(err.Error(), "fuse") {
+			t.Skip(err)
+		}
 		t.Fatal(err)
 	}
 	go func() {

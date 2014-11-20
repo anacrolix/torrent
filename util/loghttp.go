@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	_ "net/http/pprof"
 )
 
 func LoggedHTTPServe(addr string) *http.ServeMux {
@@ -26,7 +27,7 @@ func LoggedHTTPServe(addr string) *http.ServeMux {
 		log.Fatalf("error creating http conn: %#v", err)
 	}
 	log.Printf("starting http server on http://%s", conn.Addr())
-	mux := http.NewServeMux()
+	mux := http.DefaultServeMux
 	go func() {
 		defer conn.Close()
 		err = (&http.Server{

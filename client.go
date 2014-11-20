@@ -126,6 +126,7 @@ type Client struct {
 	disableTrackers  bool
 	downloadStrategy DownloadStrategy
 	dHT              *dht.Server
+	disableUTP       bool
 
 	mu    levelmu.LevelMutex
 	event sync.Cond
@@ -278,6 +279,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		downloadStrategy: cfg.DownloadStrategy,
 		halfOpenLimit:    100,
 		dataDir:          cfg.DataDir,
+		disableUTP:       cfg.DisableUTP,
 
 		quit:     make(chan struct{}),
 		torrents: make(map[InfoHash]*torrent),
@@ -327,10 +329,13 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		go cl.acceptConnections(utpL, true)
 	}
 	if !cfg.NoDHT {
-		cl.dHT, err = dht.NewServer(&dht.ServerConfig{
+		cfg := dht.ServerConfig{
 			Addr: listenAddr(),
-			Conn: utpL.RawConn,
-		})
+		}
+		if utpL != nil {
+			cfg.Conn = utpL.RawConn
+		}
+		cl.dHT, err = dht.NewServer(&cfg)
 		if err != nil {
 			return
 		}
@@ -455,16 +460,20 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 
 		// Initiate connections via TCP and UTP simultaneously. Use the first
 		// one that succeeds.
-		left := 2
+		left := 1
+		if !me.disableUTP {
+			left++
+		}
 		resCh := make(chan dialResult, left)
+		if !me.disableUTP {
+			go doDial(func() (net.Conn, error) {
+				return (&utp.Dialer{Timeout: dialTimeout}).Dial("utp", addr)
+			}, resCh, true)
+		}
 		go doDial(func() (net.Conn, error) {
-			time.Sleep(time.Second) // Give uTP a bit of a head start.
+			// time.Sleep(time.Second) // Give uTP a bit of a head start.
 			return net.DialTimeout("tcp", addr, dialTimeout)
 		}, resCh, false)
-		go doDial(func() (net.Conn, error) {
-			return (&utp.Dialer{Timeout: dialTimeout}).Dial("utp", addr)
-		}, resCh, true)
-
 		var res dialResult
 		for ; left > 0 && res.Conn == nil; left-- {
 			res = <-resCh
@@ -614,6 +623,7 @@ type peerConn struct {
 }
 
 func (pc peerConn) Read(b []byte) (n int, err error) {
+	// Keep-alives should be received every 2 mins. Give a bit of gracetime.
 	err = pc.Conn.SetReadDeadline(time.Now().Add(150 * time.Second))
 	if err != nil {
 		return

@@ -180,38 +180,17 @@ func TestDownloadOnDemand(t *testing.T) {
 		}
 	}()})
 	fs := New(leecher)
-	mountDir := layout.MountDir
-	fuseConn, err := fuse.Mount(layout.MountDir)
-	if err != nil {
-		t.Fatal(err)
+	defer fs.Destroy()
+	root, _ := fs.Root()
+	node, _ := root.(fusefs.NodeStringLookuper).Lookup("greeting", nil)
+	size := int(node.Attr().Size)
+	resp := &fuse.ReadResponse{
+		Data: make([]byte, size),
 	}
-	defer func() {
-		if err := fuse.Unmount(mountDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
-	go func() {
-		if err := fusefs.Serve(fuseConn, fs); err != nil {
-			t.Fatal(err)
-		}
-		if err := fuseConn.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}()
-	<-fuseConn.Ready
-	if fuseConn.MountError != nil {
-		t.Fatal(fuseConn.MountError)
-	}
-	go func() {
-		time.Sleep(10 * time.Second)
-		if err := fuse.Unmount(mountDir); err != nil {
-			t.Log(err)
-		}
-	}()
-	content, err := ioutil.ReadFile(filepath.Join(mountDir, "greeting"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	node.(fusefs.HandleReader).Read(&fuse.ReadRequest{
+		Size: size,
+	}, resp, nil)
+	content := resp.Data
 	if string(content) != testutil.GreetingFileContents {
 		t.FailNow()
 	}

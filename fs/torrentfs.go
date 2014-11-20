@@ -149,8 +149,7 @@ type dirNode struct {
 
 var (
 	_ fusefs.HandleReadDirer = dirNode{}
-
-	_ fusefs.HandleReader = fileNode{}
+	_ fusefs.HandleReader    = fileNode{}
 )
 
 func isSubPath(parent, child []string) bool {

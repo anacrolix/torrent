@@ -176,6 +176,9 @@ type requestFiller struct {
 
 // Wrapper around connection.request that tracks request heat.
 func (me *requestFiller) request(req request) bool {
+	if me.pieces == nil {
+		me.pieces = make(map[int]struct{})
+	}
 	me.pieces[int(req.Index)] = struct{}{}
 	if me.c.RequestPending(req) {
 		return true
@@ -330,7 +333,7 @@ func (me *requestFiller) readahead() bool {
 }
 
 func (me *responsiveDownloadStrategy) FillRequests(t *torrent, c *connection) (pieces []int) {
-	rf := requestFiller{c, t, me, make(map[int]struct{}, t.NumPieces())}
+	rf := requestFiller{c: c, t: t, s: me}
 	rf.Run()
 	for p := range rf.pieces {
 		pieces = append(pieces, p)

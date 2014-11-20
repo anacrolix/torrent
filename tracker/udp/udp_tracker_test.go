@@ -105,6 +105,7 @@ func TestUDPTracker(t *testing.T) {
 	}
 }
 
+// TODO: Create a fake UDP tracker to make these requests to.
 func TestAnnounceRandomInfoHash(t *testing.T) {
 	wg := sync.WaitGroup{}
 	for _, url := range []string{
@@ -131,7 +132,8 @@ func TestAnnounceRandomInfoHash(t *testing.T) {
 			rand.Read(req.InfoHash[:])
 			resp, err := tr.Announce(&req)
 			if err != nil {
-				t.Fatal(err)
+				t.Logf("error announcing to %s: %s", url, err)
+				return
 			}
 			if resp.Leechers != 0 || resp.Seeders != 0 || len(resp.Peers) != 0 {
 				t.Fatal(resp)

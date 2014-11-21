@@ -217,7 +217,7 @@ func (me *requestFiller) priorities() bool {
 }
 
 // Fill requests, with all contextual information available in the receiver.
-func (me requestFiller) Run() {
+func (me *requestFiller) Run() {
 	if !me.priorities() {
 		return
 	}

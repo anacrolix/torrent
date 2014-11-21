@@ -1308,6 +1308,7 @@ func (t *torrent) addTrackers(announceList [][]string) {
 		} else {
 			newTrackers = append(newTrackers, mergeTier(nil, tier))
 		}
+		shuffleTier(newTrackers[tierIndex])
 	}
 	t.Trackers = newTrackers
 }

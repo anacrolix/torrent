@@ -22,10 +22,15 @@ type DownloadStrategy interface {
 	TorrentGotPiece(t *torrent, piece int)
 	WriteStatus(w io.Writer)
 	AssertNotRequested(*torrent, request)
+	PendingData(*torrent) bool
 }
 
 type DefaultDownloadStrategy struct {
 	heat map[*torrent]map[request]int
+}
+
+func (me *DefaultDownloadStrategy) PendingData(t *torrent) bool {
+	return !t.haveAllPieces()
 }
 
 func (me *DefaultDownloadStrategy) AssertNotRequested(t *torrent, r request) {
@@ -135,6 +140,7 @@ type responsiveDownloadStrategy struct {
 	priorities     map[*torrent]map[request]struct{}
 	requestHeat    map[*torrent]map[request]int
 	rand           *rand.Rand // Avoid global lock
+	dummyConn      *connection
 }
 
 func (me *responsiveDownloadStrategy) WriteStatus(w io.Writer) {
@@ -151,6 +157,7 @@ func (me *responsiveDownloadStrategy) WriteStatus(w io.Writer) {
 func (me *responsiveDownloadStrategy) TorrentStarted(t *torrent) {
 	me.priorities[t] = make(map[request]struct{})
 	me.requestHeat[t] = make(map[request]int)
+	me.dummyConn = &connection{}
 }
 
 func (me *responsiveDownloadStrategy) TorrentStopped(t *torrent) {
@@ -179,6 +186,7 @@ func (me *requestFiller) request(req request) bool {
 	if me.pieces == nil {
 		me.pieces = make(map[int]struct{})
 	}
+	// log.Print(req)
 	me.pieces[int(req.Index)] = struct{}{}
 	if me.c.RequestPending(req) {
 		return true
@@ -374,4 +382,8 @@ func (s *responsiveDownloadStrategy) AssertNotRequested(t *torrent, r request) {
 	if s.requestHeat[t][r] != 0 {
 		panic("outstanding requests invariant broken")
 	}
+}
+
+func (me *responsiveDownloadStrategy) PendingData(t *torrent) bool {
+	return len(me.FillRequests(t, me.dummyConn)) != 0
 }

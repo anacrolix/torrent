@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"bufio"
 	"container/list"
 	"encoding"
 	"errors"
@@ -301,19 +302,34 @@ var (
 
 // Writes buffers to the socket from the write channel.
 func (conn *connection) writer() {
+	// Reduce write syscalls.
+	buf := bufio.NewWriterSize(conn.Socket, 0x8000) // 32 KiB
+	// Returns immediately if the buffer contains data.
+	notEmpty := make(chan struct{}, 1)
 	for {
+		if buf.Buffered() != 0 {
+			select {
+			case notEmpty <- struct{}{}:
+			default:
+			}
+		}
 		select {
 		case b, ok := <-conn.writeCh:
 			if !ok {
 				return
 			}
-			_, err := conn.Socket.Write(b)
+			_, err := buf.Write(b)
 			if err != nil {
 				conn.Close()
 				return
 			}
 		case <-conn.closing:
 			return
+		case <-notEmpty:
+			err := buf.Flush()
+			if err != nil {
+				return
+			}
 		}
 	}
 }

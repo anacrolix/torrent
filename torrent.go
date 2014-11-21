@@ -319,6 +319,13 @@ func (t *torrent) WriteStatus(w io.Writer) {
 		fmt.Fprintf(w, "%c", t.pieceStatusChar(index))
 	}
 	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Trackers: ")
+	for _, tier := range t.Trackers {
+		for _, tr := range tier {
+			fmt.Fprintf(w, "%q ", tr.String())
+		}
+	}
+	fmt.Fprintf(w, "\n")
 	fmt.Fprintf(w, "Pending peers: %d\n", len(t.Peers))
 	fmt.Fprintf(w, "Half open: %d\n", len(t.HalfOpen))
 	fmt.Fprintf(w, "Active peers: %d\n", len(t.Conns))

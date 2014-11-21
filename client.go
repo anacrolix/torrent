@@ -1337,6 +1337,7 @@ func (cl *Client) AddMagnet(uri string) (t Torrent, err error) {
 	defer cl.mu.Unlock()
 	t.torrent = cl.torrent(m.InfoHash)
 	if t.torrent != nil {
+		t.addTrackers([][]string{m.Trackers})
 		return
 	}
 	t.torrent, err = newTorrent(m.InfoHash, [][]string{m.Trackers}, cl.halfOpenLimit)

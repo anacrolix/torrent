@@ -308,6 +308,9 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if addr := cl.ListenAddr(); addr != nil {
 			return addr.String()
 		}
+		if cfg.ListenAddr == "" {
+			return ":50007"
+		}
 		return cfg.ListenAddr
 	}
 	if !cfg.DisableTCP {
@@ -358,6 +361,9 @@ func (cl *Client) stopped() bool {
 func (me *Client) Stop() {
 	me.mu.Lock()
 	close(me.quit)
+	for _, l := range me.listeners {
+		l.Close()
+	}
 	me.event.Broadcast()
 	for _, t := range me.torrents {
 		t.Close()

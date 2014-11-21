@@ -143,11 +143,15 @@ func TestDownloadOnDemand(t *testing.T) {
 		DataDir:         layout.Completed,
 		DisableTrackers: true,
 		NoDHT:           true,
+		ListenAddr:      ":0",
 	})
+	if err != nil {
+		t.Fatalf("error creating seeder client: %s", err)
+	}
+	defer seeder.Stop()
 	http.HandleFunc("/seeder", func(w http.ResponseWriter, req *http.Request) {
 		seeder.WriteStatus(w)
 	})
-	defer seeder.Stop()
 	_, err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%x", layout.Metainfo.Info.Hash))
 	if err != nil {
 		t.Fatal(err)
@@ -157,6 +161,7 @@ func TestDownloadOnDemand(t *testing.T) {
 		DownloadStrategy: torrent.NewResponsiveDownloadStrategy(0),
 		DisableTrackers:  true,
 		NoDHT:            true,
+		ListenAddr:       ":0",
 
 		// This can be used to check if clients can connect to other clients
 		// with the same ID.

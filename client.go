@@ -1539,7 +1539,7 @@ newAnnounce:
 		for _, tier := range trackers {
 			for trIndex, tr := range tier {
 				if err := tr.Connect(); err != nil {
-					log.Print(err)
+					log.Printf("error connecting to tracker at %q: %s", tr, err)
 					continue
 				}
 				resp, err := tr.Announce(&req)

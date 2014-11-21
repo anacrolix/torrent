@@ -1277,7 +1277,7 @@ func shuffleTier(tier []tracker.Client) {
 
 func copyTrackers(base [][]tracker.Client) (copy [][]tracker.Client) {
 	for _, tier := range base {
-		copy = append(copy, tier)
+		copy = append(copy, append([]tracker.Client{}, tier...))
 	}
 	return
 }

@@ -45,6 +45,7 @@ type Client interface {
 	Announce(*AnnounceRequest) (AnnounceResponse, error)
 	Connect() error
 	String() string
+	URL() string
 }
 
 var (

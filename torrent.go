@@ -46,8 +46,11 @@ type peersKey struct {
 }
 
 type torrent struct {
-	stateMu           sync.Mutex
-	closing           chan struct{}
+	stateMu sync.Mutex
+	closing chan struct{}
+
+	// Closed when no more network activity is desired. This includes
+	// announcing, and communicating with peers.
 	ceasingNetworking chan struct{}
 
 	InfoHash                    InfoHash
@@ -63,10 +66,12 @@ type torrent struct {
 	Conns []*connection
 	// Set of addrs to which we're attempting to connect.
 	HalfOpen map[string]struct{}
+
 	// Reserve of peers to connect to. A peer can be both here and in the
 	// active connections if were told about the peer after connecting with
 	// them. That encourages us to reconnect to peers that are well known.
-	Peers map[peersKey]Peer
+	Peers     map[peersKey]Peer
+	wantPeers sync.Cond
 
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
 	// mirror their respective URLs from the announce-list key.

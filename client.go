@@ -1566,7 +1566,8 @@ newAnnounce:
 				continue newAnnounce
 			}
 		}
-		time.Sleep(5 * time.Second)
+		// Couldn't announce at all. Wait a bit before trying again.
+		time.Sleep(15 * time.Second)
 	}
 }
 

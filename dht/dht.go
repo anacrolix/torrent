@@ -27,6 +27,7 @@ type Server struct {
 	nodes            map[string]*Node // Keyed by dHTAddr.String().
 	mu               sync.Mutex
 	closed           chan struct{}
+	passive          bool // Don't respond to queries.
 
 	NumConfirmedAnnounces int
 }
@@ -41,8 +42,9 @@ func newDHTAddr(addr *net.UDPAddr) (ret dHTAddr) {
 }
 
 type ServerConfig struct {
-	Addr string
-	Conn net.PacketConn
+	Addr    string
+	Conn    net.PacketConn
+	Passive bool // Don't respond to queries.
 }
 
 func (s *Server) LocalAddr() net.Addr {
@@ -71,6 +73,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 			return
 		}
 	}
+	s.passive = c.Passive
 	err = s.init()
 	if err != nil {
 		return
@@ -346,6 +349,9 @@ func (s *Server) nodeByID(id string) *Node {
 func (s *Server) handleQuery(source dHTAddr, m Msg) {
 	args := m["a"].(map[string]interface{})
 	s.heardFromNode(source, args["id"].(string))
+	if s.passive {
+		return
+	}
 	switch m["q"] {
 	case "ping":
 		s.reply(source, m["t"].(string), nil)

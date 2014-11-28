@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/nsf/libtorgo/torrent"
+	"github.com/anacrolix/libtorgo/metainfo"
 )
 
 func main() {
 	flag.Parse()
 	for _, filename := range flag.Args() {
-		metainfo, err := torrent.LoadFromFile(filename)
+		metainfo, err := metainfo.LoadFromFile(filename)
 		if err != nil {
 			log.Print(err)
 			continue

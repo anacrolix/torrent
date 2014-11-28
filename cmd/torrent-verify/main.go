@@ -1,18 +1,16 @@
 package main
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/mmap_span"
 	"bytes"
 	"crypto/sha1"
 	"flag"
 	"fmt"
-
-	// "github.com/davecheney/profile"
 	"log"
 	"os"
 	"path/filepath"
 
-	metainfo "github.com/nsf/libtorgo/torrent"
+	"bitbucket.org/anacrolix/go.torrent/mmap_span"
+	"github.com/anacrolix/libtorgo/metainfo"
 	"launchpad.net/gommap"
 )
 
@@ -26,7 +24,6 @@ func init() {
 }
 
 func main() {
-	// defer profile.Start(profile.CPUProfile).Stop()
 	metaInfo, err := metainfo.LoadFromFile(*filePath)
 	if err != nil {
 		log.Fatal(err)
@@ -37,8 +34,8 @@ func main() {
 	}
 	defer devZero.Close()
 	var mMapSpan mmap_span.MMapSpan
-	for _, file := range metaInfo.Files {
-		filename := filepath.Join(append([]string{*dirPath, metaInfo.Name}, file.Path...)...)
+	for _, file := range metaInfo.Info.Files {
+		filename := filepath.Join(append([]string{*dirPath, metaInfo.Info.Name}, file.Path...)...)
 		osFile, err := os.Open(filename)
 		mmapFd := osFile.Fd()
 		if err != nil {
@@ -58,16 +55,16 @@ func main() {
 		osFile.Close()
 		mMapSpan = append(mMapSpan, goMMap)
 	}
-	log.Println(len(metaInfo.Files))
+	log.Println(len(metaInfo.Info.Files))
 	log.Println(mMapSpan.Size())
-	log.Println(len(metaInfo.Pieces))
-	for piece := 0; piece < (len(metaInfo.Pieces)+sha1.Size-1)/sha1.Size; piece++ {
-		expectedHash := metaInfo.Pieces[sha1.Size*piece : sha1.Size*(piece+1)]
+	log.Println(len(metaInfo.Info.Pieces))
+	for piece := 0; piece < (len(metaInfo.Info.Pieces)+sha1.Size-1)/sha1.Size; piece++ {
+		expectedHash := metaInfo.Info.Pieces[sha1.Size*piece : sha1.Size*(piece+1)]
 		if len(expectedHash) == 0 {
 			break
 		}
 		hash := sha1.New()
-		_, err := mMapSpan.WriteSectionTo(hash, int64(piece)*metaInfo.PieceLength, metaInfo.PieceLength)
+		_, err := mMapSpan.WriteSectionTo(hash, int64(piece)*metaInfo.Info.PieceLength, metaInfo.Info.PieceLength)
 		if err != nil {
 			log.Fatal(err)
 		}

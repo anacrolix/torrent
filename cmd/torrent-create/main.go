@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/nsf/libtorgo/torrent"
+	torrent "github.com/anacrolix/libtorgo/metainfo"
 )
 
 var (

@@ -8,7 +8,7 @@ import (
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	_ "bitbucket.org/anacrolix/go.torrent/tracker/udp"
 	"bitbucket.org/anacrolix/go.torrent/util"
-	metainfo "github.com/nsf/libtorgo/torrent"
+	metainfo "github.com/anacrolix/libtorgo/metainfo"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 			ar := tracker.AnnounceRequest{
 				NumWant: -1,
 			}
-			util.CopyExact(ar.InfoHash, mi.InfoHash)
+			util.CopyExact(ar.InfoHash, mi.Info.Hash)
 			resp, err := tr.Announce(&ar)
 			if err != nil {
 				log.Fatal(err)

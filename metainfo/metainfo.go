@@ -2,7 +2,7 @@ package metainfo
 
 import (
 	"crypto/sha1"
-	"github.com/nsf/libtorgo/bencode"
+	"github.com/anacrolix/libtorgo/bencode"
 	"io"
 	"os"
 )

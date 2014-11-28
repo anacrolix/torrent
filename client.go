@@ -333,13 +333,17 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		go cl.acceptConnections(utpL, true)
 	}
 	if !cfg.NoDHT {
-		cfg := dht.ServerConfig{
-			Addr: listenAddr(),
+		dhtCfg := cfg.DHTConfig
+		if dhtCfg == nil {
+			dhtCfg = &dht.ServerConfig{}
 		}
-		if utpL != nil {
-			cfg.Conn = utpL.RawConn
+		if dhtCfg.Addr == "" {
+			dhtCfg.Addr = listenAddr()
 		}
-		cl.dHT, err = dht.NewServer(&cfg)
+		if dhtCfg.Conn == nil && utpL != nil {
+			dhtCfg.Conn = utpL.RawConn
+		}
+		cl.dHT, err = dht.NewServer(dhtCfg)
 		if err != nil {
 			return
 		}

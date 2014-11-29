@@ -30,6 +30,7 @@ import (
 	mathRand "math/rand"
 	"net"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -42,11 +43,11 @@ import (
 	"github.com/anacrolix/libtorgo/metainfo"
 
 	"bitbucket.org/anacrolix/go.torrent/dht"
+	"bitbucket.org/anacrolix/go.torrent/iplist"
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	_ "bitbucket.org/anacrolix/go.torrent/tracker/udp"
 	. "bitbucket.org/anacrolix/go.torrent/util"
-	"bitbucket.org/anacrolix/go.torrent/util/levelmu"
 )
 
 var (
@@ -128,8 +129,9 @@ type Client struct {
 	downloadStrategy DownloadStrategy
 	dHT              *dht.Server
 	disableUTP       bool
+	ipBlockList      *iplist.IPList
 
-	mu    levelmu.LevelMutex
+	mu    sync.RWMutex
 	event sync.Cond
 	quit  chan struct{}
 
@@ -138,6 +140,12 @@ type Client struct {
 	torrents map[InfoHash]*torrent
 
 	dataWaits map[*torrent][]dataWait
+}
+
+func (me *Client) SetIPBlockList(list *iplist.IPList) {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	me.ipBlockList = list
 }
 
 func (me *Client) PeerID() string {
@@ -183,8 +191,8 @@ func (cl *Client) sortedTorrents() (ret []*torrent) {
 }
 
 func (cl *Client) WriteStatus(_w io.Writer) {
-	cl.mu.LevelLock(1)
-	defer cl.mu.Unlock()
+	cl.mu.RLock()
+	defer cl.mu.RUnlock()
 	w := bufio.NewWriter(_w)
 	defer w.Flush()
 	fmt.Fprintf(w, "Listening on %s\n", cl.ListenAddr())
@@ -221,8 +229,8 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 // Read torrent data at the given offset. Returns ErrDataNotReady if the data
 // isn't available.
 func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err error) {
-	cl.mu.LevelLock(1)
-	defer cl.mu.Unlock()
+	cl.mu.RLock()
+	defer cl.mu.RUnlock()
 	t := cl.torrent(ih)
 	if t == nil {
 		err = errors.New("unknown torrent")
@@ -269,6 +277,42 @@ func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err er
 	return t.Data.ReadAt(p, off)
 }
 
+func (cl *Client) setEnvBlocklist() (err error) {
+	filename := os.Getenv("TORRENT_BLOCKLIST_FILE")
+	defaultBlocklist := filename == ""
+	if defaultBlocklist {
+		filename = filepath.Join(os.Getenv("HOME"), ".config/torrent/blocklist")
+	}
+	f, err := os.Open(filename)
+	if err != nil {
+		if defaultBlocklist {
+			err = nil
+		}
+		return
+	}
+	defer f.Close()
+	var ranges []iplist.Range
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		r, ok, lineErr := iplist.ParseBlocklistP2PLine(scanner.Text())
+		if lineErr != nil {
+			err = fmt.Errorf("error reading torrent blocklist line: %s", lineErr)
+			return
+		}
+		if !ok {
+			continue
+		}
+		ranges = append(ranges, r)
+	}
+	err = scanner.Err()
+	if err != nil {
+		err = fmt.Errorf("error reading torrent blocklist: %s", err)
+		return
+	}
+	cl.ipBlockList = iplist.New(ranges)
+	return
+}
+
 func NewClient(cfg *Config) (cl *Client, err error) {
 	if cfg == nil {
 		cfg = &Config{}
@@ -288,7 +332,11 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		dataWaits: make(map[*torrent][]dataWait),
 	}
 	cl.event.L = &cl.mu
-	cl.mu.Init(2)
+
+	err = cl.setEnvBlocklist()
+	if err != nil {
+		return
+	}
 
 	if cfg.PeerID != "" {
 		CopyExact(&cl.peerID, cfg.PeerID)
@@ -344,6 +392,9 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 			dhtCfg.Conn = utpL.RawConn
 		}
 		cl.dHT, err = dht.NewServer(dhtCfg)
+		if cl.ipBlockList != nil {
+			cl.dHT.SetIPBlockList(cl.ipBlockList)
+		}
 		if err != nil {
 			return
 		}
@@ -376,9 +427,20 @@ func (me *Client) Stop() {
 	me.mu.Unlock()
 }
 
+func (cl *Client) ipBlocked(ip net.IP) bool {
+	if cl.ipBlockList == nil {
+		return false
+	}
+	if r := cl.ipBlockList.Lookup(ip); r != nil {
+		log.Printf("IP blocked: %s in range %s-%s: %s", ip, r.First, r.Last, r.Description)
+		return true
+	}
+	return false
+}
+
 func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 	for {
-		// We accept all connections immediately, because we don't what
+		// We accept all connections immediately, because we don't know what
 		// torrent they're for.
 		conn, err := l.Accept()
 		select {
@@ -394,6 +456,12 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 			return
 		}
 		acceptedConns.Add(1)
+		cl.mu.RLock()
+		blocked := cl.ipBlocked(AddrIP(conn.RemoteAddr()))
+		cl.mu.RUnlock()
+		if blocked {
+			continue
+		}
 		go func() {
 			if err := cl.runConnection(conn, nil, peerSourceIncoming, utp); err != nil {
 				log.Print(err)
@@ -459,6 +527,9 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 	addr := net.JoinHostPort(peer.IP.String(), fmt.Sprintf("%d", peer.Port))
 	if t.addrActive(addr) {
 		duplicateConnsAvoided.Add(1)
+		return
+	}
+	if me.ipBlocked(peer.IP) {
 		return
 	}
 	dialTimeout := reducedDialTimeout(nominalDialTimeout, me.halfOpenLimit, len(t.Peers))

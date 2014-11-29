@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"bitbucket.org/anacrolix/go.torrent/iplist"
+
 	"bitbucket.org/anacrolix/go.torrent/logonce"
 	"bitbucket.org/anacrolix/go.torrent/util"
 	"github.com/anacrolix/libtorgo/bencode"
@@ -28,6 +30,7 @@ type Server struct {
 	mu               sync.Mutex
 	closed           chan struct{}
 	passive          bool // Don't respond to queries.
+	ipBlockList      *iplist.IPList
 
 	NumConfirmedAnnounces int
 }
@@ -92,7 +95,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 	go func() {
 		err := s.bootstrap()
 		if err != nil {
-			panic(err)
+			log.Printf("error bootstrapping DHT: %s", err)
 		}
 	}()
 	return
@@ -267,6 +270,12 @@ func (s *Server) setDefaults() (err error) {
 	return
 }
 
+func (s *Server) SetIPBlockList(list *iplist.IPList) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ipBlockList = list
+}
+
 func (s *Server) init() (err error) {
 	err = s.setDefaults()
 	if err != nil {
@@ -323,6 +332,13 @@ func (s *Server) serve() error {
 		}
 		s.processPacket(b[:n], newDHTAddr(addr.(*net.UDPAddr)))
 	}
+}
+
+func (s *Server) ipBlocked(ip net.IP) bool {
+	if s.ipBlockList == nil {
+		return false
+	}
+	return s.ipBlockList.Lookup(ip) != nil
 }
 
 func (s *Server) AddNode(ni NodeInfo) {
@@ -424,7 +440,7 @@ func (s *Server) reply(addr dHTAddr, t string, r map[string]interface{}) {
 	}
 	err = s.writeToNode(b, addr)
 	if err != nil {
-		panic(err)
+		log.Printf("error replying to %s: %s", addr, err)
 	}
 }
 
@@ -451,6 +467,12 @@ func (s *Server) getNode(addr dHTAddr) (n *Node) {
 }
 
 func (s *Server) writeToNode(b []byte, node dHTAddr) (err error) {
+	if list := s.ipBlockList; list != nil {
+		if r := list.Lookup(util.AddrIP(node)); r != nil {
+			err = fmt.Errorf("write to %s blocked: %s", node, r.Description)
+			return
+		}
+	}
 	n, err := s.socket.WriteTo(b, node)
 	if err != nil {
 		err = fmt.Errorf("error writing %d bytes to %s: %s", len(b), node, err)
@@ -733,6 +755,9 @@ func (s *Server) liftNodes(d Msg) {
 		for _, cni := range r.Nodes {
 			if util.AddrPort(cni.Addr) == 0 {
 				// TODO: Why would people even do this?
+				continue
+			}
+			if s.ipBlocked(util.AddrIP(cni.Addr)) {
 				continue
 			}
 			n := s.getNode(cni.Addr)

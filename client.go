@@ -977,7 +977,7 @@ func addrPort(addr net.Addr) int {
 // and exit.
 func (me *Client) connectionLoop(t *torrent, c *connection) error {
 	decoder := pp.Decoder{
-		R:         bufio.NewReaderSize(c.Socket, 20*1024),
+		R:         bufio.NewReader(c.Socket),
 		MaxLength: 256 * 1024,
 	}
 	for {
@@ -1542,7 +1542,7 @@ func (cl *Client) waitWantPeers(t *torrent) bool {
 
 func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 	for cl.waitWantPeers(t) {
-		log.Printf("announcing torrent %q to DHT", t)
+		log.Printf("getting peers for %q from DHT", t)
 		ps, err := cl.dHT.GetPeers(string(t.InfoHash[:]))
 		if err != nil {
 			log.Printf("error getting peers from dht: %s", err)

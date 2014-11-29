@@ -831,12 +831,12 @@ func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *transaction, err er
 	return
 }
 
-func bootstrapAddr() (net.Addr, error) {
-	return net.ResolveUDPAddr("udp4", "router.bittorrent.com:6881")
+func bootstrapAddr() (*net.UDPAddr, error) {
+	return net.ResolveUDPAddr("udp4", "router.utorrent.com:6881")
 }
 
 func (s *Server) addRootNode() error {
-	addr, err := net.ResolveUDPAddr("udp4", "router.bittorrent.com:6881")
+	addr, err := bootstrapAddr()
 	if err != nil {
 		return err
 	}

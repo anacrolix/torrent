@@ -63,6 +63,7 @@ var (
 	unsuccessfulDials           = expvar.NewInt("unsuccessfulDials")
 	successfulDials             = expvar.NewInt("successfulDials")
 	acceptedConns               = expvar.NewInt("acceptedConns")
+	inboundConnsBlocked         = expvar.NewInt("inboundConnsBlocked")
 )
 
 const (
@@ -146,6 +147,9 @@ func (me *Client) SetIPBlockList(list *iplist.IPList) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	me.ipBlockList = list
+	if me.dHT != nil {
+		me.dHT.SetIPBlockList(list)
+	}
 }
 
 func (me *Client) PeerID() string {
@@ -427,15 +431,12 @@ func (me *Client) Stop() {
 	me.mu.Unlock()
 }
 
-func (cl *Client) ipBlocked(ip net.IP) bool {
+func (cl *Client) ipBlockRange(ip net.IP) (r *iplist.Range) {
 	if cl.ipBlockList == nil {
-		return false
+		return
 	}
-	if r := cl.ipBlockList.Lookup(ip); r != nil {
-		log.Printf("IP blocked: %s in range %s-%s: %s", ip, r.First, r.Last, r.Description)
-		return true
-	}
-	return false
+	r = cl.ipBlockList.Lookup(ip)
+	return
 }
 
 func (cl *Client) acceptConnections(l net.Listener, utp bool) {
@@ -457,9 +458,11 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 		}
 		acceptedConns.Add(1)
 		cl.mu.RLock()
-		blocked := cl.ipBlocked(AddrIP(conn.RemoteAddr()))
+		blockRange := cl.ipBlockRange(AddrIP(conn.RemoteAddr()))
 		cl.mu.RUnlock()
-		if blocked {
+		if blockRange != nil {
+			inboundConnsBlocked.Add(1)
+			log.Printf("inbound connection from %s blocked by %s", conn.RemoteAddr(), blockRange)
 			continue
 		}
 		go func() {
@@ -529,7 +532,8 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 		duplicateConnsAvoided.Add(1)
 		return
 	}
-	if me.ipBlocked(peer.IP) {
+	if r := me.ipBlockRange(peer.IP); r != nil {
+		log.Printf("outbound connect to %s blocked by IP blocklist rule %s", peer.IP, r)
 		return
 	}
 	dialTimeout := reducedDialTimeout(nominalDialTimeout, me.halfOpenLimit, len(t.Peers))
@@ -1274,6 +1278,19 @@ func (me *Client) AddPeers(infoHash InfoHash, peers []Peer) error {
 	t := me.torrent(infoHash)
 	if t == nil {
 		return errors.New("no such torrent")
+	}
+	blocked := 0
+	for i, p := range peers {
+		if me.ipBlockRange(p.IP) == nil {
+			continue
+		}
+		peers[i] = peers[len(peers)-1]
+		peers = peers[:len(peers)-1]
+		i--
+		blocked++
+	}
+	if blocked != 0 {
+		log.Printf("IP blocklist screened %d peers from being added", blocked)
 	}
 	t.AddPeers(peers)
 	me.openNewConns(t)

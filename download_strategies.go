@@ -77,7 +77,7 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) (piece
 			piece := t.Pieces[pieceIndex]
 			if !piece.EverHashed {
 				pieces = append(pieces, int(pieceIndex))
-				return
+				continue
 			}
 			for chunkSpec := range t.Pieces[pieceIndex].PendingChunkSpecs {
 				r := request{pieceIndex, chunkSpec}

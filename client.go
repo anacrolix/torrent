@@ -1496,7 +1496,7 @@ func (me *Client) addTorrent(t *torrent) (err error) {
 	}
 	me.torrents[t.InfoHash] = t
 	if !me.disableTrackers {
-		go me.announceTorrent(t)
+		go me.announceTorrentTrackers(t)
 	}
 	if me.dHT != nil {
 		go me.announceTorrentDHT(t, true)
@@ -1614,7 +1614,8 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 	}
 }
 
-func (cl *Client) announceTorrent(t *torrent) {
+// Announce torrent to its trackers.
+func (cl *Client) announceTorrentTrackers(t *torrent) {
 	req := tracker.AnnounceRequest{
 		Event:    tracker.Started,
 		NumWant:  -1,
@@ -1624,10 +1625,10 @@ func (cl *Client) announceTorrent(t *torrent) {
 	}
 newAnnounce:
 	for cl.waitWantPeers(t) {
-		cl.mu.Lock()
+		cl.mu.RLock()
 		req.Left = t.BytesLeft()
 		trackers := t.Trackers
-		cl.mu.Unlock()
+		cl.mu.RUnlock()
 		for _, tier := range trackers {
 			for trIndex, tr := range tier {
 				if err := tr.Connect(); err != nil {
@@ -1652,7 +1653,14 @@ newAnnounce:
 				} else {
 					log.Printf("%s: %d new peers from %s", t, len(peers), tr)
 				}
+
+				// If the trackers list hasn't been touched (a new array would
+				// have been assigned), then float this tracker to the top of
+				// the tier.
+				cl.mu.Lock()
 				tier[0], tier[trIndex] = tier[trIndex], tier[0]
+				cl.mu.Unlock()
+
 				time.Sleep(time.Second * time.Duration(resp.Interval))
 				req.Event = tracker.None
 				continue newAnnounce

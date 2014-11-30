@@ -862,7 +862,8 @@ func (s *Server) bootstrap() (err error) {
 			var t *transaction
 			t, err = s.findNode(node.addr, s.id)
 			if err != nil {
-				return
+				log.Printf("error sending find_node: %s", err)
+				continue
 			}
 			outstanding.Add(1)
 			go func() {

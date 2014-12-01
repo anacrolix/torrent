@@ -344,7 +344,11 @@ func (t *torrent) WriteStatus(w io.Writer) {
 }
 
 func (t *torrent) String() string {
-	return t.Name()
+	s := t.Name()
+	if s == "" {
+		s = fmt.Sprintf("%x", t.InfoHash)
+	}
+	return s
 }
 
 func (t *torrent) haveInfo() bool {

@@ -1631,6 +1631,57 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 	}
 }
 
+func (cl *Client) announceTorrentSingleTracker(tr tracker.Client, req *tracker.AnnounceRequest, t *torrent) error {
+	if err := tr.Connect(); err != nil {
+		return fmt.Errorf("error connecting: %s", err)
+	}
+	resp, err := tr.Announce(req)
+	if err != nil {
+		return fmt.Errorf("error announcing: %s", err)
+	}
+	var peers []Peer
+	for _, peer := range resp.Peers {
+		peers = append(peers, Peer{
+			IP:   peer.IP,
+			Port: peer.Port,
+		})
+	}
+	err = cl.AddPeers(t.InfoHash, peers)
+	if err != nil {
+		log.Printf("error adding peers to torrent %s: %s", t, err)
+	} else {
+		log.Printf("%s: %d new peers from %s", t, len(peers), tr)
+	}
+
+	time.Sleep(time.Second * time.Duration(resp.Interval))
+	return nil
+}
+
+func (cl *Client) announceTorrentTrackersFastStart(req *tracker.AnnounceRequest, trackers [][]tracker.Client, t *torrent) (atLeastOne bool) {
+	oks := make(chan bool)
+	outstanding := 0
+	for _, tier := range trackers {
+		for _, tr := range tier {
+			outstanding++
+			go func(tr tracker.Client) {
+				err := cl.announceTorrentSingleTracker(tr, req, t)
+				if err != nil {
+					log.Printf("error announcing to %s: %s", tr, err)
+				}
+				oks <- err == nil
+			}(tr)
+		}
+	}
+	for outstanding > 0 {
+		ok := <-oks
+		outstanding--
+		if ok {
+			atLeastOne = true
+		}
+	}
+	return
+}
+
 // Announce torrent to its trackers.
 func (cl *Client) announceTorrentTrackers(t *torrent) {
 	req := tracker.AnnounceRequest{
@@ -1640,51 +1691,37 @@ func (cl *Client) announceTorrentTrackers(t *torrent) {
 		PeerId:   cl.peerID,
 		InfoHash: t.InfoHash,
 	}
+	cl.mu.RLock()
+	req.Left = t.BytesLeft()
+	trackers := t.Trackers
+	cl.mu.RUnlock()
+	if cl.announceTorrentTrackersFastStart(&req, trackers, t) {
+		req.Event = tracker.None
+	}
 newAnnounce:
 	for cl.waitWantPeers(t) {
 		cl.mu.RLock()
 		req.Left = t.BytesLeft()
-		trackers := t.Trackers
+		trackers = t.Trackers
 		cl.mu.RUnlock()
 		for _, tier := range trackers {
 			for trIndex, tr := range tier {
-				if err := tr.Connect(); err != nil {
-					log.Printf("error connecting to tracker at %q: %s", tr, err)
+				err := cl.announceTorrentSingleTracker(tr, &req, t)
+				if err != nil {
+					log.Printf("error announcing to %s: %s", tr, err)
 					continue
 				}
-				resp, err := tr.Announce(&req)
-				if err != nil {
-					log.Print(err)
-					continue
-				}
-				var peers []Peer
-				for _, peer := range resp.Peers {
-					peers = append(peers, Peer{
-						IP:   peer.IP,
-						Port: peer.Port,
-					})
-				}
-				err = cl.AddPeers(t.InfoHash, peers)
-				if err != nil {
-					log.Printf("error adding peers to torrent %s: %s", t, err)
-				} else {
-					log.Printf("%s: %d new peers from %s", t, len(peers), tr)
-				}
-
-				// If the trackers list hasn't been touched (a new array would
-				// have been assigned), then float this tracker to the top of
-				// the tier.
+				// Float the successful announce to the top of the tier. If
+				// the trackers list has been changed, we'll be modifying an
+				// old copy so it won't matter.
 				cl.mu.Lock()
 				tier[0], tier[trIndex] = tier[trIndex], tier[0]
 				cl.mu.Unlock()
 
-				time.Sleep(time.Second * time.Duration(resp.Interval))
 				req.Event = tracker.None
 				continue newAnnounce
 			}
 		}
-		// Couldn't announce at all. Wait a bit before trying again.
-		time.Sleep(15 * time.Second)
 	}
 }
 

@@ -51,30 +51,27 @@ func main() {
 		return
 	}
 	for _, arg := range flag.Args() {
-		var ih torrent.InfoHash
-		if strings.HasPrefix(arg, "magnet:") {
-			m, err := torrent.ParseMagnetURI(arg)
-			if err != nil {
-				log.Fatalf("error parsing magnet uri: %s", err)
+		t := func() torrent.Torrent {
+			if strings.HasPrefix(arg, "magnet:") {
+				t, err := client.AddMagnet(arg)
+				if err != nil {
+					log.Fatalf("error adding magnet: %s", err)
+				}
+				return t
+			} else {
+				metaInfo, err := metainfo.LoadFromFile(arg)
+				if err != nil {
+					log.Fatal(err)
+				}
+				t, err := client.AddTorrent(metaInfo)
+				if err != nil {
+					log.Fatal(err)
+				}
+				return t
 			}
-			ih = m.InfoHash
-			_, err = client.AddMagnet(arg)
-			if err != nil {
-				log.Fatalf("error adding magnet: %s", err)
-			}
-		} else {
-			metaInfo, err := metainfo.LoadFromFile(arg)
-			if err != nil {
-				log.Fatal(err)
-			}
-			err = client.AddTorrent(metaInfo)
-			if err != nil {
-				log.Fatal(err)
-			}
-			util.CopyExact(&ih, metaInfo.Info.Hash)
-		}
+		}()
 		// client.PrioritizeDataRegion(ih, 0, 999999999)
-		err := client.AddPeers(ih, func() []torrent.Peer {
+		err := t.AddPeers(func() []torrent.Peer {
 			if *testPeer == "" {
 				return nil
 			}
@@ -90,6 +87,10 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		go func() {
+			<-t.GotMetainfo
+			t.DownloadAll()
+		}()
 	}
 	if *seed {
 		select {}

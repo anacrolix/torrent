@@ -107,6 +107,12 @@ func (me *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) error {
 	if !t.haveInfo() {
 		return errors.New("missing metadata")
 	}
+	i := int(off / int64(t.UsualPieceSize()))
+	me.queueFirstHash(t, i)
+	i++
+	if i < t.NumPieces() {
+		me.queueFirstHash(t, i)
+	}
 	me.downloadStrategy.TorrentPrioritize(t, off, len_)
 	for _, cn := range t.Conns {
 		me.replenishConnRequests(t, cn)
@@ -1430,6 +1436,18 @@ type Torrent struct {
 	*torrent
 }
 
+func (t Torrent) AddPeers(pp []Peer) error {
+	return t.cl.AddPeers(t.torrent.InfoHash, pp)
+}
+
+func (t Torrent) DownloadAll() {
+	t.cl.mu.Lock()
+	for i := 0; i < t.NumPieces(); i++ {
+		t.cl.queueFirstHash(t.torrent, i)
+	}
+	t.cl.mu.Unlock()
+}
+
 func (me Torrent) ReadAt(p []byte, off int64) (n int, err error) {
 	err = me.cl.PrioritizeDataRegion(me.InfoHash, off, int64(len(p)))
 	if err != nil {
@@ -1525,27 +1543,28 @@ func (me *Client) addTorrent(t *torrent) (err error) {
 }
 
 // Adds the torrent to the client.
-func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) (err error) {
+func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) (t Torrent, err error) {
+	t.cl = me
 	var ih InfoHash
 	CopyExact(&ih, metaInfo.Info.Hash)
-	t, err := newTorrent(ih, metaInfo.AnnounceList, me.halfOpenLimit)
+	t.torrent, err = newTorrent(ih, metaInfo.AnnounceList, me.halfOpenLimit)
 	if err != nil {
 		return
 	}
 	me.mu.Lock()
 	defer me.mu.Unlock()
-	err = me.addTorrent(t)
+	err = me.addTorrent(t.torrent)
 	if err != nil {
 		return
 	}
-	err = me.setMetaData(t, metaInfo.Info.Info, metaInfo.Info.Bytes)
+	err = me.setMetaData(t.torrent, metaInfo.Info.Info, metaInfo.Info.Bytes)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (me *Client) AddTorrentFromFile(name string) (err error) {
+func (me *Client) AddTorrentFromFile(name string) (t Torrent, err error) {
 	mi, err := metainfo.LoadFromFile(name)
 	if err != nil {
 		err = fmt.Errorf("error loading metainfo from file: %s", err)

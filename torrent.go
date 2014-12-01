@@ -275,10 +275,10 @@ func (t *torrent) pieceStatusChar(index int) byte {
 		return 'Q'
 	case p.Hashing:
 		return 'H'
-	case t.PiecePartiallyDownloaded(index):
-		return 'P'
 	case !p.EverHashed:
 		return '?'
+	case t.PiecePartiallyDownloaded(index):
+		return 'P'
 	default:
 		return '.'
 	}

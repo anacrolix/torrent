@@ -137,6 +137,7 @@ type Client struct {
 	dHT              *dht.Server
 	disableUTP       bool
 	ipBlockList      *iplist.IPList
+	bannedTorrents   map[InfoHash]struct{}
 
 	mu    sync.RWMutex
 	event sync.Cond
@@ -287,11 +288,15 @@ func (cl *Client) TorrentReadAt(ih InfoHash, off int64, p []byte) (n int, err er
 	return t.Data.ReadAt(p, off)
 }
 
+func (cl *Client) configDir() string {
+	return filepath.Join(os.Getenv("HOME"), ".config/torrent")
+}
+
 func (cl *Client) setEnvBlocklist() (err error) {
 	filename := os.Getenv("TORRENT_BLOCKLIST_FILE")
 	defaultBlocklist := filename == ""
 	if defaultBlocklist {
-		filename = filepath.Join(os.Getenv("HOME"), ".config/torrent/blocklist")
+		filename = filepath.Join(cl.configDir(), "blocklist")
 	}
 	f, err := os.Open(filename)
 	if err != nil {
@@ -323,6 +328,39 @@ func (cl *Client) setEnvBlocklist() (err error) {
 	return
 }
 
+func (cl *Client) initBannedTorrents() error {
+	f, err := os.Open(filepath.Join(cl.configDir(), "banned_infohashes"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("error opening banned infohashes file: %s", err)
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	cl.bannedTorrents = make(map[InfoHash]struct{})
+	for scanner.Scan() {
+		var ihs string
+		n, err := fmt.Sscanf(scanner.Text(), "%x", &ihs)
+		if err != nil {
+			return fmt.Errorf("error reading infohash: %s", err)
+		}
+		if n != 1 {
+			continue
+		}
+		if len(ihs) != 20 {
+			return errors.New("bad infohash")
+		}
+		var ih InfoHash
+		CopyExact(&ih, ihs)
+		cl.bannedTorrents[ih] = struct{}{}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error scanning file: %s", err)
+	}
+	return nil
+}
+
 func NewClient(cfg *Config) (cl *Client, err error) {
 	if cfg == nil {
 		cfg = &Config{}
@@ -345,6 +383,11 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 
 	err = cl.setEnvBlocklist()
 	if err != nil {
+		return
+	}
+
+	if err = cl.initBannedTorrents(); err != nil {
+		err = fmt.Errorf("error initing banned torrents: %s", err)
 		return
 	}
 
@@ -1313,6 +1356,26 @@ func (me *Client) AddPeers(infoHash InfoHash, peers []Peer) error {
 	}
 	t.AddPeers(peers)
 	me.openNewConns(t)
+	return nil
+}
+
+func (cl *Client) torrentFileCachePath(ih InfoHash) string {
+	return filepath.Join(cl.configDir(), "torrents", ih.HexString()+".torrent")
+}
+
+func (cl *Client) saveTorrentFile(t *torrent) error {
+	path := cl.torrentFileCachePath(t.InfoHash)
+	os.MkdirAll(filepath.Dir(path), 0777)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		return fmt.Errorf("error opening file: %s", err)
+	}
+	defer f.Close()
+	e := bencode.NewEncoder(f)
+	err = e.Encode(t.MetaInfo())
+	if err != nil {
+		return fmt.Errorf("error marshalling metainfo: %s", err)
+	}
 	return nil
 }
 

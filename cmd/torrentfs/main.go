@@ -23,28 +23,24 @@ import (
 )
 
 var (
-	downloadDir     string
-	torrentPath     string
-	mountDir        string
-	disableTrackers = flag.Bool("disableTrackers", false, "disables trackers")
-	testPeer        = flag.String("testPeer", "", "the address for a test peer")
-	httpAddr        = flag.String("httpAddr", "localhost:0", "HTTP server bind address")
-	readaheadBytes  = flag.Int64("readaheadBytes", 10*1024*1024, "bytes to readahead in each torrent from the last read piece")
-	testPeerAddr    *net.TCPAddr
-	listenAddr      = flag.String("listenAddr", ":6882", "incoming connection address")
-)
-
-func init() {
-	flag.StringVar(&downloadDir, "downloadDir", "", "location to save torrent data")
-	flag.StringVar(&torrentPath, "torrentPath", func() string {
+	torrentPath = flag.String("torrentPath", func() string {
 		_user, err := user.Current()
 		if err != nil {
 			log.Fatal(err)
 		}
 		return filepath.Join(_user.HomeDir, ".config/transmission/torrents")
 	}(), "torrent files in this location describe the contents of the mounted filesystem")
-	flag.StringVar(&mountDir, "mountDir", "", "location the torrent contents are made available")
-}
+	downloadDir = flag.String("downloadDir", "", "location to save torrent data")
+	mountDir    = flag.String("mountDir", "", "location the torrent contents are made available")
+
+	disableTrackers = flag.Bool("disableTrackers", false, "disables trackers")
+	testPeer        = flag.String("testPeer", "", "the address for a test peer")
+	httpAddr        = flag.String("httpAddr", "localhost:0", "HTTP server bind address")
+	readaheadBytes  = flag.Int64("readaheadBytes", 10*1024*1024, "bytes to readahead in each torrent from the last read piece")
+	listenAddr      = flag.String("listenAddr", ":6882", "incoming connection address")
+
+	testPeerAddr *net.TCPAddr
+)
 
 func resolveTestPeerAddr() {
 	if *testPeer == "" {
@@ -89,7 +85,7 @@ func main() {
 		os.Stderr.WriteString("one does not simply pass positional args\n")
 		os.Exit(2)
 	}
-	if mountDir == "" {
+	if *mountDir == "" {
 		os.Stderr.WriteString("y u no specify mountpoint?\n")
 		os.Exit(2)
 	}
@@ -97,24 +93,24 @@ func main() {
 	if *httpAddr != "" {
 		util.LoggedHTTPServe(*httpAddr)
 	}
-	conn, err := fuse.Mount(mountDir)
+	conn, err := fuse.Mount(*mountDir)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer fuse.Unmount(mountDir)
+	defer fuse.Unmount(*mountDir)
 	// TODO: Think about the ramifications of exiting not due to a signal.
 	defer conn.Close()
 	client, err := torrent.NewClient(&torrent.Config{
-		DataDir:          downloadDir,
-		DisableTrackers:  *disableTrackers,
-		DownloadStrategy: torrent.NewResponsiveDownloadStrategy(*readaheadBytes),
-		ListenAddr:       *listenAddr,
-		NoUpload:         true, // Ensure that uploads are responsive.
+		DataDir:         *downloadDir,
+		DisableTrackers: *disableTrackers,
+		// DownloadStrategy: torrent.NewResponsiveDownloadStrategy(*readaheadBytes),
+		ListenAddr: *listenAddr,
+		NoUpload:   true, // Ensure that uploads are responsive.
 	})
 	http.DefaultServeMux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})
-	dw, err := dirwatch.New(torrentPath)
+	dw, err := dirwatch.New(*torrentPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -123,7 +119,7 @@ func main() {
 			switch ev.Change {
 			case dirwatch.Added:
 				if ev.TorrentFilePath != "" {
-					err := client.AddTorrentFromFile(ev.TorrentFilePath)
+					_, err := client.AddTorrentFromFile(ev.TorrentFilePath)
 					if err != nil {
 						log.Printf("error adding torrent to client: %s", err)
 					}

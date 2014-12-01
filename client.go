@@ -431,8 +431,16 @@ func (me *Client) Stop() {
 	me.mu.Unlock()
 }
 
+var ipv6BlockRange = iplist.Range{Description: "non-IPv4 address"}
+
 func (cl *Client) ipBlockRange(ip net.IP) (r *iplist.Range) {
 	if cl.ipBlockList == nil {
+		return
+	}
+	ip = ip.To4()
+	if ip == nil {
+		log.Printf("saw non-IPv4 address")
+		r = &ipv6BlockRange
 		return
 	}
 	r = cl.ipBlockList.Lookup(ip)

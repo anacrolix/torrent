@@ -26,21 +26,32 @@ func (me *worstConns) Push(x interface{}) {
 }
 
 type worstConnsSortKey struct {
-	level int
-	age   time.Duration
+	// Peer has something we want.
+	useless bool
+	// A fabricated duration since peer was last helpful.
+	age time.Duration
 }
 
 func (me worstConnsSortKey) Less(other worstConnsSortKey) bool {
-	if me.level != other.level {
-		return me.level > other.level
+	if me.useless != other.useless {
+		return me.useless
 	}
 	return me.age > other.age
 }
 
 func (me worstConns) key(i int) (key worstConnsSortKey) {
 	c := me.c[i]
-	if time.Now().Sub(c.completedHandshake) >= 30*time.Second && !me.t.connHasWantedPieces(c) {
-		key.level = 1
+	// Peer has had time to declare what they have.
+	if time.Now().Sub(c.completedHandshake) >= 30*time.Second {
+		if !me.t.haveInfo() {
+			if _, ok := c.PeerExtensionIDs["ut_metadata"]; !ok {
+				key.useless = true
+			}
+		} else {
+			if !me.t.connHasWantedPieces(c) {
+				key.useless = true
+			}
+		}
 	}
 	key.age = time.Duration(1+3*c.UnwantedChunksReceived) * time.Now().Sub(func() time.Time {
 		if !c.lastUsefulChunkReceived.IsZero() {

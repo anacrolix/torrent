@@ -796,7 +796,8 @@ func extractValues(m Msg) (vs []util.CompactPeer) {
 	}
 	vl, ok := v.([]interface{})
 	if !ok {
-		panic(v)
+		log.Printf("unexpected krpc values type: %T", v)
+		return
 	}
 	vs = make([]util.CompactPeer, 0, len(vl))
 	for _, i := range vl {

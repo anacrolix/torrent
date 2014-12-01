@@ -1744,6 +1744,8 @@ newAnnounce:
 				continue newAnnounce
 			}
 		}
+		// TODO: Wait until trackers are added if there are none.
+		time.Sleep(10 * time.Second)
 	}
 }
 

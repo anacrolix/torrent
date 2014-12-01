@@ -9,6 +9,7 @@ import (
 	"net"
 	"sort"
 	"sync"
+	"time"
 
 	"bitbucket.org/anacrolix/go.torrent/util"
 

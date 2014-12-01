@@ -836,6 +836,9 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 			Port: uint16(addr.Port),
 		})
 	}
+	if torrent.haveInfo() {
+		conn.initPieceOrder(torrent.NumPieces())
+	}
 	err = me.connectionLoop(torrent, conn)
 	if err != nil {
 		err = fmt.Errorf("during Connection loop with peer %q: %s", conn.PeerID, err)
@@ -1758,36 +1761,11 @@ func (me *Client) WaitAll() bool {
 	return true
 }
 
-func (cl *Client) assertRequestHeat() {
-	dds, ok := cl.downloadStrategy.(*DefaultDownloadStrategy)
-	if !ok {
-		return
-	}
-	for _, t := range cl.torrents {
-		m := make(map[request]int, 3000)
-		for _, cn := range t.Conns {
-			for r := range cn.Requests {
-				m[r]++
-			}
-		}
-		for r, h := range dds.heat[t] {
-			if m[r] != h {
-				panic(fmt.Sprintln(m[r], h))
-			}
-		}
-	}
-}
-
 func (me *Client) replenishConnRequests(t *torrent, c *connection) {
 	if !t.haveInfo() {
 		return
 	}
-	for _, p := range me.downloadStrategy.FillRequests(t, c) {
-		// Make sure the state of pieces that would have been requested is
-		// known.
-		me.queueFirstHash(t, p)
-	}
-	//me.assertRequestHeat()
+	me.downloadStrategy.FillRequests(t, c)
 	if len(c.Requests) == 0 && !c.PeerChoked {
 		c.SetInterested(false)
 	}
@@ -1915,11 +1893,6 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 					panic("wat")
 				}
 			}
-		}
-		// Do this even if the piece is correct because new first-hashings may
-		// need to be scheduled.
-		if conn.PeerHasPiece(piece) {
-			me.replenishConnRequests(t, conn)
 		}
 	}
 	if t.haveAllPieces() && me.noUpload {

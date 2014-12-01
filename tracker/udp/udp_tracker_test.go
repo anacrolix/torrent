@@ -88,10 +88,10 @@ func TestConvertInt16ToInt(t *testing.T) {
 func TestUDPTracker(t *testing.T) {
 	tr, err := tracker.New("udp://tracker.openbittorrent.com:80/announce")
 	if err != nil {
-		t.Fatal(err)
+		t.Skip(err)
 	}
 	if err := tr.Connect(); err != nil {
-		t.Fatal(err)
+		t.Skip(err)
 	}
 	req := tracker.AnnounceRequest{
 		NumWant: -1,
@@ -101,7 +101,7 @@ func TestUDPTracker(t *testing.T) {
 	copy(req.InfoHash[:], []uint8{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1})
 	_, err = tr.Announce(&req)
 	if err != nil {
-		t.Fatal(err)
+		t.Skip(err)
 	}
 }
 

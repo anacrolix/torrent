@@ -148,6 +148,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error creating seeder client: %s", err)
 	}
+	seeder.SetIPBlockList(nil)
 	defer seeder.Stop()
 	http.HandleFunc("/seeder", func(w http.ResponseWriter, req *http.Request) {
 		seeder.WriteStatus(w)
@@ -168,6 +169,7 @@ func TestDownloadOnDemand(t *testing.T) {
 
 		// PeerID: seeder.PeerID(),
 	})
+	leecher.SetIPBlockList(nil)
 	http.HandleFunc("/leecher", func(w http.ResponseWriter, req *http.Request) {
 		leecher.WriteStatus(w)
 	})

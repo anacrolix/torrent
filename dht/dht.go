@@ -289,14 +289,17 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 	var d Msg
 	err := bencode.Unmarshal(b, &d)
 	if err != nil {
-		if se, ok := err.(*bencode.SyntaxError); !ok || se.Offset != 0 {
-			log.Printf("%s: received bad krpc message: %s%s", s, err, func() string {
-				if se.What == io.ErrUnexpectedEOF {
-					return ""
+		func() {
+			if se, ok := err.(*bencode.SyntaxError); ok {
+				if b[se.Offset] == 0 {
+					return
 				}
-				return fmt.Sprintf(": %q", b)
-			}())
-		}
+				if se.Offset == 0 {
+					return
+				}
+			}
+			log.Printf("%s: received bad krpc message: %s: %q", s, err, b)
+		}()
 		return
 	}
 	s.mu.Lock()

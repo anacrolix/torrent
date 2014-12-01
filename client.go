@@ -107,11 +107,13 @@ func (me *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) error {
 	if !t.haveInfo() {
 		return errors.New("missing metadata")
 	}
-	i := int(off / int64(t.UsualPieceSize()))
-	me.queueFirstHash(t, i)
-	i++
-	if i < t.NumPieces() {
-		me.queueFirstHash(t, i)
+	firstIndex := int(off / int64(t.UsualPieceSize()))
+	for i := 0; i < 5; i++ {
+		index := firstIndex + i
+		if index >= t.NumPieces() {
+			continue
+		}
+		me.queueFirstHash(t, index)
 	}
 	me.downloadStrategy.TorrentPrioritize(t, off, len_)
 	for _, cn := range t.Conns {

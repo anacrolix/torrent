@@ -3,6 +3,7 @@ package torrent
 import (
 	"crypto"
 	"errors"
+	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -30,6 +31,10 @@ type (
 
 func (ih *InfoHash) AsString() string {
 	return string(ih[:])
+}
+
+func (ih *InfoHash) HexString() string {
+	return fmt.Sprintf("%x", ih[:])
 }
 
 type piece struct {

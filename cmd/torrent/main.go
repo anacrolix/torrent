@@ -24,6 +24,7 @@ var (
 	listenAddr      = flag.String("listenAddr", ":50007", "incoming connection address")
 	disableTrackers = flag.Bool("disableTrackers", false, "disable trackers")
 	seed            = flag.Bool("seed", false, "seed after downloading")
+	upload          = flag.Bool("upload", true, "upload data to peers")
 )
 
 func main() {
@@ -36,6 +37,7 @@ func main() {
 		DataDir:         *downloadDir,
 		DisableTrackers: *disableTrackers,
 		ListenAddr:      *listenAddr,
+		NoUpload:        !*upload,
 	})
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)

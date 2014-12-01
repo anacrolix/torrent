@@ -1524,29 +1524,19 @@ func (me Torrent) ReadAt(p []byte, off int64) (n int, err error) {
 	return me.cl.TorrentReadAt(me.InfoHash, off, p)
 }
 
-func (cl *Client) AddMagnet(uri string) (t Torrent, err error) {
-	t.cl = cl
+func (cl *Client) AddMagnet(uri string) (T Torrent, err error) {
 	m, err := ParseMagnetURI(uri)
 	if err != nil {
 		return
 	}
+	cl.AddTorrentFromFile(cl.torrentFileCachePath(m.InfoHash))
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	t.torrent = cl.torrent(m.InfoHash)
-	if t.torrent != nil {
-		t.addTrackers([][]string{m.Trackers})
-		return
-	}
-	t.torrent, err = newTorrent(m.InfoHash, [][]string{m.Trackers}, cl.halfOpenLimit)
+	T, err = cl.addOrMergeTorrent(m.InfoHash, [][]string{m.Trackers})
 	if err != nil {
 		return
 	}
-	t.DisplayName = m.DisplayName
-	err = cl.addTorrent(t.torrent)
-	if err != nil {
-		t.Close()
-	}
-	go cl.connectionPruner(t.torrent)
+	T.DisplayName = m.DisplayName
 	return
 }
 
@@ -1593,39 +1583,48 @@ func (me *Client) DropTorrent(infoHash InfoHash) (err error) {
 	return
 }
 
-func (me *Client) addTorrent(t *torrent) (err error) {
-	if _, ok := me.torrents[t.InfoHash]; ok {
-		err = fmt.Errorf("torrent infohash collision")
+func (me *Client) addOrMergeTorrent(ih InfoHash, announceList [][]string) (T Torrent, err error) {
+	if _, ok := me.bannedTorrents[ih]; ok {
+		err = errors.New("banned torrent")
 		return
 	}
-	me.torrents[t.InfoHash] = t
-	if !me.disableTrackers {
-		go me.announceTorrentTrackers(t)
-	}
-	if me.dHT != nil {
-		go me.announceTorrentDHT(t, true)
+	T.cl = me
+	var ok bool
+	T.torrent, ok = me.torrents[ih]
+	if ok {
+		T.torrent.addTrackers(announceList)
+	} else {
+		T.torrent, err = newTorrent(ih, announceList, me.halfOpenLimit)
+		if err != nil {
+			return
+		}
+		me.torrents[ih] = T.torrent
+		if !me.disableTrackers {
+			go me.announceTorrentTrackers(T.torrent)
+		}
+		if me.dHT != nil {
+			go me.announceTorrentDHT(T.torrent, true)
+		}
+		go me.connectionPruner(T.torrent)
 	}
 	return
 }
 
 // Adds the torrent to the client.
 func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) (t Torrent, err error) {
-	t.cl = me
 	var ih InfoHash
 	CopyExact(&ih, metaInfo.Info.Hash)
-	t.torrent, err = newTorrent(ih, metaInfo.AnnounceList, me.halfOpenLimit)
-	if err != nil {
-		return
-	}
 	me.mu.Lock()
 	defer me.mu.Unlock()
-	err = me.addTorrent(t.torrent)
+	t, err = me.addOrMergeTorrent(ih, metaInfo.AnnounceList)
 	if err != nil {
 		return
 	}
-	err = me.setMetaData(t.torrent, metaInfo.Info.Info, metaInfo.Info.Bytes)
-	if err != nil {
-		return
+	if !t.torrent.haveInfo() {
+		err = me.setMetaData(t.torrent, metaInfo.Info.Info, metaInfo.Info.Bytes)
+		if err != nil {
+			return
+		}
 	}
 	return
 }

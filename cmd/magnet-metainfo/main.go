@@ -27,12 +27,9 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			mi, ok := <-t.GotMetainfo
+			<-t.GotMetainfo
+			mi := t.MetaInfo()
 			t.Close()
-			if !ok {
-				log.Printf("no metainfo for %q", t.Name())
-				return
-			}
 			f, err := os.Create(mi.Info.Name + ".torrent")
 			if err != nil {
 				log.Fatalf("error creating torrent metainfo file: %s", err)

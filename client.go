@@ -1339,21 +1339,24 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 	cl.downloadStrategy.TorrentStarted(t)
 	// TODO(anacrolix): I think this should be made available as a method, the
 	// channel only acts as a signal that the metadata has become available.
-	select {
-	case t.gotMetainfo <- &metainfo.MetaInfo{
-		Info: metainfo.InfoEx{
-			Info: md,
-		},
-		CreationDate: time.Now().Unix(),
-		Comment:      "metadata set in client",
-		CreatedBy:    "go.torrent",
-		// TODO(anacrolix): Expose trackers given when torrent added.
-	}:
-	default:
-		panic("shouldn't block")
+	// select {
+	// case t.gotMetainfo <- &metainfo.MetaInfo{
+	// 	Info: metainfo.InfoEx{
+	// 		Info: md,
+	// 	},
+	// 	CreationDate: time.Now().Unix(),
+	// 	Comment:      "metadata set in client",
+	// 	CreatedBy:    "go.torrent",
+	// 	// TODO(anacrolix): Expose trackers given when torrent added.
+	// }:
+	// default:
+	// 	panic("shouldn't block")
+	// }
+	if err := cl.saveTorrentFile(t); err != nil {
+		log.Printf("error saving torrent file for %s: %s", t, err)
 	}
 	close(t.gotMetainfo)
-	t.gotMetainfo = nil
+	// t.gotMetainfo = nil
 	return
 }
 
@@ -1368,7 +1371,7 @@ func newTorrent(ih InfoHash, announceList [][]string, halfOpenLimit int) (t *tor
 		closing:           make(chan struct{}),
 		ceasingNetworking: make(chan struct{}),
 
-		gotMetainfo: make(chan *metainfo.MetaInfo, 1),
+		gotMetainfo: make(chan struct{}),
 
 		HalfOpen: make(map[string]struct{}, halfOpenLimit),
 	}

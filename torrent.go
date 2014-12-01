@@ -80,8 +80,8 @@ type torrent struct {
 	MetaData     []byte
 	metadataHave []bool
 
-	gotMetainfo chan *metainfo.MetaInfo
-	GotMetainfo <-chan *metainfo.MetaInfo
+	gotMetainfo chan struct{}
+	GotMetainfo <-chan struct{}
 }
 
 func (t *torrent) addrActive(addr string) bool {
@@ -353,6 +353,30 @@ func (t *torrent) String() string {
 
 func (t *torrent) haveInfo() bool {
 	return t.Info != nil
+}
+
+// TODO: Include URIs that weren't converted to tracker clients.
+func (t *torrent) AnnounceList() (al [][]string) {
+	for _, tier := range t.Trackers {
+		var l []string
+		for _, tr := range tier {
+			l = append(l, tr.URL())
+		}
+		al = append(al, l)
+	}
+	return
+}
+
+func (t *torrent) MetaInfo() *metainfo.MetaInfo {
+	return &metainfo.MetaInfo{
+		Info: metainfo.InfoEx{
+			Info: *t.Info.Info,
+		},
+		CreationDate: time.Now().Unix(),
+		Comment:      "dynamic metainfo from client",
+		CreatedBy:    "go.torrent",
+		AnnounceList: t.AnnounceList(),
+	}
 }
 
 func (t *torrent) BytesLeft() (left int64) {

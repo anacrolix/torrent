@@ -24,18 +24,18 @@ var (
 	interruptedReads             = expvar.NewInt("interruptedReads")
 )
 
-type torrentFS struct {
+type TorrentFS struct {
 	Client    *torrent.Client
 	destroyed chan struct{}
 	mu        sync.Mutex
 }
 
 var (
-	_ fusefs.FSDestroyer = &torrentFS{}
-	_ fusefs.FSIniter    = &torrentFS{}
+	_ fusefs.FSDestroyer = &TorrentFS{}
+	_ fusefs.FSIniter    = &TorrentFS{}
 )
 
-func (fs *torrentFS) Init(req *fuse.InitRequest, resp *fuse.InitResponse, intr fusefs.Intr) fuse.Error {
+func (fs *TorrentFS) Init(req *fuse.InitRequest, resp *fuse.InitResponse, intr fusefs.Intr) fuse.Error {
 	log.Print(req)
 	log.Print(resp)
 	resp.MaxReadahead = req.MaxReadahead
@@ -46,13 +46,13 @@ func (fs *torrentFS) Init(req *fuse.InitRequest, resp *fuse.InitResponse, intr f
 var _ fusefs.NodeForgetter = rootNode{}
 
 type rootNode struct {
-	fs *torrentFS
+	fs *TorrentFS
 }
 
 type node struct {
 	path     []string
 	metadata *torrent.MetaInfo
-	FS       *torrentFS
+	FS       *TorrentFS
 	InfoHash torrent.InfoHash
 }
 
@@ -72,7 +72,7 @@ func (n *node) fsPath() string {
 	return "/" + strings.Join(append([]string{n.metadata.Name}, n.path...), "/")
 }
 
-func blockingRead(fs *torrentFS, ih torrent.InfoHash, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
+func blockingRead(fs *TorrentFS, ih torrent.InfoHash, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
 	dataWaiter := fs.Client.DataWaiter(ih, off)
 	select {
 	case <-dataWaiter:
@@ -87,7 +87,7 @@ func blockingRead(fs *torrentFS, ih torrent.InfoHash, off int64, p []byte, intr 
 	return
 }
 
-func readFull(fs *torrentFS, ih torrent.InfoHash, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
+func readFull(fs *TorrentFS, ih torrent.InfoHash, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
 	for len(p) != 0 {
 		var nn int
 		nn, err = blockingRead(fs, ih, off, p, intr)
@@ -276,11 +276,11 @@ func (me rootNode) Forget() {
 	me.fs.Destroy()
 }
 
-func (tfs *torrentFS) Root() (fusefs.Node, fuse.Error) {
+func (tfs *TorrentFS) Root() (fusefs.Node, fuse.Error) {
 	return rootNode{tfs}, nil
 }
 
-func (me *torrentFS) Destroy() {
+func (me *TorrentFS) Destroy() {
 	me.mu.Lock()
 	select {
 	case <-me.destroyed:
@@ -290,8 +290,8 @@ func (me *torrentFS) Destroy() {
 	me.mu.Unlock()
 }
 
-func New(cl *torrent.Client) *torrentFS {
-	fs := &torrentFS{
+func New(cl *torrent.Client) *TorrentFS {
+	fs := &TorrentFS{
 		Client:    cl,
 		destroyed: make(chan struct{}),
 	}

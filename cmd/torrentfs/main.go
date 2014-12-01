@@ -57,18 +57,17 @@ func resolveTestPeerAddr() {
 	}
 }
 
-func setSignalHandlers() {
+func exitSignalHandlers(fs *torrentfs.TorrentFS) {
 	c := make(chan os.Signal)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		for {
-			<-c
-			err := fuse.Unmount(mountDir)
-			if err != nil {
-				log.Print(err)
-			}
+	for {
+		<-c
+		fs.Destroy()
+		err := fuse.Unmount(*mountDir)
+		if err != nil {
+			log.Print(err)
 		}
-	}()
+	}
 }
 
 func addTestPeer(client *torrent.Client) {
@@ -104,7 +103,6 @@ func main() {
 	}
 	defer fuse.Unmount(mountDir)
 	// TODO: Think about the ramifications of exiting not due to a signal.
-	setSignalHandlers()
 	defer conn.Close()
 	client, err := torrent.NewClient(&torrent.Config{
 		DataDir:          downloadDir,
@@ -145,6 +143,7 @@ func main() {
 	}()
 	resolveTestPeerAddr()
 	fs := torrentfs.New(client)
+	go exitSignalHandlers(fs)
 	go func() {
 		for {
 			addTestPeer(client)

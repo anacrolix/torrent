@@ -849,7 +849,7 @@ func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) {
 		c.PeerPieces = append(c.PeerPieces, false)
 	}
 	c.PeerPieces[piece] = true
-	if !t.havePiece(piece) {
+	if t.wantPiece(piece) {
 		me.replenishConnRequests(t, c)
 	}
 }
@@ -956,6 +956,8 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 			break
 		}
 		t.SaveMetadataPiece(piece, payload[begin:])
+		c.UsefulChunksReceived++
+		c.lastUsefulChunkReceived = time.Now()
 		if !t.HaveAllMetadataPieces() {
 			break
 		}
@@ -1326,6 +1328,8 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 	}
 
 	cl.downloadStrategy.TorrentStarted(t)
+	// TODO(anacrolix): I think this should be made available as a method, the
+	// channel only acts as a signal that the metadata has become available.
 	select {
 	case t.gotMetainfo <- &metainfo.MetaInfo{
 		Info: metainfo.InfoEx{
@@ -1363,6 +1367,11 @@ func newTorrent(ih InfoHash, announceList [][]string, halfOpenLimit int) (t *tor
 	t.GotMetainfo = t.gotMetainfo
 	t.addTrackers(announceList)
 	return
+}
+
+func init() {
+	// For shuffling the tracker tiers.
+	mathRand.Seed(time.Now().Unix())
 }
 
 // The trackers within each tier must be shuffled before use.

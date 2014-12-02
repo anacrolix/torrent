@@ -426,15 +426,9 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		cl.listeners = append(cl.listeners, l)
 		go cl.acceptConnections(l, false)
 	}
-	var utpL *utp.Listener
+	var utpL *utp.UTPListener
 	if !cfg.DisableUTP {
-		var utpAddr *utp.Addr
-		utpAddr, err = utp.ResolveAddr("utp", listenAddr())
-		if err != nil {
-			err = fmt.Errorf("error resolving utp listen addr: %s", err)
-			return
-		}
-		utpL, err = utp.Listen("utp", utpAddr)
+		utpL, err = utp.Listen("utp", listenAddr())
 		if err != nil {
 			return
 		}
@@ -887,9 +881,10 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 		})
 	}
 	if conn.PeerExtensionBytes[7]&0x01 != 0 && me.dHT != nil {
+		addr, _ := me.dHT.LocalAddr().(*net.UDPAddr)
 		conn.Post(pp.Message{
 			Type: pp.Port,
-			Port: uint16(AddrPort(me.dHT.LocalAddr())),
+			Port: uint16(addr.Port),
 		})
 	}
 	if torrent.haveInfo() {

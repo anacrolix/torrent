@@ -13,18 +13,29 @@ var sample = `
 a:1.2.4.0-1.2.4.255
 b:1.2.8.0-1.2.8.255`
 
-func TestSimple(t *testing.T) {
-	var ranges []Range
+func sampleRanges(tb testing.TB) (ranges []Range, err error) {
 	scanner := bufio.NewScanner(strings.NewReader(sample))
 	for scanner.Scan() {
 		r, ok, _ := ParseBlocklistP2PLine(scanner.Text())
 		if ok {
-			t.Log(r)
+			// tb.Log(r)
 			ranges = append(ranges, r)
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("error while scanning: %s", err)
+	err = scanner.Err()
+	return
+}
+
+func BenchmarkParseP2pBlocklist(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		sampleRanges(b)
+	}
+}
+
+func TestSimple(t *testing.T) {
+	ranges, err := sampleRanges(t)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if len(ranges) != 2 {
 		t.Fatalf("expected 2 ranges but got %d", len(ranges))

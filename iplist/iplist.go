@@ -50,6 +50,8 @@ func (me *IPList) Lookup(ip net.IP) (r *Range) {
 	return
 }
 
+var p2pBlocklistLineRe = regexp.MustCompile(`(.*):([\d.]+)-([\d.]+)`)
+
 // Parse a line of the PeerGuardian Text Lists (P2P) Format. Returns !ok but
 // no error if a line doesn't contain a range but isn't erroneous, such as
 // comment and blank lines.
@@ -58,7 +60,7 @@ func ParseBlocklistP2PLine(l string) (r Range, ok bool, err error) {
 	if l == "" || strings.HasPrefix(l, "#") {
 		return
 	}
-	sms := regexp.MustCompile(`(.*):([\d.]+)-([\d.]+)`).FindStringSubmatch(l)
+	sms := p2pBlocklistLineRe.FindStringSubmatch(l)
 	if sms == nil {
 		err = fmt.Errorf("error parsing %q", l)
 		return

@@ -1538,7 +1538,9 @@ func (cl *Client) AddMagnet(uri string) (T Torrent, err error) {
 	if err != nil {
 		return
 	}
-	T.DisplayName = m.DisplayName
+	if m.DisplayName != "" {
+		T.DisplayName = m.DisplayName
+	}
 	return
 }
 

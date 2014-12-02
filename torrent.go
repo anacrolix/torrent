@@ -206,6 +206,7 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 	t.metadataHave = nil
 	t.Data, err = mmapTorrentData(&md, dataDir)
 	if err != nil {
+		err = fmt.Errorf("error mmap'ing torrent data: %s", err)
 		return
 	}
 	t.length = t.Data.Size()

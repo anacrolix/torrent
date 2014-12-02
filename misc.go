@@ -125,6 +125,7 @@ func mmapTorrentData(md *metainfo.Info, location string) (mms mmap_span.MMapSpan
 		fileName := filepath.Join(append([]string{location, md.Name}, miFile.Path...)...)
 		err = os.MkdirAll(filepath.Dir(fileName), 0777)
 		if err != nil {
+			err = fmt.Errorf("error creating data directory %q: %s", filepath.Dir(fileName), err)
 			return
 		}
 		var file *os.File
@@ -145,9 +146,14 @@ func mmapTorrentData(md *metainfo.Info, location string) (mms mmap_span.MMapSpan
 					return
 				}
 			}
+			if miFile.Length == 0 {
+				// Can't mmap() regions with length 0.
+				return
+			}
 			var mMap gommap.MMap
 			mMap, err = gommap.MapRegion(file.Fd(), 0, miFile.Length, gommap.PROT_READ|gommap.PROT_WRITE, gommap.MAP_SHARED)
 			if err != nil {
+				err = fmt.Errorf("error mapping file %q, length %d: %s", file.Name(), miFile.Length, err)
 				return
 			}
 			if int64(len(mMap)) != miFile.Length {

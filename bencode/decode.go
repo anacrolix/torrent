@@ -113,10 +113,7 @@ func (d *decoder) parse_int(v reflect.Value) {
 		}
 		v.SetUint(n)
 	case reflect.Bool:
-		if d.buf.Len() == 1 && d.buf.Bytes()[0] == '0' {
-			v.SetBool(false)
-		}
-		v.SetBool(true)
+		v.SetBool(d.buf.String() != "0")
 	default:
 		panic(&UnmarshalTypeError{
 			Value: "integer " + d.buf.String(),

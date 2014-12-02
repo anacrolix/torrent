@@ -370,9 +370,13 @@ func (t *torrent) AnnounceList() (al [][]string) {
 }
 
 func (t *torrent) MetaInfo() *metainfo.MetaInfo {
+	if t.MetaData == nil {
+		panic("info bytes not set")
+	}
 	return &metainfo.MetaInfo{
 		Info: metainfo.InfoEx{
-			Info: *t.Info.Info,
+			Info:  *t.Info.Info,
+			Bytes: t.MetaData,
 		},
 		CreationDate: time.Now().Unix(),
 		Comment:      "dynamic metainfo from client",

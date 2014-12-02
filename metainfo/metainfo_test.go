@@ -1,7 +1,12 @@
 package metainfo
 
-import "testing"
-import "path"
+import (
+	"bytes"
+	"path"
+	"testing"
+
+	"github.com/anacrolix/libtorgo/bencode"
+)
 
 func test_file(t *testing.T, filename string) {
 	mi, err := LoadFromFile(filename)
@@ -27,9 +32,15 @@ func test_file(t *testing.T, filename string) {
 	// 	t.Logf("URL: %s\n", url)
 	// }
 
+	b, err := bencode.Marshal(mi.Info)
+	if !bytes.Equal(b, mi.Info.Bytes) {
+		t.Logf("\n%q\n%q", b[len(b)-20:], mi.Info.Bytes[len(mi.Info.Bytes)-20:])
+		t.Fatal("encoded and decoded bytes don't match")
+	}
 }
 
 func TestFile(t *testing.T) {
 	test_file(t, "_testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent")
 	test_file(t, "_testdata/continuum.torrent")
+	test_file(t, "_testdata/23516C72685E8DB0C8F15553382A927F185C4F01.torrent")
 }

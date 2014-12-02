@@ -456,9 +456,6 @@ func (s *Server) heardFromNode(addr dHTAddr, id string) {
 }
 
 func (s *Server) getNode(addr dHTAddr) (n *Node) {
-	if util.AddrPort(addr) == 0 {
-		panic(addr)
-	}
 	n = s.nodes[addr.String()]
 	if n == nil {
 		n = &Node{

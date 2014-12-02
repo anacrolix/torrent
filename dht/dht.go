@@ -291,7 +291,7 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 	if err != nil {
 		func() {
 			if se, ok := err.(*bencode.SyntaxError); ok {
-				if b[se.Offset] == 0 {
+				if int(se.Offset) < len(b) && b[se.Offset] == 0 {
 					return
 				}
 				if se.Offset == 0 {

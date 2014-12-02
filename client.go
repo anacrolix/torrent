@@ -383,9 +383,11 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	}
 	cl.event.L = &cl.mu
 
-	err = cl.setEnvBlocklist()
-	if err != nil {
-		return
+	if !cfg.NoDefaultBlocklist {
+		err = cl.setEnvBlocklist()
+		if err != nil {
+			return
+		}
 	}
 
 	if err = cl.initBannedTorrents(); err != nil {

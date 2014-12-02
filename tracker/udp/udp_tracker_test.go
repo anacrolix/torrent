@@ -86,6 +86,9 @@ func TestConvertInt16ToInt(t *testing.T) {
 }
 
 func TestUDPTracker(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	tr, err := tracker.New("udp://tracker.openbittorrent.com:80/announce")
 	if err != nil {
 		t.Skip(err)
@@ -107,6 +110,9 @@ func TestUDPTracker(t *testing.T) {
 
 // TODO: Create a fake UDP tracker to make these requests to.
 func TestAnnounceRandomInfoHash(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
 	wg := sync.WaitGroup{}
 	for _, url := range []string{
 		"udp://tracker.openbittorrent.com:80/announce",

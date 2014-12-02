@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"bitbucket.org/anacrolix/go.torrent"
 	"bitbucket.org/anacrolix/go.torrent/testutil"
@@ -93,6 +92,8 @@ func TestUnmountWedged(t *testing.T) {
 		DataDir:         filepath.Join(layout.BaseDir, "incomplete"),
 		DisableTrackers: true,
 		NoDHT:           true,
+
+		NoDefaultBlocklist: true,
 	})
 	defer client.Stop()
 	log.Printf("%+v", *layout.Metainfo)
@@ -121,9 +122,9 @@ func TestUnmountWedged(t *testing.T) {
 	go func() {
 		ioutil.ReadFile(filepath.Join(layout.MountDir, layout.Metainfo.Info.Name))
 	}()
-	time.Sleep(time.Second)
+	// time.Sleep(time.Second)
 	fs.Destroy()
-	time.Sleep(time.Second)
+	// time.Sleep(time.Second)
 	err = fuse.Unmount(layout.MountDir)
 	if err != nil {
 		log.Print(err)
@@ -144,6 +145,8 @@ func TestDownloadOnDemand(t *testing.T) {
 		DisableTrackers: true,
 		NoDHT:           true,
 		ListenAddr:      ":0",
+
+		NoDefaultBlocklist: true,
 	})
 	if err != nil {
 		t.Fatalf("error creating seeder client: %s", err)
@@ -163,6 +166,8 @@ func TestDownloadOnDemand(t *testing.T) {
 		DisableTrackers:  true,
 		NoDHT:            true,
 		ListenAddr:       ":0",
+
+		NoDefaultBlocklist: true,
 
 		// This can be used to check if clients can connect to other clients
 		// with the same ID.

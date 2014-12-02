@@ -11,7 +11,9 @@ import (
 )
 
 func TestClientDefault(t *testing.T) {
-	cl, err := NewClient(nil)
+	cl, err := NewClient(&Config{
+		NoDefaultBlocklist: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

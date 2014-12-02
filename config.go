@@ -5,14 +5,15 @@ import (
 )
 
 type Config struct {
-	DataDir          string
-	ListenAddr       string
-	DisableTrackers  bool
-	DownloadStrategy DownloadStrategy
-	NoDHT            bool
-	DHTConfig        *dht.ServerConfig
-	NoUpload         bool
-	PeerID           string
-	DisableUTP       bool
-	DisableTCP       bool
+	DataDir            string
+	ListenAddr         string
+	DisableTrackers    bool
+	DownloadStrategy   DownloadStrategy
+	NoDHT              bool
+	DHTConfig          *dht.ServerConfig
+	NoUpload           bool
+	PeerID             string
+	DisableUTP         bool
+	DisableTCP         bool
+	NoDefaultBlocklist bool
 }

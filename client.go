@@ -1378,6 +1378,10 @@ func (cl *Client) saveTorrentFile(t *torrent) error {
 	if err != nil {
 		return fmt.Errorf("error marshalling metainfo: %s", err)
 	}
+	mi, _ := cl.torrentCacheMetaInfo(t.InfoHash)
+	if !bytes.Equal(mi.Info.Hash, t.InfoHash[:]) {
+		log.Fatalf("%x != %x", mi.Info.Hash, t.InfoHash[:])
+	}
 	return nil
 }
 
@@ -1526,12 +1530,38 @@ func (me Torrent) ReadAt(p []byte, off int64) (n int, err error) {
 	return me.cl.TorrentReadAt(me.InfoHash, off, p)
 }
 
+func (cl *Client) torrentCacheMetaInfo(ih InfoHash) (mi *metainfo.MetaInfo, err error) {
+	f, err := os.Open(cl.torrentFileCachePath(ih))
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = nil
+		}
+		return
+	}
+	defer f.Close()
+	dec := bencode.NewDecoder(f)
+	err = dec.Decode(&mi)
+	if err != nil {
+		return
+	}
+	if !bytes.Equal(mi.Info.Hash, ih[:]) {
+		err = fmt.Errorf("cached torrent has wrong infohash: %x != %x", mi.Info.Hash, ih[:])
+		return
+	}
+	return
+}
+
 func (cl *Client) AddMagnet(uri string) (T Torrent, err error) {
 	m, err := ParseMagnetURI(uri)
 	if err != nil {
 		return
 	}
-	cl.AddTorrentFromFile(cl.torrentFileCachePath(m.InfoHash))
+	mi, err := cl.torrentCacheMetaInfo(m.InfoHash)
+	if err != nil {
+		log.Printf("error getting cached metainfo for %x: %s", m.InfoHash[:], err)
+	} else if mi != nil {
+		cl.AddTorrent(mi)
+	}
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	T, err = cl.addOrMergeTorrent(m.InfoHash, [][]string{m.Trackers})

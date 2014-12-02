@@ -2,9 +2,10 @@ package metainfo
 
 import (
 	"crypto/sha1"
-	"github.com/anacrolix/libtorgo/bencode"
 	"io"
 	"os"
+
+	"github.com/anacrolix/libtorgo/bencode"
 )
 
 // Information specific to a single file inside the MetaInfo structure.
@@ -53,16 +54,27 @@ type InfoEx struct {
 	Bytes []byte
 }
 
+var (
+	_ bencode.Marshaler   = InfoEx{}
+	_ bencode.Unmarshaler = &InfoEx{}
+)
+
 func (this *InfoEx) UnmarshalBencode(data []byte) error {
 	this.Bytes = make([]byte, 0, len(data))
 	this.Bytes = append(this.Bytes, data...)
 	h := sha1.New()
-	h.Write(this.Bytes)
-	this.Hash = h.Sum(this.Hash)
+	_, err := h.Write(this.Bytes)
+	if err != nil {
+		panic(err)
+	}
+	this.Hash = h.Sum(nil)
 	return bencode.Unmarshal(data, &this.Info)
 }
 
-func (this *InfoEx) MarshalBencode() ([]byte, error) {
+func (this InfoEx) MarshalBencode() ([]byte, error) {
+	if this.Bytes != nil {
+		return this.Bytes, nil
+	}
 	return bencode.Marshal(&this.Info)
 }
 

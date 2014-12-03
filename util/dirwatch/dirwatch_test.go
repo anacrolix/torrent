@@ -12,9 +12,10 @@ func TestDirwatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(tempDirName)
+	t.Logf("tempdir: %q", tempDirName)
 	dw, err := New(tempDirName)
+	defer dw.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
-	dw.Close()
 }

@@ -9,9 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"bitbucket.org/anacrolix/go.torrent/util"
-
 	"bitbucket.org/anacrolix/go.torrent"
+	"bitbucket.org/anacrolix/go.torrent/util"
 	"github.com/anacrolix/libtorgo/metainfo"
 	"github.com/go-fsnotify/fsnotify"
 )

@@ -291,9 +291,15 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 	if err != nil {
 		func() {
 			if se, ok := err.(*bencode.SyntaxError); ok {
+				// The message was truncated.
+				if int(se.Offset) == len(b) {
+					return
+				}
+				// Some messages seem to drop to nul chars abrubtly.
 				if int(se.Offset) < len(b) && b[se.Offset] == 0 {
 					return
 				}
+				// The message isn't bencode from the first.
 				if se.Offset == 0 {
 					return
 				}

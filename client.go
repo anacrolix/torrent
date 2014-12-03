@@ -920,8 +920,14 @@ func (t *torrent) initRequestOrdering(c *connection) {
 }
 
 func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) {
-	for piece >= len(c.PeerPieces) {
-		c.PeerPieces = append(c.PeerPieces, false)
+	if t.haveInfo() {
+		if c.PeerPieces == nil {
+			c.PeerPieces = make([]bool, t.NumPieces())
+		}
+	} else {
+		for piece >= len(c.PeerPieces) {
+			c.PeerPieces = append(c.PeerPieces, false)
+		}
 	}
 	c.PeerPieces[piece] = true
 	if t.wantPiece(piece) {

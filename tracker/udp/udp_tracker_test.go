@@ -68,13 +68,8 @@ func TestLongWriteUDP(t *testing.T) {
 func TestShortBinaryRead(t *testing.T) {
 	var data ResponseHeader
 	err := binary.Read(bytes.NewBufferString("\x00\x00\x00\x01"), binary.BigEndian, &data)
-	if data.Action != 0 {
-		t.Log("optimistic binary read now works?!")
-	}
-	switch err {
-	case io.ErrUnexpectedEOF:
-	default:
-		// TODO
+	if err != io.ErrUnexpectedEOF {
+		t.FailNow()
 	}
 }
 
@@ -113,6 +108,11 @@ func TestAnnounceRandomInfoHash(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
 	}
+	req := tracker.AnnounceRequest{
+		Event: tracker.Stopped,
+	}
+	rand.Read(req.PeerId[:])
+	rand.Read(req.InfoHash[:])
 	wg := sync.WaitGroup{}
 	for _, url := range []string{
 		"udp://tracker.openbittorrent.com:80/announce",
@@ -131,11 +131,6 @@ func TestAnnounceRandomInfoHash(t *testing.T) {
 				t.Log(err)
 				return
 			}
-			req := tracker.AnnounceRequest{
-				Event: tracker.Stopped,
-			}
-			rand.Read(req.PeerId[:])
-			rand.Read(req.InfoHash[:])
 			resp, err := tr.Announce(&req)
 			if err != nil {
 				t.Logf("error announcing to %s: %s", url, err)

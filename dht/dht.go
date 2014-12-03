@@ -329,8 +329,8 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 }
 
 func (s *Server) serve() error {
+	var b [0x10000]byte
 	for {
-		var b [0x10000]byte
 		n, addr, err := s.socket.ReadFrom(b[:])
 		if err != nil {
 			return err

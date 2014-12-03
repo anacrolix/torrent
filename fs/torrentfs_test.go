@@ -77,6 +77,8 @@ func newGreetingLayout() (tl testLayout, err error) {
 	return
 }
 
+// Unmount without first killing the FUSE connection while there are FUSE
+// operations blocked inside the filesystem code.
 func TestUnmountWedged(t *testing.T) {
 	layout, err := newGreetingLayout()
 	if err != nil {
@@ -96,7 +98,7 @@ func TestUnmountWedged(t *testing.T) {
 		NoDefaultBlocklist: true,
 	})
 	defer client.Stop()
-	log.Printf("%+v", *layout.Metainfo)
+	t.Logf("%+v", *layout.Metainfo)
 	client.AddTorrent(layout.Metainfo)
 	fs := New(client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
@@ -106,32 +108,50 @@ func TestUnmountWedged(t *testing.T) {
 		}
 		t.Fatal(err)
 	}
+	<-fuseConn.Ready
+	if err := fuseConn.MountError; err != nil {
+		t.Fatal(err)
+	}
 	go func() {
 		server := fusefs.Server{
 			FS: fs,
 			Debug: func(msg interface{}) {
-				log.Print(msg)
+				t.Log(msg)
 			},
 		}
 		server.Serve(fuseConn)
 	}()
-	<-fuseConn.Ready
-	if err := fuseConn.MountError; err != nil {
-		log.Fatal(err)
-	}
+	// Read the greeting file, though it will never be available. This should
+	// "wedge" FUSE, requiring the fs object to be forcibly destroyed. The
+	// read call will return with a FS error.
 	go func() {
-		ioutil.ReadFile(filepath.Join(layout.MountDir, layout.Metainfo.Info.Name))
+		_, err := ioutil.ReadFile(filepath.Join(layout.MountDir, layout.Metainfo.Info.Name))
+		if err == nil {
+			t.Fatal("expected error reading greeting")
+		}
 	}()
-	// time.Sleep(time.Second)
-	fs.Destroy()
-	// time.Sleep(time.Second)
-	err = fuse.Unmount(layout.MountDir)
-	if err != nil {
-		log.Print(err)
+
+	// Wait until the read has blocked inside the filesystem code.
+	fs.mu.Lock()
+	for fs.blockedReads != 1 {
+		fs.event.Wait()
 	}
+	fs.mu.Unlock()
+
+	fs.Destroy()
+
+	for {
+		err = fuse.Unmount(layout.MountDir)
+		if err != nil {
+			t.Logf("error unmounting: %s", err)
+		} else {
+			break
+		}
+	}
+
 	err = fuseConn.Close()
 	if err != nil {
-		t.Log(err)
+		t.Fatalf("error closing fuse conn: %s", err)
 	}
 }
 
@@ -140,6 +160,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer layout.Destroy()
 	seeder, err := torrent.NewClient(&torrent.Config{
 		DataDir:         layout.Completed,
 		DisableTrackers: true,

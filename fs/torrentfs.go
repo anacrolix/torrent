@@ -25,9 +25,11 @@ var (
 )
 
 type TorrentFS struct {
-	Client    *torrent.Client
-	destroyed chan struct{}
-	mu        sync.Mutex
+	Client       *torrent.Client
+	destroyed    chan struct{}
+	mu           sync.Mutex
+	blockedReads int
+	event        sync.Cond
 }
 
 var (
@@ -73,6 +75,10 @@ func (n *node) fsPath() string {
 }
 
 func blockingRead(fs *TorrentFS, t torrent.Torrent, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
+	fs.mu.Lock()
+	fs.blockedReads++
+	fs.event.Broadcast()
+	fs.mu.Unlock()
 	var (
 		_n   int
 		_err fuse.Error
@@ -91,6 +97,10 @@ func blockingRead(fs *TorrentFS, t torrent.Torrent, off int64, p []byte, intr fu
 	case <-intr:
 		err = fuse.EINTR
 	}
+	fs.mu.Lock()
+	fs.blockedReads--
+	fs.event.Broadcast()
+	fs.mu.Unlock()
 	return
 }
 
@@ -296,5 +306,6 @@ func New(cl *torrent.Client) *TorrentFS {
 		Client:    cl,
 		destroyed: make(chan struct{}),
 	}
+	fs.event.L = &fs.mu
 	return fs
 }

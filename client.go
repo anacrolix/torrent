@@ -892,7 +892,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 		})
 	}
 	if torrent.haveInfo() {
-		me.initRequestOrdering(torrent, conn)
+		torrent.initRequestOrdering(conn)
 	}
 	err = me.connectionLoop(torrent, conn)
 	if err != nil {
@@ -902,7 +902,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 	return
 }
 
-func (cl *Client) initRequestOrdering(t *torrent, c *connection) {
+func (t *torrent) initRequestOrdering(c *connection) {
 	if c.pieceRequestOrder != nil || c.piecePriorities != nil {
 		panic("double init of request ordering")
 	}

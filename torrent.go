@@ -230,6 +230,7 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 	}
 	t.assertIncompletePiecesByBytesLeftOrdering()
 	for _, conn := range t.Conns {
+		t.initRequestOrdering(conn)
 		if err := conn.setNumPieces(t.NumPieces()); err != nil {
 			log.Printf("closing connection: %s", err)
 			conn.Close()

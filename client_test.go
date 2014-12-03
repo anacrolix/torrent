@@ -48,7 +48,7 @@ func TestTorrentInitialState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = tor.setMetadata(mi.Info.Info, dir, mi.Info.Bytes)
+	err = tor.setMetadata(mi.Info.Info, dir, mi.Info.Bytes, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

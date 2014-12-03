@@ -200,7 +200,7 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 }
 
 // Called when metadata for a torrent becomes available.
-func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte) (err error) {
+func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte, eventLocker sync.Locker) (err error) {
 	t.Info = newMetaInfo(&md)
 	t.MetaData = infoBytes
 	t.metadataHave = nil
@@ -223,6 +223,7 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 	})
 	for index, hash := range infoPieceHashes(&md) {
 		piece := &torrentPiece{}
+		piece.Event.L = eventLocker
 		util.CopyExact(piece.Hash[:], hash)
 		t.Pieces = append(t.Pieces, piece)
 		piece.bytesLeftElement = t.IncompletePiecesByBytesLeft.Insert(index)
@@ -280,6 +281,8 @@ func (t *torrent) pieceStatusChar(index int) byte {
 		return 'H'
 	case !p.EverHashed:
 		return '?'
+	case p.Priority == piecePriorityHigh:
+		return '!'
 	case t.PiecePartiallyDownloaded(index):
 		return 'P'
 	default:
@@ -629,7 +632,7 @@ func (t *torrent) wantPiece(index int) bool {
 		return false
 	}
 	p := t.Pieces[index]
-	return p.EverHashed && len(p.PendingChunkSpecs) != 0
+	return p.EverHashed && len(p.PendingChunkSpecs) != 0 && p.Priority != piecePriorityNone
 }
 
 func (t *torrent) connHasWantedPieces(c *connection) bool {

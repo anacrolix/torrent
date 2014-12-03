@@ -44,9 +44,7 @@ func (me worstConns) key(i int) (key worstConnsSortKey) {
 	// Peer has had time to declare what they have.
 	if time.Now().Sub(c.completedHandshake) >= 30*time.Second {
 		if !me.t.haveInfo() {
-			if _, ok := c.PeerExtensionIDs["ut_metadata"]; !ok {
-				key.useless = true
-			}
+			key.useless = !c.supportsExtension("ut_metadata")
 		} else {
 			if !me.t.connHasWantedPieces(c) {
 				key.useless = true

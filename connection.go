@@ -8,6 +8,7 @@ import (
 	"expvar"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -85,6 +86,26 @@ func newConnection(sock net.Conn, peb peerExtensionBytes, peerID [20]byte, uTP b
 	go c.writer()
 	go c.writeOptimizer(time.Minute)
 	return
+}
+
+func (cn *connection) pendPiece(piece int, priority piecePriority) {
+	if priority == piecePriorityNone {
+		cn.pieceRequestOrder.RemovePiece(piece)
+		return
+	}
+	key := cn.piecePriorities[piece]
+	if priority == piecePriorityHigh {
+		key = -key
+	}
+	if piece == 0 {
+		log.Print(key)
+	}
+	cn.pieceRequestOrder.SetPiece(piece, key)
+}
+
+func (cn *connection) supportsExtension(ext string) bool {
+	_, ok := cn.PeerExtensionIDs[ext]
+	return ok
 }
 
 func (cn *connection) completedString() string {

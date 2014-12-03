@@ -53,7 +53,7 @@ type node struct {
 	path     []string
 	metadata *torrent.MetaInfo
 	FS       *TorrentFS
-	InfoHash torrent.InfoHash
+	t        torrent.Torrent
 }
 
 type fileNode struct {
@@ -72,25 +72,32 @@ func (n *node) fsPath() string {
 	return "/" + strings.Join(append([]string{n.metadata.Name}, n.path...), "/")
 }
 
-func blockingRead(fs *TorrentFS, ih torrent.InfoHash, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
-	dataWaiter := fs.Client.DataWaiter(ih, off)
+func blockingRead(fs *TorrentFS, t torrent.Torrent, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
+	var (
+		_n   int
+		_err fuse.Error
+	)
+	readDone := make(chan struct{})
+	go func() {
+		_n, _err = t.ReadAt(p, off)
+		close(readDone)
+	}()
 	select {
-	case <-dataWaiter:
+	case <-readDone:
+		n = _n
+		err = _err
 	case <-fs.destroyed:
 		err = fuse.EIO
-		return
 	case <-intr:
 		err = fuse.EINTR
-		return
 	}
-	n, err = fs.Client.TorrentReadAt(ih, off, p)
 	return
 }
 
-func readFull(fs *TorrentFS, ih torrent.InfoHash, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
+func readFull(fs *TorrentFS, t torrent.Torrent, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
 	for len(p) != 0 {
 		var nn int
-		nn, err = blockingRead(fs, ih, off, p, intr)
+		nn, err = blockingRead(fs, t, off, p, intr)
 		if err != nil {
 			break
 		}
@@ -126,14 +133,8 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 	if len(resp.Data) == 0 {
 		return nil
 	}
-	infoHash := fn.InfoHash
 	torrentOff := fn.TorrentOffset + req.Offset
-	go func() {
-		if err := fn.FS.Client.PrioritizeDataRegion(infoHash, torrentOff, int64(size)); err != nil {
-			log.Printf("error prioritizing %s: %s", fn.fsPath(), err)
-		}
-	}()
-	n, err := readFull(fn.FS, infoHash, torrentOff, resp.Data, intr)
+	n, err := readFull(fn.FS, fn.t, torrentOff, resp.Data, intr)
 	if err != nil {
 		return err
 	}
@@ -231,7 +232,7 @@ func (me rootNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err
 		__node := node{
 			metadata: t.Info,
 			FS:       me.fs,
-			InfoHash: t.InfoHash,
+			t:        t,
 		}
 		if t.Info.SingleFile() {
 			_node = fileNode{__node, uint64(t.Info.Length), 0}

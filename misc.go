@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"bitbucket.org/anacrolix/go.torrent/mmap_span"
@@ -37,12 +38,22 @@ func (ih *InfoHash) HexString() string {
 	return fmt.Sprintf("%x", ih[:])
 }
 
+type piecePriority byte
+
+const (
+	piecePriorityNone piecePriority = iota
+	piecePriorityNormal
+	piecePriorityHigh
+)
+
 type piece struct {
 	Hash              pieceSum
 	PendingChunkSpecs map[chunkSpec]struct{}
 	Hashing           bool
 	QueuedForHash     bool
 	EverHashed        bool
+	Event             sync.Cond
+	Priority          piecePriority
 }
 
 func (p *piece) shuffledPendingChunkSpecs() (css []chunkSpec) {

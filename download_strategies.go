@@ -45,13 +45,13 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	addRequest := func(req request) (again bool) {
 		return c.Request(req)
 	}
-	for i := range t.Pieces {
-		pieceIndex := c.pieceOrder[i]
+	for e := c.pieceRequestOrder.First(); e != nil; e = e.Next() {
+		pieceIndex := e.Piece()
 		if !c.PeerHasPiece(pp.Integer(pieceIndex)) {
-			continue
+			panic("piece in request order but peer doesn't have it")
 		}
 		if !t.wantPiece(pieceIndex) {
-			continue
+			panic("unwanted piece in connection request order")
 		}
 		piece := t.Pieces[pieceIndex]
 		for _, cs := range piece.shuffledPendingChunkSpecs() {

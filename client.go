@@ -37,6 +37,8 @@ import (
 	"syscall"
 	"time"
 
+	"bitbucket.org/anacrolix/go.torrent/internal/pieceordering"
+
 	"github.com/h2so5/utp"
 
 	"github.com/anacrolix/libtorgo/bencode"
@@ -890,7 +892,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 		})
 	}
 	if torrent.haveInfo() {
-		conn.initPieceOrder(torrent.NumPieces())
+		me.initRequestOrdering(torrent, conn)
 	}
 	err = me.connectionLoop(torrent, conn)
 	if err != nil {
@@ -900,12 +902,30 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 	return
 }
 
+func (cl *Client) initRequestOrdering(t *torrent, c *connection) {
+	if c.pieceRequestOrder != nil || c.piecePriorities != nil {
+		panic("double init of request ordering")
+	}
+	c.piecePriorities = mathRand.Perm(t.NumPieces())
+	c.pieceRequestOrder = pieceordering.New()
+	for i := 0; i < t.NumPieces(); i++ {
+		if !c.PeerHasPiece(pp.Integer(i)) {
+			continue
+		}
+		if !t.wantPiece(i) {
+			continue
+		}
+		c.pieceRequestOrder.SetPiece(i, c.piecePriorities[i])
+	}
+}
+
 func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) {
 	for piece >= len(c.PeerPieces) {
 		c.PeerPieces = append(c.PeerPieces, false)
 	}
 	c.PeerPieces[piece] = true
 	if t.wantPiece(piece) {
+		c.pieceRequestOrder.SetPiece(piece, c.piecePriorities[piece])
 		me.replenishConnRequests(t, c)
 	}
 }
@@ -1924,6 +1944,9 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	delete(t.Pieces[req.Index].PendingChunkSpecs, req.chunkSpec)
 	me.dataReady(t, req)
 	if len(t.Pieces[req.Index].PendingChunkSpecs) == 0 {
+		for _, c := range t.Conns {
+			c.pieceRequestOrder.RemovePiece(int(req.Index))
+		}
 		me.queuePieceCheck(t, req.Index)
 	}
 	t.PieceBytesLeftChanged(int(req.Index))
@@ -2015,6 +2038,10 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 					panic("wat")
 				}
 			}
+			conn.pieceRequestOrder.RemovePiece(int(piece))
+		}
+		if t.wantPiece(int(piece)) && conn.PeerHasPiece(piece) {
+			conn.pieceRequestOrder.SetPiece(int(piece), conn.piecePriorities[piece])
 		}
 	}
 	if t.haveAllPieces() && me.noUpload {

@@ -8,11 +8,11 @@ import (
 	"expvar"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"sync"
 	"time"
 
+	"bitbucket.org/anacrolix/go.torrent/internal/pieceordering"
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 )
 
@@ -28,14 +28,16 @@ const (
 
 // Maintains the state of a connection with a peer.
 type connection struct {
-	Socket     net.Conn
-	Discovery  peerSource
-	uTP        bool
-	closing    chan struct{}
-	mu         sync.Mutex // Only for closing.
-	post       chan pp.Message
-	writeCh    chan []byte
-	pieceOrder []int
+	Socket    net.Conn
+	Discovery peerSource
+	uTP       bool
+	closing   chan struct{}
+	mu        sync.Mutex // Only for closing.
+	post      chan pp.Message
+	writeCh   chan []byte
+
+	piecePriorities   []int
+	pieceRequestOrder *pieceordering.Instance
 
 	UnwantedChunksReceived int
 	UsefulChunksReceived   int
@@ -111,7 +113,6 @@ func (cn *connection) piecesPeerHasCount() (count int) {
 // invalid, such as by receiving badly sized BITFIELD, or invalid HAVE
 // messages.
 func (cn *connection) setNumPieces(num int) error {
-	cn.initPieceOrder(num)
 	if cn.PeerPieces == nil {
 		return nil
 	}
@@ -132,15 +133,6 @@ func (cn *connection) setNumPieces(num int) error {
 		panic("wat")
 	}
 	return nil
-}
-
-func (cn *connection) initPieceOrder(numPieces int) {
-	if cn.pieceOrder == nil {
-		cn.pieceOrder = rand.Perm(numPieces)
-	}
-	if len(cn.pieceOrder) != numPieces {
-		panic("piece order initialized with wrong length")
-	}
 }
 
 func eventAgeString(t time.Time) string {

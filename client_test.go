@@ -1,9 +1,14 @@
 package torrent
 
 import (
+	"fmt"
+	"log"
+	"net"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/h2so5/utp"
 
 	"bitbucket.org/anacrolix/go.torrent/testutil"
 	"bitbucket.org/anacrolix/go.torrent/util"
@@ -101,5 +106,68 @@ func TestReducedDialTimeout(t *testing.T) {
 		if reduced != expected {
 			t.Fatalf("expected %s, got %s", _case.ExpectedReduced, reduced)
 		}
+	}
+}
+
+func TestUTPRawConn(t *testing.T) {
+	l, err := utp.Listen("utp", &utp.Addr{&net.UDPAddr{Port: 0}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	go func() {
+		for {
+			_, err := l.Accept()
+			if err != nil {
+				break
+			}
+		}
+	}()
+	// Connect a UTP peer to see if the RawConn will still work.
+	utpPeer, err := utp.DialUTP("utp", nil, l.Addr().(*utp.Addr))
+	if err != nil {
+		t.Fatalf("error dialing utp listener: %s", err)
+	}
+	defer utpPeer.Close()
+	peer, err := net.ListenPacket("udp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer peer.Close()
+
+	msgsReceived := 0
+	const N = 5000 // How many messages to send.
+	readerStopped := make(chan struct{})
+	// The reader goroutine.
+	go func() {
+		defer close(readerStopped)
+		b := make([]byte, 500)
+		for i := 0; i < N; i++ {
+			n, _, err := l.RawConn.ReadFrom(b)
+			if err != nil {
+				t.Fatalf("error reading from raw conn: %s", err)
+			}
+			msgsReceived++
+			var d int
+			fmt.Sscan(string(b[:n]), &d)
+			if d != i {
+				log.Printf("got wrong number: expected %d, got %d", i, d)
+			}
+		}
+	}()
+	for i := 0; i < N; i++ {
+		_, err := peer.WriteTo([]byte(fmt.Sprintf("%d", i)), l.Addr().(*utp.Addr).Addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(time.Microsecond)
+	}
+	select {
+	case <-readerStopped:
+	case <-time.After(time.Second):
+		t.Fatal("reader timed out")
+	}
+	if msgsReceived != N {
+		t.Fatalf("messages received: %d", msgsReceived)
 	}
 }

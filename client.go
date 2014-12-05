@@ -648,7 +648,7 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 
 		// Initiate connections via TCP and UTP simultaneously. Use the first
 		// one that succeeds.
-		left := 1
+		left := 0
 		if !me.disableUTP {
 			left++
 		}

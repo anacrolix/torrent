@@ -140,6 +140,7 @@ type Client struct {
 	downloadStrategy DownloadStrategy
 	dHT              *dht.Server
 	disableUTP       bool
+	disableTCP       bool
 	ipBlockList      *iplist.IPList
 	bannedTorrents   map[InfoHash]struct{}
 
@@ -387,7 +388,8 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		downloadStrategy: cfg.DownloadStrategy,
 		halfOpenLimit:    socketsPerTorrent,
 		dataDir:          cfg.DataDir,
-		disableUTP:       cfg.DisableUTP,
+		disableUTP:       true, // TODO: Write my own UTP library ಠ_ಠ
+		disableTCP:       cfg.DisableTCP,
 
 		quit:     make(chan struct{}),
 		torrents: make(map[InfoHash]*torrent),
@@ -630,16 +632,21 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 		if !me.disableUTP {
 			left++
 		}
+		if !me.disableTCP {
+			left++
+		}
 		resCh := make(chan dialResult, left)
 		if !me.disableUTP {
 			go doDial(func() (net.Conn, error) {
 				return (&utp.Dialer{Timeout: dialTimeout}).Dial("utp", addr)
 			}, resCh, true)
 		}
-		go doDial(func() (net.Conn, error) {
-			// time.Sleep(time.Second) // Give uTP a bit of a head start.
-			return net.DialTimeout("tcp", addr, dialTimeout)
-		}, resCh, false)
+		if !me.disableTCP {
+			go doDial(func() (net.Conn, error) {
+				// time.Sleep(time.Second) // Give uTP a bit of a head start.
+				return net.DialTimeout("tcp", addr, dialTimeout)
+			}, resCh, false)
+		}
 		var res dialResult
 		for ; left > 0 && res.Conn == nil; left-- {
 			res = <-resCh

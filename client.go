@@ -2019,7 +2019,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	me.dataReady(t, req)
 	if len(t.Pieces[req.Index].PendingChunkSpecs) == 0 {
 		for _, c := range t.Conns {
-			c.pieceRequestOrder.RemovePiece(int(req.Index))
+			c.pieceRequestOrder.DeletePiece(int(req.Index))
 		}
 		me.queuePieceCheck(t, req.Index)
 	}
@@ -2117,7 +2117,7 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 					panic("wat")
 				}
 			}
-			conn.pieceRequestOrder.RemovePiece(int(piece))
+			conn.pieceRequestOrder.DeletePiece(int(piece))
 		}
 		if t.wantPiece(int(piece)) && conn.PeerHasPiece(piece) {
 			conn.pendPiece(int(piece), t.Pieces[piece].Priority)

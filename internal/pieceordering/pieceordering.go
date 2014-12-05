@@ -22,9 +22,7 @@ func (me *Instance) SetPiece(piece, key int) {
 		if existingKey == key {
 			return
 		}
-		if me.sl.Remove(existingKey).Value.(int) != piece {
-			panic("piecekeys map lied to us")
-		}
+		me.removeKeyPiece(existingKey, piece)
 	}
 	me.sl.Insert(key, piece)
 	if me.pieceKeys == nil {
@@ -33,18 +31,21 @@ func (me *Instance) SetPiece(piece, key int) {
 	me.pieceKeys[piece] = key
 }
 
-func (me *Instance) RemovePiece(piece int) {
-	key, ok := me.pieceKeys[piece]
-	if !ok {
-		return
-	}
-	el := me.sl.Remove(key)
-	if el == nil {
-		panic("element not present but should be")
+func (me *Instance) removeKeyPiece(key, piece int) {
+	if me.sl.Remove(key).Value.(int) != piece {
+		panic("piecekeys map lied to us")
 	}
 	if me.sl.Remove(key) != nil {
 		panic("duplicate key")
 	}
+}
+
+func (me *Instance) DeletePiece(piece int) {
+	key, ok := me.pieceKeys[piece]
+	if !ok {
+		return
+	}
+	me.removeKeyPiece(key, piece)
 	delete(me.pieceKeys, piece)
 }
 

@@ -89,7 +89,7 @@ func newConnection(sock net.Conn, peb peerExtensionBytes, peerID [20]byte, uTP b
 
 func (cn *connection) pendPiece(piece int, priority piecePriority) {
 	if priority == piecePriorityNone {
-		cn.pieceRequestOrder.RemovePiece(piece)
+		cn.pieceRequestOrder.DeletePiece(piece)
 		return
 	}
 	key := cn.piecePriorities[piece]

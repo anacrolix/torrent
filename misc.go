@@ -43,7 +43,9 @@ type piecePriority byte
 const (
 	piecePriorityNone piecePriority = iota
 	piecePriorityNormal
-	piecePriorityHigh
+	piecePriorityReadahead
+	piecePriorityNext
+	piecePriorityNow
 )
 
 type piece struct {

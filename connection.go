@@ -8,7 +8,6 @@ import (
 	"expvar"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -94,11 +93,15 @@ func (cn *connection) pendPiece(piece int, priority piecePriority) {
 		return
 	}
 	key := cn.piecePriorities[piece]
-	if priority == piecePriorityHigh {
-		key = -key
-	}
-	if piece == 0 {
-		log.Print(key)
+	// TODO: Have some kind of overlap here, so there's some probabilistic
+	// favouring of higher priority pieces.
+	switch priority {
+	case piecePriorityReadahead:
+		key -= len(cn.piecePriorities)
+	case piecePriorityNext:
+		key -= 2 * len(cn.piecePriorities)
+	case piecePriorityNow:
+		key -= 3 * len(cn.piecePriorities)
 	}
 	cn.pieceRequestOrder.SetPiece(piece, key)
 }

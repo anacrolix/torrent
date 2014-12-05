@@ -281,12 +281,26 @@ func (t *torrent) pieceStatusChar(index int) byte {
 		return 'H'
 	case !p.EverHashed:
 		return '?'
-	case p.Priority == piecePriorityHigh:
-		return '!'
 	case t.PiecePartiallyDownloaded(index):
-		return 'P'
+		switch p.Priority {
+		case piecePriorityNone:
+			return 'F' // Forgotten
+		default:
+			return 'P'
+		}
 	default:
-		return '.'
+		switch p.Priority {
+		case piecePriorityNone:
+			return 'z'
+		case piecePriorityNow:
+			return '!'
+		case piecePriorityReadahead:
+			return 'R'
+		case piecePriorityNext:
+			return 'N'
+		default:
+			return '.'
+		}
 	}
 }
 

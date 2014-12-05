@@ -264,20 +264,34 @@ func (cl *Client) torrentReadAt(t *torrent, off int64, p []byte) (n int, err err
 		err = io.EOF
 		return
 	}
+	cl.readRaisePiecePriorities(t, off, int64(len(p)))
 	if len(p) > pieceLeft {
 		p = p[:pieceLeft]
 	}
 	if len(p) == 0 {
 		panic(len(p))
 	}
-	cl.prioritizePiece(t, index, piecePriorityHigh)
-	for i := index + 1; i < index+7 && i < t.NumPieces(); i++ {
-		cl.prioritizePiece(t, i, piecePriorityNormal)
-	}
 	for !piece.Complete() {
 		piece.Event.Wait()
 	}
 	return t.Data.ReadAt(p, off)
+}
+
+func (cl *Client) readRaisePiecePriorities(t *torrent, off, _len int64) {
+	index := int(off / int64(t.UsualPieceSize()))
+	cl.raisePiecePriority(t, index, piecePriorityNow)
+	index++
+	if index >= t.NumPieces() {
+		return
+	}
+	cl.raisePiecePriority(t, index, piecePriorityNext)
+	for i := 0; i < 5; i++ {
+		index++
+		if index >= t.NumPieces() {
+			break
+		}
+		cl.raisePiecePriority(t, index, piecePriorityReadahead)
+	}
 }
 
 func (cl *Client) configDir() string {
@@ -290,6 +304,12 @@ func (cl *Client) ConfigDir() string {
 
 func (t *torrent) connPendPiece(c *connection, piece int) {
 	c.pendPiece(piece, t.Pieces[piece].Priority)
+}
+
+func (cl *Client) raisePiecePriority(t *torrent, piece int, priority piecePriority) {
+	if t.Pieces[piece].Priority < priority {
+		cl.prioritizePiece(t, piece, priority)
+	}
 }
 
 func (cl *Client) prioritizePiece(t *torrent, piece int, priority piecePriority) {
@@ -1595,8 +1615,10 @@ func (t Torrent) DownloadAll() {
 		// TODO: Leave higher priorities as they were?
 		t.cl.prioritizePiece(t.torrent, i, piecePriorityNormal)
 	}
-	t.cl.prioritizePiece(t.torrent, 0, piecePriorityHigh)
-	t.cl.prioritizePiece(t.torrent, t.NumPieces()-1, piecePriorityHigh)
+	// Nice to have the first and last pieces soon for various interactive
+	// purposes.
+	t.cl.prioritizePiece(t.torrent, 0, piecePriorityReadahead)
+	t.cl.prioritizePiece(t.torrent, t.NumPieces()-1, piecePriorityReadahead)
 	t.cl.mu.Unlock()
 }
 

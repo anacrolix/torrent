@@ -47,9 +47,10 @@ type connection struct {
 	lastUsefulChunkReceived time.Time
 
 	// Stuff controlled by the local peer.
-	Interested bool
-	Choked     bool
-	Requests   map[request]struct{}
+	Interested       bool
+	Choked           bool
+	Requests         map[request]struct{}
+	requestsLowWater int
 
 	// Stuff controlled by the remote peer.
 	PeerID             [20]byte
@@ -248,6 +249,7 @@ func (c *connection) Request(chunk request) bool {
 		c.Requests = make(map[request]struct{}, c.PeerMaxRequests)
 	}
 	c.Requests[chunk] = struct{}{}
+	c.requestsLowWater = len(c.Requests) / 2
 	c.Post(pp.Message{
 		Type:   pp.Request,
 		Index:  chunk.Index,

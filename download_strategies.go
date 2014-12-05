@@ -38,7 +38,7 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 		if c.PeerChoked {
 			return
 		}
-		if len(c.Requests) != 0 {
+		if len(c.Requests) > c.requestsLowWater {
 			return
 		}
 	}

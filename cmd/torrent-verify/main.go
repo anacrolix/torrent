@@ -33,7 +33,7 @@ func main() {
 		log.Print(err)
 	}
 	defer devZero.Close()
-	var mMapSpan mmap_span.MMapSpan
+	var mMapSpan *mmap_span.MMapSpan
 	for _, file := range metaInfo.Info.Files {
 		filename := filepath.Join(append([]string{*dirPath, metaInfo.Info.Name}, file.Path...)...)
 		osFile, err := os.Open(filename)
@@ -53,7 +53,7 @@ func main() {
 			log.Printf("file mmap has wrong size: %#v", filename)
 		}
 		osFile.Close()
-		mMapSpan = append(mMapSpan, goMMap)
+		mMapSpan.Append(goMMap)
 	}
 	log.Println(len(metaInfo.Info.Files))
 	log.Println(mMapSpan.Size())

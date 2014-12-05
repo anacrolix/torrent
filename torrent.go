@@ -60,7 +60,7 @@ type torrent struct {
 	length                      int64
 	// Prevent mutations to Data memory maps while in use as they're not safe.
 	dataLock sync.RWMutex
-	Data     mmap_span.MMapSpan
+	Data     *mmap_span.MMapSpan
 
 	Info *MetaInfo
 	// Active peer connections.
@@ -459,8 +459,10 @@ func (t *torrent) Close() (err error) {
 	t.CeaseNetworking()
 	close(t.closing)
 	t.dataLock.Lock()
-	t.Data.Close()
-	t.Data = nil
+	if t.Data != nil {
+		t.Data.Close()
+		t.Data = nil
+	}
 	t.dataLock.Unlock()
 	for _, conn := range t.Conns {
 		conn.Close()

@@ -125,7 +125,8 @@ func upvertedSingleFileInfoFiles(info *metainfo.Info) []metainfo.FileInfo {
 	return []metainfo.FileInfo{{Length: info.Length, Path: nil}}
 }
 
-func mmapTorrentData(md *metainfo.Info, location string) (mms mmap_span.MMapSpan, err error) {
+func mmapTorrentData(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, err error) {
+	mms = &mmap_span.MMapSpan{}
 	defer func() {
 		if err != nil {
 			mms.Close()
@@ -170,7 +171,7 @@ func mmapTorrentData(md *metainfo.Info, location string) (mms mmap_span.MMapSpan
 			if int64(len(mMap)) != miFile.Length {
 				panic("mmap has wrong length")
 			}
-			mms = append(mms, mMap)
+			mms.Append(mMap)
 		}()
 		if err != nil {
 			return

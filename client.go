@@ -215,10 +215,12 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	fmt.Fprintf(w, "Peer ID: %q\n", cl.peerID)
 	fmt.Fprintf(w, "Handshaking: %d\n", cl.handshaking)
 	if cl.dHT != nil {
-		fmt.Fprintf(w, "DHT nodes: %d\n", cl.dHT.NumNodes())
+		dhtStats := cl.dHT.Stats()
+		fmt.Fprintf(w, "DHT nodes: %d (%d good)\n", dhtStats.NumNodes, dhtStats.NumGoodNodes)
 		fmt.Fprintf(w, "DHT Server ID: %x\n", cl.dHT.IDString())
 		fmt.Fprintf(w, "DHT port: %d\n", addrPort(cl.dHT.LocalAddr()))
 		fmt.Fprintf(w, "DHT announces: %d\n", cl.dHT.NumConfirmedAnnounces)
+		fmt.Fprintf(w, "Outstanding transactions: %d\n", dhtStats.NumOutstandingTransactions)
 	}
 	cl.downloadStrategy.WriteStatus(w)
 	fmt.Fprintln(w)

@@ -50,6 +50,25 @@ type ServerConfig struct {
 	Passive bool // Don't respond to queries.
 }
 
+type serverStats struct {
+	NumGoodNodes               int
+	NumNodes                   int
+	NumOutstandingTransactions int
+}
+
+func (s *Server) Stats() (ss serverStats) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, n := range s.nodes {
+		if n.Good() {
+			ss.NumGoodNodes++
+		}
+	}
+	ss.NumNodes = len(s.nodes)
+	ss.NumOutstandingTransactions = len(s.transactions)
+	return
+}
+
 func (s *Server) LocalAddr() net.Addr {
 	return s.socket.LocalAddr()
 }

@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 
 	"bitbucket.org/anacrolix/go.torrent/util"
 )
@@ -24,6 +25,21 @@ func (me *peerDiscovery) Close() {
 }
 
 func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
+	s.mu.Lock()
+	startAddrs := func() (ret []net.Addr) {
+		for _, n := range s.closestGoodNodes(160, infoHash) {
+			ret = append(ret, n.addr)
+		}
+		return
+	}()
+	s.mu.Unlock()
+	if len(startAddrs) == 0 {
+		addr, err := bootstrapAddr()
+		if err != nil {
+			return nil, err
+		}
+		startAddrs = append(startAddrs, addr)
+	}
 	disc := &peerDiscovery{
 		peerStream: &peerStream{
 			Values: make(chan peerStreamValue),
@@ -36,22 +52,9 @@ func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
 		infoHash:          infoHash,
 	}
 	go disc.loop()
-	s.mu.Lock()
-	startAddrs := func() (ret []net.Addr) {
-		for _, n := range s.closestGoodNodes(160, infoHash) {
-			ret = append(ret, n.addr)
-		}
-		return
-	}()
-	s.mu.Unlock()
-	for _, addr := range startAddrs {
-		disc.contact(addr)
-	}
-	if len(startAddrs) == 0 {
-		addr, err := bootstrapAddr()
-		if err != nil {
-			disc.Close()
-			return nil, err
+	for i, addr := range startAddrs {
+		if i != 0 {
+			time.Sleep(time.Microsecond)
 		}
 		disc.contact(addr)
 	}

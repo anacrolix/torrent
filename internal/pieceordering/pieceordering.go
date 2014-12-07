@@ -1,17 +1,19 @@
 package pieceordering
 
 import (
-	"github.com/glenn-brown/skiplist"
+	"math/rand"
+
+	"github.com/ryszard/goskiplist/skiplist"
 )
 
 type Instance struct {
-	sl        *skiplist.T
+	sl        *skiplist.SkipList
 	pieceKeys map[int]int
 }
 
 func New() *Instance {
 	return &Instance{
-		sl: skiplist.New(),
+		sl: skiplist.NewIntMap(),
 	}
 }
 
@@ -24,19 +26,48 @@ func (me *Instance) SetPiece(piece, key int) {
 		}
 		me.removeKeyPiece(existingKey, piece)
 	}
-	me.sl.Insert(key, piece)
+	var itemSl []int
+	if exItem, ok := me.sl.Get(key); ok {
+		itemSl = exItem.([]int)
+	}
+	me.sl.Set(key, append(itemSl, piece))
 	if me.pieceKeys == nil {
 		me.pieceKeys = make(map[int]int)
 	}
 	me.pieceKeys[piece] = key
+	me.shuffleItem(key)
+}
+
+func (me *Instance) shuffleItem(key int) {
+	_item, ok := me.sl.Get(key)
+	if !ok {
+		return
+	}
+	item := _item.([]int)
+	for i := range item {
+		j := i + rand.Intn(len(item)-i)
+		item[i], item[j] = item[j], item[i]
+	}
+	me.sl.Set(key, item)
 }
 
 func (me *Instance) removeKeyPiece(key, piece int) {
-	if me.sl.Remove(key).Value.(int) != piece {
-		panic("piecekeys map lied to us")
+	item, ok := me.sl.Get(key)
+	if !ok {
+		panic("no item for key")
 	}
-	if me.sl.Remove(key) != nil {
-		panic("duplicate key")
+	itemSl := item.([]int)
+	for i, piece1 := range itemSl {
+		if piece1 == piece {
+			itemSl[i] = itemSl[len(itemSl)-1]
+			itemSl = itemSl[:len(itemSl)-1]
+			break
+		}
+	}
+	if len(itemSl) == 0 {
+		me.sl.Delete(key)
+	} else {
+		me.sl.Set(key, itemSl)
 	}
 }
 
@@ -50,11 +81,11 @@ func (me *Instance) DeletePiece(piece int) {
 }
 
 func (me Instance) First() Element {
-	e := me.sl.Front()
-	if e == nil {
+	i := me.sl.SeekToFirst()
+	if i == nil {
 		return nil
 	}
-	return element{e}
+	return &element{i, i.Value().([]int)}
 }
 
 type Element interface {
@@ -63,17 +94,23 @@ type Element interface {
 }
 
 type element struct {
-	sle *skiplist.Element
+	i  skiplist.Iterator
+	sl []int
 }
 
-func (e element) Next() Element {
-	sle := e.sle.Next()
-	if sle == nil {
+func (e *element) Next() Element {
+	e.sl = e.sl[1:]
+	if len(e.sl) > 0 {
+		return e
+	}
+	ok := e.i.Next()
+	if !ok {
 		return nil
 	}
-	return element{sle}
+	e.sl = e.i.Value().([]int)
+	return e
 }
 
 func (e element) Piece() int {
-	return e.sle.Value.(int)
+	return e.sl[0]
 }

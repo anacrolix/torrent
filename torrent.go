@@ -336,14 +336,33 @@ func (t *torrent) WriteStatus(w io.Writer) {
 			return "?"
 		}
 	}())
-	fmt.Fprint(w, "Pieces:")
-	for index := range t.Pieces {
-		if index%100 == 0 {
-			fmt.Fprintln(w)
+	if t.haveInfo() {
+		fmt.Fprint(w, "Pieces: ")
+		var (
+			char  byte
+			count int
+		)
+		writeSequence := func() {
+			fmt.Fprintf(w, "%d%c ", count, char)
 		}
-		fmt.Fprintf(w, "%c", t.pieceStatusChar(index))
+		if len(t.Pieces) != 0 {
+			char = t.pieceStatusChar(0)
+		}
+		for index := range t.Pieces {
+			char1 := t.pieceStatusChar(index)
+			if char1 == char {
+				count++
+			} else {
+				writeSequence()
+				char = char1
+				count = 1
+			}
+		}
+		if count != 0 {
+			writeSequence()
+		}
+		fmt.Fprintln(w)
 	}
-	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Trackers: ")
 	for _, tier := range t.Trackers {
 		for _, tr := range tier {

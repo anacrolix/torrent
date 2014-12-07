@@ -456,7 +456,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		}
 		return cfg.ListenAddr
 	}
-	if !cfg.DisableTCP {
+	if !cl.disableTCP {
 		var l net.Listener
 		l, err = net.Listen("tcp", listenAddr())
 		if err != nil {
@@ -466,7 +466,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		go cl.acceptConnections(l, false)
 	}
 	var utpL *utp.Listener
-	if !cfg.DisableUTP {
+	if !cl.disableUTP {
 		var utpAddr *utp.Addr
 		utpAddr, err = utp.ResolveAddr("utp", listenAddr())
 		if err != nil {

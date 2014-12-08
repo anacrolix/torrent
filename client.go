@@ -33,9 +33,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
+
+	"bitbucket.org/anacrolix/sync"
 
 	"bitbucket.org/anacrolix/go.torrent/internal/pieceordering"
 

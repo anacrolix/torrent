@@ -1801,6 +1801,7 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 			log.Printf("error getting peers from dht: %s", err)
 			return
 		}
+		allAddrs := make(map[string]struct{})
 	getPeers:
 		for {
 			select {
@@ -1809,6 +1810,13 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 					break getPeers
 				}
 				peersFoundByDHT.Add(int64(len(v.Peers)))
+				for _, p := range v.Peers {
+					allAddrs[(&net.UDPAddr{
+						IP:   p.IP[:],
+						Port: int(p.Port),
+					}).String()] = struct{}{}
+				}
+				// log.Printf("%s: %d new peers from DHT", t, len(v.Peers))
 				err = cl.AddPeers(t.InfoHash, func() (ret []Peer) {
 					for _, cp := range v.Peers {
 						ret = append(ret, Peer{
@@ -1829,7 +1837,7 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 			}
 		}
 		ps.Close()
-		log.Printf("finished DHT peer scrape for %s", t)
+		log.Printf("finished DHT peer scrape for %s: %d peers", t, len(allAddrs))
 
 		// After a GetPeers, we can announce on the best nodes that gave us an
 		// announce token.
@@ -1927,7 +1935,7 @@ newAnnounce:
 			for trIndex, tr := range tier {
 				err := cl.announceTorrentSingleTracker(tr, &req, t)
 				if err != nil {
-					log.Printf("error announcing to %s: %s", tr, err)
+					log.Printf("error announcing %s to %s: %s", t, tr, err)
 					continue
 				}
 				// Float the successful announce to the top of the tier. If

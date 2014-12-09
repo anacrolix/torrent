@@ -52,10 +52,7 @@ func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
 		infoHash:          infoHash,
 	}
 	go disc.loop()
-	for i, addr := range startAddrs {
-		if i != 0 {
-			time.Sleep(time.Microsecond)
-		}
+	for _, addr := range startAddrs {
 		disc.contact(addr)
 	}
 	return disc.peerStream, nil
@@ -69,6 +66,10 @@ func (me *peerDiscovery) contact(addr net.Addr) {
 }
 
 func (me *peerDiscovery) responseNode(node NodeInfo) {
+	if util.AddrPort(node.Addr) == 0 {
+		// Not a contactable address.
+		return
+	}
 	me.contact(node.Addr)
 }
 
@@ -76,13 +77,16 @@ func (me *peerDiscovery) loop() {
 	for {
 		select {
 		case addr := <-me.contactAddrs:
-			if me.pending >= 160 {
+			if me.pending >= 1000 {
 				break
 			}
 			if _, ok := me.triedAddrs[addr.String()]; ok {
 				break
 			}
 			me.triedAddrs[addr.String()] = struct{}{}
+			if me.server.ipBlocked(util.AddrIP(addr)) {
+				break
+			}
 			if err := me.getPeers(addr); err != nil {
 				log.Printf("error sending get_peers request to %s: %s", addr, err)
 				break
@@ -163,11 +167,11 @@ type peerStream struct {
 
 func (ps *peerStream) Close() {
 	ps.mu.Lock()
+	defer ps.mu.Unlock()
 	select {
 	case <-ps.stop:
 	default:
 		close(ps.stop)
 		close(ps.Values)
 	}
-	ps.mu.Unlock()
 }

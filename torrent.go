@@ -21,6 +21,10 @@ import (
 )
 
 func (t *torrent) PieceNumPendingBytes(index pp.Integer) (count pp.Integer) {
+	piece := t.Pieces[index]
+	if !piece.EverHashed {
+		return t.PieceLength(index)
+	}
 	pendingChunks := t.Pieces[index].PendingChunkSpecs
 	count = pp.Integer(len(pendingChunks)) * chunkSize
 	_lastChunkSpec := lastChunkSpec(t.PieceLength(index))

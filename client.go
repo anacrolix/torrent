@@ -941,6 +941,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 	}
 	if torrent.haveInfo() {
 		torrent.initRequestOrdering(conn)
+		me.replenishConnRequests(torrent, conn)
 	}
 	err = me.connectionLoop(torrent, conn)
 	if err != nil {
@@ -2139,7 +2140,8 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 			conn.pieceRequestOrder.DeletePiece(int(piece))
 		}
 		if t.wantPiece(int(piece)) && conn.PeerHasPiece(piece) {
-			conn.pendPiece(int(piece), t.Pieces[piece].Priority)
+			t.connPendPiece(conn, int(piece))
+			me.replenishConnRequests(t, conn)
 		}
 	}
 	if t.haveAllPieces() && me.noUpload {

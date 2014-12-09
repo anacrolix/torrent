@@ -176,8 +176,11 @@ func (cn *connection) WriteStatus(w io.Writer) {
 	if len(cn.Requests) != 0 {
 		c('D')
 	}
+	if !cn.Interested {
+		c('z')
+	}
 	if cn.PeerChoked && cn.Interested {
-		c('d')
+		c('i')
 	}
 	if !cn.Choked {
 		if cn.PeerInterested {

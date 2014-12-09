@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 
 	"bitbucket.org/anacrolix/go.torrent/util"
 )
@@ -70,7 +71,10 @@ func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
 		}
 	}()
 	disc.mu.Lock()
-	for _, addr := range startAddrs {
+	for i, addr := range startAddrs {
+		if i != 0 {
+			time.Sleep(time.Millisecond)
+		}
 		disc.contact(addr)
 	}
 	disc.mu.Unlock()

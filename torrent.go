@@ -227,7 +227,6 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 		util.CopyExact(piece.Hash[:], hash)
 		t.Pieces = append(t.Pieces, piece)
 		piece.bytesLeftElement = t.IncompletePiecesByBytesLeft.Insert(index)
-		t.pendAllChunkSpecs(pp.Integer(index))
 	}
 	t.assertIncompletePiecesByBytesLeftOrdering()
 	for _, conn := range t.Conns {

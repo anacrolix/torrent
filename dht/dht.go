@@ -232,7 +232,7 @@ type transaction struct {
 	remoteAddr  dHTAddr
 	t           string
 	Response    chan Msg
-	onResponse  func(Msg)
+	onResponse  func(Msg) // Called with the server locked.
 	done        chan struct{}
 	queryPacket []byte
 	timer       *time.Timer
@@ -326,7 +326,9 @@ func (t *transaction) handleResponse(m Msg) {
 	close(t.done)
 	t.mu.Unlock()
 	if t.onResponse != nil {
+		t.s.mu.Lock()
 		t.onResponse(m)
+		t.s.mu.Unlock()
 	}
 	t.queryPacket = nil
 	select {

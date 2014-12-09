@@ -52,6 +52,7 @@ var testIDs = []string{
 	"\x03" + zeroID[1:18] + "\x55\xf0",
 	"\x55" + zeroID[1:17] + "\xff\x55\x0f",
 	"\x54" + zeroID[1:18] + "\x50\x0f",
+	"",
 }
 
 func TestDistances(t *testing.T) {
@@ -64,21 +65,38 @@ func TestDistances(t *testing.T) {
 	if idDistance(testIDs[3], testIDs[2]).BitCount() != 4+8+8 {
 		t.FailNow()
 	}
+	for i := 0; i < 5; i++ {
+		dist := idDistance(testIDs[i], testIDs[5]).Int
+		if dist.Cmp(&maxDistance) != 0 {
+			t.FailNow()
+		}
+	}
+}
+
+func TestMaxDistanceString(t *testing.T) {
+	if string(maxDistance.Bytes()) != "\x01"+zeroID {
+		t.FailNow()
+	}
 }
 
 func TestBadIdStrings(t *testing.T) {
 	var a, b string
+	idDistance(a, b)
+	idDistance(a, zeroID)
+	idDistance(zeroID, b)
 	recoverPanicOrDie(t, func() {
-		idDistance(a, b)
+		idDistance("when", a)
 	})
 	recoverPanicOrDie(t, func() {
-		idDistance(a, zeroID)
+		idDistance(a, "bad")
 	})
 	recoverPanicOrDie(t, func() {
-		idDistance(zeroID, b)
+		idDistance("meets", "evil")
 	})
-	if !idDistance(zeroID, zeroID).IsZero() {
-		t.Fatal("identical IDs should have distance 0")
+	for _, id := range testIDs {
+		if !idDistance(id, id).IsZero() {
+			t.Fatal("identical IDs should have distance 0")
+		}
 	}
 	a = "\x03" + zeroID[1:]
 	b = zeroID

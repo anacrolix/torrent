@@ -1104,8 +1104,33 @@ func (me bitCountDistance) IsZero() bool {
 }
 
 // Below are 2 versions of idDistance. Only one can be active.
+var maxDistance big.Int
 
+func init() {
+	var zero big.Int
+	maxDistance.SetBit(&zero, 160, 1)
+}
+
+// If we don't know the ID for a node, then its distance is more than the
+// furthest possible distance otherwise.
 func idDistance(a, b string) (ret bigIntDistance) {
+	if a == "" && b == "" {
+		return
+	}
+	if a == "" {
+		if len(b) != 20 {
+			panic(b)
+		}
+		ret.Set(&maxDistance)
+		return
+	}
+	if b == "" {
+		if len(a) != 20 {
+			panic(a)
+		}
+		ret.Set(&maxDistance)
+		return
+	}
 	if len(a) != 20 {
 		panic(a)
 	}

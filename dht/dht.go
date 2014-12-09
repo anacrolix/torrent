@@ -156,7 +156,7 @@ func (n *Node) DefinitelyGood() bool {
 	if len(n.id) != 20 {
 		return false
 	}
-	// No reason to think ill of them if they've never responded.
+	// No reason to think ill of them if they've never been queried.
 	if n.lastSentQuery.IsZero() {
 		return true
 	}

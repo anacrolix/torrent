@@ -61,6 +61,7 @@ func TestTorrentInitialState(t *testing.T) {
 		t.Fatal("wrong number of pieces")
 	}
 	p := tor.Pieces[0]
+	tor.pendAllChunkSpecs(0)
 	if len(p.PendingChunkSpecs) != 1 {
 		t.Fatalf("should only be 1 chunk: %v", p.PendingChunkSpecs)
 	}

@@ -1,12 +1,6 @@
  * Properly encapsulate the mmap/span stuff.
- * Finish balancing socketsPerTorrent and half-open, handshakes and worst conns.
- * Use big.Int, and it's Xor(), and SetBytes() functions for DHT node ID distances.
- * Add a coarse-responsive download strategy, that prioritizes pieces instead of chunks.
  * Track upload and download data.
  * Emulate a UDP server in the UDP tracker tests.
- * Ping nodes that stop being good.
- * Cache completed torrent files from magnet.
- * Don't download the last piece preemptively because it appears partial.
  * Make use of sparse file regions in download data for faster hashing.
  * Add an alternative to mmap()'ed torrent data.
- * Implement block lists.
+ * If we're choked and interested, we never send not-interested if there's nothing we want?

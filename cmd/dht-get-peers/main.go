@@ -125,7 +125,6 @@ func setupSignals() {
 	go func() {
 		<-ch
 		close(quitting)
-		s.Close()
 	}()
 }
 

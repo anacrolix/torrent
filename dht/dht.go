@@ -909,17 +909,32 @@ func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *transaction, err er
 	return
 }
 
-func bootstrapAddr() (*net.UDPAddr, error) {
-	return net.ResolveUDPAddr("udp4", "router.utorrent.com:6881")
+func bootstrapAddrs() (addrs []*net.UDPAddr, err error) {
+	for _, addrStr := range []string{
+		"router.utorrent.com:6881",
+		"router.bittorrent.com:6881",
+	} {
+		udpAddr, err := net.ResolveUDPAddr("udp4", addrStr)
+		if err != nil {
+			continue
+		}
+		addrs = append(addrs, udpAddr)
+	}
+	if len(addrs) == 0 {
+		err = errors.New("nothing resolved")
+	}
+	return
 }
 
-func (s *Server) addRootNode() error {
-	addr, err := bootstrapAddr()
+func (s *Server) addRootNodes() error {
+	addrs, err := bootstrapAddrs()
 	if err != nil {
 		return err
 	}
-	s.nodes[addr.String()] = &Node{
-		addr: newDHTAddr(addr),
+	for _, addr := range addrs {
+		s.nodes[addr.String()] = &Node{
+			addr: newDHTAddr(addr),
+		}
 	}
 	return nil
 }
@@ -929,7 +944,7 @@ func (s *Server) bootstrap() (err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.nodes) == 0 {
-		err = s.addRootNode()
+		err = s.addRootNodes()
 	}
 	if err != nil {
 		return

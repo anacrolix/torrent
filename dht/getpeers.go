@@ -37,11 +37,13 @@ func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
 	}()
 	s.mu.Unlock()
 	if len(startAddrs) == 0 {
-		addr, err := bootstrapAddr()
+		addrs, err := bootstrapAddrs()
 		if err != nil {
 			return nil, err
 		}
-		startAddrs = append(startAddrs, addr)
+		for _, addr := range addrs {
+			startAddrs = append(startAddrs, addr)
+		}
 	}
 	disc := &peerDiscovery{
 		peerStream: &peerStream{

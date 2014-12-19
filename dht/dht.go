@@ -475,6 +475,9 @@ func (s *Server) handleQuery(source dHTAddr, m Msg) {
 		s.reply(source, m["t"].(string), nil)
 	case "get_peers":
 		targetID := args["info_hash"].(string)
+		if len(targetID) != 20 {
+			break
+		}
 		var rNodes []NodeInfo
 		// TODO: Reply with "values" list if we have peers instead.
 		for _, node := range s.closestGoodNodes(8, targetID) {

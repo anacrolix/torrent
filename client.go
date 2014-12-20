@@ -1542,14 +1542,14 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 func newTorrent(ih InfoHash, announceList [][]string, halfOpenLimit int) (t *torrent, err error) {
 	t = &torrent{
 		InfoHash: ih,
-		Peers:    make(map[peersKey]Peer, 2000),
+		Peers:    make(map[peersKey]Peer),
 
 		closing:           make(chan struct{}),
 		ceasingNetworking: make(chan struct{}),
 
 		gotMetainfo: make(chan struct{}),
 
-		HalfOpen: make(map[string]struct{}, halfOpenLimit),
+		HalfOpen: make(map[string]struct{}),
 	}
 	t.wantPeers.L = &t.stateMu
 	t.GotMetainfo = t.gotMetainfo

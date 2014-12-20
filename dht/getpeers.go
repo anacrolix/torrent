@@ -2,10 +2,10 @@ package dht
 
 import (
 	"bitbucket.org/anacrolix/go.torrent/util"
+	"bitbucket.org/anacrolix/sync"
 	"github.com/willf/bloom"
 	"log"
 	"net"
-	"sync"
 	"time"
 )
 
@@ -15,10 +15,6 @@ type peerDiscovery struct {
 	pending    int
 	server     *Server
 	infoHash   string
-}
-
-func (me *peerDiscovery) Close() {
-	me.peerStream.Close()
 }
 
 func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
@@ -65,14 +61,14 @@ func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
 			}
 		}
 	}()
-	disc.mu.Lock()
 	for i, addr := range startAddrs {
 		if i != 0 {
 			time.Sleep(time.Millisecond)
 		}
+		disc.mu.Lock()
 		disc.contact(addr)
+		disc.mu.Unlock()
 	}
-	disc.mu.Unlock()
 	return disc.peerStream, nil
 }
 
@@ -102,7 +98,7 @@ func (me *peerDiscovery) contact(addr net.Addr) {
 func (me *peerDiscovery) transactionClosed() {
 	me.pending--
 	if me.pending == 0 {
-		me.Close()
+		me.close()
 		return
 	}
 }
@@ -126,10 +122,8 @@ func (me *peerDiscovery) getPeers(addr net.Addr) error {
 		select {
 		case m := <-t.Response:
 			me.mu.Lock()
-			if nodes := m.Nodes(); len(nodes) != 0 {
-				for _, n := range nodes {
-					me.responseNode(n)
-				}
+			for _, n := range m.Nodes() {
+				me.responseNode(n)
 			}
 			me.mu.Unlock()
 			if vs := extractValues(m); vs != nil {
@@ -177,6 +171,10 @@ type peerStream struct {
 func (ps *peerStream) Close() {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
+	ps.close()
+}
+
+func (ps *peerStream) close() {
 	select {
 	case <-ps.stop:
 	default:

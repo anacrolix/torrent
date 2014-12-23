@@ -1438,7 +1438,7 @@ func (me *Client) openNewConns(t *torrent) {
 		if !me.wantConns(t) {
 			return
 		}
-		if len(t.HalfOpen)+me.handshaking >= me.halfOpenLimit {
+		if len(t.HalfOpen) >= me.halfOpenLimit {
 			return
 		}
 		var (

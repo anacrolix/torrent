@@ -413,7 +413,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		downloadStrategy: cfg.DownloadStrategy,
 		halfOpenLimit:    socketsPerTorrent,
 		dataDir:          cfg.DataDir,
-		disableUTP:       true, // TODO: Write my own UTP library ಠ_ಠ
+		disableUTP:       cfg.DisableUTP,
 		disableTCP:       cfg.DisableTCP,
 
 		quit:     make(chan struct{}),
@@ -421,6 +421,8 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 
 		dataWaits: make(map[*torrent][]dataWait),
 	}
+	// TODO: Write my own UTP library ಠ_ಠ
+	// cl.disableUTP = true
 	cl.event.L = &cl.mu
 
 	if !cfg.NoDefaultBlocklist {

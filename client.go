@@ -1969,14 +1969,7 @@ func (cl *Client) allTorrentsCompleted() bool {
 		if !t.haveInfo() {
 			return false
 		}
-		for e := t.IncompletePiecesByBytesLeft.Front(); e != nil; e = e.Next() {
-			i := e.Value.(int)
-			if t.Pieces[i].Complete() {
-				continue
-			}
-			// If the piece isn't complete, make sure it's not because it's
-			// never been hashed.
-			cl.queueFirstHash(t, i)
+		if t.NumPiecesCompleted() != t.NumPieces() {
 			return false
 		}
 	}
@@ -2043,7 +2036,6 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 		}
 		me.queuePieceCheck(t, req.Index)
 	}
-	t.PieceBytesLeftChanged(int(req.Index))
 
 	// Unprioritize the chunk.
 	me.downloadStrategy.TorrentGotChunk(t, req)
@@ -2124,7 +2116,6 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 			me.openNewConns(t)
 		}
 	}
-	t.PieceBytesLeftChanged(int(piece))
 	for _, conn := range t.Conns {
 		if correct {
 			conn.Post(pp.Message{

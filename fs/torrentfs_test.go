@@ -182,11 +182,10 @@ func TestDownloadOnDemand(t *testing.T) {
 		t.Fatal(err)
 	}
 	leecher, err := torrent.NewClient(&torrent.Config{
-		DataDir:          filepath.Join(layout.BaseDir, "download"),
-		DownloadStrategy: torrent.NewResponsiveDownloadStrategy(0),
-		DisableTrackers:  true,
-		NoDHT:            true,
-		ListenAddr:       ":0",
+		DataDir:         filepath.Join(layout.BaseDir, "download"),
+		DisableTrackers: true,
+		NoDHT:           true,
+		ListenAddr:      ":0",
 
 		NoDefaultBlocklist: true,
 

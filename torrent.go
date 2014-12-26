@@ -58,10 +58,9 @@ type torrent struct {
 	// announcing, and communicating with peers.
 	ceasingNetworking chan struct{}
 
-	InfoHash                    InfoHash
-	Pieces                      []*torrentPiece
-	IncompletePiecesByBytesLeft *OrderedList
-	length                      int64
+	InfoHash InfoHash
+	Pieces   []*torrentPiece
+	length   int64
 	// Prevent mutations to Data memory maps while in use as they're not safe.
 	dataLock sync.RWMutex
 	Data     *mmap_span.MMapSpan
@@ -121,34 +120,6 @@ func (t *torrent) CeaseNetworking() {
 	close(t.ceasingNetworking)
 	for _, c := range t.Conns {
 		c.Close()
-	}
-}
-
-func (t *torrent) assertIncompletePiecesByBytesLeftOrdering() {
-	allIndexes := make(map[int]struct{}, t.NumPieces())
-	for i := 0; i < t.NumPieces(); i++ {
-		allIndexes[i] = struct{}{}
-	}
-	var lastBytesLeft int
-	for e := t.IncompletePiecesByBytesLeft.Front(); e != nil; e = e.Next() {
-		i := e.Value.(int)
-		if _, ok := allIndexes[i]; !ok {
-			panic("duplicate entry")
-		}
-		delete(allIndexes, i)
-		if t.Pieces[i].Complete() {
-			panic("complete piece")
-		}
-		bytesLeft := int(t.PieceNumPendingBytes(pp.Integer(i)))
-		if bytesLeft < lastBytesLeft {
-			panic("ordering broken")
-		}
-		lastBytesLeft = bytesLeft
-	}
-	for i := range allIndexes {
-		if !t.Pieces[i].Complete() {
-			panic("leaked incomplete piece")
-		}
 	}
 }
 
@@ -214,25 +185,12 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 		return
 	}
 	t.length = t.Data.Size()
-	t.IncompletePiecesByBytesLeft = NewList(func(a, b interface{}) bool {
-		apb := t.PieceNumPendingBytes(pp.Integer(a.(int)))
-		bpb := t.PieceNumPendingBytes(pp.Integer(b.(int)))
-		if apb < bpb {
-			return true
-		}
-		if apb > bpb {
-			return false
-		}
-		return a.(int) < b.(int)
-	})
-	for index, hash := range infoPieceHashes(&md) {
+	for _, hash := range infoPieceHashes(&md) {
 		piece := &torrentPiece{}
 		piece.Event.L = eventLocker
 		util.CopyExact(piece.Hash[:], hash)
 		t.Pieces = append(t.Pieces, piece)
-		piece.bytesLeftElement = t.IncompletePiecesByBytesLeft.Insert(index)
 	}
-	t.assertIncompletePiecesByBytesLeftOrdering()
 	for _, conn := range t.Conns {
 		t.initRequestOrdering(conn)
 		if err := conn.setNumPieces(t.NumPieces()); err != nil {
@@ -578,17 +536,7 @@ func (t *torrent) pendAllChunkSpecs(index pp.Integer) {
 	for _, cs := range t.pieceChunks(int(index)) {
 		pcss[cs] = struct{}{}
 	}
-	t.IncompletePiecesByBytesLeft.ValueChanged(piece.bytesLeftElement)
 	return
-}
-
-func (t *torrent) PieceBytesLeftChanged(index int) {
-	p := t.Pieces[index]
-	if p.Complete() {
-		t.IncompletePiecesByBytesLeft.Remove(p.bytesLeftElement)
-	} else {
-		t.IncompletePiecesByBytesLeft.ValueChanged(p.bytesLeftElement)
-	}
 }
 
 type Peer struct {

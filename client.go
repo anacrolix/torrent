@@ -1902,9 +1902,6 @@ func (cl *Client) announceTorrentTrackersFastStart(req *tracker.AnnounceRequest,
 			outstanding++
 			go func(tr tracker.Client) {
 				err := cl.announceTorrentSingleTracker(tr, req, t)
-				if err != nil {
-					log.Printf("error announcing %q to %s: %s", t, tr, err)
-				}
 				oks <- err == nil
 			}(tr)
 		}
@@ -1941,11 +1938,12 @@ newAnnounce:
 		req.Left = t.BytesLeft()
 		trackers = t.Trackers
 		cl.mu.RUnlock()
+		numTrackersTried := 0
 		for _, tier := range trackers {
 			for trIndex, tr := range tier {
+				numTrackersTried++
 				err := cl.announceTorrentSingleTracker(tr, &req, t)
 				if err != nil {
-					log.Printf("error announcing %s to %s: %s", t, tr, err)
 					continue
 				}
 				// Float the successful announce to the top of the tier. If
@@ -1958,6 +1956,9 @@ newAnnounce:
 				req.Event = tracker.None
 				continue newAnnounce
 			}
+		}
+		if numTrackersTried != 0 {
+			log.Printf("%s: all trackers failed", t)
 		}
 		// TODO: Wait until trackers are added if there are none.
 		time.Sleep(10 * time.Second)

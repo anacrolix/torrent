@@ -46,29 +46,34 @@ func recoverPanicOrDie(t *testing.T, f func()) {
 
 const zeroID = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
-var testIDs = []string{
-	zeroID,
-	"\x03" + zeroID[1:],
-	"\x03" + zeroID[1:18] + "\x55\xf0",
-	"\x55" + zeroID[1:17] + "\xff\x55\x0f",
-	"\x54" + zeroID[1:18] + "\x50\x0f",
-	"",
+var testIDs []nodeID
+
+func init() {
+	for _, s := range []string{
+		zeroID,
+		"\x03" + zeroID[1:],
+		"\x03" + zeroID[1:18] + "\x55\xf0",
+		"\x55" + zeroID[1:17] + "\xff\x55\x0f",
+		"\x54" + zeroID[1:18] + "\x50\x0f",
+		"",
+	} {
+		testIDs = append(testIDs, nodeIDFromString(s))
+	}
 }
 
 func TestDistances(t *testing.T) {
-	if idDistance(testIDs[3], testIDs[0]).BitCount() != 4+8+4+4 {
-		t.FailNow()
+	expectBitcount := func(i big.Int, count int) {
+		if bitCount(i) != count {
+			t.Fatalf("expected bitcount of %d: got %d", count, bitCount(i))
+		}
 	}
-	if idDistance(testIDs[3], testIDs[1]).BitCount() != 4+8+4+4 {
-		t.FailNow()
-	}
-	if idDistance(testIDs[3], testIDs[2]).BitCount() != 4+8+8 {
-		t.FailNow()
-	}
+	expectBitcount(testIDs[3].Distance(&testIDs[0]), 4+8+4+4)
+	expectBitcount(testIDs[3].Distance(&testIDs[1]), 4+8+4+4)
+	expectBitcount(testIDs[3].Distance(&testIDs[2]), 4+8+8)
 	for i := 0; i < 5; i++ {
-		dist := idDistance(testIDs[i], testIDs[5]).Int
+		dist := testIDs[i].Distance(&testIDs[5])
 		if dist.Cmp(&maxDistance) != 0 {
-			t.FailNow()
+			t.Fatal("expected max distance for comparison with unset node id")
 		}
 	}
 }
@@ -76,37 +81,6 @@ func TestDistances(t *testing.T) {
 func TestMaxDistanceString(t *testing.T) {
 	if string(maxDistance.Bytes()) != "\x01"+zeroID {
 		t.FailNow()
-	}
-}
-
-func TestBadIdStrings(t *testing.T) {
-	var a, b string
-	idDistance(a, b)
-	idDistance(a, zeroID)
-	idDistance(zeroID, b)
-	recoverPanicOrDie(t, func() {
-		idDistance("when", a)
-	})
-	recoverPanicOrDie(t, func() {
-		idDistance(a, "bad")
-	})
-	recoverPanicOrDie(t, func() {
-		idDistance("meets", "evil")
-	})
-	for _, id := range testIDs {
-		if !idDistance(id, id).IsZero() {
-			t.Fatal("identical IDs should have distance 0")
-		}
-	}
-	a = "\x03" + zeroID[1:]
-	b = zeroID
-	if idDistance(a, b).BitCount() != 2 {
-		t.FailNow()
-	}
-	a = "\x03" + zeroID[1:18] + "\x55\xf0"
-	b = "\x55" + zeroID[1:17] + "\xff\x55\x0f"
-	if c := idDistance(a, b).BitCount(); c != 20 {
-		t.Fatal(c)
 	}
 }
 
@@ -120,9 +94,9 @@ func TestClosestNodes(t *testing.T) {
 	}
 	m := map[string]bool{}
 	for _, id := range cn.IDs() {
-		m[id] = true
+		m[id.String()] = true
 	}
-	if !m[testIDs[3]] || !m[testIDs[4]] {
+	if !m[testIDs[3].String()] || !m[testIDs[4].String()] {
 		t.FailNow()
 	}
 }
@@ -153,4 +127,29 @@ func TestDHTDefaultConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
+}
+
+func TestPing(t *testing.T) {
+	srv, err := NewServer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	srv0, err := NewServer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv0.Close()
+	tn, err := srv.Ping(&net.UDPAddr{
+		IP:   []byte{127, 0, 0, 1},
+		Port: srv0.LocalAddr().(*net.UDPAddr).Port,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tn.Close()
+	msg := <-tn.Response
+	if msg.ID() != srv0.IDString() {
+		t.FailNow()
+	}
 }

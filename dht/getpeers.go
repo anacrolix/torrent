@@ -1,12 +1,12 @@
 package dht
 
 import (
+	"log"
+	"time"
+
 	"bitbucket.org/anacrolix/go.torrent/util"
 	"bitbucket.org/anacrolix/sync"
 	"github.com/willf/bloom"
-	"log"
-	"net"
-	"time"
 )
 
 type peerDiscovery struct {
@@ -19,7 +19,7 @@ type peerDiscovery struct {
 
 func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
 	s.mu.Lock()
-	startAddrs := func() (ret []net.Addr) {
+	startAddrs := func() (ret []dHTAddr) {
 		for _, n := range s.closestGoodNodes(160, infoHash) {
 			ret = append(ret, n.addr)
 		}
@@ -32,7 +32,7 @@ func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
 			return nil, err
 		}
 		for _, addr := range addrs {
-			startAddrs = append(startAddrs, addr)
+			startAddrs = append(startAddrs, newDHTAddr(addr))
 		}
 	}
 	disc := &peerDiscovery{
@@ -41,7 +41,7 @@ func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
 			stop:   make(chan struct{}),
 			values: make(chan peerStreamValue),
 		},
-		triedAddrs: bloom.NewWithEstimates(500000, 0.01),
+		triedAddrs: bloom.NewWithEstimates(10000, 0.01),
 		server:     s,
 		infoHash:   infoHash,
 	}
@@ -72,7 +72,7 @@ func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
 	return disc.peerStream, nil
 }
 
-func (me *peerDiscovery) gotNodeAddr(addr net.Addr) {
+func (me *peerDiscovery) gotNodeAddr(addr dHTAddr) {
 	if util.AddrPort(addr) == 0 {
 		// Not a contactable address.
 		return
@@ -86,7 +86,7 @@ func (me *peerDiscovery) gotNodeAddr(addr net.Addr) {
 	me.contact(addr)
 }
 
-func (me *peerDiscovery) contact(addr net.Addr) {
+func (me *peerDiscovery) contact(addr dHTAddr) {
 	me.triedAddrs.Add([]byte(addr.String()))
 	if err := me.getPeers(addr); err != nil {
 		log.Printf("error sending get_peers request to %s: %s", addr, err)
@@ -111,7 +111,7 @@ func (me *peerDiscovery) closingCh() chan struct{} {
 	return me.peerStream.stop
 }
 
-func (me *peerDiscovery) getPeers(addr net.Addr) error {
+func (me *peerDiscovery) getPeers(addr dHTAddr) error {
 	me.server.mu.Lock()
 	defer me.server.mu.Unlock()
 	t, err := me.server.getPeers(addr, me.infoHash)

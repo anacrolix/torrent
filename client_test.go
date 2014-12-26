@@ -116,6 +116,10 @@ func TestUTPRawConn(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer l.Close()
+	utpAddr, err := utp.ResolveAddr("utp", fmt.Sprintf("localhost:%d", util.AddrPort(l.Addr())))
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() {
 		for {
 			_, err := l.Accept()
@@ -125,7 +129,7 @@ func TestUTPRawConn(t *testing.T) {
 		}
 	}()
 	// Connect a UTP peer to see if the RawConn will still work.
-	utpPeer, err := utp.DialUTP("utp", nil, l.Addr().(*utp.Addr))
+	utpPeer, err := utp.DialUTP("utp", nil, utpAddr)
 	if err != nil {
 		t.Fatalf("error dialing utp listener: %s", err)
 	}
@@ -156,8 +160,12 @@ func TestUTPRawConn(t *testing.T) {
 			}
 		}
 	}()
+	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", util.AddrPort(l.Addr())))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < N; i++ {
-		_, err := peer.WriteTo([]byte(fmt.Sprintf("%d", i)), l.Addr().(*utp.Addr).Addr)
+		_, err := peer.WriteTo([]byte(fmt.Sprintf("%d", i)), udpAddr)
 		if err != nil {
 			t.Fatal(err)
 		}

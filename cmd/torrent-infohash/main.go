@@ -3,8 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/anacrolix/libtorgo/metainfo"
 	"log"
+
+	"github.com/anacrolix/libtorgo/metainfo"
 )
 
 func main() {

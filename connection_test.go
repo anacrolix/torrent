@@ -1,9 +1,10 @@
 package torrent
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"testing"
 	"time"
+
+	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
 )
 
 func TestCancelRequestOptimized(t *testing.T) {

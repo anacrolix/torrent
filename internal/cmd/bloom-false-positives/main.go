@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/willf/bloom"
 	"os"
+
+	"github.com/willf/bloom"
 )
 
 func main() {

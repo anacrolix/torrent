@@ -572,6 +572,7 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 		if blockRange != nil {
 			inboundConnsBlocked.Add(1)
 			log.Printf("inbound connection from %s blocked by %s", conn.RemoteAddr(), blockRange)
+			conn.Close()
 			continue
 		}
 		go func() {
@@ -599,6 +600,9 @@ type dialResult struct {
 func doDial(dial func() (net.Conn, error), ch chan dialResult, utp bool) {
 	conn, err := dial()
 	if err != nil {
+		if conn != nil {
+			conn.Close()
+		}
 		conn = nil // Pedantic
 	}
 	ch <- dialResult{conn, utp}

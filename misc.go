@@ -99,22 +99,6 @@ func newRequest(index, begin, length peer_protocol.Integer) request {
 	return request{index, chunkSpec{begin, length}}
 }
 
-type pieceByBytesPendingSlice struct {
-	Pending, Indices []peer_protocol.Integer
-}
-
-func (pcs pieceByBytesPendingSlice) Len() int {
-	return len(pcs.Indices)
-}
-
-func (me pieceByBytesPendingSlice) Less(i, j int) bool {
-	return me.Pending[me.Indices[i]] < me.Pending[me.Indices[j]]
-}
-
-func (me pieceByBytesPendingSlice) Swap(i, j int) {
-	me.Indices[i], me.Indices[j] = me.Indices[j], me.Indices[i]
-}
-
 var (
 	// Requested data not yet available.
 	ErrDataNotReady = errors.New("data not ready")

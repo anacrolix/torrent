@@ -1,16 +1,11 @@
 package dht
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/iplist"
-	"bitbucket.org/anacrolix/go.torrent/logonce"
-	"bitbucket.org/anacrolix/go.torrent/util"
-	"bitbucket.org/anacrolix/sync"
 	"crypto"
 	_ "crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/anacrolix/libtorgo/bencode"
 	"io"
 	"log"
 	"math/big"
@@ -18,6 +13,12 @@ import (
 	"net"
 	"os"
 	"time"
+
+	"bitbucket.org/anacrolix/go.torrent/iplist"
+	"bitbucket.org/anacrolix/go.torrent/logonce"
+	"bitbucket.org/anacrolix/go.torrent/util"
+	"bitbucket.org/anacrolix/sync"
+	"github.com/anacrolix/libtorgo/bencode"
 )
 
 const maxNodes = 10000
@@ -853,49 +854,6 @@ func (t *transaction) setOnResponse(f func(m Msg)) {
 		panic(t.onResponse)
 	}
 	t.onResponse = f
-}
-
-func unmarshalNodeInfoBinary(b []byte) (ret []NodeInfo, err error) {
-	if len(b)%26 != 0 {
-		err = errors.New("bad buffer length")
-		return
-	}
-	ret = make([]NodeInfo, 0, len(b)/26)
-	for i := 0; i < len(b); i += 26 {
-		var ni NodeInfo
-		err = ni.UnmarshalCompact(b[i : i+26])
-		if err != nil {
-			return
-		}
-		ret = append(ret, ni)
-	}
-	return
-}
-
-func extractNodes(d Msg) (nodes []NodeInfo, err error) {
-	if d["y"] != "r" {
-		return
-	}
-	r, ok := d["r"]
-	if !ok {
-		err = errors.New("missing r dict")
-		return
-	}
-	rd, ok := r.(map[string]interface{})
-	if !ok {
-		err = errors.New("bad r value type")
-		return
-	}
-	n, ok := rd["nodes"]
-	if !ok {
-		return
-	}
-	ns, ok := n.(string)
-	if !ok {
-		err = errors.New("bad nodes value type")
-		return
-	}
-	return unmarshalNodeInfoBinary([]byte(ns))
 }
 
 func (s *Server) liftNodes(d Msg) {

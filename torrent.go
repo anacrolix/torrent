@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"container/heap"
-	"container/list"
 	"fmt"
 	"io"
 	"log"
@@ -11,11 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/util"
-
 	"bitbucket.org/anacrolix/go.torrent/mmap_span"
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
+	"bitbucket.org/anacrolix/go.torrent/util"
 	"github.com/anacrolix/libtorgo/bencode"
 	"github.com/anacrolix/libtorgo/metainfo"
 )
@@ -36,15 +34,6 @@ func (t *torrent) PieceNumPendingBytes(index pp.Integer) (count pp.Integer) {
 	return
 }
 
-type pieceBytesLeft struct {
-	Piece, BytesLeft int
-}
-
-type torrentPiece struct {
-	piece
-	bytesLeftElement *list.Element
-}
-
 type peersKey struct {
 	IPBytes string
 	Port    int
@@ -59,7 +48,7 @@ type torrent struct {
 	ceasingNetworking chan struct{}
 
 	InfoHash InfoHash
-	Pieces   []*torrentPiece
+	Pieces   []*piece
 	length   int64
 	// Prevent mutations to Data memory maps while in use as they're not safe.
 	dataLock sync.RWMutex
@@ -186,7 +175,7 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 	}
 	t.length = t.Data.Size()
 	for _, hash := range infoPieceHashes(&md) {
-		piece := &torrentPiece{}
+		piece := &piece{}
 		piece.Event.L = eventLocker
 		util.CopyExact(piece.Hash[:], hash)
 		t.Pieces = append(t.Pieces, piece)

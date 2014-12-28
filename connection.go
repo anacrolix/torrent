@@ -328,11 +328,6 @@ func (c *connection) SetInterested(interested bool) {
 	c.Interested = interested
 }
 
-var (
-	// Four consecutive zero bytes that comprise a keep alive on the wire.
-	keepAliveBytes [4]byte
-)
-
 // Writes buffers to the socket from the write channel.
 func (conn *connection) writer() {
 	// Reduce write syscalls.

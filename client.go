@@ -1157,6 +1157,8 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			for r := range c.Requests {
 				me.connDeleteRequest(t, c, r)
 			}
+			// We can then reset our interest.
+			me.replenishConnRequests(t, c)
 		case pp.Unchoke:
 			c.PeerChoked = false
 			me.peerUnchoked(t, c)
@@ -1619,6 +1621,10 @@ func (t *torrent) addTrackers(announceList [][]string) {
 type Torrent struct {
 	cl *Client
 	*torrent
+}
+
+func (t Torrent) MetainfoFilepath() string {
+	return filepath.Join(t.cl.ConfigDir(), "torrents", t.InfoHash.HexString()+".torrent")
 }
 
 func (t Torrent) AddPeers(pp []Peer) error {

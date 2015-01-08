@@ -8,10 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/h2so5/utp"
-
 	"bitbucket.org/anacrolix/go.torrent/testutil"
 	"bitbucket.org/anacrolix/go.torrent/util"
+	"bitbucket.org/anacrolix/utp"
 	"github.com/anacrolix/libtorgo/bencode"
 )
 
@@ -111,15 +110,11 @@ func TestReducedDialTimeout(t *testing.T) {
 }
 
 func TestUTPRawConn(t *testing.T) {
-	l, err := utp.Listen("utp", &utp.Addr{&net.UDPAddr{Port: 0}})
+	l, err := utp.NewSocket("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer l.Close()
-	utpAddr, err := utp.ResolveAddr("utp", fmt.Sprintf("localhost:%d", util.AddrPort(l.Addr())))
-	if err != nil {
-		t.Fatal(err)
-	}
 	go func() {
 		for {
 			_, err := l.Accept()
@@ -129,7 +124,10 @@ func TestUTPRawConn(t *testing.T) {
 		}
 	}()
 	// Connect a UTP peer to see if the RawConn will still work.
-	utpPeer, err := utp.DialUTP("utp", nil, utpAddr)
+	utpPeer, err := func() *utp.Socket {
+		s, _ := utp.NewSocket("")
+		return s
+	}().Dial(fmt.Sprintf("localhost:%d", util.AddrPort(l.Addr())))
 	if err != nil {
 		t.Fatalf("error dialing utp listener: %s", err)
 	}
@@ -148,7 +146,7 @@ func TestUTPRawConn(t *testing.T) {
 		defer close(readerStopped)
 		b := make([]byte, 500)
 		for i := 0; i < N; i++ {
-			n, _, err := l.RawConn.ReadFrom(b)
+			n, _, err := l.ReadFrom(b)
 			if err != nil {
 				t.Fatalf("error reading from raw conn: %s", err)
 			}

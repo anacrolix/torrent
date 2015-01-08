@@ -36,21 +36,17 @@ import (
 	"syscall"
 	"time"
 
-	"bitbucket.org/anacrolix/sync"
-
-	"bitbucket.org/anacrolix/go.torrent/internal/pieceordering"
-
-	"github.com/h2so5/utp"
-
-	"github.com/anacrolix/libtorgo/bencode"
-	"github.com/anacrolix/libtorgo/metainfo"
-
 	"bitbucket.org/anacrolix/go.torrent/dht"
+	"bitbucket.org/anacrolix/go.torrent/internal/pieceordering"
 	"bitbucket.org/anacrolix/go.torrent/iplist"
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	_ "bitbucket.org/anacrolix/go.torrent/tracker/udp"
 	. "bitbucket.org/anacrolix/go.torrent/util"
+	"bitbucket.org/anacrolix/sync"
+	"bitbucket.org/anacrolix/utp"
+	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/libtorgo/metainfo"
 )
 
 var (
@@ -139,6 +135,7 @@ type Client struct {
 	halfOpenLimit    int
 	peerID           [20]byte
 	listeners        []net.Listener
+	utpSock          *utp.Socket
 	disableTrackers  bool
 	downloadStrategy DownloadStrategy
 	dHT              *dht.Server
@@ -470,20 +467,14 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		cl.listeners = append(cl.listeners, l)
 		go cl.acceptConnections(l, false)
 	}
-	var utpL *utp.Listener
+	var utpSock *utp.Socket
 	if !cl.disableUTP {
-		var utpAddr *utp.Addr
-		utpAddr, err = utp.ResolveAddr("utp", listenAddr())
-		if err != nil {
-			err = fmt.Errorf("error resolving utp listen addr: %s", err)
-			return
-		}
-		utpL, err = utp.Listen("utp", utpAddr)
+		utpSock, err = utp.NewSocket(listenAddr())
 		if err != nil {
 			return
 		}
-		cl.listeners = append(cl.listeners, utpL)
-		go cl.acceptConnections(utpL, true)
+		cl.listeners = append(cl.listeners, utpSock)
+		go cl.acceptConnections(utpSock, true)
 	}
 	if !cfg.NoDHT {
 		dhtCfg := cfg.DHTConfig
@@ -493,8 +484,8 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if dhtCfg.Addr == "" {
 			dhtCfg.Addr = listenAddr()
 		}
-		if dhtCfg.Conn == nil && utpL != nil {
-			dhtCfg.Conn = utpL.RawConn
+		if dhtCfg.Conn == nil && utpSock != nil {
+			dhtCfg.Conn = utpSock
 		}
 		cl.dHT, err = dht.NewServer(dhtCfg)
 		if cl.ipBlockList != nil {
@@ -669,7 +660,7 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 		resCh := make(chan dialResult, left)
 		if !me.disableUTP {
 			go doDial(func() (net.Conn, error) {
-				return (&utp.Dialer{Timeout: dialTimeout}).Dial("utp", addr)
+				return me.utpSock.DialTimeout(addr, dialTimeout)
 			}, resCh, true)
 		}
 		if !me.disableTCP {

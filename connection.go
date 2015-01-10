@@ -104,6 +104,8 @@ func (cn *connection) pendPiece(piece int, priority piecePriority) {
 	case piecePriorityNow:
 		key -= len(cn.piecePriorities)
 	}
+	// Favour earlier pieces more than later pieces.
+	key -= piece / 2
 	cn.pieceRequestOrder.SetPiece(piece, key)
 }
 

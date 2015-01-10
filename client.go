@@ -467,14 +467,13 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		cl.listeners = append(cl.listeners, l)
 		go cl.acceptConnections(l, false)
 	}
-	var utpSock *utp.Socket
 	if !cl.disableUTP {
-		utpSock, err = utp.NewSocket(listenAddr())
+		cl.utpSock, err = utp.NewSocket(listenAddr())
 		if err != nil {
 			return
 		}
-		cl.listeners = append(cl.listeners, utpSock)
-		go cl.acceptConnections(utpSock, true)
+		cl.listeners = append(cl.listeners, cl.utpSock)
+		go cl.acceptConnections(cl.utpSock, true)
 	}
 	if !cfg.NoDHT {
 		dhtCfg := cfg.DHTConfig
@@ -484,8 +483,8 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if dhtCfg.Addr == "" {
 			dhtCfg.Addr = listenAddr()
 		}
-		if dhtCfg.Conn == nil && utpSock != nil {
-			dhtCfg.Conn = utpSock
+		if dhtCfg.Conn == nil && cl.utpSock != nil {
+			dhtCfg.Conn = cl.utpSock
 		}
 		cl.dHT, err = dht.NewServer(dhtCfg)
 		if cl.ipBlockList != nil {

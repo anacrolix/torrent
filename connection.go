@@ -94,8 +94,8 @@ func (cn *connection) pendPiece(piece int, priority piecePriority) {
 		return
 	}
 	key := cn.piecePriorities[piece]
-	// TODO: Have some kind of overlap here, so there's some probabilistic
-	// favouring of higher priority pieces.
+	// There is overlap here so there's some probabilistic favouring of higher
+	// priority pieces.
 	switch priority {
 	case piecePriorityReadahead:
 		key -= len(cn.piecePriorities) / 3

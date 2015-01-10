@@ -287,7 +287,7 @@ func (cl *Client) readRaisePiecePriorities(t *torrent, off, _len int64) {
 		return
 	}
 	cl.raisePiecePriority(t, index, piecePriorityNext)
-	for i := 0; i < 5; i++ {
+	for i := 0; i < t.numConnsUnchoked()-2; i++ {
 		index++
 		if index >= t.NumPieces() {
 			break

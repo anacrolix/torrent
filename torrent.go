@@ -77,6 +77,15 @@ type torrent struct {
 	GotMetainfo <-chan struct{}
 }
 
+func (t *torrent) numConnsUnchoked() (num int) {
+	for _, c := range t.Conns {
+		if !c.PeerChoked {
+			num++
+		}
+	}
+	return
+}
+
 func (t *torrent) addrActive(addr string) bool {
 	if _, ok := t.HalfOpen[addr]; ok {
 		return true

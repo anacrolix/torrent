@@ -65,7 +65,7 @@ func (ca cachedAddr) UDPAddr() *net.UDPAddr {
 	return ca.a.(*net.UDPAddr)
 }
 
-func newDHTAddr(addr *net.UDPAddr) dHTAddr {
+func newDHTAddr(addr net.Addr) dHTAddr {
 	return cachedAddr{addr, addr.String()}
 }
 
@@ -499,7 +499,7 @@ func (s *Server) serve() error {
 			logonce.Stderr.Printf("received dht packet exceeds buffer size")
 			continue
 		}
-		s.processPacket(b[:n], newDHTAddr(addr.(*net.UDPAddr)))
+		s.processPacket(b[:n], newDHTAddr(addr))
 	}
 }
 
@@ -991,8 +991,8 @@ func (s *Server) bootstrap() (err error) {
 			var t *transaction
 			t, err = s.findNode(node.addr, s.id)
 			if err != nil {
-				log.Printf("error sending find_node: %s", err)
-				continue
+				err = fmt.Errorf("error sending find_node: %s", err)
+				return
 			}
 			outstanding.Add(1)
 			go func() {

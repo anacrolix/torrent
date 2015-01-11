@@ -17,6 +17,7 @@ import (
 func TestClientDefault(t *testing.T) {
 	cl, err := NewClient(&Config{
 		NoDefaultBlocklist: true,
+		ListenAddr:         ":0",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -176,5 +177,17 @@ func TestUTPRawConn(t *testing.T) {
 	}
 	if msgsReceived != N {
 		t.Fatalf("messages received: %d", msgsReceived)
+	}
+}
+
+func TestTwoClientsArbitraryPorts(t *testing.T) {
+	for i := 0; i < 2; i++ {
+		cl, err := NewClient(&Config{
+			ListenAddr: ":0",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cl.Stop()
 	}
 }

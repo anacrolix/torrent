@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -13,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"bitbucket.org/anacrolix/go.torrent"
 	"bitbucket.org/anacrolix/go.torrent/testutil"
@@ -73,7 +73,6 @@ func newGreetingLayout() (tl testLayout, err error) {
 	metaInfoBuf := &bytes.Buffer{}
 	testutil.CreateMetaInfo(name, metaInfoBuf)
 	tl.Metainfo, err = metainfo.Load(metaInfoBuf)
-	log.Printf("%x", tl.Metainfo.Info.Pieces)
 	return
 }
 
@@ -98,7 +97,6 @@ func TestUnmountWedged(t *testing.T) {
 		NoDefaultBlocklist: true,
 	})
 	defer client.Stop()
-	t.Logf("%+v", *layout.Metainfo)
 	client.AddTorrent(layout.Metainfo)
 	fs := New(client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
@@ -106,10 +104,6 @@ func TestUnmountWedged(t *testing.T) {
 		if strings.Contains(err.Error(), "fuse") {
 			t.Skip(err)
 		}
-		t.Fatal(err)
-	}
-	<-fuseConn.Ready
-	if err := fuseConn.MountError; err != nil {
 		t.Fatal(err)
 	}
 	go func() {
@@ -121,6 +115,10 @@ func TestUnmountWedged(t *testing.T) {
 		}
 		server.Serve(fuseConn)
 	}()
+	<-fuseConn.Ready
+	if err := fuseConn.MountError; err != nil {
+		t.Fatal(err)
+	}
 	// Read the greeting file, though it will never be available. This should
 	// "wedge" FUSE, requiring the fs object to be forcibly destroyed. The
 	// read call will return with a FS error.
@@ -144,6 +142,7 @@ func TestUnmountWedged(t *testing.T) {
 		err = fuse.Unmount(layout.MountDir)
 		if err != nil {
 			t.Logf("error unmounting: %s", err)
+			time.Sleep(time.Millisecond)
 		} else {
 			break
 		}

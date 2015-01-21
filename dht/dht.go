@@ -21,7 +21,7 @@ import (
 	"github.com/anacrolix/libtorgo/bencode"
 )
 
-const maxNodes = 10000
+const maxNodes = 1000
 
 // Uniquely identifies a transaction to us.
 type transactionKey struct {

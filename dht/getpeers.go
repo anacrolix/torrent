@@ -41,7 +41,7 @@ func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
 			stop:   make(chan struct{}),
 			values: make(chan peerStreamValue),
 		},
-		triedAddrs: bloom.NewWithEstimates(10000, 0.01),
+		triedAddrs: bloom.NewWithEstimates(1000, 0.5),
 		server:     s,
 		infoHash:   infoHash,
 	}

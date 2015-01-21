@@ -334,10 +334,11 @@ func (c *connection) SetInterested(interested bool) {
 func (conn *connection) writer() {
 	// Reduce write syscalls.
 	buf := bufio.NewWriterSize(conn.Socket, 0x8000) // 32 KiB
-	// Returns immediately if the buffer contains data.
+	// Receives when buf is not empty.
 	notEmpty := make(chan struct{}, 1)
 	for {
 		if buf.Buffered() != 0 {
+			// Make sure it's receivable.
 			select {
 			case notEmpty <- struct{}{}:
 			default:

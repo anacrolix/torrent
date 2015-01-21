@@ -820,7 +820,7 @@ func (pc peerConn) Read(b []byte) (n int, err error) {
 	// Keep-alives should be received every 2 mins. Give a bit of gracetime.
 	err = pc.Conn.SetReadDeadline(time.Now().Add(150 * time.Second))
 	if err != nil {
-		return
+		err = fmt.Errorf("error setting read deadline: %s", err)
 	}
 	n, err = pc.Conn.Read(b)
 	if err != nil {

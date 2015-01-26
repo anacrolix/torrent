@@ -286,6 +286,45 @@ func (t *torrent) NewMetadataExtensionMessage(c *connection, msgType int, piece 
 	}
 }
 
+type PieceStatusCharSequence struct {
+	Char  byte
+	Count int
+}
+
+func (t *torrent) PieceStatusCharSequences() []PieceStatusCharSequence {
+	t.stateMu.Lock()
+	defer t.stateMu.Unlock()
+	return t.pieceStatusCharSequences()
+}
+
+// Returns the length of sequences of identical piece status chars.
+func (t *torrent) pieceStatusCharSequences() (ret []PieceStatusCharSequence) {
+	var (
+		char  byte
+		count int
+	)
+	writeSequence := func() {
+		ret = append(ret, PieceStatusCharSequence{char, count})
+	}
+	if len(t.Pieces) != 0 {
+		char = t.pieceStatusChar(0)
+	}
+	for index := range t.Pieces {
+		char1 := t.pieceStatusChar(index)
+		if char1 == char {
+			count++
+		} else {
+			writeSequence()
+			char = char1
+			count = 1
+		}
+	}
+	if count != 0 {
+		writeSequence()
+	}
+	return
+}
+
 func (t *torrent) WriteStatus(w io.Writer) {
 	fmt.Fprintf(w, "Infohash: %x\n", t.InfoHash)
 	fmt.Fprintf(w, "Piece length: %s\n", func() string {
@@ -297,28 +336,8 @@ func (t *torrent) WriteStatus(w io.Writer) {
 	}())
 	if t.haveInfo() {
 		fmt.Fprint(w, "Pieces: ")
-		var (
-			char  byte
-			count int
-		)
-		writeSequence := func() {
-			fmt.Fprintf(w, "%d%c ", count, char)
-		}
-		if len(t.Pieces) != 0 {
-			char = t.pieceStatusChar(0)
-		}
-		for index := range t.Pieces {
-			char1 := t.pieceStatusChar(index)
-			if char1 == char {
-				count++
-			} else {
-				writeSequence()
-				char = char1
-				count = 1
-			}
-		}
-		if count != 0 {
-			writeSequence()
+		for _, seq := range t.pieceStatusCharSequences() {
+			fmt.Fprintf(w, "%d%c ", seq.Count, seq.Char)
 		}
 		fmt.Fprintln(w)
 	}

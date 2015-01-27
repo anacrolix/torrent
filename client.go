@@ -1613,6 +1613,53 @@ type Torrent struct {
 	*torrent
 }
 
+type File struct {
+	t      Torrent
+	path   string
+	offset int64
+	length int64
+}
+
+func (f *File) Length() int64 {
+	return f.length
+}
+
+func (f *File) PrioritizeRegion(off, len int64) {
+	if off < 0 || off >= f.length {
+		return
+	}
+	if off+len > f.length {
+		len = f.length - off
+	}
+	off += f.offset
+	f.t.SetRegionPriority(off, len)
+}
+
+// Returns handles to the files in the torrent. This requires the metainfo is
+// available first.
+func (t Torrent) Files() (ret []File) {
+	var offset int64
+	for _, fi := range t.Info.UpvertedFiles() {
+		ret = append(ret, File{
+			t,
+			strings.Join(fi.Path, "/"),
+			offset,
+			fi.Length,
+		})
+		offset += fi.Length
+	}
+	return
+}
+
+func (t Torrent) SetRegionPriority(off, len int64) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	pieceSize := int64(t.UsualPieceSize())
+	for i := off / pieceSize; i*pieceSize < off+len; i++ {
+		t.cl.prioritizePiece(t.torrent, int(i), piecePriorityNormal)
+	}
+}
+
 func (t Torrent) MetainfoFilepath() string {
 	return filepath.Join(t.cl.ConfigDir(), "torrents", t.InfoHash.HexString()+".torrent")
 }

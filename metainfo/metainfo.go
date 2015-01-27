@@ -46,6 +46,19 @@ type Info struct {
 	Files       []FileInfo `bencode:"files,omitempty"`
 }
 
+// The files field, converted up from the old single-file in the parent info
+// dict if necessary. This is a helper to avoid having to conditionally handle
+// single and multi-file torrent infos.
+func (i *Info) UpvertedFiles() []FileInfo {
+	if len(i.Files) == 0 {
+		return []FileInfo{{
+			Length: i.Length,
+			Path:   []string{i.Name},
+		}}
+	}
+	return i.Files
+}
+
 // The info dictionary with its hash and raw bytes exposed, as these are
 // important to Bittorrent.
 type InfoEx struct {

@@ -4,5 +4,4 @@
  * Make use of sparse file regions in download data for faster hashing.
  * Add an alternative to mmap()'ed torrent data.
  * If we're choked and interested, we never send not-interested if there's nothing we want?
- * Replace connection pruner with something just drops connections that are definitely bad in addConnection.
  * Perform announce as part of GetPeers, to reduce closest node calculation overhead, and wasting discarded nodes during the search.

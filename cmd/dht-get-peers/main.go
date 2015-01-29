@@ -133,7 +133,7 @@ func main() {
 	seen := make(map[util.CompactPeer]struct{})
 getPeers:
 	for {
-		ps, err := s.GetPeers(*infoHash)
+		ps, err := s.Announce(*infoHash, 0, false)
 		if err != nil {
 			log.Fatal(err)
 		}

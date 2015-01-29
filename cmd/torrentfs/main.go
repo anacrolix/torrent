@@ -13,7 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/util"
+	_ "github.com/anacrolix/envpprof"
+
 	"bitbucket.org/anacrolix/go.torrent/util/dirwatch"
 
 	"bazil.org/fuse"
@@ -35,7 +36,6 @@ var (
 
 	disableTrackers = flag.Bool("disableTrackers", false, "disables trackers")
 	testPeer        = flag.String("testPeer", "", "the address for a test peer")
-	httpAddr        = flag.String("httpAddr", "localhost:0", "HTTP server bind address")
 	readaheadBytes  = flag.Int64("readaheadBytes", 10*1024*1024, "bytes to readahead in each torrent from the last read piece")
 	listenAddr      = flag.String("listenAddr", ":6882", "incoming connection address")
 
@@ -90,9 +90,6 @@ func main() {
 		os.Exit(2)
 	}
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	if *httpAddr != "" {
-		util.LoggedHTTPServe(*httpAddr)
-	}
 	conn, err := fuse.Mount(*mountDir)
 	if err != nil {
 		log.Fatal(err)

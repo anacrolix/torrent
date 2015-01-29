@@ -10,16 +10,16 @@ import (
 	"os"
 	"strings"
 
+	_ "github.com/anacrolix/envpprof"
+
 	"github.com/anacrolix/libtorgo/metainfo"
 
 	"bitbucket.org/anacrolix/go.torrent"
-	"bitbucket.org/anacrolix/go.torrent/util"
 )
 
 var (
 	downloadDir = flag.String("downloadDir", "", "directory to store download torrent data")
 	testPeer    = flag.String("testPeer", "", "bootstrap peer address")
-	httpAddr    = flag.String("httpAddr", "localhost:6061", "http serve address")
 	// TODO: Check the default torrent listen port.
 	listenAddr      = flag.String("listenAddr", ":50007", "incoming connection address")
 	disableTrackers = flag.Bool("disableTrackers", false, "disable trackers")
@@ -30,9 +30,6 @@ var (
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	flag.Parse()
-	if *httpAddr != "" {
-		util.LoggedHTTPServe(*httpAddr)
-	}
 	client, err := torrent.NewClient(&torrent.Config{
 		DataDir:         *downloadDir,
 		DisableTrackers: *disableTrackers,

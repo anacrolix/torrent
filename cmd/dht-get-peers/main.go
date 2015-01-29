@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/signal"
 
+	_ "github.com/anacrolix/envpprof"
+
 	"bitbucket.org/anacrolix/go.torrent/dht"
 	"bitbucket.org/anacrolix/go.torrent/util"
 	_ "bitbucket.org/anacrolix/go.torrent/util/profile"
@@ -129,7 +131,6 @@ func setupSignals() {
 }
 
 func main() {
-	util.LoggedHTTPServe("")
 	seen := make(map[util.CompactPeer]struct{})
 getPeers:
 	for {

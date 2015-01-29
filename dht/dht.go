@@ -773,9 +773,7 @@ func (cni *NodeInfo) UnmarshalCompact(b []byte) error {
 	if len(b) != 26 {
 		return errors.New("expected 26 bytes")
 	}
-	if 20 != copy(cni.ID[:], b[:20]) {
-		panic("impossibru!")
-	}
+	util.CopyExact(cni.ID[:], b[:20])
 	cni.Addr = newDHTAddr(&net.UDPAddr{
 		IP:   net.IPv4(b[20], b[21], b[22], b[23]),
 		Port: int(binary.BigEndian.Uint16(b[24:26])),

@@ -254,12 +254,23 @@ func (m Msg) ID() string {
 	return m[m["y"].(string)].(map[string]interface{})["id"].(string)
 }
 
-func (m Msg) Nodes() []NodeInfo {
-	var r findNodeResponse
-	if err := r.UnmarshalKRPCMsg(m); err != nil {
-		return nil
+// Suggested nodes in a response.
+func (m Msg) Nodes() (nodes []NodeInfo) {
+	b := func() string {
+		defer func() {
+			recover()
+		}()
+		return m["r"].(map[string]interface{})["nodes"].(string)
+	}()
+	for i := 0; i < len(b); i += 26 {
+		var n NodeInfo
+		err := n.UnmarshalCompact([]byte(b[i : i+26]))
+		if err != nil {
+			continue
+		}
+		nodes = append(nodes, n)
 	}
-	return r.Nodes
+	return
 }
 
 type KRPCError struct {
@@ -292,9 +303,10 @@ func (m Msg) Error() (ret *KRPCError) {
 
 // Returns the token given in response to a get_peers request for future
 // announce_peer requests to that node.
-func (m Msg) AnnounceToken() string {
+func (m Msg) AnnounceToken() (token string, ok bool) {
 	defer func() { recover() }()
-	return m["r"].(map[string]interface{})["token"].(string)
+	token, ok = m["r"].(map[string]interface{})["token"].(string)
+	return
 }
 
 type transaction struct {
@@ -795,6 +807,9 @@ func (s *Server) AnnouncePeer(port int, impliedPort bool, infoHash string) (err 
 }
 
 func (s *Server) announcePeer(node dHTAddr, infoHash string, port int, token string, impliedPort bool) error {
+	if port == 0 && !impliedPort {
+		return errors.New("nothing to announce")
+	}
 	t, err := s.query(node, "announce_peer", map[string]interface{}{
 		"implied_port": func() int {
 			if impliedPort {
@@ -817,38 +832,6 @@ func (s *Server) announcePeer(node dHTAddr, infoHash string, port int, token str
 	return err
 }
 
-type findNodeResponse struct {
-	Nodes []NodeInfo
-}
-
-func getResponseNodes(m Msg) (s string, err error) {
-	defer func() {
-		r := recover()
-		if r == nil {
-			return
-		}
-		err = fmt.Errorf("couldn't get response nodes: %s: %#v", r, m)
-	}()
-	s = m["r"].(map[string]interface{})["nodes"].(string)
-	return
-}
-
-func (me *findNodeResponse) UnmarshalKRPCMsg(m Msg) error {
-	b, err := getResponseNodes(m)
-	if err != nil {
-		return err
-	}
-	for i := 0; i < len(b); i += 26 {
-		var n NodeInfo
-		err := n.UnmarshalCompact([]byte(b[i : i+26]))
-		if err != nil {
-			return err
-		}
-		me.Nodes = append(me.Nodes, n)
-	}
-	return nil
-}
-
 func (t *transaction) setOnResponse(f func(m Msg)) {
 	if t.onResponse != nil {
 		panic(t.onResponse)
@@ -861,23 +844,16 @@ func (s *Server) liftNodes(d Msg) {
 	if d["y"] != "r" {
 		return
 	}
-	var r findNodeResponse
-	err := r.UnmarshalKRPCMsg(d)
-	if err != nil {
-		// log.Print(err)
-	} else {
-		for _, cni := range r.Nodes {
-			if util.AddrPort(cni.Addr) == 0 {
-				// TODO: Why would people even do this?
-				continue
-			}
-			if s.ipBlocked(util.AddrIP(cni.Addr)) {
-				continue
-			}
-			n := s.getNode(cni.Addr)
-			n.SetIDFromBytes(cni.ID[:])
+	for _, cni := range d.Nodes() {
+		if util.AddrPort(cni.Addr) == 0 {
+			// TODO: Why would people even do this?
+			continue
 		}
-		// log.Printf("lifted %d nodes", len(r.Nodes))
+		if s.ipBlocked(util.AddrIP(cni.Addr)) {
+			continue
+		}
+		n := s.getNode(cni.Addr)
+		n.SetIDFromBytes(cni.ID[:])
 	}
 }
 
@@ -895,7 +871,9 @@ func (s *Server) findNode(addr dHTAddr, targetID string) (t *transaction, err er
 	return
 }
 
-func extractValues(m Msg) (vs []util.CompactPeer) {
+// In a get_peers response, the addresses of torrent clients involved with the
+// queried info-hash.
+func (m Msg) Values() (vs []util.CompactPeer) {
 	r, ok := m["r"]
 	if !ok {
 		return
@@ -941,7 +919,10 @@ func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *transaction, err er
 	}
 	t.setOnResponse(func(m Msg) {
 		s.liftNodes(m)
-		s.getNode(addr).announceToken = m.AnnounceToken()
+		at, ok := m.AnnounceToken()
+		if ok {
+			s.getNode(addr).announceToken = at
+		}
 	})
 	return
 }

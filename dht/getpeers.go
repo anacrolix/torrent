@@ -6,6 +6,8 @@ import (
 	"log"
 	"time"
 
+	"bitbucket.org/anacrolix/go.torrent/logonce"
+
 	"bitbucket.org/anacrolix/go.torrent/util"
 	"bitbucket.org/anacrolix/sync"
 	"github.com/willf/bloom"
@@ -13,13 +15,22 @@ import (
 
 type peerDiscovery struct {
 	*peerStream
-	triedAddrs *bloom.BloomFilter
-	pending    int
-	server     *Server
-	infoHash   string
+	triedAddrs          *bloom.BloomFilter
+	pending             int
+	server              *Server
+	infoHash            string
+	numContacted        int
+	announcePort        int
+	announcePortImplied bool
 }
 
-func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
+func (pd *peerDiscovery) NumContacted() int {
+	pd.mu.Lock()
+	defer pd.mu.Unlock()
+	return pd.numContacted
+}
+
+func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*peerDiscovery, error) {
 	s.mu.Lock()
 	startAddrs := func() (ret []dHTAddr) {
 		for _, n := range s.closestGoodNodes(160, infoHash) {
@@ -39,13 +50,15 @@ func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
 	}
 	disc := &peerDiscovery{
 		peerStream: &peerStream{
-			Values: make(chan peerStreamValue),
+			Values: make(chan peerStreamValue, 100),
 			stop:   make(chan struct{}),
 			values: make(chan peerStreamValue),
 		},
-		triedAddrs: bloom.NewWithEstimates(1000, 0.5),
-		server:     s,
-		infoHash:   infoHash,
+		triedAddrs:          bloom.NewWithEstimates(1000, 0.5),
+		server:              s,
+		infoHash:            infoHash,
+		announcePort:        port,
+		announcePortImplied: impliedPort,
 	}
 	// Function ferries from values to Values until discovery is halted.
 	go func() {
@@ -71,7 +84,7 @@ func (s *Server) GetPeers(infoHash string) (*peerStream, error) {
 		disc.contact(addr)
 		disc.mu.Unlock()
 	}
-	return disc.peerStream, nil
+	return disc, nil
 }
 
 func (me *peerDiscovery) gotNodeAddr(addr dHTAddr) {
@@ -89,6 +102,7 @@ func (me *peerDiscovery) gotNodeAddr(addr dHTAddr) {
 }
 
 func (me *peerDiscovery) contact(addr dHTAddr) {
+	me.numContacted++
 	me.triedAddrs.Add([]byte(addr.String()))
 	if err := me.getPeers(addr); err != nil {
 		log.Printf("error sending get_peers request to %s: %s", addr, err)
@@ -113,6 +127,13 @@ func (me *peerDiscovery) closingCh() chan struct{} {
 	return me.peerStream.stop
 }
 
+func (me *peerDiscovery) announcePeer(to dHTAddr, token string) {
+	err := me.server.announcePeer(to, me.infoHash, me.announcePort, token, me.announcePortImplied)
+	if err != nil {
+		logonce.Stderr.Printf("error announcing peer: %s", err)
+	}
+}
+
 func (me *peerDiscovery) getPeers(addr dHTAddr) error {
 	me.server.mu.Lock()
 	defer me.server.mu.Unlock()
@@ -129,17 +150,12 @@ func (me *peerDiscovery) getPeers(addr dHTAddr) error {
 				me.responseNode(n)
 			}
 			me.mu.Unlock()
-			if vs := extractValues(m); vs != nil {
+
+			if vs := m.Values(); vs != nil {
 				nodeInfo := NodeInfo{
 					Addr: t.remoteAddr,
 				}
-				id := func() string {
-					defer func() {
-						recover()
-					}()
-					return m["r"].(map[string]interface{})["id"].(string)
-				}()
-				copy(nodeInfo.ID[:], id)
+				copy(nodeInfo.ID[:], m.ID())
 				select {
 				case me.peerStream.values <- peerStreamValue{
 					Peers:    vs,
@@ -147,6 +163,10 @@ func (me *peerDiscovery) getPeers(addr dHTAddr) error {
 				}:
 				case <-me.peerStream.stop:
 				}
+			}
+
+			if at, ok := m.AnnounceToken(); ok {
+				me.announcePeer(addr, at)
 			}
 		case <-me.closingCh():
 		}

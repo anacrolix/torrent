@@ -1855,7 +1855,7 @@ func (cl *Client) waitWantPeers(t *torrent) bool {
 func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 	for cl.waitWantPeers(t) {
 		log.Printf("getting peers for %q from DHT", t)
-		ps, err := cl.dHT.GetPeers(string(t.InfoHash[:]))
+		ps, err := cl.dHT.Announce(string(t.InfoHash[:]), cl.incomingPeerPort(), impliedPort)
 		if err != nil {
 			log.Printf("error getting peers from dht: %s", err)
 			return
@@ -1900,22 +1900,6 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 		ps.Close()
 		log.Printf("finished DHT peer scrape for %s: %d peers", t, len(allAddrs))
 
-		// After a GetPeers, we can announce on the best nodes that gave us an
-		// announce token.
-
-		port := cl.incomingPeerPort()
-		// If port is zero, then we're not listening, and there's nothing to
-		// announce.
-		if port != 0 {
-			// We can't allow the port to be implied as long as the UTP and
-			// DHT ports are different.
-			err := cl.dHT.AnnouncePeer(port, impliedPort, t.InfoHash.AsString())
-			if err != nil {
-				log.Printf("error announcing torrent to DHT: %s", err)
-			} else {
-				log.Printf("announced %q to DHT", t)
-			}
-		}
 	}
 }
 

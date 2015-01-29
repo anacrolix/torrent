@@ -1,5 +1,7 @@
 package dht
 
+// get_peers and announce_peers.
+
 import (
 	"log"
 	"time"
@@ -121,6 +123,7 @@ func (me *peerDiscovery) getPeers(addr dHTAddr) error {
 	go func() {
 		select {
 		case m := <-t.Response:
+			// Register suggested nodes closer to the target info-hash.
 			me.mu.Lock()
 			for _, n := range m.Nodes() {
 				me.responseNode(n)
@@ -160,6 +163,8 @@ type peerStreamValue struct {
 	NodeInfo                    // The node that gave the response.
 }
 
+// TODO: This was to be the shared publicly accessible part returned by DHT
+// functions that stream peers. Possibly not necessary anymore.
 type peerStream struct {
 	mu     sync.Mutex
 	Values chan peerStreamValue

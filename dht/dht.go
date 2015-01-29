@@ -856,6 +856,7 @@ func (t *transaction) setOnResponse(f func(m Msg)) {
 	t.onResponse = f
 }
 
+// Add response nodes to node table.
 func (s *Server) liftNodes(d Msg) {
 	if d["y"] != "r" {
 		return

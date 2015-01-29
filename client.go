@@ -1729,6 +1729,8 @@ func (cl *Client) AddMagnet(uri string) (T Torrent, err error) {
 	return
 }
 
+// Actively prunes unused connections. This is required to make space to dial
+// for replacements.
 func (cl *Client) connectionPruner(t *torrent) {
 	for {
 		time.Sleep(15 * time.Second)

@@ -1735,6 +1735,10 @@ func (cl *Client) connectionPruner(t *torrent) {
 	for {
 		time.Sleep(15 * time.Second)
 		cl.mu.Lock()
+		select {
+		case <-t.ceasingNetworking:
+		default:
+		}
 		license := len(t.Conns) - (socketsPerTorrent+1)/2
 		for _, c := range t.Conns {
 			if license <= 0 {

@@ -16,7 +16,7 @@ b:1.2.8.0-1.2.8.255`
 func sampleRanges(tb testing.TB) (ranges []Range, err error) {
 	scanner := bufio.NewScanner(strings.NewReader(sample))
 	for scanner.Scan() {
-		r, ok, _ := ParseBlocklistP2PLine(scanner.Text())
+		r, ok, _ := ParseBlocklistP2PLine(scanner.Bytes())
 		if ok {
 			// tb.Log(r)
 			ranges = append(ranges, r)

@@ -347,7 +347,7 @@ func (cl *Client) setEnvBlocklist() (err error) {
 	var ranges []iplist.Range
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		r, ok, lineErr := iplist.ParseBlocklistP2PLine(scanner.Text())
+		r, ok, lineErr := iplist.ParseBlocklistP2PLine(scanner.Bytes())
 		if lineErr != nil {
 			err = fmt.Errorf("error reading torrent blocklist line: %s", lineErr)
 			return

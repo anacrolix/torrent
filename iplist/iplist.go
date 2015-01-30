@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"sort"
-	"strings"
 )
 
 type IPList struct {
@@ -52,16 +51,16 @@ func (me *IPList) Lookup(ip net.IP) (r *Range) {
 // Parse a line of the PeerGuardian Text Lists (P2P) Format. Returns !ok but
 // no error if a line doesn't contain a range but isn't erroneous, such as
 // comment and blank lines.
-func ParseBlocklistP2PLine(l string) (r Range, ok bool, err error) {
-	l = strings.TrimSpace(l)
-	if len(l) == 0 || strings.HasPrefix(l, "#") {
+func ParseBlocklistP2PLine(l []byte) (r Range, ok bool, err error) {
+	l = bytes.TrimSpace(l)
+	if len(l) == 0 || bytes.HasPrefix(l, []byte("#")) {
 		return
 	}
-	colon := strings.IndexByte(l, ':')
-	hyphen := strings.IndexByte(l[colon+1:], '-') + colon + 1
-	r.Description = l[:colon]
-	r.First = net.ParseIP(l[colon+1 : hyphen])
-	r.Last = net.ParseIP(l[hyphen+1:])
+	colon := bytes.IndexByte(l, ':')
+	hyphen := bytes.IndexByte(l[colon+1:], '-') + colon + 1
+	r.Description = string(l[:colon])
+	r.First = net.ParseIP(string(l[colon+1 : hyphen]))
+	r.Last = net.ParseIP(string(l[hyphen+1:]))
 	if r.First == nil || r.Last == nil {
 		return
 	}

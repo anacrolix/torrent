@@ -345,6 +345,7 @@ func (cl *Client) setEnvBlocklist() (err error) {
 	}
 	defer f.Close()
 	var ranges []iplist.Range
+	uniqStrs := make(map[string]string)
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		r, ok, lineErr := iplist.ParseBlocklistP2PLine(scanner.Bytes())
@@ -354,6 +355,11 @@ func (cl *Client) setEnvBlocklist() (err error) {
 		}
 		if !ok {
 			continue
+		}
+		if s, ok := uniqStrs[r.Description]; ok {
+			r.Description = s
+		} else {
+			uniqStrs[r.Description] = r.Description
 		}
 		ranges = append(ranges, r)
 	}

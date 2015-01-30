@@ -593,8 +593,8 @@ type dialResult struct {
 	UTP bool
 }
 
-func doDial(dial func() (net.Conn, error), ch chan dialResult, utp bool) {
-	conn, err := dial()
+func doDial(dial func(addr string) (net.Conn, error), ch chan dialResult, utp bool, addr string) {
+	conn, err := dial(addr)
 	if err != nil {
 		if conn != nil {
 			conn.Close()
@@ -617,7 +617,7 @@ func doDial(dial func() (net.Conn, error), ch chan dialResult, utp bool) {
 		}
 	}
 	if err != nil {
-		log.Printf("error connecting to peer: %s %#v", err, err)
+		log.Printf("error dialing %s: %s", addr, err)
 		return
 	}
 }
@@ -664,15 +664,15 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 		}
 		resCh := make(chan dialResult, left)
 		if !me.disableUTP {
-			go doDial(func() (net.Conn, error) {
+			go doDial(func(addr string) (net.Conn, error) {
 				return me.utpSock.DialTimeout(addr, dialTimeout)
-			}, resCh, true)
+			}, resCh, true, addr)
 		}
 		if !me.disableTCP {
-			go doDial(func() (net.Conn, error) {
+			go doDial(func(addr string) (net.Conn, error) {
 				// time.Sleep(time.Second) // Give uTP a bit of a head start.
 				return net.DialTimeout("tcp", addr, dialTimeout)
-			}, resCh, false)
+			}, resCh, false, addr)
 		}
 		var res dialResult
 		for ; left > 0 && res.Conn == nil; left-- {

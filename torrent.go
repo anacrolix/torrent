@@ -218,15 +218,21 @@ func (t *torrent) SetMetadataSize(bytes int64) {
 	if t.MetaData != nil {
 		return
 	}
+	if bytes > 10000000 { // 10MB, pulled from my ass.
+		return
+	}
 	t.MetaData = make([]byte, bytes)
 	t.metadataHave = make([]bool, (bytes+(1<<14)-1)/(1<<14))
 }
 
 func (t *torrent) Name() string {
-	if !t.haveInfo() {
+	if t.haveInfo() {
+		return t.Info.Name
+	}
+	if t.DisplayName != "" {
 		return t.DisplayName
 	}
-	return t.Info.Name
+	return t.InfoHash.HexString()
 }
 
 func (t *torrent) pieceStatusChar(index int) byte {
@@ -446,11 +452,6 @@ func (t *torrent) NumPiecesCompleted() (num int) {
 }
 
 func (t *torrent) Length() int64 {
-	if t.Data == nil {
-		// Possibly the length might be available before the data is mmapped,
-		// I defer this decision to such a need arising.
-		panic("torrent length not known?")
-	}
 	return t.length
 }
 

@@ -25,6 +25,21 @@ func TestClientDefault(t *testing.T) {
 	cl.Stop()
 }
 
+func TestAddDropTorrent(t *testing.T) {
+	cl, err := NewClient(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Stop()
+	dir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(dir)
+	tt, err := cl.AddTorrent(mi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tt.Drop()
+}
+
 func TestAddTorrentNoSupportedTrackerSchemes(t *testing.T) {
 	t.SkipNow()
 }

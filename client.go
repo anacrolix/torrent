@@ -1505,7 +1505,12 @@ func (cl *Client) saveTorrentFile(t *torrent) error {
 	if err != nil {
 		return fmt.Errorf("error marshalling metainfo: %s", err)
 	}
-	mi, _ := cl.torrentCacheMetaInfo(t.InfoHash)
+	mi, err := cl.torrentCacheMetaInfo(t.InfoHash)
+	if err != nil {
+		// For example, a script kiddy makes us load too many files, and we're
+		// able to save the torrent, but not load it again to check it.
+		return nil
+	}
 	if !bytes.Equal(mi.Info.Hash, t.InfoHash[:]) {
 		log.Fatalf("%x != %x", mi.Info.Hash, t.InfoHash[:])
 	}
@@ -1517,6 +1522,17 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 	if err != nil {
 		return
 	}
+
+	if err := cl.saveTorrentFile(t); err != nil {
+		log.Printf("error saving torrent file for %s: %s", t, err)
+	}
+
+	if strings.Contains(strings.ToLower(md.Name), "porn") {
+		cl.dropTorrent(t.InfoHash)
+		err = errors.New("no porn plx")
+		return
+	}
+
 	// If the client intends to upload, it needs to know what state pieces are
 	// in.
 	if !cl.noUpload {
@@ -1533,9 +1549,6 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 	}
 
 	cl.downloadStrategy.TorrentStarted(t)
-	if err := cl.saveTorrentFile(t); err != nil {
-		log.Printf("error saving torrent file for %s: %s", t, err)
-	}
 	close(t.gotMetainfo)
 	return
 }
@@ -1617,6 +1630,10 @@ func (t *torrent) addTrackers(announceList [][]string) {
 type Torrent struct {
 	cl *Client
 	*torrent
+}
+
+func (t Torrent) Drop() {
+	t.cl.dropTorrent(t.InfoHash)
 }
 
 type File struct {
@@ -1721,7 +1738,10 @@ func (cl *Client) AddMagnet(uri string) (T Torrent, err error) {
 	if err != nil {
 		log.Printf("error getting cached metainfo for %x: %s", m.InfoHash[:], err)
 	} else if mi != nil {
-		cl.AddTorrent(mi)
+		_, err = cl.AddTorrent(mi)
+		if err != nil {
+			return
+		}
 	}
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
@@ -1766,6 +1786,10 @@ func (cl *Client) connectionPruner(t *torrent) {
 func (me *Client) DropTorrent(infoHash InfoHash) (err error) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
+	return me.dropTorrent(infoHash)
+}
+
+func (me *Client) dropTorrent(infoHash InfoHash) (err error) {
 	t, ok := me.torrents[infoHash]
 	if !ok {
 		err = fmt.Errorf("no such torrent")

@@ -262,6 +262,9 @@ func (m Msg) Nodes() (nodes []NodeInfo) {
 		}()
 		return m["r"].(map[string]interface{})["nodes"].(string)
 	}()
+	if len(b)%26 != 0 {
+		return
+	}
 	for i := 0; i < len(b); i += 26 {
 		var n NodeInfo
 		err := n.UnmarshalCompact([]byte(b[i : i+26]))

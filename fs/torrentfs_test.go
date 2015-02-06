@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"bitbucket.org/anacrolix/go.torrent"
 	"bitbucket.org/anacrolix/go.torrent/testutil"
 	"bitbucket.org/anacrolix/go.torrent/util"
@@ -218,14 +220,14 @@ func TestDownloadOnDemand(t *testing.T) {
 	fs := New(leecher)
 	defer fs.Destroy()
 	root, _ := fs.Root()
-	node, _ := root.(fusefs.NodeStringLookuper).Lookup("greeting", nil)
+	node, _ := root.(fusefs.NodeStringLookuper).Lookup(context.Background(), "greeting")
 	size := int(node.Attr().Size)
 	resp := &fuse.ReadResponse{
 		Data: make([]byte, size),
 	}
-	node.(fusefs.HandleReader).Read(&fuse.ReadRequest{
+	node.(fusefs.HandleReader).Read(context.Background(), &fuse.ReadRequest{
 		Size: size,
-	}, resp, nil)
+	}, resp)
 	content := resp.Data
 	if string(content) != testutil.GreetingFileContents {
 		t.FailNow()

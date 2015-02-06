@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
 	"bitbucket.org/anacrolix/go.torrent"
@@ -37,7 +39,7 @@ var (
 	_ fusefs.FSIniter    = &TorrentFS{}
 )
 
-func (fs *TorrentFS) Init(req *fuse.InitRequest, resp *fuse.InitResponse, intr fusefs.Intr) fuse.Error {
+func (fs *TorrentFS) Init(ctx context.Context, req *fuse.InitRequest, resp *fuse.InitResponse) error {
 	log.Print(req)
 	log.Print(resp)
 	resp.MaxReadahead = req.MaxReadahead
@@ -74,14 +76,14 @@ func (n *node) fsPath() string {
 	return "/" + strings.Join(append([]string{n.metadata.Name}, n.path...), "/")
 }
 
-func blockingRead(fs *TorrentFS, t torrent.Torrent, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
+func blockingRead(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int64, p []byte) (n int, err error) {
 	fs.mu.Lock()
 	fs.blockedReads++
 	fs.event.Broadcast()
 	fs.mu.Unlock()
 	var (
 		_n   int
-		_err fuse.Error
+		_err error
 	)
 	readDone := make(chan struct{})
 	go func() {
@@ -94,7 +96,7 @@ func blockingRead(fs *TorrentFS, t torrent.Torrent, off int64, p []byte, intr fu
 		err = _err
 	case <-fs.destroyed:
 		err = fuse.EIO
-	case <-intr:
+	case <-ctx.Done():
 		err = fuse.EINTR
 	}
 	fs.mu.Lock()
@@ -104,10 +106,10 @@ func blockingRead(fs *TorrentFS, t torrent.Torrent, off int64, p []byte, intr fu
 	return
 }
 
-func readFull(fs *TorrentFS, t torrent.Torrent, off int64, p []byte, intr fusefs.Intr) (n int, err fuse.Error) {
+func readFull(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int64, p []byte) (n int, err error) {
 	for len(p) != 0 {
 		var nn int
-		nn, err = blockingRead(fs, t, off, p, intr)
+		nn, err = blockingRead(ctx, fs, t, off, p)
 		if err != nil {
 			break
 		}
@@ -118,7 +120,7 @@ func readFull(fs *TorrentFS, t torrent.Torrent, off int64, p []byte, intr fusefs
 	return
 }
 
-func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fusefs.Intr) fuse.Error {
+func (fn fileNode) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadResponse) error {
 	torrentfsReadRequests.Add(1)
 	started := time.Now()
 	if req.Dir {
@@ -144,7 +146,7 @@ func (fn fileNode) Read(req *fuse.ReadRequest, resp *fuse.ReadResponse, intr fus
 		return nil
 	}
 	torrentOff := fn.TorrentOffset + req.Offset
-	n, err := readFull(fn.FS, fn.t, torrentOff, resp.Data, intr)
+	n, err := readFull(ctx, fn.FS, fn.t, torrentOff, resp.Data)
 	if err != nil {
 		return err
 	}
@@ -159,8 +161,8 @@ type dirNode struct {
 }
 
 var (
-	_ fusefs.HandleReadDirer = dirNode{}
-	_ fusefs.HandleReader    = fileNode{}
+	_ fusefs.HandleReadDirAller = dirNode{}
+	_ fusefs.HandleReader       = fileNode{}
 )
 
 func isSubPath(parent, child []string) bool {
@@ -175,7 +177,7 @@ func isSubPath(parent, child []string) bool {
 	return true
 }
 
-func (dn dirNode) ReadDir(intr fusefs.Intr) (des []fuse.Dirent, err fuse.Error) {
+func (dn dirNode) ReadDirAll(ctx context.Context) (des []fuse.Dirent, err error) {
 	names := map[string]bool{}
 	for _, fi := range dn.metadata.Files {
 		if !isSubPath(dn.path, fi.Path) {
@@ -199,7 +201,7 @@ func (dn dirNode) ReadDir(intr fusefs.Intr) (des []fuse.Dirent, err fuse.Error) 
 	return
 }
 
-func (dn dirNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err fuse.Error) {
+func (dn dirNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, err error) {
 	var torrentOffset int64
 	for _, fi := range dn.metadata.Files {
 		if !isSubPath(dn.path, fi.Path) {
@@ -234,7 +236,7 @@ func (dn dirNode) Attr() (attr fuse.Attr) {
 	return
 }
 
-func (me rootNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err fuse.Error) {
+func (me rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, err error) {
 	for _, t := range me.fs.Client.Torrents() {
 		if t.Name() != name || t.Info == nil {
 			continue
@@ -257,7 +259,7 @@ func (me rootNode) Lookup(name string, intr fusefs.Intr) (_node fusefs.Node, err
 	return
 }
 
-func (me rootNode) ReadDir(intr fusefs.Intr) (dirents []fuse.Dirent, err fuse.Error) {
+func (me rootNode) ReadDir(ctx context.Context) (dirents []fuse.Dirent, err error) {
 	for _, t := range me.fs.Client.Torrents() {
 		if t.Info == nil {
 			continue
@@ -287,7 +289,7 @@ func (me rootNode) Forget() {
 	me.fs.Destroy()
 }
 
-func (tfs *TorrentFS) Root() (fusefs.Node, fuse.Error) {
+func (tfs *TorrentFS) Root() (fusefs.Node, error) {
 	return rootNode{tfs}, nil
 }
 

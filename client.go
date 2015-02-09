@@ -517,6 +517,7 @@ func (cl *Client) stopped() bool {
 // come to a halt.
 func (me *Client) Stop() {
 	me.mu.Lock()
+	defer me.mu.Unlock()
 	close(me.quit)
 	for _, l := range me.listeners {
 		l.Close()
@@ -525,7 +526,6 @@ func (me *Client) Stop() {
 	for _, t := range me.torrents {
 		t.close()
 	}
-	me.mu.Unlock()
 }
 
 var ipv6BlockRange = iplist.Range{Description: "non-IPv4 address"}

@@ -111,7 +111,7 @@ func (me *Client) PrioritizeDataRegion(ih InfoHash, off, len_ int64) error {
 	firstIndex := int(off / int64(t.UsualPieceSize()))
 	for i := 0; i < 5; i++ {
 		index := firstIndex + i
-		if index >= t.NumPieces() {
+		if index >= t.numPieces() {
 			continue
 		}
 		me.queueFirstHash(t, index)
@@ -283,13 +283,13 @@ func (cl *Client) readRaisePiecePriorities(t *torrent, off, _len int64) {
 	index := int(off / int64(t.UsualPieceSize()))
 	cl.raisePiecePriority(t, index, piecePriorityNow)
 	index++
-	if index >= t.NumPieces() {
+	if index >= t.numPieces() {
 		return
 	}
 	cl.raisePiecePriority(t, index, piecePriorityNext)
 	for i := 0; i < t.numConnsUnchoked()-2; i++ {
 		index++
-		if index >= t.NumPieces() {
+		if index >= t.numPieces() {
 			break
 		}
 		cl.raisePiecePriority(t, index, piecePriorityReadahead)
@@ -523,7 +523,7 @@ func (me *Client) Stop() {
 	}
 	me.event.Broadcast()
 	for _, t := range me.torrents {
-		t.Close()
+		t.close()
 	}
 	me.mu.Unlock()
 }
@@ -957,9 +957,9 @@ func (t *torrent) initRequestOrdering(c *connection) {
 	if c.pieceRequestOrder != nil || c.piecePriorities != nil {
 		panic("double init of request ordering")
 	}
-	c.piecePriorities = mathRand.Perm(t.NumPieces())
+	c.piecePriorities = mathRand.Perm(t.numPieces())
 	c.pieceRequestOrder = pieceordering.New()
-	for i := 0; i < t.NumPieces(); i++ {
+	for i := 0; i < t.numPieces(); i++ {
 		if !c.PeerHasPiece(pp.Integer(i)) {
 			continue
 		}
@@ -973,7 +973,7 @@ func (t *torrent) initRequestOrdering(c *connection) {
 func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) {
 	if t.haveInfo() {
 		if c.PeerPieces == nil {
-			c.PeerPieces = make([]bool, t.NumPieces())
+			c.PeerPieces = make([]bool, t.numPieces())
 		}
 	} else {
 		for piece >= len(c.PeerPieces) {
@@ -1206,11 +1206,11 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				break
 			}
 			if t.haveInfo() {
-				if len(msg.Bitfield) < t.NumPieces() {
+				if len(msg.Bitfield) < t.numPieces() {
 					err = errors.New("received invalid bitfield")
 					break
 				}
-				msg.Bitfield = msg.Bitfield[:t.NumPieces()]
+				msg.Bitfield = msg.Bitfield[:t.numPieces()]
 			}
 			c.PeerPieces = msg.Bitfield
 			for index, has := range c.PeerPieces {
@@ -1632,6 +1632,10 @@ type Torrent struct {
 	*torrent
 }
 
+func (t Torrent) NumPieces() int {
+	return t.numPieces()
+}
+
 func (t Torrent) Drop() {
 	t.cl.dropTorrent(t.InfoHash)
 }
@@ -1693,14 +1697,14 @@ func (t Torrent) AddPeers(pp []Peer) error {
 
 func (t Torrent) DownloadAll() {
 	t.cl.mu.Lock()
-	for i := 0; i < t.NumPieces(); i++ {
+	for i := 0; i < t.numPieces(); i++ {
 		// TODO: Leave higher priorities as they were?
 		t.cl.prioritizePiece(t.torrent, i, piecePriorityNormal)
 	}
 	// Nice to have the first and last pieces soon for various interactive
 	// purposes.
 	t.cl.prioritizePiece(t.torrent, 0, piecePriorityReadahead)
-	t.cl.prioritizePiece(t.torrent, t.NumPieces()-1, piecePriorityReadahead)
+	t.cl.prioritizePiece(t.torrent, t.numPieces()-1, piecePriorityReadahead)
 	t.cl.mu.Unlock()
 }
 
@@ -1795,7 +1799,7 @@ func (me *Client) dropTorrent(infoHash InfoHash) (err error) {
 		err = fmt.Errorf("no such torrent")
 		return
 	}
-	err = t.Close()
+	err = t.close()
 	if err != nil {
 		panic(err)
 	}
@@ -2039,7 +2043,7 @@ func (cl *Client) allTorrentsCompleted() bool {
 		if !t.haveInfo() {
 			return false
 		}
-		if t.NumPiecesCompleted() != t.NumPieces() {
+		if t.NumPiecesCompleted() != t.numPieces() {
 			return false
 		}
 	}
@@ -2206,7 +2210,7 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 		}
 	}
 	if t.haveAllPieces() && me.noUpload {
-		t.CeaseNetworking()
+		t.ceaseNetworking()
 	}
 	me.event.Broadcast()
 }

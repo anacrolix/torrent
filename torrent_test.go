@@ -52,7 +52,7 @@ func TestTorrentDoubleClose(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		wg.Add(1)
 		go func() {
-			tt.Close()
+			tt.close()
 			wg.Done()
 		}()
 	}

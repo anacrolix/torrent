@@ -107,7 +107,7 @@ func (t *torrent) worstConnsHeap() (wcs *worstConns) {
 	return
 }
 
-func (t *torrent) CeaseNetworking() {
+func (t *torrent) ceaseNetworking() {
 	t.stateMu.Lock()
 	defer t.stateMu.Unlock()
 	select {
@@ -191,7 +191,7 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 	}
 	for _, conn := range t.Conns {
 		t.initRequestOrdering(conn)
-		if err := conn.setNumPieces(t.NumPieces()); err != nil {
+		if err := conn.setNumPieces(t.numPieces()); err != nil {
 			log.Printf("closing connection: %s", err)
 			conn.Close()
 		}
@@ -410,7 +410,7 @@ func (t *torrent) BytesLeft() (left int64) {
 	if !t.haveInfo() {
 		return -1
 	}
-	for i := pp.Integer(0); i < pp.Integer(t.NumPieces()); i++ {
+	for i := pp.Integer(0); i < pp.Integer(t.numPieces()); i++ {
 		left += int64(t.PieceNumPendingBytes(i))
 	}
 	return
@@ -424,21 +424,15 @@ func NumChunksForPiece(chunkSize int, pieceSize int) int {
 	return (pieceSize + chunkSize - 1) / chunkSize
 }
 
-func (t *torrent) ChunkCount() (num int) {
-	num += (t.NumPieces() - 1) * NumChunksForPiece(chunkSize, int(t.PieceLength(0)))
-	num += NumChunksForPiece(chunkSize, int(t.PieceLength(pp.Integer(t.NumPieces()-1))))
-	return
-}
-
 func (t *torrent) UsualPieceSize() int {
 	return int(t.Info.PieceLength)
 }
 
 func (t *torrent) LastPieceSize() int {
-	return int(t.PieceLength(pp.Integer(t.NumPieces() - 1)))
+	return int(t.PieceLength(pp.Integer(t.numPieces() - 1)))
 }
 
-func (t *torrent) NumPieces() int {
+func (t *torrent) numPieces() int {
 	return len(t.Info.Pieces) / 20
 }
 
@@ -464,11 +458,11 @@ func (t *torrent) isClosed() bool {
 	}
 }
 
-func (t *torrent) Close() (err error) {
+func (t *torrent) close() (err error) {
 	if t.isClosed() {
 		return
 	}
-	t.CeaseNetworking()
+	t.ceaseNetworking()
 	close(t.closing)
 	t.dataLock.Lock()
 	if t.Data != nil {
@@ -565,7 +559,7 @@ type Peer struct {
 }
 
 func (t *torrent) PieceLength(piece pp.Integer) (len_ pp.Integer) {
-	if int(piece) == t.NumPieces()-1 {
+	if int(piece) == t.numPieces()-1 {
 		len_ = pp.Integer(t.Length() % t.Info.PieceLength)
 	}
 	if len_ == 0 {

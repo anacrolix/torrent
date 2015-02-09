@@ -851,11 +851,15 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 		tcpConn.SetLinger(0)
 	}
 	defer sock.Close()
+	// One minute to complete handshake.
+	err = sock.SetDeadline(time.Now().Add(time.Minute))
+	if err != nil {
+		err = fmt.Errorf("couldn't set handshake deadline: %s", err)
+		return
+	}
 	me.mu.Lock()
 	me.handshaking++
 	me.mu.Unlock()
-	// One minute to complete handshake.
-	sock.SetDeadline(time.Now().Add(time.Minute))
 	hsRes, ok, err := handshake(sock, func() *InfoHash {
 		if torrent == nil {
 			return nil

@@ -114,7 +114,7 @@ func setupSignals() {
 
 func main() {
 	select {}
-	if err := saveTable(); err != nil {
-		log.Printf("error saving node table: %s", err)
-	}
+	// if err := saveTable(); err != nil {
+	// 	log.Printf("error saving node table: %s", err)
+	// }
 }

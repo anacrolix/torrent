@@ -10,7 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/mmap_span"
+	"bitbucket.org/anacrolix/go.torrent/data/file"
+
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	"bitbucket.org/anacrolix/go.torrent/util"
@@ -39,6 +40,14 @@ type peersKey struct {
 	Port    int
 }
 
+type torrentData interface {
+	ReadAt(p []byte, off int64) (n int, err error)
+	Close()
+	WriteAt(p []byte, off int64) (n int, err error)
+	WriteSectionTo(w io.Writer, off, n int64) (written int64, err error)
+}
+
+// Is not aware of Client.
 type torrent struct {
 	stateMu sync.Mutex
 	closing chan struct{}
@@ -50,9 +59,10 @@ type torrent struct {
 	InfoHash InfoHash
 	Pieces   []*piece
 	length   int64
+
 	// Prevent mutations to Data memory maps while in use as they're not safe.
 	dataLock sync.RWMutex
-	Data     *mmap_span.MMapSpan
+	Data     torrentData
 
 	Info *MetaInfo
 	// Active peer connections.
@@ -175,14 +185,12 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 // Called when metadata for a torrent becomes available.
 func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte, eventLocker sync.Locker) (err error) {
 	t.Info = newMetaInfo(&md)
+	t.length = 0
+	for _, f := range t.Info.UpvertedFiles() {
+		t.length += f.Length
+	}
 	t.MetaData = infoBytes
 	t.metadataHave = nil
-	t.Data, err = mmapTorrentData(&md, dataDir)
-	if err != nil {
-		err = fmt.Errorf("error mmap'ing torrent data: %s", err)
-		return
-	}
-	t.length = t.Data.Size()
 	for _, hash := range infoPieceHashes(&md) {
 		piece := &piece{}
 		piece.Event.L = eventLocker
@@ -195,6 +203,11 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 			log.Printf("closing connection: %s", err)
 			conn.Close()
 		}
+	}
+	t.Data, err = file.TorrentData(&md, dataDir)
+	if err != nil {
+		err = fmt.Errorf("error mmap'ing torrent data: %s", err)
+		return
 	}
 	return
 }
@@ -571,15 +584,8 @@ func (t *torrent) PieceLength(piece pp.Integer) (len_ pp.Integer) {
 func (t *torrent) HashPiece(piece pp.Integer) (ps pieceSum) {
 	hash := pieceHash.New()
 	t.dataLock.RLock()
-	n, err := t.Data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, t.Info.PieceLength)
+	t.Data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, t.Info.PieceLength)
 	t.dataLock.RUnlock()
-	if err != nil {
-		panic(err)
-	}
-	if pp.Integer(n) != t.PieceLength(piece) {
-		// log.Print(t.Info)
-		panic(fmt.Sprintf("hashed wrong number of bytes: expected %d; did %d; piece %d", t.PieceLength(piece), n, piece))
-	}
 	util.CopyExact(ps[:], hash.Sum(nil))
 	return
 }

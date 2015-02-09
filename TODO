@@ -1,7 +1,5 @@
- * Properly encapsulate the mmap/span stuff.
  * Track upload and download data.
  * Emulate a UDP server in the UDP tracker tests.
  * Make use of sparse file regions in download data for faster hashing.
- * Add an alternative to mmap()'ed torrent data.
  * If we're choked and interested, we never send not-interested if there's nothing we want?
  * Perform announce as part of GetPeers, to reduce closest node calculation overhead, and wasting discarded nodes during the search.

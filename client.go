@@ -1653,10 +1653,35 @@ type File struct {
 	path   string
 	offset int64
 	length int64
+	metainfo.FileInfo
 }
 
 func (f *File) Length() int64 {
 	return f.length
+}
+
+type FilePieceState struct {
+	Length int64
+	State  byte
+}
+
+func (f *File) Progress() (ret []FilePieceState) {
+	pieceSize := int64(f.t.UsualPieceSize())
+	off := f.offset % pieceSize
+	remaining := f.length
+	for i := int(f.offset / pieceSize); ; i++ {
+		if remaining == 0 {
+			break
+		}
+		len1 := pieceSize - off
+		if len1 > remaining {
+			len1 = remaining
+		}
+		ret = append(ret, FilePieceState{len1, f.t.pieceStatusChar(i)})
+		off = 0
+		remaining -= len1
+	}
+	return
 }
 
 func (f *File) PrioritizeRegion(off, len int64) {
@@ -1680,6 +1705,7 @@ func (t Torrent) Files() (ret []File) {
 			strings.Join(fi.Path, "/"),
 			offset,
 			fi.Length,
+			fi,
 		})
 		offset += fi.Length
 	}

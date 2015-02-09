@@ -20,10 +20,11 @@ const GreetingFileContents = "hello, world\n"
 func CreateDummyTorrentData(dirName string) string {
 	f, _ := os.Create(filepath.Join(dirName, "greeting"))
 	defer f.Close()
-	f.WriteString("hello, world\n")
+	f.WriteString(GreetingFileContents)
 	return f.Name()
 }
 
+// Writes to w, a metainfo containing the file at name.
 func CreateMetaInfo(name string, w io.Writer) {
 	builder := metainfo.Builder{}
 	builder.AddFile(name)

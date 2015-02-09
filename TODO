@@ -2,4 +2,4 @@
  * Emulate a UDP server in the UDP tracker tests.
  * Make use of sparse file regions in download data for faster hashing.
  * If we're choked and interested, we never send not-interested if there's nothing we want?
- * Perform announce as part of GetPeers, to reduce closest node calculation overhead, and wasting discarded nodes during the search.
+ * Don't announce torrents that don't need active peers. It spams UDP, fills memory, and publicizes what we have loaded.

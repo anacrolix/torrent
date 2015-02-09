@@ -759,6 +759,10 @@ type handshakeResult struct {
 	InfoHash
 }
 
+// ih is nil if we expect the peer to declare the InfoHash, such as when the
+// peer initiated the connection. Returns ok if the handshake was successful,
+// and err if there was an unexpected condition other than the peer simply
+// abandoning the handshake.
 func handshake(sock io.ReadWriteCloser, ih *InfoHash, peerID [20]byte) (res handshakeResult, ok bool, err error) {
 	// Bytes to be sent to the peer. Should never block the sender.
 	postCh := make(chan []byte, 4)
@@ -1839,7 +1843,7 @@ func (me *Client) addOrMergeTorrent(ih InfoHash, announceList [][]string) (T Tor
 	return
 }
 
-// Adds the torrent to the client.
+// Adds a torrent to the client.
 func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) (t Torrent, err error) {
 	var ih InfoHash
 	CopyExact(&ih, metaInfo.Info.Hash)

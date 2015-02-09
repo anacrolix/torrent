@@ -162,7 +162,7 @@ func TestUTPRawConn(t *testing.T) {
 		defer close(readerStopped)
 		b := make([]byte, 500)
 		for i := 0; i < N; i++ {
-			n, _, err := l.ReadFrom(b)
+			n, _, err := l.PacketConn().ReadFrom(b)
 			if err != nil {
 				t.Fatalf("error reading from raw conn: %s", err)
 			}

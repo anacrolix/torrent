@@ -490,7 +490,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 			dhtCfg.Addr = listenAddr()
 		}
 		if dhtCfg.Conn == nil && cl.utpSock != nil {
-			dhtCfg.Conn = cl.utpSock
+			dhtCfg.Conn = cl.utpSock.PacketConn()
 		}
 		cl.dHT, err = dht.NewServer(dhtCfg)
 		if cl.ipBlockList != nil {

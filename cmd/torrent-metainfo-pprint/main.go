@@ -9,6 +9,7 @@ import (
 )
 
 func main() {
+	name := flag.Bool("name", false, "print name")
 	flag.Parse()
 	for _, filename := range flag.Args() {
 		metainfo, err := metainfo.LoadFromFile(filename)
@@ -16,6 +17,10 @@ func main() {
 			log.Print(err)
 			continue
 		}
-		fmt.Printf("%+#v\n", metainfo)
+		if *name {
+			fmt.Printf("%s\n", metainfo.Info.Name)
+		} else {
+			fmt.Printf("%+#v\n", metainfo)
+		}
 	}
 }

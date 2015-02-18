@@ -1,3 +1,5 @@
+// Implements ordering of torrent piece indices for such purposes as download
+// prioritization.
 package pieceordering
 
 import (
@@ -6,6 +8,7 @@ import (
 	"github.com/ryszard/goskiplist/skiplist"
 )
 
+// Maintains piece integers by their ascending assigned keys.
 type Instance struct {
 	sl        *skiplist.SkipList
 	pieceKeys map[int]int
@@ -17,8 +20,8 @@ func New() *Instance {
 	}
 }
 
-// Add the piece with the given key. No other piece can have the same key. If
-// the piece is already present, change its key.
+// Add the piece with the given key. If the piece is already present, change
+// its key.
 func (me *Instance) SetPiece(piece, key int) {
 	if existingKey, ok := me.pieceKeys[piece]; ok {
 		if existingKey == key {
@@ -80,6 +83,7 @@ func (me *Instance) DeletePiece(piece int) {
 	delete(me.pieceKeys, piece)
 }
 
+// Returns the piece with the lowest key.
 func (me Instance) First() Element {
 	i := me.sl.SeekToFirst()
 	if i == nil {

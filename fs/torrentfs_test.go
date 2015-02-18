@@ -187,6 +187,7 @@ func TestDownloadOnDemand(t *testing.T) {
 		DisableTrackers: true,
 		NoDHT:           true,
 		ListenAddr:      ":0",
+		DisableTCP:      true,
 
 		NoDefaultBlocklist: true,
 

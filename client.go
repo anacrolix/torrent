@@ -235,8 +235,11 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		} else {
 			fmt.Fprint(w, t.Name())
 		}
+		fmt.Fprint(w, "\n")
 		if t.haveInfo() {
-			fmt.Fprintf(w, ": %f%% of %d bytes", 100*(1-float32(t.BytesLeft())/float32(t.Length())), t.Length())
+			fmt.Fprintf(w, "%f%% of %d bytes", 100*(1-float32(t.BytesLeft())/float32(t.Length())), t.Length())
+		} else {
+			w.WriteString("<missing metainfo>")
 		}
 		fmt.Fprint(w, "\n")
 		fmt.Fprint(w, "Blocked reads:")

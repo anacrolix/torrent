@@ -73,8 +73,13 @@ const (
 	extensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x01"
 
 	socketsPerTorrent     = 40
-	torrentPeersHighWater = 1000
-	torrentPeersLowWater  = socketsPerTorrent * 5
+	torrentPeersHighWater = 200
+	torrentPeersLowWater  = 50
+
+	// Limit how long handshake can take. This is to reduce the lingering
+	// impact of a few bad apples. 4s loses 1% of successful handshakes that
+	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
+	handshakeTimeout = 4 * time.Second
 )
 
 // Currently doesn't really queue, but should in the future.
@@ -851,8 +856,7 @@ func (me *Client) runConnection(sock net.Conn, torrent *torrent, discovery peerS
 		tcpConn.SetLinger(0)
 	}
 	defer sock.Close()
-	// One minute to complete handshake.
-	err = sock.SetDeadline(time.Now().Add(time.Minute))
+	err = sock.SetDeadline(time.Now().Add(handshakeTimeout))
 	if err != nil {
 		err = fmt.Errorf("couldn't set handshake deadline: %s", err)
 		return

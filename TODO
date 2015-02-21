@@ -3,3 +3,4 @@
  * Make use of sparse file regions in download data for faster hashing.
  * If we're choked and interested, we never send not-interested if there's nothing we want?
  * Don't announce torrents that don't need active peers. It spams UDP, fills memory, and publicizes what we have loaded.
+ * Randomize triedAddrs bloom filter to allow different Addr sets on each Announce.

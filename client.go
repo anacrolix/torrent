@@ -830,6 +830,8 @@ func handshake(sock io.ReadWriteCloser, ih *InfoHash, peerID [20]byte) (res hand
 	return
 }
 
+// Wraps a raw connection and provides the interface we want for using the
+// connection in the message loop.
 type peerConn struct {
 	net.Conn
 }
@@ -841,6 +843,7 @@ func (pc peerConn) Read(b []byte) (n int, err error) {
 		err = fmt.Errorf("error setting read deadline: %s", err)
 	}
 	n, err = pc.Conn.Read(b)
+	// Convert common errors into io.EOF.
 	if err != nil {
 		if opError, ok := err.(*net.OpError); ok && opError.Op == "read" && opError.Err == syscall.ECONNRESET {
 			err = io.EOF

@@ -40,6 +40,9 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 		}
 	}
 	addRequest := func(req request) (again bool) {
+		if len(c.Requests) >= 32 {
+			return false
+		}
 		return c.Request(req)
 	}
 	for e := c.pieceRequestOrder.First(); e != nil; e = e.Next() {

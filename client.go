@@ -1807,12 +1807,14 @@ func (cl *Client) AddMagnet(uri string) (T Torrent, err error) {
 // for replacements.
 func (cl *Client) connectionPruner(t *torrent) {
 	for {
-		time.Sleep(15 * time.Second)
-		cl.mu.Lock()
 		select {
 		case <-t.ceasingNetworking:
-		default:
+			return
+		case <-t.closing:
+			return
+		case <-time.After(15 * time.Second):
 		}
+		cl.mu.Lock()
 		license := len(t.Conns) - (socketsPerTorrent+1)/2
 		for _, c := range t.Conns {
 			if license <= 0 {
@@ -1923,7 +1925,7 @@ func (cl *Client) waitWantPeers(t *torrent) bool {
 			return false
 		default:
 		}
-		if len(t.Peers) < torrentPeersLowWater {
+		if len(t.Peers) < torrentPeersLowWater && t.needData() {
 			return true
 		}
 		cl.mu.Unlock()
@@ -2041,6 +2043,9 @@ func (cl *Client) announceTorrentTrackers(t *torrent) {
 		Port:     int16(cl.incomingPeerPort()),
 		PeerId:   cl.peerID,
 		InfoHash: t.InfoHash,
+	}
+	if !cl.waitWantPeers(t) {
+		return
 	}
 	cl.mu.RLock()
 	req.Left = t.BytesLeft()

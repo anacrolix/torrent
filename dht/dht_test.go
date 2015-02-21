@@ -148,8 +148,11 @@ func TestPing(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tn.Close()
-	msg := <-tn.Response
-	if msg.ID() != srv0.IDString() {
+	ok := make(chan bool)
+	tn.SetResponseHandler(func(msg Msg) {
+		ok <- msg.ID() == srv0.IDString()
+	})
+	if !<-ok {
 		t.FailNow()
 	}
 }

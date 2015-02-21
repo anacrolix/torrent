@@ -47,14 +47,15 @@ func main() {
 				log.Fatal(err)
 			}
 			start := time.Now()
-			go func(addr string) {
-				resp := <-t.Response
-				pingResponses <- pingResponse{
-					addr: addr,
-					krpc: resp,
-					rtt:  time.Now().Sub(start),
+			t.SetResponseHandler(func(addr string) func(dht.Msg) {
+				return func(resp dht.Msg) {
+					pingResponses <- pingResponse{
+						addr: addr,
+						krpc: resp,
+						rtt:  time.Now().Sub(start),
+					}
 				}
-			}(netloc)
+			}(netloc))
 		}
 		if *timeout >= 0 {
 			time.Sleep(*timeout)

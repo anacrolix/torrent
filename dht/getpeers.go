@@ -105,7 +105,7 @@ func (me *peerDiscovery) contact(addr dHTAddr) {
 	me.numContacted++
 	me.triedAddrs.Add([]byte(addr.String()))
 	if err := me.getPeers(addr); err != nil {
-		log.Printf("error sending get_peers request to %s: %s", addr, err)
+		log.Printf("error sending get_peers request to %s: %#v", addr, err)
 		return
 	}
 	me.pending++
@@ -143,40 +143,36 @@ func (me *peerDiscovery) getPeers(addr dHTAddr) error {
 	if err != nil {
 		return err
 	}
-	go func() {
-		select {
-		case m := <-t.Response:
-			// Register suggested nodes closer to the target info-hash.
-			me.mu.Lock()
-			for _, n := range m.Nodes() {
-				me.responseNode(n)
-			}
-			me.mu.Unlock()
-
-			if vs := m.Values(); vs != nil {
-				nodeInfo := NodeInfo{
-					Addr: t.remoteAddr,
-				}
-				copy(nodeInfo.ID[:], m.ID())
-				select {
-				case me.peerStream.values <- peerStreamValue{
-					Peers:    vs,
-					NodeInfo: nodeInfo,
-				}:
-				case <-me.peerStream.stop:
-				}
-			}
-
-			if at, ok := m.AnnounceToken(); ok {
-				me.announcePeer(addr, at)
-			}
-		case <-me.closingCh():
+	t.SetResponseHandler(func(m Msg) {
+		// Register suggested nodes closer to the target info-hash.
+		me.mu.Lock()
+		for _, n := range m.Nodes() {
+			me.responseNode(n)
 		}
-		t.Close()
+		me.mu.Unlock()
+
+		if vs := m.Values(); vs != nil {
+			nodeInfo := NodeInfo{
+				Addr: t.remoteAddr,
+			}
+			copy(nodeInfo.ID[:], m.ID())
+			select {
+			case me.peerStream.values <- peerStreamValue{
+				Peers:    vs,
+				NodeInfo: nodeInfo,
+			}:
+			case <-me.peerStream.stop:
+			}
+		}
+
+		if at, ok := m.AnnounceToken(); ok {
+			me.announcePeer(addr, at)
+		}
+
 		me.mu.Lock()
 		me.transactionClosed()
 		me.mu.Unlock()
-	}()
+	})
 	return nil
 }
 

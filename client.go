@@ -92,6 +92,8 @@ func (cl *Client) queuePieceCheck(t *torrent, pieceIndex pp.Integer) {
 	go cl.verifyPiece(t, pieceIndex)
 }
 
+// Queue a piece check if one isn't already queued, and the piece has never
+// been checked before.
 func (cl *Client) queueFirstHash(t *torrent, piece int) {
 	p := t.Pieces[piece]
 	if p.EverHashed || p.Hashing || p.QueuedForHash {
@@ -1196,7 +1198,8 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				c.PeerRequests = make(map[request]struct{}, maxRequests)
 			}
 			request := newRequest(msg.Index, msg.Begin, msg.Length)
-			// TODO: Requests should be satisfied from a dedicated upload routine.
+			// TODO: Requests should be satisfied from a dedicated upload
+			// routine.
 			// c.PeerRequests[request] = struct{}{}
 			p := make([]byte, msg.Length)
 			n, err := t.Data.ReadAt(p, int64(t.PieceLength(0))*int64(msg.Index)+int64(msg.Begin))
@@ -1756,6 +1759,7 @@ func (me Torrent) ReadAt(p []byte, off int64) (n int, err error) {
 	return me.cl.torrentReadAt(me.torrent, off, p)
 }
 
+// Returns nil metainfo if it isn't in the cache.
 func (cl *Client) torrentCacheMetaInfo(ih InfoHash) (mi *metainfo.MetaInfo, err error) {
 	f, err := os.Open(cl.torrentFileCachePath(ih))
 	if err != nil {

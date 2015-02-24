@@ -47,7 +47,7 @@ type torrentData interface {
 	WriteSectionTo(w io.Writer, off, n int64) (written int64, err error)
 }
 
-// Is not aware of Client.
+// Is not aware of Client. Maintains state of torrent for with-in a Client.
 type torrent struct {
 	stateMu sync.Mutex
 	closing chan struct{}
@@ -77,7 +77,7 @@ type torrent struct {
 	wantPeers sync.Cond
 
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
-	// mirror their respective URLs from the announce-list key.
+	// mirror their respective URLs from the announce-list metainfo key.
 	Trackers     [][]tracker.Client
 	DisplayName  string
 	MetaData     []byte

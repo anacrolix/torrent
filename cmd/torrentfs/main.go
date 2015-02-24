@@ -127,9 +127,12 @@ func main() {
 					}
 				}
 			case dirwatch.Removed:
-				err := client.DropTorrent(ev.InfoHash)
-				if err != nil {
-					log.Printf("error dropping torrent: %s", err)
+				for _, t := range client.Torrents() {
+					if t.InfoHash != ev.InfoHash {
+						continue
+					}
+					t.Drop()
+					break
 				}
 			}
 		}

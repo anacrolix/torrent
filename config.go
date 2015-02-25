@@ -16,4 +16,8 @@ type Config struct {
 	DisableUTP         bool
 	DisableTCP         bool
 	NoDefaultBlocklist bool
+	// Defaults to "$HOME/.config/torrent"
+	ConfigDir            string
+	DisableMetainfoCache bool
+	TorrentDataOpener
 }

@@ -36,6 +36,8 @@ import (
 	"syscall"
 	"time"
 
+	filePkg "bitbucket.org/anacrolix/go.torrent/data/file"
+
 	"bitbucket.org/anacrolix/go.torrent/dht"
 	"bitbucket.org/anacrolix/go.torrent/internal/pieceordering"
 	"bitbucket.org/anacrolix/go.torrent/iplist"
@@ -80,6 +82,8 @@ const (
 	// impact of a few bad apples. 4s loses 1% of successful handshakes that
 	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
 	handshakeTimeout = 4 * time.Second
+
+	pruneInterval = 10 * time.Second
 )
 
 // Currently doesn't really queue, but should in the future.
@@ -116,6 +120,11 @@ type Client struct {
 	disableTCP       bool
 	ipBlockList      *iplist.IPList
 	bannedTorrents   map[InfoHash]struct{}
+	_configDir       string
+	config           Config
+	pruneTimer       *time.Timer
+
+	torrentDataOpener TorrentDataOpener
 
 	mu    sync.RWMutex
 	event sync.Cond
@@ -219,8 +228,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
-// Read torrent data at the given offset. Returns ErrDataNotReady if the data
-// isn't available.
+// Read torrent data at the given offset. Will block until it is available.
 func (cl *Client) torrentReadAt(t *torrent, off int64, p []byte) (n int, err error) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
@@ -248,10 +256,10 @@ func (cl *Client) torrentReadAt(t *torrent, off int64, p []byte) (n int, err err
 	if len(p) == 0 {
 		panic(len(p))
 	}
-	for !piece.Complete() {
+	for !piece.Complete() && !t.isClosed() {
 		piece.Event.Wait()
 	}
-	return t.Data.ReadAt(p, off)
+	return t.data.ReadAt(p, off)
 }
 
 func (cl *Client) readRaisePiecePriorities(t *torrent, off, _len int64) {
@@ -272,7 +280,10 @@ func (cl *Client) readRaisePiecePriorities(t *torrent, off, _len int64) {
 }
 
 func (cl *Client) configDir() string {
-	return filepath.Join(os.Getenv("HOME"), ".config/torrent")
+	if cl._configDir == "" {
+		return filepath.Join(os.Getenv("HOME"), ".config/torrent")
+	}
+	return cl._configDir
 }
 
 func (cl *Client) ConfigDir() string {
@@ -393,6 +404,11 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		dataDir:          cfg.DataDir,
 		disableUTP:       cfg.DisableUTP,
 		disableTCP:       cfg.DisableTCP,
+		_configDir:       cfg.ConfigDir,
+		config:           *cfg,
+		torrentDataOpener: func(md *metainfo.Info) (TorrentData, error) {
+			return filePkg.TorrentData(md, cfg.DataDir), nil
+		},
 
 		quit:     make(chan struct{}),
 		torrents: make(map[InfoHash]*torrent),
@@ -1163,7 +1179,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			// routine.
 			// c.PeerRequests[request] = struct{}{}
 			p := make([]byte, msg.Length)
-			n, err := t.Data.ReadAt(p, int64(t.PieceLength(0))*int64(msg.Index)+int64(msg.Begin))
+			n, err := t.data.ReadAt(p, int64(t.PieceLength(0))*int64(msg.Index)+int64(msg.Begin))
 			if err != nil {
 				return fmt.Errorf("reading t data to serve request %q: %s", request, err)
 			}
@@ -1499,22 +1515,10 @@ func (cl *Client) saveTorrentFile(t *torrent) error {
 	return nil
 }
 
-func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err error) {
-	err = t.setMetadata(md, cl.dataDir, bytes, &cl.mu)
-	if err != nil {
-		return
+func (cl *Client) startTorrent(t *torrent) {
+	if t.Info == nil || t.data == nil {
+		panic("nope")
 	}
-
-	if err := cl.saveTorrentFile(t); err != nil {
-		log.Printf("error saving torrent file for %s: %s", t, err)
-	}
-
-	if strings.Contains(strings.ToLower(md.Name), "porn") {
-		cl.dropTorrent(t.InfoHash)
-		err = errors.New("no porn plx")
-		return
-	}
-
 	// If the client intends to upload, it needs to know what state pieces are
 	// in.
 	if !cl.noUpload {
@@ -1529,9 +1533,43 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 			}
 		}()
 	}
-
 	cl.downloadStrategy.TorrentStarted(t)
+}
+
+// Storage cannot be changed once it's set.
+func (cl *Client) setStorage(t *torrent, td TorrentData) (err error) {
+	err = t.setStorage(td)
+	cl.event.Broadcast()
+	if err != nil {
+		return
+	}
+	cl.startTorrent(t)
+	return
+}
+
+type TorrentDataOpener func(*metainfo.Info) (TorrentData, error)
+
+func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err error) {
+	err = t.setMetadata(md, bytes, &cl.mu)
+	if err != nil {
+		return
+	}
+	if !cl.config.DisableMetainfoCache {
+		if err := cl.saveTorrentFile(t); err != nil {
+			log.Printf("error saving torrent file for %s: %s", t, err)
+		}
+	}
+	if strings.Contains(strings.ToLower(md.Name), "porn") {
+		cl.dropTorrent(t.InfoHash)
+		err = errors.New("no porn plx")
+		return
+	}
 	close(t.gotMetainfo)
+	td, err := cl.torrentDataOpener(&md)
+	if err != nil {
+		return
+	}
+	err = cl.setStorage(t, td)
 	return
 }
 
@@ -1722,6 +1760,9 @@ func (me Torrent) ReadAt(p []byte, off int64) (n int, err error) {
 
 // Returns nil metainfo if it isn't in the cache.
 func (cl *Client) torrentCacheMetaInfo(ih InfoHash) (mi *metainfo.MetaInfo, err error) {
+	if cl.config.DisableMetainfoCache {
+		return
+	}
 	f, err := os.Open(cl.torrentFileCachePath(ih))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1768,34 +1809,33 @@ func (cl *Client) AddMagnet(uri string) (T Torrent, err error) {
 	return
 }
 
-// Actively prunes unused connections. This is required to make space to dial
-// for replacements.
-func (cl *Client) connectionPruner(t *torrent) {
-	for {
-		select {
-		case <-t.ceasingNetworking:
-			return
-		case <-t.closing:
-			return
-		case <-time.After(15 * time.Second):
-		}
-		cl.mu.Lock()
-		license := len(t.Conns) - (socketsPerTorrent+1)/2
-		for _, c := range t.Conns {
-			if license <= 0 {
-				break
-			}
-			if time.Now().Sub(c.lastUsefulChunkReceived) < time.Minute {
-				continue
-			}
-			if time.Now().Sub(c.completedHandshake) < time.Minute {
-				continue
-			}
-			c.Close()
-			license--
-		}
-		cl.mu.Unlock()
+// Prunes unused connections. This is required to make space to dial for
+// replacements.
+func (cl *Client) pruneConnectionsUnlocked(t *torrent) {
+	select {
+	case <-t.ceasingNetworking:
+		return
+	case <-t.closing:
+		return
+	default:
 	}
+	cl.mu.Lock()
+	license := len(t.Conns) - (socketsPerTorrent+1)/2
+	for _, c := range t.Conns {
+		if license <= 0 {
+			break
+		}
+		if time.Now().Sub(c.lastUsefulChunkReceived) < time.Minute {
+			continue
+		}
+		if time.Now().Sub(c.completedHandshake) < time.Minute {
+			continue
+		}
+		c.Close()
+		license--
+	}
+	cl.mu.Unlock()
+	t.pruneTimer.Reset(pruneInterval)
 }
 
 func (me *Client) dropTorrent(infoHash InfoHash) (err error) {
@@ -1835,7 +1875,9 @@ func (me *Client) addOrMergeTorrent(ih InfoHash, announceList [][]string) (T Tor
 		if me.dHT != nil {
 			go me.announceTorrentDHT(T.torrent, true)
 		}
-		go me.connectionPruner(T.torrent)
+		T.torrent.pruneTimer = time.AfterFunc(0, func() {
+			me.pruneConnectionsUnlocked(T.torrent)
+		})
 	}
 	return
 }
@@ -2178,7 +2220,7 @@ func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	p := t.Pieces[index]
-	for p.Hashing {
+	for p.Hashing || t.data == nil {
 		cl.event.Wait()
 	}
 	if t.isClosed() {

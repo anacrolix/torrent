@@ -169,6 +169,9 @@ func TestDownloadOnDemand(t *testing.T) {
 		ListenAddr:      ":0",
 
 		NoDefaultBlocklist: true,
+		// Ensure that the metainfo is obtained over the wire, since we added
+		// the torrent to the seeder by magnet.
+		DisableMetainfoCache: true,
 	})
 	if err != nil {
 		t.Fatalf("error creating seeder client: %s", err)
@@ -183,13 +186,16 @@ func TestDownloadOnDemand(t *testing.T) {
 		t.Fatal(err)
 	}
 	leecher, err := torrent.NewClient(&torrent.Config{
-		DataDir:         filepath.Join(layout.BaseDir, "download"),
 		DisableTrackers: true,
 		NoDHT:           true,
 		ListenAddr:      ":0",
 		DisableTCP:      true,
 
 		NoDefaultBlocklist: true,
+
+		TorrentDataOpener: func(info *metainfo.Info) (torrent.TorrentData, error) {
+			return mmap.TorrentData(info, filepath.Join(layout.BaseDir, "download"))
+		},
 
 		// This can be used to check if clients can connect to other clients
 		// with the same ID.

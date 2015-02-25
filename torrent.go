@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/data/file"
-
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	"bitbucket.org/anacrolix/go.torrent/util"
@@ -40,7 +38,7 @@ type peersKey struct {
 	Port    int
 }
 
-type torrentData interface {
+type TorrentData interface {
 	ReadAt(p []byte, off int64) (n int, err error)
 	Close()
 	WriteAt(p []byte, off int64) (n int, err error)
@@ -60,9 +58,7 @@ type torrent struct {
 	Pieces   []*piece
 	length   int64
 
-	// Prevent mutations to Data memory maps while in use as they're not safe.
-	dataLock sync.RWMutex
-	Data     torrentData
+	data TorrentData
 
 	Info *MetaInfo
 	// Active peer connections.
@@ -85,6 +81,8 @@ type torrent struct {
 
 	gotMetainfo chan struct{}
 	GotMetainfo <-chan struct{}
+
+	pruneTimer *time.Timer
 }
 
 func (t *torrent) numConnsUnchoked() (num int) {
@@ -129,6 +127,7 @@ func (t *torrent) ceaseNetworking() {
 	for _, c := range t.Conns {
 		c.Close()
 	}
+	t.pruneTimer.Stop()
 }
 
 func (t *torrent) AddPeers(pp []Peer) {
@@ -183,7 +182,7 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 }
 
 // Called when metadata for a torrent becomes available.
-func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte, eventLocker sync.Locker) (err error) {
+func (t *torrent) setMetadata(md metainfo.Info, infoBytes []byte, eventLocker sync.Locker) (err error) {
 	t.Info = newMetaInfo(&md)
 	t.length = 0
 	for _, f := range t.Info.UpvertedFiles() {
@@ -204,11 +203,14 @@ func (t *torrent) setMetadata(md metainfo.Info, dataDir string, infoBytes []byte
 			conn.Close()
 		}
 	}
-	t.Data, err = file.TorrentData(&md, dataDir)
-	if err != nil {
-		err = fmt.Errorf("error mmap'ing torrent data: %s", err)
-		return
+	return
+}
+
+func (t *torrent) setStorage(td TorrentData) (err error) {
+	if t.data != nil {
+		t.data.Close()
 	}
+	t.data = td
 	return
 }
 
@@ -477,12 +479,9 @@ func (t *torrent) close() (err error) {
 	}
 	t.ceaseNetworking()
 	close(t.closing)
-	t.dataLock.Lock()
-	if t.Data != nil {
-		t.Data.Close()
-		t.Data = nil
+	if t.data != nil {
+		t.data.Close()
 	}
-	t.dataLock.Unlock()
 	for _, conn := range t.Conns {
 		conn.Close()
 	}
@@ -525,7 +524,7 @@ func (t *torrent) offsetRequest(off int64) (req request, ok bool) {
 }
 
 func (t *torrent) WriteChunk(piece int, begin int64, data []byte) (err error) {
-	_, err = t.Data.WriteAt(data, int64(piece)*t.Info.PieceLength+begin)
+	_, err = t.data.WriteAt(data, int64(piece)*t.Info.PieceLength+begin)
 	return
 }
 
@@ -583,9 +582,7 @@ func (t *torrent) PieceLength(piece pp.Integer) (len_ pp.Integer) {
 
 func (t *torrent) HashPiece(piece pp.Integer) (ps pieceSum) {
 	hash := pieceHash.New()
-	t.dataLock.RLock()
-	t.Data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, t.Info.PieceLength)
-	t.dataLock.RUnlock()
+	t.data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, t.Info.PieceLength)
 	util.CopyExact(ps[:], hash.Sum(nil))
 	return
 }

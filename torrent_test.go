@@ -3,6 +3,7 @@ package torrent
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
 )
@@ -45,6 +46,7 @@ func TestTorrentRequest(t *testing.T) {
 
 func TestTorrentDoubleClose(t *testing.T) {
 	tt, err := newTorrent(InfoHash{}, nil, 0)
+	tt.pruneTimer = time.NewTimer(0)
 	if err != nil {
 		t.Fatal(err)
 	}

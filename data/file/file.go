@@ -13,12 +13,11 @@ type data struct {
 	loc  string
 }
 
-func TorrentData(md *metainfo.Info, location string) (ret *data, err error) {
-	ret = &data{md, location}
-	return
+func TorrentData(md *metainfo.Info, location string) data {
+	return data{md, location}
 }
 
-func (me *data) ReadAt(p []byte, off int64) (n int, err error) {
+func (me data) ReadAt(p []byte, off int64) (n int, err error) {
 	for _, fi := range me.info.UpvertedFiles() {
 		if off >= fi.Length {
 			off -= fi.Length
@@ -48,9 +47,9 @@ func (me *data) ReadAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (me *data) Close() {}
+func (me data) Close() {}
 
-func (me *data) WriteAt(p []byte, off int64) (n int, err error) {
+func (me data) WriteAt(p []byte, off int64) (n int, err error) {
 	for _, fi := range me.info.UpvertedFiles() {
 		if off >= fi.Length {
 			off -= fi.Length
@@ -82,7 +81,7 @@ func (me *data) WriteAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (me *data) WriteSectionTo(w io.Writer, off, n int64) (written int64, err error) {
+func (me data) WriteSectionTo(w io.Writer, off, n int64) (written int64, err error) {
 	for _, fi := range me.info.UpvertedFiles() {
 		if off >= fi.Length {
 			off -= fi.Length
@@ -112,6 +111,6 @@ func (me *data) WriteSectionTo(w io.Writer, off, n int64) (written int64, err er
 	return
 }
 
-func (me *data) fileInfoName(fi metainfo.FileInfo) string {
+func (me data) fileInfoName(fi metainfo.FileInfo) string {
 	return filepath.Join(append([]string{me.loc, me.info.Name}, fi.Path...)...)
 }

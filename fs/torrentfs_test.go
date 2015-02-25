@@ -17,8 +17,10 @@ import (
 	"golang.org/x/net/context"
 
 	"bitbucket.org/anacrolix/go.torrent"
+	"bitbucket.org/anacrolix/go.torrent/data/mmap"
 	"bitbucket.org/anacrolix/go.torrent/testutil"
 	"bitbucket.org/anacrolix/go.torrent/util"
+
 	"github.com/anacrolix/libtorgo/metainfo"
 
 	"bazil.org/fuse"

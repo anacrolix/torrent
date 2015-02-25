@@ -197,7 +197,11 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	defer cl.mu.RUnlock()
 	w := bufio.NewWriter(_w)
 	defer w.Flush()
-	fmt.Fprintf(w, "Listening on %s\n", cl.ListenAddr())
+	if addr := cl.ListenAddr(); addr != nil {
+		fmt.Fprintf(w, "Listening on %s\n", cl.ListenAddr())
+	} else {
+		fmt.Println("Not listening!")
+	}
 	fmt.Fprintf(w, "Peer ID: %q\n", cl.peerID)
 	fmt.Fprintf(w, "Handshaking: %d\n", cl.handshaking)
 	if cl.dHT != nil {

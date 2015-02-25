@@ -418,6 +418,9 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		torrents: make(map[InfoHash]*torrent),
 	}
 	cl.event.L = &cl.mu
+	if cfg.TorrentDataOpener != nil {
+		cl.torrentDataOpener = cfg.TorrentDataOpener
+	}
 
 	if !cfg.NoDefaultBlocklist {
 		err = cl.setEnvBlocklist()

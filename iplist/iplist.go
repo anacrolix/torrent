@@ -28,8 +28,18 @@ func New(initSorted []Range) *IPList {
 	}
 }
 
+func (me *IPList) NumRanges() int {
+	if me == nil {
+		return 0
+	}
+	return len(me.ranges)
+}
+
 // Return the range the given IP is in. Returns nil if no range is found.
 func (me *IPList) Lookup(ip net.IP) (r *Range) {
+	if me == nil {
+		return nil
+	}
 	// Find the index of the first range for which the following range exceeds
 	// it.
 	i := sort.Search(len(me.ranges), func(i int) bool {

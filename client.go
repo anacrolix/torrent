@@ -124,8 +124,12 @@ type Client struct {
 	handshaking int
 
 	torrents map[InfoHash]*torrent
+}
 
-	dataWaits map[*torrent][]dataWait
+func (me *Client) IPBlockList() *iplist.IPList {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	return me.ipBlockList
 }
 
 func (me *Client) SetIPBlockList(list *iplist.IPList) {

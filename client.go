@@ -1710,6 +1710,11 @@ func (f *File) PrioritizeRegion(off, len int64) {
 // Returns handles to the files in the torrent. This requires the metainfo is
 // available first.
 func (t Torrent) Files() (ret []File) {
+	select {
+	case <-t.GotMetainfo:
+	default:
+		return
+	}
 	var offset int64
 	for _, fi := range t.Info.UpvertedFiles() {
 		ret = append(ret, File{

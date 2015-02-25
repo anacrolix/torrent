@@ -16,6 +16,20 @@ type Magnet struct {
 
 const xtPrefix = "urn:btih:"
 
+func (m *Magnet) String() (ret string) {
+	// net.URL likes to assume //, and encodes ':' on us, so we do most of
+	// this manually.
+	ret = "magnet:?xt="
+	ret += xtPrefix + hex.EncodeToString(m.InfoHash[:])
+	if m.DisplayName != "" {
+		ret += "&dn=" + url.QueryEscape(m.DisplayName)
+	}
+	for _, tr := range m.Trackers {
+		ret += "&tr=" + url.QueryEscape(tr)
+	}
+	return
+}
+
 func ParseMagnetURI(uri string) (m Magnet, err error) {
 	u, err := url.Parse(uri)
 	if err != nil {

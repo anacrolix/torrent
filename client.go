@@ -222,7 +222,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		}
 		fmt.Fprint(w, "\n")
 		if t.haveInfo() {
-			fmt.Fprintf(w, "%f%% of %d bytes", 100*(1-float32(t.BytesLeft())/float32(t.Length())), t.Length())
+			fmt.Fprintf(w, "%f%% of %d bytes", 100*(1-float32(t.bytesLeft())/float32(t.Length())), t.Length())
 		} else {
 			w.WriteString("<missing metainfo>")
 		}
@@ -236,7 +236,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 func (cl *Client) torrentReadAt(t *torrent, off int64, p []byte) (n int, err error) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	index := int(off / int64(t.UsualPieceSize()))
+	index := int(off / int64(t.usualPieceSize()))
 	// Reading outside the bounds of a file is an error.
 	if index < 0 {
 		err = os.ErrInvalid
@@ -247,7 +247,7 @@ func (cl *Client) torrentReadAt(t *torrent, off int64, p []byte) (n int, err err
 		return
 	}
 	piece := t.Pieces[index]
-	pieceOff := pp.Integer(off % int64(t.UsualPieceSize()))
+	pieceOff := pp.Integer(off % int64(t.usualPieceSize()))
 	pieceLeft := int(t.PieceLength(pp.Integer(index)) - pieceOff)
 	if pieceLeft <= 0 {
 		err = io.EOF
@@ -267,7 +267,7 @@ func (cl *Client) torrentReadAt(t *torrent, off int64, p []byte) (n int, err err
 }
 
 func (cl *Client) readRaisePiecePriorities(t *torrent, off, _len int64) {
-	index := int(off / int64(t.UsualPieceSize()))
+	index := int(off / int64(t.usualPieceSize()))
 	cl.raisePiecePriority(t, index, piecePriorityNow)
 	index++
 	if index >= t.numPieces() {
@@ -1017,8 +1017,8 @@ func (cl *Client) requestPendingMetadata(t *torrent, c *connection) {
 		return
 	}
 	var pending []int
-	for index := 0; index < t.MetadataPieceCount(); index++ {
-		if !t.HaveMetadataPiece(index) {
+	for index := 0; index < t.metadataPieceCount(); index++ {
+		if !t.haveMetadataPiece(index) {
 			pending = append(pending, index)
 		}
 	}
@@ -1047,14 +1047,14 @@ func (cl *Client) completedMetadata(t *torrent) {
 	CopyExact(&ih, h.Sum(nil))
 	if ih != t.InfoHash {
 		log.Print("bad metadata")
-		t.InvalidateMetadata()
+		t.invalidateMetadata()
 		return
 	}
 	var info metainfo.Info
 	err := bencode.Unmarshal(t.MetaData, &info)
 	if err != nil {
 		log.Printf("error unmarshalling metadata: %s", err)
-		t.InvalidateMetadata()
+		t.invalidateMetadata()
 		return
 	}
 	// TODO(anacrolix): If this fails, I think something harsher should be
@@ -1062,7 +1062,7 @@ func (cl *Client) completedMetadata(t *torrent) {
 	err = cl.setMetaData(t, info, t.MetaData)
 	if err != nil {
 		log.Printf("error setting metadata: %s", err)
-		t.InvalidateMetadata()
+		t.invalidateMetadata()
 		return
 	}
 	log.Printf("%s: got metadata from peers", t)
@@ -1095,17 +1095,17 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 		t.SaveMetadataPiece(piece, payload[begin:])
 		c.UsefulChunksReceived++
 		c.lastUsefulChunkReceived = time.Now()
-		if !t.HaveAllMetadataPieces() {
+		if !t.haveAllMetadataPieces() {
 			break
 		}
 		cl.completedMetadata(t)
 	case pp.RequestMetadataExtensionMsgType:
-		if !t.HaveMetadataPiece(piece) {
-			c.Post(t.NewMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
+		if !t.haveMetadataPiece(piece) {
+			c.Post(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
 			break
 		}
 		start := (1 << 14) * piece
-		c.Post(t.NewMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.MetaData[start:start+t.metadataPieceSize(piece)]))
+		c.Post(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.MetaData[start:start+t.metadataPieceSize(piece)]))
 	case pp.RejectMetadataExtensionMsgType:
 	default:
 		err = errors.New("unknown msg_type value")
@@ -1685,7 +1685,7 @@ type FilePieceState struct {
 }
 
 func (f *File) Progress() (ret []FilePieceState) {
-	pieceSize := int64(f.t.UsualPieceSize())
+	pieceSize := int64(f.t.usualPieceSize())
 	off := f.offset % pieceSize
 	remaining := f.length
 	for i := int(f.offset / pieceSize); ; i++ {
@@ -1739,7 +1739,7 @@ func (t Torrent) Files() (ret []File) {
 func (t Torrent) SetRegionPriority(off, len int64) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
-	pieceSize := int64(t.UsualPieceSize())
+	pieceSize := int64(t.usualPieceSize())
 	for i := off / pieceSize; i*pieceSize < off+len; i++ {
 		t.cl.prioritizePiece(t.torrent, int(i), piecePriorityNormal)
 	}
@@ -2057,7 +2057,7 @@ func (cl *Client) announceTorrentTrackers(t *torrent) {
 		return
 	}
 	cl.mu.RLock()
-	req.Left = t.BytesLeft()
+	req.Left = t.bytesLeft()
 	trackers := t.Trackers
 	cl.mu.RUnlock()
 	if cl.announceTorrentTrackersFastStart(&req, trackers, t) {
@@ -2066,7 +2066,7 @@ func (cl *Client) announceTorrentTrackers(t *torrent) {
 newAnnounce:
 	for cl.waitWantPeers(t) {
 		cl.mu.RLock()
-		req.Left = t.BytesLeft()
+		req.Left = t.bytesLeft()
 		trackers = t.Trackers
 		cl.mu.RUnlock()
 		numTrackersTried := 0
@@ -2101,7 +2101,7 @@ func (cl *Client) allTorrentsCompleted() bool {
 		if !t.haveInfo() {
 			return false
 		}
-		if t.NumPiecesCompleted() != t.numPieces() {
+		if t.numPiecesCompleted() != t.numPieces() {
 			return false
 		}
 	}
@@ -2154,7 +2154,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	c.lastUsefulChunkReceived = time.Now()
 
 	// Write the chunk out.
-	err := t.WriteChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
+	err := t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
 	if err != nil {
 		return fmt.Errorf("error writing chunk: %s", err)
 	}
@@ -2241,7 +2241,7 @@ func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 	p.Hashing = true
 	p.QueuedForHash = false
 	cl.mu.Unlock()
-	sum := t.HashPiece(index)
+	sum := t.hashPiece(index)
 	cl.mu.Lock()
 	select {
 	case <-t.closing:

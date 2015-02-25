@@ -136,7 +136,7 @@ func (t *torrent) AddPeers(pp []Peer) {
 	}
 }
 
-func (t *torrent) InvalidateMetadata() {
+func (t *torrent) invalidateMetadata() {
 	t.MetaData = nil
 	t.metadataHave = nil
 	t.Info = nil
@@ -154,11 +154,11 @@ func (t *torrent) SaveMetadataPiece(index int, data []byte) {
 	t.metadataHave[index] = true
 }
 
-func (t *torrent) MetadataPieceCount() int {
+func (t *torrent) metadataPieceCount() int {
 	return (len(t.MetaData) + (1 << 14) - 1) / (1 << 14)
 }
 
-func (t *torrent) HaveMetadataPiece(piece int) bool {
+func (t *torrent) haveMetadataPiece(piece int) bool {
 	if t.haveInfo() {
 		return (1<<14)*piece < len(t.MetaData)
 	} else {
@@ -214,7 +214,7 @@ func (t *torrent) setStorage(td TorrentData) (err error) {
 	return
 }
 
-func (t *torrent) HaveAllMetadataPieces() bool {
+func (t *torrent) haveAllMetadataPieces() bool {
 	if t.haveInfo() {
 		return true
 	}
@@ -261,7 +261,7 @@ func (t *torrent) pieceStatusChar(index int) byte {
 		return 'H'
 	case !p.EverHashed:
 		return '?'
-	case t.PiecePartiallyDownloaded(index):
+	case t.piecePartiallyDownloaded(index):
 		switch p.Priority {
 		case piecePriorityNone:
 			return 'F' // Forgotten
@@ -288,7 +288,7 @@ func (t *torrent) metadataPieceSize(piece int) int {
 	return metadataPieceSize(len(t.MetaData), piece)
 }
 
-func (t *torrent) NewMetadataExtensionMessage(c *connection, msgType int, piece int, data []byte) pp.Message {
+func (t *torrent) newMetadataExtensionMessage(c *connection, msgType int, piece int, data []byte) pp.Message {
 	d := map[string]int{
 		"msg_type": msgType,
 		"piece":    piece,
@@ -350,7 +350,7 @@ func (t *torrent) WriteStatus(w io.Writer) {
 	fmt.Fprintf(w, "Infohash: %x\n", t.InfoHash)
 	fmt.Fprintf(w, "Piece length: %s\n", func() string {
 		if t.haveInfo() {
-			return fmt.Sprint(t.UsualPieceSize())
+			return fmt.Sprint(t.usualPieceSize())
 		} else {
 			return "?"
 		}
@@ -394,7 +394,7 @@ func (t *torrent) haveInfo() bool {
 }
 
 // TODO: Include URIs that weren't converted to tracker clients.
-func (t *torrent) AnnounceList() (al [][]string) {
+func (t *torrent) announceList() (al [][]string) {
 	for _, tier := range t.Trackers {
 		var l []string
 		for _, tr := range tier {
@@ -417,11 +417,11 @@ func (t *torrent) MetaInfo() *metainfo.MetaInfo {
 		CreationDate: time.Now().Unix(),
 		Comment:      "dynamic metainfo from client",
 		CreatedBy:    "go.torrent",
-		AnnounceList: t.AnnounceList(),
+		AnnounceList: t.announceList(),
 	}
 }
 
-func (t *torrent) BytesLeft() (left int64) {
+func (t *torrent) bytesLeft() (left int64) {
 	if !t.haveInfo() {
 		return -1
 	}
@@ -431,7 +431,7 @@ func (t *torrent) BytesLeft() (left int64) {
 	return
 }
 
-func (t *torrent) PiecePartiallyDownloaded(index int) bool {
+func (t *torrent) piecePartiallyDownloaded(index int) bool {
 	return t.PieceNumPendingBytes(pp.Integer(index)) != t.PieceLength(pp.Integer(index))
 }
 
@@ -439,11 +439,11 @@ func NumChunksForPiece(chunkSize int, pieceSize int) int {
 	return (pieceSize + chunkSize - 1) / chunkSize
 }
 
-func (t *torrent) UsualPieceSize() int {
+func (t *torrent) usualPieceSize() int {
 	return int(t.Info.PieceLength)
 }
 
-func (t *torrent) LastPieceSize() int {
+func (t *torrent) lastPieceSize() int {
 	return int(t.PieceLength(pp.Integer(t.numPieces() - 1)))
 }
 
@@ -451,7 +451,7 @@ func (t *torrent) numPieces() int {
 	return len(t.Info.Pieces) / 20
 }
 
-func (t *torrent) NumPiecesCompleted() (num int) {
+func (t *torrent) numPiecesCompleted() (num int) {
 	for _, p := range t.Pieces {
 		if p.Complete() {
 			num++
@@ -515,7 +515,7 @@ func torrentRequestOffset(torrentLength, pieceSize int64, r request) (off int64)
 }
 
 func (t *torrent) requestOffset(r request) int64 {
-	return torrentRequestOffset(t.Length(), int64(t.UsualPieceSize()), r)
+	return torrentRequestOffset(t.Length(), int64(t.usualPieceSize()), r)
 }
 
 // Return the request that would include the given offset into the torrent data.
@@ -523,7 +523,7 @@ func (t *torrent) offsetRequest(off int64) (req request, ok bool) {
 	return torrentOffsetRequest(t.Length(), t.Info.PieceLength, chunkSize, off)
 }
 
-func (t *torrent) WriteChunk(piece int, begin int64, data []byte) (err error) {
+func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 	_, err = t.data.WriteAt(data, int64(piece)*t.Info.PieceLength+begin)
 	return
 }
@@ -580,7 +580,7 @@ func (t *torrent) PieceLength(piece pp.Integer) (len_ pp.Integer) {
 	return
 }
 
-func (t *torrent) HashPiece(piece pp.Integer) (ps pieceSum) {
+func (t *torrent) hashPiece(piece pp.Integer) (ps pieceSum) {
 	hash := pieceHash.New()
 	t.data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, t.Info.PieceLength)
 	util.CopyExact(ps[:], hash.Sum(nil))
@@ -646,7 +646,7 @@ func (t *torrent) connHasWantedPieces(c *connection) bool {
 }
 
 func (t *torrent) extentPieces(off, _len int64) (pieces []int) {
-	for i := off / int64(t.UsualPieceSize()); i*int64(t.UsualPieceSize()) < off+_len; i++ {
+	for i := off / int64(t.usualPieceSize()); i*int64(t.usualPieceSize()) < off+_len; i++ {
 		pieces = append(pieces, int(i))
 	}
 	return

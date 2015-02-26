@@ -46,6 +46,42 @@ type Info struct {
 	Files       []FileInfo `bencode:"files,omitempty"`
 }
 
+func (me *Info) TotalLength() (ret int64) {
+	if me.IsDir() {
+		for _, fi := range me.Files {
+			ret += fi.Length
+		}
+	} else {
+		ret = me.Length
+	}
+	return
+}
+
+func (me *Info) NumPieces() int {
+	return len(me.Pieces) / 20
+}
+
+type Piece interface {
+	Hash() []byte
+	Length() int64
+}
+
+type piece struct {
+	Info *Info
+	i    int
+}
+
+func (me piece) Length() int64 {
+	if me.i == me.Info.NumPieces()-1 {
+		return me.Info.TotalLength() - int64(me.i)*me.Info.PieceLength
+	}
+	return me.Info.PieceLength
+}
+
+func (me *Info) Piece(i int) piece {
+	return piece{me, i}
+}
+
 func (i *Info) IsDir() bool {
 	return len(i.Files) != 0
 }

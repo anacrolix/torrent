@@ -60,7 +60,7 @@ type torrent struct {
 
 	data TorrentData
 
-	Info *MetaInfo
+	Info *metainfo.Info
 	// Active peer connections.
 	Conns []*connection
 	// Set of addrs to which we're attempting to connect.
@@ -183,7 +183,7 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 
 // Called when metadata for a torrent becomes available.
 func (t *torrent) setMetadata(md metainfo.Info, infoBytes []byte, eventLocker sync.Locker) (err error) {
-	t.Info = newMetaInfo(&md)
+	t.Info = &md
 	t.length = 0
 	for _, f := range t.Info.UpvertedFiles() {
 		t.length += f.Length
@@ -411,7 +411,7 @@ func (t *torrent) MetaInfo() *metainfo.MetaInfo {
 	}
 	return &metainfo.MetaInfo{
 		Info: metainfo.InfoEx{
-			Info:  *t.Info.Info,
+			Info:  *t.Info,
 			Bytes: t.MetaData,
 		},
 		CreationDate: time.Now().Unix(),

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anacrolix/libtorgo/metainfo"
 	"golang.org/x/net/context"
 
 	"bazil.org/fuse"
@@ -55,7 +56,7 @@ type rootNode struct {
 
 type node struct {
 	path     []string
-	metadata *torrent.MetaInfo
+	metadata *metainfo.Info
 	FS       *TorrentFS
 	t        torrent.Torrent
 }
@@ -246,7 +247,7 @@ func (me rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, 
 			FS:       me.fs,
 			t:        t,
 		}
-		if t.Info.SingleFile() {
+		if !t.Info.IsDir() {
 			_node = fileNode{__node, uint64(t.Info.Length), 0}
 		} else {
 			_node = dirNode{__node}
@@ -267,7 +268,7 @@ func (me rootNode) ReadDir(ctx context.Context) (dirents []fuse.Dirent, err erro
 		dirents = append(dirents, fuse.Dirent{
 			Name: t.Info.Name,
 			Type: func() fuse.DirentType {
-				if t.Info.SingleFile() {
+				if !t.Info.IsDir() {
 					return fuse.DT_File
 				} else {
 					return fuse.DT_Dir

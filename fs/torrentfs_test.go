@@ -18,7 +18,7 @@ import (
 
 	"bitbucket.org/anacrolix/go.torrent"
 	"bitbucket.org/anacrolix/go.torrent/data/mmap"
-	"bitbucket.org/anacrolix/go.torrent/testutil"
+	"bitbucket.org/anacrolix/go.torrent/internal/testutil"
 	"bitbucket.org/anacrolix/go.torrent/util"
 
 	"github.com/anacrolix/libtorgo/metainfo"
@@ -26,10 +26,6 @@ import (
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
 )
-
-func init() {
-	go http.ListenAndServe(":6061", nil)
-}
 
 func TestTCPAddrString(t *testing.T) {
 	l, err := net.Listen("tcp4", "localhost:0")

@@ -1,18 +1,34 @@
 package torrent
 
 import (
+	"encoding/binary"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
 	"testing"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/testutil"
+	"bitbucket.org/anacrolix/go.torrent/data/blob"
+	"github.com/anacrolix/libtorgo/metainfo"
+
+	"github.com/bradfitz/iter"
+
+	"bitbucket.org/anacrolix/go.torrent/internal/testutil"
 	"bitbucket.org/anacrolix/go.torrent/util"
 	"bitbucket.org/anacrolix/utp"
 	"github.com/anacrolix/libtorgo/bencode"
 )
+
+var TestingConfig = Config{
+	ListenAddr:           ":0",
+	NoDHT:                true,
+	DisableTrackers:      true,
+	NoDefaultBlocklist:   true,
+	DisableMetainfoCache: true,
+}
 
 func TestClientDefault(t *testing.T) {
 	cl, err := NewClient(&Config{
@@ -74,7 +90,7 @@ func TestTorrentInitialState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tor.Pieces) != 1 {
+	if len(tor.Pieces) != 3 {
 		t.Fatal("wrong number of pieces")
 	}
 	p := tor.Pieces[0]
@@ -82,10 +98,13 @@ func TestTorrentInitialState(t *testing.T) {
 	if len(p.PendingChunkSpecs) != 1 {
 		t.Fatalf("should only be 1 chunk: %v", p.PendingChunkSpecs)
 	}
-	if _, ok := p.PendingChunkSpecs[chunkSpec{
-		Length: 13,
-	}]; !ok {
-		t.Fatal("pending chunk spec is incorrect")
+	// TODO: Set chunkSize to 2, to test odd/even silliness.
+	if false {
+		if _, ok := p.PendingChunkSpecs[chunkSpec{
+			Length: 13,
+		}]; !ok {
+			t.Fatal("pending chunk spec is incorrect")
+		}
 	}
 }
 
@@ -206,5 +225,53 @@ func TestTwoClientsArbitraryPorts(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer cl.Stop()
+	}
+}
+
+func TestAddDropManyTorrents(t *testing.T) {
+	cl, _ := NewClient(&TestingConfig)
+	defer cl.Stop()
+	var m Magnet
+	for i := range iter.N(1000) {
+		binary.PutVarint(m.InfoHash[:], int64(i))
+		cl.AddMagnet(m.String())
+	}
+}
+
+func TestClientTransfer(t *testing.T) {
+	greetingTempDir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(greetingTempDir)
+	cfg := TestingConfig
+	cfg.DataDir = greetingTempDir
+	seeder, err := NewClient(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer seeder.Stop()
+	seeder.AddTorrent(mi)
+	leecherDataDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(leecherDataDir)
+	cfg.TorrentDataOpener = func(info *metainfo.Info) (Data, error) {
+		return blob.TorrentData(info, leecherDataDir), nil
+	}
+	leecher, _ := NewClient(&cfg)
+	defer leecher.Stop()
+	leecherGreeting, _ := leecher.AddTorrent(mi)
+	leecherGreeting.AddPeers([]Peer{
+		Peer{
+			IP:   util.AddrIP(seeder.ListenAddr()),
+			Port: util.AddrPort(seeder.ListenAddr()),
+		},
+	})
+	_greeting, err := ioutil.ReadAll(io.NewSectionReader(leecherGreeting, 0, leecherGreeting.Length()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	greeting := string(_greeting)
+	if greeting != testutil.GreetingFileContents {
+		t.Fatal(":(")
 	}
 }

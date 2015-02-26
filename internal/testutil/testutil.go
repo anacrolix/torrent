@@ -29,6 +29,7 @@ func CreateMetaInfo(name string, w io.Writer) {
 	builder := metainfo.Builder{}
 	builder.AddFile(name)
 	builder.AddAnnounceGroup([]string{"lol://cheezburger"})
+	builder.SetPieceLength(5)
 	batch, err := builder.Submit()
 	if err != nil {
 		panic(err)

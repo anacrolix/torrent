@@ -2260,6 +2260,14 @@ func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 	cl.pieceHashed(t, index, sum == p.Hash)
 }
 
+func (cl *Client) Torrent(ih InfoHash) (t Torrent, ok bool) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	t.torrent, ok = cl.torrents[ih]
+	t.cl = cl
+	return
+}
+
 func (me *Client) Torrents() (ret []Torrent) {
 	me.mu.Lock()
 	for _, t := range me.torrents {

@@ -37,7 +37,6 @@ import (
 	"time"
 
 	filePkg "bitbucket.org/anacrolix/go.torrent/data/file"
-
 	"bitbucket.org/anacrolix/go.torrent/dht"
 	"bitbucket.org/anacrolix/go.torrent/internal/pieceordering"
 	"bitbucket.org/anacrolix/go.torrent/iplist"
@@ -1672,7 +1671,15 @@ type File struct {
 	path   string
 	offset int64
 	length int64
-	metainfo.FileInfo
+	fi     metainfo.FileInfo
+}
+
+func (f File) FileInfo() metainfo.FileInfo {
+	return f.fi
+}
+
+func (f File) Path() string {
+	return f.path
 }
 
 func (f File) ReadAt(p []byte, off int64) (n int, err error) {
@@ -1734,7 +1741,7 @@ func (t Torrent) Files() (ret []File) {
 	for _, fi := range t.Info.UpvertedFiles() {
 		ret = append(ret, File{
 			t,
-			strings.Join(fi.Path, "/"),
+			strings.Join(append([]string{t.Info.Name}, fi.Path...), "/"),
 			offset,
 			fi.Length,
 			fi,

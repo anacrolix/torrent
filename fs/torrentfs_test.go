@@ -222,7 +222,10 @@ func TestDownloadOnDemand(t *testing.T) {
 			panic(err)
 		}
 		return torrent.Peer{
-			IP:   net.IPv6loopback,
+			IP: func() net.IP {
+				ret, _ := net.ResolveIPAddr("ip", "localhost")
+				return ret.IP
+			}(),
 			Port: int(portInt64),
 		}
 	}()})

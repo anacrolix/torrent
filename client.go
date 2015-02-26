@@ -1675,6 +1675,14 @@ type File struct {
 	metainfo.FileInfo
 }
 
+func (f File) ReadAt(p []byte, off int64) (n int, err error) {
+	maxLen := f.length - off
+	if int64(len(p)) > maxLen {
+		p = p[:maxLen]
+	}
+	return f.t.ReadAt(p, off+f.offset)
+}
+
 func (f *File) Length() int64 {
 	return f.length
 }

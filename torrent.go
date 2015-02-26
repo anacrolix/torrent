@@ -38,7 +38,7 @@ type peersKey struct {
 	Port    int
 }
 
-type TorrentData interface {
+type Data interface {
 	ReadAt(p []byte, off int64) (n int, err error)
 	Close()
 	WriteAt(p []byte, off int64) (n int, err error)
@@ -58,7 +58,7 @@ type torrent struct {
 	Pieces   []*piece
 	length   int64
 
-	data TorrentData
+	data Data
 
 	Info *metainfo.Info
 	// Active peer connections.
@@ -206,7 +206,7 @@ func (t *torrent) setMetadata(md metainfo.Info, infoBytes []byte, eventLocker sy
 	return
 }
 
-func (t *torrent) setStorage(td TorrentData) (err error) {
+func (t *torrent) setStorage(td Data) (err error) {
 	if t.data != nil {
 		t.data.Close()
 	}

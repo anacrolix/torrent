@@ -195,7 +195,7 @@ func TestDownloadOnDemand(t *testing.T) {
 
 		NoDefaultBlocklist: true,
 
-		TorrentDataOpener: func(info *metainfo.Info) (torrent.TorrentData, error) {
+		TorrentDataOpener: func(info *metainfo.Info) (torrent.Data, error) {
 			return mmap.TorrentData(info, filepath.Join(layout.BaseDir, "download"))
 		},
 

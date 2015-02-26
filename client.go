@@ -410,7 +410,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		disableTCP:       cfg.DisableTCP,
 		_configDir:       cfg.ConfigDir,
 		config:           *cfg,
-		torrentDataOpener: func(md *metainfo.Info) (TorrentData, error) {
+		torrentDataOpener: func(md *metainfo.Info) (Data, error) {
 			return filePkg.TorrentData(md, cfg.DataDir), nil
 		},
 
@@ -1544,7 +1544,7 @@ func (cl *Client) startTorrent(t *torrent) {
 }
 
 // Storage cannot be changed once it's set.
-func (cl *Client) setStorage(t *torrent, td TorrentData) (err error) {
+func (cl *Client) setStorage(t *torrent, td Data) (err error) {
 	err = t.setStorage(td)
 	cl.event.Broadcast()
 	if err != nil {
@@ -1554,7 +1554,7 @@ func (cl *Client) setStorage(t *torrent, td TorrentData) (err error) {
 	return
 }
 
-type TorrentDataOpener func(*metainfo.Info) (TorrentData, error)
+type TorrentDataOpener func(*metainfo.Info) (Data, error)
 
 func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err error) {
 	err = t.setMetadata(md, bytes, &cl.mu)

@@ -78,6 +78,10 @@ func (me piece) Length() int64 {
 	return me.Info.PieceLength
 }
 
+func (me piece) Hash() []byte {
+	return me.Info.Pieces[me.i*20 : (me.i+1)*20]
+}
+
 func (me *Info) Piece(i int) piece {
 	return piece{me, i}
 }

@@ -99,7 +99,7 @@ func (cl *Client) queuePieceCheck(t *torrent, pieceIndex pp.Integer) {
 // been checked before.
 func (cl *Client) queueFirstHash(t *torrent, piece int) {
 	p := t.Pieces[piece]
-	if p.EverHashed || p.Hashing || p.QueuedForHash {
+	if p.EverHashed || p.Hashing || p.QueuedForHash || p.Complete() {
 		return
 	}
 	cl.queuePieceCheck(t, pp.Integer(piece))
@@ -409,7 +409,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		disableTCP:       cfg.DisableTCP,
 		_configDir:       cfg.ConfigDir,
 		config:           *cfg,
-		torrentDataOpener: func(md *metainfo.Info) (Data, error) {
+		torrentDataOpener: func(md *metainfo.Info) (StatelessData, error) {
 			return filePkg.TorrentData(md, cfg.DataDir), nil
 		},
 
@@ -1553,7 +1553,16 @@ func (cl *Client) setStorage(t *torrent, td Data) (err error) {
 	return
 }
 
-type TorrentDataOpener func(*metainfo.Info) (Data, error)
+type TorrentDataOpener func(*metainfo.Info) (StatelessData, error)
+
+type statelessDataWrapper struct {
+	StatelessData
+}
+
+func (statelessDataWrapper) PieceComplete(int) bool   { return false }
+func (statelessDataWrapper) PieceCompleted(int) error { return nil }
+
+var _ Data = statelessDataWrapper{}
 
 func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err error) {
 	err = t.setMetadata(md, bytes, &cl.mu)
@@ -1571,9 +1580,13 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 		return
 	}
 	close(t.gotMetainfo)
-	td, err := cl.torrentDataOpener(&md)
+	stateless, err := cl.torrentDataOpener(&md)
 	if err != nil {
 		return
+	}
+	td, ok := stateless.(Data)
+	if !ok {
+		td = statelessDataWrapper{stateless}
 	}
 	err = cl.setStorage(t, td)
 	return
@@ -2206,8 +2219,16 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 	}
 	p.EverHashed = true
 	if correct {
+		err := t.data.PieceCompleted(int(piece))
+		if err != nil {
+			log.Printf("error completing piece: %s", err)
+			correct = false
+		}
+	}
+	if correct {
 		p.Priority = piecePriorityNone
 		p.PendingChunkSpecs = nil
+		p.complete = true
 		p.Event.Broadcast()
 		me.downloadStrategy.TorrentGotPiece(t, int(piece))
 	} else {
@@ -2250,11 +2271,11 @@ func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 	for p.Hashing || t.data == nil {
 		cl.event.Wait()
 	}
-	if t.isClosed() {
+	p.QueuedForHash = false
+	if t.isClosed() || p.complete {
 		return
 	}
 	p.Hashing = true
-	p.QueuedForHash = false
 	cl.mu.Unlock()
 	sum := t.hashPiece(index)
 	cl.mu.Lock()

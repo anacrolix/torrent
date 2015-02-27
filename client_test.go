@@ -254,7 +254,7 @@ func TestClientTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(leecherDataDir)
-	cfg.TorrentDataOpener = func(info *metainfo.Info) (Data, error) {
+	cfg.TorrentDataOpener = func(info *metainfo.Info) (StatelessData, error) {
 		return blob.TorrentData(info, leecherDataDir), nil
 	}
 	leecher, _ := NewClient(&cfg)

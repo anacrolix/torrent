@@ -45,6 +45,7 @@ const (
 
 type piece struct {
 	Hash              pieceSum
+	complete          bool
 	PendingChunkSpecs map[chunkSpec]struct{}
 	Hashing           bool
 	QueuedForHash     bool
@@ -72,7 +73,7 @@ func (p *piece) shuffledPendingChunkSpecs() (css []chunkSpec) {
 }
 
 func (p *piece) Complete() bool {
-	return len(p.PendingChunkSpecs) == 0 && p.EverHashed
+	return p.complete
 }
 
 func lastChunkSpec(pieceLength peer_protocol.Integer) (cs chunkSpec) {

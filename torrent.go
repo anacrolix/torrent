@@ -38,11 +38,19 @@ type peersKey struct {
 	Port    int
 }
 
-type Data interface {
+type StatelessData interface {
 	ReadAt(p []byte, off int64) (n int, err error)
 	Close()
 	WriteAt(p []byte, off int64) (n int, err error)
 	WriteSectionTo(w io.Writer, off, n int64) (written int64, err error)
+}
+
+type Data interface {
+	StatelessData
+	// We believe the piece data will pass a hash check.
+	PieceCompleted(index int) error
+	// Returns true if the piece is complete.
+	PieceComplete(index int) bool
 }
 
 // Is not aware of Client. Maintains state of torrent for with-in a Client.
@@ -211,6 +219,9 @@ func (t *torrent) setStorage(td Data) (err error) {
 		t.data.Close()
 	}
 	t.data = td
+	for i, p := range t.Pieces {
+		p.complete = t.data.PieceComplete(i)
+	}
 	return
 }
 
@@ -586,6 +597,7 @@ func (t *torrent) hashPiece(piece pp.Integer) (ps pieceSum) {
 	util.CopyExact(ps[:], hash.Sum(nil))
 	return
 }
+
 func (t *torrent) haveAllPieces() bool {
 	if !t.haveInfo() {
 		return false

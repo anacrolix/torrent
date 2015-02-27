@@ -1,12 +1,20 @@
 package blob
 
 import (
+	"bytes"
+	"crypto/sha1"
 	"encoding/hex"
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/anacrolix/libtorgo/metainfo"
+)
+
+const (
+	filePerm = 0640
+	dirPerm  = 0750
 )
 
 type data struct {
@@ -124,4 +132,48 @@ func (me *data) WriteSectionTo(w io.Writer, off, n int64) (written int64, err er
 		off = 0
 	}
 	return
+}
+
+func (me *data) incompletePiecePath(piece int) string {
+	return filepath.Join(me.baseDir, "incomplete", me.pieceHashHex(piece))
+}
+
+func (me *data) completedPiecePath(piece int) string {
+	return filepath.Join(me.baseDir, "complete", me.pieceHashHex(piece))
+}
+
+func (me *data) PieceCompleted(index int) (err error) {
+	var (
+		incompletePiecePath = me.incompletePiecePath(index)
+		completedPiecePath  = me.completedPiecePath(index)
+	)
+	fSrc, err := os.Open(incompletePiecePath)
+	if err != nil {
+		return
+	}
+	defer fSrc.Close()
+	os.MkdirAll(filepath.Dir(completedPiecePath), dirPerm)
+	fDst, err := os.OpenFile(completedPiecePath, os.O_EXCL|os.O_CREATE|os.O_WRONLY, filePerm)
+	if err != nil {
+		return
+	}
+	defer fDst.Close()
+	hasher := sha1.New()
+	r := io.TeeReader(io.LimitReader(fSrc, me.info.Piece(index).Length()), hasher)
+	_, err = io.Copy(fDst, r)
+	if err != nil {
+		return
+	}
+	if !bytes.Equal(hasher.Sum(nil), me.info.Piece(index).Hash()) {
+		err = errors.New("piece incomplete")
+		os.Remove(completedPiecePath)
+		return
+	}
+	os.Remove(incompletePiecePath)
+	return
+}
+
+func (me *data) PieceComplete(piece int) bool {
+	_, err := os.Stat(me.completedPiecePath(piece))
+	return err == nil
 }

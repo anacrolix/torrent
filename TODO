@@ -4,3 +4,4 @@
  * If we're choked and interested, we never send not-interested if there's nothing we want?
  * Don't announce torrents that don't need active peers. It spams UDP, fills memory, and publicizes what we have loaded.
  * Randomize triedAddrs bloom filter to allow different Addr sets on each Announce.
+ * When lots of good connections, it'll do a huge readahead, then refuse to trickle new pieces because we sent not interested to them all, thereby reducing the number of unchoked connections.

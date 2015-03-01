@@ -90,10 +90,9 @@ func (me *data) WriteAt(p []byte, off int64) (n int, err error) {
 }
 
 func (me *data) pieceReader(piece int, off int64) (ret io.ReadCloser, err error) {
-	hash := me.pieceHashHex(piece)
-	f, err := os.Open(me.baseDir + "/complete/" + hash)
+	f, err := os.Open(me.completedPiecePath(piece))
 	if os.IsNotExist(err) {
-		f, err = os.Open(me.baseDir + "/incomplete/" + hash)
+		f, err = os.Open(me.incompletePiecePath(piece))
 		if os.IsNotExist(err) {
 			err = io.EOF
 			return

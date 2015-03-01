@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"container/heap"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -19,6 +20,9 @@ import (
 
 func (t *torrent) PieceNumPendingBytes(index pp.Integer) (count pp.Integer) {
 	piece := t.Pieces[index]
+	if piece.complete {
+		return 0
+	}
 	if !piece.EverHashed {
 		return t.PieceLength(index)
 	}
@@ -39,14 +43,22 @@ type peersKey struct {
 }
 
 type StatelessData interface {
-	ReadAt(p []byte, off int64) (n int, err error)
-	Close()
+	// OpenSection(off, n int64) (io.ReadCloser, error)
+	// ReadAt(p []byte, off int64) (n int, err error)
+	// Close()
 	WriteAt(p []byte, off int64) (n int, err error)
 	WriteSectionTo(w io.Writer, off, n int64) (written int64, err error)
 }
 
+// Represents data storage for a Torrent. Additional optional interfaces to
+// implement are io.Closer, io.ReaderAt, StatefulData, and SectionOpener.
 type Data interface {
 	StatelessData
+}
+
+// Data maintains per-piece persistent state.
+type StatefulData interface {
+	Data
 	// We believe the piece data will pass a hash check.
 	PieceCompleted(index int) error
 	// Returns true if the piece is complete.
@@ -91,6 +103,79 @@ type torrent struct {
 	GotMetainfo <-chan struct{}
 
 	pruneTimer *time.Timer
+}
+
+// A file-like handle to torrent data that implements SectionOpener. Opened
+// sections are be reused so long as Reads are contiguous.
+type handle struct {
+	rc     io.ReadCloser
+	curOff int64
+	so     SectionOpener
+	size   int64
+	t      Torrent
+}
+
+func (h *handle) Close() error {
+	if h.rc != nil {
+		return h.rc.Close()
+	}
+	return nil
+}
+
+func (h *handle) Read(b []byte) (n int, err error) {
+	max := h.t.prepareRead(h.curOff)
+	if int64(len(b)) > max {
+		b = b[:max]
+	}
+	if h.rc == nil {
+		h.rc, err = h.so.OpenSection(h.curOff, h.size-h.curOff)
+		if err != nil {
+			return
+		}
+	}
+	n, err = h.rc.Read(b)
+	h.curOff += int64(n)
+	return
+}
+
+func (h *handle) Seek(off int64, whence int) (newOff int64, err error) {
+	switch whence {
+	case 0:
+		newOff = off
+	case 1:
+		newOff += off
+	case 2:
+		newOff = h.size + off
+	default:
+		err = errors.New("bad whence")
+	}
+	if newOff == h.curOff {
+		return
+	}
+	h.curOff = newOff
+	if h.rc != nil {
+		h.Close()
+		h.rc = nil
+	}
+	return
+}
+
+// Implements Handle on top of an io.SectionReader.
+type sectionReaderHandle struct {
+	*io.SectionReader
+}
+
+func (sectionReaderHandle) Close() error { return nil }
+
+func (T Torrent) NewReadHandle() Handle {
+	if so, ok := T.data.(SectionOpener); ok {
+		return &handle{
+			so:   so,
+			size: T.Length(),
+			t:    T,
+		}
+	}
+	return sectionReaderHandle{io.NewSectionReader(T, 0, T.Length())}
 }
 
 func (t *torrent) numConnsUnchoked() (num int) {
@@ -215,12 +300,14 @@ func (t *torrent) setMetadata(md metainfo.Info, infoBytes []byte, eventLocker sy
 }
 
 func (t *torrent) setStorage(td Data) (err error) {
-	if t.data != nil {
-		t.data.Close()
+	if c, ok := t.data.(io.Closer); ok {
+		c.Close()
 	}
 	t.data = td
-	for i, p := range t.Pieces {
-		p.complete = t.data.PieceComplete(i)
+	if sd, ok := t.data.(StatefulData); ok {
+		for i, p := range t.Pieces {
+			p.complete = sd.PieceComplete(i)
+		}
 	}
 	return
 }
@@ -490,8 +577,8 @@ func (t *torrent) close() (err error) {
 	}
 	t.ceaseNetworking()
 	close(t.closing)
-	if t.data != nil {
-		t.data.Close()
+	if c, ok := t.data.(io.Closer); ok {
+		c.Close()
 	}
 	for _, conn := range t.Conns {
 		conn.Close()

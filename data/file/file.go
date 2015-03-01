@@ -2,6 +2,7 @@ package file
 
 import (
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -46,8 +47,6 @@ func (me data) ReadAt(p []byte, off int64) (n int, err error) {
 	}
 	return
 }
-
-func (me data) Close() {}
 
 func (me data) WriteAt(p []byte, off int64) (n int, err error) {
 	for _, fi := range me.info.UpvertedFiles() {

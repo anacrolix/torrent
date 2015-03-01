@@ -245,27 +245,67 @@ func (cl *Client) torrentReadAt(t *torrent, off int64, p []byte) (n int, err err
 		err = io.EOF
 		return
 	}
-	piece := t.Pieces[index]
 	pieceOff := pp.Integer(off % int64(t.usualPieceSize()))
 	pieceLeft := int(t.PieceLength(pp.Integer(index)) - pieceOff)
 	if pieceLeft <= 0 {
 		err = io.EOF
 		return
 	}
-	cl.readRaisePiecePriorities(t, off, int64(len(p)))
 	if len(p) > pieceLeft {
 		p = p[:pieceLeft]
 	}
 	if len(p) == 0 {
 		panic(len(p))
 	}
+	cl.prepareRead(t, off)
+	return dataReadAt(t.data, p, off)
+}
+
+// Sets priorities to download from the given offset. Returns when the piece
+// at the given offset can be read. Returns the number of bytes that
+// immediately available from the offset.
+func (cl *Client) prepareRead(t *torrent, off int64) (n int64) {
+	index := int(off / int64(t.usualPieceSize()))
+	// Reading outside the bounds of a file is an error.
+	if index < 0 || index >= t.numPieces() {
+		return
+	}
+	piece := t.Pieces[index]
+	cl.readRaisePiecePriorities(t, off)
 	for !piece.Complete() && !t.isClosed() {
 		piece.Event.Wait()
 	}
-	return t.data.ReadAt(p, off)
+	return t.Info.Piece(index).Length() - off%t.Info.PieceLength
 }
 
-func (cl *Client) readRaisePiecePriorities(t *torrent, off, _len int64) {
+func (T Torrent) prepareRead(off int64) (avail int64) {
+	T.cl.mu.Lock()
+	defer T.cl.mu.Unlock()
+	return T.cl.prepareRead(T.torrent, off)
+}
+
+// Data implements a streaming interface that's more efficient than ReadAt.
+type SectionOpener interface {
+	OpenSection(off, n int64) (io.ReadCloser, error)
+}
+
+func dataReadAt(d Data, b []byte, off int64) (n int, err error) {
+	if ra, ok := d.(io.ReaderAt); ok {
+		return ra.ReadAt(b, off)
+	}
+	if so, ok := d.(SectionOpener); ok {
+		var rc io.ReadCloser
+		rc, err = so.OpenSection(off, int64(len(b)))
+		if err != nil {
+			return
+		}
+		defer rc.Close()
+		return io.ReadFull(rc, b)
+	}
+	panic(fmt.Sprintf("can't read from %T", d))
+}
+
+func (cl *Client) readRaisePiecePriorities(t *torrent, off int64) {
 	index := int(off / int64(t.usualPieceSize()))
 	cl.raisePiecePriority(t, index, piecePriorityNow)
 	index++
@@ -1185,7 +1225,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			// routine.
 			// c.PeerRequests[request] = struct{}{}
 			p := make([]byte, msg.Length)
-			n, err := t.data.ReadAt(p, int64(t.PieceLength(0))*int64(msg.Index)+int64(msg.Begin))
+			n, err := dataReadAt(t.data, p, int64(t.PieceLength(0))*int64(msg.Index)+int64(msg.Begin))
 			if err != nil {
 				return fmt.Errorf("reading t data to serve request %q: %s", request, err)
 			}
@@ -1555,15 +1595,6 @@ func (cl *Client) setStorage(t *torrent, td Data) (err error) {
 
 type TorrentDataOpener func(*metainfo.Info) (StatelessData, error)
 
-type statelessDataWrapper struct {
-	StatelessData
-}
-
-func (statelessDataWrapper) PieceComplete(int) bool   { return false }
-func (statelessDataWrapper) PieceCompleted(int) error { return nil }
-
-var _ Data = statelessDataWrapper{}
-
 func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err error) {
 	err = t.setMetadata(md, bytes, &cl.mu)
 	if err != nil {
@@ -1580,13 +1611,9 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 		return
 	}
 	close(t.gotMetainfo)
-	stateless, err := cl.torrentDataOpener(&md)
+	td, err := cl.torrentDataOpener(&md)
 	if err != nil {
 		return
-	}
-	td, ok := stateless.(Data)
-	if !ok {
-		td = statelessDataWrapper{stateless}
 	}
 	err = cl.setStorage(t, td)
 	return
@@ -1695,6 +1722,61 @@ func (f File) Path() string {
 	return f.path
 }
 
+type Handle interface {
+	io.Reader
+	io.Seeker
+	io.Closer
+}
+
+// Implements a Handle within a subsection of another Handle.
+type sectionHandle struct {
+	h           Handle
+	off, n, cur int64
+}
+
+func (me *sectionHandle) Seek(offset int64, whence int) (ret int64, err error) {
+	if whence == 0 {
+		offset += me.off
+	} else if whence == 2 {
+		whence = 0
+		offset = me.off + me.n
+	}
+	ret, err = me.h.Seek(offset, whence)
+	ret -= me.off
+	return
+}
+
+func (me *sectionHandle) Close() error {
+	return me.h.Close()
+}
+
+func (me *sectionHandle) Read(b []byte) (n int, err error) {
+	max := me.off + me.n - me.cur
+	if int64(len(b)) > max {
+		b = b[:max]
+	}
+	n, err = me.h.Read(b)
+	me.cur += int64(n)
+	if err != nil {
+		return
+	}
+	if me.cur == me.off+me.n {
+		err = io.EOF
+	}
+	return
+}
+
+func (f File) Open() (h Handle, err error) {
+	h = f.t.NewReadHandle()
+	_, err = h.Seek(f.offset, os.SEEK_SET)
+	if err != nil {
+		h.Close()
+		return
+	}
+	h = &sectionHandle{h, f.offset, f.Length(), f.offset}
+	return
+}
+
 func (f File) ReadAt(p []byte, off int64) (n int, err error) {
 	maxLen := f.length - off
 	if int64(len(p)) > maxLen {
@@ -1745,16 +1827,17 @@ func (f *File) PrioritizeRegion(off, len int64) {
 // Returns handles to the files in the torrent. This requires the metainfo is
 // available first.
 func (t Torrent) Files() (ret []File) {
-	select {
-	case <-t.GotMetainfo:
-	default:
+	t.cl.mu.Lock()
+	info := t.Info
+	t.cl.mu.Unlock()
+	if info == nil {
 		return
 	}
 	var offset int64
-	for _, fi := range t.Info.UpvertedFiles() {
+	for _, fi := range info.UpvertedFiles() {
 		ret = append(ret, File{
 			t,
-			strings.Join(append([]string{t.Info.Name}, fi.Path...), "/"),
+			strings.Join(append([]string{info.Name}, fi.Path...), "/"),
 			offset,
 			fi.Length,
 			fi,
@@ -2219,10 +2302,12 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 	}
 	p.EverHashed = true
 	if correct {
-		err := t.data.PieceCompleted(int(piece))
-		if err != nil {
-			log.Printf("error completing piece: %s", err)
-			correct = false
+		if sd, ok := t.data.(StatefulData); ok {
+			err := sd.PieceCompleted(int(piece))
+			if err != nil {
+				log.Printf("error completing piece: %s", err)
+				correct = false
+			}
 		}
 	}
 	if correct {

@@ -305,6 +305,10 @@ func dataReadAt(d Data, b []byte, off int64) (n int, err error) {
 	panic(fmt.Sprintf("can't read from %T", d))
 }
 
+func readaheadPieces(readahead, pieceLength int64) int {
+	return int((readahead+pieceLength-1)/pieceLength - 1)
+}
+
 func (cl *Client) readRaisePiecePriorities(t *torrent, off int64) {
 	index := int(off / int64(t.usualPieceSize()))
 	cl.raisePiecePriority(t, index, piecePriorityNow)
@@ -313,7 +317,7 @@ func (cl *Client) readRaisePiecePriorities(t *torrent, off int64) {
 		return
 	}
 	cl.raisePiecePriority(t, index, piecePriorityNext)
-	for i := 0; i < t.numConnsUnchoked()/2; i++ {
+	for i := 0; i < readaheadPieces(5*1024*1024, t.Info.PieceLength); i++ {
 		index++
 		if index >= t.numPieces() {
 			break

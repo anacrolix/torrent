@@ -275,3 +275,21 @@ func TestClientTransfer(t *testing.T) {
 		t.Fatal(":(")
 	}
 }
+
+func TestReadaheadPieces(t *testing.T) {
+	for _, case_ := range []struct {
+		readaheadBytes, pieceLength int64
+		readaheadPieces             int
+	}{
+		{5 * 1024 * 1024, 256 * 1024, 19},
+		{5 * 1024 * 1024, 5 * 1024 * 1024, 0},
+		{5*1024*1024 - 1, 5 * 1024 * 1024, 0},
+		{5 * 1024 * 1024, 5*1024*1024 - 1, 1},
+		{0, 5 * 1024 * 1024, -1},
+		{5 * 1024 * 1024, 1048576, 4},
+	} {
+		if readaheadPieces(case_.readaheadBytes, case_.pieceLength) != case_.readaheadPieces {
+			t.Fatalf("case failed: %s", case_)
+		}
+	}
+}

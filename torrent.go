@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -106,9 +107,10 @@ type torrent struct {
 }
 
 // A file-like handle to torrent data that implements SectionOpener. Opened
-// sections are be reused so long as Reads are contiguous.
+// sections will be reused so long as Reads and ReadAt's are contiguous.
 type handle struct {
 	rc     io.ReadCloser
+	rcOff  int64
 	curOff int64
 	so     SectionOpener
 	size   int64
@@ -122,41 +124,52 @@ func (h *handle) Close() error {
 	return nil
 }
 
-func (h *handle) Read(b []byte) (n int, err error) {
-	max := h.t.prepareRead(h.curOff)
-	if int64(len(b)) > max {
-		b = b[:max]
+func (h *handle) ReadAt(b []byte, off int64) (n int, err error) {
+	return h.readAt(b, off)
+}
+
+func (h *handle) readAt(b []byte, off int64) (n int, err error) {
+	avail := h.t.prepareRead(off)
+	if int64(len(b)) > avail {
+		b = b[:avail]
+	}
+	if int64(len(b)) > h.size-off {
+		b = b[:h.size-off]
+	}
+	if h.rcOff != off && h.rc != nil {
+		h.rc.Close()
+		h.rc = nil
 	}
 	if h.rc == nil {
-		h.rc, err = h.so.OpenSection(h.curOff, h.size-h.curOff)
+		h.rc, err = h.so.OpenSection(off, h.size-off)
 		if err != nil {
 			return
 		}
+		h.rcOff = off
 	}
 	n, err = h.rc.Read(b)
-	h.curOff += int64(n)
+	h.rcOff += int64(n)
+	return
+}
+
+func (h *handle) Read(b []byte) (n int, err error) {
+	n, err = h.readAt(b, h.curOff)
+	h.curOff = h.rcOff
 	return
 }
 
 func (h *handle) Seek(off int64, whence int) (newOff int64, err error) {
 	switch whence {
-	case 0:
-		newOff = off
-	case 1:
-		newOff += off
-	case 2:
-		newOff = h.size + off
+	case os.SEEK_SET:
+		h.curOff = off
+	case os.SEEK_CUR:
+		h.curOff += off
+	case os.SEEK_END:
+		h.curOff = h.size + off
 	default:
 		err = errors.New("bad whence")
 	}
-	if newOff == h.curOff {
-		return
-	}
-	h.curOff = newOff
-	if h.rc != nil {
-		h.Close()
-		h.rc = nil
-	}
+	newOff = h.curOff
 	return
 }
 

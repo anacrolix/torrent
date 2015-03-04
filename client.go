@@ -1726,6 +1726,7 @@ type Handle interface {
 	io.Reader
 	io.Seeker
 	io.Closer
+	io.ReaderAt
 }
 
 // Implements a Handle within a subsection of another Handle.
@@ -1739,9 +1740,10 @@ func (me *sectionHandle) Seek(offset int64, whence int) (ret int64, err error) {
 		offset += me.off
 	} else if whence == 2 {
 		whence = 0
-		offset = me.off + me.n
+		offset += me.off + me.n
 	}
 	ret, err = me.h.Seek(offset, whence)
+	me.cur = ret
 	ret -= me.off
 	return
 }
@@ -1764,6 +1766,17 @@ func (me *sectionHandle) Read(b []byte) (n int, err error) {
 		err = io.EOF
 	}
 	return
+}
+
+func (me *sectionHandle) ReadAt(b []byte, off int64) (n int, err error) {
+	if off >= me.n {
+		err = io.EOF
+		return
+	}
+	if int64(len(b)) >= me.n-off {
+		b = b[:me.n-off]
+	}
+	return me.h.ReadAt(b, me.off+off)
 }
 
 func (f File) Open() (h Handle, err error) {

@@ -64,6 +64,7 @@ func (me *Info) NumPieces() int {
 type Piece interface {
 	Hash() []byte
 	Length() int64
+	Offset() int64
 }
 
 type piece struct {
@@ -76,6 +77,10 @@ func (me piece) Length() int64 {
 		return me.Info.TotalLength() - int64(me.i)*me.Info.PieceLength
 	}
 	return me.Info.PieceLength
+}
+
+func (me piece) Offset() int64 {
+	return int64(me.i) * me.Info.PieceLength
 }
 
 func (me piece) Hash() []byte {

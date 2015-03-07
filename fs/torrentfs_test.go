@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"bitbucket.org/anacrolix/go.torrent/data"
+
 	"golang.org/x/net/context"
 
 	"bitbucket.org/anacrolix/go.torrent"
@@ -191,8 +193,9 @@ func TestDownloadOnDemand(t *testing.T) {
 
 		NoDefaultBlocklist: true,
 
-		TorrentDataOpener: func(info *metainfo.Info) (torrent.StatelessData, error) {
-			return mmap.TorrentData(info, filepath.Join(layout.BaseDir, "download"))
+		TorrentDataOpener: func(info *metainfo.Info) data.Data {
+			ret, _ := mmap.TorrentData(info, filepath.Join(layout.BaseDir, "download"))
+			return ret
 		},
 
 		// This can be used to check if clients can connect to other clients

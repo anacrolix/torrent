@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
+	dataPkg "bitbucket.org/anacrolix/go.torrent/data"
+
 	"github.com/anacrolix/libtorgo/metainfo"
 )
 
@@ -22,8 +24,16 @@ type data struct {
 	baseDir string
 }
 
-func TorrentData(info *metainfo.Info, baseDir string) *data {
-	return &data{info, baseDir}
+type store struct {
+	baseDir string
+}
+
+func (me store) OpenTorrent(info *metainfo.Info) dataPkg.Data {
+	return &data{info, me.baseDir}
+}
+
+func NewStore(baseDir string) dataPkg.Store {
+	return store{baseDir}
 }
 
 func (me *data) pieceHashHex(i int) string {

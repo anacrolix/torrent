@@ -36,6 +36,7 @@ import (
 	"syscall"
 	"time"
 
+	"bitbucket.org/anacrolix/go.torrent/data"
 	filePkg "bitbucket.org/anacrolix/go.torrent/data/file"
 	"bitbucket.org/anacrolix/go.torrent/dht"
 	"bitbucket.org/anacrolix/go.torrent/internal/pieceordering"
@@ -455,8 +456,8 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		disableTCP:       cfg.DisableTCP,
 		_configDir:       cfg.ConfigDir,
 		config:           *cfg,
-		torrentDataOpener: func(md *metainfo.Info) (StatelessData, error) {
-			return filePkg.TorrentData(md, cfg.DataDir), nil
+		torrentDataOpener: func(md *metainfo.Info) data.Data {
+			return filePkg.TorrentData(md, cfg.DataDir)
 		},
 
 		quit:     make(chan struct{}),
@@ -1601,7 +1602,7 @@ func (cl *Client) setStorage(t *torrent, td Data) (err error) {
 	return
 }
 
-type TorrentDataOpener func(*metainfo.Info) (StatelessData, error)
+type TorrentDataOpener func(*metainfo.Info) data.Data
 
 func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err error) {
 	err = t.setMetadata(md, bytes, &cl.mu)
@@ -1619,10 +1620,7 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 		return
 	}
 	close(t.gotMetainfo)
-	td, err := cl.torrentDataOpener(&md)
-	if err != nil {
-		return
-	}
+	td := cl.torrentDataOpener(&md)
 	err = cl.setStorage(t, td)
 	return
 }

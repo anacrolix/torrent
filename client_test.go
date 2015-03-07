@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"bitbucket.org/anacrolix/go.torrent/data/blob"
-	"github.com/anacrolix/libtorgo/metainfo"
 
 	"github.com/bradfitz/iter"
 
@@ -254,9 +253,10 @@ func TestClientTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(leecherDataDir)
-	cfg.TorrentDataOpener = func(info *metainfo.Info) (StatelessData, error) {
-		return blob.TorrentData(info, leecherDataDir), nil
-	}
+	// cfg.TorrentDataOpener = func(info *metainfo.Info) (data.Data, error) {
+	// 	return blob.TorrentData(info, leecherDataDir), nil
+	// }
+	cfg.TorrentDataOpener = blob.NewStore(leecherDataDir).OpenTorrent
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Stop()
 	leecherGreeting, _ := leecher.AddTorrent(mi)

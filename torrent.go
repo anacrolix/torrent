@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"bitbucket.org/anacrolix/go.torrent/data"
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	"bitbucket.org/anacrolix/go.torrent/util"
@@ -43,18 +44,10 @@ type peersKey struct {
 	Port    int
 }
 
-type StatelessData interface {
-	// OpenSection(off, n int64) (io.ReadCloser, error)
-	// ReadAt(p []byte, off int64) (n int, err error)
-	// Close()
-	WriteAt(p []byte, off int64) (n int, err error)
-	WriteSectionTo(w io.Writer, off, n int64) (written int64, err error)
-}
-
 // Represents data storage for a Torrent. Additional optional interfaces to
 // implement are io.Closer, io.ReaderAt, StatefulData, and SectionOpener.
 type Data interface {
-	StatelessData
+	data.Data
 }
 
 // Data maintains per-piece persistent state.

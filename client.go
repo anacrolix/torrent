@@ -499,7 +499,9 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 			return addr.String()
 		}
 		if cfg.ListenAddr == "" {
-			return ":50007"
+			// IPv6 isn't well supported with blocklists, or with trackers and
+			// DHT.
+			return "0.0.0.0:50007"
 		}
 		return cfg.ListenAddr
 	}
@@ -1728,6 +1730,7 @@ func (f File) Path() string {
 	return f.path
 }
 
+// A file-like handle to some torrent data resource.
 type Handle interface {
 	io.Reader
 	io.Seeker

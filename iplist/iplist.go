@@ -2,6 +2,7 @@ package iplist
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"sort"
@@ -67,7 +68,16 @@ func ParseBlocklistP2PLine(l []byte) (r Range, ok bool, err error) {
 		return
 	}
 	colon := bytes.IndexByte(l, ':')
-	hyphen := bytes.IndexByte(l[colon+1:], '-') + colon + 1
+	if colon == -1 {
+		err = errors.New("missing colon")
+		return
+	}
+	hyphen := bytes.IndexByte(l[colon+1:], '-')
+	if hyphen == -1 {
+		err = errors.New("missing hyphen")
+		return
+	}
+	hyphen += colon + 1
 	r.Description = string(l[:colon])
 	r.First = net.ParseIP(string(l[colon+1 : hyphen]))
 	r.Last = net.ParseIP(string(l[hyphen+1:]))

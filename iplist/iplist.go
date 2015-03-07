@@ -41,6 +41,23 @@ func (me *IPList) Lookup(ip net.IP) (r *Range) {
 	if me == nil {
 		return nil
 	}
+	// TODO: Perhaps all addresses should be converted to IPv6, if the future
+	// of IP is to always be backwards compatible. But this will cost 4x the
+	// memory for IPv4 addresses?
+	if v4 := ip.To4(); v4 != nil {
+		r = me.lookup(v4)
+		if r != nil {
+			return
+		}
+	}
+	if v6 := ip.To16(); v6 != nil {
+		return me.lookup(v6)
+	}
+	return nil
+}
+
+// Return the range the given IP is in. Returns nil if no range is found.
+func (me *IPList) lookup(ip net.IP) (r *Range) {
 	// Find the index of the first range for which the following range exceeds
 	// it.
 	i := sort.Search(len(me.ranges), func(i int) bool {

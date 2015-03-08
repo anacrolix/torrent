@@ -77,6 +77,13 @@ func (me *IPList) lookup(ip net.IP) (r *Range) {
 	return
 }
 
+func minifyIP(ip *net.IP) {
+	v4 := ip.To4()
+	if v4 != nil {
+		*ip = append(make([]byte, 0, 4), v4...)
+	}
+}
+
 // Parse a line of the PeerGuardian Text Lists (P2P) Format. Returns !ok but
 // no error if a line doesn't contain a range but isn't erroneous, such as
 // comment and blank lines.
@@ -85,7 +92,9 @@ func ParseBlocklistP2PLine(l []byte) (r Range, ok bool, err error) {
 	if len(l) == 0 || bytes.HasPrefix(l, []byte("#")) {
 		return
 	}
-	colon := bytes.IndexByte(l, ':')
+	// TODO: Something tells me this will end badly when IPv6 blocklists are
+	// added.
+	colon := bytes.LastIndexAny(l, ":")
 	if colon == -1 {
 		err = errors.New("missing colon")
 		return
@@ -98,8 +107,11 @@ func ParseBlocklistP2PLine(l []byte) (r Range, ok bool, err error) {
 	hyphen += colon + 1
 	r.Description = string(l[:colon])
 	r.First = net.ParseIP(string(l[colon+1 : hyphen]))
+	minifyIP(&r.First)
 	r.Last = net.ParseIP(string(l[hyphen+1:]))
-	if r.First == nil || r.Last == nil {
+	minifyIP(&r.Last)
+	if r.First == nil || r.Last == nil || len(r.First) != len(r.Last) {
+		err = errors.New("bad IP range")
 		return
 	}
 	ok = true

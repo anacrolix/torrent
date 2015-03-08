@@ -114,7 +114,7 @@ type Client struct {
 	listeners        []net.Listener
 	utpSock          *utp.Socket
 	disableTrackers  bool
-	downloadStrategy DownloadStrategy
+	downloadStrategy downloadStrategy
 	dHT              *dht.Server
 	disableUTP       bool
 	disableTCP       bool
@@ -192,6 +192,8 @@ func (cl *Client) sortedTorrents() (ret []*torrent) {
 	return
 }
 
+// Writes out a human readable status of the client, such as for writing to a
+// HTTP status page.
 func (cl *Client) WriteStatus(_w io.Writer) {
 	cl.mu.RLock()
 	defer cl.mu.RUnlock()
@@ -290,7 +292,7 @@ type SectionOpener interface {
 	OpenSection(off, n int64) (io.ReadCloser, error)
 }
 
-func dataReadAt(d Data, b []byte, off int64) (n int, err error) {
+func dataReadAt(d data.Data, b []byte, off int64) (n int, err error) {
 	if ra, ok := d.(io.ReaderAt); ok {
 		return ra.ReadAt(b, off)
 	}
@@ -447,15 +449,14 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	}
 
 	cl = &Client{
-		noUpload:         cfg.NoUpload,
-		disableTrackers:  cfg.DisableTrackers,
-		downloadStrategy: cfg.DownloadStrategy,
-		halfOpenLimit:    socketsPerTorrent,
-		dataDir:          cfg.DataDir,
-		disableUTP:       cfg.DisableUTP,
-		disableTCP:       cfg.DisableTCP,
-		_configDir:       cfg.ConfigDir,
-		config:           *cfg,
+		noUpload:        cfg.NoUpload,
+		disableTrackers: cfg.DisableTrackers,
+		halfOpenLimit:   socketsPerTorrent,
+		dataDir:         cfg.DataDir,
+		disableUTP:      cfg.DisableUTP,
+		disableTCP:      cfg.DisableTCP,
+		_configDir:      cfg.ConfigDir,
+		config:          *cfg,
 		torrentDataOpener: func(md *metainfo.Info) data.Data {
 			return filePkg.TorrentData(md, cfg.DataDir)
 		},
@@ -483,7 +484,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	if cfg.PeerID != "" {
 		CopyExact(&cl.peerID, cfg.PeerID)
 	} else {
-		o := copy(cl.peerID[:], BEP20)
+		o := copy(cl.peerID[:], bep20)
 		_, err = rand.Read(cl.peerID[o:])
 		if err != nil {
 			panic("error generating peer id")
@@ -491,7 +492,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	}
 
 	if cl.downloadStrategy == nil {
-		cl.downloadStrategy = &DefaultDownloadStrategy{}
+		cl.downloadStrategy = &defaultDownloadStrategy{}
 	}
 
 	// Returns the laddr string to listen on for the next Listen call.
@@ -557,7 +558,7 @@ func (cl *Client) stopped() bool {
 
 // Stops the client. All connections to peers are closed and all activity will
 // come to a halt.
-func (me *Client) Stop() {
+func (me *Client) Close() {
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	close(me.quit)
@@ -622,12 +623,7 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 }
 
 func (me *Client) torrent(ih InfoHash) *torrent {
-	for _, t := range me.torrents {
-		if t.InfoHash == ih {
-			return t
-		}
-	}
-	return nil
+	return me.torrents[ih]
 }
 
 type dialResult struct {
@@ -1342,7 +1338,8 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 					break
 				}
 				go func() {
-					err := me.AddPeers(t.InfoHash, func() (ret []Peer) {
+					me.mu.Lock()
+					me.addPeers(t, func() (ret []Peer) {
 						for _, cp := range pexMsg.Added {
 							p := Peer{
 								IP:     make([]byte, 4),
@@ -1356,10 +1353,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 						}
 						return
 					}())
-					if err != nil {
-						log.Printf("error adding PEX peers: %s", err)
-						return
-					}
+					me.mu.Unlock()
 					peersFoundByPEX.Add(int64(len(pexMsg.Added)))
 				}()
 			default:
@@ -1513,32 +1507,17 @@ func (me *Client) openNewConns(t *torrent) {
 
 func (me *Client) addPeers(t *torrent, peers []Peer) {
 	blocked := 0
-	for i, p := range peers {
-		if me.ipBlockRange(p.IP) == nil {
+	for _, p := range peers {
+		if me.ipBlockRange(p.IP) != nil {
+			blocked++
 			continue
 		}
-		peers[i] = peers[len(peers)-1]
-		peers = peers[:len(peers)-1]
-		i--
-		blocked++
+		t.addPeer(p)
 	}
 	if blocked != 0 {
 		log.Printf("IP blocklist screened %d peers from being added", blocked)
 	}
-	t.AddPeers(peers)
 	me.openNewConns(t)
-}
-
-// Adds peers to the swarm for the torrent corresponding to infoHash.
-func (me *Client) AddPeers(infoHash InfoHash, peers []Peer) error {
-	me.mu.Lock()
-	defer me.mu.Unlock()
-	t := me.torrent(infoHash)
-	if t == nil {
-		return errors.New("no such torrent")
-	}
-	me.addPeers(t, peers)
-	return nil
 }
 
 func (cl *Client) torrentFileCachePath(ih InfoHash) string {
@@ -1592,7 +1571,7 @@ func (cl *Client) startTorrent(t *torrent) {
 }
 
 // Storage cannot be changed once it's set.
-func (cl *Client) setStorage(t *torrent, td Data) (err error) {
+func (cl *Client) setStorage(t *torrent, td data.Data) (err error) {
 	err = t.setStorage(td)
 	cl.event.Broadcast()
 	if err != nil {
@@ -1881,7 +1860,11 @@ func (t Torrent) MetainfoFilepath() string {
 }
 
 func (t Torrent) AddPeers(pp []Peer) error {
-	return t.cl.AddPeers(t.torrent.InfoHash, pp)
+	cl := t.cl
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	cl.addPeers(t.torrent, pp)
+	return nil
 }
 
 func (t Torrent) DownloadAll() {
@@ -2142,12 +2125,10 @@ func (cl *Client) announceTorrentSingleTracker(tr tracker.Client, req *tracker.A
 			Port: peer.Port,
 		})
 	}
-	err = cl.AddPeers(t.InfoHash, peers)
-	if err != nil {
-		log.Printf("error adding peers to torrent %s: %s", t, err)
-	} else {
-		log.Printf("%s: %d new peers from %s", t, len(peers), tr)
-	}
+	cl.mu.Lock()
+	cl.addPeers(t, peers)
+	cl.mu.Unlock()
+	log.Printf("%s: %d new peers from %s", t, len(peers), tr)
 
 	time.Sleep(time.Second * time.Duration(resp.Interval))
 	return nil
@@ -2393,14 +2374,7 @@ func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 	cl.pieceHashed(t, index, sum == p.Hash)
 }
 
-func (cl *Client) Torrent(ih InfoHash) (t Torrent, ok bool) {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
-	t.torrent, ok = cl.torrents[ih]
-	t.cl = cl
-	return
-}
-
+// Returns handles to all the torrents loaded in the Client.
 func (me *Client) Torrents() (ret []Torrent) {
 	me.mu.Lock()
 	for _, t := range me.torrents {

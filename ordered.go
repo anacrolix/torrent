@@ -4,23 +4,26 @@ import (
 	"container/list"
 )
 
-type OrderedList struct {
+// This was used to maintain pieces in order of bytes left to download. I
+// don't think it's currently in use.
+
+type orderedList struct {
 	list     *list.List
 	lessFunc func(a, b interface{}) bool
 }
 
-func (me *OrderedList) Len() int {
+func (me *orderedList) Len() int {
 	return me.list.Len()
 }
 
-func NewList(lessFunc func(a, b interface{}) bool) *OrderedList {
-	return &OrderedList{
+func newOrderedList(lessFunc func(a, b interface{}) bool) *orderedList {
+	return &orderedList{
 		list:     list.New(),
 		lessFunc: lessFunc,
 	}
 }
 
-func (me *OrderedList) ValueChanged(e *list.Element) {
+func (me *orderedList) ValueChanged(e *list.Element) {
 	for prev := e.Prev(); prev != nil && me.lessFunc(e.Value, prev.Value); prev = e.Prev() {
 		me.list.MoveBefore(e, prev)
 	}
@@ -29,16 +32,16 @@ func (me *OrderedList) ValueChanged(e *list.Element) {
 	}
 }
 
-func (me *OrderedList) Insert(value interface{}) (ret *list.Element) {
+func (me *orderedList) Insert(value interface{}) (ret *list.Element) {
 	ret = me.list.PushFront(value)
 	me.ValueChanged(ret)
 	return
 }
 
-func (me *OrderedList) Front() *list.Element {
+func (me *orderedList) Front() *list.Element {
 	return me.list.Front()
 }
 
-func (me *OrderedList) Remove(e *list.Element) interface{} {
+func (me *orderedList) Remove(e *list.Element) interface{} {
 	return me.list.Remove(e)
 }

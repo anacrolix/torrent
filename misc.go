@@ -15,7 +15,7 @@ const (
 	pieceHash          = crypto.SHA1
 	maxRequests        = 250        // Maximum pending requests we allow peers to send us.
 	chunkSize          = 0x4000     // 16KiB
-	BEP20              = "-GT0000-" // Peer ID client identifier prefix
+	bep20              = "-GT0000-" // Peer ID client identifier prefix
 	nominalDialTimeout = time.Second * 30
 	minDialTimeout     = 5 * time.Second
 )
@@ -97,7 +97,7 @@ func newRequest(index, begin, length peer_protocol.Integer) request {
 
 var (
 	// Requested data not yet available.
-	ErrDataNotReady = errors.New("data not ready")
+	errDataNotReady = errors.New("data not ready")
 )
 
 // The size in bytes of a metadata extension piece.

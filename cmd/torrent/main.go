@@ -42,7 +42,7 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})
-	defer client.Stop()
+	defer client.Close()
 	if flag.NArg() == 0 {
 		fmt.Fprintln(os.Stderr, "no torrents specified")
 		return

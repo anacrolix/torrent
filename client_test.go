@@ -37,7 +37,7 @@ func TestClientDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cl.Stop()
+	cl.Close()
 }
 
 func TestAddDropTorrent(t *testing.T) {
@@ -47,7 +47,7 @@ func TestAddDropTorrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cl.Stop()
+	defer cl.Close()
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
 	tt, err := cl.AddTorrent(mi)
@@ -223,13 +223,13 @@ func TestTwoClientsArbitraryPorts(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer cl.Stop()
+		defer cl.Close()
 	}
 }
 
 func TestAddDropManyTorrents(t *testing.T) {
 	cl, _ := NewClient(&TestingConfig)
-	defer cl.Stop()
+	defer cl.Close()
 	var m Magnet
 	for i := range iter.N(1000) {
 		binary.PutVarint(m.InfoHash[:], int64(i))
@@ -246,7 +246,7 @@ func TestClientTransfer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer seeder.Stop()
+	defer seeder.Close()
 	seeder.AddTorrent(mi)
 	leecherDataDir, err := ioutil.TempDir("", "")
 	if err != nil {
@@ -258,7 +258,7 @@ func TestClientTransfer(t *testing.T) {
 	// }
 	cfg.TorrentDataOpener = blob.NewStore(leecherDataDir).OpenTorrent
 	leecher, _ := NewClient(&cfg)
-	defer leecher.Stop()
+	defer leecher.Close()
 	leecherGreeting, _ := leecher.AddTorrent(mi)
 	leecherGreeting.AddPeers([]Peer{
 		Peer{

@@ -44,15 +44,9 @@ type peersKey struct {
 	Port    int
 }
 
-// Represents data storage for a Torrent. Additional optional interfaces to
-// implement are io.Closer, io.ReaderAt, StatefulData, and SectionOpener.
-type Data interface {
-	data.Data
-}
-
 // Data maintains per-piece persistent state.
 type StatefulData interface {
-	Data
+	data.Data
 	// We believe the piece data will pass a hash check.
 	PieceCompleted(index int) error
 	// Returns true if the piece is complete.
@@ -72,7 +66,7 @@ type torrent struct {
 	Pieces   []*piece
 	length   int64
 
-	data Data
+	data data.Data
 
 	Info *metainfo.Info
 	// Active peer connections.
@@ -229,10 +223,8 @@ func (t *torrent) ceaseNetworking() {
 	t.pruneTimer.Stop()
 }
 
-func (t *torrent) AddPeers(pp []Peer) {
-	for _, p := range pp {
-		t.Peers[peersKey{string(p.IP), p.Port}] = p
-	}
+func (t *torrent) addPeer(p Peer) {
+	t.Peers[peersKey{string(p.IP), p.Port}] = p
 }
 
 func (t *torrent) invalidateMetadata() {
@@ -305,7 +297,7 @@ func (t *torrent) setMetadata(md metainfo.Info, infoBytes []byte, eventLocker sy
 	return
 }
 
-func (t *torrent) setStorage(td Data) (err error) {
+func (t *torrent) setStorage(td data.Data) (err error) {
 	if c, ok := t.data.(io.Closer); ok {
 		c.Close()
 	}
@@ -539,7 +531,7 @@ func (t *torrent) piecePartiallyDownloaded(index int) bool {
 	return t.PieceNumPendingBytes(pp.Integer(index)) != t.PieceLength(pp.Integer(index))
 }
 
-func NumChunksForPiece(chunkSize int, pieceSize int) int {
+func numChunksForPiece(chunkSize int, pieceSize int) int {
 	return (pieceSize + chunkSize - 1) / chunkSize
 }
 

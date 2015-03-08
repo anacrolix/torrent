@@ -6,7 +6,7 @@ import (
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 )
 
-type DownloadStrategy interface {
+type downloadStrategy interface {
 	// Tops up the outgoing pending requests.
 	FillRequests(*torrent, *connection)
 	TorrentStarted(*torrent)
@@ -20,17 +20,17 @@ type DownloadStrategy interface {
 	PendingData(*torrent) bool
 }
 
-type DefaultDownloadStrategy struct{}
+type defaultDownloadStrategy struct{}
 
-func (me *DefaultDownloadStrategy) PendingData(t *torrent) bool {
+func (me *defaultDownloadStrategy) PendingData(t *torrent) bool {
 	return !t.haveAllPieces()
 }
 
-func (me *DefaultDownloadStrategy) AssertNotRequested(t *torrent, r request) {}
+func (me *defaultDownloadStrategy) AssertNotRequested(t *torrent, r request) {}
 
-func (me *DefaultDownloadStrategy) WriteStatus(w io.Writer) {}
+func (me *defaultDownloadStrategy) WriteStatus(w io.Writer) {}
 
-func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
+func (s *defaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	if c.Interested {
 		if c.PeerChoked {
 			return
@@ -64,14 +64,14 @@ func (s *DefaultDownloadStrategy) FillRequests(t *torrent, c *connection) {
 	return
 }
 
-func (s *DefaultDownloadStrategy) TorrentStarted(t *torrent) {}
+func (s *defaultDownloadStrategy) TorrentStarted(t *torrent) {}
 
-func (s *DefaultDownloadStrategy) TorrentStopped(t *torrent) {
+func (s *defaultDownloadStrategy) TorrentStopped(t *torrent) {
 }
 
-func (s *DefaultDownloadStrategy) DeleteRequest(t *torrent, r request) {
+func (s *defaultDownloadStrategy) DeleteRequest(t *torrent, r request) {
 }
 
-func (me *DefaultDownloadStrategy) TorrentGotChunk(t *torrent, c request)      {}
-func (me *DefaultDownloadStrategy) TorrentGotPiece(t *torrent, piece int)      {}
-func (*DefaultDownloadStrategy) TorrentPrioritize(t *torrent, off, _len int64) {}
+func (me *defaultDownloadStrategy) TorrentGotChunk(t *torrent, c request)      {}
+func (me *defaultDownloadStrategy) TorrentGotPiece(t *torrent, piece int)      {}
+func (*defaultDownloadStrategy) TorrentPrioritize(t *torrent, off, _len int64) {}

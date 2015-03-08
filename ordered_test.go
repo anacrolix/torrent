@@ -5,7 +5,7 @@ import (
 )
 
 func TestOrderedList(t *testing.T) {
-	ol := NewList(func(a, b interface{}) bool {
+	ol := newOrderedList(func(a, b interface{}) bool {
 		return a.(int) < b.(int)
 	})
 	if ol.Len() != 0 {

@@ -98,7 +98,7 @@ func TestUnmountWedged(t *testing.T) {
 
 		NoDefaultBlocklist: true,
 	})
-	defer client.Stop()
+	defer client.Close()
 	client.AddTorrent(layout.Metainfo)
 	fs := New(client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
@@ -177,7 +177,7 @@ func TestDownloadOnDemand(t *testing.T) {
 		t.Fatalf("error creating seeder client: %s", err)
 	}
 	seeder.SetIPBlockList(nil)
-	defer seeder.Stop()
+	defer seeder.Close()
 	http.HandleFunc("/seeder", func(w http.ResponseWriter, req *http.Request) {
 		seeder.WriteStatus(w)
 	})
@@ -207,11 +207,9 @@ func TestDownloadOnDemand(t *testing.T) {
 	http.HandleFunc("/leecher", func(w http.ResponseWriter, req *http.Request) {
 		leecher.WriteStatus(w)
 	})
-	defer leecher.Stop()
-	leecher.AddTorrent(layout.Metainfo)
-	var ih torrent.InfoHash
-	util.CopyExact(ih[:], layout.Metainfo.Info.Hash)
-	leecher.AddPeers(ih, []torrent.Peer{func() torrent.Peer {
+	defer leecher.Close()
+	leecherTorrent, _ := leecher.AddTorrent(layout.Metainfo)
+	leecherTorrent.AddPeers([]torrent.Peer{func() torrent.Peer {
 		_, port, err := net.SplitHostPort(seeder.ListenAddr().String())
 		if err != nil {
 			panic(err)

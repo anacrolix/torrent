@@ -21,8 +21,9 @@ func (r *Range) String() string {
 	return fmt.Sprintf("%s-%s (%s)", r.First, r.Last, r.Description)
 }
 
-// Create a new IP list. The given range must already sorted by the lower IP
-// in the range. Behaviour is undefined for lists of overlapping ranges.
+// Create a new IP list. The given ranges must already sorted by the lower
+// bound IP in each range. Behaviour is undefined for lists of overlapping
+// ranges.
 func New(initSorted []Range) *IPList {
 	return &IPList{
 		ranges: initSorted,

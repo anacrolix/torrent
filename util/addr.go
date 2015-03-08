@@ -27,6 +27,8 @@ func AddrIP(addr net.Addr) net.IP {
 	switch raw := addr.(type) {
 	case *net.UDPAddr:
 		return raw.IP
+	case *net.TCPAddr:
+		return raw.IP
 	default:
 		host, _, err := net.SplitHostPort(addr.String())
 		if err != nil {

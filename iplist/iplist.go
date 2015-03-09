@@ -92,8 +92,7 @@ func ParseBlocklistP2PLine(l []byte) (r Range, ok bool, err error) {
 	if len(l) == 0 || bytes.HasPrefix(l, []byte("#")) {
 		return
 	}
-	// TODO: Something tells me this will end badly when IPv6 blocklists are
-	// added.
+	// TODO: Check this when IPv6 blocklists are available.
 	colon := bytes.LastIndexAny(l, ":")
 	if colon == -1 {
 		err = errors.New("missing colon")

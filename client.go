@@ -202,7 +202,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	if addr := cl.ListenAddr(); addr != nil {
 		fmt.Fprintf(w, "Listening on %s\n", cl.ListenAddr())
 	} else {
-		fmt.Println("Not listening!")
+		fmt.Println(w, "Not listening!")
 	}
 	fmt.Fprintf(w, "Peer ID: %q\n", cl.peerID)
 	fmt.Fprintf(w, "Handshaking: %d\n", cl.handshaking)

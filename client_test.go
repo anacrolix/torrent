@@ -41,9 +41,7 @@ func TestClientDefault(t *testing.T) {
 }
 
 func TestAddDropTorrent(t *testing.T) {
-	cl, err := NewClient(&Config{
-		ListenAddr: "localhost:0",
-	})
+	cl, err := NewClient(&TestingConfig)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -29,6 +29,7 @@ import (
 	"math/big"
 	mathRand "math/rand"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -2100,7 +2101,37 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 	}
 }
 
+func (cl *Client) trackerBlockedUnlocked(tr tracker.Client) (blocked bool, err error) {
+	url_, err := url.Parse(tr.URL())
+	if err != nil {
+		return
+	}
+	host, _, err := net.SplitHostPort(url_.Host)
+	if err != nil {
+		host = url_.Host
+	}
+	addr, err := net.ResolveIPAddr("ip", host)
+	if err != nil {
+		return
+	}
+	cl.mu.Lock()
+	if cl.ipBlockList != nil {
+		if cl.ipBlockRange(addr.IP) != nil {
+			blocked = true
+		}
+	}
+	cl.mu.Unlock()
+	return
+}
+
 func (cl *Client) announceTorrentSingleTracker(tr tracker.Client, req *tracker.AnnounceRequest, t *torrent) error {
+	blocked, err := cl.trackerBlockedUnlocked(tr)
+	if err != nil {
+		return fmt.Errorf("error determining if tracker blocked: %s", err)
+	}
+	if blocked {
+		return fmt.Errorf("tracker blocked: %s", tr)
+	}
 	if err := tr.Connect(); err != nil {
 		return fmt.Errorf("error connecting: %s", err)
 	}

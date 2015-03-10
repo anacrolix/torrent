@@ -523,14 +523,14 @@ func (t *torrent) bytesLeft() (left int64) {
 	if !t.haveInfo() {
 		return -1
 	}
-	for i := pp.Integer(0); i < pp.Integer(t.numPieces()); i++ {
+	for i := 0; i < t.numPieces(); i++ {
 		left += int64(t.PieceNumPendingBytes(i))
 	}
 	return
 }
 
 func (t *torrent) piecePartiallyDownloaded(index int) bool {
-	return t.PieceNumPendingBytes(pp.Integer(index)) != t.PieceLength(pp.Integer(index))
+	return t.PieceNumPendingBytes(index) != t.PieceLength(index)
 }
 
 func numChunksForPiece(chunkSize int, pieceSize int) int {
@@ -542,7 +542,7 @@ func (t *torrent) usualPieceSize() int {
 }
 
 func (t *torrent) lastPieceSize() int {
-	return int(t.PieceLength(pp.Integer(t.numPieces() - 1)))
+	return int(t.PieceLength(t.numPieces() - 1))
 }
 
 func (t *torrent) numPieces() int {
@@ -634,9 +634,9 @@ func (t *torrent) bitfield() (bf []bool) {
 }
 
 func (t *torrent) pieceChunks(piece int) (css []chunkSpec) {
-	css = make([]chunkSpec, 0, (t.PieceLength(pp.Integer(piece))+chunkSize-1)/chunkSize)
+	css = make([]chunkSpec, 0, (t.PieceLength(piece)+chunkSize-1)/chunkSize)
 	var cs chunkSpec
-	for left := t.PieceLength(pp.Integer(piece)); left != 0; left -= cs.Length {
+	for left := t.PieceLength(piece); left != 0; left -= cs.Length {
 		cs.Length = left
 		if cs.Length > chunkSize {
 			cs.Length = chunkSize
@@ -647,7 +647,7 @@ func (t *torrent) pieceChunks(piece int) (css []chunkSpec) {
 	return
 }
 
-func (t *torrent) pendAllChunkSpecs(index pp.Integer) {
+func (t *torrent) pendAllChunkSpecs(index int) {
 	piece := t.Pieces[index]
 	if piece.PendingChunkSpecs == nil {
 		piece.PendingChunkSpecs = make(
@@ -668,7 +668,7 @@ type Peer struct {
 	Source peerSource
 }
 
-func (t *torrent) PieceLength(piece pp.Integer) (len_ pp.Integer) {
+func (t *torrent) PieceLength(piece int) (len_ pp.Integer) {
 	if int(piece) == t.numPieces()-1 {
 		len_ = pp.Integer(t.Length() % t.Info.PieceLength)
 	}

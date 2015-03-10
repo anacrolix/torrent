@@ -202,7 +202,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	if addr := cl.ListenAddr(); addr != nil {
 		fmt.Fprintf(w, "Listening on %s\n", cl.ListenAddr())
 	} else {
-		fmt.Println(w, "Not listening!")
+		fmt.Fprintln(w, "Not listening!")
 	}
 	fmt.Fprintf(w, "Peer ID: %q\n", cl.peerID)
 	fmt.Fprintf(w, "Handshaking: %d\n", cl.handshaking)
@@ -214,7 +214,6 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		fmt.Fprintf(w, "DHT announces: %d\n", cl.dHT.NumConfirmedAnnounces)
 		fmt.Fprintf(w, "Outstanding transactions: %d\n", dhtStats.NumOutstandingTransactions)
 	}
-	cl.downloadStrategy.WriteStatus(w)
 	fmt.Fprintln(w)
 	for _, t := range cl.sortedTorrents() {
 		if t.Name() == "" {
@@ -249,7 +248,7 @@ func (cl *Client) torrentReadAt(t *torrent, off int64, p []byte) (n int, err err
 		return
 	}
 	pieceOff := pp.Integer(off % int64(t.usualPieceSize()))
-	pieceLeft := int(t.PieceLength(pp.Integer(index)) - pieceOff)
+	pieceLeft := int(t.PieceLength(index) - pieceOff)
 	if pieceLeft <= 0 {
 		err = io.EOF
 		return
@@ -489,10 +488,6 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if err != nil {
 			panic("error generating peer id")
 		}
-	}
-
-	if cl.downloadStrategy == nil {
-		cl.downloadStrategy = &defaultDownloadStrategy{}
 	}
 
 	// Returns the laddr string to listen on for the next Listen call.
@@ -1043,7 +1038,6 @@ func (cl *Client) connCancel(t *torrent, cn *connection, r request) (ok bool) {
 	ok = cn.Cancel(r)
 	if ok {
 		postedCancels.Add(1)
-		cl.downloadStrategy.DeleteRequest(t, r)
 	}
 	return
 }
@@ -1052,7 +1046,6 @@ func (cl *Client) connDeleteRequest(t *torrent, cn *connection, r request) {
 	if !cn.RequestPending(r) {
 		return
 	}
-	cl.downloadStrategy.DeleteRequest(t, r)
 	delete(cn.Requests, r)
 }
 
@@ -1567,7 +1560,6 @@ func (cl *Client) startTorrent(t *torrent) {
 			}
 		}()
 	}
-	cl.downloadStrategy.TorrentStarted(t)
 }
 
 // Storage cannot be changed once it's set.
@@ -1975,7 +1967,6 @@ func (me *Client) dropTorrent(infoHash InfoHash) (err error) {
 		panic(err)
 	}
 	delete(me.torrents, infoHash)
-	me.downloadStrategy.TorrentStopped(t)
 	return
 }
 
@@ -2106,7 +2097,6 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 		}
 		ps.Close()
 		log.Printf("finished DHT peer scrape for %s: %d peers", t, len(allAddrs))
-
 	}
 }
 
@@ -2255,6 +2245,8 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 
 	defer me.replenishConnRequests(t, c)
 
+	piece := t.Pieces[req.Index]
+
 	// Do we actually want this chunk?
 	if _, ok := t.Pieces[req.Index].PendingChunkSpecs[req.chunkSpec]; !ok {
 		unusedDownloadedChunksCount.Add(1)
@@ -2272,16 +2264,13 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	}
 
 	// Record that we have the chunk.
-	delete(t.Pieces[req.Index].PendingChunkSpecs, req.chunkSpec)
-	if len(t.Pieces[req.Index].PendingChunkSpecs) == 0 {
+	delete(piece.PendingChunkSpecs, req.chunkSpec)
+	if len(piece.PendingChunkSpecs) == 0 {
 		for _, c := range t.Conns {
 			c.pieceRequestOrder.DeletePiece(int(req.Index))
 		}
 		me.queuePieceCheck(t, req.Index)
 	}
-
-	// Unprioritize the chunk.
-	me.downloadStrategy.TorrentGotChunk(t, req)
 
 	// Cancel pending requests for this chunk.
 	for _, c := range t.Conns {
@@ -2289,8 +2278,6 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 			me.replenishConnRequests(t, c)
 		}
 	}
-
-	me.downloadStrategy.AssertNotRequested(t, req)
 
 	return nil
 }
@@ -2316,10 +2303,9 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 		p.PendingChunkSpecs = nil
 		p.complete = true
 		p.Event.Broadcast()
-		me.downloadStrategy.TorrentGotPiece(t, int(piece))
 	} else {
 		if len(p.PendingChunkSpecs) == 0 {
-			t.pendAllChunkSpecs(piece)
+			t.pendAllChunkSpecs(int(piece))
 		}
 		if p.Priority != piecePriorityNone {
 			me.openNewConns(t)
@@ -2333,13 +2319,13 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 			})
 			// TODO: Cancel requests for this piece.
 			for r := range conn.Requests {
-				if r.Index == piece {
+				if int(r.Index) == piece {
 					panic("wat")
 				}
 			}
 			conn.pieceRequestOrder.DeletePiece(int(piece))
 		}
-		if t.wantPiece(int(piece)) && conn.PeerHasPiece(piece) {
+		if t.wantPiece(int(piece)) && conn.PeerHasPiece(pp.Integer(piece)) {
 			t.connPendPiece(conn, int(piece))
 			me.replenishConnRequests(t, conn)
 		}

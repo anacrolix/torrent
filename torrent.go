@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bradfitz/iter"
+
 	"bitbucket.org/anacrolix/go.torrent/data"
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
@@ -20,11 +22,11 @@ import (
 	"github.com/anacrolix/libtorgo/metainfo"
 )
 
-func (t *torrent) PieceNumPendingBytes(index pp.Integer) (count pp.Integer) {
-	piece := t.Pieces[index]
-	if piece.complete {
+func (t *torrent) PieceNumPendingBytes(index int) (count pp.Integer) {
+	if t.pieceComplete(index) {
 		return 0
 	}
+	piece := t.Pieces[index]
 	if !piece.EverHashed {
 		return t.PieceLength(index)
 	}
@@ -66,7 +68,7 @@ type torrent struct {
 	Pieces   []*piece
 	length   int64
 
-	data data.Data
+	data StatefulData
 
 	Info *metainfo.Info
 	// Active peer connections.
@@ -91,6 +93,12 @@ type torrent struct {
 	GotMetainfo <-chan struct{}
 
 	pruneTimer *time.Timer
+}
+
+func (t *torrent) pieceComplete(piece int) bool {
+	// TODO: This is called when setting metadata, and before storage is
+	// assigned, which doesn't seem right.
+	return t.data != nil && t.data.PieceComplete(piece)
 }
 
 // A file-like handle to torrent data that implements SectionOpener. Opened
@@ -301,11 +309,10 @@ func (t *torrent) setStorage(td data.Data) (err error) {
 	if c, ok := t.data.(io.Closer); ok {
 		c.Close()
 	}
-	t.data = td
-	if sd, ok := t.data.(StatefulData); ok {
-		for i, p := range t.Pieces {
-			p.complete = sd.PieceComplete(i)
-		}
+	if sd, ok := td.(StatefulData); ok {
+		t.data = sd
+	} else {
+		t.data = &statelessDataWrapper{td, make([]bool, t.Info.NumPieces())}
 	}
 	return
 }
@@ -351,7 +358,7 @@ func (t *torrent) Name() string {
 func (t *torrent) pieceStatusChar(index int) byte {
 	p := t.Pieces[index]
 	switch {
-	case p.Complete():
+	case t.pieceComplete(index):
 		return 'C'
 	case p.QueuedForHash:
 		return 'Q'
@@ -550,8 +557,8 @@ func (t *torrent) numPieces() int {
 }
 
 func (t *torrent) numPiecesCompleted() (num int) {
-	for _, p := range t.Pieces {
-		if p.Complete() {
+	for i := range iter.N(t.Info.NumPieces()) {
+		if t.pieceComplete(i) {
 			num++
 		}
 	}
@@ -689,8 +696,8 @@ func (t *torrent) haveAllPieces() bool {
 	if !t.haveInfo() {
 		return false
 	}
-	for _, piece := range t.Pieces {
-		if !piece.Complete() {
+	for i := range t.Pieces {
+		if !t.pieceComplete(i) {
 			return false
 		}
 	}
@@ -698,8 +705,8 @@ func (t *torrent) haveAllPieces() bool {
 }
 
 func (me *torrent) haveAnyPieces() bool {
-	for _, piece := range me.Pieces {
-		if piece.Complete() {
+	for i := range me.Pieces {
+		if me.pieceComplete(i) {
 			return true
 		}
 	}
@@ -707,7 +714,7 @@ func (me *torrent) haveAnyPieces() bool {
 }
 
 func (t *torrent) havePiece(index int) bool {
-	return t.haveInfo() && t.Pieces[index].Complete()
+	return t.haveInfo() && t.pieceComplete(index)
 }
 
 func (t *torrent) haveChunk(r request) bool {
@@ -732,7 +739,7 @@ func (t *torrent) wantPiece(index int) bool {
 		return false
 	}
 	p := t.Pieces[index]
-	return p.EverHashed && len(p.PendingChunkSpecs) != 0 && p.Priority != piecePriorityNone
+	return !t.pieceComplete(index) && p.Priority != piecePriorityNone && !p.QueuedForHash && !p.Hashing
 }
 
 func (t *torrent) connHasWantedPieces(c *connection) bool {

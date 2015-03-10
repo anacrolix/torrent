@@ -45,7 +45,6 @@ const (
 
 type piece struct {
 	Hash              pieceSum
-	complete          bool
 	PendingChunkSpecs map[chunkSpec]struct{}
 	Hashing           bool
 	QueuedForHash     bool
@@ -70,10 +69,6 @@ func (p *piece) shuffledPendingChunkSpecs() (css []chunkSpec) {
 		css[i], css[j] = css[j], css[i]
 	}
 	return
-}
-
-func (p *piece) Complete() bool {
-	return p.complete
 }
 
 func lastChunkSpec(pieceLength peer_protocol.Integer) (cs chunkSpec) {
@@ -107,4 +102,19 @@ func metadataPieceSize(totalSize int, piece int) int {
 		ret = 1 << 14
 	}
 	return ret
+}
+
+type Super interface {
+	Super() interface{}
+}
+
+// Returns ok if there's a parent, and it's not nil.
+func super(child interface{}) (parent interface{}, ok bool) {
+	s, ok := child.(Super)
+	if !ok {
+		return
+	}
+	parent = s.Super()
+	ok = parent != nil
+	return
 }

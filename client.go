@@ -100,29 +100,28 @@ func (cl *Client) queuePieceCheck(t *torrent, pieceIndex pp.Integer) {
 // been checked before.
 func (cl *Client) queueFirstHash(t *torrent, piece int) {
 	p := t.Pieces[piece]
-	if p.EverHashed || p.Hashing || p.QueuedForHash || p.Complete() {
+	if p.EverHashed || p.Hashing || p.QueuedForHash || t.pieceComplete(piece) {
 		return
 	}
 	cl.queuePieceCheck(t, pp.Integer(piece))
 }
 
 type Client struct {
-	noUpload         bool
-	dataDir          string
-	halfOpenLimit    int
-	peerID           [20]byte
-	listeners        []net.Listener
-	utpSock          *utp.Socket
-	disableTrackers  bool
-	downloadStrategy downloadStrategy
-	dHT              *dht.Server
-	disableUTP       bool
-	disableTCP       bool
-	ipBlockList      *iplist.IPList
-	bannedTorrents   map[InfoHash]struct{}
-	_configDir       string
-	config           Config
-	pruneTimer       *time.Timer
+	noUpload        bool
+	dataDir         string
+	halfOpenLimit   int
+	peerID          [20]byte
+	listeners       []net.Listener
+	utpSock         *utp.Socket
+	disableTrackers bool
+	dHT             *dht.Server
+	disableUTP      bool
+	disableTCP      bool
+	ipBlockList     *iplist.IPList
+	bannedTorrents  map[InfoHash]struct{}
+	_configDir      string
+	config          Config
+	pruneTimer      *time.Timer
 
 	torrentDataOpener TorrentDataOpener
 
@@ -274,7 +273,10 @@ func (cl *Client) prepareRead(t *torrent, off int64) (n int64) {
 	}
 	piece := t.Pieces[index]
 	cl.readRaisePiecePriorities(t, off)
-	for !piece.Complete() && !t.isClosed() {
+	for !t.pieceComplete(index) && !t.isClosed() {
+		// This is to prevent being starved if a piece is dropped before we
+		// can read it.
+		cl.readRaisePiecePriorities(t, off)
 		piece.Event.Wait()
 	}
 	return t.Info.Piece(index).Length() - off%t.Info.PieceLength
@@ -292,6 +294,7 @@ type SectionOpener interface {
 }
 
 func dataReadAt(d data.Data, b []byte, off int64) (n int, err error) {
+again:
 	if ra, ok := d.(io.ReaderAt); ok {
 		return ra.ReadAt(b, off)
 	}
@@ -303,6 +306,10 @@ func dataReadAt(d data.Data, b []byte, off int64) (n int, err error) {
 		}
 		defer rc.Close()
 		return io.ReadFull(rc, b)
+	}
+	if dp, ok := super(d); ok {
+		d = dp.(data.Data)
+		goto again
 	}
 	panic(fmt.Sprintf("can't read from %T", d))
 }
@@ -355,14 +362,7 @@ func (cl *Client) prioritizePiece(t *torrent, piece int, priority piecePriority)
 	}
 	cl.queueFirstHash(t, piece)
 	t.Pieces[piece].Priority = priority
-	if t.wantPiece(piece) {
-		for _, c := range t.Conns {
-			if c.PeerHasPiece(pp.Integer(piece)) {
-				t.connPendPiece(c, piece)
-				cl.replenishConnRequests(t, c)
-			}
-		}
-	}
+	cl.pieceChanged(t, piece)
 }
 
 func (cl *Client) setEnvBlocklist() (err error) {
@@ -2224,11 +2224,45 @@ func (me *Client) WaitAll() bool {
 	return true
 }
 
+func (me *Client) fillRequests(t *torrent, c *connection) {
+	if c.Interested {
+		if c.PeerChoked {
+			return
+		}
+		if len(c.Requests) > c.requestsLowWater {
+			return
+		}
+	}
+	addRequest := func(req request) (again bool) {
+		if len(c.Requests) >= 32 {
+			return false
+		}
+		return c.Request(req)
+	}
+	for e := c.pieceRequestOrder.First(); e != nil; e = e.Next() {
+		pieceIndex := e.Piece()
+		if !c.PeerHasPiece(pp.Integer(pieceIndex)) {
+			panic("piece in request order but peer doesn't have it")
+		}
+		if !t.wantPiece(pieceIndex) {
+			panic("unwanted piece in connection request order")
+		}
+		piece := t.Pieces[pieceIndex]
+		for _, cs := range piece.shuffledPendingChunkSpecs() {
+			r := request{pp.Integer(pieceIndex), cs}
+			if !addRequest(r) {
+				return
+			}
+		}
+	}
+	return
+}
+
 func (me *Client) replenishConnRequests(t *torrent, c *connection) {
 	if !t.haveInfo() {
 		return
 	}
-	me.downloadStrategy.FillRequests(t, c)
+	me.fillRequests(t, c)
 	if len(c.Requests) == 0 && !c.PeerChoked {
 		c.SetInterested(false)
 	}
@@ -2248,7 +2282,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	piece := t.Pieces[req.Index]
 
 	// Do we actually want this chunk?
-	if _, ok := t.Pieces[req.Index].PendingChunkSpecs[req.chunkSpec]; !ok {
+	if _, ok := piece.PendingChunkSpecs[req.chunkSpec]; !ok || piece.Priority == piecePriorityNone {
 		unusedDownloadedChunksCount.Add(1)
 		c.UnwantedChunksReceived++
 		return nil
@@ -2298,10 +2332,15 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 			}
 		}
 	}
+	me.pieceChanged(t, int(piece))
+}
+
+func (me *Client) pieceChanged(t *torrent, piece int) {
+	correct := t.pieceComplete(piece)
+	p := t.Pieces[piece]
 	if correct {
 		p.Priority = piecePriorityNone
 		p.PendingChunkSpecs = nil
-		p.complete = true
 		p.Event.Broadcast()
 	} else {
 		if len(p.PendingChunkSpecs) == 0 {
@@ -2344,7 +2383,7 @@ func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 		cl.event.Wait()
 	}
 	p.QueuedForHash = false
-	if t.isClosed() || p.complete {
+	if t.isClosed() || t.pieceComplete(int(index)) {
 		return
 	}
 	p.Hashing = true

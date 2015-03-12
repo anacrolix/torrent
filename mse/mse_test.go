@@ -49,7 +49,7 @@ func TestHandshake(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		a, err := Handshake(a, true, []byte("yep"))
+		a, err := InitiateHandshake(a, []byte("yep"))
 		if err != nil {
 			t.Fatal(err)
 			return
@@ -61,7 +61,7 @@ func TestHandshake(t *testing.T) {
 	}()
 	go func() {
 		defer wg.Done()
-		b, err := Handshake(b, false, []byte("yep"))
+		b, err := ReceiveHandshake(b, [][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")})
 		if err != nil {
 			t.Fatal(err)
 			return

@@ -3,6 +3,7 @@ package mse
 import (
 	"bytes"
 	"io"
+	"log"
 	"net"
 	"sync"
 
@@ -53,7 +54,10 @@ func TestHandshake(t *testing.T) {
 			t.Fatal(err)
 			return
 		}
-		a.Close()
+		a.Write([]byte("hello world"))
+		var msg [20]byte
+		n, _ := a.Read(msg[:])
+		log.Print(string(msg[:n]))
 	}()
 	go func() {
 		defer wg.Done()
@@ -62,7 +66,10 @@ func TestHandshake(t *testing.T) {
 			t.Fatal(err)
 			return
 		}
-		b.Close()
+		var msg [20]byte
+		n, _ := b.Read(msg[:])
+		log.Print(string(msg[:n]))
+		b.Write([]byte("yo dawg"))
 	}()
 	wg.Wait()
 }

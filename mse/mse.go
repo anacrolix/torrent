@@ -339,7 +339,12 @@ func readUntil(r io.Reader, b []byte) error {
 	return nil
 }
 
-func (h *handshake) Do() (ret io.ReadWriteCloser, err error) {
+type readWriter struct {
+	io.Reader
+	io.Writer
+}
+
+func (h *handshake) Do() (ret io.ReadWriter, err error) {
 	err = h.establishS()
 	if err != nil {
 		return
@@ -383,6 +388,7 @@ func (h *handshake) Do() (ret io.ReadWriteCloser, err error) {
 			err = fmt.Errorf("error reading crypto negotiation: %s", err)
 			return
 		}
+		ret = readWriter{r, &cipherWriter{bC, h.conn}}
 	} else {
 		err = readUntil(h.conn, hash(req1, h.s.Bytes()))
 		if err != nil {
@@ -422,6 +428,7 @@ func (h *handshake) Do() (ret io.ReadWriteCloser, err error) {
 		if err != nil {
 			return
 		}
+		ret = readWriter{r, w}
 	}
 	err = h.finishWriting()
 	if err != nil {
@@ -431,7 +438,7 @@ func (h *handshake) Do() (ret io.ReadWriteCloser, err error) {
 	return
 }
 
-func Handshake(rw io.ReadWriteCloser, initer bool, skey []byte) (ret io.ReadWriteCloser, err error) {
+func Handshake(rw io.ReadWriteCloser, initer bool, skey []byte) (ret io.ReadWriter, err error) {
 	h := handshake{
 		conn:   rw,
 		initer: initer,

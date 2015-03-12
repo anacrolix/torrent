@@ -42,6 +42,7 @@ import (
 	"bitbucket.org/anacrolix/go.torrent/dht"
 	"bitbucket.org/anacrolix/go.torrent/internal/pieceordering"
 	"bitbucket.org/anacrolix/go.torrent/iplist"
+	"bitbucket.org/anacrolix/go.torrent/logonce"
 	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
 	"bitbucket.org/anacrolix/go.torrent/tracker"
 	_ "bitbucket.org/anacrolix/go.torrent/tracker/udp"
@@ -57,6 +58,7 @@ var (
 	chunksDownloadedCount       = expvar.NewInt("chunksDownloadedCount")
 	peersFoundByDHT             = expvar.NewInt("peersFoundByDHT")
 	peersFoundByPEX             = expvar.NewInt("peersFoundByPEX")
+	peersFoundByTracker         = expvar.NewInt("peersFoundByTracker")
 	uploadChunksPosted          = expvar.NewInt("uploadChunksPosted")
 	unexpectedCancels           = expvar.NewInt("unexpectedCancels")
 	postedCancels               = expvar.NewInt("postedCancels")
@@ -606,7 +608,7 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 		cl.mu.RUnlock()
 		if blockRange != nil {
 			inboundConnsBlocked.Add(1)
-			log.Printf("inbound connection from %s blocked by %s", conn.RemoteAddr(), blockRange)
+			// log.Printf("inbound connection from %s blocked by %s", conn.RemoteAddr(), blockRange)
 			conn.Close()
 			continue
 		}
@@ -784,8 +786,10 @@ func handshakeWriter(w io.WriteCloser, bb <-chan []byte, done chan<- error) {
 	done <- err
 }
 
-type peerExtensionBytes [8]byte
-type peerID [20]byte
+type (
+	peerExtensionBytes [8]byte
+	peerID             [20]byte
+)
 
 type handshakeResult struct {
 	peerExtensionBytes
@@ -2149,7 +2153,9 @@ func (cl *Client) announceTorrentSingleTracker(tr tracker.Client, req *tracker.A
 	cl.mu.Lock()
 	cl.addPeers(t, peers)
 	cl.mu.Unlock()
+
 	log.Printf("%s: %d new peers from %s", t, len(peers), tr)
+	peersFoundByTracker.Add(int64(len(peers)))
 
 	time.Sleep(time.Second * time.Duration(resp.Interval))
 	return nil
@@ -2208,7 +2214,7 @@ newAnnounce:
 				numTrackersTried++
 				err := cl.announceTorrentSingleTracker(tr, &req, t)
 				if err != nil {
-					continue
+					logonce.Stderr.Printf("%s: error announcing to %s: %s", t, tr, err)
 				}
 				// Float the successful announce to the top of the tier. If
 				// the trackers list has been changed, we'll be modifying an

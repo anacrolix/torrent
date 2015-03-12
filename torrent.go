@@ -482,7 +482,7 @@ func (t *torrent) WriteStatus(w io.Writer) {
 		t: t,
 	})
 	for _, c := range t.Conns {
-		c.WriteStatus(w)
+		c.WriteStatus(w, t)
 	}
 }
 
@@ -553,7 +553,7 @@ func (t *torrent) lastPieceSize() int {
 }
 
 func (t *torrent) numPieces() int {
-	return len(t.Info.Pieces) / 20
+	return t.Info.NumPieces()
 }
 
 func (t *torrent) numPiecesCompleted() (num int) {
@@ -744,7 +744,7 @@ func (t *torrent) wantPiece(index int) bool {
 
 func (t *torrent) connHasWantedPieces(c *connection) bool {
 	for p := range t.Pieces {
-		if t.wantPiece(p) && c.PeerHasPiece(pp.Integer(p)) {
+		if t.wantPiece(p) && c.PeerHasPiece(p) {
 			return true
 		}
 	}

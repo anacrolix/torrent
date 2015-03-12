@@ -21,6 +21,7 @@ import (
 	"container/heap"
 	"crypto/rand"
 	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"expvar"
 	"fmt"
@@ -68,6 +69,7 @@ var (
 	successfulDials             = expvar.NewInt("successfulDials")
 	acceptedConns               = expvar.NewInt("acceptedConns")
 	inboundConnsBlocked         = expvar.NewInt("inboundConnsBlocked")
+	peerExtensions              = expvar.NewMap("peerExtensions")
 )
 
 const (
@@ -75,7 +77,8 @@ const (
 	//
 	// Extension protocol: http://www.bittorrent.org/beps/bep_0010.html
 	// DHT: http://www.bittorrent.org/beps/bep_0005.html
-	extensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x01"
+	// Fast Extension: http://bittorrent.org/beps/bep_0006.html
+	extensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x05"
 
 	socketsPerTorrent     = 40
 	torrentPeersHighWater = 200
@@ -850,7 +853,11 @@ func handshake(sock io.ReadWriteCloser, ih *InfoHash, peerID [20]byte) (res hand
 	CopyExact(&res.peerExtensionBytes, b[20:28])
 	CopyExact(&res.InfoHash, b[28:48])
 	CopyExact(&res.peerID, b[48:68])
+	peerExtensions.Add(hex.EncodeToString(res.peerExtensionBytes[:]), 1)
 
+	// TODO: Maybe we can just drop peers here if we're not interested. This
+	// could prevent them trying to reconnect, falsely believing there was
+	// just a problem.
 	if ih == nil { // We were waiting for the peer to tell us what they wanted.
 		post(res.InfoHash[:])
 		post(peerID[:])
@@ -1008,7 +1015,7 @@ func (t *torrent) initRequestOrdering(c *connection) {
 	c.piecePriorities = mathRand.Perm(t.numPieces())
 	c.pieceRequestOrder = pieceordering.New()
 	for i := 0; i < t.numPieces(); i++ {
-		if !c.PeerHasPiece(pp.Integer(i)) {
+		if !c.PeerHasPiece(i) {
 			continue
 		}
 		if !t.wantPiece(i) {
@@ -1019,16 +1026,18 @@ func (t *torrent) initRequestOrdering(c *connection) {
 }
 
 func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) {
-	if t.haveInfo() {
-		if c.PeerPieces == nil {
-			c.PeerPieces = make([]bool, t.numPieces())
+	if !c.peerHasAll {
+		if t.haveInfo() {
+			if c.PeerPieces == nil {
+				c.PeerPieces = make([]bool, t.numPieces())
+			}
+		} else {
+			for piece >= len(c.PeerPieces) {
+				c.PeerPieces = append(c.PeerPieces, false)
+			}
 		}
-	} else {
-		for piece >= len(c.PeerPieces) {
-			c.PeerPieces = append(c.PeerPieces, false)
-		}
+		c.PeerPieces[piece] = true
 	}
-	c.PeerPieces[piece] = true
 	if t.wantPiece(piece) {
 		t.connPendPiece(c, piece)
 		me.replenishConnRequests(t, c)
@@ -1166,6 +1175,16 @@ func addrPort(addr net.Addr) int {
 	return AddrPort(addr)
 }
 
+func (cl *Client) peerHasAll(t *torrent, cn *connection) {
+	cn.peerHasAll = true
+	cn.PeerPieces = nil
+	if t.haveInfo() {
+		for i := 0; i < t.numPieces(); i++ {
+			cl.peerGotPiece(t, cn, i)
+		}
+	}
+}
+
 // Processes incoming bittorrent messages. The client lock is held upon entry
 // and exit.
 func (me *Client) connectionLoop(t *torrent, c *connection) error {
@@ -1201,6 +1220,8 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			}
 			// We can then reset our interest.
 			me.replenishConnRequests(t, c)
+		case pp.Reject:
+			me.connDeleteRequest(t, c, newRequest(msg.Index, msg.Begin, msg.Length))
 		case pp.Unchoke:
 			c.PeerChoked = false
 			me.peerUnchoked(t, c)
@@ -1248,7 +1269,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				unexpectedCancels.Add(1)
 			}
 		case pp.Bitfield:
-			if c.PeerPieces != nil {
+			if c.PeerPieces != nil || c.peerHasAll {
 				err = errors.New("received unexpected bitfield")
 				break
 			}
@@ -1265,6 +1286,24 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 					me.peerGotPiece(t, c, index)
 				}
 			}
+		case pp.HaveAll:
+			if c.PeerPieces != nil || c.peerHasAll {
+				err = errors.New("unexpected have-all")
+				break
+			}
+			me.peerHasAll(t, c)
+		case pp.HaveNone:
+			if c.peerHasAll || c.PeerPieces != nil {
+				err = errors.New("unexpected have-none")
+				break
+			}
+			c.PeerPieces = make([]bool, func() int {
+				if t.haveInfo() {
+					return t.numPieces()
+				} else {
+					return 0
+				}
+			}())
 		case pp.Piece:
 			err = me.downloadedChunk(t, c, &msg)
 		case pp.Extended:
@@ -2278,7 +2317,7 @@ func (me *Client) fillRequests(t *torrent, c *connection) {
 	}
 	for e := c.pieceRequestOrder.First(); e != nil; e = e.Next() {
 		pieceIndex := e.Piece()
-		if !c.PeerHasPiece(pp.Integer(pieceIndex)) {
+		if !c.PeerHasPiece(pieceIndex) {
 			panic("piece in request order but peer doesn't have it")
 		}
 		if !t.wantPiece(pieceIndex) {
@@ -2401,7 +2440,7 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 			}
 			conn.pieceRequestOrder.DeletePiece(int(piece))
 		}
-		if t.wantPiece(int(piece)) && conn.PeerHasPiece(pp.Integer(piece)) {
+		if t.wantPiece(piece) && conn.PeerHasPiece(piece) {
 			t.connPendPiece(conn, int(piece))
 			me.replenishConnRequests(t, conn)
 		}

@@ -34,7 +34,15 @@ const (
 	Piece                     // 7
 	Cancel                    // 8
 	Port                      // 9
-	Extended      = 20
+
+	// BEP 6
+	Suggest     = 0xd  // 13
+	HaveAll     = 0xe  // 14
+	HaveNone    = 0xf  // 15
+	Reject      = 0x10 // 16
+	AllowedFast = 0x11 // 17
+
+	Extended = 20
 
 	HandshakeExtendedID = 0
 
@@ -62,10 +70,10 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 			return
 		}
 		switch msg.Type {
-		case Choke, Unchoke, Interested, NotInterested:
+		case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
 		case Have:
 			err = binary.Write(buf, binary.BigEndian, msg.Index)
-		case Request, Cancel:
+		case Request, Cancel, Reject:
 			for _, i := range []Integer{msg.Index, msg.Begin, msg.Length} {
 				err = binary.Write(buf, binary.BigEndian, i)
 				if err != nil {
@@ -159,11 +167,11 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 	}
 	msg.Type = MessageType(c)
 	switch msg.Type {
-	case Choke, Unchoke, Interested, NotInterested:
+	case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
 		return
 	case Have:
 		err = msg.Index.Read(r)
-	case Request, Cancel:
+	case Request, Cancel, Reject:
 		for _, data := range []*Integer{&msg.Index, &msg.Begin, &msg.Length} {
 			err = data.Read(r)
 			if err != nil {

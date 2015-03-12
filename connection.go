@@ -60,7 +60,9 @@ type connection struct {
 	PeerExtensionBytes peerExtensionBytes
 	// Whether the peer has the given piece. nil if they've not sent any
 	// related messages yet.
-	PeerPieces       []bool
+	PeerPieces []bool
+	peerHasAll bool
+
 	PeerMaxRequests  int // Maximum pending requests the peer allows.
 	PeerExtensionIDs map[string]int64
 	PeerClientName   string
@@ -115,32 +117,42 @@ func (cn *connection) supportsExtension(ext string) bool {
 	return ok
 }
 
-func (cn *connection) completedString() string {
-	if cn.PeerPieces == nil {
+func (cn *connection) completedString(t *torrent) string {
+	if cn.PeerPieces == nil && !cn.peerHasAll {
 		return "?"
 	}
-	// f := float32(cn.piecesPeerHasCount()) / float32(cn.totalPiecesCount())
-	// return fmt.Sprintf("%d%%", int(f*100))
-	return fmt.Sprintf("%d/%d", cn.piecesPeerHasCount(), cn.totalPiecesCount())
-}
-
-func (cn *connection) totalPiecesCount() int {
-	return len(cn.PeerPieces)
-}
-
-func (cn *connection) piecesPeerHasCount() (count int) {
-	for _, has := range cn.PeerPieces {
-		if has {
-			count++
+	return fmt.Sprintf("%d/%d", func() int {
+		if cn.peerHasAll {
+			if t.haveInfo() {
+				return t.numPieces()
+			}
+			return -1
 		}
-	}
-	return
+		ret := 0
+		for _, b := range cn.PeerPieces {
+			if b {
+				ret++
+			}
+		}
+		return ret
+	}(), func() int {
+		if cn.peerHasAll || cn.PeerPieces == nil {
+			if t.haveInfo() {
+				return t.numPieces()
+			}
+			return -1
+		}
+		return len(cn.PeerPieces)
+	}())
 }
 
 // Correct the PeerPieces slice length. Return false if the existing slice is
 // invalid, such as by receiving badly sized BITFIELD, or invalid HAVE
 // messages.
 func (cn *connection) setNumPieces(num int) error {
+	if cn.peerHasAll {
+		return nil
+	}
 	if cn.PeerPieces == nil {
 		return nil
 	}
@@ -170,9 +182,9 @@ func eventAgeString(t time.Time) string {
 	return fmt.Sprintf("%.2fs ago", time.Now().Sub(t).Seconds())
 }
 
-func (cn *connection) WriteStatus(w io.Writer) {
+func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 	// \t isn't preserved in <pre> blocks?
-	fmt.Fprintf(w, "%s\n    %s completed, good chunks: %d/%d reqs: %d-%d, last msg: %s, connected: %s, last useful chunk: %s, flags: ", fmt.Sprintf("%q: %s-%s", cn.PeerID, cn.Socket.LocalAddr(), cn.Socket.RemoteAddr()), cn.completedString(), cn.UsefulChunksReceived, cn.UnwantedChunksReceived+cn.UsefulChunksReceived, len(cn.Requests), len(cn.PeerRequests), eventAgeString(cn.lastMessageReceived), eventAgeString(cn.completedHandshake), eventAgeString(cn.lastUsefulChunkReceived))
+	fmt.Fprintf(w, "%s\n    %s completed, good chunks: %d/%d reqs: %d-%d, last msg: %s, connected: %s, last useful chunk: %s, flags: ", fmt.Sprintf("%q: %s-%s", cn.PeerID, cn.Socket.LocalAddr(), cn.Socket.RemoteAddr()), cn.completedString(t), cn.UsefulChunksReceived, cn.UnwantedChunksReceived+cn.UsefulChunksReceived, len(cn.Requests), len(cn.PeerRequests), eventAgeString(cn.lastMessageReceived), eventAgeString(cn.completedHandshake), eventAgeString(cn.lastUsefulChunkReceived))
 	c := func(b byte) {
 		fmt.Fprintf(w, "%c", b)
 	}
@@ -215,14 +227,14 @@ func (c *connection) Close() {
 	go c.Socket.Close()
 }
 
-func (c *connection) PeerHasPiece(index pp.Integer) bool {
-	if c.PeerPieces == nil {
+func (c *connection) PeerHasPiece(piece int) bool {
+	if c.peerHasAll {
+		return true
+	}
+	if piece >= len(c.PeerPieces) {
 		return false
 	}
-	if int(index) >= len(c.PeerPieces) {
-		return false
-	}
-	return c.PeerPieces[index]
+	return c.PeerPieces[piece]
 }
 
 func (c *connection) Post(msg pp.Message) {
@@ -242,7 +254,7 @@ func (c *connection) Request(chunk request) bool {
 	if len(c.Requests) >= c.PeerMaxRequests {
 		return false
 	}
-	if !c.PeerHasPiece(chunk.Index) {
+	if !c.PeerHasPiece(int(chunk.Index)) {
 		return true
 	}
 	if c.RequestPending(chunk) {

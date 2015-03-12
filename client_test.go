@@ -287,7 +287,7 @@ func TestReadaheadPieces(t *testing.T) {
 		{5 * 1024 * 1024, 1048576, 4},
 	} {
 		if readaheadPieces(case_.readaheadBytes, case_.pieceLength) != case_.readaheadPieces {
-			t.Fatalf("case failed: %s", case_)
+			t.Fatalf("case failed: %v", case_)
 		}
 	}
 }

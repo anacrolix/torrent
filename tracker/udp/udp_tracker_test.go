@@ -5,7 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"io"
+	"io/ioutil"
+	"log"
 	"net"
+	"net/url"
 	"sync"
 	"syscall"
 	"testing"
@@ -143,4 +146,53 @@ func TestAnnounceRandomInfoHash(t *testing.T) {
 		wg.Add(1)
 	}
 	wg.Wait()
+}
+
+// Check that URLPath option is done correctly.
+func TestURLPathOption(t *testing.T) {
+	conn, err := net.ListenUDP("udp", nil)
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+	cl := newClient(&url.URL{
+		Host: conn.LocalAddr().String(),
+		Path: "/announce",
+	})
+	go func() {
+		err = cl.Connect()
+		if err != nil {
+			t.Fatal(err)
+		}
+		log.Print("connected")
+		_, err = cl.Announce(&tracker.AnnounceRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+	var b [512]byte
+	_, addr, _ := conn.ReadFrom(b[:])
+	r := bytes.NewReader(b[:])
+	var h RequestHeader
+	read(r, &h)
+	w := &bytes.Buffer{}
+	write(w, ResponseHeader{
+		TransactionId: h.TransactionId,
+	})
+	write(w, ConnectionResponse{42})
+	conn.WriteTo(w.Bytes(), addr)
+	n, _, _ := conn.ReadFrom(b[:])
+	r = bytes.NewReader(b[:n])
+	read(r, &h)
+	read(r, &tracker.AnnounceRequest{})
+	all, _ := ioutil.ReadAll(r)
+	if string(all) != "\x02\x09/announce" {
+		t.FailNow()
+	}
+	w = &bytes.Buffer{}
+	write(w, ResponseHeader{
+		TransactionId: h.TransactionId,
+	})
+	write(w, AnnounceResponseHeader{})
+	conn.WriteTo(w.Bytes(), addr)
 }

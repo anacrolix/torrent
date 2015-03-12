@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 	"net"
@@ -20,6 +21,11 @@ const (
 	Announce
 	Scrape
 	Error
+
+	// BEP 41
+	optionTypeEndOfOptions = 0
+	optionTypeNOP          = 1
+	optionTypeURLData      = 2
 )
 
 type ConnectionRequest struct {
@@ -41,7 +47,7 @@ type RequestHeader struct {
 	ConnectionId  int64
 	Action        Action
 	TransactionId int32
-}
+} // 16 bytes
 
 type AnnounceResponseHeader struct {
 	Interval int32
@@ -100,13 +106,21 @@ func (c *client) Announce(req *tracker.AnnounceRequest) (res tracker.AnnounceRes
 		err = tracker.ErrNotConnected
 		return
 	}
-	b, err := c.request(Announce, req)
+	reqURI := c.url.RequestURI()
+	// Clearly this limits the request URI to 255 bytes. BEP 41 supports
+	// longer but I'm not fussed.
+	options := append([]byte{optionTypeURLData, byte(len(reqURI))}, []byte(reqURI)...)
+	b, err := c.request(Announce, req, options)
 	if err != nil {
 		return
 	}
 	var h AnnounceResponseHeader
 	err = readBody(b, &h)
 	if err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		err = fmt.Errorf("error parsing announce response: %s", err)
 		return
 	}
 	res.Interval = h.Interval
@@ -130,7 +144,9 @@ func (c *client) Announce(req *tracker.AnnounceRequest) (res tracker.AnnounceRes
 	}
 }
 
-func (c *client) write(h *RequestHeader, body interface{}) (err error) {
+// body is the binary serializable request body. trailer is optional data
+// following it, such as for BEP 41.
+func (c *client) write(h *RequestHeader, body interface{}, trailer []byte) (err error) {
 	buf := &bytes.Buffer{}
 	err = binary.Write(buf, binary.BigEndian, h)
 	if err != nil {
@@ -142,6 +158,10 @@ func (c *client) write(h *RequestHeader, body interface{}) (err error) {
 			panic(err)
 		}
 	}
+	_, err = buf.Write(trailer)
+	if err != nil {
+		return
+	}
 	n, err := c.socket.Write(buf.Bytes())
 	if err != nil {
 		return
@@ -152,13 +172,23 @@ func (c *client) write(h *RequestHeader, body interface{}) (err error) {
 	return
 }
 
-func (c *client) request(action Action, args interface{}) (responseBody *bytes.Reader, err error) {
+func read(r io.Reader, data interface{}) error {
+	return binary.Read(r, binary.BigEndian, data)
+}
+
+func write(w io.Writer, data interface{}) error {
+	return binary.Write(w, binary.BigEndian, data)
+}
+
+// args is the binary serializable request body. trailer is optional data
+// following it, such as for BEP 41.
+func (c *client) request(action Action, args interface{}, options []byte) (responseBody *bytes.Reader, err error) {
 	tid := newTransactionId()
 	err = c.write(&RequestHeader{
 		ConnectionId:  c.connectionId,
 		Action:        action,
 		TransactionId: tid,
-	}, args)
+	}, args, options)
 	if err != nil {
 		return
 	}
@@ -223,7 +253,7 @@ func (c *client) Connect() (err error) {
 			return
 		}
 	}
-	b, err := c.request(Connect, nil)
+	b, err := c.request(Connect, nil, nil)
 	if err != nil {
 		return
 	}

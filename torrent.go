@@ -200,7 +200,7 @@ func (t *torrent) addrActive(addr string) bool {
 		return true
 	}
 	for _, c := range t.Conns {
-		if c.Socket.RemoteAddr().String() == addr {
+		if c.remoteAddr().String() == addr {
 			return true
 		}
 	}

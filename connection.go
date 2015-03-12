@@ -28,7 +28,8 @@ const (
 
 // Maintains the state of a connection with a peer.
 type connection struct {
-	Socket    net.Conn
+	conn      net.Conn
+	rw        io.ReadWriter // The real slim shady
 	Discovery peerSource
 	uTP       bool
 	closing   chan struct{}
@@ -68,10 +69,11 @@ type connection struct {
 	PeerClientName   string
 }
 
-func newConnection(sock net.Conn, peb peerExtensionBytes, peerID [20]byte, uTP bool) (c *connection) {
+func newConnection(sock net.Conn, peb peerExtensionBytes, peerID [20]byte, uTP bool, rw io.ReadWriter) (c *connection) {
 	c = &connection{
-		Socket: sock,
-		uTP:    uTP,
+		conn: sock,
+		rw:   rw,
+		uTP:  uTP,
 
 		Choked:             true,
 		PeerChoked:         true,
@@ -88,6 +90,14 @@ func newConnection(sock net.Conn, peb peerExtensionBytes, peerID [20]byte, uTP b
 	go c.writer()
 	go c.writeOptimizer(time.Minute)
 	return
+}
+
+func (cn *connection) remoteAddr() net.Addr {
+	return cn.conn.RemoteAddr()
+}
+
+func (cn *connection) localAddr() net.Addr {
+	return cn.conn.LocalAddr()
 }
 
 func (cn *connection) pendPiece(piece int, priority piecePriority) {
@@ -184,7 +194,7 @@ func eventAgeString(t time.Time) string {
 
 func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 	// \t isn't preserved in <pre> blocks?
-	fmt.Fprintf(w, "%s\n    %s completed, good chunks: %d/%d reqs: %d-%d, last msg: %s, connected: %s, last useful chunk: %s, flags: ", fmt.Sprintf("%q: %s-%s", cn.PeerID, cn.Socket.LocalAddr(), cn.Socket.RemoteAddr()), cn.completedString(t), cn.UsefulChunksReceived, cn.UnwantedChunksReceived+cn.UsefulChunksReceived, len(cn.Requests), len(cn.PeerRequests), eventAgeString(cn.lastMessageReceived), eventAgeString(cn.completedHandshake), eventAgeString(cn.lastUsefulChunkReceived))
+	fmt.Fprintf(w, "%s\n    %s completed, good chunks: %d/%d reqs: %d-%d, last msg: %s, connected: %s, last useful chunk: %s, flags: ", fmt.Sprintf("%q: %s-%s", cn.PeerID, cn.localAddr(), cn.remoteAddr()), cn.completedString(t), cn.UsefulChunksReceived, cn.UnwantedChunksReceived+cn.UsefulChunksReceived, len(cn.Requests), len(cn.PeerRequests), eventAgeString(cn.lastMessageReceived), eventAgeString(cn.completedHandshake), eventAgeString(cn.lastUsefulChunkReceived))
 	c := func(b byte) {
 		fmt.Fprintf(w, "%c", b)
 	}
@@ -224,7 +234,7 @@ func (c *connection) Close() {
 	}
 	close(c.closing)
 	// TODO: This call blocks sometimes, why?
-	go c.Socket.Close()
+	go c.conn.Close()
 }
 
 func (c *connection) PeerHasPiece(piece int) bool {
@@ -347,7 +357,7 @@ func (c *connection) SetInterested(interested bool) {
 // Writes buffers to the socket from the write channel.
 func (conn *connection) writer() {
 	// Reduce write syscalls.
-	buf := bufio.NewWriterSize(conn.Socket, 0x8000) // 32 KiB
+	buf := bufio.NewWriterSize(conn.rw, 0x8000) // 32 KiB
 	// Receives when buf is not empty.
 	notEmpty := make(chan struct{}, 1)
 	for {

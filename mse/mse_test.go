@@ -3,9 +3,10 @@ package mse
 import (
 	"bytes"
 	"io"
-	"log"
 	"net"
 	"sync"
+
+	"github.com/bradfitz/iter"
 
 	"testing"
 )
@@ -43,21 +44,25 @@ func TestSuffixMatchLen(t *testing.T) {
 	test("sup", "person", 1)
 }
 
-func TestHandshake(t *testing.T) {
+func handshakeTest(t testing.TB, ia []byte, aData, bData string) {
 	a, b := net.Pipe()
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		a, err := InitiateHandshake(a, []byte("yep"))
+		a, err := InitiateHandshake(a, []byte("yep"), ia)
 		if err != nil {
 			t.Fatal(err)
 			return
 		}
-		a.Write([]byte("hello world"))
+		go a.Write([]byte(aData))
+
 		var msg [20]byte
 		n, _ := a.Read(msg[:])
-		log.Print(string(msg[:n]))
+		if n != len(bData) {
+			t.FailNow()
+		}
+		// t.Log(string(msg[:n]))
 	}()
 	go func() {
 		defer wg.Done()
@@ -66,10 +71,34 @@ func TestHandshake(t *testing.T) {
 			t.Fatal(err)
 			return
 		}
-		var msg [20]byte
-		n, _ := b.Read(msg[:])
-		log.Print(string(msg[:n]))
-		b.Write([]byte("yo dawg"))
+		go b.Write([]byte(bData))
+		// Need to be exact here, as there are several reads, and net.Pipe is
+		// most synchronous.
+		msg := make([]byte, len(ia)+len(aData))
+		n, _ := io.ReadFull(b, msg[:])
+		if n != len(msg) {
+			t.FailNow()
+		}
+		// t.Log(string(msg[:n]))
 	}()
 	wg.Wait()
+	a.Close()
+	b.Close()
+}
+
+func allHandshakeTests(t testing.TB) {
+	handshakeTest(t, []byte("jump the gun, "), "hello world", "yo dawg")
+	handshakeTest(t, nil, "hello world", "yo dawg")
+	handshakeTest(t, []byte{}, "hello world", "yo dawg")
+}
+
+func TestHandshake(t *testing.T) {
+	allHandshakeTests(t)
+	t.Logf("crypto provides encountered: %s", cryptoProvidesCount)
+}
+
+func BenchmarkHandshake(b *testing.B) {
+	for range iter.N(b.N) {
+		allHandshakeTests(b)
+	}
 }

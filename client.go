@@ -624,8 +624,22 @@ func (cl *Client) ipBlockRange(ip net.IP) (r *iplist.Range) {
 	return
 }
 
+func (cl *Client) waitAccept() {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	for {
+		for _, t := range cl.torrents {
+			if cl.wantConns(t) {
+				return
+			}
+		}
+		cl.event.Wait()
+	}
+}
+
 func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 	for {
+		cl.waitAccept()
 		// We accept all connections immediately, because we don't know what
 		// torrent they're for.
 		conn, err := l.Accept()
@@ -1668,6 +1682,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 }
 
 func (me *Client) dropConnection(torrent *torrent, conn *connection) {
+	me.event.Broadcast()
 	for r := range conn.Requests {
 		me.connDeleteRequest(torrent, conn, r)
 	}

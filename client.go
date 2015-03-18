@@ -143,6 +143,10 @@ type Client struct {
 	config          Config
 	pruneTimer      *time.Timer
 	extensionBytes  peerExtensionBytes
+	// Set of addresses that have our client ID. This intentionally will
+	// include ourselves if we end up trying to connect to our own address
+	// through legitimate channels.
+	dopplegangerAddrs map[string]struct{}
 
 	torrentDataOpener TorrentDataOpener
 
@@ -480,6 +484,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		torrentDataOpener: func(md *metainfo.Info) data.Data {
 			return filePkg.TorrentData(md, cfg.DataDir)
 		},
+		dopplegangerAddrs: make(map[string]struct{}),
 
 		quit:     make(chan struct{}),
 		torrents: make(map[InfoHash]*torrent),
@@ -623,9 +628,10 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 		}
 		acceptedConns.Add(1)
 		cl.mu.RLock()
+		doppleganger := cl.dopplegangerAddr(conn.RemoteAddr().String())
 		blockRange := cl.ipBlockRange(AddrIP(conn.RemoteAddr()))
 		cl.mu.RUnlock()
-		if blockRange != nil {
+		if blockRange != nil || doppleganger {
 			inboundConnsBlocked.Add(1)
 			// log.Printf("inbound connection from %s blocked by %s", conn.RemoteAddr(), blockRange)
 			conn.Close()
@@ -708,6 +714,11 @@ func reducedDialTimeout(max time.Duration, halfOpenLimit int, pendingPeers int) 
 	return
 }
 
+func (me *Client) dopplegangerAddr(addr string) bool {
+	_, ok := me.dopplegangerAddrs[addr]
+	return ok
+}
+
 // Start the process of connecting to the given peer for the given torrent if
 // appropriate.
 func (me *Client) initiateConn(peer Peer, t *torrent) {
@@ -715,7 +726,7 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 		return
 	}
 	addr := net.JoinHostPort(peer.IP.String(), fmt.Sprintf("%d", peer.Port))
-	if t.addrActive(addr) {
+	if me.dopplegangerAddr(addr) || t.addrActive(addr) {
 		duplicateConnsAvoided.Add(1)
 		return
 	}
@@ -1759,16 +1770,14 @@ func (me *Client) openNewConns(t *torrent) {
 }
 
 func (me *Client) addPeers(t *torrent, peers []Peer) {
-	blocked := 0
 	for _, p := range peers {
+		if me.dopplegangerAddr(net.JoinHostPort(p.IP.String(), strconv.FormatInt(int64(p.Port), 10))) {
+			continue
+		}
 		if me.ipBlockRange(p.IP) != nil {
-			blocked++
 			continue
 		}
 		t.addPeer(p)
-	}
-	if blocked != 0 {
-		log.Printf("IP blocklist screened %d peers from being added", blocked)
 	}
 	me.openNewConns(t)
 }

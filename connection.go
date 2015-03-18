@@ -187,28 +187,20 @@ func eventAgeString(t time.Time) string {
 	return fmt.Sprintf("%.2fs ago", time.Now().Sub(t).Seconds())
 }
 
-func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
-	// \t isn't preserved in <pre> blocks?
-	fmt.Fprintf(w, "%s\n    %s completed, good chunks: %d/%d reqs: %d-%d, last msg: %s, connected: %s, last useful chunk: %s, flags: ", fmt.Sprintf("%q: %s-%s", cn.PeerID, cn.localAddr(), cn.remoteAddr()), cn.completedString(t), cn.UsefulChunksReceived, cn.UnwantedChunksReceived+cn.UsefulChunksReceived, len(cn.Requests), len(cn.PeerRequests), eventAgeString(cn.lastMessageReceived), eventAgeString(cn.completedHandshake), eventAgeString(cn.lastUsefulChunkReceived))
+// Inspired by https://trac.transmissionbt.com/wiki/PeerStatusText
+func (cn *connection) statusFlags() (ret string) {
 	c := func(b byte) {
-		fmt.Fprintf(w, "%c", b)
+		ret += string([]byte{b})
 	}
-	// Inspired by https://trac.transmissionbt.com/wiki/PeerStatusText
-	if len(cn.Requests) != 0 {
-		c('D')
-	}
-	if !cn.Interested {
-		c('z')
-	}
-	if cn.PeerChoked && cn.Interested {
+	if cn.Interested {
 		c('i')
 	}
-	if !cn.Choked {
-		if cn.PeerInterested {
-			c('U')
-		} else {
-			c('u')
-		}
+	if cn.Choked {
+		c('c')
+	}
+	c('-')
+	if cn.encrypted {
+		c('E')
 	}
 	if cn.Discovery != 0 {
 		c(byte(cn.Discovery))
@@ -216,7 +208,30 @@ func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 	if cn.uTP {
 		c('T')
 	}
-	fmt.Fprintln(w)
+	c('-')
+	if cn.PeerInterested {
+		c('i')
+	}
+	if cn.PeerChoked {
+		c('c')
+	}
+	return
+}
+
+func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
+	// \t isn't preserved in <pre> blocks?
+	fmt.Fprintf(w, "%q: %s-%s\n", cn.PeerID, cn.localAddr(), cn.remoteAddr())
+	fmt.Fprintf(w, "    last msg: %s, connected: %s, last useful chunk: %s\n",
+		eventAgeString(cn.lastMessageReceived),
+		eventAgeString(cn.completedHandshake),
+		eventAgeString(cn.lastUsefulChunkReceived))
+	fmt.Fprintf(w, "    %s completed, good chunks: %d/%d reqs: %d-%d, flags: %s\n",
+		cn.completedString(t),
+		cn.UsefulChunksReceived,
+		cn.UnwantedChunksReceived+cn.UsefulChunksReceived,
+		len(cn.Requests),
+		len(cn.PeerRequests),
+		cn.statusFlags())
 }
 
 func (c *connection) Close() {

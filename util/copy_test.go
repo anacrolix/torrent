@@ -78,3 +78,12 @@ func TestCopySrcNilInterface(t *testing.T) {
 	}()
 	CopyExact(&arr, nil)
 }
+
+func TestCopySrcPtr(t *testing.T) {
+	var bigDst [1024]byte
+	var bigSrc [1024]byte = [1024]byte{'h', 'i'}
+	CopyExact(&bigDst, &bigSrc)
+	if !bytes.Equal(bigDst[:], bigSrc[:]) {
+		t.FailNow()
+	}
+}

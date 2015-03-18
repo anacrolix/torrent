@@ -14,6 +14,9 @@ func CopyExact(dest interface{}, src interface{}) {
 	if dV.Kind() == reflect.Array && !dV.CanAddr() {
 		panic(fmt.Sprintf("dest not addressable: %T", dest))
 	}
+	if sV.Kind() == reflect.Ptr {
+		sV = sV.Elem()
+	}
 	if sV.Kind() == reflect.String {
 		sV = sV.Convert(reflect.SliceOf(dV.Type().Elem()))
 	}

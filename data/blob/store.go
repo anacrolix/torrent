@@ -10,6 +10,8 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
+	"time"
 
 	dataPkg "bitbucket.org/anacrolix/go.torrent/data"
 	"github.com/anacrolix/libtorgo/metainfo"
@@ -133,6 +135,36 @@ func (me *store) removeCompleted(name string) (err error) {
 	return
 }
 
+type fileInfoSorter struct {
+	fis []os.FileInfo
+}
+
+func (me fileInfoSorter) Len() int {
+	return len(me.fis)
+}
+
+func lastTime(fi os.FileInfo) (ret time.Time) {
+	ret = fi.ModTime()
+	atime := accessTime(fi)
+	if atime.After(ret) {
+		ret = atime
+	}
+	return
+}
+
+func (me fileInfoSorter) Less(i, j int) bool {
+	return lastTime(me.fis[i]).Before(lastTime(me.fis[j]))
+}
+
+func (me fileInfoSorter) Swap(i, j int) {
+	me.fis[i], me.fis[j] = me.fis[j], me.fis[i]
+}
+
+func sortFileInfos(fis []os.FileInfo) {
+	sorter := fileInfoSorter{fis}
+	sort.Sort(sorter)
+}
+
 func (me *store) makeSpace(space int64) error {
 	if me.capacity < 0 {
 		return nil
@@ -148,12 +180,11 @@ func (me *store) makeSpace(space int64) error {
 	for _, fi := range fis {
 		size += fi.Size()
 	}
+	sortFileInfos(fis)
 	for size > me.capacity-space {
-		i := rand.Intn(len(fis))
-		me.removeCompleted(fis[i].Name())
-		size -= fis[i].Size()
-		fis[i] = fis[len(fis)-1]
-		fis = fis[:len(fis)-1]
+		me.removeCompleted(fis[0].Name())
+		size -= fis[0].Size()
+		fis = fis[1:]
 	}
 	return nil
 }

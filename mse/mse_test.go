@@ -2,7 +2,9 @@ package mse
 
 import (
 	"bytes"
+	"crypto/rand"
 	"io"
+	"io/ioutil"
 	"net"
 	"sync"
 
@@ -101,4 +103,20 @@ func BenchmarkHandshake(b *testing.B) {
 	for range iter.N(b.N) {
 		allHandshakeTests(b)
 	}
+}
+
+type trackReader struct {
+	r io.Reader
+	n int64
+}
+
+func (me *trackReader) Read(b []byte) (n int, err error) {
+	n, err = me.r.Read(b)
+	me.n += int64(n)
+	return
+}
+
+func TestReceiveRandomData(t *testing.T) {
+	tr := trackReader{rand.Reader, 0}
+	ReceiveHandshake(readWriter{&tr, ioutil.Discard}, nil)
 }

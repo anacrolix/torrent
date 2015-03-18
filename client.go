@@ -34,9 +34,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/bradfitz/iter"
 
 	"bitbucket.org/anacrolix/go.torrent/mse"
 
@@ -77,10 +80,12 @@ var (
 const (
 	// Justification for set bits follows.
 	//
-	// Extension protocol: http://www.bittorrent.org/beps/bep_0010.html
-	// DHT: http://www.bittorrent.org/beps/bep_0005.html
-	// Fast Extension: http://bittorrent.org/beps/bep_0006.html ([7]|=4)
-	defaultExtensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x05"
+	// Extension protocol: http://www.bittorrent.org/beps/bep_0010.html ([5]|=0x10)
+	// DHT: http://www.bittorrent.org/beps/bep_0005.html ([7]|=1)
+	// Fast Extension:
+	// 	 http://bittorrent.org/beps/bep_0006.html ([7]|=4)
+	//   Disabled until AllowedFast is implemented
+	defaultExtensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x01"
 
 	socketsPerTorrent     = 40
 	torrentPeersHighWater = 200

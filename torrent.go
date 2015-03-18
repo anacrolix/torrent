@@ -683,6 +683,8 @@ type Peer struct {
 	IP     net.IP
 	Port   int
 	Source peerSource
+	// Peer is known to support encryption.
+	SupportsEncryption bool
 }
 
 func (t *torrent) PieceLength(piece int) (len_ pp.Integer) {

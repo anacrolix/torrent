@@ -1218,6 +1218,7 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 							return 1
 						}
 					}(),
+					"e": 1, // Awwww yeah
 				}
 				if torrent.metadataSizeKnown() {
 					d["metadata_size"] = torrent.metadataSize()
@@ -1419,9 +1420,9 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 }
 
 type peerExchangeMessage struct {
-	Added      CompactPeers   `bencode:"added"`
-	AddedFlags []byte         `bencode:"added.f"`
-	Dropped    []tracker.Peer `bencode:"dropped"`
+	Added      CompactPeers `bencode:"added"`
+	AddedFlags []byte       `bencode:"added.f"`
+	Dropped    CompactPeers `bencode:"dropped"`
 }
 
 // Extracts the port as an integer from an address string.
@@ -1450,6 +1451,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		me.mu.Unlock()
 		var msg pp.Message
 		err := decoder.Decode(&msg)
+		receivedMessageTypes.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
 		me.mu.Lock()
 		c.lastMessageReceived = time.Now()
 		select {
@@ -1602,6 +1604,9 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 					if id == 0 {
 						delete(c.PeerExtensionIDs, name)
 					} else {
+						if c.PeerExtensionIDs[name] == 0 {
+							supportedExtensionMessages.Add(name, 1)
+						}
 						c.PeerExtensionIDs[name] = id
 					}
 				}
@@ -1632,15 +1637,16 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				go func() {
 					me.mu.Lock()
 					me.addPeers(t, func() (ret []Peer) {
-						for _, cp := range pexMsg.Added {
+						for i, cp := range pexMsg.Added {
 							p := Peer{
 								IP:     make([]byte, 4),
 								Port:   int(cp.Port),
 								Source: peerSourcePEX,
 							}
-							if n := copy(p.IP, cp.IP[:]); n != 4 {
-								panic(n)
+							if i < len(pexMsg.AddedFlags) && pexMsg.AddedFlags[i]&0x01 != 0 {
+								p.SupportsEncryption = true
 							}
+							CopyExact(p.IP, cp.IP[:])
 							ret = append(ret, p)
 						}
 						return
@@ -1717,6 +1723,7 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 	for _, c0 := range t.Conns {
 		if c.PeerID == c0.PeerID {
 			// Already connected to a client with that ID.
+			duplicateClientConns.Add(1)
 			return false
 		}
 	}
@@ -1749,7 +1756,12 @@ func (t *torrent) badConn(c *connection) bool {
 		return false
 	}
 	if !t.haveInfo() {
-		return !c.supportsExtension("ut_metadata")
+		if !c.supportsExtension("ut_metadata") {
+			return true
+		}
+		if time.Since(c.completedHandshake) > 2*time.Minute {
+			return true
+		}
 	}
 	return !t.connHasWantedPieces(c)
 }
@@ -2572,7 +2584,7 @@ func (me *Client) fillRequests(t *torrent, c *connection) {
 		}
 	}
 	addRequest := func(req request) (again bool) {
-		if len(c.Requests) >= 32 {
+		if len(c.Requests) >= 64 {
 			return false
 		}
 		return c.Request(req)
@@ -2602,7 +2614,11 @@ func (me *Client) replenishConnRequests(t *torrent, c *connection) {
 	}
 	me.fillRequests(t, c)
 	if len(c.Requests) == 0 && !c.PeerChoked {
-		c.SetInterested(false)
+		// So we're not choked, but we don't want anything right now. We may
+		// have completed readahead, and the readahead window has not rolled
+		// over to the next piece. Better to stay interested in case we're
+		// going to want data in the near future.
+		c.SetInterested(!t.haveAllPieces())
 	}
 }
 

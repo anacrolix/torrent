@@ -291,15 +291,15 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 }
 
 // Called when metadata for a torrent becomes available.
-func (t *torrent) setMetadata(md metainfo.Info, infoBytes []byte, eventLocker sync.Locker) (err error) {
-	t.Info = &md
+func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte, eventLocker sync.Locker) (err error) {
+	t.Info = md
 	t.length = 0
 	for _, f := range t.Info.UpvertedFiles() {
 		t.length += f.Length
 	}
 	t.MetaData = infoBytes
 	t.metadataHave = nil
-	for _, hash := range infoPieceHashes(&md) {
+	for _, hash := range infoPieceHashes(md) {
 		piece := &piece{}
 		piece.Event.L = eventLocker
 		util.CopyExact(piece.Hash[:], hash)

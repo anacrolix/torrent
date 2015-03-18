@@ -21,8 +21,12 @@ import (
 	"github.com/anacrolix/libtorgo/bencode"
 )
 
+func init() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
 var TestingConfig = Config{
-	ListenAddr:           ":0",
+	ListenAddr:           "localhost:0",
 	NoDHT:                true,
 	DisableTrackers:      true,
 	NoDefaultBlocklist:   true,
@@ -30,10 +34,7 @@ var TestingConfig = Config{
 }
 
 func TestClientDefault(t *testing.T) {
-	cl, err := NewClient(&Config{
-		NoDefaultBlocklist: true,
-		ListenAddr:         ":0",
-	})
+	cl, err := NewClient(&TestingConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,9 +49,12 @@ func TestAddDropTorrent(t *testing.T) {
 	defer cl.Close()
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	tt, err := cl.AddTorrent(mi)
+	tt, new, err := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !new {
+		t.FailNow()
 	}
 	tt.Drop()
 }
@@ -79,11 +83,11 @@ func TestTorrentInitialState(t *testing.T) {
 	tor, err := newTorrent(func() (ih InfoHash) {
 		util.CopyExact(ih[:], mi.Info.Hash)
 		return
-	}(), nil, 0)
+	}())
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = tor.setMetadata(mi.Info.Info, mi.Info.Bytes, nil)
+	err = tor.setMetadata(&mi.Info.Info, mi.Info.Bytes, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,9 +219,7 @@ func TestUTPRawConn(t *testing.T) {
 
 func TestTwoClientsArbitraryPorts(t *testing.T) {
 	for i := 0; i < 2; i++ {
-		cl, err := NewClient(&Config{
-			ListenAddr: ":0",
-		})
+		cl, err := NewClient(&TestingConfig)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -228,10 +230,17 @@ func TestTwoClientsArbitraryPorts(t *testing.T) {
 func TestAddDropManyTorrents(t *testing.T) {
 	cl, _ := NewClient(&TestingConfig)
 	defer cl.Close()
-	var m Magnet
 	for i := range iter.N(1000) {
-		binary.PutVarint(m.InfoHash[:], int64(i))
-		cl.AddMagnet(m.String())
+		var spec TorrentSpec
+		binary.PutVarint(spec.InfoHash[:], int64(i))
+		tt, new, err := cl.AddTorrentSpec(&spec)
+		if err != nil {
+			t.Error(err)
+		}
+		if !new {
+			t.FailNow()
+		}
+		defer tt.Drop()
 	}
 }
 
@@ -245,7 +254,7 @@ func TestClientTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer seeder.Close()
-	seeder.AddTorrent(mi)
+	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	leecherDataDir, err := ioutil.TempDir("", "")
 	if err != nil {
 		t.Fatal(err)
@@ -257,7 +266,7 @@ func TestClientTransfer(t *testing.T) {
 	cfg.TorrentDataOpener = blob.NewStore(leecherDataDir).OpenTorrent
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()
-	leecherGreeting, _ := leecher.AddTorrent(mi)
+	leecherGreeting, _, _ := leecher.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	leecherGreeting.AddPeers([]Peer{
 		Peer{
 			IP:   util.AddrIP(seeder.ListenAddr()),

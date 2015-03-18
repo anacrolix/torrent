@@ -1335,7 +1335,7 @@ func (cl *Client) completedMetadata(t *torrent) {
 	}
 	// TODO(anacrolix): If this fails, I think something harsher should be
 	// done.
-	err = cl.setMetaData(t, info, t.MetaData)
+	err = cl.setMetaData(t, &info, t.MetaData)
 	if err != nil {
 		log.Printf("error setting metadata: %s", err)
 		t.invalidateMetadata()
@@ -1844,7 +1844,7 @@ func (cl *Client) setStorage(t *torrent, td data.Data) (err error) {
 
 type TorrentDataOpener func(*metainfo.Info) data.Data
 
-func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err error) {
+func (cl *Client) setMetaData(t *torrent, md *metainfo.Info, bytes []byte) (err error) {
 	err = t.setMetadata(md, bytes, &cl.mu)
 	if err != nil {
 		return
@@ -1854,13 +1854,14 @@ func (cl *Client) setMetaData(t *torrent, md metainfo.Info, bytes []byte) (err e
 			log.Printf("error saving torrent file for %s: %s", t, err)
 		}
 	}
+	cl.event.Broadcast()
 	if strings.Contains(strings.ToLower(md.Name), "porn") {
 		cl.dropTorrent(t.InfoHash)
 		err = errors.New("no porn plx")
 		return
 	}
 	close(t.gotMetainfo)
-	td := cl.torrentDataOpener(&md)
+	td := cl.torrentDataOpener(md)
 	err = cl.setStorage(t, td)
 	return
 }
@@ -2172,28 +2173,89 @@ func (cl *Client) torrentCacheMetaInfo(ih InfoHash) (mi *metainfo.MetaInfo, err 
 	return
 }
 
-func (cl *Client) AddMagnet(uri string) (T Torrent, err error) {
+// For adding new torrents to a client.
+type TorrentSpec struct {
+	Trackers    [][]string
+	InfoHash    InfoHash
+	Info        *metainfo.InfoEx
+	DisplayName string
+}
+
+func TorrentSpecFromMagnetURI(uri string) (spec *TorrentSpec, err error) {
 	m, err := ParseMagnetURI(uri)
 	if err != nil {
 		return
 	}
-	mi, err := cl.torrentCacheMetaInfo(m.InfoHash)
-	if err != nil {
-		log.Printf("error getting cached metainfo for %x: %s", m.InfoHash[:], err)
-	} else if mi != nil {
-		_, err = cl.AddTorrent(mi)
-		if err != nil {
-			return
-		}
+	spec = &TorrentSpec{
+		Trackers:    [][]string{m.Trackers},
+		DisplayName: m.DisplayName,
 	}
+	CopyExact(&spec.InfoHash, &m.InfoHash)
+	return
+}
+
+func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
+	spec = &TorrentSpec{
+		Trackers: mi.AnnounceList,
+		Info:     &mi.Info,
+	}
+	CopyExact(&spec.InfoHash, &mi.Info.Hash)
+	return
+}
+
+func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err error) {
+	T.cl = cl
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	T, err = cl.addOrMergeTorrent(m.InfoHash, [][]string{m.Trackers})
+
+	t, ok := cl.torrents[spec.InfoHash]
+	if ok {
+		T.torrent = t
+		return
+	}
+
+	new = true
+
+	if _, ok := cl.bannedTorrents[spec.InfoHash]; ok {
+		err = errors.New("banned torrent")
+		return
+	}
+
+	t, err = newTorrent(spec.InfoHash)
 	if err != nil {
 		return
 	}
-	if m.DisplayName != "" {
-		T.DisplayName = m.DisplayName
+	if spec.DisplayName != "" {
+		t.DisplayName = spec.DisplayName
+	}
+	if spec.Info != nil {
+		err = cl.setMetaData(t, &spec.Info.Info, spec.Info.Bytes)
+	} else {
+		var mi *metainfo.MetaInfo
+		mi, err = cl.torrentCacheMetaInfo(spec.InfoHash)
+		if err != nil {
+			log.Printf("error getting cached metainfo: %s", err)
+		} else if mi != nil {
+			t.addTrackers(mi.AnnounceList)
+			err = cl.setMetaData(t, &mi.Info.Info, mi.Info.Bytes)
+		}
+	}
+	if err != nil {
+		return
+	}
+
+	cl.torrents[spec.InfoHash] = t
+	T.torrent = t
+
+	T.torrent.pruneTimer = time.AfterFunc(0, func() {
+		cl.pruneConnectionsUnlocked(T.torrent)
+	})
+	t.addTrackers(spec.Trackers)
+	if !cl.disableTrackers {
+		go cl.announceTorrentTrackers(T.torrent)
+	}
+	if cl.dHT != nil {
+		go cl.announceTorrentDHT(T.torrent, true)
 	}
 	return
 }
@@ -2239,63 +2301,6 @@ func (me *Client) dropTorrent(infoHash InfoHash) (err error) {
 	}
 	delete(me.torrents, infoHash)
 	return
-}
-
-func (me *Client) addOrMergeTorrent(ih InfoHash, announceList [][]string) (T Torrent, err error) {
-	if _, ok := me.bannedTorrents[ih]; ok {
-		err = errors.New("banned torrent")
-		return
-	}
-	T.cl = me
-	var ok bool
-	T.torrent, ok = me.torrents[ih]
-	if ok {
-		T.torrent.addTrackers(announceList)
-	} else {
-		T.torrent, err = newTorrent(ih, announceList, me.halfOpenLimit)
-		if err != nil {
-			return
-		}
-		me.torrents[ih] = T.torrent
-		if !me.disableTrackers {
-			go me.announceTorrentTrackers(T.torrent)
-		}
-		if me.dHT != nil {
-			go me.announceTorrentDHT(T.torrent, true)
-		}
-		T.torrent.pruneTimer = time.AfterFunc(0, func() {
-			me.pruneConnectionsUnlocked(T.torrent)
-		})
-	}
-	return
-}
-
-// Adds a torrent to the client.
-func (me *Client) AddTorrent(metaInfo *metainfo.MetaInfo) (t Torrent, err error) {
-	var ih InfoHash
-	CopyExact(&ih, metaInfo.Info.Hash)
-	me.mu.Lock()
-	defer me.mu.Unlock()
-	t, err = me.addOrMergeTorrent(ih, metaInfo.AnnounceList)
-	if err != nil {
-		return
-	}
-	if !t.torrent.haveInfo() {
-		err = me.setMetaData(t.torrent, metaInfo.Info.Info, metaInfo.Info.Bytes)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func (me *Client) AddTorrentFromFile(name string) (t Torrent, err error) {
-	mi, err := metainfo.LoadFromFile(name)
-	if err != nil {
-		err = fmt.Errorf("error loading metainfo from file: %s", err)
-		return
-	}
-	return me.AddTorrent(mi)
 }
 
 // Returns true when peers are required, or false if the torrent is closing.
@@ -2709,5 +2714,28 @@ func (me *Client) Torrents() (ret []Torrent) {
 		ret = append(ret, Torrent{me, t})
 	}
 	me.mu.Unlock()
+	return
+}
+
+func (me *Client) AddMagnet(uri string) (T Torrent, err error) {
+	spec, err := TorrentSpecFromMagnetURI(uri)
+	if err != nil {
+		return
+	}
+	T, _, err = me.AddTorrentSpec(spec)
+	return
+}
+
+func (me *Client) AddTorrent(mi *metainfo.MetaInfo) (T Torrent, err error) {
+	T, _, err = me.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	return
+}
+
+func (me *Client) AddTorrentFromFile(filename string) (T Torrent, err error) {
+	mi, err := metainfo.LoadFromFile(filename)
+	if err != nil {
+		return
+	}
+	T, _, err = me.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	return
 }

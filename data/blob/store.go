@@ -124,6 +124,10 @@ func (me *store) pieceRead(p metainfo.Piece) (f *os.File) {
 	if !os.IsNotExist(err) {
 		panic(err)
 	}
+	// Ermahgerd, self heal. This occurs when the underlying data goes
+	// missing, likely due to a "cache flush", also known as deleting the
+	// files. TODO: Trigger an asynchronous initCompleted.
+	delete(me.completed, sliceToPieceHashArray(p.Hash()))
 	f, err = os.Open(me.path(p, false))
 	if err == nil {
 		return

@@ -280,8 +280,20 @@ func (cl *Client) torrentReadAt(t *torrent, off int64, p []byte) (n int, err err
 	if len(p) == 0 {
 		panic(len(p))
 	}
-	cl.prepareRead(t, off)
-	return dataReadAt(t.data, p, off)
+	// TODO: ReadAt should always try to fill the buffer.
+	for {
+		avail := cl.prepareRead(t, off)
+		if avail < int64(len(p)) {
+			p = p[:avail]
+		}
+		n, err = dataReadAt(t.data, p, off)
+		if n != 0 || err != io.ErrUnexpectedEOF {
+			break
+		}
+		// If we reach here, the data we thought was ready, isn't. So we
+		// prepare it again, and retry.
+	}
+	return
 }
 
 // Sets priorities to download from the given offset. Returns when the piece

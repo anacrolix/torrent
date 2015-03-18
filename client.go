@@ -458,6 +458,9 @@ func (cl *Client) initBannedTorrents() error {
 	scanner := bufio.NewScanner(f)
 	cl.bannedTorrents = make(map[InfoHash]struct{})
 	for scanner.Scan() {
+		if strings.HasPrefix(strings.TrimSpace(scanner.Text()), "#") {
+			continue
+		}
 		var ihs string
 		n, err := fmt.Sscanf(scanner.Text(), "%x", &ihs)
 		if err != nil {

@@ -749,16 +749,12 @@ func (t *torrent) wantPiece(index int) bool {
 		return false
 	}
 	p := t.Pieces[index]
-	return !t.pieceComplete(index) && p.Priority != piecePriorityNone && !p.QueuedForHash && !p.Hashing
+	// Put piece complete check last, since it's the slowest!
+	return p.Priority != piecePriorityNone && !p.QueuedForHash && !p.Hashing && !t.pieceComplete(index)
 }
 
 func (t *torrent) connHasWantedPieces(c *connection) bool {
-	for p := range t.Pieces {
-		if t.wantPiece(p) && c.PeerHasPiece(p) {
-			return true
-		}
-	}
-	return false
+	return c.pieceRequestOrder != nil && c.pieceRequestOrder.First() != nil
 }
 
 func (t *torrent) extentPieces(off, _len int64) (pieces []int) {

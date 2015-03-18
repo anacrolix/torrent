@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
@@ -25,7 +24,7 @@ const (
 type store struct {
 	baseDir   string
 	capacity  int64
-	completed map[string]struct{}
+	completed map[[20]byte]struct{}
 }
 
 func (me *store) OpenTorrent(info *metainfo.Info) dataPkg.Data {
@@ -49,14 +48,31 @@ func NewStore(baseDir string, opt ...StoreOption) dataPkg.Store {
 	return s
 }
 
+func hexStringPieceHashArray(s string) (ret [20]byte) {
+	if len(s) != 40 {
+		panic(s)
+	}
+	n, err := hex.Decode(ret[:], []byte(s))
+	if err != nil {
+		panic(err)
+	}
+	if n != 20 {
+		panic(n)
+	}
+	return
+}
+
 func (me *store) initCompleted() {
 	fis, err := me.readCompletedDir()
 	if err != nil {
 		panic(err)
 	}
-	me.completed = make(map[string]struct{}, len(fis))
+	me.completed = make(map[[20]byte]struct{}, len(fis))
 	for _, fi := range fis {
-		me.completed[fi.Name()] = struct{}{}
+		if len(fi.Name()) != 40 {
+			continue
+		}
+		me.completed[hexStringPieceHashArray(fi.Name())] = struct{}{}
 	}
 }
 
@@ -74,8 +90,16 @@ func (me *store) path(p metainfo.Piece, completed bool) string {
 	}(), fmt.Sprintf("%x", p.Hash()))
 }
 
+func sliceToPieceHashArray(b []byte) (ret [20]byte) {
+	n := copy(ret[:], b)
+	if n != 20 {
+		panic(n)
+	}
+	return
+}
+
 func (me *store) pieceComplete(p metainfo.Piece) bool {
-	_, ok := me.completed[hex.EncodeToString(p.Hash())]
+	_, ok := me.completed[sliceToPieceHashArray(p.Hash())]
 	return ok
 }
 
@@ -131,7 +155,7 @@ func (me *store) removeCompleted(name string) (err error) {
 	if err != nil {
 		return err
 	}
-	delete(me.completed, name)
+	delete(me.completed, hexStringPieceHashArray(name))
 	return
 }
 
@@ -221,6 +245,6 @@ func (me *store) PieceCompleted(p metainfo.Piece) (err error) {
 		return
 	}
 	os.Remove(incompletePiecePath)
-	me.completed[hex.EncodeToString(p.Hash())] = struct{}{}
+	me.completed[sliceToPieceHashArray(p.Hash())] = struct{}{}
 	return
 }

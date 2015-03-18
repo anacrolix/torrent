@@ -45,7 +45,7 @@ func TestTorrentRequest(t *testing.T) {
 }
 
 func TestTorrentDoubleClose(t *testing.T) {
-	tt, err := newTorrent(InfoHash{}, nil, 0)
+	tt, err := newTorrent(InfoHash{})
 	tt.pruneTimer = time.NewTimer(0)
 	if err != nil {
 		t.Fatal(err)

@@ -30,6 +30,7 @@ const (
 type connection struct {
 	conn      net.Conn
 	rw        io.ReadWriter // The real slim shady
+	encrypted bool
 	Discovery peerSource
 	uTP       bool
 	closing   chan struct{}
@@ -37,7 +38,9 @@ type connection struct {
 	post      chan pp.Message
 	writeCh   chan []byte
 
-	piecePriorities   []int
+	// The connections preferred order to download pieces.
+	piecePriorities []int
+	// The piece request order based on piece priorities.
 	pieceRequestOrder *pieceordering.Instance
 
 	UnwantedChunksReceived int
@@ -69,26 +72,16 @@ type connection struct {
 	PeerClientName   string
 }
 
-func newConnection(sock net.Conn, peb peerExtensionBytes, peerID [20]byte, uTP bool, rw io.ReadWriter) (c *connection) {
+func newConnection() (c *connection) {
 	c = &connection{
-		conn: sock,
-		rw:   rw,
-		uTP:  uTP,
-
-		Choked:             true,
-		PeerChoked:         true,
-		PeerMaxRequests:    250,
-		PeerExtensionBytes: peb,
-		PeerID:             peerID,
+		Choked:          true,
+		PeerChoked:      true,
+		PeerMaxRequests: 250,
 
 		closing: make(chan struct{}),
 		writeCh: make(chan []byte),
 		post:    make(chan pp.Message),
-
-		completedHandshake: time.Now(),
 	}
-	go c.writer()
-	go c.writeOptimizer(time.Minute)
 	return
 }
 
@@ -100,6 +93,8 @@ func (cn *connection) localAddr() net.Addr {
 	return cn.conn.LocalAddr()
 }
 
+// Adjust piece position in the request order for this connection based on the
+// given piece priority.
 func (cn *connection) pendPiece(piece int, priority piecePriority) {
 	if priority == piecePriorityNone {
 		cn.pieceRequestOrder.DeletePiece(piece)

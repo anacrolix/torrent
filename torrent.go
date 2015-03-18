@@ -66,14 +66,18 @@ type torrent struct {
 
 	InfoHash InfoHash
 	Pieces   []*piece
-	length   int64
+	// Total length of the torrent in bytes. Stored because it's not O(1) to
+	// get this from the info dict.
+	length int64
 
 	data StatefulData
 
+	// The info dict. Nil if we don't have it.
 	Info *metainfo.Info
-	// Active peer connections.
+	// Active peer connections, running message stream loops.
 	Conns []*connection
-	// Set of addrs to which we're attempting to connect.
+	// Set of addrs to which we're attempting to connect. Connections are
+	// half-open until all handshakes are completed.
 	HalfOpen map[string]struct{}
 
 	// Reserve of peers to connect to. A peer can be both here and in the
@@ -84,11 +88,16 @@ type torrent struct {
 
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
 	// mirror their respective URLs from the announce-list metainfo key.
-	Trackers     [][]tracker.Client
-	DisplayName  string
-	MetaData     []byte
+	Trackers [][]tracker.Client
+	// Name used if the info name isn't available.
+	DisplayName string
+	// The bencoded bytes of the info dict.
+	MetaData []byte
+	// Each element corresponds to the 16KiB metadata pieces. If true, we have
+	// received that piece.
 	metadataHave []bool
 
+	// Closed when .Info is set.
 	gotMetainfo chan struct{}
 	GotMetainfo <-chan struct{}
 
@@ -195,6 +204,7 @@ func (t *torrent) numConnsUnchoked() (num int) {
 	return
 }
 
+// There's a connection to that address already.
 func (t *torrent) addrActive(addr string) bool {
 	if _, ok := t.HalfOpen[addr]; ok {
 		return true

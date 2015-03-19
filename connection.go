@@ -100,20 +100,23 @@ func (cn *connection) pendPiece(piece int, priority piecePriority) {
 		cn.pieceRequestOrder.DeletePiece(piece)
 		return
 	}
-	key := cn.piecePriorities[piece]
-	// There is overlap here so there's some probabilistic favouring of higher
-	// priority pieces.
-	switch priority {
-	case piecePriorityReadahead:
-		key -= len(cn.piecePriorities)
-	case piecePriorityNext:
-		key -= 2 * len(cn.piecePriorities)
-	case piecePriorityNow:
-		key -= 3 * len(cn.piecePriorities)
-	}
-	// Favour earlier pieces more than later pieces.
-	// key -= piece / 2
-
+	pp := cn.piecePriorities[piece]
+	// Priority goes to Now, then Next in connection order. Then Readahead in
+	// by piece index. Then normal again by connection order.
+	key := func() int {
+		switch priority {
+		case piecePriorityNow:
+			return -3*len(cn.piecePriorities) + 3*pp
+		case piecePriorityNext:
+			return -2*len(cn.piecePriorities) + 2*pp
+		case piecePriorityReadahead:
+			return -len(cn.piecePriorities) + pp
+		case piecePriorityNormal:
+			return pp
+		default:
+			panic(priority)
+		}
+	}()
 	cn.pieceRequestOrder.SetPiece(piece, key)
 }
 

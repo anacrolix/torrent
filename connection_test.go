@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	. "gopkg.in/check.v1"
+
 	"github.com/bradfitz/iter"
 
 	"bitbucket.org/anacrolix/go.torrent/internal/pieceordering"
@@ -53,21 +55,25 @@ func TestCancelRequestOptimized(t *testing.T) {
 	}
 }
 
-func testRequestOrder(expected []int, ro *pieceordering.Instance, t *testing.T) {
-	e := ro.First()
-	for _, i := range expected {
-		if i != e.Piece() {
-			t.FailNow()
-		}
-		e = e.Next()
+func pieceOrderingAsSlice(po *pieceordering.Instance) (ret []int) {
+	for e := po.First(); e != nil; e = e.Next() {
+		ret = append(ret, e.Piece())
 	}
-	if e != nil {
-		t.FailNow()
-	}
+	return
 }
 
+func testRequestOrder(expected []int, ro *pieceordering.Instance, t *C) {
+	t.Assert(pieceOrderingAsSlice(ro), DeepEquals, expected)
+}
+
+type suite struct{}
+
+var _ = Suite(suite{})
+
+func Test(t *testing.T) { TestingT(t) }
+
 // Tests the request ordering based on a connections priorities.
-func TestPieceRequestOrder(t *testing.T) {
+func (suite) TestPieceRequestOrder(t *C) {
 	c := connection{
 		pieceRequestOrder: pieceordering.New(),
 		piecePriorities:   []int{1, 4, 0, 3, 2},
@@ -83,10 +89,17 @@ func TestPieceRequestOrder(t *testing.T) {
 	c.pendPiece(1, piecePriorityReadahead)
 	testRequestOrder([]int{1, 2, 0}, c.pieceRequestOrder, t)
 	c.pendPiece(4, piecePriorityNow)
+	// now(4), r(1), normal(0, 2)
 	testRequestOrder([]int{4, 1, 2, 0}, c.pieceRequestOrder, t)
 	c.pendPiece(2, piecePriorityReadahead)
 	// N(4), R(1, 2), N(0)
-	testRequestOrder([]int{4, 1, 2, 0}, c.pieceRequestOrder, t)
+	testRequestOrder([]int{4, 2, 1, 0}, c.pieceRequestOrder, t)
+	c.pendPiece(1, piecePriorityNow)
+	// now(4, 1), readahead(2), normal(0)
+	// in the same order, the keys will be: -15+6, -15+12, -5, 1
+	// so we test that a very low priority (for this connection), "now"
+	// piece has been placed after a readahead piece.
+	testRequestOrder([]int{4, 2, 1, 0}, c.pieceRequestOrder, t)
 	// Note this intentially sets to None a piece that's not in the order.
 	for i := range iter.N(5) {
 		c.pendPiece(i, piecePriorityNone)

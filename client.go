@@ -3,14 +3,12 @@ Package torrent implements a torrent client.
 
 Simple example:
 
-	c := &Client{}
-	c.Start()
-	defer c.Stop()
-	if err := c.AddTorrent(externalMetaInfoPackageSux); err != nil {
-		return fmt.Errors("error adding torrent: %s", err)
-	}
+	c, _ := NewClient()
+	t, _, c.AddMagnet("magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU")
+	t.DownloadAll()
 	c.WaitAll()
 	log.Print("erhmahgerd, torrent downloaded")
+	c.Close()
 
 */
 package torrent

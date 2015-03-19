@@ -22,7 +22,7 @@ import (
 	"github.com/anacrolix/libtorgo/metainfo"
 )
 
-func (t *torrent) PieceNumPendingBytes(index int) (count pp.Integer) {
+func (t *torrent) pieceNumPendingBytes(index int) (count pp.Integer) {
 	if t.pieceComplete(index) {
 		return 0
 	}
@@ -251,7 +251,7 @@ func (t *torrent) invalidateMetadata() {
 	t.Info = nil
 }
 
-func (t *torrent) SaveMetadataPiece(index int, data []byte) {
+func (t *torrent) saveMetadataPiece(index int, data []byte) {
 	if t.haveInfo() {
 		return
 	}
@@ -342,7 +342,7 @@ func (t *torrent) haveAllMetadataPieces() bool {
 	return true
 }
 
-func (t *torrent) SetMetadataSize(bytes int64) {
+func (t *torrent) setMetadataSize(bytes int64) {
 	if t.MetaData != nil {
 		return
 	}
@@ -461,7 +461,7 @@ func (t *torrent) pieceStatusCharSequences() (ret []PieceStatusCharSequence) {
 	return
 }
 
-func (t *torrent) WriteStatus(w io.Writer) {
+func (t *torrent) writeStatus(w io.Writer) {
 	fmt.Fprintf(w, "Infohash: %x\n", t.InfoHash)
 	fmt.Fprintf(w, "Piece length: %s\n", func() string {
 		if t.haveInfo() {
@@ -520,6 +520,8 @@ func (t *torrent) announceList() (al [][]string) {
 	return
 }
 
+// Returns a run-time generated MetaInfo that includes the info bytes and
+// announce-list as currently known to the client.
 func (t *torrent) MetaInfo() *metainfo.MetaInfo {
 	if t.MetaData == nil {
 		panic("info bytes not set")
@@ -541,13 +543,13 @@ func (t *torrent) bytesLeft() (left int64) {
 		return -1
 	}
 	for i := 0; i < t.numPieces(); i++ {
-		left += int64(t.PieceNumPendingBytes(i))
+		left += int64(t.pieceNumPendingBytes(i))
 	}
 	return
 }
 
 func (t *torrent) piecePartiallyDownloaded(index int) bool {
-	return t.PieceNumPendingBytes(index) != t.PieceLength(index)
+	return t.pieceNumPendingBytes(index) != t.PieceLength(index)
 }
 
 func numChunksForPiece(chunkSize int, pieceSize int) int {

@@ -247,7 +247,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 			w.WriteString("<missing metainfo>")
 		}
 		fmt.Fprint(w, "\n")
-		t.WriteStatus(w)
+		t.writeStatus(w)
 		fmt.Fprintln(w)
 	}
 }
@@ -480,6 +480,7 @@ func (cl *Client) initBannedTorrents() error {
 	return nil
 }
 
+// Creates a new client. Clients contain zero or more Torrents.
 func NewClient(cfg *Config) (cl *Client, err error) {
 	if cfg == nil {
 		cfg = &Config{}
@@ -684,6 +685,7 @@ func (cl *Client) incomingConnection(nc net.Conn, utp bool) {
 	}
 }
 
+// Returns a handle to the given torrent, if it's present in the client.
 func (cl *Client) Torrent(ih InfoHash) (T Torrent, ok bool) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
@@ -1396,7 +1398,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 			log.Printf("got bad metadata piece")
 			break
 		}
-		t.SaveMetadataPiece(piece, payload[begin:])
+		t.saveMetadataPiece(piece, payload[begin:])
 		c.UsefulChunksReceived++
 		c.lastUsefulChunkReceived = time.Now()
 		if !t.haveAllMetadataPieces() {
@@ -1614,7 +1616,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 					if !ok {
 						log.Printf("bad metadata_size type: %T", metadata_sizeUntyped)
 					} else {
-						t.SetMetadataSize(metadata_size)
+						t.setMetadataSize(metadata_size)
 					}
 				}
 				if _, ok := c.PeerExtensionIDs["ut_metadata"]; ok {
@@ -1979,6 +1981,7 @@ func (t *torrent) addTrackers(announceList [][]string) {
 	t.Trackers = newTrackers
 }
 
+// A handle to a live torrent within a Client.
 type Torrent struct {
 	cl *Client
 	*torrent
@@ -1994,6 +1997,7 @@ func (t Torrent) Drop() {
 	t.cl.mu.Unlock()
 }
 
+// Provides access to regions of torrent data that correspond to its files.
 type File struct {
 	t      Torrent
 	path   string
@@ -2158,10 +2162,6 @@ func (t Torrent) SetRegionPriority(off, len int64) {
 	}
 }
 
-func (t Torrent) MetainfoFilepath() string {
-	return filepath.Join(t.cl.ConfigDir(), "torrents", t.InfoHash.HexString()+".torrent")
-}
-
 func (t Torrent) AddPeers(pp []Peer) error {
 	cl := t.cl
 	cl.mu.Lock()
@@ -2170,17 +2170,17 @@ func (t Torrent) AddPeers(pp []Peer) error {
 	return nil
 }
 
+// Marks the entire torrent for download.
 func (t Torrent) DownloadAll() {
 	t.cl.mu.Lock()
-	for i := 0; i < t.numPieces(); i++ {
-		// TODO: Leave higher priorities as they were?
-		t.cl.prioritizePiece(t.torrent, i, piecePriorityNormal)
+	defer t.cl.mu.Unlock()
+	for i := range iter.N(t.numPieces()) {
+		t.cl.raisePiecePriority(t.torrent, i, piecePriorityNormal)
 	}
-	// Nice to have the first and last pieces soon for various interactive
+	// Nice to have the first and last pieces sooner for various interactive
 	// purposes.
-	t.cl.prioritizePiece(t.torrent, 0, piecePriorityReadahead)
-	t.cl.prioritizePiece(t.torrent, t.numPieces()-1, piecePriorityReadahead)
-	t.cl.mu.Unlock()
+	t.cl.raisePiecePriority(t.torrent, 0, piecePriorityReadahead)
+	t.cl.raisePiecePriority(t.torrent, t.numPieces()-1, piecePriorityReadahead)
 }
 
 func (me Torrent) ReadAt(p []byte, off int64) (n int, err error) {

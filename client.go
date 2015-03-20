@@ -51,7 +51,7 @@ import (
 	"github.com/anacrolix/torrent/tracker"
 	_ "github.com/anacrolix/torrent/tracker/udp"
 	. "github.com/anacrolix/torrent/util"
-	"bitbucket.org/anacrolix/sync"
+	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
 	"github.com/anacrolix/libtorgo/bencode"
 	"github.com/anacrolix/libtorgo/metainfo"

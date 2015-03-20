@@ -27,8 +27,16 @@ var (
 	upload          = flag.Bool("upload", true, "upload data to peers")
 )
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s [flags] (magnet URI or .torrent file path)...\n", os.Args[0])
+	os.Stderr.WriteString("Download using the BitTorrent network.\n")
+
+	flag.PrintDefaults()
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	flag.Usage = usage
 	flag.Parse()
 	client, err := torrent.NewClient(&torrent.Config{
 		DataDir:         *downloadDir,

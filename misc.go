@@ -104,13 +104,13 @@ func metadataPieceSize(totalSize int, piece int) int {
 	return ret
 }
 
-type Super interface {
+type superer interface {
 	Super() interface{}
 }
 
 // Returns ok if there's a parent, and it's not nil.
 func super(child interface{}) (parent interface{}, ok bool) {
-	s, ok := child.(Super)
+	s, ok := child.(superer)
 	if !ok {
 		return
 	}

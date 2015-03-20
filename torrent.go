@@ -14,12 +14,12 @@ import (
 
 	"github.com/bradfitz/iter"
 
+	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/libtorgo/metainfo"
 	"github.com/anacrolix/torrent/data"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/util"
-	"github.com/anacrolix/libtorgo/bencode"
-	"github.com/anacrolix/libtorgo/metainfo"
 )
 
 func (t *torrent) pieceNumPendingBytes(index int) (count pp.Integer) {
@@ -28,11 +28,11 @@ func (t *torrent) pieceNumPendingBytes(index int) (count pp.Integer) {
 	}
 	piece := t.Pieces[index]
 	if !piece.EverHashed {
-		return t.PieceLength(index)
+		return t.pieceLength(index)
 	}
 	pendingChunks := t.Pieces[index].PendingChunkSpecs
 	count = pp.Integer(len(pendingChunks)) * chunkSize
-	_lastChunkSpec := lastChunkSpec(t.PieceLength(index))
+	_lastChunkSpec := lastChunkSpec(t.pieceLength(index))
 	if _lastChunkSpec.Length != chunkSize {
 		if _, ok := pendingChunks[_lastChunkSpec]; ok {
 			count += _lastChunkSpec.Length - chunkSize
@@ -423,10 +423,14 @@ func (t *torrent) newMetadataExtensionMessage(c *connection, msgType int, piece 
 }
 
 type PieceStatusCharSequence struct {
-	Char  byte
-	Count int
+	Char  byte // The state of this sequence of pieces.
+	Count int  // How many consecutive pieces have this state.
 }
 
+// Returns the state of pieces of the torrent. They are grouped into runs of
+// same state. The sum of the Counts of the sequences is the number of pieces
+// in the torrent. See the function torrent.pieceStatusChar for the possible
+// states.
 func (t *torrent) PieceStatusCharSequences() []PieceStatusCharSequence {
 	t.stateMu.Lock()
 	defer t.stateMu.Unlock()
@@ -549,7 +553,7 @@ func (t *torrent) bytesLeft() (left int64) {
 }
 
 func (t *torrent) piecePartiallyDownloaded(index int) bool {
-	return t.pieceNumPendingBytes(index) != t.PieceLength(index)
+	return t.pieceNumPendingBytes(index) != t.pieceLength(index)
 }
 
 func numChunksForPiece(chunkSize int, pieceSize int) int {
@@ -561,7 +565,7 @@ func (t *torrent) usualPieceSize() int {
 }
 
 func (t *torrent) lastPieceSize() int {
-	return int(t.PieceLength(t.numPieces() - 1))
+	return int(t.pieceLength(t.numPieces() - 1))
 }
 
 func (t *torrent) numPieces() int {
@@ -653,9 +657,9 @@ func (t *torrent) bitfield() (bf []bool) {
 }
 
 func (t *torrent) pieceChunks(piece int) (css []chunkSpec) {
-	css = make([]chunkSpec, 0, (t.PieceLength(piece)+chunkSize-1)/chunkSize)
+	css = make([]chunkSpec, 0, (t.pieceLength(piece)+chunkSize-1)/chunkSize)
 	var cs chunkSpec
-	for left := t.PieceLength(piece); left != 0; left -= cs.Length {
+	for left := t.pieceLength(piece); left != 0; left -= cs.Length {
 		cs.Length = left
 		if cs.Length > chunkSize {
 			cs.Length = chunkSize
@@ -671,7 +675,7 @@ func (t *torrent) pendAllChunkSpecs(index int) {
 	if piece.PendingChunkSpecs == nil {
 		piece.PendingChunkSpecs = make(
 			map[chunkSpec]struct{},
-			(t.PieceLength(index)+chunkSize-1)/chunkSize)
+			(t.pieceLength(index)+chunkSize-1)/chunkSize)
 	}
 	pcss := piece.PendingChunkSpecs
 	for _, cs := range t.pieceChunks(int(index)) {
@@ -689,7 +693,7 @@ type Peer struct {
 	SupportsEncryption bool
 }
 
-func (t *torrent) PieceLength(piece int) (len_ pp.Integer) {
+func (t *torrent) pieceLength(piece int) (len_ pp.Integer) {
 	if int(piece) == t.numPieces()-1 {
 		len_ = pp.Integer(t.Length() % t.Info.PieceLength)
 	}

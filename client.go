@@ -41,6 +41,9 @@ import (
 
 	"github.com/anacrolix/torrent/mse"
 
+	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/anacrolix/sync"
 	"github.com/anacrolix/torrent/data"
 	filePkg "github.com/anacrolix/torrent/data/file"
 	"github.com/anacrolix/torrent/dht"
@@ -51,10 +54,7 @@ import (
 	"github.com/anacrolix/torrent/tracker"
 	_ "github.com/anacrolix/torrent/tracker/udp"
 	. "github.com/anacrolix/torrent/util"
-	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
-	"github.com/anacrolix/libtorgo/bencode"
-	"github.com/anacrolix/libtorgo/metainfo"
 )
 
 var (
@@ -267,7 +267,7 @@ func (cl *Client) torrentReadAt(t *torrent, off int64, p []byte) (n int, err err
 		return
 	}
 	pieceOff := pp.Integer(off % int64(t.usualPieceSize()))
-	pieceLeft := int(t.PieceLength(index) - pieceOff)
+	pieceLeft := int(t.pieceLength(index) - pieceOff)
 	if pieceLeft <= 0 {
 		err = io.EOF
 		return
@@ -1506,7 +1506,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			// routine.
 			// c.PeerRequests[request] = struct{}{}
 			p := make([]byte, msg.Length)
-			n, err := dataReadAt(t.data, p, int64(t.PieceLength(0))*int64(msg.Index)+int64(msg.Begin))
+			n, err := dataReadAt(t.data, p, int64(t.pieceLength(0))*int64(msg.Index)+int64(msg.Begin))
 			if err != nil {
 				return fmt.Errorf("reading t data to serve request %q: %s", request, err)
 			}
@@ -2213,7 +2213,8 @@ func (cl *Client) torrentCacheMetaInfo(ih InfoHash) (mi *metainfo.MetaInfo, err 
 	return
 }
 
-// For adding new torrents to a client.
+// Specifies a new torrent for adding to a client. There are helpers for
+// magnet URIs and torrent metainfo files.
 type TorrentSpec struct {
 	Trackers    [][]string
 	InfoHash    InfoHash

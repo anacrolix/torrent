@@ -12,7 +12,7 @@ import (
 	"sort"
 	"time"
 
-	dataPkg "bitbucket.org/anacrolix/go.torrent/data"
+	dataPkg "github.com/anacrolix/torrent/data"
 	"github.com/anacrolix/libtorgo/metainfo"
 )
 

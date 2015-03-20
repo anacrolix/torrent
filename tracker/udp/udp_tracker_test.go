@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"testing"
 
-	"bitbucket.org/anacrolix/go.torrent/tracker"
+	"github.com/anacrolix/torrent/tracker"
 )
 
 // Ensure net.IPs are stored big-endian, to match the way they're read from

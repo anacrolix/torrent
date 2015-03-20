@@ -14,7 +14,7 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	"bitbucket.org/anacrolix/go.torrent"
+	"github.com/anacrolix/torrent"
 )
 
 const (

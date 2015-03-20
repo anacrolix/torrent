@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/dht"
+	"github.com/anacrolix/torrent/dht"
 )
 
 type pingResponse struct {

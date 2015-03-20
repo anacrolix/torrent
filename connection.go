@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/internal/pieceordering"
-	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
+	"github.com/anacrolix/torrent/internal/pieceordering"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 var optimizedCancels = expvar.NewInt("optimizedCancels")

@@ -11,9 +11,9 @@ import (
 
 	_ "github.com/anacrolix/envpprof"
 
-	"bitbucket.org/anacrolix/go.torrent/dht"
-	"bitbucket.org/anacrolix/go.torrent/util"
-	_ "bitbucket.org/anacrolix/go.torrent/util/profile"
+	"github.com/anacrolix/torrent/dht"
+	"github.com/anacrolix/torrent/util"
+	_ "github.com/anacrolix/torrent/util/profile"
 )
 
 type pingResponse struct {

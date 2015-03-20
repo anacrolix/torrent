@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
+	"github.com/anacrolix/torrent/peer_protocol"
 )
 
 func r(i, b, l peer_protocol.Integer) request {

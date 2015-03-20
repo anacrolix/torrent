@@ -14,14 +14,14 @@ import (
 	"testing"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/data"
+	"github.com/anacrolix/torrent/data"
 
 	"golang.org/x/net/context"
 
-	"bitbucket.org/anacrolix/go.torrent"
-	"bitbucket.org/anacrolix/go.torrent/data/mmap"
-	"bitbucket.org/anacrolix/go.torrent/internal/testutil"
-	"bitbucket.org/anacrolix/go.torrent/util"
+	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/data/mmap"
+	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/util"
 
 	"github.com/anacrolix/libtorgo/metainfo"
 

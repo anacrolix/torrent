@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/tracker"
+	"github.com/anacrolix/torrent/tracker"
 )
 
 type Action int32

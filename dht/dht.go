@@ -14,9 +14,9 @@ import (
 	"os"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/iplist"
-	"bitbucket.org/anacrolix/go.torrent/logonce"
-	"bitbucket.org/anacrolix/go.torrent/util"
+	"github.com/anacrolix/torrent/iplist"
+	"github.com/anacrolix/torrent/logonce"
+	"github.com/anacrolix/torrent/util"
 	"bitbucket.org/anacrolix/sync"
 	"github.com/anacrolix/libtorgo/bencode"
 )

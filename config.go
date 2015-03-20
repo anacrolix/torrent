@@ -1,7 +1,7 @@
 package torrent
 
 import (
-	"bitbucket.org/anacrolix/go.torrent/dht"
+	"github.com/anacrolix/torrent/dht"
 )
 
 // Override Client defaults.

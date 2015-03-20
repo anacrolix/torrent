@@ -14,7 +14,7 @@ import (
 
 	"github.com/anacrolix/libtorgo/metainfo"
 
-	"bitbucket.org/anacrolix/go.torrent"
+	"github.com/anacrolix/torrent"
 )
 
 var (

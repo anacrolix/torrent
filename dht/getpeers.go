@@ -6,9 +6,9 @@ import (
 	"log"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/logonce"
+	"github.com/anacrolix/torrent/logonce"
 
-	"bitbucket.org/anacrolix/go.torrent/util"
+	"github.com/anacrolix/torrent/util"
 	"bitbucket.org/anacrolix/sync"
 	"github.com/willf/bloom"
 )

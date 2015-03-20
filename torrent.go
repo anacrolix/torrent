@@ -14,10 +14,10 @@ import (
 
 	"github.com/bradfitz/iter"
 
-	"bitbucket.org/anacrolix/go.torrent/data"
-	pp "bitbucket.org/anacrolix/go.torrent/peer_protocol"
-	"bitbucket.org/anacrolix/go.torrent/tracker"
-	"bitbucket.org/anacrolix/go.torrent/util"
+	"github.com/anacrolix/torrent/data"
+	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/util"
 	"github.com/anacrolix/libtorgo/bencode"
 	"github.com/anacrolix/libtorgo/metainfo"
 )

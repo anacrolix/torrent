@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"bitbucket.org/anacrolix/go.torrent/mmap_span"
+	"github.com/anacrolix/torrent/mmap_span"
 	"github.com/anacrolix/libtorgo/metainfo"
 	"launchpad.net/gommap"
 )

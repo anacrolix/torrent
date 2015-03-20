@@ -1,6 +1,6 @@
 package torrent
 
-import "bitbucket.org/anacrolix/go.torrent/data"
+import "github.com/anacrolix/torrent/data"
 
 type statelessDataWrapper struct {
 	data.Data

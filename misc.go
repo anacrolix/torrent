@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
+	"github.com/anacrolix/torrent/peer_protocol"
 )
 
 const (

@@ -15,12 +15,12 @@ import (
 
 	_ "github.com/anacrolix/envpprof"
 
-	"bitbucket.org/anacrolix/go.torrent/util/dirwatch"
+	"github.com/anacrolix/torrent/util/dirwatch"
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	"bitbucket.org/anacrolix/go.torrent"
-	"bitbucket.org/anacrolix/go.torrent/fs"
+	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/fs"
 )
 
 var (

@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"sync"
 
-	"bitbucket.org/anacrolix/go.torrent/util"
+	"github.com/anacrolix/torrent/util"
 
 	"github.com/bradfitz/iter"
 )

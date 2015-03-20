@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"bitbucket.org/anacrolix/go.torrent/data/blob"
+	"github.com/anacrolix/torrent/data/blob"
 
 	"github.com/bradfitz/iter"
 
-	"bitbucket.org/anacrolix/go.torrent/internal/testutil"
-	"bitbucket.org/anacrolix/go.torrent/util"
-	"bitbucket.org/anacrolix/utp"
+	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/util"
+	"github.com/anacrolix/utp"
 	"github.com/anacrolix/libtorgo/bencode"
 )
 

@@ -8,9 +8,9 @@ import (
 
 	"github.com/bradfitz/iter"
 
-	"bitbucket.org/anacrolix/go.torrent/internal/pieceordering"
+	"github.com/anacrolix/torrent/internal/pieceordering"
 
-	"bitbucket.org/anacrolix/go.torrent/peer_protocol"
+	"github.com/anacrolix/torrent/peer_protocol"
 )
 
 func TestCancelRequestOptimized(t *testing.T) {

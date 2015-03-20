@@ -9,7 +9,7 @@ import (
 
 	"github.com/anacrolix/libtorgo/bencode"
 
-	"bitbucket.org/anacrolix/go.torrent"
+	"github.com/anacrolix/torrent"
 )
 
 func main() {

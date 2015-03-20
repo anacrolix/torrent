@@ -9,7 +9,7 @@ import (
 
 	"github.com/bradfitz/iter"
 
-	"bitbucket.org/anacrolix/go.torrent/util"
+	"github.com/anacrolix/torrent/util"
 )
 
 var sample = `

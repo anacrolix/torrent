@@ -1,1 +1,1 @@
-.. image:: https://www.codeship.io/projects/a2162d50-c4b2-0131-ac6e-2e4ce217ccc2/status
+.. image:: https://www.codeship.io/projects/a2811d30-b0ce-0132-8983-5e604f7ebe37/status

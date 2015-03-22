@@ -23,6 +23,7 @@ var (
 	// TODO: Check the default torrent listen port.
 	listenAddr      = flag.String("listenAddr", ":50007", "incoming connection address")
 	disableTrackers = flag.Bool("disableTrackers", false, "disable trackers")
+	disableDHT      = flag.Bool("disableDHT", false, "disable DHT")
 	seed            = flag.Bool("seed", false, "seed after downloading")
 	upload          = flag.Bool("upload", true, "upload data to peers")
 )
@@ -43,6 +44,7 @@ func main() {
 		DisableTrackers: *disableTrackers,
 		ListenAddr:      *listenAddr,
 		NoUpload:        !*upload,
+		NoDHT:           *disableDHT,
 	})
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)

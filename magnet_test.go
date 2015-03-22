@@ -41,7 +41,7 @@ func TestParseMagnetURI(t *testing.T) {
 	// Checking if the magnet instance struct is built correctly from parsing
 	m, err = ParseMagnetURI(exampleMagnetURI)
 	if err != nil || !reflect.DeepEqual(exampleMagnet, m) {
-		t.Errorf("ParseMagnetURI(%e) returned %v, expected %v", uri, err)
+		t.Errorf("ParseMagnetURI(%e) returned %v, expected %v", uri, m, exampleMagnet)
 	}
 
 	// empty string URI case

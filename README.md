@@ -9,7 +9,7 @@ There is support for protocol encryption, DHT, PEX, uTP, and various extensions.
 
 ## Installation
 
-Install the library package with `go get github.com/anacrolix/torrent`, or one of the provided cmds with `go get github.com/anacrolix/...`.
+Install the library package with `go get github.com/anacrolix/torrent`, or the provided cmds with `go get github.com/anacrolix/torrent/cmd/...`.
 
 ## Library example
 

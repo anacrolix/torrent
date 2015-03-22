@@ -3,12 +3,13 @@ Package torrent implements a torrent client.
 
 Simple example:
 
-	c, _ := NewClient()
-	t, _, c.AddMagnet("magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU")
+	c, _ := torrent.NewClient(&torrent.Config{})
+	defer c.Close()
+	t, _ := c.AddMagnet("magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU")
 	t.DownloadAll()
 	c.WaitAll()
-	log.Print("erhmahgerd, torrent downloaded")
-	c.Close()
+	log.Print("ermahgerd, torrent downloaded")
+
 
 */
 package torrent

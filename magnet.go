@@ -30,6 +30,7 @@ func (m *Magnet) String() (ret string) {
 	return
 }
 
+// ParseMagnetURI parses Magnet-formatted URIs into a Magnet instance
 func ParseMagnetURI(uri string) (m Magnet, err error) {
 	u, err := url.Parse(uri)
 	if err != nil {
@@ -45,22 +46,23 @@ func ParseMagnetURI(uri string) (m Magnet, err error) {
 		err = fmt.Errorf("bad xt parameter")
 		return
 	}
-	xt = xt[len(xtPrefix):]
-	decode := func() func(dst, src []byte) (int, error) {
-		switch len(xt) {
-		case 40:
-			return hex.Decode
-		case 32:
-			return base32.StdEncoding.Decode
-		default:
-			return nil
-		}
-	}()
+	infoHash := xt[len(xtPrefix):]
+
+	// BTIH hash can be in HEX or BASE32 encoding
+	// will assign apropriate func judging from symbol length
+	var decode func(dst, src []byte) (int, error)
+	switch len(infoHash) {
+	case 40:
+		decode = hex.Decode
+	case 32:
+		decode = base32.StdEncoding.Decode
+	}
+
 	if decode == nil {
-		err = fmt.Errorf("unhandled xt parameter encoding: encoded length %d", len(xt))
+		err = fmt.Errorf("unhandled xt parameter encoding: encoded length %d", len(infoHash))
 		return
 	}
-	n, err := decode(m.InfoHash[:], []byte(xt))
+	n, err := decode(m.InfoHash[:], []byte(infoHash))
 	if err != nil {
 		err = fmt.Errorf("error decoding xt: %s", err)
 		return

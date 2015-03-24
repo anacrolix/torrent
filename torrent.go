@@ -346,7 +346,7 @@ func (t *torrent) setMetadataSize(bytes int64) {
 	if t.MetaData != nil {
 		return
 	}
-	if bytes > 10000000 { // 10MB, pulled from my ass.
+	if bytes <= 0 || bytes > 10000000 { // 10MB, pulled from my ass.
 		return
 	}
 	t.MetaData = make([]byte, bytes)

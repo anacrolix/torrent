@@ -687,7 +687,7 @@ func (cl *Client) incomingConnection(nc net.Conn, utp bool) {
 	c.uTP = utp
 	err := cl.runReceivedConn(c)
 	if err != nil {
-		log.Print(err)
+		// log.Print(err)
 	}
 }
 
@@ -893,7 +893,6 @@ func (me *Client) outgoingConnection(t *torrent, addr string, ps peerSource) {
 	// failure.
 	me.noLongerHalfOpen(t, addr)
 	if err != nil {
-		log.Print(err)
 		return
 	}
 	if c == nil {
@@ -903,7 +902,7 @@ func (me *Client) outgoingConnection(t *torrent, addr string, ps peerSource) {
 	c.Discovery = ps
 	err = me.runInitiatedHandshookConn(c, t)
 	if err != nil {
-		log.Print(err)
+		// log.Print(err)
 	}
 }
 

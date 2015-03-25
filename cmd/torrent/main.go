@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -10,6 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/jessevdk/go-flags"
+
 	_ "github.com/anacrolix/envpprof"
 
 	"github.com/anacrolix/libtorgo/metainfo"
@@ -17,35 +18,50 @@ import (
 	"github.com/anacrolix/torrent"
 )
 
-var (
-	downloadDir = flag.String("downloadDir", "", "directory to store download torrent data")
-	testPeer    = flag.String("testPeer", "", "bootstrap peer address")
-	// TODO: Check the default torrent listen port.
-	listenAddr      = flag.String("listenAddr", ":50007", "incoming connection address")
-	disableTrackers = flag.Bool("disableTrackers", false, "disable trackers")
-	disableDHT      = flag.Bool("disableDHT", false, "disable DHT")
-	seed            = flag.Bool("seed", false, "seed after downloading")
-	upload          = flag.Bool("upload", true, "upload data to peers")
-)
+// fmt.Fprintf(os.Stderr, "Usage: %s \n", os.Args[0])
 
-func usage() {
-	fmt.Fprintf(os.Stderr, "Usage: %s [flags] (magnet URI or .torrent file path)...\n", os.Args[0])
-	os.Stderr.WriteString("Download using the BitTorrent network.\n")
-
-	flag.PrintDefaults()
+func resolvedPeerAddrs(ss []string) (ret []torrent.Peer, err error) {
+	for _, s := range ss {
+		var addr *net.TCPAddr
+		addr, err = net.ResolveTCPAddr("tcp", s)
+		if err != nil {
+			return
+		}
+		ret = append(ret, torrent.Peer{
+			IP:   addr.IP,
+			Port: addr.Port,
+		})
+	}
+	return
 }
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	flag.Usage = usage
-	flag.Parse()
-	client, err := torrent.NewClient(&torrent.Config{
-		DataDir:         *downloadDir,
-		DisableTrackers: *disableTrackers,
-		ListenAddr:      *listenAddr,
-		NoUpload:        !*upload,
-		NoDHT:           *disableDHT,
-	})
+	var rootGroup struct {
+		Client    torrent.Config `group:"Client Options"`
+		Seed      bool           `long:"seed" description:"continue seeding torrents after completed"`
+		TestPeers []string       `long:"test-peer" description:"address of peer to inject to every torrent"`
+	}
+	// Don't pass flags.PrintError because it's inconsistent with printing.
+	// https://github.com/jessevdk/go-flags/issues/132
+	parser := flags.NewParser(&rootGroup, flags.HelpFlag|flags.PassDoubleDash)
+	parser.Usage = "[OPTIONS] (magnet URI or .torrent file path)..."
+	posArgs, err := parser.Parse()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Download from the BitTorrent network.\n")
+		fmt.Println(err)
+		os.Exit(2)
+	}
+	testPeers, err := resolvedPeerAddrs(rootGroup.TestPeers)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if len(posArgs) == 0 {
+		fmt.Fprintln(os.Stderr, "no torrents specified")
+		return
+	}
+	client, err := torrent.NewClient(&rootGroup.Client)
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)
 	}
@@ -53,11 +69,7 @@ func main() {
 		client.WriteStatus(w)
 	})
 	defer client.Close()
-	if flag.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "no torrents specified")
-		return
-	}
-	for _, arg := range flag.Args() {
+	for _, arg := range posArgs {
 		t := func() torrent.Torrent {
 			if strings.HasPrefix(arg, "magnet:") {
 				t, err := client.AddMagnet(arg)
@@ -77,20 +89,7 @@ func main() {
 				return t
 			}
 		}()
-		// client.PrioritizeDataRegion(ih, 0, 999999999)
-		err := t.AddPeers(func() []torrent.Peer {
-			if *testPeer == "" {
-				return nil
-			}
-			addr, err := net.ResolveTCPAddr("tcp", *testPeer)
-			if err != nil {
-				log.Fatal(err)
-			}
-			return []torrent.Peer{{
-				IP:   addr.IP,
-				Port: addr.Port,
-			}}
-		}())
+		err := t.AddPeers(testPeers)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -99,7 +98,8 @@ func main() {
 			t.DownloadAll()
 		}()
 	}
-	if *seed {
+	if rootGroup.Seed {
+		// We never finish, since we intend to seed indefinitely.
 		select {}
 	}
 	if client.WaitAll() {

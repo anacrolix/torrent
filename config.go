@@ -8,19 +8,19 @@ import (
 type Config struct {
 	// Store torrent file data in this directory unless TorrentDataOpener is
 	// specified.
-	DataDir string
+	DataDir string `long:"data-dir" description:"directory to store downloaded torrent data"`
 	// The address to listen for new uTP and TCP bittorrent protocol
 	// connections. DHT shares a UDP socket with uTP unless configured
 	// otherwise.
-	ListenAddr string
+	ListenAddr string `long:"listen-addr" value-name:"HOST:PORT"`
 	// Don't announce to trackers. This only leaves DHT to discover peers.
-	DisableTrackers bool
+	DisableTrackers bool `long:"disable-trackers"`
 	// Don't create a DHT.
-	NoDHT bool
+	NoDHT bool `long:"disable-dht"`
 	// Overrides the default DHT configuration.
 	DHTConfig *dht.ServerConfig
-	// Don't chunks to peers.
-	NoUpload bool
+	// Don't send chunks to peers.
+	NoUpload bool `long:"no-upload"`
 	// User-provided Client peer ID. If not present, one is generated automatically.
 	PeerID string
 	// For the bittorrent protocol.

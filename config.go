@@ -15,6 +15,7 @@ type Config struct {
 	ListenAddr string `long:"listen-addr" value-name:"HOST:PORT"`
 	// Don't announce to trackers. This only leaves DHT to discover peers.
 	DisableTrackers bool `long:"disable-trackers"`
+	DisablePEX      bool `long:"disable-pex"`
 	// Don't create a DHT.
 	NoDHT bool `long:"disable-dht"`
 	// Overrides the default DHT configuration.

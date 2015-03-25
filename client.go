@@ -103,6 +103,11 @@ const (
 	handshakesTimeout  = 20 * time.Second
 
 	pruneInterval = 10 * time.Second
+
+	metadataExtendedId = iota + 1 // 0 is reserved for deleting keys
+	pexExtendedId
+
+	extendedHandshakeClientVersion = "go.torrent dev 20140825"
 )
 
 // Currently doesn't really queue, but should in the future.
@@ -1206,10 +1211,9 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 			ExtendedPayload: func() []byte {
 				d := map[string]interface{}{
 					"m": map[string]int{
-						"ut_metadata": 1,
-						"ut_pex":      2,
+						"ut_metadata": metadataExtendedId,
 					},
-					"v": "go.torrent dev 20140825", // Just the date
+					"v": extendedHandshakeClientVersion,
 					// No upload queue is implemented yet.
 					"reqq": func() int {
 						if me.noUpload {
@@ -1220,6 +1224,9 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 						}
 					}(),
 					"e": 1, // Awwww yeah
+				}
+				if !me.config.DisablePEX {
+					d["ut_pex"] = pexExtendedId
 				}
 				if torrent.metadataSizeKnown() {
 					d["metadata_size"] = torrent.metadataSize()
@@ -1623,12 +1630,15 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				if _, ok := c.PeerExtensionIDs["ut_metadata"]; ok {
 					me.requestPendingMetadata(t, c)
 				}
-			case 1:
+			case metadataExtendedId:
 				err = me.gotMetadataExtensionMsg(msg.ExtendedPayload, t, c)
 				if err != nil {
 					err = fmt.Errorf("error handling metadata extension message: %s", err)
 				}
-			case 2:
+			case pexExtendedId:
+				if me.config.DisablePEX {
+					break
+				}
 				var pexMsg peerExchangeMessage
 				err := bencode.Unmarshal(msg.ExtendedPayload, &pexMsg)
 				if err != nil {
@@ -1665,7 +1675,6 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 					strings.HasPrefix(string(c.PeerID[:]), "-XL0012-") {
 					return nil
 				}
-				// log.Printf("peer extension map: %#v", c.PeerExtensionIDs)
 			}
 		case pp.Port:
 			if me.dHT == nil {

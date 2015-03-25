@@ -8,6 +8,9 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/dustin/go-humanize"
 
 	"github.com/jessevdk/go-flags"
 
@@ -33,6 +36,38 @@ func resolvedPeerAddrs(ss []string) (ret []torrent.Peer, err error) {
 		})
 	}
 	return
+}
+
+func bytesCompleted(tc *torrent.Client) (ret int64) {
+	for _, t := range tc.Torrents() {
+		if t.Info != nil {
+			ret += t.BytesCompleted()
+		}
+	}
+	return
+}
+
+// Returns an estimate of the total bytes for all torrents.
+func totalBytesEstimate(tc *torrent.Client) (ret int64) {
+	var noInfo, hadInfo int64
+	for _, t := range tc.Torrents() {
+		if t.Info == nil {
+			noInfo++
+			continue
+		}
+		ret += t.Info.TotalLength()
+		hadInfo++
+	}
+	if hadInfo != 0 {
+		// Treat each torrent without info as the average of those with,
+		// rounded up.
+		ret += (noInfo*ret + hadInfo - 1) / hadInfo
+	}
+	return
+}
+
+func progressLine(tc *torrent.Client) string {
+	return fmt.Sprintf("\033[K%s / %s\r", humanize.Bytes(uint64(bytesCompleted(tc))), humanize.Bytes(uint64(totalBytesEstimate(tc))))
 }
 
 func main() {
@@ -98,13 +133,26 @@ func main() {
 			t.DownloadAll()
 		}()
 	}
-	if rootGroup.Seed {
-		// We never finish, since we intend to seed indefinitely.
-		select {}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if client.WaitAll() {
+			log.Print("downloaded ALL the torrents")
+		} else {
+			log.Fatal("y u no complete torrents?!")
+		}
+	}()
+	ticker := time.NewTicker(time.Second)
+waitDone:
+	for {
+		select {
+		case <-done:
+			break waitDone
+		case <-ticker.C:
+			os.Stdout.WriteString(progressLine(client))
+		}
 	}
-	if client.WaitAll() {
-		log.Print("downloaded ALL the torrents")
-	} else {
-		log.Fatal("y u no complete torrents?!")
+	if rootGroup.Seed {
+		select {}
 	}
 }

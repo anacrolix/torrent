@@ -1998,6 +1998,14 @@ type Torrent struct {
 	*torrent
 }
 
+// Don't call this before the info is available.
+func (t *torrent) BytesCompleted() int64 {
+	if !t.haveInfo() {
+		return 0
+	}
+	return t.Info.TotalLength() - t.bytesLeft()
+}
+
 func (t Torrent) NumPieces() int {
 	return t.numPieces()
 }

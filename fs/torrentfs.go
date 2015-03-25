@@ -67,7 +67,7 @@ type fileNode struct {
 	TorrentOffset int64
 }
 
-func (fn fileNode) Attr() (attr fuse.Attr) {
+func (fn fileNode) Attr(attr *fuse.Attr) {
 	attr.Size = fn.size
 	attr.Mode = defaultMode
 	return
@@ -232,7 +232,7 @@ func (dn dirNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, e
 	return
 }
 
-func (dn dirNode) Attr() (attr fuse.Attr) {
+func (dn dirNode) Attr(attr *fuse.Attr) {
 	attr.Mode = os.ModeDir | defaultMode
 	return
 }
@@ -279,10 +279,8 @@ func (me rootNode) ReadDir(ctx context.Context) (dirents []fuse.Dirent, err erro
 	return
 }
 
-func (rootNode) Attr() fuse.Attr {
-	return fuse.Attr{
-		Mode: os.ModeDir,
-	}
+func (rootNode) Attr(attr *fuse.Attr) {
+	attr.Mode = os.ModeDir
 }
 
 // TODO(anacrolix): Why should rootNode implement this?

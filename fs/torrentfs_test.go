@@ -230,12 +230,14 @@ func TestDownloadOnDemand(t *testing.T) {
 	defer fs.Destroy()
 	root, _ := fs.Root()
 	node, _ := root.(fusefs.NodeStringLookuper).Lookup(context.Background(), "greeting")
-	size := int(node.Attr().Size)
+	var attr fuse.Attr
+	node.Attr(&attr)
+	size := attr.Size
 	resp := &fuse.ReadResponse{
 		Data: make([]byte, size),
 	}
 	node.(fusefs.HandleReader).Read(context.Background(), &fuse.ReadRequest{
-		Size: size,
+		Size: int(size),
 	}, resp)
 	content := resp.Data
 	if string(content) != testutil.GreetingFileContents {

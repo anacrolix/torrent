@@ -467,6 +467,18 @@ func (t *torrent) pieceStatusCharSequences() (ret []PieceStatusCharSequence) {
 
 func (t *torrent) writeStatus(w io.Writer) {
 	fmt.Fprintf(w, "Infohash: %x\n", t.InfoHash)
+	fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize())
+	fmt.Fprintf(w, "Metadata have: ")
+	for _, h := range t.metadataHave {
+		fmt.Fprintf(w, "%c", func() rune {
+			if h {
+				return 'H'
+			} else {
+				return '.'
+			}
+		}())
+	}
+	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Piece length: %s\n", func() string {
 		if t.haveInfo() {
 			return fmt.Sprint(t.usualPieceSize())

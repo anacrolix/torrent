@@ -1210,9 +1210,14 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 			ExtendedID: pp.HandshakeExtendedID,
 			ExtendedPayload: func() []byte {
 				d := map[string]interface{}{
-					"m": map[string]int{
-						"ut_metadata": metadataExtendedId,
-					},
+					"m": func() (ret map[string]int) {
+						ret = make(map[string]int, 2)
+						ret["ut_metadata"] = metadataExtendedId
+						if !me.config.DisablePEX {
+							ret["ut_pex"] = pexExtendedId
+						}
+						return
+					}(),
 					"v": extendedHandshakeClientVersion,
 					// No upload queue is implemented yet.
 					"reqq": func() int {
@@ -1224,9 +1229,6 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 						}
 					}(),
 					"e": 1, // Awwww yeah
-				}
-				if !me.config.DisablePEX {
-					d["ut_pex"] = pexExtendedId
 				}
 				if torrent.metadataSizeKnown() {
 					d["metadata_size"] = torrent.metadataSize()

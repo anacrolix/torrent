@@ -9,10 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/util"
 	"github.com/anacrolix/libtorgo/metainfo"
 	"github.com/go-fsnotify/fsnotify"
+
+	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/util"
 )
 
 type Change uint

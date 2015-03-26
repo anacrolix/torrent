@@ -6,11 +6,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/anacrolix/torrent/logonce"
-
-	"github.com/anacrolix/torrent/util"
 	"github.com/anacrolix/sync"
 	"github.com/willf/bloom"
+
+	"github.com/anacrolix/torrent/logonce"
+	"github.com/anacrolix/torrent/util"
 )
 
 type peerDiscovery struct {

@@ -11,14 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anacrolix/torrent/data/blob"
-
+	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 
+	"github.com/anacrolix/torrent/data/blob"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/util"
-	"github.com/anacrolix/utp"
-	"github.com/anacrolix/libtorgo/bencode"
 )
 
 func init() {

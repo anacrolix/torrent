@@ -12,8 +12,9 @@ import (
 	"sort"
 	"time"
 
-	dataPkg "github.com/anacrolix/torrent/data"
 	"github.com/anacrolix/libtorgo/metainfo"
+
+	dataPkg "github.com/anacrolix/torrent/data"
 )
 
 const (

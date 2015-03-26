@@ -5,9 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/anacrolix/torrent/mmap_span"
 	"github.com/anacrolix/libtorgo/metainfo"
 	"launchpad.net/gommap"
+
+	"github.com/anacrolix/torrent/mmap_span"
 )
 
 func TorrentData(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, err error) {

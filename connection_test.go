@@ -4,12 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bradfitz/iter"
 	. "gopkg.in/check.v1"
 
-	"github.com/bradfitz/iter"
-
 	"github.com/anacrolix/torrent/internal/pieceordering"
-
 	"github.com/anacrolix/torrent/peer_protocol"
 )
 

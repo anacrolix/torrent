@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anacrolix/libtorgo/bencode"
+
 	"github.com/anacrolix/torrent/internal/pieceordering"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )

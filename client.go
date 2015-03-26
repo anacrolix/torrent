@@ -38,24 +38,23 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bradfitz/iter"
-
-	"github.com/anacrolix/torrent/mse"
-
 	"github.com/anacrolix/libtorgo/bencode"
 	"github.com/anacrolix/libtorgo/metainfo"
 	"github.com/anacrolix/sync"
+	"github.com/anacrolix/utp"
+	"github.com/bradfitz/iter"
+
 	"github.com/anacrolix/torrent/data"
 	filePkg "github.com/anacrolix/torrent/data/file"
 	"github.com/anacrolix/torrent/dht"
 	"github.com/anacrolix/torrent/internal/pieceordering"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/logonce"
+	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/tracker"
 	_ "github.com/anacrolix/torrent/tracker/udp"
 	. "github.com/anacrolix/torrent/util"
-	"github.com/anacrolix/utp"
 )
 
 var (

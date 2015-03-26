@@ -17,9 +17,9 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/anacrolix/torrent/util"
-
 	"github.com/bradfitz/iter"
+
+	"github.com/anacrolix/torrent/util"
 )
 
 const (

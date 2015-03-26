@@ -14,11 +14,12 @@ import (
 	"os"
 	"time"
 
+	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/sync"
+
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/logonce"
 	"github.com/anacrolix/torrent/util"
-	"github.com/anacrolix/sync"
-	"github.com/anacrolix/libtorgo/bencode"
 )
 
 const (

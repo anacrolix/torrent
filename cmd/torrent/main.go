@@ -10,13 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dustin/go-humanize"
-
-	"github.com/jessevdk/go-flags"
-
 	_ "github.com/anacrolix/envpprof"
-
 	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/dustin/go-humanize"
+	"github.com/jessevdk/go-flags"
 
 	"github.com/anacrolix/torrent"
 )

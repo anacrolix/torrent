@@ -13,14 +13,13 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/anacrolix/envpprof"
-
-	"github.com/anacrolix/torrent/util/dirwatch"
-
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
+	_ "github.com/anacrolix/envpprof"
+
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/fs"
+	"github.com/anacrolix/torrent/util/dirwatch"
 )
 
 var (

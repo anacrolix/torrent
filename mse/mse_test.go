@@ -7,10 +7,9 @@ import (
 	"io/ioutil"
 	"net"
 	"sync"
+	"testing"
 
 	"github.com/bradfitz/iter"
-
-	"testing"
 )
 
 func TestReadUntil(t *testing.T) {

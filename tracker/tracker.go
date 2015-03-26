@@ -28,6 +28,11 @@ type AnnounceResponse struct {
 
 type AnnounceEvent int32
 
+func (me AnnounceEvent) String() string {
+	// See BEP 3, "event".
+	return []string{"empty", "completed", "started", "stopped"}[me]
+}
+
 type Peer struct {
 	IP   net.IP
 	Port int

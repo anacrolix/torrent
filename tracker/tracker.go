@@ -6,17 +6,18 @@ import (
 	"net/url"
 )
 
+// Marshalled as binary by the UDP client, so be careful making changes.
 type AnnounceRequest struct {
 	InfoHash   [20]byte
 	PeerId     [20]byte
 	Downloaded int64
-	Left       int64
+	Left       uint64
 	Uploaded   int64
 	Event      AnnounceEvent
 	IPAddress  int32
 	Key        int32
 	NumWant    int32 // How many peer addresses are desired. -1 for default.
-	Port       int16
+	Port       uint16
 } // 82 bytes
 
 type AnnounceResponse struct {

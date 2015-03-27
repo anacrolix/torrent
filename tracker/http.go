@@ -63,7 +63,7 @@ func (me *client) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err error
 	q.Set("port", fmt.Sprintf("%d", ar.Port))
 	q.Set("uploaded", strconv.FormatInt(ar.Uploaded, 10))
 	q.Set("downloaded", strconv.FormatInt(ar.Downloaded, 10))
-	q.Set("left", strconv.FormatInt(ar.Left, 10))
+	q.Set("left", strconv.FormatUint(ar.Left, 10))
 	if ar.Event != None {
 		q.Set("event", ar.Event.String())
 	}

@@ -1,4 +1,4 @@
-package udp_tracker
+package tracker
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/util"
 )
 
 // Ensure net.IPs are stored big-endian, to match the way they're read from
@@ -29,8 +29,10 @@ func TestNetIPv4Bytes(t *testing.T) {
 }
 
 func TestMarshalAnnounceResponse(t *testing.T) {
-	w := bytes.NewBuffer(nil)
-	if err := binary.Write(w, binary.BigEndian, []Peer{{[4]byte{127, 0, 0, 1}, 2}, {[4]byte{255, 0, 0, 3}, 4}}); err != nil {
+	w := bytes.Buffer{}
+	peers := util.CompactPeers{{[4]byte{127, 0, 0, 1}, 2}, {[4]byte{255, 0, 0, 3}, 4}}
+	err := peers.WriteBinary(&w)
+	if err != nil {
 		t.Fatalf("error writing udp announce response addrs: %s", err)
 	}
 	if w.String() != "\x7f\x00\x00\x01\x00\x02\xff\x00\x00\x03\x00\x04" {
@@ -87,16 +89,16 @@ func TestUDPTracker(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
 	}
-	tr, err := tracker.New("udp://tracker.openbittorrent.com:80/announce")
+	tr, err := New("udp://tracker.openbittorrent.com:80/announce")
 	if err != nil {
 		t.Skip(err)
 	}
 	if err := tr.Connect(); err != nil {
 		t.Skip(err)
 	}
-	req := tracker.AnnounceRequest{
+	req := AnnounceRequest{
 		NumWant: -1,
-		Event:   tracker.Started,
+		Event:   Started,
 	}
 	rand.Read(req.PeerId[:])
 	copy(req.InfoHash[:], []uint8{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1})
@@ -111,8 +113,8 @@ func TestAnnounceRandomInfoHash(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
 	}
-	req := tracker.AnnounceRequest{
-		Event: tracker.Stopped,
+	req := AnnounceRequest{
+		Event: Stopped,
 	}
 	rand.Read(req.PeerId[:])
 	rand.Read(req.InfoHash[:])
@@ -126,7 +128,7 @@ func TestAnnounceRandomInfoHash(t *testing.T) {
 	} {
 		go func(url string) {
 			defer wg.Done()
-			tr, err := tracker.New(url)
+			tr, err := New(url)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -165,7 +167,7 @@ func TestURLPathOption(t *testing.T) {
 			t.Fatal(err)
 		}
 		log.Print("connected")
-		_, err = cl.Announce(&tracker.AnnounceRequest{})
+		_, err = cl.Announce(&AnnounceRequest{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -184,7 +186,7 @@ func TestURLPathOption(t *testing.T) {
 	n, _, _ := conn.ReadFrom(b[:])
 	r = bytes.NewReader(b[:n])
 	read(r, &h)
-	read(r, &tracker.AnnounceRequest{})
+	read(r, &AnnounceRequest{})
 	all, _ := ioutil.ReadAll(r)
 	if string(all) != "\x02\x09/announce" {
 		t.FailNow()

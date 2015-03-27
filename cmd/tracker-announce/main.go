@@ -9,8 +9,6 @@ import (
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/tracker"
-	_ "github.com/anacrolix/torrent/tracker/http"
-	_ "github.com/anacrolix/torrent/tracker/udp"
 )
 
 func argSpec(arg string) (ts *torrent.TorrentSpec, err error) {

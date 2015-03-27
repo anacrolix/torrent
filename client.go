@@ -53,7 +53,6 @@ import (
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/tracker"
-	_ "github.com/anacrolix/torrent/tracker/udp"
 	. "github.com/anacrolix/torrent/util"
 )
 

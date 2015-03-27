@@ -1,4 +1,4 @@
-package http
+package tracker
 
 import (
 	"bytes"
@@ -11,22 +11,20 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/anacrolix/torrent/util"
-
 	"github.com/anacrolix/libtorgo/bencode"
 
-	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/util"
 )
 
 func init() {
-	tracker.RegisterClientScheme("http", NewClient)
+	RegisterClientScheme("http", NewClient)
 }
 
 type client struct {
 	url url.URL
 }
 
-func NewClient(url *url.URL) tracker.Client {
+func NewClient(url *url.URL) Client {
 	return &client{
 		url: *url,
 	}
@@ -41,7 +39,7 @@ type response struct {
 	Peers         interface{} `bencode:"peers"`
 }
 
-func (r *response) UnmarshalPeers() (ret []tracker.Peer, err error) {
+func (r *response) UnmarshalPeers() (ret []Peer, err error) {
 	s, ok := r.Peers.(string)
 	if !ok {
 		err = fmt.Errorf("unsupported peers value type: %T", r.Peers)
@@ -52,14 +50,14 @@ func (r *response) UnmarshalPeers() (ret []tracker.Peer, err error) {
 	if err != nil {
 		return
 	}
-	ret = make([]tracker.Peer, 0, len(cp))
+	ret = make([]Peer, 0, len(cp))
 	for _, p := range cp {
-		ret = append(ret, tracker.Peer{net.IP(p.IP[:]), int(p.Port)})
+		ret = append(ret, Peer{net.IP(p.IP[:]), int(p.Port)})
 	}
 	return
 }
 
-func (me *client) Announce(ar *tracker.AnnounceRequest) (ret tracker.AnnounceResponse, err error) {
+func (me *client) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err error) {
 	q := make(url.Values)
 	q.Set("info_hash", string(ar.InfoHash[:]))
 	q.Set("peer_id", string(ar.PeerId[:]))
@@ -67,7 +65,7 @@ func (me *client) Announce(ar *tracker.AnnounceRequest) (ret tracker.AnnounceRes
 	q.Set("uploaded", strconv.FormatInt(ar.Uploaded, 10))
 	q.Set("downloaded", strconv.FormatInt(ar.Downloaded, 10))
 	q.Set("left", strconv.FormatInt(ar.Left, 10))
-	if ar.Event != tracker.None {
+	if ar.Event != None {
 		q.Set("event", ar.Event.String())
 	}
 	// http://stackoverflow.com/questions/17418004/why-does-tracker-server-not-understand-my-request-bittorrent-protocol

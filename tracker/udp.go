@@ -1,4 +1,4 @@
-package udp_tracker
+package tracker
 
 import (
 	"bytes"
@@ -10,8 +10,6 @@ import (
 	"net"
 	"net/url"
 	"time"
-
-	"github.com/anacrolix/torrent/tracker"
 )
 
 type Action int32
@@ -55,18 +53,13 @@ type AnnounceResponseHeader struct {
 	Seeders  int32
 }
 
-type Peer struct {
-	IP   [4]byte
-	Port uint16
-}
-
 func init() {
-	tracker.RegisterClientScheme("udp", newClient)
+	RegisterClientScheme("udp", newClient)
 }
 
-func newClient(url *url.URL) tracker.Client {
-	return &client{
-		url: url,
+func newClient(url *url.URL) Client {
+	return &udpClient{
+		url: *url,
 	}
 }
 
@@ -85,25 +78,25 @@ func timeout(contiguousTimeouts int) (d time.Duration) {
 	return
 }
 
-type client struct {
+type udpClient struct {
 	contiguousTimeouts   int
 	connectionIdReceived time.Time
 	connectionId         int64
 	socket               net.Conn
-	url                  *url.URL
+	url                  url.URL
 }
 
-func (c *client) URL() string {
+func (c *udpClient) URL() string {
 	return c.url.String()
 }
 
-func (c *client) String() string {
+func (c *udpClient) String() string {
 	return c.URL()
 }
 
-func (c *client) Announce(req *tracker.AnnounceRequest) (res tracker.AnnounceResponse, err error) {
+func (c *udpClient) Announce(req *AnnounceRequest) (res AnnounceResponse, err error) {
 	if !c.connected() {
-		err = tracker.ErrNotConnected
+		err = ErrNotConnected
 		return
 	}
 	reqURI := c.url.RequestURI()
@@ -137,7 +130,7 @@ func (c *client) Announce(req *tracker.AnnounceRequest) (res tracker.AnnounceRes
 		default:
 			return
 		}
-		res.Peers = append(res.Peers, tracker.Peer{
+		res.Peers = append(res.Peers, Peer{
 			IP:   p.IP[:],
 			Port: int(p.Port),
 		})
@@ -146,7 +139,7 @@ func (c *client) Announce(req *tracker.AnnounceRequest) (res tracker.AnnounceRes
 
 // body is the binary serializable request body. trailer is optional data
 // following it, such as for BEP 41.
-func (c *client) write(h *RequestHeader, body interface{}, trailer []byte) (err error) {
+func (c *udpClient) write(h *RequestHeader, body interface{}, trailer []byte) (err error) {
 	buf := &bytes.Buffer{}
 	err = binary.Write(buf, binary.BigEndian, h)
 	if err != nil {
@@ -182,7 +175,7 @@ func write(w io.Writer, data interface{}) error {
 
 // args is the binary serializable request body. trailer is optional data
 // following it, such as for BEP 41.
-func (c *client) request(action Action, args interface{}, options []byte) (responseBody *bytes.Reader, err error) {
+func (c *udpClient) request(action Action, args interface{}, options []byte) (responseBody *bytes.Reader, err error) {
 	tid := newTransactionId()
 	err = c.write(&RequestHeader{
 		ConnectionId:  c.connectionId,
@@ -238,11 +231,11 @@ func readBody(r *bytes.Reader, data ...interface{}) (err error) {
 	return
 }
 
-func (c *client) connected() bool {
+func (c *udpClient) connected() bool {
 	return !c.connectionIdReceived.IsZero() && time.Now().Before(c.connectionIdReceived.Add(time.Minute))
 }
 
-func (c *client) Connect() (err error) {
+func (c *udpClient) Connect() (err error) {
 	if c.connected() {
 		return nil
 	}

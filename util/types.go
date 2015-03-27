@@ -5,6 +5,7 @@ import (
 	"encoding"
 	"encoding/binary"
 	"fmt"
+	"io"
 
 	"github.com/anacrolix/libtorgo/bencode"
 )
@@ -31,6 +32,10 @@ func (me *CompactPeers) UnmarshalBinary(b []byte) (err error) {
 		*me = append(*me, p)
 	}
 	return
+}
+
+func (me CompactPeers) WriteBinary(w io.Writer) error {
+	return binary.Write(w, binary.BigEndian, me)
 }
 
 type CompactPeer struct {

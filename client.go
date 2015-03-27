@@ -237,6 +237,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		fmt.Fprintf(w, "DHT announces: %d\n", cl.dHT.NumConfirmedAnnounces)
 		fmt.Fprintf(w, "Outstanding transactions: %d\n", dhtStats.NumOutstandingTransactions)
 	}
+	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.torrents))
 	fmt.Fprintln(w)
 	for _, t := range cl.sortedTorrents() {
 		if t.Name() == "" {

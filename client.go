@@ -1329,27 +1329,19 @@ func (cl *Client) requestPendingMetadata(t *torrent, c *connection) {
 	if t.haveInfo() {
 		return
 	}
+	if c.PeerExtensionIDs["ut_metadata"] == 0 {
+		// Peer doesn't support this.
+		return
+	}
+	// Request metadata pieces that we don't have in a random order.
 	var pending []int
 	for index := 0; index < t.metadataPieceCount(); index++ {
-		if !t.haveMetadataPiece(index) {
+		if !t.haveMetadataPiece(index) && !c.requestedMetadataPiece(index) {
 			pending = append(pending, index)
 		}
 	}
 	for _, i := range mathRand.Perm(len(pending)) {
-		c.Post(pp.Message{
-			Type:       pp.Extended,
-			ExtendedID: byte(c.PeerExtensionIDs["ut_metadata"]),
-			ExtendedPayload: func() []byte {
-				b, err := bencode.Marshal(map[string]int{
-					"msg_type": 0,
-					"piece":    pending[i],
-				})
-				if err != nil {
-					panic(err)
-				}
-				return b
-			}(),
-		})
+		c.requestMetadataPiece(pending[i])
 	}
 }
 
@@ -1405,6 +1397,11 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 			log.Printf("got bad metadata piece")
 			break
 		}
+		if !c.requestedMetadataPiece(piece) {
+			log.Printf("got unexpected metadata piece %d", piece)
+			break
+		}
+		c.metadataRequests[piece] = false
 		t.saveMetadataPiece(piece, payload[begin:])
 		c.UsefulChunksReceived++
 		c.lastUsefulChunkReceived = time.Now()
@@ -1600,7 +1597,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 					break
 				}
 				if c.PeerExtensionIDs == nil {
-					c.PeerExtensionIDs = make(map[string]int64, len(mTyped))
+					c.PeerExtensionIDs = make(map[string]byte, len(mTyped))
 				}
 				for name, v := range mTyped {
 					id, ok := v.(int64)
@@ -1614,7 +1611,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 						if c.PeerExtensionIDs[name] == 0 {
 							supportedExtensionMessages.Add(name, 1)
 						}
-						c.PeerExtensionIDs[name] = id
+						c.PeerExtensionIDs[name] = byte(id)
 					}
 				}
 				metadata_sizeUntyped, ok := d["metadata_size"]
@@ -1623,7 +1620,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 					if !ok {
 						log.Printf("bad metadata_size type: %T", metadata_sizeUntyped)
 					} else {
-						t.setMetadataSize(metadata_size)
+						t.setMetadataSize(metadata_size, me)
 					}
 				}
 				if _, ok := c.PeerExtensionIDs["ut_metadata"]; ok {

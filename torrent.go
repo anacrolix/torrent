@@ -342,15 +342,24 @@ func (t *torrent) haveAllMetadataPieces() bool {
 	return true
 }
 
-func (t *torrent) setMetadataSize(bytes int64) {
-	if t.MetaData != nil {
+func (t *torrent) setMetadataSize(bytes int64, cl *Client) {
+	if t.haveInfo() {
+		// We already know the correct metadata size.
 		return
 	}
 	if bytes <= 0 || bytes > 10000000 { // 10MB, pulled from my ass.
+		log.Printf("received bad metadata size: %d", bytes)
+		return
+	}
+	if t.MetaData != nil && len(t.MetaData) == int(bytes) {
 		return
 	}
 	t.MetaData = make([]byte, bytes)
 	t.metadataHave = make([]bool, (bytes+(1<<14)-1)/(1<<14))
+	for _, c := range t.Conns {
+		cl.requestPendingMetadata(t, c)
+	}
+
 }
 
 // The current working name for the torrent. Either the name in the info dict,

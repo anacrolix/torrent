@@ -57,6 +57,9 @@ type connection struct {
 	Choked           bool
 	Requests         map[request]struct{}
 	requestsLowWater int
+	// Indexed by metadata piece, set to true if posted and pending a
+	// response.
+	metadataRequests []bool
 
 	// Stuff controlled by the remote peer.
 	PeerID             [20]byte
@@ -70,7 +73,7 @@ type connection struct {
 	peerHasAll bool
 
 	PeerMaxRequests  int // Maximum pending requests the peer allows.
-	PeerExtensionIDs map[string]int64
+	PeerExtensionIDs map[string]byte
 	PeerClientName   string
 }
 
@@ -272,6 +275,38 @@ func (c *connection) Post(msg pp.Message) {
 func (c *connection) RequestPending(r request) bool {
 	_, ok := c.Requests[r]
 	return ok
+}
+
+func (c *connection) requestMetadataPiece(index int) {
+	eID := c.PeerExtensionIDs["ut_metadata"]
+	if eID == 0 {
+		return
+	}
+	if index < len(c.metadataRequests) && c.metadataRequests[index] {
+		return
+	}
+	c.Post(pp.Message{
+		Type:       pp.Extended,
+		ExtendedID: eID,
+		ExtendedPayload: func() []byte {
+			b, err := bencode.Marshal(map[string]int{
+				"msg_type": pp.RequestMetadataExtensionMsgType,
+				"piece":    index,
+			})
+			if err != nil {
+				panic(err)
+			}
+			return b
+		}(),
+	})
+	for index >= len(c.metadataRequests) {
+		c.metadataRequests = append(c.metadataRequests, false)
+	}
+	c.metadataRequests[index] = true
+}
+
+func (c *connection) requestedMetadataPiece(index int) bool {
+	return index < len(c.metadataRequests) && c.metadataRequests[index]
 }
 
 // Returns true if more requests can be sent.

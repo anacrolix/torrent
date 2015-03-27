@@ -45,14 +45,21 @@ func (me *IPList) Lookup(ip net.IP) (r *Range) {
 	// TODO: Perhaps all addresses should be converted to IPv6, if the future
 	// of IP is to always be backwards compatible. But this will cost 4x the
 	// memory for IPv4 addresses?
-	if v4 := ip.To4(); v4 != nil {
+	v4 := ip.To4()
+	if v4 != nil {
 		r = me.lookup(v4)
 		if r != nil {
 			return
 		}
 	}
-	if v6 := ip.To16(); v6 != nil {
+	v6 := ip.To16()
+	if v6 != nil {
 		return me.lookup(v6)
+	}
+	if v4 == nil && v6 == nil {
+		return &Range{
+			Description: fmt.Sprintf("unsupported IP: %s", ip),
+		}
 	}
 	return nil
 }

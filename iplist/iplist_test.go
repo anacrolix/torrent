@@ -73,6 +73,22 @@ func connRemoteAddrIP(network, laddr string, dialHost string) net.IP {
 	return ret
 }
 
+func TestBadIP(t *testing.T) {
+	iplist := New(nil)
+	if iplist.Lookup(net.IP(make([]byte, 4))) != nil {
+		t.FailNow()
+	}
+	if iplist.Lookup(net.IP(make([]byte, 16))) != nil {
+		t.FailNow()
+	}
+	if iplist.Lookup(nil) == nil {
+		t.FailNow()
+	}
+	if iplist.Lookup(net.IP(make([]byte, 5))) == nil {
+		t.FailNow()
+	}
+}
+
 func TestSimple(t *testing.T) {
 	ranges, err := sampleRanges(t)
 	if err != nil {
@@ -90,14 +106,16 @@ func TestSimple(t *testing.T) {
 		{"1.2.3.255", false, ""},
 		{"1.2.8.0", true, "b"},
 		{"1.2.4.255", true, "a"},
-		// Try to roll over to the next octet on the parse.
-		{"1.2.7.256", false, ""},
+		// Try to roll over to the next octet on the parse. Note the final
+		// octet is overbounds. In the next case.
+		{"1.2.7.256", true, "unsupported IP: <nil>"},
 		{"1.2.8.254", true, "b"},
 	} {
-		r := iplist.Lookup(net.ParseIP(_case.IP))
+		ip := net.ParseIP(_case.IP)
+		r := iplist.Lookup(ip)
 		if !_case.Hit {
 			if r != nil {
-				t.Fatalf("got hit when none was expected")
+				t.Fatalf("got hit when none was expected: %s", ip)
 			}
 			continue
 		}

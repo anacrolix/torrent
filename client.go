@@ -2258,59 +2258,69 @@ func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
 	return
 }
 
+// Add or merge a torrent spec. If the torrent is already present, the
+// trackers will be merged with the existing ones. If the Info isn't yet
+// known, it will be set. The display name is replaced if the new spec
+// provides one. Returns new if the torrent wasn't already in the client.
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err error) {
 	T.cl = cl
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 
 	t, ok := cl.torrents[spec.InfoHash]
-	if ok {
-		T.torrent = t
-		return
-	}
+	if !ok {
+		new = true
 
-	new = true
+		if _, ok := cl.bannedTorrents[spec.InfoHash]; ok {
+			err = errors.New("banned torrent")
+			return
+		}
 
-	if _, ok := cl.bannedTorrents[spec.InfoHash]; ok {
-		err = errors.New("banned torrent")
-		return
-	}
-
-	t, err = newTorrent(spec.InfoHash)
-	if err != nil {
-		return
+		t, err = newTorrent(spec.InfoHash)
+		if err != nil {
+			return
+		}
 	}
 	if spec.DisplayName != "" {
 		t.DisplayName = spec.DisplayName
 	}
-	if spec.Info != nil {
-		err = cl.setMetaData(t, &spec.Info.Info, spec.Info.Bytes)
-	} else {
-		var mi *metainfo.MetaInfo
-		mi, err = cl.torrentCacheMetaInfo(spec.InfoHash)
-		if err != nil {
-			log.Printf("error getting cached metainfo: %s", err)
-		} else if mi != nil {
-			t.addTrackers(mi.AnnounceList)
-			err = cl.setMetaData(t, &mi.Info.Info, mi.Info.Bytes)
+	// Try to merge in info we have on the torrent. Any err left will
+	// terminate the function.
+	if t.Info == nil {
+		if spec.Info != nil {
+			err = cl.setMetaData(t, &spec.Info.Info, spec.Info.Bytes)
+		} else {
+			var mi *metainfo.MetaInfo
+			mi, err = cl.torrentCacheMetaInfo(spec.InfoHash)
+			if err != nil {
+				log.Printf("error getting cached metainfo: %s", err)
+				err = nil
+			} else if mi != nil {
+				t.addTrackers(mi.AnnounceList)
+				err = cl.setMetaData(t, &mi.Info.Info, mi.Info.Bytes)
+			}
 		}
 	}
 	if err != nil {
 		return
 	}
+	t.addTrackers(spec.Trackers)
 
 	cl.torrents[spec.InfoHash] = t
 	T.torrent = t
 
-	T.torrent.pruneTimer = time.AfterFunc(0, func() {
-		cl.pruneConnectionsUnlocked(T.torrent)
-	})
-	t.addTrackers(spec.Trackers)
-	if !cl.disableTrackers {
-		go cl.announceTorrentTrackers(T.torrent)
-	}
-	if cl.dHT != nil {
-		go cl.announceTorrentDHT(T.torrent, true)
+	// From this point onwards, we can consider the torrent a part of the
+	// client.
+	if new {
+		t.pruneTimer = time.AfterFunc(0, func() {
+			cl.pruneConnectionsUnlocked(T.torrent)
+		})
+		if !cl.disableTrackers {
+			go cl.announceTorrentTrackers(T.torrent)
+		}
+		if cl.dHT != nil {
+			go cl.announceTorrentDHT(T.torrent, true)
+		}
 	}
 	return
 }

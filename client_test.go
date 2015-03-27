@@ -14,6 +14,7 @@ import (
 	"github.com/anacrolix/libtorgo/bencode"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
+	"gopkg.in/check.v1"
 
 	"github.com/anacrolix/torrent/data/blob"
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -298,4 +299,21 @@ func TestReadaheadPieces(t *testing.T) {
 			t.Fatalf("case failed: %v", case_)
 		}
 	}
+}
+
+func (suite) TestMergingTrackersByAddingSpecs(c *check.C) {
+	cl, _ := NewClient(&TestingConfig)
+	defer cl.Close()
+	spec := TorrentSpec{}
+	T, new, _ := cl.AddTorrentSpec(&spec)
+	if !new {
+		c.FailNow()
+	}
+	spec.Trackers = [][]string{{"http://a"}, {"udp://b"}}
+	_, new, _ = cl.AddTorrentSpec(&spec)
+	if new {
+		c.FailNow()
+	}
+	c.Assert(T.Trackers[0][0].URL(), check.Equals, "http://a")
+	c.Assert(T.Trackers[1][0].URL(), check.Equals, "udp://b")
 }

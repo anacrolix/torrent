@@ -1104,11 +1104,11 @@ func (me *Client) initiateHandshakes(c *connection, t *torrent) (ok bool, err er
 	return
 }
 
+// Do encryption and bittorrent handshakes as receiver.
 func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	cl.mu.Lock()
 	skeys := cl.receiveSkeys()
 	cl.mu.Unlock()
-	// TODO: Filter unmatching skey errors.
 	c.rw, c.encrypted, err = maybeReceiveEncryptedHandshake(c.rw, skeys)
 	if err != nil {
 		if err == mse.ErrNoSecretKeyMatch {
@@ -1162,8 +1162,7 @@ func (cl *Client) runReceivedConn(c *connection) (err error) {
 	}
 	t, err := cl.receiveHandshakes(c)
 	if err != nil {
-		logonce.Stderr.Printf("error receiving handshakes: %s", err)
-		err = nil
+		err = fmt.Errorf("error receiving handshakes: %s", err)
 		return
 	}
 	if t == nil {

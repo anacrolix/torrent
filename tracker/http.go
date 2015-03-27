@@ -69,6 +69,8 @@ func (me *client) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err error
 	}
 	// http://stackoverflow.com/questions/17418004/why-does-tracker-server-not-understand-my-request-bittorrent-protocol
 	q.Set("compact", "1")
+	// According to https://wiki.vuze.com/w/Message_Stream_Encryption.
+	q.Set("supportcrypto", "1")
 	var reqURL url.URL = me.url
 	reqURL.RawQuery = q.Encode()
 	resp, err := http.Get(reqURL.String())

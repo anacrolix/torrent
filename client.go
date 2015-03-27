@@ -2250,8 +2250,9 @@ func TorrentSpecFromMagnetURI(uri string) (spec *TorrentSpec, err error) {
 
 func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
 	spec = &TorrentSpec{
-		Trackers: mi.AnnounceList,
-		Info:     &mi.Info,
+		Trackers:    mi.AnnounceList,
+		Info:        &mi.Info,
+		DisplayName: mi.Info.Name,
 	}
 	CopyExact(&spec.InfoHash, &mi.Info.Hash)
 	return

@@ -2541,6 +2541,7 @@ newAnnounce:
 				err := cl.announceTorrentSingleTracker(tr, &req, t)
 				if err != nil {
 					logonce.Stderr.Printf("%s: error announcing to %s: %s", t, tr, err)
+					continue
 				}
 				// Float the successful announce to the top of the tier. If
 				// the trackers list has been changed, we'll be modifying an

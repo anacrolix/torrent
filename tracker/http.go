@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -79,10 +78,14 @@ func (me *client) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err error
 	defer resp.Body.Close()
 	buf := bytes.Buffer{}
 	io.Copy(&buf, resp.Body)
-	log.Printf("%q", buf.Bytes())
+	if resp.StatusCode != 200 {
+		err = fmt.Errorf("response from tracker: %s: %s", resp.Status, buf.String())
+		return
+	}
 	var trackerResponse response
-	err = bencode.NewDecoder(&buf).Decode(&trackerResponse)
+	err = bencode.Unmarshal(buf.Bytes(), &trackerResponse)
 	if err != nil {
+		err = fmt.Errorf("error decoding %q: %s", buf.Bytes(), err)
 		return
 	}
 	if trackerResponse.FailureReason != "" {

@@ -95,7 +95,7 @@ func (me *peerDiscovery) gotNodeAddr(addr dHTAddr) {
 	if me.triedAddrs.Test([]byte(addr.String())) {
 		return
 	}
-	if me.server.ipBlocked(util.AddrIP(addr)) {
+	if me.server.ipBlocked(addr.UDPAddr().IP) {
 		return
 	}
 	me.contact(addr)

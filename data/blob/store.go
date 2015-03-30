@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/anacrolix/libtorgo/metainfo"
@@ -23,8 +24,10 @@ const (
 )
 
 type store struct {
-	baseDir   string
-	capacity  int64
+	baseDir  string
+	capacity int64
+
+	mu        sync.Mutex
 	completed map[[20]byte]struct{}
 }
 
@@ -41,7 +44,7 @@ func Capacity(bytes int64) StoreOption {
 }
 
 func NewStore(baseDir string, opt ...StoreOption) dataPkg.Store {
-	s := &store{baseDir, -1, nil}
+	s := &store{baseDir, -1, sync.Mutex{}, nil}
 	for _, o := range opt {
 		o(s)
 	}
@@ -118,6 +121,8 @@ func (me *store) pieceWrite(p metainfo.Piece) (f *os.File) {
 }
 
 func (me *store) pieceRead(p metainfo.Piece) (f *os.File) {
+	me.mu.Lock()
+	defer me.mu.Unlock()
 	f, err := os.Open(me.path(p, true))
 	if err == nil {
 		return

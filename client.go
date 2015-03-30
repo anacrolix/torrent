@@ -773,7 +773,10 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 }
 
 func (me *Client) dialTimeout(t *torrent) time.Duration {
-	return reducedDialTimeout(nominalDialTimeout, me.halfOpenLimit, len(t.Peers))
+	me.mu.Lock()
+	pendingPeers := len(t.Peers)
+	me.mu.Unlock()
+	return reducedDialTimeout(nominalDialTimeout, me.halfOpenLimit, pendingPeers)
 }
 
 func (me *Client) dialTCP(addr string, t *torrent) (c net.Conn, err error) {

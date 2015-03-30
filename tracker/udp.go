@@ -10,6 +10,8 @@ import (
 	"net"
 	"net/url"
 	"time"
+
+	"github.com/anacrolix/torrent/util"
 )
 
 type Action int32
@@ -120,7 +122,7 @@ func (c *udpClient) Announce(req *AnnounceRequest) (res AnnounceResponse, err er
 	res.Leechers = h.Leechers
 	res.Seeders = h.Seeders
 	for {
-		var p Peer
+		var p util.CompactPeer
 		err = binary.Read(b, binary.BigEndian, &p)
 		switch err {
 		case nil:

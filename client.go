@@ -1906,11 +1906,6 @@ func (cl *Client) setMetaData(t *torrent, md *metainfo.Info, bytes []byte) (err 
 		}
 	}
 	cl.event.Broadcast()
-	if strings.Contains(strings.ToLower(md.Name), "porn") {
-		cl.dropTorrent(t.InfoHash)
-		err = errors.New("no porn plx")
-		return
-	}
 	close(t.gotMetainfo)
 	td := cl.torrentDataOpener(md)
 	err = cl.setStorage(t, td)

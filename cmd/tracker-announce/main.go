@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"math"
 	"strings"
 
 	"github.com/anacrolix/libtorgo/metainfo"
@@ -27,8 +28,7 @@ func main() {
 	flag.Parse()
 	ar := tracker.AnnounceRequest{
 		NumWant: -1,
-		// Go won't let me do uint64(-1), I'm sorry.
-		Left: 0xffffffffffffffff,
+		Left:    math.MaxUint64,
 	}
 	for _, arg := range flag.Args() {
 		ts, err := argSpec(arg)

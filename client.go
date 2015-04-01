@@ -623,13 +623,13 @@ func (cl *Client) ipBlockRange(ip net.IP) (r *iplist.Range) {
 	if cl.ipBlockList == nil {
 		return
 	}
-	ip = ip.To4()
-	if ip == nil {
-		log.Printf("saw non-IPv4 address")
+	ip4 := ip.To4()
+	if ip4 == nil {
+		log.Printf("blocking non-IPv4 address: %s", ip)
 		r = &ipv6BlockRange
 		return
 	}
-	r = cl.ipBlockList.Lookup(ip)
+	r = cl.ipBlockList.Lookup(ip4)
 	return
 }
 

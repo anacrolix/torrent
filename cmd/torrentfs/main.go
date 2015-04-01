@@ -99,13 +99,13 @@ func main() {
 	client, err := torrent.NewClient(&torrent.Config{
 		DataDir:         *downloadDir,
 		DisableTrackers: *disableTrackers,
-		// DownloadStrategy: torrent.NewResponsiveDownloadStrategy(*readaheadBytes),
-		ListenAddr: *listenAddr,
-		NoUpload:   true, // Ensure that uploads are responsive.
+		ListenAddr:      *listenAddr,
+		NoUpload:        true, // Ensure that downloads are responsive.
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
+	// This is naturally exported via GOPPROF=http.
 	http.DefaultServeMux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})
@@ -129,13 +129,11 @@ func main() {
 					}
 				}
 			case dirwatch.Removed:
-				for _, t := range client.Torrents() {
-					if t.InfoHash != ev.InfoHash {
-						continue
-					}
-					t.Drop()
+				T, ok := client.Torrent(ev.InfoHash)
+				if !ok {
 					break
 				}
+				T.Drop()
 			}
 		}
 	}()

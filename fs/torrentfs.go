@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
@@ -127,17 +126,9 @@ func readFull(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int64, 
 
 func (fn fileNode) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadResponse) error {
 	torrentfsReadRequests.Add(1)
-	started := time.Now()
 	if req.Dir {
 		panic("read on directory")
 	}
-	defer func() {
-		ms := time.Now().Sub(started).Nanoseconds() / 1000000
-		if ms < 20 {
-			return
-		}
-		log.Printf("torrentfs read took %dms", ms)
-	}()
 	size := req.Size
 	fileLeft := int64(fn.size) - req.Offset
 	if fileLeft < 0 {

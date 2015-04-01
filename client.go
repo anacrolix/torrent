@@ -491,6 +491,11 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		cfg = &Config{}
 	}
 
+	defer func() {
+		if err != nil {
+			cl = nil
+		}
+	}()
 	cl = &Client{
 		noUpload:        cfg.NoUpload,
 		disableTrackers: cfg.DisableTrackers,

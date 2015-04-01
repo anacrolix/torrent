@@ -103,6 +103,9 @@ func main() {
 		ListenAddr: *listenAddr,
 		NoUpload:   true, // Ensure that uploads are responsive.
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 	http.DefaultServeMux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})

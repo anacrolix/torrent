@@ -2247,8 +2247,8 @@ func TorrentSpecFromMagnetURI(uri string) (spec *TorrentSpec, err error) {
 	spec = &TorrentSpec{
 		Trackers:    [][]string{m.Trackers},
 		DisplayName: m.DisplayName,
+		InfoHash:    m.InfoHash,
 	}
-	CopyExact(&spec.InfoHash, &m.InfoHash)
 	return
 }
 

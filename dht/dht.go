@@ -859,23 +859,6 @@ func (s *Server) Ping(node *net.UDPAddr) (*Transaction, error) {
 	return s.query(newDHTAddr(node), "ping", nil, nil)
 }
 
-// Announce a local peer. This can only be done to nodes that gave us an
-// announce token, which is received in responses during GetPeers. It's
-// recommended then that GetPeers is called before this method.
-func (s *Server) AnnouncePeer(port int, impliedPort bool, infoHash string) (err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, node := range s.closestNodes(160, nodeIDFromString(infoHash), func(n *Node) bool {
-		return n.announceToken != ""
-	}) {
-		err = s.announcePeer(node.addr, infoHash, port, node.announceToken, impliedPort)
-		if err != nil {
-			break
-		}
-	}
-	return
-}
-
 func (s *Server) announcePeer(node dHTAddr, infoHash string, port int, token string, impliedPort bool) (err error) {
 	if port == 0 && !impliedPort {
 		return errors.New("nothing to announce")

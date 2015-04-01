@@ -48,7 +48,11 @@ func (fs *TorrentFS) Init(ctx context.Context, req *fuse.InitRequest, resp *fuse
 	return nil
 }
 
-var _ fusefs.NodeForgetter = rootNode{}
+var (
+	_ fusefs.NodeForgetter      = rootNode{}
+	_ fusefs.HandleReadDirAller = rootNode{}
+	_ fusefs.HandleReadDirAller = dirNode{}
+)
 
 type rootNode struct {
 	fs *TorrentFS
@@ -260,7 +264,7 @@ func (me rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, 
 	return
 }
 
-func (me rootNode) ReadDir(ctx context.Context) (dirents []fuse.Dirent, err error) {
+func (me rootNode) ReadDirAll(ctx context.Context) (dirents []fuse.Dirent, err error) {
 	for _, t := range me.fs.Client.Torrents() {
 		if t.Info == nil {
 			continue

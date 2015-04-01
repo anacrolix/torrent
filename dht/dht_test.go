@@ -142,7 +142,7 @@ func TestPing(t *testing.T) {
 	defer srv0.Close()
 	tn, err := srv.Ping(&net.UDPAddr{
 		IP:   []byte{127, 0, 0, 1},
-		Port: srv0.LocalAddr().(*net.UDPAddr).Port,
+		Port: srv0.Addr().(*net.UDPAddr).Port,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +150,7 @@ func TestPing(t *testing.T) {
 	defer tn.Close()
 	ok := make(chan bool)
 	tn.SetResponseHandler(func(msg Msg) {
-		ok <- msg.ID() == srv0.IDString()
+		ok <- msg.ID() == srv0.ID()
 	})
 	if !<-ok {
 		t.FailNow()

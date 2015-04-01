@@ -231,11 +231,11 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	fmt.Fprintf(w, "Peer ID: %q\n", cl.peerID)
 	if cl.dHT != nil {
 		dhtStats := cl.dHT.Stats()
-		fmt.Fprintf(w, "DHT nodes: %d (%d good)\n", dhtStats.NumNodes, dhtStats.NumGoodNodes)
-		fmt.Fprintf(w, "DHT Server ID: %x\n", cl.dHT.IDString())
-		fmt.Fprintf(w, "DHT port: %d\n", addrPort(cl.dHT.LocalAddr()))
-		fmt.Fprintf(w, "DHT announces: %d\n", cl.dHT.NumConfirmedAnnounces)
-		fmt.Fprintf(w, "Outstanding transactions: %d\n", dhtStats.NumOutstandingTransactions)
+		fmt.Fprintf(w, "DHT nodes: %d (%d good)\n", dhtStats.Nodes, dhtStats.GoodNodes)
+		fmt.Fprintf(w, "DHT Server ID: %x\n", cl.dHT.ID())
+		fmt.Fprintf(w, "DHT port: %d\n", addrPort(cl.dHT.Addr()))
+		fmt.Fprintf(w, "DHT announces: %d\n", dhtStats.ConfirmedAnnounces)
+		fmt.Fprintf(w, "Outstanding transactions: %d\n", dhtStats.OutstandingTransactions)
 	}
 	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.torrents))
 	fmt.Fprintln(w)
@@ -1269,7 +1269,7 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 	if conn.PeerExtensionBytes.SupportsDHT() && me.extensionBytes.SupportsDHT() && me.dHT != nil {
 		conn.Post(pp.Message{
 			Type: pp.Port,
-			Port: uint16(AddrPort(me.dHT.LocalAddr())),
+			Port: uint16(AddrPort(me.dHT.Addr())),
 		})
 	}
 }
@@ -2407,7 +2407,7 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 	getPeers:
 		for {
 			select {
-			case v, ok := <-ps.Values:
+			case v, ok := <-ps.Peers:
 				if !ok {
 					break getPeers
 				}

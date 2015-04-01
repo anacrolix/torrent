@@ -11,11 +11,6 @@ import (
 	"github.com/anacrolix/torrent/dht"
 )
 
-type pingResponse struct {
-	addr string
-	krpc dht.Msg
-}
-
 var (
 	tableFileName = flag.String("tableFile", "", "name of file for storing node info")
 	serveAddr     = flag.String("serveAddr", ":0", "local UDP address")
@@ -71,7 +66,7 @@ func init() {
 	if err != nil {
 		log.Fatalf("error loading table: %s", err)
 	}
-	log.Printf("dht server on %s, ID is %q", s.LocalAddr(), s.IDString())
+	log.Printf("dht server on %s, ID is %q", s.Addr(), s.ID())
 	setupSignals()
 }
 

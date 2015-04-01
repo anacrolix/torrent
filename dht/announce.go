@@ -13,8 +13,14 @@ import (
 	"github.com/anacrolix/torrent/util"
 )
 
-type peerDiscovery struct {
-	*peerStream
+// Maintains state for an ongoing Announce operation. An Announce is started
+// by calling Server.Announce.
+type Announce struct {
+	mu    sync.Mutex
+	Peers chan PeersValues
+	// Inner chan is set to nil when on close.
+	values              chan PeersValues
+	stop                chan struct{}
 	triedAddrs          *bloom.BloomFilter
 	pending             int
 	server              *Server
@@ -24,13 +30,18 @@ type peerDiscovery struct {
 	announcePortImplied bool
 }
 
-func (pd *peerDiscovery) NumContacted() int {
-	pd.mu.Lock()
-	defer pd.mu.Unlock()
-	return pd.numContacted
+// Returns the number of distinct remote addresses the announce has queried.
+func (me *Announce) NumContacted() int {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	return me.numContacted
 }
 
-func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*peerDiscovery, error) {
+// This is kind of the main thing you want to do with DHT. It traverses the
+// graph toward nodes that store peers for the infohash, streaming them to the
+// caller, and announcing the local node to each node if allowed and
+// specified.
+func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*Announce, error) {
 	s.mu.Lock()
 	startAddrs := func() (ret []dHTAddr) {
 		for _, n := range s.closestGoodNodes(160, infoHash) {
@@ -48,12 +59,10 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*peerDis
 			startAddrs = append(startAddrs, newDHTAddr(addr))
 		}
 	}
-	disc := &peerDiscovery{
-		peerStream: &peerStream{
-			Values: make(chan peerStreamValue, 100),
-			stop:   make(chan struct{}),
-			values: make(chan peerStreamValue),
-		},
+	disc := &Announce{
+		Peers:               make(chan PeersValues, 100),
+		stop:                make(chan struct{}),
+		values:              make(chan PeersValues),
 		triedAddrs:          bloom.NewWithEstimates(1000, 0.5),
 		server:              s,
 		infoHash:            infoHash,
@@ -62,12 +71,12 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*peerDis
 	}
 	// Function ferries from values to Values until discovery is halted.
 	go func() {
-		defer close(disc.Values)
+		defer close(disc.Peers)
 		for {
 			select {
 			case psv := <-disc.values:
 				select {
-				case disc.Values <- psv:
+				case disc.Peers <- psv:
 				case <-disc.stop:
 					return
 				}
@@ -87,7 +96,7 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*peerDis
 	return disc, nil
 }
 
-func (me *peerDiscovery) gotNodeAddr(addr dHTAddr) {
+func (me *Announce) gotNodeAddr(addr dHTAddr) {
 	if util.AddrPort(addr) == 0 {
 		// Not a contactable address.
 		return
@@ -101,7 +110,7 @@ func (me *peerDiscovery) gotNodeAddr(addr dHTAddr) {
 	me.contact(addr)
 }
 
-func (me *peerDiscovery) contact(addr dHTAddr) {
+func (me *Announce) contact(addr dHTAddr) {
 	me.numContacted++
 	me.triedAddrs.Add([]byte(addr.String()))
 	if err := me.getPeers(addr); err != nil {
@@ -111,7 +120,7 @@ func (me *peerDiscovery) contact(addr dHTAddr) {
 	me.pending++
 }
 
-func (me *peerDiscovery) transactionClosed() {
+func (me *Announce) transactionClosed() {
 	me.pending--
 	if me.pending == 0 {
 		me.close()
@@ -119,15 +128,15 @@ func (me *peerDiscovery) transactionClosed() {
 	}
 }
 
-func (me *peerDiscovery) responseNode(node NodeInfo) {
+func (me *Announce) responseNode(node NodeInfo) {
 	me.gotNodeAddr(node.Addr)
 }
 
-func (me *peerDiscovery) closingCh() chan struct{} {
-	return me.peerStream.stop
+func (me *Announce) closingCh() chan struct{} {
+	return me.stop
 }
 
-func (me *peerDiscovery) announcePeer(to dHTAddr, token string) {
+func (me *Announce) announcePeer(to dHTAddr, token string) {
 	me.server.mu.Lock()
 	err := me.server.announcePeer(to, me.infoHash, me.announcePort, token, me.announcePortImplied)
 	me.server.mu.Unlock()
@@ -136,7 +145,7 @@ func (me *peerDiscovery) announcePeer(to dHTAddr, token string) {
 	}
 }
 
-func (me *peerDiscovery) getPeers(addr dHTAddr) error {
+func (me *Announce) getPeers(addr dHTAddr) error {
 	me.server.mu.Lock()
 	defer me.server.mu.Unlock()
 	t, err := me.server.getPeers(addr, me.infoHash)
@@ -157,11 +166,11 @@ func (me *peerDiscovery) getPeers(addr dHTAddr) error {
 			}
 			copy(nodeInfo.ID[:], m.ID())
 			select {
-			case me.peerStream.values <- peerStreamValue{
+			case me.values <- PeersValues{
 				Peers:    vs,
 				NodeInfo: nodeInfo,
 			}:
-			case <-me.peerStream.stop:
+			case <-me.stop:
 			}
 		}
 
@@ -176,28 +185,22 @@ func (me *peerDiscovery) getPeers(addr dHTAddr) error {
 	return nil
 }
 
-type peerStreamValue struct {
+// Corresponds to the "values" key in a get_peers KRPC response. A list of
+// peers that a node has reported as being in the swarm for a queried info
+// hash.
+type PeersValues struct {
 	Peers    []util.CompactPeer // Peers given in get_peers response.
 	NodeInfo                    // The node that gave the response.
 }
 
-// TODO: This was to be the shared publicly accessible part returned by DHT
-// functions that stream peers. Possibly not necessary anymore.
-type peerStream struct {
-	mu     sync.Mutex
-	Values chan peerStreamValue
-	// Inner chan is set to nil when on close.
-	values chan peerStreamValue
-	stop   chan struct{}
+// Stop the announce.
+func (me *Announce) Close() {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	me.close()
 }
 
-func (ps *peerStream) Close() {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	ps.close()
-}
-
-func (ps *peerStream) close() {
+func (ps *Announce) close() {
 	select {
 	case <-ps.stop:
 	default:

@@ -51,7 +51,7 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*Announc
 	}()
 	s.mu.Unlock()
 	if len(startAddrs) == 0 {
-		addrs, err := bootstrapAddrs()
+		addrs, err := bootstrapAddrs(s.bootstrapNodes)
 		if err != nil {
 			return nil, err
 		}

@@ -50,6 +50,7 @@ type Server struct {
 	ipBlockList      *iplist.IPList
 
 	numConfirmedAnnounces int
+	bootstrapNodes        []string
 }
 
 type dHTAddr interface {
@@ -83,6 +84,8 @@ type ServerConfig struct {
 	Conn net.PacketConn
 	// Don't respond to queries from other nodes.
 	Passive bool
+	// DHT Bootstrap nodes
+	BootstrapNodes []string
 }
 
 type ServerStats struct {
@@ -142,6 +145,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		}
 	}
 	s.passive = c.Passive
+	s.bootstrapNodes = c.BootstrapNodes
 	err = s.init()
 	if err != nil {
 		return
@@ -967,11 +971,15 @@ func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *Transaction, err er
 	return
 }
 
-func bootstrapAddrs() (addrs []*net.UDPAddr, err error) {
-	for _, addrStr := range []string{
-		"router.utorrent.com:6881",
-		"router.bittorrent.com:6881",
-	} {
+func bootstrapAddrs(nodeAddrs []string) (addrs []*net.UDPAddr, err error) {
+	bootstrapNodes := nodeAddrs
+	if len(bootstrapNodes) == 0 {
+		bootstrapNodes = []string{
+			"router.utorrent.com:6881",
+			"router.bittorrent.com:6881",
+		}
+	}
+	for _, addrStr := range bootstrapNodes {
 		udpAddr, err := net.ResolveUDPAddr("udp4", addrStr)
 		if err != nil {
 			continue
@@ -985,7 +993,7 @@ func bootstrapAddrs() (addrs []*net.UDPAddr, err error) {
 }
 
 func (s *Server) addRootNodes() error {
-	addrs, err := bootstrapAddrs()
+	addrs, err := bootstrapAddrs(s.bootstrapNodes)
 	if err != nil {
 		return err
 	}

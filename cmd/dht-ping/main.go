@@ -1,3 +1,4 @@
+// Pings DHT nodes with the given network addresses.
 package main
 
 import (

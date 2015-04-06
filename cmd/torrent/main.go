@@ -1,3 +1,4 @@
+// Downloads torrents from the command-line.
 package main
 
 import (

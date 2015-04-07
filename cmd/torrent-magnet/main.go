@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -10,6 +11,11 @@ import (
 )
 
 func main() {
+	flag.Parse()
+	if flag.NArg() != 0 {
+		fmt.Fprintf(os.Stderr, "%s\n", "torrent-magnet: unexpected positional arguments")
+		os.Exit(2)
+	}
 	mi, err := metainfo.Load(os.Stdin)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error reading metainfo from stdin: %s", err)

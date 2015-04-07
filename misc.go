@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/anacrolix/torrent/peer_protocol"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 const (
@@ -31,22 +31,22 @@ func (ih *InfoHash) HexString() string {
 	return fmt.Sprintf("%x", ih[:])
 }
 
-func lastChunkSpec(pieceLength peer_protocol.Integer) (cs chunkSpec) {
+func lastChunkSpec(pieceLength pp.Integer) (cs chunkSpec) {
 	cs.Begin = (pieceLength - 1) / chunkSize * chunkSize
 	cs.Length = pieceLength - cs.Begin
 	return
 }
 
 type chunkSpec struct {
-	Begin, Length peer_protocol.Integer
+	Begin, Length pp.Integer
 }
 
 type request struct {
-	Index peer_protocol.Integer
+	Index pp.Integer
 	chunkSpec
 }
 
-func newRequest(index, begin, length peer_protocol.Integer) request {
+func newRequest(index, begin, length pp.Integer) request {
 	return request{index, chunkSpec{begin, length}}
 }
 

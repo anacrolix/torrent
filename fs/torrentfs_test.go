@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -25,6 +26,10 @@ import (
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/util"
 )
+
+func init() {
+	log.SetFlags(log.Flags() | log.Lshortfile)
+}
 
 func TestTCPAddrString(t *testing.T) {
 	l, err := net.Listen("tcp4", "localhost:0")
@@ -238,6 +243,6 @@ func TestDownloadOnDemand(t *testing.T) {
 	}, resp)
 	content := resp.Data
 	if string(content) != testutil.GreetingFileContents {
-		t.FailNow()
+		t.Fatalf("%q != %q", string(content), testutil.GreetingFileContents)
 	}
 }

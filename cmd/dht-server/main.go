@@ -18,6 +18,11 @@ var (
 	s *dht.Server
 )
 
+func init() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	flag.Parse()
+}
+
 func loadTable() error {
 	if *tableFileName == "" {
 		return nil
@@ -50,24 +55,6 @@ func loadTable() error {
 	}
 	log.Printf("loaded %d nodes from table file", added)
 	return nil
-}
-
-func init() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	flag.Parse()
-	var err error
-	s, err = dht.NewServer(&dht.ServerConfig{
-		Addr: *serveAddr,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = loadTable()
-	if err != nil {
-		log.Fatalf("error loading table: %s", err)
-	}
-	log.Printf("dht server on %s, ID is %q", s.Addr(), s.ID())
-	setupSignals()
 }
 
 func saveTable() error {
@@ -108,7 +95,25 @@ func setupSignals() {
 }
 
 func main() {
-	select {}
+	var err error
+	s, err = dht.NewServer(&dht.ServerConfig{
+		Addr: *serveAddr,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = loadTable()
+	if err != nil {
+		log.Fatalf("error loading table: %s", err)
+	}
+
+	setupSignals()
+	log.Printf("dht server on %s, ID is %x", s.Addr(), s.ID())
+	if err := s.Serve(); err != nil {
+		log.Fatal(err)
+	}
+
 	// if err := saveTable(); err != nil {
 	// 	log.Printf("error saving node table: %s", err)
 	// }

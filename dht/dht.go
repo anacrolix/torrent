@@ -150,23 +150,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 	if err != nil {
 		return
 	}
-	go func() {
-		err := s.serve()
-		select {
-		case <-s.closed:
-			return
-		default:
-		}
-		if err != nil {
-			panic(err)
-		}
-	}()
-	go func() {
-		err := s.bootstrap()
-		if err != nil {
-			log.Printf("error bootstrapping DHT: %s", err)
-		}
-	}()
+
 	return
 }
 
@@ -563,6 +547,23 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 	// TODO: Update node ID as this is an authoritative packet.
 	go t.handleResponse(d)
 	s.deleteTransaction(t)
+}
+
+func (s *Server) Serve() error {
+	var err error
+	go func() {
+		err = s.serve()
+	}()
+
+	go func() {
+		err := s.bootstrap()
+		if err != nil {
+			log.Printf("error bootstrapping DHT: %s", err)
+		}
+	}()
+
+	<-s.closed
+	return err
 }
 
 func (s *Server) serve() error {
@@ -980,11 +981,13 @@ func bootstrapAddrs(nodeAddrs []string) (addrs []*net.UDPAddr, err error) {
 		}
 	}
 	for _, addrStr := range bootstrapNodes {
-		udpAddr, err := net.ResolveUDPAddr("udp4", addrStr)
-		if err != nil {
-			continue
+		if addrStr != "" {
+			udpAddr, err := net.ResolveUDPAddr("udp4", addrStr)
+			if err != nil {
+				continue
+			}
+			addrs = append(addrs, udpAddr)
 		}
-		addrs = append(addrs, udpAddr)
 	}
 	if len(addrs) == 0 {
 		err = errors.New("nothing resolved")

@@ -31,7 +31,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("dht server on %s", s.Addr())
+
+	go func() {
+		log.Printf("dht server on %s", s.Addr())
+		err := s.Serve()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+
 	pingResponses := make(chan pingResponse)
 	timeoutChan := make(chan struct{})
 	go func() {

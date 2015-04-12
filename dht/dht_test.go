@@ -134,12 +134,16 @@ func TestPing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	go srv.Serve()
 	defer srv.Close()
+
 	srv0, err := NewServer(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	go srv0.Serve()
 	defer srv0.Close()
+
 	tn, err := srv.Ping(&net.UDPAddr{
 		IP:   []byte{127, 0, 0, 1},
 		Port: srv0.Addr().(*net.UDPAddr).Port,

@@ -127,6 +127,12 @@ func setupSignals() {
 
 func main() {
 	seen := make(map[util.CompactPeer]struct{})
+	go func() {
+		err := s.Serve()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
 getPeers:
 	for {
 		ps, err := s.Announce(*infoHash, 0, false)

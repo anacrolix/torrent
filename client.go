@@ -588,6 +588,12 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if err != nil {
 			return
 		}
+		go func() {
+			err := cl.dHT.Serve()
+			if err != nil {
+				panic(err)
+			}
+		}()
 	}
 
 	return
@@ -614,6 +620,9 @@ func (me *Client) Close() {
 	me.event.Broadcast()
 	for _, t := range me.torrents {
 		t.close()
+	}
+	if me.dHT != nil {
+		me.dHT.Close()
 	}
 }
 

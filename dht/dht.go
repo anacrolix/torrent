@@ -550,9 +550,10 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 }
 
 func (s *Server) Serve() error {
+	errChan := make(chan error)
 	var err error
 	go func() {
-		err = s.serve()
+		errChan <- s.serve()
 	}()
 
 	go func() {
@@ -562,8 +563,14 @@ func (s *Server) Serve() error {
 		}
 	}()
 
-	<-s.closed
-	return err
+	select {
+	case <-s.closed:
+		log.Printf("Shutting down the server")
+		return nil
+	case <-errChan:
+		log.Printf("DHT server error: %s", err)
+		return err
+	}
 }
 
 func (s *Server) serve() error {
@@ -571,6 +578,7 @@ func (s *Server) serve() error {
 	for {
 		n, addr, err := s.socket.ReadFrom(b[:])
 		if err != nil {
+			log.Print(err)
 			return err
 		}
 		if n == len(b) {

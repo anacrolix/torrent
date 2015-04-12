@@ -85,7 +85,7 @@ func saveTable() error {
 	return nil
 }
 
-func setupSignals() {
+func setupSignals(s *dht.Server) {
 	ch := make(chan os.Signal)
 	signal.Notify(ch)
 	go func() {
@@ -108,7 +108,7 @@ func main() {
 		log.Fatalf("error loading table: %s", err)
 	}
 
-	setupSignals()
+	setupSignals(s)
 	log.Printf("dht server on %s, ID is %x", s.Addr(), s.ID())
 	if err := s.Serve(); err != nil {
 		log.Fatal(err)

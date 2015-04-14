@@ -106,8 +106,13 @@ func (cn *connection) pendPiece(piece int, priority piecePriority) {
 		return
 	}
 	pp := cn.piecePriorities[piece]
-	// Priority goes to Now, then Next in connection order. Then Readahead in
-	// by piece index. Then normal again by connection order.
+	// Priority regions not to scale. Within each region, piece is randomized
+	// according to connection.
+
+	// [ Now         ]
+	//  [ Next       ]
+	//   [ Readahead ]
+	//                [ Normal ]
 	key := func() int {
 		switch priority {
 		case piecePriorityNow:

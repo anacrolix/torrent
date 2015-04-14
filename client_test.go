@@ -3,7 +3,6 @@ package torrent
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -273,9 +272,11 @@ func TestClientTransfer(t *testing.T) {
 			Port: util.AddrPort(seeder.ListenAddr()),
 		},
 	})
-	_greeting, err := ioutil.ReadAll(io.NewSectionReader(leecherGreeting, 0, leecherGreeting.Length()))
+	r := leecherGreeting.NewReader()
+	defer r.Close()
+	_greeting, err := ioutil.ReadAll(r)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("%q %s", string(_greeting), err)
 	}
 	greeting := string(_greeting)
 	if greeting != testutil.GreetingFileContents {

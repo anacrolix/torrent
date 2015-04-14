@@ -3,6 +3,7 @@ package blob
 import (
 	"encoding/hex"
 	"io"
+	"log"
 
 	"github.com/anacrolix/libtorgo/metainfo"
 )
@@ -19,16 +20,36 @@ func (me *data) pieceHashHex(i int) string {
 func (me *data) Close() {}
 
 func (me *data) ReadAt(b []byte, off int64) (n int, err error) {
-	p := me.info.Piece(int(off / me.info.PieceLength))
-	f := me.store.pieceRead(p)
-	if f == nil {
-		err = io.ErrUnexpectedEOF
-		return
-	}
-	defer f.Close()
-	n, err = f.ReadAt(b, off%me.info.PieceLength)
-	if err == io.EOF {
-		err = io.ErrUnexpectedEOF
+	for len(b) != 0 {
+		if off >= me.info.TotalLength() {
+			err = io.EOF
+			break
+		}
+		p := me.info.Piece(int(off / me.info.PieceLength))
+		f := me.store.pieceRead(p)
+		if f == nil {
+			log.Println("piece not found", p)
+			err = io.ErrUnexpectedEOF
+			break
+		}
+		b1 := b
+		maxN1 := int(p.Length() - off%me.info.PieceLength)
+		if len(b1) > maxN1 {
+			b1 = b1[:maxN1]
+		}
+		var n1 int
+		n1, err = f.ReadAt(b1, off%me.info.PieceLength)
+		f.Close()
+		n += n1
+		off += int64(n1)
+		b = b[n1:]
+		if err == io.EOF {
+			err = nil
+			break
+		}
+		if err != nil {
+			break
+		}
 	}
 	return
 }

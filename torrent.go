@@ -2,12 +2,10 @@ package torrent
 
 import (
 	"container/heap"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
-	"os"
 	"sort"
 	"sync"
 	"time"
@@ -66,6 +64,9 @@ type torrent struct {
 
 	InfoHash InfoHash
 	Pieces   []*piece
+	// Chunks that are wanted before all others. This is for
+	// responsive/streaming readers that want to unblock ASAP.
+	urgent map[request]struct{}
 	// Total length of the torrent in bytes. Stored because it's not O(1) to
 	// get this from the info dict.
 	length int64
@@ -108,91 +109,6 @@ func (t *torrent) pieceComplete(piece int) bool {
 	// TODO: This is called when setting metadata, and before storage is
 	// assigned, which doesn't seem right.
 	return t.data != nil && t.data.PieceComplete(piece)
-}
-
-// A file-like handle to torrent data that implements SectionOpener. Opened
-// sections will be reused so long as Reads and ReadAt's are contiguous.
-type handle struct {
-	rc     io.ReadCloser
-	rcOff  int64
-	curOff int64
-	so     SectionOpener
-	size   int64
-	t      Torrent
-}
-
-func (h *handle) Close() error {
-	if h.rc != nil {
-		return h.rc.Close()
-	}
-	return nil
-}
-
-func (h *handle) ReadAt(b []byte, off int64) (n int, err error) {
-	return h.readAt(b, off)
-}
-
-func (h *handle) readAt(b []byte, off int64) (n int, err error) {
-	avail := h.t.prepareRead(off)
-	if int64(len(b)) > avail {
-		b = b[:avail]
-	}
-	if int64(len(b)) > h.size-off {
-		b = b[:h.size-off]
-	}
-	if h.rcOff != off && h.rc != nil {
-		h.rc.Close()
-		h.rc = nil
-	}
-	if h.rc == nil {
-		h.rc, err = h.so.OpenSection(off, h.size-off)
-		if err != nil {
-			return
-		}
-		h.rcOff = off
-	}
-	n, err = h.rc.Read(b)
-	h.rcOff += int64(n)
-	return
-}
-
-func (h *handle) Read(b []byte) (n int, err error) {
-	n, err = h.readAt(b, h.curOff)
-	h.curOff = h.rcOff
-	return
-}
-
-func (h *handle) Seek(off int64, whence int) (newOff int64, err error) {
-	switch whence {
-	case os.SEEK_SET:
-		h.curOff = off
-	case os.SEEK_CUR:
-		h.curOff += off
-	case os.SEEK_END:
-		h.curOff = h.size + off
-	default:
-		err = errors.New("bad whence")
-	}
-	newOff = h.curOff
-	return
-}
-
-// Implements Handle on top of an io.SectionReader.
-type sectionReaderHandle struct {
-	*io.SectionReader
-}
-
-func (sectionReaderHandle) Close() error { return nil }
-
-func (T Torrent) NewReadHandle() Handle {
-	if so, ok := T.data.(SectionOpener); ok {
-		return &handle{
-			so:   so,
-			size: T.Length(),
-			t:    T,
-		}
-	}
-	return sectionReaderHandle{io.NewSectionReader(T, 0, T.Length())}
 }
 
 func (t *torrent) numConnsUnchoked() (num int) {
@@ -238,7 +154,9 @@ func (t *torrent) ceaseNetworking() {
 	for _, c := range t.Conns {
 		c.Close()
 	}
-	t.pruneTimer.Stop()
+	if t.pruneTimer != nil {
+		t.pruneTimer.Stop()
+	}
 }
 
 func (t *torrent) addPeer(p Peer) {
@@ -502,6 +420,11 @@ func (t *torrent) writeStatus(w io.Writer) {
 		}
 		fmt.Fprintln(w)
 	}
+	fmt.Fprintf(w, "Urgent:")
+	for req := range t.urgent {
+		fmt.Fprintf(w, " %s", req)
+	}
+	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Trackers: ")
 	for _, tier := range t.Trackers {
 		for _, tr := range tier {
@@ -647,6 +570,7 @@ func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 
 func (t *torrent) bitfield() (bf []bool) {
 	for _, p := range t.Pieces {
+		// TODO: Check this logic.
 		bf = append(bf, p.EverHashed && len(p.PendingChunkSpecs) == 0)
 	}
 	return
@@ -732,11 +656,12 @@ func (t *torrent) havePiece(index int) bool {
 }
 
 func (t *torrent) haveChunk(r request) bool {
-	p := t.Pieces[r.Index]
-	if !p.EverHashed {
+	if !t.haveInfo() {
 		return false
 	}
-	_, ok := p.PendingChunkSpecs[r.chunkSpec]
+	piece := t.Pieces[r.Index]
+	_, ok := piece.PendingChunkSpecs[r.chunkSpec]
+	// log.Println("have chunk", r, !ok)
 	return !ok
 }
 
@@ -745,7 +670,20 @@ func (t *torrent) wantChunk(r request) bool {
 		return false
 	}
 	_, ok := t.Pieces[r.Index].PendingChunkSpecs[r.chunkSpec]
+	if ok {
+		return true
+	}
+	_, ok = t.urgent[r]
 	return ok
+}
+
+func (t *torrent) urgentChunkInPiece(piece int) bool {
+	for req := range t.urgent {
+		if int(req.Index) == piece {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *torrent) wantPiece(index int) bool {
@@ -753,8 +691,20 @@ func (t *torrent) wantPiece(index int) bool {
 		return false
 	}
 	p := t.Pieces[index]
-	// Put piece complete check last, since it's the slowest!
-	return p.Priority != piecePriorityNone && !p.QueuedForHash && !p.Hashing && !t.pieceComplete(index)
+	if p.QueuedForHash {
+		return false
+	}
+	if p.Hashing {
+		return false
+	}
+	if p.Priority == piecePriorityNone {
+		if !t.urgentChunkInPiece(index) {
+			return false
+		}
+	}
+	// Put piece complete check last, since it's the slowest as it can involve
+	// calling out into external data stores.
+	return !t.pieceComplete(index)
 }
 
 func (t *torrent) connHasWantedPieces(c *connection) bool {

@@ -91,7 +91,10 @@ func blockingRead(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int
 	)
 	readDone := make(chan struct{})
 	go func() {
-		_n, _err = t.ReadAt(p, off)
+		r := t.NewReader()
+		defer r.Close()
+		_n, _err = r.ReadAt(p, off)
+		log.Println(_n, p)
 		close(readDone)
 	}()
 	select {

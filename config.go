@@ -27,7 +27,7 @@ type Config struct {
 	// For the bittorrent protocol.
 	DisableUTP bool
 	// For the bittorrent protocol.
-	DisableTCP bool
+	DisableTCP bool `long:"disable-tcp"`
 	// Don't automatically load "$ConfigDir/blocklist".
 	NoDefaultBlocklist bool
 	// Defaults to "$HOME/.config/torrent". This is where "blocklist",

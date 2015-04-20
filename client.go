@@ -832,7 +832,7 @@ func (me *Client) establishOutgoingConn(t *torrent, addr string) (c *connection,
 	if nc == nil {
 		return
 	}
-	c, err = handshakesConnection(nc, true, utp)
+	c, err = handshakesConnection(nc, !me.config.DisableEncryption, utp)
 	if err != nil {
 		nc.Close()
 		return
@@ -1084,12 +1084,14 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	cl.mu.Lock()
 	skeys := cl.receiveSkeys()
 	cl.mu.Unlock()
-	c.rw, c.encrypted, err = maybeReceiveEncryptedHandshake(c.rw, skeys)
-	if err != nil {
-		if err == mse.ErrNoSecretKeyMatch {
-			err = nil
+	if !cl.config.DisableEncryption {
+		c.rw, c.encrypted, err = maybeReceiveEncryptedHandshake(c.rw, skeys)
+		if err != nil {
+			if err == mse.ErrNoSecretKeyMatch {
+				err = nil
+			}
+			return
 		}
-		return
 	}
 	ih, ok, err := cl.connBTHandshake(c, nil)
 	if err != nil {
@@ -1199,7 +1201,9 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 							return 1
 						}
 					}(),
-					"e": 1, // Awwww yeah
+				}
+				if !me.config.DisableEncryption {
+					d["e"] = 1
 				}
 				if torrent.metadataSizeKnown() {
 					d["metadata_size"] = torrent.metadataSize()

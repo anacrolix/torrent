@@ -39,4 +39,5 @@ type Config struct {
 	// Called to instantiate storage for each added torrent. Provided backends
 	// are in $REPO/data. If not set, the "file" implementation is used.
 	TorrentDataOpener
+	DisableEncryption bool `long:"disable-encryption"`
 }

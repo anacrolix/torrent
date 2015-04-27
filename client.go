@@ -129,22 +129,16 @@ func (cl *Client) queueFirstHash(t *torrent, piece int) {
 }
 
 type Client struct {
-	noUpload        bool
-	dataDir         string
-	halfOpenLimit   int
-	peerID          [20]byte
-	listeners       []net.Listener
-	utpSock         *utp.Socket
-	disableTrackers bool
-	dHT             *dht.Server
-	disableUTP      bool
-	disableTCP      bool
-	ipBlockList     *iplist.IPList
-	bannedTorrents  map[InfoHash]struct{}
-	_configDir      string
-	config          Config
-	pruneTimer      *time.Timer
-	extensionBytes  peerExtensionBytes
+	halfOpenLimit  int
+	peerID         [20]byte
+	listeners      []net.Listener
+	utpSock        *utp.Socket
+	dHT            *dht.Server
+	ipBlockList    *iplist.IPList
+	bannedTorrents map[InfoHash]struct{}
+	config         Config
+	pruneTimer     *time.Timer
+	extensionBytes peerExtensionBytes
 	// Set of addresses that have our client ID. This intentionally will
 	// include ourselves if we end up trying to connect to our own address
 	// through legitimate channels.
@@ -341,10 +335,10 @@ func (cl *Client) addUrgentRequests(t *torrent, off int64, n int) {
 }
 
 func (cl *Client) configDir() string {
-	if cl._configDir == "" {
+	if cl.config.ConfigDir == "" {
 		return filepath.Join(os.Getenv("HOME"), ".config/torrent")
 	}
-	return cl._configDir
+	return cl.config.ConfigDir
 }
 
 func (cl *Client) ConfigDir() string {
@@ -463,14 +457,8 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		}
 	}()
 	cl = &Client{
-		noUpload:        cfg.NoUpload,
-		disableTrackers: cfg.DisableTrackers,
-		halfOpenLimit:   socketsPerTorrent,
-		dataDir:         cfg.DataDir,
-		disableUTP:      cfg.DisableUTP,
-		disableTCP:      cfg.DisableTCP,
-		_configDir:      cfg.ConfigDir,
-		config:          *cfg,
+		halfOpenLimit: socketsPerTorrent,
+		config:        *cfg,
 		torrentDataOpener: func(md *metainfo.Info) data.Data {
 			return filePkg.TorrentData(md, cfg.DataDir)
 		},
@@ -519,7 +507,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		}
 		return cfg.ListenAddr
 	}
-	if !cl.disableTCP {
+	if !cl.config.DisableTCP {
 		var l net.Listener
 		l, err = net.Listen("tcp", listenAddr())
 		if err != nil {
@@ -528,7 +516,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		cl.listeners = append(cl.listeners, l)
 		go cl.acceptConnections(l, false)
 	}
-	if !cl.disableUTP {
+	if !cl.config.DisableUTP {
 		cl.utpSock, err = utp.NewSocket(listenAddr())
 		if err != nil {
 			return
@@ -767,17 +755,17 @@ func (me *Client) dial(addr string, t *torrent) (conn net.Conn, utp bool) {
 	// Initiate connections via TCP and UTP simultaneously. Use the first one
 	// that succeeds.
 	left := 0
-	if !me.disableUTP {
+	if !me.config.DisableUTP {
 		left++
 	}
-	if !me.disableTCP {
+	if !me.config.DisableTCP {
 		left++
 	}
 	resCh := make(chan dialResult, left)
-	if !me.disableUTP {
+	if !me.config.DisableUTP {
 		go doDial(me.dialUTP, resCh, true, addr, t)
 	}
-	if !me.disableTCP {
+	if !me.config.DisableTCP {
 		go doDial(me.dialTCP, resCh, false, addr, t)
 	}
 	var res dialResult
@@ -1194,7 +1182,7 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 					"v": extendedHandshakeClientVersion,
 					// No upload queue is implemented yet.
 					"reqq": func() int {
-						if me.noUpload {
+						if me.config.NoUpload {
 							// No need to look strange if it costs us nothing.
 							return 250
 						} else {
@@ -1467,7 +1455,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		case pp.Interested:
 			c.PeerInterested = true
 			// TODO: This should be done from a dedicated unchoking routine.
-			if me.noUpload {
+			if me.config.NoUpload {
 				break
 			}
 			c.Unchoke()
@@ -1477,7 +1465,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		case pp.Have:
 			me.peerGotPiece(t, c, int(msg.Index))
 		case pp.Request:
-			if me.noUpload {
+			if me.config.NoUpload {
 				break
 			}
 			if c.PeerRequests == nil {
@@ -1760,7 +1748,7 @@ func (t *torrent) numGoodConns() (num int) {
 }
 
 func (me *Client) wantConns(t *torrent) bool {
-	if me.noUpload && !t.needData() {
+	if me.config.NoUpload && !t.needData() {
 		return false
 	}
 	if t.numGoodConns() >= socketsPerTorrent {
@@ -1843,7 +1831,7 @@ func (cl *Client) startTorrent(t *torrent) {
 	}
 	// If the client intends to upload, it needs to know what state pieces are
 	// in.
-	if !cl.noUpload {
+	if !cl.config.NoUpload {
 		// Queue all pieces for hashing. This is done sequentially to avoid
 		// spamming goroutines.
 		for _, p := range t.Pieces {
@@ -2157,7 +2145,7 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err er
 		t.pruneTimer = time.AfterFunc(0, func() {
 			cl.pruneConnectionsUnlocked(T.torrent)
 		})
-		if !cl.disableTrackers {
+		if !cl.config.DisableTrackers {
 			go cl.announceTorrentTrackers(T.torrent)
 		}
 		if cl.dHT != nil {
@@ -2604,7 +2592,7 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 			me.replenishConnRequests(t, conn)
 		}
 	}
-	if t.haveAllPieces() && me.noUpload {
+	if t.haveAllPieces() && me.config.NoUpload {
 		t.ceaseNetworking()
 	}
 	me.event.Broadcast()

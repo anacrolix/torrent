@@ -5,7 +5,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/torrent/bencode"
 )
 
 func test_file(t *testing.T, filename string) {

@@ -1,6 +1,6 @@
 package torrent
 
-import "github.com/anacrolix/libtorgo/metainfo"
+import "github.com/anacrolix/torrent/metainfo"
 
 // Provides access to regions of torrent data that correspond to its files.
 type File struct {

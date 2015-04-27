@@ -3,7 +3,7 @@ package data
 import (
 	"io"
 
-	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 type Store interface {

@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/torrent/bencode"
 
 	"github.com/anacrolix/torrent/util"
 )

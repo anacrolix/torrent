@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/torrent/bencode"
 
 	"github.com/anacrolix/torrent"
 )

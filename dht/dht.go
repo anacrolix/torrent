@@ -19,7 +19,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/iplist"

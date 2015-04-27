@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/anacrolix/torrent/metainfo"
 	"launchpad.net/gommap"
 
 	"github.com/anacrolix/torrent/mmap_span"

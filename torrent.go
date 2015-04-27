@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anacrolix/libtorgo/bencode"
-	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/data"

@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/torrent/bencode"
 )
 
 // Information specific to a single file inside the MetaInfo structure.

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"gopkg.in/check.v1"

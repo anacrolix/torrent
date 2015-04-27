@@ -38,8 +38,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/anacrolix/libtorgo/bencode"
-	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"

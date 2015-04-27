@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 func main() {

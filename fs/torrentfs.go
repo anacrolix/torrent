@@ -10,7 +10,7 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/anacrolix/torrent/metainfo"
 	"golang.org/x/net/context"
 
 	"github.com/anacrolix/torrent"

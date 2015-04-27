@@ -12,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 const GreetingFileContents = "hello, world\n"

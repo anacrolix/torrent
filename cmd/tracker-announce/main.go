@@ -6,7 +6,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/anacrolix/torrent/metainfo"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/tracker"

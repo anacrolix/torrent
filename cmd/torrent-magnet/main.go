@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/anacrolix/torrent/metainfo"
 
 	"github.com/anacrolix/torrent"
 )

@@ -3,7 +3,7 @@ package metainfo
 import (
 	"crypto/sha1"
 	"errors"
-	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/torrent/bencode"
 	"hash"
 	"io"
 	"os"

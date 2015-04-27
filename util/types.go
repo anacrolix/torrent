@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/anacrolix/libtorgo/bencode"
+	"github.com/anacrolix/torrent/bencode"
 )
 
 type CompactPeers []CompactPeer

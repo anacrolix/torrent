@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anacrolix/libtorgo/metainfo"
+	"github.com/anacrolix/torrent/metainfo"
 
 	dataPkg "github.com/anacrolix/torrent/data"
 )

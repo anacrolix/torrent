@@ -105,10 +105,11 @@ func TestUnmountWedged(t *testing.T) {
 	fs := New(client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
 	if err != nil {
-		if strings.Contains(err.Error(), "fuse") {
-			t.Skip(err)
+		msg := fmt.Sprintf("error mounting: %s", err)
+		if strings.Contains(err.Error(), "fuse") || err.Error() == "exit status 71" {
+			t.Skip(msg)
 		}
-		t.Fatal(err)
+		t.Fatal(msg)
 	}
 	go func() {
 		server := fusefs.Server{
@@ -121,7 +122,7 @@ func TestUnmountWedged(t *testing.T) {
 	}()
 	<-fuseConn.Ready
 	if err := fuseConn.MountError; err != nil {
-		t.Fatal(err)
+		t.Fatalf("mount error: %s", err)
 	}
 	// Read the greeting file, though it will never be available. This should
 	// "wedge" FUSE, requiring the fs object to be forcibly destroyed. The

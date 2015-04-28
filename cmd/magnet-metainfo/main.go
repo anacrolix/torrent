@@ -7,9 +7,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/anacrolix/torrent/bencode"
-
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/bencode"
 )
 
 func main() {
@@ -27,7 +26,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			<-t.GotMetainfo
+			<-t.GotInfo
 			mi := t.MetaInfo()
 			t.Drop()
 			f, err := os.Create(mi.Info.Name + ".torrent")

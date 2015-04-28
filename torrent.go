@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/bradfitz/iter"
 
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/data"
+	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/util"
@@ -73,7 +73,7 @@ type torrent struct {
 
 	data StatefulData
 
-	// The info dict. Nil if we don't have it.
+	// The info dict. Nil if we don't have it (yet).
 	Info *metainfo.Info
 	// Active peer connections, running message stream loops.
 	Conns []*connection
@@ -100,7 +100,6 @@ type torrent struct {
 
 	// Closed when .Info is set.
 	gotMetainfo chan struct{}
-	GotMetainfo <-chan struct{}
 
 	pruneTimer *time.Timer
 }

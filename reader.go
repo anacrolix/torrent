@@ -89,7 +89,7 @@ func (r *Reader) readAt(b []byte, pos int64) (n int, err error) {
 	// }()
 	r.t.cl.mu.Lock()
 	defer r.t.cl.mu.Unlock()
-	maxLen := r.t.Info.TotalLength() - pos
+	maxLen := r.t.torrent.Info.TotalLength() - pos
 	if maxLen <= 0 {
 		err = io.EOF
 		return
@@ -123,7 +123,7 @@ func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {
 	case os.SEEK_CUR:
 		r.pos += off
 	case os.SEEK_END:
-		r.pos = r.t.Info.TotalLength() + off
+		r.pos = r.t.torrent.Info.TotalLength() + off
 	default:
 		err = errors.New("bad whence")
 	}

@@ -12,11 +12,11 @@ import (
 	"time"
 
 	_ "github.com/anacrolix/envpprof"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/dustin/go-humanize"
 	"github.com/jessevdk/go-flags"
 
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 // fmt.Fprintf(os.Stderr, "Usage: %s \n", os.Args[0])
@@ -49,11 +49,12 @@ func bytesCompleted(tc *torrent.Client) (ret int64) {
 func totalBytesEstimate(tc *torrent.Client) (ret int64) {
 	var noInfo, hadInfo int64
 	for _, t := range tc.Torrents() {
-		if t.Info == nil {
+		info := t.Info()
+		if info == nil {
 			noInfo++
 			continue
 		}
-		ret += t.Info.TotalLength()
+		ret += info.TotalLength()
 		hadInfo++
 	}
 	if hadInfo != 0 {
@@ -127,7 +128,7 @@ func main() {
 			log.Fatal(err)
 		}
 		go func() {
-			<-t.GotMetainfo
+			<-t.GotInfo
 			t.DownloadAll()
 		}()
 	}

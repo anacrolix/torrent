@@ -1,17 +1,3 @@
-/*
-Package torrent implements a torrent client.
-
-Simple example:
-
-	c, _ := torrent.NewClient(&torrent.Config{})
-	defer c.Close()
-	t, _ := c.AddMagnet("magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU")
-	t.DownloadAll()
-	c.WaitAll()
-	log.Print("ermahgerd, torrent downloaded")
-
-
-*/
 package torrent
 
 import (
@@ -38,18 +24,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/data"
 	filePkg "github.com/anacrolix/torrent/data/file"
 	"github.com/anacrolix/torrent/dht"
 	"github.com/anacrolix/torrent/internal/pieceordering"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/logonce"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/tracker"
@@ -657,7 +643,7 @@ func (cl *Client) Torrent(ih InfoHash) (T Torrent, ok bool) {
 	if !ok {
 		return
 	}
-	T = Torrent{cl, t}
+	T = Torrent{cl, t, t.gotMetainfo}
 	return
 }
 
@@ -1894,7 +1880,6 @@ func newTorrent(ih InfoHash) (t *torrent, err error) {
 		HalfOpen: make(map[string]struct{}),
 	}
 	t.wantPeers.L = &t.stateMu
-	t.GotMetainfo = t.gotMetainfo
 	return
 }
 
@@ -1981,7 +1966,7 @@ type Handle interface {
 // available first.
 func (t Torrent) Files() (ret []File) {
 	t.cl.mu.Lock()
-	info := t.Info
+	info := t.Info()
 	t.cl.mu.Unlock()
 	if info == nil {
 		return
@@ -2017,7 +2002,8 @@ func (t Torrent) AddPeers(pp []Peer) error {
 	return nil
 }
 
-// Marks the entire torrent for download.
+// Marks the entire torrent for download. Requires the info first, see
+// GotInfo.
 func (t Torrent) DownloadAll() {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
@@ -2626,7 +2612,7 @@ func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 func (me *Client) Torrents() (ret []Torrent) {
 	me.mu.Lock()
 	for _, t := range me.torrents {
-		ret = append(ret, Torrent{me, t})
+		ret = append(ret, Torrent{me, t, t.gotMetainfo})
 	}
 	me.mu.Unlock()
 	return

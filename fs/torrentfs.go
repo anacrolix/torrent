@@ -10,10 +10,10 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	"github.com/anacrolix/torrent/metainfo"
 	"golang.org/x/net/context"
 
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 const (
@@ -237,16 +237,17 @@ func (dn dirNode) Attr(attr *fuse.Attr) {
 
 func (me rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, err error) {
 	for _, t := range me.fs.Client.Torrents() {
-		if t.Name() != name || t.Info == nil {
+		info := t.Info()
+		if t.Name() != name || info == nil {
 			continue
 		}
 		__node := node{
-			metadata: t.Info,
+			metadata: info,
 			FS:       me.fs,
 			t:        t,
 		}
-		if !t.Info.IsDir() {
-			_node = fileNode{__node, uint64(t.Info.Length), 0}
+		if !info.IsDir() {
+			_node = fileNode{__node, uint64(info.Length), 0}
 		} else {
 			_node = dirNode{__node}
 		}
@@ -260,13 +261,14 @@ func (me rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, 
 
 func (me rootNode) ReadDirAll(ctx context.Context) (dirents []fuse.Dirent, err error) {
 	for _, t := range me.fs.Client.Torrents() {
-		if t.Info == nil {
+		info := t.Info()
+		if info == nil {
 			continue
 		}
 		dirents = append(dirents, fuse.Dirent{
-			Name: t.Info.Name,
+			Name: info.Name,
 			Type: func() fuse.DirentType {
-				if !t.Info.IsDir() {
+				if !info.IsDir() {
 					return fuse.DT_File
 				} else {
 					return fuse.DT_Dir

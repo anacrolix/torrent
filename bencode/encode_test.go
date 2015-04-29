@@ -21,7 +21,7 @@ type dummy struct {
 
 func (d *dummy) MarshalBencode() ([]byte, error) {
 	var b bytes.Buffer
-	_, err := fmt.Fprintf(&b, "i%dei%dei%de", d.a + 1, d.b + 1, d.c + 1)
+	_, err := fmt.Fprintf(&b, "i%dei%dei%de", d.a+1, d.b+1, d.c+1)
 	if err != nil {
 		return nil, err
 	}

@@ -10,10 +10,13 @@ import (
 type Torrent struct {
 	cl *Client
 	*torrent
-	// Closed when the info (.Info()) for the torrent has become available.
-	// Using features of Torrent that require the info before it is available
-	// will have undefined behaviour.
-	GotInfo <-chan struct{}
+}
+
+// Closed when the info (.Info()) for the torrent has become available. Using
+// features of Torrent that require the info before it is available will have
+// undefined behaviour.
+func (t *Torrent) GotInfo() <-chan struct{} {
+	return t.torrent.gotMetainfo
 }
 
 func (t *Torrent) Info() *metainfo.Info {

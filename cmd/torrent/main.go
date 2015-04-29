@@ -128,7 +128,7 @@ func main() {
 			log.Fatal(err)
 		}
 		go func() {
-			<-t.GotInfo
+			<-t.GotInfo()
 			t.DownloadAll()
 		}()
 	}

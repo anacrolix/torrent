@@ -643,7 +643,7 @@ func (cl *Client) Torrent(ih InfoHash) (T Torrent, ok bool) {
 	if !ok {
 		return
 	}
-	T = Torrent{cl, t, t.gotMetainfo}
+	T = Torrent{cl, t}
 	return
 }
 
@@ -2612,7 +2612,7 @@ func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 func (me *Client) Torrents() (ret []Torrent) {
 	me.mu.Lock()
 	for _, t := range me.torrents {
-		ret = append(ret, Torrent{me, t, t.gotMetainfo})
+		ret = append(ret, Torrent{me, t})
 	}
 	me.mu.Unlock()
 	return

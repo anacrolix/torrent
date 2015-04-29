@@ -17,13 +17,13 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	"github.com/anacrolix/torrent/metainfo"
 	"golang.org/x/net/context"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/data"
 	"github.com/anacrolix/torrent/data/mmap"
 	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/util"
 )
 

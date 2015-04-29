@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/anacrolix/torrent/metainfo"
-
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 func main() {

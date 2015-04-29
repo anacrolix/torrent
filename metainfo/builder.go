@@ -3,13 +3,14 @@ package metainfo
 import (
 	"crypto/sha1"
 	"errors"
-	"github.com/anacrolix/torrent/bencode"
 	"hash"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/anacrolix/torrent/bencode"
 )
 
 //----------------------------------------------------------------------------

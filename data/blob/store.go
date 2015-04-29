@@ -13,9 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anacrolix/torrent/metainfo"
-
 	dataPkg "github.com/anacrolix/torrent/data"
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 const (

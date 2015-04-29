@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"gopkg.in/check.v1"
 
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/data/blob"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/util"

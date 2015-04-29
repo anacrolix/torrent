@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/anacrolix/torrent/bencode"
-
 	"github.com/anacrolix/torrent/internal/pieceordering"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )

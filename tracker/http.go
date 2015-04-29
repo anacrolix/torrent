@@ -11,7 +11,6 @@ import (
 	"strconv"
 
 	"github.com/anacrolix/torrent/bencode"
-
 	"github.com/anacrolix/torrent/util"
 )
 

@@ -144,8 +144,9 @@ func (this InfoEx) MarshalBencode() ([]byte, error) {
 
 type MetaInfo struct {
 	Info         InfoEx      `bencode:"info"`
-	Announce     string      `bencode:"announce"`
+	Announce     string      `bencode:"announce,omitempty"`
 	AnnounceList [][]string  `bencode:"announce-list,omitempty"`
+	Nodes        [][]string  `bencode:"nodes,omitempty"`
 	CreationDate int64       `bencode:"creation date,omitempty"`
 	Comment      string      `bencode:"comment,omitempty"`
 	CreatedBy    string      `bencode:"created by,omitempty"`

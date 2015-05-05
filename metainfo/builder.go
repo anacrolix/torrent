@@ -67,6 +67,11 @@ func (b *Builder) AddAnnounceGroup(group []string) {
 	b.announce_list = append(b.announce_list, group)
 }
 
+// Add DHT nodes URLs for trackerless mode
+func (b *Builder) AddDhtNodes(group []string) {
+	b.node_list = append(b.node_list, group)
+}
+
 // Sets creation date. The default is time.Now() when the .Build method was
 // called.
 func (b *Builder) SetCreationDate(date time.Time) {
@@ -203,26 +208,38 @@ func (b *Builder) check_parameters() error {
 		return errors.New("no files were queued")
 	}
 
-	// let's clean up the announce_list
-	newal := make([][]string, 0, len(b.announce_list))
-	for _, ag := range b.announce_list {
-		ag = remove_empty_strings(ag)
+	// let's clean up the announce_list and node_list
+	b.announce_list = cleanUpLists(b.announce_list)
+	b.node_list = cleanUpLists(b.node_list)
 
-		// discard empty announce groups
-		if len(ag) == 0 {
-			continue
-		}
-		newal = append(newal, ag)
+	if len(b.announce_list) == 0 && len(b.node_list) == 0 {
+		return errors.New("no announce group or DHT nodes specified")
 	}
-	b.announce_list = newal
-	if len(b.announce_list) == 0 {
-		return errors.New("no announce groups were specified")
+
+	// Either the node_list or announce_list can be present
+	// Never the both!
+	if len(b.announce_list) > 0 && len(b.node_list) > 0 {
+		return errors.New("announce group and nodes are mutually exclusive")
 	}
 
 	// and clean up the urls
 	b.urls = remove_empty_strings(b.urls)
 
 	return nil
+}
+
+func cleanUpLists(list [][]string) [][]string {
+	newList := make([][]string, 0, len(list))
+	for _, l := range list {
+		l = remove_empty_strings(l)
+
+		// discard empty announce groups
+		if len(l) == 0 {
+			continue
+		}
+		newList = append(newList, l)
+	}
+	return newList
 }
 
 //----------------------------------------------------------------------------
@@ -346,10 +363,19 @@ func (b *Batch) Start(w io.Writer, nworkers int) (<-chan error, <-chan int64) {
 
 func (b *Batch) write_torrent(w io.Writer) error {
 	var td MetaInfo
-	td.Announce = b.announce_list[0][0]
-	if len(b.announce_list) != 1 || len(b.announce_list[0]) != 1 {
-		td.AnnounceList = b.announce_list
+
+	// Either announce or node lists are allowed - not both
+	if len(b.announce_list) != 0 {
+		td.Announce = b.announce_list[0][0]
+		if len(b.announce_list) != 1 || len(b.announce_list[0]) != 1 {
+			td.AnnounceList = b.announce_list
+		}
 	}
+
+	if len(b.node_list) != 0 {
+		td.Nodes = b.node_list
+	}
+
 	td.CreationDate = b.creation_date.Unix()
 	td.Comment = b.comment
 	td.CreatedBy = b.created_by
@@ -420,6 +446,7 @@ type batch_state struct {
 	pieces        []byte
 	private       bool
 	announce_list [][]string
+	node_list     [][]string
 	creation_date time.Time
 	comment       string
 	created_by    string

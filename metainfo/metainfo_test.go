@@ -43,4 +43,5 @@ func TestFile(t *testing.T) {
 	test_file(t, "_testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent")
 	test_file(t, "_testdata/continuum.torrent")
 	test_file(t, "_testdata/23516C72685E8DB0C8F15553382A927F185C4F01.torrent")
+	test_file(t, "_testdata/trackerless.torrent")
 }

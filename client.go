@@ -2568,7 +2568,7 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 			// TODO: Cancel requests for this piece.
 			for r := range conn.Requests {
 				if int(r.Index) == piece {
-					panic("wat")
+					conn.Cancel(r)
 				}
 			}
 			conn.pieceRequestOrder.DeletePiece(int(piece))

@@ -46,6 +46,7 @@ type connection struct {
 
 	UnwantedChunksReceived int
 	UsefulChunksReceived   int
+	chunksSent             int
 
 	lastMessageReceived     time.Time
 	completedHandshake      time.Time
@@ -237,13 +238,16 @@ func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),
 		eventAgeString(cn.lastUsefulChunkReceived))
-	fmt.Fprintf(w, "    %s completed, good chunks: %d/%d reqs: %d-%d, flags: %s\n",
+	fmt.Fprintf(w,
+		"    %s completed, good chunks: %d/%d-%d reqq: %d-%d, flags: %s\n",
 		cn.completedString(t),
 		cn.UsefulChunksReceived,
 		cn.UnwantedChunksReceived+cn.UsefulChunksReceived,
+		cn.chunksSent,
 		len(cn.Requests),
 		len(cn.PeerRequests),
-		cn.statusFlags())
+		cn.statusFlags(),
+	)
 }
 
 func (c *connection) Close() {

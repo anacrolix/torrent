@@ -1167,14 +1167,7 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 					}(),
 					"v": extendedHandshakeClientVersion,
 					// No upload queue is implemented yet.
-					"reqq": func() int {
-						if me.config.NoUpload {
-							// No need to look strange if it costs us nothing.
-							return 250
-						} else {
-							return 1
-						}
-					}(),
+					"reqq": 64,
 				}
 				if !me.config.DisableEncryption {
 					d["e"] = 1
@@ -1454,13 +1447,13 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			if me.config.NoUpload {
 				break
 			}
-			if c.PeerRequests == nil {
-				c.PeerRequests = make(map[request]struct{}, maxRequests)
-			}
 			request := newRequest(msg.Index, msg.Begin, msg.Length)
 			// TODO: Requests should be satisfied from a dedicated upload
 			// routine.
 			// c.PeerRequests[request] = struct{}{}
+			// if c.PeerRequests == nil {
+			// 	c.PeerRequests = make(map[request]struct{}, maxRequests)
+			// }
 			p := make([]byte, msg.Length)
 			n, err := dataReadAt(t.data, p, int64(t.pieceLength(0))*int64(msg.Index)+int64(msg.Begin))
 			if err != nil {
@@ -1476,6 +1469,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				Piece: p,
 			})
 			uploadChunksPosted.Add(1)
+			c.chunksSent++
 		case pp.Cancel:
 			req := newRequest(msg.Index, msg.Begin, msg.Length)
 			if !c.PeerCancel(req) {
@@ -2196,15 +2190,24 @@ func (cl *Client) waitWantPeers(t *torrent) bool {
 			return false
 		default:
 		}
-		if len(t.Peers) < torrentPeersLowWater && t.needData() {
+		if len(t.Peers) > torrentPeersLowWater {
+			goto wait
+		}
+		if t.needData() || cl.seeding(t) {
 			return true
 		}
+	wait:
 		cl.mu.Unlock()
 		t.wantPeers.Wait()
 		t.stateMu.Unlock()
 		cl.mu.Lock()
 		t.stateMu.Lock()
 	}
+}
+
+// Returns whether the client should make effort to seed the torrent.
+func (cl *Client) seeding(t *torrent) bool {
+	return cl.config.Seed && !cl.config.NoUpload
 }
 
 func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {

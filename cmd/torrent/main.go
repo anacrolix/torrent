@@ -73,7 +73,6 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var rootGroup struct {
 		Client    torrent.Config `group:"Client Options"`
-		Seed      bool           `long:"seed" description:"continue seeding torrents after completed"`
 		TestPeers []string       `long:"test-peer" description:"address of peer to inject to every torrent"`
 	}
 	// Don't pass flags.PrintError because it's inconsistent with printing.
@@ -151,7 +150,7 @@ waitDone:
 			os.Stdout.WriteString(progressLine(client))
 		}
 	}
-	if rootGroup.Seed {
+	if rootGroup.Client.Seed {
 		select {}
 	}
 }

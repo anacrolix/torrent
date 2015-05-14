@@ -421,7 +421,7 @@ func (t *torrent) writeStatus(w io.Writer) {
 	}
 	fmt.Fprintf(w, "Urgent:")
 	for req := range t.urgent {
-		fmt.Fprintf(w, " %s", req)
+		fmt.Fprintf(w, " %v", req)
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Trackers: ")

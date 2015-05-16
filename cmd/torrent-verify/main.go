@@ -16,16 +16,40 @@ import (
 )
 
 var (
-	filePath = flag.String("torrent", "/path/to/the.torrent", "path of the torrent file")
-	dirPath  = flag.String("path", "/torrent/data", "path of the torrent data")
+	torrentPath = flag.String("torrent", "/path/to/the.torrent", "path of the torrent file")
+	dataPath    = flag.String("path", "/torrent/data", "path of the torrent data")
+	summary     = flag.Bool("summary", false, "display summary at the end")
 )
 
-func init() {
-	flag.Parse()
+func verifySummary(sMap map[bool][]int) {
+	fmt.Println("----------------")
+	fmt.Println(" TORRENT-VERIFY ")
+	fmt.Println("----------------")
+	fmt.Printf("Number of correct pieces: %d\n", len(sMap[true]))
+	fmt.Printf("Number of wrong pieces: %d\n", len(sMap[false]))
+}
+
+func fileToMmap(filename string, length int64, devZero *os.File, mMapSpan *mmap_span.MMapSpan) {
+	osFile, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	mmapFd := osFile.Fd()
+	goMMap, err := gommap.MapRegion(mmapFd, 0, length, gommap.PROT_READ, gommap.MAP_PRIVATE)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if int64(len(goMMap)) != length {
+		log.Printf("file mmap has wrong size: %#v", filename)
+	}
+	osFile.Close()
+	mMapSpan.Append(goMMap)
 }
 
 func main() {
-	metaInfo, err := metainfo.LoadFromFile(*filePath)
+	flag.Parse()
+	summaryMap := make(map[bool][]int)
+	metaInfo, err := metainfo.LoadFromFile(*torrentPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -34,31 +58,19 @@ func main() {
 		log.Print(err)
 	}
 	defer devZero.Close()
-	var mMapSpan *mmap_span.MMapSpan
-	for _, file := range metaInfo.Info.Files {
-		filename := filepath.Join(append([]string{*dirPath, metaInfo.Info.Name}, file.Path...)...)
-		osFile, err := os.Open(filename)
-		mmapFd := osFile.Fd()
-		if err != nil {
-			if pe, ok := err.(*os.PathError); ok && pe.Err.Error() == "no such file or directory" {
-				mmapFd = devZero.Fd()
-			} else {
-				log.Fatal(err)
-			}
+	mMapSpan := &mmap_span.MMapSpan{}
+	if len(metaInfo.Info.Files) > 0 {
+		for _, file := range metaInfo.Info.Files {
+			filename := filepath.Join(append([]string{*dataPath, metaInfo.Info.Name}, file.Path...)...)
+			fileToMmap(filename, file.Length, devZero, mMapSpan)
 		}
-		goMMap, err := gommap.MapRegion(mmapFd, 0, file.Length, gommap.PROT_READ, gommap.MAP_PRIVATE)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if int64(len(goMMap)) != file.Length {
-			log.Printf("file mmap has wrong size: %#v", filename)
-		}
-		osFile.Close()
-		mMapSpan.Append(goMMap)
+		log.Println(len(metaInfo.Info.Files))
+	} else {
+		fileToMmap(*dataPath, metaInfo.Info.Length, devZero, mMapSpan)
 	}
-	log.Println(len(metaInfo.Info.Files))
 	log.Println(mMapSpan.Size())
 	log.Println(len(metaInfo.Info.Pieces))
+	var pieceValid bool
 	for piece := 0; piece < (len(metaInfo.Info.Pieces)+sha1.Size-1)/sha1.Size; piece++ {
 		expectedHash := metaInfo.Info.Pieces[sha1.Size*piece : sha1.Size*(piece+1)]
 		if len(expectedHash) == 0 {
@@ -69,6 +81,11 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(piece, bytes.Equal(hash.Sum(nil), expectedHash))
+		pieceValid = bytes.Equal(hash.Sum(nil), expectedHash)
+		summaryMap[pieceValid] = append(summaryMap[pieceValid], piece)
+		fmt.Println(piece, pieceValid)
+	}
+	if *summary {
+		verifySummary(summaryMap)
 	}
 }

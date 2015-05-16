@@ -26,6 +26,9 @@ func init() {
 func main() {
 	b := torrent.Builder{}
 	for _, filename := range flag.Args() {
+		if _, err := os.Stat(filename); os.IsNotExist(err) {
+			log.Fatal(err)
+		}
 		if err := filepath.Walk(filename, func(path string, info os.FileInfo, err error) error {
 			log.Print(path)
 			if info.IsDir() {

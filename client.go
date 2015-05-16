@@ -2447,7 +2447,7 @@ func (me *Client) fillRequests(t *torrent, c *connection) {
 			panic("unwanted piece in connection request order")
 		}
 		piece := t.Pieces[pieceIndex]
-		for _, cs := range piece.shuffledPendingChunkSpecs() {
+		for _, cs := range piece.shuffledPendingChunkSpecs(t.pieceLength(pieceIndex)) {
 			r := request{pp.Integer(pieceIndex), cs}
 			if !addRequest(r) {
 				return
@@ -2503,9 +2503,9 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	// log.Println("got chunk", req)
 	piece.Event.Broadcast()
 	// Record that we have the chunk.
-	delete(piece.PendingChunkSpecs, req.chunkSpec)
+	piece.unpendChunkIndex(chunkIndex(req.chunkSpec))
 	delete(t.urgent, req)
-	if len(piece.PendingChunkSpecs) == 0 {
+	if piece.numPendingChunks() == 0 {
 		for _, c := range t.Conns {
 			c.pieceRequestOrder.DeletePiece(int(req.Index))
 		}
@@ -2555,7 +2555,7 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 		}
 		p.Event.Broadcast()
 	} else {
-		if len(p.PendingChunkSpecs) == 0 {
+		if p.numPendingChunks() == 0 {
 			t.pendAllChunkSpecs(int(piece))
 		}
 		if t.wantPiece(piece) {

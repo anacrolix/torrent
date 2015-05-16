@@ -95,16 +95,12 @@ func TestTorrentInitialState(t *testing.T) {
 	}
 	p := tor.Pieces[0]
 	tor.pendAllChunkSpecs(0)
-	if len(p.PendingChunkSpecs) != 1 {
+	if p.numPendingChunks() != 1 {
 		t.Fatalf("should only be 1 chunk: %v", p.PendingChunkSpecs)
 	}
 	// TODO: Set chunkSize to 2, to test odd/even silliness.
-	if false {
-		if _, ok := p.PendingChunkSpecs[chunkSpec{
-			Length: 13,
-		}]; !ok {
-			t.Fatal("pending chunk spec is incorrect")
-		}
+	if chunkIndexSpec(0, tor.pieceLength(0)).Length != 5 {
+		t.Fatal("pending chunk spec is incorrect")
 	}
 }
 

@@ -3,6 +3,8 @@ package torrent
 import (
 	"math/rand"
 	"sync"
+
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 type piecePriority byte
@@ -16,8 +18,10 @@ const (
 )
 
 type piece struct {
-	Hash              pieceSum
-	PendingChunkSpecs map[chunkSpec]struct{}
+	Hash pieceSum
+	// Chunks we don't have. The offset and length can be determined by our
+	// request chunkSize in use.
+	PendingChunkSpecs []bool
 	Hashing           bool
 	QueuedForHash     bool
 	EverHashed        bool
@@ -25,13 +29,46 @@ type piece struct {
 	Priority          piecePriority
 }
 
-func (p *piece) shuffledPendingChunkSpecs() (css []chunkSpec) {
-	if len(p.PendingChunkSpecs) == 0 {
+func (p *piece) pendingChunk(cs chunkSpec) bool {
+	if p.PendingChunkSpecs == nil {
+		return false
+	}
+	return p.PendingChunkSpecs[chunkIndex(cs)]
+}
+
+func (p *piece) numPendingChunks() (ret int) {
+	for _, pending := range p.PendingChunkSpecs {
+		if pending {
+			ret++
+		}
+	}
+	return
+}
+
+func (p *piece) unpendChunkIndex(i int) {
+	if p.PendingChunkSpecs == nil {
 		return
 	}
-	css = make([]chunkSpec, 0, len(p.PendingChunkSpecs))
-	for cs := range p.PendingChunkSpecs {
-		css = append(css, cs)
+	p.PendingChunkSpecs[i] = false
+}
+
+func chunkIndexSpec(index int, pieceLength pp.Integer) chunkSpec {
+	ret := chunkSpec{pp.Integer(index) * chunkSize, chunkSize}
+	if ret.Begin+ret.Length > pieceLength {
+		ret.Length = pieceLength - ret.Begin
+	}
+	return ret
+}
+
+func (p *piece) shuffledPendingChunkSpecs(pieceLength pp.Integer) (css []chunkSpec) {
+	if p.numPendingChunks() == 0 {
+		return
+	}
+	css = make([]chunkSpec, 0, p.numPendingChunks())
+	for i, pending := range p.PendingChunkSpecs {
+		if pending {
+			css = append(css, chunkIndexSpec(i, pieceLength))
+		}
 	}
 	if len(css) <= 1 {
 		return

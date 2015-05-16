@@ -25,15 +25,13 @@ func (t *torrent) pieceNumPendingBytes(index int) (count pp.Integer) {
 		return 0
 	}
 	piece := t.Pieces[index]
+	pieceLength := t.pieceLength(index)
 	if !piece.EverHashed {
-		return t.pieceLength(index)
+		return pieceLength
 	}
-	pendingChunks := t.Pieces[index].PendingChunkSpecs
-	count = pp.Integer(len(pendingChunks)) * chunkSize
-	_lastChunkSpec := lastChunkSpec(t.pieceLength(index))
-	if _lastChunkSpec.Length != chunkSize {
-		if _, ok := pendingChunks[_lastChunkSpec]; ok {
-			count += _lastChunkSpec.Length - chunkSize
+	for i, pending := range piece.PendingChunkSpecs {
+		if pending {
+			count += chunkIndexSpec(i, pieceLength).Length
 		}
 	}
 	return
@@ -570,9 +568,26 @@ func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 func (t *torrent) bitfield() (bf []bool) {
 	for _, p := range t.Pieces {
 		// TODO: Check this logic.
-		bf = append(bf, p.EverHashed && len(p.PendingChunkSpecs) == 0)
+		bf = append(bf, p.EverHashed && p.numPendingChunks() == 0)
 	}
 	return
+}
+
+func (t *torrent) validOutgoingRequest(r request) bool {
+	if r.Index >= pp.Integer(t.Info.NumPieces()) {
+		return false
+	}
+	if r.Begin%chunkSize != 0 {
+		return false
+	}
+	if r.Length > chunkSize {
+		return false
+	}
+	pieceLength := t.pieceLength(int(r.Index))
+	if r.Begin+r.Length > pieceLength {
+		return false
+	}
+	return r.Length == chunkSize || r.Begin+r.Length == pieceLength
 }
 
 func (t *torrent) pieceChunks(piece int) (css []chunkSpec) {
@@ -589,16 +604,16 @@ func (t *torrent) pieceChunks(piece int) (css []chunkSpec) {
 	return
 }
 
-func (t *torrent) pendAllChunkSpecs(index int) {
-	piece := t.Pieces[index]
+func (t *torrent) pendAllChunkSpecs(pieceIndex int) {
+	piece := t.Pieces[pieceIndex]
 	if piece.PendingChunkSpecs == nil {
-		piece.PendingChunkSpecs = make(
-			map[chunkSpec]struct{},
-			(t.pieceLength(index)+chunkSize-1)/chunkSize)
+		// Allocate to exact size.
+		piece.PendingChunkSpecs = make([]bool, (t.pieceLength(pieceIndex)+chunkSize-1)/chunkSize)
 	}
+	// Pend all the chunks.
 	pcss := piece.PendingChunkSpecs
-	for _, cs := range t.pieceChunks(int(index)) {
-		pcss[cs] = struct{}{}
+	for i := range pcss {
+		pcss[i] = true
 	}
 	return
 }
@@ -658,21 +673,22 @@ func (t *torrent) haveChunk(r request) bool {
 	if !t.haveInfo() {
 		return false
 	}
-	piece := t.Pieces[r.Index]
-	_, ok := piece.PendingChunkSpecs[r.chunkSpec]
-	// log.Println("have chunk", r, !ok)
-	return !ok
+	return !t.Pieces[r.Index].pendingChunk(r.chunkSpec)
 }
 
+func chunkIndex(cs chunkSpec) int {
+	return int(cs.Begin / chunkSize)
+}
+
+// TODO: This should probably be called wantPiece.
 func (t *torrent) wantChunk(r request) bool {
 	if !t.wantPiece(int(r.Index)) {
 		return false
 	}
-	_, ok := t.Pieces[r.Index].PendingChunkSpecs[r.chunkSpec]
-	if ok {
+	if t.Pieces[r.Index].pendingChunk(r.chunkSpec) {
 		return true
 	}
-	_, ok = t.urgent[r]
+	_, ok := t.urgent[r]
 	return ok
 }
 
@@ -685,6 +701,7 @@ func (t *torrent) urgentChunkInPiece(piece int) bool {
 	return false
 }
 
+// TODO: This should be called wantPieceIndex.
 func (t *torrent) wantPiece(index int) bool {
 	if !t.haveInfo() {
 		return false

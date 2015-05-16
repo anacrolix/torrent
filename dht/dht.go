@@ -980,13 +980,11 @@ func bootstrapAddrs(nodeAddrs []string) (addrs []*net.UDPAddr, err error) {
 		}
 	}
 	for _, addrStr := range bootstrapNodes {
-		if addrStr != "" {
-			udpAddr, err := net.ResolveUDPAddr("udp4", addrStr)
-			if err != nil {
-				continue
-			}
-			addrs = append(addrs, udpAddr)
+		udpAddr, err := net.ResolveUDPAddr("udp4", addrStr)
+		if err != nil {
+			continue
 		}
+		addrs = append(addrs, udpAddr)
 	}
 	if len(addrs) == 0 {
 		err = errors.New("nothing resolved")

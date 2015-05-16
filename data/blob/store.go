@@ -51,17 +51,19 @@ func NewStore(baseDir string, opt ...StoreOption) dataPkg.Store {
 	return s
 }
 
-func hexStringPieceHashArray(s string) (ret [20]byte) {
+// Turns 40 byte hex string into its equivalent binary byte array.
+func hexStringPieceHashArray(s string) (ret [20]byte, ok bool) {
 	if len(s) != 40 {
-		panic(s)
+		return
 	}
 	n, err := hex.Decode(ret[:], []byte(s))
 	if err != nil {
-		panic(err)
+		return
 	}
 	if n != 20 {
 		panic(n)
 	}
+	ok = true
 	return
 }
 
@@ -72,10 +74,11 @@ func (me *store) initCompleted() {
 	}
 	me.completed = make(map[[20]byte]struct{}, len(fis))
 	for _, fi := range fis {
-		if len(fi.Name()) != 40 {
+		binHash, ok := hexStringPieceHashArray(fi.Name())
+		if !ok {
 			continue
 		}
-		me.completed[hexStringPieceHashArray(fi.Name())] = struct{}{}
+		me.completed[binHash] = struct{}{}
 	}
 }
 
@@ -164,7 +167,10 @@ func (me *store) removeCompleted(name string) (err error) {
 	if err != nil {
 		return err
 	}
-	delete(me.completed, hexStringPieceHashArray(name))
+	binHash, ok := hexStringPieceHashArray(name)
+	if ok {
+		delete(me.completed, binHash)
+	}
 	return
 }
 

@@ -1052,12 +1052,24 @@ func bootstrapAddrs(nodeAddrs []string) (addrs []*net.UDPAddr, err error) {
 	return
 }
 
+// Adds bootstrap nodes directly to table, if there's room. Node ID security
+// is bypassed, but the IP blocklist is not.
 func (s *Server) addRootNodes() error {
 	addrs, err := bootstrapAddrs(s.bootstrapNodes)
 	if err != nil {
 		return err
 	}
 	for _, addr := range addrs {
+		if len(s.nodes) >= maxNodes {
+			break
+		}
+		if s.nodes[addr.String()] != nil {
+			continue
+		}
+		if s.ipBlocked(addr.IP) {
+			log.Printf("dht root node is in the blocklist: %s", addr.IP)
+			continue
+		}
 		s.nodes[addr.String()] = &node{
 			addr: newDHTAddr(addr),
 		}

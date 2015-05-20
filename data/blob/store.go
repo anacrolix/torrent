@@ -122,6 +122,8 @@ func (me *store) pieceWrite(p metainfo.Piece) (f *os.File) {
 	return
 }
 
+// Returns the file for the given piece, if it exists. It could be completed,
+// or incomplete.
 func (me *store) pieceRead(p metainfo.Piece) (f *os.File) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
@@ -132,9 +134,9 @@ func (me *store) pieceRead(p metainfo.Piece) (f *os.File) {
 	if !os.IsNotExist(err) {
 		panic(err)
 	}
-	// Ermahgerd, self heal. This occurs when the underlying data goes
-	// missing, likely due to a "cache flush", also known as deleting the
-	// files. TODO: Trigger an asynchronous initCompleted.
+	// Mark the file not completed, in case we thought it was. TODO: Trigger
+	// an asynchronous initCompleted to reinitialize the entire completed map
+	// as there are likely other files missing.
 	delete(me.completed, sliceToPieceHashArray(p.Hash()))
 	f, err = os.Open(me.path(p, false))
 	if err == nil {

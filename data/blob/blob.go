@@ -100,11 +100,7 @@ func (me *data) WriteSectionTo(w io.Writer, off, n int64) (written int64, err er
 		var pr io.ReadCloser
 		pr, err = me.pieceReader(i, off)
 		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
 			return
-			pr.Close()
 		}
 		var n1 int64
 		n1, err = io.CopyN(w, pr, n)

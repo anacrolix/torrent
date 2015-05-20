@@ -81,7 +81,7 @@ func main() {
 	parser.Usage = "[OPTIONS] (magnet URI or .torrent file path)..."
 	posArgs, err := parser.Parse()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Download from the BitTorrent network.\n")
+		fmt.Fprintln(os.Stderr, "Download from the BitTorrent network.")
 		fmt.Println(err)
 		os.Exit(2)
 	}

@@ -160,10 +160,8 @@ func (me *Client) PeerID() string {
 
 func (me *Client) ListenAddr() (addr net.Addr) {
 	for _, l := range me.listeners {
-		if addr != nil && l.Addr().String() != addr.String() {
-			panic(fmt.Sprintf("listeners are on different addresses: %q != %q", l.Addr().String(), addr.String()))
-		}
 		addr = l.Addr()
+		break
 	}
 	return
 }
@@ -487,9 +485,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 			return addr.String()
 		}
 		if cfg.ListenAddr == "" {
-			// IPv6 isn't well supported with blocklists, or with trackers and
-			// DHT.
-			return "0.0.0.0:50007"
+			return ":50007"
 		}
 		return cfg.ListenAddr
 	}

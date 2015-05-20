@@ -552,7 +552,7 @@ func (s *Server) setDefaults() (err error) {
 		secureNodeId(id[:], util.AddrIP(s.socket.LocalAddr()))
 		s.id = string(id[:])
 	}
-	s.nodes = make(map[string]*node, 10000)
+	s.nodes = make(map[string]*node, maxNodes)
 	return
 }
 

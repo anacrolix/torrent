@@ -1,10 +1,13 @@
 package dht
 
 import (
+	"encoding/hex"
 	"math/big"
 	"math/rand"
 	"net"
 	"testing"
+
+	"github.com/anacrolix/torrent/util"
 )
 
 func TestSetNilBigInt(t *testing.T) {
@@ -94,9 +97,9 @@ func TestClosestNodes(t *testing.T) {
 	}
 	m := map[string]bool{}
 	for _, id := range cn.IDs() {
-		m[id.String()] = true
+		m[id.ByteString()] = true
 	}
-	if !m[testIDs[3].String()] || !m[testIDs[4].String()] {
+	if !m[testIDs[3].ByteString()] || !m[testIDs[4].ByteString()] {
 		t.FailNow()
 	}
 }
@@ -154,5 +157,57 @@ func TestPing(t *testing.T) {
 	})
 	if !<-ok {
 		t.FailNow()
+	}
+}
+
+func TestDHTSec(t *testing.T) {
+	for _, case_ := range []struct {
+		ipStr     string
+		nodeIDHex string
+		valid     bool
+	}{
+		// These 5 are from the spec example. They are all valid.
+		{"124.31.75.21", "5fbfbff10c5d6a4ec8a88e4c6ab4c28b95eee401", true},
+		{"21.75.31.124", "5a3ce9c14e7a08645677bbd1cfe7d8f956d53256", true},
+		{"65.23.51.170", "a5d43220bc8f112a3d426c84764f8c2a1150e616", true},
+		{"84.124.73.14", "1b0321dd1bb1fe518101ceef99462b947a01ff41", true},
+		{"43.213.53.83", "e56f6cbf5b7c4be0237986d5243b87aa6d51305a", true},
+		// spec[0] with one of the rand() bytes changed. Valid.
+		{"124.31.75.21", "5fbfbff10c5d7a4ec8a88e4c6ab4c28b95eee401", true},
+		// spec[1] with the 21st leading bit changed. Not Valid.
+		{"21.75.31.124", "5a3ce1c14e7a08645677bbd1cfe7d8f956d53256", false},
+		// spec[2] with the 22nd leading bit changed. Valid.
+		{"65.23.51.170", "a5d43620bc8f112a3d426c84764f8c2a1150e616", true},
+		// spec[3] with the 4th last bit changed. Valid.
+		{"84.124.73.14", "1b0321dd1bb1fe518101ceef99462b947a01fe01", true},
+		// spec[4] with the 3rd last bit changed. Not valid.
+		{"43.213.53.83", "e56f6cbf5b7c4be0237986d5243b87aa6d51303e", false},
+	} {
+		ip := net.ParseIP(case_.ipStr)
+		id, err := hex.DecodeString(case_.nodeIDHex)
+		if err != nil {
+			t.Fatal(err)
+		}
+		secure := nodeIdSecure(string(id), ip)
+		if secure != case_.valid {
+			t.Fatalf("case failed: %v", case_)
+		}
+		if !secure {
+			secureNodeId(id, ip)
+			if !nodeIdSecure(string(id), ip) {
+				t.Fatal("failed to secure node id")
+			}
+		}
+	}
+}
+
+func TestServerDefaultNodeIdSecure(t *testing.T) {
+	s, err := NewServer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if !nodeIdSecure(s.ID(), util.AddrIP(s.Addr())) {
+		t.Fatal("not secure")
 	}
 }

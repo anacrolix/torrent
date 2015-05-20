@@ -161,7 +161,7 @@ func (me *Client) PeerID() string {
 func (me *Client) ListenAddr() (addr net.Addr) {
 	for _, l := range me.listeners {
 		if addr != nil && l.Addr().String() != addr.String() {
-			panic("listeners exist on different addresses")
+			panic(fmt.Sprintf("listeners are on different addresses: %q != %q", l.Addr().String(), addr.String()))
 		}
 		addr = l.Addr()
 	}

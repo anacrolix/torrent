@@ -38,7 +38,7 @@ func resolvedPeerAddrs(ss []string) (ret []torrent.Peer, err error) {
 
 func bytesCompleted(tc *torrent.Client) (ret int64) {
 	for _, t := range tc.Torrents() {
-		if t.Info != nil {
+		if t.Info() != nil {
 			ret += t.BytesCompleted()
 		}
 	}

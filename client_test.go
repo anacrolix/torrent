@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"gopkg.in/check.v1"

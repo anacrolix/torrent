@@ -173,7 +173,9 @@ func TestUTPRawConn(t *testing.T) {
 	defer peer.Close()
 
 	msgsReceived := 0
-	const N = 5000 // How many messages to send.
+	// How many messages to send. I've set this to double the channel buffer
+	// size in the raw packetConn.
+	const N = 200
 	readerStopped := make(chan struct{})
 	// The reader goroutine.
 	go func() {

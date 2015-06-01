@@ -10,7 +10,11 @@ import (
 
 // Maintains piece integers by their ascending assigned keys.
 type Instance struct {
-	sl        *skiplist.SkipList
+	// Contains the ascending priority keys. The keys contain a slice of piece
+	// indices.
+	sl *skiplist.SkipList
+	// Maps from piece index back to its key, so that it can be remove
+	// efficiently from the skip list.
 	pieceKeys map[int]int
 }
 
@@ -41,6 +45,7 @@ func (me *Instance) SetPiece(piece, key int) {
 	me.shuffleItem(key)
 }
 
+// Shuffle the piece indices that share a given key.
 func (me *Instance) shuffleItem(key int) {
 	_item, ok := me.sl.Get(key)
 	if !ok {

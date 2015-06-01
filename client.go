@@ -1975,6 +1975,7 @@ func (t Torrent) Files() (ret []File) {
 	return
 }
 
+// Marks the pieces in the given region for download.
 func (t Torrent) SetRegionPriority(off, len int64) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()

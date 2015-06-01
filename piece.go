@@ -7,6 +7,8 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
+// Piece priority describes the importance of obtaining a particular piece.
+
 type piecePriority byte
 
 const (
@@ -18,8 +20,8 @@ const (
 )
 
 type piece struct {
-	Hash pieceSum
-	// Chunks we don't have. The offset and length can be determined by our
+	Hash pieceSum // The completed piece SHA1 hash, from the metainfo "pieces" field.
+	// Chunks we don't have. The offset and length can be determined by the
 	// request chunkSize in use.
 	PendingChunkSpecs []bool
 	Hashing           bool

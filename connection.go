@@ -39,7 +39,8 @@ type connection struct {
 	post      chan pp.Message
 	writeCh   chan []byte
 
-	// The connections preferred order to download pieces.
+	// The connection's preferred order to download pieces. The index is the
+	// piece, the value is its priority.
 	piecePriorities []int
 	// The piece request order based on piece priorities.
 	pieceRequestOrder *pieceordering.Instance
@@ -109,6 +110,7 @@ func (cn *connection) pendPiece(piece int, priority piecePriority) {
 	// Priority regions not to scale. Within each region, piece is randomized
 	// according to connection.
 
+	// <-request first -- last->
 	// [ Now         ]
 	//  [ Next       ]
 	//   [ Readahead ]

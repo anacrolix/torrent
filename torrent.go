@@ -515,14 +515,6 @@ func (t *torrent) numPieces() int {
 	return t.Info.NumPieces()
 }
 
-func (t *torrent) neededPiecesDownloaded() bool {
-	for i := range iter.N(t.Info.NumPieces()) {
-		if t.Pieces[i].Priority != piecePriorityNone && !t.pieceComplete(i) {
-			return false
-		}
-	}
-	return true
-}
 
 func (t *torrent) numPiecesCompleted() (num int) {
 	for i := range iter.N(t.Info.NumPieces()) {

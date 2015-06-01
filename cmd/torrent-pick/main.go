@@ -135,7 +135,7 @@ func main() {
 	}
 	dstWriter := bufio.NewWriter(f)
 
-
+	done := make(chan struct{})
 	for _, arg := range posArgs {
 		t := func() torrent.Torrent {
 			if strings.HasPrefix(arg, "magnet:") {
@@ -171,21 +171,14 @@ func main() {
 
 					srcReader := io.NewSectionReader(t.NewReader(), file.Offset(), file.Length())
 					io.Copy(dstWriter, srcReader)
+					close(done)
 					break
 				}
 			}
 		}()
 	}
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		if client.WaitNeeded() {
-			log.Print("downloaded ALL the torrents")
-		} else {
-			log.Fatal("y u no complete torrents?!")
-		}
-	}()
+
 	ticker := time.NewTicker(time.Second)
 waitDone:
 	for {

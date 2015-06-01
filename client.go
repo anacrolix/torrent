@@ -2400,17 +2400,6 @@ func (cl *Client) allTorrentsCompleted() bool {
 	return true
 }
 
-func (cl *Client) allNeededTorrentsCompleted() bool {
-	for _, t := range cl.torrents {
-		if !t.haveInfo() {
-			return false
-		}
-		if ! t.neededPiecesDownloaded() {
-			return false
-		}
-	}
-	return true
-}
 
 // Returns true when all torrents are completely downloaded and false if the
 // client is stopped before that.
@@ -2426,19 +2415,6 @@ func (me *Client) WaitAll() bool {
 	return true
 }
 
-// Returns true when all requested chunks are completely downloaded and false if the
-// client is stopped before that.
-func (me *Client) WaitNeeded() bool {
-	me.mu.Lock()
-	defer me.mu.Unlock()
-	for !me.allNeededTorrentsCompleted() {
-		if me.stopped() {
-			return false
-		}
-		me.event.Wait()
-	}
-	return true
-}
 
 func (me *Client) fillRequests(t *torrent, c *connection) {
 	if c.Interested {

@@ -2016,8 +2016,6 @@ func (t Torrent) DownloadAll() {
 	t.cl.raisePiecePriority(t.torrent, t.numPieces()-1, piecePriorityReadahead)
 }
 
-
-
 // Returns nil metainfo if it isn't in the cache. Checks that the retrieved
 // metainfo has the correct infohash.
 func (cl *Client) torrentCacheMetaInfo(ih InfoHash) (mi *metainfo.MetaInfo, err error) {

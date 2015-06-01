@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anacrolix/missinggo"
 	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -289,38 +290,19 @@ func (t *torrent) Name() string {
 	return ""
 }
 
-func (t *torrent) pieceStatusChar(index int) byte {
+func (t *torrent) pieceState(index int) (ret PieceState) {
 	p := t.Pieces[index]
-	switch {
-	case t.pieceComplete(index):
-		return 'C'
-	case p.QueuedForHash:
-		return 'Q'
-	case p.Hashing:
-		return 'H'
-	case !p.EverHashed:
-		return '?'
-	case t.piecePartiallyDownloaded(index):
-		switch p.Priority {
-		case piecePriorityNone:
-			return 'F' // Forgotten
-		default:
-			return 'P'
-		}
-	default:
-		switch p.Priority {
-		case piecePriorityNone:
-			return 'z'
-		case piecePriorityNow:
-			return '!'
-		case piecePriorityReadahead:
-			return 'R'
-		case piecePriorityNext:
-			return 'N'
-		default:
-			return '.'
-		}
+	ret.Priority = p.Priority
+	if t.pieceComplete(index) {
+		ret.Complete = true
 	}
+	if p.QueuedForHash || p.Hashing {
+		ret.Checking = true
+	}
+	if t.piecePartiallyDownloaded(index) {
+		ret.Partial = true
+	}
+	return
 }
 
 func (t *torrent) metadataPieceSize(piece int) int {
@@ -346,45 +328,45 @@ func (t *torrent) newMetadataExtensionMessage(c *connection, msgType int, piece 
 	}
 }
 
-type PieceStatusCharSequence struct {
-	Char  byte // The state of this sequence of pieces.
-	Count int  // How many consecutive pieces have this state.
-}
-
-// Returns the state of pieces of the torrent. They are grouped into runs of
-// same state. The sum of the Counts of the sequences is the number of pieces
-// in the torrent. See the function torrent.pieceStatusChar for the possible
-// states.
-func (t *torrent) PieceStatusCharSequences() []PieceStatusCharSequence {
-	t.stateMu.Lock()
-	defer t.stateMu.Unlock()
-	return t.pieceStatusCharSequences()
-}
-
-// Returns the length of sequences of identical piece status chars.
-func (t *torrent) pieceStatusCharSequences() (ret []PieceStatusCharSequence) {
-	var (
-		char  byte
-		count int
-	)
-	writeSequence := func() {
-		ret = append(ret, PieceStatusCharSequence{char, count})
-	}
-	if len(t.Pieces) != 0 {
-		char = t.pieceStatusChar(0)
-	}
+func (t *torrent) pieceStateRuns() (ret []PieceStateRun) {
+	rle := missinggo.NewRunLengthEncoder(func(el interface{}, count uint64) {
+		ret = append(ret, PieceStateRun{
+			PieceState: el.(PieceState),
+			Length:     int(count),
+		})
+	})
 	for index := range t.Pieces {
-		char1 := t.pieceStatusChar(index)
-		if char1 == char {
-			count++
-		} else {
-			writeSequence()
-			char = char1
-			count = 1
-		}
+		rle.Append(t.pieceState(index), 1)
 	}
-	if count != 0 {
-		writeSequence()
+	rle.Flush()
+	return
+}
+
+// Produces a small string representing a PieceStateRun.
+func pieceStateRunStatusChars(psr PieceStateRun) (ret string) {
+	ret = fmt.Sprintf("%d", psr.Length)
+	ret += func() string {
+		switch psr.Priority {
+		case PiecePriorityNext:
+			return "N"
+		case PiecePriorityNormal:
+			return "."
+		case PiecePriorityReadahead:
+			return "R"
+		case PiecePriorityNow:
+			return "!"
+		default:
+			return ""
+		}
+	}()
+	if psr.Checking {
+		ret += "H"
+	}
+	if psr.Partial {
+		ret += "P"
+	}
+	if psr.Complete {
+		ret += "C"
 	}
 	return
 }
@@ -411,9 +393,10 @@ func (t *torrent) writeStatus(w io.Writer) {
 		}
 	}())
 	if t.haveInfo() {
-		fmt.Fprint(w, "Pieces: ")
-		for _, seq := range t.pieceStatusCharSequences() {
-			fmt.Fprintf(w, "%d%c ", seq.Count, seq.Char)
+		fmt.Fprint(w, "Pieces:")
+		for _, psr := range t.pieceStateRuns() {
+			w.Write([]byte(" "))
+			w.Write([]byte(pieceStateRunStatusChars(psr)))
 		}
 		fmt.Fprintln(w)
 	}
@@ -494,7 +477,8 @@ func (t *torrent) bytesLeft() (left int64) {
 }
 
 func (t *torrent) piecePartiallyDownloaded(index int) bool {
-	return t.pieceNumPendingBytes(index) != t.pieceLength(index)
+	pendingBytes := t.pieceNumPendingBytes(index)
+	return pendingBytes != 0 && pendingBytes != t.pieceLength(index)
 }
 
 func numChunksForPiece(chunkSize int, pieceSize int) int {
@@ -713,7 +697,7 @@ func (t *torrent) wantPiece(index int) bool {
 	if p.Hashing {
 		return false
 	}
-	if p.Priority == piecePriorityNone {
+	if p.Priority == PiecePriorityNone {
 		if !t.urgentChunkInPiece(index) {
 			return false
 		}

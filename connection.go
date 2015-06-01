@@ -102,7 +102,7 @@ func (cn *connection) localAddr() net.Addr {
 // Adjust piece position in the request order for this connection based on the
 // given piece priority.
 func (cn *connection) pendPiece(piece int, priority piecePriority) {
-	if priority == piecePriorityNone {
+	if priority == PiecePriorityNone {
 		cn.pieceRequestOrder.DeletePiece(piece)
 		return
 	}
@@ -117,13 +117,13 @@ func (cn *connection) pendPiece(piece int, priority piecePriority) {
 	//                [ Normal ]
 	key := func() int {
 		switch priority {
-		case piecePriorityNow:
+		case PiecePriorityNow:
 			return -3*len(cn.piecePriorities) + 3*pp
-		case piecePriorityNext:
+		case PiecePriorityNext:
 			return -2*len(cn.piecePriorities) + 2*pp
-		case piecePriorityReadahead:
+		case PiecePriorityReadahead:
 			return -len(cn.piecePriorities) + pp
-		case piecePriorityNormal:
+		case PiecePriorityNormal:
 			return pp
 		default:
 			panic(priority)

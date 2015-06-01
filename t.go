@@ -30,3 +30,12 @@ func (t *Torrent) NewReader() (ret *Reader) {
 	}
 	return
 }
+
+// Returns the state of pieces of the torrent. They are grouped into runs of
+// same state. The sum of the state run lengths is the number of pieces
+// in the torrent.
+func (t *Torrent) PieceStateRuns() []PieceStateRun {
+	t.stateMu.Lock()
+	defer t.stateMu.Unlock()
+	return t.torrent.pieceStateRuns()
+}

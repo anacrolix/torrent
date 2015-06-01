@@ -279,18 +279,18 @@ func readaheadPieces(readahead, pieceLength int64) int {
 
 func (cl *Client) readRaisePiecePriorities(t *torrent, off, readaheadBytes int64) {
 	index := int(off / int64(t.usualPieceSize()))
-	cl.raisePiecePriority(t, index, piecePriorityNow)
+	cl.raisePiecePriority(t, index, PiecePriorityNow)
 	index++
 	if index >= t.numPieces() {
 		return
 	}
-	cl.raisePiecePriority(t, index, piecePriorityNext)
+	cl.raisePiecePriority(t, index, PiecePriorityNext)
 	for range iter.N(readaheadPieces(readaheadBytes, t.Info.PieceLength)) {
 		index++
 		if index >= t.numPieces() {
 			break
 		}
-		cl.raisePiecePriority(t, index, piecePriorityReadahead)
+		cl.raisePiecePriority(t, index, PiecePriorityReadahead)
 	}
 }
 
@@ -1981,7 +1981,7 @@ func (t Torrent) SetRegionPriority(off, len int64) {
 	defer t.cl.mu.Unlock()
 	pieceSize := int64(t.usualPieceSize())
 	for i := off / pieceSize; i*pieceSize < off+len; i++ {
-		t.cl.prioritizePiece(t.torrent, int(i), piecePriorityNormal)
+		t.cl.raisePiecePriority(t.torrent, int(i), PiecePriorityNormal)
 	}
 }
 
@@ -1999,12 +1999,12 @@ func (t Torrent) DownloadAll() {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	for i := range iter.N(t.numPieces()) {
-		t.cl.raisePiecePriority(t.torrent, i, piecePriorityNormal)
+		t.cl.raisePiecePriority(t.torrent, i, PiecePriorityNormal)
 	}
 	// Nice to have the first and last pieces sooner for various interactive
 	// purposes.
-	t.cl.raisePiecePriority(t.torrent, 0, piecePriorityReadahead)
-	t.cl.raisePiecePriority(t.torrent, t.numPieces()-1, piecePriorityReadahead)
+	t.cl.raisePiecePriority(t.torrent, 0, PiecePriorityReadahead)
+	t.cl.raisePiecePriority(t.torrent, t.numPieces()-1, PiecePriorityReadahead)
 }
 
 // Returns nil metainfo if it isn't in the cache. Checks that the retrieved
@@ -2543,7 +2543,7 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 	correct := t.pieceComplete(piece)
 	p := t.Pieces[piece]
 	if correct {
-		p.Priority = piecePriorityNone
+		p.Priority = PiecePriorityNone
 		p.PendingChunkSpecs = nil
 		for req := range t.urgent {
 			if int(req.Index) == piece {

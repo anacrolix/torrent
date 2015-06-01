@@ -12,11 +12,11 @@ import (
 type piecePriority byte
 
 const (
-	piecePriorityNone piecePriority = iota
-	piecePriorityNormal
-	piecePriorityReadahead
-	piecePriorityNext
-	piecePriorityNow
+	PiecePriorityNone      piecePriority = iota // Not wanted.
+	PiecePriorityNormal                         // Wanted.
+	PiecePriorityReadahead                      // May be required soon.
+	PiecePriorityNext                           // Succeeds a piece where a read occurred.
+	PiecePriorityNow                            // A read occurred in this piece.
 )
 
 type piece struct {

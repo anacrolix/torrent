@@ -29,11 +29,12 @@ func (f *File) Length() int64 {
 }
 
 type FilePieceState struct {
-	Length int64
-	State  byte
+	Bytes int64 // Bytes within the piece that are part of this File.
+	PieceState
 }
 
-func (f *File) Progress() (ret []FilePieceState) {
+// Returns the state of pieces in this file.
+func (f *File) State() (ret []FilePieceState) {
 	pieceSize := int64(f.t.usualPieceSize())
 	off := f.offset % pieceSize
 	remaining := f.length
@@ -45,7 +46,7 @@ func (f *File) Progress() (ret []FilePieceState) {
 		if len1 > remaining {
 			len1 = remaining
 		}
-		ret = append(ret, FilePieceState{len1, f.t.pieceStatusChar(i)})
+		ret = append(ret, FilePieceState{len1, f.t.pieceState(i)})
 		off = 0
 		remaining -= len1
 	}

@@ -344,9 +344,14 @@ func (cl *Client) prioritizePiece(t *torrent, piece int, priority piecePriority)
 	if t.havePiece(piece) {
 		return
 	}
-	cl.queueFirstHash(t, piece)
-	t.Pieces[piece].Priority = priority
-	cl.pieceChanged(t, piece)
+	if priority != PiecePriorityNone {
+		cl.queueFirstHash(t, piece)
+	}
+	p := t.Pieces[piece]
+	if p.Priority != priority {
+		p.Priority = priority
+		cl.pieceChanged(t, piece)
+	}
 }
 
 func (cl *Client) setEnvBlocklist() (err error) {

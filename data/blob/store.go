@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anacrolix/missinggo"
+
 	dataPkg "github.com/anacrolix/torrent/data"
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -186,7 +188,7 @@ func (me fileInfoSorter) Len() int {
 
 func lastTime(fi os.FileInfo) (ret time.Time) {
 	ret = fi.ModTime()
-	atime := accessTime(fi)
+	atime := missinggo.FileInfoAccessTime(fi)
 	if atime.After(ret) {
 		ret = atime
 	}

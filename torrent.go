@@ -515,7 +515,6 @@ func (t *torrent) numPieces() int {
 	return t.Info.NumPieces()
 }
 
-
 func (t *torrent) numPiecesCompleted() (num int) {
 	for i := range iter.N(t.Info.NumPieces()) {
 		if t.pieceComplete(i) {

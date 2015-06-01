@@ -2400,7 +2400,6 @@ func (cl *Client) allTorrentsCompleted() bool {
 	return true
 }
 
-
 // Returns true when all torrents are completely downloaded and false if the
 // client is stopped before that.
 func (me *Client) WaitAll() bool {
@@ -2414,7 +2413,6 @@ func (me *Client) WaitAll() bool {
 	}
 	return true
 }
-
 
 func (me *Client) fillRequests(t *torrent, c *connection) {
 	if c.Interested {

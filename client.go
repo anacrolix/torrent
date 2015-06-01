@@ -23,7 +23,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"math"
 
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
@@ -2017,60 +2016,6 @@ func (t Torrent) DownloadAll() {
 	t.cl.raisePiecePriority(t.torrent, t.numPieces()-1, piecePriorityReadahead)
 }
 
-// Marks the entire torrent for download. Requires the info first, see
-// GotInfo.
-func (t Torrent) DownloadFile(Path []string) {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
-
-	// log.Printf("File to Download: %s", Path)
-
-	// log.Printf("Pieces: %s", t.torrent.Info.NumPieces())
-	// log.Printf("Length: %s", t.torrent.Info.TotalLength())
-	// log.Printf("Torrent info: %s", t.torrent.Info.UpvertedFiles())
-
-	var offset int64
-	var pickedFile metainfo.FileInfo
-
-	found := false
-	pathStr := strings.Join(Path, "")
-
-	for _, file := range t.torrent.Info.UpvertedFiles() {
-		if strings.Join(file.Path, "/") ==  pathStr {
-			log.Printf("Found file: %s", file)
-
-			found = true
-			pickedFile = file
-			break
-		}
-		// log.Printf("%d %d `%s` `%s`", len(file.Path), len(Path), strings.Join(file.Path, "/"), strings.Join(Path, ""))
-		log.Printf("File: %s", strings.Join(file.Path, "/"))
-		offset += file.Length;
-	}
-
-	if !found {
-		panic(fmt.Sprintf("File not found"))
-	}
-
-	log.Printf("Donwloading file: `%s`", Path)
-	log.Printf("Calculated offset: %s", offset)
-	log.Printf("File length: %s", pickedFile.Length)
-	log.Printf("Piece length: %s", t.torrent.Info.PieceLength)
-
-
-	firstChunk := int(offset/t.torrent.Info.PieceLength)
-	nChunks := int(math.Ceil(float64(pickedFile.Length) / float64(t.torrent.Info.PieceLength)))
-
-	log.Printf("First chunk: %s", offset/t.torrent.Info.PieceLength)
-	log.Printf("Number of chunks: %s", nChunks)
-	log.Printf("Total chunks: %s", t.torrent.Info.NumPieces())
-
-
-	for chunk := firstChunk; chunk < firstChunk + nChunks; chunk++ {
-		log.Printf("Piece #%d: %s %s", chunk, t.torrent.Info.Piece(chunk).Length(), t.torrent.Info.Piece(chunk).Offset())
-		t.cl.raisePiecePriority(t.torrent, chunk, piecePriorityNormal)
-	}
-}
 
 
 // Returns nil metainfo if it isn't in the cache. Checks that the retrieved

@@ -8,8 +8,12 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"io"
+	"io/ioutil"
 	"strings"
 	"time"
+	"bufio"
+
 
 	_ "github.com/anacrolix/envpprof"
 	"github.com/dustin/go-humanize"
@@ -69,13 +73,18 @@ func progressLine(tc *torrent.Client) string {
 	return fmt.Sprintf("\033[K%s / %s\r", humanize.Bytes(uint64(bytesCompleted(tc))), humanize.Bytes(uint64(totalBytesEstimate(tc))))
 }
 
+func dstFileName(picked string) string {
+	parts := strings.Split(picked, "/")
+	return parts[len(parts)-1]
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var rootGroup struct {
 		Client    torrent.Config `group:"Client Options"`
 		Seed      bool           `long:"seed" description:"continue seeding torrents after completed"`
 		TestPeers []string       `long:"test-peer" description:"address of peer to inject to every torrent"`
-		Pick      []string       `long:"pick" description:"filename to pick"`
+		Pick      string         `long:"pick" description:"filename to pick"`
 	}
 	// Don't pass flags.PrintError because it's inconsistent with printing.
 	// https://github.com/jessevdk/go-flags/issues/132
@@ -98,6 +107,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "no torrents specified")
 		return
 	}
+
+	tmpdir, err := ioutil.TempDir("", "torrent-pick-")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer os.RemoveAll(tmpdir)
+
+	rootGroup.Client.DataDir = tmpdir
+
 	client, err := torrent.NewClient(&rootGroup.Client)
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)
@@ -106,6 +125,17 @@ func main() {
 		client.WriteStatus(w)
 	})
 	defer client.Close()
+
+
+	dstName := dstFileName(rootGroup.Pick)
+
+	f, err := os.Create(dstName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dstWriter := bufio.NewWriter(f)
+
+
 	for _, arg := range posArgs {
 		t := func() torrent.Torrent {
 			if strings.HasPrefix(arg, "magnet:") {
@@ -130,11 +160,23 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		go func() {
 			<-t.GotInfo()
-			t.DownloadFile(rootGroup.Pick)
+			files := t.Files()
+			for _, file := range files {
+				if file.Path() ==  rootGroup.Pick {
+
+					log.Printf("Downloading file: %s", file.Path())
+
+					srcReader := io.NewSectionReader(t.NewReader(), file.Offset(), file.Length())
+					io.Copy(dstWriter, srcReader)
+					break
+				}
+			}
 		}()
 	}
+
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

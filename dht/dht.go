@@ -629,7 +629,10 @@ func (s *Server) serve() error {
 			logonce.Stderr.Printf("received dht packet exceeds buffer size")
 			continue
 		}
-		if s.ipBlocked(util.AddrIP(addr)) {
+		s.mu.Lock()
+		blocked := s.ipBlocked(util.AddrIP(addr))
+		s.mu.Unlock()
+		if blocked {
 			continue
 		}
 		s.processPacket(b[:n], newDHTAddr(addr))

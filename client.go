@@ -1444,7 +1444,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		case pp.Have:
 			me.peerGotPiece(t, c, int(msg.Index))
 		case pp.Request:
-			if me.config.NoUpload {
+			if c.Choked {
 				break
 			}
 			request := newRequest(msg.Index, msg.Begin, msg.Length)
@@ -1456,6 +1456,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			// }
 			p := make([]byte, msg.Length)
 			n, err := dataReadAt(t.data, p, int64(t.pieceLength(0))*int64(msg.Index)+int64(msg.Begin))
+			// TODO: Failing to read for a request should not be fatal to the connection.
 			if err != nil {
 				return fmt.Errorf("reading t data to serve request %q: %s", request, err)
 			}
@@ -1769,6 +1770,10 @@ func (me *Client) addPeers(t *torrent, peers []Peer) {
 			continue
 		}
 		if me.ipBlockRange(p.IP) != nil {
+			continue
+		}
+		if p.Port == 0 {
+			log.Printf("got bad peer: %v", p)
 			continue
 		}
 		t.addPeer(p)
@@ -2498,7 +2503,8 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	// Write the chunk out.
 	err := t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
 	if err != nil {
-		return fmt.Errorf("error writing chunk: %s", err)
+		log.Printf("error writing chunk: %s", err)
+		return nil
 	}
 
 	// log.Println("got chunk", req)
@@ -2531,12 +2537,10 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 	}
 	p.EverHashed = true
 	if correct {
-		if sd, ok := t.data.(StatefulData); ok {
-			err := sd.PieceCompleted(int(piece))
-			if err != nil {
-				log.Printf("error completing piece: %s", err)
-				correct = false
-			}
+		err := t.data.PieceCompleted(int(piece))
+		if err != nil {
+			log.Printf("error completing piece: %s", err)
+			correct = false
 		}
 	}
 	me.pieceChanged(t, int(piece))

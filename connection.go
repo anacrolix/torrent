@@ -385,6 +385,7 @@ func (c *connection) Choke() {
 	c.Post(pp.Message{
 		Type: pp.Choke,
 	})
+	c.PeerRequests = nil
 	c.Choked = true
 }
 

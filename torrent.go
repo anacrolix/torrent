@@ -545,7 +545,10 @@ func (t *torrent) offsetRequest(off int64) (req request, ok bool) {
 }
 
 func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
-	_, err = t.data.WriteAt(data, int64(piece)*t.Info.PieceLength+begin)
+	n, err := t.data.WriteAt(data, int64(piece)*t.Info.PieceLength+begin)
+	if err == nil && n != len(data) {
+		err = io.ErrShortWrite
+	}
 	return
 }
 

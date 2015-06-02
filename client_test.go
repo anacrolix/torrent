@@ -3,10 +3,12 @@ package torrent
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -17,7 +19,9 @@ import (
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/data/blob"
+	"github.com/anacrolix/torrent/data"
 	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/util"
 )
 
@@ -31,6 +35,7 @@ var TestingConfig = Config{
 	DisableTrackers:      true,
 	NoDefaultBlocklist:   true,
 	DisableMetainfoCache: true,
+	DataDir:              filepath.Join(os.TempDir(), "anacrolix"),
 }
 
 func TestClientDefault(t *testing.T) {
@@ -316,4 +321,69 @@ func (suite) TestMergingTrackersByAddingSpecs(c *check.C) {
 	}
 	c.Assert(T.Trackers[0][0].URL(), check.Equals, "http://a")
 	c.Assert(T.Trackers[1][0].URL(), check.Equals, "udp://b")
+}
+
+type badData struct {
+}
+
+func (me badData) WriteAt(b []byte, off int64) (int, error) {
+	return 0, nil
+}
+
+func (me badData) WriteSectionTo(w io.Writer, off, n int64) (int64, error) {
+	return 0, nil
+}
+
+func (me badData) PieceComplete(piece int) bool {
+	return true
+}
+
+func (me badData) PieceCompleted(piece int) error {
+	return nil
+}
+
+func (me badData) ReadAt(b []byte, off int64) (n int, err error) {
+	if off >= 5 {
+		err = io.EOF
+		return
+	}
+	n = copy(b, []byte("hello")[off:])
+	return
+}
+
+var _ StatefulData = badData{}
+
+// We read from a piece which is marked completed, but is missing data.
+func TestCompletedPieceWrongSize(t *testing.T) {
+	cfg := TestingConfig
+	cfg.TorrentDataOpener = func(*metainfo.Info) data.Data {
+		return badData{}
+	}
+	cl, _ := NewClient(&cfg)
+	defer cl.Close()
+	tt, new, err := cl.AddTorrentSpec(&TorrentSpec{
+		Info: &metainfo.InfoEx{
+			Info: metainfo.Info{
+				PieceLength: 15,
+				Pieces:      make([]byte, 20),
+				Files: []metainfo.FileInfo{
+					metainfo.FileInfo{Path: []string{"greeting"}, Length: 13},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !new {
+		t.Fatal("expected new")
+	}
+	r := tt.NewReader()
+	defer r.Close()
+	b := make([]byte, 20)
+	n, err := io.ReadFull(r, b)
+	if n != 5 || err != io.ErrUnexpectedEOF {
+		t.Fatal(n, err)
+	}
+	defer tt.Drop()
 }

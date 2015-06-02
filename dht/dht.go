@@ -65,6 +65,9 @@ type ServerConfig struct {
 	// Disable the DHT security extension:
 	// http://www.libtorrent.org/dht_sec.html.
 	NoSecurity bool
+	// Initial IP blocklist to use. Applied before serving and bootstrapping
+	// begins.
+	IPBlocklist *iplist.IPList
 }
 
 type ServerStats struct {
@@ -115,7 +118,8 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		c = &ServerConfig{}
 	}
 	s = &Server{
-		config: *c,
+		config:      *c,
+		ipBlockList: c.IPBlocklist,
 	}
 	if c.Conn != nil {
 		s.socket = c.Conn

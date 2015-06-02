@@ -514,7 +514,9 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	if !cfg.NoDHT {
 		dhtCfg := cfg.DHTConfig
 		if dhtCfg == nil {
-			dhtCfg = &dht.ServerConfig{}
+			dhtCfg = &dht.ServerConfig{
+				IPBlocklist: cl.ipBlockList,
+			}
 		}
 		if dhtCfg.Addr == "" {
 			dhtCfg.Addr = listenAddr()
@@ -525,9 +527,6 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		cl.dHT, err = dht.NewServer(dhtCfg)
 		if err != nil {
 			return
-		}
-		if cl.ipBlockList != nil {
-			cl.dHT.SetIPBlockList(cl.ipBlockList)
 		}
 	}
 

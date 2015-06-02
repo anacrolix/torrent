@@ -70,10 +70,10 @@ type fileNode struct {
 	TorrentOffset int64
 }
 
-func (fn fileNode) Attr(attr *fuse.Attr) {
+func (fn fileNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 	attr.Size = fn.size
 	attr.Mode = defaultMode
-	return
+	return nil
 }
 
 func (n *node) fsPath() string {
@@ -230,9 +230,9 @@ func (dn dirNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, e
 	return
 }
 
-func (dn dirNode) Attr(attr *fuse.Attr) {
+func (dn dirNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 	attr.Mode = os.ModeDir | defaultMode
-	return
+	return nil
 }
 
 func (me rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, err error) {
@@ -279,8 +279,9 @@ func (me rootNode) ReadDirAll(ctx context.Context) (dirents []fuse.Dirent, err e
 	return
 }
 
-func (rootNode) Attr(attr *fuse.Attr) {
+func (rootNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 	attr.Mode = os.ModeDir
+	return nil
 }
 
 // TODO(anacrolix): Why should rootNode implement this?

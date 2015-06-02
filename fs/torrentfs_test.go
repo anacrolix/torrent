@@ -17,7 +17,8 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	"golang.org/x/net/context"
+	"github.com/gorilla/context"
+	netContext "golang.org/x/net/context"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/data"
@@ -234,7 +235,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	root, _ := fs.Root()
 	node, _ := root.(fusefs.NodeStringLookuper).Lookup(context.Background(), "greeting")
 	var attr fuse.Attr
-	node.Attr(&attr)
+	node.Attr(netContext.Background(), &attr)
 	size := attr.Size
 	resp := &fuse.ReadResponse{
 		Data: make([]byte, size),

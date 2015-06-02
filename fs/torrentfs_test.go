@@ -17,7 +17,6 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	"github.com/gorilla/context"
 	netContext "golang.org/x/net/context"
 
 	"github.com/anacrolix/torrent"
@@ -233,14 +232,14 @@ func TestDownloadOnDemand(t *testing.T) {
 	fs := New(leecher)
 	defer fs.Destroy()
 	root, _ := fs.Root()
-	node, _ := root.(fusefs.NodeStringLookuper).Lookup(context.Background(), "greeting")
+	node, _ := root.(fusefs.NodeStringLookuper).Lookup(netContext.Background(), "greeting")
 	var attr fuse.Attr
 	node.Attr(netContext.Background(), &attr)
 	size := attr.Size
 	resp := &fuse.ReadResponse{
 		Data: make([]byte, size),
 	}
-	node.(fusefs.HandleReader).Read(context.Background(), &fuse.ReadRequest{
+	node.(fusefs.HandleReader).Read(netContext.Background(), &fuse.ReadRequest{
 		Size: int(size),
 	}, resp)
 	content := resp.Data

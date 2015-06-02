@@ -208,6 +208,11 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 
 // Called when metadata for a torrent becomes available.
 func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte, eventLocker sync.Locker) (err error) {
+	err = validateInfo(md)
+	if err != nil {
+		err = fmt.Errorf("bad info: %s", err)
+		return
+	}
 	t.Info = md
 	t.length = 0
 	for _, f := range t.Info.UpvertedFiles() {

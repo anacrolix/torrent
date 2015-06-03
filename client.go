@@ -337,8 +337,8 @@ func (t *torrent) connPendPiece(c *connection, piece int) {
 
 func (cl *Client) raisePiecePriority(t *torrent, piece int, priority piecePriority) {
 	if t.Pieces[piece].Priority < priority {
-		cl.event.Broadcast()
 		cl.prioritizePiece(t, piece, priority)
+		cl.event.Broadcast()
 	}
 }
 
@@ -2552,6 +2552,7 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 func (me *Client) pieceChanged(t *torrent, piece int) {
 	correct := t.pieceComplete(piece)
 	p := t.Pieces[piece]
+	defer p.Event.Broadcast()
 	if correct {
 		p.Priority = PiecePriorityNone
 		p.PendingChunkSpecs = nil
@@ -2560,7 +2561,6 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 				delete(t.urgent, req)
 			}
 		}
-		p.Event.Broadcast()
 	} else {
 		if p.numPendingChunks() == 0 {
 			t.pendAllChunkSpecs(int(piece))
@@ -2587,9 +2587,6 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 			t.connPendPiece(conn, int(piece))
 			me.replenishConnRequests(t, conn)
 		}
-	}
-	if t.haveAllPieces() && me.config.NoUpload {
-		t.ceaseNetworking()
 	}
 	me.event.Broadcast()
 }

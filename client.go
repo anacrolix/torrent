@@ -681,6 +681,9 @@ func doDial(dial func(addr string, t *torrent) (net.Conn, error), ch chan dialRe
 			return
 		}
 	}
+	if utp && err.Error() == "timed out waiting for ack" {
+		return
+	}
 	if err != nil {
 		log.Printf("error dialing %s: %s", addr, err)
 		return

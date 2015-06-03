@@ -23,6 +23,9 @@ func (t *Torrent) Info() *metainfo.Info {
 	return t.torrent.Info
 }
 
+// Returns a Reader bound to the torrent's data. All read calls block until
+// the data requested is actually available. Priorities are set to ensure the
+// data requested will be downloaded as soon as possible.
 func (t *Torrent) NewReader() (ret *Reader) {
 	ret = &Reader{
 		t:         t,

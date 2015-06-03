@@ -22,6 +22,8 @@ func (r *Reader) SetResponsive() {
 	r.responsive = true
 }
 
+// Configure the number of bytes ahead of a read that should also be
+// prioritized in preparation for further reads.
 func (r *Reader) SetReadahead(readahead int64) {
 	r.readahead = readahead
 }
@@ -83,6 +85,7 @@ func (r *Reader) Read(b []byte) (n int, err error) {
 	return
 }
 
+// Must only return EOF at the end of the torrent.
 func (r *Reader) readAt(b []byte, pos int64) (n int, err error) {
 	// defer func() {
 	// 	log.Println(pos, n, err)

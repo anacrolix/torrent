@@ -114,6 +114,8 @@ func (cl *Client) queueFirstHash(t *torrent, piece int) {
 	cl.queuePieceCheck(t, pp.Integer(piece))
 }
 
+// Clients contain zero or more Torrents. A client manages a blocklist, the
+// TCP/UDP protocol ports, and DHT as desired.
 type Client struct {
 	halfOpenLimit  int
 	peerID         [20]byte
@@ -434,7 +436,7 @@ func (cl *Client) initBannedTorrents() error {
 	return nil
 }
 
-// Creates a new client. Clients contain zero or more Torrents.
+// Creates a new client.
 func NewClient(cfg *Config) (cl *Client, err error) {
 	if cfg == nil {
 		cfg = &Config{}

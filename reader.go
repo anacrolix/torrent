@@ -65,6 +65,10 @@ func (r *Reader) available(off, max int64) (ret int64) {
 		ret += len1
 		off += len1
 	}
+	// Ensure that ret hasn't exceeded our original max.
+	if max < 0 {
+		ret += max
+	}
 	return
 }
 
@@ -79,9 +83,6 @@ func (r *Reader) ReadAt(b []byte, off int64) (n int, err error) {
 func (r *Reader) Read(b []byte) (n int, err error) {
 	n, err = r.readAt(b, r.pos)
 	r.pos += int64(n)
-	if n != 0 && err == io.ErrUnexpectedEOF {
-		err = nil
-	}
 	return
 }
 
@@ -100,6 +101,7 @@ func (r *Reader) readAt(b []byte, pos int64) (n int, err error) {
 	if int64(len(b)) > maxLen {
 		b = b[:maxLen]
 	}
+again:
 	r.raisePriorities(pos, len(b))
 	for !r.readable(pos) {
 		r.raisePriorities(pos, len(b))
@@ -107,10 +109,15 @@ func (r *Reader) readAt(b []byte, pos int64) (n int, err error) {
 	}
 	avail := r.available(pos, int64(len(b)))
 	// log.Println("available", avail)
-	if int64(len(b)) > avail {
-		b = b[:avail]
+	b1 := b[:avail]
+	n, err = dataReadAt(r.t.data, b1, pos)
+	if n != 0 {
+		err = nil
+		return
 	}
-	n, err = dataReadAt(r.t.data, b, pos)
+	if err == io.ErrUnexpectedEOF {
+		goto again
+	}
 	return
 }
 

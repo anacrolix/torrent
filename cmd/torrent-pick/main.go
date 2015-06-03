@@ -2,18 +2,17 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"io"
-	"io/ioutil"
 	"strings"
 	"time"
-	"bufio"
-
 
 	_ "github.com/anacrolix/envpprof"
 	"github.com/dustin/go-humanize"
@@ -126,7 +125,6 @@ func main() {
 	})
 	defer client.Close()
 
-
 	dstName := dstFileName(rootGroup.Pick)
 
 	f, err := os.Create(dstName)
@@ -165,7 +163,7 @@ func main() {
 			<-t.GotInfo()
 			files := t.Files()
 			for _, file := range files {
-				if file.Path() ==  rootGroup.Pick {
+				if file.Path() == rootGroup.Pick {
 
 					log.Printf("Downloading file: %s", file.Path())
 
@@ -177,7 +175,6 @@ func main() {
 			}
 		}()
 	}
-
 
 	ticker := time.NewTicker(time.Second)
 waitDone:

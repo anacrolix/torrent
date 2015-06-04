@@ -24,6 +24,7 @@ func Example_fileReader() {
 	)
 	r := t.NewReader()
 	defer r.Close()
+	// Access the parts of the torrent pertaining to f. Data will be
+	// downloaded as required, per the configuration of the torrent.Reader.
 	_ = io.NewSectionReader(r, f.Offset(), f.Length())
-	// fr will read from the parts of the torrent pertaining to f.
 }

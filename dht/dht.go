@@ -772,7 +772,7 @@ func (s *Server) getNode(addr dHTAddr, id string) (n *node) {
 	n = &node{
 		addr: addr,
 	}
-	if id != "" {
+	if len(id) == 20 {
 		n.SetIDFromString(id)
 	}
 	if len(s.nodes) >= maxNodes {

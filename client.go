@@ -819,6 +819,12 @@ func (me *Client) establishOutgoingConn(t *torrent, addr string) (c *connection,
 		return
 	}
 	nc.Close()
+	// Try again without encryption, using whichever protocol type worked last
+	// time.
+	if me.config.DisableEncryption {
+		// We already tried without encryption.
+		return
+	}
 	if utp {
 		nc, err = me.dialUTP(addr, t)
 	} else {

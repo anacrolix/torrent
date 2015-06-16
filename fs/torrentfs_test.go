@@ -170,6 +170,7 @@ func TestDownloadOnDemand(t *testing.T) {
 		DisableTrackers: true,
 		NoDHT:           true,
 		ListenAddr:      ":0",
+		Seed:            true,
 
 		NoDefaultBlocklist: true,
 		// Ensure that the metainfo is obtained over the wire, since we added

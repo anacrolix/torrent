@@ -20,7 +20,8 @@ const (
 )
 
 type piece struct {
-	Hash pieceSum // The completed piece SHA1 hash, from the metainfo "pieces" field.
+	// The completed piece SHA1 hash, from the metainfo "pieces" field.
+	Hash pieceSum
 	// Chunks we don't have. The offset and length can be determined by the
 	// request chunkSize in use.
 	PendingChunkSpecs []bool

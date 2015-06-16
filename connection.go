@@ -52,6 +52,7 @@ type connection struct {
 	lastMessageReceived     time.Time
 	completedHandshake      time.Time
 	lastUsefulChunkReceived time.Time
+	lastChunkSent           time.Time
 
 	// Stuff controlled by the local peer.
 	Interested       bool

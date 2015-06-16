@@ -18,8 +18,8 @@ import (
 	"gopkg.in/check.v1"
 
 	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/data/blob"
 	"github.com/anacrolix/torrent/data"
+	"github.com/anacrolix/torrent/data/blob"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/util"
@@ -251,6 +251,7 @@ func TestClientTransfer(t *testing.T) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
 	cfg := TestingConfig
+	cfg.Seed = true
 	cfg.DataDir = greetingTempDir
 	seeder, err := NewClient(&cfg)
 	if err != nil {

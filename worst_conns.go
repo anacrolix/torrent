@@ -6,12 +6,13 @@ import (
 
 // Implements heap functions such that [0] is the worst connection.
 type worstConns struct {
-	c []*connection
-	t *torrent
+	c  []*connection
+	t  *torrent
+	cl *Client
 }
 
-func (me worstConns) Len() int      { return len(me.c) }
-func (me worstConns) Swap(i, j int) { me.c[i], me.c[j] = me.c[j], me.c[i] }
+func (me *worstConns) Len() int      { return len(me.c) }
+func (me *worstConns) Swap(i, j int) { me.c[i], me.c[j] = me.c[j], me.c[i] }
 
 func (me *worstConns) Pop() (ret interface{}) {
 	old := me.c
@@ -26,37 +27,25 @@ func (me *worstConns) Push(x interface{}) {
 }
 
 type worstConnsSortKey struct {
-	// Peer has something we want.
-	useless bool
-	// A fabricated duration since peer was last helpful.
-	age time.Duration
+	useful      bool
+	lastHelpful time.Time
 }
 
 func (me worstConnsSortKey) Less(other worstConnsSortKey) bool {
-	if me.useless != other.useless {
-		return me.useless
+	if me.useful != other.useful {
+		return !me.useful
 	}
-	return me.age > other.age
+	return me.lastHelpful.Before(other.lastHelpful)
 }
 
-func (me worstConns) key(i int) (key worstConnsSortKey) {
+func (me *worstConns) key(i int) (key worstConnsSortKey) {
 	c := me.c[i]
-	// Peer has had time to declare what they have.
-	if time.Now().Sub(c.completedHandshake) >= 30*time.Second {
-		if !me.t.haveInfo() {
-			key.useless = !c.supportsExtension("ut_metadata")
-		} else {
-			if !me.t.connHasWantedPieces(c) {
-				key.useless = true
-			}
-		}
+	key.useful = me.cl.usefulConn(me.t, c)
+	if me.cl.seeding(me.t) {
+		key.lastHelpful = c.lastChunkSent
+	} else {
+		key.lastHelpful = c.lastUsefulChunkReceived
 	}
-	key.age = time.Duration(1+3*c.UnwantedChunksReceived) * time.Now().Sub(func() time.Time {
-		if !c.lastUsefulChunkReceived.IsZero() {
-			return c.lastUsefulChunkReceived
-		}
-		return c.completedHandshake.Add(-time.Minute)
-	}()) / time.Duration(1+c.UsefulChunksReceived)
 	return
 }
 

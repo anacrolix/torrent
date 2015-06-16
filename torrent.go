@@ -131,10 +131,11 @@ func (t *torrent) addrActive(addr string) bool {
 	return false
 }
 
-func (t *torrent) worstConnsHeap() (wcs *worstConns) {
+func (t *torrent) worstConnsHeap(cl *Client) (wcs *worstConns) {
 	wcs = &worstConns{
-		c: append([]*connection{}, t.Conns...),
-		t: t,
+		c:  append([]*connection{}, t.Conns...),
+		t:  t,
+		cl: cl,
 	}
 	heap.Init(wcs)
 	return
@@ -376,7 +377,7 @@ func pieceStateRunStatusChars(psr PieceStateRun) (ret string) {
 	return
 }
 
-func (t *torrent) writeStatus(w io.Writer) {
+func (t *torrent) writeStatus(w io.Writer, cl *Client) {
 	fmt.Fprintf(w, "Infohash: %x\n", t.InfoHash)
 	fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize())
 	fmt.Fprintf(w, "Metadata have: ")
@@ -421,8 +422,9 @@ func (t *torrent) writeStatus(w io.Writer) {
 	fmt.Fprintf(w, "Half open: %d\n", len(t.HalfOpen))
 	fmt.Fprintf(w, "Active peers: %d\n", len(t.Conns))
 	sort.Sort(&worstConns{
-		c: t.Conns,
-		t: t,
+		c:  t.Conns,
+		t:  t,
+		cl: cl,
 	})
 	for _, c := range t.Conns {
 		c.WriteStatus(w, t)
@@ -685,8 +687,9 @@ func (t *torrent) wantChunk(r request) bool {
 }
 
 func (t *torrent) urgentChunkInPiece(piece int) bool {
+	p := pp.Integer(piece)
 	for req := range t.urgent {
-		if int(req.Index) == piece {
+		if req.Index == p {
 			return true
 		}
 	}

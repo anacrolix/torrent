@@ -275,8 +275,12 @@ again:
 
 // Calculates the number of pieces to set to Readahead priority, after the
 // Now, and Next pieces.
-func readaheadPieces(readahead, pieceLength int64) int {
-	return int((readahead+pieceLength-1)/pieceLength - 1)
+func readaheadPieces(readahead, pieceLength int64) (ret int) {
+	ret = int((readahead+pieceLength-1)/pieceLength - 1)
+	if ret < 2 {
+		ret = 2
+	}
+	return
 }
 
 func (cl *Client) readRaisePiecePriorities(t *torrent, off, readaheadBytes int64) {

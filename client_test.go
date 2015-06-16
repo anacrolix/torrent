@@ -15,6 +15,7 @@ import (
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
+	"github.com/stretchr/testify/assert"
 	"gopkg.in/check.v1"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -295,15 +296,14 @@ func TestReadaheadPieces(t *testing.T) {
 		readaheadPieces             int
 	}{
 		{5 * 1024 * 1024, 256 * 1024, 19},
-		{5 * 1024 * 1024, 5 * 1024 * 1024, 0},
-		{5*1024*1024 - 1, 5 * 1024 * 1024, 0},
-		{5 * 1024 * 1024, 5*1024*1024 - 1, 1},
-		{0, 5 * 1024 * 1024, -1},
+		{5 * 1024 * 1024, 5 * 1024 * 1024, 1},
+		{5*1024*1024 - 1, 5 * 1024 * 1024, 1},
+		{5 * 1024 * 1024, 5*1024*1024 - 1, 2},
+		{0, 5 * 1024 * 1024, 0},
 		{5 * 1024 * 1024, 1048576, 4},
 	} {
-		if readaheadPieces(case_.readaheadBytes, case_.pieceLength) != case_.readaheadPieces {
-			t.Fatalf("case failed: %v", case_)
-		}
+		pieces := readaheadPieces(case_.readaheadBytes, case_.pieceLength)
+		assert.Equal(t, case_.readaheadPieces, pieces, "%v", case_)
 	}
 }
 

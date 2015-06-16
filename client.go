@@ -276,9 +276,13 @@ again:
 // Calculates the number of pieces to set to Readahead priority, after the
 // Now, and Next pieces.
 func readaheadPieces(readahead, pieceLength int64) (ret int) {
+	// Expand the readahead to fit any partial pieces. Subtract 1 for the
+	// "next" piece that is assigned.
 	ret = int((readahead+pieceLength-1)/pieceLength - 1)
+	// Lengthen the "readahead tail" to smooth blockiness that occurs when the
+	// piece length is much larger than the readahead.
 	if ret < 2 {
-		ret = 2
+		ret++
 	}
 	return
 }

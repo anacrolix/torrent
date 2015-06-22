@@ -1,9 +1,13 @@
+// Package iplist handles the P2P Plaintext Format described by
+// https://en.wikipedia.org/wiki/PeerGuardian#P2P_plaintext_format.
 package iplist
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sort"
 )
@@ -121,5 +125,38 @@ func ParseBlocklistP2PLine(l []byte) (r Range, ok bool, err error) {
 		return
 	}
 	ok = true
+	return
+}
+
+// Creates an IPList from a line-delimited P2P Plaintext file.
+func NewFromReader(f io.Reader) (ret *IPList, err error) {
+	var ranges []Range
+	// There's a lot of similar descriptions, so we maintain a pool and reuse
+	// them to reduce memory overhead.
+	uniqStrs := make(map[string]string)
+	scanner := bufio.NewScanner(f)
+	lineNum := 1
+	for scanner.Scan() {
+		r, ok, lineErr := ParseBlocklistP2PLine(scanner.Bytes())
+		if lineErr != nil {
+			err = fmt.Errorf("error parsing line %d: %s", lineNum, lineErr)
+			return
+		}
+		lineNum++
+		if !ok {
+			continue
+		}
+		if s, ok := uniqStrs[r.Description]; ok {
+			r.Description = s
+		} else {
+			uniqStrs[r.Description] = r.Description
+		}
+		ranges = append(ranges, r)
+	}
+	err = scanner.Err()
+	if err != nil {
+		return
+	}
+	ret = New(ranges)
 	return
 }

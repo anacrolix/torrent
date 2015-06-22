@@ -377,33 +377,7 @@ func (cl *Client) setEnvBlocklist() (err error) {
 		return
 	}
 	defer f.Close()
-	var ranges []iplist.Range
-	uniqStrs := make(map[string]string)
-	scanner := bufio.NewScanner(f)
-	lineNum := 1
-	for scanner.Scan() {
-		r, ok, lineErr := iplist.ParseBlocklistP2PLine(scanner.Bytes())
-		if lineErr != nil {
-			err = fmt.Errorf("error reading torrent blocklist line %d: %s", lineNum, lineErr)
-			return
-		}
-		lineNum++
-		if !ok {
-			continue
-		}
-		if s, ok := uniqStrs[r.Description]; ok {
-			r.Description = s
-		} else {
-			uniqStrs[r.Description] = r.Description
-		}
-		ranges = append(ranges, r)
-	}
-	err = scanner.Err()
-	if err != nil {
-		err = fmt.Errorf("error reading torrent blocklist: %s", err)
-		return
-	}
-	cl.ipBlockList = iplist.New(ranges)
+	cl.ipBlockList, err = iplist.NewFromReader(f)
 	return
 }
 

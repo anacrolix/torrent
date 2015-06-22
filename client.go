@@ -336,6 +336,8 @@ func (cl *Client) configDir() string {
 	return cl.config.ConfigDir
 }
 
+// The directory where the Client expects to find and store configuration
+// data. Defaults to $HOME/.config/torrent.
 func (cl *Client) ConfigDir() string {
 	return cl.configDir()
 }

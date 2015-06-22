@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -19,8 +21,14 @@ func main() {
 		}
 		if *name {
 			fmt.Printf("%s\n", metainfo.Info.Name)
-		} else {
-			fmt.Printf("%+#v\n", metainfo)
+			continue
 		}
+		d := map[string]interface{}{
+			"Name":      metainfo.Info.Name,
+			"NumPieces": metainfo.Info.NumPieces(),
+		}
+		b, _ := json.MarshalIndent(d, "", "  ")
+		os.Stdout.Write(b)
 	}
+	os.Stdout.WriteString("\n")
 }

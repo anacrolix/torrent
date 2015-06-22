@@ -208,7 +208,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	} else {
 		fmt.Fprintln(w, "Not listening!")
 	}
-	fmt.Fprintf(w, "Peer ID: %q\n", cl.peerID)
+	fmt.Fprintf(w, "Peer ID: %+q\n", cl.peerID)
 	if cl.dHT != nil {
 		dhtStats := cl.dHT.Stats()
 		fmt.Fprintf(w, "DHT nodes: %d (%d good)\n", dhtStats.Nodes, dhtStats.GoodNodes)

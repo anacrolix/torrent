@@ -236,7 +236,7 @@ func (cn *connection) statusFlags() (ret string) {
 
 func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 	// \t isn't preserved in <pre> blocks?
-	fmt.Fprintf(w, "%q: %s-%s\n", cn.PeerID, cn.localAddr(), cn.remoteAddr())
+	fmt.Fprintf(w, "%+q: %s-%s\n", cn.PeerID, cn.localAddr(), cn.remoteAddr())
 	fmt.Fprintf(w, "    last msg: %s, connected: %s, last useful chunk: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),

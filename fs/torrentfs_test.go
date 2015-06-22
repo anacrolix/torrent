@@ -97,9 +97,15 @@ func TestUnmountWedged(t *testing.T) {
 		DataDir:         filepath.Join(layout.BaseDir, "incomplete"),
 		DisableTrackers: true,
 		NoDHT:           true,
+		ListenAddr:      "redonk",
+		DisableTCP:      true,
+		DisableUTP:      true,
 
 		NoDefaultBlocklist: true,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer client.Close()
 	client.AddTorrent(layout.Metainfo)
 	fs := New(client)

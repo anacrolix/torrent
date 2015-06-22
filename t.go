@@ -42,3 +42,13 @@ func (t *Torrent) PieceStateRuns() []PieceStateRun {
 	defer t.stateMu.Unlock()
 	return t.torrent.pieceStateRuns()
 }
+
+func (t Torrent) NumPieces() int {
+	return t.numPieces()
+}
+
+func (t Torrent) Drop() {
+	t.cl.mu.Lock()
+	t.cl.dropTorrent(t.InfoHash)
+	t.cl.mu.Unlock()
+}

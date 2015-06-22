@@ -1971,16 +1971,6 @@ func (t *torrent) BytesCompleted() int64 {
 	return t.Info.TotalLength() - t.bytesLeft()
 }
 
-func (t Torrent) NumPieces() int {
-	return t.numPieces()
-}
-
-func (t Torrent) Drop() {
-	t.cl.mu.Lock()
-	t.cl.dropTorrent(t.InfoHash)
-	t.cl.mu.Unlock()
-}
-
 // A file-like handle to some torrent data resource.
 type Handle interface {
 	io.Reader

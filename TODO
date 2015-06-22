@@ -7,4 +7,4 @@
  * Rearrange the local-peer choked/interested status flags to be more natural to read.
  * Check that pruning is working correctly. worstConns sorting might need an adjustment to how it factors in the good/unwanted chunks ratio.
  * data/blob: Deleting incomplete data triggers io.ErrUnexpectedEOF that isn't recovered from.
- * Responsive reader needs to apply some readahead.
+ * UL/DL rate-limiting.

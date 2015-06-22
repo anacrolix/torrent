@@ -8,3 +8,4 @@
  * Check that pruning is working correctly. worstConns sorting might need an adjustment to how it factors in the good/unwanted chunks ratio.
  * data/blob: Deleting incomplete data triggers io.ErrUnexpectedEOF that isn't recovered from.
  * UL/DL rate-limiting.
+ * Handle Torrent being dropped before GotInfo.

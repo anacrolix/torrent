@@ -43,21 +43,22 @@ import (
 )
 
 var (
-	unusedDownloadedChunksCount = expvar.NewInt("unusedDownloadedChunksCount")
-	chunksDownloadedCount       = expvar.NewInt("chunksDownloadedCount")
-	peersFoundByDHT             = expvar.NewInt("peersFoundByDHT")
-	peersFoundByPEX             = expvar.NewInt("peersFoundByPEX")
-	peersFoundByTracker         = expvar.NewInt("peersFoundByTracker")
-	uploadChunksPosted          = expvar.NewInt("uploadChunksPosted")
-	unexpectedCancels           = expvar.NewInt("unexpectedCancels")
-	postedCancels               = expvar.NewInt("postedCancels")
-	duplicateConnsAvoided       = expvar.NewInt("duplicateConnsAvoided")
-	failedPieceHashes           = expvar.NewInt("failedPieceHashes")
-	unsuccessfulDials           = expvar.NewInt("unsuccessfulDials")
-	successfulDials             = expvar.NewInt("successfulDials")
-	acceptedConns               = expvar.NewInt("acceptedConns")
-	inboundConnsBlocked         = expvar.NewInt("inboundConnsBlocked")
-	peerExtensions              = expvar.NewMap("peerExtensions")
+	unwantedChunksReceived   = expvar.NewInt("chunksReceivedUnwanted")
+	unexpectedChunksReceived = expvar.NewInt("chunksReceivedUnexpected")
+	chunksReceived           = expvar.NewInt("chunksReceived")
+	peersFoundByDHT          = expvar.NewInt("peersFoundByDHT")
+	peersFoundByPEX          = expvar.NewInt("peersFoundByPEX")
+	peersFoundByTracker      = expvar.NewInt("peersFoundByTracker")
+	uploadChunksPosted       = expvar.NewInt("uploadChunksPosted")
+	unexpectedCancels        = expvar.NewInt("unexpectedCancels")
+	postedCancels            = expvar.NewInt("postedCancels")
+	duplicateConnsAvoided    = expvar.NewInt("duplicateConnsAvoided")
+	failedPieceHashes        = expvar.NewInt("failedPieceHashes")
+	unsuccessfulDials        = expvar.NewInt("unsuccessfulDials")
+	successfulDials          = expvar.NewInt("successfulDials")
+	acceptedConns            = expvar.NewInt("acceptedConns")
+	inboundConnsBlocked      = expvar.NewInt("inboundConnsBlocked")
+	peerExtensions           = expvar.NewMap("peerExtensions")
 	// Count of connections to peer with same client ID.
 	connsToSelf = expvar.NewInt("connsToSelf")
 	// Number of completed connections to a client we're already connected with.
@@ -1255,11 +1256,12 @@ func (cl *Client) connCancel(t *torrent, cn *connection, r request) (ok bool) {
 	return
 }
 
-func (cl *Client) connDeleteRequest(t *torrent, cn *connection, r request) {
+func (cl *Client) connDeleteRequest(t *torrent, cn *connection, r request) bool {
 	if !cn.RequestPending(r) {
-		return
+		return false
 	}
 	delete(cn.Requests, r)
+	return true
 }
 
 func (cl *Client) requestPendingMetadata(t *torrent, c *connection) {
@@ -2512,20 +2514,22 @@ func (me *Client) replenishConnRequests(t *torrent, c *connection) {
 
 // Handle a received chunk from a peer.
 func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) error {
-	chunksDownloadedCount.Add(1)
+	chunksReceived.Add(1)
 
 	req := newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))
 
 	// Request has been satisfied.
-	me.connDeleteRequest(t, c, req)
-
-	defer me.replenishConnRequests(t, c)
+	if me.connDeleteRequest(t, c, req) {
+		defer me.replenishConnRequests(t, c)
+	} else {
+		unexpectedChunksReceived.Add(1)
+	}
 
 	piece := t.Pieces[req.Index]
 
 	// Do we actually want this chunk?
 	if !t.wantChunk(req) {
-		unusedDownloadedChunksCount.Add(1)
+		unwantedChunksReceived.Add(1)
 		c.UnwantedChunksReceived++
 		return nil
 	}

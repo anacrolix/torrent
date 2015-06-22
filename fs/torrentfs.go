@@ -36,18 +36,7 @@ type TorrentFS struct {
 
 var (
 	_ fusefs.FSDestroyer = &TorrentFS{}
-	_ fusefs.FSIniter    = &TorrentFS{}
-)
 
-func (fs *TorrentFS) Init(ctx context.Context, req *fuse.InitRequest, resp *fuse.InitResponse) error {
-	log.Print(req)
-	log.Print(resp)
-	resp.MaxReadahead = req.MaxReadahead
-	resp.Flags |= fuse.InitAsyncRead
-	return nil
-}
-
-var (
 	_ fusefs.NodeForgetter      = rootNode{}
 	_ fusefs.HandleReadDirAller = rootNode{}
 	_ fusefs.HandleReadDirAller = dirNode{}

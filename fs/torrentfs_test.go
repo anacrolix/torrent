@@ -112,13 +112,12 @@ func TestUnmountWedged(t *testing.T) {
 		t.Fatal(msg)
 	}
 	go func() {
-		server := fusefs.Server{
-			FS: fs,
+		server := fusefs.New(fuseConn, &fusefs.Config{
 			Debug: func(msg interface{}) {
 				t.Log(msg)
 			},
-		}
-		server.Serve(fuseConn)
+		})
+		server.Serve(fs)
 	}()
 	<-fuseConn.Ready
 	if err := fuseConn.MountError; err != nil {

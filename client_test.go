@@ -388,3 +388,19 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 	}
 	defer tt.Drop()
 }
+
+func BenchmarkAddLargeTorrent(b *testing.B) {
+	cfg := TestingConfig
+	cfg.DisableTCP = true
+	cfg.DisableUTP = true
+	cfg.ListenAddr = "redonk"
+	cl, _ := NewClient(&cfg)
+	defer cl.Close()
+	for range iter.N(b.N) {
+		t, err := cl.AddTorrentFromFile("testdata/bootstrap.dat.torrent")
+		if err != nil {
+			b.Fatal(err)
+		}
+		t.Drop()
+	}
+}

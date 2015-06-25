@@ -41,7 +41,7 @@ func resolvedPeerAddrs(ss []string) (ret []torrent.Peer, err error) {
 
 func bytesCompleted(tc *torrent.Client) (ret int64) {
 	for _, t := range tc.Torrents() {
-		if t.Info != nil {
+		if t.Info() != nil {
 			ret += t.BytesCompleted()
 		}
 	}
@@ -81,7 +81,6 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var rootGroup struct {
 		Client    torrent.Config `group:"Client Options"`
-		Seed      bool           `long:"seed" description:"continue seeding torrents after completed"`
 		TestPeers []string       `long:"test-peer" description:"address of peer to inject to every torrent"`
 		Pick      string         `long:"pick" description:"filename to pick"`
 	}
@@ -186,7 +185,7 @@ waitDone:
 			os.Stdout.WriteString(progressLine(client))
 		}
 	}
-	if rootGroup.Seed {
+	if rootGroup.Client.Seed {
 		select {}
 	}
 }

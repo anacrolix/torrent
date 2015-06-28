@@ -46,19 +46,25 @@ var (
 	unwantedChunksReceived   = expvar.NewInt("chunksReceivedUnwanted")
 	unexpectedChunksReceived = expvar.NewInt("chunksReceivedUnexpected")
 	chunksReceived           = expvar.NewInt("chunksReceived")
-	peersFoundByDHT          = expvar.NewInt("peersFoundByDHT")
-	peersFoundByPEX          = expvar.NewInt("peersFoundByPEX")
-	peersFoundByTracker      = expvar.NewInt("peersFoundByTracker")
-	uploadChunksPosted       = expvar.NewInt("uploadChunksPosted")
-	unexpectedCancels        = expvar.NewInt("unexpectedCancels")
-	postedCancels            = expvar.NewInt("postedCancels")
-	duplicateConnsAvoided    = expvar.NewInt("duplicateConnsAvoided")
-	failedPieceHashes        = expvar.NewInt("failedPieceHashes")
-	unsuccessfulDials        = expvar.NewInt("unsuccessfulDials")
-	successfulDials          = expvar.NewInt("successfulDials")
-	acceptedConns            = expvar.NewInt("acceptedConns")
-	inboundConnsBlocked      = expvar.NewInt("inboundConnsBlocked")
-	peerExtensions           = expvar.NewMap("peerExtensions")
+
+	peersFoundByDHT     = expvar.NewInt("peersFoundByDHT")
+	peersFoundByPEX     = expvar.NewInt("peersFoundByPEX")
+	peersFoundByTracker = expvar.NewInt("peersFoundByTracker")
+
+	uploadChunksPosted    = expvar.NewInt("uploadChunksPosted")
+	unexpectedCancels     = expvar.NewInt("unexpectedCancels")
+	postedCancels         = expvar.NewInt("postedCancels")
+	duplicateConnsAvoided = expvar.NewInt("duplicateConnsAvoided")
+
+	pieceHashedCorrect    = expvar.NewInt("pieceHashedCorrect")
+	pieceHashedNotCorrect = expvar.NewInt("pieceHashedNotCorrect")
+
+	unsuccessfulDials = expvar.NewInt("dialSuccessful")
+	successfulDials   = expvar.NewInt("dialUnsuccessful")
+
+	acceptedConns       = expvar.NewInt("acceptedConns")
+	inboundConnsBlocked = expvar.NewInt("inboundConnsBlocked")
+	peerExtensions      = expvar.NewMap("peerExtensions")
 	// Count of connections to peer with same client ID.
 	connsToSelf = expvar.NewInt("connsToSelf")
 	// Number of completed connections to a client we're already connected with.
@@ -2566,9 +2572,13 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 
 func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 	p := t.Pieces[piece]
-	if p.EverHashed && !correct {
-		log.Printf("%s: piece %d failed hash", t, piece)
-		failedPieceHashes.Add(1)
+	if p.EverHashed {
+		if correct {
+			pieceHashedCorrect.Add(1)
+		} else {
+			log.Printf("%s: piece %d failed hash", t, piece)
+			pieceHashedNotCorrect.Add(1)
+		}
 	}
 	p.EverHashed = true
 	if correct {

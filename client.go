@@ -1064,7 +1064,7 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	}
 	ih, ok, err := cl.connBTHandshake(c, nil)
 	if err != nil {
-		fmt.Errorf("error during bt handshake: %s", err)
+		err = fmt.Errorf("error during bt handshake: %s", err)
 		return
 	}
 	if !ok {

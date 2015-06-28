@@ -490,7 +490,6 @@ func (d *decoder) parse_value_interface() (interface{}, bool) {
 			What:   errors.New("unknown value type (invalid bencode?)"),
 		})
 	}
-	panic("unreachable")
 }
 
 func (d *decoder) parse_int_interface() interface{} {

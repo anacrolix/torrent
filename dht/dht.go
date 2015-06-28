@@ -596,7 +596,7 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 					return
 				}
 			}
-			log.Printf("%s: received bad krpc message from %s: %s: %q", s, addr, err, b)
+			log.Printf("%s: received bad krpc message from %s: %s: %+q", s, addr, err, b)
 		}()
 		return
 	}

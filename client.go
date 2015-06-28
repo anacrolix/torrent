@@ -89,10 +89,14 @@ const (
 
 	pruneInterval = 10 * time.Second
 
+	// These are our extended message IDs.
 	metadataExtendedId = iota + 1 // 0 is reserved for deleting keys
 	pexExtendedId
 
-	extendedHandshakeClientVersion = "go.torrent dev 20140825"
+	// Updated occasionally to when there's been some changes to client
+	// behaviour in case other clients are assuming anything of us. See also
+	// `bep20`.
+	extendedHandshakeClientVersion = "go.torrent dev 20150624"
 )
 
 // Currently doesn't really queue, but should in the future.

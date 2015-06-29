@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"bufio"
+	"bytes"
 	"container/list"
 	"encoding"
 	"errors"
@@ -232,6 +233,12 @@ func (cn *connection) statusFlags() (ret string) {
 		c('c')
 	}
 	return
+}
+
+func (cn *connection) String() string {
+	var buf bytes.Buffer
+	cn.WriteStatus(&buf, nil)
+	return buf.String()
 }
 
 func (cn *connection) WriteStatus(w io.Writer, t *torrent) {

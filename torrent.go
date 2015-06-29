@@ -381,17 +381,19 @@ func pieceStateRunStatusChars(psr PieceStateRun) (ret string) {
 func (t *torrent) writeStatus(w io.Writer, cl *Client) {
 	fmt.Fprintf(w, "Infohash: %x\n", t.InfoHash)
 	fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize())
-	fmt.Fprintf(w, "Metadata have: ")
-	for _, h := range t.metadataHave {
-		fmt.Fprintf(w, "%c", func() rune {
-			if h {
-				return 'H'
-			} else {
-				return '.'
-			}
-		}())
+	if !t.haveInfo() {
+		fmt.Fprintf(w, "Metadata have: ")
+		for _, h := range t.metadataHave {
+			fmt.Fprintf(w, "%c", func() rune {
+				if h {
+					return 'H'
+				} else {
+					return '.'
+				}
+			}())
+		}
+		fmt.Fprintln(w)
 	}
-	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Piece length: %s\n", func() string {
 		if t.haveInfo() {
 			return fmt.Sprint(t.usualPieceSize())
@@ -427,7 +429,8 @@ func (t *torrent) writeStatus(w io.Writer, cl *Client) {
 		t:  t,
 		cl: cl,
 	})
-	for _, c := range t.Conns {
+	for i, c := range t.Conns {
+		fmt.Fprintf(w, "%2d. ", i+1)
 		c.WriteStatus(w, t)
 	}
 }
@@ -441,7 +444,7 @@ func (t *torrent) String() string {
 }
 
 func (t *torrent) haveInfo() bool {
-	return t.Info != nil
+	return t != nil && t.Info != nil
 }
 
 // TODO: Include URIs that weren't converted to tracker clients.

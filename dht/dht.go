@@ -149,7 +149,11 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 	go func() {
 		err := s.bootstrap()
 		if err != nil {
-			log.Printf("error bootstrapping DHT: %s", err)
+			select {
+			case <-s.closed:
+			default:
+				log.Printf("error bootstrapping DHT: %s", err)
+			}
 		}
 	}()
 	return

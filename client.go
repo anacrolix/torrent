@@ -84,7 +84,7 @@ const (
 	//   Disabled until AllowedFast is implemented
 	defaultExtensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x01"
 
-	socketsPerTorrent     = 40
+	socketsPerTorrent     = 80
 	torrentPeersHighWater = 200
 	torrentPeersLowWater  = 50
 

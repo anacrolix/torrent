@@ -3,7 +3,6 @@ package torrent
 import (
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/anacrolix/torrent/peer_protocol"
 )
@@ -46,7 +45,6 @@ func TestTorrentRequest(t *testing.T) {
 
 func TestTorrentDoubleClose(t *testing.T) {
 	tt, err := newTorrent(InfoHash{})
-	tt.pruneTimer = time.NewTimer(0)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -99,8 +99,6 @@ type torrent struct {
 
 	// Closed when .Info is set.
 	gotMetainfo chan struct{}
-
-	pruneTimer *time.Timer
 }
 
 func (t *torrent) pieceComplete(piece int) bool {
@@ -131,13 +129,19 @@ func (t *torrent) addrActive(addr string) bool {
 	return false
 }
 
-func (t *torrent) worstConnsHeap(cl *Client) (wcs *worstConns) {
+func (t *torrent) worstConns(cl *Client) (wcs *worstConns) {
 	wcs = &worstConns{
-		c:  append([]*connection{}, t.Conns...),
+		c:  make([]*connection, 0, len(t.Conns)),
 		t:  t,
 		cl: cl,
 	}
-	heap.Init(wcs)
+	for _, c := range t.Conns {
+		select {
+		case <-c.closing:
+		default:
+			wcs.c = append(wcs.c, c)
+		}
+	}
 	return
 }
 
@@ -152,9 +156,6 @@ func (t *torrent) ceaseNetworking() {
 	close(t.ceasingNetworking)
 	for _, c := range t.Conns {
 		c.Close()
-	}
-	if t.pruneTimer != nil {
-		t.pruneTimer.Stop()
 	}
 }
 
@@ -727,4 +728,19 @@ func (t *torrent) extentPieces(off, _len int64) (pieces []int) {
 		pieces = append(pieces, int(i))
 	}
 	return
+}
+
+func (t *torrent) worstBadConn(cl *Client) *connection {
+	wcs := t.worstConns(cl)
+	heap.Init(wcs)
+	// A connection can only be bad if it's in the worst half, rounded down.
+	for wcs.Len() > (socketsPerTorrent+1)/2 {
+		c := heap.Pop(wcs).(*connection)
+		// Give connections 1 minute to prove themselves.
+		if time.Since(c.completedHandshake) < time.Minute {
+			continue
+		}
+		return c
+	}
+	return nil
 }

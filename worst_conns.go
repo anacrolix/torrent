@@ -29,13 +29,17 @@ func (me *worstConns) Push(x interface{}) {
 type worstConnsSortKey struct {
 	useful      bool
 	lastHelpful time.Time
+	connected   time.Time
 }
 
 func (me worstConnsSortKey) Less(other worstConnsSortKey) bool {
 	if me.useful != other.useful {
 		return !me.useful
 	}
-	return me.lastHelpful.Before(other.lastHelpful)
+	if !me.lastHelpful.Equal(other.lastHelpful) {
+		return me.lastHelpful.Before(other.lastHelpful)
+	}
+	return me.connected.Before(other.connected)
 }
 
 func (me *worstConns) key(i int) (key worstConnsSortKey) {
@@ -43,9 +47,13 @@ func (me *worstConns) key(i int) (key worstConnsSortKey) {
 	key.useful = me.cl.usefulConn(me.t, c)
 	if me.cl.seeding(me.t) {
 		key.lastHelpful = c.lastChunkSent
-	} else {
+	}
+	// Intentionally consider the last time a chunk was received when seeding,
+	// because we might go from seeding back to leeching.
+	if c.lastUsefulChunkReceived.After(key.lastHelpful) {
 		key.lastHelpful = c.lastUsefulChunkReceived
 	}
+	key.connected = c.completedHandshake
 	return
 }
 

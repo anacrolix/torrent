@@ -585,6 +585,7 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 	var d Msg
 	err := bencode.Unmarshal(b, &d)
 	if err != nil {
+		readUnmarshalError.Add(1)
 		func() {
 			if se, ok := err.(*bencode.SyntaxError); ok {
 				// The message was truncated.
@@ -607,6 +608,7 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if d["y"] == "q" {
+		readQuery.Add(1)
 		s.handleQuery(addr, d)
 		return
 	}
@@ -629,6 +631,7 @@ func (s *Server) serve() error {
 		if err != nil {
 			return err
 		}
+		read.Add(1)
 		if n == len(b) {
 			logonce.Stderr.Printf("received dht packet exceeds buffer size")
 			continue
@@ -637,6 +640,7 @@ func (s *Server) serve() error {
 		blocked := s.ipBlocked(util.AddrIP(addr))
 		s.mu.Unlock()
 		if blocked {
+			readBlocked.Add(1)
 			continue
 		}
 		s.processPacket(b[:n], newDHTAddr(addr))

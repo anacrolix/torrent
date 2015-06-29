@@ -62,9 +62,11 @@ var (
 	unsuccessfulDials = expvar.NewInt("dialSuccessful")
 	successfulDials   = expvar.NewInt("dialUnsuccessful")
 
-	acceptedConns       = expvar.NewInt("acceptedConns")
-	inboundConnsBlocked = expvar.NewInt("inboundConnsBlocked")
-	peerExtensions      = expvar.NewMap("peerExtensions")
+	acceptUTP    = expvar.NewInt("acceptUTP")
+	acceptTCP    = expvar.NewInt("acceptTCP")
+	acceptReject = expvar.NewInt("acceptReject")
+
+	peerExtensions = expvar.NewMap("peerExtensions")
 	// Count of connections to peer with same client ID.
 	connsToSelf = expvar.NewInt("connsToSelf")
 	// Number of completed connections to a client we're already connected with.
@@ -600,13 +602,17 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 			log.Print(err)
 			return
 		}
-		acceptedConns.Add(1)
+		if utp {
+			acceptUTP.Add(1)
+		} else {
+			acceptTCP.Add(1)
+		}
 		cl.mu.RLock()
 		doppleganger := cl.dopplegangerAddr(conn.RemoteAddr().String())
 		blockRange := cl.ipBlockRange(AddrIP(conn.RemoteAddr()))
 		cl.mu.RUnlock()
 		if blockRange != nil || doppleganger {
-			inboundConnsBlocked.Add(1)
+			acceptReject.Add(1)
 			// log.Printf("inbound connection from %s blocked by %s", conn.RemoteAddr(), blockRange)
 			conn.Close()
 			continue

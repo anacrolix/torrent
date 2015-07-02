@@ -8,8 +8,6 @@ This repository implements BitTorrent-related packages and command-line utilitie
 
 There is support for protocol encryption, DHT, PEX, uTP, and various extensions. There are several storage backends provided, blob, file, mmap. You can use the provided binaries in `./cmd`, or use `torrent` as a library for your own applications.
 
-See also the [mailing list](https://groups.google.com/forum/#!forum/go_torrent), and the [Gophers Slack channel](https://gophers.slack.com/#torrent).
-
 ## Installation
 
 Install the library package with `go get github.com/anacrolix/torrent`, or the provided cmds with `go get github.com/anacrolix/torrent/cmd/...`.

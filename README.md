@@ -1,7 +1,6 @@
 # torrent
 
 [![Join the chat at https://gitter.im/anacrolix/torrent](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/anacrolix/torrent?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
 [![Codeship](https://www.codeship.io/projects/a2811d30-b0ce-0132-8983-5e604f7ebe37/status)](https://codeship.com/projects/69674)
 [![GoDoc](https://godoc.org/github.com/anacrolix/torrent?status.svg)](https://godoc.org/github.com/anacrolix/torrent)
 

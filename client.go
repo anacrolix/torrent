@@ -365,12 +365,15 @@ func (cl *Client) raisePiecePriority(t *torrent, piece int, priority piecePriori
 
 func (cl *Client) prioritizePiece(t *torrent, piece int, priority piecePriority) {
 	if t.havePiece(piece) {
-		return
+		priority = PiecePriorityNone
 	}
 	if priority != PiecePriorityNone {
 		cl.queueFirstHash(t, piece)
 	}
 	p := t.Pieces[piece]
+	if p.Hashing || p.QueuedForHash {
+		return
+	}
 	if p.Priority != priority {
 		p.Priority = priority
 		cl.pieceChanged(t, piece)

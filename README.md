@@ -1,13 +1,12 @@
 # torrent
 
+[![Join the chat at https://gitter.im/anacrolix/torrent](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/anacrolix/torrent?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Codeship](https://www.codeship.io/projects/a2811d30-b0ce-0132-8983-5e604f7ebe37/status)](https://codeship.com/projects/69674)
 [![GoDoc](https://godoc.org/github.com/anacrolix/torrent?status.svg)](https://godoc.org/github.com/anacrolix/torrent)
 
 This repository implements BitTorrent-related packages and command-line utilities in Go.
 
 There is support for protocol encryption, DHT, PEX, uTP, and various extensions. There are several storage backends provided, blob, file, mmap. You can use the provided binaries in `./cmd`, or use `torrent` as a library for your own applications.
-
-See also the [mailing list](https://groups.google.com/forum/#!forum/go_torrent), and the [Gophers Slack channel](https://gophers.slack.com/#torrent).
 
 ## Installation
 

@@ -30,5 +30,7 @@ func main() {
 		b, _ := json.MarshalIndent(d, "", "  ")
 		os.Stdout.Write(b)
 	}
-	os.Stdout.WriteString("\n")
+	if !*name {
+		os.Stdout.WriteString("\n")
+	}
 }

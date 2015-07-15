@@ -1410,11 +1410,12 @@ func (me *Client) upload(t *torrent, c *connection) {
 	if !c.PeerInterested {
 		return
 	}
-	if !me.seeding(t) && !t.connHasWantedPieces(c) {
+	seeding := me.seeding(t)
+	if !seeding && !t.connHasWantedPieces(c) {
 		return
 	}
 another:
-	for c.chunksSent < c.UsefulChunksReceived+6 {
+	for seeding || c.chunksSent < c.UsefulChunksReceived+6 {
 		c.Unchoke()
 		for r := range c.PeerRequests {
 			err := me.sendChunk(t, c, r)

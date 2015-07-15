@@ -93,6 +93,7 @@ func TestTorrentInitialState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tor.chunkSize = 2
 	err = tor.setMetadata(&mi.Info.Info, mi.Info.Bytes, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -102,13 +103,8 @@ func TestTorrentInitialState(t *testing.T) {
 	}
 	p := tor.Pieces[0]
 	tor.pendAllChunkSpecs(0)
-	if p.numPendingChunks() != 1 {
-		t.Fatalf("should only be 1 chunk: %v", p.PendingChunkSpecs)
-	}
-	// TODO: Set chunkSize to 2, to test odd/even silliness.
-	if chunkIndexSpec(0, tor.pieceLength(0)).Length != 5 {
-		t.Fatal("pending chunk spec is incorrect")
-	}
+	assert.EqualValues(t, 3, p.numPendingChunks())
+	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
 }
 
 func TestUnmarshalPEXMsg(t *testing.T) {
@@ -271,7 +267,11 @@ func TestClientTransfer(t *testing.T) {
 	cfg.TorrentDataOpener = blob.NewStore(leecherDataDir).OpenTorrent
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()
-	leecherGreeting, _, _ := leecher.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	leecherGreeting, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
+		ret = TorrentSpecFromMetaInfo(mi)
+		ret.ChunkSize = 2
+		return
+	}())
 	leecherGreeting.AddPeers([]Peer{
 		Peer{
 			IP:   util.AddrIP(seeder.ListenAddr()),

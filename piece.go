@@ -32,11 +32,11 @@ type piece struct {
 	Priority          piecePriority
 }
 
-func (p *piece) pendingChunk(cs chunkSpec) bool {
+func (p *piece) pendingChunk(cs chunkSpec, chunkSize pp.Integer) bool {
 	if p.PendingChunkSpecs == nil {
 		return false
 	}
-	return p.PendingChunkSpecs[chunkIndex(cs)]
+	return p.PendingChunkSpecs[chunkIndex(cs, chunkSize)]
 }
 
 func (p *piece) numPendingChunks() (ret int) {
@@ -55,7 +55,7 @@ func (p *piece) unpendChunkIndex(i int) {
 	p.PendingChunkSpecs[i] = false
 }
 
-func chunkIndexSpec(index int, pieceLength pp.Integer) chunkSpec {
+func chunkIndexSpec(index int, pieceLength, chunkSize pp.Integer) chunkSpec {
 	ret := chunkSpec{pp.Integer(index) * chunkSize, chunkSize}
 	if ret.Begin+ret.Length > pieceLength {
 		ret.Length = pieceLength - ret.Begin
@@ -63,14 +63,14 @@ func chunkIndexSpec(index int, pieceLength pp.Integer) chunkSpec {
 	return ret
 }
 
-func (p *piece) shuffledPendingChunkSpecs(pieceLength pp.Integer) (css []chunkSpec) {
+func (p *piece) shuffledPendingChunkSpecs(pieceLength, chunkSize pp.Integer) (css []chunkSpec) {
 	if p.numPendingChunks() == 0 {
 		return
 	}
 	css = make([]chunkSpec, 0, p.numPendingChunks())
 	for i, pending := range p.PendingChunkSpecs {
 		if pending {
-			css = append(css, chunkIndexSpec(i, pieceLength))
+			css = append(css, chunkIndexSpec(i, pieceLength, chunkSize))
 		}
 	}
 	if len(css) <= 1 {

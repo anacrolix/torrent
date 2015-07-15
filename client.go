@@ -324,7 +324,7 @@ func (cl *Client) addUrgentRequests(t *torrent, off int64, n int) {
 		}
 		if _, ok := t.urgent[req]; !ok && !t.haveChunk(req) {
 			if t.urgent == nil {
-				t.urgent = make(map[request]struct{}, (n+chunkSize-1)/chunkSize)
+				t.urgent = make(map[request]struct{}, (n+int(t.chunkSize)-1)/int(t.chunkSize))
 			}
 			t.urgent[req] = struct{}{}
 			cl.event.Broadcast() // Why?
@@ -1911,8 +1911,9 @@ func (cl *Client) setMetaData(t *torrent, md *metainfo.Info, bytes []byte) (err 
 // it.
 func newTorrent(ih InfoHash) (t *torrent, err error) {
 	t = &torrent{
-		InfoHash: ih,
-		Peers:    make(map[peersKey]Peer),
+		InfoHash:  ih,
+		chunkSize: defaultChunkSize,
+		Peers:     make(map[peersKey]Peer),
 
 		closing:           make(chan struct{}),
 		ceasingNetworking: make(chan struct{}),
@@ -2078,10 +2079,15 @@ func (cl *Client) torrentCacheMetaInfo(ih InfoHash) (mi *metainfo.MetaInfo, err 
 // Specifies a new torrent for adding to a client. There are helpers for
 // magnet URIs and torrent metainfo files.
 type TorrentSpec struct {
-	Trackers    [][]string
-	InfoHash    InfoHash
-	Info        *metainfo.InfoEx
+	// The tiered tracker URIs.
+	Trackers [][]string
+	InfoHash InfoHash
+	Info     *metainfo.InfoEx
+	// The name to use if the Name field from the Info isn't available.
 	DisplayName string
+	// The chunk size to use for outbound requests. Defaults to 16KiB if not
+	// set.
+	ChunkSize int
 }
 
 func TorrentSpecFromMagnetURI(uri string) (spec *TorrentSpec, err error) {
@@ -2128,6 +2134,9 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err er
 		t, err = newTorrent(spec.InfoHash)
 		if err != nil {
 			return
+		}
+		if spec.ChunkSize != 0 {
+			t.chunkSize = pp.Integer(spec.ChunkSize)
 		}
 	}
 	if spec.DisplayName != "" {
@@ -2463,7 +2472,7 @@ func (me *Client) fillRequests(t *torrent, c *connection) {
 			panic("unwanted piece in connection request order")
 		}
 		piece := t.Pieces[pieceIndex]
-		for _, cs := range piece.shuffledPendingChunkSpecs(t.pieceLength(pieceIndex)) {
+		for _, cs := range piece.shuffledPendingChunkSpecs(t.pieceLength(pieceIndex), pp.Integer(t.chunkSize)) {
 			r := request{pp.Integer(pieceIndex), cs}
 			if !addRequest(r) {
 				return
@@ -2524,7 +2533,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	// log.Println("got chunk", req)
 	piece.Event.Broadcast()
 	// Record that we have the chunk.
-	piece.unpendChunkIndex(chunkIndex(req.chunkSpec))
+	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, t.chunkSize))
 	delete(t.urgent, req)
 	if piece.numPendingChunks() == 0 {
 		for _, c := range t.Conns {

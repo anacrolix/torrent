@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	pieceHash   = crypto.SHA1
-	maxRequests = 250    // Maximum pending requests we allow peers to send us.
-	chunkSize   = 0x4000 // 16KiB
+	pieceHash        = crypto.SHA1
+	maxRequests      = 250    // Maximum pending requests we allow peers to send us.
+	defaultChunkSize = 0x4000 // 16KiB
 	// Peer ID client identifier prefix. We'll update this occasionally to
 	// reflect changes to client behaviour that other clients may depend on.
 	// Also see `extendedHandshakeClientVersion`.
@@ -35,7 +35,7 @@ func (ih *InfoHash) HexString() string {
 	return fmt.Sprintf("%x", ih[:])
 }
 
-func lastChunkSpec(pieceLength pp.Integer) (cs chunkSpec) {
+func lastChunkSpec(pieceLength, chunkSize pp.Integer) (cs chunkSpec) {
 	cs.Begin = (pieceLength - 1) / chunkSize * chunkSize
 	cs.Length = pieceLength - cs.Begin
 	return

@@ -4,7 +4,7 @@ import . "gopkg.in/check.v1"
 
 func (suite) TestTorrentOffsetRequest(c *C) {
 	check := func(tl, ps, off int64, expected request, ok bool) {
-		req, _ok := torrentOffsetRequest(tl, ps, chunkSize, off)
+		req, _ok := torrentOffsetRequest(tl, ps, defaultChunkSize, off)
 		c.Check(_ok, Equals, ok)
 		c.Check(req, Equals, expected)
 	}

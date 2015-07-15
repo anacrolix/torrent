@@ -16,6 +16,7 @@ import (
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/check.v1"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -403,4 +404,46 @@ func BenchmarkAddLargeTorrent(b *testing.B) {
 		}
 		t.Drop()
 	}
+}
+
+func TestResponsive(t *testing.T) {
+	seederDataDir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(seederDataDir)
+	cfg := TestingConfig
+	cfg.Seed = true
+	cfg.DataDir = seederDataDir
+	seeder, err := NewClient(&cfg)
+	require.Nil(t, err)
+	defer seeder.Close()
+	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	leecherDataDir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(leecherDataDir)
+	cfg = TestingConfig
+	cfg.DataDir = leecherDataDir
+	leecher, err := NewClient(&cfg)
+	require.Nil(t, err)
+	defer leecher.Close()
+	leecherTorrent, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
+		ret = TorrentSpecFromMetaInfo(mi)
+		ret.ChunkSize = 2
+		return
+	}())
+	leecherTorrent.AddPeers([]Peer{
+		Peer{
+			IP:   util.AddrIP(seeder.ListenAddr()),
+			Port: util.AddrPort(seeder.ListenAddr()),
+		},
+	})
+	reader := leecherTorrent.NewReader()
+	reader.SetReadahead(0)
+	reader.SetResponsive()
+	b := make([]byte, 2)
+	_, err = reader.ReadAt(b, 3)
+	assert.Nil(t, err)
+	assert.EqualValues(t, "lo", string(b))
+	n, err := reader.ReadAt(b, 11)
+	assert.Nil(t, err)
+	assert.EqualValues(t, 2, n)
+	assert.EqualValues(t, "d\n", string(b))
 }

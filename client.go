@@ -1432,6 +1432,7 @@ another:
 
 func (me *Client) sendChunk(t *torrent, c *connection, r request) error {
 	b := make([]byte, r.Length)
+	t.Pieces[r.Index].pendingWrites.Wait()
 	p := t.Info.Piece(int(r.Index))
 	n, err := dataReadAt(t.data, b, p.Offset()+int64(r.Begin))
 	if err != nil {
@@ -2523,12 +2524,18 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 
 	me.upload(t, c)
 
-	// Write the chunk out.
-	err := t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
-	if err != nil {
-		log.Printf("error writing chunk: %s", err)
-		return nil
-	}
+	piece.pendingWrites.Add(1)
+	go func() {
+		defer piece.pendingWrites.Done()
+		// Write the chunk out.
+		tr := perf.NewTimer()
+		err := t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
+		if err != nil {
+			log.Printf("error writing chunk: %s", err)
+			return
+		}
+		tr.Stop("write chunk")
+	}()
 
 	// log.Println("got chunk", req)
 	piece.Event.Broadcast()

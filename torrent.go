@@ -638,6 +638,8 @@ func (t *torrent) pieceLength(piece int) (len_ pp.Integer) {
 
 func (t *torrent) hashPiece(piece pp.Integer) (ps pieceSum) {
 	hash := pieceHash.New()
+	p := t.Pieces[piece]
+	p.pendingWrites.Wait()
 	t.data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, t.Info.PieceLength)
 	util.CopyExact(ps[:], hash.Sum(nil))
 	return

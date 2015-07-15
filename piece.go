@@ -30,6 +30,7 @@ type piece struct {
 	EverHashed        bool
 	Event             sync.Cond
 	Priority          piecePriority
+	pendingWrites     sync.WaitGroup
 }
 
 func (p *piece) pendingChunk(cs chunkSpec, chunkSize pp.Integer) bool {

@@ -121,6 +121,14 @@ again:
 	avail := r.available(pos, int64(len(b)))
 	// log.Println("available", avail)
 	b1 := b[:avail]
+	pi := int(pos / r.t.Info().PieceLength)
+	tp := r.t.torrent.Pieces[pi]
+	ip := r.t.Info().Piece(pi)
+	po := pos % ip.Length()
+	if int64(len(b1)) > ip.Length()-po {
+		b1 = b1[:ip.Length()-po]
+	}
+	tp.pendingWrites.Wait()
 	n, err = dataReadAt(r.t.data, b1, pos)
 	if n != 0 {
 		err = nil

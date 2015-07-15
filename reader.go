@@ -32,7 +32,9 @@ func (r *Reader) raisePriorities(off int64, n int) {
 	if r.responsive {
 		r.t.cl.addUrgentRequests(r.t.torrent, off, n)
 	}
-	r.t.cl.readRaisePiecePriorities(r.t.torrent, off, int64(n)+r.readahead)
+	if !r.responsive || r.readahead != 0 {
+		r.t.cl.readRaisePiecePriorities(r.t.torrent, off, int64(n)+r.readahead)
+	}
 }
 
 func (r *Reader) readable(off int64) (ret bool) {
@@ -77,7 +79,16 @@ func (r *Reader) waitReadable(off int64) {
 }
 
 func (r *Reader) ReadAt(b []byte, off int64) (n int, err error) {
-	return r.readAt(b, off)
+	for {
+		var n1 int
+		n1, err = r.readAt(b, off)
+		n += n1
+		b = b[n1:]
+		off += int64(n1)
+		if err != nil || len(b) == 0 || n1 == 0 {
+			return
+		}
+	}
 }
 
 func (r *Reader) Read(b []byte) (n int, err error) {

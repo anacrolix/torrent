@@ -102,8 +102,6 @@ func (r *Reader) readAt(b []byte, pos int64) (n int, err error) {
 	// defer func() {
 	// 	log.Println(pos, n, err)
 	// }()
-	r.t.cl.mu.Lock()
-	defer r.t.cl.mu.Unlock()
 	maxLen := r.t.torrent.Info.TotalLength() - pos
 	if maxLen <= 0 {
 		err = io.EOF
@@ -113,6 +111,7 @@ func (r *Reader) readAt(b []byte, pos int64) (n int, err error) {
 		b = b[:maxLen]
 	}
 again:
+	r.t.cl.mu.Lock()
 	r.raisePriorities(pos, len(b))
 	for !r.readable(pos) {
 		r.raisePriorities(pos, len(b))
@@ -120,6 +119,7 @@ again:
 	}
 	avail := r.available(pos, int64(len(b)))
 	// log.Println("available", avail)
+	r.t.cl.mu.Unlock()
 	b1 := b[:avail]
 	pi := int(pos / r.t.Info().PieceLength)
 	tp := r.t.torrent.Pieces[pi]

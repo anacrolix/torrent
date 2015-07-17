@@ -2542,11 +2542,15 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	// Record that we have the chunk.
 	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, t.chunkSize))
 	delete(t.urgent, req)
+	// It's important that the piece is potentially queued before we check if
+	// the piece is still wanted, because if it is queued, it won't be wanted.
 	if piece.numPendingChunks() == 0 {
+		me.queuePieceCheck(t, req.Index)
+	}
+	if !t.wantPiece(int(req.Index)) {
 		for _, c := range t.Conns {
 			c.pieceRequestOrder.DeletePiece(int(req.Index))
 		}
-		me.queuePieceCheck(t, req.Index)
 	}
 
 	// Cancel pending requests for this chunk.

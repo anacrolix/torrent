@@ -307,7 +307,7 @@ func (t *torrent) pieceState(index int) (ret PieceState) {
 	if p.QueuedForHash || p.Hashing {
 		ret.Checking = true
 	}
-	if t.piecePartiallyDownloaded(index) {
+	if !ret.Complete && t.piecePartiallyDownloaded(index) {
 		ret.Partial = true
 	}
 	return
@@ -674,7 +674,13 @@ func (t *torrent) haveChunk(r request) bool {
 	if !t.haveInfo() {
 		return false
 	}
+	if t.pieceComplete(int(r.Index)) {
+		return true
+	}
 	p := t.Pieces[r.Index]
+	if p.PendingChunkSpecs == nil {
+		return false
+	}
 	return !p.pendingChunk(r.chunkSpec, t.chunkSize)
 }
 

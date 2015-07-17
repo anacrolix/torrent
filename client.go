@@ -1749,8 +1749,11 @@ func (t *torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
-	for i := range t.Pieces {
-		if t.wantPiece(i) {
+	if len(t.urgent) != 0 {
+		return true
+	}
+	for _, p := range t.Pieces {
+		if p.Priority != PiecePriorityNone {
 			return true
 		}
 	}
@@ -2618,8 +2621,7 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 				}
 			}
 			conn.pieceRequestOrder.DeletePiece(int(piece))
-		}
-		if t.wantPiece(piece) && conn.PeerHasPiece(piece) {
+		} else if t.wantPiece(piece) && conn.PeerHasPiece(piece) {
 			t.connPendPiece(conn, int(piece))
 			me.replenishConnRequests(t, conn)
 		}

@@ -4,9 +4,11 @@
 [![Codeship](https://www.codeship.io/projects/a2811d30-b0ce-0132-8983-5e604f7ebe37/status)](https://codeship.com/projects/69674)
 [![GoDoc](https://godoc.org/github.com/anacrolix/torrent?status.svg)](https://godoc.org/github.com/anacrolix/torrent)
 
-This repository implements BitTorrent-related packages and command-line utilities in Go.
+This repository implements BitTorrent-related packages and command-line utilities in Go. The emphasis is on use as a library from other projects. It's been used 24/7 in production by a downstream, private service since late 2014. There have been contributions from people using some various packages for integrating BitTorrent into media and other services.
 
-There is support for protocol encryption, DHT, PEX, uTP, and various extensions. There are several storage backends provided, blob, file, mmap. You can use the provided binaries in `./cmd`, or use `torrent` as a library for your own applications.
+There is support for protocol encryption, DHT, PEX, uTP, and various extensions. See the package documentation for a more complete list. There are several data storage backends provided: blob, file, and mmap, and you can write your own, such as to store data on S3, or in a database. You can use the provided binaries in `./cmd`, or use `torrent` as a library for your own applications.
+
+Many of the sub-packages can be used for other purposes: dht, bencode, and tracker, in particular.
 
 ## Installation
 
@@ -20,7 +22,7 @@ There is a small example in the [package documentation](https://godoc.org/github
 
 Here I'll describe what some of the provided commands in `./cmd` do.
 
-Note that [`godo`](https://bitbucket.org/anacrolix/go-utils) that I invoke in the following examples is a command that builds and executes a Go import path, like `go run`. It's easier to use this convention than to spell out the install/invoke cycle for every single example.
+Note that [`godo`](https://github.com/anacrolix/godo) that I invoke in the following examples is a command that builds and executes a Go import path, like `go run`. It's easier to use this convention than to spell out the install/invoke cycle for every single example.
 
 ### torrent
 

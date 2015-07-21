@@ -19,8 +19,6 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-// fmt.Fprintf(os.Stderr, "Usage: %s \n", os.Args[0])
-
 func resolvedPeerAddrs(ss []string) (ret []torrent.Peer, err error) {
 	for _, s := range ss {
 		var addr *net.TCPAddr

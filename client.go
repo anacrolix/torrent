@@ -1882,9 +1882,6 @@ func (cl *Client) setStorage(t *torrent, td data.Data) (err error) {
 	if err != nil {
 		return
 	}
-	for index := range iter.N(t.numPieces()) {
-		cl.pieceChanged(t, index)
-	}
 	cl.startTorrent(t)
 	return
 }

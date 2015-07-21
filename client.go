@@ -1979,7 +1979,7 @@ func (t *torrent) addTrackers(announceList [][]string) {
 }
 
 // Don't call this before the info is available.
-func (t *torrent) BytesCompleted() int64 {
+func (t *torrent) bytesCompleted() int64 {
 	if !t.haveInfo() {
 		return 0
 	}

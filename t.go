@@ -52,3 +52,9 @@ func (t Torrent) Drop() {
 	t.cl.dropTorrent(t.InfoHash)
 	t.cl.mu.Unlock()
 }
+
+func (t Torrent) BytesCompleted() int64 {
+	t.cl.mu.RLock()
+	defer t.cl.mu.RUnlock()
+	return t.bytesCompleted()
+}

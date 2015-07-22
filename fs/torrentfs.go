@@ -3,7 +3,6 @@ package torrentfs
 import (
 	"expvar"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -83,7 +82,6 @@ func blockingRead(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int
 		r := t.NewReader()
 		defer r.Close()
 		_n, _err = r.ReadAt(p, off)
-		log.Println(_n, p)
 		close(readDone)
 	}()
 	select {

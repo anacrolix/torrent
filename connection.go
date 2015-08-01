@@ -204,6 +204,22 @@ func eventAgeString(t time.Time) string {
 	return fmt.Sprintf("%.2fs ago", time.Now().Sub(t).Seconds())
 }
 
+func (cn *connection) connectionFlags() (ret string) {
+	c := func(b byte) {
+		ret += string([]byte{b})
+	}
+	if cn.encrypted {
+		c('E')
+	}
+	if cn.Discovery != 0 {
+		c(byte(cn.Discovery))
+	}
+	if cn.uTP {
+		c('T')
+	}
+	return
+}
+
 // Inspired by https://trac.transmissionbt.com/wiki/PeerStatusText
 func (cn *connection) statusFlags() (ret string) {
 	c := func(b byte) {
@@ -216,15 +232,7 @@ func (cn *connection) statusFlags() (ret string) {
 		c('c')
 	}
 	c('-')
-	if cn.encrypted {
-		c('E')
-	}
-	if cn.Discovery != 0 {
-		c(byte(cn.Discovery))
-	}
-	if cn.uTP {
-		c('T')
-	}
+	ret += cn.connectionFlags()
 	c('-')
 	if cn.PeerInterested {
 		c('i')

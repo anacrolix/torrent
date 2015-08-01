@@ -66,7 +66,8 @@ var (
 	acceptTCP    = expvar.NewInt("acceptTCP")
 	acceptReject = expvar.NewInt("acceptReject")
 
-	peerExtensions = expvar.NewMap("peerExtensions")
+	peerExtensions                    = expvar.NewMap("peerExtensions")
+	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
 	// Count of connections to peer with same client ID.
 	connsToSelf = expvar.NewInt("connsToSelf")
 	// Number of completed connections to a client we're already connected with.
@@ -1134,6 +1135,7 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) (err error) {
 		deadlineReader{c.conn, c.rw},
 		c.rw,
 	}
+	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
 	if !cl.addConnection(t, c) {
 		return
 	}

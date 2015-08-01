@@ -12,6 +12,10 @@ type Torrent struct {
 	*torrent
 }
 
+func (t Torrent) InfoHash() InfoHash {
+	return t.torrent.InfoHash
+}
+
 // Closed when the info (.Info()) for the torrent has become available. Using
 // features of Torrent that require the info before it is available will have
 // undefined behaviour.
@@ -49,7 +53,7 @@ func (t Torrent) NumPieces() int {
 
 func (t Torrent) Drop() {
 	t.cl.mu.Lock()
-	t.cl.dropTorrent(t.InfoHash)
+	t.cl.dropTorrent(t.torrent.InfoHash)
 	t.cl.mu.Unlock()
 }
 

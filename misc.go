@@ -27,11 +27,11 @@ type (
 	pieceSum [20]byte
 )
 
-func (ih *InfoHash) AsString() string {
+func (ih InfoHash) AsString() string {
 	return string(ih[:])
 }
 
-func (ih *InfoHash) HexString() string {
+func (ih InfoHash) HexString() string {
 	return fmt.Sprintf("%x", ih[:])
 }
 

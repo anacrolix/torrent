@@ -676,22 +676,6 @@ func doDial(dial func(addr string, t *torrent) (net.Conn, error), ch chan dialRe
 		return
 	}
 	unsuccessfulDials.Add(1)
-	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-		return
-	}
-	if netOpErr, ok := err.(*net.OpError); ok {
-		switch netOpErr.Err {
-		case syscall.ECONNREFUSED, syscall.EHOSTUNREACH:
-			return
-		}
-	}
-	if utp && err.Error() == "timed out waiting for ack" {
-		return
-	}
-	if err != nil {
-		log.Printf("error dialing %s: %s", addr, err)
-		return
-	}
 }
 
 func reducedDialTimeout(max time.Duration, halfOpenLimit int, pendingPeers int) (ret time.Duration) {
@@ -2240,7 +2224,7 @@ func (cl *Client) seeding(t *torrent) bool {
 
 func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 	for cl.waitWantPeers(t) {
-		log.Printf("getting peers for %q from DHT", t)
+		// log.Printf("getting peers for %q from DHT", t)
 		ps, err := cl.dHT.Announce(string(t.InfoHash[:]), cl.incomingPeerPort(), impliedPort)
 		if err != nil {
 			log.Printf("error getting peers from dht: %s", err)
@@ -2262,7 +2246,6 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 						Port: int(p.Port),
 					}).String()] = struct{}{}
 				}
-				// log.Printf("%s: %d new peers from DHT", t, len(v.Peers))
 				cl.mu.Lock()
 				cl.addPeers(t, func() (ret []Peer) {
 					for _, cp := range v.Peers {
@@ -2285,7 +2268,7 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 			}
 		}
 		ps.Close()
-		log.Printf("finished DHT peer scrape for %s: %d peers", t, len(allAddrs))
+		// log.Printf("finished DHT peer scrape for %s: %d peers", t, len(allAddrs))
 	}
 }
 
@@ -2338,7 +2321,7 @@ func (cl *Client) announceTorrentSingleTracker(tr tracker.Client, req *tracker.A
 	cl.addPeers(t, peers)
 	cl.mu.Unlock()
 
-	log.Printf("%s: %d new peers from %s", t, len(peers), tr)
+	// log.Printf("%s: %d new peers from %s", t, len(peers), tr)
 	peersFoundByTracker.Add(int64(len(peers)))
 
 	time.Sleep(time.Second * time.Duration(resp.Interval))

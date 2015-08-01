@@ -729,8 +729,8 @@ func (me *Client) dialUTP(addr string, t *torrent) (c net.Conn, err error) {
 	return me.utpSock.DialTimeout(addr, me.dialTimeout(t))
 }
 
-// Returns a connection over UTP or TCP.
-func (me *Client) dial(addr string, t *torrent) (conn net.Conn, utp bool) {
+// Returns a connection over UTP or TCP, whichever is first to connect.
+func (me *Client) dialFirst(addr string, t *torrent) (conn net.Conn, utp bool) {
 	// Initiate connections via TCP and UTP simultaneously. Use the first one
 	// that succeeds.
 	left := 0
@@ -776,30 +776,32 @@ func (me *Client) noLongerHalfOpen(t *torrent, addr string) {
 	me.openNewConns(t)
 }
 
+// Performs initiator handshakes and returns a connection.
+func (me *Client) handshakesConnection(nc net.Conn, t *torrent, encrypted, utp bool) (c *connection, err error) {
+	c = newConnection()
+	c.conn = nc
+	c.rw = nc
+	c.encrypted = encrypted
+	c.uTP = utp
+	err = nc.SetDeadline(time.Now().Add(handshakesTimeout))
+	if err != nil {
+		return
+	}
+	ok, err := me.initiateHandshakes(c, t)
+	if !ok {
+		c = nil
+	}
+	return
+}
+
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
 func (me *Client) establishOutgoingConn(t *torrent, addr string) (c *connection, err error) {
-	handshakesConnection := func(nc net.Conn, encrypted, utp bool) (c *connection, err error) {
-		c = newConnection()
-		c.conn = nc
-		c.rw = nc
-		c.encrypted = encrypted
-		c.uTP = utp
-		err = nc.SetDeadline(time.Now().Add(handshakesTimeout))
-		if err != nil {
-			return
-		}
-		ok, err := me.initiateHandshakes(c, t)
-		if !ok {
-			c = nil
-		}
-		return
-	}
-	nc, utp := me.dial(addr, t)
+	nc, utp := me.dialFirst(addr, t)
 	if nc == nil {
 		return
 	}
-	c, err = handshakesConnection(nc, !me.config.DisableEncryption, utp)
+	c, err = me.handshakesConnection(nc, t, !me.config.DisableEncryption, utp)
 	if err != nil {
 		nc.Close()
 		return
@@ -822,7 +824,7 @@ func (me *Client) establishOutgoingConn(t *torrent, addr string) (c *connection,
 		err = fmt.Errorf("error dialing for unencrypted connection: %s", err)
 		return
 	}
-	c, err = handshakesConnection(nc, false, utp)
+	c, err = me.handshakesConnection(nc, t, false, utp)
 	if err != nil {
 		nc.Close()
 	}

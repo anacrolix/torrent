@@ -78,11 +78,15 @@ var (
 const (
 	// Justification for set bits follows.
 	//
-	// Extension protocol: http://www.bittorrent.org/beps/bep_0010.html ([5]|=0x10)
-	// DHT: http://www.bittorrent.org/beps/bep_0005.html ([7]|=1)
-	// Fast Extension:
-	// 	 http://bittorrent.org/beps/bep_0006.html ([7]|=4)
-	//   Disabled until AllowedFast is implemented
+	// Extension protocol ([5]|=0x10):
+	// http://www.bittorrent.org/beps/bep_0010.html
+	//
+	// Fast Extension ([7]|=0x04):
+	// http://bittorrent.org/beps/bep_0006.html.
+	// Disabled until AllowedFast is implemented.
+	//
+	// DHT ([7]|=1):
+	// http://www.bittorrent.org/beps/bep_0005.html
 	defaultExtensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x01"
 
 	socketsPerTorrent     = 80
@@ -819,12 +823,12 @@ func (me *Client) establishOutgoingConn(t *torrent, addr string) (c *connection,
 		return
 	}
 	nc.Close()
-	// Try again without encryption, using whichever protocol type worked last
-	// time.
 	if me.config.DisableEncryption {
 		// We already tried without encryption.
 		return
 	}
+	// Try again without encryption, using whichever protocol type worked last
+	// time.
 	if utp {
 		nc, err = me.dialUTP(addr, t)
 	} else {
@@ -2242,6 +2246,7 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 			log.Printf("error getting peers from dht: %s", err)
 			return
 		}
+		// Count all the unique addresses we got during this announce.
 		allAddrs := make(map[string]struct{})
 	getPeers:
 		for {

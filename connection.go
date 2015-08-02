@@ -431,6 +431,9 @@ func (c *connection) SetInterested(interested bool) {
 	c.Interested = interested
 }
 
+var connectionWriterFlush = expvar.NewInt("connectionWriterFlush")
+var connectionWriterWrite = expvar.NewInt("connectionWriterWrite")
+
 // Writes buffers to the socket from the write channel.
 func (conn *connection) writer() {
 	// Reduce write syscalls.
@@ -450,6 +453,7 @@ func (conn *connection) writer() {
 			if !ok {
 				return
 			}
+			connectionWriterWrite.Add(1)
 			_, err := buf.Write(b)
 			if err != nil {
 				conn.Close()
@@ -458,6 +462,7 @@ func (conn *connection) writer() {
 		case <-conn.closing:
 			return
 		case <-notEmpty:
+			connectionWriterFlush.Add(1)
 			err := buf.Flush()
 			if err != nil {
 				return

@@ -431,41 +431,57 @@ func (c *connection) SetInterested(interested bool) {
 	c.Interested = interested
 }
 
-var connectionWriterFlush = expvar.NewInt("connectionWriterFlush")
-var connectionWriterWrite = expvar.NewInt("connectionWriterWrite")
+var (
+	// Track connection writer buffer writes and flushes, to determine its
+	// efficiency.
+	connectionWriterFlush = expvar.NewInt("connectionWriterFlush")
+	connectionWriterWrite = expvar.NewInt("connectionWriterWrite")
+)
 
 // Writes buffers to the socket from the write channel.
 func (conn *connection) writer() {
 	// Reduce write syscalls.
-	buf := bufio.NewWriterSize(conn.rw, 0x8000) // 32 KiB
-	// Receives when buf is not empty.
-	notEmpty := make(chan struct{}, 1)
+	buf := bufio.NewWriter(conn.rw)
 	for {
-		if buf.Buffered() != 0 {
-			// Make sure it's receivable.
+		if buf.Buffered() == 0 {
+			// There's nothing to write, so block until we get something.
 			select {
-			case notEmpty <- struct{}{}:
+			case b, ok := <-conn.writeCh:
+				if !ok {
+					return
+				}
+				connectionWriterWrite.Add(1)
+				_, err := buf.Write(b)
+				if err != nil {
+					conn.Close()
+					return
+				}
+			case <-conn.closing:
+				return
+			}
+		} else {
+			// We already have something to write, so flush if there's nothing
+			// more to write.
+			select {
+			case b, ok := <-conn.writeCh:
+				if !ok {
+					return
+				}
+				connectionWriterWrite.Add(1)
+				_, err := buf.Write(b)
+				if err != nil {
+					conn.Close()
+					return
+				}
+			case <-conn.closing:
+				return
 			default:
-			}
-		}
-		select {
-		case b, ok := <-conn.writeCh:
-			if !ok {
-				return
-			}
-			connectionWriterWrite.Add(1)
-			_, err := buf.Write(b)
-			if err != nil {
-				conn.Close()
-				return
-			}
-		case <-conn.closing:
-			return
-		case <-notEmpty:
-			connectionWriterFlush.Add(1)
-			err := buf.Flush()
-			if err != nil {
-				return
+				connectionWriterFlush.Add(1)
+				err := buf.Flush()
+				if err != nil {
+					conn.Close()
+					return
+				}
 			}
 		}
 	}

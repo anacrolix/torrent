@@ -20,7 +20,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/anacrolix/missinggo/perf"
@@ -99,8 +98,6 @@ const (
 	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
 	btHandshakeTimeout = 4 * time.Second
 	handshakesTimeout  = 20 * time.Second
-
-	pruneInterval = 10 * time.Second
 
 	// These are our extended message IDs.
 	metadataExtendedId = iota + 1 // 0 is reserved for deleting keys

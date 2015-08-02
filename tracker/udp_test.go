@@ -10,8 +10,9 @@ import (
 	"net"
 	"net/url"
 	"sync"
-	"syscall"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/util"
 )
@@ -58,10 +59,7 @@ func TestLongWriteUDP(t *testing.T) {
 	for msgLen := 1; ; msgLen *= 2 {
 		n, err := c.Write(make([]byte, msgLen))
 		if err != nil {
-			err := err.(*net.OpError).Err
-			if err != syscall.EMSGSIZE {
-				t.Fatalf("write error isn't EMSGSIZE: %s", err)
-			}
+			require.Contains(t, err.Error(), "message too long")
 			return
 		}
 		if n < msgLen {

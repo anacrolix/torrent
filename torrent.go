@@ -745,14 +745,17 @@ func (t *torrent) extentPieces(off, _len int64) (pieces []int) {
 func (t *torrent) worstBadConn(cl *Client) *connection {
 	wcs := t.worstConns(cl)
 	heap.Init(wcs)
-	// A connection can only be bad if it's in the worst half, rounded down.
-	for wcs.Len() > (socketsPerTorrent+1)/2 {
+	for wcs.Len() != 0 {
 		c := heap.Pop(wcs).(*connection)
-		// Give connections 1 minute to prove themselves.
-		if time.Since(c.completedHandshake) < time.Minute {
-			continue
+		if c.UnwantedChunksReceived >= 6 && c.UnwantedChunksReceived > c.UsefulChunksReceived {
+			return c
 		}
-		return c
+		if wcs.Len() >= (socketsPerTorrent+1)/2 {
+			// Give connections 1 minute to prove themselves.
+			if time.Since(c.completedHandshake) > time.Minute {
+				return c
+			}
+		}
 	}
 	return nil
 }

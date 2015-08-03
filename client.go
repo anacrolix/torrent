@@ -2480,7 +2480,9 @@ func (me *Client) fillRequests(t *torrent, c *connection) {
 			panic("piece in request order but peer doesn't have it")
 		}
 		if !t.wantPiece(pieceIndex) {
-			panic("unwanted piece in connection request order")
+			log.Printf("unwanted piece %d in connection request order\n%s", pieceIndex, c)
+			c.pieceRequestOrder.DeletePiece(pieceIndex)
+			continue
 		}
 		piece := t.Pieces[pieceIndex]
 		for _, cs := range piece.shuffledPendingChunkSpecs(t.pieceLength(pieceIndex), pp.Integer(t.chunkSize)) {

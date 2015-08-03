@@ -1,12 +1,16 @@
 package torrent
 
-import . "gopkg.in/check.v1"
+import (
+	"testing"
 
-func (suite) TestTorrentOffsetRequest(c *C) {
+	"github.com/stretchr/testify/assert"
+)
+
+func TestTorrentOffsetRequest(t *testing.T) {
 	check := func(tl, ps, off int64, expected request, ok bool) {
 		req, _ok := torrentOffsetRequest(tl, ps, defaultChunkSize, off)
-		c.Check(_ok, Equals, ok)
-		c.Check(req, Equals, expected)
+		assert.Equal(t, _ok, ok)
+		assert.Equal(t, req, expected)
 	}
 	check(13, 5, 0, newRequest(0, 0, 5), true)
 	check(13, 5, 3, newRequest(0, 0, 5), true)

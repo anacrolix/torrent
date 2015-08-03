@@ -17,7 +17,6 @@ import (
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/check.v1"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/data"
@@ -308,21 +307,21 @@ func TestReadaheadPieces(t *testing.T) {
 	}
 }
 
-func (suite) TestMergingTrackersByAddingSpecs(c *check.C) {
+func TestMergingTrackersByAddingSpecs(t *testing.T) {
 	cl, _ := NewClient(&TestingConfig)
 	defer cl.Close()
 	spec := TorrentSpec{}
 	T, new, _ := cl.AddTorrentSpec(&spec)
 	if !new {
-		c.FailNow()
+		t.FailNow()
 	}
 	spec.Trackers = [][]string{{"http://a"}, {"udp://b"}}
 	_, new, _ = cl.AddTorrentSpec(&spec)
 	if new {
-		c.FailNow()
+		t.FailNow()
 	}
-	c.Assert(T.Trackers[0][0].URL(), check.Equals, "http://a")
-	c.Assert(T.Trackers[1][0].URL(), check.Equals, "udp://b")
+	assert.EqualValues(t, T.Trackers[0][0].URL(), "http://a")
+	assert.EqualValues(t, T.Trackers[1][0].URL(), "udp://b")
 }
 
 type badData struct {

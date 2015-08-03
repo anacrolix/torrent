@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/bradfitz/iter"
-	. "gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/anacrolix/torrent/internal/pieceordering"
 	"github.com/anacrolix/torrent/peer_protocol"
@@ -60,18 +60,12 @@ func pieceOrderingAsSlice(po *pieceordering.Instance) (ret []int) {
 	return
 }
 
-func testRequestOrder(expected []int, ro *pieceordering.Instance, t *C) {
-	t.Assert(pieceOrderingAsSlice(ro), DeepEquals, expected)
+func testRequestOrder(expected []int, ro *pieceordering.Instance, t *testing.T) {
+	assert.EqualValues(t, pieceOrderingAsSlice(ro), expected)
 }
 
-type suite struct{}
-
-var _ = Suite(suite{})
-
-func Test(t *testing.T) { TestingT(t) }
-
 // Tests the request ordering based on a connections priorities.
-func (suite) TestPieceRequestOrder(t *C) {
+func TestPieceRequestOrder(t *testing.T) {
 	c := connection{
 		pieceRequestOrder: pieceordering.New(),
 		piecePriorities:   []int{1, 4, 0, 3, 2},

@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	. "github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
@@ -514,9 +515,10 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	if !cfg.NoDHT {
 		dhtCfg := cfg.DHTConfig
 		if dhtCfg == nil {
-			dhtCfg = &dht.ServerConfig{
-				IPBlocklist: cl.ipBlockList,
-			}
+			dhtCfg = &dht.ServerConfig{}
+		}
+		if dhtCfg.IPBlocklist == nil {
+			dhtCfg.IPBlocklist = cl.ipBlockList
 		}
 		if dhtCfg.Addr == "" {
 			dhtCfg.Addr = listenAddr()

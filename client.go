@@ -2527,6 +2527,10 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 		}
 		tr.Stop("write chunk")
 	}()
+	if c.peerTouchedPieces == nil {
+		c.peerTouchedPieces = make(map[int]struct{})
+	}
+	c.peerTouchedPieces[int(req.Index)] = struct{}{}
 
 	// log.Println("got chunk", req)
 	piece.Event.Broadcast()
@@ -2562,6 +2566,16 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 		} else {
 			log.Printf("%s: piece %d failed hash", t, piece)
 			pieceHashedNotCorrect.Add(1)
+			var touched []*connection
+			for _, c := range t.Conns {
+				if _, ok := c.peerTouchedPieces[int(piece)]; ok {
+					touched = append(touched, c)
+				}
+			}
+			log.Printf("dropping %d conns that touched piece", len(touched))
+			for _, c := range touched {
+				me.dropConnection(t, c)
+			}
 		}
 	}
 	p.EverHashed = true

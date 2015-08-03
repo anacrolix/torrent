@@ -74,6 +74,8 @@ type connection struct {
 	// related messages yet.
 	PeerPieces []bool
 	peerHasAll bool
+	// Pieces we've accepted chunks for from the peer.
+	peerTouchedPieces map[int]struct{}
 
 	PeerMaxRequests  int // Maximum pending requests the peer allows.
 	PeerExtensionIDs map[string]byte
@@ -257,8 +259,9 @@ func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 		eventAgeString(cn.completedHandshake),
 		eventAgeString(cn.lastUsefulChunkReceived))
 	fmt.Fprintf(w,
-		"    %s completed, good chunks: %d/%d-%d reqq: %d-%d, flags: %s\n",
+		"    %s completed, %d pieces touched, good chunks: %d/%d-%d reqq: %d-%d, flags: %s\n",
 		cn.completedString(t),
+		len(cn.peerTouchedPieces),
 		cn.UsefulChunksReceived,
 		cn.UnwantedChunksReceived+cn.UsefulChunksReceived,
 		cn.chunksSent,

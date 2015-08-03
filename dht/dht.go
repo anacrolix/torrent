@@ -587,6 +587,10 @@ func (s *Server) SetIPBlockList(list *iplist.IPList) {
 	s.ipBlockList = list
 }
 
+func (s *Server) IPBlocklist() *iplist.IPList {
+	return s.ipBlockList
+}
+
 func (s *Server) init() (err error) {
 	err = s.setDefaults()
 	if err != nil {

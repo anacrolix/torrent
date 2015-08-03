@@ -74,6 +74,7 @@ func (me *store) initCompleted() {
 	if err != nil {
 		panic(err)
 	}
+	me.mu.Lock()
 	me.completed = make(map[[20]byte]struct{}, len(fis))
 	for _, fi := range fis {
 		binHash, ok := hexStringPieceHashArray(fi.Name())
@@ -82,6 +83,7 @@ func (me *store) initCompleted() {
 		}
 		me.completed[binHash] = struct{}{}
 	}
+	me.mu.Unlock()
 }
 
 func (me *store) completePieceDirPath() string {
@@ -107,6 +109,8 @@ func sliceToPieceHashArray(b []byte) (ret [20]byte) {
 }
 
 func (me *store) pieceComplete(p metainfo.Piece) bool {
+	me.mu.Lock()
+	defer me.mu.Unlock()
 	_, ok := me.completed[sliceToPieceHashArray(p.Hash())]
 	return ok
 }
@@ -127,8 +131,6 @@ func (me *store) pieceWrite(p metainfo.Piece) (f *os.File) {
 // Returns the file for the given piece, if it exists. It could be completed,
 // or incomplete.
 func (me *store) pieceRead(p metainfo.Piece) (f *os.File) {
-	me.mu.Lock()
-	defer me.mu.Unlock()
 	f, err := os.Open(me.path(p, true))
 	if err == nil {
 		return
@@ -139,7 +141,9 @@ func (me *store) pieceRead(p metainfo.Piece) (f *os.File) {
 	// Mark the file not completed, in case we thought it was. TODO: Trigger
 	// an asynchronous initCompleted to reinitialize the entire completed map
 	// as there are likely other files missing.
+	me.mu.Lock()
 	delete(me.completed, sliceToPieceHashArray(p.Hash()))
+	me.mu.Unlock()
 	f, err = os.Open(me.path(p, false))
 	if err == nil {
 		return
@@ -173,7 +177,9 @@ func (me *store) removeCompleted(name string) (err error) {
 	}
 	binHash, ok := hexStringPieceHashArray(name)
 	if ok {
+		me.mu.Lock()
 		delete(me.completed, binHash)
+		me.mu.Unlock()
 	}
 	return
 }
@@ -264,6 +270,8 @@ func (me *store) PieceCompleted(p metainfo.Piece) (err error) {
 		return
 	}
 	os.Remove(incompletePiecePath)
+	me.mu.Lock()
 	me.completed[sliceToPieceHashArray(p.Hash())] = struct{}{}
+	me.mu.Unlock()
 	return
 }

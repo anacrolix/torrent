@@ -108,6 +108,12 @@ func (me *Announce) gotNodeAddr(addr dHTAddr) {
 	if me.server.ipBlocked(addr.UDPAddr().IP) {
 		return
 	}
+	me.server.mu.Lock()
+	if me.server.badNodes.Test([]byte(addr.String())) {
+		me.server.mu.Unlock()
+		return
+	}
+	me.server.mu.Unlock()
 	me.contact(addr)
 }
 
@@ -162,6 +168,14 @@ func (me *Announce) getPeers(addr dHTAddr) error {
 		me.mu.Unlock()
 
 		if vs := m.Values(); vs != nil {
+			for _, cp := range vs {
+				if cp.Port == 0 {
+					me.server.mu.Lock()
+					me.server.badNode(addr)
+					me.server.mu.Unlock()
+					return
+				}
+			}
 			nodeInfo := NodeInfo{
 				Addr: t.remoteAddr,
 			}

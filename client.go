@@ -226,7 +226,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	fmt.Fprintf(w, "Peer ID: %+q\n", cl.peerID)
 	if cl.dHT != nil {
 		dhtStats := cl.dHT.Stats()
-		fmt.Fprintf(w, "DHT nodes: %d (%d good)\n", dhtStats.Nodes, dhtStats.GoodNodes)
+		fmt.Fprintf(w, "DHT nodes: %d (%d good, %d banned)\n", dhtStats.Nodes, dhtStats.GoodNodes, dhtStats.BadNodes)
 		fmt.Fprintf(w, "DHT Server ID: %x\n", cl.dHT.ID())
 		fmt.Fprintf(w, "DHT port: %d\n", addrPort(cl.dHT.Addr()))
 		fmt.Fprintf(w, "DHT announces: %d\n", dhtStats.ConfirmedAnnounces)

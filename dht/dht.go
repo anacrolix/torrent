@@ -22,6 +22,7 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/sync"
+	"github.com/tylertreat/BoomFilters"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/iplist"
@@ -50,6 +51,7 @@ type Server struct {
 	closed           chan struct{}
 	passive          bool // Don't respond to queries.
 	ipBlockList      *iplist.IPList
+	badNodes         *boom.BloomFilter
 
 	numConfirmedAnnounces int
 	bootstrapNodes        []string
@@ -81,6 +83,8 @@ type ServerStats struct {
 	OutstandingTransactions int
 	// Individual announce_peer requests that got a success response.
 	ConfirmedAnnounces int
+	// Nodes that have been blocked.
+	BadNodes uint
 }
 
 // Returns statistics for the server.
@@ -95,6 +99,7 @@ func (s *Server) Stats() (ss ServerStats) {
 	ss.Nodes = len(s.nodes)
 	ss.OutstandingTransactions = len(s.transactions)
 	ss.ConfirmedAnnounces = s.numConfirmedAnnounces
+	ss.BadNodes = s.badNodes.Count()
 	return
 }
 
@@ -121,6 +126,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 	s = &Server{
 		config:      *c,
 		ipBlockList: c.IPBlocklist,
+		badNodes:    boom.NewBloomFilter(1000, 0.1),
 	}
 	if c.Conn != nil {
 		s.socket = c.Conn
@@ -790,6 +796,9 @@ func (s *Server) getNode(addr dHTAddr, id string) (n *node) {
 	if !s.config.NoSecurity && !n.IsSecure() {
 		return
 	}
+	if s.badNodes.Test([]byte(addrStr)) {
+		return
+	}
 	s.nodes[addrStr] = n
 	return
 }
@@ -1213,4 +1222,9 @@ func (s *Server) closestNodes(k int, target nodeID, filter func(*node) bool) []*
 		ret = append(ret, idNodes[id.ByteString()])
 	}
 	return ret
+}
+
+func (me *Server) badNode(addr dHTAddr) {
+	me.badNodes.Add([]byte(addr.String()))
+	delete(me.nodes, addr.String())
 }

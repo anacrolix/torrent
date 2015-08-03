@@ -2261,24 +2261,26 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 				if !ok {
 					break getPeers
 				}
-				peersFoundByDHT.Add(int64(len(v.Peers)))
-				for _, p := range v.Peers {
-					allAddrs[(&net.UDPAddr{
-						IP:   p.IP[:],
-						Port: int(p.Port),
-					}).String()] = struct{}{}
-				}
-				cl.mu.Lock()
-				cl.addPeers(t, func() (ret []Peer) {
-					for _, cp := range v.Peers {
-						ret = append(ret, Peer{
-							IP:     cp.IP[:],
-							Port:   int(cp.Port),
-							Source: peerSourceDHT,
-						})
+				addPeers := make([]Peer, 0, len(v.Peers))
+				for _, cp := range v.Peers {
+					if cp.Port == 0 {
+						// Can't do anything with this.
+						continue
 					}
-					return
-				}())
+					addPeers = append(addPeers, Peer{
+						IP:     cp.IP[:],
+						Port:   int(cp.Port),
+						Source: peerSourceDHT,
+					})
+					key := (&net.UDPAddr{
+						IP:   cp.IP[:],
+						Port: int(cp.Port),
+					}).String()
+					allAddrs[key] = struct{}{}
+				}
+				peersFoundByDHT.Add(int64(len(addPeers)))
+				cl.mu.Lock()
+				cl.addPeers(t, addPeers)
 				numPeers := len(t.Peers)
 				cl.mu.Unlock()
 				if numPeers >= torrentPeersHighWater {

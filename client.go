@@ -1742,7 +1742,7 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 		if c == nil {
 			return false
 		}
-		log.Printf("%s: dropping connection to make room for new one: %s", t, c)
+		log.Printf("%s: dropping connection to make room for new one:\n    %s", t, c)
 		c.Close()
 		me.deleteConnection(t, c)
 	}

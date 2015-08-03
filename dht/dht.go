@@ -71,6 +71,8 @@ type ServerConfig struct {
 	// Initial IP blocklist to use. Applied before serving and bootstrapping
 	// begins.
 	IPBlocklist *iplist.IPList
+	// Used to secure the server's ID. Defaults to the Conn's LocalAddr().
+	PublicIP net.IP
 }
 
 type ServerStats struct {
@@ -564,7 +566,14 @@ func (s *Server) setDefaults() (err error) {
 		if len(id) != 20 {
 			panic(len(id))
 		}
-		secureNodeId(id[:], util.AddrIP(s.socket.LocalAddr()))
+		publicIP := func() net.IP {
+			if s.config.PublicIP != nil {
+				return s.config.PublicIP
+			} else {
+				return missinggo.AddrIP(s.socket.LocalAddr())
+			}
+		}()
+		secureNodeId(id[:], publicIP)
 		s.id = string(id[:])
 	}
 	s.nodes = make(map[string]*node, maxNodes)

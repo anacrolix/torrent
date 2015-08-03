@@ -978,7 +978,9 @@ func (s *Server) announcePeer(node dHTAddr, infoHash string, port int, token str
 		"token":     token,
 	}, func(m Msg) {
 		if err := m.Error(); err != nil {
-			logonce.Stderr.Printf("announce_peer response: %s", err)
+			announceErrors.Add(1)
+			// log.Print(token)
+			// logonce.Stderr.Printf("announce_peer response: %s", err)
 			return
 		}
 		s.numConfirmedAnnounces++

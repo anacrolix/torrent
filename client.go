@@ -551,14 +551,22 @@ func (cl *Client) stopped() bool {
 func (me *Client) Close() {
 	me.mu.Lock()
 	defer me.mu.Unlock()
+	select {
+	case <-me.quit:
+		return
+	default:
+	}
 	close(me.quit)
+	if me.dHT != nil {
+		me.dHT.Close()
+	}
 	for _, l := range me.listeners {
 		l.Close()
 	}
-	me.event.Broadcast()
 	for _, t := range me.torrents {
 		t.close()
 	}
+	me.event.Broadcast()
 }
 
 var ipv6BlockRange = iplist.Range{Description: "non-IPv4 address"}
@@ -585,6 +593,11 @@ func (cl *Client) waitAccept() {
 			if cl.wantConns(t) {
 				return
 			}
+		}
+		select {
+		case <-cl.quit:
+			return
+		default:
 		}
 		cl.event.Wait()
 	}

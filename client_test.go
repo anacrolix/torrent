@@ -13,6 +13,7 @@ import (
 	"time"
 
 	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
@@ -23,7 +24,6 @@ import (
 	"github.com/anacrolix/torrent/data/blob"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/util"
 )
 
 func init() {
@@ -87,7 +87,7 @@ func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
 	tor, err := newTorrent(func() (ih InfoHash) {
-		util.CopyExact(ih[:], mi.Info.Hash)
+		missinggo.CopyExact(ih[:], mi.Info.Hash)
 		return
 	}())
 	if err != nil {
@@ -196,7 +196,7 @@ func TestUTPRawConn(t *testing.T) {
 			}
 		}
 	}()
-	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", util.AddrPort(l.Addr())))
+	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,8 +274,8 @@ func TestClientTransfer(t *testing.T) {
 	}())
 	leecherGreeting.AddPeers([]Peer{
 		Peer{
-			IP:   util.AddrIP(seeder.ListenAddr()),
-			Port: util.AddrPort(seeder.ListenAddr()),
+			IP:   missinggo.AddrIP(seeder.ListenAddr()),
+			Port: missinggo.AddrPort(seeder.ListenAddr()),
 		},
 	})
 	r := leecherGreeting.NewReader()
@@ -430,8 +430,8 @@ func TestResponsive(t *testing.T) {
 	}())
 	leecherTorrent.AddPeers([]Peer{
 		Peer{
-			IP:   util.AddrIP(seeder.ListenAddr()),
-			Port: util.AddrPort(seeder.ListenAddr()),
+			IP:   missinggo.AddrIP(seeder.ListenAddr()),
+			Port: missinggo.AddrPort(seeder.ListenAddr()),
 		},
 	})
 	reader := leecherTorrent.NewReader()

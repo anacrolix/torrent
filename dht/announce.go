@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/sync"
 	"github.com/willf/bloom"
 
@@ -97,7 +98,7 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*Announc
 }
 
 func (me *Announce) gotNodeAddr(addr dHTAddr) {
-	if util.AddrPort(addr) == 0 {
+	if missinggo.AddrPort(addr) == 0 {
 		// Not a contactable address.
 		return
 	}

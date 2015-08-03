@@ -20,6 +20,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -637,7 +638,7 @@ func (s *Server) serve() error {
 			continue
 		}
 		s.mu.Lock()
-		blocked := s.ipBlocked(util.AddrIP(addr))
+		blocked := s.ipBlocked(missinggo.AddrIP(addr))
 		s.mu.Unlock()
 		if blocked {
 			readBlocked.Add(1)
@@ -809,7 +810,7 @@ func (s *Server) nodeTimedOut(addr dHTAddr) {
 
 func (s *Server) writeToNode(b []byte, node dHTAddr) (err error) {
 	if list := s.ipBlockList; list != nil {
-		if r := list.Lookup(util.AddrIP(node.UDPAddr())); r != nil {
+		if r := list.Lookup(missinggo.AddrIP(node.UDPAddr())); r != nil {
 			err = fmt.Errorf("write to %s blocked: %s", node, r.Description)
 			return
 		}
@@ -908,14 +909,14 @@ func (ni *NodeInfo) PutCompact(b []byte) error {
 	if n := copy(b[:], ni.ID[:]); n != 20 {
 		panic(n)
 	}
-	ip := util.AddrIP(ni.Addr).To4()
+	ip := missinggo.AddrIP(ni.Addr).To4()
 	if len(ip) != 4 {
 		return errors.New("expected ipv4 address")
 	}
 	if n := copy(b[20:], ip); n != 4 {
 		panic(n)
 	}
-	binary.BigEndian.PutUint16(b[24:], uint16(util.AddrPort(ni.Addr)))
+	binary.BigEndian.PutUint16(b[24:], uint16(missinggo.AddrPort(ni.Addr)))
 	return nil
 }
 
@@ -923,7 +924,7 @@ func (cni *NodeInfo) UnmarshalCompact(b []byte) error {
 	if len(b) != 26 {
 		return errors.New("expected 26 bytes")
 	}
-	util.CopyExact(cni.ID[:], b[:20])
+	missinggo.CopyExact(cni.ID[:], b[:20])
 	cni.Addr = newDHTAddr(&net.UDPAddr{
 		IP:   net.IPv4(b[20], b[21], b[22], b[23]),
 		Port: int(binary.BigEndian.Uint16(b[24:26])),
@@ -969,11 +970,11 @@ func (s *Server) liftNodes(d Msg) {
 		return
 	}
 	for _, cni := range d.Nodes() {
-		if util.AddrPort(cni.Addr) == 0 {
+		if missinggo.AddrPort(cni.Addr) == 0 {
 			// TODO: Why would people even do this?
 			continue
 		}
-		if s.ipBlocked(util.AddrIP(cni.Addr)) {
+		if s.ipBlocked(missinggo.AddrIP(cni.Addr)) {
 			continue
 		}
 		n := s.getNode(cni.Addr, string(cni.ID[:]))

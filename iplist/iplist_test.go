@@ -7,9 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/anacrolix/missinggo"
 	"github.com/bradfitz/iter"
-
-	"github.com/anacrolix/torrent/util"
 )
 
 var sample = `
@@ -58,7 +57,7 @@ func connRemoteAddrIP(network, laddr string, dialHost string) net.IP {
 		panic(err)
 	}
 	go func() {
-		c, err := net.Dial(network, net.JoinHostPort(dialHost, fmt.Sprintf("%d", util.AddrPort(l.Addr()))))
+		c, err := net.Dial(network, net.JoinHostPort(dialHost, fmt.Sprintf("%d", missinggo.AddrPort(l.Addr()))))
 		if err != nil {
 			panic(err)
 		}
@@ -69,7 +68,7 @@ func connRemoteAddrIP(network, laddr string, dialHost string) net.IP {
 		panic(err)
 	}
 	defer c.Close()
-	ret := util.AddrIP(c.RemoteAddr())
+	ret := missinggo.AddrIP(c.RemoteAddr())
 	return ret
 }
 

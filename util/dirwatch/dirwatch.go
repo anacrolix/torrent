@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/anacrolix/missinggo"
 	"github.com/go-fsnotify/fsnotify"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/util"
 )
 
 type Change uint
@@ -70,7 +70,7 @@ func torrentFileInfoHash(fileName string) (ih torrent.InfoHash, ok bool) {
 	if mi == nil {
 		return
 	}
-	util.CopyExact(ih[:], mi.Info.Hash)
+	missinggo.CopyExact(ih[:], mi.Info.Hash)
 	ok = true
 	return
 }
@@ -108,7 +108,7 @@ func scanDir(dirName string) (ee map[torrent.InfoHash]entity) {
 			e := entity{
 				TorrentFilePath: fullName,
 			}
-			util.CopyExact(&e.InfoHash, ih)
+			missinggo.CopyExact(&e.InfoHash, ih)
 			addEntity(e)
 		case ".magnet":
 			uris, err := magnetFileURIs(fullName)

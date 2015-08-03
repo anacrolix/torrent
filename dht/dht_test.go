@@ -7,7 +7,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/anacrolix/torrent/util"
+	"github.com/anacrolix/missinggo"
 )
 
 func TestSetNilBigInt(t *testing.T) {
@@ -207,7 +207,7 @@ func TestServerDefaultNodeIdSecure(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if !nodeIdSecure(s.ID(), util.AddrIP(s.Addr())) {
+	if !nodeIdSecure(s.ID(), missinggo.AddrIP(s.Addr())) {
 		t.Fatal("not secure")
 	}
 }

@@ -3,7 +3,7 @@ package dht
 import (
 	"net"
 
-	"github.com/anacrolix/torrent/util"
+	"github.com/anacrolix/missinggo"
 )
 
 // Used internally to refer to node network addresses.
@@ -37,5 +37,5 @@ func (ca cachedAddr) IP() net.IP {
 }
 
 func newDHTAddr(addr net.Addr) dHTAddr {
-	return cachedAddr{addr, addr.String(), util.AddrIP(addr)}
+	return cachedAddr{addr, addr.String(), missinggo.AddrIP(addr)}
 }

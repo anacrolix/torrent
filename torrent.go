@@ -18,7 +18,6 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/tracker"
-	"github.com/anacrolix/torrent/util"
 )
 
 func (t *torrent) pieceNumPendingBytes(index int) (count pp.Integer) {
@@ -226,7 +225,7 @@ func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte, eventLocker s
 	for _, hash := range infoPieceHashes(md) {
 		piece := &piece{}
 		piece.Event.L = eventLocker
-		util.CopyExact(piece.Hash[:], hash)
+		missinggo.CopyExact(piece.Hash[:], hash)
 		t.Pieces = append(t.Pieces, piece)
 	}
 	for _, conn := range t.Conns {
@@ -641,7 +640,7 @@ func (t *torrent) hashPiece(piece pp.Integer) (ps pieceSum) {
 	p := t.Pieces[piece]
 	p.pendingWrites.Wait()
 	t.data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, t.Info.PieceLength)
-	util.CopyExact(ps[:], hash.Sum(nil))
+	missinggo.CopyExact(ps[:], hash.Sum(nil))
 	return
 }
 

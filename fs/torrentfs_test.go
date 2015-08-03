@@ -17,6 +17,7 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
+	"github.com/anacrolix/missinggo"
 	netContext "golang.org/x/net/context"
 
 	"github.com/anacrolix/torrent"
@@ -24,7 +25,6 @@ import (
 	"github.com/anacrolix/torrent/data/mmap"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/util"
 )
 
 func init() {
@@ -45,7 +45,7 @@ func TestTCPAddrString(t *testing.T) {
 	ras := c.RemoteAddr().String()
 	ta := &net.TCPAddr{
 		IP:   net.IPv4(127, 0, 0, 1),
-		Port: util.AddrPort(l.Addr()),
+		Port: missinggo.AddrPort(l.Addr()),
 	}
 	s := ta.String()
 	if ras != s {

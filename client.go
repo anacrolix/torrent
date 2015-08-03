@@ -1249,7 +1249,7 @@ func (t *torrent) initRequestOrdering(c *connection) {
 	}
 }
 
-func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) {
+func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) error {
 	if !c.peerHasAll {
 		if t.haveInfo() {
 			if c.PeerPieces == nil {
@@ -1260,12 +1260,16 @@ func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) {
 				c.PeerPieces = append(c.PeerPieces, false)
 			}
 		}
+		if piece >= len(c.PeerPieces) {
+			return errors.New("peer got out of range piece index")
+		}
 		c.PeerPieces[piece] = true
 	}
 	if t.wantPiece(piece) {
 		t.connPendPiece(c, piece)
 		me.replenishConnRequests(t, c)
 	}
+	return nil
 }
 
 func (me *Client) peerUnchoked(torrent *torrent, conn *connection) {

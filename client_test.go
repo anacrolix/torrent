@@ -22,7 +22,9 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/data"
 	"github.com/anacrolix/torrent/data/blob"
+	"github.com/anacrolix/torrent/dht"
 	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -444,4 +446,16 @@ func TestResponsive(t *testing.T) {
 	assert.Nil(t, err)
 	assert.EqualValues(t, 2, n)
 	assert.EqualValues(t, "d\n", string(b))
+}
+
+func TestDHTInheritBlocklist(t *testing.T) {
+	ipl := iplist.New(nil)
+	require.NotNil(t, ipl)
+	cl, err := NewClient(&Config{
+		IPBlocklist: iplist.New(nil),
+		DHTConfig:   &dht.ServerConfig{},
+	})
+	require.NoError(t, err)
+	defer cl.Close()
+	require.Equal(t, ipl, cl.DHT().IPBlocklist())
 }

@@ -463,7 +463,9 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		cl.torrentDataOpener = cfg.TorrentDataOpener
 	}
 
-	if !cfg.NoDefaultBlocklist {
+	if cfg.IPBlocklist != nil {
+		cl.ipBlockList = cfg.IPBlocklist
+	} else if !cfg.NoDefaultBlocklist {
 		err = cl.setEnvBlocklist()
 		if err != nil {
 			return
@@ -2670,4 +2672,8 @@ func (me *Client) AddTorrentFromFile(filename string) (T Torrent, err error) {
 	}
 	T, _, err = me.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	return
+}
+
+func (me *Client) DHT() *dht.Server {
+	return me.dHT
 }

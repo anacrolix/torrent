@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"github.com/anacrolix/torrent/dht"
+	"github.com/anacrolix/torrent/iplist"
 )
 
 // Override Client defaults.
@@ -43,4 +44,6 @@ type Config struct {
 	// are in $REPO/data. If not set, the "file" implementation is used.
 	TorrentDataOpener
 	DisableEncryption bool `long:"disable-encryption"`
+
+	IPBlocklist *iplist.IPList
 }

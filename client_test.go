@@ -160,10 +160,9 @@ func TestUTPRawConn(t *testing.T) {
 		}
 	}()
 	// Connect a UTP peer to see if the RawConn will still work.
-	utpPeer, err := func() *utp.Socket {
-		s, _ := utp.NewSocket("")
-		return s
-	}().Dial(fmt.Sprintf("localhost:%d", util.AddrPort(l.Addr())))
+	s, _ := utp.NewSocket("")
+	defer s.Close()
+	utpPeer, err := s.Dial(fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
 	if err != nil {
 		t.Fatalf("error dialing utp listener: %s", err)
 	}

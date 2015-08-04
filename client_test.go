@@ -148,7 +148,7 @@ func TestReducedDialTimeout(t *testing.T) {
 }
 
 func TestUTPRawConn(t *testing.T) {
-	l, err := utp.NewSocket("")
+	l, err := utp.NewSocket("udp", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestUTPRawConn(t *testing.T) {
 		}
 	}()
 	// Connect a UTP peer to see if the RawConn will still work.
-	s, _ := utp.NewSocket("")
+	s, _ := utp.NewSocket("udp", "")
 	defer s.Close()
 	utpPeer, err := s.Dial(fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
 	if err != nil {

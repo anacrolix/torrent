@@ -225,6 +225,7 @@ func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte, eventLocker s
 	for _, hash := range infoPieceHashes(md) {
 		piece := &piece{}
 		piece.Event.L = eventLocker
+		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		missinggo.CopyExact(piece.Hash[:], hash)
 		t.Pieces = append(t.Pieces, piece)
 	}
@@ -638,7 +639,11 @@ func (t *torrent) pieceLength(piece int) (len_ pp.Integer) {
 func (t *torrent) hashPiece(piece pp.Integer) (ps pieceSum) {
 	hash := pieceHash.New()
 	p := t.Pieces[piece]
-	p.pendingWrites.Wait()
+	p.pendingWritesMutex.Lock()
+	for p.pendingWrites != 0 {
+		p.noPendingWrites.Wait()
+	}
+	p.pendingWritesMutex.Unlock()
 	t.data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, t.Info.PieceLength)
 	missinggo.CopyExact(ps[:], hash.Sum(nil))
 	return

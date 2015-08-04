@@ -128,7 +128,11 @@ again:
 	if int64(len(b1)) > ip.Length()-po {
 		b1 = b1[:ip.Length()-po]
 	}
-	tp.pendingWrites.Wait()
+	tp.pendingWritesMutex.Lock()
+	for tp.pendingWrites != 0 {
+		tp.noPendingWrites.Wait()
+	}
+	tp.pendingWritesMutex.Unlock()
 	n, err = dataReadAt(r.t.data, b1, pos)
 	if n != 0 {
 		err = nil

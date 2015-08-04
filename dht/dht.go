@@ -221,7 +221,7 @@ func (n *node) IsSecure() bool {
 	if n.id.IsUnset() {
 		return false
 	}
-	return nodeIdSecure(n.id.ByteString(), n.addr.IP())
+	return NodeIdSecure(n.id.ByteString(), n.addr.IP())
 }
 
 func (n *node) idString() string {
@@ -521,16 +521,18 @@ func crcIP(ip net.IP, rand uint8) uint32 {
 	return crc32.Checksum(ip[:len(mask)], crc32.MakeTable(crc32.Castagnoli))
 }
 
-// Makes a node ID valid, in-place.
-func secureNodeId(id []byte, ip net.IP) {
+// Makes a node ID secure, in-place. The ID is 20 raw bytes.
+// http://www.libtorrent.org/dht_sec.html
+func SecureNodeId(id []byte, ip net.IP) {
 	crc := crcIP(ip, id[19])
 	id[0] = byte(crc >> 24 & 0xff)
 	id[1] = byte(crc >> 16 & 0xff)
 	id[2] = byte(crc>>8&0xf8) | id[2]&7
 }
 
-// http://www.libtorrent.org/dht_sec.html
-func nodeIdSecure(id string, ip net.IP) bool {
+// Returns whether the node ID is considered secure. The id is the 20 raw
+// bytes. http://www.libtorrent.org/dht_sec.html
+func NodeIdSecure(id string, ip net.IP) bool {
 	if len(id) != 20 {
 		panic(fmt.Sprintf("%q", id))
 	}
@@ -573,7 +575,7 @@ func (s *Server) setDefaults() (err error) {
 				return missinggo.AddrIP(s.socket.LocalAddr())
 			}
 		}()
-		secureNodeId(id[:], publicIP)
+		SecureNodeId(id[:], publicIP)
 		s.id = string(id[:])
 	}
 	s.nodes = make(map[string]*node, maxNodes)

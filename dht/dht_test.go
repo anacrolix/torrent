@@ -188,13 +188,13 @@ func TestDHTSec(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		secure := nodeIdSecure(string(id), ip)
+		secure := NodeIdSecure(string(id), ip)
 		if secure != case_.valid {
 			t.Fatalf("case failed: %v", case_)
 		}
 		if !secure {
-			secureNodeId(id, ip)
-			if !nodeIdSecure(string(id), ip) {
+			SecureNodeId(id, ip)
+			if !NodeIdSecure(string(id), ip) {
 				t.Fatal("failed to secure node id")
 			}
 		}
@@ -207,7 +207,7 @@ func TestServerDefaultNodeIdSecure(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if !nodeIdSecure(s.ID(), missinggo.AddrIP(s.Addr())) {
+	if !NodeIdSecure(s.ID(), missinggo.AddrIP(s.Addr())) {
 		t.Fatal("not secure")
 	}
 }

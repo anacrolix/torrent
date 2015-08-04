@@ -2605,32 +2605,42 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	return nil
 }
 
+// Return the connections that touched a piece, and clear the entry while
+// doing it.
+func (me *Client) reapPieceTouches(t *torrent, piece int) (ret []*connection) {
+	for _, c := range t.Conns {
+		if _, ok := c.peerTouchedPieces[piece]; ok {
+			ret = append(ret, c)
+			delete(c.peerTouchedPieces, piece)
+		}
+	}
+	return
+}
+
 func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 	p := t.Pieces[piece]
 	if p.EverHashed {
+		// Don't score the first time a piece is hashed, it could be an
+		// initial check.
 		if correct {
 			pieceHashedCorrect.Add(1)
 		} else {
 			log.Printf("%s: piece %d failed hash", t, piece)
 			pieceHashedNotCorrect.Add(1)
-			var touched []*connection
-			for _, c := range t.Conns {
-				if _, ok := c.peerTouchedPieces[int(piece)]; ok {
-					touched = append(touched, c)
-				}
-			}
-			log.Printf("dropping %d conns that touched piece", len(touched))
-			for _, c := range touched {
-				me.dropConnection(t, c)
-			}
 		}
 	}
 	p.EverHashed = true
+	touchers := me.reapPieceTouches(t, int(piece))
 	if correct {
 		err := t.data.PieceCompleted(int(piece))
 		if err != nil {
 			log.Printf("error completing piece: %s", err)
 			correct = false
+		}
+	} else if len(touchers) != 0 {
+		log.Printf("dropping %d conns that touched piece", len(touchers))
+		for _, c := range touchers {
+			me.dropConnection(t, c)
 		}
 	}
 	me.pieceChanged(t, int(piece))

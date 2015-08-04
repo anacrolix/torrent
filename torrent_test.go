@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"sync"
 	"testing"
 
 	"github.com/anacrolix/torrent/peer_protocol"
@@ -41,22 +40,6 @@ func TestTorrentRequest(t *testing.T) {
 			t.Fatalf("expected %v, got %v", _case.req, req)
 		}
 	}
-}
-
-func TestTorrentDoubleClose(t *testing.T) {
-	tt, err := newTorrent(InfoHash{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	wg := sync.WaitGroup{}
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() {
-			tt.close()
-			wg.Done()
-		}()
-	}
-	wg.Wait()
 }
 
 func TestAppendToCopySlice(t *testing.T) {

@@ -499,7 +499,13 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	}
 	if !cl.config.DisableTCP {
 		var l net.Listener
-		l, err = net.Listen("tcp", listenAddr())
+		l, err = net.Listen(func() string {
+			if cl.config.DisableIPv6 {
+				return "tcp4"
+			} else {
+				return "tcp"
+			}
+		}(), listenAddr())
 		if err != nil {
 			return
 		}
@@ -507,7 +513,13 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		go cl.acceptConnections(l, false)
 	}
 	if !cl.config.DisableUTP {
-		cl.utpSock, err = utp.NewSocket(listenAddr())
+		cl.utpSock, err = utp.NewSocket(func() string {
+			if cl.config.DisableIPv6 {
+				return "udp4"
+			} else {
+				return "udp"
+			}
+		}(), listenAddr())
 		if err != nil {
 			return
 		}

@@ -46,4 +46,5 @@ type Config struct {
 	DisableEncryption bool `long:"disable-encryption"`
 
 	IPBlocklist *iplist.IPList
+	DisableIPv6 bool
 }

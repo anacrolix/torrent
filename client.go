@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anacrolix/missinggo"
 	. "github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/sync"
@@ -1763,7 +1764,9 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 		if c == nil {
 			return false
 		}
-		log.Printf("%s: dropping connection to make room for new one:\n    %s", t, c)
+		if missinggo.CryHeard() {
+			log.Printf("%s: dropping connection to make room for new one:\n    %s", t, c)
+		}
 		c.Close()
 		me.deleteConnection(t, c)
 	}

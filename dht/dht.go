@@ -628,7 +628,9 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 					return
 				}
 			}
-			log.Printf("%s: received bad krpc message from %s: %s: %+q", s, addr, err, b)
+			if missinggo.CryHeard() {
+				log.Printf("%s: received bad krpc message from %s: %s: %+q", s, addr, err, b)
+			}
 		}()
 		return
 	}
@@ -1043,7 +1045,9 @@ func (m Msg) Values() (vs []util.CompactPeer) {
 	}
 	vl, ok := v.([]interface{})
 	if !ok {
-		log.Printf("unexpected krpc values type: %T", v)
+		if missinggo.CryHeard() {
+			log.Printf(`unexpected krpc "values" field: %#v`, v)
+		}
 		return
 	}
 	vs = make([]util.CompactPeer, 0, len(vl))

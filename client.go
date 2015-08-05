@@ -2360,6 +2360,12 @@ func (cl *Client) announceTorrentSingleTracker(tr tracker.Client, req *tracker.A
 	}
 	var peers []Peer
 	for _, peer := range resp.Peers {
+		if peer.Port == 0 {
+			if CryHeard() {
+				log.Printf("tracker %s gave peer %s", tr, peer)
+			}
+			continue
+		}
 		peers = append(peers, Peer{
 			IP:   peer.IP,
 			Port: peer.Port,

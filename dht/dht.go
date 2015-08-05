@@ -604,6 +604,11 @@ func (s *Server) init() (err error) {
 }
 
 func (s *Server) processPacket(b []byte, addr dHTAddr) {
+	if len(b) < 2 || b[0] != 'd' || b[len(b)-1] != 'e' {
+		// KRPC messages are bencoded dicts.
+		readNotKRPCDict.Add(1)
+		return
+	}
 	var d Msg
 	err := bencode.Unmarshal(b, &d)
 	if err != nil {

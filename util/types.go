@@ -1,11 +1,12 @@
 package util
 
 import (
-	"bytes"
 	"encoding"
 	"encoding/binary"
 	"fmt"
 	"io"
+	"net"
+	"strconv"
 
 	"github.com/anacrolix/torrent/bencode"
 )
@@ -34,25 +35,53 @@ func (me *CompactPeers) UnmarshalBinary(b []byte) (err error) {
 	return
 }
 
-func (me CompactPeers) WriteBinary(w io.Writer) error {
-	return binary.Write(w, binary.BigEndian, me)
+func (me CompactPeers) WriteBinary(w io.Writer) (err error) {
+	for _, cp := range me {
+		cp.Write(w)
+		if err != nil {
+			return
+		}
+	}
+	return
 }
 
 type CompactPeer struct {
-	IP   [4]byte
+	IP   net.IP
 	Port uint16
 }
 
 var _ encoding.BinaryUnmarshaler = &CompactPeer{}
 
 func (cp *CompactPeer) UnmarshalBinary(b []byte) (err error) {
-	r := bytes.NewReader(b)
-	err = binary.Read(r, binary.BigEndian, cp)
+	switch len(b) {
+	case 18:
+		cp.IP = make([]byte, 16)
+	case 6:
+		cp.IP = make([]byte, 4)
+	default:
+		err = fmt.Errorf("bad length: %d", len(b))
+		return
+	}
+	if n := copy(cp.IP, b); n != len(cp.IP) {
+		panic(n)
+	}
+	b = b[len(cp.IP):]
+	if len(b) != 2 {
+		panic(len(b))
+	}
+	cp.Port = binary.BigEndian.Uint16(b)
+	return
+}
+
+func (cp *CompactPeer) Write(w io.Writer) (err error) {
+	_, err = w.Write(cp.IP)
 	if err != nil {
 		return
 	}
-	if r.Len() != 0 {
-		err = fmt.Errorf("%d bytes unused", r.Len())
-	}
+	err = binary.Write(w, binary.BigEndian, cp.Port)
 	return
+}
+
+func (cp *CompactPeer) String() string {
+	return net.JoinHostPort(cp.IP.String(), strconv.FormatUint(uint64(cp.Port), 10))
 }

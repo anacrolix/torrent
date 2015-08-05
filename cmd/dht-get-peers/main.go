@@ -12,7 +12,6 @@ import (
 	_ "github.com/anacrolix/envpprof"
 
 	"github.com/anacrolix/torrent/dht"
-	"github.com/anacrolix/torrent/util"
 	_ "github.com/anacrolix/torrent/util/profile"
 )
 
@@ -126,7 +125,7 @@ func setupSignals() {
 }
 
 func main() {
-	seen := make(map[util.CompactPeer]struct{})
+	seen := make(map[string]struct{})
 getPeers:
 	for {
 		ps, err := s.Announce(*infoHash, 0, false)
@@ -142,10 +141,10 @@ getPeers:
 				}
 				log.Printf("received %d peers from %x", len(v.Peers), v.NodeInfo.ID)
 				for _, p := range v.Peers {
-					if _, ok := seen[p]; ok {
+					if _, ok := seen[p.String()]; ok {
 						continue
 					}
-					seen[p] = struct{}{}
+					seen[p.String()] = struct{}{}
 					fmt.Println((&net.UDPAddr{
 						IP:   p.IP[:],
 						Port: int(p.Port),

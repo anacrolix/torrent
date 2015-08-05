@@ -31,7 +31,7 @@ func TestNetIPv4Bytes(t *testing.T) {
 
 func TestMarshalAnnounceResponse(t *testing.T) {
 	w := bytes.Buffer{}
-	peers := util.CompactPeers{{[4]byte{127, 0, 0, 1}, 2}, {[4]byte{255, 0, 0, 3}, 4}}
+	peers := util.CompactPeers{{[]byte{127, 0, 0, 1}, 2}, {[]byte{255, 0, 0, 3}, 4}}
 	err := peers.WriteBinary(&w)
 	if err != nil {
 		t.Fatalf("error writing udp announce response addrs: %s", err)

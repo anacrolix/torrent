@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -289,6 +290,71 @@ func TestClientTransfer(t *testing.T) {
 	if greeting != testutil.GreetingFileContents {
 		t.Fatal(":(")
 	}
+}
+
+// Check that after completing leeching, a leecher transitions to a seeding
+// correctly. Connected in a chain like so: Seeder <-> Leecher <-> LeecherLeecher.
+func TestSeedAfterDownloading(t *testing.T) {
+	greetingTempDir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(greetingTempDir)
+	cfg := TestingConfig
+	cfg.Seed = true
+	cfg.DataDir = greetingTempDir
+	seeder, err := NewClient(&cfg)
+	defer seeder.Close()
+	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	cfg.DataDir, err = ioutil.TempDir("", "")
+	require.NoError(t, err)
+	defer os.RemoveAll(cfg.DataDir)
+	leecher, _ := NewClient(&cfg)
+	defer leecher.Close()
+	cfg.Seed = false
+	cfg.TorrentDataOpener = nil
+	cfg.DataDir, err = ioutil.TempDir("", "")
+	require.NoError(t, err)
+	defer os.RemoveAll(cfg.DataDir)
+	leecherLeecher, _ := NewClient(&cfg)
+	defer leecherLeecher.Close()
+	leecherGreeting, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
+		ret = TorrentSpecFromMetaInfo(mi)
+		ret.ChunkSize = 2
+		return
+	}())
+	llg, _, _ := leecherLeecher.AddTorrentSpec(func() (ret *TorrentSpec) {
+		ret = TorrentSpecFromMetaInfo(mi)
+		ret.ChunkSize = 3
+		return
+	}())
+	// Simultaneously DownloadAll in Leecher, and read the contents
+	// consecutively in LeecherLeecher. This non-deterministically triggered a
+	// case where the leecher wouldn't unchoke the LeecherLeecher.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		r := llg.NewReader()
+		defer r.Close()
+		b, err := ioutil.ReadAll(r)
+		require.NoError(t, err)
+		require.EqualValues(t, testutil.GreetingFileContents, b)
+	}()
+	leecherGreeting.AddPeers([]Peer{
+		Peer{
+			IP:   missinggo.AddrIP(seeder.ListenAddr()),
+			Port: missinggo.AddrPort(seeder.ListenAddr()),
+		},
+		Peer{
+			IP:   missinggo.AddrIP(leecherLeecher.ListenAddr()),
+			Port: missinggo.AddrPort(leecherLeecher.ListenAddr()),
+		},
+	})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		leecherGreeting.DownloadAll()
+		leecher.WaitAll()
+	}()
+	wg.Wait()
 }
 
 func TestReadaheadPieces(t *testing.T) {

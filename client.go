@@ -2693,6 +2693,7 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 				}
 			}
 			conn.pieceRequestOrder.DeletePiece(int(piece))
+			me.upload(t, conn)
 		} else if t.wantPiece(piece) && conn.PeerHasPiece(piece) {
 			t.connPendPiece(conn, int(piece))
 			me.replenishConnRequests(t, conn)

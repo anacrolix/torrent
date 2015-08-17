@@ -289,11 +289,24 @@ func (m Msg) T() (t string) {
 	return
 }
 
-func (m Msg) ID() string {
+func (m Msg) Args() map[string]interface{} {
 	defer func() {
 		recover()
 	}()
-	return m[m["y"].(string)].(map[string]interface{})["id"].(string)
+	return m["a"].(map[string]interface{})
+}
+
+func (m Msg) SenderID() string {
+	defer func() {
+		recover()
+	}()
+	switch m["y"].(string) {
+	case "q":
+		return m.Args()["id"].(string)
+	case "r":
+		return m["r"].(map[string]interface{})["id"].(string)
+	}
+	return ""
 }
 
 // Suggested nodes in a response.
@@ -647,7 +660,7 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 		//log.Printf("unexpected message: %#v", d)
 		return
 	}
-	node := s.getNode(addr, d.ID())
+	node := s.getNode(addr, d.SenderID())
 	node.lastGotResponse = time.Now()
 	// TODO: Update node ID as this is an authoritative packet.
 	go t.handleResponse(d)
@@ -1090,7 +1103,7 @@ func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *Transaction, err er
 		s.liftNodes(m)
 		at, ok := m.AnnounceToken()
 		if ok {
-			s.getNode(addr, m.ID()).announceToken = at
+			s.getNode(addr, m.SenderID()).announceToken = at
 		}
 	})
 	return

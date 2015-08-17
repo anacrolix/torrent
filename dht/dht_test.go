@@ -145,7 +145,7 @@ func TestPing(t *testing.T) {
 	defer tn.Close()
 	ok := make(chan bool)
 	tn.SetResponseHandler(func(msg Msg) {
-		ok <- msg.ID() == srv0.ID()
+		ok <- msg.SenderID() == srv0.ID()
 	})
 	if !<-ok {
 		t.FailNow()

@@ -178,7 +178,7 @@ func (me *Announce) getPeers(addr dHTAddr) error {
 			nodeInfo := NodeInfo{
 				Addr: t.remoteAddr,
 			}
-			copy(nodeInfo.ID[:], m.ID())
+			copy(nodeInfo.ID[:], m.SenderID())
 			select {
 			case me.values <- PeersValues{
 				Peers:    vs,

@@ -50,7 +50,6 @@ type Server struct {
 	nodes            map[string]*node // Keyed by dHTAddr.String().
 	mu               sync.Mutex
 	closed           chan struct{}
-	passive          bool // Don't respond to queries.
 	ipBlockList      *iplist.IPList
 	badNodes         *boom.BloomFilter
 
@@ -139,7 +138,6 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 			return
 		}
 	}
-	s.passive = c.Passive
 	s.bootstrapNodes = c.BootstrapNodes
 	err = s.init()
 	if err != nil {
@@ -722,7 +720,7 @@ func (s *Server) handleQuery(source dHTAddr, m Msg) {
 	node.SetIDFromString(args["id"].(string))
 	node.lastGotQuery = time.Now()
 	// Don't respond.
-	if s.passive {
+	if s.config.Passive {
 		return
 	}
 	switch m["q"] {

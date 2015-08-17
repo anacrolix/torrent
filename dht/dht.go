@@ -904,6 +904,11 @@ func (s *Server) query(node dHTAddr, q string, a map[string]interface{}, onRespo
 		"q": q,
 		"a": a,
 	}
+	// BEP 43. Outgoing queries from uncontactiable nodes should contain
+	// "ro":1 in the top level dictionary.
+	if s.config.Passive {
+		d["ro"] = 1
+	}
 	b, err := bencode.Marshal(d)
 	if err != nil {
 		return

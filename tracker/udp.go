@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/anacrolix/missinggo"
+
 	"github.com/anacrolix/torrent/util"
 )
 
@@ -21,6 +23,8 @@ const (
 	Announce
 	Scrape
 	Error
+
+	connectRequestConnectionId = 0x41727101980
 
 	// BEP 41
 	optionTypeEndOfOptions = 0
@@ -121,34 +125,29 @@ func (c *udpClient) Announce(req *AnnounceRequest) (res AnnounceResponse, err er
 	res.Interval = h.Interval
 	res.Leechers = h.Leechers
 	res.Seeders = h.Seeders
-	for {
-		var p util.CompactPeer
-		err = binary.Read(b, binary.BigEndian, &p)
-		switch err {
-		case nil:
-		case io.EOF:
-			err = nil
-			fallthrough
-		default:
-			return
-		}
+	cps, err := util.UnmarshalIPv4CompactPeers(b.Bytes())
+	if err != nil {
+		return
+	}
+	for _, cp := range cps {
 		res.Peers = append(res.Peers, Peer{
-			IP:   p.IP[:],
-			Port: int(p.Port),
+			IP:   cp.IP[:],
+			Port: int(cp.Port),
 		})
 	}
+	return
 }
 
 // body is the binary serializable request body. trailer is optional data
 // following it, such as for BEP 41.
 func (c *udpClient) write(h *RequestHeader, body interface{}, trailer []byte) (err error) {
-	buf := &bytes.Buffer{}
-	err = binary.Write(buf, binary.BigEndian, h)
+	var buf bytes.Buffer
+	err = binary.Write(&buf, binary.BigEndian, h)
 	if err != nil {
 		panic(err)
 	}
 	if body != nil {
-		err = binary.Write(buf, binary.BigEndian, body)
+		err = binary.Write(&buf, binary.BigEndian, body)
 		if err != nil {
 			panic(err)
 		}
@@ -177,7 +176,7 @@ func write(w io.Writer, data interface{}) error {
 
 // args is the binary serializable request body. trailer is optional data
 // following it, such as for BEP 41.
-func (c *udpClient) request(action Action, args interface{}, options []byte) (responseBody *bytes.Reader, err error) {
+func (c *udpClient) request(action Action, args interface{}, options []byte) (responseBody *bytes.Buffer, err error) {
 	tid := newTransactionId()
 	err = c.write(&RequestHeader{
 		ConnectionId:  c.connectionId,
@@ -218,12 +217,12 @@ func (c *udpClient) request(action Action, args interface{}, options []byte) (re
 		if h.Action == Error {
 			err = errors.New(buf.String())
 		}
-		responseBody = bytes.NewReader(buf.Bytes())
+		responseBody = buf
 		return
 	}
 }
 
-func readBody(r *bytes.Reader, data ...interface{}) (err error) {
+func readBody(r io.Reader, data ...interface{}) (err error) {
 	for _, datum := range data {
 		err = binary.Read(r, binary.BigEndian, datum)
 		if err != nil {
@@ -241,9 +240,14 @@ func (c *udpClient) Connect() (err error) {
 	if c.connected() {
 		return nil
 	}
-	c.connectionId = 0x41727101980
+	c.connectionId = connectRequestConnectionId
 	if c.socket == nil {
-		c.socket, err = net.Dial("udp", c.url.Host)
+		hmp := missinggo.SplitHostPort(c.url.Host)
+		if hmp.NoPort {
+			hmp.NoPort = false
+			hmp.Port = 80
+		}
+		c.socket, err = net.Dial("udp", hmp.String())
 		if err != nil {
 			return
 		}

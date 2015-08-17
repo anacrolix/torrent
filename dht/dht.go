@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/anacrolix/missinggo"
@@ -1028,19 +1029,25 @@ func (s *Server) findNode(addr dHTAddr, targetID string) (t *Transaction, err er
 	return
 }
 
+type Peer struct {
+	IP   net.IP
+	Port int
+}
+
+func (me *Peer) String() string {
+	return net.JoinHostPort(me.IP.String(), strconv.FormatInt(int64(me.Port), 10))
+}
+
 // In a get_peers response, the addresses of torrent clients involved with the
 // queried info-hash.
-func (m Msg) Values() (vs []util.CompactPeer) {
-	r, ok := m["r"]
-	if !ok {
-		return
-	}
-	rd, ok := r.(map[string]interface{})
-	if !ok {
-		return
-	}
-	v, ok := rd["values"]
-	if !ok {
+func (m Msg) Values() (vs []Peer) {
+	v := func() interface{} {
+		defer func() {
+			recover()
+		}()
+		return m["r"].(map[string]interface{})["values"]
+	}()
+	if v == nil {
 		return
 	}
 	vl, ok := v.([]interface{})
@@ -1050,19 +1057,21 @@ func (m Msg) Values() (vs []util.CompactPeer) {
 		}
 		return
 	}
-	vs = make([]util.CompactPeer, 0, len(vl))
+	vs = make([]Peer, 0, len(vl))
 	for _, i := range vl {
 		s, ok := i.(string)
 		if !ok {
 			panic(i)
 		}
+		// Because it's a list of strings, we can let the length of the string
+		// determine the IP version of the compact peer.
 		var cp util.CompactPeer
 		err := cp.UnmarshalBinary([]byte(s))
 		if err != nil {
 			log.Printf("error decoding values list element: %s", err)
 			continue
 		}
-		vs = append(vs, cp)
+		vs = append(vs, Peer{cp.IP[:], int(cp.Port)})
 	}
 	return
 }

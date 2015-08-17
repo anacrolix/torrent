@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/util"
@@ -30,18 +32,16 @@ func TestNetIPv4Bytes(t *testing.T) {
 }
 
 func TestMarshalAnnounceResponse(t *testing.T) {
-	w := bytes.Buffer{}
-	peers := util.CompactPeers{{[]byte{127, 0, 0, 1}, 2}, {[]byte{255, 0, 0, 3}, 4}}
-	err := peers.WriteBinary(&w)
-	if err != nil {
-		t.Fatalf("error writing udp announce response addrs: %s", err)
+	peers := util.CompactIPv4Peers{
+		{[]byte{127, 0, 0, 1}, 2},
+		{[]byte{255, 0, 0, 3}, 4},
 	}
-	if w.String() != "\x7f\x00\x00\x01\x00\x02\xff\x00\x00\x03\x00\x04" {
-		t.FailNow()
-	}
-	if binary.Size(AnnounceResponseHeader{}) != 12 {
-		t.FailNow()
-	}
+	b, err := peers.MarshalBinary()
+	require.NoError(t, err)
+	require.EqualValues(t,
+		"\x7f\x00\x00\x01\x00\x02\xff\x00\x00\x03\x00\x04",
+		b)
+	require.EqualValues(t, 12, binary.Size(AnnounceResponseHeader{}))
 }
 
 // Failure to write an entire packet to UDP is expected to given an error.
@@ -83,32 +83,80 @@ func TestConvertInt16ToInt(t *testing.T) {
 	}
 }
 
-func TestUDPTracker(t *testing.T) {
-	if testing.Short() {
-		t.SkipNow()
+func TestAnnounceLocalhost(t *testing.T) {
+	srv := server{
+		t: map[[20]byte]torrent{
+			[20]byte{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1}: {
+				Seeders:  1,
+				Leechers: 2,
+				Peers: []util.CompactPeer{
+					{[]byte{1, 2, 3, 4}, 5},
+					{[]byte{6, 7, 8, 9}, 10},
+				},
+			},
+		},
 	}
-	tr, err := New("udp://tracker.openbittorrent.com:80/announce")
-	if err != nil {
-		t.Skip(err)
-	}
-	if err := tr.Connect(); err != nil {
-		t.Skip(err)
-	}
+	var err error
+	srv.pc, err = net.ListenPacket("udp", ":0")
+	require.NoError(t, err)
+	defer srv.pc.Close()
+	tr, err := New(fmt.Sprintf("udp://%s/announce", srv.pc.LocalAddr().String()))
+	require.NoError(t, err)
+	go func() {
+		require.NoError(t, srv.serveOne())
+	}()
+	err = tr.Connect()
+	require.NoError(t, err)
 	req := AnnounceRequest{
 		NumWant: -1,
 		Event:   Started,
 	}
 	rand.Read(req.PeerId[:])
 	copy(req.InfoHash[:], []uint8{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1})
-	_, err = tr.Announce(&req)
-	if err != nil {
-		t.Skip(err)
-	}
+	go func() {
+		require.NoError(t, srv.serveOne())
+	}()
+	ar, err := tr.Announce(&req)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, ar.Seeders)
+	assert.EqualValues(t, 2, len(ar.Peers))
 }
 
-// TODO: Create a fake UDP tracker to make these requests to.
-func TestAnnounceRandomInfoHash(t *testing.T) {
+func TestUDPTracker(t *testing.T) {
+	tr, err := New("udp://tracker.openbittorrent.com:80/announce")
+	require.NoError(t, err)
 	if testing.Short() {
+		t.SkipNow()
+	}
+	if err := tr.Connect(); err != nil {
+		if strings.Contains(err.Error(), "no such host") {
+			t.Skip(err)
+		}
+		if strings.Contains(err.Error(), "i/o timeout") {
+			t.Skip(err)
+		}
+		t.Fatal(err)
+	}
+	req := AnnounceRequest{
+		NumWant: -1,
+		// Event:   Started,
+	}
+	rand.Read(req.PeerId[:])
+	copy(req.InfoHash[:], []uint8{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1})
+	ar, err := tr.Announce(&req)
+	if ne, ok := err.(net.Error); ok {
+		if ne.Timeout() {
+			t.Skip(err)
+		}
+	}
+	require.NoError(t, err)
+	t.Log(ar)
+}
+
+func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
+	if testing.Short() {
+		// This test involves contacting third party servers that may have
+		// unpreditable results.
 		t.SkipNow()
 	}
 	req := AnnounceRequest{
@@ -117,13 +165,18 @@ func TestAnnounceRandomInfoHash(t *testing.T) {
 	rand.Read(req.PeerId[:])
 	rand.Read(req.InfoHash[:])
 	wg := sync.WaitGroup{}
+	success := make(chan bool)
+	fail := make(chan struct{})
 	for _, url := range []string{
 		"udp://tracker.openbittorrent.com:80/announce",
 		"udp://tracker.publicbt.com:80",
 		"udp://tracker.istole.it:6969",
 		"udp://tracker.ccc.de:80",
 		"udp://tracker.open.demonii.com:1337",
+		"udp://open.demonii.com:1337",
+		"udp://exodus.desync.com:6969",
 	} {
+		wg.Add(1)
 		go func(url string) {
 			defer wg.Done()
 			tr, err := New(url)
@@ -140,12 +193,26 @@ func TestAnnounceRandomInfoHash(t *testing.T) {
 				return
 			}
 			if resp.Leechers != 0 || resp.Seeders != 0 || len(resp.Peers) != 0 {
+				// The info hash we generated was random in 2^160 space. If we
+				// get a hit, something is weird.
 				t.Fatal(resp)
 			}
+			t.Logf("announced to %s", url)
+			// TODO: Can probably get stuck here, but it's just a throwaway
+			// test.
+			success <- true
 		}(url)
-		wg.Add(1)
 	}
-	wg.Wait()
+	go func() {
+		wg.Wait()
+		close(fail)
+	}()
+	// Bail as quickly as we can.
+	select {
+	case <-fail:
+		t.FailNow()
+	case <-success:
+	}
 }
 
 // Check that URLPath option is done correctly.
@@ -164,7 +231,6 @@ func TestURLPathOption(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		log.Print("connected")
 		_, err = cl.Announce(&AnnounceRequest{})
 		if err != nil {
 			t.Fatal(err)

@@ -3,85 +3,77 @@ package util
 import (
 	"encoding"
 	"encoding/binary"
-	"fmt"
-	"io"
+	"errors"
 	"net"
-	"strconv"
+
+	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/bencode"
 )
 
-type CompactPeers []CompactPeer
+// Concatenated 6-byte peer addresses.
+type CompactIPv4Peers []CompactPeer
 
-func (me *CompactPeers) UnmarshalBencode(bb []byte) (err error) {
-	var b []byte
-	err = bencode.Unmarshal(bb, &b)
+var (
+	// This allows bencode.Unmarshal to do better than a string or []byte.
+	_ bencode.Unmarshaler      = &CompactIPv4Peers{}
+	_ encoding.BinaryMarshaler = CompactIPv4Peers{}
+)
+
+// This allows bencode.Unmarshal to do better than a string or []byte.
+func (me *CompactIPv4Peers) UnmarshalBencode(b []byte) (err error) {
+	var bb []byte
+	err = bencode.Unmarshal(b, &bb)
 	if err != nil {
 		return
 	}
-	err = me.UnmarshalBinary(b)
+	*me, err = UnmarshalIPv4CompactPeers(bb)
 	return
 }
 
-func (me *CompactPeers) UnmarshalBinary(b []byte) (err error) {
-	for i := 0; i < len(b); i += 6 {
-		var p CompactPeer
-		err = p.UnmarshalBinary([]byte(b[i : i+6]))
-		if err != nil {
-			return
-		}
-		*me = append(*me, p)
+func (me CompactIPv4Peers) MarshalBinary() (ret []byte, err error) {
+	ret = make([]byte, len(me)*6)
+	for i, cp := range me {
+		copy(ret[6*i:], cp.IP.To4())
+		binary.BigEndian.PutUint16(ret[6*i+4:], uint16(cp.Port))
 	}
 	return
 }
 
-func (me CompactPeers) WriteBinary(w io.Writer) (err error) {
-	for _, cp := range me {
-		cp.Write(w)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
+// Represents peer address in either IPv6 or IPv4 form.
 type CompactPeer struct {
 	IP   net.IP
-	Port uint16
+	Port int
 }
 
-var _ encoding.BinaryUnmarshaler = &CompactPeer{}
-
-func (cp *CompactPeer) UnmarshalBinary(b []byte) (err error) {
+func (me *CompactPeer) UnmarshalBinary(b []byte) error {
 	switch len(b) {
 	case 18:
-		cp.IP = make([]byte, 16)
+		me.IP = make([]byte, 16)
 	case 6:
-		cp.IP = make([]byte, 4)
+		me.IP = make([]byte, 4)
 	default:
-		err = fmt.Errorf("bad length: %d", len(b))
-		return
+		return errors.New("bad length")
 	}
-	if n := copy(cp.IP, b); n != len(cp.IP) {
-		panic(n)
-	}
-	b = b[len(cp.IP):]
-	if len(b) != 2 {
-		panic(len(b))
-	}
-	cp.Port = binary.BigEndian.Uint16(b)
-	return
+	copy(me.IP, b)
+	b = b[len(me.IP):]
+	me.Port = int(binary.BigEndian.Uint16(b))
+	return nil
 }
 
-func (cp *CompactPeer) Write(w io.Writer) (err error) {
-	_, err = w.Write(cp.IP)
-	if err != nil {
+func UnmarshalIPv4CompactPeers(b []byte) (ret []CompactPeer, err error) {
+	if len(b)%6 != 0 {
+		err = errors.New("bad length")
 		return
 	}
-	err = binary.Write(w, binary.BigEndian, cp.Port)
+	num := len(b) / 6
+	ret = make([]CompactPeer, num)
+	for i := range iter.N(num) {
+		off := i * 6
+		err = ret[i].UnmarshalBinary(b[off : off+6])
+		if err != nil {
+			return
+		}
+	}
 	return
-}
-
-func (cp *CompactPeer) String() string {
-	return net.JoinHostPort(cp.IP.String(), strconv.FormatUint(uint64(cp.Port), 10))
 }

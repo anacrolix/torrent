@@ -11,7 +11,6 @@ import (
 	"github.com/willf/bloom"
 
 	"github.com/anacrolix/torrent/logonce"
-	"github.com/anacrolix/torrent/util"
 )
 
 // Maintains state for an ongoing Announce operation. An Announce is started
@@ -204,8 +203,8 @@ func (me *Announce) getPeers(addr dHTAddr) error {
 // peers that a node has reported as being in the swarm for a queried info
 // hash.
 type PeersValues struct {
-	Peers    []util.CompactPeer // Peers given in get_peers response.
-	NodeInfo                    // The node that gave the response.
+	Peers    []Peer // Peers given in get_peers response.
+	NodeInfo        // The node that gave the response.
 }
 
 // Stop the announce.

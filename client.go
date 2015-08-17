@@ -35,12 +35,10 @@ import (
 	"github.com/anacrolix/torrent/dht"
 	"github.com/anacrolix/torrent/internal/pieceordering"
 	"github.com/anacrolix/torrent/iplist"
-	"github.com/anacrolix/torrent/logonce"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/tracker"
-	. "github.com/anacrolix/torrent/util"
 )
 
 var (
@@ -1403,12 +1401,6 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 	return
 }
 
-type peerExchangeMessage struct {
-	Added      CompactPeers `bencode:"added"`
-	AddedFlags []byte       `bencode:"added.f"`
-	Dropped    CompactPeers `bencode:"dropped"`
-}
-
 // Extracts the port as an integer from an address string.
 func addrPort(addr net.Addr) int {
 	return AddrPort(addr)
@@ -2434,8 +2426,8 @@ newAnnounce:
 			for trIndex, tr := range tier {
 				numTrackersTried++
 				err := cl.announceTorrentSingleTracker(tr, &req, t)
-				if err != nil {
-					logonce.Stderr.Printf("%s: error announcing to %s: %s", t, tr, err)
+				if err != nil && missinggo.CryHeard() {
+					log.Printf("%s: error announcing to %s: %s", t, tr, err)
 					continue
 				}
 				// Float the successful announce to the top of the tier. If

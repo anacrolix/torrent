@@ -43,8 +43,7 @@ func (r *response) UnmarshalPeers() (ret []Peer, err error) {
 		err = fmt.Errorf("unsupported peers value type: %T", r.Peers)
 		return
 	}
-	cp := make(util.CompactPeers, 0, len(s)/6)
-	err = cp.UnmarshalBinary([]byte(s))
+	cp, err := util.UnmarshalIPv4CompactPeers([]byte(s))
 	if err != nil {
 		return
 	}

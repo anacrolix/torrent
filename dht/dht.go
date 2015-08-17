@@ -715,9 +715,7 @@ func (s *Server) nodeByID(id string) *node {
 }
 
 func (s *Server) handleQuery(source dHTAddr, m Msg) {
-	args := m["a"].(map[string]interface{})
-	node := s.getNode(source, m.ID())
-	node.SetIDFromString(args["id"].(string))
+	node := s.getNode(source, m.SenderID())
 	node.lastGotQuery = time.Now()
 	// Don't respond.
 	if s.config.Passive {

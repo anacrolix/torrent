@@ -721,6 +721,10 @@ func (s *Server) handleQuery(source dHTAddr, m Msg) {
 	if s.config.Passive {
 		return
 	}
+	args := m.Args()
+	if args == nil {
+		return
+	}
 	switch m["q"] {
 	case "ping":
 		s.reply(source, m["t"].(string), nil)

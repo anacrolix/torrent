@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSetNilBigInt(t *testing.T) {
@@ -104,25 +105,16 @@ func TestClosestNodes(t *testing.T) {
 	}
 }
 
-// func TestUnmarshalGetPeersResponse(t *testing.T) {
-// 	var gpr getPeersResponse
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	err = dec.Decode(map[string]interface{}{
-// 		"values": []string{"\x01\x02\x03\x04\x05\x06", "\x07\x08\x09\x0a\x0b\x0c"},
-// 		"nodes":  "\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d",
-// 	})
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	if len(gpr.Values) != 2 {
-// 		t.FailNow()
-// 	}
-// 	if len(gpr.Nodes) != 2 {
-// 		t.FailNow()
-// 	}
-// }
+func TestUnmarshalGetPeersResponse(t *testing.T) {
+	gpr := Msg{
+		"r": map[string]interface{}{
+			"values": []interface{}{"\x01\x02\x03\x04\x05\x06", "\x07\x08\x09\x0a\x0b\x0c"},
+			"nodes":  "\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x02\x03\x04\x05\x06\x07\x08\x09\x02\x03\x04\x05\x06\x07" + "\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x02\x03\x04\x05\x06\x07\x08\x09\x02\x03\x04\x05\x06\x07",
+		},
+	}
+	assert.EqualValues(t, 2, len(gpr.Values()))
+	assert.EqualValues(t, 2, len(gpr.Nodes()))
+}
 
 func TestDHTDefaultConfig(t *testing.T) {
 	s, err := NewServer(nil)

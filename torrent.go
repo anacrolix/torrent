@@ -292,10 +292,7 @@ func (t *torrent) Name() string {
 	if t.haveInfo() {
 		return t.Info.Name
 	}
-	if t.DisplayName != "" {
-		return t.DisplayName
-	}
-	return ""
+	return t.DisplayName
 }
 
 func (t *torrent) pieceState(index int) (ret PieceState) {

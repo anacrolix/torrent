@@ -2579,6 +2579,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 		}
 		tr.Stop("write chunk")
 	}()
+	// This could be made dependent on whether any actual data was written.
 	if c.peerTouchedPieces == nil {
 		c.peerTouchedPieces = make(map[int]struct{})
 	}

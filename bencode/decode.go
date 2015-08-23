@@ -33,7 +33,9 @@ func (d *decoder) decode(v interface{}) (err error) {
 		return &UnmarshalInvalidArgError{reflect.TypeOf(v)}
 	}
 
-	d.parse_value(pv.Elem())
+	if !d.parse_value(pv.Elem()) {
+		d.throwSyntaxError(d.offset-1, errors.New("unexpected 'e'"))
+	}
 	return nil
 }
 
@@ -76,6 +78,13 @@ func check_for_int_parse_error(err error, offset int64) {
 			What:   err,
 		})
 	}
+}
+
+func (d *decoder) throwSyntaxError(offset int64, err error) {
+	panic(&SyntaxError{
+		Offset: offset,
+		What:   err,
+	})
 }
 
 // called when 'i' was consumed

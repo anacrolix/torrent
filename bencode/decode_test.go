@@ -48,16 +48,10 @@ func TestLoneE(t *testing.T) {
 	require.EqualValues(t, 0, se.Offset)
 }
 
-func TestTrailingBytes(t *testing.T) {
-	var i int
-	err := Unmarshal([]byte("i6ei6e"), &i)
-	se := err.(*SyntaxError)
-	require.EqualValues(t, 3, se.Offset)
-	err = Unmarshal([]byte("i6ee"), &i)
-	require.EqualValues(t, 3, se.Offset)
-	se = err.(*SyntaxError)
+func TestDecoderConsecutive(t *testing.T) {
 	d := NewDecoder(bytes.NewReader([]byte("i1ei2e")))
-	err = d.Decode(&i)
+	var i int
+	err := d.Decode(&i)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, i)
 	err = d.Decode(&i)

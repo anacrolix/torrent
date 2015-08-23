@@ -525,3 +525,55 @@ func TestDHTInheritBlocklist(t *testing.T) {
 	defer cl.Close()
 	require.Equal(t, ipl, cl.DHT().IPBlocklist())
 }
+
+// Check that stuff is merged in subsequent AddTorrentSpec for the same
+// infohash.
+func TestAddTorrentSpecMerging(t *testing.T) {
+	cl, err := NewClient(&TestingConfig)
+	require.NoError(t, err)
+	defer cl.Close()
+	dir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(dir)
+	var ts TorrentSpec
+	missinggo.CopyExact(&ts.InfoHash, mi.Info.Hash)
+	tt, new, err := cl.AddTorrentSpec(&ts)
+	require.NoError(t, err)
+	require.True(t, new)
+	require.Nil(t, tt.Info())
+	_, new, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	require.NoError(t, err)
+	require.False(t, new)
+	require.NotNil(t, tt.Info())
+}
+
+// Check that torrent Info is obtained from the metainfo file cache.
+func TestAddTorrentMetainfoInCache(t *testing.T) {
+	cfg := TestingConfig
+	cfg.DisableMetainfoCache = false
+	cfg.ConfigDir, _ = ioutil.TempDir(os.TempDir(), "")
+	defer os.RemoveAll(cfg.ConfigDir)
+	cl, err := NewClient(&cfg)
+	require.NoError(t, err)
+	defer cl.Close()
+	dir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(dir)
+	tt, new, err := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	require.NoError(t, err)
+	require.True(t, new)
+	require.NotNil(t, tt.Info())
+	_, err = os.Stat(filepath.Join(cfg.ConfigDir, "torrents", fmt.Sprintf("%x.torrent", mi.Info.Hash)))
+	require.NoError(t, err)
+	// Contains only the infohash.
+	var ts TorrentSpec
+	missinggo.CopyExact(&ts.InfoHash, mi.Info.Hash)
+	_, ok := cl.Torrent(ts.InfoHash)
+	require.True(t, ok)
+	tt.Drop()
+	_, ok = cl.Torrent(ts.InfoHash)
+	require.False(t, ok)
+	tt, new, err = cl.AddTorrentSpec(&ts)
+	require.NoError(t, err)
+	require.True(t, new)
+	// Obtained from the metainfo cache.
+	require.NotNil(t, tt.Info())
+}

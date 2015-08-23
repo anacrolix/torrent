@@ -3,7 +3,6 @@ package bencode
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -128,23 +127,9 @@ func Marshal(v interface{}) ([]byte, error) {
 
 // Unmarshal the bencode value in the 'data' to a value pointed by the 'v'
 // pointer, return a non-nil error if any.
-func Unmarshal(data []byte, v interface{}) (err error) {
+func Unmarshal(data []byte, v interface{}) error {
 	e := decoder{Reader: bufio.NewReader(bytes.NewBuffer(data))}
-	err = e.decode(v)
-	if err != nil {
-		return
-	}
-	_, err = e.Reader.ReadByte()
-	if err == io.EOF {
-		return nil
-	}
-	if err == nil {
-		err = &SyntaxError{
-			Offset: e.offset,
-			What:   errors.New("trailing bytes"),
-		}
-	}
-	return
+	return e.decode(v)
 }
 
 //----------------------------------------------------------------------------

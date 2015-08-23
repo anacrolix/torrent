@@ -15,9 +15,12 @@ import (
 	"testing"
 	"time"
 
+	_ "github.com/anacrolix/envpprof"
+
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
 	"github.com/anacrolix/missinggo"
+	"github.com/stretchr/testify/assert"
 	netContext "golang.org/x/net/context"
 
 	"github.com/anacrolix/torrent"
@@ -251,5 +254,21 @@ func TestDownloadOnDemand(t *testing.T) {
 	content := resp.Data
 	if string(content) != testutil.GreetingFileContents {
 		t.Fatalf("%q != %q", string(content), testutil.GreetingFileContents)
+	}
+}
+
+func TestIsSubPath(t *testing.T) {
+	for _, case_ := range []struct {
+		parent, child string
+		is            bool
+	}{
+		{"", "", false},
+		{"", "/", true},
+		{"a/b", "a/bc", false},
+		{"a/b", "a/b", false},
+		{"a/b", "a/b/c", true},
+		{"a/b", "a//b", false},
+	} {
+		assert.Equal(t, case_.is, isSubPath(case_.parent, case_.child))
 	}
 }

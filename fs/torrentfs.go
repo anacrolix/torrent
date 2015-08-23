@@ -4,6 +4,7 @@ import (
 	"expvar"
 	"fmt"
 	"os"
+	"path"
 	"strings"
 	"sync"
 
@@ -46,7 +47,7 @@ type rootNode struct {
 }
 
 type node struct {
-	path     []string
+	path     string
 	metadata *metainfo.Info
 	FS       *TorrentFS
 	t        torrent.Torrent
@@ -65,7 +66,7 @@ func (fn fileNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 }
 
 func (n *node) fsPath() string {
-	return "/" + strings.Join(append([]string{n.metadata.Name}, n.path...), "/")
+	return "/" + n.metadata.Name + "/" + n.path
 }
 
 func blockingRead(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int64, p []byte) (n int, err error) {
@@ -151,22 +152,21 @@ var (
 	_ fusefs.HandleReader       = fileNode{}
 )
 
-func isSubPath(parent, child []string) bool {
-	if len(child) <= len(parent) {
+func isSubPath(parent, child string) bool {
+	if !strings.HasPrefix(child, parent) {
 		return false
 	}
-	for i := range parent {
-		if parent[i] != child[i] {
-			return false
-		}
+	s := child[len(parent):]
+	if len(s) == 0 {
+		return false
 	}
-	return true
+	return s[0] == '/'
 }
 
 func (dn dirNode) ReadDirAll(ctx context.Context) (des []fuse.Dirent, err error) {
 	names := map[string]bool{}
 	for _, fi := range dn.metadata.Files {
-		if !isSubPath(dn.path, fi.Path) {
+		if !isSubPath(dn.path, strings.Join(fi.Path, "/")) {
 			continue
 		}
 		name := fi.Path[len(dn.path)]
@@ -190,7 +190,7 @@ func (dn dirNode) ReadDirAll(ctx context.Context) (des []fuse.Dirent, err error)
 func (dn dirNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, err error) {
 	var torrentOffset int64
 	for _, fi := range dn.metadata.Files {
-		if !isSubPath(dn.path, fi.Path) {
+		if !isSubPath(dn.path, strings.Join(fi.Path, "/")) {
 			torrentOffset += fi.Length
 			continue
 		}
@@ -199,7 +199,7 @@ func (dn dirNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, e
 			continue
 		}
 		__node := dn.node
-		__node.path = append(__node.path, name)
+		__node.path = path.Join(__node.path, name)
 		if len(fi.Path) == len(dn.path)+1 {
 			_node = fileNode{
 				node:          __node,

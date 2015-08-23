@@ -98,34 +98,36 @@ func (d *decoder) parse_int(v reflect.Value) {
 		})
 	}
 
+	s := d.buf.String()
+
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		n, err := strconv.ParseInt(d.buf.String(), 10, 64)
+		n, err := strconv.ParseInt(s, 10, 64)
 		check_for_int_parse_error(err, start)
 
 		if v.OverflowInt(n) {
 			panic(&UnmarshalTypeError{
-				Value: "integer " + d.buf.String(),
+				Value: "integer " + s,
 				Type:  v.Type(),
 			})
 		}
 		v.SetInt(n)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		n, err := strconv.ParseUint(d.buf.String(), 10, 64)
+		n, err := strconv.ParseUint(s, 10, 64)
 		check_for_int_parse_error(err, start)
 
 		if v.OverflowUint(n) {
 			panic(&UnmarshalTypeError{
-				Value: "integer " + d.buf.String(),
+				Value: "integer " + s,
 				Type:  v.Type(),
 			})
 		}
 		v.SetUint(n)
 	case reflect.Bool:
-		v.SetBool(d.buf.String() != "0")
+		v.SetBool(s != "0")
 	default:
 		panic(&UnmarshalTypeError{
-			Value: "integer " + d.buf.String(),
+			Value: "integer " + s,
 			Type:  v.Type(),
 		})
 	}

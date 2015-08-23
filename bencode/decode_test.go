@@ -1,7 +1,13 @@
 package bencode
 
-import "testing"
-import "reflect"
+import (
+	"bytes"
+	"io"
+	"reflect"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 type random_decode_test struct {
 	data     string
@@ -25,7 +31,7 @@ func TestRandomDecode(t *testing.T) {
 		var value interface{}
 		err := Unmarshal([]byte(test.data), &value)
 		if err != nil {
-			t.Error(err)
+			t.Error(err, test.data)
 			continue
 		}
 		if !reflect.DeepEqual(test.expected, value) {
@@ -33,6 +39,32 @@ func TestRandomDecode(t *testing.T) {
 				value, value, test.expected, test.expected)
 		}
 	}
+}
+
+func TestLoneE(t *testing.T) {
+	var v int
+	err := Unmarshal([]byte("e"), &v)
+	se := err.(*SyntaxError)
+	require.EqualValues(t, 0, se.Offset)
+}
+
+func TestTrailingBytes(t *testing.T) {
+	var i int
+	err := Unmarshal([]byte("i6ei6e"), &i)
+	se := err.(*SyntaxError)
+	require.EqualValues(t, 3, se.Offset)
+	err = Unmarshal([]byte("i6ee"), &i)
+	require.EqualValues(t, 3, se.Offset)
+	se = err.(*SyntaxError)
+	d := NewDecoder(bytes.NewReader([]byte("i1ei2e")))
+	err = d.Decode(&i)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, i)
+	err = d.Decode(&i)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, i)
+	err = d.Decode(&i)
+	require.Equal(t, io.EOF, err)
 }
 
 func check_error(t *testing.T, err error) {

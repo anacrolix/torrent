@@ -47,4 +47,6 @@ type Config struct {
 
 	IPBlocklist *iplist.IPList
 	DisableIPv6 bool
+	// Perform logging and any other behaviour that will help debug.
+	Debug bool
 }

@@ -1756,7 +1756,7 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 		if c == nil {
 			return false
 		}
-		if missinggo.CryHeard() {
+		if me.config.Debug && missinggo.CryHeard() {
 			log.Printf("%s: dropping connection to make room for new one:\n    %s", t, c)
 		}
 		c.Close()

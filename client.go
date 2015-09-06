@@ -1945,7 +1945,8 @@ func newTorrent(ih InfoHash) (t *torrent, err error) {
 
 		gotMetainfo: make(chan struct{}),
 
-		HalfOpen: make(map[string]struct{}),
+		HalfOpen:          make(map[string]struct{}),
+		pieceStateChanges: pubsub.NewPubSub(),
 	}
 	t.wantPeers.L = &t.stateMu
 	return
@@ -2587,6 +2588,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 
 	// log.Println("got chunk", req)
 	piece.Event.Broadcast()
+	defer t.publishPieceChange(int(req.Index))
 	// Record that we have the chunk.
 	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, t.chunkSize))
 	delete(t.urgent, req)
@@ -2656,6 +2658,7 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 func (me *Client) pieceChanged(t *torrent, piece int) {
 	correct := t.pieceComplete(piece)
 	p := t.Pieces[piece]
+	defer t.publishPieceChange(piece)
 	defer p.Event.Broadcast()
 	if correct {
 		p.Priority = PiecePriorityNone

@@ -30,6 +30,7 @@ type piece struct {
 	EverHashed        bool
 	Event             sync.Cond
 	Priority          piecePriority
+	PublicPieceState  PieceState
 
 	pendingWritesMutex sync.Mutex
 	pendingWrites      int

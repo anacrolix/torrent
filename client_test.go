@@ -274,6 +274,16 @@ func TestClientTransfer(t *testing.T) {
 		ret.ChunkSize = 2
 		return
 	}())
+	// TODO: The piece state publishing is kinda jammed in here until I have a
+	// more thorough test.
+	go func() {
+		s := leecherGreeting.pieceStateChanges.Subscribe()
+		defer s.Close()
+		for i := range s.Values {
+			log.Print(i)
+		}
+		log.Print("finished")
+	}()
 	leecherGreeting.AddPeers([]Peer{
 		Peer{
 			IP:   missinggo.AddrIP(seeder.ListenAddr()),

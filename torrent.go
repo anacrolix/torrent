@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -60,9 +61,11 @@ type torrent struct {
 	// announcing, and communicating with peers.
 	ceasingNetworking chan struct{}
 
-	InfoHash  InfoHash
-	Pieces    []*piece
-	chunkSize pp.Integer
+	InfoHash InfoHash
+	Pieces   []*piece
+	// Values are the piece indices that changed.
+	pieceStateChanges *pubsub.PubSub
+	chunkSize         pp.Integer
 	// Chunks that are wanted before all others. This is for
 	// responsive/streaming readers that want to unblock ASAP.
 	urgent map[request]struct{}
@@ -540,6 +543,7 @@ func (t *torrent) close() (err error) {
 	for _, conn := range t.Conns {
 		conn.Close()
 	}
+	t.pieceStateChanges.Close()
 	return
 }
 
@@ -760,4 +764,13 @@ func (t *torrent) worstBadConn(cl *Client) *connection {
 		}
 	}
 	return nil
+}
+
+func (t *torrent) publishPieceChange(piece int) {
+	cur := t.pieceState(piece)
+	p := t.Pieces[piece]
+	if cur != p.PublicPieceState {
+		t.pieceStateChanges.Publish(piece)
+	}
+	p.PublicPieceState = cur
 }

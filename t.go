@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -67,4 +68,8 @@ func (t Torrent) BytesCompleted() int64 {
 	t.cl.mu.RLock()
 	defer t.cl.mu.RUnlock()
 	return t.bytesCompleted()
+}
+
+func (t Torrent) SubscribePieceStateChanges() *pubsub.Subscription {
+	return t.torrent.pieceStateChanges.Subscribe()
 }

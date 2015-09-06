@@ -25,6 +25,7 @@ import (
 	"github.com/anacrolix/missinggo"
 	. "github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/perf"
+	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
@@ -116,6 +117,7 @@ func (cl *Client) queuePieceCheck(t *torrent, pieceIndex pp.Integer) {
 		return
 	}
 	piece.QueuedForHash = true
+	t.publishPieceChange(int(pieceIndex))
 	go cl.verifyPiece(t, pieceIndex)
 }
 

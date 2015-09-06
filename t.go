@@ -4,14 +4,17 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-// The public interface for a torrent within a Client.
+// This file contains Torrent, until I decide where the private, lower-case
+// "torrent" type belongs. That type is currently mostly in torrent.go.
 
-// A handle to a live torrent within a Client.
+// The public handle to a live torrent within a Client.
 type Torrent struct {
 	cl *Client
 	*torrent
 }
 
+// The torrent's infohash. This is fixed and cannot change. It uniquely
+// identifies a torrent.
 func (t Torrent) InfoHash() InfoHash {
 	return t.torrent.InfoHash
 }
@@ -23,6 +26,7 @@ func (t *Torrent) GotInfo() <-chan struct{} {
 	return t.torrent.gotMetainfo
 }
 
+// Returns the metainfo, or nil if it's not yet available.
 func (t *Torrent) Info() *metainfo.Info {
 	return t.torrent.Info
 }
@@ -51,12 +55,14 @@ func (t Torrent) NumPieces() int {
 	return t.numPieces()
 }
 
+// Drop the torrent from the client, and close it.
 func (t Torrent) Drop() {
 	t.cl.mu.Lock()
 	t.cl.dropTorrent(t.torrent.InfoHash)
 	t.cl.mu.Unlock()
 }
 
+// Number of bytes of the entire torrent we have completed.
 func (t Torrent) BytesCompleted() int64 {
 	t.cl.mu.RLock()
 	defer t.cl.mu.RUnlock()

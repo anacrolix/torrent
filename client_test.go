@@ -15,6 +15,7 @@ import (
 
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
+	. "github.com/anacrolix/missinggo"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
@@ -586,4 +587,21 @@ func TestAddTorrentMetainfoInCache(t *testing.T) {
 	require.True(t, new)
 	// Obtained from the metainfo cache.
 	require.NotNil(t, tt.Info())
+}
+
+func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
+	dir, mi := testutil.GreetingTestTorrent()
+	os.RemoveAll(dir)
+	cl, _ := NewClient(&TestingConfig)
+	defer cl.Close()
+	var ts TorrentSpec
+	CopyExact(&ts.InfoHash, mi.Info.Hash)
+	tt, _, _ := cl.AddTorrentSpec(&ts)
+	tt.Drop()
+	assert.EqualValues(t, 0, len(cl.Torrents()))
+	select {
+	case <-tt.GotInfo():
+		t.FailNow()
+	default:
+	}
 }

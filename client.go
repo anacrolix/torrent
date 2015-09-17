@@ -1350,7 +1350,9 @@ func (cl *Client) completedMetadata(t *torrent) {
 		t.invalidateMetadata()
 		return
 	}
-	log.Printf("%s: got metadata from peers", t)
+	if cl.config.Debug {
+		log.Printf("%s: got metadata from peers", t)
+	}
 }
 
 // Process incoming ut_metadata message.
@@ -1435,7 +1437,7 @@ another:
 		for r := range c.PeerRequests {
 			err := me.sendChunk(t, c, r)
 			if err != nil {
-				log.Printf("error sending chunk to peer: %s", err)
+				log.Printf("error sending chunk %+v to peer: %s", r, err)
 			}
 			delete(c.PeerRequests, r)
 			goto another

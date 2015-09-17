@@ -9,3 +9,4 @@
  * data/blob: Deleting incomplete data triggers io.ErrUnexpectedEOF that isn't recovered from.
  * UL/DL rate-limiting.
  * Handle Torrent being dropped before GotInfo.
+ * Punish sources of bad peers? Some trackers, PEX, and DHT give port 0s, which seems lousy. The spec suggests maybe to not worry about it, but some sources are very persistent.

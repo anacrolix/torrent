@@ -1657,10 +1657,6 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 					me.mu.Lock()
 					me.addPeers(t, func() (ret []Peer) {
 						for i, cp := range pexMsg.Added {
-							if cp.Port == 0 {
-								log.Printf("peer gave zero port peer over PEX\n\t%s", c)
-								continue
-							}
 							p := Peer{
 								IP:     make([]byte, 4),
 								Port:   int(cp.Port),
@@ -1846,7 +1842,7 @@ func (me *Client) addPeers(t *torrent, peers []Peer) {
 			continue
 		}
 		if p.Port == 0 {
-			log.Printf("got bad peer: %v", p)
+			// The spec says to scrub these yourselves. Fine.
 			continue
 		}
 		t.addPeer(p)

@@ -714,6 +714,7 @@ func reducedDialTimeout(max time.Duration, halfOpenLimit int, pendingPeers int) 
 	return
 }
 
+// Returns whether an address is known to connect to a client with our own ID.
 func (me *Client) dopplegangerAddr(addr string) bool {
 	_, ok := me.dopplegangerAddrs[addr]
 	return ok
@@ -1838,7 +1839,10 @@ func (me *Client) openNewConns(t *torrent) {
 
 func (me *Client) addPeers(t *torrent, peers []Peer) {
 	for _, p := range peers {
-		if me.dopplegangerAddr(net.JoinHostPort(p.IP.String(), strconv.FormatInt(int64(p.Port), 10))) {
+		if me.dopplegangerAddr(net.JoinHostPort(
+			p.IP.String(),
+			strconv.FormatInt(int64(p.Port), 10),
+		)) {
 			continue
 		}
 		if me.ipBlockRange(p.IP) != nil {

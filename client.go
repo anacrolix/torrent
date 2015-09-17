@@ -1448,6 +1448,8 @@ another:
 }
 
 func (me *Client) sendChunk(t *torrent, c *connection, r request) error {
+	// Count the chunk being sent, even if it isn't.
+	c.chunksSent++
 	b := make([]byte, r.Length)
 	tp := t.Pieces[r.Index]
 	tp.pendingWritesMutex.Lock()
@@ -1470,7 +1472,6 @@ func (me *Client) sendChunk(t *torrent, c *connection, r request) error {
 		Piece: b,
 	})
 	uploadChunksPosted.Add(1)
-	c.chunksSent++
 	c.lastChunkSent = time.Now()
 	return nil
 }

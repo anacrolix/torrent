@@ -22,7 +22,7 @@ There is a small example in the [package documentation](https://godoc.org/github
 
 Here I'll describe what some of the provided commands in `./cmd` do.
 
-Note that [`godo`](https://github.com/anacrolix/godo) that I invoke in the following examples is a command that builds and executes a Go import path, like `go run`. It's easier to use this convention than to spell out the install/invoke cycle for every single example.
+Note that the [`godo`](https://github.com/anacrolix/godo) command which is invoked in the following examples builds and executes a Go import path, like `go run`. It's easier to use this convention than to spell out the install/invoke cycle for every single example.
 
 ### torrent
 

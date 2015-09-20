@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"math/big"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -503,7 +504,7 @@ func (d *decoder) parse_value_interface() (interface{}, bool) {
 	}
 }
 
-func (d *decoder) parse_int_interface() interface{} {
+func (d *decoder) parse_int_interface() (ret interface{}) {
 	start := d.offset - 1
 	d.read_until('e')
 	if d.buf.Len() == 0 {
@@ -514,9 +515,23 @@ func (d *decoder) parse_int_interface() interface{} {
 	}
 
 	n, err := strconv.ParseInt(d.buf.String(), 10, 64)
-	check_for_int_parse_error(err, start)
+	if ne, ok := err.(*strconv.NumError); ok && ne.Err == strconv.ErrRange {
+		i := new(big.Int)
+		_, ok := i.SetString(d.buf.String(), 10)
+		if !ok {
+			panic(&SyntaxError{
+				Offset: start,
+				What:   errors.New("failed to parse integer"),
+			})
+		}
+		ret = i
+	} else {
+		check_for_int_parse_error(err, start)
+		ret = n
+	}
+
 	d.buf.Reset()
-	return n
+	return
 }
 
 func (d *decoder) parse_string_interface() interface{} {

@@ -3,6 +3,8 @@ package bencode
 import (
 	"bytes"
 	"io"
+	"log"
+	"math/big"
 	"reflect"
 	"testing"
 
@@ -24,6 +26,10 @@ var random_decode_tests = []random_decode_test{
 		[]interface{}{int64(5), int64(10), int64(15), int64(20), "bencode"}},
 	{"ldedee", []interface{}{map[string]interface{}{}, map[string]interface{}{}}},
 	{"le", []interface{}{}},
+	{"i604919719469385652980544193299329427705624352086e", func() *big.Int {
+		ret, _ := big.NewInt(-1).SetString("604919719469385652980544193299329427705624352086", 10)
+		return ret
+	}()},
 }
 
 func TestRandomDecode(t *testing.T) {

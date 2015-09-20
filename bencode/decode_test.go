@@ -3,7 +3,6 @@ package bencode
 import (
 	"bytes"
 	"io"
-	"log"
 	"math/big"
 	"reflect"
 	"testing"

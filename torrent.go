@@ -738,7 +738,7 @@ func (t *torrent) wantPiece(index int) bool {
 }
 
 func (t *torrent) connHasWantedPieces(c *connection) bool {
-	return c.pieceRequestOrder != nil && c.pieceRequestOrder.First() != nil
+	return c.pieceRequestOrder != nil && !c.pieceRequestOrder.Empty()
 }
 
 func (t *torrent) extentPieces(off, _len int64) (pieces []int) {

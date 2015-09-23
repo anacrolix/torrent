@@ -50,7 +50,7 @@ type Server struct {
 	nodes            map[string]*node // Keyed by dHTAddr.String().
 	mu               sync.Mutex
 	closed           chan struct{}
-	ipBlockList      *iplist.IPList
+	ipBlockList      iplist.Ranger
 	badNodes         *boom.BloomFilter
 
 	numConfirmedAnnounces int
@@ -70,7 +70,7 @@ type ServerConfig struct {
 	NoSecurity bool
 	// Initial IP blocklist to use. Applied before serving and bootstrapping
 	// begins.
-	IPBlocklist *iplist.IPList
+	IPBlocklist iplist.Ranger
 	// Used to secure the server's ID. Defaults to the Conn's LocalAddr().
 	PublicIP net.IP
 }
@@ -595,13 +595,13 @@ func (s *Server) setDefaults() (err error) {
 }
 
 // Packets to and from any address matching a range in the list are dropped.
-func (s *Server) SetIPBlockList(list *iplist.IPList) {
+func (s *Server) SetIPBlockList(list iplist.Ranger) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ipBlockList = list
 }
 
-func (s *Server) IPBlocklist() *iplist.IPList {
+func (s *Server) IPBlocklist() iplist.Ranger {
 	return s.ipBlockList
 }
 

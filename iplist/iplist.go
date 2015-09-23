@@ -12,6 +12,14 @@ import (
 	"sort"
 )
 
+// An abstraction of IP list implementations.
+type Ranger interface {
+	// Return a Range containing the IP.
+	Lookup(net.IP) *Range
+	// If your ranges hurt, use this.
+	NumRanges() int
+}
+
 type IPList struct {
 	ranges []Range
 }
@@ -62,30 +70,38 @@ func (me *IPList) Lookup(ip net.IP) (r *Range) {
 	}
 	if v4 == nil && v6 == nil {
 		return &Range{
-			Description: fmt.Sprintf("unsupported IP: %s", ip),
+			Description: "bad IP",
 		}
 	}
 	return nil
 }
 
-// Return the range the given IP is in. Returns nil if no range is found.
-func (me *IPList) lookup(ip net.IP) (r *Range) {
+// Return a range that contains ip, or nil.
+func lookup(f func(i int) Range, n int, ip net.IP) *Range {
 	// Find the index of the first range for which the following range exceeds
 	// it.
-	i := sort.Search(len(me.ranges), func(i int) bool {
-		if i+1 >= len(me.ranges) {
+	i := sort.Search(n, func(i int) bool {
+		if i+1 >= n {
 			return true
 		}
-		return bytes.Compare(ip, me.ranges[i+1].First) < 0
+		r := f(i + 1)
+		return bytes.Compare(ip, r.First) < 0
 	})
-	if i == len(me.ranges) {
-		return
+	if i == n {
+		return nil
 	}
-	r = &me.ranges[i]
+	r := f(i)
 	if bytes.Compare(ip, r.First) < 0 || bytes.Compare(ip, r.Last) > 0 {
-		r = nil
+		return nil
 	}
-	return
+	return &r
+}
+
+// Return the range the given IP is in. Returns nil if no range is found.
+func (me *IPList) lookup(ip net.IP) (r *Range) {
+	return lookup(func(i int) Range {
+		return me.ranges[i]
+	}, len(me.ranges), ip)
 }
 
 func minifyIP(ip *net.IP) {

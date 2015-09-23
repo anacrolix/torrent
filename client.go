@@ -29,6 +29,7 @@ import (
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
+	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/data"
@@ -139,7 +140,7 @@ type Client struct {
 	listeners      []net.Listener
 	utpSock        *utp.Socket
 	dHT            *dht.Server
-	ipBlockList    *iplist.IPList
+	ipBlockList    iplist.Ranger
 	bannedTorrents map[InfoHash]struct{}
 	config         Config
 	pruneTimer     *time.Timer
@@ -158,13 +159,13 @@ type Client struct {
 	torrents map[InfoHash]*torrent
 }
 
-func (me *Client) IPBlockList() *iplist.IPList {
+func (me *Client) IPBlockList() iplist.Ranger {
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	return me.ipBlockList
 }
 
-func (me *Client) SetIPBlockList(list *iplist.IPList) {
+func (me *Client) SetIPBlockList(list iplist.Ranger) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	me.ipBlockList = list
@@ -382,10 +383,35 @@ func (cl *Client) prioritizePiece(t *torrent, piece int, priority piecePriority)
 	}
 }
 
+func loadPackedBlocklist(filename string) (ret iplist.Ranger, err error) {
+	f, err := os.Open(filename)
+	if os.IsNotExist(err) {
+		err = nil
+		return
+	}
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	mm, err := mmap.Map(f, mmap.RDONLY, 0)
+	if err != nil {
+		return
+	}
+	ret = iplist.NewFromPacked(mm)
+	return
+}
+
 func (cl *Client) setEnvBlocklist() (err error) {
 	filename := os.Getenv("TORRENT_BLOCKLIST_FILE")
 	defaultBlocklist := filename == ""
 	if defaultBlocklist {
+		cl.ipBlockList, err = loadPackedBlocklist(filepath.Join(cl.configDir(), "packed-blocklist"))
+		if err != nil {
+			return
+		}
+		if cl.ipBlockList != nil {
+			return
+		}
 		filename = filepath.Join(cl.configDir(), "blocklist")
 	}
 	f, err := os.Open(filename)

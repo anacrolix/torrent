@@ -360,7 +360,7 @@ func (cl *Client) ConfigDir() string {
 }
 
 func (t *torrent) connPendPiece(c *connection, piece int) {
-	c.pendPiece(piece, t.Pieces[piece].Priority)
+	c.pendPiece(piece, t.Pieces[piece].Priority, t)
 }
 
 func (cl *Client) raisePiecePriority(t *torrent, piece int, priority piecePriority) {
@@ -1276,7 +1276,6 @@ func (t *torrent) initRequestOrdering(c *connection) {
 	if c.pieceRequestOrder != nil || c.piecePriorities != nil {
 		panic("double init of request ordering")
 	}
-	c.piecePriorities = mathRand.Perm(t.numPieces())
 	c.pieceRequestOrder = pieceordering.New()
 	for i := range iter.N(t.Info.NumPieces()) {
 		if !c.PeerHasPiece(i) {
@@ -1754,6 +1753,12 @@ func (me *Client) deleteConnection(t *torrent, c *connection) bool {
 func (me *Client) dropConnection(t *torrent, c *connection) {
 	me.event.Broadcast()
 	c.Close()
+	if c.piecePriorities != nil {
+		t.connPiecePriorites.Put(c.piecePriorities)
+		// I wonder if it's safe to set it to nil. Probably not. Since it's
+		// only read, it doesn't particularly matter if a closing connection
+		// shares the slice with another connection.
+	}
 	if me.deleteConnection(t, c) {
 		me.openNewConns(t)
 	}

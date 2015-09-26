@@ -2,9 +2,11 @@ package torrent
 
 import (
 	"container/heap"
+	"expvar"
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"sort"
 	"sync"
@@ -102,6 +104,23 @@ type torrent struct {
 
 	// Closed when .Info is set.
 	gotMetainfo chan struct{}
+
+	connPiecePriorites sync.Pool
+}
+
+var (
+	piecePrioritiesReused = expvar.NewInt("piecePrioritiesReused")
+	piecePrioritiesNew    = expvar.NewInt("piecePrioritiesNew")
+)
+
+func (t *torrent) newConnPiecePriorities() []int {
+	_ret := t.connPiecePriorites.Get()
+	if _ret != nil {
+		piecePrioritiesReused.Add(1)
+		return _ret.([]int)
+	}
+	piecePrioritiesNew.Add(1)
+	return rand.Perm(t.numPieces())
 }
 
 func (t *torrent) pieceComplete(piece int) bool {

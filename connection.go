@@ -105,10 +105,13 @@ func (cn *connection) localAddr() net.Addr {
 
 // Adjust piece position in the request order for this connection based on the
 // given piece priority.
-func (cn *connection) pendPiece(piece int, priority piecePriority) {
+func (cn *connection) pendPiece(piece int, priority piecePriority, t *torrent) {
 	if priority == PiecePriorityNone {
 		cn.pieceRequestOrder.DeletePiece(piece)
 		return
+	}
+	if cn.piecePriorities == nil {
+		cn.piecePriorities = t.newConnPiecePriorities()
 	}
 	pp := cn.piecePriorities[piece]
 	// Priority regions not to scale. Within each region, piece is randomized

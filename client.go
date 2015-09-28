@@ -48,9 +48,7 @@ var (
 	unexpectedChunksReceived = expvar.NewInt("chunksReceivedUnexpected")
 	chunksReceived           = expvar.NewInt("chunksReceived")
 
-	peersFoundByDHT     = expvar.NewInt("peersFoundByDHT")
-	peersFoundByPEX     = expvar.NewInt("peersFoundByPEX")
-	peersFoundByTracker = expvar.NewInt("peersFoundByTracker")
+	peersAddedBySource = expvar.NewMap("peersAddedBySource")
 
 	uploadChunksPosted    = expvar.NewInt("uploadChunksPosted")
 	unexpectedCancels     = expvar.NewInt("unexpectedCancels")
@@ -1700,7 +1698,6 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 						return
 					}())
 					me.mu.Unlock()
-					peersFoundByPEX.Add(int64(len(pexMsg.Added)))
 				}()
 			default:
 				err = fmt.Errorf("unexpected extended message ID: %v", msg.ExtendedID)
@@ -1883,9 +1880,8 @@ func (me *Client) addPeers(t *torrent, peers []Peer) {
 			// The spec says to scrub these yourselves. Fine.
 			continue
 		}
-		t.addPeer(p)
+		t.addPeer(p, me)
 	}
-	me.openNewConns(t)
 }
 
 func (cl *Client) cachedMetaInfoFilename(ih InfoHash) string {
@@ -2331,7 +2327,6 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 					}).String()
 					allAddrs[key] = struct{}{}
 				}
-				peersFoundByDHT.Add(int64(len(addPeers)))
 				cl.mu.Lock()
 				cl.addPeers(t, addPeers)
 				numPeers := len(t.Peers)
@@ -2399,7 +2394,6 @@ func (cl *Client) announceTorrentSingleTracker(tr tracker.Client, req *tracker.A
 	cl.mu.Unlock()
 
 	// log.Printf("%s: %d new peers from %s", t, len(peers), tr)
-	peersFoundByTracker.Add(int64(len(peers)))
 
 	time.Sleep(time.Second * time.Duration(resp.Interval))
 	return nil

@@ -23,6 +23,7 @@ var optimizedCancels = expvar.NewInt("optimizedCancels")
 type peerSource byte
 
 const (
+	peerSourceTracker  = '\x00' // It's the default.
 	peerSourceIncoming = 'I'
 	peerSourceDHT      = 'H'
 	peerSourcePEX      = 'X'

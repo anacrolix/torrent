@@ -181,8 +181,19 @@ func (t *torrent) ceaseNetworking() {
 	}
 }
 
-func (t *torrent) addPeer(p Peer) {
-	t.Peers[peersKey{string(p.IP), p.Port}] = p
+func (t *torrent) addPeer(p Peer, cl *Client) {
+	cl.openNewConns(t)
+	if len(t.Peers) >= torrentPeersHighWater {
+		return
+	}
+	key := peersKey{string(p.IP), p.Port}
+	if _, ok := t.Peers[key]; ok {
+		return
+	}
+	t.Peers[key] = p
+	peersAddedBySource.Add(string(p.Source), 1)
+	cl.openNewConns(t)
+
 }
 
 func (t *torrent) invalidateMetadata() {

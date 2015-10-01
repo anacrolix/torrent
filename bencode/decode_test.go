@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,6 +30,12 @@ var random_decode_tests = []random_decode_test{
 		ret, _ := big.NewInt(-1).SetString("604919719469385652980544193299329427705624352086", 10)
 		return ret
 	}()},
+	{"d1:rd6:\xd4/\xe2F\x00\x01e1:t3:\x9a\x87\x011:v4:TR%=1:y1:re", map[string]interface{}{
+		"r": map[string]interface{}{},
+		"t": "\x9a\x87\x01",
+		"v": "TR%=",
+		"y": "r",
+	}},
 }
 
 func TestRandomDecode(t *testing.T) {
@@ -39,10 +46,7 @@ func TestRandomDecode(t *testing.T) {
 			t.Error(err, test.data)
 			continue
 		}
-		if !reflect.DeepEqual(test.expected, value) {
-			t.Errorf("got: %v (%T), expected: %v (%T)\n",
-				value, value, test.expected, test.expected)
-		}
+		assert.EqualValues(t, test.expected, value)
 	}
 }
 

@@ -264,10 +264,7 @@ func (d *decoder) parse_dict(v reflect.Value) {
 			} else {
 				_, ok := d.parse_value_interface()
 				if !ok {
-					panic(&SyntaxError{
-						Offset: d.offset,
-						What:   errors.New("unexpected end of dict, no matching value for a given key"),
-					})
+					return
 				}
 				continue
 			}
@@ -275,10 +272,7 @@ func (d *decoder) parse_dict(v reflect.Value) {
 
 		// now we need to actually parse it
 		if !d.parse_value(valuev) {
-			panic(&SyntaxError{
-				Offset: d.offset,
-				What:   errors.New("unexpected end of dict, no matching value for a given key"),
-			})
+			return
 		}
 
 		if v.Kind() == reflect.Map {
@@ -414,8 +408,8 @@ func (d *decoder) parse_unmarshaler(v reflect.Value) bool {
 	return false
 }
 
-// returns true if there was a value and it's now stored in 'v', otherwise there
-// was an end symbol ("e") and no value was stored
+// Returns true if there was a value and it's now stored in 'v', otherwise
+// there was an end symbol ("e") and no value was stored.
 func (d *decoder) parse_value(v reflect.Value) bool {
 	// we support one level of indirection at the moment
 	if v.Kind() == reflect.Ptr {
@@ -576,10 +570,7 @@ func (d *decoder) parse_dict_interface() interface{} {
 
 		valuei, ok := d.parse_value_interface()
 		if !ok {
-			panic(&SyntaxError{
-				Offset: d.offset,
-				What:   errors.New("unexpected end of dict, no matching value for a given key"),
-			})
+			break
 		}
 
 		dict[key] = valuei

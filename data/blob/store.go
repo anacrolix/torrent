@@ -87,13 +87,13 @@ func (me *store) initCompleted() {
 }
 
 func (me *store) completePieceDirPath() string {
-	return filepath.Join(me.baseDir, "complete")
+	return filepath.Join(me.baseDir, "completed")
 }
 
 func (me *store) path(p metainfo.Piece, completed bool) string {
 	return filepath.Join(me.baseDir, func() string {
 		if completed {
-			return "complete"
+			return "completed"
 		} else {
 			return "incomplete"
 		}

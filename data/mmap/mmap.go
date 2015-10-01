@@ -11,12 +11,28 @@ import (
 	"github.com/anacrolix/torrent/mmap_span"
 )
 
-func TorrentData(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, err error) {
-	mms = &mmap_span.MMapSpan{}
+type torrentData struct {
+	// Supports non-torrent specific data operations for the torrent.Data
+	// interface.
+	mmap_span.MMapSpan
+
+	completed []bool
+}
+
+func (me *torrentData) PieceComplete(piece int) bool {
+	return me.completed[piece]
+}
+
+func (me *torrentData) PieceCompleted(piece int) error {
+	me.completed[piece] = true
+	return nil
+}
+
+func TorrentData(md *metainfo.Info, location string) (ret *torrentData, err error) {
+	var mms mmap_span.MMapSpan
 	defer func() {
 		if err != nil {
 			mms.Close()
-			mms = nil
 		}
 	}()
 	for _, miFile := range md.UpvertedFiles() {
@@ -62,6 +78,10 @@ func TorrentData(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, e
 		if err != nil {
 			return
 		}
+	}
+	ret = &torrentData{
+		MMapSpan:  mms,
+		completed: make([]bool, md.NumPieces()),
 	}
 	return
 }

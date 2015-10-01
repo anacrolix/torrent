@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/data"
 	"github.com/anacrolix/torrent/data/blob"
 	"github.com/anacrolix/torrent/dht"
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -267,7 +266,10 @@ func TestClientTransfer(t *testing.T) {
 	// cfg.TorrentDataOpener = func(info *metainfo.Info) (data.Data, error) {
 	// 	return blob.TorrentData(info, leecherDataDir), nil
 	// }
-	cfg.TorrentDataOpener = blob.NewStore(leecherDataDir).OpenTorrent
+	blobStore := blob.NewStore(leecherDataDir)
+	cfg.TorrentDataOpener = func(info *metainfo.Info) Data {
+		return blobStore.OpenTorrent(info)
+	}
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()
 	leecherGreeting, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
@@ -402,8 +404,9 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 	assert.EqualValues(t, T.Trackers[1][0].URL(), "udp://b")
 }
 
-type badData struct {
-}
+type badData struct{}
+
+func (me badData) Close() {}
 
 func (me badData) WriteAt(b []byte, off int64) (int, error) {
 	return 0, nil
@@ -430,12 +433,10 @@ func (me badData) ReadAt(b []byte, off int64) (n int, err error) {
 	return
 }
 
-var _ StatefulData = badData{}
-
 // We read from a piece which is marked completed, but is missing data.
 func TestCompletedPieceWrongSize(t *testing.T) {
 	cfg := TestingConfig
-	cfg.TorrentDataOpener = func(*metainfo.Info) data.Data {
+	cfg.TorrentDataOpener = func(*metainfo.Info) Data {
 		return badData{}
 	}
 	cl, _ := NewClient(&cfg)

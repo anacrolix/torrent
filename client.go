@@ -32,7 +32,6 @@ import (
 	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/data"
 	filePkg "github.com/anacrolix/torrent/data/file"
 	"github.com/anacrolix/torrent/dht"
 	"github.com/anacrolix/torrent/internal/pieceordering"
@@ -253,40 +252,14 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
-// A Data that implements this has a streaming interface that should be
-// preferred over ReadAt. For example, the data is stored in blocks on the
-// network and have a fixed cost to open.
-type SectionOpener interface {
-	// Open a ReadCloser at the given offset into torrent data. n is how many
-	// bytes we intend to read.
-	OpenSection(off, n int64) (io.ReadCloser, error)
-}
-
-func dataReadAt(d data.Data, b []byte, off int64) (n int, err error) {
+func dataReadAt(d Data, b []byte, off int64) (n int, err error) {
 	// defer func() {
 	// 	if err == io.ErrUnexpectedEOF && n != 0 {
 	// 		err = nil
 	// 	}
 	// }()
 	// log.Println("data read at", len(b), off)
-again:
-	if ra, ok := d.(io.ReaderAt); ok {
-		return ra.ReadAt(b, off)
-	}
-	if so, ok := d.(SectionOpener); ok {
-		var rc io.ReadCloser
-		rc, err = so.OpenSection(off, int64(len(b)))
-		if err != nil {
-			return
-		}
-		defer rc.Close()
-		return io.ReadFull(rc, b)
-	}
-	if dp, ok := super(d); ok {
-		d = dp.(data.Data)
-		goto again
-	}
-	panic(fmt.Sprintf("can't read from %T", d))
+	return d.ReadAt(b, off)
 }
 
 // Calculates the number of pieces to set to Readahead priority, after the
@@ -474,7 +447,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	cl = &Client{
 		halfOpenLimit: socketsPerTorrent,
 		config:        *cfg,
-		torrentDataOpener: func(md *metainfo.Info) data.Data {
+		torrentDataOpener: func(md *metainfo.Info) Data {
 			return filePkg.TorrentData(md, cfg.DataDir)
 		},
 		dopplegangerAddrs: make(map[string]struct{}),
@@ -1934,7 +1907,7 @@ func (cl *Client) startTorrent(t *torrent) {
 }
 
 // Storage cannot be changed once it's set.
-func (cl *Client) setStorage(t *torrent, td data.Data) (err error) {
+func (cl *Client) setStorage(t *torrent, td Data) (err error) {
 	err = t.setStorage(td)
 	cl.event.Broadcast()
 	if err != nil {
@@ -1944,7 +1917,7 @@ func (cl *Client) setStorage(t *torrent, td data.Data) (err error) {
 	return
 }
 
-type TorrentDataOpener func(*metainfo.Info) data.Data
+type TorrentDataOpener func(*metainfo.Info) Data
 
 func (cl *Client) setMetaData(t *torrent, md *metainfo.Info, bytes []byte) (err error) {
 	err = t.setMetadata(md, bytes, &cl.mu)

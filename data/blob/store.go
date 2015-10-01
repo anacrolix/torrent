@@ -1,3 +1,4 @@
+// Implements torrent data storage as per-piece files.
 package blob
 
 import (
@@ -14,8 +15,8 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/torrent"
 
-	dataPkg "github.com/anacrolix/torrent/data"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -32,7 +33,7 @@ type store struct {
 	completed map[[20]byte]struct{}
 }
 
-func (me *store) OpenTorrent(info *metainfo.Info) dataPkg.Data {
+func (me *store) OpenTorrent(info *metainfo.Info) torrent.Data {
 	return &data{info, me}
 }
 
@@ -44,7 +45,7 @@ func Capacity(bytes int64) StoreOption {
 	}
 }
 
-func NewStore(baseDir string, opt ...StoreOption) dataPkg.Store {
+func NewStore(baseDir string, opt ...StoreOption) *store {
 	s := &store{baseDir, -1, sync.Mutex{}, nil}
 	for _, o := range opt {
 		o(s)

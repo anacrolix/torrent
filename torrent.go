@@ -17,7 +17,6 @@ import (
 	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/data"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/tracker"
@@ -45,15 +44,6 @@ type peersKey struct {
 	Port    int
 }
 
-// Data maintains per-piece persistent state.
-type StatefulData interface {
-	data.Data
-	// We believe the piece data will pass a hash check.
-	PieceCompleted(index int) error
-	// Returns true if the piece is complete.
-	PieceComplete(index int) bool
-}
-
 // Is not aware of Client. Maintains state of torrent for with-in a Client.
 type torrent struct {
 	stateMu sync.Mutex
@@ -75,7 +65,7 @@ type torrent struct {
 	// get this from the info dict.
 	length int64
 
-	data StatefulData
+	data Data
 
 	// The info dict. Nil if we don't have it (yet).
 	Info *metainfo.Info
@@ -272,15 +262,11 @@ func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte, eventLocker s
 	return
 }
 
-func (t *torrent) setStorage(td data.Data) (err error) {
-	if c, ok := t.data.(io.Closer); ok {
-		c.Close()
+func (t *torrent) setStorage(td Data) (err error) {
+	if t.data != nil {
+		t.data.Close()
 	}
-	if sd, ok := td.(StatefulData); ok {
-		t.data = sd
-	} else {
-		t.data = &statelessDataWrapper{td, make([]bool, t.Info.NumPieces())}
-	}
+	t.data = td
 	return
 }
 

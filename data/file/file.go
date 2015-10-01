@@ -9,12 +9,24 @@ import (
 )
 
 type data struct {
-	info *metainfo.Info
-	loc  string
+	info      *metainfo.Info
+	loc       string
+	completed []bool
 }
 
 func TorrentData(md *metainfo.Info, location string) data {
-	return data{md, location}
+	return data{md, location, make([]bool, md.NumPieces())}
+}
+
+func (me data) Close() {}
+
+func (me data) PieceComplete(piece int) bool {
+	return me.completed[piece]
+}
+
+func (me data) PieceCompleted(piece int) error {
+	me.completed[piece] = true
+	return nil
 }
 
 func (me data) ReadAt(p []byte, off int64) (n int, err error) {

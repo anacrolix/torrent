@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/torrent"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -33,7 +32,7 @@ type store struct {
 	completed map[[20]byte]struct{}
 }
 
-func (me *store) OpenTorrent(info *metainfo.Info) torrent.Data {
+func (me *store) OpenTorrent(info *metainfo.Info) *data {
 	return &data{info, me}
 }
 

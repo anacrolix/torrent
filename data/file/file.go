@@ -103,6 +103,9 @@ func (me data) WriteSectionTo(w io.Writer, off, n int64) (written int64, err err
 		}
 		var f *os.File
 		f, err = os.Open(me.fileInfoName(fi))
+		if os.IsNotExist(err) {
+			err = io.ErrUnexpectedEOF
+		}
 		if err != nil {
 			return
 		}

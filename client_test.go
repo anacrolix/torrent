@@ -16,13 +16,15 @@ import (
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
 	. "github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/filecache"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/data/blob"
+	"github.com/anacrolix/torrent/data/pieceStore"
+	"github.com/anacrolix/torrent/data/pieceStore/dataBackend/fileCache"
 	"github.com/anacrolix/torrent/dht"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/iplist"
@@ -30,7 +32,7 @@ import (
 )
 
 func init() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.SetFlags(log.LstdFlags | log.Llongfile)
 }
 
 var TestingConfig = Config{
@@ -266,10 +268,18 @@ func TestClientTransfer(t *testing.T) {
 	// cfg.TorrentDataOpener = func(info *metainfo.Info) (data.Data, error) {
 	// 	return blob.TorrentData(info, leecherDataDir), nil
 	// }
-	blobStore := blob.NewStore(leecherDataDir)
-	cfg.TorrentDataOpener = func(info *metainfo.Info) Data {
-		return blobStore.OpenTorrent(info)
-	}
+	// blobStore := blob.NewStore(leecherDataDir)
+	// cfg.TorrentDataOpener = func(info *metainfo.Info) Data {
+	// 	return blobStore.OpenTorrent(info)
+	// }
+	cfg.TorrentDataOpener = func() TorrentDataOpener {
+		fc, err := filecache.NewCache(leecherDataDir)
+		require.NoError(t, err)
+		store := pieceStore.New(fileCacheDataBackend.New(fc))
+		return func(mi *metainfo.Info) Data {
+			return store.OpenTorrentData(mi)
+		}
+	}()
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()
 	leecherGreeting, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {

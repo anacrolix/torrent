@@ -4,9 +4,11 @@ import "io"
 
 // Represents data storage for a Torrent.
 type Data interface {
-	ReadAt(p []byte, off int64) (n int, err error)
+	io.ReaderAt
+	io.WriterAt
+	// Bro, do you even io.Closer?
 	Close()
-	WriteAt(p []byte, off int64) (n int, err error)
+	// If the data isn't available, err should be io.ErrUnexpectedEOF.
 	WriteSectionTo(w io.Writer, off, n int64) (written int64, err error)
 	// We believe the piece data will pass a hash check.
 	PieceCompleted(index int) error

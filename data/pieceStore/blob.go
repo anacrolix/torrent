@@ -1,9 +1,8 @@
-package blob
+package pieceStore
 
 import (
 	"encoding/hex"
 	"io"
-	"log"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -19,6 +18,10 @@ func (me *data) pieceHashHex(i int) string {
 
 func (me *data) Close() {}
 
+// TODO: Make sure that reading completed can't read from incomplete. Then
+// also it'll be possible to verify that the Content-Range on completed
+// returns the correct piece length so there aren't short reads.
+
 func (me *data) ReadAt(b []byte, off int64) (n int, err error) {
 	for len(b) != 0 {
 		if off >= me.info.TotalLength() {
@@ -26,27 +29,16 @@ func (me *data) ReadAt(b []byte, off int64) (n int, err error) {
 			break
 		}
 		p := me.info.Piece(int(off / me.info.PieceLength))
-		f := me.store.pieceRead(p)
-		if f == nil {
-			log.Println("piece not found", p)
-			err = io.ErrUnexpectedEOF
-			break
-		}
 		b1 := b
 		maxN1 := int(p.Length() - off%me.info.PieceLength)
 		if len(b1) > maxN1 {
 			b1 = b1[:maxN1]
 		}
 		var n1 int
-		n1, err = f.ReadAt(b1, off%me.info.PieceLength)
-		f.Close()
+		n1, err = me.store.pieceReadAt(p, b1, off%me.info.PieceLength)
 		n += n1
 		off += int64(n1)
 		b = b[n1:]
-		if err == io.EOF {
-			err = nil
-			break
-		}
 		if err != nil {
 			break
 		}
@@ -54,19 +46,18 @@ func (me *data) ReadAt(b []byte, off int64) (n int, err error) {
 	return
 }
 
+// TODO: Rewrite this later, on short writes to a piece it will start to play up.
 func (me *data) WriteAt(p []byte, off int64) (n int, err error) {
 	i := int(off / me.info.PieceLength)
 	off %= me.info.PieceLength
 	for len(p) != 0 {
-		f := me.store.pieceWrite(me.info.Piece(i))
 		p1 := p
 		maxN := me.info.Piece(i).Length() - off
 		if int64(len(p1)) > maxN {
 			p1 = p1[:maxN]
 		}
 		var n1 int
-		n1, err = f.WriteAt(p1, off)
-		f.Close()
+		n1, err = me.store.pieceWriteAt(me.info.Piece(i), p1, off)
 		n += n1
 		if err != nil {
 			return
@@ -78,27 +69,23 @@ func (me *data) WriteAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (me *data) pieceReader(piece int, off int64) (ret io.ReadCloser, err error) {
-	f := me.store.pieceRead(me.info.Piece(piece))
-	if f == nil {
-		err = io.ErrUnexpectedEOF
-		return
-	}
-	return struct {
-		io.Reader
-		io.Closer
-	}{
-		Reader: io.NewSectionReader(f, off, me.info.Piece(piece).Length()-off),
-		Closer: f,
-	}, nil
+func (me *data) pieceReader(p metainfo.Piece, off int64) (ret io.ReadCloser, err error) {
+	return me.store.getPieceRange(p, off, p.Length()-off)
 }
 
 func (me *data) WriteSectionTo(w io.Writer, off, n int64) (written int64, err error) {
 	i := int(off / me.info.PieceLength)
 	off %= me.info.PieceLength
 	for n != 0 {
+		if i >= me.info.NumPieces() {
+			break
+		}
+		p := me.info.Piece(i)
+		if off >= p.Length() {
+			break
+		}
 		var pr io.ReadCloser
-		pr, err = me.pieceReader(i, off)
+		pr, err = me.pieceReader(p, off)
 		if err != nil {
 			return
 		}

@@ -662,7 +662,17 @@ func (t *torrent) hashPiece(piece pp.Integer) (ps pieceSum) {
 		p.noPendingWrites.Wait()
 	}
 	p.pendingWritesMutex.Unlock()
-	t.data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, t.Info.PieceLength)
+	pl := t.Info.Piece(int(piece)).Length()
+	n, err := t.data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, pl)
+	if err != nil {
+		if err != io.ErrUnexpectedEOF {
+			log.Printf("error hashing piece with %T: %s", t.data, err)
+		}
+		return
+	}
+	if n != pl {
+		panic("lame")
+	}
 	missinggo.CopyExact(ps[:], hash.Sum(nil))
 	return
 }

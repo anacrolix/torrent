@@ -536,7 +536,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 			dhtCfg.Addr = listenAddr()
 		}
 		if dhtCfg.Conn == nil && cl.utpSock != nil {
-			dhtCfg.Conn = cl.utpSock.PacketConn()
+			dhtCfg.Conn = cl.utpSock
 		}
 		cl.dHT, err = dht.NewServer(dhtCfg)
 		if err != nil {

@@ -8,7 +8,7 @@ This repository implements BitTorrent-related packages and command-line utilitie
 
 There is support for protocol encryption, DHT, PEX, uTP, and various extensions. See the package documentation for a more complete list. There are several data storage backends provided: blob, file, and mmap, and you can write your own, such as to store data on S3, or in a database. You can use the provided binaries in `./cmd`, or use `torrent` as a library for your own applications.
 
-Many of the sub-packages can be used for other purposes: dht, bencode, and tracker, in particular.
+Many of the sub-packages can be used for other purposes: [dht](https://godoc.org/github.com/anacrolix/torrent/dht), [bencode](https://godoc.org/github.com/anacrolix/torrent/bencode), and [tracker](https://godoc.org/github.com/anacrolix/torrent/tracker), in particular.
 
 ## Installation
 
@@ -17,6 +17,10 @@ Install the library package with `go get github.com/anacrolix/torrent`, or the p
 ## Library example
 
 There is a small example in the [package documentation](https://godoc.org/github.com/anacrolix/torrent).
+
+## Other projects using Torrent
+
+ * [Go Peerflix](https://github.com/Sioro-Neoku/go-peerflix)
 
 ## Commands
 

@@ -26,7 +26,7 @@ func (t *torrent) pieceNumPendingBytes(index int) (count pp.Integer) {
 	if t.pieceComplete(index) {
 		return 0
 	}
-	piece := t.Pieces[index]
+	piece := &t.Pieces[index]
 	pieceLength := t.pieceLength(index)
 	if !piece.EverHashed {
 		return pieceLength
@@ -54,7 +54,7 @@ type torrent struct {
 	ceasingNetworking chan struct{}
 
 	InfoHash InfoHash
-	Pieces   []*piece
+	Pieces   []piece
 	// Values are the piece indices that changed.
 	pieceStateChanges *pubsub.PubSub
 	chunkSize         pp.Integer
@@ -245,12 +245,13 @@ func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte, eventLocker s
 	}
 	t.MetaData = infoBytes
 	t.metadataHave = nil
-	for _, hash := range infoPieceHashes(md) {
-		piece := &piece{}
+	hashes := infoPieceHashes(md)
+	t.Pieces = make([]piece, len(hashes))
+	for i, hash := range hashes {
+		piece := &t.Pieces[i]
 		piece.Event.L = eventLocker
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		missinggo.CopyExact(piece.Hash[:], hash)
-		t.Pieces = append(t.Pieces, piece)
 	}
 	for _, conn := range t.Conns {
 		t.initRequestOrdering(conn)
@@ -315,7 +316,7 @@ func (t *torrent) Name() string {
 }
 
 func (t *torrent) pieceState(index int) (ret PieceState) {
-	p := t.Pieces[index]
+	p := &t.Pieces[index]
 	ret.Priority = p.Priority
 	if t.pieceComplete(index) {
 		ret.Complete = true
@@ -583,7 +584,8 @@ func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 }
 
 func (t *torrent) bitfield() (bf []bool) {
-	for _, p := range t.Pieces {
+	for i := range t.Pieces {
+		p := &t.Pieces[i]
 		// TODO: Check this logic.
 		bf = append(bf, p.EverHashed && p.numPendingChunks() == 0)
 	}
@@ -622,7 +624,7 @@ func (t *torrent) pieceChunks(piece int) (css []chunkSpec) {
 }
 
 func (t *torrent) pendAllChunkSpecs(pieceIndex int) {
-	piece := t.Pieces[pieceIndex]
+	piece := &t.Pieces[pieceIndex]
 	if piece.PendingChunkSpecs == nil {
 		// Allocate to exact size.
 		piece.PendingChunkSpecs = make([]bool, (t.pieceLength(pieceIndex)+t.chunkSize-1)/t.chunkSize)
@@ -656,7 +658,7 @@ func (t *torrent) pieceLength(piece int) (len_ pp.Integer) {
 
 func (t *torrent) hashPiece(piece pp.Integer) (ps pieceSum) {
 	hash := pieceHash.New()
-	p := t.Pieces[piece]
+	p := &t.Pieces[piece]
 	p.pendingWritesMutex.Lock()
 	for p.pendingWrites != 0 {
 		p.noPendingWrites.Wait()
@@ -709,7 +711,7 @@ func (t *torrent) haveChunk(r request) bool {
 	if t.pieceComplete(int(r.Index)) {
 		return true
 	}
-	p := t.Pieces[r.Index]
+	p := &t.Pieces[r.Index]
 	if p.PendingChunkSpecs == nil {
 		return false
 	}
@@ -747,7 +749,7 @@ func (t *torrent) wantPiece(index int) bool {
 	if !t.haveInfo() {
 		return false
 	}
-	p := t.Pieces[index]
+	p := &t.Pieces[index]
 	if p.QueuedForHash {
 		return false
 	}
@@ -795,7 +797,7 @@ func (t *torrent) worstBadConn(cl *Client) *connection {
 
 func (t *torrent) publishPieceChange(piece int) {
 	cur := t.pieceState(piece)
-	p := t.Pieces[piece]
+	p := &t.Pieces[piece]
 	if cur != p.PublicPieceState {
 		t.pieceStateChanges.Publish(piece)
 	}

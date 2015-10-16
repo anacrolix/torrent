@@ -110,7 +110,7 @@ const (
 
 // Currently doesn't really queue, but should in the future.
 func (cl *Client) queuePieceCheck(t *torrent, pieceIndex pp.Integer) {
-	piece := t.Pieces[pieceIndex]
+	piece := &t.Pieces[pieceIndex]
 	if piece.QueuedForHash {
 		return
 	}
@@ -122,7 +122,7 @@ func (cl *Client) queuePieceCheck(t *torrent, pieceIndex pp.Integer) {
 // Queue a piece check if one isn't already queued, and the piece has never
 // been checked before.
 func (cl *Client) queueFirstHash(t *torrent, piece int) {
-	p := t.Pieces[piece]
+	p := &t.Pieces[piece]
 	if p.EverHashed || p.Hashing || p.QueuedForHash || t.pieceComplete(piece) {
 		return
 	}
@@ -347,7 +347,7 @@ func (cl *Client) prioritizePiece(t *torrent, piece int, priority piecePriority)
 	if priority != PiecePriorityNone {
 		cl.queueFirstHash(t, piece)
 	}
-	p := t.Pieces[piece]
+	p := &t.Pieces[piece]
 	if p.Priority != priority {
 		p.Priority = priority
 		cl.pieceChanged(t, piece)
@@ -1448,7 +1448,7 @@ func (me *Client) sendChunk(t *torrent, c *connection, r request) error {
 	// Count the chunk being sent, even if it isn't.
 	c.chunksSent++
 	b := make([]byte, r.Length)
-	tp := t.Pieces[r.Index]
+	tp := &t.Pieces[r.Index]
 	tp.pendingWritesMutex.Lock()
 	for tp.pendingWrites != 0 {
 		tp.noPendingWrites.Wait()
@@ -1895,8 +1895,8 @@ func (cl *Client) startTorrent(t *torrent) {
 	if !cl.config.NoUpload {
 		// Queue all pieces for hashing. This is done sequentially to avoid
 		// spamming goroutines.
-		for _, p := range t.Pieces {
-			p.QueuedForHash = true
+		for i := range t.Pieces {
+			t.Pieces[i].QueuedForHash = true
 		}
 		go func() {
 			for i := range t.Pieces {
@@ -2511,7 +2511,7 @@ func (me *Client) fillRequests(t *torrent, c *connection) {
 			c.pieceRequestOrder.DeletePiece(pieceIndex)
 			continue
 		}
-		piece := t.Pieces[pieceIndex]
+		piece := &t.Pieces[pieceIndex]
 		for _, cs := range piece.shuffledPendingChunkSpecs(t.pieceLength(pieceIndex), pp.Integer(t.chunkSize)) {
 			r := request{pp.Integer(pieceIndex), cs}
 			if !addRequest(r) {
@@ -2549,7 +2549,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 		unexpectedChunksReceived.Add(1)
 	}
 
-	piece := t.Pieces[req.Index]
+	piece := &t.Pieces[req.Index]
 
 	// Do we actually want this chunk?
 	if !t.wantChunk(req) {
@@ -2630,7 +2630,7 @@ func (me *Client) reapPieceTouches(t *torrent, piece int) (ret []*connection) {
 }
 
 func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
-	p := t.Pieces[piece]
+	p := &t.Pieces[piece]
 	if p.EverHashed {
 		// Don't score the first time a piece is hashed, it could be an
 		// initial check.
@@ -2661,7 +2661,7 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 // TODO: Check this isn't called more than once for each piece being correct.
 func (me *Client) pieceChanged(t *torrent, piece int) {
 	correct := t.pieceComplete(piece)
-	p := t.Pieces[piece]
+	p := &t.Pieces[piece]
 	defer t.publishPieceChange(piece)
 	defer p.Event.Broadcast()
 	if correct {
@@ -2705,7 +2705,7 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	p := t.Pieces[index]
+	p := &t.Pieces[index]
 	for p.Hashing || t.data == nil {
 		cl.event.Wait()
 	}

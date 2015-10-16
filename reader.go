@@ -122,7 +122,7 @@ again:
 	r.t.cl.mu.Unlock()
 	b1 := b[:avail]
 	pi := int(pos / r.t.Info().PieceLength)
-	tp := r.t.torrent.Pieces[pi]
+	tp := &r.t.torrent.Pieces[pi]
 	ip := r.t.Info().Piece(pi)
 	po := pos % ip.Length()
 	if int64(len(b1)) > ip.Length()-po {

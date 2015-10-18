@@ -1,11 +1,13 @@
 package bencode
 
-import "bufio"
-import "reflect"
-import "runtime"
-import "strconv"
-import "sync"
-import "sort"
+import (
+	"bufio"
+	"reflect"
+	"runtime"
+	"sort"
+	"strconv"
+	"sync"
+)
 
 func is_empty_value(v reflect.Value) bool {
 	switch v.Kind() {
@@ -138,7 +140,6 @@ func (e *encoder) reflect_value(v reflect.Value) {
 			if ef.omit_empty && is_empty_value(field_value) {
 				continue
 			}
-
 			e.reflect_string(ef.tag)
 			e.reflect_value(field_value)
 		}

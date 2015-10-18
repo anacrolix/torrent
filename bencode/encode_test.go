@@ -1,6 +1,10 @@
 package bencode
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 import "bytes"
 import "fmt"
 
@@ -57,12 +61,7 @@ var random_encode_tests = []random_encode_test{
 func TestRandomEncode(t *testing.T) {
 	for _, test := range random_encode_tests {
 		data, err := Marshal(test.value)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(data, []byte(test.expected)) {
-			t.Errorf("got: %s, expected: %s\n",
-				string(data), string(test.expected))
-		}
+		assert.NoError(t, err)
+		assert.EqualValues(t, test.expected, string(data))
 	}
 }

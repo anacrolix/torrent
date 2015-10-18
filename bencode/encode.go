@@ -237,7 +237,9 @@ func encode_fields(t reflect.Type) []encode_field {
 				continue
 			}
 			name, opts := parse_tag(tv)
-			ef.tag = name
+			if name != "" {
+				ef.tag = name
+			}
 			ef.omit_empty = opts.contains("omitempty")
 		}
 		fs = append(fs, ef)

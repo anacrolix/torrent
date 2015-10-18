@@ -76,28 +76,37 @@ func (me PackedIPList) NumRanges() int {
 	return me.len()
 }
 
+func (me PackedIPList) getFirst(i int) net.IP {
+	off := packedRangesOffset + packedRangeLen*i
+	return net.IP(me[off : off+4])
+}
+
 func (me PackedIPList) getRange(i int) (ret Range) {
 	rOff := packedRangesOffset + packedRangeLen*i
-	first := me[rOff : rOff+4]
 	last := me[rOff+4 : rOff+8]
 	descOff := int(binary.LittleEndian.Uint64(me[rOff+8:]))
 	descLen := int(binary.LittleEndian.Uint32(me[rOff+16:]))
 	descOff += packedRangesOffset + packedRangeLen*me.len()
-	ret = Range{net.IP(first), net.IP(last), string(me[descOff : descOff+descLen])}
+	ret = Range{
+		me.getFirst(i),
+		net.IP(last),
+		string(me[descOff : descOff+descLen]),
+	}
 	return
 }
 
-func (me PackedIPList) Lookup(ip net.IP) (r *Range) {
+func (me PackedIPList) Lookup(ip net.IP) (r Range, ok bool) {
 	ip4 := ip.To4()
 	if ip4 == nil {
 		// If the IP list was built successfully, then it only contained IPv4
 		// ranges. Therefore no IPv6 ranges are blocked.
 		if ip.To16() == nil {
-			r = &Range{
+			r = Range{
 				Description: "bad IP",
 			}
+			ok = true
 		}
 		return
 	}
-	return lookup(me.getRange, me.len(), ip4)
+	return lookup(me.getFirst, me.getRange, me.len(), ip4)
 }

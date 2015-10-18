@@ -688,11 +688,12 @@ func (s *Server) serve() error {
 	}
 }
 
-func (s *Server) ipBlocked(ip net.IP) bool {
+func (s *Server) ipBlocked(ip net.IP) (blocked bool) {
 	if s.ipBlockList == nil {
-		return false
+		return
 	}
-	return s.ipBlockList.Lookup(ip) != nil
+	_, blocked = s.ipBlockList.Lookup(ip)
+	return
 }
 
 // Adds directly to the node table.

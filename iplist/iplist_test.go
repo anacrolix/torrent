@@ -95,15 +95,21 @@ func connRemoteAddrIP(network, laddr string, dialHost string) net.IP {
 	return ret
 }
 
+func lookupOk(r Range, ok bool) bool {
+	return ok
+}
+
 func TestBadIP(t *testing.T) {
 	for _, iplist := range []Ranger{
 		New(nil),
 		NewFromPacked([]byte("\x00\x00\x00\x00\x00\x00\x00\x00")),
 	} {
-		assert.Nil(t, iplist.Lookup(net.IP(make([]byte, 4))), "%v", iplist)
-		assert.Nil(t, iplist.Lookup(net.IP(make([]byte, 16))))
-		assert.Equal(t, iplist.Lookup(nil).Description, "bad IP")
-		assert.NotNil(t, iplist.Lookup(net.IP(make([]byte, 5))))
+		assert.False(t, lookupOk(iplist.Lookup(net.IP(make([]byte, 4)))), "%v", iplist)
+		assert.False(t, lookupOk(iplist.Lookup(net.IP(make([]byte, 16)))))
+		r, ok := iplist.Lookup(nil)
+		assert.True(t, ok)
+		assert.Equal(t, r.Description, "bad IP")
+		assert.True(t, lookupOk(iplist.Lookup(net.IP(make([]byte, 5)))))
 	}
 }
 
@@ -123,15 +129,10 @@ func testLookuperSimple(t *testing.T, iplist Ranger) {
 		{"1.2.8.2", true, "eff"},
 	} {
 		ip := net.ParseIP(_case.IP)
-		r := iplist.Lookup(ip)
+		r, ok := iplist.Lookup(ip)
+		assert.Equal(t, _case.Hit, ok, "%s", _case)
 		if !_case.Hit {
-			if r != nil {
-				t.Fatalf("got hit when none was expected: %s", ip)
-			}
 			continue
-		}
-		if r == nil {
-			t.Fatalf("expected hit for %q", _case.IP)
 		}
 		assert.Equal(t, _case.Desc, r.Description, "%T", iplist)
 	}

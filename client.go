@@ -581,18 +581,20 @@ func (me *Client) Close() {
 
 var ipv6BlockRange = iplist.Range{Description: "non-IPv4 address"}
 
-func (cl *Client) ipBlockRange(ip net.IP) (r *iplist.Range) {
+func (cl *Client) ipBlockRange(ip net.IP) (r iplist.Range, blocked bool) {
 	if cl.ipBlockList == nil {
 		return
 	}
 	ip4 := ip.To4()
+	// If blocklists are enabled, then block non-IPv4 addresses, because
+	// blocklists do not yet support IPv6.
 	if ip4 == nil {
 		log.Printf("blocking non-IPv4 address: %s", ip)
-		r = &ipv6BlockRange
+		r = ipv6BlockRange
+		blocked = true
 		return
 	}
-	r = cl.ipBlockList.Lookup(ip4)
-	return
+	return cl.ipBlockList.Lookup(ip4)
 }
 
 func (cl *Client) waitAccept() {
@@ -638,9 +640,9 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 		}
 		cl.mu.RLock()
 		doppleganger := cl.dopplegangerAddr(conn.RemoteAddr().String())
-		blockRange := cl.ipBlockRange(AddrIP(conn.RemoteAddr()))
+		_, blocked := cl.ipBlockRange(AddrIP(conn.RemoteAddr()))
 		cl.mu.RUnlock()
-		if blockRange != nil || doppleganger {
+		if blocked || doppleganger {
 			acceptReject.Add(1)
 			// log.Printf("inbound connection from %s blocked by %s", conn.RemoteAddr(), blockRange)
 			conn.Close()
@@ -728,7 +730,7 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 		duplicateConnsAvoided.Add(1)
 		return
 	}
-	if r := me.ipBlockRange(peer.IP); r != nil {
+	if r, ok := me.ipBlockRange(peer.IP); ok {
 		log.Printf("outbound connect to %s blocked by IP blocklist rule %s", peer.IP, r)
 		return
 	}
@@ -1846,7 +1848,7 @@ func (me *Client) addPeers(t *torrent, peers []Peer) {
 		)) {
 			continue
 		}
-		if me.ipBlockRange(p.IP) != nil {
+		if _, ok := me.ipBlockRange(p.IP); ok {
 			continue
 		}
 		if p.Port == 0 {
@@ -2337,13 +2339,9 @@ func (cl *Client) trackerBlockedUnlocked(tr tracker.Client) (blocked bool, err e
 	if err != nil {
 		return
 	}
-	cl.mu.Lock()
-	if cl.ipBlockList != nil {
-		if cl.ipBlockRange(addr.IP) != nil {
-			blocked = true
-		}
-	}
-	cl.mu.Unlock()
+	cl.mu.RLock()
+	_, blocked = cl.ipBlockRange(addr.IP)
+	cl.mu.RUnlock()
 	return
 }
 

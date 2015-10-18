@@ -61,34 +61,28 @@ func (me *Info) NumPieces() int {
 	return len(me.Pieces) / 20
 }
 
-type Piece interface {
-	Hash() []byte
-	Length() int64
-	Offset() int64
-}
-
-type piece struct {
+type Piece struct {
 	Info *Info
 	i    int
 }
 
-func (me piece) Length() int64 {
+func (me Piece) Length() int64 {
 	if me.i == me.Info.NumPieces()-1 {
 		return me.Info.TotalLength() - int64(me.i)*me.Info.PieceLength
 	}
 	return me.Info.PieceLength
 }
 
-func (me piece) Offset() int64 {
+func (me Piece) Offset() int64 {
 	return int64(me.i) * me.Info.PieceLength
 }
 
-func (me piece) Hash() []byte {
+func (me Piece) Hash() []byte {
 	return me.Info.Pieces[me.i*20 : (me.i+1)*20]
 }
 
-func (me *Info) Piece(i int) piece {
-	return piece{me, i}
+func (me *Info) Piece(i int) Piece {
+	return Piece{me, i}
 }
 
 func (i *Info) IsDir() bool {

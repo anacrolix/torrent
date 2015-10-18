@@ -856,7 +856,7 @@ func (s *Server) nodeTimedOut(addr dHTAddr) {
 
 func (s *Server) writeToNode(b []byte, node dHTAddr) (err error) {
 	if list := s.ipBlockList; list != nil {
-		if r := list.Lookup(missinggo.AddrIP(node.UDPAddr())); r != nil {
+		if r, ok := list.Lookup(missinggo.AddrIP(node.UDPAddr())); ok {
 			err = fmt.Errorf("write to %s blocked: %s", node, r.Description)
 			return
 		}

@@ -56,6 +56,18 @@ var random_encode_tests = []random_encode_test{
 	{[]int{}, "le"},
 	{map[string]int{}, "de"},
 	{&dummy{1, 2, 3}, "i2ei3ei4e"},
+	{struct {
+		A *string
+	}{nil}, "d1:A0:e"},
+	{struct {
+		A *string
+	}{new(string)}, "d1:A0:e"},
+	{struct {
+		A *string `bencode:",omitempty"`
+	}{nil}, "de"},
+	{struct {
+		A *string `bencode:",omitempty"`
+	}{new(string)}, "d1:A0:e"},
 }
 
 func TestRandomEncode(t *testing.T) {

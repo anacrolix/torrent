@@ -179,9 +179,11 @@ func (e *encoder) reflect_value(v reflect.Value) {
 		e.write_string("e")
 	case reflect.Interface, reflect.Ptr:
 		if v.IsNil() {
-			break
+			v = reflect.Zero(v.Type().Elem())
+		} else {
+			v = v.Elem()
 		}
-		e.reflect_value(v.Elem())
+		e.reflect_value(v)
 	default:
 		panic(&MarshalTypeError{v.Type()})
 	}

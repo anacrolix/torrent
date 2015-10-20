@@ -673,7 +673,7 @@ func (t *torrent) hashPiece(piece pp.Integer) (ps pieceSum) {
 		return
 	}
 	if n != pl {
-		panic("lame")
+		panic(fmt.Sprintf("%T: %d != %d", t.data, n, pl))
 	}
 	missinggo.CopyExact(ps[:], hash.Sum(nil))
 	return

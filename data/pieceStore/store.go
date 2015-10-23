@@ -141,7 +141,7 @@ func (me *store) pieceWriteAt(p metainfo.Piece, b []byte, off int64) (n int, err
 	defer func() {
 		<-me.requestPool
 	}()
-	f, err := me.db.Open(me.incompletePiecePath(p))
+	f, err := me.db.Open(me.incompletePiecePath(p), os.O_WRONLY|os.O_CREATE)
 	if err != nil {
 		return
 	}
@@ -264,7 +264,7 @@ func (me *store) hashCopyFile(from, to string, n int64) (hash []byte, err error)
 	defer src.Close()
 	hasher := sha1.New()
 	tee := io.TeeReader(src, hasher)
-	dest, err := me.db.Open(to)
+	dest, err := me.db.Open(to, os.O_WRONLY|os.O_CREATE)
 	if err != nil {
 		return
 	}

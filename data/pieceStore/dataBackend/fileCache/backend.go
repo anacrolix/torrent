@@ -39,8 +39,8 @@ func (me *backend) GetLength(path string) (ret int64, err error) {
 	return
 }
 
-func (me *backend) Open(path string) (ret dataBackend.File, err error) {
-	ret, err = me.c.OpenFile(path, os.O_RDWR|os.O_CREATE)
+func (me *backend) Open(path string, flag int) (ret dataBackend.File, err error) {
+	ret, err = me.c.OpenFile(path, flag)
 	return
 }
 

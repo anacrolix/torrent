@@ -41,7 +41,11 @@ func (e *encoder) encode(v interface{}) (err error) {
 			if _, ok := e.(runtime.Error); ok {
 				panic(e)
 			}
-			err = e.(error)
+			var ok bool
+			err, ok = e.(error)
+			if !ok {
+				panic(e)
+			}
 		}
 	}()
 	e.reflect_value(reflect.ValueOf(v))

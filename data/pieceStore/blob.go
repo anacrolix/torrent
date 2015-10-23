@@ -78,10 +78,12 @@ func (me *data) WriteSectionTo(w io.Writer, off, n int64) (written int64, err er
 	off %= me.info.PieceLength
 	for n != 0 {
 		if i >= me.info.NumPieces() {
+			err = io.EOF
 			break
 		}
 		p := me.info.Piece(i)
 		if off >= p.Length() {
+			err = io.EOF
 			break
 		}
 		var pr io.ReadCloser

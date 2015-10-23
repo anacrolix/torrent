@@ -16,6 +16,7 @@ import (
 	"github.com/jessevdk/go-flags"
 
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/data/mmap"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -72,6 +73,7 @@ func main() {
 	var rootGroup struct {
 		Client    torrent.Config `group:"Client Options"`
 		TestPeers []string       `long:"test-peer" description:"address of peer to inject to every torrent"`
+		MMap      bool           `long:"mmap" description:"memory-map the torrent files"`
 	}
 	// Don't pass flags.PrintError because it's inconsistent with printing.
 	// https://github.com/jessevdk/go-flags/issues/132
@@ -86,6 +88,15 @@ func main() {
 	testPeers, err := resolvedPeerAddrs(rootGroup.TestPeers)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if rootGroup.MMap {
+		rootGroup.Client.TorrentDataOpener = func(info *metainfo.Info) torrent.Data {
+			ret, err := mmap.TorrentData(info, "")
+			if err != nil {
+				log.Fatalf("error opening torrent data for %q: %s", info.Name, err)
+			}
+			return ret
+		}
 	}
 
 	if len(posArgs) == 0 {

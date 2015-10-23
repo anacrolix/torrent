@@ -160,36 +160,35 @@ func (me *Announce) getPeers(addr dHTAddr) error {
 	}
 	t.SetResponseHandler(func(m Msg) {
 		// Register suggested nodes closer to the target info-hash.
-		me.mu.Lock()
-		for _, n := range m.Nodes() {
-			me.responseNode(n)
-		}
-		me.mu.Unlock()
+		if m.R != nil {
+			me.mu.Lock()
+			for _, n := range m.R.Nodes {
+				me.responseNode(n)
+			}
+			me.mu.Unlock()
 
-		if vs := m.Values(); vs != nil {
-			for _, cp := range vs {
-				if cp.Port == 0 {
-					me.server.mu.Lock()
-					me.server.badNode(addr)
-					me.server.mu.Unlock()
-					return
+			if vs := m.R.Values; len(vs) != 0 {
+				nodeInfo := NodeInfo{
+					Addr: t.remoteAddr,
+				}
+				copy(nodeInfo.ID[:], m.SenderID())
+				select {
+				case me.values <- PeersValues{
+					Peers: func() (ret []Peer) {
+						for _, cp := range vs {
+							ret = append(ret, Peer(cp))
+						}
+						return
+					}(),
+					NodeInfo: nodeInfo,
+				}:
+				case <-me.stop:
 				}
 			}
-			nodeInfo := NodeInfo{
-				Addr: t.remoteAddr,
-			}
-			copy(nodeInfo.ID[:], m.SenderID())
-			select {
-			case me.values <- PeersValues{
-				Peers:    vs,
-				NodeInfo: nodeInfo,
-			}:
-			case <-me.stop:
-			}
-		}
 
-		if at, ok := m.AnnounceToken(); ok {
-			me.announcePeer(addr, at)
+			if at := m.R.Token; at != "" {
+				me.announcePeer(addr, at)
+			}
 		}
 
 		me.mu.Lock()

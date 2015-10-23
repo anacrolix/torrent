@@ -28,11 +28,13 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/logonce"
-	"github.com/anacrolix/torrent/util"
 )
 
 const (
-	maxNodes         = 320
+	maxNodes = 320
+)
+
+var (
 	queryResendEvery = 5 * time.Second
 )
 
@@ -264,105 +266,6 @@ func (n *node) DefinitelyGood() bool {
 		return true
 	}
 	return true
-}
-
-// A wrapper around the unmarshalled KRPC dict that constitutes messages in
-// the DHT. There are various helpers for extracting common data from the
-// message. In normal use, Msg is abstracted away for you, but it can be of
-// interest.
-type Msg map[string]interface{}
-
-var _ fmt.Stringer = Msg{}
-
-func (m Msg) String() string {
-	return fmt.Sprintf("%#v", m)
-}
-
-func (m Msg) T() (t string) {
-	tif, ok := m["t"]
-	if !ok {
-		return
-	}
-	t, _ = tif.(string)
-	return
-}
-
-func (m Msg) Args() map[string]interface{} {
-	defer func() {
-		recover()
-	}()
-	return m["a"].(map[string]interface{})
-}
-
-func (m Msg) SenderID() string {
-	defer func() {
-		recover()
-	}()
-	switch m["y"].(string) {
-	case "q":
-		return m.Args()["id"].(string)
-	case "r":
-		return m["r"].(map[string]interface{})["id"].(string)
-	}
-	return ""
-}
-
-// Suggested nodes in a response.
-func (m Msg) Nodes() (nodes []NodeInfo) {
-	b := func() string {
-		defer func() {
-			recover()
-		}()
-		return m["r"].(map[string]interface{})["nodes"].(string)
-	}()
-	if len(b)%26 != 0 {
-		return
-	}
-	for i := 0; i < len(b); i += 26 {
-		var n NodeInfo
-		err := n.UnmarshalCompact([]byte(b[i : i+26]))
-		if err != nil {
-			continue
-		}
-		nodes = append(nodes, n)
-	}
-	return
-}
-
-type KRPCError struct {
-	Code int
-	Msg  string
-}
-
-func (me KRPCError) Error() string {
-	return fmt.Sprintf("KRPC error %d: %s", me.Code, me.Msg)
-}
-
-var _ error = KRPCError{}
-
-func (m Msg) Error() (ret *KRPCError) {
-	if m["y"] != "e" {
-		return
-	}
-	ret = &KRPCError{}
-	switch e := m["e"].(type) {
-	case []interface{}:
-		ret.Code = int(e[0].(int64))
-		ret.Msg = e[1].(string)
-	case string:
-		ret.Msg = e
-	default:
-		logonce.Stderr.Printf(`KRPC error "e" value has unexpected type: %T`, e)
-	}
-	return
-}
-
-// Returns the token given in response to a get_peers request for future
-// announce_peer requests to that node.
-func (m Msg) AnnounceToken() (token string, ok bool) {
-	defer func() { recover() }()
-	token, ok = m["r"].(map[string]interface{})["token"].(string)
-	return
 }
 
 type Transaction struct {
@@ -648,12 +551,12 @@ func (s *Server) processPacket(b []byte, addr dHTAddr) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if d["y"] == "q" {
+	if d.Y == "q" {
 		readQuery.Add(1)
 		s.handleQuery(addr, d)
 		return
 	}
-	t := s.findResponseTransaction(d.T(), addr)
+	t := s.findResponseTransaction(d.T, addr)
 	if t == nil {
 		//log.Printf("unexpected message: %#v", d)
 		return
@@ -722,15 +625,12 @@ func (s *Server) handleQuery(source dHTAddr, m Msg) {
 	if s.config.Passive {
 		return
 	}
-	args := m.Args()
-	if args == nil {
-		return
-	}
-	switch m["q"] {
+	args := m.A
+	switch m.Q {
 	case "ping":
-		s.reply(source, m["t"].(string), nil)
+		s.reply(source, m.T, Return{})
 	case "get_peers": // TODO: Extract common behaviour with find_node.
-		targetID := args["info_hash"].(string)
+		targetID := args.InfoHash
 		if len(targetID) != 20 {
 			break
 		}
@@ -739,19 +639,13 @@ func (s *Server) handleQuery(source dHTAddr, m Msg) {
 		for _, node := range s.closestGoodNodes(8, targetID) {
 			rNodes = append(rNodes, node.NodeInfo())
 		}
-		nodesBytes := make([]byte, CompactNodeInfoLen*len(rNodes))
-		for i, ni := range rNodes {
-			err := ni.PutCompact(nodesBytes[i*CompactNodeInfoLen : (i+1)*CompactNodeInfoLen])
-			if err != nil {
-				panic(err)
-			}
-		}
-		s.reply(source, m["t"].(string), map[string]interface{}{
-			"nodes": string(nodesBytes),
-			"token": "hi",
+		s.reply(source, m.T, Return{
+			Nodes: rNodes,
+			// TODO: Generate this dynamically, and store it for the source.
+			Token: "hi",
 		})
 	case "find_node": // TODO: Extract common behaviour with get_peers.
-		targetID := args["target"].(string)
+		targetID := args.Target
 		if len(targetID) != 20 {
 			log.Printf("bad DHT query: %v", m)
 			return
@@ -760,24 +654,13 @@ func (s *Server) handleQuery(source dHTAddr, m Msg) {
 		if node := s.nodeByID(targetID); node != nil {
 			rNodes = append(rNodes, node.NodeInfo())
 		} else {
+			// This will probably cause a crash for IPv6, but meh.
 			for _, node := range s.closestGoodNodes(8, targetID) {
 				rNodes = append(rNodes, node.NodeInfo())
 			}
 		}
-		nodesBytes := make([]byte, CompactNodeInfoLen*len(rNodes))
-		for i, ni := range rNodes {
-			// TODO: Put IPv6 nodes into the correct dict element.
-			if ni.Addr.UDPAddr().IP.To4() == nil {
-				continue
-			}
-			err := ni.PutCompact(nodesBytes[i*CompactNodeInfoLen : (i+1)*CompactNodeInfoLen])
-			if err != nil {
-				log.Printf("error compacting %#v: %s", ni, err)
-				continue
-			}
-		}
-		s.reply(source, m["t"].(string), map[string]interface{}{
-			"nodes": string(nodesBytes),
+		s.reply(source, m.T, Return{
+			Nodes: rNodes,
 		})
 	case "announce_peer":
 		// TODO(anacrolix): Implement this lolz.
@@ -785,20 +668,17 @@ func (s *Server) handleQuery(source dHTAddr, m Msg) {
 	case "vote":
 		// TODO(anacrolix): Or reject, I don't think I want this.
 	default:
-		log.Printf("%s: not handling received query: q=%s", s, m["q"])
+		log.Printf("%s: not handling received query: q=%s", s, m.Q)
 		return
 	}
 }
 
-func (s *Server) reply(addr dHTAddr, t string, r map[string]interface{}) {
-	if r == nil {
-		r = make(map[string]interface{}, 1)
-	}
-	r["id"] = s.ID()
-	m := map[string]interface{}{
-		"t": t,
-		"y": "r",
-		"r": r,
+func (s *Server) reply(addr dHTAddr, t string, r Return) {
+	r.ID = s.ID()
+	m := Msg{
+		T: t,
+		Y: "r",
+		R: &r,
 	}
 	b, err := bencode.Marshal(m)
 	if err != nil {
@@ -947,7 +827,7 @@ func (s *Server) query(node dHTAddr, q string, a map[string]interface{}, onRespo
 }
 
 // The size in bytes of a NodeInfo in its compact binary representation.
-const CompactNodeInfoLen = 26
+const CompactIPv4NodeInfoLen = 26
 
 type NodeInfo struct {
 	ID   [20]byte
@@ -971,7 +851,7 @@ func (ni *NodeInfo) PutCompact(b []byte) error {
 	return nil
 }
 
-func (cni *NodeInfo) UnmarshalCompact(b []byte) error {
+func (cni *NodeInfo) UnmarshalCompactIPv4(b []byte) error {
 	if len(b) != 26 {
 		return errors.New("expected 26 bytes")
 	}
@@ -1019,10 +899,10 @@ func (s *Server) announcePeer(node dHTAddr, infoHash string, port int, token str
 
 // Add response nodes to node table.
 func (s *Server) liftNodes(d Msg) {
-	if d["y"] != "r" {
+	if d.Y != "r" {
 		return
 	}
-	for _, cni := range d.Nodes() {
+	for _, cni := range d.R.Nodes {
 		if missinggo.AddrPort(cni.Addr) == 0 {
 			// TODO: Why would people even do this?
 			continue
@@ -1057,44 +937,6 @@ func (me *Peer) String() string {
 	return net.JoinHostPort(me.IP.String(), strconv.FormatInt(int64(me.Port), 10))
 }
 
-// In a get_peers response, the addresses of torrent clients involved with the
-// queried info-hash.
-func (m Msg) Values() (vs []Peer) {
-	v := func() interface{} {
-		defer func() {
-			recover()
-		}()
-		return m["r"].(map[string]interface{})["values"]
-	}()
-	if v == nil {
-		return
-	}
-	vl, ok := v.([]interface{})
-	if !ok {
-		if missinggo.CryHeard() {
-			log.Printf(`unexpected krpc "values" field: %#v`, v)
-		}
-		return
-	}
-	vs = make([]Peer, 0, len(vl))
-	for _, i := range vl {
-		s, ok := i.(string)
-		if !ok {
-			panic(i)
-		}
-		// Because it's a list of strings, we can let the length of the string
-		// determine the IP version of the compact peer.
-		var cp util.CompactPeer
-		err := cp.UnmarshalBinary([]byte(s))
-		if err != nil {
-			log.Printf("error decoding values list element: %s", err)
-			continue
-		}
-		vs = append(vs, Peer{cp.IP[:], int(cp.Port)})
-	}
-	return
-}
-
 func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *Transaction, err error) {
 	if len(infoHash) != 20 {
 		err = fmt.Errorf("infohash has bad length")
@@ -1102,10 +944,7 @@ func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *Transaction, err er
 	}
 	t, err = s.query(addr, "get_peers", map[string]interface{}{"info_hash": infoHash}, func(m Msg) {
 		s.liftNodes(m)
-		at, ok := m.AnnounceToken()
-		if ok {
-			s.getNode(addr, m.SenderID()).announceToken = at
-		}
+		s.getNode(addr, m.SenderID()).announceToken = m.R.Token
 	})
 	return
 }

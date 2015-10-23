@@ -68,11 +68,8 @@ pingResponses:
 	for _ = range pingStrAddrs {
 		select {
 		case resp := <-pingResponses:
-			if resp.krpc == nil {
-				break
-			}
 			responses++
-			fmt.Printf("%-65s %s\n", fmt.Sprintf("%x (%s):", resp.krpc["r"].(map[string]interface{})["id"].(string), resp.addr), resp.rtt)
+			fmt.Printf("%-65s %s\n", fmt.Sprintf("%x (%s):", resp.krpc.R.ID, resp.addr), resp.rtt)
 		case <-timeoutChan:
 			break pingResponses
 		}

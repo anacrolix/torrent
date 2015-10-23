@@ -33,6 +33,9 @@ type encoder struct {
 }
 
 func (e *encoder) encode(v interface{}) (err error) {
+	if v == nil {
+		return
+	}
 	defer func() {
 		if e := recover(); e != nil {
 			if _, ok := e.(runtime.Error); ok {
@@ -106,9 +109,6 @@ func (e *encoder) reflect_marshaler(v reflect.Value) bool {
 }
 
 func (e *encoder) reflect_value(v reflect.Value) {
-	if !v.IsValid() {
-		return
-	}
 
 	if e.reflect_marshaler(v) {
 		return

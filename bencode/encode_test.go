@@ -73,7 +73,7 @@ var random_encode_tests = []random_encode_test{
 func TestRandomEncode(t *testing.T) {
 	for _, test := range random_encode_tests {
 		data, err := Marshal(test.value)
-		assert.NoError(t, err)
+		assert.NoError(t, err, "%s", test)
 		assert.EqualValues(t, test.expected, string(data))
 	}
 }

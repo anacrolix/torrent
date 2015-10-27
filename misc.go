@@ -116,7 +116,7 @@ func validateInfo(info *metainfo.Info) error {
 	if len(info.Pieces)%20 != 0 {
 		return errors.New("pieces has invalid length")
 	}
-	if int((info.TotalLength()+info.PieceLength-1)/info.PieceLength) != info.NumPieces() {
+	if int((info.TotalLength()+info.PieceLength)/info.PieceLength) != info.NumPieces() {
 		return errors.New("piece count and file lengths are at odds")
 	}
 	return nil

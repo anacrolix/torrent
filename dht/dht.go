@@ -944,7 +944,9 @@ func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *Transaction, err er
 	}
 	t, err = s.query(addr, "get_peers", map[string]interface{}{"info_hash": infoHash}, func(m Msg) {
 		s.liftNodes(m)
-		s.getNode(addr, m.SenderID()).announceToken = m.R.Token
+		if m.R != nil && m.R.Token != "" {
+			s.getNode(addr, m.SenderID()).announceToken = m.R.Token
+		}
 	})
 	return
 }

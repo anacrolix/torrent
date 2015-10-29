@@ -1781,7 +1781,8 @@ func (t *torrent) needData() bool {
 	if len(t.urgent) != 0 {
 		return true
 	}
-	for _, p := range t.Pieces {
+	for i := range t.Pieces {
+		p := &t.Pieces[i]
 		if p.Priority != PiecePriorityNone {
 			return true
 		}

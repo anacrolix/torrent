@@ -52,8 +52,8 @@ func (me *backend) GetLength(path string) (ret int64, err error) {
 	return
 }
 
-func (me *backend) Open(path string, flag int) (ret dataBackend.File, err error) {
-	ret = httpfile.Open(me.urlStr(path), flag)
+func (me *backend) Open(path string, flags int) (ret dataBackend.File, err error) {
+	ret, err = httpfile.Open(me.urlStr(path), flags)
 	err = fixErrNotFound(err)
 	return
 }

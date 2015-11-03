@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"reflect"
@@ -371,11 +372,7 @@ func (d *decoder) read_one_value() bool {
 			break
 		}
 
-		// unknown value
-		panic(&SyntaxError{
-			Offset: d.offset - 1,
-			What:   errors.New("unknown value type (invalid bencode?)"),
-		})
+		d.raiseUnknownValueType(b, d.offset-1)
 	}
 
 	return true
@@ -456,14 +453,18 @@ func (d *decoder) parse_value(v reflect.Value) bool {
 			break
 		}
 
-		// unknown value
-		panic(&SyntaxError{
-			Offset: d.offset - 1,
-			What:   errors.New("unknown value type (invalid bencode?)"),
-		})
+		d.raiseUnknownValueType(b, d.offset-1)
 	}
 
 	return true
+}
+
+// An unknown bencode type character was encountered.
+func (d *decoder) raiseUnknownValueType(b byte, offset int64) {
+	panic(&SyntaxError{
+		Offset: offset,
+		What:   fmt.Errorf("unknown value type %+q", b),
+	})
 }
 
 func (d *decoder) parse_value_interface() (interface{}, bool) {
@@ -490,11 +491,8 @@ func (d *decoder) parse_value_interface() (interface{}, bool) {
 			return d.parse_string_interface(), true
 		}
 
-		// unknown value
-		panic(&SyntaxError{
-			Offset: d.offset - 1,
-			What:   errors.New("unknown value type (invalid bencode?)"),
-		})
+		d.raiseUnknownValueType(b, d.offset-1)
+		panic("unreachable")
 	}
 }
 

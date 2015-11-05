@@ -12,8 +12,8 @@ import (
 	"time"
 
 	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/tagflag"
 	"github.com/dustin/go-humanize"
-	"github.com/jessevdk/go-flags"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/data/mmap"
@@ -70,27 +70,16 @@ func progressLine(tc *torrent.Client) string {
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	var rootGroup struct {
-		Client    torrent.Config `group:"Client Options"`
-		TestPeers []string       `long:"test-peer" description:"address of peer to inject to every torrent"`
-		MMap      bool           `long:"mmap" description:"memory-map the torrent files"`
+	var opts struct {
+		torrent.Config `name:"Client"`
+		Mmap           bool           `help:"memory-map torrent data"`
+		TestPeer       []*net.TCPAddr `short:"p" help:"addresses of some starting peers"`
+		Torrent        []string       `type:"pos" arity:"+" help:"torrent file path or magnet uri"`
 	}
-	// Don't pass flags.PrintError because it's inconsistent with printing.
-	// https://github.com/jessevdk/go-flags/issues/132
-	parser := flags.NewParser(&rootGroup, flags.HelpFlag|flags.PassDoubleDash)
-	parser.Usage = "[OPTIONS] (magnet URI or .torrent file path)..."
-	posArgs, err := parser.Parse()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Download from the BitTorrent network.")
-		fmt.Println(err)
-		os.Exit(2)
-	}
-	testPeers, err := resolvedPeerAddrs(rootGroup.TestPeers)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if rootGroup.MMap {
-		rootGroup.Client.TorrentDataOpener = func(info *metainfo.Info) torrent.Data {
+	tagflag.Parse(&opts, tagflag.SkipBadTypes())
+	clientConfig := opts.Config
+	if opts.Mmap {
+		clientConfig.TorrentDataOpener = func(info *metainfo.Info) torrent.Data {
 			ret, err := mmap.TorrentData(info, "")
 			if err != nil {
 				log.Fatalf("error opening torrent data for %q: %s", info.Name, err)
@@ -99,11 +88,12 @@ func main() {
 		}
 	}
 
-	if len(posArgs) == 0 {
-		fmt.Fprintln(os.Stderr, "no torrents specified")
+	torrents := opts.Torrent
+	if len(torrents) == 0 {
+		fmt.Fprintf(os.Stderr, "no torrents specified\n")
 		return
 	}
-	client, err := torrent.NewClient(&rootGroup.Client)
+	client, err := torrent.NewClient(&clientConfig)
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)
 	}
@@ -111,7 +101,7 @@ func main() {
 		client.WriteStatus(w)
 	})
 	defer client.Close()
-	for _, arg := range posArgs {
+	for _, arg := range torrents {
 		t := func() torrent.Torrent {
 			if strings.HasPrefix(arg, "magnet:") {
 				t, err := client.AddMagnet(arg)
@@ -122,7 +112,8 @@ func main() {
 			} else {
 				metaInfo, err := metainfo.LoadFromFile(arg)
 				if err != nil {
-					log.Fatal(err)
+					fmt.Fprintf(os.Stderr, "error loading torrent file %q: %s\n", arg, err)
+					os.Exit(1)
 				}
 				t, err := client.AddTorrent(metaInfo)
 				if err != nil {
@@ -131,7 +122,15 @@ func main() {
 				return t
 			}
 		}()
-		err := t.AddPeers(testPeers)
+		err := t.AddPeers(func() (ret []torrent.Peer) {
+			for _, ta := range opts.TestPeer {
+				ret = append(ret, torrent.Peer{
+					IP:   ta.IP,
+					Port: ta.Port,
+				})
+			}
+			return
+		}())
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -159,7 +158,7 @@ waitDone:
 			os.Stdout.WriteString(progressLine(client))
 		}
 	}
-	if rootGroup.Client.Seed {
+	if opts.Seed {
 		select {}
 	}
 }

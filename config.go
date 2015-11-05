@@ -46,7 +46,7 @@ type Config struct {
 	DisableEncryption bool `long:"disable-encryption"`
 
 	IPBlocklist *iplist.IPList
-	DisableIPv6 bool
+	DisableIPv6 bool `long:"disable-ipv6"`
 	// Perform logging and any other behaviour that will help debug.
-	Debug bool
+	Debug bool `help:"enable debug logging"`
 }

@@ -28,7 +28,6 @@ type piece struct {
 	Hashing           bool
 	QueuedForHash     bool
 	EverHashed        bool
-	Event             sync.Cond
 	Priority          piecePriority
 	PublicPieceState  PieceState
 

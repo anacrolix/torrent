@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"github.com/anacrolix/missinggo/pubsub"
+
 	"github.com/anacrolix/torrent/metainfo"
 )
 

@@ -1923,7 +1923,7 @@ func (cl *Client) setStorage(t *torrent, td Data) (err error) {
 type TorrentDataOpener func(*metainfo.Info) Data
 
 func (cl *Client) setMetaData(t *torrent, md *metainfo.Info, bytes []byte) (err error) {
-	err = t.setMetadata(md, bytes, &cl.mu)
+	err = t.setMetadata(md, bytes)
 	if err != nil {
 		return
 	}
@@ -2590,7 +2590,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	c.peerTouchedPieces[int(req.Index)] = struct{}{}
 
 	// log.Println("got chunk", req)
-	piece.Event.Broadcast()
+	me.event.Broadcast()
 	defer t.publishPieceChange(int(req.Index))
 	// Record that we have the chunk.
 	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, t.chunkSize))
@@ -2662,7 +2662,7 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 	correct := t.pieceComplete(piece)
 	p := &t.Pieces[piece]
 	defer t.publishPieceChange(piece)
-	defer p.Event.Broadcast()
+	defer me.event.Broadcast()
 	if correct {
 		p.Priority = PiecePriorityNone
 		p.PendingChunkSpecs = nil

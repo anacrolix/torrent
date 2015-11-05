@@ -75,7 +75,7 @@ func (r *Reader) available(off, max int64) (ret int64) {
 }
 
 func (r *Reader) waitReadable(off int64) {
-	r.t.Pieces[off/int64(r.t.usualPieceSize())].Event.Wait()
+	r.t.cl.event.Wait()
 }
 
 func (r *Reader) ReadAt(b []byte, off int64) (n int, err error) {

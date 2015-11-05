@@ -99,7 +99,7 @@ func TestTorrentInitialState(t *testing.T) {
 		t.Fatal(err)
 	}
 	tor.chunkSize = 2
-	err = tor.setMetadata(&mi.Info.Info, mi.Info.Bytes, nil)
+	err = tor.setMetadata(&mi.Info.Info, mi.Info.Bytes)
 	if err != nil {
 		t.Fatal(err)
 	}

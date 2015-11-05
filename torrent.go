@@ -232,7 +232,7 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 }
 
 // Called when metadata for a torrent becomes available.
-func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte, eventLocker sync.Locker) (err error) {
+func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte) (err error) {
 	err = validateInfo(md)
 	if err != nil {
 		err = fmt.Errorf("bad info: %s", err)
@@ -249,7 +249,6 @@ func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte, eventLocker s
 	t.Pieces = make([]piece, len(hashes))
 	for i, hash := range hashes {
 		piece := &t.Pieces[i]
-		piece.Event.L = eventLocker
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		missinggo.CopyExact(piece.Hash[:], hash)
 	}

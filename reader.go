@@ -42,6 +42,9 @@ func (r *Reader) readable(off int64) (ret bool) {
 	// defer func() {
 	// 	log.Println("readable", ret)
 	// }()
+	if r.t.isClosed() {
+		return true
+	}
 	req, ok := r.t.offsetRequest(off)
 	if !ok {
 		panic(off)
@@ -136,6 +139,12 @@ again:
 	n, err = dataReadAt(r.t.data, b1, pos)
 	if n != 0 {
 		err = nil
+		return
+	}
+	if r.t.isClosed() {
+		if err == nil {
+			err = errors.New("torrent closed")
+		}
 		return
 	}
 	if err == io.ErrUnexpectedEOF {

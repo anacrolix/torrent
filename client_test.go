@@ -536,6 +536,48 @@ func TestResponsive(t *testing.T) {
 	assert.EqualValues(t, "d\n", string(b))
 }
 
+func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
+	seederDataDir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(seederDataDir)
+	cfg := TestingConfig
+	cfg.Seed = true
+	cfg.DataDir = seederDataDir
+	seeder, err := NewClient(&cfg)
+	require.Nil(t, err)
+	defer seeder.Close()
+	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	leecherDataDir, err := ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(leecherDataDir)
+	cfg = TestingConfig
+	cfg.DataDir = leecherDataDir
+	leecher, err := NewClient(&cfg)
+	require.Nil(t, err)
+	defer leecher.Close()
+	leecherTorrent, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
+		ret = TorrentSpecFromMetaInfo(mi)
+		ret.ChunkSize = 2
+		return
+	}())
+	leecherTorrent.AddPeers([]Peer{
+		Peer{
+			IP:   missinggo.AddrIP(seeder.ListenAddr()),
+			Port: missinggo.AddrPort(seeder.ListenAddr()),
+		},
+	})
+	reader := leecherTorrent.NewReader()
+	reader.SetReadahead(0)
+	reader.SetResponsive()
+	b := make([]byte, 2)
+	_, err = reader.ReadAt(b, 3)
+	assert.Nil(t, err)
+	assert.EqualValues(t, "lo", string(b))
+	go leecherTorrent.Drop()
+	n, err := reader.ReadAt(b, 11)
+	assert.EqualError(t, err, "torrent closed")
+	assert.EqualValues(t, 0, n)
+}
+
 func TestDHTInheritBlocklist(t *testing.T) {
 	ipl := iplist.New(nil)
 	require.NotNil(t, ipl)

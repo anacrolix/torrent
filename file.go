@@ -15,6 +15,10 @@ type File struct {
 	fi     metainfo.FileInfo
 }
 
+func (f *File) Torrent() Torrent {
+	return f.t
+}
+
 // Data for this file begins this far into the torrent.
 func (f *File) Offset() int64 {
 	return f.offset

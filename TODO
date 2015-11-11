@@ -6,3 +6,4 @@
  * UL/DL rate-limiting.
  * Handle Torrent being dropped before GotInfo.
  * Track connection chunk contributions to successful and failed piece hashes. Only drop the worst performer on a bad hash. Maybe block its IP.
+ * Remove assumptions that the first piece requested will be the first that peers will send.

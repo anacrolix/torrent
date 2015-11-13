@@ -589,7 +589,9 @@ func (cl *Client) ipBlockRange(ip net.IP) (r iplist.Range, blocked bool) {
 	// If blocklists are enabled, then block non-IPv4 addresses, because
 	// blocklists do not yet support IPv6.
 	if ip4 == nil {
-		log.Printf("blocking non-IPv4 address: %s", ip)
+		if missinggo.CryHeard() {
+			log.Printf("blocking non-IPv4 address: %s", ip)
+		}
 		r = ipv6BlockRange
 		blocked = true
 		return

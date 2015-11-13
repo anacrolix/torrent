@@ -1,8 +1,8 @@
 package dataBackend
 
 import (
-	"errors"
 	"io"
+	"os"
 )
 
 // All functions must return ErrNotFound as required.
@@ -13,7 +13,7 @@ type I interface {
 	Delete(path string) error
 }
 
-var ErrNotFound = errors.New("not found")
+var ErrNotFound = os.ErrNotExist
 
 type File interface {
 	io.Closer

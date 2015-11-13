@@ -211,11 +211,11 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 		wg.Wait()
 		close(fail)
 	}()
-	// Bail as quickly as we can.
 	select {
 	case <-fail:
-		t.FailNow()
+		// It doesn't matter if they all fail, the servers could just be down.
 	case <-success:
+		// Bail as quickly as we can. One success is enough.
 	}
 }
 

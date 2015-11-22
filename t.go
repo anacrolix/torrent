@@ -74,3 +74,9 @@ func (t Torrent) BytesCompleted() int64 {
 func (t Torrent) SubscribePieceStateChanges() *pubsub.Subscription {
 	return t.torrent.pieceStateChanges.Subscribe()
 }
+
+func (t Torrent) Seeding() bool {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	return t.cl.seeding(t.torrent)
+}

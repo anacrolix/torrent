@@ -85,7 +85,7 @@ type torrent struct {
 	// mirror their respective URLs from the announce-list metainfo key.
 	Trackers [][]tracker.Client
 	// Name used if the info name isn't available.
-	DisplayName string
+	displayName string
 	// The bencoded bytes of the info dict.
 	MetaData []byte
 	// Each element corresponds to the 16KiB metadata pieces. If true, we have
@@ -311,7 +311,7 @@ func (t *torrent) Name() string {
 	if t.haveInfo() {
 		return t.Info.Name
 	}
-	return t.DisplayName
+	return t.displayName
 }
 
 func (t *torrent) pieceState(index int) (ret PieceState) {

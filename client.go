@@ -2183,7 +2183,7 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err er
 		}
 	}
 	if spec.DisplayName != "" {
-		t.DisplayName = spec.DisplayName
+		t.displayName = spec.DisplayName
 	}
 	// Try to merge in info we have on the torrent. Any err left will
 	// terminate the function.

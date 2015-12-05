@@ -1,8 +1,3 @@
-// Package DHT implements a DHT for use with the BitTorrent protocol,
-// described in BEP 5: http://www.bittorrent.org/beps/bep_0005.html.
-//
-// Standard use involves creating a NewServer, and calling Announce on it with
-// the details of your local torrent client and infohash of interest.
 package dht
 
 import (
@@ -44,6 +39,14 @@ type transactionKey struct {
 	T          string // The KRPC transaction ID.
 }
 
+// A Server defines parameters for a DHT node server that is able to
+// send queries, and respond to the ones from the network.
+// Each node has a globally unique identifier known as the "node ID."
+// Node IDs are chosen at random from the same 160-bit space
+// as BitTorrent infohashes [2] and define the behaviour of the node.
+// Zero valued Server does not have a valid ID and thus
+// is unable to function properly. Use `NewServer(nil)`
+// to initialize a default node.
 type Server struct {
 	id               string
 	socket           net.PacketConn
@@ -60,6 +63,8 @@ type Server struct {
 	config                ServerConfig
 }
 
+// ServerConfig allows to set up a  configuration of the `Server` instance
+// to be created with NewServer
 type ServerConfig struct {
 	Addr string // Listen address. Used if Conn is nil.
 	Conn net.PacketConn
@@ -77,6 +82,7 @@ type ServerConfig struct {
 	PublicIP net.IP
 }
 
+// ServerStats instance is returned by Server.Stats() and stores Server metrics
 type ServerStats struct {
 	// Count of nodes in the node table that responded to our last query or
 	// haven't yet been queried.
@@ -91,7 +97,7 @@ type ServerStats struct {
 	BadNodes uint
 }
 
-// Returns statistics for the server.
+// Stats returns statistics for the server.
 func (s *Server) Stats() (ss ServerStats) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -107,7 +113,7 @@ func (s *Server) Stats() (ss ServerStats) {
 	return
 }
 
-// Returns the listen address for the server. Packets arriving to this address
+// Addr returns the listen address for the server. Packets arriving to this address
 // are processed by the server (unless aliens are involved).
 func (s *Server) Addr() net.Addr {
 	return s.socket.LocalAddr()
@@ -122,7 +128,7 @@ func makeSocket(addr string) (socket *net.UDPConn, err error) {
 	return
 }
 
-// Create a new DHT server.
+// NewServer initializes a new DHT node server.
 func NewServer(c *ServerConfig) (s *Server, err error) {
 	if c == nil {
 		c = &ServerConfig{}
@@ -268,6 +274,8 @@ func (n *node) DefinitelyGood() bool {
 	return true
 }
 
+// Transaction keeps track of a message exchange between nodes,
+// such as a query message and a response message
 type Transaction struct {
 	mu             sync.Mutex
 	remoteAddr     dHTAddr
@@ -777,7 +785,7 @@ func (s *Server) addTransaction(t *Transaction) {
 	s.transactions[t.key()] = t
 }
 
-// Returns the 20-byte server ID. This is the ID used to communicate with the
+// ID returns the 20-byte server ID. This is the ID used to communicate with the
 // DHT network.
 func (s *Server) ID() string {
 	if len(s.id) != 20 {

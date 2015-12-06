@@ -1,7 +1,7 @@
 /*
    Package dht implements a Distributed Hash Table (DHT) part of
    the BitTorrent protocol,
-   as specified by BEP 5: http://www.bittorrent.org/beps/bep_0005.html.
+   as specified by BEP 5: http://www.bittorrent.org/beps/bep_0005.html
 
    BitTorrent uses a "distributed hash table" (DHT)
    for storing peer contact information for "trackerless" torrents.

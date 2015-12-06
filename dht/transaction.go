@@ -36,7 +36,12 @@ func (t *Transaction) tryHandleResponse() {
 		return
 	}
 	select {
-	case r := <-t.response:
+	case r, ok := <-t.response:
+		if !ok {
+			// TODO: I think some assumption is broken. This isn't supposed to
+			// happen.
+			break
+		}
 		t.userOnResponse(r)
 		// Shouldn't be called more than once.
 		t.userOnResponse = nil

@@ -13,9 +13,10 @@ import (
 )
 
 type pingResponse struct {
-	addr string
-	krpc dht.Msg
-	rtt  time.Duration
+	addr  string
+	krpc  dht.Msg
+	msgOk bool
+	rtt   time.Duration
 }
 
 func main() {
@@ -48,12 +49,13 @@ func main() {
 				log.Fatal(err)
 			}
 			start := time.Now()
-			t.SetResponseHandler(func(addr string) func(dht.Msg) {
-				return func(resp dht.Msg) {
+			t.SetResponseHandler(func(addr string) func(dht.Msg, bool) {
+				return func(resp dht.Msg, ok bool) {
 					pingResponses <- pingResponse{
-						addr: addr,
-						krpc: resp,
-						rtt:  time.Now().Sub(start),
+						addr:  addr,
+						krpc:  resp,
+						rtt:   time.Now().Sub(start),
+						msgOk: ok,
 					}
 				}
 			}(netloc))
@@ -68,8 +70,11 @@ pingResponses:
 	for _ = range pingStrAddrs {
 		select {
 		case resp := <-pingResponses:
+			if !resp.msgOk {
+				break
+			}
 			responses++
-			fmt.Printf("%-65s %s\n", fmt.Sprintf("%x (%s):", resp.krpc.R.ID, resp.addr), resp.rtt)
+			fmt.Printf("%-65s %s\n", fmt.Sprintf("%x (%s):", resp.krpc.SenderID(), resp.addr), resp.rtt)
 		case <-timeoutChan:
 			break pingResponses
 		}

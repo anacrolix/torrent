@@ -19,22 +19,25 @@ import (
 // may be correlated with multiple queries to the same node. The transaction ID should be encoded as a short string of binary numbers, typically 2 characters are enough as they cover 2^16 outstanding queries. The other key contained in every KRPC message is "y" with a single character value describing the type of message. The value of the "y" key is one of "q" for query, "r" for response, or "e" for error.
 // 3 message types:  QUERY, RESPONSE, ERROR
 type Msg struct {
-	Q string `bencode:"q,omitempty"` //  method name of the query (on of 4: "ping", "find_node", "get_peers", "announce_peer")
-	A *struct {
-		ID       string `bencode:"id"`        // ID of the quirying Node
-		InfoHash string `bencode:"info_hash"` // InfoHash of the torrent
-		Target   string `bencode:"target"`    // ID of the node sought
-	} `bencode:"a,omitempty"` // named arguments sent with a query
-	T string     `bencode:"t"`           // required: transaction ID
-	Y string     `bencode:"y"`           // required: type of the message: q for QUERY, r for RESPONSE, e for ERROR
-	R *Return    `bencode:"r,omitempty"` // RESPONSE type only
-	E *KRPCError `bencode:"e,omitempty"` // ERROR type only
+	Q  string           `bencode:"q,omitempty"` // Query method (one of 4: "ping", "find_node", "get_peers", "announce_peer")
+	A  *MsgArgs         `bencode:"a,omitempty"` // named arguments sent with a query
+	T  string           `bencode:"t"`           // required: transaction ID
+	Y  string           `bencode:"y"`           // required: type of the message: q for QUERY, r for RESPONSE, e for ERROR
+	R  *Return          `bencode:"r,omitempty"` // RESPONSE type only
+	E  *KRPCError       `bencode:"e,omitempty"` // ERROR type only
+	IP util.CompactPeer `bencode:"ip,omitempty"`
+}
+
+type MsgArgs struct {
+	ID       string `bencode:"id"`        // ID of the quirying Node
+	InfoHash string `bencode:"info_hash"` // InfoHash of the torrent
+	Target   string `bencode:"target"`    // ID of the node sought
 }
 
 type Return struct {
 	ID     string              `bencode:"id"` // ID of the querying node
 	Nodes  CompactIPv4NodeInfo `bencode:"nodes,omitempty"`
-	Token  string              `bencode:"token"`
+	Token  string              `bencode:"token,omitempty"`
 	Values []util.CompactPeer  `bencode:"values,omitempty"`
 }
 

@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// Transaction keeps track of a message exchange between nodes,
-// such as a query message and a response message
+// Transaction keeps track of a message exchange between nodes, such as a
+// query message and a response message.
 type Transaction struct {
 	mu             sync.Mutex
 	remoteAddr     dHTAddr
@@ -19,12 +19,12 @@ type Transaction struct {
 	s              *Server
 	retries        int
 	lastSend       time.Time
-	userOnResponse func(Msg)
+	userOnResponse func(Msg, bool)
 }
 
 // SetResponseHandler sets up a function to be called when query response
-// arrives
-func (t *Transaction) SetResponseHandler(f func(Msg)) {
+// arrives.
+func (t *Transaction) SetResponseHandler(f func(Msg, bool)) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.userOnResponse = f
@@ -37,12 +37,7 @@ func (t *Transaction) tryHandleResponse() {
 	}
 	select {
 	case r, ok := <-t.response:
-		if !ok {
-			// TODO: I think some assumption is broken. This isn't supposed to
-			// happen.
-			break
-		}
-		t.userOnResponse(r)
+		t.userOnResponse(r, ok)
 		// Shouldn't be called more than once.
 		t.userOnResponse = nil
 	default:

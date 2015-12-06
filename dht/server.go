@@ -556,7 +556,7 @@ func (s *Server) bootstrap() (err error) {
 				return
 			}
 			outstanding.Add(1)
-			t.SetResponseHandler(func(Msg) {
+			t.SetResponseHandler(func(Msg, bool) {
 				outstanding.Done()
 			})
 		}

@@ -39,7 +39,7 @@ func (cni *NodeInfo) UnmarshalCompactIPv4(b []byte) error {
 	}
 	missinggo.CopyExact(cni.ID[:], b[:20])
 	cni.Addr = newDHTAddr(&net.UDPAddr{
-		IP:   net.IPv4(b[20], b[21], b[22], b[23]),
+		IP:   append(make([]byte, 0, 4), b[20:24]...),
 		Port: int(binary.BigEndian.Uint16(b[24:26])),
 	})
 	return nil

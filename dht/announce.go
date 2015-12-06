@@ -8,9 +8,8 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/sync"
-	"github.com/willf/bloom"
-
 	"github.com/anacrolix/torrent/logonce"
+	"github.com/willf/bloom"
 )
 
 // Maintains state for an ongoing Announce operation. An Announce is started
@@ -158,7 +157,7 @@ func (me *Announce) getPeers(addr dHTAddr) error {
 	if err != nil {
 		return err
 	}
-	t.SetResponseHandler(func(m Msg) {
+	t.SetResponseHandler(func(m Msg, ok bool) {
 		// Register suggested nodes closer to the target info-hash.
 		if m.R != nil {
 			me.mu.Lock()

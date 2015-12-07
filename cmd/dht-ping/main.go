@@ -2,7 +2,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -20,13 +19,13 @@ type pingResponse struct {
 }
 
 func main() {
+	err := CommandLine.Parse(os.Args[1:])
+	pingStrAddrs := CommandLine.Args()
+
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	timeout := flag.Duration("timeout", -1, "maximum timeout")
-	flag.Parse()
-	pingStrAddrs := flag.Args()
 	if len(pingStrAddrs) == 0 {
-		os.Stderr.WriteString("u must specify addrs of nodes to ping e.g. router.bittorrent.com:6881\n")
-		os.Exit(2)
+		os.Stderr.WriteString("Error: no target UDP node addresses specified\n")
+		usageMessageAndQuit()
 	}
 	s, err := dht.NewServer(nil)
 	if err != nil {
@@ -79,6 +78,5 @@ pingResponsesLoop:
 			break pingResponsesLoop
 		}
 	}
-	// timeouts := len(pingStrAddrs) - responses
 	fmt.Printf("%d/%d responses (%f%%)\n", responses, len(pingStrAddrs), 100*float64(responses)/float64(len(pingStrAddrs)))
 }

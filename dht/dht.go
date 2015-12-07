@@ -60,9 +60,18 @@ type Server struct {
 	config                ServerConfig
 }
 
+// Returned when a caller sets ID manually but fails to set NoSecurity
+// configuration flag. Better to be explicit and make outcomes
+// predictable than implicitly disable one option when provided another.
+var ErrConflictingConfigNoSecNodeId = errors.New("Cannot manually set NodeId without also setting NoSecurity.")
+
 type ServerConfig struct {
 	Addr string // Listen address. Used if Conn is nil.
-	Conn net.PacketConn
+	// To set NodeId manually. Caller MUST also set NoSecurity,
+	// and NodeId in this case is 20 bytes cast to string, not
+	// a hex or baseXX encoded ID.
+	NodeId string
+	Conn   net.PacketConn
 	// Don't respond to queries from other nodes.
 	Passive bool
 	// DHT Bootstrap nodes
@@ -141,6 +150,12 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		}
 	}
 	s.bootstrapNodes = c.BootstrapNodes
+	if c.NodeId != "" {
+		if !c.NoSecurity {
+			return nil, ErrConflictingConfigNoSecNodeId
+		}
+		s.id = c.NodeId
+	}
 	err = s.init()
 	if err != nil {
 		return

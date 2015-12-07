@@ -54,6 +54,7 @@ type Server struct {
 	closed           chan struct{}
 	ipBlockList      iplist.Ranger
 	badNodes         *boom.BloomFilter
+	hooks            map[string]KRPCHook
 
 	numConfirmedAnnounces int
 	bootstrapNodes        []string
@@ -84,6 +85,12 @@ type ServerConfig struct {
 	IPBlocklist iplist.Ranger
 	// Used to secure the server's ID. Defaults to the Conn's LocalAddr().
 	PublicIP net.IP
+	// Hook functions to be called when matching KRPC queries arrive.
+	// Hooks run prior to default KRPC handling, and may modify messages
+	// or indicate whether to skip default handling.
+	// Hooks can therefore replace, extend, or disable KRPC query handling
+	// in a Query-type specific way.
+	KRPCHooks map[string]KRPCHook
 }
 
 type ServerStats struct {
@@ -140,6 +147,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		config:      *c,
 		ipBlockList: c.IPBlocklist,
 		badNodes:    boom.NewBloomFilter(1000, 0.1),
+		hooks:       c.KRPCHooks,
 	}
 	if c.Conn != nil {
 		s.socket = c.Conn

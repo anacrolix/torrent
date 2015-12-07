@@ -1,9 +1,12 @@
 package dht
 
 // A hook function for handling incoming KRPC messages.
+// Hooks can't pass errors back, so if error logging or
+// management within hooks is desired, consider passing
+// methods of a custom type as KRPCHooks and use the type
+// to handle errors.
 // The arguments are the incoming DHTAddr and Msg.
 // The outputs are:
 //  - Optional replacement Msg for ensuing use in default handlers
 //  - Bool indicating whether to skip default handlers
-//  - error, which propagates outwards from Server.handleQuery
-type KRPCHook func(DHTAddr, Msg) (*Msg, bool, error)
+type KRPCHook func(*DHTAddr, *Node, *Msg) (*Msg, bool)

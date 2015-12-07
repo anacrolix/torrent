@@ -49,7 +49,7 @@ type Server struct {
 	socket           net.PacketConn
 	transactions     map[transactionKey]*Transaction
 	transactionIDInt uint64
-	nodes            map[string]*node // Keyed by dHTAddr.String().
+	nodes            map[string]*Node // Keyed by dHTAddr.String().
 	mu               sync.Mutex
 	closed           chan struct{}
 	ipBlockList      iplist.Ranger
@@ -231,7 +231,7 @@ func (nid *nodeID) ByteString() string {
 	return string(buf[:])
 }
 
-type node struct {
+type Node struct {
 	addr          DHTAddr
 	id            nodeID
 	announceToken string
@@ -241,18 +241,18 @@ type node struct {
 	lastSentQuery   time.Time
 }
 
-func (n *node) IsSecure() bool {
+func (n *Node) IsSecure() bool {
 	if n.id.IsUnset() {
 		return false
 	}
 	return NodeIdSecure(n.id.ByteString(), n.addr.IP())
 }
 
-func (n *node) idString() string {
+func (n *Node) idString() string {
 	return n.id.ByteString()
 }
 
-func (n *node) SetIDFromBytes(b []byte) {
+func (n *Node) SetIDFromBytes(b []byte) {
 	if len(b) != 20 {
 		panic(b)
 	}
@@ -260,15 +260,15 @@ func (n *node) SetIDFromBytes(b []byte) {
 	n.id.set = true
 }
 
-func (n *node) SetIDFromString(s string) {
+func (n *Node) SetIDFromString(s string) {
 	n.SetIDFromBytes([]byte(s))
 }
 
-func (n *node) IDNotSet() bool {
+func (n *Node) IDNotSet() bool {
 	return n.id.i.Int64() == 0
 }
 
-func (n *node) NodeInfo() (ret NodeInfo) {
+func (n *Node) NodeInfo() (ret NodeInfo) {
 	ret.Addr = n.addr
 	if n := copy(ret.ID[:], n.idString()); n != 20 {
 		panic(n)
@@ -276,7 +276,7 @@ func (n *node) NodeInfo() (ret NodeInfo) {
 	return
 }
 
-func (n *node) DefinitelyGood() bool {
+func (n *Node) DefinitelyGood() bool {
 	if len(n.idString()) != 20 {
 		return false
 	}
@@ -516,7 +516,7 @@ func (s *Server) setDefaults() (err error) {
 		SecureNodeId(id[:], publicIP)
 		s.id = string(id[:])
 	}
-	s.nodes = make(map[string]*node, maxNodes)
+	s.nodes = make(map[string]*Node, maxNodes)
 	return
 }
 
@@ -627,12 +627,12 @@ func (s *Server) AddNode(ni NodeInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.nodes == nil {
-		s.nodes = make(map[string]*node)
+		s.nodes = make(map[string]*Node)
 	}
 	s.getNode(ni.Addr, string(ni.ID[:]))
 }
 
-func (s *Server) nodeByID(id string) *node {
+func (s *Server) nodeByID(id string) *Node {
 	for _, node := range s.nodes {
 		if node.idString() == id {
 			return node
@@ -642,10 +642,26 @@ func (s *Server) nodeByID(id string) *node {
 }
 
 func (s *Server) handleQuery(source DHTAddr, m Msg) {
+	var (
+		newmsg *Msg
+		skip   bool
+	)
 	node := s.getNode(source, m.SenderID())
 	node.lastGotQuery = time.Now()
 	// Don't respond.
 	if s.config.Passive {
+		return
+	}
+	// Call any hooks that may apply
+	if hook, ok := s.hooks[m.Q]; ok {
+		newmsg, skip = hook(&source, node, &m)
+		if newmsg != nil {
+			// Func is pass-by-value so this shouldn't have side effects?
+			m = *newmsg
+		}
+	}
+	// Unless told not to by hook, proceed with normal handling.
+	if skip {
 		return
 	}
 	args := m.A
@@ -715,7 +731,7 @@ func (s *Server) reply(addr DHTAddr, t string, r Return) {
 
 // Returns a node struct for the addr. It is taken from the table or created
 // and possibly added if required and meets validity constraints.
-func (s *Server) getNode(addr DHTAddr, id string) (n *node) {
+func (s *Server) getNode(addr DHTAddr, id string) (n *Node) {
 	addrStr := addr.String()
 	n = s.nodes[addrStr]
 	if n != nil {
@@ -724,7 +740,7 @@ func (s *Server) getNode(addr DHTAddr, id string) (n *node) {
 		}
 		return
 	}
-	n = &node{
+	n = &Node{
 		addr: addr,
 	}
 	if len(id) == 20 {
@@ -1013,7 +1029,7 @@ func (s *Server) addRootNodes() error {
 			log.Printf("dht root node is in the blocklist: %s", addr.IP)
 			continue
 		}
-		s.nodes[addr.String()] = &node{
+		s.nodes[addr.String()] = &Node{
 			addr: newDHTAddr(addr),
 		}
 	}
@@ -1120,13 +1136,13 @@ func init() {
 	maxDistance.SetBit(&zero, 160, 1)
 }
 
-func (s *Server) closestGoodNodes(k int, targetID string) []*node {
-	return s.closestNodes(k, nodeIDFromString(targetID), func(n *node) bool { return n.DefinitelyGood() })
+func (s *Server) closestGoodNodes(k int, targetID string) []*Node {
+	return s.closestNodes(k, nodeIDFromString(targetID), func(n *Node) bool { return n.DefinitelyGood() })
 }
 
-func (s *Server) closestNodes(k int, target nodeID, filter func(*node) bool) []*node {
+func (s *Server) closestNodes(k int, target nodeID, filter func(*Node) bool) []*Node {
 	sel := newKClosestNodesSelector(k, target)
-	idNodes := make(map[string]*node, len(s.nodes))
+	idNodes := make(map[string]*Node, len(s.nodes))
 	for _, node := range s.nodes {
 		if !filter(node) {
 			continue
@@ -1135,7 +1151,7 @@ func (s *Server) closestNodes(k int, target nodeID, filter func(*node) bool) []*
 		idNodes[node.idString()] = node
 	}
 	ids := sel.IDs()
-	ret := make([]*node, 0, len(ids))
+	ret := make([]*Node, 0, len(ids))
 	for _, id := range ids {
 		ret = append(ret, idNodes[id.ByteString()])
 	}

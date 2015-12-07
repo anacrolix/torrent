@@ -7,7 +7,7 @@ import (
 )
 
 // Used internally to refer to node network addresses.
-type dHTAddr interface {
+type DHTAddr interface {
 	net.Addr
 	UDPAddr() *net.UDPAddr
 	IP() net.IP
@@ -36,6 +36,6 @@ func (ca cachedAddr) IP() net.IP {
 	return ca.ip
 }
 
-func newDHTAddr(addr net.Addr) dHTAddr {
+func newDHTAddr(addr net.Addr) DHTAddr {
 	return cachedAddr{addr, addr.String(), missinggo.AddrIP(addr)}
 }

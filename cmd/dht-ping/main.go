@@ -33,7 +33,7 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("dht server on %s", s.Addr())
-	pingResponses := make(chan pingResponse)
+	pingResponsesChan := make(chan pingResponse)
 	timeoutChan := make(chan struct{})
 	go func() {
 		for i, netloc := range pingStrAddrs {
@@ -51,7 +51,7 @@ func main() {
 			start := time.Now()
 			t.SetResponseHandler(func(addr string) func(dht.Msg, bool) {
 				return func(resp dht.Msg, ok bool) {
-					pingResponses <- pingResponse{
+					pingResponsesChan <- pingResponse{
 						addr:  addr,
 						krpc:  resp,
 						rtt:   time.Now().Sub(start),
@@ -66,17 +66,17 @@ func main() {
 		}
 	}()
 	responses := 0
-pingResponses:
+pingResponsesLoop:
 	for _ = range pingStrAddrs {
 		select {
-		case resp := <-pingResponses:
+		case resp := <-pingResponsesChan:
 			if !resp.msgOk {
 				break
 			}
 			responses++
 			fmt.Printf("%-65s %s\n", fmt.Sprintf("%x (%s):", resp.krpc.SenderID(), resp.addr), resp.rtt)
 		case <-timeoutChan:
-			break pingResponses
+			break pingResponsesLoop
 		}
 	}
 	// timeouts := len(pingStrAddrs) - responses

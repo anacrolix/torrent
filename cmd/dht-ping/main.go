@@ -1,8 +1,8 @@
-// Pings DHT nodes with the given network addresses.
+// dht-ping is a cli tool that pings DHT nodes with the given UDP network
+// addresses and returns NodeID if sucessful
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -20,23 +20,31 @@ type pingResponse struct {
 }
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	timeout := flag.Duration("timeout", -1, "maximum timeout")
-	flag.Parse()
-	pingStrAddrs := flag.Args()
+	err := CommandLine.Parse(os.Args[1:])
+	pingStrAddrs := CommandLine.Args()
+
 	if len(pingStrAddrs) == 0 {
-		os.Stderr.WriteString("u must specify addrs of nodes to ping e.g. router.bittorrent.com:6881\n")
-		os.Exit(2)
+		os.Stderr.WriteString("Error: no target UDP node addresses specified\n")
+		usageMessageAndQuit()
 	}
+
+	err = sendPings(pingStrAddrs)
+	if err != nil {
+		fmt.Printf("Error: %s\n", err)
+		os.Exit(0)
+	}
+}
+
+// PingAddresses attempts to send the ping KRPC messages to the UDP addresses
+func sendPings(targets []string) error {
 	s, err := dht.NewServer(nil)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("cannot access UDP server for the dht node: %s", err)
 	}
-	log.Printf("dht server on %s", s.Addr())
-	pingResponses := make(chan pingResponse)
+	pingResponsesChan := make(chan pingResponse)
 	timeoutChan := make(chan struct{})
 	go func() {
-		for i, netloc := range pingStrAddrs {
+		for i, netloc := range targets {
 			if i != 0 {
 				time.Sleep(1 * time.Millisecond)
 			}
@@ -51,7 +59,7 @@ func main() {
 			start := time.Now()
 			t.SetResponseHandler(func(addr string) func(dht.Msg, bool) {
 				return func(resp dht.Msg, ok bool) {
-					pingResponses <- pingResponse{
+					pingResponsesChan <- pingResponse{
 						addr:  addr,
 						krpc:  resp,
 						rtt:   time.Now().Sub(start),
@@ -66,19 +74,20 @@ func main() {
 		}
 	}()
 	responses := 0
-pingResponses:
-	for _ = range pingStrAddrs {
+pingResponsesLoop:
+	for _ = range targets {
 		select {
-		case resp := <-pingResponses:
+		case resp := <-pingResponsesChan:
 			if !resp.msgOk {
 				break
 			}
 			responses++
 			fmt.Printf("%-65s %s\n", fmt.Sprintf("%x (%s):", resp.krpc.SenderID(), resp.addr), resp.rtt)
 		case <-timeoutChan:
-			break pingResponses
+			break pingResponsesLoop
 		}
+		fmt.Printf("%d/%d responses (%f%%)\n", responses, len(targets), 100*float64(responses)/float64(len(targets)))
+
 	}
-	// timeouts := len(pingStrAddrs) - responses
-	fmt.Printf("%d/%d responses (%f%%)\n", responses, len(pingStrAddrs), 100*float64(responses)/float64(len(pingStrAddrs)))
+	return nil
 }

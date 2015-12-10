@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -143,6 +144,7 @@ func (me *store) pieceWriteAt(p metainfo.Piece, b []byte, off int64) (n int, err
 	}()
 	f, err := me.db.Open(me.incompletePiecePath(p), os.O_WRONLY|os.O_CREATE)
 	if err != nil {
+		err = fmt.Errorf("error opening %q: %s", me.incompletePiecePath(p), err)
 		return
 	}
 	defer func() {

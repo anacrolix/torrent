@@ -20,7 +20,7 @@ import (
 	"github.com/anacrolix/torrent/logonce"
 )
 
-//type KRPCHook func(*DHTAddr, *Node, *Msg) (*Msg, bool)
+type KRPCHook func(*DHTAddr, *Node, *Msg) (*Msg, bool)
 
 // A Server defines parameters for a DHT node server that is able to
 // send queries, and respond to the ones from the network.
@@ -40,7 +40,7 @@ type Server struct {
 	closed           chan struct{}
 	ipBlockList      iplist.Ranger
 	badNodes         *boom.BloomFilter
-	//hooks            map[string]KRPCHook
+	hooks            map[string]KRPCHook
 
 	numConfirmedAnnounces int
 	bootstrapNodes        []string
@@ -78,6 +78,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		config:      *c,
 		ipBlockList: c.IPBlocklist,
 		badNodes:    boom.NewBloomFilter(1000, 0.1),
+		hooks:       c.KRPCHooks,
 	}
 	if c.Conn != nil {
 		s.socket = c.Conn
@@ -88,6 +89,12 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		}
 	}
 	s.bootstrapNodes = c.BootstrapNodes
+	if c.NodeId != "" {
+		if !c.NoSecurity {
+			return nil, ErrConflictingConfigNoSecNodeId
+		}
+		s.id = c.NodeId
+	}
 	err = s.init()
 	if err != nil {
 		return
@@ -103,16 +110,18 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 			panic(err)
 		}
 	}()
-	go func() {
-		err := s.bootstrap()
-		if err != nil {
-			select {
-			case <-s.closed:
-			default:
-				log.Printf("error bootstrapping DHT: %s", err)
+	if !s.config.NoBootstrap {
+		go func() {
+			err := s.bootstrap()
+			if err != nil {
+				select {
+				case <-s.closed:
+				default:
+					log.Printf("error bootstrapping DHT: %s", err)
+				}
 			}
-		}
-	}()
+		}()
+	}
 	return
 }
 
@@ -243,10 +252,25 @@ func (s *Server) nodeByID(id string) *Node {
 }
 
 func (s *Server) handleQuery(source DHTAddr, m Msg) {
+	var (
+		newmsg *Msg
+		skip   bool
+	)
 	node := s.getNode(source, m.SenderID())
 	node.lastGotQuery = time.Now()
 	// Don't respond.
 	if s.config.Passive {
+		return
+	}
+	// Call any hooks that may apply
+	if hook, ok := s.hooks[m.Q]; ok {
+		newmsg, skip = hook(&source, node, &m)
+		if newmsg != nil {
+			m = *newmsg
+		}
+	}
+	// Unless told not to by hook, proceed with normal handling.
+	if skip {
 		return
 	}
 	args := m.A

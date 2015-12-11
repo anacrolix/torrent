@@ -77,6 +77,11 @@ type ServerConfig struct {
 	Passive bool
 	// DHT Bootstrap nodes
 	BootstrapNodes []string
+	// Disable bootstrapping from global servers even if given no BootstrapNodes.
+	// This creates a solitary node that awaits other nodes; it's only useful if
+	// you're creating your own DHT and want to avoid accidental crossover, without
+	// spoofing a bootstrap node and filling your logs with connection errors.
+	NoBootstrap bool
 	// Disable the DHT security extension:
 	// http://www.libtorrent.org/dht_sec.html.
 	NoSecurity bool
@@ -179,16 +184,18 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 			panic(err)
 		}
 	}()
-	go func() {
-		err := s.bootstrap()
-		if err != nil {
-			select {
-			case <-s.closed:
-			default:
-				log.Printf("error bootstrapping DHT: %s", err)
+	if !s.config.NoBootstrap {
+		go func() {
+			err := s.bootstrap()
+			if err != nil {
+				select {
+				case <-s.closed:
+				default:
+					log.Printf("error bootstrapping DHT: %s", err)
+				}
 			}
-		}
-	}()
+		}()
+	}
 	return
 }
 
@@ -656,7 +663,6 @@ func (s *Server) handleQuery(source DHTAddr, m Msg) {
 	if hook, ok := s.hooks[m.Q]; ok {
 		newmsg, skip = hook(&source, node, &m)
 		if newmsg != nil {
-			// Func is pass-by-value so this shouldn't have side effects?
 			m = *newmsg
 		}
 	}

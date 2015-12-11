@@ -20,6 +20,8 @@ import (
 	"github.com/anacrolix/torrent/logonce"
 )
 
+//type KRPCHook func(*DHTAddr, *Node, *Msg) (*Msg, bool)
+
 // A Server defines parameters for a DHT node server that is able to
 // send queries, and respond to the ones from the network.
 // Each node has a globally unique identifier known as the "node ID."
@@ -33,11 +35,12 @@ type Server struct {
 	socket           net.PacketConn
 	transactions     map[transactionKey]*Transaction
 	transactionIDInt uint64
-	nodes            map[string]*node // Keyed by dHTAddr.String().
+	nodes            map[string]*Node // Keyed by dHTAddr.String().
 	mu               sync.Mutex
 	closed           chan struct{}
 	ipBlockList      iplist.Ranger
 	badNodes         *boom.BloomFilter
+	//hooks            map[string]KRPCHook
 
 	numConfirmedAnnounces int
 	bootstrapNodes        []string
@@ -139,7 +142,7 @@ func (s *Server) init() (err error) {
 	return
 }
 
-func (s *Server) processPacket(b []byte, addr dHTAddr) {
+func (s *Server) processPacket(b []byte, addr DHTAddr) {
 	if len(b) < 2 || b[0] != 'd' || b[len(b)-1] != 'e' {
 		// KRPC messages are bencoded dicts.
 		readNotKRPCDict.Add(1)
@@ -225,12 +228,12 @@ func (s *Server) AddNode(ni NodeInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.nodes == nil {
-		s.nodes = make(map[string]*node)
+		s.nodes = make(map[string]*Node)
 	}
 	s.getNode(ni.Addr, string(ni.ID[:]))
 }
 
-func (s *Server) nodeByID(id string) *node {
+func (s *Server) nodeByID(id string) *Node {
 	for _, node := range s.nodes {
 		if node.idString() == id {
 			return node
@@ -239,7 +242,7 @@ func (s *Server) nodeByID(id string) *node {
 	return nil
 }
 
-func (s *Server) handleQuery(source dHTAddr, m Msg) {
+func (s *Server) handleQuery(source DHTAddr, m Msg) {
 	node := s.getNode(source, m.SenderID())
 	node.lastGotQuery = time.Now()
 	// Don't respond.
@@ -294,7 +297,7 @@ func (s *Server) handleQuery(source dHTAddr, m Msg) {
 	}
 }
 
-func (s *Server) reply(addr dHTAddr, t string, r Return) {
+func (s *Server) reply(addr DHTAddr, t string, r Return) {
 	r.ID = s.ID()
 	m := Msg{
 		T: t,
@@ -313,7 +316,7 @@ func (s *Server) reply(addr dHTAddr, t string, r Return) {
 
 // Returns a node struct for the addr. It is taken from the table or created
 // and possibly added if required and meets validity constraints.
-func (s *Server) getNode(addr dHTAddr, id string) (n *node) {
+func (s *Server) getNode(addr DHTAddr, id string) (n *Node) {
 	addrStr := addr.String()
 	n = s.nodes[addrStr]
 	if n != nil {
@@ -322,7 +325,7 @@ func (s *Server) getNode(addr dHTAddr, id string) (n *node) {
 		}
 		return
 	}
-	n = &node{
+	n = &Node{
 		addr: addr,
 	}
 	if len(id) == 20 {
@@ -341,7 +344,7 @@ func (s *Server) getNode(addr dHTAddr, id string) (n *node) {
 	return
 }
 
-func (s *Server) nodeTimedOut(addr dHTAddr) {
+func (s *Server) nodeTimedOut(addr DHTAddr) {
 	node, ok := s.nodes[addr.String()]
 	if !ok {
 		return
@@ -355,7 +358,7 @@ func (s *Server) nodeTimedOut(addr dHTAddr) {
 	delete(s.nodes, addr.String())
 }
 
-func (s *Server) writeToNode(b []byte, node dHTAddr) (err error) {
+func (s *Server) writeToNode(b []byte, node DHTAddr) (err error) {
 	if list := s.ipBlockList; list != nil {
 		if r, ok := list.Lookup(missinggo.AddrIP(node.UDPAddr())); ok {
 			err = fmt.Errorf("write to %s blocked: %s", node, r.Description)
@@ -374,7 +377,7 @@ func (s *Server) writeToNode(b []byte, node dHTAddr) (err error) {
 	return
 }
 
-func (s *Server) findResponseTransaction(transactionID string, sourceNode dHTAddr) *Transaction {
+func (s *Server) findResponseTransaction(transactionID string, sourceNode DHTAddr) *Transaction {
 	return s.transactions[transactionKey{
 		sourceNode.String(),
 		transactionID}]
@@ -407,7 +410,7 @@ func (s *Server) ID() string {
 	return s.id
 }
 
-func (s *Server) query(node dHTAddr, q string, a map[string]interface{}, onResponse func(Msg)) (t *Transaction, err error) {
+func (s *Server) query(node DHTAddr, q string, a map[string]interface{}, onResponse func(Msg)) (t *Transaction, err error) {
 	tid := s.nextTransactionID()
 	if a == nil {
 		a = make(map[string]interface{}, 1)
@@ -454,7 +457,7 @@ func (s *Server) Ping(node *net.UDPAddr) (*Transaction, error) {
 	return s.query(newDHTAddr(node), "ping", nil, nil)
 }
 
-func (s *Server) announcePeer(node dHTAddr, infoHash string, port int, token string, impliedPort bool) (err error) {
+func (s *Server) announcePeer(node DHTAddr, infoHash string, port int, token string, impliedPort bool) (err error) {
 	if port == 0 && !impliedPort {
 		return errors.New("nothing to announce")
 	}
@@ -500,7 +503,7 @@ func (s *Server) liftNodes(d Msg) {
 }
 
 // Sends a find_node query to addr. targetID is the node we're looking for.
-func (s *Server) findNode(addr dHTAddr, targetID string) (t *Transaction, err error) {
+func (s *Server) findNode(addr DHTAddr, targetID string) (t *Transaction, err error) {
 	t, err = s.query(addr, "find_node", map[string]interface{}{"target": targetID}, func(d Msg) {
 		// Scrape peers from the response to put in the server's table before
 		// handing the response back to the caller.
@@ -530,7 +533,7 @@ func (s *Server) addRootNodes() error {
 			log.Printf("dht root node is in the blocklist: %s", addr.IP)
 			continue
 		}
-		s.nodes[addr.String()] = &node{
+		s.nodes[addr.String()] = &Node{
 			addr: newDHTAddr(addr),
 		}
 	}
@@ -656,11 +659,11 @@ func (s *Server) setDefaults() (err error) {
 		SecureNodeId(id[:], publicIP)
 		s.id = string(id[:])
 	}
-	s.nodes = make(map[string]*node, maxNodes)
+	s.nodes = make(map[string]*Node, maxNodes)
 	return
 }
 
-func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *Transaction, err error) {
+func (s *Server) getPeers(addr DHTAddr, infoHash string) (t *Transaction, err error) {
 	if len(infoHash) != 20 {
 		err = fmt.Errorf("infohash has bad length")
 		return
@@ -674,13 +677,13 @@ func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *Transaction, err er
 	return
 }
 
-func (s *Server) closestGoodNodes(k int, targetID string) []*node {
-	return s.closestNodes(k, nodeIDFromString(targetID), func(n *node) bool { return n.DefinitelyGood() })
+func (s *Server) closestGoodNodes(k int, targetID string) []*Node {
+	return s.closestNodes(k, nodeIDFromString(targetID), func(n *Node) bool { return n.DefinitelyGood() })
 }
 
-func (s *Server) closestNodes(k int, target nodeID, filter func(*node) bool) []*node {
+func (s *Server) closestNodes(k int, target nodeID, filter func(*Node) bool) []*Node {
 	sel := newKClosestNodesSelector(k, target)
-	idNodes := make(map[string]*node, len(s.nodes))
+	idNodes := make(map[string]*Node, len(s.nodes))
 	for _, node := range s.nodes {
 		if !filter(node) {
 			continue
@@ -689,14 +692,14 @@ func (s *Server) closestNodes(k int, target nodeID, filter func(*node) bool) []*
 		idNodes[node.idString()] = node
 	}
 	ids := sel.IDs()
-	ret := make([]*node, 0, len(ids))
+	ret := make([]*Node, 0, len(ids))
 	for _, id := range ids {
 		ret = append(ret, idNodes[id.ByteString()])
 	}
 	return ret
 }
 
-func (me *Server) badNode(addr dHTAddr) {
+func (me *Server) badNode(addr DHTAddr) {
 	me.badNodes.Add([]byte(addr.String()))
 	delete(me.nodes, addr.String())
 }

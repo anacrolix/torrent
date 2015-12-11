@@ -13,7 +13,7 @@ const CompactIPv4NodeInfoLen = 26
 
 type NodeInfo struct {
 	ID   [20]byte
-	Addr dHTAddr
+	Addr DHTAddr
 }
 
 // Writes the node info to its compact binary representation in b. See

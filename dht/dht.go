@@ -112,8 +112,8 @@ func (nid *nodeID) ByteString() string {
 	return string(buf[:])
 }
 
-type node struct {
-	addr          dHTAddr
+type Node struct {
+	addr          DHTAddr
 	id            nodeID
 	announceToken string
 
@@ -122,18 +122,18 @@ type node struct {
 	lastSentQuery   time.Time
 }
 
-func (n *node) IsSecure() bool {
+func (n *Node) IsSecure() bool {
 	if n.id.IsUnset() {
 		return false
 	}
 	return NodeIdSecure(n.id.ByteString(), n.addr.IP())
 }
 
-func (n *node) idString() string {
+func (n *Node) idString() string {
 	return n.id.ByteString()
 }
 
-func (n *node) SetIDFromBytes(b []byte) {
+func (n *Node) SetIDFromBytes(b []byte) {
 	if len(b) != 20 {
 		panic(b)
 	}
@@ -141,15 +141,15 @@ func (n *node) SetIDFromBytes(b []byte) {
 	n.id.set = true
 }
 
-func (n *node) SetIDFromString(s string) {
+func (n *Node) SetIDFromString(s string) {
 	n.SetIDFromBytes([]byte(s))
 }
 
-func (n *node) IDNotSet() bool {
+func (n *Node) IDNotSet() bool {
 	return n.id.i.Int64() == 0
 }
 
-func (n *node) NodeInfo() (ret NodeInfo) {
+func (n *Node) NodeInfo() (ret NodeInfo) {
 	ret.Addr = n.addr
 	if n := copy(ret.ID[:], n.idString()); n != 20 {
 		panic(n)
@@ -157,7 +157,7 @@ func (n *node) NodeInfo() (ret NodeInfo) {
 	return
 }
 
-func (n *node) DefinitelyGood() bool {
+func (n *Node) DefinitelyGood() bool {
 	if len(n.idString()) != 20 {
 		return false
 	}

@@ -2584,12 +2584,13 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 			return
 		}
 		tr.Stop("write chunk")
+		me.mu.Lock()
+		if c.peerTouchedPieces == nil {
+			c.peerTouchedPieces = make(map[int]struct{})
+		}
+		c.peerTouchedPieces[int(req.Index)] = struct{}{}
+		me.mu.Unlock()
 	}()
-	// This could be made dependent on whether any actual data was written.
-	if c.peerTouchedPieces == nil {
-		c.peerTouchedPieces = make(map[int]struct{})
-	}
-	c.peerTouchedPieces[int(req.Index)] = struct{}{}
 
 	// log.Println("got chunk", req)
 	me.event.Broadcast()

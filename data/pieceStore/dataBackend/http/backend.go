@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"path"
 
-	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/httpfile"
+	"github.com/anacrolix/missinggo/httptoo"
 
 	"github.com/anacrolix/torrent/data/pieceStore/dataBackend"
 )
@@ -21,7 +21,7 @@ type backend struct {
 
 func New(u url.URL) *backend {
 	return &backend{
-		url: *missinggo.CopyURL(&u),
+		url: *httptoo.CopyURL(&u),
 	}
 }
 

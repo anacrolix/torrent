@@ -360,8 +360,8 @@ func (s *Server) getNode(addr dHTAddr, id string) (n *Node) {
 		return
 	}
 	// (@cathalgarvey) DHT Security is supposed to prevent insecure nodes from
-	// hosting torrents: not to exclude them from DHT routing entirely. Does
-	// this check exclude them entirely from the routing table?
+	// hosting data: not to exclude them from DHT routing entirely. Does
+	// this check exclude them entirely from the local routing table?
 	if !s.config.NoSecurity && !n.IsSecure() {
 		return
 	}
@@ -488,6 +488,11 @@ func (s *Server) Ping(node *net.UDPAddr) (*Transaction, error) {
 func (s *Server) announcePeer(node dHTAddr, infoHash string, port int, token string, impliedPort bool) (err error) {
 	if port == 0 && !impliedPort {
 		return errors.New("nothing to announce")
+	}
+	// Get node, verify that it's secure for storing announces on.
+	N := s.getNode(node, "") // May not exist, probably prone to races
+	if N.IDNotSet() || !N.IsSecure() && !s.config.NoSecurity {
+		return ErrNoStoreOnInsecureNodes
 	}
 	_, err = s.query(node, "announce_peer", map[string]interface{}{
 		"implied_port": func() int {

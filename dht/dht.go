@@ -142,6 +142,8 @@ func (n *Node) IsSecure() bool {
 	if n.id.IsUnset() {
 		return false
 	}
+	// TODO (@onetruecathal): Exempt local peers from security
+	// check as per security extension recommendations
 	return NodeIdSecure(n.id.ByteString(), n.addr.IP())
 }
 
@@ -187,6 +189,7 @@ func (n *Node) DefinitelyGood() bool {
 	}
 	return true
 }
+
 func jitterDuration(average time.Duration, plusMinus time.Duration) time.Duration {
 	return average - plusMinus/2 + time.Duration(rand.Int63n(int64(plusMinus)))
 }

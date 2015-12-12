@@ -1,5 +1,7 @@
 package dht
 
+import "net"
+
 // A hook function for handling incoming KRPC messages.
 // Hooks can't pass errors back, so if error logging or
 // management within hooks is desired, consider passing
@@ -9,4 +11,4 @@ package dht
 // The outputs are:
 //  - Optional replacement Msg for ensuing use in default handlers
 //  - Bool indicating whether to skip default handlers
-type KRPCHook func(*DHTAddr, *Node, *Msg) (*Msg, bool)
+type KRPCHook func(*net.Addr, *Node, *Msg) (*Msg, bool)

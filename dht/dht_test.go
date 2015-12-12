@@ -126,7 +126,7 @@ func TestHook(t *testing.T) {
 		Addr:           "127.0.0.1:5679",
 		BootstrapNodes: []string{"127.0.0.1:5678"},
 		KRPCHooks: map[string]KRPCHook{
-			"ping": func(source *DHTAddr, node *Node, m *Msg) (newmsg *Msg, skiphandling bool) {
+			"ping": func(source *net.Addr, node *Node, m *Msg) (newmsg *Msg, skiphandling bool) {
 				hookCalled <- true
 				return nil, false
 			},

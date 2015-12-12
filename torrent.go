@@ -103,6 +103,10 @@ var (
 	piecePrioritiesNew    = expvar.NewInt("piecePrioritiesNew")
 )
 
+func (t *torrent) setDisplayName(dn string) {
+	t.displayName = dn
+}
+
 func (t *torrent) newConnPiecePriorities() []int {
 	_ret := t.connPiecePriorites.Get()
 	if _ret != nil {

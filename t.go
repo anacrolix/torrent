@@ -84,3 +84,11 @@ func (t Torrent) Seeding() bool {
 	defer t.cl.mu.Unlock()
 	return t.cl.seeding(t.torrent)
 }
+
+// Clobbers the torrent display name. The display name is used as the torrent
+// name if the metainfo is not available.
+func (t Torrent) SetDisplayName(dn string) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	t.torrent.setDisplayName(dn)
+}

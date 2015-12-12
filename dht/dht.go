@@ -35,15 +35,22 @@ type transactionKey struct {
 	T          string // The KRPC transaction ID.
 }
 
+// Returned when a caller sets ID manually but fails to set NoSecurity
+// configuration flag. Better to be explicit and make outcomes
+// predictable than implicitly disable one option when provided another.
+var ErrConflictingConfigNoSecNodeId = errors.New("Cannot manually set NodeId without also setting NoSecurity.")
+
 // ServerConfig allows to set up a  configuration of the `Server` instance
 // to be created with NewServer
 type ServerConfig struct {
-	Addr string // Listen address. Used if Conn is nil.
+	// Listen address. Used if Conn is nil.
+	Addr string
 	// To set NodeId manually. Caller MUST also set NoSecurity,
 	// and NodeId in this case is 20 bytes cast to string, not
 	// a hex or baseXX encoded ID.
 	NodeId string
-	Conn   net.PacketConn
+
+	Conn net.PacketConn
 	// Don't respond to queries from other nodes.
 	Passive bool
 	// DHT Bootstrap nodes
@@ -53,6 +60,7 @@ type ServerConfig struct {
 	// you're creating your own DHT and want to avoid accidental crossover, without
 	// spoofing a bootstrap node and filling your logs with connection errors.
 	NoBootstrap bool
+
 	// Disable the DHT security extension:
 	// http://www.libtorrent.org/dht_sec.html.
 	NoSecurity bool
@@ -61,11 +69,7 @@ type ServerConfig struct {
 	IPBlocklist iplist.Ranger
 	// Used to secure the server's ID. Defaults to the Conn's LocalAddr().
 	PublicIP net.IP
-	// Hook functions to be called when matching KRPC queries arrive.
-	// Hooks run prior to default KRPC handling, and may modify messages
-	// or indicate whether to skip default handling.
-	// Hooks can therefore replace, extend, or disable KRPC query handling
-	// in a Query-type specific way.
+	// Hooks for the server to call on various KRPC queries
 	KRPCHooks map[string]KRPCHook
 }
 

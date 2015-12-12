@@ -143,7 +143,7 @@ func TestHook(t *testing.T) {
 	assert.NoError(t, err)
 	defer tn.Close()
 	// Await response from hooked server
-	tn.SetResponseHandler(func(msg Msg) {
+	tn.SetResponseHandler(func(msg Msg, b bool) {
 		t.Log("TestHook: Sender received response from pinged hook server, so normal execution resumed.")
 	})
 	// Await signal that hook has been called.

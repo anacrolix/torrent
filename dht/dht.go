@@ -38,12 +38,26 @@ type transactionKey struct {
 // ServerConfig allows to set up a  configuration of the `Server` instance
 // to be created with NewServer
 type ServerConfig struct {
-	Addr string // Listen address. Used if Conn is nil.
+	// Listen address. Used if Conn is nil.
+	Addr string
+
+	// Set NodeId Manually. Caller must ensure that, if NodeId does
+	// not conform to DHT Security Extensions, that NoSecurity is
+	// also set.
+	// This should be given as a HEX string.
+	NodeId string
+
 	Conn net.PacketConn
 	// Don't respond to queries from other nodes.
 	Passive bool
 	// DHT Bootstrap nodes
 	BootstrapNodes []string
+	// Disable bootstrapping from global servers even if given no BootstrapNodes.
+	// This creates a solitary node that awaits other nodes; it's only useful if
+	// you're creating your own DHT and want to avoid accidental crossover, without
+	// spoofing a bootstrap node and filling your logs with connection errors.
+	NoGlobalBootstrap bool
+
 	// Disable the DHT security extension:
 	// http://www.libtorrent.org/dht_sec.html.
 	NoSecurity bool
@@ -52,6 +66,8 @@ type ServerConfig struct {
 	IPBlocklist iplist.Ranger
 	// Used to secure the server's ID. Defaults to the Conn's LocalAddr().
 	PublicIP net.IP
+	// Hooks for the server to call on various KRPC queries
+	KRPCHooks map[string]KRPCHook
 }
 
 // ServerStats instance is returned by Server.Stats() and stores Server metrics
@@ -112,7 +128,7 @@ func (nid *nodeID) ByteString() string {
 	return string(buf[:])
 }
 
-type node struct {
+type Node struct {
 	addr          dHTAddr
 	id            nodeID
 	announceToken string
@@ -122,18 +138,20 @@ type node struct {
 	lastSentQuery   time.Time
 }
 
-func (n *node) IsSecure() bool {
+func (n *Node) IsSecure() bool {
 	if n.id.IsUnset() {
 		return false
 	}
+	// TODO (@onetruecathal): Exempt local peers from security
+	// check as per security extension recommendations
 	return NodeIdSecure(n.id.ByteString(), n.addr.IP())
 }
 
-func (n *node) idString() string {
+func (n *Node) idString() string {
 	return n.id.ByteString()
 }
 
-func (n *node) SetIDFromBytes(b []byte) {
+func (n *Node) SetIDFromBytes(b []byte) {
 	if len(b) != 20 {
 		panic(b)
 	}
@@ -141,15 +159,15 @@ func (n *node) SetIDFromBytes(b []byte) {
 	n.id.set = true
 }
 
-func (n *node) SetIDFromString(s string) {
+func (n *Node) SetIDFromString(s string) {
 	n.SetIDFromBytes([]byte(s))
 }
 
-func (n *node) IDNotSet() bool {
+func (n *Node) IDNotSet() bool {
 	return n.id.i.Int64() == 0
 }
 
-func (n *node) NodeInfo() (ret NodeInfo) {
+func (n *Node) NodeInfo() (ret NodeInfo) {
 	ret.Addr = n.addr
 	if n := copy(ret.ID[:], n.idString()); n != 20 {
 		panic(n)
@@ -157,7 +175,7 @@ func (n *node) NodeInfo() (ret NodeInfo) {
 	return
 }
 
-func (n *node) DefinitelyGood() bool {
+func (n *Node) DefinitelyGood() bool {
 	if len(n.idString()) != 20 {
 		return false
 	}
@@ -171,6 +189,7 @@ func (n *node) DefinitelyGood() bool {
 	}
 	return true
 }
+
 func jitterDuration(average time.Duration, plusMinus time.Duration) time.Duration {
 	return average - plusMinus/2 + time.Duration(rand.Int63n(int64(plusMinus)))
 }

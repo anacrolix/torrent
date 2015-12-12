@@ -3,6 +3,7 @@ package dht
 import (
 	"crypto"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -33,11 +34,12 @@ type Server struct {
 	socket           net.PacketConn
 	transactions     map[transactionKey]*Transaction
 	transactionIDInt uint64
-	nodes            map[string]*node // Keyed by dHTAddr.String().
+	nodes            map[string]*Node // Keyed by dHTAddr.String().
 	mu               sync.Mutex
 	closed           chan struct{}
 	ipBlockList      iplist.Ranger
 	badNodes         *boom.BloomFilter
+	hooks            map[string]KRPCHook
 
 	numConfirmedAnnounces int
 	bootstrapNodes        []string
@@ -75,6 +77,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		config:      *c,
 		ipBlockList: c.IPBlocklist,
 		badNodes:    boom.NewBloomFilter(1000, 0.1),
+		hooks:       c.KRPCHooks,
 	}
 	if c.Conn != nil {
 		s.socket = c.Conn
@@ -85,6 +88,14 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		}
 	}
 	s.bootstrapNodes = c.BootstrapNodes
+	if c.NodeId != "" {
+		var rawID []byte
+		rawID, err = hex.DecodeString(c.NodeId)
+		if err != nil {
+			return
+		}
+		s.id = string(rawID)
+	}
 	err = s.init()
 	if err != nil {
 		return
@@ -225,12 +236,12 @@ func (s *Server) AddNode(ni NodeInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.nodes == nil {
-		s.nodes = make(map[string]*node)
+		s.nodes = make(map[string]*Node)
 	}
 	s.getNode(ni.Addr, string(ni.ID[:]))
 }
 
-func (s *Server) nodeByID(id string) *node {
+func (s *Server) nodeByID(id string) *Node {
 	for _, node := range s.nodes {
 		if node.idString() == id {
 			return node
@@ -240,10 +251,27 @@ func (s *Server) nodeByID(id string) *node {
 }
 
 func (s *Server) handleQuery(source dHTAddr, m Msg) {
+	var (
+		newmsg    *Msg
+		propagate bool
+	)
+	propagate = true // Sane default..
 	node := s.getNode(source, m.SenderID())
 	node.lastGotQuery = time.Now()
 	// Don't respond.
 	if s.config.Passive {
+		return
+	}
+	// Call any hooks that may apply
+	if hook, ok := s.hooks[m.Q]; ok {
+		sourceAddr := source.(net.Addr)
+		newmsg, propagate = hook(&sourceAddr, node, &m)
+		if newmsg != nil {
+			m = *newmsg
+		}
+	}
+	// Unless told not to by hook, proceed with normal handling.
+	if !propagate {
 		return
 	}
 	args := m.A
@@ -313,7 +341,7 @@ func (s *Server) reply(addr dHTAddr, t string, r Return) {
 
 // Returns a node struct for the addr. It is taken from the table or created
 // and possibly added if required and meets validity constraints.
-func (s *Server) getNode(addr dHTAddr, id string) (n *node) {
+func (s *Server) getNode(addr dHTAddr, id string) (n *Node) {
 	addrStr := addr.String()
 	n = s.nodes[addrStr]
 	if n != nil {
@@ -322,7 +350,7 @@ func (s *Server) getNode(addr dHTAddr, id string) (n *node) {
 		}
 		return
 	}
-	n = &node{
+	n = &Node{
 		addr: addr,
 	}
 	if len(id) == 20 {
@@ -331,6 +359,9 @@ func (s *Server) getNode(addr dHTAddr, id string) (n *node) {
 	if len(s.nodes) >= maxNodes {
 		return
 	}
+	// (@cathalgarvey) DHT Security is supposed to prevent insecure nodes from
+	// hosting data: not to exclude them from DHT routing entirely. Does
+	// this check exclude them entirely from the local routing table?
 	if !s.config.NoSecurity && !n.IsSecure() {
 		return
 	}
@@ -458,6 +489,11 @@ func (s *Server) announcePeer(node dHTAddr, infoHash string, port int, token str
 	if port == 0 && !impliedPort {
 		return errors.New("nothing to announce")
 	}
+	// Get node, verify that it's secure for storing announces on.
+	N := s.getNode(node, "") // May not exist, probably prone to races
+	if N.IDNotSet() || !N.IsSecure() && !s.config.NoSecurity {
+		return ErrNoStoreOnInsecureNodes
+	}
 	_, err = s.query(node, "announce_peer", map[string]interface{}{
 		"implied_port": func() int {
 			if impliedPort {
@@ -530,7 +566,7 @@ func (s *Server) addRootNodes() error {
 			log.Printf("dht root node is in the blocklist: %s", addr.IP)
 			continue
 		}
-		s.nodes[addr.String()] = &node{
+		s.nodes[addr.String()] = &Node{
 			addr: newDHTAddr(addr),
 		}
 	}
@@ -541,7 +577,7 @@ func (s *Server) addRootNodes() error {
 func (s *Server) bootstrap() (err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.nodes) == 0 {
+	if len(s.nodes) == 0 && !s.config.NoGlobalBootstrap {
 		err = s.addRootNodes()
 	}
 	if err != nil {
@@ -656,7 +692,7 @@ func (s *Server) setDefaults() (err error) {
 		SecureNodeId(id[:], publicIP)
 		s.id = string(id[:])
 	}
-	s.nodes = make(map[string]*node, maxNodes)
+	s.nodes = make(map[string]*Node, maxNodes)
 	return
 }
 
@@ -674,13 +710,13 @@ func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *Transaction, err er
 	return
 }
 
-func (s *Server) closestGoodNodes(k int, targetID string) []*node {
-	return s.closestNodes(k, nodeIDFromString(targetID), func(n *node) bool { return n.DefinitelyGood() })
+func (s *Server) closestGoodNodes(k int, targetID string) []*Node {
+	return s.closestNodes(k, nodeIDFromString(targetID), func(n *Node) bool { return n.DefinitelyGood() })
 }
 
-func (s *Server) closestNodes(k int, target nodeID, filter func(*node) bool) []*node {
+func (s *Server) closestNodes(k int, target nodeID, filter func(*Node) bool) []*Node {
 	sel := newKClosestNodesSelector(k, target)
-	idNodes := make(map[string]*node, len(s.nodes))
+	idNodes := make(map[string]*Node, len(s.nodes))
 	for _, node := range s.nodes {
 		if !filter(node) {
 			continue
@@ -689,7 +725,7 @@ func (s *Server) closestNodes(k int, target nodeID, filter func(*node) bool) []*
 		idNodes[node.idString()] = node
 	}
 	ids := sel.IDs()
-	ret := make([]*node, 0, len(ids))
+	ret := make([]*Node, 0, len(ids))
 	for _, id := range ids {
 		ret = append(ret, idNodes[id.ByteString()])
 	}

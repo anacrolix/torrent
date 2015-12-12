@@ -71,10 +71,14 @@ func (t Torrent) BytesCompleted() int64 {
 	return t.bytesCompleted()
 }
 
+// The subscription emits as (int) the index of pieces as their state changes.
+// A state change is when the PieceState for a piece alters in value.
 func (t Torrent) SubscribePieceStateChanges() *pubsub.Subscription {
 	return t.torrent.pieceStateChanges.Subscribe()
 }
 
+// Returns true if the torrent is currently being seeded. This occurs when the
+// client is willing to upload without wanting anything in return.
 func (t Torrent) Seeding() bool {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()

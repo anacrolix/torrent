@@ -128,7 +128,7 @@ func TestHook(t *testing.T) {
 		KRPCHooks: map[string]KRPCHook{
 			"ping": func(source *net.Addr, node *Node, m *Msg) (newmsg *Msg, skiphandling bool) {
 				hookCalled <- true
-				return nil, false
+				return nil, true
 			},
 		},
 	})
@@ -248,7 +248,7 @@ func TestServerCustomNodeId(t *testing.T) {
 	// different Ids? Generate custom ids for local IPs and use
 	// mini-Id?
 	s, err := NewServer(&ServerConfig{
-		NodeId:            customId, // string(id),
+		NodeId:            customId,
 		NoGlobalBootstrap: true,
 	})
 	require.NoError(t, err)

@@ -252,9 +252,10 @@ func (s *Server) nodeByID(id string) *Node {
 
 func (s *Server) handleQuery(source dHTAddr, m Msg) {
 	var (
-		newmsg *Msg
-		skip   bool
+		newmsg    *Msg
+		propagate bool
 	)
+	propagate = true // Sane default..
 	node := s.getNode(source, m.SenderID())
 	node.lastGotQuery = time.Now()
 	// Don't respond.
@@ -264,13 +265,13 @@ func (s *Server) handleQuery(source dHTAddr, m Msg) {
 	// Call any hooks that may apply
 	if hook, ok := s.hooks[m.Q]; ok {
 		sourceAddr := source.(net.Addr)
-		newmsg, skip = hook(&sourceAddr, node, &m)
+		newmsg, propagate = hook(&sourceAddr, node, &m)
 		if newmsg != nil {
 			m = *newmsg
 		}
 	}
 	// Unless told not to by hook, proceed with normal handling.
-	if skip {
+	if !propagate {
 		return
 	}
 	args := m.A

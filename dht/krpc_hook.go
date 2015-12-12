@@ -10,5 +10,5 @@ import "net"
 // The arguments are the incoming DHTAddr and Msg.
 // The outputs are:
 //  - Optional replacement Msg for ensuing use in default handlers
-//  - Bool indicating whether to skip default handlers
+//  - Bool indicating whether to propagate msg to default handlers.
 type KRPCHook func(*net.Addr, *Node, *Msg) (*Msg, bool)

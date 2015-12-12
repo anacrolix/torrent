@@ -35,11 +35,6 @@ type transactionKey struct {
 	T          string // The KRPC transaction ID.
 }
 
-// Returned when a caller sets ID manually but fails to set NoSecurity
-// configuration flag. Better to be explicit and make outcomes
-// predictable than implicitly disable one option when provided another.
-var ErrConflictingConfigNoSecNodeId = errors.New("Cannot manually set NodeId without also setting NoSecurity.")
-
 // ServerConfig allows to set up a  configuration of the `Server` instance
 // to be created with NewServer
 type ServerConfig struct {
@@ -49,6 +44,7 @@ type ServerConfig struct {
 	// Set NodeId Manually. Caller must ensure that, if NodeId does
 	// not conform to DHT Security Extensions, that NoSecurity is
 	// also set.
+	// This should be given as a HEX string.
 	NodeId string
 
 	Conn net.PacketConn

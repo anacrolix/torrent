@@ -3,6 +3,7 @@ package dht
 import (
 	"crypto"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -88,10 +89,12 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 	}
 	s.bootstrapNodes = c.BootstrapNodes
 	if c.NodeId != "" {
-		if !c.NoSecurity {
-			return nil, ErrConflictingConfigNoSecNodeId
+		var rawID []byte
+		rawID, err = hex.DecodeString(c.NodeId)
+		if err != nil {
+			return
 		}
-		s.id = c.NodeId
+		s.id = string(rawID)
 	}
 	err = s.init()
 	if err != nil {
@@ -355,6 +358,9 @@ func (s *Server) getNode(addr dHTAddr, id string) (n *Node) {
 	if len(s.nodes) >= maxNodes {
 		return
 	}
+	// (@cathalgarvey) DHT Security is supposed to prevent insecure nodes from
+	// hosting torrents: not to exclude them from DHT routing entirely. Does
+	// this check exclude them entirely from the routing table?
 	if !s.config.NoSecurity && !n.IsSecure() {
 		return
 	}

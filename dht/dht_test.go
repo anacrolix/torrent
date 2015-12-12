@@ -230,12 +230,30 @@ func TestDHTSec(t *testing.T) {
 }
 
 func TestServerDefaultNodeIdSecure(t *testing.T) {
-	s, err := NewServer(nil)
+	s, err := NewServer(&ServerConfig{
+		NoGlobalBootstrap: true,
+	})
 	require.NoError(t, err)
 	defer s.Close()
 	if !NodeIdSecure(s.ID(), missinggo.AddrIP(s.Addr())) {
 		t.Fatal("not secure")
 	}
+}
+
+func TestServerCustomNodeId(t *testing.T) {
+	customId := "5a3ce1c14e7a08645677bbd1cfe7d8f956d53256"
+	id, err := hex.DecodeString(customId)
+	assert.NoError(t, err)
+	// How to test custom *secure* Id when tester computers will have
+	// different Ids? Generate custom ids for local IPs and use
+	// mini-Id?
+	s, err := NewServer(&ServerConfig{
+		NodeId:            customId, // string(id),
+		NoGlobalBootstrap: true,
+	})
+	require.NoError(t, err)
+	defer s.Close()
+	assert.Equal(t, string(id), s.ID())
 }
 
 func TestAnnounceTimeout(t *testing.T) {

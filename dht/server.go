@@ -108,18 +108,16 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 			panic(err)
 		}
 	}()
-	if !s.config.NoBootstrap {
-		go func() {
-			err := s.bootstrap()
-			if err != nil {
-				select {
-				case <-s.closed:
-				default:
-					log.Printf("error bootstrapping DHT: %s", err)
-				}
+	go func() {
+		err := s.bootstrap()
+		if err != nil {
+			select {
+			case <-s.closed:
+			default:
+				log.Printf("error bootstrapping DHT: %s", err)
 			}
-		}()
-	}
+		}
+	}()
 	return
 }
 
@@ -566,7 +564,7 @@ func (s *Server) addRootNodes() error {
 func (s *Server) bootstrap() (err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.nodes) == 0 {
+	if len(s.nodes) == 0 && !s.config.NoGlobalBootstrap {
 		err = s.addRootNodes()
 	}
 	if err != nil {

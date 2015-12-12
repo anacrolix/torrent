@@ -45,9 +45,10 @@ var ErrConflictingConfigNoSecNodeId = errors.New("Cannot manually set NodeId wit
 type ServerConfig struct {
 	// Listen address. Used if Conn is nil.
 	Addr string
-	// To set NodeId manually. Caller MUST also set NoSecurity,
-	// and NodeId in this case is 20 bytes cast to string, not
-	// a hex or baseXX encoded ID.
+
+	// Set NodeId Manually. Caller must ensure that, if NodeId does
+	// not conform to DHT Security Extensions, that NoSecurity is
+	// also set.
 	NodeId string
 
 	Conn net.PacketConn
@@ -59,7 +60,7 @@ type ServerConfig struct {
 	// This creates a solitary node that awaits other nodes; it's only useful if
 	// you're creating your own DHT and want to avoid accidental crossover, without
 	// spoofing a bootstrap node and filling your logs with connection errors.
-	NoBootstrap bool
+	NoGlobalBootstrap bool
 
 	// Disable the DHT security extension:
 	// http://www.libtorrent.org/dht_sec.html.

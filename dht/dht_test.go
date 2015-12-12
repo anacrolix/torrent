@@ -115,8 +115,8 @@ func TestDHTDefaultConfig(t *testing.T) {
 func TestHook(t *testing.T) {
 	t.Log("TestHook: Starting with Ping intercept/passthrough")
 	srv, err := NewServer(&ServerConfig{
-		Addr:        "127.0.0.1:5678",
-		NoBootstrap: true,
+		Addr:              "127.0.0.1:5678",
+		NoGlobalBootstrap: true,
 	})
 	require.NoError(t, err)
 	defer srv.Close()
@@ -164,8 +164,8 @@ func TestHook(t *testing.T) {
 
 func TestPing(t *testing.T) {
 	srv, err := NewServer(&ServerConfig{
-		Addr:        "127.0.0.1:5680",
-		NoBootstrap: true,
+		Addr:              "127.0.0.1:5680",
+		NoGlobalBootstrap: true,
 	})
 	require.NoError(t, err)
 	defer srv.Close()

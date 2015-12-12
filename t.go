@@ -24,21 +24,21 @@ func (t Torrent) InfoHash() InfoHash {
 // Closed when the info (.Info()) for the torrent has become available. Using
 // features of Torrent that require the info before it is available will have
 // undefined behaviour.
-func (t *Torrent) GotInfo() <-chan struct{} {
+func (t Torrent) GotInfo() <-chan struct{} {
 	return t.torrent.gotMetainfo
 }
 
 // Returns the metainfo, or nil if it's not yet available.
-func (t *Torrent) Info() *metainfo.Info {
+func (t Torrent) Info() *metainfo.Info {
 	return t.torrent.Info
 }
 
 // Returns a Reader bound to the torrent's data. All read calls block until
 // the data requested is actually available. Priorities are set to ensure the
 // data requested will be downloaded as soon as possible.
-func (t *Torrent) NewReader() (ret *Reader) {
+func (t Torrent) NewReader() (ret *Reader) {
 	ret = &Reader{
-		t:         t,
+		t:         &t,
 		readahead: 5 * 1024 * 1024,
 	}
 	return
@@ -47,7 +47,7 @@ func (t *Torrent) NewReader() (ret *Reader) {
 // Returns the state of pieces of the torrent. They are grouped into runs of
 // same state. The sum of the state run lengths is the number of pieces
 // in the torrent.
-func (t *Torrent) PieceStateRuns() []PieceStateRun {
+func (t Torrent) PieceStateRuns() []PieceStateRun {
 	t.stateMu.Lock()
 	defer t.stateMu.Unlock()
 	return t.torrent.pieceStateRuns()

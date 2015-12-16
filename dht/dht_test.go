@@ -107,23 +107,23 @@ func TestDHTDefaultConfig(t *testing.T) {
 }
 
 func TestPing(t *testing.T) {
-	srv, err := NewServer(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	srv, err := NewServer(&ServerConfig{
+		Addr:               "127.0.0.1:5680",
+		NoDefaultBootstrap: true,
+	})
+	require.NoError(t, err)
 	defer srv.Close()
-	srv0, err := NewServer(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	srv0, err := NewServer(&ServerConfig{
+		Addr:           "127.0.0.1:5681",
+		BootstrapNodes: []string{"127.0.0.1:5680"},
+	})
+	require.NoError(t, err)
 	defer srv0.Close()
 	tn, err := srv.Ping(&net.UDPAddr{
 		IP:   []byte{127, 0, 0, 1},
 		Port: srv0.Addr().(*net.UDPAddr).Port,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer tn.Close()
 	ok := make(chan bool)
 	tn.SetResponseHandler(func(msg Msg, msgOk bool) {
@@ -159,9 +159,7 @@ func TestDHTSec(t *testing.T) {
 	} {
 		ip := net.ParseIP(case_.ipStr)
 		id, err := hex.DecodeString(case_.nodeIDHex)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		secure := NodeIdSecure(string(id), ip)
 		if secure != case_.valid {
 			t.Fatalf("case failed: %v", case_)

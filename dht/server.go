@@ -541,7 +541,7 @@ func (s *Server) addRootNodes() error {
 func (s *Server) bootstrap() (err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.nodes) == 0 {
+	if len(s.nodes) == 0 && !s.config.NoDefaultBootstrap {
 		err = s.addRootNodes()
 	}
 	if err != nil {

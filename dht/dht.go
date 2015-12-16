@@ -38,12 +38,19 @@ type transactionKey struct {
 // ServerConfig allows to set up a  configuration of the `Server` instance
 // to be created with NewServer
 type ServerConfig struct {
-	Addr string // Listen address. Used if Conn is nil.
+	// Listen address. Used if Conn is nil.
+	Addr string
 	Conn net.PacketConn
 	// Don't respond to queries from other nodes.
 	Passive bool
 	// DHT Bootstrap nodes
 	BootstrapNodes []string
+	// Disable bootstrapping from global servers even if given no BootstrapNodes.
+	// This creates a solitary node that awaits other nodes; it's only useful if
+	// you're creating your own DHT and want to avoid accidental crossover, without
+	// spoofing a bootstrap node and filling your logs with connection errors.
+	NoDefaultBootstrap bool
+
 	// Disable the DHT security extension:
 	// http://www.libtorrent.org/dht_sec.html.
 	NoSecurity bool
@@ -171,6 +178,7 @@ func (n *node) DefinitelyGood() bool {
 	}
 	return true
 }
+
 func jitterDuration(average time.Duration, plusMinus time.Duration) time.Duration {
 	return average - plusMinus/2 + time.Duration(rand.Int63n(int64(plusMinus)))
 }

@@ -22,21 +22,15 @@ func TestMarshalCompactNodeInfo(t *testing.T) {
 		ID: [20]byte{'a', 'b', 'c'},
 	}
 	addr, err := net.ResolveUDPAddr("udp4", "1.2.3.4:5")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	cni.Addr = newDHTAddr(addr)
 	var b [CompactIPv4NodeInfoLen]byte
-	cni.PutCompact(b[:])
-	if err != nil {
-		t.Fatal(err)
-	}
+	err = cni.PutCompact(b[:])
+	require.NoError(t, err)
 	var bb [26]byte
 	copy(bb[:], []byte("abc"))
 	copy(bb[20:], []byte("\x01\x02\x03\x04\x00\x05"))
-	if b != bb {
-		t.FailNow()
-	}
+	assert.EqualValues(t, bb, b)
 }
 
 func recoverPanicOrDie(t *testing.T, f func()) {
@@ -108,9 +102,7 @@ func TestClosestNodes(t *testing.T) {
 
 func TestDHTDefaultConfig(t *testing.T) {
 	s, err := NewServer(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 	s.Close()
 }
 

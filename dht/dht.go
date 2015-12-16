@@ -40,6 +40,12 @@ type transactionKey struct {
 type ServerConfig struct {
 	// Listen address. Used if Conn is nil.
 	Addr string
+
+	// Set NodeId Manually. Caller must ensure that, if NodeId does not
+	// conform to DHT Security Extensions, that NoSecurity is also set. This
+	// should be given as a HEX string.
+	NodeIdHex string
+
 	Conn net.PacketConn
 	// Don't respond to queries from other nodes.
 	Passive bool

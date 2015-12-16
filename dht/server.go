@@ -3,6 +3,7 @@ package dht
 import (
 	"crypto"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -85,6 +86,14 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		}
 	}
 	s.bootstrapNodes = c.BootstrapNodes
+	if c.NodeIdHex != "" {
+		var rawID []byte
+		rawID, err = hex.DecodeString(c.NodeIdHex)
+		if err != nil {
+			return
+		}
+		s.id = string(rawID)
+	}
 	err = s.init()
 	if err != nil {
 		return

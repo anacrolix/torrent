@@ -174,10 +174,10 @@ func TestDHTSec(t *testing.T) {
 }
 
 func TestServerDefaultNodeIdSecure(t *testing.T) {
-	s, err := NewServer(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s, err := NewServer(&ServerConfig{
+		NoDefaultBootstrap: true,
+	})
+	require.NoError(t, err)
 	defer s.Close()
 	if !NodeIdSecure(s.ID(), missinggo.AddrIP(s.Addr())) {
 		t.Fatal("not secure")
@@ -201,6 +201,9 @@ func TestServerCustomNodeId(t *testing.T) {
 }
 
 func TestAnnounceTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
 	s, err := NewServer(&ServerConfig{
 		BootstrapNodes: []string{"1.2.3.4:5"},
 	})

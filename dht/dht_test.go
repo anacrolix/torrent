@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/anacrolix/missinggo"
 	"github.com/stretchr/testify/assert"
@@ -216,4 +217,54 @@ func TestAnnounceTimeout(t *testing.T) {
 
 func TestEqualPointers(t *testing.T) {
 	assert.EqualValues(t, &Msg{R: &Return{}}, &Msg{R: &Return{}})
+}
+
+func TestHook(t *testing.T) {
+	t.Log("TestHook: Starting with Ping intercept/passthrough")
+	srv, err := NewServer(&ServerConfig{
+		Addr:               "127.0.0.1:5678",
+		NoDefaultBootstrap: true,
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	// Establish server with a hook attached to "ping"
+	hookCalled := make(chan bool)
+	srv0, err := NewServer(&ServerConfig{
+		Addr:           "127.0.0.1:5679",
+		BootstrapNodes: []string{"127.0.0.1:5678"},
+		OnQuery: func(m *Msg, addr net.Addr) bool {
+			if m.Q == "ping" {
+				hookCalled <- true
+			}
+			return true
+		},
+	})
+	require.NoError(t, err)
+	defer srv0.Close()
+	// Ping srv0 from srv to trigger hook. Should also receive a response.
+	t.Log("TestHook: Servers created, hook for ping established. Calling Ping.")
+	tn, err := srv.Ping(&net.UDPAddr{
+		IP:   []byte{127, 0, 0, 1},
+		Port: srv0.Addr().(*net.UDPAddr).Port,
+	})
+	assert.NoError(t, err)
+	defer tn.Close()
+	// Await response from hooked server
+	tn.SetResponseHandler(func(msg Msg, b bool) {
+		t.Log("TestHook: Sender received response from pinged hook server, so normal execution resumed.")
+	})
+	// Await signal that hook has been called.
+	select {
+	case <-hookCalled:
+		{
+			// Success, hook was triggered. Todo: Ensure that "ok" channel
+			// receives, also, indicating normal handling proceeded also.
+			t.Log("TestHook: Received ping, hook called and returned to normal execution!")
+			return
+		}
+	case <-time.After(time.Second * 1):
+		{
+			t.Error("Failed to see evidence of ping hook being called after 2 seconds.")
+		}
+	}
 }

@@ -251,6 +251,12 @@ func (s *Server) nodeByID(id string) *node {
 func (s *Server) handleQuery(source dHTAddr, m Msg) {
 	node := s.getNode(source, m.SenderID())
 	node.lastGotQuery = time.Now()
+	if s.config.OnQuery != nil {
+		propagate := s.config.OnQuery(&m, source.UDPAddr())
+		if !propagate {
+			return
+		}
+	}
 	// Don't respond.
 	if s.config.Passive {
 		return
@@ -340,6 +346,7 @@ func (s *Server) getNode(addr dHTAddr, id string) (n *node) {
 	if len(s.nodes) >= maxNodes {
 		return
 	}
+	// Exclude insecure nodes from the node table.
 	if !s.config.NoSecurity && !n.IsSecure() {
 		return
 	}

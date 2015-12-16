@@ -65,6 +65,8 @@ type ServerConfig struct {
 	IPBlocklist iplist.Ranger
 	// Used to secure the server's ID. Defaults to the Conn's LocalAddr().
 	PublicIP net.IP
+
+	OnQuery func(*Msg, net.Addr) bool
 }
 
 // ServerStats instance is returned by Server.Stats() and stores Server metrics
@@ -139,6 +141,8 @@ func (n *node) IsSecure() bool {
 	if n.id.IsUnset() {
 		return false
 	}
+	// TODO (@onetruecathal): Exempt local peers from security
+	// check as per security extension recommendations
 	return NodeIdSecure(n.id.ByteString(), n.addr.IP())
 }
 

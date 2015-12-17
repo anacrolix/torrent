@@ -8,8 +8,9 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/sync"
-	"github.com/anacrolix/torrent/logonce"
 	"github.com/willf/bloom"
+
+	"github.com/anacrolix/torrent/logonce"
 )
 
 // Maintains state for an ongoing Announce operation. An Announce is started
@@ -141,8 +142,18 @@ func (me *Announce) closingCh() chan struct{} {
 	return me.stop
 }
 
-func (me *Announce) announcePeer(to dHTAddr, token string) {
+// Announce to a peer, if appropriate.
+func (me *Announce) maybeAnnouncePeer(to dHTAddr, token, peerId string) {
 	me.server.mu.Lock()
+	defer me.server.mu.Unlock()
+	if !me.server.config.NoSecurity {
+		if len(peerId) != 20 {
+			return
+		}
+		if !NodeIdSecure(peerId, to.IP()) {
+			return
+		}
+	}
 	err := me.server.announcePeer(to, me.infoHash, me.announcePort, token, me.announcePortImplied)
 	me.server.mu.Unlock()
 	if err != nil {
@@ -185,9 +196,7 @@ func (me *Announce) getPeers(addr dHTAddr) error {
 				}
 			}
 
-			if at := m.R.Token; at != "" {
-				me.announcePeer(addr, at)
-			}
+			me.maybeAnnouncePeer(addr, m.R.Token, m.SenderID())
 		}
 
 		me.mu.Lock()

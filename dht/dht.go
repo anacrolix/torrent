@@ -139,8 +139,6 @@ func (n *node) IsSecure() bool {
 	if n.id.IsUnset() {
 		return false
 	}
-	// TODO (@onetruecathal): Exempt local peers from security
-	// check as per security extension recommendations
 	return NodeIdSecure(n.id.ByteString(), n.addr.IP())
 }
 

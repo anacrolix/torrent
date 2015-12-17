@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,19 +32,22 @@ func TestDHTSec(t *testing.T) {
 		{"84.124.73.14", "1b0321dd1bb1fe518101ceef99462b947a01fe01", true},
 		// spec[4] with the 3rd last bit changed. Not valid.
 		{"43.213.53.83", "e56f6cbf5b7c4be0237986d5243b87aa6d51303e", false},
+		// Because class A network.
+		{"10.213.53.83", "e56f6cbf5b7c4be0237986d5243b87aa6d51305a", true},
+		// Because not class A, and id[0]&3 does not match.
+		{"12.213.53.83", "e56f6cbf5b7c4be0237986d5243b87aa6d51305a", false},
+		// Because class C.
+		{"192.168.53.83", "e56f6cbf5b7c4be0237986d5243b87aa6d51305a", true},
 	} {
 		ip := net.ParseIP(case_.ipStr)
 		id, err := hex.DecodeString(case_.nodeIDHex)
 		require.NoError(t, err)
 		secure := NodeIdSecure(string(id), ip)
-		if secure != case_.valid {
-			t.Fatalf("case failed: %v", case_)
-		}
+		assert.Equal(t, case_.valid, secure, "%v", case_)
 		if !secure {
+			// It's not secure, so secure it in place and then check it again.
 			SecureNodeId(id, ip)
-			if !NodeIdSecure(string(id), ip) {
-				t.Fatal("failed to secure node id")
-			}
+			assert.True(t, NodeIdSecure(string(id), ip), "%v", case_)
 		}
 	}
 }

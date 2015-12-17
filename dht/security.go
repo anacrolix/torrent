@@ -43,6 +43,9 @@ func SecureNodeId(id []byte, ip net.IP) {
 // Returns whether the node ID is considered secure. The id is the 20 raw
 // bytes. http://www.libtorrent.org/dht_sec.html
 func NodeIdSecure(id string, ip net.IP) bool {
+	if isLocalNetwork(ip) {
+		return true
+	}
 	if len(id) != 20 {
 		panic(fmt.Sprintf("%q", id))
 	}
@@ -60,4 +63,44 @@ func NodeIdSecure(id string, ip net.IP) bool {
 		return false
 	}
 	return true
+}
+
+var (
+	classA, classB, classC *net.IPNet
+)
+
+func mustParseCIDRIPNet(s string) *net.IPNet {
+	_, ret, err := net.ParseCIDR(s)
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
+func init() {
+	classA = mustParseCIDRIPNet("10.0.0.0/8")
+	classB = mustParseCIDRIPNet("172.16.0.0/12")
+	classC = mustParseCIDRIPNet("192.168.0.0/16")
+}
+
+// Per http://www.libtorrent.org/dht_sec.html#enforcement, the IP is
+// considered a local network address and should be exempted from node ID
+// verification.
+func isLocalNetwork(ip net.IP) bool {
+	if classA.Contains(ip) {
+		return true
+	}
+	if classB.Contains(ip) {
+		return true
+	}
+	if classC.Contains(ip) {
+		return true
+	}
+	if ip.IsLinkLocalUnicast() {
+		return true
+	}
+	if ip.IsLoopback() {
+		return true
+	}
+	return false
 }

@@ -155,7 +155,6 @@ func (me *Announce) maybeAnnouncePeer(to dHTAddr, token, peerId string) {
 		}
 	}
 	err := me.server.announcePeer(to, me.infoHash, me.announcePort, token, me.announcePortImplied)
-	me.server.mu.Unlock()
 	if err != nil {
 		logonce.Stderr.Printf("error announcing peer: %s", err)
 	}

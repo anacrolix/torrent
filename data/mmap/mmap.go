@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"launchpad.net/gommap"
+	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mmap_span"
@@ -64,8 +64,10 @@ func TorrentData(md *metainfo.Info, location string) (ret *torrentData, err erro
 				// Can't mmap() regions with length 0.
 				return
 			}
-			var mMap gommap.MMap
-			mMap, err = gommap.MapRegion(file.Fd(), 0, miFile.Length, gommap.PROT_READ|gommap.PROT_WRITE, gommap.MAP_SHARED)
+			var mMap mmap.MMap
+			mMap, err = mmap.MapRegion(file,
+				int(miFile.Length), // Probably not great on <64 bit systems.
+				mmap.RDWR, 0, 0)
 			if err != nil {
 				err = fmt.Errorf("error mapping file %q, length %d: %s", file.Name(), miFile.Length, err)
 				return

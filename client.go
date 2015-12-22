@@ -1994,7 +1994,7 @@ nextURL:
 		}
 		tr, err := tracker.New(url)
 		if err != nil {
-			log.Printf("error creating tracker client for %q: %s", url, err)
+			// log.Printf("error creating tracker client for %q: %s", url, err)
 			continue
 		}
 		tier = append(tier, tr)

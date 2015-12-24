@@ -14,14 +14,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bradfitz/iter"
+
 	"github.com/anacrolix/torrent/data/pieceStore/dataBackend"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
 type store struct {
 	db dataBackend.I
-	// Limit backend requests.
-	requestPool chan struct{}
 
 	mu sync.Mutex
 	// The cached completion state for pieces.
@@ -46,8 +46,7 @@ func (me *store) OpenTorrentData(info *metainfo.Info) *data {
 
 func New(db dataBackend.I) *store {
 	s := &store{
-		db:          db,
-		requestPool: make(chan struct{}, 5),
+		db: db,
 	}
 	return s
 }
@@ -111,10 +110,6 @@ func (me *store) pieceComplete(p metainfo.Piece) bool {
 	if !me.lastError.IsZero() && time.Since(me.lastError) < time.Second {
 		return false
 	}
-	me.requestPool <- struct{}{}
-	defer func() {
-		<-me.requestPool
-	}()
 	length, err := me.db.GetLength(me.completedPiecePath(p))
 	if err == dataBackend.ErrNotFound {
 		me.setCompletion(p, false)
@@ -138,10 +133,6 @@ func (me *store) pieceWriteAt(p metainfo.Piece, b []byte, off int64) (n int, err
 		err = errors.New("already have piece")
 		return
 	}
-	me.requestPool <- struct{}{}
-	defer func() {
-		<-me.requestPool
-	}()
 	f, err := me.db.Open(me.incompletePiecePath(p), os.O_WRONLY|os.O_CREATE)
 	if err != nil {
 		err = fmt.Errorf("error opening %q: %s", me.incompletePiecePath(p), err)
@@ -161,26 +152,6 @@ func (me *store) pieceWriteAt(p metainfo.Piece, b []byte, off int64) (n int, err
 	return
 }
 
-// Wraps a Closer, releases a slot from a channel pool the first time Close is
-// called.
-type poolCloser struct {
-	mu       sync.Mutex
-	released bool
-	pool     <-chan struct{}
-	io.Closer
-}
-
-func (me *poolCloser) Close() (err error) {
-	err = me.Closer.Close()
-	me.mu.Lock()
-	if !me.released {
-		<-me.pool
-		me.released = true
-	}
-	me.mu.Unlock()
-	return
-}
-
 func (me *store) forgetCompletions() {
 	me.mu.Lock()
 	me.completion = nil
@@ -188,7 +159,6 @@ func (me *store) forgetCompletions() {
 }
 
 func (me *store) getPieceRange(p metainfo.Piece, off, n int64) (ret io.ReadCloser, err error) {
-	me.requestPool <- struct{}{}
 	rc, err := me.db.OpenSection(me.completedPiecePath(p), off, n)
 	if err == dataBackend.ErrNotFound {
 		if me.isComplete(p) {
@@ -198,26 +168,15 @@ func (me *store) getPieceRange(p metainfo.Piece, off, n int64) (ret io.ReadClose
 		rc, err = me.db.OpenSection(me.incompletePiecePath(p), off, n)
 	}
 	if err == dataBackend.ErrNotFound {
-		<-me.requestPool
 		err = io.ErrUnexpectedEOF
 		return
 	}
 	if err != nil {
-		<-me.requestPool
 		return
 	}
 	// Wrap up the response body so that the request slot is released when the
 	// response body is closed.
-	ret = struct {
-		io.Reader
-		io.Closer
-	}{
-		rc,
-		&poolCloser{
-			pool:   me.requestPool,
-			Closer: rc,
-		},
-	}
+	ret = rc
 	return
 }
 
@@ -235,10 +194,6 @@ func (me *store) pieceReadAt(p metainfo.Piece, b []byte, off int64) (n int, err 
 }
 
 func (me *store) removePath(path string) (err error) {
-	me.requestPool <- struct{}{}
-	defer func() {
-		<-me.requestPool
-	}()
 	err = me.db.Delete(path)
 	return
 }
@@ -253,12 +208,6 @@ func (me *store) deleteCompleted(p metainfo.Piece) {
 }
 
 func (me *store) hashCopyFile(from, to string, n int64) (hash []byte, err error) {
-	// Yes, 2 requests occur here simultaneously, but we're not trying to be
-	// pedantic.
-	me.requestPool <- struct{}{}
-	defer func() {
-		<-me.requestPool
-	}()
 	src, err := me.db.OpenSection(from, 0, n)
 	if err != nil {
 		return

@@ -40,8 +40,12 @@ func (me *store) incompletePiecePath(p metainfo.Piece) string {
 		hex.EncodeToString(p.Hash()))
 }
 
-func (me *store) OpenTorrentData(info *metainfo.Info) *data {
-	return &data{info, me}
+func (me *store) OpenTorrentData(info *metainfo.Info) (ret *data) {
+	ret = &data{info, me}
+	for i := range iter.N(info.NumPieces()) {
+		go ret.PieceComplete(i)
+	}
+	return
 }
 
 func New(db dataBackend.I) *store {

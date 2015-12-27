@@ -50,7 +50,7 @@ type node struct {
 	path     string
 	metadata *metainfo.Info
 	FS       *TorrentFS
-	t        torrent.Torrent
+	t        torrent.Download
 }
 
 type fileNode struct {
@@ -69,7 +69,7 @@ func (n *node) fsPath() string {
 	return "/" + n.metadata.Name + "/" + n.path
 }
 
-func blockingRead(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int64, p []byte) (n int, err error) {
+func blockingRead(ctx context.Context, fs *TorrentFS, t torrent.Download, off int64, p []byte) (n int, err error) {
 	fs.mu.Lock()
 	fs.blockedReads++
 	fs.event.Broadcast()
@@ -101,7 +101,7 @@ func blockingRead(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int
 	return
 }
 
-func readFull(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int64, p []byte) (n int, err error) {
+func readFull(ctx context.Context, fs *TorrentFS, t torrent.Download, off int64, p []byte) (n int, err error) {
 	for len(p) != 0 {
 		var nn int
 		nn, err = blockingRead(ctx, fs, t, off, p)
@@ -225,7 +225,7 @@ func (dn dirNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 func (me rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, err error) {
 	for _, t := range me.fs.Client.Torrents() {
 		info := t.Info()
-		if t.Name() != name || info == nil {
+		if t.Info().Name != name || info == nil {
 			continue
 		}
 		__node := node{

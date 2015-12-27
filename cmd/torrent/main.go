@@ -36,7 +36,7 @@ func resolvedPeerAddrs(ss []string) (ret []torrent.Peer, err error) {
 	return
 }
 
-func torrentBar(t torrent.Torrent) {
+func torrentBar(t torrent.Download) {
 	bar := uiprogress.AddBar(1)
 	bar.AppendCompleted()
 	bar.AppendFunc(func(*uiprogress.Bar) (ret string) {
@@ -54,7 +54,7 @@ func torrentBar(t torrent.Torrent) {
 		}
 	})
 	bar.PrependFunc(func(*uiprogress.Bar) string {
-		return t.Name()
+		return t.Info().Name
 	})
 	go func() {
 		<-t.GotInfo()
@@ -69,7 +69,7 @@ func torrentBar(t torrent.Torrent) {
 
 func addTorrents(client *torrent.Client) {
 	for _, arg := range opts.Torrent {
-		t := func() torrent.Torrent {
+		t := func() torrent.Download {
 			if strings.HasPrefix(arg, "magnet:") {
 				t, err := client.AddMagnet(arg)
 				if err != nil {

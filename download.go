@@ -22,4 +22,5 @@ type Download interface {
 	AddPeers(pp []Peer) error
 	DownloadAll()
 	Trackers() [][]tracker.Client
+	Files() (ret []File)
 }

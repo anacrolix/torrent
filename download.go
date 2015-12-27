@@ -23,4 +23,5 @@ type Download interface {
 	DownloadAll()
 	Trackers() [][]tracker.Client
 	Files() (ret []File)
+	Peers() map[peersKey]Peer
 }

@@ -2,7 +2,7 @@ package torrent
 
 import (
 	"github.com/anacrolix/missinggo/pubsub"
-
+	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -91,4 +91,14 @@ func (t Torrent) SetDisplayName(dn string) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	t.torrent.setDisplayName(dn)
+}
+
+// Client returns Torrent's client instance
+func (t Torrent) Client() *Client {
+	return t.cl
+}
+
+// Trackers returns torrent's trackers
+func (t Torrent) Trackers() [][]tracker.Client {
+	return t.torrent.Trackers
 }

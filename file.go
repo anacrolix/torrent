@@ -15,7 +15,7 @@ type File struct {
 	fi     metainfo.FileInfo
 }
 
-func (f *File) Torrent() Torrent {
+func (f *File) Torrent() Download {
 	return f.t
 }
 

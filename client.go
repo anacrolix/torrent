@@ -671,7 +671,7 @@ func (cl *Client) incomingConnection(nc net.Conn, utp bool) {
 }
 
 // Returns a handle to the given torrent, if it's present in the client.
-func (cl *Client) Torrent(ih InfoHash) (T Torrent, ok bool) {
+func (cl *Client) Torrent(ih InfoHash) (T Download, ok bool) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	t, ok := cl.torrents[ih]
@@ -2160,8 +2160,10 @@ func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
 // trackers will be merged with the existing ones. If the Info isn't yet
 // known, it will be set. The display name is replaced if the new spec
 // provides one. Returns new if the torrent wasn't already in the client.
-func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err error) {
+func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (D Download, new bool, err error) {
+	T := Torrent{}
 	T.cl = cl
+	D = &T
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 
@@ -2729,7 +2731,7 @@ func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 }
 
 // Returns handles to all the torrents loaded in the Client.
-func (me *Client) Torrents() (ret []Torrent) {
+func (me *Client) Torrents() (ret []Download) {
 	me.mu.Lock()
 	for _, t := range me.torrents {
 		ret = append(ret, Torrent{me, t})
@@ -2738,7 +2740,7 @@ func (me *Client) Torrents() (ret []Torrent) {
 	return
 }
 
-func (me *Client) AddMagnet(uri string) (T Torrent, err error) {
+func (me *Client) AddMagnet(uri string) (T Download, err error) {
 	spec, err := TorrentSpecFromMagnetURI(uri)
 	if err != nil {
 		return
@@ -2747,12 +2749,12 @@ func (me *Client) AddMagnet(uri string) (T Torrent, err error) {
 	return
 }
 
-func (me *Client) AddTorrent(mi *metainfo.MetaInfo) (T Torrent, err error) {
+func (me *Client) AddTorrent(mi *metainfo.MetaInfo) (T Download, err error) {
 	T, _, err = me.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	return
 }
 
-func (me *Client) AddTorrentFromFile(filename string) (T Torrent, err error) {
+func (me *Client) AddTorrentFromFile(filename string) (T Download, err error) {
 	mi, err := metainfo.LoadFromFile(filename)
 	if err != nil {
 		return

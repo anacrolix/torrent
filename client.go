@@ -1831,7 +1831,7 @@ func (me *Client) openNewConns(t *torrent) {
 			return
 		}
 		var (
-			k peersKey
+			k PeersKey
 			p Peer
 		)
 		for k, p = range t.Peers {
@@ -1948,7 +1948,7 @@ func newTorrent(ih InfoHash) (t *torrent, err error) {
 	t = &torrent{
 		InfoHash:  ih,
 		chunkSize: defaultChunkSize,
-		Peers:     make(map[peersKey]Peer),
+		Peers:     make(map[PeersKey]Peer),
 
 		closing:           make(chan struct{}),
 		ceasingNetworking: make(chan struct{}),

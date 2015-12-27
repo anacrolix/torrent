@@ -104,6 +104,6 @@ func (t Torrent) Trackers() [][]tracker.Client {
 }
 
 // Peers returns torrent's peers
-func (t Torrent) Peers() map[peersKey]Peer {
+func (t Torrent) Peers() map[PeersKey]Peer {
 	return t.torrent.Peers
 }

@@ -659,7 +659,7 @@ func (t *torrent) pieceLength(piece int) (len_ pp.Integer) {
 	return
 }
 
-func (t *torrent) hashPiece(piece pp.Integer) (ps pieceSum) {
+func (t *torrent) hashPiece(piece int) (ps pieceSum) {
 	hash := pieceHash.New()
 	p := &t.Pieces[piece]
 	p.pendingWritesMutex.Lock()

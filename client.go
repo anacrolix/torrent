@@ -2429,8 +2429,7 @@ newAnnounce:
 			for trIndex, tr := range tier {
 				numTrackersTried++
 				err := cl.announceTorrentSingleTracker(tr, &req, t)
-				if err != nil && missinggo.CryHeard() {
-					log.Printf("%s: error announcing to %s: %s", t, tr, err)
+				if err != nil {
 					continue
 				}
 				// Float the successful announce to the top of the tier. If

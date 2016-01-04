@@ -109,14 +109,14 @@ const (
 )
 
 // Currently doesn't really queue, but should in the future.
-func (cl *Client) queuePieceCheck(t *torrent, pieceIndex pp.Integer) {
+func (cl *Client) queuePieceCheck(t *torrent, pieceIndex int) {
 	piece := &t.Pieces[pieceIndex]
 	if piece.QueuedForHash {
 		return
 	}
 	piece.QueuedForHash = true
 	t.publishPieceChange(int(pieceIndex))
-	go cl.verifyPiece(t, pieceIndex)
+	go cl.verifyPiece(t, int(pieceIndex))
 }
 
 // Queue a piece check if one isn't already queued, and the piece has never
@@ -126,7 +126,7 @@ func (cl *Client) queueFirstHash(t *torrent, piece int) {
 	if p.EverHashed || p.Hashing || p.QueuedForHash || t.pieceComplete(piece) {
 		return
 	}
-	cl.queuePieceCheck(t, pp.Integer(piece))
+	cl.queuePieceCheck(t, piece)
 }
 
 // Clients contain zero or more Torrents. A client manages a blocklist, the
@@ -1226,10 +1226,7 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 		})
 	}
 	if torrent.haveAnyPieces() {
-		conn.Post(pp.Message{
-			Type:     pp.Bitfield,
-			Bitfield: torrent.bitfield(),
-		})
+		conn.Bitfield(torrent.bitfield())
 	} else if me.extensionBytes.SupportsFast() && conn.PeerExtensionBytes.SupportsFast() {
 		conn.Post(pp.Message{
 			Type: pp.HaveNone,
@@ -1905,7 +1902,7 @@ func (cl *Client) startTorrent(t *torrent) {
 		}
 		go func() {
 			for i := range t.Pieces {
-				cl.verifyPiece(t, pp.Integer(i))
+				cl.verifyPiece(t, i)
 			}
 		}()
 	}
@@ -2434,8 +2431,7 @@ newAnnounce:
 			for trIndex, tr := range tier {
 				numTrackersTried++
 				err := cl.announceTorrentSingleTracker(tr, &req, t)
-				if err != nil && missinggo.CryHeard() {
-					log.Printf("%s: error announcing to %s: %s", t, tr, err)
+				if err != nil {
 					continue
 				}
 				// Float the successful announce to the top of the tier. If
@@ -2603,7 +2599,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	// It's important that the piece is potentially queued before we check if
 	// the piece is still wanted, because if it is queued, it won't be wanted.
 	if piece.numPendingChunks() == 0 {
-		me.queuePieceCheck(t, req.Index)
+		me.queuePieceCheck(t, int(req.Index))
 	}
 	if !t.wantPiece(int(req.Index)) {
 		for _, c := range t.Conns {
@@ -2633,7 +2629,7 @@ func (me *Client) reapPieceTouches(t *torrent, piece int) (ret []*connection) {
 	return
 }
 
-func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
+func (me *Client) pieceHashed(t *torrent, piece int, correct bool) {
 	p := &t.Pieces[piece]
 	if p.EverHashed {
 		// Don't score the first time a piece is hashed, it could be an
@@ -2662,7 +2658,6 @@ func (me *Client) pieceHashed(t *torrent, piece pp.Integer, correct bool) {
 	me.pieceChanged(t, int(piece))
 }
 
-// TODO: Check this isn't called more than once for each piece being correct.
 func (me *Client) pieceChanged(t *torrent, piece int) {
 	correct := t.pieceComplete(piece)
 	p := &t.Pieces[piece]
@@ -2686,11 +2681,7 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 	}
 	for _, conn := range t.Conns {
 		if correct {
-			conn.Post(pp.Message{
-				Type:  pp.Have,
-				Index: pp.Integer(piece),
-			})
-			// TODO: Cancel requests for this piece.
+			conn.Have(piece)
 			for r := range conn.Requests {
 				if int(r.Index) == piece {
 					conn.Cancel(r)
@@ -2706,20 +2697,20 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 	me.event.Broadcast()
 }
 
-func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
+func (cl *Client) verifyPiece(t *torrent, piece int) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	p := &t.Pieces[index]
+	p := &t.Pieces[piece]
 	for p.Hashing || t.data == nil {
 		cl.event.Wait()
 	}
 	p.QueuedForHash = false
-	if t.isClosed() || t.pieceComplete(int(index)) {
+	if t.isClosed() || t.pieceComplete(piece) {
 		return
 	}
 	p.Hashing = true
 	cl.mu.Unlock()
-	sum := t.hashPiece(index)
+	sum := t.hashPiece(piece)
 	cl.mu.Lock()
 	select {
 	case <-t.closing:
@@ -2727,7 +2718,7 @@ func (cl *Client) verifyPiece(t *torrent, index pp.Integer) {
 	default:
 	}
 	p.Hashing = false
-	cl.pieceHashed(t, index, sum == p.Hash)
+	cl.pieceHashed(t, piece, sum == p.Hash)
 }
 
 // Returns handles to all the torrents loaded in the Client.

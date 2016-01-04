@@ -1902,7 +1902,7 @@ func (cl *Client) startTorrent(t *torrent) {
 		}
 		go func() {
 			for i := range t.Pieces {
-				cl.verifyPiece(t, pp.Integer(i))
+				cl.verifyPiece(t, i)
 			}
 		}()
 	}

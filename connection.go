@@ -568,7 +568,7 @@ func (cn *connection) Have(piece int) {
 }
 
 func (cn *connection) Bitfield(haves []bool) {
-	if len(cn.sentHaves) != nil {
+	if cn.sentHaves != nil {
 		panic("bitfield must be first have-related message sent")
 	}
 	cn.Post(pp.Message{

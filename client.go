@@ -1226,10 +1226,7 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 		})
 	}
 	if torrent.haveAnyPieces() {
-		conn.Post(pp.Message{
-			Type:     pp.Bitfield,
-			Bitfield: torrent.bitfield(),
-		})
+		conn.Bitfield(torrent.bitfield())
 	} else if me.extensionBytes.SupportsFast() && conn.PeerExtensionBytes.SupportsFast() {
 		conn.Post(pp.Message{
 			Type: pp.HaveNone,
@@ -2660,7 +2657,6 @@ func (me *Client) pieceHashed(t *torrent, piece int, correct bool) {
 	me.pieceChanged(t, int(piece))
 }
 
-// TODO: Check this isn't called more than once for each piece being correct.
 func (me *Client) pieceChanged(t *torrent, piece int) {
 	correct := t.pieceComplete(piece)
 	p := &t.Pieces[piece]
@@ -2684,11 +2680,7 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 	}
 	for _, conn := range t.Conns {
 		if correct {
-			conn.Post(pp.Message{
-				Type:  pp.Have,
-				Index: pp.Integer(piece),
-			})
-			// TODO: Cancel requests for this piece.
+			conn.Have(piece)
 			for r := range conn.Requests {
 				if int(r.Index) == piece {
 					conn.Cancel(r)

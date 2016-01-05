@@ -8,7 +8,7 @@ import (
 
 // Accesses torrent data via a client.
 type Reader struct {
-	t          *Torrent
+	t          *clientTorrent
 	pos        int64
 	responsive bool
 	readahead  int64

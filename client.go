@@ -671,14 +671,14 @@ func (cl *Client) incomingConnection(nc net.Conn, utp bool) {
 }
 
 // Returns a handle to the given torrent, if it's present in the client.
-func (cl *Client) Torrent(ih InfoHash) (T Download, ok bool) {
+func (cl *Client) Torrent(ih InfoHash) (T Torrent, ok bool) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	t, ok := cl.torrents[ih]
 	if !ok {
 		return
 	}
-	T = Torrent{cl, t}
+	T = clientTorrent{cl, t}
 	return
 }
 
@@ -2030,7 +2030,7 @@ type Handle interface {
 
 // Returns handles to the files in the torrent. This requires the metainfo is
 // available first.
-func (t Torrent) Files() (ret []File) {
+func (t clientTorrent) Files() (ret []File) {
 	t.cl.mu.Lock()
 	info := t.Info()
 	t.cl.mu.Unlock()
@@ -2052,7 +2052,7 @@ func (t Torrent) Files() (ret []File) {
 }
 
 // Marks the pieces in the given region for download.
-func (t Torrent) SetRegionPriority(off, len int64) {
+func (t clientTorrent) SetRegionPriority(off, len int64) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	pieceSize := int64(t.usualPieceSize())
@@ -2061,7 +2061,7 @@ func (t Torrent) SetRegionPriority(off, len int64) {
 	}
 }
 
-func (t Torrent) AddPeers(pp []Peer) error {
+func (t clientTorrent) AddPeers(pp []Peer) error {
 	cl := t.cl
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
@@ -2071,7 +2071,7 @@ func (t Torrent) AddPeers(pp []Peer) error {
 
 // Marks the entire torrent for download. Requires the info first, see
 // GotInfo.
-func (t Torrent) DownloadAll() {
+func (t clientTorrent) DownloadAll() {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	for i := range iter.N(t.numPieces()) {
@@ -2157,8 +2157,8 @@ func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
 // trackers will be merged with the existing ones. If the Info isn't yet
 // known, it will be set. The display name is replaced if the new spec
 // provides one. Returns new if the torrent wasn't already in the client.
-func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (D Download, new bool, err error) {
-	T := Torrent{}
+func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (D Torrent, new bool, err error) {
+	T := clientTorrent{}
 	T.cl = cl
 	D = &T
 	cl.mu.Lock()
@@ -2722,16 +2722,16 @@ func (cl *Client) verifyPiece(t *torrent, piece int) {
 }
 
 // Returns handles to all the torrents loaded in the Client.
-func (me *Client) Torrents() (ret []Download) {
+func (me *Client) Torrents() (ret []Torrent) {
 	me.mu.Lock()
 	for _, t := range me.torrents {
-		ret = append(ret, Torrent{me, t})
+		ret = append(ret, clientTorrent{me, t})
 	}
 	me.mu.Unlock()
 	return
 }
 
-func (me *Client) AddMagnet(uri string) (T Download, err error) {
+func (me *Client) AddMagnet(uri string) (T Torrent, err error) {
 	spec, err := TorrentSpecFromMagnetURI(uri)
 	if err != nil {
 		return
@@ -2740,12 +2740,12 @@ func (me *Client) AddMagnet(uri string) (T Download, err error) {
 	return
 }
 
-func (me *Client) AddTorrent(mi *metainfo.MetaInfo) (T Download, err error) {
+func (me *Client) AddTorrent(mi *metainfo.MetaInfo) (T Torrent, err error) {
 	T, _, err = me.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	return
 }
 
-func (me *Client) AddTorrentFromFile(filename string) (T Download, err error) {
+func (me *Client) AddTorrentFromFile(filename string) (T Torrent, err error) {
 	mi, err := metainfo.LoadFromFile(filename)
 	if err != nil {
 		return

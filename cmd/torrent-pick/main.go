@@ -134,7 +134,7 @@ func main() {
 
 	done := make(chan struct{})
 	for _, arg := range posArgs {
-		t := func() torrent.Download {
+		t := func() torrent.Torrent {
 			if strings.HasPrefix(arg, "magnet:") {
 				t, err := client.AddMagnet(arg)
 				if err != nil {

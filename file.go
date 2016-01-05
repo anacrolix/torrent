@@ -8,14 +8,14 @@ import (
 
 // Provides access to regions of torrent data that correspond to its files.
 type File struct {
-	t      Torrent
+	t      clientTorrent
 	path   string
 	offset int64
 	length int64
 	fi     metainfo.FileInfo
 }
 
-func (f *File) Torrent() Download {
+func (f *File) Torrent() Torrent {
 	return f.t
 }
 

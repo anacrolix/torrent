@@ -39,7 +39,7 @@ func (t *torrent) pieceNumPendingBytes(index int) (count pp.Integer) {
 	return
 }
 
-type peersKey struct {
+type PeersKey struct {
 	IPBytes string
 	Port    int
 }
@@ -78,7 +78,7 @@ type torrent struct {
 	// Reserve of peers to connect to. A peer can be both here and in the
 	// active connections if were told about the peer after connecting with
 	// them. That encourages us to reconnect to peers that are well known.
-	Peers     map[peersKey]Peer
+	Peers     map[PeersKey]Peer
 	wantPeers sync.Cond
 
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
@@ -180,7 +180,7 @@ func (t *torrent) addPeer(p Peer, cl *Client) {
 	if len(t.Peers) >= torrentPeersHighWater {
 		return
 	}
-	key := peersKey{string(p.IP), p.Port}
+	key := PeersKey{string(p.IP), p.Port}
 	if _, ok := t.Peers[key]; ok {
 		return
 	}

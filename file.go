@@ -8,7 +8,7 @@ import (
 
 // Provides access to regions of torrent data that correspond to its files.
 type File struct {
-	t      Torrent
+	t      clientTorrent
 	path   string
 	offset int64
 	length int64

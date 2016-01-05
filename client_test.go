@@ -290,7 +290,7 @@ func TestClientTransfer(t *testing.T) {
 	// TODO: The piece state publishing is kinda jammed in here until I have a
 	// more thorough test.
 	go func() {
-		s := leecherGreeting.pieceStateChanges.Subscribe()
+		s := leecherGreeting.SubscribePieceStateChanges()
 		defer s.Close()
 		for i := range s.Values {
 			log.Print(i)
@@ -410,8 +410,8 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 	if new {
 		t.FailNow()
 	}
-	assert.EqualValues(t, T.Trackers[0][0].URL(), "http://a")
-	assert.EqualValues(t, T.Trackers[1][0].URL(), "udp://b")
+	assert.EqualValues(t, T.Trackers()[0][0].URL(), "http://a")
+	assert.EqualValues(t, T.Trackers()[1][0].URL(), "udp://b")
 }
 
 type badData struct{}

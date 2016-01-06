@@ -1,15 +1,15 @@
 package torrent
 
 import (
+	"github.com/anacrolix/torrent/metainfo"
+	"testing"
+	"path/filepath"
+	"os"
+	"github.com/anacrolix/torrent/dht"
+	"io"
 	"errors"
 	"fmt"
-	"github.com/anacrolix/torrent/dht"
-	"github.com/anacrolix/torrent/metainfo"
-	"io"
-	"os"
-	"path/filepath"
 	"runtime"
-	"testing"
 )
 
 var numclients int = 0
@@ -42,12 +42,12 @@ func testingConfig() *Config {
 		Seed:                 true,
 		DataDir:              filepath.Join(os.TempDir(), "torrent-test/data"),
 		ConfigDir:            filepath.Join(os.TempDir(), "torrent-test/config"),
-		DHTConfig: &dht.ServerConfig{
-			Passive:        false,
+		DHTConfig:            &dht.ServerConfig{
+			Passive: false,
 			BootstrapNodes: []string{},
-			NoSecurity:     false,
+			NoSecurity: false,
 		},
-		Debug: true,
+		Debug:                true,
 	}
 }
 
@@ -74,7 +74,7 @@ func writeranddata(path string) error {
 	return nil
 }
 
-func TestInfohash(t *testing.T) {
+func TestInfohash(t *testing.T){
 	os.RemoveAll(filepath.Join(os.TempDir(), "torrent-test"))
 	os.MkdirAll(filepath.Join(os.TempDir(), "torrent-test"), 0700)
 	var cl_one *Client

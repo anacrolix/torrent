@@ -225,7 +225,7 @@ func (dn dirNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 func (me rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, err error) {
 	for _, t := range me.fs.Client.Torrents() {
 		info := t.Info()
-		if t.Info().Name != name || info == nil {
+		if t.Name() != name || info == nil {
 			continue
 		}
 		__node := node{

@@ -54,7 +54,7 @@ func torrentBar(t torrent.Torrent) {
 		}
 	})
 	bar.PrependFunc(func(*uiprogress.Bar) string {
-		return t.Info().Name
+		return t.Name()
 	})
 	go func() {
 		<-t.GotInfo()

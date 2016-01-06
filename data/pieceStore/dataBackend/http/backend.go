@@ -1,39 +1,18 @@
 package httpDataBackend
 
 import (
+	"crypto/tls"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"path"
-	"sync"
-	"time"
 
 	"github.com/anacrolix/missinggo/httpfile"
 	"github.com/anacrolix/missinggo/httptoo"
+	"golang.org/x/net/http2"
 
 	"github.com/anacrolix/torrent/data/pieceStore/dataBackend"
 )
-
-// A net.Conn that releases a handle from the dial pool when closed.
-type dialPoolNetConn struct {
-	net.Conn
-
-	dialPool chan struct{}
-	mu       sync.Mutex
-	released bool
-}
-
-func (me *dialPoolNetConn) Close() error {
-	err := me.Conn.Close()
-	me.mu.Lock()
-	if !me.released {
-		<-me.dialPool
-		me.released = true
-	}
-	me.mu.Unlock()
-	return err
-}
 
 type backend struct {
 	// Backend URL.
@@ -43,31 +22,14 @@ type backend struct {
 }
 
 func New(u url.URL) *backend {
-	// Limit concurrent connections at a time.
-	dialPool := make(chan struct{}, 5)
-	// Allows an extra connection through once a second to break deadlocks and
-	// help with stalls.
-	ticker := time.NewTicker(time.Second)
 	return &backend{
 		url: *httptoo.CopyURL(&u),
 		FS: httpfile.FS{
 			Client: &http.Client{
-				Transport: &http.Transport{
-					Dial: func(_net, addr string) (net.Conn, error) {
-						select {
-						case dialPool <- struct{}{}:
-						case <-ticker.C:
-							go func() { dialPool <- struct{}{} }()
-						}
-						nc, err := net.Dial(_net, addr)
-						if err != nil {
-							<-dialPool
-							return nil, err
-						}
-						return &dialPoolNetConn{
-							Conn:     nc,
-							dialPool: dialPool,
-						}, nil
+				Transport: &http2.Transport{
+					TLSClientConfig: &tls.Config{
+						InsecureSkipVerify: true,
+						NextProtos:         []string{"h2"},
 					},
 				},
 			},

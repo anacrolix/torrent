@@ -2509,7 +2509,7 @@ func (me *Client) fillRequests(t *torrent, c *connection) {
 			continue
 		}
 		piece := &t.Pieces[pieceIndex]
-		for _, cs := range piece.shuffledPendingChunkSpecs(t.pieceLength(pieceIndex), pp.Integer(t.chunkSize)) {
+		for _, cs := range piece.shuffledPendingChunkSpecs(t, pieceIndex) {
 			r := request{pp.Integer(pieceIndex), cs}
 			if !addRequest(r) {
 				return
@@ -2546,7 +2546,8 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 		unexpectedChunksReceived.Add(1)
 	}
 
-	piece := &t.Pieces[req.Index]
+	index := int(req.Index)
+	piece := &t.Pieces[index]
 
 	// Do we actually want this chunk?
 	if !t.wantChunk(req) {
@@ -2584,7 +2585,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 		if c.peerTouchedPieces == nil {
 			c.peerTouchedPieces = make(map[int]struct{})
 		}
-		c.peerTouchedPieces[int(req.Index)] = struct{}{}
+		c.peerTouchedPieces[index] = struct{}{}
 		me.mu.Unlock()
 	}()
 
@@ -2596,7 +2597,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	delete(t.urgent, req)
 	// It's important that the piece is potentially queued before we check if
 	// the piece is still wanted, because if it is queued, it won't be wanted.
-	if piece.numPendingChunks() == 0 {
+	if t.pieceAllDirty(index) {
 		me.queuePieceCheck(t, int(req.Index))
 	}
 	if !t.wantPiece(int(req.Index)) {
@@ -2663,15 +2664,14 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 	defer me.event.Broadcast()
 	if correct {
 		p.Priority = PiecePriorityNone
-		p.PendingChunkSpecs = nil
 		for req := range t.urgent {
 			if int(req.Index) == piece {
 				delete(t.urgent, req)
 			}
 		}
 	} else {
-		if p.numPendingChunks() == 0 {
-			t.pendAllChunkSpecs(int(piece))
+		if t.pieceAllDirty(piece) {
+			t.pendAllChunkSpecs(piece)
 		}
 		if t.wantPiece(piece) {
 			me.openNewConns(t)

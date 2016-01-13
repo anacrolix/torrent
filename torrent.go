@@ -22,18 +22,22 @@ import (
 	"github.com/anacrolix/torrent/tracker"
 )
 
+func (t *torrent) chunkIndexSpec(chunkIndex, piece int) chunkSpec {
+	return chunkIndexSpec(chunkIndex, t.pieceLength(piece), t.chunkSize)
+}
+
 func (t *torrent) pieceNumPendingBytes(index int) (count pp.Integer) {
 	if t.pieceComplete(index) {
-		return 0
+		return
 	}
 	piece := &t.Pieces[index]
-	pieceLength := t.pieceLength(index)
+	count = t.pieceLength(index)
 	if !piece.EverHashed {
-		return pieceLength
+		return
 	}
-	for i, pending := range piece.PendingChunkSpecs {
-		if pending {
-			count += chunkIndexSpec(i, pieceLength, t.chunkSize).Length
+	for i, dirty := range piece.DirtyChunks {
+		if dirty {
+			count -= t.chunkIndexSpec(i, index).Length
 		}
 	}
 	return
@@ -588,9 +592,7 @@ func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 
 func (t *torrent) bitfield() (bf []bool) {
 	for i := range t.Pieces {
-		p := &t.Pieces[i]
-		// TODO: Check this logic.
-		bf = append(bf, p.EverHashed && p.numPendingChunks() == 0)
+		bf = append(bf, t.havePiece(i))
 	}
 	return
 }
@@ -626,18 +628,12 @@ func (t *torrent) pieceChunks(piece int) (css []chunkSpec) {
 	return
 }
 
+func (t *torrent) pieceNumChunks(piece int) int {
+	return int((t.pieceLength(piece) + t.chunkSize - 1) / t.chunkSize)
+}
+
 func (t *torrent) pendAllChunkSpecs(pieceIndex int) {
-	piece := &t.Pieces[pieceIndex]
-	if piece.PendingChunkSpecs == nil {
-		// Allocate to exact size.
-		piece.PendingChunkSpecs = make([]bool, (t.pieceLength(pieceIndex)+t.chunkSize-1)/t.chunkSize)
-	}
-	// Pend all the chunks.
-	pcss := piece.PendingChunkSpecs
-	for i := range pcss {
-		pcss[i] = true
-	}
-	return
+	t.Pieces[pieceIndex].DirtyChunks = nil
 }
 
 type Peer struct {
@@ -650,6 +646,9 @@ type Peer struct {
 }
 
 func (t *torrent) pieceLength(piece int) (len_ pp.Integer) {
+	if piece < 0 || piece > t.Info.NumPieces() {
+		return
+	}
 	if int(piece) == t.numPieces()-1 {
 		len_ = pp.Integer(t.Length() % t.Info.PieceLength)
 	}
@@ -707,7 +706,10 @@ func (t *torrent) havePiece(index int) bool {
 	return t.haveInfo() && t.pieceComplete(index)
 }
 
-func (t *torrent) haveChunk(r request) bool {
+func (t *torrent) haveChunk(r request) (ret bool) {
+	// defer func() {
+	// 	log.Println("have chunk", r, ret)
+	// }()
 	if !t.haveInfo() {
 		return false
 	}
@@ -715,9 +717,6 @@ func (t *torrent) haveChunk(r request) bool {
 		return true
 	}
 	p := &t.Pieces[r.Index]
-	if p.PendingChunkSpecs == nil {
-		return false
-	}
 	return !p.pendingChunk(r.chunkSpec, t.chunkSize)
 }
 
@@ -805,4 +804,21 @@ func (t *torrent) publishPieceChange(piece int) {
 		t.pieceStateChanges.Publish(piece)
 	}
 	p.PublicPieceState = cur
+}
+
+func (t *torrent) pieceNumPendingChunks(piece int) int {
+	return t.pieceNumChunks(piece) - t.Pieces[piece].numDirtyChunks()
+}
+
+func (t *torrent) pieceAllDirty(piece int) bool {
+	p := &t.Pieces[piece]
+	if len(p.DirtyChunks) != t.pieceNumChunks(piece) {
+		return false
+	}
+	for _, dirty := range p.DirtyChunks {
+		if !dirty {
+			return false
+		}
+	}
+	return true
 }

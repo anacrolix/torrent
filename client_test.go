@@ -106,9 +106,8 @@ func TestTorrentInitialState(t *testing.T) {
 	if len(tor.Pieces) != 3 {
 		t.Fatal("wrong number of pieces")
 	}
-	p := &tor.Pieces[0]
 	tor.pendAllChunkSpecs(0)
-	assert.EqualValues(t, 3, p.numPendingChunks())
+	assert.EqualValues(t, 3, tor.pieceNumPendingChunks(0))
 	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
 }
 

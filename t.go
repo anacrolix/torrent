@@ -28,7 +28,7 @@ func (t Torrent) GotInfo() <-chan struct{} {
 	return t.torrent.gotMetainfo
 }
 
-// Returns the metainfo, or nil if it's not yet available.
+// Returns the metainfo info dictionary, or nil if it's not yet available.
 func (t Torrent) Info() *metainfo.Info {
 	return t.torrent.Info
 }
@@ -53,6 +53,8 @@ func (t Torrent) PieceStateRuns() []PieceStateRun {
 	return t.torrent.pieceStateRuns()
 }
 
+// The number of pieces in the torrent. This requires that the info has been
+// obtained first.
 func (t Torrent) NumPieces() int {
 	return t.torrent.numPieces()
 }
@@ -93,6 +95,8 @@ func (t Torrent) SetDisplayName(dn string) {
 	t.torrent.setDisplayName(dn)
 }
 
+// The current working name for the torrent. Either the name in the info dict,
+// or a display name given such as by the dn value in a magnet link, or "".
 func (t Torrent) Name() string {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()

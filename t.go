@@ -107,3 +107,11 @@ func (t Torrent) Length() int64 {
 		return -1
 	}
 }
+
+// Returns a run-time generated metainfo for the torrent that includes the
+// info bytes and announce-list as currently known to the client.
+func (t Torrent) MetaInfo() *metainfo.MetaInfo {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	return t.torrent.MetaInfo()
+}

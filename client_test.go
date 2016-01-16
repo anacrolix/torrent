@@ -42,6 +42,9 @@ var TestingConfig = Config{
 	NoDefaultBlocklist:   true,
 	DisableMetainfoCache: true,
 	DataDir:              filepath.Join(os.TempDir(), "anacrolix"),
+	DHTConfig: dht.ServerConfig{
+		NoDefaultBootstrap: true,
+	},
 }
 
 func TestClientDefault(t *testing.T) {
@@ -580,10 +583,10 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 func TestDHTInheritBlocklist(t *testing.T) {
 	ipl := iplist.New(nil)
 	require.NotNil(t, ipl)
-	cl, err := NewClient(&Config{
-		IPBlocklist: iplist.New(nil),
-		DHTConfig:   &dht.ServerConfig{},
-	})
+	cfg := TestingConfig
+	cfg.IPBlocklist = ipl
+	cfg.NoDHT = false
+	cl, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer cl.Close()
 	require.Equal(t, ipl, cl.DHT().IPBlocklist())

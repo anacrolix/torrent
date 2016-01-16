@@ -20,7 +20,7 @@ type Config struct {
 	// Don't create a DHT.
 	NoDHT bool `long:"disable-dht"`
 	// Overrides the default DHT configuration.
-	DHTConfig *dht.ServerConfig
+	DHTConfig dht.ServerConfig
 	// Don't ever send chunks to peers.
 	NoUpload bool `long:"no-upload"`
 	// Upload even after there's nothing in it for us. By default uploading is

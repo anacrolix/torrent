@@ -526,9 +526,6 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	}
 	if !cfg.NoDHT {
 		dhtCfg := cfg.DHTConfig
-		if dhtCfg == nil {
-			dhtCfg = &dht.ServerConfig{}
-		}
 		if dhtCfg.IPBlocklist == nil {
 			dhtCfg.IPBlocklist = cl.ipBlockList
 		}
@@ -538,7 +535,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if dhtCfg.Conn == nil && cl.utpSock != nil {
 			dhtCfg.Conn = cl.utpSock
 		}
-		cl.dHT, err = dht.NewServer(dhtCfg)
+		cl.dHT, err = dht.NewServer(&dhtCfg)
 		if err != nil {
 			return
 		}

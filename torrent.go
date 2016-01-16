@@ -543,10 +543,6 @@ func (t *torrent) numPiecesCompleted() (num int) {
 	return
 }
 
-func (t *torrent) Length() int64 {
-	return t.length
-}
-
 func (t *torrent) isClosed() bool {
 	select {
 	case <-t.closing:
@@ -573,13 +569,13 @@ func (t *torrent) close() (err error) {
 }
 
 func (t *torrent) requestOffset(r request) int64 {
-	return torrentRequestOffset(t.Length(), int64(t.usualPieceSize()), r)
+	return torrentRequestOffset(t.length, int64(t.usualPieceSize()), r)
 }
 
 // Return the request that would include the given offset into the torrent
 // data. Returns !ok if there is no such request.
 func (t *torrent) offsetRequest(off int64) (req request, ok bool) {
-	return torrentOffsetRequest(t.Length(), t.Info.PieceLength, int64(t.chunkSize), off)
+	return torrentOffsetRequest(t.length, t.Info.PieceLength, int64(t.chunkSize), off)
 }
 
 func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
@@ -650,7 +646,7 @@ func (t *torrent) pieceLength(piece int) (len_ pp.Integer) {
 		return
 	}
 	if int(piece) == t.numPieces()-1 {
-		len_ = pp.Integer(t.Length() % t.Info.PieceLength)
+		len_ = pp.Integer(t.length % t.Info.PieceLength)
 	}
 	if len_ == 0 {
 		len_ = pp.Integer(t.Info.PieceLength)

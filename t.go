@@ -11,8 +11,8 @@ import (
 
 // The public handle to a live torrent within a Client.
 type Torrent struct {
-	cl *Client
-	*torrent
+	cl      *Client
+	torrent *torrent
 }
 
 // The torrent's infohash. This is fixed and cannot change. It uniquely
@@ -48,13 +48,13 @@ func (t Torrent) NewReader() (ret *Reader) {
 // same state. The sum of the state run lengths is the number of pieces
 // in the torrent.
 func (t Torrent) PieceStateRuns() []PieceStateRun {
-	t.stateMu.Lock()
-	defer t.stateMu.Unlock()
+	t.torrent.stateMu.Lock()
+	defer t.torrent.stateMu.Unlock()
 	return t.torrent.pieceStateRuns()
 }
 
 func (t Torrent) NumPieces() int {
-	return t.numPieces()
+	return t.torrent.numPieces()
 }
 
 // Drop the torrent from the client, and close it.
@@ -68,7 +68,7 @@ func (t Torrent) Drop() {
 func (t Torrent) BytesCompleted() int64 {
 	t.cl.mu.RLock()
 	defer t.cl.mu.RUnlock()
-	return t.bytesCompleted()
+	return t.torrent.bytesCompleted()
 }
 
 // The subscription emits as (int) the index of pieces as their state changes.
@@ -91,4 +91,19 @@ func (t Torrent) SetDisplayName(dn string) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	t.torrent.setDisplayName(dn)
+}
+
+func (t Torrent) Name() string {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	return t.torrent.Name()
+}
+
+func (t Torrent) Length() int64 {
+	select {
+	case <-t.GotInfo():
+		return t.torrent.length
+	default:
+		return -1
+	}
 }

@@ -242,7 +242,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		}
 		fmt.Fprint(w, "\n")
 		if t.haveInfo() {
-			fmt.Fprintf(w, "%f%% of %d bytes", 100*(1-float32(t.bytesLeft())/float32(t.Length())), t.Length())
+			fmt.Fprintf(w, "%f%% of %d bytes", 100*(1-float32(t.bytesLeft())/float32(t.length)), t.length)
 		} else {
 			w.WriteString("<missing metainfo>")
 		}
@@ -2052,7 +2052,7 @@ func (t Torrent) Files() (ret []File) {
 func (t Torrent) SetRegionPriority(off, len int64) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
-	pieceSize := int64(t.usualPieceSize())
+	pieceSize := int64(t.torrent.usualPieceSize())
 	for i := off / pieceSize; i*pieceSize < off+len; i++ {
 		t.cl.raisePiecePriority(t.torrent, int(i), PiecePriorityNormal)
 	}
@@ -2071,13 +2071,13 @@ func (t Torrent) AddPeers(pp []Peer) error {
 func (t Torrent) DownloadAll() {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
-	for i := range iter.N(t.numPieces()) {
+	for i := range iter.N(t.torrent.numPieces()) {
 		t.cl.raisePiecePriority(t.torrent, i, PiecePriorityNormal)
 	}
 	// Nice to have the first and last pieces sooner for various interactive
 	// purposes.
 	t.cl.raisePiecePriority(t.torrent, 0, PiecePriorityReadahead)
-	t.cl.raisePiecePriority(t.torrent, t.numPieces()-1, PiecePriorityReadahead)
+	t.cl.raisePiecePriority(t.torrent, t.torrent.numPieces()-1, PiecePriorityReadahead)
 }
 
 // Returns nil metainfo if it isn't in the cache. Checks that the retrieved

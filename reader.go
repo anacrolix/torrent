@@ -42,30 +42,30 @@ func (r *Reader) readable(off int64) (ret bool) {
 	// defer func() {
 	// 	log.Println("readable", ret)
 	// }()
-	if r.t.isClosed() {
+	if r.t.torrent.isClosed() {
 		return true
 	}
-	req, ok := r.t.offsetRequest(off)
+	req, ok := r.t.torrent.offsetRequest(off)
 	if !ok {
 		panic(off)
 	}
 	if r.responsive {
-		return r.t.haveChunk(req)
+		return r.t.torrent.haveChunk(req)
 	}
-	return r.t.pieceComplete(int(req.Index))
+	return r.t.torrent.pieceComplete(int(req.Index))
 }
 
 // How many bytes are available to read. Max is the most we could require.
 func (r *Reader) available(off, max int64) (ret int64) {
 	for max > 0 {
-		req, ok := r.t.offsetRequest(off)
+		req, ok := r.t.torrent.offsetRequest(off)
 		if !ok {
 			break
 		}
-		if !r.t.haveChunk(req) {
+		if !r.t.torrent.haveChunk(req) {
 			break
 		}
-		len1 := int64(req.Length) - (off - r.t.requestOffset(req))
+		len1 := int64(req.Length) - (off - r.t.torrent.requestOffset(req))
 		max -= len1
 		ret += len1
 		off += len1
@@ -136,12 +136,12 @@ again:
 		tp.noPendingWrites.Wait()
 	}
 	tp.pendingWritesMutex.Unlock()
-	n, err = dataReadAt(r.t.data, b1, pos)
+	n, err = dataReadAt(r.t.torrent.data, b1, pos)
 	if n != 0 {
 		err = nil
 		return
 	}
-	if r.t.isClosed() {
+	if r.t.torrent.isClosed() {
 		if err == nil {
 			err = errors.New("torrent closed")
 		}

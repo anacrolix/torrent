@@ -96,6 +96,8 @@ type torrent struct {
 	gotMetainfo chan struct{}
 
 	readers map[*Reader]struct{}
+
+	pendingPieces map[int]struct{}
 }
 
 var (
@@ -860,6 +862,9 @@ func (t *torrent) piecePriority(piece int) (ret piecePriority) {
 	if t.pieceComplete(piece) {
 		return
 	}
+	if _, ok := t.pendingPieces[piece]; ok {
+		ret = PiecePriorityNormal
+	}
 	raiseRet := func(prio piecePriority) {
 		if prio > ret {
 			ret = prio
@@ -875,4 +880,65 @@ func (t *torrent) piecePriority(piece int) (ret piecePriority) {
 		return true
 	})
 	return
+}
+
+func (t *torrent) pendPiece(piece int, cl *Client) {
+	if t.pendingPieces == nil {
+		t.pendingPieces = make(map[int]struct{}, t.Info.NumPieces())
+	}
+	if _, ok := t.pendingPieces[piece]; ok {
+		return
+	}
+	if t.havePiece(piece) {
+		return
+	}
+	t.pendingPieces[piece] = struct{}{}
+	for _, c := range t.Conns {
+		if !c.PeerHasPiece(piece) {
+			continue
+		}
+
+	}
+}
+
+func (t *torrent) connRequestPiecePendingChunks(c *connection, piece int) (more bool) {
+	if !c.PeerHasPiece(piece) {
+		return true
+	}
+	for _, cs := range t.Pieces[piece].shuffledPendingChunkSpecs(t, piece) {
+		req := request{pp.Integer(piece), cs}
+		if !c.Request(req) {
+			return false
+		}
+	}
+	return true
+}
+
+func (t *torrent) fillRequests(c *connection) {
+	if c.Interested {
+		if c.PeerChoked {
+			return
+		}
+		if len(c.Requests) > c.requestsLowWater {
+			return
+		}
+	}
+	if !t.forUrgentPieces(func(piece int) (again bool) {
+		return t.connRequestPiecePendingChunks(c, piece)
+	}) {
+		return
+	}
+	t.forReaderWantedRegionPieces(func(begin, end int) (again bool) {
+		for i := begin + 1; i < end; i++ {
+			if !t.connRequestPiecePendingChunks(c, i) {
+				return false
+			}
+		}
+		return true
+	})
+	for i := range t.pendingPieces {
+		if !t.connRequestPiecePendingChunks(c, i) {
+			return
+		}
+	}
 }

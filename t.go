@@ -137,3 +137,11 @@ func (t Torrent) deleteReader(r *Reader) {
 	delete(t.torrent.readers, r)
 	t.torrent.readersChanged(t.cl)
 }
+
+func (t Torrent) DownloadPieces(begin, end int) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	for i := begin; i < end; i++ {
+		t.torrent.pendPiece(i, t.cl)
+	}
+}

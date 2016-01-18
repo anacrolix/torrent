@@ -75,15 +75,6 @@ func (f *File) State() (ret []FilePieceState) {
 	return
 }
 
-// Marks pieces in the region of the file for download. This is a helper
-// wrapping Torrent.SetRegionPriority.
-func (f *File) PrioritizeRegion(off, len int64) {
-	if off < 0 || off >= f.length {
-		return
-	}
-	if off+len > f.length {
-		len = f.length - off
-	}
-	off += f.offset
-	f.t.SetRegionPriority(off, len)
+func (f *File) Download() {
+	f.t.DownloadPieces(f.t.torrent.byteRegionPieces(f.offset, f.length))
 }

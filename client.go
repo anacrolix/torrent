@@ -2496,6 +2496,7 @@ func (me *Client) pieceHashed(t *torrent, piece int, correct bool) {
 }
 
 func (me *Client) onCompletedPiece(t *torrent, piece int) {
+	delete(t.pendingPieces, piece)
 	for _, conn := range t.Conns {
 		conn.Have(piece)
 		for r := range conn.Requests {

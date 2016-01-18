@@ -361,7 +361,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 		defer r.Close()
 		b, err := ioutil.ReadAll(r)
 		require.NoError(t, err)
-		require.EqualValues(t, testutil.GreetingFileContents, b)
+		assert.EqualValues(t, testutil.GreetingFileContents, b)
 	}()
 	leecherGreeting.AddPeers([]Peer{
 		Peer{

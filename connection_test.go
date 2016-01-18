@@ -4,9 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
-	"github.com/anacrolix/torrent/internal/pieceordering"
 	"github.com/anacrolix/torrent/peer_protocol"
 )
 
@@ -50,15 +47,4 @@ func TestCancelRequestOptimized(t *testing.T) {
 			t.Fatal("got unexpected non-keepalive")
 		}
 	}
-}
-
-func pieceOrderingAsSlice(po *pieceordering.Instance) (ret []int) {
-	for e := po.First(); e != nil; e = e.Next() {
-		ret = append(ret, e.Piece())
-	}
-	return
-}
-
-func testRequestOrder(expected []int, ro *pieceordering.Instance, t *testing.T) {
-	assert.EqualValues(t, pieceOrderingAsSlice(ro), expected)
 }

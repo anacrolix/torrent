@@ -458,7 +458,9 @@ func (s *Server) query(node dHTAddr, q string, a map[string]interface{}, onRespo
 		return
 	}
 	s.getNode(node, "").lastSentQuery = time.Now()
+	t.mu.Lock()
 	t.startTimer()
+	t.mu.Unlock()
 	s.addTransaction(t)
 	return
 }

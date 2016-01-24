@@ -1679,6 +1679,9 @@ func (t *torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
+	if len(t.pendingPieces) != 0 {
+		return true
+	}
 	return !t.forReaderWantedRegionPieces(func(begin, end int) (again bool) {
 		for i := begin; i < end; i++ {
 			if !t.pieceComplete(i) {

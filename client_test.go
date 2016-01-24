@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -317,6 +318,12 @@ func TestClientTransfer(t *testing.T) {
 	}
 }
 
+func exportClientStatus(cl *Client, path string) {
+	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		cl.WriteStatus(w)
+	})
+}
+
 // Check that after completing leeching, a leecher transitions to a seeding
 // correctly. Connected in a chain like so: Seeder <-> Leecher <-> LeecherLeecher.
 func TestSeedAfterDownloading(t *testing.T) {
@@ -327,12 +334,14 @@ func TestSeedAfterDownloading(t *testing.T) {
 	cfg.DataDir = greetingTempDir
 	seeder, err := NewClient(&cfg)
 	defer seeder.Close()
+	exportClientStatus(seeder, "/s")
 	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.DataDir)
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()
+	exportClientStatus(leecher, "/l")
 	cfg.Seed = false
 	cfg.TorrentDataOpener = nil
 	cfg.DataDir, err = ioutil.TempDir("", "")
@@ -340,6 +349,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	defer os.RemoveAll(cfg.DataDir)
 	leecherLeecher, _ := NewClient(&cfg)
 	defer leecherLeecher.Close()
+	exportClientStatus(leecherLeecher, "/ll")
 	leecherGreeting, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2

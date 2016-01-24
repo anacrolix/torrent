@@ -813,6 +813,8 @@ func (t *torrent) forUrgentPieces(f func(piece int) (again bool)) (all bool) {
 }
 
 func (t *torrent) readersChanged(cl *Client) {
+	// Accept new connections.
+	cl.event.Broadcast()
 	for _, c := range t.Conns {
 		c.updateRequests()
 	}

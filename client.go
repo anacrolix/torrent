@@ -1185,13 +1185,13 @@ func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) error {
 		c.PeerPieces[piece] = true
 	}
 	if t.wantPiece(piece) {
-		me.replenishConnRequests(t, c)
+		c.updateRequests()
 	}
 	return nil
 }
 
 func (me *Client) peerUnchoked(torrent *torrent, conn *connection) {
-	me.replenishConnRequests(torrent, conn)
+	conn.updateRequests()
 }
 
 func (cl *Client) connCancel(t *torrent, cn *connection, r request) (ok bool) {
@@ -1416,10 +1416,10 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				me.connDeleteRequest(t, c, r)
 			}
 			// We can then reset our interest.
-			me.replenishConnRequests(t, c)
+			c.updateRequests()
 		case pp.Reject:
 			me.connDeleteRequest(t, c, newRequest(msg.Index, msg.Begin, msg.Length))
-			me.replenishConnRequests(t, c)
+			c.updateRequests()
 		case pp.Unchoke:
 			c.PeerChoked = false
 			me.peerUnchoked(t, c)
@@ -1671,6 +1671,7 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 		panic(len(t.Conns))
 	}
 	t.Conns = append(t.Conns, c)
+	c.t = t
 	return true
 }
 
@@ -2362,20 +2363,6 @@ func (me *Client) WaitAll() bool {
 	return true
 }
 
-func (me *Client) replenishConnRequests(t *torrent, c *connection) {
-	if !t.haveInfo() {
-		return
-	}
-	t.fillRequests(c)
-	if len(c.Requests) == 0 && !c.PeerChoked {
-		// So we're not choked, but we don't want anything right now. We may
-		// have completed readahead, and the readahead window has not rolled
-		// over to the next piece. Better to stay interested in case we're
-		// going to want data in the near future.
-		c.SetInterested(!t.haveAllPieces())
-	}
-}
-
 // Handle a received chunk from a peer.
 func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) error {
 	chunksReceived.Add(1)
@@ -2384,7 +2371,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 
 	// Request has been satisfied.
 	if me.connDeleteRequest(t, c, req) {
-		defer me.replenishConnRequests(t, c)
+		defer c.updateRequests()
 	} else {
 		unexpectedChunksReceived.Add(1)
 	}
@@ -2447,7 +2434,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	// Cancel pending requests for this chunk.
 	for _, c := range t.Conns {
 		if me.connCancel(t, c, req) {
-			me.replenishConnRequests(t, c)
+			c.updateRequests()
 		}
 	}
 
@@ -2520,7 +2507,7 @@ func (me *Client) onFailedPiece(t *torrent, piece int) {
 	me.openNewConns(t)
 	for _, conn := range t.Conns {
 		if conn.PeerHasPiece(piece) {
-			me.replenishConnRequests(t, conn)
+			conn.updateRequests()
 		}
 	}
 }

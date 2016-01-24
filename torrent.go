@@ -458,7 +458,7 @@ func (t *torrent) String() string {
 }
 
 func (t *torrent) haveInfo() bool {
-	return t != nil && t.Info != nil
+	return t.Info != nil
 }
 
 // TODO: Include URIs that weren't converted to tracker clients.
@@ -814,7 +814,7 @@ func (t *torrent) forUrgentPieces(f func(piece int) (again bool)) (all bool) {
 
 func (t *torrent) readersChanged(cl *Client) {
 	for _, c := range t.Conns {
-		cl.replenishConnRequests(t, c)
+		c.updateRequests()
 	}
 	cl.openNewConns(t)
 }
@@ -897,8 +897,10 @@ func (t *torrent) pendPiece(piece int, cl *Client) {
 		if !c.PeerHasPiece(piece) {
 			continue
 		}
-
+		c.updateRequests()
 	}
+	cl.openNewConns(t)
+	cl.pieceChanged(t, piece)
 }
 
 func (t *torrent) connRequestPiecePendingChunks(c *connection, piece int) (more bool) {
@@ -912,33 +914,4 @@ func (t *torrent) connRequestPiecePendingChunks(c *connection, piece int) (more 
 		}
 	}
 	return true
-}
-
-func (t *torrent) fillRequests(c *connection) {
-	if c.Interested {
-		if c.PeerChoked {
-			return
-		}
-		if len(c.Requests) > c.requestsLowWater {
-			return
-		}
-	}
-	if !t.forUrgentPieces(func(piece int) (again bool) {
-		return t.connRequestPiecePendingChunks(c, piece)
-	}) {
-		return
-	}
-	t.forReaderWantedRegionPieces(func(begin, end int) (again bool) {
-		for i := begin + 1; i < end; i++ {
-			if !t.connRequestPiecePendingChunks(c, i) {
-				return false
-			}
-		}
-		return true
-	})
-	for i := range t.pendingPieces {
-		if !t.connRequestPiecePendingChunks(c, i) {
-			return
-		}
-	}
 }

@@ -30,6 +30,7 @@ const (
 
 // Maintains the state of a connection with a peer.
 type connection struct {
+	t         *torrent
 	conn      net.Conn
 	rw        io.ReadWriter // The real slim shady
 	encrypted bool
@@ -533,4 +534,47 @@ func (cn *connection) Bitfield(haves []bool) {
 		Bitfield: haves,
 	})
 	cn.sentHaves = haves
+}
+
+func (c *connection) updateRequests() {
+	if !c.t.haveInfo() {
+		return
+	}
+	if c.Interested {
+		if c.PeerChoked {
+			return
+		}
+		if len(c.Requests) > c.requestsLowWater {
+			return
+		}
+	}
+	c.fillRequests()
+	if len(c.Requests) == 0 && !c.PeerChoked {
+		// So we're not choked, but we don't want anything right now. We may
+		// have completed readahead, and the readahead window has not rolled
+		// over to the next piece. Better to stay interested in case we're
+		// going to want data in the near future.
+		c.SetInterested(!c.t.haveAllPieces())
+	}
+}
+
+func (c *connection) fillRequests() {
+	if !c.t.forUrgentPieces(func(piece int) (again bool) {
+		return c.t.connRequestPiecePendingChunks(c, piece)
+	}) {
+		return
+	}
+	c.t.forReaderWantedRegionPieces(func(begin, end int) (again bool) {
+		for i := begin + 1; i < end; i++ {
+			if !c.t.connRequestPiecePendingChunks(c, i) {
+				return false
+			}
+		}
+		return true
+	})
+	for i := range c.t.pendingPieces {
+		if !c.t.connRequestPiecePendingChunks(c, i) {
+			return
+		}
+	}
 }

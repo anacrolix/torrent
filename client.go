@@ -1357,11 +1357,7 @@ func (me *Client) sendChunk(t *torrent, c *connection, r request) error {
 	c.chunksSent++
 	b := make([]byte, r.Length)
 	tp := &t.Pieces[r.Index]
-	tp.pendingWritesMutex.Lock()
-	for tp.pendingWrites != 0 {
-		tp.noPendingWrites.Wait()
-	}
-	tp.pendingWritesMutex.Unlock()
+	tp.waitNoPendingWrites()
 	p := t.Info.Piece(int(r.Index))
 	n, err := dataReadAt(t.data, b, p.Offset()+int64(r.Begin))
 	if err != nil {

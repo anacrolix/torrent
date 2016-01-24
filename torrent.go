@@ -645,11 +645,7 @@ func (t *torrent) pieceLength(piece int) (len_ pp.Integer) {
 func (t *torrent) hashPiece(piece int) (ps pieceSum) {
 	hash := pieceHash.New()
 	p := &t.Pieces[piece]
-	p.pendingWritesMutex.Lock()
-	for p.pendingWrites != 0 {
-		p.noPendingWrites.Wait()
-	}
-	p.pendingWritesMutex.Unlock()
+	p.waitNoPendingWrites()
 	pl := t.Info.Piece(int(piece)).Length()
 	n, err := t.data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, pl)
 	if err != nil {

@@ -92,3 +92,29 @@ func (p *piece) shuffledPendingChunkSpecs(t *torrent, piece int) (css []chunkSpe
 	}
 	return
 }
+
+func (p *piece) incrementPendingWrites() {
+	p.pendingWritesMutex.Lock()
+	p.pendingWrites++
+	p.pendingWritesMutex.Unlock()
+}
+
+func (p *piece) decrementPendingWrites() {
+	p.pendingWritesMutex.Lock()
+	if p.pendingWrites == 0 {
+		panic("assertion")
+	}
+	p.pendingWrites--
+	if p.pendingWrites == 0 {
+		p.noPendingWrites.Broadcast()
+	}
+	p.pendingWritesMutex.Unlock()
+}
+
+func (p *piece) waitNoPendingWrites() {
+	p.pendingWritesMutex.Lock()
+	for p.pendingWrites != 0 {
+		p.noPendingWrites.Wait()
+	}
+	p.pendingWritesMutex.Unlock()
+}

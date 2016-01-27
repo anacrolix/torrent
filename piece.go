@@ -61,6 +61,13 @@ func (p *piece) unpendChunkIndex(i int) {
 	p.DirtyChunks[i] = true
 }
 
+func (p *piece) pendChunkIndex(i int) {
+	if i >= len(p.DirtyChunks) {
+		return
+	}
+	p.DirtyChunks[i] = false
+}
+
 func chunkIndexSpec(index int, pieceLength, chunkSize pp.Integer) chunkSpec {
 	ret := chunkSpec{pp.Integer(index) * chunkSize, chunkSize}
 	if ret.Begin+ret.Length > pieceLength {

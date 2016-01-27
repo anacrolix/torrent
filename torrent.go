@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/bradfitz/iter"
 
@@ -422,8 +423,8 @@ func (t *torrent) writeStatus(w io.Writer, cl *Client) {
 		}
 		fmt.Fprintln(w)
 	}
-	fmt.Fprintf(w, "Urgent:")
-	t.forReaderWantedRegionPieces(func(begin, end int) (again bool) {
+	fmt.Fprintf(w, "Reader Pieces:")
+	t.forReaderOffsetPieces(func(begin, end int) (again bool) {
 		fmt.Fprintf(w, " %d:%d", begin, end)
 		return true
 	})
@@ -567,9 +568,13 @@ func (t *torrent) offsetRequest(off int64) (req request, ok bool) {
 }
 
 func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
+	tr := perf.NewTimer()
 	n, err := t.data.WriteAt(data, int64(piece)*t.Info.PieceLength+begin)
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite
+	}
+	if err == nil {
+		tr.Stop("write chunk")
 	}
 	return
 }
@@ -729,14 +734,35 @@ func (t *torrent) wantPiece(index int) bool {
 	if p.Hashing {
 		return false
 	}
+	if t.pieceComplete(index) {
+		return false
+	}
+	if _, ok := t.pendingPieces[index]; ok {
+		return true
+	}
+	return !t.forReaderOffsetPieces(func(begin, end int) bool {
+		return index < begin || index >= end
+	})
+}
 
-	// Put piece complete check last, since it's the slowest as it can involve
-	// calling out into external data stores.
-	return !t.pieceComplete(index)
+func (t *torrent) forNeededPieces(f func(piece int) (more bool)) (all bool) {
+	return t.forReaderOffsetPieces(func(begin, end int) (more bool) {
+		for i := begin; begin < end; i++ {
+			if !f(i) {
+				return false
+			}
+		}
+		return true
+	})
 }
 
 func (t *torrent) connHasWantedPieces(c *connection) bool {
-	return !t.forReaderWantedRegionPieces(func(begin, end int) (again bool) {
+	for i := range t.pendingPieces {
+		if c.PeerHasPiece(i) {
+			return true
+		}
+	}
+	return !t.forReaderOffsetPieces(func(begin, end int) (again bool) {
 		for i := begin; i < end; i++ {
 			if c.PeerHasPiece(i) {
 				return false
@@ -781,6 +807,9 @@ func (t *torrent) publishPieceChange(piece int) {
 }
 
 func (t *torrent) pieceNumPendingChunks(piece int) int {
+	if t.pieceComplete(piece) {
+		return 0
+	}
 	return t.pieceNumChunks(piece) - t.Pieces[piece].numDirtyChunks()
 }
 
@@ -798,7 +827,7 @@ func (t *torrent) pieceAllDirty(piece int) bool {
 }
 
 func (t *torrent) forUrgentPieces(f func(piece int) (again bool)) (all bool) {
-	return t.forReaderWantedRegionPieces(func(begin, end int) (again bool) {
+	return t.forReaderOffsetPieces(func(begin, end int) (again bool) {
 		if begin < end {
 			if !f(begin) {
 				return false
@@ -836,7 +865,8 @@ func (t *torrent) byteRegionPieces(off, size int64) (begin, end int) {
 	return
 }
 
-func (t *torrent) forReaderWantedRegionPieces(f func(begin, end int) (more bool)) (all bool) {
+// Returns true if all iterations complete without breaking.
+func (t *torrent) forReaderOffsetPieces(f func(begin, end int) (more bool)) (all bool) {
 	for r := range t.readers {
 		r.mu.Lock()
 		pos, readahead := r.pos, r.readahead
@@ -868,7 +898,7 @@ func (t *torrent) piecePriority(piece int) (ret piecePriority) {
 			ret = prio
 		}
 	}
-	t.forReaderWantedRegionPieces(func(begin, end int) (again bool) {
+	t.forReaderOffsetPieces(func(begin, end int) (again bool) {
 		if piece == begin {
 			raiseRet(PiecePriorityNow)
 		}
@@ -912,4 +942,9 @@ func (t *torrent) connRequestPiecePendingChunks(c *connection, piece int) (more 
 		}
 	}
 	return true
+}
+
+func (t *torrent) pendRequest(req request) {
+	ci := chunkIndex(req.chunkSpec, t.chunkSize)
+	t.Pieces[req.Index].pendChunkIndex(ci)
 }

@@ -24,7 +24,6 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	. "github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
@@ -1482,7 +1481,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				}
 			}())
 		case pp.Piece:
-			err = me.downloadedChunk(t, c, &msg)
+			me.downloadedChunk(t, c, &msg)
 		case pp.Extended:
 			switch msg.ExtendedID {
 			case pp.HandshakeExtendedID:
@@ -1675,10 +1674,12 @@ func (t *torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
-	if len(t.pendingPieces) != 0 {
-		return true
+	for i := range t.pendingPieces {
+		if t.wantPiece(i) {
+			return true
+		}
 	}
-	return !t.forReaderWantedRegionPieces(func(begin, end int) (again bool) {
+	return !t.forReaderOffsetPieces(func(begin, end int) (again bool) {
 		for i := begin; i < end; i++ {
 			if !t.pieceComplete(i) {
 				return false
@@ -2363,7 +2364,7 @@ func (me *Client) WaitAll() bool {
 }
 
 // Handle a received chunk from a peer.
-func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) error {
+func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) {
 	chunksReceived.Add(1)
 
 	req := newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))
@@ -2382,7 +2383,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	if !t.wantChunk(req) {
 		unwantedChunksReceived.Add(1)
 		c.UnwantedChunksReceived++
-		return nil
+		return
 	}
 
 	c.UsefulChunksReceived++
@@ -2390,45 +2391,11 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 
 	me.upload(t, c)
 
-	piece.pendingWritesMutex.Lock()
-	piece.pendingWrites++
-	piece.pendingWritesMutex.Unlock()
-	go func() {
-		defer me.event.Broadcast()
-		defer func() {
-			piece.pendingWritesMutex.Lock()
-			piece.pendingWrites--
-			if piece.pendingWrites == 0 {
-				piece.noPendingWrites.Broadcast()
-			}
-			piece.pendingWritesMutex.Unlock()
-		}()
-		// Write the chunk out.
-		tr := perf.NewTimer()
-		err := t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
-		if err != nil {
-			log.Printf("error writing chunk: %s", err)
-			return
-		}
-		tr.Stop("write chunk")
-		me.mu.Lock()
-		if c.peerTouchedPieces == nil {
-			c.peerTouchedPieces = make(map[int]struct{})
-		}
-		c.peerTouchedPieces[index] = struct{}{}
-		me.mu.Unlock()
-	}()
-
-	// log.Println("got chunk", req)
-	me.event.Broadcast()
-	defer t.publishPieceChange(int(req.Index))
+	// Need to record that it hasn't been written yet, before we attempt to do
+	// anything with it.
+	piece.incrementPendingWrites()
 	// Record that we have the chunk.
 	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, t.chunkSize))
-	// It's important that the piece is potentially queued before we check if
-	// the piece is still wanted, because if it is queued, it won't be wanted.
-	if t.pieceAllDirty(index) {
-		me.queuePieceCheck(t, int(req.Index))
-	}
 
 	// Cancel pending requests for this chunk.
 	for _, c := range t.Conns {
@@ -2437,7 +2404,33 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 		}
 	}
 
-	return nil
+	me.mu.Unlock()
+	// Write the chunk out.
+	err := t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
+	me.mu.Lock()
+
+	piece.decrementPendingWrites()
+
+	if err != nil {
+		log.Printf("error writing chunk: %s", err)
+		t.pendRequest(req)
+		return
+	}
+
+	// It's important that the piece is potentially queued before we check if
+	// the piece is still wanted, because if it is queued, it won't be wanted.
+	if t.pieceAllDirty(index) {
+		me.queuePieceCheck(t, int(req.Index))
+	}
+
+	if c.peerTouchedPieces == nil {
+		c.peerTouchedPieces = make(map[int]struct{})
+	}
+	c.peerTouchedPieces[index] = struct{}{}
+
+	me.event.Broadcast()
+	t.publishPieceChange(int(req.Index))
+	return
 }
 
 // Return the connections that touched a piece, and clear the entry while

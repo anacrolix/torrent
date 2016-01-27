@@ -564,7 +564,7 @@ func (c *connection) fillRequests() {
 	}) {
 		return
 	}
-	c.t.forReaderWantedRegionPieces(func(begin, end int) (again bool) {
+	c.t.forReaderOffsetPieces(func(begin, end int) (again bool) {
 		for i := begin + 1; i < end; i++ {
 			if !c.t.connRequestPiecePendingChunks(c, i) {
 				return false
@@ -573,6 +573,9 @@ func (c *connection) fillRequests() {
 		return true
 	})
 	for i := range c.t.pendingPieces {
+		if !c.t.wantPiece(i) {
+			continue
+		}
 		if !c.t.connRequestPiecePendingChunks(c, i) {
 			return
 		}

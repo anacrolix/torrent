@@ -34,13 +34,13 @@ func (t Torrent) Info() *metainfo.Info {
 }
 
 // Returns a Reader bound to the torrent's data. All read calls block until
-// the data requested is actually available. Priorities are set to ensure the
-// data requested will be downloaded as soon as possible.
+// the data requested is actually available.
 func (t Torrent) NewReader() (ret *Reader) {
 	ret = &Reader{
 		t:         &t,
 		readahead: 5 * 1024 * 1024,
 	}
+	t.addReader(ret)
 	return
 }
 
@@ -118,4 +118,29 @@ func (t Torrent) MetaInfo() *metainfo.MetaInfo {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	return t.torrent.MetaInfo()
+}
+
+func (t Torrent) addReader(r *Reader) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	if t.torrent.readers == nil {
+		t.torrent.readers = make(map[*Reader]struct{})
+	}
+	t.torrent.readers[r] = struct{}{}
+	t.torrent.readersChanged(t.cl)
+}
+
+func (t Torrent) deleteReader(r *Reader) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	delete(t.torrent.readers, r)
+	t.torrent.readersChanged(t.cl)
+}
+
+func (t Torrent) DownloadPieces(begin, end int) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	for i := begin; i < end; i++ {
+		t.torrent.pendPiece(i, t.cl)
+	}
 }

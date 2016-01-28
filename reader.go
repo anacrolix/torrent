@@ -4,11 +4,14 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sync"
 )
 
 // Accesses torrent data via a client.
 type Reader struct {
-	t          *Torrent
+	t *Torrent
+
+	mu         sync.Mutex
 	pos        int64
 	responsive bool
 	readahead  int64
@@ -25,16 +28,9 @@ func (r *Reader) SetResponsive() {
 // Configure the number of bytes ahead of a read that should also be
 // prioritized in preparation for further reads.
 func (r *Reader) SetReadahead(readahead int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.readahead = readahead
-}
-
-func (r *Reader) raisePriorities(off int64, n int) {
-	if r.responsive {
-		r.t.cl.addUrgentRequests(r.t.torrent, off, n)
-	}
-	if !r.responsive || r.readahead != 0 {
-		r.t.cl.readRaisePiecePriorities(r.t.torrent, off, int64(n)+r.readahead)
-	}
 }
 
 func (r *Reader) readable(off int64) (ret bool) {
@@ -77,26 +73,26 @@ func (r *Reader) available(off, max int64) (ret int64) {
 	return
 }
 
+func (r *Reader) tickleClient() {
+	r.t.torrent.readersChanged(r.t.cl)
+}
+
 func (r *Reader) waitReadable(off int64) {
+	// We may have been sent back here because we were told we could read but
+	// it failed.
+	r.tickleClient()
 	r.t.cl.event.Wait()
 }
 
-func (r *Reader) ReadAt(b []byte, off int64) (n int, err error) {
-	for {
-		var n1 int
-		n1, err = r.readAt(b, off)
-		n += n1
-		b = b[n1:]
-		off += int64(n1)
-		if err != nil || len(b) == 0 || n1 == 0 {
-			return
-		}
-	}
-}
-
 func (r *Reader) Read(b []byte) (n int, err error) {
-	n, err = r.readAt(b, r.pos)
+	r.mu.Lock()
+	pos := r.pos
+	r.mu.Unlock()
+	n, err = r.readAt(b, pos)
+	r.mu.Lock()
 	r.pos += int64(n)
+	r.mu.Unlock()
+	r.posChanged()
 	return
 }
 
@@ -115,9 +111,7 @@ func (r *Reader) readAt(b []byte, pos int64) (n int, err error) {
 	}
 again:
 	r.t.cl.mu.Lock()
-	r.raisePriorities(pos, len(b))
 	for !r.readable(pos) {
-		r.raisePriorities(pos, len(b))
 		r.waitReadable(pos)
 	}
 	avail := r.available(pos, int64(len(b)))
@@ -131,11 +125,7 @@ again:
 	if int64(len(b1)) > ip.Length()-po {
 		b1 = b1[:ip.Length()-po]
 	}
-	tp.pendingWritesMutex.Lock()
-	for tp.pendingWrites != 0 {
-		tp.noPendingWrites.Wait()
-	}
-	tp.pendingWritesMutex.Unlock()
+	tp.waitNoPendingWrites()
 	n, err = dataReadAt(r.t.torrent.data, b1, pos)
 	if n != 0 {
 		err = nil
@@ -154,11 +144,19 @@ again:
 }
 
 func (r *Reader) Close() error {
+	r.t.deleteReader(r)
 	r.t = nil
 	return nil
 }
 
+func (r *Reader) posChanged() {
+	r.t.cl.mu.Lock()
+	defer r.t.cl.mu.Unlock()
+	r.t.torrent.readersChanged(r.t.cl)
+}
+
 func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {
+	r.mu.Lock()
 	switch whence {
 	case os.SEEK_SET:
 		r.pos = off
@@ -170,5 +168,7 @@ func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {
 		err = errors.New("bad whence")
 	}
 	ret = r.pos
+	r.mu.Unlock()
+	r.posChanged()
 	return
 }

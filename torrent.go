@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/bradfitz/iter"
 
@@ -62,9 +62,6 @@ type torrent struct {
 	// Values are the piece indices that changed.
 	pieceStateChanges *pubsub.PubSub
 	chunkSize         pp.Integer
-	// Chunks that are wanted before all others. This is for
-	// responsive/streaming readers that want to unblock ASAP.
-	urgent map[request]struct{}
 	// Total length of the torrent in bytes. Stored because it's not O(1) to
 	// get this from the info dict.
 	length int64
@@ -99,7 +96,9 @@ type torrent struct {
 	// Closed when .Info is set.
 	gotMetainfo chan struct{}
 
-	connPiecePriorites sync.Pool
+	readers map[*Reader]struct{}
+
+	pendingPieces map[int]struct{}
 }
 
 var (
@@ -109,16 +108,6 @@ var (
 
 func (t *torrent) setDisplayName(dn string) {
 	t.displayName = dn
-}
-
-func (t *torrent) newConnPiecePriorities() []int {
-	_ret := t.connPiecePriorites.Get()
-	if _ret != nil {
-		piecePrioritiesReused.Add(1)
-		return _ret.([]int)
-	}
-	piecePrioritiesNew.Add(1)
-	return rand.Perm(t.numPieces())
 }
 
 func (t *torrent) pieceComplete(piece int) bool {
@@ -261,7 +250,6 @@ func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte) (err error) {
 		missinggo.CopyExact(piece.Hash[:], hash)
 	}
 	for _, conn := range t.Conns {
-		t.initRequestOrdering(conn)
 		if err := conn.setNumPieces(t.numPieces()); err != nil {
 			log.Printf("closing connection: %s", err)
 			conn.Close()
@@ -324,7 +312,7 @@ func (t *torrent) Name() string {
 
 func (t *torrent) pieceState(index int) (ret PieceState) {
 	p := &t.Pieces[index]
-	ret.Priority = p.Priority
+	ret.Priority = t.piecePriority(index)
 	if t.pieceComplete(index) {
 		ret.Complete = true
 	}
@@ -435,10 +423,11 @@ func (t *torrent) writeStatus(w io.Writer, cl *Client) {
 		}
 		fmt.Fprintln(w)
 	}
-	fmt.Fprintf(w, "Urgent:")
-	for req := range t.urgent {
-		fmt.Fprintf(w, " %v", req)
-	}
+	fmt.Fprintf(w, "Reader Pieces:")
+	t.forReaderOffsetPieces(func(begin, end int) (again bool) {
+		fmt.Fprintf(w, " %d:%d", begin, end)
+		return true
+	})
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Trackers: ")
 	for _, tier := range t.Trackers {
@@ -470,7 +459,7 @@ func (t *torrent) String() string {
 }
 
 func (t *torrent) haveInfo() bool {
-	return t != nil && t.Info != nil
+	return t.Info != nil
 }
 
 // TODO: Include URIs that weren't converted to tracker clients.
@@ -579,9 +568,13 @@ func (t *torrent) offsetRequest(off int64) (req request, ok bool) {
 }
 
 func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
+	tr := perf.NewTimer()
 	n, err := t.data.WriteAt(data, int64(piece)*t.Info.PieceLength+begin)
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite
+	}
+	if err == nil {
+		tr.Stop("write chunk")
 	}
 	return
 }
@@ -657,11 +650,7 @@ func (t *torrent) pieceLength(piece int) (len_ pp.Integer) {
 func (t *torrent) hashPiece(piece int) (ps pieceSum) {
 	hash := pieceHash.New()
 	p := &t.Pieces[piece]
-	p.pendingWritesMutex.Lock()
-	for p.pendingWrites != 0 {
-		p.noPendingWrites.Wait()
-	}
-	p.pendingWritesMutex.Unlock()
+	p.waitNoPendingWrites()
 	pl := t.Info.Piece(int(piece)).Length()
 	n, err := t.data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, pl)
 	if err != nil {
@@ -728,17 +717,8 @@ func (t *torrent) wantChunk(r request) bool {
 	if t.Pieces[r.Index].pendingChunk(r.chunkSpec, t.chunkSize) {
 		return true
 	}
-	_, ok := t.urgent[r]
-	return ok
-}
-
-func (t *torrent) urgentChunkInPiece(piece int) bool {
-	p := pp.Integer(piece)
-	for req := range t.urgent {
-		if req.Index == p {
-			return true
-		}
-	}
+	// TODO: What about pieces that were wanted, but aren't now, and aren't
+	// completed either? That used to be done here.
 	return false
 }
 
@@ -754,18 +734,42 @@ func (t *torrent) wantPiece(index int) bool {
 	if p.Hashing {
 		return false
 	}
-	if p.Priority == PiecePriorityNone {
-		if !t.urgentChunkInPiece(index) {
-			return false
-		}
+	if t.pieceComplete(index) {
+		return false
 	}
-	// Put piece complete check last, since it's the slowest as it can involve
-	// calling out into external data stores.
-	return !t.pieceComplete(index)
+	if _, ok := t.pendingPieces[index]; ok {
+		return true
+	}
+	return !t.forReaderOffsetPieces(func(begin, end int) bool {
+		return index < begin || index >= end
+	})
+}
+
+func (t *torrent) forNeededPieces(f func(piece int) (more bool)) (all bool) {
+	return t.forReaderOffsetPieces(func(begin, end int) (more bool) {
+		for i := begin; begin < end; i++ {
+			if !f(i) {
+				return false
+			}
+		}
+		return true
+	})
 }
 
 func (t *torrent) connHasWantedPieces(c *connection) bool {
-	return c.pieceRequestOrder != nil && !c.pieceRequestOrder.Empty()
+	for i := range t.pendingPieces {
+		if c.PeerHasPiece(i) {
+			return true
+		}
+	}
+	return !t.forReaderOffsetPieces(func(begin, end int) (again bool) {
+		for i := begin; i < end; i++ {
+			if c.PeerHasPiece(i) {
+				return false
+			}
+		}
+		return true
+	})
 }
 
 func (t *torrent) extentPieces(off, _len int64) (pieces []int) {
@@ -803,6 +807,9 @@ func (t *torrent) publishPieceChange(piece int) {
 }
 
 func (t *torrent) pieceNumPendingChunks(piece int) int {
+	if t.pieceComplete(piece) {
+		return 0
+	}
 	return t.pieceNumChunks(piece) - t.Pieces[piece].numDirtyChunks()
 }
 
@@ -817,4 +824,127 @@ func (t *torrent) pieceAllDirty(piece int) bool {
 		}
 	}
 	return true
+}
+
+func (t *torrent) forUrgentPieces(f func(piece int) (again bool)) (all bool) {
+	return t.forReaderOffsetPieces(func(begin, end int) (again bool) {
+		if begin < end {
+			if !f(begin) {
+				return false
+			}
+		}
+		return true
+	})
+}
+
+func (t *torrent) readersChanged(cl *Client) {
+	// Accept new connections.
+	cl.event.Broadcast()
+	for _, c := range t.Conns {
+		c.updateRequests()
+	}
+	cl.openNewConns(t)
+}
+
+func (t *torrent) byteRegionPieces(off, size int64) (begin, end int) {
+	if off >= t.length {
+		return
+	}
+	if off < 0 {
+		size += off
+		off = 0
+	}
+	if size <= 0 {
+		return
+	}
+	begin = int(off / t.Info.PieceLength)
+	end = int((off + size + t.Info.PieceLength - 1) / t.Info.PieceLength)
+	if end > t.Info.NumPieces() {
+		end = t.Info.NumPieces()
+	}
+	return
+}
+
+// Returns true if all iterations complete without breaking.
+func (t *torrent) forReaderOffsetPieces(f func(begin, end int) (more bool)) (all bool) {
+	for r := range t.readers {
+		r.mu.Lock()
+		pos, readahead := r.pos, r.readahead
+		r.mu.Unlock()
+		if readahead < 1 {
+			readahead = 1
+		}
+		begin, end := t.byteRegionPieces(pos, readahead)
+		if begin >= end {
+			continue
+		}
+		if !f(begin, end) {
+			return false
+		}
+	}
+	return true
+}
+
+func (t *torrent) piecePriority(piece int) (ret piecePriority) {
+	ret = PiecePriorityNone
+	if t.pieceComplete(piece) {
+		return
+	}
+	if _, ok := t.pendingPieces[piece]; ok {
+		ret = PiecePriorityNormal
+	}
+	raiseRet := func(prio piecePriority) {
+		if prio > ret {
+			ret = prio
+		}
+	}
+	t.forReaderOffsetPieces(func(begin, end int) (again bool) {
+		if piece == begin {
+			raiseRet(PiecePriorityNow)
+		}
+		if begin <= piece && piece < end {
+			raiseRet(PiecePriorityReadahead)
+		}
+		return true
+	})
+	return
+}
+
+func (t *torrent) pendPiece(piece int, cl *Client) {
+	if t.pendingPieces == nil {
+		t.pendingPieces = make(map[int]struct{}, t.Info.NumPieces())
+	}
+	if _, ok := t.pendingPieces[piece]; ok {
+		return
+	}
+	if t.havePiece(piece) {
+		return
+	}
+	t.pendingPieces[piece] = struct{}{}
+	for _, c := range t.Conns {
+		if !c.PeerHasPiece(piece) {
+			continue
+		}
+		c.updateRequests()
+	}
+	cl.openNewConns(t)
+	cl.pieceChanged(t, piece)
+}
+
+func (t *torrent) connRequestPiecePendingChunks(c *connection, piece int) (more bool) {
+	if !c.PeerHasPiece(piece) {
+		return true
+	}
+	for _, cs := range t.Pieces[piece].shuffledPendingChunkSpecs(t, piece) {
+		req := request{pp.Integer(piece), cs}
+		if !c.Request(req) {
+			return false
+		}
+	}
+	return true
+}
+
+func (t *torrent) pendRequest(req request) {
+	ci := chunkIndex(req.chunkSpec, t.chunkSize)
+	t.Pieces[req.Index].pendChunkIndex(ci)
 }

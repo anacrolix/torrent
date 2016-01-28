@@ -1,8 +1,9 @@
 package torrent_test
 
 import (
-	"io"
 	"log"
+
+	"github.com/anacrolix/missinggo"
 
 	"github.com/anacrolix/torrent"
 )
@@ -26,5 +27,5 @@ func Example_fileReader() {
 	defer r.Close()
 	// Access the parts of the torrent pertaining to f. Data will be
 	// downloaded as required, per the configuration of the torrent.Reader.
-	_ = io.NewSectionReader(r, f.Offset(), f.Length())
+	_ = missinggo.NewSectionReadSeeker(r, f.Offset(), f.Length())
 }

@@ -24,7 +24,6 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	. "github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
@@ -34,7 +33,6 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	filePkg "github.com/anacrolix/torrent/data/file"
 	"github.com/anacrolix/torrent/dht"
-	"github.com/anacrolix/torrent/internal/pieceordering"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
@@ -252,6 +250,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
+// TODO: Make this non-blocking Read on Torrent.
 func dataReadAt(d Data, b []byte, off int64) (n int, err error) {
 	// defer func() {
 	// 	if err == io.ErrUnexpectedEOF && n != 0 {
@@ -276,47 +275,6 @@ func readaheadPieces(readahead, pieceLength int64) (ret int) {
 	return
 }
 
-func (cl *Client) readRaisePiecePriorities(t *torrent, off, readaheadBytes int64) {
-	index := int(off / int64(t.usualPieceSize()))
-	cl.raisePiecePriority(t, index, PiecePriorityNow)
-	index++
-	if index >= t.numPieces() {
-		return
-	}
-	cl.raisePiecePriority(t, index, PiecePriorityNext)
-	for range iter.N(readaheadPieces(readaheadBytes, t.Info.PieceLength)) {
-		index++
-		if index >= t.numPieces() {
-			break
-		}
-		cl.raisePiecePriority(t, index, PiecePriorityReadahead)
-	}
-}
-
-func (cl *Client) addUrgentRequests(t *torrent, off int64, n int) {
-	for n > 0 {
-		req, ok := t.offsetRequest(off)
-		if !ok {
-			break
-		}
-		if _, ok := t.urgent[req]; !ok && !t.haveChunk(req) {
-			if t.urgent == nil {
-				t.urgent = make(map[request]struct{}, (n+int(t.chunkSize)-1)/int(t.chunkSize))
-			}
-			t.urgent[req] = struct{}{}
-			cl.event.Broadcast() // Why?
-			index := int(req.Index)
-			cl.queueFirstHash(t, index)
-			cl.pieceChanged(t, index)
-		}
-		reqOff := t.requestOffset(req)
-		n1 := req.Length - pp.Integer(off-reqOff)
-		off += int64(n1)
-		n -= int(n1)
-	}
-	// log.Print(t.urgent)
-}
-
 func (cl *Client) configDir() string {
 	if cl.config.ConfigDir == "" {
 		return filepath.Join(os.Getenv("HOME"), ".config/torrent")
@@ -328,30 +286,6 @@ func (cl *Client) configDir() string {
 // data. Defaults to $HOME/.config/torrent.
 func (cl *Client) ConfigDir() string {
 	return cl.configDir()
-}
-
-func (t *torrent) connPendPiece(c *connection, piece int) {
-	c.pendPiece(piece, t.Pieces[piece].Priority, t)
-}
-
-func (cl *Client) raisePiecePriority(t *torrent, piece int, priority piecePriority) {
-	if t.Pieces[piece].Priority < priority {
-		cl.prioritizePiece(t, piece, priority)
-	}
-}
-
-func (cl *Client) prioritizePiece(t *torrent, piece int, priority piecePriority) {
-	if t.havePiece(piece) {
-		priority = PiecePriorityNone
-	}
-	if priority != PiecePriorityNone {
-		cl.queueFirstHash(t, piece)
-	}
-	p := &t.Pieces[piece]
-	if p.Priority != priority {
-		p.Priority = priority
-		cl.pieceChanged(t, piece)
-	}
 }
 
 func loadPackedBlocklist(filename string) (ret iplist.Ranger, err error) {
@@ -1169,9 +1103,6 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) (err error) {
 	go c.writer()
 	go c.writeOptimizer(time.Minute)
 	cl.sendInitialMessages(c, t)
-	if t.haveInfo() {
-		t.initRequestOrdering(c)
-	}
 	err = cl.connectionLoop(t, c)
 	if err != nil {
 		err = fmt.Errorf("error during connection loop: %s", err)
@@ -1237,26 +1168,6 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 	}
 }
 
-// Randomizes the piece order for this connection. Every connection will be
-// given a different ordering. Having it stored per connection saves having to
-// randomize during request filling, and constantly recalculate the ordering
-// based on piece priorities.
-func (t *torrent) initRequestOrdering(c *connection) {
-	if c.pieceRequestOrder != nil || c.piecePriorities != nil {
-		panic("double init of request ordering")
-	}
-	c.pieceRequestOrder = pieceordering.New()
-	for i := range iter.N(t.Info.NumPieces()) {
-		if !c.PeerHasPiece(i) {
-			continue
-		}
-		if !t.wantPiece(i) {
-			continue
-		}
-		t.connPendPiece(c, i)
-	}
-}
-
 func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) error {
 	if !c.peerHasAll {
 		if t.haveInfo() {
@@ -1274,14 +1185,13 @@ func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) error {
 		c.PeerPieces[piece] = true
 	}
 	if t.wantPiece(piece) {
-		t.connPendPiece(c, piece)
-		me.replenishConnRequests(t, c)
+		c.updateRequests()
 	}
 	return nil
 }
 
 func (me *Client) peerUnchoked(torrent *torrent, conn *connection) {
-	me.replenishConnRequests(torrent, conn)
+	conn.updateRequests()
 }
 
 func (cl *Client) connCancel(t *torrent, cn *connection, r request) (ok bool) {
@@ -1447,11 +1357,7 @@ func (me *Client) sendChunk(t *torrent, c *connection, r request) error {
 	c.chunksSent++
 	b := make([]byte, r.Length)
 	tp := &t.Pieces[r.Index]
-	tp.pendingWritesMutex.Lock()
-	for tp.pendingWrites != 0 {
-		tp.noPendingWrites.Wait()
-	}
-	tp.pendingWritesMutex.Unlock()
+	tp.waitNoPendingWrites()
 	p := t.Info.Piece(int(r.Index))
 	n, err := dataReadAt(t.data, b, p.Offset()+int64(r.Begin))
 	if err != nil {
@@ -1506,10 +1412,10 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				me.connDeleteRequest(t, c, r)
 			}
 			// We can then reset our interest.
-			me.replenishConnRequests(t, c)
+			c.updateRequests()
 		case pp.Reject:
 			me.connDeleteRequest(t, c, newRequest(msg.Index, msg.Begin, msg.Length))
-			me.replenishConnRequests(t, c)
+			c.updateRequests()
 		case pp.Unchoke:
 			c.PeerChoked = false
 			me.peerUnchoked(t, c)
@@ -1576,7 +1482,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				}
 			}())
 		case pp.Piece:
-			err = me.downloadedChunk(t, c, &msg)
+			me.downloadedChunk(t, c, &msg)
 		case pp.Extended:
 			switch msg.ExtendedID {
 			case pp.HandshakeExtendedID:
@@ -1721,12 +1627,6 @@ func (me *Client) deleteConnection(t *torrent, c *connection) bool {
 func (me *Client) dropConnection(t *torrent, c *connection) {
 	me.event.Broadcast()
 	c.Close()
-	if c.piecePriorities != nil {
-		t.connPiecePriorites.Put(c.piecePriorities)
-		// I wonder if it's safe to set it to nil. Probably not. Since it's
-		// only read, it doesn't particularly matter if a closing connection
-		// shares the slice with another connection.
-	}
 	if me.deleteConnection(t, c) {
 		me.openNewConns(t)
 	}
@@ -1767,6 +1667,7 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 		panic(len(t.Conns))
 	}
 	t.Conns = append(t.Conns, c)
+	c.t = t
 	return true
 }
 
@@ -1774,16 +1675,19 @@ func (t *torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
-	if len(t.urgent) != 0 {
-		return true
-	}
-	for i := range t.Pieces {
-		p := &t.Pieces[i]
-		if p.Priority != PiecePriorityNone {
+	for i := range t.pendingPieces {
+		if t.wantPiece(i) {
 			return true
 		}
 	}
-	return false
+	return !t.forReaderOffsetPieces(func(begin, end int) (again bool) {
+		for i := begin; i < end; i++ {
+			if !t.pieceComplete(i) {
+				return false
+			}
+		}
+		return true
+	})
 }
 
 func (cl *Client) usefulConn(t *torrent, c *connection) bool {
@@ -2048,16 +1952,6 @@ func (t Torrent) Files() (ret []File) {
 	return
 }
 
-// Marks the pieces in the given region for download.
-func (t Torrent) SetRegionPriority(off, len int64) {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
-	pieceSize := int64(t.torrent.usualPieceSize())
-	for i := off / pieceSize; i*pieceSize < off+len; i++ {
-		t.cl.raisePiecePriority(t.torrent, int(i), PiecePriorityNormal)
-	}
-}
-
 func (t Torrent) AddPeers(pp []Peer) error {
 	cl := t.cl
 	cl.mu.Lock()
@@ -2071,13 +1965,9 @@ func (t Torrent) AddPeers(pp []Peer) error {
 func (t Torrent) DownloadAll() {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
-	for i := range iter.N(t.torrent.numPieces()) {
-		t.cl.raisePiecePriority(t.torrent, i, PiecePriorityNormal)
+	for i := range iter.N(t.torrent.Info.NumPieces()) {
+		t.torrent.pendPiece(i, t.cl)
 	}
-	// Nice to have the first and last pieces sooner for various interactive
-	// purposes.
-	t.cl.raisePiecePriority(t.torrent, 0, PiecePriorityReadahead)
-	t.cl.raisePiecePriority(t.torrent, t.torrent.numPieces()-1, PiecePriorityReadahead)
 }
 
 // Returns nil metainfo if it isn't in the cache. Checks that the retrieved
@@ -2474,71 +2364,15 @@ func (me *Client) WaitAll() bool {
 	return true
 }
 
-func (me *Client) fillRequests(t *torrent, c *connection) {
-	if c.Interested {
-		if c.PeerChoked {
-			return
-		}
-		if len(c.Requests) > c.requestsLowWater {
-			return
-		}
-	}
-	addRequest := func(req request) (again bool) {
-		// TODO: Couldn't this check also be done *after* the request?
-		if len(c.Requests) >= 64 {
-			return false
-		}
-		return c.Request(req)
-	}
-	for req := range t.urgent {
-		if !addRequest(req) {
-			return
-		}
-	}
-	for e := c.pieceRequestOrder.First(); e != nil; e = e.Next() {
-		pieceIndex := e.Piece()
-		if !c.PeerHasPiece(pieceIndex) {
-			panic("piece in request order but peer doesn't have it")
-		}
-		if !t.wantPiece(pieceIndex) {
-			log.Printf("unwanted piece %d in connection request order\n%s", pieceIndex, c)
-			c.pieceRequestOrder.DeletePiece(pieceIndex)
-			continue
-		}
-		piece := &t.Pieces[pieceIndex]
-		for _, cs := range piece.shuffledPendingChunkSpecs(t, pieceIndex) {
-			r := request{pp.Integer(pieceIndex), cs}
-			if !addRequest(r) {
-				return
-			}
-		}
-	}
-	return
-}
-
-func (me *Client) replenishConnRequests(t *torrent, c *connection) {
-	if !t.haveInfo() {
-		return
-	}
-	me.fillRequests(t, c)
-	if len(c.Requests) == 0 && !c.PeerChoked {
-		// So we're not choked, but we don't want anything right now. We may
-		// have completed readahead, and the readahead window has not rolled
-		// over to the next piece. Better to stay interested in case we're
-		// going to want data in the near future.
-		c.SetInterested(!t.haveAllPieces())
-	}
-}
-
 // Handle a received chunk from a peer.
-func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) error {
+func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) {
 	chunksReceived.Add(1)
 
 	req := newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))
 
 	// Request has been satisfied.
 	if me.connDeleteRequest(t, c, req) {
-		defer me.replenishConnRequests(t, c)
+		defer c.updateRequests()
 	} else {
 		unexpectedChunksReceived.Add(1)
 	}
@@ -2550,7 +2384,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 	if !t.wantChunk(req) {
 		unwantedChunksReceived.Add(1)
 		c.UnwantedChunksReceived++
-		return nil
+		return
 	}
 
 	c.UsefulChunksReceived++
@@ -2558,59 +2392,46 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) er
 
 	me.upload(t, c)
 
-	piece.pendingWritesMutex.Lock()
-	piece.pendingWrites++
-	piece.pendingWritesMutex.Unlock()
-	go func() {
-		defer func() {
-			piece.pendingWritesMutex.Lock()
-			piece.pendingWrites--
-			if piece.pendingWrites == 0 {
-				piece.noPendingWrites.Broadcast()
-			}
-			piece.pendingWritesMutex.Unlock()
-		}()
-		// Write the chunk out.
-		tr := perf.NewTimer()
-		err := t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
-		if err != nil {
-			log.Printf("error writing chunk: %s", err)
-			return
-		}
-		tr.Stop("write chunk")
-		me.mu.Lock()
-		if c.peerTouchedPieces == nil {
-			c.peerTouchedPieces = make(map[int]struct{})
-		}
-		c.peerTouchedPieces[index] = struct{}{}
-		me.mu.Unlock()
-	}()
-
-	// log.Println("got chunk", req)
-	me.event.Broadcast()
-	defer t.publishPieceChange(int(req.Index))
+	// Need to record that it hasn't been written yet, before we attempt to do
+	// anything with it.
+	piece.incrementPendingWrites()
 	// Record that we have the chunk.
 	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, t.chunkSize))
-	delete(t.urgent, req)
+
+	// Cancel pending requests for this chunk.
+	for _, c := range t.Conns {
+		if me.connCancel(t, c, req) {
+			c.updateRequests()
+		}
+	}
+
+	me.mu.Unlock()
+	// Write the chunk out.
+	err := t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
+	me.mu.Lock()
+
+	piece.decrementPendingWrites()
+
+	if err != nil {
+		log.Printf("error writing chunk: %s", err)
+		t.pendRequest(req)
+		return
+	}
+
 	// It's important that the piece is potentially queued before we check if
 	// the piece is still wanted, because if it is queued, it won't be wanted.
 	if t.pieceAllDirty(index) {
 		me.queuePieceCheck(t, int(req.Index))
 	}
-	if !t.wantPiece(int(req.Index)) {
-		for _, c := range t.Conns {
-			c.pieceRequestOrder.DeletePiece(int(req.Index))
-		}
-	}
 
-	// Cancel pending requests for this chunk.
-	for _, c := range t.Conns {
-		if me.connCancel(t, c, req) {
-			me.replenishConnRequests(t, c)
-		}
+	if c.peerTouchedPieces == nil {
+		c.peerTouchedPieces = make(map[int]struct{})
 	}
+	c.peerTouchedPieces[index] = struct{}{}
 
-	return nil
+	me.event.Broadcast()
+	t.publishPieceChange(int(req.Index))
+	return
 }
 
 // Return the connections that touched a piece, and clear the entry while
@@ -2654,42 +2475,45 @@ func (me *Client) pieceHashed(t *torrent, piece int, correct bool) {
 	me.pieceChanged(t, int(piece))
 }
 
+func (me *Client) onCompletedPiece(t *torrent, piece int) {
+	delete(t.pendingPieces, piece)
+	for _, conn := range t.Conns {
+		conn.Have(piece)
+		for r := range conn.Requests {
+			if int(r.Index) == piece {
+				conn.Cancel(r)
+			}
+		}
+		// Could check here if peer doesn't have piece, but due to caching
+		// some peers may have said they have a piece but they don't.
+		me.upload(t, conn)
+	}
+}
+
+func (me *Client) onFailedPiece(t *torrent, piece int) {
+	if t.pieceAllDirty(piece) {
+		t.pendAllChunkSpecs(piece)
+	}
+	if !t.wantPiece(piece) {
+		return
+	}
+	me.openNewConns(t)
+	for _, conn := range t.Conns {
+		if conn.PeerHasPiece(piece) {
+			conn.updateRequests()
+		}
+	}
+}
+
 func (me *Client) pieceChanged(t *torrent, piece int) {
 	correct := t.pieceComplete(piece)
-	p := &t.Pieces[piece]
 	defer t.publishPieceChange(piece)
 	defer me.event.Broadcast()
 	if correct {
-		p.Priority = PiecePriorityNone
-		for req := range t.urgent {
-			if int(req.Index) == piece {
-				delete(t.urgent, req)
-			}
-		}
+		me.onCompletedPiece(t, piece)
 	} else {
-		if t.pieceAllDirty(piece) {
-			t.pendAllChunkSpecs(piece)
-		}
-		if t.wantPiece(piece) {
-			me.openNewConns(t)
-		}
+		me.onFailedPiece(t, piece)
 	}
-	for _, conn := range t.Conns {
-		if correct {
-			conn.Have(piece)
-			for r := range conn.Requests {
-				if int(r.Index) == piece {
-					conn.Cancel(r)
-				}
-			}
-			conn.pieceRequestOrder.DeletePiece(int(piece))
-			me.upload(t, conn)
-		} else if t.wantPiece(piece) && conn.PeerHasPiece(piece) {
-			t.connPendPiece(conn, int(piece))
-			me.replenishConnRequests(t, conn)
-		}
-	}
-	me.event.Broadcast()
 }
 
 func (cl *Client) verifyPiece(t *torrent, piece int) {

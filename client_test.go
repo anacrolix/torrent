@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -317,6 +318,12 @@ func TestClientTransfer(t *testing.T) {
 	}
 }
 
+func exportClientStatus(cl *Client, path string) {
+	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		cl.WriteStatus(w)
+	})
+}
+
 // Check that after completing leeching, a leecher transitions to a seeding
 // correctly. Connected in a chain like so: Seeder <-> Leecher <-> LeecherLeecher.
 func TestSeedAfterDownloading(t *testing.T) {
@@ -327,12 +334,14 @@ func TestSeedAfterDownloading(t *testing.T) {
 	cfg.DataDir = greetingTempDir
 	seeder, err := NewClient(&cfg)
 	defer seeder.Close()
+	exportClientStatus(seeder, "/s")
 	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.DataDir)
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()
+	exportClientStatus(leecher, "/l")
 	cfg.Seed = false
 	cfg.TorrentDataOpener = nil
 	cfg.DataDir, err = ioutil.TempDir("", "")
@@ -340,6 +349,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	defer os.RemoveAll(cfg.DataDir)
 	leecherLeecher, _ := NewClient(&cfg)
 	defer leecherLeecher.Close()
+	exportClientStatus(leecherLeecher, "/ll")
 	leecherGreeting, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
@@ -361,7 +371,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 		defer r.Close()
 		b, err := ioutil.ReadAll(r)
 		require.NoError(t, err)
-		require.EqualValues(t, testutil.GreetingFileContents, b)
+		assert.EqualValues(t, testutil.GreetingFileContents, b)
 	}()
 	leecherGreeting.AddPeers([]Peer{
 		Peer{
@@ -529,10 +539,14 @@ func TestResponsive(t *testing.T) {
 	reader.SetReadahead(0)
 	reader.SetResponsive()
 	b := make([]byte, 2)
-	_, err = reader.ReadAt(b, 3)
+	_, err = reader.Seek(3, os.SEEK_SET)
+	require.NoError(t, err)
+	_, err = io.ReadFull(reader, b)
 	assert.Nil(t, err)
 	assert.EqualValues(t, "lo", string(b))
-	n, err := reader.ReadAt(b, 11)
+	_, err = reader.Seek(11, os.SEEK_SET)
+	require.NoError(t, err)
+	n, err := io.ReadFull(reader, b)
 	assert.Nil(t, err)
 	assert.EqualValues(t, 2, n)
 	assert.EqualValues(t, "d\n", string(b))
@@ -571,11 +585,15 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	reader.SetReadahead(0)
 	reader.SetResponsive()
 	b := make([]byte, 2)
-	_, err = reader.ReadAt(b, 3)
+	_, err = reader.Seek(3, os.SEEK_SET)
+	require.NoError(t, err)
+	_, err = io.ReadFull(reader, b)
 	assert.Nil(t, err)
 	assert.EqualValues(t, "lo", string(b))
 	go leecherTorrent.Drop()
-	n, err := reader.ReadAt(b, 11)
+	_, err = reader.Seek(11, os.SEEK_SET)
+	require.NoError(t, err)
+	n, err := reader.Read(b)
 	assert.EqualError(t, err, "torrent closed")
 	assert.EqualValues(t, 0, n)
 }

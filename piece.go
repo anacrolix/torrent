@@ -30,7 +30,6 @@ type piece struct {
 	Hashing          bool
 	QueuedForHash    bool
 	EverHashed       bool
-	Priority         piecePriority
 	PublicPieceState PieceState
 
 	pendingWritesMutex sync.Mutex
@@ -60,6 +59,13 @@ func (p *piece) unpendChunkIndex(i int) {
 		p.DirtyChunks = append(p.DirtyChunks, false)
 	}
 	p.DirtyChunks[i] = true
+}
+
+func (p *piece) pendChunkIndex(i int) {
+	if i >= len(p.DirtyChunks) {
+		return
+	}
+	p.DirtyChunks[i] = false
 }
 
 func chunkIndexSpec(index int, pieceLength, chunkSize pp.Integer) chunkSpec {
@@ -92,4 +98,30 @@ func (p *piece) shuffledPendingChunkSpecs(t *torrent, piece int) (css []chunkSpe
 		css[i], css[j] = css[j], css[i]
 	}
 	return
+}
+
+func (p *piece) incrementPendingWrites() {
+	p.pendingWritesMutex.Lock()
+	p.pendingWrites++
+	p.pendingWritesMutex.Unlock()
+}
+
+func (p *piece) decrementPendingWrites() {
+	p.pendingWritesMutex.Lock()
+	if p.pendingWrites == 0 {
+		panic("assertion")
+	}
+	p.pendingWrites--
+	if p.pendingWrites == 0 {
+		p.noPendingWrites.Broadcast()
+	}
+	p.pendingWritesMutex.Unlock()
+}
+
+func (p *piece) waitNoPendingWrites() {
+	p.pendingWritesMutex.Lock()
+	for p.pendingWrites != 0 {
+		p.noPendingWrites.Wait()
+	}
+	p.pendingWritesMutex.Unlock()
 }

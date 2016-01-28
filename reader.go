@@ -73,7 +73,14 @@ func (r *Reader) available(off, max int64) (ret int64) {
 	return
 }
 
+func (r *Reader) tickleClient() {
+	r.t.torrent.readersChanged(r.t.cl)
+}
+
 func (r *Reader) waitReadable(off int64) {
+	// We may have been sent back here because we were told we could read but
+	// it failed.
+	r.tickleClient()
 	r.t.cl.event.Wait()
 }
 

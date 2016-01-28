@@ -250,6 +250,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
+// TODO: Make this non-blocking Read on Torrent.
 func dataReadAt(d Data, b []byte, off int64) (n int, err error) {
 	// defer func() {
 	// 	if err == io.ErrUnexpectedEOF && n != 0 {

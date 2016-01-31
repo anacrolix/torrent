@@ -95,15 +95,12 @@ func TestPieceHashSize(t *testing.T) {
 func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	tor, err := newTorrent(func() (ih InfoHash) {
+	tor := newTorrent(func() (ih InfoHash) {
 		missinggo.CopyExact(ih[:], mi.Info.Hash)
 		return
 	}())
-	if err != nil {
-		t.Fatal(err)
-	}
 	tor.chunkSize = 2
-	err = tor.setMetadata(&mi.Info.Info, mi.Info.Bytes)
+	err := tor.setMetadata(&mi.Info.Info, mi.Info.Bytes)
 	if err != nil {
 		t.Fatal(err)
 	}

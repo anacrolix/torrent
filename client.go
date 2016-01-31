@@ -1842,7 +1842,7 @@ func (cl *Client) setMetaData(t *torrent, md *metainfo.Info, bytes []byte) (err 
 // Prepare a Torrent without any attachment to a Client. That means we can
 // initialize fields all fields that don't require the Client without locking
 // it.
-func newTorrent(ih InfoHash) (t *torrent, err error) {
+func newTorrent(ih InfoHash) (t *torrent) {
 	t = &torrent{
 		InfoHash:  ih,
 		chunkSize: defaultChunkSize,
@@ -2057,11 +2057,8 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err er
 			err = errors.New("banned torrent")
 			return
 		}
-
-		t, err = newTorrent(spec.InfoHash)
-		if err != nil {
-			return
-		}
+		// TODO: Tidy this up?
+		t = newTorrent(spec.InfoHash)
 		if spec.ChunkSize != 0 {
 			t.chunkSize = pp.Integer(spec.ChunkSize)
 		}

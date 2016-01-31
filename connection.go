@@ -572,7 +572,8 @@ func (c *connection) fillRequests() {
 		}
 		return true
 	})
-	for i := range c.t.pendingPieces {
+	for it := c.t.pendingPieces.Iter(); it.Next(); {
+		i := it.Value()
 		if !c.t.wantPiece(i) {
 			continue
 		}

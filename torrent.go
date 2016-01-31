@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/bradfitz/iter"
@@ -98,7 +99,7 @@ type torrent struct {
 
 	readers map[*Reader]struct{}
 
-	pendingPieces map[int]struct{}
+	pendingPieces *bitmap.Bitmap
 }
 
 var (
@@ -737,7 +738,7 @@ func (t *torrent) wantPiece(index int) bool {
 	if t.pieceComplete(index) {
 		return false
 	}
-	if _, ok := t.pendingPieces[index]; ok {
+	if t.pendingPieces.Contains(index) {
 		return true
 	}
 	return !t.forReaderOffsetPieces(func(begin, end int) bool {
@@ -757,8 +758,8 @@ func (t *torrent) forNeededPieces(f func(piece int) (more bool)) (all bool) {
 }
 
 func (t *torrent) connHasWantedPieces(c *connection) bool {
-	for i := range t.pendingPieces {
-		if c.PeerHasPiece(i) {
+	for it := t.pendingPieces.Iter(); it.Next(); {
+		if c.PeerHasPiece(it.Value()) {
 			return true
 		}
 	}
@@ -890,7 +891,7 @@ func (t *torrent) piecePriority(piece int) (ret piecePriority) {
 	if t.pieceComplete(piece) {
 		return
 	}
-	if _, ok := t.pendingPieces[piece]; ok {
+	if t.pendingPieces.Contains(piece) {
 		ret = PiecePriorityNormal
 	}
 	raiseRet := func(prio piecePriority) {
@@ -912,15 +913,15 @@ func (t *torrent) piecePriority(piece int) (ret piecePriority) {
 
 func (t *torrent) pendPiece(piece int, cl *Client) {
 	if t.pendingPieces == nil {
-		t.pendingPieces = make(map[int]struct{}, t.Info.NumPieces())
+		t.pendingPieces = bitmap.New()
 	}
-	if _, ok := t.pendingPieces[piece]; ok {
+	if t.pendingPieces.Contains(piece) {
 		return
 	}
 	if t.havePiece(piece) {
 		return
 	}
-	t.pendingPieces[piece] = struct{}{}
+	t.pendingPieces.Add(piece)
 	for _, c := range t.Conns {
 		if !c.PeerHasPiece(piece) {
 			continue

@@ -1675,8 +1675,8 @@ func (t *torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
-	for i := range t.pendingPieces {
-		if t.wantPiece(i) {
+	for i := t.pendingPieces.Iter(); i.Next(); {
+		if t.wantPiece(i.Value()) {
 			return true
 		}
 	}
@@ -2476,7 +2476,7 @@ func (me *Client) pieceHashed(t *torrent, piece int, correct bool) {
 }
 
 func (me *Client) onCompletedPiece(t *torrent, piece int) {
-	delete(t.pendingPieces, piece)
+	t.pendingPieces.Remove(piece)
 	for _, conn := range t.Conns {
 		conn.Have(piece)
 		for r := range conn.Requests {

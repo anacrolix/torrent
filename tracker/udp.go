@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/pproffd"
 
 	"github.com/anacrolix/torrent/util"
 )
@@ -251,6 +252,7 @@ func (c *udpClient) Connect() (err error) {
 		if err != nil {
 			return
 		}
+		c.socket = pproffd.WrapNetConn(c.socket)
 	}
 	b, err := c.request(Connect, nil, nil)
 	if err != nil {

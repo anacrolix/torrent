@@ -92,12 +92,12 @@ func (info *Info) writeFiles(w io.Writer, open func(fi FileInfo) (io.ReadCloser,
 	for _, fi := range info.UpvertedFiles() {
 		r, err := open(fi)
 		if err != nil {
-			return fmt.Errorf("error opening %s: %s", fi, err)
+			return fmt.Errorf("error opening %v: %s", fi, err)
 		}
 		wn, err := io.CopyN(w, r, fi.Length)
 		r.Close()
 		if wn != fi.Length || err != nil {
-			return fmt.Errorf("error hashing %s: %s", fi, err)
+			return fmt.Errorf("error hashing %v: %s", fi, err)
 		}
 	}
 	return nil

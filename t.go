@@ -127,14 +127,14 @@ func (t Torrent) addReader(r *Reader) {
 		t.torrent.readers = make(map[*Reader]struct{})
 	}
 	t.torrent.readers[r] = struct{}{}
-	t.torrent.readersChanged(t.cl)
+	t.torrent.readersChanged()
 }
 
 func (t Torrent) deleteReader(r *Reader) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	delete(t.torrent.readers, r)
-	t.torrent.readersChanged(t.cl)
+	t.torrent.readersChanged()
 }
 
 func (t Torrent) DownloadPieces(begin, end int) {

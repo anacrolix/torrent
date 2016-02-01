@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"sort"
 	"sync"
@@ -51,6 +52,8 @@ type peersKey struct {
 
 // Is not aware of Client. Maintains state of torrent for with-in a Client.
 type torrent struct {
+	cl *Client
+
 	stateMu sync.Mutex
 	closing chan struct{}
 
@@ -99,12 +102,15 @@ type torrent struct {
 
 	readers map[*Reader]struct{}
 
-	pendingPieces *bitmap.Bitmap
+	pendingPieces bitmap.Bitmap
+
+	connPieceInclinationPool sync.Pool
 }
 
 var (
-	piecePrioritiesReused = expvar.NewInt("piecePrioritiesReused")
-	piecePrioritiesNew    = expvar.NewInt("piecePrioritiesNew")
+	pieceInclinationsReused = expvar.NewInt("pieceInclinationsReused")
+	pieceInclinationsNew    = expvar.NewInt("pieceInclinationsNew")
+	pieceInclinationsPut    = expvar.NewInt("pieceInclinationsPut")
 )
 
 func (t *torrent) setDisplayName(dn string) {
@@ -836,13 +842,43 @@ func (t *torrent) forUrgentPieces(f func(piece int) (again bool)) (all bool) {
 	})
 }
 
-func (t *torrent) readersChanged(cl *Client) {
-	// Accept new connections.
-	cl.event.Broadcast()
+func (t *torrent) readersChanged() {
+	t.updatePiecePriorities()
+}
+
+func (t *torrent) maybeNewConns() {
+	// Tickle the accept routine.
+	t.cl.event.Broadcast()
+	t.openNewConns()
+}
+
+func (t *torrent) piecePriorityChanged(piece int) {
+	for _, c := range t.Conns {
+		c.updatePiecePriority(piece)
+	}
+	t.maybeNewConns()
+}
+
+func (t *torrent) updatePiecePriority(piece int) bool {
+	p := &t.Pieces[piece]
+	newPrio := t.piecePriorityUncached(piece)
+	if newPrio == p.priority {
+		return false
+	}
+	p.priority = newPrio
+	return true
+}
+
+func (t *torrent) updatePiecePriorities() {
+	for i := range t.Pieces {
+		if t.updatePiecePriority(i) {
+			t.piecePriorityChanged(i)
+		}
+	}
 	for _, c := range t.Conns {
 		c.updateRequests()
 	}
-	cl.openNewConns(t)
+	t.maybeNewConns()
 }
 
 func (t *torrent) byteRegionPieces(off, size int64) (begin, end int) {
@@ -884,7 +920,14 @@ func (t *torrent) forReaderOffsetPieces(f func(begin, end int) (more bool)) (all
 	return true
 }
 
-func (t *torrent) piecePriority(piece int) (ret piecePriority) {
+func (t *torrent) piecePriority(piece int) piecePriority {
+	if !t.haveInfo() {
+		return PiecePriorityNone
+	}
+	return t.Pieces[piece].priority
+}
+
+func (t *torrent) piecePriorityUncached(piece int) (ret piecePriority) {
 	ret = PiecePriorityNone
 	if t.pieceComplete(piece) {
 		return
@@ -910,9 +953,6 @@ func (t *torrent) piecePriority(piece int) (ret piecePriority) {
 }
 
 func (t *torrent) pendPiece(piece int, cl *Client) {
-	if t.pendingPieces == nil {
-		t.pendingPieces = bitmap.New()
-	}
 	if t.pendingPieces.Contains(piece) {
 		return
 	}
@@ -920,14 +960,10 @@ func (t *torrent) pendPiece(piece int, cl *Client) {
 		return
 	}
 	t.pendingPieces.Add(piece)
-	for _, c := range t.Conns {
-		if !c.PeerHasPiece(piece) {
-			continue
-		}
-		c.updateRequests()
+	if !t.updatePiecePriority(piece) {
+		return
 	}
-	cl.openNewConns(t)
-	cl.pieceChanged(t, piece)
+	t.piecePriorityChanged(piece)
 }
 
 func (t *torrent) connRequestPiecePendingChunks(c *connection, piece int) (more bool) {
@@ -946,4 +982,27 @@ func (t *torrent) connRequestPiecePendingChunks(c *connection, piece int) (more 
 func (t *torrent) pendRequest(req request) {
 	ci := chunkIndex(req.chunkSpec, t.chunkSize)
 	t.Pieces[req.Index].pendChunkIndex(ci)
+}
+
+func (t *torrent) pieceChanged(piece int) {
+	t.cl.pieceChanged(t, piece)
+}
+
+func (t *torrent) openNewConns() {
+	t.cl.openNewConns(t)
+}
+
+func (t *torrent) getConnPieceInclination() []int {
+	_ret := t.connPieceInclinationPool.Get()
+	if _ret == nil {
+		pieceInclinationsNew.Add(1)
+		return rand.Perm(t.numPieces())
+	}
+	pieceInclinationsReused.Add(1)
+	return _ret.([]int)
+}
+
+func (t *torrent) putPieceInclination(pi []int) {
+	t.connPieceInclinationPool.Put(pi)
+	pieceInclinationsPut.Add(1)
 }

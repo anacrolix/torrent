@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/itertools"
+	"github.com/anacrolix/missinggo/prioritybitmap"
+
 	"github.com/anacrolix/torrent/bencode"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
@@ -75,6 +78,9 @@ type connection struct {
 	PeerMaxRequests  int // Maximum pending requests the peer allows.
 	PeerExtensionIDs map[string]byte
 	PeerClientName   string
+
+	pieceInclination  []int
+	pieceRequestOrder prioritybitmap.PriorityBitmap
 }
 
 func newConnection() (c *connection) {
@@ -234,6 +240,7 @@ func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 
 func (c *connection) Close() {
 	c.closed.Set()
+	c.discardPieceInclination()
 	// TODO: This call blocks sometimes, why?
 	go c.conn.Close()
 }
@@ -550,26 +557,53 @@ func (c *connection) updateRequests() {
 }
 
 func (c *connection) fillRequests() {
-	if !c.t.forUrgentPieces(func(piece int) (again bool) {
-		return c.t.connRequestPiecePendingChunks(c, piece)
-	}) {
+	itertools.ForIterable(&c.pieceRequestOrder, func(_piece interface{}) (more bool) {
+		return c.requestPiecePendingChunks(_piece.(int))
+	})
+}
+
+func (c *connection) requestPiecePendingChunks(piece int) (again bool) {
+	return c.t.connRequestPiecePendingChunks(c, piece)
+}
+
+func (c *connection) stopRequestingPiece(piece int) {
+	c.pieceRequestOrder.Remove(piece)
+}
+
+func (c *connection) updatePiecePriority(piece int) {
+	if !c.PeerHasPiece(piece) {
 		return
 	}
-	c.t.forReaderOffsetPieces(func(begin, end int) (again bool) {
-		for i := begin + 1; i < end; i++ {
-			if !c.t.connRequestPiecePendingChunks(c, i) {
-				return false
-			}
-		}
-		return true
-	})
-	for it := c.t.pendingPieces.Iter(); it.Next(); {
-		i := it.Value()
-		if !c.t.wantPiece(i) {
-			continue
-		}
-		if !c.t.connRequestPiecePendingChunks(c, i) {
-			return
-		}
+	tpp := c.t.piecePriority(piece)
+	if tpp == PiecePriorityNone {
+		c.stopRequestingPiece(piece)
+		return
 	}
+	prio := c.getPieceInclination()[piece]
+	switch tpp {
+	case PiecePriorityNormal:
+	case PiecePriorityReadahead:
+		prio -= c.t.numPieces()
+	case PiecePriorityNext, PiecePriorityNow:
+		prio -= 2 * c.t.numPieces()
+	default:
+		panic(tpp)
+	}
+	c.pieceRequestOrder.Set(piece, prio)
+	c.updateRequests()
+}
+
+func (c *connection) getPieceInclination() []int {
+	if c.pieceInclination == nil {
+		c.pieceInclination = c.t.getConnPieceInclination()
+	}
+	return c.pieceInclination
+}
+
+func (c *connection) discardPieceInclination() {
+	if c.pieceInclination == nil {
+		return
+	}
+	c.t.putPieceInclination(c.pieceInclination)
+	c.pieceInclination = nil
 }

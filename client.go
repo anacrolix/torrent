@@ -1184,9 +1184,7 @@ func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) error {
 		}
 		c.PeerPieces[piece] = true
 	}
-	if t.wantPiece(piece) {
-		c.updateRequests()
-	}
+	c.updatePiecePriority(piece)
 	return nil
 }
 
@@ -1625,6 +1623,7 @@ func (me *Client) deleteConnection(t *torrent, c *connection) bool {
 func (me *Client) dropConnection(t *torrent, c *connection) {
 	me.event.Broadcast()
 	c.Close()
+
 	if me.deleteConnection(t, c) {
 		me.openNewConns(t)
 	}
@@ -2055,6 +2054,7 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err er
 		}
 		// TODO: Tidy this up?
 		t = newTorrent(spec.InfoHash)
+		t.cl = cl
 		if spec.ChunkSize != 0 {
 			t.chunkSize = pp.Integer(spec.ChunkSize)
 		}

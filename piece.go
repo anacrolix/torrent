@@ -31,6 +31,7 @@ type piece struct {
 	QueuedForHash    bool
 	EverHashed       bool
 	PublicPieceState PieceState
+	priority         piecePriority
 
 	pendingWritesMutex sync.Mutex
 	pendingWrites      int

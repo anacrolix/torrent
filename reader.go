@@ -74,7 +74,7 @@ func (r *Reader) available(off, max int64) (ret int64) {
 }
 
 func (r *Reader) tickleClient() {
-	r.t.torrent.readersChanged(r.t.cl)
+	r.t.torrent.readersChanged()
 }
 
 func (r *Reader) waitReadable(off int64) {
@@ -152,7 +152,7 @@ func (r *Reader) Close() error {
 func (r *Reader) posChanged() {
 	r.t.cl.mu.Lock()
 	defer r.t.cl.mu.Unlock()
-	r.t.torrent.readersChanged(r.t.cl)
+	r.t.torrent.readersChanged()
 }
 
 func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {

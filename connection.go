@@ -241,6 +241,7 @@ func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 func (c *connection) Close() {
 	c.closed.Set()
 	c.discardPieceInclination()
+	c.pieceRequestOrder.Clear()
 	// TODO: This call blocks sometimes, why?
 	go c.conn.Close()
 }
@@ -404,6 +405,11 @@ var (
 
 // Writes buffers to the socket from the write channel.
 func (conn *connection) writer() {
+	defer func() {
+		conn.t.cl.mu.Lock()
+		defer conn.t.cl.mu.Unlock()
+		conn.Close()
+	}()
 	// Reduce write syscalls.
 	buf := bufio.NewWriter(conn.rw)
 	for {
@@ -417,7 +423,6 @@ func (conn *connection) writer() {
 				connectionWriterWrite.Add(1)
 				_, err := buf.Write(b)
 				if err != nil {
-					conn.Close()
 					return
 				}
 			case <-conn.closed.C():
@@ -434,7 +439,6 @@ func (conn *connection) writer() {
 				connectionWriterWrite.Add(1)
 				_, err := buf.Write(b)
 				if err != nil {
-					conn.Close()
 					return
 				}
 			case <-conn.closed.C():
@@ -443,7 +447,6 @@ func (conn *connection) writer() {
 				connectionWriterFlush.Add(1)
 				err := buf.Flush()
 				if err != nil {
-					conn.Close()
 					return
 				}
 			}

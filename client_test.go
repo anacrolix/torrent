@@ -259,6 +259,7 @@ func TestClientTransfer(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer seeder.Close()
+	exportClientStatus(seeder, "/TestClientTransfer/s")
 	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	leecherDataDir, err := ioutil.TempDir("", "")
 	if err != nil {
@@ -282,6 +283,7 @@ func TestClientTransfer(t *testing.T) {
 	}()
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()
+	exportClientStatus(leecher, "/TestClientTransfer/l")
 	leecherGreeting, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2

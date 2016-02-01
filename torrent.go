@@ -882,10 +882,11 @@ func (t *torrent) updatePiecePriorities() {
 			newPrios[begin].Raise(PiecePriorityNow)
 		}
 		for i := begin + 1; i < end; i++ {
-			newPrios[begin].Raise(PiecePriorityReadahead)
+			newPrios[i].Raise(PiecePriorityReadahead)
 		}
 		return true
 	})
+	// TODO: Do I need a pass suppressing stuff that we already have?
 	for i, prio := range newPrios {
 		if prio != t.Pieces[i].priority {
 			t.Pieces[i].priority = prio

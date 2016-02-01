@@ -1672,8 +1672,9 @@ func (t *torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
-	for i := t.pendingPieces.Iter(); i.Next(); {
-		if t.wantPiece(i.Value()) {
+	for i := t.pendingPieces.IterTyped(); i.Next(); {
+		if t.wantPiece(i.ValueInt()) {
+			i.Stop()
 			return true
 		}
 	}

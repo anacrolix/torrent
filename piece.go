@@ -13,6 +13,12 @@ import (
 
 type piecePriority byte
 
+func (me *piecePriority) Raise(maybe piecePriority) {
+	if maybe > *me {
+		*me = maybe
+	}
+}
+
 const (
 	PiecePriorityNone      piecePriority = iota // Not wanted.
 	PiecePriorityNormal                         // Wanted.

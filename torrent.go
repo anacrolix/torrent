@@ -14,6 +14,7 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
+	"github.com/anacrolix/missinggo/itertools"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/bradfitz/iter"
@@ -762,8 +763,9 @@ func (t *torrent) forNeededPieces(f func(piece int) (more bool)) (all bool) {
 }
 
 func (t *torrent) connHasWantedPieces(c *connection) bool {
-	for it := t.pendingPieces.Iter(); it.Next(); {
-		if c.PeerHasPiece(it.Value()) {
+	for it := t.pendingPieces.IterTyped(); it.Next(); {
+		if c.PeerHasPiece(it.ValueInt()) {
+			it.Stop()
 			return true
 		}
 	}
@@ -870,15 +872,26 @@ func (t *torrent) updatePiecePriority(piece int) bool {
 }
 
 func (t *torrent) updatePiecePriorities() {
-	for i := range t.Pieces {
-		if t.updatePiecePriority(i) {
+	newPrios := make([]piecePriority, t.numPieces())
+	itertools.ForIterable(&t.pendingPieces, func(value interface{}) (next bool) {
+		newPrios[value.(int)] = PiecePriorityNormal
+		return true
+	})
+	t.forReaderOffsetPieces(func(begin, end int) (next bool) {
+		if begin < end {
+			newPrios[begin].Raise(PiecePriorityNow)
+		}
+		for i := begin + 1; i < end; i++ {
+			newPrios[begin].Raise(PiecePriorityReadahead)
+		}
+		return true
+	})
+	for i, prio := range newPrios {
+		if prio != t.Pieces[i].priority {
+			t.Pieces[i].priority = prio
 			t.piecePriorityChanged(i)
 		}
 	}
-	for _, c := range t.Conns {
-		c.updateRequests()
-	}
-	t.maybeNewConns()
 }
 
 func (t *torrent) byteRegionPieces(off, size int64) (begin, end int) {
@@ -935,11 +948,7 @@ func (t *torrent) piecePriorityUncached(piece int) (ret piecePriority) {
 	if t.pendingPieces.Contains(piece) {
 		ret = PiecePriorityNormal
 	}
-	raiseRet := func(prio piecePriority) {
-		if prio > ret {
-			ret = prio
-		}
-	}
+	raiseRet := ret.Raise
 	t.forReaderOffsetPieces(func(begin, end int) (again bool) {
 		if piece == begin {
 			raiseRet(PiecePriorityNow)

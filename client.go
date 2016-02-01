@@ -1391,10 +1391,8 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		receivedMessageTypes.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
 		me.mu.Lock()
 		c.lastMessageReceived = time.Now()
-		select {
-		case <-c.closing:
+		if c.closed.IsSet() {
 			return nil
-		default:
 		}
 		if err != nil {
 			if me.stopped() || err == io.EOF {
@@ -1691,10 +1689,8 @@ func (t *torrent) needData() bool {
 }
 
 func (cl *Client) usefulConn(t *torrent, c *connection) bool {
-	select {
-	case <-c.closing:
+	if c.closed.IsSet() {
 		return false
-	default:
 	}
 	if !t.haveInfo() {
 		return c.supportsExtension("ut_metadata")

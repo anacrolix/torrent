@@ -146,9 +146,7 @@ func (t *torrent) worstConns(cl *Client) (wcs *worstConns) {
 		cl: cl,
 	}
 	for _, c := range t.Conns {
-		select {
-		case <-c.closing:
-		default:
+		if !c.closed.IsSet() {
 			wcs.c = append(wcs.c, c)
 		}
 	}

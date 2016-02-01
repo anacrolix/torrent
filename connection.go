@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync"
 	"time"
 
+	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/torrent/bencode"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
@@ -36,8 +36,7 @@ type connection struct {
 	encrypted bool
 	Discovery peerSource
 	uTP       bool
-	closing   chan struct{}
-	mu        sync.Mutex // Only for closing.
+	closed    missinggo.Event
 	post      chan pp.Message
 	writeCh   chan []byte
 
@@ -84,7 +83,6 @@ func newConnection() (c *connection) {
 		PeerChoked:      true,
 		PeerMaxRequests: 250,
 
-		closing: make(chan struct{}),
 		writeCh: make(chan []byte),
 		post:    make(chan pp.Message),
 	}
@@ -235,14 +233,7 @@ func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 }
 
 func (c *connection) Close() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	select {
-	case <-c.closing:
-		return
-	default:
-	}
-	close(c.closing)
+	c.closed.Set()
 	// TODO: This call blocks sometimes, why?
 	go c.conn.Close()
 }
@@ -260,7 +251,7 @@ func (c *connection) PeerHasPiece(piece int) bool {
 func (c *connection) Post(msg pp.Message) {
 	select {
 	case c.post <- msg:
-	case <-c.closing:
+	case <-c.closed.C():
 	}
 }
 
@@ -422,7 +413,7 @@ func (conn *connection) writer() {
 					conn.Close()
 					return
 				}
-			case <-conn.closing:
+			case <-conn.closed.C():
 				return
 			}
 		} else {
@@ -439,7 +430,7 @@ func (conn *connection) writer() {
 					conn.Close()
 					return
 				}
-			case <-conn.closing:
+			case <-conn.closed.C():
 				return
 			default:
 				connectionWriterFlush.Add(1)
@@ -505,7 +496,7 @@ func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
 			if pending.Len() == 0 {
 				timer.Reset(keepAliveDelay)
 			}
-		case <-conn.closing:
+		case <-conn.closed.C():
 			return
 		}
 	}

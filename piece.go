@@ -52,6 +52,15 @@ func (p *piece) pendingChunk(cs chunkSpec, chunkSize pp.Integer) bool {
 	return !p.DirtyChunks[ci]
 }
 
+func (p *piece) hasDirtyChunks() bool {
+	for _, dirty := range p.DirtyChunks {
+		if dirty {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *piece) numDirtyChunks() (ret int) {
 	for _, dirty := range p.DirtyChunks {
 		if dirty {

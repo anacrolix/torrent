@@ -508,9 +508,14 @@ func (t *torrent) bytesLeft() (left int64) {
 	return
 }
 
-func (t *torrent) piecePartiallyDownloaded(index int) bool {
-	pendingBytes := t.pieceNumPendingBytes(index)
-	return pendingBytes != 0 && pendingBytes != t.pieceLength(index)
+func (t *torrent) piecePartiallyDownloaded(piece int) bool {
+	if t.pieceComplete(piece) {
+		return false
+	}
+	if t.pieceAllDirty(piece) {
+		return true
+	}
+	return t.Pieces[piece].hasDirtyChunks()
 }
 
 func numChunksForPiece(chunkSize int, pieceSize int) int {
@@ -974,6 +979,37 @@ func (t *torrent) pendPiece(piece int, cl *Client) {
 		return
 	}
 	t.piecePriorityChanged(piece)
+}
+
+func (t *torrent) getCompletedPieces() (ret bitmap.Bitmap) {
+	for i := range iter.N(t.numPieces()) {
+		if t.pieceComplete(i) {
+			ret.Add(i)
+		}
+	}
+	return
+}
+
+func (t *torrent) pendPieces(pend *bitmap.Bitmap) {
+	t.pendingPieces.Union(pend)
+	t.updatePiecePriorities()
+}
+
+func (t *torrent) unpendPieces(unpend *bitmap.Bitmap) {
+	t.pendingPieces.Sub(unpend)
+	t.updatePiecePriorities()
+}
+
+func (t *torrent) pendPieceRange(begin, end int) {
+	var bm bitmap.Bitmap
+	bm.AddRange(begin, end)
+	t.pendPieces(&bm)
+}
+
+func (t *torrent) unpendPieceRange(begin, end int) {
+	var bm bitmap.Bitmap
+	bm.AddRange(begin, end)
+	t.unpendPieces(&bm)
 }
 
 func (t *torrent) connRequestPiecePendingChunks(c *connection, piece int) (more bool) {

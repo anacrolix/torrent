@@ -78,3 +78,17 @@ func (f *File) State() (ret []FilePieceState) {
 func (f *File) Download() {
 	f.t.DownloadPieces(f.t.torrent.byteRegionPieces(f.offset, f.length))
 }
+
+func byteRegionExclusivePieces(off, size, pieceSize int64) (begin, end int) {
+	begin = int((off + pieceSize - 1) / pieceSize)
+	end = int((off + size) / pieceSize)
+	return
+}
+
+func (f *File) exclusivePieces() (begin, end int) {
+	return byteRegionExclusivePieces(f.offset, f.length, int64(f.t.torrent.usualPieceSize()))
+}
+
+func (f *File) Cancel() {
+	f.t.CancelPieces(f.exclusivePieces())
+}

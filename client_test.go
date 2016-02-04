@@ -535,6 +535,7 @@ func TestResponsive(t *testing.T) {
 		},
 	})
 	reader := leecherTorrent.NewReader()
+	defer reader.Close()
 	reader.SetReadahead(0)
 	reader.SetResponsive()
 	b := make([]byte, 2)
@@ -581,6 +582,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 		},
 	})
 	reader := leecherTorrent.NewReader()
+	defer reader.Close()
 	reader.SetReadahead(0)
 	reader.SetResponsive()
 	b := make([]byte, 2)

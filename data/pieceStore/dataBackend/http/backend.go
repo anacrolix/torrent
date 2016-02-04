@@ -33,7 +33,6 @@ func New(u url.URL) *backend {
 					},
 				},
 			},
-			// Client: http.DefaultClient,
 		},
 	}
 }

@@ -1623,7 +1623,6 @@ func (me *Client) deleteConnection(t *torrent, c *connection) bool {
 func (me *Client) dropConnection(t *torrent, c *connection) {
 	me.event.Broadcast()
 	c.Close()
-
 	if me.deleteConnection(t, c) {
 		me.openNewConns(t)
 	}

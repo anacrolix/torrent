@@ -69,6 +69,7 @@ var (
 	// Number of completed connections to a client we're already connected with.
 	duplicateClientConns       = expvar.NewInt("duplicateClientConns")
 	receivedMessageTypes       = expvar.NewMap("receivedMessageTypes")
+	receivedKeepalives         = expvar.NewInt("receivedKeepalives")
 	supportedExtensionMessages = expvar.NewMap("supportedExtensionMessages")
 )
 
@@ -1386,21 +1387,19 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		me.mu.Unlock()
 		var msg pp.Message
 		err := decoder.Decode(&msg)
-		receivedMessageTypes.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
 		me.mu.Lock()
-		c.lastMessageReceived = time.Now()
-		if c.closed.IsSet() {
+		if me.stopped() || c.closed.IsSet() || err == io.EOF {
 			return nil
 		}
 		if err != nil {
-			if me.stopped() || err == io.EOF {
-				return nil
-			}
 			return err
 		}
+		c.lastMessageReceived = time.Now()
 		if msg.Keepalive {
+			receivedKeepalives.Add(1)
 			continue
 		}
+		receivedMessageTypes.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
 		switch msg.Type {
 		case pp.Choke:
 			c.PeerChoked = true

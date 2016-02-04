@@ -69,7 +69,7 @@ func TestNumPieces(t *testing.T) {
 			PieceLength: _case.PieceLength,
 		}
 		err := info.GeneratePieces(func(fi FileInfo) (io.ReadCloser, error) {
-			return ioutil.NopCloser(missinggo.ZeroReader{}), nil
+			return ioutil.NopCloser(missinggo.ZeroReader), nil
 		})
 		assert.NoError(t, err)
 		assert.EqualValues(t, _case.NumPieces, info.NumPieces())

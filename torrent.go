@@ -864,6 +864,7 @@ func (t *torrent) piecePriorityChanged(piece int) {
 		c.updatePiecePriority(piece)
 	}
 	t.maybeNewConns()
+	t.publishPieceChange(piece)
 }
 
 func (t *torrent) updatePiecePriority(piece int) bool {

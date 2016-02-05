@@ -18,12 +18,12 @@ func init() {
 	RegisterClientScheme("http", NewClient)
 }
 
-type client struct {
+type httpClient struct {
 	url url.URL
 }
 
 func NewClient(url *url.URL) Client {
-	return &client{
+	return &httpClient{
 		url: *url,
 	}
 }
@@ -54,7 +54,7 @@ func (r *response) UnmarshalPeers() (ret []Peer, err error) {
 	return
 }
 
-func (me *client) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err error) {
+func (me *httpClient) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err error) {
 	q := make(url.Values)
 	q.Set("info_hash", string(ar.InfoHash[:]))
 	q.Set("peer_id", string(ar.PeerId[:]))
@@ -99,15 +99,15 @@ func (me *client) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err error
 	return
 }
 
-func (me *client) Connect() error {
+func (me *httpClient) Connect() error {
 	// HTTP trackers do not require a connecting handshake.
 	return nil
 }
 
-func (me *client) String() string {
+func (me *httpClient) String() string {
 	return me.URL()
 }
 
-func (me *client) URL() string {
+func (me *httpClient) URL() string {
 	return me.url.String()
 }

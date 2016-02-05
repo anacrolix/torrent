@@ -38,11 +38,13 @@ func (t *torrent) pieceNumPendingBytes(index int) (count pp.Integer) {
 	if !piece.EverHashed {
 		return
 	}
-	for i, dirty := range piece.DirtyChunks {
-		if dirty {
-			count -= t.chunkIndexSpec(i, index).Length
-		}
+	regularDirty := piece.numDirtyChunks()
+	lastChunkIndex := t.pieceNumChunks(index) - 1
+	if piece.pendingChunkIndex(lastChunkIndex) {
+		regularDirty--
+		count -= t.chunkIndexSpec(lastChunkIndex, index).Length
 	}
+	count -= pp.Integer(regularDirty) * t.chunkSize
 	return
 }
 
@@ -633,7 +635,7 @@ func (t *torrent) pieceNumChunks(piece int) int {
 }
 
 func (t *torrent) pendAllChunkSpecs(pieceIndex int) {
-	t.Pieces[pieceIndex].DirtyChunks = nil
+	t.Pieces[pieceIndex].DirtyChunks.Clear()
 }
 
 type Peer struct {
@@ -826,16 +828,7 @@ func (t *torrent) pieceNumPendingChunks(piece int) int {
 }
 
 func (t *torrent) pieceAllDirty(piece int) bool {
-	p := &t.Pieces[piece]
-	if len(p.DirtyChunks) != t.pieceNumChunks(piece) {
-		return false
-	}
-	for _, dirty := range p.DirtyChunks {
-		if !dirty {
-			return false
-		}
-	}
-	return true
+	return t.Pieces[piece].DirtyChunks.Len() == t.pieceNumChunks(piece)
 }
 
 func (t *torrent) forUrgentPieces(f func(piece int) (again bool)) (all bool) {

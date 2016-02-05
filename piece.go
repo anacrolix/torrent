@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"sync"
 
+	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/bradfitz/iter"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -32,7 +33,7 @@ type piece struct {
 	Hash pieceSum
 	// Chunks we've written to since the last check. The chunk offset and
 	// length can be determined by the request chunkSize in use.
-	DirtyChunks      []bool
+	DirtyChunks      bitmap.Bitmap
 	Hashing          bool
 	QueuedForHash    bool
 	EverHashed       bool
@@ -44,44 +45,28 @@ type piece struct {
 	noPendingWrites    sync.Cond
 }
 
+func (p *piece) pendingChunkIndex(chunkIndex int) bool {
+	return !p.DirtyChunks.Contains(chunkIndex)
+}
+
 func (p *piece) pendingChunk(cs chunkSpec, chunkSize pp.Integer) bool {
-	ci := chunkIndex(cs, chunkSize)
-	if ci >= len(p.DirtyChunks) {
-		return true
-	}
-	return !p.DirtyChunks[ci]
+	return p.pendingChunkIndex(chunkIndex(cs, chunkSize))
 }
 
 func (p *piece) hasDirtyChunks() bool {
-	for _, dirty := range p.DirtyChunks {
-		if dirty {
-			return true
-		}
-	}
-	return false
+	return p.DirtyChunks.Len() != 0
 }
 
 func (p *piece) numDirtyChunks() (ret int) {
-	for _, dirty := range p.DirtyChunks {
-		if dirty {
-			ret++
-		}
-	}
-	return
+	return p.DirtyChunks.Len()
 }
 
 func (p *piece) unpendChunkIndex(i int) {
-	for i >= len(p.DirtyChunks) {
-		p.DirtyChunks = append(p.DirtyChunks, false)
-	}
-	p.DirtyChunks[i] = true
+	p.DirtyChunks.Add(i)
 }
 
 func (p *piece) pendChunkIndex(i int) {
-	if i >= len(p.DirtyChunks) {
-		return
-	}
-	p.DirtyChunks[i] = false
+	p.DirtyChunks.Remove(i)
 }
 
 func chunkIndexSpec(index int, pieceLength, chunkSize pp.Integer) chunkSpec {
@@ -102,7 +87,7 @@ func (p *piece) shuffledPendingChunkSpecs(t *torrent, piece int) (css []chunkSpe
 	}
 	css = make([]chunkSpec, 0, numPending)
 	for ci := range iter.N(t.pieceNumChunks(piece)) {
-		if ci >= len(p.DirtyChunks) || !p.DirtyChunks[ci] {
+		if !p.DirtyChunks.Contains(ci) {
 			css = append(css, t.chunkIndexSpec(ci, piece))
 		}
 	}

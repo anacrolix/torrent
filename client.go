@@ -24,6 +24,7 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	. "github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
@@ -1666,23 +1667,23 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 	return true
 }
 
+func (t *torrent) readerPieces() (ret bitmap.Bitmap) {
+	t.forReaderOffsetPieces(func(begin, end int) bool {
+		ret.AddRange(begin, end)
+		return true
+	})
+	return
+}
+
 func (t *torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
-	for i := t.pendingPieces.IterTyped(); i.Next(); {
-		if t.wantPiece(i.ValueInt()) {
-			i.Stop()
-			return true
-		}
-	}
-	return !t.forReaderOffsetPieces(func(begin, end int) (again bool) {
-		for i := begin; i < end; i++ {
-			if !t.pieceComplete(i) {
-				return false
-			}
-		}
+	if t.pendingPieces.Len() != 0 {
 		return true
+	}
+	return !t.readerPieces().IterTyped(func(piece int) bool {
+		return t.pieceComplete(piece)
 	})
 }
 

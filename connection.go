@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/itertools"
 	"github.com/anacrolix/missinggo/prioritybitmap"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -560,8 +559,8 @@ func (c *connection) updateRequests() {
 }
 
 func (c *connection) fillRequests() {
-	itertools.ForIterable(&c.pieceRequestOrder, func(_piece interface{}) (more bool) {
-		return c.requestPiecePendingChunks(_piece.(int))
+	c.pieceRequestOrder.IterTyped(func(piece int) (more bool) {
+		return c.requestPiecePendingChunks(piece)
 	})
 }
 

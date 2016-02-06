@@ -14,7 +14,6 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
-	"github.com/anacrolix/missinggo/itertools"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/bradfitz/iter"
@@ -770,20 +769,7 @@ func (t *torrent) forNeededPieces(f func(piece int) (more bool)) (all bool) {
 }
 
 func (t *torrent) connHasWantedPieces(c *connection) bool {
-	for it := t.pendingPieces.IterTyped(); it.Next(); {
-		if c.PeerHasPiece(it.ValueInt()) {
-			it.Stop()
-			return true
-		}
-	}
-	return !t.forReaderOffsetPieces(func(begin, end int) (again bool) {
-		for i := begin; i < end; i++ {
-			if c.PeerHasPiece(i) {
-				return false
-			}
-		}
-		return true
-	})
+	return !c.pieceRequestOrder.IsEmpty()
 }
 
 func (t *torrent) extentPieces(off, _len int64) (pieces []int) {
@@ -872,8 +858,8 @@ func (t *torrent) updatePiecePriority(piece int) bool {
 
 func (t *torrent) updatePiecePriorities() {
 	newPrios := make([]piecePriority, t.numPieces())
-	itertools.ForIterable(&t.pendingPieces, func(value interface{}) (next bool) {
-		newPrios[value.(int)] = PiecePriorityNormal
+	t.pendingPieces.IterTyped(func(piece int) (more bool) {
+		newPrios[piece] = PiecePriorityNormal
 		return true
 	})
 	t.forReaderOffsetPieces(func(begin, end int) (next bool) {

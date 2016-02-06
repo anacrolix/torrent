@@ -2517,10 +2517,12 @@ func (cl *Client) verifyPiece(t *torrent, piece int) {
 		cl.event.Wait()
 	}
 	p.QueuedForHash = false
+	t.publishPieceChange(piece)
 	if t.isClosed() || t.pieceComplete(piece) {
 		return
 	}
 	p.Hashing = true
+	t.publishPieceChange(piece)
 	cl.mu.Unlock()
 	sum := t.hashPiece(piece)
 	cl.mu.Lock()

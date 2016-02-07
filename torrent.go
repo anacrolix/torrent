@@ -1005,7 +1005,6 @@ func (t *torrent) connRequestPiecePendingChunks(c *connection, piece int) (more 
 		req := request{pp.Integer(piece), t.chunkIndexSpec(chunkIndices[i], piece)}
 		return c.Request(req)
 	})
-	return true
 }
 
 func (t *torrent) pendRequest(req request) {

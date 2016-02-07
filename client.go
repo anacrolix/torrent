@@ -1860,37 +1860,34 @@ func init() {
 	mathRand.Seed(time.Now().Unix())
 }
 
+type trackerTier []string
+
 // The trackers within each tier must be shuffled before use.
 // http://stackoverflow.com/a/12267471/149482
 // http://www.bittorrent.org/beps/bep_0012.html#order-of-processing
-func shuffleTier(tier []tracker.Client) {
+func shuffleTier(tier trackerTier) {
 	for i := range tier {
 		j := mathRand.Intn(i + 1)
 		tier[i], tier[j] = tier[j], tier[i]
 	}
 }
 
-func copyTrackers(base [][]tracker.Client) (copy [][]tracker.Client) {
+func copyTrackers(base []trackerTier) (copy []trackerTier) {
 	for _, tier := range base {
-		copy = append(copy, append([]tracker.Client{}, tier...))
+		copy = append(copy, append(trackerTier(nil), tier...))
 	}
 	return
 }
 
-func mergeTier(tier []tracker.Client, newURLs []string) []tracker.Client {
+func mergeTier(tier trackerTier, newURLs []string) trackerTier {
 nextURL:
 	for _, url := range newURLs {
-		for _, tr := range tier {
-			if tr.URL() == url {
+		for _, trURL := range tier {
+			if trURL == url {
 				continue nextURL
 			}
 		}
-		tr, err := tracker.New(url)
-		if err != nil {
-			// log.Printf("error creating tracker client for %q: %s", url, err)
-			continue
-		}
-		tier = append(tier, tr)
+		tier = append(tier, url)
 	}
 	return tier
 }
@@ -2206,8 +2203,8 @@ func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
 	}
 }
 
-func (cl *Client) trackerBlockedUnlocked(tr tracker.Client) (blocked bool, err error) {
-	url_, err := url.Parse(tr.URL())
+func (cl *Client) trackerBlockedUnlocked(trRawURL string) (blocked bool, err error) {
+	url_, err := url.Parse(trRawURL)
 	if err != nil {
 		return
 	}
@@ -2225,7 +2222,7 @@ func (cl *Client) trackerBlockedUnlocked(tr tracker.Client) (blocked bool, err e
 	return
 }
 
-func (cl *Client) announceTorrentSingleTracker(tr tracker.Client, req *tracker.AnnounceRequest, t *torrent) error {
+func (cl *Client) announceTorrentSingleTracker(tr string, req *tracker.AnnounceRequest, t *torrent) error {
 	blocked, err := cl.trackerBlockedUnlocked(tr)
 	if err != nil {
 		return fmt.Errorf("error determining if tracker blocked: %s", err)
@@ -2233,10 +2230,7 @@ func (cl *Client) announceTorrentSingleTracker(tr tracker.Client, req *tracker.A
 	if blocked {
 		return fmt.Errorf("tracker blocked: %s", tr)
 	}
-	if err := tr.Connect(); err != nil {
-		return fmt.Errorf("error connecting: %s", err)
-	}
-	resp, err := tr.Announce(req)
+	resp, err := tracker.Announce(tr, req)
 	if err != nil {
 		return fmt.Errorf("error announcing: %s", err)
 	}
@@ -2257,13 +2251,13 @@ func (cl *Client) announceTorrentSingleTracker(tr tracker.Client, req *tracker.A
 	return nil
 }
 
-func (cl *Client) announceTorrentTrackersFastStart(req *tracker.AnnounceRequest, trackers [][]tracker.Client, t *torrent) (atLeastOne bool) {
+func (cl *Client) announceTorrentTrackersFastStart(req *tracker.AnnounceRequest, trackers []trackerTier, t *torrent) (atLeastOne bool) {
 	oks := make(chan bool)
 	outstanding := 0
 	for _, tier := range trackers {
 		for _, tr := range tier {
 			outstanding++
-			go func(tr tracker.Client) {
+			go func(tr string) {
 				err := cl.announceTorrentSingleTracker(tr, req, t)
 				oks <- err == nil
 			}(tr)

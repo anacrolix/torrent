@@ -21,7 +21,6 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	"github.com/anacrolix/torrent/tracker"
 )
 
 func (t *torrent) chunkIndexSpec(chunkIndex, piece int) chunkSpec {
@@ -90,7 +89,7 @@ type torrent struct {
 
 	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
 	// mirror their respective URLs from the announce-list metainfo key.
-	Trackers [][]tracker.Client
+	Trackers []trackerTier
 	// Name used if the info name isn't available.
 	displayName string
 	// The bencoded bytes of the info dict.
@@ -439,7 +438,7 @@ func (t *torrent) writeStatus(w io.Writer, cl *Client) {
 	fmt.Fprintf(w, "Trackers: ")
 	for _, tier := range t.Trackers {
 		for _, tr := range tier {
-			fmt.Fprintf(w, "%q ", tr.String())
+			fmt.Fprintf(w, "%q ", tr)
 		}
 	}
 	fmt.Fprintf(w, "\n")
@@ -471,13 +470,7 @@ func (t *torrent) haveInfo() bool {
 
 // TODO: Include URIs that weren't converted to tracker clients.
 func (t *torrent) announceList() (al [][]string) {
-	for _, tier := range t.Trackers {
-		var l []string
-		for _, tr := range tier {
-			l = append(l, tr.URL())
-		}
-		al = append(al, l)
-	}
+	missinggo.CastSlice(&al, t.Trackers)
 	return
 }
 

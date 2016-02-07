@@ -421,8 +421,8 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 	if new {
 		t.FailNow()
 	}
-	assert.EqualValues(t, T.torrent.Trackers[0][0].URL(), "http://a")
-	assert.EqualValues(t, T.torrent.Trackers[1][0].URL(), "udp://b")
+	assert.EqualValues(t, T.torrent.Trackers[0][0], "http://a")
+	assert.EqualValues(t, T.torrent.Trackers[1][0], "udp://b")
 }
 
 type badData struct{}

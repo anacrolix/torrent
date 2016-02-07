@@ -28,7 +28,7 @@ func NewClient(url *url.URL) Client {
 	}
 }
 
-type response struct {
+type httpResponse struct {
 	FailureReason string      `bencode:"failure reason"`
 	Interval      int32       `bencode:"interval"`
 	TrackerId     string      `bencode:"tracker id"`
@@ -37,7 +37,7 @@ type response struct {
 	Peers         interface{} `bencode:"peers"`
 }
 
-func (r *response) UnmarshalPeers() (ret []Peer, err error) {
+func (r *httpResponse) UnmarshalPeers() (ret []Peer, err error) {
 	s, ok := r.Peers.(string)
 	if !ok {
 		err = fmt.Errorf("unsupported peers value type: %T", r.Peers)
@@ -82,7 +82,7 @@ func (me *httpClient) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err e
 		err = fmt.Errorf("response from tracker: %s: %s", resp.Status, buf.String())
 		return
 	}
-	var trackerResponse response
+	var trackerResponse httpResponse
 	err = bencode.Unmarshal(buf.Bytes(), &trackerResponse)
 	if err != nil {
 		err = fmt.Errorf("error decoding %q: %s", buf.Bytes(), err)

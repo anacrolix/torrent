@@ -53,6 +53,12 @@ func (t Torrent) PieceStateRuns() []PieceStateRun {
 	return t.torrent.pieceStateRuns()
 }
 
+func (t Torrent) PieceState(piece int) PieceState {
+	t.torrent.stateMu.Lock()
+	defer t.torrent.stateMu.Unlock()
+	return t.torrent.pieceState(piece)
+}
+
 // The number of pieces in the torrent. This requires that the info has been
 // obtained first.
 func (t Torrent) NumPieces() int {

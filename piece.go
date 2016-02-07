@@ -1,11 +1,9 @@
 package torrent
 
 import (
-	"math/rand"
 	"sync"
 
 	"github.com/anacrolix/missinggo/bitmap"
-	"github.com/bradfitz/iter"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
@@ -30,7 +28,9 @@ const (
 
 type piece struct {
 	// The completed piece SHA1 hash, from the metainfo "pieces" field.
-	Hash pieceSum
+	Hash  pieceSum
+	t     *torrent
+	index int
 	// Chunks we've written to since the last check. The chunk offset and
 	// length can be determined by the request chunkSize in use.
 	DirtyChunks      bitmap.Bitmap
@@ -77,27 +77,13 @@ func chunkIndexSpec(index int, pieceLength, chunkSize pp.Integer) chunkSpec {
 	return ret
 }
 
-func (p *piece) shuffledPendingChunkSpecs(t *torrent, piece int) (css []chunkSpec) {
-	// defer func() {
-	// 	log.Println(piece, css)
-	// }()
-	numPending := t.pieceNumPendingChunks(piece)
-	if numPending == 0 {
-		return
-	}
-	css = make([]chunkSpec, 0, numPending)
-	for ci := range iter.N(t.pieceNumChunks(piece)) {
-		if !p.DirtyChunks.Contains(ci) {
-			css = append(css, t.chunkIndexSpec(ci, piece))
-		}
-	}
-	if len(css) <= 1 {
-		return
-	}
-	for i := range css {
-		j := rand.Intn(i + 1)
-		css[i], css[j] = css[j], css[i]
-	}
+func (p *piece) numChunks() int {
+	return p.t.pieceNumChunks(p.index)
+}
+
+func (p *piece) undirtiedChunkIndices() (ret bitmap.Bitmap) {
+	ret = p.DirtyChunks.Copy()
+	ret.FlipRange(0, p.numChunks())
 	return
 }
 

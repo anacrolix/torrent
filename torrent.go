@@ -14,6 +14,7 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
+	"github.com/anacrolix/missinggo/itertools"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/bradfitz/iter"
@@ -252,6 +253,8 @@ func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte) (err error) {
 	t.Pieces = make([]piece, len(hashes))
 	for i, hash := range hashes {
 		piece := &t.Pieces[i]
+		piece.t = t
+		piece.index = i
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		missinggo.CopyExact(piece.Hash[:], hash)
 	}
@@ -997,12 +1000,11 @@ func (t *torrent) connRequestPiecePendingChunks(c *connection, piece int) (more 
 	if !c.PeerHasPiece(piece) {
 		return true
 	}
-	for _, cs := range t.Pieces[piece].shuffledPendingChunkSpecs(t, piece) {
-		req := request{pp.Integer(piece), cs}
-		if !c.Request(req) {
-			return false
-		}
-	}
+	chunkIndices := t.Pieces[piece].undirtiedChunkIndices().ToSortedSlice()
+	return itertools.ForPerm(len(chunkIndices), func(i int) bool {
+		req := request{pp.Integer(piece), t.chunkIndexSpec(chunkIndices[i], piece)}
+		return c.Request(req)
+	})
 	return true
 }
 

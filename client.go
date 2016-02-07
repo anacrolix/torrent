@@ -2511,8 +2511,8 @@ func (cl *Client) verifyPiece(t *torrent, piece int) {
 		cl.event.Wait()
 	}
 	p.QueuedForHash = false
-	t.publishPieceChange(piece)
 	if t.isClosed() || t.pieceComplete(piece) {
+		t.publishPieceChange(piece)
 		return
 	}
 	p.Hashing = true

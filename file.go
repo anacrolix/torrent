@@ -79,6 +79,10 @@ func (f *File) Download() {
 	f.t.DownloadPieces(f.t.torrent.byteRegionPieces(f.offset, f.length))
 }
 
+func (f *File) PrioritizeRegion(off, len int64) {
+	f.t.DownloadPieces(f.t.torrent.byteRegionPieces(f.offset+off, len))
+}
+
 func byteRegionExclusivePieces(off, size, pieceSize int64) (begin, end int) {
 	begin = int((off + pieceSize - 1) / pieceSize)
 	end = int((off + size) / pieceSize)

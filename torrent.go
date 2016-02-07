@@ -790,13 +790,21 @@ func (t *torrent) worstBadConn(cl *Client) *connection {
 	return nil
 }
 
+type PieceStateChange struct {
+	Index int
+	PieceState
+}
+
 func (t *torrent) publishPieceChange(piece int) {
 	cur := t.pieceState(piece)
 	p := &t.Pieces[piece]
 	if cur != p.PublicPieceState {
-		t.pieceStateChanges.Publish(piece)
+		p.PublicPieceState = cur
+		t.pieceStateChanges.Publish(PieceStateChange{
+			piece,
+			cur,
+		})
 	}
-	p.PublicPieceState = cur
 }
 
 func (t *torrent) pieceNumPendingChunks(piece int) int {

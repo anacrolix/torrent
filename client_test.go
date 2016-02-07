@@ -294,8 +294,8 @@ func TestClientTransfer(t *testing.T) {
 	go func() {
 		s := leecherGreeting.torrent.pieceStateChanges.Subscribe()
 		defer s.Close()
-		for i := range s.Values {
-			log.Print(i)
+		for v := range s.Values {
+			log.Printf("%#v", v)
 		}
 		log.Print("finished")
 	}()

@@ -15,14 +15,16 @@ import (
 )
 
 func init() {
-	RegisterClientScheme("http", NewClient)
+	registerClientScheme("http", newHTTPClient)
 }
 
 type httpClient struct {
 	url url.URL
 }
 
-func NewClient(url *url.URL) Client {
+func (httpClient) Close() error { return nil }
+
+func newHTTPClient(url *url.URL) client {
 	return &httpClient{
 		url: *url,
 	}

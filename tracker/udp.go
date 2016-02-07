@@ -61,10 +61,10 @@ type AnnounceResponseHeader struct {
 }
 
 func init() {
-	RegisterClientScheme("udp", newClient)
+	registerClientScheme("udp", newUDPClient)
 }
 
-func newClient(url *url.URL) Client {
+func newUDPClient(url *url.URL) client {
 	return &udpClient{
 		url: *url,
 	}
@@ -91,6 +91,13 @@ type udpClient struct {
 	connectionId         int64
 	socket               net.Conn
 	url                  url.URL
+}
+
+func (me *udpClient) Close() error {
+	if me.socket != nil {
+		return me.socket.Close()
+	}
+	return nil
 }
 
 func (c *udpClient) URL() string {

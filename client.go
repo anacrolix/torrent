@@ -1403,9 +1403,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		switch msg.Type {
 		case pp.Choke:
 			c.PeerChoked = true
-			for r := range c.Requests {
-				me.connDeleteRequest(t, c, r)
-			}
+			c.Requests = nil
 			// We can then reset our interest.
 			c.updateRequests()
 		case pp.Reject:

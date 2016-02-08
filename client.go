@@ -1957,9 +1957,7 @@ func (t Torrent) AddPeers(pp []Peer) error {
 func (t Torrent) DownloadAll() {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
-	for i := range iter.N(t.torrent.Info.NumPieces()) {
-		t.torrent.pendPiece(i, t.cl)
-	}
+	t.torrent.pendPieceRange(0, t.torrent.numPieces())
 }
 
 // Returns nil metainfo if it isn't in the cache. Checks that the retrieved

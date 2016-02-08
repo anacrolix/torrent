@@ -951,7 +951,7 @@ func (t *torrent) piecePriorityUncached(piece int) (ret piecePriority) {
 	return
 }
 
-func (t *torrent) pendPiece(piece int, cl *Client) {
+func (t *torrent) pendPiece(piece int) {
 	if t.pendingPieces.Contains(piece) {
 		return
 	}
@@ -974,20 +974,15 @@ func (t *torrent) getCompletedPieces() (ret bitmap.Bitmap) {
 	return
 }
 
-func (t *torrent) pendPieces(pend *bitmap.Bitmap) {
-	t.pendingPieces.Union(pend)
-	t.updatePiecePriorities()
-}
-
 func (t *torrent) unpendPieces(unpend *bitmap.Bitmap) {
 	t.pendingPieces.Sub(unpend)
 	t.updatePiecePriorities()
 }
 
 func (t *torrent) pendPieceRange(begin, end int) {
-	var bm bitmap.Bitmap
-	bm.AddRange(begin, end)
-	t.pendPieces(&bm)
+	for i := begin; i < end; i++ {
+		t.pendPiece(i)
+	}
 }
 
 func (t *torrent) unpendPieceRange(begin, end int) {

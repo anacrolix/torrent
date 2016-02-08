@@ -28,7 +28,6 @@ import (
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
-	"github.com/bradfitz/iter"
 	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -2492,13 +2491,14 @@ func (me *Client) onFailedPiece(t *torrent, piece int) {
 
 func (me *Client) pieceChanged(t *torrent, piece int) {
 	correct := t.pieceComplete(piece)
-	defer t.publishPieceChange(piece)
 	defer me.event.Broadcast()
 	if correct {
 		me.onCompletedPiece(t, piece)
 	} else {
 		me.onFailedPiece(t, piece)
 	}
+	t.updatePiecePriority(piece)
+	t.publishPieceChange(piece)
 }
 
 func (cl *Client) verifyPiece(t *torrent, piece int) {
@@ -2510,6 +2510,7 @@ func (cl *Client) verifyPiece(t *torrent, piece int) {
 	}
 	p.QueuedForHash = false
 	if t.isClosed() || t.pieceComplete(piece) {
+		t.updatePiecePriority(piece)
 		t.publishPieceChange(piece)
 		return
 	}

@@ -299,9 +299,18 @@ func (c *connection) requestedMetadataPiece(index int) bool {
 	return index < len(c.metadataRequests) && c.metadataRequests[index]
 }
 
+// The actual value to use as the maximum outbound requests.
+func (c *connection) nominalMaxRequests() (ret int) {
+	ret = c.PeerMaxRequests
+	if ret > 64 {
+		ret = 64
+	}
+	return
+}
+
 // Returns true if more requests can be sent.
 func (c *connection) Request(chunk request) bool {
-	if len(c.Requests) >= c.PeerMaxRequests {
+	if len(c.Requests) >= c.nominalMaxRequests() {
 		return false
 	}
 	if !c.PeerHasPiece(int(chunk.Index)) {

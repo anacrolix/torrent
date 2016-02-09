@@ -585,10 +585,10 @@ func (c *connection) stopRequestingPiece(piece int) {
 }
 
 func (c *connection) updatePiecePriority(piece int) {
-	if !c.PeerHasPiece(piece) {
-		return
-	}
 	tpp := c.t.piecePriority(piece)
+	if !c.PeerHasPiece(piece) {
+		tpp = PiecePriorityNone
+	}
 	if tpp == PiecePriorityNone {
 		c.stopRequestingPiece(piece)
 		return

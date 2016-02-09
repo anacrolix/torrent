@@ -27,15 +27,14 @@ func (me *backend) Delete(path string) (err error) {
 }
 
 func (me *backend) GetLength(path string) (ret int64, err error) {
-	f, err := me.c.OpenFile(path, 0)
+	fi, err := me.c.StatFile(path)
 	if os.IsNotExist(err) {
 		err = dataBackend.ErrNotFound
 	}
 	if err != nil {
 		return
 	}
-	defer f.Close()
-	ret, err = f.Seek(0, os.SEEK_END)
+	ret = fi.Size()
 	return
 }
 

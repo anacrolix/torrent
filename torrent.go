@@ -510,7 +510,7 @@ func (t *torrent) piecePartiallyDownloaded(piece int) bool {
 		return false
 	}
 	if t.pieceAllDirty(piece) {
-		return true
+		return false
 	}
 	return t.Pieces[piece].hasDirtyChunks()
 }

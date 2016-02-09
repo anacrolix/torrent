@@ -71,6 +71,8 @@ var (
 	receivedMessageTypes       = expvar.NewMap("receivedMessageTypes")
 	receivedKeepalives         = expvar.NewInt("receivedKeepalives")
 	supportedExtensionMessages = expvar.NewMap("supportedExtensionMessages")
+	postedMessageTypes         = expvar.NewMap("postedMessageTypes")
+	postedKeepalives           = expvar.NewInt("postedKeepalives")
 )
 
 const (

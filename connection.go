@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/anacrolix/missinggo"
@@ -258,6 +259,7 @@ func (c *connection) PeerHasPiece(piece int) bool {
 func (c *connection) Post(msg pp.Message) {
 	select {
 	case c.post <- msg:
+		postedMessageTypes.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
 	case <-c.closed.C():
 	}
 }
@@ -492,6 +494,7 @@ func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
 				break
 			}
 			pending.PushBack(pp.Message{Keepalive: true})
+			postedKeepalives.Add(1)
 		case msg, ok := <-conn.post:
 			if !ok {
 				return

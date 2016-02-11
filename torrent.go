@@ -860,6 +860,8 @@ func (t *torrent) updatePiecePriority(piece int) bool {
 	return true
 }
 
+// Update all piece priorities in one hit. This function should have the same
+// output as updatePiecePriority, but across all pieces.
 func (t *torrent) updatePiecePriorities() {
 	newPrios := make([]piecePriority, t.numPieces())
 	t.pendingPieces.IterTyped(func(piece int) (more bool) {
@@ -875,8 +877,10 @@ func (t *torrent) updatePiecePriorities() {
 		}
 		return true
 	})
-	// TODO: Do I need a pass suppressing stuff that we already have?
 	for i, prio := range newPrios {
+		if t.pieceComplete(i) {
+			prio = PiecePriorityNone
+		}
 		if prio != t.Pieces[i].priority {
 			t.Pieces[i].priority = prio
 			t.piecePriorityChanged(i)

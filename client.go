@@ -2497,7 +2497,9 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 	} else {
 		me.onFailedPiece(t, piece)
 	}
-	t.updatePiecePriority(piece)
+	if t.updatePiecePriority(piece) {
+		t.piecePriorityChanged(piece)
+	}
 	t.publishPieceChange(piece)
 }
 

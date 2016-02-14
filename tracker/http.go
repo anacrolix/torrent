@@ -57,7 +57,9 @@ func (r *httpResponse) UnmarshalPeers() (ret []Peer, err error) {
 }
 
 func (me *httpClient) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err error) {
-	q := make(url.Values)
+	// retain query parameters from announce URL
+	q := me.url.Query()
+
 	q.Set("info_hash", string(ar.InfoHash[:]))
 	q.Set("peer_id", string(ar.PeerId[:]))
 	q.Set("port", fmt.Sprintf("%d", ar.Port))

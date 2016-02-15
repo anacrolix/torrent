@@ -572,6 +572,9 @@ func (c *connection) updateRequests() {
 
 func (c *connection) fillRequests() {
 	c.pieceRequestOrder.IterTyped(func(piece int) (more bool) {
+		if c.t.cl.config.Debug && c.t.havePiece(piece) {
+			panic(piece)
+		}
 		return c.requestPiecePendingChunks(piece)
 	})
 }

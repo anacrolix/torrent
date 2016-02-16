@@ -1783,34 +1783,9 @@ func (cl *Client) saveTorrentFile(t *torrent) error {
 	return nil
 }
 
-func (cl *Client) startTorrent(t *torrent) {
-	if t.Info == nil || t.data == nil {
-		panic("nope")
-	}
-	// If the client intends to upload, it needs to know what state pieces are
-	// in.
-	if !cl.config.NoUpload {
-		// Queue all pieces for hashing. This is done sequentially to avoid
-		// spamming goroutines.
-		for i := range t.Pieces {
-			t.Pieces[i].QueuedForHash = true
-		}
-		go func() {
-			for i := range t.Pieces {
-				cl.verifyPiece(t, i)
-			}
-		}()
-	}
-}
-
-// Storage cannot be changed once it's set.
 func (cl *Client) setStorage(t *torrent, td Data) (err error) {
-	err = t.setStorage(td)
+	t.setStorage(td)
 	cl.event.Broadcast()
-	if err != nil {
-		return
-	}
-	cl.startTorrent(t)
 	return
 }
 
@@ -2450,6 +2425,7 @@ func (me *Client) pieceHashed(t *torrent, piece int, correct bool) {
 			log.Printf("%T: error completing piece %d: %s", t.data, piece, err)
 			correct = false
 		}
+		t.updatePieceCompletion(piece)
 	} else if len(touchers) != 0 {
 		log.Printf("dropping %d conns that touched piece", len(touchers))
 		for _, c := range touchers {

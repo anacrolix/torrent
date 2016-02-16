@@ -17,7 +17,6 @@ import (
 	"github.com/anacrolix/missinggo/itertools"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
-	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
@@ -104,7 +103,8 @@ type torrent struct {
 
 	readers map[*Reader]struct{}
 
-	pendingPieces bitmap.Bitmap
+	pendingPieces   bitmap.Bitmap
+	completedPieces bitmap.Bitmap
 
 	connPieceInclinationPool sync.Pool
 }
@@ -120,6 +120,10 @@ func (t *torrent) setDisplayName(dn string) {
 }
 
 func (t *torrent) pieceComplete(piece int) bool {
+	return t.completedPieces.Get(piece)
+}
+
+func (t *torrent) pieceCompleteUncached(piece int) bool {
 	// TODO: This is called when setting metadata, and before storage is
 	// assigned, which doesn't seem right.
 	return t.data != nil && t.data.PieceComplete(piece)
@@ -267,12 +271,24 @@ func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte) (err error) {
 	return
 }
 
-func (t *torrent) setStorage(td Data) (err error) {
+func (t *torrent) setStorage(td Data) {
 	if t.data != nil {
 		t.data.Close()
 	}
 	t.data = td
-	return
+	t.completedPieces.Clear()
+	for i := range t.Pieces {
+		t.Pieces[i].QueuedForHash = true
+	}
+	go func() {
+		for i := range t.Pieces {
+			t.verifyPiece(i)
+		}
+	}()
+}
+
+func (t *torrent) verifyPiece(piece int) {
+	t.cl.verifyPiece(t, piece)
 }
 
 func (t *torrent) haveAllMetadataPieces() bool {
@@ -532,12 +548,7 @@ func (t *torrent) numPieces() int {
 }
 
 func (t *torrent) numPiecesCompleted() (num int) {
-	for i := range iter.N(t.Info.NumPieces()) {
-		if t.pieceComplete(i) {
-			num++
-		}
-	}
-	return
+	return t.completedPieces.Len()
 }
 
 func (t *torrent) isClosed() bool {
@@ -588,9 +599,11 @@ func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 }
 
 func (t *torrent) bitfield() (bf []bool) {
-	for i := range t.Pieces {
-		bf = append(bf, t.havePiece(i))
-	}
+	bf = make([]bool, t.numPieces())
+	t.completedPieces.IterTyped(func(piece int) (again bool) {
+		bf[piece] = true
+		return true
+	})
 	return
 }
 
@@ -678,12 +691,7 @@ func (t *torrent) haveAllPieces() bool {
 	if !t.haveInfo() {
 		return false
 	}
-	for i := range t.Pieces {
-		if !t.pieceComplete(i) {
-			return false
-		}
-	}
-	return true
+	return t.completedPieces.Len() == t.numPieces()
 }
 
 func (me *torrent) haveAnyPieces() bool {
@@ -877,10 +885,11 @@ func (t *torrent) updatePiecePriorities() {
 		}
 		return true
 	})
+	t.completedPieces.IterTyped(func(piece int) (more bool) {
+		newPrios[piece] = PiecePriorityNone
+		return true
+	})
 	for i, prio := range newPrios {
-		if t.pieceComplete(i) {
-			prio = PiecePriorityNone
-		}
 		if prio != t.Pieces[i].priority {
 			t.Pieces[i].priority = prio
 			t.piecePriorityChanged(i)
@@ -970,12 +979,7 @@ func (t *torrent) pendPiece(piece int) {
 }
 
 func (t *torrent) getCompletedPieces() (ret bitmap.Bitmap) {
-	for i := range iter.N(t.numPieces()) {
-		if t.pieceComplete(i) {
-			ret.Add(i)
-		}
-	}
-	return
+	return t.completedPieces.Copy()
 }
 
 func (t *torrent) unpendPieces(unpend *bitmap.Bitmap) {
@@ -1032,4 +1036,8 @@ func (t *torrent) getConnPieceInclination() []int {
 func (t *torrent) putPieceInclination(pi []int) {
 	t.connPieceInclinationPool.Put(pi)
 	pieceInclinationsPut.Add(1)
+}
+
+func (t *torrent) updatePieceCompletion(piece int) {
+	t.completedPieces.Set(piece, t.pieceCompleteUncached(piece))
 }

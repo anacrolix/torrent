@@ -434,7 +434,11 @@ func (me badData) WriteAt(b []byte, off int64) (int, error) {
 }
 
 func (me badData) WriteSectionTo(w io.Writer, off, n int64) (int64, error) {
-	return 0, nil
+	written, err := w.Write([]byte("hello"))
+	if err == nil {
+		err = io.ErrUnexpectedEOF
+	}
+	return int64(written), err
 }
 
 func (me badData) PieceComplete(piece int) bool {

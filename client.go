@@ -2447,7 +2447,7 @@ func (me *Client) pieceHashed(t *torrent, piece int, correct bool) {
 	if correct {
 		err := t.data.PieceCompleted(int(piece))
 		if err != nil {
-			log.Printf("error completing piece: %s", err)
+			log.Printf("%T: error completing piece %d: %s", t.data, piece, err)
 			correct = false
 		}
 	} else if len(touchers) != 0 {

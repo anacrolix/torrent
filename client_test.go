@@ -2,14 +2,17 @@ package torrent
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -434,10 +437,8 @@ func (me badData) WriteAt(b []byte, off int64) (int, error) {
 }
 
 func (me badData) WriteSectionTo(w io.Writer, off, n int64) (int64, error) {
-	written, err := w.Write([]byte("hello"))
-	if err == nil {
-		err = io.ErrUnexpectedEOF
-	}
+	p := []byte(me.randomlyTruncatedDataString())
+	written, err := w.Write(p)
 	return int64(written), err
 }
 
@@ -446,20 +447,21 @@ func (me badData) PieceComplete(piece int) bool {
 }
 
 func (me badData) PieceCompleted(piece int) error {
-	return nil
+	return errors.New("psyyyyyyyche")
+}
+
+func (me badData) randomlyTruncatedDataString() string {
+	return "hello, world\n"[:rand.Intn(14)]
 }
 
 func (me badData) ReadAt(b []byte, off int64) (n int, err error) {
-	if off >= 5 {
-		err = io.EOF
-		return
-	}
-	n = copy(b, []byte("hello")[off:])
-	return
+	r := strings.NewReader(me.randomlyTruncatedDataString())
+	return r.ReadAt(b, off)
 }
 
 // We read from a piece which is marked completed, but is missing data.
 func TestCompletedPieceWrongSize(t *testing.T) {
+	t.Parallel()
 	cfg := TestingConfig
 	cfg.TorrentDataOpener = func(*metainfo.Info) Data {
 		return badData{}
@@ -477,20 +479,14 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 			},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !new {
-		t.Fatal("expected new")
-	}
+	require.NoError(t, err)
+	defer tt.Drop()
+	assert.True(t, new)
 	r := tt.NewReader()
 	defer r.Close()
-	b := make([]byte, 20)
-	n, err := io.ReadFull(r, b)
-	if n != 5 || err != io.ErrUnexpectedEOF {
-		t.Fatal(n, err)
-	}
-	defer tt.Drop()
+	b, err := ioutil.ReadAll(r)
+	assert.Len(t, b, 13)
+	assert.NoError(t, err)
 }
 
 func BenchmarkAddLargeTorrent(b *testing.B) {

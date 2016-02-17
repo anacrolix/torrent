@@ -30,7 +30,7 @@ func addirs(cf *Config) *Config {
 	return cf
 }
 
-func testingConfig() *Config {
+func issue35TestingConfig() *Config {
 	return &Config{
 		ListenAddr:           "localhost:0",
 		NoDHT:                false,
@@ -85,7 +85,7 @@ func TestInfohash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cf_one = testingConfig()
+	cf_one = issue35TestingConfig()
 	cf_one.ListenAddr = "localhost:43433"
 	cf_one = addirs(cf_one)
 	cl_one, err = NewClient(cf_one)

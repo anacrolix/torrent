@@ -106,7 +106,7 @@ func (me *data) WriteSectionTo(w io.Writer, off, n int64) (written int64, err er
 }
 
 func (me *data) PieceCompleted(index int) (err error) {
-	return me.store.PieceCompleted(me.info.Piece(index))
+	return me.store.pieceCompleted(me.info.Piece(index))
 }
 
 func (me *data) PieceComplete(piece int) bool {

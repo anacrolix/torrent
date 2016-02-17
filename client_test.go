@@ -683,3 +683,55 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 	default:
 	}
 }
+
+func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool) {
+	fileCacheDir, err := ioutil.TempDir("", "")
+	require.NoError(t, err)
+	defer os.RemoveAll(fileCacheDir)
+	fileCache, err := filecache.NewCache(fileCacheDir)
+	require.NoError(t, err)
+	greetingDataTempDir, greetingMetainfo := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(greetingDataTempDir)
+	filePieceStore := pieceStore.New(fileCacheDataBackend.New(fileCache))
+	greetingData := filePieceStore.OpenTorrentData(&greetingMetainfo.Info.Info)
+	written, err := greetingData.WriteAt([]byte(testutil.GreetingFileContents), 0)
+	require.Equal(t, len(testutil.GreetingFileContents), written)
+	require.NoError(t, err)
+	for i := 0; i < greetingMetainfo.Info.NumPieces(); i++ {
+		// p := greetingMetainfo.Info.Piece(i)
+		if alreadyCompleted {
+			err := greetingData.PieceCompleted(i)
+			assert.NoError(t, err)
+		}
+	}
+	cfg := TestingConfig
+	// TODO: Disable network option?
+	cfg.DisableTCP = true
+	cfg.DisableUTP = true
+	cfg.TorrentDataOpener = func(mi *metainfo.Info) Data {
+		return filePieceStore.OpenTorrentData(mi)
+	}
+	cl, err := NewClient(&cfg)
+	require.NoError(t, err)
+	defer cl.Close()
+	tt, err := cl.AddTorrent(greetingMetainfo)
+	require.NoError(t, err)
+	psrs := tt.PieceStateRuns()
+	assert.Len(t, psrs, 1)
+	assert.EqualValues(t, 3, psrs[0].Length)
+	assert.Equal(t, alreadyCompleted, psrs[0].Complete)
+	if alreadyCompleted {
+		r := tt.NewReader()
+		b, err := ioutil.ReadAll(r)
+		assert.NoError(t, err)
+		assert.EqualValues(t, testutil.GreetingFileContents, b)
+	}
+}
+
+func TestAddTorrentPiecesAlreadyCompleted(t *testing.T) {
+	testAddTorrentPriorPieceCompletion(t, true)
+}
+
+func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
+	testAddTorrentPriorPieceCompletion(t, false)
+}

@@ -233,6 +233,9 @@ func (me *store) hashCopyFile(from, to string, n int64) (hash []byte, err error)
 }
 
 func (me *store) pieceCompleted(p metainfo.Piece) (err error) {
+	if me.pieceComplete(p) {
+		return
+	}
 	hash, err := me.hashCopyFile(me.incompletePiecePath(p), me.completedPiecePath(p), p.Length())
 	if err == nil && !bytes.Equal(hash, p.Hash()) {
 		err = errors.New("piece incomplete")

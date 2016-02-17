@@ -551,6 +551,7 @@ func (t *torrent) numPiecesCompleted() (num int) {
 	return t.completedPieces.Len()
 }
 
+// Safe to call with or without client lock.
 func (t *torrent) isClosed() bool {
 	select {
 	case <-t.closing:

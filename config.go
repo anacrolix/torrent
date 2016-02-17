@@ -35,7 +35,8 @@ type Config struct {
 	// Don't automatically load "$ConfigDir/blocklist".
 	NoDefaultBlocklist bool
 	// Defaults to "$HOME/.config/torrent". This is where "blocklist",
-	// "torrents" and other operational files are stored.
+	// "torrents" and other operational files are stored. TODO: Dump this
+	// stuff, this is specific to the default cmd/torrent client only.
 	ConfigDir string
 	// Don't save or load to a cache of torrent files stored in
 	// "$ConfigDir/torrents".

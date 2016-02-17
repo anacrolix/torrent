@@ -276,8 +276,8 @@ func (t *torrent) setStorage(td Data) {
 		t.data.Close()
 	}
 	t.data = td
-	t.completedPieces.Clear()
 	for i := range t.Pieces {
+		t.updatePieceCompletion(i)
 		t.Pieces[i].QueuedForHash = true
 	}
 	go func() {

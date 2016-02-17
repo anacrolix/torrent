@@ -53,9 +53,10 @@ func (me data) ReadAt(p []byte, off int64) (n int, err error) {
 		off = 0
 		p = p[n1:]
 		if len(p) == 0 {
-			break
+			return
 		}
 	}
+	err = io.EOF
 	return
 }
 

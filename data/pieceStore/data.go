@@ -73,38 +73,6 @@ func (me *data) pieceReader(p metainfo.Piece, off int64) (ret io.ReadCloser, err
 	return me.store.getPieceRange(p, off, p.Length()-off)
 }
 
-func (me *data) WriteSectionTo(w io.Writer, off, n int64) (written int64, err error) {
-	i := int(off / me.info.PieceLength)
-	off %= me.info.PieceLength
-	for n != 0 {
-		if i >= me.info.NumPieces() {
-			err = io.EOF
-			break
-		}
-		p := me.info.Piece(i)
-		if off >= p.Length() {
-			err = io.EOF
-			break
-		}
-		var pr io.ReadCloser
-		pr, err = me.pieceReader(p, off)
-		if err != nil {
-			return
-		}
-		var n1 int64
-		n1, err = io.CopyN(w, pr, n)
-		pr.Close()
-		written += n1
-		n -= n1
-		if err != nil {
-			return
-		}
-		off = 0
-		i++
-	}
-	return
-}
-
 func (me *data) PieceCompleted(index int) (err error) {
 	return me.store.pieceCompleted(me.info.Piece(index))
 }

@@ -669,22 +669,20 @@ func (t *torrent) pieceLength(piece int) (len_ pp.Integer) {
 	return
 }
 
-func (t *torrent) hashPiece(piece int) (ps pieceSum) {
+func (t *torrent) hashPiece(piece int) (ret pieceSum) {
 	hash := pieceHash.New()
 	p := &t.Pieces[piece]
 	p.waitNoPendingWrites()
-	pl := t.Info.Piece(int(piece)).Length()
-	n, err := t.data.WriteSectionTo(hash, int64(piece)*t.Info.PieceLength, pl)
-	if err != nil {
-		if err != io.ErrUnexpectedEOF {
-			log.Printf("error hashing piece with %T: %s", t.data, err)
-		}
+	ip := t.Info.Piece(piece)
+	pl := ip.Length()
+	n, err := io.Copy(hash, io.NewSectionReader(t.data, ip.Offset(), pl))
+	if n == pl {
+		missinggo.CopyExact(&ret, hash.Sum(nil))
 		return
 	}
-	if n != pl {
-		panic(fmt.Sprintf("%T: %d != %d", t.data, n, pl))
+	if err != io.ErrUnexpectedEOF {
+		log.Printf("unexpected error hashing piece with %T: %s", t.data, err)
 	}
-	missinggo.CopyExact(ps[:], hash.Sum(nil))
 	return
 }
 

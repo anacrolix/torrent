@@ -436,12 +436,6 @@ func (me badData) WriteAt(b []byte, off int64) (int, error) {
 	return 0, nil
 }
 
-func (me badData) WriteSectionTo(w io.Writer, off, n int64) (int64, error) {
-	p := []byte(me.randomlyTruncatedDataString())
-	written, err := w.Write(p)
-	return int64(written), err
-}
-
 func (me badData) PieceComplete(piece int) bool {
 	return true
 }

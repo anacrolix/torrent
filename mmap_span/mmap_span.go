@@ -48,24 +48,6 @@ func (me MMapSpan) ReadAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (me MMapSpan) WriteSectionTo(w io.Writer, off, n int64) (written int64, err error) {
-	me.ApplyTo(off, func(intervalOffset int64, interval sizer) (stop bool) {
-		var _n int
-		p := (*interval.(segment).MMap)[intervalOffset:]
-		if n < int64(len(p)) {
-			p = p[:n]
-		}
-		_n, err = w.Write(p)
-		written += int64(_n)
-		n -= int64(_n)
-		if err != nil {
-			return true
-		}
-		return n == 0
-	})
-	return
-}
-
 func (me MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
 	me.ApplyTo(off, func(iOff int64, i sizer) (stop bool) {
 		mMap := i.(segment)

@@ -135,8 +135,10 @@ func (r *Reader) readOnceAt(b []byte, pos int64) (n int, err error) {
 			return
 		}
 		log.Printf("%s: error reading from torrent storage pos=%d: %s", r.t, pos, err)
+		r.t.cl.mu.Lock()
 		r.t.torrent.updatePieceCompletion(pi)
 		r.t.torrent.updatePiecePriority(pi)
+		r.t.cl.mu.Unlock()
 	}
 }
 

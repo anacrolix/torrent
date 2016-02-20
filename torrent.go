@@ -917,6 +917,8 @@ func (t *torrent) byteRegionPieces(off, size int64) (begin, end int) {
 
 // Returns true if all iterations complete without breaking.
 func (t *torrent) forReaderOffsetPieces(f func(begin, end int) (more bool)) (all bool) {
+	// There's an oppurtunity here to build a map of beginning pieces, and a
+	// bitmap of the rest. I wonder if it's worth the allocation overhead.
 	for r := range t.readers {
 		r.mu.Lock()
 		pos, readahead := r.pos, r.readahead

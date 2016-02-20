@@ -154,3 +154,7 @@ func (t Torrent) CancelPieces(begin, end int) {
 	defer t.cl.mu.Unlock()
 	t.torrent.unpendPieceRange(begin, end)
 }
+
+func (t Torrent) String() string {
+	return t.torrent.String()
+}

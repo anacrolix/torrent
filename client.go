@@ -1825,7 +1825,6 @@ func newTorrent(ih InfoHash) (t *torrent) {
 		HalfOpen:          make(map[string]struct{}),
 		pieceStateChanges: pubsub.NewPubSub(),
 	}
-	t.wantPeers.L = &t.stateMu
 	return
 }
 
@@ -2024,6 +2023,7 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err er
 		// TODO: Tidy this up?
 		t = newTorrent(spec.InfoHash)
 		t.cl = cl
+		t.wantPeers.L = &cl.mu
 		if spec.ChunkSize != 0 {
 			t.chunkSize = pp.Integer(spec.ChunkSize)
 		}
@@ -2087,8 +2087,6 @@ func (me *Client) dropTorrent(infoHash InfoHash) (err error) {
 func (cl *Client) waitWantPeers(t *torrent) bool {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	t.stateMu.Lock()
-	defer t.stateMu.Unlock()
 	for {
 		select {
 		case <-t.ceasingNetworking:
@@ -2102,11 +2100,7 @@ func (cl *Client) waitWantPeers(t *torrent) bool {
 			return true
 		}
 	wait:
-		cl.mu.Unlock()
 		t.wantPeers.Wait()
-		t.stateMu.Unlock()
-		cl.mu.Lock()
-		t.stateMu.Lock()
 	}
 }
 

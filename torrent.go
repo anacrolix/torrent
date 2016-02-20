@@ -51,11 +51,10 @@ type peersKey struct {
 	Port    int
 }
 
-// Is not aware of Client. Maintains state of torrent for with-in a Client.
+// Maintains state of torrent within a Client.
 type torrent struct {
 	cl *Client
 
-	stateMu sync.Mutex
 	closing chan struct{}
 
 	// Closed when no more network activity is desired. This includes
@@ -166,8 +165,6 @@ func (t *torrent) worstConns(cl *Client) (wcs *worstConns) {
 }
 
 func (t *torrent) ceaseNetworking() {
-	t.stateMu.Lock()
-	defer t.stateMu.Unlock()
 	select {
 	case <-t.ceasingNetworking:
 		return

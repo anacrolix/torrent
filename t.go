@@ -48,14 +48,14 @@ func (t Torrent) NewReader() (ret *Reader) {
 // same state. The sum of the state run lengths is the number of pieces
 // in the torrent.
 func (t Torrent) PieceStateRuns() []PieceStateRun {
-	t.torrent.stateMu.Lock()
-	defer t.torrent.stateMu.Unlock()
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
 	return t.torrent.pieceStateRuns()
 }
 
 func (t Torrent) PieceState(piece int) PieceState {
-	t.torrent.stateMu.Lock()
-	defer t.torrent.stateMu.Unlock()
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
 	return t.torrent.pieceState(piece)
 }
 

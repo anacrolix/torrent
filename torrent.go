@@ -1039,3 +1039,14 @@ func (t *torrent) putPieceInclination(pi []int) {
 func (t *torrent) updatePieceCompletion(piece int) {
 	t.completedPieces.Set(piece, t.pieceCompleteUncached(piece))
 }
+
+// Non-blocking read. Client lock is not required.
+func (t *torrent) readAt(b []byte, off int64) (n int, err error) {
+	if off+int64(len(b)) > t.length {
+		b = b[:t.length-off]
+	}
+	for pi := off / t.Info.PieceLength; pi*t.Info.PieceLength < off+int64(len(b)); pi++ {
+		t.Pieces[pi].waitNoPendingWrites()
+	}
+	return t.data.ReadAt(b, off)
+}

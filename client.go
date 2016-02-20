@@ -253,17 +253,6 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
-// TODO: Make this non-blocking Read on Torrent.
-func dataReadAt(d Data, b []byte, off int64) (n int, err error) {
-	// defer func() {
-	// 	if err == io.ErrUnexpectedEOF && n != 0 {
-	// 		err = nil
-	// 	}
-	// }()
-	// log.Println("data read at", len(b), off)
-	return d.ReadAt(b, off)
-}
-
 // Calculates the number of pieces to set to Readahead priority, after the
 // Now, and Next pieces.
 func readaheadPieces(readahead, pieceLength int64) (ret int) {
@@ -1357,10 +1346,8 @@ func (me *Client) sendChunk(t *torrent, c *connection, r request) error {
 	// Count the chunk being sent, even if it isn't.
 	c.chunksSent++
 	b := make([]byte, r.Length)
-	tp := &t.Pieces[r.Index]
-	tp.waitNoPendingWrites()
 	p := t.Info.Piece(int(r.Index))
-	n, err := dataReadAt(t.data, b, p.Offset()+int64(r.Begin))
+	n, err := t.readAt(b, p.Offset()+int64(r.Begin))
 	if n != len(b) {
 		if err == nil {
 			panic("expected error")

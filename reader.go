@@ -125,14 +125,12 @@ func (r *Reader) readOnceAt(b []byte, pos int64) (n int, err error) {
 		}
 		b1 := b[:avail]
 		pi := int(pos / r.t.Info().PieceLength)
-		tp := &r.t.torrent.Pieces[pi]
 		ip := r.t.Info().Piece(pi)
 		po := pos % ip.Length()
 		if int64(len(b1)) > ip.Length()-po {
 			b1 = b1[:ip.Length()-po]
 		}
-		tp.waitNoPendingWrites()
-		n, err = dataReadAt(r.t.torrent.data, b1, pos)
+		n, err = r.t.torrent.readAt(b1, pos)
 		if n != 0 {
 			return
 		}

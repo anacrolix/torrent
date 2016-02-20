@@ -1361,11 +1361,11 @@ func (me *Client) sendChunk(t *torrent, c *connection, r request) error {
 	tp.waitNoPendingWrites()
 	p := t.Info.Piece(int(r.Index))
 	n, err := dataReadAt(t.data, b, p.Offset()+int64(r.Begin))
-	if err != nil {
-		return err
-	}
 	if n != len(b) {
-		log.Fatal(b)
+		if err == nil {
+			panic("expected error")
+		}
+		return err
 	}
 	c.Post(pp.Message{
 		Type:  pp.Piece,

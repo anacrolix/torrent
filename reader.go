@@ -3,7 +3,6 @@ package torrent
 import (
 	"errors"
 	"io"
-	"log"
 	"os"
 	"sync"
 )
@@ -12,8 +11,12 @@ import (
 type Reader struct {
 	t          *Torrent
 	responsive bool
-	opMu       sync.Mutex
+	// Ensure operations that change the position are exclusive, like Read()
+	// and Seek().
+	opMu sync.Mutex
 
+	// Required when modifying pos and readahead, or reading them without
+	// opMu.
 	mu        sync.Mutex
 	pos       int64
 	readahead int64
@@ -96,7 +99,9 @@ func (r *Reader) Read(b []byte) (n int, err error) {
 		}
 		b = b[n1:]
 		n += n1
+		r.mu.Lock()
 		r.pos += int64(n1)
+		r.mu.Unlock()
 	}
 	if r.pos >= r.t.torrent.length {
 		err = io.EOF
@@ -168,6 +173,9 @@ func (r *Reader) posChanged() {
 }
 
 func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {
+	r.opMu.Lock()
+	defer r.opMu.Unlock()
+
 	r.mu.Lock()
 	switch whence {
 	case os.SEEK_SET:
@@ -181,6 +189,7 @@ func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {
 	}
 	ret = r.pos
 	r.mu.Unlock()
+
 	r.posChanged()
 	return
 }

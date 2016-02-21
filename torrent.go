@@ -17,6 +17,7 @@ import (
 	"github.com/anacrolix/missinggo/itertools"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
+	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
@@ -1049,4 +1050,10 @@ func (t *torrent) readAt(b []byte, off int64) (n int, err error) {
 		t.Pieces[pi].waitNoPendingWrites()
 	}
 	return t.data.ReadAt(b, off)
+}
+
+func (t *torrent) updateAllPieceCompletions() {
+	for i := range iter.N(t.numPieces()) {
+		t.updatePieceCompletion(i)
+	}
 }

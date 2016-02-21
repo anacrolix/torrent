@@ -81,6 +81,7 @@ func blockingRead(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int
 	)
 	readDone := make(chan struct{})
 	go func() {
+		defer close(readDone)
 		r := t.NewReader()
 		defer r.Close()
 		_, _err = r.Seek(off, os.SEEK_SET)
@@ -88,7 +89,6 @@ func blockingRead(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int
 			return
 		}
 		_n, _err = io.ReadFull(r, p)
-		close(readDone)
 	}()
 	select {
 	case <-readDone:

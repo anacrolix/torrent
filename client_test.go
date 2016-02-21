@@ -258,24 +258,13 @@ func TestClientTransfer(t *testing.T) {
 	cfg.Seed = true
 	cfg.DataDir = greetingTempDir
 	seeder, err := NewClient(&cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer seeder.Close()
 	exportClientStatus(seeder, "/TestClientTransfer/s")
 	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	leecherDataDir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
-	// cfg.TorrentDataOpener = func(info *metainfo.Info) (data.Data, error) {
-	// 	return blob.TorrentData(info, leecherDataDir), nil
-	// }
-	// blobStore := blob.NewStore(leecherDataDir)
-	// cfg.TorrentDataOpener = func(info *metainfo.Info) Data {
-	// 	return blobStore.OpenTorrent(info)
-	// }
 	cfg.TorrentDataOpener = func() TorrentDataOpener {
 		fc, err := filecache.NewCache(leecherDataDir)
 		require.NoError(t, err)
@@ -287,21 +276,13 @@ func TestClientTransfer(t *testing.T) {
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()
 	exportClientStatus(leecher, "/TestClientTransfer/l")
-	leecherGreeting, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
+	leecherGreeting, new, err := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
 		return
 	}())
-	// TODO: The piece state publishing is kinda jammed in here until I have a
-	// more thorough test.
-	go func() {
-		s := leecherGreeting.torrent.pieceStateChanges.Subscribe()
-		defer s.Close()
-		for v := range s.Values {
-			log.Printf("%#v", v)
-		}
-		log.Print("finished")
-	}()
+	require.NoError(t, err)
+	assert.True(t, new)
 	leecherGreeting.AddPeers([]Peer{
 		Peer{
 			IP:   missinggo.AddrIP(seeder.ListenAddr()),
@@ -311,13 +292,8 @@ func TestClientTransfer(t *testing.T) {
 	r := leecherGreeting.NewReader()
 	defer r.Close()
 	_greeting, err := ioutil.ReadAll(r)
-	if err != nil {
-		t.Fatalf("%q %s", string(_greeting), err)
-	}
-	greeting := string(_greeting)
-	if greeting != testutil.GreetingFileContents {
-		t.Fatal(":(")
-	}
+	assert.NoError(t, err)
+	assert.EqualValues(t, testutil.GreetingFileContents, _greeting)
 }
 
 func exportClientStatus(cl *Client, path string) {

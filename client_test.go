@@ -287,7 +287,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	require.NoError(t, err)
 	defer seeder.Close()
 	if ps.ExportClientStatus {
-		exportClientStatus(seeder, "s")
+		testutil.ExportStatusWriter(seeder, "s")
 	}
 	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	leecherDataDir, err := ioutil.TempDir("", "")
@@ -304,7 +304,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()
 	if ps.ExportClientStatus {
-		exportClientStatus(leecher, "l")
+		testutil.ExportStatusWriter(leecher, "l")
 	}
 	leecherGreeting, new, err := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
@@ -332,15 +332,6 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	assert.EqualValues(t, testutil.GreetingFileContents, _greeting)
 }
 
-func exportClientStatus(cl *Client, path string) {
-	http.HandleFunc(
-		fmt.Sprintf("/%s/%s", missinggo.GetTestName(), path),
-		func(w http.ResponseWriter, r *http.Request) {
-			cl.WriteStatus(w)
-		},
-	)
-}
-
 // Check that after completing leeching, a leecher transitions to a seeding
 // correctly. Connected in a chain like so: Seeder <-> Leecher <-> LeecherLeecher.
 func TestSeedAfterDownloading(t *testing.T) {
@@ -351,14 +342,14 @@ func TestSeedAfterDownloading(t *testing.T) {
 	cfg.DataDir = greetingTempDir
 	seeder, err := NewClient(&cfg)
 	defer seeder.Close()
-	exportClientStatus(seeder, "s")
+	testutil.ExportStatusWriter(seeder, "s")
 	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.DataDir)
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()
-	exportClientStatus(leecher, "l")
+	testutil.ExportStatusWriter(leecher, "l")
 	cfg.Seed = false
 	cfg.TorrentDataOpener = nil
 	cfg.DataDir, err = ioutil.TempDir("", "")
@@ -366,7 +357,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	defer os.RemoveAll(cfg.DataDir)
 	leecherLeecher, _ := NewClient(&cfg)
 	defer leecherLeecher.Close()
-	exportClientStatus(leecherLeecher, "ll")
+	testutil.ExportStatusWriter(leecherLeecher, "ll")
 	leecherGreeting, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2

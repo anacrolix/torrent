@@ -251,7 +251,33 @@ func TestAddDropManyTorrents(t *testing.T) {
 	}
 }
 
-func TestClientTransfer(t *testing.T) {
+func TestClientTransferDefault(t *testing.T) {
+	testClientTransfer(t, testClientTransferParams{})
+}
+
+func TestClientTransferVarious(t *testing.T) {
+	for _, responsive := range []bool{false, true} {
+		testClientTransfer(t, testClientTransferParams{
+			Responsive: responsive,
+		})
+		for _, readahead := range []int64{-1, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20} {
+			testClientTransfer(t, testClientTransferParams{
+				Responsive:   responsive,
+				SetReadahead: true,
+				Readahead:    readahead,
+			})
+		}
+	}
+}
+
+type testClientTransferParams struct {
+	Responsive         bool
+	Readahead          int64
+	SetReadahead       bool
+	ExportClientStatus bool
+}
+
+func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
 	cfg := TestingConfig
@@ -260,7 +286,9 @@ func TestClientTransfer(t *testing.T) {
 	seeder, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
-	exportClientStatus(seeder, "/TestClientTransfer/s")
+	if ps.ExportClientStatus {
+		exportClientStatus(seeder, "s")
+	}
 	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
@@ -275,7 +303,9 @@ func TestClientTransfer(t *testing.T) {
 	}()
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()
-	exportClientStatus(leecher, "/TestClientTransfer/l")
+	if ps.ExportClientStatus {
+		exportClientStatus(leecher, "l")
+	}
 	leecherGreeting, new, err := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
@@ -291,15 +321,24 @@ func TestClientTransfer(t *testing.T) {
 	})
 	r := leecherGreeting.NewReader()
 	defer r.Close()
+	if ps.Responsive {
+		r.SetResponsive()
+	}
+	if ps.SetReadahead {
+		r.SetReadahead(ps.Readahead)
+	}
 	_greeting, err := ioutil.ReadAll(r)
 	assert.NoError(t, err)
 	assert.EqualValues(t, testutil.GreetingFileContents, _greeting)
 }
 
 func exportClientStatus(cl *Client, path string) {
-	http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-		cl.WriteStatus(w)
-	})
+	http.HandleFunc(
+		fmt.Sprintf("/%s/%s", missinggo.GetTestName(), path),
+		func(w http.ResponseWriter, r *http.Request) {
+			cl.WriteStatus(w)
+		},
+	)
 }
 
 // Check that after completing leeching, a leecher transitions to a seeding
@@ -312,14 +351,14 @@ func TestSeedAfterDownloading(t *testing.T) {
 	cfg.DataDir = greetingTempDir
 	seeder, err := NewClient(&cfg)
 	defer seeder.Close()
-	exportClientStatus(seeder, "/s")
+	exportClientStatus(seeder, "s")
 	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.DataDir)
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()
-	exportClientStatus(leecher, "/l")
+	exportClientStatus(leecher, "l")
 	cfg.Seed = false
 	cfg.TorrentDataOpener = nil
 	cfg.DataDir, err = ioutil.TempDir("", "")
@@ -327,7 +366,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	defer os.RemoveAll(cfg.DataDir)
 	leecherLeecher, _ := NewClient(&cfg)
 	defer leecherLeecher.Close()
-	exportClientStatus(leecherLeecher, "/ll")
+	exportClientStatus(leecherLeecher, "ll")
 	leecherGreeting, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2

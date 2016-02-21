@@ -655,7 +655,7 @@ type Peer struct {
 }
 
 func (t *torrent) pieceLength(piece int) (len_ pp.Integer) {
-	if piece < 0 || piece > t.Info.NumPieces() {
+	if piece < 0 || piece >= t.Info.NumPieces() {
 		return
 	}
 	if int(piece) == t.numPieces()-1 {

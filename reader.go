@@ -10,12 +10,13 @@ import (
 
 // Accesses torrent data via a client.
 type Reader struct {
-	t *Torrent
-
-	mu         sync.Mutex
-	pos        int64
+	t          *Torrent
 	responsive bool
-	readahead  int64
+	opMu       sync.Mutex
+
+	mu        sync.Mutex
+	pos       int64
+	readahead int64
 }
 
 var _ io.ReadCloser = &Reader{}
@@ -82,14 +83,26 @@ func (r *Reader) waitReadable(off int64) {
 }
 
 func (r *Reader) Read(b []byte) (n int, err error) {
-	r.mu.Lock()
-	pos := r.pos
-	r.mu.Unlock()
-	n, err = r.readAt(b, pos)
-	r.mu.Lock()
-	r.pos += int64(n)
-	r.mu.Unlock()
-	r.posChanged()
+	r.opMu.Lock()
+	defer r.opMu.Unlock()
+	for len(b) != 0 {
+		var n1 int
+		n1, err = r.readOnceAt(b, r.pos)
+		if n1 == 0 {
+			if err == nil {
+				panic("expected error")
+			}
+			break
+		}
+		b = b[n1:]
+		n += n1
+		r.pos += int64(n1)
+	}
+	if r.pos >= r.t.torrent.length {
+		err = io.EOF
+	} else if err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
 	return
 }
 
@@ -134,38 +147,12 @@ func (r *Reader) readOnceAt(b []byte, pos int64) (n int, err error) {
 		if n != 0 {
 			return
 		}
-		log.Printf("%s: error reading from torrent storage pos=%d: %s", r.t, pos, err)
+		// log.Printf("%s: error reading from torrent storage pos=%d: %s", r.t, pos, err)
 		r.t.cl.mu.Lock()
 		r.t.torrent.updateAllPieceCompletions()
 		r.t.torrent.updatePiecePriorities()
 		r.t.cl.mu.Unlock()
 	}
-}
-
-// Must only return EOF at the end of the torrent. Fills b until error or
-// valid EOF. Note that the Reader pos is not updated until the read
-// completes, this may reduce piece priority recalculation, but also the
-// effectiveness of readahead.
-func (r *Reader) readAt(b []byte, pos int64) (n int, err error) {
-	for len(b) != 0 {
-		var n1 int
-		n1, err = r.readOnceAt(b, pos)
-		if n1 == 0 {
-			if err == nil {
-				panic("expected error")
-			}
-			break
-		}
-		b = b[n1:]
-		n += n1
-		pos += int64(n1)
-	}
-	if pos >= r.t.torrent.length {
-		err = io.EOF
-	} else if err == io.EOF {
-		err = io.ErrUnexpectedEOF
-	}
-	return
 }
 
 func (r *Reader) Close() error {

@@ -172,7 +172,7 @@ func TestDownloadOnDemand(t *testing.T) {
 		DataDir:         layout.Completed,
 		DisableTrackers: true,
 		NoDHT:           true,
-		ListenAddr:      ":0",
+		ListenAddr:      "localhost:0",
 		Seed:            true,
 
 		NoDefaultBlocklist: true,
@@ -189,7 +189,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	leecher, err := torrent.NewClient(&torrent.Config{
 		DisableTrackers: true,
 		NoDHT:           true,
-		ListenAddr:      ":0",
+		ListenAddr:      "localhost:0",
 		DisableTCP:      true,
 
 		NoDefaultBlocklist: true,

@@ -40,6 +40,8 @@ import (
 	"github.com/anacrolix/torrent/tracker"
 )
 
+// I could move a lot of these counters to their own file, but I suspect they
+// may be attached to a Client someday.
 var (
 	unwantedChunksReceived   = expvar.NewInt("chunksReceivedUnwanted")
 	unexpectedChunksReceived = expvar.NewInt("chunksReceivedUnexpected")
@@ -73,6 +75,8 @@ var (
 	supportedExtensionMessages = expvar.NewMap("supportedExtensionMessages")
 	postedMessageTypes         = expvar.NewMap("postedMessageTypes")
 	postedKeepalives           = expvar.NewInt("postedKeepalives")
+	// Requests received for pieces we don't have.
+	requestsReceivedForMissingPieces = expvar.NewInt("requestsReceivedForMissingPieces")
 )
 
 const (
@@ -1333,6 +1337,12 @@ another:
 			err := me.sendChunk(t, c, r)
 			if err != nil {
 				log.Printf("error sending chunk %+v to peer: %s", r, err)
+				// If we failed to send a chunk, choke the peer to ensure they
+				// flush all their requests. We've probably dropped a piece,
+				// but there's no way to communicate this to the peer. If they
+				// ask for it again, we'll kick them to allow us to send them
+				// an updated bitfield.
+				break another
 			}
 			delete(c.PeerRequests, r)
 			goto another
@@ -1344,7 +1354,6 @@ another:
 
 func (me *Client) sendChunk(t *torrent, c *connection, r request) error {
 	// Count the chunk being sent, even if it isn't.
-	c.chunksSent++
 	b := make([]byte, r.Length)
 	p := t.Info.Piece(int(r.Index))
 	n, err := t.readAt(b, p.Offset()+int64(r.Begin))
@@ -1360,6 +1369,7 @@ func (me *Client) sendChunk(t *torrent, c *connection, r request) error {
 		Begin: r.Begin,
 		Piece: b,
 	})
+	c.chunksSent++
 	uploadChunksPosted.Add(1)
 	c.lastChunkSent = time.Now()
 	return nil
@@ -1415,6 +1425,14 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			}
 			if !c.PeerInterested {
 				err = errors.New("peer sent request but isn't interested")
+				break
+			}
+			if !t.havePiece(msg.Index.Int()) {
+				// This isn't necessarily them screwing up. We can drop pieces
+				// from our storage, and can't communicate this to peers
+				// except by reconnecting.
+				requestsReceivedForMissingPieces.Add(1)
+				err = errors.New("peer requested piece we don't have")
 				break
 			}
 			if c.PeerRequests == nil {

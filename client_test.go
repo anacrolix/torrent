@@ -9,7 +9,6 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -255,6 +254,20 @@ func TestClientTransferDefault(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{})
 }
 
+func TestClientTransferSmallCache(t *testing.T) {
+	testClientTransfer(t, testClientTransferParams{
+		SetLeecherStorageCapacity: true,
+		// Going below the piece length means it can't complete a piece so
+		// that it can be hashed.
+		LeecherStorageCapacity: 5,
+		SetReadahead:           true,
+		// Can't readahead too far or the cache will thrash and drop data we
+		// thought we had.
+		Readahead:          0,
+		ExportClientStatus: true,
+	})
+}
+
 func TestClientTransferVarious(t *testing.T) {
 	for _, responsive := range []bool{false, true} {
 		testClientTransfer(t, testClientTransferParams{
@@ -271,10 +284,12 @@ func TestClientTransferVarious(t *testing.T) {
 }
 
 type testClientTransferParams struct {
-	Responsive         bool
-	Readahead          int64
-	SetReadahead       bool
-	ExportClientStatus bool
+	Responsive                bool
+	Readahead                 int64
+	SetReadahead              bool
+	ExportClientStatus        bool
+	SetLeecherStorageCapacity bool
+	LeecherStorageCapacity    int64
 }
 
 func testClientTransfer(t *testing.T, ps testClientTransferParams) {
@@ -296,6 +311,9 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	cfg.TorrentDataOpener = func() TorrentDataOpener {
 		fc, err := filecache.NewCache(leecherDataDir)
 		require.NoError(t, err)
+		if ps.SetLeecherStorageCapacity {
+			fc.SetCapacity(ps.LeecherStorageCapacity)
+		}
 		store := pieceStore.New(fileCacheDataBackend.New(fc))
 		return func(mi *metainfo.Info) Data {
 			return store.OpenTorrentData(mi)
@@ -327,9 +345,14 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if ps.SetReadahead {
 		r.SetReadahead(ps.Readahead)
 	}
-	_greeting, err := ioutil.ReadAll(r)
-	assert.NoError(t, err)
-	assert.EqualValues(t, testutil.GreetingFileContents, _greeting)
+	for range iter.N(2) {
+		pos, err := r.Seek(0, os.SEEK_SET)
+		assert.NoError(t, err)
+		assert.EqualValues(t, 0, pos)
+		_greeting, err := ioutil.ReadAll(r)
+		assert.NoError(t, err)
+		assert.EqualValues(t, testutil.GreetingFileContents, _greeting)
+	}
 }
 
 // Check that after completing leeching, a leecher transitions to a seeding

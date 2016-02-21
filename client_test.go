@@ -470,7 +470,6 @@ func (me badData) ReadAt(b []byte, off int64) (n int, err error) {
 
 // We read from a piece which is marked completed, but is missing data.
 func TestCompletedPieceWrongSize(t *testing.T) {
-	t.Parallel()
 	cfg := TestingConfig
 	cfg.TorrentDataOpener = func(*metainfo.Info) Data {
 		return badData{}

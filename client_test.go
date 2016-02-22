@@ -441,7 +441,8 @@ func TestReadaheadPieces(t *testing.T) {
 }
 
 func TestMergingTrackersByAddingSpecs(t *testing.T) {
-	cl, _ := NewClient(&TestingConfig)
+	cl, err := NewClient(&TestingConfig)
+	require.NoError(t, err)
 	defer cl.Close()
 	spec := TorrentSpec{}
 	T, new, _ := cl.AddTorrentSpec(&spec)

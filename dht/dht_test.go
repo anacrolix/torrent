@@ -2,6 +2,7 @@ package dht
 
 import (
 	"encoding/hex"
+	"log"
 	"math/big"
 	"math/rand"
 	"net"
@@ -48,6 +49,7 @@ const zeroID = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
 var testIDs []nodeID
 
 func init() {
+	log.SetFlags(log.Flags() | log.Lshortfile)
 	for _, s := range []string{
 		zeroID,
 		"\x03" + zeroID[1:],
@@ -152,7 +154,7 @@ func TestServerCustomNodeId(t *testing.T) {
 
 func TestAnnounceTimeout(t *testing.T) {
 	if testing.Short() {
-		t.Skip()
+		t.SkipNow()
 	}
 	s, err := NewServer(&ServerConfig{
 		BootstrapNodes: []string{"1.2.3.4:5"},

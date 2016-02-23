@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/anacrolix/torrent/bencode"
 )
 
 func testFileNodesMatch(t *testing.T, file string, nodes []Node) {
@@ -36,5 +38,18 @@ func TestNodesListPairsBEP5(t *testing.T) {
 		"101.187.175.163:19665",
 		"37.187.118.32:6881",
 		"83.128.223.71:23865",
+	})
+}
+
+func testMarshalMetainfo(t *testing.T, expected string, mi MetaInfo) {
+	b, err := bencode.Marshal(mi)
+	assert.NoError(t, err)
+	assert.EqualValues(t, expected, string(b))
+}
+
+func TestMarshalMetainfoNodes(t *testing.T) {
+	testMarshalMetainfo(t, "d4:infod4:name0:12:piece lengthi0e6:piecesleee", MetaInfo{})
+	testMarshalMetainfo(t, "d4:infod4:name0:12:piece lengthi0e6:pieceslee5:nodesl12:1.2.3.4:555514:not a hostportee", MetaInfo{
+		Nodes: []Node{"1.2.3.4:5555", "not a hostport"},
 	})
 }

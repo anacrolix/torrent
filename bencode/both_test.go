@@ -1,35 +1,31 @@
 package bencode
 
-import "testing"
-import "bytes"
-import "io/ioutil"
+import (
+	"bytes"
+	"io/ioutil"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 func loadFile(name string, t *testing.T) []byte {
 	data, err := ioutil.ReadFile(name)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	return data
 }
 
 func testFileInterface(t *testing.T, filename string) {
 	data1 := loadFile(filename, t)
-	var iface interface{}
 
+	var iface interface{}
 	err := Unmarshal(data1, &iface)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	data2, err := Marshal(iface)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	if !bytes.Equal(data1, data2) {
-		t.Fatalf("equality expected\n")
-	}
-
+	assert.EqualValues(t, data1, data2)
 }
 
 func TestBothInterface(t *testing.T) {

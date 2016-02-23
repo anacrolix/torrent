@@ -69,7 +69,7 @@ func (b *Builder) AddAnnounceGroup(group []string) {
 
 // Add DHT nodes URLs for trackerless mode
 func (b *Builder) AddDhtNodes(group []string) {
-	b.node_list = append(b.node_list, group)
+	b.node_list = append(b.node_list, group...)
 }
 
 // Sets creation date. The default is time.Now() when the .Build method was
@@ -202,6 +202,15 @@ func (b *Builder) set_defaults() {
 	}
 }
 
+func emptyStringsFiltered(ss []string) (ret []string) {
+	for _, s := range ss {
+		if s != "" {
+			ret = append(ret, s)
+		}
+	}
+	return
+}
+
 func (b *Builder) check_parameters() error {
 	// should be at least one file
 	if len(b.filesmap) == 0 {
@@ -210,7 +219,7 @@ func (b *Builder) check_parameters() error {
 
 	// let's clean up the announce_list and node_list
 	b.announce_list = cleanUpLists(b.announce_list)
-	b.node_list = cleanUpLists(b.node_list)
+	b.node_list = emptyStringsFiltered(b.node_list)
 
 	if len(b.announce_list) == 0 && len(b.node_list) == 0 {
 		return errors.New("no announce group or DHT nodes specified")
@@ -446,7 +455,7 @@ type batch_state struct {
 	pieces        []byte
 	private       bool
 	announce_list [][]string
-	node_list     [][]string
+	node_list     []string
 	creation_date time.Time
 	comment       string
 	created_by    string

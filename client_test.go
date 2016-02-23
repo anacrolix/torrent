@@ -754,3 +754,16 @@ func TestAddTorrentPiecesAlreadyCompleted(t *testing.T) {
 func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
 	testAddTorrentPriorPieceCompletion(t, false)
 }
+
+func TestAddIssue65Torrent(t *testing.T) {
+	cfg := TestingConfig
+	cfg.NoDHT = false
+	cl, err := NewClient(&cfg)
+	require.NoError(t, err)
+	defer cl.Close()
+	assert.EqualValues(t, cl.DHT().NumNodes(), 0)
+	tt, err := cl.AddTorrentFromFile("metainfo/testdata/issue_65a.torrent")
+	require.NoError(t, err)
+	assert.Len(t, tt.torrent.Trackers, 5)
+	assert.EqualValues(t, 6, cl.DHT().NumNodes())
+}

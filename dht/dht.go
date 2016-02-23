@@ -126,7 +126,7 @@ func (nid *nodeID) ByteString() string {
 }
 
 type node struct {
-	addr          dHTAddr
+	addr          Addr
 	id            nodeID
 	announceToken string
 

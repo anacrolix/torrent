@@ -148,7 +148,7 @@ func (s *Server) init() (err error) {
 	return
 }
 
-func (s *Server) processPacket(b []byte, addr dHTAddr) {
+func (s *Server) processPacket(b []byte, addr Addr) {
 	if len(b) < 2 || b[0] != 'd' || b[len(b)-1] != 'e' {
 		// KRPC messages are bencoded dicts.
 		readNotKRPCDict.Add(1)
@@ -248,7 +248,7 @@ func (s *Server) nodeByID(id string) *node {
 	return nil
 }
 
-func (s *Server) handleQuery(source dHTAddr, m Msg) {
+func (s *Server) handleQuery(source Addr, m Msg) {
 	node := s.getNode(source, m.SenderID())
 	node.lastGotQuery = time.Now()
 	if s.config.OnQuery != nil {
@@ -309,7 +309,7 @@ func (s *Server) handleQuery(source dHTAddr, m Msg) {
 	}
 }
 
-func (s *Server) reply(addr dHTAddr, t string, r Return) {
+func (s *Server) reply(addr Addr, t string, r Return) {
 	r.ID = s.ID()
 	m := Msg{
 		T: t,
@@ -328,7 +328,7 @@ func (s *Server) reply(addr dHTAddr, t string, r Return) {
 
 // Returns a node struct for the addr. It is taken from the table or created
 // and possibly added if required and meets validity constraints.
-func (s *Server) getNode(addr dHTAddr, id string) (n *node) {
+func (s *Server) getNode(addr Addr, id string) (n *node) {
 	addrStr := addr.String()
 	n = s.nodes[addrStr]
 	if n != nil {
@@ -357,7 +357,7 @@ func (s *Server) getNode(addr dHTAddr, id string) (n *node) {
 	return
 }
 
-func (s *Server) nodeTimedOut(addr dHTAddr) {
+func (s *Server) nodeTimedOut(addr Addr) {
 	node, ok := s.nodes[addr.String()]
 	if !ok {
 		return
@@ -371,7 +371,7 @@ func (s *Server) nodeTimedOut(addr dHTAddr) {
 	delete(s.nodes, addr.String())
 }
 
-func (s *Server) writeToNode(b []byte, node dHTAddr) (err error) {
+func (s *Server) writeToNode(b []byte, node Addr) (err error) {
 	if list := s.ipBlockList; list != nil {
 		if r, ok := list.Lookup(missinggo.AddrIP(node.UDPAddr())); ok {
 			err = fmt.Errorf("write to %s blocked: %s", node, r.Description)
@@ -390,7 +390,7 @@ func (s *Server) writeToNode(b []byte, node dHTAddr) (err error) {
 	return
 }
 
-func (s *Server) findResponseTransaction(transactionID string, sourceNode dHTAddr) *Transaction {
+func (s *Server) findResponseTransaction(transactionID string, sourceNode Addr) *Transaction {
 	return s.transactions[transactionKey{
 		sourceNode.String(),
 		transactionID}]
@@ -423,7 +423,7 @@ func (s *Server) ID() string {
 	return s.id
 }
 
-func (s *Server) query(node dHTAddr, q string, a map[string]interface{}, onResponse func(Msg)) (t *Transaction, err error) {
+func (s *Server) query(node Addr, q string, a map[string]interface{}, onResponse func(Msg)) (t *Transaction, err error) {
 	tid := s.nextTransactionID()
 	if a == nil {
 		a = make(map[string]interface{}, 1)
@@ -472,7 +472,7 @@ func (s *Server) Ping(node *net.UDPAddr) (*Transaction, error) {
 	return s.query(newDHTAddr(node), "ping", nil, nil)
 }
 
-func (s *Server) announcePeer(node dHTAddr, infoHash string, port int, token string, impliedPort bool) (err error) {
+func (s *Server) announcePeer(node Addr, infoHash string, port int, token string, impliedPort bool) (err error) {
 	if port == 0 && !impliedPort {
 		return errors.New("nothing to announce")
 	}
@@ -518,7 +518,7 @@ func (s *Server) liftNodes(d Msg) {
 }
 
 // Sends a find_node query to addr. targetID is the node we're looking for.
-func (s *Server) findNode(addr dHTAddr, targetID string) (t *Transaction, err error) {
+func (s *Server) findNode(addr Addr, targetID string) (t *Transaction, err error) {
 	t, err = s.query(addr, "find_node", map[string]interface{}{"target": targetID}, func(d Msg) {
 		// Scrape peers from the response to put in the server's table before
 		// handing the response back to the caller.
@@ -678,7 +678,7 @@ func (s *Server) setDefaults() (err error) {
 	return
 }
 
-func (s *Server) getPeers(addr dHTAddr, infoHash string) (t *Transaction, err error) {
+func (s *Server) getPeers(addr Addr, infoHash string) (t *Transaction, err error) {
 	if len(infoHash) != 20 {
 		err = fmt.Errorf("infohash has bad length")
 		return
@@ -714,7 +714,7 @@ func (s *Server) closestNodes(k int, target nodeID, filter func(*node) bool) []*
 	return ret
 }
 
-func (me *Server) badNode(addr dHTAddr) {
+func (me *Server) badNode(addr Addr) {
 	me.badNodes.Add([]byte(addr.String()))
 	delete(me.nodes, addr.String())
 }

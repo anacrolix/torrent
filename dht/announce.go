@@ -43,7 +43,7 @@ func (me *Announce) NumContacted() int {
 // specified.
 func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*Announce, error) {
 	s.mu.Lock()
-	startAddrs := func() (ret []dHTAddr) {
+	startAddrs := func() (ret []Addr) {
 		for _, n := range s.closestGoodNodes(160, infoHash) {
 			ret = append(ret, n.addr)
 		}
@@ -96,7 +96,7 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*Announc
 	return disc, nil
 }
 
-func (me *Announce) gotNodeAddr(addr dHTAddr) {
+func (me *Announce) gotNodeAddr(addr Addr) {
 	if missinggo.AddrPort(addr) == 0 {
 		// Not a contactable address.
 		return
@@ -116,7 +116,7 @@ func (me *Announce) gotNodeAddr(addr dHTAddr) {
 	me.contact(addr)
 }
 
-func (me *Announce) contact(addr dHTAddr) {
+func (me *Announce) contact(addr Addr) {
 	me.numContacted++
 	me.triedAddrs.Add([]byte(addr.String()))
 	if err := me.getPeers(addr); err != nil {
@@ -143,7 +143,7 @@ func (me *Announce) closingCh() chan struct{} {
 }
 
 // Announce to a peer, if appropriate.
-func (me *Announce) maybeAnnouncePeer(to dHTAddr, token, peerId string) {
+func (me *Announce) maybeAnnouncePeer(to Addr, token, peerId string) {
 	me.server.mu.Lock()
 	defer me.server.mu.Unlock()
 	if !me.server.config.NoSecurity {
@@ -160,7 +160,7 @@ func (me *Announce) maybeAnnouncePeer(to dHTAddr, token, peerId string) {
 	}
 }
 
-func (me *Announce) getPeers(addr dHTAddr) error {
+func (me *Announce) getPeers(addr Addr) error {
 	me.server.mu.Lock()
 	defer me.server.mu.Unlock()
 	t, err := me.server.getPeers(addr, me.infoHash)

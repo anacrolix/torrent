@@ -53,3 +53,10 @@ func TestMarshalMetainfoNodes(t *testing.T) {
 		Nodes: []Node{"1.2.3.4:5555", "not a hostport"},
 	})
 }
+
+func TestUnmarshalBadMetainfoNodes(t *testing.T) {
+	var mi MetaInfo
+	// Should barf on the integer in the nodes list.
+	err := bencode.Unmarshal([]byte("d5:nodesl1:ai42eee"), &mi)
+	require.Error(t, err)
+}

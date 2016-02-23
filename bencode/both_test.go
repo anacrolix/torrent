@@ -4,7 +4,7 @@ import "testing"
 import "bytes"
 import "io/ioutil"
 
-func load_file(name string, t *testing.T) []byte {
+func loadFile(name string, t *testing.T) []byte {
 	data, err := ioutil.ReadFile(name)
 	if err != nil {
 		t.Fatal(err)
@@ -12,8 +12,8 @@ func load_file(name string, t *testing.T) []byte {
 	return data
 }
 
-func test_file_interface(t *testing.T, filename string) {
-	data1 := load_file(filename, t)
+func testFileInterface(t *testing.T, filename string) {
+	data1 := loadFile(filename, t)
 	var iface interface{}
 
 	err := Unmarshal(data1, &iface)
@@ -33,11 +33,11 @@ func test_file_interface(t *testing.T, filename string) {
 }
 
 func TestBothInterface(t *testing.T) {
-	test_file_interface(t, "testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent")
-	test_file_interface(t, "testdata/continuum.torrent")
+	testFileInterface(t, "testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent")
+	testFileInterface(t, "testdata/continuum.torrent")
 }
 
-type torrent_file struct {
+type torrentFile struct {
 	Info struct {
 		Name        string `bencode:"name"`
 		Length      int64  `bencode:"length"`
@@ -55,9 +55,9 @@ type torrent_file struct {
 	URLList      interface{} `bencode:"url-list,omitempty"`
 }
 
-func test_file(t *testing.T, filename string) {
-	data1 := load_file(filename, t)
-	var f torrent_file
+func testFile(t *testing.T, filename string) {
+	data1 := loadFile(filename, t)
+	var f torrentFile
 
 	err := Unmarshal(data1, &f)
 	if err != nil {
@@ -76,5 +76,5 @@ func test_file(t *testing.T, filename string) {
 }
 
 func TestBoth(t *testing.T) {
-	test_file(t, "testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent")
+	testFile(t, "testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent")
 }

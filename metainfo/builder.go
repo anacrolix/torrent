@@ -383,7 +383,7 @@ func (b *Batch) write_torrent(w io.Writer) error {
 		}
 	}
 
-	missinggo.CastSlice(td.Nodes, b.node_list)
+	missinggo.CastSlice(&td.Nodes, b.node_list)
 	td.CreationDate = b.creation_date.Unix()
 	td.Comment = b.comment
 	td.CreatedBy = b.created_by

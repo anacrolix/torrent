@@ -233,7 +233,7 @@ type MetaInfo struct {
 	Info         InfoEx      `bencode:"info"`
 	Announce     string      `bencode:"announce,omitempty"`
 	AnnounceList [][]string  `bencode:"announce-list,omitempty"`
-	Nodes        []string    `bencode:"nodes,omitempty"`
+	Nodes        []Node      `bencode:"nodes,omitempty"`
 	CreationDate int64       `bencode:"creation date,omitempty"`
 	Comment      string      `bencode:"comment,omitempty"`
 	CreatedBy    string      `bencode:"created by,omitempty"`

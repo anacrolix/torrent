@@ -24,7 +24,7 @@ func TestMarshalCompactNodeInfo(t *testing.T) {
 	}
 	addr, err := net.ResolveUDPAddr("udp4", "1.2.3.4:5")
 	require.NoError(t, err)
-	cni.Addr = newDHTAddr(addr)
+	cni.Addr = NewAddr(addr)
 	var b [CompactIPv4NodeInfoLen]byte
 	err = cni.PutCompact(b[:])
 	require.NoError(t, err)

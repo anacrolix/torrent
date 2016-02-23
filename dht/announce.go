@@ -6,7 +6,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/sync"
 	"github.com/willf/bloom"
 
@@ -56,7 +55,7 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*Announc
 			return nil, err
 		}
 		for _, addr := range addrs {
-			startAddrs = append(startAddrs, newDHTAddr(addr))
+			startAddrs = append(startAddrs, NewAddr(addr))
 		}
 	}
 	disc := &Announce{
@@ -97,7 +96,7 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*Announc
 }
 
 func (me *Announce) gotNodeAddr(addr Addr) {
-	if missinggo.AddrPort(addr) == 0 {
+	if addr.UDPAddr().Port == 0 {
 		// Not a contactable address.
 		return
 	}
@@ -150,7 +149,7 @@ func (me *Announce) maybeAnnouncePeer(to Addr, token, peerId string) {
 		if len(peerId) != 20 {
 			return
 		}
-		if !NodeIdSecure(peerId, to.IP()) {
+		if !NodeIdSecure(peerId, to.UDPAddr().IP) {
 			return
 		}
 	}

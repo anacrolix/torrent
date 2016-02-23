@@ -217,7 +217,7 @@ func (s *Server) serve() error {
 			readBlocked.Add(1)
 			continue
 		}
-		s.processPacket(b[:n], newDHTAddr(addr))
+		s.processPacket(b[:n], NewAddr(addr.(*net.UDPAddr)))
 	}
 }
 
@@ -469,7 +469,7 @@ func (s *Server) query(node Addr, q string, a map[string]interface{}, onResponse
 func (s *Server) Ping(node *net.UDPAddr) (*Transaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.query(newDHTAddr(node), "ping", nil, nil)
+	return s.query(NewAddr(node), "ping", nil, nil)
 }
 
 func (s *Server) announcePeer(node Addr, infoHash string, port int, token string, impliedPort bool) (err error) {
@@ -505,11 +505,11 @@ func (s *Server) liftNodes(d Msg) {
 		return
 	}
 	for _, cni := range d.R.Nodes {
-		if missinggo.AddrPort(cni.Addr) == 0 {
+		if cni.Addr.UDPAddr().Port == 0 {
 			// TODO: Why would people even do this?
 			continue
 		}
-		if s.ipBlocked(missinggo.AddrIP(cni.Addr)) {
+		if s.ipBlocked(cni.Addr.UDPAddr().IP) {
 			continue
 		}
 		n := s.getNode(cni.Addr, string(cni.ID[:]))
@@ -549,7 +549,7 @@ func (s *Server) addRootNodes() error {
 			continue
 		}
 		s.nodes[addr.String()] = &node{
-			addr: newDHTAddr(addr),
+			addr: NewAddr(addr),
 		}
 	}
 	return nil

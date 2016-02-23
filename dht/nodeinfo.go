@@ -22,14 +22,14 @@ func (ni *NodeInfo) PutCompact(b []byte) error {
 	if n := copy(b[:], ni.ID[:]); n != 20 {
 		panic(n)
 	}
-	ip := missinggo.AddrIP(ni.Addr).To4()
+	ip := ni.Addr.UDPAddr().IP.To4()
 	if len(ip) != 4 {
 		return errors.New("expected ipv4 address")
 	}
 	if n := copy(b[20:], ip); n != 4 {
 		panic(n)
 	}
-	binary.BigEndian.PutUint16(b[24:], uint16(missinggo.AddrPort(ni.Addr)))
+	binary.BigEndian.PutUint16(b[24:], uint16(ni.Addr.UDPAddr().Port))
 	return nil
 }
 
@@ -38,7 +38,7 @@ func (cni *NodeInfo) UnmarshalCompactIPv4(b []byte) error {
 		return errors.New("expected 26 bytes")
 	}
 	missinggo.CopyExact(cni.ID[:], b[:20])
-	cni.Addr = newDHTAddr(&net.UDPAddr{
+	cni.Addr = NewAddr(&net.UDPAddr{
 		IP:   append(make([]byte, 0, 4), b[20:24]...),
 		Port: int(binary.BigEndian.Uint16(b[24:26])),
 	})

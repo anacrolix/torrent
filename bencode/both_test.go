@@ -33,8 +33,8 @@ func test_file_interface(t *testing.T, filename string) {
 }
 
 func TestBothInterface(t *testing.T) {
-	test_file_interface(t, "_testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent")
-	test_file_interface(t, "_testdata/continuum.torrent")
+	test_file_interface(t, "testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent")
+	test_file_interface(t, "testdata/continuum.torrent")
 }
 
 type torrent_file struct {
@@ -76,5 +76,5 @@ func test_file(t *testing.T, filename string) {
 }
 
 func TestBoth(t *testing.T) {
-	test_file(t, "_testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent")
+	test_file(t, "testdata/archlinux-2011.08.19-netinstall-i686.iso.torrent")
 }

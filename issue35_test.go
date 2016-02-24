@@ -96,7 +96,7 @@ func TestInfohash(t *testing.T) {
 	writeranddata(tfp)
 	b := metainfo.Builder{}
 	b.AddFile(tfp)
-	b.AddDhtNodes([]string{fmt.Sprintf(cl_one.DHT().ID())})
+	b.AddDhtNodes([]string{"1.2.3.4:5555"})
 	ba, err := b.Submit()
 	if err != nil {
 		t.Fatal(err)

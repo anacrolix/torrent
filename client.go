@@ -2526,6 +2526,9 @@ func (me *Client) AddMagnet(uri string) (T Torrent, err error) {
 
 func (me *Client) AddTorrent(mi *metainfo.MetaInfo) (T Torrent, err error) {
 	T, _, err = me.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	var ss []string
+	missinggo.CastSlice(&ss, mi.Nodes)
+	me.AddDHTNodes(ss)
 	return
 }
 
@@ -2534,10 +2537,27 @@ func (me *Client) AddTorrentFromFile(filename string) (T Torrent, err error) {
 	if err != nil {
 		return
 	}
-	T, _, err = me.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	return
+	return me.AddTorrent(mi)
 }
 
 func (me *Client) DHT() *dht.Server {
 	return me.dHT
+}
+
+func (me *Client) AddDHTNodes(nodes []string) {
+	for _, n := range nodes {
+		hmp := missinggo.SplitHostPort(n)
+		ip := net.ParseIP(hmp.Host)
+		if ip == nil {
+			log.Printf("won't add DHT node with bad IP: %q", hmp.Host)
+			continue
+		}
+		ni := dht.NodeInfo{
+			Addr: dht.NewAddr(&net.UDPAddr{
+				IP:   ip,
+				Port: hmp.Port,
+			}),
+		}
+		me.DHT().AddNode(ni)
+	}
 }

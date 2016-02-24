@@ -755,9 +755,13 @@ func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
 	testAddTorrentPriorPieceCompletion(t, false)
 }
 
-func TestAddIssue65Torrent(t *testing.T) {
+func TestAddMetainfoWithNodes(t *testing.T) {
 	cfg := TestingConfig
 	cfg.NoDHT = false
+	// For now, we want to just jam the nodes into the table, without
+	// verifying them first. Also the DHT code doesn't support mixing secure
+	// and insecure nodes if security is enabled (yet).
+	cfg.DHTConfig.NoSecurity = true
 	cl, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer cl.Close()

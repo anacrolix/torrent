@@ -1336,7 +1336,11 @@ another:
 		for r := range c.PeerRequests {
 			err := me.sendChunk(t, c, r)
 			if err != nil {
-				log.Printf("error sending chunk %+v to peer: %s", r, err)
+				if t.pieceComplete(int(r.Index)) && err == io.ErrUnexpectedEOF {
+					// We had the piece, but not anymore.
+				} else {
+					log.Printf("error sending chunk %+v to peer: %s", r, err)
+				}
 				// If we failed to send a chunk, choke the peer to ensure they
 				// flush all their requests. We've probably dropped a piece,
 				// but there's no way to communicate this to the peer. If they

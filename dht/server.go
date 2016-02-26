@@ -36,7 +36,7 @@ type Server struct {
 	transactionIDInt uint64
 	nodes            map[string]*node // Keyed by dHTAddr.String().
 	mu               sync.Mutex
-	closed           chan struct{}
+	closed           missinggo.Event
 	ipBlockList      iplist.Ranger
 	badNodes         *boom.BloomFilter
 
@@ -100,10 +100,10 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 	}
 	go func() {
 		err := s.serve()
-		select {
-		case <-s.closed:
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.closed.IsSet() {
 			return
-		default:
 		}
 		if err != nil {
 			panic(err)
@@ -112,11 +112,11 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 	go func() {
 		err := s.bootstrap()
 		if err != nil {
-			select {
-			case <-s.closed:
-			default:
+			s.mu.Lock()
+			if !s.closed.IsSet() {
 				log.Printf("error bootstrapping DHT: %s", err)
 			}
+			s.mu.Unlock()
 		}
 	}()
 	return
@@ -143,7 +143,6 @@ func (s *Server) init() (err error) {
 	if err != nil {
 		return
 	}
-	s.closed = make(chan struct{})
 	s.transactions = make(map[transactionKey]*Transaction)
 	return
 }
@@ -586,7 +585,7 @@ func (s *Server) bootstrap() (err error) {
 		}()
 		s.mu.Unlock()
 		select {
-		case <-s.closed:
+		case <-s.closed.C():
 			s.mu.Lock()
 			return
 		case <-time.After(15 * time.Second):
@@ -639,13 +638,9 @@ func (s *Server) Nodes() (nis []NodeInfo) {
 // Stops the server network activity. This is all that's required to clean-up a Server.
 func (s *Server) Close() {
 	s.mu.Lock()
-	select {
-	case <-s.closed:
-	default:
-		close(s.closed)
-		s.socket.Close()
-	}
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	s.closed.Set()
+	s.socket.Close()
 }
 
 func (s *Server) setDefaults() (err error) {

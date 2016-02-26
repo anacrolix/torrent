@@ -843,7 +843,7 @@ values:
 			log.Print(time.Since(started))
 			v := _v.(PieceStateChange)
 			completes[v.Index] = v.Complete
-		case <-time.After(10 * time.Millisecond):
+		case <-time.After(100 * time.Millisecond):
 			break values
 		}
 	}

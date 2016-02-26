@@ -319,7 +319,8 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 			return store.OpenTorrentData(mi)
 		}
 	}()
-	leecher, _ := NewClient(&cfg)
+	leecher, err := NewClient(&cfg)
+	require.NoError(t, err)
 	defer leecher.Close()
 	if ps.ExportClientStatus {
 		testutil.ExportStatusWriter(leecher, "l")

@@ -772,3 +772,95 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	assert.Len(t, tt.torrent.Trackers, 5)
 	assert.EqualValues(t, 6, cl.DHT().NumNodes())
 }
+
+type testDownloadCancelParams struct {
+	Responsive                bool
+	Readahead                 int64
+	SetReadahead              bool
+	ExportClientStatus        bool
+	SetLeecherStorageCapacity bool
+	LeecherStorageCapacity    int64
+	Cancel                    bool
+}
+
+func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
+	greetingTempDir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(greetingTempDir)
+	cfg := TestingConfig
+	cfg.Seed = true
+	cfg.DataDir = greetingTempDir
+	seeder, err := NewClient(&cfg)
+	require.NoError(t, err)
+	defer seeder.Close()
+	if ps.ExportClientStatus {
+		testutil.ExportStatusWriter(seeder, "s")
+	}
+	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	leecherDataDir, err := ioutil.TempDir("", "")
+	require.NoError(t, err)
+	defer os.RemoveAll(leecherDataDir)
+	cfg.TorrentDataOpener = func() TorrentDataOpener {
+		fc, err := filecache.NewCache(leecherDataDir)
+		require.NoError(t, err)
+		if ps.SetLeecherStorageCapacity {
+			fc.SetCapacity(ps.LeecherStorageCapacity)
+		}
+		store := pieceStore.New(fileCacheDataBackend.New(fc))
+		return func(mi *metainfo.Info) Data {
+			return store.OpenTorrentData(mi)
+		}
+	}()
+	leecher, _ := NewClient(&cfg)
+	defer leecher.Close()
+	if ps.ExportClientStatus {
+		testutil.ExportStatusWriter(leecher, "l")
+	}
+	leecherGreeting, new, err := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
+		ret = TorrentSpecFromMetaInfo(mi)
+		ret.ChunkSize = 2
+		return
+	}())
+	require.NoError(t, err)
+	assert.True(t, new)
+	psc := leecherGreeting.SubscribePieceStateChanges()
+	defer psc.Close()
+	leecherGreeting.DownloadAll()
+	if ps.Cancel {
+		leecherGreeting.CancelPieces(0, leecherGreeting.NumPieces())
+	}
+	leecherGreeting.AddPeers([]Peer{
+		Peer{
+			IP:   missinggo.AddrIP(seeder.ListenAddr()),
+			Port: missinggo.AddrPort(seeder.ListenAddr()),
+		},
+	})
+	completes := make(map[int]bool, 3)
+values:
+	for {
+		started := time.Now()
+		select {
+		case _v := <-psc.Values:
+			log.Print(time.Since(started))
+			v := _v.(PieceStateChange)
+			completes[v.Index] = v.Complete
+		case <-time.After(10 * time.Millisecond):
+			break values
+		}
+	}
+	if ps.Cancel {
+		assert.EqualValues(t, map[int]bool{0: false, 1: false, 2: false}, completes)
+	} else {
+		assert.EqualValues(t, map[int]bool{0: true, 1: true, 2: true}, completes)
+	}
+
+}
+
+func TestTorrentDownloadAll(t *testing.T) {
+	testDownloadCancel(t, testDownloadCancelParams{})
+}
+
+func TestTorrentDownloadAllThenCancel(t *testing.T) {
+	testDownloadCancel(t, testDownloadCancelParams{
+		Cancel: true,
+	})
+}

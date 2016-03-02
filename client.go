@@ -733,7 +733,8 @@ func (me *Client) noLongerHalfOpen(t *torrent, addr string) {
 	me.openNewConns(t)
 }
 
-// Performs initiator handshakes and returns a connection.
+// Performs initiator handshakes and returns a connection. Returns nil
+// *connection if no connection for valid reasons.
 func (me *Client) handshakesConnection(nc net.Conn, t *torrent, encrypted, utp bool) (c *connection, err error) {
 	c = newConnection()
 	c.conn = nc
@@ -782,7 +783,7 @@ func (me *Client) establishOutgoingConn(t *torrent, addr string) (c *connection,
 		return
 	}
 	c, err = me.handshakesConnection(nc, t, false, utp)
-	if err != nil {
+	if err != nil || c == nil {
 		nc.Close()
 	}
 	return

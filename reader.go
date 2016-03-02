@@ -193,3 +193,7 @@ func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {
 	r.posChanged()
 	return
 }
+
+func (r *Reader) Torrent() *Torrent {
+	return r.t
+}

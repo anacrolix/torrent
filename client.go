@@ -154,9 +154,9 @@ type Client struct {
 
 	torrentDataOpener TorrentDataOpener
 
-	mu    sync.RWMutex
-	event sync.Cond
-	quit  chan struct{}
+	mu     sync.RWMutex
+	event  sync.Cond
+	closed missinggo.Event
 
 	torrents map[InfoHash]*torrent
 }
@@ -381,9 +381,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 			return filePkg.TorrentData(md, cfg.DataDir)
 		},
 		dopplegangerAddrs: make(map[string]struct{}),
-
-		quit:     make(chan struct{}),
-		torrents: make(map[InfoHash]*torrent),
+		torrents:          make(map[InfoHash]*torrent),
 	}
 	CopyExact(&cl.extensionBytes, defaultExtensionBytes)
 	cl.event.L = &cl.mu
@@ -474,26 +472,12 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	return
 }
 
-func (cl *Client) stopped() bool {
-	select {
-	case <-cl.quit:
-		return true
-	default:
-		return false
-	}
-}
-
 // Stops the client. All connections to peers are closed and all activity will
 // come to a halt.
 func (me *Client) Close() {
 	me.mu.Lock()
 	defer me.mu.Unlock()
-	select {
-	case <-me.quit:
-		return
-	default:
-	}
-	close(me.quit)
+	me.closed.Set()
 	if me.dHT != nil {
 		me.dHT.Close()
 	}
@@ -535,10 +519,8 @@ func (cl *Client) waitAccept() {
 				return
 			}
 		}
-		select {
-		case <-cl.quit:
+		if cl.closed.IsSet() {
 			return
-		default:
 		}
 		cl.event.Wait()
 	}
@@ -547,19 +529,17 @@ func (cl *Client) waitAccept() {
 func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 	for {
 		cl.waitAccept()
-		// We accept all connections immediately, because we don't know what
-		// torrent they're for.
 		conn, err := l.Accept()
-		select {
-		case <-cl.quit:
+		if cl.closed.IsSet() {
 			if conn != nil {
 				conn.Close()
 			}
 			return
-		default:
 		}
 		if err != nil {
 			log.Print(err)
+			// I think something harsher should happen here? Our accept
+			// routine just fucked off.
 			return
 		}
 		if utp {
@@ -1392,7 +1372,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 		var msg pp.Message
 		err := decoder.Decode(&msg)
 		me.mu.Lock()
-		if me.stopped() || c.closed.IsSet() || err == io.EOF {
+		if me.closed.IsSet() || c.closed.IsSet() || err == io.EOF {
 			return nil
 		}
 		if err != nil {
@@ -1639,7 +1619,7 @@ func (me *Client) dropConnection(t *torrent, c *connection) {
 
 // Returns true if the connection is added.
 func (me *Client) addConnection(t *torrent, c *connection) bool {
-	if me.stopped() {
+	if me.closed.IsSet() {
 		return false
 	}
 	select {
@@ -2319,7 +2299,7 @@ func (me *Client) WaitAll() bool {
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	for !me.allTorrentsCompleted() {
-		if me.stopped() {
+		if me.closed.IsSet() {
 			return false
 		}
 		me.event.Wait()

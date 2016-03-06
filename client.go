@@ -25,6 +25,7 @@ import (
 	"github.com/anacrolix/missinggo"
 	. "github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
+	"github.com/anacrolix/missinggo/pproffd"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
@@ -530,6 +531,7 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 	for {
 		cl.waitAccept()
 		conn, err := l.Accept()
+		conn = pproffd.WrapNetConn(conn)
 		if cl.closed.IsSet() {
 			if conn != nil {
 				conn.Close()

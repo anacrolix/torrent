@@ -2533,7 +2533,7 @@ func (me *Client) DHT() *dht.Server {
 
 func (me *Client) AddDHTNodes(nodes []string) {
 	for _, n := range nodes {
-		hmp := missinggo.SplitHostPort(n)
+		hmp := missinggo.SplitHostMaybePort(n)
 		ip := net.ParseIP(hmp.Host)
 		if ip == nil {
 			log.Printf("won't add DHT node with bad IP: %q", hmp.Host)

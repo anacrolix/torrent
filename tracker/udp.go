@@ -250,7 +250,7 @@ func (c *udpClient) Connect() (err error) {
 	}
 	c.connectionId = connectRequestConnectionId
 	if c.socket == nil {
-		hmp := missinggo.SplitHostPort(c.url.Host)
+		hmp := missinggo.SplitHostMaybePort(c.url.Host)
 		if hmp.NoPort {
 			hmp.NoPort = false
 			hmp.Port = 80

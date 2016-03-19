@@ -606,6 +606,7 @@ func (c *connection) updatePiecePriority(piece int) {
 	default:
 		panic(tpp)
 	}
+	prio += piece
 	c.pieceRequestOrder.Set(piece, prio)
 	c.updateRequests()
 }

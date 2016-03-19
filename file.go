@@ -75,10 +75,13 @@ func (f *File) State() (ret []FilePieceState) {
 	return
 }
 
+// Requests that all pieces containing data in the file be downloaded.
 func (f *File) Download() {
 	f.t.DownloadPieces(f.t.torrent.byteRegionPieces(f.offset, f.length))
 }
 
+// Requests that torrent pieces containing bytes in the given region of the
+// file be downloaded.
 func (f *File) PrioritizeRegion(off, len int64) {
 	f.t.DownloadPieces(f.t.torrent.byteRegionPieces(f.offset+off, len))
 }

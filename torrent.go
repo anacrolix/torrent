@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"math/rand"
 	"net"
 	"sort"
@@ -517,6 +518,15 @@ func (t *torrent) bytesLeft() (left int64) {
 		left += int64(t.pieceNumPendingBytes(i))
 	}
 	return
+}
+
+// Bytes left to give in tracker announces.
+func (t *torrent) bytesLeftAnnounce() uint64 {
+	if t.haveInfo() {
+		return uint64(t.bytesLeft())
+	} else {
+		return math.MaxUint64
+	}
 }
 
 func (t *torrent) piecePartiallyDownloaded(piece int) bool {

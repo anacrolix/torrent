@@ -2219,7 +2219,7 @@ func (cl *Client) announceTorrentTrackers(t *torrent) {
 		return
 	}
 	cl.mu.RLock()
-	req.Left = uint64(t.bytesLeft())
+	req.Left = t.bytesLeftAnnounce()
 	trackers := t.Trackers
 	cl.mu.RUnlock()
 	if cl.announceTorrentTrackersFastStart(&req, trackers, t) {
@@ -2228,7 +2228,7 @@ func (cl *Client) announceTorrentTrackers(t *torrent) {
 newAnnounce:
 	for cl.waitWantPeers(t) {
 		cl.mu.RLock()
-		req.Left = uint64(t.bytesLeft())
+		req.Left = t.bytesLeftAnnounce()
 		trackers = t.Trackers
 		cl.mu.RUnlock()
 		numTrackersTried := 0

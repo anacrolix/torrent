@@ -234,7 +234,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		dhtStats := cl.dHT.Stats()
 		fmt.Fprintf(w, "DHT nodes: %d (%d good, %d banned)\n", dhtStats.Nodes, dhtStats.GoodNodes, dhtStats.BadNodes)
 		fmt.Fprintf(w, "DHT Server ID: %x\n", cl.dHT.ID())
-		fmt.Fprintf(w, "DHT port: %d\n", addrPort(cl.dHT.Addr()))
+		fmt.Fprintf(w, "DHT port: %d\n", missinggo.AddrPort(cl.dHT.Addr()))
 		fmt.Fprintf(w, "DHT announces: %d\n", dhtStats.ConfirmedAnnounces)
 		fmt.Fprintf(w, "Outstanding transactions: %d\n", dhtStats.OutstandingTransactions)
 	}
@@ -801,7 +801,7 @@ func (cl *Client) incomingPeerPort() int {
 	if listenAddr == nil {
 		return 0
 	}
-	return addrPort(listenAddr)
+	return missinggo.AddrPort(listenAddr)
 }
 
 // Convert a net.Addr to its compact IP representation. Either 4 or 16 bytes
@@ -1265,11 +1265,6 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 		err = errors.New("unknown msg_type value")
 	}
 	return
-}
-
-// Extracts the port as an integer from an address string.
-func addrPort(addr net.Addr) int {
-	return AddrPort(addr)
 }
 
 func (cl *Client) peerHasAll(t *torrent, cn *connection) {

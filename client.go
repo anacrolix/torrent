@@ -248,7 +248,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		}
 		fmt.Fprint(w, "\n")
 		if t.haveInfo() {
-			fmt.Fprintf(w, "%f%% of %d bytes", 100*(1-float32(t.bytesLeft())/float32(t.length)), t.length)
+			fmt.Fprintf(w, "%f%% of %d bytes", 100*(1-float64(t.bytesLeft())/float64(t.length)), t.length)
 		} else {
 			w.WriteString("<missing metainfo>")
 		}

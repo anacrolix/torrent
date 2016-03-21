@@ -625,3 +625,23 @@ func (c *connection) discardPieceInclination() {
 	c.t.putPieceInclination(c.pieceInclination)
 	c.pieceInclination = nil
 }
+
+func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) error {
+	if !c.peerHasAll {
+		if t.haveInfo() {
+			if c.PeerPieces == nil {
+				c.PeerPieces = make([]bool, t.numPieces())
+			}
+		} else {
+			for piece >= len(c.PeerPieces) {
+				c.PeerPieces = append(c.PeerPieces, false)
+			}
+		}
+		if piece >= len(c.PeerPieces) {
+			return errors.New("peer got out of range piece index")
+		}
+		c.PeerPieces[piece] = true
+	}
+	c.updatePiecePriority(piece)
+	return nil
+}

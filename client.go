@@ -1277,7 +1277,7 @@ func (cl *Client) peerHasAll(t *torrent, cn *connection) {
 	cn.PeerPieces = nil
 	if t.haveInfo() {
 		for i := 0; i < t.numPieces(); i++ {
-			cl.peerGotPiece(t, cn, i)
+			cn.peerGotPiece(i)
 		}
 	}
 }
@@ -1385,7 +1385,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			c.PeerInterested = false
 			c.Choke()
 		case pp.Have:
-			me.peerGotPiece(t, c, int(msg.Index))
+			c.peerGotPiece(int(msg.Index))
 		case pp.Request:
 			if c.Choked {
 				break
@@ -1427,7 +1427,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			c.PeerPieces = msg.Bitfield
 			for index, has := range c.PeerPieces {
 				if has {
-					me.peerGotPiece(t, c, index)
+					c.peerGotPiece(index)
 				}
 			}
 		case pp.HaveAll:

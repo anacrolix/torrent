@@ -626,11 +626,11 @@ func (c *connection) discardPieceInclination() {
 	c.pieceInclination = nil
 }
 
-func (me *Client) peerGotPiece(t *torrent, c *connection, piece int) error {
+func (c *connection) peerGotPiece(piece int) error {
 	if !c.peerHasAll {
-		if t.haveInfo() {
+		if c.t.haveInfo() {
 			if c.PeerPieces == nil {
-				c.PeerPieces = make([]bool, t.numPieces())
+				c.PeerPieces = make([]bool, c.t.numPieces())
 			}
 		} else {
 			for piece >= len(c.PeerPieces) {

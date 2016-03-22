@@ -781,6 +781,9 @@ func (me *Client) outgoingConnection(t *torrent, addr string, ps peerSource) {
 	// failure.
 	me.noLongerHalfOpen(t, addr)
 	if err != nil {
+		if me.config.Debug {
+			log.Printf("error establishing outgoing connection: %s", err)
+		}
 		return
 	}
 	if c == nil {
@@ -790,7 +793,9 @@ func (me *Client) outgoingConnection(t *torrent, addr string, ps peerSource) {
 	c.Discovery = ps
 	err = me.runInitiatedHandshookConn(c, t)
 	if err != nil {
-		// log.Print(err)
+		if me.config.Debug {
+			log.Printf("error in established outgoing connection: %s", err)
+		}
 	}
 }
 

@@ -1267,16 +1267,6 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 	return
 }
 
-func (cl *Client) peerHasAll(t *torrent, cn *connection) {
-	cn.peerHasAll = true
-	cn.PeerPieces = nil
-	if t.haveInfo() {
-		for i := 0; i < t.numPieces(); i++ {
-			cn.peerGotPiece(i)
-		}
-	}
-}
-
 func (me *Client) upload(t *torrent, c *connection) {
 	if me.config.NoUpload {
 		return
@@ -1380,7 +1370,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 			c.PeerInterested = false
 			c.Choke()
 		case pp.Have:
-			c.peerGotPiece(int(msg.Index))
+			err = c.peerSentHave(int(msg.Index))
 		case pp.Request:
 			if c.Choked {
 				break
@@ -1408,41 +1398,11 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 				unexpectedCancels.Add(1)
 			}
 		case pp.Bitfield:
-			if c.PeerPieces != nil || c.peerHasAll {
-				err = errors.New("received unexpected bitfield")
-				break
-			}
-			if t.haveInfo() {
-				if len(msg.Bitfield) < t.numPieces() {
-					err = errors.New("received invalid bitfield")
-					break
-				}
-				msg.Bitfield = msg.Bitfield[:t.numPieces()]
-			}
-			c.PeerPieces = msg.Bitfield
-			for index, has := range c.PeerPieces {
-				if has {
-					c.peerGotPiece(index)
-				}
-			}
+			err = c.peerSentBitfield(msg.Bitfield)
 		case pp.HaveAll:
-			if c.PeerPieces != nil || c.peerHasAll {
-				err = errors.New("unexpected have-all")
-				break
-			}
-			me.peerHasAll(t, c)
+			err = c.peerSentHaveAll()
 		case pp.HaveNone:
-			if c.peerHasAll || c.PeerPieces != nil {
-				err = errors.New("unexpected have-none")
-				break
-			}
-			c.PeerPieces = make([]bool, func() int {
-				if t.haveInfo() {
-					return t.numPieces()
-				} else {
-					return 0
-				}
-			}())
+			err = c.peerSentHaveNone()
 		case pp.Piece:
 			me.downloadedChunk(t, c, &msg)
 		case pp.Extended:

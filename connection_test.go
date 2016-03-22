@@ -4,19 +4,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/anacrolix/missinggo/bitmap"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/anacrolix/torrent/peer_protocol"
 )
 
 func TestCancelRequestOptimized(t *testing.T) {
 	c := &connection{
 		PeerMaxRequests: 1,
-		PeerPieces:      []bool{false, true},
-		post:            make(chan peer_protocol.Message),
-		writeCh:         make(chan []byte),
+		peerPieces: func() bitmap.Bitmap {
+			var bm bitmap.Bitmap
+			bm.Set(1, true)
+			return bm
+		}(),
+		post:    make(chan peer_protocol.Message),
+		writeCh: make(chan []byte),
 	}
-	if len(c.Requests) != 0 {
-		t.FailNow()
-	}
+	assert.Len(t, c.Requests, 0)
 	// Keepalive timeout of 0 works because I'm just that good.
 	go c.writeOptimizer(0 * time.Millisecond)
 	c.Request(newRequest(1, 2, 3))

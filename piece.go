@@ -69,14 +69,6 @@ func (p *piece) pendChunkIndex(i int) {
 	p.DirtyChunks.Remove(i)
 }
 
-func chunkIndexSpec(index int, pieceLength, chunkSize pp.Integer) chunkSpec {
-	ret := chunkSpec{pp.Integer(index) * chunkSize, chunkSize}
-	if ret.Begin+ret.Length > pieceLength {
-		ret.Length = pieceLength - ret.Begin
-	}
-	return ret
-}
-
 func (p *piece) numChunks() int {
 	return p.t.pieceNumChunks(p.index)
 }
@@ -111,4 +103,46 @@ func (p *piece) waitNoPendingWrites() {
 		p.noPendingWrites.Wait()
 	}
 	p.pendingWritesMutex.Unlock()
+}
+
+func (p *piece) chunkIndexDirty(chunk int) bool {
+	return p.DirtyChunks.Contains(chunk)
+}
+
+func (p *piece) chunkIndexSpec(chunk int) chunkSpec {
+	return chunkIndexSpec(chunk, p.length(), p.chunkSize())
+}
+
+func (p *piece) numDirtyBytes() (ret pp.Integer) {
+	defer func() {
+		if ret > p.length() {
+			panic("too many dirty bytes")
+		}
+	}()
+	numRegularDirtyChunks := p.numDirtyChunks()
+	if p.chunkIndexDirty(p.numChunks() - 1) {
+		numRegularDirtyChunks--
+		ret += p.chunkIndexSpec(p.lastChunkIndex()).Length
+	}
+	ret += pp.Integer(numRegularDirtyChunks) * p.chunkSize()
+	return
+}
+
+func (p *piece) length() pp.Integer {
+	return p.t.pieceLength(p.index)
+}
+
+func (p *piece) chunkSize() pp.Integer {
+	return p.t.chunkSize
+}
+
+func (p *piece) lastChunkIndex() int {
+	return p.numChunks() - 1
+}
+
+func (p *piece) bytesLeft() (ret pp.Integer) {
+	if p.t.pieceComplete(p.index) {
+		return 0
+	}
+	return p.length() - p.numDirtyBytes()
 }

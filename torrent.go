@@ -29,25 +29,6 @@ func (t *torrent) chunkIndexSpec(chunkIndex, piece int) chunkSpec {
 	return chunkIndexSpec(chunkIndex, t.pieceLength(piece), t.chunkSize)
 }
 
-func (t *torrent) pieceNumPendingBytes(index int) (count pp.Integer) {
-	if t.pieceComplete(index) {
-		return
-	}
-	piece := &t.Pieces[index]
-	count = t.pieceLength(index)
-	if !piece.EverHashed {
-		return
-	}
-	regularDirty := piece.numDirtyChunks()
-	lastChunkIndex := t.pieceNumChunks(index) - 1
-	if piece.pendingChunkIndex(lastChunkIndex) {
-		regularDirty--
-		count -= t.chunkIndexSpec(lastChunkIndex, index).Length
-	}
-	count -= pp.Integer(regularDirty) * t.chunkSize
-	return
-}
-
 type peersKey struct {
 	IPBytes string
 	Port    int
@@ -511,11 +492,8 @@ func (t *torrent) MetaInfo() *metainfo.MetaInfo {
 }
 
 func (t *torrent) bytesLeft() (left int64) {
-	if !t.haveInfo() {
-		return -1
-	}
 	for i := 0; i < t.numPieces(); i++ {
-		left += int64(t.pieceNumPendingBytes(i))
+		left += int64(t.Pieces[i].bytesLeft())
 	}
 	return
 }

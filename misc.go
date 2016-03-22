@@ -121,3 +121,11 @@ func validateInfo(info *metainfo.Info) error {
 	}
 	return nil
 }
+
+func chunkIndexSpec(index int, pieceLength, chunkSize pp.Integer) chunkSpec {
+	ret := chunkSpec{pp.Integer(index) * chunkSize, chunkSize}
+	if ret.Begin+ret.Length > pieceLength {
+		ret.Length = pieceLength - ret.Begin
+	}
+	return ret
+}

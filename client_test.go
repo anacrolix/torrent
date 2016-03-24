@@ -234,18 +234,15 @@ func TestTwoClientsArbitraryPorts(t *testing.T) {
 }
 
 func TestAddDropManyTorrents(t *testing.T) {
-	cl, _ := NewClient(&TestingConfig)
+	cl, err := NewClient(&TestingConfig)
+	require.NoError(t, err)
 	defer cl.Close()
 	for i := range iter.N(1000) {
 		var spec TorrentSpec
 		binary.PutVarint(spec.InfoHash[:], int64(i))
 		tt, new, err := cl.AddTorrentSpec(&spec)
-		if err != nil {
-			t.Error(err)
-		}
-		if !new {
-			t.FailNow()
-		}
+		assert.NoError(t, err)
+		assert.True(t, new)
 		defer tt.Drop()
 	}
 }

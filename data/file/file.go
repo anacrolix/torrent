@@ -29,35 +29,59 @@ func (me data) PieceCompleted(piece int) error {
 	return nil
 }
 
-func (me data) ReadAt(p []byte, off int64) (n int, err error) {
-	for _, fi := range me.info.UpvertedFiles() {
-		if off >= fi.Length {
-			off -= fi.Length
-			continue
-		}
-		n1 := len(p)
-		if int64(n1) > fi.Length-off {
-			n1 = int(fi.Length - off)
-		}
-		var f *os.File
-		f, err = os.Open(me.fileInfoName(fi))
-		if os.IsNotExist(err) {
-			err = io.ErrUnexpectedEOF
-		}
-		if err != nil {
-			return
-		}
-		n1, err = f.ReadAt(p[:n1], off)
-		f.Close()
-		if err != nil {
-			return
-		}
+// Returns EOF on short or missing file.
+func (me data) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err error) {
+	f, err := os.Open(me.fileInfoName(fi))
+	if os.IsNotExist(err) {
+		// File missing is treated the same as a short file.
+		err = io.EOF
+		return
+	}
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	// Limit the read to within the expected bounds of this file.
+	if int64(len(b)) > fi.Length-off {
+		b = b[:fi.Length-off]
+	}
+	for off < fi.Length && len(b) != 0 {
+		n1, err1 := f.ReadAt(b, off)
+		b = b[n1:]
 		n += n1
-		off = 0
-		p = p[n1:]
-		if len(p) == 0 {
+		off += int64(n1)
+		if n1 == 0 {
+			err = err1
+			break
+		}
+	}
+	return
+}
+
+// Only returns EOF at the end of the torrent. Premature EOF is ErrUnexpectedEOF.
+func (me data) ReadAt(b []byte, off int64) (n int, err error) {
+	for _, fi := range me.info.UpvertedFiles() {
+		for off < fi.Length {
+			n1, err1 := me.readFileAt(fi, b, off)
+			n += n1
+			off += int64(n1)
+			b = b[n1:]
+			if len(b) == 0 {
+				// Got what we need.
+				return
+			}
+			if n1 != 0 {
+				// Made progress.
+				continue
+			}
+			err = err1
+			if err == io.EOF {
+				// Lies.
+				err = io.ErrUnexpectedEOF
+			}
 			return
 		}
+		off -= fi.Length
 	}
 	err = io.EOF
 	return

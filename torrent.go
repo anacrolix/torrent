@@ -666,7 +666,7 @@ func (t *torrent) hashPiece(piece int) (ret pieceSum) {
 		missinggo.CopyExact(&ret, hash.Sum(nil))
 		return
 	}
-	if err != io.ErrUnexpectedEOF {
+	if err != nil && err != io.ErrUnexpectedEOF {
 		log.Printf("unexpected error hashing piece with %T: %s", t.data, err)
 	}
 	return

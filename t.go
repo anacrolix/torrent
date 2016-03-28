@@ -17,7 +17,7 @@ type Torrent struct {
 
 // The torrent's infohash. This is fixed and cannot change. It uniquely
 // identifies a torrent.
-func (t Torrent) InfoHash() InfoHash {
+func (t Torrent) InfoHash() metainfo.InfoHash {
 	return t.torrent.InfoHash
 }
 
@@ -29,7 +29,7 @@ func (t Torrent) GotInfo() <-chan struct{} {
 }
 
 // Returns the metainfo info dictionary, or nil if it's not yet available.
-func (t Torrent) Info() *metainfo.Info {
+func (t Torrent) Info() *metainfo.InfoEx {
 	return t.torrent.Info
 }
 

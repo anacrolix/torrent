@@ -50,27 +50,19 @@ var TestingConfig = Config{
 
 func TestClientDefault(t *testing.T) {
 	cl, err := NewClient(&TestingConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	cl.Close()
 }
 
 func TestAddDropTorrent(t *testing.T) {
 	cl, err := NewClient(&TestingConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer cl.Close()
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
 	tt, new, err := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !new {
-		t.FailNow()
-	}
+	require.NoError(t, err)
+	assert.True(t, new)
 	tt.Drop()
 }
 
@@ -95,7 +87,7 @@ func TestPieceHashSize(t *testing.T) {
 func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	tor := newTorrent(func() (ih InfoHash) {
+	tor := newTorrent(func() (ih metainfo.InfoHash) {
 		missinggo.CopyExact(ih[:], mi.Info.Hash)
 		return
 	}())
@@ -265,16 +257,23 @@ func TestClientTransferSmallCache(t *testing.T) {
 }
 
 func TestClientTransferVarious(t *testing.T) {
-	for _, responsive := range []bool{false, true} {
-		testClientTransfer(t, testClientTransferParams{
-			Responsive: responsive,
-		})
-		for _, readahead := range []int64{-1, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20} {
+	for _, ss := range []func(string) storage.I{
+		storage.NewFile,
+		storage.NewMMap,
+	} {
+		for _, responsive := range []bool{false, true} {
 			testClientTransfer(t, testClientTransferParams{
-				Responsive:   responsive,
-				SetReadahead: true,
-				Readahead:    readahead,
+				Responsive:    responsive,
+				SeederStorage: ss,
 			})
+			for _, readahead := range []int64{-1, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20} {
+				testClientTransfer(t, testClientTransferParams{
+					SeederStorage: ss,
+					Responsive:    responsive,
+					SetReadahead:  true,
+					Readahead:     readahead,
+				})
+			}
 		}
 	}
 }
@@ -286,6 +285,7 @@ type testClientTransferParams struct {
 	ExportClientStatus        bool
 	SetLeecherStorageCapacity bool
 	LeecherStorageCapacity    int64
+	SeederStorage             func(string) storage.I
 }
 
 func testClientTransfer(t *testing.T, ps testClientTransferParams) {
@@ -293,7 +293,11 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	defer os.RemoveAll(greetingTempDir)
 	cfg := TestingConfig
 	cfg.Seed = true
-	cfg.DataDir = greetingTempDir
+	if ps.SeederStorage != nil {
+		cfg.DefaultStorage = ps.SeederStorage(greetingTempDir)
+	} else {
+		cfg.DataDir = greetingTempDir
+	}
 	seeder, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
@@ -673,7 +677,7 @@ func TestAddTorrentMetainfoInCache(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, new)
 	require.NotNil(t, tt.Info())
-	_, err = os.Stat(filepath.Join(cfg.ConfigDir, "torrents", fmt.Sprintf("%x.torrent", mi.Info.Hash)))
+	_, err = os.Stat(filepath.Join(cfg.ConfigDir, "torrents", fmt.Sprintf("%x.torrent", mi.Info.Hash.Bytes())))
 	require.NoError(t, err)
 	// Contains only the infohash.
 	var ts TorrentSpec

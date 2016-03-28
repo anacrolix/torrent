@@ -3,7 +3,6 @@ package torrent
 import (
 	"crypto"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -23,17 +22,8 @@ const (
 )
 
 type (
-	InfoHash [20]byte
 	pieceSum [20]byte
 )
-
-func (ih InfoHash) AsString() string {
-	return string(ih[:])
-}
-
-func (ih InfoHash) HexString() string {
-	return fmt.Sprintf("%x", ih[:])
-}
 
 func lastChunkSpec(pieceLength, chunkSize pp.Integer) (cs chunkSpec) {
 	cs.Begin = (pieceLength - 1) / chunkSize * chunkSize

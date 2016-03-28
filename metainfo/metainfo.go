@@ -157,7 +157,7 @@ func (me *Info) NumPieces() int {
 }
 
 type Piece struct {
-	Info *Info
+	Info *InfoEx
 	i    int
 }
 
@@ -177,7 +177,7 @@ func (me Piece) Hash() (ret InfoHash) {
 	return
 }
 
-func (me *Info) Piece(i int) Piece {
+func (me *InfoEx) Piece(i int) Piece {
 	return Piece{me, i}
 }
 
@@ -204,7 +204,7 @@ func (i *Info) UpvertedFiles() []FileInfo {
 // important to Bittorrent.
 type InfoEx struct {
 	Info
-	Hash  []byte
+	Hash  *InfoHash
 	Bytes []byte
 }
 
@@ -214,14 +214,14 @@ var (
 )
 
 func (this *InfoEx) UnmarshalBencode(data []byte) error {
-	this.Bytes = make([]byte, 0, len(data))
-	this.Bytes = append(this.Bytes, data...)
+	this.Bytes = append(make([]byte, 0, len(data)), data...)
 	h := sha1.New()
 	_, err := h.Write(this.Bytes)
 	if err != nil {
 		panic(err)
 	}
-	this.Hash = h.Sum(nil)
+	this.Hash = new(InfoHash)
+	missinggo.CopyExact(this.Hash, h.Sum(nil))
 	return bencode.Unmarshal(data, &this.Info)
 }
 
@@ -258,3 +258,15 @@ func (mi *MetaInfo) SetDefaults() {
 }
 
 type InfoHash [20]byte
+
+func (me *InfoHash) Bytes() []byte {
+	return me[:]
+}
+
+func (ih *InfoHash) AsString() string {
+	return string(ih[:])
+}
+
+func (ih *InfoHash) HexString() string {
+	return fmt.Sprintf("%x", ih[:])
+}

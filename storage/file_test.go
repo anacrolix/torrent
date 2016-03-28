@@ -20,10 +20,12 @@ func TestShortFile(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
 	data := NewFile(td)
-	info := &metainfo.Info{
-		Name:        "a",
-		Length:      2,
-		PieceLength: missinggo.MiB,
+	info := &metainfo.InfoEx{
+		Info: metainfo.Info{
+			Name:        "a",
+			Length:      2,
+			PieceLength: missinggo.MiB,
+		},
 	}
 	f, err := os.Create(filepath.Join(td, "a"))
 	err = f.Truncate(1)

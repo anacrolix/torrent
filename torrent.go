@@ -45,7 +45,7 @@ type torrent struct {
 	// announcing, and communicating with peers.
 	ceasingNetworking chan struct{}
 
-	InfoHash InfoHash
+	InfoHash metainfo.InfoHash
 	Pieces   []piece
 	// Values are the piece indices that changed.
 	pieceStateChanges *pubsub.PubSub
@@ -57,7 +57,7 @@ type torrent struct {
 	storage storage.I
 
 	// The info dict. Nil if we don't have it (yet).
-	Info *metainfo.Info
+	Info *metainfo.InfoEx
 	// Active peer connections, running message stream loops.
 	Conns []*connection
 	// Set of addrs to which we're attempting to connect. Connections are
@@ -225,7 +225,11 @@ func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte) (err error) {
 		err = fmt.Errorf("bad info: %s", err)
 		return
 	}
-	t.Info = md
+	t.Info = &metainfo.InfoEx{
+		Info:  *md,
+		Bytes: infoBytes,
+		Hash:  &t.InfoHash,
+	}
 	t.length = 0
 	for _, f := range t.Info.UpvertedFiles() {
 		t.length += f.Length
@@ -472,10 +476,7 @@ func (t *torrent) MetaInfo() *metainfo.MetaInfo {
 		panic("info bytes not set")
 	}
 	return &metainfo.MetaInfo{
-		Info: metainfo.InfoEx{
-			Info:  *t.Info,
-			Bytes: t.MetaData,
-		},
+		Info:         *t.Info,
 		CreationDate: time.Now().Unix(),
 		Comment:      "dynamic metainfo from client",
 		CreatedBy:    "go.torrent",

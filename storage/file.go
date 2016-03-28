@@ -15,7 +15,7 @@ type fileStorage struct {
 	completed map[[20]byte]bool
 }
 
-func NewFile(baseDir string) *fileStorage {
+func NewFile(baseDir string) I {
 	return &fileStorage{
 		baseDir: baseDir,
 	}
@@ -54,7 +54,7 @@ func (me *fileStoragePiece) MarkComplete() error {
 }
 
 type fileStorageTorrent struct {
-	info    *metainfo.Info
+	info    *metainfo.InfoEx
 	baseDir string
 }
 

@@ -23,3 +23,20 @@ type Piece interface {
 	// Returns true if the piece is complete.
 	GetIsComplete() bool
 }
+
+// type PieceStorage interface {
+// 	ReadAt(metainfo.Piece, []byte, int64) (int, error)
+// 	WriteAt(metainfo.Piece, []byte, int64) (int, error)
+// 	MarkComplete(metainfo.Piece) error
+// 	GetIsComplete(metainfo.Piece) bool
+// }
+
+// type wrappedPieceStorage struct {
+// 	ps PieceStorage
+// }
+
+// func WrapPieceStorage(ps PieceStorage) I {
+// 	return wrappedPieceStorage{ps}
+// }
+
+// func (me wrappedPieceStorage) Piece(metainfo.Piece)

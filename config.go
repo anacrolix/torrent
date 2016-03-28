@@ -3,6 +3,7 @@ package torrent
 import (
 	"github.com/anacrolix/torrent/dht"
 	"github.com/anacrolix/torrent/iplist"
+	"github.com/anacrolix/torrent/storage"
 )
 
 // Override Client defaults.
@@ -43,7 +44,7 @@ type Config struct {
 	DisableMetainfoCache bool
 	// Called to instantiate storage for each added torrent. Provided backends
 	// are in $REPO/data. If not set, the "file" implementation is used.
-	TorrentDataOpener
+	DefaultStorage    storage.I
 	DisableEncryption bool `long:"disable-encryption"`
 
 	IPBlocklist *iplist.IPList

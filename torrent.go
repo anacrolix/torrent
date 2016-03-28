@@ -23,6 +23,7 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/anacrolix/torrent/storage"
 )
 
 func (t *torrent) chunkIndexSpec(chunkIndex, piece int) chunkSpec {
@@ -53,7 +54,7 @@ type torrent struct {
 	// get this from the info dict.
 	length int64
 
-	data Data
+	storage storage.I
 
 	// The info dict. Nil if we don't have it (yet).
 	Info *metainfo.Info
@@ -106,9 +107,7 @@ func (t *torrent) pieceComplete(piece int) bool {
 }
 
 func (t *torrent) pieceCompleteUncached(piece int) bool {
-	// TODO: This is called when setting metadata, and before storage is
-	// assigned, which doesn't seem right.
-	return t.data != nil && t.data.PieceComplete(piece)
+	return t.Pieces[piece].Storage().GetIsComplete()
 }
 
 func (t *torrent) numConnsUnchoked() (num int) {
@@ -248,14 +247,6 @@ func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte) (err error) {
 			conn.Close()
 		}
 	}
-	return
-}
-
-func (t *torrent) setStorage(td Data) {
-	if t.data != nil {
-		t.data.Close()
-	}
-	t.data = td
 	for i := range t.Pieces {
 		t.updatePieceCompletion(i)
 		t.Pieces[i].QueuedForHash = true
@@ -265,6 +256,7 @@ func (t *torrent) setStorage(td Data) {
 			t.verifyPiece(i)
 		}
 	}()
+	return
 }
 
 func (t *torrent) verifyPiece(piece int) {
@@ -553,7 +545,7 @@ func (t *torrent) close() (err error) {
 	}
 	t.ceaseNetworking()
 	close(t.closing)
-	if c, ok := t.data.(io.Closer); ok {
+	if c, ok := t.storage.(io.Closer); ok {
 		c.Close()
 	}
 	for _, conn := range t.Conns {
@@ -575,7 +567,8 @@ func (t *torrent) offsetRequest(off int64) (req request, ok bool) {
 
 func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 	tr := perf.NewTimer()
-	n, err := t.data.WriteAt(data, int64(piece)*t.Info.PieceLength+begin)
+
+	n, err := t.Pieces[piece].Storage().WriteAt(data, begin)
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite
 	}
@@ -661,13 +654,13 @@ func (t *torrent) hashPiece(piece int) (ret pieceSum) {
 	p.waitNoPendingWrites()
 	ip := t.Info.Piece(piece)
 	pl := ip.Length()
-	n, err := io.Copy(hash, io.NewSectionReader(t.data, ip.Offset(), pl))
+	n, err := io.Copy(hash, io.NewSectionReader(t.Pieces[piece].Storage(), 0, pl))
 	if n == pl {
 		missinggo.CopyExact(&ret, hash.Sum(nil))
 		return
 	}
 	if err != io.ErrUnexpectedEOF {
-		log.Printf("unexpected error hashing piece with %T: %s", t.data, err)
+		log.Printf("unexpected error hashing piece with %T: %s", t.storage, err)
 	}
 	return
 }
@@ -1031,13 +1024,9 @@ func (t *torrent) updatePieceCompletion(piece int) {
 
 // Non-blocking read. Client lock is not required.
 func (t *torrent) readAt(b []byte, off int64) (n int, err error) {
-	if off+int64(len(b)) > t.length {
-		b = b[:t.length-off]
-	}
-	for pi := off / t.Info.PieceLength; pi*t.Info.PieceLength < off+int64(len(b)); pi++ {
-		t.Pieces[pi].waitNoPendingWrites()
-	}
-	return t.data.ReadAt(b, off)
+	p := &t.Pieces[off/t.Info.PieceLength]
+	p.waitNoPendingWrites()
+	return p.Storage().ReadAt(b, off-p.Info().Offset())
 }
 
 func (t *torrent) updateAllPieceCompletions() {

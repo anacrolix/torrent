@@ -121,7 +121,7 @@ func main() {
 	tagflag.Parse(&opts, tagflag.SkipBadTypes())
 	clientConfig := opts.Config
 	if opts.Mmap {
-		clientConfig.TorrentDataOpener = func(info *metainfo.Info) torrent.Data {
+		clientConfig.TorrentDataOpener = func(info *metainfo.Info) torrent.Storage {
 			ret, err := mmap.TorrentData(info, "")
 			if err != nil {
 				log.Fatalf("error opening torrent data for %q: %s", info.Name, err)

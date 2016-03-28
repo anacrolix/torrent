@@ -32,12 +32,12 @@ import (
 	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/bencode"
-	filePkg "github.com/anacrolix/torrent/data/file"
 	"github.com/anacrolix/torrent/dht"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
 )
 
@@ -153,7 +153,7 @@ type Client struct {
 	// through legitimate channels.
 	dopplegangerAddrs map[string]struct{}
 
-	torrentDataOpener TorrentDataOpener
+	defaultStorage storage.I
 
 	mu     sync.RWMutex
 	event  sync.Cond
@@ -376,20 +376,17 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		}
 	}()
 	cl = &Client{
-		halfOpenLimit: socketsPerTorrent,
-		config:        *cfg,
-		torrentDataOpener: func(md *metainfo.Info) Data {
-			return filePkg.TorrentData(md, cfg.DataDir)
-		},
+		halfOpenLimit:     socketsPerTorrent,
+		config:            *cfg,
+		defaultStorage:    cfg.DefaultStorage,
 		dopplegangerAddrs: make(map[string]struct{}),
 		torrents:          make(map[InfoHash]*torrent),
 	}
 	CopyExact(&cl.extensionBytes, defaultExtensionBytes)
 	cl.event.L = &cl.mu
-	if cfg.TorrentDataOpener != nil {
-		cl.torrentDataOpener = cfg.TorrentDataOpener
+	if cl.defaultStorage == nil {
+		cl.defaultStorage = storage.NewFile(cfg.DataDir)
 	}
-
 	if cfg.IPBlocklist != nil {
 		cl.ipBlockList = cfg.IPBlocklist
 	} else if !cfg.NoDefaultBlocklist {
@@ -1715,14 +1712,6 @@ func (cl *Client) saveTorrentFile(t *torrent) error {
 	return nil
 }
 
-func (cl *Client) setStorage(t *torrent, td Data) (err error) {
-	t.setStorage(td)
-	cl.event.Broadcast()
-	return
-}
-
-type TorrentDataOpener func(*metainfo.Info) Data
-
 func (cl *Client) setMetaData(t *torrent, md *metainfo.Info, bytes []byte) (err error) {
 	err = t.setMetadata(md, bytes)
 	if err != nil {
@@ -1735,8 +1724,6 @@ func (cl *Client) setMetaData(t *torrent, md *metainfo.Info, bytes []byte) (err 
 	}
 	cl.event.Broadcast()
 	close(t.gotMetainfo)
-	td := cl.torrentDataOpener(md)
-	err = cl.setStorage(t, td)
 	return
 }
 
@@ -1903,6 +1890,7 @@ type TorrentSpec struct {
 	// The chunk size to use for outbound requests. Defaults to 16KiB if not
 	// set.
 	ChunkSize int
+	Storage   storage.I
 }
 
 func TorrentSpecFromMagnetURI(uri string) (spec *TorrentSpec, err error) {
@@ -1948,6 +1936,8 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err er
 	if !ok {
 		new = true
 
+		// TODO: This doesn't belong in the core client, it's more of a
+		// helper.
 		if _, ok := cl.bannedTorrents[spec.InfoHash]; ok {
 			err = errors.New("banned torrent")
 			return
@@ -1958,6 +1948,10 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err er
 		t.wantPeers.L = &cl.mu
 		if spec.ChunkSize != 0 {
 			t.chunkSize = pp.Integer(spec.ChunkSize)
+		}
+		t.storage = spec.Storage
+		if t.storage == nil {
+			t.storage = cl.defaultStorage
 		}
 	}
 	if spec.DisplayName != "" {
@@ -2299,7 +2293,9 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) {
 
 	if err != nil {
 		log.Printf("error writing chunk: %s", err)
+		// t.updatePieceCompletion(msg.Index)
 		t.pendRequest(req)
+		// t.updatePiecePriority(msg.Index)
 		return
 	}
 
@@ -2346,9 +2342,9 @@ func (me *Client) pieceHashed(t *torrent, piece int, correct bool) {
 	p.EverHashed = true
 	touchers := me.reapPieceTouches(t, int(piece))
 	if correct {
-		err := t.data.PieceCompleted(int(piece))
+		err := p.Storage().MarkComplete()
 		if err != nil {
-			log.Printf("%T: error completing piece %d: %s", t.data, piece, err)
+			log.Printf("%T: error completing piece %d: %s", t.storage, piece, err)
 		}
 		t.updatePieceCompletion(piece)
 	} else if len(touchers) != 0 {
@@ -2409,7 +2405,7 @@ func (cl *Client) verifyPiece(t *torrent, piece int) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	p := &t.Pieces[piece]
-	for p.Hashing || t.data == nil {
+	for p.Hashing || t.storage == nil {
 		cl.event.Wait()
 	}
 	p.QueuedForHash = false

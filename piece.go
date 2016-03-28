@@ -5,7 +5,9 @@ import (
 
 	"github.com/anacrolix/missinggo/bitmap"
 
+	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/anacrolix/torrent/storage"
 )
 
 // Piece priority describes the importance of obtaining a particular piece.
@@ -43,6 +45,14 @@ type piece struct {
 	pendingWritesMutex sync.Mutex
 	pendingWrites      int
 	noPendingWrites    sync.Cond
+}
+
+func (p *piece) Info() metainfo.Piece {
+	return p.t.Info.Piece(p.index)
+}
+
+func (p *piece) Storage() storage.Piece {
+	return p.t.storage.Piece(p.Info())
 }
 
 func (p *piece) pendingChunkIndex(chunkIndex int) bool {

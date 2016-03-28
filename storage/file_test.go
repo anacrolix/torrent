@@ -1,4 +1,4 @@
-package file
+package storage
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/anacrolix/missinggo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -18,15 +19,18 @@ func TestShortFile(t *testing.T) {
 	td, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
-	data := TorrentData(&metainfo.Info{
-		Name:   "a",
-		Length: 2,
-	}, td)
+	data := NewFile(td)
+	info := &metainfo.Info{
+		Name:        "a",
+		Length:      2,
+		PieceLength: missinggo.MiB,
+	}
 	f, err := os.Create(filepath.Join(td, "a"))
 	err = f.Truncate(1)
 	f.Close()
 	var buf bytes.Buffer
-	n, err := io.Copy(&buf, io.NewSectionReader(data, 0, 2))
+	p := info.Piece(0)
+	n, err := io.Copy(&buf, io.NewSectionReader(data.Piece(p), 0, p.Length()))
 	assert.EqualValues(t, 1, n)
 	assert.Equal(t, io.ErrUnexpectedEOF, err)
 }

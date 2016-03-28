@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anacrolix/missinggo"
+
 	"github.com/anacrolix/torrent/bencode"
 )
 
@@ -170,8 +172,9 @@ func (me Piece) Offset() int64 {
 	return int64(me.i) * me.Info.PieceLength
 }
 
-func (me Piece) Hash() []byte {
-	return me.Info.Pieces[me.i*20 : (me.i+1)*20]
+func (me Piece) Hash() (ret InfoHash) {
+	missinggo.CopyExact(&ret, me.Info.Pieces[me.i*20:(me.i+1)*20])
+	return
 }
 
 func (me *Info) Piece(i int) Piece {
@@ -253,3 +256,5 @@ func (mi *MetaInfo) SetDefaults() {
 	mi.CreationDate = time.Now().Unix()
 	mi.Info.PieceLength = 256 * 1024
 }
+
+type InfoHash [20]byte

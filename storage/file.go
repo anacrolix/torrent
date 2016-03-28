@@ -1,36 +1,65 @@
-package file
+package storage
 
 import (
 	"io"
 	"os"
 	"path/filepath"
 
+	"github.com/anacrolix/missinggo"
+
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-type data struct {
-	info      *metainfo.Info
-	loc       string
-	completed []bool
+type fileStorage struct {
+	baseDir   string
+	completed map[[20]byte]bool
 }
 
-func TorrentData(md *metainfo.Info, location string) data {
-	return data{md, location, make([]bool, md.NumPieces())}
+func NewFile(baseDir string) *fileStorage {
+	return &fileStorage{
+		baseDir: baseDir,
+	}
 }
 
-func (me data) Close() {}
-
-func (me data) PieceComplete(piece int) bool {
-	return me.completed[piece]
+func (me *fileStorage) Piece(p metainfo.Piece) Piece {
+	_io := &fileStorageTorrent{
+		p.Info,
+		me.baseDir,
+	}
+	return &fileStoragePiece{
+		me,
+		p,
+		missinggo.NewSectionWriter(_io, p.Offset(), p.Length()),
+		io.NewSectionReader(_io, p.Offset(), p.Length()),
+	}
 }
 
-func (me data) PieceCompleted(piece int) error {
-	me.completed[piece] = true
+type fileStoragePiece struct {
+	*fileStorage
+	p metainfo.Piece
+	io.WriterAt
+	io.ReaderAt
+}
+
+func (me *fileStoragePiece) GetIsComplete() bool {
+	return me.completed[me.p.Hash()]
+}
+
+func (me *fileStoragePiece) MarkComplete() error {
+	if me.completed == nil {
+		me.completed = make(map[[20]byte]bool)
+	}
+	me.completed[me.p.Hash()] = true
 	return nil
 }
 
+type fileStorageTorrent struct {
+	info    *metainfo.Info
+	baseDir string
+}
+
 // Returns EOF on short or missing file.
-func (me data) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err error) {
+func (me *fileStorageTorrent) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err error) {
 	f, err := os.Open(me.fileInfoName(fi))
 	if os.IsNotExist(err) {
 		// File missing is treated the same as a short file.
@@ -59,7 +88,7 @@ func (me data) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err
 }
 
 // Only returns EOF at the end of the torrent. Premature EOF is ErrUnexpectedEOF.
-func (me data) ReadAt(b []byte, off int64) (n int, err error) {
+func (me *fileStorageTorrent) ReadAt(b []byte, off int64) (n int, err error) {
 	for _, fi := range me.info.UpvertedFiles() {
 		for off < fi.Length {
 			n1, err1 := me.readFileAt(fi, b, off)
@@ -87,7 +116,7 @@ func (me data) ReadAt(b []byte, off int64) (n int, err error) {
 	return
 }
 
-func (me data) WriteAt(p []byte, off int64) (n int, err error) {
+func (me *fileStorageTorrent) WriteAt(p []byte, off int64) (n int, err error) {
 	for _, fi := range me.info.UpvertedFiles() {
 		if off >= fi.Length {
 			off -= fi.Length
@@ -119,6 +148,6 @@ func (me data) WriteAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (me data) fileInfoName(fi metainfo.FileInfo) string {
-	return filepath.Join(append([]string{me.loc, me.info.Name}, fi.Path...)...)
+func (me *fileStorageTorrent) fileInfoName(fi metainfo.FileInfo) string {
+	return filepath.Join(append([]string{me.baseDir, me.info.Name}, fi.Path...)...)
 }

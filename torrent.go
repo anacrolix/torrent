@@ -54,7 +54,8 @@ type torrent struct {
 	// get this from the info dict.
 	length int64
 
-	storage storage.I
+	storageOpener storage.I
+	storage       storage.Torrent
 
 	// The info dict. Nil if we don't have it (yet).
 	Info *metainfo.InfoEx
@@ -229,6 +230,10 @@ func (t *torrent) setMetadata(md *metainfo.Info, infoBytes []byte) (err error) {
 		Info:  *md,
 		Bytes: infoBytes,
 		Hash:  &t.InfoHash,
+	}
+	t.storage, err = t.storageOpener.OpenTorrent(t.Info)
+	if err != nil {
+		return
 	}
 	t.length = 0
 	for _, f := range t.Info.UpvertedFiles() {

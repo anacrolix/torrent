@@ -19,7 +19,7 @@ func TestShortFile(t *testing.T) {
 	td, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
-	data := NewFile(td)
+	s := NewFile(td)
 	info := &metainfo.InfoEx{
 		Info: metainfo.Info{
 			Name:        "a",
@@ -27,12 +27,14 @@ func TestShortFile(t *testing.T) {
 			PieceLength: missinggo.MiB,
 		},
 	}
+	ts, err := s.OpenTorrent(info)
+	assert.NoError(t, err)
 	f, err := os.Create(filepath.Join(td, "a"))
 	err = f.Truncate(1)
 	f.Close()
 	var buf bytes.Buffer
 	p := info.Piece(0)
-	n, err := io.Copy(&buf, io.NewSectionReader(data.Piece(p), 0, p.Length()))
+	n, err := io.Copy(&buf, io.NewSectionReader(ts.Piece(p), 0, p.Length()))
 	assert.EqualValues(t, 1, n)
 	assert.Equal(t, io.ErrUnexpectedEOF, err)
 }

@@ -92,7 +92,7 @@ func TestTorrentInitialState(t *testing.T) {
 		return
 	}())
 	tor.chunkSize = 2
-	tor.storage = storage.NewFile(dir)
+	tor.storageOpener = storage.NewFile(dir)
 	// Needed to lock for asynchronous piece verification.
 	tor.cl = new(Client)
 	err := tor.setMetadata(&mi.Info.Info, mi.Info.Bytes)
@@ -463,6 +463,14 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 }
 
 type badStorage struct{}
+
+func (me badStorage) OpenTorrent(*metainfo.InfoEx) (storage.Torrent, error) {
+	return me, nil
+}
+
+func (me badStorage) Close() error {
+	return nil
+}
 
 func (me badStorage) Piece(p metainfo.Piece) storage.Piece {
 	return badStoragePiece{p}

@@ -1949,9 +1949,9 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err er
 		if spec.ChunkSize != 0 {
 			t.chunkSize = pp.Integer(spec.ChunkSize)
 		}
-		t.storage = spec.Storage
-		if t.storage == nil {
-			t.storage = cl.defaultStorage
+		t.storageOpener = spec.Storage
+		if t.storageOpener == nil {
+			t.storageOpener = cl.defaultStorage
 		}
 	}
 	if spec.DisplayName != "" {

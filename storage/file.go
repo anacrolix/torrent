@@ -21,6 +21,14 @@ func NewFile(baseDir string) I {
 	}
 }
 
+func (me *fileStorage) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
+	return fileTorrentStorage{me}, nil
+}
+
+type fileTorrentStorage struct {
+	*fileStorage
+}
+
 func (me *fileStorage) Piece(p metainfo.Piece) Piece {
 	_io := &fileStorageTorrent{
 		p.Info,
@@ -32,6 +40,10 @@ func (me *fileStorage) Piece(p metainfo.Piece) Piece {
 		missinggo.NewSectionWriter(_io, p.Offset(), p.Length()),
 		io.NewSectionReader(_io, p.Offset(), p.Length()),
 	}
+}
+
+func (me *fileStorage) Close() error {
+	return nil
 }
 
 type fileStoragePiece struct {

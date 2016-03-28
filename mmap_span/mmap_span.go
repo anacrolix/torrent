@@ -2,6 +2,7 @@ package mmap_span
 
 import (
 	"io"
+	"log"
 
 	"github.com/edsrzf/mmap-go"
 )
@@ -22,10 +23,14 @@ func (me *MMapSpan) Append(mmap mmap.MMap) {
 	me.span = append(me.span, segment{&mmap})
 }
 
-func (me MMapSpan) Close() {
+func (me MMapSpan) Close() error {
 	for _, mMap := range me.span {
-		mMap.(segment).Unmap()
+		err := mMap.(segment).Unmap()
+		if err != nil {
+			log.Print(err)
+		}
 	}
+	return nil
 }
 
 func (me MMapSpan) Size() (ret int64) {

@@ -6,11 +6,18 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-// Represents data storage for a Torrent.
+// Represents data storage for an unspecified torrent.
 type I interface {
-	Piece(metainfo.Piece) Piece
+	OpenTorrent(info *metainfo.InfoEx) (Torrent, error)
 }
 
+// Data storage bound to a torrent.
+type Torrent interface {
+	Piece(metainfo.Piece) Piece
+	Close() error
+}
+
+// Interacts with torrent piece data.
 type Piece interface {
 	// Should return io.EOF only at end of torrent. Short reads due to missing
 	// data should return io.ErrUnexpectedEOF.
@@ -23,20 +30,3 @@ type Piece interface {
 	// Returns true if the piece is complete.
 	GetIsComplete() bool
 }
-
-// type PieceStorage interface {
-// 	ReadAt(metainfo.Piece, []byte, int64) (int, error)
-// 	WriteAt(metainfo.Piece, []byte, int64) (int, error)
-// 	MarkComplete(metainfo.Piece) error
-// 	GetIsComplete(metainfo.Piece) bool
-// }
-
-// type wrappedPieceStorage struct {
-// 	ps PieceStorage
-// }
-
-// func WrapPieceStorage(ps PieceStorage) I {
-// 	return wrappedPieceStorage{ps}
-// }
-
-// func (me wrappedPieceStorage) Piece(metainfo.Piece)

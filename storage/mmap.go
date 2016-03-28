@@ -14,9 +14,7 @@ import (
 )
 
 type mmapStorage struct {
-	baseDir   string
-	spans     map[metainfo.InfoHash]mmap_span.MMapSpan
-	completed map[metainfo.InfoHash]bool
+	baseDir string
 }
 
 func NewMMap(baseDir string) I {
@@ -25,36 +23,35 @@ func NewMMap(baseDir string) I {
 	}
 }
 
-func (me *mmapStorage) lazySpan(info *metainfo.InfoEx) error {
-	if me.spans == nil {
-		me.spans = make(map[metainfo.InfoHash]mmap_span.MMapSpan)
-	}
-	if _, ok := me.spans[*info.Hash]; ok {
-		return nil
-	}
+func (me *mmapStorage) OpenTorrent(info *metainfo.InfoEx) (t Torrent, err error) {
 	span, err := MMapTorrent(&info.Info, me.baseDir)
-	if err != nil {
-		return err
+	t = &mmapTorrentStorage{
+		span: span,
 	}
-	me.spans[*info.Hash] = span
-	return nil
+	return
 }
 
-func (me *mmapStorage) Piece(p metainfo.Piece) Piece {
-	err := me.lazySpan(p.Info)
-	if err != nil {
-		panic(err)
-	}
+type mmapTorrentStorage struct {
+	span      mmap_span.MMapSpan
+	completed map[metainfo.InfoHash]bool
+}
+
+func (me *mmapTorrentStorage) Piece(p metainfo.Piece) Piece {
 	return mmapStoragePiece{
 		storage:  me,
 		p:        p,
-		ReaderAt: io.NewSectionReader(me.spans[*p.Info.Hash], p.Offset(), p.Length()),
-		WriterAt: missinggo.NewSectionWriter(me.spans[*p.Info.Hash], p.Offset(), p.Length()),
+		ReaderAt: io.NewSectionReader(me.span, p.Offset(), p.Length()),
+		WriterAt: missinggo.NewSectionWriter(me.span, p.Offset(), p.Length()),
 	}
 }
 
+func (me *mmapTorrentStorage) Close() error {
+	me.span.Close()
+	return nil
+}
+
 type mmapStoragePiece struct {
-	storage *mmapStorage
+	storage *mmapTorrentStorage
 	p       metainfo.Piece
 	io.ReaderAt
 	io.WriterAt

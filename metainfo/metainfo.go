@@ -259,7 +259,7 @@ func (mi *MetaInfo) SetDefaults() {
 
 type InfoHash [20]byte
 
-func (me *InfoHash) Bytes() []byte {
+func (me InfoHash) Bytes() []byte {
 	return me[:]
 }
 
@@ -267,6 +267,6 @@ func (ih *InfoHash) AsString() string {
 	return string(ih[:])
 }
 
-func (ih *InfoHash) HexString() string {
+func (ih InfoHash) HexString() string {
 	return fmt.Sprintf("%x", ih[:])
 }

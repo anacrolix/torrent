@@ -22,9 +22,9 @@ import (
 	netContext "golang.org/x/net/context"
 
 	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/data/mmap"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/storage"
 )
 
 func init() {
@@ -184,7 +184,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	require.NoError(t, err)
 	defer seeder.Close()
 	testutil.ExportStatusWriter(seeder, "s")
-	_, err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%x", layout.Metainfo.Info.Hash))
+	_, err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.Info.Hash.HexString()))
 	require.NoError(t, err)
 	leecher, err := torrent.NewClient(&torrent.Config{
 		DisableTrackers: true,
@@ -194,10 +194,7 @@ func TestDownloadOnDemand(t *testing.T) {
 
 		NoDefaultBlocklist: true,
 
-		TorrentDataOpener: func(info *metainfo.Info) torrent.Storage {
-			ret, _ := mmap.TorrentData(info, filepath.Join(layout.BaseDir, "download"))
-			return ret
-		},
+		DefaultStorage: storage.NewMMap(filepath.Join(layout.BaseDir, "download")),
 
 		// This can be used to check if clients can connect to other clients
 		// with the same ID.

@@ -19,6 +19,7 @@ import (
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
 	. "github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/filecache"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
@@ -310,17 +311,12 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
-	// cfg.TorrentDataOpener = func() TorrentDataOpener {
-	// 	fc, err := filecache.NewCache(leecherDataDir)
-	// 	require.NoError(t, err)
-	// 	if ps.SetLeecherStorageCapacity {
-	// 		fc.SetCapacity(ps.LeecherStorageCapacity)
-	// 	}
-	// 	store := pieceStore.New(fileCacheDataBackend.New(fc))
-	// 	return func(mi *metainfo.Info) storage.I {
-	// 		return store.OpenTorrentData(mi)
-	// 	}
-	// }()
+	fc, err := filecache.NewCache(leecherDataDir)
+	require.NoError(t, err)
+	if ps.SetLeecherStorageCapacity {
+		fc.SetCapacity(ps.LeecherStorageCapacity)
+	}
+	cfg.DefaultStorage = storage.NewPieceFileStorage(storage.FileCacheFileStore{fc})
 	leecher, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer leecher.Close()
@@ -719,55 +715,64 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 	}
 }
 
-// func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool) {
-// 	fileCacheDir, err := ioutil.TempDir("", "")
-// 	require.NoError(t, err)
-// 	defer os.RemoveAll(fileCacheDir)
-// 	fileCache, err := filecache.NewCache(fileCacheDir)
-// 	require.NoError(t, err)
-// 	greetingDataTempDir, greetingMetainfo := testutil.GreetingTestTorrent()
-// 	defer os.RemoveAll(greetingDataTempDir)
-// 	filePieceStore := pieceStore.New(fileCacheDataBackend.New(fileCache))
-// 	greetingData := filePieceStore.OpenTorrentData(&greetingMetainfo.Info.Info)
-// 	written, err := greetingData.WriteAt([]byte(testutil.GreetingFileContents), 0)
-// 	require.Equal(t, len(testutil.GreetingFileContents), written)
-// 	require.NoError(t, err)
-// 	for i := 0; i < greetingMetainfo.Info.NumPieces(); i++ {
-// 		// p := greetingMetainfo.Info.Piece(i)
-// 		if alreadyCompleted {
-// 			err := greetingData.PieceCompleted(i)
-// 			assert.NoError(t, err)
-// 		}
-// 	}
-// 	cfg := TestingConfig
-// 	// TODO: Disable network option?
-// 	cfg.DisableTCP = true
-// 	cfg.DisableUTP = true
-// 	// cfg.DefaultStorage = filePieceStore
-// 	cl, err := NewClient(&cfg)
-// 	require.NoError(t, err)
-// 	defer cl.Close()
-// 	tt, err := cl.AddTorrent(greetingMetainfo)
-// 	require.NoError(t, err)
-// 	psrs := tt.PieceStateRuns()
-// 	assert.Len(t, psrs, 1)
-// 	assert.EqualValues(t, 3, psrs[0].Length)
-// 	assert.Equal(t, alreadyCompleted, psrs[0].Complete)
-// 	if alreadyCompleted {
-// 		r := tt.NewReader()
-// 		b, err := ioutil.ReadAll(r)
-// 		assert.NoError(t, err)
-// 		assert.EqualValues(t, testutil.GreetingFileContents, b)
-// 	}
-// }
+func writeTorrentData(ts storage.Torrent, info *metainfo.InfoEx, b []byte) {
+	for i := range iter.N(info.NumPieces()) {
+		n, err := ts.Piece(info.Piece(i)).WriteAt(b, 0)
+		b = b[n:]
+		log.Print(err)
+	}
+}
 
-// func TestAddTorrentPiecesAlreadyCompleted(t *testing.T) {
-// 	testAddTorrentPriorPieceCompletion(t, true)
-// }
+func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool) {
+	fileCacheDir, err := ioutil.TempDir("", "")
+	require.NoError(t, err)
+	defer os.RemoveAll(fileCacheDir)
+	fileCache, err := filecache.NewCache(fileCacheDir)
+	require.NoError(t, err)
+	greetingDataTempDir, greetingMetainfo := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(greetingDataTempDir)
+	filePieceStore := storage.NewPieceFileStorage(storage.FileCacheFileStore{fileCache})
+	greetingData, err := filePieceStore.OpenTorrent(&greetingMetainfo.Info)
+	require.NoError(t, err)
+	writeTorrentData(greetingData, &greetingMetainfo.Info, []byte(testutil.GreetingFileContents))
+	// require.Equal(t, len(testutil.GreetingFileContents), written)
+	// require.NoError(t, err)
+	for i := 0; i < greetingMetainfo.Info.NumPieces(); i++ {
+		p := greetingMetainfo.Info.Piece(i)
+		if alreadyCompleted {
+			err := greetingData.Piece(p).MarkComplete()
+			assert.NoError(t, err)
+		}
+	}
+	cfg := TestingConfig
+	// TODO: Disable network option?
+	cfg.DisableTCP = true
+	cfg.DisableUTP = true
+	cfg.DefaultStorage = filePieceStore
+	cl, err := NewClient(&cfg)
+	require.NoError(t, err)
+	defer cl.Close()
+	tt, err := cl.AddTorrent(greetingMetainfo)
+	require.NoError(t, err)
+	psrs := tt.PieceStateRuns()
+	assert.Len(t, psrs, 1)
+	assert.EqualValues(t, 3, psrs[0].Length)
+	assert.Equal(t, alreadyCompleted, psrs[0].Complete)
+	if alreadyCompleted {
+		r := tt.NewReader()
+		b, err := ioutil.ReadAll(r)
+		assert.NoError(t, err)
+		assert.EqualValues(t, testutil.GreetingFileContents, b)
+	}
+}
 
-// func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
-// 	testAddTorrentPriorPieceCompletion(t, false)
-// }
+func TestAddTorrentPiecesAlreadyCompleted(t *testing.T) {
+	testAddTorrentPriorPieceCompletion(t, true)
+}
+
+func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
+	testAddTorrentPriorPieceCompletion(t, false)
+}
 
 func TestAddMetainfoWithNodes(t *testing.T) {
 	cfg := TestingConfig
@@ -812,17 +817,12 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
-	// cfg.TorrentDataOpener = func() TorrentDataOpener {
-	// 	fc, err := filecache.NewCache(leecherDataDir)
-	// 	require.NoError(t, err)
-	// 	if ps.SetLeecherStorageCapacity {
-	// 		fc.SetCapacity(ps.LeecherStorageCapacity)
-	// 	}
-	// 	store := pieceStore.New(fileCacheDataBackend.New(fc))
-	// 	return func(mi *metainfo.Info) storage.I {
-	// 		return store.OpenTorrentData(mi)
-	// 	}
-	// }()
+	fc, err := filecache.NewCache(leecherDataDir)
+	require.NoError(t, err)
+	if ps.SetLeecherStorageCapacity {
+		fc.SetCapacity(ps.LeecherStorageCapacity)
+	}
+	cfg.DefaultStorage = storage.NewPieceFileStorage(storage.FileCacheFileStore{fc})
 	cfg.DataDir = leecherDataDir
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()

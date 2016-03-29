@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"io"
 	"os"
 	"path"
 
@@ -14,12 +15,16 @@ type FileStore interface {
 	OpenFile(path string, flags int) (File, error)
 	Stat(path string) (os.FileInfo, error)
 	Rename(from, to string) error
+	Remove(path string) error
 }
 
 type File interface {
-	WriteAt([]byte, int64) (int, error)
-	ReadAt([]byte, int64) (int, error)
-	Close() error
+	io.ReaderAt
+	io.WriterAt
+	io.Writer
+	io.Reader
+	io.Closer
+	io.Seeker
 }
 
 type FileCacheFileStore struct {
@@ -83,6 +88,10 @@ func (me pieceFileTorrentStoragePiece) ReadAt(b []byte, off int64) (n int, err e
 	f, err := me.fs.OpenFile(me.completedPath(), os.O_RDONLY)
 	if err != nil {
 		f, err = me.fs.OpenFile(me.incompletePath(), os.O_RDONLY)
+		if os.IsNotExist(err) {
+			err = io.ErrUnexpectedEOF
+			return
+		}
 		if err != nil {
 			return
 		}

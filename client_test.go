@@ -716,9 +716,8 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 
 func writeTorrentData(ts storage.Torrent, info *metainfo.InfoEx, b []byte) {
 	for i := range iter.N(info.NumPieces()) {
-		n, err := ts.Piece(info.Piece(i)).WriteAt(b, 0)
+		n, _ := ts.Piece(info.Piece(i)).WriteAt(b, 0)
 		b = b[n:]
-		log.Print(err)
 	}
 }
 

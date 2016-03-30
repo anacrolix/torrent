@@ -363,13 +363,15 @@ func TestSeedAfterDownloading(t *testing.T) {
 	cfg.Seed = true
 	cfg.DataDir = greetingTempDir
 	seeder, err := NewClient(&cfg)
+	require.NoError(t, err)
 	defer seeder.Close()
 	testutil.ExportStatusWriter(seeder, "s")
 	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.DataDir)
-	leecher, _ := NewClient(&cfg)
+	leecher, err := NewClient(&cfg)
+	require.NoError(t, err)
 	defer leecher.Close()
 	testutil.ExportStatusWriter(leecher, "l")
 	cfg.Seed = false

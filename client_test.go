@@ -315,7 +315,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if ps.SetLeecherStorageCapacity {
 		fc.SetCapacity(ps.LeecherStorageCapacity)
 	}
-	cfg.DefaultStorage = storage.NewPieceFileStorage(storage.FileCacheFileStore{fc})
+	cfg.DefaultStorage = storage.NewPieceFileStorage(fc.AsFileStore())
 	leecher, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer leecher.Close()
@@ -730,7 +730,7 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool) {
 	require.NoError(t, err)
 	greetingDataTempDir, greetingMetainfo := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingDataTempDir)
-	filePieceStore := storage.NewPieceFileStorage(storage.FileCacheFileStore{fileCache})
+	filePieceStore := storage.NewPieceFileStorage(fileCache.AsFileStore())
 	greetingData, err := filePieceStore.OpenTorrent(&greetingMetainfo.Info)
 	require.NoError(t, err)
 	writeTorrentData(greetingData, &greetingMetainfo.Info, []byte(testutil.GreetingFileContents))
@@ -821,7 +821,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	if ps.SetLeecherStorageCapacity {
 		fc.SetCapacity(ps.LeecherStorageCapacity)
 	}
-	cfg.DefaultStorage = storage.NewPieceFileStorage(storage.FileCacheFileStore{fc})
+	cfg.DefaultStorage = storage.NewPieceFileStorage(fc.AsFileStore())
 	cfg.DataDir = leecherDataDir
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()

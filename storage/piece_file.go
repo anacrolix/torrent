@@ -6,40 +6,15 @@ import (
 	"path"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/filecache"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-type FileStore interface {
-	OpenFile(path string, flags int) (File, error)
-	Stat(path string) (os.FileInfo, error)
-	Rename(from, to string) error
-	Remove(path string) error
-}
-
-type File interface {
-	io.ReaderAt
-	io.WriterAt
-	io.Writer
-	io.Reader
-	io.Closer
-	io.Seeker
-}
-
-type FileCacheFileStore struct {
-	*filecache.Cache
-}
-
-func (me FileCacheFileStore) OpenFile(p string, f int) (File, error) {
-	return me.Cache.OpenFile(p, f)
-}
-
 type pieceFileStorage struct {
-	fs FileStore
+	fs missinggo.FileStore
 }
 
-func NewPieceFileStorage(fs FileStore) I {
+func NewPieceFileStorage(fs missinggo.FileStore) I {
 	return &pieceFileStorage{
 		fs: fs,
 	}
@@ -64,7 +39,7 @@ func (me *pieceFileTorrentStorage) Piece(p metainfo.Piece) Piece {
 type pieceFileTorrentStoragePiece struct {
 	ts *pieceFileTorrentStorage
 	p  metainfo.Piece
-	fs FileStore
+	fs missinggo.FileStore
 }
 
 func (me pieceFileTorrentStoragePiece) completedPath() string {

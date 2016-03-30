@@ -18,7 +18,6 @@ import (
 
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
-	. "github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/filecache"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
@@ -704,7 +703,7 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 	cl, _ := NewClient(&TestingConfig)
 	defer cl.Close()
 	var ts TorrentSpec
-	CopyExact(&ts.InfoHash, mi.Info.Hash)
+	missinggo.CopyExact(&ts.InfoHash, mi.Info.Hash)
 	tt, _, _ := cl.AddTorrentSpec(&ts)
 	tt.Drop()
 	assert.EqualValues(t, 0, len(cl.Torrents()))

@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
-	. "github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/pproffd"
 	"github.com/anacrolix/missinggo/pubsub"
@@ -355,7 +354,7 @@ func (cl *Client) initBannedTorrents() error {
 			return errors.New("bad infohash")
 		}
 		var ih metainfo.InfoHash
-		CopyExact(&ih, ihs)
+		missinggo.CopyExact(&ih, ihs)
 		cl.bannedTorrents[ih] = struct{}{}
 	}
 	if err := scanner.Err(); err != nil {
@@ -382,7 +381,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		dopplegangerAddrs: make(map[string]struct{}),
 		torrents:          make(map[metainfo.InfoHash]*torrent),
 	}
-	CopyExact(&cl.extensionBytes, defaultExtensionBytes)
+	missinggo.CopyExact(&cl.extensionBytes, defaultExtensionBytes)
 	cl.event.L = &cl.mu
 	if cl.defaultStorage == nil {
 		cl.defaultStorage = storage.NewFile(cfg.DataDir)
@@ -402,7 +401,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	}
 
 	if cfg.PeerID != "" {
-		CopyExact(&cl.peerID, cfg.PeerID)
+		missinggo.CopyExact(&cl.peerID, cfg.PeerID)
 	} else {
 		o := copy(cl.peerID[:], bep20)
 		_, err = rand.Read(cl.peerID[o:])
@@ -548,7 +547,7 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 		}
 		cl.mu.RLock()
 		doppleganger := cl.dopplegangerAddr(conn.RemoteAddr().String())
-		_, blocked := cl.ipBlockRange(AddrIP(conn.RemoteAddr()))
+		_, blocked := cl.ipBlockRange(missinggo.AddrIP(conn.RemoteAddr()))
 		cl.mu.RUnlock()
 		if blocked || doppleganger {
 			acceptReject.Add(1)
@@ -907,9 +906,9 @@ func handshake(sock io.ReadWriter, ih *metainfo.InfoHash, peerID [20]byte, exten
 	if string(b[:20]) != pp.Protocol {
 		return
 	}
-	CopyExact(&res.peerExtensionBytes, b[20:28])
-	CopyExact(&res.InfoHash, b[28:48])
-	CopyExact(&res.peerID, b[48:68])
+	missinggo.CopyExact(&res.peerExtensionBytes, b[20:28])
+	missinggo.CopyExact(&res.InfoHash, b[28:48])
+	missinggo.CopyExact(&res.peerID, b[48:68])
 	peerExtensions.Add(hex.EncodeToString(res.peerExtensionBytes[:]), 1)
 
 	// TODO: Maybe we can just drop peers here if we're not interested. This
@@ -1144,7 +1143,7 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 	if conn.PeerExtensionBytes.SupportsDHT() && me.extensionBytes.SupportsDHT() && me.dHT != nil {
 		conn.Post(pp.Message{
 			Type: pp.Port,
-			Port: uint16(AddrPort(me.dHT.Addr())),
+			Port: uint16(missinggo.AddrPort(me.dHT.Addr())),
 		})
 	}
 }
@@ -1193,7 +1192,7 @@ func (cl *Client) completedMetadata(t *torrent) {
 	h := sha1.New()
 	h.Write(t.MetaData)
 	var ih metainfo.InfoHash
-	CopyExact(&ih, h.Sum(nil))
+	missinggo.CopyExact(&ih, h.Sum(nil))
 	if ih != t.InfoHash {
 		log.Print("bad metadata")
 		t.invalidateMetadata()
@@ -1493,7 +1492,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 							if i < len(pexMsg.AddedFlags) && pexMsg.AddedFlags[i]&0x01 != 0 {
 								p.SupportsEncryption = true
 							}
-							CopyExact(p.IP, cp.IP[:])
+							missinggo.CopyExact(p.IP, cp.IP[:])
 							ret = append(ret, p)
 						}
 						return
@@ -1919,7 +1918,7 @@ func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
 		spec.Trackers[0] = append(spec.Trackers[0], mi.Announce)
 	}
 
-	CopyExact(&spec.InfoHash, mi.Info.Hash)
+	missinggo.CopyExact(&spec.InfoHash, mi.Info.Hash)
 	return
 }
 

@@ -72,7 +72,12 @@ func (me pieceFileTorrentStoragePiece) ReadAt(b []byte, off int64) (n int, err e
 		}
 	}
 	defer f.Close()
-	return f.ReadAt(b, off)
+	n, err = f.ReadAt(b, off)
+	off += int64(n)
+	if err == io.EOF && off < me.p.Length() {
+		err = io.ErrUnexpectedEOF
+	}
+	return
 }
 
 func (me pieceFileTorrentStoragePiece) WriteAt(b []byte, off int64) (n int, err error) {

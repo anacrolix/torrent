@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path"
@@ -96,6 +97,10 @@ func (me pieceFileTorrentStoragePiece) ReadAt(b []byte, off int64) (n int, err e
 }
 
 func (me pieceFileTorrentStoragePiece) WriteAt(b []byte, off int64) (n int, err error) {
+	if me.GetIsComplete() {
+		err = errors.New("piece completed")
+		return
+	}
 	f, err := me.fs.OpenFile(me.incompletePath(), os.O_WRONLY|os.O_CREATE)
 	if err != nil {
 		return

@@ -48,7 +48,7 @@ type piece struct {
 }
 
 func (p *piece) Info() metainfo.Piece {
-	return p.t.Info.Piece(p.index)
+	return p.t.info.Piece(p.index)
 }
 
 func (p *piece) Storage() storage.Piece {

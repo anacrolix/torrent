@@ -187,7 +187,7 @@ func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {
 	case os.SEEK_CUR:
 		r.pos += off
 	case os.SEEK_END:
-		r.pos = r.t.torrent.Info.TotalLength() + off
+		r.pos = r.t.torrent.info.TotalLength() + off
 	default:
 		err = errors.New("bad whence")
 	}

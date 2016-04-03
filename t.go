@@ -30,7 +30,7 @@ func (t Torrent) GotInfo() <-chan struct{} {
 
 // Returns the metainfo info dictionary, or nil if it's not yet available.
 func (t Torrent) Info() *metainfo.InfoEx {
-	return t.torrent.Info
+	return t.torrent.info
 }
 
 // Returns a Reader bound to the torrent's data. All read calls block until

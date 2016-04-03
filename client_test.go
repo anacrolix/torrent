@@ -97,7 +97,7 @@ func TestTorrentInitialState(t *testing.T) {
 	tor.cl = new(Client)
 	err := tor.setMetadata(&mi.Info.Info, mi.Info.Bytes)
 	require.NoError(t, err)
-	require.Len(t, tor.Pieces, 3)
+	require.Len(t, tor.pieces, 3)
 	tor.pendAllChunkSpecs(0)
 	assert.EqualValues(t, 3, tor.pieceNumPendingChunks(0))
 	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
@@ -455,8 +455,8 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 	if new {
 		t.FailNow()
 	}
-	assert.EqualValues(t, T.torrent.Trackers[0][0], "http://a")
-	assert.EqualValues(t, T.torrent.Trackers[1][0], "udp://b")
+	assert.EqualValues(t, T.torrent.trackers[0][0], "http://a")
+	assert.EqualValues(t, T.torrent.trackers[1][0], "udp://b")
 }
 
 type badStorage struct{}
@@ -787,7 +787,7 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	assert.EqualValues(t, cl.DHT().NumNodes(), 0)
 	tt, err := cl.AddTorrentFromFile("metainfo/testdata/issue_65a.torrent")
 	require.NoError(t, err)
-	assert.Len(t, tt.torrent.Trackers, 5)
+	assert.Len(t, tt.torrent.trackers, 5)
 	assert.EqualValues(t, 6, cl.DHT().NumNodes())
 }
 

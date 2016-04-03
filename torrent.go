@@ -54,10 +54,12 @@ type torrent struct {
 	// get this from the info dict.
 	length int64
 
+	// The storage to open when the info dict becomes available.
 	storageOpener storage.I
-	storage       storage.Torrent
+	// Storage for torrent data.
+	storage storage.Torrent
 
-	// The info dict. Nil if we don't have it (yet).
+	// The info dict. nil if we don't have it (yet).
 	info *metainfo.InfoEx
 	// Active peer connections, running message stream loops.
 	conns []*connection

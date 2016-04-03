@@ -1025,7 +1025,12 @@ func (t *torrent) putPieceInclination(pi []int) {
 }
 
 func (t *torrent) updatePieceCompletion(piece int) {
-	t.completedPieces.Set(piece, t.pieceCompleteUncached(piece))
+	pcu := t.pieceCompleteUncached(piece)
+	changed := t.completedPieces.Get(piece) != pcu
+	t.completedPieces.Set(piece, pcu)
+	if changed {
+		t.pieceChanged(piece)
+	}
 }
 
 // Non-blocking read. Client lock is not required.

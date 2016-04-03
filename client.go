@@ -2293,7 +2293,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) {
 	if err != nil {
 		log.Printf("%s: error writing chunk %v: %s", t, req, err)
 		t.pendRequest(req)
-		// t.updatePiecePriority(msg.Index)
+		t.updatePieceCompletion(int(msg.Index))
 		return
 	}
 

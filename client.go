@@ -240,10 +240,10 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.torrents))
 	fmt.Fprintln(w)
 	for _, t := range cl.sortedTorrents() {
-		if t.Name() == "" {
+		if t.name() == "" {
 			fmt.Fprint(w, "<unknown name>")
 		} else {
-			fmt.Fprint(w, t.Name())
+			fmt.Fprint(w, t.name())
 		}
 		fmt.Fprint(w, "\n")
 		if t.haveInfo() {

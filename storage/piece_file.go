@@ -59,22 +59,37 @@ func (me pieceFileTorrentStoragePiece) MarkComplete() error {
 	return me.fs.Rename(me.incompletePath(), me.completedPath())
 }
 
+func (me pieceFileTorrentStoragePiece) openFile() (f missinggo.File, err error) {
+	f, err = me.fs.OpenFile(me.completedPath(), os.O_RDONLY)
+	if err == nil {
+		var fi os.FileInfo
+		fi, err = f.Stat()
+		if err == nil && fi.Size() == me.p.Length() {
+			return
+		}
+		f.Close()
+	} else if !os.IsNotExist(err) {
+		return
+	}
+	f, err = me.fs.OpenFile(me.incompletePath(), os.O_RDONLY)
+	if os.IsNotExist(err) {
+		err = io.ErrUnexpectedEOF
+	}
+	return
+}
+
 func (me pieceFileTorrentStoragePiece) ReadAt(b []byte, off int64) (n int, err error) {
-	f, err := me.fs.OpenFile(me.completedPath(), os.O_RDONLY)
+	f, err := me.openFile()
 	if err != nil {
-		f, err = me.fs.OpenFile(me.incompletePath(), os.O_RDONLY)
-		if os.IsNotExist(err) {
-			err = io.ErrUnexpectedEOF
-			return
-		}
-		if err != nil {
-			return
-		}
+		return
 	}
 	defer f.Close()
+	missinggo.LimitLen(&b, me.p.Length()-off)
 	n, err = f.ReadAt(b, off)
 	off += int64(n)
-	if err == io.EOF && off < me.p.Length() {
+	if off >= me.p.Length() {
+		err = io.EOF
+	} else if err == io.EOF {
 		err = io.ErrUnexpectedEOF
 	}
 	return

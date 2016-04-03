@@ -1974,6 +1974,7 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 	t.addTrackers(spec.Trackers)
 
 	cl.torrents[spec.InfoHash] = t
+	t.maybeNewConns()
 
 	// From this point onwards, we can consider the torrent a part of the
 	// client.

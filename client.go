@@ -2291,8 +2291,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) {
 	piece.decrementPendingWrites()
 
 	if err != nil {
-		log.Printf("error writing chunk: %s", err)
-		// t.updatePieceCompletion(msg.Index)
+		log.Printf("%s: error writing chunk %v: %s", t, req, err)
 		t.pendRequest(req)
 		// t.updatePiecePriority(msg.Index)
 		return
@@ -2334,7 +2333,7 @@ func (me *Client) pieceHashed(t *torrent, piece int, correct bool) {
 		if correct {
 			pieceHashedCorrect.Add(1)
 		} else {
-			log.Printf("%s: piece %d failed hash", t, piece)
+			log.Printf("%s: piece %d (%x) failed hash", t, piece, p.Hash)
 			pieceHashedNotCorrect.Add(1)
 		}
 	}

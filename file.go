@@ -8,14 +8,14 @@ import (
 
 // Provides access to regions of torrent data that correspond to its files.
 type File struct {
-	t      Torrent
+	t      *Torrent
 	path   string
 	offset int64
 	length int64
 	fi     metainfo.FileInfo
 }
 
-func (f *File) Torrent() Torrent {
+func (f *File) Torrent() *Torrent {
 	return f.t
 }
 
@@ -54,7 +54,7 @@ type FilePieceState struct {
 
 // Returns the state of pieces in this file.
 func (f *File) State() (ret []FilePieceState) {
-	pieceSize := int64(f.t.torrent.usualPieceSize())
+	pieceSize := int64(f.t.usualPieceSize())
 	off := f.offset % pieceSize
 	remaining := f.length
 	for i := int(f.offset / pieceSize); ; i++ {
@@ -66,7 +66,7 @@ func (f *File) State() (ret []FilePieceState) {
 			len1 = remaining
 		}
 		f.t.cl.mu.RLock()
-		ps := f.t.torrent.pieceState(i)
+		ps := f.t.pieceState(i)
 		f.t.cl.mu.RUnlock()
 		ret = append(ret, FilePieceState{len1, ps})
 		off = 0
@@ -77,13 +77,13 @@ func (f *File) State() (ret []FilePieceState) {
 
 // Requests that all pieces containing data in the file be downloaded.
 func (f *File) Download() {
-	f.t.DownloadPieces(f.t.torrent.byteRegionPieces(f.offset, f.length))
+	f.t.DownloadPieces(f.t.byteRegionPieces(f.offset, f.length))
 }
 
 // Requests that torrent pieces containing bytes in the given region of the
 // file be downloaded.
 func (f *File) PrioritizeRegion(off, len int64) {
-	f.t.DownloadPieces(f.t.torrent.byteRegionPieces(f.offset+off, len))
+	f.t.DownloadPieces(f.t.byteRegionPieces(f.offset+off, len))
 }
 
 func byteRegionExclusivePieces(off, size, pieceSize int64) (begin, end int) {
@@ -93,7 +93,7 @@ func byteRegionExclusivePieces(off, size, pieceSize int64) (begin, end int) {
 }
 
 func (f *File) exclusivePieces() (begin, end int) {
-	return byteRegionExclusivePieces(f.offset, f.length, int64(f.t.torrent.usualPieceSize()))
+	return byteRegionExclusivePieces(f.offset, f.length, int64(f.t.usualPieceSize()))
 }
 
 func (f *File) Cancel() {

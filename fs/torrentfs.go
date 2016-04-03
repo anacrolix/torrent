@@ -51,7 +51,7 @@ type node struct {
 	path     string
 	metadata *metainfo.InfoEx
 	FS       *TorrentFS
-	t        torrent.Torrent
+	t        *torrent.Torrent
 }
 
 type fileNode struct {
@@ -70,7 +70,7 @@ func (n *node) fsPath() string {
 	return "/" + n.metadata.Name + "/" + n.path
 }
 
-func blockingRead(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int64, p []byte) (n int, err error) {
+func blockingRead(ctx context.Context, fs *TorrentFS, t *torrent.Torrent, off int64, p []byte) (n int, err error) {
 	fs.mu.Lock()
 	fs.blockedReads++
 	fs.event.Broadcast()
@@ -106,7 +106,7 @@ func blockingRead(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int
 	return
 }
 
-func readFull(ctx context.Context, fs *TorrentFS, t torrent.Torrent, off int64, p []byte) (n int, err error) {
+func readFull(ctx context.Context, fs *TorrentFS, t *torrent.Torrent, off int64, p []byte) (n int, err error) {
 	for len(p) != 0 {
 		var nn int
 		nn, err = blockingRead(ctx, fs, t, off, p)

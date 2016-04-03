@@ -84,9 +84,7 @@ func newGreetingLayout() (tl testLayout, err error) {
 // operations blocked inside the filesystem code.
 func TestUnmountWedged(t *testing.T) {
 	layout, err := newGreetingLayout()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer func() {
 		err := layout.Destroy()
 		if err != nil {
@@ -103,11 +101,10 @@ func TestUnmountWedged(t *testing.T) {
 
 		NoDefaultBlocklist: true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer client.Close()
-	client.AddTorrent(layout.Metainfo)
+	_, err = client.AddTorrent(layout.Metainfo)
+	require.NoError(t, err)
 	fs := New(client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
 	if err != nil {

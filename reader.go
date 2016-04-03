@@ -47,27 +47,27 @@ func (r *Reader) readable(off int64) (ret bool) {
 	if r.torrentClosed() {
 		return true
 	}
-	req, ok := r.t.torrent.offsetRequest(off)
+	req, ok := r.t.offsetRequest(off)
 	if !ok {
 		panic(off)
 	}
 	if r.responsive {
-		return r.t.torrent.haveChunk(req)
+		return r.t.haveChunk(req)
 	}
-	return r.t.torrent.pieceComplete(int(req.Index))
+	return r.t.pieceComplete(int(req.Index))
 }
 
 // How many bytes are available to read. Max is the most we could require.
 func (r *Reader) available(off, max int64) (ret int64) {
 	for max > 0 {
-		req, ok := r.t.torrent.offsetRequest(off)
+		req, ok := r.t.offsetRequest(off)
 		if !ok {
 			break
 		}
-		if !r.t.torrent.haveChunk(req) {
+		if !r.t.haveChunk(req) {
 			break
 		}
-		len1 := int64(req.Length) - (off - r.t.torrent.requestOffset(req))
+		len1 := int64(req.Length) - (off - r.t.requestOffset(req))
 		max -= len1
 		ret += len1
 		off += len1
@@ -80,7 +80,7 @@ func (r *Reader) available(off, max int64) (ret int64) {
 }
 
 func (r *Reader) tickleClient() {
-	r.t.torrent.readersChanged()
+	r.t.readersChanged()
 }
 
 func (r *Reader) waitReadable(off int64) {
@@ -108,7 +108,7 @@ func (r *Reader) Read(b []byte) (n int, err error) {
 		r.pos += int64(n1)
 		r.mu.Unlock()
 	}
-	if r.pos >= r.t.torrent.length {
+	if r.pos >= r.t.length {
 		err = io.EOF
 	} else if err == io.EOF {
 		err = io.ErrUnexpectedEOF
@@ -118,7 +118,7 @@ func (r *Reader) Read(b []byte) (n int, err error) {
 
 // Safe to call with or without client lock.
 func (r *Reader) torrentClosed() bool {
-	return r.t.torrent.isClosed()
+	return r.t.isClosed()
 }
 
 // Wait until some data should be available to read. Tickles the client if it
@@ -134,7 +134,7 @@ func (r *Reader) waitAvailable(pos, wanted int64) (avail int64) {
 
 // Performs at most one successful read to torrent storage.
 func (r *Reader) readOnceAt(b []byte, pos int64) (n int, err error) {
-	if pos >= r.t.torrent.length {
+	if pos >= r.t.length {
 		err = io.EOF
 		return
 	}
@@ -151,15 +151,15 @@ func (r *Reader) readOnceAt(b []byte, pos int64) (n int, err error) {
 		ip := r.t.Info().Piece(pi)
 		po := pos % ip.Length()
 		missinggo.LimitLen(&b1, ip.Length()-po)
-		n, err = r.t.torrent.readAt(b1, pos)
+		n, err = r.t.readAt(b1, pos)
 		if n != 0 {
 			err = nil
 			return
 		}
 		// log.Printf("%s: error reading from torrent storage pos=%d: %s", r.t, pos, err)
 		r.t.cl.mu.Lock()
-		r.t.torrent.updateAllPieceCompletions()
-		r.t.torrent.updatePiecePriorities()
+		r.t.updateAllPieceCompletions()
+		r.t.updatePiecePriorities()
 		r.t.cl.mu.Unlock()
 	}
 }
@@ -173,7 +173,7 @@ func (r *Reader) Close() error {
 func (r *Reader) posChanged() {
 	r.t.cl.mu.Lock()
 	defer r.t.cl.mu.Unlock()
-	r.t.torrent.readersChanged()
+	r.t.readersChanged()
 }
 
 func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {
@@ -187,7 +187,7 @@ func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {
 	case os.SEEK_CUR:
 		r.pos += off
 	case os.SEEK_END:
-		r.pos = r.t.torrent.info.TotalLength() + off
+		r.pos = r.t.info.TotalLength() + off
 	default:
 		err = errors.New("bad whence")
 	}

@@ -20,7 +20,7 @@ func Example() {
 
 func Example_fileReader() {
 	var (
-		t torrent.Torrent
+		t *torrent.Torrent
 		f torrent.File
 	)
 	r := t.NewReader()

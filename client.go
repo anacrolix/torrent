@@ -114,7 +114,7 @@ const (
 )
 
 // Currently doesn't really queue, but should in the future.
-func (cl *Client) queuePieceCheck(t *torrent, pieceIndex int) {
+func (cl *Client) queuePieceCheck(t *Torrent, pieceIndex int) {
 	piece := &t.pieces[pieceIndex]
 	if piece.QueuedForHash {
 		return
@@ -126,7 +126,7 @@ func (cl *Client) queuePieceCheck(t *torrent, pieceIndex int) {
 
 // Queue a piece check if one isn't already queued, and the piece has never
 // been checked before.
-func (cl *Client) queueFirstHash(t *torrent, piece int) {
+func (cl *Client) queueFirstHash(t *Torrent, piece int) {
 	p := &t.pieces[piece]
 	if p.EverHashed || p.Hashing || p.QueuedForHash || t.pieceComplete(piece) {
 		return
@@ -158,7 +158,7 @@ type Client struct {
 	event  sync.Cond
 	closed missinggo.Event
 
-	torrents map[metainfo.InfoHash]*torrent
+	torrents map[metainfo.InfoHash]*Torrent
 }
 
 func (me *Client) IPBlockList() iplist.Ranger {
@@ -204,7 +204,7 @@ func (me hashSorter) Swap(a, b int) {
 	me.Hashes[a], me.Hashes[b] = me.Hashes[b], me.Hashes[a]
 }
 
-func (cl *Client) sortedTorrents() (ret []*torrent) {
+func (cl *Client) sortedTorrents() (ret []*Torrent) {
 	var hs hashSorter
 	for ih := range cl.torrents {
 		hs.Hashes = append(hs.Hashes, ih)
@@ -379,7 +379,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		config:            *cfg,
 		defaultStorage:    cfg.DefaultStorage,
 		dopplegangerAddrs: make(map[string]struct{}),
-		torrents:          make(map[metainfo.InfoHash]*torrent),
+		torrents:          make(map[metainfo.InfoHash]*Torrent),
 	}
 	missinggo.CopyExact(&cl.extensionBytes, defaultExtensionBytes)
 	cl.event.L = &cl.mu
@@ -576,18 +576,14 @@ func (cl *Client) incomingConnection(nc net.Conn, utp bool) {
 }
 
 // Returns a handle to the given torrent, if it's present in the client.
-func (cl *Client) Torrent(ih metainfo.InfoHash) (T Torrent, ok bool) {
+func (cl *Client) Torrent(ih metainfo.InfoHash) (t *Torrent, ok bool) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	t, ok := cl.torrents[ih]
-	if !ok {
-		return
-	}
-	T = Torrent{cl, t}
+	t, ok = cl.torrents[ih]
 	return
 }
 
-func (me *Client) torrent(ih metainfo.InfoHash) *torrent {
+func (me *Client) torrent(ih metainfo.InfoHash) *Torrent {
 	return me.torrents[ih]
 }
 
@@ -596,7 +592,7 @@ type dialResult struct {
 	UTP  bool
 }
 
-func doDial(dial func(addr string, t *torrent) (net.Conn, error), ch chan dialResult, utp bool, addr string, t *torrent) {
+func doDial(dial func(addr string, t *Torrent) (net.Conn, error), ch chan dialResult, utp bool, addr string, t *Torrent) {
 	conn, err := dial(addr, t)
 	if err != nil {
 		if conn != nil {
@@ -628,7 +624,7 @@ func (me *Client) dopplegangerAddr(addr string) bool {
 
 // Start the process of connecting to the given peer for the given torrent if
 // appropriate.
-func (me *Client) initiateConn(peer Peer, t *torrent) {
+func (me *Client) initiateConn(peer Peer, t *Torrent) {
 	if peer.Id == me.peerID {
 		return
 	}
@@ -645,14 +641,14 @@ func (me *Client) initiateConn(peer Peer, t *torrent) {
 	go me.outgoingConnection(t, addr, peer.Source)
 }
 
-func (me *Client) dialTimeout(t *torrent) time.Duration {
+func (me *Client) dialTimeout(t *Torrent) time.Duration {
 	me.mu.Lock()
 	pendingPeers := len(t.peers)
 	me.mu.Unlock()
 	return reducedDialTimeout(nominalDialTimeout, me.halfOpenLimit, pendingPeers)
 }
 
-func (me *Client) dialTCP(addr string, t *torrent) (c net.Conn, err error) {
+func (me *Client) dialTCP(addr string, t *Torrent) (c net.Conn, err error) {
 	c, err = net.DialTimeout("tcp", addr, me.dialTimeout(t))
 	if err == nil {
 		c.(*net.TCPConn).SetLinger(0)
@@ -660,12 +656,12 @@ func (me *Client) dialTCP(addr string, t *torrent) (c net.Conn, err error) {
 	return
 }
 
-func (me *Client) dialUTP(addr string, t *torrent) (c net.Conn, err error) {
+func (me *Client) dialUTP(addr string, t *Torrent) (c net.Conn, err error) {
 	return me.utpSock.DialTimeout(addr, me.dialTimeout(t))
 }
 
 // Returns a connection over UTP or TCP, whichever is first to connect.
-func (me *Client) dialFirst(addr string, t *torrent) (conn net.Conn, utp bool) {
+func (me *Client) dialFirst(addr string, t *Torrent) (conn net.Conn, utp bool) {
 	// Initiate connections via TCP and UTP simultaneously. Use the first one
 	// that succeeds.
 	left := 0
@@ -703,7 +699,7 @@ func (me *Client) dialFirst(addr string, t *torrent) (conn net.Conn, utp bool) {
 	return
 }
 
-func (me *Client) noLongerHalfOpen(t *torrent, addr string) {
+func (me *Client) noLongerHalfOpen(t *Torrent, addr string) {
 	if _, ok := t.halfOpen[addr]; !ok {
 		panic("invariant broken")
 	}
@@ -713,7 +709,7 @@ func (me *Client) noLongerHalfOpen(t *torrent, addr string) {
 
 // Performs initiator handshakes and returns a connection. Returns nil
 // *connection if no connection for valid reasons.
-func (me *Client) handshakesConnection(nc net.Conn, t *torrent, encrypted, utp bool) (c *connection, err error) {
+func (me *Client) handshakesConnection(nc net.Conn, t *Torrent, encrypted, utp bool) (c *connection, err error) {
 	c = newConnection()
 	c.conn = nc
 	c.rw = nc
@@ -732,7 +728,7 @@ func (me *Client) handshakesConnection(nc net.Conn, t *torrent, encrypted, utp b
 
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
-func (me *Client) establishOutgoingConn(t *torrent, addr string) (c *connection, err error) {
+func (me *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection, err error) {
 	nc, utp := me.dialFirst(addr, t)
 	if nc == nil {
 		return
@@ -769,7 +765,7 @@ func (me *Client) establishOutgoingConn(t *torrent, addr string) (c *connection,
 
 // Called to dial out and run a connection. The addr we're given is already
 // considered half-open.
-func (me *Client) outgoingConnection(t *torrent, addr string, ps peerSource) {
+func (me *Client) outgoingConnection(t *Torrent, addr string, ps peerSource) {
 	c, err := me.establishOutgoingConn(t, addr)
 	me.mu.Lock()
 	defer me.mu.Unlock()
@@ -981,22 +977,22 @@ func (cl *Client) receiveSkeys() (ret [][]byte) {
 	return
 }
 
-func (me *Client) initiateHandshakes(c *connection, t *torrent) (ok bool, err error) {
+func (me *Client) initiateHandshakes(c *connection, t *Torrent) (ok bool, err error) {
 	if c.encrypted {
-		c.rw, err = mse.InitiateHandshake(c.rw, t.InfoHash[:], nil)
+		c.rw, err = mse.InitiateHandshake(c.rw, t.infoHash[:], nil)
 		if err != nil {
 			return
 		}
 	}
-	ih, ok, err := me.connBTHandshake(c, &t.InfoHash)
-	if ih != t.InfoHash {
+	ih, ok, err := me.connBTHandshake(c, &t.infoHash)
+	if ih != t.infoHash {
 		ok = false
 	}
 	return
 }
 
 // Do encryption and bittorrent handshakes as receiver.
-func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
+func (cl *Client) receiveHandshakes(c *connection) (t *Torrent, err error) {
 	cl.mu.Lock()
 	skeys := cl.receiveSkeys()
 	cl.mu.Unlock()
@@ -1036,7 +1032,7 @@ func (cl *Client) connBTHandshake(c *connection, ih *metainfo.InfoHash) (ret met
 	return
 }
 
-func (cl *Client) runInitiatedHandshookConn(c *connection, t *torrent) (err error) {
+func (cl *Client) runInitiatedHandshookConn(c *connection, t *Torrent) (err error) {
 	if c.PeerID == cl.peerID {
 		// Only if we initiated the connection is the remote address a
 		// listen addr for a doppleganger.
@@ -1069,7 +1065,7 @@ func (cl *Client) runReceivedConn(c *connection) (err error) {
 	return cl.runHandshookConn(c, t)
 }
 
-func (cl *Client) runHandshookConn(c *connection, t *torrent) (err error) {
+func (cl *Client) runHandshookConn(c *connection, t *Torrent) (err error) {
 	c.conn.SetWriteDeadline(time.Time{})
 	c.rw = readWriter{
 		deadlineReader{c.conn, c.rw},
@@ -1090,7 +1086,7 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) (err error) {
 	return
 }
 
-func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
+func (me *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 	if conn.PeerExtensionBytes.SupportsExtended() && me.extensionBytes.SupportsExtended() {
 		conn.Post(pp.Message{
 			Type:       pp.Extended,
@@ -1148,11 +1144,11 @@ func (me *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 	}
 }
 
-func (me *Client) peerUnchoked(torrent *torrent, conn *connection) {
+func (me *Client) peerUnchoked(torrent *Torrent, conn *connection) {
 	conn.updateRequests()
 }
 
-func (cl *Client) connCancel(t *torrent, cn *connection, r request) (ok bool) {
+func (cl *Client) connCancel(t *Torrent, cn *connection, r request) (ok bool) {
 	ok = cn.Cancel(r)
 	if ok {
 		postedCancels.Add(1)
@@ -1160,7 +1156,7 @@ func (cl *Client) connCancel(t *torrent, cn *connection, r request) (ok bool) {
 	return
 }
 
-func (cl *Client) connDeleteRequest(t *torrent, cn *connection, r request) bool {
+func (cl *Client) connDeleteRequest(t *Torrent, cn *connection, r request) bool {
 	if !cn.RequestPending(r) {
 		return false
 	}
@@ -1168,7 +1164,7 @@ func (cl *Client) connDeleteRequest(t *torrent, cn *connection, r request) bool 
 	return true
 }
 
-func (cl *Client) requestPendingMetadata(t *torrent, c *connection) {
+func (cl *Client) requestPendingMetadata(t *Torrent, c *connection) {
 	if t.haveInfo() {
 		return
 	}
@@ -1188,12 +1184,12 @@ func (cl *Client) requestPendingMetadata(t *torrent, c *connection) {
 	}
 }
 
-func (cl *Client) completedMetadata(t *torrent) {
+func (cl *Client) completedMetadata(t *Torrent) {
 	h := sha1.New()
 	h.Write(t.metadataBytes)
 	var ih metainfo.InfoHash
 	missinggo.CopyExact(&ih, h.Sum(nil))
-	if ih != t.InfoHash {
+	if ih != t.infoHash {
 		log.Print("bad metadata")
 		t.invalidateMetadata()
 		return
@@ -1219,7 +1215,7 @@ func (cl *Client) completedMetadata(t *torrent) {
 }
 
 // Process incoming ut_metadata message.
-func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connection) (err error) {
+func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connection) (err error) {
 	var d map[string]int
 	err = bencode.Unmarshal(payload, &d)
 	if err != nil {
@@ -1268,7 +1264,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connect
 	return
 }
 
-func (me *Client) upload(t *torrent, c *connection) {
+func (me *Client) upload(t *Torrent, c *connection) {
 	if me.config.NoUpload {
 		return
 	}
@@ -1305,7 +1301,7 @@ another:
 	c.Choke()
 }
 
-func (me *Client) sendChunk(t *torrent, c *connection, r request) error {
+func (me *Client) sendChunk(t *Torrent, c *connection, r request) error {
 	// Count the chunk being sent, even if it isn't.
 	b := make([]byte, r.Length)
 	p := t.info.Piece(int(r.Index))
@@ -1330,7 +1326,7 @@ func (me *Client) sendChunk(t *torrent, c *connection, r request) error {
 
 // Processes incoming bittorrent messages. The client lock is held upon entry
 // and exit.
-func (me *Client) connectionLoop(t *torrent, c *connection) error {
+func (me *Client) connectionLoop(t *Torrent, c *connection) error {
 	decoder := pp.Decoder{
 		R:         bufio.NewReader(c.rw),
 		MaxLength: 256 * 1024,
@@ -1532,7 +1528,7 @@ func (me *Client) connectionLoop(t *torrent, c *connection) error {
 }
 
 // Returns true if connection is removed from torrent.Conns.
-func (me *Client) deleteConnection(t *torrent, c *connection) bool {
+func (me *Client) deleteConnection(t *Torrent, c *connection) bool {
 	for i0, _c := range t.conns {
 		if _c != c {
 			continue
@@ -1547,7 +1543,7 @@ func (me *Client) deleteConnection(t *torrent, c *connection) bool {
 	return false
 }
 
-func (me *Client) dropConnection(t *torrent, c *connection) {
+func (me *Client) dropConnection(t *Torrent, c *connection) {
 	me.event.Broadcast()
 	c.Close()
 	if me.deleteConnection(t, c) {
@@ -1556,7 +1552,7 @@ func (me *Client) dropConnection(t *torrent, c *connection) {
 }
 
 // Returns true if the connection is added.
-func (me *Client) addConnection(t *torrent, c *connection) bool {
+func (me *Client) addConnection(t *Torrent, c *connection) bool {
 	if me.closed.IsSet() {
 		return false
 	}
@@ -1594,7 +1590,7 @@ func (me *Client) addConnection(t *torrent, c *connection) bool {
 	return true
 }
 
-func (t *torrent) readerPieces() (ret bitmap.Bitmap) {
+func (t *Torrent) readerPieces() (ret bitmap.Bitmap) {
 	t.forReaderOffsetPieces(func(begin, end int) bool {
 		ret.AddRange(begin, end)
 		return true
@@ -1602,7 +1598,7 @@ func (t *torrent) readerPieces() (ret bitmap.Bitmap) {
 	return
 }
 
-func (t *torrent) needData() bool {
+func (t *Torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
@@ -1614,7 +1610,7 @@ func (t *torrent) needData() bool {
 	})
 }
 
-func (cl *Client) usefulConn(t *torrent, c *connection) bool {
+func (cl *Client) usefulConn(t *Torrent, c *connection) bool {
 	if c.closed.IsSet() {
 		return false
 	}
@@ -1627,7 +1623,7 @@ func (cl *Client) usefulConn(t *torrent, c *connection) bool {
 	return t.connHasWantedPieces(c)
 }
 
-func (me *Client) wantConns(t *torrent) bool {
+func (me *Client) wantConns(t *Torrent) bool {
 	if !me.seeding(t) && !t.needData() {
 		return false
 	}
@@ -1637,7 +1633,7 @@ func (me *Client) wantConns(t *torrent) bool {
 	return t.worstBadConn(me) != nil
 }
 
-func (me *Client) openNewConns(t *torrent) {
+func (me *Client) openNewConns(t *Torrent) {
 	select {
 	case <-t.ceasingNetworking:
 		return
@@ -1663,7 +1659,7 @@ func (me *Client) openNewConns(t *torrent) {
 	t.wantPeers.Broadcast()
 }
 
-func (me *Client) addPeers(t *torrent, peers []Peer) {
+func (me *Client) addPeers(t *Torrent, peers []Peer) {
 	for _, p := range peers {
 		if me.dopplegangerAddr(net.JoinHostPort(
 			p.IP.String(),
@@ -1686,8 +1682,8 @@ func (cl *Client) cachedMetaInfoFilename(ih metainfo.InfoHash) string {
 	return filepath.Join(cl.configDir(), "torrents", ih.HexString()+".torrent")
 }
 
-func (cl *Client) saveTorrentFile(t *torrent) error {
-	path := cl.cachedMetaInfoFilename(t.InfoHash)
+func (cl *Client) saveTorrentFile(t *Torrent) error {
+	path := cl.cachedMetaInfoFilename(t.infoHash)
 	os.MkdirAll(filepath.Dir(path), 0777)
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
@@ -1695,23 +1691,23 @@ func (cl *Client) saveTorrentFile(t *torrent) error {
 	}
 	defer f.Close()
 	e := bencode.NewEncoder(f)
-	err = e.Encode(t.MetaInfo())
+	err = e.Encode(t.metainfo())
 	if err != nil {
 		return fmt.Errorf("error marshalling metainfo: %s", err)
 	}
-	mi, err := cl.torrentCacheMetaInfo(t.InfoHash)
+	mi, err := cl.torrentCacheMetaInfo(t.infoHash)
 	if err != nil {
 		// For example, a script kiddy makes us load too many files, and we're
 		// able to save the torrent, but not load it again to check it.
 		return nil
 	}
-	if !bytes.Equal(mi.Info.Hash.Bytes(), t.InfoHash[:]) {
-		log.Fatalf("%x != %x", mi.Info.Hash, t.InfoHash[:])
+	if !bytes.Equal(mi.Info.Hash.Bytes(), t.infoHash[:]) {
+		log.Fatalf("%x != %x", mi.Info.Hash, t.infoHash[:])
 	}
 	return nil
 }
 
-func (cl *Client) setMetaData(t *torrent, md *metainfo.Info, bytes []byte) (err error) {
+func (cl *Client) setMetaData(t *Torrent, md *metainfo.Info, bytes []byte) (err error) {
 	err = t.setMetadata(md, bytes)
 	if err != nil {
 		return
@@ -1729,9 +1725,9 @@ func (cl *Client) setMetaData(t *torrent, md *metainfo.Info, bytes []byte) (err 
 // Prepare a Torrent without any attachment to a Client. That means we can
 // initialize fields all fields that don't require the Client without locking
 // it.
-func newTorrent(ih metainfo.InfoHash) (t *torrent) {
-	t = &torrent{
-		InfoHash:  ih,
+func newTorrent(ih metainfo.InfoHash) (t *Torrent) {
+	t = &Torrent{
+		infoHash:  ih,
 		chunkSize: defaultChunkSize,
 		peers:     make(map[peersKey]Peer),
 
@@ -1783,7 +1779,7 @@ nextURL:
 	return tier
 }
 
-func (t *torrent) addTrackers(announceList [][]string) {
+func (t *Torrent) addTrackers(announceList [][]string) {
 	newTrackers := copyTrackers(t.trackers)
 	for tierIndex, tier := range announceList {
 		if tierIndex < len(newTrackers) {
@@ -1797,7 +1793,7 @@ func (t *torrent) addTrackers(announceList [][]string) {
 }
 
 // Don't call this before the info is available.
-func (t *torrent) bytesCompleted() int64 {
+func (t *Torrent) bytesCompleted() int64 {
 	if !t.haveInfo() {
 		return 0
 	}
@@ -1814,7 +1810,7 @@ type Handle interface {
 
 // Returns handles to the files in the torrent. This requires the metainfo is
 // available first.
-func (t Torrent) Files() (ret []File) {
+func (t *Torrent) Files() (ret []File) {
 	t.cl.mu.Lock()
 	info := t.Info()
 	t.cl.mu.Unlock()
@@ -1835,20 +1831,20 @@ func (t Torrent) Files() (ret []File) {
 	return
 }
 
-func (t Torrent) AddPeers(pp []Peer) error {
+func (t *Torrent) AddPeers(pp []Peer) error {
 	cl := t.cl
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	cl.addPeers(t.torrent, pp)
+	cl.addPeers(t, pp)
 	return nil
 }
 
 // Marks the entire torrent for download. Requires the info first, see
 // GotInfo.
-func (t Torrent) DownloadAll() {
+func (t *Torrent) DownloadAll() {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
-	t.torrent.pendPieceRange(0, t.torrent.numPieces())
+	t.pendPieceRange(0, t.numPieces())
 }
 
 // Returns nil metainfo if it isn't in the cache. Checks that the retrieved
@@ -1926,8 +1922,7 @@ func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
 // trackers will be merged with the existing ones. If the Info isn't yet
 // known, it will be set. The display name is replaced if the new spec
 // provides one. Returns new if the torrent wasn't already in the client.
-func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err error) {
-	T.cl = cl
+func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 
@@ -1979,16 +1974,15 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (T Torrent, new bool, err er
 	t.addTrackers(spec.Trackers)
 
 	cl.torrents[spec.InfoHash] = t
-	T.torrent = t
 
 	// From this point onwards, we can consider the torrent a part of the
 	// client.
 	if new {
 		if !cl.config.DisableTrackers {
-			go cl.announceTorrentTrackers(T.torrent)
+			go cl.announceTorrentTrackers(t)
 		}
 		if cl.dHT != nil {
-			go cl.announceTorrentDHT(T.torrent, true)
+			go cl.announceTorrentDHT(t, true)
 		}
 	}
 	return
@@ -2009,7 +2003,7 @@ func (me *Client) dropTorrent(infoHash metainfo.InfoHash) (err error) {
 }
 
 // Returns true when peers are required, or false if the torrent is closing.
-func (cl *Client) waitWantPeers(t *torrent) bool {
+func (cl *Client) waitWantPeers(t *Torrent) bool {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	for {
@@ -2030,7 +2024,7 @@ func (cl *Client) waitWantPeers(t *torrent) bool {
 }
 
 // Returns whether the client should make effort to seed the torrent.
-func (cl *Client) seeding(t *torrent) bool {
+func (cl *Client) seeding(t *Torrent) bool {
 	if cl.config.NoUpload {
 		return false
 	}
@@ -2043,10 +2037,10 @@ func (cl *Client) seeding(t *torrent) bool {
 	return true
 }
 
-func (cl *Client) announceTorrentDHT(t *torrent, impliedPort bool) {
+func (cl *Client) announceTorrentDHT(t *Torrent, impliedPort bool) {
 	for cl.waitWantPeers(t) {
 		// log.Printf("getting peers for %q from DHT", t)
-		ps, err := cl.dHT.Announce(string(t.InfoHash[:]), cl.incomingPeerPort(), impliedPort)
+		ps, err := cl.dHT.Announce(string(t.infoHash[:]), cl.incomingPeerPort(), impliedPort)
 		if err != nil {
 			log.Printf("error getting peers from dht: %s", err)
 			return
@@ -2113,7 +2107,7 @@ func (cl *Client) trackerBlockedUnlocked(trRawURL string) (blocked bool, err err
 	return
 }
 
-func (cl *Client) announceTorrentSingleTracker(tr string, req *tracker.AnnounceRequest, t *torrent) error {
+func (cl *Client) announceTorrentSingleTracker(tr string, req *tracker.AnnounceRequest, t *Torrent) error {
 	blocked, err := cl.trackerBlockedUnlocked(tr)
 	if err != nil {
 		return fmt.Errorf("error determining if tracker blocked: %s", err)
@@ -2142,7 +2136,7 @@ func (cl *Client) announceTorrentSingleTracker(tr string, req *tracker.AnnounceR
 	return nil
 }
 
-func (cl *Client) announceTorrentTrackersFastStart(req *tracker.AnnounceRequest, trackers []trackerTier, t *torrent) (atLeastOne bool) {
+func (cl *Client) announceTorrentTrackersFastStart(req *tracker.AnnounceRequest, trackers []trackerTier, t *Torrent) (atLeastOne bool) {
 	oks := make(chan bool)
 	outstanding := 0
 	for _, tier := range trackers {
@@ -2165,13 +2159,13 @@ func (cl *Client) announceTorrentTrackersFastStart(req *tracker.AnnounceRequest,
 }
 
 // Announce torrent to its trackers.
-func (cl *Client) announceTorrentTrackers(t *torrent) {
+func (cl *Client) announceTorrentTrackers(t *Torrent) {
 	req := tracker.AnnounceRequest{
 		Event:    tracker.Started,
 		NumWant:  -1,
 		Port:     uint16(cl.incomingPeerPort()),
 		PeerId:   cl.peerID,
-		InfoHash: t.InfoHash,
+		InfoHash: t.infoHash,
 	}
 	if !cl.waitWantPeers(t) {
 		return
@@ -2243,7 +2237,7 @@ func (me *Client) WaitAll() bool {
 }
 
 // Handle a received chunk from a peer.
-func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) {
+func (me *Client) downloadedChunk(t *Torrent, c *connection, msg *pp.Message) {
 	chunksReceived.Add(1)
 
 	req := newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))
@@ -2315,7 +2309,7 @@ func (me *Client) downloadedChunk(t *torrent, c *connection, msg *pp.Message) {
 
 // Return the connections that touched a piece, and clear the entry while
 // doing it.
-func (me *Client) reapPieceTouches(t *torrent, piece int) (ret []*connection) {
+func (me *Client) reapPieceTouches(t *Torrent, piece int) (ret []*connection) {
 	for _, c := range t.conns {
 		if _, ok := c.peerTouchedPieces[piece]; ok {
 			ret = append(ret, c)
@@ -2325,7 +2319,7 @@ func (me *Client) reapPieceTouches(t *torrent, piece int) (ret []*connection) {
 	return
 }
 
-func (me *Client) pieceHashed(t *torrent, piece int, correct bool) {
+func (me *Client) pieceHashed(t *Torrent, piece int, correct bool) {
 	p := &t.pieces[piece]
 	if p.EverHashed {
 		// Don't score the first time a piece is hashed, it could be an
@@ -2354,7 +2348,7 @@ func (me *Client) pieceHashed(t *torrent, piece int, correct bool) {
 	me.pieceChanged(t, int(piece))
 }
 
-func (me *Client) onCompletedPiece(t *torrent, piece int) {
+func (me *Client) onCompletedPiece(t *Torrent, piece int) {
 	t.pendingPieces.Remove(piece)
 	t.pendAllChunkSpecs(piece)
 	for _, conn := range t.conns {
@@ -2370,7 +2364,7 @@ func (me *Client) onCompletedPiece(t *torrent, piece int) {
 	}
 }
 
-func (me *Client) onFailedPiece(t *torrent, piece int) {
+func (me *Client) onFailedPiece(t *Torrent, piece int) {
 	if t.pieceAllDirty(piece) {
 		t.pendAllChunkSpecs(piece)
 	}
@@ -2385,7 +2379,7 @@ func (me *Client) onFailedPiece(t *torrent, piece int) {
 	}
 }
 
-func (me *Client) pieceChanged(t *torrent, piece int) {
+func (me *Client) pieceChanged(t *Torrent, piece int) {
 	correct := t.pieceComplete(piece)
 	defer me.event.Broadcast()
 	if correct {
@@ -2399,7 +2393,7 @@ func (me *Client) pieceChanged(t *torrent, piece int) {
 	t.publishPieceChange(piece)
 }
 
-func (cl *Client) verifyPiece(t *torrent, piece int) {
+func (cl *Client) verifyPiece(t *Torrent, piece int) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	p := &t.pieces[piece]
@@ -2427,16 +2421,16 @@ func (cl *Client) verifyPiece(t *torrent, piece int) {
 }
 
 // Returns handles to all the torrents loaded in the Client.
-func (me *Client) Torrents() (ret []Torrent) {
+func (me *Client) Torrents() (ret []*Torrent) {
 	me.mu.Lock()
 	for _, t := range me.torrents {
-		ret = append(ret, Torrent{me, t})
+		ret = append(ret, t)
 	}
 	me.mu.Unlock()
 	return
 }
 
-func (me *Client) AddMagnet(uri string) (T Torrent, err error) {
+func (me *Client) AddMagnet(uri string) (T *Torrent, err error) {
 	spec, err := TorrentSpecFromMagnetURI(uri)
 	if err != nil {
 		return
@@ -2445,7 +2439,7 @@ func (me *Client) AddMagnet(uri string) (T Torrent, err error) {
 	return
 }
 
-func (me *Client) AddTorrent(mi *metainfo.MetaInfo) (T Torrent, err error) {
+func (me *Client) AddTorrent(mi *metainfo.MetaInfo) (T *Torrent, err error) {
 	T, _, err = me.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	var ss []string
 	missinggo.CastSlice(&ss, mi.Nodes)
@@ -2453,7 +2447,7 @@ func (me *Client) AddTorrent(mi *metainfo.MetaInfo) (T Torrent, err error) {
 	return
 }
 
-func (me *Client) AddTorrentFromFile(filename string) (T Torrent, err error) {
+func (me *Client) AddTorrentFromFile(filename string) (T *Torrent, err error) {
 	mi, err := metainfo.LoadFromFile(filename)
 	if err != nil {
 		return

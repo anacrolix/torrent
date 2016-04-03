@@ -35,7 +35,7 @@ const (
 
 // Maintains the state of a connection with a peer.
 type connection struct {
-	t         *torrent
+	t         *Torrent
 	conn      net.Conn
 	rw        io.ReadWriter // The real slim shady
 	encrypted bool
@@ -188,7 +188,7 @@ func (cn *connection) String() string {
 	return buf.String()
 }
 
-func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
+func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
 	// \t isn't preserved in <pre> blocks?
 	fmt.Fprintf(w, "%+q: %s-%s\n", cn.PeerID, cn.localAddr(), cn.remoteAddr())
 	fmt.Fprintf(w, "    last msg: %s, connected: %s, last useful chunk: %s\n",

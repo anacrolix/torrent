@@ -455,8 +455,8 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 	if new {
 		t.FailNow()
 	}
-	assert.EqualValues(t, T.torrent.trackers[0][0], "http://a")
-	assert.EqualValues(t, T.torrent.trackers[1][0], "udp://b")
+	assert.EqualValues(t, T.trackers[0][0], "http://a")
+	assert.EqualValues(t, T.trackers[1][0], "udp://b")
 }
 
 type badStorage struct{}
@@ -787,7 +787,7 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	assert.EqualValues(t, cl.DHT().NumNodes(), 0)
 	tt, err := cl.AddTorrentFromFile("metainfo/testdata/issue_65a.torrent")
 	require.NoError(t, err)
-	assert.Len(t, tt.torrent.trackers, 5)
+	assert.Len(t, tt.trackers, 5)
 	assert.EqualValues(t, 6, cl.DHT().NumNodes())
 }
 
@@ -897,7 +897,7 @@ func TestPeerInvalidHave(t *testing.T) {
 	assert.True(t, _new)
 	defer tt.Drop()
 	cn := &connection{
-		t: tt.torrent,
+		t: tt,
 	}
 	assert.NoError(t, cn.peerSentHave(0))
 	assert.Error(t, cn.peerSentHave(1))

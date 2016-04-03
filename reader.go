@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"sync"
+
+	"github.com/anacrolix/missinggo"
 )
 
 // Accesses torrent data via a client.
@@ -148,11 +150,10 @@ func (r *Reader) readOnceAt(b []byte, pos int64) (n int, err error) {
 		pi := int(pos / r.t.Info().PieceLength)
 		ip := r.t.Info().Piece(pi)
 		po := pos % ip.Length()
-		if int64(len(b1)) > ip.Length()-po {
-			b1 = b1[:ip.Length()-po]
-		}
+		missinggo.LimitLen(&b1, ip.Length()-po)
 		n, err = r.t.torrent.readAt(b1, pos)
 		if n != 0 {
+			err = nil
 			return
 		}
 		// log.Printf("%s: error reading from torrent storage pos=%d: %s", r.t, pos, err)

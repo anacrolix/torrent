@@ -43,10 +43,6 @@ func metadataPieceSize(totalSize int, piece int) int {
 	return ret
 }
 
-type superer interface {
-	Super() interface{}
-}
-
 // Return the request that would include the given offset into the torrent data.
 func torrentOffsetRequest(torrentLength, pieceSize, chunkSize, offset int64) (
 	r request, ok bool) {

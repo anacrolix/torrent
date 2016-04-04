@@ -4,6 +4,8 @@ import (
 	"encoding/hex"
 	"reflect"
 	"testing"
+
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 var (
@@ -65,4 +67,50 @@ func TestParseMagnetURI(t *testing.T) {
 		t.Errorf("Failed to detect broken Magnet URI: %v", uri)
 	}
 
+}
+
+func Test_Magnetize(t *testing.T) {
+	mi, err := metainfo.LoadFromFile("testdata/bootstrap.dat.torrent")
+	if err != nil {
+		t.Errorf("Failed to load testdata torrent: %v", err)
+	}
+
+	magnet := Magnetize(mi)
+
+	if magnet.DisplayName != "bootstrap.dat" {
+		t.Errorf("Magnet Dispalyname is incorrect: %s", magnet.DisplayName)
+	}
+
+	ih := [20]byte{
+		54, 113, 155, 162, 206, 207, 159, 59, 215, 197,
+		171, 251, 122, 136, 233, 57, 97, 27, 83, 108,
+	}
+
+	if magnet.InfoHash != ih {
+		t.Errorf("Magnet infohash is incorrect")
+	}
+
+	trackers := []string{
+		"udp://tracker.openbittorrent.com:80",
+		"udp://tracker.openbittorrent.com:80",
+		"udp://tracker.publicbt.com:80",
+		"udp://coppersurfer.tk:6969/announce",
+		"udp://open.demonii.com:1337",
+		"http://bttracker.crunchbanglinux.org:6969/announce",
+	}
+
+	for _, expected := range trackers {
+		if !contains(magnet.Trackers, expected) {
+			t.Errorf("Magnet does not contain expected tracker: %s", expected)
+		}
+	}
+}
+
+func contains(haystack []string, needle string) bool {
+	for _, s := range haystack {
+		if s == needle {
+			return true
+		}
+	}
+	return false
 }

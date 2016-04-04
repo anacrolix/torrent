@@ -517,10 +517,6 @@ func (t *Torrent) piecePartiallyDownloaded(piece int) bool {
 	return t.pieces[piece].hasDirtyChunks()
 }
 
-func numChunksForPiece(chunkSize int, pieceSize int) int {
-	return (pieceSize + chunkSize - 1) / chunkSize
-}
-
 func (t *Torrent) usualPieceSize() int {
 	return int(t.info.PieceLength)
 }

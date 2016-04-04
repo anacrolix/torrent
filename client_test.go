@@ -423,23 +423,6 @@ func TestSeedAfterDownloading(t *testing.T) {
 	wg.Wait()
 }
 
-func TestReadaheadPieces(t *testing.T) {
-	for _, case_ := range []struct {
-		readaheadBytes, pieceLength int64
-		readaheadPieces             int
-	}{
-		{5 * 1024 * 1024, 256 * 1024, 19},
-		{5 * 1024 * 1024, 5 * 1024 * 1024, 1},
-		{5*1024*1024 - 1, 5 * 1024 * 1024, 1},
-		{5 * 1024 * 1024, 5*1024*1024 - 1, 2},
-		{0, 5 * 1024 * 1024, 0},
-		{5 * 1024 * 1024, 1048576, 4},
-	} {
-		pieces := readaheadPieces(case_.readaheadBytes, case_.pieceLength)
-		assert.Equal(t, case_.readaheadPieces, pieces, "%v", case_)
-	}
-}
-
 func TestMergingTrackersByAddingSpecs(t *testing.T) {
 	cl, err := NewClient(&TestingConfig)
 	require.NoError(t, err)

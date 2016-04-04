@@ -99,8 +99,7 @@ const (
 	// Limit how long handshake can take. This is to reduce the lingering
 	// impact of a few bad apples. 4s loses 1% of successful handshakes that
 	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
-	btHandshakeTimeout = 4 * time.Second
-	handshakesTimeout  = 20 * time.Second
+	handshakesTimeout = 20 * time.Second
 
 	// These are our extended message IDs.
 	metadataExtendedId = iota + 1 // 0 is reserved for deleting keys
@@ -254,20 +253,6 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		t.writeStatus(w, cl)
 		fmt.Fprintln(w)
 	}
-}
-
-// Calculates the number of pieces to set to Readahead priority, after the
-// Now, and Next pieces.
-func readaheadPieces(readahead, pieceLength int64) (ret int) {
-	// Expand the readahead to fit any partial pieces. Subtract 1 for the
-	// "next" piece that is assigned.
-	ret = int((readahead+pieceLength-1)/pieceLength - 1)
-	// Lengthen the "readahead tail" to smooth blockiness that occurs when the
-	// piece length is much larger than the readahead.
-	if ret < 2 {
-		ret++
-	}
-	return
 }
 
 func (cl *Client) configDir() string {

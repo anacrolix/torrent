@@ -21,12 +21,6 @@ const (
 	minDialTimeout     = 5 * time.Second
 )
 
-func lastChunkSpec(pieceLength, chunkSize pp.Integer) (cs chunkSpec) {
-	cs.Begin = (pieceLength - 1) / chunkSize * chunkSize
-	cs.Length = pieceLength - cs.Begin
-	return
-}
-
 type chunkSpec struct {
 	Begin, Length pp.Integer
 }
@@ -40,11 +34,6 @@ func newRequest(index, begin, length pp.Integer) request {
 	return request{index, chunkSpec{begin, length}}
 }
 
-var (
-	// Requested data not yet available.
-	errDataNotReady = errors.New("data not ready")
-)
-
 // The size in bytes of a metadata extension piece.
 func metadataPieceSize(totalSize int, piece int) int {
 	ret := totalSize - piece*(1<<14)
@@ -56,17 +45,6 @@ func metadataPieceSize(totalSize int, piece int) int {
 
 type superer interface {
 	Super() interface{}
-}
-
-// Returns ok if there's a parent, and it's not nil.
-func super(child interface{}) (parent interface{}, ok bool) {
-	s, ok := child.(superer)
-	if !ok {
-		return
-	}
-	parent = s.Super()
-	ok = parent != nil
-	return
 }
 
 // Return the request that would include the given offset into the torrent data.

@@ -459,7 +459,7 @@ func (t *Torrent) writeStatus(w io.Writer, cl *Client) {
 }
 
 func (t *Torrent) String() string {
-	s := t.Name()
+	s := t.name()
 	if s == "" {
 		s = fmt.Sprintf("%x", t.infoHash)
 	}

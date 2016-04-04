@@ -161,6 +161,7 @@ func TestAnnounceTimeout(t *testing.T) {
 	})
 	require.NoError(t, err)
 	a, err := s.Announce("12341234123412341234", 0, true)
+	assert.NoError(t, err)
 	<-a.Peers
 	a.Close()
 	s.Close()

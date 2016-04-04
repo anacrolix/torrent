@@ -1366,7 +1366,7 @@ func (me *Client) connectionLoop(t *Torrent, c *connection) error {
 					break
 				}
 				var pexMsg peerExchangeMessage
-				err := bencode.Unmarshal(msg.ExtendedPayload, &pexMsg)
+				err = bencode.Unmarshal(msg.ExtendedPayload, &pexMsg)
 				if err != nil {
 					err = fmt.Errorf("error unmarshalling PEX message: %s", err)
 					break
@@ -1412,7 +1412,7 @@ func (me *Client) connectionLoop(t *Torrent, c *connection) error {
 			if msg.Port != 0 {
 				pingAddr.Port = int(msg.Port)
 			}
-			_, err = me.dHT.Ping(pingAddr)
+			me.dHT.Ping(pingAddr)
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}

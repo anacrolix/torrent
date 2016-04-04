@@ -173,7 +173,6 @@ func TestDownloadOnDemand(t *testing.T) {
 		// the torrent to the seeder by magnet.
 		DisableMetainfoCache: true,
 	})
-	seeder.SetIPBlockList(nil)
 	require.NoError(t, err)
 	defer seeder.Close()
 	testutil.ExportStatusWriter(seeder, "s")
@@ -189,7 +188,7 @@ func TestDownloadOnDemand(t *testing.T) {
 		// with the same ID.
 		// PeerID: seeder.PeerID(),
 	})
-	leecher.SetIPBlockList(nil)
+	require.NoError(t, err)
 	testutil.ExportStatusWriter(leecher, "l")
 	defer leecher.Close()
 	leecherTorrent, _ := leecher.AddTorrent(layout.Metainfo)

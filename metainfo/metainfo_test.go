@@ -1,7 +1,6 @@
 package metainfo
 
 import (
-	"bytes"
 	"io"
 	"io/ioutil"
 	"path"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/bencode"
 )
@@ -38,10 +38,8 @@ func testFile(t *testing.T, filename string) {
 	// }
 
 	b, err := bencode.Marshal(mi.Info)
-	if !bytes.Equal(b, mi.Info.Bytes) {
-		t.Logf("\n%q\n%q", b[len(b)-20:], mi.Info.Bytes[len(mi.Info.Bytes)-20:])
-		t.Fatal("encoded and decoded bytes don't match")
-	}
+	require.NoError(t, err)
+	assert.EqualValues(t, b, mi.Info.Bytes)
 }
 
 func TestFile(t *testing.T) {

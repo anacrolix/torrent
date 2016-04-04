@@ -87,7 +87,7 @@ func TestPieceHashSize(t *testing.T) {
 func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	tor := newTorrent(func() (ih metainfo.InfoHash) {
+	tor := newTorrent(func() (ih metainfo.Hash) {
 		missinggo.CopyExact(ih[:], mi.Info.Hash)
 		return
 	}())

@@ -33,7 +33,7 @@ func (me *mmapStorage) OpenTorrent(info *metainfo.InfoEx) (t Torrent, err error)
 
 type mmapTorrentStorage struct {
 	span      mmap_span.MMapSpan
-	completed map[metainfo.InfoHash]bool
+	completed map[metainfo.Hash]bool
 }
 
 func (me *mmapTorrentStorage) Piece(p metainfo.Piece) Piece {
@@ -63,7 +63,7 @@ func (me mmapStoragePiece) GetIsComplete() bool {
 
 func (me mmapStoragePiece) MarkComplete() error {
 	if me.storage.completed == nil {
-		me.storage.completed = make(map[metainfo.InfoHash]bool)
+		me.storage.completed = make(map[metainfo.Hash]bool)
 	}
 	me.storage.completed[me.p.Hash()] = true
 	return nil

@@ -143,7 +143,7 @@ type Client struct {
 	utpSock        *utp.Socket
 	dHT            *dht.Server
 	ipBlockList    iplist.Ranger
-	bannedTorrents map[metainfo.InfoHash]struct{}
+	bannedTorrents map[metainfo.Hash]struct{}
 	config         Config
 	pruneTimer     *time.Timer
 	extensionBytes peerExtensionBytes
@@ -158,7 +158,7 @@ type Client struct {
 	event  sync.Cond
 	closed missinggo.Event
 
-	torrents map[metainfo.InfoHash]*Torrent
+	torrents map[metainfo.Hash]*Torrent
 }
 
 func (me *Client) IPBlockList() iplist.Ranger {
@@ -189,7 +189,7 @@ func (me *Client) ListenAddr() (addr net.Addr) {
 }
 
 type hashSorter struct {
-	Hashes []metainfo.InfoHash
+	Hashes []metainfo.Hash
 }
 
 func (me hashSorter) Len() int {
@@ -337,7 +337,7 @@ func (cl *Client) initBannedTorrents() error {
 	}
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
-	cl.bannedTorrents = make(map[metainfo.InfoHash]struct{})
+	cl.bannedTorrents = make(map[metainfo.Hash]struct{})
 	for scanner.Scan() {
 		if strings.HasPrefix(strings.TrimSpace(scanner.Text()), "#") {
 			continue
@@ -353,7 +353,7 @@ func (cl *Client) initBannedTorrents() error {
 		if len(ihs) != 20 {
 			return errors.New("bad infohash")
 		}
-		var ih metainfo.InfoHash
+		var ih metainfo.Hash
 		missinggo.CopyExact(&ih, ihs)
 		cl.bannedTorrents[ih] = struct{}{}
 	}
@@ -379,7 +379,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		config:            *cfg,
 		defaultStorage:    cfg.DefaultStorage,
 		dopplegangerAddrs: make(map[string]struct{}),
-		torrents:          make(map[metainfo.InfoHash]*Torrent),
+		torrents:          make(map[metainfo.Hash]*Torrent),
 	}
 	missinggo.CopyExact(&cl.extensionBytes, defaultExtensionBytes)
 	cl.event.L = &cl.mu
@@ -576,14 +576,14 @@ func (cl *Client) incomingConnection(nc net.Conn, utp bool) {
 }
 
 // Returns a handle to the given torrent, if it's present in the client.
-func (cl *Client) Torrent(ih metainfo.InfoHash) (t *Torrent, ok bool) {
+func (cl *Client) Torrent(ih metainfo.Hash) (t *Torrent, ok bool) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	t, ok = cl.torrents[ih]
 	return
 }
 
-func (me *Client) torrent(ih metainfo.InfoHash) *Torrent {
+func (me *Client) torrent(ih metainfo.Hash) *Torrent {
 	return me.torrents[ih]
 }
 
@@ -849,14 +849,14 @@ func (me *peerExtensionBytes) SupportsFast() bool {
 type handshakeResult struct {
 	peerExtensionBytes
 	peerID
-	metainfo.InfoHash
+	metainfo.Hash
 }
 
 // ih is nil if we expect the peer to declare the InfoHash, such as when the
 // peer initiated the connection. Returns ok if the handshake was successful,
 // and err if there was an unexpected condition other than the peer simply
 // abandoning the handshake.
-func handshake(sock io.ReadWriter, ih *metainfo.InfoHash, peerID [20]byte, extensions peerExtensionBytes) (res handshakeResult, ok bool, err error) {
+func handshake(sock io.ReadWriter, ih *metainfo.Hash, peerID [20]byte, extensions peerExtensionBytes) (res handshakeResult, ok bool, err error) {
 	// Bytes to be sent to the peer. Should never block the sender.
 	postCh := make(chan []byte, 4)
 	// A single error value sent when the writer completes.
@@ -903,7 +903,7 @@ func handshake(sock io.ReadWriter, ih *metainfo.InfoHash, peerID [20]byte, exten
 		return
 	}
 	missinggo.CopyExact(&res.peerExtensionBytes, b[20:28])
-	missinggo.CopyExact(&res.InfoHash, b[28:48])
+	missinggo.CopyExact(&res.Hash, b[28:48])
 	missinggo.CopyExact(&res.peerID, b[48:68])
 	peerExtensions.Add(hex.EncodeToString(res.peerExtensionBytes[:]), 1)
 
@@ -911,7 +911,7 @@ func handshake(sock io.ReadWriter, ih *metainfo.InfoHash, peerID [20]byte, exten
 	// could prevent them trying to reconnect, falsely believing there was
 	// just a problem.
 	if ih == nil { // We were waiting for the peer to tell us what they wanted.
-		post(res.InfoHash[:])
+		post(res.Hash[:])
 		post(peerID[:])
 	}
 
@@ -1020,12 +1020,12 @@ func (cl *Client) receiveHandshakes(c *connection) (t *Torrent, err error) {
 }
 
 // Returns !ok if handshake failed for valid reasons.
-func (cl *Client) connBTHandshake(c *connection, ih *metainfo.InfoHash) (ret metainfo.InfoHash, ok bool, err error) {
+func (cl *Client) connBTHandshake(c *connection, ih *metainfo.Hash) (ret metainfo.Hash, ok bool, err error) {
 	res, ok, err := handshake(c.rw, ih, cl.peerID, cl.extensionBytes)
 	if err != nil || !ok {
 		return
 	}
-	ret = res.InfoHash
+	ret = res.Hash
 	c.PeerExtensionBytes = res.peerExtensionBytes
 	c.PeerID = res.peerID
 	c.completedHandshake = time.Now()
@@ -1187,7 +1187,7 @@ func (cl *Client) requestPendingMetadata(t *Torrent, c *connection) {
 func (cl *Client) completedMetadata(t *Torrent) {
 	h := sha1.New()
 	h.Write(t.metadataBytes)
-	var ih metainfo.InfoHash
+	var ih metainfo.Hash
 	missinggo.CopyExact(&ih, h.Sum(nil))
 	if ih != t.infoHash {
 		log.Print("bad metadata")
@@ -1678,7 +1678,7 @@ func (me *Client) addPeers(t *Torrent, peers []Peer) {
 	}
 }
 
-func (cl *Client) cachedMetaInfoFilename(ih metainfo.InfoHash) string {
+func (cl *Client) cachedMetaInfoFilename(ih metainfo.Hash) string {
 	return filepath.Join(cl.configDir(), "torrents", ih.HexString()+".torrent")
 }
 
@@ -1725,7 +1725,7 @@ func (cl *Client) setMetaData(t *Torrent, md *metainfo.Info, bytes []byte) (err 
 // Prepare a Torrent without any attachment to a Client. That means we can
 // initialize fields all fields that don't require the Client without locking
 // it.
-func newTorrent(ih metainfo.InfoHash) (t *Torrent) {
+func newTorrent(ih metainfo.Hash) (t *Torrent) {
 	t = &Torrent{
 		infoHash:  ih,
 		chunkSize: defaultChunkSize,
@@ -1849,7 +1849,7 @@ func (t *Torrent) DownloadAll() {
 
 // Returns nil metainfo if it isn't in the cache. Checks that the retrieved
 // metainfo has the correct infohash.
-func (cl *Client) torrentCacheMetaInfo(ih metainfo.InfoHash) (mi *metainfo.MetaInfo, err error) {
+func (cl *Client) torrentCacheMetaInfo(ih metainfo.Hash) (mi *metainfo.MetaInfo, err error) {
 	if cl.config.DisableMetainfoCache {
 		return
 	}
@@ -1878,7 +1878,7 @@ func (cl *Client) torrentCacheMetaInfo(ih metainfo.InfoHash) (mi *metainfo.MetaI
 type TorrentSpec struct {
 	// The tiered tracker URIs.
 	Trackers [][]string
-	InfoHash metainfo.InfoHash
+	InfoHash metainfo.Hash
 	Info     *metainfo.InfoEx
 	// The name to use if the Name field from the Info isn't available.
 	DisplayName string
@@ -1989,7 +1989,7 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 	return
 }
 
-func (me *Client) dropTorrent(infoHash metainfo.InfoHash) (err error) {
+func (me *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
 	t, ok := me.torrents[infoHash]
 	if !ok {
 		err = fmt.Errorf("no such torrent")

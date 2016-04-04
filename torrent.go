@@ -45,7 +45,7 @@ type Torrent struct {
 	// announcing, and communicating with peers.
 	ceasingNetworking chan struct{}
 
-	infoHash metainfo.InfoHash
+	infoHash metainfo.Hash
 	pieces   []piece
 	// Values are the piece indices that changed.
 	pieceStateChanges *pubsub.PubSub
@@ -656,7 +656,7 @@ func (t *Torrent) pieceLength(piece int) (len_ pp.Integer) {
 	return
 }
 
-func (t *Torrent) hashPiece(piece int) (ret pieceSum) {
+func (t *Torrent) hashPiece(piece int) (ret metainfo.Hash) {
 	hash := pieceHash.New()
 	p := &t.pieces[piece]
 	p.waitNoPendingWrites()

@@ -21,10 +21,6 @@ const (
 	minDialTimeout     = 5 * time.Second
 )
 
-type (
-	pieceSum [20]byte
-)
-
 func lastChunkSpec(pieceLength, chunkSize pp.Integer) (cs chunkSpec) {
 	cs.Begin = (pieceLength - 1) / chunkSize * chunkSize
 	cs.Length = pieceLength - cs.Begin

@@ -28,7 +28,6 @@ import (
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
-	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/dht"
@@ -284,85 +283,6 @@ func (cl *Client) ConfigDir() string {
 	return cl.configDir()
 }
 
-func loadPackedBlocklist(filename string) (ret iplist.Ranger, err error) {
-	f, err := os.Open(filename)
-	if os.IsNotExist(err) {
-		err = nil
-		return
-	}
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	mm, err := mmap.Map(f, mmap.RDONLY, 0)
-	if err != nil {
-		return
-	}
-	ret = iplist.NewFromPacked(mm)
-	return
-}
-
-func (cl *Client) setEnvBlocklist() (err error) {
-	filename := os.Getenv("TORRENT_BLOCKLIST_FILE")
-	defaultBlocklist := filename == ""
-	if defaultBlocklist {
-		cl.ipBlockList, err = loadPackedBlocklist(filepath.Join(cl.configDir(), "packed-blocklist"))
-		if err != nil {
-			return
-		}
-		if cl.ipBlockList != nil {
-			return
-		}
-		filename = filepath.Join(cl.configDir(), "blocklist")
-	}
-	f, err := os.Open(filename)
-	if err != nil {
-		if defaultBlocklist {
-			err = nil
-		}
-		return
-	}
-	defer f.Close()
-	cl.ipBlockList, err = iplist.NewFromReader(f)
-	return
-}
-
-func (cl *Client) initBannedTorrents() error {
-	f, err := os.Open(filepath.Join(cl.configDir(), "banned_infohashes"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("error opening banned infohashes file: %s", err)
-	}
-	defer f.Close()
-	scanner := bufio.NewScanner(f)
-	cl.bannedTorrents = make(map[metainfo.Hash]struct{})
-	for scanner.Scan() {
-		if strings.HasPrefix(strings.TrimSpace(scanner.Text()), "#") {
-			continue
-		}
-		var ihs string
-		n, err := fmt.Sscanf(scanner.Text(), "%x", &ihs)
-		if err != nil {
-			return fmt.Errorf("error reading infohash: %s", err)
-		}
-		if n != 1 {
-			continue
-		}
-		if len(ihs) != 20 {
-			return errors.New("bad infohash")
-		}
-		var ih metainfo.Hash
-		missinggo.CopyExact(&ih, ihs)
-		cl.bannedTorrents[ih] = struct{}{}
-	}
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error scanning file: %s", err)
-	}
-	return nil
-}
-
 // Creates a new client.
 func NewClient(cfg *Config) (cl *Client, err error) {
 	if cfg == nil {
@@ -388,16 +308,6 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	}
 	if cfg.IPBlocklist != nil {
 		cl.ipBlockList = cfg.IPBlocklist
-	} else if !cfg.NoDefaultBlocklist {
-		err = cl.setEnvBlocklist()
-		if err != nil {
-			return
-		}
-	}
-
-	if err = cl.initBannedTorrents(); err != nil {
-		err = fmt.Errorf("error initing banned torrents: %s", err)
-		return
 	}
 
 	if cfg.PeerID != "" {

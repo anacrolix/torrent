@@ -35,7 +35,6 @@ func issue35TestingConfig() *Config {
 		ListenAddr:           "localhost:0",
 		NoDHT:                false,
 		DisableTrackers:      true,
-		NoDefaultBlocklist:   true,
 		DisableUTP:           false,
 		DisableMetainfoCache: true,
 		DisableIPv6:          true,

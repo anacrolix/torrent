@@ -98,8 +98,6 @@ func TestUnmountWedged(t *testing.T) {
 		ListenAddr:      "redonk",
 		DisableTCP:      true,
 		DisableUTP:      true,
-
-		NoDefaultBlocklist: true,
 	})
 	require.NoError(t, err)
 	defer client.Close()
@@ -171,8 +169,6 @@ func TestDownloadOnDemand(t *testing.T) {
 		NoDHT:           true,
 		ListenAddr:      "localhost:0",
 		Seed:            true,
-
-		NoDefaultBlocklist: true,
 		// Ensure that the metainfo is obtained over the wire, since we added
 		// the torrent to the seeder by magnet.
 		DisableMetainfoCache: true,
@@ -188,14 +184,9 @@ func TestDownloadOnDemand(t *testing.T) {
 		NoDHT:           true,
 		ListenAddr:      "localhost:0",
 		DisableTCP:      true,
-
-		NoDefaultBlocklist: true,
-
-		DefaultStorage: storage.NewMMap(filepath.Join(layout.BaseDir, "download")),
-
+		DefaultStorage:  storage.NewMMap(filepath.Join(layout.BaseDir, "download")),
 		// This can be used to check if clients can connect to other clients
 		// with the same ID.
-
 		// PeerID: seeder.PeerID(),
 	})
 	leecher.SetIPBlockList(nil)

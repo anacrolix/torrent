@@ -40,7 +40,6 @@ var TestingConfig = Config{
 	ListenAddr:           "localhost:0",
 	NoDHT:                true,
 	DisableTrackers:      true,
-	NoDefaultBlocklist:   true,
 	DisableMetainfoCache: true,
 	DataDir:              "/dev/null",
 	DHTConfig: dht.ServerConfig{

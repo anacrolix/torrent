@@ -118,8 +118,8 @@ func (cl *Client) queuePieceCheck(t *Torrent, pieceIndex int) {
 		return
 	}
 	piece.QueuedForHash = true
-	t.publishPieceChange(int(pieceIndex))
-	go cl.verifyPiece(t, int(pieceIndex))
+	t.publishPieceChange(pieceIndex)
+	go cl.verifyPiece(t, pieceIndex)
 }
 
 // Queue a piece check if one isn't already queued, and the piece has never
@@ -1377,7 +1377,7 @@ func (me *Client) connectionLoop(t *Torrent, c *connection) error {
 						for i, cp := range pexMsg.Added {
 							p := Peer{
 								IP:     make([]byte, 4),
-								Port:   int(cp.Port),
+								Port:   cp.Port,
 								Source: peerSourcePEX,
 							}
 							if i < len(pexMsg.AddedFlags) && pexMsg.AddedFlags[i]&0x01 != 0 {
@@ -1958,12 +1958,12 @@ func (cl *Client) announceTorrentDHT(t *Torrent, impliedPort bool) {
 					}
 					addPeers = append(addPeers, Peer{
 						IP:     cp.IP[:],
-						Port:   int(cp.Port),
+						Port:   cp.Port,
 						Source: peerSourceDHT,
 					})
 					key := (&net.UDPAddr{
 						IP:   cp.IP[:],
-						Port: int(cp.Port),
+						Port: cp.Port,
 					}).String()
 					allAddrs[key] = struct{}{}
 				}
@@ -2228,7 +2228,7 @@ func (me *Client) pieceHashed(t *Torrent, piece int, correct bool) {
 		}
 	}
 	p.EverHashed = true
-	touchers := me.reapPieceTouches(t, int(piece))
+	touchers := me.reapPieceTouches(t, piece)
 	if correct {
 		err := p.Storage().MarkComplete()
 		if err != nil {
@@ -2241,7 +2241,7 @@ func (me *Client) pieceHashed(t *Torrent, piece int, correct bool) {
 			me.dropConnection(t, c)
 		}
 	}
-	me.pieceChanged(t, int(piece))
+	me.pieceChanged(t, piece)
 }
 
 func (me *Client) onCompletedPiece(t *Torrent, piece int) {

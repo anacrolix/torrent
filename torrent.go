@@ -351,7 +351,7 @@ func (t *Torrent) newMetadataExtensionMessage(c *connection, msgType int, piece 
 	}
 	return pp.Message{
 		Type:            pp.Extended,
-		ExtendedID:      byte(c.PeerExtensionIDs["ut_metadata"]),
+		ExtendedID:      c.PeerExtensionIDs["ut_metadata"],
 		ExtendedPayload: append(p, data...),
 	}
 }
@@ -643,7 +643,7 @@ func (t *Torrent) pieceLength(piece int) (len_ pp.Integer) {
 	if piece < 0 || piece >= t.info.NumPieces() {
 		return
 	}
-	if int(piece) == t.numPieces()-1 {
+	if piece == t.numPieces()-1 {
 		len_ = pp.Integer(t.length % t.info.PieceLength)
 	}
 	if len_ == 0 {

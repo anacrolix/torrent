@@ -156,27 +156,6 @@ func (me *Info) NumPieces() int {
 	return len(me.Pieces) / 20
 }
 
-type Piece struct {
-	Info *InfoEx
-	i    int
-}
-
-func (me Piece) Length() int64 {
-	if me.i == me.Info.NumPieces()-1 {
-		return me.Info.TotalLength() - int64(me.i)*me.Info.PieceLength
-	}
-	return me.Info.PieceLength
-}
-
-func (me Piece) Offset() int64 {
-	return int64(me.i) * me.Info.PieceLength
-}
-
-func (me Piece) Hash() (ret Hash) {
-	missinggo.CopyExact(&ret, me.Info.Pieces[me.i*20:(me.i+1)*20])
-	return
-}
-
 func (me *InfoEx) Piece(i int) Piece {
 	return Piece{me, i}
 }
@@ -257,17 +236,14 @@ func (mi *MetaInfo) SetDefaults() {
 	mi.Info.PieceLength = 256 * 1024
 }
 
-// 20-byte SHA1 hash used for info and pieces.
-type Hash [20]byte
-
-func (me Hash) Bytes() []byte {
-	return me[:]
-}
-
-func (ih *Hash) AsString() string {
-	return string(ih[:])
-}
-
-func (ih Hash) HexString() string {
-	return fmt.Sprintf("%x", ih[:])
+// Magnetize creates a Magnet from a MetaInfo
+func (mi *MetaInfo) Magnet() (m Magnet) {
+	for _, tier := range mi.AnnounceList {
+		for _, tracker := range tier {
+			m.Trackers = append(m.Trackers, tracker)
+		}
+	}
+	m.DisplayName = mi.Info.Name
+	m.InfoHash = *mi.Info.Hash
+	return
 }

@@ -1889,7 +1889,7 @@ type TorrentSpec struct {
 }
 
 func TorrentSpecFromMagnetURI(uri string) (spec *TorrentSpec, err error) {
-	m, err := ParseMagnetURI(uri)
+	m, err := metainfo.ParseMagnetURI(uri)
 	if err != nil {
 		return
 	}

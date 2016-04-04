@@ -1,4 +1,4 @@
-package torrent
+package metainfo
 
 import (
 	"encoding/base32"
@@ -6,20 +6,18 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-
-	"github.com/anacrolix/torrent/metainfo"
 )
 
-// Magnet
+// Magnet link components.
 type Magnet struct {
-	InfoHash    [20]byte
+	InfoHash    Hash
 	Trackers    []string
 	DisplayName string
 }
 
 const xtPrefix = "urn:btih:"
 
-func (m *Magnet) String() string {
+func (m Magnet) String() string {
 	// net.URL likes to assume //, and encodes ':' on us, so we do most of
 	// this manually.
 	ret := "magnet:?xt="
@@ -31,22 +29,6 @@ func (m *Magnet) String() string {
 		ret += "&tr=" + url.QueryEscape(tr)
 	}
 	return ret
-}
-
-// Magnetize creates a Magnet from a MetaInfo
-func Magnetize(mi *metainfo.MetaInfo) Magnet {
-	ts := TorrentSpecFromMetaInfo(mi)
-	trackers := []string{}
-	for _, tier := range ts.Trackers {
-		for _, tracker := range tier {
-			trackers = append(trackers, tracker)
-		}
-	}
-	return Magnet{
-		InfoHash:    ts.InfoHash,
-		Trackers:    trackers,
-		DisplayName: ts.DisplayName,
-	}
 }
 
 // ParseMagnetURI parses Magnet-formatted URIs into a Magnet instance

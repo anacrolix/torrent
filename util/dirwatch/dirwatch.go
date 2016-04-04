@@ -12,7 +12,6 @@ import (
 	"github.com/anacrolix/missinggo"
 	"github.com/go-fsnotify/fsnotify"
 
-	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -117,7 +116,7 @@ func scanDir(dirName string) (ee map[metainfo.Hash]entity) {
 				break
 			}
 			for _, uri := range uris {
-				m, err := torrent.ParseMagnetURI(uri)
+				m, err := metainfo.ParseMagnetURI(uri)
 				if err != nil {
 					log.Printf("error parsing %q in file %q: %s", uri, fullName, err)
 					continue

@@ -1,11 +1,12 @@
-package torrent
+package metainfo
 
 import (
 	"encoding/hex"
 	"reflect"
 	"testing"
 
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -70,23 +71,19 @@ func TestParseMagnetURI(t *testing.T) {
 }
 
 func Test_Magnetize(t *testing.T) {
-	mi, err := metainfo.LoadFromFile("testdata/bootstrap.dat.torrent")
-	if err != nil {
-		t.Errorf("Failed to load testdata torrent: %v", err)
-	}
+	mi, err := LoadFromFile("../testdata/bootstrap.dat.torrent")
+	require.NoError(t, err)
 
-	magnet := Magnetize(mi)
+	m := mi.Magnet()
 
-	if magnet.DisplayName != "bootstrap.dat" {
-		t.Errorf("Magnet Dispalyname is incorrect: %s", magnet.DisplayName)
-	}
+	assert.EqualValues(t, "bootstrap.dat", m.DisplayName)
 
 	ih := [20]byte{
 		54, 113, 155, 162, 206, 207, 159, 59, 215, 197,
 		171, 251, 122, 136, 233, 57, 97, 27, 83, 108,
 	}
 
-	if magnet.InfoHash != ih {
+	if m.InfoHash != ih {
 		t.Errorf("Magnet infohash is incorrect")
 	}
 
@@ -100,7 +97,7 @@ func Test_Magnetize(t *testing.T) {
 	}
 
 	for _, expected := range trackers {
-		if !contains(magnet.Trackers, expected) {
+		if !contains(m.Trackers, expected) {
 			t.Errorf("Magnet does not contain expected tracker: %s", expected)
 		}
 	}

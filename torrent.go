@@ -289,13 +289,14 @@ func (t *Torrent) haveAllMetadataPieces() bool {
 	return true
 }
 
+// TODO: Propagate errors to disconnect peer.
 func (t *Torrent) setMetadataSize(bytes int64, cl *Client) {
 	if t.haveInfo() {
 		// We already know the correct metadata size.
 		return
 	}
 	if bytes <= 0 || bytes > 10000000 { // 10MB, pulled from my ass.
-		log.Printf("received bad metadata size: %d", bytes)
+		log.Printf("%s: received bad metadata size: %d", t, bytes)
 		return
 	}
 	if t.metadataBytes != nil && len(t.metadataBytes) == int(bytes) {

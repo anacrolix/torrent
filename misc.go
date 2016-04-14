@@ -1,24 +1,10 @@
 package torrent
 
 import (
-	"crypto"
 	"errors"
-	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-)
-
-const (
-	pieceHash        = crypto.SHA1
-	maxRequests      = 250    // Maximum pending requests we allow peers to send us.
-	defaultChunkSize = 0x4000 // 16KiB
-	// Peer ID client identifier prefix. We'll update this occasionally to
-	// reflect changes to client behaviour that other clients may depend on.
-	// Also see `extendedHandshakeClientVersion`.
-	bep20              = "-GT0001-"
-	nominalDialTimeout = time.Second * 30
-	minDialTimeout     = 5 * time.Second
 )
 
 type chunkSpec struct {

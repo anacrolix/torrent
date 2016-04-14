@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"container/heap"
-	"expvar"
 	"fmt"
 	"io"
 	"log"
@@ -94,12 +93,6 @@ type Torrent struct {
 
 	connPieceInclinationPool sync.Pool
 }
-
-var (
-	pieceInclinationsReused = expvar.NewInt("pieceInclinationsReused")
-	pieceInclinationsNew    = expvar.NewInt("pieceInclinationsNew")
-	pieceInclinationsPut    = expvar.NewInt("pieceInclinationsPut")
-)
 
 func (t *Torrent) setDisplayName(dn string) {
 	t.displayName = dn

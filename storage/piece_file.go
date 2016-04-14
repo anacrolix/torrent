@@ -52,7 +52,7 @@ func (me pieceFileTorrentStoragePiece) incompletePath() string {
 }
 
 func (me pieceFileTorrentStoragePiece) GetIsComplete() bool {
-	fi, err := me.ts.s.fs.Stat(me.completedPath())
+	fi, err := me.fs.Stat(me.completedPath())
 	return err == nil && fi.Size() == me.p.Length()
 }
 

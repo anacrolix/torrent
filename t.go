@@ -56,7 +56,9 @@ func (t *Torrent) NumPieces() int {
 	return t.numPieces()
 }
 
-// Drop the torrent from the client, and close it.
+// Drop the torrent from the client, and close it. It's always safe to do
+// this. No data corruption can, or should occur to either the torrent's data,
+// or connected peers.
 func (t *Torrent) Drop() {
 	t.cl.mu.Lock()
 	t.cl.dropTorrent(t.infoHash)

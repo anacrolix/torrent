@@ -109,16 +109,17 @@ func addTorrents(client *torrent.Client) {
 }
 
 var opts struct {
-	torrent.Config `name:"Client"`
-	Mmap           bool           `help:"memory-map torrent data"`
-	TestPeer       []*net.TCPAddr `short:"p" help:"addresses of some starting peers"`
-	Torrent        []string       `type:"pos" arity:"+" help:"torrent file path or magnet uri"`
+	Mmap     bool           `help:"memory-map torrent data"`
+	TestPeer []*net.TCPAddr `short:"p" help:"addresses of some starting peers"`
+	Seed     bool           `help:"seed after download is complete"`
+	tagflag.StartPos
+	Torrent []string `type:"pos" arity:"+" help:"torrent file path or magnet uri"`
 }
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	tagflag.Parse(&opts, tagflag.SkipBadTypes())
-	clientConfig := opts.Config
+	tagflag.Parse(&opts)
+	var clientConfig torrent.Config
 	if opts.Mmap {
 		clientConfig.DefaultStorage = storage.NewMMap("")
 	}

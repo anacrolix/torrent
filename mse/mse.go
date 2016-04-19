@@ -87,10 +87,10 @@ type cipherReader struct {
 	r io.Reader
 }
 
-func (me *cipherReader) Read(b []byte) (n int, err error) {
+func (cr *cipherReader) Read(b []byte) (n int, err error) {
 	be := make([]byte, len(b))
-	n, err = me.r.Read(be)
-	me.c.XORKeyStream(b[:n], be[:n])
+	n, err = cr.r.Read(be)
+	cr.c.XORKeyStream(b[:n], be[:n])
 	return
 }
 
@@ -103,14 +103,14 @@ type cipherWriter struct {
 	w io.Writer
 }
 
-func (me *cipherWriter) Write(b []byte) (n int, err error) {
+func (cr *cipherWriter) Write(b []byte) (n int, err error) {
 	be := make([]byte, len(b))
-	me.c.XORKeyStream(be, b)
-	n, err = me.w.Write(be)
+	cr.c.XORKeyStream(be, b)
+	n, err = cr.w.Write(be)
 	if n != len(be) {
 		// The cipher will have advanced beyond the callers stream position.
 		// We can't use the cipher anymore.
-		me.c = nil
+		cr.c = nil
 	}
 	return
 }

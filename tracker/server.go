@@ -34,27 +34,27 @@ func marshal(parts ...interface{}) (ret []byte, err error) {
 	return
 }
 
-func (me *server) respond(addr net.Addr, rh ResponseHeader, parts ...interface{}) (err error) {
+func (s *server) respond(addr net.Addr, rh ResponseHeader, parts ...interface{}) (err error) {
 	b, err := marshal(append([]interface{}{rh}, parts...)...)
 	if err != nil {
 		return
 	}
-	_, err = me.pc.WriteTo(b, addr)
+	_, err = s.pc.WriteTo(b, addr)
 	return
 }
 
-func (me *server) newConn() (ret int64) {
+func (s *server) newConn() (ret int64) {
 	ret = rand.Int63()
-	if me.conns == nil {
-		me.conns = make(map[int64]struct{})
+	if s.conns == nil {
+		s.conns = make(map[int64]struct{})
 	}
-	me.conns[ret] = struct{}{}
+	s.conns[ret] = struct{}{}
 	return
 }
 
-func (me *server) serveOne() (err error) {
+func (s *server) serveOne() (err error) {
 	b := make([]byte, 0x10000)
-	n, addr, err := me.pc.ReadFrom(b)
+	n, addr, err := s.pc.ReadFrom(b)
 	if err != nil {
 		return
 	}
@@ -69,8 +69,8 @@ func (me *server) serveOne() (err error) {
 		if h.ConnectionId != connectRequestConnectionId {
 			return
 		}
-		connId := me.newConn()
-		err = me.respond(addr, ResponseHeader{
+		connId := s.newConn()
+		err = s.respond(addr, ResponseHeader{
 			ActionConnect,
 			h.TransactionId,
 		}, ConnectionResponse{
@@ -78,8 +78,8 @@ func (me *server) serveOne() (err error) {
 		})
 		return
 	case ActionAnnounce:
-		if _, ok := me.conns[h.ConnectionId]; !ok {
-			me.respond(addr, ResponseHeader{
+		if _, ok := s.conns[h.ConnectionId]; !ok {
+			s.respond(addr, ResponseHeader{
 				TransactionId: h.TransactionId,
 				Action:        ActionError,
 			}, []byte("not connected"))
@@ -90,12 +90,12 @@ func (me *server) serveOne() (err error) {
 		if err != nil {
 			return
 		}
-		t := me.t[ar.InfoHash]
+		t := s.t[ar.InfoHash]
 		b, err = t.Peers.MarshalBinary()
 		if err != nil {
 			panic(err)
 		}
-		err = me.respond(addr, ResponseHeader{
+		err = s.respond(addr, ResponseHeader{
 			TransactionId: h.TransactionId,
 			Action:        ActionAnnounce,
 		}, AnnounceResponseHeader{
@@ -106,7 +106,7 @@ func (me *server) serveOne() (err error) {
 		return
 	default:
 		err = fmt.Errorf("unhandled action: %d", h.Action)
-		me.respond(addr, ResponseHeader{
+		s.respond(addr, ResponseHeader{
 			TransactionId: h.TransactionId,
 			Action:        ActionError,
 		}, []byte("unhandled action"))

@@ -23,8 +23,8 @@ func NewMMap(baseDir string) I {
 	}
 }
 
-func (me *mmapStorage) OpenTorrent(info *metainfo.InfoEx) (t Torrent, err error) {
-	span, err := MMapTorrent(&info.Info, me.baseDir)
+func (s *mmapStorage) OpenTorrent(info *metainfo.InfoEx) (t Torrent, err error) {
+	span, err := MMapTorrent(&info.Info, s.baseDir)
 	t = &mmapTorrentStorage{
 		span: span,
 	}
@@ -36,17 +36,17 @@ type mmapTorrentStorage struct {
 	completed map[metainfo.Hash]bool
 }
 
-func (me *mmapTorrentStorage) Piece(p metainfo.Piece) Piece {
+func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) Piece {
 	return mmapStoragePiece{
-		storage:  me,
+		storage:  ts,
 		p:        p,
-		ReaderAt: io.NewSectionReader(me.span, p.Offset(), p.Length()),
-		WriterAt: missinggo.NewSectionWriter(me.span, p.Offset(), p.Length()),
+		ReaderAt: io.NewSectionReader(ts.span, p.Offset(), p.Length()),
+		WriterAt: missinggo.NewSectionWriter(ts.span, p.Offset(), p.Length()),
 	}
 }
 
-func (me *mmapTorrentStorage) Close() error {
-	me.span.Close()
+func (ts *mmapTorrentStorage) Close() error {
+	ts.span.Close()
 	return nil
 }
 
@@ -57,15 +57,15 @@ type mmapStoragePiece struct {
 	io.WriterAt
 }
 
-func (me mmapStoragePiece) GetIsComplete() bool {
-	return me.storage.completed[me.p.Hash()]
+func (sp mmapStoragePiece) GetIsComplete() bool {
+	return sp.storage.completed[sp.p.Hash()]
 }
 
-func (me mmapStoragePiece) MarkComplete() error {
-	if me.storage.completed == nil {
-		me.storage.completed = make(map[metainfo.Hash]bool)
+func (sp mmapStoragePiece) MarkComplete() error {
+	if sp.storage.completed == nil {
+		sp.storage.completed = make(map[metainfo.Hash]bool)
 	}
-	me.storage.completed[me.p.Hash()] = true
+	sp.storage.completed[sp.p.Hash()] = true
 	return nil
 }
 

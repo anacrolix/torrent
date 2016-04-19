@@ -9,23 +9,23 @@ type nodeMaxHeap struct {
 	Target nodeID
 }
 
-func (me nodeMaxHeap) Len() int { return len(me.IDs) }
+func (mh nodeMaxHeap) Len() int { return len(mh.IDs) }
 
-func (me nodeMaxHeap) Less(i, j int) bool {
-	m := me.IDs[i].Distance(&me.Target)
-	n := me.IDs[j].Distance(&me.Target)
+func (mh nodeMaxHeap) Less(i, j int) bool {
+	m := mh.IDs[i].Distance(&mh.Target)
+	n := mh.IDs[j].Distance(&mh.Target)
 	return m.Cmp(&n) > 0
 }
 
-func (me *nodeMaxHeap) Pop() (ret interface{}) {
-	ret, me.IDs = me.IDs[len(me.IDs)-1], me.IDs[:len(me.IDs)-1]
+func (mh *nodeMaxHeap) Pop() (ret interface{}) {
+	ret, mh.IDs = mh.IDs[len(mh.IDs)-1], mh.IDs[:len(mh.IDs)-1]
 	return
 }
-func (me *nodeMaxHeap) Push(val interface{}) {
-	me.IDs = append(me.IDs, val.(nodeID))
+func (mh *nodeMaxHeap) Push(val interface{}) {
+	mh.IDs = append(mh.IDs, val.(nodeID))
 }
-func (me nodeMaxHeap) Swap(i, j int) {
-	me.IDs[i], me.IDs[j] = me.IDs[j], me.IDs[i]
+func (mh nodeMaxHeap) Swap(i, j int) {
+	mh.IDs[i], mh.IDs[j] = mh.IDs[j], mh.IDs[i]
 }
 
 type closestNodesSelector struct {
@@ -33,15 +33,15 @@ type closestNodesSelector struct {
 	k       int
 }
 
-func (me *closestNodesSelector) Push(id nodeID) {
-	heap.Push(&me.closest, id)
-	if me.closest.Len() > me.k {
-		heap.Pop(&me.closest)
+func (cns *closestNodesSelector) Push(id nodeID) {
+	heap.Push(&cns.closest, id)
+	if cns.closest.Len() > cns.k {
+		heap.Pop(&cns.closest)
 	}
 }
 
-func (me *closestNodesSelector) IDs() []nodeID {
-	return me.closest.IDs
+func (cns *closestNodesSelector) IDs() []nodeID {
+	return cns.closest.IDs
 }
 
 func newKClosestNodesSelector(k int, targetID nodeID) (ret closestNodesSelector) {

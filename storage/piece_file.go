@@ -25,16 +25,16 @@ type pieceFileTorrentStorage struct {
 	s *pieceFileStorage
 }
 
-func (me *pieceFileStorage) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
-	return &pieceFileTorrentStorage{me}, nil
+func (s *pieceFileStorage) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
+	return &pieceFileTorrentStorage{s}, nil
 }
 
-func (me *pieceFileTorrentStorage) Close() error {
+func (s *pieceFileTorrentStorage) Close() error {
 	return nil
 }
 
-func (me *pieceFileTorrentStorage) Piece(p metainfo.Piece) Piece {
-	return pieceFileTorrentStoragePiece{me, p, me.s.fs}
+func (s *pieceFileTorrentStorage) Piece(p metainfo.Piece) Piece {
+	return pieceFileTorrentStoragePiece{s, p, s.s.fs}
 }
 
 type pieceFileTorrentStoragePiece struct {
@@ -43,52 +43,52 @@ type pieceFileTorrentStoragePiece struct {
 	fs missinggo.FileStore
 }
 
-func (me pieceFileTorrentStoragePiece) completedPath() string {
-	return path.Join("completed", me.p.Hash().HexString())
+func (s pieceFileTorrentStoragePiece) completedPath() string {
+	return path.Join("completed", s.p.Hash().HexString())
 }
 
-func (me pieceFileTorrentStoragePiece) incompletePath() string {
-	return path.Join("incomplete", me.p.Hash().HexString())
+func (s pieceFileTorrentStoragePiece) incompletePath() string {
+	return path.Join("incomplete", s.p.Hash().HexString())
 }
 
-func (me pieceFileTorrentStoragePiece) GetIsComplete() bool {
-	fi, err := me.fs.Stat(me.completedPath())
-	return err == nil && fi.Size() == me.p.Length()
+func (s pieceFileTorrentStoragePiece) GetIsComplete() bool {
+	fi, err := s.fs.Stat(s.completedPath())
+	return err == nil && fi.Size() == s.p.Length()
 }
 
-func (me pieceFileTorrentStoragePiece) MarkComplete() error {
-	return me.fs.Rename(me.incompletePath(), me.completedPath())
+func (s pieceFileTorrentStoragePiece) MarkComplete() error {
+	return s.fs.Rename(s.incompletePath(), s.completedPath())
 }
 
-func (me pieceFileTorrentStoragePiece) openFile() (f missinggo.File, err error) {
-	f, err = me.fs.OpenFile(me.completedPath(), os.O_RDONLY)
+func (s pieceFileTorrentStoragePiece) openFile() (f missinggo.File, err error) {
+	f, err = s.fs.OpenFile(s.completedPath(), os.O_RDONLY)
 	if err == nil {
 		var fi os.FileInfo
 		fi, err = f.Stat()
-		if err == nil && fi.Size() == me.p.Length() {
+		if err == nil && fi.Size() == s.p.Length() {
 			return
 		}
 		f.Close()
 	} else if !os.IsNotExist(err) {
 		return
 	}
-	f, err = me.fs.OpenFile(me.incompletePath(), os.O_RDONLY)
+	f, err = s.fs.OpenFile(s.incompletePath(), os.O_RDONLY)
 	if os.IsNotExist(err) {
 		err = io.ErrUnexpectedEOF
 	}
 	return
 }
 
-func (me pieceFileTorrentStoragePiece) ReadAt(b []byte, off int64) (n int, err error) {
-	f, err := me.openFile()
+func (s pieceFileTorrentStoragePiece) ReadAt(b []byte, off int64) (n int, err error) {
+	f, err := s.openFile()
 	if err != nil {
 		return
 	}
 	defer f.Close()
-	missinggo.LimitLen(&b, me.p.Length()-off)
+	missinggo.LimitLen(&b, s.p.Length()-off)
 	n, err = f.ReadAt(b, off)
 	off += int64(n)
-	if off >= me.p.Length() {
+	if off >= s.p.Length() {
 		err = io.EOF
 	} else if err == io.EOF {
 		err = io.ErrUnexpectedEOF
@@ -96,16 +96,16 @@ func (me pieceFileTorrentStoragePiece) ReadAt(b []byte, off int64) (n int, err e
 	return
 }
 
-func (me pieceFileTorrentStoragePiece) WriteAt(b []byte, off int64) (n int, err error) {
-	if me.GetIsComplete() {
+func (s pieceFileTorrentStoragePiece) WriteAt(b []byte, off int64) (n int, err error) {
+	if s.GetIsComplete() {
 		err = errors.New("piece completed")
 		return
 	}
-	f, err := me.fs.OpenFile(me.incompletePath(), os.O_WRONLY|os.O_CREATE)
+	f, err := s.fs.OpenFile(s.incompletePath(), os.O_WRONLY|os.O_CREATE)
 	if err != nil {
 		return
 	}
 	defer f.Close()
-	missinggo.LimitLen(&b, me.p.Length()-off)
+	missinggo.LimitLen(&b, s.p.Length()-off)
 	return f.WriteAt(b, off)
 }

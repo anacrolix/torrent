@@ -443,15 +443,15 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 
 type badStorage struct{}
 
-func (me badStorage) OpenTorrent(*metainfo.InfoEx) (storage.Torrent, error) {
-	return me, nil
+func (bs badStorage) OpenTorrent(*metainfo.InfoEx) (storage.Torrent, error) {
+	return bs, nil
 }
 
-func (me badStorage) Close() error {
+func (bs badStorage) Close() error {
 	return nil
 }
 
-func (me badStorage) Piece(p metainfo.Piece) storage.Piece {
+func (bs badStorage) Piece(p metainfo.Piece) storage.Piece {
 	return badStoragePiece{p}
 }
 
@@ -459,25 +459,25 @@ type badStoragePiece struct {
 	p metainfo.Piece
 }
 
-func (me badStoragePiece) WriteAt(b []byte, off int64) (int, error) {
+func (p badStoragePiece) WriteAt(b []byte, off int64) (int, error) {
 	return 0, nil
 }
 
-func (me badStoragePiece) GetIsComplete() bool {
+func (p badStoragePiece) GetIsComplete() bool {
 	return true
 }
 
-func (me badStoragePiece) MarkComplete() error {
+func (p badStoragePiece) MarkComplete() error {
 	return errors.New("psyyyyyyyche")
 }
 
-func (me badStoragePiece) randomlyTruncatedDataString() string {
+func (p badStoragePiece) randomlyTruncatedDataString() string {
 	return "hello, world\n"[:rand.Intn(14)]
 }
 
-func (me badStoragePiece) ReadAt(b []byte, off int64) (n int, err error) {
-	r := strings.NewReader(me.randomlyTruncatedDataString())
-	return r.ReadAt(b, off+me.p.Offset())
+func (p badStoragePiece) ReadAt(b []byte, off int64) (n int, err error) {
+	r := strings.NewReader(p.randomlyTruncatedDataString())
+	return r.ReadAt(b, off+p.p.Offset())
 }
 
 // We read from a piece which is marked completed, but is missing data.

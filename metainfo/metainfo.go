@@ -138,45 +138,45 @@ func (info *Info) GeneratePieces(open func(fi FileInfo) (io.ReadCloser, error)) 
 	return nil
 }
 
-func (me *Info) TotalLength() (ret int64) {
-	if me.IsDir() {
-		for _, fi := range me.Files {
+func (info *Info) TotalLength() (ret int64) {
+	if info.IsDir() {
+		for _, fi := range info.Files {
 			ret += fi.Length
 		}
 	} else {
-		ret = me.Length
+		ret = info.Length
 	}
 	return
 }
 
-func (me *Info) NumPieces() int {
-	if len(me.Pieces)%20 != 0 {
-		panic(len(me.Pieces))
+func (info *Info) NumPieces() int {
+	if len(info.Pieces)%20 != 0 {
+		panic(len(info.Pieces))
 	}
-	return len(me.Pieces) / 20
+	return len(info.Pieces) / 20
 }
 
-func (me *InfoEx) Piece(i int) Piece {
-	return Piece{me, i}
+func (info *InfoEx) Piece(i int) Piece {
+	return Piece{info, i}
 }
 
-func (i *Info) IsDir() bool {
-	return len(i.Files) != 0
+func (info *Info) IsDir() bool {
+	return len(info.Files) != 0
 }
 
 // The files field, converted up from the old single-file in the parent info
 // dict if necessary. This is a helper to avoid having to conditionally handle
 // single and multi-file torrent infos.
-func (i *Info) UpvertedFiles() []FileInfo {
-	if len(i.Files) == 0 {
+func (info *Info) UpvertedFiles() []FileInfo {
+	if len(info.Files) == 0 {
 		return []FileInfo{{
-			Length: i.Length,
+			Length: info.Length,
 			// Callers should determine that Info.Name is the basename, and
 			// thus a regular file.
 			Path: nil,
 		}}
 	}
-	return i.Files
+	return info.Files
 }
 
 // The info dictionary with its hash and raw bytes exposed, as these are
@@ -192,23 +192,23 @@ var (
 	_ bencode.Unmarshaler = &InfoEx{}
 )
 
-func (this *InfoEx) UnmarshalBencode(data []byte) error {
-	this.Bytes = append(make([]byte, 0, len(data)), data...)
+func (ie *InfoEx) UnmarshalBencode(data []byte) error {
+	ie.Bytes = append(make([]byte, 0, len(data)), data...)
 	h := sha1.New()
-	_, err := h.Write(this.Bytes)
+	_, err := h.Write(ie.Bytes)
 	if err != nil {
 		panic(err)
 	}
-	this.Hash = new(Hash)
-	missinggo.CopyExact(this.Hash, h.Sum(nil))
-	return bencode.Unmarshal(data, &this.Info)
+	ie.Hash = new(Hash)
+	missinggo.CopyExact(ie.Hash, h.Sum(nil))
+	return bencode.Unmarshal(data, &ie.Info)
 }
 
-func (this InfoEx) MarshalBencode() ([]byte, error) {
-	if this.Bytes != nil {
-		return this.Bytes, nil
+func (ie InfoEx) MarshalBencode() ([]byte, error) {
+	if ie.Bytes != nil {
+		return ie.Bytes, nil
 	}
-	return bencode.Marshal(&this.Info)
+	return bencode.Marshal(&ie.Info)
 }
 
 type MetaInfo struct {

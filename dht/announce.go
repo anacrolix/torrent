@@ -30,10 +30,10 @@ type Announce struct {
 }
 
 // Returns the number of distinct remote addresses the announce has queried.
-func (me *Announce) NumContacted() int {
-	me.mu.Lock()
-	defer me.mu.Unlock()
-	return me.numContacted
+func (a *Announce) NumContacted() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.numContacted
 }
 
 // This is kind of the main thing you want to do with DHT. It traverses the
@@ -95,57 +95,57 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*Announc
 	return disc, nil
 }
 
-func (me *Announce) gotNodeAddr(addr Addr) {
+func (a *Announce) gotNodeAddr(addr Addr) {
 	if addr.UDPAddr().Port == 0 {
 		// Not a contactable address.
 		return
 	}
-	if me.triedAddrs.Test([]byte(addr.String())) {
+	if a.triedAddrs.Test([]byte(addr.String())) {
 		return
 	}
-	if me.server.ipBlocked(addr.UDPAddr().IP) {
+	if a.server.ipBlocked(addr.UDPAddr().IP) {
 		return
 	}
-	me.server.mu.Lock()
-	if me.server.badNodes.Test([]byte(addr.String())) {
-		me.server.mu.Unlock()
+	a.server.mu.Lock()
+	if a.server.badNodes.Test([]byte(addr.String())) {
+		a.server.mu.Unlock()
 		return
 	}
-	me.server.mu.Unlock()
-	me.contact(addr)
+	a.server.mu.Unlock()
+	a.contact(addr)
 }
 
-func (me *Announce) contact(addr Addr) {
-	me.numContacted++
-	me.triedAddrs.Add([]byte(addr.String()))
-	if err := me.getPeers(addr); err != nil {
+func (a *Announce) contact(addr Addr) {
+	a.numContacted++
+	a.triedAddrs.Add([]byte(addr.String()))
+	if err := a.getPeers(addr); err != nil {
 		log.Printf("error sending get_peers request to %s: %#v", addr, err)
 		return
 	}
-	me.pending++
+	a.pending++
 }
 
-func (me *Announce) transactionClosed() {
-	me.pending--
-	if me.pending == 0 {
-		me.close()
+func (a *Announce) transactionClosed() {
+	a.pending--
+	if a.pending == 0 {
+		a.close()
 		return
 	}
 }
 
-func (me *Announce) responseNode(node NodeInfo) {
-	me.gotNodeAddr(node.Addr)
+func (a *Announce) responseNode(node NodeInfo) {
+	a.gotNodeAddr(node.Addr)
 }
 
-func (me *Announce) closingCh() chan struct{} {
-	return me.stop
+func (a *Announce) closingCh() chan struct{} {
+	return a.stop
 }
 
 // Announce to a peer, if appropriate.
-func (me *Announce) maybeAnnouncePeer(to Addr, token, peerId string) {
-	me.server.mu.Lock()
-	defer me.server.mu.Unlock()
-	if !me.server.config.NoSecurity {
+func (a *Announce) maybeAnnouncePeer(to Addr, token, peerId string) {
+	a.server.mu.Lock()
+	defer a.server.mu.Unlock()
+	if !a.server.config.NoSecurity {
 		if len(peerId) != 20 {
 			return
 		}
@@ -153,27 +153,27 @@ func (me *Announce) maybeAnnouncePeer(to Addr, token, peerId string) {
 			return
 		}
 	}
-	err := me.server.announcePeer(to, me.infoHash, me.announcePort, token, me.announcePortImplied)
+	err := a.server.announcePeer(to, a.infoHash, a.announcePort, token, a.announcePortImplied)
 	if err != nil {
 		logonce.Stderr.Printf("error announcing peer: %s", err)
 	}
 }
 
-func (me *Announce) getPeers(addr Addr) error {
-	me.server.mu.Lock()
-	defer me.server.mu.Unlock()
-	t, err := me.server.getPeers(addr, me.infoHash)
+func (a *Announce) getPeers(addr Addr) error {
+	a.server.mu.Lock()
+	defer a.server.mu.Unlock()
+	t, err := a.server.getPeers(addr, a.infoHash)
 	if err != nil {
 		return err
 	}
 	t.SetResponseHandler(func(m Msg, ok bool) {
 		// Register suggested nodes closer to the target info-hash.
 		if m.R != nil {
-			me.mu.Lock()
+			a.mu.Lock()
 			for _, n := range m.R.Nodes {
-				me.responseNode(n)
+				a.responseNode(n)
 			}
-			me.mu.Unlock()
+			a.mu.Unlock()
 
 			if vs := m.R.Values; len(vs) != 0 {
 				nodeInfo := NodeInfo{
@@ -181,7 +181,7 @@ func (me *Announce) getPeers(addr Addr) error {
 				}
 				copy(nodeInfo.ID[:], m.SenderID())
 				select {
-				case me.values <- PeersValues{
+				case a.values <- PeersValues{
 					Peers: func() (ret []Peer) {
 						for _, cp := range vs {
 							ret = append(ret, Peer(cp))
@@ -190,16 +190,16 @@ func (me *Announce) getPeers(addr Addr) error {
 					}(),
 					NodeInfo: nodeInfo,
 				}:
-				case <-me.stop:
+				case <-a.stop:
 				}
 			}
 
-			me.maybeAnnouncePeer(addr, m.R.Token, m.SenderID())
+			a.maybeAnnouncePeer(addr, m.R.Token, m.SenderID())
 		}
 
-		me.mu.Lock()
-		me.transactionClosed()
-		me.mu.Unlock()
+		a.mu.Lock()
+		a.transactionClosed()
+		a.mu.Unlock()
 	})
 	return nil
 }
@@ -213,16 +213,16 @@ type PeersValues struct {
 }
 
 // Stop the announce.
-func (me *Announce) Close() {
-	me.mu.Lock()
-	defer me.mu.Unlock()
-	me.close()
+func (a *Announce) Close() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.close()
 }
 
-func (ps *Announce) close() {
+func (a *Announce) close() {
 	select {
-	case <-ps.stop:
+	case <-a.stop:
 	default:
-		close(ps.stop)
+		close(a.stop)
 	}
 }

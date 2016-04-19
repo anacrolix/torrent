@@ -109,9 +109,9 @@ type trackReader struct {
 	n int64
 }
 
-func (me *trackReader) Read(b []byte) (n int, err error) {
-	n, err = me.r.Read(b)
-	me.n += int64(n)
+func (tr *trackReader) Read(b []byte) (n int, err error) {
+	n, err = tr.r.Read(b)
+	tr.n += int64(n)
 	return
 }
 

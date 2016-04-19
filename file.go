@@ -24,11 +24,11 @@ func (f *File) Offset() int64 {
 	return f.offset
 }
 
-func (f File) FileInfo() metainfo.FileInfo {
+func (f *File) FileInfo() metainfo.FileInfo {
 	return f.fi
 }
 
-func (f File) Path() string {
+func (f *File) Path() string {
 	return f.path
 }
 

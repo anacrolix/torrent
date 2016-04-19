@@ -13,12 +13,12 @@ func parse_tag(tag string) (string, tag_options) {
 	return tag, tag_options("")
 }
 
-func (this tag_options) contains(option_name string) bool {
-	if len(this) == 0 {
+func (opts tag_options) contains(option_name string) bool {
+	if len(opts) == 0 {
 		return false
 	}
 
-	s := string(this)
+	s := string(opts)
 	for s != "" {
 		var next string
 		i := strings.Index(s, ",")

@@ -11,20 +11,20 @@ type segment struct {
 	*mmap.MMap
 }
 
-func (me segment) Size() int64 {
-	return int64(len(*me.MMap))
+func (s segment) Size() int64 {
+	return int64(len(*s.MMap))
 }
 
 type MMapSpan struct {
 	span
 }
 
-func (me *MMapSpan) Append(mmap mmap.MMap) {
-	me.span = append(me.span, segment{&mmap})
+func (ms *MMapSpan) Append(mmap mmap.MMap) {
+	ms.span = append(ms.span, segment{&mmap})
 }
 
-func (me MMapSpan) Close() error {
-	for _, mMap := range me.span {
+func (ms MMapSpan) Close() error {
+	for _, mMap := range ms.span {
 		err := mMap.(segment).Unmap()
 		if err != nil {
 			log.Print(err)
@@ -33,15 +33,15 @@ func (me MMapSpan) Close() error {
 	return nil
 }
 
-func (me MMapSpan) Size() (ret int64) {
-	for _, seg := range me.span {
+func (ms MMapSpan) Size() (ret int64) {
+	for _, seg := range ms.span {
 		ret += seg.Size()
 	}
 	return
 }
 
-func (me MMapSpan) ReadAt(p []byte, off int64) (n int, err error) {
-	me.ApplyTo(off, func(intervalOffset int64, interval sizer) (stop bool) {
+func (ms MMapSpan) ReadAt(p []byte, off int64) (n int, err error) {
+	ms.ApplyTo(off, func(intervalOffset int64, interval sizer) (stop bool) {
 		_n := copy(p, (*interval.(segment).MMap)[intervalOffset:])
 		p = p[_n:]
 		n += _n
@@ -53,8 +53,8 @@ func (me MMapSpan) ReadAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (me MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
-	me.ApplyTo(off, func(iOff int64, i sizer) (stop bool) {
+func (ms MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
+	ms.ApplyTo(off, func(iOff int64, i sizer) (stop bool) {
 		mMap := i.(segment)
 		_n := copy((*mMap.MMap)[iOff:], p)
 		// err = mMap.Sync(gommap.MS_ASYNC)

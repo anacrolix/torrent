@@ -14,7 +14,7 @@ var (
 	_ bencode.Unmarshaler = new(Node)
 )
 
-func (me *Node) UnmarshalBencode(b []byte) (err error) {
+func (n *Node) UnmarshalBencode(b []byte) (err error) {
 	var iface interface{}
 	err = bencode.Unmarshal(b, &iface)
 	if err != nil {
@@ -22,7 +22,7 @@ func (me *Node) UnmarshalBencode(b []byte) (err error) {
 	}
 	switch v := iface.(type) {
 	case string:
-		*me = Node(v)
+		*n = Node(v)
 	case []interface{}:
 		func() {
 			defer func() {
@@ -31,7 +31,7 @@ func (me *Node) UnmarshalBencode(b []byte) (err error) {
 					err = r.(error)
 				}
 			}()
-			*me = Node(net.JoinHostPort(v[0].(string), strconv.FormatInt(v[1].(int64), 10)))
+			*n = Node(net.JoinHostPort(v[0].(string), strconv.FormatInt(v[1].(int64), 10)))
 		}()
 	default:
 		err = fmt.Errorf("unsupported type: %T", iface)

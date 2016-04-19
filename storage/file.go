@@ -21,28 +21,28 @@ func NewFile(baseDir string) I {
 	}
 }
 
-func (me *fileStorage) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
-	return fileTorrentStorage{me}, nil
+func (fs *fileStorage) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
+	return fileTorrentStorage{fs}, nil
 }
 
 type fileTorrentStorage struct {
 	*fileStorage
 }
 
-func (me *fileStorage) Piece(p metainfo.Piece) Piece {
+func (fs *fileStorage) Piece(p metainfo.Piece) Piece {
 	_io := &fileStorageTorrent{
 		p.Info,
-		me.baseDir,
+		fs.baseDir,
 	}
 	return &fileStoragePiece{
-		me,
+		fs,
 		p,
 		missinggo.NewSectionWriter(_io, p.Offset(), p.Length()),
 		io.NewSectionReader(_io, p.Offset(), p.Length()),
 	}
 }
 
-func (me *fileStorage) Close() error {
+func (fs *fileStorage) Close() error {
 	return nil
 }
 
@@ -53,15 +53,15 @@ type fileStoragePiece struct {
 	io.ReaderAt
 }
 
-func (me *fileStoragePiece) GetIsComplete() bool {
-	return me.completed[me.p.Hash()]
+func (fs *fileStoragePiece) GetIsComplete() bool {
+	return fs.completed[fs.p.Hash()]
 }
 
-func (me *fileStoragePiece) MarkComplete() error {
-	if me.completed == nil {
-		me.completed = make(map[[20]byte]bool)
+func (fs *fileStoragePiece) MarkComplete() error {
+	if fs.completed == nil {
+		fs.completed = make(map[[20]byte]bool)
 	}
-	me.completed[me.p.Hash()] = true
+	fs.completed[fs.p.Hash()] = true
 	return nil
 }
 
@@ -71,8 +71,8 @@ type fileStorageTorrent struct {
 }
 
 // Returns EOF on short or missing file.
-func (me *fileStorageTorrent) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err error) {
-	f, err := os.Open(me.fileInfoName(fi))
+func (fst *fileStorageTorrent) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err error) {
+	f, err := os.Open(fst.fileInfoName(fi))
 	if os.IsNotExist(err) {
 		// File missing is treated the same as a short file.
 		err = io.EOF
@@ -100,10 +100,10 @@ func (me *fileStorageTorrent) readFileAt(fi metainfo.FileInfo, b []byte, off int
 }
 
 // Only returns EOF at the end of the torrent. Premature EOF is ErrUnexpectedEOF.
-func (me *fileStorageTorrent) ReadAt(b []byte, off int64) (n int, err error) {
-	for _, fi := range me.info.UpvertedFiles() {
+func (fst *fileStorageTorrent) ReadAt(b []byte, off int64) (n int, err error) {
+	for _, fi := range fst.info.UpvertedFiles() {
 		for off < fi.Length {
-			n1, err1 := me.readFileAt(fi, b, off)
+			n1, err1 := fst.readFileAt(fi, b, off)
 			n += n1
 			off += int64(n1)
 			b = b[n1:]
@@ -128,8 +128,8 @@ func (me *fileStorageTorrent) ReadAt(b []byte, off int64) (n int, err error) {
 	return
 }
 
-func (me *fileStorageTorrent) WriteAt(p []byte, off int64) (n int, err error) {
-	for _, fi := range me.info.UpvertedFiles() {
+func (fst *fileStorageTorrent) WriteAt(p []byte, off int64) (n int, err error) {
+	for _, fi := range fst.info.UpvertedFiles() {
 		if off >= fi.Length {
 			off -= fi.Length
 			continue
@@ -138,7 +138,7 @@ func (me *fileStorageTorrent) WriteAt(p []byte, off int64) (n int, err error) {
 		if int64(n1) > fi.Length-off {
 			n1 = int(fi.Length - off)
 		}
-		name := me.fileInfoName(fi)
+		name := fst.fileInfoName(fi)
 		os.MkdirAll(filepath.Dir(name), 0770)
 		var f *os.File
 		f, err = os.OpenFile(name, os.O_WRONLY|os.O_CREATE, 0660)
@@ -160,6 +160,6 @@ func (me *fileStorageTorrent) WriteAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (me *fileStorageTorrent) fileInfoName(fi metainfo.FileInfo) string {
-	return filepath.Join(append([]string{me.baseDir, me.info.Name}, fi.Path...)...)
+func (fst *fileStorageTorrent) fileInfoName(fi metainfo.FileInfo) string {
+	return filepath.Join(append([]string{fst.baseDir, fst.info.Name}, fi.Path...)...)
 }

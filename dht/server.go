@@ -709,7 +709,7 @@ func (s *Server) closestNodes(k int, target nodeID, filter func(*node) bool) []*
 	return ret
 }
 
-func (me *Server) badNode(addr Addr) {
-	me.badNodes.Add([]byte(addr.String()))
-	delete(me.nodes, addr.String())
+func (s *Server) badNode(addr Addr) {
+	s.badNodes.Add([]byte(addr.String()))
+	delete(s.nodes, addr.String())
 }

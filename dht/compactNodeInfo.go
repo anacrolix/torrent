@@ -13,7 +13,7 @@ type CompactIPv4NodeInfo []NodeInfo
 
 var _ bencode.Unmarshaler = &CompactIPv4NodeInfo{}
 
-func (me *CompactIPv4NodeInfo) UnmarshalBencode(_b []byte) (err error) {
+func (i *CompactIPv4NodeInfo) UnmarshalBencode(_b []byte) (err error) {
 	var b []byte
 	err = bencode.Unmarshal(_b, &b)
 	if err != nil {
@@ -23,20 +23,20 @@ func (me *CompactIPv4NodeInfo) UnmarshalBencode(_b []byte) (err error) {
 		err = fmt.Errorf("bad length: %d", len(b))
 		return
 	}
-	for i := 0; i < len(b); i += CompactIPv4NodeInfoLen {
+	for k := 0; k < len(b); k += CompactIPv4NodeInfoLen {
 		var ni NodeInfo
-		err = ni.UnmarshalCompactIPv4(b[i : i+CompactIPv4NodeInfoLen])
+		err = ni.UnmarshalCompactIPv4(b[k : k+CompactIPv4NodeInfoLen])
 		if err != nil {
 			return
 		}
-		*me = append(*me, ni)
+		*i = append(*i, ni)
 	}
 	return
 }
 
-func (me CompactIPv4NodeInfo) MarshalBencode() (ret []byte, err error) {
+func (i CompactIPv4NodeInfo) MarshalBencode() (ret []byte, err error) {
 	var buf bytes.Buffer
-	for _, ni := range me {
+	for _, ni := range i {
 		buf.Write(ni.ID[:])
 		if ni.Addr == nil {
 			err = errors.New("nil addr in node info")

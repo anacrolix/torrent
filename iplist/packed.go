@@ -21,9 +21,9 @@ const (
 	packedRangeLen     = 20
 )
 
-func (me *IPList) WritePacked(w io.Writer) (err error) {
-	descOffsets := make(map[string]int64, len(me.ranges))
-	descs := make([]string, 0, len(me.ranges))
+func (ipl *IPList) WritePacked(w io.Writer) (err error) {
+	descOffsets := make(map[string]int64, len(ipl.ranges))
+	descs := make([]string, 0, len(ipl.ranges))
 	var nextOffset int64
 	// This is a little monadic, no?
 	write := func(b []byte, expectedLen int) {
@@ -40,9 +40,9 @@ func (me *IPList) WritePacked(w io.Writer) (err error) {
 		}
 	}
 	var b [8]byte
-	binary.LittleEndian.PutUint64(b[:], uint64(len(me.ranges)))
+	binary.LittleEndian.PutUint64(b[:], uint64(len(ipl.ranges)))
 	write(b[:], 8)
-	for _, r := range me.ranges {
+	for _, r := range ipl.ranges {
 		write(r.First.To4(), 4)
 		write(r.Last.To4(), 4)
 		descOff, ok := descOffsets[r.Description]
@@ -71,34 +71,34 @@ type PackedIPList []byte
 
 var _ Ranger = PackedIPList{}
 
-func (me PackedIPList) len() int {
-	return int(binary.LittleEndian.Uint64(me[:8]))
+func (pil PackedIPList) len() int {
+	return int(binary.LittleEndian.Uint64(pil[:8]))
 }
 
-func (me PackedIPList) NumRanges() int {
-	return me.len()
+func (pil PackedIPList) NumRanges() int {
+	return pil.len()
 }
 
-func (me PackedIPList) getFirst(i int) net.IP {
+func (pil PackedIPList) getFirst(i int) net.IP {
 	off := packedRangesOffset + packedRangeLen*i
-	return net.IP(me[off : off+4])
+	return net.IP(pil[off : off+4])
 }
 
-func (me PackedIPList) getRange(i int) (ret Range) {
+func (pil PackedIPList) getRange(i int) (ret Range) {
 	rOff := packedRangesOffset + packedRangeLen*i
-	last := me[rOff+4 : rOff+8]
-	descOff := int(binary.LittleEndian.Uint64(me[rOff+8:]))
-	descLen := int(binary.LittleEndian.Uint32(me[rOff+16:]))
-	descOff += packedRangesOffset + packedRangeLen*me.len()
+	last := pil[rOff+4 : rOff+8]
+	descOff := int(binary.LittleEndian.Uint64(pil[rOff+8:]))
+	descLen := int(binary.LittleEndian.Uint32(pil[rOff+16:]))
+	descOff += packedRangesOffset + packedRangeLen*pil.len()
 	ret = Range{
-		me.getFirst(i),
+		pil.getFirst(i),
 		net.IP(last),
-		string(me[descOff : descOff+descLen]),
+		string(pil[descOff : descOff+descLen]),
 	}
 	return
 }
 
-func (me PackedIPList) Lookup(ip net.IP) (r Range, ok bool) {
+func (pil PackedIPList) Lookup(ip net.IP) (r Range, ok bool) {
 	ip4 := ip.To4()
 	if ip4 == nil {
 		// If the IP list was built successfully, then it only contained IPv4
@@ -111,7 +111,7 @@ func (me PackedIPList) Lookup(ip net.IP) (r Range, ok bool) {
 		}
 		return
 	}
-	return lookup(me.getFirst, me.getRange, me.len(), ip4)
+	return lookup(pil.getFirst, pil.getRange, pil.len(), ip4)
 }
 
 func MMapPacked(filename string) (ret Ranger, err error) {

@@ -11,19 +11,19 @@ type worstConns struct {
 	cl *Client
 }
 
-func (me *worstConns) Len() int      { return len(me.c) }
-func (me *worstConns) Swap(i, j int) { me.c[i], me.c[j] = me.c[j], me.c[i] }
+func (wc *worstConns) Len() int      { return len(wc.c) }
+func (wc *worstConns) Swap(i, j int) { wc.c[i], wc.c[j] = wc.c[j], wc.c[i] }
 
-func (me *worstConns) Pop() (ret interface{}) {
-	old := me.c
+func (wc *worstConns) Pop() (ret interface{}) {
+	old := wc.c
 	n := len(old)
 	ret = old[n-1]
-	me.c = old[:n-1]
+	wc.c = old[:n-1]
 	return
 }
 
-func (me *worstConns) Push(x interface{}) {
-	me.c = append(me.c, x.(*connection))
+func (wc *worstConns) Push(x interface{}) {
+	wc.c = append(wc.c, x.(*connection))
 }
 
 type worstConnsSortKey struct {
@@ -32,20 +32,20 @@ type worstConnsSortKey struct {
 	connected   time.Time
 }
 
-func (me worstConnsSortKey) Less(other worstConnsSortKey) bool {
-	if me.useful != other.useful {
-		return !me.useful
+func (wc worstConnsSortKey) Less(other worstConnsSortKey) bool {
+	if wc.useful != other.useful {
+		return !wc.useful
 	}
-	if !me.lastHelpful.Equal(other.lastHelpful) {
-		return me.lastHelpful.Before(other.lastHelpful)
+	if !wc.lastHelpful.Equal(other.lastHelpful) {
+		return wc.lastHelpful.Before(other.lastHelpful)
 	}
-	return me.connected.Before(other.connected)
+	return wc.connected.Before(other.connected)
 }
 
-func (me *worstConns) key(i int) (key worstConnsSortKey) {
-	c := me.c[i]
-	key.useful = me.cl.usefulConn(me.t, c)
-	if me.cl.seeding(me.t) {
+func (wc *worstConns) key(i int) (key worstConnsSortKey) {
+	c := wc.c[i]
+	key.useful = wc.cl.usefulConn(wc.t, c)
+	if wc.cl.seeding(wc.t) {
 		key.lastHelpful = c.lastChunkSent
 	}
 	// Intentionally consider the last time a chunk was received when seeding,
@@ -57,6 +57,6 @@ func (me *worstConns) key(i int) (key worstConnsSortKey) {
 	return
 }
 
-func (me worstConns) Less(i, j int) bool {
-	return me.key(i).Less(me.key(j))
+func (wc worstConns) Less(i, j int) bool {
+	return wc.key(i).Less(wc.key(j))
 }

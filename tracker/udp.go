@@ -93,9 +93,9 @@ type udpClient struct {
 	url                  url.URL
 }
 
-func (me *udpClient) Close() error {
-	if me.socket != nil {
-		return me.socket.Close()
+func (c *udpClient) Close() error {
+	if c.socket != nil {
+		return c.socket.Close()
 	}
 	return nil
 }

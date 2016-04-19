@@ -194,8 +194,8 @@ type Peer struct {
 	Port int
 }
 
-func (me *Peer) String() string {
-	return net.JoinHostPort(me.IP.String(), strconv.FormatInt(int64(me.Port), 10))
+func (p *Peer) String() string {
+	return net.JoinHostPort(p.IP.String(), strconv.FormatInt(int64(p.Port), 10))
 }
 
 func bootstrapAddrs(nodeAddrs []string) (addrs []*net.UDPAddr, err error) {

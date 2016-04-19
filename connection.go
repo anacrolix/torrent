@@ -208,40 +208,40 @@ func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
 	)
 }
 
-func (c *connection) Close() {
-	c.closed.Set()
-	c.discardPieceInclination()
-	c.pieceRequestOrder.Clear()
+func (cn *connection) Close() {
+	cn.closed.Set()
+	cn.discardPieceInclination()
+	cn.pieceRequestOrder.Clear()
 	// TODO: This call blocks sometimes, why?
-	go c.conn.Close()
+	go cn.conn.Close()
 }
 
-func (c *connection) PeerHasPiece(piece int) bool {
-	return c.peerHasAll || c.peerPieces.Contains(piece)
+func (cn *connection) PeerHasPiece(piece int) bool {
+	return cn.peerHasAll || cn.peerPieces.Contains(piece)
 }
 
-func (c *connection) Post(msg pp.Message) {
+func (cn *connection) Post(msg pp.Message) {
 	select {
-	case c.post <- msg:
+	case cn.post <- msg:
 		postedMessageTypes.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
-	case <-c.closed.C():
+	case <-cn.closed.C():
 	}
 }
 
-func (c *connection) RequestPending(r request) bool {
-	_, ok := c.Requests[r]
+func (cn *connection) RequestPending(r request) bool {
+	_, ok := cn.Requests[r]
 	return ok
 }
 
-func (c *connection) requestMetadataPiece(index int) {
-	eID := c.PeerExtensionIDs["ut_metadata"]
+func (cn *connection) requestMetadataPiece(index int) {
+	eID := cn.PeerExtensionIDs["ut_metadata"]
 	if eID == 0 {
 		return
 	}
-	if index < len(c.metadataRequests) && c.metadataRequests[index] {
+	if index < len(cn.metadataRequests) && cn.metadataRequests[index] {
 		return
 	}
-	c.Post(pp.Message{
+	cn.Post(pp.Message{
 		Type:       pp.Extended,
 		ExtendedID: eID,
 		ExtendedPayload: func() []byte {
@@ -255,19 +255,19 @@ func (c *connection) requestMetadataPiece(index int) {
 			return b
 		}(),
 	})
-	for index >= len(c.metadataRequests) {
-		c.metadataRequests = append(c.metadataRequests, false)
+	for index >= len(cn.metadataRequests) {
+		cn.metadataRequests = append(cn.metadataRequests, false)
 	}
-	c.metadataRequests[index] = true
+	cn.metadataRequests[index] = true
 }
 
-func (c *connection) requestedMetadataPiece(index int) bool {
-	return index < len(c.metadataRequests) && c.metadataRequests[index]
+func (cn *connection) requestedMetadataPiece(index int) bool {
+	return index < len(cn.metadataRequests) && cn.metadataRequests[index]
 }
 
 // The actual value to use as the maximum outbound requests.
-func (c *connection) nominalMaxRequests() (ret int) {
-	ret = c.PeerMaxRequests
+func (cn *connection) nominalMaxRequests() (ret int) {
+	ret = cn.PeerMaxRequests
 	if ret > 64 {
 		ret = 64
 	}
@@ -275,26 +275,26 @@ func (c *connection) nominalMaxRequests() (ret int) {
 }
 
 // Returns true if more requests can be sent.
-func (c *connection) Request(chunk request) bool {
-	if len(c.Requests) >= c.nominalMaxRequests() {
+func (cn *connection) Request(chunk request) bool {
+	if len(cn.Requests) >= cn.nominalMaxRequests() {
 		return false
 	}
-	if !c.PeerHasPiece(int(chunk.Index)) {
+	if !cn.PeerHasPiece(int(chunk.Index)) {
 		return true
 	}
-	if c.RequestPending(chunk) {
+	if cn.RequestPending(chunk) {
 		return true
 	}
-	c.SetInterested(true)
-	if c.PeerChoked {
+	cn.SetInterested(true)
+	if cn.PeerChoked {
 		return false
 	}
-	if c.Requests == nil {
-		c.Requests = make(map[request]struct{}, c.PeerMaxRequests)
+	if cn.Requests == nil {
+		cn.Requests = make(map[request]struct{}, cn.PeerMaxRequests)
 	}
-	c.Requests[chunk] = struct{}{}
-	c.requestsLowWater = len(c.Requests) / 2
-	c.Post(pp.Message{
+	cn.Requests[chunk] = struct{}{}
+	cn.requestsLowWater = len(cn.Requests) / 2
+	cn.Post(pp.Message{
 		Type:   pp.Request,
 		Index:  chunk.Index,
 		Begin:  chunk.Begin,
@@ -304,15 +304,15 @@ func (c *connection) Request(chunk request) bool {
 }
 
 // Returns true if an unsatisfied request was canceled.
-func (c *connection) Cancel(r request) bool {
-	if c.Requests == nil {
+func (cn *connection) Cancel(r request) bool {
+	if cn.Requests == nil {
 		return false
 	}
-	if _, ok := c.Requests[r]; !ok {
+	if _, ok := cn.Requests[r]; !ok {
 		return false
 	}
-	delete(c.Requests, r)
-	c.Post(pp.Message{
+	delete(cn.Requests, r)
+	cn.Post(pp.Message{
 		Type:   pp.Cancel,
 		Index:  r.Index,
 		Begin:  r.Begin,
@@ -322,43 +322,43 @@ func (c *connection) Cancel(r request) bool {
 }
 
 // Returns true if an unsatisfied request was canceled.
-func (c *connection) PeerCancel(r request) bool {
-	if c.PeerRequests == nil {
+func (cn *connection) PeerCancel(r request) bool {
+	if cn.PeerRequests == nil {
 		return false
 	}
-	if _, ok := c.PeerRequests[r]; !ok {
+	if _, ok := cn.PeerRequests[r]; !ok {
 		return false
 	}
-	delete(c.PeerRequests, r)
+	delete(cn.PeerRequests, r)
 	return true
 }
 
-func (c *connection) Choke() {
-	if c.Choked {
+func (cn *connection) Choke() {
+	if cn.Choked {
 		return
 	}
-	c.Post(pp.Message{
+	cn.Post(pp.Message{
 		Type: pp.Choke,
 	})
-	c.PeerRequests = nil
-	c.Choked = true
+	cn.PeerRequests = nil
+	cn.Choked = true
 }
 
-func (c *connection) Unchoke() {
-	if !c.Choked {
+func (cn *connection) Unchoke() {
+	if !cn.Choked {
 		return
 	}
-	c.Post(pp.Message{
+	cn.Post(pp.Message{
 		Type: pp.Unchoke,
 	})
-	c.Choked = false
+	cn.Choked = false
 }
 
-func (c *connection) SetInterested(interested bool) {
-	if c.Interested == interested {
+func (cn *connection) SetInterested(interested bool) {
+	if cn.Interested == interested {
 		return
 	}
-	c.Post(pp.Message{
+	cn.Post(pp.Message{
 		Type: func() pp.MessageType {
 			if interested {
 				return pp.Interested
@@ -367,7 +367,7 @@ func (c *connection) SetInterested(interested bool) {
 			}
 		}(),
 	})
-	c.Interested = interested
+	cn.Interested = interested
 }
 
 var (
@@ -378,19 +378,19 @@ var (
 )
 
 // Writes buffers to the socket from the write channel.
-func (conn *connection) writer() {
+func (cn *connection) writer() {
 	defer func() {
-		conn.t.cl.mu.Lock()
-		defer conn.t.cl.mu.Unlock()
-		conn.Close()
+		cn.t.cl.mu.Lock()
+		defer cn.t.cl.mu.Unlock()
+		cn.Close()
 	}()
 	// Reduce write syscalls.
-	buf := bufio.NewWriter(conn.rw)
+	buf := bufio.NewWriter(cn.rw)
 	for {
 		if buf.Buffered() == 0 {
 			// There's nothing to write, so block until we get something.
 			select {
-			case b, ok := <-conn.writeCh:
+			case b, ok := <-cn.writeCh:
 				if !ok {
 					return
 				}
@@ -399,14 +399,14 @@ func (conn *connection) writer() {
 				if err != nil {
 					return
 				}
-			case <-conn.closed.C():
+			case <-cn.closed.C():
 				return
 			}
 		} else {
 			// We already have something to write, so flush if there's nothing
 			// more to write.
 			select {
-			case b, ok := <-conn.writeCh:
+			case b, ok := <-cn.writeCh:
 				if !ok {
 					return
 				}
@@ -415,7 +415,7 @@ func (conn *connection) writer() {
 				if err != nil {
 					return
 				}
-			case <-conn.closed.C():
+			case <-cn.closed.C():
 				return
 			default:
 				connectionWriterFlush.Add(1)
@@ -428,15 +428,15 @@ func (conn *connection) writer() {
 	}
 }
 
-func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
-	defer close(conn.writeCh) // Responsible for notifying downstream routines.
-	pending := list.New()     // Message queue.
-	var nextWrite []byte      // Set to nil if we need to need to marshal the next message.
+func (cn *connection) writeOptimizer(keepAliveDelay time.Duration) {
+	defer close(cn.writeCh) // Responsible for notifying downstream routines.
+	pending := list.New()   // Message queue.
+	var nextWrite []byte    // Set to nil if we need to need to marshal the next message.
 	timer := time.NewTimer(keepAliveDelay)
 	defer timer.Stop()
 	lastWrite := time.Now()
 	for {
-		write := conn.writeCh // Set to nil if there's nothing to write.
+		write := cn.writeCh // Set to nil if there's nothing to write.
 		if pending.Len() == 0 {
 			write = nil
 		} else if nextWrite == nil {
@@ -459,7 +459,7 @@ func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
 			}
 			pending.PushBack(pp.Message{Keepalive: true})
 			postedKeepalives.Add(1)
-		case msg, ok := <-conn.post:
+		case msg, ok := <-cn.post:
 			if !ok {
 				return
 			}
@@ -481,7 +481,7 @@ func (conn *connection) writeOptimizer(keepAliveDelay time.Duration) {
 			if pending.Len() == 0 {
 				timer.Reset(keepAliveDelay)
 			}
-		case <-conn.closed.C():
+		case <-cn.closed.C():
 			return
 		}
 	}
@@ -512,134 +512,134 @@ func (cn *connection) Bitfield(haves []bool) {
 	cn.sentHaves = haves
 }
 
-func (c *connection) updateRequests() {
-	if !c.t.haveInfo() {
+func (cn *connection) updateRequests() {
+	if !cn.t.haveInfo() {
 		return
 	}
-	if c.Interested {
-		if c.PeerChoked {
+	if cn.Interested {
+		if cn.PeerChoked {
 			return
 		}
-		if len(c.Requests) > c.requestsLowWater {
+		if len(cn.Requests) > cn.requestsLowWater {
 			return
 		}
 	}
-	c.fillRequests()
-	if len(c.Requests) == 0 && !c.PeerChoked {
+	cn.fillRequests()
+	if len(cn.Requests) == 0 && !cn.PeerChoked {
 		// So we're not choked, but we don't want anything right now. We may
 		// have completed readahead, and the readahead window has not rolled
 		// over to the next piece. Better to stay interested in case we're
 		// going to want data in the near future.
-		c.SetInterested(!c.t.haveAllPieces())
+		cn.SetInterested(!cn.t.haveAllPieces())
 	}
 }
 
-func (c *connection) fillRequests() {
-	c.pieceRequestOrder.IterTyped(func(piece int) (more bool) {
-		if c.t.cl.config.Debug && c.t.havePiece(piece) {
+func (cn *connection) fillRequests() {
+	cn.pieceRequestOrder.IterTyped(func(piece int) (more bool) {
+		if cn.t.cl.config.Debug && cn.t.havePiece(piece) {
 			panic(piece)
 		}
-		return c.requestPiecePendingChunks(piece)
+		return cn.requestPiecePendingChunks(piece)
 	})
 }
 
-func (c *connection) requestPiecePendingChunks(piece int) (again bool) {
-	return c.t.connRequestPiecePendingChunks(c, piece)
+func (cn *connection) requestPiecePendingChunks(piece int) (again bool) {
+	return cn.t.connRequestPiecePendingChunks(cn, piece)
 }
 
-func (c *connection) stopRequestingPiece(piece int) {
-	c.pieceRequestOrder.Remove(piece)
+func (cn *connection) stopRequestingPiece(piece int) {
+	cn.pieceRequestOrder.Remove(piece)
 }
 
-func (c *connection) updatePiecePriority(piece int) {
-	tpp := c.t.piecePriority(piece)
-	if !c.PeerHasPiece(piece) {
+func (cn *connection) updatePiecePriority(piece int) {
+	tpp := cn.t.piecePriority(piece)
+	if !cn.PeerHasPiece(piece) {
 		tpp = PiecePriorityNone
 	}
 	if tpp == PiecePriorityNone {
-		c.stopRequestingPiece(piece)
+		cn.stopRequestingPiece(piece)
 		return
 	}
-	prio := c.getPieceInclination()[piece]
+	prio := cn.getPieceInclination()[piece]
 	switch tpp {
 	case PiecePriorityNormal:
 	case PiecePriorityReadahead:
-		prio -= c.t.numPieces()
+		prio -= cn.t.numPieces()
 	case PiecePriorityNext, PiecePriorityNow:
-		prio -= 2 * c.t.numPieces()
+		prio -= 2 * cn.t.numPieces()
 	default:
 		panic(tpp)
 	}
 	prio += piece
-	c.pieceRequestOrder.Set(piece, prio)
-	c.updateRequests()
+	cn.pieceRequestOrder.Set(piece, prio)
+	cn.updateRequests()
 }
 
-func (c *connection) getPieceInclination() []int {
-	if c.pieceInclination == nil {
-		c.pieceInclination = c.t.getConnPieceInclination()
+func (cn *connection) getPieceInclination() []int {
+	if cn.pieceInclination == nil {
+		cn.pieceInclination = cn.t.getConnPieceInclination()
 	}
-	return c.pieceInclination
+	return cn.pieceInclination
 }
 
-func (c *connection) discardPieceInclination() {
-	if c.pieceInclination == nil {
+func (cn *connection) discardPieceInclination() {
+	if cn.pieceInclination == nil {
 		return
 	}
-	c.t.putPieceInclination(c.pieceInclination)
-	c.pieceInclination = nil
+	cn.t.putPieceInclination(cn.pieceInclination)
+	cn.pieceInclination = nil
 }
 
-func (c *connection) peerHasPieceChanged(piece int) {
-	c.updatePiecePriority(piece)
+func (cn *connection) peerHasPieceChanged(piece int) {
+	cn.updatePiecePriority(piece)
 }
 
-func (c *connection) peerPiecesChanged() {
-	if c.t.haveInfo() {
-		for i := range iter.N(c.t.numPieces()) {
-			c.peerHasPieceChanged(i)
+func (cn *connection) peerPiecesChanged() {
+	if cn.t.haveInfo() {
+		for i := range iter.N(cn.t.numPieces()) {
+			cn.peerHasPieceChanged(i)
 		}
 	}
 }
 
-func (c *connection) raisePeerMinPieces(newMin int) {
-	if newMin > c.peerMinPieces {
-		c.peerMinPieces = newMin
+func (cn *connection) raisePeerMinPieces(newMin int) {
+	if newMin > cn.peerMinPieces {
+		cn.peerMinPieces = newMin
 	}
 }
 
-func (c *connection) peerSentHave(piece int) error {
-	if c.t.haveInfo() && piece >= c.t.numPieces() {
+func (cn *connection) peerSentHave(piece int) error {
+	if cn.t.haveInfo() && piece >= cn.t.numPieces() {
 		return errors.New("invalid piece")
 	}
-	if c.PeerHasPiece(piece) {
+	if cn.PeerHasPiece(piece) {
 		return nil
 	}
-	c.raisePeerMinPieces(piece + 1)
-	c.peerPieces.Set(piece, true)
-	c.peerHasPieceChanged(piece)
+	cn.raisePeerMinPieces(piece + 1)
+	cn.peerPieces.Set(piece, true)
+	cn.peerHasPieceChanged(piece)
 	return nil
 }
 
-func (c *connection) peerSentBitfield(bf []bool) error {
-	c.peerHasAll = false
+func (cn *connection) peerSentBitfield(bf []bool) error {
+	cn.peerHasAll = false
 	if len(bf)%8 != 0 {
 		panic("expected bitfield length divisible by 8")
 	}
 	// We know that the last byte means that at most the last 7 bits are
 	// wasted.
-	c.raisePeerMinPieces(len(bf) - 7)
-	if c.t.haveInfo() {
+	cn.raisePeerMinPieces(len(bf) - 7)
+	if cn.t.haveInfo() {
 		// Ignore known excess pieces.
-		bf = bf[:c.t.numPieces()]
+		bf = bf[:cn.t.numPieces()]
 	}
 	for i, have := range bf {
 		if have {
-			c.raisePeerMinPieces(i + 1)
+			cn.raisePeerMinPieces(i + 1)
 		}
-		c.peerPieces.Set(i, have)
+		cn.peerPieces.Set(i, have)
 	}
-	c.peerPiecesChanged()
+	cn.peerPiecesChanged()
 	return nil
 }
 
@@ -650,9 +650,9 @@ func (cn *connection) peerSentHaveAll() error {
 	return nil
 }
 
-func (c *connection) peerSentHaveNone() error {
-	c.peerPieces.Clear()
-	c.peerHasAll = false
-	c.peerPiecesChanged()
+func (cn *connection) peerSentHaveNone() error {
+	cn.peerPieces.Clear()
+	cn.peerHasAll = false
+	cn.peerPiecesChanged()
 	return nil
 }

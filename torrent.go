@@ -670,9 +670,9 @@ func (t *Torrent) haveAllPieces() bool {
 	return t.completedPieces.Len() == t.numPieces()
 }
 
-func (me *Torrent) haveAnyPieces() bool {
-	for i := range me.pieces {
-		if me.pieceComplete(i) {
+func (t *Torrent) haveAnyPieces() bool {
+	for i := range t.pieces {
+		if t.pieceComplete(i) {
 			return true
 		}
 	}
@@ -701,9 +701,8 @@ func chunkIndex(cs chunkSpec, chunkSize pp.Integer) int {
 	return int(cs.Begin / chunkSize)
 }
 
-// TODO: This should probably be called wantPiece.
-func (t *Torrent) wantChunk(r request) bool {
-	if !t.wantPiece(int(r.Index)) {
+func (t *Torrent) wantPiece(r request) bool {
+	if !t.wantPieceIndex(int(r.Index)) {
 		return false
 	}
 	if t.pieces[r.Index].pendingChunk(r.chunkSpec, t.chunkSize) {
@@ -714,8 +713,7 @@ func (t *Torrent) wantChunk(r request) bool {
 	return false
 }
 
-// TODO: This should be called wantPieceIndex.
-func (t *Torrent) wantPiece(index int) bool {
+func (t *Torrent) wantPieceIndex(index int) bool {
 	if !t.haveInfo() {
 		return false
 	}

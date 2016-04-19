@@ -56,9 +56,9 @@ func (r *httpResponse) UnmarshalPeers() (ret []Peer, err error) {
 	return
 }
 
-func (me *httpClient) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err error) {
+func (c *httpClient) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err error) {
 	// retain query parameters from announce URL
-	q := me.url.Query()
+	q := c.url.Query()
 
 	q.Set("info_hash", string(ar.InfoHash[:]))
 	q.Set("peer_id", string(ar.PeerId[:]))
@@ -73,7 +73,7 @@ func (me *httpClient) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err e
 	q.Set("compact", "1")
 	// According to https://wiki.vuze.com/w/Message_Stream_Encryption.
 	q.Set("supportcrypto", "1")
-	var reqURL url.URL = me.url
+	var reqURL url.URL = c.url
 	reqURL.RawQuery = q.Encode()
 	resp, err := http.Get(reqURL.String())
 	if err != nil {
@@ -103,15 +103,15 @@ func (me *httpClient) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err e
 	return
 }
 
-func (me *httpClient) Connect() error {
+func (c *httpClient) Connect() error {
 	// HTTP trackers do not require a connecting handshake.
 	return nil
 }
 
-func (me *httpClient) String() string {
-	return me.URL()
+func (c *httpClient) String() string {
+	return c.URL()
 }
 
-func (me *httpClient) URL() string {
-	return me.url.String()
+func (c *httpClient) URL() string {
+	return c.url.String()
 }

@@ -42,24 +42,24 @@ type Instance struct {
 	dirState map[metainfo.Hash]entity
 }
 
-func (me *Instance) Close() {
-	me.w.Close()
+func (i *Instance) Close() {
+	i.w.Close()
 }
 
-func (me *Instance) handleEvents() {
-	defer close(me.Events)
-	for e := range me.w.Events {
+func (i *Instance) handleEvents() {
+	defer close(i.Events)
+	for e := range i.w.Events {
 		log.Printf("event: %s", e)
 		if e.Op == fsnotify.Write {
 			// TODO: Special treatment as an existing torrent may have changed.
 		} else {
-			me.refresh()
+			i.refresh()
 		}
 	}
 }
 
-func (me *Instance) handleErrors() {
-	for err := range me.w.Errors {
+func (i *Instance) handleErrors() {
+	for err := range i.w.Errors {
 		log.Printf("error in torrent directory watcher: %s", err)
 	}
 }
@@ -150,15 +150,15 @@ func magnetFileURIs(name string) (uris []string, err error) {
 	return
 }
 
-func (me *Instance) torrentRemoved(ih metainfo.Hash) {
-	me.Events <- Event{
+func (i *Instance) torrentRemoved(ih metainfo.Hash) {
+	i.Events <- Event{
 		InfoHash: ih,
 		Change:   Removed,
 	}
 }
 
-func (me *Instance) torrentAdded(e entity) {
-	me.Events <- Event{
+func (i *Instance) torrentAdded(e entity) {
+	i.Events <- Event{
 		InfoHash:        e.Hash,
 		Change:          Added,
 		MagnetURI:       e.MagnetURI,
@@ -166,13 +166,13 @@ func (me *Instance) torrentAdded(e entity) {
 	}
 }
 
-func (me *Instance) refresh() {
-	_new := scanDir(me.dirName)
-	old := me.dirState
+func (i *Instance) refresh() {
+	_new := scanDir(i.dirName)
+	old := i.dirState
 	for ih, _ := range old {
 		_, ok := _new[ih]
 		if !ok {
-			me.torrentRemoved(ih)
+			i.torrentRemoved(ih)
 		}
 	}
 	for ih, newE := range _new {
@@ -181,11 +181,11 @@ func (me *Instance) refresh() {
 			if newE == oldE {
 				continue
 			}
-			me.torrentRemoved(ih)
+			i.torrentRemoved(ih)
 		}
-		me.torrentAdded(newE)
+		i.torrentAdded(newE)
 	}
-	me.dirState = _new
+	i.dirState = _new
 }
 
 func New(dirName string) (i *Instance, err error) {

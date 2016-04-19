@@ -60,8 +60,8 @@ type testLayout struct {
 	Metainfo  *metainfo.MetaInfo
 }
 
-func (me *testLayout) Destroy() error {
-	return os.RemoveAll(me.BaseDir)
+func (tl *testLayout) Destroy() error {
+	return os.RemoveAll(tl.BaseDir)
 }
 
 func newGreetingLayout() (tl testLayout, err error) {

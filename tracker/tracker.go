@@ -29,9 +29,9 @@ type AnnounceResponse struct {
 
 type AnnounceEvent int32
 
-func (me AnnounceEvent) String() string {
+func (e AnnounceEvent) String() string {
 	// See BEP 3, "event".
-	return []string{"empty", "completed", "started", "stopped"}[me]
+	return []string{"empty", "completed", "started", "stopped"}[e]
 }
 
 type Peer struct {

@@ -18,8 +18,8 @@ type MarshalTypeError struct {
 	Type reflect.Type
 }
 
-func (this *MarshalTypeError) Error() string {
-	return "bencode: unsupported type: " + this.Type.String()
+func (e *MarshalTypeError) Error() string {
+	return "bencode: unsupported type: " + e.Type.String()
 }
 
 // Unmarshal argument must be a non-nil value of some pointer type.

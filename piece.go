@@ -14,9 +14,9 @@ import (
 
 type piecePriority byte
 
-func (me *piecePriority) Raise(maybe piecePriority) {
-	if maybe > *me {
-		*me = maybe
+func (pp *piecePriority) Raise(maybe piecePriority) {
+	if maybe > *pp {
+		*pp = maybe
 	}
 }
 

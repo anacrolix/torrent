@@ -33,12 +33,12 @@ func (ni *NodeInfo) PutCompact(b []byte) error {
 	return nil
 }
 
-func (cni *NodeInfo) UnmarshalCompactIPv4(b []byte) error {
+func (ni *NodeInfo) UnmarshalCompactIPv4(b []byte) error {
 	if len(b) != CompactIPv4NodeInfoLen {
 		return errors.New("expected 26 bytes")
 	}
-	missinggo.CopyExact(cni.ID[:], b[:20])
-	cni.Addr = NewAddr(&net.UDPAddr{
+	missinggo.CopyExact(ni.ID[:], b[:20])
+	ni.Addr = NewAddr(&net.UDPAddr{
 		IP:   append(make([]byte, 0, 4), b[20:24]...),
 		Port: int(binary.BigEndian.Uint16(b[24:26])),
 	})

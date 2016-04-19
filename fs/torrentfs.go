@@ -227,15 +227,15 @@ func (dn dirNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 	return nil
 }
 
-func (me rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, err error) {
-	for _, t := range me.fs.Client.Torrents() {
+func (rn rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, err error) {
+	for _, t := range rn.fs.Client.Torrents() {
 		info := t.Info()
 		if t.Name() != name || info == nil {
 			continue
 		}
 		__node := node{
 			metadata: info,
-			FS:       me.fs,
+			FS:       rn.fs,
 			t:        t,
 		}
 		if !info.IsDir() {
@@ -251,8 +251,8 @@ func (me rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, 
 	return
 }
 
-func (me rootNode) ReadDirAll(ctx context.Context) (dirents []fuse.Dirent, err error) {
-	for _, t := range me.fs.Client.Torrents() {
+func (rn rootNode) ReadDirAll(ctx context.Context) (dirents []fuse.Dirent, err error) {
+	for _, t := range rn.fs.Client.Torrents() {
 		info := t.Info()
 		if info == nil {
 			continue
@@ -271,28 +271,28 @@ func (me rootNode) ReadDirAll(ctx context.Context) (dirents []fuse.Dirent, err e
 	return
 }
 
-func (rootNode) Attr(ctx context.Context, attr *fuse.Attr) error {
+func (rn rootNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 	attr.Mode = os.ModeDir
 	return nil
 }
 
 // TODO(anacrolix): Why should rootNode implement this?
-func (me rootNode) Forget() {
-	me.fs.Destroy()
+func (rn rootNode) Forget() {
+	rn.fs.Destroy()
 }
 
 func (tfs *TorrentFS) Root() (fusefs.Node, error) {
 	return rootNode{tfs}, nil
 }
 
-func (me *TorrentFS) Destroy() {
-	me.mu.Lock()
+func (tfs *TorrentFS) Destroy() {
+	tfs.mu.Lock()
 	select {
-	case <-me.destroyed:
+	case <-tfs.destroyed:
 	default:
-		close(me.destroyed)
+		close(tfs.destroyed)
 	}
-	me.mu.Unlock()
+	tfs.mu.Unlock()
 }
 
 func New(cl *torrent.Client) *TorrentFS {

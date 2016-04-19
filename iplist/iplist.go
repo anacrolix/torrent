@@ -42,16 +42,16 @@ func New(initSorted []Range) *IPList {
 	}
 }
 
-func (me *IPList) NumRanges() int {
-	if me == nil {
+func (ipl *IPList) NumRanges() int {
+	if ipl == nil {
 		return 0
 	}
-	return len(me.ranges)
+	return len(ipl.ranges)
 }
 
 // Return the range the given IP is in. Returns nil if no range is found.
-func (me *IPList) Lookup(ip net.IP) (r Range, ok bool) {
-	if me == nil {
+func (ipl *IPList) Lookup(ip net.IP) (r Range, ok bool) {
+	if ipl == nil {
 		return
 	}
 	// TODO: Perhaps all addresses should be converted to IPv6, if the future
@@ -59,14 +59,14 @@ func (me *IPList) Lookup(ip net.IP) (r Range, ok bool) {
 	// memory for IPv4 addresses?
 	v4 := ip.To4()
 	if v4 != nil {
-		r, ok = me.lookup(v4)
+		r, ok = ipl.lookup(v4)
 		if ok {
 			return
 		}
 	}
 	v6 := ip.To16()
 	if v6 != nil {
-		return me.lookup(v6)
+		return ipl.lookup(v6)
 	}
 	if v4 == nil && v6 == nil {
 		r = Range{
@@ -103,12 +103,12 @@ func lookup(
 }
 
 // Return the range the given IP is in. Returns nil if no range is found.
-func (me *IPList) lookup(ip net.IP) (Range, bool) {
+func (ipl *IPList) lookup(ip net.IP) (Range, bool) {
 	return lookup(func(i int) net.IP {
-		return me.ranges[i].First
+		return ipl.ranges[i].First
 	}, func(i int) Range {
-		return me.ranges[i]
-	}, len(me.ranges), ip)
+		return ipl.ranges[i]
+	}, len(ipl.ranges), ip)
 }
 
 func minifyIP(ip *net.IP) {

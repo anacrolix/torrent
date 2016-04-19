@@ -112,6 +112,7 @@ var opts struct {
 	Mmap     bool           `help:"memory-map torrent data"`
 	TestPeer []*net.TCPAddr `short:"p" help:"addresses of some starting peers"`
 	Seed     bool           `help:"seed after download is complete"`
+	Addr     *net.TCPAddr   `help:"network listen addr"`
 	tagflag.StartPos
 	Torrent []string `type:"pos" arity:"+" help:"torrent file path or magnet uri"`
 }
@@ -122,6 +123,9 @@ func main() {
 	var clientConfig torrent.Config
 	if opts.Mmap {
 		clientConfig.DefaultStorage = storage.NewMMap("")
+	}
+	if opts.Addr != nil {
+		clientConfig.ListenAddr = opts.Addr.String()
 	}
 
 	client, err := torrent.NewClient(&clientConfig)

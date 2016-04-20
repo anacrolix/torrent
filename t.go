@@ -12,9 +12,8 @@ func (t *Torrent) InfoHash() metainfo.Hash {
 	return t.infoHash
 }
 
-// Closed when the info (.Info()) for the torrent has become available. Using
-// features of Torrent that require the info before it is available will have
-// undefined behaviour.
+// Returns a channel that is closed when the info (.Info()) for the torrent
+// has become available.
 func (t *Torrent) GotInfo() <-chan struct{} {
 	return t.gotMetainfo
 }
@@ -102,6 +101,8 @@ func (t *Torrent) Name() string {
 	return t.name()
 }
 
+// The completed length of all the torrent data, in all its files. This is
+// derived from the torrent info, when it is available.
 func (t *Torrent) Length() int64 {
 	select {
 	case <-t.GotInfo():

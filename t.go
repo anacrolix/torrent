@@ -104,12 +104,10 @@ func (t *Torrent) Name() string {
 // The completed length of all the torrent data, in all its files. This is
 // derived from the torrent info, when it is available.
 func (t *Torrent) Length() int64 {
-	select {
-	case <-t.GotInfo():
-		return t.length
-	default:
-		return -1
+	if t.info == nil {
+		panic("not valid until info obtained")
 	}
+	return t.length
 }
 
 // Returns a run-time generated metainfo for the torrent that includes the

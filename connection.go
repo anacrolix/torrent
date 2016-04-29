@@ -629,7 +629,7 @@ func (cn *connection) peerSentBitfield(bf []bool) error {
 	// We know that the last byte means that at most the last 7 bits are
 	// wasted.
 	cn.raisePeerMinPieces(len(bf) - 7)
-	if cn.t.haveInfo() {
+	if cn.t.haveInfo() && len(bf) > cn.t.numPieces() {
 		// Ignore known excess pieces.
 		bf = bf[:cn.t.numPieces()]
 	}

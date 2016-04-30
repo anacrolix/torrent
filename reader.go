@@ -1,13 +1,13 @@
 package torrent
 
 import (
-	"context"
 	"errors"
 	"io"
 	"os"
 	"sync"
 
 	"github.com/anacrolix/missinggo"
+	"golang.org/x/net/context"
 )
 
 // Accesses torrent data via a client.

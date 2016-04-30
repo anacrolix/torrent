@@ -50,7 +50,7 @@ type Info struct {
 	Pieces      []byte     `bencode:"pieces"`
 	Name        string     `bencode:"name"`
 	Length      int64      `bencode:"length,omitempty"`
-	Private     bool       `bencode:"private,omitempty"`
+	Private     *bool      `bencode:"private,omitempty"`
 	Files       []FileInfo `bencode:"files,omitempty"`
 }
 

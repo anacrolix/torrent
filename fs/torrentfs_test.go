@@ -1,7 +1,6 @@
 package torrentfs
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -73,10 +72,8 @@ func newGreetingLayout() (tl testLayout, err error) {
 	os.Mkdir(tl.Completed, 0777)
 	tl.MountDir = filepath.Join(tl.BaseDir, "mnt")
 	os.Mkdir(tl.MountDir, 0777)
-	name := testutil.CreateDummyTorrentData(tl.Completed)
-	metaInfoBuf := &bytes.Buffer{}
-	testutil.CreateMetaInfo(name, metaInfoBuf)
-	tl.Metainfo, err = metainfo.Load(metaInfoBuf)
+	testutil.CreateDummyTorrentData(tl.Completed)
+	tl.Metainfo = testutil.GreetingMetaInfo()
 	return
 }
 

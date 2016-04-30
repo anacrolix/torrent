@@ -6,20 +6,25 @@
 package testutil
 
 import (
-	"bytes"
+	"crypto/sha1"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/anacrolix/missinggo"
 
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-const GreetingFileContents = "hello, world\n"
+const (
+	GreetingFileContents = "hello, world\n"
+	GreetingFileName     = "greeting"
+)
 
 func CreateDummyTorrentData(dirName string) string {
 	f, _ := os.Create(filepath.Join(dirName, "greeting"))
@@ -27,25 +32,23 @@ func CreateDummyTorrentData(dirName string) string {
 	f.WriteString(GreetingFileContents)
 	return f.Name()
 }
-
-// Writes to w, a metainfo containing the file at name.
-func CreateMetaInfo(name string, w io.Writer) {
-	var mi metainfo.MetaInfo
-	mi.Info.Name = filepath.Base(name)
-	fi, _ := os.Stat(name)
-	mi.Info.Length = fi.Size()
+func GreetingMetaInfo() (mi *metainfo.MetaInfo) {
+	mi = new(metainfo.MetaInfo)
+	mi.Info.Name = GreetingFileName
+	mi.Info.Length = int64(len(GreetingFileContents))
 	mi.Announce = "lol://cheezburger"
 	mi.Info.PieceLength = 5
 	err := mi.Info.GeneratePieces(func(metainfo.FileInfo) (io.ReadCloser, error) {
-		return os.Open(name)
+		return ioutil.NopCloser(strings.NewReader(GreetingFileContents)), nil
 	})
 	if err != nil {
 		panic(err)
 	}
-	err = mi.Write(w)
-	if err != nil {
-		panic(err)
-	}
+	mi.Info.Bytes, _ = bencode.Marshal(&mi.Info.Info)
+	h := sha1.New()
+	h.Write(mi.Info.Bytes)
+	missinggo.CopyExact(&mi.Info.Hash, h.Sum(nil))
+	return
 }
 
 // Gives a temporary directory containing the completed "greeting" torrent,
@@ -56,10 +59,8 @@ func GreetingTestTorrent() (tempDir string, metaInfo *metainfo.MetaInfo) {
 	if err != nil {
 		panic(err)
 	}
-	name := CreateDummyTorrentData(tempDir)
-	w := &bytes.Buffer{}
-	CreateMetaInfo(name, w)
-	metaInfo, _ = metainfo.Load(w)
+	CreateDummyTorrentData(tempDir)
+	metaInfo = GreetingMetaInfo()
 	return
 }
 

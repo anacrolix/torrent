@@ -183,8 +183,8 @@ func (info *Info) UpvertedFiles() []FileInfo {
 // important to Bittorrent.
 type InfoEx struct {
 	Info
-	Hash  *Hash
-	Bytes []byte
+	Hash  Hash   // Only set when unmarshalling or UpdateHash.
+	Bytes []byte // Only set when unmarshalling or UpdateBytes.
 }
 
 var (
@@ -193,21 +193,17 @@ var (
 )
 
 func (ie *InfoEx) UnmarshalBencode(data []byte) error {
-	ie.Bytes = append(make([]byte, 0, len(data)), data...)
+	ie.Bytes = append([]byte(nil), data...)
 	h := sha1.New()
 	_, err := h.Write(ie.Bytes)
 	if err != nil {
 		panic(err)
 	}
-	ie.Hash = new(Hash)
-	missinggo.CopyExact(ie.Hash, h.Sum(nil))
+	missinggo.CopyExact(&ie.Hash, h.Sum(nil))
 	return bencode.Unmarshal(data, &ie.Info)
 }
 
 func (ie InfoEx) MarshalBencode() ([]byte, error) {
-	if ie.Bytes != nil {
-		return ie.Bytes, nil
-	}
 	return bencode.Marshal(&ie.Info)
 }
 
@@ -244,6 +240,6 @@ func (mi *MetaInfo) Magnet() (m Magnet) {
 		}
 	}
 	m.DisplayName = mi.Info.Name
-	m.InfoHash = *mi.Info.Hash
+	m.InfoHash = mi.Info.Hash
 	return
 }

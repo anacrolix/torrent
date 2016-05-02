@@ -37,6 +37,7 @@ func main() {
 			"Name":        info.Name,
 			"NumPieces":   info.NumPieces(),
 			"PieceLength": info.PieceLength,
+			"InfoHash":    metainfo.Info.Hash.HexString(),
 		}
 		if flags.PieceHashes {
 			d["PieceHashes"] = func() (ret []string) {

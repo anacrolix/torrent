@@ -1,13 +1,10 @@
 package main
 
 import (
-	"io"
 	"log"
 	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/docopt/docopt-go"
+	"github.com/anacrolix/tagflag"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -21,24 +18,19 @@ var (
 )
 
 func main() {
-	opts, err := docopt.Parse("Usage: torrent-create <root>", nil, true, "", true)
-	if err != nil {
-		panic(err)
+	log.SetFlags(log.Flags() | log.Lshortfile)
+	var args struct {
+		tagflag.StartPos
+		Root string
 	}
-	root := opts["<root>"].(string)
+	tagflag.Parse(&args, tagflag.Description("Creates a torrent metainfo for the file system rooted at ROOT, and outputs it to stdout."))
 	mi := metainfo.MetaInfo{
 		AnnounceList: builtinAnnounceList,
 	}
 	mi.SetDefaults()
-	err = mi.Info.BuildFromFilePath(root)
+	err := mi.Info.BuildFromFilePath(args.Root)
 	if err != nil {
 		log.Fatal(err)
-	}
-	err = mi.Info.GeneratePieces(func(fi metainfo.FileInfo) (io.ReadCloser, error) {
-		return os.Open(filepath.Join(root, strings.Join(fi.Path, string(filepath.Separator))))
-	})
-	if err != nil {
-		log.Fatalf("error generating pieces: %s", err)
 	}
 	err = mi.Write(os.Stdout)
 	if err != nil {

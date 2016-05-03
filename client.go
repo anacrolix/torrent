@@ -59,7 +59,7 @@ func (cl *Client) queueFirstHash(t *Torrent, piece int) {
 	cl.queuePieceCheck(t, piece)
 }
 
-// Clients contain zero or more Torrents. A client manages a blocklist, the
+// Clients contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
 type Client struct {
 	halfOpenLimit  int
@@ -1012,7 +1012,7 @@ func (cl *Client) completedMetadata(t *Torrent) {
 	var ih metainfo.Hash
 	missinggo.CopyExact(&ih, h.Sum(nil))
 	if ih != t.infoHash {
-		log.Print("bad metadata")
+		log.Printf("torrent %q: metadata bytes failed hash check", t)
 		t.invalidateMetadata()
 		return
 	}

@@ -54,6 +54,8 @@ type Info struct {
 	Files       []FileInfo `bencode:"files,omitempty"`
 }
 
+// This is a helper that sets Files and Pieces from a root path and its
+// children.
 func (info *Info) BuildFromFilePath(root string) (err error) {
 	info.Name = filepath.Base(root)
 	info.Files = nil

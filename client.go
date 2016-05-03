@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
-	"crypto/sha1"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -22,7 +21,6 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/pproffd"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/sync"
@@ -1006,44 +1004,6 @@ func (cl *Client) requestPendingMetadata(t *Torrent, c *connection) {
 	}
 }
 
-func (t *Torrent) maybeMetadataCompleted() {
-	if t.haveInfo() {
-		// Nothing to do.
-		return
-	}
-	if !t.haveAllMetadataPieces() {
-		// Don't have enough metadata pieces.
-		return
-	}
-	h := sha1.New()
-	h.Write(t.metadataBytes)
-	var ih metainfo.Hash
-	missinggo.CopyExact(&ih, h.Sum(nil))
-	if ih != t.infoHash {
-		log.Printf("torrent %q: metadata bytes failed hash check", t)
-		t.invalidateMetadata()
-		return
-	}
-	var info metainfo.Info
-	err := bencode.Unmarshal(t.metadataBytes, &info)
-	if err != nil {
-		log.Printf("error unmarshalling metadata: %s", err)
-		t.invalidateMetadata()
-		return
-	}
-	// TODO(anacrolix): If this fails, I think something harsher should be
-	// done.
-	err = t.cl.setMetaData(t, &info, t.metadataBytes)
-	if err != nil {
-		log.Printf("error setting metadata: %s", err)
-		t.invalidateMetadata()
-		return
-	}
-	if t.cl.config.Debug {
-		log.Printf("%s: got metadata from peers", t)
-	}
-}
-
 // Process incoming ut_metadata message.
 func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connection) (err error) {
 	var d map[string]int
@@ -1414,26 +1374,6 @@ func (cl *Client) addConnection(t *Torrent, c *connection) bool {
 	return true
 }
 
-func (t *Torrent) readerPieces() (ret bitmap.Bitmap) {
-	t.forReaderOffsetPieces(func(begin, end int) bool {
-		ret.AddRange(begin, end)
-		return true
-	})
-	return
-}
-
-func (t *Torrent) needData() bool {
-	if !t.haveInfo() {
-		return true
-	}
-	if t.pendingPieces.Len() != 0 {
-		return true
-	}
-	return !t.readerPieces().IterTyped(func(piece int) bool {
-		return t.pieceComplete(piece)
-	})
-}
-
 func (cl *Client) usefulConn(t *Torrent, c *connection) bool {
 	if c.closed.IsSet() {
 		return false
@@ -1603,72 +1543,12 @@ nextURL:
 	return tier
 }
 
-func (t *Torrent) addTrackers(announceList [][]string) {
-	newTrackers := copyTrackers(t.trackers)
-	for tierIndex, tier := range announceList {
-		if tierIndex < len(newTrackers) {
-			newTrackers[tierIndex] = mergeTier(newTrackers[tierIndex], tier)
-		} else {
-			newTrackers = append(newTrackers, mergeTier(nil, tier))
-		}
-		shuffleTier(newTrackers[tierIndex])
-	}
-	t.trackers = newTrackers
-}
-
-// Don't call this before the info is available.
-func (t *Torrent) bytesCompleted() int64 {
-	if !t.haveInfo() {
-		return 0
-	}
-	return t.info.TotalLength() - t.bytesLeft()
-}
-
 // A file-like handle to some torrent data resource.
 type Handle interface {
 	io.Reader
 	io.Seeker
 	io.Closer
 	io.ReaderAt
-}
-
-// Returns handles to the files in the torrent. This requires the metainfo is
-// available first.
-func (t *Torrent) Files() (ret []File) {
-	t.cl.mu.Lock()
-	info := t.Info()
-	t.cl.mu.Unlock()
-	if info == nil {
-		return
-	}
-	var offset int64
-	for _, fi := range info.UpvertedFiles() {
-		ret = append(ret, File{
-			t,
-			strings.Join(append([]string{info.Name}, fi.Path...), "/"),
-			offset,
-			fi.Length,
-			fi,
-		})
-		offset += fi.Length
-	}
-	return
-}
-
-func (t *Torrent) AddPeers(pp []Peer) error {
-	cl := t.cl
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
-	cl.addPeers(t, pp)
-	return nil
-}
-
-// Marks the entire torrent for download. Requires the info first, see
-// GotInfo.
-func (t *Torrent) DownloadAll() {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
-	t.pendPieceRange(0, t.numPieces())
 }
 
 // Returns nil metainfo if it isn't in the cache. Checks that the retrieved

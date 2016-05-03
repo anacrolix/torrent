@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"container/heap"
+	"crypto/sha1"
 	"fmt"
 	"io"
 	"log"
@@ -450,14 +451,6 @@ func (t *Torrent) writeStatus(w io.Writer, cl *Client) {
 		fmt.Fprintf(w, "%2d. ", i+1)
 		c.WriteStatus(w, t)
 	}
-}
-
-func (t *Torrent) String() string {
-	s := t.name()
-	if s == "" {
-		s = fmt.Sprintf("%x", t.infoHash)
-	}
-	return s
 }
 
 func (t *Torrent) haveInfo() bool {
@@ -1034,4 +1027,83 @@ func (t *Torrent) updateAllPieceCompletions() {
 	for i := range iter.N(t.numPieces()) {
 		t.updatePieceCompletion(i)
 	}
+}
+
+func (t *Torrent) maybeMetadataCompleted() {
+	if t.haveInfo() {
+		// Nothing to do.
+		return
+	}
+	if !t.haveAllMetadataPieces() {
+		// Don't have enough metadata pieces.
+		return
+	}
+	h := sha1.New()
+	h.Write(t.metadataBytes)
+	var ih metainfo.Hash
+	missinggo.CopyExact(&ih, h.Sum(nil))
+	if ih != t.infoHash {
+		log.Printf("torrent %q: metadata bytes failed hash check", t)
+		t.invalidateMetadata()
+		return
+	}
+	var info metainfo.Info
+	err := bencode.Unmarshal(t.metadataBytes, &info)
+	if err != nil {
+		log.Printf("error unmarshalling metadata: %s", err)
+		t.invalidateMetadata()
+		return
+	}
+	// TODO(anacrolix): If this fails, I think something harsher should be
+	// done.
+	err = t.cl.setMetaData(t, &info, t.metadataBytes)
+	if err != nil {
+		log.Printf("error setting metadata: %s", err)
+		t.invalidateMetadata()
+		return
+	}
+	if t.cl.config.Debug {
+		log.Printf("%s: got metadata from peers", t)
+	}
+}
+
+func (t *Torrent) readerPieces() (ret bitmap.Bitmap) {
+	t.forReaderOffsetPieces(func(begin, end int) bool {
+		ret.AddRange(begin, end)
+		return true
+	})
+	return
+}
+
+func (t *Torrent) needData() bool {
+	if !t.haveInfo() {
+		return true
+	}
+	if t.pendingPieces.Len() != 0 {
+		return true
+	}
+	return !t.readerPieces().IterTyped(func(piece int) bool {
+		return t.pieceComplete(piece)
+	})
+}
+
+func (t *Torrent) addTrackers(announceList [][]string) {
+	newTrackers := copyTrackers(t.trackers)
+	for tierIndex, tier := range announceList {
+		if tierIndex < len(newTrackers) {
+			newTrackers[tierIndex] = mergeTier(newTrackers[tierIndex], tier)
+		} else {
+			newTrackers = append(newTrackers, mergeTier(nil, tier))
+		}
+		shuffleTier(newTrackers[tierIndex])
+	}
+	t.trackers = newTrackers
+}
+
+// Don't call this before the info is available.
+func (t *Torrent) bytesCompleted() int64 {
+	if !t.haveInfo() {
+		return 0
+	}
+	return t.info.TotalLength() - t.bytesLeft()
 }

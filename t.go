@@ -1,6 +1,9 @@
 package torrent
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/anacrolix/missinggo/pubsub"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -145,4 +148,51 @@ func (t *Torrent) CancelPieces(begin, end int) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	t.unpendPieceRange(begin, end)
+}
+
+// Returns handles to the files in the torrent. This requires the metainfo is
+// available first.
+func (t *Torrent) Files() (ret []File) {
+	t.cl.mu.Lock()
+	info := t.Info()
+	t.cl.mu.Unlock()
+	if info == nil {
+		return
+	}
+	var offset int64
+	for _, fi := range info.UpvertedFiles() {
+		ret = append(ret, File{
+			t,
+			strings.Join(append([]string{info.Name}, fi.Path...), "/"),
+			offset,
+			fi.Length,
+			fi,
+		})
+		offset += fi.Length
+	}
+	return
+}
+
+func (t *Torrent) AddPeers(pp []Peer) error {
+	cl := t.cl
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	cl.addPeers(t, pp)
+	return nil
+}
+
+// Marks the entire torrent for download. Requires the info first, see
+// GotInfo.
+func (t *Torrent) DownloadAll() {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	t.pendPieceRange(0, t.numPieces())
+}
+
+func (t *Torrent) String() string {
+	s := t.name()
+	if s == "" {
+		s = fmt.Sprintf("%x", t.infoHash)
+	}
+	return s
 }

@@ -1006,7 +1006,15 @@ func (cl *Client) requestPendingMetadata(t *Torrent, c *connection) {
 	}
 }
 
-func (cl *Client) completedMetadata(t *Torrent) {
+func (t *Torrent) maybeMetadataCompleted() {
+	if t.haveInfo() {
+		// Nothing to do.
+		return
+	}
+	if !t.haveAllMetadataPieces() {
+		// Don't have enough metadata pieces.
+		return
+	}
 	h := sha1.New()
 	h.Write(t.metadataBytes)
 	var ih metainfo.Hash
@@ -1025,13 +1033,13 @@ func (cl *Client) completedMetadata(t *Torrent) {
 	}
 	// TODO(anacrolix): If this fails, I think something harsher should be
 	// done.
-	err = cl.setMetaData(t, &info, t.metadataBytes)
+	err = t.cl.setMetaData(t, &info, t.metadataBytes)
 	if err != nil {
 		log.Printf("error setting metadata: %s", err)
 		t.invalidateMetadata()
 		return
 	}
-	if cl.config.Debug {
+	if t.cl.config.Debug {
 		log.Printf("%s: got metadata from peers", t)
 	}
 }
@@ -1052,26 +1060,20 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connect
 	piece := d["piece"]
 	switch msgType {
 	case pp.DataMetadataExtensionMsgType:
-		if t.haveInfo() {
-			break
-		}
-		begin := len(payload) - metadataPieceSize(d["total_size"], piece)
-		if begin < 0 || begin >= len(payload) {
-			log.Printf("got bad metadata piece")
-			break
-		}
 		if !c.requestedMetadataPiece(piece) {
-			log.Printf("got unexpected metadata piece %d", piece)
-			break
+			err = fmt.Errorf("got unexpected piece %d", piece)
+			return
 		}
 		c.metadataRequests[piece] = false
+		begin := len(payload) - metadataPieceSize(d["total_size"], piece)
+		if begin < 0 || begin >= len(payload) {
+			err = fmt.Errorf("data has bad offset in payload: %d", begin)
+			return
+		}
 		t.saveMetadataPiece(piece, payload[begin:])
 		c.UsefulChunksReceived++
 		c.lastUsefulChunkReceived = time.Now()
-		if !t.haveAllMetadataPieces() {
-			break
-		}
-		cl.completedMetadata(t)
+		t.maybeMetadataCompleted()
 	case pp.RequestMetadataExtensionMsgType:
 		if !t.haveMetadataPiece(piece) {
 			c.Post(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))

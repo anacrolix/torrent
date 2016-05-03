@@ -183,8 +183,8 @@ func (info *Info) UpvertedFiles() []FileInfo {
 	return info.Files
 }
 
-// The info dictionary with its hash and raw bytes exposed, as these are
-// important to Bittorrent.
+// The info dictionary with its hash and raw bytes exposed, in case
+// remarshalling Info produces a different value.
 type InfoEx struct {
 	Info
 	Hash  Hash   // Only set when unmarshalling or UpdateHash.
@@ -236,7 +236,7 @@ func (mi *MetaInfo) SetDefaults() {
 	mi.Info.PieceLength = 256 * 1024
 }
 
-// Magnetize creates a Magnet from a MetaInfo
+// Magnetize creates a Magnet from a MetaInfo.
 func (mi *MetaInfo) Magnet() (m Magnet) {
 	for _, tier := range mi.AnnounceList {
 		for _, tracker := range tier {

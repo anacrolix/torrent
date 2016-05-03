@@ -60,7 +60,9 @@ func (info *Info) BuildFromFilePath(root string) (err error) {
 	info.Name = filepath.Base(root)
 	info.Files = nil
 	err = filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
-		log.Println(path, root, err)
+		if err != nil {
+			return err
+		}
 		if fi.IsDir() {
 			// Directories are implicit in torrent files.
 			return nil

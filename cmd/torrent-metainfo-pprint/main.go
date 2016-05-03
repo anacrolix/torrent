@@ -16,6 +16,7 @@ import (
 var flags struct {
 	JustName    bool
 	PieceHashes bool
+	Files       bool
 	tagflag.StartPos
 	TorrentFiles []string
 }
@@ -38,6 +39,11 @@ func main() {
 			"NumPieces":   info.NumPieces(),
 			"PieceLength": info.PieceLength,
 			"InfoHash":    metainfo.Info.Hash.HexString(),
+			"NumFiles":    len(info.UpvertedFiles()),
+			"TotalLength": info.TotalLength(),
+		}
+		if flags.Files {
+			d["Files"] = info.Files
 		}
 		if flags.PieceHashes {
 			d["PieceHashes"] = func() (ret []string) {

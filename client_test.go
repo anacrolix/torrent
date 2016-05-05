@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -37,11 +36,10 @@ func init() {
 }
 
 var TestingConfig = Config{
-	ListenAddr:           "localhost:0",
-	NoDHT:                true,
-	DisableTrackers:      true,
-	DisableMetainfoCache: true,
-	DataDir:              "/dev/null",
+	ListenAddr:      "localhost:0",
+	NoDHT:           true,
+	DisableTrackers: true,
+	DataDir:         "/dev/null",
 	DHTConfig: dht.ServerConfig{
 		NoDefaultBootstrap: true,
 	},
@@ -643,37 +641,6 @@ func TestAddTorrentSpecMerging(t *testing.T) {
 	_, new, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	require.NoError(t, err)
 	require.False(t, new)
-	require.NotNil(t, tt.Info())
-}
-
-// Check that torrent Info is obtained from the metainfo file cache.
-func TestAddTorrentMetainfoInCache(t *testing.T) {
-	cfg := TestingConfig
-	cfg.DisableMetainfoCache = false
-	cfg.ConfigDir, _ = ioutil.TempDir(os.TempDir(), "")
-	defer os.RemoveAll(cfg.ConfigDir)
-	cl, err := NewClient(&cfg)
-	require.NoError(t, err)
-	defer cl.Close()
-	dir, mi := testutil.GreetingTestTorrent()
-	defer os.RemoveAll(dir)
-	tt, new, err := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	require.NoError(t, err)
-	require.True(t, new)
-	require.NotNil(t, tt.Info())
-	_, err = os.Stat(filepath.Join(cfg.ConfigDir, "torrents", fmt.Sprintf("%x.torrent", mi.Info.Hash())))
-	require.NoError(t, err)
-	_, ok := cl.Torrent(mi.Info.Hash())
-	require.True(t, ok)
-	tt.Drop()
-	_, ok = cl.Torrent(mi.Info.Hash())
-	require.False(t, ok)
-	tt, new, err = cl.AddTorrentSpec(&TorrentSpec{
-		InfoHash: mi.Info.Hash(),
-	})
-	require.NoError(t, err)
-	require.True(t, new)
-	// Obtained from the metainfo cache.
 	require.NotNil(t, tt.Info())
 }
 

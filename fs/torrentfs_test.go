@@ -166,9 +166,6 @@ func TestDownloadOnDemand(t *testing.T) {
 		NoDHT:           true,
 		ListenAddr:      "localhost:0",
 		Seed:            true,
-		// Ensure that the metainfo is obtained over the wire, since we added
-		// the torrent to the seeder by magnet.
-		DisableMetainfoCache: true,
 	})
 	require.NoError(t, err)
 	defer seeder.Close()

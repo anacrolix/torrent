@@ -13,8 +13,6 @@ import (
 	mathRand "math/rand"
 	"net"
 	"net/url"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -178,19 +176,6 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		t.writeStatus(w, cl)
 		fmt.Fprintln(w)
 	}
-}
-
-func (cl *Client) configDir() string {
-	if cl.config.ConfigDir == "" {
-		return filepath.Join(os.Getenv("HOME"), ".config/torrent")
-	}
-	return cl.config.ConfigDir
-}
-
-// The directory where the Client expects to find and store configuration
-// data. Defaults to $HOME/.config/torrent.
-func (cl *Client) ConfigDir() string {
-	return cl.configDir()
 }
 
 // Creates a new client.
@@ -1442,44 +1427,10 @@ func (cl *Client) addPeers(t *Torrent, peers []Peer) {
 	}
 }
 
-func (cl *Client) cachedMetaInfoFilename(ih metainfo.Hash) string {
-	return filepath.Join(cl.configDir(), "torrents", ih.HexString()+".torrent")
-}
-
-func (cl *Client) saveTorrentFile(t *Torrent) error {
-	path := cl.cachedMetaInfoFilename(t.infoHash)
-	os.MkdirAll(filepath.Dir(path), 0777)
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
-	if err != nil {
-		return fmt.Errorf("error opening file: %s", err)
-	}
-	defer f.Close()
-	e := bencode.NewEncoder(f)
-	err = e.Encode(t.metainfo())
-	if err != nil {
-		return fmt.Errorf("error marshalling metainfo: %s", err)
-	}
-	mi, err := cl.torrentCacheMetaInfo(t.infoHash)
-	if err != nil {
-		// For example, a script kiddy makes us load too many files, and we're
-		// able to save the torrent, but not load it again to check it.
-		return nil
-	}
-	if mi.Info.Hash() != t.infoHash {
-		log.Fatalf("%x != %x", mi.Info.Hash, t.infoHash[:])
-	}
-	return nil
-}
-
 func (cl *Client) setMetaData(t *Torrent, md *metainfo.Info, bytes []byte) (err error) {
 	err = t.setMetadata(md, bytes)
 	if err != nil {
 		return
-	}
-	if !cl.config.DisableMetainfoCache {
-		if err := cl.saveTorrentFile(t); err != nil {
-			log.Printf("error saving torrent file for %s: %s", t, err)
-		}
 	}
 	cl.event.Broadcast()
 	close(t.gotMetainfo)
@@ -1549,32 +1500,6 @@ type Handle interface {
 	io.Seeker
 	io.Closer
 	io.ReaderAt
-}
-
-// Returns nil metainfo if it isn't in the cache. Checks that the retrieved
-// metainfo has the correct infohash.
-func (cl *Client) torrentCacheMetaInfo(ih metainfo.Hash) (mi *metainfo.MetaInfo, err error) {
-	if cl.config.DisableMetainfoCache {
-		return
-	}
-	f, err := os.Open(cl.cachedMetaInfoFilename(ih))
-	if err != nil {
-		if os.IsNotExist(err) {
-			err = nil
-		}
-		return
-	}
-	defer f.Close()
-	dec := bencode.NewDecoder(f)
-	err = dec.Decode(&mi)
-	if err != nil {
-		return
-	}
-	if mi.Info.Hash() != ih {
-		err = fmt.Errorf("cached torrent has wrong infohash: %x != %x", mi.Info.Hash, ih[:])
-		return
-	}
-	return
 }
 
 // Specifies a new torrent for adding to a client. There are helpers for
@@ -1655,20 +1580,8 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 	}
 	// Try to merge in info we have on the torrent. Any err left will
 	// terminate the function.
-	if t.info == nil {
-		if spec.Info != nil {
-			err = cl.setMetaData(t, &spec.Info.Info, spec.Info.Bytes)
-		} else {
-			var mi *metainfo.MetaInfo
-			mi, err = cl.torrentCacheMetaInfo(spec.InfoHash)
-			if err != nil {
-				log.Printf("error getting cached metainfo: %s", err)
-				err = nil
-			} else if mi != nil {
-				t.addTrackers(mi.AnnounceList)
-				err = cl.setMetaData(t, &mi.Info.Info, mi.Info.Bytes)
-			}
-		}
+	if t.info == nil && spec.Info != nil {
+		err = cl.setMetaData(t, &spec.Info.Info, spec.Info.Bytes)
 	}
 	if err != nil {
 		return

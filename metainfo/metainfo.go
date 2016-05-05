@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anacrolix/missinggo"
-
 	"github.com/anacrolix/torrent/bencode"
 )
 
@@ -183,34 +181,6 @@ func (info *Info) UpvertedFiles() []FileInfo {
 	return info.Files
 }
 
-// The info dictionary with its hash and raw bytes exposed, in case
-// remarshalling Info produces a different value.
-type InfoEx struct {
-	Info
-	Hash  Hash   // Only set when unmarshalling or UpdateHash.
-	Bytes []byte // Only set when unmarshalling or UpdateBytes.
-}
-
-var (
-	_ bencode.Marshaler   = InfoEx{}
-	_ bencode.Unmarshaler = &InfoEx{}
-)
-
-func (ie *InfoEx) UnmarshalBencode(data []byte) error {
-	ie.Bytes = append([]byte(nil), data...)
-	h := sha1.New()
-	_, err := h.Write(ie.Bytes)
-	if err != nil {
-		panic(err)
-	}
-	missinggo.CopyExact(&ie.Hash, h.Sum(nil))
-	return bencode.Unmarshal(data, &ie.Info)
-}
-
-func (ie InfoEx) MarshalBencode() ([]byte, error) {
-	return bencode.Marshal(&ie.Info)
-}
-
 type MetaInfo struct {
 	Info         InfoEx      `bencode:"info"`
 	Announce     string      `bencode:"announce,omitempty"`
@@ -236,7 +206,7 @@ func (mi *MetaInfo) SetDefaults() {
 	mi.Info.PieceLength = 256 * 1024
 }
 
-// Magnetize creates a Magnet from a MetaInfo.
+// Creates a Magnet from a MetaInfo.
 func (mi *MetaInfo) Magnet() (m Magnet) {
 	for _, tier := range mi.AnnounceList {
 		for _, tracker := range tier {
@@ -244,6 +214,6 @@ func (mi *MetaInfo) Magnet() (m Magnet) {
 		}
 	}
 	m.DisplayName = mi.Info.Name
-	m.InfoHash = mi.Info.Hash
+	m.InfoHash = mi.Info.Hash()
 	return
 }

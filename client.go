@@ -1465,7 +1465,7 @@ func (cl *Client) saveTorrentFile(t *Torrent) error {
 		// able to save the torrent, but not load it again to check it.
 		return nil
 	}
-	if !bytes.Equal(mi.Info.Hash.Bytes(), t.infoHash[:]) {
+	if mi.Info.Hash() != t.infoHash {
 		log.Fatalf("%x != %x", mi.Info.Hash, t.infoHash[:])
 	}
 	return nil
@@ -1570,7 +1570,7 @@ func (cl *Client) torrentCacheMetaInfo(ih metainfo.Hash) (mi *metainfo.MetaInfo,
 	if err != nil {
 		return
 	}
-	if !bytes.Equal(mi.Info.Hash.Bytes(), ih[:]) {
+	if mi.Info.Hash() != ih {
 		err = fmt.Errorf("cached torrent has wrong infohash: %x != %x", mi.Info.Hash, ih[:])
 		return
 	}
@@ -1610,15 +1610,13 @@ func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
 		Trackers:    mi.AnnounceList,
 		Info:        &mi.Info,
 		DisplayName: mi.Info.Name,
+		InfoHash:    mi.Info.Hash(),
 	}
-
 	if len(spec.Trackers) == 0 {
 		spec.Trackers = [][]string{[]string{mi.Announce}}
 	} else {
 		spec.Trackers[0] = append(spec.Trackers[0], mi.Announce)
 	}
-
-	missinggo.CopyExact(&spec.InfoHash, mi.Info.Hash)
 	return
 }
 

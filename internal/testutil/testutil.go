@@ -6,7 +6,6 @@
 package testutil
 
 import (
-	"crypto/sha1"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/anacrolix/missinggo"
 
-	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -44,10 +42,7 @@ func GreetingMetaInfo() (mi *metainfo.MetaInfo) {
 	if err != nil {
 		panic(err)
 	}
-	mi.Info.Bytes, _ = bencode.Marshal(&mi.Info.Info)
-	h := sha1.New()
-	h.Write(mi.Info.Bytes)
-	missinggo.CopyExact(&mi.Info.Hash, h.Sum(nil))
+	mi.Info.UpdateBytes()
 	return
 }
 

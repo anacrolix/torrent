@@ -173,7 +173,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	require.NoError(t, err)
 	defer seeder.Close()
 	testutil.ExportStatusWriter(seeder, "s")
-	_, err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.Info.Hash.HexString()))
+	_, err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.Info.Hash().HexString()))
 	require.NoError(t, err)
 	leecher, err := torrent.NewClient(&torrent.Config{
 		DisableTrackers: true,

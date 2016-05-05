@@ -15,9 +15,7 @@ import (
 
 func testFile(t *testing.T, filename string) {
 	mi, err := LoadFromFile(filename)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	if len(mi.Info.Files) == 1 {
 		t.Logf("Single file: %s (length: %d)\n", mi.Info.Name, mi.Info.Files[0].Length)
@@ -33,13 +31,10 @@ func testFile(t *testing.T, filename string) {
 			t.Logf("Tracker: %s\n", tracker)
 		}
 	}
-	// for _, url := range mi.WebSeedURLs {
-	// 	t.Logf("URL: %s\n", url)
-	// }
 
-	b, err := bencode.Marshal(mi.Info)
+	b, err := bencode.Marshal(&mi.Info.Info)
 	require.NoError(t, err)
-	assert.EqualValues(t, b, mi.Info.Bytes)
+	assert.EqualValues(t, string(b), string(mi.Info.Bytes))
 }
 
 func TestFile(t *testing.T) {

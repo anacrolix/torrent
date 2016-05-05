@@ -225,7 +225,6 @@ func (t *Torrent) setMetadata(md *metainfo.Info, infoBytes []byte) (err error) {
 	t.info = &metainfo.InfoEx{
 		Info:  *md,
 		Bytes: infoBytes,
-		Hash:  t.infoHash,
 	}
 	t.storage, err = t.storageOpener.OpenTorrent(t.info)
 	if err != nil {

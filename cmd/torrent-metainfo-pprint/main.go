@@ -38,7 +38,7 @@ func main() {
 			"Name":        info.Name,
 			"NumPieces":   info.NumPieces(),
 			"PieceLength": info.PieceLength,
-			"InfoHash":    metainfo.Info.Hash.HexString(),
+			"InfoHash":    metainfo.Info.Hash().HexString(),
 			"NumFiles":    len(info.UpvertedFiles()),
 			"TotalLength": info.TotalLength(),
 		}

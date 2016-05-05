@@ -86,10 +86,7 @@ func TestPieceHashSize(t *testing.T) {
 func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	tor := newTorrent(func() (ih metainfo.Hash) {
-		missinggo.CopyExact(ih[:], mi.Info.Hash)
-		return
-	}())
+	tor := newTorrent(mi.Info.Hash())
 	tor.chunkSize = 2
 	tor.storageOpener = storage.NewFile(dir)
 	// Needed to lock for asynchronous piece verification.
@@ -637,9 +634,9 @@ func TestAddTorrentSpecMerging(t *testing.T) {
 	defer cl.Close()
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	var ts TorrentSpec
-	missinggo.CopyExact(&ts.InfoHash, mi.Info.Hash)
-	tt, new, err := cl.AddTorrentSpec(&ts)
+	tt, new, err := cl.AddTorrentSpec(&TorrentSpec{
+		InfoHash: mi.Info.Hash(),
+	})
 	require.NoError(t, err)
 	require.True(t, new)
 	require.Nil(t, tt.Info())
@@ -664,17 +661,16 @@ func TestAddTorrentMetainfoInCache(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, new)
 	require.NotNil(t, tt.Info())
-	_, err = os.Stat(filepath.Join(cfg.ConfigDir, "torrents", fmt.Sprintf("%x.torrent", mi.Info.Hash.Bytes())))
+	_, err = os.Stat(filepath.Join(cfg.ConfigDir, "torrents", fmt.Sprintf("%x.torrent", mi.Info.Hash())))
 	require.NoError(t, err)
-	// Contains only the infohash.
-	var ts TorrentSpec
-	missinggo.CopyExact(&ts.InfoHash, mi.Info.Hash)
-	_, ok := cl.Torrent(ts.InfoHash)
+	_, ok := cl.Torrent(mi.Info.Hash())
 	require.True(t, ok)
 	tt.Drop()
-	_, ok = cl.Torrent(ts.InfoHash)
+	_, ok = cl.Torrent(mi.Info.Hash())
 	require.False(t, ok)
-	tt, new, err = cl.AddTorrentSpec(&ts)
+	tt, new, err = cl.AddTorrentSpec(&TorrentSpec{
+		InfoHash: mi.Info.Hash(),
+	})
 	require.NoError(t, err)
 	require.True(t, new)
 	// Obtained from the metainfo cache.
@@ -686,9 +682,9 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 	os.RemoveAll(dir)
 	cl, _ := NewClient(&TestingConfig)
 	defer cl.Close()
-	var ts TorrentSpec
-	missinggo.CopyExact(&ts.InfoHash, mi.Info.Hash)
-	tt, _, _ := cl.AddTorrentSpec(&ts)
+	tt, _, _ := cl.AddTorrentSpec(&TorrentSpec{
+		InfoHash: mi.Info.Hash(),
+	})
 	tt.Drop()
 	assert.EqualValues(t, 0, len(cl.Torrents()))
 	select {

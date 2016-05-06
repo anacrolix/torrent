@@ -5,11 +5,13 @@ import (
 	"log"
 
 	"github.com/anacrolix/tagflag"
+
 	"github.com/anacrolix/torrent/metainfo"
 )
 
 func main() {
 	var args struct {
+		tagflag.StartPos
 		Files []string `arity:"+" type:"pos"`
 	}
 	tagflag.Parse(&args)
@@ -18,6 +20,6 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("%x: %s\n", mi.Info.Hash, arg)
+		fmt.Printf("%s: %s\n", mi.Info.Hash().HexString(), arg)
 	}
 }

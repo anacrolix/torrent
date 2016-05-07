@@ -93,7 +93,9 @@ func TestTorrentInitialState(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, tor.pieces, 3)
 	tor.pendAllChunkSpecs(0)
+	tor.cl.mu.Lock()
 	assert.EqualValues(t, 3, tor.pieceNumPendingChunks(0))
+	tor.cl.mu.Unlock()
 	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
 }
 

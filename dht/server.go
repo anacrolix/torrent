@@ -585,7 +585,7 @@ func (s *Server) bootstrap() (err error) {
 		}()
 		s.mu.Unlock()
 		select {
-		case <-s.closed.C():
+		case <-s.closed.LockedChan(&s.mu):
 			s.mu.Lock()
 			return
 		case <-time.After(15 * time.Second):

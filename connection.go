@@ -4,13 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"container/list"
-	"encoding"
 	"errors"
 	"expvar"
 	"fmt"
 	"io"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/anacrolix/missinggo"
@@ -42,8 +42,6 @@ type connection struct {
 	Discovery peerSource
 	uTP       bool
 	closed    missinggo.Event
-	post      chan pp.Message
-	writeCh   chan []byte
 
 	UnwantedChunksReceived int
 	UsefulChunksReceived   int
@@ -88,6 +86,13 @@ type connection struct {
 
 	pieceInclination  []int
 	pieceRequestOrder prioritybitmap.PriorityBitmap
+
+	outgoingUnbufferedMessages         *list.List
+	outgoingUnbufferedMessagesNotEmpty missinggo.Event
+}
+
+func (cn *connection) mu() sync.Locker {
+	return &cn.t.cl.mu
 }
 
 func newConnection() (c *connection) {
@@ -95,9 +100,6 @@ func newConnection() (c *connection) {
 		Choked:          true,
 		PeerChoked:      true,
 		PeerMaxRequests: 250,
-
-		writeCh: make(chan []byte),
-		post:    make(chan pp.Message),
 	}
 	return
 }
@@ -221,11 +223,23 @@ func (cn *connection) PeerHasPiece(piece int) bool {
 }
 
 func (cn *connection) Post(msg pp.Message) {
-	select {
-	case cn.post <- msg:
-		postedMessageTypes.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
-	case <-cn.closed.C():
+	switch msg.Type {
+	case pp.Cancel:
+		for e := cn.outgoingUnbufferedMessages.Back(); e != nil; e = e.Prev() {
+			elemMsg := e.Value.(pp.Message)
+			if elemMsg.Type == pp.Request && elemMsg.Index == msg.Index && elemMsg.Begin == msg.Begin && elemMsg.Length == msg.Length {
+				cn.outgoingUnbufferedMessages.Remove(e)
+				optimizedCancels.Add(1)
+				return
+			}
+		}
 	}
+	if cn.outgoingUnbufferedMessages == nil {
+		cn.outgoingUnbufferedMessages = list.New()
+	}
+	cn.outgoingUnbufferedMessages.PushBack(msg)
+	cn.outgoingUnbufferedMessagesNotEmpty.Set()
+	postedMessageTypes.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
 }
 
 func (cn *connection) RequestPending(r request) bool {
@@ -305,10 +319,7 @@ func (cn *connection) Request(chunk request) bool {
 
 // Returns true if an unsatisfied request was canceled.
 func (cn *connection) Cancel(r request) bool {
-	if cn.Requests == nil {
-		return false
-	}
-	if _, ok := cn.Requests[r]; !ok {
+	if !cn.RequestPending(r) {
 		return false
 	}
 	delete(cn.Requests, r)
@@ -378,111 +389,53 @@ var (
 )
 
 // Writes buffers to the socket from the write channel.
-func (cn *connection) writer() {
+func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	defer func() {
-		cn.t.cl.mu.Lock()
-		defer cn.t.cl.mu.Unlock()
+		cn.mu().Lock()
+		defer cn.mu().Unlock()
 		cn.Close()
 	}()
 	// Reduce write syscalls.
 	buf := bufio.NewWriter(cn.rw)
+	keepAliveTimer := time.NewTimer(keepAliveTimeout)
 	for {
-		if buf.Buffered() == 0 {
-			// There's nothing to write, so block until we get something.
-			select {
-			case b, ok := <-cn.writeCh:
-				if !ok {
-					return
-				}
-				connectionWriterWrite.Add(1)
-				_, err := buf.Write(b)
-				if err != nil {
-					return
-				}
-			case <-cn.closed.C():
-				return
-			}
-		} else {
-			// We already have something to write, so flush if there's nothing
-			// more to write.
-			select {
-			case b, ok := <-cn.writeCh:
-				if !ok {
-					return
-				}
-				connectionWriterWrite.Add(1)
-				_, err := buf.Write(b)
-				if err != nil {
-					return
-				}
-			case <-cn.closed.C():
-				return
-			default:
-				connectionWriterFlush.Add(1)
-				err := buf.Flush()
-				if err != nil {
-					return
-				}
-			}
-		}
-	}
-}
-
-func (cn *connection) writeOptimizer(keepAliveDelay time.Duration) {
-	defer close(cn.writeCh) // Responsible for notifying downstream routines.
-	pending := list.New()   // Message queue.
-	var nextWrite []byte    // Set to nil if we need to need to marshal the next message.
-	timer := time.NewTimer(keepAliveDelay)
-	defer timer.Stop()
-	lastWrite := time.Now()
-	for {
-		write := cn.writeCh // Set to nil if there's nothing to write.
-		if pending.Len() == 0 {
-			write = nil
-		} else if nextWrite == nil {
-			var err error
-			nextWrite, err = pending.Front().Value.(encoding.BinaryMarshaler).MarshalBinary()
+		cn.mu().Lock()
+		for cn.outgoingUnbufferedMessages.Len() != 0 {
+			msg := cn.outgoingUnbufferedMessages.Remove(cn.outgoingUnbufferedMessages.Front()).(pp.Message)
+			cn.mu().Unlock()
+			b, err := msg.MarshalBinary()
 			if err != nil {
 				panic(err)
 			}
-		}
-	event:
-		select {
-		case <-timer.C:
-			if pending.Len() != 0 {
-				break
-			}
-			keepAliveTime := lastWrite.Add(keepAliveDelay)
-			if time.Now().Before(keepAliveTime) {
-				timer.Reset(keepAliveTime.Sub(time.Now()))
-				break
-			}
-			pending.PushBack(pp.Message{Keepalive: true})
-			postedKeepalives.Add(1)
-		case msg, ok := <-cn.post:
-			if !ok {
+			connectionWriterWrite.Add(1)
+			n, err := buf.Write(b)
+			if err != nil {
 				return
 			}
-			if msg.Type == pp.Cancel {
-				for e := pending.Back(); e != nil; e = e.Prev() {
-					elemMsg := e.Value.(pp.Message)
-					if elemMsg.Type == pp.Request && msg.Index == elemMsg.Index && msg.Begin == elemMsg.Begin && msg.Length == elemMsg.Length {
-						pending.Remove(e)
-						optimizedCancels.Add(1)
-						break event
-					}
-				}
+			keepAliveTimer.Reset(keepAliveTimeout)
+			if n != len(b) {
+				panic("short write")
 			}
-			pending.PushBack(msg)
-		case write <- nextWrite:
-			pending.Remove(pending.Front())
-			nextWrite = nil
-			lastWrite = time.Now()
-			if pending.Len() == 0 {
-				timer.Reset(keepAliveDelay)
+			cn.mu().Lock()
+		}
+		cn.outgoingUnbufferedMessagesNotEmpty.Clear()
+		cn.mu().Unlock()
+		connectionWriterFlush.Add(1)
+		if buf.Buffered() != 0 {
+			if buf.Flush() != nil {
+				return
 			}
-		case <-cn.closed.C():
+			keepAliveTimer.Reset(keepAliveTimeout)
+		}
+		select {
+		case <-cn.closed.LockedChan(cn.mu()):
 			return
+		case <-cn.outgoingUnbufferedMessagesNotEmpty.LockedChan(cn.mu()):
+		case <-keepAliveTimer.C:
+			cn.mu().Lock()
+			cn.Post(pp.Message{Keepalive: true})
+			cn.mu().Unlock()
+			postedKeepalives.Add(1)
 		}
 	}
 }

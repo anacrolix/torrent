@@ -95,8 +95,11 @@ func (cn *connection) mu() sync.Locker {
 	return &cn.t.cl.mu
 }
 
-func newConnection() (c *connection) {
+func (cl *Client) newConnection(nc net.Conn) (c *connection) {
 	c = &connection{
+		conn: nc,
+		rw:   nc,
+
 		Choked:          true,
 		PeerChoked:      true,
 		PeerMaxRequests: 250,

@@ -96,13 +96,15 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*Announc
 		}
 	}()
 	go func() {
+		disc.mu.Lock()
+		defer disc.mu.Unlock()
 		for i, addr := range startAddrs {
 			if i != 0 {
+				disc.mu.Unlock()
 				time.Sleep(time.Millisecond)
+				disc.mu.Lock()
 			}
-			disc.mu.Lock()
 			disc.contact(addr)
-			disc.mu.Unlock()
 		}
 		disc.contactedStartAddrs = true
 		// If we failed to contact any of the starting addrs, no transactions

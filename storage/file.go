@@ -10,6 +10,8 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
+// File-based storage for torrents, that isn't yet bound to a particular
+// torrent.
 type fileStorage struct {
 	baseDir   string
 	completed map[[20]byte]bool
@@ -25,15 +27,18 @@ func (fs *fileStorage) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
 	return fileTorrentStorage{fs}, nil
 }
 
+// File-based torrent storage, not yet bound to a Torrent.
 type fileTorrentStorage struct {
 	*fileStorage
 }
 
 func (fs *fileStorage) Piece(p metainfo.Piece) Piece {
+	// Create a view onto the file-based torrent storage.
 	_io := &fileStorageTorrent{
 		p.Info,
 		fs.baseDir,
 	}
+	// Return the appropriate segments of this.
 	return &fileStoragePiece{
 		fs,
 		p,
@@ -65,6 +70,7 @@ func (fs *fileStoragePiece) MarkComplete() error {
 	return nil
 }
 
+// Exposes file-based storage of a torrent, as one big ReadWriterAt.
 type fileStorageTorrent struct {
 	info    *metainfo.InfoEx
 	baseDir string

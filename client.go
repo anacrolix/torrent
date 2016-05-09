@@ -1421,16 +1421,6 @@ func (cl *Client) addPeers(t *Torrent, peers []Peer) {
 	}
 }
 
-func (cl *Client) setMetaData(t *Torrent, md *metainfo.Info, bytes []byte) (err error) {
-	err = t.setMetadata(md, bytes)
-	if err != nil {
-		return
-	}
-	cl.event.Broadcast()
-	close(t.gotMetainfo)
-	return
-}
-
 // Prepare a Torrent without any attachment to a Client. That means we can
 // initialize fields all fields that don't require the Client without locking
 // it.
@@ -1443,8 +1433,6 @@ func (cl *Client) newTorrent(ih metainfo.Hash) (t *Torrent) {
 
 		closing:           make(chan struct{}),
 		ceasingNetworking: make(chan struct{}),
-
-		gotMetainfo: make(chan struct{}),
 
 		halfOpen:          make(map[string]struct{}),
 		pieceStateChanges: pubsub.NewPubSub(),
@@ -1552,6 +1540,13 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	}
 	new = true
 	t = cl.newTorrent(infoHash)
+	if !cl.config.DisableTrackers {
+		go cl.announceTorrentTrackers(t)
+	}
+	if cl.dHT != nil {
+		go cl.announceTorrentDHT(t, true)
+	}
+	cl.torrents[infoHash] = t
 	return
 }
 
@@ -1562,35 +1557,24 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
 	t, new = cl.AddTorrentInfoHash(spec.InfoHash)
 
+	if spec.DisplayName != "" {
+		t.SetDisplayName(spec.DisplayName)
+	}
+
+	if spec.Info != nil {
+		err = t.SetInfoBytes(spec.Info.Bytes)
+		if err != nil {
+			return
+		}
+	}
+
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 
-	if spec.DisplayName != "" {
-		t.setDisplayName(spec.DisplayName)
-	}
-	// Try to merge in info we have on the torrent. Any err left will
-	// terminate the function.
-	if t.info == nil && spec.Info != nil {
-		err = cl.setMetaData(t, &spec.Info.Info, spec.Info.Bytes)
-	}
-	if err != nil {
-		return
-	}
 	t.addTrackers(spec.Trackers)
 
-	cl.torrents[spec.InfoHash] = t
 	t.maybeNewConns()
 
-	// From this point onwards, we can consider the torrent a part of the
-	// client.
-	if new {
-		if !cl.config.DisableTrackers {
-			go cl.announceTorrentTrackers(t)
-		}
-		if cl.dHT != nil {
-			go cl.announceTorrentDHT(t, true)
-		}
-	}
 	return
 }
 

@@ -93,7 +93,7 @@ func TestTorrentInitialState(t *testing.T) {
 	tor.storageOpener = storage.NewFile(dir)
 	// Needed to lock for asynchronous piece verification.
 	tor.cl = new(Client)
-	err := tor.setMetadata(&mi.Info.Info, mi.Info.Bytes)
+	err := tor.setInfoBytes(mi.Info.Bytes)
 	require.NoError(t, err)
 	require.Len(t, tor.pieces, 3)
 	tor.pendAllChunkSpecs(0)
@@ -487,16 +487,19 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 	cfg.DefaultStorage = badStorage{}
 	cl, _ := NewClient(&cfg)
 	defer cl.Close()
-	tt, new, err := cl.AddTorrentSpec(&TorrentSpec{
-		Info: &metainfo.InfoEx{
-			Info: metainfo.Info{
-				PieceLength: 15,
-				Pieces:      make([]byte, 20),
-				Files: []metainfo.FileInfo{
-					metainfo.FileInfo{Path: []string{"greeting"}, Length: 13},
-				},
+	ie := metainfo.InfoEx{
+		Info: metainfo.Info{
+			PieceLength: 15,
+			Pieces:      make([]byte, 20),
+			Files: []metainfo.FileInfo{
+				metainfo.FileInfo{Path: []string{"greeting"}, Length: 13},
 			},
 		},
+	}
+	ie.UpdateBytes()
+	tt, new, err := cl.AddTorrentSpec(&TorrentSpec{
+		Info:     &ie,
+		InfoHash: ie.Hash(),
 	})
 	require.NoError(t, err)
 	defer tt.Drop()
@@ -835,14 +838,17 @@ func TestPeerInvalidHave(t *testing.T) {
 	cl, err := NewClient(&TestingConfig)
 	require.NoError(t, err)
 	defer cl.Close()
-	tt, _new, err := cl.AddTorrentSpec(&TorrentSpec{
-		Info: &metainfo.InfoEx{
-			Info: metainfo.Info{
-				PieceLength: 1,
-				Pieces:      make([]byte, 20),
-				Files:       []metainfo.FileInfo{{Length: 1}},
-			},
+	ie := metainfo.InfoEx{
+		Info: metainfo.Info{
+			PieceLength: 1,
+			Pieces:      make([]byte, 20),
+			Files:       []metainfo.FileInfo{{Length: 1}},
 		},
+	}
+	ie.UpdateBytes()
+	tt, _new, err := cl.AddTorrentSpec(&TorrentSpec{
+		Info:     &ie,
+		InfoHash: ie.Hash(),
 	})
 	require.NoError(t, err)
 	assert.True(t, _new)

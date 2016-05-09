@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"container/heap"
-	"crypto/sha1"
 	"fmt"
 	"io"
 	"log"
@@ -84,8 +83,8 @@ type Torrent struct {
 	// received that piece.
 	metadataCompletedChunks []bool
 
-	// Closed when .Info is set.
-	gotMetainfo chan struct{}
+	// Set when .Info is obtained.
+	gotMetainfo missinggo.Event
 
 	readers map[*Reader]struct{}
 
@@ -216,27 +215,36 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 }
 
 // Called when metadata for a torrent becomes available.
-func (t *Torrent) setMetadata(md *metainfo.Info, infoBytes []byte) (err error) {
-	err = validateInfo(md)
+func (t *Torrent) setInfoBytes(b []byte) error {
+	if t.haveInfo() {
+		return nil
+	}
+	var ie *metainfo.InfoEx
+	err := bencode.Unmarshal(b, &ie)
 	if err != nil {
-		err = fmt.Errorf("bad info: %s", err)
-		return
+		return fmt.Errorf("error unmarshalling info bytes: %s", err)
 	}
-	t.info = &metainfo.InfoEx{
-		Info:  *md,
-		Bytes: infoBytes,
+	if ie.Hash() != t.infoHash {
+		return fmt.Errorf("info bytes have wrong hash")
 	}
+	err = validateInfo(&ie.Info)
+	if err != nil {
+		return fmt.Errorf("bad info: %s", err)
+	}
+	t.info = ie
+	t.cl.event.Broadcast()
+	t.gotMetainfo.Set()
 	t.storage, err = t.storageOpener.OpenTorrent(t.info)
 	if err != nil {
-		return
+		return fmt.Errorf("error opening torrent storage: %s", err)
 	}
 	t.length = 0
 	for _, f := range t.info.UpvertedFiles() {
 		t.length += f.Length
 	}
-	t.metadataBytes = infoBytes
+	t.metadataBytes = b
 	t.metadataCompletedChunks = nil
-	hashes := infoPieceHashes(md)
+	hashes := infoPieceHashes(&t.info.Info)
 	t.pieces = make([]piece, len(hashes))
 	for i, hash := range hashes {
 		piece := &t.pieces[i]
@@ -260,7 +268,7 @@ func (t *Torrent) setMetadata(md *metainfo.Info, infoBytes []byte) (err error) {
 			t.verifyPiece(i)
 		}
 	}()
-	return
+	return nil
 }
 
 func (t *Torrent) verifyPiece(piece int) {
@@ -1037,25 +1045,9 @@ func (t *Torrent) maybeMetadataCompleted() {
 		// Don't have enough metadata pieces.
 		return
 	}
-	h := sha1.New()
-	h.Write(t.metadataBytes)
-	var ih metainfo.Hash
-	missinggo.CopyExact(&ih, h.Sum(nil))
-	if ih != t.infoHash {
-		log.Printf("torrent %q: metadata bytes failed hash check", t)
-		t.invalidateMetadata()
-		return
-	}
-	var info metainfo.Info
-	err := bencode.Unmarshal(t.metadataBytes, &info)
-	if err != nil {
-		log.Printf("error unmarshalling metadata: %s", err)
-		t.invalidateMetadata()
-		return
-	}
 	// TODO(anacrolix): If this fails, I think something harsher should be
 	// done.
-	err = t.cl.setMetaData(t, &info, t.metadataBytes)
+	err := t.setInfoBytes(t.metadataBytes)
 	if err != nil {
 		log.Printf("error setting metadata: %s", err)
 		t.invalidateMetadata()
@@ -1105,4 +1097,13 @@ func (t *Torrent) bytesCompleted() int64 {
 		return 0
 	}
 	return t.info.TotalLength() - t.bytesLeft()
+}
+
+func (t *Torrent) SetInfoBytes(b []byte) (err error) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	if t.info != nil {
+		return
+	}
+	return t.setInfoBytes(b)
 }

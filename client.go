@@ -64,7 +64,6 @@ type Client struct {
 	utpSock        *utp.Socket
 	dHT            *dht.Server
 	ipBlockList    iplist.Ranger
-	bannedTorrents map[metainfo.Hash]struct{}
 	config         Config
 	pruneTimer     *time.Timer
 	extensionBytes peerExtensionBytes
@@ -1435,8 +1434,9 @@ func (cl *Client) setMetaData(t *Torrent, md *metainfo.Info, bytes []byte) (err 
 // Prepare a Torrent without any attachment to a Client. That means we can
 // initialize fields all fields that don't require the Client without locking
 // it.
-func newTorrent(ih metainfo.Hash) (t *Torrent) {
+func (cl *Client) newTorrent(ih metainfo.Hash) (t *Torrent) {
 	t = &Torrent{
+		cl:        cl,
 		infoHash:  ih,
 		chunkSize: defaultChunkSize,
 		peers:     make(map[peersKey]Peer),
@@ -1448,7 +1448,10 @@ func newTorrent(ih metainfo.Hash) (t *Torrent) {
 
 		halfOpen:          make(map[string]struct{}),
 		pieceStateChanges: pubsub.NewPubSub(),
+
+		storageOpener: cl.defaultStorage,
 	}
+	t.wantPeers.L = &cl.mu
 	return
 }
 
@@ -1540,36 +1543,28 @@ func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
 	return
 }
 
+func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bool) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	t, ok := cl.torrents[infoHash]
+	if ok {
+		return
+	}
+	new = true
+	t = cl.newTorrent(infoHash)
+	return
+}
+
 // Add or merge a torrent spec. If the torrent is already present, the
 // trackers will be merged with the existing ones. If the Info isn't yet
 // known, it will be set. The display name is replaced if the new spec
 // provides one. Returns new if the torrent wasn't already in the client.
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
+	t, new = cl.AddTorrentInfoHash(spec.InfoHash)
+
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 
-	t, ok := cl.torrents[spec.InfoHash]
-	if !ok {
-		new = true
-
-		// TODO: This doesn't belong in the core client, it's more of a
-		// helper.
-		if _, ok := cl.bannedTorrents[spec.InfoHash]; ok {
-			err = errors.New("banned torrent")
-			return
-		}
-		// TODO: Tidy this up?
-		t = newTorrent(spec.InfoHash)
-		t.cl = cl
-		t.wantPeers.L = &cl.mu
-		if spec.ChunkSize != 0 {
-			t.chunkSize = pp.Integer(spec.ChunkSize)
-		}
-		t.storageOpener = spec.Storage
-		if t.storageOpener == nil {
-			t.storageOpener = cl.defaultStorage
-		}
-	}
 	if spec.DisplayName != "" {
 		t.setDisplayName(spec.DisplayName)
 	}

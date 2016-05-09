@@ -18,6 +18,7 @@ import (
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/filecache"
+	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
@@ -84,7 +85,10 @@ func TestPieceHashSize(t *testing.T) {
 func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	tor := newTorrent(mi.Info.Hash())
+	tor := &Torrent{
+		infoHash:          mi.Info.Hash(),
+		pieceStateChanges: pubsub.NewPubSub(),
+	}
 	tor.chunkSize = 2
 	tor.storageOpener = storage.NewFile(dir)
 	// Needed to lock for asynchronous piece verification.

@@ -1556,25 +1556,22 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 // provides one. Returns new if the torrent wasn't already in the client.
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
 	t, new = cl.AddTorrentInfoHash(spec.InfoHash)
-
 	if spec.DisplayName != "" {
 		t.SetDisplayName(spec.DisplayName)
 	}
-
 	if spec.Info != nil {
 		err = t.SetInfoBytes(spec.Info.Bytes)
 		if err != nil {
 			return
 		}
 	}
-
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-
+	if spec.ChunkSize != 0 {
+		t.chunkSize = pp.Integer(spec.ChunkSize)
+	}
 	t.addTrackers(spec.Trackers)
-
 	t.maybeNewConns()
-
 	return
 }
 

@@ -102,16 +102,3 @@ func (c *httpClient) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err er
 	ret.Peers, err = trackerResponse.UnmarshalPeers()
 	return
 }
-
-func (c *httpClient) Connect() error {
-	// HTTP trackers do not require a connecting handshake.
-	return nil
-}
-
-func (c *httpClient) String() string {
-	return c.URL()
-}
-
-func (c *httpClient) URL() string {
-	return c.url.String()
-}

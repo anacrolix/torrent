@@ -100,17 +100,9 @@ func (c *udpClient) Close() error {
 	return nil
 }
 
-func (c *udpClient) URL() string {
-	return c.url.String()
-}
-
-func (c *udpClient) String() string {
-	return c.URL()
-}
-
 func (c *udpClient) Announce(req *AnnounceRequest) (res AnnounceResponse, err error) {
-	if !c.connected() {
-		err = ErrNotConnected
+	err = c.connect()
+	if err != nil {
 		return
 	}
 	reqURI := c.url.RequestURI()
@@ -244,7 +236,7 @@ func (c *udpClient) connected() bool {
 	return !c.connectionIdReceived.IsZero() && time.Now().Before(c.connectionIdReceived.Add(time.Minute))
 }
 
-func (c *udpClient) Connect() (err error) {
+func (c *udpClient) connect() (err error) {
 	if c.connected() {
 		return nil
 	}

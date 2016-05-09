@@ -47,17 +47,12 @@ const (
 )
 
 type client interface {
-	// Returns ErrNotConnected if Connect needs to be called.
 	Announce(*AnnounceRequest) (AnnounceResponse, error)
-	Connect() error
-	String() string
-	URL() string
 	Close() error
 }
 
 var (
-	ErrNotConnected = errors.New("not connected")
-	ErrBadScheme    = errors.New("unknown scheme")
+	ErrBadScheme = errors.New("unknown scheme")
 
 	schemes = make(map[string]func(*url.URL) client)
 )
@@ -67,7 +62,7 @@ func registerClientScheme(scheme string, newFunc func(*url.URL) client) {
 }
 
 // Returns ErrBadScheme if the tracker scheme isn't recognised.
-func new(rawurl string) (cl client, err error) {
+func newClient(rawurl string) (cl client, err error) {
 	url_s, err := url.Parse(rawurl)
 	if err != nil {
 		return
@@ -82,15 +77,11 @@ func new(rawurl string) (cl client, err error) {
 }
 
 func Announce(urlStr string, req *AnnounceRequest) (res AnnounceResponse, err error) {
-	cl, err := new(urlStr)
+	cl, err := newClient(urlStr)
 	if err != nil {
 		return
 	}
 	defer cl.Close()
-	err = cl.Connect()
-	if err != nil {
-		return
-	}
 	return cl.Announce(req)
 
 }

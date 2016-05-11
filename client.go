@@ -65,7 +65,6 @@ type Client struct {
 	dHT            *dht.Server
 	ipBlockList    iplist.Ranger
 	config         Config
-	pruneTimer     *time.Timer
 	extensionBytes peerExtensionBytes
 	// Set of addresses that have our client ID. This intentionally will
 	// include ourselves if we end up trying to connect to our own address

@@ -485,7 +485,8 @@ func (p badStoragePiece) ReadAt(b []byte, off int64) (n int, err error) {
 func TestCompletedPieceWrongSize(t *testing.T) {
 	cfg := TestingConfig
 	cfg.DefaultStorage = badStorage{}
-	cl, _ := NewClient(&cfg)
+	cl, err := NewClient(&cfg)
+	require.NoError(t, err)
 	defer cl.Close()
 	ie := metainfo.InfoEx{
 		Info: metainfo.Info{

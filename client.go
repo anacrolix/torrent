@@ -58,9 +58,11 @@ func (cl *Client) queueFirstHash(t *Torrent, piece int) {
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
 type Client struct {
-	halfOpenLimit  int
-	peerID         [20]byte
-	listeners      []net.Listener
+	halfOpenLimit int
+	peerID        [20]byte
+	// The net.Addr.String part that should be common to all active listeners.
+	listenAddr     string
+	tcpListener    net.Listener
 	utpSock        *utp.Socket
 	dHT            *dht.Server
 	ipBlockList    iplist.Ranger
@@ -99,12 +101,17 @@ func (cl *Client) PeerID() string {
 	return string(cl.peerID[:])
 }
 
-func (cl *Client) ListenAddr() (addr net.Addr) {
-	for _, l := range cl.listeners {
-		addr = l.Addr()
-		break
+type torrentAddr string
+
+func (me torrentAddr) Network() string { return "" }
+
+func (me torrentAddr) String() string { return string(me) }
+
+func (cl *Client) ListenAddr() net.Addr {
+	if cl.listenAddr == "" {
+		return nil
 	}
-	return
+	return torrentAddr(cl.listenAddr)
 }
 
 type hashSorter struct {
@@ -176,6 +183,59 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
+func listenUTP(networkSuffix, addr string) (*utp.Socket, error) {
+	return utp.NewSocket("udp"+networkSuffix, addr)
+}
+
+func listenTCP(networkSuffix, addr string) (net.Listener, error) {
+	return net.Listen("tcp"+networkSuffix, addr)
+}
+
+func listenBothSameDynamicPort(networkSuffix, host string) (tcpL net.Listener, utpSock *utp.Socket, listenedAddr string, err error) {
+	for {
+		tcpL, err = listenTCP(networkSuffix, net.JoinHostPort(host, "0"))
+		if err != nil {
+			return
+		}
+		listenedAddr = tcpL.Addr().String()
+		utpSock, err = listenUTP(networkSuffix, listenedAddr)
+		if err == nil {
+			return
+		}
+		tcpL.Close()
+		if !strings.Contains(err.Error(), "address already in use") {
+			return
+		}
+	}
+}
+
+func listen(tcp, utp bool, networkSuffix, addr string) (tcpL net.Listener, utpSock *utp.Socket, listenedAddr string, err error) {
+	if addr == "" {
+		addr = ":50007"
+	}
+	host, port, err := missinggo.ParseHostPort(addr)
+	if err != nil {
+		return
+	}
+	if tcp && utp && port == 0 {
+		return listenBothSameDynamicPort(networkSuffix, host)
+	}
+	listenedAddr = addr
+	if tcp {
+		tcpL, err = listenTCP(networkSuffix, addr)
+		if err != nil {
+			return
+		}
+	}
+	if utp {
+		utpSock, err = listenUTP(networkSuffix, addr)
+		if err != nil && tcp {
+			tcpL.Close()
+		}
+	}
+	return
+}
+
 // Creates a new client.
 func NewClient(cfg *Config) (cl *Client, err error) {
 	if cfg == nil {
@@ -213,43 +273,24 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		}
 	}
 
-	// Returns the laddr string to listen on for the next Listen call.
-	listenAddr := func() string {
-		if addr := cl.ListenAddr(); addr != nil {
-			return addr.String()
-		}
-		if cfg.ListenAddr == "" {
-			return ":50007"
-		}
-		return cfg.ListenAddr
-	}
-	if !cl.config.DisableTCP {
-		var l net.Listener
-		l, err = net.Listen(func() string {
+	cl.tcpListener, cl.utpSock, cl.listenAddr, err = listen(
+		!cl.config.DisableTCP,
+		!cl.config.DisableUTP,
+		func() string {
 			if cl.config.DisableIPv6 {
-				return "tcp4"
+				return "4"
 			} else {
-				return "tcp"
+				return ""
 			}
-		}(), listenAddr())
-		if err != nil {
-			return
-		}
-		cl.listeners = append(cl.listeners, l)
-		go cl.acceptConnections(l, false)
+		}(),
+		cl.config.ListenAddr)
+	if err != nil {
+		return
 	}
-	if !cl.config.DisableUTP {
-		cl.utpSock, err = utp.NewSocket(func() string {
-			if cl.config.DisableIPv6 {
-				return "udp4"
-			} else {
-				return "udp"
-			}
-		}(), listenAddr())
-		if err != nil {
-			return
-		}
-		cl.listeners = append(cl.listeners, cl.utpSock)
+	if cl.tcpListener != nil {
+		go cl.acceptConnections(cl.tcpListener, false)
+	}
+	if cl.utpSock != nil {
 		go cl.acceptConnections(cl.utpSock, true)
 	}
 	if !cfg.NoDHT {
@@ -258,7 +299,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 			dhtCfg.IPBlocklist = cl.ipBlockList
 		}
 		if dhtCfg.Addr == "" {
-			dhtCfg.Addr = listenAddr()
+			dhtCfg.Addr = cl.listenAddr
 		}
 		if dhtCfg.Conn == nil && cl.utpSock != nil {
 			dhtCfg.Conn = cl.utpSock
@@ -281,8 +322,11 @@ func (cl *Client) Close() {
 	if cl.dHT != nil {
 		cl.dHT.Close()
 	}
-	for _, l := range cl.listeners {
-		l.Close()
+	if cl.utpSock != nil {
+		cl.utpSock.Close()
+	}
+	if cl.tcpListener != nil {
+		cl.tcpListener.Close()
 	}
 	for _, t := range cl.torrents {
 		t.close()
@@ -593,11 +637,14 @@ func (cl *Client) outgoingConnection(t *Torrent, addr string, ps peerSource) {
 // The port number for incoming peer connections. 0 if the client isn't
 // listening.
 func (cl *Client) incomingPeerPort() int {
-	listenAddr := cl.ListenAddr()
-	if listenAddr == nil {
+	if cl.listenAddr == "" {
 		return 0
 	}
-	return missinggo.AddrPort(listenAddr)
+	_, port, err := missinggo.ParseHostPort(cl.listenAddr)
+	if err != nil {
+		panic(err)
+	}
+	return port
 }
 
 // Convert a net.Addr to its compact IP representation. Either 4 or 16 bytes

@@ -92,7 +92,6 @@ func TestUnmountWedged(t *testing.T) {
 		DataDir:         filepath.Join(layout.BaseDir, "incomplete"),
 		DisableTrackers: true,
 		NoDHT:           true,
-		ListenAddr:      "redonk",
 		DisableTCP:      true,
 		DisableUTP:      true,
 	})

@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"container/list"
 	"io"
 	"io/ioutil"
 	"net"
@@ -56,4 +57,38 @@ func TestCancelRequestOptimized(t *testing.T) {
 	// A single keep-alive will have gone through, as writer would be stuck
 	// trying to flush it, and then promptly close.
 	require.EqualValues(t, "\x00\x00\x00\x00", string(b))
+}
+
+// Ensure that no race exists between sending a bitfield, and a subsequent
+// Have that would potentially alter it.
+func TestSendBitfieldThenHave(t *testing.T) {
+	r, w := io.Pipe()
+	c := &connection{
+		t: &Torrent{
+			cl: &Client{},
+		},
+		rw: struct {
+			io.Reader
+			io.Writer
+		}{r, w},
+		outgoingUnbufferedMessages: list.New(),
+	}
+	go c.writer(time.Minute)
+	c.mu().Lock()
+	c.Bitfield([]bool{false, true, false})
+	c.mu().Unlock()
+	c.mu().Lock()
+	c.Have(2)
+	c.mu().Unlock()
+	b := make([]byte, 15)
+	n, err := io.ReadFull(r, b)
+	c.mu().Lock()
+	// This will cause connection.writer to terminate.
+	c.closed.Set()
+	c.mu().Unlock()
+	require.NoError(t, err)
+	require.EqualValues(t, 15, n)
+	// Here we see that the bitfield doesn't have piece 2 set, as that should
+	// arrive in the following Have message.
+	require.EqualValues(t, "\x00\x00\x00\x02\x05@\x00\x00\x00\x05\x04\x00\x00\x00\x02", string(b))
 }

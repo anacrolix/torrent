@@ -217,8 +217,10 @@ func (cn *connection) Close() {
 	cn.closed.Set()
 	cn.discardPieceInclination()
 	cn.pieceRequestOrder.Clear()
-	// TODO: This call blocks sometimes, why?
-	go cn.conn.Close()
+	if cn.conn != nil {
+		// TODO: This call blocks sometimes, why?
+		go cn.conn.Close()
+	}
 }
 
 func (cn *connection) PeerHasPiece(piece int) bool {
@@ -465,7 +467,10 @@ func (cn *connection) Bitfield(haves []bool) {
 		Type:     pp.Bitfield,
 		Bitfield: haves,
 	})
-	cn.sentHaves = haves
+	// Make a copy of haves, as that's read when the message is marshalled
+	// without the lock. Also it obviously shouldn't change in the Msg due to
+	// changes in .sentHaves.
+	cn.sentHaves = append([]bool(nil), haves...)
 }
 
 func (cn *connection) updateRequests() {

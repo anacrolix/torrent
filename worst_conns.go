@@ -45,7 +45,7 @@ func (wc worstConnsSortKey) Less(other worstConnsSortKey) bool {
 func (wc *worstConns) key(i int) (key worstConnsSortKey) {
 	c := wc.c[i]
 	key.useful = wc.cl.usefulConn(wc.t, c)
-	if wc.cl.seeding(wc.t) {
+	if wc.t.seeding() {
 		key.lastHelpful = c.lastChunkSent
 	}
 	// Intentionally consider the last time a chunk was received when seeding,

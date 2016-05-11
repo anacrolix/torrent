@@ -87,7 +87,7 @@ func (t *Torrent) SubscribePieceStateChanges() *pubsub.Subscription {
 func (t *Torrent) Seeding() bool {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
-	return t.cl.seeding(t)
+	return t.seeding()
 }
 
 // Clobbers the torrent display name. The display name is used as the torrent

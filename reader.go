@@ -45,7 +45,7 @@ func (r *Reader) SetReadahead(readahead int64) {
 }
 
 func (r *Reader) readable(off int64) (ret bool) {
-	if r.torrentClosed() {
+	if r.t.closed.IsSet() {
 		return true
 	}
 	req, ok := r.t.offsetRequest(off)
@@ -137,11 +137,6 @@ func (r *Reader) ReadContext(b []byte, ctx context.Context) (n int, err error) {
 	return
 }
 
-// Safe to call with or without client lock.
-func (r *Reader) torrentClosed() bool {
-	return r.t.isClosed()
-}
-
 // Wait until some data should be available to read. Tickles the client if it
 // isn't. Returns how much should be readable without blocking.
 func (r *Reader) waitAvailable(pos, wanted int64, ctxErr *error) (avail int64) {
@@ -162,7 +157,7 @@ func (r *Reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 	for {
 		avail := r.waitAvailable(pos, int64(len(b)), ctxErr)
 		if avail == 0 {
-			if r.torrentClosed() {
+			if r.t.closed.IsSet() {
 				err = errors.New("torrent closed")
 				return
 			}

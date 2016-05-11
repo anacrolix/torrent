@@ -38,12 +38,7 @@ type peersKey struct {
 type Torrent struct {
 	cl *Client
 
-	closing chan struct{}
-
-	// Closed when no more network activity is desired. This includes
-	// announcing, and communicating with peers.
-	ceasingNetworking chan struct{}
-
+	closed   missinggo.Event
 	infoHash metainfo.Hash
 	pieces   []piece
 	// Values are the piece indices that changed.
@@ -140,18 +135,6 @@ func (t *Torrent) worstConns(cl *Client) (wcs *worstConns) {
 		}
 	}
 	return
-}
-
-func (t *Torrent) ceaseNetworking() {
-	select {
-	case <-t.ceasingNetworking:
-		return
-	default:
-	}
-	close(t.ceasingNetworking)
-	for _, c := range t.conns {
-		c.Close()
-	}
 }
 
 func (t *Torrent) addPeer(p Peer, cl *Client) {
@@ -527,22 +510,8 @@ func (t *Torrent) numPiecesCompleted() (num int) {
 	return t.completedPieces.Len()
 }
 
-// Safe to call with or without client lock.
-func (t *Torrent) isClosed() bool {
-	select {
-	case <-t.closing:
-		return true
-	default:
-		return false
-	}
-}
-
 func (t *Torrent) close() (err error) {
-	if t.isClosed() {
-		return
-	}
-	t.ceaseNetworking()
-	close(t.closing)
+	t.closed.Set()
 	if c, ok := t.storage.(io.Closer); ok {
 		c.Close()
 	}
@@ -1106,4 +1075,62 @@ func (t *Torrent) SetInfoBytes(b []byte) (err error) {
 		return
 	}
 	return t.setInfoBytes(b)
+}
+
+// Returns true if connection is removed from torrent.Conns.
+func (t *Torrent) deleteConnection(c *connection) bool {
+	for i0, _c := range t.conns {
+		if _c != c {
+			continue
+		}
+		i1 := len(t.conns) - 1
+		if i0 != i1 {
+			t.conns[i0] = t.conns[i1]
+		}
+		t.conns = t.conns[:i1]
+		return true
+	}
+	return false
+}
+
+func (t *Torrent) dropConnection(c *connection) {
+	t.cl.event.Broadcast()
+	c.Close()
+	if t.deleteConnection(c) {
+		t.openNewConns()
+	}
+}
+
+// Returns true when peers are required, or false if the torrent is closing.
+func (t *Torrent) waitWantPeers() bool {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	for {
+		if t.closed.IsSet() {
+			return false
+		}
+		if len(t.peers) > torrentPeersLowWater {
+			goto wait
+		}
+		if t.needData() || t.seeding() {
+			return true
+		}
+	wait:
+		t.wantPeers.Wait()
+	}
+}
+
+// Returns whether the client should make effort to seed the torrent.
+func (t *Torrent) seeding() bool {
+	cl := t.cl
+	if cl.config.NoUpload {
+		return false
+	}
+	if !cl.config.Seed {
+		return false
+	}
+	if t.needData() {
+		return false
+	}
+	return true
 }

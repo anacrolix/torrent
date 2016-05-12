@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"container/heap"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -208,7 +209,7 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 		return fmt.Errorf("error unmarshalling info bytes: %s", err)
 	}
 	if ie.Hash() != t.infoHash {
-		return fmt.Errorf("info bytes have wrong hash")
+		return errors.New("info bytes have wrong hash")
 	}
 	err = validateInfo(&ie.Info)
 	if err != nil {

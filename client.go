@@ -1668,17 +1668,19 @@ func (cl *Client) trackerBlockedUnlocked(trRawURL string) (blocked bool, err err
 	return
 }
 
-func (cl *Client) announceTorrentSingleTracker(tr string, req *tracker.AnnounceRequest, t *Torrent) error {
+func (cl *Client) announceTorrentSingleTracker(tr string, req *tracker.AnnounceRequest, t *Torrent) (interval time.Duration, err error) {
 	blocked, err := cl.trackerBlockedUnlocked(tr)
 	if err != nil {
-		return fmt.Errorf("error determining if tracker blocked: %s", err)
+		err = fmt.Errorf("error determining if tracker blocked: %s", err)
+		return
 	}
 	if blocked {
-		return fmt.Errorf("tracker blocked: %s", tr)
+		err = errors.New("tracker has blocked IP")
+		return
 	}
 	resp, err := tracker.Announce(tr, req)
 	if err != nil {
-		return fmt.Errorf("error announcing: %s", err)
+		return
 	}
 	var peers []Peer
 	for _, peer := range resp.Peers {
@@ -1687,14 +1689,9 @@ func (cl *Client) announceTorrentSingleTracker(tr string, req *tracker.AnnounceR
 			Port: peer.Port,
 		})
 	}
-	cl.mu.Lock()
-	cl.addPeers(t, peers)
-	cl.mu.Unlock()
-
-	// log.Printf("%s: %d new peers from %s", t, len(peers), tr)
-
-	time.Sleep(time.Second * time.Duration(resp.Interval))
-	return nil
+	t.AddPeers(peers)
+	interval = time.Second * time.Duration(resp.Interval)
+	return
 }
 
 func (cl *Client) announceTorrentTrackersFastStart(req *tracker.AnnounceRequest, trackers []trackerTier, t *Torrent) (atLeastOne bool) {
@@ -1704,7 +1701,7 @@ func (cl *Client) announceTorrentTrackersFastStart(req *tracker.AnnounceRequest,
 		for _, tr := range tier {
 			outstanding++
 			go func(tr string) {
-				err := cl.announceTorrentSingleTracker(tr, req, t)
+				_, err := cl.announceTorrentSingleTracker(tr, req, t)
 				oks <- err == nil
 			}(tr)
 		}
@@ -1748,8 +1745,9 @@ newAnnounce:
 		for _, tier := range trackers {
 			for trIndex, tr := range tier {
 				numTrackersTried++
-				err := cl.announceTorrentSingleTracker(tr, &req, t)
+				interval, err := cl.announceTorrentSingleTracker(tr, &req, t)
 				if err != nil {
+					// Try the next tracker.
 					continue
 				}
 				// Float the successful announce to the top of the tier. If
@@ -1760,6 +1758,8 @@ newAnnounce:
 				cl.mu.Unlock()
 
 				req.Event = tracker.None
+				// Wait the interval before attempting another announce.
+				time.Sleep(interval)
 				continue newAnnounce
 			}
 		}

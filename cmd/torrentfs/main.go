@@ -68,14 +68,10 @@ func exitSignalHandlers(fs *torrentfs.TorrentFS) {
 
 func addTestPeer(client *torrent.Client) {
 	for _, t := range client.Torrents() {
-		if testPeerAddr != nil {
-			if err := t.AddPeers([]torrent.Peer{{
-				IP:   testPeerAddr.IP,
-				Port: testPeerAddr.Port,
-			}}); err != nil {
-				log.Print(err)
-			}
-		}
+		t.AddPeers([]torrent.Peer{{
+			IP:   testPeerAddr.IP,
+			Port: testPeerAddr.Port,
+		}})
 	}
 }
 

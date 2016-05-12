@@ -175,12 +175,11 @@ func (t *Torrent) Files() (ret []File) {
 	return
 }
 
-func (t *Torrent) AddPeers(pp []Peer) error {
+func (t *Torrent) AddPeers(pp []Peer) {
 	cl := t.cl
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	cl.addPeers(t, pp)
-	return nil
 }
 
 // Marks the entire torrent for download. Requires the info first, see

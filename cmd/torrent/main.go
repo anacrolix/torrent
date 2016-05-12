@@ -67,7 +67,7 @@ func torrentBar(t *torrent.Torrent) {
 }
 
 func addTorrents(client *torrent.Client) {
-	for _, arg := range opts.Torrent {
+	for _, arg := range flags.Torrent {
 		t := func() *torrent.Torrent {
 			if strings.HasPrefix(arg, "magnet:") {
 				t, err := client.AddMagnet(arg)
@@ -89,8 +89,8 @@ func addTorrents(client *torrent.Client) {
 			}
 		}()
 		torrentBar(t)
-		err := t.AddPeers(func() (ret []torrent.Peer) {
-			for _, ta := range opts.TestPeer {
+		t.AddPeers(func() (ret []torrent.Peer) {
+			for _, ta := range flags.TestPeer {
 				ret = append(ret, torrent.Peer{
 					IP:   ta.IP,
 					Port: ta.Port,
@@ -98,9 +98,6 @@ func addTorrents(client *torrent.Client) {
 			}
 			return
 		}())
-		if err != nil {
-			log.Fatal(err)
-		}
 		go func() {
 			<-t.GotInfo()
 			t.DownloadAll()
@@ -108,24 +105,24 @@ func addTorrents(client *torrent.Client) {
 	}
 }
 
-var opts struct {
+var flags struct {
 	Mmap     bool           `help:"memory-map torrent data"`
 	TestPeer []*net.TCPAddr `short:"p" help:"addresses of some starting peers"`
 	Seed     bool           `help:"seed after download is complete"`
 	Addr     *net.TCPAddr   `help:"network listen addr"`
 	tagflag.StartPos
-	Torrent []string `type:"pos" arity:"+" help:"torrent file path or magnet uri"`
+	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	tagflag.Parse(&opts)
+	tagflag.Parse(&flags)
 	var clientConfig torrent.Config
-	if opts.Mmap {
+	if flags.Mmap {
 		clientConfig.DefaultStorage = storage.NewMMap("")
 	}
-	if opts.Addr != nil {
-		clientConfig.ListenAddr = opts.Addr.String()
+	if flags.Addr != nil {
+		clientConfig.ListenAddr = flags.Addr.String()
 	}
 
 	client, err := torrent.NewClient(&clientConfig)
@@ -133,6 +130,9 @@ func main() {
 		log.Fatalf("error creating client: %s", err)
 	}
 	defer client.Close()
+	// Write status on the root path on the default HTTP muxer. This will be
+	// bound to localhost somewhere if GOPPROF is set, thanks to the envpprof
+	// import.
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})
@@ -143,7 +143,7 @@ func main() {
 	} else {
 		log.Fatal("y u no complete torrents?!")
 	}
-	if opts.Seed {
+	if flags.Seed {
 		select {}
 	}
 }

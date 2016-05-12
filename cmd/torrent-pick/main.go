@@ -154,10 +154,7 @@ func main() {
 				return t
 			}
 		}()
-		err := t.AddPeers(testPeers)
-		if err != nil {
-			log.Fatal(err)
-		}
+		t.AddPeers(testPeers)
 
 		go func() {
 			defer close(done)

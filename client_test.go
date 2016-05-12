@@ -90,7 +90,7 @@ func TestTorrentInitialState(t *testing.T) {
 		pieceStateChanges: pubsub.NewPubSub(),
 	}
 	tor.chunkSize = 2
-	tor.storageOpener = storage.NewFile(dir)
+	tor.storageOpener = storage.NewFile("/dev/null")
 	// Needed to lock for asynchronous piece verification.
 	tor.cl = new(Client)
 	err := tor.setInfoBytes(mi.Info.Bytes)

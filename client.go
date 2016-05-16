@@ -1816,7 +1816,8 @@ func (cl *Client) downloadedChunk(t *Torrent, c *connection, msg *pp.Message) {
 	}
 
 	cl.mu.Unlock()
-	// Write the chunk out.
+	// Write the chunk out. Note that the upper bound on chunk writing
+	// concurrency will be the number of connections.
 	err := t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
 	cl.mu.Lock()
 

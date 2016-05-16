@@ -51,7 +51,7 @@ type Torrent struct {
 	length int64
 
 	// The storage to open when the info dict becomes available.
-	storageOpener storage.I
+	storageOpener storage.Client
 	// Storage for torrent data.
 	storage storage.Torrent
 

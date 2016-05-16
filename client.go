@@ -73,7 +73,7 @@ type Client struct {
 	// through legitimate channels.
 	dopplegangerAddrs map[string]struct{}
 
-	defaultStorage storage.I
+	defaultStorage storage.Client
 
 	mu     sync.RWMutex
 	event  sync.Cond
@@ -1486,7 +1486,7 @@ type TorrentSpec struct {
 	// The chunk size to use for outbound requests. Defaults to 16KiB if not
 	// set.
 	ChunkSize int
-	Storage   storage.I
+	Storage   storage.Client
 }
 
 func TorrentSpecFromMagnetURI(uri string) (spec *TorrentSpec, err error) {

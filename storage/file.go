@@ -17,7 +17,7 @@ type fileStorage struct {
 	completed map[[20]byte]bool
 }
 
-func NewFile(baseDir string) I {
+func NewFile(baseDir string) Client {
 	return &fileStorage{
 		baseDir: baseDir,
 	}

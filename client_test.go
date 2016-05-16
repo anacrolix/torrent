@@ -243,11 +243,11 @@ func TestClientTransferDefault(t *testing.T) {
 	})
 }
 
-func fileCachePieceResourceStorage(fc *filecache.Cache) storage.I {
+func fileCachePieceResourceStorage(fc *filecache.Cache) storage.Client {
 	return storage.NewPiecePerResource(fc.AsResourceProvider())
 }
 
-func fileCachePieceFileStorage(fc *filecache.Cache) storage.I {
+func fileCachePieceFileStorage(fc *filecache.Cache) storage.Client {
 	return storage.NewPieceFileStorage(fc.AsFileStore())
 }
 
@@ -267,11 +267,11 @@ func TestClientTransferSmallCache(t *testing.T) {
 }
 
 func TestClientTransferVarious(t *testing.T) {
-	for _, lsf := range []func(*filecache.Cache) storage.I{
+	for _, lsf := range []func(*filecache.Cache) storage.Client{
 		fileCachePieceFileStorage,
 		fileCachePieceResourceStorage,
 	} {
-		for _, ss := range []func(string) storage.I{
+		for _, ss := range []func(string) storage.Client{
 			storage.NewFile,
 			storage.NewMMap,
 		} {
@@ -302,8 +302,8 @@ type testClientTransferParams struct {
 	ExportClientStatus                  bool
 	SetLeecherStorageCapacity           bool
 	LeecherStorageCapacity              int64
-	LeecherFileCachePieceStorageFactory func(*filecache.Cache) storage.I
-	SeederStorage                       func(string) storage.I
+	LeecherFileCachePieceStorageFactory func(*filecache.Cache) storage.Client
+	SeederStorage                       func(string) storage.Client
 }
 
 func testClientTransfer(t *testing.T, ps testClientTransferParams) {
@@ -696,7 +696,7 @@ func writeTorrentData(ts storage.Torrent, info *metainfo.InfoEx, b []byte) {
 	}
 }
 
-func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.I) {
+func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.Client) {
 	fileCacheDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(fileCacheDir)

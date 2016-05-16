@@ -7,7 +7,7 @@ import (
 )
 
 // Represents data storage for an unspecified torrent.
-type I interface {
+type Client interface {
 	OpenTorrent(info *metainfo.InfoEx) (Torrent, error)
 }
 

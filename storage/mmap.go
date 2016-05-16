@@ -17,7 +17,7 @@ type mmapStorage struct {
 	baseDir string
 }
 
-func NewMMap(baseDir string) I {
+func NewMMap(baseDir string) Client {
 	return &mmapStorage{
 		baseDir: baseDir,
 	}

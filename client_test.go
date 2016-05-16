@@ -238,8 +238,17 @@ func TestAddDropManyTorrents(t *testing.T) {
 
 func TestClientTransferDefault(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
-		ExportClientStatus: true,
+		ExportClientStatus:                  true,
+		LeecherFileCachePieceStorageFactory: fileCachePieceResourceStorage,
 	})
+}
+
+func fileCachePieceResourceStorage(fc *filecache.Cache) storage.I {
+	return storage.NewPiecePerResource(fc.AsResourceProvider())
+}
+
+func fileCachePieceFileStorage(fc *filecache.Cache) storage.I {
+	return storage.NewPieceFileStorage(fc.AsFileStore())
 }
 
 func TestClientTransferSmallCache(t *testing.T) {
@@ -251,41 +260,50 @@ func TestClientTransferSmallCache(t *testing.T) {
 		SetReadahead:           true,
 		// Can't readahead too far or the cache will thrash and drop data we
 		// thought we had.
-		Readahead:          0,
-		ExportClientStatus: true,
+		Readahead:                           0,
+		ExportClientStatus:                  true,
+		LeecherFileCachePieceStorageFactory: fileCachePieceResourceStorage,
 	})
 }
 
 func TestClientTransferVarious(t *testing.T) {
-	for _, ss := range []func(string) storage.I{
-		storage.NewFile,
-		storage.NewMMap,
+	for _, lsf := range []func(*filecache.Cache) storage.I{
+		fileCachePieceFileStorage,
+		fileCachePieceResourceStorage,
 	} {
-		for _, responsive := range []bool{false, true} {
-			testClientTransfer(t, testClientTransferParams{
-				Responsive:    responsive,
-				SeederStorage: ss,
-			})
-			for _, readahead := range []int64{-1, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20} {
+		for _, ss := range []func(string) storage.I{
+			storage.NewFile,
+			storage.NewMMap,
+		} {
+			for _, responsive := range []bool{false, true} {
 				testClientTransfer(t, testClientTransferParams{
-					SeederStorage: ss,
-					Responsive:    responsive,
-					SetReadahead:  true,
-					Readahead:     readahead,
+					Responsive:                          responsive,
+					SeederStorage:                       ss,
+					LeecherFileCachePieceStorageFactory: lsf,
 				})
+				for _, readahead := range []int64{-1, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20} {
+					testClientTransfer(t, testClientTransferParams{
+						SeederStorage:                       ss,
+						Responsive:                          responsive,
+						SetReadahead:                        true,
+						Readahead:                           readahead,
+						LeecherFileCachePieceStorageFactory: lsf,
+					})
+				}
 			}
 		}
 	}
 }
 
 type testClientTransferParams struct {
-	Responsive                bool
-	Readahead                 int64
-	SetReadahead              bool
-	ExportClientStatus        bool
-	SetLeecherStorageCapacity bool
-	LeecherStorageCapacity    int64
-	SeederStorage             func(string) storage.I
+	Responsive                          bool
+	Readahead                           int64
+	SetReadahead                        bool
+	ExportClientStatus                  bool
+	SetLeecherStorageCapacity           bool
+	LeecherStorageCapacity              int64
+	LeecherFileCachePieceStorageFactory func(*filecache.Cache) storage.I
+	SeederStorage                       func(string) storage.I
 }
 
 func testClientTransfer(t *testing.T, ps testClientTransferParams) {
@@ -315,7 +333,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if ps.SetLeecherStorageCapacity {
 		fc.SetCapacity(ps.LeecherStorageCapacity)
 	}
-	cfg.DefaultStorage = storage.NewPieceFileStorage(fc.AsFileStore())
+	cfg.DefaultStorage = ps.LeecherFileCachePieceStorageFactory(fc)
 	leecher, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer leecher.Close()
@@ -678,7 +696,7 @@ func writeTorrentData(ts storage.Torrent, info *metainfo.InfoEx, b []byte) {
 	}
 }
 
-func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool) {
+func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.I) {
 	fileCacheDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(fileCacheDir)
@@ -686,7 +704,7 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool) {
 	require.NoError(t, err)
 	greetingDataTempDir, greetingMetainfo := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingDataTempDir)
-	filePieceStore := storage.NewPieceFileStorage(fileCache.AsFileStore())
+	filePieceStore := csf(fileCache)
 	greetingData, err := filePieceStore.OpenTorrent(&greetingMetainfo.Info)
 	require.NoError(t, err)
 	writeTorrentData(greetingData, &greetingMetainfo.Info, []byte(testutil.GreetingFileContents))
@@ -722,11 +740,13 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool) {
 }
 
 func TestAddTorrentPiecesAlreadyCompleted(t *testing.T) {
-	testAddTorrentPriorPieceCompletion(t, true)
+	testAddTorrentPriorPieceCompletion(t, true, fileCachePieceFileStorage)
+	testAddTorrentPriorPieceCompletion(t, true, fileCachePieceResourceStorage)
 }
 
 func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
-	testAddTorrentPriorPieceCompletion(t, false)
+	testAddTorrentPriorPieceCompletion(t, false, fileCachePieceFileStorage)
+	testAddTorrentPriorPieceCompletion(t, false, fileCachePieceResourceStorage)
 }
 
 func TestAddMetainfoWithNodes(t *testing.T) {

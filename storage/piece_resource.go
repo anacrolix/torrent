@@ -5,16 +5,16 @@ import (
 	"path"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/uniform"
+	"github.com/anacrolix/missinggo/resource"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
 
 type piecePerResource struct {
-	p uniform.Provider
+	p resource.Provider
 }
 
-func NewResourcePieces(p uniform.Provider) Client {
+func NewResourcePieces(p resource.Provider) Client {
 	return &piecePerResource{
 		p: p,
 	}
@@ -29,11 +29,11 @@ func (s *piecePerResource) Close() error {
 }
 
 func (s *piecePerResource) Piece(p metainfo.Piece) Piece {
-	completed, err := s.p.NewResource(path.Join("completed", p.Hash().HexString()))
+	completed, err := s.p.NewInstance(path.Join("completed", p.Hash().HexString()))
 	if err != nil {
 		panic(err)
 	}
-	incomplete, err := s.p.NewResource(path.Join("incomplete", p.Hash().HexString()))
+	incomplete, err := s.p.NewInstance(path.Join("incomplete", p.Hash().HexString()))
 	if err != nil {
 		panic(err)
 	}
@@ -46,8 +46,8 @@ func (s *piecePerResource) Piece(p metainfo.Piece) Piece {
 
 type piecePerResourcePiece struct {
 	p metainfo.Piece
-	c uniform.Resource
-	i uniform.Resource
+	c resource.Instance
+	i resource.Instance
 }
 
 func (s piecePerResourcePiece) GetIsComplete() bool {
@@ -56,7 +56,7 @@ func (s piecePerResourcePiece) GetIsComplete() bool {
 }
 
 func (s piecePerResourcePiece) MarkComplete() error {
-	return uniform.Move(s.i, s.c)
+	return resource.Move(s.i, s.c)
 }
 
 func (s piecePerResourcePiece) ReadAt(b []byte, off int64) (n int, err error) {

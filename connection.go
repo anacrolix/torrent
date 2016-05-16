@@ -8,6 +8,7 @@ import (
 	"expvar"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"strconv"
 	"sync"
@@ -616,4 +617,24 @@ func (cn *connection) peerSentHaveNone() error {
 	cn.peerHasAll = false
 	cn.peerPiecesChanged()
 	return nil
+}
+
+func (c *connection) requestPendingMetadata() {
+	if c.t.haveInfo() {
+		return
+	}
+	if c.PeerExtensionIDs["ut_metadata"] == 0 {
+		// Peer doesn't support this.
+		return
+	}
+	// Request metadata pieces that we don't have in a random order.
+	var pending []int
+	for index := 0; index < c.t.metadataPieceCount(); index++ {
+		if !c.t.haveMetadataPiece(index) && !c.requestedMetadataPiece(index) {
+			pending = append(pending, index)
+		}
+	}
+	for _, i := range rand.Perm(len(pending)) {
+		c.requestMetadataPiece(pending[i])
+	}
 }

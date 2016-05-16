@@ -290,7 +290,7 @@ func (t *Torrent) setMetadataSize(bytes int64, cl *Client) {
 	t.metadataBytes = make([]byte, bytes)
 	t.metadataCompletedChunks = make([]bool, (bytes+(1<<14)-1)/(1<<14))
 	for _, c := range t.conns {
-		cl.requestPendingMetadata(t, c)
+		c.requestPendingMetadata()
 	}
 
 }

@@ -1009,26 +1009,6 @@ func (cl *Client) connDeleteRequest(t *Torrent, cn *connection, r request) bool 
 	return true
 }
 
-func (cl *Client) requestPendingMetadata(t *Torrent, c *connection) {
-	if t.haveInfo() {
-		return
-	}
-	if c.PeerExtensionIDs["ut_metadata"] == 0 {
-		// Peer doesn't support this.
-		return
-	}
-	// Request metadata pieces that we don't have in a random order.
-	var pending []int
-	for index := 0; index < t.metadataPieceCount(); index++ {
-		if !t.haveMetadataPiece(index) && !c.requestedMetadataPiece(index) {
-			pending = append(pending, index)
-		}
-	}
-	for _, i := range mathRand.Perm(len(pending)) {
-		c.requestMetadataPiece(pending[i])
-	}
-}
-
 // Process incoming ut_metadata message.
 func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connection) (err error) {
 	var d map[string]int
@@ -1268,7 +1248,7 @@ func (cl *Client) connectionLoop(t *Torrent, c *connection) error {
 					}
 				}
 				if _, ok := c.PeerExtensionIDs["ut_metadata"]; ok {
-					cl.requestPendingMetadata(t, c)
+					c.requestPendingMetadata()
 				}
 			case metadataExtendedId:
 				err = cl.gotMetadataExtensionMsg(msg.ExtendedPayload, t, c)

@@ -7,13 +7,13 @@ import (
 	"os"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/args"
+	"github.com/anacrolix/tagflag"
 
 	"github.com/anacrolix/torrent/iplist"
 )
 
 func main() {
-	args.Parse()
+	tagflag.Parse(nil)
 	l, err := iplist.NewFromReader(os.Stdin)
 	if err != nil {
 		missinggo.Fatal(err)

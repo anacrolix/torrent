@@ -1244,7 +1244,11 @@ func (cl *Client) connectionLoop(t *Torrent, c *connection) error {
 					if !ok {
 						log.Printf("bad metadata_size type: %T", metadata_sizeUntyped)
 					} else {
-						t.setMetadataSize(metadata_size, cl)
+						err = t.setMetadataSize(metadata_size)
+						if err != nil {
+							err = fmt.Errorf("error setting metadata size to %d", metadata_size)
+							break
+						}
 					}
 				}
 				if _, ok := c.PeerExtensionIDs["ut_metadata"]; ok {

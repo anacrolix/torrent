@@ -9,6 +9,7 @@ import (
 	"math"
 	"math/rand"
 	"net"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -626,7 +627,7 @@ func (t *Torrent) hashPiece(piece int) (ret metainfo.Hash) {
 		missinggo.CopyExact(&ret, hash.Sum(nil))
 		return
 	}
-	if err != io.ErrUnexpectedEOF {
+	if err != io.ErrUnexpectedEOF && !os.IsNotExist(err) {
 		log.Printf("unexpected error hashing piece with %T: %s", t.storage, err)
 	}
 	return

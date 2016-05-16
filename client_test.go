@@ -747,9 +747,6 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 }
 
 type testDownloadCancelParams struct {
-	Responsive                bool
-	Readahead                 int64
-	SetReadahead              bool
 	ExportClientStatus        bool
 	SetLeecherStorageCapacity bool
 	LeecherStorageCapacity    int64

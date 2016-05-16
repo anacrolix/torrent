@@ -244,11 +244,11 @@ func TestClientTransferDefault(t *testing.T) {
 }
 
 func fileCachePieceResourceStorage(fc *filecache.Cache) storage.Client {
-	return storage.NewPiecePerResource(fc.AsResourceProvider())
+	return storage.NewResourcePieces(fc.AsResourceProvider())
 }
 
 func fileCachePieceFileStorage(fc *filecache.Cache) storage.Client {
-	return storage.NewPieceFileStorage(fc.AsFileStore())
+	return storage.NewFileStorePieces(fc.AsFileStore())
 }
 
 func TestClientTransferSmallCache(t *testing.T) {
@@ -794,7 +794,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	if ps.SetLeecherStorageCapacity {
 		fc.SetCapacity(ps.LeecherStorageCapacity)
 	}
-	cfg.DefaultStorage = storage.NewPieceFileStorage(fc.AsFileStore())
+	cfg.DefaultStorage = storage.NewFileStorePieces(fc.AsFileStore())
 	cfg.DataDir = leecherDataDir
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()

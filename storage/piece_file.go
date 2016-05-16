@@ -15,7 +15,7 @@ type pieceFileStorage struct {
 	fs missinggo.FileStore
 }
 
-func NewPieceFileStorage(fs missinggo.FileStore) Client {
+func NewFileStorePieces(fs missinggo.FileStore) Client {
 	return &pieceFileStorage{
 		fs: fs,
 	}

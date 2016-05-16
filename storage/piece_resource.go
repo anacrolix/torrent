@@ -14,7 +14,7 @@ type piecePerResource struct {
 	p uniform.Provider
 }
 
-func NewPiecePerResource(p uniform.Provider) Client {
+func NewResourcePieces(p uniform.Provider) Client {
 	return &piecePerResource{
 		p: p,
 	}

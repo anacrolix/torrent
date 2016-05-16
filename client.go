@@ -414,10 +414,7 @@ func (cl *Client) incomingConnection(nc net.Conn, utp bool) {
 	c := cl.newConnection(nc)
 	c.Discovery = peerSourceIncoming
 	c.uTP = utp
-	err := cl.runReceivedConn(c)
-	if err != nil {
-		// log.Print(err)
-	}
+	cl.runReceivedConn(c)
 }
 
 // Returns a handle to the given torrent, if it's present in the client.
@@ -626,12 +623,7 @@ func (cl *Client) outgoingConnection(t *Torrent, addr string, ps peerSource) {
 	}
 	defer c.Close()
 	c.Discovery = ps
-	err = cl.runInitiatedHandshookConn(c, t)
-	if err != nil {
-		if cl.config.Debug {
-			log.Printf("error in established outgoing connection: %s", err)
-		}
-	}
+	cl.runInitiatedHandshookConn(c, t)
 }
 
 // The port number for incoming peer connections. 0 if the client isn't
@@ -878,7 +870,7 @@ func (cl *Client) connBTHandshake(c *connection, ih *metainfo.Hash) (ret metainf
 	return
 }
 
-func (cl *Client) runInitiatedHandshookConn(c *connection, t *Torrent) (err error) {
+func (cl *Client) runInitiatedHandshookConn(c *connection, t *Torrent) {
 	if c.PeerID == cl.peerID {
 		// Only if we initiated the connection is the remote address a
 		// listen addr for a doppleganger.
@@ -887,17 +879,19 @@ func (cl *Client) runInitiatedHandshookConn(c *connection, t *Torrent) (err erro
 		cl.dopplegangerAddrs[addr] = struct{}{}
 		return
 	}
-	return cl.runHandshookConn(c, t)
+	cl.runHandshookConn(c, t)
 }
 
-func (cl *Client) runReceivedConn(c *connection) (err error) {
-	err = c.conn.SetDeadline(time.Now().Add(handshakesTimeout))
+func (cl *Client) runReceivedConn(c *connection) {
+	err := c.conn.SetDeadline(time.Now().Add(handshakesTimeout))
 	if err != nil {
-		return
+		panic(err)
 	}
 	t, err := cl.receiveHandshakes(c)
 	if err != nil {
-		err = fmt.Errorf("error receiving handshakes: %s", err)
+		if cl.config.Debug {
+			log.Printf("error receiving handshakes: %s", err)
+		}
 		return
 	}
 	if t == nil {
@@ -908,10 +902,10 @@ func (cl *Client) runReceivedConn(c *connection) (err error) {
 	if c.PeerID == cl.peerID {
 		return
 	}
-	return cl.runHandshookConn(c, t)
+	cl.runHandshookConn(c, t)
 }
 
-func (cl *Client) runHandshookConn(c *connection, t *Torrent) (err error) {
+func (cl *Client) runHandshookConn(c *connection, t *Torrent) {
 	c.conn.SetWriteDeadline(time.Time{})
 	c.rw = readWriter{
 		deadlineReader{c.conn, c.rw},
@@ -924,11 +918,10 @@ func (cl *Client) runHandshookConn(c *connection, t *Torrent) (err error) {
 	defer t.dropConnection(c)
 	go c.writer(time.Minute)
 	cl.sendInitialMessages(c, t)
-	err = cl.connectionLoop(t, c)
-	if err != nil {
-		err = fmt.Errorf("error during connection loop: %s", err)
+	err := cl.connectionLoop(t, c)
+	if err != nil && cl.config.Debug {
+		log.Printf("error during connection loop: %s", err)
 	}
-	return
 }
 
 func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
@@ -1114,7 +1107,7 @@ func (cl *Client) sendChunk(t *Torrent, c *connection, r request) error {
 }
 
 // Processes incoming bittorrent messages. The client lock is held upon entry
-// and exit.
+// and exit. Returning will end the connection.
 func (cl *Client) connectionLoop(t *Torrent, c *connection) error {
 	decoder := pp.Decoder{
 		R:         bufio.NewReader(c.rw),

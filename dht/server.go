@@ -446,7 +446,7 @@ func (s *Server) query(node Addr, q string, a map[string]interface{}, onResponse
 	if err != nil {
 		return
 	}
-	t = &Transaction{
+	_t := &Transaction{
 		remoteAddr:  node,
 		t:           tid,
 		response:    make(chan Msg, 1),
@@ -455,15 +455,16 @@ func (s *Server) query(node Addr, q string, a map[string]interface{}, onResponse
 		s:           s,
 		onResponse:  onResponse,
 	}
-	err = t.sendQuery()
+	err = _t.sendQuery()
 	if err != nil {
 		return
 	}
 	s.getNode(node, "").lastSentQuery = time.Now()
-	t.mu.Lock()
-	t.startTimer()
-	t.mu.Unlock()
-	s.addTransaction(t)
+	_t.mu.Lock()
+	_t.startTimer()
+	_t.mu.Unlock()
+	s.addTransaction(_t)
+	t = _t
 	return
 }
 

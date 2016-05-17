@@ -22,8 +22,8 @@ type Transaction struct {
 	userOnResponse func(Msg, bool)
 }
 
-// SetResponseHandler sets up a function to be called when query response
-// arrives.
+// SetResponseHandler sets up a function to be called when the query response
+// is available.
 func (t *Transaction) SetResponseHandler(f func(Msg, bool)) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

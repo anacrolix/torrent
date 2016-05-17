@@ -115,10 +115,20 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*Announc
 	return disc, nil
 }
 
+func validNodeAddr(addr Addr) bool {
+	ua := addr.UDPAddr()
+	if ua.Port == 0 {
+		return false
+	}
+	if ip4 := ua.IP.To4(); ip4 != nil && ip4[0] == 0 {
+		return false
+	}
+	return true
+}
+
 // TODO: Merge this with maybeGetPeersFromAddr.
 func (a *Announce) gotNodeAddr(addr Addr) {
-	if addr.UDPAddr().Port == 0 {
-		// Not a contactable address.
+	if !validNodeAddr(addr) {
 		return
 	}
 	if a.triedAddrs.Test([]byte(addr.String())) {

@@ -221,3 +221,11 @@ func TestHook(t *testing.T) {
 		}
 	}
 }
+
+// Check that address resolution doesn't rat out invalid SendTo addr
+// arguments.
+func TestResolveBadAddr(t *testing.T) {
+	ua, err := net.ResolveUDPAddr("udp", "0.131.255.145:33085")
+	require.NoError(t, err)
+	assert.False(t, validNodeAddr(NewAddr(ua)))
+}

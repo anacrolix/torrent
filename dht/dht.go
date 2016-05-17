@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/anacrolix/torrent/dht/krpc"
 	"github.com/anacrolix/torrent/iplist"
 )
 
@@ -64,7 +65,7 @@ type ServerConfig struct {
 	// Used to secure the server's ID. Defaults to the Conn's LocalAddr().
 	PublicIP net.IP
 
-	OnQuery func(*Msg, net.Addr) bool
+	OnQuery func(*krpc.Msg, net.Addr) bool
 }
 
 // ServerStats instance is returned by Server.Stats() and stores Server metrics
@@ -162,8 +163,8 @@ func (n *node) IDNotSet() bool {
 	return n.id.i.Int64() == 0
 }
 
-func (n *node) NodeInfo() (ret NodeInfo) {
-	ret.Addr = n.addr
+func (n *node) NodeInfo() (ret krpc.NodeInfo) {
+	ret.Addr = n.addr.UDPAddr()
 	if n := copy(ret.ID[:], n.idString()); n != 20 {
 		panic(n)
 	}

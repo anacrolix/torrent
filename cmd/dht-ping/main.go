@@ -13,6 +13,7 @@ import (
 	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/dht"
+	"github.com/anacrolix/torrent/dht/krpc"
 )
 
 func main() {
@@ -65,7 +66,7 @@ func startPings(s *dht.Server, pongChan chan pong, nodes []string) {
 
 type pong struct {
 	addr  string
-	krpc  dht.Msg
+	krpc  krpc.Msg
 	msgOk bool
 	rtt   time.Duration
 }
@@ -80,8 +81,8 @@ func ping(netloc string, pongChan chan pong, s *dht.Server) {
 		log.Fatal(err)
 	}
 	start := time.Now()
-	t.SetResponseHandler(func(addr string) func(dht.Msg, bool) {
-		return func(resp dht.Msg, ok bool) {
+	t.SetResponseHandler(func(addr string) func(krpc.Msg, bool) {
+		return func(resp krpc.Msg, ok bool) {
 			pongChan <- pong{
 				addr:  addr,
 				krpc:  resp,

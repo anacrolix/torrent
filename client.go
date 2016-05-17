@@ -26,6 +26,7 @@ import (
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/dht"
+	"github.com/anacrolix/torrent/dht/krpc"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
@@ -2001,11 +2002,11 @@ func (cl *Client) AddDHTNodes(nodes []string) {
 			log.Printf("won't add DHT node with bad IP: %q", hmp.Host)
 			continue
 		}
-		ni := dht.NodeInfo{
-			Addr: dht.NewAddr(&net.UDPAddr{
+		ni := krpc.NodeInfo{
+			Addr: &net.UDPAddr{
 				IP:   ip,
 				Port: hmp.Port,
-			}),
+			},
 		}
 		cl.DHT().AddNode(ni)
 	}

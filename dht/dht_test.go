@@ -12,6 +12,8 @@ import (
 	_ "github.com/anacrolix/envpprof"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/anacrolix/torrent/dht/krpc"
 )
 
 func TestSetNilBigInt(t *testing.T) {
@@ -20,13 +22,13 @@ func TestSetNilBigInt(t *testing.T) {
 }
 
 func TestMarshalCompactNodeInfo(t *testing.T) {
-	cni := NodeInfo{
+	cni := krpc.NodeInfo{
 		ID: [20]byte{'a', 'b', 'c'},
 	}
 	addr, err := net.ResolveUDPAddr("udp4", "1.2.3.4:5")
 	require.NoError(t, err)
-	cni.Addr = NewAddr(addr)
-	var b [CompactIPv4NodeInfoLen]byte
+	cni.Addr = addr
+	var b [krpc.CompactIPv4NodeInfoLen]byte
 	err = cni.PutCompact(b[:])
 	require.NoError(t, err)
 	var bb [26]byte
@@ -129,7 +131,7 @@ func TestPing(t *testing.T) {
 	require.NoError(t, err)
 	defer tn.Close()
 	ok := make(chan bool)
-	tn.SetResponseHandler(func(msg Msg, msgOk bool) {
+	tn.SetResponseHandler(func(msg krpc.Msg, msgOk bool) {
 		ok <- msg.SenderID() == srv0.ID()
 	})
 	if !<-ok {
@@ -169,7 +171,7 @@ func TestAnnounceTimeout(t *testing.T) {
 }
 
 func TestEqualPointers(t *testing.T) {
-	assert.EqualValues(t, &Msg{R: &Return{}}, &Msg{R: &Return{}})
+	assert.EqualValues(t, &krpc.Msg{R: &krpc.Return{}}, &krpc.Msg{R: &krpc.Return{}})
 }
 
 func TestHook(t *testing.T) {
@@ -185,7 +187,7 @@ func TestHook(t *testing.T) {
 	srv0, err := NewServer(&ServerConfig{
 		Addr:           "127.0.0.1:5679",
 		BootstrapNodes: []string{"127.0.0.1:5678"},
-		OnQuery: func(m *Msg, addr net.Addr) bool {
+		OnQuery: func(m *krpc.Msg, addr net.Addr) bool {
 			if m.Q == "ping" {
 				hookCalled <- true
 			}
@@ -203,7 +205,7 @@ func TestHook(t *testing.T) {
 	assert.NoError(t, err)
 	defer tn.Close()
 	// Await response from hooked server
-	tn.SetResponseHandler(func(msg Msg, b bool) {
+	tn.SetResponseHandler(func(msg krpc.Msg, b bool) {
 		t.Log("TestHook: Sender received response from pinged hook server, so normal execution resumed.")
 	})
 	// Await signal that hook has been called.

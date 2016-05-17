@@ -1,4 +1,4 @@
-package dht
+package krpc
 
 import (
 	"net"
@@ -46,10 +46,10 @@ func TestMarshalUnmarshalMsg(t *testing.T) {
 		R: &Return{
 			Nodes: CompactIPv4NodeInfo{
 				NodeInfo{
-					Addr: NewAddr(&net.UDPAddr{
+					Addr: &net.UDPAddr{
 						IP:   net.IPv4(1, 2, 3, 4).To4(),
 						Port: 0x1234,
-					}),
+					},
 				},
 			},
 		},

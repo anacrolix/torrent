@@ -3,6 +3,8 @@ package dht
 import (
 	"sync"
 	"time"
+
+	"github.com/anacrolix/torrent/dht/krpc"
 )
 
 // Transaction keeps track of a message exchange between nodes, such as a
@@ -11,20 +13,20 @@ type Transaction struct {
 	mu             sync.Mutex
 	remoteAddr     Addr
 	t              string
-	response       chan Msg
-	onResponse     func(Msg) // Called with the server locked.
+	response       chan krpc.Msg
+	onResponse     func(krpc.Msg) // Called with the server locked.
 	done           chan struct{}
 	queryPacket    []byte
 	timer          *time.Timer
 	s              *Server
 	retries        int
 	lastSend       time.Time
-	userOnResponse func(Msg, bool)
+	userOnResponse func(krpc.Msg, bool)
 }
 
 // SetResponseHandler sets up a function to be called when the query response
 // is available.
-func (t *Transaction) SetResponseHandler(f func(Msg, bool)) {
+func (t *Transaction) SetResponseHandler(f func(krpc.Msg, bool)) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.userOnResponse = f
@@ -124,7 +126,7 @@ func (t *Transaction) Close() {
 	t.close()
 }
 
-func (t *Transaction) handleResponse(m Msg) {
+func (t *Transaction) handleResponse(m krpc.Msg) {
 	t.mu.Lock()
 	if t.closing() {
 		t.mu.Unlock()

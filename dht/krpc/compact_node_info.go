@@ -1,4 +1,4 @@
-package dht
+package krpc
 
 import (
 	"bytes"
@@ -42,8 +42,8 @@ func (i CompactIPv4NodeInfo) MarshalBencode() (ret []byte, err error) {
 			err = errors.New("nil addr in node info")
 			return
 		}
-		buf.Write(ni.Addr.UDPAddr().IP.To4())
-		binary.Write(&buf, binary.BigEndian, uint16(ni.Addr.UDPAddr().Port))
+		buf.Write(ni.Addr.IP.To4())
+		binary.Write(&buf, binary.BigEndian, uint16(ni.Addr.Port))
 	}
 	return bencode.Marshal(buf.Bytes())
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/tylertreat/BoomFilters"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/dht/krpc"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/logonce"
 )
@@ -153,7 +154,7 @@ func (s *Server) processPacket(b []byte, addr Addr) {
 		readNotKRPCDict.Add(1)
 		return
 	}
-	var d Msg
+	var d krpc.Msg
 	err := bencode.Unmarshal(b, &d)
 	if err != nil {
 		readUnmarshalError.Add(1)
@@ -232,13 +233,13 @@ func (s *Server) ipBlocked(ip net.IP) (blocked bool) {
 }
 
 // Adds directly to the node table.
-func (s *Server) AddNode(ni NodeInfo) {
+func (s *Server) AddNode(ni krpc.NodeInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.nodes == nil {
 		s.nodes = make(map[string]*node)
 	}
-	s.getNode(ni.Addr, string(ni.ID[:]))
+	s.getNode(NewAddr(ni.Addr), string(ni.ID[:]))
 }
 
 func (s *Server) nodeByID(id string) *node {
@@ -250,7 +251,7 @@ func (s *Server) nodeByID(id string) *node {
 	return nil
 }
 
-func (s *Server) handleQuery(source Addr, m Msg) {
+func (s *Server) handleQuery(source Addr, m krpc.Msg) {
 	node := s.getNode(source, m.SenderID())
 	node.lastGotQuery = time.Now()
 	if s.config.OnQuery != nil {
@@ -266,18 +267,18 @@ func (s *Server) handleQuery(source Addr, m Msg) {
 	args := m.A
 	switch m.Q {
 	case "ping":
-		s.reply(source, m.T, Return{})
+		s.reply(source, m.T, krpc.Return{})
 	case "get_peers": // TODO: Extract common behaviour with find_node.
 		targetID := args.InfoHash
 		if len(targetID) != 20 {
 			break
 		}
-		var rNodes []NodeInfo
+		var rNodes []krpc.NodeInfo
 		// TODO: Reply with "values" list if we have peers instead.
 		for _, node := range s.closestGoodNodes(8, targetID) {
 			rNodes = append(rNodes, node.NodeInfo())
 		}
-		s.reply(source, m.T, Return{
+		s.reply(source, m.T, krpc.Return{
 			Nodes: rNodes,
 			// TODO: Generate this dynamically, and store it for the source.
 			Token: "hi",
@@ -288,7 +289,7 @@ func (s *Server) handleQuery(source Addr, m Msg) {
 			log.Printf("bad DHT query: %v", m)
 			return
 		}
-		var rNodes []NodeInfo
+		var rNodes []krpc.NodeInfo
 		if node := s.nodeByID(targetID); node != nil {
 			rNodes = append(rNodes, node.NodeInfo())
 		} else {
@@ -297,7 +298,7 @@ func (s *Server) handleQuery(source Addr, m Msg) {
 				rNodes = append(rNodes, node.NodeInfo())
 			}
 		}
-		s.reply(source, m.T, Return{
+		s.reply(source, m.T, krpc.Return{
 			Nodes: rNodes,
 		})
 	case "announce_peer":
@@ -311,9 +312,9 @@ func (s *Server) handleQuery(source Addr, m Msg) {
 	}
 }
 
-func (s *Server) reply(addr Addr, t string, r Return) {
+func (s *Server) reply(addr Addr, t string, r krpc.Return) {
 	r.ID = s.ID()
-	m := Msg{
+	m := krpc.Msg{
 		T: t,
 		Y: "r",
 		R: &r,
@@ -425,7 +426,7 @@ func (s *Server) ID() string {
 	return s.id
 }
 
-func (s *Server) query(node Addr, q string, a map[string]interface{}, onResponse func(Msg)) (t *Transaction, err error) {
+func (s *Server) query(node Addr, q string, a map[string]interface{}, onResponse func(krpc.Msg)) (t *Transaction, err error) {
 	tid := s.nextTransactionID()
 	if a == nil {
 		a = make(map[string]interface{}, 1)
@@ -449,7 +450,7 @@ func (s *Server) query(node Addr, q string, a map[string]interface{}, onResponse
 	_t := &Transaction{
 		remoteAddr:  node,
 		t:           tid,
-		response:    make(chan Msg, 1),
+		response:    make(chan krpc.Msg, 1),
 		done:        make(chan struct{}),
 		queryPacket: b,
 		s:           s,
@@ -490,7 +491,7 @@ func (s *Server) announcePeer(node Addr, infoHash string, port int, token string
 		"info_hash": infoHash,
 		"port":      port,
 		"token":     token,
-	}, func(m Msg) {
+	}, func(m krpc.Msg) {
 		if err := m.Error(); err != nil {
 			announceErrors.Add(1)
 			// log.Print(token)
@@ -503,26 +504,26 @@ func (s *Server) announcePeer(node Addr, infoHash string, port int, token string
 }
 
 // Add response nodes to node table.
-func (s *Server) liftNodes(d Msg) {
+func (s *Server) liftNodes(d krpc.Msg) {
 	if d.Y != "r" {
 		return
 	}
 	for _, cni := range d.R.Nodes {
-		if cni.Addr.UDPAddr().Port == 0 {
+		if cni.Addr.Port == 0 {
 			// TODO: Why would people even do this?
 			continue
 		}
-		if s.ipBlocked(cni.Addr.UDPAddr().IP) {
+		if s.ipBlocked(cni.Addr.IP) {
 			continue
 		}
-		n := s.getNode(cni.Addr, string(cni.ID[:]))
+		n := s.getNode(NewAddr(cni.Addr), string(cni.ID[:]))
 		n.SetIDFromBytes(cni.ID[:])
 	}
 }
 
 // Sends a find_node query to addr. targetID is the node we're looking for.
 func (s *Server) findNode(addr Addr, targetID string) (t *Transaction, err error) {
-	t, err = s.query(addr, "find_node", map[string]interface{}{"target": targetID}, func(d Msg) {
+	t, err = s.query(addr, "find_node", map[string]interface{}{"target": targetID}, func(d krpc.Msg) {
 		// Scrape peers from the response to put in the server's table before
 		// handing the response back to the caller.
 		s.liftNodes(d)
@@ -578,7 +579,7 @@ func (s *Server) bootstrap() (err error) {
 				return
 			}
 			outstanding.Add(1)
-			t.SetResponseHandler(func(Msg, bool) {
+			t.SetResponseHandler(func(krpc.Msg, bool) {
 				outstanding.Done()
 			})
 		}
@@ -621,15 +622,15 @@ func (s *Server) NumNodes() int {
 }
 
 // Exports the current node table.
-func (s *Server) Nodes() (nis []NodeInfo) {
+func (s *Server) Nodes() (nis []krpc.NodeInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, node := range s.nodes {
 		// if !node.Good() {
 		// 	continue
 		// }
-		ni := NodeInfo{
-			Addr: node.addr,
+		ni := krpc.NodeInfo{
+			Addr: node.addr.UDPAddr(),
 		}
 		if n := copy(ni.ID[:], node.idString()); n != 20 && n != 0 {
 			panic(n)
@@ -682,7 +683,7 @@ func (s *Server) getPeers(addr Addr, infoHash string) (t *Transaction, err error
 		err = fmt.Errorf("infohash has bad length")
 		return
 	}
-	t, err = s.query(addr, "get_peers", map[string]interface{}{"info_hash": infoHash}, func(m Msg) {
+	t, err = s.query(addr, "get_peers", map[string]interface{}{"info_hash": infoHash}, func(m krpc.Msg) {
 		s.liftNodes(m)
 		if m.R != nil && m.R.Token != "" {
 			s.getNode(addr, m.SenderID()).announceToken = m.R.Token

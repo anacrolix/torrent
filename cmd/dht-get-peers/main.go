@@ -12,6 +12,7 @@ import (
 	_ "github.com/anacrolix/envpprof"
 
 	"github.com/anacrolix/torrent/dht"
+	"github.com/anacrolix/torrent/dht/krpc"
 )
 
 var (
@@ -38,7 +39,7 @@ func loadTable() error {
 	defer f.Close()
 	added := 0
 	for {
-		b := make([]byte, dht.CompactIPv4NodeInfoLen)
+		b := make([]byte, krpc.CompactIPv4NodeInfoLen)
 		_, err := io.ReadFull(f, b)
 		if err == io.EOF {
 			break
@@ -46,7 +47,7 @@ func loadTable() error {
 		if err != nil {
 			return fmt.Errorf("error reading table file: %s", err)
 		}
-		var ni dht.NodeInfo
+		var ni krpc.NodeInfo
 		err = ni.UnmarshalCompactIPv4(b)
 		if err != nil {
 			return fmt.Errorf("error unmarshaling compact node info: %s", err)
@@ -100,7 +101,7 @@ func saveTable() error {
 	}
 	defer f.Close()
 	for _, nodeInfo := range goodNodes {
-		var b [dht.CompactIPv4NodeInfoLen]byte
+		var b [krpc.CompactIPv4NodeInfoLen]byte
 		err := nodeInfo.PutCompact(b[:])
 		if err != nil {
 			return fmt.Errorf("error compacting node info: %s", err)

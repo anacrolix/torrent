@@ -180,6 +180,9 @@ func (s *Server) processPacket(b []byte, addr Addr) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed.IsSet() {
+		return
+	}
 	if d.Y == "q" {
 		readQuery.Add(1)
 		s.handleQuery(addr, d)

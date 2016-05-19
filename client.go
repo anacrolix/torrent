@@ -1528,7 +1528,7 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	new = true
 	t = cl.newTorrent(infoHash)
 	if !cl.config.DisableTrackers {
-		go cl.announceTorrentTrackers(t)
+		go t.announceTrackers()
 	}
 	if cl.dHT != nil {
 		go cl.announceTorrentDHT(t, true)

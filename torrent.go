@@ -1138,7 +1138,8 @@ func (t *Torrent) seeding() bool {
 }
 
 // Announce torrent to its trackers.
-func (cl *Client) announceTorrentTrackers(t *Torrent) {
+func (t *Torrent) announceTrackers() {
+	cl := t.cl
 	req := tracker.AnnounceRequest{
 		Event:    tracker.Started,
 		NumWant:  -1,
@@ -1153,7 +1154,7 @@ func (cl *Client) announceTorrentTrackers(t *Torrent) {
 	req.Left = t.bytesLeftAnnounce()
 	trackers := t.trackers
 	cl.mu.RUnlock()
-	if cl.announceTorrentTrackersFastStart(&req, trackers, t) {
+	if t.announceTrackersFastStart(&req, trackers) {
 		req.Event = tracker.None
 	}
 newAnnounce:
@@ -1166,7 +1167,7 @@ newAnnounce:
 		for _, tier := range trackers {
 			for trIndex, tr := range tier {
 				numTrackersTried++
-				interval, err := cl.announceTorrentSingleTracker(tr, &req, t)
+				interval, err := t.announceSingleTracker(tr, &req)
 				if err != nil {
 					// Try the next tracker.
 					continue
@@ -1192,14 +1193,14 @@ newAnnounce:
 	}
 }
 
-func (cl *Client) announceTorrentTrackersFastStart(req *tracker.AnnounceRequest, trackers []trackerTier, t *Torrent) (atLeastOne bool) {
+func (t *Torrent) announceTrackersFastStart(req *tracker.AnnounceRequest, trackers []trackerTier) (atLeastOne bool) {
 	oks := make(chan bool)
 	outstanding := 0
 	for _, tier := range trackers {
 		for _, tr := range tier {
 			outstanding++
 			go func(tr string) {
-				_, err := cl.announceTorrentSingleTracker(tr, req, t)
+				_, err := t.announceSingleTracker(tr, req)
 				oks <- err == nil
 			}(tr)
 		}
@@ -1214,8 +1215,8 @@ func (cl *Client) announceTorrentTrackersFastStart(req *tracker.AnnounceRequest,
 	return
 }
 
-func (cl *Client) announceTorrentSingleTracker(tr string, req *tracker.AnnounceRequest, t *Torrent) (interval time.Duration, err error) {
-	blocked, err := cl.trackerBlockedUnlocked(tr)
+func (t *Torrent) announceSingleTracker(tr string, req *tracker.AnnounceRequest) (interval time.Duration, err error) {
+	blocked, err := t.cl.trackerBlockedUnlocked(tr)
 	if err != nil {
 		err = fmt.Errorf("error determining if tracker blocked: %s", err)
 		return

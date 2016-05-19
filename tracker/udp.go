@@ -60,16 +60,6 @@ type AnnounceResponseHeader struct {
 	Seeders  int32
 }
 
-func init() {
-	registerClientScheme("udp", newUDPClient)
-}
-
-func newUDPClient(url *url.URL) client {
-	return &udpClient{
-		url: *url,
-	}
-}
-
 func newTransactionId() int32 {
 	return int32(rand.Uint32())
 }
@@ -85,7 +75,7 @@ func timeout(contiguousTimeouts int) (d time.Duration) {
 	return
 }
 
-type udpClient struct {
+type udpAnnounce struct {
 	contiguousTimeouts   int
 	connectionIdReceived time.Time
 	connectionId         int64
@@ -93,14 +83,14 @@ type udpClient struct {
 	url                  url.URL
 }
 
-func (c *udpClient) Close() error {
+func (c *udpAnnounce) Close() error {
 	if c.socket != nil {
 		return c.socket.Close()
 	}
 	return nil
 }
 
-func (c *udpClient) Announce(req *AnnounceRequest) (res AnnounceResponse, err error) {
+func (c *udpAnnounce) Do(req *AnnounceRequest) (res AnnounceResponse, err error) {
 	err = c.connect()
 	if err != nil {
 		return
@@ -140,7 +130,7 @@ func (c *udpClient) Announce(req *AnnounceRequest) (res AnnounceResponse, err er
 
 // body is the binary serializable request body. trailer is optional data
 // following it, such as for BEP 41.
-func (c *udpClient) write(h *RequestHeader, body interface{}, trailer []byte) (err error) {
+func (c *udpAnnounce) write(h *RequestHeader, body interface{}, trailer []byte) (err error) {
 	var buf bytes.Buffer
 	err = binary.Write(&buf, binary.BigEndian, h)
 	if err != nil {
@@ -176,7 +166,7 @@ func write(w io.Writer, data interface{}) error {
 
 // args is the binary serializable request body. trailer is optional data
 // following it, such as for BEP 41.
-func (c *udpClient) request(action Action, args interface{}, options []byte) (responseBody *bytes.Buffer, err error) {
+func (c *udpAnnounce) request(action Action, args interface{}, options []byte) (responseBody *bytes.Buffer, err error) {
 	tid := newTransactionId()
 	err = c.write(&RequestHeader{
 		ConnectionId:  c.connectionId,
@@ -232,11 +222,11 @@ func readBody(r io.Reader, data ...interface{}) (err error) {
 	return
 }
 
-func (c *udpClient) connected() bool {
+func (c *udpAnnounce) connected() bool {
 	return !c.connectionIdReceived.IsZero() && time.Now().Before(c.connectionIdReceived.Add(time.Minute))
 }
 
-func (c *udpClient) connect() (err error) {
+func (c *udpAnnounce) connect() (err error) {
 	if c.connected() {
 		return nil
 	}
@@ -265,4 +255,12 @@ func (c *udpClient) connect() (err error) {
 	c.connectionId = res.ConnectionId
 	c.connectionIdReceived = time.Now()
 	return
+}
+
+func announceUDP(ar *AnnounceRequest, _url *url.URL) (AnnounceResponse, error) {
+	ua := udpAnnounce{
+		url: *_url,
+	}
+	defer ua.Close()
+	return ua.Do(ar)
 }

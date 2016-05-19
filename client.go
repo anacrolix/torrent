@@ -23,6 +23,7 @@ import (
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
+	"github.com/dustin/go-humanize"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/dht"
@@ -174,7 +175,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		}
 		fmt.Fprint(w, "\n")
 		if t.haveInfo() {
-			fmt.Fprintf(w, "%f%% of %d bytes", 100*(1-float64(t.bytesLeft())/float64(t.length)), t.length)
+			fmt.Fprintf(w, "%f%% of %d bytes (%s)", 100*(1-float64(t.bytesLeft())/float64(t.length)), t.length, humanize.Bytes(uint64(t.length)))
 		} else {
 			w.WriteString("<missing metainfo>")
 		}

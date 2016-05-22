@@ -34,7 +34,6 @@ func GreetingMetaInfo() (mi *metainfo.MetaInfo) {
 	mi = new(metainfo.MetaInfo)
 	mi.Info.Name = GreetingFileName
 	mi.Info.Length = int64(len(GreetingFileContents))
-	mi.Announce = "lol://cheezburger"
 	mi.Info.PieceLength = 5
 	err := mi.Info.GeneratePieces(func(metainfo.FileInfo) (io.ReadCloser, error) {
 		return ioutil.NopCloser(strings.NewReader(GreetingFileContents)), nil

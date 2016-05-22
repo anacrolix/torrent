@@ -13,11 +13,13 @@ type AnnounceRequest struct {
 	Downloaded int64
 	Left       uint64
 	Uploaded   int64
-	Event      AnnounceEvent
-	IPAddress  int32
-	Key        int32
-	NumWant    int32 // How many peer addresses are desired. -1 for default.
-	Port       uint16
+	// Apparently this is optional. None can be used for announces done at
+	// regular intervals.
+	Event     AnnounceEvent
+	IPAddress int32
+	Key       int32
+	NumWant   int32 // How many peer addresses are desired. -1 for default.
+	Port      uint16
 } // 82 bytes
 
 type AnnounceResponse struct {

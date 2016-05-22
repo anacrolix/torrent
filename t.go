@@ -120,7 +120,7 @@ func (t *Torrent) Length() int64 {
 func (t *Torrent) Metainfo() *metainfo.MetaInfo {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
-	return t.metainfo()
+	return t.newMetaInfo()
 }
 
 func (t *Torrent) addReader(r *Reader) {

@@ -1372,6 +1372,7 @@ func (cl *Client) wantConns(t *Torrent) bool {
 }
 
 func (cl *Client) openNewConns(t *Torrent) {
+	defer t.updateWantPeersEvent()
 	for len(t.peers) != 0 {
 		if !cl.wantConns(t) {
 			return
@@ -1389,7 +1390,6 @@ func (cl *Client) openNewConns(t *Torrent) {
 		delete(t.peers, k)
 		cl.initiateConn(p, t)
 	}
-	t.wantPeers.Broadcast()
 }
 
 func (cl *Client) addPeers(t *Torrent, peers []Peer) {
@@ -1426,7 +1426,6 @@ func (cl *Client) newTorrent(ih metainfo.Hash) (t *Torrent) {
 
 		storageOpener: cl.defaultStorage,
 	}
-	t.wantPeers.L = &cl.mu
 	return
 }
 
@@ -1445,26 +1444,6 @@ func shuffleTier(tier trackerTier) {
 		j := mathRand.Intn(i + 1)
 		tier[i], tier[j] = tier[j], tier[i]
 	}
-}
-
-func copyTrackers(base []trackerTier) (copy []trackerTier) {
-	for _, tier := range base {
-		copy = append(copy, append(trackerTier(nil), tier...))
-	}
-	return
-}
-
-func mergeTier(tier trackerTier, newURLs []string) trackerTier {
-nextURL:
-	for _, url := range newURLs {
-		for _, trURL := range tier {
-			if trURL == url {
-				continue nextURL
-			}
-		}
-		tier = append(tier, url)
-	}
-	return tier
 }
 
 // A file-like handle to some torrent data resource.
@@ -1527,9 +1506,6 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	}
 	new = true
 	t = cl.newTorrent(infoHash)
-	if !cl.config.DisableTrackers {
-		go t.announceTrackers()
-	}
 	if cl.dHT != nil {
 		go cl.announceTorrentDHT(t, true)
 	}
@@ -1577,7 +1553,12 @@ func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
 }
 
 func (cl *Client) announceTorrentDHT(t *Torrent, impliedPort bool) {
-	for t.waitWantPeers() {
+	for {
+		select {
+		case <-t.wantPeersEvent.LockedChan(&cl.mu):
+		case <-t.closed.LockedChan(&cl.mu):
+			return
+		}
 		// log.Printf("getting peers for %q from DHT", t)
 		ps, err := cl.dHT.Announce(string(t.infoHash[:]), cl.incomingPeerPort(), impliedPort)
 		if err != nil {
@@ -1627,22 +1608,27 @@ func (cl *Client) announceTorrentDHT(t *Torrent, impliedPort bool) {
 	}
 }
 
-func (cl *Client) trackerBlockedUnlocked(trRawURL string) (blocked bool, err error) {
-	url_, err := url.Parse(trRawURL)
+func (cl *Client) prepareTrackerAnnounceUnlocked(announceURL string) (blocked bool, urlToUse string, host string, err error) {
+	_url, err := url.Parse(announceURL)
 	if err != nil {
 		return
 	}
-	host, _, err := net.SplitHostPort(url_.Host)
-	if err != nil {
-		host = url_.Host
+	hmp := missinggo.SplitHostMaybePort(_url.Host)
+	if hmp.Err != nil {
+		err = hmp.Err
+		return
 	}
-	addr, err := net.ResolveIPAddr("ip", host)
+	addr, err := net.ResolveIPAddr("ip", hmp.Host)
 	if err != nil {
 		return
 	}
 	cl.mu.RLock()
 	_, blocked = cl.ipBlockRange(addr.IP)
 	cl.mu.RUnlock()
+	host = _url.Host
+	hmp.Host = addr.String()
+	_url.Host = hmp.String()
+	urlToUse = _url.String()
 	return
 }
 

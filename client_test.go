@@ -453,11 +453,10 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 	}
 	spec.Trackers = [][]string{{"http://a"}, {"udp://b"}}
 	_, new, _ = cl.AddTorrentSpec(&spec)
-	if new {
-		t.FailNow()
-	}
-	assert.EqualValues(t, T.trackers[0][0], "http://a")
-	assert.EqualValues(t, T.trackers[1][0], "udp://b")
+	assert.False(t, new)
+	assert.EqualValues(t, [][]string{{"http://a"}, {"udp://b"}}, T.metainfo.AnnounceList)
+	// Because trackers are disabled in TestingConfig.
+	assert.EqualValues(t, 0, len(T.trackerAnnouncers))
 }
 
 type badStorage struct{}
@@ -762,7 +761,7 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	assert.EqualValues(t, cl.DHT().NumNodes(), 0)
 	tt, err := cl.AddTorrentFromFile("metainfo/testdata/issue_65a.torrent")
 	require.NoError(t, err)
-	assert.Len(t, tt.trackers, 5)
+	assert.Len(t, tt.metainfo.AnnounceList, 5)
 	assert.EqualValues(t, 6, cl.DHT().NumNodes())
 }
 
@@ -888,4 +887,13 @@ func TestPieceCompletedInStorageButNotClient(t *testing.T) {
 	seeder.AddTorrentSpec(&TorrentSpec{
 		Info: &greetingMetainfo.Info,
 	})
+}
+
+func TestPrepareTrackerAnnounce(t *testing.T) {
+	cl := &Client{}
+	blocked, urlToUse, host, err := cl.prepareTrackerAnnounceUnlocked("http://localhost:1234/announce?herp")
+	require.NoError(t, err)
+	assert.False(t, blocked)
+	assert.EqualValues(t, "localhost:1234", host)
+	assert.EqualValues(t, "http://127.0.0.1:1234/announce?herp", urlToUse)
 }

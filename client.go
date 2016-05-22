@@ -1489,10 +1489,8 @@ func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
 		DisplayName: mi.Info.Name,
 		InfoHash:    mi.Info.Hash(),
 	}
-	if len(spec.Trackers) == 0 {
-		spec.Trackers = [][]string{[]string{mi.Announce}}
-	} else {
-		spec.Trackers[0] = append(spec.Trackers[0], mi.Announce)
+	if spec.Trackers == nil && mi.Announce != "" {
+		spec.Trackers = [][]string{{mi.Announce}}
 	}
 	return
 }

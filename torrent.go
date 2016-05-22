@@ -1155,6 +1155,9 @@ func (t *Torrent) seeding() bool {
 // Adds and starts tracker scrapers for tracker URLs that aren't already
 // running.
 func (t *Torrent) startMissingTrackerScrapers() {
+	if t.cl.config.DisableTrackers {
+		return
+	}
 	for _, tier := range t.announceList() {
 		for _, trackerURL := range tier {
 			if _, ok := t.trackerAnnouncers[trackerURL]; ok {

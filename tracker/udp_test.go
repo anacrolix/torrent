@@ -131,18 +131,9 @@ func TestUDPTracker(t *testing.T) {
 	rand.Read(req.PeerId[:])
 	copy(req.InfoHash[:], []uint8{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1})
 	ar, err := Announce("udp://tracker.openbittorrent.com:80/announce", &req)
-	// Skip temporary errors as we don't control the server.
-	if ne, ok := err.(net.Error); ok {
-		if ne.Timeout() {
-			t.Skip(err)
-		}
-	}
-	// Skip DNS errors because the network might not be available, and we
-	// don't control the domains we're testing.
-	if oe, ok := err.(*net.OpError); ok {
-		if _, ok := oe.Err.(*net.DNSError); ok {
-			t.Skip(err)
-		}
+	// Skip any net errors as we don't control the server.
+	if _, ok := err.(net.Error); ok {
+		t.Skip(err)
 	}
 	require.NoError(t, err)
 	t.Log(ar)

@@ -519,6 +519,7 @@ func (t *Torrent) close() (err error) {
 		conn.Close()
 	}
 	t.pieceStateChanges.Close()
+	t.updateWantPeersEvent()
 	return
 }
 
@@ -1076,6 +1077,7 @@ func (t *Torrent) addTrackers(announceList [][]string) {
 		(*fullAnnounceList)[tierIndex] = appendMissingStrings((*fullAnnounceList)[tierIndex], trackerURLs)
 	}
 	t.startMissingTrackerScrapers()
+	t.updateWantPeersEvent()
 }
 
 // Don't call this before the info is available.

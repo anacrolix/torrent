@@ -1508,6 +1508,7 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 		go cl.announceTorrentDHT(t, true)
 	}
 	cl.torrents[infoHash] = t
+	t.updateWantPeersEvent()
 	return
 }
 

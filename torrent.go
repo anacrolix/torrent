@@ -218,6 +218,7 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	if err != nil {
 		return fmt.Errorf("bad info: %s", err)
 	}
+	defer t.updateWantPeersEvent()
 	t.info = ie
 	t.cl.event.Broadcast()
 	t.gotMetainfo.Set()

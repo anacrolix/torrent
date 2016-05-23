@@ -30,12 +30,16 @@ func trackerToTorrentPeers(ps []tracker.Peer) (ret []Peer) {
 	return
 }
 
-// Return how long to wait before trying again.
+// Return how long to wait before trying again. For most errors, we return 5
+// minutes, a relatively quick turn around for DNS changes.
 func (me *trackerScraper) announce() time.Duration {
 	blocked, urlToUse, host, err := me.t.cl.prepareTrackerAnnounceUnlocked(me.url)
+	if err != nil {
+		log.Printf("error preparing announce to %q: %s", me.url, err)
+		return 5 * time.Minute
+	}
 	if blocked {
-		// Wait for DNS to potentially change. Very few people do it faster
-		// than 5 minutes.
+		log.Printf("announce to tracker %q blocked by IP", me.url)
 		return 5 * time.Minute
 	}
 	me.t.cl.mu.Lock()

@@ -456,17 +456,17 @@ func (t *Torrent) announceList() (al [][]string) {
 
 // Returns a run-time generated MetaInfo that includes the info bytes and
 // announce-list as currently known to the client.
-func (t *Torrent) newMetaInfo() *metainfo.MetaInfo {
-	if t.metadataBytes == nil {
-		panic("info bytes not set")
-	}
-	return &metainfo.MetaInfo{
-		Info:         *t.info,
+func (t *Torrent) newMetaInfo() (mi *metainfo.MetaInfo) {
+	mi = &metainfo.MetaInfo{
 		CreationDate: time.Now().Unix(),
 		Comment:      "dynamic metainfo from client",
 		CreatedBy:    "go.torrent",
 		AnnounceList: t.announceList(),
 	}
+	if t.info != nil {
+		mi.Info = *t.info
+	}
+	return
 }
 
 func (t *Torrent) bytesLeft() (left int64) {

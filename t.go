@@ -197,3 +197,9 @@ func (t *Torrent) String() string {
 	}
 	return s
 }
+
+func (t *Torrent) AddTrackers(announceList [][]string) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	t.addTrackers(announceList)
+}

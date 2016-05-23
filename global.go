@@ -60,10 +60,9 @@ var (
 
 	peersAddedBySource = expvar.NewMap("peersAddedBySource")
 
-	uploadChunksPosted    = expvar.NewInt("uploadChunksPosted")
-	unexpectedCancels     = expvar.NewInt("unexpectedCancels")
-	postedCancels         = expvar.NewInt("postedCancels")
-	duplicateConnsAvoided = expvar.NewInt("duplicateConnsAvoided")
+	uploadChunksPosted = expvar.NewInt("uploadChunksPosted")
+	unexpectedCancels  = expvar.NewInt("unexpectedCancels")
+	postedCancels      = expvar.NewInt("postedCancels")
 
 	pieceHashedCorrect    = expvar.NewInt("pieceHashedCorrect")
 	pieceHashedNotCorrect = expvar.NewInt("pieceHashedNotCorrect")

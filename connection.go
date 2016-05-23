@@ -47,6 +47,8 @@ type connection struct {
 	UnwantedChunksReceived int
 	UsefulChunksReceived   int
 	chunksSent             int
+	goodPiecesDirtied      int
+	badPiecesDirtied       int
 
 	lastMessageReceived     time.Time
 	completedHandshake      time.Time

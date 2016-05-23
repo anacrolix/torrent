@@ -73,6 +73,7 @@ type Client struct {
 	// include ourselves if we end up trying to connect to our own address
 	// through legitimate channels.
 	dopplegangerAddrs map[string]struct{}
+	badPeerIPs        map[string]struct{}
 
 	defaultStorage storage.Client
 
@@ -156,6 +157,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		fmt.Fprintln(w, "Not listening!")
 	}
 	fmt.Fprintf(w, "Peer ID: %+q\n", cl.peerID)
+	fmt.Fprintf(w, "Banned IPs: %d\n", len(cl.badPeerIPs))
 	if cl.dHT != nil {
 		dhtStats := cl.dHT.Stats()
 		fmt.Fprintf(w, "DHT nodes: %d (%d good, %d banned)\n", dhtStats.Nodes, dhtStats.GoodNodes, dhtStats.BadNodes)
@@ -394,12 +396,12 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 			acceptTCP.Add(1)
 		}
 		cl.mu.RLock()
-		doppleganger := cl.dopplegangerAddr(conn.RemoteAddr().String())
-		_, blocked := cl.ipBlockRange(missinggo.AddrIP(conn.RemoteAddr()))
+		reject := cl.badPeerIPPort(
+			missinggo.AddrIP(conn.RemoteAddr()),
+			missinggo.AddrPort(conn.RemoteAddr()))
 		cl.mu.RUnlock()
-		if blocked || doppleganger {
+		if reject {
 			acceptReject.Add(1)
-			// log.Printf("inbound connection from %s blocked by %s", conn.RemoteAddr(), blockRange)
 			conn.Close()
 			continue
 		}
@@ -471,13 +473,11 @@ func (cl *Client) initiateConn(peer Peer, t *Torrent) {
 	if peer.Id == cl.peerID {
 		return
 	}
-	addr := net.JoinHostPort(peer.IP.String(), fmt.Sprintf("%d", peer.Port))
-	if cl.dopplegangerAddr(addr) || t.addrActive(addr) {
-		duplicateConnsAvoided.Add(1)
+	if cl.badPeerIPPort(peer.IP, peer.Port) {
 		return
 	}
-	if r, ok := cl.ipBlockRange(peer.IP); ok {
-		log.Printf("outbound connect to %s blocked by IP blocklist rule %s", peer.IP, r)
+	addr := net.JoinHostPort(peer.IP.String(), fmt.Sprintf("%d", peer.Port))
+	if t.addrActive(addr) {
 		return
 	}
 	t.halfOpen[addr] = struct{}{}
@@ -873,8 +873,6 @@ func (cl *Client) connBTHandshake(c *connection, ih *metainfo.Hash) (ret metainf
 
 func (cl *Client) runInitiatedHandshookConn(c *connection, t *Torrent) {
 	if c.PeerID == cl.peerID {
-		// Only if we initiated the connection is the remote address a
-		// listen addr for a doppleganger.
 		connsToSelf.Add(1)
 		addr := c.conn.RemoteAddr().String()
 		cl.dopplegangerAddrs[addr] = struct{}{}
@@ -901,6 +899,10 @@ func (cl *Client) runReceivedConn(c *connection) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	if c.PeerID == cl.peerID {
+		// Because the remote address is not necessarily the same as its
+		// client's torrent listen address, we won't record the remote address
+		// as a doppleganger. Instead, the initiator can record *us* as the
+		// doppleganger.
 		return
 	}
 	cl.runHandshookConn(c, t)
@@ -1392,19 +1394,25 @@ func (cl *Client) openNewConns(t *Torrent) {
 	}
 }
 
+func (cl *Client) badPeerIPPort(ip net.IP, port int) bool {
+	if port == 0 {
+		return true
+	}
+	if cl.dopplegangerAddr(net.JoinHostPort(ip.String(), strconv.FormatInt(int64(port), 10))) {
+		return true
+	}
+	if _, ok := cl.ipBlockRange(ip); ok {
+		return true
+	}
+	if _, ok := cl.badPeerIPs[ip.String()]; ok {
+		return true
+	}
+	return false
+}
+
 func (cl *Client) addPeers(t *Torrent, peers []Peer) {
 	for _, p := range peers {
-		if cl.dopplegangerAddr(net.JoinHostPort(
-			p.IP.String(),
-			strconv.FormatInt(int64(p.Port), 10),
-		)) {
-			continue
-		}
-		if _, ok := cl.ipBlockRange(p.IP); ok {
-			continue
-		}
-		if p.Port == 0 {
-			// The spec says to scrub these yourselves. Fine.
+		if cl.badPeerIPPort(p.IP, p.Port) {
 			continue
 		}
 		t.addPeer(p, cl)
@@ -1756,14 +1764,19 @@ func (cl *Client) pieceHashed(t *Torrent, piece int, correct bool) {
 	p.EverHashed = true
 	touchers := cl.reapPieceTouches(t, piece)
 	if correct {
+		for _, c := range touchers {
+			c.goodPiecesDirtied++
+		}
 		err := p.Storage().MarkComplete()
 		if err != nil {
 			log.Printf("%T: error completing piece %d: %s", t.storage, piece, err)
 		}
 		t.updatePieceCompletion(piece)
 	} else if len(touchers) != 0 {
-		log.Printf("dropping %d conns that touched piece", len(touchers))
+		log.Printf("dropping and banning %d conns that touched piece", len(touchers))
 		for _, c := range touchers {
+			c.badPiecesDirtied++
+			t.cl.banPeerIP(missinggo.AddrIP(c.remoteAddr()))
 			t.dropConnection(c)
 		}
 	}
@@ -1892,4 +1905,11 @@ func (cl *Client) AddDHTNodes(nodes []string) {
 		}
 		cl.DHT().AddNode(ni)
 	}
+}
+
+func (cl *Client) banPeerIP(ip net.IP) {
+	if cl.badPeerIPs == nil {
+		cl.badPeerIPs = make(map[string]struct{})
+	}
+	cl.badPeerIPs[ip.String()] = struct{}{}
 }

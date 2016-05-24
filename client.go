@@ -212,6 +212,7 @@ func listenBothSameDynamicPort(networkSuffix, host string) (tcpL net.Listener, u
 	}
 }
 
+// Listen to enabled protocols, ensuring ports match.
 func listen(tcp, utp bool, networkSuffix, addr string) (tcpL net.Listener, utpSock *utp.Socket, listenedAddr string, err error) {
 	if addr == "" {
 		addr = ":50007"
@@ -221,20 +222,29 @@ func listen(tcp, utp bool, networkSuffix, addr string) (tcpL net.Listener, utpSo
 		return
 	}
 	if tcp && utp && port == 0 {
+		// If both protocols are active, they need to have the same port.
 		return listenBothSameDynamicPort(networkSuffix, host)
 	}
+	defer func() {
+		if err != nil {
+			listenedAddr = ""
+		}
+	}()
 	if tcp {
 		tcpL, err = listenTCP(networkSuffix, addr)
 		if err != nil {
 			return
 		}
+		defer func() {
+			if err != nil {
+				tcpL.Close()
+			}
+		}()
 		listenedAddr = tcpL.Addr().String()
-
 	}
 	if utp {
 		utpSock, err = listenUTP(networkSuffix, addr)
-		if err != nil && tcp {
-			tcpL.Close()
+		if err != nil {
 			return
 		}
 		listenedAddr = utpSock.Addr().String()

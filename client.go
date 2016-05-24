@@ -235,6 +235,7 @@ func listen(tcp, utp bool, networkSuffix, addr string) (tcpL net.Listener, utpSo
 		utpSock, err = listenUTP(networkSuffix, addr)
 		if err != nil && tcp {
 			tcpL.Close()
+			return
 		}
 		listenedAddr = utpSock.Addr().String()
 	}

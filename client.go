@@ -222,18 +222,20 @@ func listen(tcp, utp bool, networkSuffix, addr string) (tcpL net.Listener, utpSo
 	if tcp && utp && port == 0 {
 		return listenBothSameDynamicPort(networkSuffix, host)
 	}
-	listenedAddr = addr
 	if tcp {
 		tcpL, err = listenTCP(networkSuffix, addr)
 		if err != nil {
 			return
 		}
+		listenedAddr = tcpL.Addr().String()
+
 	}
 	if utp {
 		utpSock, err = listenUTP(networkSuffix, addr)
 		if err != nil && tcp {
 			tcpL.Close()
 		}
+		listenedAddr = utpSock.Addr().String()
 	}
 	return
 }

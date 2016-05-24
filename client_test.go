@@ -897,3 +897,44 @@ func TestPrepareTrackerAnnounce(t *testing.T) {
 	assert.EqualValues(t, "localhost:1234", host)
 	assert.EqualValues(t, "http://127.0.0.1:1234/announce?herp", urlToUse)
 }
+
+// Check that when the listen port is 0, all the protocols listened on have
+// the same port, and it isn't zero.
+func TestClientDynamicListenPortAllProtocols(t *testing.T) {
+	cl, err := NewClient(&TestingConfig)
+	require.NoError(t, err)
+	defer cl.Close()
+	assert.NotEqual(t, 0, missinggo.AddrPort(cl.ListenAddr()))
+	assert.Equal(t, missinggo.AddrPort(cl.utpSock.Addr()), missinggo.AddrPort(cl.tcpListener.Addr()))
+}
+
+func TestClientDynamicListenTCPOnly(t *testing.T) {
+	cfg := TestingConfig
+	cfg.DisableUTP = true
+	cl, err := NewClient(&cfg)
+	require.NoError(t, err)
+	defer cl.Close()
+	assert.NotEqual(t, 0, missinggo.AddrPort(cl.ListenAddr()))
+	assert.Nil(t, cl.utpSock)
+}
+
+func TestClientDynamicListenUTPOnly(t *testing.T) {
+	cfg := TestingConfig
+	cfg.DisableTCP = true
+	cl, err := NewClient(&cfg)
+	require.NoError(t, err)
+	defer cl.Close()
+	assert.NotEqual(t, 0, missinggo.AddrPort(cl.ListenAddr()))
+	assert.Nil(t, cl.tcpListener)
+}
+
+func TestClientDynamicListenPortNoProtocols(t *testing.T) {
+	cfg := TestingConfig
+	cfg.DisableTCP = true
+	cfg.DisableUTP = true
+	cl, err := NewClient(&cfg)
+	require.NoError(t, err)
+	defer cl.Close()
+	t.Log(cl.listenAddr)
+	assert.Nil(t, cl.ListenAddr())
+}

@@ -314,9 +314,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if dhtCfg.IPBlocklist == nil {
 			dhtCfg.IPBlocklist = cl.ipBlockList
 		}
-		if dhtCfg.Addr == "" {
-			dhtCfg.Addr = cl.listenAddr
-		}
+		dhtCfg.Addr = firstNonEmptyString(dhtCfg.Addr, cl.listenAddr, cl.config.ListenAddr)
 		if dhtCfg.Conn == nil && cl.utpSock != nil {
 			dhtCfg.Conn = cl.utpSock
 		}
@@ -327,6 +325,15 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	}
 
 	return
+}
+
+func firstNonEmptyString(ss ...string) string {
+	for _, s := range ss {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // Stops the client. All connections to peers are closed and all activity will

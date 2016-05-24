@@ -35,12 +35,14 @@ func main() {
 			continue
 		}
 		d := map[string]interface{}{
-			"Name":        info.Name,
-			"NumPieces":   info.NumPieces(),
-			"PieceLength": info.PieceLength,
-			"InfoHash":    metainfo.Info.Hash().HexString(),
-			"NumFiles":    len(info.UpvertedFiles()),
-			"TotalLength": info.TotalLength(),
+			"Name":         info.Name,
+			"NumPieces":    info.NumPieces(),
+			"PieceLength":  info.PieceLength,
+			"InfoHash":     metainfo.Info.Hash().HexString(),
+			"NumFiles":     len(info.UpvertedFiles()),
+			"TotalLength":  info.TotalLength(),
+			"Announce":     metainfo.Announce,
+			"AnnounceList": metainfo.AnnounceList,
 		}
 		if flags.Files {
 			d["Files"] = info.Files

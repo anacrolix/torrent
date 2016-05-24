@@ -13,11 +13,13 @@ type AnnounceRequest struct {
 	Downloaded int64
 	Left       uint64
 	Uploaded   int64
-	Event      AnnounceEvent
-	IPAddress  int32
-	Key        int32
-	NumWant    int32 // How many peer addresses are desired. -1 for default.
-	Port       uint16
+	// Apparently this is optional. None can be used for announces done at
+	// regular intervals.
+	Event     AnnounceEvent
+	IPAddress int32
+	Key       int32
+	NumWant   int32 // How many peer addresses are desired. -1 for default.
+	Port      uint16
 } // 82 bytes
 
 type AnnounceResponse struct {
@@ -46,42 +48,26 @@ const (
 	Stopped                 // The local peer is leaving the swarm.
 )
 
-type client interface {
-	Announce(*AnnounceRequest) (AnnounceResponse, error)
-	Close() error
-}
-
 var (
 	ErrBadScheme = errors.New("unknown scheme")
-
-	schemes = make(map[string]func(*url.URL) client)
 )
 
-func registerClientScheme(scheme string, newFunc func(*url.URL) client) {
-	schemes[scheme] = newFunc
+func Announce(urlStr string, req *AnnounceRequest) (res AnnounceResponse, err error) {
+	return AnnounceHost(urlStr, req, "")
 }
 
-// Returns ErrBadScheme if the tracker scheme isn't recognised.
-func newClient(rawurl string) (cl client, err error) {
-	url_s, err := url.Parse(rawurl)
+func AnnounceHost(urlStr string, req *AnnounceRequest, host string) (res AnnounceResponse, err error) {
+	_url, err := url.Parse(urlStr)
 	if err != nil {
 		return
 	}
-	newFunc, ok := schemes[url_s.Scheme]
-	if !ok {
+	switch _url.Scheme {
+	case "http", "https":
+		return announceHTTP(req, _url, host)
+	case "udp":
+		return announceUDP(req, _url)
+	default:
 		err = ErrBadScheme
 		return
 	}
-	cl = newFunc(url_s)
-	return
-}
-
-func Announce(urlStr string, req *AnnounceRequest) (res AnnounceResponse, err error) {
-	cl, err := newClient(urlStr)
-	if err != nil {
-		return
-	}
-	defer cl.Close()
-	return cl.Announce(req)
-
 }

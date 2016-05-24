@@ -25,6 +25,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/anacrolix/torrent/tracker"
 )
 
 func (t *Torrent) chunkIndexSpec(chunkIndex, piece int) chunkSpec {
@@ -55,6 +56,8 @@ type Torrent struct {
 	// Storage for torrent data.
 	storage storage.Torrent
 
+	metainfo metainfo.MetaInfo
+
 	// The info dict. nil if we don't have it (yet).
 	info *metainfo.InfoEx
 	// Active peer connections, running message stream loops.
@@ -66,12 +69,11 @@ type Torrent struct {
 	// Reserve of peers to connect to. A peer can be both here and in the
 	// active connections if were told about the peer after connecting with
 	// them. That encourages us to reconnect to peers that are well known.
-	peers     map[peersKey]Peer
-	wantPeers sync.Cond
+	peers          map[peersKey]Peer
+	wantPeersEvent missinggo.Event
 
-	// BEP 12 Multitracker Metadata Extension. The tracker.Client instances
-	// mirror their respective URLs from the announce-list metainfo key.
-	trackers []trackerTier
+	// An announcer for each tracker URL.
+	trackerAnnouncers map[string]*trackerScraper
 	// Name used if the info name isn't available.
 	displayName string
 	// The bencoded bytes of the info dict.
@@ -216,6 +218,7 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	if err != nil {
 		return fmt.Errorf("bad info: %s", err)
 	}
+	defer t.updateWantPeersEvent()
 	t.info = ie
 	t.cl.event.Broadcast()
 	t.gotMetainfo.Set()
@@ -424,10 +427,8 @@ func (t *Torrent) writeStatus(w io.Writer, cl *Client) {
 	})
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Trackers: ")
-	for _, tier := range t.trackers {
-		for _, tr := range tier {
-			fmt.Fprintf(w, "%q ", tr)
-		}
+	for _url := range t.trackerAnnouncers {
+		fmt.Fprintf(w, "%q ", _url)
 	}
 	fmt.Fprintf(w, "\n")
 	fmt.Fprintf(w, "Pending peers: %d\n", len(t.peers))
@@ -450,23 +451,22 @@ func (t *Torrent) haveInfo() bool {
 
 // TODO: Include URIs that weren't converted to tracker clients.
 func (t *Torrent) announceList() (al [][]string) {
-	missinggo.CastSlice(&al, t.trackers)
-	return
+	return t.metainfo.AnnounceList
 }
 
 // Returns a run-time generated MetaInfo that includes the info bytes and
 // announce-list as currently known to the client.
-func (t *Torrent) metainfo() *metainfo.MetaInfo {
-	if t.metadataBytes == nil {
-		panic("info bytes not set")
-	}
-	return &metainfo.MetaInfo{
-		Info:         *t.info,
+func (t *Torrent) newMetaInfo() (mi *metainfo.MetaInfo) {
+	mi = &metainfo.MetaInfo{
 		CreationDate: time.Now().Unix(),
 		Comment:      "dynamic metainfo from client",
 		CreatedBy:    "go.torrent",
 		AnnounceList: t.announceList(),
 	}
+	if t.info != nil {
+		mi.Info = *t.info
+	}
+	return
 }
 
 func (t *Torrent) bytesLeft() (left int64) {
@@ -520,6 +520,7 @@ func (t *Torrent) close() (err error) {
 		conn.Close()
 	}
 	t.pieceStateChanges.Close()
+	t.updateWantPeersEvent()
 	return
 }
 
@@ -1048,17 +1049,36 @@ func (t *Torrent) needData() bool {
 	})
 }
 
-func (t *Torrent) addTrackers(announceList [][]string) {
-	newTrackers := copyTrackers(t.trackers)
-	for tierIndex, tier := range announceList {
-		if tierIndex < len(newTrackers) {
-			newTrackers[tierIndex] = mergeTier(newTrackers[tierIndex], tier)
-		} else {
-			newTrackers = append(newTrackers, mergeTier(nil, tier))
+func appendMissingStrings(old, new []string) (ret []string) {
+	ret = old
+new:
+	for _, n := range new {
+		for _, o := range old {
+			if o == n {
+				continue new
+			}
 		}
-		shuffleTier(newTrackers[tierIndex])
+		ret = append(ret, n)
 	}
-	t.trackers = newTrackers
+	return
+}
+
+func appendMissingTrackerTiers(existing [][]string, minNumTiers int) (ret [][]string) {
+	ret = existing
+	for minNumTiers > len(ret) {
+		ret = append(ret, nil)
+	}
+	return
+}
+
+func (t *Torrent) addTrackers(announceList [][]string) {
+	fullAnnounceList := &t.metainfo.AnnounceList
+	t.metainfo.AnnounceList = appendMissingTrackerTiers(*fullAnnounceList, len(announceList))
+	for tierIndex, trackerURLs := range announceList {
+		(*fullAnnounceList)[tierIndex] = appendMissingStrings((*fullAnnounceList)[tierIndex], trackerURLs)
+	}
+	t.startMissingTrackerScrapers()
+	t.updateWantPeersEvent()
 }
 
 // Don't call this before the info is available.
@@ -1102,22 +1122,21 @@ func (t *Torrent) dropConnection(c *connection) {
 	}
 }
 
-// Returns true when peers are required, or false if the torrent is closing.
-func (t *Torrent) waitWantPeers() bool {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
-	for {
-		if t.closed.IsSet() {
-			return false
-		}
-		if len(t.peers) > torrentPeersLowWater {
-			goto wait
-		}
-		if t.needData() || t.seeding() {
-			return true
-		}
-	wait:
-		t.wantPeers.Wait()
+func (t *Torrent) wantPeers() bool {
+	if t.closed.IsSet() {
+		return false
+	}
+	if len(t.peers) > torrentPeersLowWater {
+		return false
+	}
+	return t.needData() || t.seeding()
+}
+
+func (t *Torrent) updateWantPeersEvent() {
+	if t.wantPeers() {
+		t.wantPeersEvent.Set()
+	} else {
+		t.wantPeersEvent.Clear()
 	}
 }
 
@@ -1134,4 +1153,41 @@ func (t *Torrent) seeding() bool {
 		return false
 	}
 	return true
+}
+
+// Adds and starts tracker scrapers for tracker URLs that aren't already
+// running.
+func (t *Torrent) startMissingTrackerScrapers() {
+	if t.cl.config.DisableTrackers {
+		return
+	}
+	for _, tier := range t.announceList() {
+		for _, trackerURL := range tier {
+			if _, ok := t.trackerAnnouncers[trackerURL]; ok {
+				continue
+			}
+			newAnnouncer := &trackerScraper{
+				url: trackerURL,
+				t:   t,
+			}
+			if t.trackerAnnouncers == nil {
+				t.trackerAnnouncers = make(map[string]*trackerScraper)
+			}
+			t.trackerAnnouncers[trackerURL] = newAnnouncer
+			go newAnnouncer.Run()
+		}
+	}
+}
+
+// Returns an AnnounceRequest with fields filled out to defaults and current
+// values.
+func (t *Torrent) announceRequest() tracker.AnnounceRequest {
+	return tracker.AnnounceRequest{
+		Event:    tracker.None,
+		NumWant:  -1,
+		Port:     uint16(t.cl.incomingPeerPort()),
+		PeerId:   t.cl.peerID,
+		InfoHash: t.infoHash,
+		Left:     t.bytesLeftAnnounce(),
+	}
 }

@@ -10,25 +10,11 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/anacrolix/missinggo/httptoo"
+
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/util"
 )
-
-func init() {
-	registerClientScheme("http", newHTTPClient)
-}
-
-type httpClient struct {
-	url url.URL
-}
-
-func (httpClient) Close() error { return nil }
-
-func newHTTPClient(url *url.URL) client {
-	return &httpClient{
-		url: *url,
-	}
-}
 
 type httpResponse struct {
 	FailureReason string      `bencode:"failure reason"`
@@ -56,9 +42,8 @@ func (r *httpResponse) UnmarshalPeers() (ret []Peer, err error) {
 	return
 }
 
-func (c *httpClient) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err error) {
-	// retain query parameters from announce URL
-	q := c.url.Query()
+func setAnnounceParams(_url *url.URL, ar *AnnounceRequest) {
+	q := _url.Query()
 
 	q.Set("info_hash", string(ar.InfoHash[:]))
 	q.Set("peer_id", string(ar.PeerId[:]))
@@ -73,14 +58,21 @@ func (c *httpClient) Announce(ar *AnnounceRequest) (ret AnnounceResponse, err er
 	q.Set("compact", "1")
 	// According to https://wiki.vuze.com/w/Message_Stream_Encryption.
 	q.Set("supportcrypto", "1")
-	var reqURL url.URL = c.url
-	reqURL.RawQuery = q.Encode()
-	resp, err := http.Get(reqURL.String())
+
+	_url.RawQuery = q.Encode()
+}
+
+func announceHTTP(ar *AnnounceRequest, _url *url.URL, host string) (ret AnnounceResponse, err error) {
+	_url = httptoo.CopyURL(_url)
+	setAnnounceParams(_url, ar)
+	req, err := http.NewRequest("GET", _url.String(), nil)
+	req.Host = host
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return
 	}
 	defer resp.Body.Close()
-	buf := bytes.Buffer{}
+	var buf bytes.Buffer
 	io.Copy(&buf, resp.Body)
 	if resp.StatusCode != 200 {
 		err = fmt.Errorf("response from tracker: %s: %s", resp.Status, buf.String())

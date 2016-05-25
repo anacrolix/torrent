@@ -41,7 +41,7 @@ func TestCancelRequestOptimized(t *testing.T) {
 	// Check that write optimization filters out the Request, due to the
 	// Cancel. We should have received an Interested, due to the initial
 	// request, and then keep-alives until we close the connection.
-	go c.writer(0)
+	go c.writer(0, nil)
 	b := make([]byte, 9)
 	n, err := io.ReadFull(r, b)
 	require.NoError(t, err)
@@ -73,7 +73,11 @@ func TestSendBitfieldThenHave(t *testing.T) {
 		}{r, w},
 		outgoingUnbufferedMessages: list.New(),
 	}
-	go c.writer(time.Minute)
+	cfg := new(Config)
+	cfg.LimitSendPieceRate = true
+	cfg.SendPieceRate = 100
+	client, _ := NewClient(cfg)
+	go c.writer(time.Minute, client)
 	c.mu().Lock()
 	c.Bitfield([]bool{false, true, false})
 	c.mu().Unlock()

@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
+	"github.com/anacrolix/torrent/ratelimit"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/pproffd"
 	"github.com/anacrolix/missinggo/pubsub"
@@ -82,6 +82,8 @@ type Client struct {
 	closed missinggo.Event
 
 	torrents map[metainfo.Hash]*Torrent
+
+	rate *ratelimit.RateLimit
 }
 
 func (cl *Client) IPBlockList() iplist.Ranger {
@@ -314,6 +316,12 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if err != nil {
 			return
 		}
+	}
+
+	if cfg.LimitSendPieceRate{
+		cl.rate = new(ratelimit.RateLimit)
+		cl.rate.MaxByte = cfg.SendPieceRate * 1024
+		cl.rate.PeriodicallyIncRate()
 	}
 
 	return
@@ -922,7 +930,7 @@ func (cl *Client) runHandshookConn(c *connection, t *Torrent) {
 		return
 	}
 	defer t.dropConnection(c)
-	go c.writer(time.Minute)
+	go c.writer(time.Minute, cl)
 	cl.sendInitialMessages(c, t)
 	err := cl.connectionLoop(t, c)
 	if err != nil && cl.config.Debug {

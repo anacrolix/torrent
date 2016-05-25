@@ -397,7 +397,7 @@ var (
 )
 
 // Writes buffers to the socket from the write channel.
-func (cn *connection) writer(keepAliveTimeout time.Duration) {
+func (cn *connection) writer(keepAliveTimeout time.Duration, cl *Client) {
 	defer func() {
 		cn.mu().Lock()
 		defer cn.mu().Unlock()
@@ -412,6 +412,9 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			msg := cn.outgoingUnbufferedMessages.Remove(cn.outgoingUnbufferedMessages.Front()).(pp.Message)
 			cn.mu().Unlock()
 			b, err := msg.MarshalBinary()
+			if msg.Type == pp.Piece && cl.config.LimitSendPieceRate{
+				cl.rate.ApplyForSendByte(uint32(len(b)))
+			}
 			if err != nil {
 				panic(err)
 			}

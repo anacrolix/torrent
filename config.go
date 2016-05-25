@@ -40,7 +40,6 @@ type Config struct {
 
 	IPBlocklist iplist.Ranger
 	DisableIPv6 bool `long:"disable-ipv6"`
-	LimitSendPieceRate bool `long:"limit-send-piece-rate"`
 	// how many kB can be send every second
 	SendPieceRate uint32 `long:"max-kbyte-can-send-every-second"`
 	// Perform logging and any other behaviour that will help debug.

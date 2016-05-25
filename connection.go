@@ -415,7 +415,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration, cl *Client) {
 			if err != nil {
 				panic(err)
 			}
-			if msg.Type == pp.Piece && cl.config.LimitSendPieceRate{
+			if msg.Type == pp.Piece && cl.config.SendPieceRate > 0 {
 				cl.rate.ApplyForSendByte(uint32(len(b)))
 			}
 			connectionWriterWrite.Add(1)

@@ -7,6 +7,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/pproffd"
+	"github.com/anacrolix/missinggo/pubsub"
+	"github.com/anacrolix/sync"
+	"github.com/anacrolix/torrent/ratelimit"
+	"github.com/anacrolix/utp"
+	"github.com/dustin/go-humanize"
 	"io"
 	"log"
 	"math/big"
@@ -17,13 +24,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"github.com/anacrolix/torrent/ratelimit"
-	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/pproffd"
-	"github.com/anacrolix/missinggo/pubsub"
-	"github.com/anacrolix/sync"
-	"github.com/anacrolix/utp"
-	"github.com/dustin/go-humanize"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/dht"
@@ -318,7 +318,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		}
 	}
 
-	if cfg.LimitSendPieceRate{
+	if cfg.SendPieceRate > 0 {
 		cl.rate = new(ratelimit.RateLimit)
 		cl.rate.MaxByte = cfg.SendPieceRate * 1024
 		cl.rate.PeriodicallyIncRate()

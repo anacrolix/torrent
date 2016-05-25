@@ -412,11 +412,11 @@ func (cn *connection) writer(keepAliveTimeout time.Duration, cl *Client) {
 			msg := cn.outgoingUnbufferedMessages.Remove(cn.outgoingUnbufferedMessages.Front()).(pp.Message)
 			cn.mu().Unlock()
 			b, err := msg.MarshalBinary()
-			if msg.Type == pp.Piece && cl.config.LimitSendPieceRate{
-				cl.rate.ApplyForSendByte(uint32(len(b)))
-			}
 			if err != nil {
 				panic(err)
+			}
+			if msg.Type == pp.Piece && cl.config.LimitSendPieceRate{
+				cl.rate.ApplyForSendByte(uint32(len(b)))
 			}
 			connectionWriterWrite.Add(1)
 			n, err := buf.Write(b)

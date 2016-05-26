@@ -1797,6 +1797,7 @@ func (cl *Client) pieceHashed(t *Torrent, piece int, correct bool) {
 func (cl *Client) onCompletedPiece(t *Torrent, piece int) {
 	t.pendingPieces.Remove(piece)
 	t.pendAllChunkSpecs(piece)
+
 	for _, conn := range t.conns {
 		conn.Have(piece)
 		for r := range conn.Requests {

@@ -54,6 +54,21 @@ func (me *trackerScraper) announce() time.Duration {
 	return time.Duration(res.Interval) * time.Second
 }
 
+func (me *trackerScraper) announceEvent(event tracker.AnnounceEvent) {
+	_, urlToUse, host, err := me.t.cl.prepareTrackerAnnounceUnlocked(me.url)
+	if err != nil {
+		log.Printf("error preparing announce to %q: %s", me.url, err)
+		return
+	}
+	req := me.t.announceRequest()
+	req.Event = event
+	_, err = tracker.AnnounceHost(urlToUse, &req, host)
+	if err != nil {
+		log.Printf("error announcing %s %q to %q: %s", me.t.InfoHash().HexString(), me.t.Name(), me.url, err)
+	}
+
+}
+
 func (me *trackerScraper) Run() {
 	for {
 		select {

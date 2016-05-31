@@ -33,6 +33,7 @@ import (
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/anacrolix/torrent/tracker"
 )
 
 // Currently doesn't really queue, but should in the future.
@@ -1568,6 +1569,29 @@ func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
 	}
 	delete(cl.torrents, infoHash)
 	return
+}
+
+func (cl *Client) DropTorrent(infoHash metainfo.Hash) (err error) {
+	t, ok := cl.torrents[infoHash]
+	if ok{
+		for _, track := range t.trackerAnnouncers{
+			go track.announceEvent(tracker.Stopped)
+		}
+		return cl.dropTorrent(infoHash)
+	}else{
+		return nil
+	}
+}
+
+func (cl *Client) DropAllTorrent(){
+	for infoHash := range(cl.torrents){
+		cl.DropTorrent(infoHash)
+	}
+}
+
+func (cl *Client) CheckExistsInfoHash(infoHash metainfo.Hash) (ok bool){
+	_, ok = cl.torrents[infoHash]
+	return ok
 }
 
 func (cl *Client) announceTorrentDHT(t *Torrent, impliedPort bool) {

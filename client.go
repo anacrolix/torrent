@@ -7,6 +7,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/pproffd"
+	"github.com/anacrolix/missinggo/pubsub"
+	"github.com/anacrolix/sync"
+	"github.com/anacrolix/torrent/ratelimit"
+	"github.com/anacrolix/utp"
+	"github.com/dustin/go-humanize"
 	"io"
 	"log"
 	"math/big"
@@ -18,13 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/pproffd"
-	"github.com/anacrolix/missinggo/pubsub"
-	"github.com/anacrolix/sync"
-	"github.com/anacrolix/utp"
-	"github.com/dustin/go-humanize"
-
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/dht"
 	"github.com/anacrolix/torrent/dht/krpc"
@@ -33,6 +33,7 @@ import (
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/anacrolix/torrent/tracker"
 )
 
 // Currently doesn't really queue, but should in the future.
@@ -82,6 +83,8 @@ type Client struct {
 	closed missinggo.Event
 
 	torrents map[metainfo.Hash]*Torrent
+
+	rate *ratelimit.RateLimit
 }
 
 func (cl *Client) IPBlockList() iplist.Ranger {
@@ -322,6 +325,12 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if err != nil {
 			return
 		}
+	}
+
+	if cfg.SendPieceRate > 0 {
+		cl.rate = new(ratelimit.RateLimit)
+		cl.rate.MaxByte = cfg.SendPieceRate * 1024
+		cl.rate.PeriodicallyIncRate()
 	}
 
 	return
@@ -939,7 +948,7 @@ func (cl *Client) runHandshookConn(c *connection, t *Torrent) {
 		return
 	}
 	defer t.dropConnection(c)
-	go c.writer(time.Minute)
+	go c.writer(time.Minute, cl)
 	cl.sendInitialMessages(c, t)
 	err := cl.connectionLoop(t, c)
 	if err != nil && cl.config.Debug {
@@ -1579,6 +1588,29 @@ func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
 	return
 }
 
+func (cl *Client) DropTorrent(infoHash metainfo.Hash) (err error) {
+	t, ok := cl.torrents[infoHash]
+	if ok{
+		for _, track := range t.trackerAnnouncers{
+			go track.announceEvent(tracker.Stopped)
+		}
+		return cl.dropTorrent(infoHash)
+	}else{
+		return nil
+	}
+}
+
+func (cl *Client) DropAllTorrent(){
+	for infoHash := range(cl.torrents){
+		cl.DropTorrent(infoHash)
+	}
+}
+
+func (cl *Client) CheckExistsInfoHash(infoHash metainfo.Hash) (ok bool){
+	_, ok = cl.torrents[infoHash]
+	return ok
+}
+
 func (cl *Client) announceTorrentDHT(t *Torrent, impliedPort bool) {
 	for {
 		select {
@@ -1806,6 +1838,7 @@ func (cl *Client) pieceHashed(t *Torrent, piece int, correct bool) {
 func (cl *Client) onCompletedPiece(t *Torrent, piece int) {
 	t.pendingPieces.Remove(piece)
 	t.pendAllChunkSpecs(piece)
+
 	for _, conn := range t.conns {
 		conn.Have(piece)
 		for r := range conn.Requests {

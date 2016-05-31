@@ -964,6 +964,11 @@ func (t *Torrent) pendRequest(req request) {
 
 func (t *Torrent) pieceChanged(piece int) {
 	t.cl.pieceChanged(t, piece)
+	if t.completedPieces.Len() == t.numPieces() {
+		for _, ts := range t.trackerAnnouncers {
+			go ts.announceEvent(tracker.Completed)
+		}
+	}
 }
 
 func (t *Torrent) openNewConns() {
@@ -1174,6 +1179,7 @@ func (t *Torrent) startMissingTrackerScrapers() {
 				t.trackerAnnouncers = make(map[string]*trackerScraper)
 			}
 			t.trackerAnnouncers[trackerURL] = newAnnouncer
+			go newAnnouncer.announceEvent(tracker.Started)
 			go newAnnouncer.Run()
 		}
 	}

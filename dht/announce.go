@@ -61,7 +61,7 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*Announc
 		return
 	}()
 	s.mu.Unlock()
-	if len(startAddrs) == 0 {
+	if len(startAddrs) == 0 && !s.config.NoDefaultBootstrap {
 		addrs, err := bootstrapAddrs(s.bootstrapNodes)
 		if err != nil {
 			return nil, err

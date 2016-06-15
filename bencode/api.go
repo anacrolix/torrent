@@ -113,7 +113,7 @@ type Unmarshaler interface {
 // error if any.
 func Marshal(v interface{}) ([]byte, error) {
 	var buf bytes.Buffer
-	e := Encoder{Writer: bufio.NewWriter(&buf)}
+	e := Encoder{w: bufio.NewWriter(&buf)}
 	err := e.Encode(v)
 	if err != nil {
 		return nil, err
@@ -133,5 +133,5 @@ func NewDecoder(r io.Reader) *Decoder {
 }
 
 func NewEncoder(w io.Writer) *Encoder {
-	return &Encoder{Writer: bufio.NewWriter(w)}
+	return &Encoder{w: bufio.NewWriter(w)}
 }

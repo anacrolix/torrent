@@ -1,7 +1,7 @@
 package bencode
 
 import (
-	"bufio"
+	"io"
 	"reflect"
 	"runtime"
 	"sort"
@@ -16,7 +16,11 @@ func is_empty_value(v reflect.Value) bool {
 }
 
 type Encoder struct {
-	*bufio.Writer
+	w interface {
+		Flush() error
+		io.Writer
+		WriteString(string) (int, error)
+	}
 	scratch [64]byte
 }
 
@@ -37,7 +41,7 @@ func (e *Encoder) Encode(v interface{}) (err error) {
 		}
 	}()
 	e.reflect_value(reflect.ValueOf(v))
-	return e.Flush()
+	return e.w.Flush()
 }
 
 type string_values []reflect.Value
@@ -48,14 +52,14 @@ func (sv string_values) Less(i, j int) bool { return sv.get(i) < sv.get(j) }
 func (sv string_values) get(i int) string   { return sv[i].String() }
 
 func (e *Encoder) write(s []byte) {
-	_, err := e.Write(s)
+	_, err := e.w.Write(s)
 	if err != nil {
 		panic(err)
 	}
 }
 
 func (e *Encoder) write_string(s string) {
-	_, err := e.WriteString(s)
+	_, err := e.w.WriteString(s)
 	if err != nil {
 		panic(err)
 	}

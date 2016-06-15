@@ -179,7 +179,7 @@ func (t *Torrent) AddPeers(pp []Peer) {
 	cl := t.cl
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	cl.addPeers(t, pp)
+	t.addPeers(pp)
 }
 
 // Marks the entire torrent for download. Requires the info first, see

@@ -71,9 +71,11 @@ type Torrent struct {
 	// them. That encourages us to reconnect to peers that are well known.
 	peers          map[peersKey]Peer
 	wantPeersEvent missinggo.Event
-
 	// An announcer for each tracker URL.
 	trackerAnnouncers map[string]*trackerScraper
+	// How many times we've initiated a DHT announce.
+	numDHTAnnounces int
+
 	// Name used if the info name isn't available.
 	displayName string
 	// The bencoded bytes of the info dict.
@@ -141,7 +143,8 @@ func (t *Torrent) worstConns(cl *Client) (wcs *worstConns) {
 	return
 }
 
-func (t *Torrent) addPeer(p Peer, cl *Client) {
+func (t *Torrent) addPeer(p Peer) {
+	cl := t.cl
 	cl.openNewConns(t)
 	if len(t.peers) >= torrentPeersHighWater {
 		return
@@ -426,11 +429,15 @@ func (t *Torrent) writeStatus(w io.Writer, cl *Client) {
 		return true
 	})
 	fmt.Fprintln(w)
+
 	fmt.Fprintf(w, "Trackers: ")
 	for _url := range t.trackerAnnouncers {
 		fmt.Fprintf(w, "%q ", _url)
 	}
 	fmt.Fprintf(w, "\n")
+
+	fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
+
 	fmt.Fprintf(w, "Pending peers: %d\n", len(t.peers))
 	fmt.Fprintf(w, "Half open: %d\n", len(t.halfOpen))
 	fmt.Fprintf(w, "Active peers: %d\n", len(t.conns))
@@ -1206,6 +1213,9 @@ func (t *Torrent) announceDHT(impliedPort bool) {
 			log.Printf("error getting peers from dht: %s", err)
 			return
 		}
+		cl.mu.Lock()
+		t.numDHTAnnounces++
+		cl.mu.Unlock()
 		// Count all the unique addresses we got during this announce.
 		allAddrs := make(map[string]struct{})
 	getPeers:
@@ -1233,7 +1243,7 @@ func (t *Torrent) announceDHT(impliedPort bool) {
 					allAddrs[key] = struct{}{}
 				}
 				cl.mu.Lock()
-				cl.addPeers(t, addPeers)
+				t.addPeers(addPeers)
 				numPeers := len(t.peers)
 				cl.mu.Unlock()
 				if numPeers >= torrentPeersHighWater {
@@ -1246,5 +1256,14 @@ func (t *Torrent) announceDHT(impliedPort bool) {
 		}
 		ps.Close()
 		// log.Printf("finished DHT peer scrape for %s: %d peers", t, len(allAddrs))
+	}
+}
+
+func (t *Torrent) addPeers(peers []Peer) {
+	for _, p := range peers {
+		if t.cl.badPeerIPPort(p.IP, p.Port) {
+			continue
+		}
+		t.addPeer(p)
 	}
 }

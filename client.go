@@ -1287,7 +1287,7 @@ func (cl *Client) connectionLoop(t *Torrent, c *connection) error {
 				}
 				go func() {
 					cl.mu.Lock()
-					cl.addPeers(t, func() (ret []Peer) {
+					t.addPeers(func() (ret []Peer) {
 						for i, cp := range pexMsg.Added {
 							p := Peer{
 								IP:     make([]byte, 4),
@@ -1428,15 +1428,6 @@ func (cl *Client) badPeerIPPort(ip net.IP, port int) bool {
 		return true
 	}
 	return false
-}
-
-func (cl *Client) addPeers(t *Torrent, peers []Peer) {
-	for _, p := range peers {
-		if cl.badPeerIPPort(p.IP, p.Port) {
-			continue
-		}
-		t.addPeer(p, cl)
-	}
 }
 
 // Prepare a Torrent without any attachment to a Client. That means we can

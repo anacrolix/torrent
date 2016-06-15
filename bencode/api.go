@@ -109,16 +109,12 @@ type Unmarshaler interface {
 	UnmarshalBencode([]byte) error
 }
 
-//----------------------------------------------------------------------------
-// Stateless interface
-//----------------------------------------------------------------------------
-
 // Marshal the value 'v' to the bencode form, return the result as []byte and an
 // error if any.
 func Marshal(v interface{}) ([]byte, error) {
 	var buf bytes.Buffer
-	e := encoder{Writer: bufio.NewWriter(&buf)}
-	err := e.encode(v)
+	e := Encoder{Writer: bufio.NewWriter(&buf)}
+	err := e.Encode(v)
 	if err != nil {
 		return nil, err
 	}
@@ -128,38 +124,14 @@ func Marshal(v interface{}) ([]byte, error) {
 // Unmarshal the bencode value in the 'data' to a value pointed by the 'v'
 // pointer, return a non-nil error if any.
 func Unmarshal(data []byte, v interface{}) error {
-	e := decoder{r: bytes.NewBuffer(data)}
-	return e.decode(v)
-}
-
-//----------------------------------------------------------------------------
-// Stateful interface
-//----------------------------------------------------------------------------
-
-type Decoder struct {
-	d decoder
+	e := Decoder{r: bytes.NewBuffer(data)}
+	return e.Decode(v)
 }
 
 func NewDecoder(r io.Reader) *Decoder {
-	return &Decoder{decoder{r: bufio.NewReader(r)}}
-}
-
-func (d *Decoder) Decode(v interface{}) error {
-	return d.d.decode(v)
-}
-
-type Encoder struct {
-	e encoder
+	return &Decoder{r: bufio.NewReader(r)}
 }
 
 func NewEncoder(w io.Writer) *Encoder {
-	return &Encoder{encoder{Writer: bufio.NewWriter(w)}}
-}
-
-func (e *Encoder) Encode(v interface{}) error {
-	err := e.e.encode(v)
-	if err != nil {
-		return err
-	}
-	return nil
+	return &Encoder{Writer: bufio.NewWriter(w)}
 }

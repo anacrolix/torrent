@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-type decoder struct {
+type Decoder struct {
 	r interface {
 		io.ByteScanner
 		io.Reader
@@ -22,7 +22,7 @@ type decoder struct {
 	key    string
 }
 
-func (d *decoder) decode(v interface{}) (err error) {
+func (d *Decoder) Decode(v interface{}) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			if _, ok := e.(runtime.Error); ok {
@@ -52,7 +52,7 @@ func check_for_unexpected_eof(err error, offset int64) {
 	}
 }
 
-func (d *decoder) read_byte() byte {
+func (d *Decoder) read_byte() byte {
 	b, err := d.r.ReadByte()
 	if err != nil {
 		check_for_unexpected_eof(err, d.offset)
@@ -65,7 +65,7 @@ func (d *decoder) read_byte() byte {
 
 // reads data writing it to 'd.buf' until 'sep' byte is encountered, 'sep' byte
 // is consumed, but not included into the 'd.buf'
-func (d *decoder) read_until(sep byte) {
+func (d *Decoder) read_until(sep byte) {
 	for {
 		b := d.read_byte()
 		if b == sep {
@@ -84,7 +84,7 @@ func check_for_int_parse_error(err error, offset int64) {
 	}
 }
 
-func (d *decoder) throwSyntaxError(offset int64, err error) {
+func (d *Decoder) throwSyntaxError(offset int64, err error) {
 	panic(&SyntaxError{
 		Offset: offset,
 		What:   err,
@@ -92,7 +92,7 @@ func (d *decoder) throwSyntaxError(offset int64, err error) {
 }
 
 // called when 'i' was consumed
-func (d *decoder) parse_int(v reflect.Value) {
+func (d *Decoder) parse_int(v reflect.Value) {
 	start := d.offset - 1
 	d.read_until('e')
 	if d.buf.Len() == 0 {
@@ -138,7 +138,7 @@ func (d *decoder) parse_int(v reflect.Value) {
 	d.buf.Reset()
 }
 
-func (d *decoder) parse_string(v reflect.Value) {
+func (d *Decoder) parse_string(v reflect.Value) {
 	start := d.offset - 1
 
 	// read the string length first
@@ -180,7 +180,7 @@ func (d *decoder) parse_string(v reflect.Value) {
 	d.buf.Reset()
 }
 
-func (d *decoder) parse_dict(v reflect.Value) {
+func (d *Decoder) parse_dict(v reflect.Value) {
 	switch v.Kind() {
 	case reflect.Map:
 		t := v.Type()
@@ -284,7 +284,7 @@ func (d *decoder) parse_dict(v reflect.Value) {
 	}
 }
 
-func (d *decoder) parse_list(v reflect.Value) {
+func (d *Decoder) parse_list(v reflect.Value) {
 	switch v.Kind() {
 	case reflect.Array, reflect.Slice:
 	default:
@@ -330,7 +330,7 @@ func (d *decoder) parse_list(v reflect.Value) {
 	}
 }
 
-func (d *decoder) read_one_value() bool {
+func (d *Decoder) read_one_value() bool {
 	b, err := d.r.ReadByte()
 	if err != nil {
 		panic(err)
@@ -381,7 +381,7 @@ func (d *decoder) read_one_value() bool {
 
 }
 
-func (d *decoder) parse_unmarshaler(v reflect.Value) bool {
+func (d *Decoder) parse_unmarshaler(v reflect.Value) bool {
 	m, ok := v.Interface().(Unmarshaler)
 	if !ok {
 		// T doesn't work, try *T
@@ -409,7 +409,7 @@ func (d *decoder) parse_unmarshaler(v reflect.Value) bool {
 
 // Returns true if there was a value and it's now stored in 'v', otherwise
 // there was an end symbol ("e") and no value was stored.
-func (d *decoder) parse_value(v reflect.Value) bool {
+func (d *Decoder) parse_value(v reflect.Value) bool {
 	// we support one level of indirection at the moment
 	if v.Kind() == reflect.Ptr {
 		// if the pointer is nil, allocate a new element of the type it
@@ -462,14 +462,14 @@ func (d *decoder) parse_value(v reflect.Value) bool {
 }
 
 // An unknown bencode type character was encountered.
-func (d *decoder) raiseUnknownValueType(b byte, offset int64) {
+func (d *Decoder) raiseUnknownValueType(b byte, offset int64) {
 	panic(&SyntaxError{
 		Offset: offset,
 		What:   fmt.Errorf("unknown value type %+q", b),
 	})
 }
 
-func (d *decoder) parse_value_interface() (interface{}, bool) {
+func (d *Decoder) parse_value_interface() (interface{}, bool) {
 	b, err := d.r.ReadByte()
 	if err != nil {
 		panic(err)
@@ -498,7 +498,7 @@ func (d *decoder) parse_value_interface() (interface{}, bool) {
 	}
 }
 
-func (d *decoder) parse_int_interface() (ret interface{}) {
+func (d *Decoder) parse_int_interface() (ret interface{}) {
 	start := d.offset - 1
 	d.read_until('e')
 	if d.buf.Len() == 0 {
@@ -528,7 +528,7 @@ func (d *decoder) parse_int_interface() (ret interface{}) {
 	return
 }
 
-func (d *decoder) parse_string_interface() interface{} {
+func (d *Decoder) parse_string_interface() interface{} {
 	start := d.offset - 1
 
 	// read the string length first
@@ -552,7 +552,7 @@ func (d *decoder) parse_string_interface() interface{} {
 	return s
 }
 
-func (d *decoder) parse_dict_interface() interface{} {
+func (d *Decoder) parse_dict_interface() interface{} {
 	dict := make(map[string]interface{})
 	for {
 		keyi, ok := d.parse_value_interface()
@@ -578,7 +578,7 @@ func (d *decoder) parse_dict_interface() interface{} {
 	return dict
 }
 
-func (d *decoder) parse_list_interface() interface{} {
+func (d *Decoder) parse_list_interface() interface{} {
 	var list []interface{}
 	for {
 		valuei, ok := d.parse_value_interface()

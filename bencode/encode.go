@@ -15,12 +15,12 @@ func is_empty_value(v reflect.Value) bool {
 	return missinggo.IsEmptyValue(v)
 }
 
-type encoder struct {
+type Encoder struct {
 	*bufio.Writer
 	scratch [64]byte
 }
 
-func (e *encoder) encode(v interface{}) (err error) {
+func (e *Encoder) Encode(v interface{}) (err error) {
 	if v == nil {
 		return
 	}
@@ -47,28 +47,28 @@ func (sv string_values) Swap(i, j int)      { sv[i], sv[j] = sv[j], sv[i] }
 func (sv string_values) Less(i, j int) bool { return sv.get(i) < sv.get(j) }
 func (sv string_values) get(i int) string   { return sv[i].String() }
 
-func (e *encoder) write(s []byte) {
+func (e *Encoder) write(s []byte) {
 	_, err := e.Write(s)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (e *encoder) write_string(s string) {
+func (e *Encoder) write_string(s string) {
 	_, err := e.WriteString(s)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (e *encoder) reflect_string(s string) {
+func (e *Encoder) reflect_string(s string) {
 	b := strconv.AppendInt(e.scratch[:0], int64(len(s)), 10)
 	e.write(b)
 	e.write_string(":")
 	e.write_string(s)
 }
 
-func (e *encoder) reflect_byte_slice(s []byte) {
+func (e *Encoder) reflect_byte_slice(s []byte) {
 	b := strconv.AppendInt(e.scratch[:0], int64(len(s)), 10)
 	e.write(b)
 	e.write_string(":")
@@ -77,7 +77,7 @@ func (e *encoder) reflect_byte_slice(s []byte) {
 
 // returns true if the value implements Marshaler interface and marshaling was
 // done successfully
-func (e *encoder) reflect_marshaler(v reflect.Value) bool {
+func (e *Encoder) reflect_marshaler(v reflect.Value) bool {
 	m, ok := v.Interface().(Marshaler)
 	if !ok {
 		// T doesn't work, try *T
@@ -100,7 +100,7 @@ func (e *encoder) reflect_marshaler(v reflect.Value) bool {
 	return false
 }
 
-func (e *encoder) reflect_value(v reflect.Value) {
+func (e *Encoder) reflect_value(v reflect.Value) {
 
 	if e.reflect_marshaler(v) {
 		return

@@ -1191,3 +1191,60 @@ func (t *Torrent) announceRequest() tracker.AnnounceRequest {
 		Left:     t.bytesLeftAnnounce(),
 	}
 }
+
+func (t *Torrent) announceDHT(impliedPort bool) {
+	cl := t.cl
+	for {
+		select {
+		case <-t.wantPeersEvent.LockedChan(&cl.mu):
+		case <-t.closed.LockedChan(&cl.mu):
+			return
+		}
+		// log.Printf("getting peers for %q from DHT", t)
+		ps, err := cl.dHT.Announce(string(t.infoHash[:]), cl.incomingPeerPort(), impliedPort)
+		if err != nil {
+			log.Printf("error getting peers from dht: %s", err)
+			return
+		}
+		// Count all the unique addresses we got during this announce.
+		allAddrs := make(map[string]struct{})
+	getPeers:
+		for {
+			select {
+			case v, ok := <-ps.Peers:
+				if !ok {
+					break getPeers
+				}
+				addPeers := make([]Peer, 0, len(v.Peers))
+				for _, cp := range v.Peers {
+					if cp.Port == 0 {
+						// Can't do anything with this.
+						continue
+					}
+					addPeers = append(addPeers, Peer{
+						IP:     cp.IP[:],
+						Port:   cp.Port,
+						Source: peerSourceDHT,
+					})
+					key := (&net.UDPAddr{
+						IP:   cp.IP[:],
+						Port: cp.Port,
+					}).String()
+					allAddrs[key] = struct{}{}
+				}
+				cl.mu.Lock()
+				cl.addPeers(t, addPeers)
+				numPeers := len(t.peers)
+				cl.mu.Unlock()
+				if numPeers >= torrentPeersHighWater {
+					break getPeers
+				}
+			case <-t.closed.LockedChan(&cl.mu):
+				ps.Close()
+				return
+			}
+		}
+		ps.Close()
+		// log.Printf("finished DHT peer scrape for %s: %d peers", t, len(allAddrs))
+	}
+}

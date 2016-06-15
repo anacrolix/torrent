@@ -20,7 +20,7 @@ var (
 func main() {
 	log.SetFlags(log.Flags() | log.Lshortfile)
 	var args struct {
-		AnnonceList []string `short:"a" help:"set annonce server's"`
+		AnnonceList []string `name:"a" help:"add annonce server"`
 		tagflag.StartPos
 		Root string `help:"Creates a torrent metainfo for the file system rooted at ROOT, and outputs it to stdout."`
 	}

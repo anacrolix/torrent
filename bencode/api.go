@@ -128,7 +128,7 @@ func Marshal(v interface{}) ([]byte, error) {
 // Unmarshal the bencode value in the 'data' to a value pointed by the 'v'
 // pointer, return a non-nil error if any.
 func Unmarshal(data []byte, v interface{}) error {
-	e := decoder{Reader: bufio.NewReader(bytes.NewBuffer(data))}
+	e := decoder{r: bufio.NewReader(bytes.NewBuffer(data))}
 	return e.decode(v)
 }
 
@@ -141,7 +141,7 @@ type Decoder struct {
 }
 
 func NewDecoder(r io.Reader) *Decoder {
-	return &Decoder{decoder{Reader: bufio.NewReader(r)}}
+	return &Decoder{decoder{r: bufio.NewReader(r)}}
 }
 
 func (d *Decoder) Decode(v interface{}) error {

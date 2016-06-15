@@ -1,7 +1,6 @@
 package bencode
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -14,7 +13,10 @@ import (
 )
 
 type decoder struct {
-	*bufio.Reader
+	r interface {
+		io.ByteScanner
+		io.Reader
+	}
 	offset int64
 	buf    bytes.Buffer
 	key    string
@@ -51,7 +53,7 @@ func check_for_unexpected_eof(err error, offset int64) {
 }
 
 func (d *decoder) read_byte() byte {
-	b, err := d.ReadByte()
+	b, err := d.r.ReadByte()
 	if err != nil {
 		check_for_unexpected_eof(err, d.offset)
 		panic(err)
@@ -145,7 +147,7 @@ func (d *decoder) parse_string(v reflect.Value) {
 	check_for_int_parse_error(err, start)
 
 	d.buf.Reset()
-	n, err := io.CopyN(&d.buf, d, length)
+	n, err := io.CopyN(&d.buf, d.r, length)
 	d.offset += n
 	if err != nil {
 		check_for_unexpected_eof(err, d.offset)
@@ -329,12 +331,12 @@ func (d *decoder) parse_list(v reflect.Value) {
 }
 
 func (d *decoder) read_one_value() bool {
-	b, err := d.ReadByte()
+	b, err := d.r.ReadByte()
 	if err != nil {
 		panic(err)
 	}
 	if b == 'e' {
-		d.UnreadByte()
+		d.r.UnreadByte()
 		return false
 	} else {
 		d.offset++
@@ -360,7 +362,7 @@ func (d *decoder) read_one_value() bool {
 			check_for_int_parse_error(err, d.offset-1)
 
 			d.buf.WriteString(":")
-			n, err := io.CopyN(&d.buf, d, length)
+			n, err := io.CopyN(&d.buf, d.r, length)
 			d.offset += n
 			if err != nil {
 				check_for_unexpected_eof(err, d.offset)
@@ -429,7 +431,7 @@ func (d *decoder) parse_value(v reflect.Value) bool {
 		return true
 	}
 
-	b, err := d.ReadByte()
+	b, err := d.r.ReadByte()
 	if err != nil {
 		panic(err)
 	}
@@ -468,7 +470,7 @@ func (d *decoder) raiseUnknownValueType(b byte, offset int64) {
 }
 
 func (d *decoder) parse_value_interface() (interface{}, bool) {
-	b, err := d.ReadByte()
+	b, err := d.r.ReadByte()
 	if err != nil {
 		panic(err)
 	}
@@ -535,7 +537,7 @@ func (d *decoder) parse_string_interface() interface{} {
 	check_for_int_parse_error(err, start)
 
 	d.buf.Reset()
-	n, err := io.CopyN(&d.buf, d, length)
+	n, err := io.CopyN(&d.buf, d.r, length)
 	d.offset += n
 	if err != nil {
 		check_for_unexpected_eof(err, d.offset)

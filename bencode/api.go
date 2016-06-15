@@ -128,7 +128,7 @@ func Marshal(v interface{}) ([]byte, error) {
 // Unmarshal the bencode value in the 'data' to a value pointed by the 'v'
 // pointer, return a non-nil error if any.
 func Unmarshal(data []byte, v interface{}) error {
-	e := decoder{r: bufio.NewReader(bytes.NewBuffer(data))}
+	e := decoder{r: bytes.NewBuffer(data)}
 	return e.decode(v)
 }
 

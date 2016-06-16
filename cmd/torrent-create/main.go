@@ -20,15 +20,15 @@ var (
 func main() {
 	log.SetFlags(log.Flags() | log.Lshortfile)
 	var args struct {
-		AnnonceList []string `name:"a" help:"add annonce server"`
+		AnnounceList []string `name:"a" help:"extra announce-list tier entry"`
 		tagflag.StartPos
-		Root string `help:"Creates a torrent metainfo for the file system rooted at ROOT, and outputs it to stdout."`
+		Root string
 	}
-	tagflag.Parse(&args)
+	tagflag.Parse(&args, tagflag.Description("Creates a torrent metainfo for the file system rooted at ROOT, and outputs it to stdout."))
 	mi := metainfo.MetaInfo{
 		AnnounceList: builtinAnnounceList,
 	}
-	for _, a := range args.AnnonceList {
+	for _, a := range args.AnnounceList {
 		mi.AnnounceList = append(mi.AnnounceList, []string{a})
 	}
 	mi.SetDefaults()

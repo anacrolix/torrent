@@ -1514,6 +1514,24 @@ func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
 	return
 }
 
+func TorrentSpecFromState(buf []byte) (spec *TorrentSpec, pieces []byte) {
+	r := bytes.NewReader(buf)
+	mi, err := metainfo.Load(r)
+	if err != nil {
+		panic(err)
+	}
+	spec = &TorrentSpec{
+		Trackers:    mi.AnnounceList,
+		Info:        &mi.Info,
+		DisplayName: mi.Info.Name,
+		InfoHash:    mi.Info.Hash(),
+	}
+	if spec.Trackers == nil && mi.Announce != "" {
+		spec.Trackers = [][]string{{mi.Announce}}
+	}
+	return
+}
+
 func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bool) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
@@ -1535,14 +1553,30 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 func (cl *Client) SaveTorrent(t *Torrent) []byte {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
+
 	return nil
 }
 
 // Load torrent from saved state, metadata + pices states.
-func (cl *Client) LoadTorrent([]byte) *Torrent {
+func (cl *Client) LoadTorrent(buf []byte) (t *Torrent, err error) {
+	spec, pieces := TorrentSpecFromState(buf)
+	t, _ = cl.AddTorrentInfoHash(spec.InfoHash)
+	if spec.DisplayName != "" {
+		t.SetDisplayName(spec.DisplayName)
+	}
+	if spec.Info != nil {
+		err = t.loadTorrent(spec.Info.Bytes, pieces)
+		if err != nil {
+			return
+		}
+	}
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	return nil
+	if spec.ChunkSize != 0 {
+		t.chunkSize = pp.Integer(spec.ChunkSize)
+	}
+	t.addTrackers(spec.Trackers)
+	return
 }
 
 // Separate StartTorrent action from adding torrent, so we can add torrent, run

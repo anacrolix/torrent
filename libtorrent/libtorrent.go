@@ -1,4 +1,4 @@
-package torrent
+package libtorrent
 
 import "C"
 
@@ -8,6 +8,10 @@ import (
 	"sync"
 )
 
+// Create
+//
+// Create libtorrent object
+//
 //export Create
 func Create() bool {
 	var err error
@@ -18,6 +22,10 @@ func Create() bool {
 	return true
 }
 
+// AddMagnet
+//
+// Add magnet link to download list
+//
 //export AddMagnet
 func AddMagnet(magnet string) int {
 	t, err := client.AddMagnet(magnet)
@@ -27,6 +35,10 @@ func AddMagnet(magnet string) int {
 	return register(t)
 }
 
+// AddTorrent
+//
+// Add torrent to download list
+//
 //export AddTorrent
 func AddTorrent(file string) int {
 	metaInfo, err := metainfo.LoadFromFile(file)
@@ -40,18 +52,29 @@ func AddTorrent(file string) int {
 	return register(t)
 }
 
+// SaveTorrent
+//
+// Save torrent to state file
+//
 //export SaveTorrent
 func SaveTorrent(i int) []byte {
 	return nil
 }
 
+// LoadTorrent
+//
+// Load torrent from saved state file
+//
 //export LoadTorrent
-func LoadTorrent([]byte) {
+func LoadTorrent(buf []byte) {
 }
 
 //export StartTorrent
 func StartTorrent(i int) {
 	t := torrents[i]
+
+	client.StartTorrent(t)
+
 	go func() {
 		<-t.GotInfo()
 		t.DownloadAll()
@@ -64,6 +87,10 @@ func StopTorrent(i int) {
 	client.StopTorrent(t)
 }
 
+// CheckTorrent
+//
+// Check torrent file consisteny (pices hases) on a disk.
+//
 //export CheckTorrent
 func CheckTorrent(i int) {
 	t := torrents[i]

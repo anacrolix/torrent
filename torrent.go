@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"text/tabwriter"
 	"time"
@@ -75,8 +76,6 @@ type Torrent struct {
 	wantPeersEvent missinggo.Event
 	// An announcer for each tracker URL.
 	trackerAnnouncers map[string]*trackerScraper
-	// How many times we've initiated a DHT announce.
-	numDHTAnnounces int
 
 	// Name used if the info name isn't available.
 	displayName string
@@ -96,6 +95,9 @@ type Torrent struct {
 
 	connPieceInclinationPool sync.Pool
 	stats                    TorrentStats
+
+	// torrent under file concistency check
+	checking bool
 }
 
 func (t *Torrent) setDisplayName(dn string) {
@@ -223,6 +225,21 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	if t.haveInfo() {
 		return nil
 	}
+	err := t.loadInfoBytes(b)
+	if err != nil {
+		return err
+	}
+	for _, conn := range t.conns {
+		if err = conn.setNumPieces(t.numPieces()); err != nil {
+			log.Printf("closing connection: %s", err)
+			conn.Close()
+		}
+	}
+	t.check()
+	return nil
+}
+
+func (t *Torrent) loadInfoBytes(b []byte) error {
 	var ie *metainfo.InfoEx
 	err := bencode.Unmarshal(b, &ie)
 	if err != nil {
@@ -251,22 +268,42 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	t.metadataBytes = b
 	t.metadataCompletedChunks = nil
 	t.makePieces()
-	for _, conn := range t.conns {
-		if err := conn.setNumPieces(t.numPieces()); err != nil {
-			log.Printf("closing connection: %s", err)
-			conn.Close()
-		}
+	return nil
+}
+
+// check torrent file for concistency. done will not be called if torrent
+// stoped.
+func (t *Torrent) check() {
+	if _, ok := t.cl.torrents[t.infoHash]; ok {
+		// do not allow run integrity checks on running torrents. this is too time
+		// consuming, better redownload parts then check and download at the same
+		// time.
+		return
 	}
+	if t.checking {
+		return
+	}
+	t.checking = true
 	for i := range t.pieces {
 		t.updatePieceCompletion(i)
 		t.pieces[i].QueuedForHash = true
+		// make it EverHashed false, same as torrent freshly added. so other init
+		// checks flows in order.
+		t.pieces[i].EverHashed = false
 	}
 	go func() {
+		defer func() {
+			t.cl.mu.Lock()
+			t.checking = false
+			t.cl.mu.Unlock()
+		}()
 		for i := range t.pieces {
 			t.verifyPiece(i)
+			if t.closed.IsSet() {
+				return
+			}
 		}
 	}()
-	return nil
 }
 
 func (t *Torrent) verifyPiece(piece int) {
@@ -314,7 +351,11 @@ func (t *Torrent) name() string {
 	if t.haveInfo() {
 		return t.info.Name
 	}
-	return t.displayName
+	str := t.displayName
+	// magnets may have incorrect name including '/'. it is not so good for function which suppose to return root directory returns path name.
+	str = strings.Replace(str, string(os.PathSeparator), string(os.PathListSeparator), -1)
+	str = strings.Replace(str, string('|'), string(os.PathListSeparator), -1)
+	return str
 }
 
 func (t *Torrent) pieceState(index int) (ret PieceState) {
@@ -449,7 +490,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		tw.Flush()
 	}()
 
-	fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
+	fmt.Fprintf(w, "DHT Announces: %d\n", t.stats.NumDHTAnnounces)
 
 	fmt.Fprintf(w, "Pending peers: %d\n", len(t.peers))
 	fmt.Fprintf(w, "Half open: %d\n", len(t.halfOpen))
@@ -532,11 +573,17 @@ func (t *Torrent) close() (err error) {
 	if c, ok := t.storage.(io.Closer); ok {
 		c.Close()
 	}
+	for _, tracker := range t.trackerAnnouncers {
+		tracker.stop.Set()
+	}
+	t.trackerAnnouncers = nil
 	for _, conn := range t.conns {
 		conn.Close()
 	}
+	t.conns = nil
+	t.peers = nil
+	t.halfOpen = nil
 	t.pieceStateChanges.Close()
-	t.updateWantPeersEvent()
 	return
 }
 
@@ -1177,6 +1224,9 @@ func (t *Torrent) startMissingTrackerScrapers() {
 	if t.cl.config.DisableTrackers {
 		return
 	}
+	if _, ok := t.cl.torrents[t.infoHash]; !ok { // do not start trackers announce for paused torrents
+		return
+	}
 	for _, tier := range t.announceList() {
 		for _, trackerURL := range tier {
 			if _, ok := t.trackerAnnouncers[trackerURL]; ok {
@@ -1215,15 +1265,24 @@ func (t *Torrent) announceDHT(impliedPort bool) {
 		case <-t.wantPeersEvent.LockedChan(&cl.mu):
 		case <-t.closed.LockedChan(&cl.mu):
 			return
+		case <-cl.dHT.Wait(): // announceDHT - goroutine should exit when DHT does
+			return
 		}
 		// log.Printf("getting peers for %q from DHT", t)
+		cl.mu.Lock()
+		t.stats.LastAnnounceDHT = time.Now().Unix()
+		t.stats.ErrDHT = nil
+		cl.mu.Unlock()
 		ps, err := cl.dHT.Announce(string(t.infoHash[:]), cl.incomingPeerPort(), impliedPort)
 		if err != nil {
 			log.Printf("error getting peers from dht: %s", err)
+			cl.mu.Lock()
+			t.stats.ErrDHT = err
+			cl.mu.Unlock()
 			return
 		}
 		cl.mu.Lock()
-		t.numDHTAnnounces++
+		t.stats.NumDHTAnnounces++
 		cl.mu.Unlock()
 		// Count all the unique addresses we got during this announce.
 		allAddrs := make(map[string]struct{})
@@ -1252,6 +1311,11 @@ func (t *Torrent) announceDHT(impliedPort bool) {
 					allAddrs[key] = struct{}{}
 				}
 				cl.mu.Lock()
+				if t.peers == nil { // torrent can be already closed. return.
+					cl.mu.Unlock()
+					ps.Close()
+					return
+				}
 				t.addPeers(addPeers)
 				numPeers := len(t.peers)
 				cl.mu.Unlock()
@@ -1264,6 +1328,9 @@ func (t *Torrent) announceDHT(impliedPort bool) {
 			}
 		}
 		ps.Close()
+		cl.mu.Lock()
+		t.stats.PeersDHT = len(allAddrs)
+		cl.mu.Unlock()
 		// log.Printf("finished DHT peer scrape for %s: %d peers", t, len(allAddrs))
 	}
 }
@@ -1280,7 +1347,9 @@ func (t *Torrent) addPeers(peers []Peer) {
 func (t *Torrent) Stats() TorrentStats {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
-	return t.stats
+	stats := t.stats
+	stats.PeersCount = len(t.peers)
+	return stats
 }
 
 // Returns true if the connection is added.
@@ -1319,7 +1388,9 @@ func (t *Torrent) addConnection(c *connection) bool {
 	// Reconcile bytes transferred before connection was associated with a
 	// torrent.
 	t.stats.wroteBytes(c.stats.BytesWritten)
+	t.cl.stats.wroteBytes(c.stats.BytesWritten)
 	t.stats.readBytes(c.stats.BytesRead)
+	t.cl.stats.readBytes(c.stats.BytesRead)
 	c.t = t
 	return true
 }

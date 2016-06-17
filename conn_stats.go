@@ -17,6 +17,8 @@ type ConnStats struct {
 	// Data bytes, actual torrent data.
 	DataBytesWritten int64
 	DataBytesRead    int64
+
+	PiecesCompleted int // number pieces completed
 }
 
 func (cs *ConnStats) wroteMsg(msg *pp.Message) {

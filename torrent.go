@@ -250,11 +250,13 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 			conn.Close()
 		}
 	}
-	t.check()
+	t.check(nil)
 	return nil
 }
 
-func (t *Torrent) check() {
+// check torrent file for concistency. done will not be called if torrent
+// stoped.
+func (t *Torrent) check(done func) {
 	for i := range t.pieces {
 		t.updatePieceCompletion(i)
 		p := t.pieces[i]
@@ -266,7 +268,13 @@ func (t *Torrent) check() {
 	go func() {
 		for i := range t.pieces {
 			t.verifyPiece(i)
+			if t.closed.IsSet() {
+				return
+			}
 		}
+    if done != nil {
+      done()
+    }
 	}()
 }
 

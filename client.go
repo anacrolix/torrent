@@ -1531,6 +1531,18 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	return
 }
 
+// Save torrent to state file, metadata + pices states.
+func (cl *Client) SaveTorrent(t *Torrent) []byte {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+}
+
+// Load torrent from saved state, metadata + pices states.
+func (cl *Client) LoadTorrent([]byte) *Torrent {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+}
+
 // Separate StartTorrent action from adding torrent, so we can add torrent, run
 // file consictency checks and then manually start it.
 func (cl *Client) StartTorrent(t *Torrent) {
@@ -1551,7 +1563,7 @@ func (cl *Client) StartTorrent(t *Torrent) {
 }
 
 // Drop connections from a torrent, prepare to Remove torrent from client or
-// Resume it again.
+// Resume it again. Stop command also cancels check() torrent.
 func (cl *Client) StopTorrent(t *Torrent) {
 	t.close()
 }
@@ -1559,7 +1571,30 @@ func (cl *Client) StopTorrent(t *Torrent) {
 // Run file consistency checks. For active torrent, pause it, then resume
 // download. For Paused torrent keep it paused.
 func (cl *Client) CheckTorrent(t *Torrent) {
-	t.check()
+	restart := false
+	if !t.closed.IsSet() {
+		t.close()
+		restart = true
+	}
+
+	if t.closed.IsSet() {
+		// reset close
+		t.closed.Clear()
+
+		t.cl.mu.Lock()
+		defer t.cl.mu.Unlock()
+
+		// reopen storage
+		info := t.info
+		t.info = nil
+		t.setInfoBytes(info)
+	}
+
+	t.check(func() {
+		if restart {
+			cl.StartTorrent(t)
+		}
+	})
 }
 
 // Add or merge a torrent spec. If the torrent is already present, the

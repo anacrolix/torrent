@@ -40,6 +40,14 @@ func AddTorrent(file string) int {
 	return register(t)
 }
 
+//export SaveTorrent
+func SaveTorrent(i int) []byte {
+}
+
+//export StartTorrent
+func LoadTorrent([]byte) {
+}
+
 //export StartTorrent
 func StartTorrent(i int) {
 	t := torrents[i]

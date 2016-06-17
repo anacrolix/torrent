@@ -1531,6 +1531,37 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	return
 }
 
+// Separate StartTorrent action from adding torrent, so we can add torrent, run
+// file consictency checks and then manually start it.
+func (cl *Client) StartTorrent(t *Torrent) {
+	if t.closed.IsSet() {
+		// reset close
+		t.closed.Clear()
+
+		t.cl.mu.Lock()
+		defer t.cl.mu.Unlock()
+
+		// reopen storage
+		info := t.info
+		t.info = nil
+		t.setInfoBytes(info)
+	}
+
+	t.maybeNewConns()
+}
+
+// Drop connections from a torrent, prepare to Remove torrent from client or
+// Resume it again.
+func (cl *Client) StopTorrent(t *Torrent) {
+	t.close()
+}
+
+// Run file consistency checks. For active torrent, pause it, then resume
+// download. For Paused torrent keep it paused.
+func (cl *Client) CheckTorrent(t *Torrent) {
+	t.check()
+}
+
 // Add or merge a torrent spec. If the torrent is already present, the
 // trackers will be merged with the existing ones. If the Info isn't yet
 // known, it will be set. The display name is replaced if the new spec
@@ -1552,7 +1583,6 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 		t.chunkSize = pp.Integer(spec.ChunkSize)
 	}
 	t.addTrackers(spec.Trackers)
-	t.maybeNewConns()
 	return
 }
 
@@ -1791,10 +1821,14 @@ func (cl *Client) verifyPiece(t *Torrent, piece int) {
 		cl.event.Wait()
 	}
 	p.QueuedForHash = false
-	if t.closed.IsSet() || t.pieceComplete(piece) {
-		t.updatePiecePriority(piece)
-		t.publishPieceChange(piece)
-		return
+	// when we are checking torrent consitency EvernHashed == false. so, it does
+	// not matter is piace complete or not. it may be damadged on disk.
+	if p.EverHashed {
+		if t.closed.IsSet() || t.pieceComplete(piece) {
+			t.updatePiecePriority(piece)
+			t.publishPieceChange(piece)
+			return
+		}
 	}
 	p.Hashing = true
 	t.publishPieceChange(piece)

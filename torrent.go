@@ -250,16 +250,24 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 			conn.Close()
 		}
 	}
+	t.check()
+	return nil
+}
+
+func (t *Torrent) check() {
 	for i := range t.pieces {
 		t.updatePieceCompletion(i)
-		t.pieces[i].QueuedForHash = true
+		p := t.pieces[i]
+		// make it EverHashed false, same as torrent freshly added. so other init
+		// checks flows in order.
+		p.EverHashed = false
+		p.QueuedForHash = true
 	}
 	go func() {
 		for i := range t.pieces {
 			t.verifyPiece(i)
 		}
 	}()
-	return nil
 }
 
 func (t *Torrent) verifyPiece(piece int) {
@@ -526,6 +534,7 @@ func (t *Torrent) close() (err error) {
 	for _, conn := range t.conns {
 		conn.Close()
 	}
+	t.conns = nil
 	t.pieceStateChanges.Close()
 	t.updateWantPeersEvent()
 	return

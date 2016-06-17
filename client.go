@@ -1535,12 +1535,14 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 func (cl *Client) SaveTorrent(t *Torrent) []byte {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
+	return nil
 }
 
 // Load torrent from saved state, metadata + pices states.
 func (cl *Client) LoadTorrent([]byte) *Torrent {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
+	return nil
 }
 
 // Separate StartTorrent action from adding torrent, so we can add torrent, run
@@ -1556,7 +1558,7 @@ func (cl *Client) StartTorrent(t *Torrent) {
 		// reopen storage
 		info := t.info
 		t.info = nil
-		t.setInfoBytes(info)
+		t.setInfoBytes(info.Bytes)
 	}
 
 	t.maybeNewConns()
@@ -1587,7 +1589,7 @@ func (cl *Client) CheckTorrent(t *Torrent) {
 		// reopen storage
 		info := t.info
 		t.info = nil
-		t.setInfoBytes(info)
+		t.setInfoBytes(info.Bytes)
 	}
 
 	t.check(func() {

@@ -42,9 +42,10 @@ func AddTorrent(file string) int {
 
 //export SaveTorrent
 func SaveTorrent(i int) []byte {
+	return nil
 }
 
-//export StartTorrent
+//export LoadTorrent
 func LoadTorrent([]byte) {
 }
 
@@ -76,9 +77,12 @@ func RemoveTorrent(i int) {
 	unregister(i)
 }
 
+// Error()
+//
+// Must call free() on buffer pointer.
+//
 //export Error
 func Error() *C.char {
-	// must call free() on buffer pointer
 	return C.CString(err.Error())
 }
 

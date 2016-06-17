@@ -256,7 +256,7 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 
 // check torrent file for concistency. done will not be called if torrent
 // stoped.
-func (t *Torrent) check(done func) {
+func (t *Torrent) check(done func()) {
 	for i := range t.pieces {
 		t.updatePieceCompletion(i)
 		p := t.pieces[i]
@@ -272,9 +272,9 @@ func (t *Torrent) check(done func) {
 				return
 			}
 		}
-    if done != nil {
-      done()
-    }
+		if done != nil {
+			done()
+		}
 	}()
 }
 

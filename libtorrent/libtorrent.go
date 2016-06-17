@@ -55,6 +55,7 @@ func StopTorrent(i int) {
 	client.StopTorrent(t)
 }
 
+//export CheckTorrent
 func CheckTorrent(i int) {
 	t := torrents[i]
 	client.CheckTorrent(t)

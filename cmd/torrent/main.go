@@ -107,7 +107,7 @@ func addTorrents(client *torrent.Client) {
 
 var flags struct {
 	Mmap     bool           `help:"memory-map torrent data"`
-	TestPeer []*net.TCPAddr `short:"p" help:"addresses of some starting peers"`
+	TestPeer []*net.TCPAddr `help:"addresses of some starting peers"`
 	Seed     bool           `help:"seed after download is complete"`
 	Addr     *net.TCPAddr   `help:"network listen addr"`
 	tagflag.StartPos

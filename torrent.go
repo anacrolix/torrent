@@ -213,14 +213,6 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	if err != nil {
 		return err
 	}
-	t.pieces = make([]piece, len(hashes))
-	for i, hash := range hashes {
-		piece := &t.pieces[i]
-		piece.t = t
-		piece.index = i
-		piece.noPendingWrites.L = &piece.pendingWritesMutex
-		missinggo.CopyExact(piece.Hash[:], hash)
-	}
 	for _, conn := range t.conns {
 		if err = conn.setNumPieces(t.numPieces()); err != nil {
 			log.Printf("closing connection: %s", err)
@@ -259,6 +251,14 @@ func (t *Torrent) loadInfoBytes(b []byte) error {
 	t.metadataBytes = b
 	t.metadataCompletedChunks = nil
 	hashes := infoPieceHashes(&t.info.Info)
+	t.pieces = make([]piece, len(hashes))
+	for i, hash := range hashes {
+		piece := &t.pieces[i]
+		piece.t = t
+		piece.index = i
+		piece.noPendingWrites.L = &piece.pendingWritesMutex
+		missinggo.CopyExact(piece.Hash[:], hash)
+	}
 	return nil
 }
 
@@ -286,19 +286,21 @@ func (t *Torrent) check(done func()) {
 	}()
 }
 
-func (t *Torrent) loadTorrent(buf []byte, pieces []byte) {
-	t.loadInfoBytes(buf)
-	t.pieces = pieces
-
-	// do we need it here?
-	for i, hash := range hashes {
-		piece := &t.pieces[i]
-		piece.t = t
-		piece.index = i
-		piece.noPendingWrites.L = &piece.pendingWritesMutex
-		missinggo.CopyExact(piece.Hash[:], hash)
+func (t *Torrent) loadTorrent(buf []byte, pieces []bool) error {
+	err := t.loadInfoBytes(buf)
+	if err != nil {
+		return err
 	}
 	// do not run t.check(nil)
+	for i := range t.pieces {
+		t.updatePieceCompletion(i)
+		p := t.pieces[i]
+		p.EverHashed = true
+		if pieces[i] {
+			t.completedPieces.Set(i, true)
+		}
+	}
+	return nil
 }
 
 func (t *Torrent) verifyPiece(piece int) {

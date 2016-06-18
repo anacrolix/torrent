@@ -1531,15 +1531,31 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	return
 }
 
-// Save torrent to state file, metadata + pices states.
-func (cl *Client) SaveTorrent(t *Torrent) []byte {
+// Save torrent to state file, [metadata, pices states]
+func (cl *Client) SaveTorrent(t *Torrent) ([]byte, error) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 
-	return nil
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	e := bencode.NewEncoder(w)
+	err := e.Encode(t.info.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	// since missinggo/bitmap/bitmap.go private rb field, copy bit by bit
+	pieces := make([]bool, t.completedPieces.Len())
+	for i := 0; i <= len(pieces); i++ {
+		pieces[i] = t.completedPieces.Get(i)
+	}
+	err = e.Encode(pieces)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
-// Load torrent from saved state, metadata + pices states.
+// Load torrent from saved state
 func (cl *Client) LoadTorrent(buf []byte) (t *Torrent, err error) {
 	r := bytes.NewReader(buf)
 	mi, err := metainfo.Load(r)

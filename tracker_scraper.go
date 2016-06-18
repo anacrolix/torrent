@@ -47,7 +47,7 @@ func (me *trackerScraper) announce() time.Duration {
 	me.t.cl.mu.Unlock()
 	res, err := tracker.AnnounceHost(urlToUse, &req, host)
 	if err != nil {
-		log.Printf("error announcing %s %q to %q: %s", me.t.InfoHash().HexString(), me.t.Name(), me.url, err)
+		// log.Printf("error announcing %s %q to %q: %s", me.t.InfoHash().HexString(), me.t.Name(), me.url, err)
 		return 5 * time.Minute
 	}
 	me.t.AddPeers(trackerToTorrentPeers(res.Peers))

@@ -1,5 +1,6 @@
 package libtorrent
 
+// #include <stdlib.h>
 import "C"
 
 import (
@@ -104,6 +105,38 @@ func RemoveTorrent(i int) {
 	unregister(i)
 }
 
+// TorrentFiles
+//
+// return torrent files array
+//
+//export TorrentFiles
+func TorrentFiles(i int) *C.char {
+	return nil
+}
+
+// TorrentFileRename
+//
+// To implement this we need to keep two Metainfo one for network operations,
+// and second for local file storage.
+//
+//export TorrentFileRename
+func TorrentFileRename(i int, f int, n *C.char) {
+}
+
+// Total size of torrent
+//
+//export TorrentTotalSize
+func TorrentTotalSize(i int) int64 {
+	return 0
+}
+
+// Current (downloaded) size
+//
+//export TorrentCurrentSize
+func TorrentCurrentSize(i int) int64 {
+	return 0
+}
+
 // Error()
 //
 // Must call free() on buffer pointer.
@@ -111,6 +144,11 @@ func RemoveTorrent(i int) {
 //export Error
 func Error() *C.char {
 	return C.CString(err.Error())
+}
+
+//export Free
+func Free(p *C.char) {
+	C.free(p)
 }
 
 //export Close

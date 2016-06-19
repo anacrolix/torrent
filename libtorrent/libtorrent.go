@@ -4,10 +4,32 @@ package libtorrent
 import "C"
 
 import (
+	"bufio"
+	"bytes"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	"sync"
 )
+
+//export CreateTorrent
+func CreateTorrent(path string, announs []string) []byte {
+	mi := metainfo.MetaInfo{}
+	for _, a := range announs {
+		mi.AnnounceList = append(mi.AnnounceList, []string{a})
+	}
+	mi.SetDefaults()
+	err = mi.Info.BuildFromFilePath(path)
+	if err != nil {
+		return nil
+	}
+	var b bytes.Buffer
+	w := bufio.NewWriter(&b)
+	err = mi.Write(w)
+	if err != nil {
+		return nil
+	}
+	return b.Bytes()
+}
 
 // Create
 //
@@ -156,8 +178,8 @@ func TorrentStatus(i int) *Status {
 type File struct {
 	Downloading bool
 	Name        string
-	Progress    int
 	Length      int64
+	Completed   int64
 }
 
 // return torrent files array
@@ -205,7 +227,10 @@ func TorrentTrackers(i int) []Tracker {
 
 //export Error
 func Error() string {
-	return err.Error()
+	if err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 //export Close

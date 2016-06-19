@@ -69,6 +69,7 @@ func AddMagnet(magnet string) int {
 	return register(t)
 }
 
+//export GetMagnet
 func GetMagnet(i int) string {
 	t := torrents[i]
 	return t.Magnet().String()
@@ -125,7 +126,9 @@ func StartTorrent(i int) {
 //export StopTorrent
 func StopTorrent(i int) {
 	t := torrents[i]
-	client.StopTorrent(t)
+	if client.ActiveTorrent(t) {
+		t.Drop()
+	}
 }
 
 // CheckTorrent
@@ -155,6 +158,7 @@ const (
 type Status struct {
 	// destination folder
 	Folder string
+	Name   string
 	// torrent runtime status
 	Status int32
 	// pieces count
@@ -180,7 +184,40 @@ type Status struct {
 }
 
 func TorrentStatus(i int) *Status {
-	return nil
+	t := torrents[i]
+
+	h := t.InfoHash()
+
+	s := Status{}
+	s.InfoHash = h.AsString()
+	s.Name = t.Name()
+	s.Completed = t.BytesCompleted()
+
+	if t.Info() != nil {
+		s.TotalSize = t.Length()
+
+		if s.Completed < s.TotalSize {
+			if client.ActiveTorrent(t) {
+				s.Status = StatusDownloading
+			} else {
+				s.Status = StatusPaused
+			}
+		} else {
+			if t.Seeding() {
+				s.Status = StatusSeeding
+			} else {
+				s.Status = StatusPaused
+			}
+		}
+	} else {
+		if client.ActiveTorrent(t) {
+			s.Status = StatusDownloading
+		} else {
+			s.Status = StatusPaused
+		}
+	}
+
+	return &s
 }
 
 type File struct {

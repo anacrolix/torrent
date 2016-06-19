@@ -28,6 +28,10 @@ func CreateTorrent(path string, announs []string) []byte {
 	if err != nil {
 		return nil
 	}
+	err = w.Flush()
+	if err != nil {
+		return nil
+	}
 	return b.Bytes()
 }
 

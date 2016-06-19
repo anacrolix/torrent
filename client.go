@@ -1529,8 +1529,8 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 
 // Save torrent to state file, [metadata, pices states]
 func (cl *Client) SaveTorrent(t *Torrent) ([]byte, error) {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
 
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
@@ -1575,6 +1575,7 @@ func (cl *Client) LoadTorrent(buf []byte) (t *Torrent, err error) {
 			return
 		}
 	}
+
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	if spec.ChunkSize != 0 {
@@ -1585,11 +1586,17 @@ func (cl *Client) LoadTorrent(buf []byte) (t *Torrent, err error) {
 }
 
 // Do any network actvity only after calling this function. We can add torrent,
-// run file consictency checks and then manually start it.
+// run file consictency checks and then manually start it. Here are two
+// possibilites: 1) Create *Torrent without adding it to client. 2) Add Torrent
+// to client and do not announce it or download.
 func (cl *Client) StartTorrent(t *Torrent) {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
 
+	cl.startTorrent(t)
+}
+
+func (cl *Client) startTorrent(t *Torrent) {
 	if t.closed.IsSet() {
 		// reset close
 		t.closed.Clear()
@@ -1631,6 +1638,9 @@ func (cl *Client) activeTorrent(t *Torrent) bool {
 // Run file consistency checks. For active torrent, pause it, then resume
 // download. For Paused torrent keep it paused.
 func (cl *Client) CheckTorrent(t *Torrent) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+
 	restart := false
 	if !t.closed.IsSet() {
 		t.close()
@@ -1640,9 +1650,6 @@ func (cl *Client) CheckTorrent(t *Torrent) {
 	if t.closed.IsSet() {
 		// reset close
 		t.closed.Clear()
-
-		t.cl.mu.Lock()
-		defer t.cl.mu.Unlock()
 
 		// reopen storage
 		info := t.info

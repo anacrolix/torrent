@@ -41,7 +41,6 @@ func CreateTorrent(path string, announs []string) []byte {
 //
 //export Create
 func Create() bool {
-	var err error
 	client, err = torrent.NewClient(&clientConfig)
 	if err != nil {
 		return false
@@ -68,6 +67,11 @@ func AddMagnet(magnet string) int {
 		return -1
 	}
 	return register(t)
+}
+
+func GetMagnet(i int) string {
+	t := torrents[i]
+	return t.Magnet().String()
 }
 
 // AddTorrent

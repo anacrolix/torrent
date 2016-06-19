@@ -1607,6 +1607,8 @@ func (cl *Client) StartTorrent(t *Torrent) {
 		go t.announceDHT(true)
 	}
 
+	t.startMissingTrackerScrapers()
+
 	t.maybeNewConns()
 }
 

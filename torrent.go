@@ -1126,7 +1126,6 @@ func (t *Torrent) addTrackers(announceList [][]string) {
 	for tierIndex, trackerURLs := range announceList {
 		(*fullAnnounceList)[tierIndex] = appendMissingStrings((*fullAnnounceList)[tierIndex], trackerURLs)
 	}
-	t.startMissingTrackerScrapers()
 	t.updateWantPeersEvent()
 }
 

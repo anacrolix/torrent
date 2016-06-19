@@ -286,6 +286,12 @@ func (t *Torrent) check(done func()) {
 	}()
 }
 
+// for big torrent we need to save CPU time and do not recheck files on disk
+// bettwen application restarts. loadTorrent allows to restore pieces state
+// including: completedPieces, and mark Torrent.pieces as they already been
+// checked. Since we allow to skip checks, and user may want to have full
+// control over additional checks we need to create Torrent.check() function to
+// run manual checks.
 func (t *Torrent) loadTorrent(buf []byte, pieces []bool) error {
 	err := t.loadInfoBytes(buf)
 	if err != nil {

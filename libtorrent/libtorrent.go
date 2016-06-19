@@ -105,12 +105,60 @@ func RemoveTorrent(i int) {
 	unregister(i)
 }
 
+type Stats struct {
+	// destination folder
+	Folder string
+	// pieces count
+	Pieces int
+	// pieces length in bytes
+	PeicesLength int64
+	// bytes uploaded
+	Uploaded int64
+	// bytes downloaded
+	Downloaded int64
+	// uploading speed bytes
+	Uploading int
+	// downloading speed
+	Downloading int
+	// peers count
+	Peers int
+	// total size
+	TotalSize int64
+	// downloaded size
+	Completed int64
+	// hash info
+	InfoHash string
+}
+
+func TorrentStats(i int) *Stats {
+	return nil
+}
+
+type File struct {
+	Name     string
+	Progress int
+	Length   int64
+}
+
 // TorrentFiles
 //
 // return torrent files array
 //
 //export TorrentFiles
-func TorrentFiles(i int) *C.char {
+func TorrentFiles(i int) []File {
+	return nil
+}
+
+type Peer struct {
+	Addr       string
+	Client     string
+	Encryption bool
+	Progress   int
+	Upload     int
+	Download   int
+}
+
+func TorrentPeers(i int) []Peer {
 	return nil
 }
 
@@ -120,35 +168,28 @@ func TorrentFiles(i int) *C.char {
 // and second for local file storage.
 //
 //export TorrentFileRename
-func TorrentFileRename(i int, f int, n *C.char) {
+func TorrentFileRename(i int, f int, n string) {
 }
 
-// Total size of torrent
-//
-//export TorrentTotalSize
-func TorrentTotalSize(i int) int64 {
-	return 0
+type Tracker struct {
+	// url or DHT LSD
+	Addr         string
+	Error        string
+	LastAnnounce int
+	NextAnnounce int
+	LastScrape   int
+	Seeders      int
+	Leechers     int
+	Downloaded   int
 }
 
-// Current (downloaded) size
-//
-//export TorrentCurrentSize
-func TorrentCurrentSize(i int) int64 {
-	return 0
+func TorrentTrackers(i int) []Tracker {
+	return nil
 }
 
-// Error()
-//
-// Must call free() on buffer pointer.
-//
 //export Error
-func Error() *C.char {
-	return C.CString(err.Error())
-}
-
-//export Free
-func Free(p *C.char) {
-	C.free(p)
+func Error() string {
+	return err.Error()
 }
 
 //export Close

@@ -82,6 +82,11 @@ type Client struct {
 	closed missinggo.Event
 
 	torrents map[metainfo.Hash]*Torrent
+
+	// Since we have to have loadTorrent, we woudl like to keep other statistics like all modern torrent apps does.
+	// Usint this data we will be able to measure Client total bandwidth.
+	Downloaded int64
+	Uploaded   int64
 }
 
 func (cl *Client) IPBlockList() iplist.Ranger {

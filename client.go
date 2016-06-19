@@ -1523,10 +1523,6 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	}
 	new = true
 	t = cl.newTorrent(infoHash)
-	if cl.dHT != nil {
-		go t.announceDHT(true)
-	}
-	cl.torrents[infoHash] = t
 	t.updateWantPeersEvent()
 	return
 }
@@ -1588,15 +1584,15 @@ func (cl *Client) LoadTorrent(buf []byte) (t *Torrent, err error) {
 	return
 }
 
-// Separate StartTorrent action from adding torrent, so we can add torrent, run
-// file consictency checks and then manually start it.
+// Do any network actvity only after calling this function. We can add torrent,
+// run file consictency checks and then manually start it.
 func (cl *Client) StartTorrent(t *Torrent) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+
 	if t.closed.IsSet() {
 		// reset close
 		t.closed.Clear()
-
-		t.cl.mu.Lock()
-		defer t.cl.mu.Unlock()
 
 		// reopen storage
 		info := t.info
@@ -1604,13 +1600,26 @@ func (cl *Client) StartTorrent(t *Torrent) {
 		t.setInfoBytes(info.Bytes)
 	}
 
+	// add torrent to the list, so Client can now respond to requests
+	cl.torrents[t.infoHash] = t
+
+	if cl.dHT != nil {
+		go t.announceDHT(true)
+	}
+
 	t.maybeNewConns()
 }
 
-// Drop connections from a torrent, prepare to Remove torrent from client or
-// Resume it again. Stop command also cancels check() torrent.
-func (cl *Client) StopTorrent(t *Torrent) {
-	t.close()
+// Check if torrent respond to network actions.
+func (cl *Client) ActiveTorrent(t *Torrent) bool {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+
+	if _, ok := cl.torrents[t.infoHash]; ok {
+		return true
+	}
+
+	return false
 }
 
 // Run file consistency checks. For active torrent, pause it, then resume

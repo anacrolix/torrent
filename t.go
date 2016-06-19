@@ -203,3 +203,15 @@ func (t *Torrent) AddTrackers(announceList [][]string) {
 	defer t.cl.mu.Unlock()
 	t.addTrackers(announceList)
 }
+
+// Creates a Magnet from a Torrent, if Metainfo not yet downloaded create Magnet from torrent.
+func (t *Torrent) Magnet() (m metainfo.Magnet) {
+	for _, tier := range t.metainfo.AnnounceList {
+		for _, tracker := range tier {
+			m.Trackers = append(m.Trackers, tracker)
+		}
+	}
+	m.DisplayName = t.displayName
+	m.InfoHash = t.infoHash
+	return
+}

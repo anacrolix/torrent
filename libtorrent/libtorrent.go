@@ -23,6 +23,13 @@ func Create() bool {
 	return true
 }
 
+// Get Torrent Count
+//
+//export Count
+func Count() int {
+	return len(torrents)
+}
+
 // AddMagnet
 //
 // Add magnet link to download list
@@ -108,9 +115,18 @@ func RemoveTorrent(i int) {
 	unregister(i)
 }
 
+const (
+	StatusPaused      int32 = 0
+	StatusDownloading int32 = 1
+	StatusSeeding     int32 = 2
+	StatusQueued      int32 = 3
+)
+
 type Status struct {
 	// destination folder
 	Folder string
+	// torrent runtime status
+	Status int32
 	// pieces count
 	Pieces int
 	// pieces length in bytes

@@ -29,7 +29,8 @@ func Create() bool {
 //
 //export AddMagnet
 func AddMagnet(magnet string) int {
-	t, err := client.AddMagnet(magnet)
+	var t *torrent.Torrent
+	t, err = client.AddMagnet(magnet)
 	if err != nil {
 		return -1
 	}
@@ -42,11 +43,13 @@ func AddMagnet(magnet string) int {
 //
 //export AddTorrent
 func AddTorrent(file string) int {
-	metaInfo, err := metainfo.LoadFromFile(file)
+	var metaInfo *metainfo.MetaInfo
+	metaInfo, err = metainfo.LoadFromFile(file)
 	if err != nil {
 		return -1
 	}
-	t, err := client.AddTorrent(metaInfo)
+	var t *torrent.Torrent
+	t, err = client.AddTorrent(metaInfo)
 	if err != nil {
 		return -1
 	}
@@ -135,9 +138,10 @@ func TorrentStatus(i int) *Status {
 }
 
 type File struct {
-	Name     string
-	Progress int
-	Length   int64
+	Downloading bool
+	Name        string
+	Progress    int
+	Length      int64
 }
 
 // return torrent files array

@@ -1614,9 +1614,13 @@ func (cl *Client) StartTorrent(t *Torrent) {
 
 // Check if torrent respond to network actions.
 func (cl *Client) ActiveTorrent(t *Torrent) bool {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
 
+	return activeTorrent(t)
+}
+
+func (cl *Client) activeTorrent(t *Torrent) bool {
 	if _, ok := cl.torrents[t.infoHash]; ok {
 		return true
 	}

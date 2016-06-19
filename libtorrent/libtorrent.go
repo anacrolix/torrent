@@ -105,7 +105,7 @@ func RemoveTorrent(i int) {
 	unregister(i)
 }
 
-type Stats struct {
+type Status struct {
 	// destination folder
 	Folder string
 	// pieces count
@@ -130,7 +130,7 @@ type Stats struct {
 	InfoHash string
 }
 
-func TorrentStats(i int) *Stats {
+func TorrentStatus(i int) *Status {
 	return nil
 }
 
@@ -140,11 +140,7 @@ type File struct {
 	Length   int64
 }
 
-// TorrentFiles
-//
 // return torrent files array
-//
-//export TorrentFiles
 func TorrentFiles(i int) []File {
 	return nil
 }

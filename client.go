@@ -1617,7 +1617,7 @@ func (cl *Client) ActiveTorrent(t *Torrent) bool {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 
-	return activeTorrent(t)
+	return cl.activeTorrent(t)
 }
 
 func (cl *Client) activeTorrent(t *Torrent) bool {

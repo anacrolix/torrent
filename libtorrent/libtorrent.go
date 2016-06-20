@@ -48,6 +48,16 @@ func Create() bool {
 	return true
 }
 
+type BytesInfo struct {
+	Downloaded int64
+	Uploaded   int64
+}
+
+func Stats() *BytesInfo {
+	d, u := client.Status()
+	return &BytesInfo{d, u}
+}
+
 // Get Torrent Count
 //
 //export Count
@@ -69,12 +79,6 @@ func AddMagnet(magnet string) int {
 	return register(t)
 }
 
-//export GetMagnet
-func GetMagnet(i int) string {
-	t := torrents[i]
-	return t.Magnet().String()
-}
-
 // AddTorrent
 //
 // Add torrent to download list
@@ -94,9 +98,20 @@ func AddTorrent(file string) int {
 	return register(t)
 }
 
+// Get Torrent file from runtime torrent
+//
+//export GetTorrent
+func GetTorrent(i int) []byte {
+	return nil
+}
+
 // SaveTorrent
 //
-// Save torrent to state file
+// Every torrent application restarts it require to check files consistency. To
+// avoid this, and save machine time we need to store torrents runtime state
+// about completed pieces.
+//
+// Save runtime torrent data to state file
 //
 //export SaveTorrent
 func SaveTorrent(i int) []byte {
@@ -105,12 +120,17 @@ func SaveTorrent(i int) []byte {
 
 // LoadTorrent
 //
-// Load torrent from saved state file
+// Load runtime torrent data from saved state file
 //
 //export LoadTorrent
-func LoadTorrent(buf []byte) {
+func LoadTorrent(buf []byte) int {
+	return -1
 }
 
+// Separate load / create torrent from network activity.
+//
+// Start announce torrent, seed/download
+//
 //export StartTorrent
 func StartTorrent(i int) {
 	t := torrents[i]
@@ -123,6 +143,8 @@ func StartTorrent(i int) {
 	}()
 }
 
+// Stop torrent from announce, check, seed, download
+//
 //export StopTorrent
 func StopTorrent(i int) {
 	t := torrents[i]
@@ -133,7 +155,8 @@ func StopTorrent(i int) {
 
 // CheckTorrent
 //
-// Check torrent file consisteny (pices hases) on a disk.
+// Check torrent file consisteny (pices hases) on a disk. Pause torrent if
+// downloading, resume after.
 //
 //export CheckTorrent
 func CheckTorrent(i int) {
@@ -141,11 +164,61 @@ func CheckTorrent(i int) {
 	client.CheckTorrent(t)
 }
 
+// Remote torrent for library
+//
 //export RemoveTorrent
 func RemoveTorrent(i int) {
 	t := torrents[i]
-	t.Drop()
+	if client.ActiveTorrent(t) {
+		t.Drop()
+	}
 	unregister(i)
+}
+
+//export Error
+func Error() string {
+	if err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+//export Close
+func Close() {
+	if client != nil {
+		client.Close()
+		client = nil
+	}
+}
+
+//
+// Torrent* methods
+//
+
+// Get Magnet from runtime torrent.
+//
+//export TorrentMagnet
+func TorrentMagnet(i int) string {
+	t := torrents[i]
+	return t.Metainfo().Magnet().String()
+}
+
+func TorrentMetainfo(i int) *metainfo.MetaInfo {
+	t := torrents[i]
+	return t.Metainfo()
+}
+
+//export TorrentHash
+func TorrentHash(i int) string {
+	t := torrents[i]
+	h := t.InfoHash()
+	return h.AsString()
+}
+
+//export TorrentName
+func TorrentName(i int) string {
+	t := torrents[i]
+	return t.Name()
 }
 
 const (
@@ -155,69 +228,47 @@ const (
 	StatusQueued      int32 = 3
 )
 
-type Status struct {
-	// destination folder
-	Folder string
-	Name   string
-	// torrent runtime status
-	Status int32
-	// pieces count
-	Pieces int
-	// pieces length in bytes
-	PeicesLength int64
-	// bytes uploaded
-	Uploaded int64
-	// bytes downloaded
-	Downloaded int64
-	// uploading speed bytes
-	Uploading int
-	// downloading speed
-	Downloading int
-	// peers count
-	Peers int
-	// total size
-	TotalSize int64
-	// downloaded size
-	Completed int64
-	// hash info
-	InfoHash string
-}
-
-func TorrentStatus(i int) *Status {
+//export TorrentStatus
+func TorrentStatus(i int) int32 {
 	t := torrents[i]
 
-	h := t.InfoHash()
-
-	s := Status{}
-	s.InfoHash = h.AsString()
-	s.Name = t.Name()
-	s.Completed = t.BytesCompleted()
-
 	if t.Info() != nil {
-		s.TotalSize = t.Length()
-
-		if s.Completed < s.TotalSize {
+		if t.BytesCompleted() < t.Length() {
 			if client.ActiveTorrent(t) {
-				s.Status = StatusDownloading
+				return StatusDownloading
 			} else {
-				s.Status = StatusPaused
+				return StatusPaused
 			}
 		} else {
 			if t.Seeding() {
-				s.Status = StatusSeeding
+				return StatusSeeding
 			} else {
-				s.Status = StatusPaused
+				return StatusPaused
 			}
 		}
 	} else {
 		if client.ActiveTorrent(t) {
-			s.Status = StatusDownloading
+			return StatusDownloading
 		} else {
-			s.Status = StatusPaused
+			return StatusPaused
 		}
 	}
+}
 
-	return &s
+//export TorrentBytesLength
+func TorrentBytesLength(i int) int64 {
+	t := torrents[i]
+	return t.Length()
+}
+
+//export TorrentBytesCompleted
+func TorrentBytesCompleted(i int) int64 {
+	t := torrents[i]
+	return t.BytesCompleted()
+}
+
+func TorrentStats(i int) *BytesInfo {
+	return &BytesInfo{}
 }
 
 type File struct {
@@ -239,6 +290,12 @@ type Peer struct {
 	Progress   int
 	Upload     int
 	Download   int
+}
+
+func TorrentPeersCount(i int) int {
+	t := torrents[i]
+
+	return t.Peers()
 }
 
 func TorrentPeers(i int) []Peer {
@@ -270,23 +327,9 @@ func TorrentTrackers(i int) []Tracker {
 	return nil
 }
 
-//export Error
-func Error() string {
-	if err != nil {
-		return err.Error()
-	}
-	return ""
-}
-
-//export Close
-func Close() {
-	if client != nil {
-		client.Close()
-		client = nil
-	}
-}
-
+//
 // protected
+//
 
 var clientConfig torrent.Config
 var client *torrent.Client

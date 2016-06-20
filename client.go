@@ -85,8 +85,8 @@ type Client struct {
 
 	// Since we have to have loadTorrent, we woudl like to keep other statistics like all modern torrent apps does.
 	// Usint this data we will be able to measure Client total bandwidth.
-	Downloaded int64
-	Uploaded   int64
+	downloaded int64
+	uploaded   int64
 }
 
 func (cl *Client) IPBlockList() iplist.Ranger {
@@ -2008,4 +2008,10 @@ func (cl *Client) banPeerIP(ip net.IP) {
 		cl.badPeerIPs = make(map[string]struct{})
 	}
 	cl.badPeerIPs[ip.String()] = struct{}{}
+}
+
+func (cl *Client) Status() (downloaded int64, uploaded int64) {
+	downloaded = cl.downloaded
+	uploaded = cl.uploaded
+	return
 }

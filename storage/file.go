@@ -6,20 +6,28 @@ import (
 	"path/filepath"
 
 	"github.com/anacrolix/missinggo"
+	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
 
+type pieceCompletion interface {
+	Get(metainfo.Piece) bool
+	Set(metainfo.Piece, bool)
+	Close()
+}
+
 // File-based storage for torrents, that isn't yet bound to a particular
 // torrent.
 type fileStorage struct {
-	baseDir   string
-	completed map[[20]byte]bool
+	baseDir    string
+	completion pieceCompletion
 }
 
 func NewFile(baseDir string) Client {
 	return &fileStorage{
-		baseDir: baseDir,
+		baseDir:    baseDir,
+		completion: pieceCompletionForDir(baseDir),
 	}
 }
 
@@ -48,6 +56,7 @@ func (fs *fileStorage) Piece(p metainfo.Piece) Piece {
 }
 
 func (fs *fileStorage) Close() error {
+	fs.completion.Close()
 	return nil
 }
 
@@ -59,14 +68,11 @@ type fileStoragePiece struct {
 }
 
 func (fs *fileStoragePiece) GetIsComplete() bool {
-	return fs.completed[fs.p.Hash()]
+	return fs.completion.Get(fs.p)
 }
 
 func (fs *fileStoragePiece) MarkComplete() error {
-	if fs.completed == nil {
-		fs.completed = make(map[[20]byte]bool)
-	}
-	fs.completed[fs.p.Hash()] = true
+	fs.completion.Set(fs.p, true)
 	return nil
 }
 

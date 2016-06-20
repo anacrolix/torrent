@@ -22,3 +22,16 @@ func (p Piece) Hash() (ret Hash) {
 	missinggo.CopyExact(&ret, p.Info.Pieces[p.i*20:(p.i+1)*20])
 	return
 }
+
+func (p Piece) Index() int {
+	return p.i
+}
+
+func (p Piece) Key() PieceKey {
+	return PieceKey{p.Info.Hash(), p.i}
+}
+
+type PieceKey struct {
+	Hash  Hash
+	Index int
+}

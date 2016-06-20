@@ -1705,6 +1705,9 @@ func (cl *Client) reapPieceTouches(t *Torrent, piece int) (ret []*connection) {
 }
 
 func (cl *Client) pieceHashed(t *Torrent, piece int, correct bool) {
+	if t.closed.IsSet() {
+		return
+	}
 	p := &t.pieces[piece]
 	if p.EverHashed {
 		// Don't score the first time a piece is hashed, it could be an

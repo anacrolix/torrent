@@ -95,14 +95,14 @@ type Torrent struct {
 	connPieceInclinationPool sync.Pool
 
 	// Since we have to have loadTorrent, we woudl like to keep other statistics like all modern torrent apps does.
-	Downloaded int64
-	Uploaded   int64
-	// dates
-	AddedDate     int
-	CompletedDate int
-	// elapsed
-	DownloadingTime int
-	SeedingTime     int
+	downloaded int64
+	uploaded   int64
+	// dates in seconds
+	addedDate     int
+	completedDate int
+	// elapsed in seconds
+	downloadingTime int
+	seedingTime     int
 }
 
 func (t *Torrent) setDisplayName(dn string) {
@@ -667,6 +667,9 @@ type Peer struct {
 	Source peerSource
 	// Peer is known to support encryption.
 	SupportsEncryption bool
+	// byte info information
+	Downloaded int64
+	Uploaded   int64
 }
 
 func (t *Torrent) pieceLength(piece int) (len_ pp.Integer) {

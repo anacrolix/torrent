@@ -54,7 +54,7 @@ type BytesInfo struct {
 }
 
 func Stats() *BytesInfo {
-	d, u := client.Status()
+	d, u := client.Stats()
 	return &BytesInfo{d, u}
 }
 
@@ -102,14 +102,26 @@ func AddTorrent(file string) int {
 //
 //export GetTorrent
 func GetTorrent(i int) []byte {
-	return nil
+	t := torrents[i]
+
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	err = t.Metainfo().Write(w)
+	if err != nil {
+		return nil
+	}
+	err = w.Flush()
+	if err != nil {
+		return nil
+	}
+	return buf.Bytes()
 }
 
 // SaveTorrent
 //
 // Every torrent application restarts it require to check files consistency. To
-// avoid this, and save machine time we need to store torrents runtime state
-// about completed pieces.
+// avoid this, and save machine time we need to store torrents runtime states
+// completed pieces and other information externaly.
 //
 // Save runtime torrent data to state file
 //
@@ -272,34 +284,34 @@ func TorrentStats(i int) *BytesInfo {
 }
 
 type File struct {
-	Downloading bool
-	Name        string
-	Length      int64
-	Completed   int64
+	Check          bool
+	Path           string
+	Length         int64
+	BytesCompleted int64
 }
 
 // return torrent files array
 func TorrentFiles(i int) []File {
-	return nil
-}
-
-type Peer struct {
-	Addr       string
-	Client     string
-	Encryption bool
-	Progress   int
-	Upload     int
-	Download   int
+	t := torrents[i]
+	var ff []File
+	for _, v := range t.Files() {
+		f := File{}
+		f.Check = true
+		f.Path = v.Path()
+		f.Length = v.Length()
+		ff = append(ff, f)
+	}
+	return ff
 }
 
 func TorrentPeersCount(i int) int {
 	t := torrents[i]
-
-	return t.Peers()
+	return t.PeersCount()
 }
 
-func TorrentPeers(i int) []Peer {
-	return nil
+func TorrentPeers(i int) []torrent.Peer {
+	t := torrents[i]
+	return t.Peers()
 }
 
 // TorrentFileRename

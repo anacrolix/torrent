@@ -1532,24 +1532,38 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	return
 }
 
-// Save torrent to state file, [metadata, pices states]
+// Save torrent to state file
 func (cl *Client) SaveTorrent(t *Torrent) ([]byte, error) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 
+	// [metadata]
+	// [completed pieces]
+
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
 	e := bencode.NewEncoder(w)
-	err := e.Encode(t.info.Bytes)
-	if err != nil {
-		return nil, err
+
+	{
+		err := e.Encode(t.info.Bytes)
+		if err != nil {
+			return nil, err
+		}
 	}
-	// since missinggo/bitmap/bitmap.go private rb field, copy bit by bit
-	pieces := make([]bool, t.completedPieces.Len())
-	for i := 0; i <= len(pieces); i++ {
-		pieces[i] = t.completedPieces.Get(i)
+
+	{
+		// since missinggo/bitmap/bitmap.go private rb field, copy bit by bit
+		pieces := make([]bool, t.completedPieces.Len())
+		for i := 0; i <= len(pieces); i++ {
+			pieces[i] = t.completedPieces.Get(i)
+		}
+		err = e.Encode(pieces)
+		if err != nil {
+			return nil, err
+		}
 	}
-	err = e.Encode(pieces)
+
+	err = w.Flush()
 	if err != nil {
 		return nil, err
 	}
@@ -2010,7 +2024,10 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	cl.badPeerIPs[ip.String()] = struct{}{}
 }
 
-func (cl *Client) Status() (downloaded int64, uploaded int64) {
+func (cl *Client) Stats() (downloaded int64, uploaded int64) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+
 	downloaded = cl.downloaded
 	uploaded = cl.uploaded
 	return

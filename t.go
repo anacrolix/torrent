@@ -204,8 +204,24 @@ func (t *Torrent) AddTrackers(announceList [][]string) {
 	t.addTrackers(announceList)
 }
 
-func (t *Torrent) Peers() int {
+func (t *Torrent) PeersCount() int {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	return len(t.peers)
+}
+
+func (t *Torrent) Peers() []Peer {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	v := make([]Peer, 0, len(t.peers))
+	for _, value := range t.peers {
+		v = append(v, value)
+	}
+	return v
+}
+
+func (t *Torrent) Stats() (downloaded int64, uploaded int64) {
+	downloaded = t.downloaded
+	uploaded = t.uploaded
+	return
 }

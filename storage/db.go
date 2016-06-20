@@ -2,7 +2,6 @@ package storage
 
 import (
 	"database/sql"
-	"log"
 	"path/filepath"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -14,7 +13,6 @@ type dbPieceCompletion struct {
 
 func newDBPieceCompletion(dir string) (ret *dbPieceCompletion, err error) {
 	p := filepath.Join(dir, ".torrent.db")
-	log.Println(p)
 	db, err := sql.Open("sqlite3", p)
 	if err != nil {
 		return

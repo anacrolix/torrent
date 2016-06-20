@@ -82,6 +82,11 @@ type Client struct {
 	closed missinggo.Event
 
 	torrents map[metainfo.Hash]*Torrent
+
+	// Since we have to have loadTorrent, we woudl like to keep other statistics like all modern torrent apps does.
+	// Usint this data we will be able to measure Client total bandwidth.
+	downloaded int64
+	uploaded   int64
 }
 
 func (cl *Client) IPBlockList() iplist.Ranger {
@@ -1524,12 +1529,159 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	}
 	new = true
 	t = cl.newTorrent(infoHash)
+	t.updateWantPeersEvent()
+	return
+}
+
+// Save torrent to state file
+func (cl *Client) SaveTorrent(t *Torrent) ([]byte, error) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+
+	// [metadata]
+	// [completed pieces]
+
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	e := bencode.NewEncoder(w)
+
+	{
+		err := e.Encode(t.info.Bytes)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	{
+		// since missinggo/bitmap/bitmap.go private rb field, copy bit by bit
+		pieces := make([]bool, t.completedPieces.Len())
+		for i := 0; i <= len(pieces); i++ {
+			pieces[i] = t.completedPieces.Get(i)
+		}
+		err = e.Encode(pieces)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err = w.Flush()
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// Load torrent from saved state
+func (cl *Client) LoadTorrent(buf []byte) (t *Torrent, err error) {
+	r := bytes.NewReader(buf)
+	mi, err := metainfo.Load(r)
+	if err != nil {
+		return
+	}
+	var pieces []bool
+	d := bencode.NewDecoder(r)
+	err = d.Decode(&pieces)
+	if err != nil {
+		return
+	}
+	spec := TorrentSpecFromMetaInfo(mi)
+	t, _ = cl.AddTorrentInfoHash(spec.InfoHash)
+	if spec.DisplayName != "" {
+		t.SetDisplayName(spec.DisplayName)
+	}
+	if spec.Info != nil {
+		err = t.loadTorrent(spec.Info.Bytes, pieces)
+		if err != nil {
+			return
+		}
+	}
+
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	if spec.ChunkSize != 0 {
+		t.chunkSize = pp.Integer(spec.ChunkSize)
+	}
+	t.addTrackers(spec.Trackers)
+	return
+}
+
+// Do any network actvity only after calling this function. We can add torrent,
+// run file consictency checks and then manually start it. Here are two
+// possibilites: 1) Create *Torrent without adding it to client. 2) Add Torrent
+// to client and do not announce it or download.
+func (cl *Client) StartTorrent(t *Torrent) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+
+	cl.startTorrent(t)
+}
+
+func (cl *Client) startTorrent(t *Torrent) {
+	if t.closed.IsSet() {
+		// reset close
+		t.closed.Clear()
+
+		// reopen storage
+		info := t.info
+		t.info = nil
+		t.setInfoBytes(info.Bytes)
+	}
+
+	// add torrent to the list, so Client can now respond to requests
+	cl.torrents[t.infoHash] = t
+
 	if cl.dHT != nil {
 		go t.announceDHT(true)
 	}
-	cl.torrents[infoHash] = t
-	t.updateWantPeersEvent()
-	return
+
+	t.startMissingTrackerScrapers()
+
+	t.maybeNewConns()
+}
+
+// Check if torrent respond to network actions.
+func (cl *Client) ActiveTorrent(t *Torrent) bool {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+
+	return cl.activeTorrent(t)
+}
+
+func (cl *Client) activeTorrent(t *Torrent) bool {
+	if _, ok := cl.torrents[t.infoHash]; ok {
+		return true
+	}
+
+	return false
+}
+
+// Run file consistency checks. For active torrent, pause it, then resume
+// download. For Paused torrent keep it paused.
+func (cl *Client) CheckTorrent(t *Torrent) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+
+	restart := false
+	if !t.closed.IsSet() {
+		t.close()
+		restart = true
+	}
+
+	if t.closed.IsSet() {
+		// reset close
+		t.closed.Clear()
+
+		// reopen storage
+		info := t.info
+		t.info = nil
+		t.setInfoBytes(info.Bytes)
+	}
+
+	t.check(func() {
+		if restart {
+			cl.StartTorrent(t)
+		}
+	})
 }
 
 // Add or merge a torrent spec. If the torrent is already present, the
@@ -1553,7 +1705,6 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 		t.chunkSize = pp.Integer(spec.ChunkSize)
 	}
 	t.addTrackers(spec.Trackers)
-	t.maybeNewConns()
 	return
 }
 
@@ -1795,10 +1946,14 @@ func (cl *Client) verifyPiece(t *Torrent, piece int) {
 		cl.event.Wait()
 	}
 	p.QueuedForHash = false
-	if t.closed.IsSet() || t.pieceComplete(piece) {
-		t.updatePiecePriority(piece)
-		t.publishPieceChange(piece)
-		return
+	// when we are checking torrent consitency EvernHashed == false. so, it does
+	// not matter is piace complete or not. it may be damadged on disk.
+	if p.EverHashed {
+		if t.closed.IsSet() || t.pieceComplete(piece) {
+			t.updatePiecePriority(piece)
+			t.publishPieceChange(piece)
+			return
+		}
 	}
 	p.Hashing = true
 	t.publishPieceChange(piece)
@@ -1871,4 +2026,13 @@ func (cl *Client) banPeerIP(ip net.IP) {
 		cl.badPeerIPs = make(map[string]struct{})
 	}
 	cl.badPeerIPs[ip.String()] = struct{}{}
+}
+
+func (cl *Client) Stats() (downloaded int64, uploaded int64) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+
+	downloaded = cl.downloaded
+	uploaded = cl.uploaded
+	return
 }

@@ -99,6 +99,7 @@ func addTorrents(client *torrent.Client) {
 			return
 		}())
 		go func() {
+			client.StartTorrent(t)
 			<-t.GotInfo()
 			t.DownloadAll()
 		}()

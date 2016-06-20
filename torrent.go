@@ -93,6 +93,16 @@ type Torrent struct {
 	completedPieces bitmap.Bitmap
 
 	connPieceInclinationPool sync.Pool
+
+	// Since we have to have loadTorrent, we woudl like to keep other statistics like all modern torrent apps does.
+	downloaded int64
+	uploaded   int64
+	// dates in seconds
+	addedDate     int
+	completedDate int
+	// elapsed in seconds
+	downloadingTime int
+	seedingTime     int
 }
 
 func (t *Torrent) setDisplayName(dn string) {
@@ -209,6 +219,21 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	if t.haveInfo() {
 		return nil
 	}
+	err := t.loadInfoBytes(b)
+	if err != nil {
+		return err
+	}
+	for _, conn := range t.conns {
+		if err = conn.setNumPieces(t.numPieces()); err != nil {
+			log.Printf("closing connection: %s", err)
+			conn.Close()
+		}
+	}
+	t.check(nil)
+	return nil
+}
+
+func (t *Torrent) loadInfoBytes(b []byte) error {
 	var ie *metainfo.InfoEx
 	err := bencode.Unmarshal(b, &ie)
 	if err != nil {
@@ -244,21 +269,53 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		missinggo.CopyExact(piece.Hash[:], hash)
 	}
-	for _, conn := range t.conns {
-		if err := conn.setNumPieces(t.numPieces()); err != nil {
-			log.Printf("closing connection: %s", err)
-			conn.Close()
-		}
-	}
+	return nil
+}
+
+// check torrent file for concistency. done will not be called if torrent
+// stoped.
+func (t *Torrent) check(done func()) {
 	for i := range t.pieces {
 		t.updatePieceCompletion(i)
-		t.pieces[i].QueuedForHash = true
+		p := t.pieces[i]
+		// make it EverHashed false, same as torrent freshly added. so other init
+		// checks flows in order.
+		p.EverHashed = false
+		p.QueuedForHash = true
 	}
 	go func() {
 		for i := range t.pieces {
 			t.verifyPiece(i)
+			if t.closed.IsSet() {
+				return
+			}
+		}
+		if done != nil {
+			done()
 		}
 	}()
+}
+
+// for big torrent we need to save CPU time and do not recheck files on disk
+// bettwen application restarts. loadTorrent allows to restore pieces state
+// including: completedPieces, and mark Torrent.pieces as they already been
+// checked. Since we allow to skip checks, and user may want to have full
+// control over additional checks we need to create Torrent.check() function to
+// run manual checks.
+func (t *Torrent) loadTorrent(buf []byte, pieces []bool) error {
+	err := t.loadInfoBytes(buf)
+	if err != nil {
+		return err
+	}
+	// do not run t.check(nil)
+	for i := range t.pieces {
+		t.updatePieceCompletion(i)
+		p := t.pieces[i]
+		p.EverHashed = true
+		if pieces[i] {
+			t.completedPieces.Set(i, true)
+		}
+	}
 	return nil
 }
 
@@ -526,6 +583,7 @@ func (t *Torrent) close() (err error) {
 	for _, conn := range t.conns {
 		conn.Close()
 	}
+	t.conns = nil
 	t.pieceStateChanges.Close()
 	t.updateWantPeersEvent()
 	return
@@ -609,6 +667,9 @@ type Peer struct {
 	Source peerSource
 	// Peer is known to support encryption.
 	SupportsEncryption bool
+	// byte info information
+	Downloaded int64
+	Uploaded   int64
 }
 
 func (t *Torrent) pieceLength(piece int) (len_ pp.Integer) {
@@ -1166,6 +1227,9 @@ func (t *Torrent) seeding() bool {
 // running.
 func (t *Torrent) startMissingTrackerScrapers() {
 	if t.cl.config.DisableTrackers {
+		return
+	}
+	if !t.cl.activeTorrent(t) {
 		return
 	}
 	for _, tier := range t.announceList() {

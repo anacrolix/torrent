@@ -14,12 +14,14 @@ import (
 )
 
 type mmapStorage struct {
-	baseDir string
+	baseDir    string
+	completion pieceCompletion
 }
 
 func NewMMap(baseDir string) Client {
 	return &mmapStorage{
-		baseDir: baseDir,
+		baseDir:    baseDir,
+		completion: pieceCompletionForDir(baseDir),
 	}
 }
 
@@ -27,18 +29,19 @@ func (s *mmapStorage) OpenTorrent(info *metainfo.InfoEx) (t Torrent, err error) 
 	span, err := mMapTorrent(&info.Info, s.baseDir)
 	t = &mmapTorrentStorage{
 		span: span,
+		pc:   s.completion,
 	}
 	return
 }
 
 type mmapTorrentStorage struct {
-	span      mmap_span.MMapSpan
-	completed map[metainfo.Hash]bool
+	span mmap_span.MMapSpan
+	pc   pieceCompletion
 }
 
 func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) Piece {
 	return mmapStoragePiece{
-		storage:  ts,
+		pc:       ts.pc,
 		p:        p,
 		ReaderAt: io.NewSectionReader(ts.span, p.Offset(), p.Length()),
 		WriterAt: missinggo.NewSectionWriter(ts.span, p.Offset(), p.Length()),
@@ -51,21 +54,18 @@ func (ts *mmapTorrentStorage) Close() error {
 }
 
 type mmapStoragePiece struct {
-	storage *mmapTorrentStorage
-	p       metainfo.Piece
+	pc pieceCompletion
+	p  metainfo.Piece
 	io.ReaderAt
 	io.WriterAt
 }
 
 func (sp mmapStoragePiece) GetIsComplete() bool {
-	return sp.storage.completed[sp.p.Hash()]
+	return sp.pc.Get(sp.p)
 }
 
 func (sp mmapStoragePiece) MarkComplete() error {
-	if sp.storage.completed == nil {
-		sp.storage.completed = make(map[metainfo.Hash]bool)
-	}
-	sp.storage.completed[sp.p.Hash()] = true
+	sp.pc.Set(sp.p, true)
 	return nil
 }
 

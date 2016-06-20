@@ -24,7 +24,7 @@ func NewMMap(baseDir string) Client {
 }
 
 func (s *mmapStorage) OpenTorrent(info *metainfo.InfoEx) (t Torrent, err error) {
-	span, err := MMapTorrent(&info.Info, s.baseDir)
+	span, err := mMapTorrent(&info.Info, s.baseDir)
 	t = &mmapTorrentStorage{
 		span: span,
 	}
@@ -69,7 +69,7 @@ func (sp mmapStoragePiece) MarkComplete() error {
 	return nil
 }
 
-func MMapTorrent(md *metainfo.Info, location string) (mms mmap_span.MMapSpan, err error) {
+func mMapTorrent(md *metainfo.Info, location string) (mms mmap_span.MMapSpan, err error) {
 	defer func() {
 		if err != nil {
 			mms.Close()

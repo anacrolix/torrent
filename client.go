@@ -516,6 +516,7 @@ func (cl *Client) dialTCP(addr string, t *Torrent) (c net.Conn, err error) {
 	if err == nil {
 		c.(*net.TCPConn).SetLinger(0)
 	}
+	c = pproffd.WrapNetConn(c)
 	return
 }
 

@@ -36,6 +36,11 @@ func (h *Hash) FromHexString(s string) (err error) {
 	return
 }
 
+func NewHashFromHex(s string) (h Hash) {
+	h.FromHexString(s)
+	return
+}
+
 func HashBytes(b []byte) (ret Hash) {
 	hasher := sha1.New()
 	hasher.Write(b)

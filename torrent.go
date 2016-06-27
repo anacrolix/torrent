@@ -1103,9 +1103,6 @@ func (t *Torrent) bytesCompleted() int64 {
 func (t *Torrent) SetInfoBytes(b []byte) (err error) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
-	if t.info != nil {
-		return
-	}
 	return t.setInfoBytes(b)
 }
 

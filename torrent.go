@@ -96,6 +96,9 @@ type Torrent struct {
 }
 
 func (t *Torrent) setDisplayName(dn string) {
+	if t.haveInfo() {
+		return
+	}
 	t.displayName = dn
 }
 
@@ -223,6 +226,7 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	}
 	defer t.updateWantPeersEvent()
 	t.info = ie
+	t.displayName = "" // Save a few bytes lol.
 	t.cl.event.Broadcast()
 	t.gotMetainfo.Set()
 	t.storage, err = t.storageOpener.OpenTorrent(t.info)

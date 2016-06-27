@@ -408,7 +408,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	keepAliveTimer := time.NewTimer(keepAliveTimeout)
 	for {
 		cn.mu().Lock()
-		for cn.outgoingUnbufferedMessages.Len() != 0 {
+		for cn.outgoingUnbufferedMessages != nil && cn.outgoingUnbufferedMessages.Len() != 0 {
 			msg := cn.outgoingUnbufferedMessages.Remove(cn.outgoingUnbufferedMessages.Front()).(pp.Message)
 			cn.mu().Unlock()
 			b, err := msg.MarshalBinary()

@@ -76,6 +76,8 @@ type connection struct {
 	// The peer has everything. This can occur due to a special message, when
 	// we may not even know the number of pieces in the torrent yet.
 	peerHasAll bool
+	// number pieces completed
+	peerCompleted int
 	// The highest possible number of pieces the torrent could have based on
 	// communication with the peer. Generally only useful until we have the
 	// torrent info.
@@ -92,6 +94,10 @@ type connection struct {
 
 	outgoingUnbufferedMessages         *list.List
 	outgoingUnbufferedMessagesNotEmpty missinggo.Event
+
+	// byte info information
+	Downloaded int64
+	Uploaded   int64
 }
 
 func (cn *connection) mu() sync.Locker {
@@ -599,6 +605,7 @@ func (cn *connection) peerSentBitfield(bf []bool) error {
 	}
 	for i, have := range bf {
 		if have {
+			cn.peerCompleted = cn.peerCompleted + 1
 			cn.raisePeerMinPieces(i + 1)
 		}
 		cn.peerPieces.Set(i, have)

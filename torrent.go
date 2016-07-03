@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -73,8 +74,18 @@ type Torrent struct {
 	wantPeersEvent missinggo.Event
 	// An announcer for each tracker URL.
 	trackerAnnouncers map[string]*trackerScraper
+
 	// How many times we've initiated a DHT announce.
 	numDHTAnnounces int
+	// how many peers we got, not sure if we have to use last value or increment
+	peersDHT int
+	// error message
+	errDHT string
+	// last call
+	lastAnnounceDHT int64
+
+	// peers come from pex, not sure if we have to use last value or increment
+	peersPEX int
 
 	// Name used if the info name isn't available.
 	displayName string
@@ -93,6 +104,34 @@ type Torrent struct {
 	completedPieces bitmap.Bitmap
 
 	connPieceInclinationPool sync.Pool
+
+	// files download checkbox
+	checks []bool
+
+	// torrent under file concistency check
+	checking bool
+
+	// fired when torrent downloaded
+	completed missinggo.Event
+
+	// Since we have to have loadTorrent, we woudl like to keep other statistics like all modern torrent apps does.
+	downloaded int64
+	uploaded   int64
+	// dates in seconds
+	addedDate     int64
+	completedDate int64
+
+	// date in seconds when torrent been StartTorrent, we measure this value to get downloadingTime && seedingTime
+	activateDate int64
+
+	// elapsed in seconds
+	downloadingTime int64
+	seedingTime     int64
+
+	// .torrent info
+	creator   string
+	createdOn int64
+	comment   string
 }
 
 func (t *Torrent) setDisplayName(dn string) {
@@ -212,6 +251,21 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	if t.haveInfo() {
 		return nil
 	}
+	err := t.loadInfoBytes(b, nil)
+	if err != nil {
+		return err
+	}
+	for _, conn := range t.conns {
+		if err = conn.setNumPieces(t.numPieces()); err != nil {
+			log.Printf("closing connection: %s", err)
+			conn.Close()
+		}
+	}
+	t.check()
+	return nil
+}
+
+func (t *Torrent) loadInfoBytes(b []byte, checks []bool) error {
 	var ie *metainfo.InfoEx
 	err := bencode.Unmarshal(b, &ie)
 	if err != nil {
@@ -234,7 +288,8 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 		return fmt.Errorf("error opening torrent storage: %s", err)
 	}
 	t.length = 0
-	for _, f := range t.info.UpvertedFiles() {
+	ff := t.info.UpvertedFiles()
+	for _, f := range ff {
 		t.length += f.Length
 	}
 	t.metadataBytes = b
@@ -248,21 +303,73 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		missinggo.CopyExact(piece.Hash[:], hash)
 	}
-	for _, conn := range t.conns {
-		if err := conn.setNumPieces(t.numPieces()); err != nil {
-			log.Printf("closing connection: %s", err)
-			conn.Close()
+	if checks != nil {
+		t.checks = checks
+	} else {
+		t.checks = make([]bool, len(ff))
+		for i := range t.checks {
+			t.checks[i] = true
 		}
 	}
+	return nil
+}
+
+// check torrent file for concistency. done will not be called if torrent
+// stoped.
+func (t *Torrent) check() {
+	if t.cl.activeTorrent(t) {
+		// do not allow run integrity checks on running torrents. this is too time
+		// consuming, better redownload parts then check and download at the same
+		// time.
+		return
+	}
+	if t.checking {
+		return
+	}
+	t.checking = true
 	for i := range t.pieces {
 		t.updatePieceCompletion(i)
-		t.pieces[i].QueuedForHash = true
+		p := t.pieces[i]
+		// make it EverHashed false, same as torrent freshly added. so other init
+		// checks flows in order.
+		p.EverHashed = false
+		p.QueuedForHash = true
 	}
 	go func() {
+		defer func() {
+			t.cl.mu.Lock()
+			t.checking = false
+			t.cl.mu.Unlock()
+		}()
 		for i := range t.pieces {
 			t.verifyPiece(i)
+			if t.closed.IsSet() {
+				return
+			}
 		}
 	}()
+}
+
+// for big torrent we need to save CPU time and do not recheck files on disk
+// bettwen application restarts. loadTorrent allows to restore pieces state
+// including: completedPieces, and mark Torrent.pieces as they already been
+// checked. Since we allow to skip checks, and user may want to have full
+// control over additional checks we need to create Torrent.check() function to
+// run manual checks.
+func (t *Torrent) loadTorrent(buf []byte, pieces []bool, checks []bool) error {
+	err := t.loadInfoBytes(buf, checks)
+	if err != nil {
+		return err
+	}
+	// do not run t.check(nil)
+	for i := range t.pieces {
+		t.updatePieceCompletion(i)
+		p := t.pieces[i]
+		p.EverHashed = true
+		if pieces[i] {
+			t.completedPieces.Add(i)
+		}
+	}
 	return nil
 }
 
@@ -311,7 +418,11 @@ func (t *Torrent) name() string {
 	if t.haveInfo() {
 		return t.info.Name
 	}
-	return t.displayName
+	str := t.displayName
+	// magnets may have incorrect name including '/'
+	str = strings.Replace(str, string(os.PathSeparator), string(os.PathListSeparator), -1)
+	str = strings.Replace(str, string('|'), string(os.PathListSeparator), -1)
+	return str
 }
 
 func (t *Torrent) pieceState(index int) (ret PieceState) {
@@ -469,9 +580,9 @@ func (t *Torrent) announceList() (al [][]string) {
 // announce-list as currently known to the client.
 func (t *Torrent) newMetaInfo() (mi *metainfo.MetaInfo) {
 	mi = &metainfo.MetaInfo{
-		CreationDate: time.Now().Unix(),
-		Comment:      "dynamic metainfo from client",
-		CreatedBy:    "go.torrent",
+		CreationDate: t.createdOn,
+		Comment:      t.comment,
+		CreatedBy:    t.creator,
 		AnnounceList: t.announceList(),
 	}
 	if t.info != nil {
@@ -527,11 +638,17 @@ func (t *Torrent) close() (err error) {
 	if c, ok := t.storage.(io.Closer); ok {
 		c.Close()
 	}
+	for _, tracker := range t.trackerAnnouncers {
+		tracker.stop.Set()
+	}
+	t.trackerAnnouncers = nil
 	for _, conn := range t.conns {
 		conn.Close()
 	}
+	t.conns = nil
+	t.peers = nil
+	t.halfOpen = nil
 	t.pieceStateChanges.Close()
-	t.updateWantPeersEvent()
 	return
 }
 
@@ -936,6 +1053,20 @@ func (t *Torrent) pendPiece(piece int) {
 	t.piecePriorityChanged(piece)
 }
 
+func (t *Torrent) unpendPiece(piece int) {
+	if !t.pendingPieces.Contains(piece) {
+		return
+	}
+	if t.havePiece(piece) {
+		return
+	}
+	t.pendingPieces.Remove(piece)
+	if !t.updatePiecePriority(piece) {
+		return
+	}
+	t.piecePriorityChanged(piece)
+}
+
 func (t *Torrent) getCompletedPieces() (ret bitmap.Bitmap) {
 	return t.completedPieces.Copy()
 }
@@ -1035,6 +1166,13 @@ func (t *Torrent) maybeMetadataCompleted() {
 		t.invalidateMetadata()
 		return
 	}
+
+	now := time.Now().Unix()
+	t.downloadingTime = t.downloadingTime + (now - t.activateDate)
+	t.activateDate = now
+
+	t.fileUpdateCheck()
+
 	if t.cl.config.Debug {
 		log.Printf("%s: got metadata from peers", t)
 	}
@@ -1169,6 +1307,9 @@ func (t *Torrent) startMissingTrackerScrapers() {
 	if t.cl.config.DisableTrackers {
 		return
 	}
+	if !t.cl.activeTorrent(t) {
+		return
+	}
 	for _, tier := range t.announceList() {
 		for _, trackerURL := range tier {
 			if _, ok := t.trackerAnnouncers[trackerURL]; ok {
@@ -1209,12 +1350,16 @@ func (t *Torrent) announceDHT(impliedPort bool) {
 			return
 		}
 		// log.Printf("getting peers for %q from DHT", t)
-		ps, err := cl.dHT.Announce(string(t.infoHash[:]), cl.incomingPeerPort(), impliedPort)
+		ps, err := cl.dHT.Announce(string(t.infoHash[:]), cl.incomingPeerUDPPort(), impliedPort)
 		if err != nil {
-			log.Printf("error getting peers from dht: %s", err)
+			cl.mu.Lock()
+			t.errDHT = fmt.Sprintf("error getting peers from dht: %s", err)
+			log.Printf(t.errDHT)
+			cl.mu.Unlock()
 			return
 		}
 		cl.mu.Lock()
+		t.lastAnnounceDHT = time.Now().Unix()
 		t.numDHTAnnounces++
 		cl.mu.Unlock()
 		// Count all the unique addresses we got during this announce.
@@ -1244,6 +1389,11 @@ func (t *Torrent) announceDHT(impliedPort bool) {
 					allAddrs[key] = struct{}{}
 				}
 				cl.mu.Lock()
+				if t.peers == nil {
+					cl.mu.Unlock()
+					ps.Close()
+					return
+				}
 				t.addPeers(addPeers)
 				numPeers := len(t.peers)
 				cl.mu.Unlock()
@@ -1256,6 +1406,9 @@ func (t *Torrent) announceDHT(impliedPort bool) {
 			}
 		}
 		ps.Close()
+		cl.mu.Lock()
+		t.peersDHT = len(allAddrs)
+		cl.mu.Unlock()
 		// log.Printf("finished DHT peer scrape for %s: %d peers", t, len(allAddrs))
 	}
 }

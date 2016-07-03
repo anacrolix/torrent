@@ -98,6 +98,7 @@ func addTorrents(client *torrent.Client) {
 			}
 			return
 		}())
+		client.StartTorrent(t)
 		go func() {
 			<-t.GotInfo()
 			t.DownloadAll()
@@ -130,6 +131,10 @@ func main() {
 		log.Fatalf("error creating client: %s", err)
 	}
 	defer client.Close()
+	err = client.Start()
+	if err != nil {
+		log.Fatalf("error creating client: %s", err)
+	}
 	// Write status on the root path on the default HTTP muxer. This will be
 	// bound to localhost somewhere if GOPPROF is set, thanks to the envpprof
 	// import.

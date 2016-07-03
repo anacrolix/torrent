@@ -65,6 +65,9 @@ func validateInfo(info *metainfo.Info) error {
 	if int((info.TotalLength()+info.PieceLength-1)/info.PieceLength) != info.NumPieces() {
 		return errors.New("piece count and file lengths are at odds")
 	}
+	if info.NumPieces() == 0 || info.TotalLength() == 0 {
+		return errors.New("empty torrent")
+	}
 	return nil
 }
 

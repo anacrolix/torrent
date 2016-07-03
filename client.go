@@ -2046,6 +2046,7 @@ func (cl *Client) onCompletedPiece(t *Torrent, piece int) {
 				t.completedDate = now
 				t.downloadingTime = t.downloadingTime + (now - t.activateDate)
 				t.activateDate = now // seeding time now
+				t.completed.Set()
 			}
 		}
 	}
@@ -2203,4 +2204,10 @@ func (cl *Client) SetListenUDPAddr(addr string) {
 
 func (cl *Client) Wait() <-chan struct{} {
 	return cl.closed.LockedChan(&cl.mu)
+}
+
+func (cl *Client) ActiveCount() int {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	return len(cl.torrents)
 }

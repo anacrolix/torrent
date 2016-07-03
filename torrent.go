@@ -111,6 +111,9 @@ type Torrent struct {
 	// torrent under file concistency check
 	checking bool
 
+	// fired when torrent downloaded
+	completed missinggo.Event
+
 	// Since we have to have loadTorrent, we woudl like to keep other statistics like all modern torrent apps does.
 	downloaded int64
 	uploaded   int64

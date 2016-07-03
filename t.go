@@ -106,6 +106,10 @@ func (t *Torrent) Wait() <-chan struct{} {
 	return t.closed.LockedChan(&t.cl.mu)
 }
 
+func (t *Torrent) Completed() <-chan struct{} {
+	return t.completed.LockedChan(&t.cl.mu)
+}
+
 // Clobbers the torrent display name. The display name is used as the torrent
 // name if the metainfo is not available.
 func (t *Torrent) SetDisplayName(dn string) {
@@ -381,6 +385,7 @@ func (t *Torrent) fileUpdateCheck() {
 	if t.pendingBytesCompleted(fb) < t.pendingBytesLength(fb) {
 		// now we downloading
 		t.completedDate = 0
+		t.completed.Clear()
 		// did we seed before? update seed timer
 		if seeding {
 			t.seedingTime = t.seedingTime + (now - t.activateDate)

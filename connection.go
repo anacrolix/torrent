@@ -653,3 +653,19 @@ func (cn *connection) wroteBytes(b []byte) {
 	cn.stats.wroteBytes(b)
 	cn.t.stats.wroteBytes(b)
 }
+
+// Returns whether the connection is currently useful to us. We're seeding and
+// they want data, we don't have metainfo and they can provide it, etc.
+func (c *connection) useful() bool {
+	t := c.t
+	if c.closed.IsSet() {
+		return false
+	}
+	if !t.haveInfo() {
+		return c.supportsExtension("ut_metadata")
+	}
+	if t.seeding() {
+		return c.PeerInterested
+	}
+	return t.connHasWantedPieces(c)
+}

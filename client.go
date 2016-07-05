@@ -264,7 +264,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		}
 	}()
 	cl = &Client{
-		halfOpenLimit:     socketsPerTorrent,
+		halfOpenLimit:     defaultHalfOpenConnsPerTorrent,
 		config:            *cfg,
 		defaultStorage:    cfg.DefaultStorage,
 		dopplegangerAddrs: make(map[string]struct{}),
@@ -382,7 +382,7 @@ func (cl *Client) waitAccept() {
 	defer cl.mu.Unlock()
 	for {
 		for _, t := range cl.torrents {
-			if cl.wantConns(t) {
+			if t.wantConns() {
 				return
 			}
 		}
@@ -936,7 +936,7 @@ func (cl *Client) runHandshookConn(c *connection, t *Torrent) {
 		c.rw,
 	}
 	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
-	if !cl.addConnection(t, c) {
+	if !t.addConnection(c) {
 		return
 	}
 	defer t.dropConnection(c)
@@ -1337,67 +1337,10 @@ func (cl *Client) connectionLoop(t *Torrent, c *connection) error {
 	}
 }
 
-// Returns true if the connection is added.
-func (cl *Client) addConnection(t *Torrent, c *connection) bool {
-	if cl.closed.IsSet() {
-		return false
-	}
-	if !cl.wantConns(t) {
-		return false
-	}
-	for _, c0 := range t.conns {
-		if c.PeerID == c0.PeerID {
-			// Already connected to a client with that ID.
-			duplicateClientConns.Add(1)
-			return false
-		}
-	}
-	if len(t.conns) >= socketsPerTorrent {
-		c := t.worstBadConn(cl)
-		if c == nil {
-			return false
-		}
-		if cl.config.Debug && missinggo.CryHeard() {
-			log.Printf("%s: dropping connection to make room for new one:\n    %s", t, c)
-		}
-		c.Close()
-		t.deleteConnection(c)
-	}
-	if len(t.conns) >= socketsPerTorrent {
-		panic(len(t.conns))
-	}
-	t.conns = append(t.conns, c)
-	c.t = t
-	return true
-}
-
-func (cl *Client) usefulConn(t *Torrent, c *connection) bool {
-	if c.closed.IsSet() {
-		return false
-	}
-	if !t.haveInfo() {
-		return c.supportsExtension("ut_metadata")
-	}
-	if t.seeding() {
-		return c.PeerInterested
-	}
-	return t.connHasWantedPieces(c)
-}
-
-func (cl *Client) wantConns(t *Torrent) bool {
-	if !t.seeding() && !t.needData() {
-		return false
-	}
-	if len(t.conns) < socketsPerTorrent {
-		return true
-	}
-	return t.worstBadConn(cl) != nil
-}
-
 func (cl *Client) openNewConns(t *Torrent) {
 	defer t.updateWantPeersEvent()
 	for len(t.peers) != 0 {
-		if !cl.wantConns(t) {
+		if !t.wantConns() {
 			return
 		}
 		if len(t.halfOpen) >= cl.halfOpenLimit {
@@ -1431,9 +1374,7 @@ func (cl *Client) badPeerIPPort(ip net.IP, port int) bool {
 	return false
 }
 
-// Prepare a Torrent without any attachment to a Client. That means we can
-// initialize fields all fields that don't require the Client without locking
-// it.
+// Return a Torrent ready for insertion into a Client.
 func (cl *Client) newTorrent(ih metainfo.Hash) (t *Torrent) {
 	t = &Torrent{
 		cl:        cl,
@@ -1444,7 +1385,8 @@ func (cl *Client) newTorrent(ih metainfo.Hash) (t *Torrent) {
 		halfOpen:          make(map[string]struct{}),
 		pieceStateChanges: pubsub.NewPubSub(),
 
-		storageOpener: cl.defaultStorage,
+		storageOpener:       cl.defaultStorage,
+		maxEstablishedConns: defaultEstablishedConnsPerTorrent,
 	}
 	return
 }

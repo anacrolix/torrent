@@ -4,11 +4,9 @@ import (
 	"time"
 )
 
-// Implements heap functions such that [0] is the worst connection.
+// Implements a heap of connections by how useful they are or have been.
 type worstConns struct {
-	c  []*connection
-	t  *Torrent
-	cl *Client
+	c []*connection
 }
 
 func (wc *worstConns) Len() int      { return len(wc.c) }
@@ -44,8 +42,8 @@ func (wc worstConnsSortKey) Less(other worstConnsSortKey) bool {
 
 func (wc *worstConns) key(i int) (key worstConnsSortKey) {
 	c := wc.c[i]
-	key.useful = wc.cl.usefulConn(wc.t, c)
-	if wc.t.seeding() {
+	key.useful = c.useful()
+	if c.t.seeding() {
 		key.lastHelpful = c.lastChunkSent
 	}
 	// Intentionally consider the last time a chunk was received when seeding,

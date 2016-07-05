@@ -61,7 +61,8 @@ type Torrent struct {
 	// The info dict. nil if we don't have it (yet).
 	info *metainfo.InfoEx
 	// Active peer connections, running message stream loops.
-	conns []*connection
+	conns               []*connection
+	maxEstablishedConns int
 	// Set of addrs to which we're attempting to connect. Connections are
 	// half-open until all handshakes are completed.
 	halfOpen map[string]struct{}
@@ -133,12 +134,8 @@ func (t *Torrent) addrActive(addr string) bool {
 	return false
 }
 
-func (t *Torrent) worstConns(cl *Client) (wcs *worstConns) {
-	wcs = &worstConns{
-		c:  make([]*connection, 0, len(t.conns)),
-		t:  t,
-		cl: cl,
-	}
+func (t *Torrent) worstConns() (wcs *worstConns) {
+	wcs = &worstConns{make([]*connection, 0, len(t.conns))}
 	for _, c := range t.conns {
 		if !c.closed.IsSet() {
 			wcs.c = append(wcs.c, c)
@@ -446,11 +443,7 @@ func (t *Torrent) writeStatus(w io.Writer, cl *Client) {
 	fmt.Fprintf(w, "Pending peers: %d\n", len(t.peers))
 	fmt.Fprintf(w, "Half open: %d\n", len(t.halfOpen))
 	fmt.Fprintf(w, "Active peers: %d\n", len(t.conns))
-	sort.Sort(&worstConns{
-		c:  t.conns,
-		t:  t,
-		cl: cl,
-	})
+	sort.Sort(&worstConns{t.conns})
 	for i, c := range t.conns {
 		fmt.Fprintf(w, "%2d. ", i+1)
 		c.WriteStatus(w, t)
@@ -740,15 +733,15 @@ func (t *Torrent) extentPieces(off, _len int64) (pieces []int) {
 	return
 }
 
-func (t *Torrent) worstBadConn(cl *Client) *connection {
-	wcs := t.worstConns(cl)
+func (t *Torrent) worstBadConn() *connection {
+	wcs := t.worstConns()
 	heap.Init(wcs)
 	for wcs.Len() != 0 {
 		c := heap.Pop(wcs).(*connection)
 		if c.UnwantedChunksReceived >= 6 && c.UnwantedChunksReceived > c.UsefulChunksReceived {
 			return c
 		}
-		if wcs.Len() >= (socketsPerTorrent+1)/2 {
+		if wcs.Len() >= (t.maxEstablishedConns+1)/2 {
 			// Give connections 1 minute to prove themselves.
 			if time.Since(c.completedHandshake) > time.Minute {
 				return c
@@ -1272,4 +1265,48 @@ func (t *Torrent) addPeers(peers []Peer) {
 
 func (t *Torrent) Stats() TorrentStats {
 	return t.stats
+}
+
+// Returns true if the connection is added.
+func (t *Torrent) addConnection(c *connection) bool {
+	if t.cl.closed.IsSet() {
+		return false
+	}
+	if !t.wantConns() {
+		return false
+	}
+	for _, c0 := range t.conns {
+		if c.PeerID == c0.PeerID {
+			// Already connected to a client with that ID.
+			duplicateClientConns.Add(1)
+			return false
+		}
+	}
+	if len(t.conns) >= t.maxEstablishedConns {
+		c := t.worstBadConn()
+		if c == nil {
+			return false
+		}
+		if t.cl.config.Debug && missinggo.CryHeard() {
+			log.Printf("%s: dropping connection to make room for new one:\n    %s", t, c)
+		}
+		c.Close()
+		t.deleteConnection(c)
+	}
+	if len(t.conns) >= t.maxEstablishedConns {
+		panic(len(t.conns))
+	}
+	t.conns = append(t.conns, c)
+	c.t = t
+	return true
+}
+
+func (t *Torrent) wantConns() bool {
+	if !t.seeding() && !t.needData() {
+		return false
+	}
+	if len(t.conns) < t.maxEstablishedConns {
+		return true
+	}
+	return t.worstBadConn() != nil
 }

@@ -352,12 +352,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}())
 	require.NoError(t, err)
 	assert.True(t, new)
-	leecherGreeting.AddPeers([]Peer{
-		Peer{
-			IP:   missinggo.AddrIP(seeder.ListenAddr()),
-			Port: missinggo.AddrPort(seeder.ListenAddr()),
-		},
-	})
+	addClientPeer(leecherGreeting, seeder)
 	r := leecherGreeting.NewReader()
 	defer r.Close()
 	if ps.Responsive {
@@ -372,8 +367,8 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	assert.EqualValues(t, 8, seederTorrent.Stats().ChunksSent)
 	// This is not a strict requirement. It is however interesting to follow.
 	assert.EqualValues(t, 261, seederTorrent.Stats().BytesSent)
-	// Read through again for the cases where the torrent data size exceed the
-	// size of the cache.
+	// Read through again for the cases where the torrent data size exceeds
+	// the size of the cache.
 	assertReadAllGreeting(t, r)
 }
 
@@ -437,16 +432,8 @@ func TestSeedAfterDownloading(t *testing.T) {
 		require.NoError(t, err)
 		assert.EqualValues(t, testutil.GreetingFileContents, b)
 	}()
-	leecherGreeting.AddPeers([]Peer{
-		Peer{
-			IP:   missinggo.AddrIP(seeder.ListenAddr()),
-			Port: missinggo.AddrPort(seeder.ListenAddr()),
-		},
-		Peer{
-			IP:   missinggo.AddrIP(leecherLeecher.ListenAddr()),
-			Port: missinggo.AddrPort(leecherLeecher.ListenAddr()),
-		},
-	})
+	addClientPeer(leecherGreeting, seeder)
+	addClientPeer(leecherGreeting, leecherLeecher)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -582,12 +569,7 @@ func TestResponsive(t *testing.T) {
 		ret.ChunkSize = 2
 		return
 	}())
-	leecherTorrent.AddPeers([]Peer{
-		Peer{
-			IP:   missinggo.AddrIP(seeder.ListenAddr()),
-			Port: missinggo.AddrPort(seeder.ListenAddr()),
-		},
-	})
+	addClientPeer(leecherTorrent, seeder)
 	reader := leecherTorrent.NewReader()
 	defer reader.Close()
 	reader.SetReadahead(0)
@@ -629,12 +611,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 		ret.ChunkSize = 2
 		return
 	}())
-	leecherTorrent.AddPeers([]Peer{
-		Peer{
-			IP:   missinggo.AddrIP(seeder.ListenAddr()),
-			Port: missinggo.AddrPort(seeder.ListenAddr()),
-		},
-	})
+	addClientPeer(leecherTorrent, seeder)
 	reader := leecherTorrent.NewReader()
 	defer reader.Close()
 	reader.SetReadahead(0)
@@ -827,12 +804,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	if ps.Cancel {
 		leecherGreeting.CancelPieces(0, leecherGreeting.NumPieces())
 	}
-	leecherGreeting.AddPeers([]Peer{
-		Peer{
-			IP:   missinggo.AddrIP(seeder.ListenAddr()),
-			Port: missinggo.AddrPort(seeder.ListenAddr()),
-		},
-	})
+	addClientPeer(leecherGreeting, seeder)
 	completes := make(map[int]bool, 3)
 values:
 	for {

@@ -952,3 +952,67 @@ func TestClientDynamicListenPortNoProtocols(t *testing.T) {
 	t.Log(cl.listenAddr)
 	assert.Nil(t, cl.ListenAddr())
 }
+
+func addClientPeer(t *Torrent, cl *Client) {
+	t.AddPeers([]Peer{
+		Peer{
+			IP:   missinggo.AddrIP(cl.ListenAddr()),
+			Port: missinggo.AddrPort(cl.ListenAddr()),
+		},
+	})
+}
+
+func printConnPeerCounts(t *Torrent) {
+	t.cl.mu.Lock()
+	log.Println(len(t.conns), len(t.peers))
+	t.cl.mu.Unlock()
+}
+
+func totalConns(tts []*Torrent) (ret int) {
+	for _, tt := range tts {
+		tt.cl.mu.Lock()
+		ret += len(tt.conns)
+		tt.cl.mu.Unlock()
+	}
+	return
+}
+
+func TestSetMaxEstablishedConn(t *testing.T) {
+	var tts []*Torrent
+	ih := testutil.GreetingMetaInfo().Info.Hash()
+	cfg := TestingConfig
+	cfg.DisableUTP = true
+	for i := range iter.N(3) {
+		cl, err := NewClient(&cfg)
+		require.NoError(t, err)
+		defer cl.Close()
+		tt, _ := cl.AddTorrentInfoHash(ih)
+		tt.SetMaxEstablishedConns(2)
+		testutil.ExportStatusWriter(cl, fmt.Sprintf("%d", i))
+		tts = append(tts, tt)
+	}
+	addPeers := func() {
+		for i, tt := range tts {
+			for _, _tt := range tts[:i] {
+				addClientPeer(tt, _tt.cl)
+			}
+		}
+	}
+	waitTotalConns := func(num int) {
+		for totalConns(tts) != num {
+			time.Sleep(time.Millisecond)
+		}
+	}
+	addPeers()
+	waitTotalConns(6)
+	tts[0].SetMaxEstablishedConns(1)
+	waitTotalConns(4)
+	tts[0].SetMaxEstablishedConns(0)
+	waitTotalConns(2)
+	tts[0].SetMaxEstablishedConns(1)
+	addPeers()
+	waitTotalConns(4)
+	tts[0].SetMaxEstablishedConns(2)
+	addPeers()
+	waitTotalConns(6)
+}

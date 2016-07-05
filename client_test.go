@@ -306,6 +306,8 @@ type testClientTransferParams struct {
 	SeederStorage                       func(string) storage.Client
 }
 
+// Creates a seeder and a leecher, and ensures the data transfers when a read
+// is attempted on the leecher.
 func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
@@ -322,7 +324,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if ps.ExportClientStatus {
 		testutil.ExportStatusWriter(seeder, "s")
 	}
-	_, new, err := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	seederTorrent, new, err := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	require.NoError(t, err)
 	assert.True(t, new)
 	leecherDataDir, err := ioutil.TempDir("", "")
@@ -362,14 +364,24 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if ps.SetReadahead {
 		r.SetReadahead(ps.Readahead)
 	}
-	for range iter.N(2) {
-		pos, err := r.Seek(0, os.SEEK_SET)
-		assert.NoError(t, err)
-		assert.EqualValues(t, 0, pos)
-		_greeting, err := ioutil.ReadAll(r)
-		assert.NoError(t, err)
-		assert.EqualValues(t, testutil.GreetingFileContents, _greeting)
-	}
+	assertReadAllGreeting(t, r)
+	// After one read through, we can assume certain torrent statistics.
+	assert.EqualValues(t, 13, seederTorrent.Stats().DataBytesSent)
+	assert.EqualValues(t, 8, seederTorrent.Stats().ChunksSent)
+	// This is not a strict requirement. It is however interesting to follow.
+	assert.EqualValues(t, 261, seederTorrent.Stats().BytesSent)
+	// Read through again for the cases where the torrent data size exceed the
+	// size of the cache.
+	assertReadAllGreeting(t, r)
+}
+
+func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
+	pos, err := r.Seek(0, os.SEEK_SET)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 0, pos)
+	_greeting, err := ioutil.ReadAll(r)
+	assert.NoError(t, err)
+	assert.EqualValues(t, testutil.GreetingFileContents, _greeting)
 }
 
 // Check that after completing leeching, a leecher transitions to a seeding

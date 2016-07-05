@@ -44,6 +44,7 @@ type connection struct {
 	uTP       bool
 	closed    missinggo.Event
 
+	stats                  ConnStats
 	UnwantedChunksReceived int
 	UsefulChunksReceived   int
 	chunksSent             int
@@ -425,6 +426,8 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 				panic("short write")
 			}
 			cn.mu().Lock()
+			cn.wroteMsg(msg)
+			cn.wroteBytes(b)
 		}
 		cn.outgoingUnbufferedMessagesNotEmpty.Clear()
 		cn.mu().Unlock()
@@ -639,4 +642,14 @@ func (c *connection) requestPendingMetadata() {
 	for _, i := range rand.Perm(len(pending)) {
 		c.requestMetadataPiece(pending[i])
 	}
+}
+
+func (cn *connection) wroteMsg(msg pp.Message) {
+	cn.stats.wroteMsg(msg)
+	cn.t.stats.wroteMsg(msg)
+}
+
+func (cn *connection) wroteBytes(b []byte) {
+	cn.stats.wroteBytes(b)
+	cn.t.stats.wroteBytes(b)
 }

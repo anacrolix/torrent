@@ -93,6 +93,7 @@ type Torrent struct {
 	completedPieces bitmap.Bitmap
 
 	connPieceInclinationPool sync.Pool
+	stats                    TorrentStats
 }
 
 func (t *Torrent) setDisplayName(dn string) {
@@ -1267,4 +1268,8 @@ func (t *Torrent) addPeers(peers []Peer) {
 		}
 		t.addPeer(p)
 	}
+}
+
+func (t *Torrent) Stats() TorrentStats {
+	return t.stats
 }

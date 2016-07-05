@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"sort"
 	"sync"
 	"time"
 
@@ -134,11 +133,11 @@ func (t *Torrent) addrActive(addr string) bool {
 	return false
 }
 
-func (t *Torrent) worstConns() (wcs *worstConns) {
-	wcs = &worstConns{make([]*connection, 0, len(t.conns))}
+func (t *Torrent) worstUnclosedConns() (ret []*connection) {
+	ret = make([]*connection, 0, len(t.conns))
 	for _, c := range t.conns {
 		if !c.closed.IsSet() {
-			wcs.c = append(wcs.c, c)
+			ret = append(ret, c)
 		}
 	}
 	return
@@ -443,7 +442,7 @@ func (t *Torrent) writeStatus(w io.Writer, cl *Client) {
 	fmt.Fprintf(w, "Pending peers: %d\n", len(t.peers))
 	fmt.Fprintf(w, "Half open: %d\n", len(t.halfOpen))
 	fmt.Fprintf(w, "Active peers: %d\n", len(t.conns))
-	sort.Sort(&worstConns{t.conns})
+	missinggo.Sort(t.conns, worseConn)
 	for i, c := range t.conns {
 		fmt.Fprintf(w, "%2d. ", i+1)
 		c.WriteStatus(w, t)
@@ -733,9 +732,12 @@ func (t *Torrent) extentPieces(off, _len int64) (pieces []int) {
 	return
 }
 
+// The worst connection is one that hasn't been sent, or sent anything useful
+// for the longest. A bad connection is one that usually sends us unwanted
+// pieces, or has been in worser half of the established connections for more
+// than a minute.
 func (t *Torrent) worstBadConn() *connection {
-	wcs := t.worstConns()
-	heap.Init(wcs)
+	wcs := missinggo.HeapFromSlice(t.worstUnclosedConns(), worseConn)
 	for wcs.Len() != 0 {
 		c := heap.Pop(wcs).(*connection)
 		if c.UnwantedChunksReceived >= 6 && c.UnwantedChunksReceived > c.UsefulChunksReceived {
@@ -1309,4 +1311,17 @@ func (t *Torrent) wantConns() bool {
 		return true
 	}
 	return t.worstBadConn() != nil
+}
+
+func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	oldMax = t.maxEstablishedConns
+	t.maxEstablishedConns = max
+	wcs := missinggo.HeapFromSlice(append([]*connection(nil), t.conns...), worseConn)
+	for len(t.conns) > t.maxEstablishedConns && wcs.Len() > 0 {
+		t.dropConnection(wcs.Pop().(*connection))
+	}
+	t.openNewConns()
+	return oldMax
 }

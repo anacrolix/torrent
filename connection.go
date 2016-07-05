@@ -669,3 +669,11 @@ func (c *connection) useful() bool {
 	}
 	return t.connHasWantedPieces(c)
 }
+
+func (c *connection) lastHelpful() time.Time {
+	lasts := []time.Time{c.lastUsefulChunkReceived}
+	if c.t.seeding() {
+		lasts = append(lasts, c.lastChunkSent)
+	}
+	return missinggo.Max(time.Time.Before, missinggo.ConvertToSliceOfEmptyInterface(lasts)...).(time.Time)
+}

@@ -61,6 +61,8 @@ func TestAddDropTorrent(t *testing.T) {
 	tt, new, err := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	require.NoError(t, err)
 	assert.True(t, new)
+	tt.SetMaxEstablishedConns(0)
+	tt.SetMaxEstablishedConns(1)
 	tt.Drop()
 }
 

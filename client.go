@@ -378,8 +378,6 @@ func (cl *Client) ipBlockRange(ip net.IP) (r iplist.Range, blocked bool) {
 }
 
 func (cl *Client) waitAccept() {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
 	for {
 		for _, t := range cl.torrents {
 			if t.wantConns() {
@@ -394,10 +392,14 @@ func (cl *Client) waitAccept() {
 }
 
 func (cl *Client) acceptConnections(l net.Listener, utp bool) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
 	for {
 		cl.waitAccept()
+		cl.mu.Unlock()
 		conn, err := l.Accept()
 		conn = pproffd.WrapNetConn(conn)
+		cl.mu.Lock()
 		if cl.closed.IsSet() {
 			if conn != nil {
 				conn.Close()
@@ -415,11 +417,9 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 		} else {
 			acceptTCP.Add(1)
 		}
-		cl.mu.RLock()
 		reject := cl.badPeerIPPort(
 			missinggo.AddrIP(conn.RemoteAddr()),
 			missinggo.AddrPort(conn.RemoteAddr()))
-		cl.mu.RUnlock()
 		if reject {
 			acceptReject.Add(1)
 			conn.Close()

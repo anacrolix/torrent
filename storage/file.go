@@ -11,12 +11,6 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-type pieceCompletion interface {
-	Get(metainfo.Piece) bool
-	Set(metainfo.Piece, bool)
-	Close()
-}
-
 // File-based storage for torrents, that isn't yet bound to a particular
 // torrent.
 type fileStorage struct {

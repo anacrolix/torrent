@@ -49,8 +49,8 @@ func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) Piece {
 }
 
 func (ts *mmapTorrentStorage) Close() error {
-	ts.span.Close()
-	return nil
+	ts.pc.Close()
+	return ts.span.Close()
 }
 
 type mmapStoragePiece struct {

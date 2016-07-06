@@ -953,6 +953,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 	var tts []*Torrent
 	ih := testutil.GreetingMetaInfo().Info.Hash()
 	cfg := TestingConfig
+	cfg.DisableUTP = true
 	for i := range iter.N(3) {
 		cl, err := NewClient(&cfg)
 		require.NoError(t, err)

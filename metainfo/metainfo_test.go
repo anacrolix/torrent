@@ -3,7 +3,9 @@ package metainfo
 import (
 	"io"
 	"io/ioutil"
+	"os"
 	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/anacrolix/missinggo"
@@ -67,4 +69,30 @@ func TestNumPieces(t *testing.T) {
 		assert.NoError(t, err)
 		assert.EqualValues(t, _case.NumPieces, info.NumPieces())
 	}
+}
+
+func touchFile(path string) (err error) {
+	f, err := os.Create(path)
+	if err != nil {
+		return
+	}
+	err = f.Close()
+	return
+}
+
+func TestBuildFromFilePathOrder(t *testing.T) {
+	td, err := ioutil.TempDir("", "anacrolix")
+	require.NoError(t, err)
+	defer os.RemoveAll(td)
+	require.NoError(t, touchFile(filepath.Join(td, "b")))
+	require.NoError(t, touchFile(filepath.Join(td, "a")))
+	info := Info{
+		PieceLength: 1,
+	}
+	require.NoError(t, info.BuildFromFilePath(td))
+	assert.EqualValues(t, []FileInfo{{
+		Path: []string{"a"},
+	}, {
+		Path: []string{"b"},
+	}}, info.Files)
 }

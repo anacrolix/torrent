@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anacrolix/missinggo"
+
 	"github.com/anacrolix/torrent/bencode"
 )
 
@@ -83,6 +85,9 @@ func (info *Info) BuildFromFilePath(root string) (err error) {
 	if err != nil {
 		return
 	}
+	missinggo.SortSlice(info.Files, func(l, r FileInfo) bool {
+		return strings.Join(l.Path, "/") < strings.Join(r.Path, "/")
+	})
 	err = info.GeneratePieces(func(fi FileInfo) (io.ReadCloser, error) {
 		return os.Open(filepath.Join(root, strings.Join(fi.Path, string(filepath.Separator))))
 	})

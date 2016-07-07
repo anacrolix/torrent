@@ -1475,6 +1475,8 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	}
 	cl.torrents[infoHash] = t
 	t.updateWantPeersEvent()
+	// Tickle Client.waitAccept, new torrent may want conns.
+	cl.event.Broadcast()
 	return
 }
 

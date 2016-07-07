@@ -442,7 +442,7 @@ func (t *Torrent) writeStatus(w io.Writer, cl *Client) {
 	fmt.Fprintf(w, "Pending peers: %d\n", len(t.peers))
 	fmt.Fprintf(w, "Half open: %d\n", len(t.halfOpen))
 	fmt.Fprintf(w, "Active peers: %d\n", len(t.conns))
-	missinggo.Sort(t.conns, worseConn)
+	missinggo.SortSlice(t.conns, worseConn)
 	for i, c := range t.conns {
 		fmt.Fprintf(w, "%2d. ", i+1)
 		c.WriteStatus(w, t)

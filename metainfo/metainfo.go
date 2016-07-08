@@ -163,10 +163,6 @@ func (info *Info) NumPieces() int {
 	return len(info.Pieces) / 20
 }
 
-func (info *InfoEx) Piece(i int) Piece {
-	return Piece{info, i}
-}
-
 func (info *Info) IsDir() bool {
 	return len(info.Files) != 0
 }

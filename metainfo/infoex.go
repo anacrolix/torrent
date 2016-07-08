@@ -41,3 +41,7 @@ func (ie *InfoEx) MarshalBencode() ([]byte, error) {
 	}
 	return ie.Bytes, nil
 }
+
+func (info *InfoEx) Piece(i int) Piece {
+	return Piece{info, i}
+}

@@ -14,48 +14,50 @@ import (
 // File-based storage for torrents, that isn't yet bound to a particular
 // torrent.
 type fileStorage struct {
-	baseDir    string
-	completion pieceCompletion
+	baseDir string
 }
 
 func NewFile(baseDir string) Client {
 	return &fileStorage{
-		baseDir:    baseDir,
-		completion: pieceCompletionForDir(baseDir),
+		baseDir: baseDir,
 	}
 }
 
 func (fs *fileStorage) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
-	return fileTorrentStorage{fs}, nil
+	return &fileTorrentStorage{
+		fs,
+		pieceCompletionForDir(fs.baseDir),
+	}, nil
 }
 
 // File-based torrent storage, not yet bound to a Torrent.
 type fileTorrentStorage struct {
-	*fileStorage
+	fs         *fileStorage
+	completion pieceCompletion
 }
 
-func (fs *fileStorage) Piece(p metainfo.Piece) Piece {
+func (fts *fileTorrentStorage) Piece(p metainfo.Piece) Piece {
 	// Create a view onto the file-based torrent storage.
 	_io := &fileStorageTorrent{
 		p.Info,
-		fs.baseDir,
+		fts.fs.baseDir,
 	}
 	// Return the appropriate segments of this.
 	return &fileStoragePiece{
-		fs,
+		fts,
 		p,
 		missinggo.NewSectionWriter(_io, p.Offset(), p.Length()),
 		io.NewSectionReader(_io, p.Offset(), p.Length()),
 	}
 }
 
-func (fs *fileStorage) Close() error {
+func (fs *fileTorrentStorage) Close() error {
 	fs.completion.Close()
 	return nil
 }
 
 type fileStoragePiece struct {
-	*fileStorage
+	*fileTorrentStorage
 	p metainfo.Piece
 	io.WriterAt
 	io.ReaderAt

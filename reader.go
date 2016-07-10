@@ -3,6 +3,7 @@ package torrent
 import (
 	"errors"
 	"io"
+	"log"
 	"os"
 	"sync"
 
@@ -176,7 +177,7 @@ func (r *Reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 			err = nil
 			return
 		}
-		// log.Printf("%s: error reading from torrent storage pos=%d: %s", r.t, pos, err)
+		log.Printf("%s: error reading from torrent storage pos=%d: %s", r.t, pos, err)
 		r.t.cl.mu.Lock()
 		r.t.updateAllPieceCompletions()
 		r.t.updatePiecePriorities()

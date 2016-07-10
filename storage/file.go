@@ -26,6 +26,7 @@ func NewFile(baseDir string) Client {
 func (fs *fileStorage) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
 	return &fileTorrentStorage{
 		fs,
+		&info.Info,
 		pieceCompletionForDir(fs.baseDir),
 	}, nil
 }
@@ -33,15 +34,13 @@ func (fs *fileStorage) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
 // File-based torrent storage, not yet bound to a Torrent.
 type fileTorrentStorage struct {
 	fs         *fileStorage
+	info       *metainfo.Info
 	completion pieceCompletion
 }
 
 func (fts *fileTorrentStorage) Piece(p metainfo.Piece) Piece {
 	// Create a view onto the file-based torrent storage.
-	_io := &fileStorageTorrent{
-		p.Info,
-		fts.fs.baseDir,
-	}
+	_io := fileStorageTorrent{fts}
 	// Return the appropriate segments of this.
 	return &fileStoragePiece{
 		fts,
@@ -56,31 +55,14 @@ func (fs *fileTorrentStorage) Close() error {
 	return nil
 }
 
-type fileStoragePiece struct {
-	*fileTorrentStorage
-	p metainfo.Piece
-	io.WriterAt
-	io.ReaderAt
-}
-
-func (fs *fileStoragePiece) GetIsComplete() bool {
-	return fs.completion.Get(fs.p)
-}
-
-func (fs *fileStoragePiece) MarkComplete() error {
-	fs.completion.Set(fs.p, true)
-	return nil
-}
-
 // Exposes file-based storage of a torrent, as one big ReadWriterAt.
 type fileStorageTorrent struct {
-	info    *metainfo.InfoEx
-	baseDir string
+	fts *fileTorrentStorage
 }
 
 // Returns EOF on short or missing file.
 func (fst *fileStorageTorrent) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err error) {
-	f, err := os.Open(fst.fileInfoName(fi))
+	f, err := os.Open(fst.fts.fileInfoName(fi))
 	if os.IsNotExist(err) {
 		// File missing is treated the same as a short file.
 		err = io.EOF
@@ -108,8 +90,8 @@ func (fst *fileStorageTorrent) readFileAt(fi metainfo.FileInfo, b []byte, off in
 }
 
 // Only returns EOF at the end of the torrent. Premature EOF is ErrUnexpectedEOF.
-func (fst *fileStorageTorrent) ReadAt(b []byte, off int64) (n int, err error) {
-	for _, fi := range fst.info.UpvertedFiles() {
+func (fst fileStorageTorrent) ReadAt(b []byte, off int64) (n int, err error) {
+	for _, fi := range fst.fts.info.UpvertedFiles() {
 		for off < fi.Length {
 			n1, err1 := fst.readFileAt(fi, b, off)
 			n += n1
@@ -136,8 +118,8 @@ func (fst *fileStorageTorrent) ReadAt(b []byte, off int64) (n int, err error) {
 	return
 }
 
-func (fst *fileStorageTorrent) WriteAt(p []byte, off int64) (n int, err error) {
-	for _, fi := range fst.info.UpvertedFiles() {
+func (fst fileStorageTorrent) WriteAt(p []byte, off int64) (n int, err error) {
+	for _, fi := range fst.fts.info.UpvertedFiles() {
 		if off >= fi.Length {
 			off -= fi.Length
 			continue
@@ -146,7 +128,7 @@ func (fst *fileStorageTorrent) WriteAt(p []byte, off int64) (n int, err error) {
 		if int64(n1) > fi.Length-off {
 			n1 = int(fi.Length - off)
 		}
-		name := fst.fileInfoName(fi)
+		name := fst.fts.fileInfoName(fi)
 		os.MkdirAll(filepath.Dir(name), 0770)
 		var f *os.File
 		f, err = os.OpenFile(name, os.O_WRONLY|os.O_CREATE, 0660)
@@ -168,6 +150,6 @@ func (fst *fileStorageTorrent) WriteAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (fst *fileStorageTorrent) fileInfoName(fi metainfo.FileInfo) string {
-	return filepath.Join(append([]string{fst.baseDir, fst.info.Name}, fi.Path...)...)
+func (fts *fileTorrentStorage) fileInfoName(fi metainfo.FileInfo) string {
+	return filepath.Join(append([]string{fts.fs.baseDir, fts.info.Name}, fi.Path...)...)
 }

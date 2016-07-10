@@ -238,10 +238,33 @@ func TestAddDropManyTorrents(t *testing.T) {
 	}
 }
 
+type FileCacheClientStorageFactoryParams struct {
+	Capacity    int64
+	SetCapacity bool
+	Wrapper     func(*filecache.Cache) storage.Client
+}
+
+func NewFileCacheClientStorageFactory(ps FileCacheClientStorageFactoryParams) storageFactory {
+	return func(dataDir string) storage.Client {
+		fc, err := filecache.NewCache(dataDir)
+		if err != nil {
+			panic(err)
+		}
+		if ps.SetCapacity {
+			fc.SetCapacity(ps.Capacity)
+		}
+		return ps.Wrapper(fc)
+	}
+}
+
+type storageFactory func(string) storage.Client
+
 func TestClientTransferDefault(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
-		ExportClientStatus:                  true,
-		LeecherFileCachePieceStorageFactory: fileCachePieceResourceStorage,
+		ExportClientStatus: true,
+		LeecherStorage: NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
+			Wrapper: fileCachePieceResourceStorage,
+		}),
 	})
 }
 
@@ -255,16 +278,18 @@ func fileCachePieceFileStorage(fc *filecache.Cache) storage.Client {
 
 func TestClientTransferSmallCache(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
-		SetLeecherStorageCapacity: true,
-		// Going below the piece length means it can't complete a piece so
-		// that it can be hashed.
-		LeecherStorageCapacity: 5,
-		SetReadahead:           true,
+		LeecherStorage: NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
+			SetCapacity: true,
+			// Going below the piece length means it can't complete a piece so
+			// that it can be hashed.
+			Capacity: 5,
+			Wrapper:  fileCachePieceResourceStorage,
+		}),
+		SetReadahead: true,
 		// Can't readahead too far or the cache will thrash and drop data we
 		// thought we had.
-		Readahead:                           0,
-		ExportClientStatus:                  true,
-		LeecherFileCachePieceStorageFactory: fileCachePieceResourceStorage,
+		Readahead:          0,
+		ExportClientStatus: true,
 	})
 }
 
@@ -279,17 +304,21 @@ func TestClientTransferVarious(t *testing.T) {
 		} {
 			for _, responsive := range []bool{false, true} {
 				testClientTransfer(t, testClientTransferParams{
-					Responsive:                          responsive,
-					SeederStorage:                       ss,
-					LeecherFileCachePieceStorageFactory: lsf,
+					Responsive:    responsive,
+					SeederStorage: ss,
+					LeecherStorage: NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
+						Wrapper: lsf,
+					}),
 				})
 				for _, readahead := range []int64{-1, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20} {
 					testClientTransfer(t, testClientTransferParams{
-						SeederStorage:                       ss,
-						Responsive:                          responsive,
-						SetReadahead:                        true,
-						Readahead:                           readahead,
-						LeecherFileCachePieceStorageFactory: lsf,
+						SeederStorage: ss,
+						Responsive:    responsive,
+						SetReadahead:  true,
+						Readahead:     readahead,
+						LeecherStorage: NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
+							Wrapper: lsf,
+						}),
 					})
 				}
 			}
@@ -298,14 +327,12 @@ func TestClientTransferVarious(t *testing.T) {
 }
 
 type testClientTransferParams struct {
-	Responsive                          bool
-	Readahead                           int64
-	SetReadahead                        bool
-	ExportClientStatus                  bool
-	SetLeecherStorageCapacity           bool
-	LeecherStorageCapacity              int64
-	LeecherFileCachePieceStorageFactory func(*filecache.Cache) storage.Client
-	SeederStorage                       func(string) storage.Client
+	Responsive         bool
+	Readahead          int64
+	SetReadahead       bool
+	ExportClientStatus bool
+	LeecherStorage     func(string) storage.Client
+	SeederStorage      func(string) storage.Client
 }
 
 // Creates a seeder and a leecher, and ensures the data transfers when a read
@@ -332,12 +359,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
-	fc, err := filecache.NewCache(leecherDataDir)
-	require.NoError(t, err)
-	if ps.SetLeecherStorageCapacity {
-		fc.SetCapacity(ps.LeecherStorageCapacity)
-	}
-	cfg.DefaultStorage = ps.LeecherFileCachePieceStorageFactory(fc)
+	cfg.DefaultStorage = ps.LeecherStorage(leecherDataDir)
 	leecher, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer leecher.Close()

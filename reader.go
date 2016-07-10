@@ -177,7 +177,7 @@ func (r *Reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 			err = nil
 			return
 		}
-		log.Printf("%s: error reading from torrent storage pos=%d: %s", r.t, pos, err)
+		log.Printf("error reading torrent %q piece %d offset %d, %d bytes: %s", r.t, pi, po, len(b1), err)
 		r.t.cl.mu.Lock()
 		r.t.updateAllPieceCompletions()
 		r.t.updatePiecePriorities()

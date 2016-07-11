@@ -943,7 +943,6 @@ func TestClientDynamicListenPortNoProtocols(t *testing.T) {
 	cl, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer cl.Close()
-	t.Log(cl.listenAddr)
 	assert.Nil(t, cl.ListenAddr())
 }
 

@@ -10,12 +10,12 @@ type mapPieceCompletion struct {
 
 func (mapPieceCompletion) Close() {}
 
-func (me *mapPieceCompletion) Get(p metainfo.Piece) bool {
+func (me *mapPieceCompletion) Get(p metainfo.Piece) (bool, error) {
 	_, ok := me.m[p.Key()]
-	return ok
+	return ok, nil
 }
 
-func (me *mapPieceCompletion) Set(p metainfo.Piece, b bool) {
+func (me *mapPieceCompletion) Set(p metainfo.Piece, b bool) error {
 	if b {
 		if me.m == nil {
 			me.m = make(map[metainfo.PieceKey]struct{})
@@ -24,4 +24,5 @@ func (me *mapPieceCompletion) Set(p metainfo.Piece, b bool) {
 	} else {
 		delete(me.m, p.Key())
 	}
+	return nil
 }

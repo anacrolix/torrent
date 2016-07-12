@@ -58,8 +58,9 @@ type mmapStoragePiece struct {
 	io.WriterAt
 }
 
-func (sp mmapStoragePiece) GetIsComplete() bool {
-	return sp.pc.Get(sp.p)
+func (sp mmapStoragePiece) GetIsComplete() (ret bool) {
+	ret, _ = sp.pc.Get(sp.p)
+	return
 }
 
 func (sp mmapStoragePiece) MarkComplete() error {

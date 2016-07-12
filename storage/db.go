@@ -26,25 +26,19 @@ func newDBPieceCompletion(dir string) (ret *dbPieceCompletion, err error) {
 	return
 }
 
-func (me *dbPieceCompletion) Get(p metainfo.Piece) (ret bool) {
+func (me *dbPieceCompletion) Get(p metainfo.Piece) (ret bool, err error) {
 	row := me.db.QueryRow(`select exists(select * from completed where infohash=? and "index"=?)`, p.Info.Hash().HexString(), p.Index())
-	err := row.Scan(&ret)
-	if err != nil {
-		panic(err)
-	}
+	err = row.Scan(&ret)
 	return
 }
 
-func (me *dbPieceCompletion) Set(p metainfo.Piece, b bool) {
-	var err error
+func (me *dbPieceCompletion) Set(p metainfo.Piece, b bool) (err error) {
 	if b {
 		_, err = me.db.Exec(`insert into completed (infohash, "index") values (?, ?)`, p.Info.Hash().HexString(), p.Index())
 	} else {
 		_, err = me.db.Exec(`delete from completed where infohash=? and "index"=?`, p.Info.Hash().HexString(), p.Index())
 	}
-	if err != nil {
-		panic(err)
-	}
+	return
 }
 
 func (me *dbPieceCompletion) Close() {

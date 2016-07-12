@@ -14,10 +14,10 @@ type fileStoragePiece struct {
 	r io.ReaderAt
 }
 
-func (fs *fileStoragePiece) GetIsComplete() (ret bool) {
-	ret = fs.completion.Get(fs.p)
-	if !ret {
-		return
+func (fs *fileStoragePiece) GetIsComplete() bool {
+	ret, err := fs.completion.Get(fs.p)
+	if err != nil || !ret {
+		return false
 	}
 	// If it's allegedly complete, check that its constituent files have the
 	// necessary length.
@@ -29,11 +29,11 @@ func (fs *fileStoragePiece) GetIsComplete() (ret bool) {
 		}
 	}
 	if ret {
-		return
+		return true
 	}
 	// The completion was wrong, fix it.
 	fs.completion.Set(fs.p, false)
-	return
+	return false
 }
 
 func (fs *fileStoragePiece) MarkComplete() error {

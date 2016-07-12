@@ -441,7 +441,7 @@ func (t *Torrent) writeStatus(w io.Writer, cl *Client) {
 	func() {
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		fmt.Fprintf(tw, "    URL\tNext announce\tLast announce\n")
-		for _, ta := range slices.Sort(slices.FromElems(t.trackerAnnouncers), func(l, r *trackerScraper) bool {
+		for _, ta := range slices.Sort(slices.FromMapElems(t.trackerAnnouncers), func(l, r *trackerScraper) bool {
 			return l.url < r.url
 		}).([]*trackerScraper) {
 			fmt.Fprintf(tw, "    %s\n", ta.statusLine())
@@ -749,7 +749,7 @@ func (t *Torrent) extentPieces(off, _len int64) (pieces []int) {
 // pieces, or has been in worser half of the established connections for more
 // than a minute.
 func (t *Torrent) worstBadConn() *connection {
-	wcs := slices.AsHeap(t.worstUnclosedConns(), worseConn)
+	wcs := slices.HeapInterface(t.worstUnclosedConns(), worseConn)
 	for wcs.Len() != 0 {
 		c := heap.Pop(wcs).(*connection)
 		if c.UnwantedChunksReceived >= 6 && c.UnwantedChunksReceived > c.UsefulChunksReceived {
@@ -1339,7 +1339,7 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	defer t.cl.mu.Unlock()
 	oldMax = t.maxEstablishedConns
 	t.maxEstablishedConns = max
-	wcs := slices.AsHeap(append([]*connection(nil), t.conns...), worseConn)
+	wcs := slices.HeapInterface(append([]*connection(nil), t.conns...), worseConn)
 	for len(t.conns) > t.maxEstablishedConns && wcs.Len() > 0 {
 		t.dropConnection(wcs.Pop().(*connection))
 	}

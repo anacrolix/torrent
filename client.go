@@ -182,7 +182,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 			w.WriteString("<missing metainfo>")
 		}
 		fmt.Fprint(w, "\n")
-		t.writeStatus(w, cl)
+		t.writeStatus(w)
 		fmt.Fprintln(w)
 	}
 }

@@ -205,6 +205,18 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 	return
 }
 
+func (t *Torrent) makePieces() {
+	hashes := infoPieceHashes(&t.info.Info)
+	t.pieces = make([]piece, len(hashes))
+	for i, hash := range hashes {
+		piece := &t.pieces[i]
+		piece.t = t
+		piece.index = i
+		piece.noPendingWrites.L = &piece.pendingWritesMutex
+		missinggo.CopyExact(piece.Hash[:], hash)
+	}
+}
+
 // Called when metadata for a torrent becomes available.
 func (t *Torrent) setInfoBytes(b []byte) error {
 	if t.haveInfo() {
@@ -237,15 +249,7 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	}
 	t.metadataBytes = b
 	t.metadataCompletedChunks = nil
-	hashes := infoPieceHashes(&t.info.Info)
-	t.pieces = make([]piece, len(hashes))
-	for i, hash := range hashes {
-		piece := &t.pieces[i]
-		piece.t = t
-		piece.index = i
-		piece.noPendingWrites.L = &piece.pendingWritesMutex
-		missinggo.CopyExact(piece.Hash[:], hash)
-	}
+	t.makePieces()
 	for _, conn := range t.conns {
 		if err := conn.setNumPieces(t.numPieces()); err != nil {
 			log.Printf("closing connection: %s", err)

@@ -1,7 +1,9 @@
 package torrent
 
 import (
-	"log"
+	"bytes"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/anacrolix/missinggo"
@@ -14,8 +16,38 @@ import (
 type trackerScraper struct {
 	url string
 	// Causes the trackerScraper to stop running.
-	stop missinggo.Event
-	t    *Torrent
+	stop         missinggo.Event
+	t            *Torrent
+	lastAnnounce trackerAnnounceResult
+}
+
+func (ts *trackerScraper) statusLine() string {
+	var w bytes.Buffer
+	fmt.Fprintf(&w, "%q\t%s\t%s",
+		ts.url,
+		func() string {
+			// return ts.lastAnnounce.Completed.Add(ts.lastAnnounce.Interval).Format("2006-01-02 15:04:05 -0700 MST")
+			na := ts.lastAnnounce.Completed.Add(ts.lastAnnounce.Interval).Sub(time.Now())
+			if na > 0 {
+				return na.String()
+			} else {
+				return "anytime"
+			}
+		}(),
+		func() string {
+			if ts.lastAnnounce.Err != nil {
+				return ts.lastAnnounce.Err.Error()
+			}
+			return fmt.Sprintf("%d peers", ts.lastAnnounce.NumPeers)
+		}())
+	return w.String()
+}
+
+type trackerAnnounceResult struct {
+	Err       error
+	NumPeers  int
+	Interval  time.Duration
+	Completed time.Time
 }
 
 func trackerToTorrentPeers(ps []tracker.Peer) (ret []Peer) {
@@ -32,26 +64,32 @@ func trackerToTorrentPeers(ps []tracker.Peer) (ret []Peer) {
 
 // Return how long to wait before trying again. For most errors, we return 5
 // minutes, a relatively quick turn around for DNS changes.
-func (me *trackerScraper) announce() time.Duration {
+func (me *trackerScraper) announce() (ret trackerAnnounceResult) {
+	defer func() {
+		ret.Completed = time.Now()
+	}()
+	ret.Interval = 5 * time.Minute
 	blocked, urlToUse, host, err := me.t.cl.prepareTrackerAnnounceUnlocked(me.url)
 	if err != nil {
-		log.Printf("error preparing announce to %q: %s", me.url, err)
-		return 5 * time.Minute
+		ret.Err = err
+		return
 	}
 	if blocked {
-		log.Printf("announce to tracker %q blocked by IP", me.url)
-		return 5 * time.Minute
+		ret.Err = errors.New("blocked by IP")
+		return
 	}
 	me.t.cl.mu.Lock()
 	req := me.t.announceRequest()
 	me.t.cl.mu.Unlock()
 	res, err := tracker.AnnounceHost(urlToUse, &req, host)
 	if err != nil {
-		// log.Printf("error announcing %s %q to %q: %s", me.t.InfoHash().HexString(), me.t.Name(), me.url, err)
-		return 5 * time.Minute
+		ret.Err = err
+		return
 	}
 	me.t.AddPeers(trackerToTorrentPeers(res.Peers))
-	return time.Duration(res.Interval) * time.Second
+	ret.NumPeers = len(res.Peers)
+	ret.Interval = time.Duration(res.Interval) * time.Second
+	return
 }
 
 func (me *trackerScraper) Run() {
@@ -64,7 +102,12 @@ func (me *trackerScraper) Run() {
 		case <-me.t.wantPeersEvent.LockedChan(&me.t.cl.mu):
 		}
 
-		intervalChan := time.After(me.announce())
+		ar := me.announce()
+		me.t.cl.mu.Lock()
+		me.lastAnnounce = ar
+		me.t.cl.mu.Unlock()
+
+		intervalChan := time.After(ar.Completed.Add(ar.Interval).Sub(time.Now()))
 
 		select {
 		case <-me.t.closed.LockedChan(&me.t.cl.mu):

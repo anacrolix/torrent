@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"text/tabwriter"
 	"time"
 
 	"github.com/anacrolix/missinggo"
@@ -436,11 +437,17 @@ func (t *Torrent) writeStatus(w io.Writer, cl *Client) {
 	})
 	fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "Trackers: ")
-	for _url := range t.trackerAnnouncers {
-		fmt.Fprintf(w, "%q ", _url)
-	}
-	fmt.Fprintf(w, "\n")
+	fmt.Fprintf(w, "Trackers:\n")
+	func() {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		fmt.Fprintf(tw, "    URL\tNext announce\tLast announce\n")
+		for _, ta := range slices.Sort(slices.FromElems(t.trackerAnnouncers), func(l, r *trackerScraper) bool {
+			return l.url < r.url
+		}).([]*trackerScraper) {
+			fmt.Fprintf(tw, "    %s\n", ta.statusLine())
+		}
+		tw.Flush()
+	}()
 
 	fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
 

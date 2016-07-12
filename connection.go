@@ -100,15 +100,15 @@ func (cn *connection) mu() sync.Locker {
 	return &cn.t.cl.mu
 }
 
-func (cl *Client) newConnection(nc net.Conn) (c *connection) {
+func newConnection(nc net.Conn, l sync.Locker) (c *connection) {
 	c = &connection{
 		conn: nc,
-		rw:   nc,
 
 		Choked:          true,
 		PeerChoked:      true,
 		PeerMaxRequests: 250,
 	}
+	c.rw = connStatsReadWriter{nc, l, c}
 	return
 }
 
@@ -427,8 +427,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 				panic("short write")
 			}
 			cn.mu().Lock()
-			cn.wroteMsg(msg)
-			cn.wroteBytes(b)
+			cn.wroteMsg(&msg)
 		}
 		cn.outgoingUnbufferedMessagesNotEmpty.Clear()
 		cn.mu().Unlock()
@@ -645,14 +644,28 @@ func (c *connection) requestPendingMetadata() {
 	}
 }
 
-func (cn *connection) wroteMsg(msg pp.Message) {
+func (cn *connection) wroteMsg(msg *pp.Message) {
 	cn.stats.wroteMsg(msg)
 	cn.t.stats.wroteMsg(msg)
 }
 
-func (cn *connection) wroteBytes(b []byte) {
-	cn.stats.wroteBytes(b)
-	cn.t.stats.wroteBytes(b)
+func (cn *connection) readMsg(msg *pp.Message) {
+	cn.stats.readMsg(msg)
+	cn.t.stats.readMsg(msg)
+}
+
+func (cn *connection) wroteBytes(n int64) {
+	cn.stats.wroteBytes(n)
+	if cn.t != nil {
+		cn.t.stats.wroteBytes(n)
+	}
+}
+
+func (cn *connection) readBytes(n int64) {
+	cn.stats.readBytes(n)
+	if cn.t != nil {
+		cn.t.stats.readBytes(n)
+	}
 }
 
 // Returns whether the connection is currently useful to us. We're seeding and

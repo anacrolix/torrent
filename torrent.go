@@ -1267,6 +1267,8 @@ func (t *Torrent) addPeers(peers []Peer) {
 }
 
 func (t *Torrent) Stats() TorrentStats {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
 	return t.stats
 }
 
@@ -1300,6 +1302,13 @@ func (t *Torrent) addConnection(c *connection) bool {
 		panic(len(t.conns))
 	}
 	t.conns = append(t.conns, c)
+	if c.t != nil {
+		panic("connection already associated with a torrent")
+	}
+	// Reconcile bytes transferred before connection was associated with a
+	// torrent.
+	t.stats.wroteBytes(c.stats.BytesWritten)
+	t.stats.readBytes(c.stats.BytesRead)
 	c.t = t
 	return true
 }

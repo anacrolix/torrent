@@ -385,10 +385,15 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}
 	assertReadAllGreeting(t, r)
 	// After one read through, we can assume certain torrent statistics.
-	assert.EqualValues(t, 13, seederTorrent.Stats().DataBytesSent)
-	assert.EqualValues(t, 8, seederTorrent.Stats().ChunksSent)
-	// This is not a strict requirement. It is however interesting to follow.
-	assert.EqualValues(t, 261, seederTorrent.Stats().BytesSent)
+	assert.EqualValues(t, 13, seederTorrent.Stats().DataBytesWritten)
+	assert.EqualValues(t, 8, seederTorrent.Stats().ChunksWritten)
+	// These are not a strict requirement. It is however interesting to
+	// follow.
+	t.Logf("%#v", seederTorrent.Stats())
+	assert.EqualValues(t, 13, seederTorrent.Stats().DataBytesWritten)
+	assert.EqualValues(t, 8, seederTorrent.Stats().ChunksWritten)
+	assert.EqualValues(t, 13, leecherGreeting.Stats().DataBytesRead)
+	assert.EqualValues(t, 8, leecherGreeting.Stats().ChunksRead)
 	// Read through again for the cases where the torrent data size exceeds
 	// the size of the cache.
 	assertReadAllGreeting(t, r)

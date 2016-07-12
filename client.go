@@ -435,7 +435,7 @@ func (cl *Client) incomingConnection(nc net.Conn, utp bool) {
 	if tc, ok := nc.(*net.TCPConn); ok {
 		tc.SetLinger(0)
 	}
-	c := cl.newConnection(nc)
+	c := newConnection(nc, &cl.mu)
 	c.Discovery = peerSourceIncoming
 	c.uTP = utp
 	cl.runReceivedConn(c)
@@ -575,7 +575,7 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
 // Performs initiator handshakes and returns a connection. Returns nil
 // *connection if no connection for valid reasons.
 func (cl *Client) handshakesConnection(nc net.Conn, t *Torrent, encrypted, utp bool) (c *connection, err error) {
-	c = cl.newConnection(nc)
+	c = newConnection(nc, &cl.mu)
 	c.encrypted = encrypted
 	c.uTP = utp
 	err = nc.SetDeadline(time.Now().Add(handshakesTimeout))
@@ -1153,6 +1153,7 @@ func (cl *Client) connectionLoop(t *Torrent, c *connection) error {
 		if err != nil {
 			return err
 		}
+		c.readMsg(&msg)
 		c.lastMessageReceived = time.Now()
 		if msg.Keepalive {
 			receivedKeepalives.Add(1)

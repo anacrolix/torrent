@@ -385,8 +385,6 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}
 	assertReadAllGreeting(t, r)
 	// After one read through, we can assume certain torrent statistics.
-	assert.EqualValues(t, 13, seederTorrent.Stats().DataBytesWritten)
-	assert.EqualValues(t, 8, seederTorrent.Stats().ChunksWritten)
 	// These are not a strict requirement. It is however interesting to
 	// follow.
 	t.Logf("%#v", seederTorrent.Stats())

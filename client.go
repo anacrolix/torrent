@@ -21,6 +21,7 @@ import (
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/pproffd"
 	"github.com/anacrolix/missinggo/pubsub"
+	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
 	"github.com/dustin/go-humanize"
@@ -1779,7 +1780,7 @@ func (cl *Client) AddMagnet(uri string) (T *Torrent, err error) {
 func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (T *Torrent, err error) {
 	T, _, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	var ss []string
-	missinggo.CastSlice(&ss, mi.Nodes)
+	slices.MakeInto(&ss, mi.Nodes)
 	cl.AddDHTNodes(ss)
 	return
 }

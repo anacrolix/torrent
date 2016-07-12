@@ -18,6 +18,7 @@ import (
 	"github.com/anacrolix/missinggo/itertools"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
+	"github.com/anacrolix/missinggo/slices"
 	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -442,7 +443,7 @@ func (t *Torrent) writeStatus(w io.Writer, cl *Client) {
 	fmt.Fprintf(w, "Pending peers: %d\n", len(t.peers))
 	fmt.Fprintf(w, "Half open: %d\n", len(t.halfOpen))
 	fmt.Fprintf(w, "Active peers: %d\n", len(t.conns))
-	missinggo.SortSlice(t.conns, worseConn)
+	slices.Sort(t.conns, worseConn)
 	for i, c := range t.conns {
 		fmt.Fprintf(w, "%2d. ", i+1)
 		c.WriteStatus(w, t)
@@ -737,7 +738,7 @@ func (t *Torrent) extentPieces(off, _len int64) (pieces []int) {
 // pieces, or has been in worser half of the established connections for more
 // than a minute.
 func (t *Torrent) worstBadConn() *connection {
-	wcs := missinggo.HeapFromSlice(t.worstUnclosedConns(), worseConn)
+	wcs := slices.AsHeap(t.worstUnclosedConns(), worseConn)
 	for wcs.Len() != 0 {
 		c := heap.Pop(wcs).(*connection)
 		if c.UnwantedChunksReceived >= 6 && c.UnwantedChunksReceived > c.UsefulChunksReceived {
@@ -1318,7 +1319,7 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	defer t.cl.mu.Unlock()
 	oldMax = t.maxEstablishedConns
 	t.maxEstablishedConns = max
-	wcs := missinggo.HeapFromSlice(append([]*connection(nil), t.conns...), worseConn)
+	wcs := slices.AsHeap(append([]*connection(nil), t.conns...), worseConn)
 	for len(t.conns) > t.maxEstablishedConns && wcs.Len() > 0 {
 		t.dropConnection(wcs.Pop().(*connection))
 	}

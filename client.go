@@ -1922,28 +1922,6 @@ func (cl *Client) Stats() ClientStats {
 	return cl.stats
 }
 
-// Check if torrent respond to network actions.
-func (cl *Client) ActiveTorrent(t *Torrent) bool {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
-
-	return cl.activeTorrent(t)
-}
-
-func (cl *Client) activeTorrent(t *Torrent) bool {
-	if _, ok := cl.torrents[t.infoHash]; ok {
-		return true
-	}
-
-	return false
-}
-
-func (cl *Client) ActiveCount() int {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
-	return len(cl.torrents)
-}
-
 // Run file consistency checks. For active torrent, pause it, then resume
 // download. For Paused torrent keep it paused.
 func (cl *Client) CheckTorrent(t *Torrent, rb *bitmap.Bitmap) {

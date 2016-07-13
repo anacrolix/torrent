@@ -234,7 +234,7 @@ func (t *Torrent) RemoveTracker(addr string) {
 type Tracker struct {
 	Url          string
 	Peers        int
-	Err          string
+	Err          error
 	LastAnnounce int64
 	NextAnnounce int64
 }
@@ -250,9 +250,7 @@ func (t *Torrent) Trackers() []Tracker {
 			T := Tracker{Url: trackerURL}
 			if trackerScraper, ok := t.trackerAnnouncers[trackerURL]; ok {
 				T.Peers = trackerScraper.lastAnnounce.NumPeers
-				if trackerScraper.lastAnnounce.Err != nil {
-					T.Err = trackerScraper.lastAnnounce.Err.Error()
-				}
+				T.Err = trackerScraper.lastAnnounce.Err
 				T.LastAnnounce = int64(trackerScraper.lastAnnounce.Completed.Unix())
 				T.NextAnnounce = trackerScraper.lastAnnounce.NextAnnounce
 			}
@@ -260,13 +258,9 @@ func (t *Torrent) Trackers() []Tracker {
 		}
 	}
 
-	de := ""
-	if t.stats.ErrDHT != nil {
-		de = t.stats.ErrDHT.Error()
-	}
-	tt = append(tt, Tracker{"DHT", t.stats.PeersDHT, de, t.stats.LastAnnounceDHT, 0})
+	tt = append(tt, Tracker{"DHT", t.stats.PeersDHT, t.stats.ErrDHT, t.stats.LastAnnounceDHT, 0})
 
-	tt = append(tt, Tracker{"PEX", t.stats.PeersPEX, "", 0, 0})
+	tt = append(tt, Tracker{"PEX", t.stats.PeersPEX, nil, 0, 0})
 
 	return tt
 }

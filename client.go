@@ -995,7 +995,7 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 						}
 						return
 					}(),
-					"v": extendedHandshakeClientVersion,
+					"v": ExtendedHandshakeClientVersion,
 					// No upload queue is implemented yet.
 					"reqq": 64,
 				}

@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+var (
+	ExtendedHandshakeClientVersion = extendedHandshakeClientVersion
+)
+
 const (
 	pieceHash        = crypto.SHA1
 	maxRequests      = 250    // Maximum pending requests we allow peers to send us.

@@ -28,6 +28,8 @@ func (ts *trackerScraper) statusLine() string {
 		func() string {
 			// return ts.lastAnnounce.Completed.Add(ts.lastAnnounce.Interval).Format("2006-01-02 15:04:05 -0700 MST")
 			na := ts.lastAnnounce.Completed.Add(ts.lastAnnounce.Interval).Sub(time.Now())
+			na /= time.Second
+			na *= time.Second
 			if na > 0 {
 				return na.String()
 			} else {
@@ -37,6 +39,9 @@ func (ts *trackerScraper) statusLine() string {
 		func() string {
 			if ts.lastAnnounce.Err != nil {
 				return ts.lastAnnounce.Err.Error()
+			}
+			if ts.lastAnnounce.Completed.IsZero() {
+				return "never"
 			}
 			return fmt.Sprintf("%d peers", ts.lastAnnounce.NumPeers)
 		}())

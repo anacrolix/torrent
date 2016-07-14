@@ -99,11 +99,17 @@ func (s *Server) Announce(infoHash string, port int, impliedPort bool) (*Announc
 	go func() {
 		disc.mu.Lock()
 		defer disc.mu.Unlock()
+		if disc.server.closed.IsSet() { // can be already closed, exit
+			return
+		}
 		for i, addr := range startAddrs {
 			if i != 0 {
 				disc.mu.Unlock()
 				time.Sleep(time.Millisecond)
 				disc.mu.Lock()
+				if disc.server.closed.IsSet() { // can be already closed, exit
+					return
+				}
 			}
 			disc.contact(addr)
 		}

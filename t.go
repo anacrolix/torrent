@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/pubsub"
 
 	"github.com/anacrolix/torrent/metainfo"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 // The torrent's infohash. This is fixed and cannot change. It uniquely
@@ -202,4 +204,171 @@ func (t *Torrent) AddTrackers(announceList [][]string) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	t.addTrackers(announceList)
+}
+
+func (t *Torrent) RemoveTracker(addr string) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+
+	nn := make([][]string, 0)
+
+	for _, tier := range t.metainfo.AnnounceList {
+		n := make([]string, 0)
+		for _, tracker := range tier {
+			if tracker != addr {
+				n = append(n, tracker)
+			} else {
+				if trackerScraper, ok := t.trackerAnnouncers[tracker]; ok {
+					trackerScraper.stop.Set()
+				}
+			}
+		}
+		if len(n) > 0 {
+			nn = append(nn, n)
+		}
+	}
+
+	t.metainfo.AnnounceList = nn
+}
+
+type Tracker struct {
+	Url          string
+	Peers        int
+	Err          error
+	LastAnnounce int64
+	NextAnnounce int64
+}
+
+func (t *Torrent) Trackers() []Tracker {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+
+	var tt []Tracker
+
+	for _, tier := range t.announceList() {
+		for _, trackerURL := range tier {
+			T := Tracker{Url: trackerURL}
+			if trackerScraper, ok := t.trackerAnnouncers[trackerURL]; ok {
+				T.Peers = trackerScraper.lastAnnounce.NumPeers
+				T.Err = trackerScraper.lastAnnounce.Err
+				T.LastAnnounce = int64(trackerScraper.lastAnnounce.Completed.Unix())
+				T.NextAnnounce = trackerScraper.lastAnnounce.NextAnnounce
+			}
+			tt = append(tt, T)
+		}
+	}
+
+	tt = append(tt, Tracker{"DHT", t.stats.PeersDHT, t.stats.ErrDHT, t.stats.LastAnnounceDHT, 0})
+
+	tt = append(tt, Tracker{"PEX", t.stats.PeersPEX, nil, 0, 0})
+
+	return tt
+}
+
+type PeerInfo struct {
+	Id     [20]byte
+	Name   string
+	Addr   string
+	Source peerSource
+	// Peer is known to support encryption.
+	SupportsEncryption bool
+	PiecesCompleted    int
+	// byte info information
+	Downloaded int64
+	Uploaded   int64
+}
+
+func (t *Torrent) Peers() []PeerInfo {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+
+	v := make([]PeerInfo, 0, len(t.conns))
+	for _, value := range t.conns {
+		v = append(v, PeerInfo{value.PeerID, value.PeerClientName,
+			value.remoteAddr().String(), value.Discovery, value.encrypted,
+			value.stats.PiecesCompleted, value.stats.BytesRead, value.stats.BytesWritten})
+	}
+	return v
+}
+
+func (t *Torrent) Check() bool {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	return t.checking
+}
+
+func (t *Torrent) Stop() {
+	t.closed.Set()
+}
+
+func (t *Torrent) PiecePended(i int) bool {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	return t.pendingPieces.Contains(i)
+}
+
+func (t *Torrent) PieceBytesCompleted(i int) int64 {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	p := t.pieces[i]
+	return int64(p.length() - p.bytesLeft())
+}
+
+func (t *Torrent) PieceLength(i int) int64 {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	return int64(t.pieces[i].length().Int())
+}
+
+func (t *Torrent) GetPendingPieces() (ret bitmap.Bitmap) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	return t.pendingPieces.Copy()
+}
+
+func (t *Torrent) SetChunkSize(c pp.Integer) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	t.chunkSize = c
+}
+
+func (t *Torrent) UpdateAllPieceCompletions() {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	t.updateAllPieceCompletions()
+}
+
+func (t *Torrent) UpdatePiecePriorities() {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	t.updatePiecePriorities()
+}
+
+func (t *Torrent) SetStats(downloaded, uploaded int64) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	t.stats.BytesRead = downloaded
+	t.stats.BytesWritten = uploaded
+}
+
+func (t *Torrent) LoadInfoBytes(buf []byte) error {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	return t.loadInfoBytes(buf)
+}
+
+func (t *Torrent) AnnounceList() (al [][]string) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	return t.announceList()
+}
+
+func (t *Torrent) SetMaxConns(max int) {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	t.maxEstablishedConns = max
+}
+
+func (t *Torrent) Wait() <-chan struct{} {
+	return t.closed.LockedChan(&t.cl.mu)
 }

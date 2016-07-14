@@ -718,3 +718,7 @@ func (s *Server) badNode(addr Addr) {
 	s.badNodes.Add([]byte(addr.String()))
 	delete(s.nodes, addr.String())
 }
+
+func (s *Server) Wait() <-chan struct{} {
+	return s.closed.LockedChan(&s.mu)
+}

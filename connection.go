@@ -602,6 +602,7 @@ func (cn *connection) peerSentBitfield(bf []bool) error {
 	}
 	for i, have := range bf {
 		if have {
+			cn.stats.PiecesCompleted = cn.stats.PiecesCompleted + 1
 			cn.raisePeerMinPieces(i + 1)
 		}
 		cn.peerPieces.Set(i, have)
@@ -647,17 +648,20 @@ func (c *connection) requestPendingMetadata() {
 func (cn *connection) wroteMsg(msg *pp.Message) {
 	cn.stats.wroteMsg(msg)
 	cn.t.stats.wroteMsg(msg)
+	cn.t.cl.stats.wroteMsg(msg)
 }
 
 func (cn *connection) readMsg(msg *pp.Message) {
 	cn.stats.readMsg(msg)
 	cn.t.stats.readMsg(msg)
+	cn.t.cl.stats.readMsg(msg)
 }
 
 func (cn *connection) wroteBytes(n int64) {
 	cn.stats.wroteBytes(n)
 	if cn.t != nil {
 		cn.t.stats.wroteBytes(n)
+		cn.t.cl.stats.wroteBytes(n)
 	}
 }
 
@@ -665,6 +669,7 @@ func (cn *connection) readBytes(n int64) {
 	cn.stats.readBytes(n)
 	if cn.t != nil {
 		cn.t.stats.readBytes(n)
+		cn.t.cl.stats.readBytes(n)
 	}
 }
 

@@ -19,6 +19,8 @@ type trackerScraper struct {
 	stop         missinggo.Event
 	t            *Torrent
 	lastAnnounce trackerAnnounceResult
+
+	force missinggo.Event // force to announce on port change (UPnP/NAT-PMP)
 }
 
 func (ts *trackerScraper) statusLine() string {
@@ -53,6 +55,8 @@ type trackerAnnounceResult struct {
 	NumPeers  int
 	Interval  time.Duration
 	Completed time.Time
+
+	NextAnnounce int64
 }
 
 func trackerToTorrentPeers(ps []tracker.Peer) (ret []Peer) {
@@ -74,6 +78,7 @@ func (me *trackerScraper) announce() (ret trackerAnnounceResult) {
 		ret.Completed = time.Now()
 	}()
 	ret.Interval = 5 * time.Minute
+	ret.Err = nil
 	blocked, urlToUse, host, err := me.t.cl.prepareTrackerAnnounceUnlocked(me.url)
 	if err != nil {
 		ret.Err = err
@@ -91,7 +96,12 @@ func (me *trackerScraper) announce() (ret trackerAnnounceResult) {
 		ret.Err = err
 		return
 	}
-	me.t.AddPeers(trackerToTorrentPeers(res.Peers))
+	me.t.cl.mu.Lock()
+	defer me.t.cl.mu.Unlock()
+	if me.stop.IsSet() { // can already be stopped
+		return
+	}
+	me.t.addPeers(trackerToTorrentPeers(res.Peers))
 	ret.NumPeers = len(res.Peers)
 	ret.Interval = time.Duration(res.Interval) * time.Second
 	return
@@ -99,17 +109,21 @@ func (me *trackerScraper) announce() (ret trackerAnnounceResult) {
 
 func (me *trackerScraper) Run() {
 	for {
+		me.force.Clear()
 		select {
 		case <-me.t.closed.LockedChan(&me.t.cl.mu):
 			return
 		case <-me.stop.LockedChan(&me.t.cl.mu):
 			return
+		case <-me.force.LockedChan(&me.t.cl.mu):
 		case <-me.t.wantPeersEvent.LockedChan(&me.t.cl.mu):
 		}
 
 		ar := me.announce()
 		me.t.cl.mu.Lock()
 		me.lastAnnounce = ar
+		now := time.Now().Unix()
+		me.lastAnnounce.NextAnnounce = now + int64(me.lastAnnounce.Interval.Seconds())
 		me.t.cl.mu.Unlock()
 
 		intervalChan := time.After(ar.Completed.Add(ar.Interval).Sub(time.Now()))

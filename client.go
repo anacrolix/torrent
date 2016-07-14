@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/pproffd"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
@@ -57,6 +58,10 @@ func (cl *Client) queueFirstHash(t *Torrent, piece int) {
 	cl.queuePieceCheck(t, piece)
 }
 
+type ClientStats struct {
+	ConnStats // Aggregates stats over all connections past and present.
+}
+
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
 type Client struct {
@@ -83,6 +88,8 @@ type Client struct {
 	closed missinggo.Event
 
 	torrents map[metainfo.Hash]*Torrent
+
+	stats ClientStats
 }
 
 func (cl *Client) IPBlockList() iplist.Ranger {
@@ -304,14 +311,24 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	if err != nil {
 		return
 	}
+
+	return
+}
+
+// for UPnP handling, do not start DHT before we know ours external ip/port
+func (cl *Client) Start() (err error) {
+	cl.closed.Clear()
 	if cl.tcpListener != nil {
 		go cl.acceptConnections(cl.tcpListener, false)
 	}
 	if cl.utpSock != nil {
 		go cl.acceptConnections(cl.utpSock, true)
 	}
-	if !cfg.NoDHT {
-		dhtCfg := cfg.DHTConfig
+	if !cl.config.NoDHT {
+		if cl.dHT != nil {
+			return
+		}
+		dhtCfg := cl.config.DHTConfig
 		if dhtCfg.IPBlocklist == nil {
 			dhtCfg.IPBlocklist = cl.ipBlockList
 		}
@@ -324,7 +341,6 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 			return
 		}
 	}
-
 	return
 }
 
@@ -345,12 +361,15 @@ func (cl *Client) Close() {
 	cl.closed.Set()
 	if cl.dHT != nil {
 		cl.dHT.Close()
+		cl.dHT = nil
 	}
 	if cl.utpSock != nil {
 		cl.utpSock.Close()
+		cl.utpSock = nil
 	}
 	if cl.tcpListener != nil {
 		cl.tcpListener.Close()
+		cl.tcpListener = nil
 	}
 	for _, t := range cl.torrents {
 		t.close()
@@ -564,12 +583,18 @@ func (cl *Client) dialFirst(addr string, t *Torrent) (conn net.Conn, utp bool) {
 	return
 }
 
-func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
+func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) bool {
+	if t.halfOpen == nil {
+		// torrent can be already closed. drop all old connections
+		return false
+	}
 	if _, ok := t.halfOpen[addr]; !ok {
-		panic("invariant broken")
+		// not exitst? torrent can be restared with new halfopen queue. drop all old connections.
+		return false
 	}
 	delete(t.halfOpen, addr)
 	cl.openNewConns(t)
+	return true
 }
 
 // Performs initiator handshakes and returns a connection. Returns nil
@@ -634,7 +659,13 @@ func (cl *Client) outgoingConnection(t *Torrent, addr string, ps peerSource) {
 	defer cl.mu.Unlock()
 	// Don't release lock between here and addConnection, unless it's for
 	// failure.
-	cl.noLongerHalfOpen(t, addr)
+	if !cl.noLongerHalfOpen(t, addr) {
+		// connection come after torrent was restarted, drop connection
+		if c != nil {
+			c.Close()
+		}
+		return
+	}
 	if err != nil {
 		if cl.config.Debug {
 			log.Printf("error establishing outgoing connection: %s", err)
@@ -964,7 +995,7 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 						}
 						return
 					}(),
-					"v": extendedHandshakeClientVersion,
+					"v": ExtendedHandshakeClientVersion,
 					// No upload queue is implemented yet.
 					"reqq": 64,
 				}
@@ -1294,6 +1325,11 @@ func (cl *Client) connectionLoop(t *Torrent, c *connection) error {
 				}
 				go func() {
 					cl.mu.Lock()
+					defer cl.mu.Unlock()
+					// torrent can be already closed so, drop all incoming data
+					if t.closed.IsSet() {
+						return
+					}
 					t.addPeers(func() (ret []Peer) {
 						for i, cp := range pexMsg.Added {
 							p := Peer{
@@ -1307,9 +1343,9 @@ func (cl *Client) connectionLoop(t *Torrent, c *connection) error {
 							missinggo.CopyExact(p.IP, cp.IP[:])
 							ret = append(ret, p)
 						}
+						t.stats.PeersPEX = len(ret)
 						return
 					}())
-					cl.mu.Unlock()
 				}()
 			default:
 				err = fmt.Errorf("unexpected extended message ID: %v", msg.ExtendedID)
@@ -1472,14 +1508,63 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	}
 	new = true
 	t = cl.newTorrent(infoHash)
+	t.updateWantPeersEvent()
+	return
+}
+
+// Do any network actvity only after calling this function. We can add torrent,
+// run file consictency checks and then manually start it. Here are two
+// possibilites: 1) Create *Torrent without adding it to client. 2) Add Torrent
+// to client and do not announce it or download.
+func (cl *Client) StartTorrent(t *Torrent) error {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+
+	return cl.startTorrent(t)
+}
+
+func (cl *Client) startTorrent(t *Torrent) error {
+	if t.closed.IsSet() {
+		t.closed.Clear()
+		if t.info != nil {
+			err := t.loadInfoBytes(t.info.Bytes)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		if t.info != nil {
+			err := t.setInfoBytes(t.info.Bytes)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// add torrent to the list, so Client can now respond to requests
+	cl.torrents[t.infoHash] = t
+
+	t.pieceStateChanges = pubsub.NewPubSub()
+	t.peers = make(map[peersKey]Peer)
+	t.halfOpen = make(map[string]struct{})
+
+	for i := range t.pieces {
+		t.pieceChanged(i)
+	}
+
 	if cl.dHT != nil {
 		go t.announceDHT(true)
 	}
-	cl.torrents[infoHash] = t
+
 	t.updateWantPeersEvent()
 	// Tickle Client.waitAccept, new torrent may want conns.
 	cl.event.Broadcast()
-	return
+
+	t.startMissingTrackerScrapers()
+
+	t.maybeNewConns()
+
+	return nil
 }
 
 // Add or merge a torrent spec. If the torrent is already present, the
@@ -1503,7 +1588,6 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 		t.chunkSize = pp.Integer(spec.ChunkSize)
 	}
 	t.addTrackers(spec.Trackers)
-	t.maybeNewConns()
 	return
 }
 
@@ -1681,6 +1765,7 @@ func (cl *Client) pieceHashed(t *Torrent, piece int, correct bool) {
 			log.Printf("%T: error completing piece %d: %s", t.storage, piece, err)
 		}
 		t.updatePieceCompletion(piece)
+		t.pendingPieces.Remove(piece)
 	} else if len(touchers) != 0 {
 		log.Printf("dropping and banning %d conns that touched piece", len(touchers))
 		for _, c := range touchers {
@@ -1745,10 +1830,14 @@ func (cl *Client) verifyPiece(t *Torrent, piece int) {
 		cl.event.Wait()
 	}
 	p.QueuedForHash = false
-	if t.closed.IsSet() || t.pieceComplete(piece) {
-		t.updatePiecePriority(piece)
-		t.publishPieceChange(piece)
-		return
+	// when we are checking torrent consitency EvernHashed == false. so, it does
+	// not matter is piace complete or not. it may be damadged on disk.
+	if p.EverHashed {
+		if t.closed.IsSet() || t.pieceComplete(piece) {
+			t.updatePiecePriority(piece)
+			t.publishPieceChange(piece)
+			return
+		}
 	}
 	p.Hashing = true
 	t.publishPieceChange(piece)
@@ -1780,6 +1869,10 @@ func (cl *Client) AddMagnet(uri string) (T *Torrent, err error) {
 
 func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (T *Torrent, err error) {
 	T, _, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	if err != nil {
+		return
+	}
+
 	var ss []string
 	slices.MakeInto(&ss, mi.Nodes)
 	cl.AddDHTNodes(ss)
@@ -1821,4 +1914,51 @@ func (cl *Client) banPeerIP(ip net.IP) {
 		cl.badPeerIPs = make(map[string]struct{})
 	}
 	cl.badPeerIPs[ip.String()] = struct{}{}
+}
+
+func (cl *Client) Stats() ClientStats {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	return cl.stats
+}
+
+// Run file consistency checks. For active torrent, pause it, then resume
+// download. For Paused torrent keep it paused.
+func (cl *Client) CheckTorrent(t *Torrent, rb *bitmap.Bitmap) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+
+	t.pendingPieces = *rb
+	t.updatePiecePriorities()
+
+	if t.closed.IsSet() {
+		// reset close
+		t.closed.Clear()
+		t.loadInfoBytes(t.info.Bytes)
+	}
+
+	t.check()
+}
+
+// for UPnP/NAT-PMP mapping
+func (cl *Client) SetListenAddr(addr string) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	cl.listenAddr = addr
+
+	for _, t := range cl.torrents {
+		for _, tracker := range t.trackerAnnouncers {
+			tracker.force.Set()
+		}
+	}
+}
+
+func (cl *Client) Wait() <-chan struct{} {
+	return cl.closed.LockedChan(&cl.mu)
+}
+
+func (cl *Client) SetHalfOpenLimit(max int) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	cl.halfOpenLimit = max
 }

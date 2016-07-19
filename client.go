@@ -310,8 +310,11 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	if cl.utpSock != nil {
 		go cl.acceptConnections(cl.utpSock, true)
 	}
-	if !cfg.NoDHT {
-		dhtCfg := cfg.DHTConfig
+	if !cl.config.NoDHT {
+		if cl.dHT != nil {
+			return
+		}
+		dhtCfg := cl.config.DHTConfig
 		if dhtCfg.IPBlocklist == nil {
 			dhtCfg.IPBlocklist = cl.ipBlockList
 		}
@@ -345,12 +348,15 @@ func (cl *Client) Close() {
 	cl.closed.Set()
 	if cl.dHT != nil {
 		cl.dHT.Close()
+		cl.dHT = nil
 	}
 	if cl.utpSock != nil {
 		cl.utpSock.Close()
+		cl.utpSock = nil
 	}
 	if cl.tcpListener != nil {
 		cl.tcpListener.Close()
+		cl.tcpListener = nil
 	}
 	for _, t := range cl.torrents {
 		t.close()
@@ -564,12 +570,18 @@ func (cl *Client) dialFirst(addr string, t *Torrent) (conn net.Conn, utp bool) {
 	return
 }
 
-func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
+func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) bool {
+	if t.halfOpen == nil {
+		// torrent can be already closed. drop all old connections
+		return false
+	}
 	if _, ok := t.halfOpen[addr]; !ok {
-		panic("invariant broken")
+		// not exitst? torrent can be restared with new halfopen queue. drop all old connections.
+		return false
 	}
 	delete(t.halfOpen, addr)
 	cl.openNewConns(t)
+	return true
 }
 
 // Performs initiator handshakes and returns a connection. Returns nil
@@ -634,7 +646,13 @@ func (cl *Client) outgoingConnection(t *Torrent, addr string, ps peerSource) {
 	defer cl.mu.Unlock()
 	// Don't release lock between here and addConnection, unless it's for
 	// failure.
-	cl.noLongerHalfOpen(t, addr)
+	if !cl.noLongerHalfOpen(t, addr) {
+		// connection come after torrent was restarted, drop connection
+		if c != nil {
+			c.Close()
+		}
+		return
+	}
 	if err != nil {
 		if cl.config.Debug {
 			log.Printf("error establishing outgoing connection: %s", err)
@@ -1294,6 +1312,11 @@ func (cl *Client) connectionLoop(t *Torrent, c *connection) error {
 				}
 				go func() {
 					cl.mu.Lock()
+					defer cl.mu.Unlock()
+					// torrent can be already closed so, drop all incoming data
+					if t.closed.IsSet() {
+						return
+					}
 					t.addPeers(func() (ret []Peer) {
 						for i, cp := range pexMsg.Added {
 							p := Peer{
@@ -1309,7 +1332,6 @@ func (cl *Client) connectionLoop(t *Torrent, c *connection) error {
 						}
 						return
 					}())
-					cl.mu.Unlock()
 				}()
 			default:
 				err = fmt.Errorf("unexpected extended message ID: %v", msg.ExtendedID)
@@ -1780,6 +1802,10 @@ func (cl *Client) AddMagnet(uri string) (T *Torrent, err error) {
 
 func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (T *Torrent, err error) {
 	T, _, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	if err != nil {
+		return
+	}
+
 	var ss []string
 	slices.MakeInto(&ss, mi.Nodes)
 	cl.AddDHTNodes(ss)

@@ -532,11 +532,17 @@ func (t *Torrent) close() (err error) {
 	if c, ok := t.storage.(io.Closer); ok {
 		c.Close()
 	}
+	for _, tracker := range t.trackerAnnouncers {
+		tracker.stop.Set()
+	}
+	t.trackerAnnouncers = nil
 	for _, conn := range t.conns {
 		conn.Close()
 	}
+	t.conns = nil
+	t.peers = nil
+	t.halfOpen = nil
 	t.pieceStateChanges.Close()
-	t.updateWantPeersEvent()
 	return
 }
 
@@ -1177,6 +1183,9 @@ func (t *Torrent) startMissingTrackerScrapers() {
 	if t.cl.config.DisableTrackers {
 		return
 	}
+	if _, ok := t.cl.torrents[t.infoHash]; !ok { // do not start trackers announce for paused torrents
+		return
+	}
 	for _, tier := range t.announceList() {
 		for _, trackerURL := range tier {
 			if _, ok := t.trackerAnnouncers[trackerURL]; ok {
@@ -1215,6 +1224,8 @@ func (t *Torrent) announceDHT(impliedPort bool) {
 		case <-t.wantPeersEvent.LockedChan(&cl.mu):
 		case <-t.closed.LockedChan(&cl.mu):
 			return
+		case <-cl.dHT.Wait(): // announceDHT - goroutine should exit when DHT does
+			return
 		}
 		// log.Printf("getting peers for %q from DHT", t)
 		ps, err := cl.dHT.Announce(string(t.infoHash[:]), cl.incomingPeerPort(), impliedPort)
@@ -1252,6 +1263,11 @@ func (t *Torrent) announceDHT(impliedPort bool) {
 					allAddrs[key] = struct{}{}
 				}
 				cl.mu.Lock()
+				if t.peers == nil { // torrent can be already closed. return.
+					cl.mu.Unlock()
+					ps.Close()
+					return
+				}
 				t.addPeers(addPeers)
 				numPeers := len(t.peers)
 				cl.mu.Unlock()

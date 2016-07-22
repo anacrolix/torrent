@@ -74,6 +74,7 @@ func (me *trackerScraper) announce() (ret trackerAnnounceResult) {
 		ret.Completed = time.Now()
 	}()
 	ret.Interval = 5 * time.Minute
+	ret.Err = nil
 	blocked, urlToUse, host, err := me.t.cl.prepareTrackerAnnounceUnlocked(me.url)
 	if err != nil {
 		ret.Err = err

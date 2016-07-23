@@ -382,7 +382,9 @@ func (s *Server) writeToNode(b []byte, node Addr) (err error) {
 		}
 	}
 	n, err := s.socket.WriteTo(b, node.UDPAddr())
+	writes.Add(1)
 	if err != nil {
+		writeErrors.Add(1)
 		err = fmt.Errorf("error writing %d bytes to %s: %s", len(b), node, err)
 		return
 	}

@@ -11,4 +11,6 @@ var (
 	readUnmarshalError = expvar.NewInt("dhtReadUnmarshalError")
 	readQuery          = expvar.NewInt("dhtReadQuery")
 	announceErrors     = expvar.NewInt("dhtAnnounceErrors")
+	writeErrors        = expvar.NewInt("dhtWriteErrors")
+	writes             = expvar.NewInt("dhtWrites")
 )

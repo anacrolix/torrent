@@ -347,7 +347,7 @@ func (cl *Client) Close() {
 		cl.dHT.Close()
 	}
 	if cl.utpSock != nil {
-		cl.utpSock.Close()
+		cl.utpSock.CloseNow()
 	}
 	if cl.tcpListener != nil {
 		cl.tcpListener.Close()

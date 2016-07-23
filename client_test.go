@@ -340,6 +340,7 @@ type testClientTransferParams struct {
 func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
+	// Create seeder and a Torrent.
 	cfg := TestingConfig
 	cfg.Seed = true
 	if ps.SeederStorage != nil {
@@ -356,6 +357,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	seederTorrent, new, err := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	require.NoError(t, err)
 	assert.True(t, new)
+	// Create leecher and a Torrent.
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
@@ -374,6 +376,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}())
 	require.NoError(t, err)
 	assert.True(t, new)
+	// Now do some things with leecher and seeder.
 	addClientPeer(leecherGreeting, seeder)
 	r := leecherGreeting.NewReader()
 	defer r.Close()

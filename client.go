@@ -1028,47 +1028,44 @@ func (cl *Client) connDeleteRequest(t *Torrent, cn *connection, r request) bool 
 }
 
 // Process incoming ut_metadata message.
-func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connection) (err error) {
+func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connection) error {
 	var d map[string]int
-	err = bencode.Unmarshal(payload, &d)
+	err := bencode.Unmarshal(payload, &d)
 	if err != nil {
-		err = fmt.Errorf("error unmarshalling payload: %s: %q", err, payload)
-		return
+		return fmt.Errorf("error unmarshalling payload: %s: %q", err, payload)
 	}
 	msgType, ok := d["msg_type"]
 	if !ok {
-		err = errors.New("missing msg_type field")
-		return
+		return errors.New("missing msg_type field")
 	}
 	piece := d["piece"]
 	switch msgType {
 	case pp.DataMetadataExtensionMsgType:
 		if !c.requestedMetadataPiece(piece) {
-			err = fmt.Errorf("got unexpected piece %d", piece)
-			return
+			return fmt.Errorf("got unexpected piece %d", piece)
 		}
 		c.metadataRequests[piece] = false
 		begin := len(payload) - metadataPieceSize(d["total_size"], piece)
 		if begin < 0 || begin >= len(payload) {
-			err = fmt.Errorf("data has bad offset in payload: %d", begin)
-			return
+			return fmt.Errorf("data has bad offset in payload: %d", begin)
 		}
 		t.saveMetadataPiece(piece, payload[begin:])
 		c.UsefulChunksReceived++
 		c.lastUsefulChunkReceived = time.Now()
-		t.maybeMetadataCompleted()
+		return t.maybeCompleteMetadata()
 	case pp.RequestMetadataExtensionMsgType:
 		if !t.haveMetadataPiece(piece) {
 			c.Post(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
-			break
+			return nil
 		}
 		start := (1 << 14) * piece
 		c.Post(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]))
+		return nil
 	case pp.RejectMetadataExtensionMsgType:
+		return nil
 	default:
-		err = errors.New("unknown msg_type value")
+		return errors.New("unknown msg_type value")
 	}
-	return
 }
 
 func (cl *Client) upload(t *Torrent, c *connection) {

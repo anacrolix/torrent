@@ -163,8 +163,9 @@ func (t *Torrent) addPeer(p Peer) {
 }
 
 func (t *Torrent) invalidateMetadata() {
-	t.metadataBytes = nil
-	t.metadataCompletedChunks = nil
+	for i := range t.metadataCompletedChunks {
+		t.metadataCompletedChunks[i] = false
+	}
 	t.info = nil
 }
 
@@ -1027,26 +1028,26 @@ func (t *Torrent) updateAllPieceCompletions() {
 	}
 }
 
-func (t *Torrent) maybeMetadataCompleted() {
+// Returns an error if the metadata was completed, but couldn't be set for
+// some reason. Blame it on the last peer to contribute.
+func (t *Torrent) maybeCompleteMetadata() error {
 	if t.haveInfo() {
 		// Nothing to do.
-		return
+		return nil
 	}
 	if !t.haveAllMetadataPieces() {
 		// Don't have enough metadata pieces.
-		return
+		return nil
 	}
-	// TODO(anacrolix): If this fails, I think something harsher should be
-	// done.
 	err := t.setInfoBytes(t.metadataBytes)
 	if err != nil {
-		log.Printf("error setting metadata: %s", err)
 		t.invalidateMetadata()
-		return
+		return fmt.Errorf("error setting info bytes: %s", err)
 	}
 	if t.cl.config.Debug {
 		log.Printf("%s: got metadata from peers", t)
 	}
+	return nil
 }
 
 func (t *Torrent) readerPieces() (ret bitmap.Bitmap) {

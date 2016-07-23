@@ -1473,7 +1473,7 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	new = true
 	t = cl.newTorrent(infoHash)
 	if cl.dHT != nil {
-		go t.announceDHT(true)
+		go t.dhtAnnouncer()
 	}
 	cl.torrents[infoHash] = t
 	t.updateWantPeersEvent()

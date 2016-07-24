@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"container/heap"
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"io"
@@ -202,8 +203,8 @@ func (t *Torrent) metadataSize() int {
 }
 
 func infoPieceHashes(info *metainfo.Info) (ret []string) {
-	for i := 0; i < len(info.Pieces); i += 20 {
-		ret = append(ret, string(info.Pieces[i:i+20]))
+	for i := 0; i < len(info.Pieces); i += sha1.Size {
+		ret = append(ret, string(info.Pieces[i:i+sha1.Size]))
 	}
 	return
 }

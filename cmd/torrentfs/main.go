@@ -137,12 +137,15 @@ func main() {
 	resolveTestPeerAddr()
 	fs := torrentfs.New(client)
 	go exitSignalHandlers(fs)
-	go func() {
-		for {
-			addTestPeer(client)
-			time.Sleep(10 * time.Second)
-		}
-	}()
+
+	if testPeerAddr != nil {
+		go func() {
+			for {
+				addTestPeer(client)
+				time.Sleep(10 * time.Second)
+			}
+		}()
+	}
 
 	if err := fusefs.Serve(conn, fs); err != nil {
 		log.Fatal(err)

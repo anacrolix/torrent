@@ -69,7 +69,7 @@ func torrentFileInfoHash(fileName string) (ih metainfo.Hash, ok bool) {
 	if mi == nil {
 		return
 	}
-	missinggo.CopyExact(ih[:], mi.Info.Hash)
+	ih = mi.Info.Hash()
 	ok = true
 	return
 }

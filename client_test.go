@@ -343,6 +343,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	// Create seeder and a Torrent.
 	cfg := TestingConfig
 	cfg.Seed = true
+	cfg.ListenAddr = "localhost:4000"
 	if ps.SeederStorage != nil {
 		cfg.DefaultStorage = ps.SeederStorage(greetingTempDir)
 	} else {
@@ -362,6 +363,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
 	cfg.DefaultStorage = ps.LeecherStorage(leecherDataDir)
+	cfg.ListenAddr = "localhost:4001"
 	leecher, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer leecher.Close()

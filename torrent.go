@@ -1066,6 +1066,9 @@ func (t *Torrent) readerPieces() (ret bitmap.Bitmap) {
 }
 
 func (t *Torrent) needData() bool {
+	if t.closed.IsSet() {
+		return false
+	}
 	if !t.haveInfo() {
 		return true
 	}
@@ -1168,6 +1171,9 @@ func (t *Torrent) updateWantPeersEvent() {
 // Returns whether the client should make effort to seed the torrent.
 func (t *Torrent) seeding() bool {
 	cl := t.cl
+	if t.closed.IsSet() {
+		return false
+	}
 	if cl.config.NoUpload {
 		return false
 	}
@@ -1351,6 +1357,9 @@ func (t *Torrent) addConnection(c *connection) bool {
 }
 
 func (t *Torrent) wantConns() bool {
+	if t.closed.IsSet() {
+		return false
+	}
 	if !t.seeding() && !t.needData() {
 		return false
 	}

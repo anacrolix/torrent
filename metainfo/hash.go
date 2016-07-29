@@ -13,7 +13,7 @@ func (h Hash) Bytes() []byte {
 	return h[:]
 }
 
-func (h *Hash) AsString() string {
+func (h Hash) AsString() string {
 	return string(h[:])
 }
 

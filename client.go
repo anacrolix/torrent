@@ -9,11 +9,9 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/big"
 	mathRand "math/rand"
 	"net"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -85,6 +83,12 @@ type Client struct {
 	torrents map[metainfo.Hash]*Torrent
 }
 
+func (cl *Client) BadPeerIPs() []string {
+	cl.mu.RLock()
+	defer cl.mu.RUnlock()
+	return slices.FromMapKeys(cl.badPeerIPs).([]string)
+}
+
 func (cl *Client) IPBlockList() iplist.Ranger {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
@@ -117,67 +121,45 @@ func (cl *Client) ListenAddr() net.Addr {
 	return torrentAddr(cl.listenAddr)
 }
 
-type hashSorter struct {
-	Hashes []metainfo.Hash
-}
-
-func (hs hashSorter) Len() int {
-	return len(hs.Hashes)
-}
-
-func (hs hashSorter) Less(a, b int) bool {
-	return (&big.Int{}).SetBytes(hs.Hashes[a][:]).Cmp((&big.Int{}).SetBytes(hs.Hashes[b][:])) < 0
-}
-
-func (hs hashSorter) Swap(a, b int) {
-	hs.Hashes[a], hs.Hashes[b] = hs.Hashes[b], hs.Hashes[a]
-}
-
 func (cl *Client) sortedTorrents() (ret []*Torrent) {
-	var hs hashSorter
-	for ih := range cl.torrents {
-		hs.Hashes = append(hs.Hashes, ih)
-	}
-	sort.Sort(hs)
-	for _, ih := range hs.Hashes {
-		ret = append(ret, cl.torrent(ih))
-	}
-	return
+	return slices.Sort(slices.FromMapElems(cl.torrents), func(l, r metainfo.Hash) bool {
+		return l.AsString() < r.AsString()
+	}).([]*Torrent)
 }
 
 // Writes out a human readable status of the client, such as for writing to a
 // HTTP status page.
 func (cl *Client) WriteStatus(_w io.Writer) {
-	cl.mu.RLock()
-	defer cl.mu.RUnlock()
 	w := bufio.NewWriter(_w)
 	defer w.Flush()
 	if addr := cl.ListenAddr(); addr != nil {
-		fmt.Fprintf(w, "Listening on %s\n", cl.ListenAddr())
+		fmt.Fprintf(w, "Listening on %s\n", addr)
 	} else {
 		fmt.Fprintln(w, "Not listening!")
 	}
-	fmt.Fprintf(w, "Peer ID: %+q\n", cl.peerID)
-	fmt.Fprintf(w, "Banned IPs: %d\n", len(cl.badPeerIPs))
-	if cl.dHT != nil {
-		dhtStats := cl.dHT.Stats()
+	fmt.Fprintf(w, "Peer ID: %+q\n", cl.PeerID())
+	fmt.Fprintf(w, "Banned IPs: %d\n", len(cl.BadPeerIPs()))
+	if dht := cl.DHT(); dht != nil {
+		dhtStats := dht.Stats()
 		fmt.Fprintf(w, "DHT nodes: %d (%d good, %d banned)\n", dhtStats.Nodes, dhtStats.GoodNodes, dhtStats.BadNodes)
-		fmt.Fprintf(w, "DHT Server ID: %x\n", cl.dHT.ID())
-		fmt.Fprintf(w, "DHT port: %d\n", missinggo.AddrPort(cl.dHT.Addr()))
+		fmt.Fprintf(w, "DHT Server ID: %x\n", dht.ID())
+		fmt.Fprintf(w, "DHT port: %d\n", missinggo.AddrPort(dht.Addr()))
 		fmt.Fprintf(w, "DHT announces: %d\n", dhtStats.ConfirmedAnnounces)
 		fmt.Fprintf(w, "Outstanding transactions: %d\n", dhtStats.OutstandingTransactions)
 	}
-	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.torrents))
+	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.Torrents()))
 	fmt.Fprintln(w)
-	for _, t := range cl.sortedTorrents() {
-		if t.name() == "" {
+	for _, t := range slices.Sorted(cl.Torrents(), func(l, r *Torrent) bool {
+		return l.InfoHash().AsString() < r.InfoHash().AsString()
+	}).([]*Torrent) {
+		if t.Name() == "" {
 			fmt.Fprint(w, "<unknown name>")
 		} else {
-			fmt.Fprint(w, t.name())
+			fmt.Fprint(w, t.Name())
 		}
 		fmt.Fprint(w, "\n")
-		if t.haveInfo() {
-			fmt.Fprintf(w, "%f%% of %d bytes (%s)", 100*(1-float64(t.bytesLeft())/float64(t.length)), t.length, humanize.Bytes(uint64(t.length)))
+		if t.Info() != nil {
+			fmt.Fprintf(w, "%f%% of %d bytes (%s)", 100*(1-float64(t.BytesMissing())/float64(t.Info().TotalLength())), t.length, humanize.Bytes(uint64(t.Info().TotalLength())))
 		} else {
 			w.WriteString("<missing metainfo>")
 		}

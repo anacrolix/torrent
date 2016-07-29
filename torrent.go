@@ -488,6 +488,12 @@ func (t *Torrent) newMetaInfo() (mi *metainfo.MetaInfo) {
 	return
 }
 
+func (t *Torrent) BytesMissing() int64 {
+	t.mu().RLock()
+	defer t.mu().RUnlock()
+	return t.bytesLeft()
+}
+
 func (t *Torrent) bytesLeft() (left int64) {
 	for i := 0; i < t.numPieces(); i++ {
 		left += int64(t.pieces[i].bytesLeft())
@@ -1365,4 +1371,8 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	}
 	t.openNewConns()
 	return oldMax
+}
+
+func (t *Torrent) mu() missinggo.RWLocker {
+	return &t.cl.mu
 }

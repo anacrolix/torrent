@@ -149,7 +149,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.Torrents()))
 	fmt.Fprintln(w)
-	for _, t := range slices.Sorted(cl.Torrents(), func(l, r *Torrent) bool {
+	for _, t := range slices.Sort(append([]*Torrent(nil), cl.Torrents()...), func(l, r *Torrent) bool {
 		return l.InfoHash().AsString() < r.InfoHash().AsString()
 	}).([]*Torrent) {
 		if t.Name() == "" {

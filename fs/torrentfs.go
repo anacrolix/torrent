@@ -158,6 +158,9 @@ var (
 )
 
 func isSubPath(parent, child string) bool {
+	if len(parent) == 0 {
+		return len(child) > 0
+	}
 	if !strings.HasPrefix(child, parent) {
 		return false
 	}

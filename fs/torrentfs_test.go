@@ -214,6 +214,7 @@ func TestIsSubPath(t *testing.T) {
 	}{
 		{"", "", false},
 		{"", "/", true},
+		{"", "a", true},
 		{"a/b", "a/bc", false},
 		{"a/b", "a/b", false},
 		{"a/b", "a/b/c", true},

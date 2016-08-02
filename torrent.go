@@ -424,10 +424,10 @@ func (t *Torrent) writeStatus(w io.Writer) {
 			return "?"
 		}
 	}())
-	if t.haveInfo() {
+	if t.Info() != nil {
 		fmt.Fprintf(w, "Num Pieces: %d\n", t.numPieces())
 		fmt.Fprint(w, "Piece States:")
-		for _, psr := range t.pieceStateRuns() {
+		for _, psr := range t.PieceStateRuns() {
 			w.Write([]byte(" "))
 			w.Write([]byte(pieceStateRunStatusChars(psr)))
 		}

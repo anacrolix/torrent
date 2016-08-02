@@ -76,14 +76,18 @@ func addTestPeer(client *torrent.Client) {
 }
 
 func main() {
+	os.Exit(mainExitCode())
+}
+
+func mainExitCode() int {
 	flag.Parse()
 	if flag.NArg() != 0 {
 		os.Stderr.WriteString("one does not simply pass positional args\n")
-		os.Exit(2)
+		return 2
 	}
 	if *mountDir == "" {
 		os.Stderr.WriteString("y u no specify mountpoint?\n")
-		os.Exit(2)
+		return 2
 	}
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	conn, err := fuse.Mount(*mountDir)
@@ -100,7 +104,8 @@ func main() {
 		NoUpload:        true, // Ensure that downloads are responsive.
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
+		return 1
 	}
 	// This is naturally exported via GOPPROF=http.
 	http.DefaultServeMux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
@@ -108,7 +113,8 @@ func main() {
 	})
 	dw, err := dirwatch.New(*torrentPath)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("error watching torrent dir: %s", err)
+		return 1
 	}
 	go func() {
 		for ev := range dw.Events {
@@ -154,4 +160,5 @@ func main() {
 	if err := conn.MountError; err != nil {
 		log.Fatal(err)
 	}
+	return 0
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/prioritybitmap"
-	"github.com/anacrolix/missinggo/slices"
 	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -684,10 +683,10 @@ func (c *connection) useful() bool {
 	return t.connHasWantedPieces(c)
 }
 
-func (c *connection) lastHelpful() time.Time {
-	lasts := []time.Time{c.lastUsefulChunkReceived}
-	if c.t.seeding() {
-		lasts = append(lasts, c.lastChunkSent)
+func (c *connection) lastHelpful() (ret time.Time) {
+	ret = c.lastUsefulChunkReceived
+	if c.t.seeding() && c.lastChunkSent.After(ret) {
+		ret = c.lastChunkSent
 	}
-	return missinggo.Max(time.Time.Before, slices.ToEmptyInterface(lasts)...).(time.Time)
+	return
 }

@@ -4,16 +4,16 @@ import (
 	"strings"
 )
 
-type tag_options string
+type tagOptions string
 
-func parse_tag(tag string) (string, tag_options) {
+func parseTag(tag string) (string, tagOptions) {
 	if idx := strings.Index(tag, ","); idx != -1 {
-		return tag[:idx], tag_options(tag[idx+1:])
+		return tag[:idx], tagOptions(tag[idx+1:])
 	}
-	return tag, tag_options("")
+	return tag, tagOptions("")
 }
 
-func (opts tag_options) contains(option_name string) bool {
+func (opts tagOptions) contains(option_name string) bool {
 	if len(opts) == 0 {
 		return false
 	}

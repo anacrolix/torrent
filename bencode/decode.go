@@ -92,7 +92,7 @@ func (d *Decoder) throwSyntaxError(offset int64, err error) {
 }
 
 // called when 'i' was consumed
-func (d *Decoder) parse_int(v reflect.Value) {
+func (d *Decoder) parseInt(v reflect.Value) {
 	start := d.offset - 1
 	d.readUntil('e')
 	if d.buf.Len() == 0 {
@@ -138,7 +138,7 @@ func (d *Decoder) parse_int(v reflect.Value) {
 	d.buf.Reset()
 }
 
-func (d *Decoder) parse_string(v reflect.Value) {
+func (d *Decoder) parseString(v reflect.Value) {
 	start := d.offset - 1
 
 	// read the string length first
@@ -180,7 +180,7 @@ func (d *Decoder) parse_string(v reflect.Value) {
 	d.buf.Reset()
 }
 
-func (d *Decoder) parse_dict(v reflect.Value) {
+func (d *Decoder) parseDict(v reflect.Value) {
 	switch v.Kind() {
 	case reflect.Map:
 		t := v.Type()
@@ -201,7 +201,7 @@ func (d *Decoder) parse_dict(v reflect.Value) {
 		})
 	}
 
-	var map_elem reflect.Value
+	var mapElem reflect.Value
 
 	// so, at this point 'd' byte was consumed, let's just read key/value
 	// pairs one by one
@@ -216,12 +216,12 @@ func (d *Decoder) parse_dict(v reflect.Value) {
 		switch v.Kind() {
 		case reflect.Map:
 			elem_type := v.Type().Elem()
-			if !map_elem.IsValid() {
-				map_elem = reflect.New(elem_type).Elem()
+			if !mapElem.IsValid() {
+				mapElem = reflect.New(elem_type).Elem()
 			} else {
-				map_elem.Set(reflect.Zero(elem_type))
+				mapElem.Set(reflect.Zero(elem_type))
 			}
-			valuev = map_elem
+			valuev = mapElem
 		case reflect.Struct:
 			var f reflect.StructField
 			var ok bool
@@ -237,7 +237,7 @@ func (d *Decoder) parse_dict(v reflect.Value) {
 					continue
 				}
 
-				tag_name, _ := parse_tag(tag)
+				tag_name, _ := parseTag(tag)
 				if tag_name == d.key {
 					ok = true
 					break
@@ -284,7 +284,7 @@ func (d *Decoder) parse_dict(v reflect.Value) {
 	}
 }
 
-func (d *Decoder) parse_list(v reflect.Value) {
+func (d *Decoder) parseList(v reflect.Value) {
 	switch v.Kind() {
 	case reflect.Array, reflect.Slice:
 	default:
@@ -441,17 +441,17 @@ func (d *Decoder) parseValue(v reflect.Value) bool {
 	case 'e':
 		return false
 	case 'd':
-		d.parse_dict(v)
+		d.parseDict(v)
 	case 'l':
-		d.parse_list(v)
+		d.parseList(v)
 	case 'i':
-		d.parse_int(v)
+		d.parseInt(v)
 	default:
 		if b >= '0' && b <= '9' {
 			// string
 			// append first digit of the length to the buffer
 			d.buf.WriteByte(b)
-			d.parse_string(v)
+			d.parseString(v)
 			break
 		}
 

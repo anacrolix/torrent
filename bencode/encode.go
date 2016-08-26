@@ -236,7 +236,7 @@ func encodeFields(t reflect.Type) []encodeField {
 			if tv == "-" {
 				continue
 			}
-			name, opts := parse_tag(tv)
+			name, opts := parseTag(tv)
 			if name != "" {
 				ef.tag = name
 			}

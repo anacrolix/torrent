@@ -37,13 +37,13 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 		return &UnmarshalInvalidArgError{reflect.TypeOf(v)}
 	}
 
-	if !d.parse_value(pv.Elem()) {
+	if !d.parseValue(pv.Elem()) {
 		d.throwSyntaxError(d.offset-1, errors.New("unexpected 'e'"))
 	}
 	return nil
 }
 
-func check_for_unexpected_eof(err error, offset int64) {
+func checkForUnexpectedEOF(err error, offset int64) {
 	if err == io.EOF {
 		panic(&SyntaxError{
 			Offset: offset,
@@ -52,10 +52,10 @@ func check_for_unexpected_eof(err error, offset int64) {
 	}
 }
 
-func (d *Decoder) read_byte() byte {
+func (d *Decoder) readByte() byte {
 	b, err := d.r.ReadByte()
 	if err != nil {
-		check_for_unexpected_eof(err, d.offset)
+		checkForUnexpectedEOF(err, d.offset)
 		panic(err)
 	}
 
@@ -65,9 +65,9 @@ func (d *Decoder) read_byte() byte {
 
 // reads data writing it to 'd.buf' until 'sep' byte is encountered, 'sep' byte
 // is consumed, but not included into the 'd.buf'
-func (d *Decoder) read_until(sep byte) {
+func (d *Decoder) readUntil(sep byte) {
 	for {
-		b := d.read_byte()
+		b := d.readByte()
 		if b == sep {
 			return
 		}
@@ -75,7 +75,7 @@ func (d *Decoder) read_until(sep byte) {
 	}
 }
 
-func check_for_int_parse_error(err error, offset int64) {
+func checkForIntParseError(err error, offset int64) {
 	if err != nil {
 		panic(&SyntaxError{
 			Offset: offset,
@@ -94,7 +94,7 @@ func (d *Decoder) throwSyntaxError(offset int64, err error) {
 // called when 'i' was consumed
 func (d *Decoder) parse_int(v reflect.Value) {
 	start := d.offset - 1
-	d.read_until('e')
+	d.readUntil('e')
 	if d.buf.Len() == 0 {
 		panic(&SyntaxError{
 			Offset: start,
@@ -107,7 +107,7 @@ func (d *Decoder) parse_int(v reflect.Value) {
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		n, err := strconv.ParseInt(s, 10, 64)
-		check_for_int_parse_error(err, start)
+		checkForIntParseError(err, start)
 
 		if v.OverflowInt(n) {
 			panic(&UnmarshalTypeError{
@@ -118,7 +118,7 @@ func (d *Decoder) parse_int(v reflect.Value) {
 		v.SetInt(n)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		n, err := strconv.ParseUint(s, 10, 64)
-		check_for_int_parse_error(err, start)
+		checkForIntParseError(err, start)
 
 		if v.OverflowUint(n) {
 			panic(&UnmarshalTypeError{
@@ -142,15 +142,15 @@ func (d *Decoder) parse_string(v reflect.Value) {
 	start := d.offset - 1
 
 	// read the string length first
-	d.read_until(':')
+	d.readUntil(':')
 	length, err := strconv.ParseInt(d.buf.String(), 10, 64)
-	check_for_int_parse_error(err, start)
+	checkForIntParseError(err, start)
 
 	d.buf.Reset()
 	n, err := io.CopyN(&d.buf, d.r, length)
 	d.offset += n
 	if err != nil {
-		check_for_unexpected_eof(err, d.offset)
+		checkForUnexpectedEOF(err, d.offset)
 		panic(&SyntaxError{
 			Offset: d.offset,
 			What:   errors.New("unexpected I/O error: " + err.Error()),
@@ -208,7 +208,7 @@ func (d *Decoder) parse_dict(v reflect.Value) {
 	for {
 		var valuev reflect.Value
 		keyv := reflect.ValueOf(&d.key).Elem()
-		if !d.parse_value(keyv) {
+		if !d.parseValue(keyv) {
 			return
 		}
 
@@ -265,7 +265,7 @@ func (d *Decoder) parse_dict(v reflect.Value) {
 					valuev = v.FieldByIndex(f.Index)
 				}
 			} else {
-				_, ok := d.parse_value_interface()
+				_, ok := d.parseValueInterface()
 				if !ok {
 					return
 				}
@@ -274,7 +274,7 @@ func (d *Decoder) parse_dict(v reflect.Value) {
 		}
 
 		// now we need to actually parse it
-		if !d.parse_value(valuev) {
+		if !d.parseValue(valuev) {
 			return
 		}
 
@@ -302,9 +302,9 @@ func (d *Decoder) parse_list(v reflect.Value) {
 
 		ok := false
 		if i < v.Len() {
-			ok = d.parse_value(v.Index(i))
+			ok = d.parseValue(v.Index(i))
 		} else {
-			_, ok = d.parse_value_interface()
+			_, ok = d.parseValueInterface()
 		}
 
 		if !ok {
@@ -330,7 +330,7 @@ func (d *Decoder) parse_list(v reflect.Value) {
 	}
 }
 
-func (d *Decoder) read_one_value() bool {
+func (d *Decoder) readOneValue() bool {
 	b, err := d.r.ReadByte()
 	if err != nil {
 		panic(err)
@@ -346,26 +346,26 @@ func (d *Decoder) read_one_value() bool {
 	switch b {
 	case 'd', 'l':
 		// read until there is nothing to read
-		for d.read_one_value() {
+		for d.readOneValue() {
 		}
 		// consume 'e' as well
-		b = d.read_byte()
+		b = d.readByte()
 		d.buf.WriteByte(b)
 	case 'i':
-		d.read_until('e')
+		d.readUntil('e')
 		d.buf.WriteString("e")
 	default:
 		if b >= '0' && b <= '9' {
 			start := d.buf.Len() - 1
-			d.read_until(':')
+			d.readUntil(':')
 			length, err := strconv.ParseInt(d.buf.String()[start:], 10, 64)
-			check_for_int_parse_error(err, d.offset-1)
+			checkForIntParseError(err, d.offset-1)
 
 			d.buf.WriteString(":")
 			n, err := io.CopyN(&d.buf, d.r, length)
 			d.offset += n
 			if err != nil {
-				check_for_unexpected_eof(err, d.offset)
+				checkForUnexpectedEOF(err, d.offset)
 				panic(&SyntaxError{
 					Offset: d.offset,
 					What:   errors.New("unexpected I/O error: " + err.Error()),
@@ -381,7 +381,7 @@ func (d *Decoder) read_one_value() bool {
 
 }
 
-func (d *Decoder) parse_unmarshaler(v reflect.Value) bool {
+func (d *Decoder) parseUnmarshaler(v reflect.Value) bool {
 	m, ok := v.Interface().(Unmarshaler)
 	if !ok {
 		// T doesn't work, try *T
@@ -393,7 +393,7 @@ func (d *Decoder) parse_unmarshaler(v reflect.Value) bool {
 		}
 	}
 	if ok && (v.Kind() != reflect.Ptr || !v.IsNil()) {
-		if d.read_one_value() {
+		if d.readOneValue() {
 			err := m.UnmarshalBencode(d.buf.Bytes())
 			d.buf.Reset()
 			if err != nil {
@@ -409,7 +409,7 @@ func (d *Decoder) parse_unmarshaler(v reflect.Value) bool {
 
 // Returns true if there was a value and it's now stored in 'v', otherwise
 // there was an end symbol ("e") and no value was stored.
-func (d *Decoder) parse_value(v reflect.Value) bool {
+func (d *Decoder) parseValue(v reflect.Value) bool {
 	// we support one level of indirection at the moment
 	if v.Kind() == reflect.Ptr {
 		// if the pointer is nil, allocate a new element of the type it
@@ -420,13 +420,13 @@ func (d *Decoder) parse_value(v reflect.Value) bool {
 		v = v.Elem()
 	}
 
-	if d.parse_unmarshaler(v) {
+	if d.parseUnmarshaler(v) {
 		return true
 	}
 
 	// common case: interface{}
 	if v.Kind() == reflect.Interface && v.NumMethod() == 0 {
-		iface, _ := d.parse_value_interface()
+		iface, _ := d.parseValueInterface()
 		v.Set(reflect.ValueOf(iface))
 		return true
 	}
@@ -469,7 +469,7 @@ func (d *Decoder) raiseUnknownValueType(b byte, offset int64) {
 	})
 }
 
-func (d *Decoder) parse_value_interface() (interface{}, bool) {
+func (d *Decoder) parseValueInterface() (interface{}, bool) {
 	b, err := d.r.ReadByte()
 	if err != nil {
 		panic(err)
@@ -480,17 +480,17 @@ func (d *Decoder) parse_value_interface() (interface{}, bool) {
 	case 'e':
 		return nil, false
 	case 'd':
-		return d.parse_dict_interface(), true
+		return d.parseDictInterface(), true
 	case 'l':
-		return d.parse_list_interface(), true
+		return d.parseListInterface(), true
 	case 'i':
-		return d.parse_int_interface(), true
+		return d.parseIntInterface(), true
 	default:
 		if b >= '0' && b <= '9' {
 			// string
 			// append first digit of the length to the buffer
 			d.buf.WriteByte(b)
-			return d.parse_string_interface(), true
+			return d.parseStringInterface(), true
 		}
 
 		d.raiseUnknownValueType(b, d.offset-1)
@@ -498,9 +498,9 @@ func (d *Decoder) parse_value_interface() (interface{}, bool) {
 	}
 }
 
-func (d *Decoder) parse_int_interface() (ret interface{}) {
+func (d *Decoder) parseIntInterface() (ret interface{}) {
 	start := d.offset - 1
-	d.read_until('e')
+	d.readUntil('e')
 	if d.buf.Len() == 0 {
 		panic(&SyntaxError{
 			Offset: start,
@@ -520,7 +520,7 @@ func (d *Decoder) parse_int_interface() (ret interface{}) {
 		}
 		ret = i
 	} else {
-		check_for_int_parse_error(err, start)
+		checkForIntParseError(err, start)
 		ret = n
 	}
 
@@ -528,19 +528,19 @@ func (d *Decoder) parse_int_interface() (ret interface{}) {
 	return
 }
 
-func (d *Decoder) parse_string_interface() interface{} {
+func (d *Decoder) parseStringInterface() interface{} {
 	start := d.offset - 1
 
 	// read the string length first
-	d.read_until(':')
+	d.readUntil(':')
 	length, err := strconv.ParseInt(d.buf.String(), 10, 64)
-	check_for_int_parse_error(err, start)
+	checkForIntParseError(err, start)
 
 	d.buf.Reset()
 	n, err := io.CopyN(&d.buf, d.r, length)
 	d.offset += n
 	if err != nil {
-		check_for_unexpected_eof(err, d.offset)
+		checkForUnexpectedEOF(err, d.offset)
 		panic(&SyntaxError{
 			Offset: d.offset,
 			What:   errors.New("unexpected I/O error: " + err.Error()),
@@ -552,10 +552,10 @@ func (d *Decoder) parse_string_interface() interface{} {
 	return s
 }
 
-func (d *Decoder) parse_dict_interface() interface{} {
+func (d *Decoder) parseDictInterface() interface{} {
 	dict := make(map[string]interface{})
 	for {
-		keyi, ok := d.parse_value_interface()
+		keyi, ok := d.parseValueInterface()
 		if !ok {
 			break
 		}
@@ -568,7 +568,7 @@ func (d *Decoder) parse_dict_interface() interface{} {
 			})
 		}
 
-		valuei, ok := d.parse_value_interface()
+		valuei, ok := d.parseValueInterface()
 		if !ok {
 			break
 		}
@@ -578,10 +578,10 @@ func (d *Decoder) parse_dict_interface() interface{} {
 	return dict
 }
 
-func (d *Decoder) parse_list_interface() interface{} {
+func (d *Decoder) parseListInterface() interface{} {
 	var list []interface{}
 	for {
-		valuei, ok := d.parse_value_interface()
+		valuei, ok := d.parseValueInterface()
 		if !ok {
 			break
 		}

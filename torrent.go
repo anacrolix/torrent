@@ -62,7 +62,7 @@ type Torrent struct {
 	metainfo metainfo.MetaInfo
 
 	// The info dict. nil if we don't have it (yet).
-	info *metainfo.InfoEx
+	info *metainfo.Info
 	// Active peer connections, running message stream loops.
 	conns               []*connection
 	maxEstablishedConns int
@@ -210,7 +210,7 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 }
 
 func (t *Torrent) makePieces() {
-	hashes := infoPieceHashes(&t.info.Info)
+	hashes := infoPieceHashes(t.info)
 	t.pieces = make([]piece, len(hashes))
 	for i, hash := range hashes {
 		piece := &t.pieces[i]
@@ -226,24 +226,24 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	if t.haveInfo() {
 		return nil
 	}
-	var ie *metainfo.InfoEx
-	err := bencode.Unmarshal(b, &ie)
+	if metainfo.HashBytes(b) != t.infoHash {
+		return errors.New("info bytes have wrong hash")
+	}
+	var info metainfo.Info
+	err := bencode.Unmarshal(b, &info)
 	if err != nil {
 		return fmt.Errorf("error unmarshalling info bytes: %s", err)
 	}
-	if ie.Hash() != t.infoHash {
-		return errors.New("info bytes have wrong hash")
-	}
-	err = validateInfo(&ie.Info)
+	err = validateInfo(&info)
 	if err != nil {
 		return fmt.Errorf("bad info: %s", err)
 	}
 	defer t.updateWantPeersEvent()
-	t.info = ie
+	t.info = &info
 	t.displayName = "" // Save a few bytes lol.
 	t.cl.event.Broadcast()
 	t.gotMetainfo.Set()
-	t.storage, err = t.storageOpener.OpenTorrent(t.info)
+	t.storage, err = t.storageOpener.OpenTorrent(t.info, t.infoHash)
 	if err != nil {
 		return fmt.Errorf("error opening torrent storage: %s", err)
 	}
@@ -475,17 +475,14 @@ func (t *Torrent) announceList() (al [][]string) {
 
 // Returns a run-time generated MetaInfo that includes the info bytes and
 // announce-list as currently known to the client.
-func (t *Torrent) newMetaInfo() (mi *metainfo.MetaInfo) {
-	mi = &metainfo.MetaInfo{
+func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
+	return metainfo.MetaInfo{
 		CreationDate: time.Now().Unix(),
 		Comment:      "dynamic metainfo from client",
 		CreatedBy:    "go.torrent",
 		AnnounceList: t.announceList(),
+		InfoBytes:    t.metadataBytes,
 	}
-	if t.info != nil {
-		mi.Info = *t.info
-	}
-	return
 }
 
 func (t *Torrent) BytesMissing() int64 {

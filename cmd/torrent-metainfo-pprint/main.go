@@ -29,16 +29,16 @@ func main() {
 			log.Print(err)
 			continue
 		}
-		info := &metainfo.Info.Info
+		info := metainfo.UnmarshalInfo()
 		if flags.JustName {
-			fmt.Printf("%s\n", metainfo.Info.Name)
+			fmt.Printf("%s\n", info.Name)
 			continue
 		}
 		d := map[string]interface{}{
 			"Name":         info.Name,
 			"NumPieces":    info.NumPieces(),
 			"PieceLength":  info.PieceLength,
-			"InfoHash":     metainfo.Info.Hash().HexString(),
+			"InfoHash":     metainfo.HashInfoBytes().HexString(),
 			"NumFiles":     len(info.UpvertedFiles()),
 			"TotalLength":  info.TotalLength(),
 			"Announce":     metainfo.Announce,

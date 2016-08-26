@@ -42,15 +42,16 @@ func TestNodesListPairsBEP5(t *testing.T) {
 }
 
 func testMarshalMetainfo(t *testing.T, expected string, mi *MetaInfo) {
-	b, err := bencode.Marshal(mi)
+	b, err := bencode.Marshal(*mi)
 	assert.NoError(t, err)
 	assert.EqualValues(t, expected, string(b))
 }
 
 func TestMarshalMetainfoNodes(t *testing.T) {
-	testMarshalMetainfo(t, "d4:infod4:name0:12:piece lengthi0e6:piecesleee", &MetaInfo{})
-	testMarshalMetainfo(t, "d4:infod4:name0:12:piece lengthi0e6:pieceslee5:nodesl12:1.2.3.4:555514:not a hostportee", &MetaInfo{
-		Nodes: []Node{"1.2.3.4:5555", "not a hostport"},
+	testMarshalMetainfo(t, "d4:infodee", &MetaInfo{InfoBytes: []byte("de")})
+	testMarshalMetainfo(t, "d4:infod2:hi5:theree5:nodesl12:1.2.3.4:555514:not a hostportee", &MetaInfo{
+		Nodes:     []Node{"1.2.3.4:5555", "not a hostport"},
+		InfoBytes: []byte("d2:hi5:theree"),
 	})
 }
 

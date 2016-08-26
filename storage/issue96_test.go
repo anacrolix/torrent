@@ -15,13 +15,11 @@ func testMarkedCompleteMissingOnRead(t *testing.T, csf func(string) Client) {
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
 	cs := csf(td)
-	info := &metainfo.InfoEx{
-		Info: metainfo.Info{
-			PieceLength: 1,
-			Files:       []metainfo.FileInfo{{Path: []string{"a"}, Length: 1}},
-		},
+	info := &metainfo.Info{
+		PieceLength: 1,
+		Files:       []metainfo.FileInfo{{Path: []string{"a"}, Length: 1}},
 	}
-	ts, err := cs.OpenTorrent(info)
+	ts, err := cs.OpenTorrent(info, metainfo.Hash{})
 	require.NoError(t, err)
 	p := ts.Piece(info.Piece(0))
 	require.NoError(t, p.MarkComplete())

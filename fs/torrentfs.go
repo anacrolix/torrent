@@ -49,7 +49,7 @@ type rootNode struct {
 
 type node struct {
 	path     string
-	metadata *metainfo.InfoEx
+	metadata *metainfo.Info
 	FS       *TorrentFS
 	t        *torrent.Torrent
 }

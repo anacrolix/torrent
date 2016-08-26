@@ -49,22 +49,22 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	info := metaInfo.UnmarshalInfo()
 	mMapSpan := &mmap_span.MMapSpan{}
-	if len(metaInfo.Info.Files) > 0 {
-		for _, file := range metaInfo.Info.Files {
-			filename := filepath.Join(append([]string{*dataPath, metaInfo.Info.Name}, file.Path...)...)
+	if len(info.Files) > 0 {
+		for _, file := range info.Files {
+			filename := filepath.Join(append([]string{*dataPath, info.Name}, file.Path...)...)
 			goMMap := fileToMmap(filename, file.Length)
 			mMapSpan.Append(goMMap)
 		}
-		log.Println(len(metaInfo.Info.Files))
+		log.Println(len(info.Files))
 	} else {
-		goMMap := fileToMmap(*dataPath, metaInfo.Info.Length)
+		goMMap := fileToMmap(*dataPath, info.Length)
 		mMapSpan.Append(goMMap)
 	}
 	log.Println(mMapSpan.Size())
-	log.Println(len(metaInfo.Info.Pieces))
-	info := metaInfo.Info
-	for i := range iter.N(metaInfo.Info.NumPieces()) {
+	log.Println(len(info.Pieces))
+	for i := range iter.N(info.NumPieces()) {
 		p := info.Piece(i)
 		hash := sha1.New()
 		_, err := io.Copy(hash, io.NewSectionReader(mMapSpan, p.Offset(), p.Length()))

@@ -97,7 +97,7 @@ func TestUnmountWedged(t *testing.T) {
 	})
 	require.NoError(t, err)
 	defer client.Close()
-	_, err = client.AddTorrent(layout.Metainfo)
+	tt, err := client.AddTorrent(layout.Metainfo)
 	require.NoError(t, err)
 	fs := New(client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
@@ -124,7 +124,7 @@ func TestUnmountWedged(t *testing.T) {
 	// "wedge" FUSE, requiring the fs object to be forcibly destroyed. The
 	// read call will return with a FS error.
 	go func() {
-		_, err := ioutil.ReadFile(filepath.Join(layout.MountDir, layout.Metainfo.Info.Name))
+		_, err := ioutil.ReadFile(filepath.Join(layout.MountDir, tt.Info().Name))
 		if err == nil {
 			t.Fatal("expected error reading greeting")
 		}
@@ -169,7 +169,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	require.NoError(t, err)
 	defer seeder.Close()
 	testutil.ExportStatusWriter(seeder, "s")
-	_, err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.Info.Hash().HexString()))
+	_, err = seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.HashInfoBytes().HexString()))
 	require.NoError(t, err)
 	leecher, err := torrent.NewClient(&torrent.Config{
 		DisableTrackers: true,

@@ -1,19 +1,25 @@
 package metainfo
 
 import (
-	"crypto/sha1"
-	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/torrent/bencode"
 )
+
+type MetaInfo struct {
+	InfoBytes    bencode.Bytes `bencode:"info"`
+	Announce     string        `bencode:"announce,omitempty"`
+	AnnounceList [][]string    `bencode:"announce-list,omitempty"`
+	Nodes        []Node        `bencode:"nodes,omitempty"`
+	CreationDate int64         `bencode:"creation date,omitempty"`
+	Comment      string        `bencode:"comment,omitempty"`
+	CreatedBy    string        `bencode:"created by,omitempty"`
+	Encoding     string        `bencode:"encoding,omitempty"`
+	URLList      interface{}   `bencode:"url-list,omitempty"`
+}
 
 // Information specific to a single file inside the MetaInfo structure.
 type FileInfo struct {
@@ -43,158 +49,20 @@ func LoadFromFile(filename string) (*MetaInfo, error) {
 	return Load(f)
 }
 
-// The info dictionary.
-type Info struct {
-	PieceLength int64      `bencode:"piece length"`
-	Pieces      []byte     `bencode:"pieces"`
-	Name        string     `bencode:"name"`
-	Length      int64      `bencode:"length,omitempty"`
-	Private     *bool      `bencode:"private,omitempty"`
-	Files       []FileInfo `bencode:"files,omitempty"`
-}
-
-// This is a helper that sets Files and Pieces from a root path and its
-// children.
-func (info *Info) BuildFromFilePath(root string) (err error) {
-	info.Name = filepath.Base(root)
-	info.Files = nil
-	err = filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if fi.IsDir() {
-			// Directories are implicit in torrent files.
-			return nil
-		} else if path == root {
-			// The root is a file.
-			info.Length = fi.Size()
-			return nil
-		}
-		relPath, err := filepath.Rel(root, path)
-		log.Println(relPath, err)
-		if err != nil {
-			return fmt.Errorf("error getting relative path: %s", err)
-		}
-		info.Files = append(info.Files, FileInfo{
-			Path:   strings.Split(relPath, string(filepath.Separator)),
-			Length: fi.Size(),
-		})
-		return nil
-	})
+func (mi MetaInfo) UnmarshalInfo() (info Info) {
+	err := bencode.Unmarshal(mi.InfoBytes, &info)
 	if err != nil {
-		return
-	}
-	slices.Sort(info.Files, func(l, r FileInfo) bool {
-		return strings.Join(l.Path, "/") < strings.Join(r.Path, "/")
-	})
-	err = info.GeneratePieces(func(fi FileInfo) (io.ReadCloser, error) {
-		return os.Open(filepath.Join(root, strings.Join(fi.Path, string(filepath.Separator))))
-	})
-	if err != nil {
-		err = fmt.Errorf("error generating pieces: %s", err)
+		panic(fmt.Sprintf("bad info bytes: %s", err))
 	}
 	return
 }
 
-func (info *Info) writeFiles(w io.Writer, open func(fi FileInfo) (io.ReadCloser, error)) error {
-	for _, fi := range info.UpvertedFiles() {
-		r, err := open(fi)
-		if err != nil {
-			return fmt.Errorf("error opening %v: %s", fi, err)
-		}
-		wn, err := io.CopyN(w, r, fi.Length)
-		r.Close()
-		if wn != fi.Length || err != nil {
-			return fmt.Errorf("error hashing %v: %s", fi, err)
-		}
-	}
-	return nil
-}
-
-// Set info.Pieces by hashing info.Files.
-func (info *Info) GeneratePieces(open func(fi FileInfo) (io.ReadCloser, error)) error {
-	if info.PieceLength == 0 {
-		return errors.New("piece length must be non-zero")
-	}
-	pr, pw := io.Pipe()
-	go func() {
-		err := info.writeFiles(pw, open)
-		pw.CloseWithError(err)
-	}()
-	defer pr.Close()
-	var pieces []byte
-	for {
-		hasher := sha1.New()
-		wn, err := io.CopyN(hasher, pr, info.PieceLength)
-		if err == io.EOF {
-			err = nil
-		}
-		if err != nil {
-			return err
-		}
-		if wn == 0 {
-			break
-		}
-		pieces = hasher.Sum(pieces)
-		if wn < info.PieceLength {
-			break
-		}
-	}
-	info.Pieces = pieces
-	return nil
-}
-
-func (info *Info) TotalLength() (ret int64) {
-	if info.IsDir() {
-		for _, fi := range info.Files {
-			ret += fi.Length
-		}
-	} else {
-		ret = info.Length
-	}
-	return
-}
-
-func (info *Info) NumPieces() int {
-	if len(info.Pieces)%20 != 0 {
-		panic(len(info.Pieces))
-	}
-	return len(info.Pieces) / 20
-}
-
-func (info *Info) IsDir() bool {
-	return len(info.Files) != 0
-}
-
-// The files field, converted up from the old single-file in the parent info
-// dict if necessary. This is a helper to avoid having to conditionally handle
-// single and multi-file torrent infos.
-func (info *Info) UpvertedFiles() []FileInfo {
-	if len(info.Files) == 0 {
-		return []FileInfo{{
-			Length: info.Length,
-			// Callers should determine that Info.Name is the basename, and
-			// thus a regular file.
-			Path: nil,
-		}}
-	}
-	return info.Files
-}
-
-type MetaInfo struct {
-	Info         InfoEx      `bencode:"info"`
-	Announce     string      `bencode:"announce,omitempty"`
-	AnnounceList [][]string  `bencode:"announce-list,omitempty"`
-	Nodes        []Node      `bencode:"nodes,omitempty"`
-	CreationDate int64       `bencode:"creation date,omitempty"`
-	Comment      string      `bencode:"comment,omitempty"`
-	CreatedBy    string      `bencode:"created by,omitempty"`
-	Encoding     string      `bencode:"encoding,omitempty"`
-	URLList      interface{} `bencode:"url-list,omitempty"`
+func (mi MetaInfo) HashInfoBytes() (infoHash Hash) {
+	return HashBytes(mi.InfoBytes)
 }
 
 // Encode to bencoded form.
-func (mi *MetaInfo) Write(w io.Writer) error {
+func (mi MetaInfo) Write(w io.Writer) error {
 	return bencode.NewEncoder(w).Encode(mi)
 }
 
@@ -203,11 +71,11 @@ func (mi *MetaInfo) SetDefaults() {
 	mi.Comment = "yoloham"
 	mi.CreatedBy = "github.com/anacrolix/torrent"
 	mi.CreationDate = time.Now().Unix()
-	mi.Info.PieceLength = 256 * 1024
+	// mi.Info.PieceLength = 256 * 1024
 }
 
 // Creates a Magnet from a MetaInfo.
-func (mi *MetaInfo) Magnet() (m Magnet) {
+func (mi *MetaInfo) Magnet(displayName string, infoHash Hash) (m Magnet) {
 	for _, tier := range mi.AnnounceList {
 		for _, tracker := range tier {
 			m.Trackers = append(m.Trackers, tracker)
@@ -216,7 +84,7 @@ func (mi *MetaInfo) Magnet() (m Magnet) {
 	if m.Trackers == nil && mi.Announce != "" {
 		m.Trackers = []string{mi.Announce}
 	}
-	m.DisplayName = mi.Info.Name
-	m.InfoHash = mi.Info.Hash()
+	m.DisplayName = displayName
+	m.InfoHash = infoHash
 	return
 }

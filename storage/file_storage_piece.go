@@ -14,14 +14,18 @@ type fileStoragePiece struct {
 	r io.ReaderAt
 }
 
+func (me *fileStoragePiece) pieceKey() metainfo.PieceKey {
+	return metainfo.PieceKey{me.infoHash, me.p.Index()}
+}
+
 func (fs *fileStoragePiece) GetIsComplete() bool {
-	ret, err := fs.completion.Get(fs.p)
+	ret, err := fs.completion.Get(fs.pieceKey())
 	if err != nil || !ret {
 		return false
 	}
 	// If it's allegedly complete, check that its constituent files have the
 	// necessary length.
-	for _, fi := range extentCompleteRequiredLengths(&fs.p.Info.Info, fs.p.Offset(), fs.p.Length()) {
+	for _, fi := range extentCompleteRequiredLengths(fs.p.Info, fs.p.Offset(), fs.p.Length()) {
 		s, err := os.Stat(fs.fileInfoName(fi))
 		if err != nil || s.Size() < fi.Length {
 			ret = false
@@ -32,12 +36,12 @@ func (fs *fileStoragePiece) GetIsComplete() bool {
 		return true
 	}
 	// The completion was wrong, fix it.
-	fs.completion.Set(fs.p, false)
+	fs.completion.Set(fs.pieceKey(), false)
 	return false
 }
 
 func (fs *fileStoragePiece) MarkComplete() error {
-	fs.completion.Set(fs.p, true)
+	fs.completion.Set(fs.pieceKey(), true)
 	return nil
 }
 
@@ -50,6 +54,6 @@ func (fsp *fileStoragePiece) ReadAt(b []byte, off int64) (n int, err error) {
 	if off < 0 || off >= fsp.p.Length() {
 		return
 	}
-	fsp.completion.Set(fsp.p, false)
+	fsp.completion.Set(fsp.pieceKey(), false)
 	return
 }

@@ -69,7 +69,7 @@ func torrentFileInfoHash(fileName string) (ih metainfo.Hash, ok bool) {
 	if mi == nil {
 		return
 	}
-	ih = mi.Info.Hash()
+	ih = mi.HashInfoBytes()
 	ok = true
 	return
 }

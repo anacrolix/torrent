@@ -19,11 +19,12 @@ func testFile(t *testing.T, filename string) {
 	mi, err := LoadFromFile(filename)
 	require.NoError(t, err)
 
-	if len(mi.Info.Files) == 1 {
-		t.Logf("Single file: %s (length: %d)\n", mi.Info.Name, mi.Info.Files[0].Length)
+	info := mi.UnmarshalInfo()
+	if len(info.Files) == 1 {
+		t.Logf("Single file: %s (length: %d)\n", info.Name, info.Files[0].Length)
 	} else {
-		t.Logf("Multiple files: %s\n", mi.Info.Name)
-		for _, f := range mi.Info.Files {
+		t.Logf("Multiple files: %s\n", info.Name)
+		for _, f := range info.Files {
 			t.Logf(" - %s (length: %d)\n", path.Join(f.Path...), f.Length)
 		}
 	}
@@ -34,9 +35,9 @@ func testFile(t *testing.T, filename string) {
 		}
 	}
 
-	b, err := bencode.Marshal(&mi.Info.Info)
+	b, err := bencode.Marshal(&info)
 	require.NoError(t, err)
-	assert.EqualValues(t, string(b), string(mi.Info.Bytes))
+	assert.EqualValues(t, string(b), string(mi.InfoBytes))
 }
 
 func TestFile(t *testing.T) {
@@ -95,4 +96,22 @@ func TestBuildFromFilePathOrder(t *testing.T) {
 	}, {
 		Path: []string{"b"},
 	}}, info.Files)
+}
+
+func testUnmarshal(t *testing.T, input string, expected *MetaInfo) {
+	var actual MetaInfo
+	err := bencode.Unmarshal([]byte(input), &actual)
+	if expected == nil {
+		assert.Error(t, err)
+		return
+	}
+	assert.NoError(t, err)
+	assert.EqualValues(t, *expected, actual)
+}
+
+func TestUnmarshal(t *testing.T) {
+	testUnmarshal(t, `de`, &MetaInfo{})
+	testUnmarshal(t, `d4:infoe`, &MetaInfo{})
+	testUnmarshal(t, `d4:infoabce`, nil)
+	testUnmarshal(t, `d4:infodee`, &MetaInfo{InfoBytes: []byte("de")})
 }

@@ -1407,7 +1407,7 @@ type TorrentSpec struct {
 	// The tiered tracker URIs.
 	Trackers [][]string
 	InfoHash metainfo.Hash
-	Info     *metainfo.InfoEx
+	InfoBytes []byte
 	// The name to use if the Name field from the Info isn't available.
 	DisplayName string
 	// The chunk size to use for outbound requests. Defaults to 16KiB if not
@@ -1430,11 +1430,12 @@ func TorrentSpecFromMagnetURI(uri string) (spec *TorrentSpec, err error) {
 }
 
 func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
+	info := mi.UnmarshalInfo()
 	spec = &TorrentSpec{
 		Trackers:    mi.AnnounceList,
-		Info:        &mi.Info,
-		DisplayName: mi.Info.Name,
-		InfoHash:    mi.Info.Hash(),
+		InfoBytes:   mi.InfoBytes,
+		DisplayName: info.Name,
+		InfoHash:    mi.HashInfoBytes(),
 	}
 	if spec.Trackers == nil && mi.Announce != "" {
 		spec.Trackers = [][]string{{mi.Announce}}
@@ -1470,8 +1471,8 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 	if spec.DisplayName != "" {
 		t.SetDisplayName(spec.DisplayName)
 	}
-	if spec.Info != nil {
-		err = t.SetInfoBytes(spec.Info.Bytes)
+	if spec.InfoBytes != nil {
+		err = t.SetInfoBytes(spec.InfoBytes)
 		if err != nil {
 			return
 		}

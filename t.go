@@ -24,7 +24,7 @@ func (t *Torrent) GotInfo() <-chan struct{} {
 }
 
 // Returns the metainfo info dictionary, or nil if it's not yet available.
-func (t *Torrent) Info() *metainfo.InfoEx {
+func (t *Torrent) Info() *metainfo.Info {
 	return t.info
 }
 
@@ -117,7 +117,7 @@ func (t *Torrent) Length() int64 {
 
 // Returns a run-time generated metainfo for the torrent that includes the
 // info bytes and announce-list as currently known to the client.
-func (t *Torrent) Metainfo() *metainfo.MetaInfo {
+func (t *Torrent) Metainfo() metainfo.MetaInfo {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	return t.newMetaInfo()

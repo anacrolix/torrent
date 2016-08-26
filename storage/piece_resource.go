@@ -20,7 +20,7 @@ func NewResourcePieces(p resource.Provider) Client {
 	}
 }
 
-func (s *piecePerResource) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
+func (s *piecePerResource) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (Torrent, error) {
 	return s, nil
 }
 

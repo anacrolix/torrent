@@ -70,11 +70,11 @@ func TestParseMagnetURI(t *testing.T) {
 
 }
 
-func Test_Magnetize(t *testing.T) {
+func TestMagnetize(t *testing.T) {
 	mi, err := LoadFromFile("../testdata/bootstrap.dat.torrent")
 	require.NoError(t, err)
 
-	m := mi.Magnet()
+	m := mi.Magnet(mi.UnmarshalInfo().Name, mi.HashInfoBytes())
 
 	assert.EqualValues(t, "bootstrap.dat", m.DisplayName)
 

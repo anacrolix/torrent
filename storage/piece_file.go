@@ -25,7 +25,7 @@ type pieceFileTorrentStorage struct {
 	s *pieceFileStorage
 }
 
-func (s *pieceFileStorage) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
+func (s *pieceFileStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (Torrent, error) {
 	return &pieceFileTorrentStorage{s}, nil
 }
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/anacrolix/tagflag"
 
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -32,7 +33,14 @@ func main() {
 		mi.AnnounceList = append(mi.AnnounceList, []string{a})
 	}
 	mi.SetDefaults()
-	err := mi.Info.BuildFromFilePath(args.Root)
+	info := metainfo.Info{
+		PieceLength: 256 * 1024,
+	}
+	err := info.BuildFromFilePath(args.Root)
+	if err != nil {
+		log.Fatal(err)
+	}
+	mi.InfoBytes, err = bencode.Marshal(info)
 	if err != nil {
 		log.Fatal(err)
 	}

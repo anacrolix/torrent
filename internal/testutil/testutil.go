@@ -16,6 +16,7 @@ import (
 
 	"github.com/anacrolix/missinggo"
 
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -30,19 +31,25 @@ func CreateDummyTorrentData(dirName string) string {
 	f.WriteString(GreetingFileContents)
 	return f.Name()
 }
-func GreetingMetaInfo() (mi *metainfo.MetaInfo) {
-	mi = new(metainfo.MetaInfo)
-	mi.Info.Name = GreetingFileName
-	mi.Info.Length = int64(len(GreetingFileContents))
-	mi.Info.PieceLength = 5
-	err := mi.Info.GeneratePieces(func(metainfo.FileInfo) (io.ReadCloser, error) {
+
+func GreetingMetaInfo() *metainfo.MetaInfo {
+	info := metainfo.Info{
+		Name:        GreetingFileName,
+		Length:      int64(len(GreetingFileContents)),
+		PieceLength: 5,
+	}
+	err := info.GeneratePieces(func(metainfo.FileInfo) (io.ReadCloser, error) {
 		return ioutil.NopCloser(strings.NewReader(GreetingFileContents)), nil
 	})
 	if err != nil {
 		panic(err)
 	}
-	mi.Info.UpdateBytes()
-	return
+	mi := &metainfo.MetaInfo{}
+	mi.InfoBytes, err = bencode.Marshal(info)
+	if err != nil {
+		panic(err)
+	}
+	return mi
 }
 
 // Gives a temporary directory containing the completed "greeting" torrent,

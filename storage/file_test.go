@@ -20,14 +20,12 @@ func TestShortFile(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
 	s := NewFile(td)
-	info := &metainfo.InfoEx{
-		Info: metainfo.Info{
-			Name:        "a",
-			Length:      2,
-			PieceLength: missinggo.MiB,
-		},
+	info := &metainfo.Info{
+		Name:        "a",
+		Length:      2,
+		PieceLength: missinggo.MiB,
 	}
-	ts, err := s.OpenTorrent(info)
+	ts, err := s.OpenTorrent(info, metainfo.Hash{})
 	assert.NoError(t, err)
 	f, err := os.Create(filepath.Join(td, "a"))
 	err = f.Truncate(1)

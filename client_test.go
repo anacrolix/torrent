@@ -88,14 +88,14 @@ func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
 	tor := &Torrent{
-		infoHash:          mi.Info.Hash(),
+		infoHash:          mi.HashInfoBytes(),
 		pieceStateChanges: pubsub.NewPubSub(),
 	}
 	tor.chunkSize = 2
 	tor.storageOpener = storage.NewFile("/dev/null")
 	// Needed to lock for asynchronous piece verification.
 	tor.cl = new(Client)
-	err := tor.setInfoBytes(mi.Info.Bytes)
+	err := tor.setInfoBytes(mi.InfoBytes)
 	require.NoError(t, err)
 	require.Len(t, tor.pieces, 3)
 	tor.pendAllChunkSpecs(0)
@@ -492,7 +492,7 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 
 type badStorage struct{}
 
-func (bs badStorage) OpenTorrent(*metainfo.InfoEx) (storage.Torrent, error) {
+func (bs badStorage) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.Torrent, error) {
 	return bs, nil
 }
 
@@ -536,26 +536,24 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 	cl, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer cl.Close()
-	ie := metainfo.InfoEx{
-		Info: metainfo.Info{
-			PieceLength: 15,
-			Pieces:      make([]byte, 20),
-			Files: []metainfo.FileInfo{
-				metainfo.FileInfo{Path: []string{"greeting"}, Length: 13},
-			},
+	info := metainfo.Info{
+		PieceLength: 15,
+		Pieces:      make([]byte, 20),
+		Files: []metainfo.FileInfo{
+			metainfo.FileInfo{Path: []string{"greeting"}, Length: 13},
 		},
 	}
-	ie.UpdateBytes()
+	b, err := bencode.Marshal(info)
 	tt, new, err := cl.AddTorrentSpec(&TorrentSpec{
-		Info:     &ie,
-		InfoHash: ie.Hash(),
+		InfoBytes: b,
+		InfoHash:  metainfo.HashBytes(b),
 	})
 	require.NoError(t, err)
 	defer tt.Drop()
 	assert.True(t, new)
 	r := tt.NewReader()
 	defer r.Close()
-	b, err := ioutil.ReadAll(r)
+	b, err = ioutil.ReadAll(r)
 	assert.Len(t, b, 13)
 	assert.NoError(t, err)
 }
@@ -681,7 +679,7 @@ func TestAddTorrentSpecMerging(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
 	tt, new, err := cl.AddTorrentSpec(&TorrentSpec{
-		InfoHash: mi.Info.Hash(),
+		InfoHash: mi.HashInfoBytes(),
 	})
 	require.NoError(t, err)
 	require.True(t, new)
@@ -698,7 +696,7 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 	cl, _ := NewClient(&TestingConfig)
 	defer cl.Close()
 	tt, _, _ := cl.AddTorrentSpec(&TorrentSpec{
-		InfoHash: mi.Info.Hash(),
+		InfoHash: mi.HashInfoBytes(),
 	})
 	tt.Drop()
 	assert.EqualValues(t, 0, len(cl.Torrents()))
@@ -709,7 +707,7 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 	}
 }
 
-func writeTorrentData(ts storage.Torrent, info *metainfo.InfoEx, b []byte) {
+func writeTorrentData(ts storage.Torrent, info metainfo.Info, b []byte) {
 	for i := range iter.N(info.NumPieces()) {
 		n, _ := ts.Piece(info.Piece(i)).WriteAt(b, 0)
 		b = b[n:]
@@ -725,13 +723,15 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 	greetingDataTempDir, greetingMetainfo := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingDataTempDir)
 	filePieceStore := csf(fileCache)
-	greetingData, err := filePieceStore.OpenTorrent(&greetingMetainfo.Info)
+	info := greetingMetainfo.UnmarshalInfo()
+	ih := greetingMetainfo.HashInfoBytes()
+	greetingData, err := filePieceStore.OpenTorrent(&info, ih)
 	require.NoError(t, err)
-	writeTorrentData(greetingData, &greetingMetainfo.Info, []byte(testutil.GreetingFileContents))
+	writeTorrentData(greetingData, info, []byte(testutil.GreetingFileContents))
 	// require.Equal(t, len(testutil.GreetingFileContents), written)
 	// require.NoError(t, err)
-	for i := 0; i < greetingMetainfo.Info.NumPieces(); i++ {
-		p := greetingMetainfo.Info.Piece(i)
+	for i := 0; i < info.NumPieces(); i++ {
+		p := info.Piece(i)
 		if alreadyCompleted {
 			err := greetingData.Piece(p).MarkComplete()
 			assert.NoError(t, err)
@@ -871,17 +871,16 @@ func TestPeerInvalidHave(t *testing.T) {
 	cl, err := NewClient(&TestingConfig)
 	require.NoError(t, err)
 	defer cl.Close()
-	ie := metainfo.InfoEx{
-		Info: metainfo.Info{
-			PieceLength: 1,
-			Pieces:      make([]byte, 20),
-			Files:       []metainfo.FileInfo{{Length: 1}},
-		},
+	info := metainfo.Info{
+		PieceLength: 1,
+		Pieces:      make([]byte, 20),
+		Files:       []metainfo.FileInfo{{Length: 1}},
 	}
-	ie.UpdateBytes()
+	infoBytes, err := bencode.Marshal(info)
+	require.NoError(t, err)
 	tt, _new, err := cl.AddTorrentSpec(&TorrentSpec{
-		Info:     &ie,
-		InfoHash: ie.Hash(),
+		InfoBytes: infoBytes,
+		InfoHash:  metainfo.HashBytes(infoBytes),
 	})
 	require.NoError(t, err)
 	assert.True(t, _new)
@@ -901,7 +900,7 @@ func TestPieceCompletedInStorageButNotClient(t *testing.T) {
 	seeder, err := NewClient(&TestingConfig)
 	require.NoError(t, err)
 	seeder.AddTorrentSpec(&TorrentSpec{
-		Info: &greetingMetainfo.Info,
+		InfoBytes: greetingMetainfo.InfoBytes,
 	})
 }
 
@@ -980,7 +979,7 @@ func totalConns(tts []*Torrent) (ret int) {
 
 func TestSetMaxEstablishedConn(t *testing.T) {
 	var tts []*Torrent
-	ih := testutil.GreetingMetaInfo().Info.Hash()
+	ih := testutil.GreetingMetaInfo().HashInfoBytes()
 	cfg := TestingConfig
 	for i := range iter.N(3) {
 		cl, err := NewClient(&cfg)

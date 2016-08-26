@@ -17,6 +17,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error reading metainfo from stdin: %s", err)
 		os.Exit(1)
 	}
+	info := mi.UnmarshalInfo()
 
-	fmt.Fprintf(os.Stdout, "%s\n", mi.Magnet().String())
+	fmt.Fprintf(os.Stdout, "%s\n", mi.Magnet(info.Name, mi.HashInfoBytes()).String())
 }

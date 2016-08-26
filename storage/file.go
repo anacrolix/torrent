@@ -23,10 +23,11 @@ func NewFile(baseDir string) Client {
 	}
 }
 
-func (fs *fileStorage) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
+func (fs *fileStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (Torrent, error) {
 	return &fileTorrentStorage{
 		fs,
-		&info.Info,
+		info,
+		infoHash,
 		pieceCompletionForDir(fs.baseDir),
 	}, nil
 }
@@ -35,6 +36,7 @@ func (fs *fileStorage) OpenTorrent(info *metainfo.InfoEx) (Torrent, error) {
 type fileTorrentStorage struct {
 	fs         *fileStorage
 	info       *metainfo.Info
+	infoHash   metainfo.Hash
 	completion pieceCompletion
 }
 

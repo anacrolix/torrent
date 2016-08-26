@@ -10,19 +10,19 @@ type mapPieceCompletion struct {
 
 func (mapPieceCompletion) Close() {}
 
-func (me *mapPieceCompletion) Get(p metainfo.Piece) (bool, error) {
-	_, ok := me.m[p.Key()]
+func (me *mapPieceCompletion) Get(pk metainfo.PieceKey) (bool, error) {
+	_, ok := me.m[pk]
 	return ok, nil
 }
 
-func (me *mapPieceCompletion) Set(p metainfo.Piece, b bool) error {
+func (me *mapPieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
 	if b {
 		if me.m == nil {
 			me.m = make(map[metainfo.PieceKey]struct{})
 		}
-		me.m[p.Key()] = struct{}{}
+		me.m[pk] = struct{}{}
 	} else {
-		delete(me.m, p.Key())
+		delete(me.m, pk)
 	}
 	return nil
 }

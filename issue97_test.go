@@ -17,9 +17,11 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	defer os.RemoveAll(td)
 	cs := storage.NewFile(td)
 	tt := &Torrent{}
-	tt.info = &testutil.GreetingMetaInfo().Info
+	mi := testutil.GreetingMetaInfo()
+	info := mi.UnmarshalInfo()
+	tt.info = &info
 	tt.makePieces()
-	tt.storage, err = cs.OpenTorrent(tt.info)
+	tt.storage, err = cs.OpenTorrent(tt.info, mi.HashInfoBytes())
 	require.NoError(t, err)
 	require.NoError(t, tt.storage.Close())
 	tt.hashPiece(0)

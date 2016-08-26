@@ -7,8 +7,8 @@ import (
 )
 
 type pieceCompletion interface {
-	Get(metainfo.Piece) (bool, error)
-	Set(metainfo.Piece, bool) error
+	Get(metainfo.PieceKey) (bool, error)
+	Set(metainfo.PieceKey, bool) error
 	Close()
 }
 

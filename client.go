@@ -200,13 +200,17 @@ func listen(tcp, utp bool, networkSuffix, addr string) (tcpL net.Listener, utpSo
 	if addr == "" {
 		addr = ":50007"
 	}
-	host, port, err := missinggo.ParseHostPort(addr)
-	if err != nil {
-		return
-	}
-	if tcp && utp && port == 0 {
-		// If both protocols are active, they need to have the same port.
-		return listenBothSameDynamicPort(networkSuffix, host)
+	if tcp && utp {
+		var host string
+		var port int
+		host, port, err = missinggo.ParseHostPort(addr)
+		if err != nil {
+			return
+		}
+		if port == 0 {
+			// If both protocols are active, they need to have the same port.
+			return listenBothSameDynamicPort(networkSuffix, host)
+		}
 	}
 	defer func() {
 		if err != nil {
@@ -1405,8 +1409,8 @@ type Handle interface {
 // magnet URIs and torrent metainfo files.
 type TorrentSpec struct {
 	// The tiered tracker URIs.
-	Trackers [][]string
-	InfoHash metainfo.Hash
+	Trackers  [][]string
+	InfoHash  metainfo.Hash
 	InfoBytes []byte
 	// The name to use if the Name field from the Info isn't available.
 	DisplayName string

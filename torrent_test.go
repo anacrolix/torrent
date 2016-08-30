@@ -3,6 +3,10 @@ package torrent
 import (
 	"testing"
 
+	"github.com/bradfitz/iter"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/peer_protocol"
 )
 
@@ -56,5 +60,32 @@ func TestTorrentString(t *testing.T) {
 	s := tor.InfoHash().HexString()
 	if s != "0000000000000000000000000000000000000000" {
 		t.FailNow()
+	}
+}
+
+// This benchmark is from the observation that a lot of overlapping Readers on
+// a large torrent with small pieces had a lot of overhead in recalculating
+// piece priorities everytime a reader (possibly in another Torrent) changed.
+func BenchmarkUpdatePiecePriorities(b *testing.B) {
+	cl := &Client{}
+	t := cl.newTorrent(metainfo.Hash{})
+	t.info = &metainfo.Info{
+		Pieces:      make([]byte, 20*13410),
+		PieceLength: 256 << 10,
+	}
+	t.makePieces()
+	assert.EqualValues(b, 13410, t.numPieces())
+	for range iter.N(7) {
+		r := t.NewReader()
+		r.SetReadahead(32 << 20)
+		r.Seek(3500000, 0)
+	}
+	assert.Len(b, t.readers, 7)
+	t.pendPieceRange(0, t.numPieces())
+	for i := 0; i < t.numPieces(); i += 3 {
+		t.completedPieces.Set(i, true)
+	}
+	for range iter.N(b.N) {
+		t.updatePiecePriorities()
 	}
 }

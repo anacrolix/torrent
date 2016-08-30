@@ -24,8 +24,9 @@ const (
 	PiecePriorityNone      piecePriority = iota // Not wanted.
 	PiecePriorityNormal                         // Wanted.
 	PiecePriorityReadahead                      // May be required soon.
-	PiecePriorityNext                           // Succeeds a piece where a read occurred.
-	PiecePriorityNow                            // A Reader is reading in this piece.
+	// Succeeds a piece where a read occurred. Currently the same as Now, apparently due to issues with caching.
+	PiecePriorityNext
+	PiecePriorityNow // A Reader is reading in this piece.
 )
 
 type piece struct {

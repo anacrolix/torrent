@@ -563,7 +563,8 @@ func BenchmarkAddLargeTorrent(b *testing.B) {
 	cfg.DisableTCP = true
 	cfg.DisableUTP = true
 	cfg.ListenAddr = "redonk"
-	cl, _ := NewClient(&cfg)
+	cl, err := NewClient(&cfg)
+	require.NoError(b, err)
 	defer cl.Close()
 	for range iter.N(b.N) {
 		t, err := cl.AddTorrentFromFile("testdata/bootstrap.dat.torrent")

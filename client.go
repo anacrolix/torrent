@@ -1715,10 +1715,7 @@ func (cl *Client) pieceChanged(t *Torrent, piece int) {
 	} else {
 		cl.onFailedPiece(t, piece)
 	}
-	if t.updatePiecePriority(piece) {
-		t.piecePriorityChanged(piece)
-	}
-	t.publishPieceChange(piece)
+	t.updatePiecePriority(piece)
 }
 
 func (cl *Client) verifyPiece(t *Torrent, piece int) {
@@ -1731,7 +1728,6 @@ func (cl *Client) verifyPiece(t *Torrent, piece int) {
 	p.QueuedForHash = false
 	if t.closed.IsSet() || t.pieceComplete(piece) {
 		t.updatePiecePriority(piece)
-		t.publishPieceChange(piece)
 		return
 	}
 	p.Hashing = true

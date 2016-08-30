@@ -21,7 +21,7 @@ type Reader struct {
 
 	// Required when modifying pos and readahead, or reading them without
 	// opMu.
-	mu        sync.Mutex
+	mu        sync.Locker
 	pos       int64
 	readahead int64
 }
@@ -128,6 +128,7 @@ func (r *Reader) ReadContext(b []byte, ctx context.Context) (n int, err error) {
 		n += n1
 		r.mu.Lock()
 		r.pos += int64(n1)
+		r.posChanged()
 		r.mu.Unlock()
 	}
 	if r.pos >= r.t.length {
@@ -192,8 +193,6 @@ func (r *Reader) Close() error {
 }
 
 func (r *Reader) posChanged() {
-	r.t.cl.mu.Lock()
-	defer r.t.cl.mu.Unlock()
 	r.t.readersChanged()
 }
 
@@ -202,6 +201,7 @@ func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {
 	defer r.opMu.Unlock()
 
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	switch whence {
 	case os.SEEK_SET:
 		r.pos = off
@@ -213,7 +213,6 @@ func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {
 		err = errors.New("bad whence")
 	}
 	ret = r.pos
-	r.mu.Unlock()
 
 	r.posChanged()
 	return

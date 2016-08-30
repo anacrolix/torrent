@@ -97,7 +97,9 @@ type Torrent struct {
 	// Set when .Info is obtained.
 	gotMetainfo missinggo.Event
 
-	readers map[*Reader]struct{}
+	readers               map[*Reader]struct{}
+	readerNowPieces       bitmap.Bitmap
+	readerReadaheadPieces bitmap.Bitmap
 
 	// The indexes of pieces we want with normal priority, that aren't
 	// currently available.
@@ -824,6 +826,7 @@ func (t *Torrent) forUrgentPieces(f func(piece int) (again bool)) (all bool) {
 }
 
 func (t *Torrent) readersChanged() {
+	t.readerNowPieces, t.readerReadaheadPieces = t.readerPiecePriorities()
 	t.updatePiecePriorities()
 }
 
@@ -841,42 +844,21 @@ func (t *Torrent) piecePriorityChanged(piece int) {
 	t.publishPieceChange(piece)
 }
 
-func (t *Torrent) updatePiecePriority(piece int) bool {
+func (t *Torrent) updatePiecePriority(piece int) {
 	p := &t.pieces[piece]
 	newPrio := t.piecePriorityUncached(piece)
 	if newPrio == p.priority {
-		return false
+		return
 	}
 	p.priority = newPrio
-	return true
+	t.piecePriorityChanged(piece)
 }
 
 // Update all piece priorities in one hit. This function should have the same
 // output as updatePiecePriority, but across all pieces.
 func (t *Torrent) updatePiecePriorities() {
-	newPrios := make([]piecePriority, t.numPieces())
-	t.pendingPieces.IterTyped(func(piece int) (more bool) {
-		newPrios[piece] = PiecePriorityNormal
-		return true
-	})
-	t.forReaderOffsetPieces(func(begin, end int) (next bool) {
-		if begin < end {
-			newPrios[begin].Raise(PiecePriorityNow)
-		}
-		for i := begin + 1; i < end; i++ {
-			newPrios[i].Raise(PiecePriorityReadahead)
-		}
-		return true
-	})
-	t.completedPieces.IterTyped(func(piece int) (more bool) {
-		newPrios[piece] = PiecePriorityNone
-		return true
-	})
-	for i, prio := range newPrios {
-		if prio != t.pieces[i].priority {
-			t.pieces[i].priority = prio
-			t.piecePriorityChanged(i)
-		}
+	for i := range t.pieces {
+		t.updatePiecePriority(i)
 	}
 }
 
@@ -904,9 +886,9 @@ func (t *Torrent) byteRegionPieces(off, size int64) (begin, end int) {
 // callers depend on this method to enumerate readers.
 func (t *Torrent) forReaderOffsetPieces(f func(begin, end int) (more bool)) (all bool) {
 	for r := range t.readers {
-		r.mu.Lock()
+		// r.mu.Lock()
 		pos, readahead := r.pos, r.readahead
-		r.mu.Unlock()
+		// r.mu.Unlock()
 		if readahead < 1 {
 			readahead = 1
 		}
@@ -928,25 +910,23 @@ func (t *Torrent) piecePriority(piece int) piecePriority {
 	return t.pieces[piece].priority
 }
 
-func (t *Torrent) piecePriorityUncached(piece int) (ret piecePriority) {
-	ret = PiecePriorityNone
+func (t *Torrent) piecePriorityUncached(piece int) piecePriority {
 	if t.pieceComplete(piece) {
-		return
+		return PiecePriorityNone
+	}
+	if t.readerNowPieces.Contains(piece) {
+		return PiecePriorityNow
+	}
+	// if t.readerNowPieces.Contains(piece - 1) {
+	// 	return PiecePriorityNext
+	// }
+	if t.readerReadaheadPieces.Contains(piece) {
+		return PiecePriorityReadahead
 	}
 	if t.pendingPieces.Contains(piece) {
-		ret = PiecePriorityNormal
+		return PiecePriorityNormal
 	}
-	raiseRet := ret.Raise
-	t.forReaderOffsetPieces(func(begin, end int) (again bool) {
-		if piece == begin {
-			raiseRet(PiecePriorityNow)
-		}
-		if begin <= piece && piece < end {
-			raiseRet(PiecePriorityReadahead)
-		}
-		return true
-	})
-	return
+	return PiecePriorityNone
 }
 
 func (t *Torrent) pendPiece(piece int) {
@@ -957,10 +937,7 @@ func (t *Torrent) pendPiece(piece int) {
 		return
 	}
 	t.pendingPieces.Add(piece)
-	if !t.updatePiecePriority(piece) {
-		return
-	}
-	t.piecePriorityChanged(piece)
+	t.updatePiecePriority(piece)
 }
 
 func (t *Torrent) getCompletedPieces() (ret bitmap.Bitmap) {
@@ -1070,6 +1047,17 @@ func (t *Torrent) maybeCompleteMetadata() error {
 func (t *Torrent) readerPieces() (ret bitmap.Bitmap) {
 	t.forReaderOffsetPieces(func(begin, end int) bool {
 		ret.AddRange(begin, end)
+		return true
+	})
+	return
+}
+
+func (t *Torrent) readerPiecePriorities() (now, readahead bitmap.Bitmap) {
+	t.forReaderOffsetPieces(func(begin, end int) bool {
+		if end > begin {
+			now.Add(begin)
+			readahead.AddRange(begin+1, end)
+		}
 		return true
 	})
 	return

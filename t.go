@@ -32,6 +32,7 @@ func (t *Torrent) Info() *metainfo.Info {
 // the data requested is actually available.
 func (t *Torrent) NewReader() (ret *Reader) {
 	ret = &Reader{
+		mu:        &t.cl.mu,
 		t:         t,
 		readahead: 5 * 1024 * 1024,
 	}

@@ -49,7 +49,9 @@ type Torrent struct {
 	pieces   []piece
 	// Values are the piece indices that changed.
 	pieceStateChanges *pubsub.PubSub
-	chunkSize         pp.Integer
+	// The size of chunks to request from peers over the wire. This is
+	// normally 16KiB by convention these days.
+	chunkSize pp.Integer
 	// Total length of the torrent in bytes. Stored because it's not O(1) to
 	// get this from the info dict.
 	length int64
@@ -72,17 +74,21 @@ type Torrent struct {
 
 	// Reserve of peers to connect to. A peer can be both here and in the
 	// active connections if were told about the peer after connecting with
-	// them. That encourages us to reconnect to peers that are well known.
+	// them. That encourages us to reconnect to peers that are well known in
+	// the swarm.
 	peers          map[peersKey]Peer
 	wantPeersEvent missinggo.Event
 	// An announcer for each tracker URL.
 	trackerAnnouncers map[string]*trackerScraper
-	// How many times we've initiated a DHT announce.
+	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
-	// Name used if the info name isn't available.
+	// Name used if the info name isn't available. Should be cleared when the
+	// Info does become available.
 	displayName string
-	// The bencoded bytes of the info dict.
+	// The bencoded bytes of the info dict. This is actively manipulated if
+	// the info bytes aren't initially available, and we try to fetch them
+	// from peers.
 	metadataBytes []byte
 	// Each element corresponds to the 16KiB metadata pieces. If true, we have
 	// received that piece.
@@ -93,11 +99,18 @@ type Torrent struct {
 
 	readers map[*Reader]struct{}
 
-	pendingPieces   bitmap.Bitmap
+	// The indexes of pieces we want with normal priority, that aren't
+	// currently available.
+	pendingPieces bitmap.Bitmap
+	// A cache of completed piece indices.
 	completedPieces bitmap.Bitmap
 
+	// A pool of piece priorities []int for assignment to new connections.
+	// These "inclinations" are used to give connections preference for
+	// different pieces.
 	connPieceInclinationPool sync.Pool
-	stats                    TorrentStats
+	// Torrent-level statistics.
+	stats TorrentStats
 }
 
 func (t *Torrent) setDisplayName(dn string) {
@@ -886,10 +899,10 @@ func (t *Torrent) byteRegionPieces(off, size int64) (begin, end int) {
 	return
 }
 
-// Returns true if all iterations complete without breaking.
+// Returns true if all iterations complete without breaking. Returns the read
+// regions for all readers. The reader regions should not be merged as some
+// callers depend on this method to enumerate readers.
 func (t *Torrent) forReaderOffsetPieces(f func(begin, end int) (more bool)) (all bool) {
-	// There's an oppurtunity here to build a map of beginning pieces, and a
-	// bitmap of the rest. I wonder if it's worth the allocation overhead.
 	for r := range t.readers {
 		r.mu.Lock()
 		pos, readahead := r.pos, r.readahead
@@ -1072,6 +1085,7 @@ func (t *Torrent) needData() bool {
 	if t.pendingPieces.Len() != 0 {
 		return true
 	}
+	// Read as "not all complete".
 	return !t.readerPieces().IterTyped(func(piece int) bool {
 		return t.pieceComplete(piece)
 	})

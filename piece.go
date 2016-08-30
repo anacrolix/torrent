@@ -25,7 +25,7 @@ const (
 	PiecePriorityNormal                         // Wanted.
 	PiecePriorityReadahead                      // May be required soon.
 	PiecePriorityNext                           // Succeeds a piece where a read occurred.
-	PiecePriorityNow                            // A read occurred in this piece.
+	PiecePriorityNow                            // A Reader is reading in this piece.
 )
 
 type piece struct {

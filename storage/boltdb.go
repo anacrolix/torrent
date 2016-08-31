@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/binary"
+	"io"
 	"path/filepath"
 
 	"github.com/boltdb/bolt"
@@ -100,13 +101,13 @@ func (me *boltDBPiece) ReadAt(b []byte, off int64) (n int, err error) {
 		}
 		return nil
 	})
-	// if n == 0 && err == nil {
-	// 	if off < me.p.Length() {
-	// 		err = io.ErrUnexpectedEOF
-	// 	} else {
-	// 		err = io.EOF
-	// 	}
-	// }
+	if n == 0 && err == nil {
+		if off < me.p.Length() {
+			err = io.ErrUnexpectedEOF
+		} else {
+			err = io.EOF
+		}
+	}
 	// // log.Println(n, err)
 	return
 }

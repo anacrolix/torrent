@@ -40,7 +40,7 @@ var TestingConfig = Config{
 	ListenAddr:      "localhost:0",
 	NoDHT:           true,
 	DisableTrackers: true,
-	DataDir:         "/dev/null",
+	DataDir:         "/tmp/anacrolix",
 	DHTConfig: dht.ServerConfig{
 		NoDefaultBootstrap: true,
 	},
@@ -344,7 +344,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	// Create seeder and a Torrent.
 	cfg := TestingConfig
 	cfg.Seed = true
-	cfg.ListenAddr = "localhost:4000"
+	// cfg.ListenAddr = "localhost:4000"
 	if ps.SeederStorage != nil {
 		cfg.DefaultStorage = ps.SeederStorage(greetingTempDir)
 	} else {
@@ -364,7 +364,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
 	cfg.DefaultStorage = ps.LeecherStorage(leecherDataDir)
-	cfg.ListenAddr = "localhost:4001"
+	// cfg.ListenAddr = "localhost:4001"
 	leecher, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer leecher.Close()
@@ -393,7 +393,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	// After one read through, we can assume certain torrent statistics.
 	// These are not a strict requirement. It is however interesting to
 	// follow.
-	t.Logf("%#v", seederTorrent.Stats())
+	// t.Logf("%#v", seederTorrent.Stats())
 	assert.EqualValues(t, 13, seederTorrent.Stats().DataBytesWritten)
 	assert.EqualValues(t, 8, seederTorrent.Stats().ChunksWritten)
 	assert.EqualValues(t, 13, leecherGreeting.Stats().DataBytesRead)

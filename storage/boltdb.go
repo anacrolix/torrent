@@ -10,6 +10,8 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
+const chunkSize = 1 << 14
+
 var (
 	data      = []byte("data")
 	completed = []byte("completed")
@@ -85,12 +87,12 @@ func (me *boltDBPiece) ReadAt(b []byte, off int64) (n int, err error) {
 		if db == nil {
 			return nil
 		}
-		ci := off / (1 << 14)
-		off %= 1 << 14
+		ci := off / chunkSize
+		off %= chunkSize
 		for len(b) != 0 {
 			ck := me.chunkKey(int(ci))
 			_b := db.Get(ck[:])
-			if len(_b) != 1<<14 {
+			if len(_b) != chunkSize {
 				break
 			}
 			n1 := copy(b, _b[off:])
@@ -124,10 +126,10 @@ func (me *boltDBPiece) WriteAt(b []byte, off int64) (n int, err error) {
 		if err != nil {
 			return err
 		}
-		ci := off / (1 << 14)
-		off %= 1 << 14
+		ci := off / chunkSize
+		off %= chunkSize
 		for len(b) != 0 {
-			_b := make([]byte, 1<<14)
+			_b := make([]byte, chunkSize)
 			ck := me.chunkKey(int(ci))
 			copy(_b, db.Get(ck[:]))
 			n1 := copy(_b[off:], b)

@@ -5,19 +5,30 @@ import (
 	"io"
 	"path/filepath"
 
+	"github.com/anacrolix/missinggo"
 	"github.com/boltdb/bolt"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-const chunkSize = 1 << 14
+const (
+	// Chosen to match the usual chunk size in a torrent client. This way,
+	// most chunk writes are to exactly one full item in bolt DB.
+	chunkSize = 1 << 14
+)
 
 var (
-	data      = []byte("data")
+	// The key for the data bucket.
+	data = []byte("data")
+	// The key for the completion flag bucket.
 	completed = []byte("completed")
+	// The value to assigned to pieces that are complete in the completed
+	// bucket.
+	completedValue = []byte{1}
 )
 
 type boltDBClient struct {
+	// TODO: This is never closed.
 	db *bolt.DB
 }
 
@@ -76,7 +87,7 @@ func (me *boltDBPiece) MarkComplete() error {
 		if err != nil {
 			return
 		}
-		b.Put(me.key[:], make([]byte, 1))
+		b.Put(me.key[:], completedValue)
 		return
 	})
 }

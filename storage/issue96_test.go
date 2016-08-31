@@ -33,3 +33,7 @@ func testMarkedCompleteMissingOnRead(t *testing.T, csf func(string) Client) {
 func TestMarkedCompleteMissingOnReadFile(t *testing.T) {
 	testMarkedCompleteMissingOnRead(t, NewFile)
 }
+
+func TestMarkedCompleteMissingOnReadFileBoltDB(t *testing.T) {
+	testMarkedCompleteMissingOnRead(t, NewBoltDB)
+}

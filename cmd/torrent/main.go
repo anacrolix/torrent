@@ -124,6 +124,9 @@ func main() {
 	if flags.Addr != nil {
 		clientConfig.ListenAddr = flags.Addr.String()
 	}
+	if flags.Seed {
+		clientConfig.Seed = true
+	}
 
 	client, err := torrent.NewClient(&clientConfig)
 	if err != nil {

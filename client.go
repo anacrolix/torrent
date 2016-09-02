@@ -74,7 +74,7 @@ type Client struct {
 	dopplegangerAddrs map[string]struct{}
 	badPeerIPs        map[string]struct{}
 
-	defaultStorage storage.Client
+	defaultStorage *storage.Client
 
 	mu     sync.RWMutex
 	event  sync.Cond
@@ -253,15 +253,16 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	cl = &Client{
 		halfOpenLimit:     defaultHalfOpenConnsPerTorrent,
 		config:            *cfg,
-		defaultStorage:    cfg.DefaultStorage,
 		dopplegangerAddrs: make(map[string]struct{}),
 		torrents:          make(map[metainfo.Hash]*Torrent),
 	}
 	missinggo.CopyExact(&cl.extensionBytes, defaultExtensionBytes)
 	cl.event.L = &cl.mu
-	if cl.defaultStorage == nil {
-		cl.defaultStorage = storage.NewFile(cfg.DataDir)
+	storageImpl := cfg.DefaultStorage
+	if storageImpl == nil {
+		storageImpl = storage.NewFile(cfg.DataDir)
 	}
+	cl.defaultStorage = storage.NewClient(storageImpl)
 	if cfg.IPBlocklist != nil {
 		cl.ipBlockList = cfg.IPBlocklist
 	}
@@ -1417,7 +1418,7 @@ type TorrentSpec struct {
 	// The chunk size to use for outbound requests. Defaults to 16KiB if not
 	// set.
 	ChunkSize int
-	Storage   storage.Client
+	Storage   storage.ClientImpl
 }
 
 func TorrentSpecFromMagnetURI(uri string) (spec *TorrentSpec, err error) {

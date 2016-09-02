@@ -14,7 +14,7 @@ import (
 
 // Two different torrents opened from the same storage. Closing one should not
 // break the piece completion on the other.
-func testIssue95(t *testing.T, c Client) {
+func testIssue95(t *testing.T, c ClientImpl) {
 	i1 := &metainfo.Info{
 		Files:  []metainfo.FileInfo{{Path: []string{"a"}}},
 		Pieces: make([]byte, 20),

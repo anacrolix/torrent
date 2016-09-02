@@ -35,7 +35,7 @@ type Config struct {
 	DisableTCP bool `long:"disable-tcp"`
 	// Called to instantiate storage for each added torrent. Provided backends
 	// are in $REPO/data. If not set, the "file" implementation is used.
-	DefaultStorage    storage.Client
+	DefaultStorage    storage.ClientImpl
 	DisableEncryption bool `long:"disable-encryption"`
 
 	IPBlocklist iplist.Ranger

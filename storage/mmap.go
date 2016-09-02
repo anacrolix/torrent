@@ -17,13 +17,13 @@ type mmapStorage struct {
 	baseDir string
 }
 
-func NewMMap(baseDir string) Client {
+func NewMMap(baseDir string) ClientImpl {
 	return &mmapStorage{
 		baseDir: baseDir,
 	}
 }
 
-func (s *mmapStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (t Torrent, err error) {
+func (s *mmapStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (t TorrentImpl, err error) {
 	span, err := mMapTorrent(info, s.baseDir)
 	t = &mmapTorrentStorage{
 		span: span,
@@ -37,7 +37,7 @@ type mmapTorrentStorage struct {
 	pc   pieceCompletion
 }
 
-func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) Piece {
+func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 	return mmapStoragePiece{
 		pc:       ts.pc,
 		p:        p,
@@ -70,6 +70,11 @@ func (sp mmapStoragePiece) GetIsComplete() (ret bool) {
 
 func (sp mmapStoragePiece) MarkComplete() error {
 	sp.pc.Set(sp.pieceKey(), true)
+	return nil
+}
+
+func (sp mmapStoragePiece) MarkNotComplete() error {
+	sp.pc.Set(sp.pieceKey(), false)
 	return nil
 }
 

@@ -57,9 +57,9 @@ type Torrent struct {
 	length int64
 
 	// The storage to open when the info dict becomes available.
-	storageOpener storage.Client
+	storageOpener *storage.Client
 	// Storage for torrent data.
-	storage storage.Torrent
+	storage *storage.Torrent
 
 	metainfo metainfo.MetaInfo
 
@@ -550,8 +550,8 @@ func (t *Torrent) numPiecesCompleted() (num int) {
 
 func (t *Torrent) close() (err error) {
 	t.closed.Set()
-	if c, ok := t.storage.(io.Closer); ok {
-		c.Close()
+	if t.storage != nil {
+		t.storage.Close()
 	}
 	for _, conn := range t.conns {
 		conn.Close()

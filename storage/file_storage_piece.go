@@ -11,7 +11,7 @@ type fileStoragePiece struct {
 	*fileTorrentStorage
 	p metainfo.Piece
 	io.WriterAt
-	r io.ReaderAt
+	io.ReaderAt
 }
 
 func (me *fileStoragePiece) pieceKey() metainfo.PieceKey {
@@ -45,15 +45,7 @@ func (fs *fileStoragePiece) MarkComplete() error {
 	return nil
 }
 
-func (fsp *fileStoragePiece) ReadAt(b []byte, off int64) (n int, err error) {
-	n, err = fsp.r.ReadAt(b, off)
-	if n != 0 {
-		err = nil
-		return
-	}
-	if off < 0 || off >= fsp.p.Length() {
-		return
-	}
-	fsp.completion.Set(fsp.pieceKey(), false)
-	return
+func (fs *fileStoragePiece) MarkNotComplete() error {
+	fs.completion.Set(fs.pieceKey(), false)
+	return nil
 }

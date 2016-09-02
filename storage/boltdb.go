@@ -2,10 +2,8 @@ package storage
 
 import (
 	"encoding/binary"
-	"io"
 	"path/filepath"
 
-	"github.com/anacrolix/missinggo"
 	"github.com/boltdb/bolt"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -43,7 +41,7 @@ type boltDBPiece struct {
 	key [24]byte
 }
 
-func NewBoltDB(filePath string) Client {
+func NewBoltDB(filePath string) ClientImpl {
 	ret := &boltDBClient{}
 	var err error
 	ret.db, err = bolt.Open(filepath.Join(filePath, "bolt.db"), 0600, nil)
@@ -53,11 +51,11 @@ func NewBoltDB(filePath string) Client {
 	return ret
 }
 
-func (me *boltDBClient) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (Torrent, error) {
+func (me *boltDBClient) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
 	return &boltDBTorrent{me, infoHash}, nil
 }
 
-func (me *boltDBTorrent) Piece(p metainfo.Piece) Piece {
+func (me *boltDBTorrent) Piece(p metainfo.Piece) PieceImpl {
 	ret := &boltDBPiece{p: p, db: me.cl.db}
 	copy(ret.key[:], me.ih[:])
 	binary.BigEndian.PutUint32(ret.key[20:], uint32(p.Index()))
@@ -82,16 +80,24 @@ func (me *boltDBPiece) GetIsComplete() (complete bool) {
 }
 
 func (me *boltDBPiece) MarkComplete() error {
-	return me.db.Update(func(tx *bolt.Tx) (err error) {
+	return me.db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists(completed)
 		if err != nil {
-			return
+			return err
 		}
-		b.Put(me.key[:], completedValue)
-		return
+		return b.Put(me.key[:], completedValue)
 	})
 }
 
+func (me *boltDBPiece) MarkNotComplete() error {
+	return me.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(completed)
+		if b == nil {
+			return nil
+		}
+		return b.Delete(me.key[:])
+	})
+}
 func (me *boltDBPiece) ReadAt(b []byte, off int64) (n int, err error) {
 	err = me.db.View(func(tx *bolt.Tx) error {
 		db := tx.Bucket(data)
@@ -114,14 +120,6 @@ func (me *boltDBPiece) ReadAt(b []byte, off int64) (n int, err error) {
 		}
 		return nil
 	})
-	if n == 0 && err == nil {
-		if off < me.p.Length() {
-			err = io.ErrUnexpectedEOF
-		} else {
-			err = io.EOF
-		}
-	}
-	// // log.Println(n, err)
 	return
 }
 

@@ -7,26 +7,28 @@ import (
 )
 
 // Represents data storage for an unspecified torrent.
-type Client interface {
-	OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (Torrent, error)
+type ClientImpl interface {
+	OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error)
 }
 
 // Data storage bound to a torrent.
-type Torrent interface {
-	Piece(metainfo.Piece) Piece
+type TorrentImpl interface {
+	Piece(metainfo.Piece) PieceImpl
 	Close() error
 }
 
 // Interacts with torrent piece data.
-type Piece interface {
-	// Should return io.EOF only at end of torrent. Short reads due to missing
-	// data should return io.ErrUnexpectedEOF.
+type PieceImpl interface {
+	// These interfaces are not as strict as normally required. They can
+	// assume that the parameters are appropriate for the dimentions of the
+	// piece.
 	io.ReaderAt
 	io.WriterAt
 	// Called when the client believes the piece data will pass a hash check.
 	// The storage can move or mark the piece data as read-only as it sees
 	// fit.
 	MarkComplete() error
+	MarkNotComplete() error
 	// Returns true if the piece is complete.
 	GetIsComplete() bool
 }

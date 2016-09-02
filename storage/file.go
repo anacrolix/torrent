@@ -17,13 +17,13 @@ type fileStorage struct {
 	baseDir string
 }
 
-func NewFile(baseDir string) Client {
+func NewFile(baseDir string) ClientImpl {
 	return &fileStorage{
 		baseDir: baseDir,
 	}
 }
 
-func (fs *fileStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (Torrent, error) {
+func (fs *fileStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
 	return &fileTorrentStorage{
 		fs,
 		info,
@@ -40,7 +40,7 @@ type fileTorrentStorage struct {
 	completion pieceCompletion
 }
 
-func (fts *fileTorrentStorage) Piece(p metainfo.Piece) Piece {
+func (fts *fileTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 	// Create a view onto the file-based torrent storage.
 	_io := fileStorageTorrent{fts}
 	// Return the appropriate segments of this.

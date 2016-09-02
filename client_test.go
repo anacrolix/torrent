@@ -92,7 +92,7 @@ func TestTorrentInitialState(t *testing.T) {
 		pieceStateChanges: pubsub.NewPubSub(),
 	}
 	tor.chunkSize = 2
-	tor.storageOpener = storage.NewFile("/dev/null")
+	tor.storageOpener = storage.NewClient(storage.NewFile("/dev/null"))
 	// Needed to lock for asynchronous piece verification.
 	tor.cl = new(Client)
 	err := tor.setInfoBytes(mi.InfoBytes)
@@ -241,11 +241,11 @@ func TestAddDropManyTorrents(t *testing.T) {
 type FileCacheClientStorageFactoryParams struct {
 	Capacity    int64
 	SetCapacity bool
-	Wrapper     func(*filecache.Cache) storage.Client
+	Wrapper     func(*filecache.Cache) storage.ClientImpl
 }
 
 func NewFileCacheClientStorageFactory(ps FileCacheClientStorageFactoryParams) storageFactory {
-	return func(dataDir string) storage.Client {
+	return func(dataDir string) storage.ClientImpl {
 		fc, err := filecache.NewCache(dataDir)
 		if err != nil {
 			panic(err)
@@ -257,7 +257,7 @@ func NewFileCacheClientStorageFactory(ps FileCacheClientStorageFactoryParams) st
 	}
 }
 
-type storageFactory func(string) storage.Client
+type storageFactory func(string) storage.ClientImpl
 
 func TestClientTransferDefault(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
@@ -268,11 +268,11 @@ func TestClientTransferDefault(t *testing.T) {
 	})
 }
 
-func fileCachePieceResourceStorage(fc *filecache.Cache) storage.Client {
+func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
 	return storage.NewResourcePieces(fc.AsResourceProvider())
 }
 
-func fileCachePieceFileStorage(fc *filecache.Cache) storage.Client {
+func fileCachePieceFileStorage(fc *filecache.Cache) storage.ClientImpl {
 	return storage.NewFileStorePieces(fc.AsFileStore())
 }
 
@@ -303,7 +303,7 @@ func TestClientTransferVarious(t *testing.T) {
 		}),
 		storage.NewBoltDB,
 	} {
-		for _, ss := range []func(string) storage.Client{
+		for _, ss := range []func(string) storage.ClientImpl{
 			storage.NewFile,
 			storage.NewMMap,
 		} {
@@ -332,8 +332,8 @@ type testClientTransferParams struct {
 	Readahead          int64
 	SetReadahead       bool
 	ExportClientStatus bool
-	LeecherStorage     func(string) storage.Client
-	SeederStorage      func(string) storage.Client
+	LeecherStorage     func(string) storage.ClientImpl
+	SeederStorage      func(string) storage.ClientImpl
 }
 
 // Creates a seeder and a leecher, and ensures the data transfers when a read
@@ -493,7 +493,7 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 
 type badStorage struct{}
 
-func (bs badStorage) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.Torrent, error) {
+func (bs badStorage) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.TorrentImpl, error) {
 	return bs, nil
 }
 
@@ -501,7 +501,7 @@ func (bs badStorage) Close() error {
 	return nil
 }
 
-func (bs badStorage) Piece(p metainfo.Piece) storage.Piece {
+func (bs badStorage) Piece(p metainfo.Piece) storage.PieceImpl {
 	return badStoragePiece{p}
 }
 
@@ -518,6 +518,10 @@ func (p badStoragePiece) GetIsComplete() bool {
 }
 
 func (p badStoragePiece) MarkComplete() error {
+	return errors.New("psyyyyyyyche")
+}
+
+func (p badStoragePiece) MarkNotComplete() error {
 	return errors.New("psyyyyyyyche")
 }
 
@@ -709,14 +713,14 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 	}
 }
 
-func writeTorrentData(ts storage.Torrent, info metainfo.Info, b []byte) {
+func writeTorrentData(ts *storage.Torrent, info metainfo.Info, b []byte) {
 	for i := range iter.N(info.NumPieces()) {
-		n, _ := ts.Piece(info.Piece(i)).WriteAt(b, 0)
-		b = b[n:]
+		p := info.Piece(i)
+		ts.Piece(p).WriteAt(b[p.Offset():p.Offset()+p.Length()], 0)
 	}
 }
 
-func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.Client) {
+func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.ClientImpl) {
 	fileCacheDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(fileCacheDir)
@@ -727,7 +731,7 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 	filePieceStore := csf(fileCache)
 	info := greetingMetainfo.UnmarshalInfo()
 	ih := greetingMetainfo.HashInfoBytes()
-	greetingData, err := filePieceStore.OpenTorrent(&info, ih)
+	greetingData, err := storage.NewClient(filePieceStore).OpenTorrent(&info, ih)
 	require.NoError(t, err)
 	writeTorrentData(greetingData, info, []byte(testutil.GreetingFileContents))
 	// require.Equal(t, len(testutil.GreetingFileContents), written)

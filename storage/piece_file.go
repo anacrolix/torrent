@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"errors"
 	"io"
 	"os"
 	"path"
@@ -15,7 +14,7 @@ type pieceFileStorage struct {
 	fs missinggo.FileStore
 }
 
-func NewFileStorePieces(fs missinggo.FileStore) Client {
+func NewFileStorePieces(fs missinggo.FileStore) ClientImpl {
 	return &pieceFileStorage{
 		fs: fs,
 	}
@@ -25,7 +24,7 @@ type pieceFileTorrentStorage struct {
 	s *pieceFileStorage
 }
 
-func (s *pieceFileStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (Torrent, error) {
+func (s *pieceFileStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
 	return &pieceFileTorrentStorage{s}, nil
 }
 
@@ -33,7 +32,7 @@ func (s *pieceFileTorrentStorage) Close() error {
 	return nil
 }
 
-func (s *pieceFileTorrentStorage) Piece(p metainfo.Piece) Piece {
+func (s *pieceFileTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 	return pieceFileTorrentStoragePiece{s, p, s.s.fs}
 }
 
@@ -58,6 +57,10 @@ func (s pieceFileTorrentStoragePiece) GetIsComplete() bool {
 
 func (s pieceFileTorrentStoragePiece) MarkComplete() error {
 	return s.fs.Rename(s.incompletePath(), s.completedPath())
+}
+
+func (s pieceFileTorrentStoragePiece) MarkNotComplete() error {
+	return s.fs.Remove(s.completedPath())
 }
 
 func (s pieceFileTorrentStoragePiece) openFile() (f missinggo.File, err error) {
@@ -85,27 +88,14 @@ func (s pieceFileTorrentStoragePiece) ReadAt(b []byte, off int64) (n int, err er
 		return
 	}
 	defer f.Close()
-	missinggo.LimitLen(&b, s.p.Length()-off)
-	n, err = f.ReadAt(b, off)
-	off += int64(n)
-	if off >= s.p.Length() {
-		err = io.EOF
-	} else if err == io.EOF {
-		err = io.ErrUnexpectedEOF
-	}
-	return
+	return f.ReadAt(b, off)
 }
 
 func (s pieceFileTorrentStoragePiece) WriteAt(b []byte, off int64) (n int, err error) {
-	if s.GetIsComplete() {
-		err = errors.New("piece completed")
-		return
-	}
 	f, err := s.fs.OpenFile(s.incompletePath(), os.O_WRONLY|os.O_CREATE)
 	if err != nil {
 		return
 	}
 	defer f.Close()
-	missinggo.LimitLen(&b, s.p.Length()-off)
 	return f.WriteAt(b, off)
 }

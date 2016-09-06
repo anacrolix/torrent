@@ -50,7 +50,7 @@ func ParseMagnetURI(uri string) (m Magnet, err error) {
 	infoHash := xt[len(xtPrefix):]
 
 	// BTIH hash can be in HEX or BASE32 encoding
-	// will assign apropriate func judging from symbol length
+	// will assign appropriate func judging from symbol length
 	var decode func(dst, src []byte) (int, error)
 	switch len(infoHash) {
 	case 40:

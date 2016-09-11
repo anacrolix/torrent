@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	mathRand "math/rand"
 	"net"
 	"net/url"
 	"strconv"
@@ -1379,23 +1378,6 @@ func (cl *Client) newTorrent(ih metainfo.Hash) (t *Torrent) {
 		maxEstablishedConns: defaultEstablishedConnsPerTorrent,
 	}
 	return
-}
-
-func init() {
-	// For shuffling the tracker tiers.
-	mathRand.Seed(time.Now().Unix())
-}
-
-type trackerTier []string
-
-// The trackers within each tier must be shuffled before use.
-// http://stackoverflow.com/a/12267471/149482
-// http://www.bittorrent.org/beps/bep_0012.html#order-of-processing
-func shuffleTier(tier trackerTier) {
-	for i := range tier {
-		j := mathRand.Intn(i + 1)
-		tier[i], tier[j] = tier[j], tier[i]
-	}
 }
 
 // A file-like handle to some torrent data resource.

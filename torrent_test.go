@@ -1,11 +1,16 @@
 package torrent
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/anacrolix/missinggo"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/peer_protocol"
 )
@@ -88,4 +93,26 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	for range iter.N(b.N) {
 		t.updatePiecePriorities()
 	}
+}
+
+func TestEmptyFilesAndZeroPieceLength(t *testing.T) {
+	cl, err := NewClient(&TestingConfig)
+	require.NoError(t, err)
+	defer cl.Close()
+	ib, err := bencode.Marshal(metainfo.Info{
+		Name:   "empty",
+		Length: 0,
+	})
+	require.NoError(t, err)
+	fp := filepath.Join(TestingConfig.DataDir, "empty")
+	os.Remove(fp)
+	assert.False(t, missinggo.FilePathExists(fp))
+	tt, err := cl.AddTorrent(&metainfo.MetaInfo{
+		InfoBytes: ib,
+	})
+	require.NoError(t, err)
+	defer tt.Drop()
+	tt.DownloadAll()
+	require.True(t, cl.WaitAll())
+	assert.True(t, missinggo.FilePathExists(fp))
 }

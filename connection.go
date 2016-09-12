@@ -698,9 +698,16 @@ func (c *connection) lastHelpful() (ret time.Time) {
 func (c *connection) mainReadLoop() error {
 	t := c.t
 	cl := t.cl
+	pool := &sync.Pool{
+		New: func() interface{} {
+			return make([]byte, t.chunkSize)
+		},
+	}
+
 	decoder := pp.Decoder{
 		R:         bufio.NewReader(c.rw),
 		MaxLength: 256 * 1024,
+		Pool:      pool,
 	}
 	for {
 		cl.mu.Unlock()
@@ -774,6 +781,9 @@ func (c *connection) mainReadLoop() error {
 			err = c.peerSentHaveNone()
 		case pp.Piece:
 			cl.downloadedChunk(t, c, &msg)
+			if len(msg.Piece) == int(t.chunkSize) {
+				pool.Put(msg.Piece)
+			}
 		case pp.Extended:
 			switch msg.ExtendedID {
 			case pp.HandshakeExtendedID:

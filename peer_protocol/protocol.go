@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"sync"
 )
 
 type (
@@ -123,6 +124,7 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 
 type Decoder struct {
 	R         *bufio.Reader
+	Pool      *sync.Pool
 	MaxLength Integer // TODO: Should this include the length header or not?
 }
 
@@ -197,7 +199,16 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 		if err != nil {
 			break
 		}
-		msg.Piece, err = ioutil.ReadAll(r)
+		//msg.Piece, err = ioutil.ReadAll(r)
+		b := d.Pool.Get().([]byte)
+		n, err := io.ReadFull(r, b)
+		if err != nil {
+			if err != io.ErrUnexpectedEOF || n != int(length-9) {
+				return err
+			}
+			b = b[0:n]
+		}
+		msg.Piece = b
 	case Extended:
 		msg.ExtendedID, err = r.ReadByte()
 		if err != nil {

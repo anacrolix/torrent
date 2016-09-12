@@ -8,7 +8,7 @@ import (
 )
 
 type fileStoragePiece struct {
-	*fileTorrentStorage
+	*fileTorrentImpl
 	p metainfo.Piece
 	io.WriterAt
 	io.ReaderAt

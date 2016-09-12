@@ -24,6 +24,10 @@ func NewFile(baseDir string) ClientImpl {
 }
 
 func (fs *fileStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
+	err := CreateNativeZeroLengthFiles(info, fs.baseDir)
+	if err != nil {
+		return nil, err
+	}
 	return &fileTorrentStorage{
 		fs,
 		info,
@@ -55,6 +59,26 @@ func (fts *fileTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 func (fs *fileTorrentStorage) Close() error {
 	fs.completion.Close()
 	return nil
+}
+
+// Creates natives files for any zero-length file entries in the info. This is
+// a helper for file-based storages, which don't address or write to zero-
+// length files because they have no corresponding pieces.
+func CreateNativeZeroLengthFiles(info *metainfo.Info, baseDir string) (err error) {
+	for _, fi := range info.UpvertedFiles() {
+		if fi.Length != 0 {
+			continue
+		}
+		name := filepath.Join(append([]string{baseDir, info.Name}, fi.Path...)...)
+		os.MkdirAll(filepath.Dir(name), 0750)
+		var f io.Closer
+		f, err = os.Create(name)
+		if err != nil {
+			break
+		}
+		f.Close()
+	}
+	return
 }
 
 // Exposes file-based storage of a torrent, as one big ReadWriterAt.

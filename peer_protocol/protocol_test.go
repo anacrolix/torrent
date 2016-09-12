@@ -76,10 +76,8 @@ func TestHaveEncode(t *testing.T) {
 }
 
 func TestShortRead(t *testing.T) {
-	dec := Decoder{
-		R:         bufio.NewReader(bytes.NewBufferString("\x00\x00\x00\x02\x00!")),
-		MaxLength: 2,
-	}
+	r := bufio.NewReader(bytes.NewBufferString("\x00\x00\x00\x02\x00!"))
+	dec := NewDecoder(r, nil, 2)
 	msg := new(Message)
 	err := dec.Decode(msg)
 	if !strings.Contains(err.Error(), "1 bytes unused in message type 0") {
@@ -97,10 +95,8 @@ func TestUnexpectedEOF(t *testing.T) {
 		// Request truncated.
 		"\x00\x00\x00\x0b\x06\x00\x00\x00\x00\x00",
 	} {
-		dec := Decoder{
-			R:         bufio.NewReader(bytes.NewBufferString(stream)),
-			MaxLength: 42,
-		}
+		r := bufio.NewReader(bytes.NewBufferString(stream))
+		dec := NewDecoder(r, nil, 42)
 		err := dec.Decode(msg)
 		if err == nil {
 			t.Fatalf("expected an error decoding %q", stream)
@@ -137,10 +133,8 @@ func TestMarshalPortMsg(t *testing.T) {
 
 func TestUnmarshalPortMsg(t *testing.T) {
 	var m Message
-	d := Decoder{
-		R:         bufio.NewReader(bytes.NewBufferString("\x00\x00\x00\x03\x09\xaa\xbb")),
-		MaxLength: 8,
-	}
+	r := bufio.NewReader(bytes.NewBufferString("\x00\x00\x00\x03\x09\xaa\xbb"))
+	d := NewDecoder(r, nil, 8)
 	err := d.Decode(&m)
 	if err != nil {
 		t.Fatal(err)

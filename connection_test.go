@@ -147,6 +147,11 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		chunkSize:         defaultChunkSize,
 		storage:           &storage.Torrent{ts},
 		pieceStateChanges: pubsub.NewPubSub(),
+		pieceBuffer: &sync.Pool{
+			New: func() interface{} {
+				return make([]byte, defaultChunkSize)
+			},
+		},
 	}
 	t.makePieces()
 	t.pendingPieces.Add(0)

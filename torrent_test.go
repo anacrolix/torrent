@@ -13,6 +13,7 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/peer_protocol"
+	"github.com/anacrolix/torrent/storage"
 )
 
 func r(i, b, l peer_protocol.Integer) request {
@@ -95,13 +96,19 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	}
 }
 
-func TestEmptyFilesAndZeroPieceLength(t *testing.T) {
+// Check that a torrent containing zero-length file(s) will start, and that
+// they're created in the filesystem. The client storage is assumed to be
+// file-based on the native filesystem based.
+func testEmptyFilesAndZeroPieceLength(t *testing.T, cs storage.ClientImpl) {
+	cfg := TestingConfig
+	cfg.DefaultStorage = cs
 	cl, err := NewClient(&TestingConfig)
 	require.NoError(t, err)
 	defer cl.Close()
 	ib, err := bencode.Marshal(metainfo.Info{
-		Name:   "empty",
-		Length: 0,
+		Name:        "empty",
+		Length:      0,
+		PieceLength: 0,
 	})
 	require.NoError(t, err)
 	fp := filepath.Join(TestingConfig.DataDir, "empty")
@@ -115,4 +122,12 @@ func TestEmptyFilesAndZeroPieceLength(t *testing.T) {
 	tt.DownloadAll()
 	require.True(t, cl.WaitAll())
 	assert.True(t, missinggo.FilePathExists(fp))
+}
+
+func TestEmptyFilesAndZeroPieceLengthWithFileStorage(t *testing.T) {
+	testEmptyFilesAndZeroPieceLength(t, storage.NewFile(TestingConfig.DataDir))
+}
+
+func TestEmptyFilesAndZeroPieceLengthWithMMapStorage(t *testing.T) {
+	testEmptyFilesAndZeroPieceLength(t, storage.NewMMap(TestingConfig.DataDir))
 }

@@ -57,7 +57,12 @@ func torrentBar(t *torrent.Torrent) {
 	})
 	go func() {
 		<-t.GotInfo()
-		bar.Total = int(t.Info().TotalLength())
+		tl := int(t.Info().TotalLength())
+		if tl == 0 {
+			bar.Set(1)
+			return
+		}
+		bar.Total = tl
 		for {
 			bc := t.BytesCompleted()
 			bar.Set(int(bc))

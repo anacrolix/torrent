@@ -25,6 +25,10 @@ There is a small example in the [package documentation](https://godoc.org/github
  * [Android Torrent Client](https://github.com/axet/android-torrent-client)
  * [Android libtorrent](https://github.com/axet/libtorrent)
 
+## Mobile
+
+There's a branch called `mobile` that supports binding to torrent with the [gomobile](https://github.com/golang/go/wiki/Mobile) tool. It has some API changes as required by `gomobile`. Checkout the `mobile` branch, and bind as usual.
+
 ## Commands
 
 Here I'll describe what some of the provided commands in `./cmd` do.

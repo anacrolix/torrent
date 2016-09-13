@@ -1203,8 +1203,8 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 // trackers will be merged with the existing ones. If the Info isn't yet
 // known, it will be set. The display name is replaced if the new spec
 // provides one. Returns new if the torrent wasn't already in the client.
-func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
-	t, new = cl.AddTorrentInfoHash(spec.InfoHash)
+func (cl *Client) AddTorrentSpec(spec *TorrentSpec, new *bool) (t *Torrent, err error) {
+	t, *new = cl.AddTorrentInfoHash(spec.InfoHash)
 	if spec.DisplayName != "" {
 		t.SetDisplayName(spec.DisplayName)
 	}
@@ -1487,12 +1487,12 @@ func (cl *Client) AddMagnet(uri string) (T *Torrent, err error) {
 	if err != nil {
 		return
 	}
-	T, _, err = cl.AddTorrentSpec(spec)
+	T, err = cl.AddTorrentSpec(spec, new(bool))
 	return
 }
 
 func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (T *Torrent, err error) {
-	T, _, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	T, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi), new(bool))
 	var ss []string
 	slices.MakeInto(&ss, mi.Nodes)
 	cl.AddDHTNodes(ss)

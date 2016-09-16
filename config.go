@@ -36,8 +36,11 @@ type Config struct {
 	// Called to instantiate storage for each added torrent. Builtin backends
 	// are in the storage package. If not set, the "file" implementation is
 	// used.
-	DefaultStorage    storage.ClientImpl
-	DisableEncryption bool `long:"disable-encryption"`
+	DefaultStorage storage.ClientImpl
+
+	DisableEncryption  bool `long:"disable-encryption"`
+	ForceEncryption    bool // Don't allow unobfuscated connections.
+	PreferNoEncryption bool
 
 	IPBlocklist iplist.Ranger
 	DisableIPv6 bool `long:"disable-ipv6"`

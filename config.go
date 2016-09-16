@@ -33,8 +33,9 @@ type Config struct {
 	DisableUTP bool
 	// For the bittorrent protocol.
 	DisableTCP bool `long:"disable-tcp"`
-	// Called to instantiate storage for each added torrent. Provided backends
-	// are in $REPO/data. If not set, the "file" implementation is used.
+	// Called to instantiate storage for each added torrent. Builtin backends
+	// are in the storage package. If not set, the "file" implementation is
+	// used.
 	DefaultStorage    storage.ClientImpl
 	DisableEncryption bool `long:"disable-encryption"`
 

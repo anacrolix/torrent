@@ -1,15 +1,15 @@
-package torrent_test
+package motorrent_test
 
 import (
 	"log"
 
 	"github.com/anacrolix/missinggo"
 
-	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/motorrent"
 )
 
 func Example() {
-	c, _ := torrent.NewClient(nil)
+	c, _ := motorrent.NewClient(nil)
 	defer c.Close()
 	t, _ := c.AddMagnet("magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU")
 	<-t.GotInfo()

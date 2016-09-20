@@ -1,4 +1,4 @@
-package torrent
+package motorrent
 
 import (
 	"bufio"
@@ -582,8 +582,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 	if nc == nil {
 		return
 	}
-	encryptFirst := !cl.config.DisableEncryption && !cl.config.PreferNoEncryption
-	c, err = cl.handshakesConnection(nc, t, encryptFirst, utp)
+	c, err = cl.handshakesConnection(nc, t, !cl.config.DisableEncryption, utp)
 	if err != nil {
 		nc.Close()
 		return
@@ -591,12 +590,12 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 		return
 	}
 	nc.Close()
-	if cl.config.DisableEncryption || cl.config.ForceEncryption {
-		// There's no alternate encryption case to try.
+	if cl.config.DisableEncryption {
+		// We already tried without encryption.
 		return
 	}
-	// Try again with encryption if we didn't earlier, or without if we did,
-	// using whichever protocol type worked last time.
+	// Try again without encryption, using whichever protocol type worked last
+	// time.
 	if utp {
 		nc, err = cl.dialUTP(addr, t)
 	} else {
@@ -606,7 +605,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 		err = fmt.Errorf("error dialing for unencrypted connection: %s", err)
 		return
 	}
-	c, err = cl.handshakesConnection(nc, t, !encryptFirst, utp)
+	c, err = cl.handshakesConnection(nc, t, false, utp)
 	if err != nil || c == nil {
 		nc.Close()
 	}
@@ -852,10 +851,6 @@ func (cl *Client) receiveHandshakes(c *connection) (t *Torrent, err error) {
 			}
 			return
 		}
-	}
-	if cl.config.ForceEncryption && !c.encrypted {
-		err = errors.New("connection not encrypted")
-		return
 	}
 	ih, ok, err := cl.connBTHandshake(c, nil)
 	if err != nil {
@@ -1208,8 +1203,8 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 // trackers will be merged with the existing ones. If the Info isn't yet
 // known, it will be set. The display name is replaced if the new spec
 // provides one. Returns new if the torrent wasn't already in the client.
-func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
-	t, new = cl.AddTorrentInfoHash(spec.InfoHash)
+func (cl *Client) AddTorrentSpec(spec *TorrentSpec, new *bool) (t *Torrent, err error) {
+	t, *new = cl.AddTorrentInfoHash(spec.InfoHash)
 	if spec.DisplayName != "" {
 		t.SetDisplayName(spec.DisplayName)
 	}
@@ -1492,12 +1487,12 @@ func (cl *Client) AddMagnet(uri string) (T *Torrent, err error) {
 	if err != nil {
 		return
 	}
-	T, _, err = cl.AddTorrentSpec(spec)
+	T, err = cl.AddTorrentSpec(spec, new(bool))
 	return
 }
 
 func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (T *Torrent, err error) {
-	T, _, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	T, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi), new(bool))
 	var ss []string
 	slices.MakeInto(&ss, mi.Nodes)
 	cl.AddDHTNodes(ss)

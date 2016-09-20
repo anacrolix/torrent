@@ -1,6 +1,7 @@
 package metainfo
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -48,8 +49,11 @@ func LoadFromFile(filename string) (*MetaInfo, error) {
 	return Load(f)
 }
 
-func (mi MetaInfo) UnmarshalInfo() (info Info, err error) {
-	err = bencode.Unmarshal(mi.InfoBytes, &info)
+func (mi MetaInfo) UnmarshalInfo() (info Info) {
+	err := bencode.Unmarshal(mi.InfoBytes, &info)
+	if err != nil {
+		panic(fmt.Sprintf("bad info bytes: %s", err))
+	}
 	return
 }
 

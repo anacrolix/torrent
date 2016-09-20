@@ -1,4 +1,4 @@
-package torrent
+package motorrent
 
 import (
 	"github.com/anacrolix/torrent/dht"
@@ -33,17 +33,15 @@ type Config struct {
 	DisableUTP bool
 	// For the bittorrent protocol.
 	DisableTCP bool `long:"disable-tcp"`
-	// Called to instantiate storage for each added torrent. Builtin backends
-	// are in the storage package. If not set, the "file" implementation is
-	// used.
-	DefaultStorage storage.ClientImpl
-
-	DisableEncryption  bool `long:"disable-encryption"`
-	ForceEncryption    bool // Don't allow unobfuscated connections.
-	PreferNoEncryption bool
+	// Called to instantiate storage for each added torrent. Provided backends
+	// are in $REPO/data. If not set, the "file" implementation is used.
+	DefaultStorage    storage.ClientImpl
+	DisableEncryption bool `long:"disable-encryption"`
 
 	IPBlocklist iplist.Ranger
 	DisableIPv6 bool `long:"disable-ipv6"`
 	// Perform logging and any other behaviour that will help debug.
 	Debug bool `help:"enable debug logging"`
 }
+
+func NewConfig() *Config { return &Config{} }

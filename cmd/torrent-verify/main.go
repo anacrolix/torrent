@@ -49,10 +49,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	info, err := metaInfo.UnmarshalInfo()
-	if err != nil {
-		log.Fatalf("error unmarshalling info: %s", err)
-	}
+	info := metaInfo.UnmarshalInfo()
 	mMapSpan := &mmap_span.MMapSpan{}
 	if len(info.Files) > 0 {
 		for _, file := range info.Files {

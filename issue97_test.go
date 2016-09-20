@@ -1,4 +1,4 @@
-package torrent
+package motorrent
 
 import (
 	"io/ioutil"
@@ -18,8 +18,7 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	cs := storage.NewClient(storage.NewFile(td))
 	tt := &Torrent{}
 	mi := testutil.GreetingMetaInfo()
-	info, err := mi.UnmarshalInfo()
-	require.NoError(t, err)
+	info := mi.UnmarshalInfo()
 	tt.info = &info
 	tt.makePieces()
 	tt.storage, err = cs.OpenTorrent(tt.info, mi.HashInfoBytes())

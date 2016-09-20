@@ -18,8 +18,9 @@ import (
 func testFile(t *testing.T, filename string) {
 	mi, err := LoadFromFile(filename)
 	require.NoError(t, err)
+	info, err := mi.UnmarshalInfo()
+	require.NoError(t, err)
 
-	info := mi.UnmarshalInfo()
 	if len(info.Files) == 1 {
 		t.Logf("Single file: %s (length: %d)\n", info.Name, info.Files[0].Length)
 	} else {

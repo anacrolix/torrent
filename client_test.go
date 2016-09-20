@@ -1029,10 +1029,10 @@ func makeMagnet(t *testing.T, cl *Client, dir string, name string) string {
 	file, err := os.Create(dir + "/" + name)
 	require.NoError(t, err)
 	file.Write([]byte(name))
-	file.Close()	
+	file.Close()
 	mi := metainfo.MetaInfo{}
 	mi.SetDefaults()
-	info := metainfo.Info{ PieceLength: 256 * 1024 }
+	info := metainfo.Info{PieceLength: 256 * 1024}
 	err = info.BuildFromFilePath(dir + "/" + name)
 	require.NoError(t, err)
 	mi.InfoBytes, err = bencode.Marshal(info)
@@ -1069,10 +1069,10 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 	tr, err := client.AddMagnet(magnet1)
 	require.NoError(t, err)
 	tr.AddPeers([]Peer{Peer{
-		IP: missinggo.AddrIP(server.ListenAddr()),
+		IP:   missinggo.AddrIP(server.ListenAddr()),
 		Port: missinggo.AddrPort(server.ListenAddr()),
-		}})
-	<- tr.GotInfo()
+	}})
+	<-tr.GotInfo()
 	tr.DownloadAll()
 	client.WaitAll()
 }

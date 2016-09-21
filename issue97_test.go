@@ -18,7 +18,8 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	cs := storage.NewClient(storage.NewFile(td))
 	tt := &Torrent{}
 	mi := testutil.GreetingMetaInfo()
-	info := mi.UnmarshalInfo()
+	info, err := mi.UnmarshalInfo()
+	require.NoError(t, err)
 	tt.info = &info
 	tt.makePieces()
 	tt.storage, err = cs.OpenTorrent(tt.info, mi.HashInfoBytes())

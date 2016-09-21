@@ -29,7 +29,11 @@ func main() {
 			log.Print(err)
 			continue
 		}
-		info := metainfo.UnmarshalInfo()
+		info, err := metainfo.UnmarshalInfo()
+		if err != nil {
+			log.Printf("error unmarshalling info: %s", err)
+			continue
+		}
 		if flags.JustName {
 			fmt.Printf("%s\n", info.Name)
 			continue

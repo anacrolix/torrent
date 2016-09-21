@@ -67,7 +67,7 @@ func init() {
 	if err != nil {
 		log.Fatalf("error loading table: %s", err)
 	}
-	log.Printf("dht server on %s, ID is %q", s.Addr(), s.ID())
+	log.Printf("dht server on %s, ID is %x", s.Addr(), s.ID())
 }
 
 func saveTable() error {

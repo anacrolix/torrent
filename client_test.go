@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -1025,15 +1026,14 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 }
 
 func makeMagnet(t *testing.T, cl *Client, dir string, name string) string {
-	var err error
-	file, err := os.Create(dir + "/" + name)
+	file, err := os.Create(filepath.Join(dir, name))
 	require.NoError(t, err)
 	file.Write([]byte(name))
 	file.Close()
 	mi := metainfo.MetaInfo{}
 	mi.SetDefaults()
 	info := metainfo.Info{PieceLength: 256 * 1024}
-	err = info.BuildFromFilePath(dir + "/" + name)
+	err = info.BuildFromFilePath(filepath.Join(dir, name))
 	require.NoError(t, err)
 	mi.InfoBytes, err = bencode.Marshal(info)
 	require.NoError(t, err)
@@ -1049,23 +1049,25 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 	cfg := TestingConfig
 	cfg.DisableUTP = true
 	cfg.Seed = true
-	cfg.DataDir = cfg.DataDir + "/server"
+	cfg.DataDir = filepath.Join(cfg.DataDir, "server")
 	cfg.Debug = true
 	cfg.ForceEncryption = true
 	os.Mkdir(cfg.DataDir, 0755)
 	server, err := NewClient(&cfg)
-	defer server.Close()
 	require.NoError(t, err)
+	defer server.Close()
+	testutil.ExportStatusWriter(server, "s")
 	magnet1 := makeMagnet(t, server, cfg.DataDir, "test1")
 	makeMagnet(t, server, cfg.DataDir, "test2")
 	cfg = TestingConfig
 	cfg.DisableUTP = true
-	cfg.DataDir = cfg.DataDir + "/client"
+	cfg.DataDir = filepath.Join(cfg.DataDir, "client")
 	cfg.Debug = true
 	cfg.ForceEncryption = true
 	client, err := NewClient(&cfg)
 	require.NoError(t, err)
 	defer client.Close()
+	testutil.ExportStatusWriter(client, "c")
 	tr, err := client.AddMagnet(magnet1)
 	require.NoError(t, err)
 	tr.AddPeers([]Peer{Peer{

@@ -730,8 +730,7 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 	greetingDataTempDir, greetingMetainfo := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingDataTempDir)
 	filePieceStore := csf(fileCache)
-	info, err := greetingMetainfo.UnmarshalInfo()
-	require.NoError(t, err)
+	info := greetingMetainfo.UnmarshalInfo()
 	ih := greetingMetainfo.HashInfoBytes()
 	greetingData, err := storage.NewClient(filePieceStore).OpenTorrent(&info, ih)
 	require.NoError(t, err)
@@ -1022,57 +1021,4 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 	tts[0].SetMaxEstablishedConns(2)
 	addPeers()
 	waitTotalConns(6)
-}
-
-func makeMagnet(t *testing.T, cl *Client, dir string, name string) string {
-	var err error
-	file, err := os.Create(dir + "/" + name)
-	require.NoError(t, err)
-	file.Write([]byte(name))
-	file.Close()
-	mi := metainfo.MetaInfo{}
-	mi.SetDefaults()
-	info := metainfo.Info{PieceLength: 256 * 1024}
-	err = info.BuildFromFilePath(dir + "/" + name)
-	require.NoError(t, err)
-	mi.InfoBytes, err = bencode.Marshal(info)
-	require.NoError(t, err)
-	magnet := mi.Magnet(name, mi.HashInfoBytes()).String()
-	tr, err := cl.AddTorrent(&mi)
-	require.NoError(t, err)
-	assert.True(t, tr.Seeding())
-	return magnet
-}
-
-// https://github.com/anacrolix/torrent/issues/114
-func TestMultipleTorrentsWithEncryption(t *testing.T) {
-	cfg := TestingConfig
-	cfg.DisableUTP = true
-	cfg.Seed = true
-	cfg.DataDir = cfg.DataDir + "/server"
-	cfg.Debug = true
-	cfg.ForceEncryption = true
-	os.Mkdir(cfg.DataDir, 0755)
-	server, err := NewClient(&cfg)
-	defer server.Close()
-	require.NoError(t, err)
-	magnet1 := makeMagnet(t, server, cfg.DataDir, "test1")
-	makeMagnet(t, server, cfg.DataDir, "test2")
-	cfg = TestingConfig
-	cfg.DisableUTP = true
-	cfg.DataDir = cfg.DataDir + "/client"
-	cfg.Debug = true
-	cfg.ForceEncryption = true
-	client, err := NewClient(&cfg)
-	require.NoError(t, err)
-	defer client.Close()
-	tr, err := client.AddMagnet(magnet1)
-	require.NoError(t, err)
-	tr.AddPeers([]Peer{Peer{
-		IP:   missinggo.AddrIP(server.ListenAddr()),
-		Port: missinggo.AddrPort(server.ListenAddr()),
-	}})
-	<-tr.GotInfo()
-	tr.DownloadAll()
-	client.WaitAll()
 }

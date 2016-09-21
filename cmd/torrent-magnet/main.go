@@ -17,11 +17,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error reading metainfo from stdin: %s", err)
 		os.Exit(1)
 	}
-	info, err := mi.UnmarshalInfo()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error unmarshalling info: %s", err)
-		os.Exit(1)
-	}
+	info := mi.UnmarshalInfo()
 
 	fmt.Fprintf(os.Stdout, "%s\n", mi.Magnet(info.Name, mi.HashInfoBytes()).String())
 }

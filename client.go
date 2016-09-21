@@ -404,10 +404,16 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 		} else {
 			acceptTCP.Add(1)
 		}
+		if cl.config.Debug {
+			log.Printf("accepted connection from %s", conn.RemoteAddr())
+		}
 		reject := cl.badPeerIPPort(
 			missinggo.AddrIP(conn.RemoteAddr()),
 			missinggo.AddrPort(conn.RemoteAddr()))
 		if reject {
+			if cl.config.Debug {
+				log.Printf("rejecting connection from %s", conn.RemoteAddr())
+			}
 			acceptReject.Add(1)
 			conn.Close()
 			continue

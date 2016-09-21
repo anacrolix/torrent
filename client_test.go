@@ -1026,6 +1026,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 }
 
 func makeMagnet(t *testing.T, cl *Client, dir string, name string) string {
+	os.MkdirAll(dir, 0770)
 	file, err := os.Create(filepath.Join(dir, name))
 	require.NoError(t, err)
 	file.Write([]byte(name))

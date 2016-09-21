@@ -1,4 +1,4 @@
-package motorrent
+package torrent
 
 func worseConn(l, r *connection) bool {
 	if l.useful() != r.useful() {

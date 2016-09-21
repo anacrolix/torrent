@@ -1,4 +1,4 @@
-package motorrent
+package torrent
 
 // The current state of a piece.
 type PieceState struct {

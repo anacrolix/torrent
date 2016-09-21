@@ -1,4 +1,4 @@
-package motorrent
+package torrent
 
 import (
 	"bytes"

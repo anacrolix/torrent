@@ -31,4 +31,4 @@ BitTorrent features implemented include:
   - 42: DHT Security extension
   - 43: Read-only DHT Nodes
 */
-package motorrent
+package torrent

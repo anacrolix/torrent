@@ -826,7 +826,7 @@ func maybeReceiveEncryptedHandshake(rw io.ReadWriter, skeys [][]byte) (ret io.Re
 
 func (cl *Client) receiveSkeys() (ret [][]byte) {
 	for ih := range cl.torrents {
-		ret = append(ret, ih[:])
+		ret = append(ret, append([]byte(nil), ih[:]...))
 	}
 	return
 }

@@ -68,7 +68,6 @@ func init() {
 		log.Fatalf("error loading table: %s", err)
 	}
 	log.Printf("dht server on %s, ID is %q", s.Addr(), s.ID())
-	setupSignals()
 }
 
 func saveTable() error {
@@ -102,15 +101,16 @@ func saveTable() error {
 func setupSignals() {
 	ch := make(chan os.Signal)
 	signal.Notify(ch)
-	go func() {
-		<-ch
-		s.Close()
-	}()
+	<-ch
+	s.Close()
+
+	if *tableFileName != "" {
+		if err := saveTable(); err != nil {
+			log.Printf("error saving node table: %s", err)
+		}
+	}
 }
 
 func main() {
-	select {}
-	// if err := saveTable(); err != nil {
-	// 	log.Printf("error saving node table: %s", err)
-	// }
+	setupSignals()
 }

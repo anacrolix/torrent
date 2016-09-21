@@ -1,4 +1,4 @@
-# torrent
+# motorrent
 
 [![Join the chat at https://gitter.im/anacrolix/torrent](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/anacrolix/torrent?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Build Status](https://drone.io/github.com/anacrolix/torrent/status.png)](https://drone.io/github.com/anacrolix/torrent/latest)

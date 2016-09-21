@@ -1,4 +1,4 @@
-package torrent
+package motorrent
 
 import (
 	"github.com/anacrolix/torrent/dht"
@@ -43,3 +43,5 @@ type Config struct {
 	// Perform logging and any other behaviour that will help debug.
 	Debug bool `help:"enable debug logging"`
 }
+
+func NewConfig() *Config { return &Config{} }

@@ -1,4 +1,4 @@
-package torrent
+package motorrent
 
 import (
 	"github.com/anacrolix/torrent/metainfo"

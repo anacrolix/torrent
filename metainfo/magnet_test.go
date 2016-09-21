@@ -74,7 +74,9 @@ func TestMagnetize(t *testing.T) {
 	mi, err := LoadFromFile("../testdata/bootstrap.dat.torrent")
 	require.NoError(t, err)
 
-	m := mi.Magnet(mi.UnmarshalInfo().Name, mi.HashInfoBytes())
+	info, err := mi.UnmarshalInfo()
+	require.NoError(t, err)
+	m := mi.Magnet(info.Name, mi.HashInfoBytes())
 
 	assert.EqualValues(t, "bootstrap.dat", m.DisplayName)
 

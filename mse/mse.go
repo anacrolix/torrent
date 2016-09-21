@@ -183,13 +183,14 @@ func newPadLen() int64 {
 	return ret
 }
 
+// Manages state for both initiating and receiving handshakes.
 type handshake struct {
 	conn   io.ReadWriter
 	s      [96]byte
-	initer bool
-	skeys  [][]byte
-	skey   []byte
-	ia     []byte // Initial payload. Only used by the initiator.
+	initer bool     // Whether we're initiating or receiving.
+	skeys  [][]byte // Skeys we'll accept if receiving.
+	skey   []byte   // Skey we're initiating with.
+	ia     []byte   // Initial payload. Only used by the initiator.
 
 	writeMu    sync.Mutex
 	writes     [][]byte
@@ -311,6 +312,8 @@ func suffixMatchLen(a, b []byte) int {
 	return 0
 }
 
+// Reads from r until b has been seen. Keeps the minimum amount of data in
+// memory.
 func readUntil(r io.Reader, b []byte) error {
 	b1 := make([]byte, len(b))
 	i := 0

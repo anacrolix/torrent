@@ -113,6 +113,9 @@ type Torrent struct {
 	connPieceInclinationPool sync.Pool
 	// Torrent-level statistics.
 	stats TorrentStats
+
+	// Pool for receive piece data
+	pieceBuffer *sync.Pool
 }
 
 func (t *Torrent) setDisplayName(dn string) {

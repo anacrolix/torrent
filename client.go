@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	rtsync "sync"
 	"time"
 
 	"github.com/anacrolix/missinggo"
@@ -1229,6 +1230,11 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 	defer cl.mu.Unlock()
 	if spec.ChunkSize != 0 {
 		t.chunkSize = pp.Integer(spec.ChunkSize)
+	}
+	t.pieceBuffer = &rtsync.Pool{
+		New: func() interface{} {
+			return make([]byte, t.chunkSize)
+		},
 	}
 	t.addTrackers(spec.Trackers)
 	t.maybeNewConns()

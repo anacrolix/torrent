@@ -17,7 +17,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/anacrolix/missinggo"
 	"github.com/bradfitz/iter"
 )
 
@@ -167,7 +166,8 @@ func (h *handshake) establishS() (err error) {
 	var Y, S big.Int
 	Y.SetBytes(b[:])
 	S.Exp(&Y, &x, &p)
-	missinggo.CopyExact(&h.s, paddedLeft(S.Bytes(), 96))
+	sBytes := S.Bytes()
+	copy(h.s[96-len(sBytes):96], sBytes)
 	return
 }
 

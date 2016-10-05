@@ -45,6 +45,7 @@ var TestingConfig = Config{
 	DHTConfig: dht.ServerConfig{
 		NoDefaultBootstrap: true,
 	},
+	Debug: true,
 }
 
 func TestClientDefault(t *testing.T) {

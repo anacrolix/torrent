@@ -52,6 +52,7 @@ type Torrent struct {
 	// The size of chunks to request from peers over the wire. This is
 	// normally 16KiB by convention these days.
 	chunkSize pp.Integer
+	chunkPool *sync.Pool
 	// Total length of the torrent in bytes. Stored because it's not O(1) to
 	// get this from the info dict.
 	length int64
@@ -113,6 +114,15 @@ type Torrent struct {
 	connPieceInclinationPool sync.Pool
 	// Torrent-level statistics.
 	stats TorrentStats
+}
+
+func (t *Torrent) setChunkSize(size pp.Integer) {
+	t.chunkSize = size
+	t.chunkPool = &sync.Pool{
+		New: func() interface{} {
+			return make([]byte, size)
+		},
+	}
 }
 
 func (t *Torrent) setDisplayName(dn string) {

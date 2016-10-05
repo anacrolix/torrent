@@ -1169,10 +1169,9 @@ func (cl *Client) badPeerIPPort(ip net.IP, port int) bool {
 // Return a Torrent ready for insertion into a Client.
 func (cl *Client) newTorrent(ih metainfo.Hash) (t *Torrent) {
 	t = &Torrent{
-		cl:        cl,
-		infoHash:  ih,
-		chunkSize: defaultChunkSize,
-		peers:     make(map[peersKey]Peer),
+		cl:       cl,
+		infoHash: ih,
+		peers:    make(map[peersKey]Peer),
 
 		halfOpen:          make(map[string]struct{}),
 		pieceStateChanges: pubsub.NewPubSub(),
@@ -1180,6 +1179,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash) (t *Torrent) {
 		storageOpener:       cl.defaultStorage,
 		maxEstablishedConns: defaultEstablishedConnsPerTorrent,
 	}
+	t.setChunkSize(defaultChunkSize)
 	return
 }
 
@@ -1228,7 +1228,7 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	if spec.ChunkSize != 0 {
-		t.chunkSize = pp.Integer(spec.ChunkSize)
+		t.setChunkSize(pp.Integer(spec.ChunkSize))
 	}
 	t.addTrackers(spec.Trackers)
 	t.maybeNewConns()

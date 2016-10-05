@@ -144,10 +144,10 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			Length:      1 << 20,
 			PieceLength: 1 << 20,
 		},
-		chunkSize:         defaultChunkSize,
 		storage:           &storage.Torrent{ts},
 		pieceStateChanges: pubsub.NewPubSub(),
 	}
+	t.setChunkSize(defaultChunkSize)
 	t.makePieces()
 	t.pendingPieces.Add(0)
 	r, w := io.Pipe()

@@ -31,6 +31,7 @@ import (
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	"golang.org/x/time/rate"
 )
 
 // Currently doesn't really queue, but should in the future.
@@ -80,6 +81,9 @@ type Client struct {
 	closed missinggo.Event
 
 	torrents map[metainfo.Hash]*Torrent
+
+	uploadRateLimit   *rate.Limiter
+	downloadRateLimit *rate.Limiter
 }
 
 func (cl *Client) BadPeerIPs() []string {
@@ -274,6 +278,14 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if err != nil {
 			panic("error generating peer id")
 		}
+	}
+
+	if cfg.UploadRateLimit > 0 {
+		cl.uploadRateLimit = rate.NewLimiter(rate.Limit(cfg.UploadRateLimit), cfg.UploadRateLimit)
+	}
+
+	if cfg.DownloadRateLimit > 0 {
+		cl.downloadRateLimit = rate.NewLimiter(rate.Limit(cfg.UploadRateLimit), cfg.UploadRateLimit)
 	}
 
 	cl.tcpListener, cl.utpSock, cl.listenAddr, err = listen(
@@ -1076,6 +1088,15 @@ func (cl *Client) upload(t *Torrent, c *connection) {
 	if !seeding && !t.connHasWantedPieces(c) {
 		return
 	}
+
+	// upload rate limit check
+	if cl.uploadRateLimit != nil {
+		if !cl.uploadRateLimit.AllowN(time.Now(), int(t.chunkSize)) {
+			overUploadRateLimit.Add(1)
+			return
+		}
+	}
+
 another:
 	for seeding || c.chunksSent < c.UsefulChunksReceived+6 {
 		c.Unchoke()
@@ -1302,6 +1323,21 @@ func (cl *Client) WaitAll() bool {
 // Handle a received chunk from a peer.
 func (cl *Client) downloadedChunk(t *Torrent, c *connection, msg *pp.Message) {
 	chunksReceived.Add(1)
+
+	if cl.downloadRateLimit != nil {
+		now := time.Now()
+		rv := cl.downloadRateLimit.ReserveN(now, len(msg.Piece))
+		if !rv.OK() {
+			overDownloadBurstLimit.Add(1)
+			return
+		}
+
+		delay := rv.DelayFrom(now)
+		if delay > 0 {
+			overDownloadRateLimit.Add(1)
+			time.Sleep(delay)
+		}
+	}
 
 	req := newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))
 

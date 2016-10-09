@@ -285,7 +285,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	}
 
 	if cfg.DownloadRateLimit > 0 {
-		cl.downloadRateLimit = rate.NewLimiter(rate.Limit(cfg.UploadRateLimit), cfg.UploadRateLimit)
+		cl.downloadRateLimit = rate.NewLimiter(rate.Limit(cfg.DownloadRateLimit), cfg.DownloadRateLimit)
 	}
 
 	cl.tcpListener, cl.utpSock, cl.listenAddr, err = listen(
@@ -1089,14 +1089,6 @@ func (cl *Client) upload(t *Torrent, c *connection) {
 		return
 	}
 
-	// upload rate limit check
-	if cl.uploadRateLimit != nil {
-		if !cl.uploadRateLimit.AllowN(time.Now(), int(t.chunkSize)) {
-			overUploadRateLimit.Add(1)
-			return
-		}
-	}
-
 another:
 	for seeding || c.chunksSent < c.UsefulChunksReceived+6 {
 		c.Unchoke()
@@ -1329,13 +1321,11 @@ func (cl *Client) downloadedChunk(t *Torrent, c *connection, msg *pp.Message) {
 		rv := cl.downloadRateLimit.ReserveN(now, len(msg.Piece))
 		if !rv.OK() {
 			overDownloadBurstLimit.Add(1)
-			return
 		}
 
 		delay := rv.DelayFrom(now)
 		if delay > 0 {
 			overDownloadRateLimit.Add(1)
-			time.Sleep(delay)
 		}
 	}
 

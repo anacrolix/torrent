@@ -413,6 +413,20 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		cn.mu().Lock()
 		for cn.outgoingUnbufferedMessages != nil && cn.outgoingUnbufferedMessages.Len() != 0 {
 			msg := cn.outgoingUnbufferedMessages.Remove(cn.outgoingUnbufferedMessages.Front()).(pp.Message)
+			if msg.Type == pp.Piece && cn.t.cl.uploadRateLimit != nil {
+				if !cn.t.cl.uploadRateLimit.AllowN(time.Now(), int(cn.t.chunkSize)) {
+					cn.outgoingUnbufferedMessages.PushBack(msg)
+					overUploadRateLimit.Add(1)
+					continue
+				}
+			}
+
+			if msg.Type == pp.Request && cn.t.cl.downloadRateLimit != nil {
+				if !cn.t.cl.downloadRateLimit.AllowN(time.Now(), 0) {
+					cn.outgoingUnbufferedMessages.PushBack(msg)
+					continue
+				}
+			}
 			cn.mu().Unlock()
 			b, err := msg.MarshalBinary()
 			if err != nil {

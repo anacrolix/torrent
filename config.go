@@ -46,4 +46,9 @@ type Config struct {
 	DisableIPv6 bool `long:"disable-ipv6"`
 	// Perform logging and any other behaviour that will help debug.
 	Debug bool `help:"enable debug logging"`
+
+	// Upload rate limit, Bytes per second
+	UploadRateLimit int `long:"upload-ratelimit"`
+	// Download rate limit
+	DownloadRateLimit int `long:"download-ratelimit"`
 }

@@ -93,4 +93,8 @@ var (
 	pieceInclinationsReused = expvar.NewInt("pieceInclinationsReused")
 	pieceInclinationsNew    = expvar.NewInt("pieceInclinationsNew")
 	pieceInclinationsPut    = expvar.NewInt("pieceInclinationsPut")
+
+	overDownloadRateLimit  = expvar.NewInt("overDownloadRateLimit")
+	overDownloadBurstLimit = expvar.NewInt("overDownloadBurstLimit")
+	overUploadRateLimit    = expvar.NewInt("overUploadRateLimit")
 )

@@ -57,29 +57,30 @@ func (cl *Client) queueFirstHash(t *Torrent, piece int) {
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
 type Client struct {
-	halfOpenLimit int
-	peerID        [20]byte
-	// The net.Addr.String part that should be common to all active listeners.
-	listenAddr     string
+	mu     sync.RWMutex
+	event  sync.Cond
+	closed missinggo.Event
+
+	config Config
+
+	halfOpenLimit  int
+	peerID         [20]byte
+	defaultStorage *storage.Client
 	tcpListener    net.Listener
 	utpSock        *utp.Socket
 	dHT            *dht.Server
 	ipBlockList    iplist.Ranger
-	config         Config
+	// Our BitTorrent protocol extension bytes, sent in our BT handshakes.
 	extensionBytes peerExtensionBytes
+	// The net.Addr.String part that should be common to all active listeners.
+	listenAddr string
+
 	// Set of addresses that have our client ID. This intentionally will
 	// include ourselves if we end up trying to connect to our own address
 	// through legitimate channels.
 	dopplegangerAddrs map[string]struct{}
 	badPeerIPs        map[string]struct{}
-
-	defaultStorage *storage.Client
-
-	mu     sync.RWMutex
-	event  sync.Cond
-	closed missinggo.Event
-
-	torrents map[metainfo.Hash]*Torrent
+	torrents          map[metainfo.Hash]*Torrent
 }
 
 func (cl *Client) BadPeerIPs() []string {

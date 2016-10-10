@@ -95,6 +95,9 @@ type connection struct {
 
 	outgoingUnbufferedMessages         *list.List
 	outgoingUnbufferedMessagesNotEmpty missinggo.Event
+
+	pieceLimitQueue   chan pp.Message
+	requestLimitQueue chan pp.Message
 }
 
 func (cn *connection) mu() sync.Locker {
@@ -105,9 +108,11 @@ func newConnection(nc net.Conn, l sync.Locker) (c *connection) {
 	c = &connection{
 		conn: nc,
 
-		Choked:          true,
-		PeerChoked:      true,
-		PeerMaxRequests: 250,
+		Choked:            true,
+		PeerChoked:        true,
+		PeerMaxRequests:   250,
+		pieceLimitQueue:   make(chan pp.Message, 250),
+		requestLimitQueue: make(chan pp.Message, 250),
 	}
 	c.rw = connStatsReadWriter{nc, l, c}
 	return
@@ -220,6 +225,8 @@ func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
 }
 
 func (cn *connection) Close() {
+	close(cn.pieceLimitQueue)
+	close(cn.requestLimitQueue)
 	cn.closed.Set()
 	cn.discardPieceInclination()
 	cn.pieceRequestOrder.Clear()
@@ -244,6 +251,12 @@ func (cn *connection) Post(msg pp.Message) {
 				return
 			}
 		}
+	case pp.Piece:
+		cn.pieceLimitQueue <- msg
+		return
+	case pp.Request:
+		cn.requestLimitQueue <- msg
+		return
 	}
 	if cn.outgoingUnbufferedMessages == nil {
 		cn.outgoingUnbufferedMessages = list.New()
@@ -413,20 +426,6 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		cn.mu().Lock()
 		for cn.outgoingUnbufferedMessages != nil && cn.outgoingUnbufferedMessages.Len() != 0 {
 			msg := cn.outgoingUnbufferedMessages.Remove(cn.outgoingUnbufferedMessages.Front()).(pp.Message)
-			if msg.Type == pp.Piece && cn.t.cl.uploadRateLimit != nil {
-				if !cn.t.cl.uploadRateLimit.AllowN(time.Now(), int(cn.t.chunkSize)) {
-					cn.outgoingUnbufferedMessages.PushBack(msg)
-					overUploadRateLimit.Add(1)
-					continue
-				}
-			}
-
-			if msg.Type == pp.Request && cn.t.cl.downloadRateLimit != nil {
-				if !cn.t.cl.downloadRateLimit.AllowN(time.Now(), 0) {
-					cn.outgoingUnbufferedMessages.PushBack(msg)
-					continue
-				}
-			}
 			cn.mu().Unlock()
 			b, err := msg.MarshalBinary()
 			if err != nil {
@@ -463,6 +462,63 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			cn.mu().Unlock()
 			postedKeepalives.Add(1)
 		}
+	}
+}
+
+func (cn *connection) pieceLimitWriter() {
+	for msg := range cn.pieceLimitQueue {
+		// Upload limit check
+		if cn.t.cl.uploadRateLimit != nil {
+			now := time.Now()
+			delay := time.Second
+			rv := cn.t.cl.uploadRateLimit.ReserveN(now, len(msg.Piece))
+			if !rv.OK() {
+				overUploadBurstLimit.Add(1)
+			} else {
+				delay = rv.DelayFrom(now)
+				if delay > 0 {
+					overUploadRateLimit.Add(1)
+				}
+			}
+
+			if delay > 0 {
+				time.Sleep(delay)
+			}
+		}
+
+		cn.mu().Lock()
+		if cn.outgoingUnbufferedMessages == nil {
+			cn.outgoingUnbufferedMessages = list.New()
+		}
+		cn.outgoingUnbufferedMessages.PushBack(msg)
+		cn.outgoingUnbufferedMessagesNotEmpty.Set()
+		cn.mu().Unlock()
+	}
+}
+
+func (cn *connection) requestLimitWriter() {
+	for msg := range cn.requestLimitQueue {
+		// Download limit check
+		if cn.t.cl.downloadRateLimit != nil {
+			now := time.Now()
+			delay := time.Second
+			rv := cn.t.cl.downloadRateLimit.ReserveN(now, 0)
+			if rv.OK() {
+				delay = rv.DelayFrom(now)
+			}
+
+			if delay > 0 {
+				time.Sleep(delay)
+			}
+		}
+
+		cn.mu().Lock()
+		if cn.outgoingUnbufferedMessages == nil {
+			cn.outgoingUnbufferedMessages = list.New()
+		}
+		cn.outgoingUnbufferedMessages.PushBack(msg)
+		cn.outgoingUnbufferedMessagesNotEmpty.Set()
+		cn.mu().Unlock()
 	}
 }
 

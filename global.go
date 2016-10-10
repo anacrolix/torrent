@@ -97,4 +97,5 @@ var (
 	overDownloadRateLimit  = expvar.NewInt("overDownloadRateLimit")
 	overDownloadBurstLimit = expvar.NewInt("overDownloadBurstLimit")
 	overUploadRateLimit    = expvar.NewInt("overUploadRateLimit")
+	overUploadBurstLimit   = expvar.NewInt("overUploadBurstLimit")
 )

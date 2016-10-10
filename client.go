@@ -951,6 +951,8 @@ func (cl *Client) runHandshookConn(c *connection, t *Torrent) {
 	}
 	defer t.dropConnection(c)
 	go c.writer(time.Minute)
+	go c.pieceLimitWriter()
+	go c.requestLimitWriter()
 	cl.sendInitialMessages(c, t)
 	err := c.mainReadLoop()
 	if err != nil && cl.config.Debug {

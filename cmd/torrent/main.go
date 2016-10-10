@@ -14,6 +14,7 @@ import (
 	"github.com/anacrolix/tagflag"
 	"github.com/dustin/go-humanize"
 	"github.com/gosuri/uiprogress"
+	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
@@ -110,13 +111,18 @@ func addTorrents(client *torrent.Client) {
 	}
 }
 
-var flags struct {
-	Mmap     bool           `help:"memory-map torrent data"`
-	TestPeer []*net.TCPAddr `help:"addresses of some starting peers"`
-	Seed     bool           `help:"seed after download is complete"`
-	Addr     *net.TCPAddr   `help:"network listen addr"`
+var flags = struct {
+	Mmap         bool           `help:"memory-map torrent data"`
+	TestPeer     []*net.TCPAddr `help:"addresses of some starting peers"`
+	Seed         bool           `help:"seed after download is complete"`
+	Addr         *net.TCPAddr   `help:"network listen addr"`
+	UploadRate   tagflag.Bytes  `help:"max piece bytes to send per second"`
+	DownloadRate tagflag.Bytes  `help:"max bytes per second down from peers"`
 	tagflag.StartPos
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
+}{
+	UploadRate:   -1,
+	DownloadRate: -1,
 }
 
 func main() {
@@ -131,6 +137,12 @@ func main() {
 	}
 	if flags.Seed {
 		clientConfig.Seed = true
+	}
+	if flags.UploadRate != -1 {
+		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(flags.UploadRate), 256<<10)
+	}
+	if flags.DownloadRate != -1 {
+		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(flags.DownloadRate), 1<<20)
 	}
 
 	client, err := torrent.NewClient(&clientConfig)

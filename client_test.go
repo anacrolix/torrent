@@ -271,7 +271,7 @@ func TestClientTransferDefault(t *testing.T) {
 	})
 }
 
-func TestClientTransferRateLimited(t *testing.T) {
+func TestClientTransferRateLimitedUpload(t *testing.T) {
 	started := time.Now()
 	testClientTransfer(t, testClientTransferParams{
 		// We are uploading 13 bytes (the length of the greeting torrent). The
@@ -280,6 +280,12 @@ func TestClientTransferRateLimited(t *testing.T) {
 		SeederUploadRateLimiter: rate.NewLimiter(11, 2),
 	})
 	require.True(t, time.Since(started) > time.Second)
+}
+
+func TestClientTransferRateLimitedDownload(t *testing.T) {
+	testClientTransfer(t, testClientTransferParams{
+		LeecherDownloadRateLimiter: rate.NewLimiter(512, 512),
+	})
 }
 
 func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
@@ -344,13 +350,14 @@ func TestClientTransferVarious(t *testing.T) {
 }
 
 type testClientTransferParams struct {
-	Responsive              bool
-	Readahead               int64
-	SetReadahead            bool
-	ExportClientStatus      bool
-	LeecherStorage          func(string) storage.ClientImpl
-	SeederStorage           func(string) storage.ClientImpl
-	SeederUploadRateLimiter *rate.Limiter
+	Responsive                 bool
+	Readahead                  int64
+	SetReadahead               bool
+	ExportClientStatus         bool
+	LeecherStorage             func(string) storage.ClientImpl
+	SeederStorage              func(string) storage.ClientImpl
+	SeederUploadRateLimiter    *rate.Limiter
+	LeecherDownloadRateLimiter *rate.Limiter
 }
 
 // Creates a seeder and a leecher, and ensures the data transfers when a read
@@ -387,6 +394,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	} else {
 		cfg.DefaultStorage = ps.LeecherStorage(leecherDataDir)
 	}
+	cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
 	// cfg.ListenAddr = "localhost:4001"
 	leecher, err := NewClient(&cfg)
 	require.NoError(t, err)

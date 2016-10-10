@@ -74,8 +74,9 @@ type Client struct {
 	// Our BitTorrent protocol extension bytes, sent in our BT handshakes.
 	extensionBytes peerExtensionBytes
 	// The net.Addr.String part that should be common to all active listeners.
-	listenAddr  string
-	uploadLimit *rate.Limiter
+	listenAddr    string
+	uploadLimit   *rate.Limiter
+	downloadLimit *rate.Limiter
 
 	// Set of addresses that have our client ID. This intentionally will
 	// include ourselves if we end up trying to connect to our own address
@@ -262,6 +263,11 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		cl.uploadLimit = rate.NewLimiter(rate.Inf, 0)
 	} else {
 		cl.uploadLimit = cfg.UploadRateLimiter
+	}
+	if cfg.DownloadRateLimiter == nil {
+		cl.downloadLimit = rate.NewLimiter(rate.Inf, 0)
+	} else {
+		cl.downloadLimit = cfg.DownloadRateLimiter
 	}
 	missinggo.CopyExact(&cl.extensionBytes, defaultExtensionBytes)
 	cl.event.L = &cl.mu
@@ -1583,5 +1589,6 @@ func (cl *Client) newConnection(nc net.Conn) (c *connection) {
 		PeerMaxRequests: 250,
 	}
 	c.setRW(connStatsReadWriter{nc, &cl.mu, c})
+	c.r = rateLimitedReader{cl.downloadLimit, c.r}
 	return
 }

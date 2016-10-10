@@ -33,7 +33,12 @@ type Config struct {
 	Seed bool `long:"seed"`
 	// Events are data bytes sent in pieces. The burst must be large enough to
 	// fit a whole chunk.
-	UploadRateLimiter   *rate.Limiter
+	UploadRateLimiter *rate.Limiter
+	// The events are bytes read from connections. The burst must be bigger
+	// than the largest Read performed on a Conn minus one. This is likely to
+	// be the larger of the main read loop buffer (~4096), and the requested
+	// chunk size (~16KiB).
+	DownloadRateLimiter *rate.Limiter
 
 	// User-provided Client peer ID. If not present, one is generated automatically.
 	PeerID string

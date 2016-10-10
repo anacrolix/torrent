@@ -1066,6 +1066,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connect
 	}
 }
 
+// Also handles choking and unchoking of the remote peer.
 func (cl *Client) upload(t *Torrent, c *connection) {
 	if cl.config.NoUpload {
 		return
@@ -1075,10 +1076,14 @@ func (cl *Client) upload(t *Torrent, c *connection) {
 	}
 	seeding := t.seeding()
 	if !seeding && !t.connHasWantedPieces(c) {
+		// There's no reason to upload to this peer.
 		return
 	}
+	// Breaking or completing this loop means we don't want to upload to the
+	// peer anymore, and we choke them.
 another:
 	for seeding || c.chunksSent < c.UsefulChunksReceived+6 {
+		// We want to upload to the peer.
 		c.Unchoke()
 		for r := range c.PeerRequests {
 			err := cl.sendChunk(t, c, r)

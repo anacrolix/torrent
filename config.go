@@ -22,10 +22,12 @@ type Config struct {
 	NoDHT bool `long:"disable-dht"`
 	// Overrides the default DHT configuration.
 	DHTConfig dht.ServerConfig
-	// Don't ever send chunks to peers.
+
+	// Never send chunks to peers.
 	NoUpload bool `long:"no-upload"`
 	// Upload even after there's nothing in it for us. By default uploading is
-	// not altruistic.
+	// not altruistic, we'll upload slightly more than we download from each
+	// peer.
 	Seed bool `long:"seed"`
 	// User-provided Client peer ID. If not present, one is generated automatically.
 	PeerID string

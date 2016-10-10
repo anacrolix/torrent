@@ -296,6 +296,7 @@ func TestClientTransferSmallCache(t *testing.T) {
 }
 
 func TestClientTransferVarious(t *testing.T) {
+	// Leecher storage
 	for _, ls := range []storageFactory{
 		NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
 			Wrapper: fileCachePieceFileStorage,
@@ -305,6 +306,7 @@ func TestClientTransferVarious(t *testing.T) {
 		}),
 		storage.NewBoltDB,
 	} {
+		// Seeder storage
 		for _, ss := range []func(string) storage.ClientImpl{
 			storage.NewFile,
 			storage.NewMMap,

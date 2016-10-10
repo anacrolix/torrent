@@ -106,18 +106,6 @@ func (cn *connection) mu() sync.Locker {
 	return &cn.t.cl.mu
 }
 
-func newConnection(nc net.Conn, l sync.Locker) (c *connection) {
-	c = &connection{
-		conn: nc,
-
-		Choked:          true,
-		PeerChoked:      true,
-		PeerMaxRequests: 250,
-	}
-	c.setRW(connStatsReadWriter{nc, l, c})
-	return
-}
-
 func (cn *connection) remoteAddr() net.Addr {
 	return cn.conn.RemoteAddr()
 }

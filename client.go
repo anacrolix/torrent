@@ -22,6 +22,7 @@ import (
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/utp"
 	"github.com/dustin/go-humanize"
+	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/dht"
@@ -73,7 +74,8 @@ type Client struct {
 	// Our BitTorrent protocol extension bytes, sent in our BT handshakes.
 	extensionBytes peerExtensionBytes
 	// The net.Addr.String part that should be common to all active listeners.
-	listenAddr string
+	listenAddr  string
+	uploadLimit *rate.Limiter
 
 	// Set of addresses that have our client ID. This intentionally will
 	// include ourselves if we end up trying to connect to our own address
@@ -255,6 +257,11 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		config:            *cfg,
 		dopplegangerAddrs: make(map[string]struct{}),
 		torrents:          make(map[metainfo.Hash]*Torrent),
+	}
+	if cfg.UploadRateLimiter == nil {
+		cl.uploadLimit = rate.NewLimiter(rate.Inf, 0)
+	} else {
+		cl.uploadLimit = cfg.UploadRateLimiter
 	}
 	missinggo.CopyExact(&cl.extensionBytes, defaultExtensionBytes)
 	cl.event.L = &cl.mu
@@ -1086,6 +1093,18 @@ another:
 		// We want to upload to the peer.
 		c.Unchoke()
 		for r := range c.PeerRequests {
+			res := cl.uploadLimit.ReserveN(time.Now(), int(r.Length))
+			delay := res.Delay()
+			if delay > 0 {
+				res.Cancel()
+				go func() {
+					time.Sleep(delay)
+					cl.mu.Lock()
+					defer cl.mu.Unlock()
+					cl.upload(t, c)
+				}()
+				return
+			}
 			err := cl.sendChunk(t, c, r)
 			if err != nil {
 				i := int(r.Index)

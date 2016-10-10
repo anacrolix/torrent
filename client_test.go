@@ -24,6 +24,7 @@ import (
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/dht"
@@ -270,6 +271,17 @@ func TestClientTransferDefault(t *testing.T) {
 	})
 }
 
+func TestClientTransferRateLimited(t *testing.T) {
+	started := time.Now()
+	testClientTransfer(t, testClientTransferParams{
+		// We are uploading 13 bytes (the length of the greeting torrent). The
+		// chunks are 2 bytes in length. Then the smallest burst we can run
+		// with is 2. Time taken is (13-burst)/rate.
+		SeederUploadRateLimiter: rate.NewLimiter(11, 2),
+	})
+	require.True(t, time.Since(started) > time.Second)
+}
+
 func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
 	return storage.NewResourcePieces(fc.AsResourceProvider())
 }
@@ -332,12 +344,13 @@ func TestClientTransferVarious(t *testing.T) {
 }
 
 type testClientTransferParams struct {
-	Responsive         bool
-	Readahead          int64
-	SetReadahead       bool
-	ExportClientStatus bool
-	LeecherStorage     func(string) storage.ClientImpl
-	SeederStorage      func(string) storage.ClientImpl
+	Responsive              bool
+	Readahead               int64
+	SetReadahead            bool
+	ExportClientStatus      bool
+	LeecherStorage          func(string) storage.ClientImpl
+	SeederStorage           func(string) storage.ClientImpl
+	SeederUploadRateLimiter *rate.Limiter
 }
 
 // Creates a seeder and a leecher, and ensures the data transfers when a read
@@ -348,6 +361,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	// Create seeder and a Torrent.
 	cfg := TestingConfig
 	cfg.Seed = true
+	cfg.UploadRateLimiter = ps.SeederUploadRateLimiter
 	// cfg.ListenAddr = "localhost:4000"
 	if ps.SeederStorage != nil {
 		cfg.DefaultStorage = ps.SeederStorage(greetingTempDir)
@@ -368,7 +382,11 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
-	cfg.DefaultStorage = ps.LeecherStorage(leecherDataDir)
+	if ps.LeecherStorage == nil {
+		cfg.DataDir = leecherDataDir
+	} else {
+		cfg.DefaultStorage = ps.LeecherStorage(leecherDataDir)
+	}
 	// cfg.ListenAddr = "localhost:4001"
 	leecher, err := NewClient(&cfg)
 	require.NoError(t, err)

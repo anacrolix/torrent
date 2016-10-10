@@ -1,6 +1,8 @@
 package torrent
 
 import (
+	"golang.org/x/time/rate"
+
 	"github.com/anacrolix/torrent/dht"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/storage"
@@ -29,6 +31,10 @@ type Config struct {
 	// not altruistic, we'll upload slightly more than we download from each
 	// peer.
 	Seed bool `long:"seed"`
+	// If non-zero, is the maximum bytes per second of data pieces we'll
+	// upload to peers.
+	UploadRateLimiter *rate.Limiter
+
 	// User-provided Client peer ID. If not present, one is generated automatically.
 	PeerID string
 	// For the bittorrent protocol.

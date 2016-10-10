@@ -809,18 +809,16 @@ func (r deadlineReader) Read(b []byte) (n int, err error) {
 	return
 }
 
-type readWriter struct {
-	io.Reader
-	io.Writer
-}
-
 func maybeReceiveEncryptedHandshake(rw io.ReadWriter, skeys [][]byte) (ret io.ReadWriter, encrypted bool, err error) {
 	var protocol [len(pp.Protocol)]byte
 	_, err = io.ReadFull(rw, protocol[:])
 	if err != nil {
 		return
 	}
-	ret = readWriter{
+	ret = struct {
+		io.Reader
+		io.Writer
+	}{
 		io.MultiReader(bytes.NewReader(protocol[:]), rw),
 		rw,
 	}
@@ -841,7 +839,12 @@ func (cl *Client) receiveSkeys() (ret [][]byte) {
 
 func (cl *Client) initiateHandshakes(c *connection, t *Torrent) (ok bool, err error) {
 	if c.encrypted {
-		c.rw, err = mse.InitiateHandshake(c.rw, t.infoHash[:], nil)
+		var rw io.ReadWriter
+		rw, err = mse.InitiateHandshake(struct {
+			io.Reader
+			io.Writer
+		}{c.r, c.w}, t.infoHash[:], nil)
+		c.setRW(rw)
 		if err != nil {
 			return
 		}
@@ -859,7 +862,9 @@ func (cl *Client) receiveHandshakes(c *connection) (t *Torrent, err error) {
 	skeys := cl.receiveSkeys()
 	cl.mu.Unlock()
 	if !cl.config.DisableEncryption {
-		c.rw, c.encrypted, err = maybeReceiveEncryptedHandshake(c.rw, skeys)
+		var rw io.ReadWriter
+		rw, c.encrypted, err = maybeReceiveEncryptedHandshake(c.rw(), skeys)
+		c.setRW(rw)
 		if err != nil {
 			if err == mse.ErrNoSecretKeyMatch {
 				err = nil
@@ -887,7 +892,7 @@ func (cl *Client) receiveHandshakes(c *connection) (t *Torrent, err error) {
 
 // Returns !ok if handshake failed for valid reasons.
 func (cl *Client) connBTHandshake(c *connection, ih *metainfo.Hash) (ret metainfo.Hash, ok bool, err error) {
-	res, ok, err := handshake(c.rw, ih, cl.peerID, cl.extensionBytes)
+	res, ok, err := handshake(c.rw(), ih, cl.peerID, cl.extensionBytes)
 	if err != nil || !ok {
 		return
 	}
@@ -937,10 +942,7 @@ func (cl *Client) runReceivedConn(c *connection) {
 
 func (cl *Client) runHandshookConn(c *connection, t *Torrent) {
 	c.conn.SetWriteDeadline(time.Time{})
-	c.rw = readWriter{
-		deadlineReader{c.conn, c.rw},
-		c.rw,
-	}
+	c.r = deadlineReader{c.conn, c.r}
 	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
 	if !t.addConnection(c) {
 		return

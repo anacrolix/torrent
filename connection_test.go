@@ -29,12 +29,7 @@ func TestCancelRequestOptimized(t *testing.T) {
 			bm.Set(1, true)
 			return bm
 		}(),
-		rw: struct {
-			io.Reader
-			io.Writer
-		}{
-			Writer: w,
-		},
+		w:    w,
 		conn: new(net.TCPConn),
 		// For the locks
 		t: &Torrent{cl: &Client{}},
@@ -74,10 +69,8 @@ func TestSendBitfieldThenHave(t *testing.T) {
 		t: &Torrent{
 			cl: &Client{},
 		},
-		rw: struct {
-			io.Reader
-			io.Writer
-		}{r, w},
+		r: r,
+		w: w,
 		outgoingUnbufferedMessages: list.New(),
 	}
 	go c.writer(time.Minute)
@@ -153,10 +146,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	r, w := io.Pipe()
 	cn := &connection{
 		t: t,
-		rw: struct {
-			io.Reader
-			io.Writer
-		}{r, nil},
+		r: r,
 	}
 	mrlErr := make(chan error)
 	cl.mu.Lock()

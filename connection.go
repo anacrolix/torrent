@@ -38,9 +38,14 @@ const (
 
 // Maintains the state of a connection with a peer.
 type connection struct {
-	t         *Torrent
-	conn      net.Conn
-	rw        io.ReadWriter // The real slim shady
+	t *Torrent
+	// The actual Conn, used for closing, and setting socket options.
+	conn net.Conn
+	// The Reader and Writer for this Conn, with hooks installed for stats,
+	// limiting, deadlines etc.
+	w io.Writer
+	r io.Reader
+	// True if the connection is operating over MSE obfuscation.
 	encrypted bool
 	Discovery peerSource
 	uTP       bool
@@ -109,7 +114,7 @@ func newConnection(nc net.Conn, l sync.Locker) (c *connection) {
 		PeerChoked:      true,
 		PeerMaxRequests: 250,
 	}
-	c.rw = connStatsReadWriter{nc, l, c}
+	c.setRW(connStatsReadWriter{nc, l, c})
 	return
 }
 
@@ -407,7 +412,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		cn.Close()
 	}()
 	// Reduce write syscalls.
-	buf := bufio.NewWriter(cn.rw)
+	buf := bufio.NewWriter(cn.w)
 	keepAliveTimer := time.NewTimer(keepAliveTimeout)
 	for {
 		cn.mu().Lock()
@@ -700,7 +705,7 @@ func (c *connection) mainReadLoop() error {
 	cl := t.cl
 
 	decoder := pp.Decoder{
-		R:         bufio.NewReader(c.rw),
+		R:         bufio.NewReader(c.r),
 		MaxLength: 256 * 1024,
 		Pool:      t.chunkPool,
 	}
@@ -906,4 +911,18 @@ func (c *connection) mainReadLoop() error {
 			return err
 		}
 	}
+}
+
+// Set both the Reader and Writer for the connection from a single ReadWriter.
+func (cn *connection) setRW(rw io.ReadWriter) {
+	cn.r = rw
+	cn.w = rw
+}
+
+// Returns the Reader and Writer as a combined ReadWriter.
+func (cn *connection) rw() io.ReadWriter {
+	return struct {
+		io.Reader
+		io.Writer
+	}{cn.r, cn.w}
 }

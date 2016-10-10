@@ -31,9 +31,9 @@ type Config struct {
 	// not altruistic, we'll upload slightly more than we download from each
 	// peer.
 	Seed bool `long:"seed"`
-	// If non-zero, is the maximum bytes per second of data pieces we'll
-	// upload to peers.
-	UploadRateLimiter *rate.Limiter
+	// Events are data bytes sent in pieces. The burst must be large enough to
+	// fit a whole chunk.
+	UploadRateLimiter   *rate.Limiter
 
 	// User-provided Client peer ID. If not present, one is generated automatically.
 	PeerID string

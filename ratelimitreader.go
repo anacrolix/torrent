@@ -1,7 +1,7 @@
 package torrent
 
 import (
-	"context"
+	"golang.org/x/net/context"
 	"io"
 	"time"
 

@@ -13,3 +13,4 @@
  * Implement BEP 40.
  * Rewrite tracker package to be announce-centric, rather than client. Currently the clients are private and adapted onto by the Announce() func.
  * Move tracker management code in the torrent package to its own file.
+ * Optimize Reader.posChanged, it triggers all piece priorities to be recomputed.

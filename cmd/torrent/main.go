@@ -81,6 +81,22 @@ func addTorrents(client *torrent.Client) {
 					log.Fatalf("error adding magnet: %s", err)
 				}
 				return t
+			} else if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
+				response, err := http.Get(arg)
+				if err != nil {
+					log.Fatalf("Error downloading torrent file: %s", err)
+				}
+
+				metaInfo, err := metainfo.Load(response.Body)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "error loading torrent file %q: %s\n", arg, err)
+					os.Exit(1)
+				}
+				t, err := client.AddTorrent(metaInfo)
+				if err != nil {
+					log.Fatal(err)
+				}
+				return t
 			} else {
 				metaInfo, err := metainfo.LoadFromFile(arg)
 				if err != nil {

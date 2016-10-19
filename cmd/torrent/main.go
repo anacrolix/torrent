@@ -88,6 +88,7 @@ func addTorrents(client *torrent.Client) {
 				}
 
 				metaInfo, err := metainfo.Load(response.Body)
+				defer response.Body.Close()
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "error loading torrent file %q: %s\n", arg, err)
 					os.Exit(1)

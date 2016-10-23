@@ -872,6 +872,7 @@ func (t *Torrent) updatePiecePriorities() {
 	}
 }
 
+// Returns the range of pieces [begin, end) that contains the extent of bytes.
 func (t *Torrent) byteRegionPieces(off, size int64) (begin, end int) {
 	if off >= t.length {
 		return
@@ -896,17 +897,11 @@ func (t *Torrent) byteRegionPieces(off, size int64) (begin, end int) {
 // callers depend on this method to enumerate readers.
 func (t *Torrent) forReaderOffsetPieces(f func(begin, end int) (more bool)) (all bool) {
 	for r := range t.readers {
-		// r.mu.Lock()
-		pos, readahead := r.pos, r.readahead
-		// r.mu.Unlock()
-		if readahead < 1 {
-			readahead = 1
-		}
-		begin, end := t.byteRegionPieces(pos, readahead)
-		if begin >= end {
+		p := r.pieces
+		if p.begin >= p.end {
 			continue
 		}
-		if !f(begin, end) {
+		if !f(p.begin, p.end) {
 			return false
 		}
 	}

@@ -52,7 +52,7 @@ func (r *Reader) SetReadahead(readahead int64) {
 	r.mu.Unlock()
 	r.t.cl.mu.Lock()
 	defer r.t.cl.mu.Unlock()
-	r.tickleClient()
+	r.posChanged()
 }
 
 func (r *Reader) readable(off int64) (ret bool) {

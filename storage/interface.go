@@ -20,7 +20,7 @@ type TorrentImpl interface {
 // Interacts with torrent piece data.
 type PieceImpl interface {
 	// These interfaces are not as strict as normally required. They can
-	// assume that the parameters are appropriate for the dimentions of the
+	// assume that the parameters are appropriate for the dimensions of the
 	// piece.
 	io.ReaderAt
 	io.WriterAt

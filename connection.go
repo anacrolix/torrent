@@ -18,6 +18,7 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
+	"github.com/anacrolix/missinggo/itertools"
 	"github.com/anacrolix/missinggo/prioritybitmap"
 	"github.com/bradfitz/iter"
 
@@ -504,8 +505,15 @@ func (cn *connection) fillRequests() {
 	})
 }
 
-func (cn *connection) requestPiecePendingChunks(piece int) (again bool) {
-	return cn.t.connRequestPiecePendingChunks(cn, piece)
+func (c *connection) requestPiecePendingChunks(piece int) (again bool) {
+	if !c.PeerHasPiece(piece) {
+		return true
+	}
+	chunkIndices := c.t.pieces[piece].undirtiedChunkIndices().ToSortedSlice()
+	return itertools.ForPerm(len(chunkIndices), func(i int) bool {
+		req := request{pp.Integer(piece), c.t.chunkIndexSpec(chunkIndices[i], piece)}
+		return c.Request(req)
+	})
 }
 
 func (cn *connection) stopRequestingPiece(piece int) {

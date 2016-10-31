@@ -982,7 +982,10 @@ func (t *Torrent) getCompletedPieces() (ret bitmap.Bitmap) {
 
 func (t *Torrent) unpendPieces(unpend *bitmap.Bitmap) {
 	t.pendingPieces.Sub(unpend)
-	t.updatePiecePriorities()
+	unpend.IterTyped(func(piece int) (again bool) {
+		t.updatePiecePriority(piece)
+		return true
+	})
 }
 
 func (t *Torrent) pendPieceRange(begin, end int) {

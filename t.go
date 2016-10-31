@@ -132,7 +132,7 @@ func (t *Torrent) addReader(r *Reader) {
 		t.readers = make(map[*Reader]struct{})
 	}
 	t.readers[r] = struct{}{}
-	t.readersChanged()
+	r.posChanged()
 }
 
 func (t *Torrent) deleteReader(r *Reader) {

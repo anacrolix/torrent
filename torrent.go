@@ -835,8 +835,36 @@ func (t *Torrent) forUrgentPieces(f func(piece int) (again bool)) (all bool) {
 }
 
 func (t *Torrent) readersChanged() {
+	t.updateReaderPieces()
+	t.updateAllPiecePriorities()
+}
+
+func (t *Torrent) updateReaderPieces() {
 	t.readerNowPieces, t.readerReadaheadPieces = t.readerPiecePriorities()
-	t.updatePiecePriorities()
+}
+
+func (t *Torrent) readerPosChanged(from, to pieceRange) {
+	if from == to {
+		return
+	}
+	t.updateReaderPieces()
+	// Order the ranges, high and low.
+	l, h := from, to
+	if l.begin > h.begin {
+		l, h = h, l
+	}
+	if l.end < h.begin {
+		// Two distinct ranges.
+		t.updatePiecePriorities(l.begin, l.end)
+		t.updatePiecePriorities(h.begin, h.end)
+	} else {
+		// Ranges overlap.
+		end := l.end
+		if h.end > end {
+			end = h.end
+		}
+		t.updatePiecePriorities(l.begin, end)
+	}
 }
 
 func (t *Torrent) maybeNewConns() {
@@ -863,10 +891,14 @@ func (t *Torrent) updatePiecePriority(piece int) {
 	t.piecePriorityChanged(piece)
 }
 
+func (t *Torrent) updateAllPiecePriorities() {
+	t.updatePiecePriorities(0, len(t.pieces))
+}
+
 // Update all piece priorities in one hit. This function should have the same
 // output as updatePiecePriority, but across all pieces.
-func (t *Torrent) updatePiecePriorities() {
-	for i := range t.pieces {
+func (t *Torrent) updatePiecePriorities(begin, end int) {
+	for i := begin; i < end; i++ {
 		t.updatePiecePriority(i)
 	}
 }

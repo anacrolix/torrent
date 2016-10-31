@@ -92,7 +92,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		t.completedPieces.Set(i, true)
 	}
 	for range iter.N(b.N) {
-		t.updatePiecePriorities()
+		t.updateAllPiecePriorities()
 	}
 }
 

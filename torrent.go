@@ -779,9 +779,9 @@ func (t *Torrent) extentPieces(off, _len int64) (pieces []int) {
 // pieces, or has been in worser half of the established connections for more
 // than a minute.
 func (t *Torrent) worstBadConn() *connection {
-	wcs := slices.HeapInterface(t.worstUnclosedConns(), worseConn)
+	wcs := worseConnSlice{t.worstUnclosedConns()}
 	for wcs.Len() != 0 {
-		c := heap.Pop(wcs).(*connection)
+		c := heap.Pop(&wcs).(*connection)
 		if c.UnwantedChunksReceived >= 6 && c.UnwantedChunksReceived > c.UsefulChunksReceived {
 			return c
 		}

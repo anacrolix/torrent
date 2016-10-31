@@ -136,8 +136,6 @@ func (t *Torrent) addReader(r *Reader) {
 }
 
 func (t *Torrent) deleteReader(r *Reader) {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
 	delete(t.readers, r)
 	t.readersChanged()
 }

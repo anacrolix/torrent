@@ -208,6 +208,8 @@ func (r *Reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 }
 
 func (r *Reader) Close() error {
+	r.t.cl.mu.Lock()
+	defer r.t.cl.mu.Unlock()
 	r.t.deleteReader(r)
 	r.t = nil
 	return nil

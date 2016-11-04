@@ -41,7 +41,6 @@ func (info *Info) BuildFromFilePath(root string) (err error) {
 			return nil
 		}
 		relPath, err := filepath.Rel(root, path)
-		log.Println(relPath, err)
 		if err != nil {
 			return fmt.Errorf("error getting relative path: %s", err)
 		}

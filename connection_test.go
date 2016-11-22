@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/peer_protocol"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
 )
 
@@ -157,8 +157,8 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		}
 		close(mrlErr)
 	}()
-	msg := peer_protocol.Message{
-		Type:  peer_protocol.Piece,
+	msg := pp.Message{
+		Type:  pp.Piece,
 		Piece: make([]byte, defaultChunkSize),
 	}
 	wb, err := msg.MarshalBinary()
@@ -177,4 +177,15 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	w.Close()
 	require.NoError(b, <-mrlErr)
 	require.EqualValues(b, b.N, cn.UsefulChunksReceived)
+}
+
+func TestConnectionReceiveBadChunkIndex(t *testing.T) {
+	cn := connection{
+		t: &Torrent{},
+	}
+	require.False(t, cn.t.haveInfo())
+	assert.NotPanics(t, func() { cn.receiveChunk(&pp.Message{}) })
+	cn.t.info = &metainfo.Info{}
+	require.True(t, cn.t.haveInfo())
+	assert.NotPanics(t, func() { cn.receiveChunk(&pp.Message{}) })
 }

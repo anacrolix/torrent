@@ -734,6 +734,9 @@ func (t *Torrent) wantPieceIndex(index int) bool {
 	if !t.haveInfo() {
 		return false
 	}
+	if index < 0 || index >= t.numPieces() {
+		return false
+	}
 	p := &t.pieces[index]
 	if p.QueuedForHash {
 		return false

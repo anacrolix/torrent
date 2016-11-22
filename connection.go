@@ -942,15 +942,15 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 		unexpectedChunksReceived.Add(1)
 	}
 
-	index := int(req.Index)
-	piece := &t.pieces[index]
-
 	// Do we actually want this chunk?
 	if !t.wantPiece(req) {
 		unwantedChunksReceived.Add(1)
 		c.UnwantedChunksReceived++
 		return
 	}
+
+	index := int(req.Index)
+	piece := &t.pieces[index]
 
 	c.UsefulChunksReceived++
 	c.lastUsefulChunkReceived = time.Now()

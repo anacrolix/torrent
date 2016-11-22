@@ -780,7 +780,7 @@ func (c *connection) mainReadLoop() error {
 		case pp.HaveNone:
 			err = c.peerSentHaveNone()
 		case pp.Piece:
-			c.downloadedChunk(&msg)
+			c.receiveChunk(&msg)
 			if len(msg.Piece) == int(t.chunkSize) {
 				t.chunkPool.Put(msg.Piece)
 			}
@@ -928,7 +928,7 @@ func (cn *connection) rw() io.ReadWriter {
 }
 
 // Handle a received chunk from a peer.
-func (c *connection) downloadedChunk(msg *pp.Message) {
+func (c *connection) receiveChunk(msg *pp.Message) {
 	t := c.t
 	cl := t.cl
 	chunksReceived.Add(1)

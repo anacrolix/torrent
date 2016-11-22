@@ -296,10 +296,6 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	return nil
 }
 
-func (t *Torrent) verifyPiece(piece int) {
-	t.cl.verifyPiece(t, piece)
-}
-
 func (t *Torrent) haveAllMetadataPieces() bool {
 	if t.haveInfo() {
 		return true
@@ -1009,7 +1005,14 @@ func (t *Torrent) pendRequest(req request) {
 }
 
 func (t *Torrent) pieceChanged(piece int) {
-	t.cl.pieceChanged(t, piece)
+	correct := t.pieceComplete(piece)
+	defer t.cl.event.Broadcast()
+	if correct {
+		t.onCompletedPiece(piece)
+	} else {
+		t.onFailedPiece(piece)
+	}
+	t.updatePiecePriority(piece)
 }
 
 func (t *Torrent) openNewConns() {
@@ -1414,4 +1417,107 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 
 func (t *Torrent) mu() missinggo.RWLocker {
 	return &t.cl.mu
+}
+
+func (t *Torrent) pieceHashed(piece int, correct bool) {
+	if t.closed.IsSet() {
+		return
+	}
+	p := &t.pieces[piece]
+	if p.EverHashed {
+		// Don't score the first time a piece is hashed, it could be an
+		// initial check.
+		if correct {
+			pieceHashedCorrect.Add(1)
+		} else {
+			log.Printf("%s: piece %d (%x) failed hash", t, piece, p.Hash)
+			pieceHashedNotCorrect.Add(1)
+		}
+	}
+	p.EverHashed = true
+	touchers := t.reapPieceTouches(piece)
+	if correct {
+		for _, c := range touchers {
+			c.goodPiecesDirtied++
+		}
+		err := p.Storage().MarkComplete()
+		if err != nil {
+			log.Printf("%T: error completing piece %d: %s", t.storage, piece, err)
+		}
+		t.updatePieceCompletion(piece)
+	} else if len(touchers) != 0 {
+		log.Printf("dropping and banning %d conns that touched piece", len(touchers))
+		for _, c := range touchers {
+			c.badPiecesDirtied++
+			t.cl.banPeerIP(missinggo.AddrIP(c.remoteAddr()))
+			t.dropConnection(c)
+		}
+	}
+	t.pieceChanged(piece)
+}
+
+func (t *Torrent) onCompletedPiece(piece int) {
+	t.pendingPieces.Remove(piece)
+	t.pendAllChunkSpecs(piece)
+	for _, conn := range t.conns {
+		conn.Have(piece)
+		for r := range conn.Requests {
+			if int(r.Index) == piece {
+				conn.Cancel(r)
+			}
+		}
+		// Could check here if peer doesn't have piece, but due to caching
+		// some peers may have said they have a piece but they don't.
+		conn.upload()
+	}
+}
+
+func (t *Torrent) onFailedPiece(piece int) {
+	cl := t.cl
+	if t.pieceAllDirty(piece) {
+		t.pendAllChunkSpecs(piece)
+	}
+	if !t.wantPieceIndex(piece) {
+		return
+	}
+	cl.openNewConns(t)
+	for _, conn := range t.conns {
+		if conn.PeerHasPiece(piece) {
+			conn.updateRequests()
+		}
+	}
+}
+
+func (t *Torrent) verifyPiece(piece int) {
+	cl := t.cl
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	p := &t.pieces[piece]
+	for p.Hashing || t.storage == nil {
+		cl.event.Wait()
+	}
+	p.QueuedForHash = false
+	if t.closed.IsSet() || t.pieceComplete(piece) {
+		t.updatePiecePriority(piece)
+		return
+	}
+	p.Hashing = true
+	t.publishPieceChange(piece)
+	cl.mu.Unlock()
+	sum := t.hashPiece(piece)
+	cl.mu.Lock()
+	p.Hashing = false
+	t.pieceHashed(piece, sum == p.Hash)
+}
+
+// Return the connections that touched a piece, and clear the entry while
+// doing it.
+func (t *Torrent) reapPieceTouches(piece int) (ret []*connection) {
+	for _, c := range t.conns {
+		if _, ok := c.peerTouchedPieces[piece]; ok {
+			ret = append(ret, c)
+			delete(c.peerTouchedPieces, piece)
+		}
+	}
+	return
 }

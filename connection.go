@@ -741,7 +741,7 @@ func (c *connection) mainReadLoop() error {
 			cl.peerUnchoked(t, c)
 		case pp.Interested:
 			c.PeerInterested = true
-			cl.upload(t, c)
+			c.upload()
 		case pp.NotInterested:
 			c.PeerInterested = false
 			c.Choke()
@@ -767,7 +767,7 @@ func (c *connection) mainReadLoop() error {
 				c.PeerRequests = make(map[request]struct{}, maxRequests)
 			}
 			c.PeerRequests[newRequest(msg.Index, msg.Begin, msg.Length)] = struct{}{}
-			cl.upload(t, c)
+			c.upload()
 		case pp.Cancel:
 			req := newRequest(msg.Index, msg.Begin, msg.Length)
 			if !c.PeerCancel(req) {
@@ -955,7 +955,7 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	c.UsefulChunksReceived++
 	c.lastUsefulChunkReceived = time.Now()
 
-	cl.upload(t, c)
+	c.upload()
 
 	// Need to record that it hasn't been written yet, before we attempt to do
 	// anything with it.
@@ -999,4 +999,64 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	cl.event.Broadcast()
 	t.publishPieceChange(int(req.Index))
 	return
+}
+
+// Also handles choking and unchoking of the remote peer.
+func (c *connection) upload() {
+	t := c.t
+	cl := t.cl
+	if cl.config.NoUpload {
+		return
+	}
+	if !c.PeerInterested {
+		return
+	}
+	seeding := t.seeding()
+	if !seeding && !t.connHasWantedPieces(c) {
+		// There's no reason to upload to this peer.
+		return
+	}
+	// Breaking or completing this loop means we don't want to upload to the
+	// peer anymore, and we choke them.
+another:
+	for seeding || c.chunksSent < c.UsefulChunksReceived+6 {
+		// We want to upload to the peer.
+		c.Unchoke()
+		for r := range c.PeerRequests {
+			res := cl.uploadLimit.ReserveN(time.Now(), int(r.Length))
+			delay := res.Delay()
+			if delay > 0 {
+				res.Cancel()
+				go func() {
+					time.Sleep(delay)
+					cl.mu.Lock()
+					defer cl.mu.Unlock()
+					c.upload()
+				}()
+				return
+			}
+			err := cl.sendChunk(t, c, r)
+			if err != nil {
+				i := int(r.Index)
+				if t.pieceComplete(i) {
+					t.updatePieceCompletion(i)
+					if !t.pieceComplete(i) {
+						// We had the piece, but not anymore.
+						break another
+					}
+				}
+				log.Printf("error sending chunk %+v to peer: %s", r, err)
+				// If we failed to send a chunk, choke the peer to ensure they
+				// flush all their requests. We've probably dropped a piece,
+				// but there's no way to communicate this to the peer. If they
+				// ask for it again, we'll kick them to allow us to send them
+				// an updated bitfield.
+				break another
+			}
+			delete(c.PeerRequests, r)
+			goto another
+		}
+		return
+	}
+	c.Choke()
 }

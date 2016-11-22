@@ -576,7 +576,7 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 		PieceLength: 15,
 		Pieces:      make([]byte, 20),
 		Files: []metainfo.FileInfo{
-			metainfo.FileInfo{Path: []string{"greeting"}, Length: 13},
+			{Path: []string{"greeting"}, Length: 13},
 		},
 	}
 	b, err := bencode.Marshal(info)
@@ -993,7 +993,7 @@ func TestClientDynamicListenPortNoProtocols(t *testing.T) {
 
 func addClientPeer(t *Torrent, cl *Client) {
 	t.AddPeers([]Peer{
-		Peer{
+		{
 			IP:   missinggo.AddrIP(cl.ListenAddr()),
 			Port: missinggo.AddrPort(cl.ListenAddr()),
 		},
@@ -1100,7 +1100,7 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 	testutil.ExportStatusWriter(client, "c")
 	tr, err := client.AddMagnet(magnet1)
 	require.NoError(t, err)
-	tr.AddPeers([]Peer{Peer{
+	tr.AddPeers([]Peer{{
 		IP:   missinggo.AddrIP(server.ListenAddr()),
 		Port: missinggo.AddrPort(server.ListenAddr()),
 	}})

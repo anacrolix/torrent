@@ -169,7 +169,7 @@ func (i *Instance) torrentAdded(e entity) {
 func (i *Instance) refresh() {
 	_new := scanDir(i.dirName)
 	old := i.dirState
-	for ih, _ := range old {
+	for ih := range old {
 		_, ok := _new[ih]
 		if !ok {
 			i.torrentRemoved(ih)

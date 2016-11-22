@@ -186,7 +186,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	defer leecher.Close()
 	leecherTorrent, _ := leecher.AddTorrent(layout.Metainfo)
 	leecherTorrent.AddPeers([]torrent.Peer{
-		torrent.Peer{
+		{
 			IP:   missinggo.AddrIP(seeder.ListenAddr()),
 			Port: missinggo.AddrPort(seeder.ListenAddr()),
 		},

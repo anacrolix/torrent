@@ -1147,6 +1147,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash) (t *Torrent) {
 		cl:       cl,
 		infoHash: ih,
 		peers:    make(map[peersKey]Peer),
+		conns:    make(map[*connection]struct{}, 2*defaultEstablishedConnsPerTorrent),
 
 		halfOpen:          make(map[string]struct{}),
 		pieceStateChanges: pubsub.NewPubSub(),

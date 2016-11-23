@@ -964,7 +964,7 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, t.chunkSize))
 
 	// Cancel pending requests for this chunk.
-	for _, c := range t.conns {
+	for c := range t.conns {
 		if cl.connCancel(t, c, req) {
 			c.updateRequests()
 		}

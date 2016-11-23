@@ -1415,18 +1415,18 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 		return
 	}
 	p := &t.pieces[piece]
+	touchers := t.reapPieceTouchers(piece)
 	if p.EverHashed {
 		// Don't score the first time a piece is hashed, it could be an
 		// initial check.
 		if correct {
 			pieceHashedCorrect.Add(1)
 		} else {
-			log.Printf("%s: piece %d (%x) failed hash", t, piece, p.Hash)
+			log.Printf("%s: piece %d (%x) failed hash: %d connections contributed", t, piece, p.Hash, len(touchers))
 			pieceHashedNotCorrect.Add(1)
 		}
 	}
 	p.EverHashed = true
-	touchers := t.reapPieceTouchers(piece)
 	if correct {
 		for _, c := range touchers {
 			c.goodPiecesDirtied++
@@ -1437,12 +1437,20 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 		}
 		t.updatePieceCompletion(piece)
 	} else if len(touchers) != 0 {
-		log.Printf("dropping and banning %d conns that touched piece", len(touchers))
 		for _, c := range touchers {
+			// Y u do dis peer?!
 			c.badPiecesDirtied++
-			t.cl.banPeerIP(missinggo.AddrIP(c.remoteAddr()))
-			t.dropConnection(c)
 		}
+		slices.Sort(touchers, connLessTrusted)
+		log.Printf("dropping first corresponding conn from trust: %s", func() (ret []int) {
+			for _, c := range touchers {
+				ret = append(ret, c.netGoodPiecesDirtied())
+			}
+			return
+		})
+		c := touchers[0]
+		t.cl.banPeerIP(missinggo.AddrIP(c.remoteAddr()))
+		c.Drop()
 	}
 }
 

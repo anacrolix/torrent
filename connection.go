@@ -1068,3 +1068,7 @@ func (cn *connection) Drop() {
 func (cn *connection) sentHave(piece int) bool {
 	return piece < len(cn.sentHaves) && cn.sentHaves[piece]
 }
+
+func (cn *connection) netGoodPiecesDirtied() int {
+	return cn.goodPiecesDirtied - cn.badPiecesDirtied
+}

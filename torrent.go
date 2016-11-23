@@ -1469,6 +1469,16 @@ func (t *Torrent) onIncompletePiece(piece int) {
 	if !t.wantPieceIndex(piece) {
 		return
 	}
+	// We could drop any connections that we told we have a piece that we
+	// don't here. But there's a test failure, and it seems clients don't care
+	// if you request pieces that you already claim to have. Pruning bad
+	// connections might just remove any connections that aren't treating us
+	// favourably anyway.
+	// for c := range t.conns {
+	// 	if c.sentHave(piece) {
+	// 		c.Drop()
+	// 	}
+	// }
 	for conn := range t.conns {
 		if conn.PeerHasPiece(piece) {
 			conn.updateRequests()

@@ -1060,3 +1060,11 @@ another:
 	}
 	c.Choke()
 }
+
+func (cn *connection) Drop() {
+	cn.t.dropConnection(cn)
+}
+
+func (cn *connection) sentHave(piece int) bool {
+	return piece < len(cn.sentHaves) && cn.sentHaves[piece]
+}

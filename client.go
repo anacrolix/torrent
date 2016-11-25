@@ -45,16 +45,6 @@ func (cl *Client) queuePieceCheck(t *Torrent, pieceIndex int) {
 	go t.verifyPiece(pieceIndex)
 }
 
-// Queue a piece check if one isn't already queued, and the piece has never
-// been checked before.
-func (cl *Client) queueFirstHash(t *Torrent, piece int) {
-	p := &t.pieces[piece]
-	if p.EverHashed || p.Hashing || p.QueuedForHash || t.pieceComplete(piece) {
-		return
-	}
-	cl.queuePieceCheck(t, piece)
-}
-
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
 type Client struct {

@@ -2,6 +2,7 @@ package dht
 
 import (
 	"crypto"
+	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -79,7 +80,13 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		config:      *c,
 		ipBlockList: c.IPBlocklist,
 		badNodes:    boom.NewBloomFilter(1000, 0.1),
+		tokenServer: tokenServer{
+			maxIntervalDelta: 2,
+			interval:         5 * time.Minute,
+			secret:           make([]byte, 20),
+		},
 	}
+	rand.Read(s.tokenServer.secret)
 	if c.Conn != nil {
 		s.socket = c.Conn
 	} else {

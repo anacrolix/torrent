@@ -20,6 +20,7 @@ import (
 	"github.com/anacrolix/torrent/dht/krpc"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/logonce"
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 // A Server defines parameters for a DHT node server that is able to
@@ -40,6 +41,7 @@ type Server struct {
 	closed           missinggo.Event
 	ipBlockList      iplist.Ranger
 	badNodes         *boom.BloomFilter
+	tokenServer      tokenServer
 
 	numConfirmedAnnounces int
 	bootstrapNodes        []string
@@ -251,6 +253,8 @@ func (s *Server) nodeByID(id string) *node {
 	return nil
 }
 
+// TODO: Probably should write error messages back to senders if something is
+// wrong.
 func (s *Server) handleQuery(source Addr, m krpc.Msg) {
 	node := s.getNode(source, m.SenderID())
 	node.lastGotQuery = time.Now()
@@ -280,8 +284,7 @@ func (s *Server) handleQuery(source Addr, m krpc.Msg) {
 		}
 		s.reply(source, m.T, krpc.Return{
 			Nodes: rNodes,
-			// TODO: Generate this dynamically, and store it for the source.
-			Token: "hi",
+			Token: s.createToken(source),
 		})
 	case "find_node": // TODO: Extract common behaviour with get_peers.
 		targetID := args.Target
@@ -302,8 +305,27 @@ func (s *Server) handleQuery(source Addr, m krpc.Msg) {
 			Nodes: rNodes,
 		})
 	case "announce_peer":
-		// TODO(anacrolix): Implement this lolz.
-		// log.Print(m)
+		readAnnouncePeer.Add(1)
+		if !s.validToken(args.Token, source) {
+			readInvalidToken.Add(1)
+			return
+		}
+		if len(args.InfoHash) != 20 {
+			readQueryBad.Add(1)
+			return
+		}
+		if h := s.config.OnAnnouncePeer; h != nil {
+			var ih metainfo.Hash
+			copy(ih[:], args.InfoHash)
+			p := Peer{
+				IP:   source.UDPAddr().IP,
+				Port: args.Port,
+			}
+			if args.ImpliedPort != 0 {
+				p.Port = source.UDPAddr().Port
+			}
+			h(ih, p)
+		}
 	case "vote":
 		// TODO(anacrolix): Or reject, I don't think I want this.
 	default:
@@ -426,6 +448,14 @@ func (s *Server) ID() string {
 		panic("bad node id")
 	}
 	return s.id
+}
+
+func (s *Server) createToken(addr Addr) string {
+	return s.tokenServer.CreateToken(addr)
+}
+
+func (s *Server) validToken(token string, addr Addr) bool {
+	return s.tokenServer.ValidToken(token, addr)
 }
 
 func (s *Server) query(node Addr, q string, a map[string]interface{}, onResponse func(krpc.Msg)) (t *Transaction, err error) {

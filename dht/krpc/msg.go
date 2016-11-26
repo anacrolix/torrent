@@ -29,16 +29,19 @@ type Msg struct {
 }
 
 type MsgArgs struct {
-	ID       string `bencode:"id"`        // ID of the quirying Node
-	InfoHash string `bencode:"info_hash"` // InfoHash of the torrent
-	Target   string `bencode:"target"`    // ID of the node sought
+	ID          string `bencode:"id"`           // ID of the quirying Node
+	InfoHash    string `bencode:"info_hash"`    // InfoHash of the torrent
+	Target      string `bencode:"target"`       // ID of the node sought
+	Token       string `bencode:"token"`        // Token received from an earlier get_peers query
+	Port        int    `bencode:"port"`         // Senders torrent port
+	ImpliedPort int    `bencode:"implied_port"` // Use senders apparent DHT port
 }
 
 type Return struct {
-	ID     string              `bencode:"id"` // ID of the querying node
-	Nodes  CompactIPv4NodeInfo `bencode:"nodes,omitempty"`
-	Token  string              `bencode:"token,omitempty"`
-	Values []util.CompactPeer  `bencode:"values,omitempty"`
+	ID     string              `bencode:"id"`               // ID of the querying node
+	Nodes  CompactIPv4NodeInfo `bencode:"nodes,omitempty"`  // K closest nodes to the requested target
+	Token  string              `bencode:"token,omitempty"`  // Token for future announce_peer
+	Values []util.CompactPeer  `bencode:"values,omitempty"` // Torrent peers
 }
 
 var _ fmt.Stringer = Msg{}

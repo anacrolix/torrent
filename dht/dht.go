@@ -11,6 +11,7 @@ import (
 
 	"github.com/anacrolix/torrent/dht/krpc"
 	"github.com/anacrolix/torrent/iplist"
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 const (
@@ -65,7 +66,11 @@ type ServerConfig struct {
 	// Used to secure the server's ID. Defaults to the Conn's LocalAddr().
 	PublicIP net.IP
 
-	OnQuery func(*krpc.Msg, net.Addr) bool
+	// Hook received queries. Return true if you don't want to propagate to
+	// the default handlers.
+	OnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
+	// Called when a peer successfully announces to us.
+	OnAnnouncePeer func(infoHash metainfo.Hash, peer Peer)
 }
 
 // ServerStats instance is returned by Server.Stats() and stores Server metrics

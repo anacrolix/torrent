@@ -309,6 +309,9 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if dhtCfg.Conn == nil && cl.utpSock != nil {
 			dhtCfg.Conn = cl.utpSock
 		}
+		if dhtCfg.OnAnnouncePeer == nil {
+			dhtCfg.OnAnnouncePeer = cl.onDHTAnnouncePeer
+		}
 		cl.dHT, err = dht.NewServer(&dhtCfg)
 		if err != nil {
 			return
@@ -1340,4 +1343,18 @@ func (cl *Client) newConnection(nc net.Conn) (c *connection) {
 	c.setRW(connStatsReadWriter{nc, &cl.mu, c})
 	c.r = rateLimitedReader{cl.downloadLimit, c.r}
 	return
+}
+
+func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, p dht.Peer) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	t, ok := cl.Torrent(ih)
+	if !ok {
+		return
+	}
+	t.addPeers([]Peer{{
+		IP:     p.IP,
+		Port:   p.Port,
+		Source: peerSourceDHTAnnouncePeer,
+	}})
 }

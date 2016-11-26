@@ -1268,7 +1268,7 @@ func (t *Torrent) consumeDHTAnnounce(pvs <-chan dht.PeersValues) {
 				addPeers = append(addPeers, Peer{
 					IP:     cp.IP[:],
 					Port:   cp.Port,
-					Source: peerSourceDHT,
+					Source: peerSourceDHTGetPeers,
 				})
 				key := (&net.UDPAddr{
 					IP:   cp.IP[:],

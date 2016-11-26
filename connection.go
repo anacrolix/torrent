@@ -28,13 +28,14 @@ import (
 
 var optimizedCancels = expvar.NewInt("optimizedCancels")
 
-type peerSource byte
+type peerSource string
 
 const (
-	peerSourceTracker  = '\x00' // It's the default.
-	peerSourceIncoming = 'I'
-	peerSourceDHT      = 'H'
-	peerSourcePEX      = 'X'
+	peerSourceTracker         = "T" // It's the default.
+	peerSourceIncoming        = "I"
+	peerSourceDHTGetPeers     = "Hg"
+	peerSourceDHTAnnouncePeer = "Ha"
+	peerSourcePEX             = "X"
 )
 
 // Maintains the state of a connection with a peer.
@@ -155,9 +156,7 @@ func (cn *connection) connectionFlags() (ret string) {
 	if cn.encrypted {
 		c('E')
 	}
-	if cn.Discovery != 0 {
-		c(byte(cn.Discovery))
-	}
+	ret += string(cn.Discovery)
 	if cn.uTP {
 		c('T')
 	}

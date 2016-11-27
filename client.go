@@ -1358,8 +1358,8 @@ func (cl *Client) newConnection(nc net.Conn) (c *connection) {
 func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, p dht.Peer) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	t, ok := cl.Torrent(ih)
-	if !ok {
+	t := cl.torrent(ih)
+	if t == nil {
 		return
 	}
 	t.addPeers([]Peer{{

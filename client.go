@@ -79,6 +79,10 @@ type Client struct {
 func (cl *Client) BadPeerIPs() []string {
 	cl.mu.RLock()
 	defer cl.mu.RUnlock()
+	return cl.badPeerIPsLocked()
+}
+
+func (cl *Client) badPeerIPsLocked() []string {
 	return slices.FromMapKeys(cl.badPeerIPs).([]string)
 }
 
@@ -123,6 +127,8 @@ func (cl *Client) sortedTorrents() (ret []*Torrent) {
 // Writes out a human readable status of the client, such as for writing to a
 // HTTP status page.
 func (cl *Client) WriteStatus(_w io.Writer) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
 	w := bufio.NewWriter(_w)
 	defer w.Flush()
 	if addr := cl.ListenAddr(); addr != nil {
@@ -131,7 +137,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		fmt.Fprintln(w, "Not listening!")
 	}
 	fmt.Fprintf(w, "Peer ID: %+q\n", cl.PeerID())
-	fmt.Fprintf(w, "Banned IPs: %d\n", len(cl.BadPeerIPs()))
+	fmt.Fprintf(w, "Banned IPs: %d\n", len(cl.badPeerIPsLocked()))
 	if dht := cl.DHT(); dht != nil {
 		dhtStats := dht.Stats()
 		fmt.Fprintf(w, "DHT nodes: %d (%d good, %d banned)\n", dhtStats.Nodes, dhtStats.GoodNodes, dhtStats.BadNodes)
@@ -140,19 +146,19 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		fmt.Fprintf(w, "DHT announces: %d\n", dhtStats.ConfirmedAnnounces)
 		fmt.Fprintf(w, "Outstanding transactions: %d\n", dhtStats.OutstandingTransactions)
 	}
-	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.Torrents()))
+	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.torrentsAsSlice()))
 	fmt.Fprintln(w)
-	for _, t := range slices.Sort(append([]*Torrent(nil), cl.Torrents()...), func(l, r *Torrent) bool {
+	for _, t := range slices.Sort(cl.torrentsAsSlice(), func(l, r *Torrent) bool {
 		return l.InfoHash().AsString() < r.InfoHash().AsString()
 	}).([]*Torrent) {
-		if t.Name() == "" {
+		if t.name() == "" {
 			fmt.Fprint(w, "<unknown name>")
 		} else {
-			fmt.Fprint(w, t.Name())
+			fmt.Fprint(w, t.name())
 		}
 		fmt.Fprint(w, "\n")
 		if t.Info() != nil {
-			fmt.Fprintf(w, "%f%% of %d bytes (%s)", 100*(1-float64(t.BytesMissing())/float64(t.Info().TotalLength())), t.length, humanize.Bytes(uint64(t.Info().TotalLength())))
+			fmt.Fprintf(w, "%f%% of %d bytes (%s)", 100*(1-float64(t.bytesMissingLocked())/float64(t.Info().TotalLength())), t.length, humanize.Bytes(uint64(t.Info().TotalLength())))
 		} else {
 			w.WriteString("<missing metainfo>")
 		}
@@ -1269,12 +1275,16 @@ func (cl *Client) WaitAll() bool {
 }
 
 // Returns handles to all the torrents loaded in the Client.
-func (cl *Client) Torrents() (ret []*Torrent) {
+func (cl *Client) Torrents() []*Torrent {
 	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	return cl.torrentsAsSlice()
+}
+
+func (cl *Client) torrentsAsSlice() (ret []*Torrent) {
 	for _, t := range cl.torrents {
 		ret = append(ret, t)
 	}
-	cl.mu.Unlock()
 	return
 }
 

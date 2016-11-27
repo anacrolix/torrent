@@ -447,7 +447,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	if t.Info() != nil {
 		fmt.Fprintf(w, "Num Pieces: %d\n", t.numPieces())
 		fmt.Fprint(w, "Piece States:")
-		for _, psr := range t.PieceStateRuns() {
+		for _, psr := range t.pieceStateRuns() {
 			w.Write([]byte(" "))
 			w.Write([]byte(pieceStateRunStatusChars(psr)))
 		}
@@ -509,6 +509,10 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 func (t *Torrent) BytesMissing() int64 {
 	t.mu().RLock()
 	defer t.mu().RUnlock()
+	return t.bytesMissingLocked()
+}
+
+func (t *Torrent) bytesMissingLocked() int64 {
 	return t.bytesLeft()
 }
 

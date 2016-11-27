@@ -331,7 +331,7 @@ func (s *Server) handleQuery(source Addr, m krpc.Msg) {
 			if args.ImpliedPort != 0 {
 				p.Port = source.UDPAddr().Port
 			}
-			h(ih, p)
+			go h(ih, p)
 		}
 	case "vote":
 		// TODO(anacrolix): Or reject, I don't think I want this.

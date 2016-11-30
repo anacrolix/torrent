@@ -98,6 +98,9 @@ func addTorrents(client *torrent.Client) {
 					log.Fatal(err)
 				}
 				return t
+			} else if strings.HasPrefix(arg, "infohash:") {
+				t, _ := client.AddTorrentInfoHash(metainfo.NewHashFromHex(strings.TrimPrefix(arg, "infohash:")))
+				return t
 			} else {
 				metaInfo, err := metainfo.LoadFromFile(arg)
 				if err != nil {

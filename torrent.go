@@ -115,6 +115,11 @@ type Torrent struct {
 	stats TorrentStats
 }
 
+// Returns a channel that is closed when the Torrent is closed.
+func (t *Torrent) Closed() <-chan struct{} {
+	return t.closed.LockedChan(&t.cl.mu)
+}
+
 func (t *Torrent) setChunkSize(size pp.Integer) {
 	t.chunkSize = size
 	t.chunkPool = &sync.Pool{

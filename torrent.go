@@ -1445,21 +1445,24 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 			log.Printf("%T: error completing piece %d: %s", t.storage, piece, err)
 		}
 		t.updatePieceCompletion(piece)
-	} else if len(touchers) != 0 {
-		for _, c := range touchers {
-			// Y u do dis peer?!
-			c.badPiecesDirtied++
-		}
-		slices.Sort(touchers, connLessTrusted)
-		log.Printf("dropping first corresponding conn from trust: %v", func() (ret []int) {
+	} else {
+		if len(touchers) != 0 {
 			for _, c := range touchers {
-				ret = append(ret, c.netGoodPiecesDirtied())
+				// Y u do dis peer?!
+				c.badPiecesDirtied++
 			}
-			return
-		}())
-		c := touchers[0]
-		t.cl.banPeerIP(missinggo.AddrIP(c.remoteAddr()))
-		c.Drop()
+			slices.Sort(touchers, connLessTrusted)
+			log.Printf("dropping first corresponding conn from trust: %v", func() (ret []int) {
+				for _, c := range touchers {
+					ret = append(ret, c.netGoodPiecesDirtied())
+				}
+				return
+			}())
+			c := touchers[0]
+			t.cl.banPeerIP(missinggo.AddrIP(c.remoteAddr()))
+			c.Drop()
+		}
+		t.onIncompletePiece(piece)
 	}
 }
 

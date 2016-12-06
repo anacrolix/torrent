@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
@@ -130,4 +131,20 @@ func TestEmptyFilesAndZeroPieceLengthWithFileStorage(t *testing.T) {
 
 func TestEmptyFilesAndZeroPieceLengthWithMMapStorage(t *testing.T) {
 	testEmptyFilesAndZeroPieceLength(t, storage.NewMMap(TestingConfig.DataDir))
+}
+
+func TestPieceHashFailed(t *testing.T) {
+	mi := testutil.GreetingMetaInfo()
+	tt := Torrent{
+		cl:            new(Client),
+		infoHash:      mi.HashInfoBytes(),
+		storageOpener: storage.NewClient(badStorage{}),
+		chunkSize:     2,
+	}
+	require.NoError(t, tt.setInfoBytes(mi.InfoBytes))
+	tt.pieces[1].DirtyChunks.AddRange(0, 3)
+	require.True(t, tt.pieceAllDirty(1))
+	tt.pieceHashed(1, false)
+	// Dirty chunks should be cleared so we can try again.
+	require.False(t, tt.pieceAllDirty(1))
 }

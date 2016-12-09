@@ -19,6 +19,7 @@ type Info struct {
 	Name        string     `bencode:"name"`
 	Length      int64      `bencode:"length,omitempty"`
 	Private     *bool      `bencode:"private,omitempty"`
+	Source      string     `bencode:"source,omitempty"`
 	Files       []FileInfo `bencode:"files,omitempty"`
 }
 

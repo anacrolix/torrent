@@ -6,6 +6,11 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 )
 
+var ErrorMethodUnknown = KRPCError{
+	Code: 204,
+	Msg:  "Method Unknown",
+}
+
 // Represented as a string or list in bencode.
 type KRPCError struct {
 	Code int

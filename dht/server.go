@@ -333,11 +333,24 @@ func (s *Server) handleQuery(source Addr, m krpc.Msg) {
 			}
 			go h(ih, p)
 		}
-	case "vote":
-		// TODO(anacrolix): Or reject, I don't think I want this.
 	default:
-		log.Printf("%s: not handling received query: q=%s", s, m.Q)
-		return
+		s.sendError(source, m.T, krpc.ErrorMethodUnknown)
+	}
+}
+
+func (s *Server) sendError(addr Addr, t string, e krpc.KRPCError) {
+	m := krpc.Msg{
+		T: t,
+		Y: "e",
+		E: &e,
+	}
+	b, err := bencode.Marshal(m)
+	if err != nil {
+		panic(err)
+	}
+	err = s.writeToNode(b, addr)
+	if err != nil {
+		log.Printf("error replying to %s: %s", addr, err)
 	}
 }
 

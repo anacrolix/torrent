@@ -6,24 +6,24 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 )
 
-var ErrorMethodUnknown = KRPCError{
+var ErrorMethodUnknown = Error{
 	Code: 204,
 	Msg:  "Method Unknown",
 }
 
 // Represented as a string or list in bencode.
-type KRPCError struct {
+type Error struct {
 	Code int
 	Msg  string
 }
 
 var (
-	_ bencode.Unmarshaler = &KRPCError{}
-	_ bencode.Marshaler   = &KRPCError{}
-	_ error               = KRPCError{}
+	_ bencode.Unmarshaler = &Error{}
+	_ bencode.Marshaler   = &Error{}
+	_ error               = Error{}
 )
 
-func (e *KRPCError) UnmarshalBencode(_b []byte) (err error) {
+func (e *Error) UnmarshalBencode(_b []byte) (err error) {
 	var _v interface{}
 	err = bencode.Unmarshal(_b, &_v)
 	if err != nil {
@@ -41,10 +41,10 @@ func (e *KRPCError) UnmarshalBencode(_b []byte) (err error) {
 	return
 }
 
-func (e KRPCError) MarshalBencode() (ret []byte, err error) {
+func (e Error) MarshalBencode() (ret []byte, err error) {
 	return bencode.Marshal([]interface{}{e.Code, e.Msg})
 }
 
-func (e KRPCError) Error() string {
+func (e Error) Error() string {
 	return fmt.Sprintf("KRPC error %d: %s", e.Code, e.Msg)
 }

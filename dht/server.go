@@ -338,7 +338,7 @@ func (s *Server) handleQuery(source Addr, m krpc.Msg) {
 	}
 }
 
-func (s *Server) sendError(addr Addr, t string, e krpc.KRPCError) {
+func (s *Server) sendError(addr Addr, t string, e krpc.Error) {
 	m := krpc.Msg{
 		T: t,
 		Y: "e",

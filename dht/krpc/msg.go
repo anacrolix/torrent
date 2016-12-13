@@ -24,7 +24,7 @@ type Msg struct {
 	T  string           `bencode:"t"`           // required: transaction ID
 	Y  string           `bencode:"y"`           // required: type of the message: q for QUERY, r for RESPONSE, e for ERROR
 	R  *Return          `bencode:"r,omitempty"` // RESPONSE type only
-	E  *KRPCError       `bencode:"e,omitempty"` // ERROR type only
+	E  *Error           `bencode:"e,omitempty"` // ERROR type only
 	IP util.CompactPeer `bencode:"ip,omitempty"`
 }
 
@@ -61,7 +61,7 @@ func (m Msg) SenderID() string {
 	return ""
 }
 
-func (m Msg) Error() *KRPCError {
+func (m Msg) Error() *Error {
 	if m.Y != "e" {
 		return nil
 	}

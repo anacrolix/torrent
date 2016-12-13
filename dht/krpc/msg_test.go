@@ -33,7 +33,7 @@ func TestMarshalUnmarshalMsg(t *testing.T) {
 	testMarshalUnmarshalMsg(t, Msg{
 		Y: "e",
 		T: "42",
-		E: &KRPCError{Code: 200, Msg: "fuck"},
+		E: &Error{Code: 200, Msg: "fuck"},
 	}, "d1:eli200e4:fucke1:t2:421:y1:ee")
 	testMarshalUnmarshalMsg(t, Msg{
 		Y: "r",

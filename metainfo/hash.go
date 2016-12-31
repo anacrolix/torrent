@@ -37,7 +37,10 @@ func (h *Hash) FromHexString(s string) (err error) {
 }
 
 func NewHashFromHex(s string) (h Hash) {
-	h.FromHexString(s)
+	err := h.FromHexString(s)
+	if err != nil {
+		panic(err)
+	}
 	return
 }
 

@@ -17,12 +17,13 @@ Install the library package with `go get github.com/anacrolix/torrent`, or the p
 
 There is a small example in the [package documentation](https://godoc.org/github.com/anacrolix/torrent).
 
-## Other projects using Torrent
+## Other public projects using torrent
 
  * [Go Peerflix](https://github.com/Sioro-Neoku/go-peerflix)
  * [Cloud Torrent](https://github.com/jpillora/cloud-torrent)
  * [Android Torrent Client](https://gitlab.com/axet/android-torrent-client)
  * [Android libtorrent](https://gitlab.com/axet/libtorrent)
+ * [Trickl - Torrent Client](https://play.google.com/store/apps/details?id=com.shwifty.tex)
 
 ## Mobile
 

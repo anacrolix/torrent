@@ -21,8 +21,8 @@ There is a small example in the [package documentation](https://godoc.org/github
 
  * [Go Peerflix](https://github.com/Sioro-Neoku/go-peerflix)
  * [Cloud Torrent](https://github.com/jpillora/cloud-torrent)
- * [Android Torrent Client](https://github.com/axet/android-torrent-client)
- * [Android libtorrent](https://github.com/axet/libtorrent)
+ * [Android Torrent Client](https://gitlab.com/axet/android-torrent-client)
+ * [Android libtorrent](https://gitlab.com/axet/libtorrent)
 
 ## Mobile
 

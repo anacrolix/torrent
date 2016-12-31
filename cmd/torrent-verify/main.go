@@ -20,6 +20,7 @@ import (
 var (
 	torrentPath = flag.String("torrent", "/path/to/the.torrent", "path of the torrent file")
 	dataPath    = flag.String("path", "/torrent/data", "path of the torrent data")
+	fastFail    = flag.Bool("fastfail", false, "exit at first failure")
 )
 
 func fileToMmap(filename string, length int64) mmap.MMap {
@@ -74,6 +75,10 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("%d: %x: %v\n", i, p.Hash(), bytes.Equal(hash.Sum(nil), p.Hash().Bytes()))
+		good := bytes.Equal(hash.Sum(nil), p.Hash().Bytes())
+		fmt.Printf("%d: %x: %v\n", i, p.Hash(), good)
+		if *fastFail && !good {
+			log.Fatal("hash mismatch")
+		}
 	}
 }

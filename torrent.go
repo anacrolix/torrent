@@ -1546,3 +1546,14 @@ func (t *Torrent) connsAsSlice() (ret []*connection) {
 	}
 	return
 }
+
+// Currently doesn't really queue, but should in the future.
+func (t *Torrent) queuePieceCheck(pieceIndex int) {
+	piece := &t.pieces[pieceIndex]
+	if piece.QueuedForHash {
+		return
+	}
+	piece.QueuedForHash = true
+	t.publishPieceChange(pieceIndex)
+	go t.verifyPiece(pieceIndex)
+}

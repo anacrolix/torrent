@@ -34,17 +34,6 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-// Currently doesn't really queue, but should in the future.
-func (cl *Client) queuePieceCheck(t *Torrent, pieceIndex int) {
-	piece := &t.pieces[pieceIndex]
-	if piece.QueuedForHash {
-		return
-	}
-	piece.QueuedForHash = true
-	t.publishPieceChange(pieceIndex)
-	go t.verifyPiece(pieceIndex)
-}
-
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
 type Client struct {

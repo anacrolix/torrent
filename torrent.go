@@ -144,15 +144,6 @@ func (t *Torrent) pieceCompleteUncached(piece int) bool {
 	return t.pieces[piece].Storage().GetIsComplete()
 }
 
-func (t *Torrent) numConnsUnchoked() (num int) {
-	for c := range t.conns {
-		if !c.PeerChoked {
-			num++
-		}
-	}
-	return
-}
-
 // There's a connection to that address already.
 func (t *Torrent) addrActive(addr string) bool {
 	if _, ok := t.halfOpen[addr]; ok {
@@ -551,10 +542,6 @@ func (t *Torrent) usualPieceSize() int {
 	return int(t.info.PieceLength)
 }
 
-func (t *Torrent) lastPieceSize() int {
-	return int(t.pieceLength(t.numPieces() - 1))
-}
-
 func (t *Torrent) numPieces() int {
 	return t.info.NumPieces()
 }
@@ -605,37 +592,6 @@ func (t *Torrent) bitfield() (bf []bool) {
 		bf[piece] = true
 		return true
 	})
-	return
-}
-
-func (t *Torrent) validOutgoingRequest(r request) bool {
-	if r.Index >= pp.Integer(t.info.NumPieces()) {
-		return false
-	}
-	if r.Begin%t.chunkSize != 0 {
-		return false
-	}
-	if r.Length > t.chunkSize {
-		return false
-	}
-	pieceLength := t.pieceLength(int(r.Index))
-	if r.Begin+r.Length > pieceLength {
-		return false
-	}
-	return r.Length == t.chunkSize || r.Begin+r.Length == pieceLength
-}
-
-func (t *Torrent) pieceChunks(piece int) (css []chunkSpec) {
-	css = make([]chunkSpec, 0, (t.pieceLength(piece)+t.chunkSize-1)/t.chunkSize)
-	var cs chunkSpec
-	for left := t.pieceLength(piece); left != 0; left -= cs.Length {
-		cs.Length = left
-		if cs.Length > t.chunkSize {
-			cs.Length = t.chunkSize
-		}
-		css = append(css, cs)
-		cs.Begin += cs.Length
-	}
 	return
 }
 
@@ -761,26 +717,8 @@ func (t *Torrent) wantPieceIndex(index int) bool {
 	})
 }
 
-func (t *Torrent) forNeededPieces(f func(piece int) (more bool)) (all bool) {
-	return t.forReaderOffsetPieces(func(begin, end int) (more bool) {
-		for i := begin; begin < end; i++ {
-			if !f(i) {
-				return false
-			}
-		}
-		return true
-	})
-}
-
 func (t *Torrent) connHasWantedPieces(c *connection) bool {
 	return !c.pieceRequestOrder.IsEmpty()
-}
-
-func (t *Torrent) extentPieces(off, _len int64) (pieces []int) {
-	for i := off / int64(t.usualPieceSize()); i*int64(t.usualPieceSize()) < off+_len; i++ {
-		pieces = append(pieces, int(i))
-	}
-	return
 }
 
 // The worst connection is one that hasn't been sent, or sent anything useful
@@ -830,17 +768,6 @@ func (t *Torrent) pieceNumPendingChunks(piece int) int {
 
 func (t *Torrent) pieceAllDirty(piece int) bool {
 	return t.pieces[piece].DirtyChunks.Len() == t.pieceNumChunks(piece)
-}
-
-func (t *Torrent) forUrgentPieces(f func(piece int) (again bool)) (all bool) {
-	return t.forReaderOffsetPieces(func(begin, end int) (again bool) {
-		if begin < end {
-			if !f(begin) {
-				return false
-			}
-		}
-		return true
-	})
 }
 
 func (t *Torrent) readersChanged() {
@@ -983,10 +910,6 @@ func (t *Torrent) pendPiece(piece int) {
 	}
 	t.pendingPieces.Add(piece)
 	t.updatePiecePriority(piece)
-}
-
-func (t *Torrent) getCompletedPieces() (ret bitmap.Bitmap) {
-	return t.completedPieces.Copy()
 }
 
 func (t *Torrent) unpendPieces(unpend *bitmap.Bitmap) {

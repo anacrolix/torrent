@@ -96,7 +96,7 @@ func (cl *Client) PeerID() string {
 
 type torrentAddr string
 
-func (me torrentAddr) Network() string { return "" }
+func (torrentAddr) Network() string { return "" }
 
 func (me torrentAddr) String() string { return string(me) }
 
@@ -105,12 +105,6 @@ func (cl *Client) ListenAddr() net.Addr {
 		return nil
 	}
 	return torrentAddr(cl.listenAddr)
-}
-
-func (cl *Client) sortedTorrents() (ret []*Torrent) {
-	return slices.Sort(slices.FromMapElems(cl.torrents), func(l, r metainfo.Hash) bool {
-		return l.AsString() < r.AsString()
-	}).([]*Torrent)
 }
 
 // Writes out a human readable status of the client, such as for writing to a
@@ -452,7 +446,7 @@ type dialResult struct {
 	UTP  bool
 }
 
-func doDial(dial func(addr string, t *Torrent) (net.Conn, error), ch chan dialResult, utp bool, addr string, t *Torrent) {
+func doDial(dial func(string, *Torrent) (net.Conn, error), ch chan dialResult, utp bool, addr string, t *Torrent) {
 	conn, err := dial(addr, t)
 	if err != nil {
 		if conn != nil {
@@ -515,7 +509,7 @@ func (cl *Client) dialTCP(addr string, t *Torrent) (c net.Conn, err error) {
 	return
 }
 
-func (cl *Client) dialUTP(addr string, t *Torrent) (c net.Conn, err error) {
+func (cl *Client) dialUTP(addr string, t *Torrent) (net.Conn, error) {
 	return cl.utpSock.DialTimeout(addr, cl.dialTimeout(t))
 }
 

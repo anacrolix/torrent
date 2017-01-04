@@ -637,7 +637,7 @@ func (t *Torrent) hashPiece(piece int) (ret metainfo.Hash) {
 		return
 	}
 	if err != io.ErrUnexpectedEOF && !os.IsNotExist(err) {
-		log.Printf("unexpected error hashing piece with %T: %s", t.storage, err)
+		log.Printf("unexpected error hashing piece with %T: %s", t.storage.TorrentImpl, err)
 	}
 	return
 }

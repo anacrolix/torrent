@@ -20,12 +20,6 @@ type MetaInfo struct {
 	URLList      interface{}   `bencode:"url-list,omitempty"`
 }
 
-// Information specific to a single file inside the MetaInfo structure.
-type FileInfo struct {
-	Length int64    `bencode:"length"`
-	Path   []string `bencode:"path"`
-}
-
 // Load a MetaInfo from an io.Reader. Returns a non-nil error in case of
 // failure.
 func Load(r io.Reader) (*MetaInfo, error) {

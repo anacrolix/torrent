@@ -210,6 +210,18 @@ func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
 		len(cn.PeerRequests),
 		cn.statusFlags(),
 	)
+	fmt.Fprintf(w, "    next pieces: %v\n", priorityBitmapHeadAsSlice(&cn.pieceRequestOrder, 10))
+}
+
+func priorityBitmapHeadAsSlice(pb *prioritybitmap.PriorityBitmap, n int) (ret []int) {
+	pb.IterTyped(func(i int) bool {
+		if len(ret) >= n {
+			return false
+		}
+		ret = append(ret, i)
+		return true
+	})
+	return
 }
 
 func (cn *connection) Close() {

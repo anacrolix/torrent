@@ -542,7 +542,7 @@ func (cn *connection) updatePiecePriority(piece int) {
 	default:
 		panic(tpp)
 	}
-	prio += piece / 2
+	prio += piece / 3
 	cn.pieceRequestOrder.Set(piece, prio)
 	cn.updateRequests()
 }

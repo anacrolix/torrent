@@ -292,10 +292,6 @@ func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
 	return storage.NewResourcePieces(fc.AsResourceProvider())
 }
 
-func fileCachePieceFileStorage(fc *filecache.Cache) storage.ClientImpl {
-	return storage.NewFileStorePieces(fc.AsFileStore())
-}
-
 func TestClientTransferSmallCache(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
 		LeecherStorage: NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
@@ -316,9 +312,6 @@ func TestClientTransferSmallCache(t *testing.T) {
 func TestClientTransferVarious(t *testing.T) {
 	// Leecher storage
 	for _, ls := range []storageFactory{
-		NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
-			Wrapper: fileCachePieceFileStorage,
-		}),
 		NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
 			Wrapper: fileCachePieceResourceStorage,
 		}),
@@ -798,12 +791,10 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 }
 
 func TestAddTorrentPiecesAlreadyCompleted(t *testing.T) {
-	testAddTorrentPriorPieceCompletion(t, true, fileCachePieceFileStorage)
 	testAddTorrentPriorPieceCompletion(t, true, fileCachePieceResourceStorage)
 }
 
 func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
-	testAddTorrentPriorPieceCompletion(t, false, fileCachePieceFileStorage)
 	testAddTorrentPriorPieceCompletion(t, false, fileCachePieceResourceStorage)
 }
 
@@ -852,7 +843,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	if ps.SetLeecherStorageCapacity {
 		fc.SetCapacity(ps.LeecherStorageCapacity)
 	}
-	cfg.DefaultStorage = storage.NewFileStorePieces(fc.AsFileStore())
+	cfg.DefaultStorage = storage.NewResourcePieces(fc.AsResourceProvider())
 	cfg.DataDir = leecherDataDir
 	leecher, _ := NewClient(&cfg)
 	defer leecher.Close()

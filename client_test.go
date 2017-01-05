@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/anacrolix/dht"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/filecache"
@@ -27,7 +28,6 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/dht"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"

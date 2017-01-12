@@ -5,9 +5,9 @@
 
 This repository implements BitTorrent-related packages and command-line utilities in Go. The emphasis is on use as a library from other projects. It's been used 24/7 in production by a downstream, private service since late 2014.
 
-There is support for protocol encryption, DHT, PEX, uTP, and various extensions. See the package documentation for a more complete list. There are several data storage backends provided: blob, file, and mmap, and you can write your own, such as to store data on S3, or in a database. You can use the provided binaries in `./cmd`, or use `torrent` as a library for your own applications.
+There is support for protocol encryption, [DHT](https://github.com/anacrolix/dht), PEX, [uTP](https://github.com/anacrolix/utp), and various extensions. See the package documentation for a more complete list. There are several data storage backends provided: blob, file, and mmap, and you can write your own, such as to store data on S3, or in a database. You can use the provided binaries in `./cmd`, or use `torrent` as a library for your own applications.
 
-Many of the sub-packages can be used for other purposes: [dht](https://godoc.org/github.com/anacrolix/torrent/dht), [bencode](https://godoc.org/github.com/anacrolix/torrent/bencode), and [tracker](https://godoc.org/github.com/anacrolix/torrent/tracker), in particular.
+Many of the sub-packages can be used for other purposes: [bencode](https://godoc.org/github.com/anacrolix/torrent/bencode), and [tracker](https://godoc.org/github.com/anacrolix/torrent/tracker), in particular.
 
 ## Installation
 
@@ -24,10 +24,11 @@ There is a small example in the [package documentation](https://godoc.org/github
  * [Android Torrent Client](https://gitlab.com/axet/android-torrent-client)
  * [Android libtorrent](https://gitlab.com/axet/libtorrent)
  * [Trickl - Torrent Client](https://play.google.com/store/apps/details?id=com.shwifty.tex)
+ * [Confluence](https://github.com/anacrolix/confluence)
 
 ## Mobile
 
-There's a branch called `mobile` that supports binding to torrent with the [gomobile](https://github.com/golang/go/wiki/Mobile) tool. It has some API changes as required by `gomobile`. Checkout the `mobile` branch, and bind as usual.
+There's a branch called `mobile` that supports binding to torrent with the [gomobile](https://github.com/golang/go/wiki/Mobile) tool. It has some API changes as required by `gomobile`. Checkout the [`mobile` branch](https://github.com/anacrolix/torrent/tree/mobile), and bind as usual.
 
 ## Commands
 

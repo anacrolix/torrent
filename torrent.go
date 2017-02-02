@@ -1417,6 +1417,7 @@ func (t *Torrent) onIncompletePiece(piece int) {
 	// if you request pieces that you already claim to have. Pruning bad
 	// connections might just remove any connections that aren't treating us
 	// favourably anyway.
+
 	// for c := range t.conns {
 	// 	if c.sentHave(piece) {
 	// 		c.Drop()

@@ -1223,7 +1223,7 @@ func (t *Torrent) consumeDHTAnnounce(pvs <-chan dht.PeersValues) {
 
 func (t *Torrent) announceDHT(impliedPort bool) (err error) {
 	cl := t.cl
-	ps, err := cl.dHT.Announce(string(t.infoHash[:]), cl.incomingPeerPort(), impliedPort)
+	ps, err := cl.dHT.Announce(t.infoHash, cl.incomingPeerPort(), impliedPort)
 	if err != nil {
 		return
 	}

@@ -9,10 +9,9 @@ import (
 	"os"
 	"os/signal"
 
-	_ "github.com/anacrolix/envpprof"
-
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/dht/krpc"
+	_ "github.com/anacrolix/envpprof"
 )
 
 var (
@@ -128,7 +127,9 @@ func main() {
 	seen := make(map[string]struct{})
 getPeers:
 	for {
-		ps, err := s.Announce(*infoHash, 0, false)
+		var ih [20]byte
+		copy(ih[:], *infoHash)
+		ps, err := s.Announce(ih, 0, false)
 		if err != nil {
 			log.Fatal(err)
 		}

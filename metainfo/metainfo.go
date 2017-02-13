@@ -78,3 +78,18 @@ func (mi *MetaInfo) Magnet(displayName string, infoHash Hash) (m Magnet) {
 	m.InfoHash = infoHash
 	return
 }
+
+func (mi *MetaInfo) FlatTrackers() (ret []string) {
+	m := make(map[string]struct{})
+	for _, t := range mi.AnnounceList {
+		for _, s := range t {
+			m[s] = struct{}{}
+		}
+	}
+	m[mi.Announce] = struct{}{}
+	ret = make([]string, 0, len(m))
+	for s := range m {
+		ret = append(ret, s)
+	}
+	return
+}

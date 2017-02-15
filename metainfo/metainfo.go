@@ -11,7 +11,7 @@ import (
 type MetaInfo struct {
 	InfoBytes    bencode.Bytes `bencode:"info"`
 	Announce     string        `bencode:"announce,omitempty"`
-	AnnounceList [][]string    `bencode:"announce-list,omitempty"`
+	AnnounceList AnnounceList  `bencode:"announce-list,omitempty"`
 	Nodes        []Node        `bencode:"nodes,omitempty"`
 	CreationDate int64         `bencode:"creation date,omitempty"`
 	Comment      string        `bencode:"comment,omitempty"`
@@ -66,15 +66,22 @@ func (mi *MetaInfo) SetDefaults() {
 
 // Creates a Magnet from a MetaInfo.
 func (mi *MetaInfo) Magnet(displayName string, infoHash Hash) (m Magnet) {
-	for _, tier := range mi.AnnounceList {
-		for _, tracker := range tier {
-			m.Trackers = append(m.Trackers, tracker)
-		}
-	}
-	if m.Trackers == nil && mi.Announce != "" {
-		m.Trackers = []string{mi.Announce}
+	for t := range mi.UpvertedAnnounceList().DistinctValues() {
+		m.Trackers = append(m.Trackers, t)
 	}
 	m.DisplayName = displayName
 	m.InfoHash = infoHash
 	return
+}
+
+// Returns the announce list converted from the old single announce field if
+// necessary.
+func (mi *MetaInfo) UpvertedAnnounceList() AnnounceList {
+	if mi.AnnounceList.OverridesAnnounce(mi.Announce) {
+		return mi.AnnounceList
+	}
+	if mi.Announce != "" {
+		return [][]string{[]string{mi.Announce}}
+	}
+	return nil
 }

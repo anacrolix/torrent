@@ -418,7 +418,7 @@ func pieceStateRunStatusChars(psr PieceStateRun) (ret string) {
 }
 
 func (t *Torrent) writeStatus(w io.Writer) {
-	fmt.Fprintf(w, "Infohash: %x\n", t.infoHash)
+	fmt.Fprintf(w, "Infohash: %s\n", t.infoHash.HexString())
 	fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize())
 	if !t.haveInfo() {
 		fmt.Fprintf(w, "Metadata have: ")

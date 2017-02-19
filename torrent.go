@@ -485,11 +485,6 @@ func (t *Torrent) haveInfo() bool {
 	return t.info != nil
 }
 
-// TODO: Include URIs that weren't converted to tracker clients.
-func (t *Torrent) announceList() (al [][]string) {
-	return t.metainfo.AnnounceList
-}
-
 // Returns a run-time generated MetaInfo that includes the info bytes and
 // announce-list as currently known to the client.
 func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
@@ -497,7 +492,7 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 		CreationDate: time.Now().Unix(),
 		Comment:      "dynamic metainfo from client",
 		CreatedBy:    "go.torrent",
-		AnnounceList: t.announceList(),
+		AnnounceList: t.metainfo.UpvertedAnnounceList(),
 		InfoBytes:    t.metadataBytes,
 	}
 }
@@ -1142,26 +1137,34 @@ func (t *Torrent) seeding() bool {
 	return true
 }
 
+func (t *Torrent) startScrapingTracker(url string) {
+	if url == "" {
+		return
+	}
+	if _, ok := t.trackerAnnouncers[url]; ok {
+		return
+	}
+	newAnnouncer := &trackerScraper{
+		url: url,
+		t:   t,
+	}
+	if t.trackerAnnouncers == nil {
+		t.trackerAnnouncers = make(map[string]*trackerScraper)
+	}
+	t.trackerAnnouncers[url] = newAnnouncer
+	go newAnnouncer.Run()
+}
+
 // Adds and starts tracker scrapers for tracker URLs that aren't already
 // running.
 func (t *Torrent) startMissingTrackerScrapers() {
 	if t.cl.config.DisableTrackers {
 		return
 	}
-	for _, tier := range t.announceList() {
-		for _, trackerURL := range tier {
-			if _, ok := t.trackerAnnouncers[trackerURL]; ok {
-				continue
-			}
-			newAnnouncer := &trackerScraper{
-				url: trackerURL,
-				t:   t,
-			}
-			if t.trackerAnnouncers == nil {
-				t.trackerAnnouncers = make(map[string]*trackerScraper)
-			}
-			t.trackerAnnouncers[trackerURL] = newAnnouncer
-			go newAnnouncer.Run()
+	t.startScrapingTracker(t.metainfo.Announce)
+	for _, tier := range t.metainfo.AnnounceList {
+		for _, url := range tier {
+			t.startScrapingTracker(url)
 		}
 	}
 }

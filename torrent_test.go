@@ -75,7 +75,7 @@ func TestTorrentString(t *testing.T) {
 // piece priorities everytime a reader (possibly in another Torrent) changed.
 func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	cl := &Client{}
-	t := cl.newTorrent(metainfo.Hash{})
+	t := cl.newTorrent(metainfo.Hash{}, nil)
 	t.info = &metainfo.Info{
 		Pieces:      make([]byte, 20*13410),
 		PieceLength: 256 << 10,

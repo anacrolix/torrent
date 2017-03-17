@@ -1124,7 +1124,13 @@ func (cl *Client) badPeerIPPort(ip net.IP, port int) bool {
 }
 
 // Return a Torrent ready for insertion into a Client.
-func (cl *Client) newTorrent(ih metainfo.Hash) (t *Torrent) {
+func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (t *Torrent) {
+	// use provided storage, if provided
+	storageClient := cl.defaultStorage
+	if specStorage != nil {
+		storageClient = storage.NewClient(specStorage)
+	}
+
 	t = &Torrent{
 		cl:       cl,
 		infoHash: ih,
@@ -1134,7 +1140,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash) (t *Torrent) {
 		halfOpen:          make(map[string]struct{}),
 		pieceStateChanges: pubsub.NewPubSub(),
 
-		storageOpener:       cl.defaultStorage,
+		storageOpener:       storageClient,
 		maxEstablishedConns: defaultEstablishedConnsPerTorrent,
 	}
 	t.setChunkSize(defaultChunkSize)
@@ -1150,6 +1156,13 @@ type Handle interface {
 }
 
 func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bool) {
+	return cl.AddTorrentInfoHashWithStorage(infoHash, nil)
+}
+
+// Adds a torrent by InfoHash with a custom Storage implementation.
+// If the torrent already exists then this Storage is ignored and the
+// existing torrent returned with `new` set to `false`
+func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStorage storage.ClientImpl) (t *Torrent, new bool) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	t, ok := cl.torrents[infoHash]
@@ -1157,7 +1170,7 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 		return
 	}
 	new = true
-	t = cl.newTorrent(infoHash)
+	t = cl.newTorrent(infoHash, specStorage)
 	if cl.dHT != nil {
 		go t.dhtAnnouncer()
 	}
@@ -1172,8 +1185,10 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 // trackers will be merged with the existing ones. If the Info isn't yet
 // known, it will be set. The display name is replaced if the new spec
 // provides one. Returns new if the torrent wasn't already in the client.
+// Note that any `Storage` defined on the spec will be ignored if the
+// torrent is already present (i.e. `new` return value is `true`)
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
-	t, new = cl.AddTorrentInfoHash(spec.InfoHash)
+	t, new = cl.AddTorrentInfoHashWithStorage(spec.InfoHash, spec.Storage)
 	if spec.DisplayName != "" {
 		t.SetDisplayName(spec.DisplayName)
 	}

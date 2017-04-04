@@ -797,7 +797,7 @@ func (r deadlineReader) Read(b []byte) (n int, err error) {
 	return
 }
 
-func maybeReceiveEncryptedHandshake(rw io.ReadWriter, skeys [][]byte) (ret io.ReadWriter, encrypted bool, err error) {
+func maybeReceiveEncryptedHandshake(rw io.ReadWriter, skeys mse.SecretKeyIter) (ret io.ReadWriter, encrypted bool, err error) {
 	var protocol [len(pp.Protocol)]byte
 	_, err = io.ReadFull(rw, protocol[:])
 	if err != nil {
@@ -814,14 +814,7 @@ func maybeReceiveEncryptedHandshake(rw io.ReadWriter, skeys [][]byte) (ret io.Re
 		return
 	}
 	encrypted = true
-	ret, err = mse.ReceiveHandshake(ret, skeys)
-	return
-}
-
-func (cl *Client) receiveSkeys() (ret [][]byte) {
-	for ih := range cl.torrents {
-		ret = append(ret, append([]byte(nil), ih[:]...))
-	}
+	ret, err = mse.ReceiveHandshakeLazy(ret, skeys)
 	return
 }
 
@@ -844,14 +837,22 @@ func (cl *Client) initiateHandshakes(c *connection, t *Torrent) (ok bool, err er
 	return
 }
 
+// Calls f with any secret keys.
+func (cl *Client) forSkeys(f func([]byte) bool) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	for ih := range cl.torrents {
+		if !f(ih[:]) {
+			break
+		}
+	}
+}
+
 // Do encryption and bittorrent handshakes as receiver.
 func (cl *Client) receiveHandshakes(c *connection) (t *Torrent, err error) {
-	cl.mu.Lock()
-	skeys := cl.receiveSkeys()
-	cl.mu.Unlock()
 	if !cl.config.DisableEncryption {
 		var rw io.ReadWriter
-		rw, c.encrypted, err = maybeReceiveEncryptedHandshake(c.rw(), skeys)
+		rw, c.encrypted, err = maybeReceiveEncryptedHandshake(c.rw(), cl.forSkeys)
 		c.setRW(rw)
 		if err != nil {
 			if err == mse.ErrNoSecretKeyMatch {

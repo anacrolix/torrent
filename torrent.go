@@ -1271,7 +1271,28 @@ func (t *Torrent) addPeers(peers []Peer) {
 func (t *Torrent) Stats() TorrentStats {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
+
+	t.stats.ActivePeers = len(t.conns)
+	t.stats.HalfOpenPeers = len(t.halfOpen)
+	t.stats.PendingPeers = len(t.peers)
+	t.stats.TotalPeers = t.numTotalPeers()
+
 	return t.stats
+}
+
+// The total number of peers in the torrent.
+func (t *Torrent) numTotalPeers() int {
+	peers := make(map[string]struct{})
+	for conn := range t.conns {
+		peers[conn.conn.RemoteAddr().String()] = struct{}{}
+	}
+	for addr := range t.halfOpen {
+		peers[addr] = struct{}{}
+	}
+	for _, peer := range t.peers {
+		peers[fmt.Sprintf("%s:%d", peer.IP, peer.Port)] = struct{}{}
+	}
+	return len(peers)
 }
 
 // Returns true if the connection is added.

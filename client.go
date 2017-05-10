@@ -899,7 +899,7 @@ func (cl *Client) runInitiatedHandshookConn(c *connection, t *Torrent) {
 		cl.dopplegangerAddrs[addr] = struct{}{}
 		return
 	}
-	cl.runHandshookConn(c, t)
+	cl.runHandshookConn(c, t, true)
 }
 
 func (cl *Client) runReceivedConn(c *connection) {
@@ -926,14 +926,14 @@ func (cl *Client) runReceivedConn(c *connection) {
 		// doppleganger.
 		return
 	}
-	cl.runHandshookConn(c, t)
+	cl.runHandshookConn(c, t, false)
 }
 
-func (cl *Client) runHandshookConn(c *connection, t *Torrent) {
+func (cl *Client) runHandshookConn(c *connection, t *Torrent, outgoing bool) {
 	c.conn.SetWriteDeadline(time.Time{})
 	c.r = deadlineReader{c.conn, c.r}
 	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
-	if !t.addConnection(c) {
+	if !t.addConnection(c, outgoing) {
 		return
 	}
 	defer t.dropConnection(c)

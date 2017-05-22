@@ -15,7 +15,7 @@ import (
 type fileClientImpl struct {
 	baseDir   string
 	pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string
-	pc        pieceCompletion
+	pc        PieceCompletion
 }
 
 // The Default path maker just returns the current path
@@ -29,7 +29,11 @@ func infoHashPathMaker(baseDir string, info *metainfo.Info, infoHash metainfo.Ha
 
 // All Torrent data stored in this baseDir
 func NewFile(baseDir string) ClientImpl {
-	return NewFileWithCustomPathMaker(baseDir, nil)
+	return NewFileWithCompletion(baseDir, pieceCompletionForDir(baseDir))
+}
+
+func NewFileWithCompletion(baseDir string, completion PieceCompletion) ClientImpl {
+	return newFileWithCustomPathMakerAndCompletion(baseDir, nil, completion)
 }
 
 // All Torrent data stored in subdirectorys by infohash
@@ -39,13 +43,17 @@ func NewFileByInfoHash(baseDir string) ClientImpl {
 
 // Allows passing a function to determine the path for storing torrent data
 func NewFileWithCustomPathMaker(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string) ClientImpl {
+	return newFileWithCustomPathMakerAndCompletion(baseDir, pathMaker, pieceCompletionForDir(baseDir))
+}
+
+func newFileWithCustomPathMakerAndCompletion(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string, completion PieceCompletion) ClientImpl {
 	if pathMaker == nil {
 		pathMaker = defaultPathMaker
 	}
 	return &fileClientImpl{
 		baseDir:   baseDir,
 		pathMaker: pathMaker,
-		pc:        pieceCompletionForDir(baseDir),
+		pc:        completion,
 	}
 }
 
@@ -72,7 +80,7 @@ type fileTorrentImpl struct {
 	dir        string
 	info       *metainfo.Info
 	infoHash   metainfo.Hash
-	completion pieceCompletion
+	completion PieceCompletion
 }
 
 func (fts *fileTorrentImpl) Piece(p metainfo.Piece) PieceImpl {

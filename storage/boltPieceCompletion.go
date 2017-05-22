@@ -18,7 +18,7 @@ type boltPieceCompletion struct {
 	db *bolt.DB
 }
 
-func newBoltPieceCompletion(dir string) (ret *boltPieceCompletion, err error) {
+func NewBoltPieceCompletion(dir string) (ret PieceCompletion, err error) {
 	p := filepath.Join(dir, ".torrent.bolt.db")
 	db, err := bolt.Open(p, 0660, &bolt.Options{
 		Timeout: time.Second,

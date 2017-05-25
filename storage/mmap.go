@@ -15,13 +15,17 @@ import (
 
 type mmapStorage struct {
 	baseDir string
-	pc      pieceCompletion
+	pc      PieceCompletion
 }
 
 func NewMMap(baseDir string) ClientImpl {
+	return NewMMapWithCompletion(baseDir, pieceCompletionForDir(baseDir))
+}
+
+func NewMMapWithCompletion(baseDir string, completion PieceCompletion) ClientImpl {
 	return &mmapStorage{
 		baseDir: baseDir,
-		pc:      pieceCompletionForDir(baseDir),
+		pc:      completion,
 	}
 }
 
@@ -40,7 +44,7 @@ func (s *mmapStorage) Close() error {
 
 type mmapTorrentStorage struct {
 	span mmap_span.MMapSpan
-	pc   pieceCompletion
+	pc   PieceCompletion
 }
 
 func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
@@ -58,7 +62,7 @@ func (ts *mmapTorrentStorage) Close() error {
 }
 
 type mmapStoragePiece struct {
-	pc pieceCompletion
+	pc PieceCompletion
 	p  metainfo.Piece
 	ih metainfo.Hash
 	io.ReaderAt

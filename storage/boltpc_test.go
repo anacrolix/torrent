@@ -16,7 +16,7 @@ func TestBoltPieceCompletion(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
 
-	pc, err := newBoltPieceCompletion(td)
+	pc, err := NewBoltPieceCompletion(td)
 	require.NoError(t, err)
 	defer pc.Close()
 

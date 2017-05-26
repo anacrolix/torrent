@@ -1305,20 +1305,21 @@ func (t *Torrent) addConnection(c *connection, outgoing bool) bool {
 	}
 	for c0 := range t.conns {
 		if c.PeerID == c0.PeerID {
-			// Retain the connection from lower peer ID to higher.
-			lower := string(t.cl.peerID[:]) < string(c.PeerID[:])
-			if (outgoing && lower) || (!outgoing && !lower) {
-				c0.Close()
-				t.deleteConnection(c0)
-				duplicateClientConns.Add(1)
-				log.Printf("Drop connection: %s, %s, %s", t.name(), c0.localAddr(), c0.remoteAddr())
-				continue
-			}
-
 			// Already connected to a client with that ID.
 			duplicateClientConns.Add(1)
-			log.Printf("Drop connection: %s, %s, %s", t.name(), c.localAddr(), c.remoteAddr())
-			return false
+			lower := string(t.cl.peerID[:]) < string(c.PeerID[:])
+			// Retain the connection from initiated from lower peer ID to
+			// higher.
+			if outgoing == lower {
+				// Close the other one.
+				c0.Close()
+				// Is it safe to delete from the map while we're iterating
+				// over it?
+				t.deleteConnection(c0)
+			} else {
+				// Abandon this one.
+				return false
+			}
 		}
 	}
 	if len(t.conns) >= t.maxEstablishedConns {

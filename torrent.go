@@ -576,7 +576,7 @@ func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 		err = io.ErrShortWrite
 	}
 	if err == nil {
-		tr.Stop("write chunk")
+		tr.Mark("write chunk")
 	}
 	return
 }

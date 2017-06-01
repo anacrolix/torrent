@@ -46,6 +46,7 @@ type Client struct {
 	halfOpenLimit  int
 	peerID         [20]byte
 	defaultStorage *storage.Client
+	onClose        []func()
 	tcpListener    net.Listener
 	utpSock        *utp.Socket
 	dHT            *dht.Server
@@ -238,6 +239,12 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		dopplegangerAddrs: make(map[string]struct{}),
 		torrents:          make(map[metainfo.Hash]*Torrent),
 	}
+	defer func() {
+		if err == nil {
+			return
+		}
+		cl.Close()
+	}()
 	if cfg.UploadRateLimiter == nil {
 		cl.uploadLimit = rate.NewLimiter(rate.Inf, 0)
 	} else {
@@ -253,6 +260,11 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	storageImpl := cfg.DefaultStorage
 	if storageImpl == nil {
 		storageImpl = storage.NewFile(cfg.DataDir)
+		cl.onClose = append(cl.onClose, func() {
+			if err := storageImpl.Close(); err != nil {
+				log.Printf("error closing default storage: %s", err)
+			}
+		})
 	}
 	cl.defaultStorage = storage.NewClient(storageImpl)
 	if cfg.IPBlocklist != nil {
@@ -336,6 +348,9 @@ func (cl *Client) Close() {
 	}
 	for _, t := range cl.torrents {
 		t.close()
+	}
+	for _, f := range cl.onClose {
+		f()
 	}
 	cl.event.Broadcast()
 }

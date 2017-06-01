@@ -102,7 +102,8 @@ func TestUnmountWedged(t *testing.T) {
 	fuseConn, err := fuse.Mount(layout.MountDir)
 	if err != nil {
 		switch err.Error() {
-		case "cannot locate OSXFUSE":
+		case "cannot locate OSXFUSE",
+			"fusermount: exit status 1":
 			t.Skip(err)
 		}
 		t.Fatal(err)

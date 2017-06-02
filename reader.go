@@ -44,6 +44,11 @@ func (r *Reader) SetResponsive() {
 	r.responsive = true
 }
 
+// Disable responsive mode.
+func (r *Reader) SetNonResponsive() {
+	r.responsive = false
+}
+
 // Configure the number of bytes ahead of a read that should also be
 // prioritized in preparation for further reads.
 func (r *Reader) SetReadahead(readahead int64) {
@@ -53,6 +58,11 @@ func (r *Reader) SetReadahead(readahead int64) {
 	r.t.cl.mu.Lock()
 	defer r.t.cl.mu.Unlock()
 	r.posChanged()
+}
+
+// Return reader's current position.
+func (r *Reader) CurrentPos() int64 {
+	return r.pos
 }
 
 func (r *Reader) readable(off int64) (ret bool) {

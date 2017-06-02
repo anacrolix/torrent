@@ -61,6 +61,14 @@ func (t *Torrent) NumPieces() int {
 	return t.numPieces()
 }
 
+// Get missing bytes count for specific piece.
+func (t *Torrent) PieceBytesMissing(piece int) int64 {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+
+	return int64(t.pieces[piece].bytesLeft())
+}
+
 // Drop the torrent from the client, and close it. It's always safe to do
 // this. No data corruption can, or should occur to either the torrent's data,
 // or connected peers.

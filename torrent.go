@@ -553,6 +553,7 @@ func (t *Torrent) close() (err error) {
 	for conn := range t.conns {
 		conn.Close()
 	}
+	t.cl.event.Broadcast()
 	t.pieceStateChanges.Close()
 	t.updateWantPeersEvent()
 	return

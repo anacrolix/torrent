@@ -116,3 +116,15 @@ func TestUnmarshal(t *testing.T) {
 	testUnmarshal(t, `d4:infoabce`, nil)
 	testUnmarshal(t, `d4:infodee`, &MetaInfo{InfoBytes: []byte("de")})
 }
+
+func TestMetainfoWithListURLList(t *testing.T) {
+	mi, err := LoadFromFile("testdata/SKODAOCTAVIA336x280_archive.torrent")
+	require.NoError(t, err)
+	assert.Len(t, mi.UrlList, 3)
+}
+
+func TestMetainfoWithStringURLList(t *testing.T) {
+	mi, err := LoadFromFile("testdata/flat-url-list.torrent")
+	require.NoError(t, err)
+	assert.Len(t, mi.UrlList, 1)
+}

@@ -22,7 +22,6 @@ import (
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/sync"
-	"github.com/anacrolix/utp"
 	"github.com/dustin/go-humanize"
 	"golang.org/x/time/rate"
 
@@ -48,7 +47,7 @@ type Client struct {
 	defaultStorage *storage.Client
 	onClose        []func()
 	tcpListener    net.Listener
-	utpSock        *utp.Socket
+	utpSock        utpSocket
 	dHT            *dht.Server
 	ipBlockList    iplist.Ranger
 	// Our BitTorrent protocol extension bytes, sent in our BT handshakes.
@@ -152,15 +151,15 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
-func listenUTP(networkSuffix, addr string) (*utp.Socket, error) {
-	return utp.NewSocket("udp"+networkSuffix, addr)
+func listenUTP(networkSuffix, addr string) (utpSocket, error) {
+	return NewUtpSocket("udp"+networkSuffix, addr)
 }
 
 func listenTCP(networkSuffix, addr string) (net.Listener, error) {
 	return net.Listen("tcp"+networkSuffix, addr)
 }
 
-func listenBothSameDynamicPort(networkSuffix, host string) (tcpL net.Listener, utpSock *utp.Socket, listenedAddr string, err error) {
+func listenBothSameDynamicPort(networkSuffix, host string) (tcpL net.Listener, utpSock utpSocket, listenedAddr string, err error) {
 	for {
 		tcpL, err = listenTCP(networkSuffix, net.JoinHostPort(host, "0"))
 		if err != nil {
@@ -179,7 +178,7 @@ func listenBothSameDynamicPort(networkSuffix, host string) (tcpL net.Listener, u
 }
 
 // Listen to enabled protocols, ensuring ports match.
-func listen(tcp, utp bool, networkSuffix, addr string) (tcpL net.Listener, utpSock *utp.Socket, listenedAddr string, err error) {
+func listen(tcp, utp bool, networkSuffix, addr string) (tcpL net.Listener, utpSock utpSocket, listenedAddr string, err error) {
 	if addr == "" {
 		addr = ":50007"
 	}
@@ -341,7 +340,7 @@ func (cl *Client) Close() {
 		cl.dHT.Close()
 	}
 	if cl.utpSock != nil {
-		cl.utpSock.CloseNow()
+		cl.utpSock.Close()
 	}
 	if cl.tcpListener != nil {
 		cl.tcpListener.Close()

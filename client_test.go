@@ -21,7 +21,6 @@ import (
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/filecache"
 	"github.com/anacrolix/missinggo/pubsub"
-	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -171,7 +170,7 @@ func TestReducedDialTimeout(t *testing.T) {
 }
 
 func TestUTPRawConn(t *testing.T) {
-	l, err := utp.NewSocket("udp", "")
+	l, err := NewUtpSocket("udp", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +184,7 @@ func TestUTPRawConn(t *testing.T) {
 		}
 	}()
 	// Connect a UTP peer to see if the RawConn will still work.
-	s, _ := utp.NewSocket("udp", "")
+	s, _ := NewUtpSocket("udp", "")
 	defer s.Close()
 	utpPeer, err := s.Dial(fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
 	if err != nil {

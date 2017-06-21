@@ -549,7 +549,7 @@ func (cn *connection) updatePiecePriority(piece int) {
 	case PiecePriorityReadahead:
 		prio -= cn.t.numPieces()
 	case PiecePriorityNext, PiecePriorityNow:
-		prio -= 2 * cn.t.numPieces()
+		prio -= cn.t.numPieces()
 	default:
 		panic(tpp)
 	}

@@ -1331,6 +1331,9 @@ func (cl *Client) DHT() *dht.Server {
 }
 
 func (cl *Client) AddDHTNodes(nodes []string) {
+	if cl.DHT() == nil {
+		return
+	}
 	for _, n := range nodes {
 		hmp := missinggo.SplitHostMaybePort(n)
 		ip := net.ParseIP(hmp.Host)

@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/anacrolix/missinggo/pubsub"
@@ -200,7 +199,7 @@ func (t *Torrent) DownloadAll() {
 func (t *Torrent) String() string {
 	s := t.name()
 	if s == "" {
-		s = fmt.Sprintf("%x", t.infoHash)
+		s = t.infoHash.HexString()
 	}
 	return s
 }

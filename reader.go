@@ -208,8 +208,8 @@ func (r *Reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 			err = nil
 			return
 		}
-		log.Printf("error reading torrent %q piece %d offset %d, %d bytes: %s", r.t, pi, po, len(b1), err)
 		r.t.cl.mu.Lock()
+		log.Printf("error reading torrent %q piece %d offset %d, %d bytes: %s", r.t, pi, po, len(b1), err)
 		r.t.updateAllPieceCompletions()
 		r.t.updateAllPiecePriorities()
 		r.t.cl.mu.Unlock()

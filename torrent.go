@@ -1245,13 +1245,15 @@ func (t *Torrent) dhtAnnouncer() {
 			return
 		}
 		err := t.announceDHT(true)
-		if err == nil {
+		func() {
 			cl.mu.Lock()
-			t.numDHTAnnounces++
-			cl.mu.Unlock()
-		} else {
-			log.Printf("error announcing %q to DHT: %s", t, err)
-		}
+			defer cl.mu.Unlock()
+			if err == nil {
+				t.numDHTAnnounces++
+			} else {
+				log.Printf("error announcing %q to DHT: %s", t, err)
+			}
+		}()
 		select {
 		case <-t.closed.LockedChan(&cl.mu):
 			return

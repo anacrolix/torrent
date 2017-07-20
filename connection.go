@@ -913,7 +913,7 @@ func (c *connection) mainReadLoop() error {
 			if msg.Port != 0 {
 				pingAddr.Port = int(msg.Port)
 			}
-			go cl.dHT.Ping(pingAddr)
+			go cl.dHT.Ping(pingAddr, nil)
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}

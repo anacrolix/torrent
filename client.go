@@ -305,9 +305,15 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if dhtCfg.IPBlocklist == nil {
 			dhtCfg.IPBlocklist = cl.ipBlockList
 		}
-		dhtCfg.Addr = firstNonEmptyString(dhtCfg.Addr, cl.listenAddr, cl.config.ListenAddr)
-		if dhtCfg.Conn == nil && cl.utpSock != nil {
-			dhtCfg.Conn = cl.utpSock
+		if dhtCfg.Conn == nil {
+			if cl.utpSock != nil {
+				dhtCfg.Conn = cl.utpSock
+			} else {
+				dhtCfg.Conn, err = net.ListenPacket("udp", firstNonEmptyString(cl.listenAddr, cl.config.ListenAddr))
+				if err != nil {
+					return
+				}
+			}
 		}
 		if dhtCfg.OnAnnouncePeer == nil {
 			dhtCfg.OnAnnouncePeer = cl.onDHTAnnouncePeer

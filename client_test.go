@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anacrolix/dht"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/filecache"
@@ -49,9 +48,6 @@ func TestingConfig() *Config {
 			}
 			return ret
 		}(),
-		DHTConfig: dht.ServerConfig{
-			NoDefaultBootstrap: true,
-		},
 		Debug: true,
 	}
 }
@@ -831,11 +827,14 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()
-	assert.EqualValues(t, cl.DHT().NumNodes(), 0)
+	assert.EqualValues(t, 0, cl.DHT().NumNodes()+cl.DHT().Stats().OutstandingTransactions)
 	tt, err := cl.AddTorrentFromFile("metainfo/testdata/issue_65a.torrent")
 	require.NoError(t, err)
+	// Nodes are not added or exposed in Torrent's metainfo. We just randomly
+	// check if the announce-list is here instead. TODO: Add nodes.
 	assert.Len(t, tt.metainfo.AnnounceList, 5)
-	assert.EqualValues(t, 6, cl.DHT().NumNodes())
+	// There are 6 nodes in the torrent file.
+	assert.EqualValues(t, 6, cl.DHT().NumNodes()+cl.DHT().Stats().OutstandingTransactions)
 }
 
 type testDownloadCancelParams struct {

@@ -322,6 +322,11 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		if err != nil {
 			return
 		}
+		go func() {
+			if _, err := cl.dHT.Bootstrap(); err != nil {
+				log.Printf("error bootstrapping dht: %s", err)
+			}
+		}()
 	}
 
 	return

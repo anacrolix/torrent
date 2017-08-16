@@ -527,7 +527,11 @@ func (cl *Client) dialTimeout(t *Torrent) time.Duration {
 }
 
 func (cl *Client) dialTCP(addr string, t *Torrent) (c net.Conn, err error) {
-	c, err = net.DialTimeout("tcp", addr, cl.dialTimeout(t))
+	d := net.Dialer{
+		// LocalAddr: cl.tcpListener.Addr(),
+		Timeout: cl.dialTimeout(t),
+	}
+	c, err = d.Dial("tcp", addr)
 	if err == nil {
 		c.(*net.TCPConn).SetLinger(0)
 	}

@@ -543,17 +543,13 @@ func (cl *Client) dialFirst(addr string, t *Torrent) (conn net.Conn, utp bool) {
 	// Initiate connections via TCP and UTP simultaneously. Use the first one
 	// that succeeds.
 	left := 0
-	if !cl.config.DisableUTP {
-		left++
-	}
-	if !cl.config.DisableTCP {
-		left++
-	}
 	resCh := make(chan dialResult, left)
 	if !cl.config.DisableUTP {
+		left++
 		go doDial(cl.dialUTP, resCh, true, addr, t)
 	}
 	if !cl.config.DisableTCP {
+		left++
 		go doDial(cl.dialTCP, resCh, false, addr, t)
 	}
 	var res dialResult

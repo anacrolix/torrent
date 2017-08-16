@@ -3,6 +3,7 @@ package torrent
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -535,7 +536,9 @@ func (cl *Client) dialTCP(addr string, t *Torrent) (c net.Conn, err error) {
 }
 
 func (cl *Client) dialUTP(addr string, t *Torrent) (net.Conn, error) {
-	return cl.utpSock.DialTimeout(addr, cl.dialTimeout(t))
+	ctx, cancel := context.WithTimeout(context.Background(), cl.dialTimeout(t))
+	defer cancel()
+	return cl.utpSock.DialContext(ctx, addr)
 }
 
 // Returns a connection over UTP or TCP, whichever is first to connect.

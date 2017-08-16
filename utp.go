@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"net"
 	"time"
 )
@@ -17,6 +18,6 @@ type utpSocket interface {
 	SetWriteDeadline(time.Time) error
 	SetReadDeadline(time.Time) error
 	WriteTo([]byte, net.Addr) (int, error)
-	DialTimeout(string, time.Duration) (net.Conn, error)
-	Dial(string) (net.Conn, error)
+	DialContext(ctx context.Context, addr string) (net.Conn, error)
+	Dial(addr string) (net.Conn, error)
 }

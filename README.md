@@ -72,14 +72,3 @@ Creates a magnet link from a torrent file. Note the extracted trackers, display 
 
     $ godo github.com/anacrolix/torrent/cmd/torrent-magnet < ubuntu-14.04.2-desktop-amd64.iso.torrent
 	magnet:?xt=urn:btih:546cf15f724d19c4319cc17b179d7e035f89c1f4&dn=ubuntu-14.04.2-desktop-amd64.iso&tr=http%3A%2F%2Ftorrent.ubuntu.com%3A6969%2Fannounce&tr=http%3A%2F%2Fipv6.torrent.ubuntu.com%3A6969%2Fannounce
-
-### dht-ping
-
-Pings DHT nodes with the given network addresses.
-
-    $ godo ./cmd/dht-ping router.bittorrent.com:6881 router.utorrent.com:6881
-    2015/04/01 17:21:23 main.go:33: dht server on [::]:60058
-    32f54e697351ff4aec29cdbaabf2fbe3467cc267 (router.bittorrent.com:6881): 648.218621ms
-    ebff36697351ff4aec29cdbaabf2fbe3467cc267 (router.utorrent.com:6881): 873.864706ms
-    2/2 responses (100.000000%)
-

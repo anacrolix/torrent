@@ -43,6 +43,8 @@ type peersKey struct {
 type Torrent struct {
 	cl *Client
 
+	networkingEnabled bool
+
 	closed   missinggo.Event
 	infoHash metainfo.Hash
 	pieces   []piece
@@ -1348,6 +1350,9 @@ func (t *Torrent) addConnection(c *connection, outgoing bool) bool {
 }
 
 func (t *Torrent) wantConns() bool {
+	if !t.networkingEnabled {
+		return false
+	}
 	if t.closed.IsSet() {
 		return false
 	}

@@ -1178,6 +1178,8 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 
 		storageOpener:       storageClient,
 		maxEstablishedConns: defaultEstablishedConnsPerTorrent,
+
+		networkingEnabled: true,
 	}
 	t.setChunkSize(defaultChunkSize)
 	return

@@ -484,26 +484,67 @@ func (cn *connection) Bitfield(haves []bool) {
 	cn.sentHaves = append([]bool(nil), haves...)
 }
 
+func nextRequestState(
+	networkingEnabled bool,
+	currentRequests map[request]struct{},
+	peerChoking bool,
+	nextPieces prioritybitmap.PriorityBitmap,
+	pendingChunks func(piece int, f func(chunkSpec) bool) bool,
+	requestsLowWater int,
+	requestsHighWater int,
+) (
+	requests map[request]struct{},
+	interested bool,
+) {
+	if !networkingEnabled || nextPieces.IsEmpty() {
+		return nil, false
+	}
+	if peerChoking || len(currentRequests) > requestsLowWater {
+		return currentRequests, true
+	}
+	requests = make(map[request]struct{}, requestsHighWater)
+	for r := range currentRequests {
+		requests[r] = struct{}{}
+	}
+	nextPieces.IterTyped(func(piece int) bool {
+		return pendingChunks(piece, func(cs chunkSpec) bool {
+			if len(requests) >= requestsHighWater {
+				return false
+			}
+			r := request{pp.Integer(piece), cs}
+			requests[r] = struct{}{}
+			return true
+		})
+	})
+	return requests, true
+}
+
 func (cn *connection) updateRequests() {
-	if !cn.t.haveInfo() {
-		return
-	}
-	if cn.Interested {
-		if cn.PeerChoked {
-			return
+	rs, i := nextRequestState(
+		cn.t.networkingEnabled,
+		cn.Requests,
+		cn.PeerChoked,
+		cn.pieceRequestOrder,
+		func(piece int, f func(chunkSpec) bool) bool {
+			return undirtiedChunks(piece, cn.t, f)
+		},
+		cn.requestsLowWater,
+		cn.nominalMaxRequests())
+	for r := range cn.Requests {
+		if _, ok := rs[r]; !ok {
+			if !cn.Cancel(r) {
+				panic("wat")
+			}
 		}
-		if len(cn.Requests) > cn.requestsLowWater {
-			return
+	}
+	for r := range rs {
+		if _, ok := cn.Requests[r]; !ok {
+			if !cn.Request(r) {
+				panic("how")
+			}
 		}
 	}
-	cn.fillRequests()
-	if len(cn.Requests) == 0 && !cn.PeerChoked {
-		// So we're not choked, but we don't want anything right now. We may
-		// have completed readahead, and the readahead window has not rolled
-		// over to the next piece. Better to stay interested in case we're
-		// going to want data in the near future.
-		cn.SetInterested(!cn.t.haveAllPieces())
-	}
+	cn.SetInterested(i)
 }
 
 func (cn *connection) fillRequests() {
@@ -523,6 +564,13 @@ func (c *connection) requestPiecePendingChunks(piece int) (again bool) {
 	return iter.ForPerm(len(chunkIndices), func(i int) bool {
 		req := request{pp.Integer(piece), c.t.chunkIndexSpec(chunkIndices[i], piece)}
 		return c.Request(req)
+	})
+}
+
+func undirtiedChunks(piece int, t *Torrent, f func(chunkSpec) bool) bool {
+	chunkIndices := t.pieces[piece].undirtiedChunkIndices().ToSortedSlice()
+	return iter.ForPerm(len(chunkIndices), func(i int) bool {
+		return f(t.chunkIndexSpec(chunkIndices[i], piece))
 	})
 }
 

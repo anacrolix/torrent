@@ -713,10 +713,6 @@ func (t *Torrent) wantPieceIndex(index int) bool {
 	})
 }
 
-func (t *Torrent) connHasWantedPieces(c *connection) bool {
-	return !c.pieceRequestOrder.IsEmpty()
-}
-
 // The worst connection is one that hasn't been sent, or sent anything useful
 // for the longest. A bad connection is one that usually sends us unwanted
 // pieces, or has been in worser half of the established connections for more

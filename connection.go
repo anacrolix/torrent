@@ -698,7 +698,7 @@ func (c *connection) useful() bool {
 	if t.seeding() {
 		return c.PeerInterested
 	}
-	return t.connHasWantedPieces(c)
+	return c.peerHasWantedPieces()
 }
 
 func (c *connection) lastHelpful() (ret time.Time) {
@@ -1023,7 +1023,7 @@ func (c *connection) upload() {
 		return
 	}
 	seeding := t.seeding()
-	if !seeding && !t.connHasWantedPieces(c) {
+	if !seeding && !c.peerHasWantedPieces() {
 		// There's no reason to upload to this peer.
 		return
 	}
@@ -1078,4 +1078,8 @@ func (cn *connection) Drop() {
 
 func (cn *connection) netGoodPiecesDirtied() int {
 	return cn.goodPiecesDirtied - cn.badPiecesDirtied
+}
+
+func (c *connection) peerHasWantedPieces() bool {
+	return !c.pieceRequestOrder.IsEmpty()
 }

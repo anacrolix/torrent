@@ -528,6 +528,7 @@ func (c *connection) requestPiecePendingChunks(piece int) (again bool) {
 
 func (cn *connection) stopRequestingPiece(piece int) {
 	cn.pieceRequestOrder.Remove(piece)
+	cn.updateRequests()
 }
 
 // This is distinct from Torrent piece priority, which is the user's

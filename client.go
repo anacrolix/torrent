@@ -225,7 +225,17 @@ func listen(tcp, utp bool, networkSuffix, addr string) (tcpL net.Listener, utpSo
 // Creates a new client.
 func NewClient(cfg *Config) (cl *Client, err error) {
 	if cfg == nil {
-		cfg = &Config{}
+		cfg = &Config{
+			DHTConfig: dht.ServerConfig{
+				StartingNodes: func() []dht.Addr {
+					addrs, err := dht.GlobalBootstrapAddrs()
+					if err != nil {
+						log.Printf("error getting dht bootstrap addrs for default torrent client config: %s", err)
+					}
+					return addrs
+				}(),
+			},
+		}
 	}
 
 	defer func() {

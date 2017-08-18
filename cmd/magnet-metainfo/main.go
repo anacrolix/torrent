@@ -4,9 +4,11 @@ package main
 import (
 	"flag"
 	"log"
+	"net/http"
 	"os"
 	"sync"
 
+	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/bencode"
 )
@@ -17,6 +19,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)
 	}
+	http.HandleFunc("/torrent", func(w http.ResponseWriter, r *http.Request) {
+		cl.WriteStatus(w)
+	})
+	http.HandleFunc("/dht", func(w http.ResponseWriter, r *http.Request) {
+		cl.DHT().WriteStatus(w)
+	})
 	wg := sync.WaitGroup{}
 	for _, arg := range flag.Args() {
 		t, err := cl.AddMagnet(arg)

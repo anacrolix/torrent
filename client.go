@@ -227,13 +227,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	if cfg == nil {
 		cfg = &Config{
 			DHTConfig: dht.ServerConfig{
-				StartingNodes: func() []dht.Addr {
-					addrs, err := dht.GlobalBootstrapAddrs()
-					if err != nil {
-						log.Printf("error getting dht bootstrap addrs for default torrent client config: %s", err)
-					}
-					return addrs
-				}(),
+				StartingNodes: dht.GlobalBootstrapAddrs,
 			},
 		}
 	}

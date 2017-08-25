@@ -16,6 +16,7 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
+	"github.com/anacrolix/dht"
 	_ "github.com/anacrolix/envpprof"
 
 	"github.com/anacrolix/torrent"
@@ -102,6 +103,9 @@ func mainExitCode() int {
 		DisableTrackers: *disableTrackers,
 		ListenAddr:      *listenAddr,
 		NoUpload:        true, // Ensure that downloads are responsive.
+		DHTConfig: dht.ServerConfig{
+			StartingNodes: dht.GlobalBootstrapAddrs,
+		},
 	})
 	if err != nil {
 		log.Print(err)

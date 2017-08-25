@@ -488,7 +488,7 @@ func nextRequestState(
 	networkingEnabled bool,
 	currentRequests map[request]struct{},
 	peerChoking bool,
-	nextPieces prioritybitmap.PriorityBitmap,
+	nextPieces *prioritybitmap.PriorityBitmap,
 	pendingChunks func(piece int, f func(chunkSpec) bool) bool,
 	requestsLowWater int,
 	requestsHighWater int,
@@ -524,7 +524,7 @@ func (cn *connection) updateRequests() {
 		cn.t.networkingEnabled,
 		cn.Requests,
 		cn.PeerChoked,
-		cn.pieceRequestOrder,
+		&cn.pieceRequestOrder,
 		func(piece int, f func(chunkSpec) bool) bool {
 			return undirtiedChunks(piece, cn.t, f)
 		},

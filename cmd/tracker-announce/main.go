@@ -6,6 +6,8 @@ import (
 	"math"
 	"strings"
 
+	"github.com/davecgh/go-spew/spew"
+
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/tracker"
@@ -42,7 +44,7 @@ func main() {
 					log.Print(err)
 					continue
 				}
-				log.Printf("%q: %#v", tURI, resp)
+				log.Printf("%q: %s", tURI, spew.Sdump(resp))
 			}
 		}
 	}

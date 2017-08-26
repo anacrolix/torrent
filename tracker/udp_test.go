@@ -47,7 +47,7 @@ func TestMarshalAnnounceResponse(t *testing.T) {
 // Failure to write an entire packet to UDP is expected to given an error.
 func TestLongWriteUDP(t *testing.T) {
 	t.Parallel()
-	l, err := net.ListenUDP("udp", nil)
+	l, err := net.ListenUDP("udp4", nil)
 	defer l.Close()
 	if err != nil {
 		t.Fatal(err)

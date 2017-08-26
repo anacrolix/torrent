@@ -2,7 +2,6 @@ package torrentfs
 
 import (
 	"expvar"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -52,18 +51,6 @@ type node struct {
 	metadata *metainfo.Info
 	FS       *TorrentFS
 	t        *torrent.Torrent
-}
-
-type fileNode struct {
-	node
-	size          uint64
-	TorrentOffset int64
-}
-
-func (fn fileNode) Attr(ctx context.Context, attr *fuse.Attr) error {
-	attr.Size = fn.size
-	attr.Mode = defaultMode
-	return nil
 }
 
 func (n *node) fsPath() string {
@@ -120,41 +107,12 @@ func readFull(ctx context.Context, fs *TorrentFS, t *torrent.Torrent, off int64,
 	return
 }
 
-func (fn fileNode) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadResponse) error {
-	torrentfsReadRequests.Add(1)
-	if req.Dir {
-		panic("read on directory")
-	}
-	size := req.Size
-	fileLeft := int64(fn.size) - req.Offset
-	if fileLeft < 0 {
-		fileLeft = 0
-	}
-	if fileLeft < int64(size) {
-		size = int(fileLeft)
-	}
-	resp.Data = resp.Data[:size]
-	if len(resp.Data) == 0 {
-		return nil
-	}
-	torrentOff := fn.TorrentOffset + req.Offset
-	n, err := readFull(ctx, fn.FS, fn.t, torrentOff, resp.Data)
-	if err != nil {
-		return err
-	}
-	if n != size {
-		panic(fmt.Sprintf("%d < %d", n, size))
-	}
-	return nil
-}
-
 type dirNode struct {
 	node
 }
 
 var (
 	_ fusefs.HandleReadDirAller = dirNode{}
-	_ fusefs.HandleReader       = fileNode{}
 )
 
 func isSubPath(parent, child string) bool {

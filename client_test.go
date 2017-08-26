@@ -1014,12 +1014,6 @@ func addClientPeer(t *Torrent, cl *Client) {
 	})
 }
 
-func printConnPeerCounts(t *Torrent) {
-	t.cl.mu.Lock()
-	log.Println(len(t.conns), len(t.peers))
-	t.cl.mu.Unlock()
-}
-
 func totalConns(tts []*Torrent) (ret int) {
 	for _, tt := range tts {
 		tt.cl.mu.Lock()

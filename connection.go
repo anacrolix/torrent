@@ -547,26 +547,6 @@ func (cn *connection) updateRequests() {
 	cn.SetInterested(i)
 }
 
-func (cn *connection) fillRequests() {
-	cn.pieceRequestOrder.IterTyped(func(piece int) (more bool) {
-		if cn.t.cl.config.Debug && cn.t.havePiece(piece) {
-			panic(piece)
-		}
-		return cn.requestPiecePendingChunks(piece)
-	})
-}
-
-func (c *connection) requestPiecePendingChunks(piece int) (again bool) {
-	if !c.PeerHasPiece(piece) {
-		return true
-	}
-	chunkIndices := c.t.pieces[piece].undirtiedChunkIndices().ToSortedSlice()
-	return iter.ForPerm(len(chunkIndices), func(i int) bool {
-		req := request{pp.Integer(piece), c.t.chunkIndexSpec(chunkIndices[i], piece)}
-		return c.Request(req)
-	})
-}
-
 func undirtiedChunks(piece int, t *Torrent, f func(chunkSpec) bool) bool {
 	chunkIndices := t.pieces[piece].undirtiedChunkIndices().ToSortedSlice()
 	return iter.ForPerm(len(chunkIndices), func(i int) bool {

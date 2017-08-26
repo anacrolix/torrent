@@ -515,13 +515,6 @@ func (cl *Client) initiateConn(peer Peer, t *Torrent) {
 	go cl.outgoingConnection(t, addr, peer.Source)
 }
 
-func (cl *Client) dialTimeout(t *Torrent) time.Duration {
-	cl.mu.Lock()
-	pendingPeers := len(t.peers)
-	cl.mu.Unlock()
-	return reducedDialTimeout(nominalDialTimeout, cl.halfOpenLimit, pendingPeers)
-}
-
 func (cl *Client) dialTCP(ctx context.Context, addr string) (c net.Conn, err error) {
 	d := net.Dialer{
 	// LocalAddr: cl.tcpListener.Addr(),

@@ -640,13 +640,6 @@ func (t *Torrent) hashPiece(piece int) (ret metainfo.Hash) {
 	return
 }
 
-func (t *Torrent) haveAllPieces() bool {
-	if !t.haveInfo() {
-		return false
-	}
-	return t.completedPieces.Len() == t.numPieces()
-}
-
 func (t *Torrent) haveAnyPieces() bool {
 	for i := range t.pieces {
 		if t.pieceComplete(i) {

@@ -1,6 +1,8 @@
 package torrentfs
 
 import (
+	"os"
+
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
 	"golang.org/x/net/context"
@@ -23,5 +25,7 @@ func (fn fileNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 }
 
 func (fn fileNode) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (fusefs.Handle, error) {
-	return fileHandle{fn}, nil
+	r := fn.t.NewReader()
+	r.Seek(fn.TorrentOffset, os.SEEK_SET)
+	return fileHandle{fn, r}, nil
 }

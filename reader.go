@@ -119,10 +119,10 @@ func (r *Reader) piecesUncached() (ret pieceRange) {
 }
 
 func (r *Reader) Read(b []byte) (n int, err error) {
-	return r.ReadContext(b, context.Background())
+	return r.ReadContext(context.Background(), b)
 }
 
-func (r *Reader) ReadContext(b []byte, ctx context.Context) (n int, err error) {
+func (r *Reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 	// This is set under the Client lock if the Context is canceled.
 	var ctxErr error
 	if ctx.Done() != nil {

@@ -20,6 +20,6 @@ func TestReaderReadContext(t *testing.T) {
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(time.Millisecond))
 	r := tt.NewReader()
 	defer r.Close()
-	_, err = r.ReadContext(make([]byte, 1), ctx)
+	_, err = r.ReadContext(ctx, make([]byte, 1))
 	require.EqualValues(t, context.DeadlineExceeded, err)
 }

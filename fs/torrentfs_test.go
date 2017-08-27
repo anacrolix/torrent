@@ -1,6 +1,7 @@
 package torrentfs
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -120,10 +121,18 @@ func TestUnmountWedged(t *testing.T) {
 	if err := fuseConn.MountError; err != nil {
 		t.Fatalf("mount error: %s", err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	// Read the greeting file, though it will never be available. This should
 	// "wedge" FUSE, requiring the fs object to be forcibly destroyed. The
 	// read call will return with a FS error.
 	go func() {
+		<-ctx.Done()
+		fs.mu.Lock()
+		fs.event.Broadcast()
+		fs.mu.Unlock()
+	}()
+	go func() {
+		defer cancel()
 		_, err := ioutil.ReadFile(filepath.Join(layout.MountDir, tt.Info().Name))
 		if err == nil {
 			t.Fatal("expected error reading greeting")
@@ -132,7 +141,7 @@ func TestUnmountWedged(t *testing.T) {
 
 	// Wait until the read has blocked inside the filesystem code.
 	fs.mu.Lock()
-	for fs.blockedReads != 1 {
+	for fs.blockedReads != 1 && ctx.Err() == nil {
 		fs.event.Wait()
 	}
 	fs.mu.Unlock()

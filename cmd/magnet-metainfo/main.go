@@ -2,19 +2,23 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"net/http"
 	"os"
 	"sync"
 
 	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/tagflag"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/bencode"
 )
 
 func main() {
-	flag.Parse()
+	args := struct {
+		tagflag.StartPos
+		Magnet []string
+	}{}
+	tagflag.Parse(&args)
 	cl, err := torrent.NewClient(nil)
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)
@@ -26,7 +30,7 @@ func main() {
 		cl.DHT().WriteStatus(w)
 	})
 	wg := sync.WaitGroup{}
-	for _, arg := range flag.Args() {
+	for _, arg := range args.Magnet {
 		t, err := cl.AddMagnet(arg)
 		if err != nil {
 			log.Fatalf("error adding magnet to client: %s", err)

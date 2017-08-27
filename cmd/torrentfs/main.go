@@ -2,7 +2,6 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"net"
 	"net/http"
@@ -18,6 +17,7 @@ import (
 	fusefs "bazil.org/fuse/fs"
 	"github.com/anacrolix/dht"
 	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/tagflag"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/fs"
@@ -25,34 +25,27 @@ import (
 )
 
 var (
-	torrentPath = flag.String("torrentPath", func() string {
-		_user, err := user.Current()
-		if err != nil {
-			log.Fatal(err)
-		}
-		return filepath.Join(_user.HomeDir, ".config/transmission/torrents")
-	}(), "torrent files in this location describe the contents of the mounted filesystem")
-	downloadDir = flag.String("downloadDir", "", "location to save torrent data")
-	mountDir    = flag.String("mountDir", "", "location the torrent contents are made available")
+	args = struct {
+		MetainfoDir string `help:"torrent files in this location describe the contents of the mounted filesystem"`
+		DownloadDir string `help:"location to save torrent data"`
+		MountDir    string `help:"location the torrent contents are made available"`
 
-	disableTrackers = flag.Bool("disableTrackers", false, "disables trackers")
-	testPeer        = flag.String("testPeer", "", "the address for a test peer")
-	readaheadBytes  = flag.Int64("readaheadBytes", 10*1024*1024, "bytes to readahead in each torrent from the last read piece")
-	listenAddr      = flag.String("listenAddr", ":6882", "incoming connection address")
-
-	testPeerAddr *net.TCPAddr
+		DisableTrackers bool
+		TestPeer        *net.TCPAddr
+		ReadaheadBytes  tagflag.Bytes
+		ListenAddr      *net.TCPAddr
+	}{
+		MetainfoDir: func() string {
+			_user, err := user.Current()
+			if err != nil {
+				log.Fatal(err)
+			}
+			return filepath.Join(_user.HomeDir, ".config/transmission/torrents")
+		}(),
+		ReadaheadBytes: 10 << 20,
+		ListenAddr:     &net.TCPAddr{},
+	}
 )
-
-func resolveTestPeerAddr() {
-	if *testPeer == "" {
-		return
-	}
-	var err error
-	testPeerAddr, err = net.ResolveTCPAddr("tcp4", *testPeer)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
 
 func exitSignalHandlers(fs *torrentfs.TorrentFS) {
 	c := make(chan os.Signal)
@@ -60,7 +53,7 @@ func exitSignalHandlers(fs *torrentfs.TorrentFS) {
 	for {
 		<-c
 		fs.Destroy()
-		err := fuse.Unmount(*mountDir)
+		err := fuse.Unmount(args.MountDir)
 		if err != nil {
 			log.Print(err)
 		}
@@ -70,8 +63,8 @@ func exitSignalHandlers(fs *torrentfs.TorrentFS) {
 func addTestPeer(client *torrent.Client) {
 	for _, t := range client.Torrents() {
 		t.AddPeers([]torrent.Peer{{
-			IP:   testPeerAddr.IP,
-			Port: testPeerAddr.Port,
+			IP:   args.TestPeer.IP,
+			Port: args.TestPeer.Port,
 		}})
 	}
 }
@@ -81,27 +74,23 @@ func main() {
 }
 
 func mainExitCode() int {
-	flag.Parse()
-	if flag.NArg() != 0 {
-		os.Stderr.WriteString("one does not simply pass positional args\n")
-		return 2
-	}
-	if *mountDir == "" {
+	tagflag.Parse(&args)
+	if args.MountDir == "" {
 		os.Stderr.WriteString("y u no specify mountpoint?\n")
 		return 2
 	}
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	conn, err := fuse.Mount(*mountDir)
+	conn, err := fuse.Mount(args.MountDir)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer fuse.Unmount(*mountDir)
+	defer fuse.Unmount(args.MountDir)
 	// TODO: Think about the ramifications of exiting not due to a signal.
 	defer conn.Close()
 	client, err := torrent.NewClient(&torrent.Config{
-		DataDir:         *downloadDir,
-		DisableTrackers: *disableTrackers,
-		ListenAddr:      *listenAddr,
+		DataDir:         args.DownloadDir,
+		DisableTrackers: args.DisableTrackers,
+		ListenAddr:      args.ListenAddr.String(),
 		NoUpload:        true, // Ensure that downloads are responsive.
 		DHTConfig: dht.ServerConfig{
 			StartingNodes: dht.GlobalBootstrapAddrs,
@@ -115,7 +104,7 @@ func mainExitCode() int {
 	http.DefaultServeMux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})
-	dw, err := dirwatch.New(*torrentPath)
+	dw, err := dirwatch.New(args.MetainfoDir)
 	if err != nil {
 		log.Printf("error watching torrent dir: %s", err)
 		return 1
@@ -144,11 +133,10 @@ func mainExitCode() int {
 			}
 		}
 	}()
-	resolveTestPeerAddr()
 	fs := torrentfs.New(client)
 	go exitSignalHandlers(fs)
 
-	if testPeerAddr != nil {
+	if args.TestPeer != nil {
 		go func() {
 			for {
 				addTestPeer(client)

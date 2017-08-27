@@ -53,10 +53,10 @@ Downloads torrents from the command-line. This first example does not use `godo`
 
 ### torrentfs
 
-torrentfs mounts a FUSE filesystem at `-mountDir`. The contents are the torrents described by the torrent files and magnet links at `-torrentPath`. Data for read requests is fetched only as required from the torrent network, and stored at `-downloadDir`.
+torrentfs mounts a FUSE filesystem at `-mountDir`. The contents are the torrents described by the torrent files and magnet links at `-metainfoDir`. Data for read requests is fetched only as required from the torrent network, and stored at `-downloadDir`.
 
     $ mkdir mnt torrents
-    $ godo github.com/anacrolix/torrent/cmd/torrentfs -mountDir mnt -torrentPath torrents &
+    $ godo github.com/anacrolix/torrent/cmd/torrentfs -mountDir=mnt -metainfoDir=torrents &
     $ cd torrents
     $ wget http://releases.ubuntu.com/14.04.2/ubuntu-14.04.2-desktop-amd64.iso.torrent
     $ cd ..

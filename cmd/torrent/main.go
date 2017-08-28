@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anacrolix/dht"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
 	"github.com/dustin/go-humanize"
@@ -148,7 +149,11 @@ var flags = struct {
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	tagflag.Parse(&flags)
-	var clientConfig torrent.Config
+	clientConfig := torrent.Config{
+		DHTConfig: dht.ServerConfig{
+			StartingNodes: dht.GlobalBootstrapAddrs,
+		},
+	}
 	if flags.Mmap {
 		clientConfig.DefaultStorage = storage.NewMMap("")
 	}

@@ -82,20 +82,35 @@ func newEncrypt(initer bool, s []byte, skey []byte) (c *rc4.Cipher) {
 }
 
 type cipherReader struct {
-	c *rc4.Cipher
-	r io.Reader
+	c  *rc4.Cipher
+	r  io.Reader
+	mu sync.Mutex
+	be []byte
 }
 
 func (cr *cipherReader) Read(b []byte) (n int, err error) {
-	// inefficient to allocate here
-	be := make([]byte, len(b))
-	n, err = cr.r.Read(be)
+	var be []byte
+	cr.mu.Lock()
+	if len(cr.be) >= len(b) {
+		be = cr.be
+		cr.be = nil
+		cr.mu.Unlock()
+	} else {
+		cr.mu.Unlock()
+		be = make([]byte, len(b))
+	}
+	n, err = cr.r.Read(be[:len(b)])
 	cr.c.XORKeyStream(b[:n], be[:n])
+	cr.mu.Lock()
+	if len(be) > len(cr.be) {
+		cr.be = be
+	}
+	cr.mu.Unlock()
 	return
 }
 
 func newCipherReader(c *rc4.Cipher, r io.Reader) io.Reader {
-	return &cipherReader{c, r}
+	return &cipherReader{c: c, r: r}
 }
 
 type cipherWriter struct {
@@ -371,7 +386,7 @@ func (h *handshake) initerSteps() (ret io.ReadWriter, err error) {
 		}
 		return
 	}
-	r := &cipherReader{bC, h.conn}
+	r := newCipherReader(bC, h.conn)
 	var method uint32
 	err = unmarshal(r, &method, &padLen)
 	if err != nil {

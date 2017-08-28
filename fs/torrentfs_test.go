@@ -210,7 +210,9 @@ func TestDownloadOnDemand(t *testing.T) {
 	resp := &fuse.ReadResponse{
 		Data: make([]byte, size),
 	}
-	node.(fusefs.HandleReader).Read(netContext.Background(), &fuse.ReadRequest{
+	h, err := node.(fusefs.NodeOpener).Open(nil, nil, nil)
+	require.NoError(t, err)
+	h.(fusefs.HandleReader).Read(netContext.Background(), &fuse.ReadRequest{
 		Size: int(size),
 	}, resp)
 	assert.EqualValues(t, testutil.GreetingFileContents, resp.Data)

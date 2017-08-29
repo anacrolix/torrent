@@ -1,8 +1,12 @@
 mkdir mnt torrents
+umount mnt
+set -e
 GOPPROF=http godo github.com/anacrolix/torrent/cmd/torrentfs -mountDir=mnt -metainfoDir=torrents &
 cd torrents
-wget http://releases.ubuntu.com/14.04.2/ubuntu-14.04.2-desktop-amd64.iso.torrent
+wget -c https://cdimage.debian.org/debian-cd/current/amd64/bt-cd/debian-9.1.0-amd64-netinst.iso.torrent
+echo 'magnet:?xt=urn:btih:6a9759bffd5c0af65319979fb7832189f4f3c35d&dn=sintel.mp4' > sintel.magnet
 cd ..
-file=ubuntu-14.04.2-desktop-amd64.iso
+file=debian-9.1.0-amd64-netinst.iso
+# file=sintel.mp4
 while [ ! -e "mnt/$file" ]; do sleep 1; done
 pv "mnt/$file" | md5sum

@@ -749,10 +749,15 @@ func (c *connection) mainReadLoop() error {
 		Pool:      t.chunkPool,
 	}
 	for {
-		cl.mu.Unlock()
-		var msg pp.Message
-		err := decoder.Decode(&msg)
-		cl.mu.Lock()
+		var (
+			msg pp.Message
+			err error
+		)
+		func() {
+			cl.mu.Unlock()
+			defer cl.mu.Lock()
+			err = decoder.Decode(&msg)
+		}()
 		if cl.closed.IsSet() || c.closed.IsSet() || err == io.EOF {
 			return nil
 		}

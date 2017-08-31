@@ -1386,6 +1386,7 @@ func (cl *Client) newConnection(nc net.Conn) (c *connection) {
 		PeerChoked:      true,
 		PeerMaxRequests: 250,
 	}
+	c.writerCond.L = &cl.mu
 	c.setRW(connStatsReadWriter{nc, &cl.mu, c})
 	c.r = rateLimitedReader{cl.downloadLimit, c.r}
 	return

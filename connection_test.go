@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"container/list"
 	"io"
 	"io/ioutil"
 	"net"
@@ -73,8 +72,8 @@ func TestSendBitfieldThenHave(t *testing.T) {
 		},
 		r: r,
 		w: w,
-		outgoingUnbufferedMessages: list.New(),
 	}
+	c.writerCond.L = &c.t.cl.mu
 	go c.writer(time.Minute)
 	c.mu().Lock()
 	c.Bitfield([]bool{false, true, false})

@@ -68,6 +68,14 @@ type Message struct {
 	Port                 uint16
 }
 
+func (msg Message) MustMarshalBinary() []byte {
+	b, err := msg.MarshalBinary()
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
 func (msg Message) MarshalBinary() (data []byte, err error) {
 	buf := &bytes.Buffer{}
 	if !msg.Keepalive {

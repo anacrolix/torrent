@@ -1035,23 +1035,11 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 	}
 }
 
-func (cl *Client) peerUnchoked(torrent *Torrent, conn *connection) {
-	conn.updateRequests()
-}
-
-func (cl *Client) connCancel(t *Torrent, cn *connection, r request) (ok bool) {
-	ok = cn.Cancel(r)
-	if ok {
-		postedCancels.Add(1)
-	}
-	return
-}
-
 func (cl *Client) connDeleteRequest(t *Torrent, cn *connection, r request) bool {
 	if !cn.RequestPending(r) {
 		return false
 	}
-	delete(cn.Requests, r)
+	delete(cn.requests, r)
 	return true
 }
 

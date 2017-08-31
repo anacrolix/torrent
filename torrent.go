@@ -1422,16 +1422,18 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 	}
 }
 
+func (t *Torrent) cancelRequestsForPiece(piece int) {
+	for cn := range t.conns {
+		cn.writerCond.Broadcast()
+	}
+}
+
 func (t *Torrent) onPieceCompleted(piece int) {
 	t.pendingPieces.Remove(piece)
 	t.pendAllChunkSpecs(piece)
+	t.cancelRequestsForPiece(piece)
 	for conn := range t.conns {
 		conn.Have(piece)
-		for r := range conn.Requests {
-			if int(r.Index) == piece {
-				conn.Cancel(r)
-			}
-		}
 		// Could check here if peer doesn't have piece, but due to caching
 		// some peers may have said they have a piece but they don't.
 		conn.upload()

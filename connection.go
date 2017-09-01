@@ -346,12 +346,15 @@ var (
 )
 
 func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
+	numFillBuffers.Add(1)
 	rs, i := cn.desiredRequestState()
 	if !cn.SetInterested(i, msg) {
 		return
 	}
+	sentCancels := false
 	for r := range cn.requests {
 		if _, ok := rs[r]; !ok {
+			sentCancels = true
 			delete(cn.requests, r)
 			// log.Printf("%p: cancelling request: %v", cn, r)
 			if !msg(pp.Message{
@@ -364,12 +367,17 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 			}
 		}
 	}
+	if sentCancels {
+		fillBufferSentCancels.Add(1)
+	}
+	sentRequests := false
 	for r := range rs {
 		if _, ok := cn.requests[r]; !ok {
 			if cn.requests == nil {
 				cn.requests = make(map[request]struct{}, cn.nominalMaxRequests())
 			}
 			cn.requests[r] = struct{}{}
+			sentRequests = true
 			// log.Printf("%p: requesting %v", cn, r)
 			if !msg(pp.Message{
 				Type:   pp.Request,
@@ -380,6 +388,9 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 				return
 			}
 		}
+	}
+	if sentRequests {
+		fillBufferSentRequests.Add(1)
 	}
 }
 

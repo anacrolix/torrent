@@ -199,25 +199,19 @@ func TestUTPRawConn(t *testing.T) {
 		b := make([]byte, 500)
 		for i := 0; i < N; i++ {
 			n, _, err := l.ReadFrom(b)
-			if err != nil {
-				t.Fatalf("error reading from raw conn: %s", err)
-			}
+			require.NoError(t, err)
 			msgsReceived++
 			var d int
 			fmt.Sscan(string(b[:n]), &d)
-			if d != i {
-				log.Printf("got wrong number: expected %d, got %d", i, d)
-			}
+			assert.Equal(t, i, d)
 		}
 	}()
 	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
 	require.NoError(t, err)
 	for i := 0; i < N; i++ {
 		_, err := peer.WriteTo([]byte(fmt.Sprintf("%d", i)), udpAddr)
-		if err != nil {
-			t.Fatal(err)
-		}
-		time.Sleep(time.Microsecond)
+		require.NoError(t, err)
+		time.Sleep(time.Millisecond)
 	}
 	select {
 	case <-readerStopped:

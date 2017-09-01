@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"expvar"
 	"fmt"
 	"io"
 	"log"
@@ -23,8 +22,6 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
-
-var optimizedCancels = expvar.NewInt("optimizedCancels")
 
 type peerSource string
 
@@ -337,13 +334,6 @@ func (cn *connection) SetInterested(interested bool, msg func(pp.Message) bool) 
 		}(),
 	})
 }
-
-var (
-	// Track connection writer buffer writes and flushes, to determine its
-	// efficiency.
-	connectionWriterFlush = expvar.NewInt("connectionWriterFlush")
-	connectionWriterWrite = expvar.NewInt("connectionWriterWrite")
-)
 
 func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	numFillBuffers.Add(1)

@@ -2,6 +2,7 @@
 package main
 
 import (
+	"expvar"
 	"fmt"
 	"log"
 	"net"
@@ -11,7 +12,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/dht"
-	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
 	"github.com/dustin/go-humanize"
 	"github.com/gosuri/uiprogress"
@@ -139,6 +140,7 @@ var flags = struct {
 	Addr         *net.TCPAddr   `help:"network listen addr"`
 	UploadRate   tagflag.Bytes  `help:"max piece bytes to send per second"`
 	DownloadRate tagflag.Bytes  `help:"max bytes per second down from peers"`
+	Debug        bool
 	tagflag.StartPos
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }{
@@ -191,4 +193,8 @@ func main() {
 	if flags.Seed {
 		select {}
 	}
+	expvar.Do(func(kv expvar.KeyValue) {
+		fmt.Printf("%s: %s\n", kv.Key, kv.Value)
+	})
+	envpprof.Stop()
 }

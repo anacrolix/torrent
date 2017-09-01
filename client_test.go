@@ -167,9 +167,7 @@ func TestReducedDialTimeout(t *testing.T) {
 
 func TestUTPRawConn(t *testing.T) {
 	l, err := NewUtpSocket("udp", "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer l.Close()
 	go func() {
 		for {
@@ -180,17 +178,14 @@ func TestUTPRawConn(t *testing.T) {
 		}
 	}()
 	// Connect a UTP peer to see if the RawConn will still work.
-	s, _ := NewUtpSocket("udp", "")
+	s, err := NewUtpSocket("udp", "")
+	require.NoError(t, err)
 	defer s.Close()
 	utpPeer, err := s.Dial(fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
-	if err != nil {
-		t.Fatalf("error dialing utp listener: %s", err)
-	}
+	require.NoError(t, err)
 	defer utpPeer.Close()
 	peer, err := net.ListenPacket("udp", ":0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer peer.Close()
 
 	msgsReceived := 0
@@ -216,9 +211,7 @@ func TestUTPRawConn(t *testing.T) {
 		}
 	}()
 	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for i := 0; i < N; i++ {
 		_, err := peer.WriteTo([]byte(fmt.Sprintf("%d", i)), udpAddr)
 		if err != nil {

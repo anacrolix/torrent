@@ -798,7 +798,9 @@ func (t *Torrent) maybeNewConns() {
 
 func (t *Torrent) piecePriorityChanged(piece int) {
 	for c := range t.conns {
-		c.updatePiecePriority(piece)
+		if c.updatePiecePriority(piece) {
+			c.updateRequests()
+		}
 	}
 	t.maybeNewConns()
 	t.publishPieceChange(piece)
@@ -1424,7 +1426,7 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 
 func (t *Torrent) cancelRequestsForPiece(piece int) {
 	for cn := range t.conns {
-		cn.writerCond.Broadcast()
+		cn.tickleWriter()
 	}
 }
 

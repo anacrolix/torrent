@@ -234,7 +234,7 @@ func (cn *connection) PeerHasPiece(piece int) bool {
 }
 
 func (cn *connection) Post(msg pp.Message) {
-	postedMessageTypes.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
+	messageTypesPosted.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
 	cn.postedBuffer.Write(msg.MustMarshalBinary())
 	cn.writerCond.Broadcast()
 }
@@ -408,6 +408,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		cn.postedBuffer.Reset()
 		if buf.Len() == 0 {
 			cn.fillWriteBuffer(func(msg pp.Message) bool {
+				cn.wroteMsg(&msg)
 				buf.Write(msg.MustMarshalBinary())
 				return buf.Len() < 1<<16
 			})
@@ -662,6 +663,7 @@ func (c *connection) requestPendingMetadata() {
 }
 
 func (cn *connection) wroteMsg(msg *pp.Message) {
+	messageTypesSent.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
 	cn.stats.wroteMsg(msg)
 	cn.t.stats.wroteMsg(msg)
 }
@@ -742,7 +744,7 @@ func (c *connection) mainReadLoop() error {
 			receivedKeepalives.Add(1)
 			continue
 		}
-		receivedMessageTypes.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
+		messageTypesReceived.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
 		switch msg.Type {
 		case pp.Choke:
 			c.PeerChoked = true

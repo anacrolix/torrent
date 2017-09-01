@@ -1035,14 +1035,6 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 	}
 }
 
-func (cl *Client) connDeleteRequest(t *Torrent, cn *connection, r request) bool {
-	if !cn.RequestPending(r) {
-		return false
-	}
-	delete(cn.requests, r)
-	return true
-}
-
 // Process incoming ut_metadata message.
 func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connection) error {
 	var d map[string]int

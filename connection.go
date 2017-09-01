@@ -239,11 +239,6 @@ func (cn *connection) Post(msg pp.Message) {
 	cn.writerCond.Broadcast()
 }
 
-func (cn *connection) RequestPending(r request) bool {
-	_, ok := cn.requests[r]
-	return ok
-}
-
 func (cn *connection) requestMetadataPiece(index int) {
 	eID := cn.PeerExtensionIDs["ut_metadata"]
 	if eID == 0 {
@@ -528,8 +523,9 @@ func undirtiedChunks(piece int, t *Torrent, f func(chunkSpec) bool) bool {
 }
 
 func (cn *connection) stopRequestingPiece(piece int) {
-	cn.pieceRequestOrder.Remove(piece)
-	cn.writerCond.Broadcast()
+	if cn.pieceRequestOrder.Remove(piece) {
+		cn.writerCond.Broadcast()
+	}
 }
 
 // This is distinct from Torrent piece priority, which is the user's
@@ -556,8 +552,9 @@ func (cn *connection) updatePiecePriority(piece int) {
 		panic(tpp)
 	}
 	prio += piece / 3
-	cn.pieceRequestOrder.Set(piece, prio)
-	cn.updateRequests()
+	if cn.pieceRequestOrder.Set(piece, prio) {
+		cn.updateRequests()
+	}
 }
 
 func (cn *connection) getPieceInclination() []int {
@@ -752,8 +749,7 @@ func (c *connection) mainReadLoop() error {
 			// We can then reset our interest.
 			c.updateRequests()
 		case pp.Reject:
-			cl.connDeleteRequest(t, c, newRequest(msg.Index, msg.Begin, msg.Length))
-			c.updateRequests()
+			c.deleteRequest(newRequest(msg.Index, msg.Begin, msg.Length))
 		case pp.Unchoke:
 			c.PeerChoked = false
 			c.writerCond.Broadcast()
@@ -954,9 +950,7 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	req := newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))
 
 	// Request has been satisfied.
-	if cl.connDeleteRequest(t, c, req) {
-		defer c.updateRequests()
-	} else {
+	if !c.deleteRequest(req) {
 		unexpectedChunksReceived.Add(1)
 	}
 
@@ -1091,4 +1085,13 @@ func (c *connection) peerHasWantedPieces() bool {
 
 func (c *connection) numLocalRequests() int {
 	return len(c.requests)
+}
+
+func (c *connection) deleteRequest(r request) bool {
+	if _, ok := c.requests[r]; !ok {
+		return false
+	}
+	delete(c.requests, r)
+	c.writerCond.Broadcast()
+	return true
 }

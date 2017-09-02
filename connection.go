@@ -332,14 +332,13 @@ func (cn *connection) SetInterested(interested bool, msg func(pp.Message) bool) 
 
 func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	numFillBuffers.Add(1)
-	rs, i := cn.desiredRequestState()
+	cancel, new, i := cn.desiredRequestState()
 	if !cn.SetInterested(i, msg) {
 		return
 	}
-	sentCancels := false
-	for r := range cn.requests {
-		if _, ok := rs[r]; !ok {
-			sentCancels = true
+	if cancel && len(cn.requests) != 0 {
+		fillBufferSentCancels.Add(1)
+		for r := range cn.requests {
 			cn.deleteRequest(r)
 			// log.Printf("%p: cancelling request: %v", cn, r)
 			if !msg(pp.Message{
@@ -352,17 +351,13 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 			}
 		}
 	}
-	if sentCancels {
-		fillBufferSentCancels.Add(1)
-	}
-	sentRequests := false
-	for r := range rs {
-		if _, ok := cn.requests[r]; !ok {
+	if len(new) != 0 {
+		fillBufferSentRequests.Add(1)
+		for _, r := range new {
 			if cn.requests == nil {
 				cn.requests = make(map[request]struct{}, cn.nominalMaxRequests())
 			}
 			cn.requests[r] = struct{}{}
-			sentRequests = true
 			// log.Printf("%p: requesting %v", cn, r)
 			if !msg(pp.Message{
 				Type:   pp.Request,
@@ -373,9 +368,10 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 				return
 			}
 		}
-	}
-	if sentRequests {
-		fillBufferSentRequests.Add(1)
+		// If we didn't completely top up the requests, we shouldn't mark the
+		// low water, since we'll want to top up the requests as soon as we
+		// have more write buffer space.
+		cn.requestsLowWater = len(cn.requests) / 2
 	}
 }
 
@@ -471,37 +467,36 @@ func nextRequestState(
 	requestsLowWater int,
 	requestsHighWater int,
 ) (
-	requests map[request]struct{},
+	cancelExisting bool,
+	newRequests []request,
 	interested bool,
 ) {
 	if !networkingEnabled || nextPieces.IsEmpty() {
-		return nil, false
+		return true, nil, false
 	}
 	if peerChoking || len(currentRequests) > requestsLowWater {
-		return currentRequests, true
-	}
-	requests = make(map[request]struct{}, requestsHighWater)
-	for r := range currentRequests {
-		requests[r] = struct{}{}
+		return false, nil, !nextPieces.IsEmpty()
 	}
 	nextPieces.IterTyped(func(piece int) bool {
 		return pendingChunks(piece, func(cs chunkSpec) bool {
-			if len(requests) >= requestsHighWater {
-				return false
-			}
 			r := request{pp.Integer(piece), cs}
-			requests[r] = struct{}{}
-			return true
+			if _, ok := currentRequests[r]; !ok {
+				if newRequests == nil {
+					newRequests = make([]request, 0, requestsHighWater-len(currentRequests))
+				}
+				newRequests = append(newRequests, r)
+			}
+			return len(currentRequests)+len(newRequests) < requestsHighWater
 		})
 	})
-	return requests, true
+	return false, newRequests, true
 }
 
 func (cn *connection) updateRequests() {
 	cn.tickleWriter()
 }
 
-func (cn *connection) desiredRequestState() (map[request]struct{}, bool) {
+func (cn *connection) desiredRequestState() (bool, []request, bool) {
 	return nextRequestState(
 		cn.t.networkingEnabled,
 		cn.requests,

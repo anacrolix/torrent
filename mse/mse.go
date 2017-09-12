@@ -116,16 +116,28 @@ func newCipherReader(c *rc4.Cipher, r io.Reader) io.Reader {
 type cipherWriter struct {
 	c *rc4.Cipher
 	w io.Writer
+	b []byte
 }
 
 func (cr *cipherWriter) Write(b []byte) (n int, err error) {
-	be := make([]byte, len(b))
-	cr.c.XORKeyStream(be, b)
-	n, err = cr.w.Write(be)
-	if n != len(be) {
+	be := func() []byte {
+		if len(cr.b) < len(b) {
+			return make([]byte, len(b))
+		} else {
+			ret := cr.b
+			cr.b = nil
+			return ret
+		}
+	}()
+	cr.c.XORKeyStream(be[:], b)
+	n, err = cr.w.Write(be[:len(b)])
+	if n != len(b) {
 		// The cipher will have advanced beyond the callers stream position.
 		// We can't use the cipher anymore.
 		cr.c = nil
+	}
+	if len(be) > len(cr.b) {
+		cr.b = be
 	}
 	return
 }
@@ -390,7 +402,7 @@ func (h *handshake) initerSteps() (ret io.ReadWriter, err error) {
 	if err != nil {
 		return
 	}
-	ret = readWriter{r, &cipherWriter{e, h.conn}}
+	ret = readWriter{r, &cipherWriter{e, h.conn, nil}}
 	return
 }
 
@@ -449,7 +461,7 @@ func (h *handshake) receiverSteps() (ret io.ReadWriter, err error) {
 		unmarshal(r, h.ia)
 	}
 	buf := &bytes.Buffer{}
-	w := cipherWriter{h.newEncrypt(false), buf}
+	w := cipherWriter{h.newEncrypt(false), buf, nil}
 	padLen = uint16(newPadLen())
 	err = marshal(&w, &vc, uint32(cryptoMethodRC4), padLen, zeroPad[:padLen])
 	if err != nil {
@@ -459,7 +471,7 @@ func (h *handshake) receiverSteps() (ret io.ReadWriter, err error) {
 	if err != nil {
 		return
 	}
-	ret = readWriter{io.MultiReader(bytes.NewReader(h.ia), r), &cipherWriter{w.c, h.conn}}
+	ret = readWriter{io.MultiReader(bytes.NewReader(h.ia), r), &cipherWriter{w.c, h.conn, nil}}
 	return
 }
 

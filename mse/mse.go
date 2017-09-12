@@ -130,16 +130,6 @@ func (cr *cipherWriter) Write(b []byte) (n int, err error) {
 	return
 }
 
-func readY(r io.Reader) (y big.Int, err error) {
-	var b [96]byte
-	_, err = io.ReadFull(r, b[:])
-	if err != nil {
-		return
-	}
-	y.SetBytes(b[:])
-	return
-}
-
 func newX() big.Int {
 	var X big.Int
 	X.SetBytes(func() []byte {

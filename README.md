@@ -27,10 +27,6 @@ There is a small example in the [package documentation](https://godoc.org/github
  * [Trickl - Torrent Client](https://play.google.com/store/apps/details?id=com.shwifty.tex)
  * [Confluence](https://github.com/anacrolix/confluence)
 
-## Mobile
-
-There's a branch called `mobile` that supports binding to torrent with the [gomobile](https://github.com/golang/go/wiki/Mobile) tool. It has some API changes as required by `gomobile`. Checkout the [`mobile` branch](https://github.com/anacrolix/torrent/tree/mobile), and bind as usual.
-
 ## Commands
 
 Here I'll describe what some of the provided commands in `./cmd` do.

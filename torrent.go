@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"text/tabwriter"
 	"time"
@@ -120,6 +121,44 @@ type Torrent struct {
 // Returns a channel that is closed when the Torrent is closed.
 func (t *Torrent) Closed() <-chan struct{} {
 	return t.closed.LockedChan(&t.cl.mu)
+}
+
+// KnownSwarm returns the known subset of the peers in the Torrent's swarm, including active,
+// pending, and half-open peers.
+func (t *Torrent) KnownSwarm() (ks []Peer) {
+	// Add pending peers to the list
+	for _, peer := range t.peers {
+		ks = append(ks, peer)
+	}
+
+	// Add active peers to the list
+	for conn := range t.conns {
+		host, portString, err := net.SplitHostPort(conn.remoteAddr().String())
+		if err != nil {
+			panic(err)
+		}
+
+		ip := net.ParseIP(host)
+		port, err := strconv.Atoi(portString)
+		if err != nil {
+			panic(err)
+		}
+
+		ks = append(ks, Peer{
+			Id: conn.PeerID,
+			IP: ip,
+			Port: port,
+			Source: conn.Discovery,
+			// TODO: the connection can be unencrypted due to our (or the peer's) preference,
+			//       but the remote peer might support the encryption. Find a better way to query
+			//       that information, if possible.
+			SupportsEncryption: conn.encrypted,
+		})
+	}
+
+	// TODO: how can we add half-open peers?
+
+	return
 }
 
 func (t *Torrent) setChunkSize(size pp.Integer) {

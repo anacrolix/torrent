@@ -200,6 +200,7 @@ func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 			return
 		}
 		n1, err = f.WriteAt(p[:n1], off)
+		// TODO: On some systems, write errors can be delayed until the Close.
 		f.Close()
 		if err != nil {
 			return

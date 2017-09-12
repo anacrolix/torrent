@@ -3,6 +3,7 @@ package mse
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/rc4"
 	"io"
 	"io/ioutil"
 	"net"
@@ -124,4 +125,42 @@ func TestReceiveRandomData(t *testing.T) {
 	// Establishing S, and then reading the maximum padding for giving up on
 	// synchronizing.
 	require.EqualValues(t, 96+532, tr.n)
+}
+
+func BenchmarkPipe(t *testing.B) {
+	key := make([]byte, 20)
+	n, _ := rand.Read(key)
+	require.Equal(t, len(key), n)
+	var buf bytes.Buffer
+	c, err := rc4.NewCipher(key)
+	require.NoError(t, err)
+	r := cipherReader{
+		c: c,
+		r: &buf,
+	}
+	c, err = rc4.NewCipher(key)
+	require.NoError(t, err)
+	w := cipherWriter{
+		c: c,
+		w: &buf,
+	}
+	a := make([]byte, 0x1000)
+	n, _ = io.ReadFull(rand.Reader, a)
+	require.Equal(t, len(a), n)
+	b := make([]byte, len(a))
+	t.SetBytes(int64(len(a)))
+	t.ResetTimer()
+	for range iter.N(t.N) {
+		n, _ = w.Write(a)
+		if n != len(a) {
+			t.FailNow()
+		}
+		n, _ = r.Read(b)
+		if n != len(b) {
+			t.FailNow()
+		}
+		if !bytes.Equal(a, b) {
+			t.FailNow()
+		}
+	}
 }

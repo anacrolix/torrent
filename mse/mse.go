@@ -24,9 +24,9 @@ import (
 const (
 	maxPadLen = 512
 
-	cryptoMethodPlaintext = 1
-	cryptoMethodRC4       = 2
-	AllSupportedCrypto    = cryptoMethodPlaintext | cryptoMethodRC4
+	CryptoMethodPlaintext = 1
+	CryptoMethodRC4       = 2
+	AllSupportedCrypto    = CryptoMethodPlaintext | CryptoMethodRC4
 )
 
 var (
@@ -409,9 +409,9 @@ func (h *handshake) initerSteps() (ret io.ReadWriter, err error) {
 		return
 	}
 	switch method & h.cryptoProvides {
-	case cryptoMethodRC4:
+	case CryptoMethodRC4:
 		ret = readWriter{r, &cipherWriter{e, h.conn, nil}}
-	case cryptoMethodPlaintext:
+	case CryptoMethodPlaintext:
 		ret = h.conn
 	default:
 		err = fmt.Errorf("receiver chose unsupported method: %x", method)
@@ -482,12 +482,12 @@ func (h *handshake) receiverSteps() (ret io.ReadWriter, err error) {
 		return
 	}
 	switch chosen {
-	case cryptoMethodRC4:
+	case CryptoMethodRC4:
 		ret = readWriter{
 			io.MultiReader(bytes.NewReader(h.ia), r),
 			&cipherWriter{w.c, h.conn, nil},
 		}
-	case cryptoMethodPlaintext:
+	case CryptoMethodPlaintext:
 		ret = readWriter{
 			io.MultiReader(bytes.NewReader(h.ia), h.conn),
 			h.conn,
@@ -538,11 +538,11 @@ func InitiateHandshake(rw io.ReadWriter, skey []byte, initialPayload []byte, cry
 	return h.Do()
 }
 
-func ReceiveHandshake(rw io.ReadWriter, skeys [][]byte, selectCrypto func(uint32) uint32) (ret io.ReadWriter, err error) {
+func ReceiveHandshake(rw io.ReadWriter, skeys SecretKeyIter, selectCrypto func(uint32) uint32) (ret io.ReadWriter, err error) {
 	h := handshake{
 		conn:         rw,
 		initer:       false,
-		skeys:        sliceIter(skeys),
+		skeys:        skeys,
 		chooseMethod: selectCrypto,
 	}
 	return h.Do()
@@ -562,22 +562,11 @@ func sliceIter(skeys [][]byte) SecretKeyIter {
 // returns false or exhausted.
 type SecretKeyIter func(callback func(skey []byte) (more bool))
 
-// Doesn't unpack the secret keys until it needs to, and through the passed
-// function.
-func ReceiveHandshakeLazy(rw io.ReadWriter, skeys SecretKeyIter) (ret io.ReadWriter, err error) {
-	h := handshake{
-		conn:   rw,
-		initer: false,
-		skeys:  skeys,
-	}
-	return h.Do()
-}
-
 func DefaultCryptoSelector(provided uint32) uint32 {
-	if provided&cryptoMethodRC4 != 0 {
-		return cryptoMethodRC4
+	if provided&CryptoMethodRC4 != 0 {
+		return CryptoMethodRC4
 	}
-	return cryptoMethodPlaintext
+	return CryptoMethodPlaintext
 }
 
 type CryptoSelector func(uint32) uint32

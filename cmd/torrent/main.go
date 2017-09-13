@@ -23,21 +23,6 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-func resolvedPeerAddrs(ss []string) (ret []torrent.Peer, err error) {
-	for _, s := range ss {
-		var addr *net.TCPAddr
-		addr, err = net.ResolveTCPAddr("tcp", s)
-		if err != nil {
-			return
-		}
-		ret = append(ret, torrent.Peer{
-			IP:   addr.IP,
-			Port: addr.Port,
-		})
-	}
-	return
-}
-
 func torrentBar(t *torrent.Torrent) {
 	bar := uiprogress.AddBar(1)
 	bar.AppendCompleted()

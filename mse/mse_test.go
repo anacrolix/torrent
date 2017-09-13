@@ -71,7 +71,7 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 	}()
 	go func() {
 		defer wg.Done()
-		b, err := ReceiveHandshake(b, [][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")}, cryptoSelect)
+		b, err := ReceiveHandshake(b, sliceIter([][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")}), cryptoSelect)
 		if err != nil {
 			t.Fatal(err)
 			return
@@ -103,7 +103,7 @@ func TestHandshakeDefault(t *testing.T) {
 }
 
 func TestHandshakeSelectPlaintext(t *testing.T) {
-	allHandshakeTests(t, AllSupportedCrypto, func(uint32) uint32 { return cryptoMethodPlaintext })
+	allHandshakeTests(t, AllSupportedCrypto, func(uint32) uint32 { return CryptoMethodPlaintext })
 }
 
 func BenchmarkHandshakeDefault(b *testing.B) {
@@ -180,7 +180,7 @@ func benchmarkStream(t *testing.B, crypto uint32) {
 		}()
 		func() {
 			defer bc.Close()
-			rw, err := ReceiveHandshake(bc, [][]byte{[]byte("cats")}, func(uint32) uint32 { return crypto })
+			rw, err := ReceiveHandshake(bc, sliceIter([][]byte{[]byte("cats")}), func(uint32) uint32 { return crypto })
 			require.NoError(t, err)
 			require.NoError(t, readAndWrite(rw, br, b))
 		}()
@@ -201,11 +201,11 @@ func benchmarkStream(t *testing.B, crypto uint32) {
 }
 
 func BenchmarkStreamRC4(t *testing.B) {
-	benchmarkStream(t, cryptoMethodRC4)
+	benchmarkStream(t, CryptoMethodRC4)
 }
 
 func BenchmarkStreamPlaintext(t *testing.B) {
-	benchmarkStream(t, cryptoMethodPlaintext)
+	benchmarkStream(t, CryptoMethodPlaintext)
 }
 
 func BenchmarkPipeRC4(t *testing.B) {

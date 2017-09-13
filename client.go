@@ -586,9 +586,9 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
 
 // Performs initiator handshakes and returns a connection. Returns nil
 // *connection if no connection for valid reasons.
-func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torrent, encrypted, utp bool) (c *connection, err error) {
+func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torrent, encryptHeader, utp bool) (c *connection, err error) {
 	c = cl.newConnection(nc)
-	c.encrypted = encrypted
+	c.headerEncrypted = encryptHeader
 	c.uTP = utp
 	ctx, cancel := context.WithTimeout(ctx, handshakesTimeout)
 	defer cancel()
@@ -616,8 +616,8 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 	if nc == nil {
 		return
 	}
-	encryptFirst := !cl.config.DisableEncryption && !cl.config.PreferNoEncryption
-	c, err = cl.handshakesConnection(ctx, nc, t, encryptFirst, utp)
+	obfuscatedHeaderFirst := !cl.config.DisableEncryption && !cl.config.PreferNoEncryption
+	c, err = cl.handshakesConnection(ctx, nc, t, obfuscatedHeaderFirst, utp)
 	if err != nil {
 		nc.Close()
 		return
@@ -625,8 +625,12 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 		return
 	}
 	nc.Close()
-	if cl.config.DisableEncryption || cl.config.ForceEncryption {
-		// There's no alternate encryption case to try.
+	if cl.config.ForceEncryption {
+		// We should have just tried with an obfuscated header. A plaintext
+		// header can't result in an encrypted connection, so we're done.
+		if !obfuscatedHeaderFirst {
+			panic(cl.config.EncryptionPolicy)
+		}
 		return
 	}
 	// Try again with encryption if we didn't earlier, or without if we did,
@@ -640,7 +644,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 		err = fmt.Errorf("error dialing for unencrypted connection: %s", err)
 		return
 	}
-	c, err = cl.handshakesConnection(ctx, nc, t, !encryptFirst, utp)
+	c, err = cl.handshakesConnection(ctx, nc, t, !obfuscatedHeaderFirst, utp)
 	if err != nil || c == nil {
 		nc.Close()
 	}
@@ -829,34 +833,74 @@ func (r deadlineReader) Read(b []byte) (n int, err error) {
 	return
 }
 
-func maybeReceiveEncryptedHandshake(rw io.ReadWriter, skeys mse.SecretKeyIter) (ret io.ReadWriter, encrypted bool, err error) {
-	var protocol [len(pp.Protocol)]byte
-	_, err = io.ReadFull(rw, protocol[:])
-	if err != nil {
-		return
+func handleEncryption(
+	rw io.ReadWriter,
+	skeys mse.SecretKeyIter,
+	policy EncryptionPolicy,
+) (
+	ret io.ReadWriter,
+	headerEncrypted bool,
+	cryptoMethod uint32,
+	err error,
+) {
+	if !policy.ForceEncryption {
+		var protocol [len(pp.Protocol)]byte
+		_, err = io.ReadFull(rw, protocol[:])
+		if err != nil {
+			return
+		}
+		rw = struct {
+			io.Reader
+			io.Writer
+		}{
+			io.MultiReader(bytes.NewReader(protocol[:]), rw),
+			rw,
+		}
+		if string(protocol[:]) == pp.Protocol {
+			ret = rw
+			return
+		}
 	}
-	ret = struct {
-		io.Reader
-		io.Writer
-	}{
-		io.MultiReader(bytes.NewReader(protocol[:]), rw),
-		rw,
-	}
-	if string(protocol[:]) == pp.Protocol {
-		return
-	}
-	encrypted = true
-	ret, err = mse.ReceiveHandshakeLazy(ret, skeys)
+	headerEncrypted = true
+	ret, err = mse.ReceiveHandshake(rw, skeys, func(provides uint32) uint32 {
+		cryptoMethod = func() uint32 {
+			switch {
+			case policy.ForceEncryption:
+				return mse.CryptoMethodRC4
+			case policy.DisableEncryption:
+				return mse.CryptoMethodPlaintext
+			case policy.PreferNoEncryption && provides&mse.CryptoMethodPlaintext != 0:
+				return mse.CryptoMethodPlaintext
+			default:
+				return mse.DefaultCryptoSelector(provides)
+			}
+		}()
+		return cryptoMethod
+	})
 	return
 }
 
 func (cl *Client) initiateHandshakes(c *connection, t *Torrent) (ok bool, err error) {
-	if c.encrypted {
+	if c.headerEncrypted {
 		var rw io.ReadWriter
-		rw, err = mse.InitiateHandshake(struct {
-			io.Reader
-			io.Writer
-		}{c.r, c.w}, t.infoHash[:], nil)
+		rw, err = mse.InitiateHandshake(
+			struct {
+				io.Reader
+				io.Writer
+			}{c.r, c.w},
+			t.infoHash[:],
+			nil,
+			func() uint32 {
+				switch {
+				case cl.config.ForceEncryption:
+					return mse.CryptoMethodRC4
+				case cl.config.DisableEncryption:
+					return mse.CryptoMethodPlaintext
+				default:
+					return mse.AllSupportedCrypto
+				}
+			}(),
+		)
 		c.setRW(rw)
 		if err != nil {
 			return
@@ -882,18 +926,16 @@ func (cl *Client) forSkeys(f func([]byte) bool) {
 
 // Do encryption and bittorrent handshakes as receiver.
 func (cl *Client) receiveHandshakes(c *connection) (t *Torrent, err error) {
-	if !cl.config.DisableEncryption {
-		var rw io.ReadWriter
-		rw, c.encrypted, err = maybeReceiveEncryptedHandshake(c.rw(), cl.forSkeys)
-		c.setRW(rw)
-		if err != nil {
-			if err == mse.ErrNoSecretKeyMatch {
-				err = nil
-			}
-			return
+	var rw io.ReadWriter
+	rw, c.headerEncrypted, c.cryptoMethod, err = handleEncryption(c.rw(), cl.forSkeys, cl.config.EncryptionPolicy)
+	c.setRW(rw)
+	if err != nil {
+		if err == mse.ErrNoSecretKeyMatch {
+			err = nil
 		}
+		return
 	}
-	if cl.config.ForceEncryption && !c.encrypted {
+	if cl.config.ForceEncryption && !c.headerEncrypted {
 		err = errors.New("connection not encrypted")
 		return
 	}

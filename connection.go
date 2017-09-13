@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anacrolix/torrent/mse"
+
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/iter"
@@ -43,10 +45,11 @@ type connection struct {
 	w io.Writer
 	r io.Reader
 	// True if the connection is operating over MSE obfuscation.
-	encrypted bool
-	Discovery peerSource
-	uTP       bool
-	closed    missinggo.Event
+	headerEncrypted bool
+	cryptoMethod    uint32
+	Discovery       peerSource
+	uTP             bool
+	closed          missinggo.Event
 
 	stats                  ConnStats
 	UnwantedChunksReceived int
@@ -148,8 +151,10 @@ func (cn *connection) connectionFlags() (ret string) {
 	c := func(b byte) {
 		ret += string([]byte{b})
 	}
-	if cn.encrypted {
+	if cn.cryptoMethod == mse.CryptoMethodRC4 {
 		c('E')
+	} else if cn.headerEncrypted {
+		c('e')
 	}
 	ret += string(cn.Discovery)
 	if cn.uTP {

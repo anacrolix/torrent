@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 
+	_ "github.com/anacrolix/envpprof"
+
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/require"
 )
@@ -47,13 +49,13 @@ func TestSuffixMatchLen(t *testing.T) {
 	test("sup", "person", 1)
 }
 
-func handshakeTest(t testing.TB, ia []byte, aData, bData string) {
+func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides uint32, cryptoSelect func(uint32) uint32) {
 	a, b := net.Pipe()
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		a, err := InitiateHandshake(a, []byte("yep"), ia)
+		a, err := InitiateHandshake(a, []byte("yep"), ia, cryptoProvides)
 		if err != nil {
 			t.Fatal(err)
 			return
@@ -69,7 +71,7 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string) {
 	}()
 	go func() {
 		defer wg.Done()
-		b, err := ReceiveHandshake(b, [][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")})
+		b, err := ReceiveHandshake(b, [][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")}, cryptoSelect)
 		if err != nil {
 			t.Fatal(err)
 			return
@@ -89,20 +91,24 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string) {
 	b.Close()
 }
 
-func allHandshakeTests(t testing.TB) {
-	handshakeTest(t, []byte("jump the gun, "), "hello world", "yo dawg")
-	handshakeTest(t, nil, "hello world", "yo dawg")
-	handshakeTest(t, []byte{}, "hello world", "yo dawg")
+func allHandshakeTests(t testing.TB, provides uint32, selector CryptoSelector) {
+	handshakeTest(t, []byte("jump the gun, "), "hello world", "yo dawg", provides, selector)
+	handshakeTest(t, nil, "hello world", "yo dawg", provides, selector)
+	handshakeTest(t, []byte{}, "hello world", "yo dawg", provides, selector)
 }
 
-func TestHandshake(t *testing.T) {
-	allHandshakeTests(t)
+func TestHandshakeDefault(t *testing.T) {
+	allHandshakeTests(t, AllSupportedCrypto, DefaultCryptoSelector)
 	t.Logf("crypto provides encountered: %s", cryptoProvidesCount)
 }
 
-func BenchmarkHandshake(b *testing.B) {
+func TestHandshakeSelectPlaintext(t *testing.T) {
+	allHandshakeTests(t, AllSupportedCrypto, func(uint32) uint32 { return cryptoMethodPlaintext })
+}
+
+func BenchmarkHandshakeDefault(b *testing.B) {
 	for range iter.N(b.N) {
-		allHandshakeTests(b)
+		allHandshakeTests(b, AllSupportedCrypto, DefaultCryptoSelector)
 	}
 }
 
@@ -119,7 +125,7 @@ func (tr *trackReader) Read(b []byte) (n int, err error) {
 
 func TestReceiveRandomData(t *testing.T) {
 	tr := trackReader{rand.Reader, 0}
-	_, err := ReceiveHandshake(readWriter{&tr, ioutil.Discard}, nil)
+	_, err := ReceiveHandshake(readWriter{&tr, ioutil.Discard}, nil, DefaultCryptoSelector)
 	// No skey matches
 	require.Error(t, err)
 	// Establishing S, and then reading the maximum padding for giving up on
@@ -127,7 +133,82 @@ func TestReceiveRandomData(t *testing.T) {
 	require.EqualValues(t, 96+532, tr.n)
 }
 
-func BenchmarkPipe(t *testing.B) {
+func fillRand(t testing.TB, bs ...[]byte) {
+	for _, b := range bs {
+		_, err := rand.Read(b)
+		require.NoError(t, err)
+	}
+}
+
+func readAndWrite(rw io.ReadWriter, r []byte, w []byte) error {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	var wErr error
+	go func() {
+		defer wg.Done()
+		_, wErr = rw.Write(w)
+	}()
+	_, err := io.ReadFull(rw, r)
+	if err != nil {
+		return err
+	}
+	wg.Wait()
+	return wErr
+}
+
+func benchmarkStream(t *testing.B, crypto uint32) {
+	ia := make([]byte, 0x1000)
+	a := make([]byte, 1<<20)
+	b := make([]byte, 1<<20)
+	fillRand(t, ia, a, b)
+	t.StopTimer()
+	t.SetBytes(int64(len(ia) + len(a) + len(b)))
+	t.ResetTimer()
+	for range iter.N(t.N) {
+		ac, bc := net.Pipe()
+		ar := make([]byte, len(b))
+		br := make([]byte, len(ia)+len(a))
+		t.StartTimer()
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer ac.Close()
+			defer wg.Done()
+			rw, err := InitiateHandshake(ac, []byte("cats"), ia, crypto)
+			require.NoError(t, err)
+			require.NoError(t, readAndWrite(rw, ar, a))
+		}()
+		func() {
+			defer bc.Close()
+			rw, err := ReceiveHandshake(bc, [][]byte{[]byte("cats")}, func(uint32) uint32 { return crypto })
+			require.NoError(t, err)
+			require.NoError(t, readAndWrite(rw, br, b))
+		}()
+		t.StopTimer()
+		if !bytes.Equal(ar, b) {
+			t.Fatalf("A read the wrong bytes")
+		}
+		if !bytes.Equal(br[:len(ia)], ia) {
+			t.Fatalf("B read the wrong IA")
+		}
+		if !bytes.Equal(br[len(ia):], a) {
+			t.Fatalf("B read the wrong A")
+		}
+		// require.Equal(t, b, ar)
+		// require.Equal(t, ia, br[:len(ia)])
+		// require.Equal(t, a, br[len(ia):])
+	}
+}
+
+func BenchmarkStreamRC4(t *testing.B) {
+	benchmarkStream(t, cryptoMethodRC4)
+}
+
+func BenchmarkStreamPlaintext(t *testing.B) {
+	benchmarkStream(t, cryptoMethodPlaintext)
+}
+
+func BenchmarkPipeRC4(t *testing.B) {
 	key := make([]byte, 20)
 	n, _ := rand.Read(key)
 	require.Equal(t, len(key), n)

@@ -1102,3 +1102,15 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 	tr.DownloadAll()
 	client.WaitAll()
 }
+
+func TestClientAddressInUse(t *testing.T) {
+	s, _ := NewUtpSocket("udp", ":50007")
+	if s != nil {
+		defer s.Close()
+	}
+	cfg := TestingConfig()
+	cfg.ListenAddr = ":50007"
+	cl, err := NewClient(cfg)
+	require.Error(t, err)
+	require.Nil(t, cl)
+}

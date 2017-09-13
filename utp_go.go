@@ -7,5 +7,10 @@ import (
 )
 
 func NewUtpSocket(network, addr string) (utpSocket, error) {
-	return utp.NewSocket(network, addr)
+	s, err := utp.NewSocket(network, addr)
+	if s == nil {
+		return nil, err
+	} else {
+		return s, err
+	}
 }

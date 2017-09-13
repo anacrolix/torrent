@@ -366,6 +366,10 @@ func (h *handshake) initerSteps() (ret io.ReadWriter, err error) {
 	buf := &bytes.Buffer{}
 	padLen := uint16(newPadLen())
 	err = marshal(buf, vc[:], uint32(cryptoMethodRC4), padLen, zeroPad[:padLen], uint16(len(h.ia)), h.ia)
+	if len(h.ia) > math.MaxUint16 {
+		err = errors.New("initial payload too large")
+		return
+	}
 	if err != nil {
 		return
 	}

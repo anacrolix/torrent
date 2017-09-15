@@ -512,7 +512,7 @@ func (cl *Client) initiateConn(peer Peer, t *Torrent) {
 	if t.addrActive(addr) {
 		return
 	}
-	t.halfOpen[addr] = struct{}{}
+	t.halfOpen[addr] = peer
 	go cl.outgoingConnection(t, addr, peer.Source)
 }
 
@@ -1215,7 +1215,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		peers:    make(map[peersKey]Peer),
 		conns:    make(map[*connection]struct{}, 2*defaultEstablishedConnsPerTorrent),
 
-		halfOpen:          make(map[string]struct{}),
+		halfOpen:          make(map[string]Peer),
 		pieceStateChanges: pubsub.NewPubSub(),
 
 		storageOpener:       storageClient,

@@ -563,10 +563,10 @@ func sliceIter(skeys [][]byte) SecretKeyIter {
 type SecretKeyIter func(callback func(skey []byte) (more bool))
 
 func DefaultCryptoSelector(provided uint32) uint32 {
-	if provided&CryptoMethodRC4 != 0 {
-		return CryptoMethodRC4
+	if provided&CryptoMethodPlaintext != 0 {
+		return CryptoMethodPlaintext
 	}
-	return CryptoMethodPlaintext
+	return CryptoMethodRC4
 }
 
 type CryptoSelector func(uint32) uint32

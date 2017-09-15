@@ -122,7 +122,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	ts.writeSem.Lock()
 	for range iter.N(b.N) {
 		cl.mu.Lock()
-		t.pieces[0].DirtyChunks.Clear()
+		t.pieces[0].dirtyChunks.Clear()
 		cl.mu.Unlock()
 		n, err := w.Write(wb)
 		require.NoError(b, err)

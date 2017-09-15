@@ -47,7 +47,7 @@ type Torrent struct {
 
 	closed   missinggo.Event
 	infoHash metainfo.Hash
-	pieces   []piece
+	pieces   []Piece
 	// Values are the piece indices that changed.
 	pieceStateChanges *pubsub.PubSub
 	// The size of chunks to request from peers over the wire. This is
@@ -233,13 +233,13 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 
 func (t *Torrent) makePieces() {
 	hashes := infoPieceHashes(t.info)
-	t.pieces = make([]piece, len(hashes))
+	t.pieces = make([]Piece, len(hashes))
 	for i, hash := range hashes {
 		piece := &t.pieces[i]
 		piece.t = t
 		piece.index = i
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
-		missinggo.CopyExact(piece.Hash[:], hash)
+		missinggo.CopyExact(piece.hash[:], hash)
 	}
 }
 
@@ -344,7 +344,7 @@ func (t *Torrent) pieceState(index int) (ret PieceState) {
 	if t.pieceComplete(index) {
 		ret.Complete = true
 	}
-	if p.QueuedForHash || p.Hashing {
+	if p.queuedForHash || p.hashing {
 		ret.Checking = true
 	}
 	if !ret.Complete && t.piecePartiallyDownloaded(index) {
@@ -598,7 +598,7 @@ func (t *Torrent) pieceNumChunks(piece int) int {
 }
 
 func (t *Torrent) pendAllChunkSpecs(pieceIndex int) {
-	t.pieces[pieceIndex].DirtyChunks.Clear()
+	t.pieces[pieceIndex].dirtyChunks.Clear()
 }
 
 type Peer struct {
@@ -691,10 +691,10 @@ func (t *Torrent) wantPieceIndex(index int) bool {
 		return false
 	}
 	p := &t.pieces[index]
-	if p.QueuedForHash {
+	if p.queuedForHash {
 		return false
 	}
-	if p.Hashing {
+	if p.hashing {
 		return false
 	}
 	if t.pieceComplete(index) {
@@ -737,8 +737,8 @@ type PieceStateChange struct {
 func (t *Torrent) publishPieceChange(piece int) {
 	cur := t.pieceState(piece)
 	p := &t.pieces[piece]
-	if cur != p.PublicPieceState {
-		p.PublicPieceState = cur
+	if cur != p.publicPieceState {
+		p.publicPieceState = cur
 		t.pieceStateChanges.Publish(PieceStateChange{
 			piece,
 			cur,
@@ -754,7 +754,7 @@ func (t *Torrent) pieceNumPendingChunks(piece int) int {
 }
 
 func (t *Torrent) pieceAllDirty(piece int) bool {
-	return t.pieces[piece].DirtyChunks.Len() == t.pieceNumChunks(piece)
+	return t.pieces[piece].dirtyChunks.Len() == t.pieceNumChunks(piece)
 }
 
 func (t *Torrent) readersChanged() {
@@ -1383,17 +1383,17 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 	}
 	p := &t.pieces[piece]
 	touchers := t.reapPieceTouchers(piece)
-	if p.EverHashed {
+	if p.everHashed {
 		// Don't score the first time a piece is hashed, it could be an
 		// initial check.
 		if correct {
 			pieceHashedCorrect.Add(1)
 		} else {
-			log.Printf("%s: piece %d (%s) failed hash: %d connections contributed", t, piece, p.Hash, len(touchers))
+			log.Printf("%s: piece %d (%s) failed hash: %d connections contributed", t, piece, p.hash, len(touchers))
 			pieceHashedNotCorrect.Add(1)
 		}
 	}
-	p.EverHashed = true
+	p.everHashed = true
 	if correct {
 		for _, c := range touchers {
 			c.goodPiecesDirtied++
@@ -1472,22 +1472,22 @@ func (t *Torrent) verifyPiece(piece int) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	p := &t.pieces[piece]
-	for p.Hashing || t.storage == nil {
+	for p.hashing || t.storage == nil {
 		cl.event.Wait()
 	}
-	p.QueuedForHash = false
+	p.queuedForHash = false
 	if t.closed.IsSet() || t.pieceComplete(piece) {
 		t.updatePiecePriority(piece)
 		return
 	}
-	p.Hashing = true
+	p.hashing = true
 	t.publishPieceChange(piece)
 	cl.mu.Unlock()
 	sum := t.hashPiece(piece)
 	cl.mu.Lock()
 	p.numVerifies++
-	p.Hashing = false
-	t.pieceHashed(piece, sum == p.Hash)
+	p.hashing = false
+	t.pieceHashed(piece, sum == p.hash)
 }
 
 // Return the connections that touched a piece, and clear the entry while
@@ -1512,10 +1512,10 @@ func (t *Torrent) connsAsSlice() (ret []*connection) {
 // Currently doesn't really queue, but should in the future.
 func (t *Torrent) queuePieceCheck(pieceIndex int) {
 	piece := &t.pieces[pieceIndex]
-	if piece.QueuedForHash {
+	if piece.queuedForHash {
 		return
 	}
-	piece.QueuedForHash = true
+	piece.queuedForHash = true
 	t.publishPieceChange(pieceIndex)
 	go t.verifyPiece(pieceIndex)
 }

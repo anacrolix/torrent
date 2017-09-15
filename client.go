@@ -637,6 +637,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 	obfuscatedHeaderFirst := !cl.config.DisableEncryption && !cl.config.PreferNoEncryption
 	c, err = cl.handshakesConnection(ctx, nc, t, obfuscatedHeaderFirst, utp)
 	if err != nil {
+		// log.Printf("error initiating connection handshakes: %s", err)
 		nc.Close()
 		return
 	} else if c != nil {
@@ -660,7 +661,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 		nc, err = cl.dialTCP(ctx, addr)
 	}
 	if err != nil {
-		err = fmt.Errorf("error dialing for unencrypted connection: %s", err)
+		err = fmt.Errorf("error dialing for header encryption fallback: %s", err)
 		return
 	}
 	c, err = cl.handshakesConnection(ctx, nc, t, !obfuscatedHeaderFirst, utp)

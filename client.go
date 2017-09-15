@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"expvar"
 	"fmt"
 	"io"
 	"log"
@@ -534,6 +535,11 @@ func (cl *Client) dialUTP(ctx context.Context, addr string) (c net.Conn, err err
 	return
 }
 
+var (
+	dialledFirstUtp    = expvar.NewInt("dialledFirstUtp")
+	dialledFirstNotUtp = expvar.NewInt("dialledFirstNotUtp")
+)
+
 // Returns a connection over UTP or TCP, whichever is first to connect.
 func (cl *Client) dialFirst(ctx context.Context, addr string) (conn net.Conn, utp bool) {
 	ctx, cancel := context.WithCancel(ctx)
@@ -573,6 +579,13 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) (conn net.Conn, ut
 	}
 	conn = res.Conn
 	utp = res.UTP
+	if conn != nil {
+		if utp {
+			dialledFirstUtp.Add(1)
+		} else {
+			dialledFirstNotUtp.Add(1)
+		}
+	}
 	return
 }
 
@@ -607,6 +620,11 @@ func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torr
 	return
 }
 
+var (
+	initiatedConnWithPreferredHeaderEncryption = expvar.NewInt("initiatedConnWithPreferredHeaderEncryption")
+	initiatedConnWithFallbackHeaderEncryption  = expvar.NewInt("initiatedConnWithFallbackHeaderEncryption")
+)
+
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
 func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection, err error) {
@@ -622,6 +640,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 		nc.Close()
 		return
 	} else if c != nil {
+		initiatedConnWithPreferredHeaderEncryption.Add(1)
 		return
 	}
 	nc.Close()
@@ -647,6 +666,9 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 	c, err = cl.handshakesConnection(ctx, nc, t, !obfuscatedHeaderFirst, utp)
 	if err != nil || c == nil {
 		nc.Close()
+	}
+	if err == nil && c != nil {
+		initiatedConnWithFallbackHeaderEncryption.Add(1)
 	}
 	return
 }

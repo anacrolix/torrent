@@ -284,13 +284,13 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	}
 	for i := range t.pieces {
 		t.updatePieceCompletion(i)
-		t.pieces[i].QueuedForHash = true
+		// t.pieces[i].QueuedForHash = true
 	}
-	go func() {
-		for i := range t.pieces {
-			t.verifyPiece(i)
-		}
-	}()
+	// go func() {
+	// 	for i := range t.pieces {
+	// 		t.verifyPiece(i)
+	// 	}
+	// }()
 	return nil
 }
 
@@ -1485,6 +1485,7 @@ func (t *Torrent) verifyPiece(piece int) {
 	cl.mu.Unlock()
 	sum := t.hashPiece(piece)
 	cl.mu.Lock()
+	p.numVerifies++
 	p.Hashing = false
 	t.pieceHashed(piece, sum == p.Hash)
 }
@@ -1517,4 +1518,10 @@ func (t *Torrent) queuePieceCheck(pieceIndex int) {
 	piece.QueuedForHash = true
 	t.publishPieceChange(pieceIndex)
 	go t.verifyPiece(pieceIndex)
+}
+
+func (t *Torrent) VerifyData() {
+	for i := range iter.N(t.NumPieces()) {
+		t.Piece(i).VerifyData()
+	}
 }

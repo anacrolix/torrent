@@ -36,10 +36,13 @@ type piece struct {
 	index int
 	// Chunks we've written to since the last check. The chunk offset and
 	// length can be determined by the request chunkSize in use.
-	DirtyChunks      bitmap.Bitmap
-	Hashing          bool
-	QueuedForHash    bool
-	EverHashed       bool
+	DirtyChunks bitmap.Bitmap
+
+	Hashing       bool
+	QueuedForHash bool
+	EverHashed    bool
+	numVerifies   int64
+
 	PublicPieceState PieceState
 	priority         piecePriority
 
@@ -156,4 +159,17 @@ func (p *piece) bytesLeft() (ret pp.Integer) {
 		return 0
 	}
 	return p.length() - p.numDirtyBytes()
+}
+
+func (p *piece) VerifyData() {
+	p.t.cl.mu.Lock()
+	defer p.t.cl.mu.Unlock()
+	target := p.numVerifies + 1
+	if p.Hashing {
+		target++
+	}
+	p.t.queuePieceCheck(p.index)
+	for p.numVerifies < target {
+		p.t.cl.event.Wait()
+	}
 }

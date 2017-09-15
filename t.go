@@ -209,3 +209,9 @@ func (t *Torrent) AddTrackers(announceList [][]string) {
 	defer t.cl.mu.Unlock()
 	t.addTrackers(announceList)
 }
+
+func (t *Torrent) Piece(i int) *piece {
+	t.cl.mu.Lock()
+	defer t.cl.mu.Unlock()
+	return &t.pieces[i]
+}

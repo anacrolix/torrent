@@ -381,10 +381,8 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if ps.ExportClientStatus {
 		testutil.ExportStatusWriter(seeder, "s")
 	}
-	// seederTorrent, new, err := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	_, new, err := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	require.NoError(t, err)
-	assert.True(t, new)
+	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	seederTorrent.VerifyData()
 	// Create leecher and a Torrent.
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
@@ -454,7 +452,8 @@ func TestSeedAfterDownloading(t *testing.T) {
 	require.NoError(t, err)
 	defer seeder.Close()
 	testutil.ExportStatusWriter(seeder, "s")
-	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	seederTorrent.VerifyData()
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.DataDir)
@@ -619,7 +618,8 @@ func TestResponsive(t *testing.T) {
 	seeder, err := NewClient(cfg)
 	require.Nil(t, err)
 	defer seeder.Close()
-	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	seederTorrent.VerifyData()
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(leecherDataDir)
@@ -661,7 +661,8 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	seeder, err := NewClient(cfg)
 	require.Nil(t, err)
 	defer seeder.Close()
-	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	seederTorrent.VerifyData()
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(leecherDataDir)
@@ -759,6 +760,7 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 	greetingDataTempDir, greetingMetainfo := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingDataTempDir)
 	filePieceStore := csf(fileCache)
+	defer filePieceStore.Close()
 	info, err := greetingMetainfo.UnmarshalInfo()
 	require.NoError(t, err)
 	ih := greetingMetainfo.HashInfoBytes()
@@ -770,8 +772,7 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 	for i := 0; i < info.NumPieces(); i++ {
 		p := info.Piece(i)
 		if alreadyCompleted {
-			err := greetingData.Piece(p).MarkComplete()
-			assert.NoError(t, err)
+			require.NoError(t, greetingData.Piece(p).MarkComplete())
 		}
 	}
 	cfg := TestingConfig()
@@ -844,7 +845,8 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	if ps.ExportClientStatus {
 		testutil.ExportStatusWriter(seeder, "s")
 	}
-	seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	seederTorrent.VerifyData()
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
@@ -1064,7 +1066,8 @@ func makeMagnet(t *testing.T, cl *Client, dir string, name string) string {
 	magnet := mi.Magnet(name, mi.HashInfoBytes()).String()
 	tr, err := cl.AddTorrent(&mi)
 	require.NoError(t, err)
-	assert.True(t, tr.Seeding())
+	require.True(t, tr.Seeding())
+	tr.VerifyData()
 	return magnet
 }
 

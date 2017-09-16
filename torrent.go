@@ -150,9 +150,9 @@ func (t *Torrent) KnownSwarm() (ks []Peer) {
 		}
 
 		ks = append(ks, Peer{
-			Id: conn.PeerID,
-			IP: ip,
-			Port: port,
+			Id:     conn.PeerID,
+			IP:     ip,
+			Port:   port,
 			Source: conn.Discovery,
 			// > If the connection is encrypted, that's certainly enough to set SupportsEncryption.
 			// > But if we're not connected to them with an encrypted connection, I couldn't say

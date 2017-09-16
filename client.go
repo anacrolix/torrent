@@ -264,6 +264,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	cl.event.L = &cl.mu
 	storageImpl := cfg.DefaultStorage
 	if storageImpl == nil {
+		// We'd use mmap but HFS+ doesn't support sparse files.
 		storageImpl = storage.NewFile(cfg.DataDir)
 		cl.onClose = append(cl.onClose, func() {
 			if err := storageImpl.Close(); err != nil {

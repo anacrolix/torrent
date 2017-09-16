@@ -160,7 +160,7 @@ func (t *Torrent) KnownSwarm() (ks []Peer) {
 			// > received it from trackers/DHT/PEX, or just use the encryption state for the
 			// > connection. It's probably easiest to do the latter for now.
 			// https://github.com/anacrolix/torrent/pull/188
-			SupportsEncryption: conn.encrypted,
+			SupportsEncryption: conn.headerEncrypted,
 		})
 	}
 

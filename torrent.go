@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"text/tabwriter"
 	"time"
@@ -120,6 +121,50 @@ type Torrent struct {
 // Returns a channel that is closed when the Torrent is closed.
 func (t *Torrent) Closed() <-chan struct{} {
 	return t.closed.LockedChan(&t.cl.mu)
+}
+
+// KnownSwarm returns the known subset of the peers in the Torrent's swarm, including active,
+// pending, and half-open peers.
+func (t *Torrent) KnownSwarm() (ks []Peer) {
+	// Add pending peers to the list
+	for _, peer := range t.peers {
+		ks = append(ks, peer)
+	}
+
+	// Add half-open peers to the list
+	for _, peer := range t.halfOpen {
+		ks = append(ks, peer)
+	}
+
+	// Add active peers to the list
+	for conn := range t.conns {
+		host, portString, err := net.SplitHostPort(conn.remoteAddr().String())
+		if err != nil {
+			panic(err)
+		}
+
+		ip := net.ParseIP(host)
+		port, err := strconv.Atoi(portString)
+		if err != nil {
+			panic(err)
+		}
+
+		ks = append(ks, Peer{
+			Id: conn.PeerID,
+			IP: ip,
+			Port: port,
+			Source: conn.Discovery,
+			// > If the connection is encrypted, that's certainly enough to set SupportsEncryption.
+			// > But if we're not connected to them with an encrypted connection, I couldn't say
+			// > what's appropriate. We can carry forward the SupportsEncryption value as we
+			// > received it from trackers/DHT/PEX, or just use the encryption state for the
+			// > connection. It's probably easiest to do the latter for now.
+			// https://github.com/anacrolix/torrent/pull/188
+			SupportsEncryption: conn.encrypted,
+		})
+	}
+
+	return
 }
 
 func (t *Torrent) setChunkSize(size pp.Integer) {

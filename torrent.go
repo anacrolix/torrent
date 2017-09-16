@@ -131,6 +131,11 @@ func (t *Torrent) KnownSwarm() (ks []Peer) {
 		ks = append(ks, peer)
 	}
 
+	// Add half-open peers to the list
+	for _, peer := range t.halfOpen {
+		ks = append(ks, peer)
+	}
+
 	// Add active peers to the list
 	for conn := range t.conns {
 		host, portString, err := net.SplitHostPort(conn.remoteAddr().String())
@@ -149,14 +154,15 @@ func (t *Torrent) KnownSwarm() (ks []Peer) {
 			IP: ip,
 			Port: port,
 			Source: conn.Discovery,
-			// TODO: the connection can be unencrypted due to our (or the peer's) preference,
-			//       but the remote peer might support the encryption. Find a better way to query
-			//       that information, if possible.
+			// > If the connection is encrypted, that's certainly enough to set SupportsEncryption.
+			// > But if we're not connected to them with an encrypted connection, I couldn't say
+			// > what's appropriate. We can carry forward the SupportsEncryption value as we
+			// > received it from trackers/DHT/PEX, or just use the encryption state for the
+			// > connection. It's probably easiest to do the latter for now.
+			// https://github.com/anacrolix/torrent/pull/188
 			SupportsEncryption: conn.encrypted,
 		})
 	}
-
-	// TODO: how can we add half-open peers?
 
 	return
 }

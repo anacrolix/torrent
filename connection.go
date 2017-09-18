@@ -975,7 +975,7 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 
 	// Cancel pending requests for this chunk.
 	for c := range t.conns {
-		c.updateRequests()
+		c.postCancel(req)
 	}
 
 	cl.mu.Unlock()
@@ -1102,4 +1102,12 @@ func (c *connection) deleteRequest(r request) bool {
 }
 func (c *connection) tickleWriter() {
 	c.writerCond.Broadcast()
+}
+
+func (c *connection) postCancel(r request) bool {
+	if !c.deleteRequest(r) {
+		return false
+	}
+	c.Post(makeCancelMessage(r))
+	return true
 }

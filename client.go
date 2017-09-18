@@ -1142,7 +1142,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connect
 	}
 }
 
-func (cl *Client) sendChunk(t *Torrent, c *connection, r request) error {
+func (cl *Client) sendChunk(t *Torrent, c *connection, r request, msg func(pp.Message) bool) (more bool, err error) {
 	// Count the chunk being sent, even if it isn't.
 	b := make([]byte, r.Length)
 	p := t.info.Piece(int(r.Index))
@@ -1151,9 +1151,9 @@ func (cl *Client) sendChunk(t *Torrent, c *connection, r request) error {
 		if err == nil {
 			panic("expected error")
 		}
-		return err
+		return
 	}
-	c.Post(pp.Message{
+	more = msg(pp.Message{
 		Type:  pp.Piece,
 		Index: r.Index,
 		Begin: r.Begin,
@@ -1162,7 +1162,7 @@ func (cl *Client) sendChunk(t *Torrent, c *connection, r request) error {
 	c.chunksSent++
 	uploadChunksPosted.Add(1)
 	c.lastChunkSent = time.Now()
-	return nil
+	return
 }
 
 func (cl *Client) openNewConns(t *Torrent) {

@@ -1481,9 +1481,6 @@ func (t *Torrent) onPieceCompleted(piece int) {
 	t.cancelRequestsForPiece(piece)
 	for conn := range t.conns {
 		conn.Have(piece)
-		// Could check here if peer doesn't have piece, but due to caching
-		// some peers may have said they have a piece but they don't.
-		conn.upload()
 	}
 }
 

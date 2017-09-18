@@ -99,49 +99,56 @@ func mMapTorrent(md *metainfo.Info, location string) (mms mmap_span.MMapSpan, er
 	}()
 	for _, miFile := range md.UpvertedFiles() {
 		fileName := filepath.Join(append([]string{location, md.Name}, miFile.Path...)...)
-		err = os.MkdirAll(filepath.Dir(fileName), 0777)
+		var mm mmap.MMap
+		mm, err = mmapFile(fileName, miFile.Length)
 		if err != nil {
-			err = fmt.Errorf("error creating data directory %q: %s", filepath.Dir(fileName), err)
+			err = fmt.Errorf("file %q: %s", miFile.DisplayPath(md), err)
 			return
 		}
-		var file *os.File
-		file, err = os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0666)
-		if err != nil {
-			return
-		}
-		func() {
-			defer file.Close()
-			var fi os.FileInfo
-			fi, err = file.Stat()
-			if err != nil {
-				return
-			}
-			if fi.Size() < miFile.Length {
-				err = file.Truncate(miFile.Length)
-				if err != nil {
-					return
-				}
-			}
-			if miFile.Length == 0 {
-				// Can't mmap() regions with length 0.
-				return
-			}
-			var mMap mmap.MMap
-			mMap, err = mmap.MapRegion(file,
-				int(miFile.Length), // Probably not great on <64 bit systems.
-				mmap.RDWR, 0, 0)
-			if err != nil {
-				err = fmt.Errorf("error mapping file %q, length %d: %s", file.Name(), miFile.Length, err)
-				return
-			}
-			if int64(len(mMap)) != miFile.Length {
-				panic("mmap has wrong length")
-			}
-			mms.Append(mMap)
-		}()
+		mms.Append(mm)
+	}
+	return
+}
+
+func mmapFile(name string, size int64) (ret mmap.MMap, err error) {
+	dir := filepath.Dir(name)
+	err = os.MkdirAll(dir, 0777)
+	if err != nil {
+		err = fmt.Errorf("making directory %q: %s", dir, err)
+		return
+	}
+	var file *os.File
+	file, err = os.OpenFile(name, os.O_CREATE|os.O_RDWR, 0666)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	var fi os.FileInfo
+	fi, err = file.Stat()
+	if err != nil {
+		return
+	}
+	if fi.Size() < size {
+		// I think this is necessary on HFS+. Maybe Linux will SIGBUS too if
+		// you overmap a file but I'm not sure.
+		err = file.Truncate(size)
 		if err != nil {
 			return
 		}
+	}
+	if size == 0 {
+		// Can't mmap() regions with length 0.
+		return
+	}
+	ret, err = mmap.MapRegion(file,
+		int(size), // Probably not great on <64 bit systems.
+		mmap.RDWR, 0, 0)
+	if err != nil {
+		err = fmt.Errorf("mapping file %q, length %d: %s", file.Name(), size, err)
+		return
+	}
+	if int64(len(ret)) != size {
+		panic("mmap has wrong length")
 	}
 	return
 }

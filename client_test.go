@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -32,23 +31,19 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-func init() {
-	log.SetFlags(log.LstdFlags | log.Llongfile)
-}
-
 func TestingConfig() *Config {
 	return &Config{
-		ListenAddr:      "localhost:0",
-		NoDHT:           true,
-		DisableTrackers: true,
+		ListenAddr: "localhost:0",
+		NoDHT:      true,
 		DataDir: func() string {
-			ret, err := ioutil.TempDir("", "")
+			ret, err := ioutil.TempDir(tempDir, "")
 			if err != nil {
 				panic(err)
 			}
 			return ret
 		}(),
-		Debug: true,
+		DisableTrackers: true,
+		Debug:           true,
 	}
 }
 

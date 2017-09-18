@@ -226,7 +226,9 @@ func priorityBitmapHeadAsSlice(pb *prioritybitmap.PriorityBitmap, n int) (ret []
 }
 
 func (cn *connection) Close() {
-	cn.closed.Set()
+	if !cn.closed.Set() {
+		return
+	}
 	cn.discardPieceInclination()
 	cn.pieceRequestOrder.Clear()
 	if cn.conn != nil {

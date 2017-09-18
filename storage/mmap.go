@@ -105,7 +105,9 @@ func mMapTorrent(md *metainfo.Info, location string) (mms mmap_span.MMapSpan, er
 			err = fmt.Errorf("file %q: %s", miFile.DisplayPath(md), err)
 			return
 		}
-		mms.Append(mm)
+		if mm != nil {
+			mms.Append(mm)
+		}
 	}
 	return
 }

@@ -261,3 +261,12 @@ func marshalBitfield(bf []bool) (b []byte) {
 	}
 	return
 }
+
+func MakeCancelMessage(piece, offset, length Integer) Message {
+	return Message{
+		Type:   Cancel,
+		Index:  piece,
+		Begin:  offset,
+		Length: length,
+	}
+}

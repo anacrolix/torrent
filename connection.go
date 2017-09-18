@@ -355,12 +355,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		for r := range cn.requests {
 			cn.deleteRequest(r)
 			// log.Printf("%p: cancelling request: %v", cn, r)
-			if !msg(pp.Message{
-				Type:   pp.Cancel,
-				Index:  r.Index,
-				Begin:  r.Begin,
-				Length: r.Length,
-			}) {
+			if !msg(makeCancelMessage(r)) {
 				return
 			}
 		}

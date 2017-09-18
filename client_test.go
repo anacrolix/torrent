@@ -517,6 +517,8 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 
 type badStorage struct{}
 
+var _ storage.ClientImpl = badStorage{}
+
 func (bs badStorage) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.TorrentImpl, error) {
 	return bs, nil
 }
@@ -917,6 +919,7 @@ func TestPeerInvalidHave(t *testing.T) {
 	tt, _new, err := cl.AddTorrentSpec(&TorrentSpec{
 		InfoBytes: infoBytes,
 		InfoHash:  metainfo.HashBytes(infoBytes),
+		Storage:   badStorage{},
 	})
 	require.NoError(t, err)
 	assert.True(t, _new)

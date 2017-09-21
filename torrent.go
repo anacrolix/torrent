@@ -204,7 +204,7 @@ func (t *Torrent) addrActive(addr string) bool {
 	return false
 }
 
-func (t *Torrent) worstUnclosedConns() (ret []*connection) {
+func (t *Torrent) unclosedConnsAsSlice() (ret []*connection) {
 	ret = make([]*connection, 0, len(t.conns))
 	for c := range t.conns {
 		if !c.closed.IsSet() {
@@ -758,7 +758,8 @@ func (t *Torrent) wantPieceIndex(index int) bool {
 // pieces, or has been in worser half of the established connections for more
 // than a minute.
 func (t *Torrent) worstBadConn() *connection {
-	wcs := worseConnSlice{t.worstUnclosedConns()}
+	wcs := worseConnSlice{t.unclosedConnsAsSlice()}
+	heap.Init(&wcs)
 	for wcs.Len() != 0 {
 		c := heap.Pop(&wcs).(*connection)
 		if c.UnwantedChunksReceived >= 6 && c.UnwantedChunksReceived > c.UsefulChunksReceived {

@@ -720,7 +720,7 @@ func (c *connection) mainReadLoop() error {
 	cl := t.cl
 
 	decoder := pp.Decoder{
-		R:         bufio.NewReader(c.r),
+		R:         bufio.NewReaderSize(c.r, 1<<17),
 		MaxLength: 256 * 1024,
 		Pool:      t.chunkPool,
 	}

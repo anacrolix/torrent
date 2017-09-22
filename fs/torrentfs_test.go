@@ -103,8 +103,9 @@ func TestUnmountWedged(t *testing.T) {
 	fuseConn, err := fuse.Mount(layout.MountDir)
 	if err != nil {
 		switch err.Error() {
-		case "cannot locate OSXFUSE",
-			"fusermount: exit status 1":
+		case "cannot locate OSXFUSE":
+			fallthrough
+		case "fusermount: exit status 1":
 			t.Skip(err)
 		}
 		t.Fatal(err)
@@ -134,9 +135,7 @@ func TestUnmountWedged(t *testing.T) {
 	go func() {
 		defer cancel()
 		_, err := ioutil.ReadFile(filepath.Join(layout.MountDir, tt.Info().Name))
-		if err == nil {
-			t.Fatal("expected error reading greeting")
-		}
+		require.Error(t, err)
 	}()
 
 	// Wait until the read has blocked inside the filesystem code.
@@ -159,9 +158,7 @@ func TestUnmountWedged(t *testing.T) {
 	}
 
 	err = fuseConn.Close()
-	if err != nil {
-		t.Fatalf("error closing fuse conn: %s", err)
-	}
+	assert.NoError(t, err)
 }
 
 func TestDownloadOnDemand(t *testing.T) {

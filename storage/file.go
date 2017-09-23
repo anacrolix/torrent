@@ -75,7 +75,6 @@ func (fs *fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Has
 	}, nil
 }
 
-// File-based torrent storage, not yet bound to a Torrent.
 type fileTorrentImpl struct {
 	dir        string
 	info       *metainfo.Info

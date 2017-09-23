@@ -950,7 +950,7 @@ func (t *Torrent) pendPiece(piece int) {
 	t.updatePiecePriority(piece)
 }
 
-func (t *Torrent) unpendPieces(unpend *bitmap.Bitmap) {
+func (t *Torrent) unpendPieces(unpend bitmap.Bitmap) {
 	t.pendingPieces.Sub(unpend)
 	unpend.IterTyped(func(piece int) (again bool) {
 		t.updatePiecePriority(piece)
@@ -967,7 +967,7 @@ func (t *Torrent) pendPieceRange(begin, end int) {
 func (t *Torrent) unpendPieceRange(begin, end int) {
 	var bm bitmap.Bitmap
 	bm.AddRange(begin, end)
-	t.unpendPieces(&bm)
+	t.unpendPieces(bm)
 }
 
 func (t *Torrent) pendRequest(req request) {

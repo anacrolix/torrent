@@ -45,6 +45,7 @@ type Torrent struct {
 	cl *Client
 
 	networkingEnabled bool
+	requestStrategy   int
 
 	closed   missinggo.Event
 	infoHash metainfo.Hash
@@ -68,12 +69,14 @@ type Torrent struct {
 
 	// The info dict. nil if we don't have it (yet).
 	info *metainfo.Info
+
 	// Active peer connections, running message stream loops.
 	conns               map[*connection]struct{}
 	maxEstablishedConns int
 	// Set of addrs to which we're attempting to connect. Connections are
 	// half-open until all handshakes are completed.
-	halfOpen map[string]Peer
+	halfOpen    map[string]Peer
+	fastestConn *connection
 
 	// Reserve of peers to connect to. A peer can be both here and in the
 	// active connections if were told about the peer after connecting with

@@ -128,11 +128,11 @@ func (p *Piece) chunkIndexSpec(chunk int) chunkSpec {
 }
 
 func (p *Piece) numDirtyBytes() (ret pp.Integer) {
-	defer func() {
-		if ret > p.length() {
-			panic("too many dirty bytes")
-		}
-	}()
+	// defer func() {
+	// 	if ret > p.length() {
+	// 		panic("too many dirty bytes")
+	// 	}
+	// }()
 	numRegularDirtyChunks := p.numDirtyChunks()
 	if p.chunkIndexDirty(p.numChunks() - 1) {
 		numRegularDirtyChunks--

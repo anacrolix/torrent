@@ -558,9 +558,11 @@ func (t *Torrent) bytesMissingLocked() int64 {
 }
 
 func (t *Torrent) bytesLeft() (left int64) {
-	for i := 0; i < t.numPieces(); i++ {
-		left += int64(t.pieces[i].bytesLeft())
-	}
+	bitmap.Flip(t.completedPieces, 0, t.numPieces()).IterTyped(func(piece int) bool {
+		p := t.pieces[piece]
+		left += int64(p.length() - p.numDirtyBytes())
+		return true
+	})
 	return
 }
 
@@ -658,17 +660,14 @@ type Peer struct {
 	SupportsEncryption bool
 }
 
-func (t *Torrent) pieceLength(piece int) (len_ pp.Integer) {
-	if piece < 0 || piece >= t.info.NumPieces() {
-		return
-	}
+func (t *Torrent) pieceLength(piece int) pp.Integer {
 	if piece == t.numPieces()-1 {
-		len_ = pp.Integer(t.length % t.info.PieceLength)
+		ret := pp.Integer(t.length % t.info.PieceLength)
+		if ret != 0 {
+			return ret
+		}
 	}
-	if len_ == 0 {
-		len_ = pp.Integer(t.info.PieceLength)
-	}
-	return
+	return pp.Integer(t.info.PieceLength)
 }
 
 func (t *Torrent) hashPiece(piece int) (ret metainfo.Hash) {

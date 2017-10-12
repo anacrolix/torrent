@@ -3,7 +3,7 @@ umount mnt
 set -e
 GOPPROF=http godo github.com/anacrolix/torrent/cmd/torrentfs -mountDir=mnt -metainfoDir=torrents &
 cd torrents
-wget -c https://cdimage.debian.org/debian-cd/current/amd64/bt-cd/debian-9.1.0-amd64-netinst.iso.torrent
+wget -c https://cdimage.debian.org/cdimage/archive/9.1.0/amd64/bt-cd/debian-9.1.0-amd64-netinst.iso.torrent
 echo 'magnet:?xt=urn:btih:6a9759bffd5c0af65319979fb7832189f4f3c35d&dn=sintel.mp4' > sintel.magnet
 cd ..
 file=debian-9.1.0-amd64-netinst.iso

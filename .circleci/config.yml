@@ -19,6 +19,7 @@ jobs:
       - run: cd /usr/local && sudo rm -r go && sudo mkdir go go1.4 && sudo chown `whoami` go go1.4 && git clone git://github.com/golang/go && cd go && git branch -f -t go1.4 origin/release-branch.go1.4 && cd .. && git clone --single-branch -b go1.4 go go1.4 && cd go1.4/src && ./make.bash && cd ../../go/src && GOROOT_BOOTSTRAP=/usr/local/go1.4 ./make.bash
       - run: go version
       - checkout
+      - run: sudo apt-get update
       - run: sudo apt install fuse pv
       - run: go get -t -d -v -race $PROJECT_GO_PACKAGE/...
       - run: go test -v -race $PROJECT_GO_PACKAGE/...

@@ -230,14 +230,7 @@ func (cn *connection) Close() {
 	cn.discardPieceInclination()
 	cn.pieceRequestOrder.Clear()
 	if cn.conn != nil {
-		go func() {
-			// TODO: This call blocks sometimes, why? Maybe it was the Go utp
-			// implementation?
-			err := cn.conn.Close()
-			if err != nil {
-				log.Printf("error closing connection net.Conn: %s", err)
-			}
-		}()
+		go cn.conn.Close()
 	}
 }
 

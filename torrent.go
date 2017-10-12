@@ -1532,7 +1532,6 @@ func (t *Torrent) verifyPiece(piece int) {
 	}
 	if t.closed.IsSet() || t.pieceComplete(piece) {
 		t.updatePiecePriority(piece)
-		log.Println("early return", t.closed.IsSet(), t.pieceComplete(piece))
 		return
 	}
 	p.hashing = true

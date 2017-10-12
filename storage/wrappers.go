@@ -37,8 +37,9 @@ type Piece struct {
 }
 
 func (p Piece) WriteAt(b []byte, off int64) (n int, err error) {
-	if p.GetIsComplete() {
-		err = errors.New("piece completed")
+	c := p.Completion()
+	if c.Ok && c.Complete {
+		err = errors.New("piece already completed")
 		return
 	}
 	if off+int64(len(b)) > p.mip.Length() {

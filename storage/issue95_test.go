@@ -29,7 +29,7 @@ func testIssue95(t *testing.T, c ClientImpl) {
 	require.NoError(t, err)
 	t2p := t2.Piece(i2.Piece(0))
 	assert.NoError(t, t1.Close())
-	assert.NotPanics(t, func() { t2p.GetIsComplete() })
+	assert.NotPanics(t, func() { t2p.Completion() })
 }
 
 func TestIssue95File(t *testing.T) {

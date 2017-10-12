@@ -58,8 +58,8 @@ func (me *torrentStorage) Piece(mp metainfo.Piece) storage.PieceImpl {
 	return me
 }
 
-func (me *torrentStorage) GetIsComplete() bool {
-	return false
+func (me *torrentStorage) Completion() storage.Completion {
+	return storage.Completion{}
 }
 
 func (me *torrentStorage) MarkComplete() error {

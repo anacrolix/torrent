@@ -112,6 +112,8 @@ type Torrent struct {
 	pendingPieces bitmap.Bitmap
 	// A cache of completed piece indices.
 	completedPieces bitmap.Bitmap
+	// Pieces that need to be hashed.
+	piecesQueuedForHash bitmap.Bitmap
 
 	// A pool of piece priorities []int for assignment to new connections.
 	// These "inclinations" are used to give connections preference for
@@ -190,8 +192,8 @@ func (t *Torrent) pieceComplete(piece int) bool {
 	return t.completedPieces.Get(piece)
 }
 
-func (t *Torrent) pieceCompleteUncached(piece int) bool {
-	return t.pieces[piece].Storage().GetIsComplete()
+func (t *Torrent) pieceCompleteUncached(piece int) storage.Completion {
+	return t.pieces[piece].Storage().Completion()
 }
 
 // There's a connection to that address already.
@@ -332,13 +334,12 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	}
 	for i := range t.pieces {
 		t.updatePieceCompletion(i)
-		// t.pieces[i].QueuedForHash = true
+		p := &t.pieces[i]
+		if !p.storageCompletionOk {
+			log.Printf("piece %s completion unknown, queueing check", p)
+			t.queuePieceCheck(i)
+		}
 	}
-	// go func() {
-	// 	for i := range t.pieces {
-	// 		t.verifyPiece(i)
-	// 	}
-	// }()
 	return nil
 }
 
@@ -392,7 +393,7 @@ func (t *Torrent) pieceState(index int) (ret PieceState) {
 	if t.pieceComplete(index) {
 		ret.Complete = true
 	}
-	if p.queuedForHash || p.hashing {
+	if p.queuedForHash() || p.hashing {
 		ret.Checking = true
 	}
 	if !ret.Complete && t.piecePartiallyDownloaded(index) {
@@ -738,7 +739,7 @@ func (t *Torrent) wantPieceIndex(index int) bool {
 		return false
 	}
 	p := &t.pieces[index]
-	if p.queuedForHash {
+	if p.queuedForHash() {
 		return false
 	}
 	if p.hashing {
@@ -1005,8 +1006,10 @@ func (t *Torrent) putPieceInclination(pi []int) {
 
 func (t *Torrent) updatePieceCompletion(piece int) {
 	pcu := t.pieceCompleteUncached(piece)
-	changed := t.completedPieces.Get(piece) != pcu
-	t.completedPieces.Set(piece, pcu)
+	p := &t.pieces[piece]
+	changed := t.completedPieces.Get(piece) != pcu.Complete || p.storageCompletionOk != pcu.Ok
+	p.storageCompletionOk = pcu.Ok
+	t.completedPieces.Set(piece, pcu.Complete)
 	if changed {
 		t.pieceCompletionChanged(piece)
 	}
@@ -1517,12 +1520,19 @@ func (t *Torrent) verifyPiece(piece int) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	p := &t.pieces[piece]
+	defer func() {
+		p.numVerifies++
+		cl.event.Broadcast()
+	}()
 	for p.hashing || t.storage == nil {
 		cl.event.Wait()
 	}
-	p.queuedForHash = false
+	if !p.t.piecesQueuedForHash.Remove(piece) {
+		panic("piece was not queued")
+	}
 	if t.closed.IsSet() || t.pieceComplete(piece) {
 		t.updatePiecePriority(piece)
+		log.Println("early return", t.closed.IsSet(), t.pieceComplete(piece))
 		return
 	}
 	p.hashing = true
@@ -1530,7 +1540,6 @@ func (t *Torrent) verifyPiece(piece int) {
 	cl.mu.Unlock()
 	sum := t.hashPiece(piece)
 	cl.mu.Lock()
-	p.numVerifies++
 	p.hashing = false
 	t.pieceHashed(piece, sum == p.hash)
 }
@@ -1557,10 +1566,10 @@ func (t *Torrent) connsAsSlice() (ret []*connection) {
 // Currently doesn't really queue, but should in the future.
 func (t *Torrent) queuePieceCheck(pieceIndex int) {
 	piece := &t.pieces[pieceIndex]
-	if piece.queuedForHash {
+	if piece.queuedForHash() {
 		return
 	}
-	piece.queuedForHash = true
+	t.piecesQueuedForHash.Add(pieceIndex)
 	t.publishPieceChange(pieceIndex)
 	go t.verifyPiece(pieceIndex)
 }

@@ -537,12 +537,14 @@ type badStoragePiece struct {
 	p metainfo.Piece
 }
 
+var _ storage.PieceImpl = badStoragePiece{}
+
 func (p badStoragePiece) WriteAt(b []byte, off int64) (int, error) {
 	return 0, nil
 }
 
-func (p badStoragePiece) GetIsComplete() bool {
-	return true
+func (p badStoragePiece) Completion() storage.Completion {
+	return storage.Completion{Complete: true, Ok: true}
 }
 
 func (p badStoragePiece) MarkComplete() error {

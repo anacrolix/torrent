@@ -86,7 +86,7 @@ func (fts *fileTorrentImpl) Piece(p metainfo.Piece) PieceImpl {
 	// Create a view onto the file-based torrent storage.
 	_io := fileTorrentImplIO{fts}
 	// Return the appropriate segments of this.
-	return &fileStoragePiece{
+	return &filePieceImpl{
 		fts,
 		p,
 		missinggo.NewSectionWriter(_io, p.Offset(), p.Length()),

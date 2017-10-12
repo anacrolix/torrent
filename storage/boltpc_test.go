@@ -24,17 +24,17 @@ func TestBoltPieceCompletion(t *testing.T) {
 
 	b, err := pc.Get(pk)
 	require.NoError(t, err)
-	assert.False(t, b)
+	assert.False(t, b.Ok)
 
 	require.NoError(t, pc.Set(pk, false))
 
 	b, err = pc.Get(pk)
 	require.NoError(t, err)
-	assert.False(t, b)
+	assert.Equal(t, Completion{Complete: false, Ok: true}, b)
 
 	require.NoError(t, pc.Set(pk, true))
 
 	b, err = pc.Get(pk)
 	require.NoError(t, err)
-	assert.True(t, b)
+	assert.Equal(t, Completion{Complete: true, Ok: true}, b)
 }

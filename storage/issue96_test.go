@@ -27,7 +27,7 @@ func testMarkedCompleteMissingOnRead(t *testing.T, csf func(string) ClientImpl) 
 	n, err := p.ReadAt(make([]byte, 1), 0)
 	require.Error(t, err)
 	require.EqualValues(t, 0, n)
-	require.False(t, p.GetIsComplete())
+	require.False(t, p.Completion().Complete)
 }
 
 func TestMarkedCompleteMissingOnReadFile(t *testing.T) {

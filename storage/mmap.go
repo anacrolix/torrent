@@ -76,9 +76,9 @@ func (me mmapStoragePiece) pieceKey() metainfo.PieceKey {
 	return metainfo.PieceKey{me.ih, me.p.Index()}
 }
 
-func (sp mmapStoragePiece) GetIsComplete() (ret bool) {
-	ret, _ = sp.pc.Get(sp.pieceKey())
-	return
+func (sp mmapStoragePiece) Completion() Completion {
+	c, _ := sp.pc.Get(sp.pieceKey())
+	return c
 }
 
 func (sp mmapStoragePiece) MarkComplete() error {

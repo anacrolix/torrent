@@ -1,6 +1,8 @@
 package torrent
 
 import (
+	"fmt"
+	"log"
 	"sync"
 
 	"github.com/anacrolix/missinggo/bitmap"
@@ -38,10 +40,10 @@ type Piece struct {
 	// length can be determined by the request chunkSize in use.
 	dirtyChunks bitmap.Bitmap
 
-	hashing       bool
-	queuedForHash bool
-	everHashed    bool
-	numVerifies   int64
+	hashing             bool
+	everHashed          bool
+	numVerifies         int64
+	storageCompletionOk bool
 
 	publicPieceState PieceState
 	priority         piecePriority
@@ -49,6 +51,10 @@ type Piece struct {
 	pendingWritesMutex sync.Mutex
 	pendingWrites      int
 	noPendingWrites    sync.Cond
+}
+
+func (p *Piece) String() string {
+	return fmt.Sprintf("%s/%d", p.t.infoHash.HexString(), p.index)
 }
 
 func (p *Piece) Info() metainfo.Piece {
@@ -168,8 +174,15 @@ func (p *Piece) VerifyData() {
 	if p.hashing {
 		target++
 	}
+	log.Printf("target: %d", target)
 	p.t.queuePieceCheck(p.index)
 	for p.numVerifies < target {
+		log.Printf("got %d verifies", p.numVerifies)
 		p.t.cl.event.Wait()
 	}
+	log.Print("done")
+}
+
+func (p *Piece) queuedForHash() bool {
+	return p.t.piecesQueuedForHash.Get(p.index)
 }

@@ -112,7 +112,9 @@ func TestTorrentInitialState(t *testing.T) {
 	tor.storageOpener = storage.NewClient(storage.NewFileWithCompletion("/dev/null", storage.NewMapPieceCompletion()))
 	// Needed to lock for asynchronous piece verification.
 	tor.cl = new(Client)
+	tor.cl.mu.Lock()
 	err := tor.setInfoBytes(mi.InfoBytes)
+	tor.cl.mu.Unlock()
 	require.NoError(t, err)
 	require.Len(t, tor.pieces, 3)
 	tor.pendAllChunkSpecs(0)

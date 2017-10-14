@@ -47,6 +47,7 @@ func main() {
 			"TotalLength":  info.TotalLength(),
 			"Announce":     metainfo.Announce,
 			"AnnounceList": metainfo.AnnounceList,
+			"UrlList":      metainfo.UrlList,
 		}
 		if flags.Files {
 			d["Files"] = info.Files

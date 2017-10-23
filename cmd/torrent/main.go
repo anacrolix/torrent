@@ -89,6 +89,18 @@ func addTorrents(client *torrent.Client) {
 				t, _ := client.AddTorrentInfoHash(metainfo.NewHashFromHex(strings.TrimPrefix(arg, "infohash:")))
 				return t
 			} else {
+				if len(arg) == 40 {
+					info := "magnet:?xt=urn:btih:" + arg
+					log.Printf("hash to %s", info)
+					t, err := client.AddMagnet(info)
+					if err != nil {
+						log.Printf("error adding magnet: %s", err)
+					} else {
+						return t
+					}
+					
+				}
+				
 				metaInfo, err := metainfo.LoadFromFile(arg)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "error loading torrent file %q: %s\n", arg, err)

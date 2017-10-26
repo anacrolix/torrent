@@ -70,6 +70,20 @@ func TestDecoderConsecutive(t *testing.T) {
 	require.Equal(t, io.EOF, err)
 }
 
+func TestDecoderConsecutiveDicts(t *testing.T) {
+	bb := bytes.NewBufferString("d4:herp4:derped3:wat1:ke17:oh baby a triple!")
+	d := NewDecoder(bb)
+	var m map[string]interface{}
+	require.NoError(t, d.Decode(&m))
+	assert.Len(t, m, 1)
+	assert.Equal(t, "derp", m["herp"])
+	require.NoError(t, d.Decode(&m))
+	assert.Equal(t, "k", m["wat"])
+	var s string
+	require.NoError(t, d.Decode(&s))
+	assert.Equal(t, "oh baby a triple!", s)
+}
+
 func check_error(t *testing.T, err error) {
 	if err != nil {
 		t.Error(err)

@@ -1004,6 +1004,11 @@ func (t *Torrent) putPieceInclination(pi []int) {
 	pieceInclinationsPut.Add(1)
 }
 
+// Trigger updatePieceCompletion
+func (t *Torrent) UpdatePieceCompletion(piece int) {
+	t.updatePieceCompletion(piece)
+}
+
 func (t *Torrent) updatePieceCompletion(piece int) {
 	pcu := t.pieceCompleteUncached(piece)
 	p := &t.pieces[piece]

@@ -2,12 +2,15 @@ package tracker
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/anacrolix/missinggo/httptoo"
 

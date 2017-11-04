@@ -548,16 +548,6 @@ func ReceiveHandshake(rw io.ReadWriter, skeys SecretKeyIter, selectCrypto func(u
 	return h.Do()
 }
 
-func sliceIter(skeys [][]byte) SecretKeyIter {
-	return func(callback func([]byte) bool) {
-		for _, sk := range skeys {
-			if !callback(sk) {
-				break
-			}
-		}
-	}
-}
-
 // A function that given a function, calls it with secret keys until it
 // returns false or exhausted.
 type SecretKeyIter func(callback func(skey []byte) (more bool))

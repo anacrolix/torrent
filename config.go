@@ -32,7 +32,7 @@ type Config struct {
 	// peer.
 	Seed bool `long:"seed"`
 	// Events are data bytes sent in pieces. The burst must be large enough to
-	// fit a whole chunk.
+	// fit a whole chunk, which is usually 16 KiB.
 	UploadRateLimiter *rate.Limiter
 	// The events are bytes read from connections. The burst must be bigger
 	// than the largest Read performed on a Conn minus one. This is likely to

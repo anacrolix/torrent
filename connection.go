@@ -1088,7 +1088,7 @@ another:
 		for r := range c.PeerRequests {
 			res := cl.uploadLimit.ReserveN(time.Now(), int(r.Length))
 			if !res.OK() {
-				panic(res)
+				panic(fmt.Sprintf("upload rate limiter burst size < %d", r.Length))
 			}
 			delay := res.Delay()
 			if delay > 0 {

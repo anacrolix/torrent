@@ -1153,6 +1153,7 @@ func (c *connection) deleteRequest(r request) bool {
 	delete(c.requests, r)
 	return true
 }
+
 func (c *connection) tickleWriter() {
 	c.writerCond.Broadcast()
 }

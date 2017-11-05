@@ -336,7 +336,7 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 		t.updatePieceCompletion(i)
 		p := &t.pieces[i]
 		if !p.storageCompletionOk {
-			log.Printf("piece %s completion unknown, queueing check", p)
+			// log.Printf("piece %s completion unknown, queueing check", p)
 			t.queuePieceCheck(i)
 		}
 	}

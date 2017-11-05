@@ -72,16 +72,28 @@ func TestDecoderConsecutive(t *testing.T) {
 
 func TestDecoderConsecutiveDicts(t *testing.T) {
 	bb := bytes.NewBufferString("d4:herp4:derped3:wat1:ke17:oh baby a triple!")
+
 	d := NewDecoder(bb)
+	assert.EqualValues(t, "d4:herp4:derped3:wat1:ke17:oh baby a triple!", bb.Bytes())
+	assert.EqualValues(t, 0, d.offset)
+
 	var m map[string]interface{}
+
 	require.NoError(t, d.Decode(&m))
 	assert.Len(t, m, 1)
 	assert.Equal(t, "derp", m["herp"])
+	assert.Equal(t, "d3:wat1:ke17:oh baby a triple!", bb.String())
+	assert.EqualValues(t, 14, d.offset)
+
 	require.NoError(t, d.Decode(&m))
 	assert.Equal(t, "k", m["wat"])
+	assert.Equal(t, "17:oh baby a triple!", bb.String())
+	assert.EqualValues(t, 24, d.offset)
+
 	var s string
 	require.NoError(t, d.Decode(&s))
 	assert.Equal(t, "oh baby a triple!", s)
+	assert.EqualValues(t, 44, d.offset)
 }
 
 func check_error(t *testing.T, err error) {

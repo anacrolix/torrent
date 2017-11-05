@@ -129,7 +129,7 @@ func Unmarshal(data []byte, v interface{}) error {
 }
 
 func NewDecoder(r io.Reader) *Decoder {
-	return &Decoder{r: bufio.NewReader(r)}
+	return &Decoder{r: &scanner{r: r}}
 }
 
 func NewEncoder(w io.Writer) *Encoder {

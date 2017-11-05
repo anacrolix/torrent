@@ -1176,7 +1176,7 @@ func (t *Torrent) seeding() bool {
 	if !cl.config.Seed {
 		return false
 	}
-	if t.needData() {
+	if cl.config.DisableAggressiveUpload && t.needData() {
 		return false
 	}
 	return true

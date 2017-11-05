@@ -27,6 +27,8 @@ type Config struct {
 
 	// Never send chunks to peers.
 	NoUpload bool `long:"no-upload"`
+	// Disable uploading even when it isn't fair.
+	DisableAggressiveUpload bool `long:"disable-aggressive-upload"`
 	// Upload even after there's nothing in it for us. By default uploading is
 	// not altruistic, we'll upload slightly more than we download from each
 	// peer.

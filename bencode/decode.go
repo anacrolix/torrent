@@ -17,6 +17,7 @@ type Decoder struct {
 		io.ByteScanner
 		io.Reader
 	}
+	// Sum of bytes used to Decode values.
 	Offset int64
 	buf    bytes.Buffer
 	key    string

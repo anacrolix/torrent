@@ -17,7 +17,7 @@ type Decoder struct {
 		io.ByteScanner
 		io.Reader
 	}
-	offset int64
+	Offset int64
 	buf    bytes.Buffer
 	key    string
 }
@@ -38,7 +38,7 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 	}
 
 	if !d.parseValue(pv.Elem()) {
-		d.throwSyntaxError(d.offset-1, errors.New("unexpected 'e'"))
+		d.throwSyntaxError(d.Offset-1, errors.New("unexpected 'e'"))
 	}
 	return nil
 }
@@ -55,11 +55,11 @@ func checkForUnexpectedEOF(err error, offset int64) {
 func (d *Decoder) readByte() byte {
 	b, err := d.r.ReadByte()
 	if err != nil {
-		checkForUnexpectedEOF(err, d.offset)
+		checkForUnexpectedEOF(err, d.Offset)
 		panic(err)
 	}
 
-	d.offset++
+	d.Offset++
 	return b
 }
 
@@ -93,7 +93,7 @@ func (d *Decoder) throwSyntaxError(offset int64, err error) {
 
 // called when 'i' was consumed
 func (d *Decoder) parseInt(v reflect.Value) {
-	start := d.offset - 1
+	start := d.Offset - 1
 	d.readUntil('e')
 	if d.buf.Len() == 0 {
 		panic(&SyntaxError{
@@ -139,7 +139,7 @@ func (d *Decoder) parseInt(v reflect.Value) {
 }
 
 func (d *Decoder) parseString(v reflect.Value) {
-	start := d.offset - 1
+	start := d.Offset - 1
 
 	// read the string length first
 	d.readUntil(':')
@@ -148,11 +148,11 @@ func (d *Decoder) parseString(v reflect.Value) {
 
 	d.buf.Reset()
 	n, err := io.CopyN(&d.buf, d.r, length)
-	d.offset += n
+	d.Offset += n
 	if err != nil {
-		checkForUnexpectedEOF(err, d.offset)
+		checkForUnexpectedEOF(err, d.Offset)
 		panic(&SyntaxError{
-			Offset: d.offset,
+			Offset: d.Offset,
 			What:   errors.New("unexpected I/O error: " + err.Error()),
 		})
 	}
@@ -339,7 +339,7 @@ func (d *Decoder) readOneValue() bool {
 		d.r.UnreadByte()
 		return false
 	} else {
-		d.offset++
+		d.Offset++
 		d.buf.WriteByte(b)
 	}
 
@@ -359,22 +359,22 @@ func (d *Decoder) readOneValue() bool {
 			start := d.buf.Len() - 1
 			d.readUntil(':')
 			length, err := strconv.ParseInt(d.buf.String()[start:], 10, 64)
-			checkForIntParseError(err, d.offset-1)
+			checkForIntParseError(err, d.Offset-1)
 
 			d.buf.WriteString(":")
 			n, err := io.CopyN(&d.buf, d.r, length)
-			d.offset += n
+			d.Offset += n
 			if err != nil {
-				checkForUnexpectedEOF(err, d.offset)
+				checkForUnexpectedEOF(err, d.Offset)
 				panic(&SyntaxError{
-					Offset: d.offset,
+					Offset: d.Offset,
 					What:   errors.New("unexpected I/O error: " + err.Error()),
 				})
 			}
 			break
 		}
 
-		d.raiseUnknownValueType(b, d.offset-1)
+		d.raiseUnknownValueType(b, d.Offset-1)
 	}
 
 	return true
@@ -435,7 +435,7 @@ func (d *Decoder) parseValue(v reflect.Value) bool {
 	if err != nil {
 		panic(err)
 	}
-	d.offset++
+	d.Offset++
 
 	switch b {
 	case 'e':
@@ -455,7 +455,7 @@ func (d *Decoder) parseValue(v reflect.Value) bool {
 			break
 		}
 
-		d.raiseUnknownValueType(b, d.offset-1)
+		d.raiseUnknownValueType(b, d.Offset-1)
 	}
 
 	return true
@@ -474,7 +474,7 @@ func (d *Decoder) parseValueInterface() (interface{}, bool) {
 	if err != nil {
 		panic(err)
 	}
-	d.offset++
+	d.Offset++
 
 	switch b {
 	case 'e':
@@ -493,13 +493,13 @@ func (d *Decoder) parseValueInterface() (interface{}, bool) {
 			return d.parseStringInterface(), true
 		}
 
-		d.raiseUnknownValueType(b, d.offset-1)
+		d.raiseUnknownValueType(b, d.Offset-1)
 		panic("unreachable")
 	}
 }
 
 func (d *Decoder) parseIntInterface() (ret interface{}) {
-	start := d.offset - 1
+	start := d.Offset - 1
 	d.readUntil('e')
 	if d.buf.Len() == 0 {
 		panic(&SyntaxError{
@@ -529,7 +529,7 @@ func (d *Decoder) parseIntInterface() (ret interface{}) {
 }
 
 func (d *Decoder) parseStringInterface() interface{} {
-	start := d.offset - 1
+	start := d.Offset - 1
 
 	// read the string length first
 	d.readUntil(':')
@@ -538,11 +538,11 @@ func (d *Decoder) parseStringInterface() interface{} {
 
 	d.buf.Reset()
 	n, err := io.CopyN(&d.buf, d.r, length)
-	d.offset += n
+	d.Offset += n
 	if err != nil {
-		checkForUnexpectedEOF(err, d.offset)
+		checkForUnexpectedEOF(err, d.Offset)
 		panic(&SyntaxError{
-			Offset: d.offset,
+			Offset: d.Offset,
 			What:   errors.New("unexpected I/O error: " + err.Error()),
 		})
 	}
@@ -563,7 +563,7 @@ func (d *Decoder) parseDictInterface() interface{} {
 		key, ok := keyi.(string)
 		if !ok {
 			panic(&SyntaxError{
-				Offset: d.offset,
+				Offset: d.Offset,
 				What:   errors.New("non-string key in a dict"),
 			})
 		}

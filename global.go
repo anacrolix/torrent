@@ -30,7 +30,7 @@ const (
 	//
 	// Fast Extension ([7]|=0x04):
 	// http://bittorrent.org/beps/bep_0006.html.
-	// Disabled until AllowedFast is implemented.
+	// Disabled until AllowedFast is implemented. TODO
 	//
 	// DHT ([7]|=1):
 	// http://www.bittorrent.org/beps/bep_0005.html

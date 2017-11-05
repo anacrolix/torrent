@@ -410,6 +410,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			postedKeepalives.Add(1)
 		}
 		if buf.Len() == 0 {
+			// TODO: Minimize wakeups....
 			cn.writerCond.Wait()
 			continue
 		}

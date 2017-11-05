@@ -1476,6 +1476,7 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 }
 
 func (t *Torrent) cancelRequestsForPiece(piece int) {
+	// TODO: Make faster
 	for cn := range t.conns {
 		cn.tickleWriter()
 	}

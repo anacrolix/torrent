@@ -823,6 +823,15 @@ func (c *connection) mainReadLoop() error {
 				break
 			}
 			if len(c.PeerRequests) >= maxRequests {
+				// TODO: Should we drop them or Choke them instead?
+				break
+			}
+			if !t.havePiece(msg.Index.Int()) {
+				// This isn't necessarily them screwing up. We can drop pieces
+				// from our storage, and can't communicate this to peers
+				// except by reconnecting.
+				requestsReceivedForMissingPieces.Add(1)
+				err = errors.New("peer requested piece we don't have")
 				break
 			}
 			if c.PeerRequests == nil {

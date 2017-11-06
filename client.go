@@ -1152,6 +1152,8 @@ func (cl *Client) sendChunk(t *Torrent, c *connection, r request, msg func(pp.Me
 			panic("expected error")
 		}
 		return
+	} else if err == io.EOF {
+		err = nil
 	}
 	more = msg(pp.Message{
 		Type:  pp.Piece,

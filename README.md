@@ -27,6 +27,7 @@ There is a small example in the [package documentation](https://godoc.org/github
  * [Trickl - Torrent Client](https://play.google.com/store/apps/details?id=com.shwifty.tex)
  * [Confluence](https://github.com/anacrolix/confluence)
  * [Remote-Torrent](https://github.com/BruceWangNo1/remote-torrent)
+ * [Trickl Android Torrent Client](https://github.com/arranlomas/Trickl)
 
 ## Commands
 

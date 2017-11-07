@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"fmt"
-	"log"
 	"sync"
 
 	"github.com/anacrolix/missinggo/bitmap"
@@ -174,13 +173,13 @@ func (p *Piece) VerifyData() {
 	if p.hashing {
 		target++
 	}
-	log.Printf("target: %d", target)
+	// log.Printf("target: %d", target)
 	p.t.queuePieceCheck(p.index)
 	for p.numVerifies < target {
-		log.Printf("got %d verifies", p.numVerifies)
+		// log.Printf("got %d verifies", p.numVerifies)
 		p.t.cl.event.Wait()
 	}
-	log.Print("done")
+	// log.Print("done")
 }
 
 func (p *Piece) queuedForHash() bool {

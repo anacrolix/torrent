@@ -33,17 +33,11 @@ import (
 
 func TestingConfig() *Config {
 	return &Config{
-		ListenAddr: "localhost:0",
-		NoDHT:      true,
-		DataDir: func() string {
-			ret, err := ioutil.TempDir(tempDir, "")
-			if err != nil {
-				panic(err)
-			}
-			return ret
-		}(),
+		ListenAddr:      "localhost:0",
+		NoDHT:           true,
+		DataDir:         tempDir(),
 		DisableTrackers: true,
-		Debug:           true,
+		// Debug:           true,
 	}
 }
 
@@ -109,7 +103,7 @@ func TestTorrentInitialState(t *testing.T) {
 		pieceStateChanges: pubsub.NewPubSub(),
 	}
 	tor.chunkSize = 2
-	tor.storageOpener = storage.NewClient(storage.NewFileWithCompletion("/dev/null", storage.NewMapPieceCompletion()))
+	tor.storageOpener = storage.NewClient(storage.NewFileWithCompletion(tempDir(), storage.NewMapPieceCompletion()))
 	// Needed to lock for asynchronous piece verification.
 	tor.cl = new(Client)
 	tor.cl.mu.Lock()

@@ -997,7 +997,7 @@ func (t *Torrent) getConnPieceInclination() []int {
 		return rand.Perm(t.numPieces())
 	}
 	pieceInclinationsReused.Add(1)
-	return _ret.([]int)
+	return *_ret.(*[]int)
 }
 
 func (t *Torrent) putPieceInclination(pi []int) {

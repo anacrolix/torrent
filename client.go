@@ -836,25 +836,13 @@ type deadlineReader struct {
 	r  io.Reader
 }
 
-func (r deadlineReader) Read(b []byte) (n int, err error) {
+func (r deadlineReader) Read(b []byte) (int, error) {
 	// Keep-alives should be received every 2 mins. Give a bit of gracetime.
-	err = r.nc.SetReadDeadline(time.Now().Add(150 * time.Second))
+	err := r.nc.SetReadDeadline(time.Now().Add(150 * time.Second))
 	if err != nil {
-		err = fmt.Errorf("error setting read deadline: %s", err)
+		return 0, fmt.Errorf("error setting read deadline: %s", err)
 	}
-	n, err = r.r.Read(b)
-	// Convert common errors into io.EOF.
-	// if err != nil {
-	// 	if opError, ok := err.(*net.OpError); ok && opError.Op == "read" && opError.Err == syscall.ECONNRESET {
-	// 		err = io.EOF
-	// 	} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-	// 		if n != 0 {
-	// 			panic(n)
-	// 		}
-	// 		err = io.EOF
-	// 	}
-	// }
-	return
+	return r.r.Read(b)
 }
 
 func handleEncryption(

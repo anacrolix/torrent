@@ -111,7 +111,7 @@ func (me *trackerScraper) Run() {
 		me.lastAnnounce = ar
 		me.t.cl.mu.Unlock()
 
-		intervalChan := time.After(ar.Completed.Add(ar.Interval).Sub(time.Now()))
+		intervalChan := time.After(time.Until(ar.Completed.Add(ar.Interval)))
 
 		select {
 		case <-me.t.closed.LockedChan(&me.t.cl.mu):

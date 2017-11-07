@@ -145,7 +145,7 @@ func eventAgeString(t time.Time) string {
 	if t.IsZero() {
 		return "never"
 	}
-	return fmt.Sprintf("%.2fs ago", time.Now().Sub(t).Seconds())
+	return fmt.Sprintf("%.2fs ago", time.Since(t).Seconds())
 }
 
 func (cn *connection) connectionFlags() (ret string) {
@@ -871,7 +871,7 @@ func (c *connection) mainReadLoop() error {
 		case pp.Piece:
 			c.receiveChunk(&msg)
 			if len(msg.Piece) == int(t.chunkSize) {
-				t.chunkPool.Put(msg.Piece)
+				t.chunkPool.Put(&msg.Piece)
 			}
 		case pp.Extended:
 			switch msg.ExtendedID {
@@ -1043,9 +1043,9 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 
 	c.UsefulChunksReceived++
 	c.lastUsefulChunkReceived = time.Now()
-	if t.fastestConn != c {
-		// log.Printf("setting fastest connection %p", c)
-	}
+	// if t.fastestConn != c {
+	// log.Printf("setting fastest connection %p", c)
+	// }
 	t.fastestConn = c
 
 	// Need to record that it hasn't been written yet, before we attempt to do
@@ -1087,7 +1087,6 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 
 	cl.event.Broadcast()
 	t.publishPieceChange(int(req.Index))
-	return
 }
 
 // Also handles choking and unchoking of the remote peer.

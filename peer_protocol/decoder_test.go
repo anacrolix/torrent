@@ -48,6 +48,6 @@ func BenchmarkDecodePieces(t *testing.B) {
 		var msg Message
 		require.NoError(t, d.Decode(&msg))
 		// WWJD
-		d.Pool.Put(msg.Piece)
+		d.Pool.Put(&msg.Piece)
 	}
 }

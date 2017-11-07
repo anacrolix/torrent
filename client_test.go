@@ -423,7 +423,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 }
 
 func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
-	pos, err := r.Seek(0, os.SEEK_SET)
+	pos, err := r.Seek(0, io.SeekStart)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 0, pos)
 	_greeting, err := ioutil.ReadAll(r)
@@ -573,6 +573,7 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 		},
 	}
 	b, err := bencode.Marshal(info)
+	require.NoError(t, err)
 	tt, new, err := cl.AddTorrentSpec(&TorrentSpec{
 		InfoBytes: b,
 		InfoHash:  metainfo.HashBytes(b),
@@ -634,12 +635,12 @@ func TestResponsive(t *testing.T) {
 	reader.SetReadahead(0)
 	reader.SetResponsive()
 	b := make([]byte, 2)
-	_, err = reader.Seek(3, os.SEEK_SET)
+	_, err = reader.Seek(3, io.SeekStart)
 	require.NoError(t, err)
 	_, err = io.ReadFull(reader, b)
 	assert.Nil(t, err)
 	assert.EqualValues(t, "lo", string(b))
-	_, err = reader.Seek(11, os.SEEK_SET)
+	_, err = reader.Seek(11, io.SeekStart)
 	require.NoError(t, err)
 	n, err := io.ReadFull(reader, b)
 	assert.Nil(t, err)
@@ -677,13 +678,13 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	reader.SetReadahead(0)
 	reader.SetResponsive()
 	b := make([]byte, 2)
-	_, err = reader.Seek(3, os.SEEK_SET)
+	_, err = reader.Seek(3, io.SeekStart)
 	require.NoError(t, err)
 	_, err = io.ReadFull(reader, b)
 	assert.Nil(t, err)
 	assert.EqualValues(t, "lo", string(b))
 	go leecherTorrent.Drop()
-	_, err = reader.Seek(11, os.SEEK_SET)
+	_, err = reader.Seek(11, io.SeekStart)
 	require.NoError(t, err)
 	n, err := reader.Read(b)
 	assert.EqualError(t, err, "torrent closed")

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"log"
-	"os"
 	"sync"
 
 	"github.com/anacrolix/missinggo"
@@ -236,11 +235,11 @@ func (r *Reader) Seek(off int64, whence int) (ret int64, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	switch whence {
-	case os.SEEK_SET:
+	case io.SeekStart:
 		r.pos = off
-	case os.SEEK_CUR:
+	case io.SeekCurrent:
 		r.pos += off
-	case os.SEEK_END:
+	case io.SeekEnd:
 		r.pos = r.t.info.TotalLength() + off
 	default:
 		err = errors.New("bad whence")

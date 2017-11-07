@@ -176,7 +176,8 @@ func (t *Torrent) setChunkSize(size pp.Integer) {
 	t.chunkSize = size
 	t.chunkPool = &sync.Pool{
 		New: func() interface{} {
-			return make([]byte, size)
+			b := make([]byte, size)
+			return &b
 		},
 	}
 }
@@ -1000,7 +1001,7 @@ func (t *Torrent) getConnPieceInclination() []int {
 }
 
 func (t *Torrent) putPieceInclination(pi []int) {
-	t.connPieceInclinationPool.Put(pi)
+	t.connPieceInclinationPool.Put(&pi)
 	pieceInclinationsPut.Add(1)
 }
 

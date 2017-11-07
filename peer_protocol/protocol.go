@@ -211,7 +211,7 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 			break
 		}
 		//msg.Piece, err = ioutil.ReadAll(r)
-		b := d.Pool.Get().([]byte)
+		b := *d.Pool.Get().(*[]byte)
 		n, err := io.ReadFull(r, b)
 		if err != nil {
 			if err != io.ErrUnexpectedEOF || n != int(length-9) {

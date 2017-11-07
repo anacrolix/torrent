@@ -28,7 +28,9 @@ func TestShortFile(t *testing.T) {
 	ts, err := s.OpenTorrent(info, metainfo.Hash{})
 	assert.NoError(t, err)
 	f, err := os.Create(filepath.Join(td, "a"))
+	require.NoError(t, err)
 	err = f.Truncate(1)
+	require.NoError(t, err)
 	f.Close()
 	var buf bytes.Buffer
 	p := info.Piece(0)

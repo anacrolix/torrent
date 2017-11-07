@@ -3,12 +3,10 @@ package iplist
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"net"
 	"strings"
 	"testing"
 
-	"github.com/anacrolix/missinggo"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,27 +70,6 @@ func BenchmarkParseP2pBlocklist(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		sampleRanges(b)
 	}
-}
-
-func connRemoteAddrIP(network, laddr string, dialHost string) net.IP {
-	l, err := net.Listen(network, laddr)
-	if err != nil {
-		panic(err)
-	}
-	go func() {
-		c, err := net.Dial(network, net.JoinHostPort(dialHost, fmt.Sprintf("%d", missinggo.AddrPort(l.Addr()))))
-		if err != nil {
-			panic(err)
-		}
-		defer c.Close()
-	}()
-	c, err := l.Accept()
-	if err != nil {
-		panic(err)
-	}
-	defer c.Close()
-	ret := missinggo.AddrIP(c.RemoteAddr())
-	return ret
 }
 
 func lookupOk(r Range, ok bool) bool {

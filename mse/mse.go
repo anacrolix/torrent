@@ -238,7 +238,6 @@ func (h *handshake) finishWriting() {
 		h.writerCond.Wait()
 	}
 	h.writerMu.Unlock()
-	return
 }
 
 func (h *handshake) writer() {

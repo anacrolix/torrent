@@ -214,7 +214,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	resp := &fuse.ReadResponse{
 		Data: make([]byte, size),
 	}
-	h, err := node.(fusefs.NodeOpener).Open(nil, nil, nil)
+	h, err := node.(fusefs.NodeOpener).Open(context.TODO(), nil, nil)
 	require.NoError(t, err)
 	h.(fusefs.HandleReader).Read(netContext.Background(), &fuse.ReadRequest{
 		Size: int(size),

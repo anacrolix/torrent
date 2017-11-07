@@ -52,10 +52,6 @@ type node struct {
 	t        *torrent.Torrent
 }
 
-func (n *node) fsPath() string {
-	return "/" + n.metadata.Name + "/" + n.path
-}
-
 type dirNode struct {
 	node
 }

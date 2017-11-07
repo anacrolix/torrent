@@ -3,7 +3,6 @@ package torrentfs
 import (
 	"context"
 	"io"
-	"os"
 
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/torrent"
@@ -27,7 +26,7 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 	if req.Dir {
 		panic("read on directory")
 	}
-	pos, err := me.r.Seek(me.fn.TorrentOffset+req.Offset, os.SEEK_SET)
+	pos, err := me.r.Seek(me.fn.TorrentOffset+req.Offset, io.SeekStart)
 	if err != nil {
 		panic(err)
 	}

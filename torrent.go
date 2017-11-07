@@ -223,7 +223,7 @@ func (t *Torrent) unclosedConnsAsSlice() (ret []*connection) {
 func (t *Torrent) addPeer(p Peer) {
 	cl := t.cl
 	cl.openNewConns(t)
-	if len(t.peers) >= torrentPeersHighWater {
+	if len(t.peers) >= cl.config.TorrentPeersHighWater {
 		return
 	}
 	key := peersKey{string(p.IP), p.Port}
@@ -1151,7 +1151,7 @@ func (t *Torrent) wantPeers() bool {
 	if t.closed.IsSet() {
 		return false
 	}
-	if len(t.peers) > torrentPeersLowWater {
+	if len(t.peers) > t.cl.config.TorrentPeersLowWater {
 		return false
 	}
 	return t.needData() || t.seeding()
@@ -1261,7 +1261,7 @@ func (t *Torrent) consumeDHTAnnounce(pvs <-chan dht.PeersValues) {
 			t.addPeers(addPeers)
 			numPeers := len(t.peers)
 			cl.mu.Unlock()
-			if numPeers >= torrentPeersHighWater {
+			if numPeers >= cl.config.TorrentPeersHighWater {
 				return
 			}
 		case <-t.closed.LockedChan(&cl.mu):

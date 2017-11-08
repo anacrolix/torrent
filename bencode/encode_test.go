@@ -1,12 +1,12 @@
 package bencode
 
 import (
+	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
-import "bytes"
-import "fmt"
 
 type random_encode_test struct {
 	value    interface{}

@@ -15,6 +15,14 @@ import (
 	"github.com/anacrolix/torrent/mse"
 )
 
+type ExtensionBit uint
+
+const (
+	ExtensionBitDHT      = 0  // http://www.bittorrent.org/beps/bep_0005.html
+	ExtensionBitExtended = 20 // http://www.bittorrent.org/beps/bep_0010.html
+	ExtensionBitFast     = 2  // http://www.bittorrent.org/beps/bep_0006.html
+)
+
 func handshakeWriter(w io.Writer, bb <-chan []byte, done chan<- error) {
 	var err error
 	for b := range bb {
@@ -31,16 +39,24 @@ type (
 	peerID             [20]byte
 )
 
-func (pex *peerExtensionBytes) SupportsExtended() bool {
-	return pex[5]&0x10 != 0
+func (pex peerExtensionBytes) SupportsExtended() bool {
+	return pex.GetBit(ExtensionBitExtended)
 }
 
-func (pex *peerExtensionBytes) SupportsDHT() bool {
-	return pex[7]&0x01 != 0
+func (pex peerExtensionBytes) SupportsDHT() bool {
+	return pex.GetBit(ExtensionBitDHT)
 }
 
-func (pex *peerExtensionBytes) SupportsFast() bool {
-	return pex[7]&0x04 != 0
+func (pex peerExtensionBytes) SupportsFast() bool {
+	return pex.GetBit(ExtensionBitFast)
+}
+
+func (pex *peerExtensionBytes) SetBit(bit ExtensionBit) {
+	pex[7-bit/8] |= 1 << bit % 8
+}
+
+func (pex peerExtensionBytes) GetBit(bit ExtensionBit) bool {
+	return pex[7-bit/8]&(1<<(bit%8)) != 0
 }
 
 type handshakeResult struct {

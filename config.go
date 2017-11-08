@@ -74,7 +74,7 @@ type Config struct {
 	IPBlocklist iplist.Ranger
 	DisableIPv6 bool `long:"disable-ipv6"`
 	// Perform logging and any other behaviour that will help debug.
-	Debug bool `help:"enable debug logging"`
+	Debug bool `help:"enable debugging"`
 
 	// HTTP client used to query the tracker endpoint. Default is DefaultHTTPClient
 	HTTP *http.Client

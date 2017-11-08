@@ -92,6 +92,7 @@ type Torrent struct {
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
 	displayName string
+
 	// The bencoded bytes of the info dict. This is actively manipulated if
 	// the info bytes aren't initially available, and we try to fetch them
 	// from peers.
@@ -99,6 +100,7 @@ type Torrent struct {
 	// Each element corresponds to the 16KiB metadata pieces. If true, we have
 	// received that piece.
 	metadataCompletedChunks []bool
+	metadataChanged         sync.Cond
 
 	// Set when .Info is obtained.
 	gotMetainfo missinggo.Event
@@ -373,6 +375,7 @@ func (t *Torrent) setMetadataSize(bytes int64) (err error) {
 	}
 	t.metadataBytes = make([]byte, bytes)
 	t.metadataCompletedChunks = make([]bool, (bytes+(1<<14)-1)/(1<<14))
+	t.metadataChanged.Broadcast()
 	for c := range t.conns {
 		c.requestPendingMetadata()
 	}
@@ -545,7 +548,13 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 		Comment:      "dynamic metainfo from client",
 		CreatedBy:    "go.torrent",
 		AnnounceList: t.metainfo.UpvertedAnnounceList(),
-		InfoBytes:    t.metadataBytes,
+		InfoBytes: func() []byte {
+			if t.haveInfo() {
+				return t.metadataBytes
+			} else {
+				return nil
+			}
+		}(),
 	}
 }
 

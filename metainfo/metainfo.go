@@ -9,7 +9,7 @@ import (
 )
 
 type MetaInfo struct {
-	InfoBytes    bencode.Bytes `bencode:"info"`
+	InfoBytes    bencode.Bytes `bencode:"info,omitempty"`
 	Announce     string        `bencode:"announce,omitempty"`
 	AnnounceList AnnounceList  `bencode:"announce-list,omitempty"`
 	Nodes        []Node        `bencode:"nodes,omitempty"`

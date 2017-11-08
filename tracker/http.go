@@ -2,15 +2,12 @@ package tracker
 
 import (
 	"bytes"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 
 	"github.com/anacrolix/missinggo/httptoo"
 
@@ -25,17 +22,6 @@ type httpResponse struct {
 	Complete      int32       `bencode:"complete"`
 	Incomplete    int32       `bencode:"incomplete"`
 	Peers         interface{} `bencode:"peers"`
-}
-
-var netClient = &http.Client{
-	Timeout: time.Second * 15,
-	Transport: &http.Transport{
-		Dial: (&net.Dialer{
-			Timeout: 15 * time.Second,
-		}).Dial,
-		TLSHandshakeTimeout: 15 * time.Second,
-		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-	},
 }
 
 func (r *httpResponse) UnmarshalPeers() (ret []Peer, err error) {
@@ -87,12 +73,12 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest) {
 	_url.RawQuery = q.Encode()
 }
 
-func announceHTTP(ar *AnnounceRequest, _url *url.URL, host string) (ret AnnounceResponse, err error) {
+func announceHTTP(cl *http.Client, ar *AnnounceRequest, _url *url.URL, host string) (ret AnnounceResponse, err error) {
 	_url = httptoo.CopyURL(_url)
 	setAnnounceParams(_url, ar)
 	req, err := http.NewRequest("GET", _url.String(), nil)
 	req.Host = host
-	resp, err := netClient.Do(req)
+	resp, err := cl.Do(req)
 	if err != nil {
 		return
 	}

@@ -230,6 +230,10 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 			},
 		}
 	}
+	if cfg == nil {
+		cfg = &Config{}
+	}
+	cfg.setDefaults()
 
 	defer func() {
 		if err != nil {
@@ -237,7 +241,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		}
 	}()
 	cl = &Client{
-		halfOpenLimit:     defaultHalfOpenConnsPerTorrent,
+		halfOpenLimit:     cfg.HalfOpenConnsPerTorrent,
 		config:            *cfg,
 		dopplegangerAddrs: make(map[string]struct{}),
 		torrents:          make(map[metainfo.Hash]*Torrent),
@@ -278,7 +282,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	if cfg.PeerID != "" {
 		missinggo.CopyExact(&cl.peerID, cfg.PeerID)
 	} else {
-		o := copy(cl.peerID[:], bep20)
+		o := copy(cl.peerID[:], cfg.Bep20)
 		_, err = rand.Read(cl.peerID[o:])
 		if err != nil {
 			panic("error generating peer id")
@@ -484,7 +488,7 @@ func countDialResult(err error) {
 	}
 }
 
-func reducedDialTimeout(max time.Duration, halfOpenLimit int, pendingPeers int) (ret time.Duration) {
+func reducedDialTimeout(minDialTimeout, max time.Duration, halfOpenLimit int, pendingPeers int) (ret time.Duration) {
 	ret = max / time.Duration((pendingPeers+halfOpenLimit)/halfOpenLimit)
 	if ret < minDialTimeout {
 		ret = minDialTimeout
@@ -602,7 +606,7 @@ func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torr
 	c = cl.newConnection(nc)
 	c.headerEncrypted = encryptHeader
 	c.uTP = utp
-	ctx, cancel := context.WithTimeout(ctx, handshakesTimeout)
+	ctx, cancel := context.WithTimeout(ctx, cl.config.HandshakesTimeout)
 	defer cancel()
 	dl, ok := ctx.Deadline()
 	if !ok {
@@ -806,7 +810,7 @@ func (cl *Client) runInitiatedHandshookConn(c *connection, t *Torrent) {
 }
 
 func (cl *Client) runReceivedConn(c *connection) {
-	err := c.conn.SetDeadline(time.Now().Add(handshakesTimeout))
+	err := c.conn.SetDeadline(time.Now().Add(cl.config.HandshakesTimeout))
 	if err != nil {
 		panic(err)
 	}
@@ -863,7 +867,7 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 						}
 						return
 					}(),
-					"v": extendedHandshakeClientVersion,
+					"v": cl.config.ExtendedHandshakeClientVersion,
 					// No upload queue is implemented yet.
 					"reqq": 64,
 				}
@@ -1021,13 +1025,13 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		cl:       cl,
 		infoHash: ih,
 		peers:    make(map[peersKey]Peer),
-		conns:    make(map[*connection]struct{}, 2*defaultEstablishedConnsPerTorrent),
+		conns:    make(map[*connection]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
 
 		halfOpen:          make(map[string]Peer),
 		pieceStateChanges: pubsub.NewPubSub(),
 
 		storageOpener:       storageClient,
-		maxEstablishedConns: defaultEstablishedConnsPerTorrent,
+		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
 
 		networkingEnabled: true,
 		requestStrategy:   2,

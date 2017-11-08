@@ -1031,6 +1031,9 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 
 		networkingEnabled: true,
 		requestStrategy:   2,
+		metadataChanged: sync.Cond{
+			L: &cl.mu,
+		},
 	}
 	t.setChunkSize(defaultChunkSize)
 	return

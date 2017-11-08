@@ -892,32 +892,29 @@ func (c *connection) mainReadLoop() error {
 				if v, ok := d["v"]; ok {
 					c.PeerClientName = v.(string)
 				}
-				m, ok := d["m"]
-				if !ok {
-					err = errors.New("handshake missing m item")
-					break
-				}
-				mTyped, ok := m.(map[string]interface{})
-				if !ok {
-					err = errors.New("handshake m value is not dict")
-					break
-				}
-				if c.PeerExtensionIDs == nil {
-					c.PeerExtensionIDs = make(map[string]byte, len(mTyped))
-				}
-				for name, v := range mTyped {
-					id, ok := v.(int64)
+				if m, ok := d["m"]; ok {
+					mTyped, ok := m.(map[string]interface{})
 					if !ok {
-						log.Printf("bad handshake m item extension ID type: %T", v)
-						continue
+						err = errors.New("handshake m value is not dict")
+						break
 					}
-					if id == 0 {
-						delete(c.PeerExtensionIDs, name)
-					} else {
-						if c.PeerExtensionIDs[name] == 0 {
-							supportedExtensionMessages.Add(name, 1)
+					if c.PeerExtensionIDs == nil {
+						c.PeerExtensionIDs = make(map[string]byte, len(mTyped))
+					}
+					for name, v := range mTyped {
+						id, ok := v.(int64)
+						if !ok {
+							log.Printf("bad handshake m item extension ID type: %T", v)
+							continue
 						}
-						c.PeerExtensionIDs[name] = byte(id)
+						if id == 0 {
+							delete(c.PeerExtensionIDs, name)
+						} else {
+							if c.PeerExtensionIDs[name] == 0 {
+								supportedExtensionMessages.Add(name, 1)
+							}
+							c.PeerExtensionIDs[name] = byte(id)
+						}
 					}
 				}
 				metadata_sizeUntyped, ok := d["metadata_size"]

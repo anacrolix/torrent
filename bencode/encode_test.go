@@ -3,6 +3,7 @@ package bencode
 import (
 	"bytes"
 	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -68,6 +69,16 @@ var random_encode_tests = []random_encode_test{
 	{struct {
 		A *string `bencode:",omitempty"`
 	}{new(string)}, "d1:A0:e"},
+	{bigIntFromString("62208002200000000000"), "i62208002200000000000e"},
+	{*bigIntFromString("62208002200000000000"), "i62208002200000000000e"},
+}
+
+func bigIntFromString(s string) *big.Int {
+	bi, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		panic(s)
+	}
+	return bi
 }
 
 func TestRandomEncode(t *testing.T) {

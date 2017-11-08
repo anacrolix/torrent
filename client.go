@@ -90,8 +90,8 @@ func (cl *Client) SetIPBlockList(list iplist.Ranger) {
 	}
 }
 
-func (cl *Client) PeerID() string {
-	return string(cl.peerID[:])
+func (cl *Client) PeerID() [20]byte {
+	return cl.peerID
 }
 
 type torrentAddr string

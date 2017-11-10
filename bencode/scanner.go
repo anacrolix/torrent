@@ -23,11 +23,8 @@ func (me *scanner) ReadByte() (byte, error) {
 		return me.b[0], nil
 	}
 	n, err := me.r.Read(me.b[:])
-	if err != nil {
-		return me.b[0], err
-	}
-	if n != 1 {
-		panic(n)
+	if n == 1 {
+		err = nil
 	}
 	return me.b[0], err
 }

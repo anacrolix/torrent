@@ -31,15 +31,6 @@ func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, new)
 
-	// Make sure some of the data is actually there.
-	sub := tt.SubscribePieceStateChanges()
-	for range sub.Values {
-		if tt.BytesCompleted() > 0 {
-			break
-		}
-	}
-	sub.Close()
-
 	r := tt.NewReader()
 	go tt.Drop()
 	io.Copy(ioutil.Discard, r)

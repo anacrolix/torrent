@@ -64,6 +64,8 @@ type Torrent struct {
 	storageOpener *storage.Client
 	// Storage for torrent data.
 	storage *storage.Torrent
+	// Read-locked for using storage, and write-locked for Closing.
+	storageLock sync.RWMutex
 
 	metainfo metainfo.MetaInfo
 
@@ -611,7 +613,9 @@ func (t *Torrent) numPiecesCompleted() (num int) {
 func (t *Torrent) close() (err error) {
 	t.closed.Set()
 	if t.storage != nil {
+		t.storageLock.Lock()
 		t.storage.Close()
+		t.storageLock.Unlock()
 	}
 	for conn := range t.conns {
 		conn.Close()
@@ -1547,8 +1551,10 @@ func (t *Torrent) verifyPiece(piece int) {
 	}
 	p.hashing = true
 	t.publishPieceChange(piece)
+	t.storageLock.RLock()
 	cl.mu.Unlock()
 	sum := t.hashPiece(piece)
+	t.storageLock.RUnlock()
 	cl.mu.Lock()
 	p.hashing = false
 	t.pieceHashed(piece, sum == p.hash)

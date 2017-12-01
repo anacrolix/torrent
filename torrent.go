@@ -1552,6 +1552,7 @@ func (t *Torrent) verifyPiece(piece int) {
 	cl.mu.Lock()
 	p.hashing = false
 	t.pieceHashed(piece, sum == p.hash)
+	t.publishPieceChange(piece)
 }
 
 // Return the connections that touched a piece, and clear the entry while

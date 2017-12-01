@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -142,15 +143,18 @@ func mmapFile(name string, size int64) (ret mmap.MMap, err error) {
 		// Can't mmap() regions with length 0.
 		return
 	}
-	ret, err = mmap.MapRegion(file,
-		int(size), // Probably not great on <64 bit systems.
-		mmap.RDWR, 0, 0)
+	intLen := int(size)
+	if int64(intLen) != size {
+		err = errors.New("size too large for system")
+		return
+	}
+	ret, err = mmap.MapRegion(file, intLen, mmap.RDWR, 0, 0)
 	if err != nil {
-		err = fmt.Errorf("mapping file %q, length %d: %s", file.Name(), size, err)
+		err = fmt.Errorf("error mapping region: %s", err)
 		return
 	}
 	if int64(len(ret)) != size {
-		panic("mmap has wrong length")
+		panic(len(ret))
 	}
 	return
 }

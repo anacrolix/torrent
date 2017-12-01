@@ -570,7 +570,7 @@ func (t *Torrent) bytesMissingLocked() int64 {
 
 func (t *Torrent) bytesLeft() (left int64) {
 	bitmap.Flip(t.completedPieces, 0, t.numPieces()).IterTyped(func(piece int) bool {
-		p := t.pieces[piece]
+		p := &t.pieces[piece]
 		left += int64(p.length() - p.numDirtyBytes())
 		return true
 	})

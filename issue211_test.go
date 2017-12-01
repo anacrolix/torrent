@@ -13,7 +13,7 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-func TestDropTorrentWhileHashing(t *testing.T) {
+func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 	cfg := TestingConfig()
 	// Ensure the data is present when the torrent is added, and not obtained
 	// over the network as the test runs.

@@ -1345,7 +1345,12 @@ func (t *Torrent) Stats() TorrentStats {
 func (t *Torrent) numTotalPeers() int {
 	peers := make(map[string]struct{})
 	for conn := range t.conns {
-		peers[conn.conn.RemoteAddr().String()] = struct{}{}
+		ra := conn.conn.RemoteAddr()
+		if ra == nil {
+			// It's been closed and doesn't support RemoteAddr.
+			continue
+		}
+		peers[ra.String()] = struct{}{}
 	}
 	for addr := range t.halfOpen {
 		peers[addr] = struct{}{}
@@ -1374,8 +1379,8 @@ func (t *Torrent) addConnection(c *connection, outgoing bool) bool {
 			if outgoing == lower {
 				// Close the other one.
 				c0.Close()
-				// Is it safe to delete from the map while we're iterating
-				// over it?
+				// TODO: Is it safe to delete from the map while we're
+				// iterating over it?
 				t.deleteConnection(c0)
 			} else {
 				// Abandon this one.

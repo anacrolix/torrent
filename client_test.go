@@ -370,11 +370,14 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}
 	seeder, err := NewClient(cfg)
 	require.NoError(t, err)
-	defer seeder.Close()
 	if ps.ExportClientStatus {
 		testutil.ExportStatusWriter(seeder, "s")
 	}
 	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	// Run a Stats right after Closing the Client. This will trigger the Stats
+	// panic in #214 caused by RemoteAddr on Closed uTP sockets.
+	defer seederTorrent.Stats()
+	defer seeder.Close()
 	seederTorrent.VerifyData()
 	// Create leecher and a Torrent.
 	leecherDataDir, err := ioutil.TempDir("", "")

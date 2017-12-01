@@ -207,7 +207,11 @@ func (t *Torrent) addrActive(addr string) bool {
 		return true
 	}
 	for c := range t.conns {
-		if c.remoteAddr().String() == addr {
+		ra := c.remoteAddr()
+		if ra == nil {
+			continue
+		}
+		if ra.String() == addr {
 			return true
 		}
 	}

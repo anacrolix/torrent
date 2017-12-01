@@ -8,11 +8,11 @@ import (
 	"net"
 	"time"
 
-	pp "github.com/anacrolix/torrent/peer_protocol"
-
 	"github.com/anacrolix/missinggo"
+
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 type ExtensionBit uint

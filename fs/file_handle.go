@@ -4,11 +4,11 @@ import (
 	"context"
 	"io"
 
-	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/torrent"
-
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
+	"github.com/anacrolix/missinggo"
+
+	"github.com/anacrolix/torrent"
 )
 
 type fileHandle struct {

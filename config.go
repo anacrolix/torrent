@@ -1,16 +1,16 @@
 package torrent
 
 import (
+	"crypto/tls"
+	"net"
+	"net/http"
+	"time"
+
 	"github.com/anacrolix/dht"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/storage"
-
-	"crypto/tls"
-	"net"
-	"net/http"
-	"time"
 )
 
 var DefaultHTTPClient = &http.Client{

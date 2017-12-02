@@ -388,7 +388,9 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	cn.upload(msg)
 }
 
-// Writes buffers to the socket from the write channel.
+// Routine that writes to the peer. Some of what to write is buffered by
+// activity elsewhere in the Client, and some is determined locally when the
+// connection is writable.
 func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	var (
 		buf       bytes.Buffer
@@ -533,8 +535,12 @@ func iterBitmapsDistinct(skip bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 
 func (cn *connection) unbiasedPieceRequestOrder() iter.Func {
 	now, readahead := cn.t.readerPiecePriorities()
+	// Pieces to skip include pieces the peer doesn't have
 	skip := bitmap.Flip(cn.peerPieces, 0, cn.t.numPieces())
+	// And pieces that we already have.
 	skip.Union(cn.t.completedPieces)
+	// Return an iterator over the different priority classes, minus the skip
+	// pieces.
 	return iterBitmapsDistinct(skip, now, readahead, cn.t.pendingPieces)
 }
 

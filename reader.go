@@ -193,11 +193,10 @@ func (r *Reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 				return
 			}
 		}
-		b1 := b[:avail]
 		pi := int(pos / r.t.info.PieceLength)
 		ip := r.t.info.Piece(pi)
 		po := pos % r.t.info.PieceLength
-		missinggo.LimitLen(&b1, ip.Length()-po)
+		b1 := missinggo.LimitLen(b, ip.Length()-po, avail)
 		n, err = r.t.readAt(b1, pos)
 		if n != 0 {
 			err = nil

@@ -45,7 +45,7 @@ func (p Piece) WriteAt(b []byte, off int64) (n int, err error) {
 	if off+int64(len(b)) > p.mip.Length() {
 		panic("write overflows piece")
 	}
-	missinggo.LimitLen(&b, p.mip.Length()-off)
+	b = missinggo.LimitLen(b, p.mip.Length()-off)
 	return p.PieceImpl.WriteAt(b, off)
 }
 
@@ -58,7 +58,7 @@ func (p Piece) ReadAt(b []byte, off int64) (n int, err error) {
 		err = io.EOF
 		return
 	}
-	missinggo.LimitLen(&b, p.mip.Length()-off)
+	b = missinggo.LimitLen(b, p.mip.Length()-off)
 	if len(b) == 0 {
 		return
 	}

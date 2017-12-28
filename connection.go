@@ -1080,6 +1080,7 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	// the piece is still wanted, because if it is queued, it won't be wanted.
 	if t.pieceAllDirty(index) {
 		t.queuePieceCheck(int(req.Index))
+		t.pendAllChunkSpecs(index)
 	}
 
 	if c.peerTouchedPieces == nil {

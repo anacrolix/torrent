@@ -23,6 +23,7 @@ var DefaultHTTPClient = &http.Client{
 		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
 	},
 }
+var DefaultHTTPUserAgent = "Go-Torrent/1.0"
 
 // Override Client defaults.
 type Config struct {
@@ -78,6 +79,8 @@ type Config struct {
 
 	// HTTP client used to query the tracker endpoint. Default is DefaultHTTPClient
 	HTTP *http.Client
+	// HTTPUserAgent changes default UserAgent for HTTP requests
+	HTTPUserAgent string `long:"http-user-agent"`
 	// Updated occasionally to when there's been some changes to client
 	// behaviour in case other clients are assuming anything of us. See also
 	// `bep20`.
@@ -103,6 +106,9 @@ type Config struct {
 func (cfg *Config) setDefaults() {
 	if cfg.HTTP == nil {
 		cfg.HTTP = DefaultHTTPClient
+	}
+	if cfg.HTTPUserAgent == "" {
+		cfg.HTTPUserAgent = DefaultHTTPUserAgent
 	}
 	if cfg.ExtendedHandshakeClientVersion == "" {
 		cfg.ExtendedHandshakeClientVersion = "go.torrent dev 20150624"

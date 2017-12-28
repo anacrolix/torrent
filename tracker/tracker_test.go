@@ -21,7 +21,7 @@ var defaultClient = &http.Client{
 
 func TestUnsupportedTrackerScheme(t *testing.T) {
 	t.Parallel()
-	_, err := Announce(defaultClient, "lol://tracker.openbittorrent.com:80/announce", nil)
+	_, err := Announce(defaultClient, defaultHTTPUserAgent, "lol://tracker.openbittorrent.com:80/announce", nil)
 	if err != ErrBadScheme {
 		t.Fatal(err)
 	}

@@ -1474,7 +1474,7 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 		}
 		err := p.Storage().MarkComplete()
 		if err != nil {
-			log.Printf("%T: error completing piece %d: %s", t.storage, piece, err)
+			log.Printf("%T: error marking piece complete %d: %s", t.storage, piece, err)
 		}
 		t.updatePieceCompletion(piece)
 	} else {

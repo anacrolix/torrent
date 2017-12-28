@@ -39,7 +39,7 @@ func main() {
 		ar.InfoHash = ts.InfoHash
 		for _, tier := range ts.Trackers {
 			for _, tURI := range tier {
-				resp, err := tracker.Announce(torrent.DefaultHTTPClient, tURI, &ar)
+				resp, err := tracker.Announce(torrent.DefaultHTTPClient, torrent.DefaultHTTPUserAgent, tURI, &ar)
 				if err != nil {
 					log.Print(err)
 					continue

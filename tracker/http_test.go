@@ -9,6 +9,8 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 )
 
+var defaultHTTPUserAgent = "Go-Torrent"
+
 func TestUnmarshalHTTPResponsePeerDicts(t *testing.T) {
 	var hr httpResponse
 	require.NoError(t, bencode.Unmarshal([]byte("d5:peersl"+

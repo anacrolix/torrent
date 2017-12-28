@@ -54,18 +54,18 @@ var (
 	ErrBadScheme = errors.New("unknown scheme")
 )
 
-func Announce(cl *http.Client, urlStr string, req *AnnounceRequest) (res AnnounceResponse, err error) {
-	return AnnounceHost(cl, urlStr, req, "")
+func Announce(cl *http.Client, userAgent string, urlStr string, req *AnnounceRequest) (res AnnounceResponse, err error) {
+	return AnnounceHost(cl, userAgent, urlStr, req, "")
 }
 
-func AnnounceHost(cl *http.Client, urlStr string, req *AnnounceRequest, host string) (res AnnounceResponse, err error) {
+func AnnounceHost(cl *http.Client, userAgent string, urlStr string, req *AnnounceRequest, host string) (res AnnounceResponse, err error) {
 	_url, err := url.Parse(urlStr)
 	if err != nil {
 		return
 	}
 	switch _url.Scheme {
 	case "http", "https":
-		return announceHTTP(cl, req, _url, host)
+		return announceHTTP(cl, userAgent, req, _url, host)
 	case "udp":
 		return announceUDP(req, _url)
 	default:

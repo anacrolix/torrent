@@ -1053,7 +1053,8 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	// Need to record that it hasn't been written yet, before we attempt to do
 	// anything with it.
 	piece.incrementPendingWrites()
-	// Record that we have the chunk.
+	// Record that we have the chunk, so we aren't trying to download it while
+	// waiting for it to be written to storage.
 	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, t.chunkSize))
 
 	// Cancel pending requests for this chunk.

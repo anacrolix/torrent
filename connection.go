@@ -1061,11 +1061,17 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 		c.postCancel(req)
 	}
 
-	cl.mu.Unlock()
-	// Write the chunk out. Note that the upper bound on chunk writing
-	// concurrency will be the number of connections.
-	err := t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
-	cl.mu.Lock()
+	err := func() error {
+		cl.mu.Unlock()
+		defer cl.mu.Lock()
+		// Write the chunk out. Note that the upper bound on chunk writing
+		// concurrency will be the number of connections. We write inline with
+		// receiving the chunk (with this lock dance), because we want to
+		// handle errors synchronously and I haven't thought of a nice way to
+		// defer any concurrency to the storage and have that notify the
+		// client of errors. TODO: Do that instead.
+		return t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
+	}()
 
 	piece.decrementPendingWrites()
 

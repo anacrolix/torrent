@@ -43,7 +43,7 @@ type Client struct {
 	config Config
 
 	halfOpenLimit  int
-	peerID         [20]byte
+	peerID         peerID
 	defaultStorage *storage.Client
 	onClose        []func()
 	tcpListener    net.Listener

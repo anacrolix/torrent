@@ -36,7 +36,6 @@ func handshakeWriter(w io.Writer, bb <-chan []byte, done chan<- error) {
 
 type (
 	peerExtensionBytes [8]byte
-	peerID             [20]byte
 )
 
 func (pex peerExtensionBytes) SupportsExtended() bool {

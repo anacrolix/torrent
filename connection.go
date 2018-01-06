@@ -73,7 +73,7 @@ type connection struct {
 	sentHaves        []bool
 
 	// Stuff controlled by the remote peer.
-	PeerID             [20]byte
+	PeerID             peerID
 	PeerInterested     bool
 	PeerChoked         bool
 	PeerRequests       map[request]struct{}
@@ -194,7 +194,7 @@ func (cn *connection) String() string {
 
 func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
 	// \t isn't preserved in <pre> blocks?
-	fmt.Fprintf(w, "%+q: %s-%s\n", cn.PeerID, cn.localAddr(), cn.remoteAddr())
+	fmt.Fprintf(w, "%-40s: %s-%s\n", cn.PeerID, cn.localAddr(), cn.remoteAddr())
 	fmt.Fprintf(w, "    last msg: %s, connected: %s, last useful chunk: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),

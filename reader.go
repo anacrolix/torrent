@@ -29,6 +29,9 @@ type pieceRange struct {
 type reader struct {
 	t          *Torrent
 	responsive bool
+	// Adjust the read/seek window to handle Readers locked to File extents
+	// and the like.
+	offset, length int64
 	// Ensure operations that change the position are exclusive, like Read()
 	// and Seek().
 	opMu sync.Mutex
@@ -74,7 +77,7 @@ func (r *reader) readable(off int64) (ret bool) {
 	if r.t.closed.IsSet() {
 		return true
 	}
-	req, ok := r.t.offsetRequest(off)
+	req, ok := r.t.offsetRequest(r.offset + off)
 	if !ok {
 		panic(off)
 	}
@@ -117,9 +120,14 @@ func (r *reader) waitReadable(off int64) {
 func (r *reader) piecesUncached() (ret pieceRange) {
 	ra := r.readahead
 	if ra < 1 {
+		// Needs to be at least 1, because [x, x) means we don't want
+		// anything.
 		ra = 1
 	}
-	ret.begin, ret.end = r.t.byteRegionPieces(r.pos, ra)
+	if ra > r.length-r.pos {
+		ra = r.length - r.pos
+	}
+	ret.begin, ret.end = r.t.byteRegionPieces(r.offset+r.pos, ra)
 	return
 }
 
@@ -162,7 +170,7 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 		r.posChanged()
 		r.mu.Unlock()
 	}
-	if r.pos >= r.t.length {
+	if r.pos >= r.length {
 		err = io.EOF
 	} else if err == io.EOF {
 		err = io.ErrUnexpectedEOF
@@ -183,7 +191,7 @@ func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error) (avail int64) {
 
 // Performs at most one successful read to torrent storage.
 func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err error) {
-	if pos >= r.t.length {
+	if pos >= r.length {
 		err = io.EOF
 		return
 	}
@@ -245,7 +253,7 @@ func (r *reader) Seek(off int64, whence int) (ret int64, err error) {
 	case io.SeekCurrent:
 		r.pos += off
 	case io.SeekEnd:
-		r.pos = r.t.info.TotalLength() + off
+		r.pos = r.length + off
 	default:
 		err = errors.New("bad whence")
 	}

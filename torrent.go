@@ -58,7 +58,7 @@ type Torrent struct {
 	chunkPool *sync.Pool
 	// Total length of the torrent in bytes. Stored because it's not O(1) to
 	// get this from the info dict.
-	length int64
+	length *int64
 
 	// The storage to open when the info dict becomes available.
 	storageOpener *storage.Client
@@ -328,10 +328,11 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	if err != nil {
 		return fmt.Errorf("error opening torrent storage: %s", err)
 	}
-	t.length = 0
+	var l int64
 	for _, f := range t.info.UpvertedFiles() {
-		t.length += f.Length
+		l += f.Length
 	}
+	t.length = &l
 	t.metadataBytes = b
 	t.metadataCompletedChunks = nil
 	t.makePieces()
@@ -631,13 +632,13 @@ func (t *Torrent) close() (err error) {
 }
 
 func (t *Torrent) requestOffset(r request) int64 {
-	return torrentRequestOffset(t.length, int64(t.usualPieceSize()), r)
+	return torrentRequestOffset(*t.length, int64(t.usualPieceSize()), r)
 }
 
 // Return the request that would include the given offset into the torrent
 // data. Returns !ok if there is no such request.
 func (t *Torrent) offsetRequest(off int64) (req request, ok bool) {
-	return torrentOffsetRequest(t.length, t.info.PieceLength, int64(t.chunkSize), off)
+	return torrentOffsetRequest(*t.length, t.info.PieceLength, int64(t.chunkSize), off)
 }
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
@@ -681,7 +682,7 @@ type Peer struct {
 
 func (t *Torrent) pieceLength(piece int) pp.Integer {
 	if piece == t.numPieces()-1 {
-		ret := pp.Integer(t.length % t.info.PieceLength)
+		ret := pp.Integer(*t.length % t.info.PieceLength)
 		if ret != 0 {
 			return ret
 		}
@@ -897,7 +898,7 @@ func (t *Torrent) updatePiecePriorities(begin, end int) {
 
 // Returns the range of pieces [begin, end) that contains the extent of bytes.
 func (t *Torrent) byteRegionPieces(off, size int64) (begin, end int) {
-	if off >= t.length {
+	if off >= *t.length {
 		return
 	}
 	if off < 0 {

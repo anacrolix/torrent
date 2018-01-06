@@ -81,9 +81,14 @@ func (f *File) Download() {
 	f.t.DownloadPieces(f.t.byteRegionPieces(f.offset, f.length))
 }
 
+// Deprecated: Use File.DownloadRegion.
+func (f *File) PrioritizeRegion(off, len int64) {
+	f.DownloadRegion(off, len)
+}
+
 // Requests that torrent pieces containing bytes in the given region of the
 // file be downloaded.
-func (f *File) PrioritizeRegion(off, len int64) {
+func (f *File) DownloadRegion(off, len int64) {
 	f.t.DownloadPieces(f.t.byteRegionPieces(f.offset+off, len))
 }
 

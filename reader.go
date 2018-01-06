@@ -50,11 +50,13 @@ var _ io.ReadCloser = &reader{}
 // soon as they can when the underlying chunks become available.
 func (r *reader) SetResponsive() {
 	r.responsive = true
+	r.t.cl.event.Broadcast()
 }
 
 // Disable responsive mode. TODO: Remove?
 func (r *reader) SetNonResponsive() {
 	r.responsive = false
+	r.t.cl.event.Broadcast()
 }
 
 // Configure the number of bytes ahead of a read that should also be

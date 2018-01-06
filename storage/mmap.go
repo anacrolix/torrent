@@ -14,7 +14,7 @@ import (
 	"github.com/anacrolix/torrent/mmap_span"
 )
 
-type mmapStorage struct {
+type mmapClientImpl struct {
 	baseDir string
 	pc      PieceCompletion
 }
@@ -24,13 +24,13 @@ func NewMMap(baseDir string) ClientImpl {
 }
 
 func NewMMapWithCompletion(baseDir string, completion PieceCompletion) ClientImpl {
-	return &mmapStorage{
+	return &mmapClientImpl{
 		baseDir: baseDir,
 		pc:      completion,
 	}
 }
 
-func (s *mmapStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (t TorrentImpl, err error) {
+func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (t TorrentImpl, err error) {
 	span, err := mMapTorrent(info, s.baseDir)
 	t = &mmapTorrentStorage{
 		infoHash: infoHash,
@@ -40,7 +40,7 @@ func (s *mmapStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (
 	return
 }
 
-func (s *mmapStorage) Close() error {
+func (s *mmapClientImpl) Close() error {
 	return s.pc.Close()
 }
 

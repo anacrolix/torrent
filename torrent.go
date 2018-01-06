@@ -107,7 +107,7 @@ type Torrent struct {
 	// Set when .Info is obtained.
 	gotMetainfo missinggo.Event
 
-	readers               map[*Reader]struct{}
+	readers               map[*reader]struct{}
 	readerNowPieces       bitmap.Bitmap
 	readerReadaheadPieces bitmap.Bitmap
 

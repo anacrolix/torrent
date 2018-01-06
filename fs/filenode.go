@@ -1,17 +1,15 @@
 package torrentfs
 
 import (
-	"io"
-
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
+	"github.com/anacrolix/torrent"
 	"golang.org/x/net/context"
 )
 
 type fileNode struct {
 	node
-	size          uint64
-	TorrentOffset int64
+	f *torrent.File
 }
 
 var (
@@ -19,13 +17,12 @@ var (
 )
 
 func (fn fileNode) Attr(ctx context.Context, attr *fuse.Attr) error {
-	attr.Size = fn.size
+	attr.Size = uint64(fn.f.Length())
 	attr.Mode = defaultMode
 	return nil
 }
 
 func (fn fileNode) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (fusefs.Handle, error) {
-	r := fn.t.NewReader()
-	r.Seek(fn.TorrentOffset, io.SeekStart)
+	r := fn.f.NewReader()
 	return fileHandle{fn, r}, nil
 }

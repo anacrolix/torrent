@@ -3,6 +3,7 @@ package torrent
 import (
 	"strings"
 
+	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -98,4 +99,9 @@ func (f *File) exclusivePieces() (begin, end int) {
 
 func (f *File) Cancel() {
 	f.t.CancelPieces(f.exclusivePieces())
+}
+
+func (f *File) NewReader() Reader {
+	tr := f.t.NewReader()
+	return fileReader{missinggo.NewSectionReadSeeker(tr, f.Offset(), f.Length()), tr}
 }

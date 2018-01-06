@@ -3,7 +3,6 @@ package torrentfs
 import (
 	"expvar"
 	"os"
-	"path"
 	"strings"
 	"sync"
 
@@ -67,11 +66,12 @@ func isSubPath(parent, child string) bool {
 	if !strings.HasPrefix(child, parent) {
 		return false
 	}
-	s := child[len(parent):]
-	if len(s) == 0 {
+	extra := child[len(parent):]
+	if len(extra) == 0 {
 		return false
 	}
-	return s[0] == '/'
+	// Not just a file with more stuff on the end.
+	return extra[0] == '/'
 }
 
 func (dn dirNode) ReadDirAll(ctx context.Context) (des []fuse.Dirent, err error) {
@@ -98,34 +98,30 @@ func (dn dirNode) ReadDirAll(ctx context.Context) (des []fuse.Dirent, err error)
 	return
 }
 
-func (dn dirNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, err error) {
-	var torrentOffset int64
-	for _, fi := range dn.metadata.Files {
-		if !isSubPath(dn.path, strings.Join(fi.Path, "/")) {
-			torrentOffset += fi.Length
-			continue
+func (dn dirNode) Lookup(_ context.Context, name string) (fusefs.Node, error) {
+	dir := false
+	var file *torrent.File
+	fullPath := dn.path + "/" + name
+	for _, f := range dn.t.Files() {
+		if f.DisplayPath() == fullPath {
+			file = &f
 		}
-		if fi.Path[len(dn.path)] != name {
-			torrentOffset += fi.Length
-			continue
+		if isSubPath(fullPath, f.DisplayPath()) {
+			dir = true
 		}
-		__node := dn.node
-		__node.path = path.Join(__node.path, name)
-		if len(fi.Path) == len(dn.path)+1 {
-			_node = fileNode{
-				node:          __node,
-				size:          uint64(fi.Length),
-				TorrentOffset: torrentOffset,
-			}
-		} else {
-			_node = dirNode{__node}
-		}
-		break
 	}
-	if _node == nil {
-		err = fuse.ENOENT
+	n := dn.node
+	n.path = fullPath
+	if dir && file != nil {
+		panic("both dir and file")
 	}
-	return
+	if file != nil {
+		return fileNode{n, file}, nil
+	}
+	if dir {
+		return dirNode{n}, nil
+	}
+	return nil, fuse.ENOENT
 }
 
 func (dn dirNode) Attr(ctx context.Context, attr *fuse.Attr) error {
@@ -145,7 +141,7 @@ func (rn rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, 
 			t:        t,
 		}
 		if !info.IsDir() {
-			_node = fileNode{__node, uint64(info.Length), 0}
+			_node = fileNode{__node, &t.Files()[0]}
 		} else {
 			_node = dirNode{__node}
 		}

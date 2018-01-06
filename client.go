@@ -521,7 +521,7 @@ func (cl *Client) initiateConn(peer Peer, t *Torrent) {
 
 func (cl *Client) dialTCP(ctx context.Context, addr string) (c net.Conn, err error) {
 	d := net.Dialer{
-	// LocalAddr: cl.tcpListener.Addr(),
+		// LocalAddr: cl.tcpListener.Addr(),
 	}
 	c, err = d.DialContext(ctx, "tcp", addr)
 	countDialResult(err)

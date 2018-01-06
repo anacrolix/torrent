@@ -40,6 +40,8 @@ var (
 	_ fusefs.HandleReadDirAller = dirNode{}
 )
 
+// Is a directory node that lists all torrents and handles destruction of the
+// filesystem.
 type rootNode struct {
 	fs *TorrentFS
 }

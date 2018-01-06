@@ -48,10 +48,8 @@ func TestMarshalAnnounceResponse(t *testing.T) {
 func TestLongWriteUDP(t *testing.T) {
 	t.Parallel()
 	l, err := net.ListenUDP("udp4", nil)
+	require.NoError(t, err)
 	defer l.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
 	c, err := net.DialUDP("udp", nil, l.LocalAddr().(*net.UDPAddr))
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +112,7 @@ func TestAnnounceLocalhost(t *testing.T) {
 	go func() {
 		require.NoError(t, srv.serveOne())
 	}()
-	ar, err := Announce(fmt.Sprintf("udp://%s/announce", srv.pc.LocalAddr().String()), &req)
+	ar, err := Announce(defaultClient, defaultHTTPUserAgent, fmt.Sprintf("udp://%s/announce", srv.pc.LocalAddr().String()), &req)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, ar.Seeders)
 	assert.EqualValues(t, 2, len(ar.Peers))
@@ -130,7 +128,7 @@ func TestUDPTracker(t *testing.T) {
 	}
 	rand.Read(req.PeerId[:])
 	copy(req.InfoHash[:], []uint8{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1})
-	ar, err := Announce("udp://tracker.openbittorrent.com:80/announce", &req)
+	ar, err := Announce(defaultClient, defaultHTTPUserAgent, "udp://tracker.openbittorrent.com:80/announce", &req)
 	// Skip any net errors as we don't control the server.
 	if _, ok := err.(net.Error); ok {
 		t.Skip(err)
@@ -166,7 +164,7 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 		wg.Add(1)
 		go func(url string) {
 			defer wg.Done()
-			resp, err := Announce(url, &req)
+			resp, err := Announce(defaultClient, defaultHTTPUserAgent, url, &req)
 			if err != nil {
 				t.Logf("error announcing to %s: %s", url, err)
 				return
@@ -202,7 +200,7 @@ func TestURLPathOption(t *testing.T) {
 	}
 	defer conn.Close()
 	go func() {
-		_, err := Announce((&url.URL{
+		_, err := Announce(defaultClient, defaultHTTPUserAgent, (&url.URL{
 			Scheme: "udp",
 			Host:   conn.LocalAddr().String(),
 			Path:   "/announce",

@@ -14,14 +14,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anacrolix/torrent/mse"
-
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/prioritybitmap"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
@@ -74,7 +73,7 @@ type connection struct {
 	sentHaves        []bool
 
 	// Stuff controlled by the remote peer.
-	PeerID             [20]byte
+	PeerID             PeerID
 	PeerInterested     bool
 	PeerChoked         bool
 	PeerRequests       map[request]struct{}
@@ -195,7 +194,7 @@ func (cn *connection) String() string {
 
 func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
 	// \t isn't preserved in <pre> blocks?
-	fmt.Fprintf(w, "%+q: %s-%s\n", cn.PeerID, cn.localAddr(), cn.remoteAddr())
+	fmt.Fprintf(w, "%-40s: %s-%s\n", cn.PeerID, cn.localAddr(), cn.remoteAddr())
 	fmt.Fprintf(w, "    last msg: %s, connected: %s, last useful chunk: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),
@@ -389,7 +388,9 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	cn.upload(msg)
 }
 
-// Writes buffers to the socket from the write channel.
+// Routine that writes to the peer. Some of what to write is buffered by
+// activity elsewhere in the Client, and some is determined locally when the
+// connection is writable.
 func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	var (
 		buf       bytes.Buffer
@@ -534,8 +535,12 @@ func iterBitmapsDistinct(skip bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 
 func (cn *connection) unbiasedPieceRequestOrder() iter.Func {
 	now, readahead := cn.t.readerPiecePriorities()
+	// Pieces to skip include pieces the peer doesn't have
 	skip := bitmap.Flip(cn.peerPieces, 0, cn.t.numPieces())
+	// And pieces that we already have.
 	skip.Union(cn.t.completedPieces)
+	// Return an iterator over the different priority classes, minus the skip
+	// pieces.
 	return iterBitmapsDistinct(skip, now, readahead, cn.t.pendingPieces)
 }
 
@@ -892,32 +897,29 @@ func (c *connection) mainReadLoop() error {
 				if v, ok := d["v"]; ok {
 					c.PeerClientName = v.(string)
 				}
-				m, ok := d["m"]
-				if !ok {
-					err = errors.New("handshake missing m item")
-					break
-				}
-				mTyped, ok := m.(map[string]interface{})
-				if !ok {
-					err = errors.New("handshake m value is not dict")
-					break
-				}
-				if c.PeerExtensionIDs == nil {
-					c.PeerExtensionIDs = make(map[string]byte, len(mTyped))
-				}
-				for name, v := range mTyped {
-					id, ok := v.(int64)
+				if m, ok := d["m"]; ok {
+					mTyped, ok := m.(map[string]interface{})
 					if !ok {
-						log.Printf("bad handshake m item extension ID type: %T", v)
-						continue
+						err = errors.New("handshake m value is not dict")
+						break
 					}
-					if id == 0 {
-						delete(c.PeerExtensionIDs, name)
-					} else {
-						if c.PeerExtensionIDs[name] == 0 {
-							supportedExtensionMessages.Add(name, 1)
+					if c.PeerExtensionIDs == nil {
+						c.PeerExtensionIDs = make(map[string]byte, len(mTyped))
+					}
+					for name, v := range mTyped {
+						id, ok := v.(int64)
+						if !ok {
+							log.Printf("bad handshake m item extension ID type: %T", v)
+							continue
 						}
-						c.PeerExtensionIDs[name] = byte(id)
+						if id == 0 {
+							delete(c.PeerExtensionIDs, name)
+						} else {
+							if c.PeerExtensionIDs[name] == 0 {
+								supportedExtensionMessages.Add(name, 1)
+							}
+							c.PeerExtensionIDs[name] = byte(id)
+						}
 					}
 				}
 				metadata_sizeUntyped, ok := d["metadata_size"]
@@ -1051,7 +1053,8 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	// Need to record that it hasn't been written yet, before we attempt to do
 	// anything with it.
 	piece.incrementPendingWrites()
-	// Record that we have the chunk.
+	// Record that we have the chunk, so we aren't trying to download it while
+	// waiting for it to be written to storage.
 	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, t.chunkSize))
 
 	// Cancel pending requests for this chunk.
@@ -1059,11 +1062,17 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 		c.postCancel(req)
 	}
 
-	cl.mu.Unlock()
-	// Write the chunk out. Note that the upper bound on chunk writing
-	// concurrency will be the number of connections.
-	err := t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
-	cl.mu.Lock()
+	err := func() error {
+		cl.mu.Unlock()
+		defer cl.mu.Lock()
+		// Write the chunk out. Note that the upper bound on chunk writing
+		// concurrency will be the number of connections. We write inline with
+		// receiving the chunk (with this lock dance), because we want to
+		// handle errors synchronously and I haven't thought of a nice way to
+		// defer any concurrency to the storage and have that notify the
+		// client of errors. TODO: Do that instead.
+		return t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
+	}()
 
 	piece.decrementPendingWrites()
 
@@ -1078,6 +1087,7 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	// the piece is still wanted, because if it is queued, it won't be wanted.
 	if t.pieceAllDirty(index) {
 		t.queuePieceCheck(int(req.Index))
+		t.pendAllChunkSpecs(index)
 	}
 
 	if c.peerTouchedPieces == nil {

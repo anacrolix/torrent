@@ -31,14 +31,15 @@ func (t *Torrent) Info() *metainfo.Info {
 
 // Returns a Reader bound to the torrent's data. All read calls block until
 // the data requested is actually available.
-func (t *Torrent) NewReader() (ret *Reader) {
-	ret = &Reader{
+func (t *Torrent) NewReader() Reader {
+	r := reader{
 		mu:        &t.cl.mu,
 		t:         t,
 		readahead: 5 * 1024 * 1024,
+		length:    *t.length,
 	}
-	t.addReader(ret)
-	return
+	t.addReader(&r)
+	return &r
 }
 
 // Returns the state of pieces of the torrent. They are grouped into runs of
@@ -119,10 +120,7 @@ func (t *Torrent) Name() string {
 // The completed length of all the torrent data, in all its files. This is
 // derived from the torrent info, when it is available.
 func (t *Torrent) Length() int64 {
-	if t.info == nil {
-		panic("not valid until info obtained")
-	}
-	return t.length
+	return *t.length
 }
 
 // Returns a run-time generated metainfo for the torrent that includes the
@@ -133,17 +131,17 @@ func (t *Torrent) Metainfo() metainfo.MetaInfo {
 	return t.newMetaInfo()
 }
 
-func (t *Torrent) addReader(r *Reader) {
+func (t *Torrent) addReader(r *reader) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	if t.readers == nil {
-		t.readers = make(map[*Reader]struct{})
+		t.readers = make(map[*reader]struct{})
 	}
 	t.readers[r] = struct{}{}
 	r.posChanged()
 }
 
-func (t *Torrent) deleteReader(r *Reader) {
+func (t *Torrent) deleteReader(r *reader) {
 	delete(t.readers, r)
 	t.readersChanged()
 }

@@ -80,9 +80,14 @@ func (f *File) Download() {
 	f.t.DownloadPieces(f.t.byteRegionPieces(f.offset, f.length))
 }
 
+// Deprecated: Use File.DownloadRegion.
+func (f *File) PrioritizeRegion(off, len int64) {
+	f.DownloadRegion(off, len)
+}
+
 // Requests that torrent pieces containing bytes in the given region of the
 // file be downloaded.
-func (f *File) PrioritizeRegion(off, len int64) {
+func (f *File) DownloadRegion(off, len int64) {
 	f.t.DownloadPieces(f.t.byteRegionPieces(f.offset+off, len))
 }
 
@@ -98,4 +103,16 @@ func (f *File) exclusivePieces() (begin, end int) {
 
 func (f *File) Cancel() {
 	f.t.CancelPieces(f.exclusivePieces())
+}
+
+func (f *File) NewReader() Reader {
+	tr := reader{
+		mu:        &f.t.cl.mu,
+		t:         f.t,
+		readahead: 5 * 1024 * 1024,
+		offset:    f.Offset(),
+		length:    f.Length(),
+	}
+	f.t.addReader(&tr)
+	return &tr
 }

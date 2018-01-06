@@ -15,7 +15,6 @@ import (
 	"time"
 
 	_ "github.com/anacrolix/envpprof"
-	"github.com/anacrolix/missinggo"
 	"github.com/dustin/go-humanize"
 	"github.com/jessevdk/go-flags"
 
@@ -163,7 +162,8 @@ func main() {
 				if file.DisplayPath() != rootGroup.Pick {
 					continue
 				}
-				srcReader := missinggo.NewSectionReadSeeker(t.NewReader(), file.Offset(), file.Length())
+				srcReader := file.NewReader()
+				defer srcReader.Close()
 				io.Copy(dstWriter, srcReader)
 				return
 			}

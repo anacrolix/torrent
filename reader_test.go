@@ -18,7 +18,7 @@ func TestReaderReadContext(t *testing.T) {
 	require.NoError(t, err)
 	defer tt.Drop()
 	ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(time.Millisecond))
-	r := tt.NewReader()
+	r := tt.Files()[0].NewReader()
 	defer r.Close()
 	_, err = r.ReadContext(ctx, make([]byte, 1))
 	require.EqualValues(t, context.DeadlineExceeded, err)

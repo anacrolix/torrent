@@ -1,12 +1,29 @@
 package torrent
 
 import (
+	"crypto/tls"
+	"net"
+	"net/http"
+	"time"
+
 	"github.com/anacrolix/dht"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/storage"
 )
+
+var DefaultHTTPClient = &http.Client{
+	Timeout: time.Second * 15,
+	Transport: &http.Transport{
+		Dial: (&net.Dialer{
+			Timeout: 15 * time.Second,
+		}).Dial,
+		TLSHandshakeTimeout: 15 * time.Second,
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+	},
+}
+var DefaultHTTPUserAgent = "Go-Torrent/1.0"
 
 // Override Client defaults.
 type Config struct {
@@ -58,7 +75,68 @@ type Config struct {
 	IPBlocklist iplist.Ranger
 	DisableIPv6 bool `long:"disable-ipv6"`
 	// Perform logging and any other behaviour that will help debug.
-	Debug bool `help:"enable debug logging"`
+	Debug bool `help:"enable debugging"`
+
+	// HTTP client used to query the tracker endpoint. Default is DefaultHTTPClient
+	HTTP *http.Client
+	// HTTPUserAgent changes default UserAgent for HTTP requests
+	HTTPUserAgent string `long:"http-user-agent"`
+	// Updated occasionally to when there's been some changes to client
+	// behaviour in case other clients are assuming anything of us. See also
+	// `bep20`.
+	ExtendedHandshakeClientVersion string // default  "go.torrent dev 20150624"
+	// Peer ID client identifier prefix. We'll update this occasionally to
+	// reflect changes to client behaviour that other clients may depend on.
+	// Also see `extendedHandshakeClientVersion`.
+	Bep20 string // default "-GT0001-"
+
+	NominalDialTimeout         time.Duration // default  time.Second * 30
+	MinDialTimeout             time.Duration // default  5 * time.Second
+	EstablishedConnsPerTorrent int           // default 80
+	HalfOpenConnsPerTorrent    int           // default  80
+	TorrentPeersHighWater      int           // default 200
+	TorrentPeersLowWater       int           // default 50
+
+	// Limit how long handshake can take. This is to reduce the lingering
+	// impact of a few bad apples. 4s loses 1% of successful handshakes that
+	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
+	HandshakesTimeout time.Duration // default  20 * time.Second
+}
+
+func (cfg *Config) setDefaults() {
+	if cfg.HTTP == nil {
+		cfg.HTTP = DefaultHTTPClient
+	}
+	if cfg.HTTPUserAgent == "" {
+		cfg.HTTPUserAgent = DefaultHTTPUserAgent
+	}
+	if cfg.ExtendedHandshakeClientVersion == "" {
+		cfg.ExtendedHandshakeClientVersion = "go.torrent dev 20150624"
+	}
+	if cfg.Bep20 == "" {
+		cfg.Bep20 = "-GT0001-"
+	}
+	if cfg.NominalDialTimeout == 0 {
+		cfg.NominalDialTimeout = 30 * time.Second
+	}
+	if cfg.MinDialTimeout == 0 {
+		cfg.MinDialTimeout = 5 * time.Second
+	}
+	if cfg.EstablishedConnsPerTorrent == 0 {
+		cfg.EstablishedConnsPerTorrent = 80
+	}
+	if cfg.HalfOpenConnsPerTorrent == 0 {
+		cfg.HalfOpenConnsPerTorrent = 80
+	}
+	if cfg.TorrentPeersHighWater == 0 {
+		cfg.TorrentPeersHighWater = 200
+	}
+	if cfg.TorrentPeersLowWater == 0 {
+		cfg.TorrentPeersLowWater = 50
+	}
+	if cfg.HandshakesTimeout == 0 {
+		cfg.HandshakesTimeout = 20 * time.Second
+	}
 }
 
 type EncryptionPolicy struct {

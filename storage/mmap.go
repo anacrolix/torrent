@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,7 +14,7 @@ import (
 	"github.com/anacrolix/torrent/mmap_span"
 )
 
-type mmapStorage struct {
+type mmapClientImpl struct {
 	baseDir string
 	pc      PieceCompletion
 }
@@ -23,13 +24,13 @@ func NewMMap(baseDir string) ClientImpl {
 }
 
 func NewMMapWithCompletion(baseDir string, completion PieceCompletion) ClientImpl {
-	return &mmapStorage{
+	return &mmapClientImpl{
 		baseDir: baseDir,
 		pc:      completion,
 	}
 }
 
-func (s *mmapStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (t TorrentImpl, err error) {
+func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (t TorrentImpl, err error) {
 	span, err := mMapTorrent(info, s.baseDir)
 	t = &mmapTorrentStorage{
 		infoHash: infoHash,
@@ -39,7 +40,7 @@ func (s *mmapStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (
 	return
 }
 
-func (s *mmapStorage) Close() error {
+func (s *mmapClientImpl) Close() error {
 	return s.pc.Close()
 }
 
@@ -54,8 +55,8 @@ func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 		pc:       ts.pc,
 		p:        p,
 		ih:       ts.infoHash,
-		ReaderAt: io.NewSectionReader(ts.span, p.Offset(), p.Length()),
-		WriterAt: missinggo.NewSectionWriter(ts.span, p.Offset(), p.Length()),
+		ReaderAt: io.NewSectionReader(&ts.span, p.Offset(), p.Length()),
+		WriterAt: missinggo.NewSectionWriter(&ts.span, p.Offset(), p.Length()),
 	}
 }
 
@@ -142,15 +143,18 @@ func mmapFile(name string, size int64) (ret mmap.MMap, err error) {
 		// Can't mmap() regions with length 0.
 		return
 	}
-	ret, err = mmap.MapRegion(file,
-		int(size), // Probably not great on <64 bit systems.
-		mmap.RDWR, 0, 0)
+	intLen := int(size)
+	if int64(intLen) != size {
+		err = errors.New("size too large for system")
+		return
+	}
+	ret, err = mmap.MapRegion(file, intLen, mmap.RDWR, 0, 0)
 	if err != nil {
-		err = fmt.Errorf("mapping file %q, length %d: %s", file.Name(), size, err)
+		err = fmt.Errorf("error mapping region: %s", err)
 		return
 	}
 	if int64(len(ret)) != size {
-		panic("mmap has wrong length")
+		panic(len(ret))
 	}
 	return
 }

@@ -4,16 +4,16 @@ import (
 	"context"
 	"io"
 
-	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/torrent"
-
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
+	"github.com/anacrolix/missinggo"
+
+	"github.com/anacrolix/torrent"
 )
 
 type fileHandle struct {
 	fn fileNode
-	r  *torrent.Reader
+	r  torrent.Reader
 }
 
 var _ interface {
@@ -26,11 +26,11 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 	if req.Dir {
 		panic("read on directory")
 	}
-	pos, err := me.r.Seek(me.fn.TorrentOffset+req.Offset, io.SeekStart)
+	pos, err := me.r.Seek(req.Offset, io.SeekStart)
 	if err != nil {
 		panic(err)
 	}
-	if pos != me.fn.TorrentOffset+req.Offset {
+	if pos != req.Offset {
 		panic("seek failed")
 	}
 	resp.Data = resp.Data[:req.Size]

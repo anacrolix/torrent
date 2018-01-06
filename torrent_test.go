@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,11 +14,11 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/peer_protocol"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
 )
 
-func r(i, b, l peer_protocol.Integer) request {
+func r(i, b, l pp.Integer) request {
 	return request{i, chunkSpec{b, l}}
 }
 
@@ -155,4 +156,61 @@ func TestPieceHashFailed(t *testing.T) {
 	// Dirty chunks should be cleared so we can try again.
 	require.False(t, tt.pieceAllDirty(1))
 	tt.cl.mu.Unlock()
+}
+
+// Check the behaviour of Torrent.Metainfo when metadata is not completed.
+func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
+	cfg := TestingConfig()
+	cfg.Debug = true
+	cl, err := NewClient(cfg)
+	require.NoError(t, err)
+	defer cl.Close()
+
+	mi := testutil.GreetingMetaInfo()
+	ih := mi.HashInfoBytes()
+
+	tt, _ := cl.AddTorrentInfoHash(ih)
+	assert.Nil(t, tt.Metainfo().InfoBytes)
+	assert.False(t, tt.haveAllMetadataPieces())
+
+	nc, err := net.Dial("tcp", cl.ListenAddr().String())
+	require.NoError(t, err)
+	defer nc.Close()
+
+	var pex peerExtensionBytes
+	pex.SetBit(ExtensionBitExtended)
+	hr, ok, err := handshake(nc, &ih, [20]byte{}, pex)
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.True(t, hr.peerExtensionBytes.GetBit(ExtensionBitExtended))
+	assert.EqualValues(t, cl.PeerID(), hr.PeerID)
+	assert.Equal(t, ih, hr.Hash)
+
+	assert.EqualValues(t, 0, tt.metadataSize())
+
+	func() {
+		cl.mu.Lock()
+		defer cl.mu.Unlock()
+		go func() {
+			_, err = nc.Write(pp.Message{
+				Type:       pp.Extended,
+				ExtendedID: pp.HandshakeExtendedID,
+				ExtendedPayload: func() []byte {
+					d := map[string]interface{}{
+						"metadata_size": len(mi.InfoBytes),
+					}
+					b, err := bencode.Marshal(d)
+					if err != nil {
+						panic(err)
+					}
+					return b
+				}(),
+			}.MustMarshalBinary())
+			require.NoError(t, err)
+		}()
+		tt.metadataChanged.Wait()
+	}()
+	assert.Equal(t, make([]byte, len(mi.InfoBytes)), tt.metadataBytes)
+	assert.False(t, tt.haveAllMetadataPieces())
+	assert.Nil(t, tt.Metainfo().InfoBytes)
 }

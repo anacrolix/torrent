@@ -1,6 +1,7 @@
 package metainfo
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -60,4 +61,14 @@ func TestUnmarshalBadMetainfoNodes(t *testing.T) {
 	// Should barf on the integer in the nodes list.
 	err := bencode.Unmarshal([]byte("d5:nodesl1:ai42eee"), &mi)
 	require.Error(t, err)
+}
+
+func TestMetainfoEmptyInfoBytes(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, (&MetaInfo{
+		// Include a non-empty field that comes after "info".
+		UrlList: []string{"hello"},
+	}).Write(&buf))
+	var mi MetaInfo
+	require.NoError(t, bencode.Unmarshal(buf.Bytes(), &mi))
 }

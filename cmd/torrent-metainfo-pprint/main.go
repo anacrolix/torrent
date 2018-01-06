@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 
@@ -18,50 +19,53 @@ var flags struct {
 	PieceHashes bool
 	Files       bool
 	tagflag.StartPos
-	TorrentFiles []string
+}
+
+func processReader(r io.Reader) error {
+	metainfo, err := metainfo.Load(r)
+	if err != nil {
+		return err
+	}
+	info, err := metainfo.UnmarshalInfo()
+	if err != nil {
+		return fmt.Errorf("error unmarshalling info: %s", err)
+	}
+	if flags.JustName {
+		fmt.Printf("%s\n", info.Name)
+		return nil
+	}
+	d := map[string]interface{}{
+		"Name":         info.Name,
+		"NumPieces":    info.NumPieces(),
+		"PieceLength":  info.PieceLength,
+		"InfoHash":     metainfo.HashInfoBytes().HexString(),
+		"NumFiles":     len(info.UpvertedFiles()),
+		"TotalLength":  info.TotalLength(),
+		"Announce":     metainfo.Announce,
+		"AnnounceList": metainfo.AnnounceList,
+		"UrlList":      metainfo.UrlList,
+	}
+	if flags.Files {
+		d["Files"] = info.Files
+	}
+	if flags.PieceHashes {
+		d["PieceHashes"] = func() (ret []string) {
+			for i := range iter.N(info.NumPieces()) {
+				ret = append(ret, hex.EncodeToString(info.Pieces[i*20:(i+1)*20]))
+			}
+			return
+		}()
+	}
+	b, _ := json.MarshalIndent(d, "", "  ")
+	_, err = os.Stdout.Write(b)
+	return err
 }
 
 func main() {
 	tagflag.Parse(&flags)
-	for _, filename := range flags.TorrentFiles {
-		metainfo, err := metainfo.LoadFromFile(filename)
-		if err != nil {
-			log.Print(err)
-			continue
-		}
-		info, err := metainfo.UnmarshalInfo()
-		if err != nil {
-			log.Printf("error unmarshalling info: %s", err)
-			continue
-		}
-		if flags.JustName {
-			fmt.Printf("%s\n", info.Name)
-			continue
-		}
-		d := map[string]interface{}{
-			"Name":         info.Name,
-			"NumPieces":    info.NumPieces(),
-			"PieceLength":  info.PieceLength,
-			"InfoHash":     metainfo.HashInfoBytes().HexString(),
-			"NumFiles":     len(info.UpvertedFiles()),
-			"TotalLength":  info.TotalLength(),
-			"Announce":     metainfo.Announce,
-			"AnnounceList": metainfo.AnnounceList,
-			"UrlList":      metainfo.UrlList,
-		}
-		if flags.Files {
-			d["Files"] = info.Files
-		}
-		if flags.PieceHashes {
-			d["PieceHashes"] = func() (ret []string) {
-				for i := range iter.N(info.NumPieces()) {
-					ret = append(ret, hex.EncodeToString(info.Pieces[i*20:(i+1)*20]))
-				}
-				return
-			}()
-		}
-		b, _ := json.MarshalIndent(d, "", "  ")
-		os.Stdout.Write(b)
+	err := processReader(os.Stdin)
+	if err != nil {
+		log.Fatal(err)
 	}
 	if !flags.JustName {
 		os.Stdout.WriteString("\n")

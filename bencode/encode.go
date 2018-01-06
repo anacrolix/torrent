@@ -2,6 +2,7 @@ package bencode
 
 import (
 	"io"
+	"math/big"
 	"reflect"
 	"runtime"
 	"sort"
@@ -107,6 +108,14 @@ func (e *Encoder) reflectMarshaler(v reflect.Value) bool {
 func (e *Encoder) reflectValue(v reflect.Value) {
 
 	if e.reflectMarshaler(v) {
+		return
+	}
+
+	switch t := v.Interface().(type) {
+	case big.Int:
+		e.writeString("i")
+		e.writeString(t.String())
+		e.writeString("e")
 		return
 	}
 

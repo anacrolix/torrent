@@ -3,25 +3,12 @@ package torrent
 import (
 	"crypto"
 	"expvar"
-	"time"
 )
 
 const (
 	pieceHash        = crypto.SHA1
 	maxRequests      = 250    // Maximum pending requests we allow peers to send us.
 	defaultChunkSize = 0x4000 // 16KiB
-
-	// Updated occasionally to when there's been some changes to client
-	// behaviour in case other clients are assuming anything of us. See also
-	// `bep20`.
-	extendedHandshakeClientVersion = "go.torrent dev 20150624"
-	// Peer ID client identifier prefix. We'll update this occasionally to
-	// reflect changes to client behaviour that other clients may depend on.
-	// Also see `extendedHandshakeClientVersion`.
-	bep20 = "-GT0001-"
-
-	nominalDialTimeout = time.Second * 30
-	minDialTimeout     = 5 * time.Second
 
 	// Justification for set bits follows.
 	//
@@ -35,16 +22,6 @@ const (
 	// DHT ([7]|=1):
 	// http://www.bittorrent.org/beps/bep_0005.html
 	defaultExtensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x01"
-
-	defaultEstablishedConnsPerTorrent = 80
-	defaultHalfOpenConnsPerTorrent    = 80
-	torrentPeersHighWater             = 200
-	torrentPeersLowWater              = 50
-
-	// Limit how long handshake can take. This is to reduce the lingering
-	// impact of a few bad apples. 4s loses 1% of successful handshakes that
-	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
-	handshakesTimeout = 20 * time.Second
 
 	// These are our extended message IDs. Peers will use these values to
 	// select which extension a message is intended for.

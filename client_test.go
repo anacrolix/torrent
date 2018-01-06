@@ -132,23 +132,25 @@ func TestUnmarshalPEXMsg(t *testing.T) {
 }
 
 func TestReducedDialTimeout(t *testing.T) {
+	cfg := &Config{}
+	cfg.setDefaults()
 	for _, _case := range []struct {
 		Max             time.Duration
 		HalfOpenLimit   int
 		PendingPeers    int
 		ExpectedReduced time.Duration
 	}{
-		{nominalDialTimeout, 40, 0, nominalDialTimeout},
-		{nominalDialTimeout, 40, 1, nominalDialTimeout},
-		{nominalDialTimeout, 40, 39, nominalDialTimeout},
-		{nominalDialTimeout, 40, 40, nominalDialTimeout / 2},
-		{nominalDialTimeout, 40, 80, nominalDialTimeout / 3},
-		{nominalDialTimeout, 40, 4000, nominalDialTimeout / 101},
+		{cfg.NominalDialTimeout, 40, 0, cfg.NominalDialTimeout},
+		{cfg.NominalDialTimeout, 40, 1, cfg.NominalDialTimeout},
+		{cfg.NominalDialTimeout, 40, 39, cfg.NominalDialTimeout},
+		{cfg.NominalDialTimeout, 40, 40, cfg.NominalDialTimeout / 2},
+		{cfg.NominalDialTimeout, 40, 80, cfg.NominalDialTimeout / 3},
+		{cfg.NominalDialTimeout, 40, 4000, cfg.NominalDialTimeout / 101},
 	} {
-		reduced := reducedDialTimeout(_case.Max, _case.HalfOpenLimit, _case.PendingPeers)
+		reduced := reducedDialTimeout(cfg.MinDialTimeout, _case.Max, _case.HalfOpenLimit, _case.PendingPeers)
 		expected := _case.ExpectedReduced
-		if expected < minDialTimeout {
-			expected = minDialTimeout
+		if expected < cfg.MinDialTimeout {
+			expected = cfg.MinDialTimeout
 		}
 		if reduced != expected {
 			t.Fatalf("expected %s, got %s", _case.ExpectedReduced, reduced)
@@ -368,11 +370,14 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}
 	seeder, err := NewClient(cfg)
 	require.NoError(t, err)
-	defer seeder.Close()
 	if ps.ExportClientStatus {
 		testutil.ExportStatusWriter(seeder, "s")
 	}
 	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	// Run a Stats right after Closing the Client. This will trigger the Stats
+	// panic in #214 caused by RemoteAddr on Closed uTP sockets.
+	defer seederTorrent.Stats()
+	defer seeder.Close()
 	seederTorrent.VerifyData()
 	// Create leecher and a Torrent.
 	leecherDataDir, err := ioutil.TempDir("", "")

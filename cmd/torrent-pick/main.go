@@ -163,6 +163,7 @@ func main() {
 					continue
 				}
 				srcReader := file.NewReader()
+				defer srcReader.Close()
 				io.Copy(dstWriter, srcReader)
 				return
 			}

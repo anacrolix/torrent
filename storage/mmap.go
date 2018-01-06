@@ -55,8 +55,8 @@ func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 		pc:       ts.pc,
 		p:        p,
 		ih:       ts.infoHash,
-		ReaderAt: io.NewSectionReader(ts.span, p.Offset(), p.Length()),
-		WriterAt: missinggo.NewSectionWriter(ts.span, p.Offset(), p.Length()),
+		ReaderAt: io.NewSectionReader(&ts.span, p.Offset(), p.Length()),
+		WriterAt: missinggo.NewSectionWriter(&ts.span, p.Offset(), p.Length()),
 	}
 }
 

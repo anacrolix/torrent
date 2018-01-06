@@ -48,10 +48,8 @@ func TestMarshalAnnounceResponse(t *testing.T) {
 func TestLongWriteUDP(t *testing.T) {
 	t.Parallel()
 	l, err := net.ListenUDP("udp4", nil)
+	require.NoError(t, err)
 	defer l.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
 	c, err := net.DialUDP("udp", nil, l.LocalAddr().(*net.UDPAddr))
 	if err != nil {
 		t.Fatal(err)

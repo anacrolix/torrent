@@ -43,7 +43,7 @@ type Client struct {
 	config Config
 
 	halfOpenLimit  int
-	peerID         peerID
+	peerID         PeerID
 	defaultStorage *storage.Client
 	onClose        []func()
 	tcpListener    net.Listener
@@ -90,7 +90,7 @@ func (cl *Client) SetIPBlockList(list iplist.Ranger) {
 	}
 }
 
-func (cl *Client) PeerID() [20]byte {
+func (cl *Client) PeerID() PeerID {
 	return cl.peerID
 }
 
@@ -794,7 +794,7 @@ func (cl *Client) connBTHandshake(c *connection, ih *metainfo.Hash) (ret metainf
 	}
 	ret = res.Hash
 	c.PeerExtensionBytes = res.peerExtensionBytes
-	c.PeerID = res.peerID
+	c.PeerID = res.PeerID
 	c.completedHandshake = time.Now()
 	return
 }

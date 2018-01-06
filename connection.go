@@ -73,7 +73,7 @@ type connection struct {
 	sentHaves        []bool
 
 	// Stuff controlled by the remote peer.
-	PeerID             peerID
+	PeerID             PeerID
 	PeerInterested     bool
 	PeerChoked         bool
 	PeerRequests       map[request]struct{}

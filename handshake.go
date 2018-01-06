@@ -60,7 +60,7 @@ func (pex peerExtensionBytes) GetBit(bit ExtensionBit) bool {
 
 type handshakeResult struct {
 	peerExtensionBytes
-	peerID
+	PeerID
 	metainfo.Hash
 }
 
@@ -116,7 +116,7 @@ func handshake(sock io.ReadWriter, ih *metainfo.Hash, peerID [20]byte, extension
 	}
 	missinggo.CopyExact(&res.peerExtensionBytes, b[20:28])
 	missinggo.CopyExact(&res.Hash, b[28:48])
-	missinggo.CopyExact(&res.peerID, b[48:68])
+	missinggo.CopyExact(&res.PeerID, b[48:68])
 	peerExtensions.Add(hex.EncodeToString(res.peerExtensionBytes[:]), 1)
 
 	// TODO: Maybe we can just drop peers here if we're not interested. This

@@ -50,13 +50,17 @@ type Config struct {
 	// not altruistic, we'll upload slightly more than we download from each
 	// peer.
 	Seed bool `long:"seed"`
-	// Events are data bytes sent in pieces. The burst must be large enough to
-	// fit a whole chunk, which is usually 16 KiB.
+	// Only applies to chunks uploaded to peers, to maintain responsiveness
+	// communicating local Client state to peers. Each limiter token
+	// represents one byte. The Limiter's burst must be large enough to fit a
+	// whole chunk, which is usually 16 KiB (see TorrentSpec.ChunkSize).
 	UploadRateLimiter *rate.Limiter
-	// The events are bytes read from connections. The burst must be bigger
-	// than the largest Read performed on a Conn minus one. This is likely to
-	// be the larger of the main read loop buffer (~4096), and the requested
-	// chunk size (~16KiB).
+	// Rate limits all reads from connections to peers. Each limiter token
+	// represents one byte. The Limiter's burst must be bigger than the
+	// largest Read performed on a the underlying rate-limiting io.Reader
+	// minus one. This is likely to be the larger of the main read loop buffer
+	// (~4096), and the requested chunk size (~16KiB, see
+	// TorrentSpec.ChunkSize).
 	DownloadRateLimiter *rate.Limiter
 
 	// User-provided Client peer ID. If not present, one is generated automatically.

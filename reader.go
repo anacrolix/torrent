@@ -89,6 +89,7 @@ func (r *reader) readable(off int64) (ret bool) {
 
 // How many bytes are available to read. Max is the most we could require.
 func (r *reader) available(off, max int64) (ret int64) {
+	off += r.offset
 	for max > 0 {
 		req, ok := r.t.offsetRequest(off)
 		if !ok {

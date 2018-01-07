@@ -77,7 +77,7 @@ func (r *reader) readable(off int64) (ret bool) {
 	if r.t.closed.IsSet() {
 		return true
 	}
-	req, ok := r.t.offsetRequest(r.offset + off)
+	req, ok := r.t.offsetRequest(r.torrentOffset(off))
 	if !ok {
 		panic(off)
 	}
@@ -127,7 +127,7 @@ func (r *reader) piecesUncached() (ret pieceRange) {
 	if ra > r.length-r.pos {
 		ra = r.length - r.pos
 	}
-	ret.begin, ret.end = r.t.byteRegionPieces(r.offset+r.pos, ra)
+	ret.begin, ret.end = r.t.byteRegionPieces(r.torrentOffset(r.pos), ra)
 	return
 }
 
@@ -189,6 +189,10 @@ func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error) (avail int64) {
 	return r.available(pos, wanted)
 }
 
+func (r *reader) torrentOffset(readerPos int64) int64 {
+	return r.offset + readerPos
+}
+
 // Performs at most one successful read to torrent storage.
 func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err error) {
 	if pos >= r.length {
@@ -207,11 +211,11 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 				return
 			}
 		}
-		pi := int(pos / r.t.info.PieceLength)
+		pi := int(r.torrentOffset(pos) / r.t.info.PieceLength)
 		ip := r.t.info.Piece(pi)
-		po := pos % r.t.info.PieceLength
+		po := r.torrentOffset(pos) % r.t.info.PieceLength
 		b1 := missinggo.LimitLen(b, ip.Length()-po, avail)
-		n, err = r.t.readAt(b1, pos)
+		n, err = r.t.readAt(b1, r.torrentOffset(pos))
 		if n != 0 {
 			err = nil
 			return

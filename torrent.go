@@ -1608,3 +1608,11 @@ func (t *Torrent) VerifyData() {
 		t.Piece(i).VerifyData()
 	}
 }
+
+func (t *Torrent) Completed() bool {
+	if t.numPiecesCompleted() == 0 {
+		// either not even started or has nothing downloaded
+		return false
+	}
+	return !t.needData()
+}

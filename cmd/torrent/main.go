@@ -59,7 +59,12 @@ func torrentBar(t *torrent.Torrent) {
 	}()
 }
 
-func addTorrents(client *torrent.Client) {
+func addTorrents(client *torrent.Client, download_started chan int) {
+	if len(flags.InnerPath) != 0 {
+		download_started <- -len(flags.InnerPath)
+	} else {
+		download_started <- -len(flags.Torrent)
+	}
 	for _, arg := range flags.Torrent {
 		t := func() *torrent.Torrent {
 			if strings.HasPrefix(arg, "magnet:") {
@@ -113,7 +118,20 @@ func addTorrents(client *torrent.Client) {
 		}())
 		go func() {
 			<-t.GotInfo()
-			t.DownloadAll()
+			if len(flags.InnerPath) == 0 {
+				t.DownloadAll()
+				download_started <- 1
+			} else {
+				files := t.Files()
+				for _, file := range files {
+					for _, target := range flags.InnerPath {
+						if target == file.DisplayPath() {
+							file.Download()
+							download_started <- 1
+						}
+					}
+				}
+			}
 		}()
 	}
 }
@@ -126,6 +144,7 @@ var flags = struct {
 	UploadRate   tagflag.Bytes  `help:"max piece bytes to send per second"`
 	DownloadRate tagflag.Bytes  `help:"max bytes per second down from peers"`
 	Debug        bool
+	InnerPath []string `help:"path to file inside torrent to download"`
 	tagflag.StartPos
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }{
@@ -169,7 +188,15 @@ func main() {
 		client.WriteStatus(w)
 	})
 	uiprogress.Start()
-	addTorrents(client)
+	download_started := make(chan int, 1)
+	addTorrents(client, download_started)
+	download_started_cnt := 0
+	for {
+		download_started_cnt += <- download_started
+		if download_started_cnt == 0 {
+			break
+		}
+	}
 	if client.WaitAll() {
 		log.Print("downloaded ALL the torrents")
 	} else {

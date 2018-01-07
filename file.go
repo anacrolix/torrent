@@ -19,19 +19,22 @@ func (f *File) Torrent() *Torrent {
 	return f.t
 }
 
-// Data for this file begins this far into the torrent.
+// Data for this file begins this many bytes into the Torrent.
 func (f *File) Offset() int64 {
 	return f.offset
 }
 
+// The FileInfo from the metainfo.Info to which this file corresponds.
 func (f File) FileInfo() metainfo.FileInfo {
 	return f.fi
 }
 
+// The file's path components joined by '/'.
 func (f File) Path() string {
 	return f.path
 }
 
+// The file's length in bytes.
 func (f *File) Length() int64 {
 	return f.length
 }
@@ -47,6 +50,7 @@ func (f *File) DisplayPath() string {
 
 }
 
+// The download status of a piece that comprises part of a File.
 type FilePieceState struct {
 	Bytes int64 // Bytes within the piece that are part of this File.
 	PieceState

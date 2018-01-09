@@ -78,21 +78,22 @@ func TestAddDropTorrent(t *testing.T) {
 }
 
 func TestAddTorrentNoSupportedTrackerSchemes(t *testing.T) {
+	// TODO?
 	t.SkipNow()
 }
 
 func TestAddTorrentNoUsableURLs(t *testing.T) {
+	// TODO?
 	t.SkipNow()
 }
 
 func TestAddPeersToUnknownTorrent(t *testing.T) {
+	// TODO?
 	t.SkipNow()
 }
 
 func TestPieceHashSize(t *testing.T) {
-	if pieceHash.Size() != 20 {
-		t.FailNow()
-	}
+	assert.Equal(t, 20, pieceHash.Size())
 }
 
 func TestTorrentInitialState(t *testing.T) {

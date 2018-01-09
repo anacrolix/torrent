@@ -6,19 +6,19 @@
 package testutil
 
 import (
-	"fmt"
-	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/anacrolix/missinggo"
-
-	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 )
+
+var Greeting = Torrent{
+	Files: []File{{
+		Data: GreetingFileContents,
+	}},
+	Name: GreetingFileName,
+}
 
 const (
 	GreetingFileContents = "hello, world\n"
@@ -33,23 +33,7 @@ func CreateDummyTorrentData(dirName string) string {
 }
 
 func GreetingMetaInfo() *metainfo.MetaInfo {
-	info := metainfo.Info{
-		Name:        GreetingFileName,
-		Length:      int64(len(GreetingFileContents)),
-		PieceLength: 5,
-	}
-	err := info.GeneratePieces(func(metainfo.FileInfo) (io.ReadCloser, error) {
-		return ioutil.NopCloser(strings.NewReader(GreetingFileContents)), nil
-	})
-	if err != nil {
-		panic(err)
-	}
-	mi := &metainfo.MetaInfo{}
-	mi.InfoBytes, err = bencode.Marshal(info)
-	if err != nil {
-		panic(err)
-	}
-	return mi
+	return Greeting.Metainfo(5)
 }
 
 // Gives a temporary directory containing the completed "greeting" torrent,
@@ -63,17 +47,4 @@ func GreetingTestTorrent() (tempDir string, metaInfo *metainfo.MetaInfo) {
 	CreateDummyTorrentData(tempDir)
 	metaInfo = GreetingMetaInfo()
 	return
-}
-
-type StatusWriter interface {
-	WriteStatus(io.Writer)
-}
-
-func ExportStatusWriter(sw StatusWriter, path string) {
-	http.HandleFunc(
-		fmt.Sprintf("/%s/%s", missinggo.GetTestName(), path),
-		func(w http.ResponseWriter, r *http.Request) {
-			sw.WriteStatus(w)
-		},
-	)
 }

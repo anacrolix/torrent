@@ -3,7 +3,9 @@ package storage
 import (
 	"encoding/binary"
 	"path/filepath"
+	"time"
 
+	"github.com/anacrolix/missinggo/assert"
 	"github.com/boltdb/bolt"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -25,13 +27,12 @@ type boltDBTorrent struct {
 }
 
 func NewBoltDB(filePath string) ClientImpl {
-	ret := &boltDBClient{}
-	var err error
-	ret.db, err = bolt.Open(filepath.Join(filePath, "bolt.db"), 0600, nil)
-	if err != nil {
-		panic(err)
-	}
-	return ret
+	db, err := bolt.Open(filepath.Join(filePath, "bolt.db"), 0600, &bolt.Options{
+		Timeout: time.Second,
+	})
+	assert.Nil(err)
+	db.NoSync = true
+	return &boltDBClient{db}
 }
 
 func (me *boltDBClient) Close() error {

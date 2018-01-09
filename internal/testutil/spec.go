@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/anacrolix/missinggo/assert"
+
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 )

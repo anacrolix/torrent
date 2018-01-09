@@ -667,7 +667,7 @@ func (cn *connection) raisePeerMinPieces(newMin int) {
 }
 
 func (cn *connection) peerSentHave(piece int) error {
-	if cn.t.haveInfo() && piece >= cn.t.numPieces() {
+	if cn.t.haveInfo() && piece >= cn.t.numPieces() || piece < 0 {
 		return errors.New("invalid piece")
 	}
 	if cn.PeerHasPiece(piece) {

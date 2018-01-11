@@ -27,7 +27,7 @@ var DefaultHTTPUserAgent = "Go-Torrent/1.0"
 
 // Override Client defaults.
 type Config struct {
-	// Store torrent file data in this directory unless TorrentDataOpener is
+	// Store torrent file data in this directory unless .DefaultStorage is
 	// specified.
 	DataDir string `long:"data-dir" description:"directory to store downloaded torrent data"`
 	// The address to listen for new uTP and TCP bittorrent protocol

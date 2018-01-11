@@ -459,7 +459,6 @@ func TestSeedAfterDownloading(t *testing.T) {
 	defer leecher.Close()
 	testutil.ExportStatusWriter(leecher, "l")
 	cfg.Seed = false
-	// cfg.TorrentDataOpener = nil
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.DataDir)

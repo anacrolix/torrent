@@ -2,6 +2,7 @@ package storage
 
 import (
 	"io"
+	"log"
 	"os"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -22,8 +23,10 @@ func (me *filePieceImpl) pieceKey() metainfo.PieceKey {
 
 func (fs *filePieceImpl) Completion() Completion {
 	c, err := fs.completion.Get(fs.pieceKey())
-	if err != nil || !c.Ok {
-		return Completion{Ok: false}
+	if err != nil {
+		log.Printf("error getting piece completion: %s", err)
+		c.Ok = false
+		return c
 	}
 	// If it's allegedly complete, check that its constituent files have the
 	// necessary length.

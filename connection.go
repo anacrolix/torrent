@@ -541,7 +541,19 @@ func (cn *connection) unbiasedPieceRequestOrder() iter.Func {
 	skip.Union(cn.t.completedPieces)
 	// Return an iterator over the different priority classes, minus the skip
 	// pieces.
-	return iterBitmapsDistinct(skip, now, readahead, cn.t.pendingPieces)
+	return iter.Chain(
+		iterBitmapsDistinct(skip, now, readahead),
+		func(cb iter.Callback) {
+			cn.t.pendingPieces.IterTyped(func(piece int) bool {
+				if skip.Contains(piece) {
+					return true
+				}
+				more := cb(piece)
+				skip.Add(piece)
+				return more
+			})
+		},
+	)
 }
 
 // The connection should download highest priority pieces first, without any

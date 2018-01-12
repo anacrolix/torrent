@@ -16,6 +16,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/anacrolix/missinggo/prioritybitmap"
+
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
@@ -113,7 +115,7 @@ type Torrent struct {
 
 	// The indexes of pieces we want with normal priority, that aren't
 	// currently available.
-	pendingPieces bitmap.Bitmap
+	pendingPieces prioritybitmap.PriorityBitmap
 	// A cache of completed piece indices.
 	completedPieces bitmap.Bitmap
 	// Pieces that need to be hashed.
@@ -965,13 +967,13 @@ func (t *Torrent) pendPiece(piece int) {
 	if t.havePiece(piece) {
 		return
 	}
-	t.pendingPieces.Add(piece)
+	t.pendingPieces.Set(piece, PiecePriorityNormal.BitmapPriority())
 	t.updatePiecePriority(piece)
 }
 
 func (t *Torrent) unpendPieces(unpend bitmap.Bitmap) {
-	t.pendingPieces.Sub(unpend)
-	unpend.IterTyped(func(piece int) (again bool) {
+	unpend.IterTyped(func(piece int) (more bool) {
+		t.pendingPieces.Remove(piece)
 		t.updatePiecePriority(piece)
 		return true
 	})

@@ -97,7 +97,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	}
 	t.setChunkSize(defaultChunkSize)
 	t.makePieces()
-	t.pendingPieces.Add(0)
+	t.pendingPieces.Set(0, PiecePriorityNormal.BitmapPriority())
 	r, w := io.Pipe()
 	cn := &connection{
 		t: t,

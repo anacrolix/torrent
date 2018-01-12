@@ -21,13 +21,20 @@ func (pp *piecePriority) Raise(maybe piecePriority) {
 	}
 }
 
+// Priority for use in PriorityBitmap
+func (me piecePriority) BitmapPriority() int {
+	return -int(me)
+}
+
 const (
 	PiecePriorityNone      piecePriority = iota // Not wanted.
 	PiecePriorityNormal                         // Wanted.
+	PiecePriorityHigh                           // Wanted a lot.
 	PiecePriorityReadahead                      // May be required soon.
-	// Succeeds a piece where a read occurred. Currently the same as Now, apparently due to issues with caching.
+	// Succeeds a piece where a read occurred. Currently the same as Now,
+	// apparently due to issues with caching.
 	PiecePriorityNext
-	PiecePriorityNow // A Reader is reading in this piece.
+	PiecePriorityNow // A Reader is reading in this piece. Highest urgency.
 )
 
 type Piece struct {

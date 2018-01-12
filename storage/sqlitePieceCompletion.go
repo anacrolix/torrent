@@ -17,7 +17,7 @@ type sqlitePieceCompletion struct {
 
 var _ PieceCompletion = (*sqlitePieceCompletion)(nil)
 
-func newSqlitePieceCompletion(dir string) (ret *sqlitePieceCompletion, err error) {
+func NewSqlitePieceCompletion(dir string) (ret *sqlitePieceCompletion, err error) {
 	p := filepath.Join(dir, ".torrent.db")
 	db, err := sql.Open("sqlite3", p)
 	if err != nil {

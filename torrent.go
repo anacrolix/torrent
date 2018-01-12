@@ -47,7 +47,11 @@ type Torrent struct {
 	cl *Client
 
 	networkingEnabled bool
-	requestStrategy   int
+	// Determines what chunks to request from peers. 1: Favour higher priority
+	// pieces with some fuzzing to reduce overlaps and wastage across
+	// connections. 2: The fastest connection downloads strictly in order of
+	// priority, while all others adher to their piece inclications.
+	requestStrategy int
 
 	closed   missinggo.Event
 	infoHash metainfo.Hash

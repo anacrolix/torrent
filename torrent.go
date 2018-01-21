@@ -16,12 +16,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/anacrolix/missinggo/prioritybitmap"
-
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/perf"
+	"github.com/anacrolix/missinggo/prioritybitmap"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/bradfitz/iter"
@@ -76,7 +75,8 @@ type Torrent struct {
 	metainfo metainfo.MetaInfo
 
 	// The info dict. nil if we don't have it (yet).
-	info *metainfo.Info
+	info  *metainfo.Info
+	files *[]*File
 
 	// Active peer connections, running message stream loops.
 	conns               map[*connection]struct{}
@@ -305,7 +305,34 @@ func (t *Torrent) makePieces() {
 		piece.index = i
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		missinggo.CopyExact(piece.hash[:], hash)
+		piece.files = (*t.files)[pieceFirstFileIndex(piece.torrentBeginOffset(), *t.files):pieceLastFileIndex(piece.torrentEndOffset(), *t.files)]
 	}
+}
+
+func pieceFirstFileIndex(pieceOffset int64, files []*File) int {
+	for i, f := range files {
+		if f.offset+f.length > pieceOffset {
+			return i
+		}
+	}
+	return -1
+}
+
+func pieceLastFileIndex(pieceEndOffset int64, files []*File) int {
+	for i, f := range files {
+		if f.offset+f.length >= pieceEndOffset {
+			return i
+		}
+	}
+	return -1
+}
+
+func (t *Torrent) cacheLength(info *metainfo.Info) {
+	var l int64
+	for _, f := range t.info.UpvertedFiles() {
+		l += f.Length
+	}
+	t.length = &l
 }
 
 // Called when metadata for a torrent becomes available.
@@ -327,6 +354,7 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	}
 	defer t.updateWantPeersEvent()
 	t.info = &info
+	t.initFiles()
 	t.displayName = "" // Save a few bytes lol.
 	t.cl.event.Broadcast()
 	t.gotMetainfo.Set()
@@ -334,11 +362,7 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 	if err != nil {
 		return fmt.Errorf("error opening torrent storage: %s", err)
 	}
-	var l int64
-	for _, f := range t.info.UpvertedFiles() {
-		l += f.Length
-	}
-	t.length = &l
+	t.cacheLength(&info)
 	t.metadataBytes = b
 	t.metadataCompletedChunks = nil
 	t.makePieces()
@@ -945,23 +969,26 @@ func (t *Torrent) piecePriority(piece int) piecePriority {
 	return t.pieces[piece].priority
 }
 
-func (t *Torrent) piecePriorityUncached(piece int) piecePriority {
-	if t.pieceComplete(piece) {
-		return PiecePriorityNone
+func (t *Torrent) piecePriorityUncached(piece int) (ret piecePriority) {
+	for _, f := range t.pieces[piece].files {
+		ret.Raise(f.prio)
 	}
 	if t.readerNowPieces.Contains(piece) {
-		return PiecePriorityNow
+		ret.Raise(PiecePriorityNow)
 	}
 	// if t.readerNowPieces.Contains(piece - 1) {
 	// 	return PiecePriorityNext
 	// }
 	if t.readerReadaheadPieces.Contains(piece) {
-		return PiecePriorityReadahead
+		ret.Raise(PiecePriorityReadahead)
 	}
 	if t.pendingPieces.Contains(piece) {
-		return PiecePriorityNormal
+		ret.Raise(PiecePriorityNormal)
 	}
-	return PiecePriorityNone
+	if t.pieceComplete(piece) {
+		return PiecePriorityNone
+	}
+	return
 }
 
 func (t *Torrent) pendPiece(piece int) {

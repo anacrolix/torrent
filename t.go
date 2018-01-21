@@ -158,25 +158,27 @@ func (t *Torrent) CancelPieces(begin, end int) {
 	t.unpendPieceRange(begin, end)
 }
 
-// Returns handles to the files in the torrent. This requires the metainfo is
-// available first.
-func (t *Torrent) Files() (ret []File) {
-	info := t.Info()
-	if info == nil {
-		return
-	}
+func (t *Torrent) initFiles() {
 	var offset int64
-	for _, fi := range info.UpvertedFiles() {
-		ret = append(ret, File{
+	t.files = new([]*File)
+	for _, fi := range t.info.UpvertedFiles() {
+		*t.files = append(*t.files, &File{
 			t,
-			strings.Join(append([]string{info.Name}, fi.Path...), "/"),
+			strings.Join(append([]string{t.info.Name}, fi.Path...), "/"),
 			offset,
 			fi.Length,
 			fi,
+			PiecePriorityNone,
 		})
 		offset += fi.Length
 	}
-	return
+
+}
+
+// Returns handles to the files in the torrent. This requires that the Info is
+// available first.
+func (t *Torrent) Files() []*File {
+	return *t.files
 }
 
 func (t *Torrent) AddPeers(pp []Peer) {

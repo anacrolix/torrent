@@ -21,6 +21,8 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
 	tt.info = &info
+	tt.cacheLength(&info)
+	tt.initFiles()
 	tt.makePieces()
 	tt.storage, err = cs.OpenTorrent(tt.info, mi.HashInfoBytes())
 	require.NoError(t, err)

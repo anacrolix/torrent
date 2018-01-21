@@ -162,6 +162,7 @@ func main() {
 				if file.DisplayPath() != rootGroup.Pick {
 					continue
 				}
+				file.Download()
 				srcReader := file.NewReader()
 				defer srcReader.Close()
 				io.Copy(dstWriter, srcReader)

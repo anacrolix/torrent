@@ -27,7 +27,7 @@ func (me piecePriority) BitmapPriority() int {
 }
 
 const (
-	PiecePriorityNone      piecePriority = iota // Not wanted.
+	PiecePriorityNone      piecePriority = iota // Not wanted. Must be the zero value.
 	PiecePriorityNormal                         // Wanted.
 	PiecePriorityHigh                           // Wanted a lot.
 	PiecePriorityReadahead                      // May be required soon.
@@ -42,6 +42,7 @@ type Piece struct {
 	hash  metainfo.Hash
 	t     *Torrent
 	index int
+	files []*File
 	// Chunks we've written to since the last check. The chunk offset and
 	// length can be determined by the request chunkSize in use.
 	dirtyChunks bitmap.Bitmap
@@ -191,4 +192,12 @@ func (p *Piece) VerifyData() {
 
 func (p *Piece) queuedForHash() bool {
 	return p.t.piecesQueuedForHash.Get(p.index)
+}
+
+func (p *Piece) torrentBeginOffset() int64 {
+	return int64(p.index) * p.t.info.PieceLength
+}
+
+func (p *Piece) torrentEndOffset() int64 {
+	return p.torrentBeginOffset() + int64(p.length())
 }

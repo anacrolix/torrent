@@ -46,7 +46,7 @@ func (f *File) Length() int64 {
 func (f *File) DisplayPath() string {
 	fip := f.FileInfo().Path
 	if len(fip) == 0 {
-		return f.t.Info().Name
+		return f.t.info.Name
 	}
 	return strings.Join(fip, "/")
 

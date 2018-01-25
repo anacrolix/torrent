@@ -334,7 +334,7 @@ func pieceEndFileIndex(pieceEndOffset int64, files []*File) int {
 	return 0
 }
 
-func (t *Torrent) cacheLength(info *metainfo.Info) {
+func (t *Torrent) cacheLength() {
 	var l int64
 	for _, f := range t.info.UpvertedFiles() {
 		l += f.Length
@@ -342,37 +342,26 @@ func (t *Torrent) cacheLength(info *metainfo.Info) {
 	t.length = &l
 }
 
-// Called when metadata for a torrent becomes available.
-func (t *Torrent) setInfoBytes(b []byte) error {
-	if t.haveInfo() {
-		return nil
-	}
-	if metainfo.HashBytes(b) != t.infoHash {
-		return errors.New("info bytes have wrong hash")
-	}
-	var info metainfo.Info
-	err := bencode.Unmarshal(b, &info)
-	if err != nil {
-		return fmt.Errorf("error unmarshalling info bytes: %s", err)
-	}
-	err = validateInfo(&info)
-	if err != nil {
+func (t *Torrent) setInfo(info *metainfo.Info) error {
+	if err := validateInfo(info); err != nil {
 		return fmt.Errorf("bad info: %s", err)
 	}
-	defer t.updateWantPeersEvent()
-	t.info = &info
-	t.initFiles()
-	t.displayName = "" // Save a few bytes lol.
-	t.cl.event.Broadcast()
-	t.gotMetainfo.Set()
-	t.storage, err = t.storageOpener.OpenTorrent(t.info, t.infoHash)
-	if err != nil {
-		return fmt.Errorf("error opening torrent storage: %s", err)
+	if t.storageOpener != nil {
+		var err error
+		t.storage, err = t.storageOpener.OpenTorrent(info, t.infoHash)
+		if err != nil {
+			return fmt.Errorf("error opening torrent storage: %s", err)
+		}
 	}
-	t.cacheLength(&info)
-	t.metadataBytes = b
-	t.metadataCompletedChunks = nil
+	t.info = info
+	t.displayName = "" // Save a few bytes lol.
+	t.initFiles()
+	t.cacheLength()
 	t.makePieces()
+	return nil
+}
+
+func (t *Torrent) onSetInfo() {
 	for conn := range t.conns {
 		if err := conn.setNumPieces(t.numPieces()); err != nil {
 			log.Printf("closing connection: %s", err)
@@ -387,6 +376,26 @@ func (t *Torrent) setInfoBytes(b []byte) error {
 			t.queuePieceCheck(i)
 		}
 	}
+	t.cl.event.Broadcast()
+	t.gotMetainfo.Set()
+	t.updateWantPeersEvent()
+}
+
+// Called when metadata for a torrent becomes available.
+func (t *Torrent) setInfoBytes(b []byte) error {
+	if metainfo.HashBytes(b) != t.infoHash {
+		return errors.New("info bytes have wrong hash")
+	}
+	var info metainfo.Info
+	if err := bencode.Unmarshal(b, &info); err != nil {
+		return fmt.Errorf("error unmarshalling info bytes: %s", err)
+	}
+	if err := t.setInfo(&info); err != nil {
+		return err
+	}
+	t.metadataBytes = b
+	t.metadataCompletedChunks = nil
+	t.onSetInfo()
 	return nil
 }
 

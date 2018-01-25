@@ -15,17 +15,13 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	td, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
-	cs := storage.NewClient(storage.NewFile(td))
-	tt := &Torrent{}
+	tt := &Torrent{
+		storageOpener: storage.NewClient(storage.NewFile(td)),
+	}
 	mi := testutil.GreetingMetaInfo()
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
-	tt.info = &info
-	tt.cacheLength(&info)
-	tt.initFiles()
-	tt.makePieces()
-	tt.storage, err = cs.OpenTorrent(tt.info, mi.HashInfoBytes())
-	require.NoError(t, err)
+	require.NoError(t, tt.setInfo(&info))
 	require.NoError(t, tt.storage.Close())
 	tt.hashPiece(0)
 }

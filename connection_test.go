@@ -86,17 +86,16 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	cl := &Client{}
 	ts := &torrentStorage{}
 	t := &Torrent{
-		cl: cl,
-		info: &metainfo.Info{
-			Pieces:      make([]byte, 20),
-			Length:      1 << 20,
-			PieceLength: 1 << 20,
-		},
+		cl:                cl,
 		storage:           &storage.Torrent{ts},
 		pieceStateChanges: pubsub.NewPubSub(),
 	}
+	require.NoError(b, t.setInfo(&metainfo.Info{
+		Pieces:      make([]byte, 20),
+		Length:      1 << 20,
+		PieceLength: 1 << 20,
+	}))
 	t.setChunkSize(defaultChunkSize)
-	t.makePieces()
 	t.pendingPieces.Set(0, PiecePriorityNormal.BitmapPriority())
 	r, w := io.Pipe()
 	cn := &connection{

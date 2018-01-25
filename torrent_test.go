@@ -75,13 +75,17 @@ func TestTorrentString(t *testing.T) {
 // a large torrent with small pieces had a lot of overhead in recalculating
 // piece priorities everytime a reader (possibly in another Torrent) changed.
 func BenchmarkUpdatePiecePriorities(b *testing.B) {
+	const (
+		numPieces   = 13410
+		pieceLength = 256 << 10
+	)
 	cl := &Client{}
 	t := cl.newTorrent(metainfo.Hash{}, nil)
-	t.info = &metainfo.Info{
-		Pieces:      make([]byte, 20*13410),
-		PieceLength: 256 << 10,
-	}
-	t.makePieces()
+	require.NoError(b, t.setInfo(&metainfo.Info{
+		Pieces:      make([]byte, metainfo.HashSize*numPieces),
+		PieceLength: pieceLength,
+		Length:      pieceLength * numPieces,
+	}))
 	assert.EqualValues(b, 13410, t.numPieces())
 	for range iter.N(7) {
 		r := t.NewReader()

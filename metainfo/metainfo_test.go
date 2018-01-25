@@ -112,7 +112,7 @@ func testUnmarshal(t *testing.T, input string, expected *MetaInfo) {
 
 func TestUnmarshal(t *testing.T) {
 	testUnmarshal(t, `de`, &MetaInfo{})
-	testUnmarshal(t, `d4:infoe`, &MetaInfo{})
+	testUnmarshal(t, `d4:infoe`, nil)
 	testUnmarshal(t, `d4:infoabce`, nil)
 	testUnmarshal(t, `d4:infodee`, &MetaInfo{InfoBytes: []byte("de")})
 }

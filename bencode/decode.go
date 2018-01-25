@@ -38,10 +38,14 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 		return &UnmarshalInvalidArgError{reflect.TypeOf(v)}
 	}
 
-	if !d.parseValue(pv.Elem()) {
+	ok, err := d.parseValue(pv.Elem())
+	if err != nil {
+		return
+	}
+	if !ok {
 		d.throwSyntaxError(d.Offset-1, errors.New("unexpected 'e'"))
 	}
-	return nil
+	return
 }
 
 func checkForUnexpectedEOF(err error, offset int64) {
@@ -139,7 +143,7 @@ func (d *Decoder) parseInt(v reflect.Value) {
 	d.buf.Reset()
 }
 
-func (d *Decoder) parseString(v reflect.Value) {
+func (d *Decoder) parseString(v reflect.Value) error {
 	start := d.Offset - 1
 
 	// read the string length first
@@ -172,16 +176,17 @@ func (d *Decoder) parseString(v reflect.Value) {
 		copy(sl, d.buf.Bytes())
 		v.Set(reflect.ValueOf(sl))
 	default:
-		panic(&UnmarshalTypeError{
+		return &UnmarshalTypeError{
 			Value: "string",
 			Type:  v.Type(),
-		})
+		}
 	}
 
 	d.buf.Reset()
+	return nil
 }
 
-func (d *Decoder) parseDict(v reflect.Value) {
+func (d *Decoder) parseDict(v reflect.Value) error {
 	switch v.Kind() {
 	case reflect.Map:
 		t := v.Type()
@@ -209,8 +214,12 @@ func (d *Decoder) parseDict(v reflect.Value) {
 	for {
 		var valuev reflect.Value
 		keyv := reflect.ValueOf(&d.key).Elem()
-		if !d.parseValue(keyv) {
-			return
+		ok, err := d.parseValue(keyv)
+		if err != nil {
+			return fmt.Errorf("error parsing dict key: %s", err)
+		}
+		if !ok {
+			return nil
 		}
 
 		// get valuev as a map value or as a struct field
@@ -268,24 +277,27 @@ func (d *Decoder) parseDict(v reflect.Value) {
 			} else {
 				_, ok := d.parseValueInterface()
 				if !ok {
-					return
+					return fmt.Errorf("error parsing dict value for key %q", d.key)
 				}
 				continue
 			}
 		}
 
 		// now we need to actually parse it
-		if !d.parseValue(valuev) {
-			return
+		ok, err = d.parseValue(valuev)
+		if err != nil {
+			return fmt.Errorf("parsing value for key %q: %s", d.key, err)
 		}
-
+		if !ok {
+			return fmt.Errorf("missing value for key %q", d.key)
+		}
 		if v.Kind() == reflect.Map {
 			v.SetMapIndex(keyv, valuev)
 		}
 	}
 }
 
-func (d *Decoder) parseList(v reflect.Value) {
+func (d *Decoder) parseList(v reflect.Value) error {
 	switch v.Kind() {
 	case reflect.Array, reflect.Slice:
 	default:
@@ -296,23 +308,25 @@ func (d *Decoder) parseList(v reflect.Value) {
 	}
 
 	i := 0
-	for {
+	for ; ; i++ {
 		if v.Kind() == reflect.Slice && i >= v.Len() {
 			v.Set(reflect.Append(v, reflect.Zero(v.Type().Elem())))
 		}
 
-		ok := false
 		if i < v.Len() {
-			ok = d.parseValue(v.Index(i))
+			ok, err := d.parseValue(v.Index(i))
+			if err != nil {
+				return err
+			}
+			if !ok {
+				break
+			}
 		} else {
-			_, ok = d.parseValueInterface()
+			_, ok := d.parseValueInterface()
+			if !ok {
+				break
+			}
 		}
-
-		if !ok {
-			break
-		}
-
-		i++
 	}
 
 	if i < v.Len() {
@@ -329,6 +343,7 @@ func (d *Decoder) parseList(v reflect.Value) {
 	if i == 0 && v.Kind() == reflect.Slice {
 		v.Set(reflect.MakeSlice(v.Type(), 0, 0))
 	}
+	return nil
 }
 
 func (d *Decoder) readOneValue() bool {
@@ -410,7 +425,7 @@ func (d *Decoder) parseUnmarshaler(v reflect.Value) bool {
 
 // Returns true if there was a value and it's now stored in 'v', otherwise
 // there was an end symbol ("e") and no value was stored.
-func (d *Decoder) parseValue(v reflect.Value) bool {
+func (d *Decoder) parseValue(v reflect.Value) (bool, error) {
 	// we support one level of indirection at the moment
 	if v.Kind() == reflect.Ptr {
 		// if the pointer is nil, allocate a new element of the type it
@@ -422,14 +437,14 @@ func (d *Decoder) parseValue(v reflect.Value) bool {
 	}
 
 	if d.parseUnmarshaler(v) {
-		return true
+		return true, nil
 	}
 
 	// common case: interface{}
 	if v.Kind() == reflect.Interface && v.NumMethod() == 0 {
 		iface, _ := d.parseValueInterface()
 		v.Set(reflect.ValueOf(iface))
-		return true
+		return true, nil
 	}
 
 	b, err := d.r.ReadByte()
@@ -440,26 +455,25 @@ func (d *Decoder) parseValue(v reflect.Value) bool {
 
 	switch b {
 	case 'e':
-		return false
+		return false, nil
 	case 'd':
-		d.parseDict(v)
+		return true, d.parseDict(v)
 	case 'l':
-		d.parseList(v)
+		return true, d.parseList(v)
 	case 'i':
 		d.parseInt(v)
+		return true, nil
 	default:
 		if b >= '0' && b <= '9' {
 			// string
 			// append first digit of the length to the buffer
 			d.buf.WriteByte(b)
-			d.parseString(v)
-			break
+			return true, d.parseString(v)
 		}
 
 		d.raiseUnknownValueType(b, d.Offset-1)
 	}
-
-	return true
+	panic("unreachable")
 }
 
 // An unknown bencode type character was encountered.

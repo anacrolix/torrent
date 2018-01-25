@@ -514,6 +514,7 @@ func nextRequestState(
 }
 
 func (cn *connection) updateRequests() {
+	// log.Print("update requests")
 	cn.tickleWriter()
 }
 
@@ -640,7 +641,7 @@ func (cn *connection) updatePiecePriority(piece int) bool {
 		prio += piece / 3
 	default:
 	}
-	return cn.pieceRequestOrder.Set(piece, prio)
+	return cn.pieceRequestOrder.Set(piece, prio) || cn.shouldRequestWithoutBias()
 }
 
 func (cn *connection) getPieceInclination() []int {

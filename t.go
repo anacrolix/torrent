@@ -149,13 +149,24 @@ func (t *Torrent) deleteReader(r *reader) {
 func (t *Torrent) DownloadPieces(begin, end int) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
-	t.pendPieceRange(begin, end)
+	for i := begin; i < end; i++ {
+		if t.pieces[i].priority.Raise(PiecePriorityNormal) {
+			t.updatePiecePriority(i)
+		}
+	}
 }
 
 func (t *Torrent) CancelPieces(begin, end int) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
-	t.unpendPieceRange(begin, end)
+	for i := begin; i < end; i++ {
+		p := &t.pieces[i]
+		if p.priority == PiecePriorityNone {
+			continue
+		}
+		p.priority = PiecePriorityNone
+		t.updatePiecePriority(i)
+	}
 }
 
 func (t *Torrent) initFiles() {
@@ -189,11 +200,9 @@ func (t *Torrent) AddPeers(pp []Peer) {
 }
 
 // Marks the entire torrent for download. Requires the info first, see
-// GotInfo.
+// GotInfo. Sets piece priorities for historical reasons.
 func (t *Torrent) DownloadAll() {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
-	t.pendPieceRange(0, t.numPieces())
+	t.DownloadPieces(0, t.numPieces())
 }
 
 func (t *Torrent) String() string {

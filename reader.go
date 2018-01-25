@@ -243,6 +243,7 @@ func (r *reader) posChanged() {
 		return
 	}
 	r.pieces = to
+	// log.Printf("reader pos changed %v->%v", from, to)
 	r.t.readerPosChanged(from, to)
 }
 

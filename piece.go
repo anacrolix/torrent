@@ -14,10 +14,12 @@ import (
 // Describes the importance of obtaining a particular piece.
 type piecePriority byte
 
-func (pp *piecePriority) Raise(maybe piecePriority) {
+func (pp *piecePriority) Raise(maybe piecePriority) bool {
 	if maybe > *pp {
 		*pp = maybe
+		return true
 	}
+	return false
 }
 
 // Priority for use in PriorityBitmap
@@ -199,4 +201,31 @@ func (p *Piece) torrentBeginOffset() int64 {
 
 func (p *Piece) torrentEndOffset() int64 {
 	return p.torrentBeginOffset() + int64(p.length())
+}
+
+func (p *Piece) SetPriority(prio piecePriority) {
+	p.t.cl.mu.Lock()
+	defer p.t.cl.mu.Unlock()
+	p.priority = prio
+	p.t.updatePiecePriority(p.index)
+}
+
+func (p *Piece) uncachedPriority() (ret piecePriority) {
+	if p.t.pieceComplete(p.index) {
+		return PiecePriorityNone
+	}
+	for _, f := range p.files {
+		ret.Raise(f.prio)
+	}
+	if p.t.readerNowPieces.Contains(p.index) {
+		ret.Raise(PiecePriorityNow)
+	}
+	// if t.readerNowPieces.Contains(piece - 1) {
+	// 	return PiecePriorityNext
+	// }
+	if p.t.readerReadaheadPieces.Contains(p.index) {
+		ret.Raise(PiecePriorityReadahead)
+	}
+	ret.Raise(p.priority)
+	return
 }

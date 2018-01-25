@@ -117,8 +117,8 @@ type Torrent struct {
 	readerNowPieces       bitmap.Bitmap
 	readerReadaheadPieces bitmap.Bitmap
 
-	// The indexes of pieces we want with normal priority, that aren't
-	// currently available.
+	// A cache of pieces we need to get. Calculated from various piece and
+	// file priorities and completion states elsewhere.
 	pendingPieces prioritybitmap.PriorityBitmap
 	// A cache of completed piece indices.
 	completedPieces bitmap.Bitmap
@@ -816,6 +816,7 @@ func (t *Torrent) wantPieceIndex(index int) bool {
 	if t.pendingPieces.Contains(index) {
 		return true
 	}
+	// log.Printf("piece %d not pending", index)
 	return !t.forReaderOffsetPieces(func(begin, end int) bool {
 		return index < begin || index >= end
 	})
@@ -911,8 +912,10 @@ func (t *Torrent) maybeNewConns() {
 }
 
 func (t *Torrent) piecePriorityChanged(piece int) {
+	// log.Printf("piece %d priority changed", piece)
 	for c := range t.conns {
 		if c.updatePiecePriority(piece) {
+			// log.Print("conn piece priority changed")
 			c.updateRequests()
 		}
 	}
@@ -922,11 +925,17 @@ func (t *Torrent) piecePriorityChanged(piece int) {
 
 func (t *Torrent) updatePiecePriority(piece int) {
 	p := &t.pieces[piece]
-	newPrio := t.piecePriorityUncached(piece)
-	if newPrio == p.priority {
-		return
+	newPrio := p.uncachedPriority()
+	// log.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
+	if newPrio == PiecePriorityNone {
+		if !t.pendingPieces.Remove(piece) {
+			return
+		}
+	} else {
+		if !t.pendingPieces.Set(piece, newPrio.BitmapPriority()) {
+			return
+		}
 	}
-	p.priority = newPrio
 	t.piecePriorityChanged(piece)
 }
 
@@ -979,63 +988,11 @@ func (t *Torrent) forReaderOffsetPieces(f func(begin, end int) (more bool)) (all
 }
 
 func (t *Torrent) piecePriority(piece int) piecePriority {
-	if !t.haveInfo() {
+	prio, ok := t.pendingPieces.GetPriority(piece)
+	if !ok {
 		return PiecePriorityNone
 	}
-	return t.pieces[piece].priority
-}
-
-func (t *Torrent) piecePriorityUncached(piece int) (ret piecePriority) {
-	for _, f := range t.pieces[piece].files {
-		ret.Raise(f.prio)
-	}
-	if t.readerNowPieces.Contains(piece) {
-		ret.Raise(PiecePriorityNow)
-	}
-	// if t.readerNowPieces.Contains(piece - 1) {
-	// 	return PiecePriorityNext
-	// }
-	if t.readerReadaheadPieces.Contains(piece) {
-		ret.Raise(PiecePriorityReadahead)
-	}
-	if t.pendingPieces.Contains(piece) {
-		ret.Raise(PiecePriorityNormal)
-	}
-	if t.pieceComplete(piece) {
-		return PiecePriorityNone
-	}
-	return
-}
-
-func (t *Torrent) pendPiece(piece int) {
-	if t.pendingPieces.Contains(piece) {
-		return
-	}
-	if t.havePiece(piece) {
-		return
-	}
-	t.pendingPieces.Set(piece, PiecePriorityNormal.BitmapPriority())
-	t.updatePiecePriority(piece)
-}
-
-func (t *Torrent) unpendPieces(unpend bitmap.Bitmap) {
-	unpend.IterTyped(func(piece int) (more bool) {
-		t.pendingPieces.Remove(piece)
-		t.updatePiecePriority(piece)
-		return true
-	})
-}
-
-func (t *Torrent) pendPieceRange(begin, end int) {
-	for i := begin; i < end; i++ {
-		t.pendPiece(i)
-	}
-}
-
-func (t *Torrent) unpendPieceRange(begin, end int) {
-	var bm bitmap.Bitmap
-	bm.AddRange(begin, end)
-	t.unpendPieces(bm)
+	return piecePriority(-prio)
 }
 
 func (t *Torrent) pendRequest(req request) {
@@ -1078,6 +1035,8 @@ func (t *Torrent) updatePieceCompletion(piece int) {
 	changed := t.completedPieces.Get(piece) != pcu.Complete || p.storageCompletionOk != pcu.Ok
 	p.storageCompletionOk = pcu.Ok
 	t.completedPieces.Set(piece, pcu.Complete)
+	// log.Printf("piece %d uncached completion: %v", piece, pcu.Complete)
+	// log.Printf("piece %d changed: %v", piece, changed)
 	if changed {
 		t.pieceCompletionChanged(piece)
 	}
@@ -1144,13 +1103,7 @@ func (t *Torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
-	if t.pendingPieces.Len() != 0 {
-		return true
-	}
-	// Read as "not all complete".
-	return !t.readerPieces().IterTyped(func(piece int) bool {
-		return t.pieceComplete(piece)
-	})
+	return t.pendingPieces.Len() != 0
 }
 
 func appendMissingStrings(old, new []string) (ret []string) {
@@ -1572,6 +1525,7 @@ func (t *Torrent) onIncompletePiece(piece int) {
 		t.pendAllChunkSpecs(piece)
 	}
 	if !t.wantPieceIndex(piece) {
+		// log.Printf("piece %d incomplete and unwanted", piece)
 		return
 	}
 	// We could drop any connections that we told we have a piece that we

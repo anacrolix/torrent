@@ -23,8 +23,10 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
+var progress = uiprogress.New()
+
 func torrentBar(t *torrent.Torrent) {
-	bar := uiprogress.AddBar(1)
+	bar := progress.AddBar(1)
 	bar.AppendCompleted()
 	bar.AppendFunc(func(*uiprogress.Bar) (ret string) {
 		select {
@@ -133,6 +135,12 @@ var flags = struct {
 	DownloadRate: -1,
 }
 
+func stdoutAndStderrAreSameFile() bool {
+	fi1, _ := os.Stdout.Stat()
+	fi2, _ := os.Stderr.Stat()
+	return os.SameFile(fi1, fi2)
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	tagflag.Parse(&flags)
@@ -167,7 +175,10 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})
-	uiprogress.Start()
+	if stdoutAndStderrAreSameFile() {
+		log.SetOutput(progress.Bypass())
+	}
+	progress.Start()
 	addTorrents(client)
 	if client.WaitAll() {
 		log.Print("downloaded ALL the torrents")

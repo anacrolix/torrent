@@ -140,15 +140,14 @@ func main() {
 		DHTConfig: dht.ServerConfig{
 			StartingNodes: dht.GlobalBootstrapAddrs,
 		},
+		Debug: flags.Debug,
+		Seed:  flags.Seed,
 	}
 	if flags.Mmap {
 		clientConfig.DefaultStorage = storage.NewMMap("")
 	}
 	if flags.Addr != nil {
 		clientConfig.ListenAddr = flags.Addr.String()
-	}
-	if flags.Seed {
-		clientConfig.Seed = true
 	}
 	if flags.UploadRate != -1 {
 		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(flags.UploadRate), 256<<10)

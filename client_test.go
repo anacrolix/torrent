@@ -33,10 +33,11 @@ import (
 
 func TestingConfig() *Config {
 	return &Config{
-		ListenAddr:      "localhost:0",
-		NoDHT:           true,
-		DataDir:         tempDir(),
-		DisableTrackers: true,
+		ListenAddr:              "localhost:0",
+		NoDHT:                   true,
+		DataDir:                 tempDir(),
+		DisableTrackers:         true,
+		NoDefaultPortForwarding: true,
 		// Debug:           true,
 	}
 }

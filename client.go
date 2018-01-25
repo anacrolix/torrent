@@ -303,6 +303,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	if err != nil {
 		return
 	}
+	go cl.forwardPort()
 	if cl.tcpListener != nil {
 		go cl.acceptConnections(cl.tcpListener, false)
 	}

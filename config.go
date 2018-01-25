@@ -33,7 +33,8 @@ type Config struct {
 	// The address to listen for new uTP and TCP bittorrent protocol
 	// connections. DHT shares a UDP socket with uTP unless configured
 	// otherwise.
-	ListenAddr string `long:"listen-addr" value-name:"HOST:PORT"`
+	ListenAddr              string `long:"listen-addr" value-name:"HOST:PORT"`
+	NoDefaultPortForwarding bool
 	// Don't announce to trackers. This only leaves DHT to discover peers.
 	DisableTrackers bool `long:"disable-trackers"`
 	DisablePEX      bool `long:"disable-pex"`

@@ -305,26 +305,33 @@ func (t *Torrent) makePieces() {
 		piece.index = i
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		missinggo.CopyExact(piece.hash[:], hash)
-		piece.files = (*t.files)[pieceFirstFileIndex(piece.torrentBeginOffset(), *t.files):pieceLastFileIndex(piece.torrentEndOffset(), *t.files)]
+		files := *t.files
+		beginFile := pieceFirstFileIndex(piece.torrentBeginOffset(), files)
+		endFile := pieceEndFileIndex(piece.torrentEndOffset(), files)
+		piece.files = files[beginFile:endFile]
 	}
 }
 
+// Returns the index of the first file containing the piece. files must be
+// ordered by offset.
 func pieceFirstFileIndex(pieceOffset int64, files []*File) int {
 	for i, f := range files {
 		if f.offset+f.length > pieceOffset {
 			return i
 		}
 	}
-	return -1
+	return 0
 }
 
-func pieceLastFileIndex(pieceEndOffset int64, files []*File) int {
+// Returns the index after the last file containing the piece. files must be
+// ordered by offset.
+func pieceEndFileIndex(pieceEndOffset int64, files []*File) int {
 	for i, f := range files {
 		if f.offset+f.length >= pieceEndOffset {
-			return i
+			return i + 1
 		}
 	}
-	return -1
+	return 0
 }
 
 func (t *Torrent) cacheLength(info *metainfo.Info) {

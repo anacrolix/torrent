@@ -121,7 +121,7 @@ func (f *File) SetPriority(prio piecePriority) {
 		return
 	}
 	f.prio = prio
-	f.t.updatePiecePriorities(f.firstPieceIndex().Int(), f.lastPieceIndex().Int()+1)
+	f.t.updatePiecePriorities(f.firstPieceIndex().Int(), f.endPieceIndex().Int())
 }
 
 // Returns the priority per File.SetPriority.
@@ -132,9 +132,15 @@ func (f *File) Priority() piecePriority {
 }
 
 func (f *File) firstPieceIndex() pwp.Integer {
+	if f.t.usualPieceSize() == 0 {
+		return 0
+	}
 	return pwp.Integer(f.offset / int64(f.t.usualPieceSize()))
 }
 
-func (f *File) lastPieceIndex() pwp.Integer {
-	return pwp.Integer((f.offset + f.length) / int64(f.t.usualPieceSize()))
+func (f *File) endPieceIndex() pwp.Integer {
+	if f.t.usualPieceSize() == 0 {
+		return 0
+	}
+	return pwp.Integer((f.offset+f.length-1)/int64(f.t.usualPieceSize())) + 1
 }

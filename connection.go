@@ -614,9 +614,9 @@ func (cn *connection) stopRequestingPiece(piece int) bool {
 }
 
 // This is distinct from Torrent piece priority, which is the user's
-// preference. Connection piece priority is specific to a connection,
-// pseudorandomly avoids connections always requesting the same pieces and
-// thus wasting effort.
+// preference. Connection piece priority is specific to a connection and is
+// used to pseudorandomly avoid connections always requesting the same pieces
+// and thus wasting effort.
 func (cn *connection) updatePiecePriority(piece int) bool {
 	tpp := cn.t.piecePriority(piece)
 	if !cn.PeerHasPiece(piece) {

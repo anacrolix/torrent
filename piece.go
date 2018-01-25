@@ -11,8 +11,7 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-// Piece priority describes the importance of obtaining a particular piece.
-
+// Describes the importance of obtaining a particular piece.
 type piecePriority byte
 
 func (pp *piecePriority) Raise(maybe piecePriority) {

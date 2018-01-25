@@ -1557,6 +1557,7 @@ func (t *Torrent) onPieceCompleted(piece int) {
 	}
 }
 
+// Called when a piece is found to be not complete.
 func (t *Torrent) onIncompletePiece(piece int) {
 	if t.pieceAllDirty(piece) {
 		t.pendAllChunkSpecs(piece)

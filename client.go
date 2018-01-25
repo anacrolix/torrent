@@ -848,7 +848,7 @@ func (cl *Client) runHandshookConn(c *connection, t *Torrent, outgoing bool) {
 	cl.sendInitialMessages(c, t)
 	err := c.mainReadLoop()
 	if err != nil && cl.config.Debug {
-		log.Printf("error during connection loop: %s", err)
+		log.Printf("error during connection main read loop: %s", err)
 	}
 }
 

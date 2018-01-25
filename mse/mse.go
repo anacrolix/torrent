@@ -175,20 +175,20 @@ func (h *handshake) postY(x *big.Int) error {
 	return h.postWrite(paddedLeft(y.Bytes(), 96))
 }
 
-func (h *handshake) establishS() (err error) {
+func (h *handshake) establishS() error {
 	x := newX()
 	h.postY(&x)
 	var b [96]byte
-	_, err = io.ReadFull(h.conn, b[:])
+	_, err := io.ReadFull(h.conn, b[:])
 	if err != nil {
-		return
+		return fmt.Errorf("error reading Y: %s", err)
 	}
 	var Y, S big.Int
 	Y.SetBytes(b[:])
 	S.Exp(&Y, &x, &p)
 	sBytes := S.Bytes()
 	copy(h.s[96-len(sBytes):96], sBytes)
-	return
+	return nil
 }
 
 func newPadLen() int64 {

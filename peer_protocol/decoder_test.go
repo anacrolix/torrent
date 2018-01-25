@@ -40,7 +40,8 @@ func BenchmarkDecodePieces(t *testing.B) {
 		MaxLength: 1 << 18,
 		Pool: &sync.Pool{
 			New: func() interface{} {
-				return make([]byte, pieceLen)
+				b := make([]byte, pieceLen)
+				return &b
 			},
 		},
 	}

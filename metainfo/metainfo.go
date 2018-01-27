@@ -13,7 +13,7 @@ type MetaInfo struct {
 	Announce     string        `bencode:"announce,omitempty"`
 	AnnounceList AnnounceList  `bencode:"announce-list,omitempty"`
 	Nodes        []Node        `bencode:"nodes,omitempty"`
-	CreationDate int64         `bencode:"creation date,omitempty"`
+	CreationDate int64         `bencode:"creation date,omitempty,ignore_unmarshal_type_error"`
 	Comment      string        `bencode:"comment,omitempty"`
 	CreatedBy    string        `bencode:"created by,omitempty"`
 	Encoding     string        `bencode:"encoding,omitempty"`

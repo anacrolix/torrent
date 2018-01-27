@@ -240,17 +240,14 @@ func encodeFields(t reflect.Type) []encodeField {
 		ef.i = i
 		ef.tag = f.Name
 
-		tv := f.Tag.Get("bencode")
-		if tv != "" {
-			if tv == "-" {
-				continue
-			}
-			name, opts := parseTag(tv)
-			if name != "" {
-				ef.tag = name
-			}
-			ef.omit_empty = opts.contains("omitempty")
+		tv := getTag(f.Tag)
+		if tv.Ignore() {
+			continue
 		}
+		if tv.Key() != "" {
+			ef.tag = tv.Key()
+		}
+		ef.omit_empty = tv.OmitEmpty()
 		fs = append(fs, ef)
 	}
 	fss := encodeFieldsSortType(fs)

@@ -136,3 +136,14 @@ func TestUnmarshalerBencode(t *testing.T) {
 	assert_equal(t, ss[2].x, "3:way")
 
 }
+
+func TestIgnoreUnmarshalTypeError(t *testing.T) {
+	s := struct {
+		Ignore int `bencode:",ignore_unmarshal_type_error"`
+		Normal int
+	}{}
+	require.Error(t, Unmarshal([]byte("d6:Normal5:helloe"), &s))
+	assert.Nil(t, Unmarshal([]byte("d6:Ignore5:helloe"), &s))
+	require.Nil(t, Unmarshal([]byte("d6:Ignorei42ee"), &s))
+	assert.EqualValues(t, 42, s.Ignore)
+}

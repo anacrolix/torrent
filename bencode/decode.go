@@ -20,7 +20,6 @@ type Decoder struct {
 	// Sum of bytes used to Decode values.
 	Offset int64
 	buf    bytes.Buffer
-	key    string
 }
 
 func (d *Decoder) Decode(v interface{}) (err error) {
@@ -186,6 +185,82 @@ func (d *Decoder) parseString(v reflect.Value) error {
 	return nil
 }
 
+// Info for parsing a dict value.
+type dictField struct {
+	Value reflect.Value // Storage for the parsed value.
+	// True if field value should be parsed into Value. If false, the value
+	// should be parsed and discarded.
+	Ok                       bool
+	Set                      func() // Call this after parsing into Value.
+	IgnoreUnmarshalTypeError bool
+}
+
+// Returns specifics for parsing a dict field value.
+func getDictField(dict reflect.Value, key string) dictField {
+	// get valuev as a map value or as a struct field
+	switch dict.Kind() {
+	case reflect.Map:
+		value := reflect.New(dict.Type().Elem()).Elem()
+		return dictField{
+			Value: value,
+			Ok:    true,
+			Set: func() {
+				// Assigns the value into the map.
+				dict.SetMapIndex(reflect.ValueOf(key), value)
+			},
+		}
+	case reflect.Struct:
+		sf, ok := getStructFieldForKey(dict.Type(), key)
+		if !ok {
+			return dictField{}
+		}
+		if sf.PkgPath != "" {
+			panic(&UnmarshalFieldError{
+				Key:   key,
+				Type:  dict.Type(),
+				Field: sf,
+			})
+		}
+		return dictField{
+			Value: dict.FieldByIndex(sf.Index),
+			Ok:    true,
+			Set:   func() {},
+			IgnoreUnmarshalTypeError: getTag(sf.Tag).IgnoreUnmarshalTypeError(),
+		}
+	default:
+		panic(dict.Kind())
+	}
+}
+
+func getStructFieldForKey(struct_ reflect.Type, key string) (f reflect.StructField, ok bool) {
+	for i, n := 0, struct_.NumField(); i < n; i++ {
+		f = struct_.Field(i)
+		tag := f.Tag.Get("bencode")
+		if tag == "-" {
+			continue
+		}
+		if f.Anonymous {
+			continue
+		}
+
+		if parseTag(tag).Key() == key {
+			ok = true
+			break
+		}
+
+		if f.Name == key {
+			ok = true
+			break
+		}
+
+		if strings.EqualFold(f.Name, key) {
+			ok = true
+			break
+		}
+	}
+	return
+}
+
 func (d *Decoder) parseDict(v reflect.Value) error {
 	switch v.Kind() {
 	case reflect.Map:
@@ -207,14 +282,12 @@ func (d *Decoder) parseDict(v reflect.Value) error {
 		})
 	}
 
-	var mapElem reflect.Value
-
 	// so, at this point 'd' byte was consumed, let's just read key/value
 	// pairs one by one
 	for {
-		var valuev reflect.Value
-		keyv := reflect.ValueOf(&d.key).Elem()
-		ok, err := d.parseValue(keyv)
+		var keyStr string
+		keyValue := reflect.ValueOf(&keyStr).Elem()
+		ok, err := d.parseValue(keyValue)
 		if err != nil {
 			return fmt.Errorf("error parsing dict key: %s", err)
 		}
@@ -222,77 +295,30 @@ func (d *Decoder) parseDict(v reflect.Value) error {
 			return nil
 		}
 
-		// get valuev as a map value or as a struct field
-		switch v.Kind() {
-		case reflect.Map:
-			elem_type := v.Type().Elem()
-			if !mapElem.IsValid() {
-				mapElem = reflect.New(elem_type).Elem()
-			} else {
-				mapElem.Set(reflect.Zero(elem_type))
-			}
-			valuev = mapElem
-		case reflect.Struct:
-			var f reflect.StructField
-			var ok bool
-
-			t := v.Type()
-			for i, n := 0, t.NumField(); i < n; i++ {
-				f = t.Field(i)
-				tag := f.Tag.Get("bencode")
-				if tag == "-" {
-					continue
-				}
-				if f.Anonymous {
-					continue
-				}
-
-				tag_name, _ := parseTag(tag)
-				if tag_name == d.key {
-					ok = true
-					break
-				}
-
-				if f.Name == d.key {
-					ok = true
-					break
-				}
-
-				if strings.EqualFold(f.Name, d.key) {
-					ok = true
-					break
-				}
-			}
-
-			if ok {
-				if f.PkgPath != "" {
-					panic(&UnmarshalFieldError{
-						Key:   d.key,
-						Type:  v.Type(),
-						Field: f,
-					})
-				} else {
-					valuev = v.FieldByIndex(f.Index)
-				}
-			} else {
-				_, ok := d.parseValueInterface()
-				if !ok {
-					return fmt.Errorf("error parsing dict value for key %q", d.key)
-				}
-				continue
-			}
-		}
+		df := getDictField(v, keyStr)
 
 		// now we need to actually parse it
-		ok, err = d.parseValue(valuev)
+		if df.Ok {
+			// log.Printf("parsing ok struct field for key %q", keyStr)
+			ok, err = d.parseValue(df.Value)
+		} else {
+			// Discard the value, there's nowhere to put it.
+			var if_ interface{}
+			if_, ok = d.parseValueInterface()
+			if if_ == nil {
+				err = fmt.Errorf("error parsing value for key %q", keyStr)
+			}
+		}
 		if err != nil {
-			return fmt.Errorf("parsing value for key %q: %s", d.key, err)
+			if _, ok := err.(*UnmarshalTypeError); !ok || !df.IgnoreUnmarshalTypeError {
+				return fmt.Errorf("parsing value for key %q: %s", keyStr, err)
+			}
 		}
 		if !ok {
-			return fmt.Errorf("missing value for key %q", d.key)
+			return fmt.Errorf("missing value for key %q", keyStr)
 		}
-		if v.Kind() == reflect.Map {
-			v.SetMapIndex(keyv, valuev)
+		if df.Ok {
+			df.Set()
 		}
 	}
 }

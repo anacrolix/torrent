@@ -80,7 +80,10 @@ func (t *Torrent) Drop() {
 	t.cl.mu.Unlock()
 }
 
-// Number of bytes of the entire torrent we have completed.
+// Number of bytes of the entire torrent we have completed. This is the sum of
+// completed pieces, and dirtied chunks of incomplete pieces. Do not use this
+// for download rate, as it can go down when pieces are lost or fail checks.
+// Sample Torrent.Stats.DataBytesRead for actual file data download rate.
 func (t *Torrent) BytesCompleted() int64 {
 	t.cl.mu.RLock()
 	defer t.cl.mu.RUnlock()

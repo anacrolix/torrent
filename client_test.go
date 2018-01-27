@@ -873,10 +873,14 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	assert.True(t, new)
 	psc := leecherGreeting.SubscribePieceStateChanges()
 	defer psc.Close()
-	leecherGreeting.DownloadAll()
+
+	leecherGreeting.cl.mu.Lock()
+	leecherGreeting.downloadPiecesLocked(0, leecherGreeting.numPieces())
 	if ps.Cancel {
-		leecherGreeting.CancelPieces(0, leecherGreeting.NumPieces())
+		leecherGreeting.cancelPiecesLocked(0, leecherGreeting.NumPieces())
 	}
+	leecherGreeting.cl.mu.Unlock()
+
 	addClientPeer(leecherGreeting, seeder)
 	completes := make(map[int]bool, 3)
 values:

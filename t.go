@@ -152,6 +152,10 @@ func (t *Torrent) deleteReader(r *reader) {
 func (t *Torrent) DownloadPieces(begin, end int) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
+	t.downloadPiecesLocked(begin, end)
+}
+
+func (t *Torrent) downloadPiecesLocked(begin, end int) {
 	for i := begin; i < end; i++ {
 		if t.pieces[i].priority.Raise(PiecePriorityNormal) {
 			t.updatePiecePriority(i)
@@ -162,6 +166,10 @@ func (t *Torrent) DownloadPieces(begin, end int) {
 func (t *Torrent) CancelPieces(begin, end int) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
+	t.cancelPiecesLocked(begin, end)
+}
+
+func (t *Torrent) cancelPiecesLocked(begin, end int) {
 	for i := begin; i < end; i++ {
 		p := &t.pieces[i]
 		if p.priority == PiecePriorityNone {

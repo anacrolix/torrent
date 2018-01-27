@@ -16,6 +16,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
+
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
@@ -578,9 +580,9 @@ func (t *Torrent) writeStatus(w io.Writer) {
 
 	fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
 
-	fmt.Fprintf(w, "Pending peers: %d\n", len(t.peers))
-	fmt.Fprintf(w, "Half open: %d\n", len(t.halfOpen))
-	fmt.Fprintf(w, "Active peers: %d\n", len(t.conns))
+	spew.NewDefaultConfig()
+	spew.Fdump(w, t.statsLocked())
+
 	conns := t.connsAsSlice()
 	slices.Sort(conns, worseConn)
 	for i, c := range conns {
@@ -1339,12 +1341,14 @@ func (t *Torrent) addPeers(peers []Peer) {
 func (t *Torrent) Stats() TorrentStats {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
+	return t.statsLocked()
+}
 
+func (t *Torrent) statsLocked() TorrentStats {
 	t.stats.ActivePeers = len(t.conns)
 	t.stats.HalfOpenPeers = len(t.halfOpen)
 	t.stats.PendingPeers = len(t.peers)
 	t.stats.TotalPeers = t.numTotalPeers()
-
 	return t.stats
 }
 

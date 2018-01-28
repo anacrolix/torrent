@@ -4,15 +4,16 @@
 [![GoDoc](https://godoc.org/github.com/anacrolix/torrent?status.svg)](https://godoc.org/github.com/anacrolix/torrent)
 [![CircleCI](https://circleci.com/gh/anacrolix/torrent.svg?style=shield)](https://circleci.com/gh/anacrolix/torrent)
 
-This repository implements BitTorrent-related packages and demonstrative command-line utilities in Go. The emphasis is on use as a library from other projects. It's been used 24/7 in production by downstream services since late 2014. The implementation was specifically created to explore Go's concurrency capabilities, and to include the ability to stream data directly from the BitTorrent network. To this end it [supports seeking, readaheads and other features](https://godoc.org/github.com/anacrolix/torrent#Reader) exposing torrents and their files with the various Go idiomatic `io` package interfaces. This is also demonstrated through [torrentfs](#torrentfs).
+This repository implements BitTorrent-related packages and command-line utilities in Go. The emphasis is on use as a library from other projects. It's been used 24/7 in production by downstream services since late 2014. The implementation was specifically created to explore Go's concurrency capabilities, and to include the ability to stream data directly from the BitTorrent network. To this end it [supports seeking, readaheads and other features](https://godoc.org/github.com/anacrolix/torrent#Reader) exposing torrents and their files with the various Go idiomatic `io` package interfaces. This is also demonstrated through [torrentfs](#torrentfs).
 
-There is [support for protocol encryption, DHT, PEX, uTP, and various extensions](https://godoc.org/github.com/anacrolix/torrent). There are [several data storage backends provided](https://godoc.org/github.com/anacrolix/torrent/storage): blob, file, bolt, and mmap, to name a few. You can write your own to store data for example on S3, or in a database. You can use the provided binaries in `./cmd`, or use package `torrent` as a library for your own applications.
+There is [support for protocol encryption, DHT, PEX, uTP, and various extensions](https://godoc.org/github.com/anacrolix/torrent). There are [several data storage backends provided](https://godoc.org/github.com/anacrolix/torrent/storage): blob, file, bolt, and mmap, to name a few. You can [write your own](https://godoc.org/github.com/anacrolix/torrent/storage#ClientImpl) to store data for example on S3, or in a database. 
 
-Some related packages are exposed and spun-out that can be used for other purposes, in particular:
- * [uTP](https://github.com/anacrolix/go-libutp),
- * [dht](https://github.com/anacrolix/dht),
- * [bencode](https://godoc.org/github.com/anacrolix/torrent/bencode), and 
- * [tracker](https://godoc.org/github.com/anacrolix/torrent/tracker).
+Some noteworthy package dependencies that can be used for other purposes include:
+
+ * [go-libutp](https://github.com/anacrolix/go-libutp)
+ * [dht](https://github.com/anacrolix/dht)
+ * [bencode](https://godoc.org/github.com/anacrolix/torrent/bencode)
+ * [tracker](https://godoc.org/github.com/anacrolix/torrent/tracker)
 
 ## Installation
 

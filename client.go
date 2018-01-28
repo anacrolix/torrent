@@ -1250,7 +1250,10 @@ func (cl *Client) newConnection(nc net.Conn) (c *connection) {
 	}
 	c.writerCond.L = &cl.mu
 	c.setRW(connStatsReadWriter{nc, &cl.mu, c})
-	c.r = rateLimitedReader{cl.downloadLimit, c.r}
+	c.r = &rateLimitedReader{
+		l: cl.downloadLimit,
+		r: c.r,
+	}
 	return
 }
 

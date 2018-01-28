@@ -8,12 +8,13 @@ import (
 	"expvar"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/dht/krpc"
@@ -1040,6 +1041,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 			L: &cl.mu,
 		},
 	}
+	t.logger = log.Default.Clone().AddValue(t)
 	t.setChunkSize(defaultChunkSize)
 	return
 }

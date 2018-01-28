@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"math/rand"
 	"net"
@@ -15,6 +14,8 @@ import (
 	"sync"
 	"text/tabwriter"
 	"time"
+
+	"github.com/anacrolix/log"
 
 	"github.com/davecgh/go-spew/spew"
 
@@ -45,7 +46,8 @@ type peersKey struct {
 
 // Maintains state of torrent within a Client.
 type Torrent struct {
-	cl *Client
+	cl     *Client
+	logger *log.Logger
 
 	networkingEnabled bool
 	// Determines what chunks to request from peers. 1: Favour higher priority

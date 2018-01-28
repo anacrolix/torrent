@@ -146,12 +146,9 @@ func TestEmptyFilesAndZeroPieceLengthWithMMapStorage(t *testing.T) {
 
 func TestPieceHashFailed(t *testing.T) {
 	mi := testutil.GreetingMetaInfo()
-	tt := Torrent{
-		cl:            new(Client),
-		infoHash:      mi.HashInfoBytes(),
-		storageOpener: storage.NewClient(badStorage{}),
-		chunkSize:     2,
-	}
+	cl := new(Client)
+	tt := cl.newTorrent(mi.HashInfoBytes(), badStorage{})
+	tt.setChunkSize(2)
 	require.NoError(t, tt.setInfoBytes(mi.InfoBytes))
 	tt.cl.mu.Lock()
 	tt.pieces[1].dirtyChunks.AddRange(0, 3)

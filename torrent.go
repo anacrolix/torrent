@@ -449,9 +449,7 @@ func (t *Torrent) name() string {
 func (t *Torrent) pieceState(index int) (ret PieceState) {
 	p := &t.pieces[index]
 	ret.Priority = t.piecePriority(index)
-	if t.pieceComplete(index) {
-		ret.Complete = true
-	}
+	ret.Completion = p.completion()
 	if p.queuedForHash() || p.hashing {
 		ret.Checking = true
 	}
@@ -511,6 +509,8 @@ func pieceStateRunStatusChars(psr PieceStateRun) (ret string) {
 			return "R"
 		case PiecePriorityNow:
 			return "!"
+		case PiecePriorityHigh:
+			return "H"
 		default:
 			return ""
 		}
@@ -523,6 +523,9 @@ func pieceStateRunStatusChars(psr PieceStateRun) (ret string) {
 	}
 	if psr.Complete {
 		ret += "C"
+	}
+	if !psr.Ok {
+		ret += "?"
 	}
 	return
 }

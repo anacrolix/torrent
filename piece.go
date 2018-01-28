@@ -229,3 +229,9 @@ func (p *Piece) uncachedPriority() (ret piecePriority) {
 	ret.Raise(p.priority)
 	return
 }
+
+func (p *Piece) completion() (ret storage.Completion) {
+	ret.Complete = p.t.pieceComplete(p.index)
+	ret.Ok = p.storageCompletionOk
+	return
+}

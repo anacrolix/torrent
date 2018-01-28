@@ -1486,7 +1486,6 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 		if err != nil {
 			log.Printf("%T: error marking piece complete %d: %s", t.storage, piece, err)
 		}
-		t.updatePieceCompletion(piece)
 	} else {
 		if len(touchers) != 0 {
 			for _, c := range touchers {
@@ -1507,7 +1506,9 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 			c.Drop()
 		}
 		t.onIncompletePiece(piece)
+		p.Storage().MarkNotComplete()
 	}
+	t.updatePieceCompletion(piece)
 }
 
 func (t *Torrent) cancelRequestsForPiece(piece int) {

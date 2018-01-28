@@ -1515,7 +1515,6 @@ func (t *Torrent) cancelRequestsForPiece(piece int) {
 }
 
 func (t *Torrent) onPieceCompleted(piece int) {
-	t.pendingPieces.Remove(piece)
 	t.pendAllChunkSpecs(piece)
 	t.cancelRequestsForPiece(piece)
 	for conn := range t.conns {

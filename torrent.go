@@ -1354,6 +1354,12 @@ func (t *Torrent) statsLocked() TorrentStats {
 	t.stats.HalfOpenPeers = len(t.halfOpen)
 	t.stats.PendingPeers = len(t.peers)
 	t.stats.TotalPeers = t.numTotalPeers()
+	t.stats.ConnectedSeeders = 0
+	for c := range t.conns {
+		if all, ok := c.peerHasAllPieces(); all && ok {
+			t.stats.ConnectedSeeders++
+		}
+	}
 	return t.stats
 }
 

@@ -999,7 +999,14 @@ func (t *Torrent) piecePriority(piece int) piecePriority {
 	if !ok {
 		return PiecePriorityNone
 	}
-	return piecePriority(-prio)
+	if prio > 0 {
+		panic(prio)
+	}
+	ret := piecePriority(-prio)
+	if ret == PiecePriorityNone {
+		panic(piece)
+	}
+	return ret
 }
 
 func (t *Torrent) pendRequest(req request) {

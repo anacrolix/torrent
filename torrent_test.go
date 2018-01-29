@@ -80,6 +80,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		pieceLength = 256 << 10
 	)
 	cl := &Client{}
+	cl.initLogger()
 	t := cl.newTorrent(metainfo.Hash{}, nil)
 	require.NoError(b, t.setInfo(&metainfo.Info{
 		Pieces:      make([]byte, metainfo.HashSize*numPieces),

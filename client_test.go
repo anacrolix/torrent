@@ -100,6 +100,7 @@ func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
 	cl := &Client{}
+	cl.initLogger()
 	tor := cl.newTorrent(
 		mi.HashInfoBytes(),
 		storage.NewFileWithCompletion(tempDir(), storage.NewMapPieceCompletion()),
@@ -1081,7 +1082,6 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 	cfg.DisableUTP = true
 	cfg.Seed = true
 	cfg.DataDir = filepath.Join(cfg.DataDir, "server")
-	cfg.Debug = true
 	cfg.ForceEncryption = true
 	os.Mkdir(cfg.DataDir, 0755)
 	server, err := NewClient(cfg)
@@ -1093,7 +1093,6 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 	cfg = TestingConfig()
 	cfg.DisableUTP = true
 	cfg.DataDir = filepath.Join(cfg.DataDir, "client")
-	cfg.Debug = true
 	cfg.ForceEncryption = true
 	client, err := NewClient(cfg)
 	require.NoError(t, err)

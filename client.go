@@ -42,6 +42,7 @@ type Client struct {
 	closed missinggo.Event
 
 	config Config
+	logger *log.Logger
 
 	halfOpenLimit  int
 	peerID         PeerID
@@ -222,6 +223,20 @@ func listen(tcp, utp bool, networkSuffix, addr string) (tcpL net.Listener, utpSo
 	return
 }
 
+const debugLogValue = "debug"
+
+func (cl *Client) debugLogFilter(m *log.Msg) bool {
+	if !cl.config.Debug {
+		_, ok := m.Values()[debugLogValue]
+		return !ok
+	}
+	return true
+}
+
+func (cl *Client) initLogger() {
+	cl.logger = log.Default.Clone().AddValue(cl).AddFilter(log.NewFilter(cl.debugLogFilter))
+}
+
 // Creates a new client.
 func NewClient(cfg *Config) (cl *Client, err error) {
 	if cfg == nil {
@@ -247,6 +262,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		dopplegangerAddrs: make(map[string]struct{}),
 		torrents:          make(map[metainfo.Hash]*Torrent),
 	}
+	cl.initLogger()
 	defer func() {
 		if err == nil {
 			return
@@ -1041,7 +1057,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 			L: &cl.mu,
 		},
 	}
-	t.logger = log.Default.Clone().AddValue(t)
+	t.logger = cl.logger.Clone().AddValue(t)
 	t.setChunkSize(defaultChunkSize)
 	return
 }

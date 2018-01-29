@@ -1008,6 +1008,7 @@ func (t *Torrent) pendRequest(req request) {
 }
 
 func (t *Torrent) pieceCompletionChanged(piece int) {
+	log.Call().Add("piece", piece).AddValue(debugLogValue).Log(t.logger)
 	t.cl.event.Broadcast()
 	if t.pieceComplete(piece) {
 		t.onPieceCompleted(piece)
@@ -1040,6 +1041,7 @@ func (t *Torrent) updatePieceCompletion(piece int) {
 	pcu := t.pieceCompleteUncached(piece)
 	p := &t.pieces[piece]
 	changed := t.completedPieces.Get(piece) != pcu.Complete || p.storageCompletionOk != pcu.Ok
+	log.Fmsg("piece %d completion: %v", piece, pcu.Ok).AddValue(debugLogValue).Log(t.logger)
 	p.storageCompletionOk = pcu.Ok
 	t.completedPieces.Set(piece, pcu.Complete)
 	// log.Printf("piece %d uncached completion: %v", piece, pcu.Complete)
@@ -1470,6 +1472,7 @@ func (t *Torrent) mu() missinggo.RWLocker {
 }
 
 func (t *Torrent) pieceHashed(piece int, correct bool) {
+	log.Fmsg("hashed piece %d", piece).Add("piece", piece).Add("passed", correct).AddValue(debugLogValue).Log(t.logger)
 	if t.closed.IsSet() {
 		return
 	}

@@ -1,9 +1,10 @@
 package torrentfs
 
 import (
+	"context"
+
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	"golang.org/x/net/context"
 
 	"github.com/anacrolix/torrent"
 )

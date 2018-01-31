@@ -2,6 +2,7 @@ package torrentfs
 
 import (
 	"context"
+	netContext "context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -18,7 +19,6 @@ import (
 	"github.com/anacrolix/missinggo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	netContext "golang.org/x/net/context"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/internal/testutil"

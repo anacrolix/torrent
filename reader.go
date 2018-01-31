@@ -1,13 +1,13 @@
 package torrent
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log"
 	"sync"
 
 	"github.com/anacrolix/missinggo"
-	"golang.org/x/net/context"
 )
 
 type Reader interface {

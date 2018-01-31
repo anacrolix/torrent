@@ -1,6 +1,7 @@
 package torrentfs
 
 import (
+	"context"
 	"expvar"
 	"os"
 	"strings"
@@ -8,7 +9,6 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	"golang.org/x/net/context"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"

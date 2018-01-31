@@ -5,7 +5,6 @@ import (
 	"time"
 
 	flog "github.com/anacrolix/log"
-
 	"github.com/syncthing/syncthing/lib/nat"
 	"github.com/syncthing/syncthing/lib/upnp"
 )

@@ -15,11 +15,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/anacrolix/log"
-
-	"github.com/davecgh/go-spew/spew"
-
 	"github.com/anacrolix/dht"
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/perf"
@@ -27,6 +24,7 @@ import (
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/bradfitz/iter"
+	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"

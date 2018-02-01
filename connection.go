@@ -490,8 +490,7 @@ func nextRequestState(
 	networkingEnabled bool,
 	currentRequests map[request]struct{},
 	peerChoking bool,
-	requestPieces iter.Func,
-	pendingChunks func(piece int, f func(chunkSpec) bool) bool,
+	iterPendingRequests func(f func(request) bool),
 	requestsLowWater int,
 	requestsHighWater int,
 ) (
@@ -505,22 +504,18 @@ func nextRequestState(
 	if len(currentRequests) > requestsLowWater {
 		return false, nil, true
 	}
-	requestPieces(func(_piece interface{}) bool {
+	iterPendingRequests(func(r request) bool {
 		interested = true
 		if peerChoking {
 			return false
 		}
-		piece := _piece.(int)
-		return pendingChunks(piece, func(cs chunkSpec) bool {
-			r := request{pp.Integer(piece), cs}
-			if _, ok := currentRequests[r]; !ok {
-				if newRequests == nil {
-					newRequests = make([]request, 0, requestsHighWater-len(currentRequests))
-				}
-				newRequests = append(newRequests, r)
+		if _, ok := currentRequests[r]; !ok {
+			if newRequests == nil {
+				newRequests = make([]request, 0, requestsHighWater-len(currentRequests))
 			}
-			return len(currentRequests)+len(newRequests) < requestsHighWater
-		})
+			newRequests = append(newRequests, r)
+		}
+		return len(currentRequests)+len(newRequests) < requestsHighWater
 	})
 	return
 }
@@ -600,21 +595,32 @@ func (cn *connection) pieceRequestOrderIter() iter.Func {
 	}
 }
 
+func (cn *connection) iterPendingRequests(f func(request) bool) {
+	cn.pieceRequestOrderIter()(func(_piece interface{}) bool {
+		piece := _piece.(int)
+		return iterUndirtiedChunks(piece, cn.t, func(cs chunkSpec) bool {
+			r := request{pp.Integer(piece), cs}
+			// log.Println(r, cn.t.pendingRequests[r], cn.requests)
+			// if _, ok := cn.requests[r]; !ok && cn.t.pendingRequests[r] != 0 {
+			// 	return true
+			// }
+			return f(r)
+		})
+	})
+}
+
 func (cn *connection) desiredRequestState() (bool, []request, bool) {
 	return nextRequestState(
 		cn.t.networkingEnabled,
 		cn.requests,
 		cn.PeerChoked,
-		cn.pieceRequestOrderIter(),
-		func(piece int, f func(chunkSpec) bool) bool {
-			return undirtiedChunks(piece, cn.t, f)
-		},
+		cn.iterPendingRequests,
 		cn.requestsLowWater,
 		cn.nominalMaxRequests(),
 	)
 }
 
-func undirtiedChunks(piece int, t *Torrent, f func(chunkSpec) bool) bool {
+func iterUndirtiedChunks(piece int, t *Torrent, f func(chunkSpec) bool) bool {
 	chunkIndices := t.pieces[piece].undirtiedChunkIndices().ToSortedSlice()
 	// TODO: Use "math/rand".Shuffle >= Go 1.10
 	return iter.ForPerm(len(chunkIndices), func(i int) bool {

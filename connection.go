@@ -485,6 +485,7 @@ func (cn *connection) Bitfield(haves []bool) {
 	cn.sentHaves = append([]bool(nil), haves...)
 }
 
+// Determines interest and requests to send to a connected peer.
 func nextRequestState(
 	networkingEnabled bool,
 	currentRequests map[request]struct{},
@@ -615,6 +616,7 @@ func (cn *connection) desiredRequestState() (bool, []request, bool) {
 
 func undirtiedChunks(piece int, t *Torrent, f func(chunkSpec) bool) bool {
 	chunkIndices := t.pieces[piece].undirtiedChunkIndices().ToSortedSlice()
+	// TODO: Use "math/rand".Shuffle >= Go 1.10
 	return iter.ForPerm(len(chunkIndices), func(i int) bool {
 		return f(t.chunkIndexSpec(chunkIndices[i], piece))
 	})

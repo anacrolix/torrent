@@ -359,6 +359,7 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 		panic("requesting piece peer doesn't have")
 	}
 	cn.requests[r] = struct{}{}
+	cn.t.pendingRequests[r]++
 	return mw(pp.Message{
 		Type:   pp.Request,
 		Index:  r.Index,
@@ -846,7 +847,7 @@ func (c *connection) mainReadLoop() error {
 		switch msg.Type {
 		case pp.Choke:
 			c.PeerChoked = true
-			c.requests = nil
+			c.deleteAllRequests()
 			// We can then reset our interest.
 			c.updateRequests()
 		case pp.Reject:
@@ -1211,7 +1212,17 @@ func (c *connection) deleteRequest(r request) bool {
 		return false
 	}
 	delete(c.requests, r)
+	c.t.pendingRequests[r]--
 	return true
+}
+
+func (c *connection) deleteAllRequests() {
+	for r := range c.requests {
+		c.deleteRequest(r)
+	}
+	// for c := range c.t.conns {
+	// 	c.tickleWriter()
+	// }
 }
 
 func (c *connection) tickleWriter() {

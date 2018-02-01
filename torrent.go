@@ -133,6 +133,8 @@ type Torrent struct {
 	connPieceInclinationPool sync.Pool
 	// Torrent-level statistics.
 	stats TorrentStats
+
+	pendingRequests map[request]int
 }
 
 // Returns a channel that is closed when the Torrent is closed.
@@ -381,6 +383,7 @@ func (t *Torrent) onSetInfo() {
 	t.cl.event.Broadcast()
 	t.gotMetainfo.Set()
 	t.updateWantPeersEvent()
+	t.pendingRequests = make(map[request]int)
 }
 
 // Called when metadata for a torrent becomes available.
@@ -1170,7 +1173,19 @@ func (t *Torrent) SetInfoBytes(b []byte) (err error) {
 func (t *Torrent) deleteConnection(c *connection) (ret bool) {
 	_, ret = t.conns[c]
 	delete(t.conns, c)
+	c.deleteAllRequests()
+	if len(t.conns) == 0 {
+		t.assertNoPendingRequests()
+	}
 	return
+}
+
+func (t *Torrent) assertNoPendingRequests() {
+	for _, num := range t.pendingRequests {
+		if num != 0 {
+			panic(num)
+		}
+	}
 }
 
 func (t *Torrent) dropConnection(c *connection) {

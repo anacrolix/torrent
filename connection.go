@@ -794,7 +794,7 @@ func (cn *connection) readBytes(n int64) {
 	}
 }
 
-// Returns whether the connection is currently useful to us. We're seeding and
+// Returns whether the connection could be useful to us. We're seeding and
 // they want data, we don't have metainfo and they can provide it, etc.
 func (c *connection) useful() bool {
 	t := c.t
@@ -804,10 +804,13 @@ func (c *connection) useful() bool {
 	if !t.haveInfo() {
 		return c.supportsExtension("ut_metadata")
 	}
-	if t.seeding() {
-		return c.PeerInterested
+	if t.seeding() && c.PeerInterested {
+		return true
 	}
-	return c.peerHasWantedPieces()
+	if c.peerHasWantedPieces() {
+		return true
+	}
+	return false
 }
 
 func (c *connection) lastHelpful() (ret time.Time) {

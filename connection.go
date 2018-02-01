@@ -205,10 +205,10 @@ func (cn *connection) String() string {
 func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
 	// \t isn't preserved in <pre> blocks?
 	fmt.Fprintf(w, "%-40s: %s-%s\n", cn.PeerID, cn.localAddr(), cn.remoteAddr())
-	fmt.Fprintf(w, "    last msg: %s, connected: %s, last useful chunk: %s\n",
+	fmt.Fprintf(w, "    last msg: %s, connected: %s, last helpful: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),
-		eventAgeString(cn.lastUsefulChunkReceived))
+		eventAgeString(cn.lastHelpful()))
 	fmt.Fprintf(w,
 		"    %s completed, %d pieces touched, good chunks: %d/%d-%d reqq: %d-%d, flags: %s\n",
 		cn.completedString(),

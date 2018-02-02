@@ -62,6 +62,7 @@ var (
 	postedKeepalives           = expvar.NewInt("postedKeepalives")
 	// Requests received for pieces we don't have.
 	requestsReceivedForMissingPieces = expvar.NewInt("requestsReceivedForMissingPieces")
+	requestedChunkLengths            = expvar.NewMap("requestedChunkLengths")
 
 	messageTypesReceived = expvar.NewMap("messageTypesReceived")
 	messageTypesSent     = expvar.NewMap("messageTypesSent")

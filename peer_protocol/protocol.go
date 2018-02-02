@@ -25,6 +25,10 @@ func (i Integer) Int() int {
 	return int(i)
 }
 
+func (i Integer) Uint64() uint64 {
+	return uint64(i)
+}
+
 const (
 	Protocol = "\x13BitTorrent protocol"
 )

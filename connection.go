@@ -884,6 +884,7 @@ func (c *connection) mainReadLoop() error {
 		case pp.Have:
 			err = c.peerSentHave(int(msg.Index))
 		case pp.Request:
+			requestedChunkLengths.Add(strconv.FormatUint(msg.Length.Uint64(), 10), 1)
 			if c.Choked {
 				break
 			}

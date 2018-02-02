@@ -46,7 +46,7 @@ func (s *mmapClientImpl) Close() error {
 
 type mmapTorrentStorage struct {
 	infoHash metainfo.Hash
-	span     mmap_span.MMapSpan
+	span     *mmap_span.MMapSpan
 	pc       PieceCompletion
 }
 
@@ -55,8 +55,8 @@ func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 		pc:       ts.pc,
 		p:        p,
 		ih:       ts.infoHash,
-		ReaderAt: io.NewSectionReader(&ts.span, p.Offset(), p.Length()),
-		WriterAt: missinggo.NewSectionWriter(&ts.span, p.Offset(), p.Length()),
+		ReaderAt: io.NewSectionReader(ts.span, p.Offset(), p.Length()),
+		WriterAt: missinggo.NewSectionWriter(ts.span, p.Offset(), p.Length()),
 	}
 }
 
@@ -92,7 +92,8 @@ func (sp mmapStoragePiece) MarkNotComplete() error {
 	return nil
 }
 
-func mMapTorrent(md *metainfo.Info, location string) (mms mmap_span.MMapSpan, err error) {
+func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, err error) {
+	mms = &mmap_span.MMapSpan{}
 	defer func() {
 		if err != nil {
 			mms.Close()

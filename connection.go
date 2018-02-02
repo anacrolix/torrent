@@ -1173,7 +1173,7 @@ another:
 				// Hard to say what to return here.
 				return true
 			}
-			more, err := cl.sendChunk(t, c, r, msg)
+			more, err := c.sendChunk(r, msg)
 			if err != nil {
 				i := int(r.Index)
 				if t.pieceComplete(i) {

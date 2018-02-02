@@ -1,7 +1,9 @@
 package torrent
 
 type TorrentStats struct {
-	ConnStats // Aggregates stats over all connections past and present.
+	// Aggregates stats over all connections past and present. Some values may
+	// not have much meaning in the aggregate context.
+	ConnStats
 
 	// Ordered by expected descending quantities (if all is well).
 	TotalPeers       int

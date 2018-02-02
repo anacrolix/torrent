@@ -7,16 +7,34 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
+// Various connection-level metrics. At the Torrent level these are
+// aggregates. Chunks are messages with data payloads. Data is actual torrent
+// content without any overhead. Useful is something we needed locally.
+// Unwanted is something we didn't ask for (but may still be useful). Written
+// is things sent to the peer, and Read is stuff received from them.
 type ConnStats struct {
-	// Torrent "piece" messages, or data chunks.
-	ChunksWritten int64 // Num piece messages sent.
-	ChunksRead    int64
 	// Total bytes on the wire. Includes handshakes and encryption.
 	BytesWritten int64
 	BytesRead    int64
-	// Data bytes, actual torrent data.
-	DataBytesWritten int64
-	DataBytesRead    int64
+
+	// The rest of the stats only occur on connections after handshakes.
+
+	ChunksWritten int64
+
+	ChunksRead         int64
+	ChunksReadUseful   int64
+	ChunksReadUnwanted int64
+
+	DataBytesWritten    int64
+	DataBytesRead       int64
+	UsefulDataBytesRead int64
+
+	// Number of pieces data was written to, that subsequently passed verification.
+	GoodPiecesDirtied int64
+	// Number of pieces data was written to, that subsequently failed
+	// verification. Note that a connection may not have been the sole dirtier
+	// of a piece.
+	BadPiecesDirtied int64
 }
 
 func (cs *ConnStats) wroteMsg(msg *pp.Message) {

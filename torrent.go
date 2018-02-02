@@ -839,7 +839,7 @@ func (t *Torrent) worstBadConn() *connection {
 	heap.Init(&wcs)
 	for wcs.Len() != 0 {
 		c := heap.Pop(&wcs).(*connection)
-		if c.UnwantedChunksReceived >= 6 && c.UnwantedChunksReceived > c.UsefulChunksReceived {
+		if c.stats.ChunksReadUnwanted >= 6 && c.stats.ChunksReadUnwanted > c.stats.ChunksReadUseful {
 			return c
 		}
 		if wcs.Len() >= (t.maxEstablishedConns+1)/2 {
@@ -1516,7 +1516,7 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 	p.everHashed = true
 	if correct {
 		for _, c := range touchers {
-			c.goodPiecesDirtied++
+			c.stats.GoodPiecesDirtied++
 		}
 		err := p.Storage().MarkComplete()
 		if err != nil {
@@ -1526,11 +1526,11 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 		if len(touchers) != 0 {
 			for _, c := range touchers {
 				// Y u do dis peer?!
-				c.badPiecesDirtied++
+				c.stats.BadPiecesDirtied++
 			}
 			slices.Sort(touchers, connLessTrusted)
 			if t.cl.config.Debug {
-				log.Printf("dropping first corresponding conn from trust: %v", func() (ret []int) {
+				log.Printf("dropping first corresponding conn from trust: %v", func() (ret []int64) {
 					for _, c := range touchers {
 						ret = append(ret, c.netGoodPiecesDirtied())
 					}

@@ -130,7 +130,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	}
 	w.Close()
 	require.NoError(b, <-mrlErr)
-	require.EqualValues(b, b.N, cn.UsefulChunksReceived)
+	require.EqualValues(b, b.N, cn.stats.ChunksReadUseful)
 }
 
 func TestConnectionReceiveBadChunkIndex(t *testing.T) {

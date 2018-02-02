@@ -14,10 +14,12 @@ import (
 // is things sent to the peer, and Read is stuff received from them.
 type ConnStats struct {
 	// Total bytes on the wire. Includes handshakes and encryption.
-	BytesWritten int64
-	BytesRead    int64
+	BytesWritten     int64
+	BytesWrittenData int64
 
-	// The rest of the stats only occur on connections after handshakes.
+	BytesRead           int64
+	BytesReadData       int64
+	BytesReadUsefulData int64
 
 	ChunksWritten int64
 
@@ -25,23 +27,19 @@ type ConnStats struct {
 	ChunksReadUseful   int64
 	ChunksReadUnwanted int64
 
-	DataBytesWritten    int64
-	DataBytesRead       int64
-	UsefulDataBytesRead int64
-
 	// Number of pieces data was written to, that subsequently passed verification.
-	GoodPiecesDirtied int64
+	PiecesDirtiedGood int64
 	// Number of pieces data was written to, that subsequently failed
 	// verification. Note that a connection may not have been the sole dirtier
 	// of a piece.
-	BadPiecesDirtied int64
+	PiecesDirtiedBad int64
 }
 
 func (cs *ConnStats) wroteMsg(msg *pp.Message) {
 	switch msg.Type {
 	case pp.Piece:
 		cs.ChunksWritten++
-		cs.DataBytesWritten += int64(len(msg.Piece))
+		cs.BytesWrittenData += int64(len(msg.Piece))
 	}
 }
 
@@ -49,7 +47,7 @@ func (cs *ConnStats) readMsg(msg *pp.Message) {
 	switch msg.Type {
 	case pp.Piece:
 		cs.ChunksRead++
-		cs.DataBytesRead += int64(len(msg.Piece))
+		cs.BytesReadData += int64(len(msg.Piece))
 	}
 }
 

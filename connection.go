@@ -1153,7 +1153,7 @@ func (c *connection) uploadAllowed() bool {
 		return false
 	}
 	// Don't upload more than 100 KiB more than we download.
-	if c.stats.DataBytesWritten >= c.stats.DataBytesRead+100<<10 {
+	if c.stats.BytesWrittenData >= c.stats.BytesReadData+100<<10 {
 		return false
 	}
 	return true
@@ -1223,7 +1223,7 @@ func (cn *connection) Drop() {
 }
 
 func (cn *connection) netGoodPiecesDirtied() int64 {
-	return cn.stats.GoodPiecesDirtied - cn.stats.BadPiecesDirtied
+	return cn.stats.PiecesDirtiedGood - cn.stats.PiecesDirtiedBad
 }
 
 func (c *connection) peerHasWantedPieces() bool {

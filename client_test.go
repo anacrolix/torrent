@@ -416,9 +416,9 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		r.SetReadahead(ps.Readahead)
 	}
 	assertReadAllGreeting(t, r)
-	assert.True(t, 13 <= seederTorrent.Stats().DataBytesWritten)
+	assert.True(t, 13 <= seederTorrent.Stats().BytesWrittenData)
 	assert.True(t, 8 <= seederTorrent.Stats().ChunksWritten)
-	assert.True(t, 13 <= leecherTorrent.Stats().DataBytesRead)
+	assert.True(t, 13 <= leecherTorrent.Stats().BytesReadData)
 	assert.True(t, 8 <= leecherTorrent.Stats().ChunksRead)
 	// Try reading through again for the cases where the torrent data size
 	// exceeds the size of the cache.

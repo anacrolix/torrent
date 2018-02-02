@@ -1515,7 +1515,7 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 	p.everHashed = true
 	if correct {
 		for _, c := range touchers {
-			c.stats.GoodPiecesDirtied++
+			c.stats.PiecesDirtiedGood++
 		}
 		err := p.Storage().MarkComplete()
 		if err != nil {
@@ -1525,7 +1525,7 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 		if len(touchers) != 0 {
 			for _, c := range touchers {
 				// Y u do dis peer?!
-				c.stats.BadPiecesDirtied++
+				c.stats.PiecesDirtiedBad++
 			}
 			slices.Sort(touchers, connLessTrusted)
 			if t.cl.config.Debug {

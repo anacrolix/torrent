@@ -138,8 +138,8 @@ func TestConnectionReceiveBadChunkIndex(t *testing.T) {
 		t: &Torrent{},
 	}
 	require.False(t, cn.t.haveInfo())
-	assert.NotPanics(t, func() { cn.receiveChunk(&pp.Message{}) })
+	assert.NotPanics(t, func() { cn.receiveChunk(&pp.Message{Type: pp.Piece}) })
 	cn.t.info = &metainfo.Info{}
 	require.True(t, cn.t.haveInfo())
-	assert.NotPanics(t, func() { cn.receiveChunk(&pp.Message{}) })
+	assert.NotPanics(t, func() { cn.receiveChunk(&pp.Message{Type: pp.Piece}) })
 }

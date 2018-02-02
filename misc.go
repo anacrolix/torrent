@@ -21,6 +21,17 @@ func newRequest(index, begin, length pp.Integer) request {
 	return request{index, chunkSpec{begin, length}}
 }
 
+func newRequestFromMessage(msg *pp.Message) request {
+	switch msg.Type {
+	case pp.Request:
+		return newRequest(msg.Index, msg.Begin, msg.Length)
+	case pp.Piece:
+		return newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))
+	default:
+		panic(msg.Type)
+	}
+}
+
 // The size in bytes of a metadata extension piece.
 func metadataPieceSize(totalSize int, piece int) int {
 	ret := totalSize - piece*(1<<14)

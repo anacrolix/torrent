@@ -1,5 +1,7 @@
 package peer_protocol
 
+import "strconv"
+
 const (
 	Protocol = "\x13BitTorrent protocol"
 )
@@ -7,6 +9,12 @@ const (
 type (
 	MessageType byte
 )
+
+// Hopefully uncaught panics format using this so we don't just see a pair of
+// unhelpful uintptrs.
+func (me MessageType) String() string {
+	return strconv.FormatInt(int64(me), 10)
+}
 
 const (
 	Choke         MessageType = iota

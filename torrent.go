@@ -1410,6 +1410,13 @@ func (t *Torrent) numTotalPeers() int {
 	return len(peers)
 }
 
+// Reconcile bytes transferred before connection was associated with a
+// torrent.
+func (t *Torrent) reconcileHandshakeStats(c *connection) {
+	t.stats.wroteBytes(c.stats.BytesWritten)
+	t.stats.readBytes(c.stats.BytesRead)
+}
+
 // Returns true if the connection is added.
 func (t *Torrent) addConnection(c *connection, outgoing bool) bool {
 	if t.cl.closed.IsSet() {
@@ -1451,15 +1458,7 @@ func (t *Torrent) addConnection(c *connection, outgoing bool) bool {
 	if len(t.conns) >= t.maxEstablishedConns {
 		panic(len(t.conns))
 	}
-	if c.t != nil {
-		panic("connection already associated with a torrent")
-	}
-	// Reconcile bytes transferred before connection was associated with a
-	// torrent.
-	t.stats.wroteBytes(c.stats.BytesWritten)
-	t.stats.readBytes(c.stats.BytesRead)
-	c.t = t
-	t.conns[c] = struct{}{}
+	c.setTorrent(t)
 	return true
 }
 

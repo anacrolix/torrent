@@ -714,7 +714,7 @@ func (cl *Client) outgoingConnection(t *Torrent, addr string, ps peerSource) {
 	}
 	defer c.Close()
 	c.Discovery = ps
-	cl.runInitiatedHandshookConn(c, t)
+	cl.runHandshookConn(c, t, true)
 }
 
 // The port number for incoming peer connections. 0 if the client isn't
@@ -816,16 +816,6 @@ func (cl *Client) connBTHandshake(c *connection, ih *metainfo.Hash) (ret metainf
 	return
 }
 
-func (cl *Client) runInitiatedHandshookConn(c *connection, t *Torrent) {
-	if c.PeerID == cl.peerID {
-		connsToSelf.Add(1)
-		addr := c.conn.RemoteAddr().String()
-		cl.dopplegangerAddrs[addr] = struct{}{}
-		return
-	}
-	cl.runHandshookConn(c, t, true)
-}
-
 func (cl *Client) runReceivedConn(c *connection) {
 	err := c.conn.SetDeadline(time.Now().Add(cl.config.HandshakesTimeout))
 	if err != nil {
@@ -843,17 +833,24 @@ func (cl *Client) runReceivedConn(c *connection) {
 	}
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	if c.PeerID == cl.peerID {
-		// Because the remote address is not necessarily the same as its
-		// client's torrent listen address, we won't record the remote address
-		// as a doppleganger. Instead, the initiator can record *us* as the
-		// doppleganger.
-		return
-	}
 	cl.runHandshookConn(c, t, false)
 }
 
 func (cl *Client) runHandshookConn(c *connection, t *Torrent, outgoing bool) {
+	t.reconcileHandshakeStats(c)
+	if c.PeerID == cl.peerID {
+		if outgoing {
+			connsToSelf.Add(1)
+			addr := c.conn.RemoteAddr().String()
+			cl.dopplegangerAddrs[addr] = struct{}{}
+		} else {
+			// Because the remote address is not necessarily the same as its
+			// client's torrent listen address, we won't record the remote address
+			// as a doppleganger. Instead, the initiator can record *us* as the
+			// doppleganger.
+		}
+		return
+	}
 	c.conn.SetWriteDeadline(time.Time{})
 	c.r = deadlineReader{c.conn, c.r}
 	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)

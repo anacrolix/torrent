@@ -1282,3 +1282,11 @@ func (c *connection) sendChunk(r request, msg func(pp.Message) bool) (more bool,
 	c.lastChunkSent = time.Now()
 	return
 }
+
+func (c *connection) setTorrent(t *Torrent) {
+	if c.t != nil {
+		panic("connection already associated with a torrent")
+	}
+	c.t = t
+	t.conns[c] = struct{}{}
+}

@@ -1171,6 +1171,11 @@ func (t *Torrent) SetInfoBytes(b []byte) (err error) {
 
 // Returns true if connection is removed from torrent.Conns.
 func (t *Torrent) deleteConnection(c *connection) (ret bool) {
+	if !c.closed.IsSet() {
+		panic("connection is not closed")
+		// There are behaviours prevented by the closed state that will fail
+		// if the connection has been deleted.
+	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
 	c.deleteAllRequests()

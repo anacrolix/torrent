@@ -348,6 +348,7 @@ func (cn *connection) SetInterested(interested bool, msg func(pp.Message) bool) 
 // are okay.
 type messageWriter func(pp.Message) bool
 
+// Proxies the messageWriter's response.
 func (cn *connection) request(r request, mw messageWriter) bool {
 	if cn.requests == nil {
 		cn.requests = make(map[request]struct{}, cn.nominalMaxRequests())
@@ -359,6 +360,9 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 		panic("requesting piece peer doesn't have")
 	}
 	cn.requests[r] = struct{}{}
+	if _, ok := cn.t.conns[cn]; !ok {
+		panic("requesting but not in active conns")
+	}
 	cn.t.pendingRequests[r]++
 	return mw(pp.Message{
 		Type:   pp.Request,
@@ -421,6 +425,9 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	defer cn.Close()
 	defer keepAliveTimer.Stop()
 	for {
+		if cn.closed.IsSet() {
+			return
+		}
 		buf.Write(cn.postedBuffer.Bytes())
 		cn.postedBuffer.Reset()
 		if buf.Len() == 0 {

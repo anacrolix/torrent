@@ -23,7 +23,7 @@ func newRequest(index, begin, length pp.Integer) request {
 
 func newRequestFromMessage(msg *pp.Message) request {
 	switch msg.Type {
-	case pp.Request:
+	case pp.Request, pp.Cancel, pp.Reject:
 		return newRequest(msg.Index, msg.Begin, msg.Length)
 	case pp.Piece:
 		return newRequest(msg.Index, msg.Begin, pp.Integer(len(msg.Piece)))

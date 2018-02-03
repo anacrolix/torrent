@@ -232,6 +232,7 @@ func (cn *connection) Close() {
 	if !cn.closed.Set() {
 		return
 	}
+	cn.tickleWriter()
 	cn.discardPieceInclination()
 	cn.pieceRequestOrder.Clear()
 	if cn.conn != nil {

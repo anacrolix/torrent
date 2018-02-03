@@ -49,7 +49,6 @@ type Piece struct {
 	dirtyChunks bitmap.Bitmap
 
 	hashing             bool
-	everHashed          bool
 	numVerifies         int64
 	storageCompletionOk bool
 

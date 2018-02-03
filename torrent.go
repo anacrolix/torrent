@@ -1502,7 +1502,7 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 	}
 	p := &t.pieces[piece]
 	touchers := t.reapPieceTouchers(piece)
-	if p.everHashed {
+	if p.storageCompletionOk {
 		// Don't score the first time a piece is hashed, it could be an
 		// initial check.
 		if correct {
@@ -1512,7 +1512,6 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 			pieceHashedNotCorrect.Add(1)
 		}
 	}
-	p.everHashed = true
 	if correct {
 		if len(touchers) != 0 {
 			t.stats.PiecesDirtiedGood++

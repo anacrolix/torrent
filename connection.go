@@ -6,13 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
@@ -1203,7 +1204,7 @@ another:
 						break another
 					}
 				}
-				log.Printf("error sending chunk %+v to peer: %s", r, err)
+				log.Str("error sending chunk to peer").AddValues(c, r, err).Log(c.t.logger)
 				// If we failed to send a chunk, choke the peer to ensure they
 				// flush all their requests. We've probably dropped a piece,
 				// but there's no way to communicate this to the peer. If they

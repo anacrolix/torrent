@@ -1623,15 +1623,14 @@ func (t *Torrent) verifyPiece(piece int) {
 	t.publishPieceChange(piece)
 }
 
-// Return the connections that touched a piece, and clear the entry while
+// Return the connections that touched a piece, and clear the entries while
 // doing it.
 func (t *Torrent) reapPieceTouchers(piece int) (ret []*connection) {
-	for c := range t.conns {
-		if _, ok := c.peerTouchedPieces[piece]; ok {
-			ret = append(ret, c)
-			delete(c.peerTouchedPieces, piece)
-		}
+	for c := range t.pieces[piece].dirtiers {
+		delete(c.peerTouchedPieces, piece)
+		ret = append(ret, c)
 	}
+	t.pieces[piece].dirtiers = nil
 	return
 }
 

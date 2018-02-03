@@ -59,6 +59,10 @@ type Piece struct {
 	pendingWritesMutex sync.Mutex
 	pendingWrites      int
 	noPendingWrites    sync.Cond
+
+	// Connections that have written data to this piece since its last check.
+	// This can include connections that have closed.
+	dirtiers map[*connection]struct{}
 }
 
 func (p *Piece) String() string {

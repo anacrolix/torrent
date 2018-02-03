@@ -1138,13 +1138,22 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 		t.pendAllChunkSpecs(index)
 	}
 
-	if c.peerTouchedPieces == nil {
-		c.peerTouchedPieces = make(map[int]struct{})
-	}
-	c.peerTouchedPieces[index] = struct{}{}
+	c.onDirtiedPiece(index)
 
 	cl.event.Broadcast()
 	t.publishPieceChange(int(req.Index))
+}
+
+func (c *connection) onDirtiedPiece(piece int) {
+	if c.peerTouchedPieces == nil {
+		c.peerTouchedPieces = make(map[int]struct{})
+	}
+	c.peerTouchedPieces[piece] = struct{}{}
+	ds := &c.t.pieces[piece].dirtiers
+	if *ds == nil {
+		*ds = make(map[*connection]struct{})
+	}
+	(*ds)[c] = struct{}{}
 }
 
 func (c *connection) uploadAllowed() bool {

@@ -17,6 +17,15 @@ type request struct {
 	chunkSpec
 }
 
+func (r request) ToMsg(mt pp.MessageType) pp.Message {
+	return pp.Message{
+		Type:   mt,
+		Index:  r.Index,
+		Begin:  r.Begin,
+		Length: r.Length,
+	}
+}
+
 func newRequest(index, begin, length pp.Integer) request {
 	return request{index, chunkSpec{begin, length}}
 }

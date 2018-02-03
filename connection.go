@@ -824,13 +824,34 @@ func (c *connection) lastHelpful() (ret time.Time) {
 	return
 }
 
+func (c *connection) fastEnabled() bool {
+	return c.PeerExtensionBytes.SupportsFast() && c.t.cl.extensionBytes.SupportsFast()
+}
+
+// Returns true if we were able to reject the request.
+func (c *connection) reject(r request) bool {
+	if !c.fastEnabled() {
+		return false
+	}
+	c.deleteRequest(r)
+	c.Post(r.ToMsg(pp.Reject))
+	return true
+}
+
 func (c *connection) onReadRequest(r request) error {
 	requestedChunkLengths.Add(strconv.FormatUint(r.Length.Uint64(), 10), 1)
+	if r.Begin+r.Length > c.t.pieceLength(int(r.Index)) {
+		return errors.New("bad request")
+	}
+	if _, ok := c.PeerRequests[r]; ok {
+		return nil
+	}
 	if c.Choked {
+		c.reject(r)
 		return nil
 	}
 	if len(c.PeerRequests) >= maxRequests {
-		// TODO: Should we drop them or Choke them instead?
+		c.reject(r)
 		return nil
 	}
 	if !c.t.havePiece(r.Index.Int()) {
@@ -1254,6 +1275,7 @@ func (c *connection) deleteRequest(r request) bool {
 	}
 	delete(c.requests, r)
 	c.t.pendingRequests[r]--
+	c.updateRequests()
 	return true
 }
 

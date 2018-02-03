@@ -93,7 +93,7 @@ type connection struct {
 	pieceInclination  []int
 	pieceRequestOrder prioritybitmap.PriorityBitmap
 
-	writeBuffer bytes.Buffer
+	writeBuffer *bytes.Buffer
 	uploadTimer *time.Timer
 	writerCond  sync.Cond
 }
@@ -404,10 +404,9 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 // connection is writable.
 func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	var (
-		// buf       bytes.Buffer
-		lastWrite time.Time = time.Now()
+		lastWrite      time.Time = time.Now()
+		keepAliveTimer *time.Timer
 	)
-	var keepAliveTimer *time.Timer
 	keepAliveTimer = time.AfterFunc(keepAliveTimeout, func() {
 		cn.mu().Lock()
 		defer cn.mu().Unlock()
@@ -420,6 +419,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	defer cn.mu().Unlock()
 	defer cn.Close()
 	defer keepAliveTimer.Stop()
+	frontBuf := new(bytes.Buffer)
 	for {
 		if cn.closed.IsSet() {
 			return
@@ -440,12 +440,10 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			cn.writerCond.Wait()
 			continue
 		}
-		var buf bytes.Buffer
-		buf.Write(cn.writeBuffer.Bytes())
-		cn.writeBuffer.Reset()
+		// Flip the buffers.
+		frontBuf, cn.writeBuffer = cn.writeBuffer, frontBuf
 		cn.mu().Unlock()
-		// log.Printf("writing %d bytes", buf.Len())
-		n, err := cn.w.Write(buf.Bytes())
+		n, err := cn.w.Write(frontBuf.Bytes())
 		cn.mu().Lock()
 		if n != 0 {
 			lastWrite = time.Now()
@@ -454,10 +452,10 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		if err != nil {
 			return
 		}
-		if n != buf.Len() {
+		if n != frontBuf.Len() {
 			panic("short write")
 		}
-		buf.Reset()
+		frontBuf.Reset()
 	}
 }
 

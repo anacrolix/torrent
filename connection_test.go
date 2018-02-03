@@ -20,14 +20,12 @@ import (
 // Have that would potentially alter it.
 func TestSendBitfieldThenHave(t *testing.T) {
 	r, w := io.Pipe()
-	c := &connection{
-		t: &Torrent{
-			cl: &Client{},
-		},
-		r: r,
-		w: w,
-	}
-	c.writerCond.L = &c.t.cl.mu
+	var cl Client
+	cl.initLogger()
+	c := cl.newConnection(nil)
+	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
+	c.r = r
+	c.w = w
 	go c.writer(time.Minute)
 	c.mu().Lock()
 	c.Bitfield([]bool{false, true, false})

@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"errors"
@@ -538,7 +539,7 @@ func (cl *Client) initiateConn(peer Peer, t *Torrent) {
 
 func (cl *Client) dialTCP(ctx context.Context, addr string) (c net.Conn, err error) {
 	d := net.Dialer{
-		// LocalAddr: cl.tcpListener.Addr(),
+	// LocalAddr: cl.tcpListener.Addr(),
 	}
 	c, err = d.DialContext(ctx, "tcp", addr)
 	countDialResult(err)
@@ -1232,11 +1233,11 @@ func (cl *Client) banPeerIP(ip net.IP) {
 
 func (cl *Client) newConnection(nc net.Conn) (c *connection) {
 	c = &connection{
-		conn: nc,
-
+		conn:            nc,
 		Choked:          true,
 		PeerChoked:      true,
 		PeerMaxRequests: 250,
+		writeBuffer:     new(bytes.Buffer),
 	}
 	c.writerCond.L = &cl.mu
 	c.setRW(connStatsReadWriter{nc, &cl.mu, c})

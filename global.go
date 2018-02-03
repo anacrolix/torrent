@@ -10,24 +10,15 @@ const (
 	maxRequests      = 250    // Maximum pending requests we allow peers to send us.
 	defaultChunkSize = 0x4000 // 16KiB
 
-	// Justification for set bits follows.
-	//
-	// Extension protocol ([5]|=0x10):
-	// http://www.bittorrent.org/beps/bep_0010.html
-	//
-	// Fast Extension ([7]|=0x04):
-	// http://bittorrent.org/beps/bep_0006.html.
-	// Disabled until AllowedFast is implemented. TODO
-	//
-	// DHT ([7]|=1):
-	// http://www.bittorrent.org/beps/bep_0005.html
-	defaultExtensionBytes = "\x00\x00\x00\x00\x00\x10\x00\x01"
-
 	// These are our extended message IDs. Peers will use these values to
 	// select which extension a message is intended for.
 	metadataExtendedId = iota + 1 // 0 is reserved for deleting keys
 	pexExtendedId
 )
+
+func defaultPeerExtensionBytes() peerExtensionBytes {
+	return newPeerExtensionBytes(ExtensionBitDHT, ExtensionBitExtended)
+}
 
 // I could move a lot of these counters to their own file, but I suspect they
 // may be attached to a Client someday.

@@ -38,6 +38,13 @@ type (
 	peerExtensionBytes [8]byte
 )
 
+func newPeerExtensionBytes(bits ...ExtensionBit) (ret peerExtensionBytes) {
+	for _, b := range bits {
+		ret.SetBit(b)
+	}
+	return
+}
+
 func (pex peerExtensionBytes) SupportsExtended() bool {
 	return pex.GetBit(ExtensionBitExtended)
 }

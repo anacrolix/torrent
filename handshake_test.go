@@ -9,7 +9,7 @@ import (
 
 func TestDefaultExtensionBytes(t *testing.T) {
 	var pex peerExtensionBytes
-	missinggo.CopyExact(&pex, defaultExtensionBytes)
+	missinggo.CopyExact(&pex, defaultPeerExtensionBytes())
 	assert.True(t, pex.SupportsDHT())
 	assert.True(t, pex.SupportsExtended())
 	assert.False(t, pex.SupportsFast())

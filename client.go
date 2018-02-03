@@ -278,7 +278,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	} else {
 		cl.downloadLimit = cfg.DownloadRateLimiter
 	}
-	missinggo.CopyExact(&cl.extensionBytes, defaultExtensionBytes)
+	cl.extensionBytes = defaultPeerExtensionBytes()
 	cl.event.L = &cl.mu
 	storageImpl := cfg.DefaultStorage
 	if storageImpl == nil {

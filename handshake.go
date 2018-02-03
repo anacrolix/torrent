@@ -51,7 +51,7 @@ func (pex peerExtensionBytes) SupportsFast() bool {
 }
 
 func (pex *peerExtensionBytes) SetBit(bit ExtensionBit) {
-	pex[7-bit/8] |= 1 << bit % 8
+	pex[7-bit/8] |= 1 << (bit % 8)
 }
 
 func (pex peerExtensionBytes) GetBit(bit ExtensionBit) bool {

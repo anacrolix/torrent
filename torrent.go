@@ -1514,6 +1514,9 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 	}
 	p.everHashed = true
 	if correct {
+		if len(touchers) != 0 {
+			t.stats.PiecesDirtiedGood++
+		}
 		for _, c := range touchers {
 			c.stats.PiecesDirtiedGood++
 		}
@@ -1523,6 +1526,7 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 		}
 	} else {
 		if len(touchers) != 0 {
+			t.stats.PiecesDirtiedBad++
 			for _, c := range touchers {
 				// Y u do dis peer?!
 				c.stats.PiecesDirtiedBad++

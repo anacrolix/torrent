@@ -1080,6 +1080,7 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	if !t.wantPiece(req) {
 		unwantedChunksReceived.Add(1)
 		c.stats.ChunksReadUnwanted++
+		c.t.stats.ChunksReadUnwanted++
 		return
 	}
 
@@ -1087,6 +1088,9 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	piece := &t.pieces[index]
 
 	c.stats.ChunksReadUseful++
+	c.t.stats.ChunksReadUseful++
+	c.stats.BytesReadUsefulData += int64(len(msg.Piece))
+	c.t.stats.BytesReadUsefulData += int64(len(msg.Piece))
 	c.lastUsefulChunkReceived = time.Now()
 	// if t.fastestConn != c {
 	// log.Printf("setting fastest connection %p", c)

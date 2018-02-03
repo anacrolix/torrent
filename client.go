@@ -948,6 +948,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connect
 		}
 		t.saveMetadataPiece(piece, payload[begin:])
 		c.stats.ChunksReadUseful++
+		c.t.stats.ChunksReadUseful++
 		c.lastUsefulChunkReceived = time.Now()
 		return t.maybeCompleteMetadata()
 	case pp.RequestMetadataExtensionMsgType:

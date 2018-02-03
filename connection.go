@@ -243,9 +243,16 @@ func (cn *connection) PeerHasPiece(piece int) bool {
 	return cn.peerSentHaveAll || cn.peerPieces.Contains(piece)
 }
 
+// Writes a message into the write buffer.
 func (cn *connection) Post(msg pp.Message) {
 	messageTypesPosted.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
+	// We don't need to track bytes here because a connection.w Writer wrapper
+	// takes care of that (although there's some delay between us recording
+	// the message, and the connection writer flushing it out.).
 	cn.writeBuffer.Write(msg.MustMarshalBinary())
+	// Last I checked only Piece messages affect stats, and we don't post
+	// those.
+	cn.wroteMsg(&msg)
 	cn.tickleWriter()
 }
 

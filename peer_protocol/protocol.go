@@ -16,6 +16,10 @@ func (me MessageType) String() string {
 	return strconv.FormatInt(int64(me), 10)
 }
 
+func (mt MessageType) FastExtension() bool {
+	return mt >= Suggest && mt <= AllowedFast
+}
+
 const (
 	Choke         MessageType = iota
 	Unchoke                   // 1

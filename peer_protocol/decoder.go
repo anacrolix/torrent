@@ -54,7 +54,7 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 	switch msg.Type {
 	case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
 		return
-	case Have:
+	case Have, AllowedFast, Suggest:
 		err = msg.Index.Read(r)
 	case Request, Cancel, Reject:
 		for _, data := range []*Integer{&msg.Index, &msg.Begin, &msg.Length} {

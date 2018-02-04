@@ -17,7 +17,7 @@ const (
 )
 
 func defaultPeerExtensionBytes() peerExtensionBytes {
-	return newPeerExtensionBytes(ExtensionBitDHT, ExtensionBitExtended)
+	return newPeerExtensionBytes(ExtensionBitDHT, ExtensionBitExtended, ExtensionBitFast)
 }
 
 // I could move a lot of these counters to their own file, but I suspect they
@@ -27,10 +27,11 @@ var (
 	unexpectedChunksReceived = expvar.NewInt("chunksReceivedUnexpected")
 	chunksReceived           = expvar.NewInt("chunksReceived")
 
+	torrent = expvar.NewMap("torrent")
+
 	peersAddedBySource = expvar.NewMap("peersAddedBySource")
 
 	uploadChunksPosted = expvar.NewInt("uploadChunksPosted")
-	unexpectedCancels  = expvar.NewInt("unexpectedCancels")
 
 	pieceHashedCorrect    = expvar.NewInt("pieceHashedCorrect")
 	pieceHashedNotCorrect = expvar.NewInt("pieceHashedNotCorrect")

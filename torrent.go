@@ -240,7 +240,7 @@ func (t *Torrent) unclosedConnsAsSlice() (ret []*connection) {
 
 func (t *Torrent) addPeer(p Peer) {
 	cl := t.cl
-	cl.openNewConns(t)
+	t.openNewConns()
 	if len(t.peers) >= cl.config.TorrentPeersHighWater {
 		return
 	}
@@ -250,7 +250,7 @@ func (t *Torrent) addPeer(p Peer) {
 	}
 	t.peers[key] = p
 	peersAddedBySource.Add(string(p.Source), 1)
-	cl.openNewConns(t)
+	t.openNewConns()
 
 }
 
@@ -1027,7 +1027,24 @@ func (t *Torrent) pieceCompletionChanged(piece int) {
 }
 
 func (t *Torrent) openNewConns() {
-	t.cl.openNewConns(t)
+	defer t.updateWantPeersEvent()
+	for len(t.peers) != 0 {
+		if !t.wantConns() {
+			return
+		}
+		if len(t.halfOpen) >= t.cl.halfOpenLimit {
+			return
+		}
+		var (
+			k peersKey
+			p Peer
+		)
+		for k, p = range t.peers {
+			break
+		}
+		delete(t.peers, k)
+		t.initiateConn(p)
+	}
 }
 
 func (t *Torrent) getConnPieceInclination() []int {
@@ -1655,4 +1672,21 @@ func (t *Torrent) VerifyData() {
 	for i := range iter.N(t.NumPieces()) {
 		t.Piece(i).VerifyData()
 	}
+}
+
+// Start the process of connecting to the given peer for the given torrent if
+// appropriate.
+func (t *Torrent) initiateConn(peer Peer) {
+	if peer.Id == t.cl.peerID {
+		return
+	}
+	if t.cl.badPeerIPPort(peer.IP, peer.Port) {
+		return
+	}
+	addr := net.JoinHostPort(peer.IP.String(), fmt.Sprintf("%d", peer.Port))
+	if t.addrActive(addr) {
+		return
+	}
+	t.halfOpen[addr] = peer
+	go t.cl.outgoingConnection(t, addr, peer.Source)
 }

@@ -520,23 +520,6 @@ func (cl *Client) dopplegangerAddr(addr string) bool {
 	return ok
 }
 
-// Start the process of connecting to the given peer for the given torrent if
-// appropriate.
-func (cl *Client) initiateConn(peer Peer, t *Torrent) {
-	if peer.Id == cl.peerID {
-		return
-	}
-	if cl.badPeerIPPort(peer.IP, peer.Port) {
-		return
-	}
-	addr := net.JoinHostPort(peer.IP.String(), fmt.Sprintf("%d", peer.Port))
-	if t.addrActive(addr) {
-		return
-	}
-	t.halfOpen[addr] = peer
-	go cl.outgoingConnection(t, addr, peer.Source)
-}
-
 func (cl *Client) dialTCP(ctx context.Context, addr string) (c net.Conn, err error) {
 	d := net.Dialer{
 	// LocalAddr: cl.tcpListener.Addr(),
@@ -615,7 +598,7 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
 		panic("invariant broken")
 	}
 	delete(t.halfOpen, addr)
-	cl.openNewConns(t)
+	t.openNewConns()
 }
 
 // Performs initiator handshakes and returns a connection. Returns nil
@@ -964,27 +947,6 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connect
 		return nil
 	default:
 		return errors.New("unknown msg_type value")
-	}
-}
-
-func (cl *Client) openNewConns(t *Torrent) {
-	defer t.updateWantPeersEvent()
-	for len(t.peers) != 0 {
-		if !t.wantConns() {
-			return
-		}
-		if len(t.halfOpen) >= cl.halfOpenLimit {
-			return
-		}
-		var (
-			k peersKey
-			p Peer
-		)
-		for k, p = range t.peers {
-			break
-		}
-		delete(t.peers, k)
-		cl.initiateConn(p, t)
 	}
 }
 

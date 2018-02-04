@@ -1436,7 +1436,7 @@ func (t *Torrent) reconcileHandshakeStats(c *connection) {
 
 // Returns true if the connection is added.
 func (t *Torrent) addConnection(c *connection, outgoing bool) bool {
-	if t.cl.closed.IsSet() {
+	if t.closed.IsSet() {
 		return false
 	}
 	if !t.wantConns() {

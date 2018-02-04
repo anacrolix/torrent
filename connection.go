@@ -134,7 +134,11 @@ func (cn *connection) bestPeerNumPieces() int {
 }
 
 func (cn *connection) completedString() string {
-	return fmt.Sprintf("%d/%d", cn.peerPieces.Len(), cn.bestPeerNumPieces())
+	have := cn.peerPieces.Len()
+	if cn.peerSentHaveAll {
+		have = cn.bestPeerNumPieces()
+	}
+	return fmt.Sprintf("%d/%d", have, cn.bestPeerNumPieces())
 }
 
 // Correct the PeerPieces slice length. Return false if the existing slice is

@@ -735,6 +735,10 @@ type Peer struct {
 }
 
 func (t *Torrent) pieceLength(piece int) pp.Integer {
+	if t.info.PieceLength == 0 {
+		// There will be no variance amongst pieces. Only pain.
+		return 0
+	}
 	if piece == t.numPieces()-1 {
 		ret := pp.Integer(*t.length % t.info.PieceLength)
 		if ret != 0 {
@@ -762,12 +766,14 @@ func (t *Torrent) hashPiece(piece int) (ret metainfo.Hash) {
 }
 
 func (t *Torrent) haveAnyPieces() bool {
-	for i := range t.pieces {
-		if t.pieceComplete(i) {
-			return true
-		}
+	return t.completedPieces.Len() != 0
+}
+
+func (t *Torrent) haveAllPieces() bool {
+	if !t.haveInfo() {
+		return false
 	}
-	return false
+	return t.completedPieces.Len() == t.numPieces()
 }
 
 func (t *Torrent) havePiece(index int) bool {

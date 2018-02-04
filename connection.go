@@ -66,7 +66,7 @@ type connection struct {
 	// Indexed by metadata piece, set to true if posted and pending a
 	// response.
 	metadataRequests []bool
-	sentHaves        []bool
+	sentHaves        bitmap.Bitmap
 
 	// Stuff controlled by the remote peer.
 	PeerID             PeerID
@@ -141,7 +141,7 @@ func (cn *connection) completedString() string {
 // invalid, such as by receiving badly sized BITFIELD, or invalid HAVE
 // messages.
 func (cn *connection) setNumPieces(num int) error {
-	cn.peerPieces.RemoveRange(num, -1)
+	cn.peerPieces.RemoveRange(num, bitmap.ToEnd)
 	cn.peerPiecesChanged()
 	return nil
 }
@@ -468,31 +468,28 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 }
 
 func (cn *connection) Have(piece int) {
-	for piece >= len(cn.sentHaves) {
-		cn.sentHaves = append(cn.sentHaves, false)
-	}
-	if cn.sentHaves[piece] {
+	if cn.sentHaves.Get(piece) {
 		return
 	}
 	cn.Post(pp.Message{
 		Type:  pp.Have,
 		Index: pp.Integer(piece),
 	})
-	cn.sentHaves[piece] = true
+	cn.sentHaves.Add(piece)
 }
 
-func (cn *connection) Bitfield(haves []bool) {
-	if cn.sentHaves != nil {
+func (cn *connection) PostBitfield() {
+	if cn.sentHaves.Len() != 0 {
 		panic("bitfield must be first have-related message sent")
+	}
+	if !cn.t.haveAnyPieces() {
+		return
 	}
 	cn.Post(pp.Message{
 		Type:     pp.Bitfield,
-		Bitfield: haves,
+		Bitfield: cn.t.bitfield(),
 	})
-	// Make a copy of haves, as that's read when the message is marshalled
-	// without the lock. Also it obviously shouldn't change in the Msg due to
-	// changes in .sentHaves.
-	cn.sentHaves = append([]bool(nil), haves...)
+	cn.sentHaves = cn.t.completedPieces.Copy()
 }
 
 // Determines interest and requests to send to a connected peer.
@@ -553,8 +550,11 @@ func iterBitmapsDistinct(skip bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 
 func (cn *connection) unbiasedPieceRequestOrder() iter.Func {
 	now, readahead := cn.t.readerPiecePriorities()
-	// Pieces to skip include pieces the peer doesn't have
-	skip := bitmap.Flip(cn.peerPieces, 0, cn.t.numPieces())
+	var skip bitmap.Bitmap
+	if !cn.peerSentHaveAll {
+		// Pieces to skip include pieces the peer doesn't have
+		skip = bitmap.Flip(cn.peerPieces, 0, cn.t.numPieces())
+	}
 	// And pieces that we already have.
 	skip.Union(cn.t.completedPieces)
 	// Return an iterator over the different priority classes, minus the skip

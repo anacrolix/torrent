@@ -893,13 +893,20 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 			}(),
 		})
 	}
-	if torrent.haveAnyPieces() {
-		conn.Bitfield(torrent.bitfield())
-	} else if cl.extensionBytes.SupportsFast() && conn.PeerExtensionBytes.SupportsFast() {
-		conn.Post(pp.Message{
-			Type: pp.HaveNone,
-		})
-	}
+	func() {
+		if conn.fastEnabled() {
+			if torrent.haveAllPieces() {
+				conn.Post(pp.Message{Type: pp.HaveAll})
+				conn.sentHaves.AddRange(0, conn.t.NumPieces())
+				return
+			} else if !torrent.haveAnyPieces() {
+				conn.Post(pp.Message{Type: pp.HaveNone})
+				conn.sentHaves.Clear()
+				return
+			}
+		}
+		conn.PostBitfield()
+	}()
 	if conn.PeerExtensionBytes.SupportsDHT() && cl.extensionBytes.SupportsDHT() && cl.dHT != nil {
 		conn.Post(pp.Message{
 			Type: pp.Port,
@@ -1101,7 +1108,7 @@ func (cl *Client) allTorrentsCompleted() bool {
 		if !t.haveInfo() {
 			return false
 		}
-		if t.numPiecesCompleted() != t.numPieces() {
+		if !t.haveAllPieces() {
 			return false
 		}
 	}

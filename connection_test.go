@@ -24,11 +24,15 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	cl.initLogger()
 	c := cl.newConnection(nil)
 	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
+	c.t.setInfo(&metainfo.Info{
+		Pieces: make([]byte, metainfo.HashSize*3),
+	})
 	c.r = r
 	c.w = w
 	go c.writer(time.Minute)
 	c.mu().Lock()
-	c.Bitfield([]bool{false, true, false})
+	c.t.completedPieces.Add(1)
+	c.PostBitfield( /*[]bool{false, true, false}*/ )
 	c.mu().Unlock()
 	c.mu().Lock()
 	c.Have(2)

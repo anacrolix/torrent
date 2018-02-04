@@ -94,6 +94,7 @@ func (p *Piece) numDirtyChunks() (ret int) {
 
 func (p *Piece) unpendChunkIndex(i int) {
 	p.dirtyChunks.Add(i)
+	p.t.tickleReaders()
 }
 
 func (p *Piece) pendChunkIndex(i int) {

@@ -147,7 +147,7 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 			<-ctx.Done()
 			r.t.cl.mu.Lock()
 			ctxErr = ctx.Err()
-			r.t.cl.event.Broadcast()
+			r.t.tickleReaders()
 			r.t.cl.mu.Unlock()
 		}()
 	}

@@ -138,6 +138,10 @@ type Torrent struct {
 	pendingRequests map[request]int
 }
 
+func (t *Torrent) tickleReaders() {
+	t.cl.event.Broadcast()
+}
+
 // Returns a channel that is closed when the Torrent is closed.
 func (t *Torrent) Closed() <-chan struct{} {
 	return t.closed.LockedChan(&t.cl.mu)
@@ -672,6 +676,7 @@ func (t *Torrent) numPiecesCompleted() (num int) {
 
 func (t *Torrent) close() (err error) {
 	t.closed.Set()
+	t.tickleReaders()
 	if t.storage != nil {
 		t.storageLock.Lock()
 		t.storage.Close()
@@ -1078,6 +1083,7 @@ func (t *Torrent) updatePieceCompletion(piece int) {
 	log.Fmsg("piece %d completion: %v", piece, pcu.Ok).AddValue(debugLogValue).Log(t.logger)
 	p.storageCompletionOk = pcu.Ok
 	t.completedPieces.Set(piece, pcu.Complete)
+	t.tickleReaders()
 	// log.Printf("piece %d uncached completion: %v", piece, pcu.Complete)
 	// log.Printf("piece %d changed: %v", piece, changed)
 	if changed {

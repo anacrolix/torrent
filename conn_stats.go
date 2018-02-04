@@ -36,6 +36,7 @@ type ConnStats struct {
 }
 
 func (cs *ConnStats) wroteMsg(msg *pp.Message) {
+	// TODO: Track messages and not just chunks.
 	switch msg.Type {
 	case pp.Piece:
 		cs.ChunksWritten++

@@ -134,6 +134,7 @@ type Torrent struct {
 	// Torrent-level statistics.
 	stats TorrentStats
 
+	// Count of each request across active connections.
 	pendingRequests map[request]int
 }
 
@@ -848,6 +849,8 @@ func (t *Torrent) worstBadConn() *connection {
 		if c.stats.ChunksReadUnwanted >= 6 && c.stats.ChunksReadUnwanted > c.stats.ChunksReadUseful {
 			return c
 		}
+		// If the connection is in the worst half of the established
+		// connection quota and is older than a minute.
 		if wcs.Len() >= (t.maxEstablishedConns+1)/2 {
 			// Give connections 1 minute to prove themselves.
 			if time.Since(c.completedHandshake) > time.Minute {

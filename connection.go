@@ -210,6 +210,7 @@ func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
 		cn.completedString(),
 		len(cn.peerTouchedPieces),
 		cn.stats.ChunksReadUseful,
+		// TODO: Use ChunksRead? Verify that value is the same as this sum?
 		cn.stats.ChunksReadUnwanted+cn.stats.ChunksReadUseful,
 		cn.stats.ChunksWritten,
 		cn.numLocalRequests(),

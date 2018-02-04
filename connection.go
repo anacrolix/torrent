@@ -898,7 +898,7 @@ func (c *connection) mainReadLoop() error {
 			defer cl.mu.Lock()
 			err = decoder.Decode(&msg)
 		}()
-		if cl.closed.IsSet() || c.closed.IsSet() || err == io.EOF {
+		if t.closed.IsSet() || c.closed.IsSet() || err == io.EOF {
 			return nil
 		}
 		if err != nil {

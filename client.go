@@ -851,6 +851,20 @@ func (cl *Client) runHandshookConn(c *connection, t *Torrent, outgoing bool) {
 }
 
 func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
+	func() {
+		if conn.fastEnabled() {
+			if torrent.haveAllPieces() {
+				conn.Post(pp.Message{Type: pp.HaveAll})
+				conn.sentHaves.AddRange(0, conn.t.NumPieces())
+				return
+			} else if !torrent.haveAnyPieces() {
+				conn.Post(pp.Message{Type: pp.HaveNone})
+				conn.sentHaves.Clear()
+				return
+			}
+		}
+		conn.PostBitfield()
+	}()
 	if conn.PeerExtensionBytes.SupportsExtended() && cl.extensionBytes.SupportsExtended() {
 		conn.Post(pp.Message{
 			Type:       pp.Extended,
@@ -893,20 +907,6 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 			}(),
 		})
 	}
-	func() {
-		if conn.fastEnabled() {
-			if torrent.haveAllPieces() {
-				conn.Post(pp.Message{Type: pp.HaveAll})
-				conn.sentHaves.AddRange(0, conn.t.NumPieces())
-				return
-			} else if !torrent.haveAnyPieces() {
-				conn.Post(pp.Message{Type: pp.HaveNone})
-				conn.sentHaves.Clear()
-				return
-			}
-		}
-		conn.PostBitfield()
-	}()
 	if conn.PeerExtensionBytes.SupportsDHT() && cl.extensionBytes.SupportsDHT() && cl.dHT != nil {
 		conn.Post(pp.Message{
 			Type: pp.Port,

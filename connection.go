@@ -252,7 +252,7 @@ func (cn *connection) PeerHasPiece(piece int) bool {
 
 // Writes a message into the write buffer.
 func (cn *connection) Post(msg pp.Message) {
-	messageTypesPosted.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
+	messageTypesPosted.Add(msg.Type.String(), 1)
 	// We don't need to track bytes here because a connection.w Writer wrapper
 	// takes care of that (although there's some delay between us recording
 	// the message, and the connection writer flushing it out.).
@@ -808,7 +808,7 @@ func (c *connection) requestPendingMetadata() {
 }
 
 func (cn *connection) wroteMsg(msg *pp.Message) {
-	messageTypesSent.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
+	messageTypesSent.Add(msg.Type.String(), 1)
 	cn.stats.wroteMsg(msg)
 	cn.t.stats.wroteMsg(msg)
 }
@@ -945,7 +945,7 @@ func (c *connection) mainReadLoop() error {
 			receivedKeepalives.Add(1)
 			continue
 		}
-		messageTypesReceived.Add(strconv.FormatInt(int64(msg.Type), 10), 1)
+		messageTypesReceived.Add(msg.Type.String(), 1)
 		if msg.Type.FastExtension() && !c.fastEnabled() {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}

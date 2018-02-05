@@ -314,13 +314,32 @@ func (cn *connection) requestedMetadataPiece(index int) bool {
 	return index < len(cn.metadataRequests) && cn.metadataRequests[index]
 }
 
+func clamp(min, value, max int64) int64 {
+	if min > max {
+		panic("harumph")
+	}
+	if value < min {
+		value = min
+	}
+	if value > max {
+		value = max
+	}
+	return value
+}
+
+func max(as ...int64) int64 {
+	ret := as[0]
+	for _, a := range as[1:] {
+		if a > ret {
+			ret = a
+		}
+	}
+	return ret
+}
+
 // The actual value to use as the maximum outbound requests.
 func (cn *connection) nominalMaxRequests() (ret int) {
-	ret = cn.PeerMaxRequests
-	if ret > 64 {
-		ret = 64
-	}
-	return
+	return int(clamp(1, int64(cn.PeerMaxRequests), max(64, cn.stats.ChunksReadUseful-(cn.stats.ChunksRead-cn.stats.ChunksReadUseful))))
 }
 
 func (cn *connection) onPeerSentCancel(r request) {
@@ -567,13 +586,16 @@ func nextRequestState(
 				return true
 			}
 		}
+		if len(currentRequests)+len(newRequests) >= requestsHighWater {
+			return false
+		}
 		if _, ok := currentRequests[r]; !ok {
 			if newRequests == nil {
 				newRequests = make([]request, 0, requestsHighWater-len(currentRequests))
 			}
 			newRequests = append(newRequests, r)
 		}
-		return len(currentRequests)+len(newRequests) < requestsHighWater
+		return true
 	})
 	return
 }

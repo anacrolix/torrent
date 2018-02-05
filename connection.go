@@ -59,7 +59,10 @@ type connection struct {
 	lastChunkSent           time.Time
 
 	// Stuff controlled by the local peer.
-	Interested       bool
+	Interested           bool
+	lastBecameInterested time.Time
+	priorInterest        time.Duration
+
 	Choked           bool
 	requests         map[request]struct{}
 	requestsLowWater int
@@ -97,6 +100,14 @@ type connection struct {
 	writeBuffer *bytes.Buffer
 	uploadTimer *time.Timer
 	writerCond  sync.Cond
+}
+
+func (cn *connection) cumInterest() time.Duration {
+	ret := cn.priorInterest
+	if cn.Interested {
+		ret += time.Since(cn.lastBecameInterested)
+	}
+	return ret
 }
 
 func (cn *connection) peerHasAllPieces() (all bool, known bool) {
@@ -197,30 +208,38 @@ func (cn *connection) statusFlags() (ret string) {
 	return
 }
 
-func (cn *connection) String() string {
-	var buf bytes.Buffer
-	cn.WriteStatus(&buf, nil)
-	return buf.String()
+// func (cn *connection) String() string {
+// 	var buf bytes.Buffer
+// 	cn.WriteStatus(&buf, nil)
+// 	return buf.String()
+// }
+
+func (cn *connection) downloadRate() float64 {
+	return float64(cn.stats.BytesReadUsefulData) / cn.cumInterest().Seconds()
 }
 
 func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
 	// \t isn't preserved in <pre> blocks?
-	fmt.Fprintf(w, "%-40s: %s-%s\n", cn.PeerID, cn.localAddr(), cn.remoteAddr())
-	fmt.Fprintf(w, "    last msg: %s, connected: %s, last helpful: %s\n",
+	fmt.Fprintf(w, "%+-55q %s %s-%s\n", cn.PeerID, cn.PeerExtensionBytes, cn.localAddr(), cn.remoteAddr())
+	fmt.Fprintf(w, "    last msg: %s, connected: %s, last helpful: %s, itime: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),
-		eventAgeString(cn.lastHelpful()))
+		eventAgeString(cn.lastHelpful()),
+		cn.cumInterest(),
+	)
 	fmt.Fprintf(w,
-		"    %s completed, %d pieces touched, good chunks: %d/%d-%d reqq: %d-%d, flags: %s\n",
+		"    %s completed, %d pieces touched, good chunks: %d/%d-%d reqq: (%d,%d,%d]-%d, flags: %s, dr: %.1f KiB/s\n",
 		cn.completedString(),
 		len(cn.peerTouchedPieces),
 		cn.stats.ChunksReadUseful,
-		// TODO: Use ChunksRead? Verify that value is the same as this sum?
-		cn.stats.ChunksReadUnwanted+cn.stats.ChunksReadUseful,
+		cn.stats.ChunksRead,
 		cn.stats.ChunksWritten,
+		cn.requestsLowWater,
 		cn.numLocalRequests(),
+		cn.nominalMaxRequests(),
 		len(cn.PeerRequests),
 		cn.statusFlags(),
+		cn.downloadRate()/(1<<10),
 	)
 	roi := cn.pieceRequestOrderIter()
 	fmt.Fprintf(w, "    next pieces: %v%s\n",
@@ -350,6 +369,11 @@ func (cn *connection) SetInterested(interested bool, msg func(pp.Message) bool) 
 		return true
 	}
 	cn.Interested = interested
+	if interested {
+		cn.lastBecameInterested = time.Now()
+	} else if !cn.lastBecameInterested.IsZero() {
+		cn.priorInterest += time.Since(cn.lastBecameInterested)
+	}
 	// log.Printf("%p: setting interest: %v", cn, interested)
 	return msg(pp.Message{
 		Type: func() pp.MessageType {

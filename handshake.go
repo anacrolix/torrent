@@ -38,6 +38,10 @@ type (
 	peerExtensionBytes [8]byte
 )
 
+func (me peerExtensionBytes) String() string {
+	return hex.EncodeToString(me[:])
+}
+
 func newPeerExtensionBytes(bits ...ExtensionBit) (ret peerExtensionBytes) {
 	for _, b := range bits {
 		ret.SetBit(b)
@@ -124,7 +128,7 @@ func handshake(sock io.ReadWriter, ih *metainfo.Hash, peerID [20]byte, extension
 	missinggo.CopyExact(&res.peerExtensionBytes, b[20:28])
 	missinggo.CopyExact(&res.Hash, b[28:48])
 	missinggo.CopyExact(&res.PeerID, b[48:68])
-	peerExtensions.Add(hex.EncodeToString(res.peerExtensionBytes[:]), 1)
+	peerExtensions.Add(res.peerExtensionBytes.String(), 1)
 
 	// TODO: Maybe we can just drop peers here if we're not interested. This
 	// could prevent them trying to reconnect, falsely believing there was

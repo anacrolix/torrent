@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBinaryReadSliceOfPointers(t *testing.T) {
@@ -25,10 +27,8 @@ func TestBinaryReadSliceOfPointers(t *testing.T) {
 }
 
 func TestConstants(t *testing.T) {
-	// check that iota works as expected in the const block
-	if NotInterested != 3 {
-		t.FailNow()
-	}
+	assert.EqualValues(t, 3, NotInterested)
+	assert.EqualValues(t, 14, HaveAll)
 }
 
 func TestBitfieldEncode(t *testing.T) {

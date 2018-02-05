@@ -13,26 +13,30 @@ func (mt MessageType) FastExtension() bool {
 }
 
 const (
-	Choke         MessageType = iota
-	Unchoke                   // 1
-	Interested                // 2
-	NotInterested             // 3
-	Have                      // 4
-	Bitfield                  // 5
-	Request                   // 6
-	Piece                     // 7
-	Cancel                    // 8
-	Port                      // 9
+	// BEP 3
+	Choke         MessageType = 0
+	Unchoke       MessageType = 1
+	Interested    MessageType = 2
+	NotInterested MessageType = 3
+	Have          MessageType = 4
+	Bitfield      MessageType = 5
+	Request       MessageType = 6
+	Piece         MessageType = 7
+	Cancel        MessageType = 8
+	Port          MessageType = 9
 
 	// BEP 6
-	Suggest     MessageType = iota + 0xd // 13
-	HaveAll                 = 0xe        // 14
-	HaveNone                = 0xf        // 15
-	Reject                  = 0x10       // 16
-	AllowedFast             = 0x11       // 17
+	Suggest     MessageType = 0x0d // 13
+	HaveAll     MessageType = 0x0e // 14
+	HaveNone    MessageType = 0x0f // 15
+	Reject      MessageType = 0x10 // 16
+	AllowedFast MessageType = 0x11 // 17
 
-	Extended = 20
+	// BEP 10
+	Extended MessageType = 20
+)
 
+const (
 	HandshakeExtendedID = 0
 
 	RequestMetadataExtensionMsgType = 0

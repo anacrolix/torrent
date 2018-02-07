@@ -31,8 +31,6 @@ var (
 
 	peersAddedBySource = expvar.NewMap("peersAddedBySource")
 
-	uploadChunksPosted = expvar.NewInt("uploadChunksPosted")
-
 	pieceHashedCorrect    = expvar.NewInt("pieceHashedCorrect")
 	pieceHashedNotCorrect = expvar.NewInt("pieceHashedNotCorrect")
 

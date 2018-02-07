@@ -1431,7 +1431,6 @@ func (c *connection) sendChunk(r request, msg func(pp.Message) bool) (more bool,
 		Begin: r.Begin,
 		Piece: b,
 	})
-	uploadChunksPosted.Add(1)
 	c.lastChunkSent = time.Now()
 	return
 }

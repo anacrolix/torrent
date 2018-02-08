@@ -368,6 +368,12 @@ func firstNonEmptyString(ss ...string) string {
 	return ""
 }
 
+func (cl *Client) Closed() <-chan struct{} {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	return cl.closed.C()
+}
+
 // Stops the client. All connections to peers are closed and all activity will
 // come to a halt.
 func (cl *Client) Close() {

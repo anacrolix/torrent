@@ -188,19 +188,16 @@ func handleEncryption(
 	}
 	headerEncrypted = true
 	ret, err = mse.ReceiveHandshake(rw, skeys, func(provides uint32) uint32 {
-		cryptoMethod = func() uint32 {
-			switch {
-			case policy.ForceEncryption:
-				return mse.CryptoMethodRC4
-			case policy.DisableEncryption:
-				return mse.CryptoMethodPlaintext
-			case policy.PreferNoEncryption && provides&mse.CryptoMethodPlaintext != 0:
-				return mse.CryptoMethodPlaintext
-			default:
-				return mse.DefaultCryptoSelector(provides)
-			}
-		}()
-		return cryptoMethod
+		switch {
+		case policy.ForceEncryption:
+			return mse.CryptoMethodRC4
+		case policy.DisableEncryption:
+			return mse.CryptoMethodPlaintext
+		case policy.PreferNoEncryption && provides&mse.CryptoMethodPlaintext != 0:
+			return mse.CryptoMethodPlaintext
+		default:
+			return mse.DefaultCryptoSelector(provides)
+		}
 	})
 	return
 }

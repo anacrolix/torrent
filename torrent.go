@@ -245,16 +245,16 @@ func (t *Torrent) unclosedConnsAsSlice() (ret []*connection) {
 
 func (t *Torrent) addPeer(p Peer) {
 	cl := t.cl
+	peersAddedBySource.Add(string(p.Source), 1)
+	if cl.badPeerIPPort(p.IP, p.Port) {
+		torrent.Add("peers not added because of bad addr", 1)
+		return
+	}
 	t.openNewConns()
 	if len(t.peers) >= cl.config.TorrentPeersHighWater {
 		return
 	}
-	key := peersKey{string(p.IP), p.Port}
-	if _, ok := t.peers[key]; ok {
-		return
-	}
-	t.peers[key] = p
-	peersAddedBySource.Add(string(p.Source), 1)
+	t.peers[peersKey{string(p.IP), p.Port}] = p
 	t.openNewConns()
 
 }
@@ -1395,9 +1395,6 @@ func (t *Torrent) dhtAnnouncer() {
 
 func (t *Torrent) addPeers(peers []Peer) {
 	for _, p := range peers {
-		if t.cl.badPeerIPPort(p.IP, p.Port) {
-			continue
-		}
 		t.addPeer(p)
 	}
 }

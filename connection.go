@@ -608,13 +608,13 @@ func (cn *connection) updateRequests() {
 // Emits the indices in the Bitmaps bms in order, never repeating any index.
 // skip is mutated during execution, and its initial values will never be
 // emitted.
-func iterBitmapsDistinct(skip bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
+func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 	return func(cb iter.Callback) {
 		for _, bm := range bms {
 			if !iter.All(func(i interface{}) bool {
 				skip.Add(i.(int))
 				return cb(i)
-			}, bitmap.Sub(bm, skip).Iter) {
+			}, bitmap.Sub(bm, *skip).Iter) {
 				return
 			}
 		}
@@ -633,7 +633,7 @@ func (cn *connection) unbiasedPieceRequestOrder() iter.Func {
 	// Return an iterator over the different priority classes, minus the skip
 	// pieces.
 	return iter.Chain(
-		iterBitmapsDistinct(skip, now, readahead),
+		iterBitmapsDistinct(&skip, now, readahead),
 		func(cb iter.Callback) {
 			cn.t.pendingPieces.IterTyped(func(piece int) bool {
 				if skip.Contains(piece) {

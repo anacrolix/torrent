@@ -25,6 +25,7 @@ func TestIterBitmapsDistinct(t *testing.T) {
 	skip.Add(1)
 	first.Add(1, 0, 3)
 	second.Add(1, 2, 0)
-	assert.Equal(t, []interface{}{0, 3, 2}, iter.ToSlice(iterBitmapsDistinct(skip.Copy(), first, second)))
+	skipCopy := skip.Copy()
+	assert.Equal(t, []interface{}{0, 3, 2}, iter.ToSlice(iterBitmapsDistinct(&skipCopy, first, second)))
 	assert.Equal(t, []int{1}, skip.ToSortedSlice())
 }

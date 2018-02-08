@@ -134,7 +134,7 @@ func (cfg *Config) setDefaults() {
 		cfg.HalfOpenConnsPerTorrent = 80
 	}
 	if cfg.TorrentPeersHighWater == 0 {
-		cfg.TorrentPeersHighWater = 200
+		cfg.TorrentPeersHighWater = 500
 	}
 	if cfg.TorrentPeersLowWater == 0 {
 		cfg.TorrentPeersLowWater = 50

@@ -114,12 +114,20 @@ func (pil PackedIPList) Lookup(ip net.IP) (r Range, ok bool) {
 	return lookup(pil.getFirst, pil.getRange, pil.len(), ip4)
 }
 
-func MMapPacked(filename string) (ret Ranger, err error) {
+type closerFunc func() error
+
+func (me closerFunc) Close() error {
+	return me()
+}
+
+func MMapPackedFile(filename string) (
+	ret interface {
+		Ranger
+		io.Closer
+	},
+	err error,
+) {
 	f, err := os.Open(filename)
-	if os.IsNotExist(err) {
-		err = nil
-		return
-	}
 	if err != nil {
 		return
 	}
@@ -128,7 +136,9 @@ func MMapPacked(filename string) (ret Ranger, err error) {
 	if err != nil {
 		return
 	}
-	// TODO: Need a destructor that unmaps this.
-	ret = NewFromPacked(mm)
+	ret = struct {
+		Ranger
+		io.Closer
+	}{NewFromPacked(mm), closerFunc(mm.Unmap)}
 	return
 }

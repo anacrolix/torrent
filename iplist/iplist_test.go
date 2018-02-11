@@ -78,15 +78,13 @@ func lookupOk(r Range, ok bool) bool {
 
 func TestBadIP(t *testing.T) {
 	for _, iplist := range []Ranger{
-		New(nil),
+		// New(nil),
 		NewFromPacked([]byte("\x00\x00\x00\x00\x00\x00\x00\x00")),
 	} {
 		assert.False(t, lookupOk(iplist.Lookup(net.IP(make([]byte, 4)))), "%v", iplist)
 		assert.False(t, lookupOk(iplist.Lookup(net.IP(make([]byte, 16)))))
-		r, ok := iplist.Lookup(nil)
-		assert.True(t, ok)
-		assert.Equal(t, r.Description, "bad IP")
-		assert.True(t, lookupOk(iplist.Lookup(net.IP(make([]byte, 5)))))
+		assert.Panics(t, func() { iplist.Lookup(nil) })
+		assert.Panics(t, func() { iplist.Lookup(net.IP(make([]byte, 5))) })
 	}
 }
 
@@ -101,11 +99,12 @@ func testLookuperSimple(t *testing.T, iplist Ranger) {
 		{"1.2.4.255", true, "a"},
 		// Try to roll over to the next octet on the parse. Note the final
 		// octet is overbounds. In the next case.
-		{"1.2.7.256", true, "bad IP"},
+		// {"1.2.7.256", true, "bad IP"},
 		{"1.2.8.1", true, "b"},
 		{"1.2.8.2", true, "eff"},
 	} {
 		ip := net.ParseIP(_case.IP)
+		require.NotNil(t, ip, _case.IP)
 		r, ok := iplist.Lookup(ip)
 		assert.Equal(t, _case.Hit, ok, "%s", _case)
 		if !_case.Hit {

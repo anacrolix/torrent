@@ -969,6 +969,8 @@ func totalConns(tts []*Torrent) (ret int) {
 }
 
 func TestSetMaxEstablishedConn(t *testing.T) {
+	ss := testutil.NewStatusServer(t)
+	defer ss.Close()
 	var tts []*Torrent
 	ih := testutil.GreetingMetaInfo().HashInfoBytes()
 	for i := range iter.N(3) {
@@ -977,18 +979,21 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 		defer cl.Close()
 		tt, _ := cl.AddTorrentInfoHash(ih)
 		tt.SetMaxEstablishedConns(2)
-		testutil.ExportStatusWriter(cl, fmt.Sprintf("%d", i))
+		ss.HandleStatusWriter(cl, fmt.Sprintf("/%d", i))
 		tts = append(tts, tt)
 	}
 	addPeers := func() {
-		for i, tt := range tts {
-			for _, _tt := range tts[:i] {
+		for _, tt := range tts {
+			for _, _tt := range tts {
+				// if tt != _tt {
 				addClientPeer(tt, _tt.cl)
+				// }
 			}
 		}
 	}
 	waitTotalConns := func(num int) {
 		for totalConns(tts) != num {
+			addPeers()
 			time.Sleep(time.Millisecond)
 		}
 	}

@@ -12,7 +12,7 @@ import (
 var pkgTempDir string
 
 func init() {
-	log.SetFlags(log.LstdFlags | log.Llongfile)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var err error
 	pkgTempDir, err = ioutil.TempDir("", "torrent.test")
 	if err != nil {

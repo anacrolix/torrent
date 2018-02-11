@@ -1154,14 +1154,13 @@ func (c *connection) onReadExtendedMsg(id byte, payload []byte) (err error) {
 			t.addPeers(func() (ret []Peer) {
 				for i, cp := range pexMsg.Added {
 					p := Peer{
-						IP:     make([]byte, 4),
+						IP:     append(make(net.IP, 0, 4), cp.IP...),
 						Port:   cp.Port,
 						Source: peerSourcePEX,
 					}
 					if i < len(pexMsg.AddedFlags) && pexMsg.AddedFlags[i]&0x01 != 0 {
 						p.SupportsEncryption = true
 					}
-					missinggo.CopyExact(p.IP, cp.IP[:])
 					ret = append(ret, p)
 				}
 				return

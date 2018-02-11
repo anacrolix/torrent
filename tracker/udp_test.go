@@ -12,11 +12,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/anacrolix/dht/krpc"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/anacrolix/torrent/util"
 )
 
 // Ensure net.IPs are stored big-endian, to match the way they're read from
@@ -32,7 +31,7 @@ func TestNetIPv4Bytes(t *testing.T) {
 }
 
 func TestMarshalAnnounceResponse(t *testing.T) {
-	peers := util.CompactIPv4Peers{
+	peers := krpc.CompactIPv4NodeAddrs{
 		{[]byte{127, 0, 0, 1}, 2},
 		{[]byte{255, 0, 0, 3}, 4},
 	}
@@ -89,7 +88,7 @@ func TestAnnounceLocalhost(t *testing.T) {
 			{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1}: {
 				Seeders:  1,
 				Leechers: 2,
-				Peers: []util.CompactPeer{
+				Peers: krpc.CompactIPv4NodeAddrs{
 					{[]byte{1, 2, 3, 4}, 5},
 					{[]byte{6, 7, 8, 9}, 10},
 				},

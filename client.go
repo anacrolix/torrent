@@ -1177,7 +1177,7 @@ func (cl *Client) AddDHTNodes(nodes []string) {
 			continue
 		}
 		ni := krpc.NodeInfo{
-			Addr: &net.UDPAddr{
+			Addr: krpc.NodeAddr{
 				IP:   ip,
 				Port: hmp.Port,
 			},

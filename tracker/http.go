@@ -9,10 +9,10 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/anacrolix/dht/krpc"
 	"github.com/anacrolix/missinggo/httptoo"
 
 	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/util"
 )
 
 type httpResponse struct {
@@ -27,8 +27,8 @@ type httpResponse struct {
 func (r *httpResponse) UnmarshalPeers() (ret []Peer, err error) {
 	switch v := r.Peers.(type) {
 	case string:
-		var cps []util.CompactPeer
-		cps, err = util.UnmarshalIPv4CompactPeers([]byte(v))
+		var cps krpc.CompactIPv4NodeAddrs
+		err = cps.UnmarshalBinary([]byte(v))
 		if err != nil {
 			return
 		}

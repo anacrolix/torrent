@@ -11,10 +11,9 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/anacrolix/dht/krpc"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/pproffd"
-
-	"github.com/anacrolix/torrent/util"
 )
 
 type Action int32
@@ -115,7 +114,8 @@ func (c *udpAnnounce) Do(req *AnnounceRequest) (res AnnounceResponse, err error)
 	res.Interval = h.Interval
 	res.Leechers = h.Leechers
 	res.Seeders = h.Seeders
-	cps, err := util.UnmarshalIPv4CompactPeers(b.Bytes())
+	var cps krpc.CompactIPv4NodeAddrs
+	err = cps.UnmarshalBinary(b.Bytes())
 	if err != nil {
 		return
 	}

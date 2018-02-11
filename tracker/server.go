@@ -7,13 +7,13 @@ import (
 	"math/rand"
 	"net"
 
-	"github.com/anacrolix/torrent/util"
+	"github.com/anacrolix/dht/krpc"
 )
 
 type torrent struct {
 	Leechers int32
 	Seeders  int32
-	Peers    util.CompactIPv4Peers
+	Peers    krpc.CompactIPv4NodeAddrs
 }
 
 type server struct {

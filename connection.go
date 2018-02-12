@@ -1142,6 +1142,8 @@ func (c *connection) onReadExtendedMsg(id byte, payload []byte) (err error) {
 		return nil
 	case pexExtendedId:
 		if cl.config.DisablePEX {
+			// TODO: Maybe close the connection. Check that we're not
+			// advertising that we support PEX if it's disabled.
 			return nil
 		}
 		var pexMsg peerExchangeMessage
@@ -1150,21 +1152,9 @@ func (c *connection) onReadExtendedMsg(id byte, payload []byte) (err error) {
 			return fmt.Errorf("error unmarshalling PEX message: %s", err)
 		}
 		go func() {
+			ps := pexMsg.AddedPeers()
 			cl.mu.Lock()
-			t.addPeers(func() (ret []Peer) {
-				for i, cp := range pexMsg.Added {
-					p := Peer{
-						IP:     append(make(net.IP, 0, 4), cp.IP...),
-						Port:   cp.Port,
-						Source: peerSourcePEX,
-					}
-					if i < len(pexMsg.AddedFlags) && pexMsg.AddedFlags[i]&0x01 != 0 {
-						p.SupportsEncryption = true
-					}
-					ret = append(ret, p)
-				}
-				return
-			}())
+			t.addPeers(ps)
 			cl.mu.Unlock()
 		}()
 		return nil

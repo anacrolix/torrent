@@ -24,11 +24,17 @@ type Decoder struct {
 
 func (d *Decoder) Decode(v interface{}) (err error) {
 	defer func() {
-		if e := recover(); e != nil {
-			if _, ok := e.(runtime.Error); ok {
-				panic(e)
-			}
-			err = e.(error)
+		if err != nil {
+			return
+		}
+		r := recover()
+		_, ok := r.(runtime.Error)
+		if ok {
+			panic(r)
+		}
+		err, ok = r.(error)
+		if !ok && r != nil {
+			panic(r)
 		}
 	}()
 

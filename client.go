@@ -441,9 +441,18 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 			return
 		}
 		if utp {
-			acceptUTP.Add(1)
+			torrent.Add("accepted utp connections", 1)
 		} else {
-			acceptTCP.Add(1)
+			torrent.Add("accepted tcp connections", 1)
+		}
+		torrent.Add(fmt.Sprintf("accepted conn with network %q", conn.RemoteAddr().Network()), 1)
+		remoteIP := missinggo.AddrIP(conn.RemoteAddr())
+		if remoteIP.To4() != nil {
+			torrent.Add("accepted conn from ipv4 address", 1)
+		} else if remoteIP.To16() != nil {
+			torrent.Add("accepted conn from ipv6 address", 1)
+		} else {
+			torrent.Add("accepted conn from unknown ip address type", 1)
 		}
 		if cl.config.Debug {
 			log.Printf("accepted connection from %s", conn.RemoteAddr())
@@ -455,7 +464,7 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 			if cl.config.Debug {
 				log.Printf("rejecting connection from %s", conn.RemoteAddr())
 			}
-			acceptReject.Add(1)
+			torrent.Add("rejected accepted connection", 1)
 			conn.Close()
 			continue
 		}
@@ -831,6 +840,9 @@ func (cl *Client) runHandshookConn(c *connection, t *Torrent, outgoing bool) {
 	c.conn.SetWriteDeadline(time.Time{})
 	c.r = deadlineReader{c.conn, c.r}
 	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
+	if connIsIpv6(c.conn) {
+		torrent.Add("completed handshake over ipv6", 1)
+	}
 	if !t.addConnection(c, outgoing) {
 		return
 	}

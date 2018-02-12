@@ -37,10 +37,6 @@ var (
 	unsuccessfulDials = expvar.NewInt("dialSuccessful")
 	successfulDials   = expvar.NewInt("dialUnsuccessful")
 
-	acceptUTP    = expvar.NewInt("acceptUTP")
-	acceptTCP    = expvar.NewInt("acceptTCP")
-	acceptReject = expvar.NewInt("acceptReject")
-
 	peerExtensions                    = expvar.NewMap("peerExtensions")
 	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
 	// Count of connections to peer with same client ID.

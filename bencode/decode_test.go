@@ -147,3 +147,23 @@ func TestIgnoreUnmarshalTypeError(t *testing.T) {
 	require.Nil(t, Unmarshal([]byte("d6:Ignorei42ee"), &s))
 	assert.EqualValues(t, 42, s.Ignore)
 }
+
+// Test unmarshalling []byte into something that has the same kind but
+// different type.
+func TestDecodeCustomSlice(t *testing.T) {
+	type flag byte
+	var fs3, fs2 []flag
+	// We do a longer slice then a shorter slice to see if the buffers are
+	// shared.
+	d := NewDecoder(bytes.NewBufferString("3:\x01\x10\xff2:\x04\x0f"))
+	require.NoError(t, d.Decode(&fs3))
+	require.NoError(t, d.Decode(&fs2))
+	assert.EqualValues(t, []flag{1, 16, 255}, fs3)
+	assert.EqualValues(t, []flag{4, 15}, fs2)
+}
+
+func TestUnmarshalUnusedBytes(t *testing.T) {
+	var i int
+	require.EqualValues(t, ErrUnusedTrailingBytes{1}, Unmarshal([]byte("i42ee"), &i))
+	assert.EqualValues(t, 42, i)
+}

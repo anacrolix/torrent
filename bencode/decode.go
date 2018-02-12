@@ -171,9 +171,7 @@ func (d *Decoder) parseString(v reflect.Value) error {
 				Type:  v.Type(),
 			})
 		}
-		sl := make([]byte, len(d.buf.Bytes()))
-		copy(sl, d.buf.Bytes())
-		v.Set(reflect.ValueOf(sl))
+		v.SetBytes(append([]byte(nil), d.buf.Bytes()...))
 	default:
 		return &UnmarshalTypeError{
 			Value: "string",

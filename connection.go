@@ -960,7 +960,14 @@ func (c *connection) onReadRequest(r request) error {
 
 // Processes incoming bittorrent messages. The client lock is held upon entry
 // and exit. Returning will end the connection.
-func (c *connection) mainReadLoop() error {
+func (c *connection) mainReadLoop() (err error) {
+	defer func() {
+		if err != nil {
+			torrent.Add("connection.mainReadLoop returned with error", 1)
+		} else {
+			torrent.Add("connection.mainReadLoop returned with no error", 1)
+		}
+	}()
 	t := c.t
 	cl := t.cl
 
@@ -970,10 +977,7 @@ func (c *connection) mainReadLoop() error {
 		Pool:      t.chunkPool,
 	}
 	for {
-		var (
-			msg pp.Message
-			err error
-		)
+		var msg pp.Message
 		func() {
 			cl.mu.Unlock()
 			defer cl.mu.Lock()

@@ -2,7 +2,6 @@ package tracker
 
 import (
 	"errors"
-	"net"
 	"net/http"
 	"net/url"
 )
@@ -35,12 +34,6 @@ type AnnounceEvent int32
 func (e AnnounceEvent) String() string {
 	// See BEP 3, "event".
 	return []string{"empty", "completed", "started", "stopped"}[e]
-}
-
-type Peer struct {
-	IP   net.IP
-	Port int
-	ID   []byte
 }
 
 const (

@@ -16,39 +16,50 @@ import (
 )
 
 type httpResponse struct {
-	FailureReason string      `bencode:"failure reason"`
-	Interval      int32       `bencode:"interval"`
-	TrackerId     string      `bencode:"tracker id"`
-	Complete      int32       `bencode:"complete"`
-	Incomplete    int32       `bencode:"incomplete"`
-	Peers         interface{} `bencode:"peers"`
+	FailureReason string `bencode:"failure reason"`
+	Interval      int32  `bencode:"interval"`
+	TrackerId     string `bencode:"tracker id"`
+	Complete      int32  `bencode:"complete"`
+	Incomplete    int32  `bencode:"incomplete"`
+	Peers         Peers  `bencode:"peers"`
+	// BEP 7
+	Peers6 krpc.CompactIPv6NodeAddrs `bencode:"peers6"`
 }
 
-func (r *httpResponse) UnmarshalPeers() (ret []Peer, err error) {
-	switch v := r.Peers.(type) {
+type Peers []Peer
+
+func (me *Peers) UnmarshalBencode(b []byte) (err error) {
+	var _v interface{}
+	err = bencode.Unmarshal(b, &_v)
+	if err != nil {
+		return
+	}
+	switch v := _v.(type) {
 	case string:
-		var cps krpc.CompactIPv4NodeAddrs
-		err = cps.UnmarshalBinary([]byte(v))
+		vars.Add("http responses with string peers", 1)
+		var cnas krpc.CompactIPv4NodeAddrs
+		err = cnas.UnmarshalBinary([]byte(v))
 		if err != nil {
 			return
 		}
-		ret = make([]Peer, 0, len(cps))
-		for _, cp := range cps {
-			ret = append(ret, Peer{
+		for _, cp := range cnas {
+			*me = append(*me, Peer{
 				IP:   cp.IP[:],
 				Port: int(cp.Port),
 			})
 		}
 		return
 	case []interface{}:
+		vars.Add("http responses with list peers", 1)
 		for _, i := range v {
 			var p Peer
 			p.fromDictInterface(i.(map[string]interface{}))
-			ret = append(ret, p)
+			*me = append(*me, p)
 		}
 		return
 	default:
-		err = fmt.Errorf("unsupported peers value type: %T", r.Peers)
+		vars.Add("http responses with unhandled peers type", 1)
+		err = fmt.Errorf("unsupported type: %T", _v)
 		return
 	}
 }
@@ -100,9 +111,22 @@ func announceHTTP(cl *http.Client, userAgent string, ar *AnnounceRequest, _url *
 		err = errors.New(trackerResponse.FailureReason)
 		return
 	}
+	vars.Add("successful http announces", 1)
 	ret.Interval = trackerResponse.Interval
 	ret.Leechers = trackerResponse.Incomplete
 	ret.Seeders = trackerResponse.Complete
-	ret.Peers, err = trackerResponse.UnmarshalPeers()
+	if len(trackerResponse.Peers) != 0 {
+		vars.Add("http responses with nonempty peers key", 1)
+	}
+	ret.Peers = trackerResponse.Peers
+	if len(trackerResponse.Peers6) != 0 {
+		vars.Add("http responses with nonempty peers6 key", 1)
+	}
+	for _, na := range trackerResponse.Peers6 {
+		ret.Peers = append(ret.Peers, Peer{
+			IP:   na.IP,
+			Port: na.Port,
+		})
+	}
 	return
 }

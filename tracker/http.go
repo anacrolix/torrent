@@ -78,7 +78,8 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest) {
 	}
 	// http://stackoverflow.com/questions/17418004/why-does-tracker-server-not-understand-my-request-bittorrent-protocol
 	q.Set("compact", "1")
-	// According to https://wiki.vuze.com/w/Message_Stream_Encryption.
+	// According to https://wiki.vuze.com/w/Message_Stream_Encryption. TODO:
+	// Take EncryptionPolicy or something like it as a parameter.
 	q.Set("supportcrypto", "1")
 
 	_url.RawQuery = q.Encode()

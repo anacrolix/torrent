@@ -257,6 +257,8 @@ func (c *udpAnnounce) connect() (err error) {
 	return
 }
 
+// TODO: Split on IPv6, as BEP 15 says response peer decoding depends on
+// network in use.
 func announceUDP(ar *AnnounceRequest, _url *url.URL) (AnnounceResponse, error) {
 	ua := udpAnnounce{
 		url: *_url,

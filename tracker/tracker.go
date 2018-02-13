@@ -47,6 +47,8 @@ var (
 	ErrBadScheme = errors.New("unknown scheme")
 )
 
+// TODO: Just split udp/http announcing completely, to support various different options they have.
+
 func Announce(cl *http.Client, userAgent string, urlStr string, req *AnnounceRequest) (res AnnounceResponse, err error) {
 	return AnnounceHost(cl, userAgent, urlStr, req, "")
 }

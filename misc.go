@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"errors"
-	"log"
 	"net"
 
 	"github.com/anacrolix/missinggo"
@@ -128,7 +127,6 @@ func addrCompactIP(addr net.Addr) (string, error) {
 
 func connIsIpv6(nc net.Conn) bool {
 	ra := nc.RemoteAddr()
-	log.Printf("network: %q, string: %q", ra.Network(), ra.String())
 	rip := missinggo.AddrIP(ra)
 	return rip.To4() == nil && rip.To16() != nil
 }

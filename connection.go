@@ -420,9 +420,11 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 	if !cn.PeerHasPiece(r.Index.Int()) {
 		panic("requesting piece peer doesn't have")
 	}
-	cn.requests[r] = struct{}{}
 	if _, ok := cn.t.conns[cn]; !ok {
 		panic("requesting but not in active conns")
+	}
+	if cn.closed.IsSet() {
+		panic("requesting when connection is closed")
 	}
 	if cn.PeerChoked {
 		if cn.peerAllowedFast.Get(int(r.Index)) {
@@ -431,6 +433,7 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 			panic("requesting while choked and not allowed fast")
 		}
 	}
+	cn.requests[r] = struct{}{}
 	cn.t.pendingRequests[r]++
 	return mw(pp.Message{
 		Type:   pp.Request,
@@ -1383,6 +1386,9 @@ func (c *connection) deleteRequest(r request) bool {
 func (c *connection) deleteAllRequests() {
 	for r := range c.requests {
 		c.deleteRequest(r)
+	}
+	if len(c.requests) != 0 {
+		panic(len(c.requests))
 	}
 	// for c := range c.t.conns {
 	// 	c.tickleWriter()

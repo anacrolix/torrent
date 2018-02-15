@@ -77,8 +77,10 @@ type Config struct {
 
 	EncryptionPolicy
 
-	IPBlocklist iplist.Ranger
-	DisableIPv6 bool `long:"disable-ipv6"`
+	IPBlocklist      iplist.Ranger
+	DisableIPv6      bool `long:"disable-ipv6"`
+	DisableIPv4      bool
+	DisableIPv4Peers bool
 	// Perform logging and any other behaviour that will help debug.
 	Debug bool `help:"enable debugging"`
 

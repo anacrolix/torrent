@@ -13,6 +13,6 @@ type utpSocket interface {
 	Accept() (net.Conn, error)
 	Addr() net.Addr
 	// net.Dialer but there's no interface.
-	DialContext(ctx context.Context, addr string) (net.Conn, error)
-	Dial(addr string) (net.Conn, error)
+	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
+	// Dial(addr string) (net.Conn, error)
 }

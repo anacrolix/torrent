@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -171,7 +172,7 @@ func TestUTPRawConn(t *testing.T) {
 	s, err := NewUtpSocket("udp", "")
 	require.NoError(t, err)
 	defer s.Close()
-	utpPeer, err := s.Dial(fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
+	utpPeer, err := s.DialContext(context.Background(), "", fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
 	require.NoError(t, err)
 	defer utpPeer.Close()
 	peer, err := net.ListenPacket("udp", ":0")

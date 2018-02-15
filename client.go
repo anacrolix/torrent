@@ -309,13 +309,10 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	cl.tcpListener, cl.utpSock, cl.listenAddr, err = listen(
 		!cl.config.DisableTCP,
 		!cl.config.DisableUTP,
-		func() string {
-			if cl.config.DisableIPv6 {
-				return "4"
-			} else {
-				return ""
-			}
-		}(),
+		// We'll listen to IPv4 for TCP even if IPv4 peer connections are
+		// disabled because we want to ensure peers don't connect to some
+		// other process on that port.
+		ipNetworkSuffix(!cl.config.DisableIPv4, !cl.config.DisableIPv6),
 		cl.config.ListenAddr)
 	if err != nil {
 		return
@@ -419,6 +416,21 @@ func (cl *Client) waitAccept() {
 	}
 }
 
+func (cl *Client) rejectAccepted(conn net.Conn) bool {
+	ra := conn.RemoteAddr()
+	rip := missinggo.AddrIP(ra)
+	if cl.config.DisableIPv4Peers && rip.To4() != nil {
+		return true
+	}
+	if cl.config.DisableIPv4 && len(rip) == net.IPv4len {
+		return true
+	}
+	if cl.config.DisableIPv6 && len(rip) == net.IPv6len && rip.To4() == nil {
+		return true
+	}
+	return cl.badPeerIPPort(rip, missinggo.AddrPort(ra))
+}
+
 func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
@@ -440,35 +452,20 @@ func (cl *Client) acceptConnections(l net.Listener, utp bool) {
 			// routine just fucked off.
 			return
 		}
+		log.Fmsg("accepted connection from %s", conn.RemoteAddr()).AddValue(debugLogValue).Log(cl.logger)
+		go torrent.Add(fmt.Sprintf("accepted conn remote IP len=%d", len(missinggo.AddrIP(conn.RemoteAddr()))), 1)
+		go torrent.Add(fmt.Sprintf("accepted conn network=%s", conn.RemoteAddr().Network()), 1)
 		if utp {
-			torrent.Add("accepted utp connections", 1)
+			go torrent.Add("accepted utp connections", 1)
 		} else {
-			torrent.Add("accepted tcp connections", 1)
+			go torrent.Add("accepted tcp connections", 1)
 		}
-		torrent.Add(fmt.Sprintf("accepted conn with network %q", conn.RemoteAddr().Network()), 1)
-		remoteIP := missinggo.AddrIP(conn.RemoteAddr())
-		if remoteIP.To4() != nil {
-			torrent.Add("accepted conn from ipv4 address", 1)
-		} else if remoteIP.To16() != nil {
-			torrent.Add("accepted conn from ipv6 address", 1)
-		} else {
-			torrent.Add("accepted conn from unknown ip address type", 1)
-		}
-		if cl.config.Debug {
-			log.Printf("accepted connection from %s", conn.RemoteAddr())
-		}
-		reject := cl.badPeerIPPort(
-			missinggo.AddrIP(conn.RemoteAddr()),
-			missinggo.AddrPort(conn.RemoteAddr()))
-		if reject {
-			if cl.config.Debug {
-				log.Printf("rejecting connection from %s", conn.RemoteAddr())
-			}
-			torrent.Add("rejected accepted connection", 1)
+		if cl.rejectAccepted(conn) {
+			go torrent.Add("rejected accepted connections", 1)
 			conn.Close()
-			continue
+		} else {
+			go cl.incomingConnection(conn, utp)
 		}
-		go cl.incomingConnection(conn, utp)
 	}
 }
 
@@ -524,9 +521,12 @@ func (cl *Client) dopplegangerAddr(addr string) bool {
 
 func (cl *Client) dialTCP(ctx context.Context, addr string) (c net.Conn, err error) {
 	d := net.Dialer{
+	// Can't bind to the listen address, even though we intend to create an
+	// endpoint pair that is distinct. Oh well.
+
 	// LocalAddr: cl.tcpListener.Addr(),
 	}
-	c, err = d.DialContext(ctx, "tcp", addr)
+	c, err = d.DialContext(ctx, "tcp"+ipNetworkSuffix(!cl.config.DisableIPv4 && !cl.config.DisableIPv4Peers, !cl.config.DisableIPv6), addr)
 	countDialResult(err)
 	if err == nil {
 		c.(*net.TCPConn).SetLinger(0)
@@ -535,8 +535,37 @@ func (cl *Client) dialTCP(ctx context.Context, addr string) (c net.Conn, err err
 	return
 }
 
+func (cl *Client) utpDialNetwork() string {
+	// We want to restrict the addr resolve inside the utp library to the
+	// correct network, since the utp Socket may be listening to a broader
+	// network for DHT purposes or otherwise.
+	if !cl.config.DisableIPv4Peers {
+		return ""
+	}
+	n := cl.utpSock.Addr().Network()
+	switch n {
+	case "udp", "udp4", "udp6":
+		return "udp6"
+	default:
+		panic(n)
+	}
+}
+
+func ipNetworkSuffix(allowIpv4, allowIpv6 bool) string {
+	switch {
+	case allowIpv4 && allowIpv6:
+		return ""
+	case allowIpv4 && !allowIpv6:
+		return "4"
+	case !allowIpv4 && allowIpv6:
+		return "6"
+	default:
+		panic("unhandled ip network combination")
+	}
+}
+
 func (cl *Client) dialUTP(ctx context.Context, addr string) (c net.Conn, err error) {
-	c, err = cl.utpSock.DialContext(ctx, addr)
+	c, err = cl.utpSock.DialContext(ctx, cl.utpDialNetwork(), addr)
 	countDialResult(err)
 	return
 }

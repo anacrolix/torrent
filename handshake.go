@@ -165,7 +165,7 @@ func handleEncryption(
 ) (
 	ret io.ReadWriter,
 	headerEncrypted bool,
-	cryptoMethod uint32,
+	cryptoMethod mse.CryptoMethod,
 	err error,
 ) {
 	if !policy.ForceEncryption {
@@ -187,7 +187,7 @@ func handleEncryption(
 		}
 	}
 	headerEncrypted = true
-	ret, err = mse.ReceiveHandshake(rw, skeys, func(provides uint32) uint32 {
+	ret, err = mse.ReceiveHandshake(rw, skeys, func(provides mse.CryptoMethod) mse.CryptoMethod {
 		switch {
 		case policy.ForceEncryption:
 			return mse.CryptoMethodRC4

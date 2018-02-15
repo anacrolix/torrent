@@ -726,7 +726,7 @@ func (cl *Client) initiateHandshakes(c *connection, t *Torrent) (ok bool, err er
 			}{c.r, c.w},
 			t.infoHash[:],
 			nil,
-			func() uint32 {
+			func() mse.CryptoMethod {
 				switch {
 				case cl.config.ForceEncryption:
 					return mse.CryptoMethodRC4

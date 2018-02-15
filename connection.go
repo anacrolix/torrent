@@ -46,7 +46,7 @@ type connection struct {
 	r io.Reader
 	// True if the connection is operating over MSE obfuscation.
 	headerEncrypted bool
-	cryptoMethod    uint32
+	cryptoMethod    mse.CryptoMethod
 	Discovery       peerSource
 	uTP             bool
 	closed          missinggo.Event

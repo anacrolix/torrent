@@ -58,7 +58,7 @@ func TestSuffixMatchLen(t *testing.T) {
 	test("sup", "person", 1)
 }
 
-func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides uint32, cryptoSelect func(uint32) uint32) {
+func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides CryptoMethod, cryptoSelect CryptoSelector) {
 	a, b := net.Pipe()
 	wg := sync.WaitGroup{}
 	wg.Add(2)
@@ -100,7 +100,7 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 	b.Close()
 }
 
-func allHandshakeTests(t testing.TB, provides uint32, selector CryptoSelector) {
+func allHandshakeTests(t testing.TB, provides CryptoMethod, selector CryptoSelector) {
 	handshakeTest(t, []byte("jump the gun, "), "hello world", "yo dawg", provides, selector)
 	handshakeTest(t, nil, "hello world", "yo dawg", provides, selector)
 	handshakeTest(t, []byte{}, "hello world", "yo dawg", provides, selector)
@@ -112,7 +112,7 @@ func TestHandshakeDefault(t *testing.T) {
 }
 
 func TestHandshakeSelectPlaintext(t *testing.T) {
-	allHandshakeTests(t, AllSupportedCrypto, func(uint32) uint32 { return CryptoMethodPlaintext })
+	allHandshakeTests(t, AllSupportedCrypto, func(CryptoMethod) CryptoMethod { return CryptoMethodPlaintext })
 }
 
 func BenchmarkHandshakeDefault(b *testing.B) {
@@ -165,7 +165,7 @@ func readAndWrite(rw io.ReadWriter, r []byte, w []byte) error {
 	return wErr
 }
 
-func benchmarkStream(t *testing.B, crypto uint32) {
+func benchmarkStream(t *testing.B, crypto CryptoMethod) {
 	ia := make([]byte, 0x1000)
 	a := make([]byte, 1<<20)
 	b := make([]byte, 1<<20)
@@ -189,7 +189,7 @@ func benchmarkStream(t *testing.B, crypto uint32) {
 		}()
 		func() {
 			defer bc.Close()
-			rw, err := ReceiveHandshake(bc, sliceIter([][]byte{[]byte("cats")}), func(uint32) uint32 { return crypto })
+			rw, err := ReceiveHandshake(bc, sliceIter([][]byte{[]byte("cats")}), func(CryptoMethod) CryptoMethod { return crypto })
 			require.NoError(t, err)
 			require.NoError(t, readAndWrite(rw, br, b))
 		}()

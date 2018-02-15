@@ -1099,6 +1099,9 @@ func (cl *Client) prepareTrackerAnnounceUnlocked(announceURL string) (blocked bo
 	if err != nil {
 		return
 	}
+	if addr.IP == nil {
+		panic(hmp.Host)
+	}
 	cl.mu.RLock()
 	_, blocked = cl.ipBlockRange(addr.IP)
 	cl.mu.RUnlock()

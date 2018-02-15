@@ -28,7 +28,7 @@ import (
 type peerSource string
 
 const (
-	peerSourceTracker         = "T" // It's the default.
+	peerSourceTracker         = "Tr"
 	peerSourceIncoming        = "I"
 	peerSourceDHTGetPeers     = "Hg"
 	peerSourceDHTAnnouncePeer = "Ha"
@@ -180,7 +180,7 @@ func (cn *connection) connectionFlags() (ret string) {
 	}
 	ret += string(cn.Discovery)
 	if cn.uTP {
-		c('T')
+		c('U')
 	}
 	return
 }

@@ -1155,12 +1155,8 @@ func (c *connection) onReadExtendedMsg(id byte, payload []byte) (err error) {
 		if err != nil {
 			return fmt.Errorf("error unmarshalling PEX message: %s", err)
 		}
-		go func() {
-			ps := pexMsg.AddedPeers()
-			cl.mu.Lock()
-			t.addPeers(ps)
-			cl.mu.Unlock()
-		}()
+		torrent.Add("pex added6 peers received", int64(len(pexMsg.Added6)))
+		t.addPeers(pexMsg.AddedPeers())
 		return nil
 	default:
 		return fmt.Errorf("unexpected extended message ID: %v", id)

@@ -748,7 +748,7 @@ func (cl *Client) incomingPeerPort() int {
 func (cl *Client) initiateHandshakes(c *connection, t *Torrent) (ok bool, err error) {
 	if c.headerEncrypted {
 		var rw io.ReadWriter
-		rw, err = mse.InitiateHandshake(
+		rw, c.cryptoMethod, err = mse.InitiateHandshake(
 			struct {
 				io.Reader
 				io.Writer

@@ -187,7 +187,7 @@ func handleEncryption(
 		}
 	}
 	headerEncrypted = true
-	ret, err = mse.ReceiveHandshake(rw, skeys, func(provides mse.CryptoMethod) mse.CryptoMethod {
+	ret, cryptoMethod, err = mse.ReceiveHandshake(rw, skeys, func(provides mse.CryptoMethod) mse.CryptoMethod {
 		switch {
 		case policy.ForceEncryption:
 			return mse.CryptoMethodRC4

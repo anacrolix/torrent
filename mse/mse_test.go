@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/anacrolix/envpprof"
 	"github.com/bradfitz/iter"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,11 +65,9 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		a, err := InitiateHandshake(a, []byte("yep"), ia, cryptoProvides)
-		if err != nil {
-			t.Fatal(err)
-			return
-		}
+		a, cm, err := InitiateHandshake(a, []byte("yep"), ia, cryptoProvides)
+		require.NoError(t, err)
+		assert.Equal(t, cryptoSelect(cryptoProvides), cm)
 		go a.Write([]byte(aData))
 
 		var msg [20]byte
@@ -80,11 +79,9 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 	}()
 	go func() {
 		defer wg.Done()
-		b, err := ReceiveHandshake(b, sliceIter([][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")}), cryptoSelect)
-		if err != nil {
-			t.Fatal(err)
-			return
-		}
+		b, cm, err := ReceiveHandshake(b, sliceIter([][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")}), cryptoSelect)
+		require.NoError(t, err)
+		assert.Equal(t, cryptoSelect(cryptoProvides), cm)
 		go b.Write([]byte(bData))
 		// Need to be exact here, as there are several reads, and net.Pipe is
 		// most synchronous.
@@ -134,7 +131,7 @@ func (tr *trackReader) Read(b []byte) (n int, err error) {
 
 func TestReceiveRandomData(t *testing.T) {
 	tr := trackReader{rand.Reader, 0}
-	_, err := ReceiveHandshake(readWriter{&tr, ioutil.Discard}, nil, DefaultCryptoSelector)
+	_, _, err := ReceiveHandshake(readWriter{&tr, ioutil.Discard}, nil, DefaultCryptoSelector)
 	// No skey matches
 	require.Error(t, err)
 	// Establishing S, and then reading the maximum padding for giving up on
@@ -183,13 +180,13 @@ func benchmarkStream(t *testing.B, crypto CryptoMethod) {
 		go func() {
 			defer ac.Close()
 			defer wg.Done()
-			rw, err := InitiateHandshake(ac, []byte("cats"), ia, crypto)
+			rw, _, err := InitiateHandshake(ac, []byte("cats"), ia, crypto)
 			require.NoError(t, err)
 			require.NoError(t, readAndWrite(rw, ar, a))
 		}()
 		func() {
 			defer bc.Close()
-			rw, err := ReceiveHandshake(bc, sliceIter([][]byte{[]byte("cats")}), func(CryptoMethod) CryptoMethod { return crypto })
+			rw, _, err := ReceiveHandshake(bc, sliceIter([][]byte{[]byte("cats")}), func(CryptoMethod) CryptoMethod { return crypto })
 			require.NoError(t, err)
 			require.NoError(t, readAndWrite(rw, br, b))
 		}()

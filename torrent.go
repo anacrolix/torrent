@@ -82,7 +82,8 @@ type Torrent struct {
 	info  *metainfo.Info
 	files *[]*File
 
-	// Active peer connections, running message stream loops.
+	// Active peer connections, running message stream loops. TODO: Make this
+	// open (not-closed) connections only.
 	conns               map[*connection]struct{}
 	maxEstablishedConns int
 	// Set of addrs to which we're attempting to connect. Connections are
@@ -1054,13 +1055,32 @@ func (t *Torrent) pieceCompletionChanged(piece int) {
 	t.updatePiecePriority(piece)
 }
 
+func (t *Torrent) numReceivedConns() (ret int) {
+	for c := range t.conns {
+		if c.Discovery == peerSourceIncoming {
+			ret++
+		}
+	}
+	return
+}
+
+func (t *Torrent) maxHalfOpen() int {
+	// Note that if we somehow exceed the maximum established conns, we want
+	// the negative value to have an effect.
+	establishedHeadroom := int64(t.maxEstablishedConns - len(t.conns))
+	extraIncoming := int64(t.numReceivedConns() - t.maxEstablishedConns/2)
+	// We want to allow some experimentation with new peers, and to try to
+	// upset an oversupply of received connections.
+	return int(min(max(5, extraIncoming)+establishedHeadroom, int64(t.cl.halfOpenLimit)))
+}
+
 func (t *Torrent) openNewConns() {
 	defer t.updateWantPeersEvent()
 	for len(t.peers) != 0 {
 		if !t.wantConns() {
 			return
 		}
-		if len(t.halfOpen) >= t.cl.halfOpenLimit {
+		if len(t.halfOpen) >= t.maxHalfOpen() {
 			return
 		}
 		var (

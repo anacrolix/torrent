@@ -130,3 +130,36 @@ func connIsIpv6(nc net.Conn) bool {
 	rip := missinggo.AddrIP(ra)
 	return rip.To4() == nil && rip.To16() != nil
 }
+
+func clamp(min, value, max int64) int64 {
+	if min > max {
+		panic("harumph")
+	}
+	if value < min {
+		value = min
+	}
+	if value > max {
+		value = max
+	}
+	return value
+}
+
+func max(as ...int64) int64 {
+	ret := as[0]
+	for _, a := range as[1:] {
+		if a > ret {
+			ret = a
+		}
+	}
+	return ret
+}
+
+func min(as ...int64) int64 {
+	ret := as[0]
+	for _, a := range as[1:] {
+		if a < ret {
+			ret = a
+		}
+	}
+	return ret
+}

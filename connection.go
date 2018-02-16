@@ -314,29 +314,6 @@ func (cn *connection) requestedMetadataPiece(index int) bool {
 	return index < len(cn.metadataRequests) && cn.metadataRequests[index]
 }
 
-func clamp(min, value, max int64) int64 {
-	if min > max {
-		panic("harumph")
-	}
-	if value < min {
-		value = min
-	}
-	if value > max {
-		value = max
-	}
-	return value
-}
-
-func max(as ...int64) int64 {
-	ret := as[0]
-	for _, a := range as[1:] {
-		if a > ret {
-			ret = a
-		}
-	}
-	return ret
-}
-
 // The actual value to use as the maximum outbound requests.
 func (cn *connection) nominalMaxRequests() (ret int) {
 	return int(clamp(1, int64(cn.PeerMaxRequests), max(64, cn.stats.ChunksReadUseful-(cn.stats.ChunksRead-cn.stats.ChunksReadUseful))))

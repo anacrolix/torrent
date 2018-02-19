@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 var defaultClient = &http.Client{
@@ -21,8 +23,6 @@ var defaultClient = &http.Client{
 
 func TestUnsupportedTrackerScheme(t *testing.T) {
 	t.Parallel()
-	_, err := Announce(defaultClient, defaultHTTPUserAgent, "lol://tracker.openbittorrent.com:80/announce", nil)
-	if err != ErrBadScheme {
-		t.Fatal(err)
-	}
+	_, err := Announce{TrackerUrl: "lol://tracker.openbittorrent.com:80/announce"}.Do()
+	require.Equal(t, ErrBadScheme, err)
 }

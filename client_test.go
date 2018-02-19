@@ -902,15 +902,6 @@ func TestPieceCompletedInStorageButNotClient(t *testing.T) {
 	})
 }
 
-func TestPrepareTrackerAnnounce(t *testing.T) {
-	cl := &Client{}
-	blocked, urlToUse, host, err := cl.prepareTrackerAnnounceUnlocked("http://localhost:1234/announce?herp")
-	require.NoError(t, err)
-	assert.False(t, blocked)
-	assert.EqualValues(t, "localhost:1234", host)
-	assert.EqualValues(t, "http://127.0.0.1:1234/announce?herp", urlToUse)
-}
-
 // Check that when the listen port is 0, all the protocols listened on have
 // the same port, and it isn't zero.
 func TestClientDynamicListenPortAllProtocols(t *testing.T) {

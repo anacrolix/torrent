@@ -64,7 +64,7 @@ func (me *Peers) UnmarshalBencode(b []byte) (err error) {
 	}
 }
 
-func setAnnounceParams(_url *url.URL, ar *AnnounceRequest) {
+func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts Announce) {
 	q := _url.Query()
 
 	q.Set("info_hash", string(ar.InfoHash[:]))
@@ -81,17 +81,22 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest) {
 	// According to https://wiki.vuze.com/w/Message_Stream_Encryption. TODO:
 	// Take EncryptionPolicy or something like it as a parameter.
 	q.Set("supportcrypto", "1")
-
+	if opts.ClientIp4.IP != nil {
+		q.Set("ipv4", opts.ClientIp4.String())
+	}
+	if opts.ClientIp6.IP != nil {
+		q.Set("ipv6", opts.ClientIp6.String())
+	}
 	_url.RawQuery = q.Encode()
 }
 
-func announceHTTP(cl *http.Client, userAgent string, ar *AnnounceRequest, _url *url.URL, host string) (ret AnnounceResponse, err error) {
+func announceHTTP(opt Announce, _url *url.URL) (ret AnnounceResponse, err error) {
 	_url = httptoo.CopyURL(_url)
-	setAnnounceParams(_url, ar)
+	setAnnounceParams(_url, &opt.Request, opt)
 	req, err := http.NewRequest("GET", _url.String(), nil)
-	req.Header.Set("User-Agent", userAgent)
-	req.Host = host
-	resp, err := cl.Do(req)
+	req.Header.Set("User-Agent", opt.UserAgent)
+	req.Host = opt.HostHeader
+	resp, err := opt.HttpClient.Do(req)
 	if err != nil {
 		return
 	}

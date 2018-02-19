@@ -2,6 +2,7 @@ package tracker
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -80,6 +81,7 @@ type udpAnnounce struct {
 	connectionId         int64
 	socket               net.Conn
 	url                  url.URL
+	a                    *Announce
 }
 
 func (c *udpAnnounce) Close() error {
@@ -87,6 +89,14 @@ func (c *udpAnnounce) Close() error {
 		return c.socket.Close()
 	}
 	return nil
+}
+
+func (c *udpAnnounce) ipv6() bool {
+	if c.a.UdpNetwork == "udp6" {
+		return true
+	}
+	rip := missinggo.AddrIP(c.socket.RemoteAddr())
+	return rip.To16() != nil && rip.To4() == nil
 }
 
 func (c *udpAnnounce) Do(req *AnnounceRequest) (res AnnounceResponse, err error) {
@@ -114,16 +124,22 @@ func (c *udpAnnounce) Do(req *AnnounceRequest) (res AnnounceResponse, err error)
 	res.Interval = h.Interval
 	res.Leechers = h.Leechers
 	res.Seeders = h.Seeders
-	var cps krpc.CompactIPv4NodeAddrs
-	err = cps.UnmarshalBinary(b.Bytes())
+	nas := func() interface {
+		encoding.BinaryUnmarshaler
+		NodeAddrs() []krpc.NodeAddr
+	} {
+		if c.ipv6() {
+			return &krpc.CompactIPv6NodeAddrs{}
+		} else {
+			return &krpc.CompactIPv4NodeAddrs{}
+		}
+	}()
+	err = nas.UnmarshalBinary(b.Bytes())
 	if err != nil {
 		return
 	}
-	for _, cp := range cps {
-		res.Peers = append(res.Peers, Peer{
-			IP:   cp.IP[:],
-			Port: int(cp.Port),
-		})
+	for _, cp := range nas.NodeAddrs() {
+		res.Peers = append(res.Peers, Peer{}.FromNodeAddr(cp))
 	}
 	return
 }
@@ -226,6 +242,13 @@ func (c *udpAnnounce) connected() bool {
 	return !c.connectionIdReceived.IsZero() && time.Now().Before(c.connectionIdReceived.Add(time.Minute))
 }
 
+func (c *udpAnnounce) dialNetwork() string {
+	if c.a.UdpNetwork != "" {
+		return c.a.UdpNetwork
+	}
+	return "udp"
+}
+
 func (c *udpAnnounce) connect() (err error) {
 	if c.connected() {
 		return nil
@@ -237,7 +260,7 @@ func (c *udpAnnounce) connect() (err error) {
 			hmp.NoPort = false
 			hmp.Port = 80
 		}
-		c.socket, err = net.Dial("udp", hmp.String())
+		c.socket, err = net.Dial(c.dialNetwork(), hmp.String())
 		if err != nil {
 			return
 		}
@@ -259,10 +282,11 @@ func (c *udpAnnounce) connect() (err error) {
 
 // TODO: Split on IPv6, as BEP 15 says response peer decoding depends on
 // network in use.
-func announceUDP(ar *AnnounceRequest, _url *url.URL) (AnnounceResponse, error) {
+func announceUDP(opt Announce, _url *url.URL) (AnnounceResponse, error) {
 	ua := udpAnnounce{
 		url: *_url,
+		a:   &opt,
 	}
 	defer ua.Close()
-	return ua.Do(ar)
+	return ua.Do(&opt.Request)
 }

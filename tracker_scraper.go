@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"time"
 
 	"github.com/anacrolix/missinggo"
@@ -14,7 +16,7 @@ import (
 // Announces a torrent to a tracker at regular intervals, when peers are
 // required.
 type trackerScraper struct {
-	url string
+	u url.URL
 	// Causes the trackerScraper to stop running.
 	stop         missinggo.Event
 	t            *Torrent
@@ -24,7 +26,7 @@ type trackerScraper struct {
 func (ts *trackerScraper) statusLine() string {
 	var w bytes.Buffer
 	fmt.Fprintf(&w, "%q\t%s\t%s",
-		ts.url,
+		ts.u.String(),
 		func() string {
 			na := time.Until(ts.lastAnnounce.Completed.Add(ts.lastAnnounce.Interval))
 			if na > 0 {
@@ -43,7 +45,8 @@ func (ts *trackerScraper) statusLine() string {
 				return "never"
 			}
 			return fmt.Sprintf("%d peers", ts.lastAnnounce.NumPeers)
-		}())
+		}(),
+	)
 	return w.String()
 }
 
@@ -54,16 +57,41 @@ type trackerAnnounceResult struct {
 	Completed time.Time
 }
 
-func trackerToTorrentPeers(ps []tracker.Peer) (ret []Peer) {
-	ret = make([]Peer, 0, len(ps))
-	for _, p := range ps {
-		ret = append(ret, Peer{
-			IP:     p.IP,
-			Port:   p.Port,
-			Source: peerSourceTracker,
-		})
+func (me *trackerScraper) getIp() (ip net.IP, err error) {
+	ips, err := net.LookupIP(me.u.Hostname())
+	if err != nil {
+		return
 	}
+	if len(ips) == 0 {
+		err = errors.New("no ips")
+		return
+	}
+	for _, ip = range ips {
+		if me.t.cl.ipIsBlocked(ip) {
+			continue
+		}
+		switch me.u.Scheme {
+		case "udp4":
+			if ip.To4() == nil {
+				continue
+			}
+		case "udp6":
+			if ip.To4() != nil {
+				continue
+			}
+		}
+		return
+	}
+	err = errors.New("no acceptable ips")
 	return
+}
+
+func (me *trackerScraper) trackerUrl(ip net.IP) string {
+	u := me.u
+	if u.Port() != "" {
+		u.Host = net.JoinHostPort(ip.String(), u.Port())
+	}
+	return u.String()
 }
 
 // Return how long to wait before trying again. For most errors, we return 5
@@ -73,24 +101,26 @@ func (me *trackerScraper) announce() (ret trackerAnnounceResult) {
 		ret.Completed = time.Now()
 	}()
 	ret.Interval = 5 * time.Minute
-	blocked, urlToUse, host, err := me.t.cl.prepareTrackerAnnounceUnlocked(me.url)
+	ip, err := me.getIp()
 	if err != nil {
-		ret.Err = err
-		return
-	}
-	if blocked {
-		ret.Err = errors.New("blocked by IP")
+		ret.Err = fmt.Errorf("error getting ip: %s", err)
 		return
 	}
 	me.t.cl.mu.Lock()
 	req := me.t.announceRequest()
 	me.t.cl.mu.Unlock()
-	res, err := tracker.AnnounceHost(me.t.cl.config.HTTP, me.t.cl.config.HTTPUserAgent, urlToUse, &req, host)
+	res, err := tracker.Announce{
+		HttpClient: me.t.cl.config.HTTP,
+		UserAgent:  me.t.cl.config.HTTPUserAgent,
+		TrackerUrl: me.trackerUrl(ip),
+		Request:    req,
+		HostHeader: me.u.Host,
+	}.Do()
 	if err != nil {
-		ret.Err = err
+		ret.Err = fmt.Errorf("error announcing: %s", err)
 		return
 	}
-	me.t.AddPeers(trackerToTorrentPeers(res.Peers))
+	me.t.AddPeers(Peers(nil).FromTracker(res.Peers))
 	ret.NumPeers = len(res.Peers)
 	ret.Interval = time.Duration(res.Interval) * time.Second
 	return

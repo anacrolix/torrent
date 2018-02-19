@@ -9,6 +9,7 @@ import (
 	"math"
 	"math/rand"
 	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"sync"
@@ -585,7 +586,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		fmt.Fprintf(tw, "    URL\tNext announce\tLast announce\n")
 		for _, ta := range slices.Sort(slices.FromMapElems(t.trackerAnnouncers), func(l, r *trackerScraper) bool {
-			return l.url < r.url
+			return l.u.String() < r.u.String()
 		}).([]*trackerScraper) {
 			fmt.Fprintf(tw, "    %s\n", ta.statusLine())
 		}
@@ -1303,21 +1304,35 @@ func (t *Torrent) seeding() bool {
 	return true
 }
 
-func (t *Torrent) startScrapingTracker(url string) {
-	if url == "" {
+func (t *Torrent) startScrapingTracker(_url string) {
+	if _url == "" {
 		return
 	}
-	if _, ok := t.trackerAnnouncers[url]; ok {
+	u, _ := url.Parse(_url)
+	if u.Scheme == "udp" {
+		u.Scheme = "udp4"
+		t.startScrapingTracker(u.String())
+		u.Scheme = "udp6"
+		t.startScrapingTracker(u.String())
+		return
+	}
+	if u.Scheme == "udp4" && (t.cl.config.DisableIPv4Peers || t.cl.config.DisableIPv4) {
+		return
+	}
+	if u.Scheme == "udp6" && t.cl.config.DisableIPv6 {
+		return
+	}
+	if _, ok := t.trackerAnnouncers[_url]; ok {
 		return
 	}
 	newAnnouncer := &trackerScraper{
-		url: url,
-		t:   t,
+		u: *u,
+		t: t,
 	}
 	if t.trackerAnnouncers == nil {
 		t.trackerAnnouncers = make(map[string]*trackerScraper)
 	}
-	t.trackerAnnouncers[url] = newAnnouncer
+	t.trackerAnnouncers[_url] = newAnnouncer
 	go newAnnouncer.Run()
 }
 
@@ -1345,6 +1360,7 @@ func (t *Torrent) announceRequest() tracker.AnnounceRequest {
 		PeerId:   t.cl.peerID,
 		InfoHash: t.infoHash,
 		Left:     t.bytesLeftAnnounce(),
+		Key:      t.cl.announceKey(),
 	}
 }
 

@@ -5,12 +5,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"expvar"
 	"fmt"
 	"io"
 	"net"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -122,6 +122,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		fmt.Fprintln(w, "Not listening!")
 	}
 	fmt.Fprintf(w, "Peer ID: %+q\n", cl.PeerID())
+	fmt.Fprintf(w, "Announce key: %x\n", cl.announceKey())
 	fmt.Fprintf(w, "Banned IPs: %d\n", len(cl.badPeerIPsLocked()))
 	if dht := cl.DHT(); dht != nil {
 		dhtStats := dht.Stats()
@@ -235,6 +236,10 @@ func (cl *Client) debugLogFilter(m *log.Msg) bool {
 
 func (cl *Client) initLogger() {
 	cl.logger = log.Default.Clone().AddValue(cl).AddFilter(log.NewFilter(cl.debugLogFilter))
+}
+
+func (cl *Client) announceKey() int32 {
+	return int32(binary.BigEndian.Uint32(cl.peerID[16:20]))
 }
 
 // Creates a new client.
@@ -400,6 +405,11 @@ func (cl *Client) ipBlockRange(ip net.IP) (r iplist.Range, blocked bool) {
 		return
 	}
 	return cl.ipBlockList.Lookup(ip)
+}
+
+func (cl *Client) ipIsBlocked(ip net.IP) bool {
+	_, blocked := cl.ipBlockRange(ip)
+	return blocked
 }
 
 func (cl *Client) waitAccept() {
@@ -1111,33 +1121,6 @@ func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
 		panic(err)
 	}
 	delete(cl.torrents, infoHash)
-	return
-}
-
-func (cl *Client) prepareTrackerAnnounceUnlocked(announceURL string) (blocked bool, urlToUse string, host string, err error) {
-	_url, err := url.Parse(announceURL)
-	if err != nil {
-		return
-	}
-	hmp := missinggo.SplitHostMaybePort(_url.Host)
-	if hmp.Err != nil {
-		err = hmp.Err
-		return
-	}
-	addr, err := net.ResolveIPAddr("ip", hmp.Host)
-	if err != nil {
-		return
-	}
-	if addr.IP == nil {
-		panic(hmp.Host)
-	}
-	cl.mu.RLock()
-	_, blocked = cl.ipBlockRange(addr.IP)
-	cl.mu.RUnlock()
-	host = _url.Host
-	hmp.Host = addr.String()
-	_url.Host = hmp.String()
-	urlToUse = _url.String()
 	return
 }
 

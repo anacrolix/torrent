@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+
+	"github.com/anacrolix/dht/krpc"
 )
 
 // Marshalled as binary by the UDP client, so be careful making changes.
@@ -47,22 +49,29 @@ var (
 	ErrBadScheme = errors.New("unknown scheme")
 )
 
-// TODO: Just split udp/http announcing completely, to support various different options they have.
-
-func Announce(cl *http.Client, userAgent string, urlStr string, req *AnnounceRequest) (res AnnounceResponse, err error) {
-	return AnnounceHost(cl, userAgent, urlStr, req, "")
+type Announce struct {
+	TrackerUrl string
+	Request    AnnounceRequest
+	HostHeader string
+	UserAgent  string
+	HttpClient *http.Client
+	UdpNetwork string
+	ClientIp4  krpc.NodeAddr
+	ClientIp6  krpc.NodeAddr
 }
 
-func AnnounceHost(cl *http.Client, userAgent string, urlStr string, req *AnnounceRequest, host string) (res AnnounceResponse, err error) {
-	_url, err := url.Parse(urlStr)
+// In an FP language with currying, what order what you put these params?
+
+func (me Announce) Do() (res AnnounceResponse, err error) {
+	_url, err := url.Parse(me.TrackerUrl)
 	if err != nil {
 		return
 	}
 	switch _url.Scheme {
 	case "http", "https":
-		return announceHTTP(cl, userAgent, req, _url, host)
-	case "udp":
-		return announceUDP(req, _url)
+		return announceHTTP(me, _url)
+	case "udp", "udp4", "udp6":
+		return announceUDP(me, _url)
 	default:
 		err = ErrBadScheme
 		return

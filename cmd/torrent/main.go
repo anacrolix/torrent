@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anacrolix/torrent/iplist"
+
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
@@ -121,13 +123,14 @@ func addTorrents(client *torrent.Client) {
 }
 
 var flags = struct {
-	Mmap         bool           `help:"memory-map torrent data"`
-	TestPeer     []*net.TCPAddr `help:"addresses of some starting peers"`
-	Seed         bool           `help:"seed after download is complete"`
-	Addr         *net.TCPAddr   `help:"network listen addr"`
-	UploadRate   tagflag.Bytes  `help:"max piece bytes to send per second"`
-	DownloadRate tagflag.Bytes  `help:"max bytes per second down from peers"`
-	Debug        bool
+	Mmap            bool           `help:"memory-map torrent data"`
+	TestPeer        []*net.TCPAddr `help:"addresses of some starting peers"`
+	Seed            bool           `help:"seed after download is complete"`
+	Addr            *net.TCPAddr   `help:"network listen addr"`
+	UploadRate      tagflag.Bytes  `help:"max piece bytes to send per second"`
+	DownloadRate    tagflag.Bytes  `help:"max bytes per second down from peers"`
+	Debug           bool
+	PackedBlocklist string
 	tagflag.StartPos
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }{
@@ -150,6 +153,14 @@ func main() {
 		},
 		Debug: flags.Debug,
 		Seed:  flags.Seed,
+	}
+	if flags.PackedBlocklist != "" {
+		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
+		if err != nil {
+			log.Fatalf("error loading blocklist: %s", err)
+		}
+		defer blocklist.Close()
+		clientConfig.IPBlocklist = blocklist
 	}
 	if flags.Mmap {
 		clientConfig.DefaultStorage = storage.NewMMap("")

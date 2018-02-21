@@ -99,12 +99,18 @@ func (c *udpAnnounce) ipv6() bool {
 	return rip.To16() != nil && rip.To4() == nil
 }
 
-func (c *udpAnnounce) Do(req *AnnounceRequest) (res AnnounceResponse, err error) {
+func (c *udpAnnounce) Do(req AnnounceRequest) (res AnnounceResponse, err error) {
 	err = c.connect()
 	if err != nil {
 		return
 	}
 	reqURI := c.url.RequestURI()
+	if c.ipv6() {
+		// BEP 15
+		req.IPAddress = 0
+	} else if req.IPAddress == 0 && c.a.ClientIp4.IP != nil {
+		req.IPAddress = binary.BigEndian.Uint32(c.a.ClientIp4.IP.To4())
+	}
 	// Clearly this limits the request URI to 255 bytes. BEP 41 supports
 	// longer but I'm not fussed.
 	options := append([]byte{optionTypeURLData, byte(len(reqURI))}, []byte(reqURI)...)
@@ -288,5 +294,5 @@ func announceUDP(opt Announce, _url *url.URL) (AnnounceResponse, error) {
 		a:   &opt,
 	}
 	defer ua.Close()
-	return ua.Do(&opt.Request)
+	return ua.Do(opt.Request)
 }

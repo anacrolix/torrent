@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/go-fsnotify/fsnotify"
+	"github.com/fsnotify/fsnotify"
 
 	"github.com/anacrolix/torrent/metainfo"
 )

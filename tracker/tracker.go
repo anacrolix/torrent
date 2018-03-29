@@ -56,8 +56,10 @@ type Announce struct {
 	UserAgent  string
 	HttpClient *http.Client
 	UdpNetwork string
-	ClientIp4  krpc.NodeAddr
-	ClientIp6  krpc.NodeAddr
+	// If the port is zero, it's assumed to be the same as the Request.Port
+	ClientIp4 krpc.NodeAddr
+	// If the port is zero, it's assumed to be the same as the Request.Port
+	ClientIp6 krpc.NodeAddr
 }
 
 // In an FP language with currying, what order what you put these params?

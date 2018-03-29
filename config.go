@@ -108,6 +108,9 @@ type Config struct {
 	// impact of a few bad apples. 4s loses 1% of successful handshakes that
 	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
 	HandshakesTimeout time.Duration // default  20 * time.Second
+
+	PublicIp4 net.IP
+	PublicIp6 net.IP
 }
 
 func (cfg *Config) setDefaults() {

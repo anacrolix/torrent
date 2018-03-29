@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/anacrolix/dht/krpc"
 	"github.com/anacrolix/missinggo"
 
 	"github.com/anacrolix/torrent/tracker"
@@ -115,6 +116,9 @@ func (me *trackerScraper) announce() (ret trackerAnnounceResult) {
 		TrackerUrl: me.trackerUrl(ip),
 		Request:    req,
 		HostHeader: me.u.Host,
+		UdpNetwork: me.u.Scheme,
+		ClientIp4:  krpc.NodeAddr{IP: me.t.cl.config.PublicIp4},
+		ClientIp6:  krpc.NodeAddr{IP: me.t.cl.config.PublicIp6},
 	}.Do()
 	if err != nil {
 		ret.Err = fmt.Errorf("error announcing: %s", err)

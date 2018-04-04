@@ -24,6 +24,7 @@ import (
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/sync"
 	"github.com/dustin/go-humanize"
+	"github.com/google/btree"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -1029,8 +1030,13 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 	t = &Torrent{
 		cl:       cl,
 		infoHash: ih,
-		peers:    make(map[peersKey]Peer),
-		conns:    make(map[*connection]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
+		peers: prioritizedPeers{
+			om: btree.New(2),
+			getPrio: func(p Peer) peerPriority {
+				return bep40Priority(cl.publicAddr(p.IP), p.addr())
+			},
+		},
+		conns: make(map[*connection]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
 
 		halfOpen:          make(map[string]Peer),
 		pieceStateChanges: pubsub.NewPubSub(),
@@ -1250,4 +1256,27 @@ func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, p dht.Peer) {
 		Port:   p.Port,
 		Source: peerSourceDHTAnnouncePeer,
 	}})
+}
+
+func firstNotNil(ips ...net.IP) net.IP {
+	for _, ip := range ips {
+		if ip != nil {
+			return ip
+		}
+	}
+	return nil
+}
+
+func (cl *Client) publicIp(peer net.IP) net.IP {
+	// TODO: Use BEP 10 to determine how peers are seeing us.
+	if peer.To4() != nil {
+		return firstNotNil(cl.config.PublicIp4, missinggo.AddrIP(cl.ListenAddr()).To4())
+	} else {
+		return firstNotNil(cl.config.PublicIp6, missinggo.AddrIP(cl.ListenAddr()).To16())
+	}
+}
+
+// Our IP as a peer should see it.
+func (cl *Client) publicAddr(peer net.IP) ipPort {
+	return ipPort{cl.publicIp(peer), uint16(cl.incomingPeerPort())}
 }

@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/anacrolix/dht"
-	"github.com/anacrolix/dht/krpc"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
@@ -96,7 +95,7 @@ type Torrent struct {
 	// active connections if were told about the peer after connecting with
 	// them. That encourages us to reconnect to peers that are well known in
 	// the swarm.
-	peers          map[peersKey]Peer
+	peers          prioritizedPeers
 	wantPeersEvent missinggo.Event
 	// An announcer for each tracker URL.
 	trackerAnnouncers map[string]*trackerScraper
@@ -155,9 +154,9 @@ func (t *Torrent) Closed() <-chan struct{} {
 // pending, and half-open peers.
 func (t *Torrent) KnownSwarm() (ks []Peer) {
 	// Add pending peers to the list
-	for _, peer := range t.peers {
+	t.peers.Each(func(peer Peer) {
 		ks = append(ks, peer)
-	}
+	})
 
 	// Add half-open peers to the list
 	for _, peer := range t.halfOpen {
@@ -254,13 +253,14 @@ func (t *Torrent) addPeer(p Peer) {
 		torrent.Add("peers not added because of bad addr", 1)
 		return
 	}
-	t.openNewConns()
-	if len(t.peers) >= cl.config.TorrentPeersHighWater {
-		return
+	if t.peers.Add(p) {
+		torrent.Add("peers replaced", 1)
 	}
-	t.peers[peersKey{string(p.IP), p.Port}] = p
 	t.openNewConns()
-
+	for t.peers.Len() > cl.config.TorrentPeersHighWater {
+		t.peers.DeleteMin()
+		torrent.Add("peers discarded", 1)
+	}
 }
 
 func (t *Torrent) invalidateMetadata() {
@@ -735,27 +735,6 @@ func (t *Torrent) pendAllChunkSpecs(pieceIndex int) {
 	t.pieces[pieceIndex].dirtyChunks.Clear()
 }
 
-type Peer struct {
-	Id     [20]byte
-	IP     net.IP
-	Port   int
-	Source peerSource
-	// Peer is known to support encryption.
-	SupportsEncryption bool
-	pexPeerFlags
-}
-
-func (me *Peer) FromPex(na krpc.NodeAddr, fs pexPeerFlags) {
-	me.IP = append([]byte(nil), na.IP...)
-	me.Port = na.Port
-	me.Source = peerSourcePEX
-	// If they prefer encryption, they must support it.
-	if fs.Get(pexPrefersEncryption) {
-		me.SupportsEncryption = true
-	}
-	me.pexPeerFlags = fs
-}
-
 func (t *Torrent) pieceLength(piece int) pp.Integer {
 	if t.info.PieceLength == 0 {
 		// There will be no variance amongst pieces. Only pain.
@@ -1077,21 +1056,14 @@ func (t *Torrent) maxHalfOpen() int {
 
 func (t *Torrent) openNewConns() {
 	defer t.updateWantPeersEvent()
-	for len(t.peers) != 0 {
+	for t.peers.Len() != 0 {
 		if !t.wantConns() {
 			return
 		}
 		if len(t.halfOpen) >= t.maxHalfOpen() {
 			return
 		}
-		var (
-			k peersKey
-			p Peer
-		)
-		for k, p = range t.peers {
-			break
-		}
-		delete(t.peers, k)
+		p := t.peers.PopMax()
 		t.initiateConn(p)
 	}
 }
@@ -1272,7 +1244,7 @@ func (t *Torrent) wantPeers() bool {
 	if t.closed.IsSet() {
 		return false
 	}
-	if len(t.peers) > t.cl.config.TorrentPeersLowWater {
+	if t.peers.Len() > t.cl.config.TorrentPeersLowWater {
 		return false
 	}
 	return t.needData() || t.seeding()
@@ -1395,7 +1367,7 @@ func (t *Torrent) consumeDHTAnnounce(pvs <-chan dht.PeersValues) {
 			}
 			cl.mu.Lock()
 			t.addPeers(addPeers)
-			numPeers := len(t.peers)
+			numPeers := t.peers.Len()
 			cl.mu.Unlock()
 			if numPeers >= cl.config.TorrentPeersHighWater {
 				return
@@ -1458,7 +1430,7 @@ func (t *Torrent) Stats() TorrentStats {
 func (t *Torrent) statsLocked() TorrentStats {
 	t.stats.ActivePeers = len(t.conns)
 	t.stats.HalfOpenPeers = len(t.halfOpen)
-	t.stats.PendingPeers = len(t.peers)
+	t.stats.PendingPeers = t.peers.Len()
 	t.stats.TotalPeers = t.numTotalPeers()
 	t.stats.ConnectedSeeders = 0
 	for c := range t.conns {
@@ -1483,9 +1455,9 @@ func (t *Torrent) numTotalPeers() int {
 	for addr := range t.halfOpen {
 		peers[addr] = struct{}{}
 	}
-	for _, peer := range t.peers {
+	t.peers.Each(func(peer Peer) {
 		peers[fmt.Sprintf("%s:%d", peer.IP, peer.Port)] = struct{}{}
-	}
+	})
 	return len(peers)
 }
 

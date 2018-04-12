@@ -766,10 +766,9 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()
-	sum := func() (ret int) {
+	sum := func() (ret int64) {
 		cl.eachDhtServer(func(s *dht.Server) {
-			ret += s.NumNodes()
-			ret += s.Stats().OutstandingTransactions
+			ret += s.Stats().OutboundQueriesAttempted
 		})
 		return
 	}

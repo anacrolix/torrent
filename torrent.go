@@ -1325,14 +1325,22 @@ func (t *Torrent) startMissingTrackerScrapers() {
 // Returns an AnnounceRequest with fields filled out to defaults and current
 // values.
 func (t *Torrent) announceRequest() tracker.AnnounceRequest {
+	// Note that IPAddress is not set. It's set for UDP inside the tracker
+	// code, since it's dependent on the network in use.
 	return tracker.AnnounceRequest{
 		Event:    tracker.None,
 		NumWant:  -1,
 		Port:     uint16(t.cl.incomingPeerPort()),
 		PeerId:   t.cl.peerID,
 		InfoHash: t.infoHash,
-		Left:     t.bytesLeftAnnounce(),
 		Key:      t.cl.announceKey(),
+
+		// The following are vaguely described in BEP 3.
+
+		Left:     t.bytesLeftAnnounce(),
+		Uploaded: t.stats.BytesWrittenData,
+		// There's no mention of wasted or unwanted download in the BEP.
+		Downloaded: t.stats.BytesReadUsefulData,
 	}
 }
 

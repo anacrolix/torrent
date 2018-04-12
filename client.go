@@ -104,7 +104,7 @@ func writeDhtServerStatus(w io.Writer, s *dht.Server) {
 	dhtStats := s.Stats()
 	fmt.Fprintf(w, "\t# Nodes: %d (%d good, %d banned)\n", dhtStats.Nodes, dhtStats.GoodNodes, dhtStats.BadNodes)
 	fmt.Fprintf(w, "\tServer ID: %x\n", s.ID())
-	fmt.Fprintf(w, "\tAnnounces: %d\n", dhtStats.ConfirmedAnnounces)
+	fmt.Fprintf(w, "\tAnnounces: %d\n", dhtStats.SuccessfulOutboundAnnouncePeerQueries)
 	fmt.Fprintf(w, "\tOutstanding transactions: %d\n", dhtStats.OutstandingTransactions)
 }
 
@@ -224,10 +224,11 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		}
 	}
 
-	cl.conns, err = listenAll(cl.enabledPeerNetworks(), cl.config.ListenAddr)
+	cl.conns, err = listenAll(cl.enabledPeerNetworks(), cl.config.ListenHost, cl.config.ListenPort)
 	if err != nil {
 		return
 	}
+	// Check for panics.
 	cl.LocalPort()
 
 	for _, s := range cl.conns {

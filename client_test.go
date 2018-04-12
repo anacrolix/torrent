@@ -31,7 +31,7 @@ import (
 
 func TestingConfig() *Config {
 	return &Config{
-		ListenAddr:              "localhost:0",
+		ListenHost:              LoopbackListenHost,
 		NoDHT:                   true,
 		DataDir:                 tempDir(),
 		DisableTrackers:         true,
@@ -540,7 +540,7 @@ func BenchmarkAddLargeTorrent(b *testing.B) {
 	cfg := TestingConfig()
 	cfg.DisableTCP = true
 	cfg.DisableUTP = true
-	cfg.ListenAddr = "redonk"
+	cfg.ListenHost = func(string) string { return "redonk" }
 	cl, err := NewClient(cfg)
 	require.NoError(b, err)
 	defer cl.Close()
@@ -756,7 +756,7 @@ func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
 
 func TestAddMetainfoWithNodes(t *testing.T) {
 	cfg := TestingConfig()
-	cfg.ListenAddr = ":0"
+	cfg.ListenHost = func(string) string { return "" }
 	cfg.NoDHT = false
 	cfg.DhtStartingNodes = func() ([]dht.Addr, error) { return nil, nil }
 	// For now, we want to just jam the nodes into the table, without
@@ -766,10 +766,9 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()
-	sum := func() (ret int) {
+	sum := func() (ret int64) {
 		cl.eachDhtServer(func(s *dht.Server) {
-			ret += s.NumNodes()
-			ret += s.Stats().OutstandingTransactions
+			ret += s.Stats().OutboundQueriesAttempted
 		})
 		return
 	}
@@ -1065,8 +1064,7 @@ func TestClientAddressInUse(t *testing.T) {
 	if s != nil {
 		defer s.Close()
 	}
-	cfg := TestingConfig()
-	cfg.ListenAddr = ":50007"
+	cfg := TestingConfig().SetListenAddr(":50007")
 	cl, err := NewClient(cfg)
 	require.Error(t, err)
 	require.Nil(t, cl)

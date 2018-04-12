@@ -162,7 +162,7 @@ func main() {
 		clientConfig.DefaultStorage = storage.NewMMap("")
 	}
 	if flags.Addr != nil {
-		clientConfig.ListenAddr = flags.Addr.String()
+		clientConfig.SetListenAddr(flags.Addr.String())
 	}
 	if flags.UploadRate != -1 {
 		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(flags.UploadRate), 256<<10)

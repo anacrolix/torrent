@@ -1378,9 +1378,9 @@ func (t *Torrent) consumeDHTAnnounce(pvs <-chan dht.PeersValues) {
 	}
 }
 
-func (t *Torrent) announceDHT(impliedPort bool) (err error) {
+func (t *Torrent) announceDHT(impliedPort bool, s *dht.Server) (err error) {
 	cl := t.cl
-	ps, err := cl.dHT.Announce(t.infoHash, cl.incomingPeerPort(), impliedPort)
+	ps, err := s.Announce(t.infoHash, cl.incomingPeerPort(), impliedPort)
 	if err != nil {
 		return
 	}
@@ -1389,7 +1389,7 @@ func (t *Torrent) announceDHT(impliedPort bool) (err error) {
 	return
 }
 
-func (t *Torrent) dhtAnnouncer() {
+func (t *Torrent) dhtAnnouncer(s *dht.Server) {
 	cl := t.cl
 	for {
 		select {
@@ -1397,7 +1397,7 @@ func (t *Torrent) dhtAnnouncer() {
 		case <-t.closed.LockedChan(&cl.mu):
 			return
 		}
-		err := t.announceDHT(true)
+		err := t.announceDHT(true, s)
 		func() {
 			cl.mu.Lock()
 			defer cl.mu.Unlock()
@@ -1723,4 +1723,16 @@ func (t *Torrent) initiateConn(peer Peer) {
 	}
 	t.halfOpen[addr] = peer
 	go t.cl.outgoingConnection(t, addr, peer.Source)
+}
+
+func (t *Torrent) AddClientPeer(cl *Client) {
+	t.AddPeers(func() (ps []Peer) {
+		for _, la := range cl.ListenAddrs() {
+			ps = append(ps, Peer{
+				IP:   missinggo.AddrIP(la),
+				Port: missinggo.AddrPort(la),
+			})
+		}
+		return
+	}())
 }

@@ -15,7 +15,6 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	"github.com/anacrolix/dht"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
 
@@ -92,9 +91,6 @@ func mainExitCode() int {
 		DisableTrackers: args.DisableTrackers,
 		ListenAddr:      args.ListenAddr.String(),
 		NoUpload:        true, // Ensure that downloads are responsive.
-		DHTConfig: dht.ServerConfig{
-			StartingNodes: dht.GlobalBootstrapAddrs,
-		},
 	})
 	if err != nil {
 		log.Print(err)

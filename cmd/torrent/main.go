@@ -13,7 +13,6 @@ import (
 
 	"github.com/anacrolix/torrent/iplist"
 
-	"github.com/anacrolix/dht"
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
 	"github.com/dustin/go-humanize"
@@ -148,9 +147,6 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	tagflag.Parse(&flags)
 	clientConfig := torrent.Config{
-		DHTConfig: dht.ServerConfig{
-			StartingNodes: dht.GlobalBootstrapAddrs,
-		},
 		Debug: flags.Debug,
 		Seed:  flags.Seed,
 	}

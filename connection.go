@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anacrolix/dht"
 	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/missinggo"
@@ -48,7 +49,6 @@ type connection struct {
 	headerEncrypted bool
 	cryptoMethod    mse.CryptoMethod
 	Discovery       peerSource
-	uTP             bool
 	closed          missinggo.Event
 
 	stats ConnStats
@@ -179,10 +179,14 @@ func (cn *connection) connectionFlags() (ret string) {
 		c('e')
 	}
 	ret += string(cn.Discovery)
-	if cn.uTP {
+	if cn.utp() {
 		c('U')
 	}
 	return
+}
+
+func (cn *connection) utp() bool {
+	return strings.Contains(cn.remoteAddr().Network(), "utp")
 }
 
 // Inspired by https://trac.transmissionbt.com/wiki/PeerStatusText
@@ -1019,9 +1023,6 @@ func (c *connection) mainReadLoop() (err error) {
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 		case pp.Port:
-			if cl.dHT == nil {
-				break
-			}
 			pingAddr, err := net.ResolveUDPAddr("", c.remoteAddr().String())
 			if err != nil {
 				panic(err)
@@ -1029,7 +1030,9 @@ func (c *connection) mainReadLoop() (err error) {
 			if msg.Port != 0 {
 				pingAddr.Port = int(msg.Port)
 			}
-			go cl.dHT.Ping(pingAddr, nil)
+			cl.eachDhtServer(func(s *dht.Server) {
+				go s.Ping(pingAddr, nil)
+			})
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c, debugLogValue).Log(c.t.logger)

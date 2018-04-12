@@ -197,13 +197,9 @@ func TestDownloadOnDemand(t *testing.T) {
 	require.NoError(t, err)
 	testutil.ExportStatusWriter(leecher, "l")
 	defer leecher.Close()
-	leecherTorrent, _ := leecher.AddTorrent(layout.Metainfo)
-	leecherTorrent.AddPeers([]torrent.Peer{
-		{
-			IP:   missinggo.AddrIP(seeder.ListenAddr()),
-			Port: missinggo.AddrPort(seeder.ListenAddr()),
-		},
-	})
+	leecherTorrent, err := leecher.AddTorrent(layout.Metainfo)
+	require.NoError(t, err)
+	leecherTorrent.AddClientPeer(seeder)
 	fs := New(leecher)
 	defer fs.Destroy()
 	root, _ := fs.Root()

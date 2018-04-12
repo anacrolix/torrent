@@ -125,8 +125,10 @@ func addrCompactIP(addr net.Addr) (string, error) {
 	return string(ip.To16()), nil
 }
 
-func connIsIpv6(nc net.Conn) bool {
-	ra := nc.RemoteAddr()
+func connIsIpv6(nc interface {
+	LocalAddr() net.Addr
+}) bool {
+	ra := nc.LocalAddr()
 	rip := missinggo.AddrIP(ra)
 	return rip.To4() == nil && rip.To16() != nil
 }

@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -176,7 +177,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	assert.Nil(t, tt.Metainfo().InfoBytes)
 	assert.False(t, tt.haveAllMetadataPieces())
 
-	nc, err := net.Dial("tcp", cl.ListenAddr().String())
+	nc, err := net.Dial("tcp", fmt.Sprintf(":%d", cl.LocalPort()))
 	require.NoError(t, err)
 	defer nc.Close()
 

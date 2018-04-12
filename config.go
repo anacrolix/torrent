@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/anacrolix/dht"
 	"golang.org/x/time/rate"
 
+	"github.com/anacrolix/dht"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/storage"
 )
@@ -38,11 +38,10 @@ type Config struct {
 	// Don't announce to trackers. This only leaves DHT to discover peers.
 	DisableTrackers bool `long:"disable-trackers"`
 	DisablePEX      bool `long:"disable-pex"`
-	// Don't create a DHT.
-	NoDHT bool `long:"disable-dht"`
-	// Overrides the default DHT configuration.
-	DHTConfig dht.ServerConfig
 
+	// Don't create a DHT.
+	NoDHT            bool `long:"disable-dht"`
+	DhtStartingNodes dht.StartingNodesGetter
 	// Never send chunks to peers.
 	NoUpload bool `long:"no-upload"`
 	// Disable uploading even when it isn't fair.
@@ -147,6 +146,9 @@ func (cfg *Config) setDefaults() {
 	}
 	if cfg.HandshakesTimeout == 0 {
 		cfg.HandshakesTimeout = 20 * time.Second
+	}
+	if cfg.DhtStartingNodes == nil {
+		cfg.DhtStartingNodes = dht.GlobalBootstrapAddrs
 	}
 }
 

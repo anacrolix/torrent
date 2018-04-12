@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/anacrolix/dht"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/filecache"
@@ -214,16 +215,6 @@ func TestUTPRawConn(t *testing.T) {
 	}
 }
 
-func TestTwoClientsArbitraryPorts(t *testing.T) {
-	for i := 0; i < 2; i++ {
-		cl, err := NewClient(TestingConfig())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer cl.Close()
-	}
-}
-
 func TestAddDropManyTorrents(t *testing.T) {
 	cl, err := NewClient(TestingConfig())
 	require.NoError(t, err)
@@ -403,7 +394,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	require.NoError(t, err)
 	assert.True(t, new)
 	// Now do some things with leecher and seeder.
-	addClientPeer(leecherTorrent, seeder)
+	leecherTorrent.AddClientPeer(seeder)
 	// The Torrent should not be interested in obtaining peers, so the one we
 	// just added should be the only one.
 	assert.False(t, leecherTorrent.Seeding())
@@ -461,6 +452,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.DataDir)
 	leecherLeecher, _ := NewClient(cfg)
+	require.NoError(t, err)
 	defer leecherLeecher.Close()
 	testutil.ExportStatusWriter(leecherLeecher, "ll")
 	leecherGreeting, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
@@ -486,8 +478,8 @@ func TestSeedAfterDownloading(t *testing.T) {
 		require.NoError(t, err)
 		assert.EqualValues(t, testutil.GreetingFileContents, b)
 	}()
-	addClientPeer(leecherGreeting, seeder)
-	addClientPeer(leecherGreeting, leecherLeecher)
+	leecherGreeting.AddClientPeer(seeder)
+	leecherGreeting.AddClientPeer(leecherLeecher)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -585,7 +577,7 @@ func TestResponsive(t *testing.T) {
 		ret.ChunkSize = 2
 		return
 	}())
-	addClientPeer(leecherTorrent, seeder)
+	leecherTorrent.AddClientPeer(seeder)
 	reader := leecherTorrent.NewReader()
 	defer reader.Close()
 	reader.SetReadahead(0)
@@ -628,7 +620,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 		ret.ChunkSize = 2
 		return
 	}())
-	addClientPeer(leecherTorrent, seeder)
+	leecherTorrent.AddClientPeer(seeder)
 	reader := leecherTorrent.NewReader()
 	defer reader.Close()
 	reader.SetReadahead(0)
@@ -656,7 +648,12 @@ func TestDHTInheritBlocklist(t *testing.T) {
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()
-	require.Equal(t, ipl, cl.DHT().IPBlocklist())
+	numServers := 0
+	cl.eachDhtServer(func(s *dht.Server) {
+		assert.Equal(t, ipl, s.IPBlocklist())
+		numServers++
+	})
+	assert.EqualValues(t, 2, numServers)
 }
 
 // Check that stuff is merged in subsequent AddTorrentSpec for the same
@@ -761,21 +758,29 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	cfg := TestingConfig()
 	cfg.ListenAddr = ":0"
 	cfg.NoDHT = false
+	cfg.DhtStartingNodes = func() ([]dht.Addr, error) { return nil, nil }
 	// For now, we want to just jam the nodes into the table, without
 	// verifying them first. Also the DHT code doesn't support mixing secure
 	// and insecure nodes if security is enabled (yet).
-	cfg.DHTConfig.NoSecurity = true
+	// cfg.DHTConfig.NoSecurity = true
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()
-	assert.EqualValues(t, 0, cl.DHT().NumNodes()+cl.DHT().Stats().OutstandingTransactions)
+	sum := func() (ret int) {
+		cl.eachDhtServer(func(s *dht.Server) {
+			ret += s.NumNodes()
+			ret += s.Stats().OutstandingTransactions
+		})
+		return
+	}
+	assert.EqualValues(t, 0, sum())
 	tt, err := cl.AddTorrentFromFile("metainfo/testdata/issue_65a.torrent")
 	require.NoError(t, err)
 	// Nodes are not added or exposed in Torrent's metainfo. We just randomly
 	// check if the announce-list is here instead. TODO: Add nodes.
 	assert.Len(t, tt.metainfo.AnnounceList, 5)
 	// There are 6 nodes in the torrent file.
-	assert.EqualValues(t, 6, cl.DHT().NumNodes()+cl.DHT().Stats().OutstandingTransactions)
+	assert.EqualValues(t, 6*len(cl.dhtServers), sum())
 }
 
 type testDownloadCancelParams struct {
@@ -831,7 +836,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	}
 	leecherGreeting.cl.mu.Unlock()
 
-	addClientPeer(leecherGreeting, seeder)
+	leecherGreeting.AddClientPeer(seeder)
 	completes := make(map[int]bool, 3)
 values:
 	for {
@@ -908,8 +913,12 @@ func TestClientDynamicListenPortAllProtocols(t *testing.T) {
 	cl, err := NewClient(TestingConfig())
 	require.NoError(t, err)
 	defer cl.Close()
-	assert.NotEqual(t, 0, missinggo.AddrPort(cl.ListenAddr()))
-	assert.Equal(t, missinggo.AddrPort(cl.utpSock.Addr()), missinggo.AddrPort(cl.tcpListener.Addr()))
+	port := cl.LocalPort()
+	assert.NotEqual(t, 0, port)
+	cl.eachListener(func(s socket) bool {
+		assert.Equal(t, port, missinggo.AddrPort(s.Addr()))
+		return true
+	})
 }
 
 func TestClientDynamicListenTCPOnly(t *testing.T) {
@@ -918,8 +927,11 @@ func TestClientDynamicListenTCPOnly(t *testing.T) {
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()
-	assert.NotEqual(t, 0, missinggo.AddrPort(cl.ListenAddr()))
-	assert.Nil(t, cl.utpSock)
+	assert.NotEqual(t, 0, cl.LocalPort())
+	cl.eachListener(func(s socket) bool {
+		assert.True(t, isTcpNetwork(s.Addr().Network()))
+		return true
+	})
 }
 
 func TestClientDynamicListenUTPOnly(t *testing.T) {
@@ -928,8 +940,11 @@ func TestClientDynamicListenUTPOnly(t *testing.T) {
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()
-	assert.NotEqual(t, 0, missinggo.AddrPort(cl.ListenAddr()))
-	assert.Nil(t, cl.tcpListener)
+	assert.NotEqual(t, 0, cl.LocalPort())
+	cl.eachListener(func(s socket) bool {
+		assert.True(t, isUtpNetwork(s.Addr().Network()))
+		return true
+	})
 }
 
 func TestClientDynamicListenPortNoProtocols(t *testing.T) {
@@ -939,16 +954,7 @@ func TestClientDynamicListenPortNoProtocols(t *testing.T) {
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()
-	assert.Nil(t, cl.ListenAddr())
-}
-
-func addClientPeer(t *Torrent, cl *Client) {
-	t.AddPeers([]Peer{
-		{
-			IP:   missinggo.AddrIP(cl.ListenAddr()),
-			Port: missinggo.AddrPort(cl.ListenAddr()),
-		},
-	})
+	assert.Equal(t, 0, cl.LocalPort())
 }
 
 func totalConns(tts []*Torrent) (ret int) {
@@ -978,7 +984,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 		for _, tt := range tts {
 			for _, _tt := range tts {
 				// if tt != _tt {
-				addClientPeer(tt, _tt.cl)
+				tt.AddClientPeer(_tt.cl)
 				// }
 			}
 		}
@@ -1048,10 +1054,7 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 	testutil.ExportStatusWriter(client, "c")
 	tr, err := client.AddMagnet(magnet1)
 	require.NoError(t, err)
-	tr.AddPeers([]Peer{{
-		IP:   missinggo.AddrIP(server.ListenAddr()),
-		Port: missinggo.AddrPort(server.ListenAddr()),
-	}})
+	tr.AddClientPeer(server)
 	<-tr.GotInfo()
 	tr.DownloadAll()
 	client.WaitAll()

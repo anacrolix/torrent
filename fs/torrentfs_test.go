@@ -185,15 +185,13 @@ func TestDownloadOnDemand(t *testing.T) {
 		<-seederTorrent.GotInfo()
 		seederTorrent.VerifyData()
 	}()
-	leecher, err := torrent.NewClient((&torrent.Config{
+	leecher, err := torrent.NewClient(&torrent.Config{
 		DisableTrackers: true,
 		NoDHT:           true,
 		DisableTCP:      true,
 		DefaultStorage:  storage.NewMMap(filepath.Join(layout.BaseDir, "download")),
-		// This can be used to check if clients can connect to other clients
-		// with the same ID.
-		// PeerID: seeder.PeerID(),
-	}).SetListenAddr("localhost:0"))
+		ListenHost:      torrent.LoopbackListenHost,
+	})
 	require.NoError(t, err)
 	testutil.ExportStatusWriter(leecher, "l")
 	defer leecher.Close()

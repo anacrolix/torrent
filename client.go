@@ -102,10 +102,9 @@ func (cl *Client) LocalPort() (port int) {
 
 func writeDhtServerStatus(w io.Writer, s *dht.Server) {
 	dhtStats := s.Stats()
-	fmt.Fprintf(w, "\tDHT nodes: %d (%d good, %d banned)\n", dhtStats.Nodes, dhtStats.GoodNodes, dhtStats.BadNodes)
-	fmt.Fprintf(w, "\tDHT Server ID: %x\n", s.ID())
-	fmt.Fprintf(w, "\tDHT port: %d\n", missinggo.AddrPort(s.Addr()))
-	fmt.Fprintf(w, "\tDHT announces: %d\n", dhtStats.ConfirmedAnnounces)
+	fmt.Fprintf(w, "\t# Nodes: %d (%d good, %d banned)\n", dhtStats.Nodes, dhtStats.GoodNodes, dhtStats.BadNodes)
+	fmt.Fprintf(w, "\tServer ID: %x\n", s.ID())
+	fmt.Fprintf(w, "\tAnnounces: %d\n", dhtStats.ConfirmedAnnounces)
 	fmt.Fprintf(w, "\tOutstanding transactions: %d\n", dhtStats.OutstandingTransactions)
 }
 
@@ -121,7 +120,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	fmt.Fprintf(w, "Announce key: %x\n", cl.announceKey())
 	fmt.Fprintf(w, "Banned IPs: %d\n", len(cl.badPeerIPsLocked()))
 	cl.eachDhtServer(func(s *dht.Server) {
-		fmt.Fprintf(w, "%s DHT server:\n", s.Addr().Network())
+		fmt.Fprintf(w, "%s DHT server at %s:\n", s.Addr().Network(), s.Addr().String())
 		writeDhtServerStatus(w, s)
 	})
 	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.torrentsAsSlice()))

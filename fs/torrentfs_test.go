@@ -165,12 +165,14 @@ func TestDownloadOnDemand(t *testing.T) {
 	layout, err := newGreetingLayout()
 	require.NoError(t, err)
 	defer layout.Destroy()
-	seeder, err := torrent.NewClient((&torrent.Config{
+	cfg := torrent.Config{
 		DataDir:         layout.Completed,
 		DisableTrackers: true,
 		NoDHT:           true,
 		Seed:            true,
-	}).SetListenAddr("localhost:0"))
+		ListenHost:      torrent.LoopbackListenHost,
+	}
+	seeder, err := torrent.NewClient(&cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
 	testutil.ExportStatusWriter(seeder, "s")

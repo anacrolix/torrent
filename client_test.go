@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -32,13 +31,7 @@ import (
 
 func TestingConfig() *Config {
 	return &Config{
-		ListenHost: func(network string) string {
-			if strings.Contains(network, "4") {
-				return "127.0.0.1"
-			} else {
-				return "::1"
-			}
-		},
+		ListenHost:              LoopbackListenHost,
 		NoDHT:                   true,
 		DataDir:                 tempDir(),
 		DisableTrackers:         true,

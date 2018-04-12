@@ -161,6 +161,9 @@ func (cfg *Config) setDefaults() {
 	if cfg.DhtStartingNodes == nil {
 		cfg.DhtStartingNodes = dht.GlobalBootstrapAddrs
 	}
+	if cfg.ListenHost == nil {
+		cfg.ListenHost = func(string) string { return "" }
+	}
 }
 
 type EncryptionPolicy struct {

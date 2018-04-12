@@ -46,6 +46,12 @@ func TestClientDefault(t *testing.T) {
 	cl.Close()
 }
 
+func TestClientNilConfig(t *testing.T) {
+	cl, err := NewClient(nil)
+	require.NoError(t, err)
+	cl.Close()
+}
+
 func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
 	cfg := TestingConfig()
 	pc, err := storage.NewBoltPieceCompletion(cfg.DataDir)

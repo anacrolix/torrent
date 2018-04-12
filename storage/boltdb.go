@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/anacrolix/missinggo/assert"
+	"github.com/anacrolix/missinggo/expect"
 	"github.com/boltdb/bolt"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -30,7 +30,7 @@ func NewBoltDB(filePath string) ClientImpl {
 	db, err := bolt.Open(filepath.Join(filePath, "bolt.db"), 0600, &bolt.Options{
 		Timeout: time.Second,
 	})
-	assert.Nil(err)
+	expect.Nil(err)
 	db.NoSync = true
 	return &boltDBClient{db}
 }

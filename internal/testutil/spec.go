@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"github.com/anacrolix/missinggo/assert"
+	"github.com/anacrolix/missinggo/expect"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
@@ -48,7 +48,7 @@ func (t *Torrent) Info(pieceLength int64) metainfo.Info {
 	err := info.GeneratePieces(func(fi metainfo.FileInfo) (io.ReadCloser, error) {
 		return ioutil.NopCloser(strings.NewReader(t.GetFile(strings.Join(fi.Path, "/")).Data)), nil
 	})
-	assert.Nil(err)
+	expect.Nil(err)
 	return info
 }
 
@@ -56,6 +56,6 @@ func (t *Torrent) Metainfo(pieceLength int64) *metainfo.MetaInfo {
 	mi := metainfo.MetaInfo{}
 	var err error
 	mi.InfoBytes, err = bencode.Marshal(t.Info(pieceLength))
-	assert.Nil(err)
+	expect.Nil(err)
 	return &mi
 }

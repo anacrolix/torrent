@@ -229,6 +229,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	if err != nil {
 		return
 	}
+	// Check for panics.
 	cl.LocalPort()
 
 	for _, s := range cl.conns {

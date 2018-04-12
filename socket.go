@@ -61,26 +61,31 @@ func setPort(addr string, port int) string {
 	return net.JoinHostPort(host, strconv.FormatInt(int64(port), 10))
 }
 
-func listenAll(networks []string, addr string) ([]socket, error) {
+func listenAll(networks []string, getHost func(string) string, port int) ([]socket, error) {
 	if len(networks) == 0 {
 		return nil, nil
 	}
+	var nahs []networkAndHost
+	for _, n := range networks {
+		nahs = append(nahs, networkAndHost{n, getHost(n)})
+	}
 	for {
-		ss, retry, err := listenAllRetry(networks, addr)
+		ss, retry, err := listenAllRetry(nahs, port)
 		if !retry {
 			return ss, err
 		}
 	}
 }
 
-func listenAllRetry(networks []string, addr string) (ss []socket, retry bool, err error) {
-	_, port, err := missinggo.ParseHostPort(addr)
-	if err != nil {
-		err = fmt.Errorf("error parsing addr: %s", err)
-		return
-	}
-	ss = make([]socket, 1, len(networks))
-	ss[0], err = listen(networks[0], addr)
+type networkAndHost struct {
+	Network string
+	Host    string
+}
+
+func listenAllRetry(nahs []networkAndHost, port int) (ss []socket, retry bool, err error) {
+	ss = make([]socket, 1, len(nahs))
+	portStr := strconv.FormatInt(int64(port), 10)
+	ss[0], err = listen(nahs[0].Network, net.JoinHostPort(nahs[0].Host, portStr))
 	if err != nil {
 		return nil, false, fmt.Errorf("first listen: %s", err)
 	}
@@ -92,9 +97,9 @@ func listenAllRetry(networks []string, addr string) (ss []socket, retry bool, er
 			ss = nil
 		}
 	}()
-	restAddr := setPort(addr, missinggo.AddrPort(ss[0].Addr()))
-	for _, n := range networks[1:] {
-		s, err := listen(n, restAddr)
+	portStr = strconv.FormatInt(int64(missinggo.AddrPort(ss[0].Addr())), 10)
+	for _, nah := range nahs[1:] {
+		s, err := listen(nah.Network, net.JoinHostPort(nah.Host, portStr))
 		if err != nil {
 			return ss,
 				missinggo.IsAddrInUse(err) && port == 0,

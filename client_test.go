@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -31,7 +32,13 @@ import (
 
 func TestingConfig() *Config {
 	return &Config{
-		ListenAddr:              "localhost:0",
+		ListenHost: func(network string) string {
+			if strings.Contains(network, "4") {
+				return "127.0.0.1"
+			} else {
+				return "::1"
+			}
+		},
 		NoDHT:                   true,
 		DataDir:                 tempDir(),
 		DisableTrackers:         true,
@@ -540,7 +547,7 @@ func BenchmarkAddLargeTorrent(b *testing.B) {
 	cfg := TestingConfig()
 	cfg.DisableTCP = true
 	cfg.DisableUTP = true
-	cfg.ListenAddr = "redonk"
+	cfg.ListenHost = func(string) string { return "redonk" }
 	cl, err := NewClient(cfg)
 	require.NoError(b, err)
 	defer cl.Close()
@@ -756,7 +763,7 @@ func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
 
 func TestAddMetainfoWithNodes(t *testing.T) {
 	cfg := TestingConfig()
-	cfg.ListenAddr = ":0"
+	cfg.ListenHost = func(string) string { return "" }
 	cfg.NoDHT = false
 	cfg.DhtStartingNodes = func() ([]dht.Addr, error) { return nil, nil }
 	// For now, we want to just jam the nodes into the table, without
@@ -1065,8 +1072,7 @@ func TestClientAddressInUse(t *testing.T) {
 	if s != nil {
 		defer s.Close()
 	}
-	cfg := TestingConfig()
-	cfg.ListenAddr = ":50007"
+	cfg := TestingConfig().SetListenAddr(":50007")
 	cl, err := NewClient(cfg)
 	require.Error(t, err)
 	require.Nil(t, cl)

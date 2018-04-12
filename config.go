@@ -9,6 +9,8 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/dht"
+	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/expect"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/storage"
 )
@@ -33,7 +35,8 @@ type Config struct {
 	// The address to listen for new uTP and TCP bittorrent protocol
 	// connections. DHT shares a UDP socket with uTP unless configured
 	// otherwise.
-	ListenAddr              string `long:"listen-addr" value-name:"HOST:PORT"`
+	ListenHost              func(network string) string
+	ListenPort              int
 	NoDefaultPortForwarding bool
 	// Don't announce to trackers. This only leaves DHT to discover peers.
 	DisableTrackers bool `long:"disable-trackers"`
@@ -110,6 +113,14 @@ type Config struct {
 
 	PublicIp4 net.IP
 	PublicIp6 net.IP
+}
+
+func (cfg *Config) SetListenAddr(addr string) *Config {
+	host, port, err := missinggo.ParseHostPort(addr)
+	expect.Nil(err)
+	cfg.ListenHost = func(string) string { return host }
+	cfg.ListenPort = port
+	return cfg
 }
 
 func (cfg *Config) setDefaults() {

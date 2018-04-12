@@ -165,13 +165,12 @@ func TestDownloadOnDemand(t *testing.T) {
 	layout, err := newGreetingLayout()
 	require.NoError(t, err)
 	defer layout.Destroy()
-	seeder, err := torrent.NewClient(&torrent.Config{
+	seeder, err := torrent.NewClient((&torrent.Config{
 		DataDir:         layout.Completed,
 		DisableTrackers: true,
 		NoDHT:           true,
-		ListenAddr:      "localhost:0",
 		Seed:            true,
-	})
+	}).SetListenAddr("localhost:0"))
 	require.NoError(t, err)
 	defer seeder.Close()
 	testutil.ExportStatusWriter(seeder, "s")
@@ -184,16 +183,15 @@ func TestDownloadOnDemand(t *testing.T) {
 		<-seederTorrent.GotInfo()
 		seederTorrent.VerifyData()
 	}()
-	leecher, err := torrent.NewClient(&torrent.Config{
+	leecher, err := torrent.NewClient((&torrent.Config{
 		DisableTrackers: true,
 		NoDHT:           true,
-		ListenAddr:      "localhost:0",
 		DisableTCP:      true,
 		DefaultStorage:  storage.NewMMap(filepath.Join(layout.BaseDir, "download")),
 		// This can be used to check if clients can connect to other clients
 		// with the same ID.
 		// PeerID: seeder.PeerID(),
-	})
+	}).SetListenAddr("localhost:0"))
 	require.NoError(t, err)
 	testutil.ExportStatusWriter(leecher, "l")
 	defer leecher.Close()

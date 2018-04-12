@@ -225,7 +225,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		}
 	}
 
-	cl.conns, err = listenAll(cl.enabledPeerNetworks(), cl.config.ListenAddr)
+	cl.conns, err = listenAll(cl.enabledPeerNetworks(), cl.config.ListenHost, cl.config.ListenPort)
 	if err != nil {
 		return
 	}

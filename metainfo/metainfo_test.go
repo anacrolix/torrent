@@ -128,3 +128,12 @@ func TestMetainfoWithStringURLList(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, mi.UrlList, 1)
 }
+
+// https://github.com/anacrolix/torrent/issues/247
+//
+// The decoder buffer wasn't cleared before starting the next dict item after
+// a syntax error on a field with the ignore_unmarshal_type_error tag.
+func TestStringCreationDate(t *testing.T) {
+	var mi MetaInfo
+	assert.NoError(t, bencode.Unmarshal([]byte("d13:creation date23:29.03.2018 22:18:14 UTC4:infodee"), &mi))
+}

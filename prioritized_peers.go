@@ -34,8 +34,14 @@ func (me *prioritizedPeers) Add(p Peer) bool {
 	return me.om.ReplaceOrInsert(prioritizedPeersItem{me.getPrio(p), p}) != nil
 }
 
-func (me *prioritizedPeers) DeleteMin() {
-	me.om.DeleteMin()
+func (me *prioritizedPeers) DeleteMin() (ret prioritizedPeersItem, ok bool) {
+	i := me.om.DeleteMin()
+	if i == nil {
+		return
+	}
+	ret = i.(prioritizedPeersItem)
+	ok = true
+	return
 }
 
 func (me *prioritizedPeers) PopMax() Peer {

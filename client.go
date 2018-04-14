@@ -394,7 +394,7 @@ func (cl *Client) acceptConnections(l net.Listener) {
 			// routine just fucked off.
 			return
 		}
-		log.Fmsg("accepted connection from %s", conn.RemoteAddr()).AddValue(debugLogValue).Log(cl.logger)
+		log.Fmsg("accepted %s connection from %s", conn.RemoteAddr().Network(), conn.RemoteAddr()).AddValue(debugLogValue).Log(cl.logger)
 		go torrent.Add(fmt.Sprintf("accepted conn remote IP len=%d", len(missinggo.AddrIP(conn.RemoteAddr()))), 1)
 		go torrent.Add(fmt.Sprintf("accepted conn network=%s", conn.RemoteAddr().Network()), 1)
 		go torrent.Add(fmt.Sprintf("accepted on %s listener", l.Addr().Network()), 1)

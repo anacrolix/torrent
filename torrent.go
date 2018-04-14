@@ -258,8 +258,10 @@ func (t *Torrent) addPeer(p Peer) {
 	}
 	t.openNewConns()
 	for t.peers.Len() > cl.config.TorrentPeersHighWater {
-		t.peers.DeleteMin()
-		torrent.Add("peers discarded", 1)
+		_, ok := t.peers.DeleteMin()
+		if ok {
+			torrent.Add("excess reserve peers discarded", 1)
+		}
 	}
 }
 

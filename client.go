@@ -943,7 +943,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		cl:       cl,
 		infoHash: ih,
 		peers: prioritizedPeers{
-			om: btree.New(2),
+			om: btree.New(32),
 			getPrio: func(p Peer) peerPriority {
 				return bep40PriorityIgnoreError(cl.publicAddr(p.IP), p.addr())
 			},

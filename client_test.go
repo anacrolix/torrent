@@ -444,7 +444,9 @@ func TestSeedAfterDownloading(t *testing.T) {
 	require.NoError(t, err)
 	defer seeder.Close()
 	testutil.ExportStatusWriter(seeder, "s")
-	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	seederTorrent, ok, err := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	require.NoError(t, err)
+	assert.True(t, ok)
 	seederTorrent.VerifyData()
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
@@ -461,16 +463,20 @@ func TestSeedAfterDownloading(t *testing.T) {
 	require.NoError(t, err)
 	defer leecherLeecher.Close()
 	testutil.ExportStatusWriter(leecherLeecher, "ll")
-	leecherGreeting, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
+	leecherGreeting, ok, err := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
 		return
 	}())
-	llg, _, _ := leecherLeecher.AddTorrentSpec(func() (ret *TorrentSpec) {
+	require.NoError(t, err)
+	assert.True(t, ok)
+	llg, ok, err := leecherLeecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 3
 		return
 	}())
+	require.NoError(t, err)
+	assert.True(t, ok)
 	// Simultaneously DownloadAll in Leecher, and read the contents
 	// consecutively in LeecherLeecher. This non-deterministically triggered a
 	// case where the leecher wouldn't unchoke the LeecherLeecher.
@@ -484,8 +490,19 @@ func TestSeedAfterDownloading(t *testing.T) {
 		require.NoError(t, err)
 		assert.EqualValues(t, testutil.GreetingFileContents, b)
 	}()
-	leecherGreeting.AddClientPeer(seeder)
-	leecherGreeting.AddClientPeer(leecherLeecher)
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		for {
+			go leecherGreeting.AddClientPeer(seeder)
+			go leecherGreeting.AddClientPeer(leecherLeecher)
+			select {
+			case <-done:
+				return
+			case <-time.After(time.Second):
+			}
+		}
+	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

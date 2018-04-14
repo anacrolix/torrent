@@ -3,6 +3,7 @@ package torrent
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/crc32"
 
@@ -53,30 +54,38 @@ func ipv6Mask(a, b net.IP) net.IPMask {
 	panic(fmt.Sprintf("%s %s", a, b))
 }
 
-func bep40PriorityBytes(a, b ipPort) []byte {
+func bep40PriorityBytes(a, b ipPort) ([]byte, error) {
 	if a.IP.Equal(b.IP) {
 		var ret [4]byte
 		binary.BigEndian.PutUint16(ret[0:2], a.Port)
 		binary.BigEndian.PutUint16(ret[2:4], b.Port)
-		return ret[:]
+		return ret[:], nil
 	}
 	if a4, b4 := a.IP.To4(), b.IP.To4(); a4 != nil && b4 != nil {
 		m := ipv4Mask(a.IP, b.IP)
-		return append(a4.Mask(m), b4.Mask(m)...)
+		return append(a4.Mask(m), b4.Mask(m)...), nil
 	}
 	if a6, b6 := a.IP.To16(), b.IP.To16(); a6 != nil && b6 != nil {
 		m := ipv6Mask(a.IP, b.IP)
-		return append(a6.Mask(m), b6.Mask(m)...)
+		return append(a6.Mask(m), b6.Mask(m)...), nil
 	}
-	panic(fmt.Sprintf("%s %s", a.IP, b.IP))
+	return nil, errors.New("incomparable IPs")
 }
 
-func bep40Priority(a, b ipPort) peerPriority {
-	bs := bep40PriorityBytes(a, b)
+func bep40Priority(a, b ipPort) (peerPriority, error) {
+	bs, err := bep40PriorityBytes(a, b)
+	if err != nil {
+		return 0, nil
+	}
 	i := len(bs) / 2
 	_a, _b := bs[:i], bs[i:]
 	if bytes.Compare(_a, _b) > 0 {
 		bs = append(_b, _a...)
 	}
-	return crc32.Checksum(bs, table)
+	return crc32.Checksum(bs, table), nil
+}
+
+func bep40PriorityIgnoreError(a, b ipPort) peerPriority {
+	prio, _ := bep40Priority(a, b)
+	return prio
 }

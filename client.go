@@ -502,6 +502,9 @@ func peerNetworkEnabled(network string, cfg Config) bool {
 	if cfg.DisableTCP && c("tcp") {
 		return false
 	}
+	if cfg.DisableIPv6 && c("6") {
+		return false
+	}
 	return true
 }
 

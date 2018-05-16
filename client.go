@@ -203,12 +203,14 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	if storageImpl == nil {
 		// We'd use mmap but HFS+ doesn't support sparse files.
 		storageImpl = storage.NewFile(cfg.DataDir)
-		cl.onClose = append(cl.onClose, func() {
-			if err := storageImpl.Close(); err != nil {
-				log.Printf("error closing default storage: %s", err)
-			}
-		})
 	}
+
+	cl.onClose = append(cl.onClose, func() {
+		if err := storageImpl.Close(); err != nil {
+			log.Printf("error closing default storage: %s", err)
+		}
+	})
+
 	cl.defaultStorage = storage.NewClient(storageImpl)
 	if cfg.IPBlocklist != nil {
 		cl.ipBlockList = cfg.IPBlocklist

@@ -149,6 +149,9 @@ func (t *Torrent) deleteReader(r *reader) {
 	t.readersChanged()
 }
 
+// Raise the priorities of pieces in the range [begin, end) to at least Normal
+// priority. Piece indexes are not the same as bytes. Requires that the info
+// has been obtained, see Torrent.Info and Torrent.GotInfo.
 func (t *Torrent) DownloadPieces(begin, end int) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()

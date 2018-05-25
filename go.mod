@@ -11,8 +11,10 @@ require (
 	github.com/anacrolix/mmsg v0.0.0-20180515031531-a4a3ba1fc8bb
 	github.com/anacrolix/sync v0.0.0-20171108081538-eee974e4f8c1
 	github.com/anacrolix/tagflag v0.0.0-20180109131632-2146c8d41bf0
+	github.com/anacrolix/utp v0.0.0-20180219060659-9e0e1d1d0572
 	github.com/boltdb/bolt v1.3.1
 	github.com/bradfitz/iter v0.0.0-20140124041915-454541ec3da2
+	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/dustin/go-humanize v0.0.0-20180421182945-02af3965c54e
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/glycerine/go-unsnap-stream v0.0.0-20180323001048-9f0cb55181dd

@@ -130,6 +130,7 @@ var flags = struct {
 	DownloadRate    tagflag.Bytes  `help:"max bytes per second down from peers"`
 	Debug           bool
 	PackedBlocklist string
+	Stats           *bool
 	tagflag.StartPos
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }{
@@ -143,9 +144,17 @@ func stdoutAndStderrAreSameFile() bool {
 	return os.SameFile(fi1, fi2)
 }
 
+func statsEnabled() bool {
+	if flags.Stats == nil {
+		return flags.Debug
+	}
+	return *flags.Stats
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	tagflag.Parse(&flags)
+	defer envpprof.Stop()
 	clientConfig := torrent.Config{
 		Debug: flags.Debug,
 		Seed:  flags.Seed,
@@ -193,10 +202,18 @@ func main() {
 		log.Fatal("y u no complete torrents?!")
 	}
 	if flags.Seed {
+		outputStats(client)
 		select {}
+	}
+	outputStats(client)
+}
+
+func outputStats(cl *torrent.Client) {
+	if !statsEnabled() {
+		return
 	}
 	expvar.Do(func(kv expvar.KeyValue) {
 		fmt.Printf("%s: %s\n", kv.Key, kv.Value)
 	})
-	envpprof.Stop()
+	cl.WriteStatus(os.Stdout)
 }

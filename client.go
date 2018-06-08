@@ -224,7 +224,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		}
 	}
 
-	cl.conns, err = listenAll(cl.enabledPeerNetworks(), cl.config.ListenHost, cl.config.ListenPort)
+	cl.conns, err = listenAll(cl.enabledPeerNetworks(), cl.config.ListenHost, cl.config.ListenPort, cl.config.ProxyURL)
 	if err != nil {
 		return
 	}
@@ -457,10 +457,10 @@ func (cl *Client) dopplegangerAddr(addr string) bool {
 
 func (cl *Client) dialTCP(ctx context.Context, addr string) (c net.Conn, err error) {
 	d := net.Dialer{
-	// Can't bind to the listen address, even though we intend to create an
-	// endpoint pair that is distinct. Oh well.
+		// Can't bind to the listen address, even though we intend to create an
+		// endpoint pair that is distinct. Oh well.
 
-	// LocalAddr: cl.tcpListener.Addr(),
+		// LocalAddr: cl.tcpListener.Addr(),
 	}
 	c, err = d.DialContext(ctx, "tcp"+ipNetworkSuffix(!cl.config.DisableIPv4 && !cl.config.DisableIPv4Peers, !cl.config.DisableIPv6), addr)
 	countDialResult(err)

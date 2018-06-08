@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -79,6 +80,10 @@ type Config struct {
 
 	EncryptionPolicy
 
+	// Sets usage of Socks5 Proxy. Authentication should be included in the url if needed.
+	// Example of setting: "socks5://demo:demo@192.168.99.100:1080"
+	ProxyURL string
+
 	IPBlocklist      iplist.Ranger
 	DisableIPv6      bool `long:"disable-ipv6"`
 	DisableIPv4      bool
@@ -126,6 +131,9 @@ func (cfg *Config) SetListenAddr(addr string) *Config {
 func (cfg *Config) setDefaults() {
 	if cfg.HTTP == nil {
 		cfg.HTTP = DefaultHTTPClient
+		if cfg.ProxyURL != "" {
+			cfg.setProxyURL()
+		}
 	}
 	if cfg.HTTPUserAgent == "" {
 		cfg.HTTPUserAgent = DefaultHTTPUserAgent
@@ -163,6 +171,19 @@ func (cfg *Config) setDefaults() {
 	}
 	if cfg.ListenHost == nil {
 		cfg.ListenHost = func(string) string { return "" }
+	}
+}
+
+func (cfg *Config) setProxyURL() {
+	fixedURL, err := url.Parse(cfg.ProxyURL)
+	if err != nil {
+		return
+	}
+
+	cfg.HTTP.Transport = &http.Transport{
+		Proxy:               http.ProxyURL(fixedURL),
+		TLSHandshakeTimeout: 15 * time.Second,
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
 	}
 }
 

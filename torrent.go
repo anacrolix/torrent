@@ -1474,8 +1474,18 @@ func (t *Torrent) numTotalPeers() int {
 // Reconcile bytes transferred before connection was associated with a
 // torrent.
 func (t *Torrent) reconcileHandshakeStats(c *connection) {
-	t.stats.wroteBytes(c.stats.BytesWritten)
-	t.stats.readBytes(c.stats.BytesRead)
+	if c.stats != (ConnStats{
+		// Handshakes should only increment these fields:
+		BytesWritten: c.stats.BytesWritten,
+		BytesRead:    c.stats.BytesRead,
+	}) {
+		panic("bad stats")
+	}
+	c.postHandshakeStats(func(cs *ConnStats) {
+		cs.BytesRead += c.stats.BytesRead
+		cs.BytesWritten += c.stats.BytesWritten
+	})
+	c.reconciledHandshakeStats = true
 }
 
 // Returns true if the connection is added.
@@ -1519,7 +1529,7 @@ func (t *Torrent) addConnection(c *connection, outgoing bool) bool {
 	if len(t.conns) >= t.maxEstablishedConns {
 		panic(len(t.conns))
 	}
-	c.setTorrent(t)
+	t.conns[c] = struct{}{}
 	return true
 }
 
@@ -1575,10 +1585,12 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 	}
 	if correct {
 		if len(touchers) != 0 {
-			t.stats.PiecesDirtiedGood++
+			// Don't increment stats above connection-level for every involved
+			// connection.
+			t.allStats((*ConnStats).incrementPiecesDirtiedGood)
 		}
 		for _, c := range touchers {
-			c.stats.PiecesDirtiedGood++
+			c.stats.incrementPiecesDirtiedGood()
 		}
 		err := p.Storage().MarkComplete()
 		if err != nil {
@@ -1586,10 +1598,12 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 		}
 	} else {
 		if len(touchers) != 0 {
-			t.stats.PiecesDirtiedBad++
+			// Don't increment stats above connection-level for every involved
+			// connection.
+			t.allStats((*ConnStats).incrementPiecesDirtiedBad)
 			for _, c := range touchers {
 				// Y u do dis peer?!
-				c.stats.PiecesDirtiedBad++
+				c.stats.incrementPiecesDirtiedBad()
 			}
 			slices.Sort(touchers, connLessTrusted)
 			if t.cl.config.Debug {
@@ -1745,4 +1759,11 @@ func (t *Torrent) AddClientPeer(cl *Client) {
 		}
 		return
 	}())
+}
+
+// All stats that include this Torrent. Useful when we want to increment
+// ConnStats but not for every connection.
+func (t *Torrent) allStats(f func(*ConnStats)) {
+	f(&t.stats.ConnStats)
+	f(&t.cl.stats)
 }

@@ -50,6 +50,9 @@ type connection struct {
 	cryptoMethod    mse.CryptoMethod
 	Discovery       peerSource
 	closed          missinggo.Event
+	// Set true after we've added our ConnStats generated during handshake to
+	// other ConnStat instances as determined when the *Torrent became known.
+	reconciledHandshakeStats bool
 
 	stats ConnStats
 
@@ -839,27 +842,37 @@ func (c *connection) requestPendingMetadata() {
 
 func (cn *connection) wroteMsg(msg *pp.Message) {
 	messageTypesSent.Add(msg.Type.String(), 1)
-	cn.stats.wroteMsg(msg)
-	cn.t.stats.wroteMsg(msg)
+	cn.allStats(func(cs *ConnStats) { cs.wroteMsg(msg) })
 }
 
 func (cn *connection) readMsg(msg *pp.Message) {
-	cn.stats.readMsg(msg)
-	cn.t.stats.readMsg(msg)
+	cn.allStats(func(cs *ConnStats) { cs.readMsg(msg) })
+}
+
+// After handshake, we know what Torrent and Client stats to include for a
+// connection.
+func (cn *connection) postHandshakeStats(f func(*ConnStats)) {
+	t := cn.t
+	f(&t.stats.ConnStats)
+	f(&t.cl.stats)
+}
+
+// All ConnStats that include this connection. Some objects are not known
+// until the handshake is complete, after which it's expected to reconcile the
+// differences.
+func (cn *connection) allStats(f func(*ConnStats)) {
+	f(&cn.stats)
+	if cn.reconciledHandshakeStats {
+		cn.postHandshakeStats(f)
+	}
 }
 
 func (cn *connection) wroteBytes(n int64) {
-	cn.stats.wroteBytes(n)
-	if cn.t != nil {
-		cn.t.stats.wroteBytes(n)
-	}
+	cn.allStats(add(n, func(cs *ConnStats) *int64 { return &cs.BytesWritten }))
 }
 
 func (cn *connection) readBytes(n int64) {
-	cn.stats.readBytes(n)
-	if cn.t != nil {
-		cn.t.stats.readBytes(n)
-	}
+	cn.allStats(add(n, func(cs *ConnStats) *int64 { return &cs.BytesRead }))
 }
 
 // Returns whether the connection could be useful to us. We're seeding and
@@ -1185,18 +1198,15 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	// Do we actually want this chunk?
 	if !t.wantPiece(req) {
 		unwantedChunksReceived.Add(1)
-		c.stats.ChunksReadUnwanted++
-		c.t.stats.ChunksReadUnwanted++
+		c.allStats(add(1, func(cs *ConnStats) *int64 { return &cs.ChunksReadUnwanted }))
 		return
 	}
 
 	index := int(req.Index)
 	piece := &t.pieces[index]
 
-	c.stats.ChunksReadUseful++
-	c.t.stats.ChunksReadUseful++
-	c.stats.BytesReadUsefulData += int64(len(msg.Piece))
-	c.t.stats.BytesReadUsefulData += int64(len(msg.Piece))
+	c.allStats(add(1, func(cs *ConnStats) *int64 { return &cs.ChunksReadUseful }))
+	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *int64 { return &cs.BytesReadUsefulData }))
 	c.lastUsefulChunkReceived = time.Now()
 	// if t.fastestConn != c {
 	// log.Printf("setting fastest connection %p", c)
@@ -1415,5 +1425,5 @@ func (c *connection) setTorrent(t *Torrent) {
 		panic("connection already associated with a torrent")
 	}
 	c.t = t
-	t.conns[c] = struct{}{}
+	t.reconcileHandshakeStats(c)
 }

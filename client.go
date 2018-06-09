@@ -22,6 +22,7 @@ import (
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/sync"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	"github.com/google/btree"
 	"golang.org/x/time/rate"
@@ -62,6 +63,8 @@ type Client struct {
 	dopplegangerAddrs map[string]struct{}
 	badPeerIPs        map[string]struct{}
 	torrents          map[metainfo.Hash]*Torrent
+	// An aggregate of stats over all connections.
+	stats ConnStats
 }
 
 func (cl *Client) BadPeerIPs() []string {
@@ -123,6 +126,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		fmt.Fprintf(w, "%s DHT server at %s:\n", s.Addr().Network(), s.Addr().String())
 		writeDhtServerStatus(w, s)
 	})
+	spew.Fdump(w, cl.stats)
 	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.torrentsAsSlice()))
 	fmt.Fprintln(w)
 	for _, t := range slices.Sort(cl.torrentsAsSlice(), func(l, r *Torrent) bool {
@@ -764,7 +768,7 @@ func (cl *Client) runReceivedConn(c *connection) {
 }
 
 func (cl *Client) runHandshookConn(c *connection, t *Torrent, outgoing bool) {
-	t.reconcileHandshakeStats(c)
+	c.setTorrent(t)
 	if c.PeerID == cl.peerID {
 		if outgoing {
 			connsToSelf.Add(1)
@@ -899,8 +903,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connect
 			return fmt.Errorf("data has bad offset in payload: %d", begin)
 		}
 		t.saveMetadataPiece(piece, payload[begin:])
-		c.stats.ChunksReadUseful++
-		c.t.stats.ChunksReadUseful++
+		c.allStats(add(1, func(cs *ConnStats) *int64 { return &cs.ChunksReadUseful }))
 		c.lastUsefulChunkReceived = time.Now()
 		return t.maybeCompleteMetadata()
 	case pp.RequestMetadataExtensionMsgType:

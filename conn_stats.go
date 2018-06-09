@@ -52,12 +52,19 @@ func (cs *ConnStats) readMsg(msg *pp.Message) {
 	}
 }
 
-func (cs *ConnStats) wroteBytes(n int64) {
-	cs.BytesWritten += n
+func (cs *ConnStats) incrementPiecesDirtiedGood() {
+	cs.PiecesDirtiedGood++
 }
 
-func (cs *ConnStats) readBytes(n int64) {
-	cs.BytesRead += n
+func (cs *ConnStats) incrementPiecesDirtiedBad() {
+	cs.PiecesDirtiedBad++
+}
+
+func add(n int64, f func(*ConnStats) *int64) func(*ConnStats) {
+	return func(cs *ConnStats) {
+		p := f(cs)
+		*p += n
+	}
 }
 
 type connStatsReadWriter struct {

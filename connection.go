@@ -189,7 +189,7 @@ func (cn *connection) utp() bool {
 	return strings.Contains(cn.remoteAddr().Network(), "utp")
 }
 
-// Inspired by https://trac.transmissionbt.com/wiki/PeerStatusText
+// Inspired by https://github.com/transmission/transmission/wiki/Peer-Status-Text.
 func (cn *connection) statusFlags() (ret string) {
 	c := func(b byte) {
 		ret += string([]byte{b})

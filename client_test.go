@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -860,24 +861,20 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 
 	leecherGreeting.AddClientPeer(seeder)
 	completes := make(map[int]bool, 3)
-values:
-	for {
-		// started := time.Now()
+	expected := func() map[int]bool {
+		if ps.Cancel {
+			return map[int]bool{0: false, 1: false, 2: false}
+		} else {
+			return map[int]bool{0: true, 1: true, 2: true}
+		}
+	}()
+	for !reflect.DeepEqual(completes, expected) {
 		select {
 		case _v := <-psc.Values:
-			// log.Print(time.Since(started))
 			v := _v.(PieceStateChange)
 			completes[v.Index] = v.Complete
-		case <-time.After(100 * time.Millisecond):
-			break values
 		}
 	}
-	if ps.Cancel {
-		assert.EqualValues(t, map[int]bool{0: false, 1: false, 2: false}, completes)
-	} else {
-		assert.EqualValues(t, map[int]bool{0: true, 1: true, 2: true}, completes)
-	}
-
 }
 
 func TestTorrentDownloadAll(t *testing.T) {

@@ -68,16 +68,20 @@ type connStatsReadWriter struct {
 
 func (me connStatsReadWriter) Write(b []byte) (n int, err error) {
 	n, err = me.rw.Write(b)
-	me.l.Lock()
-	me.c.wroteBytes(int64(n))
-	me.l.Unlock()
+	go func() {
+		me.l.Lock()
+		me.c.wroteBytes(int64(n))
+		me.l.Unlock()
+	}()
 	return
 }
 
 func (me connStatsReadWriter) Read(b []byte) (n int, err error) {
 	n, err = me.rw.Read(b)
-	me.l.Lock()
-	me.c.readBytes(int64(n))
-	me.l.Unlock()
+	go func() {
+		me.l.Lock()
+		me.c.readBytes(int64(n))
+		me.l.Unlock()
+	}()
 	return
 }

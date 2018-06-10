@@ -378,15 +378,17 @@ func (cl *Client) rejectAccepted(conn net.Conn) bool {
 }
 
 func (cl *Client) acceptConnections(l net.Listener) {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
 	for {
-		cl.waitAccept()
-		cl.mu.Unlock()
 		conn, err := l.Accept()
 		conn = pproffd.WrapNetConn(conn)
-		cl.mu.Lock()
-		if cl.closed.IsSet() {
+		cl.mu.RLock()
+		closed := cl.closed.IsSet()
+		reject := false
+		if conn != nil {
+			reject = cl.rejectAccepted(conn)
+		}
+		cl.mu.RUnlock()
+		if closed {
 			if conn != nil {
 				conn.Close()
 			}
@@ -398,16 +400,18 @@ func (cl *Client) acceptConnections(l net.Listener) {
 			// routine just fucked off.
 			return
 		}
-		log.Fmsg("accepted %s connection from %s", conn.RemoteAddr().Network(), conn.RemoteAddr()).AddValue(debugLogValue).Log(cl.logger)
-		go torrent.Add(fmt.Sprintf("accepted conn remote IP len=%d", len(missinggo.AddrIP(conn.RemoteAddr()))), 1)
-		go torrent.Add(fmt.Sprintf("accepted conn network=%s", conn.RemoteAddr().Network()), 1)
-		go torrent.Add(fmt.Sprintf("accepted on %s listener", l.Addr().Network()), 1)
-		if cl.rejectAccepted(conn) {
-			go torrent.Add("rejected accepted connections", 1)
-			conn.Close()
-		} else {
-			go cl.incomingConnection(conn)
-		}
+		go func() {
+			if reject {
+				torrent.Add("rejected accepted connections", 1)
+				conn.Close()
+			} else {
+				go cl.incomingConnection(conn)
+			}
+			log.Fmsg("accepted %s connection from %s", conn.RemoteAddr().Network(), conn.RemoteAddr()).AddValue(debugLogValue).Log(cl.logger)
+			torrent.Add(fmt.Sprintf("accepted conn remote IP len=%d", len(missinggo.AddrIP(conn.RemoteAddr()))), 1)
+			torrent.Add(fmt.Sprintf("accepted conn network=%s", conn.RemoteAddr().Network()), 1)
+			torrent.Add(fmt.Sprintf("accepted on %s listener", l.Addr().Network()), 1)
+		}()
 	}
 }
 

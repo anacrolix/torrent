@@ -7,6 +7,7 @@ import (
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	"golang.org/x/time/rate"
 )
 
 type chunkSpec struct {
@@ -165,3 +166,5 @@ func min(as ...int64) int64 {
 	}
 	return ret
 }
+
+var unlimited = rate.NewLimiter(rate.Inf, 0)

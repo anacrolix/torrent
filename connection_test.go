@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"io"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -85,7 +86,9 @@ func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
 }
 
 func BenchmarkConnectionMainReadLoop(b *testing.B) {
-	cl := &Client{}
+	cl := &Client{
+		downloadLimit: unlimited,
+	}
 	ts := &torrentStorage{}
 	t := &Torrent{
 		cl:                cl,
@@ -99,11 +102,9 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	}))
 	t.setChunkSize(defaultChunkSize)
 	t.pendingPieces.Set(0, PiecePriorityNormal.BitmapPriority())
-	r, w := io.Pipe()
-	cn := &connection{
-		t: t,
-		r: r,
-	}
+	r, w := net.Pipe()
+	cn := cl.newConnection(r)
+	cn.setTorrent(t)
 	mrlErr := make(chan error)
 	cl.mu.Lock()
 	go func() {

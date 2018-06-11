@@ -192,12 +192,12 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		cl.Close()
 	}()
 	if cfg.UploadRateLimiter == nil {
-		cl.uploadLimit = rate.NewLimiter(rate.Inf, 0)
+		cl.uploadLimit = unlimited
 	} else {
 		cl.uploadLimit = cfg.UploadRateLimiter
 	}
 	if cfg.DownloadRateLimiter == nil {
-		cl.downloadLimit = rate.NewLimiter(rate.Inf, 0)
+		cl.downloadLimit = unlimited
 	} else {
 		cl.downloadLimit = cfg.DownloadRateLimiter
 	}

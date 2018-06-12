@@ -135,7 +135,7 @@ type Torrent struct {
 	// different pieces.
 	connPieceInclinationPool sync.Pool
 	// Torrent-level statistics.
-	stats TorrentStats
+	stats ConnStats
 
 	// Count of each request across active connections.
 	pendingRequests map[request]int
@@ -851,7 +851,7 @@ func (t *Torrent) worstBadConn() *connection {
 	heap.Init(&wcs)
 	for wcs.Len() != 0 {
 		c := heap.Pop(&wcs).(*connection)
-		if c.stats.ChunksReadUnwanted >= 6 && c.stats.ChunksReadUnwanted > c.stats.ChunksReadUseful {
+		if c.stats.ChunksReadUnwanted.Int64() >= 6 && c.stats.ChunksReadUnwanted.Int64() > c.stats.ChunksReadUseful.Int64() {
 			return c
 		}
 		// If the connection is in the worst half of the established
@@ -1343,9 +1343,9 @@ func (t *Torrent) announceRequest() tracker.AnnounceRequest {
 		// The following are vaguely described in BEP 3.
 
 		Left:     t.bytesLeftAnnounce(),
-		Uploaded: t.stats.BytesWrittenData,
+		Uploaded: t.stats.BytesWrittenData.Int64(),
 		// There's no mention of wasted or unwanted download in the BEP.
-		Downloaded: t.stats.BytesReadUsefulData,
+		Downloaded: t.stats.BytesReadUsefulData.Int64(),
 	}
 }
 
@@ -1440,18 +1440,19 @@ func (t *Torrent) Stats() TorrentStats {
 	return t.statsLocked()
 }
 
-func (t *Torrent) statsLocked() TorrentStats {
-	t.stats.ActivePeers = len(t.conns)
-	t.stats.HalfOpenPeers = len(t.halfOpen)
-	t.stats.PendingPeers = t.peers.Len()
-	t.stats.TotalPeers = t.numTotalPeers()
-	t.stats.ConnectedSeeders = 0
+func (t *Torrent) statsLocked() (ret TorrentStats) {
+	ret.ActivePeers = len(t.conns)
+	ret.HalfOpenPeers = len(t.halfOpen)
+	ret.PendingPeers = t.peers.Len()
+	ret.TotalPeers = t.numTotalPeers()
+	ret.ConnectedSeeders = 0
 	for c := range t.conns {
 		if all, ok := c.peerHasAllPieces(); all && ok {
-			t.stats.ConnectedSeeders++
+			ret.ConnectedSeeders++
 		}
 	}
-	return t.stats
+	ret.ConnStats = t.stats.Copy()
+	return
 }
 
 // The total number of peers in the torrent.
@@ -1485,8 +1486,8 @@ func (t *Torrent) reconcileHandshakeStats(c *connection) {
 		panic("bad stats")
 	}
 	c.postHandshakeStats(func(cs *ConnStats) {
-		cs.BytesRead += c.stats.BytesRead
-		cs.BytesWritten += c.stats.BytesWritten
+		cs.BytesRead.Add(c.stats.BytesRead.Int64())
+		cs.BytesWritten.Add(c.stats.BytesWritten.Int64())
 	})
 	c.reconciledHandshakeStats = true
 }
@@ -1764,6 +1765,6 @@ func (t *Torrent) AddClientPeer(cl *Client) {
 // All stats that include this Torrent. Useful when we want to increment
 // ConnStats but not for every connection.
 func (t *Torrent) allStats(f func(*ConnStats)) {
-	f(&t.stats.ConnStats)
+	f(&t.stats)
 	f(&t.cl.stats)
 }

@@ -908,7 +908,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connect
 			return fmt.Errorf("data has bad offset in payload: %d", begin)
 		}
 		t.saveMetadataPiece(piece, payload[begin:])
-		c.allStats(add(1, func(cs *ConnStats) *int64 { return &cs.ChunksReadUseful }))
+		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
 		c.lastUsefulChunkReceived = time.Now()
 		return t.maybeCompleteMetadata()
 	case pp.RequestMetadataExtensionMsgType:
@@ -1159,7 +1159,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool) (c *connection) {
 		writeBuffer:     new(bytes.Buffer),
 	}
 	c.writerCond.L = &cl.mu
-	c.setRW(connStatsReadWriter{nc, &cl.mu, c})
+	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
 		l: cl.downloadLimit,
 		r: c.r,

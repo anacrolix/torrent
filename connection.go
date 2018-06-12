@@ -223,7 +223,7 @@ func (cn *connection) statusFlags() (ret string) {
 // }
 
 func (cn *connection) downloadRate() float64 {
-	return float64(cn.stats.BytesReadUsefulData) / cn.cumInterest().Seconds()
+	return float64(cn.stats.BytesReadUsefulData.Int64()) / cn.cumInterest().Seconds()
 }
 
 func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
@@ -324,7 +324,7 @@ func (cn *connection) requestedMetadataPiece(index int) bool {
 
 // The actual value to use as the maximum outbound requests.
 func (cn *connection) nominalMaxRequests() (ret int) {
-	return int(clamp(1, int64(cn.PeerMaxRequests), max(64, cn.stats.ChunksReadUseful-(cn.stats.ChunksRead-cn.stats.ChunksReadUseful))))
+	return int(clamp(1, int64(cn.PeerMaxRequests), max(64, cn.stats.ChunksReadUseful.Int64()-(cn.stats.ChunksRead.Int64()-cn.stats.ChunksReadUseful.Int64()))))
 }
 
 func (cn *connection) onPeerSentCancel(r request) {
@@ -854,7 +854,7 @@ func (cn *connection) readMsg(msg *pp.Message) {
 // connection.
 func (cn *connection) postHandshakeStats(f func(*ConnStats)) {
 	t := cn.t
-	f(&t.stats.ConnStats)
+	f(&t.stats)
 	f(&t.cl.stats)
 }
 
@@ -869,11 +869,11 @@ func (cn *connection) allStats(f func(*ConnStats)) {
 }
 
 func (cn *connection) wroteBytes(n int64) {
-	cn.allStats(add(n, func(cs *ConnStats) *int64 { return &cs.BytesWritten }))
+	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesWritten }))
 }
 
 func (cn *connection) readBytes(n int64) {
-	cn.allStats(add(n, func(cs *ConnStats) *int64 { return &cs.BytesRead }))
+	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
 }
 
 // Returns whether the connection could be useful to us. We're seeding and
@@ -1199,15 +1199,15 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	// Do we actually want this chunk?
 	if !t.wantPiece(req) {
 		unwantedChunksReceived.Add(1)
-		c.allStats(add(1, func(cs *ConnStats) *int64 { return &cs.ChunksReadUnwanted }))
+		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUnwanted }))
 		return
 	}
 
 	index := int(req.Index)
 	piece := &t.pieces[index]
 
-	c.allStats(add(1, func(cs *ConnStats) *int64 { return &cs.ChunksReadUseful }))
-	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *int64 { return &cs.BytesReadUsefulData }))
+	c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
+	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
 	c.lastUsefulChunkReceived = time.Now()
 	// if t.fastestConn != c {
 	// log.Printf("setting fastest connection %p", c)
@@ -1283,7 +1283,7 @@ func (c *connection) uploadAllowed() bool {
 		return false
 	}
 	// Don't upload more than 100 KiB more than we download.
-	if c.stats.BytesWrittenData >= c.stats.BytesReadData+100<<10 {
+	if c.stats.BytesWrittenData.Int64() >= c.stats.BytesReadData.Int64()+100<<10 {
 		return false
 	}
 	return true
@@ -1353,7 +1353,7 @@ func (cn *connection) Drop() {
 }
 
 func (cn *connection) netGoodPiecesDirtied() int64 {
-	return cn.stats.PiecesDirtiedGood - cn.stats.PiecesDirtiedBad
+	return cn.stats.PiecesDirtiedGood.Int64() - cn.stats.PiecesDirtiedBad.Int64()
 }
 
 func (c *connection) peerHasWantedPieces() bool {

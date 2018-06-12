@@ -249,6 +249,9 @@ func (t *Torrent) unclosedConnsAsSlice() (ret []*connection) {
 func (t *Torrent) addPeer(p Peer) {
 	cl := t.cl
 	peersAddedBySource.Add(string(p.Source), 1)
+	if t.closed.IsSet() {
+		return
+	}
 	if cl.badPeerIPPort(p.IP, p.Port) {
 		torrent.Add("peers not added because of bad addr", 1)
 		return

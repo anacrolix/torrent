@@ -420,7 +420,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 	if tc, ok := nc.(*net.TCPConn); ok {
 		tc.SetLinger(0)
 	}
-	c := cl.newConnection(nc)
+	c := cl.newConnection(nc, false)
 	c.Discovery = peerSourceIncoming
 	cl.runReceivedConn(c)
 }
@@ -572,7 +572,7 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
 // Performs initiator handshakes and returns a connection. Returns nil
 // *connection if no connection for valid reasons.
 func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torrent, encryptHeader bool) (c *connection, err error) {
-	c = cl.newConnection(nc)
+	c = cl.newConnection(nc, true)
 	c.headerEncrypted = encryptHeader
 	ctx, cancel := context.WithTimeout(ctx, cl.config.HandshakesTimeout)
 	defer cancel()
@@ -656,7 +656,7 @@ func (cl *Client) outgoingConnection(t *Torrent, addr string, ps peerSource) {
 	}
 	defer c.Close()
 	c.Discovery = ps
-	cl.runHandshookConn(c, t, true)
+	cl.runHandshookConn(c, t)
 }
 
 // The port number for incoming peer connections. 0 if the client isn't
@@ -768,13 +768,13 @@ func (cl *Client) runReceivedConn(c *connection) {
 	}
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	cl.runHandshookConn(c, t, false)
+	cl.runHandshookConn(c, t)
 }
 
-func (cl *Client) runHandshookConn(c *connection, t *Torrent, outgoing bool) {
+func (cl *Client) runHandshookConn(c *connection, t *Torrent) {
 	c.setTorrent(t)
 	if c.PeerID == cl.peerID {
-		if outgoing {
+		if c.outgoing {
 			connsToSelf.Add(1)
 			addr := c.conn.RemoteAddr().String()
 			cl.dopplegangerAddrs[addr] = struct{}{}
@@ -792,7 +792,8 @@ func (cl *Client) runHandshookConn(c *connection, t *Torrent, outgoing bool) {
 	if connIsIpv6(c.conn) {
 		torrent.Add("completed handshake over ipv6", 1)
 	}
-	if !t.addConnection(c, outgoing) {
+	if err := t.addConnection(c); err != nil {
+		log.Fmsg("error adding connection: %s", err).AddValues(c, debugLogValue).Log(t.logger)
 		return
 	}
 	defer t.dropConnection(c)
@@ -1148,9 +1149,10 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	cl.badPeerIPs[ip.String()] = struct{}{}
 }
 
-func (cl *Client) newConnection(nc net.Conn) (c *connection) {
+func (cl *Client) newConnection(nc net.Conn, outgoing bool) (c *connection) {
 	c = &connection{
 		conn:            nc,
+		outgoing:        outgoing,
 		Choked:          true,
 		PeerChoked:      true,
 		PeerMaxRequests: 250,

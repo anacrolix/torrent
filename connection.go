@@ -40,7 +40,8 @@ const (
 type connection struct {
 	t *Torrent
 	// The actual Conn, used for closing, and setting socket options.
-	conn net.Conn
+	conn     net.Conn
+	outgoing bool
 	// The Reader and Writer for this Conn, with hooks installed for stats,
 	// limiting, deadlines etc.
 	w io.Writer

@@ -1489,37 +1489,34 @@ func (t *Torrent) reconcileHandshakeStats(c *connection) {
 }
 
 // Returns true if the connection is added.
-func (t *Torrent) addConnection(c *connection, outgoing bool) bool {
+func (t *Torrent) addConnection(c *connection) error {
 	if t.closed.IsSet() {
-		return false
+		return errors.New("torrent closed")
 	}
 	if !t.wantConns() {
-		return false
+		return errors.New("don't want conns")
 	}
 	for c0 := range t.conns {
-		if c.PeerID == c0.PeerID {
-			// Already connected to a client with that ID.
-			duplicateClientConns.Add(1)
-			lower := string(t.cl.peerID[:]) < string(c.PeerID[:])
-			// Retain the connection from initiated from lower peer ID to
-			// higher.
-			if outgoing == lower {
-				// Close the other one.
-				c0.Close()
-				// TODO: Is it safe to delete from the map while we're
-				// iterating over it?
-				t.deleteConnection(c0)
-			} else {
-				// Abandon this one.
-				return false
-			}
+		if c.PeerID != c0.PeerID {
+			continue
 		}
+		// Already connected to a client with that ID.
+		preferOutbound := string(t.cl.peerID[:]) < string(c.PeerID[:])
+		// Retain the connection from initiated from lower peer ID to higher.
+		if c0.outgoing == preferOutbound {
+			return errors.New("existing connection preferred")
+		}
+		if c.outgoing != preferOutbound {
+			return errors.New("prefer older connection")
+		}
+		// Close the other one.
+		c0.Close()
+		// TODO: Is it safe to delete from the map while we're iterating
+		// over it?
+		t.deleteConnection(c0)
 	}
 	if len(t.conns) >= t.maxEstablishedConns {
 		c := t.worstBadConn()
-		if c == nil {
-			return false
-		}
 		if t.cl.config.Debug && missinggo.CryHeard() {
 			log.Printf("%s: dropping connection to make room for new one:\n    %s", t, c)
 		}
@@ -1530,7 +1527,7 @@ func (t *Torrent) addConnection(c *connection, outgoing bool) bool {
 		panic(len(t.conns))
 	}
 	t.conns[c] = struct{}{}
-	return true
+	return nil
 }
 
 func (t *Torrent) wantConns() bool {

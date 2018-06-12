@@ -1522,7 +1522,7 @@ func (t *Torrent) addConnection(c *connection) error {
 	if len(t.conns) >= t.maxEstablishedConns {
 		c := t.worstBadConn()
 		if t.cl.config.Debug && missinggo.CryHeard() {
-			log.Printf("%s: dropping connection to make room for new one:\n    %s", t, c)
+			log.Printf("%s: dropping connection to make room for new one:\n    %v", t, c)
 		}
 		c.Close()
 		t.deleteConnection(c)

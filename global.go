@@ -40,9 +40,7 @@ var (
 	peerExtensions                    = expvar.NewMap("peerExtensions")
 	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
 	// Count of connections to peer with same client ID.
-	connsToSelf = expvar.NewInt("connsToSelf")
-	// Number of completed connections to a client we're already connected with.
-	duplicateClientConns       = expvar.NewInt("duplicateClientConns")
+	connsToSelf                = expvar.NewInt("connsToSelf")
 	receivedKeepalives         = expvar.NewInt("receivedKeepalives")
 	supportedExtensionMessages = expvar.NewMap("supportedExtensionMessages")
 	postedKeepalives           = expvar.NewInt("postedKeepalives")

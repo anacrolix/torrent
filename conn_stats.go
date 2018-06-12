@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"fmt"
 	"io"
 	"reflect"
 	"sync/atomic"
@@ -48,12 +49,18 @@ type Count struct {
 	n int64
 }
 
+var _ fmt.Stringer = (*Count)(nil)
+
 func (me *Count) Add(n int64) {
 	atomic.AddInt64(&me.n, n)
 }
 
 func (me *Count) Int64() int64 {
 	return atomic.LoadInt64(&me.n)
+}
+
+func (me *Count) String() string {
+	return fmt.Sprintf("%v", me.Int64())
 }
 
 func (cs *ConnStats) wroteMsg(msg *pp.Message) {

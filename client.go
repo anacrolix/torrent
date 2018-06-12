@@ -758,9 +758,7 @@ func (cl *Client) runReceivedConn(c *connection) {
 	}
 	t, err := cl.receiveHandshakes(c)
 	if err != nil {
-		if cl.config.Debug {
-			log.Printf("error receiving handshakes: %s", err)
-		}
+		log.Fmsg("error receiving handshakes: %s", err).AddValue(debugLogValue).Add("network", c.remoteAddr().Network()).Log(cl.logger)
 		return
 	}
 	if t == nil {

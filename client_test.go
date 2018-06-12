@@ -807,7 +807,6 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 }
 
 type testDownloadCancelParams struct {
-	ExportClientStatus        bool
 	SetLeecherStorageCapacity bool
 	LeecherStorageCapacity    int64
 	Cancel                    bool
@@ -822,9 +821,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	seeder, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
-	if ps.ExportClientStatus {
-		testutil.ExportStatusWriter(seeder, "s")
-	}
+	testutil.ExportStatusWriter(seeder, "s")
 	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	seederTorrent.VerifyData()
 	leecherDataDir, err := ioutil.TempDir("", "")
@@ -839,9 +836,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	cfg.DataDir = leecherDataDir
 	leecher, _ := NewClient(cfg)
 	defer leecher.Close()
-	if ps.ExportClientStatus {
-		testutil.ExportStatusWriter(leecher, "l")
-	}
+	testutil.ExportStatusWriter(leecher, "l")
 	leecherGreeting, new, err := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
@@ -858,8 +853,18 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 		leecherGreeting.cancelPiecesLocked(0, leecherGreeting.NumPieces())
 	}
 	leecherGreeting.cl.mu.Unlock()
-
-	leecherGreeting.AddClientPeer(seeder)
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		for {
+			leecherGreeting.AddClientPeer(seeder)
+			select {
+			case <-done:
+				return
+			case <-time.After(time.Second):
+			}
+		}
+	}()
 	completes := make(map[int]bool, 3)
 	expected := func() map[int]bool {
 		if ps.Cancel {

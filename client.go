@@ -617,7 +617,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 		return
 	}
 	if c != nil {
-		go torrent.Add("initiated conn with preferred header obfuscation", 1)
+		torrent.Add("initiated conn with preferred header obfuscation", 1)
 		return
 	}
 	if cl.config.ForceEncryption {
@@ -631,7 +631,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 	// Try again with encryption if we didn't earlier, or without if we did.
 	c, err = cl.establishOutgoingConnEx(t, addr, ctx, !obfuscatedHeaderFirst)
 	if c != nil {
-		go torrent.Add("initiated conn with fallback header obfuscation", 1)
+		torrent.Add("initiated conn with fallback header obfuscation", 1)
 	}
 	return
 }

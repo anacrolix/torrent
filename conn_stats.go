@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"io"
-	"log"
 	"reflect"
 	"sync/atomic"
 

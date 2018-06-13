@@ -498,17 +498,8 @@ func TestSeedAfterDownloading(t *testing.T) {
 	}()
 	done := make(chan struct{})
 	defer close(done)
-	go func() {
-		for {
-			go leecherGreeting.AddClientPeer(seeder)
-			go leecherGreeting.AddClientPeer(leecherLeecher)
-			select {
-			case <-done:
-				return
-			case <-time.After(time.Second):
-			}
-		}
-	}()
+	go leecherGreeting.AddClientPeer(seeder)
+	go leecherGreeting.AddClientPeer(leecherLeecher)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -860,16 +851,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	leecherGreeting.cl.mu.Unlock()
 	done := make(chan struct{})
 	defer close(done)
-	go func() {
-		for {
-			leecherGreeting.AddClientPeer(seeder)
-			select {
-			case <-done:
-				return
-			case <-time.After(time.Second):
-			}
-		}
-	}()
+	go leecherGreeting.AddClientPeer(seeder)
 	completes := make(map[int]bool, 3)
 	expected := func() map[int]bool {
 		if ps.Cancel {

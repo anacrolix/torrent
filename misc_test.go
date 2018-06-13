@@ -35,7 +35,7 @@ func TestIterBitmapsDistinct(t *testing.T) {
 
 func TestSpewConnStats(t *testing.T) {
 	s := spew.Sdump(ConnStats{})
-	t.Logf("\n%s\n", s)
+	t.Logf("\n%s", s)
 	lines := strings.Count(s, "\n")
 	assert.EqualValues(t, 2+reflect.ValueOf(ConnStats{}).NumField(), lines)
 }

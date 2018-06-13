@@ -1500,25 +1500,6 @@ func (t *Torrent) addConnection(c *connection) error {
 	if !t.wantConns() {
 		return errors.New("don't want conns")
 	}
-	for c0 := range t.conns {
-		if c.PeerID != c0.PeerID {
-			continue
-		}
-		// Already connected to a client with that ID.
-		preferOutbound := string(t.cl.peerID[:]) < string(c.PeerID[:])
-		// Retain the connection from initiated from lower peer ID to higher.
-		if c0.outgoing == preferOutbound {
-			return errors.New("existing connection preferred")
-		}
-		if c.outgoing != preferOutbound {
-			return errors.New("prefer older connection")
-		}
-		// Close the other one.
-		c0.Close()
-		// TODO: Is it safe to delete from the map while we're iterating
-		// over it?
-		t.deleteConnection(c0)
-	}
 	if len(t.conns) >= t.maxEstablishedConns {
 		c := t.worstBadConn()
 		if t.cl.config.Debug && missinggo.CryHeard() {

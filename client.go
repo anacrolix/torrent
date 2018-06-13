@@ -1231,6 +1231,8 @@ func (cl *Client) publicAddr(peer net.IP) ipPort {
 }
 
 func (cl *Client) ListenAddrs() (ret []net.Addr) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
 	cl.eachListener(func(l socket) bool {
 		ret = append(ret, l.Addr())
 		return true

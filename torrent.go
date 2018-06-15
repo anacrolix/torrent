@@ -1222,6 +1222,7 @@ func (t *Torrent) deleteConnection(c *connection) (ret bool) {
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
+	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests()
 	if len(t.conns) == 0 {
 		t.assertNoPendingRequests()
@@ -1493,7 +1494,12 @@ func (t *Torrent) reconcileHandshakeStats(c *connection) {
 }
 
 // Returns true if the connection is added.
-func (t *Torrent) addConnection(c *connection) error {
+func (t *Torrent) addConnection(c *connection) (err error) {
+	defer func() {
+		if err == nil {
+			torrent.Add("added connections", 1)
+		}
+	}()
 	if t.closed.IsSet() {
 		return errors.New("torrent closed")
 	}

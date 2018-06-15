@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anacrolix/missinggo/perf"
+
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/dht/krpc"
 	"github.com/anacrolix/log"
@@ -541,9 +543,12 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) net.Conn {
 	}()
 	var res dialResult
 	// Wait for a successful connection.
-	for ; left > 0 && res.Conn == nil; left-- {
-		res = <-resCh
-	}
+	func() {
+		defer perf.ScopeTimer()()
+		for ; left > 0 && res.Conn == nil; left-- {
+			res = <-resCh
+		}
+	}()
 	// There are still incompleted dials.
 	go func() {
 		for ; left > 0; left-- {
@@ -709,6 +714,7 @@ func (cl *Client) forSkeys(f func([]byte) bool) {
 
 // Do encryption and bittorrent handshakes as receiver.
 func (cl *Client) receiveHandshakes(c *connection) (t *Torrent, err error) {
+	defer perf.ScopeTimerErr(&err)()
 	var rw io.ReadWriter
 	rw, c.headerEncrypted, c.cryptoMethod, err = handleEncryption(c.rw(), cl.forSkeys, cl.config.EncryptionPolicy)
 	c.setRW(rw)
@@ -756,18 +762,27 @@ func (cl *Client) runReceivedConn(c *connection) {
 	}
 	t, err := cl.receiveHandshakes(c)
 	if err != nil {
-		log.Fmsg("error receiving handshakes: %s", err).AddValue(debugLogValue).Add("network", c.remoteAddr().Network()).Log(cl.logger)
+		log.Fmsg(
+			"error receiving handshakes: %s", err,
+		).AddValue(
+			debugLogValue,
+		).Add(
+			"network", c.remoteAddr().Network(),
+		).Log(cl.logger)
+		torrent.Add("error receiving handshake", 1)
 		cl.mu.Lock()
 		cl.onBadAccept(c.remoteAddr())
 		cl.mu.Unlock()
 		return
 	}
 	if t == nil {
+		torrent.Add("received handshake for unloaded torrent", 1)
 		cl.mu.Lock()
 		cl.onBadAccept(c.remoteAddr())
 		cl.mu.Unlock()
 		return
 	}
+	torrent.Add("received handshake for loaded torrent", 1)
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	cl.runHandshookConn(c, t)

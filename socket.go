@@ -11,6 +11,7 @@ import (
 	"golang.org/x/net/proxy"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/perf"
 )
 
 type dialer interface {
@@ -169,7 +170,8 @@ type utpSocketSocket struct {
 	d       proxy.Dialer
 }
 
-func (me utpSocketSocket) dial(ctx context.Context, addr string) (net.Conn, error) {
+func (me utpSocketSocket) dial(ctx context.Context, addr string) (conn net.Conn, err error) {
+	defer perf.ScopeTimerErr(&err)()
 	if me.d != nil {
 		return me.d.Dial(me.network, addr)
 	}

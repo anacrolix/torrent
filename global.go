@@ -34,9 +34,6 @@ var (
 	pieceHashedCorrect    = expvar.NewInt("pieceHashedCorrect")
 	pieceHashedNotCorrect = expvar.NewInt("pieceHashedNotCorrect")
 
-	unsuccessfulDials = expvar.NewInt("dialSuccessful")
-	successfulDials   = expvar.NewInt("dialUnsuccessful")
-
 	peerExtensions                    = expvar.NewMap("peerExtensions")
 	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
 	// Count of connections to peer with same client ID.

@@ -443,9 +443,9 @@ type dialResult struct {
 
 func countDialResult(err error) {
 	if err == nil {
-		successfulDials.Add(1)
+		torrent.Add("successful dials", 1)
 	} else {
-		unsuccessfulDials.Add(1)
+		torrent.Add("unsuccessful dials", 1)
 	}
 }
 

@@ -471,22 +471,6 @@ func (cl *Client) dopplegangerAddr(addr string) bool {
 	return ok
 }
 
-func (cl *Client) dialTCP(ctx context.Context, addr string) (c net.Conn, err error) {
-	d := net.Dialer{
-		// Can't bind to the listen address, even though we intend to create an
-		// endpoint pair that is distinct. Oh well.
-
-		// LocalAddr: cl.tcpListener.Addr(),
-	}
-	c, err = d.DialContext(ctx, "tcp"+ipNetworkSuffix(!cl.config.DisableIPv4 && !cl.config.DisableIPv4Peers, !cl.config.DisableIPv6), addr)
-	countDialResult(err)
-	if err == nil {
-		c.(*net.TCPConn).SetLinger(0)
-	}
-	c = pproffd.WrapNetConn(c)
-	return
-}
-
 func ipNetworkSuffix(allowIpv4, allowIpv6 bool) string {
 	switch {
 	case allowIpv4 && allowIpv6:
@@ -535,6 +519,12 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) net.Conn {
 		left++
 		go func() {
 			c, err := f(ctx, addr)
+			// This is a bit optimistic, but it looks non-trivial to thread
+			// this through the proxy code. Set it now in case we close the
+			// connection forthwith.
+			if tc, ok := c.(*net.TCPConn); ok {
+				tc.SetLinger(0)
+			}
 			countDialResult(err)
 			resCh <- dialResult{c}
 		}()

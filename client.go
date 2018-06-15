@@ -65,7 +65,11 @@ type Client struct {
 	torrents          map[metainfo.Hash]*Torrent
 	// An aggregate of stats over all connections.
 	stats ConnStats
+
+	acceptLimiter map[ipStr]int
 }
+
+type ipStr string
 
 func (cl *Client) BadPeerIPs() []string {
 	cl.mu.RLock()
@@ -184,6 +188,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		dopplegangerAddrs: make(map[string]struct{}),
 		torrents:          make(map[metainfo.Hash]*Torrent),
 	}
+	go cl.acceptLimitClearer()
 	cl.initLogger()
 	defer func() {
 		if err == nil {
@@ -372,6 +377,9 @@ func (cl *Client) rejectAccepted(conn net.Conn) bool {
 		return true
 	}
 	if cl.config.DisableIPv6 && len(rip) == net.IPv6len && rip.To4() == nil {
+		return true
+	}
+	if cl.rateLimitAccept(rip) {
 		return true
 	}
 	return cl.badPeerIPPort(rip, missinggo.AddrPort(ra))
@@ -759,9 +767,15 @@ func (cl *Client) runReceivedConn(c *connection) {
 	t, err := cl.receiveHandshakes(c)
 	if err != nil {
 		log.Fmsg("error receiving handshakes: %s", err).AddValue(debugLogValue).Add("network", c.remoteAddr().Network()).Log(cl.logger)
+		cl.mu.Lock()
+		cl.onBadAccept(c.remoteAddr())
+		cl.mu.Unlock()
 		return
 	}
 	if t == nil {
+		cl.mu.Lock()
+		cl.onBadAccept(c.remoteAddr())
+		cl.mu.Unlock()
 		return
 	}
 	cl.mu.Lock()
@@ -1238,4 +1252,37 @@ func (cl *Client) ListenAddrs() (ret []net.Addr) {
 		return true
 	})
 	return
+}
+
+func (cl *Client) onBadAccept(addr net.Addr) {
+	ip := maskIpForAcceptLimiting(missinggo.AddrIP(addr))
+	if cl.acceptLimiter == nil {
+		cl.acceptLimiter = make(map[ipStr]int)
+	}
+	cl.acceptLimiter[ipStr(ip.String())]++
+}
+
+func maskIpForAcceptLimiting(ip net.IP) net.IP {
+	if ip4 := ip.To4(); ip4 != nil {
+		return ip4.Mask(net.CIDRMask(24, 32))
+	}
+	return ip
+}
+
+func (cl *Client) acceptLimitClearer() {
+	for {
+		select {
+		case <-cl.closed.LockedChan(&cl.mu):
+			return
+		case <-time.After(15 * time.Minute):
+			cl.mu.Lock()
+			cl.acceptLimiter = nil
+			cl.mu.Unlock()
+		}
+	}
+}
+
+func (cl *Client) rateLimitAccept(ip net.IP) bool {
+	// return true
+	return cl.acceptLimiter[ipStr(maskIpForAcceptLimiting(ip).String())] >= 10
 }

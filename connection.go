@@ -106,6 +106,32 @@ type connection struct {
 	writerCond  sync.Cond
 }
 
+// Returns true if the connection is over IPv6.
+func (cn *connection) ipv6() bool {
+	ip := missinggo.AddrIP(cn.remoteAddr())
+	if ip.To4() != nil {
+		return false
+	}
+	return len(ip) == net.IPv6len
+}
+
+// Returns true the dialer has the lower client peer ID. TODO: Find the
+// specification for this.
+func (cn *connection) isPreferredDirection() bool {
+	return bytes.Compare(cn.t.cl.peerID[:], cn.PeerID[:]) < 0 == cn.outgoing
+}
+
+// Returns whether the left connection should be preferred over the right one,
+// considering only their networking properties. If ok is false, we can't
+// decide.
+func (l *connection) hasPreferredNetworkOver(r *connection) (left, ok bool) {
+	var ml multiLess
+	ml.NextBool(l.isPreferredDirection(), r.isPreferredDirection())
+	ml.NextBool(!l.utp(), !r.utp())
+	ml.NextBool(l.ipv6(), r.ipv6())
+	return ml.FinalOk()
+}
+
 func (cn *connection) cumInterest() time.Duration {
 	ret := cn.priorInterest
 	if cn.Interested {

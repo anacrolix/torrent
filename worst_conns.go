@@ -3,13 +3,15 @@ package torrent
 import "container/heap"
 
 func worseConn(l, r *connection) bool {
-	if l.useful() != r.useful() {
-		return r.useful()
-	}
-	if !l.lastHelpful().Equal(r.lastHelpful()) {
-		return l.lastHelpful().Before(r.lastHelpful())
-	}
-	return l.completedHandshake.Before(r.completedHandshake)
+	var ml multiLess
+	ml.NextBool(!l.useful(), !r.useful())
+	ml.StrictNext(
+		l.lastHelpful().Equal(r.lastHelpful()),
+		l.lastHelpful().Before(r.lastHelpful()))
+	ml.StrictNext(
+		l.completedHandshake.Equal(r.completedHandshake),
+		l.completedHandshake.Before(r.completedHandshake))
+	return ml.Final()
 }
 
 type worseConnSlice struct {

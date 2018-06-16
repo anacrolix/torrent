@@ -110,6 +110,7 @@ type ClientConfig struct {
 	PublicIp6 net.IP
 
 	DisableAcceptRateLimiting bool
+	dropDuplicatePeerIds      bool
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {

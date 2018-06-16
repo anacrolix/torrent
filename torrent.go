@@ -1503,6 +1503,20 @@ func (t *Torrent) addConnection(c *connection) (err error) {
 	if t.closed.IsSet() {
 		return errors.New("torrent closed")
 	}
+	for c0 := range t.conns {
+		if c.PeerID != c0.PeerID {
+			continue
+		}
+		if !t.cl.config.dropDuplicatePeerIds {
+			continue
+		}
+		if left, ok := c.hasPreferredNetworkOver(c0); ok && left {
+			c0.Close()
+			t.deleteConnection(c0)
+		} else {
+			return errors.New("existing connection preferred")
+		}
+	}
 	if !t.wantConns() {
 		return errors.New("don't want conns")
 	}

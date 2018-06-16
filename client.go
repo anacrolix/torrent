@@ -1003,11 +1003,13 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 		return
 	}
 	new = true
+
 	t = cl.newTorrent(infoHash, specStorage)
 	cl.eachDhtServer(func(s *dht.Server) {
 		go t.dhtAnnouncer(s)
 	})
 	cl.torrents[infoHash] = t
+	cl.clearAcceptLimits()
 	t.updateWantPeersEvent()
 	// Tickle Client.waitAccept, new torrent may want conns.
 	cl.event.Broadcast()
@@ -1259,6 +1261,10 @@ func maskIpForAcceptLimiting(ip net.IP) net.IP {
 	return ip
 }
 
+func (cl *Client) clearAcceptLimits() {
+	cl.acceptLimiter = nil
+}
+
 func (cl *Client) acceptLimitClearer() {
 	for {
 		select {
@@ -1266,7 +1272,7 @@ func (cl *Client) acceptLimitClearer() {
 			return
 		case <-time.After(15 * time.Minute):
 			cl.mu.Lock()
-			cl.acceptLimiter = nil
+			cl.clearAcceptLimits()
 			cl.mu.Unlock()
 		}
 	}

@@ -108,6 +108,8 @@ type ClientConfig struct {
 
 	PublicIp4 net.IP
 	PublicIp6 net.IP
+
+	DisableAcceptRateLimiting bool
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {

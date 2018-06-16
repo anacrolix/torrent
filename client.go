@@ -1270,7 +1270,7 @@ func (cl *Client) acceptLimitClearer() {
 		select {
 		case <-cl.closed.LockedChan(&cl.mu):
 			return
-		case <-time.After(15 * time.Minute):
+		case <-time.After(5 * time.Minute):
 			cl.mu.Lock()
 			cl.clearAcceptLimits()
 			cl.mu.Unlock()
@@ -1279,6 +1279,8 @@ func (cl *Client) acceptLimitClearer() {
 }
 
 func (cl *Client) rateLimitAccept(ip net.IP) bool {
-	// return true
-	return cl.acceptLimiter[ipStr(maskIpForAcceptLimiting(ip).String())] >= 10
+	if cl.config.DisableAcceptRateLimiting {
+		return false
+	}
+	return cl.acceptLimiter[ipStr(maskIpForAcceptLimiting(ip).String())] >= 3
 }

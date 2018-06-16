@@ -1231,10 +1231,8 @@ func (t *Torrent) deleteConnection(c *connection) (ret bool) {
 }
 
 func (t *Torrent) assertNoPendingRequests() {
-	for _, num := range t.pendingRequests {
-		if num != 0 {
-			panic(num)
-		}
+	if len(t.pendingRequests) != 0 {
+		panic(t.pendingRequests)
 	}
 }
 

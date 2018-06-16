@@ -1369,7 +1369,15 @@ func (c *connection) deleteRequest(r request) bool {
 		return false
 	}
 	delete(c.requests, r)
-	c.t.pendingRequests[r]--
+	pr := c.t.pendingRequests
+	pr[r]--
+	n := pr[r]
+	if n == 0 {
+		delete(pr, r)
+	}
+	if n < 0 {
+		panic(n)
+	}
 	c.updateRequests()
 	return true
 }

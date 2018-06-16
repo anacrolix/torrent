@@ -21,7 +21,9 @@ import (
 // Have that would potentially alter it.
 func TestSendBitfieldThenHave(t *testing.T) {
 	r, w := io.Pipe()
-	var cl Client
+	cl := Client{
+		config: &ClientConfig{DownloadRateLimiter: unlimited},
+	}
 	cl.initLogger()
 	c := cl.newConnection(nil, false)
 	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
@@ -87,7 +89,9 @@ func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
 
 func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	cl := &Client{
-		downloadLimit: unlimited,
+		config: &ClientConfig{
+			DownloadRateLimiter: unlimited,
+		},
 	}
 	ts := &torrentStorage{}
 	t := &Torrent{

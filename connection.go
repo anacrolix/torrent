@@ -1308,7 +1308,7 @@ another:
 			return false
 		}
 		for r := range c.PeerRequests {
-			res := c.t.cl.uploadLimit.ReserveN(time.Now(), int(r.Length))
+			res := c.t.cl.config.UploadRateLimiter.ReserveN(time.Now(), int(r.Length))
 			if !res.OK() {
 				panic(fmt.Sprintf("upload rate limiter burst size < %d", r.Length))
 			}

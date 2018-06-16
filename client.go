@@ -27,7 +27,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	"github.com/google/btree"
-	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/iplist"
@@ -44,7 +43,7 @@ type Client struct {
 	event  sync.Cond
 	closed missinggo.Event
 
-	config Config
+	config *ClientConfig
 	logger *log.Logger
 
 	halfOpenLimit  int
@@ -56,8 +55,6 @@ type Client struct {
 	ipBlockList    iplist.Ranger
 	// Our BitTorrent protocol extension bytes, sent in our BT handshakes.
 	extensionBytes peerExtensionBytes
-	uploadLimit    *rate.Limiter
-	downloadLimit  *rate.Limiter
 
 	// Set of addresses that have our client ID. This intentionally will
 	// include ourselves if we end up trying to connect to our own address
@@ -173,12 +170,10 @@ func (cl *Client) announceKey() int32 {
 	return int32(binary.BigEndian.Uint32(cl.peerID[16:20]))
 }
 
-func NewClient(cfg *Config) (cl *Client, err error) {
+func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	if cfg == nil {
-		cfg = &Config{}
+		cfg = NewDefaultClientConfig()
 	}
-	cfg.setDefaults()
-
 	defer func() {
 		if err != nil {
 			cl = nil
@@ -186,7 +181,7 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 	}()
 	cl = &Client{
 		halfOpenLimit:     cfg.HalfOpenConnsPerTorrent,
-		config:            *cfg,
+		config:            cfg,
 		dopplegangerAddrs: make(map[string]struct{}),
 		torrents:          make(map[metainfo.Hash]*Torrent),
 	}
@@ -198,16 +193,6 @@ func NewClient(cfg *Config) (cl *Client, err error) {
 		}
 		cl.Close()
 	}()
-	if cfg.UploadRateLimiter == nil {
-		cl.uploadLimit = unlimited
-	} else {
-		cl.uploadLimit = cfg.UploadRateLimiter
-	}
-	if cfg.DownloadRateLimiter == nil {
-		cl.downloadLimit = unlimited
-	} else {
-		cl.downloadLimit = cfg.DownloadRateLimiter
-	}
 	cl.extensionBytes = defaultPeerExtensionBytes()
 	cl.event.L = &cl.mu
 	storageImpl := cfg.DefaultStorage
@@ -492,7 +477,7 @@ func dialUTP(ctx context.Context, addr string, sock utpSocket) (c net.Conn, err 
 
 var allPeerNetworks = []string{"tcp4", "tcp6", "udp4", "udp6"}
 
-func peerNetworkEnabled(network string, cfg Config) bool {
+func peerNetworkEnabled(network string, cfg *ClientConfig) bool {
 	c := func(s string) bool {
 		return strings.Contains(network, s)
 	}
@@ -1178,7 +1163,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool) (c *connection) {
 	c.writerCond.L = &cl.mu
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
-		l: cl.downloadLimit,
+		l: cl.config.DownloadRateLimiter,
 		r: c.r,
 	}
 	return

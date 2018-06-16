@@ -30,15 +30,14 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-func TestingConfig() *Config {
-	return &Config{
-		ListenHost:              LoopbackListenHost,
-		NoDHT:                   true,
-		DataDir:                 tempDir(),
-		DisableTrackers:         true,
-		NoDefaultPortForwarding: true,
-		// Debug:           true,
-	}
+func TestingConfig() *ClientConfig {
+	cfg := NewDefaultClientConfig()
+	cfg.ListenHost = LoopbackListenHost
+	cfg.NoDHT = true
+	cfg.DataDir = tempDir()
+	cfg.DisableTrackers = true
+	cfg.NoDefaultPortForwarding = true
+	return cfg
 }
 
 func TestClientDefault(t *testing.T) {
@@ -105,7 +104,9 @@ func TestPieceHashSize(t *testing.T) {
 func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	cl := &Client{}
+	cl := &Client{
+		config: &ClientConfig{},
+	}
 	cl.initLogger()
 	tor := cl.newTorrent(
 		mi.HashInfoBytes(),
@@ -138,8 +139,7 @@ func TestUnmarshalPEXMsg(t *testing.T) {
 }
 
 func TestReducedDialTimeout(t *testing.T) {
-	cfg := &Config{}
-	cfg.setDefaults()
+	cfg := NewDefaultClientConfig()
 	for _, _case := range []struct {
 		Max             time.Duration
 		HalfOpenLimit   int
@@ -357,7 +357,9 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	// Create seeder and a Torrent.
 	cfg := TestingConfig()
 	cfg.Seed = true
-	cfg.UploadRateLimiter = ps.SeederUploadRateLimiter
+	if ps.SeederUploadRateLimiter != nil {
+		cfg.UploadRateLimiter = ps.SeederUploadRateLimiter
+	}
 	// cfg.ListenAddr = "localhost:4000"
 	if ps.SeederStorage != nil {
 		cfg.DefaultStorage = ps.SeederStorage(greetingTempDir)
@@ -380,12 +382,15 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
+	cfg = TestingConfig()
 	if ps.LeecherStorage == nil {
 		cfg.DataDir = leecherDataDir
 	} else {
 		cfg.DefaultStorage = ps.LeecherStorage(leecherDataDir)
 	}
-	cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
+	if ps.LeecherDownloadRateLimiter != nil {
+		cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
+	}
 	cfg.Seed = false
 	leecher, err := NewClient(cfg)
 	require.NoError(t, err)
@@ -443,6 +448,7 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 func TestSeedAfterDownloading(t *testing.T) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
+
 	cfg := TestingConfig()
 	cfg.Seed = true
 	cfg.DataDir = greetingTempDir
@@ -454,6 +460,9 @@ func TestSeedAfterDownloading(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ok)
 	seederTorrent.VerifyData()
+
+	cfg = TestingConfig()
+	cfg.Seed = true
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.DataDir)
@@ -461,6 +470,8 @@ func TestSeedAfterDownloading(t *testing.T) {
 	require.NoError(t, err)
 	defer leecher.Close()
 	testutil.ExportStatusWriter(leecher, "l")
+
+	cfg = TestingConfig()
 	cfg.Seed = false
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
@@ -982,8 +993,11 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 	defer ss.Close()
 	var tts []*Torrent
 	ih := testutil.GreetingMetaInfo().HashInfoBytes()
+	cfg := TestingConfig()
+	cfg.DisableAcceptRateLimiting = true
+	cfg.dropDuplicatePeerIds = true
 	for i := range iter.N(3) {
-		cl, err := NewClient(TestingConfig())
+		cl, err := NewClient(cfg)
 		require.NoError(t, err)
 		defer cl.Close()
 		tt, _ := cl.AddTorrentInfoHash(ih)

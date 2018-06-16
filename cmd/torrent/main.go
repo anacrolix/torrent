@@ -155,10 +155,9 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	tagflag.Parse(&flags)
 	defer envpprof.Stop()
-	clientConfig := torrent.Config{
-		Debug: flags.Debug,
-		Seed:  flags.Seed,
-	}
+	clientConfig := torrent.NewDefaultClientConfig()
+	clientConfig.Debug = flags.Debug
+	clientConfig.Seed = flags.Seed
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
 		if err != nil {
@@ -180,7 +179,7 @@ func main() {
 		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(flags.DownloadRate), 1<<20)
 	}
 
-	client, err := torrent.NewClient(&clientConfig)
+	client, err := torrent.NewClient(clientConfig)
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)
 	}

@@ -86,13 +86,12 @@ func mainExitCode() int {
 	defer fuse.Unmount(args.MountDir)
 	// TODO: Think about the ramifications of exiting not due to a signal.
 	defer conn.Close()
-	cfg := torrent.Config{
-		DataDir:         args.DownloadDir,
-		DisableTrackers: args.DisableTrackers,
-		NoUpload:        true, // Ensure that downloads are responsive.
-	}
+	cfg := torrent.NewDefaultClientConfig()
+	cfg.DataDir = args.DownloadDir
+	cfg.DisableTrackers = args.DisableTrackers
+	cfg.NoUpload = true // Ensure that downloads are responsive.
 	cfg.SetListenAddr(args.ListenAddr.String())
-	client, err := torrent.NewClient(&cfg)
+	client, err := torrent.NewClient(cfg)
 	if err != nil {
 		log.Print(err)
 		return 1

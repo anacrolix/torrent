@@ -1436,8 +1436,8 @@ func (t *Torrent) addPeers(peers []Peer) {
 }
 
 func (t *Torrent) Stats() TorrentStats {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.mu.RLock()
+	defer t.cl.mu.RUnlock()
 	return t.statsLocked()
 }
 

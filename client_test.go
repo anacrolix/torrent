@@ -1,12 +1,10 @@
 package torrent
 
 import (
-	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -161,64 +159,6 @@ func TestReducedDialTimeout(t *testing.T) {
 		if reduced != expected {
 			t.Fatalf("expected %s, got %s", _case.ExpectedReduced, reduced)
 		}
-	}
-}
-
-func TestUTPRawConn(t *testing.T) {
-	l, err := NewUtpSocket("udp", "")
-	require.NoError(t, err)
-	defer l.Close()
-	go func() {
-		for {
-			_, err := l.Accept()
-			if err != nil {
-				break
-			}
-		}
-	}()
-	// Connect a UTP peer to see if the RawConn will still work.
-	s, err := NewUtpSocket("udp", "")
-	require.NoError(t, err)
-	defer s.Close()
-	utpPeer, err := s.DialContext(context.Background(), "", fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
-	require.NoError(t, err)
-	defer utpPeer.Close()
-	peer, err := net.ListenPacket("udp", ":0")
-	require.NoError(t, err)
-	defer peer.Close()
-
-	msgsReceived := 0
-	// How many messages to send. I've set this to double the channel buffer
-	// size in the raw packetConn.
-	const N = 200
-	readerStopped := make(chan struct{})
-	// The reader goroutine.
-	go func() {
-		defer close(readerStopped)
-		b := make([]byte, 500)
-		for i := 0; i < N; i++ {
-			n, _, err := l.ReadFrom(b)
-			require.NoError(t, err)
-			msgsReceived++
-			var d int
-			fmt.Sscan(string(b[:n]), &d)
-			assert.Equal(t, i, d)
-		}
-	}()
-	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
-	require.NoError(t, err)
-	for i := 0; i < N; i++ {
-		_, err := peer.WriteTo([]byte(fmt.Sprintf("%d", i)), udpAddr)
-		require.NoError(t, err)
-		time.Sleep(time.Millisecond)
-	}
-	select {
-	case <-readerStopped:
-	case <-time.After(time.Second):
-		t.Fatal("reader timed out")
-	}
-	if msgsReceived != N {
-		t.Fatalf("messages received: %d", msgsReceived)
 	}
 }
 

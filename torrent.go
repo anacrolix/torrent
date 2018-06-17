@@ -1284,7 +1284,10 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	if _url == "" {
 		return
 	}
-	u, _ := url.Parse(_url)
+	u, err := url.Parse(_url)
+	if err != nil {
+		log.Str("error parsing tracker url").AddValues("url", _url).Log(t.logger)
+	}
 	if u.Scheme == "udp" {
 		u.Scheme = "udp4"
 		t.startScrapingTracker(u.String())

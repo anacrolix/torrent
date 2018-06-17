@@ -35,6 +35,7 @@ func TestingConfig() *ClientConfig {
 	cfg.DataDir = tempDir()
 	cfg.DisableTrackers = true
 	cfg.NoDefaultPortForwarding = true
+	cfg.DisableAcceptRateLimiting = true
 	return cfg
 }
 

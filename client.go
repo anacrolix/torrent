@@ -117,8 +117,8 @@ func writeDhtServerStatus(w io.Writer, s *dht.Server) {
 // Writes out a human readable status of the client, such as for writing to a
 // HTTP status page.
 func (cl *Client) WriteStatus(_w io.Writer) {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
+	cl.mu.RLock()
+	defer cl.mu.RUnlock()
 	w := bufio.NewWriter(_w)
 	defer w.Flush()
 	fmt.Fprintf(w, "Listen port: %d\n", cl.LocalPort())

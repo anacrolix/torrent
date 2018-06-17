@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"log"
 	"net"
 	"testing"
 
@@ -19,8 +18,8 @@ func testListenerNetwork(
 	require.NoError(t, err)
 	defer l.Close()
 	assert.EqualValues(t, expectedNet, l.Addr().Network())
-	log.Print(missinggo.AddrIP(l.Addr()))
-	assert.Equal(t, validIp4, missinggo.AddrIP(l.Addr()).To4() != nil)
+	ip := missinggo.AddrIP(l.Addr())
+	assert.Equal(t, validIp4, ip.To4() != nil, ip)
 }
 
 func listenUtpListener(net, addr string) (l net.Listener, err error) {

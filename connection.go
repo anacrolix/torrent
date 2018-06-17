@@ -1204,7 +1204,7 @@ func (cn *connection) rw() io.ReadWriter {
 func (c *connection) receiveChunk(msg *pp.Message) {
 	t := c.t
 	cl := t.cl
-	chunksReceived.Add(1)
+	torrent.Add("chunks received", 1)
 
 	req := newRequestFromMessage(msg)
 
@@ -1212,7 +1212,7 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	if c.deleteRequest(req) {
 		c.updateRequests()
 	} else {
-		unexpectedChunksReceived.Add(1)
+		torrent.Add("chunks received unexpected", 1)
 	}
 
 	if c.PeerChoked {
@@ -1224,7 +1224,7 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 
 	// Do we actually want this chunk?
 	if !t.wantPiece(req) {
-		unwantedChunksReceived.Add(1)
+		torrent.Add("chunks received unwanted", 1)
 		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUnwanted }))
 		return
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
 	"github.com/bradfitz/iter"
 
@@ -62,8 +64,9 @@ func processReader(r io.Reader) error {
 }
 
 func main() {
+	defer envpprof.Stop()
 	tagflag.Parse(&flags)
-	err := processReader(os.Stdin)
+	err := processReader(bufio.NewReader(os.Stdin))
 	if err != nil {
 		log.Fatal(err)
 	}

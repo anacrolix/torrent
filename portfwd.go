@@ -5,11 +5,11 @@ import (
 	"time"
 
 	flog "github.com/anacrolix/log"
-	"github.com/syncthing/syncthing/lib/nat"
-	"github.com/syncthing/syncthing/lib/upnp"
+
+	"github.com/elgatito/upnp"
 )
 
-func addPortMapping(d nat.Device, proto nat.Protocol, internalPort int, debug bool) {
+func addPortMapping(d upnp.Device, proto upnp.Protocol, internalPort int, debug bool) {
 	externalPort, err := d.AddPortMapping(proto, internalPort, internalPort, "anacrolix/torrent", 0)
 	if err != nil {
 		log.Printf("error adding %s port mapping: %s", proto, err)
@@ -33,8 +33,8 @@ func (cl *Client) forwardPort() {
 	port := cl.incomingPeerPort()
 	cl.mu.Unlock()
 	for _, d := range ds {
-		go addPortMapping(d, nat.TCP, port, cl.config.Debug)
-		go addPortMapping(d, nat.UDP, port, cl.config.Debug)
+		go addPortMapping(d, upnp.TCP, port, cl.config.Debug)
+		go addPortMapping(d, upnp.UDP, port, cl.config.Debug)
 	}
 	cl.mu.Lock()
 }

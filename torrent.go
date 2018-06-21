@@ -711,14 +711,10 @@ func (t *Torrent) offsetRequest(off int64) (req request, ok bool) {
 }
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
-	tr := perf.NewTimer()
-
+	defer perf.ScopeTimerErr(&err)()
 	n, err := t.pieces[piece].Storage().WriteAt(data, begin)
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite
-	}
-	if err == nil {
-		tr.Mark("write chunk")
 	}
 	return
 }

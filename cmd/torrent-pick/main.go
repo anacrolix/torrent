@@ -79,10 +79,12 @@ func dstFileName(picked string) string {
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	var rootGroup struct {
-		Client    torrent.Config `group:"Client Options"`
-		TestPeers []string       `long:"test-peer" description:"address of peer to inject to every torrent"`
-		Pick      string         `long:"pick" description:"filename to pick"`
+	var rootGroup = struct {
+		Client    *torrent.ClientConfig `group:"Client Options"`
+		TestPeers []string              `long:"test-peer" description:"address of peer to inject to every torrent"`
+		Pick      string                `long:"pick" description:"filename to pick"`
+	}{
+		Client: torrent.NewDefaultClientConfig(),
 	}
 	// Don't pass flags.PrintError because it's inconsistent with printing.
 	// https://github.com/jessevdk/go-flags/issues/132
@@ -115,7 +117,7 @@ func main() {
 
 	rootGroup.Client.DataDir = tmpdir
 
-	client, err := torrent.NewClient(&rootGroup.Client)
+	client, err := torrent.NewClient(rootGroup.Client)
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)
 	}

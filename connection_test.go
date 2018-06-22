@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"io"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -20,9 +21,11 @@ import (
 // Have that would potentially alter it.
 func TestSendBitfieldThenHave(t *testing.T) {
 	r, w := io.Pipe()
-	var cl Client
+	cl := Client{
+		config: &ClientConfig{DownloadRateLimiter: unlimited},
+	}
 	cl.initLogger()
-	c := cl.newConnection(nil)
+	c := cl.newConnection(nil, false)
 	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
 	c.t.setInfo(&metainfo.Info{
 		Pieces: make([]byte, metainfo.HashSize*3),
@@ -85,7 +88,11 @@ func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
 }
 
 func BenchmarkConnectionMainReadLoop(b *testing.B) {
-	cl := &Client{}
+	cl := &Client{
+		config: &ClientConfig{
+			DownloadRateLimiter: unlimited,
+		},
+	}
 	ts := &torrentStorage{}
 	t := &Torrent{
 		cl:                cl,
@@ -99,11 +106,9 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	}))
 	t.setChunkSize(defaultChunkSize)
 	t.pendingPieces.Set(0, PiecePriorityNormal.BitmapPriority())
-	r, w := io.Pipe()
-	cn := &connection{
-		t: t,
-		r: r,
-	}
+	r, w := net.Pipe()
+	cn := cl.newConnection(r, true)
+	cn.setTorrent(t)
 	mrlErr := make(chan error)
 	cl.mu.Lock()
 	go func() {
@@ -132,7 +137,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	}
 	w.Close()
 	require.NoError(b, <-mrlErr)
-	require.EqualValues(b, b.N, cn.stats.ChunksReadUseful)
+	require.EqualValues(b, b.N, cn.stats.ChunksReadUseful.Int64())
 }
 
 func TestConnectionReceiveBadChunkIndex(t *testing.T) {

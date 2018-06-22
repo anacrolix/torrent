@@ -1,14 +1,13 @@
 package torrent
 
 import (
-	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -29,15 +28,15 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-func TestingConfig() *Config {
-	return &Config{
-		ListenHost:              LoopbackListenHost,
-		NoDHT:                   true,
-		DataDir:                 tempDir(),
-		DisableTrackers:         true,
-		NoDefaultPortForwarding: true,
-		// Debug:           true,
-	}
+func TestingConfig() *ClientConfig {
+	cfg := NewDefaultClientConfig()
+	cfg.ListenHost = LoopbackListenHost
+	cfg.NoDHT = true
+	cfg.DataDir = tempDir()
+	cfg.DisableTrackers = true
+	cfg.NoDefaultPortForwarding = true
+	cfg.DisableAcceptRateLimiting = true
+	return cfg
 }
 
 func TestClientDefault(t *testing.T) {
@@ -104,7 +103,9 @@ func TestPieceHashSize(t *testing.T) {
 func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	cl := &Client{}
+	cl := &Client{
+		config: &ClientConfig{},
+	}
 	cl.initLogger()
 	tor := cl.newTorrent(
 		mi.HashInfoBytes(),
@@ -137,8 +138,7 @@ func TestUnmarshalPEXMsg(t *testing.T) {
 }
 
 func TestReducedDialTimeout(t *testing.T) {
-	cfg := &Config{}
-	cfg.setDefaults()
+	cfg := NewDefaultClientConfig()
 	for _, _case := range []struct {
 		Max             time.Duration
 		HalfOpenLimit   int
@@ -160,64 +160,6 @@ func TestReducedDialTimeout(t *testing.T) {
 		if reduced != expected {
 			t.Fatalf("expected %s, got %s", _case.ExpectedReduced, reduced)
 		}
-	}
-}
-
-func TestUTPRawConn(t *testing.T) {
-	l, err := NewUtpSocket("udp", "")
-	require.NoError(t, err)
-	defer l.Close()
-	go func() {
-		for {
-			_, err := l.Accept()
-			if err != nil {
-				break
-			}
-		}
-	}()
-	// Connect a UTP peer to see if the RawConn will still work.
-	s, err := NewUtpSocket("udp", "")
-	require.NoError(t, err)
-	defer s.Close()
-	utpPeer, err := s.DialContext(context.Background(), "", fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
-	require.NoError(t, err)
-	defer utpPeer.Close()
-	peer, err := net.ListenPacket("udp", ":0")
-	require.NoError(t, err)
-	defer peer.Close()
-
-	msgsReceived := 0
-	// How many messages to send. I've set this to double the channel buffer
-	// size in the raw packetConn.
-	const N = 200
-	readerStopped := make(chan struct{})
-	// The reader goroutine.
-	go func() {
-		defer close(readerStopped)
-		b := make([]byte, 500)
-		for i := 0; i < N; i++ {
-			n, _, err := l.ReadFrom(b)
-			require.NoError(t, err)
-			msgsReceived++
-			var d int
-			fmt.Sscan(string(b[:n]), &d)
-			assert.Equal(t, i, d)
-		}
-	}()
-	udpAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", missinggo.AddrPort(l.Addr())))
-	require.NoError(t, err)
-	for i := 0; i < N; i++ {
-		_, err := peer.WriteTo([]byte(fmt.Sprintf("%d", i)), udpAddr)
-		require.NoError(t, err)
-		time.Sleep(time.Millisecond)
-	}
-	select {
-	case <-readerStopped:
-	case <-time.After(time.Second):
-		t.Fatal("reader timed out")
-	}
-	if msgsReceived != N {
-		t.Fatalf("messages received: %d", msgsReceived)
 	}
 }
 
@@ -356,7 +298,9 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	// Create seeder and a Torrent.
 	cfg := TestingConfig()
 	cfg.Seed = true
-	cfg.UploadRateLimiter = ps.SeederUploadRateLimiter
+	if ps.SeederUploadRateLimiter != nil {
+		cfg.UploadRateLimiter = ps.SeederUploadRateLimiter
+	}
 	// cfg.ListenAddr = "localhost:4000"
 	if ps.SeederStorage != nil {
 		cfg.DefaultStorage = ps.SeederStorage(greetingTempDir)
@@ -379,12 +323,15 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
+	cfg = TestingConfig()
 	if ps.LeecherStorage == nil {
 		cfg.DataDir = leecherDataDir
 	} else {
 		cfg.DefaultStorage = ps.LeecherStorage(leecherDataDir)
 	}
-	cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
+	if ps.LeecherDownloadRateLimiter != nil {
+		cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
+	}
 	cfg.Seed = false
 	leecher, err := NewClient(cfg)
 	require.NoError(t, err)
@@ -414,10 +361,15 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		r.SetReadahead(ps.Readahead)
 	}
 	assertReadAllGreeting(t, r)
-	assert.True(t, 13 <= seederTorrent.Stats().BytesWrittenData)
-	assert.True(t, 8 <= seederTorrent.Stats().ChunksWritten)
-	assert.True(t, 13 <= leecherTorrent.Stats().BytesReadData)
-	assert.True(t, 8 <= leecherTorrent.Stats().ChunksRead)
+
+	seederStats := seederTorrent.Stats()
+	assert.True(t, 13 <= seederStats.BytesWrittenData.Int64())
+	assert.True(t, 8 <= seederStats.ChunksWritten.Int64())
+
+	leecherStats := leecherTorrent.Stats()
+	assert.True(t, 13 <= leecherStats.BytesReadData.Int64())
+	assert.True(t, 8 <= leecherStats.ChunksRead.Int64())
+
 	// Try reading through again for the cases where the torrent data size
 	// exceeds the size of the cache.
 	assertReadAllGreeting(t, r)
@@ -437,6 +389,7 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 func TestSeedAfterDownloading(t *testing.T) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
+
 	cfg := TestingConfig()
 	cfg.Seed = true
 	cfg.DataDir = greetingTempDir
@@ -448,6 +401,9 @@ func TestSeedAfterDownloading(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ok)
 	seederTorrent.VerifyData()
+
+	cfg = TestingConfig()
+	cfg.Seed = true
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.DataDir)
@@ -455,6 +411,8 @@ func TestSeedAfterDownloading(t *testing.T) {
 	require.NoError(t, err)
 	defer leecher.Close()
 	testutil.ExportStatusWriter(leecher, "l")
+
+	cfg = TestingConfig()
 	cfg.Seed = false
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
@@ -492,17 +450,8 @@ func TestSeedAfterDownloading(t *testing.T) {
 	}()
 	done := make(chan struct{})
 	defer close(done)
-	go func() {
-		for {
-			go leecherGreeting.AddClientPeer(seeder)
-			go leecherGreeting.AddClientPeer(leecherLeecher)
-			select {
-			case <-done:
-				return
-			case <-time.After(time.Second):
-			}
-		}
-	}()
+	go leecherGreeting.AddClientPeer(seeder)
+	go leecherGreeting.AddClientPeer(leecherLeecher)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -806,7 +755,6 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 }
 
 type testDownloadCancelParams struct {
-	ExportClientStatus        bool
 	SetLeecherStorageCapacity bool
 	LeecherStorageCapacity    int64
 	Cancel                    bool
@@ -821,9 +769,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	seeder, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
-	if ps.ExportClientStatus {
-		testutil.ExportStatusWriter(seeder, "s")
-	}
+	testutil.ExportStatusWriter(seeder, "s")
 	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	seederTorrent.VerifyData()
 	leecherDataDir, err := ioutil.TempDir("", "")
@@ -838,9 +784,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	cfg.DataDir = leecherDataDir
 	leecher, _ := NewClient(cfg)
 	defer leecher.Close()
-	if ps.ExportClientStatus {
-		testutil.ExportStatusWriter(leecher, "l")
-	}
+	testutil.ExportStatusWriter(leecher, "l")
 	leecherGreeting, new, err := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
@@ -857,27 +801,24 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 		leecherGreeting.cancelPiecesLocked(0, leecherGreeting.NumPieces())
 	}
 	leecherGreeting.cl.mu.Unlock()
-
-	leecherGreeting.AddClientPeer(seeder)
+	done := make(chan struct{})
+	defer close(done)
+	go leecherGreeting.AddClientPeer(seeder)
 	completes := make(map[int]bool, 3)
-values:
-	for {
-		// started := time.Now()
+	expected := func() map[int]bool {
+		if ps.Cancel {
+			return map[int]bool{0: false, 1: false, 2: false}
+		} else {
+			return map[int]bool{0: true, 1: true, 2: true}
+		}
+	}()
+	for !reflect.DeepEqual(completes, expected) {
 		select {
 		case _v := <-psc.Values:
-			// log.Print(time.Since(started))
 			v := _v.(PieceStateChange)
 			completes[v.Index] = v.Complete
-		case <-time.After(100 * time.Millisecond):
-			break values
 		}
 	}
-	if ps.Cancel {
-		assert.EqualValues(t, map[int]bool{0: false, 1: false, 2: false}, completes)
-	} else {
-		assert.EqualValues(t, map[int]bool{0: true, 1: true, 2: true}, completes)
-	}
-
 }
 
 func TestTorrentDownloadAll(t *testing.T) {
@@ -993,8 +934,11 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 	defer ss.Close()
 	var tts []*Torrent
 	ih := testutil.GreetingMetaInfo().HashInfoBytes()
+	cfg := TestingConfig()
+	cfg.DisableAcceptRateLimiting = true
+	cfg.dropDuplicatePeerIds = true
 	for i := range iter.N(3) {
-		cl, err := NewClient(TestingConfig())
+		cl, err := NewClient(cfg)
 		require.NoError(t, err)
 		defer cl.Close()
 		tt, _ := cl.AddTorrentInfoHash(ih)

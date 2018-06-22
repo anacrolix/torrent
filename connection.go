@@ -40,7 +40,8 @@ const (
 type connection struct {
 	t *Torrent
 	// The actual Conn, used for closing, and setting socket options.
-	conn net.Conn
+	conn     net.Conn
+	outgoing bool
 	// The Reader and Writer for this Conn, with hooks installed for stats,
 	// limiting, deadlines etc.
 	w io.Writer
@@ -50,6 +51,9 @@ type connection struct {
 	cryptoMethod    mse.CryptoMethod
 	Discovery       peerSource
 	closed          missinggo.Event
+	// Set true after we've added our ConnStats generated during handshake to
+	// other ConnStat instances as determined when the *Torrent became known.
+	reconciledHandshakeStats bool
 
 	stats ConnStats
 
@@ -100,6 +104,32 @@ type connection struct {
 	writeBuffer *bytes.Buffer
 	uploadTimer *time.Timer
 	writerCond  sync.Cond
+}
+
+// Returns true if the connection is over IPv6.
+func (cn *connection) ipv6() bool {
+	ip := missinggo.AddrIP(cn.remoteAddr())
+	if ip.To4() != nil {
+		return false
+	}
+	return len(ip) == net.IPv6len
+}
+
+// Returns true the dialer has the lower client peer ID. TODO: Find the
+// specification for this.
+func (cn *connection) isPreferredDirection() bool {
+	return bytes.Compare(cn.t.cl.peerID[:], cn.PeerID[:]) < 0 == cn.outgoing
+}
+
+// Returns whether the left connection should be preferred over the right one,
+// considering only their networking properties. If ok is false, we can't
+// decide.
+func (l *connection) hasPreferredNetworkOver(r *connection) (left, ok bool) {
+	var ml multiLess
+	ml.NextBool(l.isPreferredDirection(), r.isPreferredDirection())
+	ml.NextBool(!l.utp(), !r.utp())
+	ml.NextBool(l.ipv6(), r.ipv6())
+	return ml.FinalOk()
 }
 
 func (cn *connection) cumInterest() time.Duration {
@@ -189,7 +219,7 @@ func (cn *connection) utp() bool {
 	return strings.Contains(cn.remoteAddr().Network(), "utp")
 }
 
-// Inspired by https://trac.transmissionbt.com/wiki/PeerStatusText
+// Inspired by https://github.com/transmission/transmission/wiki/Peer-Status-Text.
 func (cn *connection) statusFlags() (ret string) {
 	c := func(b byte) {
 		ret += string([]byte{b})
@@ -219,7 +249,7 @@ func (cn *connection) statusFlags() (ret string) {
 // }
 
 func (cn *connection) downloadRate() float64 {
-	return float64(cn.stats.BytesReadUsefulData) / cn.cumInterest().Seconds()
+	return float64(cn.stats.BytesReadUsefulData.Int64()) / cn.cumInterest().Seconds()
 }
 
 func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
@@ -232,12 +262,12 @@ func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
 		cn.cumInterest(),
 	)
 	fmt.Fprintf(w,
-		"    %s completed, %d pieces touched, good chunks: %d/%d-%d reqq: (%d,%d,%d]-%d, flags: %s, dr: %.1f KiB/s\n",
+		"    %s completed, %d pieces touched, good chunks: %v/%v-%v reqq: (%d,%d,%d]-%d, flags: %s, dr: %.1f KiB/s\n",
 		cn.completedString(),
 		len(cn.peerTouchedPieces),
-		cn.stats.ChunksReadUseful,
-		cn.stats.ChunksRead,
-		cn.stats.ChunksWritten,
+		&cn.stats.ChunksReadUseful,
+		&cn.stats.ChunksRead,
+		&cn.stats.ChunksWritten,
 		cn.requestsLowWater,
 		cn.numLocalRequests(),
 		cn.nominalMaxRequests(),
@@ -320,7 +350,7 @@ func (cn *connection) requestedMetadataPiece(index int) bool {
 
 // The actual value to use as the maximum outbound requests.
 func (cn *connection) nominalMaxRequests() (ret int) {
-	return int(clamp(1, int64(cn.PeerMaxRequests), max(64, cn.stats.ChunksReadUseful-(cn.stats.ChunksRead-cn.stats.ChunksReadUseful))))
+	return int(clamp(1, int64(cn.PeerMaxRequests), max(64, cn.stats.ChunksReadUseful.Int64()-(cn.stats.ChunksRead.Int64()-cn.stats.ChunksReadUseful.Int64()))))
 }
 
 func (cn *connection) onPeerSentCancel(r request) {
@@ -839,27 +869,37 @@ func (c *connection) requestPendingMetadata() {
 
 func (cn *connection) wroteMsg(msg *pp.Message) {
 	messageTypesSent.Add(msg.Type.String(), 1)
-	cn.stats.wroteMsg(msg)
-	cn.t.stats.wroteMsg(msg)
+	cn.allStats(func(cs *ConnStats) { cs.wroteMsg(msg) })
 }
 
 func (cn *connection) readMsg(msg *pp.Message) {
-	cn.stats.readMsg(msg)
-	cn.t.stats.readMsg(msg)
+	cn.allStats(func(cs *ConnStats) { cs.readMsg(msg) })
+}
+
+// After handshake, we know what Torrent and Client stats to include for a
+// connection.
+func (cn *connection) postHandshakeStats(f func(*ConnStats)) {
+	t := cn.t
+	f(&t.stats)
+	f(&t.cl.stats)
+}
+
+// All ConnStats that include this connection. Some objects are not known
+// until the handshake is complete, after which it's expected to reconcile the
+// differences.
+func (cn *connection) allStats(f func(*ConnStats)) {
+	f(&cn.stats)
+	if cn.reconciledHandshakeStats {
+		cn.postHandshakeStats(f)
+	}
 }
 
 func (cn *connection) wroteBytes(n int64) {
-	cn.stats.wroteBytes(n)
-	if cn.t != nil {
-		cn.t.stats.wroteBytes(n)
-	}
+	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesWritten }))
 }
 
 func (cn *connection) readBytes(n int64) {
-	cn.stats.readBytes(n)
-	if cn.t != nil {
-		cn.t.stats.readBytes(n)
-	}
+	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
 }
 
 // Returns whether the connection could be useful to us. We're seeding and
@@ -1164,7 +1204,7 @@ func (cn *connection) rw() io.ReadWriter {
 func (c *connection) receiveChunk(msg *pp.Message) {
 	t := c.t
 	cl := t.cl
-	chunksReceived.Add(1)
+	torrent.Add("chunks received", 1)
 
 	req := newRequestFromMessage(msg)
 
@@ -1172,7 +1212,7 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	if c.deleteRequest(req) {
 		c.updateRequests()
 	} else {
-		unexpectedChunksReceived.Add(1)
+		torrent.Add("chunks received unexpected", 1)
 	}
 
 	if c.PeerChoked {
@@ -1184,19 +1224,16 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 
 	// Do we actually want this chunk?
 	if !t.wantPiece(req) {
-		unwantedChunksReceived.Add(1)
-		c.stats.ChunksReadUnwanted++
-		c.t.stats.ChunksReadUnwanted++
+		torrent.Add("chunks received unwanted", 1)
+		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUnwanted }))
 		return
 	}
 
 	index := int(req.Index)
 	piece := &t.pieces[index]
 
-	c.stats.ChunksReadUseful++
-	c.t.stats.ChunksReadUseful++
-	c.stats.BytesReadUsefulData += int64(len(msg.Piece))
-	c.t.stats.BytesReadUsefulData += int64(len(msg.Piece))
+	c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
+	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
 	c.lastUsefulChunkReceived = time.Now()
 	// if t.fastestConn != c {
 	// log.Printf("setting fastest connection %p", c)
@@ -1272,7 +1309,7 @@ func (c *connection) uploadAllowed() bool {
 		return false
 	}
 	// Don't upload more than 100 KiB more than we download.
-	if c.stats.BytesWrittenData >= c.stats.BytesReadData+100<<10 {
+	if c.stats.BytesWrittenData.Int64() >= c.stats.BytesReadData.Int64()+100<<10 {
 		return false
 	}
 	return true
@@ -1297,7 +1334,7 @@ another:
 			return false
 		}
 		for r := range c.PeerRequests {
-			res := c.t.cl.uploadLimit.ReserveN(time.Now(), int(r.Length))
+			res := c.t.cl.config.UploadRateLimiter.ReserveN(time.Now(), int(r.Length))
 			if !res.OK() {
 				panic(fmt.Sprintf("upload rate limiter burst size < %d", r.Length))
 			}
@@ -1342,7 +1379,7 @@ func (cn *connection) Drop() {
 }
 
 func (cn *connection) netGoodPiecesDirtied() int64 {
-	return cn.stats.PiecesDirtiedGood - cn.stats.PiecesDirtiedBad
+	return cn.stats.PiecesDirtiedGood.Int64() - cn.stats.PiecesDirtiedBad.Int64()
 }
 
 func (c *connection) peerHasWantedPieces() bool {
@@ -1358,7 +1395,15 @@ func (c *connection) deleteRequest(r request) bool {
 		return false
 	}
 	delete(c.requests, r)
-	c.t.pendingRequests[r]--
+	pr := c.t.pendingRequests
+	pr[r]--
+	n := pr[r]
+	if n == 0 {
+		delete(pr, r)
+	}
+	if n < 0 {
+		panic(n)
+	}
 	c.updateRequests()
 	return true
 }
@@ -1415,5 +1460,5 @@ func (c *connection) setTorrent(t *Torrent) {
 		panic("connection already associated with a torrent")
 	}
 	c.t = t
-	t.conns[c] = struct{}{}
+	t.reconcileHandshakeStats(c)
 }

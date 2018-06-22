@@ -23,10 +23,6 @@ func defaultPeerExtensionBytes() peerExtensionBytes {
 // I could move a lot of these counters to their own file, but I suspect they
 // may be attached to a Client someday.
 var (
-	unwantedChunksReceived   = expvar.NewInt("chunksReceivedUnwanted")
-	unexpectedChunksReceived = expvar.NewInt("chunksReceivedUnexpected")
-	chunksReceived           = expvar.NewInt("chunksReceived")
-
 	torrent = expvar.NewMap("torrent")
 
 	peersAddedBySource = expvar.NewMap("peersAddedBySource")
@@ -34,15 +30,10 @@ var (
 	pieceHashedCorrect    = expvar.NewInt("pieceHashedCorrect")
 	pieceHashedNotCorrect = expvar.NewInt("pieceHashedNotCorrect")
 
-	unsuccessfulDials = expvar.NewInt("dialSuccessful")
-	successfulDials   = expvar.NewInt("dialUnsuccessful")
-
 	peerExtensions                    = expvar.NewMap("peerExtensions")
 	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
 	// Count of connections to peer with same client ID.
-	connsToSelf = expvar.NewInt("connsToSelf")
-	// Number of completed connections to a client we're already connected with.
-	duplicateClientConns       = expvar.NewInt("duplicateClientConns")
+	connsToSelf                = expvar.NewInt("connsToSelf")
 	receivedKeepalives         = expvar.NewInt("receivedKeepalives")
 	supportedExtensionMessages = expvar.NewMap("supportedExtensionMessages")
 	postedKeepalives           = expvar.NewInt("postedKeepalives")

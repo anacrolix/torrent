@@ -16,20 +16,10 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-var DefaultHTTPClient = &http.Client{
-	Timeout: time.Second * 15,
-	Transport: &http.Transport{
-		Dial: (&net.Dialer{
-			Timeout: 15 * time.Second,
-		}).Dial,
-		TLSHandshakeTimeout: 15 * time.Second,
-		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-	},
-}
 var DefaultHTTPUserAgent = "Go-Torrent/1.0"
 
-// Override Client defaults.
-type Config struct {
+// Probably not safe to modify this after it's given to a Client.
+type ClientConfig struct {
 	// Store torrent file data in this directory unless .DefaultStorage is
 	// specified.
 	DataDir string `long:"data-dir" description:"directory to store downloaded torrent data"`
@@ -118,9 +108,12 @@ type Config struct {
 
 	PublicIp4 net.IP
 	PublicIp6 net.IP
+
+	DisableAcceptRateLimiting bool
+	dropDuplicatePeerIds      bool
 }
 
-func (cfg *Config) SetListenAddr(addr string) *Config {
+func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
 	host, port, err := missinggo.ParseHostPort(addr)
 	expect.Nil(err)
 	cfg.ListenHost = func(string) string { return host }
@@ -128,53 +121,35 @@ func (cfg *Config) SetListenAddr(addr string) *Config {
 	return cfg
 }
 
-func (cfg *Config) setDefaults() {
-	if cfg.HTTP == nil {
-		cfg.HTTP = DefaultHTTPClient
-		if cfg.ProxyURL != "" {
-			cfg.setProxyURL()
-		}
-	}
-	if cfg.HTTPUserAgent == "" {
-		cfg.HTTPUserAgent = DefaultHTTPUserAgent
-	}
-	if cfg.ExtendedHandshakeClientVersion == "" {
-		cfg.ExtendedHandshakeClientVersion = "go.torrent dev 20150624"
-	}
-	if cfg.Bep20 == "" {
-		cfg.Bep20 = "-GT0001-"
-	}
-	if cfg.NominalDialTimeout == 0 {
-		cfg.NominalDialTimeout = 30 * time.Second
-	}
-	if cfg.MinDialTimeout == 0 {
-		cfg.MinDialTimeout = 5 * time.Second
-	}
-	if cfg.EstablishedConnsPerTorrent == 0 {
-		cfg.EstablishedConnsPerTorrent = 50
-	}
-	if cfg.HalfOpenConnsPerTorrent == 0 {
-		cfg.HalfOpenConnsPerTorrent = (cfg.EstablishedConnsPerTorrent + 1) / 2
-	}
-	if cfg.TorrentPeersHighWater == 0 {
-		// Memory and freshness are the concern here.
-		cfg.TorrentPeersHighWater = 500
-	}
-	if cfg.TorrentPeersLowWater == 0 {
-		cfg.TorrentPeersLowWater = 2 * cfg.HalfOpenConnsPerTorrent
-	}
-	if cfg.HandshakesTimeout == 0 {
-		cfg.HandshakesTimeout = 20 * time.Second
-	}
-	if cfg.DhtStartingNodes == nil {
-		cfg.DhtStartingNodes = dht.GlobalBootstrapAddrs
-	}
-	if cfg.ListenHost == nil {
-		cfg.ListenHost = func(string) string { return "" }
+func NewDefaultClientConfig() *ClientConfig {
+	return &ClientConfig{
+		HTTP: &http.Client{
+			Timeout: time.Second * 15,
+			Transport: &http.Transport{
+				Dial: (&net.Dialer{
+					Timeout: 15 * time.Second,
+				}).Dial,
+				TLSHandshakeTimeout: 15 * time.Second,
+				TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+			}},
+		HTTPUserAgent:                  DefaultHTTPUserAgent,
+		ExtendedHandshakeClientVersion: "go.torrent dev 20150624",
+		Bep20:                      "-GT0001-",
+		NominalDialTimeout:         30 * time.Second,
+		MinDialTimeout:             5 * time.Second,
+		EstablishedConnsPerTorrent: 50,
+		HalfOpenConnsPerTorrent:    25,
+		TorrentPeersHighWater:      500,
+		TorrentPeersLowWater:       50,
+		HandshakesTimeout:          20 * time.Second,
+		DhtStartingNodes:           dht.GlobalBootstrapAddrs,
+		ListenHost:                 func(string) string { return "" },
+		UploadRateLimiter:          unlimited,
+		DownloadRateLimiter:        unlimited,
 	}
 }
 
-func (cfg *Config) setProxyURL() {
+func (cfg *ClientConfig) setProxyURL() {
 	fixedURL, err := url.Parse(cfg.ProxyURL)
 	if err != nil {
 		return

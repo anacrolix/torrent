@@ -11,6 +11,7 @@ import (
 	"golang.org/x/net/proxy"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/perf"
 )
 
 type dialer interface {
@@ -54,29 +55,39 @@ func listenTcp(network, address, proxyURL string) (s socket, err error) {
 	if err != nil {
 		return
 	}
+	defer func() {
+		if err != nil {
+			l.Close()
+		}
+	}()
 
 	// If we don't need the proxy - then we should return default net.Dialer,
 	// otherwise, let's try to parse the proxyURL and return proxy.Dialer
 	if len(proxyURL) != 0 {
+		// TODO: The error should be propagated, as proxy may be in use for
+		// security or privacy reasons. Also just pass proxy.Dialer in from
+		// the Config.
 		if dialer, err := getProxyDialer(proxyURL); err == nil {
-			return tcpSocket{l, dialer}, nil
+			return tcpSocket{l, func(ctx context.Context, addr string) (conn net.Conn, err error) {
+				defer perf.ScopeTimerErr(&err)()
+				return dialer.Dial(network, addr)
+			}}, nil
 		}
 	}
-
-	return tcpSocket{l, nil}, nil
+	dialer := net.Dialer{}
+	return tcpSocket{l, func(ctx context.Context, addr string) (conn net.Conn, err error) {
+		defer perf.ScopeTimerErr(&err)()
+		return dialer.DialContext(ctx, network, addr)
+	}}, nil
 }
 
 type tcpSocket struct {
 	net.Listener
-	d proxy.Dialer
+	d func(ctx context.Context, addr string) (net.Conn, error)
 }
 
 func (me tcpSocket) dial(ctx context.Context, addr string) (net.Conn, error) {
-	if me.d != nil {
-		return me.d.Dial(me.Addr().Network(), addr)
-	}
-
-	return net.Dial(me.Addr().Network(), addr)
+	return me.d(ctx, addr)
 }
 
 func setPort(addr string, port int) string {
@@ -159,7 +170,8 @@ type utpSocketSocket struct {
 	d       proxy.Dialer
 }
 
-func (me utpSocketSocket) dial(ctx context.Context, addr string) (net.Conn, error) {
+func (me utpSocketSocket) dial(ctx context.Context, addr string) (conn net.Conn, err error) {
+	defer perf.ScopeTimerErr(&err)()
 	if me.d != nil {
 		return me.d.Dial(me.network, addr)
 	}

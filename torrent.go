@@ -135,7 +135,7 @@ type Torrent struct {
 	// different pieces.
 	connPieceInclinationPool sync.Pool
 	// Torrent-level statistics.
-	stats TorrentStats
+	stats ConnStats
 
 	// Count of each request across active connections.
 	pendingRequests map[request]int
@@ -249,6 +249,9 @@ func (t *Torrent) unclosedConnsAsSlice() (ret []*connection) {
 func (t *Torrent) addPeer(p Peer) {
 	cl := t.cl
 	peersAddedBySource.Add(string(p.Source), 1)
+	if t.closed.IsSet() {
+		return
+	}
 	if cl.badPeerIPPort(p.IP, p.Port) {
 		torrent.Add("peers not added because of bad addr", 1)
 		return
@@ -708,14 +711,10 @@ func (t *Torrent) offsetRequest(off int64) (req request, ok bool) {
 }
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
-	tr := perf.NewTimer()
-
+	defer perf.ScopeTimerErr(&err)()
 	n, err := t.pieces[piece].Storage().WriteAt(data, begin)
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite
-	}
-	if err == nil {
-		tr.Mark("write chunk")
 	}
 	return
 }
@@ -848,7 +847,7 @@ func (t *Torrent) worstBadConn() *connection {
 	heap.Init(&wcs)
 	for wcs.Len() != 0 {
 		c := heap.Pop(&wcs).(*connection)
-		if c.stats.ChunksReadUnwanted >= 6 && c.stats.ChunksReadUnwanted > c.stats.ChunksReadUseful {
+		if c.stats.ChunksReadUnwanted.Int64() >= 6 && c.stats.ChunksReadUnwanted.Int64() > c.stats.ChunksReadUseful.Int64() {
 			return c
 		}
 		// If the connection is in the worst half of the established
@@ -1219,6 +1218,7 @@ func (t *Torrent) deleteConnection(c *connection) (ret bool) {
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
+	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests()
 	if len(t.conns) == 0 {
 		t.assertNoPendingRequests()
@@ -1227,10 +1227,8 @@ func (t *Torrent) deleteConnection(c *connection) (ret bool) {
 }
 
 func (t *Torrent) assertNoPendingRequests() {
-	for _, num := range t.pendingRequests {
-		if num != 0 {
-			panic(num)
-		}
+	if len(t.pendingRequests) != 0 {
+		panic(t.pendingRequests)
 	}
 }
 
@@ -1282,7 +1280,10 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	if _url == "" {
 		return
 	}
-	u, _ := url.Parse(_url)
+	u, err := url.Parse(_url)
+	if err != nil {
+		log.Str("error parsing tracker url").AddValues("url", _url).Log(t.logger)
+	}
 	if u.Scheme == "udp" {
 		u.Scheme = "udp4"
 		t.startScrapingTracker(u.String())
@@ -1340,9 +1341,9 @@ func (t *Torrent) announceRequest() tracker.AnnounceRequest {
 		// The following are vaguely described in BEP 3.
 
 		Left:     t.bytesLeftAnnounce(),
-		Uploaded: t.stats.BytesWrittenData,
+		Uploaded: t.stats.BytesWrittenData.Int64(),
 		// There's no mention of wasted or unwanted download in the BEP.
-		Downloaded: t.stats.BytesReadUsefulData,
+		Downloaded: t.stats.BytesReadUsefulData.Int64(),
 	}
 }
 
@@ -1432,23 +1433,24 @@ func (t *Torrent) addPeers(peers []Peer) {
 }
 
 func (t *Torrent) Stats() TorrentStats {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.mu.RLock()
+	defer t.cl.mu.RUnlock()
 	return t.statsLocked()
 }
 
-func (t *Torrent) statsLocked() TorrentStats {
-	t.stats.ActivePeers = len(t.conns)
-	t.stats.HalfOpenPeers = len(t.halfOpen)
-	t.stats.PendingPeers = t.peers.Len()
-	t.stats.TotalPeers = t.numTotalPeers()
-	t.stats.ConnectedSeeders = 0
+func (t *Torrent) statsLocked() (ret TorrentStats) {
+	ret.ActivePeers = len(t.conns)
+	ret.HalfOpenPeers = len(t.halfOpen)
+	ret.PendingPeers = t.peers.Len()
+	ret.TotalPeers = t.numTotalPeers()
+	ret.ConnectedSeeders = 0
 	for c := range t.conns {
 		if all, ok := c.peerHasAllPieces(); all && ok {
-			t.stats.ConnectedSeeders++
+			ret.ConnectedSeeders++
 		}
 	}
-	return t.stats
+	ret.ConnStats = t.stats.Copy()
+	return
 }
 
 // The total number of peers in the torrent.
@@ -1474,42 +1476,49 @@ func (t *Torrent) numTotalPeers() int {
 // Reconcile bytes transferred before connection was associated with a
 // torrent.
 func (t *Torrent) reconcileHandshakeStats(c *connection) {
-	t.stats.wroteBytes(c.stats.BytesWritten)
-	t.stats.readBytes(c.stats.BytesRead)
+	if c.stats != (ConnStats{
+		// Handshakes should only increment these fields:
+		BytesWritten: c.stats.BytesWritten,
+		BytesRead:    c.stats.BytesRead,
+	}) {
+		panic("bad stats")
+	}
+	c.postHandshakeStats(func(cs *ConnStats) {
+		cs.BytesRead.Add(c.stats.BytesRead.Int64())
+		cs.BytesWritten.Add(c.stats.BytesWritten.Int64())
+	})
+	c.reconciledHandshakeStats = true
 }
 
 // Returns true if the connection is added.
-func (t *Torrent) addConnection(c *connection, outgoing bool) bool {
+func (t *Torrent) addConnection(c *connection) (err error) {
+	defer func() {
+		if err == nil {
+			torrent.Add("added connections", 1)
+		}
+	}()
 	if t.closed.IsSet() {
-		return false
-	}
-	if !t.wantConns() {
-		return false
+		return errors.New("torrent closed")
 	}
 	for c0 := range t.conns {
-		if c.PeerID == c0.PeerID {
-			// Already connected to a client with that ID.
-			duplicateClientConns.Add(1)
-			lower := string(t.cl.peerID[:]) < string(c.PeerID[:])
-			// Retain the connection from initiated from lower peer ID to
-			// higher.
-			if outgoing == lower {
-				// Close the other one.
-				c0.Close()
-				// TODO: Is it safe to delete from the map while we're
-				// iterating over it?
-				t.deleteConnection(c0)
-			} else {
-				// Abandon this one.
-				return false
-			}
+		if c.PeerID != c0.PeerID {
+			continue
 		}
+		if !t.cl.config.dropDuplicatePeerIds {
+			continue
+		}
+		if left, ok := c.hasPreferredNetworkOver(c0); ok && left {
+			c0.Close()
+			t.deleteConnection(c0)
+		} else {
+			return errors.New("existing connection preferred")
+		}
+	}
+	if !t.wantConns() {
+		return errors.New("don't want conns")
 	}
 	if len(t.conns) >= t.maxEstablishedConns {
 		c := t.worstBadConn()
-		if c == nil {
-			return false
-		}
 		if t.cl.config.Debug && missinggo.CryHeard() {
 			log.Printf("%s: dropping connection to make room for new one:\n    %v", t, c)
 		}
@@ -1519,8 +1528,8 @@ func (t *Torrent) addConnection(c *connection, outgoing bool) bool {
 	if len(t.conns) >= t.maxEstablishedConns {
 		panic(len(t.conns))
 	}
-	c.setTorrent(t)
-	return true
+	t.conns[c] = struct{}{}
+	return nil
 }
 
 func (t *Torrent) wantConns() bool {
@@ -1575,10 +1584,12 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 	}
 	if correct {
 		if len(touchers) != 0 {
-			t.stats.PiecesDirtiedGood++
+			// Don't increment stats above connection-level for every involved
+			// connection.
+			t.allStats((*ConnStats).incrementPiecesDirtiedGood)
 		}
 		for _, c := range touchers {
-			c.stats.PiecesDirtiedGood++
+			c.stats.incrementPiecesDirtiedGood()
 		}
 		err := p.Storage().MarkComplete()
 		if err != nil {
@@ -1586,10 +1597,12 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 		}
 	} else {
 		if len(touchers) != 0 {
-			t.stats.PiecesDirtiedBad++
+			// Don't increment stats above connection-level for every involved
+			// connection.
+			t.allStats((*ConnStats).incrementPiecesDirtiedBad)
 			for _, c := range touchers {
 				// Y u do dis peer?!
-				c.stats.PiecesDirtiedBad++
+				c.stats.incrementPiecesDirtiedBad()
 			}
 			slices.Sort(touchers, connLessTrusted)
 			if t.cl.config.Debug {
@@ -1745,4 +1758,11 @@ func (t *Torrent) AddClientPeer(cl *Client) {
 		}
 		return
 	}())
+}
+
+// All stats that include this Torrent. Useful when we want to increment
+// ConnStats but not for every connection.
+func (t *Torrent) allStats(f func(*ConnStats)) {
+	f(&t.stats)
+	f(&t.cl.stats)
 }

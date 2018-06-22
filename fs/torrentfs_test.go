@@ -88,13 +88,13 @@ func TestUnmountWedged(t *testing.T) {
 			t.Log(err)
 		}
 	}()
-	client, err := torrent.NewClient(&torrent.Config{
-		DataDir:         filepath.Join(layout.BaseDir, "incomplete"),
-		DisableTrackers: true,
-		NoDHT:           true,
-		DisableTCP:      true,
-		DisableUTP:      true,
-	})
+	cfg := torrent.NewDefaultClientConfig()
+	cfg.DataDir = filepath.Join(layout.BaseDir, "incomplete")
+	cfg.DisableTrackers = true
+	cfg.NoDHT = true
+	cfg.DisableTCP = true
+	cfg.DisableUTP = true
+	client, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer client.Close()
 	tt, err := client.AddTorrent(layout.Metainfo)
@@ -165,14 +165,13 @@ func TestDownloadOnDemand(t *testing.T) {
 	layout, err := newGreetingLayout()
 	require.NoError(t, err)
 	defer layout.Destroy()
-	cfg := torrent.Config{
-		DataDir:         layout.Completed,
-		DisableTrackers: true,
-		NoDHT:           true,
-		Seed:            true,
-		ListenHost:      torrent.LoopbackListenHost,
-	}
-	seeder, err := torrent.NewClient(&cfg)
+	cfg := torrent.NewDefaultClientConfig()
+	cfg.DataDir = layout.Completed
+	cfg.DisableTrackers = true
+	cfg.NoDHT = true
+	cfg.Seed = true
+	cfg.ListenHost = torrent.LoopbackListenHost
+	seeder, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
 	testutil.ExportStatusWriter(seeder, "s")
@@ -185,13 +184,13 @@ func TestDownloadOnDemand(t *testing.T) {
 		<-seederTorrent.GotInfo()
 		seederTorrent.VerifyData()
 	}()
-	leecher, err := torrent.NewClient(&torrent.Config{
-		DisableTrackers: true,
-		NoDHT:           true,
-		DisableTCP:      true,
-		DefaultStorage:  storage.NewMMap(filepath.Join(layout.BaseDir, "download")),
-		ListenHost:      torrent.LoopbackListenHost,
-	})
+	cfg = torrent.NewDefaultClientConfig()
+	cfg.DisableTrackers = true
+	cfg.NoDHT = true
+	cfg.DisableTCP = true
+	cfg.DefaultStorage = storage.NewMMap(filepath.Join(layout.BaseDir, "download"))
+	cfg.ListenHost = torrent.LoopbackListenHost
+	leecher, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	testutil.ExportStatusWriter(leecher, "l")
 	defer leecher.Close()

@@ -45,6 +45,9 @@ type peersKey struct {
 
 // Maintains state of torrent within a Client.
 type Torrent struct {
+	// Torrent-level aggregate statistics. First in struct to ensure 64-bit
+	// alignment. See #262.
+	stats  ConnStats
 	cl     *Client
 	logger *log.Logger
 
@@ -134,8 +137,6 @@ type Torrent struct {
 	// These "inclinations" are used to give connections preference for
 	// different pieces.
 	connPieceInclinationPool sync.Pool
-	// Torrent-level statistics.
-	stats ConnStats
 
 	// Count of each request across active connections.
 	pendingRequests map[request]int

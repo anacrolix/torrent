@@ -39,6 +39,9 @@ import (
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
 type Client struct {
+	// An aggregate of stats over all connections. First in struct to ensure
+	// 64-bit alignment of fields. See #262.
+	stats  ConnStats
 	mu     sync.RWMutex
 	event  sync.Cond
 	closed missinggo.Event
@@ -62,8 +65,6 @@ type Client struct {
 	dopplegangerAddrs map[string]struct{}
 	badPeerIPs        map[string]struct{}
 	torrents          map[metainfo.Hash]*Torrent
-	// An aggregate of stats over all connections.
-	stats ConnStats
 
 	acceptLimiter map[ipStr]int
 }

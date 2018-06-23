@@ -38,6 +38,9 @@ const (
 
 // Maintains the state of a connection with a peer.
 type connection struct {
+	// First to ensure 64-bit alignment for atomics. See #262.
+	stats ConnStats
+
 	t *Torrent
 	// The actual Conn, used for closing, and setting socket options.
 	conn     net.Conn
@@ -54,8 +57,6 @@ type connection struct {
 	// Set true after we've added our ConnStats generated during handshake to
 	// other ConnStat instances as determined when the *Torrent became known.
 	reconciledHandshakeStats bool
-
-	stats ConnStats
 
 	lastMessageReceived     time.Time
 	completedHandshake      time.Time

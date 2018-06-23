@@ -591,6 +591,9 @@ func nextRequestState(
 	if len(currentRequests) > requestsLowWater {
 		return false, nil, true
 	}
+	// If we have existing requests, better maintain interest to ensure we get
+	// them. iterPendingRequests might not iterate over outstanding requests.
+	interested = len(currentRequests) != 0
 	iterPendingRequests(func(r request) bool {
 		interested = true
 		if peerChoking {
@@ -1040,8 +1043,9 @@ func (c *connection) mainReadLoop() (err error) {
 			c.tickleWriter()
 		case pp.NotInterested:
 			c.PeerInterested = false
-			// TODO: Reject?
-			c.PeerRequests = nil
+			// We don't clear their requests since it isn't clear in the spec.
+			// We'll probably choke them for this, which will clear them if
+			// appropriate, and is clearly specified.
 		case pp.Have:
 			err = c.peerSentHave(int(msg.Index))
 		case pp.Request:

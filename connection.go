@@ -1228,7 +1228,7 @@ func (c *connection) receiveChunk(msg *pp.Message) {
 	}
 
 	// Do we actually want this chunk?
-	if !t.wantPiece(req) {
+	if t.haveChunk(req) {
 		torrent.Add("chunks received unwanted", 1)
 		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUnwanted }))
 		return

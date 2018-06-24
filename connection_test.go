@@ -9,7 +9,6 @@ import (
 
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/bradfitz/iter"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -138,15 +137,4 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	w.Close()
 	require.NoError(b, <-mrlErr)
 	require.EqualValues(b, b.N, cn.stats.ChunksReadUseful.Int64())
-}
-
-func TestConnectionReceiveBadChunkIndex(t *testing.T) {
-	cn := connection{
-		t: &Torrent{},
-	}
-	require.False(t, cn.t.haveInfo())
-	assert.NotPanics(t, func() { cn.receiveChunk(&pp.Message{Type: pp.Piece}) })
-	cn.t.info = &metainfo.Info{}
-	require.True(t, cn.t.haveInfo())
-	assert.NotPanics(t, func() { cn.receiveChunk(&pp.Message{Type: pp.Piece}) })
 }

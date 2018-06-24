@@ -52,11 +52,16 @@ type Torrent struct {
 	logger *log.Logger
 
 	networkingEnabled bool
+
 	// Determines what chunks to request from peers. 1: Favour higher priority
 	// pieces with some fuzzing to reduce overlaps and wastage across
 	// connections. 2: The fastest connection downloads strictly in order of
-	// priority, while all others adher to their piece inclications.
+	// priority, while all others adher to their piece inclications. 3:
+	// Requests are strictly by piece priority, and not duplicated until
+	// duplicateRequestTimeout is reached.
 	requestStrategy int
+	// How long to avoid duplicating a pending request.
+	duplicateRequestTimeout time.Duration
 
 	closed   missinggo.Event
 	infoHash metainfo.Hash
@@ -140,6 +145,9 @@ type Torrent struct {
 
 	// Count of each request across active connections.
 	pendingRequests map[request]int
+	// The last time we requested a chunk. Deleting the request from any
+	// connection will clear this value.
+	lastRequested map[request]time.Time
 }
 
 func (t *Torrent) tickleReaders() {
@@ -399,6 +407,7 @@ func (t *Torrent) onSetInfo() {
 	t.gotMetainfo.Set()
 	t.updateWantPeersEvent()
 	t.pendingRequests = make(map[request]int)
+	t.lastRequested = make(map[request]time.Time)
 }
 
 // Called when metadata for a torrent becomes available.

@@ -975,6 +975,8 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		metadataChanged: sync.Cond{
 			L: &cl.mu,
 		},
+		lastRequested:           make(map[request]time.Time),
+		duplicateRequestTimeout: 15 * time.Second,
 	}
 	t.logger = cl.logger.Clone().AddValue(t)
 	t.setChunkSize(defaultChunkSize)

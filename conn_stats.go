@@ -25,9 +25,9 @@ type ConnStats struct {
 
 	ChunksWritten Count
 
-	ChunksRead         Count
-	ChunksReadUseful   Count
-	ChunksReadUnwanted Count
+	ChunksRead       Count
+	ChunksReadUseful Count
+	ChunksReadWasted Count
 
 	// Number of pieces data was written to, that subsequently passed verification.
 	PiecesDirtiedGood Count

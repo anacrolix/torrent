@@ -1287,32 +1287,33 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 
 	req := newRequestFromMessage(msg)
 
+	if c.PeerChoked {
+		torrent.Add("chunks received while choked", 1)
+	}
+
 	if _, ok := c.validReceiveChunks[req]; !ok {
+		torrent.Add("chunks received unexpected", 1)
 		return errors.New("received unexpected chunk")
 	}
 	delete(c.validReceiveChunks, req)
+
+	if c.PeerChoked && c.peerAllowedFast.Get(int(req.Index)) {
+		torrent.Add("chunks received due to allowed fast", 1)
+	}
 
 	// Request has been satisfied.
 	if c.deleteRequest(req) {
 		if c.expectingChunks() {
 			c.chunksReceivedWhileExpecting++
 		}
-		c.updateRequests()
 	} else {
-		torrent.Add("chunks received unexpected", 1)
-	}
-
-	if c.PeerChoked {
-		torrent.Add("chunks received while choked", 1)
-		if c.peerAllowedFast.Get(int(req.Index)) {
-			torrent.Add("chunks received due to allowed fast", 1)
-		}
+		torrent.Add("chunks received unwanted", 1)
 	}
 
 	// Do we actually want this chunk?
 	if t.haveChunk(req) {
-		torrent.Add("chunks received unwanted", 1)
-		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUnwanted }))
+		torrent.Add("chunks received wasted", 1)
+		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
 		return nil
 	}
 

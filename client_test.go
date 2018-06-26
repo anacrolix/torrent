@@ -311,7 +311,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	seeder, err := NewClient(cfg)
 	require.NoError(t, err)
 	if ps.ExportClientStatus {
-		testutil.ExportStatusWriter(seeder, "s")
+		defer testutil.ExportStatusWriter(seeder, "s")()
 	}
 	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	// Run a Stats right after Closing the Client. This will trigger the Stats
@@ -337,7 +337,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	require.NoError(t, err)
 	defer leecher.Close()
 	if ps.ExportClientStatus {
-		testutil.ExportStatusWriter(leecher, "l")
+		defer testutil.ExportStatusWriter(leecher, "l")()
 	}
 	leecherTorrent, new, err := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
@@ -396,7 +396,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	seeder, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
-	testutil.ExportStatusWriter(seeder, "s")
+	defer testutil.ExportStatusWriter(seeder, "s")()
 	seederTorrent, ok, err := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	require.NoError(t, err)
 	assert.True(t, ok)
@@ -410,7 +410,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	leecher, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer leecher.Close()
-	testutil.ExportStatusWriter(leecher, "l")
+	defer testutil.ExportStatusWriter(leecher, "l")()
 
 	cfg = TestingConfig()
 	cfg.Seed = false
@@ -420,7 +420,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	leecherLeecher, _ := NewClient(cfg)
 	require.NoError(t, err)
 	defer leecherLeecher.Close()
-	testutil.ExportStatusWriter(leecherLeecher, "ll")
+	defer testutil.ExportStatusWriter(leecherLeecher, "ll")()
 	leecherGreeting, ok, err := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
@@ -769,7 +769,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	seeder, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
-	testutil.ExportStatusWriter(seeder, "s")
+	defer testutil.ExportStatusWriter(seeder, "s")()
 	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	seederTorrent.VerifyData()
 	leecherDataDir, err := ioutil.TempDir("", "")
@@ -784,7 +784,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	cfg.DataDir = leecherDataDir
 	leecher, _ := NewClient(cfg)
 	defer leecher.Close()
-	testutil.ExportStatusWriter(leecher, "l")
+	defer testutil.ExportStatusWriter(leecher, "l")()
 	leecherGreeting, new, err := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
@@ -930,8 +930,6 @@ func totalConns(tts []*Torrent) (ret int) {
 }
 
 func TestSetMaxEstablishedConn(t *testing.T) {
-	ss := testutil.NewStatusServer(t)
-	defer ss.Close()
 	var tts []*Torrent
 	ih := testutil.GreetingMetaInfo().HashInfoBytes()
 	cfg := TestingConfig()
@@ -943,7 +941,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 		defer cl.Close()
 		tt, _ := cl.AddTorrentInfoHash(ih)
 		tt.SetMaxEstablishedConns(2)
-		ss.HandleStatusWriter(cl, fmt.Sprintf("/%d", i))
+		defer testutil.ExportStatusWriter(cl, fmt.Sprintf("%d", i))()
 		tts = append(tts, tt)
 	}
 	addPeers := func() {
@@ -1007,7 +1005,7 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 	server, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer server.Close()
-	testutil.ExportStatusWriter(server, "s")
+	defer testutil.ExportStatusWriter(server, "s")()
 	magnet1 := makeMagnet(t, server, cfg.DataDir, "test1")
 	makeMagnet(t, server, cfg.DataDir, "test2")
 	cfg = TestingConfig()
@@ -1017,7 +1015,7 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 	client, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer client.Close()
-	testutil.ExportStatusWriter(client, "c")
+	defer testutil.ExportStatusWriter(client, "c")()
 	tr, err := client.AddMagnet(magnet1)
 	require.NoError(t, err)
 	tr.AddClientPeer(server)

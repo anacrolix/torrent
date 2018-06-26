@@ -174,7 +174,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	seeder, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
-	testutil.ExportStatusWriter(seeder, "s")
+	defer testutil.ExportStatusWriter(seeder, "s")()
 	// Just to mix things up, the seeder starts with the data, but the leecher
 	// starts with the metainfo.
 	seederTorrent, err := seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.HashInfoBytes().HexString()))

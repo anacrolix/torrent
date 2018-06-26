@@ -3,51 +3,50 @@ package testutil
 import (
 	"fmt"
 	"io"
-	"log"
-	"net"
 	"net/http"
-	"testing"
+	"sync"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/stretchr/testify/require"
 )
 
 type StatusWriter interface {
 	WriteStatus(io.Writer)
 }
 
-// Use StatusServer instead to allow -count > 1 when testing.
-func ExportStatusWriter(sw StatusWriter, path string) {
+// The key is the route pattern. The value is nil when the resource is
+// released.
+var (
+	mu  sync.Mutex
+	sws = map[string]StatusWriter{}
+)
+
+func ExportStatusWriter(sw StatusWriter, path string) (release func()) {
+	pattern := fmt.Sprintf("/%s/%s", missinggo.GetTestName(), path)
+	release = func() {
+		mu.Lock()
+		defer mu.Unlock()
+		sws[pattern] = nil
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if curSw, ok := sws[pattern]; ok {
+		if curSw != nil {
+			panic(fmt.Sprintf("%q still in use", pattern))
+		}
+		sws[pattern] = sw
+		return
+	}
 	http.HandleFunc(
-		fmt.Sprintf("/%s/%s", missinggo.GetTestName(), path),
+		pattern,
 		func(w http.ResponseWriter, r *http.Request) {
+			sw := sws[pattern]
+			if sw == nil {
+				http.NotFound(w, r)
+				return
+			}
 			sw.WriteStatus(w)
 		},
 	)
-}
-
-type StatusServer struct {
-	sm http.ServeMux
-	l  net.Listener
-}
-
-func NewStatusServer(t *testing.T) (ret *StatusServer) {
-	l, err := net.Listen("tcp", "localhost:0")
-	require.NoError(t, err)
-	ret = &StatusServer{
-		l: l,
-	}
-	log.Printf("serving status at %q", l.Addr())
-	go http.Serve(l, &ret.sm)
+	sws[pattern] = sw
 	return
-}
-
-func (me *StatusServer) HandleStatusWriter(sw StatusWriter, path string) {
-	me.sm.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-		sw.WriteStatus(w)
-	})
-}
-
-func (me StatusServer) Close() {
-	me.l.Close()
 }

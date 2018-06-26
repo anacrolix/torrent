@@ -1524,11 +1524,11 @@ func (t *Torrent) addConnection(c *connection) (err error) {
 			return errors.New("existing connection preferred")
 		}
 	}
-	if !t.wantConns() {
-		return errors.New("don't want conns")
-	}
 	if len(t.conns) >= t.maxEstablishedConns {
 		c := t.worstBadConn()
+		if c == nil {
+			return errors.New("don't want conns")
+		}
 		if t.cl.config.Debug && missinggo.CryHeard() {
 			log.Printf("%s: dropping connection to make room for new one:\n    %v", t, c)
 		}

@@ -498,6 +498,12 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 			panic("requesting while choked and not allowed fast")
 		}
 	}
+	if cn.t.hashingPiece(pieceIndex(r.Index)) {
+		panic("piece is being hashed")
+	}
+	if cn.t.pieceQueuedForHash(pieceIndex(r.Index)) {
+		panic("piece is queued for hash")
+	}
 	if cn.requests == nil {
 		cn.requests = make(map[request]struct{})
 	}

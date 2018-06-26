@@ -1776,3 +1776,11 @@ func (t *Torrent) allStats(f func(*ConnStats)) {
 	f(&t.stats)
 	f(&t.cl.stats)
 }
+
+func (t *Torrent) hashingPiece(i pieceIndex) bool {
+	return t.pieces[i].hashing
+}
+
+func (t *Torrent) pieceQueuedForHash(i pieceIndex) bool {
+	return t.piecesQueuedForHash.Get(bitmap.BitIndex(i))
+}

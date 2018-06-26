@@ -192,7 +192,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	cfg.ListenHost = torrent.LoopbackListenHost
 	leecher, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
-	testutil.ExportStatusWriter(leecher, "l")
+	testutil.ExportStatusWriter(leecher, "l")()
 	defer leecher.Close()
 	leecherTorrent, err := leecher.AddTorrent(layout.Metainfo)
 	require.NoError(t, err)

@@ -1116,6 +1116,9 @@ func (c *connection) mainReadLoop() (err error) {
 			if len(msg.Piece) == int(t.chunkSize) {
 				t.chunkPool.Put(&msg.Piece)
 			}
+			if err != nil {
+				err = fmt.Errorf("receiving chunk: %s", err)
+			}
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 		case pp.Port:

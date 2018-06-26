@@ -49,8 +49,4 @@ var (
 	pieceInclinationsReused = expvar.NewInt("pieceInclinationsReused")
 	pieceInclinationsNew    = expvar.NewInt("pieceInclinationsNew")
 	pieceInclinationsPut    = expvar.NewInt("pieceInclinationsPut")
-
-	fillBufferSentCancels  = expvar.NewInt("fillBufferSentCancels")
-	fillBufferSentRequests = expvar.NewInt("fillBufferSentRequests")
-	numFillBuffers         = expvar.NewInt("numFillBuffers")
 )

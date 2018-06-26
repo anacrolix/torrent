@@ -1675,7 +1675,7 @@ func (t *Torrent) onIncompletePiece(piece int) {
 	}
 }
 
-func (t *Torrent) verifyPiece(piece int) {
+func (t *Torrent) verifyPiece(piece pieceIndex) {
 	cl := t.cl
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
@@ -1690,18 +1690,20 @@ func (t *Torrent) verifyPiece(piece int) {
 	if !p.t.piecesQueuedForHash.Remove(piece) {
 		panic("piece was not queued")
 	}
+	t.updatePiecePriority(piece)
 	if t.closed.IsSet() || t.pieceComplete(piece) {
-		t.updatePiecePriority(piece)
 		return
 	}
 	p.hashing = true
 	t.publishPieceChange(piece)
+	t.updatePiecePriority(piece)
 	t.storageLock.RLock()
 	cl.mu.Unlock()
 	sum := t.hashPiece(piece)
 	t.storageLock.RUnlock()
 	cl.mu.Lock()
 	p.hashing = false
+	t.updatePiecePriority(piece)
 	t.pieceHashed(piece, sum == p.hash)
 	t.publishPieceChange(piece)
 }
@@ -1732,6 +1734,7 @@ func (t *Torrent) queuePieceCheck(pieceIndex int) {
 	}
 	t.piecesQueuedForHash.Add(pieceIndex)
 	t.publishPieceChange(pieceIndex)
+	t.updatePiecePriority(pieceIndex)
 	go t.verifyPiece(pieceIndex)
 }
 

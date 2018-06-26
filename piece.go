@@ -215,7 +215,7 @@ func (p *Piece) SetPriority(prio piecePriority) {
 }
 
 func (p *Piece) uncachedPriority() (ret piecePriority) {
-	if p.t.pieceComplete(p.index) {
+	if p.t.pieceComplete(p.index) || p.t.pieceQueuedForHash(p.index) || p.t.hashingPiece(p.index) {
 		return PiecePriorityNone
 	}
 	for _, f := range p.files {

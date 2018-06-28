@@ -971,7 +971,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
 
 		networkingEnabled: true,
-		requestStrategy:   2,
+		requestStrategy:   3,
 		metadataChanged: sync.Cond{
 			L: &cl.mu,
 		},

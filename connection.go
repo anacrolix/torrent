@@ -739,6 +739,9 @@ func (cn *connection) shouldRequestWithoutBias() bool {
 }
 
 func (cn *connection) iterPendingPieces(f func(int) bool) bool {
+	if !cn.t.haveInfo() {
+		return false
+	}
 	if cn.t.requestStrategy == 3 {
 		return cn.iterUnbiasedPieceRequestOrder(f)
 	}

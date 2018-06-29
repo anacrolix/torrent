@@ -147,7 +147,7 @@ type Torrent struct {
 	pendingRequests map[request]int
 	// The last time we requested a chunk. Deleting the request from any
 	// connection will clear this value.
-	lastRequested map[request]time.Time
+	lastRequested map[request]*time.Timer
 }
 
 func (t *Torrent) tickleReaders() {
@@ -407,7 +407,7 @@ func (t *Torrent) onSetInfo() {
 	t.gotMetainfo.Set()
 	t.updateWantPeersEvent()
 	t.pendingRequests = make(map[request]int)
-	t.lastRequested = make(map[request]time.Time)
+	t.lastRequested = make(map[request]*time.Timer)
 }
 
 // Called when metadata for a torrent becomes available.
@@ -1239,6 +1239,9 @@ func (t *Torrent) deleteConnection(c *connection) (ret bool) {
 func (t *Torrent) assertNoPendingRequests() {
 	if len(t.pendingRequests) != 0 {
 		panic(t.pendingRequests)
+	}
+	if len(t.lastRequested) != 0 {
+		panic(t.lastRequested)
 	}
 }
 

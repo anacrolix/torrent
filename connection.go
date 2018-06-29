@@ -332,7 +332,7 @@ func (cn *connection) PeerHasPiece(piece int) bool {
 
 // Writes a message into the write buffer.
 func (cn *connection) Post(msg pp.Message) {
-	messageTypesPosted.Add(msg.Type.String(), 1)
+	torrent.Add(fmt.Sprintf("messages posted of type %s", msg.Type.String()), 1)
 	// We don't need to track bytes here because a connection.w Writer wrapper
 	// takes care of that (although there's some delay between us recording
 	// the message, and the connection writer flushing it out.).
@@ -604,7 +604,8 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			cn.fillWriteBuffer(func(msg pp.Message) bool {
 				cn.wroteMsg(&msg)
 				cn.writeBuffer.Write(msg.MustMarshalBinary())
-				return cn.writeBuffer.Len() < 1<<16
+				torrent.Add(fmt.Sprintf("messages filled of type %s", msg.Type.String()), 1)
+				return cn.writeBuffer.Len() < 1<<16 // 64KiB
 			})
 		}
 		if cn.writeBuffer.Len() == 0 && time.Since(lastWrite) >= keepAliveTimeout {
@@ -923,7 +924,7 @@ func (c *connection) requestPendingMetadata() {
 }
 
 func (cn *connection) wroteMsg(msg *pp.Message) {
-	messageTypesSent.Add(msg.Type.String(), 1)
+	torrent.Add(fmt.Sprintf("messages written of type %s", msg.Type.String()), 1)
 	cn.allStats(func(cs *ConnStats) { cs.wroteMsg(msg) })
 }
 

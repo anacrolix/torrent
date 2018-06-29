@@ -42,8 +42,6 @@ var (
 	requestedChunkLengths            = expvar.NewMap("requestedChunkLengths")
 
 	messageTypesReceived = expvar.NewMap("messageTypesReceived")
-	messageTypesSent     = expvar.NewMap("messageTypesSent")
-	messageTypesPosted   = expvar.NewMap("messageTypesPosted")
 
 	// Track the effectiveness of Torrent.connPieceInclinationPool.
 	pieceInclinationsReused = expvar.NewInt("pieceInclinationsReused")

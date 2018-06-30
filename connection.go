@@ -381,6 +381,8 @@ func (cn *connection) nominalMaxRequests() (ret int) {
 		expectingTime := int64(cn.totalExpectingTime())
 		if expectingTime == 0 {
 			expectingTime = math.MaxInt64
+		} else {
+			expectingTime *= 2
 		}
 		return int(clamp(
 			1,

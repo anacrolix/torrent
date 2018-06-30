@@ -13,5 +13,5 @@ file=debian-9.1.0-amd64-netinst.iso
 # file=sintel.mp4
 while [ ! -e "mnt/$file" ]; do sleep 1; done
 pv "mnt/$file" | md5sum
-umount mnt
+sudo umount mnt
 wait || echo "wait returned" $?

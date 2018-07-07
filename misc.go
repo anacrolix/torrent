@@ -169,4 +169,7 @@ func min(as ...int64) int64 {
 
 var unlimited = rate.NewLimiter(rate.Inf, 0)
 
-type pieceIndex = int
+type (
+	pieceIndex = int
+	InfoHash   = metainfo.Hash
+)

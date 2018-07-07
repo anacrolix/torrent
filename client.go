@@ -64,7 +64,7 @@ type Client struct {
 	// through legitimate channels.
 	dopplegangerAddrs map[string]struct{}
 	badPeerIPs        map[string]struct{}
-	torrents          map[metainfo.Hash]*Torrent
+	torrents          map[InfoHash]*Torrent
 
 	acceptLimiter map[ipStr]int
 }

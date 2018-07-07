@@ -71,4 +71,4 @@ func handleEncryption(
 	return
 }
 
-type PeerExtensionBits=pp.PeerExtensionBits
+type PeerExtensionBits = pp.PeerExtensionBits

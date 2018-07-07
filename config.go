@@ -7,11 +7,11 @@ import (
 	"net/url"
 	"time"
 
-	"golang.org/x/time/rate"
-
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/expect"
+	"golang.org/x/time/rate"
+
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/storage"
 )

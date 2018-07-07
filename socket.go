@@ -8,10 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/net/proxy"
-
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/perf"
+	"golang.org/x/net/proxy"
 )
 
 type dialer interface {

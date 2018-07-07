@@ -1,9 +1,10 @@
 package torrent
 
 import (
-	pp "github.com/anacrolix/torrent/peer_protocol"
 	"crypto"
 	"expvar"
+
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 const (

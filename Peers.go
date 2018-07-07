@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"github.com/anacrolix/dht/krpc"
+
 	"github.com/anacrolix/torrent/tracker"
 )
 

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	flog "github.com/anacrolix/log"
-
 	"github.com/elgatito/upnp"
 )
 

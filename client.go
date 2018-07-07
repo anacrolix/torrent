@@ -14,12 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anacrolix/missinggo/perf"
-
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/dht/krpc"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pproffd"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"

@@ -19,7 +19,6 @@ import (
 	"sync"
 
 	"github.com/anacrolix/missinggo/perf"
-
 	"github.com/bradfitz/iter"
 )
 

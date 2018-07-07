@@ -1296,6 +1296,9 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	u, err := url.Parse(_url)
 	if err != nil {
 		log.Str("error parsing tracker url").AddValues("url", _url).Log(t.logger)
+		// TODO: Handle urls with leading '*', some kind of silly uTorrent
+		// convention?
+		return
 	}
 	if u.Scheme == "udp" {
 		u.Scheme = "udp4"

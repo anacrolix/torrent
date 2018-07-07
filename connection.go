@@ -398,7 +398,11 @@ func (cn *connection) nominalMaxRequests() (ret int) {
 			),
 		))
 	}
-	return int(clamp(1, int64(cn.PeerMaxRequests), max(64, cn.stats.ChunksReadUseful.Int64()-(cn.stats.ChunksRead.Int64()-cn.stats.ChunksReadUseful.Int64()))))
+	return int(clamp(
+		1,
+		int64(cn.PeerMaxRequests),
+		max(64,
+			cn.stats.ChunksReadUseful.Int64()-(cn.stats.ChunksRead.Int64()-cn.stats.ChunksReadUseful.Int64()))))
 }
 
 func (cn *connection) totalExpectingTime() (ret time.Duration) {

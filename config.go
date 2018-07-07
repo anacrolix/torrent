@@ -41,8 +41,7 @@ type ClientConfig struct {
 	// Disable uploading even when it isn't fair.
 	DisableAggressiveUpload bool `long:"disable-aggressive-upload"`
 	// Upload even after there's nothing in it for us. By default uploading is
-	// not altruistic, we'll upload slightly more than we download from each
-	// peer.
+	// not altruistic, we'll only upload to encourage the peer to reciprocate.
 	Seed bool `long:"seed"`
 	// Only applies to chunks uploaded to peers, to maintain responsiveness
 	// communicating local Client state to peers. Each limiter token

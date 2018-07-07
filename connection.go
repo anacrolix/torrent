@@ -90,7 +90,7 @@ type connection struct {
 	PeerInterested     bool
 	PeerChoked         bool
 	PeerRequests       map[request]struct{}
-	PeerExtensionBytes peerExtensionBytes
+	PeerExtensionBytes pp.PeerExtensionBits
 	// The pieces the peer has claimed to have.
 	peerPieces bitmap.Bitmap
 	// The peer has everything. This can occur due to a special message, when

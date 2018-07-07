@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	pp "github.com/anacrolix/torrent/peer_protocol"
 	"crypto"
 	"expvar"
 )
@@ -16,8 +17,8 @@ const (
 	pexExtendedId
 )
 
-func defaultPeerExtensionBytes() peerExtensionBytes {
-	return newPeerExtensionBytes(ExtensionBitDHT, ExtensionBitExtended, ExtensionBitFast)
+func defaultPeerExtensionBytes() PeerExtensionBits {
+	return pp.NewPeerExtensionBytes(pp.ExtensionBitDHT, pp.ExtensionBitExtended, pp.ExtensionBitFast)
 }
 
 // I could move a lot of these counters to their own file, but I suspect they

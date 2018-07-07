@@ -182,12 +182,12 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	require.NoError(t, err)
 	defer nc.Close()
 
-	var pex peerExtensionBytes
-	pex.SetBit(ExtensionBitExtended)
-	hr, ok, err := handshake(nc, &ih, [20]byte{}, pex)
+	var pex PeerExtensionBits
+	pex.SetBit(pp.ExtensionBitExtended)
+	hr, ok, err := pp.Handshake(nc, &ih, [20]byte{}, pex)
 	require.NoError(t, err)
 	assert.True(t, ok)
-	assert.True(t, hr.peerExtensionBytes.GetBit(ExtensionBitExtended))
+	assert.True(t, hr.PeerExtensionBits.GetBit(pp.ExtensionBitExtended))
 	assert.EqualValues(t, cl.PeerID(), hr.PeerID)
 	assert.Equal(t, ih, hr.Hash)
 

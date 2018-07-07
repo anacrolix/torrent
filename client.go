@@ -57,7 +57,7 @@ type Client struct {
 	dhtServers     []*dht.Server
 	ipBlockList    iplist.Ranger
 	// Our BitTorrent protocol extension bytes, sent in our BT handshakes.
-	extensionBytes peerExtensionBytes
+	extensionBytes pp.PeerExtensionBits
 
 	// Set of addresses that have our client ID. This intentionally will
 	// include ourselves if we end up trying to connect to our own address
@@ -730,12 +730,12 @@ func (cl *Client) receiveHandshakes(c *connection) (t *Torrent, err error) {
 
 // Returns !ok if handshake failed for valid reasons.
 func (cl *Client) connBTHandshake(c *connection, ih *metainfo.Hash) (ret metainfo.Hash, ok bool, err error) {
-	res, ok, err := handshake(c.rw(), ih, cl.peerID, cl.extensionBytes)
+	res, ok, err := pp.Handshake(c.rw(), ih, cl.peerID, cl.extensionBytes)
 	if err != nil || !ok {
 		return
 	}
 	ret = res.Hash
-	c.PeerExtensionBytes = res.peerExtensionBytes
+	c.PeerExtensionBytes = res.PeerExtensionBits
 	c.PeerID = res.PeerID
 	c.completedHandshake = time.Now()
 	return

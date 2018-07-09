@@ -1,6 +1,10 @@
 package torrent
 
-import "container/heap"
+import (
+	"container/heap"
+	"fmt"
+	"unsafe"
+)
 
 func worseConn(l, r *connection) bool {
 	var ml multiLess
@@ -11,7 +15,13 @@ func worseConn(l, r *connection) bool {
 	ml.StrictNext(
 		l.completedHandshake.Equal(r.completedHandshake),
 		l.completedHandshake.Before(r.completedHandshake))
-	return ml.Final()
+	ml.StrictNext(l.peerPriority() == r.peerPriority(), l.peerPriority() < r.peerPriority())
+	ml.StrictNext(l == r, uintptr(unsafe.Pointer(l)) < uintptr(unsafe.Pointer(r)))
+	less, ok := ml.FinalOk()
+	if !ok {
+		panic(fmt.Sprintf("cannot differentiate %#v and %#v", l, r))
+	}
+	return less
 }
 
 type worseConnSlice struct {

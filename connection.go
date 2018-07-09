@@ -1553,3 +1553,15 @@ func (c *connection) setTorrent(t *Torrent) {
 	c.t = t
 	t.reconcileHandshakeStats(c)
 }
+
+func (c *connection) peerPriority() peerPriority {
+	return bep40PriorityIgnoreError(c.remoteIpPort(), c.t.cl.publicAddr(c.remoteIp()))
+}
+
+func (c *connection) remoteIp() net.IP {
+	return missinggo.AddrIP(c.remoteAddr())
+}
+
+func (c *connection) remoteIpPort() ipPort {
+	return ipPort{missinggo.AddrIP(c.remoteAddr()), uint16(missinggo.AddrPort(c.remoteAddr()))}
+}

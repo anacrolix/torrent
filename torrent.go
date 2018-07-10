@@ -444,7 +444,7 @@ func (t *Torrent) haveAllMetadataPieces() bool {
 }
 
 // TODO: Propagate errors to disconnect peer.
-func (t *Torrent) setMetadataSize(bytes int64) (err error) {
+func (t *Torrent) setMetadataSize(bytes int) (err error) {
 	if t.haveInfo() {
 		// We already know the correct metadata size.
 		return
@@ -498,13 +498,10 @@ func (t *Torrent) newMetadataExtensionMessage(c *connection, msgType int, piece 
 	if data != nil {
 		d["total_size"] = len(t.metadataBytes)
 	}
-	p, err := bencode.Marshal(d)
-	if err != nil {
-		panic(err)
-	}
+	p := bencode.MustMarshal(d)
 	return pp.Message{
 		Type:            pp.Extended,
-		ExtendedID:      c.PeerExtensionIDs["ut_metadata"],
+		ExtendedID:      c.PeerExtensionIDs[pp.ExtensionNameMetadata],
 		ExtendedPayload: append(p, data...),
 	}
 }

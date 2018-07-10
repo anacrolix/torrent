@@ -12,7 +12,7 @@ type Message struct {
 	Index, Begin, Length Integer
 	Piece                []byte
 	Bitfield             []bool
-	ExtendedID           byte
+	ExtendedID           ExtensionNumber
 	ExtendedPayload      []byte
 	Port                 uint16
 }
@@ -69,7 +69,7 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 				panic(n)
 			}
 		case Extended:
-			err = buf.WriteByte(msg.ExtendedID)
+			err = buf.WriteByte(byte(msg.ExtendedID))
 			if err != nil {
 				return
 			}

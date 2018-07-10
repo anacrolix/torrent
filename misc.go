@@ -110,23 +110,6 @@ func connLessTrusted(l, r *connection) bool {
 	return l.netGoodPiecesDirtied() < r.netGoodPiecesDirtied()
 }
 
-// Convert a net.Addr to its compact IP representation. Either 4 or 16 bytes
-// per "yourip" field of http://www.bittorrent.org/beps/bep_0010.html.
-func addrCompactIP(addr net.Addr) (string, error) {
-	host, _, err := net.SplitHostPort(addr.String())
-	if err != nil {
-		return "", err
-	}
-	ip := net.ParseIP(host)
-	if v4 := ip.To4(); v4 != nil {
-		if len(v4) != 4 {
-			panic(v4)
-		}
-		return string(v4), nil
-	}
-	return string(ip.To16()), nil
-}
-
 func connIsIpv6(nc interface {
 	LocalAddr() net.Addr
 }) bool {

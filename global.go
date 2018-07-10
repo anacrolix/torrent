@@ -11,9 +11,11 @@ const (
 	pieceHash        = crypto.SHA1
 	maxRequests      = 250    // Maximum pending requests we allow peers to send us.
 	defaultChunkSize = 0x4000 // 16KiB
+)
 
-	// These are our extended message IDs. Peers will use these values to
-	// select which extension a message is intended for.
+// These are our extended message IDs. Peers will use these values to
+// select which extension a message is intended for.
+const (
 	metadataExtendedId = iota + 1 // 0 is reserved for deleting keys
 	pexExtendedId
 )
@@ -35,10 +37,9 @@ var (
 	peerExtensions                    = expvar.NewMap("peerExtensions")
 	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
 	// Count of connections to peer with same client ID.
-	connsToSelf                = expvar.NewInt("connsToSelf")
-	receivedKeepalives         = expvar.NewInt("receivedKeepalives")
-	supportedExtensionMessages = expvar.NewMap("supportedExtensionMessages")
-	postedKeepalives           = expvar.NewInt("postedKeepalives")
+	connsToSelf        = expvar.NewInt("connsToSelf")
+	receivedKeepalives = expvar.NewInt("receivedKeepalives")
+	postedKeepalives   = expvar.NewInt("postedKeepalives")
 	// Requests received for pieces we don't have.
 	requestsReceivedForMissingPieces = expvar.NewInt("requestsReceivedForMissingPieces")
 	requestedChunkLengths            = expvar.NewMap("requestedChunkLengths")

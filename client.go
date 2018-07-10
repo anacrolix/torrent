@@ -831,40 +831,25 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 			Type:       pp.Extended,
 			ExtendedID: pp.HandshakeExtendedID,
 			ExtendedPayload: func() []byte {
-				d := map[string]interface{}{
-					"m": func() (ret map[string]int) {
-						ret = make(map[string]int, 2)
-						ret["ut_metadata"] = metadataExtendedId
-						if !cl.config.DisablePEX {
-							ret["ut_pex"] = pexExtendedId
-						}
-						return
-					}(),
-					"v": cl.config.ExtendedHandshakeClientVersion,
-					// No upload queue is implemented yet.
-					"reqq": 64,
+				msg := pp.ExtendedHandshakeMessage{
+					M: map[pp.ExtensionName]pp.ExtensionNumber{
+						pp.ExtensionNameMetadata: metadataExtendedId,
+					},
+					V:            cl.config.ExtendedHandshakeClientVersion,
+					Reqq:         64, // TODO: Really?
+					YourIp:       pp.CompactIp(missinggo.AddrIP(conn.remoteAddr())),
+					Encryption:   !cl.config.DisableEncryption,
+					Port:         cl.incomingPeerPort(),
+					MetadataSize: torrent.metadataSize(),
 				}
-				if !cl.config.DisableEncryption {
-					d["e"] = 1
+				// TODO: We can figured these out specific to the socket
+				// used.
+				copy(msg.Ipv4[:], cl.config.PublicIp4.To4())
+				copy(msg.Ipv6[:], cl.config.PublicIp6.To16())
+				if !cl.config.DisablePEX {
+					msg.M[pp.ExtensionNamePex] = pexExtendedId
 				}
-				if torrent.metadataSizeKnown() {
-					d["metadata_size"] = torrent.metadataSize()
-				}
-				if p := cl.incomingPeerPort(); p != 0 {
-					d["p"] = p
-				}
-				yourip, err := addrCompactIP(conn.remoteAddr())
-				if err != nil {
-					log.Printf("error calculating yourip field value in extension handshake: %s", err)
-				} else {
-					d["yourip"] = yourip
-				}
-				// log.Printf("sending %v", d)
-				b, err := bencode.Marshal(d)
-				if err != nil {
-					panic(err)
-				}
-				return b
+				return bencode.MustMarshal(msg)
 			}(),
 		})
 	}

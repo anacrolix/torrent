@@ -88,10 +88,11 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 		}
 		msg.Piece = b
 	case Extended:
-		msg.ExtendedID, err = readByte(r)
+		b, err := readByte(r)
 		if err != nil {
 			break
 		}
+		msg.ExtendedID = ExtensionNumber(b)
 		msg.ExtendedPayload, err = ioutil.ReadAll(r)
 	case Port:
 		err = binary.Read(r, binary.BigEndian, &msg.Port)

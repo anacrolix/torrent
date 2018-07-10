@@ -3,7 +3,6 @@ package torrent
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -20,6 +19,7 @@ import (
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/prioritybitmap"
+	"github.com/pkg/errors"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/mse"
@@ -104,7 +104,7 @@ type connection struct {
 	peerAllowedFast   bitmap.Bitmap
 
 	PeerMaxRequests  int // Maximum pending requests the peer allows.
-	PeerExtensionIDs map[string]byte
+	PeerExtensionIDs map[pp.ExtensionName]pp.ExtensionNumber
 	PeerClientName   string
 
 	pieceInclination  []int
@@ -188,7 +188,7 @@ func (cn *connection) localAddr() net.Addr {
 	return cn.conn.LocalAddr()
 }
 
-func (cn *connection) supportsExtension(ext string) bool {
+func (cn *connection) supportsExtension(ext pp.ExtensionName) bool {
 	_, ok := cn.PeerExtensionIDs[ext]
 	return ok
 }
@@ -343,7 +343,7 @@ func (cn *connection) Post(msg pp.Message) {
 }
 
 func (cn *connection) requestMetadataPiece(index int) {
-	eID := cn.PeerExtensionIDs["ut_metadata"]
+	eID := cn.PeerExtensionIDs[pp.ExtensionNameMetadata]
 	if eID == 0 {
 		return
 	}
@@ -919,7 +919,7 @@ func (c *connection) requestPendingMetadata() {
 	if c.t.haveInfo() {
 		return
 	}
-	if c.PeerExtensionIDs["ut_metadata"] == 0 {
+	if c.PeerExtensionIDs[pp.ExtensionNameMetadata] == 0 {
 		// Peer doesn't support this.
 		return
 	}
@@ -1166,7 +1166,7 @@ func (c *connection) mainReadLoop() (err error) {
 	}
 }
 
-func (c *connection) onReadExtendedMsg(id byte, payload []byte) (err error) {
+func (c *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err error) {
 	defer func() {
 		// TODO: Should we still do this?
 		if err != nil {
@@ -1181,58 +1181,31 @@ func (c *connection) onReadExtendedMsg(id byte, payload []byte) (err error) {
 	cl := t.cl
 	switch id {
 	case pp.HandshakeExtendedID:
-		// TODO: Create a bencode struct for this.
-		var d map[string]interface{}
-		err := bencode.Unmarshal(payload, &d)
-		if err != nil {
-			return fmt.Errorf("error decoding extended message payload: %s", err)
+		var d pp.ExtendedHandshakeMessage
+		if err := bencode.Unmarshal(payload, &d); err != nil {
+			log.Print(err)
+			return errors.Wrap(err, "unmarshalling extended handshake payload")
 		}
-		// log.Printf("got handshake from %q: %#v", c.Socket.RemoteAddr().String(), d)
-		if reqq, ok := d["reqq"]; ok {
-			if i, ok := reqq.(int64); ok {
-				c.PeerMaxRequests = int(i)
+		if d.Reqq != 0 {
+			c.PeerMaxRequests = d.Reqq
+		}
+		c.PeerClientName = d.V
+		if c.PeerExtensionIDs == nil {
+			c.PeerExtensionIDs = make(map[pp.ExtensionName]pp.ExtensionNumber, len(d.M))
+		}
+		for name, id := range d.M {
+			if _, ok := c.PeerExtensionIDs[name]; !ok {
+				torrent.Add(fmt.Sprintf("peers supporting extension %q", name), 1)
+			}
+			c.PeerExtensionIDs[name] = id
+		}
+		log.Print(c.PeerExtensionIDs)
+		if d.MetadataSize != 0 {
+			if err = t.setMetadataSize(d.MetadataSize); err != nil {
+				return errors.Wrapf(err, "setting metadata size to %d", d.MetadataSize)
 			}
 		}
-		if v, ok := d["v"]; ok {
-			c.PeerClientName = v.(string)
-		}
-		if m, ok := d["m"]; ok {
-			mTyped, ok := m.(map[string]interface{})
-			if !ok {
-				return errors.New("handshake m value is not dict")
-			}
-			if c.PeerExtensionIDs == nil {
-				c.PeerExtensionIDs = make(map[string]byte, len(mTyped))
-			}
-			for name, v := range mTyped {
-				id, ok := v.(int64)
-				if !ok {
-					log.Printf("bad handshake m item extension ID type: %T", v)
-					continue
-				}
-				if id == 0 {
-					delete(c.PeerExtensionIDs, name)
-				} else {
-					if c.PeerExtensionIDs[name] == 0 {
-						supportedExtensionMessages.Add(name, 1)
-					}
-					c.PeerExtensionIDs[name] = byte(id)
-				}
-			}
-		}
-		metadata_sizeUntyped, ok := d["metadata_size"]
-		if ok {
-			metadata_size, ok := metadata_sizeUntyped.(int64)
-			if !ok {
-				log.Printf("bad metadata_size type: %T", metadata_sizeUntyped)
-			} else {
-				err = t.setMetadataSize(metadata_size)
-				if err != nil {
-					return fmt.Errorf("error setting metadata size to %d", metadata_size)
-				}
-			}
-		}
-		if _, ok := c.PeerExtensionIDs["ut_metadata"]; ok {
+		if _, ok := c.PeerExtensionIDs[pp.ExtensionNameMetadata]; ok {
 			c.requestPendingMetadata()
 		}
 		return nil

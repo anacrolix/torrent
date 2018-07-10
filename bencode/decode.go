@@ -211,7 +211,7 @@ func getDictField(dict reflect.Value, key string) dictField {
 			Ok:    true,
 			Set: func() {
 				// Assigns the value into the map.
-				dict.SetMapIndex(reflect.ValueOf(key), value)
+				dict.SetMapIndex(reflect.ValueOf(key).Convert(dict.Type().Key()), value)
 			},
 		}
 	case reflect.Struct:
@@ -227,9 +227,9 @@ func getDictField(dict reflect.Value, key string) dictField {
 			})
 		}
 		return dictField{
-			Value: dict.FieldByIndex(sf.Index),
-			Ok:    true,
-			Set:   func() {},
+			Value:                    dict.FieldByIndex(sf.Index),
+			Ok:                       true,
+			Set:                      func() {},
 			IgnoreUnmarshalTypeError: getTag(sf.Tag).IgnoreUnmarshalTypeError(),
 		}
 	default:

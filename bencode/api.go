@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+
+	"github.com/anacrolix/missinggo/expect"
 )
 
 //----------------------------------------------------------------------------
@@ -119,6 +121,12 @@ func Marshal(v interface{}) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func MustMarshal(v interface{}) []byte {
+	b, err := Marshal(v)
+	expect.Nil(err)
+	return b
 }
 
 // Unmarshal the bencode value in the 'data' to a value pointed by the 'v'

@@ -1199,7 +1199,6 @@ func (c *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (e
 			}
 			c.PeerExtensionIDs[name] = id
 		}
-		log.Print(c.PeerExtensionIDs)
 		if d.MetadataSize != 0 {
 			if err = t.setMetadataSize(d.MetadataSize); err != nil {
 				return errors.Wrapf(err, "setting metadata size to %d", d.MetadataSize)

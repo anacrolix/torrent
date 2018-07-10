@@ -1793,3 +1793,7 @@ func (t *Torrent) hashingPiece(i pieceIndex) bool {
 func (t *Torrent) pieceQueuedForHash(i pieceIndex) bool {
 	return t.piecesQueuedForHash.Get(bitmap.BitIndex(i))
 }
+
+func (t *Torrent) dialTimeout() time.Duration {
+	return reducedDialTimeout(t.cl.config.MinDialTimeout, t.cl.config.NominalDialTimeout, t.cl.halfOpenLimit, t.peers.Len())
+}

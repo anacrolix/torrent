@@ -597,7 +597,11 @@ func (cl *Client) establishOutgoingConnEx(t *Torrent, addr string, ctx context.C
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
 func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), func() time.Duration {
+		cl.mu.RLock()
+		defer cl.mu.RUnlock()
+		return t.dialTimeout()
+	}())
 	defer cancel()
 	obfuscatedHeaderFirst := !cl.config.DisableEncryption && !cl.config.PreferNoEncryption
 	c, err = cl.establishOutgoingConnEx(t, addr, ctx, obfuscatedHeaderFirst)

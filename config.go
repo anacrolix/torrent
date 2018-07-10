@@ -93,17 +93,19 @@ type ClientConfig struct {
 	// Also see `extendedHandshakeClientVersion`.
 	Bep20 string // default "-GT0001-"
 
-	NominalDialTimeout         time.Duration // default  time.Second * 30
-	MinDialTimeout             time.Duration // default  5 * time.Second
-	EstablishedConnsPerTorrent int           // default 80
-	HalfOpenConnsPerTorrent    int           // default  80
-	TorrentPeersHighWater      int           // default 200
-	TorrentPeersLowWater       int           // default 50
+	// Peer dial timeout to use when there are limited peers.
+	NominalDialTimeout time.Duration
+	// Minimum peer dial timeout to use (even if we have lots of peers).
+	MinDialTimeout             time.Duration
+	EstablishedConnsPerTorrent int
+	HalfOpenConnsPerTorrent    int
+	TorrentPeersHighWater      int
+	TorrentPeersLowWater       int
 
 	// Limit how long handshake can take. This is to reduce the lingering
 	// impact of a few bad apples. 4s loses 1% of successful handshakes that
 	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
-	HandshakesTimeout time.Duration // default  20 * time.Second
+	HandshakesTimeout time.Duration
 
 	PublicIp4 net.IP
 	PublicIp6 net.IP
@@ -133,18 +135,18 @@ func NewDefaultClientConfig() *ClientConfig {
 			}},
 		HTTPUserAgent:                  DefaultHTTPUserAgent,
 		ExtendedHandshakeClientVersion: "go.torrent dev 20150624",
-		Bep20:                      "-GT0001-",
-		NominalDialTimeout:         30 * time.Second,
-		MinDialTimeout:             5 * time.Second,
-		EstablishedConnsPerTorrent: 50,
-		HalfOpenConnsPerTorrent:    25,
-		TorrentPeersHighWater:      500,
-		TorrentPeersLowWater:       50,
-		HandshakesTimeout:          20 * time.Second,
-		DhtStartingNodes:           dht.GlobalBootstrapAddrs,
-		ListenHost:                 func(string) string { return "" },
-		UploadRateLimiter:          unlimited,
-		DownloadRateLimiter:        unlimited,
+		Bep20:                          "-GT0001-",
+		NominalDialTimeout:             20 * time.Second,
+		MinDialTimeout:                 5 * time.Second,
+		EstablishedConnsPerTorrent:     50,
+		HalfOpenConnsPerTorrent:        25,
+		TorrentPeersHighWater:          500,
+		TorrentPeersLowWater:           50,
+		HandshakesTimeout:              4 * time.Second,
+		DhtStartingNodes:               dht.GlobalBootstrapAddrs,
+		ListenHost:                     func(string) string { return "" },
+		UploadRateLimiter:              unlimited,
+		DownloadRateLimiter:            unlimited,
 	}
 }
 

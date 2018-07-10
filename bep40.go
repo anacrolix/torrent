@@ -74,7 +74,7 @@ func bep40PriorityBytes(a, b ipPort) ([]byte, error) {
 func bep40Priority(a, b ipPort) (peerPriority, error) {
 	bs, err := bep40PriorityBytes(a, b)
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 	i := len(bs) / 2
 	_a, _b := bs[:i], bs[i:]

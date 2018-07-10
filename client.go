@@ -48,7 +48,6 @@ type Client struct {
 	config *ClientConfig
 	logger *log.Logger
 
-	halfOpenLimit  int
 	peerID         PeerID
 	defaultStorage *storage.Client
 	onClose        []func()
@@ -180,7 +179,6 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		}
 	}()
 	cl = &Client{
-		halfOpenLimit:     cfg.HalfOpenConnsPerTorrent,
 		config:            cfg,
 		dopplegangerAddrs: make(map[string]struct{}),
 		torrents:          make(map[metainfo.Hash]*Torrent),

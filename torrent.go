@@ -1059,7 +1059,7 @@ func (t *Torrent) maxHalfOpen() int {
 	extraIncoming := int64(t.numReceivedConns() - t.maxEstablishedConns/2)
 	// We want to allow some experimentation with new peers, and to try to
 	// upset an oversupply of received connections.
-	return int(min(max(5, extraIncoming)+establishedHeadroom, int64(t.cl.halfOpenLimit)))
+	return int(min(max(5, extraIncoming)+establishedHeadroom, int64(t.cl.config.HalfOpenConnsPerTorrent)))
 }
 
 func (t *Torrent) openNewConns() {
@@ -1792,5 +1792,5 @@ func (t *Torrent) pieceQueuedForHash(i pieceIndex) bool {
 }
 
 func (t *Torrent) dialTimeout() time.Duration {
-	return reducedDialTimeout(t.cl.config.MinDialTimeout, t.cl.config.NominalDialTimeout, t.cl.halfOpenLimit, t.peers.Len())
+	return reducedDialTimeout(t.cl.config.MinDialTimeout, t.cl.config.NominalDialTimeout, t.cl.config.HalfOpenConnsPerTorrent, t.peers.Len())
 }

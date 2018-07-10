@@ -1248,13 +1248,16 @@ func (c *connection) onReadExtendedMsg(id byte, payload []byte) (err error) {
 			// advertising that we support PEX if it's disabled.
 			return nil
 		}
-		var pexMsg peerExchangeMessage
+		var pexMsg pp.PexMsg
 		err := bencode.Unmarshal(payload, &pexMsg)
 		if err != nil {
 			return fmt.Errorf("error unmarshalling PEX message: %s", err)
 		}
 		torrent.Add("pex added6 peers received", int64(len(pexMsg.Added6)))
-		t.addPeers(pexMsg.AddedPeers())
+		var peers Peers
+		peers.AppendFromPex(pexMsg.Added6, pexMsg.Added6Flags)
+		peers.AppendFromPex(pexMsg.Added, pexMsg.AddedFlags)
+		t.addPeers(peers)
 		return nil
 	default:
 		return fmt.Errorf("unexpected extended message ID: %v", id)

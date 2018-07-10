@@ -124,19 +124,6 @@ func TestTorrentInitialState(t *testing.T) {
 	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
 }
 
-func TestUnmarshalPEXMsg(t *testing.T) {
-	var m peerExchangeMessage
-	if err := bencode.Unmarshal([]byte("d5:added12:\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0ce"), &m); err != nil {
-		t.Fatal(err)
-	}
-	if len(m.Added) != 2 {
-		t.FailNow()
-	}
-	if m.Added[0].Port != 0x506 {
-		t.FailNow()
-	}
-}
-
 func TestReducedDialTimeout(t *testing.T) {
 	cfg := NewDefaultClientConfig()
 	for _, _case := range []struct {

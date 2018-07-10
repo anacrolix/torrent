@@ -3,15 +3,16 @@ package torrent
 import (
 	"github.com/anacrolix/dht/krpc"
 
+	"github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/tracker"
 )
 
 type Peers []Peer
 
-func (me *Peers) FromPex(nas []krpc.NodeAddr, fs []pexPeerFlags) {
+func (me *Peers) AppendFromPex(nas []krpc.NodeAddr, fs []peer_protocol.PexPeerFlags) {
 	for i, na := range nas {
 		var p Peer
-		var f pexPeerFlags
+		var f peer_protocol.PexPeerFlags
 		if i < len(fs) {
 			f = fs[i]
 		}
@@ -20,7 +21,7 @@ func (me *Peers) FromPex(nas []krpc.NodeAddr, fs []pexPeerFlags) {
 	}
 }
 
-func (ret Peers) FromTracker(ps []tracker.Peer) Peers {
+func (ret Peers) AppendFromTracker(ps []tracker.Peer) Peers {
 	for _, p := range ps {
 		_p := Peer{
 			IP:     p.IP,

@@ -1,4 +1,4 @@
-package torrent
+package peer_protocol
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestUnmarshalPex(t *testing.T) {
-	var pem peerExchangeMessage
+	var pem PexMsg
 	err := bencode.Unmarshal([]byte("d5:added12:\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0ce"), &pem)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, len(pem.Added))

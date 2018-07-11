@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/anacrolix/dht"
@@ -80,10 +79,10 @@ type ClientConfig struct {
 	// Perform logging and any other behaviour that will help debug.
 	Debug bool `help:"enable debugging"`
 
-	// HTTP client used to query the tracker endpoint. Default is DefaultHTTPClient
-	HTTP *http.Client
+	// For querying HTTP trackers.
+	TrackerHttpClient *http.Client
 	// HTTPUserAgent changes default UserAgent for HTTP requests
-	HTTPUserAgent string `long:"http-user-agent"`
+	HTTPUserAgent string
 	// Updated occasionally to when there's been some changes to client
 	// behaviour in case other clients are assuming anything of us. See also
 	// `bep20`.
@@ -124,7 +123,7 @@ func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
 
 func NewDefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
-		HTTP: &http.Client{
+		TrackerHttpClient: &http.Client{
 			Timeout: time.Second * 15,
 			Transport: &http.Transport{
 				Dial: (&net.Dialer{
@@ -147,19 +146,6 @@ func NewDefaultClientConfig() *ClientConfig {
 		ListenHost:                     func(string) string { return "" },
 		UploadRateLimiter:              unlimited,
 		DownloadRateLimiter:            unlimited,
-	}
-}
-
-func (cfg *ClientConfig) setProxyURL() {
-	fixedURL, err := url.Parse(cfg.ProxyURL)
-	if err != nil {
-		return
-	}
-
-	cfg.HTTP.Transport = &http.Transport{
-		Proxy:               http.ProxyURL(fixedURL),
-		TLSHandshakeTimeout: 15 * time.Second,
-		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
 	}
 }
 

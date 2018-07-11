@@ -111,7 +111,7 @@ func (me *trackerScraper) announce() (ret trackerAnnounceResult) {
 	req := me.t.announceRequest()
 	me.t.cl.mu.Unlock()
 	res, err := tracker.Announce{
-		HttpClient: me.t.cl.config.HTTP,
+		HttpClient: me.t.cl.config.TrackerHttpClient,
 		UserAgent:  me.t.cl.config.HTTPUserAgent,
 		TrackerUrl: me.trackerUrl(ip),
 		Request:    req,

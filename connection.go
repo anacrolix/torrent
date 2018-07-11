@@ -1472,6 +1472,8 @@ func (c *connection) deleteRequest(r request) bool {
 		panic(n)
 	}
 	c.updateRequests()
+	// TODO: Other connections that aren't interested, and can provide this
+	// chunk might be wakeable?
 	return true
 }
 

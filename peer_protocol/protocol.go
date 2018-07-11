@@ -25,7 +25,7 @@ const (
 	Cancel        MessageType = 8
 	Port          MessageType = 9
 
-	// BEP 6
+	// BEP 6 - Fast extension
 	Suggest     MessageType = 0x0d // 13
 	HaveAll     MessageType = 0x0e // 14
 	HaveNone    MessageType = 0x0f // 15

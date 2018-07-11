@@ -35,7 +35,7 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 		return
 	}
 	msg.Keepalive = false
-	r := &io.LimitedReader{R:d.R, N:int64(length)}
+	r := &io.LimitedReader{R: d.R, N: int64(length)}
 	// Check that all of r was utilized.
 	defer func() {
 		if err != nil {

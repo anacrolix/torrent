@@ -213,6 +213,9 @@ func getDictField(dict reflect.Value, key string) dictField {
 			Value: value,
 			Ok:    true,
 			Set: func() {
+				if dict.IsNil() {
+					dict.Set(reflect.MakeMap(dict.Type()))
+				}
 				// Assigns the value into the map.
 				dict.SetMapIndex(reflect.ValueOf(key).Convert(dict.Type().Key()), value)
 			},
@@ -236,7 +239,7 @@ func getDictField(dict reflect.Value, key string) dictField {
 			IgnoreUnmarshalTypeError: getTag(sf.Tag).IgnoreUnmarshalTypeError(),
 		}
 	default:
-		panic(dict.Kind())
+		return dictField{}
 	}
 }
 
@@ -270,26 +273,6 @@ func getStructFieldForKey(struct_ reflect.Type, key string) (f reflect.StructFie
 }
 
 func (d *Decoder) parseDict(v reflect.Value) error {
-	switch v.Kind() {
-	case reflect.Map:
-		t := v.Type()
-		if t.Key().Kind() != reflect.String {
-			panic(&UnmarshalTypeError{
-				Value: "object",
-				Type:  t,
-			})
-		}
-		if v.IsNil() {
-			v.Set(reflect.MakeMap(t))
-		}
-	case reflect.Struct:
-	default:
-		panic(&UnmarshalTypeError{
-			Value: "object",
-			Type:  v.Type(),
-		})
-	}
-
 	// so, at this point 'd' byte was consumed, let's just read key/value
 	// pairs one by one
 	for {

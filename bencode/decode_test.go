@@ -167,3 +167,9 @@ func TestUnmarshalUnusedBytes(t *testing.T) {
 	require.EqualValues(t, ErrUnusedTrailingBytes{1}, Unmarshal([]byte("i42ee"), &i))
 	assert.EqualValues(t, 42, i)
 }
+
+func TestUnmarshalByteArray(t *testing.T) {
+	var ba [2]byte
+	assert.NoError(t, Unmarshal([]byte("2:hi"), &ba))
+	assert.EqualValues(t, "hi", ba[:])
+}

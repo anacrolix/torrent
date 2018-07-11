@@ -168,26 +168,29 @@ func (d *Decoder) parseString(v reflect.Value) error {
 		})
 	}
 
+	defer d.buf.Reset()
 	switch v.Kind() {
 	case reflect.String:
 		v.SetString(d.buf.String())
+		return nil
 	case reflect.Slice:
 		if v.Type().Elem().Kind() != reflect.Uint8 {
-			panic(&UnmarshalTypeError{
-				Value: "string",
-				Type:  v.Type(),
-			})
+			break
 		}
 		v.SetBytes(append([]byte(nil), d.buf.Bytes()...))
-	default:
-		return &UnmarshalTypeError{
-			Value: "string",
-			Type:  v.Type(),
+		return nil
+	case reflect.Array:
+		if v.Type().Elem().Kind() != reflect.Uint8 {
+			break
 		}
+		reflect.Copy(v, reflect.ValueOf(d.buf.Bytes()))
+		return nil
 	}
-
-	d.buf.Reset()
-	return nil
+	// I believe we return here to support "ignore_unmarshal_type_error".
+	return &UnmarshalTypeError{
+		Value: "string",
+		Type:  v.Type(),
+	}
 }
 
 // Info for parsing a dict value.

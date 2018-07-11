@@ -1,5 +1,7 @@
 package peer_protocol
 
+import "net"
+
 // http://www.bittorrent.org/beps/bep_0010.html
 type (
 	ExtendedHandshakeMessage struct {
@@ -13,8 +15,8 @@ type (
 		// a connection to send this.
 		Port   int       `bencode:"p,omitempty"`
 		YourIp CompactIp `bencode:"yourip,omitempty"`
-		Ipv4   [4]byte   `bencode:"ipv4,omitempty"`
-		Ipv6   [16]byte  `bencode:"ipv6,omitempty"`
+		Ipv4   CompactIp `bencode:"ipv4,omitempty"`
+		Ipv6   net.IP    `bencode:"ipv6,omitempty"`
 	}
 
 	ExtensionName   string

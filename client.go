@@ -839,11 +839,11 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 					Encryption:   !cl.config.DisableEncryption,
 					Port:         cl.incomingPeerPort(),
 					MetadataSize: torrent.metadataSize(),
+					// TODO: We can figured these out specific to the socket
+					// used.
+					Ipv4: pp.CompactIp(cl.config.PublicIp4.To4()),
+					Ipv6: cl.config.PublicIp6.To16(),
 				}
-				// TODO: We can figured these out specific to the socket
-				// used.
-				copy(msg.Ipv4[:], cl.config.PublicIp4.To4())
-				copy(msg.Ipv6[:], cl.config.PublicIp6.To16())
 				if !cl.config.DisablePEX {
 					msg.M[pp.ExtensionNamePex] = pexExtendedId
 				}

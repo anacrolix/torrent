@@ -19,3 +19,7 @@ func (i Integer) Int() int {
 func (i Integer) Uint64() uint64 {
 	return uint64(i)
 }
+
+func (i Integer) Uint32() uint32 {
+	return uint32(i)
+}

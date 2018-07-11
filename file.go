@@ -65,7 +65,7 @@ func (f *File) State() (ret []FilePieceState) {
 	pieceSize := int64(f.t.usualPieceSize())
 	off := f.offset % pieceSize
 	remaining := f.length
-	for i := int(f.offset / pieceSize); ; i++ {
+	for i := pieceIndex(f.offset / pieceSize); ; i++ {
 		if remaining == 0 {
 			break
 		}
@@ -121,7 +121,7 @@ func (f *File) SetPriority(prio piecePriority) {
 		return
 	}
 	f.prio = prio
-	f.t.updatePiecePriorities(f.firstPieceIndex().Int(), f.endPieceIndex().Int())
+	f.t.updatePiecePriorities(f.firstPieceIndex(), f.endPieceIndex())
 }
 
 // Returns the priority per File.SetPriority.

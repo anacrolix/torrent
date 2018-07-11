@@ -18,6 +18,7 @@ import (
 	"github.com/anacrolix/dht/krpc"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pproffd"
 	"github.com/anacrolix/missinggo/pubsub"
@@ -814,7 +815,7 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 		if conn.fastEnabled() {
 			if torrent.haveAllPieces() {
 				conn.Post(pp.Message{Type: pp.HaveAll})
-				conn.sentHaves.AddRange(0, conn.t.NumPieces())
+				conn.sentHaves.AddRange(0, bitmap.BitIndex(conn.t.NumPieces()))
 				return
 			} else if !torrent.haveAnyPieces() {
 				conn.Post(pp.Message{Type: pp.HaveNone})

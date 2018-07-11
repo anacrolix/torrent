@@ -98,9 +98,9 @@ type connection struct {
 	// The highest possible number of pieces the torrent could have based on
 	// communication with the peer. Generally only useful until we have the
 	// torrent info.
-	peerMinPieces int
+	peerMinPieces pieceIndex
 	// Pieces we've accepted chunks for from the peer.
-	peerTouchedPieces map[int]struct{}
+	peerTouchedPieces map[pieceIndex]struct{}
 	peerAllowedFast   bitmap.Bitmap
 
 	PeerMaxRequests  int // Maximum pending requests the peer allows.
@@ -173,7 +173,7 @@ func (cn *connection) peerHasAllPieces() (all bool, known bool) {
 	if !cn.t.haveInfo() {
 		return false, false
 	}
-	return bitmap.Flip(cn.peerPieces, 0, cn.t.numPieces()).IsEmpty(), true
+	return bitmap.Flip(cn.peerPieces, 0, bitmap.BitIndex(cn.t.numPieces())).IsEmpty(), true
 }
 
 func (cn *connection) mu() sync.Locker {
@@ -194,7 +194,7 @@ func (cn *connection) supportsExtension(ext pp.ExtensionName) bool {
 }
 
 // The best guess at number of pieces in the torrent for this peer.
-func (cn *connection) bestPeerNumPieces() int {
+func (cn *connection) bestPeerNumPieces() pieceIndex {
 	if cn.t.haveInfo() {
 		return cn.t.numPieces()
 	}
@@ -202,7 +202,7 @@ func (cn *connection) bestPeerNumPieces() int {
 }
 
 func (cn *connection) completedString() string {
-	have := cn.peerPieces.Len()
+	have := pieceIndex(cn.peerPieces.Len())
 	if cn.peerSentHaveAll {
 		have = cn.bestPeerNumPieces()
 	}
@@ -212,8 +212,8 @@ func (cn *connection) completedString() string {
 // Correct the PeerPieces slice length. Return false if the existing slice is
 // invalid, such as by receiving badly sized BITFIELD, or invalid HAVE
 // messages.
-func (cn *connection) setNumPieces(num int) error {
-	cn.peerPieces.RemoveRange(num, bitmap.ToEnd)
+func (cn *connection) setNumPieces(num pieceIndex) error {
+	cn.peerPieces.RemoveRange(bitmap.BitIndex(num), bitmap.ToEnd)
 	cn.peerPiecesChanged()
 	return nil
 }
@@ -325,8 +325,8 @@ func (cn *connection) Close() {
 	}
 }
 
-func (cn *connection) PeerHasPiece(piece int) bool {
-	return cn.peerSentHaveAll || cn.peerPieces.Contains(piece)
+func (cn *connection) PeerHasPiece(piece pieceIndex) bool {
+	return cn.peerSentHaveAll || cn.peerPieces.Contains(bitmap.BitIndex(piece))
 }
 
 // Writes a message into the write buffer.
@@ -486,7 +486,7 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 	if _, ok := cn.requests[r]; ok {
 		panic("chunk already requested")
 	}
-	if !cn.PeerHasPiece(r.Index.Int()) {
+	if !cn.PeerHasPiece(r.Index) {
 		panic("requesting piece peer doesn't have")
 	}
 	if _, ok := cn.t.conns[cn]; !ok {
@@ -554,7 +554,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	}
 	if len(cn.requests) <= cn.requestsLowWater {
 		filledBuffer := false
-		cn.iterPendingPieces(func(pieceIndex int) bool {
+		cn.iterPendingPieces(func(pieceIndex pieceIndex) bool {
 			cn.iterPendingRequests(pieceIndex, func(r request) bool {
 				if !cn.SetInterested(true, msg) {
 					filledBuffer = true
@@ -651,15 +651,15 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	}
 }
 
-func (cn *connection) Have(piece int) {
-	if cn.sentHaves.Get(piece) {
+func (cn *connection) Have(piece pieceIndex) {
+	if cn.sentHaves.Get(bitmap.BitIndex(piece)) {
 		return
 	}
 	cn.Post(pp.Message{
 		Type:  pp.Have,
 		Index: pp.Integer(piece),
 	})
-	cn.sentHaves.Add(piece)
+	cn.sentHaves.Add(bitmap.BitIndex(piece))
 }
 
 func (cn *connection) PostBitfield() {
@@ -697,12 +697,12 @@ func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 	}
 }
 
-func (cn *connection) iterUnbiasedPieceRequestOrder(f func(piece int) bool) bool {
+func (cn *connection) iterUnbiasedPieceRequestOrder(f func(piece pieceIndex) bool) bool {
 	now, readahead := cn.t.readerPiecePriorities()
 	var skip bitmap.Bitmap
 	if !cn.peerSentHaveAll {
 		// Pieces to skip include pieces the peer doesn't have.
-		skip = bitmap.Flip(cn.peerPieces, 0, cn.t.numPieces())
+		skip = bitmap.Flip(cn.peerPieces, 0, bitmap.BitIndex(cn.t.numPieces()))
 	}
 	// And pieces that we already have.
 	skip.Union(cn.t.completedPieces)
@@ -711,11 +711,11 @@ func (cn *connection) iterUnbiasedPieceRequestOrder(f func(piece int) bool) bool
 	// pieces.
 	return iter.All(
 		func(_piece interface{}) bool {
-			i := _piece.(pieceIndex)
-			if cn.t.hashingPiece(i) {
+			i := _piece.(bitmap.BitIndex)
+			if cn.t.hashingPiece(pieceIndex(i)) {
 				return true
 			}
-			return f(i)
+			return f(pieceIndex(i))
 		},
 		iterBitmapsDistinct(&skip, now, readahead),
 		func(cb iter.Callback) {
@@ -754,7 +754,7 @@ func (cn *connection) shouldRequestWithoutBias() bool {
 	return false
 }
 
-func (cn *connection) iterPendingPieces(f func(int) bool) bool {
+func (cn *connection) iterPendingPieces(f func(pieceIndex) bool) bool {
 	if !cn.t.haveInfo() {
 		return false
 	}
@@ -764,15 +764,17 @@ func (cn *connection) iterPendingPieces(f func(int) bool) bool {
 	if cn.shouldRequestWithoutBias() {
 		return cn.iterUnbiasedPieceRequestOrder(f)
 	} else {
-		return cn.pieceRequestOrder.IterTyped(f)
+		return cn.pieceRequestOrder.IterTyped(func(i int) bool {
+			return f(pieceIndex(i))
+		})
 	}
 }
 
 func (cn *connection) iterPendingPiecesUntyped(f iter.Callback) {
-	cn.iterPendingPieces(func(i int) bool { return f(i) })
+	cn.iterPendingPieces(func(i pieceIndex) bool { return f(i) })
 }
 
-func (cn *connection) iterPendingRequests(piece int, f func(request) bool) bool {
+func (cn *connection) iterPendingRequests(piece pieceIndex, f func(request) bool) bool {
 	return iterUndirtiedChunks(piece, cn.t, func(cs chunkSpec) bool {
 		r := request{pp.Integer(piece), cs}
 		if cn.t.requestStrategy == 3 {
@@ -786,24 +788,24 @@ func (cn *connection) iterPendingRequests(piece int, f func(request) bool) bool 
 	})
 }
 
-func iterUndirtiedChunks(piece int, t *Torrent, f func(chunkSpec) bool) bool {
+func iterUndirtiedChunks(piece pieceIndex, t *Torrent, f func(chunkSpec) bool) bool {
 	chunkIndices := t.pieces[piece].undirtiedChunkIndices().ToSortedSlice()
 	// TODO: Use "math/rand".Shuffle >= Go 1.10
 	return iter.ForPerm(len(chunkIndices), func(i int) bool {
-		return f(t.chunkIndexSpec(chunkIndices[i], piece))
+		return f(t.chunkIndexSpec(pieceIndex(chunkIndices[i]), piece))
 	})
 }
 
 // check callers updaterequests
-func (cn *connection) stopRequestingPiece(piece int) bool {
-	return cn.pieceRequestOrder.Remove(piece)
+func (cn *connection) stopRequestingPiece(piece pieceIndex) bool {
+	return cn.pieceRequestOrder.Remove(bitmap.BitIndex(piece))
 }
 
 // This is distinct from Torrent piece priority, which is the user's
 // preference. Connection piece priority is specific to a connection and is
 // used to pseudorandomly avoid connections always requesting the same pieces
 // and thus wasting effort.
-func (cn *connection) updatePiecePriority(piece int) bool {
+func (cn *connection) updatePiecePriority(piece pieceIndex) bool {
 	tpp := cn.t.piecePriority(piece)
 	if !cn.PeerHasPiece(piece) {
 		tpp = PiecePriorityNone
@@ -817,16 +819,16 @@ func (cn *connection) updatePiecePriority(piece int) bool {
 		switch tpp {
 		case PiecePriorityNormal:
 		case PiecePriorityReadahead:
-			prio -= cn.t.numPieces()
+			prio -= int(cn.t.numPieces())
 		case PiecePriorityNext, PiecePriorityNow:
-			prio -= 2 * cn.t.numPieces()
+			prio -= 2 * int(cn.t.numPieces())
 		default:
 			panic(tpp)
 		}
-		prio += piece / 3
+		prio += int(piece / 3)
 	default:
 	}
-	return cn.pieceRequestOrder.Set(piece, prio) || cn.shouldRequestWithoutBias()
+	return cn.pieceRequestOrder.Set(bitmap.BitIndex(piece), prio) || cn.shouldRequestWithoutBias()
 }
 
 func (cn *connection) getPieceInclination() []int {
@@ -847,7 +849,7 @@ func (cn *connection) discardPieceInclination() {
 func (cn *connection) peerPiecesChanged() {
 	if cn.t.haveInfo() {
 		prioritiesChanged := false
-		for i := range iter.N(cn.t.numPieces()) {
+		for i := pieceIndex(0); i < cn.t.numPieces(); i++ {
 			if cn.updatePiecePriority(i) {
 				prioritiesChanged = true
 			}
@@ -858,13 +860,13 @@ func (cn *connection) peerPiecesChanged() {
 	}
 }
 
-func (cn *connection) raisePeerMinPieces(newMin int) {
+func (cn *connection) raisePeerMinPieces(newMin pieceIndex) {
 	if newMin > cn.peerMinPieces {
 		cn.peerMinPieces = newMin
 	}
 }
 
-func (cn *connection) peerSentHave(piece int) error {
+func (cn *connection) peerSentHave(piece pieceIndex) error {
 	if cn.t.haveInfo() && piece >= cn.t.numPieces() || piece < 0 {
 		return errors.New("invalid piece")
 	}
@@ -872,7 +874,7 @@ func (cn *connection) peerSentHave(piece int) error {
 		return nil
 	}
 	cn.raisePeerMinPieces(piece + 1)
-	cn.peerPieces.Set(piece, true)
+	cn.peerPieces.Set(bitmap.BitIndex(piece), true)
 	if cn.updatePiecePriority(piece) {
 		cn.updateRequests()
 	}
@@ -886,14 +888,14 @@ func (cn *connection) peerSentBitfield(bf []bool) error {
 	}
 	// We know that the last byte means that at most the last 7 bits are
 	// wasted.
-	cn.raisePeerMinPieces(len(bf) - 7)
-	if cn.t.haveInfo() && len(bf) > cn.t.numPieces() {
+	cn.raisePeerMinPieces(pieceIndex(len(bf) - 7))
+	if cn.t.haveInfo() && len(bf) > int(cn.t.numPieces()) {
 		// Ignore known excess pieces.
 		bf = bf[:cn.t.numPieces()]
 	}
 	for i, have := range bf {
 		if have {
-			cn.raisePeerMinPieces(i + 1)
+			cn.raisePeerMinPieces(pieceIndex(i) + 1)
 		}
 		cn.peerPieces.Set(i, have)
 	}
@@ -1011,7 +1013,7 @@ func (c *connection) reject(r request) {
 
 func (c *connection) onReadRequest(r request) error {
 	requestedChunkLengths.Add(strconv.FormatUint(r.Length.Uint64(), 10), 1)
-	if r.Begin+r.Length > c.t.pieceLength(int(r.Index)) {
+	if r.Begin+r.Length > c.t.pieceLength(r.Index) {
 		torrent.Add("bad requests received", 1)
 		return errors.New("bad request")
 	}
@@ -1035,7 +1037,7 @@ func (c *connection) onReadRequest(r request) error {
 		// BEP 6 says we may close here if we choose.
 		return nil
 	}
-	if !c.t.havePiece(r.Index.Int()) {
+	if !c.t.havePiece(r.Index) {
 		// This isn't necessarily them screwing up. We can drop pieces
 		// from our storage, and can't communicate this to peers
 		// except by reconnecting.
@@ -1114,7 +1116,7 @@ func (c *connection) mainReadLoop() (err error) {
 			// We'll probably choke them for this, which will clear them if
 			// appropriate, and is clearly specified.
 		case pp.Have:
-			err = c.peerSentHave(int(msg.Index))
+			err = c.peerSentHave(msg.Index)
 		case pp.Request:
 			r := newRequestFromMessage(&msg)
 			err = c.onReadRequest(r)
@@ -1288,8 +1290,7 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 		return nil
 	}
 
-	index := int(req.Index)
-	piece := &t.pieces[index]
+	piece := &t.pieces[req.Index]
 
 	c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
 	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
@@ -1328,28 +1329,28 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 	if err != nil {
 		log.Printf("%s (%s): error writing chunk %v: %s", t, t.infoHash, req, err)
 		t.pendRequest(req)
-		t.updatePieceCompletion(int(msg.Index))
+		t.updatePieceCompletion(msg.Index)
 		return nil
 	}
 
 	// It's important that the piece is potentially queued before we check if
 	// the piece is still wanted, because if it is queued, it won't be wanted.
-	if t.pieceAllDirty(index) {
-		t.queuePieceCheck(int(req.Index))
-		t.pendAllChunkSpecs(index)
+	if t.pieceAllDirty(req.Index) {
+		t.queuePieceCheck(req.Index)
+		t.pendAllChunkSpecs(req.Index)
 	}
 
-	c.onDirtiedPiece(index)
+	c.onDirtiedPiece(req.Index)
 
 	cl.event.Broadcast()
-	t.publishPieceChange(int(req.Index))
+	t.publishPieceChange(req.Index)
 
 	return nil
 }
 
-func (c *connection) onDirtiedPiece(piece int) {
+func (c *connection) onDirtiedPiece(piece pieceIndex) {
 	if c.peerTouchedPieces == nil {
-		c.peerTouchedPieces = make(map[int]struct{})
+		c.peerTouchedPieces = make(map[pieceIndex]struct{})
 	}
 	c.peerTouchedPieces[piece] = struct{}{}
 	ds := &c.t.pieces[piece].dirtiers
@@ -1408,7 +1409,7 @@ another:
 			}
 			more, err := c.sendChunk(r, msg)
 			if err != nil {
-				i := int(r.Index)
+				i := r.Index
 				if c.t.pieceComplete(i) {
 					c.t.updatePieceCompletion(i)
 					if !c.t.pieceComplete(i) {

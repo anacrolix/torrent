@@ -98,7 +98,7 @@ func validateInfo(info *metainfo.Info) error {
 	return nil
 }
 
-func chunkIndexSpec(index int, pieceLength, chunkSize pp.Integer) chunkSpec {
+func chunkIndexSpec(index pieceIndex, pieceLength, chunkSize pp.Integer) chunkSpec {
 	ret := chunkSpec{pp.Integer(index) * chunkSize, chunkSize}
 	if ret.Begin+ret.Length > pieceLength {
 		ret.Length = pieceLength - ret.Begin
@@ -154,6 +154,6 @@ func min(as ...int64) int64 {
 var unlimited = rate.NewLimiter(rate.Inf, 0)
 
 type (
-	pieceIndex = int
+	pieceIndex = pp.Integer
 	InfoHash   = metainfo.Hash
 )

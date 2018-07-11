@@ -95,7 +95,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		r.Seek(3500000, 0)
 	}
 	assert.Len(b, t.readers, 7)
-	for i := 0; i < t.numPieces(); i += 3 {
+	for i := 0; i < int(t.numPieces()); i += 3 {
 		t.completedPieces.Set(i, true)
 	}
 	t.DownloadPieces(0, t.numPieces())

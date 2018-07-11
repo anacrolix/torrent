@@ -152,5 +152,5 @@ func (info *Info) UpvertedFiles() []FileInfo {
 }
 
 func (info *Info) Piece(index int) Piece {
-	return Piece{info, index}
+	return Piece{info, pieceIndex(index)}
 }

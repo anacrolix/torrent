@@ -24,7 +24,6 @@ import (
 	"github.com/anacrolix/missinggo/prioritybitmap"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
-	"github.com/bradfitz/iter"
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -34,7 +33,7 @@ import (
 	"github.com/anacrolix/torrent/tracker"
 )
 
-func (t *Torrent) chunkIndexSpec(chunkIndex, piece int) chunkSpec {
+func (t *Torrent) chunkIndexSpec(chunkIndex, piece pieceIndex) chunkSpec {
 	return chunkIndexSpec(chunkIndex, t.pieceLength(piece), t.chunkSize)
 }
 
@@ -220,11 +219,11 @@ func (t *Torrent) setDisplayName(dn string) {
 	t.displayName = dn
 }
 
-func (t *Torrent) pieceComplete(piece int) bool {
-	return t.completedPieces.Get(piece)
+func (t *Torrent) pieceComplete(piece pieceIndex) bool {
+	return t.completedPieces.Get(bitmap.BitIndex(piece))
 }
 
-func (t *Torrent) pieceCompleteUncached(piece int) storage.Completion {
+func (t *Torrent) pieceCompleteUncached(piece pieceIndex) storage.Completion {
 	return t.pieces[piece].Storage().Completion()
 }
 
@@ -329,7 +328,7 @@ func (t *Torrent) makePieces() {
 	for i, hash := range hashes {
 		piece := &t.pieces[i]
 		piece.t = t
-		piece.index = i
+		piece.index = pieceIndex(i)
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		missinggo.CopyExact(piece.hash[:], hash)
 		files := *t.files
@@ -396,11 +395,11 @@ func (t *Torrent) onSetInfo() {
 		}
 	}
 	for i := range t.pieces {
-		t.updatePieceCompletion(i)
+		t.updatePieceCompletion(pieceIndex(i))
 		p := &t.pieces[i]
 		if !p.storageCompletionOk {
 			// log.Printf("piece %s completion unknown, queueing check", p)
-			t.queuePieceCheck(i)
+			t.queuePieceCheck(pieceIndex(i))
 		}
 	}
 	t.cl.event.Broadcast()
@@ -473,7 +472,7 @@ func (t *Torrent) name() string {
 	return t.displayName
 }
 
-func (t *Torrent) pieceState(index int) (ret PieceState) {
+func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {
 	p := &t.pieces[index]
 	ret.Priority = t.piecePriority(index)
 	ret.Completion = p.completion()
@@ -514,7 +513,7 @@ func (t *Torrent) pieceStateRuns() (ret []PieceStateRun) {
 		})
 	})
 	for index := range t.pieces {
-		rle.Append(t.pieceState(index), 1)
+		rle.Append(t.pieceState(pieceIndex(index)), 1)
 	}
 	rle.Flush()
 	return
@@ -587,7 +586,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		fmt.Fprintln(w)
 	}
 	fmt.Fprintf(w, "Reader Pieces:")
-	t.forReaderOffsetPieces(func(begin, end int) (again bool) {
+	t.forReaderOffsetPieces(func(begin, end pieceIndex) (again bool) {
 		fmt.Fprintf(w, " %d:%d", begin, end)
 		return true
 	})
@@ -651,7 +650,7 @@ func (t *Torrent) bytesMissingLocked() int64 {
 }
 
 func (t *Torrent) bytesLeft() (left int64) {
-	bitmap.Flip(t.completedPieces, 0, t.numPieces()).IterTyped(func(piece int) bool {
+	bitmap.Flip(t.completedPieces, 0, bitmap.BitIndex(t.numPieces())).IterTyped(func(piece int) bool {
 		p := &t.pieces[piece]
 		left += int64(p.length() - p.numDirtyBytes())
 		return true
@@ -668,7 +667,7 @@ func (t *Torrent) bytesLeftAnnounce() uint64 {
 	}
 }
 
-func (t *Torrent) piecePartiallyDownloaded(piece int) bool {
+func (t *Torrent) piecePartiallyDownloaded(piece pieceIndex) bool {
 	if t.pieceComplete(piece) {
 		return false
 	}
@@ -682,8 +681,8 @@ func (t *Torrent) usualPieceSize() int {
 	return int(t.info.PieceLength)
 }
 
-func (t *Torrent) numPieces() int {
-	return t.info.NumPieces()
+func (t *Torrent) numPieces() pieceIndex {
+	return pieceIndex(t.info.NumPieces())
 }
 
 func (t *Torrent) numPiecesCompleted() (num int) {
@@ -735,15 +734,15 @@ func (t *Torrent) bitfield() (bf []bool) {
 	return
 }
 
-func (t *Torrent) pieceNumChunks(piece int) int {
-	return int((t.pieceLength(piece) + t.chunkSize - 1) / t.chunkSize)
+func (t *Torrent) pieceNumChunks(piece pieceIndex) pp.Integer {
+	return (t.pieceLength(piece) + t.chunkSize - 1) / t.chunkSize
 }
 
-func (t *Torrent) pendAllChunkSpecs(pieceIndex int) {
+func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex) {
 	t.pieces[pieceIndex].dirtyChunks.Clear()
 }
 
-func (t *Torrent) pieceLength(piece int) pp.Integer {
+func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
 	if t.info.PieceLength == 0 {
 		// There will be no variance amongst pieces. Only pain.
 		return 0
@@ -757,11 +756,11 @@ func (t *Torrent) pieceLength(piece int) pp.Integer {
 	return pp.Integer(t.info.PieceLength)
 }
 
-func (t *Torrent) hashPiece(piece int) (ret metainfo.Hash) {
+func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash) {
 	hash := pieceHash.New()
 	p := &t.pieces[piece]
 	p.waitNoPendingWrites()
-	ip := t.info.Piece(piece)
+	ip := t.info.Piece(int(piece))
 	pl := ip.Length()
 	n, err := io.Copy(hash, io.NewSectionReader(t.pieces[piece].Storage(), 0, pl))
 	if n == pl {
@@ -782,10 +781,10 @@ func (t *Torrent) haveAllPieces() bool {
 	if !t.haveInfo() {
 		return false
 	}
-	return t.completedPieces.Len() == t.numPieces()
+	return t.completedPieces.Len() == bitmap.BitIndex(t.numPieces())
 }
 
-func (t *Torrent) havePiece(index int) bool {
+func (t *Torrent) havePiece(index pieceIndex) bool {
 	return t.haveInfo() && t.pieceComplete(index)
 }
 
@@ -796,7 +795,7 @@ func (t *Torrent) haveChunk(r request) (ret bool) {
 	if !t.haveInfo() {
 		return false
 	}
-	if t.pieceComplete(int(r.Index)) {
+	if t.pieceComplete(r.Index) {
 		return true
 	}
 	p := &t.pieces[r.Index]
@@ -808,7 +807,7 @@ func chunkIndex(cs chunkSpec, chunkSize pp.Integer) int {
 }
 
 func (t *Torrent) wantPiece(r request) bool {
-	if !t.wantPieceIndex(int(r.Index)) {
+	if !t.wantPieceIndex(r.Index) {
 		return false
 	}
 	if t.pieces[r.Index].pendingChunk(r.chunkSpec, t.chunkSize) {
@@ -819,7 +818,7 @@ func (t *Torrent) wantPiece(r request) bool {
 	return false
 }
 
-func (t *Torrent) wantPieceIndex(index int) bool {
+func (t *Torrent) wantPieceIndex(index pieceIndex) bool {
 	if !t.haveInfo() {
 		return false
 	}
@@ -836,11 +835,11 @@ func (t *Torrent) wantPieceIndex(index int) bool {
 	if t.pieceComplete(index) {
 		return false
 	}
-	if t.pendingPieces.Contains(index) {
+	if t.pendingPieces.Contains(bitmap.BitIndex(index)) {
 		return true
 	}
 	// log.Printf("piece %d not pending", index)
-	return !t.forReaderOffsetPieces(func(begin, end int) bool {
+	return !t.forReaderOffsetPieces(func(begin, end pieceIndex) bool {
 		return index < begin || index >= end
 	})
 }
@@ -874,27 +873,27 @@ type PieceStateChange struct {
 	PieceState
 }
 
-func (t *Torrent) publishPieceChange(piece int) {
+func (t *Torrent) publishPieceChange(piece pieceIndex) {
 	cur := t.pieceState(piece)
 	p := &t.pieces[piece]
 	if cur != p.publicPieceState {
 		p.publicPieceState = cur
 		t.pieceStateChanges.Publish(PieceStateChange{
-			piece,
+			int(piece),
 			cur,
 		})
 	}
 }
 
-func (t *Torrent) pieceNumPendingChunks(piece int) int {
+func (t *Torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
 	if t.pieceComplete(piece) {
 		return 0
 	}
 	return t.pieceNumChunks(piece) - t.pieces[piece].numDirtyChunks()
 }
 
-func (t *Torrent) pieceAllDirty(piece int) bool {
-	return t.pieces[piece].dirtyChunks.Len() == t.pieceNumChunks(piece)
+func (t *Torrent) pieceAllDirty(piece pieceIndex) bool {
+	return t.pieces[piece].dirtyChunks.Len() == int(t.pieceNumChunks(piece))
 }
 
 func (t *Torrent) readersChanged() {
@@ -936,7 +935,7 @@ func (t *Torrent) maybeNewConns() {
 	t.openNewConns()
 }
 
-func (t *Torrent) piecePriorityChanged(piece int) {
+func (t *Torrent) piecePriorityChanged(piece pieceIndex) {
 	// log.Printf("piece %d priority changed", piece)
 	for c := range t.conns {
 		if c.updatePiecePriority(piece) {
@@ -948,16 +947,16 @@ func (t *Torrent) piecePriorityChanged(piece int) {
 	t.publishPieceChange(piece)
 }
 
-func (t *Torrent) updatePiecePriority(piece int) {
+func (t *Torrent) updatePiecePriority(piece pieceIndex) {
 	p := &t.pieces[piece]
 	newPrio := p.uncachedPriority()
 	// log.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
 	if newPrio == PiecePriorityNone {
-		if !t.pendingPieces.Remove(piece) {
+		if !t.pendingPieces.Remove(bitmap.BitIndex(piece)) {
 			return
 		}
 	} else {
-		if !t.pendingPieces.Set(piece, newPrio.BitmapPriority()) {
+		if !t.pendingPieces.Set(bitmap.BitIndex(piece), newPrio.BitmapPriority()) {
 			return
 		}
 	}
@@ -965,19 +964,19 @@ func (t *Torrent) updatePiecePriority(piece int) {
 }
 
 func (t *Torrent) updateAllPiecePriorities() {
-	t.updatePiecePriorities(0, len(t.pieces))
+	t.updatePiecePriorities(0, t.numPieces())
 }
 
 // Update all piece priorities in one hit. This function should have the same
 // output as updatePiecePriority, but across all pieces.
-func (t *Torrent) updatePiecePriorities(begin, end int) {
+func (t *Torrent) updatePiecePriorities(begin, end pieceIndex) {
 	for i := begin; i < end; i++ {
 		t.updatePiecePriority(i)
 	}
 }
 
 // Returns the range of pieces [begin, end) that contains the extent of bytes.
-func (t *Torrent) byteRegionPieces(off, size int64) (begin, end int) {
+func (t *Torrent) byteRegionPieces(off, size int64) (begin, end pieceIndex) {
 	if off >= *t.length {
 		return
 	}
@@ -988,10 +987,10 @@ func (t *Torrent) byteRegionPieces(off, size int64) (begin, end int) {
 	if size <= 0 {
 		return
 	}
-	begin = int(off / t.info.PieceLength)
-	end = int((off + size + t.info.PieceLength - 1) / t.info.PieceLength)
-	if end > t.info.NumPieces() {
-		end = t.info.NumPieces()
+	begin = pieceIndex(off / t.info.PieceLength)
+	end = pieceIndex((off + size + t.info.PieceLength - 1) / t.info.PieceLength)
+	if end > pieceIndex(t.info.NumPieces()) {
+		end = pieceIndex(t.info.NumPieces())
 	}
 	return
 }
@@ -999,7 +998,7 @@ func (t *Torrent) byteRegionPieces(off, size int64) (begin, end int) {
 // Returns true if all iterations complete without breaking. Returns the read
 // regions for all readers. The reader regions should not be merged as some
 // callers depend on this method to enumerate readers.
-func (t *Torrent) forReaderOffsetPieces(f func(begin, end int) (more bool)) (all bool) {
+func (t *Torrent) forReaderOffsetPieces(f func(begin, end pieceIndex) (more bool)) (all bool) {
 	for r := range t.readers {
 		p := r.pieces
 		if p.begin >= p.end {
@@ -1012,8 +1011,8 @@ func (t *Torrent) forReaderOffsetPieces(f func(begin, end int) (more bool)) (all
 	return true
 }
 
-func (t *Torrent) piecePriority(piece int) piecePriority {
-	prio, ok := t.pendingPieces.GetPriority(piece)
+func (t *Torrent) piecePriority(piece pieceIndex) piecePriority {
+	prio, ok := t.pendingPieces.GetPriority(bitmap.BitIndex(piece))
 	if !ok {
 		return PiecePriorityNone
 	}
@@ -1032,7 +1031,7 @@ func (t *Torrent) pendRequest(req request) {
 	t.pieces[req.Index].pendChunkIndex(ci)
 }
 
-func (t *Torrent) pieceCompletionChanged(piece int) {
+func (t *Torrent) pieceCompletionChanged(piece pieceIndex) {
 	log.Call().Add("piece", piece).AddValue(debugLogValue).Log(t.logger)
 	t.cl.event.Broadcast()
 	if t.pieceComplete(piece) {
@@ -1080,7 +1079,7 @@ func (t *Torrent) getConnPieceInclination() []int {
 	_ret := t.connPieceInclinationPool.Get()
 	if _ret == nil {
 		pieceInclinationsNew.Add(1)
-		return rand.Perm(t.numPieces())
+		return rand.Perm(int(t.numPieces()))
 	}
 	pieceInclinationsReused.Add(1)
 	return *_ret.(*[]int)
@@ -1091,13 +1090,13 @@ func (t *Torrent) putPieceInclination(pi []int) {
 	pieceInclinationsPut.Add(1)
 }
 
-func (t *Torrent) updatePieceCompletion(piece int) {
+func (t *Torrent) updatePieceCompletion(piece pieceIndex) {
 	pcu := t.pieceCompleteUncached(piece)
 	p := &t.pieces[piece]
-	changed := t.completedPieces.Get(piece) != pcu.Complete || p.storageCompletionOk != pcu.Ok
+	changed := t.completedPieces.Get(bitmap.BitIndex(piece)) != pcu.Complete || p.storageCompletionOk != pcu.Ok
 	log.Fmsg("piece %d completion: %v", piece, pcu.Ok).AddValue(debugLogValue).Log(t.logger)
 	p.storageCompletionOk = pcu.Ok
-	t.completedPieces.Set(piece, pcu.Complete)
+	t.completedPieces.Set(bitmap.BitIndex(piece), pcu.Complete)
 	t.tickleReaders()
 	// log.Printf("piece %d uncached completion: %v", piece, pcu.Complete)
 	// log.Printf("piece %d changed: %v", piece, changed)
@@ -1114,7 +1113,7 @@ func (t *Torrent) readAt(b []byte, off int64) (n int, err error) {
 }
 
 func (t *Torrent) updateAllPieceCompletions() {
-	for i := range iter.N(t.numPieces()) {
+	for i := pieceIndex(0); i < t.numPieces(); i++ {
 		t.updatePieceCompletion(i)
 	}
 }
@@ -1142,18 +1141,18 @@ func (t *Torrent) maybeCompleteMetadata() error {
 }
 
 func (t *Torrent) readerPieces() (ret bitmap.Bitmap) {
-	t.forReaderOffsetPieces(func(begin, end int) bool {
-		ret.AddRange(begin, end)
+	t.forReaderOffsetPieces(func(begin, end pieceIndex) bool {
+		ret.AddRange(bitmap.BitIndex(begin), bitmap.BitIndex(end))
 		return true
 	})
 	return
 }
 
 func (t *Torrent) readerPiecePriorities() (now, readahead bitmap.Bitmap) {
-	t.forReaderOffsetPieces(func(begin, end int) bool {
+	t.forReaderOffsetPieces(func(begin, end pieceIndex) bool {
 		if end > begin {
-			now.Add(begin)
-			readahead.AddRange(begin+1, end)
+			now.Add(bitmap.BitIndex(begin))
+			readahead.AddRange(bitmap.BitIndex(begin)+1, bitmap.BitIndex(end))
 		}
 		return true
 	})
@@ -1578,7 +1577,7 @@ func (t *Torrent) mu() missinggo.RWLocker {
 	return &t.cl.mu
 }
 
-func (t *Torrent) pieceHashed(piece int, correct bool) {
+func (t *Torrent) pieceHashed(piece pieceIndex, correct bool) {
 	log.Fmsg("hashed piece %d", piece).Add("piece", piece).Add("passed", correct).AddValue(debugLogValue).Log(t.logger)
 	if t.closed.IsSet() {
 		return
@@ -1636,14 +1635,14 @@ func (t *Torrent) pieceHashed(piece int, correct bool) {
 	t.updatePieceCompletion(piece)
 }
 
-func (t *Torrent) cancelRequestsForPiece(piece int) {
+func (t *Torrent) cancelRequestsForPiece(piece pieceIndex) {
 	// TODO: Make faster
 	for cn := range t.conns {
 		cn.tickleWriter()
 	}
 }
 
-func (t *Torrent) onPieceCompleted(piece int) {
+func (t *Torrent) onPieceCompleted(piece pieceIndex) {
 	t.pendAllChunkSpecs(piece)
 	t.cancelRequestsForPiece(piece)
 	for conn := range t.conns {
@@ -1652,7 +1651,7 @@ func (t *Torrent) onPieceCompleted(piece int) {
 }
 
 // Called when a piece is found to be not complete.
-func (t *Torrent) onIncompletePiece(piece int) {
+func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	if t.pieceAllDirty(piece) {
 		t.pendAllChunkSpecs(piece)
 	}
@@ -1690,7 +1689,7 @@ func (t *Torrent) verifyPiece(piece pieceIndex) {
 	for p.hashing || t.storage == nil {
 		cl.event.Wait()
 	}
-	if !p.t.piecesQueuedForHash.Remove(piece) {
+	if !p.t.piecesQueuedForHash.Remove(bitmap.BitIndex(piece)) {
 		panic("piece was not queued")
 	}
 	t.updatePiecePriority(piece)
@@ -1713,7 +1712,7 @@ func (t *Torrent) verifyPiece(piece pieceIndex) {
 
 // Return the connections that touched a piece, and clear the entries while
 // doing it.
-func (t *Torrent) reapPieceTouchers(piece int) (ret []*connection) {
+func (t *Torrent) reapPieceTouchers(piece pieceIndex) (ret []*connection) {
 	for c := range t.pieces[piece].dirtiers {
 		delete(c.peerTouchedPieces, piece)
 		ret = append(ret, c)
@@ -1730,19 +1729,19 @@ func (t *Torrent) connsAsSlice() (ret []*connection) {
 }
 
 // Currently doesn't really queue, but should in the future.
-func (t *Torrent) queuePieceCheck(pieceIndex int) {
+func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 	piece := &t.pieces[pieceIndex]
 	if piece.queuedForHash() {
 		return
 	}
-	t.piecesQueuedForHash.Add(pieceIndex)
+	t.piecesQueuedForHash.Add(bitmap.BitIndex(pieceIndex))
 	t.publishPieceChange(pieceIndex)
 	t.updatePiecePriority(pieceIndex)
 	go t.verifyPiece(pieceIndex)
 }
 
 func (t *Torrent) VerifyData() {
-	for i := range iter.N(t.NumPieces()) {
+	for i := pieceIndex(0); i < t.NumPieces(); i++ {
 		t.Piece(i).VerifyData()
 	}
 }

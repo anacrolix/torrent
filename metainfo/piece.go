@@ -1,14 +1,18 @@
 package metainfo
 
-import "github.com/anacrolix/missinggo"
+import (
+	"github.com/anacrolix/missinggo"
+)
 
 type Piece struct {
 	Info *Info
-	i    int
+	i    pieceIndex
 }
 
+type pieceIndex = int
+
 func (p Piece) Length() int64 {
-	if p.i == p.Info.NumPieces()-1 {
+	if int(p.i) == p.Info.NumPieces()-1 {
 		return p.Info.TotalLength() - int64(p.i)*p.Info.PieceLength
 	}
 	return p.Info.PieceLength
@@ -23,6 +27,6 @@ func (p Piece) Hash() (ret Hash) {
 	return
 }
 
-func (p Piece) Index() int {
+func (p Piece) Index() pieceIndex {
 	return p.i
 }

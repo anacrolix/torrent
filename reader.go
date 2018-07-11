@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/torrent/peer_protocol"
 )
 
 type Reader interface {
@@ -21,7 +22,7 @@ type Reader interface {
 
 // Piece range by piece index, [begin, end).
 type pieceRange struct {
-	begin, end int
+	begin, end pieceIndex
 }
 
 // Accesses Torrent data via a Client. Reads block until the data is
@@ -84,7 +85,7 @@ func (r *reader) readable(off int64) (ret bool) {
 	if r.responsive {
 		return r.t.haveChunk(req)
 	}
-	return r.t.pieceComplete(int(req.Index))
+	return r.t.pieceComplete(req.Index)
 }
 
 // How many bytes are available to read. Max is the most we could require.
@@ -212,8 +213,8 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 				return
 			}
 		}
-		pi := int(r.torrentOffset(pos) / r.t.info.PieceLength)
-		ip := r.t.info.Piece(pi)
+		pi := peer_protocol.Integer(r.torrentOffset(pos) / r.t.info.PieceLength)
+		ip := r.t.info.Piece(int(pi))
 		po := r.torrentOffset(pos) % r.t.info.PieceLength
 		b1 := missinggo.LimitLen(b, ip.Length()-po, avail)
 		n, err = r.t.readAt(b1, r.torrentOffset(pos))

@@ -51,7 +51,7 @@ func (t *Torrent) PieceStateRuns() []PieceStateRun {
 	return t.pieceStateRuns()
 }
 
-func (t *Torrent) PieceState(piece int) PieceState {
+func (t *Torrent) PieceState(piece pieceIndex) PieceState {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	return t.pieceState(piece)
@@ -59,7 +59,7 @@ func (t *Torrent) PieceState(piece int) PieceState {
 
 // The number of pieces in the torrent. This requires that the info has been
 // obtained first.
-func (t *Torrent) NumPieces() int {
+func (t *Torrent) NumPieces() pieceIndex {
 	return t.numPieces()
 }
 
@@ -152,13 +152,13 @@ func (t *Torrent) deleteReader(r *reader) {
 // Raise the priorities of pieces in the range [begin, end) to at least Normal
 // priority. Piece indexes are not the same as bytes. Requires that the info
 // has been obtained, see Torrent.Info and Torrent.GotInfo.
-func (t *Torrent) DownloadPieces(begin, end int) {
+func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	t.downloadPiecesLocked(begin, end)
 }
 
-func (t *Torrent) downloadPiecesLocked(begin, end int) {
+func (t *Torrent) downloadPiecesLocked(begin, end pieceIndex) {
 	for i := begin; i < end; i++ {
 		if t.pieces[i].priority.Raise(PiecePriorityNormal) {
 			t.updatePiecePriority(i)
@@ -166,13 +166,13 @@ func (t *Torrent) downloadPiecesLocked(begin, end int) {
 	}
 }
 
-func (t *Torrent) CancelPieces(begin, end int) {
+func (t *Torrent) CancelPieces(begin, end pieceIndex) {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	t.cancelPiecesLocked(begin, end)
 }
 
-func (t *Torrent) cancelPiecesLocked(begin, end int) {
+func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex) {
 	for i := begin; i < end; i++ {
 		p := &t.pieces[i]
 		if p.priority == PiecePriorityNone {
@@ -233,7 +233,7 @@ func (t *Torrent) AddTrackers(announceList [][]string) {
 	t.addTrackers(announceList)
 }
 
-func (t *Torrent) Piece(i int) *Piece {
+func (t *Torrent) Piece(i pieceIndex) *Piece {
 	t.cl.mu.Lock()
 	defer t.cl.mu.Unlock()
 	return &t.pieces[i]

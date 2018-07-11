@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/bradfitz/iter"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,4 +52,24 @@ func BenchmarkDecodePieces(t *testing.B) {
 		// WWJD
 		d.Pool.Put(&msg.Piece)
 	}
+}
+
+func TestDecodeShortPieceEOF(t *testing.T) {
+	r, w := io.Pipe()
+	go func() {
+		w.Write(Message{Type: Piece, Piece: make([]byte, 1)}.MustMarshalBinary())
+		w.Close()
+	}()
+	d := Decoder{
+		R:         bufio.NewReader(r),
+		MaxLength: 1 << 15,
+		Pool: &sync.Pool{New: func() interface{} {
+			b := make([]byte, 2)
+			return &b
+		}},
+	}
+	var m Message
+	require.NoError(t, d.Decode(&m))
+	assert.Len(t, m.Piece, 1)
+	assert.Equal(t, io.EOF, d.Decode(&m))
 }

@@ -26,8 +26,18 @@ func MakeCancelMessage(piece, offset, length Integer) Message {
 	}
 }
 
-func (msg Message) RequestSpec() RequestSpec {
-	return RequestSpec{msg.Index, msg.Begin, msg.Length}
+func (msg Message) RequestSpec() (ret RequestSpec) {
+	return RequestSpec{
+		msg.Index,
+		msg.Begin,
+		func() Integer {
+			if msg.Type == Piece {
+				return Integer(len(msg.Piece))
+			} else {
+				return msg.Length
+			}
+		}(),
+	}
 }
 
 func (msg Message) MustMarshalBinary() []byte {

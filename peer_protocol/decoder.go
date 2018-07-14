@@ -3,11 +3,12 @@ package peer_protocol
 import (
 	"bufio"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"sync"
+
+	"github.com/pkg/errors"
 )
 
 type Decoder struct {
@@ -69,24 +70,21 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 		msg.Bitfield = unmarshalBitfield(b)
 	case Piece:
 		for _, pi := range []*Integer{&msg.Index, &msg.Begin} {
-			err = pi.Read(r)
+			err := pi.Read(r)
 			if err != nil {
-				break
-			}
-		}
-		if err != nil {
-			break
-		}
-		//msg.Piece, err = ioutil.ReadAll(r)
-		b := *d.Pool.Get().(*[]byte)
-		n, err := io.ReadFull(r, b)
-		if err != nil {
-			if err != io.ErrUnexpectedEOF || n != int(length-9) {
 				return err
 			}
-			b = b[0:n]
 		}
-		msg.Piece = b
+		dataLen := r.N
+		msg.Piece = (*d.Pool.Get().(*[]byte))
+		if int64(cap(msg.Piece)) < dataLen {
+			return errors.New("piece data longer than expected")
+		}
+		msg.Piece = msg.Piece[:dataLen]
+		_, err := io.ReadFull(r, msg.Piece)
+		if err != nil {
+			return errors.Wrap(err, "reading piece data")
+		}
 	case Extended:
 		b, err := readByte(r)
 		if err != nil {

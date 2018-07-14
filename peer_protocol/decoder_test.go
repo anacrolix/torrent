@@ -89,5 +89,5 @@ func TestDecodeOverlongPiece(t *testing.T) {
 		}},
 	}
 	var m Message
-	require.EqualError(t, d.Decode(&m), "piece data longer than expected")
+	require.Error(t, d.Decode(&m))
 }

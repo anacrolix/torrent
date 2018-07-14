@@ -73,3 +73,21 @@ func TestDecodeShortPieceEOF(t *testing.T) {
 	assert.Len(t, m.Piece, 1)
 	assert.Equal(t, io.EOF, d.Decode(&m))
 }
+
+func TestDecodeOverlongPiece(t *testing.T) {
+	r, w := io.Pipe()
+	go func() {
+		w.Write(Message{Type: Piece, Piece: make([]byte, 3)}.MustMarshalBinary())
+		w.Close()
+	}()
+	d := Decoder{
+		R:         bufio.NewReader(r),
+		MaxLength: 1 << 15,
+		Pool: &sync.Pool{New: func() interface{} {
+			b := make([]byte, 2)
+			return &b
+		}},
+	}
+	var m Message
+	require.EqualError(t, d.Decode(&m), "piece data longer than expected")
+}

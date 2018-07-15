@@ -24,17 +24,22 @@ func (me *multiLess) FinalOk() (left, ok bool) {
 }
 
 func (me *multiLess) Next(f cmper) {
-	me.StrictNext(f())
+	if me.ok {
+		return
+	}
+	same, less := f()
+	if same {
+		return
+	}
+	me.ok = true
+	me.less = less
 }
 
 func (me *multiLess) StrictNext(same, less bool) {
 	if me.ok {
 		return
 	}
-	if same {
-		return
-	}
-	me.ok, me.less = true, less
+	me.Next(func() (bool, bool) { return same, less })
 }
 
 func (me *multiLess) NextBool(l, r bool) {

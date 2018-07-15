@@ -15,7 +15,9 @@ func worseConn(l, r *connection) bool {
 	ml.StrictNext(
 		l.completedHandshake.Equal(r.completedHandshake),
 		l.completedHandshake.Before(r.completedHandshake))
-	ml.StrictNext(l.peerPriority() == r.peerPriority(), l.peerPriority() < r.peerPriority())
+	ml.Next(func() (bool, bool) {
+		return l.peerPriority() == r.peerPriority(), l.peerPriority() < r.peerPriority()
+	})
 	ml.StrictNext(l == r, uintptr(unsafe.Pointer(l)) < uintptr(unsafe.Pointer(r)))
 	less, ok := ml.FinalOk()
 	if !ok {

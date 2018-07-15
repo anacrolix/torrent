@@ -29,6 +29,8 @@ type ConnStats struct {
 	ChunksReadUseful Count
 	ChunksReadWasted Count
 
+	MetadataChunksRead Count
+
 	// Number of pieces data was written to, that subsequently passed verification.
 	PiecesDirtiedGood Count
 	// Number of pieces data was written to, that subsequently failed
@@ -73,6 +75,8 @@ func (cs *ConnStats) wroteMsg(msg *pp.Message) {
 }
 
 func (cs *ConnStats) readMsg(msg *pp.Message) {
+	// We want to also handle extended metadata pieces here, but we wouldn't
+	// have decoded the extended payload yet.
 	switch msg.Type {
 	case pp.Piece:
 		cs.ChunksRead.Add(1)

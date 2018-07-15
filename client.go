@@ -890,6 +890,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connect
 	piece := d["piece"]
 	switch msgType {
 	case pp.DataMetadataExtensionMsgType:
+		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
 		if !c.requestedMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
@@ -899,7 +900,6 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connect
 			return fmt.Errorf("data has bad offset in payload: %d", begin)
 		}
 		t.saveMetadataPiece(piece, payload[begin:])
-		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
 		c.lastUsefulChunkReceived = time.Now()
 		return t.maybeCompleteMetadata()
 	case pp.RequestMetadataExtensionMsgType:

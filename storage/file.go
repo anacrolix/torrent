@@ -36,7 +36,7 @@ func NewFileWithCompletion(baseDir string, completion PieceCompletion) ClientImp
 	return newFileWithCustomPathMakerAndCompletion(baseDir, nil, completion)
 }
 
-// All Torrent data stored in subdirectorys by infohash
+// File storage with data partitioned by infohash.
 func NewFileByInfoHash(baseDir string) ClientImpl {
 	return NewFileWithCustomPathMaker(baseDir, infoHashPathMaker)
 }

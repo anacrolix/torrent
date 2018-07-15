@@ -136,7 +136,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		ExtendedHandshakeClientVersion: "go.torrent dev 20150624",
 		Bep20:                          "-GT0001-",
 		NominalDialTimeout:             20 * time.Second,
-		MinDialTimeout:                 5 * time.Second,
+		MinDialTimeout:                 3 * time.Second,
 		EstablishedConnsPerTorrent:     50,
 		HalfOpenConnsPerTorrent:        25,
 		TorrentPeersHighWater:          500,

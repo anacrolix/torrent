@@ -486,7 +486,7 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 	if _, ok := cn.requests[r]; ok {
 		panic("chunk already requested")
 	}
-	if !cn.PeerHasPiece(r.Index) {
+	if !cn.PeerHasPiece(pieceIndex(r.Index)) {
 		panic("requesting piece peer doesn't have")
 	}
 	if _, ok := cn.t.conns[cn]; !ok {
@@ -803,7 +803,7 @@ func iterUndirtiedChunks(piece pieceIndex, t *Torrent, f func(chunkSpec) bool) b
 	chunkIndices := t.pieces[piece].undirtiedChunkIndices().ToSortedSlice()
 	// TODO: Use "math/rand".Shuffle >= Go 1.10
 	return iter.ForPerm(len(chunkIndices), func(i int) bool {
-		return f(t.chunkIndexSpec(pieceIndex(chunkIndices[i]), piece))
+		return f(t.chunkIndexSpec(pp.Integer(chunkIndices[i]), piece))
 	})
 }
 
@@ -1024,7 +1024,7 @@ func (c *connection) reject(r request) {
 
 func (c *connection) onReadRequest(r request) error {
 	requestedChunkLengths.Add(strconv.FormatUint(r.Length.Uint64(), 10), 1)
-	if r.Begin+r.Length > c.t.pieceLength(r.Index) {
+	if r.Begin+r.Length > c.t.pieceLength(pieceIndex(r.Index)) {
 		torrent.Add("bad requests received", 1)
 		return errors.New("bad request")
 	}
@@ -1048,7 +1048,7 @@ func (c *connection) onReadRequest(r request) error {
 		// BEP 6 says we may close here if we choose.
 		return nil
 	}
-	if !c.t.havePiece(r.Index) {
+	if !c.t.havePiece(pieceIndex(r.Index)) {
 		// This isn't necessarily them screwing up. We can drop pieces
 		// from our storage, and can't communicate this to peers
 		// except by reconnecting.
@@ -1127,7 +1127,7 @@ func (c *connection) mainReadLoop() (err error) {
 			// We'll probably choke them for this, which will clear them if
 			// appropriate, and is clearly specified.
 		case pp.Have:
-			err = c.peerSentHave(msg.Index)
+			err = c.peerSentHave(pieceIndex(msg.Index))
 		case pp.Request:
 			r := newRequestFromMessage(&msg)
 			err = c.onReadRequest(r)
@@ -1340,21 +1340,21 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 	if err != nil {
 		log.Printf("%s (%s): error writing chunk %v: %s", t, t.infoHash, req, err)
 		t.pendRequest(req)
-		t.updatePieceCompletion(msg.Index)
+		t.updatePieceCompletion(pieceIndex(msg.Index))
 		return nil
 	}
 
 	// It's important that the piece is potentially queued before we check if
 	// the piece is still wanted, because if it is queued, it won't be wanted.
-	if t.pieceAllDirty(req.Index) {
-		t.queuePieceCheck(req.Index)
-		t.pendAllChunkSpecs(req.Index)
+	if t.pieceAllDirty(pieceIndex(req.Index)) {
+		t.queuePieceCheck(pieceIndex(req.Index))
+		t.pendAllChunkSpecs(pieceIndex(req.Index))
 	}
 
-	c.onDirtiedPiece(req.Index)
+	c.onDirtiedPiece(pieceIndex(req.Index))
 
 	cl.event.Broadcast()
-	t.publishPieceChange(req.Index)
+	t.publishPieceChange(pieceIndex(req.Index))
 
 	return nil
 }
@@ -1420,7 +1420,7 @@ another:
 			}
 			more, err := c.sendChunk(r, msg)
 			if err != nil {
-				i := r.Index
+				i := pieceIndex(r.Index)
 				if c.t.pieceComplete(i) {
 					c.t.updatePieceCompletion(i)
 					if !c.t.pieceComplete(i) {

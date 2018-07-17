@@ -85,7 +85,7 @@ func (r *reader) readable(off int64) (ret bool) {
 	if r.responsive {
 		return r.t.haveChunk(req)
 	}
-	return r.t.pieceComplete(req.Index)
+	return r.t.pieceComplete(pieceIndex(req.Index))
 }
 
 // How many bytes are available to read. Max is the most we could require.

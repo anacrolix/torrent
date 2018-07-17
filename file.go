@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/anacrolix/torrent/metainfo"
-	pwp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 // Provides access to regions of torrent data that correspond to its files.
@@ -131,16 +130,16 @@ func (f *File) Priority() piecePriority {
 	return f.prio
 }
 
-func (f *File) firstPieceIndex() pwp.Integer {
+func (f *File) firstPieceIndex() pieceIndex {
 	if f.t.usualPieceSize() == 0 {
 		return 0
 	}
-	return pwp.Integer(f.offset / int64(f.t.usualPieceSize()))
+	return pieceIndex(f.offset / int64(f.t.usualPieceSize()))
 }
 
-func (f *File) endPieceIndex() pwp.Integer {
+func (f *File) endPieceIndex() pieceIndex {
 	if f.t.usualPieceSize() == 0 {
 		return 0
 	}
-	return pwp.Integer((f.offset+f.length-1)/int64(f.t.usualPieceSize())) + 1
+	return pieceIndex((f.offset+f.length-1)/int64(f.t.usualPieceSize())) + 1
 }

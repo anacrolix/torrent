@@ -33,7 +33,7 @@ import (
 	"github.com/anacrolix/torrent/tracker"
 )
 
-func (t *Torrent) chunkIndexSpec(chunkIndex, piece pieceIndex) chunkSpec {
+func (t *Torrent) chunkIndexSpec(chunkIndex pp.Integer, piece pieceIndex) chunkSpec {
 	return chunkIndexSpec(chunkIndex, t.pieceLength(piece), t.chunkSize)
 }
 
@@ -795,7 +795,7 @@ func (t *Torrent) haveChunk(r request) (ret bool) {
 	if !t.haveInfo() {
 		return false
 	}
-	if t.pieceComplete(r.Index) {
+	if t.pieceComplete(pieceIndex(r.Index)) {
 		return true
 	}
 	p := &t.pieces[r.Index]
@@ -807,7 +807,7 @@ func chunkIndex(cs chunkSpec, chunkSize pp.Integer) int {
 }
 
 func (t *Torrent) wantPiece(r request) bool {
-	if !t.wantPieceIndex(r.Index) {
+	if !t.wantPieceIndex(pieceIndex(r.Index)) {
 		return false
 	}
 	if t.pieces[r.Index].pendingChunk(r.chunkSpec, t.chunkSize) {

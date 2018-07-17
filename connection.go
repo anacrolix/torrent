@@ -1483,8 +1483,11 @@ func (c *connection) deleteRequest(r request) bool {
 		panic(n)
 	}
 	c.updateRequests()
-	// TODO: Other connections that aren't interested, and can provide this
-	// chunk might be wakeable?
+	for _c := range c.t.conns {
+		if !_c.Interested && _c != c && c.PeerHasPiece(pieceIndex(r.Index)) {
+			_c.updateRequests()
+		}
+	}
 	return true
 }
 

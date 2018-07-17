@@ -105,16 +105,18 @@ func (e *Encoder) reflectMarshaler(v reflect.Value) bool {
 	return false
 }
 
+var bigIntType = reflect.TypeOf(big.Int{})
+
 func (e *Encoder) reflectValue(v reflect.Value) {
 
 	if e.reflectMarshaler(v) {
 		return
 	}
 
-	switch t := v.Interface().(type) {
-	case big.Int:
+	if v.Type() == bigIntType {
 		e.writeString("i")
-		e.writeString(t.String())
+		bi := v.Interface().(big.Int)
+		e.writeString(bi.String())
 		e.writeString("e")
 		return
 	}

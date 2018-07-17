@@ -789,6 +789,17 @@ func (cn *connection) iterPendingRequests(piece pieceIndex, f func(request) bool
 }
 
 func iterUndirtiedChunks(piece pieceIndex, t *Torrent, f func(chunkSpec) bool) bool {
+	p := &t.pieces[piece]
+	if t.requestStrategy == 3 {
+		for i := pp.Integer(0); i < p.numChunks(); i++ {
+			if !p.dirtyChunks.Get(bitmap.BitIndex(i)) {
+				if !f(t.chunkIndexSpec(i, piece)) {
+					return false
+				}
+			}
+		}
+		return true
+	}
 	chunkIndices := t.pieces[piece].undirtiedChunkIndices().ToSortedSlice()
 	// TODO: Use "math/rand".Shuffle >= Go 1.10
 	return iter.ForPerm(len(chunkIndices), func(i int) bool {

@@ -389,10 +389,7 @@ func (cl *Client) acceptConnections(l net.Listener) {
 			return
 		}
 		if err != nil {
-			log.Print(err)
-			// I think something harsher should happen here? Our accept
-			// routine just fucked off.
-			return
+			log.Printf("error accepting connection: %s", err)
 		}
 		go func() {
 			if reject {

@@ -29,8 +29,8 @@ type Range struct {
 	Description string
 }
 
-func (r *Range) String() string {
-	return fmt.Sprintf("%s-%s (%s)", r.First, r.Last, r.Description)
+func (r Range) String() string {
+	return fmt.Sprintf("%s-%s: %s", r.First, r.Last, r.Description)
 }
 
 // Create a new IP list. The given ranges must already sorted by the lower
@@ -49,7 +49,7 @@ func (ipl *IPList) NumRanges() int {
 	return len(ipl.ranges)
 }
 
-// Return the range the given IP is in. Returns nil if no range is found.
+// Return the range the given IP is in. ok if false if no range is found.
 func (ipl *IPList) Lookup(ip net.IP) (r Range, ok bool) {
 	if ipl == nil {
 		return

@@ -324,7 +324,7 @@ func infoPieceHashes(info *metainfo.Info) (ret []string) {
 
 func (t *Torrent) makePieces() {
 	hashes := infoPieceHashes(t.info)
-	t.pieces = make([]Piece, len(hashes))
+	t.pieces = make([]Piece, len(hashes), len(hashes))
 	for i, hash := range hashes {
 		piece := &t.pieces[i]
 		piece.t = t

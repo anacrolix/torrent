@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
-	"strings"
+	"sync"
 	"unsafe"
 )
 
@@ -243,9 +243,14 @@ func getDictField(dict reflect.Value, key string) dictField {
 	}
 }
 
-func getStructFieldForKey(struct_ reflect.Type, key string) (f reflect.StructField, ok bool) {
+var (
+	structFieldsMu sync.Mutex
+	structFields   = map[reflect.Type]map[string]reflect.StructField{}
+)
+
+func parseStructFields(struct_ reflect.Type, each func(string, reflect.StructField)) {
 	for i, n := 0, struct_.NumField(); i < n; i++ {
-		f = struct_.Field(i)
+		f := struct_.Field(i)
 		tag := f.Tag.Get("bencode")
 		if tag == "-" {
 			continue
@@ -253,22 +258,29 @@ func getStructFieldForKey(struct_ reflect.Type, key string) (f reflect.StructFie
 		if f.Anonymous {
 			continue
 		}
-
-		if parseTag(tag).Key() == key {
-			ok = true
-			break
-		}
-
-		if f.Name == key {
-			ok = true
-			break
-		}
-
-		if strings.EqualFold(f.Name, key) {
-			ok = true
-			break
+		if key := parseTag(tag).Key(); key != "" {
+			each(key, f)
+		} else {
+			each(f.Name, f)
 		}
 	}
+}
+
+func saveStructFields(struct_ reflect.Type) {
+	m := make(map[string]reflect.StructField)
+	parseStructFields(struct_, func(key string, sf reflect.StructField) {
+		m[key] = sf
+	})
+	structFields[struct_] = m
+}
+
+func getStructFieldForKey(struct_ reflect.Type, key string) (f reflect.StructField, ok bool) {
+	structFieldsMu.Lock()
+	if _, ok := structFields[struct_]; !ok {
+		saveStructFields(struct_)
+	}
+	f, ok = structFields[struct_][key]
+	structFieldsMu.Unlock()
 	return
 }
 
@@ -488,7 +500,7 @@ func (d *Decoder) parseValue(v reflect.Value) (bool, error) {
 		if b >= '0' && b <= '9' {
 			// It's a string.
 			d.buf.Reset()
-			// Write the  first digit of the length to the buffer.
+			// Write the first digit of the length to the buffer.
 			d.buf.WriteByte(b)
 			return true, d.parseString(v)
 		}

@@ -17,11 +17,7 @@ func isEmptyValue(v reflect.Value) bool {
 }
 
 type Encoder struct {
-	w interface {
-		Flush() error
-		io.Writer
-		WriteString(string) (int, error)
-	}
+	w       io.Writer
 	scratch [64]byte
 }
 
@@ -42,7 +38,7 @@ func (e *Encoder) Encode(v interface{}) (err error) {
 		}
 	}()
 	e.reflectValue(reflect.ValueOf(v))
-	return e.w.Flush()
+	return nil
 }
 
 type string_values []reflect.Value
@@ -60,9 +56,10 @@ func (e *Encoder) write(s []byte) {
 }
 
 func (e *Encoder) writeString(s string) {
-	_, err := e.w.WriteString(s)
-	if err != nil {
-		panic(err)
+	for s != "" {
+		n := copy(e.scratch[:], s)
+		s = s[n:]
+		e.write(e.scratch[:n])
 	}
 }
 
@@ -129,13 +126,13 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 			e.writeString("i0e")
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		b := strconv.AppendInt(e.scratch[:0], v.Int(), 10)
 		e.writeString("i")
+		b := strconv.AppendInt(e.scratch[:0], v.Int(), 10)
 		e.write(b)
 		e.writeString("e")
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		b := strconv.AppendUint(e.scratch[:0], v.Uint(), 10)
 		e.writeString("i")
+		b := strconv.AppendUint(e.scratch[:0], v.Uint(), 10)
 		e.write(b)
 		e.writeString("e")
 	case reflect.String:

@@ -225,56 +225,62 @@ func getDictField(dict reflect.Value, key string) dictField {
 		if !ok {
 			return dictField{}
 		}
-		if sf.PkgPath != "" {
+		if sf.r.PkgPath != "" {
 			panic(&UnmarshalFieldError{
 				Key:   key,
 				Type:  dict.Type(),
-				Field: sf,
+				Field: sf.r,
 			})
 		}
 		return dictField{
-			Value:                    dict.FieldByIndex(sf.Index),
+			Value:                    dict.FieldByIndex(sf.r.Index),
 			Ok:                       true,
 			Set:                      func() {},
-			IgnoreUnmarshalTypeError: getTag(sf.Tag).IgnoreUnmarshalTypeError(),
+			IgnoreUnmarshalTypeError: sf.tag.IgnoreUnmarshalTypeError(),
 		}
 	default:
 		return dictField{}
 	}
 }
 
+type structField struct {
+	r   reflect.StructField
+	tag tag
+}
+
 var (
 	structFieldsMu sync.Mutex
-	structFields   = map[reflect.Type]map[string]reflect.StructField{}
+	structFields   = map[reflect.Type]map[string]structField{}
 )
 
-func parseStructFields(struct_ reflect.Type, each func(string, reflect.StructField)) {
+func parseStructFields(struct_ reflect.Type, each func(string, structField)) {
 	for i, n := 0, struct_.NumField(); i < n; i++ {
 		f := struct_.Field(i)
-		tag := f.Tag.Get("bencode")
-		if tag == "-" {
-			continue
-		}
 		if f.Anonymous {
 			continue
 		}
-		if key := parseTag(tag).Key(); key != "" {
-			each(key, f)
-		} else {
-			each(f.Name, f)
+		tagStr := f.Tag.Get("bencode")
+		if tagStr == "-" {
+			continue
 		}
+		tag := parseTag(tagStr)
+		key := tag.Key()
+		if key == "" {
+			key = f.Name
+		}
+		each(key, structField{f, tag})
 	}
 }
 
 func saveStructFields(struct_ reflect.Type) {
-	m := make(map[string]reflect.StructField)
-	parseStructFields(struct_, func(key string, sf reflect.StructField) {
+	m := make(map[string]structField)
+	parseStructFields(struct_, func(key string, sf structField) {
 		m[key] = sf
 	})
 	structFields[struct_] = m
 }
 
-func getStructFieldForKey(struct_ reflect.Type, key string) (f reflect.StructField, ok bool) {
+func getStructFieldForKey(struct_ reflect.Type, key string) (f structField, ok bool) {
 	structFieldsMu.Lock()
 	if _, ok := structFields[struct_]; !ok {
 		saveStructFields(struct_)

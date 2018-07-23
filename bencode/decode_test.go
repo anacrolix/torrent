@@ -143,7 +143,7 @@ func TestIgnoreUnmarshalTypeError(t *testing.T) {
 		Normal int
 	}{}
 	require.Error(t, Unmarshal([]byte("d6:Normal5:helloe"), &s))
-	assert.Nil(t, Unmarshal([]byte("d6:Ignore5:helloe"), &s))
+	assert.NoError(t, Unmarshal([]byte("d6:Ignore5:helloe"), &s))
 	require.Nil(t, Unmarshal([]byte("d6:Ignorei42ee"), &s))
 	assert.EqualValues(t, 42, s.Ignore)
 }

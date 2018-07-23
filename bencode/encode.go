@@ -77,29 +77,23 @@ func (e *Encoder) reflectByteSlice(s []byte) {
 	e.write(s)
 }
 
-// returns true if the value implements Marshaler interface and marshaling was
-// done successfully
+// Returns true if the value implements Marshaler interface and marshaling was
+// done successfully.
 func (e *Encoder) reflectMarshaler(v reflect.Value) bool {
-	m, ok := v.Interface().(Marshaler)
-	if !ok {
-		// T doesn't work, try *T
-		if v.Kind() != reflect.Ptr && v.CanAddr() {
-			m, ok = v.Addr().Interface().(Marshaler)
-			if ok {
-				v = v.Addr()
-			}
+	if !v.Type().Implements(marshalerType) {
+		if v.Kind() != reflect.Ptr && v.CanAddr() && v.Addr().Type().Implements(marshalerType) {
+			v = v.Addr()
+		} else {
+			return false
 		}
 	}
-	if ok && (v.Kind() != reflect.Ptr || !v.IsNil()) {
-		data, err := m.MarshalBencode()
-		if err != nil {
-			panic(&MarshalerError{v.Type(), err})
-		}
-		e.write(data)
-		return true
+	m := v.Interface().(Marshaler)
+	data, err := m.MarshalBencode()
+	if err != nil {
+		panic(&MarshalerError{v.Type(), err})
 	}
-
-	return false
+	e.write(data)
+	return true
 }
 
 var bigIntType = reflect.TypeOf(big.Int{})

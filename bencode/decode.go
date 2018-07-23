@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
-	"unsafe"
 )
 
 type Decoder struct {
@@ -113,7 +112,7 @@ func (d *Decoder) parseInt(v reflect.Value) {
 		})
 	}
 
-	s := d.buf.String()
+	s := bytesAsString(d.buf.Bytes())
 
 	switch v.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -154,38 +153,49 @@ func (d *Decoder) parseString(v reflect.Value) error {
 
 	// read the string length first
 	d.readUntil(':')
-	length, err := strconv.ParseInt(d.buf.String(), 10, 64)
+	length, err := strconv.ParseInt(bytesAsString(d.buf.Bytes()), 10, 0)
 	checkForIntParseError(err, start)
 
-	d.buf.Reset()
-	n, err := io.CopyN(&d.buf, d.r, length)
-	d.Offset += n
-	if err != nil {
-		checkForUnexpectedEOF(err, d.Offset)
-		panic(&SyntaxError{
-			Offset: d.Offset,
-			What:   errors.New("unexpected I/O error: " + err.Error()),
-		})
+	defer d.buf.Reset()
+
+	read := func(b []byte) {
+		n, err := io.ReadFull(d.r, b)
+		d.Offset += int64(n)
+		if err != nil {
+			checkForUnexpectedEOF(err, d.Offset)
+			panic(&SyntaxError{
+				Offset: d.Offset,
+				What:   errors.New("unexpected I/O error: " + err.Error()),
+			})
+		}
 	}
 
-	defer d.buf.Reset()
 	switch v.Kind() {
 	case reflect.String:
-		v.SetString(d.buf.String())
+		b := make([]byte, length)
+		read(b)
+		v.SetString(bytesAsString(b))
 		return nil
 	case reflect.Slice:
 		if v.Type().Elem().Kind() != reflect.Uint8 {
 			break
 		}
-		v.SetBytes(append([]byte(nil), d.buf.Bytes()...))
+		b := make([]byte, length)
+		read(b)
+		v.SetBytes(b)
 		return nil
 	case reflect.Array:
 		if v.Type().Elem().Kind() != reflect.Uint8 {
 			break
 		}
-		reflect.Copy(v, reflect.ValueOf(d.buf.Bytes()))
+		d.buf.Grow(int(length))
+		b := d.buf.Bytes()[:length]
+		read(b)
+		reflect.Copy(v, reflect.ValueOf(b))
 		return nil
 	}
+	d.buf.Grow(int(length))
+	read(d.buf.Bytes()[:length])
 	// I believe we return here to support "ignore_unmarshal_type_error".
 	return &UnmarshalTypeError{
 		Value: "string",
@@ -409,11 +419,7 @@ func (d *Decoder) readOneValue() bool {
 		if b >= '0' && b <= '9' {
 			start := d.buf.Len() - 1
 			d.readUntil(':')
-			s := reflect.StringHeader{
-				uintptr(unsafe.Pointer(&d.buf.Bytes()[start])),
-				d.buf.Len() - start,
-			}
-			length, err := strconv.ParseInt(*(*string)(unsafe.Pointer(&s)), 10, 64)
+			length, err := strconv.ParseInt(bytesAsString(d.buf.Bytes()[start:]), 10, 64)
 			checkForIntParseError(err, d.Offset-1)
 
 			d.buf.WriteString(":")
@@ -437,29 +443,23 @@ func (d *Decoder) readOneValue() bool {
 }
 
 func (d *Decoder) parseUnmarshaler(v reflect.Value) bool {
-	m, ok := v.Interface().(Unmarshaler)
-	if !ok {
-		// T doesn't work, try *T
-		if v.Kind() != reflect.Ptr && v.CanAddr() {
-			m, ok = v.Addr().Interface().(Unmarshaler)
-			if ok {
-				v = v.Addr()
-			}
+	if !v.Type().Implements(unmarshalerType) {
+		if v.Addr().Type().Implements(unmarshalerType) {
+			v = v.Addr()
+		} else {
+			return false
 		}
 	}
-	if ok && (v.Kind() != reflect.Ptr || !v.IsNil()) {
-		if d.readOneValue() {
-			err := m.UnmarshalBencode(d.buf.Bytes())
-			d.buf.Reset()
-			if err != nil {
-				panic(&UnmarshalerError{v.Type(), err})
-			}
-			return true
-		}
-		d.buf.Reset()
+	d.buf.Reset()
+	if !d.readOneValue() {
+		return false
 	}
-
-	return false
+	m := v.Interface().(Unmarshaler)
+	err := m.UnmarshalBencode(d.buf.Bytes())
+	if err != nil {
+		panic(&UnmarshalerError{v.Type(), err})
+	}
+	return true
 }
 
 // Returns true if there was a value and it's now stored in 'v', otherwise

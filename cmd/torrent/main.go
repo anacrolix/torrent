@@ -8,7 +8,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/anacrolix/envpprof"
@@ -150,6 +152,15 @@ func statsEnabled() bool {
 	return *flags.Stats
 }
 
+func exitSignalHandlers(client *torrent.Client) {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+	for {
+		log.Printf("close signal received: %+v", <-c)
+		client.Close()
+	}
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	tagflag.Parse(&flags)
@@ -183,6 +194,8 @@ func main() {
 		log.Fatalf("error creating client: %s", err)
 	}
 	defer client.Close()
+	go exitSignalHandlers(client)
+
 	// Write status on the root path on the default HTTP muxer. This will be
 	// bound to localhost somewhere if GOPPROF is set, thanks to the envpprof
 	// import.

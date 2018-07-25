@@ -26,7 +26,7 @@ jobs:
       - run: go test -bench . ./...
       # - run: CGO_ENABLED=0 go get -t -d -v $PROJECT_GO_PACKAGE/...
       - run: set +e; CGO_ENABLED=0 go test -v ./...; true
-      - run: go get golang.org/x/mobile/cmd/gomobile
+      - run: go install golang.org/x/mobile/cmd/gomobile
       - run: gomobile init
       - run: gomobile build -target=android $PROJECT_GO_PACKAGE
       - run: go get github.com/anacrolix/godo

@@ -220,7 +220,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		}
 	}
 
-	cl.conns, err = listenAll(cl.enabledPeerNetworks(), cl.config.ListenHost, cl.config.ListenPort, cl.config.ProxyURL)
+	cl.conns, err = listenAll(cl.enabledPeerNetworks(), cl.config.ListenHost, cl.config.ListenPort, cl.config.ProxyURL, cl.firewallCallback)
 	if err != nil {
 		return
 	}
@@ -247,6 +247,18 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	}
 
 	return
+}
+
+func (cl *Client) firewallCallback(net.Addr) bool {
+	cl.rLock()
+	block := !cl.wantConns()
+	cl.rUnlock()
+	if block {
+		torrent.Add("connections firewalled", 1)
+	} else {
+		torrent.Add("connections not firewalled", 1)
+	}
+	return block
 }
 
 func (cl *Client) enabledPeerNetworks() (ns []string) {
@@ -340,14 +352,21 @@ func (cl *Client) ipIsBlocked(ip net.IP) bool {
 	return blocked
 }
 
+func (cl *Client) wantConns() bool {
+	for _, t := range cl.torrents {
+		if t.wantConns() {
+			return true
+		}
+	}
+	return false
+}
+
 func (cl *Client) waitAccept() {
 	for {
-		for _, t := range cl.torrents {
-			if t.wantConns() {
-				return
-			}
-		}
 		if cl.closed.IsSet() {
+			return
+		}
+		if cl.wantConns() {
 			return
 		}
 		cl.event.Wait()

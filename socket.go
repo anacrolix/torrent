@@ -31,11 +31,11 @@ func getProxyDialer(proxyURL string) (proxy.Dialer, error) {
 	return proxy.FromURL(fixedURL, proxy.Direct)
 }
 
-func listen(network, addr, proxyURL string) (socket, error) {
+func listen(network, addr, proxyURL string, f firewallCallback) (socket, error) {
 	if isTcpNetwork(network) {
 		return listenTcp(network, addr, proxyURL)
 	} else if isUtpNetwork(network) {
-		return listenUtp(network, addr, proxyURL)
+		return listenUtp(network, addr, proxyURL, f)
 	} else {
 		panic(fmt.Sprintf("unknown network %q", network))
 	}
@@ -97,7 +97,7 @@ func setPort(addr string, port int) string {
 	return net.JoinHostPort(host, strconv.FormatInt(int64(port), 10))
 }
 
-func listenAll(networks []string, getHost func(string) string, port int, proxyURL string) ([]socket, error) {
+func listenAll(networks []string, getHost func(string) string, port int, proxyURL string, f firewallCallback) ([]socket, error) {
 	if len(networks) == 0 {
 		return nil, nil
 	}
@@ -106,7 +106,7 @@ func listenAll(networks []string, getHost func(string) string, port int, proxyUR
 		nahs = append(nahs, networkAndHost{n, getHost(n)})
 	}
 	for {
-		ss, retry, err := listenAllRetry(nahs, port, proxyURL)
+		ss, retry, err := listenAllRetry(nahs, port, proxyURL, f)
 		if !retry {
 			return ss, err
 		}
@@ -118,10 +118,10 @@ type networkAndHost struct {
 	Host    string
 }
 
-func listenAllRetry(nahs []networkAndHost, port int, proxyURL string) (ss []socket, retry bool, err error) {
+func listenAllRetry(nahs []networkAndHost, port int, proxyURL string, f firewallCallback) (ss []socket, retry bool, err error) {
 	ss = make([]socket, 1, len(nahs))
 	portStr := strconv.FormatInt(int64(port), 10)
-	ss[0], err = listen(nahs[0].Network, net.JoinHostPort(nahs[0].Host, portStr), proxyURL)
+	ss[0], err = listen(nahs[0].Network, net.JoinHostPort(nahs[0].Host, portStr), proxyURL, f)
 	if err != nil {
 		return nil, false, fmt.Errorf("first listen: %s", err)
 	}
@@ -135,7 +135,7 @@ func listenAllRetry(nahs []networkAndHost, port int, proxyURL string) (ss []sock
 	}()
 	portStr = strconv.FormatInt(int64(missinggo.AddrPort(ss[0].Addr())), 10)
 	for _, nah := range nahs[1:] {
-		s, err := listen(nah.Network, net.JoinHostPort(nah.Host, portStr), proxyURL)
+		s, err := listen(nah.Network, net.JoinHostPort(nah.Host, portStr), proxyURL, f)
 		if err != nil {
 			return ss,
 				missinggo.IsAddrInUse(err) && port == 0,
@@ -146,8 +146,10 @@ func listenAllRetry(nahs []networkAndHost, port int, proxyURL string) (ss []sock
 	return
 }
 
-func listenUtp(network, addr, proxyURL string) (s socket, err error) {
-	us, err := NewUtpSocket(network, addr)
+type firewallCallback func(net.Addr) bool
+
+func listenUtp(network, addr, proxyURL string, fc firewallCallback) (s socket, err error) {
+	us, err := NewUtpSocket(network, addr, fc)
 	if err != nil {
 		return
 	}

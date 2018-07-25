@@ -6,11 +6,16 @@ import (
 	"github.com/anacrolix/go-libutp"
 )
 
-func NewUtpSocket(network, addr string) (utpSocket, error) {
+func NewUtpSocket(network, addr string, fc firewallCallback) (utpSocket, error) {
 	s, err := utp.NewSocket(network, addr)
 	if s == nil {
 		return nil, err
-	} else {
+	}
+	if err != nil {
 		return s, err
 	}
+	if fc != nil {
+		s.SetFirewallCallback(utp.FirewallCallback(fc))
+	}
+	return s, err
 }

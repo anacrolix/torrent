@@ -1012,7 +1012,7 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 }
 
 func TestClientAddressInUse(t *testing.T) {
-	s, _ := NewUtpSocket("udp", ":50007")
+	s, _ := NewUtpSocket("udp", ":50007", nil)
 	if s != nil {
 		defer s.Close()
 	}

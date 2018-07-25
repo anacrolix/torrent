@@ -3,13 +3,13 @@ jobs:
   build:
     machine: true
     environment:
-      PROJECT_GO_PACKAGE: github.com/anacrolix/torrent
+      # PROJECT_GO_PACKAGE: github.com/anacrolix/torrent
     # Should use PROJECT_GO_PACKAGE here but it's not interpolated for this
     # field. https://discuss.circleci.com/t/environment-variable-expansion-in-
     # working-directory/11322/4
-    working_directory: ~/go/src/github.com/anacrolix/torrent
+    # working_directory: ~/go/src/github.com/anacrolix/torrent
     steps:
-      - run: echo $PROJECT_GO_PACKAGE
+      # - run: echo $PROJECT_GO_PACKAGE
       - run: echo $CIRCLE_WORKING_DIRECTORY
       - run: echo $PWD
       - run: echo 'export GOPATH=$HOME/go' >> $BASH_ENV
@@ -21,11 +21,11 @@ jobs:
       - checkout
       - run: sudo apt-get update
       - run: sudo apt install fuse pv
-      - run: go get -t -d -v -race $PROJECT_GO_PACKAGE/...
-      - run: go test -v -race $PROJECT_GO_PACKAGE/... -count 2
-      - run: go test -bench . $PROJECT_GO_PACKAGE/...
-      - run: CGO_ENABLED=0 go get -t -d -v $PROJECT_GO_PACKAGE/...
-      - run: set +e; CGO_ENABLED=0 go test -v $PROJECT_GO_PACKAGE/...; true
+      # - run: go get -t -d -v -race $PROJECT_GO_PACKAGE/...
+      - run: go test -v -race ./... -count 2
+      - run: go test -bench . ./...
+      # - run: CGO_ENABLED=0 go get -t -d -v $PROJECT_GO_PACKAGE/...
+      - run: set +e; CGO_ENABLED=0 go test -v ./...; true
       - run: go get golang.org/x/mobile/cmd/gomobile
       - run: gomobile init
       - run: gomobile build -target=android $PROJECT_GO_PACKAGE

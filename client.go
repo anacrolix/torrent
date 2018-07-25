@@ -723,6 +723,15 @@ func (cl *Client) receiveHandshakes(c *connection) (t *Torrent, err error) {
 	var rw io.ReadWriter
 	rw, c.headerEncrypted, c.cryptoMethod, err = handleEncryption(c.rw(), cl.forSkeys, cl.config.EncryptionPolicy)
 	c.setRW(rw)
+	if err == nil || err == mse.ErrNoSecretKeyMatch {
+		if c.headerEncrypted {
+			torrent.Add("handshakes received encrypted", 1)
+		} else {
+			torrent.Add("handshakes received unencrypted", 1)
+		}
+	} else {
+		torrent.Add("handshakes received with error while handling encryption", 1)
+	}
 	if err != nil {
 		if err == mse.ErrNoSecretKeyMatch {
 			err = nil

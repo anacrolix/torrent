@@ -114,7 +114,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		Piece: make([]byte, defaultChunkSize),
 	}
 	go func() {
-		cl.mu.Lock()
+		cl.lock()
 		err := cn.mainReadLoop()
 		if err != nil {
 			mrlErr <- err
@@ -127,12 +127,12 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		defer w.Close()
 		ts.writeSem.Lock()
 		for range iter.N(b.N) {
-			cl.mu.Lock()
+			cl.lock()
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.
 			t.pieces[0].dirtyChunks.Clear()
 			cn.validReceiveChunks = map[request]struct{}{newRequestFromMessage(&msg): struct{}{}}
-			cl.mu.Unlock()
+			cl.unlock()
 			n, err := w.Write(wb)
 			require.NoError(b, err)
 			require.EqualValues(b, len(wb), n)

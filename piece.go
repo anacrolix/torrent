@@ -180,8 +180,8 @@ func (p *Piece) bytesLeft() (ret pp.Integer) {
 }
 
 func (p *Piece) VerifyData() {
-	p.t.cl.mu.Lock()
-	defer p.t.cl.mu.Unlock()
+	p.t.cl.lock()
+	defer p.t.cl.unlock()
 	target := p.numVerifies + 1
 	if p.hashing {
 		target++
@@ -208,8 +208,8 @@ func (p *Piece) torrentEndOffset() int64 {
 }
 
 func (p *Piece) SetPriority(prio piecePriority) {
-	p.t.cl.mu.Lock()
-	defer p.t.cl.mu.Unlock()
+	p.t.cl.lock()
+	defer p.t.cl.unlock()
 	p.priority = prio
 	p.t.updatePiecePriority(p.index)
 }

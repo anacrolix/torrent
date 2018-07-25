@@ -177,7 +177,7 @@ func (cn *connection) peerHasAllPieces() (all bool, known bool) {
 }
 
 func (cn *connection) mu() sync.Locker {
-	return &cn.t.cl.mu
+	return cn.t.cl.locker()
 }
 
 func (cn *connection) remoteAddr() net.Addr {
@@ -1084,8 +1084,8 @@ func (c *connection) mainReadLoop() (err error) {
 	for {
 		var msg pp.Message
 		func() {
-			cl.mu.Unlock()
-			defer cl.mu.Lock()
+			cl.unlock()
+			defer cl.lock()
 			err = decoder.Decode(&msg)
 		}()
 		if t.closed.IsSet() || c.closed.IsSet() || err == io.EOF {
@@ -1324,8 +1324,8 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 	}
 
 	err := func() error {
-		cl.mu.Unlock()
-		defer cl.mu.Lock()
+		cl.unlock()
+		defer cl.lock()
 		// Write the chunk out. Note that the upper bound on chunk writing
 		// concurrency will be the number of connections. We write inline with
 		// receiving the chunk (with this lock dance), because we want to

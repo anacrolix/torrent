@@ -154,13 +154,13 @@ func TestPieceHashFailed(t *testing.T) {
 	tt := cl.newTorrent(mi.HashInfoBytes(), badStorage{})
 	tt.setChunkSize(2)
 	require.NoError(t, tt.setInfoBytes(mi.InfoBytes))
-	tt.cl.mu.Lock()
+	tt.cl.lock()
 	tt.pieces[1].dirtyChunks.AddRange(0, 3)
 	require.True(t, tt.pieceAllDirty(1))
 	tt.pieceHashed(1, false)
 	// Dirty chunks should be cleared so we can try again.
 	require.False(t, tt.pieceAllDirty(1))
-	tt.cl.mu.Unlock()
+	tt.cl.unlock()
 }
 
 // Check the behaviour of Torrent.Metainfo when metadata is not completed.
@@ -194,8 +194,8 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	assert.EqualValues(t, 0, tt.metadataSize())
 
 	func() {
-		cl.mu.Lock()
-		defer cl.mu.Unlock()
+		cl.lock()
+		defer cl.unlock()
 		go func() {
 			_, err = nc.Write(pp.Message{
 				Type:       pp.Extended,

@@ -107,9 +107,9 @@ func (me *trackerScraper) announce() (ret trackerAnnounceResult) {
 		ret.Err = fmt.Errorf("error getting ip: %s", err)
 		return
 	}
-	me.t.cl.mu.Lock()
+	me.t.cl.lock()
 	req := me.t.announceRequest()
-	me.t.cl.mu.Unlock()
+	me.t.cl.unlock()
 	res, err := tracker.Announce{
 		HttpClient: me.t.cl.config.TrackerHttpClient,
 		UserAgent:  me.t.cl.config.HTTPUserAgent,
@@ -133,24 +133,24 @@ func (me *trackerScraper) announce() (ret trackerAnnounceResult) {
 func (me *trackerScraper) Run() {
 	for {
 		select {
-		case <-me.t.closed.LockedChan(&me.t.cl.mu):
+		case <-me.t.closed.LockedChan(me.t.cl.locker()):
 			return
-		case <-me.stop.LockedChan(&me.t.cl.mu):
+		case <-me.stop.LockedChan(me.t.cl.locker()):
 			return
-		case <-me.t.wantPeersEvent.LockedChan(&me.t.cl.mu):
+		case <-me.t.wantPeersEvent.LockedChan(me.t.cl.locker()):
 		}
 
 		ar := me.announce()
-		me.t.cl.mu.Lock()
+		me.t.cl.lock()
 		me.lastAnnounce = ar
-		me.t.cl.mu.Unlock()
+		me.t.cl.unlock()
 
 		intervalChan := time.After(time.Until(ar.Completed.Add(ar.Interval)))
 
 		select {
-		case <-me.t.closed.LockedChan(&me.t.cl.mu):
+		case <-me.t.closed.LockedChan(me.t.cl.locker()):
 			return
-		case <-me.stop.LockedChan(&me.t.cl.mu):
+		case <-me.stop.LockedChan(me.t.cl.locker()):
 			return
 		case <-intervalChan:
 		}

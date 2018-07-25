@@ -69,8 +69,8 @@ func (r *reader) SetReadahead(readahead int64) {
 	r.mu.Lock()
 	r.readahead = readahead
 	r.mu.Unlock()
-	r.t.cl.mu.Lock()
-	defer r.t.cl.mu.Unlock()
+	r.t.cl.lock()
+	defer r.t.cl.unlock()
 	r.posChanged()
 }
 
@@ -146,10 +146,10 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 		defer cancel()
 		go func() {
 			<-ctx.Done()
-			r.t.cl.mu.Lock()
+			r.t.cl.lock()
 			ctxErr = ctx.Err()
 			r.t.tickleReaders()
-			r.t.cl.mu.Unlock()
+			r.t.cl.unlock()
 		}()
 	}
 	// Hmmm, if a Read gets stuck, this means you can't change position for
@@ -183,8 +183,8 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 // Wait until some data should be available to read. Tickles the client if it
 // isn't. Returns how much should be readable without blocking.
 func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error) (avail int64) {
-	r.t.cl.mu.Lock()
-	defer r.t.cl.mu.Unlock()
+	r.t.cl.lock()
+	defer r.t.cl.unlock()
 	for !r.readable(pos) && *ctxErr == nil {
 		r.waitReadable(pos)
 	}
@@ -222,19 +222,19 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 			err = nil
 			return
 		}
-		r.t.cl.mu.Lock()
+		r.t.cl.lock()
 		// TODO: Just reset pieces in the readahead window. This might help
 		// prevent thrashing with small caches and file and piece priorities.
 		log.Printf("error reading torrent %q piece %d offset %d, %d bytes: %s", r.t, pi, po, len(b1), err)
 		r.t.updateAllPieceCompletions()
 		r.t.updateAllPiecePriorities()
-		r.t.cl.mu.Unlock()
+		r.t.cl.unlock()
 	}
 }
 
 func (r *reader) Close() error {
-	r.t.cl.mu.Lock()
-	defer r.t.cl.mu.Unlock()
+	r.t.cl.lock()
+	defer r.t.cl.unlock()
 	r.t.deleteReader(r)
 	return nil
 }

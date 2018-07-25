@@ -20,20 +20,20 @@ func addPortMapping(d upnp.Device, proto upnp.Protocol, internalPort int, debug 
 }
 
 func (cl *Client) forwardPort() {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
+	cl.lock()
+	defer cl.unlock()
 	if cl.config.NoDefaultPortForwarding {
 		return
 	}
-	cl.mu.Unlock()
+	cl.unlock()
 	ds := upnp.Discover(0, 2*time.Second)
-	cl.mu.Lock()
+	cl.lock()
 	flog.Default.Handle(flog.Fmsg("discovered %d upnp devices", len(ds)))
 	port := cl.incomingPeerPort()
-	cl.mu.Unlock()
+	cl.unlock()
 	for _, d := range ds {
 		go addPortMapping(d, upnp.TCP, port, cl.config.Debug)
 		go addPortMapping(d, upnp.UDP, port, cl.config.Debug)
 	}
-	cl.mu.Lock()
+	cl.lock()
 }

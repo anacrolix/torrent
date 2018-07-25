@@ -155,7 +155,7 @@ func (t *Torrent) tickleReaders() {
 
 // Returns a channel that is closed when the Torrent is closed.
 func (t *Torrent) Closed() <-chan struct{} {
-	return t.closed.LockedChan(&t.cl.mu)
+	return t.closed.LockedChan(t.cl.locker())
 }
 
 // KnownSwarm returns the known subset of the peers in the Torrent's swarm, including active,
@@ -640,8 +640,8 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 }
 
 func (t *Torrent) BytesMissing() int64 {
-	t.mu().RLock()
-	defer t.mu().RUnlock()
+	t.cl.rLock()
+	defer t.cl.rUnlock()
 	return t.bytesMissingLocked()
 }
 
@@ -1210,8 +1210,8 @@ func (t *Torrent) bytesCompleted() int64 {
 }
 
 func (t *Torrent) SetInfoBytes(b []byte) (err error) {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	return t.setInfoBytes(b)
 }
 
@@ -1388,14 +1388,14 @@ func (t *Torrent) consumeDHTAnnounce(pvs <-chan dht.PeersValues) {
 				}).String()
 				allAddrs[key] = struct{}{}
 			}
-			cl.mu.Lock()
+			cl.lock()
 			t.addPeers(addPeers)
 			numPeers := t.peers.Len()
-			cl.mu.Unlock()
+			cl.unlock()
 			if numPeers >= cl.config.TorrentPeersHighWater {
 				return
 			}
-		case <-t.closed.LockedChan(&cl.mu):
+		case <-t.closed.LockedChan(cl.locker()):
 			return
 		}
 	}
@@ -1416,14 +1416,14 @@ func (t *Torrent) dhtAnnouncer(s *dht.Server) {
 	cl := t.cl
 	for {
 		select {
-		case <-t.wantPeersEvent.LockedChan(&cl.mu):
-		case <-t.closed.LockedChan(&cl.mu):
+		case <-t.wantPeersEvent.LockedChan(cl.locker()):
+		case <-t.closed.LockedChan(cl.locker()):
 			return
 		}
 		err := t.announceDHT(true, s)
 		func() {
-			cl.mu.Lock()
-			defer cl.mu.Unlock()
+			cl.lock()
+			defer cl.unlock()
 			if err == nil {
 				t.numDHTAnnounces++
 			} else {
@@ -1431,7 +1431,7 @@ func (t *Torrent) dhtAnnouncer(s *dht.Server) {
 			}
 		}()
 		select {
-		case <-t.closed.LockedChan(&cl.mu):
+		case <-t.closed.LockedChan(cl.locker()):
 			return
 		case <-time.After(5 * time.Minute):
 		}
@@ -1445,8 +1445,8 @@ func (t *Torrent) addPeers(peers []Peer) {
 }
 
 func (t *Torrent) Stats() TorrentStats {
-	t.cl.mu.RLock()
-	defer t.cl.mu.RUnlock()
+	t.cl.rLock()
+	defer t.cl.rUnlock()
 	return t.statsLocked()
 }
 
@@ -1561,8 +1561,8 @@ func (t *Torrent) wantConns() bool {
 }
 
 func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	oldMax = t.maxEstablishedConns
 	t.maxEstablishedConns = max
 	wcs := slices.HeapInterface(slices.FromMapKeys(t.conns), worseConn)
@@ -1571,10 +1571,6 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	}
 	t.openNewConns()
 	return oldMax
-}
-
-func (t *Torrent) mu() missinggo.RWLocker {
-	return &t.cl.mu
 }
 
 func (t *Torrent) pieceHashed(piece pieceIndex, correct bool) {
@@ -1679,8 +1675,8 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 
 func (t *Torrent) verifyPiece(piece pieceIndex) {
 	cl := t.cl
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
+	cl.lock()
+	defer cl.unlock()
 	p := &t.pieces[piece]
 	defer func() {
 		p.numVerifies++
@@ -1700,10 +1696,10 @@ func (t *Torrent) verifyPiece(piece pieceIndex) {
 	t.publishPieceChange(piece)
 	t.updatePiecePriority(piece)
 	t.storageLock.RLock()
-	cl.mu.Unlock()
+	cl.unlock()
 	sum := t.hashPiece(piece)
 	t.storageLock.RUnlock()
-	cl.mu.Lock()
+	cl.lock()
 	p.hashing = false
 	t.updatePiecePriority(piece)
 	t.pieceHashed(piece, sum == p.hash)

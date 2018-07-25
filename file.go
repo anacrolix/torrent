@@ -59,8 +59,8 @@ type FilePieceState struct {
 
 // Returns the state of pieces in this file.
 func (f *File) State() (ret []FilePieceState) {
-	f.t.cl.mu.RLock()
-	defer f.t.cl.mu.RUnlock()
+	f.t.cl.rLock()
+	defer f.t.cl.rUnlock()
 	pieceSize := int64(f.t.usualPieceSize())
 	off := f.offset % pieceSize
 	remaining := f.length
@@ -102,7 +102,7 @@ func (f *File) Cancel() {
 
 func (f *File) NewReader() Reader {
 	tr := reader{
-		mu:        &f.t.cl.mu,
+		mu:        f.t.cl.locker(),
 		t:         f.t,
 		readahead: 5 * 1024 * 1024,
 		offset:    f.Offset(),
@@ -114,8 +114,8 @@ func (f *File) NewReader() Reader {
 
 // Sets the minimum priority for pieces in the File.
 func (f *File) SetPriority(prio piecePriority) {
-	f.t.cl.mu.Lock()
-	defer f.t.cl.mu.Unlock()
+	f.t.cl.lock()
+	defer f.t.cl.unlock()
 	if prio == f.prio {
 		return
 	}
@@ -125,8 +125,8 @@ func (f *File) SetPriority(prio piecePriority) {
 
 // Returns the priority per File.SetPriority.
 func (f *File) Priority() piecePriority {
-	f.t.cl.mu.Lock()
-	defer f.t.cl.mu.Unlock()
+	f.t.cl.lock()
+	defer f.t.cl.unlock()
 	return f.prio
 }
 

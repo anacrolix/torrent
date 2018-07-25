@@ -17,15 +17,15 @@ func (t *Torrent) InfoHash() metainfo.Hash {
 // Returns a channel that is closed when the info (.Info()) for the torrent
 // has become available.
 func (t *Torrent) GotInfo() <-chan struct{} {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	return t.gotMetainfo.C()
 }
 
 // Returns the metainfo info dictionary, or nil if it's not yet available.
 func (t *Torrent) Info() *metainfo.Info {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	return t.info
 }
 
@@ -33,7 +33,7 @@ func (t *Torrent) Info() *metainfo.Info {
 // the data requested is actually available.
 func (t *Torrent) NewReader() Reader {
 	r := reader{
-		mu:        &t.cl.mu,
+		mu:        t.cl.locker(),
 		t:         t,
 		readahead: 5 * 1024 * 1024,
 		length:    *t.length,
@@ -46,14 +46,14 @@ func (t *Torrent) NewReader() Reader {
 // same state. The sum of the state run lengths is the number of pieces
 // in the torrent.
 func (t *Torrent) PieceStateRuns() []PieceStateRun {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	return t.pieceStateRuns()
 }
 
 func (t *Torrent) PieceState(piece pieceIndex) PieceState {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	return t.pieceState(piece)
 }
 
@@ -65,8 +65,8 @@ func (t *Torrent) NumPieces() pieceIndex {
 
 // Get missing bytes count for specific piece.
 func (t *Torrent) PieceBytesMissing(piece int) int64 {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 
 	return int64(t.pieces[piece].bytesLeft())
 }
@@ -75,9 +75,9 @@ func (t *Torrent) PieceBytesMissing(piece int) int64 {
 // this. No data corruption can, or should occur to either the torrent's data,
 // or connected peers.
 func (t *Torrent) Drop() {
-	t.cl.mu.Lock()
+	t.cl.lock()
 	t.cl.dropTorrent(t.infoHash)
-	t.cl.mu.Unlock()
+	t.cl.unlock()
 }
 
 // Number of bytes of the entire torrent we have completed. This is the sum of
@@ -85,8 +85,8 @@ func (t *Torrent) Drop() {
 // for download rate, as it can go down when pieces are lost or fail checks.
 // Sample Torrent.Stats.DataBytesRead for actual file data download rate.
 func (t *Torrent) BytesCompleted() int64 {
-	t.cl.mu.RLock()
-	defer t.cl.mu.RUnlock()
+	t.cl.rLock()
+	defer t.cl.rUnlock()
 	return t.bytesCompleted()
 }
 
@@ -99,24 +99,24 @@ func (t *Torrent) SubscribePieceStateChanges() *pubsub.Subscription {
 // Returns true if the torrent is currently being seeded. This occurs when the
 // client is willing to upload without wanting anything in return.
 func (t *Torrent) Seeding() bool {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	return t.seeding()
 }
 
 // Clobbers the torrent display name. The display name is used as the torrent
 // name if the metainfo is not available.
 func (t *Torrent) SetDisplayName(dn string) {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	t.setDisplayName(dn)
 }
 
 // The current working name for the torrent. Either the name in the info dict,
 // or a display name given such as by the dn value in a magnet link, or "".
 func (t *Torrent) Name() string {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	return t.name()
 }
 
@@ -129,14 +129,14 @@ func (t *Torrent) Length() int64 {
 // Returns a run-time generated metainfo for the torrent that includes the
 // info bytes and announce-list as currently known to the client.
 func (t *Torrent) Metainfo() metainfo.MetaInfo {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	return t.newMetaInfo()
 }
 
 func (t *Torrent) addReader(r *reader) {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	if t.readers == nil {
 		t.readers = make(map[*reader]struct{})
 	}
@@ -153,8 +153,8 @@ func (t *Torrent) deleteReader(r *reader) {
 // priority. Piece indexes are not the same as bytes. Requires that the info
 // has been obtained, see Torrent.Info and Torrent.GotInfo.
 func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	t.downloadPiecesLocked(begin, end)
 }
 
@@ -167,8 +167,8 @@ func (t *Torrent) downloadPiecesLocked(begin, end pieceIndex) {
 }
 
 func (t *Torrent) CancelPieces(begin, end pieceIndex) {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	t.cancelPiecesLocked(begin, end)
 }
 
@@ -208,8 +208,8 @@ func (t *Torrent) Files() []*File {
 
 func (t *Torrent) AddPeers(pp []Peer) {
 	cl := t.cl
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
+	cl.lock()
+	defer cl.unlock()
 	t.addPeers(pp)
 }
 
@@ -228,13 +228,13 @@ func (t *Torrent) String() string {
 }
 
 func (t *Torrent) AddTrackers(announceList [][]string) {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	t.addTrackers(announceList)
 }
 
 func (t *Torrent) Piece(i pieceIndex) *Piece {
-	t.cl.mu.Lock()
-	defer t.cl.mu.Unlock()
+	t.cl.lock()
+	defer t.cl.unlock()
 	return &t.pieces[i]
 }

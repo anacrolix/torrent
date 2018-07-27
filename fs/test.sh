@@ -3,7 +3,7 @@ repopath=$(cd $(dirname $0)/..; pwd)
 d=$(mktemp -d)
 pushd "$d"
 mkdir mnt torrents
-GOPPROF=http go run github.com/anacrolix/torrent/cmd/torrentfs -mountDir=mnt -metainfoDir=torrents &
+GOPPROF=http torrentfs -mountDir=mnt -metainfoDir=torrents &
 trap 'set +e; sudo umount -f mnt; pushd; rm -rv "$d"' EXIT
 pushd torrents
 cp "$repopath"/testdata/debian-9.1.0-amd64-netinst.iso.torrent .

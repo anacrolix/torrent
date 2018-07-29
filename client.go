@@ -410,6 +410,7 @@ func (cl *Client) acceptConnections(l net.Listener) {
 		}
 		if err != nil {
 			log.Printf("error accepting connection: %s", err)
+			continue
 		}
 		go func() {
 			if reject {

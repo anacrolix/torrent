@@ -17,7 +17,6 @@ require (
 	github.com/edsrzf/mmap-go v0.0.0-20170320065105-0bce6a688712
 	github.com/elgatito/upnp v0.0.0-20180711183757-2f244d205f9a
 	github.com/fsnotify/fsnotify v1.4.7
-	github.com/glycerine/goconvey v0.0.0-20180409081950-83515ca83cca // indirect
 	github.com/google/btree v0.0.0-20180124185431-e89373fe6b4a
 	github.com/gopherjs/gopherjs v0.0.0-20180628210949-0892b62f0d9f // indirect
 	github.com/gosuri/uilive v0.0.0-20170323041506-ac356e6e42cd // indirect
@@ -41,3 +40,5 @@ require (
 	golang.org/x/sys v0.0.0-20180724212812-e072cadbbdc8 // indirect
 	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
 )
+
+replace github.com/glycerine/goconvey => github.com/smartystreets/goconvey v0.0.0-20180222194500-ef6db91d284a

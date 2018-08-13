@@ -47,16 +47,16 @@ func main() {
 		for _, tier := range ts.Trackers {
 			for _, tURI := range tier {
 				wg.Add(1)
-				go doTracker(tURI, wg.Done)
+				go doTracker(tURI, wg.Done, ar)
 			}
 		}
 	}
 	wg.Wait()
 }
 
-func doTracker(tURI string, done func()) {
+func doTracker(tURI string, done func(), ar tracker.AnnounceRequest) {
 	defer done()
-	for _, res := range announces(tURI) {
+	for _, res := range announces(tURI, ar) {
 		err := res.error
 		resp := res.AnnounceResponse
 		if err != nil {
@@ -72,12 +72,13 @@ type announceResult struct {
 	error
 }
 
-func announces(uri string) (ret []announceResult) {
+func announces(uri string, ar tracker.AnnounceRequest) (ret []announceResult) {
 	u, err := url.Parse(uri)
 	if err != nil {
 		return []announceResult{{error: err}}
 	}
 	a := tracker.Announce{
+		Request:    ar,
 		TrackerUrl: uri,
 	}
 	if u.Scheme == "udp" {

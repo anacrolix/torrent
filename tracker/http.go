@@ -2,7 +2,6 @@ package tracker
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -117,7 +116,7 @@ func announceHTTP(opt Announce, _url *url.URL) (ret AnnounceResponse, err error)
 		return
 	}
 	if trackerResponse.FailureReason != "" {
-		err = errors.New(trackerResponse.FailureReason)
+		err = fmt.Errorf("tracker gave failure reason: %q", trackerResponse.FailureReason)
 		return
 	}
 	vars.Add("successful http announces", 1)

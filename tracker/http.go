@@ -109,7 +109,9 @@ func announceHTTP(opt Announce, _url *url.URL) (ret AnnounceResponse, err error)
 	}
 	var trackerResponse httpResponse
 	err = bencode.Unmarshal(buf.Bytes(), &trackerResponse)
-	if err != nil {
+	if _, ok := err.(bencode.ErrUnusedTrailingBytes); ok {
+		err = nil
+	} else if err != nil {
 		err = fmt.Errorf("error decoding %q: %s", buf.Bytes(), err)
 		return
 	}

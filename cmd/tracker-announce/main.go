@@ -30,13 +30,17 @@ func argSpec(arg string) (ts *torrent.TorrentSpec, err error) {
 
 func main() {
 	flags := struct {
+		Port uint16
 		tagflag.StartPos
 		Torrents []string `arity:"+"`
-	}{}
+	}{
+		Port: 50007,
+	}
 	tagflag.Parse(&flags)
 	ar := tracker.AnnounceRequest{
 		NumWant: -1,
 		Left:    math.MaxUint64,
+		Port:    flags.Port,
 	}
 	var wg sync.WaitGroup
 	for _, arg := range flags.Torrents {

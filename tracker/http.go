@@ -69,6 +69,7 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts Announce) {
 
 	q.Set("info_hash", string(ar.InfoHash[:]))
 	q.Set("peer_id", string(ar.PeerId[:]))
+	// AFAICT, port is mandatory, and there's no implied port key.
 	q.Set("port", fmt.Sprintf("%d", ar.Port))
 	q.Set("uploaded", strconv.FormatInt(ar.Uploaded, 10))
 	q.Set("downloaded", strconv.FormatInt(ar.Downloaded, 10))

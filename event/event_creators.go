@@ -26,17 +26,17 @@ func createErrorEvent(msg string) log.Event {
 	return ErrorEvent{evt}
 }
 
-// Debug creates a basic debug level LeveledEvent
+// Debug creates a debug level LeveledEvent
 func Debug(msg string) log.Event {
 	return createLeveledEvent(msg, DebugLevel)
 }
 
-// Info creates a basic info level LeveledEvent
+// Info creates an info level LeveledEvent
 func Info(msg string) log.Event {
 	return createLeveledEvent(msg, InfoLevel)
 }
 
-// Error creates a basic error level LeveledEvent
+// Error creates an ErrorEvent
 func Error(msg string) log.Event {
 	return createErrorEvent(msg)
 }

@@ -98,19 +98,25 @@ type ClientConfig struct {
 	MinDialTimeout             time.Duration
 	EstablishedConnsPerTorrent int
 	HalfOpenConnsPerTorrent    int
-	TorrentPeersHighWater      int
-	TorrentPeersLowWater       int
+	// Maximum number of peer addresses in reserve.
+	TorrentPeersHighWater int
+	// Minumum number of peers before effort is made to obtain more peers.
+	TorrentPeersLowWater int
 
 	// Limit how long handshake can take. This is to reduce the lingering
 	// impact of a few bad apples. 4s loses 1% of successful handshakes that
 	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
 	HandshakesTimeout time.Duration
 
+	// The IP addresses as our peers should see them. May differ from the
+	// local interfaces due to NAT or other network configurations.
 	PublicIp4 net.IP
 	PublicIp6 net.IP
 
 	DisableAcceptRateLimiting bool
-	dropDuplicatePeerIds      bool
+	// Don't add connections that have the same peer ID as an existing
+	// connection for a given Torrent.
+	dropDuplicatePeerIds bool
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {

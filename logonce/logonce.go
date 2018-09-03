@@ -18,7 +18,7 @@ func init() {
 	// This should emulate the default logger in the log package where
 	// possible. No time flag so that messages don't differ by time. Code
 	// debug information is useful.
-	Stderr = log.New(Writer(os.Stderr), "", log.Lshortfile)
+	Stderr = log.New(Writer(os.Stderr), "logonce: ", log.Lshortfile)
 }
 
 type writer struct {

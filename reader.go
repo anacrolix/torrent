@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/anacrolix/missinggo"
+
 	"github.com/anacrolix/torrent/peer_protocol"
 )
 

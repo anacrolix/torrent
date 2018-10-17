@@ -132,27 +132,29 @@ func (me *trackerScraper) announce() (ret trackerAnnounceResult) {
 
 func (me *trackerScraper) Run() {
 	for {
-		select {
-		case <-me.t.closed.LockedChan(me.t.cl.locker()):
-			return
-		case <-me.stop.LockedChan(me.t.cl.locker()):
-			return
-		case <-me.t.wantPeersEvent.LockedChan(me.t.cl.locker()):
-		}
-
 		ar := me.announce()
 		me.t.cl.lock()
 		me.lastAnnounce = ar
 		me.t.cl.unlock()
 
-		intervalChan := time.After(time.Until(ar.Completed.Add(ar.Interval)))
+	wait:
+		interval := time.Until(ar.Completed.Add(ar.Interval))
+		select {
+		case <-me.t.wantPeersEvent.LockedChan(me.t.cl.locker()):
+			if interval > time.Minute {
+				interval = time.Minute
+			}
+		default:
+		}
 
 		select {
 		case <-me.t.closed.LockedChan(me.t.cl.locker()):
 			return
 		case <-me.stop.LockedChan(me.t.cl.locker()):
 			return
-		case <-intervalChan:
+		case <-time.After(interval):
+		case <-me.t.wantPeersEvent.LockedChan(me.t.cl.locker()):
+			goto wait
 		}
 	}
 }

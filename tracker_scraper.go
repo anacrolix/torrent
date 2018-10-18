@@ -111,11 +111,11 @@ func (me *trackerScraper) announce() (ret trackerAnnounceResult) {
 	req := me.t.announceRequest()
 	me.t.cl.unlock()
 	res, err := tracker.Announce{
-		HttpClient: me.t.cl.config.TrackerHttpClient,
 		UserAgent:  me.t.cl.config.HTTPUserAgent,
 		TrackerUrl: me.trackerUrl(ip),
 		Request:    req,
 		HostHeader: me.u.Host,
+		ServerName: me.u.Hostname(),
 		UdpNetwork: me.u.Scheme,
 		ClientIp4:  krpc.NodeAddr{IP: me.t.cl.config.PublicIp4},
 		ClientIp6:  krpc.NodeAddr{IP: me.t.cl.config.PublicIp6},

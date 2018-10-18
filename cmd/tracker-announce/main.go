@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"math"
-	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -85,7 +84,6 @@ func announces(uri string, ar tracker.AnnounceRequest) (ret []announceResult) {
 	a := tracker.Announce{
 		Request:    ar,
 		TrackerUrl: uri,
-		HttpClient: http.DefaultClient,
 	}
 	if u.Scheme == "udp" {
 		a.UdpNetwork = "udp4"

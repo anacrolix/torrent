@@ -1,9 +1,7 @@
 package torrent
 
 import (
-	"crypto/tls"
 	"net"
-	"net/http"
 	"time"
 
 	"github.com/anacrolix/dht"
@@ -79,8 +77,6 @@ type ClientConfig struct {
 	// Perform logging and any other behaviour that will help debug.
 	Debug bool `help:"enable debugging"`
 
-	// For querying HTTP trackers.
-	TrackerHttpClient *http.Client
 	// HTTPUserAgent changes default UserAgent for HTTP requests
 	HTTPUserAgent string
 	// Updated occasionally to when there's been some changes to client
@@ -129,15 +125,6 @@ func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
 
 func NewDefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
-		TrackerHttpClient: &http.Client{
-			Timeout: time.Second * 15,
-			Transport: &http.Transport{
-				Dial: (&net.Dialer{
-					Timeout: 15 * time.Second,
-				}).Dial,
-				TLSHandshakeTimeout: 15 * time.Second,
-				TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-			}},
 		HTTPUserAgent:                  DefaultHTTPUserAgent,
 		ExtendedHandshakeClientVersion: "go.torrent dev 20150624",
 		Bep20:                          "-GT0001-",

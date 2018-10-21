@@ -138,12 +138,17 @@ func (me *trackerScraper) Run() {
 		me.t.cl.unlock()
 
 	wait:
-		interval := time.Until(ar.Completed.Add(ar.Interval))
+		interval := ar.Interval
+		if interval < time.Minute {
+			interval = time.Minute
+		}
+		wantPeers := me.t.wantPeersEvent.LockedChan(me.t.cl.locker())
 		select {
-		case <-me.t.wantPeersEvent.LockedChan(me.t.cl.locker()):
+		case <-wantPeers:
 			if interval > time.Minute {
 				interval = time.Minute
 			}
+			wantPeers = nil
 		default:
 		}
 
@@ -152,9 +157,9 @@ func (me *trackerScraper) Run() {
 			return
 		case <-me.stop.LockedChan(me.t.cl.locker()):
 			return
-		case <-time.After(interval):
-		case <-me.t.wantPeersEvent.LockedChan(me.t.cl.locker()):
+		case <-wantPeers:
 			goto wait
+		case <-time.After(time.Until(ar.Completed.Add(interval))):
 		}
 	}
 }

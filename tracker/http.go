@@ -105,6 +105,7 @@ func announceHTTP(opt Announce, _url *url.URL) (ret AnnounceResponse, err error)
 			Dial: (&net.Dialer{
 				Timeout: 15 * time.Second,
 			}).Dial,
+			Proxy:               opt.HTTPProxy,
 			TLSHandshakeTimeout: 15 * time.Second,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,

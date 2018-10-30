@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -217,6 +219,12 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		_, err = rand.Read(cl.peerID[o:])
 		if err != nil {
 			panic("error generating peer id")
+		}
+	}
+
+	if cl.config.HTTPProxy == nil && cl.config.ProxyURL != "" {
+		if fixedURL, err := url.Parse(cl.config.ProxyURL); err == nil {
+			cl.config.HTTPProxy = http.ProxyURL(fixedURL)
 		}
 	}
 

@@ -2,6 +2,7 @@ package tracker
 
 import (
 	"errors"
+	"net/http"
 	"net/url"
 
 	"github.com/anacrolix/dht/krpc"
@@ -52,6 +53,7 @@ type Announce struct {
 	TrackerUrl string
 	Request    AnnounceRequest
 	HostHeader string
+	HTTPProxy  func(*http.Request) (*url.URL, error)
 	ServerName string
 	UserAgent  string
 	UdpNetwork string

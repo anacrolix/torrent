@@ -2,6 +2,8 @@ package torrent
 
 import (
 	"net"
+	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/anacrolix/dht"
@@ -67,7 +69,8 @@ type ClientConfig struct {
 	EncryptionPolicy
 
 	// Sets usage of Socks5 Proxy. Authentication should be included in the url if needed.
-	// Example of setting: "socks5://demo:demo@192.168.99.100:1080"
+	// Examples: socks5://demo:demo@192.168.99.100:1080
+	// 			 http://proxy.domain.com:3128
 	ProxyURL string
 
 	IPBlocklist      iplist.Ranger
@@ -77,6 +80,12 @@ type ClientConfig struct {
 	// Perform logging and any other behaviour that will help debug.
 	Debug bool `help:"enable debugging"`
 
+	// HTTPProxy defines proxy for HTTP requests.
+	// Format: func(*Request) (*url.URL, error),
+	// or result of http.ProxyURL(HTTPProxy).
+	// By default, it is composed from ClientConfig.ProxyURL,
+	// if not set explicitly in ClientConfig struct
+	HTTPProxy func(*http.Request) (*url.URL, error)
 	// HTTPUserAgent changes default UserAgent for HTTP requests
 	HTTPUserAgent string
 	// Updated occasionally to when there's been some changes to client

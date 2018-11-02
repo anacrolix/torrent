@@ -26,16 +26,16 @@ import (
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/sync"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/dustin/go-humanize"
-	"github.com/google/btree"
-
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/dustin/go-humanize"
+	"github.com/google/btree"
+	"golang.org/x/time/rate"
 )
 
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
@@ -68,7 +68,8 @@ type Client struct {
 	badPeerIPs        map[string]struct{}
 	torrents          map[InfoHash]*Torrent
 
-	acceptLimiter map[ipStr]int
+	acceptLimiter   map[ipStr]int
+	dialRateLimiter *rate.Limiter
 }
 
 type ipStr string
@@ -186,6 +187,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		config:            cfg,
 		dopplegangerAddrs: make(map[string]struct{}),
 		torrents:          make(map[metainfo.Hash]*Torrent),
+		dialRateLimiter:   rate.NewLimiter(10, 10),
 	}
 	go cl.acceptLimitClearer()
 	cl.initLogger()
@@ -656,6 +658,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 // Called to dial out and run a connection. The addr we're given is already
 // considered half-open.
 func (cl *Client) outgoingConnection(t *Torrent, addr string, ps peerSource) {
+	cl.dialRateLimiter.Wait(context.Background())
 	c, err := cl.establishOutgoingConn(t, addr)
 	cl.lock()
 	defer cl.unlock()

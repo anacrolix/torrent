@@ -13,7 +13,6 @@ import (
 
 	"github.com/anacrolix/dht/krpc"
 	"github.com/anacrolix/missinggo/httptoo"
-
 	"github.com/anacrolix/torrent/bencode"
 )
 

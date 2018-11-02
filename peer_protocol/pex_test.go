@@ -3,9 +3,8 @@ package peer_protocol
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUnmarshalPex(t *testing.T) {

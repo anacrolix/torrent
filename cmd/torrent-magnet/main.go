@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/anacrolix/tagflag"
-
 	"github.com/anacrolix/torrent/metainfo"
 )
 

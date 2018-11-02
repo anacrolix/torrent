@@ -3,10 +3,9 @@ package tracker
 import (
 	"testing"
 
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/anacrolix/torrent/bencode"
 )
 
 var defaultHTTPUserAgent = "Go-Torrent"

@@ -9,10 +9,9 @@ import (
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/expect"
-	"golang.org/x/time/rate"
-
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/storage"
+	"golang.org/x/time/rate"
 )
 
 var DefaultHTTPUserAgent = "Go-Torrent/1.0"
@@ -136,18 +135,18 @@ func NewDefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
 		HTTPUserAgent:                  DefaultHTTPUserAgent,
 		ExtendedHandshakeClientVersion: "go.torrent dev 20150624",
-		Bep20:                          "-GT0001-",
-		NominalDialTimeout:             20 * time.Second,
-		MinDialTimeout:                 3 * time.Second,
-		EstablishedConnsPerTorrent:     50,
-		HalfOpenConnsPerTorrent:        25,
-		TorrentPeersHighWater:          500,
-		TorrentPeersLowWater:           50,
-		HandshakesTimeout:              4 * time.Second,
-		DhtStartingNodes:               dht.GlobalBootstrapAddrs,
-		ListenHost:                     func(string) string { return "" },
-		UploadRateLimiter:              unlimited,
-		DownloadRateLimiter:            unlimited,
+		Bep20:                      "-GT0001-",
+		NominalDialTimeout:         20 * time.Second,
+		MinDialTimeout:             3 * time.Second,
+		EstablishedConnsPerTorrent: 50,
+		HalfOpenConnsPerTorrent:    25,
+		TorrentPeersHighWater:      500,
+		TorrentPeersLowWater:       50,
+		HandshakesTimeout:          4 * time.Second,
+		DhtStartingNodes:           dht.GlobalBootstrapAddrs,
+		ListenHost:                 func(string) string { return "" },
+		UploadRateLimiter:          unlimited,
+		DownloadRateLimiter:        unlimited,
 	}
 }
 

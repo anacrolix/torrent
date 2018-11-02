@@ -4,9 +4,8 @@ import (
 	"encoding/binary"
 
 	"github.com/anacrolix/missinggo/x"
-	"github.com/boltdb/bolt"
-
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/boltdb/bolt"
 )
 
 type boltDBPiece struct {

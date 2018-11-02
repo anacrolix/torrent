@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/anacrolix/missinggo"
-
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -123,7 +122,7 @@ func Handshake(sock io.ReadWriter, ih *metainfo.Hash, peerID [20]byte, extension
 	missinggo.CopyExact(&res.PeerExtensionBits, b[20:28])
 	missinggo.CopyExact(&res.Hash, b[28:48])
 	missinggo.CopyExact(&res.PeerID, b[48:68])
-	// peerExtensions.Add(res.PeerExtensionBits.String(), 1) 
+	// peerExtensions.Add(res.PeerExtensionBits.String(), 1)
 
 	// TODO: Maybe we can just drop peers here if we're not interested. This
 	// could prevent them trying to reconnect, falsely believing there was

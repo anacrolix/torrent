@@ -8,11 +8,10 @@ import (
 	"sync"
 
 	"github.com/anacrolix/tagflag"
-	"github.com/davecgh/go-spew/spew"
-
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/davecgh/go-spew/spew"
 )
 
 func argSpec(arg string) (ts *torrent.TorrentSpec, err error) {

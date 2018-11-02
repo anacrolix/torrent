@@ -5,10 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHashPieceAfterStorageClosed(t *testing.T) {

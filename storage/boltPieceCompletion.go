@@ -6,9 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/boltdb/bolt"
-
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/boltdb/bolt"
 )
 
 const (

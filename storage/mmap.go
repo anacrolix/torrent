@@ -8,10 +8,9 @@ import (
 	"path/filepath"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/edsrzf/mmap-go"
-
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mmap_span"
+	"github.com/edsrzf/mmap-go"
 )
 
 type mmapClientImpl struct {

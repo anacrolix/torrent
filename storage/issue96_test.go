@@ -5,9 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/stretchr/testify/require"
 )
 
 func testMarkedCompleteMissingOnRead(t *testing.T, csf func(string) ClientImpl) {

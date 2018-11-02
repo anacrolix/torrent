@@ -15,14 +15,13 @@ import (
 
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
-	"github.com/dustin/go-humanize"
-	"github.com/gosuri/uiprogress"
-	"golang.org/x/time/rate"
-
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/dustin/go-humanize"
+	"github.com/gosuri/uiprogress"
+	"golang.org/x/time/rate"
 )
 
 var progress = uiprogress.New()

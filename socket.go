@@ -22,6 +22,48 @@ type socket interface {
 	dialer
 }
 
+type proxyConn struct {
+	net.Conn
+	remoteAddr net.Addr
+}
+
+// RemoteAddr returns real RemoteAddr of a proxied connection,
+// instead of the first hop's RemoteAddr, which is always the proxy address.
+func (c *proxyConn) RemoteAddr() net.Addr {
+	if c.remoteAddr != nil {
+		return c.remoteAddr
+	}
+
+	return c.Conn.RemoteAddr()
+}
+
+func getNetworkDialer(network string, dialer proxy.Dialer) func(ctx context.Context, network string, addr string) (net.Conn, error) {
+	return func(ctx context.Context, network string, addr string) (net.Conn, error) {
+		conn, err := dialer.Dial(network, addr)
+		if err != nil {
+			return nil, err
+		}
+
+		// When 'network' is tcp6/udp6 and address is tcp4 - we get resolve exception.
+		// As a workaround - we can run same resolve with tcp4/udp4, instead of tcp6/udp6.
+		// Currently we leave old RemoteAddr().
+		if len(network) > 3 {
+			network = network[:3]
+		}
+		if strings.Contains(network, "tcp") {
+			if remoteAddr, err := net.ResolveTCPAddr(network, addr); err == nil {
+				return &proxyConn{conn, remoteAddr}, nil
+			}
+		} else {
+			if remoteAddr, err := net.ResolveUDPAddr(network, addr); err == nil {
+				return &proxyConn{conn, remoteAddr}, nil
+			}
+		}
+
+		return conn, nil
+	}
+}
+
 func getProxyDialer(proxyURL string) (proxy.Dialer, error) {
 	fixedURL, err := url.Parse(proxyURL)
 	if err != nil {
@@ -63,30 +105,29 @@ func listenTcp(network, address, proxyURL string) (s socket, err error) {
 	// If we don't need the proxy - then we should return default net.Dialer,
 	// otherwise, let's try to parse the proxyURL and return proxy.Dialer
 	if len(proxyURL) != 0 {
-		// TODO: The error should be propagated, as proxy may be in use for
-		// security or privacy reasons. Also just pass proxy.Dialer in from
-		// the Config.
 		if dialer, err := getProxyDialer(proxyURL); err == nil {
-			return tcpSocket{l, func(ctx context.Context, addr string) (conn net.Conn, err error) {
-				defer perf.ScopeTimerErr(&err)()
-				return dialer.Dial(network, addr)
-			}}, nil
+			return tcpSocket{l, &net.Dialer{}, network, getNetworkDialer(network, dialer)}, nil
 		}
 	}
-	dialer := net.Dialer{}
-	return tcpSocket{l, func(ctx context.Context, addr string) (conn net.Conn, err error) {
-		defer perf.ScopeTimerErr(&err)()
-		return dialer.DialContext(ctx, network, addr)
-	}}, nil
+
+	return tcpSocket{l, &net.Dialer{}, network, nil}, nil
 }
 
 type tcpSocket struct {
 	net.Listener
-	d func(ctx context.Context, addr string) (net.Conn, error)
+	*net.Dialer
+	network string
+	d       func(ctx context.Context, network string, addr string) (net.Conn, error)
 }
 
-func (me tcpSocket) dial(ctx context.Context, addr string) (net.Conn, error) {
-	return me.d(ctx, addr)
+func (me tcpSocket) dial(ctx context.Context, addr string) (conn net.Conn, err error) {
+	defer perf.ScopeTimerErr(&err)()
+
+	if me.d != nil {
+		return me.d(ctx, me.network, addr)
+	}
+
+	return me.DialContext(ctx, me.network, addr)
 }
 
 func setPort(addr string, port int) string {
@@ -154,11 +195,9 @@ func listenUtp(network, addr, proxyURL string, fc firewallCallback) (s socket, e
 		return
 	}
 
-	// If we don't need the proxy - then we should return default net.Dialer,
-	// otherwise, let's try to parse the proxyURL and return proxy.Dialer
 	if len(proxyURL) != 0 {
 		if dialer, err := getProxyDialer(proxyURL); err == nil {
-			return utpSocketSocket{us, network, dialer}, nil
+			return utpSocketSocket{us, network, getNetworkDialer(network, dialer)}, nil
 		}
 	}
 
@@ -168,13 +207,14 @@ func listenUtp(network, addr, proxyURL string, fc firewallCallback) (s socket, e
 type utpSocketSocket struct {
 	utpSocket
 	network string
-	d       proxy.Dialer
+	d       func(ctx context.Context, network string, addr string) (net.Conn, error)
 }
 
 func (me utpSocketSocket) dial(ctx context.Context, addr string) (conn net.Conn, err error) {
 	defer perf.ScopeTimerErr(&err)()
+
 	if me.d != nil {
-		return me.d.Dial(me.network, addr)
+		return me.d(ctx, me.network, addr)
 	}
 
 	return me.utpSocket.DialContext(ctx, me.network, addr)

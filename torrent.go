@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"strconv"
 	"sync"
 	"text/tabwriter"
 	"time"
@@ -172,21 +171,11 @@ func (t *Torrent) KnownSwarm() (ks []Peer) {
 
 	// Add active peers to the list
 	for conn := range t.conns {
-		host, portString, err := net.SplitHostPort(conn.remoteAddr().String())
-		if err != nil {
-			panic(err)
-		}
-
-		ip := net.ParseIP(host)
-		port, err := strconv.Atoi(portString)
-		if err != nil {
-			panic(err)
-		}
 
 		ks = append(ks, Peer{
 			Id:     conn.PeerID,
-			IP:     ip,
-			Port:   port,
+			IP:     conn.remoteAddr.IP,
+			Port:   int(conn.remoteAddr.Port),
 			Source: conn.Discovery,
 			// > If the connection is encrypted, that's certainly enough to set SupportsEncryption.
 			// > But if we're not connected to them with an encrypted connection, I couldn't say
@@ -232,10 +221,7 @@ func (t *Torrent) addrActive(addr string) bool {
 		return true
 	}
 	for c := range t.conns {
-		ra := c.remoteAddr()
-		if ra == nil {
-			continue
-		}
+		ra := c.remoteAddr
 		if ra.String() == addr {
 			return true
 		}
@@ -1621,7 +1607,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, correct bool) {
 				}())
 			}
 			c := touchers[0]
-			t.cl.banPeerIP(missinggo.AddrIP(c.remoteAddr()))
+			t.cl.banPeerIP(c.remoteAddr.IP)
 			c.Drop()
 		}
 		t.onIncompletePiece(piece)
@@ -1750,11 +1736,11 @@ func (t *Torrent) initiateConn(peer Peer) {
 	if t.cl.badPeerIPPort(peer.IP, peer.Port) {
 		return
 	}
-	addr := net.JoinHostPort(peer.IP.String(), fmt.Sprintf("%d", peer.Port))
-	if t.addrActive(addr) {
+	addr := ipPort{peer.IP, uint16(peer.Port)}
+	if t.addrActive(addr.String()) {
 		return
 	}
-	t.halfOpen[addr] = peer
+	t.halfOpen[addr.String()] = peer
 	go t.cl.outgoingConnection(t, addr, peer.Source)
 }
 

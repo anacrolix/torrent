@@ -42,8 +42,10 @@ type connection struct {
 
 	t *Torrent
 	// The actual Conn, used for closing, and setting socket options.
-	conn     net.Conn
-	outgoing bool
+	conn       net.Conn
+	outgoing   bool
+	network    string
+	remoteAddr ipPort
 	// The Reader and Writer for this Conn, with hooks installed for stats,
 	// limiting, deadlines etc.
 	w io.Writer
@@ -133,7 +135,7 @@ func (cn *connection) expectingChunks() bool {
 
 // Returns true if the connection is over IPv6.
 func (cn *connection) ipv6() bool {
-	ip := missinggo.AddrIP(cn.remoteAddr())
+	ip := cn.remoteAddr.IP
 	if ip.To4() != nil {
 		return false
 	}
@@ -177,10 +179,6 @@ func (cn *connection) peerHasAllPieces() (all bool, known bool) {
 
 func (cn *connection) mu() sync.Locker {
 	return cn.t.cl.locker()
-}
-
-func (cn *connection) remoteAddr() net.Addr {
-	return cn.conn.RemoteAddr()
 }
 
 func (cn *connection) localAddr() net.Addr {
@@ -241,7 +239,7 @@ func (cn *connection) connectionFlags() (ret string) {
 }
 
 func (cn *connection) utp() bool {
-	return isUtpNetwork(cn.remoteAddr().Network())
+	return isUtpNetwork(cn.network)
 }
 
 // Inspired by https://github.com/transmission/transmission/wiki/Peer-Status-Text.
@@ -279,7 +277,7 @@ func (cn *connection) downloadRate() float64 {
 
 func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
 	// \t isn't preserved in <pre> blocks?
-	fmt.Fprintf(w, "%+-55q %s %s-%s\n", cn.PeerID, cn.PeerExtensionBytes, cn.localAddr(), cn.remoteAddr())
+	fmt.Fprintf(w, "%+-55q %s %s-%s\n", cn.PeerID, cn.PeerExtensionBytes, cn.localAddr(), cn.remoteAddr)
 	fmt.Fprintf(w, "    last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),
@@ -1150,15 +1148,15 @@ func (c *connection) mainReadLoop() (err error) {
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 		case pp.Port:
-			pingAddr, err := net.ResolveUDPAddr("", c.remoteAddr().String())
-			if err != nil {
-				panic(err)
+			pingAddr := net.UDPAddr{
+				IP:   c.remoteAddr.IP,
+				Port: int(c.remoteAddr.Port),
 			}
 			if msg.Port != 0 {
 				pingAddr.Port = int(msg.Port)
 			}
 			cl.eachDhtServer(func(s *dht.Server) {
-				go s.Ping(pingAddr, nil)
+				go s.Ping(&pingAddr, nil)
 			})
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
@@ -1550,9 +1548,10 @@ func (c *connection) peerPriority() peerPriority {
 }
 
 func (c *connection) remoteIp() net.IP {
-	return missinggo.AddrIP(c.remoteAddr())
+	return c.remoteAddr.IP
 }
 
+// ???
 func (c *connection) remoteIpPort() ipPort {
-	return ipPort{missinggo.AddrIP(c.remoteAddr()), uint16(missinggo.AddrPort(c.remoteAddr()))}
+	return c.remoteAddr
 }

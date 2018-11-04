@@ -1020,3 +1020,13 @@ func TestClientAddressInUse(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, cl)
 }
+
+func TestClientHasDhtServersWhenUtpDisabled(t *testing.T) {
+	cc := TestingConfig()
+	cc.DisableUTP = true
+	cc.NoDHT = false
+	cl, err := NewClient(cc)
+	require.NoError(t, err)
+	defer cl.Close()
+	assert.NotEmpty(t, cl.DhtServers())
+}

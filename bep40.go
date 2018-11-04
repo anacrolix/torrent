@@ -13,11 +13,6 @@ var table = crc32.MakeTable(crc32.Castagnoli)
 
 type peerPriority = uint32
 
-type ipPort struct {
-	IP   net.IP
-	Port uint16
-}
-
 func sameSubnet(ones, bits int, a, b net.IP) bool {
 	mask := net.CIDRMask(ones, bits)
 	return a.Mask(mask).Equal(b.Mask(mask))

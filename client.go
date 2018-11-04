@@ -442,7 +442,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 	if tc, ok := nc.(*net.TCPConn); ok {
 		tc.SetLinger(0)
 	}
-	c := cl.newConnection(nc, false)
+	c := cl.newConnection(nc, false, ipPortFromNetAddr(nc.RemoteAddr()), nc.RemoteAddr().Network())
 	c.Discovery = peerSourceIncoming
 	cl.runReceivedConn(c)
 }
@@ -460,7 +460,8 @@ func (cl *Client) torrent(ih metainfo.Hash) *Torrent {
 }
 
 type dialResult struct {
-	Conn net.Conn
+	Conn    net.Conn
+	Network string
 }
 
 func countDialResult(err error) {
@@ -523,32 +524,30 @@ func peerNetworkEnabled(network string, cfg *ClientConfig) bool {
 }
 
 // Returns a connection over UTP or TCP, whichever is first to connect.
-func (cl *Client) dialFirst(ctx context.Context, addr string) net.Conn {
+func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
 	ctx, cancel := context.WithCancel(ctx)
 	// As soon as we return one connection, cancel the others.
 	defer cancel()
 	left := 0
 	resCh := make(chan dialResult, left)
-	dial := func(f func(_ context.Context, addr string) (net.Conn, error)) {
-		left++
-		go func() {
-			c, err := f(ctx, addr)
-			// This is a bit optimistic, but it looks non-trivial to thread
-			// this through the proxy code. Set it now in case we close the
-			// connection forthwith.
-			if tc, ok := c.(*net.TCPConn); ok {
-				tc.SetLinger(0)
-			}
-			countDialResult(err)
-			resCh <- dialResult{c}
-		}()
-	}
 	func() {
 		cl.lock()
 		defer cl.unlock()
 		cl.eachListener(func(s socket) bool {
-			if peerNetworkEnabled(s.Addr().Network(), cl.config) {
-				dial(s.dial)
+			network := s.Addr().Network()
+			if peerNetworkEnabled(network, cl.config) {
+				left++
+				go func() {
+					c, err := s.dial(ctx, addr)
+					// This is a bit optimistic, but it looks non-trivial to thread
+					// this through the proxy code. Set it now in case we close the
+					// connection forthwith.
+					if tc, ok := c.(*net.TCPConn); ok {
+						tc.SetLinger(0)
+					}
+					countDialResult(err)
+					resCh <- dialResult{c, network}
+				}()
 			}
 			return true
 		})
@@ -573,7 +572,7 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) net.Conn {
 	if res.Conn != nil {
 		go torrent.Add(fmt.Sprintf("network dialed first: %s", res.Conn.RemoteAddr().Network()), 1)
 	}
-	return res.Conn
+	return res
 }
 
 func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
@@ -586,8 +585,8 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
 
 // Performs initiator handshakes and returns a connection. Returns nil
 // *connection if no connection for valid reasons.
-func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torrent, encryptHeader bool) (c *connection, err error) {
-	c = cl.newConnection(nc, true)
+func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torrent, encryptHeader bool, remoteAddr ipPort, network string) (c *connection, err error) {
+	c = cl.newConnection(nc, true, remoteAddr, network)
 	c.headerEncrypted = encryptHeader
 	ctx, cancel := context.WithTimeout(ctx, cl.config.HandshakesTimeout)
 	defer cancel()
@@ -608,8 +607,9 @@ func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torr
 
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
-func (cl *Client) establishOutgoingConnEx(t *Torrent, addr string, ctx context.Context, obfuscatedHeader bool) (c *connection, err error) {
-	nc := cl.dialFirst(ctx, addr)
+func (cl *Client) establishOutgoingConnEx(t *Torrent, addr ipPort, ctx context.Context, obfuscatedHeader bool) (c *connection, err error) {
+	dr := cl.dialFirst(ctx, addr.String())
+	nc := dr.Conn
 	if nc == nil {
 		return
 	}
@@ -618,12 +618,12 @@ func (cl *Client) establishOutgoingConnEx(t *Torrent, addr string, ctx context.C
 			nc.Close()
 		}
 	}()
-	return cl.handshakesConnection(ctx, nc, t, obfuscatedHeader)
+	return cl.handshakesConnection(ctx, nc, t, obfuscatedHeader, addr, dr.Network)
 }
 
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
-func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection, err error) {
+func (cl *Client) establishOutgoingConn(t *Torrent, addr ipPort) (c *connection, err error) {
 	torrent.Add("establish outgoing connection", 1)
 	ctx, cancel := context.WithTimeout(context.Background(), func() time.Duration {
 		cl.rLock()
@@ -658,14 +658,14 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr string) (c *connection,
 
 // Called to dial out and run a connection. The addr we're given is already
 // considered half-open.
-func (cl *Client) outgoingConnection(t *Torrent, addr string, ps peerSource) {
+func (cl *Client) outgoingConnection(t *Torrent, addr ipPort, ps peerSource) {
 	cl.dialRateLimiter.Wait(context.Background())
 	c, err := cl.establishOutgoingConn(t, addr)
 	cl.lock()
 	defer cl.unlock()
 	// Don't release lock between here and addConnection, unless it's for
 	// failure.
-	cl.noLongerHalfOpen(t, addr)
+	cl.noLongerHalfOpen(t, addr.String())
 	if err != nil {
 		if cl.config.Debug {
 			log.Printf("error establishing outgoing connection: %s", err)
@@ -794,18 +794,18 @@ func (cl *Client) runReceivedConn(c *connection) {
 		).AddValue(
 			debugLogValue,
 		).Add(
-			"network", c.remoteAddr().Network(),
+			"network", c.network,
 		).Log(cl.logger)
 		torrent.Add("error receiving handshake", 1)
 		cl.lock()
-		cl.onBadAccept(c.remoteAddr())
+		cl.onBadAccept(c.remoteAddr)
 		cl.unlock()
 		return
 	}
 	if t == nil {
 		torrent.Add("received handshake for unloaded torrent", 1)
 		cl.lock()
-		cl.onBadAccept(c.remoteAddr())
+		cl.onBadAccept(c.remoteAddr)
 		cl.unlock()
 		return
 	}
@@ -862,7 +862,7 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 					},
 					V:            cl.config.ExtendedHandshakeClientVersion,
 					Reqq:         64, // TODO: Really?
-					YourIp:       pp.CompactIp(missinggo.AddrIP(conn.remoteAddr())),
+					YourIp:       pp.CompactIp(conn.remoteAddr.IP),
 					Encryption:   !cl.config.DisableEncryption,
 					Port:         cl.incomingPeerPort(),
 					MetadataSize: torrent.metadataSize(),
@@ -1182,7 +1182,7 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	cl.badPeerIPs[ip.String()] = struct{}{}
 }
 
-func (cl *Client) newConnection(nc net.Conn, outgoing bool) (c *connection) {
+func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr ipPort, network string) (c *connection) {
 	c = &connection{
 		conn:            nc,
 		outgoing:        outgoing,
@@ -1190,6 +1190,8 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool) (c *connection) {
 		PeerChoked:      true,
 		PeerMaxRequests: 250,
 		writeBuffer:     new(bytes.Buffer),
+		remoteAddr:      remoteAddr,
+		network:         network,
 	}
 	c.writerCond.L = cl.locker()
 	c.setRW(connStatsReadWriter{nc, c})
@@ -1275,8 +1277,8 @@ func (cl *Client) ListenAddrs() (ret []net.Addr) {
 	return
 }
 
-func (cl *Client) onBadAccept(addr net.Addr) {
-	ip := maskIpForAcceptLimiting(missinggo.AddrIP(addr))
+func (cl *Client) onBadAccept(addr ipPort) {
+	ip := maskIpForAcceptLimiting(addr.IP)
 	if cl.acceptLimiter == nil {
 		cl.acceptLimiter = make(map[ipStr]int)
 	}

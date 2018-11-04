@@ -873,37 +873,21 @@ func TestClientDynamicListenPortAllProtocols(t *testing.T) {
 func TestClientDynamicListenTCPOnly(t *testing.T) {
 	cfg := TestingConfig()
 	cfg.DisableUTP = true
+	cfg.DisableTCP = false
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()
 	assert.NotEqual(t, 0, cl.LocalPort())
-	cl.eachListener(func(s socket) bool {
-		assert.True(t, isTcpNetwork(s.Addr().Network()))
-		return true
-	})
 }
 
 func TestClientDynamicListenUTPOnly(t *testing.T) {
 	cfg := TestingConfig()
 	cfg.DisableTCP = true
+	cfg.DisableUTP = false
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()
 	assert.NotEqual(t, 0, cl.LocalPort())
-	cl.eachListener(func(s socket) bool {
-		assert.True(t, isUtpNetwork(s.Addr().Network()))
-		return true
-	})
-}
-
-func TestClientDynamicListenPortNoProtocols(t *testing.T) {
-	cfg := TestingConfig()
-	cfg.DisableTCP = true
-	cfg.DisableUTP = true
-	cl, err := NewClient(cfg)
-	require.NoError(t, err)
-	defer cl.Close()
-	assert.Equal(t, 0, cl.LocalPort())
 }
 
 func totalConns(tts []*Torrent) (ret int) {

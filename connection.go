@@ -1551,7 +1551,6 @@ func (c *connection) remoteIp() net.IP {
 	return c.remoteAddr.IP
 }
 
-// ???
 func (c *connection) remoteIpPort() ipPort {
 	return c.remoteAddr
 }

@@ -442,7 +442,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 	if tc, ok := nc.(*net.TCPConn); ok {
 		tc.SetLinger(0)
 	}
-	c := cl.newConnection(nc, false, ipPortFromNetAddr(nc.RemoteAddr()), nc.RemoteAddr().Network())
+	c := cl.newConnection(nc, false, missinggo.IpPortFromNetAddr(nc.RemoteAddr()), nc.RemoteAddr().Network())
 	c.Discovery = peerSourceIncoming
 	cl.runReceivedConn(c)
 }
@@ -585,7 +585,7 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
 
 // Performs initiator handshakes and returns a connection. Returns nil
 // *connection if no connection for valid reasons.
-func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torrent, encryptHeader bool, remoteAddr ipPort, network string) (c *connection, err error) {
+func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torrent, encryptHeader bool, remoteAddr IpPort, network string) (c *connection, err error) {
 	c = cl.newConnection(nc, true, remoteAddr, network)
 	c.headerEncrypted = encryptHeader
 	ctx, cancel := context.WithTimeout(ctx, cl.config.HandshakesTimeout)
@@ -607,7 +607,7 @@ func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torr
 
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
-func (cl *Client) establishOutgoingConnEx(t *Torrent, addr ipPort, ctx context.Context, obfuscatedHeader bool) (c *connection, err error) {
+func (cl *Client) establishOutgoingConnEx(t *Torrent, addr IpPort, ctx context.Context, obfuscatedHeader bool) (c *connection, err error) {
 	dr := cl.dialFirst(ctx, addr.String())
 	nc := dr.Conn
 	if nc == nil {
@@ -623,7 +623,7 @@ func (cl *Client) establishOutgoingConnEx(t *Torrent, addr ipPort, ctx context.C
 
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
-func (cl *Client) establishOutgoingConn(t *Torrent, addr ipPort) (c *connection, err error) {
+func (cl *Client) establishOutgoingConn(t *Torrent, addr IpPort) (c *connection, err error) {
 	torrent.Add("establish outgoing connection", 1)
 	ctx, cancel := context.WithTimeout(context.Background(), func() time.Duration {
 		cl.rLock()
@@ -658,7 +658,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr ipPort) (c *connection,
 
 // Called to dial out and run a connection. The addr we're given is already
 // considered half-open.
-func (cl *Client) outgoingConnection(t *Torrent, addr ipPort, ps peerSource) {
+func (cl *Client) outgoingConnection(t *Torrent, addr IpPort, ps peerSource) {
 	cl.dialRateLimiter.Wait(context.Background())
 	c, err := cl.establishOutgoingConn(t, addr)
 	cl.lock()
@@ -1182,7 +1182,7 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	cl.badPeerIPs[ip.String()] = struct{}{}
 }
 
-func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr ipPort, network string) (c *connection) {
+func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, network string) (c *connection) {
 	c = &connection{
 		conn:            nc,
 		outgoing:        outgoing,
@@ -1263,8 +1263,8 @@ func (cl *Client) findListenerIp(f func(net.IP) bool) net.IP {
 }
 
 // Our IP as a peer should see it.
-func (cl *Client) publicAddr(peer net.IP) ipPort {
-	return ipPort{cl.publicIp(peer), uint16(cl.incomingPeerPort())}
+func (cl *Client) publicAddr(peer net.IP) IpPort {
+	return IpPort{cl.publicIp(peer), uint16(cl.incomingPeerPort())}
 }
 
 func (cl *Client) ListenAddrs() (ret []net.Addr) {
@@ -1277,7 +1277,7 @@ func (cl *Client) ListenAddrs() (ret []net.Addr) {
 	return
 }
 
-func (cl *Client) onBadAccept(addr ipPort) {
+func (cl *Client) onBadAccept(addr IpPort) {
 	ip := maskIpForAcceptLimiting(addr.IP)
 	if cl.acceptLimiter == nil {
 		cl.acceptLimiter = make(map[ipStr]int)

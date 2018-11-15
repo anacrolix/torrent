@@ -48,7 +48,7 @@ func ipv6Mask(a, b net.IP) net.IPMask {
 	panic(fmt.Sprintf("%s %s", a, b))
 }
 
-func bep40PriorityBytes(a, b ipPort) ([]byte, error) {
+func bep40PriorityBytes(a, b IpPort) ([]byte, error) {
 	if a.IP.Equal(b.IP) {
 		var ret [4]byte
 		binary.BigEndian.PutUint16(ret[0:2], a.Port)
@@ -66,7 +66,7 @@ func bep40PriorityBytes(a, b ipPort) ([]byte, error) {
 	return nil, errors.New("incomparable IPs")
 }
 
-func bep40Priority(a, b ipPort) (peerPriority, error) {
+func bep40Priority(a, b IpPort) (peerPriority, error) {
 	bs, err := bep40PriorityBytes(a, b)
 	if err != nil {
 		return 0, err
@@ -79,7 +79,7 @@ func bep40Priority(a, b ipPort) (peerPriority, error) {
 	return crc32.Checksum(bs, table), nil
 }
 
-func bep40PriorityIgnoreError(a, b ipPort) peerPriority {
+func bep40PriorityIgnoreError(a, b IpPort) peerPriority {
 	prio, _ := bep40Priority(a, b)
 	return prio
 }

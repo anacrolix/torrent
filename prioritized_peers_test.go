@@ -13,7 +13,7 @@ func TestPrioritizedPeers(t *testing.T) {
 	pp := prioritizedPeers{
 		om: btree.New(3),
 		getPrio: func(p Peer) peerPriority {
-			return bep40PriorityIgnoreError(p.addr(), ipPort{IP: net.ParseIP("0.0.0.0")})
+			return bep40PriorityIgnoreError(p.addr(), IpPort{IP: net.ParseIP("0.0.0.0")})
 		},
 	}
 	_, ok := pp.DeleteMin()

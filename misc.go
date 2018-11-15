@@ -155,4 +155,5 @@ var unlimited = rate.NewLimiter(rate.Inf, 0)
 type (
 	pieceIndex = int
 	InfoHash   = metainfo.Hash
+	IpPort     = missinggo.IpPort
 )

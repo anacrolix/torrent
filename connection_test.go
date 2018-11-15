@@ -23,7 +23,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 		config: &ClientConfig{DownloadRateLimiter: unlimited},
 	}
 	cl.initLogger()
-	c := cl.newConnection(nil, false, ipPort{}, "")
+	c := cl.newConnection(nil, false, IpPort{}, "")
 	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
 	c.t.setInfo(&metainfo.Info{
 		Pieces: make([]byte, metainfo.HashSize*3),
@@ -105,7 +105,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	t.setChunkSize(defaultChunkSize)
 	t.pendingPieces.Set(0, PiecePriorityNormal.BitmapPriority())
 	r, w := net.Pipe()
-	cn := cl.newConnection(r, true, ipPort{}, "")
+	cn := cl.newConnection(r, true, IpPort{}, "")
 	cn.setTorrent(t)
 	mrlErr := make(chan error)
 	msg := pp.Message{

@@ -1736,7 +1736,7 @@ func (t *Torrent) initiateConn(peer Peer) {
 	if t.cl.badPeerIPPort(peer.IP, peer.Port) {
 		return
 	}
-	addr := ipPort{peer.IP, uint16(peer.Port)}
+	addr := IpPort{peer.IP, uint16(peer.Port)}
 	if t.addrActive(addr.String()) {
 		return
 	}

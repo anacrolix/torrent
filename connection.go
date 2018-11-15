@@ -45,7 +45,7 @@ type connection struct {
 	conn       net.Conn
 	outgoing   bool
 	network    string
-	remoteAddr ipPort
+	remoteAddr IpPort
 	// The Reader and Writer for this Conn, with hooks installed for stats,
 	// limiting, deadlines etc.
 	w io.Writer
@@ -1551,6 +1551,6 @@ func (c *connection) remoteIp() net.IP {
 	return c.remoteAddr.IP
 }
 
-func (c *connection) remoteIpPort() ipPort {
+func (c *connection) remoteIpPort() IpPort {
 	return c.remoteAddr
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/perf"
+	"github.com/pkg/errors"
 	"golang.org/x/net/proxy"
 )
 
@@ -123,7 +124,7 @@ func listenAllRetry(nahs []networkAndHost, port int, proxyURL string, f firewall
 	portStr := strconv.FormatInt(int64(port), 10)
 	ss[0], err = listen(nahs[0].Network, net.JoinHostPort(nahs[0].Host, portStr), proxyURL, f)
 	if err != nil {
-		return nil, false, fmt.Errorf("first listen: %s", err)
+		return nil, false, errors.Wrap(err, "first listen")
 	}
 	defer func() {
 		if err != nil || retry {
@@ -139,7 +140,7 @@ func listenAllRetry(nahs []networkAndHost, port int, proxyURL string, f firewall
 		if err != nil {
 			return ss,
 				missinggo.IsAddrInUse(err) && port == 0,
-				fmt.Errorf("subsequent listen: %s", err)
+				errors.Wrap(err, "subsequent listen")
 		}
 		ss = append(ss, s)
 	}

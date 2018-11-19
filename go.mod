@@ -6,7 +6,7 @@ require (
 	github.com/anacrolix/envpprof v0.0.0-20180404065416-323002cec2fa
 	github.com/anacrolix/go-libutp v0.0.0-20180725071407-34b43d880940
 	github.com/anacrolix/log v0.0.0-20180412014343-2323884b361d
-	github.com/anacrolix/missinggo v0.0.0-20180725070939-60ef2fbf63df
+	github.com/anacrolix/missinggo v0.0.0-20181115233016-3cf6293a31dc
 	github.com/anacrolix/sync v0.0.0-20180725074606-fda11526ff08
 	github.com/anacrolix/tagflag v0.0.0-20180109131632-2146c8d41bf0
 	github.com/anacrolix/utp v0.0.0-20180219060659-9e0e1d1d0572
@@ -28,7 +28,6 @@ require (
 	github.com/mschoch/smat v0.0.0-20160514031455-90eadee771ae // indirect
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7 // indirect
 	github.com/pkg/errors v0.8.0
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/smartystreets/assertions v0.0.0-20180607162144-eb5b59917fa2 // indirect
 	github.com/smartystreets/goconvey v0.0.0-20180222194500-ef6db91d284a // indirect
 	github.com/smartystreets/gunit v0.0.0-20180314194857-6f0d6275bdcd // indirect

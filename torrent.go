@@ -1516,9 +1516,6 @@ func (t *Torrent) addConnection(c *connection) (err error) {
 		if c == nil {
 			return errors.New("don't want conns")
 		}
-		if t.cl.config.Debug && missinggo.CryHeard() {
-			log.Printf("%s: dropping connection to make room for new one:\n    %v", t, c)
-		}
 		c.Close()
 		t.deleteConnection(c)
 	}

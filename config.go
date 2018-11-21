@@ -91,11 +91,11 @@ type ClientConfig struct {
 	// Updated occasionally to when there's been some changes to client
 	// behaviour in case other clients are assuming anything of us. See also
 	// `bep20`.
-	ExtendedHandshakeClientVersion string // default  "go.torrent dev 20150624"
+	ExtendedHandshakeClientVersion string
 	// Peer ID client identifier prefix. We'll update this occasionally to
 	// reflect changes to client behaviour that other clients may depend on.
 	// Also see `extendedHandshakeClientVersion`.
-	Bep20 string // default "-GT0001-"
+	Bep20 string
 
 	// Peer dial timeout to use when there are limited peers.
 	NominalDialTimeout time.Duration
@@ -137,8 +137,8 @@ func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
 func NewDefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
 		HTTPUserAgent:                  DefaultHTTPUserAgent,
-		ExtendedHandshakeClientVersion: "go.torrent dev 20150624",
-		Bep20:                      "-GT0001-",
+		ExtendedHandshakeClientVersion: "go.torrent dev 20181121",
+		Bep20:                      "-GT0002-",
 		NominalDialTimeout:         20 * time.Second,
 		MinDialTimeout:             3 * time.Second,
 		EstablishedConnsPerTorrent: 50,

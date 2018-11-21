@@ -21,6 +21,7 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
+	"github.com/anacrolix/missinggo/conntrack"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pproffd"
 	"github.com/anacrolix/missinggo/pubsub"
@@ -291,7 +292,8 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 			}
 			return cl.config.PublicIp4
 		}(),
-		StartingNodes: cl.config.DhtStartingNodes,
+		StartingNodes:      cl.config.DhtStartingNodes,
+		ConnectionTracking: cl.config.ConnTracker,
 	}
 	s, err = dht.NewServer(&cfg)
 	if err == nil {
@@ -538,6 +540,9 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
 			if peerNetworkEnabled(network, cl.config) {
 				left++
 				go func() {
+					cte := cl.config.ConnTracker.Wait(
+						conntrack.Entry{network, s.Addr().String(), addr},
+						"dial torrent client")
 					c, err := s.dial(ctx, addr)
 					// This is a bit optimistic, but it looks non-trivial to thread
 					// this through the proxy code. Set it now in case we close the
@@ -546,7 +551,17 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
 						tc.SetLinger(0)
 					}
 					countDialResult(err)
-					resCh <- dialResult{c, network}
+					dr := dialResult{c, network}
+					if c == nil {
+						cte.Done()
+					} else {
+						dr.Conn = closeWrapper{c, func() error {
+							err := c.Close()
+							cte.Done()
+							return err
+						}}
+					}
+					resCh <- dr
 				}()
 			}
 			return true

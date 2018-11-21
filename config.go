@@ -8,6 +8,7 @@ import (
 
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/conntrack"
 	"github.com/anacrolix/missinggo/expect"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/storage"
@@ -121,6 +122,8 @@ type ClientConfig struct {
 	// Don't add connections that have the same peer ID as an existing
 	// connection for a given Torrent.
 	dropDuplicatePeerIds bool
+
+	ConnTracker *conntrack.Instance
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
@@ -147,6 +150,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		ListenHost:                 func(string) string { return "" },
 		UploadRateLimiter:          unlimited,
 		DownloadRateLimiter:        unlimited,
+		ConnTracker:                conntrack.NewInstance(),
 	}
 }
 

@@ -2,7 +2,7 @@ module github.com/anacrolix/torrent
 
 require (
 	bazil.org/fuse v0.0.0-20180421153158-65cc252bf669
-	github.com/anacrolix/dht v0.0.0-20180412060941-24cbf25b72a4
+	github.com/anacrolix/dht v0.0.0-20181121061912-bf7e978fe2ad
 	github.com/anacrolix/envpprof v0.0.0-20180404065416-323002cec2fa
 	github.com/anacrolix/go-libutp v0.0.0-20180725071407-34b43d880940
 	github.com/anacrolix/log v0.0.0-20180412014343-2323884b361d
@@ -33,8 +33,8 @@ require (
 	github.com/smartystreets/gunit v0.0.0-20180314194857-6f0d6275bdcd // indirect
 	github.com/stretchr/testify v1.2.1
 	github.com/willf/bitset v1.1.9 // indirect
+	github.com/willf/bloom v2.0.3+incompatible // indirect
 	golang.org/x/net v0.0.0-20180724234803-3673e40ba225
 	golang.org/x/sys v0.0.0-20180724212812-e072cadbbdc8 // indirect
 	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
 )
-

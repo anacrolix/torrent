@@ -53,6 +53,7 @@ var random_encode_tests = []random_encode_test{
 	{[4]byte{1, 2, 3, 4}, "li1ei2ei3ei4ee"},
 	{nil, ""},
 	{[]byte{}, "0:"},
+	{[]byte(nil), "0:"},
 	{"", "0:"},
 	{[]int{}, "le"},
 	{map[string]int{}, "de"},

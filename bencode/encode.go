@@ -159,13 +159,13 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 		}
 		e.writeString("e")
 	case reflect.Slice:
-		if v.IsNil() {
-			e.writeString("le")
-			break
-		}
 		if v.Type().Elem().Kind() == reflect.Uint8 {
 			s := v.Bytes()
 			e.reflectByteSlice(s)
+			break
+		}
+		if v.IsNil() {
+			e.writeString("le")
 			break
 		}
 		fallthrough

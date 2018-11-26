@@ -15,3 +15,11 @@ func TestUnmarshalPex(t *testing.T) {
 	require.EqualValues(t, 1286, pem.Added[0].Port)
 	require.EqualValues(t, 0x100*0xb+0xc, pem.Added[1].Port)
 }
+
+func TestEmptyPexMsg(t *testing.T) {
+	pm := PexMsg{}
+	b, err := bencode.Marshal(pm)
+	t.Logf("%q", b)
+	require.NoError(t, err)
+	require.NoError(t, bencode.Unmarshal(b, &pm))
+}

@@ -544,7 +544,9 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
 				go func() {
 					cte := cl.config.ConnTracker.Wait(
 						conntrack.Entry{network, s.Addr().String(), addr},
-						"dial torrent client")
+						"dial torrent client",
+						0,
+					)
 					c, err := s.dial(ctx, addr)
 					// This is a bit optimistic, but it looks non-trivial to thread
 					// this through the proxy code. Set it now in case we close the

@@ -89,12 +89,6 @@ func (cl *Client) PeerID() PeerID {
 	return cl.peerID
 }
 
-type torrentAddr string
-
-func (torrentAddr) Network() string { return "" }
-
-func (me torrentAddr) String() string { return string(me) }
-
 func (cl *Client) LocalPort() (port int) {
 	cl.eachListener(func(l socket) bool {
 		_port := missinggo.AddrPort(l.Addr())

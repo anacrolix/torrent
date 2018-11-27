@@ -2,11 +2,11 @@ module github.com/anacrolix/torrent
 
 require (
 	bazil.org/fuse v0.0.0-20180421153158-65cc252bf669
-	github.com/anacrolix/dht v0.0.0-20181121061912-bf7e978fe2ad
+	github.com/anacrolix/dht v0.0.0-20181127122252-acaa69c368bb
 	github.com/anacrolix/envpprof v0.0.0-20180404065416-323002cec2fa
 	github.com/anacrolix/go-libutp v0.0.0-20180725071407-34b43d880940
 	github.com/anacrolix/log v0.0.0-20180412014343-2323884b361d
-	github.com/anacrolix/missinggo v0.0.0-20181121044207-6088aa27de25
+	github.com/anacrolix/missinggo v0.0.0-20181127231911-72d14a94053a
 	github.com/anacrolix/sync v0.0.0-20180725074606-fda11526ff08
 	github.com/anacrolix/tagflag v0.0.0-20180605133421-f477c8c2f14c
 	github.com/anacrolix/utp v0.0.0-20180219060659-9e0e1d1d0572

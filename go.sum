@@ -4,8 +4,8 @@ github.com/RoaringBitmap/roaring v0.4.7 h1:eGUudvFzvF7Kxh7JjYvXfI1f7l22/2duFby7r
 github.com/RoaringBitmap/roaring v0.4.7/go.mod h1:8khRDP4HmeXns4xIj9oGrKSz7XTQiJx2zgh7AcNke4w=
 github.com/anacrolix/dht v0.0.0-20180412060941-24cbf25b72a4 h1:0yHJvFiGQhJ1gSHJOR8xzmnx45orEt7uiIB6guf0+zc=
 github.com/anacrolix/dht v0.0.0-20180412060941-24cbf25b72a4/go.mod h1:hQfX2BrtuQsLQMYQwsypFAab/GvHg8qxwVi4OJdR1WI=
-github.com/anacrolix/dht v0.0.0-20181121061912-bf7e978fe2ad h1:sYT/TfVaN+NsVPLvKUNPvkXPWDXTfefvkuUo7Hjp5fU=
-github.com/anacrolix/dht v0.0.0-20181121061912-bf7e978fe2ad/go.mod h1:Z/mP+H70xwnUv957UXVkTrzYRhKs0mGjS0lyqS331g4=
+github.com/anacrolix/dht v0.0.0-20181127122252-acaa69c368bb h1:XgF37lxo6RjJOKaW3X4Q0n7qAIonVruzv4dGyJcYj+M=
+github.com/anacrolix/dht v0.0.0-20181127122252-acaa69c368bb/go.mod h1:Z/mP+H70xwnUv957UXVkTrzYRhKs0mGjS0lyqS331g4=
 github.com/anacrolix/envpprof v0.0.0-20180404065416-323002cec2fa h1:xCaATLKmn39QqLs3tUZYr6eKvezJV+FYvVOLTklxK6U=
 github.com/anacrolix/envpprof v0.0.0-20180404065416-323002cec2fa/go.mod h1:KgHhUaQMc8cC0+cEflSgCFNFbKwi5h54gqtVn8yhP7c=
 github.com/anacrolix/go-libutp v0.0.0-20180522111405-6baeb806518d/go.mod h1:beQSaSxwH2d9Eeu5ijrEnHei5Qhk+J6cDm1QkWFru4E=
@@ -15,8 +15,10 @@ github.com/anacrolix/log v0.0.0-20180412014343-2323884b361d h1:G8ITVMWuQL4adKRC3
 github.com/anacrolix/log v0.0.0-20180412014343-2323884b361d/go.mod h1:sf/7c2aTldL6sRQj/4UKyjgVZBu2+M2z9wf7MmwPiew=
 github.com/anacrolix/missinggo v0.0.0-20180522035225-b4a5853e62ff/go.mod h1:b0p+7cn+rWMIphK1gDH2hrDuwGOcbB6V4VXeSsEfHVk=
 github.com/anacrolix/missinggo v0.0.0-20180621131740-7fc7cfea16ea/go.mod h1:kwGiTUTZ0+p4vAz3VbAI5a30t2YbvemcmspjKwrAz5s=
-github.com/anacrolix/missinggo v0.0.0-20181121044207-6088aa27de25 h1:eH65V60MtZy8pGBFTLh5cyf5a1KHdqL7hZw/Z+KjGN4=
-github.com/anacrolix/missinggo v0.0.0-20181121044207-6088aa27de25/go.mod h1:IN+9GUe7OxKMIs/XeXEbT/rMUolmJzmlZiXHS7FwD/Y=
+github.com/anacrolix/missinggo v0.0.0-20181127122118-423a489232d8 h1:+iN/E5Xqa050woSEdXnUBWwO+iW98v0/zNHFM5KN7Fc=
+github.com/anacrolix/missinggo v0.0.0-20181127122118-423a489232d8/go.mod h1:IN+9GUe7OxKMIs/XeXEbT/rMUolmJzmlZiXHS7FwD/Y=
+github.com/anacrolix/missinggo v0.0.0-20181127231911-72d14a94053a h1:pX9q06ifav/vlEKLl42kM7izEAxe+EO6/wUIeLoV3wE=
+github.com/anacrolix/missinggo v0.0.0-20181127231911-72d14a94053a/go.mod h1:IN+9GUe7OxKMIs/XeXEbT/rMUolmJzmlZiXHS7FwD/Y=
 github.com/anacrolix/mmsg v0.0.0-20180515031531-a4a3ba1fc8bb h1:2Or5ccMoY4Kfao+WdL2w6tpY6ZEe+2VTVbIPd7A/Ajk=
 github.com/anacrolix/mmsg v0.0.0-20180515031531-a4a3ba1fc8bb/go.mod h1:x2/ErsYUmT77kezS63+wzZp8E3byYB0gzirM/WMBLfw=
 github.com/anacrolix/sync v0.0.0-20171108081538-eee974e4f8c1/go.mod h1:+u91KiUuf0lyILI6x3n/XrW7iFROCZCG+TjgK8nW52w=

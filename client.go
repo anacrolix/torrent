@@ -308,15 +308,6 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	return
 }
 
-func firstNonEmptyString(ss ...string) string {
-	for _, s := range ss {
-		if s != "" {
-			return s
-		}
-	}
-	return ""
-}
-
 func (cl *Client) Closed() <-chan struct{} {
 	cl.lock()
 	defer cl.unlock()
@@ -488,23 +479,6 @@ func reducedDialTimeout(minDialTimeout, max time.Duration, halfOpenLimit int, pe
 func (cl *Client) dopplegangerAddr(addr string) bool {
 	_, ok := cl.dopplegangerAddrs[addr]
 	return ok
-}
-
-func ipNetworkSuffix(allowIpv4, allowIpv6 bool) string {
-	switch {
-	case allowIpv4 && allowIpv6:
-		return ""
-	case allowIpv4 && !allowIpv6:
-		return "4"
-	case !allowIpv4 && allowIpv6:
-		return "6"
-	default:
-		panic("unhandled ip network combination")
-	}
-}
-
-func dialUTP(ctx context.Context, addr string, sock utpSocket) (c net.Conn, err error) {
-	return sock.DialContext(ctx, "", addr)
 }
 
 var allPeerNetworks = []string{"tcp4", "tcp6", "udp4", "udp6"}

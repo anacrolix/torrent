@@ -35,11 +35,6 @@ func (t *Torrent) chunkIndexSpec(chunkIndex pp.Integer, piece pieceIndex) chunkS
 	return chunkIndexSpec(chunkIndex, t.pieceLength(piece), t.chunkSize)
 }
 
-type peersKey struct {
-	IPBytes string
-	Port    int
-}
-
 // Maintains state of torrent within a Client.
 type Torrent struct {
 	// Torrent-level aggregate statistics. First in struct to ensure 64-bit
@@ -290,10 +285,6 @@ func (t *Torrent) haveMetadataPiece(piece int) bool {
 	} else {
 		return piece < len(t.metadataCompletedChunks) && t.metadataCompletedChunks[piece]
 	}
-}
-
-func (t *Torrent) metadataSizeKnown() bool {
-	return t.metadataBytes != nil
 }
 
 func (t *Torrent) metadataSize() int {
@@ -791,18 +782,6 @@ func chunkIndex(cs chunkSpec, chunkSize pp.Integer) int {
 	return int(cs.Begin / chunkSize)
 }
 
-func (t *Torrent) wantPiece(r request) bool {
-	if !t.wantPieceIndex(pieceIndex(r.Index)) {
-		return false
-	}
-	if t.pieces[r.Index].pendingChunk(r.chunkSpec, t.chunkSize) {
-		return true
-	}
-	// TODO: What about pieces that were wanted, but aren't now, and aren't
-	// completed either? That used to be done here.
-	return false
-}
-
 func (t *Torrent) wantPieceIndex(index pieceIndex) bool {
 	if !t.haveInfo() {
 		return false
@@ -1123,14 +1102,6 @@ func (t *Torrent) maybeCompleteMetadata() error {
 		log.Printf("%s: got metadata from peers", t)
 	}
 	return nil
-}
-
-func (t *Torrent) readerPieces() (ret bitmap.Bitmap) {
-	t.forReaderOffsetPieces(func(begin, end pieceIndex) bool {
-		ret.AddRange(bitmap.BitIndex(begin), bitmap.BitIndex(end))
-		return true
-	})
-	return
 }
 
 func (t *Torrent) readerPiecePriorities() (now, readahead bitmap.Bitmap) {

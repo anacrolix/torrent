@@ -91,10 +91,6 @@ func byteRegionExclusivePieces(off, size, pieceSize int64) (begin, end int) {
 	return
 }
 
-func (f *File) exclusivePieces() (begin, end int) {
-	return byteRegionExclusivePieces(f.offset, f.length, int64(f.t.usualPieceSize()))
-}
-
 // Deprecated: Use File.SetPriority.
 func (f *File) Cancel() {
 	f.SetPriority(PiecePriorityNone)

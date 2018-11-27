@@ -90,14 +90,6 @@ func (me tcpSocket) dial(ctx context.Context, addr string) (net.Conn, error) {
 	return me.d(ctx, addr)
 }
 
-func setPort(addr string, port int) string {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		panic(err)
-	}
-	return net.JoinHostPort(host, strconv.FormatInt(int64(port), 10))
-}
-
 func listenAll(networks []string, getHost func(string) string, port int, proxyURL string, f firewallCallback) ([]socket, error) {
 	if len(networks) == 0 {
 		return nil, nil

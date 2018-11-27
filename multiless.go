@@ -1,9 +1,5 @@
 package torrent
 
-func strictCmp(same, less bool) cmper {
-	return func() (bool, bool) { return same, less }
-}
-
 type (
 	cmper     func() (same, less bool)
 	multiLess struct {

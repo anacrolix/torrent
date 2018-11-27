@@ -239,7 +239,7 @@ func (cn *connection) connectionFlags() (ret string) {
 }
 
 func (cn *connection) utp() bool {
-	return isUtpNetwork(cn.network)
+	return parseNetworkString(cn.network).Udp
 }
 
 // Inspired by https://github.com/transmission/transmission/wiki/Peer-Status-Text.

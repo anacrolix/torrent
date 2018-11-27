@@ -530,7 +530,11 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
 					countDialResult(err)
 					dr := dialResult{c, network}
 					if c == nil {
-						cte.Done()
+						if err != nil && forgettableDialError(err) {
+							cte.Forget()
+						} else {
+							cte.Done()
+						}
 					} else {
 						dr.Conn = closeWrapper{c, func() error {
 							err := c.Close()
@@ -565,6 +569,10 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
 		go torrent.Add(fmt.Sprintf("network dialed first: %s", res.Conn.RemoteAddr().Network()), 1)
 	}
 	return res
+}
+
+func forgettableDialError(err error) bool {
+	return strings.Contains(err.Error(), "no suitable address found")
 }
 
 func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {

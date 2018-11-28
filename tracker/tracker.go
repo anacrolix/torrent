@@ -1,6 +1,7 @@
 package tracker
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
@@ -61,6 +62,7 @@ type Announce struct {
 	ClientIp4 krpc.NodeAddr
 	// If the port is zero, it's assumed to be the same as the Request.Port
 	ClientIp6 krpc.NodeAddr
+	Context   context.Context
 }
 
 // In an FP language with currying, what order what you put these params?

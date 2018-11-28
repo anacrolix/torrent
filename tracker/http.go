@@ -98,6 +98,9 @@ func announceHTTP(opt Announce, _url *url.URL) (ret AnnounceResponse, err error)
 	req, err := http.NewRequest("GET", _url.String(), nil)
 	req.Header.Set("User-Agent", opt.UserAgent)
 	req.Host = opt.HostHeader
+	if opt.Context != nil {
+		req = req.WithContext(opt.Context)
+	}
 	resp, err := (&http.Client{
 		Timeout: time.Second * 15,
 		Transport: &http.Transport{

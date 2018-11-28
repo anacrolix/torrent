@@ -2,6 +2,7 @@ package tracker
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
@@ -160,8 +161,7 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 	rand.Read(req.PeerId[:])
 	rand.Read(req.InfoHash[:])
 	wg := sync.WaitGroup{}
-	success := make(chan bool)
-	fail := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
 	for _, url := range trackers {
 		wg.Add(1)
 		go func(url string) {
@@ -169,6 +169,7 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 			resp, err := Announce{
 				TrackerUrl: url,
 				Request:    req,
+				Context:    ctx,
 			}.Do()
 			if err != nil {
 				t.Logf("error announcing to %s: %s", url, err)
@@ -180,21 +181,10 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 				t.Fatal(resp)
 			}
 			t.Logf("announced to %s", url)
-			// TODO: Can probably get stuck here, but it's just a throwaway
-			// test.
-			success <- true
+			cancel()
 		}(url)
 	}
-	go func() {
-		wg.Wait()
-		close(fail)
-	}()
-	select {
-	case <-fail:
-		// It doesn't matter if they all fail, the servers could just be down.
-	case <-success:
-		// Bail as quickly as we can. One success is enough.
-	}
+	wg.Wait()
 }
 
 // Check that URLPath option is done correctly.

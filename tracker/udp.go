@@ -2,9 +2,9 @@ package tracker
 
 import (
 	"bytes"
+	"context"
 	"encoding"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -15,6 +15,7 @@ import (
 	"github.com/anacrolix/dht/krpc"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/pproffd"
+	"github.com/pkg/errors"
 )
 
 type Action int32
@@ -188,39 +189,55 @@ func write(w io.Writer, data interface{}) error {
 
 // args is the binary serializable request body. trailer is optional data
 // following it, such as for BEP 41.
-func (c *udpAnnounce) request(action Action, args interface{}, options []byte) (responseBody *bytes.Buffer, err error) {
+func (c *udpAnnounce) request(action Action, args interface{}, options []byte) (*bytes.Buffer, error) {
 	tid := newTransactionId()
-	err = c.write(&RequestHeader{
-		ConnectionId:  c.connectionId,
-		Action:        action,
-		TransactionId: tid,
-	}, args, options)
-	if err != nil {
-		return
+	if err := errors.Wrap(
+		c.write(
+			&RequestHeader{
+				ConnectionId:  c.connectionId,
+				Action:        action,
+				TransactionId: tid,
+			}, args, options),
+		"writing request",
+	); err != nil {
+		return nil, err
 	}
 	c.socket.SetReadDeadline(time.Now().Add(timeout(c.contiguousTimeouts)))
 	b := make([]byte, 0x800) // 2KiB
 	for {
-		var n int
-		n, err = c.socket.Read(b)
-		if opE, ok := err.(*net.OpError); ok {
-			if opE.Timeout() {
-				c.contiguousTimeouts++
-				return
-			}
+		var (
+			n        int
+			readErr  error
+			readDone = make(chan struct{})
+		)
+		go func() {
+			defer close(readDone)
+			n, readErr = c.socket.Read(b)
+		}()
+		ctx := c.a.Context
+		if ctx == nil {
+			ctx = context.Background()
 		}
-		if err != nil {
-			return
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-readDone:
+		}
+		if opE, ok := readErr.(*net.OpError); ok && opE.Timeout() {
+			c.contiguousTimeouts++
+		}
+		if readErr != nil {
+			return nil, errors.Wrap(readErr, "reading from socket")
 		}
 		buf := bytes.NewBuffer(b[:n])
 		var h ResponseHeader
-		err = binary.Read(buf, binary.BigEndian, &h)
+		err := binary.Read(buf, binary.BigEndian, &h)
 		switch err {
-		case io.ErrUnexpectedEOF:
+		default:
+			panic(err)
+		case io.ErrUnexpectedEOF, io.EOF:
 			continue
 		case nil:
-		default:
-			return
 		}
 		if h.TransactionId != tid {
 			continue
@@ -229,8 +246,7 @@ func (c *udpAnnounce) request(action Action, args interface{}, options []byte) (
 		if h.Action == ActionError {
 			err = errors.New(buf.String())
 		}
-		responseBody = buf
-		return
+		return buf, err
 	}
 }
 

@@ -58,14 +58,12 @@ type Announce struct {
 	ServerName string
 	UserAgent  string
 	UdpNetwork string
-	// If the port is zero, it's assumed to be the same as the Request.Port
+	// If the port is zero, it's assumed to be the same as the Request.Port.
 	ClientIp4 krpc.NodeAddr
-	// If the port is zero, it's assumed to be the same as the Request.Port
+	// If the port is zero, it's assumed to be the same as the Request.Port.
 	ClientIp6 krpc.NodeAddr
 	Context   context.Context
 }
-
-// In an FP language with currying, what order what you put these params?
 
 func (me Announce) Do() (res AnnounceResponse, err error) {
 	_url, err := url.Parse(me.TrackerUrl)

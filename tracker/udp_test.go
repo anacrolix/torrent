@@ -152,7 +152,7 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
 		// This test involves contacting third party servers that may have
-		// unpreditable results.
+		// unpredictable results.
 		t.SkipNow()
 	}
 	req := AnnounceRequest{

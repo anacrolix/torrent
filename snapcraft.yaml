@@ -1,0 +1,83 @@
+name: torrent
+version: '1.0'
+summary: Full-featured BitTorrent client package and utilities
+description: |
+  Full-featured BitTorrent client package and utilities
+grade: stable
+confinement: strict
+base: core18
+parts:
+  torrent:
+    plugin: go
+    source: https://github.com/anacrolix/torrent.git
+    go-importpath: github.com/anacrolix/torrent
+    build-packages:
+      - build-essential
+apps:
+  iplist:
+    command: bin/iplist
+    plugs:
+      - home
+      - network
+  magnet-metainfo:
+    command: bin/magnet-metainfo
+    plugs:
+      - home
+      - network
+  pack-blocklist:
+    command: bin/pack-blocklist
+    plugs:
+      - home
+      - network
+  torrent:
+    command: bin/torrent
+    plugs:
+      - home
+      - network
+      - network-bind
+  torrent-create:
+    command: bin/torrent-create
+    plugs:
+      - home
+      - network
+  torrentfs:
+    command: bin/torrentfs
+    plugs:
+      - home
+      - network
+      - fuse-support
+  torrent-infohash:
+    command: bin/torrent-infohash
+    plugs:
+      - home
+      - network
+  torrent-magnet:
+    command: bin/torrent-magnet
+    plugs:
+      - home
+      - network
+  torrent-metainfo-pprint:
+    command: bin/torrent-metainfo-pprint
+    plugs:
+      - home
+      - network
+  torrent-pick:
+    command: bin/torrent-pick
+    plugs:
+      - home
+      - network
+  torrent-verify:
+    command: bin/torrent-verify
+    plugs:
+      - home
+      - network
+  tracker-announce:
+    command: bin/tracker-announce
+    plugs:
+      - home
+      - network
+      - network-bind
+
+
+
+

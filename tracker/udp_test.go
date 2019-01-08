@@ -15,6 +15,7 @@ import (
 
 	"github.com/anacrolix/dht/krpc"
 	_ "github.com/anacrolix/envpprof"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -141,7 +142,7 @@ func TestUDPTracker(t *testing.T) {
 		Request:    req,
 	}.Do()
 	// Skip any net errors as we don't control the server.
-	if _, ok := err.(net.Error); ok {
+	if _, ok := errors.Cause(err).(net.Error); ok {
 		t.Skip(err)
 	}
 	require.NoError(t, err)

@@ -19,7 +19,7 @@ import (
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/gosuri/uiprogress"
 	"golang.org/x/time/rate"
 )
@@ -131,6 +131,7 @@ var flags = struct {
 	Debug           bool
 	PackedBlocklist string
 	Stats           *bool
+	PublicIP        net.IP
 	tagflag.StartPos
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }{
@@ -163,10 +164,13 @@ func exitSignalHandlers(client *torrent.Client) {
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	tagflag.Parse(&flags)
+	log.Print(flags.PublicIP)
 	defer envpprof.Stop()
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.Debug = flags.Debug
 	clientConfig.Seed = flags.Seed
+	clientConfig.PublicIp4 = flags.PublicIP
+	clientConfig.PublicIp6 = flags.PublicIP
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
 		if err != nil {

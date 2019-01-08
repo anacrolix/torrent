@@ -23,15 +23,21 @@ jobs:
       - checkout
       - run: sudo apt-get update
       - run: sudo apt install fuse pv
+      - restore_cache:
+        keys:
+          - go-mod
       - run: go get ./...
       - run: go test -v -race ./... -count 2
       - run: go test -bench . ./...
-      # - run: CGO_ENABLED=0 go get -t -d -v $PROJECT_GO_PACKAGE/...
       - run: set +e; CGO_ENABLED=0 go test -v ./...; true
       - run: go install golang.org/x/mobile/cmd/gomobile
       - run: gomobile init
       - run: gomobile build -target=android $PROJECT_GO_PACKAGE
       # - run: GO111MODULE=off go install github.com/anacrolix/godo
       - run: go install ./cmd/torrentfs
+      - save_cache:
+        key: go-mod
+        paths:
+          - $GOPATH/pkg/mod
       - run: sudo modprobe fuse
       - run: fs/test.sh

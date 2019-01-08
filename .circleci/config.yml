@@ -24,8 +24,8 @@ jobs:
       - run: sudo apt-get update
       - run: sudo apt install fuse pv
       - restore_cache:
-        keys:
-          - go-mod
+          keys:
+            - go-mod
       - run: go get ./...
       - run: go test -v -race ./... -count 2
       - run: go test -bench . ./...
@@ -36,8 +36,8 @@ jobs:
       # - run: GO111MODULE=off go install github.com/anacrolix/godo
       - run: go install ./cmd/torrentfs
       - save_cache:
-        key: go-mod
-        paths:
-          - $GOPATH/pkg/mod
+          key: go-mod
+          paths:
+            - $GOPATH/pkg/mod
       - run: sudo modprobe fuse
       - run: fs/test.sh

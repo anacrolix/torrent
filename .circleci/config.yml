@@ -40,8 +40,8 @@ jobs:
       # - run: GO111MODULE=off go install github.com/anacrolix/godo
       - run: go install ./cmd/torrentfs
       - save_cache:
-          key: go-mod
+          key: go-mod-{{ epoch }}
           paths:
-            - $GOPATH/pkg/mod
+            - ~/go/pkg/mod
       - run: sudo modprobe fuse
       - run: fs/test.sh

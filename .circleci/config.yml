@@ -29,7 +29,7 @@ jobs:
       - run: sudo apt install fuse pv
       - restore_cache:
           keys:
-            - go-mod
+            - go-pkg
       - run: go get -d ./...
       - run: go test -v -race ./... -count 2
       - run: go test -bench . ./...
@@ -40,8 +40,8 @@ jobs:
       # - run: GO111MODULE=off go install github.com/anacrolix/godo
       - run: go install ./cmd/torrentfs
       - save_cache:
-          key: go-mod-{{ epoch }}
+          key: go-pkg-{{ epoch }}
           paths:
-            - ~/go/pkg/mod
+            - ~/go/pkg
       - run: sudo modprobe fuse
       - run: fs/test.sh

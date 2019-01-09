@@ -30,6 +30,9 @@ jobs:
       - restore_cache:
           keys:
             - go-pkg
+      - restore_cache:
+          keys:
+            - go-cache
       - run: go get -d ./...
       - run: go test -v -race ./... -count 2
       - run: go test -bench . ./...
@@ -45,3 +48,8 @@ jobs:
             - ~/go/pkg
       - run: sudo modprobe fuse
       - run: fs/test.sh
+      - save_cache:
+          key: go-cache-{{ epoch }}
+          paths:
+            - ~/.cache/go-build
+          when: always

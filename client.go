@@ -318,10 +318,12 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	if err == nil {
 		go func() {
 			ts, err := s.Bootstrap()
-			if err != nil {
-				log.Printf("error bootstrapping dht: %s", err)
+			if cl.config.Debug {
+				if err != nil {
+					log.Printf("error bootstrapping dht: %s", err)
+				}
+				log.Printf("%s: dht bootstrap: %#v", s, ts)
 			}
-			log.Printf("%s: dht bootstrap: %#v", s, ts)
 		}()
 	}
 	return

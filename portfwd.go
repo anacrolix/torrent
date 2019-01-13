@@ -10,9 +10,9 @@ import (
 
 func addPortMapping(d upnp.Device, proto upnp.Protocol, internalPort int, debug bool) {
 	externalPort, err := d.AddPortMapping(proto, internalPort, internalPort, "anacrolix/torrent", 0)
-	if err != nil {
+	if err != nil && debug {
 		log.Printf("error adding %s port mapping: %s", proto, err)
-	} else if externalPort != internalPort {
+	} else if externalPort != internalPort && debug {
 		log.Printf("external port %d does not match internal port %d in port mapping", externalPort, internalPort)
 	} else if debug {
 		log.Printf("forwarded external %s port %d", proto, externalPort)
@@ -26,9 +26,12 @@ func (cl *Client) forwardPort() {
 		return
 	}
 	cl.unlock()
+	upnp.Debug = cl.config.Debug
 	ds := upnp.Discover(0, 2*time.Second)
 	cl.lock()
-	flog.Default.Handle(flog.Fmsg("discovered %d upnp devices", len(ds)))
+	if cl.config.Debug {
+		flog.Default.Handle(flog.Fmsg("discovered %d upnp devices", len(ds)))
+	}
 	port := cl.incomingPeerPort()
 	cl.unlock()
 	for _, d := range ds {

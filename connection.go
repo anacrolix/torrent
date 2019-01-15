@@ -1193,7 +1193,7 @@ func (c *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (e
 	case pp.HandshakeExtendedID:
 		var d pp.ExtendedHandshakeMessage
 		if err := bencode.Unmarshal(payload, &d); err != nil {
-			log.Printf("error parsing extended handshake message %q: %s", payload, err)
+			c.t.logger.Printf("error parsing extended handshake message %q: %s", payload, err)
 			return errors.Wrap(err, "unmarshalling extended handshake payload")
 		}
 		if d.Reqq != 0 {
@@ -1335,7 +1335,7 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 	piece.decrementPendingWrites()
 
 	if err != nil {
-		log.Printf("%s (%s): error writing chunk %v: %s", t, t.infoHash, req, err)
+		c.t.logger.Printf("%s (%s): error writing chunk %v: %s", t, t.infoHash, req, err)
 		t.pendRequest(req)
 		t.updatePieceCompletion(pieceIndex(msg.Index))
 		return nil

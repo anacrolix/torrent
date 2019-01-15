@@ -34,7 +34,7 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/google/btree"
 	"golang.org/x/time/rate"
 )
@@ -151,7 +151,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
-const debugLogValue = "debug"
+const debugLogValue = log.Debug
 
 func (cl *Client) debugLogFilter(m *log.Msg) bool {
 	if !cl.config.Debug {
@@ -200,7 +200,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		storageImpl = storage.NewFile(cfg.DataDir)
 		cl.onClose = append(cl.onClose, func() {
 			if err := storageImpl.Close(); err != nil {
-				log.Printf("error closing default storage: %s", err)
+				cl.logger.Printf("error closing default storage: %s", err)
 			}
 		})
 	}
@@ -319,9 +319,9 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 		go func() {
 			ts, err := s.Bootstrap()
 			if err != nil {
-				log.Printf("error bootstrapping dht: %s", err)
+				cl.logger.Printf("error bootstrapping dht: %s", err)
 			}
-			log.Printf("%s: dht bootstrap: %#v", s, ts)
+			log.Str("completed bootstrap").AddValues(s, ts).Log(cl.logger)
 		}()
 	}
 	return
@@ -433,7 +433,7 @@ func (cl *Client) acceptConnections(l net.Listener) {
 			return
 		}
 		if err != nil {
-			log.Printf("error accepting connection: %s", err)
+			cl.logger.Printf("error accepting connection: %s", err)
 			continue
 		}
 		go func() {
@@ -668,7 +668,7 @@ func (cl *Client) outgoingConnection(t *Torrent, addr IpPort, ps peerSource) {
 	cl.noLongerHalfOpen(t, addr.String())
 	if err != nil {
 		if cl.config.Debug {
-			log.Printf("error establishing outgoing connection: %s", err)
+			cl.logger.Printf("error establishing outgoing connection: %s", err)
 		}
 		return
 	}
@@ -845,7 +845,7 @@ func (cl *Client) runHandshookConn(c *connection, t *Torrent) {
 	cl.sendInitialMessages(c, t)
 	err := c.mainReadLoop()
 	if err != nil && cl.config.Debug {
-		log.Printf("error during connection main read loop: %s", err)
+		cl.logger.Printf("error during connection main read loop: %s", err)
 	}
 }
 
@@ -1160,7 +1160,7 @@ func (cl *Client) AddDHTNodes(nodes []string) {
 		hmp := missinggo.SplitHostMaybePort(n)
 		ip := net.ParseIP(hmp.Host)
 		if ip == nil {
-			log.Printf("won't add DHT node with bad IP: %q", hmp.Host)
+			cl.logger.Printf("won't add DHT node with bad IP: %q", hmp.Host)
 			continue
 		}
 		ni := krpc.NodeInfo{

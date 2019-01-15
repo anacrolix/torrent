@@ -268,7 +268,7 @@ func (t *Torrent) saveMetadataPiece(index int, data []byte) {
 		return
 	}
 	if index >= len(t.metadataCompletedChunks) {
-		log.Printf("%s: ignoring metadata piece %d", t, index)
+		t.logger.Printf("%s: ignoring metadata piece %d", t, index)
 		return
 	}
 	copy(t.metadataBytes[(1<<14)*index:], data)
@@ -366,7 +366,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 func (t *Torrent) onSetInfo() {
 	for conn := range t.conns {
 		if err := conn.setNumPieces(t.numPieces()); err != nil {
-			log.Printf("closing connection: %s", err)
+			t.logger.Printf("closing connection: %s", err)
 			conn.Close()
 		}
 	}
@@ -374,7 +374,7 @@ func (t *Torrent) onSetInfo() {
 		t.updatePieceCompletion(pieceIndex(i))
 		p := &t.pieces[i]
 		if !p.storageCompletionOk {
-			// log.Printf("piece %s completion unknown, queueing check", p)
+			// t.logger.Printf("piece %s completion unknown, queueing check", p)
 			t.queuePieceCheck(pieceIndex(i))
 		}
 	}
@@ -744,7 +744,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash) {
 		return
 	}
 	if err != io.ErrUnexpectedEOF && !os.IsNotExist(err) {
-		log.Printf("unexpected error hashing piece with %T: %s", t.storage.TorrentImpl, err)
+		t.logger.Printf("unexpected error hashing piece with %T: %s", t.storage.TorrentImpl, err)
 	}
 	return
 }
@@ -802,7 +802,7 @@ func (t *Torrent) wantPieceIndex(index pieceIndex) bool {
 	if t.pendingPieces.Contains(bitmap.BitIndex(index)) {
 		return true
 	}
-	// log.Printf("piece %d not pending", index)
+	// t.logger.Printf("piece %d not pending", index)
 	return !t.forReaderOffsetPieces(func(begin, end pieceIndex) bool {
 		return index < begin || index >= end
 	})
@@ -900,7 +900,7 @@ func (t *Torrent) maybeNewConns() {
 }
 
 func (t *Torrent) piecePriorityChanged(piece pieceIndex) {
-	// log.Printf("piece %d priority changed", piece)
+	// t.logger.Printf("piece %d priority changed", piece)
 	for c := range t.conns {
 		if c.updatePiecePriority(piece) {
 			// log.Print("conn piece priority changed")
@@ -914,7 +914,7 @@ func (t *Torrent) piecePriorityChanged(piece pieceIndex) {
 func (t *Torrent) updatePiecePriority(piece pieceIndex) {
 	p := &t.pieces[piece]
 	newPrio := p.uncachedPriority()
-	// log.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
+	// t.logger.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
 	if newPrio == PiecePriorityNone {
 		if !t.pendingPieces.Remove(bitmap.BitIndex(piece)) {
 			return
@@ -1062,8 +1062,8 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) {
 	p.storageCompletionOk = pcu.Ok
 	t.completedPieces.Set(bitmap.BitIndex(piece), pcu.Complete)
 	t.tickleReaders()
-	// log.Printf("piece %d uncached completion: %v", piece, pcu.Complete)
-	// log.Printf("piece %d changed: %v", piece, changed)
+	// t.logger.Printf("piece %d uncached completion: %v", piece, pcu.Complete)
+	// t.logger.Printf("piece %d changed: %v", piece, changed)
 	if changed {
 		t.pieceCompletionChanged(piece)
 	}
@@ -1099,7 +1099,7 @@ func (t *Torrent) maybeCompleteMetadata() error {
 		return fmt.Errorf("error setting info bytes: %s", err)
 	}
 	if t.cl.config.Debug {
-		log.Printf("%s: got metadata from peers", t)
+		t.logger.Printf("%s: got metadata from peers", t)
 	}
 	return nil
 }
@@ -1247,9 +1247,11 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	}
 	u, err := url.Parse(_url)
 	if err != nil {
-		log.Str("error parsing tracker url").AddValues("url", _url).Log(t.logger)
-		// TODO: Handle urls with leading '*', some kind of silly uTorrent
-		// convention?
+		// URLs with a leading '*' appear to be a uTorrent convention to
+		// disable trackers.
+		if _url[0] != '*' {
+			log.Str("error parsing tracker url").AddValues("url", _url).Log(t.logger)
+		}
 		return
 	}
 	if u.Scheme == "udp" {
@@ -1383,7 +1385,7 @@ func (t *Torrent) dhtAnnouncer(s *dht.Server) {
 			if err == nil {
 				t.numDHTAnnounces++
 			} else {
-				log.Printf("error announcing %q to DHT: %s", t, err)
+				t.logger.Printf("error announcing %q to DHT: %s", t, err)
 			}
 		}()
 		select {
@@ -1539,7 +1541,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, correct bool) {
 		if correct {
 			pieceHashedCorrect.Add(1)
 		} else {
-			log.Printf("%s: piece %d (%s) failed hash: %d connections contributed", t, piece, p.hash, len(touchers))
+			log.Fmsg("piece failed hash: %d connections contributed", len(touchers)).AddValue(t, p).Log(t.logger)
 			pieceHashedNotCorrect.Add(1)
 		}
 	}
@@ -1554,7 +1556,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, correct bool) {
 		}
 		err := p.Storage().MarkComplete()
 		if err != nil {
-			log.Printf("%T: error marking piece complete %d: %s", t.storage, piece, err)
+			t.logger.Printf("%T: error marking piece complete %d: %s", t.storage, piece, err)
 		}
 	} else {
 		if len(touchers) != 0 {
@@ -1567,7 +1569,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, correct bool) {
 			}
 			slices.Sort(touchers, connLessTrusted)
 			if t.cl.config.Debug {
-				log.Printf("dropping first corresponding conn from trust: %v", func() (ret []int64) {
+				t.logger.Printf("dropping first corresponding conn from trust: %v", func() (ret []int64) {
 					for _, c := range touchers {
 						ret = append(ret, c.netGoodPiecesDirtied())
 					}
@@ -1605,7 +1607,7 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 		t.pendAllChunkSpecs(piece)
 	}
 	if !t.wantPieceIndex(piece) {
-		// log.Printf("piece %d incomplete and unwanted", piece)
+		// t.logger.Printf("piece %d incomplete and unwanted", piece)
 		return
 	}
 	// We could drop any connections that we told we have a piece that we

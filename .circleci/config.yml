@@ -12,24 +12,58 @@ jobs:
       # - run: echo $PROJECT_GO_PACKAGE
       - run: echo $CIRCLE_WORKING_DIRECTORY
       - run: echo $PWD
+      - run: echo $GOPATH
       - run: echo 'export GOPATH=$HOME/go' >> $BASH_ENV
       - run: echo 'export PATH="$GOPATH/bin:$PATH"' >> $BASH_ENV
       - run: echo $GOPATH
+      - run: which go
       - run: go version
-      - run: cd /usr/local && sudo rm -r go && sudo mkdir go go1.4 && sudo chown `whoami` go go1.4 && git clone git://github.com/golang/go && cd go && git branch -f -t go1.4 origin/release-branch.go1.4 && cd .. && git clone --single-branch -b go1.4 go go1.4 && cd go1.4/src && ./make.bash && cd ../../go/src && GOROOT_BOOTSTRAP=/usr/local/go1.4 ./make.bash
+      - run: |
+          cd /usr/local
+          sudo mkdir go.master
+          sudo chown `whoami` go.master
+      - restore_cache:
+          key: go-root-
+      - run: |
+          cd /usr/local
+          git clone git://github.com/golang/go go.master || true
+          cd go.master
+          git pull
+          [[ -x bin/go && `git rev-parse HEAD` == `cat anacrolix.built` ]] && exit
+          cd src
+          ./make.bash || exit
+          git rev-parse HEAD > ../anacrolix.built
+      - save_cache:
+          paths: /usr/local/go.master
+          key: go-root-{{ checksum "/usr/local/go.master/anacrolix.built" }}
+      - run: echo 'export PATH="/usr/local/go.master/bin:$PATH"' >> $BASH_ENV
       - run: go version
       - checkout
       - run: sudo apt-get update
       - run: sudo apt install fuse pv
-      # - run: go get -t -d -v -race $PROJECT_GO_PACKAGE/...
+      - restore_cache:
+          keys:
+            - go-pkg-
+      - restore_cache:
+          keys:
+            - go-cache-
+      - run: go get -d ./...
       - run: go test -v -race ./... -count 2
       - run: go test -bench . ./...
-      # - run: CGO_ENABLED=0 go get -t -d -v $PROJECT_GO_PACKAGE/...
       - run: set +e; CGO_ENABLED=0 go test -v ./...; true
       - run: go install golang.org/x/mobile/cmd/gomobile
       - run: gomobile init
       - run: gomobile build -target=android $PROJECT_GO_PACKAGE
       # - run: GO111MODULE=off go install github.com/anacrolix/godo
       - run: go install ./cmd/torrentfs
+      - save_cache:
+          key: go-pkg-{{ checksum "go.mod" }}
+          paths:
+            - ~/go/pkg
       - run: sudo modprobe fuse
       - run: fs/test.sh
+      - save_cache:
+          key: go-cache-{{ .Revision }}
+          paths:
+            - ~/.cache/go-build
+          when: always

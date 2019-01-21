@@ -28,7 +28,7 @@ func BenchmarkMarshalThenUnmarshalKrpcMsg(tb *testing.B) {
 		T: "420",
 		Y: "r",
 		R: &krpc.Return{
-			Token: "re-up",
+			Token: func() *string { t := "re-up"; return &t }(),
 		},
 		IP:       krpc.NodeAddr{IP: net.ParseIP("1.2.3.4"), Port: 1337},
 		ReadOnly: true,

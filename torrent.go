@@ -1346,7 +1346,6 @@ func (t *Torrent) announceToDht(impliedPort bool, s *dht.Server) error {
 	select {
 	case <-t.closed.LockedChan(t.cl.locker()):
 	case <-time.After(5 * time.Minute):
-	case <-t.wantPeersEvent.LockedChan(t.cl.locker()):
 	}
 	ps.Close()
 	return nil

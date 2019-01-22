@@ -1355,20 +1355,17 @@ func (t *Torrent) dhtAnnouncer(s *dht.Server) {
 	cl := t.cl
 	for {
 		select {
-		case <-t.wantPeersEvent.LockedChan(cl.locker()):
 		case <-t.closed.LockedChan(cl.locker()):
 			return
+		case <-t.wantPeersEvent.LockedChan(cl.locker()):
 		}
+		cl.lock()
+		t.numDHTAnnounces++
+		cl.unlock()
 		err := t.announceToDht(true, s)
-		func() {
-			cl.lock()
-			defer cl.unlock()
-			if err == nil {
-				t.numDHTAnnounces++
-			} else {
-				t.logger.Printf("error announcing %q to DHT: %s", t, err)
-			}
-		}()
+		if err != nil {
+			t.logger.Printf("error announcing %q to DHT: %s", t, err)
+		}
 	}
 }
 

@@ -27,5 +27,4 @@ func TestBep40Priority(t *testing.T) {
 		)
 		return b
 	}())
-
 }

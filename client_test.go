@@ -501,6 +501,7 @@ func BenchmarkAddLargeTorrent(b *testing.B) {
 	cl, err := NewClient(cfg)
 	require.NoError(b, err)
 	defer cl.Close()
+	b.ReportAllocs()
 	for range iter.N(b.N) {
 		t, err := cl.AddTorrentFromFile("testdata/bootstrap.dat.torrent")
 		if err != nil {

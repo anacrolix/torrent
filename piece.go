@@ -39,7 +39,7 @@ const (
 
 type Piece struct {
 	// The completed piece SHA1 hash, from the metainfo "pieces" field.
-	hash  metainfo.Hash
+	hash  *metainfo.Hash
 	t     *Torrent
 	index pieceIndex
 	files []*File

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"text/tabwriter"
 	"time"
+	"unsafe"
 
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/log"
@@ -290,9 +291,9 @@ func (t *Torrent) metadataSize() int {
 	return len(t.metadataBytes)
 }
 
-func infoPieceHashes(info *metainfo.Info) (ret []string) {
+func infoPieceHashes(info *metainfo.Info) (ret [][]byte) {
 	for i := 0; i < len(info.Pieces); i += sha1.Size {
-		ret = append(ret, string(info.Pieces[i:i+sha1.Size]))
+		ret = append(ret, info.Pieces[i:i+sha1.Size])
 	}
 	return
 }
@@ -305,7 +306,7 @@ func (t *Torrent) makePieces() {
 		piece.t = t
 		piece.index = pieceIndex(i)
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
-		missinggo.CopyExact(piece.hash[:], hash)
+		piece.hash = (*metainfo.Hash)(unsafe.Pointer(&hash[0]))
 		files := *t.files
 		beginFile := pieceFirstFileIndex(piece.torrentBeginOffset(), files)
 		endFile := pieceEndFileIndex(piece.torrentEndOffset(), files)
@@ -1630,7 +1631,7 @@ func (t *Torrent) verifyPiece(piece pieceIndex) {
 	cl.lock()
 	p.hashing = false
 	t.updatePiecePriority(piece)
-	t.pieceHashed(piece, sum == p.hash)
+	t.pieceHashed(piece, sum == *p.hash)
 	t.publishPieceChange(piece)
 }
 

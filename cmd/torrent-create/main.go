@@ -20,7 +20,10 @@ var (
 func main() {
 	log.SetFlags(log.Flags() | log.Lshortfile)
 	var args struct {
-		AnnounceList []string `name:"a" help:"extra announce-list tier entry"`
+		AnnounceList      []string `name:"a" help:"extra announce-list tier entry"`
+		EmptyAnnounceList bool     `name:"n" help:"exclude default announce-list entries"`
+		Comment           string   `name:"t" help:"comment"`
+		CreatedBy         string   `name:"c" help:"created by"`
 		tagflag.StartPos
 		Root string
 	}
@@ -28,10 +31,19 @@ func main() {
 	mi := metainfo.MetaInfo{
 		AnnounceList: builtinAnnounceList,
 	}
+	if args.EmptyAnnounceList {
+		mi.AnnounceList = make([][]string, 0)
+	}
 	for _, a := range args.AnnounceList {
 		mi.AnnounceList = append(mi.AnnounceList, []string{a})
 	}
 	mi.SetDefaults()
+	if len(args.Comment) > 0 {
+		mi.Comment = args.Comment
+	}
+	if len(args.CreatedBy) > 0 {
+		mi.CreatedBy = args.CreatedBy
+	}
 	info := metainfo.Info{
 		PieceLength: 256 * 1024,
 	}

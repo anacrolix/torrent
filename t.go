@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/anacrolix/missinggo/pubsub"
@@ -221,9 +222,10 @@ func (t *Torrent) DownloadAll() {
 func (t *Torrent) String() string {
 	s := t.name()
 	if s == "" {
-		s = t.infoHash.HexString()
+		return t.infoHash.HexString()
+	} else {
+		return strconv.Quote(s)
 	}
-	return s
 }
 
 func (t *Torrent) AddTrackers(announceList [][]string) {

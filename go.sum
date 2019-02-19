@@ -19,6 +19,8 @@ github.com/anacrolix/log v0.0.0-20180412014343-2323884b361d h1:G8ITVMWuQL4adKRC3
 github.com/anacrolix/log v0.0.0-20180412014343-2323884b361d/go.mod h1:sf/7c2aTldL6sRQj/4UKyjgVZBu2+M2z9wf7MmwPiew=
 github.com/anacrolix/log v0.0.0-20180808012509-286fcf906b48 h1:aHwCj9Q6sjQOq5sC8Bzylt7GCAvt+D5MPEpkD6TeXxU=
 github.com/anacrolix/log v0.0.0-20180808012509-286fcf906b48/go.mod h1:sf/7c2aTldL6sRQj/4UKyjgVZBu2+M2z9wf7MmwPiew=
+github.com/anacrolix/log v0.1.0 h1:DbweRUPxcbufzsNzyObtSTdcZ8TT1IocDqbw7BFWYn8=
+github.com/anacrolix/log v0.1.0/go.mod h1:sf/7c2aTldL6sRQj/4UKyjgVZBu2+M2z9wf7MmwPiew=
 github.com/anacrolix/missinggo v0.0.0-20180522035225-b4a5853e62ff/go.mod h1:b0p+7cn+rWMIphK1gDH2hrDuwGOcbB6V4VXeSsEfHVk=
 github.com/anacrolix/missinggo v0.0.0-20180621131740-7fc7cfea16ea/go.mod h1:kwGiTUTZ0+p4vAz3VbAI5a30t2YbvemcmspjKwrAz5s=
 github.com/anacrolix/missinggo v0.0.0-20180725070939-60ef2fbf63df/go.mod h1:kwGiTUTZ0+p4vAz3VbAI5a30t2YbvemcmspjKwrAz5s=

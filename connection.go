@@ -797,10 +797,13 @@ func iterUndirtiedChunks(piece pieceIndex, t *Torrent, f func(chunkSpec) bool) b
 		}
 		return true
 	}
-	chunkIndices := t.pieces[piece].undirtiedChunkIndices().ToSortedSlice()
-	// TODO: Use "math/rand".Shuffle >= Go 1.10
-	return iter.ForPerm(len(chunkIndices), func(i int) bool {
-		return f(t.chunkIndexSpec(pp.Integer(chunkIndices[i]), piece))
+	chunkIndices := t.pieces[piece].undirtiedChunkIndices()
+	return iter.ForPerm(chunkIndices.Len(), func(i int) bool {
+		ci, err := chunkIndices.RB.Select(uint32(i))
+		if err != nil {
+			panic(err)
+		}
+		return f(t.chunkIndexSpec(pp.Integer(ci), piece))
 	})
 }
 

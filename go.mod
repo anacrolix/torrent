@@ -6,7 +6,7 @@ require (
 	github.com/anacrolix/envpprof v0.0.0-20180404065416-323002cec2fa
 	github.com/anacrolix/go-libutp v0.0.0-20180808010927-aebbeb60ea05
 	github.com/anacrolix/log v0.2.0
-	github.com/anacrolix/missinggo v0.1.1-0.20190216073122-118c32fc17c8
+	github.com/anacrolix/missinggo v0.2.0
 	github.com/anacrolix/sync v0.0.0-20180808010631-44578de4e778
 	github.com/anacrolix/tagflag v0.0.0-20180803105420-3a8ff5428f76
 	github.com/anacrolix/utp v0.0.0-20180219060659-9e0e1d1d0572

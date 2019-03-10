@@ -1338,7 +1338,7 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 	piece.decrementPendingWrites()
 
 	if err != nil {
-		c.t.logger.Printf("%s (%s): error writing chunk %v: %s", t, t.infoHash, req, err)
+		panic(fmt.Sprintf("error writing chunk: %v", err))
 		t.pendRequest(req)
 		t.updatePieceCompletion(pieceIndex(msg.Index))
 		return nil

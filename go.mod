@@ -2,11 +2,11 @@ module github.com/anacrolix/torrent
 
 require (
 	bazil.org/fuse v0.0.0-20180421153158-65cc252bf669
-	github.com/anacrolix/dht v1.0.1-0.20190118110415-9a2d88b4a294
+	github.com/anacrolix/dht v1.0.1-0.20190311004203-de5986513709
 	github.com/anacrolix/envpprof v0.0.0-20180404065416-323002cec2fa
 	github.com/anacrolix/go-libutp v0.0.0-20180808010927-aebbeb60ea05
 	github.com/anacrolix/log v0.2.0
-	github.com/anacrolix/missinggo v0.2.0
+	github.com/anacrolix/missinggo v0.2.1-0.20190310234110-9fbdc9f242a8
 	github.com/anacrolix/sync v0.0.0-20180808010631-44578de4e778
 	github.com/anacrolix/tagflag v0.0.0-20180803105420-3a8ff5428f76
 	github.com/anacrolix/utp v0.0.0-20180219060659-9e0e1d1d0572
@@ -23,7 +23,7 @@ require (
 	github.com/mattn/go-isatty v0.0.4 // indirect
 	github.com/mattn/go-sqlite3 v1.10.0
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7 // indirect
-	github.com/pkg/errors v0.8.0
+	github.com/pkg/errors v0.8.1
 	github.com/smartystreets/assertions v0.0.0-20190215210624-980c5ac6f3ac // indirect
 	github.com/stretchr/testify v1.2.2
 	golang.org/x/net v0.0.0-20181220203305-927f97764cc3

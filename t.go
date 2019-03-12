@@ -115,8 +115,6 @@ func (t *Torrent) SetDisplayName(dn string) {
 // The current working name for the torrent. Either the name in the info dict,
 // or a display name given such as by the dn value in a magnet link, or "".
 func (t *Torrent) Name() string {
-	t.cl.lock()
-	defer t.cl.unlock()
 	return t.name()
 }
 

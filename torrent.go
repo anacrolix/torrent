@@ -104,6 +104,7 @@ type Torrent struct {
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
+	nameMu      sync.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if
@@ -260,7 +261,9 @@ func (t *Torrent) invalidateMetadata() {
 	for i := range t.metadataCompletedChunks {
 		t.metadataCompletedChunks[i] = false
 	}
+	t.nameMu.Lock()
 	t.info = nil
+	t.nameMu.Unlock()
 }
 
 func (t *Torrent) saveMetadataPiece(index int, data []byte) {
@@ -355,7 +358,9 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 			return fmt.Errorf("error opening torrent storage: %s", err)
 		}
 	}
+	t.nameMu.Lock()
 	t.info = info
+	t.nameMu.Unlock()
 	t.displayName = "" // Save a few bytes lol.
 	t.initFiles()
 	t.cacheLength()
@@ -442,6 +447,8 @@ func (t *Torrent) setMetadataSize(bytes int) (err error) {
 // The current working name for the torrent. Either the name in the info dict,
 // or a display name given such as by the dn value in a magnet link, or "".
 func (t *Torrent) name() string {
+	t.nameMu.RLock()
+	defer t.nameMu.RUnlock()
 	if t.haveInfo() {
 		return t.info.Name
 	}

@@ -25,6 +25,7 @@ require (
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/smartystreets/assertions v0.0.0-20190215210624-980c5ac6f3ac // indirect
+	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/stretchr/testify v1.2.2
 	golang.org/x/net v0.0.0-20181220203305-927f97764cc3
 	golang.org/x/sys v0.0.0-20190102155601-82a175fd1598 // indirect

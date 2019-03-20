@@ -107,9 +107,12 @@ func (t *Torrent) Seeding() bool {
 // Clobbers the torrent display name. The display name is used as the torrent
 // name if the metainfo is not available.
 func (t *Torrent) SetDisplayName(dn string) {
-	t.cl.lock()
-	defer t.cl.unlock()
-	t.setDisplayName(dn)
+	t.nameMu.Lock()
+	defer t.nameMu.Unlock()
+	if t.haveInfo() {
+		return
+	}
+	t.displayName = dn
 }
 
 // The current working name for the torrent. Either the name in the info dict,

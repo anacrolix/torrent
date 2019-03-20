@@ -196,13 +196,6 @@ func (t *Torrent) setChunkSize(size pp.Integer) {
 	}
 }
 
-func (t *Torrent) setDisplayName(dn string) {
-	if t.haveInfo() {
-		return
-	}
-	t.displayName = dn
-}
-
 func (t *Torrent) pieceComplete(piece pieceIndex) bool {
 	return t.completedPieces.Get(bitmap.BitIndex(piece))
 }

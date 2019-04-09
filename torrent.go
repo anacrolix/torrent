@@ -1054,7 +1054,7 @@ func (t *Torrent) putPieceInclination(pi []int) {
 	pieceInclinationsPut.Add(1)
 }
 
-func (t *Torrent) updatePieceCompletion(piece pieceIndex) {
+func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	pcu := t.pieceCompleteUncached(piece)
 	p := &t.pieces[piece]
 	changed := t.completedPieces.Get(bitmap.BitIndex(piece)) != pcu.Complete || p.storageCompletionOk != pcu.Ok
@@ -1067,6 +1067,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) {
 	if changed {
 		t.pieceCompletionChanged(piece)
 	}
+	return changed
 }
 
 // Non-blocking read. Client lock is not required.

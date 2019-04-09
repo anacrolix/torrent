@@ -226,8 +226,9 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 		// prevent thrashing with small caches and file and piece priorities.
 		log.Printf("error reading torrent %s piece %d offset %d, %d bytes: %v",
 			r.t.infoHash.HexString(), pi, po, len(b1), err)
-		r.t.updateAllPieceCompletions()
-		r.t.updateAllPiecePriorities()
+		if !r.t.updatePieceCompletion(pi) {
+			log.Printf("piece %d completion unchanged", pi)
+		}
 		r.t.cl.unlock()
 	}
 }

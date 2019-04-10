@@ -521,8 +521,13 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
 						"dial torrent client",
 						0,
 					)
+					// Try to avoid committing to a dial if the context is complete as it's
+					// difficult to determine which dial errors allow us to forget the connection
+					// tracking entry handle.
 					if ctx.Err() != nil {
-						cte.Forget()
+						if cte != nil {
+							cte.Forget()
+						}
 						resCh <- dialResult{}
 						return
 					}

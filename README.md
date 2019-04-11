@@ -37,6 +37,7 @@ There are several web-frontends and Android clients among the known public proje
  * [Android Torrent Client](https://gitlab.com/axet/android-torrent-client)
  * [libtorrent](https://gitlab.com/axet/libtorrent)
  * [Remote-Torrent](https://github.com/BruceWangNo1/remote-torrent)
+ * [ANT-Downloader](https://github.com/anatasluo/torrent)
  
 ## Help
 

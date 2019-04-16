@@ -102,7 +102,12 @@ func (dn dirNode) ReadDirAll(ctx context.Context) (des []fuse.Dirent, err error)
 func (dn dirNode) Lookup(_ context.Context, name string) (fusefs.Node, error) {
 	dir := false
 	var file *torrent.File
-	fullPath := dn.path + "/" + name
+	var fullPath string
+	if dn.path != "" {
+		fullPath = dn.path + "/" + name
+	} else {
+		fullPath = name
+	}
 	for _, f := range dn.t.Files() {
 		if f.DisplayPath() == fullPath {
 			file = f

@@ -3,13 +3,8 @@ jobs:
   build:
     machine: true
     environment:
-      # PROJECT_GO_PACKAGE: github.com/anacrolix/torrent
-    # Should use PROJECT_GO_PACKAGE here but it's not interpolated for this
-    # field. https://discuss.circleci.com/t/environment-variable-expansion-in-
-    # working-directory/11322/4
-    # working_directory: ~/go/src/github.com/anacrolix/torrent
+      GO_BRANCH: release-branch.go1.12
     steps:
-      # - run: echo $PROJECT_GO_PACKAGE
       - run: echo $CIRCLE_WORKING_DIRECTORY
       - run: echo $PWD
       - run: echo $GOPATH
@@ -20,23 +15,24 @@ jobs:
       - run: go version
       - run: |
           cd /usr/local
-          sudo mkdir go.master
-          sudo chown `whoami` go.master
+          sudo mkdir go.local
+          sudo chown `whoami` go.local
       - restore_cache:
-          key: go-root-
+          key: go-local-
       - run: |
           cd /usr/local
-          git clone git://github.com/golang/go go.master || true
-          cd go.master
-          git pull
+          git clone git://github.com/golang/go go.local || true
+          cd go.local
+          git fetch
+          git checkout "$GO_BRANCH"
           [[ -x bin/go && `git rev-parse HEAD` == `cat anacrolix.built` ]] && exit
           cd src
           ./make.bash || exit
           git rev-parse HEAD > ../anacrolix.built
       - save_cache:
-          paths: /usr/local/go.master
-          key: go-root-{{ checksum "/usr/local/go.master/anacrolix.built" }}
-      - run: echo 'export PATH="/usr/local/go.master/bin:$PATH"' >> $BASH_ENV
+          paths: /usr/local/go.local
+          key: go-local-{{ checksum "/usr/local/go.local/anacrolix.built" }}
+      - run: echo 'export PATH="/usr/local/go.local/bin:$PATH"' >> $BASH_ENV
       - run: go version
       - checkout
       - run: sudo apt-get update
@@ -62,4 +58,3 @@ jobs:
           key: go-cache-{{ .Revision }}
           paths:
             - ~/.cache/go-build
-          when: always

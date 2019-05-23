@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/dht"
+	"github.com/anacrolix/dht/krpc"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/conntrack"
 	"github.com/anacrolix/missinggo/expect"
@@ -124,6 +125,9 @@ type ClientConfig struct {
 	dropDuplicatePeerIds bool
 
 	ConnTracker *conntrack.Instance
+
+	// OnQuery hook func
+	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {

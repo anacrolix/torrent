@@ -666,6 +666,11 @@ func (t *Torrent) numPiecesCompleted() (num int) {
 }
 
 func (t *Torrent) close() (err error) {
+	t.logger.Printf("Sending stopped event to trackers")
+	for _, ta := range t.trackerAnnouncers {
+		ta.Stop()
+	}
+
 	t.closed.Set()
 	t.tickleReaders()
 	if t.storage != nil {
@@ -1298,11 +1303,11 @@ func (t *Torrent) startMissingTrackerScrapers() {
 
 // Returns an AnnounceRequest with fields filled out to defaults and current
 // values.
-func (t *Torrent) announceRequest() tracker.AnnounceRequest {
+func (t *Torrent) announceRequest(event tracker.AnnounceEvent) tracker.AnnounceRequest {
 	// Note that IPAddress is not set. It's set for UDP inside the tracker
 	// code, since it's dependent on the network in use.
 	return tracker.AnnounceRequest{
-		Event:    tracker.None,
+		Event:    event,
 		NumWant:  -1,
 		Port:     uint16(t.cl.incomingPeerPort()),
 		PeerId:   t.cl.peerID,

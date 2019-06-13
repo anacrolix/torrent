@@ -46,8 +46,7 @@ type UnmarshalTypeError struct {
 }
 
 func (e *UnmarshalTypeError) Error() string {
-	return "bencode: value (" + e.Value + ") is not appropriate for type: " +
-		e.Type.String()
+	return fmt.Sprintf("cannot unmarshal a bencode %s into a %s", e.Value, e.Type)
 }
 
 // Unmarshaler tried to write to an unexported (therefore unwritable) field.

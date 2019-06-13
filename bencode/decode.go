@@ -346,10 +346,10 @@ func (d *Decoder) parseList(v reflect.Value) error {
 	switch v.Kind() {
 	case reflect.Array, reflect.Slice:
 	default:
-		panic(&UnmarshalTypeError{
-			Value: "array",
+		return &UnmarshalTypeError{
+			Value: "list",
 			Type:  v.Type(),
-		})
+		}
 	}
 
 	i := 0

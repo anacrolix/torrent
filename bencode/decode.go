@@ -243,9 +243,9 @@ func getDictField(dict reflect.Value, key string) dictField {
 			})
 		}
 		return dictField{
-			Value: dict.FieldByIndex(sf.r.Index),
-			Ok:    true,
-			Set:   func() {},
+			Value:                    dict.FieldByIndex(sf.r.Index),
+			Ok:                       true,
+			Set:                      func() {},
 			IgnoreUnmarshalTypeError: sf.tag.IgnoreUnmarshalTypeError(),
 		}
 	default:

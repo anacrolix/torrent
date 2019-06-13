@@ -344,12 +344,23 @@ func (d *Decoder) parseDict(v reflect.Value) error {
 
 func (d *Decoder) parseList(v reflect.Value) error {
 	switch v.Kind() {
-	case reflect.Array, reflect.Slice:
 	default:
-		return &UnmarshalTypeError{
-			Value: "list",
-			Type:  v.Type(),
+		// If the list is a singleton of the expected type, use that value. See
+		// https://github.com/anacrolix/torrent/issues/297.
+		l := reflect.New(reflect.SliceOf(v.Type()))
+		if err := d.parseList(l.Elem()); err != nil {
+			return err
 		}
+		if l.Elem().Len() != 1 {
+			return &UnmarshalTypeError{
+				Value: "list",
+				Type:  v.Type(),
+			}
+		}
+		v.Set(l.Elem().Index(0))
+		return nil
+	case reflect.Array, reflect.Slice:
+		// We can work with this. Normal case, fallthrough.
 	}
 
 	i := 0

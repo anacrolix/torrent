@@ -1326,6 +1326,8 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 	err := func() error {
 		cl.unlock()
 		defer cl.lock()
+		concurrentChunkWrites.Add(1)
+		defer concurrentChunkWrites.Add(-1)
 		// Write the chunk out. Note that the upper bound on chunk writing
 		// concurrency will be the number of connections. We write inline with
 		// receiving the chunk (with this lock dance), because we want to

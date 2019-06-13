@@ -49,4 +49,6 @@ var (
 	pieceInclinationsReused = expvar.NewInt("pieceInclinationsReused")
 	pieceInclinationsNew    = expvar.NewInt("pieceInclinationsNew")
 	pieceInclinationsPut    = expvar.NewInt("pieceInclinationsPut")
+
+	concurrentChunkWrites = expvar.NewInt("torrentConcurrentChunkWrites")
 )

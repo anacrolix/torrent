@@ -666,11 +666,9 @@ func (t *Torrent) numPiecesCompleted() (num int) {
 }
 
 func (t *Torrent) close() (err error) {
-	t.logger.Printf("Sending stopped event to trackers")
 	for _, ta := range t.trackerAnnouncers {
 		ta.Stop()
 	}
-
 	t.closed.Set()
 	t.tickleReaders()
 	if t.storage != nil {

@@ -513,51 +513,19 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
 		cl.lock()
 		defer cl.unlock()
 		cl.eachListener(func(s socket) bool {
-			network := s.Addr().Network()
-			if peerNetworkEnabled(parseNetworkString(network), cl.config) {
+			func() {
+				network := s.Addr().Network()
+				if !peerNetworkEnabled(parseNetworkString(network), cl.config) {
+					return
+				}
 				left++
 				go func() {
-					cte := cl.config.ConnTracker.Wait(
-						ctx,
-						conntrack.Entry{network, s.Addr().String(), addr},
-						"dial torrent client",
-						0,
-					)
-					// Try to avoid committing to a dial if the context is complete as it's
-					// difficult to determine which dial errors allow us to forget the connection
-					// tracking entry handle.
-					if ctx.Err() != nil {
-						if cte != nil {
-							cte.Forget()
-						}
-						resCh <- dialResult{}
-						return
+					resCh <- dialResult{
+						cl.dialFromSocket(ctx, s, addr),
+						network,
 					}
-					c, err := s.dial(ctx, addr)
-					// This is a bit optimistic, but it looks non-trivial to thread
-					// this through the proxy code. Set it now in case we close the
-					// connection forthwith.
-					if tc, ok := c.(*net.TCPConn); ok {
-						tc.SetLinger(0)
-					}
-					countDialResult(err)
-					dr := dialResult{c, network}
-					if c == nil {
-						if err != nil && forgettableDialError(err) {
-							cte.Forget()
-						} else {
-							cte.Done()
-						}
-					} else {
-						dr.Conn = closeWrapper{c, func() error {
-							err := c.Close()
-							cte.Done()
-							return err
-						}}
-					}
-					resCh <- dr
 				}()
-			}
+			}()
 			return true
 		})
 	}()
@@ -582,6 +550,44 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
 		go torrent.Add(fmt.Sprintf("network dialed first: %s", res.Conn.RemoteAddr().Network()), 1)
 	}
 	return res
+}
+
+func (cl *Client) dialFromSocket(ctx context.Context, s socket, addr string) net.Conn {
+	network := s.Addr().Network()
+	cte := cl.config.ConnTracker.Wait(
+		ctx,
+		conntrack.Entry{network, s.Addr().String(), addr},
+		"dial torrent client",
+		0,
+	)
+	// Try to avoid committing to a dial if the context is complete as it's difficult to determine
+	// which dial errors allow us to forget the connection tracking entry handle.
+	if ctx.Err() != nil {
+		if cte != nil {
+			cte.Forget()
+		}
+		return nil
+	}
+	c, err := s.dial(ctx, addr)
+	// This is a bit optimistic, but it looks non-trivial to thread this through the proxy code. Set
+	// it now in case we close the connection forthwith.
+	if tc, ok := c.(*net.TCPConn); ok {
+		tc.SetLinger(0)
+	}
+	countDialResult(err)
+	if c == nil {
+		if err != nil && forgettableDialError(err) {
+			cte.Forget()
+		} else {
+			cte.Done()
+		}
+		return nil
+	}
+	return closeWrapper{c, func() error {
+		err := c.Close()
+		cte.Done()
+		return err
+	}}
 }
 
 func forgettableDialError(err error) bool {

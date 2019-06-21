@@ -419,6 +419,7 @@ func (cl *Client) rejectAccepted(conn net.Conn) bool {
 func (cl *Client) acceptConnections(l net.Listener) {
 	for {
 		conn, err := l.Accept()
+		torrent.Add("client listener accepts", 1)
 		conn = pproffd.WrapNetConn(conn)
 		cl.rLock()
 		closed := cl.closed.IsSet()

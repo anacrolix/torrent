@@ -23,8 +23,8 @@ require (
 	github.com/glycerine/goconvey v0.0.0-20190315024820-982ee783a72e // indirect
 	github.com/google/btree v1.0.0
 	github.com/gopherjs/gopherjs v0.0.0-20190309154008-847fc94819f9 // indirect
-	github.com/gosuri/uilive v0.0.0-20170323041506-ac356e6e42cd // indirect
-	github.com/gosuri/uiprogress v0.0.0-20170224063937-d0567a9d84a1
+	github.com/gosuri/uilive v0.0.3 // indirect
+	github.com/gosuri/uiprogress v0.0.1
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/mattn/go-isatty v0.0.7 // indirect
 	github.com/mattn/go-sqlite3 v1.10.0

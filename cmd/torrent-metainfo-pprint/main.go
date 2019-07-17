@@ -47,7 +47,7 @@ func processReader(r io.Reader) error {
 		"UrlList":      metainfo.UrlList,
 	}
 	if flags.Files {
-		d["Files"] = info.Files
+		d["Files"] = info.UpvertedFiles()
 	}
 	if flags.PieceHashes {
 		d["PieceHashes"] = func() (ret []string) {

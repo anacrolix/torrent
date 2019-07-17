@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	tagflag.Parse(nil)
+	tagflag.Parse(nil, tagflag.Description("reads a torrent file from stdin and writes out its magnet link to stdout"))
 
 	mi, err := metainfo.Load(os.Stdin)
 	if err != nil {

@@ -9,16 +9,13 @@ import (
 	"time"
 
 	"github.com/anacrolix/dht/krpc"
-	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/torrent/tracker"
 )
 
 // Announces a torrent to a tracker at regular intervals, when peers are
 // required.
 type trackerScraper struct {
-	u url.URL
-	// Causes the trackerScraper to stop running.
-	stop         missinggo.Event
+	u            url.URL
 	t            *Torrent
 	lastAnnounce trackerAnnounceResult
 }
@@ -109,6 +106,7 @@ func (me *trackerScraper) announce(event tracker.AnnounceEvent) (ret trackerAnno
 	me.t.cl.lock()
 	req := me.t.announceRequest(event)
 	me.t.cl.unlock()
+	//log.Printf("announcing %s %s to %q", me.t, req.Event, me.u.String())
 	res, err := tracker.Announce{
 		HTTPProxy:  me.t.cl.config.HTTPProxy,
 		UserAgent:  me.t.cl.config.HTTPUserAgent,
@@ -131,6 +129,7 @@ func (me *trackerScraper) announce(event tracker.AnnounceEvent) (ret trackerAnno
 }
 
 func (me *trackerScraper) Run() {
+	defer me.announceStopped()
 	// make sure first announce is a "started"
 	e := tracker.Started
 	for {
@@ -159,8 +158,6 @@ func (me *trackerScraper) Run() {
 		select {
 		case <-me.t.closed.LockedChan(me.t.cl.locker()):
 			return
-		case <-me.stop.LockedChan(me.t.cl.locker()):
-			return
 		case <-wantPeers:
 			goto wait
 		case <-time.After(time.Until(ar.Completed.Add(interval))):
@@ -168,15 +165,6 @@ func (me *trackerScraper) Run() {
 	}
 }
 
-func (me *trackerScraper) Stop() {
-	req := me.t.announceRequest(tracker.Stopped)
-	ip, _ := me.getIp()
-	tracker.Announce{
-		HTTPProxy:  me.t.cl.config.HTTPProxy,
-		UserAgent:  me.t.cl.config.HTTPUserAgent,
-		TrackerUrl: me.trackerUrl(ip),
-		Request:    req,
-		HostHeader: me.u.Host,
-		ServerName: me.u.Hostname(),
-	}.Do()
+func (me *trackerScraper) announceStopped() {
+	me.announce(tracker.Stopped)
 }

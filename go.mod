@@ -37,3 +37,5 @@ require (
 )
 
 go 1.13
+
+replace github.com/elgatito/upnp => github.com/anacrolix/upnp v0.0.0-20190717072655-8249d7a81c03

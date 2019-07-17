@@ -46,6 +46,8 @@ github.com/anacrolix/tagflag v0.0.0-20180803105420-3a8ff5428f76 h1:No2E3UEtiEcvy
 github.com/anacrolix/tagflag v0.0.0-20180803105420-3a8ff5428f76/go.mod h1:1m2U/K6ZT+JZG0+bdMK6qauP49QT4wE5pmhJXOKKCHw=
 github.com/anacrolix/torrent v0.0.0-20180622074351-fefeef4ee9eb/go.mod h1:3vcFVxgOASslNXHdivT8spyMRBanMCenHRpe0u5vpBs=
 github.com/anacrolix/torrent v1.0.1/go.mod h1:ZYV1Z2Wx3jXYSh26mDvneAbk8XIUxfvoVil2GW962zY=
+github.com/anacrolix/upnp v0.0.0-20190717072655-8249d7a81c03 h1:moiTMOh4ZQ8yELlyjgVY1dQF2PlrP2NQr2/qFD1eB1w=
+github.com/anacrolix/upnp v0.0.0-20190717072655-8249d7a81c03/go.mod h1:ufVftEeVgFwZQy/aZMVfogCLY/2z19vR7oI+dA3XBhg=
 github.com/anacrolix/utp v0.0.0-20180219060659-9e0e1d1d0572 h1:kpt6TQTVi6gognY+svubHfxxpq0DLU9AfTQyZVc3UOc=
 github.com/anacrolix/utp v0.0.0-20180219060659-9e0e1d1d0572/go.mod h1:MDwc+vsGEq7RMw6lr2GKOEqjWny5hO5OZXRVNaBJ2Dk=
 github.com/boltdb/bolt v1.3.1 h1:JQmyP4ZBrce+ZQu0dY660FMfatumYDLun9hBCUVIkF4=

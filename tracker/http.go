@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -74,7 +75,16 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts Announce) {
 	q.Set("port", fmt.Sprintf("%d", ar.Port))
 	q.Set("uploaded", strconv.FormatInt(ar.Uploaded, 10))
 	q.Set("downloaded", strconv.FormatInt(ar.Downloaded, 10))
-	q.Set("left", strconv.FormatUint(ar.Left, 10))
+
+	// The AWS S3 tracker returns "400 Bad Request: left(-1) was not in the valid range 0 -
+	// 9223372036854775807" if left is out of range, or "500 Internal Server Error: Internal Server
+	// Error" if omitted entirely.
+	left := ar.Left
+	if left < 0 {
+		left = math.MaxInt64
+	}
+	q.Set("left", strconv.FormatInt(left, 10))
+
 	if ar.Event != None {
 		q.Set("event", ar.Event.String())
 	}

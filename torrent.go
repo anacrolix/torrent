@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -14,6 +13,8 @@ import (
 	"text/tabwriter"
 	"time"
 	"unsafe"
+
+	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/dht"
 	"github.com/anacrolix/log"
@@ -28,7 +29,6 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
-	"github.com/davecgh/go-spew/spew"
 )
 
 func (t *Torrent) chunkIndexSpec(chunkIndex pp.Integer, piece pieceIndex) chunkSpec {
@@ -635,11 +635,11 @@ func (t *Torrent) bytesLeft() (left int64) {
 }
 
 // Bytes left to give in tracker announces.
-func (t *Torrent) bytesLeftAnnounce() uint64 {
+func (t *Torrent) bytesLeftAnnounce() int64 {
 	if t.haveInfo() {
-		return uint64(t.bytesLeft())
+		return t.bytesLeft()
 	} else {
-		return math.MaxUint64
+		return -1
 	}
 }
 

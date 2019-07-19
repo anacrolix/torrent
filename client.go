@@ -626,7 +626,13 @@ func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torr
 
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
-func (cl *Client) establishOutgoingConnEx(t *Torrent, addr IpPort, ctx context.Context, obfuscatedHeader bool) (c *connection, err error) {
+func (cl *Client) establishOutgoingConnEx(t *Torrent, addr IpPort, obfuscatedHeader bool) (c *connection, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), func() time.Duration {
+		cl.rLock()
+		defer cl.rUnlock()
+		return t.dialTimeout()
+	}())
+	defer cancel()
 	dr := cl.dialFirst(ctx, addr.String())
 	nc := dr.Conn
 	if nc == nil {
@@ -644,14 +650,8 @@ func (cl *Client) establishOutgoingConnEx(t *Torrent, addr IpPort, ctx context.C
 // for valid reasons.
 func (cl *Client) establishOutgoingConn(t *Torrent, addr IpPort) (c *connection, err error) {
 	torrent.Add("establish outgoing connection", 1)
-	ctx, cancel := context.WithTimeout(context.Background(), func() time.Duration {
-		cl.rLock()
-		defer cl.rUnlock()
-		return t.dialTimeout()
-	}())
-	defer cancel()
 	obfuscatedHeaderFirst := cl.config.HeaderObfuscationPolicy.Preferred
-	c, err = cl.establishOutgoingConnEx(t, addr, ctx, obfuscatedHeaderFirst)
+	c, err = cl.establishOutgoingConnEx(t, addr, obfuscatedHeaderFirst)
 	if err != nil {
 		//cl.logger.Printf("error establish connection to %s (obfuscatedHeader=%t): %v", addr, obfuscatedHeaderFirst, err)
 	}
@@ -665,7 +665,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr IpPort) (c *connection,
 		return
 	}
 	// Try again with encryption if we didn't earlier, or without if we did.
-	c, err = cl.establishOutgoingConnEx(t, addr, ctx, !obfuscatedHeaderFirst)
+	c, err = cl.establishOutgoingConnEx(t, addr, !obfuscatedHeaderFirst)
 	if c != nil {
 		torrent.Add("initiated conn with fallback header obfuscation", 1)
 	}

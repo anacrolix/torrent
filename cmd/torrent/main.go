@@ -164,7 +164,6 @@ func exitSignalHandlers(client *torrent.Client) {
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	tagflag.Parse(&flags)
-	log.Print(flags.PublicIP)
 	defer envpprof.Stop()
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.Debug = flags.Debug

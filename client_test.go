@@ -36,6 +36,7 @@ func TestingConfig() *ClientConfig {
 	cfg.DisableTrackers = true
 	cfg.NoDefaultPortForwarding = true
 	cfg.DisableAcceptRateLimiting = true
+	cfg.ListenPort = 0
 	return cfg
 }
 

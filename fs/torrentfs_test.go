@@ -189,6 +189,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	cfg.DisableTCP = true
 	cfg.DefaultStorage = storage.NewMMap(filepath.Join(layout.BaseDir, "download"))
 	cfg.ListenHost = torrent.LoopbackListenHost
+	cfg.ListenPort = 0
 	leecher, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	testutil.ExportStatusWriter(leecher, "l")()

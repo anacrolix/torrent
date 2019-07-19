@@ -164,6 +164,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		},
 		CryptoSelector: mse.DefaultCryptoSelector,
 		CryptoProvides: mse.AllSupportedCrypto,
+		ListenPort:     42069,
 	}
 	cc.ConnTracker.SetNoMaxEntries()
 	cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }

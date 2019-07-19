@@ -520,6 +520,7 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
 					return
 				}
 				left++
+				//cl.logger.Printf("dialing %s on %s/%s", addr, s.Addr().Network(), s.Addr())
 				go func() {
 					resCh <- dialResult{
 						cl.dialFromSocket(ctx, s, addr),
@@ -550,6 +551,11 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
 	if res.Conn != nil {
 		go torrent.Add(fmt.Sprintf("network dialed first: %s", res.Conn.RemoteAddr().Network()), 1)
 	}
+	//if res.Conn != nil {
+	//	cl.logger.Printf("first connection for %s from %s/%s", addr, res.Conn.LocalAddr().Network(), res.Conn.LocalAddr().String())
+	//} else {
+	//	cl.logger.Printf("failed to dial %s", addr)
+	//}
 	return res
 }
 

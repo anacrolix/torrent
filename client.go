@@ -650,21 +650,19 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr IpPort) (c *connection,
 		return t.dialTimeout()
 	}())
 	defer cancel()
-	obfuscatedHeaderFirst := !cl.config.DisableEncryption && !cl.config.PreferNoEncryption
+	obfuscatedHeaderFirst := cl.config.HeaderObfuscationPolicy.Preferred
 	c, err = cl.establishOutgoingConnEx(t, addr, ctx, obfuscatedHeaderFirst)
 	if err != nil {
+		//cl.logger.Printf("error establish connection to %s (obfuscatedHeader=%t): %v", addr, obfuscatedHeaderFirst, err)
 		return
 	}
 	if c != nil {
 		torrent.Add("initiated conn with preferred header obfuscation", 1)
 		return
 	}
-	if cl.config.ForceEncryption {
-		// We should have just tried with an obfuscated header. A plaintext
-		// header can't result in an encrypted connection, so we're done.
-		if !obfuscatedHeaderFirst {
-			panic(cl.config.EncryptionPolicy)
-		}
+	if cl.config.HeaderObfuscationPolicy.RequirePreferred {
+		// We should have just tried with the preferred header obfuscation. If it was required,
+		// there's nothing else to try.
 		return
 	}
 	// Try again with encryption if we didn't earlier, or without if we did.
@@ -715,16 +713,7 @@ func (cl *Client) initiateHandshakes(c *connection, t *Torrent) (ok bool, err er
 			}{c.r, c.w},
 			t.infoHash[:],
 			nil,
-			func() mse.CryptoMethod {
-				switch {
-				case cl.config.ForceEncryption:
-					return mse.CryptoMethodRC4
-				case cl.config.DisableEncryption:
-					return mse.CryptoMethodPlaintext
-				default:
-					return mse.AllSupportedCrypto
-				}
-			}(),
+			cl.config.CryptoProvides,
 		)
 		c.setRW(rw)
 		if err != nil {
@@ -766,7 +755,7 @@ func (cl *Client) forSkeys(f func([]byte) bool) {
 func (cl *Client) receiveHandshakes(c *connection) (t *Torrent, err error) {
 	defer perf.ScopeTimerErr(&err)()
 	var rw io.ReadWriter
-	rw, c.headerEncrypted, c.cryptoMethod, err = handleEncryption(c.rw(), cl.forSkeys, cl.config.EncryptionPolicy)
+	rw, c.headerEncrypted, c.cryptoMethod, err = handleEncryption(c.rw(), cl.forSkeys, cl.config.HeaderObfuscationPolicy, cl.config.CryptoSelector)
 	c.setRW(rw)
 	if err == nil || err == mse.ErrNoSecretKeyMatch {
 		if c.headerEncrypted {
@@ -783,8 +772,8 @@ func (cl *Client) receiveHandshakes(c *connection) (t *Torrent, err error) {
 		}
 		return
 	}
-	if cl.config.ForceEncryption && !c.headerEncrypted {
-		err = errors.New("connection not encrypted")
+	if cl.config.HeaderObfuscationPolicy.RequirePreferred && c.headerEncrypted != cl.config.HeaderObfuscationPolicy.Preferred {
+		err = errors.New("connection not have required header obfuscation")
 		return
 	}
 	ih, ok, err := cl.connBTHandshake(c, nil)
@@ -895,7 +884,7 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *Torrent) {
 					V:            cl.config.ExtendedHandshakeClientVersion,
 					Reqq:         64, // TODO: Really?
 					YourIp:       pp.CompactIp(conn.remoteAddr.IP),
-					Encryption:   !cl.config.DisableEncryption,
+					Encryption:   cl.config.HeaderObfuscationPolicy.Preferred || !cl.config.HeaderObfuscationPolicy.RequirePreferred,
 					Port:         cl.incomingPeerPort(),
 					MetadataSize: torrent.metadataSize(),
 					// TODO: We can figured these out specific to the socket

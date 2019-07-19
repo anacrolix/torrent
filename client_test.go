@@ -12,6 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bradfitz/iter"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
+
 	"github.com/anacrolix/dht"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
@@ -21,10 +26,6 @@ import (
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
-	"github.com/bradfitz/iter"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/time/rate"
 )
 
 func TestingConfig() *ClientConfig {
@@ -968,22 +969,40 @@ func makeMagnet(t *testing.T, cl *Client, dir string, name string) string {
 
 // https://github.com/anacrolix/torrent/issues/114
 func TestMultipleTorrentsWithEncryption(t *testing.T) {
+	testSeederLeecherPair(
+		t,
+		func(cfg *ClientConfig) {
+			cfg.HeaderObfuscationPolicy.Preferred = true
+			cfg.HeaderObfuscationPolicy.RequirePreferred = true
+		},
+		func(cfg *ClientConfig) {
+			cfg.HeaderObfuscationPolicy.RequirePreferred = false
+		},
+	)
+}
+
+// Test that the leecher can download a torrent in its entirety from the seeder. Note that the
+// seeder config is done first.
+func testSeederLeecherPair(t *testing.T, seeder func(*ClientConfig), leecher func(*ClientConfig)) {
 	cfg := TestingConfig()
-	cfg.DisableUTP = true
 	cfg.Seed = true
 	cfg.DataDir = filepath.Join(cfg.DataDir, "server")
-	cfg.ForceEncryption = true
 	os.Mkdir(cfg.DataDir, 0755)
+	seeder(cfg)
 	server, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer server.Close()
 	defer testutil.ExportStatusWriter(server, "s")()
 	magnet1 := makeMagnet(t, server, cfg.DataDir, "test1")
+	// Extra torrents are added to test the seeder having to match incoming obfuscated headers
+	// against more than one torrent. See issue #114
 	makeMagnet(t, server, cfg.DataDir, "test2")
+	for i := 0; i < 100; i++ {
+		makeMagnet(t, server, cfg.DataDir, fmt.Sprintf("test%d", i+2))
+	}
 	cfg = TestingConfig()
-	cfg.DisableUTP = true
 	cfg.DataDir = filepath.Join(cfg.DataDir, "client")
-	cfg.ForceEncryption = true
+	leecher(cfg)
 	client, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer client.Close()
@@ -994,6 +1013,37 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 	<-tr.GotInfo()
 	tr.DownloadAll()
 	client.WaitAll()
+}
+
+// This appears to be the situation with the S3 BitTorrent client.
+func TestObfuscatedHeaderFallbackSeederDisallowsLeecherPrefers(t *testing.T) {
+	// Leecher prefers obfuscation, but the seeder does not allow it.
+	testSeederLeecherPair(
+		t,
+		func(cfg *ClientConfig) {
+			cfg.HeaderObfuscationPolicy.Preferred = false
+			cfg.HeaderObfuscationPolicy.RequirePreferred = true
+		},
+		func(cfg *ClientConfig) {
+			cfg.HeaderObfuscationPolicy.Preferred = true
+			cfg.HeaderObfuscationPolicy.RequirePreferred = false
+		},
+	)
+}
+
+func TestObfuscatedHeaderFallbackSeederRequiresLeecherPrefersNot(t *testing.T) {
+	// Leecher prefers no obfuscation, but the seeder enforces it.
+	testSeederLeecherPair(
+		t,
+		func(cfg *ClientConfig) {
+			cfg.HeaderObfuscationPolicy.Preferred = true
+			cfg.HeaderObfuscationPolicy.RequirePreferred = true
+		},
+		func(cfg *ClientConfig) {
+			cfg.HeaderObfuscationPolicy.Preferred = false
+			cfg.HeaderObfuscationPolicy.RequirePreferred = false
+		},
+	)
 }
 
 func TestClientAddressInUse(t *testing.T) {

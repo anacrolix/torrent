@@ -12,6 +12,7 @@ import (
 	"github.com/anacrolix/missinggo/conntrack"
 	"github.com/anacrolix/missinggo/expect"
 	"github.com/anacrolix/torrent/iplist"
+	"github.com/anacrolix/torrent/mse"
 	"github.com/anacrolix/torrent/storage"
 	"golang.org/x/time/rate"
 )
@@ -67,7 +68,9 @@ type ClientConfig struct {
 	// used.
 	DefaultStorage storage.ClientImpl
 
-	EncryptionPolicy
+	HeaderObfuscationPolicy HeaderObfuscationPolicy
+	CryptoProvides          mse.CryptoMethod
+	CryptoSelector          mse.CryptoSelector
 
 	// Sets usage of Socks5 Proxy. Authentication should be included in the url if needed.
 	// Examples: socks5://demo:demo@192.168.99.100:1080
@@ -155,14 +158,19 @@ func NewDefaultClientConfig() *ClientConfig {
 		UploadRateLimiter:              unlimited,
 		DownloadRateLimiter:            unlimited,
 		ConnTracker:                    conntrack.NewInstance(),
+		HeaderObfuscationPolicy: HeaderObfuscationPolicy{
+			Preferred:        true,
+			RequirePreferred: false,
+		},
+		CryptoSelector: mse.DefaultCryptoSelector,
+		CryptoProvides: mse.AllSupportedCrypto,
 	}
 	cc.ConnTracker.SetNoMaxEntries()
 	cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }
 	return cc
 }
 
-type EncryptionPolicy struct {
-	DisableEncryption  bool
-	ForceEncryption    bool // Don't allow unobfuscated connections.
-	PreferNoEncryption bool
+type HeaderObfuscationPolicy struct {
+	RequirePreferred bool // Whether the value of Preferred is a strict requirement
+	Preferred        bool // Whether header obfuscation is preferred
 }

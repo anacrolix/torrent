@@ -69,11 +69,14 @@ type HandshakeResult struct {
 	metainfo.Hash
 }
 
-// ih is nil if we expect the peer to declare the InfoHash, such as when the
-// peer initiated the connection. Returns ok if the Handshake was successful,
-// and err if there was an unexpected condition other than the peer simply
-// abandoning the Handshake.
-func Handshake(sock io.ReadWriter, ih *metainfo.Hash, peerID [20]byte, extensions PeerExtensionBits) (res HandshakeResult, ok bool, err error) {
+// ih is nil if we expect the peer to declare the InfoHash, such as when the peer initiated the
+// connection. Returns ok if the Handshake was successful, and err if there was an unexpected
+// condition other than the peer simply abandoning the Handshake.
+func Handshake(
+	sock io.ReadWriter, ih *metainfo.Hash, peerID [20]byte, extensions PeerExtensionBits,
+) (
+	res HandshakeResult, ok bool, err error,
+) {
 	// Bytes to be sent to the peer. Should never block the sender.
 	postCh := make(chan []byte, 4)
 	// A single error value sent when the writer completes.

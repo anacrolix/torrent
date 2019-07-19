@@ -132,11 +132,13 @@ var flags = struct {
 	PackedBlocklist string
 	Stats           *bool
 	PublicIP        net.IP
+	Progress        bool
 	tagflag.StartPos
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }{
 	UploadRate:   -1,
 	DownloadRate: -1,
+	Progress:     true,
 }
 
 func stdoutAndStderrAreSameFile() bool {
@@ -207,7 +209,9 @@ func main() {
 	if stdoutAndStderrAreSameFile() {
 		log.SetOutput(progress.Bypass())
 	}
-	progress.Start()
+	if flags.Progress {
+		progress.Start()
+	}
 	addTorrents(client)
 	if client.WaitAll() {
 		log.Print("downloaded ALL the torrents")

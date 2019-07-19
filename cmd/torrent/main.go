@@ -200,9 +200,8 @@ func main() {
 	defer client.Close()
 	go exitSignalHandlers(client)
 
-	// Write status on the root path on the default HTTP muxer. This will be
-	// bound to localhost somewhere if GOPPROF is set, thanks to the envpprof
-	// import.
+	// Write status on the root path on the default HTTP muxer. This will be bound to localhost
+	// somewhere if GOPPROF is set, thanks to the envpprof import.
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})

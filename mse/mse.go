@@ -25,8 +25,8 @@ import (
 const (
 	maxPadLen = 512
 
-	CryptoMethodPlaintext CryptoMethod = 1
-	CryptoMethodRC4       CryptoMethod = 2
+	CryptoMethodPlaintext CryptoMethod = 1 // After header obfuscation, drop into plaintext
+	CryptoMethodRC4       CryptoMethod = 2 // After header obfuscation, use RC4 for the rest of the stream
 	AllSupportedCrypto                 = CryptoMethodPlaintext | CryptoMethodRC4
 )
 
@@ -557,6 +557,7 @@ func ReceiveHandshake(rw io.ReadWriter, skeys SecretKeyIter, selectCrypto Crypto
 type SecretKeyIter func(callback func(skey []byte) (more bool))
 
 func DefaultCryptoSelector(provided CryptoMethod) CryptoMethod {
+	// We prefer plaintext for performance reasons.
 	if provided&CryptoMethodPlaintext != 0 {
 		return CryptoMethodPlaintext
 	}

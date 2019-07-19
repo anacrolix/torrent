@@ -943,6 +943,8 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 	waitTotalConns(6)
 }
 
+// Creates a file containing its own name as data. Make a metainfo from that, adds it to the given
+// client, and returns a magnet link.
 func makeMagnet(t *testing.T, cl *Client, dir string, name string) string {
 	os.MkdirAll(dir, 0770)
 	file, err := os.Create(filepath.Join(dir, name))

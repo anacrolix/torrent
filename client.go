@@ -742,6 +742,19 @@ func (cl *Client) initiateHandshakes(c *connection, t *Torrent) (ok bool, err er
 func (cl *Client) forSkeys(f func([]byte) bool) {
 	cl.lock()
 	defer cl.unlock()
+	if false { // Emulate the bug from #114
+		var firstIh InfoHash
+		for ih := range cl.torrents {
+			firstIh = ih
+			break
+		}
+		for range cl.torrents {
+			if !f(firstIh[:]) {
+				break
+			}
+		}
+		return
+	}
 	for ih := range cl.torrents {
 		if !f(ih[:]) {
 			break

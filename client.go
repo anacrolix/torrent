@@ -654,7 +654,6 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr IpPort) (c *connection,
 	c, err = cl.establishOutgoingConnEx(t, addr, ctx, obfuscatedHeaderFirst)
 	if err != nil {
 		//cl.logger.Printf("error establish connection to %s (obfuscatedHeader=%t): %v", addr, obfuscatedHeaderFirst, err)
-		return
 	}
 	if c != nil {
 		torrent.Add("initiated conn with preferred header obfuscation", 1)

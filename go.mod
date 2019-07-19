@@ -34,6 +34,7 @@ require (
 	golang.org/x/net v0.0.0-20190628185345-da137c7871d7
 	golang.org/x/sys v0.0.0-20190712062909-fae7ac547cb7 // indirect
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
+	golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7
 )
 
 go 1.13

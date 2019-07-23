@@ -69,8 +69,10 @@ type ClientConfig struct {
 	DefaultStorage storage.ClientImpl
 
 	HeaderObfuscationPolicy HeaderObfuscationPolicy
-	CryptoProvides          mse.CryptoMethod
-	CryptoSelector          mse.CryptoSelector
+	// The crypto methods to offer when initiating connections with header obfuscation.
+	CryptoProvides mse.CryptoMethod
+	// Chooses the crypto method to use when receiving connections with header obfuscation.
+	CryptoSelector mse.CryptoSelector
 
 	// Sets usage of Socks5 Proxy. Authentication should be included in the url if needed.
 	// Examples: socks5://demo:demo@192.168.99.100:1080
@@ -172,6 +174,6 @@ func NewDefaultClientConfig() *ClientConfig {
 }
 
 type HeaderObfuscationPolicy struct {
-	RequirePreferred bool // Whether the value of Preferred is a strict requirement
-	Preferred        bool // Whether header obfuscation is preferred
+	RequirePreferred bool // Whether the value of Preferred is a strict requirement.
+	Preferred        bool // Whether header obfuscation is preferred.
 }

@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/anacrolix/missinggo/bitmap"
+
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
@@ -186,10 +187,13 @@ func (p *Piece) VerifyData() {
 	if p.hashing {
 		target++
 	}
-	// log.Printf("target: %d", target)
+	//log.Printf("target: %d", target)
 	p.t.queuePieceCheck(p.index)
-	for p.numVerifies < target {
-		// log.Printf("got %d verifies", p.numVerifies)
+	for {
+		//log.Printf("got %d verifies", p.numVerifies)
+		if p.numVerifies >= target {
+			break
+		}
 		p.t.cl.event.Wait()
 	}
 	// log.Print("done")

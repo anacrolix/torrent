@@ -3,7 +3,7 @@ package torrent_test
 import (
 	"log"
 
-	"github.com/anacrolix/torrent"
+	"github.com/powerand/torrent"
 )
 
 func Example() {

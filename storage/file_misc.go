@@ -1,6 +1,6 @@
 package storage
 
-import "github.com/anacrolix/torrent/metainfo"
+import "github.com/powerand/torrent/metainfo"
 
 func extentCompleteRequiredLengths(info *metainfo.Info, off, n int64) (ret []metainfo.FileInfo) {
 	if n == 0 {

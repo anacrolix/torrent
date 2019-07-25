@@ -6,8 +6,8 @@ import (
 	"database/sql"
 	"path/filepath"
 
-	"github.com/anacrolix/torrent/metainfo"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/powerand/torrent/metainfo"
 )
 
 type sqlitePieceCompletion struct {

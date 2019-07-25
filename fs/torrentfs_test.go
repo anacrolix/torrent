@@ -17,10 +17,10 @@ import (
 	fusefs "bazil.org/fuse/fs"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/internal/testutil"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/powerand/torrent"
+	"github.com/powerand/torrent/metainfo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

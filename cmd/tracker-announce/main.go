@@ -9,9 +9,9 @@ import (
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/tagflag"
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/powerand/torrent"
+	"github.com/powerand/torrent/metainfo"
 )
 
 func argSpec(arg string) (ts *torrent.TorrentSpec, err error) {

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/powerand/torrent/metainfo"
 )
 
 // File-based storage for torrents, that isn't yet bound to a particular

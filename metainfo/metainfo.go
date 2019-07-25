@@ -59,7 +59,7 @@ func (mi MetaInfo) Write(w io.Writer) error {
 // Set good default values in preparation for creating a new MetaInfo file.
 func (mi *MetaInfo) SetDefaults() {
 	mi.Comment = "yoloham"
-	mi.CreatedBy = "github.com/anacrolix/torrent"
+	mi.CreatedBy = "github.com/powerand/torrent"
 	mi.CreationDate = time.Now().Unix()
 	// mi.Info.PieceLength = 256 * 1024
 }

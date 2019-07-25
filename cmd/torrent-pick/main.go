@@ -15,10 +15,10 @@ import (
 	"time"
 
 	_ "github.com/anacrolix/envpprof"
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/dustin/go-humanize"
 	"github.com/jessevdk/go-flags"
+	"github.com/powerand/torrent"
+	"github.com/powerand/torrent/metainfo"
 )
 
 // fmt.Fprintf(os.Stderr, "Usage: %s \n", os.Args[0])

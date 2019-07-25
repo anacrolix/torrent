@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo/pubsub"
-	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/bradfitz/iter"
+	"github.com/powerand/torrent/metainfo"
 	"github.com/stretchr/testify/require"
 )
 

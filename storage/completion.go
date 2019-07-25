@@ -3,7 +3,7 @@ package storage
 import (
 	"log"
 
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/powerand/torrent/metainfo"
 )
 
 type PieceCompletionGetSetter interface {

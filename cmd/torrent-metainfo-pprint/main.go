@@ -11,8 +11,8 @@ import (
 
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/bradfitz/iter"
+	"github.com/powerand/torrent/metainfo"
 )
 
 var flags struct {

@@ -3,7 +3,7 @@ package torrent
 import (
 	"strings"
 
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/powerand/torrent/metainfo"
 )
 
 // Provides access to regions of torrent data that correspond to its files.

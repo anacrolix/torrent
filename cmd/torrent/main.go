@@ -15,12 +15,12 @@ import (
 
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
-	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/iplist"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/gosuri/uiprogress"
+	"github.com/powerand/torrent"
+	"github.com/powerand/torrent/metainfo"
 	"golang.org/x/time/rate"
 )
 

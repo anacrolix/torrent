@@ -11,7 +11,7 @@ import (
 
 type badStorage struct{}
 
-var _ storage.ClientImpl = badStorage{}
+var _ storage.ClientImpl = &badStorage{}
 
 func (bs badStorage) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.TorrentImpl, error) {
 	return bs, nil

@@ -1666,6 +1666,7 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 	go t.verifyPiece(pieceIndex)
 }
 
+// Forces all the pieces to be re-hashed. See also Piece.VerifyData.
 func (t *Torrent) VerifyData() {
 	for i := pieceIndex(0); i < t.NumPieces(); i++ {
 		t.Piece(i).VerifyData()

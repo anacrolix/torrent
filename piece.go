@@ -178,6 +178,7 @@ func (p *Piece) bytesLeft() (ret pp.Integer) {
 	return p.length() - p.numDirtyBytes()
 }
 
+// Forces the piece data to be rehashed.
 func (p *Piece) VerifyData() {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()

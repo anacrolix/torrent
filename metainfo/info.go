@@ -17,6 +17,7 @@ type Info struct {
 	PieceLength int64  `bencode:"piece length"`
 	Pieces      []byte `bencode:"pieces"`
 	Name        string `bencode:"name"`
+	NameUTF8    string `bencode:"name.utf-8"`
 	Length      int64  `bencode:"length,omitempty"`
 	Private     *bool  `bencode:"private,omitempty"`
 	// TODO: Document this field.

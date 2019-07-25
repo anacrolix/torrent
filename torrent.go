@@ -1619,7 +1619,7 @@ func (t *Torrent) verifyPiece(piece pieceIndex) {
 		panic("piece was not queued")
 	}
 	t.updatePiecePriority(piece)
-	if t.closed.IsSet() || t.pieceComplete(piece) {
+	if t.closed.IsSet() {
 		return
 	}
 	p.hashing = true

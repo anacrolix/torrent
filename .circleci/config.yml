@@ -47,7 +47,7 @@ jobs:
       - run: go test -v -race ./... -count 2
       - run: go test -bench . ./...
       - run: set +e; CGO_ENABLED=0 go test -v ./...; true
-      - run: GOARCH=386 go test -v -race ./... -count 2 -bench .
+      - run: GOARCH=386 go test ./... -count 2 -bench .
       - run: go install ./cmd/torrentfs
       - save_cache:
           key: go-pkg-{{ checksum "go.mod" }}

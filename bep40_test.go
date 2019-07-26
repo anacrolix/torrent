@@ -8,11 +8,11 @@ import (
 )
 
 func TestBep40Priority(t *testing.T) {
-	assert.EqualValues(t, 0xec2d7224, bep40PriorityIgnoreError(
+	assert.EqualValues(t, peerPriority(0xec2d7224), bep40PriorityIgnoreError(
 		IpPort{net.ParseIP("123.213.32.10"), 0},
 		IpPort{net.ParseIP("98.76.54.32"), 0},
 	))
-	assert.EqualValues(t, 0xec2d7224, bep40PriorityIgnoreError(
+	assert.EqualValues(t, peerPriority(0xec2d7224), bep40PriorityIgnoreError(
 		IpPort{net.ParseIP("98.76.54.32"), 0},
 		IpPort{net.ParseIP("123.213.32.10"), 0},
 	))

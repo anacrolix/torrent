@@ -690,7 +690,7 @@ func (cl *Client) outgoingConnection(t *Torrent, addr IpPort, ps peerSource) {
 	cl.noLongerHalfOpen(t, addr.String())
 	if err != nil {
 		if cl.config.Debug {
-			cl.logger.Printf("error establishing outgoing connection: %s", err)
+			cl.logger.Printf("error establishing outgoing connection to %v: %v", addr, err)
 		}
 		return
 	}

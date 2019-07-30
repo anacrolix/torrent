@@ -173,6 +173,7 @@ func (cl *Client) announceKey() int32 {
 func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	if cfg == nil {
 		cfg = NewDefaultClientConfig()
+		cfg.ListenPort = 0
 	}
 	defer func() {
 		if err != nil {

@@ -129,7 +129,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		fmt.Fprintf(w, "%s DHT server at %s:\n", s.Addr().Network(), s.Addr().String())
 		writeDhtServerStatus(w, s)
 	})
-	spew.Fdump(w, cl.stats)
+	spew.Fdump(w, &cl.stats)
 	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.torrentsAsSlice()))
 	fmt.Fprintln(w)
 	for _, t := range slices.Sort(cl.torrentsAsSlice(), func(l, r *Torrent) bool {

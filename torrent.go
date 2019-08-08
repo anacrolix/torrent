@@ -729,7 +729,7 @@ func (t *Torrent) PieceAvailabilityList() (connCount int, connBitfieldSum []int)
 				continue
 			}
 
-			availList[i] += 1
+			connBitfieldSum[i] += 1
 		}
 	}
 

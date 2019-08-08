@@ -326,6 +326,29 @@ func (cn *connection) PeerHasPiece(piece pieceIndex) bool {
 	return cn.peerSentHaveAll || cn.peerPieces.Contains(bitmap.BitIndex(piece))
 }
 
+func (cn *connection) PeerBitfield() []bool {
+	if !cn.t.haveInfo() {
+		return nil
+	}
+
+	bf := make([]bool, cn.t.numPieces())
+
+	if cn.peerSentHaveAll {
+		for i, _ := range(bf) {
+			bf[i] = true
+		}
+
+		return bf
+	}
+
+	cn.peerPieces.IterTyped(func(piece int) bool {
+		bf[piece] = true
+		return true
+	})
+
+	return bf
+}
+
 // Writes a message into the write buffer.
 func (cn *connection) Post(msg pp.Message) {
 	torrent.Add(fmt.Sprintf("messages posted of type %s", msg.Type.String()), 1)

@@ -714,13 +714,14 @@ func (t *Torrent) CompletedPiecesBitfield() []bool {
 	return t.bitfield()
 }
 
-func (t *Torrent) PieceAvailabilityList() (int, []int) {
+// Returns a list containing the number of peers that have a specific piece available
+func (t *Torrent) PieceAvailabilityList() (connCount int, connBitfieldSum []int) {
 	if !t.haveInfo() {
-		return 0, nil
+		return
 	}
 
-	availList := make([]int, t.numPieces())
-	connCount := len(t.conns)
+	connBitfieldSum = make([]int, t.numPieces())
+	connCount = len(t.conns)
 	for conn := range t.conns {
 		bitfield := conn.PeerBitfield()
 		for i, bit := range bitfield {
@@ -732,7 +733,7 @@ func (t *Torrent) PieceAvailabilityList() (int, []int) {
 		}
 	}
 
-	return connCount, availList
+	return
 }
 
 func (t *Torrent) pieceNumChunks(piece pieceIndex) pp.Integer {

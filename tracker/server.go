@@ -8,7 +8,7 @@ import (
 	"math/rand"
 	"net"
 
-	"github.com/anacrolix/dht/krpc"
+	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/missinggo"
 )
 

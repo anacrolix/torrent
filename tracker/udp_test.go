@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/anacrolix/dht/krpc"
+	"github.com/anacrolix/dht/v2/krpc"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"

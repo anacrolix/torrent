@@ -3,7 +3,6 @@ module github.com/anacrolix/torrent
 require (
 	bazil.org/fuse v0.0.0-20180421153158-65cc252bf669
 	github.com/RoaringBitmap/roaring v0.4.18 // indirect
-	github.com/anacrolix/dht v1.0.1
 	github.com/anacrolix/dht/v2 v2.0.1
 	github.com/anacrolix/envpprof v0.0.0-20180404065416-323002cec2fa
 	github.com/anacrolix/go-libutp v1.0.2

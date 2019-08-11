@@ -632,21 +632,21 @@ func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torr
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
 func (cl *Client) establishOutgoingConnEx(t *Torrent, addr IpPort, obfuscatedHeader bool) (*connection, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), func() time.Duration {
+	dialCtx, cancel := context.WithTimeout(context.Background(), func() time.Duration {
 		cl.rLock()
 		defer cl.rUnlock()
 		return t.dialTimeout()
 	}())
 	defer cancel()
-	dr := cl.dialFirst(ctx, addr.String())
+	dr := cl.dialFirst(dialCtx, addr.String())
 	nc := dr.Conn
 	if nc == nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+		if dialCtx.Err() != nil {
+			return nil, xerrors.Errorf("dialing: %w", dialCtx.Err())
 		}
 		return nil, errors.New("dial failed")
 	}
-	c, err := cl.handshakesConnection(ctx, nc, t, obfuscatedHeader, addr, dr.Network)
+	c, err := cl.handshakesConnection(context.Background(), nc, t, obfuscatedHeader, addr, dr.Network)
 	if err != nil {
 		nc.Close()
 	}

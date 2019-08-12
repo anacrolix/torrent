@@ -6,7 +6,7 @@ import (
 	"io"
 	"time"
 
-	"golang.org/x/time/rate"
+	"github.com/golang/time/rate"
 )
 
 type rateLimitedReader struct {

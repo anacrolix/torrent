@@ -36,8 +36,8 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	"github.com/google/btree"
-	"golang.org/x/time/rate"
-	"golang.org/x/xerrors"
+	"github.com/golang/time/rate"
+	"github.com/golang/xerrors"
 )
 
 // Clients contain zero or more Torrents. A Client manages a blocklist, the

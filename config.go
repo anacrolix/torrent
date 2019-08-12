@@ -14,7 +14,7 @@ import (
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/mse"
 	"github.com/anacrolix/torrent/storage"
-	"golang.org/x/time/rate"
+	"github.com/golang/time/rate"
 )
 
 var DefaultHTTPUserAgent = "Go-Torrent/1.0"

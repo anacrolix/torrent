@@ -11,7 +11,7 @@ import (
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/time/rate"
+	"github.com/golang/time/rate"
 )
 
 func writeN(ws []io.Writer, n int) error {

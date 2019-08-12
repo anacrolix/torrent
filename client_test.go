@@ -15,7 +15,7 @@ import (
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/time/rate"
+	"github.com/golang/time/rate"
 
 	"github.com/anacrolix/dht/v2"
 	_ "github.com/anacrolix/envpprof"

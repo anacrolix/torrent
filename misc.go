@@ -7,7 +7,7 @@ import (
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	"golang.org/x/time/rate"
+	"github.com/golang/time/rate"
 )
 
 type chunkSpec struct {

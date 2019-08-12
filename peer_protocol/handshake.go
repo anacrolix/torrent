@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"golang.org/x/xerrors"
+	"github.com/golang/xerrors"
 
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/torrent/metainfo"

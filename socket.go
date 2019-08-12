@@ -9,7 +9,7 @@ import (
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/pkg/errors"
-	"golang.org/x/net/proxy"
+	"github.com/golang/net/proxy"
 )
 
 type dialer interface {

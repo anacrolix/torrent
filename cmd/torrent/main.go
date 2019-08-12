@@ -21,7 +21,7 @@ import (
 	"github.com/anacrolix/torrent/storage"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/gosuri/uiprogress"
-	"golang.org/x/time/rate"
+	"github.com/golang/time/rate"
 )
 
 var progress = uiprogress.New()

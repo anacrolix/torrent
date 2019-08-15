@@ -505,7 +505,17 @@ func (cl *Client) dopplegangerAddr(addr string) bool {
 }
 
 // Returns a connection over UTP or TCP, whichever is first to connect.
-func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
+func (cl *Client) dialFirst(ctx context.Context, addr string) (res dialResult) {
+	{
+		t := perf.NewTimer(perf.CallerName(0))
+		defer func() {
+			if res.Conn == nil {
+				t.Mark(fmt.Sprintf("returned no conn (context: %v)", ctx.Err()))
+			} else {
+				t.Mark("returned conn over " + res.Network)
+			}
+		}()
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	// As soon as we return one connection, cancel the others.
 	defer cancel()
@@ -532,7 +542,6 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) dialResult {
 			return true
 		})
 	}()
-	var res dialResult
 	// Wait for a successful connection.
 	func() {
 		defer perf.ScopeTimer()()

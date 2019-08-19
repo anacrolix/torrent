@@ -130,7 +130,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.
 			t.pieces[0].dirtyChunks.Clear()
-			cn.validReceiveChunks = map[request]struct{}{newRequestFromMessage(&msg): struct{}{}}
+			cn.validReceiveChunks = map[request]struct{}{newRequestFromMessage(&msg): {}}
 			cl.unlock()
 			n, err := w.Write(wb)
 			require.NoError(b, err)

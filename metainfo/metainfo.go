@@ -81,7 +81,7 @@ func (mi *MetaInfo) UpvertedAnnounceList() AnnounceList {
 		return mi.AnnounceList
 	}
 	if mi.Announce != "" {
-		return [][]string{[]string{mi.Announce}}
+		return [][]string{{mi.Announce}}
 	}
 	return nil
 }

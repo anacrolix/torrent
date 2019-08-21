@@ -10,10 +10,11 @@ import (
 	"path/filepath"
 
 	"github.com/anacrolix/tagflag"
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/mmap_span"
 	"github.com/bradfitz/iter"
 	"github.com/edsrzf/mmap-go"
+
+	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/mmap_span"
 )
 
 func mmapFile(name string) (mm mmap.MMap, err error) {

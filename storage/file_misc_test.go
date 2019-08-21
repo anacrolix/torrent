@@ -3,8 +3,9 @@ package storage
 import (
 	"testing"
 
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 func TestExtentCompleteRequiredLengths(t *testing.T) {

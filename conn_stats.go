@@ -1,11 +1,11 @@
 package torrent
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"reflect"
 	"sync/atomic"
-	"encoding/json"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )

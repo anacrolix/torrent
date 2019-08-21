@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/anacrolix/missinggo"
+
 	"github.com/anacrolix/torrent/metainfo"
 )
 

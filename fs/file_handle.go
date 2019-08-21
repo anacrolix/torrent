@@ -7,6 +7,7 @@ import (
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
 	"github.com/anacrolix/missinggo"
+
 	"github.com/anacrolix/torrent"
 )
 

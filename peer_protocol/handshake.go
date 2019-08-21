@@ -8,6 +8,7 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/anacrolix/missinggo"
+
 	"github.com/anacrolix/torrent/metainfo"
 )
 

@@ -12,10 +12,11 @@ import (
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/conntrack"
 	"github.com/anacrolix/missinggo/expect"
+	"golang.org/x/time/rate"
+
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/mse"
 	"github.com/anacrolix/torrent/storage"
-	"golang.org/x/time/rate"
 )
 
 var DefaultHTTPUserAgent = "Go-Torrent/1.0"

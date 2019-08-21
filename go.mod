@@ -7,7 +7,7 @@ require (
 	github.com/anacrolix/dht/v2 v2.0.1
 	github.com/anacrolix/envpprof v1.0.0
 	github.com/anacrolix/go-libutp v1.0.2
-	github.com/anacrolix/log v0.2.2-0.20190821103111-726085c46ea1
+	github.com/anacrolix/log v0.2.2-0.20190821105323-e3efcaf1a0fd
 	github.com/anacrolix/missinggo v1.2.1
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/mmsg v1.0.0 // indirect

@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log"
 	"sync"
 
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 )
 
@@ -224,10 +224,10 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 		r.t.cl.lock()
 		// TODO: Just reset pieces in the readahead window. This might help
 		// prevent thrashing with small caches and file and piece priorities.
-		log.Printf("error reading torrent %s piece %d offset %d, %d bytes: %v",
-			r.t.infoHash.HexString(), pi, po, len(b1), err)
+		r.log(log.Fstr("error reading torrent %s piece %d offset %d, %d bytes: %v",
+			r.t.infoHash.HexString(), pi, po, len(b1), err))
 		if !r.t.updatePieceCompletion(pi) {
-			log.Printf("piece %d completion unchanged", pi)
+			r.log(log.Fstr("piece %d completion unchanged", pi))
 		}
 		r.t.cl.unlock()
 	}
@@ -271,4 +271,8 @@ func (r *reader) Seek(off int64, whence int) (ret int64, err error) {
 
 	r.posChanged()
 	return
+}
+
+func (r *reader) log(m log.Msg) {
+	r.t.logger.Log(m)
 }

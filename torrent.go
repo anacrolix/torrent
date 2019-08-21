@@ -735,7 +735,7 @@ func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
 
 func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash) {
 	hash := pieceHash.New()
-	p := &t.pieces[piece]
+	p := t.piece(piece)
 	p.waitNoPendingWrites()
 	ip := t.info.Piece(int(piece))
 	pl := ip.Length()
@@ -997,7 +997,7 @@ func (t *Torrent) pendRequest(req request) {
 }
 
 func (t *Torrent) pieceCompletionChanged(piece pieceIndex) {
-	log.Call().Add("piece", piece).AddValue(debugLogValue).Log(t.logger)
+	t.tickleReaders()
 	t.cl.event.Broadcast()
 	if t.pieceComplete(piece) {
 		t.onPieceCompleted(piece)
@@ -1056,16 +1056,14 @@ func (t *Torrent) putPieceInclination(pi []int) {
 }
 
 func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
-	pcu := t.pieceCompleteUncached(piece)
-	p := &t.pieces[piece]
-	changed := t.completedPieces.Get(bitmap.BitIndex(piece)) != pcu.Complete || p.storageCompletionOk != pcu.Ok
-	log.Fmsg("piece %d completion: %v", piece, pcu.Ok).AddValue(debugLogValue).Log(t.logger)
-	p.storageCompletionOk = pcu.Ok
-	t.completedPieces.Set(bitmap.BitIndex(piece), pcu.Complete)
-	t.tickleReaders()
-	// t.logger.Printf("piece %d uncached completion: %v", piece, pcu.Complete)
-	// t.logger.Printf("piece %d changed: %v", piece, changed)
+	p := t.piece(piece)
+	uncached := t.pieceCompleteUncached(piece)
+	cached := p.completion()
+	changed := cached != uncached
+	p.storageCompletionOk = uncached.Ok
+	t.completedPieces.Set(bitmap.BitIndex(piece), uncached.Complete)
 	if changed {
+		t.logger.Log(log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached))
 		t.pieceCompletionChanged(piece)
 	}
 	return changed
@@ -1720,4 +1718,8 @@ func (t *Torrent) pieceQueuedForHash(i pieceIndex) bool {
 
 func (t *Torrent) dialTimeout() time.Duration {
 	return reducedDialTimeout(t.cl.config.MinDialTimeout, t.cl.config.NominalDialTimeout, t.cl.config.HalfOpenConnsPerTorrent, t.peers.Len())
+}
+
+func (t *Torrent) piece(i int) *Piece {
+	return &t.pieces[i]
 }

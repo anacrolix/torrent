@@ -106,7 +106,7 @@ func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
 	cl := &Client{
-		config: &ClientConfig{},
+		config: TestingConfig(),
 	}
 	cl.initLogger()
 	tor := cl.newTorrent(

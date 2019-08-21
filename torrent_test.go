@@ -148,7 +148,7 @@ func TestEmptyFilesAndZeroPieceLengthWithMMapStorage(t *testing.T) {
 func TestPieceHashFailed(t *testing.T) {
 	mi := testutil.GreetingMetaInfo()
 	cl := new(Client)
-	cl.config = &ClientConfig{}
+	cl.config = TestingConfig()
 	cl.initLogger()
 	tt := cl.newTorrent(mi.HashInfoBytes(), badStorage{})
 	tt.setChunkSize(2)

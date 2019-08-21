@@ -1,10 +1,9 @@
 package torrent
 
 import (
-	"log"
 	"time"
 
-	flog "github.com/anacrolix/log"
+	"github.com/anacrolix/log"
 	"github.com/elgatito/upnp"
 )
 
@@ -28,7 +27,7 @@ func (cl *Client) forwardPort() {
 	cl.unlock()
 	ds := upnp.Discover(0, 2*time.Second)
 	cl.lock()
-	flog.Default.Handle(flog.Fmsg("discovered %d upnp devices", len(ds)))
+	cl.logger.Printf("discovered %d upnp devices", len(ds))
 	port := cl.incomingPeerPort()
 	cl.unlock()
 	for _, d := range ds {

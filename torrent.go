@@ -41,7 +41,7 @@ type Torrent struct {
 	// alignment. See #262.
 	stats  ConnStats
 	cl     *Client
-	logger *log.Logger
+	logger log.Logger
 
 	networkingEnabled bool
 

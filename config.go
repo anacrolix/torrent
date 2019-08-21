@@ -8,6 +8,7 @@ import (
 
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/conntrack"
 	"github.com/anacrolix/missinggo/expect"
@@ -84,7 +85,8 @@ type ClientConfig struct {
 	DisableIPv4      bool
 	DisableIPv4Peers bool
 	// Perform logging and any other behaviour that will help debug.
-	Debug bool `help:"enable debugging"`
+	Debug  bool `help:"enable debugging"`
+	Logger log.Logger
 
 	// HTTPProxy defines proxy for HTTP requests.
 	// Format: func(*Request) (*url.URL, error),
@@ -167,6 +169,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		CryptoSelector: mse.DefaultCryptoSelector,
 		CryptoProvides: mse.AllSupportedCrypto,
 		ListenPort:     42069,
+		Logger:         log.Default,
 	}
 	cc.ConnTracker.SetNoMaxEntries()
 	cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }

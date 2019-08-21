@@ -52,7 +52,7 @@ type Client struct {
 	closed missinggo.Event
 
 	config *ClientConfig
-	logger *log.Logger
+	logger log.Logger
 
 	peerID         PeerID
 	defaultStorage *storage.Client
@@ -154,16 +154,15 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 
 const debugLogValue = log.Debug
 
-func (cl *Client) debugLogFilter(m *log.Msg) bool {
-	if !cl.config.Debug {
-		_, ok := m.Values()[debugLogValue]
-		return !ok
+func (cl *Client) debugLogFilter(m log.Msg) bool {
+	if cl.config.Debug {
+		return true
 	}
-	return true
+	return !m.HasValue(debugLogValue)
 }
 
 func (cl *Client) initLogger() {
-	cl.logger = log.Default.Clone().AddValue(cl).AddFilter(log.NewFilter(cl.debugLogFilter))
+	cl.logger = cl.config.Logger.WithValues(cl).WithFilter(cl.debugLogFilter)
 }
 
 func (cl *Client) announceKey() int32 {
@@ -1036,7 +1035,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		},
 		duplicateRequestTimeout: 1 * time.Second,
 	}
-	t.logger = cl.logger.Clone().AddValue(t)
+	t.logger = cl.logger.WithValues(t)
 	t.setChunkSize(defaultChunkSize)
 	return
 }

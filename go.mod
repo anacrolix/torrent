@@ -5,10 +5,11 @@ require (
 	github.com/RoaringBitmap/roaring v0.4.18 // indirect
 	github.com/alexflint/go-arg v1.1.0
 	github.com/anacrolix/dht/v2 v2.0.1
-	github.com/anacrolix/envpprof v0.0.0-20180404065416-323002cec2fa
+	github.com/anacrolix/envpprof v1.0.0
 	github.com/anacrolix/go-libutp v1.0.2
-	github.com/anacrolix/log v0.2.0
-	github.com/anacrolix/missinggo v1.1.0
+	github.com/anacrolix/log v0.2.2-0.20190821103111-726085c46ea1
+	github.com/anacrolix/missinggo v1.2.1
+	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/mmsg v1.0.0 // indirect
 	github.com/anacrolix/sync v0.0.0-20180808010631-44578de4e778
 	github.com/anacrolix/tagflag v0.0.0-20180803105420-3a8ff5428f76

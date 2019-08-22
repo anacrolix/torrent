@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/log"
-	"github.com/elgatito/upnp"
+	"github.com/anacrolix/upnp"
 )
 
 func addPortMapping(d upnp.Device, proto upnp.Protocol, internalPort int, debug bool) {
@@ -25,7 +25,7 @@ func (cl *Client) forwardPort() {
 		return
 	}
 	cl.unlock()
-	ds := upnp.Discover(0, 2*time.Second)
+	ds := upnp.Discover(0, 2*time.Second, cl.logger)
 	cl.lock()
 	cl.logger.Printf("discovered %d upnp devices", len(ds))
 	port := cl.incomingPeerPort()

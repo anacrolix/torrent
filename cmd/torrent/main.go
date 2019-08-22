@@ -4,7 +4,6 @@ package main
 import (
 	"expvar"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -12,6 +11,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/xerrors"
+
+	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
@@ -63,48 +66,47 @@ func torrentBar(t *torrent.Torrent) {
 	}()
 }
 
-func addTorrents(client *torrent.Client) {
+func addTorrents(client *torrent.Client) error {
 	for _, arg := range flags.Torrent {
-		t := func() *torrent.Torrent {
+		t, err := func() (*torrent.Torrent, error) {
 			if strings.HasPrefix(arg, "magnet:") {
 				t, err := client.AddMagnet(arg)
 				if err != nil {
-					log.Fatalf("error adding magnet: %s", err)
+					return nil, xerrors.Errorf("error adding magnet: %w", err)
 				}
-				return t
+				return t, nil
 			} else if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
 				response, err := http.Get(arg)
 				if err != nil {
-					log.Fatalf("Error downloading torrent file: %s", err)
+					return nil, xerrors.Errorf("Error downloading torrent file: %s", err)
 				}
 
 				metaInfo, err := metainfo.Load(response.Body)
 				defer response.Body.Close()
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "error loading torrent file %q: %s\n", arg, err)
-					os.Exit(1)
+					return nil, xerrors.Errorf("error loading torrent file %q: %s\n", arg, err)
 				}
 				t, err := client.AddTorrent(metaInfo)
 				if err != nil {
-					log.Fatal(err)
+					return nil, xerrors.Errorf("adding torrent: %w", err)
 				}
-				return t
+				return t, nil
 			} else if strings.HasPrefix(arg, "infohash:") {
 				t, _ := client.AddTorrentInfoHash(metainfo.NewHashFromHex(strings.TrimPrefix(arg, "infohash:")))
-				return t
+				return t, nil
 			} else {
 				metaInfo, err := metainfo.LoadFromFile(arg)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "error loading torrent file %q: %s\n", arg, err)
-					os.Exit(1)
+					return nil, xerrors.Errorf("error loading torrent file %q: %s\n", arg, err)
 				}
 				t, err := client.AddTorrent(metaInfo)
-				if err != nil {
-					log.Fatal(err)
-				}
-				return t
+				return nil, xerrors.Errorf("adding torrent: %w", err)
+				return t, nil
 			}
 		}()
+		if err != nil {
+			return xerrors.Errorf("adding torrent for %q: %w", arg, err)
+		}
 		torrentBar(t)
 		t.AddPeers(func() (ret []torrent.Peer) {
 			for _, ta := range flags.TestPeer {
@@ -120,6 +122,7 @@ func addTorrents(client *torrent.Client) {
 			t.DownloadAll()
 		}()
 	}
+	return nil
 }
 
 var flags = struct {
@@ -134,6 +137,7 @@ var flags = struct {
 	Stats           *bool
 	PublicIP        net.IP
 	Progress        bool
+	Quiet           bool `help:"discard client logging"`
 	tagflag.StartPos
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }{
@@ -165,7 +169,13 @@ func exitSignalHandlers(client *torrent.Client) {
 }
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	if err := mainErr(); err != nil {
+		log.Printf("error in main: %v", err)
+		os.Exit(1)
+	}
+}
+
+func mainErr() error {
 	tagflag.Parse(&flags)
 	defer envpprof.Stop()
 	clientConfig := torrent.NewDefaultClientConfig()
@@ -176,7 +186,7 @@ func main() {
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
 		if err != nil {
-			log.Fatalf("error loading blocklist: %s", err)
+			return xerrors.Errorf("loading blocklist: %v", err)
 		}
 		defer blocklist.Close()
 		clientConfig.IPBlocklist = blocklist
@@ -193,10 +203,13 @@ func main() {
 	if flags.DownloadRate != -1 {
 		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(flags.DownloadRate), 1<<20)
 	}
+	if flags.Quiet {
+		clientConfig.Logger = log.Discard
+	}
 
 	client, err := torrent.NewClient(clientConfig)
 	if err != nil {
-		log.Fatalf("error creating client: %s", err)
+		return xerrors.Errorf("creating client: %v", err)
 	}
 	defer client.Close()
 	go exitSignalHandlers(client)
@@ -207,7 +220,7 @@ func main() {
 		client.WriteStatus(w)
 	})
 	if stdoutAndStderrAreSameFile() {
-		log.SetOutput(progress.Bypass())
+		log.Default = log.Logger{log.StreamLogger{W: progress.Bypass(), Fmt: log.LineFormatter}}
 	}
 	if flags.Progress {
 		progress.Start()
@@ -216,13 +229,14 @@ func main() {
 	if client.WaitAll() {
 		log.Print("downloaded ALL the torrents")
 	} else {
-		log.Fatal("y u no complete torrents?!")
+		return xerrors.New("y u no complete torrents?!")
 	}
 	if flags.Seed {
 		outputStats(client)
 		select {}
 	}
 	outputStats(client)
+	return nil
 }
 
 func outputStats(cl *torrent.Client) {

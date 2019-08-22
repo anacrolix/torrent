@@ -1065,7 +1065,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	p.storageCompletionOk = uncached.Ok
 	t.completedPieces.Set(bitmap.BitIndex(piece), uncached.Complete)
 	if changed {
-		t.logger.Log(log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached))
+		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).WithValues(debugLogValue).Log(t.logger)
 		t.pieceCompletionChanged(piece)
 	}
 	return changed

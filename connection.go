@@ -1025,10 +1025,6 @@ func (c *connection) reject(r request) {
 
 func (c *connection) onReadRequest(r request) error {
 	requestedChunkLengths.Add(strconv.FormatUint(r.Length.Uint64(), 10), 1)
-	if r.Begin+r.Length > c.t.pieceLength(pieceIndex(r.Index)) {
-		torrent.Add("bad requests received", 1)
-		return errors.New("bad request")
-	}
 	if _, ok := c.PeerRequests[r]; ok {
 		torrent.Add("duplicate requests received", 1)
 		return nil
@@ -1055,6 +1051,11 @@ func (c *connection) onReadRequest(r request) error {
 		// except by reconnecting.
 		requestsReceivedForMissingPieces.Add(1)
 		return fmt.Errorf("peer requested piece we don't have: %v", r.Index.Int())
+	}
+	// Check this after we know we have the piece, so that the piece length will be known.
+	if r.Begin+r.Length > c.t.pieceLength(pieceIndex(r.Index)) {
+		torrent.Add("bad requests received", 1)
+		return errors.New("bad request")
 	}
 	if c.PeerRequests == nil {
 		c.PeerRequests = make(map[request]struct{}, maxRequests)

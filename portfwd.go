@@ -7,14 +7,14 @@ import (
 	"github.com/anacrolix/upnp"
 )
 
-func addPortMapping(d upnp.Device, proto upnp.Protocol, internalPort int, debug bool) {
+func (cl *Client) addPortMapping(d upnp.Device, proto upnp.Protocol, internalPort int) {
 	externalPort, err := d.AddPortMapping(proto, internalPort, internalPort, "anacrolix/torrent", 0)
 	if err != nil {
-		log.Printf("error adding %s port mapping: %s", proto, err)
+		cl.logger.WithValues(log.Warning).Printf("error adding %s port mapping: %s", proto, err)
 	} else if externalPort != internalPort {
-		log.Printf("external port %d does not match internal port %d in port mapping", externalPort, internalPort)
-	} else if debug {
-		log.Printf("forwarded external %s port %d", proto, externalPort)
+		cl.logger.WithValues(log.Warning).Printf("external port %d does not match internal port %d in port mapping", externalPort, internalPort)
+	} else {
+		cl.logger.WithValues(log.Info).Printf("forwarded external %s port %d", proto, externalPort)
 	}
 }
 
@@ -25,14 +25,14 @@ func (cl *Client) forwardPort() {
 		return
 	}
 	cl.unlock()
-	ds := upnp.Discover(0, 2*time.Second, cl.logger)
+	ds := upnp.Discover(0, 2*time.Second, cl.logger.WithValues("upnp-discover"))
 	cl.lock()
 	cl.logger.Printf("discovered %d upnp devices", len(ds))
 	port := cl.incomingPeerPort()
 	cl.unlock()
 	for _, d := range ds {
-		go addPortMapping(d, upnp.TCP, port, cl.config.Debug)
-		go addPortMapping(d, upnp.UDP, port, cl.config.Debug)
+		go cl.addPortMapping(d, upnp.TCP, port)
+		go cl.addPortMapping(d, upnp.UDP, port)
 	}
 	cl.lock()
 }

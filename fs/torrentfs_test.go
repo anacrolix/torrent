@@ -171,7 +171,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	cfg.NoDHT = true
 	cfg.Seed = true
 	cfg.ListenPort = 0
-	cfg.ListenHost = torrent.LoopbackListenHost
+	cfg.ListenHost = net.IPv6loopback.String()
 	seeder, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
@@ -190,7 +190,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	cfg.NoDHT = true
 	cfg.DisableTCP = true
 	cfg.DefaultStorage = storage.NewMMap(filepath.Join(layout.BaseDir, "download"))
-	cfg.ListenHost = torrent.LoopbackListenHost
+	cfg.ListenHost = net.IPv6loopback.String()
 	cfg.ListenPort = 0
 	leecher, err := torrent.NewClient(cfg)
 	require.NoError(t, err)

@@ -31,7 +31,7 @@ import (
 
 func TestingConfig() *ClientConfig {
 	cfg := NewDefaultClientConfig()
-	cfg.ListenHost = LoopbackListenHost
+	cfg.ListenHost = "localhost"
 	cfg.NoDHT = true
 	cfg.DataDir = tempDir()
 	cfg.DisableTrackers = true
@@ -58,6 +58,22 @@ func TestClientDefault(t *testing.T) {
 
 func TestClientNilConfig(t *testing.T) {
 	cl, err := NewClient(nil)
+	require.NoError(t, err)
+	cl.Close()
+}
+
+func TestClientIP4Host(t *testing.T) {
+	c := TestingConfig()
+	c.ListenHost = "127.0.0.1"
+	cl, err := NewClient(c)
+	require.NoError(t, err)
+	cl.Close()
+}
+
+func TestClientIP6Host(t *testing.T) {
+	c := TestingConfig()
+	c.ListenHost = "::1"
+	cl, err := NewClient(c)
 	require.NoError(t, err)
 	cl.Close()
 }
@@ -623,7 +639,8 @@ func TestDHTInheritBlocklist(t *testing.T) {
 		assert.Equal(t, ipl, s.IPBlocklist())
 		numServers++
 	})
-	assert.EqualValues(t, 2, numServers)
+
+	assert.EqualValues(t, len(lookupIP(cfg.ListenHost)), numServers)
 }
 
 // Check that stuff is merged in subsequent AddTorrentSpec for the same
@@ -726,7 +743,7 @@ func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
 
 func TestAddMetainfoWithNodes(t *testing.T) {
 	cfg := TestingConfig()
-	cfg.ListenHost = func(string) string { return "" }
+	cfg.ListenHost = ""
 	cfg.NoDHT = false
 	cfg.DhtStartingNodes = func() ([]dht.Addr, error) { return nil, nil }
 	// For now, we want to just jam the nodes into the table, without

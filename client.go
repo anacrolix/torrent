@@ -41,7 +41,7 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-// Clients contain zero or more Torrents. A Client manages a blocklist, the
+// Client contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
 type Client struct {
 	// An aggregate of stats over all connections. First in struct to ensure
@@ -235,7 +235,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	cl.LocalPort()
 
 	for _, s := range cl.conns {
-		if peerNetworkEnabled(parseNetworkString(s.Addr().Network()), cl.config) {
+		if peerNetworkEnabled(s.Addr(), cl.config) {
 			go cl.acceptConnections(s)
 		}
 	}
@@ -268,22 +268,7 @@ func (cl *Client) firewallCallback(net.Addr) bool {
 	return block
 }
 
-func (cl *Client) enabledPeerNetworks() (ns []network) {
-	for _, n := range allPeerNetworks {
-		if peerNetworkEnabled(n, cl.config) {
-			ns = append(ns, n)
-		}
-	}
-	return
-}
-
 func (cl *Client) listenOnNetwork(n network) bool {
-	if n.Ipv4 && cl.config.DisableIPv4 {
-		return false
-	}
-	if n.Ipv6 && cl.config.DisableIPv6 {
-		return false
-	}
 	if n.Tcp && cl.config.DisableTCP {
 		return false
 	}
@@ -294,7 +279,7 @@ func (cl *Client) listenOnNetwork(n network) bool {
 }
 
 func (cl *Client) listenNetworks() (ns []network) {
-	for _, n := range allPeerNetworks {
+	for _, n := range allPeerNetworks() {
 		if cl.listenOnNetwork(n) {
 			ns = append(ns, n)
 		}
@@ -331,6 +316,7 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	return
 }
 
+// Closed returns a channel that can be read from to determine if the client is shutdown.
 func (cl *Client) Closed() <-chan struct{} {
 	cl.lock()
 	defer cl.unlock()
@@ -351,7 +337,7 @@ func (cl *Client) closeSockets() {
 	cl.conns = nil
 }
 
-// Stops the client. All connections to peers are closed and all activity will
+// Close stops the client. All connections to peers are closed and all activity will
 // come to a halt.
 func (cl *Client) Close() {
 	cl.lock()
@@ -466,7 +452,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 	cl.runReceivedConn(c)
 }
 
-// Returns a handle to the given torrent, if it's present in the client.
+// Torrent retrieve a handle to the given torrent, if it's present in the client.
 func (cl *Client) Torrent(ih metainfo.Hash) (t *Torrent, ok bool) {
 	cl.lock()
 	defer cl.unlock()
@@ -527,8 +513,7 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) (res dialResult) {
 		defer cl.unlock()
 		cl.eachListener(func(s socket) bool {
 			func() {
-				network := s.Addr().Network()
-				if !peerNetworkEnabled(parseNetworkString(network), cl.config) {
+				if !peerNetworkEnabled(s.Addr(), cl.config) {
 					return
 				}
 				left++
@@ -536,7 +521,7 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) (res dialResult) {
 				go func() {
 					resCh <- dialResult{
 						cl.dialFromSocket(ctx, s, addr),
-						network,
+						s.Addr().Network(),
 					}
 				}()
 			}()

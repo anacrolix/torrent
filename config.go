@@ -19,9 +19,10 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-var DefaultHTTPUserAgent = "Go-Torrent/1.0"
+// DefaultHTTPUserAgent ...
+const DefaultHTTPUserAgent = "Go-Torrent/1.0"
 
-// Probably not safe to modify this after it's given to a Client.
+// ClientConfig not safe to modify this after it's given to a Client.
 type ClientConfig struct {
 	// Store torrent file data in this directory unless .DefaultStorage is
 	// specified.
@@ -29,7 +30,7 @@ type ClientConfig struct {
 	// The address to listen for new uTP and TCP bittorrent protocol
 	// connections. DHT shares a UDP socket with uTP unless configured
 	// otherwise.
-	ListenHost              func(network string) string
+	ListenHost              string
 	ListenPort              int
 	NoDefaultPortForwarding bool
 	// Don't announce to trackers. This only leaves DHT to discover peers.
@@ -141,7 +142,7 @@ type ClientConfig struct {
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
 	host, port, err := missinggo.ParseHostPort(addr)
 	expect.Nil(err)
-	cfg.ListenHost = func(string) string { return host }
+	cfg.ListenHost = host
 	cfg.ListenPort = port
 	return cfg
 }
@@ -159,7 +160,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		TorrentPeersLowWater:           50,
 		HandshakesTimeout:              4 * time.Second,
 		DhtStartingNodes:               dht.GlobalBootstrapAddrs,
-		ListenHost:                     func(string) string { return "" },
+		ListenHost:                     "",
 		UploadRateLimiter:              unlimited,
 		DownloadRateLimiter:            unlimited,
 		ConnTracker:                    conntrack.NewInstance(),

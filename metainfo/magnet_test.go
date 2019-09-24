@@ -2,7 +2,6 @@ package metainfo
 
 import (
 	"encoding/hex"
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,13 +19,15 @@ var (
 	}
 )
 
+func init() {
+	hex.Decode(exampleMagnet.InfoHash[:], []byte("51340689c960f0778a4387aef9b4b52fd08390cd"))
+}
+
 // Converting from our Magnet type to URL string.
 func TestMagnetString(t *testing.T) {
-	hex.Decode(exampleMagnet.InfoHash[:], []byte("51340689c960f0778a4387aef9b4b52fd08390cd"))
-	s := exampleMagnet.String()
-	if s != exampleMagnetURI {
-		t.Fatalf("\nexpected:\n\t%q\nactual\n\t%q", exampleMagnetURI, s)
-	}
+	m, err := ParseMagnetURI(exampleMagnet.String())
+	require.NoError(t, err)
+	assert.EqualValues(t, exampleMagnet, m)
 }
 
 func TestParseMagnetURI(t *testing.T) {
@@ -43,9 +44,7 @@ func TestParseMagnetURI(t *testing.T) {
 
 	// Checking if the magnet instance struct is built correctly from parsing
 	m, err = ParseMagnetURI(exampleMagnetURI)
-	if err != nil || !reflect.DeepEqual(exampleMagnet, m) {
-		t.Errorf("ParseMagnetURI(%s) returned %v, expected %v", uri, m, exampleMagnet)
-	}
+	assert.EqualValues(t, exampleMagnet, m)
 
 	// empty string URI case
 	_, err = ParseMagnetURI("")

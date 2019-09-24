@@ -26,7 +26,6 @@ func (m Magnet) String() string {
 		vs[k] = append([]string(nil), v...)
 	}
 
-	vs.Add("xt", xtPrefix+m.InfoHash.HexString())
 	for _, tr := range m.Trackers {
 		vs.Add("tr", tr)
 	}
@@ -34,10 +33,17 @@ func (m Magnet) String() string {
 		vs.Add("dn", m.DisplayName)
 	}
 
-	return (&url.URL{
+	// Transmission and Deluge both expect "urn:btih:" to be unescaped. Deluge wants it to be at the
+	// start of the magnet link. The InfoHash field is expected to be BitTorrent in this
+	// implementation.
+	u := url.URL{
 		Scheme:   "magnet",
-		RawQuery: vs.Encode(),
-	}).String()
+		RawQuery: "xt=" + xtPrefix + m.InfoHash.HexString(),
+	}
+	if len(vs) != 0 {
+		u.RawQuery += "&" + vs.Encode()
+	}
+	return u.String()
 }
 
 // ParseMagnetURI parses Magnet-formatted URIs into a Magnet instance

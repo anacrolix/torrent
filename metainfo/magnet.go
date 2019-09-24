@@ -11,10 +11,10 @@ import (
 
 // Magnet link components.
 type Magnet struct {
-	InfoHash    Hash
-	Trackers    []string
-	DisplayName string
-	Params      url.Values
+	InfoHash    Hash       // Expected in this implementation
+	Trackers    []string   // "tr" values
+	DisplayName string     // "dn" value, if not empty
+	Params      url.Values // All other values, such as "x.pe", "as", "xs" etc.
 }
 
 const xtPrefix = "urn:btih:"

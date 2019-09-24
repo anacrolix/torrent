@@ -3,7 +3,7 @@ jobs:
   build:
     machine: true
     environment:
-      GO_BRANCH: release-branch.go1.12
+      GO_BRANCH: release-branch.go1.13
     steps:
       - run: echo $CIRCLE_WORKING_DIRECTORY
       - run: echo $PWD

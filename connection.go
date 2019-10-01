@@ -1065,8 +1065,8 @@ func (c *connection) onReadRequest(r request) error {
 	return nil
 }
 
-// Processes incoming bittorrent messages. The client lock is held upon entry
-// and exit. Returning will end the connection.
+// Processes incoming BitTorrent wire-protocol messages. The client lock is held upon entry and
+// exit. Returning will end the connection.
 func (c *connection) mainReadLoop() (err error) {
 	defer func() {
 		if err != nil {

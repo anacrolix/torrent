@@ -6,6 +6,8 @@ import (
 	"fmt"
 )
 
+// This is a lazy union representing all the possible fields for messages. Go doesn't have ADTs, and
+// I didn't choose to use type-assertions.
 type Message struct {
 	Keepalive            bool
 	Type                 MessageType

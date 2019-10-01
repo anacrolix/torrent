@@ -1113,9 +1113,6 @@ func (c *connection) mainReadLoop() (err error) {
 			// We can then reset our interest.
 			c.updateRequests()
 			c.updateExpectingChunks()
-		case pp.Reject:
-			c.deleteRequest(newRequestFromMessage(&msg))
-			delete(c.validReceiveChunks, newRequestFromMessage(&msg))
 		case pp.Unchoke:
 			c.PeerChoked = false
 			c.tickleWriter()
@@ -1130,18 +1127,11 @@ func (c *connection) mainReadLoop() (err error) {
 			// appropriate, and is clearly specified.
 		case pp.Have:
 			err = c.peerSentHave(pieceIndex(msg.Index))
+		case pp.Bitfield:
+			err = c.peerSentBitfield(msg.Bitfield)
 		case pp.Request:
 			r := newRequestFromMessage(&msg)
 			err = c.onReadRequest(r)
-		case pp.Cancel:
-			req := newRequestFromMessage(&msg)
-			c.onPeerSentCancel(req)
-		case pp.Bitfield:
-			err = c.peerSentBitfield(msg.Bitfield)
-		case pp.HaveAll:
-			err = c.onPeerSentHaveAll()
-		case pp.HaveNone:
-			err = c.peerSentHaveNone()
 		case pp.Piece:
 			err = c.receiveChunk(&msg)
 			if len(msg.Piece) == int(t.chunkSize) {
@@ -1150,8 +1140,9 @@ func (c *connection) mainReadLoop() (err error) {
 			if err != nil {
 				err = fmt.Errorf("receiving chunk: %s", err)
 			}
-		case pp.Extended:
-			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
+		case pp.Cancel:
+			req := newRequestFromMessage(&msg)
+			c.onPeerSentCancel(req)
 		case pp.Port:
 			pingAddr := net.UDPAddr{
 				IP:   c.remoteAddr.IP,
@@ -1163,15 +1154,24 @@ func (c *connection) mainReadLoop() (err error) {
 			cl.eachDhtServer(func(s *dht.Server) {
 				go s.Ping(&pingAddr, nil)
 			})
+		case pp.Suggest:
+			torrent.Add("suggests received", 1)
+			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index, debugLogValue).Log(c.t.logger)
+			c.updateRequests()
+		case pp.HaveAll:
+			err = c.onPeerSentHaveAll()
+		case pp.HaveNone:
+			err = c.peerSentHaveNone()
+		case pp.Reject:
+			c.deleteRequest(newRequestFromMessage(&msg))
+			delete(c.validReceiveChunks, newRequestFromMessage(&msg))
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c, debugLogValue).Log(c.t.logger)
 			c.peerAllowedFast.Add(int(msg.Index))
 			c.updateRequests()
-		case pp.Suggest:
-			torrent.Add("suggests received", 1)
-			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index, debugLogValue).Log(c.t.logger)
-			c.updateRequests()
+		case pp.Extended:
+			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}

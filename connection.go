@@ -1560,3 +1560,7 @@ func (c *connection) remoteIp() net.IP {
 func (c *connection) remoteIpPort() IpPort {
 	return c.remoteAddr
 }
+
+func (c *connection) String() string {
+	return fmt.Sprintf("%p", c)
+}

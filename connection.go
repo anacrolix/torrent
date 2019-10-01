@@ -944,8 +944,9 @@ func (c *connection) requestPendingMetadata() {
 			pending = append(pending, index)
 		}
 	}
-	for _, i := range rand.Perm(len(pending)) {
-		c.requestMetadataPiece(pending[i])
+	rand.Shuffle(len(pending), func(i, j int) { pending[i], pending[j] = pending[j], pending[i] })
+	for _, i := range pending {
+		c.requestMetadataPiece(i)
 	}
 }
 

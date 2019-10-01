@@ -1220,9 +1220,7 @@ func (c *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (e
 				return errors.Wrapf(err, "setting metadata size to %d", d.MetadataSize)
 			}
 		}
-		if _, ok := c.PeerExtensionIDs[pp.ExtensionNameMetadata]; ok {
-			c.requestPendingMetadata()
-		}
+		c.requestPendingMetadata()
 		return nil
 	case metadataExtendedId:
 		err := cl.gotMetadataExtensionMsg(payload, t, c)

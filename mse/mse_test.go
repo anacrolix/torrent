@@ -190,6 +190,7 @@ func benchmarkStream(t *testing.B, crypto CryptoMethod) {
 			require.NoError(t, err)
 			require.NoError(t, readAndWrite(rw, br, b))
 		}()
+		wg.Wait()
 		t.StopTimer()
 		if !bytes.Equal(ar, b) {
 			t.Fatalf("A read the wrong bytes")

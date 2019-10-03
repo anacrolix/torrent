@@ -19,9 +19,8 @@ import (
 // Ensure that no race exists between sending a bitfield, and a subsequent
 // Have that would potentially alter it.
 func TestSendBitfieldThenHave(t *testing.T) {
-	r, w := io.Pipe()
 	cl := Client{
-		config: &ClientConfig{DownloadRateLimiter: unlimited},
+		config: TestingConfig(),
 	}
 	cl.initLogger()
 	c := cl.newConnection(nil, false, IpPort{}, "")
@@ -29,6 +28,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	c.t.setInfo(&metainfo.Info{
 		Pieces: make([]byte, metainfo.HashSize*3),
 	})
+	r, w := io.Pipe()
 	c.r = r
 	c.w = w
 	go c.writer(time.Minute)

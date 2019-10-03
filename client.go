@@ -980,6 +980,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *connect
 			return nil
 		}
 		start := (1 << 14) * piece
+		c.logger.Printf("sending metadata piece %d", piece)
 		c.Post(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]))
 		return nil
 	case pp.RejectMetadataExtensionMsgType:
@@ -1228,12 +1229,18 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, n
 		remoteAddr:      remoteAddr,
 		network:         network,
 	}
+	c.logger = cl.logger.WithValues(c,
+		log.Debug, // I want messages to default to debug, and can set it here as it's only used by new code
+	).WithText(func(m log.Msg) string {
+		return fmt.Sprintf("%v: %s", c, m.Text())
+	})
 	c.writerCond.L = cl.locker()
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
 		l: cl.config.DownloadRateLimiter,
 		r: c.r,
 	}
+	c.logger.Printf("initialized with remote %v over network %v (outgoing=%t)", remoteAddr, network, outgoing)
 	return
 }
 

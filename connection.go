@@ -115,6 +115,8 @@ type connection struct {
 	writeBuffer *bytes.Buffer
 	uploadTimer *time.Timer
 	writerCond  sync.Cond
+
+	logger log.Logger
 }
 
 func (cn *connection) updateExpectingChunks() {
@@ -348,6 +350,7 @@ func (cn *connection) requestMetadataPiece(index int) {
 	if index < len(cn.metadataRequests) && cn.metadataRequests[index] {
 		return
 	}
+	cn.logger.Printf("requesting metadata piece %d", index)
 	cn.Post(pp.Message{
 		Type:       pp.Extended,
 		ExtendedID: eID,
@@ -1225,7 +1228,7 @@ func (c *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (e
 	case metadataExtendedId:
 		err := cl.gotMetadataExtensionMsg(payload, t, c)
 		if err != nil {
-			return fmt.Errorf("error handling metadata extension message: %s", err)
+			return fmt.Errorf("handling metadata extension message: %w", err)
 		}
 		return nil
 	case pexExtendedId:
@@ -1546,6 +1549,7 @@ func (c *connection) setTorrent(t *Torrent) {
 		panic("connection already associated with a torrent")
 	}
 	c.t = t
+	c.logger.Printf("torrent=%v", t)
 	t.reconcileHandshakeStats(c)
 }
 
@@ -1562,5 +1566,5 @@ func (c *connection) remoteIpPort() IpPort {
 }
 
 func (c *connection) String() string {
-	return fmt.Sprintf("%p", c)
+	return fmt.Sprintf("connection %p", c)
 }

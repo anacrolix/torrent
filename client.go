@@ -1378,6 +1378,10 @@ func (cl *Client) locker() sync.Locker {
 	return clientLocker{cl}
 }
 
+func (cl *Client) String() string {
+	return fmt.Sprintf("<%[1]T %[1]p>", cl)
+}
+
 type clientLocker struct {
 	*Client
 }

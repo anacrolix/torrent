@@ -92,6 +92,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			DownloadRateLimiter: unlimited,
 		},
 	}
+	cl.initLogger()
 	ts := &torrentStorage{}
 	t := &Torrent{
 		cl:                cl,

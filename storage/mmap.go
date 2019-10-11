@@ -78,7 +78,10 @@ func (me mmapStoragePiece) pieceKey() metainfo.PieceKey {
 }
 
 func (sp mmapStoragePiece) Completion() Completion {
-	c, _ := sp.pc.Get(sp.pieceKey())
+	c, err := sp.pc.Get(sp.pieceKey())
+	if err != nil {
+		panic(err)
+	}
 	return c
 }
 

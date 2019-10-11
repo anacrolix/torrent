@@ -1078,3 +1078,28 @@ func TestClientHasDhtServersWhenUtpDisabled(t *testing.T) {
 	defer cl.Close()
 	assert.NotEmpty(t, cl.DhtServers())
 }
+
+func TestIssue335(t *testing.T) {
+	dir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(dir)
+	cfg := TestingConfig()
+	cfg.Seed = false
+	cfg.Debug = true
+	cfg.DataDir = dir
+	comp, err := storage.NewBoltPieceCompletion(dir)
+	require.NoError(t, err)
+	defer comp.Close()
+	cfg.DefaultStorage = storage.NewMMapWithCompletion(dir, comp)
+	cl, err := NewClient(cfg)
+	require.NoError(t, err)
+	defer cl.Close()
+	tor, new, err := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	require.NoError(t, err)
+	assert.True(t, new)
+	require.True(t, cl.WaitAll())
+	tor.Drop()
+	tor, new, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	require.NoError(t, err)
+	assert.True(t, new)
+	require.True(t, cl.WaitAll())
+}

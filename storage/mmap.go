@@ -47,7 +47,7 @@ func (s *mmapClientImpl) Close() error {
 type mmapTorrentStorage struct {
 	infoHash metainfo.Hash
 	span     *mmap_span.MMapSpan
-	pc       PieceCompletion
+	pc       PieceCompletionGetSetter
 }
 
 func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
@@ -61,12 +61,11 @@ func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 }
 
 func (ts *mmapTorrentStorage) Close() error {
-	ts.pc.Close()
 	return ts.span.Close()
 }
 
 type mmapStoragePiece struct {
-	pc PieceCompletion
+	pc PieceCompletionGetSetter
 	p  metainfo.Piece
 	ih metainfo.Hash
 	io.ReaderAt

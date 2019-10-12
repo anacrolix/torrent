@@ -31,3 +31,5 @@ require (
 )
 
 go 1.13
+
+replace github.com/boltdb/bolt => github.com/etcd-io/bbolt v1.3.3

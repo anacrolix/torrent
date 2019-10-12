@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo/expect"
-	"github.com/boltdb/bolt"
+	bolt "github.com/boltdb/bolt"
 
 	"github.com/anacrolix/torrent/metainfo"
 )

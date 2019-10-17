@@ -31,9 +31,9 @@ type peerSource string
 const (
 	peerSourceTracker         = "Tr"
 	peerSourceIncoming        = "I"
-	peerSourceDHTGetPeers     = "Hg" // Peers we found by searching a DHT.
-	peerSourceDHTAnnouncePeer = "Ha" // Peers that were announced to us by a DHT.
-	peerSourcePEX             = "X"
+	peerSourceDhtGetPeers     = "Hg" // Peers we found by searching a DHT.
+	peerSourceDhtAnnouncePeer = "Ha" // Peers that were announced to us by a DHT.
+	peerSourcePex             = "X"
 )
 
 // Maintains the state of a connection with a peer.

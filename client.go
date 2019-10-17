@@ -1254,7 +1254,7 @@ func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portO
 	t.addPeers([]Peer{{
 		IP:     ip,
 		Port:   port,
-		Source: peerSourceDHTAnnouncePeer,
+		Source: peerSourceDhtAnnouncePeer,
 	}})
 }
 

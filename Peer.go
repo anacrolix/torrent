@@ -21,7 +21,7 @@ type Peer struct {
 func (me *Peer) FromPex(na krpc.NodeAddr, fs peer_protocol.PexPeerFlags) {
 	me.IP = append([]byte(nil), na.IP...)
 	me.Port = na.Port
-	me.Source = peerSourcePEX
+	me.Source = peerSourcePex
 	// If they prefer encryption, they must support it.
 	if fs.Get(peer_protocol.PexPrefersEncryption) {
 		me.SupportsEncryption = true

@@ -1341,7 +1341,7 @@ func (t *Torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 			t.addPeer(Peer{
 				IP:     cp.IP[:],
 				Port:   cp.Port,
-				Source: peerSourceDHTGetPeers,
+				Source: peerSourceDhtGetPeers,
 			})
 		}
 		cl.unlock()

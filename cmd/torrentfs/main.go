@@ -110,12 +110,12 @@ func mainExitCode() int {
 			switch ev.Change {
 			case dirwatch.Added:
 				if ev.TorrentFilePath != "" {
-					_, err := client.AddTorrentFromFile(ev.TorrentFilePath)
+					_, _, err := client.MaybeStart(torrent.NewFromMetaInfoFile(ev.TorrentFilePath))
 					if err != nil {
 						log.Printf("error adding torrent to client: %s", err)
 					}
 				} else if ev.MagnetURI != "" {
-					_, err := client.AddMagnet(ev.MagnetURI)
+					_, _, err := client.MaybeStart(torrent.NewFromMagnet(ev.MagnetURI))
 					if err != nil {
 						log.Printf("error adding magnet: %s", err)
 					}

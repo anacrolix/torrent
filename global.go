@@ -27,7 +27,7 @@ func defaultPeerExtensionBytes() PeerExtensionBits {
 // I could move a lot of these counters to their own file, but I suspect they
 // may be attached to a Client someday.
 var (
-	torrent = expvar.NewMap("torrent")
+	metrics = expvar.NewMap("torrent")
 
 	peersAddedBySource = expvar.NewMap("peersAddedBySource")
 

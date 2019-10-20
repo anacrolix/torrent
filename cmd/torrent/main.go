@@ -31,7 +31,7 @@ import (
 
 var progress = uiprogress.New()
 
-func torrentBar(t *torrent.Torrent) {
+func torrentBar(t torrent.Torrent) {
 	bar := progress.AddBar(1)
 	bar.AppendCompleted()
 	bar.AppendFunc(func(*uiprogress.Bar) (ret string) {
@@ -40,13 +40,16 @@ func torrentBar(t *torrent.Torrent) {
 		default:
 			return "getting info"
 		}
+
 		if t.Seeding() {
 			return "seeding"
-		} else if t.BytesCompleted() == t.Info().TotalLength() {
-			return "completed"
-		} else {
-			return fmt.Sprintf("downloading (%s/%s)", humanize.Bytes(uint64(t.BytesCompleted())), humanize.Bytes(uint64(t.Info().TotalLength())))
 		}
+
+		if t.BytesCompleted() == t.Info().TotalLength() {
+			return "completed"
+		}
+
+		return fmt.Sprintf("downloading (%s/%s)", humanize.Bytes(uint64(t.BytesCompleted())), humanize.Bytes(uint64(t.Info().TotalLength())))
 	})
 	bar.PrependFunc(func(*uiprogress.Bar) string {
 		return t.Name()
@@ -69,9 +72,9 @@ func torrentBar(t *torrent.Torrent) {
 
 func addTorrents(client *torrent.Client) error {
 	for _, arg := range flags.Torrent {
-		t, err := func() (*torrent.Torrent, error) {
+		t, err := func() (torrent.Torrent, error) {
 			if strings.HasPrefix(arg, "magnet:") {
-				t, err := client.AddMagnet(arg)
+				t, _, err := client.MaybeStart(torrent.NewFromMagnet(arg))
 				if err != nil {
 					return nil, xerrors.Errorf("error adding magnet: %w", err)
 				}
@@ -87,25 +90,25 @@ func addTorrents(client *torrent.Client) error {
 				if err != nil {
 					return nil, xerrors.Errorf("error loading torrent file %q: %s\n", arg, err)
 				}
-				t, err := client.AddTorrent(metaInfo)
+				t, _, err := client.MaybeStart(torrent.NewFromMetaInfo(metaInfo))
 				if err != nil {
 					return nil, xerrors.Errorf("adding torrent: %w", err)
 				}
 				return t, nil
 			} else if strings.HasPrefix(arg, "infohash:") {
-				t, _ := client.AddTorrentInfoHash(metainfo.NewHashFromHex(strings.TrimPrefix(arg, "infohash:")))
-				return t, nil
-			} else {
-				metaInfo, err := metainfo.LoadFromFile(arg)
-				if err != nil {
-					return nil, xerrors.Errorf("error loading torrent file %q: %s\n", arg, err)
-				}
-				t, err := client.AddTorrent(metaInfo)
-				if err != nil {
-					return nil, xerrors.Errorf("adding torrent: %w", err)
-				}
-				return t, nil
+				t, _, err := client.MaybeStart(torrent.New(metainfo.NewHashFromHex(strings.TrimPrefix(arg, "infohash:"))))
+				return t, err
 			}
+
+			metaInfo, err := metainfo.LoadFromFile(arg)
+			if err != nil {
+				return nil, xerrors.Errorf("error loading torrent file %q: %s\n", arg, err)
+			}
+			t, _, err := client.MaybeStart(torrent.NewFromMetaInfo(metaInfo))
+			if err != nil {
+				return nil, xerrors.Errorf("adding torrent: %w", err)
+			}
+			return t, nil
 		}()
 		if err != nil {
 			return xerrors.Errorf("adding torrent for %q: %w", arg, err)

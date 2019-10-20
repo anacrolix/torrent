@@ -9,7 +9,9 @@ import (
 func Example() {
 	c, _ := torrent.NewClient(nil)
 	defer c.Close()
-	t, _ := c.AddMagnet("magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU")
+	ts, _ := torrent.NewFromMagnet("magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU")
+
+	t, _, _ := c.Start(ts)
 	<-t.GotInfo()
 	t.DownloadAll()
 	c.WaitAll()

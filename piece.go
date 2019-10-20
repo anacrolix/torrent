@@ -41,7 +41,7 @@ const (
 type Piece struct {
 	// The completed piece SHA1 hash, from the metainfo "pieces" field.
 	hash  *metainfo.Hash
-	t     *Torrent
+	t     *torrent
 	index pieceIndex
 	files []*File
 	// Chunks we've written to since the last check. The chunk offset and

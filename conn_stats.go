@@ -10,7 +10,7 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
-// Various connection-level metrics. At the Torrent level these are
+// ConnStats various connection-level metrics. At the Torrent level these are
 // aggregates. Chunks are messages with data payloads. Data is actual torrent
 // content without any overhead. Useful is something we needed locally.
 // Unwanted is something we didn't ask for (but may still be useful). Written

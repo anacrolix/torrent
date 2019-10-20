@@ -24,7 +24,10 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	}
 	cl.initLogger()
 	c := cl.newConnection(nil, false, IpPort{}, "")
-	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
+	ts, err := New(metainfo.Hash{})
+	require.NoError(t, err)
+
+	c.setTorrent(cl.newTorrent(ts))
 	c.t.setInfo(&metainfo.Info{
 		Pieces: make([]byte, metainfo.HashSize*3),
 	})
@@ -94,7 +97,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	}
 	cl.initLogger()
 	ts := &torrentStorage{}
-	t := &Torrent{
+	t := &torrent{
 		cl:                cl,
 		storage:           &storage.Torrent{TorrentImpl: ts},
 		pieceStateChanges: pubsub.NewPubSub(),

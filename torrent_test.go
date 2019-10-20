@@ -65,7 +65,7 @@ func TestAppendToCopySlice(t *testing.T) {
 }
 
 func TestTorrentString(t *testing.T) {
-	tor := &Torrent{}
+	tor := &torrent{}
 	s := tor.InfoHash().HexString()
 	if s != "0000000000000000000000000000000000000000" {
 		t.FailNow()
@@ -82,7 +82,9 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	)
 	cl := &Client{config: &ClientConfig{}}
 	cl.initLogger()
-	t := cl.newTorrent(metainfo.Hash{}, nil)
+	ts, err := New(metainfo.Hash{})
+	require.NoError(b, err)
+	t := cl.newTorrent(ts)
 	require.NoError(b, t.setInfo(&metainfo.Info{
 		Pieces:      make([]byte, metainfo.HashSize*numPieces),
 		PieceLength: pieceLength,
@@ -120,11 +122,13 @@ func testEmptyFilesAndZeroPieceLength(t *testing.T, cfg *ClientConfig) {
 	fp := filepath.Join(cfg.DataDir, "empty")
 	os.Remove(fp)
 	assert.False(t, missinggo.FilePathExists(fp))
-	tt, err := cl.AddTorrent(&metainfo.MetaInfo{
+	ts, err := NewFromMetaInfo(&metainfo.MetaInfo{
 		InfoBytes: ib,
 	})
 	require.NoError(t, err)
-	defer tt.Drop()
+	tt, _, err := cl.Start(ts)
+	require.NoError(t, err)
+	defer cl.Stop(ts)
 	tt.DownloadAll()
 	require.True(t, cl.WaitAll())
 	assert.True(t, missinggo.FilePathExists(fp))
@@ -151,7 +155,9 @@ func TestPieceHashFailed(t *testing.T) {
 	cl := new(Client)
 	cl.config = TestingConfig()
 	cl.initLogger()
-	tt := cl.newTorrent(mi.HashInfoBytes(), badStorage{})
+	ts, err := NewFromMetaInfo(mi, OptionStorage(badStorage{}))
+	require.NoError(t, err)
+	tt := cl.newTorrent(ts)
 	tt.setChunkSize(2)
 	require.NoError(t, tt.setInfoBytes(mi.InfoBytes))
 	tt.cl.lock()
@@ -173,10 +179,11 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 
 	mi := testutil.GreetingMetaInfo()
 	ih := mi.HashInfoBytes()
-
-	tt, _ := cl.AddTorrentInfoHash(ih)
-	assert.Nil(t, tt.Metainfo().InfoBytes)
-	assert.False(t, tt.haveAllMetadataPieces())
+	ts, err := New(ih)
+	require.NoError(t, err)
+	tt, _, _ := cl.Start(ts)
+	assert.Nil(t, tt.(*torrent).Metainfo().InfoBytes)
+	assert.False(t, tt.(*torrent).haveAllMetadataPieces())
 
 	nc, err := net.Dial("tcp", fmt.Sprintf(":%d", cl.LocalPort()))
 	require.NoError(t, err)
@@ -190,7 +197,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	assert.EqualValues(t, cl.PeerID(), hr.PeerID)
 	assert.EqualValues(t, ih, hr.Hash)
 
-	assert.EqualValues(t, 0, tt.metadataSize())
+	assert.EqualValues(t, 0, tt.(*torrent).metadataSize())
 
 	func() {
 		cl.lock()
@@ -212,9 +219,9 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 			}.MustMarshalBinary())
 			require.NoError(t, err)
 		}()
-		tt.metadataChanged.Wait()
+		tt.(*torrent).metadataChanged.Wait()
 	}()
-	assert.Equal(t, make([]byte, len(mi.InfoBytes)), tt.metadataBytes)
-	assert.False(t, tt.haveAllMetadataPieces())
-	assert.Nil(t, tt.Metainfo().InfoBytes)
+	assert.Equal(t, make([]byte, len(mi.InfoBytes)), tt.(*torrent).metadataBytes)
+	assert.False(t, tt.(*torrent).haveAllMetadataPieces())
+	assert.Nil(t, tt.(*torrent).Metainfo().InfoBytes)
 }

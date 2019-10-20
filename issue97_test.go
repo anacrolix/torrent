@@ -15,7 +15,7 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	td, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
-	tt := &Torrent{
+	tt := &torrent{
 		storageOpener: storage.NewClient(storage.NewFile(td)),
 	}
 	mi := testutil.GreetingMetaInfo()

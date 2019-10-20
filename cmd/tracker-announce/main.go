@@ -15,16 +15,15 @@ import (
 	"github.com/anacrolix/torrent/tracker"
 )
 
-func argSpec(arg string) (ts *torrent.TorrentSpec, err error) {
+func argSpec(arg string) (ts torrent.Torrent, err error) {
 	if strings.HasPrefix(arg, "magnet:") {
-		return torrent.TorrentSpecFromMagnetURI(arg)
+		return torrent.NewFromMagnet(arg)
 	}
 	mi, err := metainfo.LoadFromFile(arg)
 	if err != nil {
-		return
+		return ts, err
 	}
-	ts = torrent.TorrentSpecFromMetaInfo(mi)
-	return
+	return torrent.NewFromMetaInfo(mi)
 }
 
 func main() {

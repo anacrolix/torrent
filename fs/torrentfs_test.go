@@ -97,7 +97,7 @@ func TestUnmountWedged(t *testing.T) {
 	client, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer client.Close()
-	tt, err := client.AddTorrent(layout.Metainfo)
+	tt, _, err := client.MaybeStart(torrent.NewFromMetaInfo(layout.Metainfo))
 	require.NoError(t, err)
 	fs := New(client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
@@ -178,7 +178,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	defer testutil.ExportStatusWriter(seeder, "s")()
 	// Just to mix things up, the seeder starts with the data, but the leecher
 	// starts with the metainfo.
-	seederTorrent, err := seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.HashInfoBytes().HexString()))
+	seederTorrent, _, err := seeder.MaybeStart(torrent.NewFromMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.HashInfoBytes().HexString())))
 	require.NoError(t, err)
 	go func() {
 		// Wait until we get the metainfo, then check for the data.
@@ -196,7 +196,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	require.NoError(t, err)
 	testutil.ExportStatusWriter(leecher, "l")()
 	defer leecher.Close()
-	leecherTorrent, err := leecher.AddTorrent(layout.Metainfo)
+	leecherTorrent, _, err := leecher.MaybeStart(torrent.NewFromMetaInfo(layout.Metainfo))
 	require.NoError(t, err)
 	leecherTorrent.AddClientPeer(seeder)
 	fs := New(leecher)
@@ -218,7 +218,7 @@ func TestDownloadOnDemand(t *testing.T) {
 }
 
 func TestIsSubPath(t *testing.T) {
-	for _, case_ := range []struct {
+	for _, c := range []struct {
 		parent, child string
 		is            bool
 	}{
@@ -230,6 +230,6 @@ func TestIsSubPath(t *testing.T) {
 		{"a/b", "a/b/c", true},
 		{"a/b", "a//b", false},
 	} {
-		assert.Equal(t, case_.is, isSubPath(case_.parent, case_.child))
+		assert.Equal(t, c.is, isSubPath(c.parent, c.child))
 	}
 }

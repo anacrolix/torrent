@@ -17,7 +17,7 @@ import (
 // required.
 type trackerScraper struct {
 	u            url.URL
-	t            *Torrent
+	t            *torrent
 	lastAnnounce trackerAnnounceResult
 }
 

@@ -34,7 +34,7 @@ func main() {
 	})
 	wg := sync.WaitGroup{}
 	for _, arg := range args.Magnet {
-		t, err := cl.AddMagnet(arg)
+		t, _, err := cl.MaybeStart(torrent.NewFromMagnet(arg))
 		if err != nil {
 			log.Fatalf("error adding magnet to client: %s", err)
 		}
@@ -43,7 +43,7 @@ func main() {
 			defer wg.Done()
 			<-t.GotInfo()
 			mi := t.Metainfo()
-			t.Drop()
+			cl.Stop(t.Torrent())
 			f, err := os.Create(t.Info().Name + ".torrent")
 			if err != nil {
 				log.Fatalf("error creating torrent metainfo file: %s", err)

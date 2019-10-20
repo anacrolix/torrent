@@ -6,9 +6,9 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-// Provides access to regions of torrent data that correspond to its files.
+// File provides access to regions of torrent data that correspond to its files.
 type File struct {
-	t      *Torrent
+	t      *torrent
 	path   string
 	offset int64
 	length int64
@@ -16,7 +16,7 @@ type File struct {
 	prio   piecePriority
 }
 
-func (f *File) Torrent() *Torrent {
+func (f *File) Torrent() *torrent {
 	return f.t
 }
 

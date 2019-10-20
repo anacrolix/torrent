@@ -23,15 +23,13 @@ func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 	defer cl.Close()
 
 	td, mi := testutil.GreetingTestTorrent()
-	tt, new, err := cl.AddTorrentSpec(&TorrentSpec{
-		Storage:   storage.NewMMap(td),
-		InfoHash:  mi.HashInfoBytes(),
-		InfoBytes: mi.InfoBytes,
-	})
+	ts, err := NewFromMetaInfo(mi, OptionStorage(storage.NewMMap(td)))
+	require.NoError(t, err)
+	tt, new, err := cl.Start(ts)
 	require.NoError(t, err)
 	assert.True(t, new)
 
 	r := tt.NewReader()
-	go tt.Drop()
+	go cl.Stop(ts)
 	io.Copy(ioutil.Discard, r)
 }

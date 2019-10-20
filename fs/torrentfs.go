@@ -50,7 +50,7 @@ type node struct {
 	path     string
 	metadata *metainfo.Info
 	FS       *TorrentFS
-	t        *torrent.Torrent
+	t        torrent.Download
 }
 
 type dirNode struct {
@@ -149,15 +149,15 @@ func (rn rootNode) Lookup(ctx context.Context, name string) (_node fusefs.Node, 
 		if t.Name() != name || info == nil {
 			continue
 		}
-		__node := node{
+		n := node{
 			metadata: info,
 			FS:       rn.fs,
 			t:        t,
 		}
 		if !info.IsDir() {
-			_node = fileNode{__node, t.Files()[0]}
+			_node = fileNode{n, t.Files()[0]}
 		} else {
-			_node = dirNode{__node}
+			_node = dirNode{n}
 		}
 		break
 	}

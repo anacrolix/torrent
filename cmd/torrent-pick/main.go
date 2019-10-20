@@ -136,24 +136,24 @@ func main() {
 
 	done := make(chan struct{})
 	for _, arg := range posArgs {
-		t := func() *torrent.Torrent {
+		t := func() torrent.Download {
 			if strings.HasPrefix(arg, "magnet:") {
-				t, err := client.AddMagnet(arg)
+				t, _, err := client.MaybeStart(torrent.NewFromMagnet(arg))
 				if err != nil {
 					log.Fatalf("error adding magnet: %s", err)
 				}
 				return t
-			} else {
-				metaInfo, err := metainfo.LoadFromFile(arg)
-				if err != nil {
-					log.Fatal(err)
-				}
-				t, err := client.AddTorrent(metaInfo)
-				if err != nil {
-					log.Fatal(err)
-				}
-				return t
 			}
+
+			metaInfo, err := metainfo.LoadFromFile(arg)
+			if err != nil {
+				log.Fatal(err)
+			}
+			t, _, err := client.MaybeStart(torrent.NewFromMetaInfo(metaInfo))
+			if err != nil {
+				log.Fatal(err)
+			}
+			return t
 		}()
 		t.AddPeers(testPeers)
 

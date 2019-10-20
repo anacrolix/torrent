@@ -41,7 +41,7 @@ type connection struct {
 	// First to ensure 64-bit alignment for atomics. See #262.
 	stats ConnStats
 
-	t *Torrent
+	t *torrent
 	// The actual Conn, used for closing, and setting socket options.
 	conn       net.Conn
 	outgoing   bool
@@ -57,7 +57,7 @@ type connection struct {
 	Discovery       peerSource
 	closed          missinggo.Event
 	// Set true after we've added our ConnStats generated during handshake to
-	// other ConnStat instances as determined when the *Torrent became known.
+	// other ConnStat instances as determined when the *torrent became known.
 	reconciledHandshakeStats bool
 
 	lastMessageReceived     time.Time
@@ -278,7 +278,7 @@ func (cn *connection) downloadRate() float64 {
 	return float64(cn.stats.BytesReadUsefulData.Int64()) / cn.cumInterest().Seconds()
 }
 
-func (cn *connection) WriteStatus(w io.Writer, t *Torrent) {
+func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 	// \t isn't preserved in <pre> blocks?
 	fmt.Fprintf(w, "%+-55q %s %s-%s\n", cn.PeerID, cn.PeerExtensionBytes, cn.localAddr(), cn.remoteAddr)
 	fmt.Fprintf(w, "    last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
@@ -331,7 +331,7 @@ func (cn *connection) PeerHasPiece(piece pieceIndex) bool {
 
 // Writes a message into the write buffer.
 func (cn *connection) Post(msg pp.Message) {
-	torrent.Add(fmt.Sprintf("messages posted of type %s", msg.Type.String()), 1)
+	torrentVar.Add(fmt.Sprintf("messages posted of type %s", msg.Type.String()), 1)
 	// We don't need to track bytes here because a connection.w Writer wrapper
 	// takes care of that (although there's some delay between us recording
 	// the message, and the connection writer flushing it out.).
@@ -416,7 +416,7 @@ func (cn *connection) totalExpectingTime() (ret time.Duration) {
 
 func (cn *connection) onPeerSentCancel(r request) {
 	if _, ok := cn.PeerRequests[r]; !ok {
-		torrent.Add("unexpected cancels received", 1)
+		torrentVar.Add("unexpected cancels received", 1)
 		return
 	}
 	if cn.fastEnabled() {
@@ -498,7 +498,7 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 	}
 	if cn.PeerChoked {
 		if cn.peerAllowedFast.Get(int(r.Index)) {
-			torrent.Add("allowed fast requests sent", 1)
+			torrentVar.Add("allowed fast requests sent", 1)
 		} else {
 			panic("requesting while choked and not allowed fast")
 		}
@@ -519,7 +519,7 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 	cn.validReceiveChunks[r] = struct{}{}
 	cn.t.pendingRequests[r]++
 	cn.t.lastRequested[r] = time.AfterFunc(cn.t.duplicateRequestTimeout, func() {
-		torrent.Add("duplicate request timeouts", 1)
+		torrentVar.Add("duplicate request timeouts", 1)
 		cn.mu().Lock()
 		defer cn.mu().Unlock()
 		delete(cn.t.lastRequested, r)
@@ -620,7 +620,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			cn.fillWriteBuffer(func(msg pp.Message) bool {
 				cn.wroteMsg(&msg)
 				cn.writeBuffer.Write(msg.MustMarshalBinary())
-				torrent.Add(fmt.Sprintf("messages filled of type %s", msg.Type.String()), 1)
+				torrentVar.Add(fmt.Sprintf("messages filled of type %s", msg.Type.String()), 1)
 				return cn.writeBuffer.Len() < 1<<16 // 64KiB
 			})
 		}
@@ -789,7 +789,7 @@ func (cn *connection) iterPendingRequests(piece pieceIndex, f func(request) bool
 	})
 }
 
-func iterUndirtiedChunks(piece pieceIndex, t *Torrent, f func(chunkSpec) bool) bool {
+func iterUndirtiedChunks(piece pieceIndex, t *torrent, f func(chunkSpec) bool) bool {
 	p := &t.pieces[piece]
 	if t.requestStrategy == 3 {
 		for i := pp.Integer(0); i < p.numChunks(); i++ {
@@ -954,7 +954,7 @@ func (c *connection) requestPendingMetadata() {
 }
 
 func (cn *connection) wroteMsg(msg *pp.Message) {
-	torrent.Add(fmt.Sprintf("messages written of type %s", msg.Type.String()), 1)
+	torrentVar.Add(fmt.Sprintf("messages written of type %s", msg.Type.String()), 1)
 	cn.allStats(func(cs *ConnStats) { cs.wroteMsg(msg) })
 }
 
@@ -1030,19 +1030,19 @@ func (c *connection) reject(r request) {
 func (c *connection) onReadRequest(r request) error {
 	requestedChunkLengths.Add(strconv.FormatUint(r.Length.Uint64(), 10), 1)
 	if _, ok := c.PeerRequests[r]; ok {
-		torrent.Add("duplicate requests received", 1)
+		torrentVar.Add("duplicate requests received", 1)
 		return nil
 	}
 	if c.Choked {
-		torrent.Add("requests received while choking", 1)
+		torrentVar.Add("requests received while choking", 1)
 		if c.fastEnabled() {
-			torrent.Add("requests rejected while choking", 1)
+			torrentVar.Add("requests rejected while choking", 1)
 			c.reject(r)
 		}
 		return nil
 	}
 	if len(c.PeerRequests) >= maxRequests {
-		torrent.Add("requests received while queue full", 1)
+		torrentVar.Add("requests received while queue full", 1)
 		if c.fastEnabled() {
 			c.reject(r)
 		}
@@ -1058,7 +1058,7 @@ func (c *connection) onReadRequest(r request) error {
 	}
 	// Check this after we know we have the piece, so that the piece length will be known.
 	if r.Begin+r.Length > c.t.pieceLength(pieceIndex(r.Index)) {
-		torrent.Add("bad requests received", 1)
+		torrentVar.Add("bad requests received", 1)
 		return errors.New("bad request")
 	}
 	if c.PeerRequests == nil {
@@ -1074,9 +1074,9 @@ func (c *connection) onReadRequest(r request) error {
 func (c *connection) mainReadLoop() (err error) {
 	defer func() {
 		if err != nil {
-			torrent.Add("connection.mainReadLoop returned with error", 1)
+			torrentVar.Add("connection.mainReadLoop returned with error", 1)
 		} else {
-			torrent.Add("connection.mainReadLoop returned with no error", 1)
+			torrentVar.Add("connection.mainReadLoop returned with no error", 1)
 		}
 	}()
 	t := c.t
@@ -1159,7 +1159,7 @@ func (c *connection) mainReadLoop() (err error) {
 				go s.Ping(&pingAddr, nil)
 			})
 		case pp.Suggest:
-			torrent.Add("suggests received", 1)
+			torrentVar.Add("suggests received", 1)
 			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index, debugLogValue).Log(c.t.logger)
 			c.updateRequests()
 		case pp.HaveAll:
@@ -1170,7 +1170,7 @@ func (c *connection) mainReadLoop() (err error) {
 			c.deleteRequest(newRequestFromMessage(&msg))
 			delete(c.validReceiveChunks, newRequestFromMessage(&msg))
 		case pp.AllowedFast:
-			torrent.Add("allowed fasts received", 1)
+			torrentVar.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c, debugLogValue).Log(c.t.logger)
 			c.peerAllowedFast.Add(int(msg.Index))
 			c.updateRequests()
@@ -1214,7 +1214,7 @@ func (c *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (e
 		}
 		for name, id := range d.M {
 			if _, ok := c.PeerExtensionIDs[name]; !ok {
-				torrent.Add(fmt.Sprintf("peers supporting extension %q", name), 1)
+				torrentVar.Add(fmt.Sprintf("peers supporting extension %q", name), 1)
 			}
 			c.PeerExtensionIDs[name] = id
 		}
@@ -1242,7 +1242,7 @@ func (c *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (e
 		if err != nil {
 			return fmt.Errorf("error unmarshalling PEX message: %s", err)
 		}
-		torrent.Add("pex added6 peers received", int64(len(pexMsg.Added6)))
+		torrentVar.Add("pex added6 peers received", int64(len(pexMsg.Added6)))
 		var peers Peers
 		peers.AppendFromPex(pexMsg.Added6, pexMsg.Added6Flags)
 		peers.AppendFromPex(pexMsg.Added, pexMsg.AddedFlags)
@@ -1271,22 +1271,22 @@ func (cn *connection) rw() io.ReadWriter {
 func (c *connection) receiveChunk(msg *pp.Message) error {
 	t := c.t
 	cl := t.cl
-	torrent.Add("chunks received", 1)
+	torrentVar.Add("chunks received", 1)
 
 	req := newRequestFromMessage(msg)
 
 	if c.PeerChoked {
-		torrent.Add("chunks received while choked", 1)
+		torrentVar.Add("chunks received while choked", 1)
 	}
 
 	if _, ok := c.validReceiveChunks[req]; !ok {
-		torrent.Add("chunks received unexpected", 1)
+		torrentVar.Add("chunks received unexpected", 1)
 		return errors.New("received unexpected chunk")
 	}
 	delete(c.validReceiveChunks, req)
 
 	if c.PeerChoked && c.peerAllowedFast.Get(int(req.Index)) {
-		torrent.Add("chunks received due to allowed fast", 1)
+		torrentVar.Add("chunks received due to allowed fast", 1)
 	}
 
 	// Request has been satisfied.
@@ -1295,12 +1295,12 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 			c.chunksReceivedWhileExpecting++
 		}
 	} else {
-		torrent.Add("chunks received unwanted", 1)
+		torrentVar.Add("chunks received unwanted", 1)
 	}
 
 	// Do we actually want this chunk?
 	if t.haveChunk(req) {
-		torrent.Add("chunks received wasted", 1)
+		torrentVar.Add("chunks received wasted", 1)
 		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
 		return nil
 	}
@@ -1381,16 +1381,20 @@ func (c *connection) uploadAllowed() bool {
 	if c.t.cl.config.NoUpload {
 		return false
 	}
+
 	if c.t.seeding() {
 		return true
 	}
+
 	if !c.peerHasWantedPieces() {
 		return false
 	}
+
 	// Don't upload more than 100 KiB more than we download.
 	if c.stats.BytesWrittenData.Int64() >= c.stats.BytesReadData.Int64()+100<<10 {
 		return false
 	}
+
 	return true
 }
 
@@ -1544,7 +1548,7 @@ func (c *connection) sendChunk(r request, msg func(pp.Message) bool) (more bool,
 	return
 }
 
-func (c *connection) setTorrent(t *Torrent) {
+func (c *connection) setTorrent(t *torrent) {
 	if c.t != nil {
 		panic("connection already associated with a torrent")
 	}

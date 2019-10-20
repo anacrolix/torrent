@@ -27,7 +27,7 @@ type pieceRange struct {
 // Accesses Torrent data via a Client. Reads block until the data is
 // available. Seeks and readahead also drive Client behaviour.
 type reader struct {
-	t          *Torrent
+	t          *torrent
 	responsive bool
 	// Adjust the read/seek window to handle Readers locked to File extents
 	// and the like.

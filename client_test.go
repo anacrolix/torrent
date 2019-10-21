@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -125,7 +124,6 @@ func TestTorrentInitialState(t *testing.T) {
 		OptionStorage(storage.NewFileWithCompletion(tempDir(), storage.NewMapPieceCompletion())),
 		OptionChunk(2),
 	)
-	log.Println("CHUNK SIZE", tt.ChunkSize)
 	require.NoError(t, err)
 	tor := cl.newTorrent(tt)
 

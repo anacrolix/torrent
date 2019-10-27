@@ -27,7 +27,7 @@ func (cl *Client) forwardPort() {
 	cl.unlock()
 	ds := upnp.Discover(0, 2*time.Second, cl.logger.WithValues("upnp-discover"))
 	cl.lock()
-	cl.logger.Printf("discovered %d upnp devices", len(ds))
+	cl.logger.WithValues(log.Info).Printf("discovered %d upnp devices", len(ds))
 	port := cl.incomingPeerPort()
 	cl.unlock()
 	for _, d := range ds {

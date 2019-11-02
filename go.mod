@@ -9,6 +9,7 @@ require (
 	github.com/anacrolix/log v0.3.1-0.20191001111012-13cede988bcd
 	github.com/anacrolix/missinggo v1.2.1
 	github.com/anacrolix/missinggo/perf v1.0.0
+	github.com/anacrolix/missinggo/v2 v2.2.0 // indirect
 	github.com/anacrolix/sync v0.2.0
 	github.com/anacrolix/tagflag v1.0.1
 	github.com/anacrolix/upnp v0.1.1

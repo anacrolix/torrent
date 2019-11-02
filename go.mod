@@ -3,13 +3,13 @@ module github.com/anacrolix/torrent
 require (
 	bazil.org/fuse v0.0.0-20180421153158-65cc252bf669
 	github.com/alexflint/go-arg v1.1.0
-	github.com/anacrolix/dht/v2 v2.1.1-0.20191017060219-221f300f6ea8
+	github.com/anacrolix/dht/v2 v2.2.1-0.20191102112544-a3c1a8910c68
 	github.com/anacrolix/envpprof v1.0.1
 	github.com/anacrolix/go-libutp v1.0.2
 	github.com/anacrolix/log v0.3.1-0.20191001111012-13cede988bcd
 	github.com/anacrolix/missinggo v1.2.1
 	github.com/anacrolix/missinggo/perf v1.0.0
-	github.com/anacrolix/missinggo/v2 v2.2.0 // indirect
+	github.com/anacrolix/missinggo/v2 v2.2.1-0.20191101011458-82a06684e1c9
 	github.com/anacrolix/sync v0.2.0
 	github.com/anacrolix/tagflag v1.0.1
 	github.com/anacrolix/upnp v0.1.1
@@ -35,3 +35,5 @@ require (
 go 1.13
 
 replace github.com/boltdb/bolt => github.com/etcd-io/bbolt v1.3.3
+
+replace github.com/lukechampine/stm => github.com/anacrolix/stm v0.0.0-20191102104501-9bf56d22767b

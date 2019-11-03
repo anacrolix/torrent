@@ -14,11 +14,11 @@ require (
 	github.com/anacrolix/tagflag v1.0.1
 	github.com/anacrolix/upnp v0.1.1
 	github.com/anacrolix/utp v0.0.0-20180219060659-9e0e1d1d0572
-	github.com/boltdb/bolt v1.3.1
 	github.com/bradfitz/iter v0.0.0-20190303215204-33e6a9893b0c
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.0.0
+	github.com/etcd-io/bbolt v1.3.3
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/google/btree v1.0.0
 	github.com/gosuri/uiprogress v0.0.1
@@ -33,5 +33,3 @@ require (
 )
 
 go 1.13
-
-replace github.com/boltdb/bolt => github.com/etcd-io/bbolt v1.3.3

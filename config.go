@@ -172,8 +172,8 @@ func NewDefaultClientConfig() *ClientConfig {
 		ListenPort:     42069,
 		Logger:         log.Default,
 	}
-	cc.ConnTracker.SetNoMaxEntries()
-	cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }
+	//cc.ConnTracker.SetNoMaxEntries()
+	//cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }
 	return cc
 }
 

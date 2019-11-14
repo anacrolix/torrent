@@ -56,7 +56,7 @@ func (me *Peers) UnmarshalBencode(b []byte) (err error) {
 		vars.Add("http responses with list peers", 1)
 		for _, i := range v {
 			var p Peer
-			p.fromDictInterface(i.(map[string]interface{}))
+			p.FromDictInterface(i.(map[string]interface{}))
 			*me = append(*me, p)
 		}
 		return

@@ -12,7 +12,7 @@ import (
 var defaultHTTPUserAgent = "Go-Torrent"
 
 func TestUnmarshalHTTPResponsePeerDicts(t *testing.T) {
-	var hr httpResponse
+	var hr HttpResponse
 	require.NoError(t, bencode.Unmarshal(
 		[]byte("d5:peersl"+
 			"d2:ip7:1.2.3.47:peer id20:thisisthe20bytepeeri4:porti9999ee"+
@@ -35,7 +35,7 @@ func TestUnmarshalHTTPResponsePeerDicts(t *testing.T) {
 }
 
 func TestUnmarshalHttpResponseNoPeers(t *testing.T) {
-	var hr httpResponse
+	var hr HttpResponse
 	require.NoError(t, bencode.Unmarshal(
 		[]byte("d6:peers618:123412341234123456e"),
 		&hr,
@@ -45,7 +45,7 @@ func TestUnmarshalHttpResponseNoPeers(t *testing.T) {
 }
 
 func TestUnmarshalHttpResponsePeers6NotCompact(t *testing.T) {
-	var hr httpResponse
+	var hr HttpResponse
 	require.Error(t, bencode.Unmarshal(
 		[]byte("d6:peers6lee"),
 		&hr,

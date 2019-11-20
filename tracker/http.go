@@ -18,7 +18,7 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 )
 
-type httpResponse struct {
+type HttpResponse struct {
 	FailureReason string `bencode:"failure reason"`
 	Interval      int32  `bencode:"interval"`
 	TrackerId     string `bencode:"tracker id"`
@@ -136,7 +136,7 @@ func announceHTTP(opt Announce, _url *url.URL) (ret AnnounceResponse, err error)
 		err = fmt.Errorf("response from tracker: %s: %s", resp.Status, buf.String())
 		return
 	}
-	var trackerResponse httpResponse
+	var trackerResponse HttpResponse
 	err = bencode.Unmarshal(buf.Bytes(), &trackerResponse)
 	if _, ok := err.(bencode.ErrUnusedTrailingBytes); ok {
 		err = nil

@@ -3,6 +3,8 @@ package torrent
 import (
 	"strings"
 
+	"github.com/anacrolix/missinggo/bitmap"
+
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -38,6 +40,31 @@ func (f File) Path() string {
 // The file's length in bytes.
 func (f *File) Length() int64 {
 	return f.length
+}
+
+// Number of bytes of the entire file we have completed. This is the sum of
+// completed pieces, and dirtied chunks of incomplete pieces.
+func (f *File) BytesCompleted() int64 {
+	f.t.cl.rLock()
+	defer f.t.cl.rUnlock()
+	return f.bytesCompleted()
+}
+
+// Don't call this before the info is available.
+func (f *File) bytesCompleted() int64 {
+	if !f.t.haveInfo() {
+		return 0
+	}
+	return f.length - f.bytesLeft()
+}
+
+func (f *File) bytesLeft() (left int64) {
+	bitmap.Flip(f.t.completedPieces, f.firstPieceIndex(), f.endPieceIndex()+1).IterTyped(func(piece int) bool {
+		p := &f.t.pieces[piece]
+		left += int64(p.length() - p.numDirtyBytes())
+		return true
+	})
+	return
 }
 
 // The relative file path for a multi-file torrent, and the torrent name for a

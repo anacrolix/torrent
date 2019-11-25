@@ -51,11 +51,7 @@ func (f *File) BytesCompleted() int64 {
 	return f.bytesCompleted()
 }
 
-// Don't call this before the info is available.
 func (f *File) bytesCompleted() int64 {
-	if !f.t.haveInfo() {
-		return 0
-	}
 	return f.length - f.bytesLeft()
 }
 

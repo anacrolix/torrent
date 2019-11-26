@@ -180,5 +180,5 @@ func (f *File) endPieceIndex() pieceIndex {
 	if f.t.usualPieceSize() == 0 {
 		return 0
 	}
-	return pieceIndex((f.offset+f.length-1)/int64(f.t.usualPieceSize())) + 1
+	return pieceIndex((f.offset + f.length + int64(f.t.usualPieceSize()) - 1) / int64(f.t.usualPieceSize()))
 }

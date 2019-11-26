@@ -169,6 +169,7 @@ func (f *File) Priority() piecePriority {
 	return f.prio
 }
 
+// Returns the index of the first piece containing data for the file.
 func (f *File) firstPieceIndex() pieceIndex {
 	if f.t.usualPieceSize() == 0 {
 		return 0
@@ -176,6 +177,7 @@ func (f *File) firstPieceIndex() pieceIndex {
 	return pieceIndex(f.offset / int64(f.t.usualPieceSize()))
 }
 
+// Returns the index of the piece after the last one containing data for the file.
 func (f *File) endPieceIndex() pieceIndex {
 	if f.t.usualPieceSize() == 0 {
 		return 0

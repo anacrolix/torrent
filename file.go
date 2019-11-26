@@ -3,7 +3,10 @@ package torrent
 import (
 	"strings"
 
+	"github.com/anacrolix/missinggo/bitmap"
+
 	"github.com/anacrolix/torrent/metainfo"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 // Provides access to regions of torrent data that correspond to its files.
@@ -38,6 +41,46 @@ func (f File) Path() string {
 // The file's length in bytes.
 func (f *File) Length() int64 {
 	return f.length
+}
+
+// Number of bytes of the entire file we have completed. This is the sum of
+// completed pieces, and dirtied chunks of incomplete pieces.
+func (f *File) BytesCompleted() int64 {
+	f.t.cl.rLock()
+	defer f.t.cl.rUnlock()
+	return f.bytesCompleted()
+}
+
+func (f *File) bytesCompleted() int64 {
+	return f.length - f.bytesLeft()
+}
+
+func (f *File) bytesLeft() (left int64) {
+	firstPieceIndex := f.firstPieceIndex()
+	endPieceIndex := f.endPieceIndex()
+	bitmap.Flip(f.t.completedPieces, firstPieceIndex, endPieceIndex+1).IterTyped(func(piece int) bool {
+		p := &f.t.pieces[piece]
+		left += int64(p.length() - p.numDirtyBytes())
+		return true
+	})
+	startPiece := f.t.piece(firstPieceIndex)
+	endChunk := int(f.offset%f.t.info.PieceLength) * int(startPiece.numChunks()) / int(startPiece.length())
+	bitmap.Flip(startPiece.dirtyChunks, 0, endChunk).IterTyped(func(chunk int) bool {
+		left -= int64(startPiece.chunkSize())
+		return true
+	})
+	endPiece := f.t.piece(endPieceIndex)
+	startChunk := int((f.offset+f.length)%f.t.info.PieceLength) * int(endPiece.numChunks()) / int(endPiece.length())
+	lastChunkIndex := int(endPiece.lastChunkIndex())
+	bitmap.Flip(endPiece.dirtyChunks, startChunk, int(endPiece.numChunks())).IterTyped(func(chunk int) bool {
+		if chunk == lastChunkIndex {
+			left -= int64(endPiece.chunkIndexSpec(pp.Integer(chunk)).Length)
+		} else {
+			left -= int64(endPiece.chunkSize())
+		}
+		return true
+	})
+	return
 }
 
 // The relative file path for a multi-file torrent, and the torrent name for a

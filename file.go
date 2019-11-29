@@ -55,6 +55,7 @@ func (f *File) bytesCompleted() int64 {
 }
 
 func (f *File) bytesLeft() (left int64) {
+	pieceSize := int64(f.t.usualPieceSize())
 	firstPieceIndex := f.firstPieceIndex()
 	endPieceIndex := f.endPieceIndex() - 1
 	bitmap.Flip(f.t.completedPieces, firstPieceIndex+1, endPieceIndex).IterTyped(func(piece int) bool {
@@ -62,12 +63,10 @@ func (f *File) bytesLeft() (left int64) {
 			return false
 		}
 		if piece > firstPieceIndex {
-			p := &f.t.pieces[piece]
-			left += int64(p.length())
+			left += pieceSize
 		}
 		return true
 	})
-	pieceSize := int64(f.t.usualPieceSize())
 	if !f.t.pieceComplete(firstPieceIndex) {
 		left += pieceSize - (f.offset % pieceSize)
 	}

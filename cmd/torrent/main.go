@@ -100,7 +100,9 @@ func addTorrents(client *torrent.Client) error {
 					return nil, xerrors.Errorf("error loading torrent file %q: %s\n", arg, err)
 				}
 				t, err := client.AddTorrent(metaInfo)
-				return nil, xerrors.Errorf("adding torrent: %w", err)
+				if err != nil {
+					return nil, xerrors.Errorf("adding torrent: %w", err)
+				}
 				return t, nil
 			}
 		}()

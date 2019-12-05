@@ -4,8 +4,9 @@ import "strings"
 
 // Information specific to a single file inside the MetaInfo structure.
 type FileInfo struct {
-	Length int64    `bencode:"length"`
-	Path   []string `bencode:"path"`
+	Length   int64    `bencode:"length"`
+	Path     []string `bencode:"path"`
+	PathUTF8 []string `bencode:"path.utf-8,omitempty"`
 }
 
 func (fi *FileInfo) DisplayPath(info *Info) string {

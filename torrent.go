@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/url"
 	"sync"
 	"text/tabwriter"
@@ -16,6 +17,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/dht/v2"
+	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/perf"
@@ -131,6 +133,8 @@ type Torrent struct {
 
 	// Count of each request across active connections.
 	pendingRequests map[request]int
+
+	pex pexState
 }
 
 func (t *Torrent) numConns() int {
@@ -257,6 +261,7 @@ func (t *Torrent) addPeer(p Peer) {
 	if ipAddr, ok := tryIpPortFromNetAddr(p.Addr); ok {
 		if cl.badPeerIPPort(ipAddr.IP, ipAddr.Port) {
 			torrent.Add("peers not added because of bad addr", 1)
+			cl.logger.Printf("peers not added because of bad addr: %v", p)
 			return
 		}
 	}
@@ -702,6 +707,7 @@ func (t *Torrent) close() (err error) {
 	for conn := range t.conns {
 		conn.close()
 	}
+	// PEX wipe state here
 	t.cl.event.Broadcast()
 	t.pieceStateChanges.Close()
 	t.updateWantPeersEvent()
@@ -1219,6 +1225,9 @@ func (t *Torrent) assertNoPendingRequests() {
 
 func (t *Torrent) dropConnection(c *PeerConn) {
 	t.cl.event.Broadcast()
+	if !t.cl.config.DisablePEX {
+		t.pex.dropped(c)
+	}
 	c.close()
 	if t.deleteConnection(c) {
 		t.openNewConns()
@@ -1491,6 +1500,9 @@ func (t *Torrent) addConnection(c *PeerConn) (err error) {
 		panic(len(t.conns))
 	}
 	t.conns[c] = struct{}{}
+	if !t.cl.config.DisablePEX {
+		t.pex.added(c)
+	}
 	return nil
 }
 
@@ -1850,4 +1862,39 @@ func (t *Torrent) SetOnWriteChunkError(f func(error)) {
 	t.cl.lock()
 	defer t.cl.unlock()
 	t.userOnWriteChunkErr = f
+}
+
+func nodeAddr(addr net.Addr) krpc.NodeAddr {
+	ipport, _ := tryIpPortFromNetAddr(addr)
+	ip := ipport.IP
+	if ip4 := ip.To4(); ip4 != nil && len(ip) != net.IPv4len {
+		ip = ip4
+	}
+	return krpc.NodeAddr{IP: ip, Port: ipport.Port}
+}
+
+func (t *Torrent) pexInitial() *pp.PexMsg {
+	// BUG FIXME PEX prepare 25 recently connected peers
+	tx := &pp.PexMsg{}
+	for c := range t.conns {
+		addr := nodeAddr(c.remoteAddr)
+		f := c.pexPeerFlags()
+		tx.AppendAdded(addr, f)
+	}
+	nc := len(tx.Added) + len(tx.Added6)
+	// BUG if nc < 50 {
+	if nc < 1 {
+		return nil
+	}
+	return tx
+}
+
+type pexState struct{}
+
+func (s *pexState) added(c *PeerConn) {
+	return
+}
+
+func (s *pexState) dropped(c *PeerConn) {
+	return
 }

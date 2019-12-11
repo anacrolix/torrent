@@ -92,6 +92,8 @@ type PeerConn struct {
 	peerChoking        bool
 	peerRequests       map[request]struct{}
 	PeerExtensionBytes pp.PeerExtensionBits
+	PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
+	PeerListenPort        int
 	// The pieces the peer has claimed to have.
 	_peerPieces bitmap.Bitmap
 	// The peer has everything. This can occur due to a special message, when
@@ -1115,6 +1117,8 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		if c.PeerExtensionIDs == nil {
 			c.PeerExtensionIDs = make(map[pp.ExtensionName]pp.ExtensionNumber, len(d.M))
 		}
+		c.PeerListenPort = d.Port
+		c.PeerPrefersEncryption = d.Encryption
 		for name, id := range d.M {
 			if _, ok := c.PeerExtensionIDs[name]; !ok {
 				torrent.Add(fmt.Sprintf("peers supporting extension %q", name), 1)
@@ -1127,6 +1131,10 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			}
 		}
 		c.requestPendingMetadata()
+		if !cl.config.DisablePEX {
+			cl.sendInitialPEX(c, t)
+			// BUG no sending PEX updates yet
+		}
 		return nil
 	case metadataExtendedId:
 		err := cl.gotMetadataExtensionMsg(payload, t, c)
@@ -1140,11 +1148,14 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			// advertising that we support PEX if it's disabled.
 			return nil
 		}
+		c.logger.Printf("incoming PEX message")
 		var pexMsg pp.PexMsg
 		err := bencode.Unmarshal(payload, &pexMsg)
 		if err != nil {
 			return fmt.Errorf("error unmarshalling PEX message: %s", err)
 		}
+		npeers := len(pexMsg.Added6) + len(pexMsg.Added)
+		c.logger.Printf("adding %d peers from PEX", npeers)
 		torrent.Add("pex added6 peers received", int64(len(pexMsg.Added6)))
 		var peers Peers
 		peers.AppendFromPex(pexMsg.Added6, pexMsg.Added6Flags)
@@ -1466,6 +1477,20 @@ func (c *PeerConn) remoteIp() net.IP {
 func (c *PeerConn) remoteIpPort() IpPort {
 	ipa, _ := tryIpPortFromNetAddr(c.remoteAddr)
 	return IpPort{ipa.IP, uint16(ipa.Port)}
+}
+
+func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
+	f := pp.PexPeerFlags(0)
+	if c.PeerPrefersEncryption {
+		f |= pp.PexPrefersEncryption
+	}
+	if c.outgoing {
+		f |= pp.PexOutgoingConn
+	}
+	if c.utp() {
+		f |= pp.PexSupportsUtp
+	}
+	return f
 }
 
 func (c *PeerConn) String() string {

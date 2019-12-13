@@ -849,15 +849,17 @@ type PieceStateChange struct {
 }
 
 func (t *Torrent) publishPieceChange(piece pieceIndex) {
-	cur := t.pieceState(piece)
-	p := &t.pieces[piece]
-	if cur != p.publicPieceState {
-		p.publicPieceState = cur
-		t.pieceStateChanges.Publish(PieceStateChange{
-			int(piece),
-			cur,
-		})
-	}
+	t.cl._mu.Defer(func() {
+		cur := t.pieceState(piece)
+		p := &t.pieces[piece]
+		if cur != p.publicPieceState {
+			p.publicPieceState = cur
+			t.pieceStateChanges.Publish(PieceStateChange{
+				int(piece),
+				cur,
+			})
+		}
+	})
 }
 
 func (t *Torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
@@ -1682,7 +1684,6 @@ func (t *Torrent) connsAsSlice() (ret []*connection) {
 	return
 }
 
-// Currently doesn't really queue, but should in the future.
 func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 	piece := t.piece(pieceIndex)
 	if piece.queuedForHash() {

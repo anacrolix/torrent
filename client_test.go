@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -288,6 +289,16 @@ type testClientTransferParams struct {
 	LeecherDownloadRateLimiter *rate.Limiter
 }
 
+func logPieceStateChanges(t *Torrent) {
+	sub := t.SubscribePieceStateChanges()
+	go func() {
+		defer sub.Close()
+		for e := range sub.Values {
+			log.Printf("%p %#v", t, e)
+		}
+	}()
+}
+
 // Creates a seeder and a leecher, and ensures the data transfers when a read
 // is attempted on the leecher.
 func testClientTransfer(t *testing.T, ps testClientTransferParams) {
@@ -344,6 +355,10 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}())
 	require.NoError(t, err)
 	assert.True(t, new)
+
+	//// This was used when observing coalescing of piece state changes.
+	//logPieceStateChanges(leecherTorrent)
+
 	// Now do some things with leecher and seeder.
 	leecherTorrent.AddClientPeer(seeder)
 	// The Torrent should not be interested in obtaining peers, so the one we

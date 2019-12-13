@@ -48,7 +48,7 @@ type Client struct {
 	// 64-bit alignment of fields. See #262.
 	stats ConnStats
 
-	_mu    sync.RWMutex
+	_mu    lockWithDeferreds
 	event  sync.Cond
 	closed missinggo.Event
 

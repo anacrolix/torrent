@@ -32,7 +32,7 @@ type ClientConfig struct {
 	ListenHost              func(network string) string
 	ListenPort              int
 	NoDefaultPortForwarding bool
-	UpnPID			string
+	UpnpID			string
 	// Don't announce to trackers. This only leaves DHT to discover peers.
 	DisableTrackers bool `long:"disable-trackers"`
 	DisablePEX      bool `long:"disable-pex"`

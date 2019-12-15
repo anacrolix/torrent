@@ -152,7 +152,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		HTTPUserAgent:                  DefaultHTTPUserAgent,
 		ExtendedHandshakeClientVersion: "go.torrent dev 20181121",
 		Bep20:                          "-GT0002-",
-		UpnPID:				"anacrolix/torrent",
+		UpnpID:				"anacrolix/torrent",
 		NominalDialTimeout:             20 * time.Second,
 		MinDialTimeout:                 3 * time.Second,
 		EstablishedConnsPerTorrent:     50,

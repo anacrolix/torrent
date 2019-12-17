@@ -1,6 +1,6 @@
 package torrent
 
-import "sync"
+import "github.com/anacrolix/sync"
 
 // Runs deferred actions on Unlock. Note that actions are assumed to be the results of changes that
 // would only occur with a write lock at present. The race detector should catch instances of defers

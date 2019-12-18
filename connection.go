@@ -55,6 +55,7 @@ type connection struct {
 	headerEncrypted bool
 	cryptoMethod    mse.CryptoMethod
 	Discovery       peerSource
+	trusted         bool
 	closed          missinggo.Event
 	// Set true after we've added our ConnStats generated during handshake to
 	// other ConnStat instances as determined when the *Torrent became known.
@@ -1567,4 +1568,20 @@ func (c *connection) remoteIpPort() IpPort {
 
 func (c *connection) String() string {
 	return fmt.Sprintf("connection %p", c)
+}
+
+func (c *connection) trust() connectionTrust {
+	return connectionTrust{c.trusted, c.netGoodPiecesDirtied()}
+}
+
+type connectionTrust struct {
+	Implicit            bool
+	NetGoodPiecesDirted int64
+}
+
+func (l connectionTrust) Less(r connectionTrust) bool {
+	var ml missinggo.MultiLess
+	ml.NextBool(!l.Implicit, !r.Implicit)
+	ml.StrictNext(l.NetGoodPiecesDirted == r.NetGoodPiecesDirted, l.NetGoodPiecesDirted < r.NetGoodPiecesDirted)
+	return ml.Less()
 }

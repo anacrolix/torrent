@@ -8,6 +8,7 @@ import (
 	"github.com/anacrolix/torrent/peer_protocol"
 )
 
+// Peer connection info, handed about publicly.
 type Peer struct {
 	Id     [20]byte
 	IP     net.IP
@@ -16,6 +17,8 @@ type Peer struct {
 	// Peer is known to support encryption.
 	SupportsEncryption bool
 	peer_protocol.PexPeerFlags
+	// Whether we can ignore poor or bad behaviour from the peer.
+	Trusted bool
 }
 
 func (me *Peer) FromPex(na krpc.NodeAddr, fs peer_protocol.PexPeerFlags) {

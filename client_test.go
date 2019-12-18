@@ -228,7 +228,7 @@ func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
 	return storage.NewResourcePieces(fc.AsResourceProvider())
 }
 
-func TestClientTransferSmallCache(t *testing.T) {
+func testClientTransferSmallCache(t *testing.T, setReadahead bool, readahead int64) {
 	testClientTransfer(t, testClientTransferParams{
 		LeecherStorage: NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
 			SetCapacity: true,
@@ -237,12 +237,24 @@ func TestClientTransferSmallCache(t *testing.T) {
 			Capacity: 5,
 			Wrapper:  fileCachePieceResourceStorage,
 		}),
-		SetReadahead: true,
+		SetReadahead: setReadahead,
 		// Can't readahead too far or the cache will thrash and drop data we
 		// thought we had.
-		Readahead:          0,
+		Readahead:          readahead,
 		ExportClientStatus: true,
 	})
+}
+
+func TestClientTransferSmallCachePieceSizedReadahead(t *testing.T) {
+	testClientTransferSmallCache(t, true, 5)
+}
+
+func TestClientTransferSmallCacheLargeReadahead(t *testing.T) {
+	testClientTransferSmallCache(t, true, 15)
+}
+
+func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
+	testClientTransferSmallCache(t, false, -1)
 }
 
 func TestClientTransferVarious(t *testing.T) {
@@ -342,6 +354,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
 	}
 	cfg.Seed = false
+	//cfg.Debug = true
 	leecher, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer leecher.Close()

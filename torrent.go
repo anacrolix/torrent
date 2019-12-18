@@ -36,7 +36,8 @@ func (t *Torrent) chunkIndexSpec(chunkIndex pp.Integer, piece pieceIndex) chunkS
 	return chunkIndexSpec(chunkIndex, t.pieceLength(piece), t.chunkSize)
 }
 
-// Maintains state of torrent within a Client.
+// Maintains state of torrent within a Client. Many methods should not be called before the info is
+// available, see .Info and .GotInfo.
 type Torrent struct {
 	// Torrent-level aggregate statistics. First in struct to ensure 64-bit
 	// alignment. See #262.
@@ -1698,7 +1699,8 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 	t.tryCreateMorePieceHashers()
 }
 
-// Forces all the pieces to be re-hashed. See also Piece.VerifyData.
+// Forces all the pieces to be re-hashed. See also Piece.VerifyData. This should not be called
+// before the Info is available.
 func (t *Torrent) VerifyData() {
 	for i := pieceIndex(0); i < t.NumPieces(); i++ {
 		t.Piece(i).VerifyData()

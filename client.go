@@ -438,7 +438,7 @@ func (cl *Client) acceptConnections(l net.Listener) {
 			return
 		}
 		if err != nil {
-			cl.logger.Printf("error accepting connection: %s", err)
+			log.Fmsg("error accepting connection: %s", err).AddValue(debugLogValue).Log(cl.logger)
 			continue
 		}
 		go func() {

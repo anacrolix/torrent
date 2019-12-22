@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/url"
 	"strconv"
@@ -55,11 +56,14 @@ func listenTcp(network, address, proxyURL string) (s socket, err error) {
 	// If we don't need the proxy - then we should return default net.Dialer,
 	// otherwise, let's try to parse the proxyURL and return proxy.Dialer
 	if len(proxyURL) != 0 {
+
+		dl := disabledListener{l}
+
 		// TODO: The error should be propagated, as proxy may be in use for
 		// security or privacy reasons. Also just pass proxy.Dialer in from
 		// the Config.
 		if dialer, err := getProxyDialer(proxyURL); err == nil {
-			return tcpSocket{l, func(ctx context.Context, addr string) (conn net.Conn, err error) {
+			return tcpSocket{dl, func(ctx context.Context, addr string) (conn net.Conn, err error) {
 				defer perf.ScopeTimerErr(&err)()
 				return dialer.Dial(network, addr)
 			}}, nil
@@ -70,6 +74,14 @@ func listenTcp(network, address, proxyURL string) (s socket, err error) {
 		defer perf.ScopeTimerErr(&err)()
 		return dialer.DialContext(ctx, network, addr)
 	}}, nil
+}
+
+type disabledListener struct {
+	net.Listener
+}
+
+func (dl disabledListener) Accept() (net.Conn, error) {
+	return nil, fmt.Errorf("tcp listener disabled due to proxy")
 }
 
 type tcpSocket struct {
@@ -141,12 +153,21 @@ func listenUtp(network, addr, proxyURL string, fc firewallCallback) (s socket, e
 	// If we don't need the proxy - then we should return default net.Dialer,
 	// otherwise, let's try to parse the proxyURL and return proxy.Dialer
 	if len(proxyURL) != 0 {
+		ds := disabledUtpSocket{us}
 		if dialer, err := getProxyDialer(proxyURL); err == nil {
-			return utpSocketSocket{us, network, dialer}, nil
+			return utpSocketSocket{ds, network, dialer}, nil
 		}
 	}
 
 	return utpSocketSocket{us, network, nil}, nil
+}
+
+type disabledUtpSocket struct {
+	utpSocket
+}
+
+func (ds disabledUtpSocket) Accept() (net.Conn, error) {
+	return nil, fmt.Errorf("utp listener disabled due to proxy")
 }
 
 type utpSocketSocket struct {

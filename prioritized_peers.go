@@ -1,6 +1,9 @@
 package torrent
 
-import "github.com/google/btree"
+import (
+	"github.com/anacrolix/multiless"
+	"github.com/google/btree"
+)
 
 // Peers are stored with their priority at insertion. Their priority may
 // change if our apparent IP changes, we don't currently handle that.
@@ -10,7 +13,11 @@ type prioritizedPeersItem struct {
 }
 
 func (me prioritizedPeersItem) Less(than btree.Item) bool {
-	return me.prio < than.(prioritizedPeersItem).prio
+	other := than.(prioritizedPeersItem)
+	return multiless.New().Bool(
+		me.p.Trusted, other.p.Trusted).Uint32(
+		me.prio, other.prio,
+	).Less()
 }
 
 type prioritizedPeers struct {

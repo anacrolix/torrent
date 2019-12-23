@@ -32,7 +32,7 @@ type ClientConfig struct {
 	ListenHost              func(network string) string
 	ListenPort              int
 	NoDefaultPortForwarding bool
-	UpnpID			string
+	UpnpID                  string
 	// Don't announce to trackers. This only leaves DHT to discover peers.
 	DisableTrackers bool `long:"disable-trackers"`
 	DisablePEX      bool `long:"disable-pex"`
@@ -152,7 +152,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		HTTPUserAgent:                  DefaultHTTPUserAgent,
 		ExtendedHandshakeClientVersion: "go.torrent dev 20181121",
 		Bep20:                          "-GT0002-",
-		UpnpID:				"anacrolix/torrent",
+		UpnpID:                         "anacrolix/torrent",
 		NominalDialTimeout:             20 * time.Second,
 		MinDialTimeout:                 3 * time.Second,
 		EstablishedConnsPerTorrent:     50,

@@ -19,6 +19,7 @@ import (
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/prioritybitmap"
+	"github.com/anacrolix/multiless"
 	"github.com/pkg/errors"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -1580,8 +1581,5 @@ type connectionTrust struct {
 }
 
 func (l connectionTrust) Less(r connectionTrust) bool {
-	var ml missinggo.MultiLess
-	ml.NextBool(!l.Implicit, !r.Implicit)
-	ml.StrictNext(l.NetGoodPiecesDirted == r.NetGoodPiecesDirted, l.NetGoodPiecesDirted < r.NetGoodPiecesDirted)
-	return ml.Less()
+	return multiless.New().Bool(l.Implicit, r.Implicit).Int64(l.NetGoodPiecesDirted, r.NetGoodPiecesDirted).Less()
 }

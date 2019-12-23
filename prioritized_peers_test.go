@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"net"
-	"sort"
 	"testing"
 
 	"github.com/google/btree"
@@ -23,16 +22,14 @@ func TestPrioritizedPeers(t *testing.T) {
 		{IP: net.ParseIP("1.2.3.4")},
 		{IP: net.ParseIP("1::2")},
 		{IP: net.ParseIP("")},
+		{IP: net.ParseIP(""), Trusted: true},
 	}
 	for i, p := range ps {
-		t.Logf("peer %d priority: %08x\n", i, pp.getPrio(p))
+		t.Logf("peer %d priority: %08x trusted: %t\n", i, pp.getPrio(p), p.Trusted)
 		assert.False(t, pp.Add(p))
 		assert.True(t, pp.Add(p))
 		assert.Equal(t, i+1, pp.Len())
 	}
-	sort.Slice(ps, func(i, j int) bool {
-		return pp.getPrio(ps[i]) < pp.getPrio(ps[j])
-	})
 	pop := func(expected *Peer) {
 		if expected == nil {
 			assert.Panics(t, func() { pp.PopMax() })
@@ -49,9 +46,10 @@ func TestPrioritizedPeers(t *testing.T) {
 			assert.Equal(t, *expected, i.p)
 		}
 	}
-	pop(&ps[2])
-	min(&ps[0])
+	pop(&ps[3])
 	pop(&ps[1])
+	min(&ps[2])
+	pop(&ps[0])
 	min(nil)
 	pop(nil)
 }

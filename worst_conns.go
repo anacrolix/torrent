@@ -4,22 +4,17 @@ import (
 	"container/heap"
 	"fmt"
 	"unsafe"
+
+	"github.com/anacrolix/multiless"
 )
 
 func worseConn(l, r *connection) bool {
-	var ml multiLess
-	ml.NextBool(!l.useful(), !r.useful())
-	ml.StrictNext(
-		l.lastHelpful().Equal(r.lastHelpful()),
-		l.lastHelpful().Before(r.lastHelpful()))
-	ml.StrictNext(
-		l.completedHandshake.Equal(r.completedHandshake),
-		l.completedHandshake.Before(r.completedHandshake))
-	ml.Next(func() (bool, bool) {
-		return l.peerPriority() == r.peerPriority(), l.peerPriority() < r.peerPriority()
-	})
-	ml.StrictNext(l == r, uintptr(unsafe.Pointer(l)) < uintptr(unsafe.Pointer(r)))
-	less, ok := ml.FinalOk()
+	less, ok := multiless.New().Bool(
+		l.useful(), r.useful()).CmpInt64(
+		l.lastHelpful().Sub(r.lastHelpful()).Nanoseconds()).CmpInt64(
+		l.completedHandshake.Sub(r.completedHandshake).Nanoseconds()).Uint32(
+		l.peerPriority(), r.peerPriority()).Uintptr(
+		uintptr(unsafe.Pointer(l)), uintptr(unsafe.Pointer(r))).LessOk()
 	if !ok {
 		panic(fmt.Sprintf("cannot differentiate %#v and %#v", l, r))
 	}

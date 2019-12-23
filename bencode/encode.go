@@ -41,12 +41,12 @@ func (e *Encoder) Encode(v interface{}) (err error) {
 	return nil
 }
 
-type string_values []reflect.Value
+type stringValues []reflect.Value
 
-func (sv string_values) Len() int           { return len(sv) }
-func (sv string_values) Swap(i, j int)      { sv[i], sv[j] = sv[j], sv[i] }
-func (sv string_values) Less(i, j int) bool { return sv.get(i) < sv.get(j) }
-func (sv string_values) get(i int) string   { return sv[i].String() }
+func (sv stringValues) Len() int           { return len(sv) }
+func (sv stringValues) Swap(i, j int)      { sv[i], sv[j] = sv[j], sv[i] }
+func (sv stringValues) Less(i, j int) bool { return sv.get(i) < sv.get(j) }
+func (sv stringValues) get(i int) string   { return sv[i].String() }
 
 func (e *Encoder) write(s []byte) {
 	_, err := e.w.Write(s)
@@ -151,7 +151,7 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 			break
 		}
 		e.writeString("d")
-		sv := string_values(v.MapKeys())
+		sv := stringValues(v.MapKeys())
 		sort.Sort(sv)
 		for _, key := range sv {
 			e.reflectString(key.String())

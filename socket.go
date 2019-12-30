@@ -56,18 +56,15 @@ func listenTcp(network, address, proxyURL string) (s socket, err error) {
 	// If we don't need the proxy - then we should return default net.Dialer,
 	// otherwise, let's try to parse the proxyURL and return proxy.Dialer
 	if len(proxyURL) != 0 {
-
 		dl := disabledListener{l}
-
-		// TODO: The error should be propagated, as proxy may be in use for
-		// security or privacy reasons. Also just pass proxy.Dialer in from
-		// the Config.
-		if dialer, err := getProxyDialer(proxyURL); err == nil {
-			return tcpSocket{dl, func(ctx context.Context, addr string) (conn net.Conn, err error) {
-				defer perf.ScopeTimerErr(&err)()
-				return dialer.Dial(network, addr)
-			}}, nil
+		dialer, err := getProxyDialer(proxyURL)
+		if err != nil {
+			return nil, err
 		}
+		return tcpSocket{dl, func(ctx context.Context, addr string) (conn net.Conn, err error) {
+			defer perf.ScopeTimerErr(&err)()
+			return dialer.Dial(network, addr)
+		}}, nil
 	}
 	dialer := net.Dialer{}
 	return tcpSocket{l, func(ctx context.Context, addr string) (conn net.Conn, err error) {
@@ -154,9 +151,11 @@ func listenUtp(network, addr, proxyURL string, fc firewallCallback) (s socket, e
 	// otherwise, let's try to parse the proxyURL and return proxy.Dialer
 	if len(proxyURL) != 0 {
 		ds := disabledUtpSocket{us}
-		if dialer, err := getProxyDialer(proxyURL); err == nil {
-			return utpSocketSocket{ds, network, dialer}, nil
+		dialer, err := getProxyDialer(proxyURL)
+		if err != nil {
+			return nil, err
 		}
+		return utpSocketSocket{ds, network, dialer}, nil
 	}
 
 	return utpSocketSocket{us, network, nil}, nil

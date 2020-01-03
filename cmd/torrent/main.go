@@ -131,7 +131,7 @@ var flags = struct {
 	Mmap            bool           `help:"memory-map torrent data"`
 	TestPeer        []*net.TCPAddr `help:"addresses of some starting peers"`
 	Seed            bool           `help:"seed after download is complete"`
-	Addr            *net.TCPAddr   `help:"network listen addr"`
+	Addr            string         `help:"network listen addr"`
 	UploadRate      tagflag.Bytes  `help:"max piece bytes to send per second"`
 	DownloadRate    tagflag.Bytes  `help:"max bytes per second down from peers"`
 	Debug           bool
@@ -199,8 +199,8 @@ func mainErr() error {
 	if flags.Mmap {
 		clientConfig.DefaultStorage = storage.NewMMap("")
 	}
-	if flags.Addr != nil {
-		clientConfig.SetListenAddr(flags.Addr.String())
+	if flags.Addr != "" {
+		clientConfig.SetListenAddr(flags.Addr)
 	}
 	if flags.UploadRate != -1 {
 		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(flags.UploadRate), 256<<10)

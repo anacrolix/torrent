@@ -225,7 +225,7 @@ func mainErr() error {
 		client.WriteStatus(w)
 	})
 	if stdoutAndStderrAreSameFile() {
-		log.Default = log.Logger{log.StreamLogger{W: progress.Bypass(), Fmt: log.LineFormatter}}
+		log.SetDefault(log.Logger{log.StreamLogger{W: progress.Bypass(), Fmt: log.LineFormatter}})
 	}
 	if flags.Progress {
 		progress.Start()

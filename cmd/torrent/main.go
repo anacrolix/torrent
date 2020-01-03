@@ -140,12 +140,14 @@ var flags = struct {
 	PublicIP        net.IP
 	Progress        bool
 	Quiet           bool `help:"discard client logging"`
+	Dht             bool
 	tagflag.StartPos
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }{
 	UploadRate:   -1,
 	DownloadRate: -1,
 	Progress:     true,
+	Dht:          true,
 }
 
 func stdoutAndStderrAreSameFile() bool {
@@ -181,6 +183,7 @@ func mainErr() error {
 	tagflag.Parse(&flags)
 	defer envpprof.Stop()
 	clientConfig := torrent.NewDefaultClientConfig()
+	clientConfig.NoDHT = !flags.Dht
 	clientConfig.Debug = flags.Debug
 	clientConfig.Seed = flags.Seed
 	clientConfig.PublicIp4 = flags.PublicIP

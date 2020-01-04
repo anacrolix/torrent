@@ -187,6 +187,7 @@ func mainErr() error {
 		log.Default = log.Logger{log.StreamLogger{W: progress.Bypass(), Fmt: log.LineFormatter}}
 	}
 	clientConfig := torrent.NewDefaultClientConfig()
+	clientConfig.DisableAcceptRateLimiting = true
 	clientConfig.NoDHT = !flags.Dht
 	clientConfig.Debug = flags.Debug
 	clientConfig.Seed = flags.Seed

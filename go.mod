@@ -4,10 +4,10 @@ require (
 	bazil.org/fuse v0.0.0-20180421153158-65cc252bf669
 	github.com/RoaringBitmap/roaring v0.4.21 // indirect
 	github.com/alexflint/go-arg v1.2.0
-	github.com/anacrolix/dht/v2 v2.3.2-0.20200103043204-8dce00767ebd
+	github.com/anacrolix/dht/v2 v2.3.1
 	github.com/anacrolix/envpprof v1.1.0
 	github.com/anacrolix/go-libutp v1.0.2
-	github.com/anacrolix/log v0.5.0
+	github.com/anacrolix/log v0.4.0
 	github.com/anacrolix/missinggo v1.2.1
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.3.1

@@ -183,6 +183,9 @@ func main() {
 func mainErr() error {
 	tagflag.Parse(&flags)
 	defer envpprof.Stop()
+	if stdoutAndStderrAreSameFile() {
+		log.Default = log.Logger{log.StreamLogger{W: progress.Bypass(), Fmt: log.LineFormatter}}
+	}
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.NoDHT = !flags.Dht
 	clientConfig.Debug = flags.Debug
@@ -234,9 +237,6 @@ func mainErr() error {
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})
-	if stdoutAndStderrAreSameFile() {
-		log.SetDefault(log.Logger{log.StreamLogger{W: progress.Bypass(), Fmt: log.LineFormatter}})
-	}
 	if flags.Progress {
 		progress.Start()
 	}

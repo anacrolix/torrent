@@ -401,22 +401,26 @@ func (cl *Client) waitAccept() {
 	}
 }
 
-func (cl *Client) rejectAccepted(conn net.Conn) bool {
+func (cl *Client) rejectAccepted(conn net.Conn) error {
 	ra := conn.RemoteAddr()
 	rip := missinggo.AddrIP(ra)
 	if cl.config.DisableIPv4Peers && rip.To4() != nil {
-		return true
+		return errors.New("ipv4 peers disabled")
 	}
 	if cl.config.DisableIPv4 && len(rip) == net.IPv4len {
-		return true
+		return errors.New("ipv4 disabled")
+
 	}
 	if cl.config.DisableIPv6 && len(rip) == net.IPv6len && rip.To4() == nil {
-		return true
+		return errors.New("ipv6 disabled")
 	}
 	if cl.rateLimitAccept(rip) {
-		return true
+		return errors.New("source IP accepted rate limited")
 	}
-	return cl.badPeerIPPort(rip, missinggo.AddrPort(ra))
+	if cl.badPeerIPPort(rip, missinggo.AddrPort(ra)) {
+		return errors.New("bad source addr")
+	}
+	return nil
 }
 
 func (cl *Client) acceptConnections(l net.Listener) {
@@ -426,7 +430,7 @@ func (cl *Client) acceptConnections(l net.Listener) {
 		conn = pproffd.WrapNetConn(conn)
 		cl.rLock()
 		closed := cl.closed.IsSet()
-		reject := false
+		var reject error
 		if conn != nil {
 			reject = cl.rejectAccepted(conn)
 		}
@@ -442,8 +446,9 @@ func (cl *Client) acceptConnections(l net.Listener) {
 			continue
 		}
 		go func() {
-			if reject {
+			if reject != nil {
 				torrent.Add("rejected accepted connections", 1)
+				cl.logger.Printf("rejecting accepted conn: %v", reject)
 				conn.Close()
 			} else {
 				go cl.incomingConnection(conn)
@@ -838,6 +843,7 @@ func (cl *Client) runReceivedConn(c *connection) {
 	}
 	if t == nil {
 		torrent.Add("received handshake for unloaded torrent", 1)
+		t.logger.Printf("received handshake for unloaded torrent")
 		cl.lock()
 		cl.onBadAccept(c.remoteAddr)
 		cl.unlock()

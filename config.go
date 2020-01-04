@@ -165,6 +165,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		UploadRateLimiter:              unlimited,
 		DownloadRateLimiter:            unlimited,
 		ConnTracker:                    conntrack.NewInstance(),
+		DisableAcceptRateLimiting:      true,
 		HeaderObfuscationPolicy: HeaderObfuscationPolicy{
 			Preferred:        true,
 			RequirePreferred: false,

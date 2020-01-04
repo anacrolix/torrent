@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/anacrolix/missinggo"
 	"golang.org/x/xerrors"
 
 	"github.com/anacrolix/log"
@@ -163,12 +164,12 @@ func statsEnabled() bool {
 	return *flags.Stats
 }
 
-func exitSignalHandlers(client *torrent.Client) {
+func exitSignalHandlers(notify *missinggo.SynchronizedEvent) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	for {
 		log.Printf("close signal received: %+v", <-c)
-		client.Close()
+		notify.Set()
 	}
 }
 
@@ -212,12 +213,21 @@ func mainErr() error {
 		clientConfig.Logger = log.Discard
 	}
 
+	var stop missinggo.SynchronizedEvent
+	defer func() {
+		stop.Set()
+	}()
+
 	client, err := torrent.NewClient(clientConfig)
 	if err != nil {
 		return xerrors.Errorf("creating client: %v", err)
 	}
 	defer client.Close()
-	go exitSignalHandlers(client)
+	go exitSignalHandlers(&stop)
+	go func() {
+		<-stop.C()
+		client.Close()
+	}()
 
 	// Write status on the root path on the default HTTP muxer. This will be bound to localhost
 	// somewhere if GOPPROF is set, thanks to the envpprof import.
@@ -238,7 +248,7 @@ func mainErr() error {
 	}
 	if flags.Seed {
 		outputStats(client)
-		select {}
+		<-stop.C()
 	}
 	outputStats(client)
 	return nil

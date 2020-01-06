@@ -448,7 +448,7 @@ func (cl *Client) acceptConnections(l net.Listener) {
 		go func() {
 			if reject != nil {
 				torrent.Add("rejected accepted connections", 1)
-				cl.logger.Printf("rejecting accepted conn: %v", reject)
+				log.Fmsg("rejecting accepted conn: %v", reject).AddValue(debugLogValue).Log(cl.logger)
 				conn.Close()
 			} else {
 				go cl.incomingConnection(conn)

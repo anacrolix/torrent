@@ -843,7 +843,7 @@ func (cl *Client) runReceivedConn(c *connection) {
 	}
 	if t == nil {
 		torrent.Add("received handshake for unloaded torrent", 1)
-		t.logger.Printf("received handshake for unloaded torrent")
+		log.Fmsg("received handshake for unloaded torrent").AddValue(debugLogValue).Log(cl.logger)
 		cl.lock()
 		cl.onBadAccept(c.remoteAddr)
 		cl.unlock()

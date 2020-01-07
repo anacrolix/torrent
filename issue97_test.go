@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/anacrolix/log"
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -17,6 +18,7 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	defer os.RemoveAll(td)
 	tt := &Torrent{
 		storageOpener: storage.NewClient(storage.NewFile(td)),
+		logger:        log.Default,
 	}
 	mi := testutil.GreetingMetaInfo()
 	info, err := mi.UnmarshalInfo()

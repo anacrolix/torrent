@@ -8,7 +8,6 @@ import (
 	"io"
 	"math/rand"
 	"net/url"
-	"os"
 	"sync"
 	"text/tabwriter"
 	"time"
@@ -744,20 +743,14 @@ func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
 	return pp.Integer(t.info.PieceLength)
 }
 
-func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash) {
+func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash, copyErr error) {
 	hash := pieceHash.New()
 	p := t.piece(piece)
 	p.waitNoPendingWrites()
 	ip := t.info.Piece(int(piece))
 	pl := ip.Length()
-	n, err := io.Copy(hash, io.NewSectionReader(t.pieces[piece].Storage(), 0, pl))
-	if n == pl {
-		missinggo.CopyExact(&ret, hash.Sum(nil))
-		return
-	}
-	if err != io.ErrUnexpectedEOF && !os.IsNotExist(err) {
-		t.logger.Printf("unexpected error hashing piece %d through %T: %s", piece, t.storage.TorrentImpl, err)
-	}
+	_, copyErr = io.CopyN(hash, io.NewSectionReader(t.pieces[piece].Storage(), 0, pl), pl)
+	missinggo.CopyExact(&ret, hash.Sum(nil))
 	return
 }
 
@@ -1073,8 +1066,12 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	uncached := t.pieceCompleteUncached(piece)
 	cached := p.completion()
 	changed := cached != uncached
+	complete := uncached.Complete
 	p.storageCompletionOk = uncached.Ok
-	t.completedPieces.Set(bitmap.BitIndex(piece), uncached.Complete)
+	t.completedPieces.Set(bitmap.BitIndex(piece), complete)
+	if complete && len(p.dirtiers) != 0 {
+		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
+	}
 	if changed {
 		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).WithValues(debugLogValue).Log(t.logger)
 		t.pieceCompletionChanged(piece)
@@ -1658,13 +1655,17 @@ func (t *Torrent) getPieceToHash() (ret pieceIndex, ok bool) {
 
 func (t *Torrent) pieceHasher(index pieceIndex) {
 	p := t.piece(index)
-	sum := t.hashPiece(index)
+	sum, copyErr := t.hashPiece(index)
+	correct := sum == *p.hash
+	if !correct {
+		log.Fmsg("piece %v hash failure copy error: %v", index, copyErr).Log(t.logger)
+	}
 	t.storageLock.RUnlock()
 	t.cl.lock()
 	defer t.cl.unlock()
 	p.hashing = false
 	t.updatePiecePriority(index)
-	t.pieceHashed(index, sum == *p.hash)
+	t.pieceHashed(index, correct)
 	t.publishPieceChange(index)
 	t.activePieceHashes--
 	t.tryCreateMorePieceHashers()

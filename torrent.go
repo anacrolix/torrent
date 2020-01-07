@@ -1618,7 +1618,7 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 }
 
 func (t *Torrent) tryCreateMorePieceHashers() {
-	for t.activePieceHashes < 2 && t.tryCreatePieceHasher() {
+	for !t.closed.IsSet() && t.activePieceHashes < 2 && t.tryCreatePieceHasher() {
 	}
 }
 

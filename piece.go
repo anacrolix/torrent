@@ -243,3 +243,7 @@ func (p *Piece) completion() (ret storage.Completion) {
 	ret.Ok = p.storageCompletionOk
 	return
 }
+
+func (p *Piece) allChunksDirty() bool {
+	return p.dirtyChunks.Len() == int(p.numChunks())
+}

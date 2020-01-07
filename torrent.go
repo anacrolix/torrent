@@ -1520,51 +1520,64 @@ func (t *Torrent) pieceHashed(piece pieceIndex, correct bool) {
 	if t.closed.IsSet() {
 		return
 	}
-	touchers := t.reapPieceTouchers(piece)
+
+	// Don't score the first time a piece is hashed, it could be an initial check.
 	if p.storageCompletionOk {
-		// Don't score the first time a piece is hashed, it could be an
-		// initial check.
 		if correct {
 			pieceHashedCorrect.Add(1)
 		} else {
-			log.Fmsg("piece %d failed hash: %d connections contributed", piece, len(touchers)).AddValues(t, p).Log(t.logger)
+			log.Fmsg("piece %d failed hash: %d connections contributed", piece, len(p.dirtiers)).AddValues(t, p).Log(t.logger)
 			pieceHashedNotCorrect.Add(1)
 		}
 	}
+
 	if correct {
-		if len(touchers) != 0 {
-			// Don't increment stats above connection-level for every involved
-			// connection.
+		if len(p.dirtiers) != 0 {
+			// Don't increment stats above connection-level for every involved connection.
 			t.allStats((*ConnStats).incrementPiecesDirtiedGood)
 		}
-		for _, c := range touchers {
+		for c := range p.dirtiers {
 			c.stats.incrementPiecesDirtiedGood()
 		}
+		t.clearPieceTouchers(piece)
 		err := p.Storage().MarkComplete()
 		if err != nil {
 			t.logger.Printf("%T: error marking piece complete %d: %s", t.storage, piece, err)
 		}
 	} else {
-		if len(touchers) != 0 {
-			// Don't increment stats above connection-level for every involved connection.
+		if len(p.dirtiers) != 0 && p.allChunksDirty() {
+
+			// Increment Torrent and above stats, and then specific connections.
 			t.allStats((*ConnStats).incrementPiecesDirtiedBad)
-			for _, c := range touchers {
+			for c := range p.dirtiers {
 				// Y u do dis peer?!
 				c.stats.incrementPiecesDirtiedBad()
 			}
-			slices.Sort(touchers, connLessTrusted)
+
+			bannableTouchers := make([]*connection, 0, len(p.dirtiers))
+			for c := range p.dirtiers {
+				if !c.trusted {
+					bannableTouchers = append(bannableTouchers, c)
+				}
+			}
+			t.clearPieceTouchers(piece)
+			slices.Sort(bannableTouchers, connLessTrusted)
+
 			if t.cl.config.Debug {
-				t.logger.Printf("conns by trust for piece %d: %v",
+				t.logger.Printf(
+					"bannable conns by trust for piece %d: %v",
 					piece,
 					func() (ret []connectionTrust) {
-						for _, c := range touchers {
+						for _, c := range bannableTouchers {
 							ret = append(ret, c.trust())
 						}
 						return
-					}())
+					}(),
+				)
 			}
-			c := touchers[0]
-			if !c.trust().Implicit {
+
+			if len(bannableTouchers) >= 1 {
+				c := bannableTouchers[0]
 				t.cl.banPeerIP(c.remoteAddr.IP)
 				c.Drop()
 			}
@@ -1671,15 +1684,13 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 	t.tryCreateMorePieceHashers()
 }
 
-// Return the connections that touched a piece, and clear the entries while
-// doing it.
-func (t *Torrent) reapPieceTouchers(piece pieceIndex) (ret []*connection) {
-	for c := range t.pieces[piece].dirtiers {
-		delete(c.peerTouchedPieces, piece)
-		ret = append(ret, c)
+// Return the connections that touched a piece, and clear the entries while doing it.
+func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
+	p := t.piece(pi)
+	for c := range p.dirtiers {
+		delete(c.peerTouchedPieces, pi)
+		delete(p.dirtiers, c)
 	}
-	t.pieces[piece].dirtiers = nil
-	return
 }
 
 func (t *Torrent) connsAsSlice() (ret []*connection) {

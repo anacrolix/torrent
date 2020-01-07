@@ -176,13 +176,13 @@ func TestAddDropManyTorrents(t *testing.T) {
 	}
 }
 
-type FileCacheClientStorageFactoryParams struct {
+type fileCacheClientStorageFactoryParams struct {
 	Capacity    int64
 	SetCapacity bool
 	Wrapper     func(*filecache.Cache) storage.ClientImpl
 }
 
-func NewFileCacheClientStorageFactory(ps FileCacheClientStorageFactoryParams) storageFactory {
+func newFileCacheClientStorageFactory(ps fileCacheClientStorageFactoryParams) storageFactory {
 	return func(dataDir string) storage.ClientImpl {
 		fc, err := filecache.NewCache(dataDir)
 		if err != nil {
@@ -200,7 +200,7 @@ type storageFactory func(string) storage.ClientImpl
 func TestClientTransferDefault(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
 		ExportClientStatus: true,
-		LeecherStorage: NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
+		LeecherStorage: newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
 			Wrapper: fileCachePieceResourceStorage,
 		}),
 	})
@@ -230,7 +230,7 @@ func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
 
 func testClientTransferSmallCache(t *testing.T, setReadahead bool, readahead int64) {
 	testClientTransfer(t, testClientTransferParams{
-		LeecherStorage: NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
+		LeecherStorage: newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
 			SetCapacity: true,
 			// Going below the piece length means it can't complete a piece so
 			// that it can be hashed.
@@ -259,34 +259,50 @@ func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
 
 func TestClientTransferVarious(t *testing.T) {
 	// Leecher storage
-	for _, ls := range []storageFactory{
-		NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
+	for _, ls := range []struct {
+		name string
+		f    storageFactory
+	}{
+		{"Filecache", newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
 			Wrapper: fileCachePieceResourceStorage,
-		}),
-		storage.NewBoltDB,
+		})},
+		{"Boltdb", storage.NewBoltDB},
 	} {
-		// Seeder storage
-		for _, ss := range []func(string) storage.ClientImpl{
-			storage.NewFile,
-			storage.NewMMap,
-		} {
-			for _, responsive := range []bool{false, true} {
-				testClientTransfer(t, testClientTransferParams{
-					Responsive:     responsive,
-					SeederStorage:  ss,
-					LeecherStorage: ls,
+		t.Run(fmt.Sprintf("LeecherStorage=%s", ls.name), func(t *testing.T) {
+			// Seeder storage
+			for _, ss := range []struct {
+				name string
+				f    func(string) storage.ClientImpl
+			}{
+				{"File", storage.NewFile},
+				{"Mmap", storage.NewMMap},
+			} {
+				t.Run(fmt.Sprintf("%sSeederStorage", ss.name), func(t *testing.T) {
+					for _, responsive := range []bool{false, true} {
+						t.Run(fmt.Sprintf("Responsive=%v", responsive), func(t *testing.T) {
+							t.Run("NoReadahead", func(t *testing.T) {
+								testClientTransfer(t, testClientTransferParams{
+									Responsive:     responsive,
+									SeederStorage:  ss.f,
+									LeecherStorage: ls.f,
+								})
+							})
+							for _, readahead := range []int64{-1, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20} {
+								t.Run(fmt.Sprintf("readahead=%v", readahead), func(t *testing.T) {
+									testClientTransfer(t, testClientTransferParams{
+										SeederStorage:  ss.f,
+										Responsive:     responsive,
+										SetReadahead:   true,
+										Readahead:      readahead,
+										LeecherStorage: ls.f,
+									})
+								})
+							}
+						})
+					}
 				})
-				for _, readahead := range []int64{-1, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20} {
-					testClientTransfer(t, testClientTransferParams{
-						SeederStorage:  ss,
-						Responsive:     responsive,
-						SetReadahead:   true,
-						Readahead:      readahead,
-						LeecherStorage: ls,
-					})
-				}
 			}
-		}
+		})
 	}
 }
 

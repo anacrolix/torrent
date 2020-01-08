@@ -749,7 +749,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash, copyErr error)
 	p.waitNoPendingWrites()
 	ip := t.info.Piece(int(piece))
 	pl := ip.Length()
-	_, copyErr = io.CopyN(hash, io.NewSectionReader(t.pieces[piece].Storage(), 0, pl), pl)
+	_, copyErr = io.Copy(hash, io.NewSectionReader(t.pieces[piece].Storage(), 0, pl))
 	missinggo.CopyExact(&ret, hash.Sum(nil))
 	return
 }
@@ -1658,7 +1658,7 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 	sum, copyErr := t.hashPiece(index)
 	correct := sum == *p.hash
 	if !correct {
-		log.Fmsg("piece %v hash failure copy error: %v", index, copyErr).Log(t.logger)
+		log.Fmsg("piece %v (%s) hash failure copy error: %v", p, p.hash.HexString(), copyErr).Log(t.logger)
 	}
 	t.storageLock.RUnlock()
 	t.cl.lock()

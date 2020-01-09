@@ -689,10 +689,13 @@ func (cn *connection) updateRequests() {
 func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 	return func(cb iter.Callback) {
 		for _, bm := range bms {
-			if !iter.All(func(i interface{}) bool {
-				skip.Add(i.(int))
-				return cb(i)
-			}, bitmap.Sub(bm, *skip).Iter) {
+			if !iter.All(
+				func(i interface{}) bool {
+					skip.Add(i.(int))
+					return cb(i)
+				},
+				bitmap.Sub(bm, *skip).Iter,
+			) {
 				return
 			}
 		}
@@ -709,8 +712,7 @@ func (cn *connection) iterUnbiasedPieceRequestOrder(f func(piece pieceIndex) boo
 	// And pieces that we already have.
 	skip.Union(cn.t.completedPieces)
 	skip.Union(cn.t.piecesQueuedForHash)
-	// Return an iterator over the different priority classes, minus the skip
-	// pieces.
+	// Return an iterator over the different priority classes, minus the skip pieces.
 	return iter.All(
 		func(_piece interface{}) bool {
 			i := _piece.(bitmap.BitIndex)
@@ -720,6 +722,7 @@ func (cn *connection) iterUnbiasedPieceRequestOrder(f func(piece pieceIndex) boo
 			return f(pieceIndex(i))
 		},
 		iterBitmapsDistinct(&skip, now, readahead),
+		// We have to iterate pendingPieces separately because it isn't a Bitmap.
 		func(cb iter.Callback) {
 			cn.t.pendingPieces.IterTyped(func(piece int) bool {
 				if skip.Contains(piece) {
@@ -733,13 +736,12 @@ func (cn *connection) iterUnbiasedPieceRequestOrder(f func(piece pieceIndex) boo
 	)
 }
 
-// The connection should download highest priority pieces first, without any
-// inclination toward avoiding wastage. Generally we might do this if there's
-// a single connection, or this is the fastest connection, and we have active
-// readers that signal an ordering preference. It's conceivable that the best
-// connection should do this, since it's least likely to waste our time if
-// assigned to the highest priority pieces, and assigning more than one this
-// role would cause significant wasted bandwidth.
+// The connection should download highest priority pieces first, without any inclination toward
+// avoiding wastage. Generally we might do this if there's a single connection, or this is the
+// fastest connection, and we have active readers that signal an ordering preference. It's
+// conceivable that the best connection should do this, since it's least likely to waste our time if
+// assigned to the highest priority pieces, and assigning more than one this role would cause
+// significant wasted bandwidth.
 func (cn *connection) shouldRequestWithoutBias() bool {
 	if cn.t.requestStrategy != 2 {
 		return false

@@ -21,7 +21,7 @@ import (
 	"github.com/anacrolix/dht/v2"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/filecache"
+	"github.com/anacrolix/missinggo/v2/filecache"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/testutil"

@@ -390,12 +390,11 @@ func (cn *connection) nominalMaxRequests() (ret int) {
 			1,
 			int64(cn.PeerMaxRequests),
 			max(
-				// It makes sense to always pipeline at least one connection,
-				// since latency must be non-zero.
+				// It makes sense to always pipeline at least one connection, since latency must be
+				// non-zero.
 				2,
-				// Request only as many as we expect to receive in the
-				// dupliateRequestTimeout window. We are trying to avoid having to
-				// duplicate requests.
+				// Request only as many as we expect to receive in the duplicateRequestTimeout
+				// window. We are trying to avoid having to duplicate requests.
 				cn.chunksReceivedWhileExpecting*int64(cn.t.duplicateRequestTimeout)/expectingTime,
 			),
 		))

@@ -46,12 +46,11 @@ type Torrent struct {
 
 	networkingEnabled bool
 
-	// Determines what chunks to request from peers. 1: Favour higher priority
-	// pieces with some fuzzing to reduce overlaps and wastage across
-	// connections. 2: The fastest connection downloads strictly in order of
-	// priority, while all others adher to their piece inclications. 3:
-	// Requests are strictly by piece priority, and not duplicated until
-	// duplicateRequestTimeout is reached.
+	// Determines what chunks to request from peers. 1: Favour higher priority pieces with some
+	// fuzzing to reduce overlaps and wastage across connections. 2: The fastest connection
+	// downloads strictly in order of priority, while all others adhere to their piece inclinations.
+	// 3: Requests are strictly by piece priority, and not duplicated until duplicateRequestTimeout
+	// is reached.
 	requestStrategy int
 	// How long to avoid duplicating a pending request.
 	duplicateRequestTimeout time.Duration

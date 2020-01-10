@@ -33,7 +33,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	c.w = w
 	go c.writer(time.Minute)
 	c.mu().Lock()
-	c.t.completedPieces.Add(1)
+	c.t._completedPieces.Add(1)
 	c.PostBitfield( /*[]bool{false, true, false}*/ )
 	c.mu().Unlock()
 	c.mu().Lock()
@@ -105,7 +105,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		PieceLength: 1 << 20,
 	}))
 	t.setChunkSize(defaultChunkSize)
-	t.pendingPieces.Set(0, PiecePriorityNormal.BitmapPriority())
+	t._pendingPieces.Set(0, PiecePriorityNormal.BitmapPriority())
 	r, w := net.Pipe()
 	cn := cl.newConnection(r, true, IpPort{}, "")
 	cn.setTorrent(t)
@@ -131,7 +131,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			cl.lock()
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.
-			t.pieces[0].dirtyChunks.Clear()
+			t.pieces[0]._dirtyChunks.Clear()
 			cn.validReceiveChunks = map[request]struct{}{newRequestFromMessage(&msg): {}}
 			cl.unlock()
 			n, err := w.Write(wb)
@@ -141,5 +141,5 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		}
 	}()
 	require.NoError(b, <-mrlErr)
-	require.EqualValues(b, b.N, cn.stats.ChunksReadUseful.Int64())
+	require.EqualValues(b, b.N, cn._stats.ChunksReadUseful.Int64())
 }

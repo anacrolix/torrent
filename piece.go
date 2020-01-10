@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/anacrolix/missinggo/bitmap"
+	"github.com/anacrolix/missinggo/v2/bitmap"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -46,7 +46,7 @@ type Piece struct {
 	files []*File
 	// Chunks we've written to since the last check. The chunk offset and
 	// length can be determined by the request chunkSize in use.
-	dirtyChunks bitmap.Bitmap
+	_dirtyChunks bitmap.Bitmap
 
 	hashing             bool
 	numVerifies         int64
@@ -77,7 +77,7 @@ func (p *Piece) Storage() storage.Piece {
 }
 
 func (p *Piece) pendingChunkIndex(chunkIndex int) bool {
-	return !p.dirtyChunks.Contains(chunkIndex)
+	return !p._dirtyChunks.Contains(chunkIndex)
 }
 
 func (p *Piece) pendingChunk(cs chunkSpec, chunkSize pp.Integer) bool {
@@ -85,20 +85,20 @@ func (p *Piece) pendingChunk(cs chunkSpec, chunkSize pp.Integer) bool {
 }
 
 func (p *Piece) hasDirtyChunks() bool {
-	return p.dirtyChunks.Len() != 0
+	return p._dirtyChunks.Len() != 0
 }
 
 func (p *Piece) numDirtyChunks() pp.Integer {
-	return pp.Integer(p.dirtyChunks.Len())
+	return pp.Integer(p._dirtyChunks.Len())
 }
 
 func (p *Piece) unpendChunkIndex(i int) {
-	p.dirtyChunks.Add(i)
+	p._dirtyChunks.Add(i)
 	p.t.tickleReaders()
 }
 
 func (p *Piece) pendChunkIndex(i int) {
-	p.dirtyChunks.Remove(i)
+	p._dirtyChunks.Remove(i)
 }
 
 func (p *Piece) numChunks() pp.Integer {
@@ -106,7 +106,7 @@ func (p *Piece) numChunks() pp.Integer {
 }
 
 func (p *Piece) undirtiedChunkIndices() (ret bitmap.Bitmap) {
-	ret = p.dirtyChunks.Copy()
+	ret = p._dirtyChunks.Copy()
 	ret.FlipRange(0, bitmap.BitIndex(p.numChunks()))
 	return
 }
@@ -138,7 +138,7 @@ func (p *Piece) waitNoPendingWrites() {
 }
 
 func (p *Piece) chunkIndexDirty(chunk pp.Integer) bool {
-	return p.dirtyChunks.Contains(bitmap.BitIndex(chunk))
+	return p._dirtyChunks.Contains(bitmap.BitIndex(chunk))
 }
 
 func (p *Piece) chunkIndexSpec(chunk pp.Integer) chunkSpec {
@@ -225,13 +225,13 @@ func (p *Piece) uncachedPriority() (ret piecePriority) {
 	for _, f := range p.files {
 		ret.Raise(f.prio)
 	}
-	if p.t.readerNowPieces.Contains(int(p.index)) {
+	if p.t.readerNowPieces().Contains(int(p.index)) {
 		ret.Raise(PiecePriorityNow)
 	}
-	// if t.readerNowPieces.Contains(piece - 1) {
+	// if t._readerNowPieces.Contains(piece - 1) {
 	// 	return PiecePriorityNext
 	// }
-	if p.t.readerReadaheadPieces.Contains(bitmap.BitIndex(p.index)) {
+	if p.t.readerReadaheadPieces().Contains(bitmap.BitIndex(p.index)) {
 		ret.Raise(PiecePriorityReadahead)
 	}
 	ret.Raise(p.priority)
@@ -245,5 +245,20 @@ func (p *Piece) completion() (ret storage.Completion) {
 }
 
 func (p *Piece) allChunksDirty() bool {
-	return p.dirtyChunks.Len() == int(p.numChunks())
+	return p._dirtyChunks.Len() == int(p.numChunks())
+}
+
+func (p *Piece) requestStrategyPiece() requestStrategyPiece {
+	return p
+}
+
+func (p *Piece) dirtyChunks() bitmap.Bitmap {
+	return p._dirtyChunks
+}
+
+func (p *Piece) wouldDuplicateRecent(cs chunkSpec) bool {
+	// This piece has been requested on another connection, and the duplicate request timer is still
+	// running.
+	_, ok := p.t.lastRequested[request{pp.Integer(p.index), cs}]
+	return ok
 }

@@ -3,7 +3,7 @@ package torrent
 import (
 	"strings"
 
-	"github.com/anacrolix/missinggo/bitmap"
+	"github.com/anacrolix/missinggo/v2/bitmap"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -58,7 +58,7 @@ func (f *File) bytesLeft() (left int64) {
 	pieceSize := int64(f.t.usualPieceSize())
 	firstPieceIndex := f.firstPieceIndex()
 	endPieceIndex := f.endPieceIndex() - 1
-	bitmap.Flip(f.t.completedPieces, firstPieceIndex+1, endPieceIndex).IterTyped(func(piece int) bool {
+	bitmap.Flip(f.t._completedPieces, firstPieceIndex+1, endPieceIndex).IterTyped(func(piece int) bool {
 		if piece >= endPieceIndex {
 			return false
 		}

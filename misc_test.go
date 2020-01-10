@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/iter"
+	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 )

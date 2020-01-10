@@ -388,7 +388,7 @@ func (cn *connection) nominalMaxRequests() (ret int) {
 }
 
 // The actual value to use as the maximum outbound requests.
-func (requestStrategyThree) nominalMaxRequests(cn requestStrategyConnection) (ret int) {
+func (rs requestStrategyThree) nominalMaxRequests(cn requestStrategyConnection) (ret int) {
 	expectingTime := int64(cn.totalExpectingTime())
 	if expectingTime == 0 {
 		expectingTime = math.MaxInt64
@@ -404,7 +404,7 @@ func (requestStrategyThree) nominalMaxRequests(cn requestStrategyConnection) (re
 			2,
 			// Request only as many as we expect to receive in the duplicateRequestTimeout
 			// window. We are trying to avoid having to duplicate requests.
-			cn.chunksReceivedWhileExpecting()*int64(cn.torrent().duplicateRequestTimeout())/expectingTime,
+			cn.chunksReceivedWhileExpecting()*int64(rs.duplicateRequestTimeout)/expectingTime,
 		),
 	))
 }
@@ -533,23 +533,20 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 	}
 	cn.validReceiveChunks[r] = struct{}{}
 	cn.t.pendingRequests[r]++
-	cn.t.lastRequested[r] = time.AfterFunc(cn.t._duplicateRequestTimeout, func() {
-		torrent.Add("duplicate request timeouts", 1)
-		cn.mu().Lock()
-		defer cn.mu().Unlock()
-		delete(cn.t.lastRequested, r)
-		for cn := range cn.t.conns {
-			if cn.PeerHasPiece(pieceIndex(r.Index)) {
-				cn.updateRequests()
-			}
-		}
-	})
+	cn.t.requestStrategy.hooks().sentRequest(r)
 	cn.updateExpectingChunks()
 	return mw(pp.Message{
 		Type:   pp.Request,
 		Index:  r.Index,
 		Begin:  r.Begin,
 		Length: r.Length,
+	})
+}
+
+func (rs requestStrategyThree) onSentRequest(r request) {
+	rs.lastRequested[r] = time.AfterFunc(rs.duplicateRequestTimeout, func() {
+		delete(rs.lastRequested, r)
+		rs.callbacks.requestTimedOut(r)
 	})
 }
 
@@ -805,22 +802,24 @@ func (cn *connection) iterPendingPiecesUntyped(f iter.Callback) {
 }
 
 func (cn *connection) iterPendingRequests(piece pieceIndex, f func(request) bool) bool {
-	return cn.t.requestStrategy.iterUndirtiedChunks(cn.t.piece(piece).requestStrategyPiece(),
+	return cn.t.requestStrategy.iterUndirtiedChunks(
+		cn.t.piece(piece).requestStrategyPiece(),
 		func(cs chunkSpec) bool {
 			return f(request{pp.Integer(piece), cs})
-		})
+		},
+	)
 }
 
-func (requestStrategyThree) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
+func (rs requestStrategyThree) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
 	for i := pp.Integer(0); i < pp.Integer(p.numChunks()); i++ {
 		if p.dirtyChunks().Get(bitmap.BitIndex(i)) {
 			continue
 		}
-		ci := p.chunkIndexSpec(i)
-		if p.wouldDuplicateRecent(ci) {
+		r := p.chunkIndexRequest(i)
+		if rs.wouldDuplicateRecent(r) {
 			continue
 		}
-		if !f(p.chunkIndexSpec(i)) {
+		if !f(r.chunkSpec) {
 			return false
 		}
 	}
@@ -835,7 +834,7 @@ func defaultIterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) 
 		if err != nil {
 			panic(err)
 		}
-		return f(p.chunkIndexSpec(pp.Integer(ci)))
+		return f(p.chunkIndexRequest(pp.Integer(ci)).chunkSpec)
 	})
 }
 
@@ -1524,10 +1523,7 @@ func (c *connection) deleteRequest(r request) bool {
 	}
 	delete(c.requests, r)
 	c.updateExpectingChunks()
-	if t, ok := c.t.lastRequested[r]; ok {
-		t.Stop()
-		delete(c.t.lastRequested, r)
-	}
+	c.t.requestStrategy.hooks().deletedRequest(r)
 	pr := c.t.pendingRequests
 	pr[r]--
 	n := pr[r]

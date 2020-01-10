@@ -145,6 +145,13 @@ func (p *Piece) chunkIndexSpec(chunk pp.Integer) chunkSpec {
 	return chunkIndexSpec(chunk, p.length(), p.chunkSize())
 }
 
+func (p *Piece) chunkIndexRequest(chunkIndex pp.Integer) request {
+	return request{
+		pp.Integer(p.index),
+		chunkIndexSpec(chunkIndex, p.length(), p.chunkSize()),
+	}
+}
+
 func (p *Piece) numDirtyBytes() (ret pp.Integer) {
 	// defer func() {
 	// 	if ret > p.length() {
@@ -256,9 +263,9 @@ func (p *Piece) dirtyChunks() bitmap.Bitmap {
 	return p._dirtyChunks
 }
 
-func (p *Piece) wouldDuplicateRecent(cs chunkSpec) bool {
+func (rs requestStrategyThree) wouldDuplicateRecent(r request) bool {
 	// This piece has been requested on another connection, and the duplicate request timer is still
 	// running.
-	_, ok := p.t.lastRequested[request{pp.Integer(p.index), cs}]
+	_, ok := rs.lastRequested[r]
 	return ok
 }

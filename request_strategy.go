@@ -12,8 +12,7 @@ import (
 type requestStrategyPiece interface {
 	numChunks() pp.Integer
 	dirtyChunks() bitmap.Bitmap
-	chunkIndexSpec(i pp.Integer) chunkSpec
-	wouldDuplicateRecent(chunkSpec) bool
+	chunkIndexRequest(i pp.Integer) request
 }
 
 type requestStrategyTorrent interface {
@@ -23,7 +22,6 @@ type requestStrategyTorrent interface {
 	readerPiecePriorities() (now, readahead bitmap.Bitmap)
 	ignorePieces() bitmap.Bitmap
 	pendingPieces() *prioritybitmap.PriorityBitmap
-	duplicateRequestTimeout() time.Duration
 }
 
 type requestStrategyConnection interface {
@@ -43,6 +41,16 @@ type requestStrategy interface {
 	nominalMaxRequests(requestStrategyConnection) int
 	shouldRequestWithoutBias(requestStrategyConnection) bool
 	piecePriority(requestStrategyConnection, pieceIndex, piecePriority, int) int
+	hooks() requestStrategyHooks
+}
+
+type requestStrategyHooks struct {
+	sentRequest    func(request)
+	deletedRequest func(request)
+}
+
+type requestStrategyCallbacks interface {
+	requestTimedOut(request)
 }
 
 // Favour higher priority pieces with some fuzzing to reduce overlaps and wastage across
@@ -69,4 +77,43 @@ func (requestStrategyTwo) ShouldRequestWithoutBias(cn requestStrategyConnection)
 // Requests are strictly by piece priority, and not duplicated until duplicateRequestTimeout is
 // reached.
 type requestStrategyThree struct {
+	// How long to avoid duplicating a pending request.
+	duplicateRequestTimeout time.Duration
+	// The last time we requested a chunk. Deleting the request from any connection will clear this
+	// value.
+	lastRequested map[request]*time.Timer
+	callbacks     requestStrategyCallbacks
+}
+
+type requestStrategyMaker func(callbacks requestStrategyCallbacks) requestStrategy
+
+func requestStrategyThreeMaker(duplicateRequestTimeout time.Duration) requestStrategyMaker {
+	return func(callbacks requestStrategyCallbacks) requestStrategy {
+		return requestStrategyThree{
+			duplicateRequestTimeout: duplicateRequestTimeout,
+			callbacks:               callbacks,
+			lastRequested:           make(map[request]*time.Timer),
+		}
+	}
+}
+
+func (rs requestStrategyThree) hooks() requestStrategyHooks {
+	return requestStrategyHooks{
+		deletedRequest: func(r request) {
+			if t, ok := rs.lastRequested[r]; ok {
+				t.Stop()
+				delete(rs.lastRequested, r)
+			}
+		},
+		sentRequest: rs.onSentRequest,
+	}
+
+}
+
+func (rs requestStrategyOne) hooks() requestStrategyHooks {
+	return requestStrategyHooks{}
+}
+
+func (rs requestStrategyTwo) hooks() requestStrategyHooks {
+	return requestStrategyHooks{}
 }

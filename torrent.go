@@ -48,8 +48,6 @@ type Torrent struct {
 
 	// Determines what chunks to request from peers.
 	requestStrategy requestStrategy
-	// How long to avoid duplicating a pending request.
-	_duplicateRequestTimeout time.Duration
 
 	closed   missinggo.Event
 	infoHash metainfo.Hash
@@ -135,9 +133,6 @@ type Torrent struct {
 
 	// Count of each request across active connections.
 	pendingRequests map[request]int
-	// The last time we requested a chunk. Deleting the request from any
-	// connection will clear this value.
-	lastRequested map[request]*time.Timer
 }
 
 func (t *Torrent) numConns() int {
@@ -408,7 +403,6 @@ func (t *Torrent) onSetInfo() {
 	t.gotMetainfo.Set()
 	t.updateWantPeersEvent()
 	t.pendingRequests = make(map[request]int)
-	t.lastRequested = make(map[request]*time.Timer)
 	t.tryCreateMorePieceHashers()
 }
 
@@ -1228,9 +1222,9 @@ func (t *Torrent) assertNoPendingRequests() {
 	if len(t.pendingRequests) != 0 {
 		panic(t.pendingRequests)
 	}
-	if len(t.lastRequested) != 0 {
-		panic(t.lastRequested)
-	}
+	//if len(t.lastRequested) != 0 {
+	//	panic(t.lastRequested)
+	//}
 }
 
 func (t *Torrent) dropConnection(c *connection) {
@@ -1802,6 +1796,22 @@ func (t *Torrent) requestStrategyTorrent() requestStrategyTorrent {
 	return t
 }
 
-func (t *Torrent) duplicateRequestTimeout() time.Duration {
-	return t._duplicateRequestTimeout
+type torrentRequestStrategyCallbacks struct {
+	t *Torrent
+}
+
+func (cb torrentRequestStrategyCallbacks) requestTimedOut(r request) {
+	torrent.Add("request timeouts", 1)
+	cb.t.cl.lock()
+	defer cb.t.cl.unlock()
+	for cn := range cb.t.conns {
+		if cn.PeerHasPiece(pieceIndex(r.Index)) {
+			cn.updateRequests()
+		}
+	}
+
+}
+
+func (t *Torrent) requestStrategyCallbacks() requestStrategyCallbacks {
+	return torrentRequestStrategyCallbacks{t}
 }

@@ -137,6 +137,8 @@ type ClientConfig struct {
 
 	// OnQuery hook func
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
+
+	DefaultRequestStrategy requestStrategyMaker
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
@@ -174,6 +176,8 @@ func NewDefaultClientConfig() *ClientConfig {
 		CryptoProvides: mse.AllSupportedCrypto,
 		ListenPort:     42069,
 		Logger:         log.Default,
+
+		DefaultRequestStrategy: requestStrategyThreeMaker(5 * time.Second),
 	}
 	//cc.ConnTracker.SetNoMaxEntries()
 	//cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }

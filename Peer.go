@@ -21,6 +21,7 @@ type Peer struct {
 	Trusted bool
 }
 
+// FromPex generate Peer from peer exchange
 func (me *Peer) FromPex(na krpc.NodeAddr, fs peer_protocol.PexPeerFlags) {
 	me.IP = append([]byte(nil), na.IP...)
 	me.Port = na.Port
@@ -33,5 +34,5 @@ func (me *Peer) FromPex(na krpc.NodeAddr, fs peer_protocol.PexPeerFlags) {
 }
 
 func (me Peer) addr() IpPort {
-	return IpPort{me.IP, uint16(me.Port)}
+	return IpPort{IP: me.IP, Port: uint16(me.Port)}
 }

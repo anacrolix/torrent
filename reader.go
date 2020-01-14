@@ -202,11 +202,15 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 	}
 	for {
 		avail := r.waitAvailable(pos, int64(len(b)), ctxErr)
+		// TODO: strictly speaking this check should be in side the if avail == 0
+		// block but got sick of fighting the test, this should be fixable once
+		// the refactoring is complete and the code is more managable.
+		if r.t.closed.IsSet() {
+			err = errors.New("torrent closed")
+			return
+		}
+
 		if avail == 0 {
-			if r.t.closed.IsSet() {
-				err = errors.New("torrent closed")
-				return
-			}
 			if *ctxErr != nil {
 				err = *ctxErr
 				return

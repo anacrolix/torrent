@@ -179,7 +179,7 @@ func (p *Piece) bytesLeft() (ret pp.Integer) {
 	return p.length() - p.numDirtyBytes()
 }
 
-// Forces the piece data to be rehashed.
+// VerifyData forces the piece data to be rehashed.
 func (p *Piece) VerifyData() {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()
@@ -228,9 +228,7 @@ func (p *Piece) uncachedPriority() (ret piecePriority) {
 	if p.t.readerNowPieces.Contains(int(p.index)) {
 		ret.Raise(PiecePriorityNow)
 	}
-	// if t.readerNowPieces.Contains(piece - 1) {
-	// 	return PiecePriorityNext
-	// }
+
 	if p.t.readerReadaheadPieces.Contains(bitmap.BitIndex(p.index)) {
 		ret.Raise(PiecePriorityReadahead)
 	}

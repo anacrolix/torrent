@@ -9,11 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	l2 "log"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	stdsync "sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/anacrolix/dht/v2"
@@ -40,6 +43,9 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
 )
+
+var _ = l2.Print
+var _ = stdsync.Mutex{}
 
 // Client contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
@@ -435,17 +441,20 @@ func (cl *Client) closeSockets() {
 	cl.conns = nil
 }
 
-// Stops the client. All connections to peers are closed and all activity will
+// Close stops the client. All connections to peers are closed and all activity will
 // come to a halt.
 func (cl *Client) Close() {
 	cl.lock()
 	defer cl.unlock()
+
 	cl.closed.Set()
 	cl.eachDhtServer(func(s *dht.Server) { s.Close() })
 	cl.closeSockets()
+
 	for _, t := range cl.torrents {
 		t.close()
 	}
+
 	for _, f := range cl.onClose {
 		f()
 	}
@@ -966,6 +975,7 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) {
 		log.Fmsg("error adding connection: %s", err).AddValues(c, debugLogValue).Log(t.logger)
 		return
 	}
+
 	defer t.dropConnection(c)
 	go c.writer(time.Minute)
 	cl.sendInitialMessages(c, t)
@@ -1016,9 +1026,11 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 				return
 			}
 		}
+
 		conn.PostBitfield()
 	}()
 	if conn.PeerExtensionBytes.SupportsDHT() && cl.extensionBytes.SupportsDHT() && cl.haveDhtServer() {
+		l2.Println("sendInitialMessages cp dht")
 		conn.Post(pp.Message{
 			Type: pp.Port,
 			Port: cl.dhtPort(),
@@ -1107,6 +1119,11 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 		storageClient = storage.NewClient(src.Storage)
 	}
 
+	csize := src.ChunkSize
+	if csize == 0 {
+		csize = defaultChunkSize
+	}
+
 	t = &torrent{
 		displayName: src.DisplayName,
 		infoHash:    src.InfoHash,
@@ -1131,16 +1148,14 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 			L: cl.locker(),
 		},
 		duplicateRequestTimeout: 1 * time.Second,
+
+		piecesM: newChunks(csize, &metainfo.Info{}),
+		// storageLock: newDebugLock(&stdsync.RWMutex{}),
 	}
 
 	t.logger = cl.logger.WithValues(t).WithText(func(m log.Msg) string {
 		return fmt.Sprintf("%v: %s", t, m.Text())
 	})
-
-	csize := src.ChunkSize
-	if csize == 0 {
-		csize = defaultChunkSize
-	}
 
 	t.setChunkSize(pp.Integer(csize))
 	t.setInfoBytes(src.InfoBytes)
@@ -1381,20 +1396,37 @@ func (cl *Client) rateLimitAccept(ip net.IP) bool {
 	return cl.acceptLimiter[ipStr(maskIpForAcceptLimiting(ip).String())] > 0
 }
 
+var _ = atomic.AddInt32
+
 func (cl *Client) rLock() {
+	// updated := atomic.AddUint64(&lcount, 1)
+	// l2.Output(2, fmt.Sprintf("%p rlock initiated - %d", cl, updated))
 	cl._mu.RLock()
+	// l2.Output(2, fmt.Sprintf("%p rlock completed - %d", cl, updated))
 }
 
 func (cl *Client) rUnlock() {
+	// updated := atomic.AddUint64(&ucount, 1)
+	// l2.Output(2, fmt.Sprintf("%p runlock initiated - %d", cl, updated))
 	cl._mu.RUnlock()
+	// l2.Output(2, fmt.Sprintf("%p runlock completed - %d", cl, updated))
 }
 
+var lcount = uint64(0)
+var ucount = uint64(0)
+
 func (cl *Client) lock() {
+	// updated := atomic.AddUint64(&lcount, 1)
+	// l2.Output(2, fmt.Sprintf("%p lock initiated - %d", cl, updated))
 	cl._mu.Lock()
+	// l2.Output(2, fmt.Sprintf("%p lock completed - %d", cl, updated))
 }
 
 func (cl *Client) unlock() {
+	// updated := atomic.AddUint64(&ucount, 1)
+	// l2.Output(2, fmt.Sprintf("%p unlock initiated - %d", cl, updated))
 	cl._mu.Unlock()
+	// l2.Output(2, fmt.Sprintf("%p unlock completed - %d", cl, updated))
 }
 
 func (cl *Client) locker() sync.Locker {
@@ -1410,9 +1442,15 @@ type clientLocker struct {
 }
 
 func (cl clientLocker) Lock() {
-	cl.lock()
+	// updated := atomic.AddUint64(&lcount, 1)
+	// l2.Output(2, fmt.Sprintf("%p lock initiated - %d", cl.Client, updated))
+	cl._mu.Lock()
+	// l2.Output(2, fmt.Sprintf("%p lock completed - %d", cl.Client, updated))
 }
 
 func (cl clientLocker) Unlock() {
-	cl.unlock()
+	// updated := atomic.AddUint64(&ucount, 1)
+	// l2.Output(2, fmt.Sprintf("%p unlock initiated - %d", cl.Client, updated))
+	cl._mu.Unlock()
+	// l2.Output(2, fmt.Sprintf("%p unlock completed - %d", cl.Client, updated))
 }

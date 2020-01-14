@@ -23,14 +23,17 @@ func TestSendBitfieldThenHave(t *testing.T) {
 		config: TestingConfig(),
 	}
 	cl.initLogger()
-	c := cl.newConnection(nil, false, IpPort{}, "")
 	ts, err := New(metainfo.Hash{})
 	require.NoError(t, err)
-
-	c.setTorrent(cl.newTorrent(ts))
-	c.t.setInfo(&metainfo.Info{
-		Pieces: make([]byte, metainfo.HashSize*3),
+	tt := cl.newTorrent(ts)
+	tt.setInfo(&metainfo.Info{
+		Pieces:      make([]byte, metainfo.HashSize*3),
+		Length:      24 * (1 << 10),
+		PieceLength: 8 * (1 << 10),
 	})
+	c := cl.newConnection(nil, false, IpPort{}, "")
+	c.setTorrent(tt)
+
 	r, w := io.Pipe()
 	c.r = r
 	c.w = w
@@ -108,7 +111,8 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		PieceLength: 1 << 20,
 	}))
 	t.setChunkSize(defaultChunkSize)
-	t.pendingPieces.Set(0, PiecePriorityNormal.BitmapPriority())
+	t.makePieces()
+	t.piecesM.ChunksPend(0)
 	r, w := net.Pipe()
 	cn := cl.newConnection(r, true, IpPort{}, "")
 	cn.setTorrent(t)
@@ -135,7 +139,8 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.
 			t.pieces[0].dirtyChunks.Clear()
-			cn.validReceiveChunks = map[request]struct{}{newRequestFromMessage(&msg): {}}
+			// TODO: figure out what this was doing....
+			// cn.validReceiveChunks = map[request]struct{}{newRequestFromMessage(&msg): {}}
 			cl.unlock()
 			n, err := w.Write(wb)
 			require.NoError(b, err)

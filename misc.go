@@ -1,8 +1,11 @@
 package torrent
 
 import (
+	"encoding/binary"
 	"errors"
+	"hash/fnv"
 	"net"
+	"time"
 
 	"github.com/anacrolix/missinggo/v2"
 	"golang.org/x/time/rate"
@@ -16,8 +19,20 @@ type chunkSpec struct {
 }
 
 type request struct {
-	Index pp.Integer
+	Index    pp.Integer
+	Reserved time.Time
+	Priority int
 	chunkSpec
+}
+
+func (r request) digest() uint64 {
+	bs := make([]byte, 12)
+	binary.LittleEndian.PutUint32(bs[:4], uint32(r.Index))
+	binary.LittleEndian.PutUint32(bs[4:8], uint32(r.Begin))
+	binary.LittleEndian.PutUint32(bs[8:], uint32(r.Length))
+	digest := fnv.New64a()
+	digest.Write(bs)
+	return digest.Sum64()
 }
 
 func (r request) ToMsg(mt pp.MessageType) pp.Message {
@@ -30,7 +45,16 @@ func (r request) ToMsg(mt pp.MessageType) pp.Message {
 }
 
 func newRequest(index, begin, length pp.Integer) request {
-	return request{index, chunkSpec{begin, length}}
+	return request{Index: index, chunkSpec: chunkSpec{begin, length}}
+}
+
+func newRequest2(index, begin, length pp.Integer, prio int) request {
+	return request{
+		Index:     index,
+		Priority:  prio,
+		chunkSpec: chunkSpec{begin, length},
+		Reserved:  time.Now(),
+	}
 }
 
 func newRequestFromMessage(msg *pp.Message) request {

@@ -23,6 +23,7 @@ import (
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/filecache"
 
+	// "github.com/anacrolix/log"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/iplist"
@@ -39,15 +40,15 @@ func TestingConfig() *ClientConfig {
 	cfg.NoDefaultPortForwarding = true
 	cfg.DisableAcceptRateLimiting = true
 	cfg.ListenPort = 0
-	//cfg.Debug = true
-	//cfg.Logger = cfg.Logger.WithText(func(m log.Msg) string {
-	//	t := m.Text()
-	//	m.Values(func(i interface{}) bool {
-	//		t += fmt.Sprintf("\n%[1]T: %[1]v", i)
-	//		return true
-	//	})
-	//	return t
-	//})
+	// cfg.Debug = true
+	// cfg.Logger = cfg.Logger.WithText(func(m log.Msg) string {
+	// 	t := m.Text()
+	// 	m.Values(func(i interface{}) bool {
+	// 		t += fmt.Sprintf("\n%[1]T: %[1]v", i)
+	// 		return true
+	// 	})
+	// 	return t
+	// })
 	return cfg
 }
 
@@ -92,21 +93,6 @@ func TestAddDropTorrent(t *testing.T) {
 	require.NoError(t, tt.Tune(TuneMaxConnections(0)))
 	require.NoError(t, tt.Tune(TuneMaxConnections(1)))
 	cl.Stop(tt.Metadata())
-}
-
-func TestAddTorrentNoSupportedTrackerSchemes(t *testing.T) {
-	// TODO?
-	t.SkipNow()
-}
-
-func TestAddTorrentNoUsableURLs(t *testing.T) {
-	// TODO?
-	t.SkipNow()
-}
-
-func TestAddPeersToUnknownTorrent(t *testing.T) {
-	// TODO?
-	t.SkipNow()
 }
 
 func TestPieceHashSize(t *testing.T) {
@@ -262,6 +248,7 @@ func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
 }
 
 func TestClientTransferVarious(t *testing.T) {
+	count := 0
 	// Leecher storage
 	for _, ls := range []storageFactory{
 		NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
@@ -281,6 +268,8 @@ func TestClientTransferVarious(t *testing.T) {
 					LeecherStorage: ls,
 				})
 				for _, readahead := range []int64{-1, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20} {
+					count++
+					log.Println("running test", count)
 					testClientTransfer(t, testClientTransferParams{
 						SeederStorage:  ss,
 						Responsive:     responsive,
@@ -346,6 +335,12 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	defer seederTorrent.Stats()
 	defer seeder.Close()
 	seederTorrent.VerifyData()
+
+	// TODO REMOVE ME.
+	require.True(t, seeder.WaitAll())
+	// log.Println("SEEDER MISSING PIECES", seederTorrent.(*torrent).piecesM.Missing())
+	// log.Printf("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n")
+
 	// Create leecher and a Torrent.
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
@@ -381,10 +376,10 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 
 	// Now do some things with leecher and seeder.
 	leecherTorrent.AddClientPeer(seeder)
+	require.EqualValues(t, 1, leecherTorrent.Stats().PendingPeers)
 	// The Torrent should not be interested in obtaining peers, so the one we
 	// just added should be the only one.
 	assert.False(t, leecherTorrent.Seeding())
-	assert.EqualValues(t, 1, leecherTorrent.Stats().PendingPeers)
 	r := leecherTorrent.NewReader()
 	defer r.Close()
 	if ps.Responsive {
@@ -435,6 +430,8 @@ func TestSeedAfterDownloading(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ok)
 	seederTorrent.VerifyData()
+	require.True(t, seeder.WaitAll())
+	log.Printf("SEEDER %p c(%p)\n", seederTorrent, seederTorrent.(*torrent).piecesM)
 
 	cfg = TestingConfig()
 	cfg.Seed = true
@@ -458,10 +455,12 @@ func TestSeedAfterDownloading(t *testing.T) {
 	leecherGreeting, ok, err := leecher.MaybeStart(NewFromMetaInfo(mi, OptionChunk(2)))
 	require.NoError(t, err)
 	assert.True(t, ok)
+	log.Printf("LEECHER %p c(%p)\n", leecherGreeting, leecherGreeting.(*torrent).piecesM)
 
 	llg, ok, err := leecherLeecher.MaybeStart(NewFromMetaInfo(mi, OptionChunk(3)))
 	require.NoError(t, err)
 	assert.True(t, ok)
+	log.Printf("LEECHER2 %p c(%p)\n", llg, llg.(*torrent).piecesM)
 
 	// Simultaneously DownloadAll in Leecher, and read the contents
 	// consecutively in LeecherLeecher. This non-deterministically triggered a
@@ -640,7 +639,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	_, err = io.ReadFull(reader, b)
 	assert.Nil(t, err)
 	assert.EqualValues(t, "lo", string(b))
-	go leecher.Stop(lt)
+	leecher.Stop(lt)
 	_, err = reader.Seek(11, io.SeekStart)
 	require.NoError(t, err)
 	n, err := reader.Read(b)
@@ -1066,6 +1065,7 @@ func testSeederLeecherPair(t *testing.T, seeder func(*ClientConfig), leecher fun
 	require.NoError(t, err)
 	tr, _, err := client.Start(ts)
 	require.NoError(t, err)
+
 	tr.AddClientPeer(server)
 	<-tr.GotInfo()
 	tr.DownloadAll()

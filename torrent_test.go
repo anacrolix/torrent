@@ -20,7 +20,7 @@ import (
 )
 
 func r(i, b, l pp.Integer) request {
-	return request{i, chunkSpec{b, l}}
+	return newRequest(i, b, l)
 }
 
 // Check the given Request is correct for various torrent offsets.

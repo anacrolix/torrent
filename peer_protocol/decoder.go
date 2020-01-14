@@ -22,19 +22,23 @@ type Decoder struct {
 func (d *Decoder) Decode(msg *Message) (err error) {
 	var length Integer
 	err = binary.Read(d.R, binary.BigEndian, &length)
-	if err != nil {
-		if err != io.EOF {
-			err = fmt.Errorf("error reading message length: %s", err)
-		}
-		return
+	if err == io.EOF {
+		return err
 	}
+
+	if err != nil {
+		return errors.Wrap(err, "error reading message length:")
+	}
+
 	if length > d.MaxLength {
 		return errors.New("message too long")
 	}
+
 	if length == 0 {
 		msg.Keepalive = true
 		return
 	}
+
 	msg.Keepalive = false
 	r := &io.LimitedReader{R: d.R, N: int64(length)}
 	// Check that all of r was utilized.

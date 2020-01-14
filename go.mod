@@ -29,7 +29,7 @@ require (
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/mattn/go-sqlite3 v1.13.0
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.0
 	github.com/stretchr/testify v1.4.0
 	golang.org/x/net v0.0.0-20191125084936-ffdde1057850
 	golang.org/x/sys v0.0.0-20191126131656-8a8471f7e56d // indirect

@@ -1151,6 +1151,7 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 
 		piecesM: newChunks(csize, &metainfo.Info{}),
 		// storageLock: newDebugLock(&stdsync.RWMutex{}),
+		event: &cl.event, // for now pass through the event sync.Cond
 	}
 
 	t.logger = cl.logger.WithValues(t).WithText(func(m log.Msg) string {

@@ -175,6 +175,9 @@ type torrent struct {
 	// The last time we requested a chunk. Deleting the request from any
 	// connection will clear this value.
 	lastRequested map[request]*time.Timer
+
+	// signal events on this torrent.
+	event *sync.Cond
 }
 
 // Metadata provides enough information to lookup the torrent again.
@@ -195,6 +198,14 @@ func (t *torrent) Tune(tuning ...Tuner) error {
 	}
 
 	return nil
+}
+
+func (t *torrent) lock() {
+	t.cl.lock()
+}
+
+func (t *torrent) unlock() {
+	t.cl.unlock()
 }
 
 func (t *torrent) tickleReaders() {

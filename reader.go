@@ -41,6 +41,7 @@ type reader struct {
 	mu        sync.Locker
 	pos       int64
 	readahead int64
+
 	// The cached piece range this reader wants downloaded. The zero value
 	// corresponds to nothing. We cache this so that changes can be detected,
 	// and bubbled up to the Torrent only as required.
@@ -53,13 +54,13 @@ var _ io.ReadCloser = &reader{}
 // soon as they can when the underlying chunks become available.
 func (r *reader) SetResponsive() {
 	r.responsive = true
-	r.t.cl.event.Broadcast()
+	r.t.event.Broadcast()
 }
 
 // Disable responsive mode. TODO: Remove?
 func (r *reader) SetNonResponsive() {
 	r.responsive = false
-	r.t.cl.event.Broadcast()
+	r.t.event.Broadcast()
 }
 
 // Configure the number of bytes ahead of a read that should also be
@@ -68,8 +69,8 @@ func (r *reader) SetReadahead(readahead int64) {
 	r.mu.Lock()
 	r.readahead = readahead
 	r.mu.Unlock()
-	r.t.cl.lock()
-	defer r.t.cl.unlock()
+	r.t.lock()
+	defer r.t.unlock()
 	r.posChanged()
 }
 
@@ -77,13 +78,16 @@ func (r *reader) readable(off int64) (ret bool) {
 	if r.t.closed.IsSet() {
 		return true
 	}
+
 	req, ok := r.t.offsetRequest(r.torrentOffset(off))
 	if !ok {
 		panic(off)
 	}
+
 	if r.responsive {
 		return r.t.haveChunk(req)
 	}
+
 	return r.t.pieceComplete(pieceIndex(req.Index))
 }
 
@@ -113,7 +117,7 @@ func (r *reader) available(off, max int64) (ret int64) {
 func (r *reader) waitReadable(off int64) {
 	// We may have been sent back here because we were told we could read but
 	// it failed.
-	r.t.cl.event.Wait()
+	r.t.event.Wait()
 }
 
 // Calculates the pieces this reader wants downloaded, ignoring the cached
@@ -145,10 +149,10 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 		defer cancel()
 		go func() {
 			<-ctx.Done()
-			r.t.cl.lock()
+			r.t.lock()
 			ctxErr = ctx.Err()
 			r.t.tickleReaders()
-			r.t.cl.unlock()
+			r.t.unlock()
 		}()
 	}
 	// Hmmm, if a Read gets stuck, this means you can't change position for
@@ -171,19 +175,21 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 		r.posChanged()
 		r.mu.Unlock()
 	}
+
 	if r.pos >= r.length {
-		err = io.EOF
+		return n, io.EOF
 	} else if err == io.EOF {
-		err = io.ErrUnexpectedEOF
+		return n, io.ErrUnexpectedEOF
 	}
-	return
+
+	return n, err
 }
 
 // Wait until some data should be available to read. Tickles the client if it
 // isn't. Returns how much should be readable without blocking.
 func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error) (avail int64) {
-	r.t.cl.lock()
-	defer r.t.cl.unlock()
+	r.t.lock()
+	defer r.t.unlock()
 	for !r.readable(pos) && *ctxErr == nil {
 		r.waitReadable(pos)
 	}
@@ -225,7 +231,7 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 			err = nil
 			return
 		}
-		r.t.cl.lock()
+		r.t.lock()
 		// TODO: Just reset pieces in the readahead window. This might help
 		// prevent thrashing with small caches and file and piece priorities.
 		r.log(log.Fstr("error reading torrent %s piece %d offset %d, %d bytes: %v",
@@ -233,13 +239,13 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 		if !r.t.updatePieceCompletion(pi) {
 			r.log(log.Fstr("piece %d completion unchanged", pi))
 		}
-		r.t.cl.unlock()
+		r.t.unlock()
 	}
 }
 
 func (r *reader) Close() error {
-	r.t.cl.lock()
-	defer r.t.cl.unlock()
+	r.t.lock()
+	defer r.t.unlock()
 	r.t.deleteReader(r)
 	return nil
 }

@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
@@ -151,17 +150,17 @@ func (cn *connection) ipv6() bool {
 // Returns true the dialer has the lower client peer ID. TODO: Find the
 // specification for this.
 func (cn *connection) isPreferredDirection() bool {
-	return bytes.Compare(cn.t.cl.peerID[:], cn.PeerID[:]) < 0 == cn.outgoing
+	return bytes.Compare(cn.t.cln.peerID[:], cn.PeerID[:]) < 0 == cn.outgoing
 }
 
 // Returns whether the left connection should be preferred over the right one,
 // considering only their networking properties. If ok is false, we can't
 // decide.
-func (l *connection) hasPreferredNetworkOver(r *connection) (left, ok bool) {
+func (cn *connection) hasPreferredNetworkOver(r *connection) (left, ok bool) {
 	var ml multiLess
-	ml.NextBool(l.isPreferredDirection(), r.isPreferredDirection())
-	ml.NextBool(!l.utp(), !r.utp())
-	ml.NextBool(l.ipv6(), r.ipv6())
+	ml.NextBool(cn.isPreferredDirection(), r.isPreferredDirection())
+	ml.NextBool(!cn.utp(), !r.utp())
+	ml.NextBool(cn.ipv6(), r.ipv6())
 	return ml.FinalOk()
 }
 
@@ -184,7 +183,7 @@ func (cn *connection) peerHasAllPieces() (all bool, known bool) {
 }
 
 func (cn *connection) mu() sync.Locker {
-	return cn.t.cl.locker()
+	return cn.t.locker()
 }
 
 func (cn *connection) localAddr() net.Addr {
@@ -988,7 +987,7 @@ func (cn *connection) readMsg(msg *pp.Message) {
 func (cn *connection) postHandshakeStats(f func(*ConnStats)) {
 	t := cn.t
 	f(&t.stats)
-	f(&t.cl.stats)
+	f(&t.cln.stats)
 }
 
 // All ConnStats that include this connection. Some objects are not known
@@ -1036,16 +1035,16 @@ func (c *connection) lastHelpful() (ret time.Time) {
 	return
 }
 
-func (c *connection) fastEnabled() bool {
-	return c.PeerExtensionBytes.SupportsFast() && c.t.cl.extensionBytes.SupportsFast()
+func (cn *connection) fastEnabled() bool {
+	return cn.PeerExtensionBytes.SupportsFast() && cn.t.cln.extensionBytes.SupportsFast()
 }
 
-func (c *connection) reject(r request) {
-	if !c.fastEnabled() {
+func (cn *connection) reject(r request) {
+	if !cn.fastEnabled() {
 		panic("fast not enabled")
 	}
-	c.Post(r.ToMsg(pp.Reject))
-	delete(c.PeerRequests, r)
+	cn.Post(r.ToMsg(pp.Reject))
+	delete(cn.PeerRequests, r)
 }
 
 func (c *connection) onReadRequest(r request) error {
@@ -1114,7 +1113,6 @@ func (c *connection) mainReadLoop() (err error) {
 		}
 	}()
 	t := c.t
-	cl := t.cl
 
 	decoder := pp.Decoder{
 		R:         bufio.NewReaderSize(c.r, 1<<17),
@@ -1124,8 +1122,8 @@ func (c *connection) mainReadLoop() (err error) {
 	for {
 		var msg pp.Message
 		func() {
-			cl.unlock()
-			defer cl.lock()
+			t.unlock()
+			defer t.lock()
 			err = decoder.Decode(&msg)
 		}()
 		if t.closed.IsSet() || c.closed.IsSet() || err == io.EOF {
@@ -1193,9 +1191,8 @@ func (c *connection) mainReadLoop() (err error) {
 			if msg.Port != 0 {
 				pingAddr.Port = int(msg.Port)
 			}
-			cl.eachDhtServer(func(s *dht.Server) {
-				go s.Ping(&pingAddr, nil)
-			})
+
+			t.ping(pingAddr)
 		case pp.Suggest:
 			metrics.Add("suggests received", 1)
 			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index, debugLogValue).Log(c.t.logger)
@@ -1236,8 +1233,8 @@ func (c *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (e
 			}
 		}
 	}()
+
 	t := c.t
-	cl := t.cl
 	switch id {
 	case pp.HandshakeExtendedID:
 		var d pp.ExtendedHandshakeMessage
@@ -1266,13 +1263,13 @@ func (c *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (e
 		c.requestPendingMetadata()
 		return nil
 	case metadataExtendedId:
-		err := cl.gotMetadataExtensionMsg(payload, t, c)
+		err := t.gotMetadataExtensionMsg(payload, c)
 		if err != nil {
 			return fmt.Errorf("handling metadata extension message: %v", err)
 		}
 		return nil
 	case pexExtendedId:
-		if cl.config.DisablePEX {
+		if t.config.DisablePEX {
 			// TODO: Maybe close the connection. Check that we're not
 			// advertising that we support PEX if it's disabled.
 			return nil
@@ -1310,7 +1307,6 @@ func (cn *connection) rw() io.ReadWriter {
 // Handle a received chunk from a peer.
 func (c *connection) receiveChunk(msg *pp.Message) error {
 	t := c.t
-	cl := t.cl
 	metrics.Add("chunks received", 1)
 
 	req := newRequestFromMessage(msg)
@@ -1345,9 +1341,6 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 	c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
 	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
 	c.lastUsefulChunkReceived = time.Now()
-	// if t.fastestConn != c {
-	// log.Printf("setting fastest connection %p", c)
-	// }
 	t.fastestConn = c
 
 	// Need to record that it hasn't been written yet, before we attempt to do
@@ -1368,8 +1361,8 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 	}
 
 	err := func() error {
-		cl.unlock()
-		defer cl.lock()
+		t.unlock()
+		defer t.lock()
 		concurrentChunkWrites.Add(1)
 		defer concurrentChunkWrites.Add(-1)
 		// Write the chunk out. Note that the upper bound on chunk writing
@@ -1385,9 +1378,9 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 
 	if err != nil {
 		panic(fmt.Sprintf("error writing chunk: %v", err))
-		t.pendRequest(req)
-		t.updatePieceCompletion(pieceIndex(msg.Index))
-		return nil
+		// t.pendRequest(req)
+		// t.updatePieceCompletion(pieceIndex(msg.Index))
+		// return nil
 	}
 
 	// It's important that the piece is potentially queued before we check if
@@ -1399,7 +1392,7 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 
 	c.onDirtiedPiece(pieceIndex(req.Index))
 
-	cl.event.Broadcast()
+	t.event.Broadcast()
 	t.publishPieceChange(pieceIndex(req.Index))
 
 	return nil
@@ -1418,7 +1411,7 @@ func (c *connection) onDirtiedPiece(piece pieceIndex) {
 }
 
 func (c *connection) uploadAllowed() bool {
-	if c.t.cl.config.NoUpload {
+	if c.t.config.NoUpload {
 		return false
 	}
 
@@ -1438,11 +1431,11 @@ func (c *connection) uploadAllowed() bool {
 	return true
 }
 
-func (c *connection) setRetryUploadTimer(delay time.Duration) {
-	if c.uploadTimer == nil {
-		c.uploadTimer = time.AfterFunc(delay, c.writerCond.Broadcast)
+func (cn *connection) setRetryUploadTimer(delay time.Duration) {
+	if cn.uploadTimer == nil {
+		cn.uploadTimer = time.AfterFunc(delay, cn.writerCond.Broadcast)
 	} else {
-		c.uploadTimer.Reset(delay)
+		cn.uploadTimer.Reset(delay)
 	}
 }
 
@@ -1458,7 +1451,7 @@ another:
 		}
 
 		for r := range c.PeerRequests {
-			res := c.t.cl.config.UploadRateLimiter.ReserveN(time.Now(), int(r.Length))
+			res := c.t.config.UploadRateLimiter.ReserveN(time.Now(), int(r.Length))
 			if !res.OK() {
 				panic(fmt.Sprintf("upload rate limiter burst size < %d", r.Length))
 			}
@@ -1506,12 +1499,12 @@ func (cn *connection) netGoodPiecesDirtied() int64 {
 	return cn.stats.PiecesDirtiedGood.Int64() - cn.stats.PiecesDirtiedBad.Int64()
 }
 
-func (c *connection) peerHasWantedPieces() bool {
-	return !c.pieceRequestOrder.IsEmpty()
+func (cn *connection) peerHasWantedPieces() bool {
+	return !cn.pieceRequestOrder.IsEmpty()
 }
 
-func (c *connection) numLocalRequests() int {
-	return len(c.requests)
+func (cn *connection) numLocalRequests() int {
+	return len(cn.requests)
 }
 
 func (cn *connection) deleteRequest(r request) bool {
@@ -1537,32 +1530,33 @@ func (cn *connection) deleteRequest(r request) bool {
 	return true
 }
 
-func (c *connection) deleteAllRequests() {
-	for _, r := range c.requests {
-		c.deleteRequest(r)
+func (cn *connection) deleteAllRequests() {
+	for _, r := range cn.requests {
+		cn.deleteRequest(r)
 	}
-	if len(c.requests) != 0 {
-		panic(len(c.requests))
+
+	if len(cn.requests) != 0 {
+		panic(len(cn.requests))
 	}
 }
 
-func (c *connection) tickleWriter() {
-	c.writerCond.Broadcast()
+func (cn *connection) tickleWriter() {
+	cn.writerCond.Broadcast()
 }
 
-func (c *connection) postCancel(r request) bool {
-	if !c.deleteRequest(r) {
+func (cn *connection) postCancel(r request) bool {
+	if !cn.deleteRequest(r) {
 		return false
 	}
-	c.Post(makeCancelMessage(r))
+	cn.Post(makeCancelMessage(r))
 	return true
 }
 
-func (c *connection) sendChunk(r request, msg func(pp.Message) bool) (more bool, err error) {
+func (cn *connection) sendChunk(r request, msg func(pp.Message) bool) (more bool, err error) {
 	// Count the chunk being sent, even if it isn't.
 	b := make([]byte, r.Length)
-	p := c.t.info.Piece(int(r.Index))
-	n, err := c.t.readAt(b, p.Offset()+int64(r.Begin))
+	p := cn.t.info.Piece(int(r.Index))
+	n, err := cn.t.readAt(b, p.Offset()+int64(r.Begin))
 	if n != len(b) {
 		if err == nil {
 			panic("expected error")
@@ -1583,21 +1577,21 @@ func (c *connection) sendChunk(r request, msg func(pp.Message) bool) (more bool,
 		Begin: r.Begin,
 		Piece: b,
 	})
-	c.lastChunkSent = time.Now()
+	cn.lastChunkSent = time.Now()
 	return
 }
 
-func (c *connection) setTorrent(t *torrent) {
-	if c.t != nil {
+func (cn *connection) setTorrent(t *torrent) {
+	if cn.t != nil {
 		panic("connection already associated with a torrent")
 	}
-	c.t = t
-	c.logger.Printf("torrent=%v", t)
-	t.reconcileHandshakeStats(c)
+	cn.t = t
+	cn.logger.Printf("torrent=%v", t)
+	t.reconcileHandshakeStats(cn)
 }
 
 func (cn *connection) peerPriority() peerPriority {
-	return bep40PriorityIgnoreError(cn.remoteIpPort(), cn.t.cl.publicAddr(cn.remoteIp()))
+	return bep40PriorityIgnoreError(cn.remoteIpPort(), cn.t.publicAddr(cn.remoteIp()))
 }
 
 func (cn *connection) remoteIp() net.IP {

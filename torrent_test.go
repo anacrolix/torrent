@@ -160,13 +160,13 @@ func TestPieceHashFailed(t *testing.T) {
 	tt := cl.newTorrent(ts)
 	tt.setChunkSize(2)
 	require.NoError(t, tt.setInfoBytes(mi.InfoBytes))
-	tt.cl.lock()
+	tt.lock()
 	tt.pieces[1].dirtyChunks.AddRange(0, 3)
 	require.True(t, tt.pieceAllDirty(1))
 	tt.pieceHashed(1, false)
 	// Dirty chunks should be cleared so we can try again.
 	require.False(t, tt.pieceAllDirty(1))
-	tt.cl.unlock()
+	tt.unlock()
 }
 
 // Check the behaviour of Torrent.Metainfo when metadata is not completed.

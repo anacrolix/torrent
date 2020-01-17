@@ -86,12 +86,14 @@ func TestAddDropTorrent(t *testing.T) {
 	defer cl.Close()
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
+
 	tt, added, err := cl.MaybeStart(NewFromMetaInfo(mi))
 	require.NoError(t, err)
 	assert.True(t, added)
 
 	require.NoError(t, tt.Tune(TuneMaxConnections(0)))
 	require.NoError(t, tt.Tune(TuneMaxConnections(1)))
+
 	cl.Stop(tt.Metadata())
 }
 
@@ -114,15 +116,15 @@ func TestTorrentInitialState(t *testing.T) {
 	require.NoError(t, err)
 	tor := cl.newTorrent(tt)
 
-	tor.cl.lock()
+	tor.lock()
 	err = tor.setInfoBytes(mi.InfoBytes)
-	tor.cl.unlock()
+	tor.unlock()
 	require.NoError(t, err)
 	require.Len(t, tor.pieces, 3)
 	tor.pendAllChunkSpecs(0)
-	tor.cl.lock()
+	tor.lock()
 	assert.EqualValues(t, 3, int(tor.pieceNumPendingChunks(0)))
-	tor.cl.unlock()
+	tor.unlock()
 	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
 }
 
@@ -838,12 +840,12 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	psc := leecherGreeting.SubscribePieceStateChanges()
 	defer psc.Close()
 
-	leecherGreeting.(*torrent).cl.lock()
+	leecherGreeting.(*torrent).lock()
 	leecherGreeting.(*torrent).downloadPiecesLocked(0, leecherGreeting.(*torrent).numPieces())
 	if ps.Cancel {
 		leecherGreeting.(*torrent).cancelPiecesLocked(0, leecherGreeting.(*torrent).NumPieces())
 	}
-	leecherGreeting.(*torrent).cl.unlock()
+	leecherGreeting.(*torrent).unlock()
 	done := make(chan struct{})
 	defer close(done)
 	go leecherGreeting.AddClientPeer(seeder)
@@ -943,9 +945,9 @@ func TestClientDynamicListenUTPOnly(t *testing.T) {
 
 func totalConns(tts []*torrent) (ret int) {
 	for _, tt := range tts {
-		tt.cl.lock()
+		tt.lock()
 		ret += len(tt.conns)
-		tt.cl.unlock()
+		tt.unlock()
 	}
 	return
 }
@@ -971,7 +973,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 		for _, tt := range tts {
 			for _, _tt := range tts {
 				// if tt != _tt {
-				tt.AddClientPeer(_tt.cl)
+				tt.AddClientPeer(_tt.cln)
 				// }
 			}
 		}

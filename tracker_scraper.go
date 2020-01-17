@@ -65,7 +65,7 @@ func (me *trackerScraper) getIp() (ip net.IP, err error) {
 		return
 	}
 	for _, ip = range ips {
-		if me.t.cl.ipIsBlocked(ip) {
+		if me.t.cln.ipIsBlocked(ip) {
 			continue
 		}
 		switch me.u.Scheme {
@@ -104,20 +104,20 @@ func (me *trackerScraper) announce(event tracker.AnnounceEvent) (ret trackerAnno
 		ret.Err = fmt.Errorf("error getting ip: %s", err)
 		return
 	}
-	me.t.cl.lock()
+	me.t.lock()
 	req := me.t.announceRequest(event)
-	me.t.cl.unlock()
+	me.t.unlock()
 	//log.Printf("announcing %s %s to %q", me.t, req.Event, me.u.String())
 	res, err := tracker.Announce{
-		HTTPProxy:  me.t.cl.config.HTTPProxy,
-		UserAgent:  me.t.cl.config.HTTPUserAgent,
+		HTTPProxy:  me.t.config.HTTPProxy,
+		UserAgent:  me.t.config.HTTPUserAgent,
 		TrackerUrl: me.trackerUrl(ip),
 		Request:    req,
 		HostHeader: me.u.Host,
 		ServerName: me.u.Hostname(),
 		UdpNetwork: me.u.Scheme,
-		ClientIp4:  krpc.NodeAddr{IP: me.t.cl.config.PublicIp4},
-		ClientIp6:  krpc.NodeAddr{IP: me.t.cl.config.PublicIp6},
+		ClientIp4:  krpc.NodeAddr{IP: me.t.config.PublicIp4},
+		ClientIp6:  krpc.NodeAddr{IP: me.t.config.PublicIp6},
 	}.Do()
 	if err != nil {
 		ret.Err = fmt.Errorf("error announcing: %s", err)
@@ -137,16 +137,16 @@ func (me *trackerScraper) Run() {
 		ar := me.announce(e)
 		// after first announce, get back to regular "none"
 		e = tracker.None
-		me.t.cl.lock()
+		me.t.lock()
 		me.lastAnnounce = ar
-		me.t.cl.unlock()
+		me.t.unlock()
 
 	wait:
 		interval := ar.Interval
 		if interval < time.Minute {
 			interval = time.Minute
 		}
-		wantPeers := me.t.wantPeersEvent.LockedChan(me.t.cl.locker())
+		wantPeers := me.t.wantPeersEvent.LockedChan(me.t.locker())
 		select {
 		case <-wantPeers:
 			if interval > time.Minute {
@@ -157,7 +157,7 @@ func (me *trackerScraper) Run() {
 		}
 
 		select {
-		case <-me.t.closed.LockedChan(me.t.cl.locker()):
+		case <-me.t.closed.LockedChan(me.t.locker()):
 			return
 		case <-wantPeers:
 			goto wait

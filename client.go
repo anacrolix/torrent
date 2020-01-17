@@ -135,8 +135,6 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 // Stop the specified torrent, this halts all network activity around the torrent
 // for this client.
 func (cl *Client) Stop(t Metadata) (err error) {
-	cl.lock()
-	defer cl.unlock()
 	return cl.dropTorrent(t.InfoHash)
 }
 
@@ -1052,49 +1050,6 @@ func (cl *Client) haveDhtServer() (ret bool) {
 	return
 }
 
-// Process incoming ut_metadata message.
-func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *torrent, c *connection) error {
-	var d map[string]int
-	err := bencode.Unmarshal(payload, &d)
-	if _, ok := err.(bencode.ErrUnusedTrailingBytes); ok {
-	} else if err != nil {
-		return fmt.Errorf("error unmarshalling bencode: %s", err)
-	}
-	msgType, ok := d["msg_type"]
-	if !ok {
-		return errors.New("missing msg_type field")
-	}
-	piece := d["piece"]
-	switch msgType {
-	case pp.DataMetadataExtensionMsgType:
-		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
-		if !c.requestedMetadataPiece(piece) {
-			return fmt.Errorf("got unexpected piece %d", piece)
-		}
-		c.metadataRequests[piece] = false
-		begin := len(payload) - metadataPieceSize(d["total_size"], piece)
-		if begin < 0 || begin >= len(payload) {
-			return fmt.Errorf("data has bad offset in payload: %d", begin)
-		}
-		t.saveMetadataPiece(piece, payload[begin:])
-		c.lastUsefulChunkReceived = time.Now()
-		return t.maybeCompleteMetadata()
-	case pp.RequestMetadataExtensionMsgType:
-		if !t.haveMetadataPiece(piece) {
-			c.Post(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
-			return nil
-		}
-		start := (1 << 14) * piece
-		c.logger.Printf("sending metadata piece %d", piece)
-		c.Post(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]))
-		return nil
-	case pp.RejectMetadataExtensionMsgType:
-		return nil
-	default:
-		return errors.New("unknown msg_type value")
-	}
-}
-
 func (cl *Client) badPeerIPPort(ip net.IP, port int) bool {
 	if port == 0 {
 		return true
@@ -1127,7 +1082,14 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 	t = &torrent{
 		displayName: src.DisplayName,
 		infoHash:    src.InfoHash,
-		cl:          cl,
+		cln:         cl,
+		config:      cl.config,
+		_mu:         &cl._mu,
+		metadataChanged: sync.Cond{
+			L: &cl._mu,
+		},
+		event: &cl.event, // for now pass through the event sync.Cond
+		// storageLock: newDebugLock(&stdsync.RWMutex{}),
 		peers: prioritizedPeers{
 			om: btree.New(32),
 			getPrio: func(p Peer) peerPriority {
@@ -1142,16 +1104,11 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 		storageOpener:       storageClient,
 		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
 
-		networkingEnabled: true,
-		requestStrategy:   2,
-		metadataChanged: sync.Cond{
-			L: cl.locker(),
-		},
+		networkingEnabled:       true,
+		requestStrategy:         2,
 		duplicateRequestTimeout: 1 * time.Second,
 
 		piecesM: newChunks(csize, &metainfo.Info{}),
-		// storageLock: newDebugLock(&stdsync.RWMutex{}),
-		event: &cl.event, // for now pass through the event sync.Cond
 	}
 
 	t.logger = cl.logger.WithValues(t).WithText(func(m log.Msg) string {
@@ -1166,7 +1123,7 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 	return t
 }
 
-// A file-like handle to some torrent data resource.
+// Handle a file-like handle to some torrent data resource.
 type Handle interface {
 	io.Reader
 	io.Seeker
@@ -1175,6 +1132,9 @@ type Handle interface {
 }
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
+	cl.lock()
+	defer cl.unlock()
+
 	t, ok := cl.torrents[infoHash]
 	if !ok {
 		return fmt.Errorf("no such torrent")

@@ -37,16 +37,16 @@ func (f File) Path() string {
 	return f.path
 }
 
-// The file's length in bytes.
+// Length the file's length in bytes.
 func (f *File) Length() int64 {
 	return f.length
 }
 
-// Number of bytes of the entire file we have completed. This is the sum of
+// BytesCompleted number of bytes of the entire file we have completed. This is the sum of
 // completed pieces, and dirtied chunks of incomplete pieces.
 func (f *File) BytesCompleted() int64 {
-	f.t.cl.rLock()
-	defer f.t.cl.rUnlock()
+	f.t.rLock()
+	defer f.t.rUnlock()
 	return f.bytesCompleted()
 }
 
@@ -95,8 +95,8 @@ type FilePieceState struct {
 
 // Returns the state of pieces in this file.
 func (f *File) State() (ret []FilePieceState) {
-	f.t.cl.rLock()
-	defer f.t.cl.rUnlock()
+	f.t.rLock()
+	defer f.t.rUnlock()
 	pieceSize := int64(f.t.usualPieceSize())
 	off := f.offset % pieceSize
 	remaining := f.length
@@ -134,7 +134,7 @@ func (f *File) Cancel() {
 
 func (f *File) NewReader() Reader {
 	tr := reader{
-		mu:        f.t.cl.locker(),
+		mu:        f.t.locker(),
 		t:         f.t,
 		readahead: 5 * 1024 * 1024,
 		offset:    f.Offset(),
@@ -146,8 +146,8 @@ func (f *File) NewReader() Reader {
 
 // Sets the minimum priority for pieces in the File.
 func (f *File) SetPriority(prio piecePriority) {
-	f.t.cl.lock()
-	defer f.t.cl.unlock()
+	f.t.lock()
+	defer f.t.unlock()
 	if prio == f.prio {
 		return
 	}
@@ -157,8 +157,8 @@ func (f *File) SetPriority(prio piecePriority) {
 
 // Returns the priority per File.SetPriority.
 func (f *File) Priority() piecePriority {
-	f.t.cl.lock()
-	defer f.t.cl.unlock()
+	f.t.lock()
+	defer f.t.unlock()
 	return f.prio
 }
 

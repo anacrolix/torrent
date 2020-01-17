@@ -101,7 +101,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	cl.initLogger()
 	ts := &torrentStorage{}
 	t := &torrent{
-		cl:                cl,
+		cln:               cl,
 		storage:           &storage.Torrent{TorrentImpl: ts},
 		pieceStateChanges: pubsub.NewPubSub(),
 	}

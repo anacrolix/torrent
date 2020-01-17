@@ -181,22 +181,22 @@ func (p *Piece) bytesLeft() (ret pp.Integer) {
 
 // VerifyData forces the piece data to be rehashed.
 func (p *Piece) VerifyData() {
-	p.t.cl.lock()
-	defer p.t.cl.unlock()
+	p.t.lock()
+	defer p.t.unlock()
 	target := p.numVerifies + 1
 	if p.hashing {
 		target++
 	}
-	//log.Printf("target: %d", target)
+
 	p.t.queuePieceCheck(p.index)
+
 	for {
-		//log.Printf("got %d verifies", p.numVerifies)
 		if p.numVerifies >= target {
 			break
 		}
-		p.t.cl.event.Wait()
+
+		p.t.event.Wait()
 	}
-	// log.Print("done")
 }
 
 func (p *Piece) queuedForHash() bool {
@@ -212,8 +212,8 @@ func (p *Piece) torrentEndOffset() int64 {
 }
 
 func (p *Piece) SetPriority(prio piecePriority) {
-	p.t.cl.lock()
-	defer p.t.cl.unlock()
+	p.t.lock()
+	defer p.t.unlock()
 	p.priority = prio
 	p.t.updatePiecePriority(p.index)
 }

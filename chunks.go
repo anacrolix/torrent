@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -337,7 +338,7 @@ func (t *chunks) Pop(available bmap) (req request, err error) {
 	}
 
 	d := req.digest()
-	// log.Printf("c(%p) Popping: d(%d - %d) r(%d,%d,%d)\n", t, d, cidx, req.Index, req.Begin, req.Length)
+	log.Printf("c(%p) Popping: d(%d - %d) r(%d,%d,%d)\n", t, d, cidx, req.Index, req.Begin, req.Length)
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -500,7 +501,7 @@ func (t *chunks) Complete(pid int) (changed bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// log.Output(2, fmt.Sprintf("c(%p) marked completed: i(%d)\n", t, pid))
+	log.Output(2, fmt.Sprintf("c(%p) marked completed: i(%d)\n", t, pid))
 
 	for _, cid := range t.chunks(pid) {
 		tmp := t.missing.Remove(cid) || t.unverified.Remove(cid)

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"text/tabwriter"
 	"time"
 	"unsafe"
@@ -74,7 +75,10 @@ type torrent struct {
 	// Torrent-level aggregate statistics. First in struct to ensure 64-bit
 	// alignment. See #262.
 	stats ConnStats
-	// cl     *Client
+
+	lcount uint64
+	ucount uint64
+
 	cln    *Client
 	config *ClientConfig
 	_mu    *lockWithDeferreds
@@ -203,23 +207,51 @@ func (t *torrent) Tune(tuning ...Tuner) error {
 }
 
 func (t *torrent) locker() sync.Locker {
-	return t._mu
+	return tlocker{torrent: t}
+}
+
+func (t *torrent) _lock(depth int) {
+	updated := atomic.AddUint64(&t.lcount, 1)
+	l2.Output(depth, fmt.Sprintf("t(%p) lock initiated - %d", t, updated))
+	t._mu.Lock()
+	l2.Output(depth, fmt.Sprintf("t(%p) lock completed - %d", t, updated))
+}
+
+func (t *torrent) _unlock(depth int) {
+	updated := atomic.AddUint64(&t.ucount, 1)
+	l2.Output(depth, fmt.Sprintf("t(%p) unlock initiated - %d", t, updated))
+	t._mu.Unlock()
+	l2.Output(depth, fmt.Sprintf("t(%p) unlock completed - %d", t, updated))
+}
+
+func (t *torrent) _rlock(depth int) {
+	updated := atomic.AddUint64(&t.lcount, 1)
+	l2.Output(depth, fmt.Sprintf("t(%p) rlock initiated - %d", t, updated))
+	t._mu.RLock()
+	l2.Output(depth, fmt.Sprintf("t(%p) rlock completed - %d", t, updated))
+}
+
+func (t *torrent) _runlock(depth int) {
+	updated := atomic.AddUint64(&t.ucount, 1)
+	l2.Output(depth, fmt.Sprintf("t(%p) unlock initiated - %d", t, updated))
+	t._mu.RUnlock()
+	l2.Output(depth, fmt.Sprintf("t(%p) unlock completed - %d", t, updated))
 }
 
 func (t *torrent) lock() {
-	t._mu.Lock()
+	t._lock(3)
 }
 
 func (t *torrent) unlock() {
-	t._mu.Unlock()
+	t._unlock(3)
 }
 
 func (t *torrent) rLock() {
-	t._mu.RLock()
+	t._rlock(3)
 }
 
 func (t *torrent) rUnlock() {
-	t._mu.RUnlock()
+	t._runlock(3)
 }
 
 func (t *torrent) tickleReaders() {
@@ -831,9 +863,10 @@ func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 	defer perf.ScopeTimerErr(&err)()
 	n, err := t.pieces[piece].Storage().WriteAt(data, begin)
 	if err == nil && n != len(data) {
-		err = io.ErrShortWrite
+		return io.ErrShortWrite
 	}
-	return
+
+	return err
 }
 
 func (t *torrent) bitfield() (bf []bool) {
@@ -977,17 +1010,20 @@ type PieceStateChange struct {
 }
 
 func (t *torrent) publishPieceChange(piece pieceIndex) {
-	t._mu.Defer(func() {
-		cur := t.pieceState(piece)
-		p := &t.pieces[piece]
-		if cur != p.publicPieceState {
-			p.publicPieceState = cur
-			t.pieceStateChanges.Publish(PieceStateChange{
-				int(piece),
-				cur,
-			})
-		}
-	})
+	// t.lock()
+	cur := t.pieceState(piece)
+	p := &t.pieces[piece]
+	if cur != p.publicPieceState {
+		p.publicPieceState = cur
+		t.pieceStateChanges.Publish(PieceStateChange{
+			int(piece),
+			cur,
+		})
+	}
+	// t.unlock()
+	// t._mu.Defer(func() {
+	//
+	// })
 }
 
 func (t *torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
@@ -1761,7 +1797,7 @@ func (t *torrent) pieceHashed(piece pieceIndex, correct bool) {
 func (t *torrent) cancelRequestsForPiece(piece pieceIndex) {
 	// TODO: Make faster
 	for cn := range t.conns {
-		cn.tickleWriter()
+		cn.updateRequests()
 	}
 }
 
@@ -1844,8 +1880,8 @@ func (t *torrent) pieceHasher(index pieceIndex) {
 	p := t.piece(index)
 	sum := t.hashPiece(index)
 	t.storageLock.RUnlock()
-	t.lock()
-	defer t.unlock()
+	// t.lock()
+	// defer t.unlock()
 	p.hashing = false
 
 	t.updatePiecePriority(index)
@@ -1960,15 +1996,15 @@ func (t *torrent) InfoHash() metainfo.Hash {
 // Returns a channel that is closed when the info (.Info()) for the torrent
 // has become available.
 func (t *torrent) GotInfo() <-chan struct{} {
-	t.lock()
-	defer t.unlock()
+	t.rLock()
+	defer t.rUnlock()
 	return t.gotMetainfo.C()
 }
 
 // Returns the metainfo info dictionary, or nil if it's not yet available.
 func (t *torrent) Info() *metainfo.Info {
-	t.lock()
-	defer t.unlock()
+	t.rLock()
+	defer t.rUnlock()
 	return t.info
 }
 
@@ -2224,4 +2260,16 @@ func (t *torrent) gotMetadataExtensionMsg(payload []byte, c *connection) error {
 	default:
 		return errors.New("unknown msg_type value")
 	}
+}
+
+type tlocker struct {
+	*torrent
+}
+
+func (t tlocker) Lock() {
+	t._lock(4)
+}
+
+func (t tlocker) Unlock() {
+	t._unlock(4)
 }

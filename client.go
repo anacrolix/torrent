@@ -443,7 +443,7 @@ func (cl *Client) closeSockets() {
 // come to a halt.
 func (cl *Client) Close() {
 	cl.lock()
-	defer cl.unlock()
+	// defer cl.unlock()
 
 	cl.closed.Set()
 	cl.eachDhtServer(func(s *dht.Server) { s.Close() })
@@ -942,10 +942,11 @@ func (cl *Client) runReceivedConn(c *connection) {
 		cl.unlock()
 		return
 	}
+
 	metrics.Add("received handshake for loaded torrent", 1)
-	cl.lock()
-	defer cl.unlock()
+	// cl.lock()
 	cl.runHandshookConn(c, t)
+	// cl.unlock()
 }
 
 func (cl *Client) runHandshookConn(c *connection, t *torrent) {
@@ -1079,16 +1080,18 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 		csize = defaultChunkSize
 	}
 
+	m := &lockWithDeferreds{}
+
 	t = &torrent{
 		displayName: src.DisplayName,
 		infoHash:    src.InfoHash,
 		cln:         cl,
 		config:      cl.config,
-		_mu:         &cl._mu,
-		metadataChanged: sync.Cond{
-			L: &cl._mu,
-		},
-		event: &cl.event, // for now pass through the event sync.Cond
+		_mu:         m,
+		// metadataChanged: sync.Cond{
+		// 	L: m,
+		// },
+		// event: &events, // for now pass through the event sync.Cond
 		// storageLock: newDebugLock(&stdsync.RWMutex{}),
 		peers: prioritizedPeers{
 			om: btree.New(32),
@@ -1110,6 +1113,8 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 
 		piecesM: newChunks(csize, &metainfo.Info{}),
 	}
+	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
+	t.event = &sync.Cond{L: tlocker{torrent: t}}
 
 	t.logger = cl.logger.WithValues(t).WithText(func(m log.Msg) string {
 		return fmt.Sprintf("%v: %s", t, m.Text())
@@ -1218,6 +1223,7 @@ func (cl *Client) banPeerIP(ip net.IP) {
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, network string) (c *connection) {
 	c = &connection{
+		_mu:             newDebugLock(&stdsync.RWMutex{}),
 		conn:            nc,
 		outgoing:        outgoing,
 		Choked:          true,
@@ -1232,7 +1238,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, n
 	).WithText(func(m log.Msg) string {
 		return fmt.Sprintf("%v: %s", c, m.Text())
 	})
-	c.writerCond.L = cl.locker()
+	c.writerCond.L = c._mu
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
 		l: cl.config.DownloadRateLimiter,

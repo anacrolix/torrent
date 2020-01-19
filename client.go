@@ -345,9 +345,9 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 }
 
 func (cl *Client) firewallCallback(net.Addr) bool {
-	cl.rLock()
+	// cl.rLock()
 	block := !cl.wantConns()
-	cl.rUnlock()
+	// cl.rUnlock()
 	if block {
 		metrics.Add("connections firewalled", 1)
 	} else {
@@ -442,9 +442,6 @@ func (cl *Client) closeSockets() {
 // Close stops the client. All connections to peers are closed and all activity will
 // come to a halt.
 func (cl *Client) Close() {
-	cl.lock()
-	// defer cl.unlock()
-
 	cl.closed.Set()
 	cl.eachDhtServer(func(s *dht.Server) { s.Close() })
 	cl.closeSockets()
@@ -792,20 +789,25 @@ func (cl *Client) outgoingConnection(t *torrent, addr IpPort, ps peerSource, tru
 	cl.dialRateLimiter.Wait(context.Background())
 	c, err := cl.establishOutgoingConn(t, addr)
 	cl.lock()
-	defer cl.unlock()
 	// Don't release lock between here and addConnection, unless it's for
 	// failure.
 	cl.noLongerHalfOpen(t, addr.String())
+	cl.unlock()
+
 	if err != nil {
 		if cl.config.Debug {
 			cl.logger.Printf("error establishing outgoing connection to %v: %v", addr, err)
 		}
 		return
 	}
-	defer c.Close()
+
 	c.Discovery = ps
 	c.trusted = trusted
+
 	cl.runHandshookConn(c, t)
+	t.deleteConnection(c)
+	t.event.Broadcast()
+	cl.event.Broadcast()
 }
 
 // The port number for incoming peer connections. 0 if the client isn't
@@ -944,9 +946,7 @@ func (cl *Client) runReceivedConn(c *connection) {
 	}
 
 	metrics.Add("received handshake for loaded torrent", 1)
-	// cl.lock()
 	cl.runHandshookConn(c, t)
-	// cl.unlock()
 }
 
 func (cl *Client) runHandshookConn(c *connection, t *torrent) {
@@ -975,12 +975,15 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) {
 		return
 	}
 
+	defer t.event.Broadcast()
 	defer t.dropConnection(c)
 	go c.writer(time.Minute)
 	cl.sendInitialMessages(c, t)
-	err := c.mainReadLoop()
-	if err != nil && cl.config.Debug {
-		cl.logger.Printf("error during connection main read loop: %s", err)
+	if err := c.mainReadLoop(); err != nil {
+		l2.Println("mainReadLoop failed", err)
+		if cl.config.Debug {
+			cl.logger.Printf("error during connection main read loop: %s", err)
+		}
 	}
 }
 
@@ -1223,7 +1226,8 @@ func (cl *Client) banPeerIP(ip net.IP) {
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, network string) (c *connection) {
 	c = &connection{
-		_mu:             newDebugLock(&stdsync.RWMutex{}),
+		// _mu:             newDebugLock(&stdsync.RWMutex{}),
+		_mu:             &stdsync.RWMutex{},
 		conn:            nc,
 		outgoing:        outgoing,
 		Choked:          true,

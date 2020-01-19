@@ -271,7 +271,7 @@ func TestClientTransferVarious(t *testing.T) {
 				})
 				for _, readahead := range []int64{-1, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20} {
 					count++
-					log.Println("running test", count)
+					log.Println("running test", os.Getpid(), count)
 					testClientTransfer(t, testClientTransferParams{
 						SeederStorage:  ss,
 						Responsive:     responsive,
@@ -338,8 +338,6 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	defer seeder.Close()
 	seederTorrent.VerifyData()
 
-	// TODO REMOVE ME.
-	require.True(t, seeder.WaitAll())
 	// log.Println("SEEDER MISSING PIECES", seederTorrent.(*torrent).piecesM.Missing())
 	// log.Printf("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n")
 
@@ -390,6 +388,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if ps.SetReadahead {
 		r.SetReadahead(ps.Readahead)
 	}
+
 	assertReadAllGreeting(t, r)
 
 	seederStats := seederTorrent.Stats()

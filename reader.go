@@ -10,6 +10,7 @@ import (
 	"github.com/anacrolix/missinggo"
 )
 
+// Reader for a torrent
 type Reader interface {
 	io.Reader
 	io.Seeker
@@ -94,6 +95,7 @@ func (r *reader) readable(off int64) (ret bool) {
 // How many bytes are available to read. Max is the most we could require.
 func (r *reader) available(off, max int64) (ret int64) {
 	off += r.offset
+
 	for max > 0 {
 		req, ok := r.t.offsetRequest(off)
 		if !ok {
@@ -107,11 +109,13 @@ func (r *reader) available(off, max int64) (ret int64) {
 		ret += len1
 		off += len1
 	}
+
 	// Ensure that ret hasn't exceeded our original max.
 	if max < 0 {
 		ret += max
 	}
-	return
+
+	return ret
 }
 
 func (r *reader) waitReadable(off int64) {
@@ -155,6 +159,7 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 			r.t.unlock()
 		}()
 	}
+
 	// Hmmm, if a Read gets stuck, this means you can't change position for
 	// other purposes. That seems reasonable, but unusual.
 	r.opMu.Lock()
@@ -222,6 +227,7 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 				return
 			}
 		}
+
 		pi := pieceIndex(r.torrentOffset(pos) / r.t.info.PieceLength)
 		ip := r.t.info.Piece(pi)
 		po := r.torrentOffset(pos) % r.t.info.PieceLength

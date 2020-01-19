@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"text/tabwriter"
 	"time"
 	"unsafe"
@@ -211,31 +210,31 @@ func (t *torrent) locker() sync.Locker {
 }
 
 func (t *torrent) _lock(depth int) {
-	updated := atomic.AddUint64(&t.lcount, 1)
-	l2.Output(depth, fmt.Sprintf("t(%p) lock initiated - %d", t, updated))
+	// updated := atomic.AddUint64(&t.lcount, 1)
+	// l2.Output(depth, fmt.Sprintf("t(%p) lock initiated - %d", t, updated))
 	t._mu.Lock()
-	l2.Output(depth, fmt.Sprintf("t(%p) lock completed - %d", t, updated))
+	// l2.Output(depth, fmt.Sprintf("t(%p) lock completed - %d", t, updated))
 }
 
 func (t *torrent) _unlock(depth int) {
-	updated := atomic.AddUint64(&t.ucount, 1)
-	l2.Output(depth, fmt.Sprintf("t(%p) unlock initiated - %d", t, updated))
+	// updated := atomic.AddUint64(&t.ucount, 1)
+	// l2.Output(depth, fmt.Sprintf("t(%p) unlock initiated - %d", t, updated))
 	t._mu.Unlock()
-	l2.Output(depth, fmt.Sprintf("t(%p) unlock completed - %d", t, updated))
+	// l2.Output(depth, fmt.Sprintf("t(%p) unlock completed - %d", t, updated))
 }
 
 func (t *torrent) _rlock(depth int) {
-	updated := atomic.AddUint64(&t.lcount, 1)
-	l2.Output(depth, fmt.Sprintf("t(%p) rlock initiated - %d", t, updated))
+	// updated := atomic.AddUint64(&t.lcount, 1)
+	// l2.Output(depth, fmt.Sprintf("t(%p) rlock initiated - %d", t, updated))
 	t._mu.RLock()
-	l2.Output(depth, fmt.Sprintf("t(%p) rlock completed - %d", t, updated))
+	// l2.Output(depth, fmt.Sprintf("t(%p) rlock completed - %d", t, updated))
 }
 
 func (t *torrent) _runlock(depth int) {
-	updated := atomic.AddUint64(&t.ucount, 1)
-	l2.Output(depth, fmt.Sprintf("t(%p) unlock initiated - %d", t, updated))
+	// updated := atomic.AddUint64(&t.ucount, 1)
+	// l2.Output(depth, fmt.Sprintf("t(%p) unlock initiated - %d", t, updated))
 	t._mu.RUnlock()
-	l2.Output(depth, fmt.Sprintf("t(%p) unlock completed - %d", t, updated))
+	// l2.Output(depth, fmt.Sprintf("t(%p) unlock completed - %d", t, updated))
 }
 
 func (t *torrent) lock() {
@@ -317,6 +316,14 @@ func (t *torrent) setChunkSize(size pp.Integer) {
 }
 
 func (t *torrent) pieceComplete(piece pieceIndex) bool {
+	if t.piecesM == nil {
+		return false
+	}
+
+	if t.piecesM.completed.IsEmpty() {
+		return false
+	}
+
 	return t.piecesM.completed.Contains(piece)
 }
 
@@ -829,6 +836,9 @@ func (t *torrent) numPiecesCompleted() (num int) {
 }
 
 func (t *torrent) close() (err error) {
+	t.lock()
+	defer t.unlock()
+
 	t.closed.Set()
 	t.tickleReaders()
 
@@ -846,7 +856,7 @@ func (t *torrent) close() (err error) {
 	t.pieceStateChanges.Close()
 
 	t.updateWantPeersEvent()
-	return
+	return err
 }
 
 func (t *torrent) requestOffset(r request) int64 {
@@ -1010,20 +1020,17 @@ type PieceStateChange struct {
 }
 
 func (t *torrent) publishPieceChange(piece pieceIndex) {
-	// t.lock()
 	cur := t.pieceState(piece)
 	p := &t.pieces[piece]
-	if cur != p.publicPieceState {
-		p.publicPieceState = cur
-		t.pieceStateChanges.Publish(PieceStateChange{
-			int(piece),
-			cur,
-		})
-	}
-	// t.unlock()
-	// t._mu.Defer(func() {
-	//
-	// })
+	// if cur != p.publicPieceState {
+	p.publicPieceState = cur
+	t.pieceStateChanges.Publish(PieceStateChange{
+		int(piece),
+		cur,
+	})
+	t.event.Broadcast()
+	t.cln.event.Broadcast() // cause the client to detect completed torrents.
+	// }
 }
 
 func (t *torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
@@ -1370,8 +1377,10 @@ func (t *torrent) deleteConnection(c *connection) (ret bool) {
 		// if the connection has been deleted.
 	}
 
+	t.lock()
 	_, ret = t.conns[c]
 	delete(t.conns, c)
+	t.unlock()
 	metrics.Add("deleted connections", 1)
 	c.deleteAllRequests()
 	if len(t.conns) == 0 {
@@ -1394,11 +1403,12 @@ func (t *torrent) assertNoPendingRequests() {
 }
 
 func (t *torrent) dropConnection(c *connection) {
-	t.event.Broadcast()
 	c.Close()
 	if t.deleteConnection(c) {
 		t.openNewConns()
 	}
+
+	t.event.Broadcast()
 }
 
 func (t *torrent) wantPeers() bool {
@@ -1607,7 +1617,14 @@ func (t *torrent) statsLocked() (ret TorrentStats) {
 // The total number of peers in the torrent.
 func (t *torrent) numTotalPeers() int {
 	peers := make(map[string]struct{})
+	t.rLock()
+	defer t.rUnlock()
+
 	for conn := range t.conns {
+		if conn == nil {
+			continue
+		}
+
 		ra := conn.conn.RemoteAddr()
 		if ra == nil {
 			// It's been closed and doesn't support RemoteAddr.
@@ -1646,14 +1663,19 @@ func (t *torrent) reconcileHandshakeStats(c *connection) {
 
 // Returns true if the connection is added.
 func (t *torrent) addConnection(c *connection) (err error) {
+	t.lock()
+	defer t.unlock()
+
 	defer func() {
 		if err == nil {
 			metrics.Add("added connections", 1)
 		}
 	}()
+
 	if t.closed.IsSet() {
 		return errors.New("torrent closed 2")
 	}
+
 	for c0 := range t.conns {
 		if c.PeerID != c0.PeerID {
 			continue
@@ -1795,6 +1817,8 @@ func (t *torrent) pieceHashed(piece pieceIndex, correct bool) {
 }
 
 func (t *torrent) cancelRequestsForPiece(piece pieceIndex) {
+	t.rLock()
+	defer t.rUnlock()
 	// TODO: Make faster
 	for cn := range t.conns {
 		cn.updateRequests()
@@ -1865,6 +1889,14 @@ func (t *torrent) tryCreatePieceHasher() bool {
 }
 
 func (t *torrent) getPieceToHash() (ret pieceIndex, ok bool) {
+	if t == nil {
+		panic("getPieceToHash - torrent nil")
+	}
+
+	if t.piecesQueuedForHash.IsEmpty() {
+		return 0, false
+	}
+
 	t.piecesQueuedForHash.IterTyped(func(i pieceIndex) bool {
 		if t.piece(i).hashing {
 			return true
@@ -1873,15 +1905,15 @@ func (t *torrent) getPieceToHash() (ret pieceIndex, ok bool) {
 		ok = true
 		return false
 	})
-	return
+
+	return ret, ok
 }
 
 func (t *torrent) pieceHasher(index pieceIndex) {
 	p := t.piece(index)
 	sum := t.hashPiece(index)
 	t.storageLock.RUnlock()
-	// t.lock()
-	// defer t.unlock()
+
 	p.hashing = false
 
 	t.updatePiecePriority(index)
@@ -1896,7 +1928,9 @@ func (t *torrent) pieceHasher(index pieceIndex) {
 // doing it.
 func (t *torrent) reapPieceTouchers(piece pieceIndex) (ret []*connection) {
 	for c := range t.pieces[piece].dirtiers {
+		t.lock()
 		delete(c.peerTouchedPieces, piece)
+		t.unlock()
 		ret = append(ret, c)
 	}
 	t.pieces[piece].dirtiers = nil
@@ -1976,6 +2010,9 @@ func (t *torrent) hashingPiece(i pieceIndex) bool {
 }
 
 func (t *torrent) pieceQueuedForHash(i pieceIndex) bool {
+	if t == nil {
+		return false
+	}
 	return t.piecesQueuedForHash.Get(bitmap.BitIndex(i))
 }
 

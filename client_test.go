@@ -97,10 +97,6 @@ func TestAddDropTorrent(t *testing.T) {
 	cl.Stop(tt.Metadata())
 }
 
-func TestPieceHashSize(t *testing.T) {
-	assert.Equal(t, 20, pieceHash.Size())
-}
-
 func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)

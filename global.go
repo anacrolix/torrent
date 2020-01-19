@@ -1,14 +1,12 @@
 package torrent
 
 import (
-	"crypto"
 	"expvar"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 const (
-	pieceHash        = crypto.SHA1
 	maxRequests      = 250    // Maximum pending requests we allow peers to send us.
 	defaultChunkSize = 0x4000 // 16KiB
 )
@@ -16,8 +14,8 @@ const (
 // These are our extended message IDs. Peers will use these values to
 // select which extension a message is intended for.
 const (
-	metadataExtendedId = iota + 1 // 0 is reserved for deleting keys
-	pexExtendedId
+	metadataExtendedID = iota + 1 // 0 is reserved for deleting keys
+	pexExtendedID
 )
 
 func defaultPeerExtensionBytes() PeerExtensionBits {

@@ -748,13 +748,15 @@ func (cn *connection) iterUnbiasedPieceRequestOrder(f func(piece pieceIndex) boo
 	}
 	// And pieces that we already have.
 	skip.Union(cn.t.completedPieces)
-	skip.Union(cn.t.piecesQueuedForHash)
+	// TODO: remove this, shouldn't be necessary anymore.
+	// skip.Union(cn.t.piecesQueuedForHash)
+
 	// Return an iterator over the different priority classes, minus the skip
 	// pieces.
 	return iter.All(
 		func(_piece interface{}) bool {
 			i := _piece.(bitmap.BitIndex)
-			if cn.t.hashingPiece(pieceIndex(i)) {
+			if cn.t.piecesM.ChunksComplete(pieceIndex(i)) {
 				return true
 			}
 			return f(pieceIndex(i))
@@ -1303,13 +1305,13 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		}
 		cn.requestPendingMetadata()
 		return nil
-	case metadataExtendedId:
+	case metadataExtendedID:
 		err := t.gotMetadataExtensionMsg(payload, cn)
 		if err != nil {
 			return fmt.Errorf("handling metadata extension message: %v", err)
 		}
 		return nil
-	case pexExtendedId:
+	case pexExtendedID:
 		if t.config.DisablePEX {
 			// TODO: Maybe close the connection. Check that we're not
 			// advertising that we support PEX if it's disabled.
@@ -1418,7 +1420,7 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 	// It's important that the piece is potentially queued before we check if
 	// the piece is still wanted, because if it is queued, it won't be wanted.
 	if cn.t.pieceAllDirty(pieceIndex(req.Index)) {
-		cn.t.queuePieceCheck(pieceIndex(req.Index))
+		cn.t.digests.Enqueue(int(req.Index))
 		cn.t.pendAllChunkSpecs(pieceIndex(req.Index))
 	}
 

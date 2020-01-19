@@ -996,7 +996,7 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 			ExtendedPayload: func() []byte {
 				msg := pp.ExtendedHandshakeMessage{
 					M: map[pp.ExtensionName]pp.ExtensionNumber{
-						pp.ExtensionNameMetadata: metadataExtendedId,
+						pp.ExtensionNameMetadata: metadataExtendedID,
 					},
 					V:            cl.config.ExtendedHandshakeClientVersion,
 					Reqq:         64, // TODO: Really?
@@ -1010,7 +1010,7 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 					Ipv6: cl.config.PublicIp6.To16(),
 				}
 				if !cl.config.DisablePEX {
-					msg.M[pp.ExtensionNamePex] = pexExtendedId
+					msg.M[pp.ExtensionNamePex] = pexExtendedID
 				}
 				return bencode.MustMarshal(msg)
 			}(),
@@ -1116,9 +1116,17 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 
 		piecesM: newChunks(csize, &metainfo.Info{}),
 	}
+	t.digests = newDigests(
+		func(idx int) *Piece { return t.piece(idx) },
+		func(idx int, cause error) {
+			t.publishPieceChange(idx)
+			t.updatePiecePriority(idx)
+			t.pieceHashed(idx, cause)
+			t.updatePieceCompletion(idx)
+		},
+	)
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
 	t.event = &sync.Cond{L: tlocker{torrent: t}}
-
 	t.logger = cl.logger.WithValues(t).WithText(func(m log.Msg) string {
 		return fmt.Sprintf("%v: %s", t, m.Text())
 	})

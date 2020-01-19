@@ -188,7 +188,7 @@ func (p *Piece) VerifyData() {
 		target++
 	}
 
-	p.t.queuePieceCheck(p.index)
+	p.t.digests.Enqueue(p.index)
 
 	for {
 		if p.numVerifies >= target {
@@ -200,7 +200,7 @@ func (p *Piece) VerifyData() {
 }
 
 func (p *Piece) queuedForHash() bool {
-	return !p.t.piecesQueuedForHash.IsEmpty() && p.t.piecesQueuedForHash.Get(bitmap.BitIndex(p.index))
+	return p.t.piecesM.ChunksComplete(p.index)
 }
 
 func (p *Piece) torrentBeginOffset() int64 {
@@ -219,7 +219,7 @@ func (p *Piece) SetPriority(prio piecePriority) {
 }
 
 func (p *Piece) uncachedPriority() (ret piecePriority) {
-	if p.t.pieceComplete(p.index) || p.t.pieceQueuedForHash(p.index) || p.t.hashingPiece(p.index) {
+	if p.t.pieceComplete(p.index) || p.t.piecesM.ChunksComplete(p.index) {
 		return PiecePriorityNone
 	}
 	for _, f := range p.files {

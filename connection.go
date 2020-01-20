@@ -836,13 +836,6 @@ func (cn *connection) iterPendingPiecesUntyped(f iter.Callback) {
 func (cn *connection) iterPendingRequests(piece pieceIndex, f func(request) bool) bool {
 	return iterUndirtiedChunks(piece, cn.t, func(cs chunkSpec) bool {
 		r := request{Index: pp.Integer(piece), chunkSpec: cs}
-		if cn.t.requestStrategy == 3 {
-			if _, ok := cn.t.lastRequested[r]; ok {
-				// This piece has been requested on another connection, and
-				// the duplicate request timer is still running.
-				return true
-			}
-		}
 		return f(r)
 	})
 }
@@ -1564,12 +1557,8 @@ func (cn *connection) deleteRequest(r request) bool {
 	cn.t.piecesM.Release(r)
 	delete(cn.requests, d)
 	cn.updateExpectingChunks()
-	if t, ok := cn.t.lastRequested[r]; ok {
-		t.Stop()
-		delete(cn.t.lastRequested, r)
-	}
-
 	cn.updateRequests()
+
 	return true
 }
 

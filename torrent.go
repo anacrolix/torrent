@@ -176,10 +176,6 @@ type torrent struct {
 	// different pieces.
 	connPieceInclinationPool sync.Pool
 
-	// The last time we requested a chunk. Deleting the request from any
-	// connection will clear this value.
-	lastRequested map[request]*time.Timer
-
 	// signal events on this torrent.
 	event *sync.Cond
 }
@@ -525,8 +521,6 @@ func (t *torrent) onSetInfo() {
 	t.event.Broadcast()
 	t.gotMetainfo.Set()
 	t.updateWantPeersEvent()
-
-	t.lastRequested = make(map[request]*time.Timer)
 }
 
 // Called when metadata for a torrent becomes available.
@@ -1372,9 +1366,6 @@ func (t *torrent) assertNoPendingRequests() {
 			l2.Println("still expecting", i, r.Index, r.Begin, r.Length)
 		}
 		panic(outstanding)
-	}
-	if len(t.lastRequested) != 0 {
-		panic(t.lastRequested)
 	}
 }
 

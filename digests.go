@@ -36,8 +36,6 @@ func (t *digests) Enqueue(idx int) {
 }
 
 func (t *digests) verify() {
-	// TODO: this exposes a bug. basically the mutex is unlocked before its locked.
-	// might be a bug in the golang compiler.
 	if atomic.CompareAndSwapInt64(&t.reaping, 0, 1) {
 		go func() {
 			for idx, ok := t.pending.Pop(); ok; idx, ok = t.pending.Pop() {

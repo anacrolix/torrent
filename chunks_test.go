@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"log"
 	"os"
 	"testing"
 	"time"
@@ -225,7 +224,7 @@ func TestChunksVariousCLength(t *testing.T) {
 	defer os.RemoveAll(greetingTempDir)
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
-	log.Println("info plength", info.PieceLength)
+
 	c := quickpopulate(newChunks(1, &info))
 	require.Equal(t, 13, c.Missing())
 

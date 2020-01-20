@@ -23,7 +23,7 @@ func newDigests(retrieve func(int) *Piece, complete func(int, error)) digests {
 type digests struct {
 	retrieve func(int) *Piece
 	complete func(int, error)
-	// marking whether digest is actively processing.
+	// marks whether digest is actively processing.
 	reaping int64
 	// cache of the pieces that need to be verified.
 	pending bitQueue

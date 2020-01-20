@@ -79,7 +79,7 @@ type torrent struct {
 
 	cln    *Client
 	config *ClientConfig
-	_mu    *lockWithDeferreds
+	_mu    *sync.RWMutex
 	logger log.Logger
 
 	networkingEnabled bool
@@ -315,6 +315,12 @@ func (t *torrent) setChunkSize(size pp.Integer) {
 }
 
 func (t *torrent) pieceComplete(piece pieceIndex) bool {
+	defer func() {
+		if r := recover(); r != nil {
+			l2.Println("RECOVERING piece complete", t.piecesM)
+		}
+	}()
+
 	if t.piecesM == nil {
 		return false
 	}
@@ -850,7 +856,7 @@ func (t *torrent) close() (err error) {
 	}
 
 	t.event.Broadcast()
-	t.pieceStateChanges.Close()
+	// t.pieceStateChanges.Close()
 
 	t.updateWantPeersEvent()
 	return err
@@ -997,15 +1003,15 @@ type PieceStateChange struct {
 func (t *torrent) publishPieceChange(piece pieceIndex) {
 	cur := t.pieceState(piece)
 	p := &t.pieces[piece]
-	// if cur != p.publicPieceState {
+
 	p.publicPieceState = cur
 	t.pieceStateChanges.Publish(PieceStateChange{
 		int(piece),
 		cur,
 	})
+
 	t.event.Broadcast()
 	t.cln.event.Broadcast() // cause the client to detect completed torrents.
-	// }
 }
 
 func (t *torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
@@ -1346,12 +1352,7 @@ func (t *torrent) SetInfoBytes(b []byte) (err error) {
 
 // Returns true if connection is removed from torrent.Conns.
 func (t *torrent) deleteConnection(c *connection) (ret bool) {
-	if !c.closed.IsSet() {
-		panic("connection is not closed")
-		// There are behaviours prevented by the closed state that will fail
-		// if the connection has been deleted.
-	}
-
+	c.Close()
 	t.lock()
 	_, ret = t.conns[c]
 	delete(t.conns, c)
@@ -1387,7 +1388,7 @@ func (t *torrent) dropConnection(c *connection) {
 }
 
 func (t *torrent) wantPeers() bool {
-	if t.closed.IsSet() {
+	if t.closed.IsSet() || t.wantPeersEvent.IsSet() {
 		return false
 	}
 
@@ -1592,8 +1593,6 @@ func (t *torrent) statsLocked() (ret TorrentStats) {
 // The total number of peers in the torrent.
 func (t *torrent) numTotalPeers() int {
 	peers := make(map[string]struct{})
-	t.rLock()
-	defer t.rUnlock()
 
 	for conn := range t.conns {
 		if conn == nil {
@@ -1842,9 +1841,9 @@ func (t *torrent) onIncompletePiece(piece pieceIndex) {
 // doing it.
 func (t *torrent) reapPieceTouchers(piece pieceIndex) (ret []*connection) {
 	for c := range t.pieces[piece].dirtiers {
-		t.lock()
+		c.cmu().Lock()
 		delete(c.peerTouchedPieces, piece)
-		t.unlock()
+		c.cmu().Unlock()
 		ret = append(ret, c)
 	}
 	t.pieces[piece].dirtiers = nil

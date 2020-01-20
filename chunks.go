@@ -236,6 +236,7 @@ func (t *chunks) ChunksPend(idx int) (changed bool) {
 		tmp := t.pend(c, c.Priority)
 		changed = changed || tmp
 	}
+
 	return changed
 }
 

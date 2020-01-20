@@ -203,7 +203,7 @@ func writeDhtServerStatus(w io.Writer, s *dht.Server) {
 	fmt.Fprintf(w, "\tOutstanding transactions: %d\n", dhtStats.OutstandingTransactions)
 }
 
-// Writes out a human readable status of the client, such as for writing to a
+// WriteStatus writes out a human readable status of the client, such as for writing to a
 // HTTP status page.
 func (cl *Client) WriteStatus(_w io.Writer) {
 	cl.rLock()
@@ -980,9 +980,15 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) {
 	go c.writer(time.Minute)
 	cl.sendInitialMessages(c, t)
 	if err := c.mainReadLoop(); err != nil {
+
 		l2.Println("mainReadLoop failed", err)
 		if cl.config.Debug {
 			cl.logger.Printf("error during connection main read loop: %s", err)
+		}
+
+		if c.outgoing && t.BytesMissing() > 0 {
+			l2.Println("restarting conn", c.outgoing, t.BytesMissing())
+			t.maybeNewConns()
 		}
 	}
 }
@@ -1016,23 +1022,22 @@ func (cl *Client) sendInitialMessages(conn *connection, torrent *torrent) {
 			}(),
 		})
 	}
-	func() {
-		if conn.fastEnabled() {
-			if torrent.haveAllPieces() {
-				conn.Post(pp.Message{Type: pp.HaveAll})
-				conn.sentHaves.AddRange(0, bitmap.BitIndex(conn.t.NumPieces()))
-				return
-			} else if !torrent.haveAnyPieces() {
-				conn.Post(pp.Message{Type: pp.HaveNone})
-				conn.sentHaves.Clear()
-				return
-			}
-		}
 
-		conn.PostBitfield()
-	}()
+	if conn.fastEnabled() {
+		if torrent.haveAllPieces() {
+			conn.Post(pp.Message{Type: pp.HaveAll})
+			conn.sentHaves.AddRange(0, bitmap.BitIndex(conn.t.NumPieces()))
+			return
+		} else if !torrent.haveAnyPieces() {
+			conn.Post(pp.Message{Type: pp.HaveNone})
+			conn.sentHaves.Clear()
+			return
+		}
+	}
+
+	conn.PostBitfield()
+
 	if conn.PeerExtensionBytes.SupportsDHT() && cl.extensionBytes.SupportsDHT() && cl.haveDhtServer() {
-		l2.Println("sendInitialMessages cp dht")
 		conn.Post(pp.Message{
 			Type: pp.Port,
 			Port: cl.dhtPort(),
@@ -1083,7 +1088,7 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 		csize = defaultChunkSize
 	}
 
-	m := &lockWithDeferreds{}
+	m := &stdsync.RWMutex{}
 
 	t = &torrent{
 		displayName: src.DisplayName,
@@ -1119,10 +1124,12 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 	t.digests = newDigests(
 		func(idx int) *Piece { return t.piece(idx) },
 		func(idx int, cause error) {
+			t.pieceHashed(idx, cause)
 			t.publishPieceChange(idx)
 			t.updatePiecePriority(idx)
-			t.pieceHashed(idx, cause)
 			t.updatePieceCompletion(idx)
+			t.event.Broadcast()
+			cl.event.Broadcast()
 		},
 	)
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}

@@ -501,10 +501,6 @@ type messageWriter func(pp.Message) bool
 
 // Proxies the messageWriter's response.
 func (cn *connection) request(r request, mw messageWriter) bool {
-	if _, ok := cn.t.conns[cn]; !ok {
-		panic("requesting but not in active conns")
-	}
-
 	cn.cmu().Lock()
 	if cn.requests == nil {
 		cn.requests = make(map[uint64]request)

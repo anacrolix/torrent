@@ -1590,10 +1590,6 @@ func (cn *connection) deleteAllRequests() {
 	for _, r := range cn.dupRequests() {
 		cn.deleteRequest(r)
 	}
-
-	if len(cn.requests) != 0 {
-		panic(len(cn.requests))
-	}
 }
 
 func (cn *connection) postCancel(r request) bool {

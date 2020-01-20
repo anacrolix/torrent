@@ -301,15 +301,15 @@ func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 		cn.statusFlags(),
 		cn.downloadRate()/(1<<10),
 	)
-	fmt.Fprintf(w, "    next pieces: %v%s\n",
-		iter.ToSlice(iter.Head(10, cn.iterPendingPiecesUntyped)),
-		func() string {
-			if cn.shouldRequestWithoutBias() {
-				return " (fastest)"
-			} else {
-				return ""
-			}
-		}())
+	// fmt.Fprintf(w, "    next pieces: %v%s\n",
+	// 	iter.ToSlice(iter.Head(10, cn.iterPendingPiecesUntyped)),
+	// 	func() string {
+	// 		if cn.shouldRequestWithoutBias() {
+	// 			return " (fastest)"
+	// 		} else {
+	// 			return ""
+	// 		}
+	// 	}())
 }
 
 func (cn *connection) Close() {
@@ -809,57 +809,6 @@ func (cn *connection) shouldRequestWithoutBias() bool {
 		return true
 	}
 	return false
-}
-
-func (cn *connection) iterPendingPieces(f func(pieceIndex) bool) bool {
-	if !cn.t.haveInfo() {
-		return false
-	}
-
-	if cn.t.requestStrategy == 3 {
-		return cn.iterUnbiasedPieceRequestOrder(f)
-	}
-
-	if cn.shouldRequestWithoutBias() {
-		return cn.iterUnbiasedPieceRequestOrder(f)
-	}
-
-	return cn.pieceRequestOrder.IterTyped(func(i int) bool {
-		return f(pieceIndex(i))
-	})
-}
-
-func (cn *connection) iterPendingPiecesUntyped(f iter.Callback) {
-	cn.iterPendingPieces(func(i pieceIndex) bool { return f(i) })
-}
-
-func (cn *connection) iterPendingRequests(piece pieceIndex, f func(request) bool) bool {
-	return iterUndirtiedChunks(piece, cn.t, func(cs chunkSpec) bool {
-		r := request{Index: pp.Integer(piece), chunkSpec: cs}
-		return f(r)
-	})
-}
-
-func iterUndirtiedChunks(piece pieceIndex, t *torrent, f func(chunkSpec) bool) bool {
-	p := &t.pieces[piece]
-	if t.requestStrategy == 3 {
-		for i := pp.Integer(0); i < p.numChunks(); i++ {
-			if !p.dirtyChunks.Get(bitmap.BitIndex(i)) {
-				if !f(t.chunkIndexSpec(i, piece)) {
-					return false
-				}
-			}
-		}
-		return true
-	}
-	chunkIndices := t.pieces[piece].undirtiedChunkIndices()
-	return iter.ForPerm(chunkIndices.Len(), func(i int) bool {
-		ci, err := chunkIndices.RB.Select(uint32(i))
-		if err != nil {
-			panic(err)
-		}
-		return f(t.chunkIndexSpec(pp.Integer(ci), piece))
-	})
 }
 
 // check callers updaterequests

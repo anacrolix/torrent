@@ -114,9 +114,13 @@ type chunks struct {
 	// gracePeriod how long to wait before reaping outstanding requests.
 	gracePeriod time.Duration
 
-	// cache of pieces we need to get. calculated from various piece and
+	// cache of chunks we need to get. calculated from various piece and
 	// file priorities and completion states elsewhere.
 	missing prioritybitmap.PriorityBitmap
+
+	// cache of chunks that failed the digest process. this bitmap is used to force
+	// connections to kill themselves when a digest fails validation.
+	failed bitmap.Bitmap
 
 	// The last time we requested a chunk. Deleting the request from any
 	// connection will clear this value.
@@ -437,6 +441,27 @@ func (t *chunks) Missing() int {
 	return t.missing.Len()
 }
 
+// Failed returns the union of the current failures and the provided completed mapping.
+func (t *chunks) Failed(completed bitmap.Bitmap) bitmap.Bitmap {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if t.failed.IsEmpty() {
+		return bitmap.Bitmap{}
+	}
+
+	union := t.failed.Copy()
+	union.Union(completed)
+
+	// TODO: using roaring bitmap for XOR
+	union.IterTyped(func(i int) bool {
+		t.failed.Remove(i)
+		return true
+	})
+
+	return union
+}
+
 // Outstanding returns a copy of the outstanding requests
 func (t *chunks) Outstanding() (dup map[uint64]request) {
 	t.mu.Lock()
@@ -509,6 +534,20 @@ func (t *chunks) Complete(pid int) (changed bool) {
 	}
 
 	t.completed.Set(pid, true)
+
+	return changed
+}
+
+// ChunksFailed mark a piece by index as failed.
+func (t *chunks) ChunksFailed(pid int) (changed bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// log.Output(2, fmt.Sprintf("c(%p) marked failed: i(%d)\n", t, pid))
+
+	for _, cid := range t.chunks(pid) {
+		t.failed.Add(cid)
+	}
 
 	return changed
 }

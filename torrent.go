@@ -1691,28 +1691,26 @@ func (t *torrent) pieceHashed(piece pieceIndex, failure error) {
 		return
 	}
 
-	touchers := t.reapPieceTouchers(piece)
-
 	// Don't score the first time a piece is hashed, it could be an
 	// initial check.
 	if p.storageCompletionOk {
 		if correct {
 			pieceHashedCorrect.Add(1)
 		} else {
-			log.Fmsg("piece %d failed hash: %d connections contributed", piece, len(touchers)).AddValues(t, p).Log(t.logger)
+			log.Fmsg("piece %d failed hash", piece).AddValues(t, p).Log(t.logger)
 			pieceHashedNotCorrect.Add(1)
 		}
 	}
 
 	if correct {
-		if len(touchers) != 0 {
-			// Don't increment stats above connection-level for every involved
-			// connection.
-			t.allStats((*ConnStats).incrementPiecesDirtiedGood)
-		}
-		for _, c := range touchers {
-			c.stats.incrementPiecesDirtiedGood()
-		}
+		// Don't increment stats above connection-level for every involved
+		// connection.
+		t.allStats((*ConnStats).incrementPiecesDirtiedGood)
+		// TODO: implement this at the connection level.
+		// for _, c := range touchers {
+		// 	c.stats.incrementPiecesDirtiedGood()
+		// }
+
 		err := p.Storage().MarkComplete()
 		if err != nil {
 			t.piecesM.ChunksPend(piece)
@@ -1722,32 +1720,9 @@ func (t *torrent) pieceHashed(piece pieceIndex, failure error) {
 	} else {
 		t.piecesM.ChunksPend(piece)
 		t.piecesM.ChunksRelease(piece)
+		t.piecesM.ChunksFailed(piece)
 
-		if len(touchers) != 0 {
-			// Don't increment stats above connection-level for every involved connection.
-			t.allStats((*ConnStats).incrementPiecesDirtiedBad)
-			for _, c := range touchers {
-				// Y u do dis peer?!
-				c.stats.incrementPiecesDirtiedBad()
-			}
-			slices.Sort(touchers, connLessTrusted)
-			if t.config.Debug {
-				t.logger.Printf("conns by trust for piece %d: %v",
-					piece,
-					func() (ret []connectionTrust) {
-						for _, c := range touchers {
-							ret = append(ret, c.trust())
-						}
-						return
-					}())
-			}
-
-			c := touchers[0]
-			if !c.trust().Implicit {
-				t.cln.banPeerIP(c.remoteAddr.IP)
-				c.Drop()
-			}
-		}
+		t.allStats((*ConnStats).incrementPiecesDirtiedBad)
 
 		t.onIncompletePiece(piece)
 		p.Storage().MarkNotComplete()
@@ -1788,29 +1763,11 @@ func (t *torrent) onIncompletePiece(piece pieceIndex) {
 	// connections might just remove any connections that aren't treating us
 	// favourably anyway.
 
-	// for c := range t.conns {
-	// 	if c.sentHave(piece) {
-	// 		c.Drop()
-	// 	}
-	// }
 	for conn := range t.conns {
 		if conn.PeerHasPiece(piece) {
 			conn.updateRequests()
 		}
 	}
-}
-
-// Return the connections that touched a piece, and clear the entries while
-// doing it.
-func (t *torrent) reapPieceTouchers(piece pieceIndex) (ret []*connection) {
-	for c := range t.pieces[piece].dirtiers {
-		c.cmu().Lock()
-		delete(c.peerTouchedPieces, piece)
-		c.cmu().Unlock()
-		ret = append(ret, c)
-	}
-	t.pieces[piece].dirtiers = nil
-	return
 }
 
 func (t *torrent) connsAsSlice() (ret []*connection) {

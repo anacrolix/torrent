@@ -621,6 +621,8 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			return
 		}
 
+		cn.checkFailures()
+
 		if cn.writeBuffer.Len() == 0 {
 			cn.fillWriteBuffer(writer)
 		}
@@ -679,6 +681,24 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			cn.Close()
 			return
 		}
+	}
+}
+
+// connections check their own failures, this amortizes the cost of failures to
+// the connections themselves instead of bottlenecking at the torrent.
+func (cn *connection) checkFailures() {
+	failed := cn.t.piecesM.Failed(bitmap.Bitmap{})
+
+	if failed.IsEmpty() {
+		return
+	}
+
+	cn.stats.incrementPiecesDirtiedBad()
+
+	if cn.stats.PiecesDirtiedBad.Int64() > 10 {
+		l2.Println("bad connection detected - TODO: implement bad peer blacklisting")
+		// cn.Drop()
+		// cn.t.cln.banPeerIP(cn.remoteAddr.IP)
 	}
 }
 
@@ -1306,14 +1326,6 @@ func (cn *connection) onDirtiedPiece(piece pieceIndex) {
 	}
 	cn.peerTouchedPieces[piece] = struct{}{}
 	cn.cmu().Unlock()
-
-	cn.t.lock()
-	ds := &cn.t.pieces[piece].dirtiers
-	if *ds == nil {
-		*ds = make(map[*connection]struct{})
-	}
-	(*ds)[cn] = struct{}{}
-	cn.t.unlock()
 }
 
 func (c *connection) uploadAllowed() bool {

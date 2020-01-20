@@ -253,6 +253,17 @@ func TestChunksVariousCLength(t *testing.T) {
 	require.Equal(t, 3, c.Missing())
 }
 
+func TestChunksFailed(t *testing.T) {
+	greetingTempDir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(greetingTempDir)
+	info, err := mi.UnmarshalInfo()
+	require.NoError(t, err)
+
+	c := quickpopulate(newChunks(1, &info))
+	require.Equal(t, 13, c.Missing())
+	assert.True(t, false, "TODO")
+}
+
 func TestChunksPop(t *testing.T) {
 	info, err := fromFile("testdata/bootstrap.dat.torrent")
 	require.NoError(t, err)

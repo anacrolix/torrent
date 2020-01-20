@@ -505,10 +505,12 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 		panic("requesting but not in active conns")
 	}
 
+	cn.cmu().Lock()
 	if cn.requests == nil {
 		cn.requests = make(map[uint64]request)
 	}
 	cn.requests[r.digest()] = r
+	cn.cmu().Unlock()
 	cn.updateExpectingChunks()
 
 	return mw(pp.Message{
@@ -526,7 +528,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		}
 
 		if len(cn.requests) != 0 {
-			for _, r := range cn.requests {
+			for _, r := range cn.dupRequests() {
 				cn.deleteRequest(r)
 				// log.Printf("%p: cancelling request: %v", cn, r)
 				if !msg(makeCancelMessage(r)) {
@@ -664,9 +666,9 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			}
 
 			cn.cmu().Lock()
-			l2.Printf("c(%p) writer going to sleep: %d\n", cn, cn.writeBuffer.Len())
+			// l2.Printf("c(%p) writer going to sleep: %d\n", cn, cn.writeBuffer.Len())
 			cn.writerCond.Wait()
-			l2.Printf("c(%p) writer awake: %d\n", cn, cn.writeBuffer.Len())
+			// l2.Printf("c(%p) writer awake: %d\n", cn, cn.writeBuffer.Len())
 			cn.cmu().Unlock()
 
 			continue
@@ -990,7 +992,6 @@ func (cn *connection) peerSentBitfield(bf []bool) error {
 func (cn *connection) onPeerSentHaveAll() error {
 	cn.peerSentHaveAll = true
 	cn.peerPieces.Clear()
-	cn.peerPieces.AddRange(0, cn.t.numPieces())
 	cn.peerPiecesChanged()
 	return nil
 }
@@ -1172,21 +1173,16 @@ func (cn *connection) mainReadLoop() (err error) {
 		Pool:      t.chunkPool,
 	}
 
-	defer cn.cmu().Unlock()
-	cn.cmu().Lock()
 	for {
 		var msg pp.Message
-		cn.cmu().Unlock()
 		cn.updateRequests()
 		err = decoder.Decode(&msg)
-		cn.cmu().Lock()
+
 		if t.closed.IsSet() || cn.closed.IsSet() || err == io.EOF {
-			// l2.Println("connection close detected", err)
 			return nil
 		}
 
 		if err != nil {
-			// l2.Printf("(%d) c(%p) - CONNECTION ERROR: %T - %v\n", os.Getpid(), cn, errors.Cause(err), err)
 			return err
 		}
 
@@ -1203,7 +1199,6 @@ func (cn *connection) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
-		// l2.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - %t - %d\n", os.Getpid(), cn, msg.Type, msg.Keepalive, msg.Index)
 		switch msg.Type {
 		case pp.Choke:
 			cn.PeerChoked = true
@@ -1258,10 +1253,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			err = cn.peerSentHaveNone()
 		case pp.Reject:
 			req := newRequestFromMessage(&msg)
-			// unlock prior to calling delete request.
-			cn.cmu().Unlock()
 			cn.deleteRequest(req)
-			cn.cmu().Lock()
 			cn.t.piecesM.Pend(req, -1*int(req.Index))
 		case pp.AllowedFast:
 			metrics.Add("allowed fasts received", 1)
@@ -1378,9 +1370,6 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 		metrics.Add("chunks received due to allowed fast", 1)
 	}
 
-	// Request has been satisfied.
-	// unlock prior to calling delete request.
-	cn.cmu().Unlock()
 	if cn.deleteRequest(req) {
 		if cn.expectingChunks() {
 			cn.chunksReceivedWhileExpecting++
@@ -1388,7 +1377,6 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 	} else {
 		metrics.Add("chunks received unwanted", 1)
 	}
-	cn.cmu().Lock()
 
 	// Do we actually want this chunk?
 	if cn.t.haveChunk(req) {
@@ -1416,12 +1404,9 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 		return err
 	}
 
-	// Cancel pending requests for this chunk.
-	cn.cmu().Unlock()
 	for c := range cn.t.conns {
 		c.postCancel(req)
 	}
-	cn.cmu().Lock()
 
 	cn.t.lock()
 	concurrentChunkWrites.Add(1)
@@ -1451,10 +1436,12 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 }
 
 func (cn *connection) onDirtiedPiece(piece pieceIndex) {
+	cn.cmu().Lock()
 	if cn.peerTouchedPieces == nil {
 		cn.peerTouchedPieces = make(map[pieceIndex]struct{})
 	}
 	cn.peerTouchedPieces[piece] = struct{}{}
+	cn.cmu().Unlock()
 
 	cn.t.lock()
 	ds := &cn.t.pieces[piece].dirtiers
@@ -1587,16 +1574,20 @@ func (cn *connection) deleteRequest(r request) bool {
 	}
 
 	cn.updateRequests()
-	for _c := range cn.t.conns {
-		if !_c.Interested && _c != cn && cn.PeerHasPiece(pieceIndex(r.Index)) {
-			_c.updateRequests()
-		}
-	}
 	return true
 }
 
-func (cn *connection) deleteAllRequests() {
+func (cn *connection) dupRequests() (requests []request) {
+	cn._mu.RLock()
 	for _, r := range cn.requests {
+		requests = append(requests, r)
+	}
+	cn._mu.RUnlock()
+	return requests
+}
+
+func (cn *connection) deleteAllRequests() {
+	for _, r := range cn.dupRequests() {
 		cn.deleteRequest(r)
 	}
 

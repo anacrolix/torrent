@@ -125,7 +125,7 @@ func mainExitCode() int {
 				if !ok {
 					break
 				}
-				T.Drop()
+				client.Stop(T.Metadata())
 			}
 		}
 	}()

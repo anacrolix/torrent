@@ -545,7 +545,9 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 
 func (rs requestStrategyThree) onSentRequest(r request) {
 	rs.lastRequested[r] = time.AfterFunc(rs.duplicateRequestTimeout, func() {
+		rs.timeoutLocker.Lock()
 		delete(rs.lastRequested, r)
+		rs.timeoutLocker.Unlock()
 		rs.callbacks.requestTimedOut(r)
 	})
 }

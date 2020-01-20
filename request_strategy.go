@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"sync"
 	"time"
 
 	"github.com/anacrolix/missinggo/v2/bitmap"
@@ -79,20 +80,25 @@ func (requestStrategyTwo) ShouldRequestWithoutBias(cn requestStrategyConnection)
 type requestStrategyThree struct {
 	// How long to avoid duplicating a pending request.
 	duplicateRequestTimeout time.Duration
+
+	callbacks requestStrategyCallbacks
+
 	// The last time we requested a chunk. Deleting the request from any connection will clear this
 	// value.
 	lastRequested map[request]*time.Timer
-	callbacks     requestStrategyCallbacks
+	// The lock to take when running a request timeout handler.
+	timeoutLocker sync.Locker
 }
 
-type requestStrategyMaker func(callbacks requestStrategyCallbacks) requestStrategy
+type requestStrategyMaker func(callbacks requestStrategyCallbacks, clientLocker sync.Locker) requestStrategy
 
 func requestStrategyThreeMaker(duplicateRequestTimeout time.Duration) requestStrategyMaker {
-	return func(callbacks requestStrategyCallbacks) requestStrategy {
+	return func(callbacks requestStrategyCallbacks, clientLocker sync.Locker) requestStrategy {
 		return requestStrategyThree{
 			duplicateRequestTimeout: duplicateRequestTimeout,
 			callbacks:               callbacks,
 			lastRequested:           make(map[request]*time.Timer),
+			timeoutLocker:           clientLocker,
 		}
 	}
 }

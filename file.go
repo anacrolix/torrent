@@ -58,7 +58,7 @@ func (f *File) bytesLeft() (left int64) {
 	pieceSize := int64(f.t.usualPieceSize())
 	firstPieceIndex := f.firstPieceIndex()
 	endPieceIndex := f.endPieceIndex() - 1
-	bitmap.Flip(f.t.completedPieces, firstPieceIndex+1, endPieceIndex).IterTyped(func(piece int) bool {
+	bitmap.Flip(f.t.piecesM.completed, firstPieceIndex+1, endPieceIndex).IterTyped(func(piece int) bool {
 		if piece >= endPieceIndex {
 			return false
 		}
@@ -76,7 +76,7 @@ func (f *File) bytesLeft() (left int64) {
 	return
 }
 
-// The relative file path for a multi-file torrent, and the torrent name for a
+// DisplayPath the relative file path for a multi-file torrent, and the torrent name for a
 // single-file torrent.
 func (f *File) DisplayPath() string {
 	fip := f.FileInfo().Path

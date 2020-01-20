@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	l2 "log"
-	"math"
 	"math/rand"
 	"net"
 	"strconv"
@@ -24,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/internal/x/bitmapx"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
@@ -394,28 +394,6 @@ func (cn *connection) requestedMetadataPiece(index int) bool {
 
 // The actual value to use as the maximum outbound requests.
 func (cn *connection) nominalMaxRequests() (ret int) {
-	if cn.t.requestStrategy == 3 {
-		expectingTime := int64(cn.totalExpectingTime())
-		if expectingTime == 0 {
-			expectingTime = math.MaxInt64
-		} else {
-			expectingTime *= 2
-		}
-		return int(clamp(
-			1,
-			int64(cn.PeerMaxRequests),
-			max(
-				// It makes sense to always pipeline at least one connection,
-				// since latency must be non-zero.
-				2,
-				// Request only as many as we expect to receive in the
-				// dupliateRequestTimeout window. We are trying to avoid having to
-				// duplicate requests.
-				cn.chunksReceivedWhileExpecting*int64(cn.t.duplicateRequestTimeout)/expectingTime,
-			),
-		))
-	}
-
 	return int(clamp(
 		1,
 		int64(cn.PeerMaxRequests),
@@ -719,14 +697,17 @@ func (cn *connection) PostBitfield() {
 	if cn.sentHaves.Len() != 0 {
 		panic("bitfield must be first have-related message sent")
 	}
+
 	if !cn.t.haveAnyPieces() {
 		return
 	}
+
+	dup := cn.t.piecesM.completed.Copy()
 	cn.Post(pp.Message{
 		Type:     pp.Bitfield,
-		Bitfield: cn.t.bitfield(),
+		Bitfield: bitmapx.Bools(cn.t.numPieces(), dup),
 	})
-	cn.sentHaves = cn.t.completedPieces.Copy()
+	cn.sentHaves = dup
 }
 
 func (cn *connection) updateRequests() {
@@ -750,44 +731,6 @@ func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 	}
 }
 
-func (cn *connection) iterUnbiasedPieceRequestOrder(f func(piece pieceIndex) bool) bool {
-	now, readahead := cn.t.readerPiecePriorities()
-	var skip bitmap.Bitmap
-	if !cn.peerSentHaveAll {
-		// Pieces to skip include pieces the peer doesn't have.
-		skip = bitmap.Flip(cn.peerPieces, 0, bitmap.BitIndex(cn.t.numPieces()))
-	}
-	// And pieces that we already have.
-	skip.Union(cn.t.completedPieces)
-	// TODO: remove this, shouldn't be necessary anymore.
-	// skip.Union(cn.t.piecesQueuedForHash)
-
-	// Return an iterator over the different priority classes, minus the skip
-	// pieces.
-	return iter.All(
-		func(_piece interface{}) bool {
-			i := _piece.(bitmap.BitIndex)
-			if cn.t.piecesM.ChunksComplete(pieceIndex(i)) {
-				return true
-			}
-			return f(pieceIndex(i))
-		},
-		iterBitmapsDistinct(&skip, now, readahead),
-		func(cb iter.Callback) {
-			// TODO: this should be dead code.
-			cn.t.piecesM.missing.IterTyped(func(chunk int) bool {
-				piece := cn.t.piecesM.pindex(chunk)
-				if skip.Contains(piece) {
-					return true
-				}
-				more := cb(piece)
-				skip.Add(piece)
-				return more
-			})
-		},
-	)
-}
-
 // The connection should download highest priority pieces first, without any
 // inclination toward avoiding wastage. Generally we might do this if there's
 // a single connection, or this is the fastest connection, and we have active
@@ -796,22 +739,21 @@ func (cn *connection) iterUnbiasedPieceRequestOrder(f func(piece pieceIndex) boo
 // assigned to the highest priority pieces, and assigning more than one this
 // role would cause significant wasted bandwidth.
 func (cn *connection) shouldRequestWithoutBias() bool {
-	if cn.t.requestStrategy != 2 {
-		return false
-	}
 	if len(cn.t.readers) == 0 {
 		return false
 	}
+
 	if len(cn.t.conns) == 1 {
 		return true
 	}
+
 	if cn == cn.t.fastestConn {
 		return true
 	}
+
 	return false
 }
 
-// check callers updaterequests
 func (cn *connection) stopRequestingPiece(piece pieceIndex) bool {
 	return cn.pieceRequestOrder.Remove(bitmap.BitIndex(piece))
 }
@@ -823,28 +765,12 @@ func (cn *connection) stopRequestingPiece(piece pieceIndex) bool {
 func (cn *connection) updatePiecePriority(piece pieceIndex) bool {
 	tpp := cn.t.piecePriority(piece)
 	if !cn.PeerHasPiece(piece) {
-		// l2.Println("peer missing piece", piece)
 		tpp = PiecePriorityNone
 	}
 	if tpp == PiecePriorityNone {
-		// l2.Println("disableRequestingPiece", piece)
 		return cn.stopRequestingPiece(piece)
 	}
 	prio := cn.getPieceInclination()[piece]
-	switch cn.t.requestStrategy {
-	case 1:
-		switch tpp {
-		case PiecePriorityNormal:
-		case PiecePriorityReadahead:
-			prio -= int(cn.t.numPieces())
-		case PiecePriorityNext, PiecePriorityNow:
-			prio -= 2 * int(cn.t.numPieces())
-		default:
-			panic(tpp)
-		}
-		prio += int(piece / 3)
-	default:
-	}
 
 	return cn.pieceRequestOrder.Set(bitmap.BitIndex(piece), prio) || cn.shouldRequestWithoutBias()
 }
@@ -872,11 +798,11 @@ func (cn *connection) peerPiecesChanged() {
 				prioritiesChanged = true
 			}
 		}
+
 		if prioritiesChanged {
 			cn.t.event.Broadcast()
 			cn.updateRequests()
 		}
-
 	}
 }
 

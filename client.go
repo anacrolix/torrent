@@ -229,7 +229,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		}
 		fmt.Fprint(w, "\n")
 		if t.info != nil {
-			fmt.Fprintf(w, "%f%% of %d bytes (%s)", 100*(1-float64(t.bytesMissingLocked())/float64(t.info.TotalLength())), t.length, humanize.Bytes(uint64(t.info.TotalLength())))
+			fmt.Fprintf(w, "%f%% of %d bytes (%s)", 100*(1-float64(t.bytesMissingLocked())/float64(t.info.TotalLength())), t.info.Length, humanize.Bytes(uint64(t.info.TotalLength())))
 		} else {
 			w.WriteString("<missing metainfo>")
 		}
@@ -1062,7 +1062,6 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
 
 		networkingEnabled:       true,
-		requestStrategy:         2,
 		duplicateRequestTimeout: 1 * time.Second,
 
 		piecesM: newChunks(csize, &metainfo.Info{}),

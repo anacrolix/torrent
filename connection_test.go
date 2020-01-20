@@ -39,7 +39,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	c.w = w
 	go c.writer(time.Minute)
 	c.cmu().Lock()
-	c.t.completedPieces.Add(1)
+	c.t.piecesM.completed.Add(1)
 	c.PostBitfield( /*[]bool{false, true, false}*/ )
 	c.cmu().Unlock()
 	c.cmu().Lock()

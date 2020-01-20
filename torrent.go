@@ -84,13 +84,6 @@ type torrent struct {
 
 	networkingEnabled bool
 
-	// Determines what chunks to request from peers. 1: Favour higher priority
-	// pieces with some fuzzing to reduce overlaps and wastage across
-	// connections. 2: The fastest connection downloads strictly in order of
-	// priority, while all others adher to their piece inclications. 3:
-	// Requests are strictly by piece priority, and not duplicated until
-	// duplicateRequestTimeout is reached.
-	requestStrategy int
 	// How long to avoid duplicating a pending request.
 	duplicateRequestTimeout time.Duration
 
@@ -103,9 +96,6 @@ type torrent struct {
 	// normally 16KiB by convention these days.
 	chunkSize pp.Integer
 	chunkPool *sync.Pool
-	// Total length of the torrent in bytes. Stored because it's not O(1) to
-	// get this from the info dict.
-	length *int64
 
 	// The storage to open when the info dict becomes available.
 	storageOpener *storage.Client
@@ -123,8 +113,10 @@ type torrent struct {
 
 	// Active peer connections, running message stream loops. TODO: Make this
 	// open (not-closed) connections only.
-	conns               map[*connection]struct{}
+	conns map[*connection]struct{}
+
 	maxEstablishedConns int
+
 	// Set of addrs to which we're attempting to connect. Connections are
 	// half-open until all handshakes are completed.
 	halfOpen    map[string]Peer
@@ -136,6 +128,7 @@ type torrent struct {
 	// the swarm.
 	peers          prioritizedPeers
 	wantPeersEvent missinggo.Event
+
 	// An announcer for each tracker URL.
 	trackerAnnouncers map[string]*trackerScraper
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
@@ -167,9 +160,6 @@ type torrent struct {
 
 	// digest management determines if pieces are valid.
 	digests digests
-
-	// A cache of completed piece indices.
-	completedPieces bitmap.Bitmap
 
 	// A pool of piece priorities []int for assignment to new connections.
 	// These "inclinations" are used to give connections preference for
@@ -470,14 +460,6 @@ func pieceEndFileIndex(pieceEndOffset int64, files []*File) int {
 	return 0
 }
 
-func (t *torrent) cacheLength() {
-	var l int64
-	for _, f := range t.info.UpvertedFiles() {
-		l += f.Length
-	}
-	t.length = &l
-}
-
 func (t *torrent) setInfo(info *metainfo.Info) error {
 	if err := validateInfo(info); err != nil {
 		return fmt.Errorf("bad info: %s", err)
@@ -496,7 +478,6 @@ func (t *torrent) setInfo(info *metainfo.Info) error {
 	t.nameMu.Unlock()
 
 	t.initFiles()
-	t.cacheLength()
 	t.makePieces()
 
 	return nil
@@ -793,7 +774,7 @@ func (t *torrent) bytesMissingLocked() int64 {
 }
 
 func (t *torrent) bytesLeft() (left int64) {
-	bitmap.Flip(t.completedPieces, 0, bitmap.BitIndex(t.numPieces())).IterTyped(func(piece int) bool {
+	bitmap.Flip(t.piecesM.completed, 0, bitmap.BitIndex(t.numPieces())).IterTyped(func(piece int) bool {
 		p := &t.pieces[piece]
 		left += int64(p.length() - p.numDirtyBytes())
 		return true
@@ -829,7 +810,7 @@ func (t *torrent) numPieces() pieceIndex {
 }
 
 func (t *torrent) numPiecesCompleted() (num int) {
-	return t.completedPieces.Len()
+	return t.piecesM.completed.Len()
 }
 
 func (t *torrent) close() (err error) {
@@ -857,13 +838,13 @@ func (t *torrent) close() (err error) {
 }
 
 func (t *torrent) requestOffset(r request) int64 {
-	return torrentRequestOffset(*t.length, int64(t.usualPieceSize()), r)
+	return torrentRequestOffset(t.info.Length, int64(t.usualPieceSize()), r)
 }
 
 // Return the request that would include the given offset into the torrent
 // data. Returns !ok if there is no such request.
 func (t *torrent) offsetRequest(off int64) (req request, ok bool) {
-	return torrentOffsetRequest(*t.length, t.info.PieceLength, int64(t.chunkSize), off)
+	return torrentOffsetRequest(t.info.Length, t.info.PieceLength, int64(t.chunkSize), off)
 }
 
 func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
@@ -874,15 +855,6 @@ func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 	}
 
 	return err
-}
-
-func (t *torrent) bitfield() (bf []bool) {
-	bf = make([]bool, t.numPieces())
-	t.completedPieces.IterTyped(func(piece int) (again bool) {
-		bf[piece] = true
-		return true
-	})
-	return
 }
 
 func (t *torrent) pieceNumChunks(piece pieceIndex) pp.Integer {
@@ -898,8 +870,9 @@ func (t *torrent) pieceLength(piece pieceIndex) pp.Integer {
 		// There will be no variance amongst pieces. Only pain.
 		return 0
 	}
+
 	if piece == t.numPieces()-1 {
-		ret := pp.Integer(*t.length % t.info.PieceLength)
+		ret := pp.Integer(t.info.Length % t.info.PieceLength)
 		if ret != 0 {
 			return ret
 		}
@@ -908,14 +881,14 @@ func (t *torrent) pieceLength(piece pieceIndex) pp.Integer {
 }
 
 func (t *torrent) haveAnyPieces() bool {
-	return t.completedPieces.Len() != 0
+	return t.piecesM.completed.Len() != 0
 }
 
 func (t *torrent) haveAllPieces() bool {
 	if !t.haveInfo() {
 		return false
 	}
-	return t.completedPieces.Len() == bitmap.BitIndex(t.numPieces())
+	return t.piecesM.completed.Len() == bitmap.BitIndex(t.numPieces())
 }
 
 func (t *torrent) havePiece(index pieceIndex) bool {
@@ -1112,7 +1085,7 @@ func (t *torrent) updatePiecePriorities(begin, end pieceIndex) {
 
 // Returns the range of pieces [begin, end) that contains the extent of bytes.
 func (t *torrent) byteRegionPieces(off, size int64) (begin, end pieceIndex) {
-	if off >= *t.length {
+	if off >= t.info.Length {
 		return
 	}
 	if off < 0 {
@@ -1229,7 +1202,6 @@ func (t *torrent) updatePieceCompletion(piece pieceIndex) bool {
 		t.piecesM.ChunksRelease(piece)
 	}
 
-	t.completedPieces.Set(bitmap.BitIndex(piece), uncached.Complete)
 	if changed {
 		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).WithValues(debugLogValue).Log(t.logger)
 		t.pieceCompletionChanged(piece)
@@ -1933,7 +1905,7 @@ func (t *torrent) NewReader() Reader {
 		mu:        t.locker(),
 		t:         t,
 		readahead: 5 * 1024 * 1024,
-		length:    *t.length,
+		length:    t.info.Length,
 	}
 	t.addReader(&r)
 	return &r
@@ -2009,7 +1981,7 @@ func (t *torrent) Name() string {
 // The completed length of all the torrent data, in all its files. This is
 // derived from the torrent info, when it is available.
 func (t *torrent) Length() int64 {
-	return *t.length
+	return t.info.Length
 }
 
 // Returns a run-time generated metainfo for the torrent that includes the

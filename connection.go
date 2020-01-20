@@ -1675,6 +1675,58 @@ func (cn *connection) trust() connectionTrust {
 	return connectionTrust{Implicit: cn.trusted, NetGoodPiecesDirted: cn.netGoodPiecesDirtied()}
 }
 
+// See the order given in Transmission's tr_peerMsgsNew.
+func (cn *connection) sendInitialMessages(cl *Client, torrent *torrent) {
+	if cn.PeerExtensionBytes.SupportsExtended() && cl.extensionBytes.SupportsExtended() {
+		cn.Post(pp.Message{
+			Type:       pp.Extended,
+			ExtendedID: pp.HandshakeExtendedID,
+			ExtendedPayload: func() []byte {
+				msg := pp.ExtendedHandshakeMessage{
+					M: map[pp.ExtensionName]pp.ExtensionNumber{
+						pp.ExtensionNameMetadata: metadataExtendedID,
+					},
+					V:            cl.config.ExtendedHandshakeClientVersion,
+					Reqq:         64, // TODO: Really?
+					YourIp:       pp.CompactIp(cn.remoteAddr.IP),
+					Encryption:   cl.config.HeaderObfuscationPolicy.Preferred || !cl.config.HeaderObfuscationPolicy.RequirePreferred,
+					Port:         cl.incomingPeerPort(),
+					MetadataSize: torrent.metadataSize(),
+					// TODO: We can figured these out specific to the socket
+					// used.
+					Ipv4: pp.CompactIp(cl.config.PublicIp4.To4()),
+					Ipv6: cl.config.PublicIp6.To16(),
+				}
+				if !cl.config.DisablePEX {
+					msg.M[pp.ExtensionNamePex] = pexExtendedID
+				}
+				return bencode.MustMarshal(msg)
+			}(),
+		})
+	}
+
+	if cn.fastEnabled() {
+		if torrent.haveAllPieces() {
+			cn.Post(pp.Message{Type: pp.HaveAll})
+			cn.sentHaves.AddRange(0, bitmap.BitIndex(cn.t.NumPieces()))
+			return
+		} else if !torrent.haveAnyPieces() {
+			cn.Post(pp.Message{Type: pp.HaveNone})
+			cn.sentHaves.Clear()
+			return
+		}
+	}
+
+	cn.PostBitfield()
+
+	if cn.PeerExtensionBytes.SupportsDHT() && cl.extensionBytes.SupportsDHT() && cl.haveDhtServer() {
+		cn.Post(pp.Message{
+			Type: pp.Port,
+			Port: cl.dhtPort(),
+		})
+	}
+}
+
 type connectionTrust struct {
 	Implicit            bool
 	NetGoodPiecesDirted int64

@@ -22,7 +22,6 @@ import (
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pproffd"
 	"github.com/anacrolix/missinggo/pubsub"
@@ -36,7 +35,6 @@ import (
 	"golang.org/x/time/rate"
 	"golang.org/x/xerrors"
 
-	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
@@ -977,8 +975,8 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) {
 
 	defer t.event.Broadcast()
 	defer t.dropConnection(c)
+	c.sendInitialMessages(cl, t)
 	go c.writer(time.Minute)
-	cl.sendInitialMessages(c, t)
 	if err := c.mainReadLoop(); err != nil {
 
 		l2.Println("mainReadLoop failed", err)
@@ -990,58 +988,6 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) {
 			l2.Println("restarting conn", c.outgoing, t.BytesMissing())
 			t.maybeNewConns()
 		}
-	}
-}
-
-// See the order given in Transmission's tr_peerMsgsNew.
-func (cl *Client) sendInitialMessages(conn *connection, torrent *torrent) {
-	if conn.PeerExtensionBytes.SupportsExtended() && cl.extensionBytes.SupportsExtended() {
-		conn.Post(pp.Message{
-			Type:       pp.Extended,
-			ExtendedID: pp.HandshakeExtendedID,
-			ExtendedPayload: func() []byte {
-				msg := pp.ExtendedHandshakeMessage{
-					M: map[pp.ExtensionName]pp.ExtensionNumber{
-						pp.ExtensionNameMetadata: metadataExtendedID,
-					},
-					V:            cl.config.ExtendedHandshakeClientVersion,
-					Reqq:         64, // TODO: Really?
-					YourIp:       pp.CompactIp(conn.remoteAddr.IP),
-					Encryption:   cl.config.HeaderObfuscationPolicy.Preferred || !cl.config.HeaderObfuscationPolicy.RequirePreferred,
-					Port:         cl.incomingPeerPort(),
-					MetadataSize: torrent.metadataSize(),
-					// TODO: We can figured these out specific to the socket
-					// used.
-					Ipv4: pp.CompactIp(cl.config.PublicIp4.To4()),
-					Ipv6: cl.config.PublicIp6.To16(),
-				}
-				if !cl.config.DisablePEX {
-					msg.M[pp.ExtensionNamePex] = pexExtendedID
-				}
-				return bencode.MustMarshal(msg)
-			}(),
-		})
-	}
-
-	if conn.fastEnabled() {
-		if torrent.haveAllPieces() {
-			conn.Post(pp.Message{Type: pp.HaveAll})
-			conn.sentHaves.AddRange(0, bitmap.BitIndex(conn.t.NumPieces()))
-			return
-		} else if !torrent.haveAnyPieces() {
-			conn.Post(pp.Message{Type: pp.HaveNone})
-			conn.sentHaves.Clear()
-			return
-		}
-	}
-
-	conn.PostBitfield()
-
-	if conn.PeerExtensionBytes.SupportsDHT() && cl.extensionBytes.SupportsDHT() && cl.haveDhtServer() {
-		conn.Post(pp.Message{
-			Type: pp.Port,
-			Port: cl.dhtPort(),
-		})
 	}
 }
 

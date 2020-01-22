@@ -1769,8 +1769,8 @@ func (t *Torrent) AddClientPeer(cl *Client) {
 	}())
 }
 
-// All stats that include this Torrent. Useful when we want to increment
-// ConnStats but not for every connection.
+// All stats that include this Torrent. Useful when we want to increment ConnStats but not for every
+// connection.
 func (t *Torrent) allStats(f func(*ConnStats)) {
 	f(&t.stats)
 	f(&t.cl.stats)

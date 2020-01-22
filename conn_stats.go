@@ -34,9 +34,8 @@ type ConnStats struct {
 
 	// Number of pieces data was written to, that subsequently passed verification.
 	PiecesDirtiedGood Count
-	// Number of pieces data was written to, that subsequently failed
-	// verification. Note that a connection may not have been the sole dirtier
-	// of a piece.
+	// Number of pieces data was written to, that subsequently failed verification. Note that a
+	// connection may not have been the sole dirtier of a piece.
 	PiecesDirtiedBad Count
 }
 

@@ -1400,12 +1400,12 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 		return nil
 	}
 
+	c.onDirtiedPiece(pieceIndex(req.Index))
+
 	if t.pieceAllDirty(pieceIndex(req.Index)) {
 		t.queuePieceCheck(pieceIndex(req.Index))
 		t.pendAllChunkSpecs(pieceIndex(req.Index))
 	}
-
-	c.onDirtiedPiece(pieceIndex(req.Index))
 
 	cl.event.Broadcast()
 	// We do this because we've written a chunk, and may change PieceState.Partial.

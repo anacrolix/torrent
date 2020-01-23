@@ -1400,8 +1400,6 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 		return nil
 	}
 
-	// It's important that the piece is potentially queued before we check if
-	// the piece is still wanted, because if it is queued, it won't be wanted.
 	if t.pieceAllDirty(pieceIndex(req.Index)) {
 		t.queuePieceCheck(pieceIndex(req.Index))
 		t.pendAllChunkSpecs(pieceIndex(req.Index))
@@ -1410,6 +1408,7 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 	c.onDirtiedPiece(pieceIndex(req.Index))
 
 	cl.event.Broadcast()
+	// We do this because we've written a chunk, and may change PieceState.Partial.
 	t.publishPieceChange(pieceIndex(req.Index))
 
 	return nil

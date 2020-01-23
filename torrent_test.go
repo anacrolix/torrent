@@ -157,7 +157,7 @@ func TestPieceHashFailed(t *testing.T) {
 	tt.cl.lock()
 	tt.pieces[1]._dirtyChunks.AddRange(0, 3)
 	require.True(t, tt.pieceAllDirty(1))
-	tt.pieceHashed(1, false)
+	tt.pieceHashed(1, false, nil)
 	// Dirty chunks should be cleared so we can try again.
 	require.False(t, tt.pieceAllDirty(1))
 	tt.cl.unlock()

@@ -1404,7 +1404,10 @@ func (c *connection) receiveChunk(msg *pp.Message) error {
 
 	if t.pieceAllDirty(pieceIndex(req.Index)) {
 		t.queuePieceCheck(pieceIndex(req.Index))
-		t.pendAllChunkSpecs(pieceIndex(req.Index))
+		// We don't pend all chunks here anymore because we don't want code dependent on the dirty
+		// chunk status (such as the haveChunk call above) to have to check all the various other
+		// piece states like queued for hash, hashing etc. This does mean that we need to be sure
+		// that chunk pieces are pended at an appropriate time later however.
 	}
 
 	cl.event.Broadcast()

@@ -1532,8 +1532,8 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	return oldMax
 }
 
-func (t *Torrent) pieceHashed(piece pieceIndex, correct bool) {
-	t.logger.Log(log.Fstr("hashed piece %d (passed=%t)", piece, correct).WithValues(debugLogValue))
+func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
+	t.logger.Log(log.Fstr("hashed piece %d (passed=%t)", piece, passed).WithValues(debugLogValue))
 	p := t.piece(piece)
 	p.numVerifies++
 	t.cl.event.Broadcast()
@@ -1543,7 +1543,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, correct bool) {
 
 	// Don't score the first time a piece is hashed, it could be an initial check.
 	if p.storageCompletionOk {
-		if correct {
+		if passed {
 			pieceHashedCorrect.Add(1)
 		} else {
 			log.Fmsg("piece %d failed hash: %d connections contributed", piece, len(p.dirtiers)).AddValues(t, p).Log(t.logger)
@@ -1551,7 +1551,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, correct bool) {
 		}
 	}
 
-	if correct {
+	if passed {
 		if len(p.dirtiers) != 0 {
 			// Don't increment stats above connection-level for every involved connection.
 			t.allStats((*ConnStats).incrementPiecesDirtiedGood)
@@ -1564,14 +1564,17 @@ func (t *Torrent) pieceHashed(piece pieceIndex, correct bool) {
 		if err != nil {
 			t.logger.Printf("%T: error marking piece complete %d: %s", t.storage, piece, err)
 		}
+		t.pendAllChunkSpecs(piece)
 	} else {
-		if len(p.dirtiers) != 0 && p.allChunksDirty() {
+		if len(p.dirtiers) != 0 && p.allChunksDirty() && hashIoErr == nil {
+			// Peers contributed to all the data for this piece hash failure, and the failure was
+			// not due to errors in the storage (such as data being dropped in a cache).
 
 			// Increment Torrent and above stats, and then specific connections.
 			t.allStats((*ConnStats).incrementPiecesDirtiedBad)
 			for c := range p.dirtiers {
 				// Y u do dis peer?!
-				c._stats.incrementPiecesDirtiedBad()
+				c.stats().incrementPiecesDirtiedBad()
 			}
 
 			bannableTouchers := make([]*connection, 0, len(p.dirtiers))
@@ -1698,7 +1701,7 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 	defer t.cl.unlock()
 	p.hashing = false
 	t.updatePiecePriority(index)
-	t.pieceHashed(index, correct)
+	t.pieceHashed(index, correct, copyErr)
 	t.publishPieceChange(index)
 	t.activePieceHashes--
 	t.tryCreateMorePieceHashers()

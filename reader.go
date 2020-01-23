@@ -274,5 +274,5 @@ func (r *reader) Seek(off int64, whence int) (ret int64, err error) {
 }
 
 func (r *reader) log(m log.Msg) {
-	r.t.logger.Log(m)
+	r.t.logger.Log(m.Skip(1))
 }

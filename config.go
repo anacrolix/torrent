@@ -37,6 +37,9 @@ type ClientConfig struct {
 	DisableTrackers bool `long:"disable-trackers"`
 	DisablePEX      bool `long:"disable-pex"`
 
+	// Disables the default Listener and Dialers.
+	NoDefaultConns bool `long:"disable-default-conns"`
+
 	// Don't create a DHT.
 	NoDHT            bool `long:"disable-dht"`
 	DhtStartingNodes dht.StartingNodesGetter

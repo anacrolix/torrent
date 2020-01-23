@@ -13,13 +13,13 @@ import (
 	"golang.org/x/net/proxy"
 )
 
-type dialer interface {
+type Dialer interface {
 	dial(_ context.Context, addr string) (net.Conn, error)
 }
 
 type socket interface {
 	net.Listener
-	dialer
+	Dialer
 }
 
 func getProxyDialer(proxyURL string) (proxy.Dialer, error) {

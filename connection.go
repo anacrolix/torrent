@@ -388,7 +388,7 @@ func (cn *connection) nominalMaxRequests() (ret int) {
 }
 
 // The actual value to use as the maximum outbound requests.
-func (rs requestStrategyThree) nominalMaxRequests(cn requestStrategyConnection) (ret int) {
+func (rs requestStrategyDuplicateRequestTimeout) nominalMaxRequests(cn requestStrategyConnection) (ret int) {
 	expectingTime := int64(cn.totalExpectingTime())
 	if expectingTime == 0 {
 		expectingTime = math.MaxInt64
@@ -413,10 +413,10 @@ func defaultNominalMaxRequests(cn requestStrategyConnection) int {
 		max(64,
 			cn.stats().ChunksReadUseful.Int64()-(cn.stats().ChunksRead.Int64()-cn.stats().ChunksReadUseful.Int64())))
 }
-func (rs requestStrategyOne) nominalMaxRequests(cn requestStrategyConnection) int {
+func (rs requestStrategyFuzzing) nominalMaxRequests(cn requestStrategyConnection) int {
 	return defaultNominalMaxRequests(cn)
 }
-func (rs requestStrategyTwo) nominalMaxRequests(cn requestStrategyConnection) int {
+func (rs requestStrategyFastest) nominalMaxRequests(cn requestStrategyConnection) int {
 	return defaultNominalMaxRequests(cn)
 }
 
@@ -543,7 +543,7 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 	})
 }
 
-func (rs requestStrategyThree) onSentRequest(r request) {
+func (rs requestStrategyDuplicateRequestTimeout) onSentRequest(r request) {
 	rs.lastRequested[r] = time.AfterFunc(rs.duplicateRequestTimeout, func() {
 		rs.timeoutLocker.Lock()
 		delete(rs.lastRequested, r)
@@ -753,7 +753,7 @@ func defaultShouldRequestWithoutBias(cn requestStrategyConnection) bool {
 	return false
 }
 
-func (requestStrategyTwo) shouldRequestWithoutBias(cn requestStrategyConnection) bool {
+func (requestStrategyFastest) shouldRequestWithoutBias(cn requestStrategyConnection) bool {
 	if cn.torrent().numReaders() == 0 {
 		return false
 	}
@@ -766,11 +766,11 @@ func (requestStrategyTwo) shouldRequestWithoutBias(cn requestStrategyConnection)
 	return false
 }
 
-func (requestStrategyOne) shouldRequestWithoutBias(cn requestStrategyConnection) bool {
+func (requestStrategyFuzzing) shouldRequestWithoutBias(cn requestStrategyConnection) bool {
 	return defaultShouldRequestWithoutBias(cn)
 }
 
-func (requestStrategyThree) shouldRequestWithoutBias(cn requestStrategyConnection) bool {
+func (requestStrategyDuplicateRequestTimeout) shouldRequestWithoutBias(cn requestStrategyConnection) bool {
 	return defaultShouldRequestWithoutBias(cn)
 }
 
@@ -780,7 +780,7 @@ func (cn *connection) iterPendingPieces(f func(pieceIndex) bool) bool {
 	}
 	return cn.t.requestStrategy.iterPendingPieces(cn, f)
 }
-func (requestStrategyThree) iterPendingPieces(cn requestStrategyConnection, f func(pieceIndex) bool) bool {
+func (requestStrategyDuplicateRequestTimeout) iterPendingPieces(cn requestStrategyConnection, f func(pieceIndex) bool) bool {
 	return iterUnbiasedPieceRequestOrder(cn, f)
 }
 func defaultIterPendingPieces(rs requestStrategy, cn requestStrategyConnection, f func(pieceIndex) bool) bool {
@@ -792,10 +792,10 @@ func defaultIterPendingPieces(rs requestStrategy, cn requestStrategyConnection, 
 		})
 	}
 }
-func (rs requestStrategyOne) iterPendingPieces(cn requestStrategyConnection, cb func(pieceIndex) bool) bool {
+func (rs requestStrategyFuzzing) iterPendingPieces(cn requestStrategyConnection, cb func(pieceIndex) bool) bool {
 	return defaultIterPendingPieces(rs, cn, cb)
 }
-func (rs requestStrategyTwo) iterPendingPieces(cn requestStrategyConnection, cb func(pieceIndex) bool) bool {
+func (rs requestStrategyFastest) iterPendingPieces(cn requestStrategyConnection, cb func(pieceIndex) bool) bool {
 	return defaultIterPendingPieces(rs, cn, cb)
 }
 
@@ -812,7 +812,7 @@ func (cn *connection) iterPendingRequests(piece pieceIndex, f func(request) bool
 	)
 }
 
-func (rs requestStrategyThree) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
+func (rs requestStrategyDuplicateRequestTimeout) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
 	for i := pp.Integer(0); i < pp.Integer(p.numChunks()); i++ {
 		if p.dirtyChunks().Get(bitmap.BitIndex(i)) {
 			continue
@@ -840,11 +840,11 @@ func defaultIterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) 
 	})
 }
 
-func (rs requestStrategyOne) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
+func (rs requestStrategyFuzzing) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
 	return defaultIterUndirtiedChunks(p, f)
 }
 
-func (rs requestStrategyTwo) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
+func (rs requestStrategyFastest) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
 	return defaultIterUndirtiedChunks(p, f)
 }
 
@@ -870,7 +870,7 @@ func (cn *connection) updatePiecePriority(piece pieceIndex) bool {
 	return cn._pieceRequestOrder.Set(bitmap.BitIndex(piece), prio) || cn.shouldRequestWithoutBias()
 }
 
-func (requestStrategyOne) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
+func (requestStrategyFuzzing) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
 	switch tpp {
 	case PiecePriorityNormal:
 	case PiecePriorityReadahead:
@@ -888,11 +888,11 @@ func defaultPiecePriority(cn requestStrategyConnection, piece pieceIndex, tpp pi
 	return prio
 }
 
-func (requestStrategyTwo) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
+func (requestStrategyFastest) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
 	return defaultPiecePriority(cn, piece, tpp, prio)
 }
 
-func (requestStrategyThree) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
+func (requestStrategyDuplicateRequestTimeout) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
 	return defaultPiecePriority(cn, piece, tpp, prio)
 }
 

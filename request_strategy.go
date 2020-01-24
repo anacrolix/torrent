@@ -65,17 +65,31 @@ type requestStrategyCallbacks interface {
 
 // Favour higher priority pieces with some fuzzing to reduce overlaps and wastage across
 // connections.
-type requestStrategyOne struct {
+type requestStrategyFuzzing struct {
 	requestStrategyDefaults
 }
 
 // The fastest connection downloads strictly in order of priority, while all others adhere to their
 // piece inclinations.
-type requestStrategyTwo struct {
+type requestStrategyFastest struct {
 	requestStrategyDefaults
 }
 
-func (requestStrategyTwo) ShouldRequestWithoutBias(cn requestStrategyConnection) bool {
+func newRequestStrategyMaker(rs requestStrategy) RequestStrategyMaker {
+	return func(requestStrategyCallbacks, sync.Locker) requestStrategy {
+		return rs
+	}
+}
+
+func RequestStrategyFastest() RequestStrategyMaker {
+	return newRequestStrategyMaker(requestStrategyFastest{})
+}
+
+func RequestStrategyFuzzing() RequestStrategyMaker {
+	return newRequestStrategyMaker(requestStrategyFuzzing{})
+}
+
+func (requestStrategyFastest) ShouldRequestWithoutBias(cn requestStrategyConnection) bool {
 	if cn.torrent().numReaders() == 0 {
 		return false
 	}
@@ -90,7 +104,7 @@ func (requestStrategyTwo) ShouldRequestWithoutBias(cn requestStrategyConnection)
 
 // Requests are strictly by piece priority, and not duplicated until duplicateRequestTimeout is
 // reached.
-type requestStrategyThree struct {
+type requestStrategyDuplicateRequestTimeout struct {
 	// How long to avoid duplicating a pending request.
 	duplicateRequestTimeout time.Duration
 
@@ -103,11 +117,11 @@ type requestStrategyThree struct {
 	timeoutLocker sync.Locker
 }
 
-type requestStrategyMaker func(callbacks requestStrategyCallbacks, clientLocker sync.Locker) requestStrategy
+type RequestStrategyMaker func(callbacks requestStrategyCallbacks, clientLocker sync.Locker) requestStrategy
 
-func requestStrategyThreeMaker(duplicateRequestTimeout time.Duration) requestStrategyMaker {
+func RequestStrategyDuplicateRequestTimeout(duplicateRequestTimeout time.Duration) RequestStrategyMaker {
 	return func(callbacks requestStrategyCallbacks, clientLocker sync.Locker) requestStrategy {
-		return requestStrategyThree{
+		return requestStrategyDuplicateRequestTimeout{
 			duplicateRequestTimeout: duplicateRequestTimeout,
 			callbacks:               callbacks,
 			lastRequested:           make(map[request]*time.Timer),
@@ -116,7 +130,7 @@ func requestStrategyThreeMaker(duplicateRequestTimeout time.Duration) requestStr
 	}
 }
 
-func (rs requestStrategyThree) hooks() requestStrategyHooks {
+func (rs requestStrategyDuplicateRequestTimeout) hooks() requestStrategyHooks {
 	return requestStrategyHooks{
 		deletedRequest: func(r request) {
 			if t, ok := rs.lastRequested[r]; ok {
@@ -126,5 +140,4 @@ func (rs requestStrategyThree) hooks() requestStrategyHooks {
 		},
 		sentRequest: rs.onSentRequest,
 	}
-
 }

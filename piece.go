@@ -263,7 +263,7 @@ func (p *Piece) dirtyChunks() bitmap.Bitmap {
 	return p._dirtyChunks
 }
 
-func (rs requestStrategyThree) wouldDuplicateRecent(r request) bool {
+func (rs requestStrategyDuplicateRequestTimeout) wouldDuplicateRecent(r request) bool {
 	// This piece has been requested on another connection, and the duplicate request timer is still
 	// running.
 	_, ok := rs.lastRequested[r]

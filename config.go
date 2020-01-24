@@ -177,7 +177,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		ListenPort:     42069,
 		Logger:         log.Default,
 
-		DefaultRequestStrategy: requestStrategyDuplicateRequestTimeout(5 * time.Second),
+		DefaultRequestStrategy: RequestStrategyDuplicateRequestTimeout(5 * time.Second),
 	}
 	//cc.ConnTracker.SetNoMaxEntries()
 	//cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }

@@ -36,6 +36,15 @@ type requestStrategyConnection interface {
 	chunksReceivedWhileExpecting() int64
 }
 
+type requestStrategyDefaults struct{}
+
+func (requestStrategyDefaults) hooks() requestStrategyHooks {
+	return requestStrategyHooks{
+		sentRequest:    func(request) {},
+		deletedRequest: func(request) {},
+	}
+}
+
 type requestStrategy interface {
 	iterPendingPieces(requestStrategyConnection, func(pieceIndex) bool) bool
 	iterUndirtiedChunks(requestStrategyPiece, func(chunkSpec) bool) bool
@@ -56,11 +65,15 @@ type requestStrategyCallbacks interface {
 
 // Favour higher priority pieces with some fuzzing to reduce overlaps and wastage across
 // connections.
-type requestStrategyOne struct{}
+type requestStrategyOne struct {
+	requestStrategyDefaults
+}
 
 // The fastest connection downloads strictly in order of priority, while all others adhere to their
 // piece inclinations.
-type requestStrategyTwo struct{}
+type requestStrategyTwo struct {
+	requestStrategyDefaults
+}
 
 func (requestStrategyTwo) ShouldRequestWithoutBias(cn requestStrategyConnection) bool {
 	if cn.torrent().numReaders() == 0 {
@@ -114,12 +127,4 @@ func (rs requestStrategyThree) hooks() requestStrategyHooks {
 		sentRequest: rs.onSentRequest,
 	}
 
-}
-
-func (rs requestStrategyOne) hooks() requestStrategyHooks {
-	return requestStrategyHooks{}
-}
-
-func (rs requestStrategyTwo) hooks() requestStrategyHooks {
-	return requestStrategyHooks{}
 }

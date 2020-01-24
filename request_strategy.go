@@ -91,7 +91,7 @@ func RequestStrategyFuzzing() RequestStrategyMaker {
 	return newRequestStrategyMaker(requestStrategyFuzzing{})
 }
 
-func (requestStrategyFastest) ShouldRequestWithoutBias(cn requestStrategyConnection) bool {
+func (requestStrategyFastest) shouldRequestWithoutBias(cn requestStrategyConnection) bool {
 	if cn.torrent().numReaders() == 0 {
 		return false
 	}
@@ -107,6 +107,7 @@ func (requestStrategyFastest) ShouldRequestWithoutBias(cn requestStrategyConnect
 // Requests are strictly by piece priority, and not duplicated until duplicateRequestTimeout is
 // reached.
 type requestStrategyDuplicateRequestTimeout struct {
+	requestStrategyDefaults
 	// How long to avoid duplicating a pending request.
 	duplicateRequestTimeout time.Duration
 
@@ -144,16 +145,8 @@ func (rs requestStrategyDuplicateRequestTimeout) hooks() requestStrategyHooks {
 	}
 }
 
-func defaultPiecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
+func (requestStrategyDefaults) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
 	return prio
-}
-
-func (requestStrategyFastest) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
-	return defaultPiecePriority(cn, piece, tpp, prio)
-}
-
-func (requestStrategyDuplicateRequestTimeout) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
-	return defaultPiecePriority(cn, piece, tpp, prio)
 }
 
 func (rs requestStrategyDuplicateRequestTimeout) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
@@ -172,7 +165,7 @@ func (rs requestStrategyDuplicateRequestTimeout) iterUndirtiedChunks(p requestSt
 	return true
 }
 
-func defaultIterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
+func (requestStrategyDefaults) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
 	chunkIndices := p.dirtyChunks().Copy()
 	chunkIndices.FlipRange(0, bitmap.BitIndex(p.numChunks()))
 	return iter.ForPerm(chunkIndices.Len(), func(i int) bool {
@@ -182,14 +175,6 @@ func defaultIterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) 
 		}
 		return f(p.chunkIndexRequest(pp.Integer(ci)).chunkSpec)
 	})
-}
-
-func (rs requestStrategyFuzzing) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
-	return defaultIterUndirtiedChunks(p, f)
-}
-
-func (rs requestStrategyFastest) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
-	return defaultIterUndirtiedChunks(p, f)
 }
 
 func (requestStrategyFuzzing) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
@@ -225,29 +210,8 @@ func (rs requestStrategyFastest) iterPendingPieces(cn requestStrategyConnection,
 	return defaultIterPendingPieces(rs, cn, cb)
 }
 
-func defaultShouldRequestWithoutBias(cn requestStrategyConnection) bool {
+func (requestStrategyDefaults) shouldRequestWithoutBias(cn requestStrategyConnection) bool {
 	return false
-}
-
-func (requestStrategyFastest) shouldRequestWithoutBias(cn requestStrategyConnection) bool {
-	if cn.torrent().numReaders() == 0 {
-		return false
-	}
-	if cn.torrent().numConns() == 1 {
-		return true
-	}
-	if cn.fastest() {
-		return true
-	}
-	return false
-}
-
-func (requestStrategyFuzzing) shouldRequestWithoutBias(cn requestStrategyConnection) bool {
-	return defaultShouldRequestWithoutBias(cn)
-}
-
-func (requestStrategyDuplicateRequestTimeout) shouldRequestWithoutBias(cn requestStrategyConnection) bool {
-	return defaultShouldRequestWithoutBias(cn)
 }
 
 func (rs requestStrategyDuplicateRequestTimeout) onSentRequest(r request) {
@@ -280,16 +244,10 @@ func (rs requestStrategyDuplicateRequestTimeout) nominalMaxRequests(cn requestSt
 		),
 	))
 }
-func defaultNominalMaxRequests(cn requestStrategyConnection) int {
+func (requestStrategyDefaults) nominalMaxRequests(cn requestStrategyConnection) int {
 	return int(
 		max(64,
 			cn.stats().ChunksReadUseful.Int64()-(cn.stats().ChunksRead.Int64()-cn.stats().ChunksReadUseful.Int64())))
-}
-func (rs requestStrategyFuzzing) nominalMaxRequests(cn requestStrategyConnection) int {
-	return defaultNominalMaxRequests(cn)
-}
-func (rs requestStrategyFastest) nominalMaxRequests(cn requestStrategyConnection) int {
-	return defaultNominalMaxRequests(cn)
 }
 
 func (rs requestStrategyDuplicateRequestTimeout) wouldDuplicateRecent(r request) bool {

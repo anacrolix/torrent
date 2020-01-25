@@ -9,6 +9,7 @@ import (
 	l2 "log"
 	"math/rand"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -559,7 +560,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 				continue
 			}
 
-			// l2.Printf("t(%p) - popped r(%d,%d,%d) - %v\n", cn.t, req.Index, req.Begin, req.Length, err)
+			// l2.Printf("c(%p) - popped r(%d,%d,%d) - %v\n", cn, req.Index, req.Begin, req.Length, err)
 
 			if !cn.SetInterested(true, msg) {
 				filledBuffer = true
@@ -783,6 +784,9 @@ func (cn *connection) stopRequestingPiece(piece pieceIndex) bool {
 // used to pseudorandomly avoid connections always requesting the same pieces
 // and thus wasting effort.
 func (cn *connection) updatePiecePriority(piece pieceIndex) bool {
+	cn.cmu().Lock()
+	defer cn.cmu().Unlock()
+
 	tpp := cn.t.piecePriority(piece)
 	if !cn.PeerHasPiece(piece) {
 		tpp = PiecePriorityNone
@@ -1019,7 +1023,7 @@ func (c *connection) onReadRequest(r request) error {
 		return fmt.Errorf("peer requested piece we don't have: %v", r.Index.Int())
 	}
 
-	// l2.Printf("(%d) c(%p) - RECEIVED REQUEST: r(%d,%d,%d)\n", os.Getpid(), c, r.Index, r.Begin, r.Length)
+	l2.Printf("(%d) c(%p) - RECEIVED REQUEST: r(%d,%d,%d)\n", os.Getpid(), c, r.Index, r.Begin, r.Length)
 
 	// Check this after we know we have the piece, so that the piece length will be known.
 	if r.Begin+r.Length > c.t.pieceLength(pieceIndex(r.Index)) {
@@ -1040,7 +1044,7 @@ func (c *connection) onReadRequest(r request) error {
 // Processes incoming BitTorrent wire-protocol messages. The client lock is held upon entry and
 // exit. Returning will end the connection.
 func (cn *connection) mainReadLoop() (err error) {
-	// defer l2.Printf("(%d) c(%p) mainReadLoop completed\n", os.Getpid(), cn)
+	defer l2.Printf("(%d) c(%p) mainReadLoop completed\n", os.Getpid(), cn)
 	defer cn.updateRequests() // tap the writer so it'll clean itself up.
 	defer func() {
 		if err != nil {
@@ -1067,6 +1071,7 @@ func (cn *connection) mainReadLoop() (err error) {
 		}
 
 		if err != nil {
+			l2.Println("read loop failed", err)
 			return err
 		}
 
@@ -1083,6 +1088,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
+		l2.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s\n", os.Getpid(), cn, msg.Type)
 		switch msg.Type {
 		case pp.Choke:
 			cn.PeerChoked = true
@@ -1244,7 +1250,7 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 
 	req := newRequestFromMessage(msg)
 
-	// l2.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
+	l2.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
 
 	if cn.PeerChoked {
 		metrics.Add("chunks received while choked", 1)

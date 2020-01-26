@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
@@ -229,7 +230,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		}
 		fmt.Fprint(w, "\n")
 		if t.info != nil {
-			fmt.Fprintf(w, "%f%% of %d bytes (%s)", 100*(1-float64(t.bytesMissingLocked())/float64(t.info.TotalLength())), t.info.Length, humanize.Bytes(uint64(t.info.TotalLength())))
+			fmt.Fprintf(w, "%f%% of %d bytes (%s)", 100*(1-float64(t.BytesMissing())/float64(t.info.TotalLength())), t.info.Length, humanize.Bytes(uint64(t.info.TotalLength())))
 		} else {
 			w.WriteString("<missing metainfo>")
 		}
@@ -1189,6 +1190,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, n
 		writeBuffer:     new(bytes.Buffer),
 		remoteAddr:      remoteAddr,
 		network:         network,
+		touched:         roaring.NewBitmap(),
 	}
 	c.logger = cl.logger.WithValues(c,
 		log.Debug, // I want messages to default to debug, and can set it here as it's only used by new code

@@ -766,20 +766,11 @@ func (t *torrent) newMetaInfo() metainfo.MetaInfo {
 func (t *torrent) BytesMissing() int64 {
 	t.rLock()
 	defer t.rUnlock()
-	return t.bytesMissingLocked()
-}
-
-func (t *torrent) bytesMissingLocked() int64 {
 	return t.bytesLeft()
 }
 
 func (t *torrent) bytesLeft() (left int64) {
-	bitmap.Flip(t.piecesM.completed, 0, bitmap.BitIndex(t.numPieces())).IterTyped(func(piece int) bool {
-		p := &t.pieces[piece]
-		left += int64(p.length() - p.numDirtyBytes())
-		return true
-	})
-	return
+	return t.info.Length - ((int64(t.piecesM.unverified.Len()) * int64(t.piecesM.clength)) + (int64(t.piecesM.completed.Len()) * int64(t.info.PieceLength)))
 }
 
 // Bytes left to give in tracker announces.
@@ -989,7 +980,8 @@ func (t *torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
 }
 
 func (t *torrent) pieceAllDirty(piece pieceIndex) bool {
-	return t.pieces[piece].dirtyChunks.Len() == int(t.pieceNumChunks(piece))
+	return !t.piecesM.ChunksMissing(piece)
+	// return t.pieces[piece].dirtyChunks.Len() == int(t.pieceNumChunks(piece))
 }
 
 func (t *torrent) readersChanged() {
@@ -1035,11 +1027,6 @@ func (t *torrent) maybeNewConns() {
 }
 
 func (t *torrent) piecePriorityChanged(piece pieceIndex) {
-	for c := range t.conns {
-		if c.updatePiecePriority(piece) {
-			c.updateRequests()
-		}
-	}
 	t.maybeNewConns()
 	t.publishPieceChange(piece)
 }
@@ -1316,6 +1303,14 @@ func (t *torrent) SetInfoBytes(b []byte) (err error) {
 	return t.setInfoBytes(b)
 }
 
+func (t *torrent) dropConnection(c *connection) {
+	if t.deleteConnection(c) {
+		t.openNewConns()
+	}
+
+	t.event.Broadcast()
+}
+
 // Returns true if connection is removed from torrent.Conns.
 func (t *torrent) deleteConnection(c *connection) (ret bool) {
 	c.Close()
@@ -1339,15 +1334,6 @@ func (t *torrent) assertNoPendingRequests() {
 		}
 		panic(outstanding)
 	}
-}
-
-func (t *torrent) dropConnection(c *connection) {
-	c.Close()
-	if t.deleteConnection(c) {
-		t.openNewConns()
-	}
-
-	t.event.Broadcast()
 }
 
 func (t *torrent) wantPeers() bool {
@@ -1600,8 +1586,9 @@ func (t *torrent) reconcileHandshakeStats(c *connection) {
 
 // Returns true if the connection is added.
 func (t *torrent) addConnection(c *connection) (err error) {
-	t.lock()
-	defer t.unlock()
+	var (
+		dropping []*connection
+	)
 
 	defer func() {
 		if err == nil {
@@ -1610,8 +1597,11 @@ func (t *torrent) addConnection(c *connection) (err error) {
 	}()
 
 	if t.closed.IsSet() {
-		return errors.New("torrent closed 2")
+		return errors.New("torrent closed")
 	}
+
+	t.lock()
+	defer t.unlock()
 
 	for c0 := range t.conns {
 		if c.PeerID != c0.PeerID {
@@ -1623,8 +1613,7 @@ func (t *torrent) addConnection(c *connection) (err error) {
 		}
 
 		if left, ok := c.hasPreferredNetworkOver(c0); ok && left {
-			c0.Close()
-			t.deleteConnection(c0)
+			dropping = append(dropping, c0)
 		} else {
 			return errors.New("existing connection preferred")
 		}
@@ -1635,14 +1624,18 @@ func (t *torrent) addConnection(c *connection) (err error) {
 		if c == nil {
 			return errors.New("don't want conns")
 		}
-		c.Close()
-		t.deleteConnection(c)
+
+		dropping = append(dropping, c)
 	}
 
-	if len(t.conns) >= t.maxEstablishedConns {
-		panic(len(t.conns))
-	}
 	t.conns[c] = struct{}{}
+
+	t.unlock()
+	defer t.lock()
+
+	for _, d := range dropping {
+		t.dropConnection(d)
+	}
 
 	return nil
 }
@@ -1660,11 +1653,11 @@ func (t *torrent) wantConns() bool {
 		return false
 	}
 
-	if len(t.conns) < t.maxEstablishedConns {
-		return true
+	if len(t.conns) >= t.maxEstablishedConns {
+		return false
 	}
 
-	return t.worstBadConn() != nil
+	return true
 }
 
 func (t *torrent) SetMaxEstablishedConns(max int) (oldMax int) {
@@ -1683,6 +1676,7 @@ func (t *torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 func (t *torrent) pieceHashed(piece pieceIndex, failure error) {
 	correct := failure == nil
 	t.logger.Log(log.Fstr("hashed piece %d (passed=%t)", piece, correct).WithValues(debugLogValue))
+
 	p := t.piece(piece)
 	p.numVerifies++
 	t.event.Broadcast()
@@ -1716,6 +1710,8 @@ func (t *torrent) pieceHashed(piece pieceIndex, failure error) {
 			t.piecesM.ChunksPend(piece)
 			t.piecesM.ChunksRelease(piece)
 			t.logger.Printf("%T: error marking piece complete %d: %s", t.storage, piece, err)
+		} else {
+			t.piecesM.ChunksComplete(piece)
 		}
 	} else {
 		t.piecesM.ChunksPend(piece)
@@ -1741,7 +1737,8 @@ func (t *torrent) cancelRequestsForPiece(piece pieceIndex) {
 func (t *torrent) onPieceCompleted(piece pieceIndex) {
 	t.pendAllChunkSpecs(piece)
 	t.cancelRequestsForPiece(piece)
-
+	t.rLock()
+	defer t.rUnlock()
 	for conn := range t.conns {
 		conn.Have(piece)
 	}
@@ -1755,18 +1752,6 @@ func (t *torrent) onIncompletePiece(piece pieceIndex) {
 
 	if !t.wantPieceIndex(piece) {
 		return
-	}
-
-	// We could drop any connections that we told we have a piece that we
-	// don't here. But there's a test failure, and it seems clients don't care
-	// if you request pieces that you already claim to have. Pruning bad
-	// connections might just remove any connections that aren't treating us
-	// favourably anyway.
-
-	for conn := range t.conns {
-		if conn.PeerHasPiece(piece) {
-			conn.updateRequests()
-		}
 	}
 }
 

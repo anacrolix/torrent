@@ -137,6 +137,14 @@ func (p *Piece) waitNoPendingWrites() {
 }
 
 func (p *Piece) chunkIndexDirty(chunk pp.Integer) bool {
+	if p.dirtyChunks.IsEmpty() {
+		return false
+	}
+
+	if p.dirtyChunks.Len() == 0 {
+		return false
+	}
+
 	return p.dirtyChunks.Contains(bitmap.BitIndex(chunk))
 }
 

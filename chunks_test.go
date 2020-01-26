@@ -175,6 +175,9 @@ func TestChunkLength(t *testing.T) {
 	assert.Equal(t, int64(5), chunkLength(13, 0, 5, 10, false))
 	assert.Equal(t, int64(5), chunkLength(13, 1, 5, 10, false))
 	assert.Equal(t, int64(3), chunkLength(13, 2, 5, 10, true))
+
+	assert.Equal(t, int64(16384), chunkLength(687865856, 31, 524288, 16384, false))
+	assert.Equal(t, int64(16384), chunkLength(687865856, 41983, 524288, 16384, true))
 }
 
 func TestChunksRequests(t *testing.T) {

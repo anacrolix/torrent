@@ -2,16 +2,21 @@ package torrent
 
 import (
 	"fmt"
+	"log"
 	"math"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/prioritybitmap"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/pkg/errors"
+
+	"github.com/anacrolix/torrent/internal/x/bitmapx"
 )
 
 const (
@@ -67,10 +72,15 @@ func chunkLength(total, cidx, plength, clength int64, maximum bool) int64 {
 	}
 
 	if maximum {
-		return (total % plength) - ((cidx % chunksper) * maxlength)
+		max := total % plength
+		if max == 0 {
+			max = plength
+		}
+
+		return max - ((cidx % chunksper) * maxlength)
 	}
 
-	if cidx%chunksper == chunksper-1 && clength != plength {
+	if cidx%chunksper == chunksper-1 && plength%clength > 0 {
 		return plength % clength
 	}
 
@@ -89,6 +99,7 @@ func newChunks(clength int, m *metainfo.Info) *chunks {
 		clength:     int64(clength),
 		gracePeriod: time.Minute,
 		outstanding: make(map[uint64]request),
+		failed:      roaring.NewBitmap(),
 	}
 
 	// log.Printf("%p - LENGTH %d NUMCHUNKS %d - CHUNK LENGTH %d - PIECE LEGNTH %d\n", p, p.meta.Length, p.cmaximum, p.clength, p.meta.PieceLength)
@@ -120,7 +131,7 @@ type chunks struct {
 
 	// cache of chunks that failed the digest process. this bitmap is used to force
 	// connections to kill themselves when a digest fails validation.
-	failed bitmap.Bitmap
+	failed *roaring.Bitmap
 
 	// The last time we requested a chunk. Deleting the request from any
 	// connection will clear this value.
@@ -222,8 +233,14 @@ func (t *chunks) ChunksAdjust(pid int, prio int) (changed bool) {
 	}
 
 	for _, c := range t.chunks(pid) {
-		oprio, _ := t.missing.GetPriority(c)
+		// oprio, _ := t.missing.GetPriority(c)
+		// tmp := oprio != prio && t.missing.Set(c, prio)
+		oprio := -1 * c
 		tmp := oprio != prio && t.missing.Set(c, prio)
+		if tmp {
+			t.unverified.Remove(c)
+		}
+
 		// log.Output(2, fmt.Sprintf("%p CHUNK PRIORITY ADJUSTED: %d %s prios %d %d %t %d\n", t, c, fmt.Sprintf("(%d)", pid), oprio, prio, tmp, t.missing.Len()))
 		changed = changed || tmp
 	}
@@ -237,7 +254,7 @@ func (t *chunks) ChunksPend(idx int) (changed bool) {
 	defer t.mu.Unlock()
 	// log.Output(2, fmt.Sprintf("%p ChunksPend %v\n", t, t.chunks(idx)))
 	for _, c := range t.chunksRequests(idx) {
-		tmp := t.pend(c, c.Priority)
+		tmp := t.pend(c, math.MaxInt64)
 		changed = changed || tmp
 	}
 
@@ -363,20 +380,6 @@ func (t *chunks) Recover() {
 		// log.Println("reaping completed")
 		atomic.CompareAndSwapInt64(&t.reapers, 1, 0)
 	}
-	// TODO: this exposes a bug. basically the mutex is unlocked before its locked.
-	// might be a bug in the golang compiler.
-	// if i := atomic.AddInt64(&t.reapers, 1); i == 5 {
-	// 	go func() {
-	// 		for {
-	// 			t.mu.Lock()
-	// 			t.reap(100 * time.Millisecond)
-	// 			t.mu.Unlock()
-	// 			if i := atomic.AddInt64(&t.reapers, -1); i < 0 {
-	// 				return
-	// 			}
-	// 		}
-	// 	}()
-	// }
 }
 
 func (t *chunks) reap(window time.Duration) {
@@ -390,9 +393,9 @@ func (t *chunks) reap(window time.Duration) {
 	for _, req := range t.outstanding {
 		scanned++
 
-		if req.Reserved.Add(t.gracePeriod).Before(ts) {
-			t.pend(req, req.Priority)
-			delete(t.outstanding, req.digest())
+		if req.Reserved.Add(t.gracePeriod).Add(time.Duration(rand.Intn(int(t.gracePeriod) / 4))).Before(ts) {
+			t.pend(req, math.MaxInt64)
+			t.release(req)
 			recovered++
 		}
 
@@ -403,7 +406,7 @@ func (t *chunks) reap(window time.Duration) {
 	}
 
 	// if recovered > 0 {
-	// log.Println(recovered, "/", scanned, "recovered in", time.Since(ts))
+	// 	log.Println(recovered, "/", scanned, "recovered in", time.Since(ts), t.gracePeriod)
 	// }
 }
 
@@ -426,10 +429,10 @@ func (t *chunks) pend(r request, prio int) (changed bool) {
 	t.unverified.Remove(cidx)
 
 	// remove from completed.
-	t.completed.Remove(int(r.Index))
+	// t.completed.Remove(int(r.Index))
 
 	// d := r.digest()
-	// log.Output(3, fmt.Sprintf("c(%p) pending request: d(%20d - %d) r(%d,%d,%d) u(%t)", t, d, cidx, r.Index, r.Begin, r.Length, changed))
+	// log.Output(3, fmt.Sprintf("c(%p) pending request: d(%20d - %d) r(%d,%d,%d) (%d) u(%t)", t, d, cidx, r.Index, r.Begin, r.Length, prio, changed))
 	return changed
 }
 
@@ -442,22 +445,22 @@ func (t *chunks) Missing() int {
 }
 
 // Failed returns the union of the current failures and the provided completed mapping.
-func (t *chunks) Failed(completed bitmap.Bitmap) bitmap.Bitmap {
+func (t *chunks) Failed(touched *roaring.Bitmap) *roaring.Bitmap {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	if t.failed.IsEmpty() {
-		return bitmap.Bitmap{}
+	if touched.IsEmpty() {
+		return bitmapx.Lazy(nil)
 	}
 
-	union := t.failed.Copy()
-	union.Union(completed)
+	if t.failed.IsEmpty() {
+		return bitmapx.Lazy(nil)
+	}
 
-	// TODO: using roaring bitmap for XOR
-	union.IterTyped(func(i int) bool {
-		t.failed.Remove(i)
-		return true
-	})
+	union := t.failed.Clone()
+	union.And(touched)
+
+	t.failed.AndNot(union)
 
 	return union
 }
@@ -479,7 +482,6 @@ func (t *chunks) Pend(req request, prio int) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.Recover()
-
 	return t.pend(req, prio)
 }
 
@@ -526,10 +528,12 @@ func (t *chunks) Complete(pid int) (changed bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// log.Output(2, fmt.Sprintf("c(%p) marked completed: i(%d)\n", t, pid))
+	chunks := t.chunks(pid)
+	log.Output(2, fmt.Sprintf("c(%p) marked completed: i(%d) chunks(%d)\n", t, pid, len(chunks)))
 
-	for _, cid := range t.chunks(pid) {
-		tmp := t.missing.Remove(cid) || t.unverified.Remove(cid)
+	for _, cid := range chunks {
+		tmp := t.missing.Remove(cid)
+		tmp = t.unverified.Remove(cid) || tmp
 		changed = changed || tmp
 	}
 
@@ -543,11 +547,7 @@ func (t *chunks) ChunksFailed(pid int) (changed bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// log.Output(2, fmt.Sprintf("c(%p) marked failed: i(%d)\n", t, pid))
-
-	for _, cid := range t.chunks(pid) {
-		t.failed.Add(cid)
-	}
+	t.failed.Add(uint32(pid))
 
 	return changed
 }

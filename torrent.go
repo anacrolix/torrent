@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"text/tabwriter"
 	"time"
 	"unsafe"
@@ -76,6 +77,8 @@ type torrent struct {
 
 	lcount uint64
 	ucount uint64
+
+	numReceivedConns int64
 
 	cln    *Client
 	config *ClientConfig
@@ -301,12 +304,6 @@ func (t *torrent) setChunkSize(size pp.Integer) {
 }
 
 func (t *torrent) pieceComplete(piece pieceIndex) bool {
-	defer func() {
-		if r := recover(); r != nil {
-			l2.Println("RECOVERING piece complete", t.piecesM)
-		}
-	}()
-
 	if t.piecesM == nil {
 		return false
 	}
@@ -315,7 +312,7 @@ func (t *torrent) pieceComplete(piece pieceIndex) bool {
 		return false
 	}
 
-	return t.piecesM.completed.Contains(piece)
+	return t.piecesM.ChunksComplete(piece)
 }
 
 func (t *torrent) pieceCompleteUncached(piece pieceIndex) storage.Completion {
@@ -363,9 +360,9 @@ func (t *torrent) addPeer(p Peer) {
 	}
 
 	t.openNewConns()
+
 	for t.peers.Len() > t.config.TorrentPeersHighWater {
-		_, ok := t.peers.DeleteMin()
-		if ok {
+		if _, ok := t.peers.DeleteMin(); ok {
 			metrics.Add("excess reserve peers discarded", 1)
 		}
 	}
@@ -430,10 +427,6 @@ func (t *torrent) makePieces() {
 		piece.index = pieceIndex(i)
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		piece.hash = (*metainfo.Hash)(unsafe.Pointer(&hash[0]))
-		files := *t.files
-		beginFile := pieceFirstFileIndex(piece.torrentBeginOffset(), files)
-		endFile := pieceEndFileIndex(piece.torrentEndOffset(), files)
-		piece.files = files[beginFile:endFile]
 	}
 }
 
@@ -893,8 +886,8 @@ func (t *torrent) haveChunk(r request) (ret bool) {
 	if t.pieceComplete(pieceIndex(r.Index)) {
 		return true
 	}
-	p := &t.pieces[r.Index]
-	return !p.pendingChunk(r.chunkSpec, t.chunkSize)
+
+	return t.piecesM.Available(r)
 }
 
 func chunkIndex(cs chunkSpec, chunkSize pp.Integer) int {
@@ -1050,7 +1043,7 @@ func (t *torrent) updatePiecePriority(piece pieceIndex) {
 		// )
 	}
 
-	if !t.piecesM.ChunksAdjust(piece, newPrio.BitmapPriority()) {
+	if !t.piecesM.ChunksAdjust(piece) {
 		// l2.Output(2, fmt.Sprintf("chunks not adjusted: %d - %d\n", piece, piece))
 		return
 	}
@@ -1118,29 +1111,31 @@ func (t *torrent) pendRequest(req request) {
 func (t *torrent) pieceCompletionChanged(piece pieceIndex) {
 	if t.pieceComplete(piece) {
 		t.onPieceCompleted(piece)
-		t.tickleReaders()
 	} else {
 		t.onIncompletePiece(piece)
 	}
 }
 
-func (t *torrent) numReceivedConns() (ret int) {
-	for c := range t.conns {
-		if c.Discovery == peerSourceIncoming {
-			ret++
-		}
+func (t *torrent) incrementReceivedConns(c *connection, delta int64) {
+	if c.Discovery == peerSourceIncoming {
+		atomic.AddInt64(&t.numReceivedConns, delta)
 	}
-	return
 }
 
 func (t *torrent) maxHalfOpen() int {
 	// Note that if we somehow exceed the maximum established conns, we want
 	// the negative value to have an effect.
 	establishedHeadroom := int64(t.maxEstablishedConns - len(t.conns))
-	extraIncoming := int64(t.numReceivedConns() - t.maxEstablishedConns/2)
+	extraIncoming := int64(t.numReceivedConns - int64(t.maxEstablishedConns/2))
 	// We want to allow some experimentation with new peers, and to try to
 	// upset an oversupply of received connections.
 	return int(min(max(5, extraIncoming)+establishedHeadroom, int64(t.config.HalfOpenConnsPerTorrent)))
+}
+
+func (t *torrent) lockedOpenNewConns() {
+	t.lock()
+	defer t.unlock()
+	t.openNewConns()
 }
 
 func (t *torrent) openNewConns() {
@@ -1303,7 +1298,7 @@ func (t *torrent) SetInfoBytes(b []byte) (err error) {
 
 func (t *torrent) dropConnection(c *connection) {
 	if t.deleteConnection(c) {
-		t.openNewConns()
+		t.lockedOpenNewConns()
 	}
 
 	t.event.Broadcast()
@@ -1689,7 +1684,7 @@ func (t *torrent) pieceHashed(piece pieceIndex, failure error) error {
 		if correct {
 			pieceHashedCorrect.Add(1)
 		} else {
-			log.Fmsg("piece %d failed hash", piece).AddValues(t, p).Log(t.logger)
+			log.Fmsg("piece %d failed hash: %v", piece, failure).AddValues(t, p).Log(t.logger)
 			pieceHashedNotCorrect.Add(1)
 		}
 	}

@@ -43,7 +43,7 @@ type Piece struct {
 	hash  *metainfo.Hash
 	t     *torrent
 	index pieceIndex
-	files []*File
+
 	// Chunks we've written to since the last check. The chunk offset and
 	// length can be determined by the request chunkSize in use.
 	dirtyChunks bitmap.Bitmap
@@ -229,9 +229,7 @@ func (p *Piece) uncachedPriority() (ret piecePriority) {
 	if p.t.pieceComplete(p.index) || p.t.piecesM.ChunksComplete(p.index) {
 		return PiecePriorityNone
 	}
-	for _, f := range p.files {
-		ret.Raise(f.prio)
-	}
+
 	if p.t.readerNowPieces.Contains(int(p.index)) {
 		ret.Raise(PiecePriorityNow)
 	}

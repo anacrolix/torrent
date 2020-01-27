@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"io"
 	l2 "log"
-	"math"
 	"math/rand"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -128,6 +128,8 @@ type connection struct {
 	writerCond  sync.Cond
 
 	logger log.Logger
+
+	drop chan error
 }
 
 func (cn *connection) updateExpectingChunks() {
@@ -332,6 +334,9 @@ func (cn *connection) Close() {
 		return
 	}
 
+	if cn.t != nil {
+		cn.t.incrementReceivedConns(cn, -1)
+	}
 	cn.updateRequests()
 	cn.discardPieceInclination()
 	cn.pieceRequestOrder.Clear()
@@ -403,8 +408,8 @@ func (cn *connection) nominalMaxRequests() (ret int) {
 	return int(clamp(
 		1,
 		int64(cn.PeerMaxRequests),
-		max(64,
-			cn.stats.ChunksReadUseful.Int64()-(cn.stats.ChunksRead.Int64()-cn.stats.ChunksReadUseful.Int64()))))
+		max(64, cn.stats.ChunksReadUseful.Int64()-(cn.stats.ChunksRead.Int64()-cn.stats.ChunksReadUseful.Int64())),
+	))
 }
 
 func (cn *connection) totalExpectingTime() (ret time.Duration) {
@@ -534,19 +539,18 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		// l2.Printf("(%d) - c(%p) not unchoking allowed(%t) - missing (%t) - outstanding (%d)\n", os.Getpid(), cn, cn.uploadAllowed(), cn.t.piecesM.Missing() == 0, len(cn.requests))
 	}
 
-	// // if we're choked and not allowed to fast track any chunks then there is nothing
-	// // to do.
-	// if cn.PeerChoked && cn.peerAllowedFast.IsEmpty() {
-	// 	l2.Print
-	// 	return
-	// }
+	// if we're choked and not allowed to fast track any chunks then there is nothing
+	// to do.
+	if cn.PeerChoked && cn.peerAllowedFast.IsEmpty() {
+		return
+	}
 
 	// check if we are actually missing pieces before executing this code.
 	if len(cn.requests) > cn.requestsLowWater || cn.t.piecesM.Missing() == 0 {
 		var deleted int
 
 		// release timed out chunks
-		if deleted = cn.deleteTimedout(30 * time.Second); deleted == 0 {
+		if deleted = cn.deleteTimedout((cn.t.piecesM.gracePeriod / 4) + time.Second); deleted == 0 {
 			// l2.Printf("c(%p) skipping chunk requests - space unavailable(%d > %d) missing(%t)\n", cn, len(cn.requests), cn.requestsLowWater, cn.t.piecesM.Missing() == 0)
 			return
 		}
@@ -560,6 +564,10 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	available := bmap(&cn.peerPieces)
 	if cn.peerSentHaveAll {
 		available = everybmap{}
+	}
+
+	if cn.PeerChoked && !cn.peerAllowedFast.IsEmpty() {
+		available = bmap(&cn.peerAllowedFast)
 	}
 
 	max := cn.nominalMaxRequests() - len(cn.requests)
@@ -592,7 +600,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 
 		// Choking is looked at here because our interest is dependent
 		// on whether we'd make requests in its absence.
-		if cn.PeerChoked && !cn.peerAllowedFast.Get(bitmap.BitIndex(req.Index)) {
+		if cn.PeerChoked && !cn.peerAllowedFast.Remove(bitmap.BitIndex(req.Index)) {
 			break
 		} else if cn.PeerChoked {
 			metrics.Add("allowed fast requests sent", 1)
@@ -606,11 +614,8 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	// advance to just the unused chunks.
 	if len(reqs) > 0 {
 		reqs = reqs[max+1:]
-	}
-
-	// release any unused requests back to the queue.
-	for _, req = range reqs {
-		cn.t.piecesM.Pend(req, req.Priority)
+		// release any unused requests back to the queue.
+		cn.t.piecesM.Pend(reqs...)
 	}
 
 	// If we didn't completely top up the requests, we shouldn't mark
@@ -628,6 +633,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	// cn.t.logger.Printf("c(%p) writer initiated\n", cn)
 	// defer cn.t.logger.Printf("c(%p) writer completed\n", cn)
 	defer cn.deleteAllRequests()
+	defer l2.Printf("(%d) c(%p) - WRITER: remaining(%d) - unverified(%d) - failed(%d) - outstanding(%d) - completed(%d)\n", os.Getpid(), cn, cn.t.piecesM.Missing(), cn.t.piecesM.unverified.Len(), cn.t.piecesM.failed.GetCardinality(), len(cn.requests), cn.t.piecesM.completed.Len())
 
 	var (
 		lastWrite      time.Time = time.Now()
@@ -656,8 +662,11 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		}
 
 		if !cn.lastMessageReceived.IsZero() && time.Since(cn.lastMessageReceived) > 2*keepAliveTimeout {
-			l2.Println("killing connection", cn.remoteIp(), time.Since(cn.lastMessageReceived), cn.lastMessageReceived)
-			cn.Drop()
+			select {
+			case cn.drop <- fmt.Errorf("killing connection %v %v %v", cn.remoteIp(), time.Since(cn.lastMessageReceived), cn.lastMessageReceived):
+				cn.Close()
+			default:
+			}
 			return
 		}
 
@@ -691,6 +700,8 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 
 		// reset the attempts
 		attempts = 0
+
+		// l2.Printf("(%d) c(%p) - WRITER: attempt(%d) - remaining(%d) - unverified(%d) - failed(%d) - outstanding(%d) - completed(%d)\n", os.Getpid(), cn, attempts, cn.t.piecesM.Missing(), cn.t.piecesM.unverified.Len(), cn.t.piecesM.failed.GetCardinality(), len(cn.requests), cn.t.piecesM.completed.Len())
 
 		cn.cmu().Lock()
 		buf := cn.writeBuffer.Bytes()
@@ -736,9 +747,11 @@ func (cn *connection) checkFailures() {
 	}
 
 	if cn.stats.PiecesDirtiedBad.Int64() > 10 {
-		l2.Println("bad connection detected - TODO: implement bad peer blacklisting")
-		cn.Drop()
-		cn.t.cln.banPeerIP(cn.remoteAddr.IP)
+		select {
+		case cn.drop <- banned{IP: cn.remoteAddr.IP}:
+			cn.Close()
+		default:
+		}
 	}
 }
 
@@ -1103,6 +1116,13 @@ func (cn *connection) mainReadLoop() (err error) {
 		var msg pp.Message
 		err = decoder.Decode(&msg)
 
+		// check for any error signals from the writer.
+		select {
+		case err = <-cn.drop:
+			return err
+		default:
+		}
+
 		if t.closed.IsSet() || cn.closed.IsSet() || err == io.EOF {
 			return nil
 		}
@@ -1192,7 +1212,7 @@ func (cn *connection) mainReadLoop() (err error) {
 		case pp.Reject:
 			req := newRequestFromMessage(&msg)
 			cn.deleteRequest(req)
-			cn.t.piecesM.Pend(req, math.MaxInt64)
+			cn.t.piecesM.Pend(req)
 		case pp.AllowedFast:
 			metrics.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(cn, debugLogValue).Log(cn.t.logger)
@@ -1274,7 +1294,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		var peers Peers
 		peers.AppendFromPex(pexMsg.Added6, pexMsg.Added6Flags)
 		peers.AppendFromPex(pexMsg.Added, pexMsg.AddedFlags)
-		t.addPeers(peers)
+		t.AddPeers(peers)
 		return nil
 	default:
 		return fmt.Errorf("unexpected extended message ID: %v", id)
@@ -1467,10 +1487,6 @@ another:
 	return cn.Choke(msg)
 }
 
-func (cn *connection) Drop() {
-	cn.t.dropConnection(cn)
-}
-
 func (cn *connection) netGoodPiecesDirtied() int64 {
 	return cn.stats.PiecesDirtiedGood.Int64() - cn.stats.PiecesDirtiedBad.Int64()
 }
@@ -1484,17 +1500,21 @@ func (cn *connection) numLocalRequests() int {
 }
 
 // delete requests that were requested beyond the timeout.
-func (cn *connection) deleteTimedout(grace time.Duration) (deleted int) {
+func (cn *connection) deleteTimedout(grace time.Duration) int {
 	ts := time.Now()
-
+	deleted := make([]request, 0, 100)
 	for _, req := range cn.dupRequests() {
 		if req.Reserved.Add(grace).Before(ts) && cn.deleteRequest(req) {
-			cn.t.piecesM.Pend(req, req.Priority)
-			deleted++
+			deleted = append(deleted, req)
+		}
+
+		if time.Since(ts) > 100*time.Millisecond {
+			break
 		}
 	}
 
-	return deleted
+	cn.t.piecesM.Pend(deleted...)
+	return len(deleted)
 }
 
 func (cn *connection) deleteRequest(r request) bool {
@@ -1523,10 +1543,11 @@ func (cn *connection) dupRequests() (requests []request) {
 }
 
 func (cn *connection) deleteAllRequests() {
-	for _, r := range cn.dupRequests() {
+	reqs := cn.dupRequests()
+	for _, r := range reqs {
 		cn.deleteRequest(r)
-		cn.t.piecesM.Pend(r, r.Priority)
 	}
+	cn.t.piecesM.Pend(reqs...)
 }
 
 func (cn *connection) postCancel(r request) bool {
@@ -1576,6 +1597,8 @@ func (cn *connection) setTorrent(t *torrent) {
 	}
 	cn.t = t
 	cn.logger.Printf("torrent=%v", t)
+
+	t.incrementReceivedConns(cn, 1)
 	t.reconcileHandshakeStats(cn)
 }
 

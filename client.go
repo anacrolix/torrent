@@ -711,7 +711,8 @@ func (cl *Client) noLongerHalfOpen(t *torrent, addr string) {
 		panic("invariant broken")
 	}
 	delete(t.halfOpen, addr)
-	t.openNewConns()
+
+	t.lockedOpenNewConns()
 }
 
 // Performs initiator handshakes and returns a connection. Returns nil
@@ -979,8 +980,19 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) {
 	c.sendInitialMessages(cl, t)
 	go c.writer(time.Minute)
 	if err := c.mainReadLoop(); err != nil {
+		var (
+			b banned
+		)
+
+		if errors.As(err, &b) {
+			cl.banPeerIP(b.IP)
+		}
+
+		cl.logger.Printf("dropping connection: %v", err)
+		t.dropConnection(c)
+
 		if cl.config.Debug {
-			cl.logger.Printf("error during connection main read loop: %s", err)
+			cl.logger.Printf("error during connection main read loop: %v", err)
 		}
 	}
 }
@@ -1056,10 +1068,11 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
 
 		networkingEnabled:       true,
-		duplicateRequestTimeout: 1 * time.Second,
+		duplicateRequestTimeout: 2 * time.Minute,
 
 		piecesM: newChunks(csize, &metainfo.Info{}),
 	}
+
 	t.digests = newDigests(
 		func(idx int) *Piece { return t.piece(idx) },
 		func(idx int, cause error) {
@@ -1192,6 +1205,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, n
 		network:         network,
 		touched:         roaring.NewBitmap(),
 		PeerRequests:    make(map[request]struct{}, maxRequests),
+		drop:            make(chan error, 1),
 	}
 	c.logger = cl.logger.WithValues(c,
 		log.Debug, // I want messages to default to debug, and can set it here as it's only used by new code

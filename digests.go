@@ -76,9 +76,9 @@ func (t *digests) check(idx int) {
 
 func (t *digests) compute(p *Piece) (ret metainfo.Hash, err error) {
 	c := sha1.New()
-	pl := int64(p.length())
-
 	p.waitNoPendingWrites()
+
+	pl := int64(p.length())
 
 	n, err := io.Copy(c, io.NewSectionReader(p.Storage(), 0, pl))
 	if err != nil {

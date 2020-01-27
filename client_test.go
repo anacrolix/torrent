@@ -23,7 +23,6 @@ import (
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/filecache"
 
-	// "github.com/anacrolix/log"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/iplist"
@@ -246,6 +245,9 @@ func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
 }
 
 func TestClientTransferVarious(t *testing.T) {
+	// defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
+	// defer profile.Start(profile.TraceProfile, profile.ProfilePath(".")).Stop()
+
 	count := 0
 	// Leecher storage
 	for _, ls := range []storageFactory{

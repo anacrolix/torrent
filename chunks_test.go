@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -263,26 +264,36 @@ func TestChunksFailed(t *testing.T) {
 	require.NoError(t, err)
 
 	c := quickpopulate(newChunks(1, &info))
+	touched := roaring.NewBitmap()
+
 	require.Equal(t, 13, c.Missing())
-	assert.True(t, false, "TODO")
+
+	reqs, err := c.Pop(1, everybmap{})
+	require.NoError(t, err)
+	for _, req := range reqs {
+		touched.Add(uint32(req.Index))
+		c.ChunksFailed(int(req.Index))
+	}
+
+	union := c.Failed(touched)
+	assert.Equal(t, uint64(1), union.GetCardinality())
 }
 
 func TestChunksPop(t *testing.T) {
 	info, err := fromFile("testdata/bootstrap.dat.torrent")
 	require.NoError(t, err)
 	p := quickpopulate(newChunks(int(info.PieceLength), &info))
-	available := filledbmap(p.missing.Len())
 
-	reqs, err := p.Pop(1, available)
+	reqs, err := p.Pop(1, everybmap{})
+	require.NoError(t, err)
 	for _, req := range reqs {
-		require.NoError(t, err)
 		require.Equal(t, 0, int(req.Index))
 		require.Equal(t, true, req.Reserved.Before(time.Now()))
 	}
 
-	reqs, err = p.Pop(1, available)
+	reqs, err = p.Pop(1, everybmap{})
+	require.NoError(t, err)
 	for _, req := range reqs {
-		require.NoError(t, err)
 		require.Equal(t, 1, int(req.Index))
 		require.Equal(t, true, req.Reserved.Before(time.Now()))
 	}
@@ -292,14 +303,14 @@ func TestChunksGraceWindow(t *testing.T) {
 	info, err := fromFile("testdata/bootstrap.dat.torrent")
 	require.NoError(t, err)
 	p := quickpopulate(newChunks(defaultChunk, &info))
-	available := filledbmap(p.missing.Len())
+
 	// adjust grace period to be negative to force immediate
 	// recovering of outstanding requests.
 	p.gracePeriod = -1 * time.Second
 
 	total := p.missing.Len()
 	for i := 0; i < 10; i++ {
-		_, err = p.Pop(1, available)
+		_, err = p.Pop(1, everybmap{})
 		require.NoError(t, err)
 		p.reap(0)
 		require.Equal(t, total, p.missing.Len())
@@ -314,7 +325,7 @@ func TestChunksComplete(t *testing.T) {
 	require.True(t, p.ChunksMissing(0))
 
 	available := filledbmap(1)
-	for rs, err := p.Pop(100, available); err == nil; rs, err = p.Pop(100, available) {
+	for rs, err := p.Pop(1, available); err == nil; rs, err = p.Pop(1, available) {
 		for _, r := range rs {
 			require.NoError(t, p.Verify(r))
 		}

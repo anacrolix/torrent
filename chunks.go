@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -229,14 +228,14 @@ func (t *chunks) ChunksComplete(pid int) bool {
 // Chunks returns the chunk requests for the given piece.
 func (t *chunks) chunksRequests(idx int) (requests []request) {
 	for _, cidx := range t.chunks(idx) {
-		req, _ := t.request(int64(cidx), -1*idx)
+		req, _ := t.request(int64(cidx), -1*(cidx+1))
 		requests = append(requests, req)
 	}
 
 	return requests
 }
 
-func (t *chunks) ChunksAdjust(pid int, prio int) (changed bool) {
+func (t *chunks) ChunksAdjust(pid int) (changed bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -245,9 +244,8 @@ func (t *chunks) ChunksAdjust(pid int, prio int) (changed bool) {
 	}
 
 	for _, c := range t.chunks(pid) {
-		// oprio, _ := t.missing.GetPriority(c)
-		// tmp := oprio != prio && t.missing.Set(c, prio)
-		oprio := -1 * c
+		prio := -1 * (c + 1)
+		oprio, _ := t.missing.GetPriority(c)
 		tmp := oprio != prio && t.missing.Set(c, prio)
 		if tmp {
 			t.unverified.Remove(c)
@@ -264,12 +262,11 @@ func (t *chunks) ChunksAdjust(pid int, prio int) (changed bool) {
 // returns true if any changes were made.
 func (t *chunks) ChunksPend(idx int) (changed bool) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-	// log.Output(2, fmt.Sprintf("%p ChunksPend %v\n", t, t.chunks(idx)))
 	for _, c := range t.chunksRequests(idx) {
-		tmp := t.pend(c, math.MaxInt64)
+		tmp := t.pend(c, c.Priority)
 		changed = changed || tmp
 	}
+	t.mu.Unlock()
 
 	return changed
 }
@@ -280,7 +277,6 @@ func (t *chunks) ChunksRelease(idx int) (changed bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// log.Output(2, fmt.Sprintf("%p ChunksPend %v\n", t, t.chunks(idx)))
 	for _, c := range t.chunksRequests(idx) {
 		tmp := t.release(c)
 		changed = changed || tmp
@@ -366,7 +362,7 @@ func (t *chunks) Peek(available bmap) (req request, err error) {
 func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Println("pop failed", n)
+			log.Println("pop failed", r, n)
 		}
 	}()
 	t.mu.Lock()
@@ -374,7 +370,7 @@ func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
 	defer t.Recover()
 	reqs = make([]request, 0, n)
 
-	for i := 0; i < n; i++ {
+	for i := 0; i <= n; i++ {
 		var (
 			cidx int
 			req  request
@@ -389,6 +385,7 @@ func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
 		t.outstanding[d] = req
 		t.missing.Remove(cidx)
 		reqs = append(reqs, req)
+
 		// log.Printf("c(%p) Popping: d(%d - %d) r(%d,%d,%d) - %t\n", t, d, cidx, req.Index, req.Begin, req.Length, t.missing.Contains(cidx))
 	}
 
@@ -418,7 +415,7 @@ func (t *chunks) reap(window time.Duration) {
 		scanned++
 
 		if req.Reserved.Add(t.gracePeriod).Before(ts) {
-			t.pend(req, rand.Intn(math.MaxInt64))
+			t.pend(req, -2*(t.requestCID(req)+1))
 			t.release(req)
 			recovered++
 		}
@@ -446,6 +443,10 @@ func (t *chunks) release(r request) bool {
 func (t *chunks) pend(r request, prio int) (changed bool) {
 	cidx := t.requestCID(r)
 
+	if prio == 0 {
+		prio = -1 * cidx
+	}
+
 	// unconditionally mark the chunk as missing.
 	changed = t.missing.Set(cidx, prio)
 
@@ -454,6 +455,7 @@ func (t *chunks) pend(r request, prio int) (changed bool) {
 
 	// d := r.digest()
 	// log.Output(3, fmt.Sprintf("c(%p) pending request: d(%20d - %d) r(%d,%d,%d) (%d) u(%t)", t, d, cidx, r.Index, r.Begin, r.Length, prio, changed))
+
 	return changed
 }
 
@@ -493,19 +495,21 @@ func (t *chunks) Outstanding() (dup map[uint64]request) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	dup = make(map[uint64]request, 0)
+	dup = make(map[uint64]request, len(t.outstanding))
 	for i, r := range t.outstanding {
 		dup[i] = r
 	}
 	return dup
 }
 
-// Pend forces a chunks to be added to the missing queue.
-func (t *chunks) Pend(req request, prio int) bool {
+// PendAll forces a chunks to be added to the missing queue.
+func (t *chunks) Pend(reqs ...request) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.Recover()
-	return t.pend(req, prio)
+	defer t.Recover()
+	for _, r := range reqs {
+		t.pend(r, 10*r.Priority)
+	}
 }
 
 // Release a request from the outstanding mapping.
@@ -572,11 +576,8 @@ func (t *chunks) Complete(pid int) (changed bool) {
 }
 
 // ChunksFailed mark a piece by index as failed.
-func (t *chunks) ChunksFailed(pid int) (changed bool) {
+func (t *chunks) ChunksFailed(pid int) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	t.failed.Add(uint32(pid))
-
-	return changed
+	t.mu.Unlock()
 }

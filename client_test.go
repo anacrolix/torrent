@@ -406,7 +406,7 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 	assert.EqualValues(t, 0, pos)
 	_greeting, err := ioutil.ReadAll(r)
 	assert.NoError(t, err)
-	assert.EqualValues(t, testutil.GreetingFileContents, _greeting)
+	assert.EqualValues(t, testutil.GreetingFileContents, string(_greeting))
 }
 
 // Check that after completing leeching, a leecher transitions to a seeding

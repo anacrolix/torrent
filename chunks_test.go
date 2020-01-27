@@ -62,7 +62,7 @@ func BenchmarkChunksPop(b *testing.B) {
 	available := filledbmap(n)
 
 	for i := 0; i < b.N && i < n; i++ {
-		_, err := p.Pop(available)
+		_, err := p.Pop(1, available)
 		require.NoError(b, err)
 	}
 }
@@ -273,15 +273,19 @@ func TestChunksPop(t *testing.T) {
 	p := quickpopulate(newChunks(int(info.PieceLength), &info))
 	available := filledbmap(p.missing.Len())
 
-	req, err := p.Pop(available)
-	require.NoError(t, err)
-	require.Equal(t, 0, int(req.Index))
-	require.Equal(t, true, req.Reserved.Before(time.Now()))
+	reqs, err := p.Pop(1, available)
+	for _, req := range reqs {
+		require.NoError(t, err)
+		require.Equal(t, 0, int(req.Index))
+		require.Equal(t, true, req.Reserved.Before(time.Now()))
+	}
 
-	req, err = p.Pop(available)
-	require.NoError(t, err)
-	require.Equal(t, 1, int(req.Index))
-	require.Equal(t, true, req.Reserved.Before(time.Now()))
+	reqs, err = p.Pop(1, available)
+	for _, req := range reqs {
+		require.NoError(t, err)
+		require.Equal(t, 1, int(req.Index))
+		require.Equal(t, true, req.Reserved.Before(time.Now()))
+	}
 }
 
 func TestChunksGraceWindow(t *testing.T) {
@@ -295,7 +299,7 @@ func TestChunksGraceWindow(t *testing.T) {
 
 	total := p.missing.Len()
 	for i := 0; i < 10; i++ {
-		_, err = p.Pop(available)
+		_, err = p.Pop(1, available)
 		require.NoError(t, err)
 		p.reap(0)
 		require.Equal(t, total, p.missing.Len())
@@ -310,8 +314,10 @@ func TestChunksComplete(t *testing.T) {
 	require.True(t, p.ChunksMissing(0))
 
 	available := filledbmap(1)
-	for r, err := p.Pop(available); err == nil; r, err = p.Pop(available) {
-		require.NoError(t, p.Verify(r))
+	for rs, err := p.Pop(100, available); err == nil; rs, err = p.Pop(100, available) {
+		for _, r := range rs {
+			require.NoError(t, p.Verify(r))
+		}
 		require.True(t, p.ChunksHashing(0))
 	}
 	require.False(t, p.ChunksMissing(0))

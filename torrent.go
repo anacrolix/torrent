@@ -3,7 +3,6 @@ package torrent
 import (
 	"container/heap"
 	"crypto/sha1"
-	"errors"
 	"fmt"
 	"io"
 	l2 "log"
@@ -18,6 +17,7 @@ import (
 	"unsafe"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/pkg/errors"
 
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/log"
@@ -980,7 +980,7 @@ func (t *torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
 }
 
 func (t *torrent) pieceAllDirty(piece pieceIndex) bool {
-	return !t.piecesM.ChunksMissing(piece)
+	return t.piecesM.ChunksAvailable(piece)
 	// return t.pieces[piece].dirtyChunks.Len() == int(t.pieceNumChunks(piece))
 }
 
@@ -1116,14 +1116,12 @@ func (t *torrent) pendRequest(req request) {
 }
 
 func (t *torrent) pieceCompletionChanged(piece pieceIndex) {
-	t.tickleReaders()
-	t.event.Broadcast()
 	if t.pieceComplete(piece) {
 		t.onPieceCompleted(piece)
+		t.tickleReaders()
 	} else {
 		t.onIncompletePiece(piece)
 	}
-	t.updatePiecePriority(piece)
 }
 
 func (t *torrent) numReceivedConns() (ret int) {
@@ -1182,7 +1180,7 @@ func (t *torrent) updatePieceCompletion(piece pieceIndex) bool {
 	changed := cached != uncached
 	p.storageCompletionOk = uncached.Ok
 
-	if uncached.Complete {
+	if uncached.Complete && uncached.Ok {
 		t.piecesM.Complete(piece)
 	} else {
 		t.piecesM.ChunksPend(piece)
@@ -1191,8 +1189,8 @@ func (t *torrent) updatePieceCompletion(piece pieceIndex) bool {
 
 	if changed {
 		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).WithValues(debugLogValue).Log(t.logger)
-		t.pieceCompletionChanged(piece)
 	}
+
 	return changed
 }
 
@@ -1318,8 +1316,9 @@ func (t *torrent) deleteConnection(c *connection) (ret bool) {
 	_, ret = t.conns[c]
 	delete(t.conns, c)
 	t.unlock()
+
 	metrics.Add("deleted connections", 1)
-	c.deleteAllRequests()
+
 	if len(t.conns) == 0 {
 		t.assertNoPendingRequests()
 	}
@@ -1673,16 +1672,15 @@ func (t *torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	return oldMax
 }
 
-func (t *torrent) pieceHashed(piece pieceIndex, failure error) {
+func (t *torrent) pieceHashed(piece pieceIndex, failure error) error {
 	correct := failure == nil
 	t.logger.Log(log.Fstr("hashed piece %d (passed=%t)", piece, correct).WithValues(debugLogValue))
 
 	p := t.piece(piece)
 	p.numVerifies++
-	t.event.Broadcast()
 
 	if t.closed.IsSet() {
-		return
+		return failure
 	}
 
 	// Don't score the first time a piece is hashed, it could be an
@@ -1700,18 +1698,11 @@ func (t *torrent) pieceHashed(piece pieceIndex, failure error) {
 		// Don't increment stats above connection-level for every involved
 		// connection.
 		t.allStats((*ConnStats).incrementPiecesDirtiedGood)
-		// TODO: implement this at the connection level.
-		// for _, c := range touchers {
-		// 	c.stats.incrementPiecesDirtiedGood()
-		// }
 
-		err := p.Storage().MarkComplete()
-		if err != nil {
+		if err := p.Storage().MarkComplete(); err != nil {
 			t.piecesM.ChunksPend(piece)
 			t.piecesM.ChunksRelease(piece)
-			t.logger.Printf("%T: error marking piece complete %d: %s", t.storage, piece, err)
-		} else {
-			t.piecesM.ChunksComplete(piece)
+			return errors.Wrapf(err, "%T: error marking piece complete %d: %T - %s", t.storage, piece, err, err)
 		}
 	} else {
 		t.piecesM.ChunksPend(piece)
@@ -1720,9 +1711,11 @@ func (t *torrent) pieceHashed(piece pieceIndex, failure error) {
 
 		t.allStats((*ConnStats).incrementPiecesDirtiedBad)
 
-		t.onIncompletePiece(piece)
 		p.Storage().MarkNotComplete()
+		t.onIncompletePiece(piece)
 	}
+
+	return failure
 }
 
 func (t *torrent) cancelRequestsForPiece(piece pieceIndex) {

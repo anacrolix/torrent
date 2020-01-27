@@ -1063,12 +1063,12 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 	t.digests = newDigests(
 		func(idx int) *Piece { return t.piece(idx) },
 		func(idx int, cause error) {
-			t.pieceHashed(idx, cause)
+			if err := t.pieceHashed(idx, cause); err != nil {
+				t.logger.Print(err)
+			}
+			t.updatePieceCompletion(idx)
 			t.publishPieceChange(idx)
 			t.updatePiecePriority(idx)
-			t.updatePieceCompletion(idx)
-			t.event.Broadcast()
-			cl.event.Broadcast()
 		},
 	)
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
@@ -1191,6 +1191,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, n
 		remoteAddr:      remoteAddr,
 		network:         network,
 		touched:         roaring.NewBitmap(),
+		PeerRequests:    make(map[request]struct{}, maxRequests),
 	}
 	c.logger = cl.logger.WithValues(c,
 		log.Debug, // I want messages to default to debug, and can set it here as it's only used by new code

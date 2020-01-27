@@ -27,7 +27,7 @@ type Torrent struct {
 }
 
 func (t Torrent) Piece(p metainfo.Piece) Piece {
-	return Piece{t.TorrentImpl.Piece(p), p}
+	return Piece{PieceImpl: t.TorrentImpl.Piece(p), mip: p}
 }
 
 type Piece struct {

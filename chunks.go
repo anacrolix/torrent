@@ -192,6 +192,18 @@ func (t *chunks) ChunksMissing(pid int) bool {
 	return false
 }
 
+func (t *chunks) ChunksAvailable(pid int) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	available := true
+	for _, c := range t.chunks(pid) {
+		available = available && t.unverified.Contains(c)
+	}
+
+	return available
+}
+
 // ChunksHashing return true iff any chunk for the given piece has been marked as unverified.
 func (t *chunks) ChunksHashing(pid int) bool {
 	t.mu.Lock()
@@ -228,7 +240,7 @@ func (t *chunks) ChunksAdjust(pid int, prio int) (changed bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.completed.Get(pid) {
+	if t.completed.Contains(pid) {
 		return false
 	}
 
@@ -244,6 +256,7 @@ func (t *chunks) ChunksAdjust(pid int, prio int) (changed bool) {
 		// log.Output(2, fmt.Sprintf("%p CHUNK PRIORITY ADJUSTED: %d %s prios %d %d %t %d\n", t, c, fmt.Sprintf("(%d)", pid), oprio, prio, tmp, t.missing.Len()))
 		changed = changed || tmp
 	}
+
 	return changed
 }
 
@@ -266,11 +279,13 @@ func (t *chunks) ChunksPend(idx int) (changed bool) {
 func (t *chunks) ChunksRelease(idx int) (changed bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	// log.Output(2, fmt.Sprintf("%p ChunksPend %v\n", t, t.chunks(idx)))
 	for _, c := range t.chunksRequests(idx) {
 		tmp := t.release(c)
 		changed = changed || tmp
 	}
+
 	return changed
 }
 
@@ -300,9 +315,6 @@ func (t *chunks) peek(available bmap) (cidx int, req request, err error) {
 		ok   bool
 		prio int
 	)
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
 
 	idx := -1
 
@@ -335,6 +347,8 @@ func (t *chunks) peek(available bmap) (cidx int, req request, err error) {
 
 // Peek at the request based on availability.
 func (t *chunks) Peek(available bmap) (req request, err error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	_, req, err = t.peek(available)
 	return req, err
 }
@@ -349,26 +363,36 @@ func (t *chunks) Peek(available bmap) (req request, err error) {
 // the outstanding request could track which available bitmap it belongs to.
 // but this complicates some of the logic, and I'm leaving it to do once refactoring
 // the locks and contention issues are resolved.
-func (t *chunks) Pop(available bmap) (req request, err error) {
-	var (
-		cidx int
-	)
-
-	if cidx, req, err = t.peek(available); err != nil {
-		return req, err
-	}
-
-	d := req.digest()
-	// log.Printf("c(%p) Popping: d(%d - %d) r(%d,%d,%d)\n", t, d, cidx, req.Index, req.Begin, req.Length)
-
+func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("pop failed", n)
+		}
+	}()
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.Recover()
+	defer t.Recover()
+	reqs = make([]request, 0, n)
 
-	t.outstanding[d] = req
-	t.missing.Remove(cidx)
+	for i := 0; i < n; i++ {
+		var (
+			cidx int
+			req  request
+		)
 
-	return req, nil
+		if cidx, req, err = t.peek(available); err != nil {
+			// log.Println("Popped empty", i, "<", n, ",", err)
+			return reqs, err
+		}
+
+		d := req.digest()
+		t.outstanding[d] = req
+		t.missing.Remove(cidx)
+		reqs = append(reqs, req)
+		// log.Printf("c(%p) Popping: d(%d - %d) r(%d,%d,%d) - %t\n", t, d, cidx, req.Index, req.Begin, req.Length, t.missing.Contains(cidx))
+	}
+
+	return reqs, nil
 }
 
 // Recover initiate a collection of outstanding requests.
@@ -393,8 +417,8 @@ func (t *chunks) reap(window time.Duration) {
 	for _, req := range t.outstanding {
 		scanned++
 
-		if req.Reserved.Add(t.gracePeriod).Add(time.Duration(rand.Intn(int(t.gracePeriod) / 4))).Before(ts) {
-			t.pend(req, math.MaxInt64)
+		if req.Reserved.Add(t.gracePeriod).Before(ts) {
+			t.pend(req, rand.Intn(math.MaxInt64))
 			t.release(req)
 			recovered++
 		}
@@ -428,9 +452,6 @@ func (t *chunks) pend(r request, prio int) (changed bool) {
 	// remove from unverified.
 	t.unverified.Remove(cidx)
 
-	// remove from completed.
-	// t.completed.Remove(int(r.Index))
-
 	// d := r.digest()
 	// log.Output(3, fmt.Sprintf("c(%p) pending request: d(%20d - %d) r(%d,%d,%d) (%d) u(%t)", t, d, cidx, r.Index, r.Begin, r.Length, prio, changed))
 	return changed
@@ -447,20 +468,22 @@ func (t *chunks) Missing() int {
 // Failed returns the union of the current failures and the provided completed mapping.
 func (t *chunks) Failed(touched *roaring.Bitmap) *roaring.Bitmap {
 	t.mu.RLock()
-	defer t.mu.RUnlock()
+	union := t.failed.Clone()
+	t.mu.RUnlock()
 
 	if touched.IsEmpty() {
 		return bitmapx.Lazy(nil)
 	}
 
-	if t.failed.IsEmpty() {
+	if union.IsEmpty() {
 		return bitmapx.Lazy(nil)
 	}
 
-	union := t.failed.Clone()
 	union.And(touched)
 
+	t.mu.Lock()
 	t.failed.AndNot(union)
+	t.mu.Unlock()
 
 	return union
 }
@@ -496,6 +519,12 @@ func (t *chunks) Release(r request) bool {
 	return t.release(r)
 }
 
+func (t *chunks) Available(r request) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.unverified.Contains(t.requestCID(r)) || t.completed.Contains(int(r.Index))
+}
+
 // Verify mark the chunk for verification.
 func (t *chunks) Verify(r request) (err error) {
 	t.mu.Lock()
@@ -529,7 +558,7 @@ func (t *chunks) Complete(pid int) (changed bool) {
 	defer t.mu.Unlock()
 
 	chunks := t.chunks(pid)
-	log.Output(2, fmt.Sprintf("c(%p) marked completed: i(%d) chunks(%d)\n", t, pid, len(chunks)))
+	// log.Output(2, fmt.Sprintf("c(%p) marked completed: i(%d) chunks(%d)\n", t, pid, len(chunks)))
 
 	for _, cid := range chunks {
 		tmp := t.missing.Remove(cid)

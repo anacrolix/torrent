@@ -1,6 +1,6 @@
 package torrent
 
-// Peer client ID.
+// PeerID client ID.
 type PeerID [20]byte
 
 // // Pretty prints the ID as hex, except parts that adher to the Peer ID

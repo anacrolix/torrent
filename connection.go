@@ -10,7 +10,6 @@ import (
 	"math"
 	"math/rand"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -67,6 +66,7 @@ type connection struct {
 	Discovery       peerSource
 	trusted         bool
 	closed          missinggo.Event
+
 	// Set true after we've added our ConnStats generated during handshake to
 	// other ConnStat instances as determined when the *torrent became known.
 	reconciledHandshakeStats bool
@@ -100,18 +100,19 @@ type connection struct {
 	PeerChoked         bool
 	PeerRequests       map[request]struct{}
 	PeerExtensionBytes pp.PeerExtensionBits
+
 	// The pieces the peer has claimed to have.
 	peerPieces bitmap.Bitmap
 	// The peer has everything. This can occur due to a special message, when
 	// we may not even know the number of pieces in the torrent yet.
 	peerSentHaveAll bool
+
 	// The highest possible number of pieces the torrent could have based on
 	// communication with the peer. Generally only useful until we have the
 	// torrent info.
 	peerMinPieces pieceIndex
 
-	// Pieces we've accepted chunks for from the peer.
-	// peerTouchedPieces map[pieceIndex]struct{}
+	// pieces we've accepted chunks for from the peer.
 	touched         *roaring.Bitmap
 	peerAllowedFast bitmap.Bitmap
 
@@ -319,6 +320,7 @@ func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 func (cn *connection) Close() {
 	// l2.Output(3, fmt.Sprintf("(%d) c(%p) closing connection", os.Getpid(), cn))
 	defer cn.t.cln.event.Broadcast()
+	defer cn.deleteAllRequests()
 	cn.cmu().Lock()
 	defer cn.cmu().Unlock()
 
@@ -500,6 +502,16 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 }
 
 func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
+	var (
+		err  error
+		reqs []request
+		req  request
+	)
+
+	if cn.closed.IsSet() {
+		return
+	}
+
 	if !cn.t.networkingEnabled {
 		if !cn.SetInterested(false, msg) {
 			return
@@ -522,88 +534,102 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		// l2.Printf("(%d) - c(%p) not unchoking allowed(%t) - missing (%t) - outstanding (%d)\n", os.Getpid(), cn, cn.uploadAllowed(), cn.t.piecesM.Missing() == 0, len(cn.requests))
 	}
 
+	// // if we're choked and not allowed to fast track any chunks then there is nothing
+	// // to do.
+	// if cn.PeerChoked && cn.peerAllowedFast.IsEmpty() {
+	// 	l2.Print
+	// 	return
+	// }
+
 	// check if we are actually missing pieces before executing this code.
-	if len(cn.requests) <= cn.requestsLowWater && cn.t.piecesM.Missing() > 0 {
-		// l2.Printf("(%d) - c(%p) filling buffer - available(%d) - outstanding (%d)\n", os.Getpid(), cn, cn.peerPieces.Len(), len(cn.requests))
-		filledBuffer := false
-		done := false
+	if len(cn.requests) > cn.requestsLowWater || cn.t.piecesM.Missing() == 0 {
+		var deleted int
 
-		available := bmap(&cn.peerPieces)
-		if cn.peerSentHaveAll {
-			available = everybmap{}
+		// release timed out chunks
+		if deleted = cn.deleteTimedout(30 * time.Second); deleted == 0 {
+			// l2.Printf("c(%p) skipping chunk requests - space unavailable(%d > %d) missing(%t)\n", cn, len(cn.requests), cn.requestsLowWater, cn.t.piecesM.Missing() == 0)
+			return
 		}
 
-		space := cn.nominalMaxRequests() - len(cn.requests)
-		i := 0
-		// load until we have the maximum number of requests or until the buffer is full.
-		for ; i < space && !filledBuffer && !done; i++ {
-			var (
-				err error
-				req request
-			)
+		// l2.Println("cleared", deleted, "chunks")
+	}
 
-			if cn.closed.IsSet() {
-				return
-			}
+	// l2.Printf("(%d) - c(%p) filling buffer - available(%d) - outstanding (%d)\n", os.Getpid(), cn, cn.peerPieces.Len(), len(cn.requests))
+	filledBuffer := false
 
-			// Choking is looked at here because our interest is dependent
-			// on whether we'd make requests in its absence.
-			if cn.PeerChoked {
-				if !cn.peerAllowedFast.Get(bitmap.BitIndex(req.Index)) {
-					// l2.Printf("(%d) - c(%p) peer choked\n", os.Getpid(), cn)
-					break
-				}
+	available := bmap(&cn.peerPieces)
+	if cn.peerSentHaveAll {
+		available = everybmap{}
+	}
 
-				metrics.Add("allowed fast requests sent", 1)
-			}
+	max := cn.nominalMaxRequests() - len(cn.requests)
 
-			if req, err = cn.t.piecesM.Pop(available); stderrors.As(err, &empty{}) {
-				l2.Printf("(%d) - c(%p) empty queue - available(%d) - outstanding (%d)\n", os.Getpid(), cn, cn.peerPieces.Len(), len(cn.requests))
-				break
-			} else if err != nil {
-				l2.Printf("(%d) - c(%p) pop failure %v\n", os.Getpid(), cn, err)
-				cn.t.logger.Printf("failed to request piece: %T - %v", err, err)
-				filledBuffer = true
-				continue
-			}
+	if reqs, err = cn.t.piecesM.Pop(max, available); stderrors.As(err, &empty{}) {
+		if len(reqs) == 0 {
+			// l2.Printf("(%d) - c(%p) empty queue - available(%d) - outstanding (%d)\n", os.Getpid(), cn, cn.peerPieces.Len(), len(cn.requests))
+			return
+		}
+	} else if err != nil {
+		cn.t.logger.Printf("failed to request piece: %T - %v", err, err)
+		return
+	}
 
-			// l2.Printf("c(%p) - popped r(%d,%d,%d) (%d) - %v\n", cn, req.Index, req.Begin, req.Length, req.Priority, err)
+	if !cn.SetInterested(true, msg) {
+		return
+	}
 
-			if !cn.SetInterested(true, msg) {
-				filledBuffer = true
-				continue
-			}
+	// we want the peer to upload to us.
+	if !cn.Unchoke(msg) {
+		return
+	}
 
-			// we want the peer to upload to us.
-			if !cn.Unchoke(msg) {
-				filledBuffer = true
-				continue
-			}
+	for max, req = range reqs {
+		// l2.Printf("c(%p) - popped r(%d,%d,%d) (%d) - %v\n", cn, req.Index, req.Begin, req.Length, req.Priority, err)
 
-			filledBuffer = !cn.request(req, msg)
+		if cn.closed.IsSet() {
+			return
 		}
 
-		// l2.Println("FILLED BUFFER", i, "/", space, !filledBuffer, !done)
-		// If we didn't completely top up the requests, we shouldn't mark
-		// the low water, since we'll want to top up the requests as soon
-		// as we have more write buffer space.
-		if !filledBuffer {
-			cn.requestsLowWater = len(cn.requests) / 2
+		// Choking is looked at here because our interest is dependent
+		// on whether we'd make requests in its absence.
+		if cn.PeerChoked && !cn.peerAllowedFast.Get(bitmap.BitIndex(req.Index)) {
+			break
+		} else if cn.PeerChoked {
+			metrics.Add("allowed fast requests sent", 1)
+		}
+
+		if filledBuffer = !cn.request(req, msg); filledBuffer {
+			break
 		}
 	}
 
-	cn.upload(msg)
+	// advance to just the unused chunks.
+	if len(reqs) > 0 {
+		reqs = reqs[max+1:]
+	}
+
+	// release any unused requests back to the queue.
+	for _, req = range reqs {
+		cn.t.piecesM.Pend(req, req.Priority)
+	}
+
+	// If we didn't completely top up the requests, we shouldn't mark
+	// the low water, since we'll want to top up the requests as soon
+	// as we have more write buffer space.
+	if !filledBuffer {
+		cn.requestsLowWater = len(cn.requests) / 2
+	}
 }
 
 // Routine that writes to the peer. Some of what to write is buffered by
 // activity elsewhere in the Client, and some is determined locally when the
 // connection is writable.
 func (cn *connection) writer(keepAliveTimeout time.Duration) {
-	cn.t.logger.Printf("c(%p) writer initiated\n", cn)
-	defer cn.t.logger.Printf("c(%p) writer completed\n", cn)
+	// cn.t.logger.Printf("c(%p) writer initiated\n", cn)
+	// defer cn.t.logger.Printf("c(%p) writer completed\n", cn)
+	defer cn.deleteAllRequests()
 
 	var (
-		deadline       time.Time = time.Now().Add(time.Minute)
 		lastWrite      time.Time = time.Now()
 		keepAliveTimer *time.Timer
 	)
@@ -629,14 +655,16 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			return
 		}
 
-		if cn.outgoing && time.Now().After(deadline) {
-			l2.Println("KILLING CONNECTION")
-			cn.Close()
+		if !cn.lastMessageReceived.IsZero() && time.Since(cn.lastMessageReceived) > 2*keepAliveTimeout {
+			l2.Println("killing connection", cn.remoteIp(), time.Since(cn.lastMessageReceived), cn.lastMessageReceived)
+			cn.Drop()
 			return
 		}
 
 		if cn.writeBuffer.Len() == 0 {
+			cn.checkFailures()
 			cn.fillWriteBuffer(writer)
+			cn.upload(writer)
 		}
 
 		if cn.writeBuffer.Len() == 0 && time.Since(lastWrite) >= keepAliveTimeout {
@@ -646,12 +674,18 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 
 		// TODO: Minimize wakeups....
 		if cn.writeBuffer.Len() == 0 {
+			// let the loop spin for a couple iterations when there is nothing to write.
+			// this helps prevent some stalls should be able to remove later.
+			if attempts < 50 {
+				time.Sleep(50 * time.Millisecond)
+				continue
+			}
+
 			cn.cmu().Lock()
 			// l2.Printf("c(%p) writer going to sleep: %d\n", cn, cn.writeBuffer.Len())
 			cn.writerCond.Wait()
 			// l2.Printf("c(%p) writer awake: %d\n", cn, cn.writeBuffer.Len())
 			cn.cmu().Unlock()
-
 			continue
 		}
 
@@ -669,8 +703,6 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			keepAliveTimer.Reset(keepAliveTimeout)
 		}
 
-		l2.Printf("(%d) c(%p) - WRITER: attempt(%d) - remaining(%d) - unverified(%d) - failed(%d) - outstanding(%d) - completed(%d)\n", os.Getpid(), cn, attempts, cn.t.piecesM.Missing(), cn.t.piecesM.unverified.Len(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.completed.Len())
-
 		if err != nil {
 			l2.Println("err writing request", err)
 			cn.t.logger.Printf("c(%p) error writing requests: %v", cn, err)
@@ -678,7 +710,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		}
 
 		if n != len(buf) {
-			l2.Println("error: short write")
+			l2.Println("short write")
 			cn.t.logger.Printf("error: write failed written != len(buf) (%d != %d)", n, len(buf))
 			cn.Close()
 			return
@@ -989,57 +1021,58 @@ func (cn *connection) reject(r request) {
 	delete(cn.PeerRequests, r)
 }
 
-func (c *connection) onReadRequest(r request) error {
+func (cn *connection) onReadRequest(r request) error {
 	requestedChunkLengths.Add(strconv.FormatUint(r.Length.Uint64(), 10), 1)
-	_, ok := c.PeerRequests[r]
+	cn._mu.RLock()
+	_, ok := cn.PeerRequests[r]
+	cn._mu.RUnlock()
+
 	if ok {
 		metrics.Add("duplicate requests received", 1)
 		return nil
 	}
 
-	if c.Choked {
+	if cn.Choked {
 		metrics.Add("requests received while choking", 1)
-		if c.fastEnabled() {
-			l2.Printf("%p - onReadRequest: choked, rejecting request", c)
+		if cn.fastEnabled() {
+			l2.Printf("%p - onReadRequest: choked, rejecting request", cn)
 			metrics.Add("requests rejected while choking", 1)
-			c.reject(r)
+			cn.reject(r)
 		}
 		return nil
 	}
 
-	if len(c.PeerRequests) >= maxRequests {
+	if len(cn.PeerRequests) >= maxRequests {
 		metrics.Add("requests received while queue full", 1)
-		if c.fastEnabled() {
-			l2.Printf("%p - onReadRequest: PeerRequests >= maxRequests, rejecting request", c)
-			c.reject(r)
+		if cn.fastEnabled() {
+			l2.Printf("%p - onReadRequest: PeerRequests >= maxRequests, rejecting request", cn)
+			cn.reject(r)
 		}
 		// BEP 6 says we may close here if we choose.
 		return nil
 	}
 
-	if !c.t.havePiece(pieceIndex(r.Index)) {
+	if !cn.t.havePiece(pieceIndex(r.Index)) {
 		// This isn't necessarily them screwing up. We can drop pieces
 		// from our storage, and can't communicate this to peers
 		// except by reconnecting.
 		requestsReceivedForMissingPieces.Add(1)
-		l2.Output(2, fmt.Sprintf("t(%p) - onReadRequest: requested piece not available: r(%d,%d,%d)", c.t, r.Index, r.Begin, r.Length))
+		l2.Output(2, fmt.Sprintf("t(%p) - onReadRequest: requested piece not available: r(%d,%d,%d)", cn.t, r.Index, r.Begin, r.Length))
 		return fmt.Errorf("peer requested piece we don't have: %v", r.Index.Int())
 	}
 
-	// l2.Printf("(%d) c(%p) - RECEIVED REQUEST: r(%d,%d,%d)\n", os.Getpid(), c, r.Index, r.Begin, r.Length)
+	// l2.Printf("(%d) c(%p) - RECEIVED REQUEST: r(%d,%d,%d)\n", os.Getpid(), cn, r.Index, r.Begin, r.Length)
 
 	// Check this after we know we have the piece, so that the piece length will be known.
-	if r.Begin+r.Length > c.t.pieceLength(pieceIndex(r.Index)) {
-		l2.Printf("%p onReadRequest - request has invalid length: %d received (%d+%d), expected (%d)", c, r.Index, r.Begin, r.Length, c.t.pieceLength(pieceIndex(r.Index)))
+	if r.Begin+r.Length > cn.t.pieceLength(pieceIndex(r.Index)) {
+		l2.Printf("%p onReadRequest - request has invalid length: %d received (%d+%d), expected (%d)", cn, r.Index, r.Begin, r.Length, cn.t.pieceLength(pieceIndex(r.Index)))
 		metrics.Add("bad requests received", 1)
 		return errors.New("bad request")
 	}
 
-	if c.PeerRequests == nil {
-		c.PeerRequests = make(map[request]struct{}, maxRequests)
-	}
-
-	c.PeerRequests[r] = struct{}{}
+	cn.cmu().Lock()
+	cn.PeerRequests[r] = struct{}{}
+	cn.cmu().Unlock()
 
 	return nil
 }
@@ -1067,10 +1100,7 @@ func (cn *connection) mainReadLoop() (err error) {
 	}
 
 	for {
-		cn.checkFailures()
-
 		var msg pp.Message
-		cn.updateRequests()
 		err = decoder.Decode(&msg)
 
 		if t.closed.IsSet() || cn.closed.IsSet() || err == io.EOF {
@@ -1106,27 +1136,33 @@ func (cn *connection) mainReadLoop() (err error) {
 		case pp.Unchoke:
 			cn.PeerChoked = false
 			cn.updateExpectingChunks()
+			cn.updateRequests()
 		case pp.Interested:
 			cn.PeerInterested = true
+			cn.updateRequests()
 		case pp.NotInterested:
 			cn.PeerInterested = false
+			cn.updateRequests()
 			// We don't clear their requests since it isn't clear in the spec.
 			// We'll probably choke them for this, which will clear them if
 			// appropriate, and is clearly specified.
 		case pp.Have:
 			err = cn.peerSentHave(pieceIndex(msg.Index))
+			cn.updateRequests()
 		case pp.Bitfield:
 			err = cn.peerSentBitfield(msg.Bitfield)
+			cn.updateRequests()
 		case pp.Request:
 			r := newRequestFromMessage(&msg)
-			err = cn.onReadRequest(r)
-		case pp.Piece:
-			err = cn.receiveChunk(&msg)
-			if len(msg.Piece) == int(t.chunkSize) {
-				t.chunkPool.Put(&msg.Piece)
+			if err = cn.onReadRequest(r); err == nil {
+				cn.updateRequests()
 			}
-			if err != nil {
-				err = fmt.Errorf("receiving chunk: %s", err)
+		case pp.Piece:
+			if err = errors.Wrap(cn.receiveChunk(&msg), "failed to received chunk"); err == nil {
+				if len(msg.Piece) == int(t.chunkSize) {
+					t.chunkPool.Put(&msg.Piece)
+				}
+				cn.updateRequests()
 			}
 		case pp.Cancel:
 			req := newRequestFromMessage(&msg)
@@ -1146,9 +1182,13 @@ func (cn *connection) mainReadLoop() (err error) {
 			metrics.Add("suggests received", 1)
 			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(cn, msg.Index, debugLogValue).Log(cn.t.logger)
 		case pp.HaveAll:
-			err = cn.onPeerSentHaveAll()
+			if err = cn.onPeerSentHaveAll(); err == nil {
+				cn.updateRequests()
+			}
 		case pp.HaveNone:
-			err = cn.peerSentHaveNone()
+			if err = cn.peerSentHaveNone(); err == nil {
+				cn.updateRequests()
+			}
 		case pp.Reject:
 			req := newRequestFromMessage(&msg)
 			cn.deleteRequest(req)
@@ -1157,8 +1197,11 @@ func (cn *connection) mainReadLoop() (err error) {
 			metrics.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(cn, debugLogValue).Log(cn.t.logger)
 			cn.peerAllowedFast.Add(int(msg.Index))
+			cn.updateRequests()
 		case pp.Extended:
-			err = cn.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
+			if err = cn.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload); err == nil {
+				cn.updateRequests()
+			}
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}
@@ -1258,7 +1301,7 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 
 	req := newRequestFromMessage(msg)
 
-	// l2.Printf("(%d) c(%p) - RECEIVED CHUNK2: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
+	// l2.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
 
 	if cn.PeerChoked {
 		metrics.Add("chunks received while choked", 1)
@@ -1276,8 +1319,10 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 		metrics.Add("chunks received unwanted", 1)
 	}
 
-	// Do we actually want this chunk?
-	if cn.t.haveChunk(req) {
+	// Do we actually want this chunk? if the chunk is already available, then we
+	// don't need it.
+	if cn.t.piecesM.Available(req) {
+		// l2.Println("already have chunk", req.Index, req.Begin, req.Length, cn.t.piecesM.requestCID(req))
 		metrics.Add("chunks received wasted", 1)
 		cn.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
 		return nil
@@ -1297,17 +1342,18 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 	// waiting for it to be written to storage.
 	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, cn.t.chunkSize))
 
-	if err := cn.t.piecesM.Verify(req); err != nil {
-		metrics.Add("chunks received unexpected", 1)
-		return err
-	}
-
 	cn.t.lock()
 	concurrentChunkWrites.Add(1)
 	err := cn.t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
 	concurrentChunkWrites.Add(-1)
 	cn.t.unlock()
 	piece.decrementPendingWrites()
+
+	if err := cn.t.piecesM.Verify(req); err != nil {
+		l2.Println("failed to add chunk to unverified")
+		metrics.Add("chunks received unexpected", 1)
+		return err
+	}
 
 	if err != nil {
 		panic(fmt.Sprintf("error writing chunk: %v", err))
@@ -1318,7 +1364,7 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 
 	// It's important that the piece is potentially queued before we check if
 	// the piece is still wanted, because if it is queued, it won't be wanted.
-	if cn.t.pieceAllDirty(pieceIndex(req.Index)) {
+	if cn.t.piecesM.ChunksAvailable(int(req.Index)) {
 		cn.t.digests.Enqueue(int(req.Index))
 		cn.t.pendAllChunkSpecs(pieceIndex(req.Index))
 	}
@@ -1331,29 +1377,23 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 
 func (cn *connection) onDirtiedPiece(piece pieceIndex) {
 	cn.touched.Add(uint32(piece))
-	// 	cn.cmu().Lock()
-	// 	if cn.peerTouchedPieces == nil {
-	// 		cn.peerTouchedPieces = make(map[pieceIndex]struct{})
-	// 	}
-	// 	cn.peerTouchedPieces[piece] = struct{}{}
-	// 	cn.cmu().Unlock()
 }
 
-func (c *connection) uploadAllowed() bool {
-	if c.t.config.NoUpload {
+func (cn *connection) uploadAllowed() bool {
+	if cn.t.config.NoUpload {
 		return false
 	}
 
-	if c.t.seeding() {
+	if cn.t.seeding() {
 		return true
 	}
 
-	if !c.peerHasWantedPieces() {
+	if !cn.peerHasWantedPieces() {
 		return false
 	}
 
 	// Don't upload more than 100 KiB more than we download.
-	if c.stats.BytesWrittenData.Int64() >= c.stats.BytesReadData.Int64()+100<<10 {
+	if cn.stats.BytesWrittenData.Int64() >= cn.stats.BytesReadData.Int64()+100<<10 {
 		return false
 	}
 
@@ -1369,43 +1409,43 @@ func (cn *connection) setRetryUploadTimer(delay time.Duration) {
 }
 
 // Also handles choking and unchoking of the remote peer.
-func (c *connection) upload(msg func(pp.Message) bool) bool {
-	c.cmu().Lock()
-	defer c.cmu().Unlock()
+func (cn *connection) upload(msg func(pp.Message) bool) bool {
+	cn.cmu().Lock()
+	defer cn.cmu().Unlock()
 	// Breaking or completing this loop means we don't want to upload to the
 	// peer anymore, and we choke them.
 
 another:
-	for c.uploadAllowed() {
+	for cn.uploadAllowed() {
 		// We want to upload to the peer.
-		if !c.Unchoke(msg) {
+		if !cn.Unchoke(msg) {
 			return false
 		}
 
-		for r := range c.PeerRequests {
-			res := c.t.config.UploadRateLimiter.ReserveN(time.Now(), int(r.Length))
+		for r := range cn.PeerRequests {
+			res := cn.t.config.UploadRateLimiter.ReserveN(time.Now(), int(r.Length))
 			if !res.OK() {
 				panic(fmt.Sprintf("upload rate limiter burst size < %d", r.Length))
 			}
 			delay := res.Delay()
 			if delay > 0 {
 				res.Cancel()
-				c.setRetryUploadTimer(delay)
+				cn.setRetryUploadTimer(delay)
 				// Hard to say what to return here.
 				return true
 			}
 
-			more, err := c.sendChunk(r, msg)
+			more, err := cn.sendChunk(r, msg)
 			if err != nil {
 				i := pieceIndex(r.Index)
-				if c.t.pieceComplete(i) {
-					c.t.updatePieceCompletion(i)
-					if !c.t.pieceComplete(i) {
+				if cn.t.pieceComplete(i) {
+					cn.t.updatePieceCompletion(i)
+					if !cn.t.pieceComplete(i) {
 						// We had the piece, but not anymore.
 						break another
 					}
 				}
-				log.Str("error sending chunk to peer").AddValues(c, r, err).Log(c.t.logger)
+				log.Str("error sending chunk to peer").AddValues(cn, r, err).Log(cn.t.logger)
 				// If we failed to send a chunk, choke the peer to ensure they
 				// flush all their requests. We've probably dropped a piece,
 				// but there's no way to communicate this to the peer. If they
@@ -1414,7 +1454,7 @@ another:
 				break another
 			}
 
-			delete(c.PeerRequests, r)
+			delete(cn.PeerRequests, r)
 
 			if !more {
 				return false
@@ -1424,7 +1464,7 @@ another:
 		return true
 	}
 
-	return c.Choke(msg)
+	return cn.Choke(msg)
 }
 
 func (cn *connection) Drop() {
@@ -1443,6 +1483,20 @@ func (cn *connection) numLocalRequests() int {
 	return len(cn.requests)
 }
 
+// delete requests that were requested beyond the timeout.
+func (cn *connection) deleteTimedout(grace time.Duration) (deleted int) {
+	ts := time.Now()
+
+	for _, req := range cn.dupRequests() {
+		if req.Reserved.Add(grace).Before(ts) && cn.deleteRequest(req) {
+			cn.t.piecesM.Pend(req, req.Priority)
+			deleted++
+		}
+	}
+
+	return deleted
+}
+
 func (cn *connection) deleteRequest(r request) bool {
 	d := r.digest()
 
@@ -1452,7 +1506,6 @@ func (cn *connection) deleteRequest(r request) bool {
 		return false
 	}
 
-	// cn.t.piecesM.Release(r)
 	delete(cn.requests, d)
 	cn.updateExpectingChunks()
 	cn.updateRequests()
@@ -1472,6 +1525,7 @@ func (cn *connection) dupRequests() (requests []request) {
 func (cn *connection) deleteAllRequests() {
 	for _, r := range cn.dupRequests() {
 		cn.deleteRequest(r)
+		cn.t.piecesM.Pend(r, r.Priority)
 	}
 }
 

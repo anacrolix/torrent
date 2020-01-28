@@ -1314,6 +1314,7 @@ func (t *torrent) deleteConnection(c *connection) (ret bool) {
 
 	metrics.Add("deleted connections", 1)
 
+	c.deleteAllRequests()
 	if len(t.conns) == 0 {
 		t.assertNoPendingRequests()
 	}

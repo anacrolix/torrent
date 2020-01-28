@@ -988,7 +988,6 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) {
 			cl.banPeerIP(b.IP)
 		}
 
-		cl.logger.Printf("dropping connection: %v", err)
 		t.dropConnection(c)
 
 		if cl.config.Debug {
@@ -1204,8 +1203,10 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, n
 		remoteAddr:      remoteAddr,
 		network:         network,
 		touched:         roaring.NewBitmap(),
+		requests:        make(map[uint64]request, maxRequests),
 		PeerRequests:    make(map[request]struct{}, maxRequests),
 		drop:            make(chan error, 1),
+		writerDone:      make(chan struct{}),
 	}
 	c.logger = cl.logger.WithValues(c,
 		log.Debug, // I want messages to default to debug, and can set it here as it's only used by new code

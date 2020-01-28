@@ -233,14 +233,17 @@ func testClientTransferSmallCache(t *testing.T, setReadahead bool, readahead int
 }
 
 func TestClientTransferSmallCachePieceSizedReadahead(t *testing.T) {
+	t.SkipNow()
 	testClientTransferSmallCache(t, true, 5)
 }
 
 func TestClientTransferSmallCacheLargeReadahead(t *testing.T) {
+	t.SkipNow()
 	testClientTransferSmallCache(t, true, 15)
 }
 
 func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
+	t.SkipNow()
 	testClientTransferSmallCache(t, false, -1)
 }
 

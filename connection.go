@@ -9,7 +9,6 @@ import (
 	l2 "log"
 	"math/rand"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -491,9 +490,6 @@ type messageWriter func(pp.Message) bool
 // Proxies the messageWriter's response.
 func (cn *connection) request(r request, mw messageWriter) bool {
 	cn.cmu().Lock()
-	if cn.requests == nil {
-		cn.requests = make(map[uint64]request)
-	}
 	cn.requests[r.digest()] = r
 	cn.cmu().Unlock()
 	cn.updateExpectingChunks()
@@ -512,10 +508,6 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		reqs []request
 		req  request
 	)
-
-	if cn.closed.IsSet() {
-		return
-	}
 
 	if !cn.t.networkingEnabled {
 		if !cn.SetInterested(false, msg) {
@@ -558,6 +550,15 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		// l2.Println("cleared", deleted, "chunks")
 	}
 
+	if !cn.SetInterested(true, msg) {
+		return
+	}
+
+	// we want the peer to upload to us.
+	if !cn.Unchoke(msg) {
+		return
+	}
+
 	// l2.Printf("(%d) - c(%p) filling buffer - available(%d) - outstanding (%d)\n", os.Getpid(), cn, cn.peerPieces.Len(), len(cn.requests))
 	filledBuffer := false
 
@@ -582,20 +583,11 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		return
 	}
 
-	if !cn.SetInterested(true, msg) {
-		return
-	}
-
-	// we want the peer to upload to us.
-	if !cn.Unchoke(msg) {
-		return
-	}
-
 	for max, req = range reqs {
 		// l2.Printf("c(%p) - popped r(%d,%d,%d) (%d) - %v\n", cn, req.Index, req.Begin, req.Length, req.Priority, err)
 
 		if cn.closed.IsSet() {
-			return
+			break
 		}
 
 		// Choking is looked at here because our interest is dependent
@@ -616,6 +608,11 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		reqs = reqs[max+1:]
 		// release any unused requests back to the queue.
 		cn.t.piecesM.Pend(reqs...)
+		cn.t.piecesM.Release(reqs...)
+	}
+
+	if cn.closed.IsSet() {
+		return
 	}
 
 	// If we didn't completely top up the requests, we shouldn't mark
@@ -633,7 +630,9 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	// cn.t.logger.Printf("c(%p) writer initiated\n", cn)
 	// defer cn.t.logger.Printf("c(%p) writer completed\n", cn)
 	defer cn.deleteAllRequests()
-	defer l2.Printf("(%d) c(%p) - WRITER: remaining(%d) - unverified(%d) - failed(%d) - outstanding(%d) - completed(%d)\n", os.Getpid(), cn, cn.t.piecesM.Missing(), cn.t.piecesM.unverified.Len(), cn.t.piecesM.failed.GetCardinality(), len(cn.requests), cn.t.piecesM.completed.Len())
+	// defer func() {
+	// 	l2.Printf("(%d) c(%p) - WRITER: remaining(%d) - unverified(%d) - failed(%d) - outstanding(%d) - completed(%d)\n", os.Getpid(), cn, cn.t.piecesM.Missing(), cn.t.piecesM.unverified.Len(), cn.t.piecesM.failed.GetCardinality(), len(cn.requests), cn.t.piecesM.completed.Len())
+	// }()
 
 	var (
 		lastWrite      time.Time = time.Now()
@@ -701,7 +700,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		// reset the attempts
 		attempts = 0
 
-		// l2.Printf("(%d) c(%p) - WRITER: attempt(%d) - remaining(%d) - unverified(%d) - failed(%d) - outstanding(%d) - completed(%d)\n", os.Getpid(), cn, attempts, cn.t.piecesM.Missing(), cn.t.piecesM.unverified.Len(), cn.t.piecesM.failed.GetCardinality(), len(cn.requests), cn.t.piecesM.completed.Len())
+		// l2.Printf("(%d) c(%p) - WRITING: attempt(%d) - remaining(%d) - unverified(%d) - failed(%d) - outstanding(%d) - completed(%d)\n", os.Getpid(), cn, attempts, cn.t.piecesM.Missing(), cn.t.piecesM.unverified.Len(), cn.t.piecesM.failed.GetCardinality(), len(cn.requests), cn.t.piecesM.completed.Len())
 
 		cn.cmu().Lock()
 		buf := cn.writeBuffer.Bytes()
@@ -715,13 +714,11 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		}
 
 		if err != nil {
-			l2.Println("err writing request", err)
 			cn.t.logger.Printf("c(%p) error writing requests: %v", cn, err)
 			return
 		}
 
 		if n != len(buf) {
-			l2.Println("short write")
 			cn.t.logger.Printf("error: write failed written != len(buf) (%d != %d)", n, len(buf))
 			cn.Close()
 			return
@@ -1128,7 +1125,6 @@ func (cn *connection) mainReadLoop() (err error) {
 		}
 
 		if err != nil {
-			l2.Println("read loop failed", err)
 			return err
 		}
 
@@ -1527,6 +1523,8 @@ func (cn *connection) deleteRequest(r request) bool {
 	}
 
 	delete(cn.requests, d)
+	cn.t.piecesM.Release(r)
+
 	cn.updateExpectingChunks()
 	cn.updateRequests()
 
@@ -1547,6 +1545,7 @@ func (cn *connection) deleteAllRequests() {
 	for _, r := range reqs {
 		cn.deleteRequest(r)
 	}
+
 	cn.t.piecesM.Pend(reqs...)
 }
 

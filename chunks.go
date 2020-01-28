@@ -110,8 +110,8 @@ func newChunks(clength int, m *metainfo.Info) *chunks {
 // the goal here is to have a single source of truth for what chunks are outstanding.
 type chunks struct {
 	meta *metainfo.Info
-	// mu   *sync.RWMutex
-	mu rwmutex
+	mu   *sync.RWMutex
+	// mu rwmutex
 
 	// chunk length
 	clength int64
@@ -365,12 +365,13 @@ func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
 			log.Println("pop failed", r, n)
 		}
 	}()
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	defer t.Recover()
-	reqs = make([]request, 0, n)
 
-	for i := 0; i <= n; i++ {
+	reqs = make([]request, 0, n)
+	for i := 0; i < n; i++ {
 		var (
 			cidx int
 			req  request
@@ -502,7 +503,7 @@ func (t *chunks) Outstanding() (dup map[uint64]request) {
 	return dup
 }
 
-// PendAll forces a chunks to be added to the missing queue.
+// Pend forces a chunks to be added to the missing queue.
 func (t *chunks) Pend(reqs ...request) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -513,14 +514,20 @@ func (t *chunks) Pend(reqs ...request) {
 }
 
 // Release a request from the outstanding mapping.
-func (t *chunks) Release(r request) bool {
+func (t *chunks) Release(reqs ...request) (b bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.Recover()
-	// d := r.digest()
-	// cidx := t.requestCID(r)
-	// log.Output(2, fmt.Sprintf("c(%p) released request: d(%20d - %d) r(%d,%d,%d)", t, d, cidx, r.Index, r.Begin, r.Length))
-	return t.release(r)
+	defer t.Recover()
+
+	b = true
+	for _, r := range reqs {
+		b = b && t.release(r)
+		// d := r.digest()
+		// cidx := t.requestCID(r)
+		// log.Output(2, fmt.Sprintf("c(%p) released request: d(%20d - %d) r(%d,%d,%d)", t, d, cidx, r.Index, r.Begin, r.Length))
+	}
+
+	return b
 }
 
 func (t *chunks) Available(r request) bool {

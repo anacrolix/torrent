@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"runtime"
+	"sync"
 	"sync/atomic"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -16,6 +18,7 @@ func newDigests(retrieve func(int) *Piece, complete func(int, error)) digests {
 		retrieve: retrieve,
 		complete: complete,
 		pending:  newBitQueue(),
+		c:        sync.NewCond(&sync.Mutex{}),
 	}
 }
 
@@ -27,6 +30,7 @@ type digests struct {
 	reaping int64
 	// cache of the pieces that need to be verified.
 	pending bitQueue
+	c       *sync.Cond
 }
 
 // Enqueue a piece to check its completed digest.
@@ -36,17 +40,18 @@ func (t *digests) Enqueue(idx int) {
 }
 
 func (t *digests) verify() {
-	if atomic.CompareAndSwapInt64(&t.reaping, 0, 1) {
-		go func() {
-			for idx, ok := t.pending.Pop(); ok; idx, ok = t.pending.Pop() {
-				t.check(idx)
-			}
-
-			if atomic.CompareAndSwapInt64(&t.reaping, 1, 0) {
-				return
-			}
-		}()
+	if atomic.AddInt64(&t.reaping, 1) > int64(runtime.NumCPU()) {
+		atomic.AddInt64(&t.reaping, -1)
+		return
 	}
+
+	go func() {
+		for idx, ok := t.pending.Pop(); ok; idx, ok = t.pending.Pop() {
+			t.check(idx)
+		}
+
+		atomic.AddInt64(&t.reaping, -1)
+	}()
 }
 
 func (t *digests) check(idx int) {

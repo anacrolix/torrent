@@ -1108,14 +1108,6 @@ func (t *torrent) pendRequest(req request) {
 	t.pieces[req.Index].pendChunkIndex(ci)
 }
 
-func (t *torrent) pieceCompletionChanged(piece pieceIndex) {
-	if t.pieceComplete(piece) {
-		t.onPieceCompleted(piece)
-	} else {
-		t.onIncompletePiece(piece)
-	}
-}
-
 func (t *torrent) incrementReceivedConns(c *connection, delta int64) {
 	if c.Discovery == peerSourceIncoming {
 		atomic.AddInt64(&t.numReceivedConns, delta)
@@ -1177,9 +1169,11 @@ func (t *torrent) updatePieceCompletion(piece pieceIndex) bool {
 
 	if uncached.Complete && uncached.Ok {
 		t.piecesM.Complete(piece)
+		defer t.onPieceCompleted(piece)
 	} else {
 		t.piecesM.ChunksPend(piece)
 		t.piecesM.ChunksRelease(piece)
+		defer t.onIncompletePiece(piece)
 	}
 
 	if changed {

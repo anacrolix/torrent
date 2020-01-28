@@ -41,6 +41,25 @@ const (
 	peerSourcePex             = "X"
 )
 
+func newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, network string) (c *connection) {
+	return &connection{
+		// _mu:             newDebugLock(&stdsync.RWMutex{}),
+		_mu:             &sync.RWMutex{},
+		conn:            nc,
+		outgoing:        outgoing,
+		Choked:          true,
+		PeerChoked:      true,
+		PeerMaxRequests: 250,
+		writeBuffer:     new(bytes.Buffer),
+		remoteAddr:      remoteAddr,
+		network:         network,
+		touched:         roaring.NewBitmap(),
+		requests:        make(map[uint64]request, maxRequests),
+		PeerRequests:    make(map[request]struct{}, maxRequests),
+		drop:            make(chan error, 1),
+	}
+}
+
 // Maintains the state of a connection with a peer.
 type connection struct {
 	// First to ensure 64-bit alignment for atomics. See #262.
@@ -550,15 +569,6 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		// l2.Println("cleared", deleted, "chunks")
 	}
 
-	if !cn.SetInterested(true, msg) {
-		return
-	}
-
-	// we want the peer to upload to us.
-	if !cn.Unchoke(msg) {
-		return
-	}
-
 	// l2.Printf("(%d) - c(%p) filling buffer - available(%d) - outstanding (%d)\n", os.Getpid(), cn, cn.peerPieces.Len(), len(cn.requests))
 	filledBuffer := false
 
@@ -580,6 +590,15 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		}
 	} else if err != nil {
 		cn.t.logger.Printf("failed to request piece: %T - %v", err, err)
+		return
+	}
+
+	if !cn.SetInterested(true, msg) {
+		return
+	}
+
+	// we want the peer to upload to us.
+	if !cn.Unchoke(msg) {
 		return
 	}
 
@@ -714,7 +733,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		}
 
 		if err != nil {
-			cn.t.logger.Printf("c(%p) error writing requests: %v", cn, err)
+			// cn.t.logger.Printf("c(%p) error writing requests: %v", cn, err)
 			return
 		}
 

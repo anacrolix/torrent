@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
@@ -19,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
@@ -1075,12 +1073,15 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 	t.digests = newDigests(
 		func(idx int) *Piece { return t.piece(idx) },
 		func(idx int, cause error) {
+			// l2.Println("digest complete", idx, cause)
 			if err := t.pieceHashed(idx, cause); err != nil {
 				t.logger.Print(err)
 			}
 			t.updatePieceCompletion(idx)
 			t.publishPieceChange(idx)
 			t.updatePiecePriority(idx)
+			t.event.Broadcast()
+			cl.event.Broadcast()
 		},
 	)
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
@@ -1191,23 +1192,7 @@ func (cl *Client) banPeerIP(ip net.IP) {
 }
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, network string) (c *connection) {
-	c = &connection{
-		// _mu:             newDebugLock(&stdsync.RWMutex{}),
-		_mu:             &stdsync.RWMutex{},
-		conn:            nc,
-		outgoing:        outgoing,
-		Choked:          true,
-		PeerChoked:      true,
-		PeerMaxRequests: 250,
-		writeBuffer:     new(bytes.Buffer),
-		remoteAddr:      remoteAddr,
-		network:         network,
-		touched:         roaring.NewBitmap(),
-		requests:        make(map[uint64]request, maxRequests),
-		PeerRequests:    make(map[request]struct{}, maxRequests),
-		drop:            make(chan error, 1),
-		writerDone:      make(chan struct{}),
-	}
+	c = newConnection(nc, outgoing, remoteAddr, network)
 	c.logger = cl.logger.WithValues(c,
 		log.Debug, // I want messages to default to debug, and can set it here as it's only used by new code
 	).WithText(func(m log.Msg) string {

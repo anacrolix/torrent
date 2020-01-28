@@ -519,11 +519,9 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 	require.NoError(t, err)
 	defer cl.Close()
 	info := metainfo.Info{
+		Length:      13,
 		PieceLength: 15,
 		Pieces:      make([]byte, 20),
-		Files: []metainfo.FileInfo{
-			{Path: []string{"greeting"}, Length: 13},
-		},
 	}
 
 	b, err := bencode.Marshal(info)
@@ -890,9 +888,8 @@ func TestPeerInvalidHave(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, _added)
 	defer cl.Stop(ts)
-	cn := &connection{
-		t: tt.(*torrent),
-	}
+	cn := newConnection(nil, true, IpPort{}, "udp")
+	cn.t = tt.(*torrent)
 	assert.NoError(t, cn.peerSentHave(0))
 	assert.Error(t, cn.peerSentHave(1))
 }

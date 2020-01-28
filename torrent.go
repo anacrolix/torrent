@@ -18,6 +18,7 @@ import (
 	"unsafe"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/google/btree"
 	"github.com/pkg/errors"
 
 	"github.com/anacrolix/dht/v2"
@@ -67,6 +68,45 @@ type Torrent interface {
 	AddPeers(pp []Peer)
 	SubscribePieceStateChanges() *pubsub.Subscription
 	PieceStateRuns() []PieceStateRun
+}
+
+func newTorrent(cl *Client, src Metadata) *torrent {
+	// use provided storage, if provided
+	storageClient := cl.defaultStorage
+	if src.Storage != nil {
+		storageClient = storage.NewClient(src.Storage)
+	}
+
+	m := &sync.RWMutex{}
+	t := &torrent{
+		displayName: src.DisplayName,
+		infoHash:    src.InfoHash,
+		cln:         cl,
+		config:      cl.config,
+		_mu:         m,
+		peers: prioritizedPeers{
+			om: btree.New(32),
+			getPrio: func(p Peer) peerPriority {
+				return bep40PriorityIgnoreError(cl.publicAddr(p.IP), p.addr())
+			},
+		},
+		conns: make(map[*connection]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
+
+		halfOpen:          make(map[string]Peer),
+		pieceStateChanges: pubsub.NewPubSub(),
+
+		storageOpener:       storageClient,
+		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
+
+		networkingEnabled:       true,
+		duplicateRequestTimeout: 2 * time.Minute,
+
+		piecesM: newChunks(src.ChunkSize, &metainfo.Info{}),
+	}
+	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
+	t.event = &sync.Cond{L: tlocker{torrent: t}}
+	t.setChunkSize(pp.Integer(src.ChunkSize))
+	return t
 }
 
 // Maintains state of torrent within a Client.
@@ -201,27 +241,28 @@ func (t *torrent) _lock(depth int) {
 	// updated := atomic.AddUint64(&t.lcount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) lock initiated - %d", t, updated))
 	t._mu.Lock()
+	// updated := atomic.AddUint64(&t.lcount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) lock completed - %d", t, updated))
 }
 
 func (t *torrent) _unlock(depth int) {
-	// updated := atomic.AddUint64(&t.ucount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) unlock initiated - %d", t, updated))
 	t._mu.Unlock()
+	// updated := atomic.AddUint64(&t.ucount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) unlock completed - %d", t, updated))
 }
 
 func (t *torrent) _rlock(depth int) {
-	// updated := atomic.AddUint64(&t.lcount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) rlock initiated - %d", t, updated))
 	t._mu.RLock()
+	// updated := atomic.AddUint64(&t.lcount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) rlock completed - %d", t, updated))
 }
 
 func (t *torrent) _runlock(depth int) {
-	// updated := atomic.AddUint64(&t.ucount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) unlock initiated - %d", t, updated))
 	t._mu.RUnlock()
+	// updated := atomic.AddUint64(&t.ucount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) unlock completed - %d", t, updated))
 }
 
@@ -578,7 +619,7 @@ func (t *torrent) name() string {
 
 func (t *torrent) pieceState(index pieceIndex) (ret PieceState) {
 	p := &t.pieces[index]
-	ret.Priority = t.piecePriority(index)
+	ret.Priority = 0
 	ret.Completion = p.completion()
 
 	if p.queuedForHash() || p.hashing {
@@ -1124,6 +1165,19 @@ func (t *torrent) maxHalfOpen() int {
 	return int(min(max(5, extraIncoming)+establishedHeadroom, int64(t.config.HalfOpenConnsPerTorrent)))
 }
 
+func (t *torrent) lockedDropHalfOpen(addr string) {
+	t.lock()
+	defer t.unlock()
+	t.dropHalfOpen(addr)
+}
+
+func (t *torrent) dropHalfOpen(addr string) {
+	if _, ok := t.halfOpen[addr]; !ok {
+		panic("invariant broken")
+	}
+	delete(t.halfOpen, addr)
+}
+
 func (t *torrent) lockedOpenNewConns() {
 	t.lock()
 	defer t.unlock()
@@ -1650,15 +1704,15 @@ func (t *torrent) wantConns() bool {
 }
 
 func (t *torrent) SetMaxEstablishedConns(max int) (oldMax int) {
-	t.lock()
-	defer t.unlock()
 	oldMax = t.maxEstablishedConns
 	t.maxEstablishedConns = max
+	t.rLock()
 	wcs := slices.HeapInterface(slices.FromMapKeys(t.conns), worseConn)
+	t.rUnlock()
 	for len(t.conns) > t.maxEstablishedConns && wcs.Len() > 0 {
 		t.dropConnection(wcs.Pop().(*connection))
 	}
-	t.openNewConns()
+	t.lockedOpenNewConns()
 	return oldMax
 }
 

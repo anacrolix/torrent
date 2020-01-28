@@ -52,9 +52,5 @@ func (me *prioritizedPeers) DeleteMin() (ret prioritizedPeersItem, ok bool) {
 }
 
 func (me *prioritizedPeers) PopMax() (p Peer) {
-	tmp := me.om.DeleteMax()
-	if tmp == nil {
-		return p
-	}
-	return tmp.(prioritizedPeersItem).p
+	return me.om.DeleteMax().(prioritizedPeersItem).p
 }

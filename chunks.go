@@ -366,6 +366,10 @@ func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
 		}
 	}()
 
+	if n < 0 {
+		return reqs, nil
+	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	defer t.Recover()

@@ -56,6 +56,7 @@ func newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, network string
 		touched:         roaring.NewBitmap(),
 		requests:        make(map[uint64]request, maxRequests),
 		PeerRequests:    make(map[request]struct{}, maxRequests),
+		sentHaves:       bitmap.Bitmap{RB: roaring.NewBitmap()},
 		drop:            make(chan error, 1),
 	}
 }
@@ -208,6 +209,11 @@ func (cn *connection) peerHasAllPieces() (all bool, known bool) {
 	if !cn.t.haveInfo() {
 		return false, false
 	}
+
+	if cn.peerPieces.IsEmpty() {
+		return false, true
+	}
+
 	return bitmap.Flip(cn.peerPieces, 0, bitmap.BitIndex(cn.t.numPieces())).IsEmpty(), true
 }
 
@@ -772,13 +778,15 @@ func (cn *connection) checkFailures() {
 }
 
 func (cn *connection) Have(piece pieceIndex) {
-	if cn.sentHaves.Get(bitmap.BitIndex(piece)) {
+	if !cn.sentHaves.IsEmpty() && cn.sentHaves.Get(bitmap.BitIndex(piece)) {
 		return
 	}
+
 	cn.Post(pp.Message{
 		Type:  pp.Have,
 		Index: pp.Integer(piece),
 	})
+
 	cn.sentHaves.Add(bitmap.BitIndex(piece))
 }
 

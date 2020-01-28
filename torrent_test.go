@@ -161,8 +161,8 @@ func TestPieceHashFailed(t *testing.T) {
 	tt.setChunkSize(2)
 	require.NoError(t, tt.setInfoBytes(mi.InfoBytes))
 	tt.lock()
-	tt.pieces[1].dirtyChunks.AddRange(0, 3)
-	require.True(t, tt.pieceAllDirty(1))
+	tt.piecesM.Validate(1)
+	require.True(t, tt.piecesM.ChunksAvailable(1))
 	tt.pieceHashed(1, fmt.Errorf("boom"))
 	// Dirty chunks should be cleared so we can try again.
 	require.False(t, tt.pieceAllDirty(1))
@@ -200,8 +200,8 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	assert.EqualValues(t, 0, tt.(*torrent).metadataSize())
 
 	func() {
-		cl.lock()
-		defer cl.unlock()
+		tt.(*torrent).lock()
+		defer tt.(*torrent).unlock()
 		go func() {
 			_, err = nc.Write(pp.Message{
 				Type:       pp.Extended,

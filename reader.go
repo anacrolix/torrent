@@ -237,7 +237,7 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 			err = nil
 			return
 		}
-		r.t.lock()
+
 		// TODO: Just reset pieces in the readahead window. This might help
 		// prevent thrashing with small caches and file and piece priorities.
 		r.log(log.Fstr("error reading torrent %s piece %d offset %d, %d bytes: %v",
@@ -245,7 +245,6 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 		if !r.t.updatePieceCompletion(pi) {
 			r.log(log.Fstr("piece %d completion unchanged", pi))
 		}
-		r.t.unlock()
 	}
 }
 

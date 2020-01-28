@@ -23,14 +23,12 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pproffd"
-	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/conntrack"
 	"github.com/anacrolix/sync"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
-	"github.com/google/btree"
 	"golang.org/x/time/rate"
 	"golang.org/x/xerrors"
 
@@ -51,7 +49,7 @@ type Client struct {
 	// 64-bit alignment of fields. See #262.
 	stats ConnStats
 
-	_mu    lockWithDeferreds
+	_mu    *stdsync.RWMutex
 	event  sync.Cond
 	closed missinggo.Event
 
@@ -270,6 +268,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		dopplegangerAddrs: make(map[string]struct{}),
 		torrents:          make(map[metainfo.Hash]*torrent),
 		dialRateLimiter:   rate.NewLimiter(10, 10),
+		_mu:               &stdsync.RWMutex{},
 	}
 	go cl.acceptLimitClearer()
 	cl.initLogger()
@@ -705,11 +704,7 @@ func forgettableDialError(err error) bool {
 }
 
 func (cl *Client) noLongerHalfOpen(t *torrent, addr string) {
-	if _, ok := t.halfOpen[addr]; !ok {
-		panic("invariant broken")
-	}
-	delete(t.halfOpen, addr)
-
+	t.lockedDropHalfOpen(addr)
 	t.lockedOpenNewConns()
 }
 
@@ -1026,50 +1021,11 @@ func (cl *Client) badPeerIPPort(ip net.IP, port int) bool {
 
 // Return a Torrent ready for insertion into a Client.
 func (cl *Client) newTorrent(src Metadata) (t *torrent) {
-	// use provided storage, if provided
-	storageClient := cl.defaultStorage
-	if src.Storage != nil {
-		storageClient = storage.NewClient(src.Storage)
+	if src.ChunkSize == 0 {
+		src.ChunkSize = defaultChunkSize
 	}
 
-	csize := src.ChunkSize
-	if csize == 0 {
-		csize = defaultChunkSize
-	}
-
-	m := &stdsync.RWMutex{}
-
-	t = &torrent{
-		displayName: src.DisplayName,
-		infoHash:    src.InfoHash,
-		cln:         cl,
-		config:      cl.config,
-		_mu:         m,
-		// metadataChanged: sync.Cond{
-		// 	L: m,
-		// },
-		// event: &events, // for now pass through the event sync.Cond
-		// storageLock: newDebugLock(&stdsync.RWMutex{}),
-		peers: prioritizedPeers{
-			om: btree.New(32),
-			getPrio: func(p Peer) peerPriority {
-				return bep40PriorityIgnoreError(cl.publicAddr(p.IP), p.addr())
-			},
-		},
-		conns: make(map[*connection]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
-
-		halfOpen:          make(map[string]Peer),
-		pieceStateChanges: pubsub.NewPubSub(),
-
-		storageOpener:       storageClient,
-		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
-
-		networkingEnabled:       true,
-		duplicateRequestTimeout: 2 * time.Minute,
-
-		piecesM: newChunks(csize, &metainfo.Info{}),
-	}
-
+	t = newTorrent(cl, src)
 	t.digests = newDigests(
 		func(idx int) *Piece { return t.piece(idx) },
 		func(idx int, cause error) {
@@ -1084,13 +1040,9 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 			cl.event.Broadcast()
 		},
 	)
-	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
-	t.event = &sync.Cond{L: tlocker{torrent: t}}
 	t.logger = cl.logger.WithValues(t).WithText(func(m log.Msg) string {
 		return fmt.Sprintf("%v: %s", t, m.Text())
 	})
-
-	t.setChunkSize(pp.Integer(csize))
 	t.setInfoBytes(src.InfoBytes)
 	t.addTrackers(src.Trackers)
 	cl.AddDHTNodes(src.Nodes)
@@ -1324,6 +1276,8 @@ func (cl *Client) rateLimitAccept(ip net.IP) bool {
 }
 
 var _ = atomic.AddInt32
+var lcount = uint64(0)
+var ucount = uint64(0)
 
 func (cl *Client) rLock() {
 	// updated := atomic.AddUint64(&lcount, 1)
@@ -1338,9 +1292,6 @@ func (cl *Client) rUnlock() {
 	cl._mu.RUnlock()
 	// l2.Output(2, fmt.Sprintf("%p runlock completed - %d", cl, updated))
 }
-
-var lcount = uint64(0)
-var ucount = uint64(0)
 
 func (cl *Client) lock() {
 	// updated := atomic.AddUint64(&lcount, 1)

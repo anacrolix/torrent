@@ -19,6 +19,7 @@ import (
 // Ensure that no race exists between sending a bitfield, and a subsequent
 // Have that would potentially alter it.
 func TestSendBitfieldThenHave(t *testing.T) {
+	t.SkipNow()
 	cl := Client{
 		config: TestingConfig(),
 	}

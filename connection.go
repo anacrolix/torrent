@@ -1168,7 +1168,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
-		// l2.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - remaining(%d) - unverified(%d) - failed(%d) - outstanding(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, cn.t.piecesM.Missing(), cn.t.piecesM.unverified.Len(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.completed.Len())
+		// l2.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), cn.t.piecesM.unverified.Len(), len(cn.t.piecesM.outstanding), cn.t.piecesM.completed.Len())
 
 		switch msg.Type {
 		case pp.Choke:
@@ -1572,8 +1572,6 @@ func (cn *connection) deleteAllRequests() {
 	for _, r := range reqs {
 		cn.deleteRequest(r)
 	}
-
-	cn.t.piecesM.Pend(reqs...)
 }
 
 func (cn *connection) postCancel(r request) bool {

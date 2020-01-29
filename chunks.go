@@ -205,13 +205,13 @@ func (t *chunks) ChunksAvailable(pid int) bool {
 	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	available := true
 	for _, c := range t.chunks(pid) {
 		available = available && t.unverified.Contains(c)
 	}
 
-	t.mu.Unlock()
 	return available
 }
 
@@ -236,10 +236,8 @@ func (t *chunks) ChunksComplete(pid int) bool {
 	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
-	tmp := t.completed.Contains(pid)
-	t.mu.Unlock()
-
-	return tmp
+	defer t.mu.Unlock()
+	return t.completed.Contains(pid)
 }
 
 // Chunks returns the chunk requests for the given piece.
@@ -284,11 +282,12 @@ func (t *chunks) ChunksPend(idx int) (changed bool) {
 	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	for _, c := range t.chunksRequests(idx) {
 		tmp := t.pend(c, c.Priority)
 		changed = changed || tmp
 	}
-	t.mu.Unlock()
 
 	return changed
 }

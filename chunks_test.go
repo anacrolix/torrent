@@ -349,3 +349,21 @@ func TestChunksComplete(t *testing.T) {
 	// we finish with 60 chunks missing.
 	require.Equal(t, 60, p.missing.Len())
 }
+
+func TestChunksAvailable(t *testing.T) {
+	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
+	require.Equal(t, 64, p.missing.Len())
+	require.True(t, p.ChunksAvailable(0))
+}
+
+func TestChunksPend(t *testing.T) {
+	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
+	require.Equal(t, 64, p.missing.Len())
+	require.True(t, p.ChunksPend(0))
+}
+
+func TestChunksRelease(t *testing.T) {
+	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
+	require.Equal(t, 64, p.missing.Len())
+	require.False(t, p.ChunksRelease(0))
+}

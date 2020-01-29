@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -25,9 +24,9 @@ func tinyTorrentInfo() *metainfo.Info {
 	}
 }
 
-func filledbmap(n int) *bitmap.Bitmap {
-	available := &bitmap.Bitmap{}
-	available.AddRange(0, n)
+func filledbmap(n int) *roaring.Bitmap {
+	available := roaring.NewBitmap()
+	available.AddRange(0, uint64(n))
 	return available
 }
 
@@ -49,6 +48,13 @@ func fromFile(path string) (info metainfo.Info, err error) {
 
 func quickpopulate(p *chunks) *chunks {
 	for i := int64(0); i < p.cmaximum; i++ {
+		p.missing.Set(int(i), int(i))
+	}
+	return p
+}
+
+func smallpopulate(p *chunks) *chunks {
+	for i := int64(0); i < 10; i++ {
 		p.missing.Set(int(i), int(i))
 	}
 	return p
@@ -303,7 +309,7 @@ func TestChunksPop(t *testing.T) {
 func TestChunksGraceWindow(t *testing.T) {
 	info, err := fromFile("testdata/bootstrap.dat.torrent")
 	require.NoError(t, err)
-	p := quickpopulate(newChunks(defaultChunk, &info))
+	p := smallpopulate(newChunks(defaultChunk, &info))
 
 	// adjust grace period to be negative to force immediate
 	// recovering of outstanding requests.

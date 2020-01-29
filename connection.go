@@ -1263,6 +1263,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			}
 			// l2.Printf("(%d) c(%p) REJECTING d(%d) r(%d,%d,%d)\n", os.Getpid(), cn, req.Digest, req.Index, req.Begin, req.Length)
 			cn.releaseRequest(req)
+			cn.rejected.AddInt(cn.t.piecesM.requestCID(req))
 		case pp.AllowedFast:
 			metrics.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(cn, debugLogValue).Log(cn.t.logger)
@@ -1577,9 +1578,9 @@ func (cn *connection) clearRequest(r request) bool {
 		return false
 	}
 
-	// add requests that have been released to the reject set to prevent them from
-	// being requested from this connection until rejected is reset.
-	cn.rejected.AddInt(cn.t.piecesM.requestCID(r))
+	// // add requests that have been released to the reject set to prevent them from
+	// // being requested from this connection until rejected is reset.
+	// cn.rejected.AddInt(cn.t.piecesM.requestCID(r))
 	delete(cn.requests, r.Digest)
 
 	cn.updateExpectingChunks()
@@ -1596,9 +1597,9 @@ func (cn *connection) releaseRequest(r request) (ok bool) {
 		return false
 	}
 
-	// add requests that have been released to the reject set to prevent them from
-	// being requested from this connection until rejected is reset.
-	cn.rejected.AddInt(cn.t.piecesM.requestCID(r))
+	// // add requests that have been released to the reject set to prevent them from
+	// // being requested from this connection until rejected is reset.
+	// cn.rejected.AddInt(cn.t.piecesM.requestCID(r))
 	delete(cn.requests, r.Digest)
 	cn.t.piecesM.Retry(r)
 

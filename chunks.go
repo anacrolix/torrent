@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -38,7 +37,7 @@ type bmap interface {
 
 type everybmap struct{}
 
-func (t everybmap) Contains(int) bool { return true }
+func (t everybmap) ContainsInt(int) bool { return true }
 
 func chunksPerPiece(plength, clength int64) int64 {
 	return int64(math.Ceil(float64(plength) / float64(clength)))
@@ -430,10 +429,10 @@ func (t *chunks) reap(window time.Duration) {
 		}
 	}
 
-	if recovered > 0 {
-		// log.Println(recovered, "/", scanned, "recovered in", time.Since(ts), ">", window, t.gracePeriod, "remaining", len(t.outstanding))
-		log.Printf("remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", t.missing.Len(), t.failed.GetCardinality(), len(t.outstanding), t.unverified.Len(), t.completed.Len())
-	}
+	// if recovered > 0 {
+	// 	log.Println(recovered, "/", scanned, "recovered in", time.Since(ts), ">", window, t.gracePeriod, "remaining", len(t.outstanding))
+	// 	log.Printf("remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", t.missing.Len(), t.failed.GetCardinality(), len(t.outstanding), t.unverified.Len(), t.completed.Len())
+	// }
 }
 
 func (t *chunks) retry(r request) {

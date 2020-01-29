@@ -278,12 +278,14 @@ func TestChunksFailed(t *testing.T) {
 	reqs, err := c.Pop(1, everybmap{})
 	require.NoError(t, err)
 	for _, req := range reqs {
-		touched.Add(uint32(req.Index))
+		touched.AddInt(int(req.Index))
 		c.ChunksFailed(int(req.Index))
 	}
 
+	assert.Equal(t, uint64(1), c.failed.GetCardinality())
 	union := c.Failed(touched)
 	assert.Equal(t, uint64(1), union.GetCardinality())
+	assert.Equal(t, uint64(0), c.failed.GetCardinality())
 }
 
 func TestChunksPop(t *testing.T) {

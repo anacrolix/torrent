@@ -377,7 +377,12 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 
 	// Now do some things with leecher and seeder.
 	leecherTorrent.AddClientPeer(seeder)
-	require.EqualValues(t, 1, leecherTorrent.Stats().PendingPeers)
+	// this check is inheritantly flawed as new conns are potentially started immediately
+	// when a peer is added.
+	// s := leecherTorrent.Stats()
+	// log.Printf("torrent stats %+v\n", s)
+	// require.EqualValues(t, 1, s.TotalPeers)
+
 	// The Torrent should not be interested in obtaining peers, so the one we
 	// just added should be the only one.
 	assert.False(t, leecherTorrent.Seeding())

@@ -9,7 +9,6 @@ import (
 	l2 "log"
 	"math/rand"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -364,7 +363,8 @@ func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
 }
 
 func (cn *connection) Close() {
-	// l2.Output(3, fmt.Sprintf("(%d) c(%p) closing connection", os.Getpid(), cn))
+	// trace(fmt.Sprintf("c(%p) initiated", cn))
+	// defer trace(fmt.Sprintf("c(%p) completed", cn))
 	defer cn.t.cln.event.Broadcast()
 	defer cn.deleteAllRequests()
 	cn.cmu().Lock()
@@ -605,7 +605,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		available = cn.fastset.Clone()
 	}
 
-	available.AndNot(cn.rejected)
+	// available.AndNot(cn.rejected)
 	max := cn.nominalMaxRequests() - len(cn.requests)
 
 	if reqs, err = cn.t.piecesM.Pop(max, available); stderrors.As(err, &empty{}) {
@@ -776,8 +776,13 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 // the connections themselves instead of bottlenecking at the torrent.
 func (cn *connection) checkFailures() {
 	cn.cmu().Lock()
+	defer cn.cmu().Unlock()
+
+	if cn.closed.IsSet() {
+		return
+	}
+
 	failed := cn.t.piecesM.Failed(cn.touched.Clone())
-	cn.cmu().Unlock()
 
 	if failed.IsEmpty() {
 		return
@@ -785,8 +790,11 @@ func (cn *connection) checkFailures() {
 
 	iter := failed.ReverseIterator()
 	for iter.HasNext() {
+		pid := int(iter.Next())
 		cn.stats.incrementPiecesDirtiedBad()
-		cn.t.piecesM.ChunksPend(int(iter.Next()))
+		if !cn.t.piecesM.ChunksComplete(pid) {
+			cn.t.piecesM.ChunksRetry(pid)
+		}
 	}
 
 	if cn.stats.PiecesDirtiedBad.Int64() > 10 {
@@ -1193,7 +1201,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
-		l2.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
+		// l2.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
 
 		switch msg.Type {
 		case pp.Choke:
@@ -1620,6 +1628,8 @@ func (cn *connection) dupRequests() (requests []request) {
 }
 
 func (cn *connection) deleteAllRequests() {
+	// trace(fmt.Sprintf("c(%p) initiated", cn))
+	// defer trace(fmt.Sprintf("c(%p) completed", cn))
 	reqs := cn.dupRequests()
 	for _, r := range reqs {
 		cn.releaseRequest(r)

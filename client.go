@@ -971,7 +971,7 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) {
 	defer t.event.Broadcast()
 	defer t.dropConnection(c)
 	c.sendInitialMessages(cl, t)
-	go c.writer(time.Minute)
+	go c.writer(10 * time.Second)
 	if err := c.mainReadLoop(); err != nil {
 		var (
 			b banned

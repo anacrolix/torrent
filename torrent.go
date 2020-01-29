@@ -1221,11 +1221,8 @@ func (t *torrent) updatePieceCompletion(piece pieceIndex) bool {
 	p.storageCompletionOk = uncached.Ok
 
 	if uncached.Complete && uncached.Ok {
-		t.piecesM.Complete(piece)
 		defer t.onPieceCompleted(piece)
 	} else {
-		t.piecesM.ChunksPend(piece)
-		t.piecesM.ChunksRelease(piece)
 		defer t.onIncompletePiece(piece)
 	}
 
@@ -1363,18 +1360,18 @@ func (t *torrent) deleteConnection(c *connection) (ret bool) {
 
 	c.deleteAllRequests()
 	if len(t.conns) == 0 {
-		t.assertNoPendingRequests()
+		t.assertNoPendingRequests(c)
 	}
 
 	return ret
 }
 
-func (t *torrent) assertNoPendingRequests() {
+func (t *torrent) assertNoPendingRequests(c *connection) {
 	if outstanding := t.piecesM.Outstanding(); len(outstanding) != 0 {
-		for i, r := range outstanding {
-			l2.Println("still expecting", i, r.Index, r.Begin, r.Length)
+		for _, r := range outstanding {
+			l2.Printf("still expecting c(%p) d(%020d) r(%d,%d,%d)", t.piecesM, r.Digest, r.Index, r.Begin, r.Length)
 		}
-		panic(outstanding)
+		panic(t.piecesM.outstanding)
 	}
 }
 
@@ -1747,9 +1744,8 @@ func (t *torrent) pieceHashed(piece pieceIndex, failure error) error {
 			t.piecesM.ChunksRelease(piece)
 			return errors.Wrapf(err, "%T: error marking piece complete %d: %T - %s", t.storage, piece, err, err)
 		}
+		t.piecesM.Complete(piece)
 	} else {
-		t.piecesM.ChunksPend(piece)
-		t.piecesM.ChunksRelease(piece)
 		t.piecesM.ChunksFailed(piece)
 
 		t.allStats((*ConnStats).incrementPiecesDirtiedBad)
@@ -1809,6 +1805,13 @@ func (t *torrent) VerifyData() {
 // Start the process of connecting to the given peer for the given torrent if
 // appropriate.
 func (t *torrent) initiateConn(peer Peer) {
+	// reset failures when connections are empty.
+	// currently this is important because failures are held onto from the initial checksum.
+	// of current data. we can remove this once that precondition is fixed.
+	if len(t.conns) == 0 {
+		t.piecesM.FailuresReset()
+	}
+
 	if peer.Id == t.cln.peerID {
 		return
 	}

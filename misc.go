@@ -19,20 +19,25 @@ type chunkSpec struct {
 }
 
 type request struct {
+	Digest   uint64
 	Index    pp.Integer
 	Reserved time.Time
 	Priority int
 	chunkSpec
 }
 
-func (r request) digest() uint64 {
+func (r request) rDigest(i, b, l uint32) uint64 {
 	bs := make([]byte, 12)
-	binary.LittleEndian.PutUint32(bs[:4], uint32(r.Index))
-	binary.LittleEndian.PutUint32(bs[4:8], uint32(r.Begin))
-	binary.LittleEndian.PutUint32(bs[8:], uint32(r.Length))
+	binary.LittleEndian.PutUint32(bs[:4], uint32(i))
+	binary.LittleEndian.PutUint32(bs[4:8], uint32(b))
+	binary.LittleEndian.PutUint32(bs[8:], uint32(l))
 	digest := fnv.New64a()
 	digest.Write(bs)
 	return digest.Sum64()
+}
+
+func (r request) digest() uint64 {
+	return r.rDigest(uint32(r.Index), uint32(r.Begin), uint32(r.Length))
 }
 
 func (r request) ToMsg(mt pp.MessageType) pp.Message {
@@ -45,11 +50,16 @@ func (r request) ToMsg(mt pp.MessageType) pp.Message {
 }
 
 func newRequest(index, begin, length pp.Integer) request {
-	return request{Index: index, chunkSpec: chunkSpec{begin, length}}
+	return request{
+		Digest:    request{}.rDigest(uint32(index), uint32(begin), uint32(length)),
+		Index:     index,
+		chunkSpec: chunkSpec{begin, length},
+	}
 }
 
 func newRequest2(index, begin, length pp.Integer, prio int) request {
 	return request{
+		Digest:    request{}.rDigest(uint32(index), uint32(begin), uint32(length)),
 		Index:     index,
 		Priority:  prio,
 		chunkSpec: chunkSpec{begin, length},

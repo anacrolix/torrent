@@ -187,6 +187,7 @@ func TestChunksRequests(t *testing.T) {
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
 	test := func(expected, r request, err error) {
+		expected.Digest = r.Digest
 		expected.Reserved = r.Reserved
 		assert.NoError(t, err)
 		assert.Equal(t, expected, r)

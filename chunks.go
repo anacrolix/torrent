@@ -33,7 +33,7 @@ func (t empty) Error() string {
 }
 
 type bmap interface {
-	Contains(int) bool
+	ContainsInt(int) bool
 }
 
 type everybmap struct{}
@@ -177,6 +177,10 @@ func (t *chunks) pindex(cidx int) int {
 	return int(pindex(int64(cidx), t.meta.PieceLength, t.clength))
 }
 
+func (t *chunks) fill(b *roaring.Bitmap) {
+	b.AddRange(0, uint64(t.cmaximum))
+}
+
 // ChunksMissing checks if the given piece has any missing chunks.
 func (t *chunks) ChunksMissing(pid int) bool {
 	t.mu.Lock()
@@ -191,6 +195,8 @@ func (t *chunks) ChunksMissing(pid int) bool {
 	return false
 }
 
+// ChunksAvailable returns true iff all the chunks for the given piece are awaiting
+// digesting.
 func (t *chunks) ChunksAvailable(pid int) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -316,9 +322,7 @@ func (t *chunks) peek(available bmap) (cidx int, req request, err error) {
 
 	// grab first missing chunk
 	t.missing.IterTyped(func(i bitmap.BitIndex) bool {
-		pid := pindex(int64(i), int64(t.meta.PieceLength), int64(t.clength))
-
-		if available.Contains(int(pid)) {
+		if available.ContainsInt(i) {
 			idx = i
 			return false
 		}
@@ -360,19 +364,13 @@ func (t *chunks) Peek(available bmap) (req request, err error) {
 // but this complicates some of the logic, and I'm leaving it to do once refactoring
 // the locks and contention issues are resolved.
 func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Println("pop failed", r, n)
-		}
-	}()
-
-	if n < 0 {
+	if n <= 0 { // sanity check.
 		return reqs, nil
 	}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	defer t.Recover()
+	t.recover()
 
 	reqs = make([]request, 0, n)
 	for i := 0; i < n; i++ {
@@ -399,7 +397,7 @@ func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
 
 // Recover initiate a collection of outstanding requests.
 // this moves them back into the missing bitmap, allowing them to be requested again.
-func (t *chunks) Recover() {
+func (t *chunks) recover() {
 	if atomic.CompareAndSwapInt64(&t.reapers, 0, 1) {
 		// log.Println("reaping initiated")
 		t.reap(100 * time.Millisecond)
@@ -412,6 +410,7 @@ func (t *chunks) reap(window time.Duration) {
 	ts := time.Now()
 	recovered := 0
 	scanned := 0
+
 	if len(t.outstanding) == 0 {
 		return
 	}
@@ -420,7 +419,7 @@ func (t *chunks) reap(window time.Duration) {
 		scanned++
 
 		if req.Reserved.Add(t.gracePeriod).Before(ts) {
-			t.pend(req, -2*(t.requestCID(req)+1))
+			t.pend(req, req.Priority)
 			t.release(req)
 			recovered++
 		}
@@ -431,17 +430,21 @@ func (t *chunks) reap(window time.Duration) {
 		}
 	}
 
-	// if recovered > 0 {
-	// 	log.Println(recovered, "/", scanned, "recovered in", time.Since(ts), t.gracePeriod)
-	// }
+	if recovered > 0 {
+		// log.Println(recovered, "/", scanned, "recovered in", time.Since(ts), ">", window, t.gracePeriod, "remaining", len(t.outstanding))
+		log.Printf("remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", t.missing.Len(), t.failed.GetCardinality(), len(t.outstanding), t.unverified.Len(), t.completed.Len())
+	}
+}
+
+func (t *chunks) retry(r request) {
+	cidx := t.requestCID(r)
+	delete(t.outstanding, r.Digest)
+	t.missing.Set(cidx, r.Priority)
 }
 
 func (t *chunks) release(r request) bool {
-	d := r.digest()
-
-	_, ok := t.outstanding[d]
-	delete(t.outstanding, d)
-
+	_, ok := t.outstanding[r.Digest]
+	delete(t.outstanding, r.Digest)
 	return ok
 }
 
@@ -468,7 +471,7 @@ func (t *chunks) pend(r request, prio int) (changed bool) {
 func (t *chunks) Missing() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.Recover()
+	t.recover()
 	return t.missing.Len()
 }
 
@@ -511,7 +514,7 @@ func (t *chunks) Outstanding() (dup map[uint64]request) {
 func (t *chunks) Pend(reqs ...request) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	defer t.Recover()
+	defer t.recover()
 	for _, r := range reqs {
 		t.pend(r, 10*r.Priority)
 	}
@@ -521,7 +524,7 @@ func (t *chunks) Pend(reqs ...request) {
 func (t *chunks) Release(reqs ...request) (b bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	defer t.Recover()
+	defer t.recover()
 
 	b = true
 	for _, r := range reqs {
@@ -534,6 +537,17 @@ func (t *chunks) Release(reqs ...request) (b bool) {
 	return b
 }
 
+// Retry mark the requests to be retried.
+func (t *chunks) Retry(reqs ...request) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	defer t.recover()
+
+	for _, r := range reqs {
+		t.retry(r)
+	}
+}
+
 func (t *chunks) Available(r request) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -544,7 +558,7 @@ func (t *chunks) Available(r request) bool {
 func (t *chunks) Verify(r request) (err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.Recover()
+	t.recover()
 
 	d := r.digest()
 	cid := t.requestCID(r)

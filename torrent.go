@@ -99,7 +99,7 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
 
 		networkingEnabled:       true,
-		duplicateRequestTimeout: 2 * time.Minute,
+		duplicateRequestTimeout: 4 * time.Second,
 
 		piecesM: newChunks(src.ChunkSize, &metainfo.Info{}),
 	}

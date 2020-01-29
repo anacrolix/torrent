@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -91,7 +92,8 @@ func pindex(chunk, plength, clength int64) int64 {
 
 func newChunks(clength int, m *metainfo.Info) *chunks {
 	p := &chunks{
-		mu:          &sync.RWMutex{},
+		// mu:          &sync.RWMutex{},
+		mu:          newDebugLock(&sync.RWMutex{}),
 		meta:        m,
 		cmaximum:    numChunks(m.Length, m.PieceLength, int64(clength)),
 		clength:     int64(clength),
@@ -109,8 +111,8 @@ func newChunks(clength int, m *metainfo.Info) *chunks {
 // the goal here is to have a single source of truth for what chunks are outstanding.
 type chunks struct {
 	meta *metainfo.Info
-	mu   *sync.RWMutex
-	// mu rwmutex
+	// mu   *sync.RWMutex
+	mu rwmutex
 
 	// chunk length
 	clength int64
@@ -182,6 +184,8 @@ func (t *chunks) fill(b *roaring.Bitmap) {
 
 // ChunksMissing checks if the given piece has any missing chunks.
 func (t *chunks) ChunksMissing(pid int) bool {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -196,20 +200,25 @@ func (t *chunks) ChunksMissing(pid int) bool {
 
 // ChunksAvailable returns true iff all the chunks for the given piece are awaiting
 // digesting.
+//go:noinline
 func (t *chunks) ChunksAvailable(pid int) bool {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
+	t.mu.Lock()
 
 	available := true
 	for _, c := range t.chunks(pid) {
 		available = available && t.unverified.Contains(c)
 	}
 
+	t.mu.Unlock()
 	return available
 }
 
 // ChunksHashing return true iff any chunk for the given piece has been marked as unverified.
 func (t *chunks) ChunksHashing(pid int) bool {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -224,10 +233,13 @@ func (t *chunks) ChunksHashing(pid int) bool {
 
 // ChunksComplete returns true iff all the chunks for the given piece has been marked as completed.
 func (t *chunks) ChunksComplete(pid int) bool {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	tmp := t.completed.Contains(pid)
+	t.mu.Unlock()
 
-	return t.completed.Contains(pid)
+	return tmp
 }
 
 // Chunks returns the chunk requests for the given piece.
@@ -241,6 +253,8 @@ func (t *chunks) chunksRequests(idx int) (requests []request) {
 }
 
 func (t *chunks) ChunksAdjust(pid int) (changed bool) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -265,7 +279,10 @@ func (t *chunks) ChunksAdjust(pid int) (changed bool) {
 
 // ChunksPend marks all the chunks for the given piece to the priority.
 // returns true if any changes were made.
+//go:noinline
 func (t *chunks) ChunksPend(idx int) (changed bool) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	for _, c := range t.chunksRequests(idx) {
 		tmp := t.pend(c, c.Priority)
@@ -278,7 +295,10 @@ func (t *chunks) ChunksPend(idx int) (changed bool) {
 
 // ChunksRelease releases all the chunks for the given piece back into the missing
 // pool.
+//go:noinline
 func (t *chunks) ChunksRelease(idx int) (changed bool) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -292,6 +312,8 @@ func (t *chunks) ChunksRelease(idx int) (changed bool) {
 
 // Chunks returns the chunk requests for the given piece.
 func (t *chunks) Chunks(idx int) (requests []request) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.chunksRequests(idx)
@@ -299,6 +321,8 @@ func (t *chunks) Chunks(idx int) (requests []request) {
 
 // Priority returns the priority of the first chunk based on the piece ID.
 func (t *chunks) Priority(idx int) int {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -308,7 +332,8 @@ func (t *chunks) Priority(idx int) int {
 		return prio
 	}
 
-	return int(PiecePriorityNone)
+	// return int(PiecePriorityNone)
+	return int(0)
 }
 
 func (t *chunks) peek(available bmap) (cidx int, req request, err error) {
@@ -346,6 +371,8 @@ func (t *chunks) peek(available bmap) (cidx int, req request, err error) {
 
 // Peek at the request based on availability.
 func (t *chunks) Peek(available bmap) (req request, err error) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	_, req, err = t.peek(available)
@@ -367,6 +394,8 @@ func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
 		return reqs, nil
 	}
 
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.recover()
@@ -437,11 +466,13 @@ func (t *chunks) reap(window time.Duration) {
 
 func (t *chunks) retry(r request) {
 	cidx := t.requestCID(r)
+	log.Output(3, fmt.Sprintf("c(%p) release request: d(%20d - %d) r(%d,%d,%d)", t, r.Digest, cidx, r.Index, r.Begin, r.Length))
 	delete(t.outstanding, r.Digest)
 	t.missing.Set(cidx, r.Priority)
 }
 
 func (t *chunks) release(r request) bool {
+	log.Output(3, fmt.Sprintf("c(%p) release request: d(%20d) r(%d,%d,%d)", t, r.Digest, r.Index, r.Begin, r.Length))
 	_, ok := t.outstanding[r.Digest]
 	delete(t.outstanding, r.Digest)
 	return ok
@@ -460,14 +491,15 @@ func (t *chunks) pend(r request, prio int) (changed bool) {
 	// remove from unverified.
 	t.unverified.Remove(cidx)
 
-	// d := r.digest()
-	// log.Output(3, fmt.Sprintf("c(%p) pending request: d(%20d - %d) r(%d,%d,%d) (%d) u(%t)", t, d, cidx, r.Index, r.Begin, r.Length, prio, changed))
+	log.Output(3, fmt.Sprintf("c(%p) pending request: d(%20d - %d) r(%d,%d,%d) (%d) u(%t)", t, r.Digest, cidx, r.Index, r.Begin, r.Length, prio, changed))
 
 	return changed
 }
 
 // Missing returns the number of missing chunks
 func (t *chunks) Missing() int {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.recover()
@@ -476,6 +508,8 @@ func (t *chunks) Missing() int {
 
 // Failed returns the union of the current failures and the provided completed mapping.
 func (t *chunks) Failed(touched *roaring.Bitmap) *roaring.Bitmap {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
 	union := t.failed.Clone()
 	t.mu.RUnlock()
@@ -499,6 +533,8 @@ func (t *chunks) Failed(touched *roaring.Bitmap) *roaring.Bitmap {
 
 // Outstanding returns a copy of the outstanding requests
 func (t *chunks) Outstanding() (dup map[uint64]request) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -511,6 +547,8 @@ func (t *chunks) Outstanding() (dup map[uint64]request) {
 
 // Pend forces a chunks to be added to the missing queue.
 func (t *chunks) Pend(reqs ...request) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	defer t.recover()
@@ -521,6 +559,8 @@ func (t *chunks) Pend(reqs ...request) {
 
 // Release a request from the outstanding mapping.
 func (t *chunks) Release(reqs ...request) (b bool) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	defer t.recover()
@@ -538,6 +578,8 @@ func (t *chunks) Release(reqs ...request) (b bool) {
 
 // Retry mark the requests to be retried.
 func (t *chunks) Retry(reqs ...request) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	defer t.recover()
@@ -548,6 +590,8 @@ func (t *chunks) Retry(reqs ...request) {
 }
 
 func (t *chunks) Available(r request) bool {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.unverified.Contains(t.requestCID(r)) || t.completed.Contains(int(r.Index))
@@ -555,6 +599,8 @@ func (t *chunks) Available(r request) bool {
 
 // Verify mark the chunk for verification.
 func (t *chunks) Verify(r request) (err error) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.recover()
@@ -573,6 +619,8 @@ func (t *chunks) Verify(r request) (err error) {
 
 // Validate mark all the chunks of the given piece to be validated.
 func (t *chunks) Validate(pid int) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -582,6 +630,8 @@ func (t *chunks) Validate(pid int) {
 }
 
 func (t *chunks) Complete(pid int) (changed bool) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -601,6 +651,8 @@ func (t *chunks) Complete(pid int) (changed bool) {
 
 // ChunksFailed mark a piece by index as failed.
 func (t *chunks) ChunksFailed(pid int) {
+	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	t.failed.Add(uint32(pid))
 	t.mu.Unlock()

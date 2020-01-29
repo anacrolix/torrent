@@ -92,7 +92,7 @@ func pindex(chunk, plength, clength int64) int64 {
 
 func newChunks(clength int, m *metainfo.Info) *chunks {
 	p := &chunks{
-		// mu:          &sync.RWMutex{},
+		// mu: &sync.RWMutex{},
 		mu:          newDebugLock(&sync.RWMutex{}),
 		meta:        m,
 		cmaximum:    numChunks(m.Length, m.PieceLength, int64(clength)),
@@ -111,8 +111,6 @@ func newChunks(clength int, m *metainfo.Info) *chunks {
 // the goal here is to have a single source of truth for what chunks are outstanding.
 type chunks struct {
 	meta *metainfo.Info
-	// mu   *sync.RWMutex
-	mu rwmutex
 
 	// chunk length
 	clength int64
@@ -142,6 +140,9 @@ type chunks struct {
 
 	// cache of completed piece indices, this means they have been retrieved and verified.
 	completed bitmap.Bitmap
+
+	// mu   *sync.RWMutex
+	mu rwmutex
 }
 
 // chunks returns the set of chunk id's for the given piece.
@@ -200,7 +201,6 @@ func (t *chunks) ChunksMissing(pid int) bool {
 
 // ChunksAvailable returns true iff all the chunks for the given piece are awaiting
 // digesting.
-//go:noinline
 func (t *chunks) ChunksAvailable(pid int) bool {
 	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
@@ -277,7 +277,6 @@ func (t *chunks) ChunksAdjust(pid int) (changed bool) {
 
 // ChunksPend marks all the chunks for the given piece to the priority.
 // returns true if any changes were made.
-//go:noinline
 func (t *chunks) ChunksPend(idx int) (changed bool) {
 	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
@@ -294,7 +293,6 @@ func (t *chunks) ChunksPend(idx int) (changed bool) {
 
 // ChunksRelease releases all the chunks for the given piece back into the missing
 // pool.
-//go:noinline
 func (t *chunks) ChunksRelease(idx int) (changed bool) {
 	trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))

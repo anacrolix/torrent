@@ -1015,7 +1015,6 @@ func (t *torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
 
 func (t *torrent) pieceAllDirty(piece pieceIndex) bool {
 	return t.piecesM.ChunksAvailable(piece)
-	// return t.pieces[piece].dirtyChunks.Len() == int(t.pieceNumChunks(piece))
 }
 
 func (t *torrent) readersChanged() {

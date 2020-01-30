@@ -1,61 +1,35 @@
 # torrent
 
-[![Join the chat at https://gitter.im/anacrolix/torrent](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/anacrolix/torrent?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![GoDoc](https://godoc.org/github.com/anacrolix/torrent?status.svg)](https://godoc.org/github.com/anacrolix/torrent)
-[![CircleCI](https://circleci.com/gh/anacrolix/torrent.svg?style=shield)](https://circleci.com/gh/anacrolix/torrent)
-[![Astronomer Rating](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fastronomer.ullaakut.eu%2Fshields%3Fowner%3Danacrolix%26name%3Dtorrent)](https://github.com/ullaakut/astronomer)
-[![GitHub Release](https://img.shields.io/github/release/anacrolix/torrent.svg)](https://github.com/anacrolix/torrent/releases)
+[![GoDoc](https://godoc.org/github.com/james-lawrence/torrent?status.svg)](https://godoc.org/github.com/james-lawrence/torrent)
 
-This repository implements BitTorrent-related packages and command-line utilities in Go. The emphasis is on use as a library from other projects. It's been used 24/7 in production by downstream services since late 2014. The implementation was specifically created to explore Go's concurrency capabilities, and to include the ability to stream data directly from the BitTorrent network. To this end it [supports seeking, readaheads and other features](https://godoc.org/github.com/anacrolix/torrent#Reader) exposing torrents and their files with the various Go idiomatic `io` package interfaces. This is also demonstrated through [torrentfs](#torrentfs).
+This repository is a refactor of [anacrolix's](https://github.com/anacrolix/torrent), primarily to simplify the exposed API to users
+of the library, improve horizontal scalability, remove many of the extraneous dependencies, and to add in some extended functionality.
 
-There is [support for protocol encryption, DHT, PEX, uTP, and various extensions](https://godoc.org/github.com/anacrolix/torrent). There are [several data storage backends provided](https://godoc.org/github.com/anacrolix/torrent/storage): blob, file, bolt, and mmap, to name a few. You can [write your own](https://godoc.org/github.com/anacrolix/torrent/storage#ClientImpl) to store data for example on S3, or in a database. 
+## improvements implemented by library
+- smaller API surface. reduces the API surface of the client.
+- refactored the single lock used for all torrents out. this means the torrents do not contend with each other for the singe lock.
 
-Some noteworthy package dependencies that can be used for other purposes include:
-
- * [go-libutp](https://github.com/anacrolix/go-libutp)
- * [dht](https://github.com/anacrolix/dht)
- * [bencode](https://godoc.org/github.com/anacrolix/torrent/bencode)
- * [tracker](https://godoc.org/github.com/anacrolix/torrent/tracker)
+## improvements planned
+- simplify network configuration.
+- swappable priority implementation.
 
 ## Installation
 
-Install the library package with `go get github.com/anacrolix/torrent`, or the provided cmds with `go get github.com/anacrolix/torrent/cmd/...`.
+Install the library package with `go get github.com/james-lawrence/torrent`, or the provided cmds with `go get github.com/james-lawrence/torrent/cmd/...`.
 
 ## Library examples
 
-There are some small [examples](https://godoc.org/github.com/anacrolix/torrent#pkg-examples) in the package documentation.
+There are some small [examples](https://godoc.org/github.com/james-lawrence/torrent#pkg-examples) in the package documentation.
 
-## Downstream projects
-
-There are several web-frontends and Android clients among the known public projects:
-
- * [Torrent.Express](https://torrent.express/)
- * [Confluence](https://github.com/anacrolix/confluence)
- * [Trickl](https://github.com/arranlomas/Trickl)
- * [Elementum](http://elementum.surge.sh/)
- * [goTorrent](https://github.com/deranjer/goTorrent)
- * [Go Peerflix](https://github.com/Sioro-Neoku/go-peerflix)
- * [Cloud Torrent](https://github.com/jpillora/cloud-torrent)
- * [Android Torrent Client](https://gitlab.com/axet/android-torrent-client)
- * [libtorrent](https://gitlab.com/axet/libtorrent)
- * [Remote-Torrent](https://github.com/BruceWangNo1/remote-torrent)
- * [ANT-Downloader](https://github.com/anatasluo/ant)
- 
 ## Help
 
-Communication about the project is primarily through [Gitter](https://gitter.im/anacrolix/torrent) and the [issue tracker](https://github.com/anacrolix/torrent/issues).
-
-## Command packages
-
-Here I'll describe what some of the packages in `./cmd` do.
-
-Note that the [`godo`](https://github.com/anacrolix/godo) command which is invoked in the following examples builds and executes a Go import path, like `go run`. It's easier to use this convention than to spell out the install/invoke cycle for every single example.
+Communication about the project is primarily through the [issue tracker](https://github.com/james-lawrence/torrent/issues).
 
 ### torrent
 
 Downloads torrents from the command-line. This first example does not use `godo`.
 
-	$ go get github.com/anacrolix/torrent/cmd/torrent
+	$ go get github.com/james-lawrence/torrent/cmd/torrent
     # Now 'torrent' should be in $GOPATH/bin, which should be in $PATH.
 	$ torrent 'magnet:?xt=urn:btih:KRWPCX3SJUM4IMM4YF5RPHL6ANPYTQPU'
     ubuntu-14.04.2-desktop-amd64.iso [===================================================================>]  99% downloading (1.0 GB/1.0 GB)
@@ -70,7 +44,7 @@ Downloads torrents from the command-line. This first example does not use `godo`
 torrentfs mounts a FUSE filesystem at `-mountDir`. The contents are the torrents described by the torrent files and magnet links at `-metainfoDir`. Data for read requests is fetched only as required from the torrent network, and stored at `-downloadDir`.
 
     $ mkdir mnt torrents
-    $ godo github.com/anacrolix/torrent/cmd/torrentfs -mountDir=mnt -metainfoDir=torrents &
+    $ godo github.com/james-lawrence/torrent/cmd/torrentfs -mountDir=mnt -metainfoDir=torrents &
     $ cd torrents
     $ wget http://releases.ubuntu.com/14.04.2/ubuntu-14.04.2-desktop-amd64.iso.torrent
     $ cd ..
@@ -84,5 +58,5 @@ torrentfs mounts a FUSE filesystem at `-mountDir`. The contents are the torrents
 
 Creates a magnet link from a torrent file. Note the extracted trackers, display name, and info hash.
 
-    $ godo github.com/anacrolix/torrent/cmd/torrent-magnet < ubuntu-14.04.2-desktop-amd64.iso.torrent
+    $ godo github.com/james-lawrence/torrent/cmd/torrent-magnet < ubuntu-14.04.2-desktop-amd64.iso.torrent
 	magnet:?xt=urn:btih:546cf15f724d19c4319cc17b179d7e035f89c1f4&dn=ubuntu-14.04.2-desktop-amd64.iso&tr=http%3A%2F%2Ftorrent.ubuntu.com%3A6969%2Fannounce&tr=http%3A%2F%2Fipv6.torrent.ubuntu.com%3A6969%2Fannounce

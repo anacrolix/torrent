@@ -19,9 +19,10 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-var DefaultHTTPUserAgent = "Go-Torrent/1.0"
+// DefaultHTTPUserAgent ...
+const DefaultHTTPUserAgent = "Go-Torrent/1.0"
 
-// Probably not safe to modify this after it's given to a Client.
+// ClientConfig not safe to modify this after it's given to a Client.
 type ClientConfig struct {
 	// Store torrent file data in this directory unless .DefaultStorage is
 	// specified.

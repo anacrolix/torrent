@@ -57,9 +57,9 @@ func newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, network string
 		fastset:         roaring.NewBitmap(),
 		claimed:         roaring.NewBitmap(),
 		rejected:        roaring.NewBitmap(),
+		sentHaves:       roaring.NewBitmap(),
 		requests:        make(map[uint64]request, maxRequests),
 		PeerRequests:    make(map[request]struct{}, maxRequests),
-		sentHaves:       bitmap.Bitmap{RB: roaring.NewBitmap()},
 		drop:            make(chan error, 1),
 	}
 }
@@ -115,7 +115,7 @@ type connection struct {
 	// Indexed by metadata piece, set to true if posted and pending a
 	// response.
 	metadataRequests []bool
-	sentHaves        bitmap.Bitmap
+	sentHaves        *roaring.Bitmap
 
 	// Stuff controlled by the remote peer.
 	PeerID             PeerID
@@ -805,16 +805,18 @@ func (cn *connection) checkFailures() {
 }
 
 func (cn *connection) Have(piece pieceIndex) {
-	if !cn.sentHaves.IsEmpty() && cn.sentHaves.Get(bitmap.BitIndex(piece)) {
+	cn.cmu().Lock()
+	if !cn.sentHaves.IsEmpty() && cn.sentHaves.ContainsInt(piece) {
+		cn.cmu().Unlock()
 		return
 	}
+	cn.sentHaves.AddInt(piece)
+	cn.cmu().Unlock()
 
 	cn.Post(pp.Message{
 		Type:  pp.Have,
 		Index: pp.Integer(piece),
 	})
-
-	cn.sentHaves.Add(bitmap.BitIndex(piece))
 }
 
 func (cn *connection) PostBitfield() {
@@ -827,7 +829,7 @@ func (cn *connection) PostBitfield() {
 		Type:     pp.Bitfield,
 		Bitfield: bitmapx.Bools(cn.t.numPieces(), dup),
 	})
-	cn.sentHaves = dup
+	cn.sentHaves = bitmapx.Lazy(dup.RB)
 }
 
 func (cn *connection) updateRequests() {
@@ -1741,7 +1743,7 @@ func (cn *connection) sendInitialMessages(cl *Client, torrent *torrent) {
 	if cn.fastEnabled() {
 		if torrent.haveAllPieces() {
 			cn.Post(pp.Message{Type: pp.HaveAll})
-			cn.sentHaves.AddRange(0, bitmap.BitIndex(cn.t.NumPieces()))
+			cn.sentHaves.AddRange(0, uint64(cn.t.NumPieces()))
 			return
 		} else if !torrent.haveAnyPieces() {
 			cn.Post(pp.Message{Type: pp.HaveNone})

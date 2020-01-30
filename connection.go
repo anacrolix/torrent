@@ -605,7 +605,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		available = cn.fastset.Clone()
 	}
 
-	// available.AndNot(cn.rejected)
+	available.AndNot(cn.rejected)
 	max := cn.nominalMaxRequests() - len(cn.requests)
 
 	if reqs, err = cn.t.piecesM.Pop(max, available); stderrors.As(err, &empty{}) {
@@ -701,6 +701,8 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	}
 
 	for attempts := 0; ; attempts++ {
+		cn.resetRejected()
+
 		if cn.closed.IsSet() {
 			return
 		}
@@ -735,7 +737,6 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			}
 
 			cn.cmu().Lock()
-			cn.resetRejected()
 			// l2.Printf("c(%p) writer going to sleep: %d\n", cn, cn.writeBuffer.Len())
 			cn.writerCond.Wait()
 			// l2.Printf("c(%p) writer awake: %d\n", cn, cn.writeBuffer.Len())

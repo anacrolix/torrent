@@ -601,17 +601,16 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	available := cn.claimed.Clone()
 
 	if cn.PeerChoked && !cn.fastset.IsEmpty() {
-		l2.Printf("(%d) - c(%p) only requesting fast set\n", os.Getpid(), cn)
+		// l2.Printf("(%d) - c(%p) only requesting fast set\n", os.Getpid(), cn)
 		available = cn.fastset.Clone()
 	}
 
-	// available.AndNot(cn.rejected)
+	available.AndNot(cn.rejected)
 	max := cn.nominalMaxRequests() - len(cn.requests)
 
 	if reqs, err = cn.t.piecesM.Pop(max, available); stderrors.As(err, &empty{}) {
 		if len(reqs) == 0 {
 			// l2.Printf("(%d) - c(%p) empty queue - available(%d) - outstanding (%d)\n", os.Getpid(), cn, available.GetCardinality(), len(cn.requests))
-			l2.Printf("(%d) - c(%p) empty queue - available(%s) - outstanding (%d)\n", os.Getpid(), cn, bitmapx.Debug(available), len(cn.requests))
 			return
 		}
 	} else if err != nil {
@@ -629,7 +628,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	}
 
 	for max, req = range reqs {
-		l2.Printf("c(%p) - popped r(%d,%d,%d) (%d) - %v\n", cn, req.Index, req.Begin, req.Length, req.Priority, err)
+		// l2.Printf("c(%p) - popped r(%d,%d,%d) (%d) - %v\n", cn, req.Index, req.Begin, req.Length, req.Priority, err)
 
 		if cn.closed.IsSet() {
 			break
@@ -937,7 +936,7 @@ func (cn *connection) raisePeerMinPieces(newMin pieceIndex) {
 }
 
 func (cn *connection) peerSentHave(piece pieceIndex) error {
-	l2.Printf("(%d) c(%p) - RECEIVED HAVE: r(%d,-,-)\n", os.Getpid(), cn, piece)
+	// l2.Printf("(%d) c(%p) - RECEIVED HAVE: r(%d,-,-)\n", os.Getpid(), cn, piece)
 	if cn.t.haveInfo() && piece >= cn.t.numPieces() || piece < 0 {
 		return errors.New("invalid piece")
 	}
@@ -1386,7 +1385,7 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 
 	req := newRequestFromMessage(msg)
 
-	l2.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
+	// l2.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
 
 	if cn.PeerChoked {
 		metrics.Add("chunks received while choked", 1)

@@ -3,6 +3,7 @@ package torrent
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/url"
 	"strconv"
@@ -98,6 +99,7 @@ func listenAll(networks []network, getHost func(string) string, port int, proxyU
 	for _, n := range networks {
 		nahs = append(nahs, networkAndHost{n, getHost(n.String())})
 	}
+	log.Printf("listening: %+v\n", nahs)
 	for {
 		ss, retry, err := listenAllRetry(nahs, port, proxyURL, f)
 		if !retry {

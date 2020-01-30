@@ -9,6 +9,7 @@ import (
 	l2 "log"
 	"math/rand"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -223,6 +224,7 @@ func (cn *connection) peerHasAllPieces() (all bool, known bool) {
 	if cn.peerSentHaveAll {
 		return true, true
 	}
+
 	if !cn.t.haveInfo() {
 		return false, false
 	}
@@ -231,8 +233,7 @@ func (cn *connection) peerHasAllPieces() (all bool, known bool) {
 		return false, true
 	}
 
-	return roaring.FlipInt(cn.claimed, 0, cn.t.numPieces()).IsEmpty(), true
-	// return bitmap.Flip(cn.peerPieces, 0, bitmap.BitIndex(cn.t.numPieces())).IsEmpty(), true
+	return roaring.FlipInt(cn.claimed, 0, int(cn.t.piecesM.cmaximum)).IsEmpty(), true
 }
 
 func (cn *connection) cmu() sync.Locker {
@@ -261,15 +262,14 @@ func (cn *connection) completedString() string {
 	if cn.peerSentHaveAll {
 		have = cn.bestPeerNumPieces()
 	}
-	return fmt.Sprintf("%d/%d", have, cn.bestPeerNumPieces())
+	return fmt.Sprintf("%d/%d", have, cn.t.piecesM.cmaximum)
 }
 
 // Correct the PeerPieces slice length. Return false if the existing slice is
 // invalid, such as by receiving badly sized BITFIELD, or invalid HAVE
 // messages.
 func (cn *connection) setNumPieces(num pieceIndex) error {
-	// TODO investigate magic number, i believe its incorrect. should be higher...
-	cn.claimed.RemoveRange(uint64(num), 0x100000000)
+	cn.claimed.RemoveRange(uint64(cn.t.piecesM.cmaximum), cn.claimed.GetCardinality())
 	cn.peerPiecesChanged()
 	return nil
 }
@@ -391,7 +391,7 @@ func (cn *connection) Close() {
 }
 
 func (cn *connection) PeerHasPiece(piece pieceIndex) bool {
-	return cn.peerSentHaveAll || cn.claimed.ContainsInt(int(piece))
+	return cn.peerSentHaveAll || bitmapx.Contains(cn.claimed, cn.t.piecesM.chunks(piece)...)
 }
 
 // Writes a message into the write buffer.
@@ -601,16 +601,17 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	available := cn.claimed.Clone()
 
 	if cn.PeerChoked && !cn.fastset.IsEmpty() {
-		// l2.Printf("(%d) - c(%p) only requesting fast set\n", os.Getpid(), cn)
+		l2.Printf("(%d) - c(%p) only requesting fast set\n", os.Getpid(), cn)
 		available = cn.fastset.Clone()
 	}
 
-	available.AndNot(cn.rejected)
+	// available.AndNot(cn.rejected)
 	max := cn.nominalMaxRequests() - len(cn.requests)
 
 	if reqs, err = cn.t.piecesM.Pop(max, available); stderrors.As(err, &empty{}) {
 		if len(reqs) == 0 {
 			// l2.Printf("(%d) - c(%p) empty queue - available(%d) - outstanding (%d)\n", os.Getpid(), cn, available.GetCardinality(), len(cn.requests))
+			l2.Printf("(%d) - c(%p) empty queue - available(%s) - outstanding (%d)\n", os.Getpid(), cn, bitmapx.Debug(available), len(cn.requests))
 			return
 		}
 	} else if err != nil {
@@ -628,7 +629,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	}
 
 	for max, req = range reqs {
-		// l2.Printf("c(%p) - popped r(%d,%d,%d) (%d) - %v\n", cn, req.Index, req.Begin, req.Length, req.Priority, err)
+		l2.Printf("c(%p) - popped r(%d,%d,%d) (%d) - %v\n", cn, req.Index, req.Begin, req.Length, req.Priority, err)
 
 		if cn.closed.IsSet() {
 			break
@@ -675,9 +676,6 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	// cn.t.logger.Printf("c(%p) writer initiated\n", cn)
 	// defer cn.t.logger.Printf("c(%p) writer completed\n", cn)
 	defer cn.deleteAllRequests()
-	// defer func() {
-	// 	l2.Printf("(%d) c(%p) - WRITER: remaining(%d) - unverified(%d) - failed(%d) - outstanding(%d) - completed(%d)\n", os.Getpid(), cn, cn.t.piecesM.Missing(), cn.t.piecesM.unverified.Len(), cn.t.piecesM.failed.GetCardinality(), len(cn.requests), cn.t.piecesM.completed.Len())
-	// }()
 
 	var (
 		lastWrite      time.Time = time.Now()
@@ -737,9 +735,9 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			}
 
 			cn.cmu().Lock()
-			// l2.Printf("c(%p) writer going to sleep: %d\n", cn, cn.writeBuffer.Len())
+			l2.Printf("c(%p) writer going to sleep: %d\n", cn, cn.writeBuffer.Len())
 			cn.writerCond.Wait()
-			// l2.Printf("c(%p) writer awake: %d\n", cn, cn.writeBuffer.Len())
+			l2.Printf("(%d) c(%p) - writer awake: pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
 			cn.cmu().Unlock()
 			continue
 		}
@@ -939,6 +937,7 @@ func (cn *connection) raisePeerMinPieces(newMin pieceIndex) {
 }
 
 func (cn *connection) peerSentHave(piece pieceIndex) error {
+	l2.Printf("(%d) c(%p) - RECEIVED HAVE: r(%d,-,-)\n", os.Getpid(), cn, piece)
 	if cn.t.haveInfo() && piece >= cn.t.numPieces() || piece < 0 {
 		return errors.New("invalid piece")
 	}
@@ -948,8 +947,8 @@ func (cn *connection) peerSentHave(piece pieceIndex) error {
 	}
 
 	cn.raisePeerMinPieces(piece + 1)
-	cn.claimed.AddInt(int(piece))
 	for _, cidx := range cn.t.piecesM.chunks(int(piece)) {
+		cn.claimed.AddInt(cidx)
 		cn.rejected.Remove(uint32(cidx))
 	}
 
@@ -977,7 +976,10 @@ func (cn *connection) peerSentBitfield(bf []bool) error {
 		if have {
 			cn.raisePeerMinPieces(pieceIndex(i) + 1)
 		}
-		cn.claimed.AddInt(i)
+
+		for _, c := range cn.t.piecesM.chunks(i) {
+			cn.claimed.AddInt(c)
+		}
 	}
 	cn.peerPiecesChanged()
 	return nil
@@ -1202,7 +1204,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
-		// l2.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
+		l2.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
 
 		switch msg.Type {
 		case pp.Choke:
@@ -1384,7 +1386,7 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 
 	req := newRequestFromMessage(msg)
 
-	// l2.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
+	l2.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
 
 	if cn.PeerChoked {
 		metrics.Add("chunks received while choked", 1)

@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -52,7 +53,6 @@ func numChunks(total, plength, clength int64) int64 {
 	remainder := total - (npieces * plength)
 	chunksper := chunksPerPiece(plength, clength)
 	rchunks := int64(math.Ceil(float64(remainder) / float64(clength)))
-	// fmt.Println("numchunks", total, clength, plength, remainder, "chunking", npieces, chunksper, chunksper*npieces, rchunks, chunksper*npieces+rchunks)
 	return (chunksper * npieces) + rchunks
 }
 
@@ -91,8 +91,7 @@ func pindex(chunk, plength, clength int64) int64 {
 
 func newChunks(clength int, m *metainfo.Info) *chunks {
 	p := &chunks{
-		mu: &sync.RWMutex{},
-		// mu:          newDebugLock(&sync.RWMutex{}),
+		mu:          &sync.RWMutex{},
 		meta:        m,
 		cmaximum:    numChunks(m.Length, m.PieceLength, int64(clength)),
 		clength:     int64(clength),
@@ -476,7 +475,7 @@ func (t *chunks) retry(r request) {
 	cidx := t.requestCID(r)
 	delete(t.outstanding, r.Digest)
 	t.missing.Set(cidx, r.Priority)
-	// log.Output(3, fmt.Sprintf("c(%p) retry request: d(%020d - %d) r(%d,%d,%d)", t, r.Digest, cidx, r.Index, r.Begin, r.Length))
+	log.Output(3, fmt.Sprintf("c(%p) retry request: d(%020d - %d) r(%d,%d,%d)", t, r.Digest, cidx, r.Index, r.Begin, r.Length))
 }
 
 func (t *chunks) release(r request) bool {
@@ -657,7 +656,7 @@ func (t *chunks) Complete(pid int) (changed bool) {
 		tmp = t.unverified.Remove(cidx) || tmp
 		changed = changed || tmp
 
-		// log.Output(2, fmt.Sprintf("c(%p) marked completed: (%020d - %d) r(%d,%d,%d)\n", t, r.Digest, cidx, r.Index, r.Begin, r.Length))
+		log.Output(2, fmt.Sprintf("c(%p) marked completed: (%020d - %d) r(%d,%d,%d)\n", t, r.Digest, cidx, r.Index, r.Begin, r.Length))
 	}
 
 	t.completed.Set(pid, true)

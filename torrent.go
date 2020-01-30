@@ -99,7 +99,7 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
 
 		networkingEnabled:       true,
-		duplicateRequestTimeout: 4 * time.Second,
+		duplicateRequestTimeout: time.Second,
 
 		piecesM: newChunks(src.ChunkSize, &metainfo.Info{}),
 	}
@@ -1364,21 +1364,22 @@ func (t *torrent) dropConnection(c *connection) {
 func (t *torrent) deleteConnection(c *connection) (ret bool) {
 	c.Close()
 	t.lock()
+	// l2.Printf("closed c(%p) - pending(%d)\n", c, len(c.requests))
 	_, ret = t.conns[c]
 	delete(t.conns, c)
+	empty := len(t.conns) == 0
 	t.unlock()
 
 	metrics.Add("deleted connections", 1)
 
-	c.deleteAllRequests()
-	if len(t.conns) == 0 {
-		t.assertNoPendingRequests(c)
+	if empty {
+		t.assertNoPendingRequests()
 	}
 
 	return ret
 }
 
-func (t *torrent) assertNoPendingRequests(c *connection) {
+func (t *torrent) assertNoPendingRequests() {
 	if outstanding := t.piecesM.Outstanding(); len(outstanding) != 0 {
 		for _, r := range outstanding {
 			l2.Printf("still expecting c(%p) d(%020d) r(%d,%d,%d)", t.piecesM, r.Digest, r.Index, r.Begin, r.Length)

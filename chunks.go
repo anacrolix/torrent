@@ -138,8 +138,52 @@ type chunks struct {
 	// cache of completed piece indices, this means they have been retrieved and verified.
 	completed bitmap.Bitmap
 
-	// mu   *sync.RWMutex
-	mu rwmutex
+	// next time to reap the outstanding requests
+	nextReap time.Time
+
+	mu *sync.RWMutex
+}
+
+func (t *chunks) reap(window time.Duration) {
+	ts := time.Now()
+	recovered := 0
+	scanned := 0
+
+	if len(t.outstanding) == 0 {
+		return
+	}
+
+	if t.nextReap.After(ts) {
+		return
+	}
+
+	for _, req := range t.outstanding {
+		scanned++
+
+		if deadline := req.Reserved.Add(t.gracePeriod); deadline.Before(ts) {
+			// t.pend(req, req.Priority)
+			// t.release(req)
+			t.retry(req)
+			recovered++
+		} else if t.nextReap.IsZero() || t.nextReap.Before(deadline) {
+			// by saving the deadline that will expire the furthest into the future
+			// we ensure we'll capture all the expired requests between now and then.
+			t.nextReap = deadline.Add(time.Millisecond)
+		}
+
+		// check after its scanned a few elements.
+		// the cap is somewhat arbitrary based on testing.
+		// thousands of items can be scanned in < millisecond times.
+		// the time.Since method vastly outweighs the scanning.
+		if scanned%1000 == 0 && time.Since(ts) > window {
+			break
+		}
+	}
+
+	// if recovered > 0 {
+	// 	log.Println(recovered, "/", scanned, "recovered in", time.Since(ts), ">", window, t.gracePeriod, "remaining", len(t.outstanding), "next reap", t.nextReap)
+	// 	log.Printf("remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\r\n", t.missing.Len(), t.failed.GetCardinality(), len(t.outstanding), t.unverified.Len(), t.completed.Len())
+	// }
 }
 
 // chunks returns the set of chunk id's for the given piece.
@@ -429,7 +473,7 @@ func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
 		t.missing.Remove(cidx)
 		reqs = append(reqs, req)
 
-		// log.Output(3, fmt.Sprintf("(%d) c(%p) popped: d(%020d - %d) r(%d,%d,%d) - %t\n", os.Getpid(), t, req.Digest, cidx, req.Index, req.Begin, req.Length, t.missing.Contains(cidx)))
+		// log.Output(2, fmt.Sprintf("(%d) c(%p) popped: d(%020d - %d) r(%d,%d,%d) - %t\n", os.Getpid(), t, req.Digest, cidx, req.Index, req.Begin, req.Length, t.missing.Contains(cidx)))
 	}
 
 	return reqs, nil
@@ -440,47 +484,20 @@ func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
 func (t *chunks) recover() {
 	if atomic.CompareAndSwapInt64(&t.reapers, 0, 1) {
 		// log.Println("reaping initiated")
-		t.reap(100 * time.Millisecond)
+		t.reap(10 * time.Millisecond)
 		// log.Println("reaping completed")
 		atomic.CompareAndSwapInt64(&t.reapers, 1, 0)
 	}
 }
 
-func (t *chunks) reap(window time.Duration) {
-	ts := time.Now()
-	recovered := 0
-	scanned := 0
-
-	if len(t.outstanding) == 0 {
-		return
-	}
-
-	for _, req := range t.outstanding {
-		scanned++
-
-		if req.Reserved.Add(t.gracePeriod).Before(ts) {
-			t.pend(req, req.Priority)
-			t.release(req)
-			recovered++
-		}
-
-		// stop reaping after the window has elapsed.
-		if time.Since(ts) > window {
-			break
-		}
-	}
-
-	// if recovered > 0 {
-	// 	log.Println(recovered, "/", scanned, "recovered in", time.Since(ts), ">", window, t.gracePeriod, "remaining", len(t.outstanding))
-	// 	log.Printf("remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", t.missing.Len(), t.failed.GetCardinality(), len(t.outstanding), t.unverified.Len(), t.completed.Len())
-	// }
-}
-
 func (t *chunks) retry(r request) {
 	cidx := t.requestCID(r)
+
+	// _, ok := t.outstanding[r.Digest]
+	// log.Output(3, fmt.Sprintf("c(%p) retry request: d(%020d - %d) r(%d,%d,%d) removed(%t)", t, r.Digest, cidx, r.Index, r.Begin, r.Length, ok))
+
 	delete(t.outstanding, r.Digest)
 	t.missing.Set(cidx, r.Priority)
-	// log.Output(3, fmt.Sprintf("c(%p) retry request: d(%020d - %d) r(%d,%d,%d)", t, r.Digest, cidx, r.Index, r.Begin, r.Length))
 }
 
 func (t *chunks) release(r request) bool {
@@ -503,6 +520,8 @@ func (t *chunks) pend(r request, prio int) (changed bool) {
 	// remove from unverified.
 	t.unverified.Remove(cidx)
 
+	delete(t.outstanding, r.Digest)
+
 	// log.Output(3, fmt.Sprintf("c(%p) pending request: d(%020d - %d) r(%d,%d,%d) (%d) u(%t)", t, r.Digest, cidx, r.Index, r.Begin, r.Length, prio, changed))
 
 	return changed
@@ -512,9 +531,8 @@ func (t *chunks) pend(r request, prio int) (changed bool) {
 func (t *chunks) Missing() int {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.recover()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return t.missing.Len()
 }
 
@@ -587,9 +605,8 @@ func (t *chunks) Release(reqs ...request) (b bool) {
 	b = true
 	for _, r := range reqs {
 		b = b && t.release(r)
-		// d := r.digest()
 		// cidx := t.requestCID(r)
-		// log.Output(2, fmt.Sprintf("c(%p) released request: d(%020d - %d) r(%d,%d,%d)", t, d, cidx, r.Index, r.Begin, r.Length))
+		// log.Output(2, fmt.Sprintf("c(%p) released request: d(%020d - %d) r(%d,%d,%d)", t, r.Digest, cidx, r.Index, r.Begin, r.Length))
 	}
 
 	return b
@@ -622,7 +639,6 @@ func (t *chunks) Verify(r request) (err error) {
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.recover()
 
 	cid := t.requestCID(r)
 

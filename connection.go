@@ -56,7 +56,7 @@ func newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, network string
 		touched:         roaring.NewBitmap(),
 		fastset:         roaring.NewBitmap(),
 		claimed:         roaring.NewBitmap(),
-		rejected:        roaring.NewBitmap(),
+		blacklisted:     roaring.NewBitmap(),
 		sentHaves:       roaring.NewBitmap(),
 		requests:        make(map[uint64]request, maxRequests),
 		PeerRequests:    make(map[request]struct{}, maxRequests),
@@ -125,9 +125,9 @@ type connection struct {
 	PeerExtensionBytes pp.PeerExtensionBits
 
 	// bitmaps representing availability of chunks from the peer.
-	rejected *roaring.Bitmap
-	claimed  *roaring.Bitmap
-	fastset  *roaring.Bitmap
+	blacklisted *roaring.Bitmap // represents chunks which we've temporarily blacklisted.
+	claimed     *roaring.Bitmap // represents chunks which our peer claims to have available.
+	fastset     *roaring.Bitmap // represents chunks which out peer will allow us to request while choked.
 	// pieces we've accepted chunks for from the peer.
 	touched *roaring.Bitmap
 
@@ -164,8 +164,8 @@ func (cn *connection) resetRejected() {
 	if cn.rejectedReset.After(time.Now()) {
 		return
 	}
-	cn.rejected.Clear()
-	cn.rejectedReset = time.Now().Add(10 * time.Second)
+	cn.blacklisted.Clear()
+	cn.rejectedReset = time.Now().Add(time.Second)
 }
 
 func (cn *connection) updateExpectingChunks() {
@@ -534,7 +534,7 @@ type messageWriter func(pp.Message) bool
 // Proxies the messageWriter's response.
 func (cn *connection) request(r request, mw messageWriter) bool {
 	cn.cmu().Lock()
-	cn.requests[r.digest()] = r
+	cn.requests[r.Digest] = r
 	cn.cmu().Unlock()
 	cn.updateExpectingChunks()
 
@@ -582,7 +582,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	}
 
 	// release timed out chunks
-	if deleted := cn.deleteTimedout((cn.t.piecesM.gracePeriod / 4) + time.Second); deleted == 0 {
+	if deleted := cn.deleteTimedout((cn.t.piecesM.gracePeriod) + time.Second); deleted == 0 {
 		// l2.Printf("c(%p) skipping chunk requests - space unavailable(%d > %d) missing(%t)\n", cn, len(cn.requests), cn.requestsLowWater, cn.t.piecesM.Missing() == 0)
 	}
 
@@ -604,8 +604,17 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		available = cn.fastset.Clone()
 	}
 
-	available.AndNot(cn.rejected)
+	available.AndNot(cn.blacklisted)
 	max := cn.nominalMaxRequests() - len(cn.requests)
+
+	if !cn.SetInterested(true, msg) {
+		return
+	}
+
+	// we want the peer to upload to us.
+	if !cn.Unchoke(msg) {
+		return
+	}
 
 	if reqs, err = cn.t.piecesM.Pop(max, available); stderrors.As(err, &empty{}) {
 		if len(reqs) == 0 {
@@ -617,25 +626,18 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		return
 	}
 
-	if !cn.SetInterested(true, msg) {
-		return
-	}
-
-	// we want the peer to upload to us.
-	if !cn.Unchoke(msg) {
-		return
-	}
-
 	for max, req = range reqs {
-		// l2.Printf("c(%p) - popped r(%d,%d,%d) (%d) - %v\n", cn, req.Index, req.Begin, req.Length, req.Priority, err)
+		// l2.Printf("c(%p) - popped d(%020d) r(%d,%d,%d) - %v\n", cn, req.Digest, req.Index, req.Begin, req.Length, err)
 
 		if cn.closed.IsSet() {
+			// l2.Printf("c(%p) closed break - d(%020d) r(%d,%d,%d)\n", cn, req.Digest, req.Index, req.Begin, req.Length)
 			break
 		}
 
 		// Choking is looked at here because our interest is dependent
 		// on whether we'd make requests in its absence.
 		if cn.PeerChoked && !cn.fastset.ContainsInt(cn.t.piecesM.requestCID(req)) {
+			// l2.Printf("c(%p) choked - d(%020d) r(%d,%d,%d)\n", cn, req.Digest, req.Index, req.Begin, req.Length)
 			continue
 		} else if cn.PeerChoked {
 			// l2.Printf("c(%p) - allowed fast request r(%d,%d,%d) (%d)\n", cn, req.Index, req.Begin, req.Length, req.Priority)
@@ -647,16 +649,12 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		}
 	}
 
+	// l2.Printf("c(%p) filled - cleaning up reqs(%d)\n", cn, len(cn.requests))
 	// advance to just the unused chunks.
 	if len(reqs) > 0 {
-		reqs = reqs[max+1:]
+		reqs = reqs[max:]
 		// release any unused requests back to the queue.
-		cn.t.piecesM.Pend(reqs...)
-		cn.t.piecesM.Release(reqs...)
-	}
-
-	if cn.closed.IsSet() {
-		return
+		cn.t.piecesM.Retry(reqs...)
 	}
 
 	// If we didn't completely top up the requests, we shouldn't mark
@@ -775,10 +773,6 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 func (cn *connection) checkFailures() {
 	cn.cmu().Lock()
 	defer cn.cmu().Unlock()
-
-	if cn.closed.IsSet() {
-		return
-	}
 
 	failed := cn.t.piecesM.Failed(cn.touched.Clone())
 
@@ -950,7 +944,7 @@ func (cn *connection) peerSentHave(piece pieceIndex) error {
 	cn.raisePeerMinPieces(piece + 1)
 	for _, cidx := range cn.t.piecesM.chunks(int(piece)) {
 		cn.claimed.AddInt(cidx)
-		cn.rejected.Remove(uint32(cidx))
+		cn.blacklisted.Remove(uint32(cidx))
 	}
 
 	if cn.updatePiecePriority(piece) {
@@ -1109,7 +1103,7 @@ func (cn *connection) onReadRequest(r request) error {
 	if cn.Choked {
 		metrics.Add("requests received while choking", 1)
 		if cn.fastEnabled() {
-			l2.Printf("%p - onReadRequest: choked, rejecting request", cn)
+			// l2.Printf("%p - onReadRequest: choked, rejecting request", cn)
 			metrics.Add("requests rejected while choking", 1)
 			cn.reject(r)
 		}
@@ -1276,7 +1270,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			}
 			// l2.Printf("(%d) c(%p) REJECTING d(%d) r(%d,%d,%d)\n", os.Getpid(), cn, req.Digest, req.Index, req.Begin, req.Length)
 			cn.releaseRequest(req)
-			cn.rejected.AddInt(cn.t.piecesM.requestCID(req))
+			cn.blacklisted.AddInt(cn.t.piecesM.requestCID(req))
 		case pp.AllowedFast:
 			metrics.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(cn, debugLogValue).Log(cn.t.logger)
@@ -1408,7 +1402,8 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 	// Do we actually want this chunk? if the chunk is already available, then we
 	// don't need it.
 	if cn.t.piecesM.Available(req) {
-		// l2.Println("already have chunk", req.Index, req.Begin, req.Length, cn.t.piecesM.requestCID(req))
+		cn.t.piecesM.Release(req)
+		// l2.Printf("c(%p) - wasted chunk d(%020d) r(%d,%d,%d)\n", cn, req.Digest, req.Index, req.Begin, req.Length)
 		metrics.Add("chunks received wasted", 1)
 		cn.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
 		return nil
@@ -1578,7 +1573,7 @@ func (cn *connection) deleteTimedout(grace time.Duration) int {
 		}
 	}
 
-	cn.t.piecesM.Retry(deleted...)
+	// cn.t.piecesM.Retry(deleted...)
 
 	return len(deleted)
 }
@@ -1591,9 +1586,10 @@ func (cn *connection) clearRequest(r request) bool {
 		return false
 	}
 
-	// // add requests that have been released to the reject set to prevent them from
-	// // being requested from this connection until rejected is reset.
-	// cn.rejected.AddInt(cn.t.piecesM.requestCID(r))
+	// l2.Printf("c(%p) - clearing request d(%020d) r(%d,%d,%d)\n", cn, r.Digest, r.Index, r.Begin, r.Length)
+	// add requests that have been released to the reject set to prevent them from
+	// being requested from this connection until rejected is reset.
+	cn.blacklisted.AddInt(cn.t.piecesM.requestCID(r))
 	delete(cn.requests, r.Digest)
 
 	cn.updateExpectingChunks()
@@ -1610,9 +1606,7 @@ func (cn *connection) releaseRequest(r request) (ok bool) {
 		return false
 	}
 
-	// // add requests that have been released to the reject set to prevent them from
-	// // being requested from this connection until rejected is reset.
-	// cn.rejected.AddInt(cn.t.piecesM.requestCID(r))
+	// l2.Printf("c(%p) - releasing request d(%020d) r(%d,%d,%d)\n", cn, r.Digest, r.Index, r.Begin, r.Length)
 	delete(cn.requests, r.Digest)
 	cn.t.piecesM.Retry(r)
 
@@ -1633,11 +1627,12 @@ func (cn *connection) dupRequests() (requests []request) {
 
 func (cn *connection) deleteAllRequests() {
 	// trace(fmt.Sprintf("c(%p) initiated", cn))
-	// defer trace(fmt.Sprintf("c(%p) completed", cn))
 	reqs := cn.dupRequests()
+	// defer trace(fmt.Sprintf("c(%p) completed reqs(%d)", cn, len(reqs)))
 	for _, r := range reqs {
 		cn.releaseRequest(r)
 	}
+	// cn.t.piecesM.Retry(reqs...)
 }
 
 func (cn *connection) postCancel(r request) bool {

@@ -172,7 +172,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		},
 		CryptoSelector: mse.DefaultCryptoSelector,
 		CryptoProvides: mse.AllSupportedCrypto,
-		ListenPort:     42069,
+		ListenPort:     0,
 		Logger:         log.Default,
 	}
 	//cc.ConnTracker.SetNoMaxEntries()

@@ -249,6 +249,8 @@ func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
 
 func TestClientTransferVarious(t *testing.T) {
 	// defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
+	// defer profile.Start(profile.BlockProfile, profile.ProfilePath(".")).Stop()
+	// defer profile.Start(profile.MutexProfile, profile.ProfilePath(".")).Stop()
 	// defer profile.Start(profile.TraceProfile, profile.ProfilePath(".")).Stop()
 
 	count := 0

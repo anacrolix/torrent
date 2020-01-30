@@ -32,9 +32,12 @@ func TestPrioritizedPeers(t *testing.T) {
 	}
 	pop := func(expected *Peer) {
 		if expected == nil {
-			assert.Panics(t, func() { pp.PopMax() })
+			_, ok := pp.PopMax()
+			assert.False(t, ok)
 		} else {
-			assert.Equal(t, *expected, pp.PopMax())
+			actual, ok := pp.PopMax()
+			assert.True(t, ok)
+			assert.Equal(t, *expected, actual)
 		}
 	}
 	min := func(expected *Peer) {

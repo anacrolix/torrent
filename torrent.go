@@ -384,6 +384,12 @@ func (t *torrent) unclosedConnsAsSlice() (ret []*connection) {
 	return
 }
 
+func (t *torrent) AddPeer(p Peer) {
+	t.lock()
+	defer t.unlock()
+	t.addPeer(p)
+}
+
 func (t *torrent) addPeer(p Peer) {
 	peersAddedBySource.Add(string(p.Source), 1)
 
@@ -1194,7 +1200,9 @@ func (t *torrent) openNewConns() {
 			return
 		}
 
-		t.initiateConn(t.peers.PopMax())
+		if p, ok := t.peers.PopMax(); ok {
+			t.initiateConn(p)
+		}
 	}
 }
 
@@ -1506,13 +1514,12 @@ func (t *torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 				// Can't do anything with this.
 				continue
 			}
-			t.lock()
-			t.addPeer(Peer{
+
+			t.AddPeer(Peer{
 				IP:     cp.IP[:],
 				Port:   cp.Port,
 				Source: peerSourceDhtGetPeers,
 			})
-			t.unlock()
 		}
 	}
 }

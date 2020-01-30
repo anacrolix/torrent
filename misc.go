@@ -93,6 +93,7 @@ func torrentOffsetRequest(torrentLength, pieceSize, chunkSize, offset int64) (
 	if offset < 0 || offset >= torrentLength {
 		return
 	}
+
 	r.Index = pp.Integer(offset / pieceSize)
 	r.Begin = pp.Integer(offset % pieceSize / chunkSize * chunkSize)
 	r.Length = pp.Integer(chunkSize)
@@ -104,6 +105,8 @@ func torrentOffsetRequest(torrentLength, pieceSize, chunkSize, offset int64) (
 	if int64(r.Length) > torrentLeft {
 		r.Length = pp.Integer(torrentLeft)
 	}
+
+	r = newRequest(r.Index, r.Begin, r.Length)
 	ok = true
 	return
 }

@@ -333,7 +333,7 @@ func TestChunksComplete(t *testing.T) {
 	require.Equal(t, 64, p.missing.Len())
 	require.True(t, p.ChunksMissing(0))
 
-	available := filledbmap(1)
+	available := filledbmap(p.lastChunk(0) + 1)
 	for rs, err := p.Pop(1, available); err == nil; rs, err = p.Pop(1, available) {
 		for _, r := range rs {
 			require.NoError(t, p.Verify(r))
@@ -355,6 +355,9 @@ func TestChunksComplete(t *testing.T) {
 func TestChunksAvailable(t *testing.T) {
 	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
 	require.Equal(t, 64, p.missing.Len())
+	for _, r := range p.chunksRequests(0) {
+		p.Verify(r)
+	}
 	require.True(t, p.ChunksAvailable(0))
 }
 

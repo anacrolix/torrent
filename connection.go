@@ -9,7 +9,6 @@ import (
 	l2 "log"
 	"math/rand"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -674,6 +673,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	// cn.t.logger.Printf("c(%p) writer initiated\n", cn)
 	// defer cn.t.logger.Printf("c(%p) writer completed\n", cn)
+	defer cn.checkFailures()
 	defer cn.deleteAllRequests()
 
 	var (
@@ -734,9 +734,9 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			}
 
 			cn.cmu().Lock()
-			l2.Printf("c(%p) writer going to sleep: %d\n", cn, cn.writeBuffer.Len())
+			// l2.Printf("c(%p) writer going to sleep: %d\n", cn, cn.writeBuffer.Len())
 			cn.writerCond.Wait()
-			l2.Printf("(%d) c(%p) - writer awake: pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
+			// l2.Printf("(%d) c(%p) - writer awake: pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
 			cn.cmu().Unlock()
 			continue
 		}
@@ -1203,7 +1203,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
-		l2.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
+		// l2.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
 
 		switch msg.Type {
 		case pp.Choke:

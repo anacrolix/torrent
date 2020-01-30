@@ -16,8 +16,10 @@ func TestPrioritizedPeers(t *testing.T) {
 		},
 	}
 	_, ok := pp.DeleteMin()
-	assert.Panics(t, func() { pp.PopMax() })
 	assert.False(t, ok)
+	_, ok = pp.PopMax()
+	assert.False(t, ok)
+
 	ps := []Peer{
 		{IP: net.ParseIP("1.2.3.4")},
 		{IP: net.ParseIP("1::2")},

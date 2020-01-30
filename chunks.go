@@ -143,18 +143,24 @@ type chunks struct {
 }
 
 // chunks returns the set of chunk id's for the given piece.
-func (t *chunks) chunks(idx int) (cidxs []int) {
+func (t *chunks) chunks(pid int) (cidxs []int) {
 	cpp := chunksPerPiece(t.meta.PieceLength, t.clength)
 	chunks := numChunks(t.meta.PieceLength, t.meta.PieceLength, t.clength)
 
 	for i := int64(0); i < chunks; i++ {
-		cidx := (idx * int(cpp)) + int(i)
+		cidx := (pid * int(cpp)) + int(i)
 		if int64(cidx) < t.cmaximum {
 			cidxs = append(cidxs, cidx)
 		}
 	}
 
 	return cidxs
+}
+
+func (t *chunks) lastChunk(pid int) int {
+	cpp := chunksPerPiece(t.meta.PieceLength, t.clength)
+	chunks := numChunks(t.meta.PieceLength, t.meta.PieceLength, t.clength)
+	return (pid * int(cpp)) + int(chunks-1)
 }
 
 func (t *chunks) request(cidx int64, prio int) (r request, err error) {
@@ -618,14 +624,13 @@ func (t *chunks) Verify(r request) (err error) {
 	defer t.mu.Unlock()
 	t.recover()
 
-	d := r.digest()
 	cid := t.requestCID(r)
 
-	delete(t.outstanding, d)
+	delete(t.outstanding, r.Digest)
 	t.missing.Remove(cid)
 	t.unverified.Set(cid, true)
 
-	// log.Printf("c(%p) marked for verification: d(%d - %d) i(%d) b(%d) l(%d)\n", t, d, cid, r.Index, r.Begin, r.Length)
+	// log.Printf("c(%p) marked for verification: d(%020d - %d) i(%d) b(%d) l(%d)\n", t, r.Digest, cid, r.Index, r.Begin, r.Length)
 
 	return nil
 }

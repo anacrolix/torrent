@@ -164,8 +164,10 @@ func TestPieceHashFailed(t *testing.T) {
 	tt.piecesM.Validate(1)
 	require.True(t, tt.piecesM.ChunksAvailable(1))
 	tt.pieceHashed(1, fmt.Errorf("boom"))
-	// Dirty chunks should be cleared so we can try again.
-	require.False(t, tt.pieceAllDirty(1))
+
+	// the piece should be marked as a failure. this means the connections will
+	// retry the piece either during their write loop or during their cleanup phase.
+	require.True(t, tt.piecesM.Failed(tt.piecesM.failed).Contains(1))
 	tt.unlock()
 }
 

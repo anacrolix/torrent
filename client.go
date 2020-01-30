@@ -1029,7 +1029,6 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 	t.digests = newDigests(
 		func(idx int) *Piece { return t.piece(idx) },
 		func(idx int, cause error) {
-			// l2.Println("digest complete", idx, cause)
 			if err := t.pieceHashed(idx, cause); err != nil {
 				t.logger.Print(err)
 			}

@@ -1633,12 +1633,6 @@ func (t *torrent) addConnection(c *connection) (err error) {
 		dropping []*connection
 	)
 
-	defer func() {
-		if err == nil {
-			metrics.Add("added connections", 1)
-		}
-	}()
-
 	if t.closed.IsSet() {
 		return errors.New("torrent closed")
 	}
@@ -1680,6 +1674,7 @@ func (t *torrent) addConnection(c *connection) (err error) {
 		t.dropConnection(d)
 	}
 
+	metrics.Add("added connections", 1)
 	return nil
 }
 

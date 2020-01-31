@@ -77,7 +77,7 @@ func DumpOnSignal(ctx context.Context, sigs ...os.Signal) {
 			return
 		case _ = <-signals:
 			if path, err := DumpRoutines(); err == nil {
-				log.Println("dump located at:", path, "\n")
+				log.Println("dump located at:", path)
 			} else {
 				log.Println("failed to dump routines:", err)
 			}

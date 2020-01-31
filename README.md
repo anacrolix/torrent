@@ -3,7 +3,7 @@
 [![GoDoc](https://godoc.org/github.com/james-lawrence/torrent?status.svg)](https://godoc.org/github.com/james-lawrence/torrent)
 
 This repository is a refactor of [anacrolix's](https://github.com/anacrolix/torrent), primarily to simplify the exposed API to users
-of the library, improve horizontal scalability, remove many of the extraneous dependencies, and to add in some extended functionality.
+of the library, use more idiomatic code styles, improve horizontal scalability, remove many of the extraneous dependencies, and to add in some extended functionality.
 
 ## improvements implemented by library
 - smaller API surface. reduces the API surface of the client.

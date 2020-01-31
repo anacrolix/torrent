@@ -52,9 +52,10 @@ func torrentBar(t torrent.Torrent) {
 		stats := t.Stats()
 
 		return fmt.Sprintf(
-			"downloading (%s/%s) completed(%d/%d) missing(%d) outstanding(%d) unverified(%d)",
+			"downloading (%s/%s) peers(%d) completed(%d/%d) missing(%d) outstanding(%d) unverified(%d)",
 			humanize.Bytes(uint64(t.BytesCompleted())),
 			humanize.Bytes(uint64(t.Info().TotalLength())),
+			stats.ActivePeers,
 			stats.Completed,
 			t.Info().NumPieces(),
 			stats.Missing,

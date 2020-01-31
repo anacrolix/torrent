@@ -135,15 +135,14 @@ func (cl *Client) merge(old *torrent, updated Metadata) (err error) {
 		old.SetDisplayName(updated.DisplayName)
 	}
 
-	cl.lock()
-	defer cl.unlock()
-
 	if updated.ChunkSize != 0 {
 		old.setChunkSize(pp.Integer(updated.ChunkSize))
 	}
 
 	old.addTrackers(updated.Trackers)
-	old.maybeNewConns()
+	old.lockedOpenNewConns()
+	cl.event.Broadcast()
+
 	return nil
 }
 
@@ -962,7 +961,7 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 		func(idx int) *Piece { return t.piece(idx) },
 		func(idx int, cause error) {
 			if err := t.pieceHashed(idx, cause); err != nil {
-				cl.config.errors().Println(err)
+				cl.config.debug().Println(err)
 			}
 			t.updatePieceCompletion(idx)
 			t.publishPieceChange(idx)

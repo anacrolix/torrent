@@ -97,6 +97,7 @@ func newChunks(clength int, m *metainfo.Info) *chunks {
 		gracePeriod: time.Minute,
 		outstanding: make(map[uint64]request),
 		failed:      roaring.NewBitmap(),
+		completed:   roaring.NewBitmap(),
 	}
 
 	// log.Printf("%p - LENGTH %d NUMCHUNKS %d - CHUNK LENGTH %d - PIECE LEGNTH %d\n", p, p.meta.Length, p.cmaximum, p.clength, p.meta.PieceLength)
@@ -136,7 +137,7 @@ type chunks struct {
 	unverified bitmap.Bitmap
 
 	// cache of completed piece indices, this means they have been retrieved and verified.
-	completed bitmap.Bitmap
+	completed *roaring.Bitmap
 
 	// next time to reap the outstanding requests
 	nextReap time.Time
@@ -284,7 +285,7 @@ func (t *chunks) ChunksComplete(pid int) bool {
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.completed.Contains(pid)
+	return t.completed.ContainsInt(pid)
 }
 
 // Chunks returns the chunk requests for the given piece.
@@ -303,7 +304,7 @@ func (t *chunks) ChunksAdjust(pid int) (changed bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.completed.Contains(pid) {
+	if t.completed.ContainsInt(pid) {
 		return false
 	}
 
@@ -352,6 +353,10 @@ func (t *chunks) ChunksRelease(idx int) (changed bool) {
 	}
 
 	return changed
+}
+
+func (t *chunks) UpdateAvailability() {
+	// t.completed
 }
 
 // ChunksRetry releases all the chunks for the given piece back into the missing
@@ -536,13 +541,14 @@ func (t *chunks) Missing() int {
 	return t.missing.Len()
 }
 
-func (t *chunks) Snapshot(s *TorrentStats) {
+func (t *chunks) Snapshot(s *TorrentStats) *TorrentStats {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	s.Missing = t.missing.Len()
 	s.Outstanding = len(t.outstanding)
 	s.Unverified = t.unverified.Len()
-	s.Completed = t.completed.Len()
+	s.Completed = int(t.completed.GetCardinality())
+	return s
 }
 
 // FailuresReset - used to clear failures
@@ -639,7 +645,7 @@ func (t *chunks) Available(r request) bool {
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.unverified.Contains(t.requestCID(r)) || t.completed.Contains(int(r.Index))
+	return t.unverified.Contains(t.requestCID(r)) || t.completed.ContainsInt(int(r.Index))
 }
 
 // Verify mark the chunk for verification.
@@ -687,8 +693,7 @@ func (t *chunks) Complete(pid int) (changed bool) {
 
 		// log.Output(2, fmt.Sprintf("c(%p) marked completed: (%020d - %d) r(%d,%d,%d)\n", t, r.Digest, cidx, r.Index, r.Begin, r.Length))
 	}
-
-	t.completed.Set(pid, true)
+	t.completed.AddInt(pid)
 	return changed
 }
 

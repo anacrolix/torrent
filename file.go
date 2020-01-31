@@ -59,7 +59,9 @@ func (f *File) bytesLeft() (left int64) {
 	pieceSize := int64(f.t.usualPieceSize())
 	firstPieceIndex := f.firstPieceIndex()
 	endPieceIndex := f.endPieceIndex() - 1
-	bitmap.Flip(f.t.piecesM.completed, firstPieceIndex+1, endPieceIndex).IterTyped(func(piece int) bool {
+
+	dup := bitmap.Bitmap{RB: f.t.piecesM.completed.Clone()}
+	bitmap.Flip(dup, firstPieceIndex+1, endPieceIndex).IterTyped(func(piece int) bool {
 		if piece >= endPieceIndex {
 			return false
 		}

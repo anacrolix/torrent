@@ -6,6 +6,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
+	"log"
 	l2 "log"
 	"math/rand"
 	"net"
@@ -95,7 +96,7 @@ type connection struct {
 	completedHandshake      time.Time
 	lastUsefulChunkReceived time.Time
 	lastChunkSent           time.Time
-	rejectedReset           time.Time
+	lastPeriodicUpdate      time.Time
 
 	// Stuff controlled by the local peer.
 	Interested           bool
@@ -155,13 +156,15 @@ type connection struct {
 	drop chan error
 }
 
-func (cn *connection) resetRejected() {
-	// reset rejected set periodically.
-	if cn.rejectedReset.After(time.Now()) {
+func (cn *connection) periodicUpdates() {
+	// these tasks only run periodically (every second)
+	if cn.lastPeriodicUpdate.After(time.Now()) {
 		return
 	}
+
+	cn.detectNewAvailability()
 	cn.blacklisted.Clear()
-	cn.rejectedReset = time.Now().Add(time.Second)
+	cn.lastPeriodicUpdate = time.Now().Add(time.Second)
 }
 
 func (cn *connection) updateExpectingChunks() {
@@ -224,11 +227,22 @@ func (cn *connection) peerHasAllPieces() (all bool, known bool) {
 		return false, false
 	}
 
-	if cn.claimed.IsEmpty() {
+	cn.cmu().Lock()
+	dup := cn.claimed.Clone()
+	cn.cmu().Unlock()
+
+	if dup.IsEmpty() {
 		return false, true
 	}
 
-	return roaring.FlipInt(cn.claimed, 0, int(cn.t.piecesM.cmaximum)).IsEmpty(), true
+	m := min(cn.t.piecesM.cmaximum, int64(dup.GetCardinality()))
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("peer has all pieces paniced", r, cn.t.piecesM.cmaximum, dup.GetCardinality(), "->", m)
+			panic(r)
+		}
+	}()
+	return roaring.FlipInt(dup, 0, int(m)).IsEmpty(), true
 }
 
 func (cn *connection) cmu() sync.Locker {
@@ -264,7 +278,9 @@ func (cn *connection) completedString() string {
 // invalid, such as by receiving badly sized BITFIELD, or invalid HAVE
 // messages.
 func (cn *connection) setNumPieces(num pieceIndex) error {
+	cn.cmu().Lock()
 	cn.claimed.RemoveRange(uint64(cn.t.piecesM.cmaximum), cn.claimed.GetCardinality())
+	cn.cmu().Unlock()
 	cn.peerPiecesChanged()
 	return nil
 }
@@ -593,7 +609,9 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	filledBuffer := false
 
 	if cn.peerSentHaveAll && cn.claimed.IsEmpty() {
+		cn.cmu().Lock()
 		cn.t.piecesM.fill(cn.claimed)
+		cn.cmu().Unlock()
 	}
 
 	available := cn.claimed.Clone()
@@ -695,7 +713,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 	}
 
 	for attempts := 0; ; attempts++ {
-		cn.resetRejected()
+		cn.periodicUpdates()
 
 		if cn.closed.IsSet() {
 			return
@@ -821,12 +839,12 @@ func (cn *connection) PostBitfield() {
 		return
 	}
 
-	dup := cn.t.piecesM.completed.Copy()
+	dup := cn.t.piecesM.completed.Clone()
 	cn.Post(pp.Message{
 		Type:     pp.Bitfield,
 		Bitfield: bitmapx.Bools(cn.t.numPieces(), dup),
 	})
-	cn.sentHaves = bitmapx.Lazy(dup.RB)
+	cn.sentHaves = bitmapx.Lazy(dup)
 }
 
 func (cn *connection) updateRequests() {
@@ -945,10 +963,13 @@ func (cn *connection) peerSentHave(piece pieceIndex) error {
 	}
 
 	cn.raisePeerMinPieces(piece + 1)
+
+	cn.cmu().Lock()
 	for _, cidx := range cn.t.piecesM.chunks(int(piece)) {
 		cn.claimed.AddInt(cidx)
 		cn.blacklisted.Remove(uint32(cidx))
 	}
+	cn.cmu().Unlock()
 
 	if cn.updatePiecePriority(piece) {
 		cn.updateRequests()
@@ -984,15 +1005,19 @@ func (cn *connection) peerSentBitfield(bf []bool) error {
 }
 
 func (cn *connection) onPeerSentHaveAll() error {
+	cn.cmu().Lock()
 	cn.peerSentHaveAll = true
 	cn.claimed.Clear()
+	cn.cmu().Unlock()
 	cn.peerPiecesChanged()
 	return nil
 }
 
 func (cn *connection) peerSentHaveNone() error {
-	cn.claimed.Clear()
+	cn.cmu().Lock()
 	cn.peerSentHaveAll = false
+	cn.claimed.Clear()
+	cn.cmu().Unlock()
 	cn.peerPiecesChanged()
 	return nil
 }
@@ -1423,12 +1448,7 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 	// Record that we have the chunk, so we aren't trying to download it while
 	// waiting for it to be written to storage.
 	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, cn.t.chunkSize))
-
-	cn.t.lock()
-	concurrentChunkWrites.Add(1)
 	err := cn.t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
-	concurrentChunkWrites.Add(-1)
-	cn.t.unlock()
 	piece.decrementPendingWrites()
 
 	if err := cn.t.piecesM.Verify(req); err != nil {
@@ -1486,6 +1506,15 @@ func (cn *connection) setRetryUploadTimer(delay time.Duration) {
 		cn.uploadTimer = time.AfterFunc(delay, cn.writerCond.Broadcast)
 	} else {
 		cn.uploadTimer.Reset(delay)
+	}
+}
+
+func (cn *connection) detectNewAvailability() {
+	dup := cn.t.piecesM.completed.Clone()
+	dup.AndNot(cn.sentHaves)
+	count := 0
+	for i := dup.Iterator(); i.HasNext(); count++ {
+		cn.Have(int(i.Next()))
 	}
 }
 

@@ -24,7 +24,6 @@ import (
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
-	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
 
@@ -239,28 +238,27 @@ func (t *torrent) _lock(depth int) {
 	// updated := atomic.AddUint64(&t.lcount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) lock initiated - %d", t, updated))
 	t._mu.Lock()
-	// updated := atomic.AddUint64(&t.lcount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) lock completed - %d", t, updated))
 }
 
 func (t *torrent) _unlock(depth int) {
+	// updated := atomic.AddUint64(&t.ucount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) unlock initiated - %d", t, updated))
 	t._mu.Unlock()
-	// updated := atomic.AddUint64(&t.ucount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) unlock completed - %d", t, updated))
 }
 
 func (t *torrent) _rlock(depth int) {
+	// updated := atomic.AddUint64(&t.lcount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) rlock initiated - %d", t, updated))
 	t._mu.RLock()
-	// updated := atomic.AddUint64(&t.lcount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) rlock completed - %d", t, updated))
 }
 
 func (t *torrent) _runlock(depth int) {
+	// updated := atomic.AddUint64(&t.ucount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) unlock initiated - %d", t, updated))
 	t._mu.RUnlock()
-	// updated := atomic.AddUint64(&t.ucount, 1)
 	// l2.Output(depth, fmt.Sprintf("t(%p) unlock completed - %d", t, updated))
 }
 
@@ -808,7 +806,8 @@ func (t *torrent) BytesMissing() int64 {
 }
 
 func (t *torrent) bytesLeft() (left int64) {
-	return t.info.Length - ((int64(t.piecesM.unverified.Len()) * int64(t.piecesM.clength)) + (int64(t.piecesM.completed.Len()) * int64(t.info.PieceLength)))
+	s := t.piecesM.Snapshot(&TorrentStats{})
+	return t.info.Length - ((int64(s.Unverified) * int64(t.piecesM.clength)) + (int64(s.Completed) * int64(t.info.PieceLength)))
 }
 
 // Bytes left to give in tracker announces.
@@ -839,7 +838,7 @@ func (t *torrent) numPieces() pieceIndex {
 }
 
 func (t *torrent) numPiecesCompleted() (num int) {
-	return t.piecesM.completed.Len()
+	return int(t.piecesM.completed.GetCardinality())
 }
 
 func (t *torrent) close() (err error) {
@@ -877,7 +876,9 @@ func (t *torrent) offsetRequest(off int64) (req request, ok bool) {
 }
 
 func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
-	defer perf.ScopeTimerErr(&err)()
+	t.lock()
+	defer t.unlock()
+
 	n, err := t.pieces[piece].Storage().WriteAt(data, begin)
 	if err == nil && n != len(data) {
 		return io.ErrShortWrite
@@ -910,7 +911,7 @@ func (t *torrent) pieceLength(piece pieceIndex) pp.Integer {
 }
 
 func (t *torrent) haveAnyPieces() bool {
-	return t.piecesM.completed.Len() != 0
+	return t.piecesM.completed.GetCardinality() != 0
 }
 
 func (t *torrent) haveAllPieces() bool {
@@ -918,7 +919,7 @@ func (t *torrent) haveAllPieces() bool {
 		return false
 	}
 
-	return t.piecesM.completed.Len() == t.numPieces()
+	return int(t.piecesM.completed.GetCardinality()) == t.numPieces()
 }
 
 func (t *torrent) havePiece(index pieceIndex) bool {
@@ -1767,11 +1768,12 @@ func (t *torrent) cancelRequestsForPiece(piece pieceIndex) {
 func (t *torrent) onPieceCompleted(piece pieceIndex) {
 	t.pendAllChunkSpecs(piece)
 	t.cancelRequestsForPiece(piece)
-	t.rLock()
-	defer t.rUnlock()
-	for conn := range t.conns {
-		conn.Have(piece)
-	}
+
+	// // TODO: move this loop into the connections directly.
+	// // they can detect it.
+	// for _, conn := range t.lockedConnsAsSlice() {
+	// 	conn.Have(piece)
+	// }
 }
 
 // Called when a piece is found to be not complete.
@@ -1783,6 +1785,12 @@ func (t *torrent) onIncompletePiece(piece pieceIndex) {
 	if !t.wantPieceIndex(piece) {
 		return
 	}
+}
+
+func (t *torrent) lockedConnsAsSlice() (conns []*connection) {
+	t.rLock()
+	defer t.rUnlock()
+	return t.connsAsSlice()
 }
 
 func (t *torrent) connsAsSlice() (ret []*connection) {

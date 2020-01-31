@@ -11,12 +11,12 @@ type bmap interface {
 }
 
 // Bools convert to an array of bools
-func Bools(n int, m bmap) (bf []bool) {
+func Bools(n int, m *roaring.Bitmap) (bf []bool) {
 	bf = make([]bool, n)
-	m.IterTyped(func(piece int) (again bool) {
-		bf[piece] = true
-		return true
-	})
+	
+	for i := m.Iterator(); i.HasNext(); {
+		bf[i.Next()] = true
+	}
 
 	return bf
 }

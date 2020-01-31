@@ -88,8 +88,9 @@ type ClientConfig struct {
 	DisableIPv6      bool `long:"disable-ipv6"`
 	DisableIPv4      bool
 	DisableIPv4Peers bool
-	Debug            logger // debug logging, defaults to discard
 	Logger           logger // standard logging for errors, defaults to stderr
+	Warn             logger // warn logging
+	Debug            logger // debug logging, defaults to discard
 
 	// HTTPProxy defines proxy for HTTP requests.
 	// Format: func(*Request) (*url.URL, error),
@@ -145,7 +146,7 @@ func (cfg *ClientConfig) errors() llog {
 }
 
 func (cfg *ClientConfig) warn() llog {
-	return llog{logger: cfg.Logger}
+	return llog{logger: cfg.Warn}
 }
 
 func (cfg *ClientConfig) info() llog {
@@ -193,6 +194,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		CryptoProvides: mse.AllSupportedCrypto,
 		ListenPort:     0,
 		Logger:         log.New(os.Stderr, "[torrent] ", log.Flags()),
+		Warn:           discard{},
 		Debug:          discard{},
 	}
 

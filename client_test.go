@@ -886,7 +886,7 @@ func TestPeerInvalidHave(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, _added)
 	defer cl.Stop(ts)
-	cn := newConnection(nil, true, IpPort{}, "udp")
+	cn := newConnection(nil, true, IpPort{})
 	cn.t = tt.(*torrent)
 	assert.NoError(t, cn.peerSentHave(0))
 	assert.Error(t, cn.peerSentHave(1))

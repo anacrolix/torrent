@@ -31,7 +31,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 		Length:      24 * (1 << 10),
 		PieceLength: 8 * (1 << 10),
 	})
-	c := cl.newConnection(nil, false, IpPort{}, "")
+	c := cl.newConnection(nil, false, IpPort{})
 	c.setTorrent(tt)
 
 	r, w := io.Pipe()
@@ -114,7 +114,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	t.makePieces()
 	t.piecesM.ChunksPend(0)
 	r, w := net.Pipe()
-	cn := cl.newConnection(r, true, IpPort{}, "")
+	cn := cl.newConnection(r, true, IpPort{})
 	cn.setTorrent(t)
 	mrlErr := make(chan error)
 	msg := pp.Message{

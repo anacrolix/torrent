@@ -917,7 +917,8 @@ func (t *torrent) haveAllPieces() bool {
 	if !t.haveInfo() {
 		return false
 	}
-	return t.piecesM.completed.Len() == bitmap.BitIndex(t.numPieces())
+
+	return t.piecesM.completed.Len() == t.numPieces()
 }
 
 func (t *torrent) havePiece(index pieceIndex) bool {
@@ -1166,12 +1167,6 @@ func (t *torrent) maxHalfOpen() int {
 	// We want to allow some experimentation with new peers, and to try to
 	// upset an oversupply of received connections.
 	return int(min(max(5, extraIncoming)+establishedHeadroom, int64(t.config.HalfOpenConnsPerTorrent)))
-}
-
-func (t *torrent) lockedDropHalfOpen(addr string) {
-	t.lock()
-	defer t.unlock()
-	t.dropHalfOpen(addr)
 }
 
 func (t *torrent) dropHalfOpen(addr string) {
@@ -1575,6 +1570,8 @@ func (t *torrent) statsLocked() (ret TorrentStats) {
 	ret.TotalPeers = t.numTotalPeers()
 	ret.ConnectedSeeders = 0
 
+	t.piecesM.Snapshot(&ret)
+
 	for c := range t.conns {
 		if all, ok := c.peerHasAllPieces(); all && ok {
 			ret.ConnectedSeeders++
@@ -1849,6 +1846,13 @@ func (t *torrent) AddClientPeer(cl *Client) {
 	}())
 }
 
+func (t *torrent) noLongerHalfOpen(addr string) {
+	t.lock()
+	defer t.unlock()
+	t.dropHalfOpen(addr)
+	t.openNewConns()
+}
+
 // All stats that include this Torrent. Useful when we want to increment
 // ConnStats but not for every connection.
 func (t *torrent) allStats(f func(*ConnStats)) {
@@ -1857,6 +1861,8 @@ func (t *torrent) allStats(f func(*ConnStats)) {
 }
 
 func (t *torrent) dialTimeout() time.Duration {
+	t.rLock()
+	defer t.rUnlock()
 	return reducedDialTimeout(t.config.MinDialTimeout, t.config.NominalDialTimeout, t.config.HalfOpenConnsPerTorrent, t.peers.Len())
 }
 

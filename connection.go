@@ -40,7 +40,7 @@ const (
 	peerSourcePex             = "X"
 )
 
-func newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, network string) (c *connection) {
+func newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort) (c *connection) {
 	return &connection{
 		// _mu:             newDebugLock(&stdsync.RWMutex{}),
 		_mu:             &sync.RWMutex{},
@@ -51,7 +51,6 @@ func newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort, network string
 		PeerMaxRequests: 250,
 		writeBuffer:     new(bytes.Buffer),
 		remoteAddr:      remoteAddr,
-		network:         network,
 		touched:         roaring.NewBitmap(),
 		fastset:         roaring.NewBitmap(),
 		claimed:         roaring.NewBitmap(),
@@ -1162,13 +1161,12 @@ func (cn *connection) mainReadLoop() (err error) {
 			metrics.Add("connection.mainReadLoop returned with no error", 1)
 		}
 	}()
-	t := cn.t
 
 	// limit := rate.NewLimiter(rate.Every(time.Second), 1)
 	decoder := pp.Decoder{
 		R:         bufio.NewReaderSize(cn.r, 1<<17),
 		MaxLength: 256 * 1024,
-		Pool:      t.chunkPool,
+		Pool:      cn.t.chunkPool,
 	}
 
 	for {
@@ -1182,7 +1180,7 @@ func (cn *connection) mainReadLoop() (err error) {
 		default:
 		}
 
-		if t.closed.IsSet() || cn.closed.IsSet() || err == io.EOF {
+		if cn.t.closed.IsSet() || cn.closed.IsSet() || err == io.EOF {
 			return nil
 		}
 
@@ -1237,8 +1235,8 @@ func (cn *connection) mainReadLoop() (err error) {
 			}
 		case pp.Piece:
 			if err = errors.Wrap(cn.receiveChunk(&msg), "failed to received chunk"); err == nil {
-				if len(msg.Piece) == int(t.chunkSize) {
-					t.chunkPool.Put(&msg.Piece)
+				if len(msg.Piece) == int(cn.t.chunkSize) {
+					cn.t.chunkPool.Put(&msg.Piece)
 				}
 				cn.updateRequests()
 			}
@@ -1255,7 +1253,7 @@ func (cn *connection) mainReadLoop() (err error) {
 				pingAddr.Port = int(msg.Port)
 			}
 
-			t.ping(pingAddr)
+			cn.t.ping(pingAddr)
 		case pp.Suggest:
 			metrics.Add("suggests received", 1)
 			cn.t.config.debug().Println("peer suggested piece", msg.Index)

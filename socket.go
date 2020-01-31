@@ -3,7 +3,6 @@ package torrent
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"net/url"
 	"strconv"
@@ -15,7 +14,7 @@ import (
 )
 
 type dialer interface {
-	dial(_ context.Context, addr string) (net.Conn, error)
+	Dial(ctx context.Context, addr string) (net.Conn, error)
 }
 
 type socket interface {
@@ -87,7 +86,7 @@ type tcpSocket struct {
 	d func(ctx context.Context, addr string) (net.Conn, error)
 }
 
-func (me tcpSocket) dial(ctx context.Context, addr string) (net.Conn, error) {
+func (me tcpSocket) Dial(ctx context.Context, addr string) (net.Conn, error) {
 	return me.d(ctx, addr)
 }
 
@@ -99,7 +98,7 @@ func listenAll(networks []network, getHost func(string) string, port int, proxyU
 	for _, n := range networks {
 		nahs = append(nahs, networkAndHost{n, getHost(n.String())})
 	}
-	log.Printf("listening: %+v\n", nahs)
+
 	for {
 		ss, retry, err := listenAllRetry(nahs, port, proxyURL, f)
 		if !retry {
@@ -177,7 +176,7 @@ type utpSocketSocket struct {
 	d       proxy.Dialer
 }
 
-func (me utpSocketSocket) dial(ctx context.Context, addr string) (conn net.Conn, err error) {
+func (me utpSocketSocket) Dial(ctx context.Context, addr string) (conn net.Conn, err error) {
 	defer perf.ScopeTimerErr(&err)()
 	if me.d != nil {
 		return me.d.Dial(me.network, addr)

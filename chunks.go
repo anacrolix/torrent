@@ -536,6 +536,15 @@ func (t *chunks) Missing() int {
 	return t.missing.Len()
 }
 
+func (t *chunks) Snapshot(s *TorrentStats) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	s.Missing = t.missing.Len()
+	s.Outstanding = len(t.outstanding)
+	s.Unverified = t.unverified.Len()
+	s.Completed = t.completed.Len()
+}
+
 // FailuresReset - used to clear failures
 func (t *chunks) FailuresReset() {
 	t.mu.Lock()

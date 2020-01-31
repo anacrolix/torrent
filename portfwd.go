@@ -24,7 +24,7 @@ func (cl *Client) forwardPort() {
 		return
 	}
 	ds := upnp.Discover(0, 2*time.Second, alog.Discard)
-	cl.config.info().Printf("discovered %d upnp devices\n", len(ds))
+	cl.config.debug().Printf("discovered %d upnp devices\n", len(ds))
 	cl.lock()
 	port := cl.incomingPeerPort()
 	id := cl.config.UpnpID
@@ -33,5 +33,4 @@ func (cl *Client) forwardPort() {
 		go cl.addPortMapping(d, upnp.TCP, port, id)
 		go cl.addPortMapping(d, upnp.UDP, port, id)
 	}
-	cl.lock()
 }

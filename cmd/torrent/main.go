@@ -49,7 +49,18 @@ func torrentBar(t torrent.Torrent) {
 			return "completed"
 		}
 
-		return fmt.Sprintf("downloading (%s/%s)", humanize.Bytes(uint64(t.BytesCompleted())), humanize.Bytes(uint64(t.Info().TotalLength())))
+		stats := t.Stats()
+
+		return fmt.Sprintf(
+			"downloading (%s/%s) completed(%d/%d) missing(%d) outstanding(%d) unverified(%d)",
+			humanize.Bytes(uint64(t.BytesCompleted())),
+			humanize.Bytes(uint64(t.Info().TotalLength())),
+			stats.Completed,
+			t.Info().NumPieces(),
+			stats.Missing,
+			stats.Outstanding,
+			stats.Unverified,
+		)
 	})
 	bar.PrependFunc(func(*uiprogress.Bar) string {
 		return t.Name()
@@ -184,6 +195,7 @@ func main() {
 }
 
 func mainErr() error {
+	log.SetFlags(log.Flags() | log.Lshortfile)
 	tagflag.Parse(&flags)
 	defer envpprof.Stop()
 

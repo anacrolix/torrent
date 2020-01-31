@@ -5,6 +5,13 @@ type TorrentStats struct {
 	// not have much meaning in the aggregate context.
 	ConnStats
 
+	// metrics marking the progress of the torrent
+	// these are in chunks.
+	Missing     int
+	Outstanding int
+	Unverified  int
+	Completed   int
+
 	// Ordered by expected descending quantities (if all is well).
 	TotalPeers       int
 	PendingPeers     int

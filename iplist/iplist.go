@@ -12,7 +12,7 @@ import (
 	"sort"
 )
 
-// An abstraction of IP list implementations.
+// Ranger an abstraction of IP list implementations.
 type Ranger interface {
 	// Return a Range containing the IP.
 	Lookup(net.IP) (r Range, ok bool)
@@ -20,10 +20,12 @@ type Ranger interface {
 	NumRanges() int
 }
 
+// IPList ...
 type IPList struct {
 	ranges []Range
 }
 
+// Range of ip address
 type Range struct {
 	First, Last net.IP
 	Description string
@@ -33,7 +35,7 @@ func (r Range) String() string {
 	return fmt.Sprintf("%s-%s: %s", r.First, r.Last, r.Description)
 }
 
-// Create a new IP list. The given ranges must already sorted by the lower
+// New IP list. The given ranges must already sorted by the lower
 // bound IP in each range. Behaviour is undefined for lists of overlapping
 // ranges.
 func New(initSorted []Range) *IPList {

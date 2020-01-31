@@ -2117,7 +2117,7 @@ func (t *torrent) gotMetadataExtensionMsg(payload []byte, c *connection) error {
 	piece := d["piece"]
 	switch msgType {
 	case pp.DataMetadataExtensionMsgType:
-		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
+		c.allStats(add(1, func(cs *ConnStats) *count { return &cs.MetadataChunksRead }))
 		if !c.requestedMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}

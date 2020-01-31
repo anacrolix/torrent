@@ -22,7 +22,7 @@ func bytesAsString(b []byte) string {
 		return ""
 	}
 	return *(*string)(unsafe.Pointer(&reflect.StringHeader{
-		uintptr(unsafe.Pointer(&b[0])),
-		len(b),
+		Data: uintptr(unsafe.Pointer(&b[0])),
+		Len:  len(b),
 	}))
 }

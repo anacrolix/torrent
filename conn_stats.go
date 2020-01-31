@@ -17,87 +17,88 @@ import (
 // is things sent to the peer, and Read is stuff received from them.
 type ConnStats struct {
 	// Total bytes on the wire. Includes handshakes and encryption.
-	BytesWritten     Count
-	BytesWrittenData Count
+	BytesWritten     count
+	BytesWrittenData count
 
-	BytesRead           Count
-	BytesReadData       Count
-	BytesReadUsefulData Count
+	BytesRead           count
+	BytesReadData       count
+	BytesReadUsefulData count
 
-	ChunksWritten Count
+	ChunksWritten count
 
-	ChunksRead       Count
-	ChunksReadUseful Count
-	ChunksReadWasted Count
+	ChunksRead       count
+	ChunksReadUseful count
+	ChunksReadWasted count
 
-	MetadataChunksRead Count
+	MetadataChunksRead count
 
 	// Number of pieces data was written to, that subsequently passed verification.
-	PiecesDirtiedGood Count
+	PiecesDirtiedGood count
 	// Number of pieces data was written to, that subsequently failed
 	// verification. Note that a connection may not have been the sole dirtier
 	// of a piece.
-	PiecesDirtiedBad Count
+	PiecesDirtiedBad count
 }
 
-func (me *ConnStats) Copy() (ret ConnStats) {
+// Copy returns a copy of the connection stats.
+func (t *ConnStats) Copy() (ret ConnStats) {
 	for i := 0; i < reflect.TypeOf(ConnStats{}).NumField(); i++ {
-		n := reflect.ValueOf(me).Elem().Field(i).Addr().Interface().(*Count).Int64()
-		reflect.ValueOf(&ret).Elem().Field(i).Addr().Interface().(*Count).Add(n)
+		n := reflect.ValueOf(t).Elem().Field(i).Addr().Interface().(*count).Int64()
+		reflect.ValueOf(&ret).Elem().Field(i).Addr().Interface().(*count).Add(n)
 	}
 	return
 }
 
-type Count struct {
+type count struct {
 	n int64
 }
 
-var _ fmt.Stringer = (*Count)(nil)
+var _ fmt.Stringer = (*count)(nil)
 
-func (me *Count) Add(n int64) {
-	atomic.AddInt64(&me.n, n)
+func (t *count) Add(n int64) {
+	atomic.AddInt64(&t.n, n)
 }
 
-func (me *Count) Int64() int64 {
-	return atomic.LoadInt64(&me.n)
+func (t *count) Int64() int64 {
+	return atomic.LoadInt64(&t.n)
 }
 
-func (me *Count) String() string {
-	return fmt.Sprintf("%v", me.Int64())
+func (t *count) String() string {
+	return fmt.Sprintf("%v", t.Int64())
 }
 
-func (me *Count) MarshalJSON() ([]byte, error) {
-	return json.Marshal(me.n)
+func (t *count) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.n)
 }
 
-func (cs *ConnStats) wroteMsg(msg *pp.Message) {
+func (t *ConnStats) wroteMsg(msg *pp.Message) {
 	// TODO: Track messages and not just chunks.
 	switch msg.Type {
 	case pp.Piece:
-		cs.ChunksWritten.Add(1)
-		cs.BytesWrittenData.Add(int64(len(msg.Piece)))
+		t.ChunksWritten.Add(1)
+		t.BytesWrittenData.Add(int64(len(msg.Piece)))
 	}
 }
 
-func (cs *ConnStats) readMsg(msg *pp.Message) {
+func (t *ConnStats) readMsg(msg *pp.Message) {
 	// We want to also handle extended metadata pieces here, but we wouldn't
 	// have decoded the extended payload yet.
 	switch msg.Type {
 	case pp.Piece:
-		cs.ChunksRead.Add(1)
-		cs.BytesReadData.Add(int64(len(msg.Piece)))
+		t.ChunksRead.Add(1)
+		t.BytesReadData.Add(int64(len(msg.Piece)))
 	}
 }
 
-func (cs *ConnStats) incrementPiecesDirtiedGood() {
-	cs.PiecesDirtiedGood.Add(1)
+func (t *ConnStats) incrementPiecesDirtiedGood() {
+	t.PiecesDirtiedGood.Add(1)
 }
 
-func (cs *ConnStats) incrementPiecesDirtiedBad() {
-	cs.PiecesDirtiedBad.Add(1)
+func (t *ConnStats) incrementPiecesDirtiedBad() {
+	t.PiecesDirtiedBad.Add(1)
 }
 
-func add(n int64, f func(*ConnStats) *Count) func(*ConnStats) {
+func add(n int64, f func(*ConnStats) *count) func(*ConnStats) {
 	return func(cs *ConnStats) {
 		p := f(cs)
 		p.Add(n)

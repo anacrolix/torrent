@@ -16,11 +16,13 @@ func isEmptyValue(v reflect.Value) bool {
 	return missinggo.IsEmptyValue(v)
 }
 
+// Encoder for bencode
 type Encoder struct {
 	w       io.Writer
 	scratch [64]byte
 }
 
+// Encode the provided value into the encoders writer.
 func (e *Encoder) Encode(v interface{}) (err error) {
 	if v == nil {
 		return
@@ -134,12 +136,12 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 	case reflect.Struct:
 		e.writeString("d")
 		for _, ef := range encodeFields(v.Type()) {
-			field_value := v.Field(ef.i)
-			if ef.omit_empty && isEmptyValue(field_value) {
+			f := v.Field(ef.i)
+			if ef.omitEmpty && isEmptyValue(f) {
 				continue
 			}
 			e.reflectString(ef.tag)
-			e.reflectValue(field_value)
+			e.reflectValue(f)
 		}
 		e.writeString("e")
 	case reflect.Map:
@@ -190,9 +192,9 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 }
 
 type encodeField struct {
-	i          int
-	tag        string
-	omit_empty bool
+	i         int
+	tag       string
+	omitEmpty bool
 }
 
 type encodeFieldsSortType []encodeField
@@ -240,7 +242,7 @@ func encodeFields(t reflect.Type) []encodeField {
 		if tv.Key() != "" {
 			ef.tag = tv.Key()
 		}
-		ef.omit_empty = tv.OmitEmpty()
+		ef.omitEmpty = tv.OmitEmpty()
 		fs = append(fs, ef)
 	}
 	fss := encodeFieldsSortType(fs)

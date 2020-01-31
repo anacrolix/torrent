@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type random_encode_test struct {
+type randomEncodeTest struct {
 	value    interface{}
 	expected string
 }
 
-type random_struct struct {
+type randomStruct struct {
 	ABC         int    `bencode:"abc"`
 	SkipThisOne string `bencode:"-"`
 	CDE         string
@@ -33,7 +33,7 @@ func (d *dummy) MarshalBencode() ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-var random_encode_tests = []random_encode_test{
+var randomEncodeTests = []randomEncodeTest{
 	{int(10), "i10e"},
 	{uint(10), "i10e"},
 	{"hello, world", "12:hello, world"},
@@ -47,7 +47,7 @@ var random_encode_tests = []random_encode_test{
 	{uint16(16), "i16e"},
 	{uint32(32), "i32e"},
 	{uint64(64), "i64e"},
-	{random_struct{123, "nono", "hello"}, "d3:CDE5:hello3:abci123ee"},
+	{randomStruct{123, "nono", "hello"}, "d3:CDE5:hello3:abci123ee"},
 	{map[string]string{"a": "b", "c": "d"}, "d1:a1:b1:c1:de"},
 	{[]byte{1, 2, 3, 4}, "4:\x01\x02\x03\x04"},
 	{[4]byte{1, 2, 3, 4}, "li1ei2ei3ei4ee"},
@@ -83,7 +83,7 @@ func bigIntFromString(s string) *big.Int {
 }
 
 func TestRandomEncode(t *testing.T) {
-	for _, test := range random_encode_tests {
+	for _, test := range randomEncodeTests {
 		data, err := Marshal(test.value)
 		assert.NoError(t, err, "%s", test)
 		assert.EqualValues(t, test.expected, string(data))

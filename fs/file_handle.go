@@ -44,7 +44,7 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 		me.fn.FS.event.Broadcast()
 		me.fn.FS.mu.Unlock()
 		var n int
-		r := missinggo.ContextedReader{me.r, ctx}
+		r := missinggo.ContextedReader{R: me.r, Ctx: ctx}
 		n, readErr = r.Read(resp.Data)
 		if readErr == io.EOF {
 			readErr = nil

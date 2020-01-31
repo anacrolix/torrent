@@ -18,21 +18,22 @@ type File struct {
 	prio   piecePriority
 }
 
-func (f *File) Torrent() *torrent {
+// Torrent returns the associated torrent
+func (f *File) Torrent() Torrent {
 	return f.t
 }
 
-// Data for this file begins this many bytes into the Torrent.
+// Offset data for this file begins this many bytes into the Torrent.
 func (f *File) Offset() int64 {
 	return f.offset
 }
 
-// The FileInfo from the metainfo.Info to which this file corresponds.
+// FileInfo from the metainfo.Info to which this file corresponds.
 func (f File) FileInfo() metainfo.FileInfo {
 	return f.fi
 }
 
-// The file's path components joined by '/'.
+// Path the file's path components joined by '/'.
 func (f File) Path() string {
 	return f.path
 }
@@ -87,13 +88,13 @@ func (f *File) DisplayPath() string {
 
 }
 
-// The download status of a piece that comprises part of a File.
+// FilePieceState the download status of a piece that comprises part of a File.
 type FilePieceState struct {
 	Bytes int64 // Bytes within the piece that are part of this File.
 	PieceState
 }
 
-// Returns the state of pieces in this file.
+// State of pieces in this file.
 func (f *File) State() (ret []FilePieceState) {
 	f.t.rLock()
 	defer f.t.rUnlock()
@@ -116,7 +117,7 @@ func (f *File) State() (ret []FilePieceState) {
 	return
 }
 
-// Requests that all pieces containing data in the file be downloaded.
+// Download requests that all pieces containing data in the file be downloaded.
 func (f *File) Download() {
 	f.SetPriority(PiecePriorityNormal)
 }
@@ -127,11 +128,7 @@ func byteRegionExclusivePieces(off, size, pieceSize int64) (begin, end int) {
 	return
 }
 
-// Deprecated: Use File.SetPriority.
-func (f *File) Cancel() {
-	f.SetPriority(PiecePriorityNone)
-}
-
+// NewReader returns a reader for the file.
 func (f *File) NewReader() Reader {
 	tr := reader{
 		mu:        f.t.locker(),
@@ -144,7 +141,7 @@ func (f *File) NewReader() Reader {
 	return &tr
 }
 
-// Sets the minimum priority for pieces in the File.
+// SetPriority the minimum priority for pieces in the File.
 func (f *File) SetPriority(prio piecePriority) {
 	f.t.lock()
 	defer f.t.unlock()
@@ -155,7 +152,7 @@ func (f *File) SetPriority(prio piecePriority) {
 	f.t.updatePiecePriorities(f.firstPieceIndex(), f.endPieceIndex())
 }
 
-// Returns the priority per File.SetPriority.
+// Priority per File.SetPriority.
 func (f *File) Priority() piecePriority {
 	f.t.lock()
 	defer f.t.unlock()

@@ -6,6 +6,7 @@ import (
 	"net"
 )
 
+// ParseCIDRListReader ...
 func ParseCIDRListReader(r io.Reader) (ret []Range, err error) {
 	s := bufio.NewScanner(r)
 	for s.Scan() {
@@ -27,7 +28,7 @@ func ParseCIDRListReader(r io.Reader) (ret []Range, err error) {
 	return
 }
 
-// Returns the last, inclusive IP in a net.IPNet.
+// IPNetLast the last, inclusive IP in a net.IPNet.
 func IPNetLast(in *net.IPNet) (last net.IP) {
 	n := len(in.IP)
 	if n != len(in.Mask) {

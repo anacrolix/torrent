@@ -65,4 +65,5 @@ func handleEncryption(
 	return
 }
 
+// PeerExtensionBits define what extensions are available.
 type PeerExtensionBits = pp.PeerExtensionBits

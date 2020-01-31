@@ -48,6 +48,9 @@ type Client struct {
 	// An aggregate of stats over all connections. First in struct to ensure
 	// 64-bit alignment of fields. See #262.
 	stats ConnStats
+	// locking counts, TODO remove these.
+	lcount uint64
+	ucount uint64
 
 	_mu    *stdsync.RWMutex
 	event  sync.Cond
@@ -70,7 +73,7 @@ type Client struct {
 	// through legitimate channels.
 	dopplegangerAddrs map[string]struct{}
 	badPeerIPs        map[string]struct{}
-	torrents          map[InfoHash]*torrent
+	torrents          map[metainfo.Hash]*torrent
 
 	acceptLimiter   map[ipStr]int
 	dialRateLimiter *rate.Limiter
@@ -253,10 +256,10 @@ func (cl *Client) announceKey() int32 {
 	return int32(binary.BigEndian.Uint32(cl.peerID[16:20]))
 }
 
+// NewClient create a new client from the provided config. nil is acceptable.
 func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	if cfg == nil {
 		cfg = NewDefaultClientConfig()
-		cfg.ListenPort = 0
 	}
 	defer func() {
 		if err != nil {
@@ -368,10 +371,10 @@ func (cl *Client) listenOnNetwork(n network) bool {
 	if n.Ipv6 && cl.config.DisableIPv6 {
 		return false
 	}
-	if n.Tcp && cl.config.DisableTCP {
+	if n.TCP && cl.config.DisableTCP {
 		return false
 	}
-	if n.Udp && cl.config.DisableUTP && cl.config.NoDHT {
+	if n.UDP && cl.config.DisableUTP && cl.config.NoDHT {
 		return false
 	}
 	return true
@@ -392,10 +395,10 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 		Conn:           conn,
 		OnAnnouncePeer: cl.onDHTAnnouncePeer,
 		PublicIP: func() net.IP {
-			if connIsIpv6(conn) && cl.config.PublicIp6 != nil {
-				return cl.config.PublicIp6
+			if connIsIpv6(conn) && cl.config.PublicIP6 != nil {
+				return cl.config.PublicIP6
 			}
-			return cl.config.PublicIp4
+			return cl.config.PublicIP4
 		}(),
 		StartingNodes:      cl.config.DhtStartingNodes,
 		ConnectionTracking: cl.config.ConnTracker,
@@ -415,6 +418,7 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	return
 }
 
+// Closed returns a channel to detect when the client is closed.
 func (cl *Client) Closed() <-chan struct{} {
 	cl.lock()
 	defer cl.unlock()
@@ -842,7 +846,7 @@ func (cl *Client) forSkeys(f func([]byte) bool) {
 	cl.lock()
 	defer cl.unlock()
 	if false { // Emulate the bug from #114
-		var firstIh InfoHash
+		var firstIh metainfo.Hash
 		for ih := range cl.torrents {
 			firstIh = ih
 			break
@@ -1082,7 +1086,7 @@ func (cl *Client) allTorrentsCompleted() bool {
 	return true
 }
 
-// Returns true when all torrents are completely downloaded and false if the
+// WaitAll returns true when all torrents are completely downloaded and false if the
 // client is stopped before that.
 func (cl *Client) WaitAll() bool {
 	cl.lock()
@@ -1096,7 +1100,7 @@ func (cl *Client) WaitAll() bool {
 	return true
 }
 
-// Returns handles to all the torrents loaded in the Client.
+// Torrents returns handles to all the torrents loaded in the Client.
 func (cl *Client) Torrents() []Torrent {
 	cl.lock()
 	defer cl.unlock()
@@ -1110,10 +1114,12 @@ func (cl *Client) torrentsAsSlice() (ret []Torrent) {
 	return
 }
 
+// DhtServers returns the set of DHT servers.
 func (cl *Client) DhtServers() []*dht.Server {
 	return cl.dhtServers
 }
 
+// AddDHTNodes adds nodes to the DHT servers.
 func (cl *Client) AddDHTNodes(nodes []string) {
 	for _, n := range nodes {
 		hmp := missinggo.SplitHostMaybePort(n)
@@ -1198,22 +1204,22 @@ func (cl *Client) findListener(f func(net.Listener) bool) (ret net.Listener) {
 	return
 }
 
-func (cl *Client) publicIp(peer net.IP) net.IP {
+func (cl *Client) publicIP(peer net.IP) net.IP {
 	// TODO: Use BEP 10 to determine how peers are seeing us.
 	if peer.To4() != nil {
 		return firstNotNil(
-			cl.config.PublicIp4,
-			cl.findListenerIp(func(ip net.IP) bool { return ip.To4() != nil }),
+			cl.config.PublicIP4,
+			cl.findListenerIP(func(ip net.IP) bool { return ip.To4() != nil }),
 		)
 	}
 
 	return firstNotNil(
-		cl.config.PublicIp6,
-		cl.findListenerIp(func(ip net.IP) bool { return ip.To4() == nil }),
+		cl.config.PublicIP6,
+		cl.findListenerIP(func(ip net.IP) bool { return ip.To4() == nil }),
 	)
 }
 
-func (cl *Client) findListenerIp(f func(net.IP) bool) net.IP {
+func (cl *Client) findListenerIP(f func(net.IP) bool) net.IP {
 	return missinggo.AddrIP(cl.findListener(func(l net.Listener) bool {
 		return f(missinggo.AddrIP(l.Addr()))
 	}).Addr())
@@ -1221,7 +1227,7 @@ func (cl *Client) findListenerIp(f func(net.IP) bool) net.IP {
 
 // Our IP as a peer should see it.
 func (cl *Client) publicAddr(peer net.IP) IpPort {
-	return IpPort{IP: cl.publicIp(peer), Port: uint16(cl.incomingPeerPort())}
+	return IpPort{IP: cl.publicIP(peer), Port: uint16(cl.incomingPeerPort())}
 }
 
 // ListenAddrs addresses currently being listened to.
@@ -1236,14 +1242,14 @@ func (cl *Client) ListenAddrs() (ret []net.Addr) {
 }
 
 func (cl *Client) onBadAccept(addr IpPort) {
-	ip := maskIpForAcceptLimiting(addr.IP)
+	ip := maskIPForAcceptLimiting(addr.IP)
 	if cl.acceptLimiter == nil {
 		cl.acceptLimiter = make(map[ipStr]int)
 	}
 	cl.acceptLimiter[ipStr(ip.String())]++
 }
 
-func maskIpForAcceptLimiting(ip net.IP) net.IP {
+func maskIPForAcceptLimiting(ip net.IP) net.IP {
 	if ip4 := ip.To4(); ip4 != nil {
 		return ip4.Mask(net.CIDRMask(24, 32))
 	}
@@ -1271,12 +1277,10 @@ func (cl *Client) rateLimitAccept(ip net.IP) bool {
 	if cl.config.DisableAcceptRateLimiting {
 		return false
 	}
-	return cl.acceptLimiter[ipStr(maskIpForAcceptLimiting(ip).String())] > 0
+	return cl.acceptLimiter[ipStr(maskIPForAcceptLimiting(ip).String())] > 0
 }
 
 var _ = atomic.AddInt32
-var lcount = uint64(0)
-var ucount = uint64(0)
 
 func (cl *Client) rLock() {
 	// updated := atomic.AddUint64(&lcount, 1)

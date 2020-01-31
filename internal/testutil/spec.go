@@ -11,11 +11,13 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
+// File ...
 type File struct {
 	Name string
 	Data string
 }
 
+// Torrent ...
 type Torrent struct {
 	Files []File
 	Name  string

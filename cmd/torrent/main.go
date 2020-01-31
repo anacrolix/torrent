@@ -187,15 +187,15 @@ func mainErr() error {
 	tagflag.Parse(&flags)
 	defer envpprof.Stop()
 	if stdoutAndStderrAreSameFile() {
-		log.Default = log.Logger{log.StreamLogger{W: progress.Bypass(), Fmt: log.LineFormatter}}
+		log.Default = log.Logger{LoggerImpl: log.StreamLogger{W: progress.Bypass(), Fmt: log.LineFormatter}}
 	}
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableAcceptRateLimiting = true
 	clientConfig.NoDHT = !flags.Dht
 	clientConfig.Debug = flags.Debug
 	clientConfig.Seed = flags.Seed
-	clientConfig.PublicIp4 = flags.PublicIP
-	clientConfig.PublicIp6 = flags.PublicIP
+	clientConfig.PublicIP4 = flags.PublicIP
+	clientConfig.PublicIP6 = flags.PublicIP
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
 		if err != nil {

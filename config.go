@@ -126,8 +126,8 @@ type ClientConfig struct {
 
 	// The IP addresses as our peers should see them. May differ from the
 	// local interfaces due to NAT or other network configurations.
-	PublicIp4 net.IP
-	PublicIp6 net.IP
+	PublicIP4 net.IP
+	PublicIP6 net.IP
 
 	DisableAcceptRateLimiting bool
 	// Don't add connections that have the same peer ID as an existing
@@ -140,6 +140,7 @@ type ClientConfig struct {
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
 }
 
+// SetListenAddr ...
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
 	host, port, err := missinggo.ParseHostPort(addr)
 	expect.Nil(err)
@@ -148,6 +149,7 @@ func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
 	return cfg
 }
 
+// NewDefaultClientConfig default client configuration.
 func NewDefaultClientConfig() *ClientConfig {
 	cc := &ClientConfig{
 		HTTPUserAgent:                  DefaultHTTPUserAgent,
@@ -181,6 +183,7 @@ func NewDefaultClientConfig() *ClientConfig {
 	return cc
 }
 
+// HeaderObfuscationPolicy ...
 type HeaderObfuscationPolicy struct {
 	RequirePreferred bool // Whether the value of Preferred is a strict requirement.
 	Preferred        bool // Whether header obfuscation is preferred.

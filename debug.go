@@ -113,8 +113,8 @@ func trace(msg string) {
 	}
 }
 
-func newDebugLock(m *sync.RWMutex) *DebugLock {
-	return &DebugLock{m: m}
+func newDebugLock(m *sync.RWMutex) *debugLock {
+	return &debugLock{m: m}
 }
 
 type rwmutex interface {
@@ -124,34 +124,34 @@ type rwmutex interface {
 	RUnlock()
 }
 
-type DebugLock struct {
+type debugLock struct {
 	m      *sync.RWMutex
 	lcount uint64
 	ucount uint64
 }
 
-func (t *DebugLock) Lock() {
+func (t *debugLock) Lock() {
 	updated := atomic.AddUint64(&t.lcount, 1)
 	log.Output(2, fmt.Sprintf("%p lock initiated - %d", t.m, updated))
 	t.m.Lock()
 	log.Output(2, fmt.Sprintf("%p lock completed - %d", t.m, updated))
 }
 
-func (t *DebugLock) Unlock() {
+func (t *debugLock) Unlock() {
 	updated := atomic.AddUint64(&t.ucount, 1)
 	log.Output(2, fmt.Sprintf("%p unlock initiated - %d", t.m, updated))
 	t.m.Unlock()
 	log.Output(2, fmt.Sprintf("%p unlock completed - %d", t.m, updated))
 }
 
-func (t *DebugLock) RLock() {
+func (t *debugLock) RLock() {
 	updated := atomic.AddUint64(&t.lcount, 1)
 	log.Output(2, fmt.Sprintf("%p rlock initiated - %d", t.m, updated))
 	t.m.RLock()
 	log.Output(2, fmt.Sprintf("%p rlock completed - %d", t.m, updated))
 }
 
-func (t *DebugLock) RUnlock() {
+func (t *debugLock) RUnlock() {
 	updated := atomic.AddUint64(&t.ucount, 1)
 	log.Output(2, fmt.Sprintf("%p runlock initiated - %d", t.m, updated))
 	t.m.RUnlock()

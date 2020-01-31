@@ -12,6 +12,7 @@ import (
 	"sync"
 )
 
+// Decoder for bencode
 type Decoder struct {
 	r interface {
 		io.ByteScanner
@@ -22,6 +23,7 @@ type Decoder struct {
 	buf    bytes.Buffer
 }
 
+// Decode the provided value.
 func (d *Decoder) Decode(v interface{}) (err error) {
 	defer func() {
 		if err != nil {
@@ -263,9 +265,9 @@ var (
 	structFields   = map[reflect.Type]map[string]structField{}
 )
 
-func parseStructFields(struct_ reflect.Type, each func(string, structField)) {
-	for i, n := 0, struct_.NumField(); i < n; i++ {
-		f := struct_.Field(i)
+func parseStructFields(t reflect.Type, each func(string, structField)) {
+	for i, n := 0, t.NumField(); i < n; i++ {
+		f := t.Field(i)
 		if f.Anonymous {
 			continue
 		}
@@ -282,20 +284,20 @@ func parseStructFields(struct_ reflect.Type, each func(string, structField)) {
 	}
 }
 
-func saveStructFields(struct_ reflect.Type) {
+func saveStructFields(t reflect.Type) {
 	m := make(map[string]structField)
-	parseStructFields(struct_, func(key string, sf structField) {
+	parseStructFields(t, func(key string, sf structField) {
 		m[key] = sf
 	})
-	structFields[struct_] = m
+	structFields[t] = m
 }
 
-func getStructFieldForKey(struct_ reflect.Type, key string) (f structField, ok bool) {
+func getStructFieldForKey(t reflect.Type, key string) (f structField, ok bool) {
 	structFieldsMu.Lock()
-	if _, ok := structFields[struct_]; !ok {
-		saveStructFields(struct_)
+	if _, ok := structFields[t]; !ok {
+		saveStructFields(t)
 	}
-	f, ok = structFields[struct_][key]
+	f, ok = structFields[t][key]
 	structFieldsMu.Unlock()
 	return
 }
@@ -322,9 +324,9 @@ func (d *Decoder) parseDict(v reflect.Value) error {
 			ok, err = d.parseValue(df.Value)
 		} else {
 			// Discard the value, there's nowhere to put it.
-			var if_ interface{}
-			if_, ok = d.parseValueInterface()
-			if if_ == nil {
+			var parsed interface{}
+			parsed, ok = d.parseValueInterface()
+			if parsed == nil {
 				err = fmt.Errorf("error parsing value for key %q", keyStr)
 			}
 		}
@@ -410,10 +412,10 @@ func (d *Decoder) readOneValue() bool {
 	if b == 'e' {
 		d.r.UnreadByte()
 		return false
-	} else {
-		d.Offset++
-		d.buf.WriteByte(b)
 	}
+
+	d.Offset++
+	d.buf.WriteByte(b)
 
 	switch b {
 	case 'd', 'l':

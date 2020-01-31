@@ -38,7 +38,6 @@ func TestingConfig() *ClientConfig {
 	cfg.DisableTrackers = true
 	cfg.NoDefaultPortForwarding = true
 	cfg.DisableAcceptRateLimiting = true
-	cfg.ListenPort = 0
 	// cfg.Debug = true
 	// cfg.Logger = cfg.Logger.WithText(func(m log.Msg) string {
 	// 	t := m.Text()
@@ -169,7 +168,7 @@ type FileCacheClientStorageFactoryParams struct {
 	Wrapper     func(*filecache.Cache) storage.ClientImpl
 }
 
-func NewFileCacheClientStorageFactory(ps FileCacheClientStorageFactoryParams) storageFactory {
+func NewFileCacheClientStorageFactory(ps FileCacheClientStorageFactoryParams) StorageFactory {
 	return func(dataDir string) storage.ClientImpl {
 		fc, err := filecache.NewCache(dataDir)
 		if err != nil {
@@ -182,7 +181,7 @@ func NewFileCacheClientStorageFactory(ps FileCacheClientStorageFactoryParams) st
 	}
 }
 
-type storageFactory func(string) storage.ClientImpl
+type StorageFactory func(string) storage.ClientImpl
 
 func TestClientTransferDefault(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
@@ -255,7 +254,7 @@ func TestClientTransferVarious(t *testing.T) {
 
 	count := 0
 	// Leecher storage
-	for _, ls := range []storageFactory{
+	for _, ls := range []StorageFactory{
 		NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
 			Wrapper: fileCachePieceResourceStorage,
 		}),

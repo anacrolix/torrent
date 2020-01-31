@@ -297,7 +297,7 @@ func (cn *connection) connectionFlags() (ret string) {
 }
 
 func (cn *connection) utp() bool {
-	return parseNetworkString(cn.network).Udp
+	return parseNetworkString(cn.network).UDP
 }
 
 // Inspired by https://github.com/transmission/transmission/wiki/Peer-Status-Text.
@@ -704,7 +704,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 
 		if !cn.lastMessageReceived.IsZero() && time.Since(cn.lastMessageReceived) > 2*keepAliveTimeout {
 			select {
-			case cn.drop <- fmt.Errorf("killing connection %v %v %v", cn.remoteIp(), time.Since(cn.lastMessageReceived), cn.lastMessageReceived):
+			case cn.drop <- fmt.Errorf("killing connection %v %v %v", cn.remoteIP(), time.Since(cn.lastMessageReceived), cn.lastMessageReceived):
 				cn.Close()
 			default:
 			}
@@ -994,24 +994,24 @@ func (cn *connection) peerSentHaveNone() error {
 	return nil
 }
 
-func (c *connection) requestPendingMetadata() {
-	if c.t.haveInfo() {
+func (cn *connection) requestPendingMetadata() {
+	if cn.t.haveInfo() {
 		return
 	}
-	if c.PeerExtensionIDs[pp.ExtensionNameMetadata] == 0 {
+	if cn.PeerExtensionIDs[pp.ExtensionNameMetadata] == 0 {
 		// Peer doesn't support this.
 		return
 	}
 	// Request metadata pieces that we don't have in a random order.
 	var pending []int
-	for index := 0; index < c.t.metadataPieceCount(); index++ {
-		if !c.t.haveMetadataPiece(index) && !c.requestedMetadataPiece(index) {
+	for index := 0; index < cn.t.metadataPieceCount(); index++ {
+		if !cn.t.haveMetadataPiece(index) && !cn.requestedMetadataPiece(index) {
 			pending = append(pending, index)
 		}
 	}
 	rand.Shuffle(len(pending), func(i, j int) { pending[i], pending[j] = pending[j], pending[i] })
 	for _, i := range pending {
-		c.requestMetadataPiece(i)
+		cn.requestMetadataPiece(i)
 	}
 }
 
@@ -1043,27 +1043,27 @@ func (cn *connection) allStats(f func(*ConnStats)) {
 }
 
 func (cn *connection) wroteBytes(n int64) {
-	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesWritten }))
+	cn.allStats(add(n, func(cs *ConnStats) *count { return &cs.BytesWritten }))
 }
 
 func (cn *connection) readBytes(n int64) {
-	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
+	cn.allStats(add(n, func(cs *ConnStats) *count { return &cs.BytesRead }))
 }
 
 // Returns whether the connection could be useful to us. We're seeding and
 // they want data, we don't have metainfo and they can provide it, etc.
-func (c *connection) useful() bool {
-	t := c.t
-	if c.closed.IsSet() {
+func (cn *connection) useful() bool {
+	t := cn.t
+	if cn.closed.IsSet() {
 		return false
 	}
 	if !t.haveInfo() {
-		return c.supportsExtension("ut_metadata")
+		return cn.supportsExtension("ut_metadata")
 	}
-	if t.seeding() && c.PeerInterested {
+	if t.seeding() && cn.PeerInterested {
 		return true
 	}
-	if c.peerHasWantedPieces() {
+	if cn.peerHasWantedPieces() {
 		return true
 	}
 	return false
@@ -1405,14 +1405,14 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 		cn.t.piecesM.Release(req)
 		// l2.Printf("c(%p) - wasted chunk d(%020d) r(%d,%d,%d)\n", cn, req.Digest, req.Index, req.Begin, req.Length)
 		metrics.Add("chunks received wasted", 1)
-		cn.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
+		cn.allStats(add(1, func(cs *ConnStats) *count { return &cs.ChunksReadWasted }))
 		return nil
 	}
 
 	piece := &cn.t.pieces[req.Index]
 
-	cn.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
-	cn.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
+	cn.allStats(add(1, func(cs *ConnStats) *count { return &cs.ChunksReadUseful }))
+	cn.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *count { return &cs.BytesReadUsefulData }))
 	cn.lastUsefulChunkReceived = time.Now()
 	cn.t.fastestConn = cn
 
@@ -1686,14 +1686,14 @@ func (cn *connection) setTorrent(t *torrent) {
 }
 
 func (cn *connection) peerPriority() peerPriority {
-	return bep40PriorityIgnoreError(cn.remoteIpPort(), cn.t.publicAddr(cn.remoteIp()))
+	return bep40PriorityIgnoreError(cn.remoteIPPort(), cn.t.publicAddr(cn.remoteIP()))
 }
 
-func (cn *connection) remoteIp() net.IP {
+func (cn *connection) remoteIP() net.IP {
 	return cn.remoteAddr.IP
 }
 
-func (cn *connection) remoteIpPort() IpPort {
+func (cn *connection) remoteIPPort() IpPort {
 	return cn.remoteAddr
 }
 
@@ -1724,8 +1724,8 @@ func (cn *connection) sendInitialMessages(cl *Client, torrent *torrent) {
 					MetadataSize: torrent.metadataSize(),
 					// TODO: We can figured these out specific to the socket
 					// used.
-					Ipv4: pp.CompactIp(cl.config.PublicIp4.To4()),
-					Ipv6: cl.config.PublicIp6.To16(),
+					Ipv4: pp.CompactIp(cl.config.PublicIP4.To4()),
+					Ipv6: cl.config.PublicIP6.To16(),
 				}
 				if !cl.config.DisablePEX {
 					msg.M[pp.ExtensionNamePex] = pexExtendedID

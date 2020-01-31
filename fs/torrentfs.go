@@ -24,6 +24,7 @@ var (
 	interruptedReads             = expvar.NewInt("interruptedReads")
 )
 
+// TorrentFS torrent filesystem.
 type TorrentFS struct {
 	Client       *torrent.Client
 	destroyed    chan struct{}
@@ -178,9 +179,8 @@ func (rn rootNode) ReadDirAll(ctx context.Context) (dirents []fuse.Dirent, err e
 			Type: func() fuse.DirentType {
 				if !info.IsDir() {
 					return fuse.DT_File
-				} else {
-					return fuse.DT_Dir
 				}
+				return fuse.DT_Dir
 			}(),
 		})
 	}
@@ -197,10 +197,12 @@ func (rn rootNode) Forget() {
 	rn.fs.Destroy()
 }
 
+// Root file system node.
 func (tfs *TorrentFS) Root() (fusefs.Node, error) {
 	return rootNode{tfs}, nil
 }
 
+// Destroy the file system.
 func (tfs *TorrentFS) Destroy() {
 	tfs.mu.Lock()
 	select {
@@ -211,6 +213,7 @@ func (tfs *TorrentFS) Destroy() {
 	tfs.mu.Unlock()
 }
 
+// New create a new torrent filesystem from the provided client.
 func New(cl *torrent.Client) *TorrentFS {
 	fs := &TorrentFS{
 		Client:    cl,

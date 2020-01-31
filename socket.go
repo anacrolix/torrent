@@ -34,16 +34,16 @@ func getProxyDialer(proxyURL string) (proxy.Dialer, error) {
 
 func listen(n network, addr, proxyURL string, f firewallCallback) (socket, error) {
 	switch {
-	case n.Tcp:
-		return listenTcp(n.String(), addr, proxyURL)
-	case n.Udp:
+	case n.TCP:
+		return listenTCP(n.String(), addr, proxyURL)
+	case n.UDP:
 		return listenUtp(n.String(), addr, proxyURL, f)
 	default:
 		panic(n)
 	}
 }
 
-func listenTcp(network, address, proxyURL string) (s socket, err error) {
+func listenTCP(network, address, proxyURL string) (s socket, err error) {
 	l, err := net.Listen(network, address)
 	if err != nil {
 		return

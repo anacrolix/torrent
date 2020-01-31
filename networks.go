@@ -12,8 +12,8 @@ var allPeerNetworks = func() (ret []network) {
 type network struct {
 	Ipv4 bool
 	Ipv6 bool
-	Udp  bool
-	Tcp  bool
+	UDP  bool
+	TCP  bool
 }
 
 func (n network) String() (ret string) {
@@ -22,8 +22,8 @@ func (n network) String() (ret string) {
 			ret += s
 		}
 	}
-	a(n.Udp, "udp")
-	a(n.Tcp, "tcp")
+	a(n.UDP, "udp")
+	a(n.TCP, "tcp")
 	a(n.Ipv4, "4")
 	a(n.Ipv6, "6")
 	return
@@ -35,16 +35,16 @@ func parseNetworkString(network string) (ret network) {
 	}
 	ret.Ipv4 = c("4")
 	ret.Ipv6 = c("6")
-	ret.Udp = c("udp")
-	ret.Tcp = c("tcp")
+	ret.UDP = c("udp")
+	ret.TCP = c("tcp")
 	return
 }
 
 func peerNetworkEnabled(n network, cfg *ClientConfig) bool {
-	if cfg.DisableUTP && n.Udp {
+	if cfg.DisableUTP && n.UDP {
 		return false
 	}
-	if cfg.DisableTCP && n.Tcp {
+	if cfg.DisableTCP && n.TCP {
 		return false
 	}
 	if cfg.DisableIPv6 && n.Ipv6 {

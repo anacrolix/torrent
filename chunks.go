@@ -9,7 +9,6 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo/bitmap"
-	"github.com/anacrolix/missinggo/prioritybitmap"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/pkg/errors"
@@ -34,10 +33,6 @@ func (t empty) Error() string {
 type bmap interface {
 	ContainsInt(int) bool
 }
-
-type everybmap struct{}
-
-func (t everybmap) ContainsInt(int) bool { return true }
 
 func chunksPerPiece(plength, clength int64) int64 {
 	return int64(math.Ceil(float64(plength) / float64(clength)))
@@ -92,12 +87,14 @@ func newChunks(clength int, m *metainfo.Info) *chunks {
 	p := &chunks{
 		mu:          &sync.RWMutex{},
 		meta:        m,
-		cmaximum:    numChunks(m.Length, m.PieceLength, int64(clength)),
+		cmaximum:    numChunks(m.TotalLength(), m.PieceLength, int64(clength)),
 		clength:     int64(clength),
 		gracePeriod: time.Minute,
 		outstanding: make(map[uint64]request),
-		failed:      roaring.NewBitmap(),
-		completed:   roaring.NewBitmap(),
+		// pending:     roaring.NewBitmap(), // TODO: pending will replace outstanding.
+		missing:   roaring.NewBitmap(),
+		failed:    roaring.NewBitmap(),
+		completed: roaring.NewBitmap(),
 	}
 
 	// log.Printf("%p - LENGTH %d NUMCHUNKS %d - CHUNK LENGTH %d - PIECE LEGNTH %d\n", p, p.meta.Length, p.cmaximum, p.clength, p.meta.PieceLength)
@@ -121,9 +118,8 @@ type chunks struct {
 	// gracePeriod how long to wait before reaping outstanding requests.
 	gracePeriod time.Duration
 
-	// cache of chunks we need to get. calculated from various piece and
-	// file priorities and completion states elsewhere.
-	missing prioritybitmap.PriorityBitmap
+	// cache of chunks we're missing.
+	missing *roaring.Bitmap
 
 	// cache of chunks that failed the digest process. this bitmap is used to force
 	// connections to kill themselves when a digest fails validation.
@@ -215,7 +211,7 @@ func (t *chunks) request(cidx int64, prio int) (r request, err error) {
 
 	pidx := pindex(cidx, t.meta.PieceLength, t.clength)
 	start := chunkOffset(pidx, cidx, t.meta.PieceLength, t.clength)
-	length := chunkLength(t.meta.Length, cidx, t.meta.PieceLength, t.clength, cidx == t.cmaximum-1)
+	length := chunkLength(t.meta.TotalLength(), cidx, t.meta.PieceLength, t.clength, cidx == t.cmaximum-1)
 	return newRequest2(pp.Integer(pidx), pp.Integer(start), pp.Integer(length), prio), nil
 }
 
@@ -239,7 +235,7 @@ func (t *chunks) ChunksMissing(pid int) bool {
 	defer t.mu.Unlock()
 
 	for _, c := range t.chunks(pid) {
-		if t.missing.Contains(c) {
+		if t.missing.ContainsInt(c) {
 			return true
 		}
 	}
@@ -309,13 +305,10 @@ func (t *chunks) ChunksAdjust(pid int) (changed bool) {
 	}
 
 	for _, c := range t.chunks(pid) {
-		prio := -1 * (c + 1)
-		oprio, _ := t.missing.GetPriority(c)
-		tmp := oprio != prio && t.missing.Set(c, prio)
+		tmp := t.missing.CheckedAdd(uint32(c))
 		if tmp {
 			t.unverified.Remove(c)
 		}
-
 		// log.Output(2, fmt.Sprintf("%p CHUNK PRIORITY ADJUSTED: %d %s prios %d %d %t %d\n", t, c, fmt.Sprintf("(%d)", pid), oprio, prio, tmp, t.missing.Len()))
 		changed = changed || tmp
 	}
@@ -332,7 +325,7 @@ func (t *chunks) ChunksPend(idx int) (changed bool) {
 	defer t.mu.Unlock()
 
 	for _, c := range t.chunksRequests(idx) {
-		tmp := t.pend(c, c.Priority)
+		tmp := t.pend(c)
 		changed = changed || tmp
 	}
 
@@ -390,49 +383,30 @@ func (t *chunks) Priority(idx int) int {
 
 	cidx := chunksPerPiece(t.meta.PieceLength, t.cmaximum) * int64(idx)
 
-	if prio, ok := t.missing.GetPriority(int(cidx)); ok {
-		return prio
+	if t.missing.ContainsInt(int(cidx)) {
+		return int(-1 * (cidx + 1))
 	}
 
-	// return int(PiecePriorityNone)
 	return int(0)
 }
 
-func (t *chunks) peek(available bmap) (cidx int, req request, err error) {
-	var (
-		ok   bool
-		prio int
-	)
-
-	idx := -1
-
-	// grab first missing chunk
-	t.missing.IterTyped(func(i bitmap.BitIndex) bool {
-		if available.ContainsInt(i) {
-			idx = i
-			return false
-		}
-
-		return true
-	})
-
-	if idx < 0 {
-		return cidx, req, empty{Outstanding: len(t.outstanding), Missing: t.missing.Len()}
+func (t *chunks) peek(available *roaring.Bitmap) (cidx int, req request, err error) {
+	if !t.missing.Intersects(available) {
+		return cidx, req, empty{Outstanding: len(t.outstanding), Missing: int(t.missing.GetCardinality())}
 	}
+	union := available.Clone()
+	union.And(t.missing)
 
-	if prio, ok = t.missing.GetPriority(idx); !ok {
-		return cidx, req, fmt.Errorf("missing priority: %d", idx)
-	}
-
-	if req, err = t.request(int64(idx), prio); err != nil {
+	cidx = int(union.Minimum())
+	if req, err = t.request(int64(cidx), int(-1*(cidx+1))); err != nil {
 		return cidx, req, errors.Wrap(err, "invalid request")
 	}
 
-	return idx, req, nil
+	return cidx, req, nil
 }
 
 // Peek at the request based on availability.
-func (t *chunks) Peek(available bmap) (req request, err error) {
+func (t *chunks) Peek(available *roaring.Bitmap) (req request, err error) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
@@ -451,7 +425,7 @@ func (t *chunks) Peek(available bmap) (req request, err error) {
 // the outstanding request could track which available bitmap it belongs to.
 // but this complicates some of the logic, and I'm leaving it to do once refactoring
 // the locks and contention issues are resolved.
-func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
+func (t *chunks) Pop(n int, available *roaring.Bitmap) (reqs []request, err error) {
 	if n <= 0 { // sanity check.
 		return reqs, nil
 	}
@@ -475,7 +449,8 @@ func (t *chunks) Pop(n int, available bmap) (reqs []request, err error) {
 		}
 
 		t.outstanding[req.Digest] = req
-		t.missing.Remove(cidx)
+		t.missing.Remove(uint32(cidx))
+
 		reqs = append(reqs, req)
 
 		// log.Output(2, fmt.Sprintf("(%d) c(%p) popped: d(%020d - %d) r(%d,%d,%d) - %t\n", os.Getpid(), t, req.Digest, cidx, req.Index, req.Begin, req.Length, t.missing.Contains(cidx)))
@@ -502,7 +477,8 @@ func (t *chunks) retry(r request) {
 	// log.Output(3, fmt.Sprintf("c(%p) retry request: d(%020d - %d) r(%d,%d,%d) removed(%t)", t, r.Digest, cidx, r.Index, r.Begin, r.Length, ok))
 
 	delete(t.outstanding, r.Digest)
-	t.missing.Set(cidx, r.Priority)
+	t.missing.AddInt(cidx)
+
 }
 
 func (t *chunks) release(r request) bool {
@@ -512,15 +488,11 @@ func (t *chunks) release(r request) bool {
 	return ok
 }
 
-func (t *chunks) pend(r request, prio int) (changed bool) {
+func (t *chunks) pend(r request) (changed bool) {
 	cidx := t.requestCID(r)
 
-	if prio == 0 {
-		prio = -1 * cidx
-	}
-
 	// unconditionally mark the chunk as missing.
-	changed = t.missing.Set(cidx, prio)
+	changed = t.missing.CheckedAdd(uint32(cidx))
 
 	// remove from unverified.
 	t.unverified.Remove(cidx)
@@ -538,13 +510,13 @@ func (t *chunks) Missing() int {
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.missing.Len()
+	return int(t.missing.GetCardinality())
 }
 
 func (t *chunks) Snapshot(s *TorrentStats) *TorrentStats {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	s.Missing = t.missing.Len()
+	s.Missing = int(t.missing.GetCardinality())
 	s.Outstanding = len(t.outstanding)
 	s.Unverified = t.unverified.Len()
 	s.Completed = int(t.completed.GetCardinality())
@@ -605,7 +577,7 @@ func (t *chunks) Pend(reqs ...request) {
 	defer t.mu.Unlock()
 	defer t.recover()
 	for _, r := range reqs {
-		t.pend(r, 10*r.Priority)
+		t.pend(r)
 	}
 }
 
@@ -658,7 +630,7 @@ func (t *chunks) Verify(r request) (err error) {
 	cid := t.requestCID(r)
 
 	delete(t.outstanding, r.Digest)
-	t.missing.Remove(cid)
+	t.missing.Remove(uint32(cid))
 	t.unverified.Set(cid, true)
 
 	// log.Printf("c(%p) marked for verification: d(%020d - %d) i(%d) b(%d) l(%d)\n", t, r.Digest, cid, r.Index, r.Begin, r.Length)
@@ -687,7 +659,7 @@ func (t *chunks) Complete(pid int) (changed bool) {
 	for _, r := range t.chunksRequests(pid) {
 		cidx := t.requestCID(r)
 		delete(t.outstanding, r.Digest)
-		tmp := t.missing.Remove(cidx)
+		tmp := t.missing.CheckedRemove(uint32(cidx))
 		tmp = t.unverified.Remove(cidx) || tmp
 		changed = changed || tmp
 

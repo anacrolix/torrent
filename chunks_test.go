@@ -47,16 +47,12 @@ func fromFile(path string) (info metainfo.Info, err error) {
 }
 
 func quickpopulate(p *chunks) *chunks {
-	for i := int64(0); i < p.cmaximum; i++ {
-		p.missing.Set(int(i), int(i))
-	}
+	p.fill(p.missing)
 	return p
 }
 
 func smallpopulate(p *chunks) *chunks {
-	for i := int64(0); i < 10; i++ {
-		p.missing.Set(int(i), int(i))
-	}
+	p.missing.AddRange(0, 10)
 	return p
 }
 
@@ -65,7 +61,7 @@ func BenchmarkChunksPop(b *testing.B) {
 	require.NoError(b, err)
 	p := quickpopulate(newChunks(defaultChunk, &info))
 
-	n := p.missing.Len()
+	n := p.Missing()
 	available := filledbmap(n)
 
 	for i := 0; i < b.N && i < n; i++ {
@@ -122,6 +118,8 @@ func TestNumChunks(t *testing.T) {
 	assert.Equal(t, int64(18), numChunks(47*1<<10, 8*1<<10, 3*1<<10))
 	// 48 KiB, 8 KiB, 3 KiB
 	assert.Equal(t, int64(18), numChunks(48*1<<10, 8*1<<10, 3*1<<10))
+	// real world example.
+	assert.Equal(t, int64(134509), numChunks(2203780254, 262144, 16384))
 }
 
 func TestChunkOffset(t *testing.T) {
@@ -185,6 +183,10 @@ func TestChunkLength(t *testing.T) {
 
 	assert.Equal(t, int64(16384), chunkLength(687865856, 31, 524288, 16384, false))
 	assert.Equal(t, int64(16384), chunkLength(687865856, 41983, 524288, 16384, true))
+	assert.Equal(t, int64(1182), chunkLength(2203780254, 134508, 262144, 16384, true))
+
+	// cid(134508) cmax(134509) - total(2203780254) plength(262144) clength(16384)
+
 }
 
 func TestChunksRequests(t *testing.T) {
@@ -275,7 +277,7 @@ func TestChunksFailed(t *testing.T) {
 
 	require.Equal(t, 13, c.Missing())
 
-	reqs, err := c.Pop(1, everybmap{})
+	reqs, err := c.Pop(1, c.missing.Clone())
 	require.NoError(t, err)
 	for _, req := range reqs {
 		touched.AddInt(int(req.Index))
@@ -293,14 +295,14 @@ func TestChunksPop(t *testing.T) {
 	require.NoError(t, err)
 	p := quickpopulate(newChunks(int(info.PieceLength), &info))
 
-	reqs, err := p.Pop(1, everybmap{})
+	reqs, err := p.Pop(1, p.missing.Clone())
 	require.NoError(t, err)
 	for _, req := range reqs {
 		require.Equal(t, 0, int(req.Index))
 		require.Equal(t, true, req.Reserved.Before(time.Now()))
 	}
 
-	reqs, err = p.Pop(1, everybmap{})
+	reqs, err = p.Pop(1, p.missing.Clone())
 	require.NoError(t, err)
 	for _, req := range reqs {
 		require.Equal(t, 1, int(req.Index))
@@ -317,12 +319,12 @@ func TestChunksGraceWindow(t *testing.T) {
 	// recovering of outstanding requests.
 	p.gracePeriod = -1 * time.Second
 
-	total := p.missing.Len()
+	total := p.missing.GetCardinality()
 	for i := 0; i < 10; i++ {
-		_, err = p.Pop(1, everybmap{})
+		_, err = p.Pop(1, p.missing.Clone())
 		require.NoError(t, err)
 		p.reap(0)
-		require.Equal(t, total, p.missing.Len())
+		require.Equal(t, total, p.missing.GetCardinality())
 	}
 }
 
@@ -330,7 +332,7 @@ func TestChunksComplete(t *testing.T) {
 	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
 
 	// we start out with 64 chunks missing.
-	require.Equal(t, 64, p.missing.Len())
+	require.Equal(t, 64, p.Missing())
 	require.True(t, p.ChunksMissing(0))
 
 	available := filledbmap(p.lastChunk(0) + 1)
@@ -349,12 +351,12 @@ func TestChunksComplete(t *testing.T) {
 	require.True(t, p.ChunksComplete(0))
 
 	// we finish with 60 chunks missing.
-	require.Equal(t, 60, p.missing.Len())
+	require.Equal(t, 60, p.Missing())
 }
 
 func TestChunksAvailable(t *testing.T) {
 	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
-	require.Equal(t, 64, p.missing.Len())
+	require.Equal(t, 64, p.Missing())
 	for _, r := range p.chunksRequests(0) {
 		p.Verify(r)
 	}
@@ -363,12 +365,13 @@ func TestChunksAvailable(t *testing.T) {
 
 func TestChunksPend(t *testing.T) {
 	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
-	require.Equal(t, 64, p.missing.Len())
+	require.Equal(t, 64, p.Missing())
+	p.missing.Remove(0)
 	require.True(t, p.ChunksPend(0))
 }
 
 func TestChunksRelease(t *testing.T) {
 	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
-	require.Equal(t, 64, p.missing.Len())
+	require.Equal(t, 64, p.Missing())
 	require.False(t, p.ChunksRelease(0))
 }

@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/anacrolix/dht/v2"
@@ -193,7 +192,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		CryptoSelector: mse.DefaultCryptoSelector,
 		CryptoProvides: mse.AllSupportedCrypto,
 		ListenPort:     0,
-		Logger:         log.New(os.Stderr, "[torrent] ", log.Flags()),
+		Logger:         log.New(log.Writer(), "[torrent] ", log.Flags()),
 		Warn:           discard{},
 		Debug:          discard{},
 	}

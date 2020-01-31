@@ -13,7 +13,7 @@ type bmap interface {
 // Bools convert to an array of bools
 func Bools(n int, m *roaring.Bitmap) (bf []bool) {
 	bf = make([]bool, n)
-	
+
 	for i := m.Iterator(); i.HasNext(); {
 		bf[i.Next()] = true
 	}
@@ -50,4 +50,12 @@ func Contains(m *roaring.Bitmap, bits ...int) (b bool) {
 		b = b && m.ContainsInt(i)
 	}
 	return b
+}
+
+// AndNot returns the combination of the two bitmaps without modifying
+func AndNot(l, r *roaring.Bitmap) (dup *roaring.Bitmap) {
+	dup = l.Clone()
+	dup.AndNot(r)
+	return dup
+
 }

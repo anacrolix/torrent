@@ -807,7 +807,7 @@ func (t *torrent) BytesMissing() int64 {
 
 func (t *torrent) bytesLeft() (left int64) {
 	s := t.piecesM.Snapshot(&TorrentStats{})
-	return t.info.Length - ((int64(s.Unverified) * int64(t.piecesM.clength)) + (int64(s.Completed) * int64(t.info.PieceLength)))
+	return t.info.TotalLength() - ((int64(s.Unverified) * int64(t.piecesM.clength)) + (int64(s.Completed) * int64(t.info.PieceLength)))
 }
 
 // Bytes left to give in tracker announces.
@@ -866,13 +866,13 @@ func (t *torrent) close() (err error) {
 }
 
 func (t *torrent) requestOffset(r request) int64 {
-	return torrentRequestOffset(t.info.Length, int64(t.usualPieceSize()), r)
+	return torrentRequestOffset(t.info.TotalLength(), int64(t.usualPieceSize()), r)
 }
 
 // Return the request that would include the given offset into the torrent
 // data. Returns !ok if there is no such request.
 func (t *torrent) offsetRequest(off int64) (req request, ok bool) {
-	return torrentOffsetRequest(t.info.Length, t.info.PieceLength, int64(t.chunkSize), off)
+	return torrentOffsetRequest(t.info.TotalLength(), t.info.PieceLength, int64(t.chunkSize), off)
 }
 
 func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
@@ -902,7 +902,7 @@ func (t *torrent) pieceLength(piece pieceIndex) pp.Integer {
 	}
 
 	if piece == t.numPieces()-1 {
-		ret := pp.Integer(t.info.Length % t.info.PieceLength)
+		ret := pp.Integer(t.info.TotalLength() % t.info.PieceLength)
 		if ret != 0 {
 			return ret
 		}
@@ -1111,7 +1111,7 @@ func (t *torrent) updatePiecePriorities(begin, end pieceIndex) {
 
 // Returns the range of pieces [begin, end) that contains the extent of bytes.
 func (t *torrent) byteRegionPieces(off, size int64) (begin, end pieceIndex) {
-	if off >= t.info.Length {
+	if off >= t.info.TotalLength() {
 		return
 	}
 	if off < 0 {
@@ -1895,7 +1895,7 @@ func (t *torrent) NewReader() Reader {
 		mu:        t.locker(),
 		t:         t,
 		readahead: 5 * 1024 * 1024,
-		length:    t.info.Length,
+		length:    t.info.TotalLength(),
 	}
 	t.addReader(&r)
 	return &r
@@ -1971,7 +1971,7 @@ func (t *torrent) Name() string {
 // The completed length of all the torrent data, in all its files. This is
 // derived from the torrent info, when it is available.
 func (t *torrent) Length() int64 {
-	return t.info.Length
+	return t.info.TotalLength()
 }
 
 // Returns a run-time generated metainfo for the torrent that includes the

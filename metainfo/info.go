@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/anacrolix/missinggo/slices"
 )
@@ -20,8 +21,9 @@ type Info struct {
 	Length      int64  `bencode:"length,omitempty"`
 	Private     *bool  `bencode:"private,omitempty"`
 	// TODO: Document this field.
-	Source string     `bencode:"source,omitempty"`
-	Files  []FileInfo `bencode:"files,omitempty"`
+	Source       string     `bencode:"source,omitempty"`
+	Files        []FileInfo `bencode:"files,omitempty"`
+	cachedLength int64      // used to cache the total length of the torrent
 }
 
 // This is a helper that sets Files and Pieces from a root path and its
@@ -118,6 +120,10 @@ func (info *Info) GeneratePieces(open func(fi FileInfo) (io.ReadCloser, error)) 
 }
 
 func (info *Info) TotalLength() (ret int64) {
+	if cached := atomic.LoadInt64(&info.cachedLength); cached > 0 {
+		return cached
+	}
+
 	if info.IsDir() {
 		for _, fi := range info.Files {
 			ret += fi.Length
@@ -125,7 +131,9 @@ func (info *Info) TotalLength() (ret int64) {
 	} else {
 		ret = info.Length
 	}
-	return
+
+	atomic.StoreInt64(&info.cachedLength, ret)
+	return ret
 }
 
 func (info *Info) NumPieces() int {

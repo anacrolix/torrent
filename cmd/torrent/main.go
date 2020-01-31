@@ -197,10 +197,13 @@ func main() {
 }
 
 func mainErr() error {
+	// defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
 	log.SetFlags(log.Flags() | log.Lshortfile)
 	tagflag.Parse(&flags)
 	defer envpprof.Stop()
-
+	if stdoutAndStderrAreSameFile() {
+		log.SetOutput(progress.Bypass())
+	}
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableAcceptRateLimiting = true
 	clientConfig.NoDHT = !flags.Dht

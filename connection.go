@@ -6,7 +6,6 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
-	"log"
 	l2 "log"
 	"math/rand"
 	"net"
@@ -163,7 +162,6 @@ func (cn *connection) periodicUpdates() {
 	}
 
 	cn.detectNewAvailability()
-	cn.blacklisted.Clear()
 	cn.lastPeriodicUpdate = time.Now().Add(time.Second)
 }
 
@@ -228,21 +226,9 @@ func (cn *connection) peerHasAllPieces() (all bool, known bool) {
 	}
 
 	cn.cmu().Lock()
-	dup := cn.claimed.Clone()
+	m := cn.claimed.GetCardinality()
 	cn.cmu().Unlock()
-
-	if dup.IsEmpty() {
-		return false, true
-	}
-
-	m := min(cn.t.piecesM.cmaximum, int64(dup.GetCardinality()))
-	defer func() {
-		if r := recover(); r != nil {
-			log.Println("peer has all pieces paniced", r, cn.t.piecesM.cmaximum, dup.GetCardinality(), "->", m)
-			panic(r)
-		}
-	}()
-	return roaring.FlipInt(dup, 0, int(m)).IsEmpty(), true
+	return cn.t.piecesM.cmaximum == int64(m), true
 }
 
 func (cn *connection) cmu() sync.Locker {
@@ -563,9 +549,10 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 
 func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	var (
-		err  error
-		reqs []request
-		req  request
+		err       error
+		reqs      []request
+		req       request
+		available *roaring.Bitmap
 	)
 
 	if !cn.t.networkingEnabled {
@@ -614,15 +601,12 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		cn.cmu().Unlock()
 	}
 
-	available := cn.claimed.Clone()
-
 	if cn.PeerChoked && !cn.fastset.IsEmpty() {
 		// l2.Printf("(%d) - c(%p) only requesting fast set\n", os.Getpid(), cn)
 		available = cn.fastset.Clone()
+	} else {
+		available = cn.claimed.Clone()
 	}
-
-	available.AndNot(cn.blacklisted)
-	max := cn.nominalMaxRequests() - len(cn.requests)
 
 	if !cn.SetInterested(true, msg) {
 		return
@@ -633,9 +617,15 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		return
 	}
 
-	if reqs, err = cn.t.piecesM.Pop(max, available); stderrors.As(err, &empty{}) {
+	max := cn.nominalMaxRequests() - len(cn.requests)
+	if reqs, err = cn.t.piecesM.Pop(max, bitmapx.AndNot(available, cn.blacklisted)); stderrors.As(err, &empty{}) {
 		if len(reqs) == 0 {
-			// l2.Printf("(%d) - c(%p) empty queue - available(%d) - outstanding (%d)\n", os.Getpid(), cn, available.GetCardinality(), len(cn.requests))
+			// if cn.t.piecesM.Missing() > 0 {
+			// 	cn.t.config.info().Printf(
+			// 		"(%d) - c(%p) empty queue - available(%d) - outstanding (%d) missing(%d) - %s\n",
+			// 		os.Getpid(), cn, available.GetCardinality(), len(cn.requests), cn.t.piecesM.Missing(), bitmapx.Debug(cn.t.piecesM.missing),
+			// 	)
+			// }
 			return
 		}
 	} else if err != nil {
@@ -686,8 +676,8 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 // activity elsewhere in the Client, and some is determined locally when the
 // connection is writable.
 func (cn *connection) writer(keepAliveTimeout time.Duration) {
-	// cn.t.logger.Printf("c(%p) writer initiated\n", cn)
-	// defer cn.t.logger.Printf("c(%p) writer completed\n", cn)
+	// cn.t.config.info().Printf("c(%p) writer initiated\n", cn)
+	// defer cn.t.config.info().Printf("c(%p) writer completed\n", cn)
 	defer cn.checkFailures()
 	defer cn.deleteAllRequests()
 
@@ -741,6 +731,10 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 
 		// TODO: Minimize wakeups....
 		if cn.writeBuffer.Len() == 0 {
+			// clear the blacklist when we run out of work to do.
+			cn.cmu().Lock()
+			cn.blacklisted.Clear()
+			cn.cmu().Unlock()
 			// let the loop spin for a couple iterations when there is nothing to write.
 			// this helps prevent some stalls should be able to remove later.
 			if attempts < 50 {
@@ -1226,7 +1220,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
-		// l2.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
+		// l2.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.GetCardinality())
 
 		switch msg.Type {
 		case pp.Choke:
@@ -1295,9 +1289,11 @@ func (cn *connection) mainReadLoop() (err error) {
 			if !cn.fastEnabled() {
 				return fmt.Errorf("reject recevied, fast not enabled")
 			}
-			// l2.Printf("(%d) c(%p) REJECTING d(%d) r(%d,%d,%d)\n", os.Getpid(), cn, req.Digest, req.Index, req.Begin, req.Length)
+			// l2.Printf("(%d) c(%p) REJECTING d(%d) r(%d,%d,%d) cid(%d) cmax(%d) - total(%d) plength(%d) clength(%d)\n", os.Getpid(), cn, req.Digest, req.Index, req.Begin, req.Length, cn.t.piecesM.requestCID(req), cn.t.piecesM.cmaximum, cn.t.info.TotalLength(), cn.t.info.PieceLength, cn.t.piecesM.clength)
 			cn.releaseRequest(req)
+			cn.cmu().Lock()
 			cn.blacklisted.AddInt(cn.t.piecesM.requestCID(req))
+			cn.cmu().Unlock()
 		case pp.AllowedFast:
 			metrics.Add("allowed fasts received", 1)
 			cn.t.config.debug().Println("peer allowed fast:", msg.Index)

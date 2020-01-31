@@ -1768,12 +1768,6 @@ func (t *torrent) cancelRequestsForPiece(piece pieceIndex) {
 func (t *torrent) onPieceCompleted(piece pieceIndex) {
 	t.pendAllChunkSpecs(piece)
 	t.cancelRequestsForPiece(piece)
-
-	// // TODO: move this loop into the connections directly.
-	// // they can detect it.
-	// for _, conn := range t.lockedConnsAsSlice() {
-	// 	conn.Have(piece)
-	// }
 }
 
 // Called when a piece is found to be not complete.

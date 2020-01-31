@@ -23,7 +23,6 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	cl := Client{
 		config: TestingConfig(),
 	}
-	cl.initLogger()
 	ts, err := New(metainfo.Hash{})
 	require.NoError(t, err)
 	tt := cl.newTorrent(ts)
@@ -99,7 +98,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			DownloadRateLimiter: unlimited,
 		},
 	}
-	cl.initLogger()
+
 	ts := &torrentStorage{}
 	t := &torrent{
 		cln:               cl,

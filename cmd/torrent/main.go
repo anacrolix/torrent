@@ -4,6 +4,8 @@ package main
 import (
 	"expvar"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -14,8 +16,6 @@ import (
 
 	"github.com/anacrolix/missinggo"
 	"golang.org/x/xerrors"
-
-	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
@@ -171,14 +171,14 @@ func exitSignalHandlers(notify *missinggo.SynchronizedEvent) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	for {
-		log.Printf("close signal received: %+v", <-c)
+		log.Printf("close signal received: %+v\n", <-c)
 		notify.Set()
 	}
 }
 
 func main() {
 	if err := mainErr(); err != nil {
-		log.Printf("error in main: %v", err)
+		log.Printf("error in main: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -186,13 +186,10 @@ func main() {
 func mainErr() error {
 	tagflag.Parse(&flags)
 	defer envpprof.Stop()
-	if stdoutAndStderrAreSameFile() {
-		log.Default = log.Logger{LoggerImpl: log.StreamLogger{W: progress.Bypass(), Fmt: log.LineFormatter}}
-	}
+
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableAcceptRateLimiting = true
 	clientConfig.NoDHT = !flags.Dht
-	clientConfig.Debug = flags.Debug
 	clientConfig.Seed = flags.Seed
 	clientConfig.PublicIP4 = flags.PublicIP
 	clientConfig.PublicIP6 = flags.PublicIP
@@ -216,8 +213,13 @@ func mainErr() error {
 	if flags.DownloadRate != -1 {
 		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(flags.DownloadRate), 1<<20)
 	}
+
+	if flags.Debug && !flags.Quiet {
+		clientConfig.Debug = log.New(os.Stderr, "", log.Flags())
+	}
+
 	if flags.Quiet {
-		clientConfig.Logger = log.Discard
+		clientConfig.Logger = log.New(ioutil.Discard, "", log.Flags())
 	}
 
 	var stop missinggo.SynchronizedEvent

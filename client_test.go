@@ -38,15 +38,7 @@ func TestingConfig() *ClientConfig {
 	cfg.DisableTrackers = true
 	cfg.NoDefaultPortForwarding = true
 	cfg.DisableAcceptRateLimiting = true
-	// cfg.Debug = true
-	// cfg.Logger = cfg.Logger.WithText(func(m log.Msg) string {
-	// 	t := m.Text()
-	// 	m.Values(func(i interface{}) bool {
-	// 		t += fmt.Sprintf("\n%[1]T: %[1]v", i)
-	// 		return true
-	// 	})
-	// 	return t
-	// })
+	// cfg.Debug = log.New(os.Stderr, "[debug] ", log.Flags())
 	return cfg
 }
 
@@ -101,7 +93,7 @@ func TestTorrentInitialState(t *testing.T) {
 	cl := &Client{
 		config: TestingConfig(),
 	}
-	cl.initLogger()
+
 	tt, err := New(
 		mi.HashInfoBytes(),
 		OptionStorage(storage.NewFileWithCompletion(tempDir(), storage.NewMapPieceCompletion())),
@@ -357,7 +349,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
 	}
 	cfg.Seed = false
-	//cfg.Debug = true
+
 	leecher, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer leecher.Close()
@@ -1134,7 +1126,7 @@ func TestIssue335(t *testing.T) {
 	defer os.RemoveAll(dir)
 	cfg := TestingConfig()
 	cfg.Seed = false
-	cfg.Debug = true
+	cfg.Debug = log.New(os.Stderr, "[debug] ", log.Flags())
 	cfg.DataDir = dir
 	comp, err := storage.NewBoltPieceCompletion(dir)
 	require.NoError(t, err)

@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -81,7 +82,6 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		pieceLength = 256 << 10
 	)
 	cl := &Client{config: &ClientConfig{}}
-	cl.initLogger()
 	ts, err := New(metainfo.Hash{})
 	require.NoError(b, err)
 	t := cl.newTorrent(ts)
@@ -154,7 +154,6 @@ func TestPieceHashFailed(t *testing.T) {
 	mi := testutil.GreetingMetaInfo()
 	cl := new(Client)
 	cl.config = TestingConfig()
-	cl.initLogger()
 	ts, err := NewFromMetaInfo(mi, OptionStorage(badStorage{}))
 	require.NoError(t, err)
 	tt := cl.newTorrent(ts)
@@ -174,7 +173,7 @@ func TestPieceHashFailed(t *testing.T) {
 // Check the behaviour of Torrent.Metainfo when metadata is not completed.
 func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	cfg := TestingConfig()
-	cfg.Debug = true
+	cfg.Debug = log.New(os.Stderr, "[debug] ", log.Flags())
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()

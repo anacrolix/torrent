@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/iter"
@@ -153,8 +152,6 @@ type connection struct {
 	writeBuffer *bytes.Buffer
 	uploadTimer *time.Timer
 	writerCond  sync.Cond
-
-	logger log.Logger
 
 	drop chan error
 }
@@ -418,10 +415,11 @@ func (cn *connection) requestMetadataPiece(index int) {
 	if eID == 0 {
 		return
 	}
+
 	if index < len(cn.metadataRequests) && cn.metadataRequests[index] {
 		return
 	}
-	cn.logger.Printf("requesting metadata piece %d", index)
+
 	cn.Post(pp.Message{
 		Type:       pp.Extended,
 		ExtendedID: eID,
@@ -436,9 +434,11 @@ func (cn *connection) requestMetadataPiece(index int) {
 			return b
 		}(),
 	})
+
 	for index >= len(cn.metadataRequests) {
 		cn.metadataRequests = append(cn.metadataRequests, false)
 	}
+
 	cn.metadataRequests[index] = true
 }
 
@@ -622,7 +622,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 			return
 		}
 	} else if err != nil {
-		cn.t.logger.Printf("failed to request piece: %T - %v", err, err)
+		cn.t.config.warn().Printf("failed to request piece: %T - %v\n", err, err)
 		return
 	}
 
@@ -761,7 +761,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		}
 
 		if n != len(buf) {
-			cn.t.logger.Printf("error: write failed written != len(buf) (%d != %d)", n, len(buf))
+			cn.t.config.warn().Printf("error: write failed written != len(buf) (%d != %d)\n", n, len(buf))
 			cn.Close()
 			return
 		}
@@ -790,11 +790,15 @@ func (cn *connection) checkFailures() {
 	}
 
 	if cn.stats.PiecesDirtiedBad.Int64() > 10 {
-		select {
-		case cn.drop <- banned{IP: cn.remoteAddr.IP}:
-			cn.Close()
-		default:
-		}
+		cn.ban()
+	}
+}
+
+func (cn *connection) ban() {
+	select {
+	case cn.drop <- banned{IP: cn.remoteAddr.IP}:
+		cn.Close()
+	default:
 	}
 }
 
@@ -1254,7 +1258,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			t.ping(pingAddr)
 		case pp.Suggest:
 			metrics.Add("suggests received", 1)
-			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(cn, msg.Index, debugLogValue).Log(cn.t.logger)
+			cn.t.config.debug().Println("peer suggested piece", msg.Index)
 		case pp.HaveAll:
 			if err = cn.onPeerSentHaveAll(); err == nil {
 				cn.updateRequests()
@@ -1273,7 +1277,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			cn.blacklisted.AddInt(cn.t.piecesM.requestCID(req))
 		case pp.AllowedFast:
 			metrics.Add("allowed fasts received", 1)
-			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(cn, debugLogValue).Log(cn.t.logger)
+			cn.t.config.debug().Println("peer allowed fast:", msg.Index)
 			for _, cidx := range cn.t.piecesM.chunks(int(msg.Index)) {
 				cn.fastset.AddInt(cidx)
 			}
@@ -1283,11 +1287,10 @@ func (cn *connection) mainReadLoop() (err error) {
 				cn.updateRequests()
 			}
 		default:
-			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
+			err = errors.Errorf("received unknown message type: %#v", msg.Type)
 		}
 
 		if err != nil {
-			l2.Println("error during read", err)
 			return err
 		}
 	}
@@ -1310,7 +1313,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 	case pp.HandshakeExtendedID:
 		var d pp.ExtendedHandshakeMessage
 		if err := bencode.Unmarshal(payload, &d); err != nil {
-			cn.t.logger.Printf("error parsing extended handshake message %q: %s", payload, err)
+			cn.t.config.errors().Printf("error parsing extended handshake message %q: %s\n", payload, err)
 			return errors.Wrap(err, "unmarshalling extended handshake payload")
 		}
 		if d.Reqq != 0 {
@@ -1336,7 +1339,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 	case metadataExtendedID:
 		err := t.gotMetadataExtensionMsg(payload, cn)
 		if err != nil {
-			return fmt.Errorf("handling metadata extension message: %v", err)
+			return errors.Errorf("handling metadata extension message: %v", err)
 		}
 		return nil
 	case pexExtendedID:
@@ -1348,7 +1351,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		var pexMsg pp.PexMsg
 		err := bencode.Unmarshal(payload, &pexMsg)
 		if err != nil {
-			return fmt.Errorf("error unmarshalling PEX message: %s", err)
+			return errors.Errorf("error unmarshalling PEX message: %s", err)
 		}
 		metrics.Add("pex added6 peers received", int64(len(pexMsg.Added6)))
 		var peers Peers
@@ -1357,7 +1360,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		t.AddPeers(peers)
 		return nil
 	default:
-		return fmt.Errorf("unexpected extended message ID: %v", id)
+		return errors.Errorf("unexpected extended message ID: %v", id)
 	}
 }
 
@@ -1505,8 +1508,11 @@ another:
 		for r := range cn.PeerRequests {
 			res := cn.t.config.UploadRateLimiter.ReserveN(time.Now(), int(r.Length))
 			if !res.OK() {
-				panic(fmt.Sprintf("upload rate limiter burst size < %d", r.Length))
+				cn.t.config.errors().Printf("upload rate limiter burst size < %d\n", r.Length)
+				go cn.ban() // pan this IP address, we'll never be able to support them.
+				return false
 			}
+
 			delay := res.Delay()
 			if delay > 0 {
 				res.Cancel()
@@ -1525,7 +1531,7 @@ another:
 						break another
 					}
 				}
-				log.Str("error sending chunk to peer").AddValues(cn, r, err).Log(cn.t.logger)
+				cn.t.config.warn().Println("error sending chunk to peer")
 				// If we failed to send a chunk, choke the peer to ensure they
 				// flush all their requests. We've probably dropped a piece,
 				// but there's no way to communicate this to the peer. If they
@@ -1676,10 +1682,10 @@ func (cn *connection) sendChunk(r request, msg func(pp.Message) bool) (more bool
 
 func (cn *connection) setTorrent(t *torrent) {
 	if cn.t != nil {
-		panic("connection already associated with a torrent")
+		cn.t.config.errors().Println("BUG: connection already associated with a torrent")
+		go cn.Close()
 	}
 	cn.t = t
-	cn.logger.Printf("torrent=%v", t)
 
 	t.incrementReceivedConns(cn, 1)
 	t.reconcileHandshakeStats(cn)

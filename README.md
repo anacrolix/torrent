@@ -8,6 +8,7 @@ of the library, improve horizontal scalability, remove many of the extraneous de
 ## improvements implemented by library
 - smaller API surface. reduces the API surface of the client.
 - refactored the single lock used for all torrents out. this means the torrents do not contend with each other for the singe lock.
+- removed a number of panics making the code safer to use.
 
 ## improvements planned
 - simplify network configuration.
@@ -15,7 +16,7 @@ of the library, improve horizontal scalability, remove many of the extraneous de
 
 ## Installation
 
-Install the library package with `go get github.com/james-lawrence/torrent`, or the provided cmds with `go get github.com/james-lawrence/torrent/cmd/...`.
+Install the library package with `go get -u github.com/james-lawrence/torrent`, or the provided cmds with `go get -u github.com/james-lawrence/torrent/cmd/...`.
 
 ## Library examples
 

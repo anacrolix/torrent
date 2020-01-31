@@ -1,14 +1,15 @@
 package torrent
 
 import (
+	"log"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/expect"
 	"github.com/anacrolix/missinggo/v2/conntrack"
@@ -87,9 +88,8 @@ type ClientConfig struct {
 	DisableIPv6      bool `long:"disable-ipv6"`
 	DisableIPv4      bool
 	DisableIPv4Peers bool
-	// Perform logging and any other behaviour that will help debug.
-	Debug  bool `help:"enable debugging"`
-	Logger log.Logger
+	Debug            logger // debug logging, defaults to discard
+	Logger           logger // standard logging for errors, defaults to stderr
 
 	// HTTPProxy defines proxy for HTTP requests.
 	// Format: func(*Request) (*url.URL, error),
@@ -140,6 +140,22 @@ type ClientConfig struct {
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
 }
 
+func (cfg *ClientConfig) errors() llog {
+	return llog{logger: cfg.Logger}
+}
+
+func (cfg *ClientConfig) warn() llog {
+	return llog{logger: cfg.Logger}
+}
+
+func (cfg *ClientConfig) info() llog {
+	return llog{logger: cfg.Logger}
+}
+
+func (cfg *ClientConfig) debug() llog {
+	return llog{logger: cfg.Debug}
+}
+
 // SetListenAddr ...
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
 	host, port, err := missinggo.ParseHostPort(addr)
@@ -176,10 +192,10 @@ func NewDefaultClientConfig() *ClientConfig {
 		CryptoSelector: mse.DefaultCryptoSelector,
 		CryptoProvides: mse.AllSupportedCrypto,
 		ListenPort:     0,
-		Logger:         log.Default,
+		Logger:         log.New(os.Stderr, "[torrent] ", log.Flags()),
+		Debug:          discard{},
 	}
-	//cc.ConnTracker.SetNoMaxEntries()
-	//cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }
+
 	return cc
 }
 

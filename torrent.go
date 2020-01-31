@@ -22,7 +22,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/anacrolix/dht/v2"
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/perf"
@@ -123,7 +122,6 @@ type torrent struct {
 	cln    *Client
 	config *ClientConfig
 	_mu    *sync.RWMutex
-	logger log.Logger
 
 	networkingEnabled bool
 
@@ -430,7 +428,7 @@ func (t *torrent) saveMetadataPiece(index int, data []byte) {
 	}
 
 	if index >= len(t.metadataCompletedChunks) {
-		t.logger.Printf("%s: ignoring metadata piece %d", t, index)
+		t.config.warn().Printf("%s: ignoring metadata piece %d\n", t, index)
 		return
 	}
 
@@ -526,7 +524,7 @@ func (t *torrent) setInfo(info *metainfo.Info) error {
 func (t *torrent) onSetInfo() {
 	for conn := range t.conns {
 		if err := conn.setNumPieces(t.numPieces()); err != nil {
-			t.logger.Printf("closing connection: %s", err)
+			t.config.info().Println(errors.Wrap(err, "closing connection"))
 			conn.Close()
 		}
 	}
@@ -1231,7 +1229,7 @@ func (t *torrent) updatePieceCompletion(piece pieceIndex) bool {
 	if uncached.Complete && uncached.Ok {
 		// this completion is to satisfy the test TestCompletedPieceWrongSize
 		// its technically unneeded otherwise.... this is due to the fundmental
-		// issue where existing data isn't processed properly.
+		// issue where existing data isn't checksummed properly.
 		t.piecesM.Complete(piece)
 		t.onPieceCompleted(piece)
 	} else {
@@ -1239,7 +1237,7 @@ func (t *torrent) updatePieceCompletion(piece pieceIndex) bool {
 	}
 
 	if changed {
-		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).WithValues(debugLogValue).Log(t.logger)
+		t.config.debug().Printf("completition changed: piece(%d) %+v -> %+v", piece, cached, uncached)
 	}
 
 	return changed
@@ -1276,9 +1274,7 @@ func (t *torrent) maybeCompleteMetadata() error {
 		return fmt.Errorf("error setting info bytes: %s", err)
 	}
 
-	if t.config.Debug {
-		t.logger.Printf("%s: got metadata from peers", t)
-	}
+	t.config.debug().Printf("%s: got metadata from peers", t)
 
 	return nil
 }
@@ -1435,7 +1431,7 @@ func (t *torrent) startScrapingTracker(_url string) {
 		// URLs with a leading '*' appear to be a uTorrent convention to
 		// disable trackers.
 		if _url[0] != '*' {
-			log.Str("error parsing tracker url").AddValues("url", _url).Log(t.logger)
+			t.config.info().Println("error parsing tracker url:", _url)
 		}
 		return
 	}
@@ -1553,9 +1549,8 @@ func (t *torrent) dhtAnnouncer(s *dht.Server) {
 		t.lock()
 		t.numDHTAnnounces++
 		t.unlock()
-		err := t.announceToDht(true, s)
-		if err != nil {
-			t.logger.Printf("error announcing %q to DHT: %s", t, err)
+		if err := t.announceToDht(true, s); err != nil {
+			t.config.errors().Println(t, errors.Wrap(err, "error announcing to DHT"))
 			time.Sleep(time.Second)
 		}
 	}
@@ -1726,7 +1721,7 @@ func (t *torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 
 func (t *torrent) pieceHashed(piece pieceIndex, failure error) error {
 	correct := failure == nil
-	t.logger.Log(log.Fstr("hashed piece %d (passed=%t)", piece, correct).WithValues(debugLogValue))
+	t.config.debug().Printf("hashed piece %d passed=%t", piece, correct)
 
 	p := t.piece(piece)
 	p.numVerifies++
@@ -1741,7 +1736,6 @@ func (t *torrent) pieceHashed(piece pieceIndex, failure error) error {
 		if correct {
 			pieceHashedCorrect.Add(1)
 		} else {
-			log.Fmsg("piece %d failed hash: %v", piece, failure).AddValues(t, p).Log(t.logger)
 			pieceHashedNotCorrect.Add(1)
 		}
 	}
@@ -2135,7 +2129,7 @@ func (t *torrent) gotMetadataExtensionMsg(payload []byte, c *connection) error {
 			return nil
 		}
 		start := (1 << 14) * piece
-		c.logger.Printf("sending metadata piece %d", piece)
+
 		c.Post(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]))
 		return nil
 	case pp.RejectMetadataExtensionMsgType:

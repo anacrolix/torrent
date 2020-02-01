@@ -120,6 +120,7 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		duplicateRequestTimeout: time.Second,
 
 		piecesM: newChunks(src.ChunkSize, &metainfo.Info{}),
+		readers: make(map[*reader]struct{}),
 	}
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
 	t.event = &sync.Cond{L: tlocker{torrent: t}}
@@ -1164,8 +1165,8 @@ func (t *torrent) forReaderOffsetPieces(f func(begin, end pieceIndex) (more bool
 	return true
 }
 
-func (t *torrent) piecePriority(piece pieceIndex) piecePriority {
-	return piecePriority(t.piecesM.Priority(piece))
+func (t *torrent) piecePriority(piece pieceIndex) PiecePriority {
+	return PiecePriority(t.piecesM.Priority(piece))
 }
 
 func (t *torrent) pendRequest(req request) {
@@ -1984,11 +1985,8 @@ func (t *torrent) Metainfo() metainfo.MetaInfo {
 
 func (t *torrent) addReader(r *reader) {
 	t.lock()
-	defer t.unlock()
-	if t.readers == nil {
-		t.readers = make(map[*reader]struct{})
-	}
 	t.readers[r] = struct{}{}
+	t.unlock()
 	r.posChanged()
 }
 

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
-	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/pkg/errors"
@@ -89,12 +88,12 @@ func newChunks(clength int, m *metainfo.Info) *chunks {
 		meta:        m,
 		cmaximum:    numChunks(m.TotalLength(), m.PieceLength, int64(clength)),
 		clength:     int64(clength),
-		gracePeriod: time.Minute,
+		gracePeriod: 4 * time.Second,
 		outstanding: make(map[uint64]request),
-		// pending:     roaring.NewBitmap(), // TODO: pending will replace outstanding.
-		missing:   roaring.NewBitmap(),
-		failed:    roaring.NewBitmap(),
-		completed: roaring.NewBitmap(),
+		missing:     roaring.NewBitmap(),
+		unverified:  roaring.NewBitmap(),
+		failed:      roaring.NewBitmap(),
+		completed:   roaring.NewBitmap(),
 	}
 
 	// log.Printf("%p - LENGTH %d NUMCHUNKS %d - CHUNK LENGTH %d - PIECE LEGNTH %d\n", p, p.meta.Length, p.cmaximum, p.clength, p.meta.PieceLength)
@@ -130,7 +129,7 @@ type chunks struct {
 	outstanding map[uint64]request
 
 	// cache of the pieces that need to be verified.
-	unverified bitmap.Bitmap
+	unverified *roaring.Bitmap
 
 	// cache of completed piece indices, this means they have been retrieved and verified.
 	completed *roaring.Bitmap
@@ -158,8 +157,6 @@ func (t *chunks) reap(window time.Duration) {
 		scanned++
 
 		if deadline := req.Reserved.Add(t.gracePeriod); deadline.Before(ts) {
-			// t.pend(req, req.Priority)
-			// t.release(req)
 			t.retry(req)
 			recovered++
 		} else if t.nextReap.IsZero() || t.nextReap.Before(deadline) {
@@ -186,9 +183,8 @@ func (t *chunks) reap(window time.Duration) {
 // chunks returns the set of chunk id's for the given piece.
 func (t *chunks) chunks(pid int) (cidxs []int) {
 	cpp := chunksPerPiece(t.meta.PieceLength, t.clength)
-	chunks := numChunks(t.meta.PieceLength, t.meta.PieceLength, t.clength)
 
-	for i := int64(0); i < chunks; i++ {
+	for i := int64(0); i < cpp; i++ {
 		cidx := (pid * int(cpp)) + int(i)
 		if int64(cidx) < t.cmaximum {
 			cidxs = append(cidxs, cidx)
@@ -253,7 +249,7 @@ func (t *chunks) ChunksAvailable(pid int) bool {
 
 	available := true
 	for _, c := range t.chunks(pid) {
-		available = available && t.unverified.Contains(c)
+		available = available && t.unverified.ContainsInt(c)
 	}
 
 	return available
@@ -267,7 +263,7 @@ func (t *chunks) ChunksHashing(pid int) bool {
 	defer t.mu.Unlock()
 
 	for _, c := range t.chunks(pid) {
-		if t.unverified.Contains(c) {
+		if t.unverified.ContainsInt(c) {
 			return true
 		}
 	}
@@ -307,7 +303,7 @@ func (t *chunks) ChunksAdjust(pid int) (changed bool) {
 	for _, c := range t.chunks(pid) {
 		tmp := t.missing.CheckedAdd(uint32(c))
 		if tmp {
-			t.unverified.Remove(c)
+			t.unverified.Remove(uint32(c))
 		}
 		// log.Output(2, fmt.Sprintf("%p CHUNK PRIORITY ADJUSTED: %d %s prios %d %d %t %d\n", t, c, fmt.Sprintf("(%d)", pid), oprio, prio, tmp, t.missing.Len()))
 		changed = changed || tmp
@@ -495,7 +491,7 @@ func (t *chunks) pend(r request) (changed bool) {
 	changed = t.missing.CheckedAdd(uint32(cidx))
 
 	// remove from unverified.
-	t.unverified.Remove(cidx)
+	t.unverified.Remove(uint32(cidx))
 
 	delete(t.outstanding, r.Digest)
 
@@ -518,7 +514,7 @@ func (t *chunks) Snapshot(s *TorrentStats) *TorrentStats {
 	defer t.mu.RUnlock()
 	s.Missing = int(t.missing.GetCardinality())
 	s.Outstanding = len(t.outstanding)
-	s.Unverified = t.unverified.Len()
+	s.Unverified = int(t.unverified.GetCardinality())
 	s.Completed = int(t.completed.GetCardinality())
 	return s
 }
@@ -617,7 +613,7 @@ func (t *chunks) Available(r request) bool {
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.unverified.Contains(t.requestCID(r)) || t.completed.ContainsInt(int(r.Index))
+	return t.unverified.ContainsInt(t.requestCID(r)) || t.completed.ContainsInt(int(r.Index))
 }
 
 // Verify mark the chunk for verification.
@@ -631,7 +627,7 @@ func (t *chunks) Verify(r request) (err error) {
 
 	delete(t.outstanding, r.Digest)
 	t.missing.Remove(uint32(cid))
-	t.unverified.Set(cid, true)
+	t.unverified.AddInt(cid)
 
 	// log.Printf("c(%p) marked for verification: d(%020d - %d) i(%d) b(%d) l(%d)\n", t, r.Digest, cid, r.Index, r.Begin, r.Length)
 
@@ -646,7 +642,7 @@ func (t *chunks) Validate(pid int) {
 	defer t.mu.Unlock()
 
 	for _, cid := range t.chunks(pid) {
-		t.unverified.Set(cid, true)
+		t.unverified.AddInt(cid)
 	}
 }
 
@@ -660,7 +656,7 @@ func (t *chunks) Complete(pid int) (changed bool) {
 		cidx := t.requestCID(r)
 		delete(t.outstanding, r.Digest)
 		tmp := t.missing.CheckedRemove(uint32(cidx))
-		tmp = t.unverified.Remove(cidx) || tmp
+		tmp = t.unverified.CheckedRemove(uint32(cidx)) || tmp
 		changed = changed || tmp
 
 		// log.Output(2, fmt.Sprintf("c(%p) marked completed: (%020d - %d) r(%d,%d,%d)\n", t, r.Digest, cidx, r.Index, r.Begin, r.Length))

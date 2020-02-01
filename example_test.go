@@ -1,24 +1,36 @@
 package torrent_test
 
 import (
+	"context"
+	"io/ioutil"
 	"log"
 
 	"github.com/anacrolix/torrent"
 )
 
-func Example() {
-	c, _ := torrent.NewClient(nil)
-	defer c.Close()
-	ts, _ := torrent.NewFromMagnet("magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU")
+func ExampleDownload() {
+	var (
+		err      error
+		metadata torrent.Metadata
+	)
 
-	t, _, _ := c.Start(ts)
-	<-t.GotInfo()
-	t.DownloadAll()
-	c.WaitAll()
-	log.Print("ermahgerd, torrent downloaded")
+	c, _ := torrent.NewDefaultClient()
+	defer c.Close()
+
+	if metadata, err = torrent.NewFromMagnet("magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU"); err != nil {
+		log.Fatalln(err)
+		return
+	}
+
+	if err = c.Download(context.Background(), metadata, ioutil.Discard); err != nil {
+		log.Fatalln(err)
+		return
+	}
+
+	log.Print("torrent downloaded")
 }
 
-func Example_fileReader() {
+func ExampleFileReader() {
 	var f torrent.File
 	// Accesses the parts of the torrent pertaining to f. Data will be
 	// downloaded as required, per the configuration of the torrent.Reader.

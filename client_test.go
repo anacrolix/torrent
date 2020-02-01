@@ -1,6 +1,8 @@
 package torrent
 
 import (
+	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -507,31 +509,53 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 	}
 }
 
-// func TestDownload(t *testing.T) {
-// 	greetingTempDir, mi := testutil.GreetingTestTorrent()
-// 	defer os.RemoveAll(greetingTempDir)
-// 	metadata, err := NewFromMetaInfo(mi)
-// 	require.NoError(t, err)
+func TestDownload(t *testing.T) {
+	buf := bytes.NewBufferString("")
 
-// 	cfg := TestingConfig()
-// 	cfg.Seed = true
-// 	cfg.DataDir = greetingTempDir
-// 	seeder, err := NewAutobindLoopback().Bind(NewClient(cfg))
-// 	require.NoError(t, err)
-// 	defer seeder.Close()
-// 	defer testutil.ExportStatusWriter(seeder, "s")()
-// 	require.NoError(t, seeder.Download(context.Background(), metadata, ioutil.Discard))
+	greetingTempDir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(greetingTempDir)
+	metadata, err := NewFromMetaInfo(mi)
+	require.NoError(t, err)
 
-// 	lcfg := TestingConfig()
-// 	lcfg.DataDir, err = ioutil.TempDir("", "")
-// 	require.Nil(t, err)
-// 	defer os.RemoveAll(lcfg.DataDir)
-// 	leecher, err := NewAutobindLoopback().Bind(NewClient(lcfg))
-// 	require.NoError(t, err)
-// 	defer leecher.Close()
-// 	require.NoError(t, err)
-// 	require.NoError(t, leecher.Download(context.Background(), metadata, ioutil.Discard, TuneClientPeer(seeder)))
-// }
+	cfg := TestingConfig()
+	cfg.Seed = true
+	cfg.DataDir = greetingTempDir
+	seeder, err := NewAutobindLoopback().Bind(NewClient(cfg))
+	require.NoError(t, err)
+	defer seeder.Close()
+	defer testutil.ExportStatusWriter(seeder, "s")()
+	require.NoError(t, seeder.Download(context.Background(), metadata, ioutil.Discard))
+
+	lcfg := TestingConfig()
+	lcfg.DataDir, err = ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(lcfg.DataDir)
+	leecher, err := NewAutobindLoopback().Bind(NewClient(lcfg))
+	require.NoError(t, err)
+	defer leecher.Close()
+	require.NoError(t, leecher.Download(context.Background(), metadata, buf, TuneClientPeer(seeder)))
+	require.Equal(t, "hello, world\n", buf.String())
+}
+
+func TestDownloadMetadataTimeout(t *testing.T) {
+	buf := bytes.NewBufferString("")
+
+	greetingTempDir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(greetingTempDir)
+	metadata, err := New(mi.HashInfoBytes())
+	require.NoError(t, err)
+
+	cfg := TestingConfig()
+	cfg.DataDir, err = ioutil.TempDir("", "")
+	require.Nil(t, err)
+	defer os.RemoveAll(cfg.DataDir)
+	leecher, err := NewAutobindLoopback().Bind(NewClient(cfg))
+	require.NoError(t, err)
+	defer leecher.Close()
+	ctx, done := context.WithTimeout(context.Background(), 0)
+	defer done()
+	require.Equal(t, context.DeadlineExceeded, leecher.Download(ctx, metadata, buf))
+}
 
 // We read from a piece which is marked completed, but is missing data.
 func TestCompletedPieceWrongSize(t *testing.T) {

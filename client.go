@@ -138,6 +138,8 @@ func (cl *Client) Download(ctx context.Context, t Metadata, dst io.Writer, optio
 		return err
 	}
 
+	dlt.Tune(options...)
+
 	select {
 	case <-dlt.GotInfo():
 	case <-ctx.Done():

@@ -1,8 +1,7 @@
 /*
-Package torrent implements a torrent client. Goals include:
- * Configurable data storage, such as file, mmap, and piece-based.
- * Downloading on demand: torrent.Reader will request only the data required to
-   satisfy Reads, which is ideal for streaming and torrentfs.
+Package torrent implements a torrent client
+ - simple api.
+ - performant.
 
 BitTorrent features implemented include:
  * Protocol obfuscation

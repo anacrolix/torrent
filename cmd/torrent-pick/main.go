@@ -155,7 +155,7 @@ func main() {
 			}
 			return t
 		}()
-		t.Tune(torrent.TuneAddPeers(testPeers))
+		t.Tune(torrent.TuneAddPeers(testPeers...))
 
 		go func() {
 			defer close(done)

@@ -571,12 +571,6 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		}
 	}
 
-	// optimisticly unchoke the connection when locally we have all the pieces
-	// we don't actually care about the result.
-	if !(cn.uploadAllowed() && cn.t.piecesM.Missing() == 0 && cn.Unchoke(msg)) {
-		// l2.Printf("(%d) - c(%p) not unchoking allowed(%t) - missing (%t) - outstanding (%d)\n", os.Getpid(), cn, cn.uploadAllowed(), cn.t.piecesM.Missing() == 0, len(cn.requests))
-	}
-
 	// if we're choked and not allowed to fast track any chunks then there is nothing
 	// to do.
 	if cn.PeerChoked && cn.fastset.IsEmpty() {

@@ -881,7 +881,6 @@ func (t *torrent) close() (err error) {
 	t.event.Broadcast()
 	// t.pieceStateChanges.Close()
 
-	t.updateWantPeersEvent()
 	return err
 }
 

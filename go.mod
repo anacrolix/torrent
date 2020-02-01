@@ -29,6 +29,7 @@ require (
 	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/pkg/errors v0.9.1
+	github.com/pkg/profile v1.4.0
 	github.com/stretchr/testify v1.4.0
 	github.com/tinylib/msgp v1.1.1 // indirect
 	golang.org/x/net v0.0.0-20200114155413-6afb5195e5aa

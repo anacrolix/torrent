@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/pkg/profile"
 	"golang.org/x/xerrors"
 
-	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/gosuri/uiprogress"
@@ -152,6 +152,7 @@ var flags = struct {
 	Addr            string         `help:"network listen addr"`
 	UploadRate      tagflag.Bytes  `help:"max piece bytes to send per second"`
 	DownloadRate    tagflag.Bytes  `help:"max bytes per second down from peers"`
+	CPU             bool           `help:"enable cpu profile"`
 	Debug           bool
 	PackedBlocklist string
 	Stats           *bool
@@ -198,13 +199,16 @@ func main() {
 }
 
 func mainErr() error {
-	// defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
 	log.SetFlags(log.Flags() | log.Lshortfile)
 	tagflag.Parse(&flags)
-	defer envpprof.Stop()
 	if stdoutAndStderrAreSameFile() {
 		log.SetOutput(progress.Bypass())
 	}
+
+	if flags.CPU {
+		defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
+	}
+
 	autobind := torrent.NewAutobind()
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableAcceptRateLimiting = true

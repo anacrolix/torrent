@@ -356,7 +356,7 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 		if err != nil {
 			cl.config.errors().Println(errors.Wrap(err, "error bootstrapping dht"))
 		}
-		cl.config.info().Printf("%v completed bootstrap (%v)\n", s, ts)
+		cl.config.debug().Printf("%v completed bootstrap (%v)\n", s, ts)
 	}()
 	return s, nil
 }

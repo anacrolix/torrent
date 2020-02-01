@@ -11,11 +11,10 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-// PiecePriority describes the importance of obtaining a particular piece.
-type PiecePriority byte
+// Describes the importance of obtaining a particular piece.
+type piecePriority byte
 
-// Raise increases the priority.
-func (pp *PiecePriority) Raise(maybe PiecePriority) bool {
+func (pp *piecePriority) Raise(maybe piecePriority) bool {
 	if maybe > *pp {
 		*pp = maybe
 		return true
@@ -23,14 +22,13 @@ func (pp *PiecePriority) Raise(maybe PiecePriority) bool {
 	return false
 }
 
-// BitmapPriority (deprecated) Priority for use in PriorityBitmap
-func (pp PiecePriority) BitmapPriority() int {
-	return -int(pp)
+// Priority for use in PriorityBitmap
+func (me piecePriority) BitmapPriority() int {
+	return -int(me)
 }
 
-// Various priority levels.
 const (
-	PiecePriorityNone      PiecePriority = iota // Not wanted. Must be the zero value.
+	PiecePriorityNone      piecePriority = iota // Not wanted. Must be the zero value.
 	PiecePriorityNormal                         // Wanted.
 	PiecePriorityHigh                           // Wanted a lot.
 	PiecePriorityReadahead                      // May be required soon.
@@ -40,7 +38,6 @@ const (
 	PiecePriorityNow // A Reader is reading in this piece. Highest urgency.
 )
 
-// Piece represents a piece of the torrent.
 type Piece struct {
 	// The completed piece SHA1 hash, from the metainfo "pieces" field.
 	hash  *metainfo.Hash
@@ -56,7 +53,7 @@ type Piece struct {
 	storageCompletionOk bool
 
 	publicPieceState PieceState
-	priority         PiecePriority
+	priority         piecePriority
 
 	pendingWritesMutex sync.Mutex
 	pendingWrites      int
@@ -221,14 +218,14 @@ func (p *Piece) torrentEndOffset() int64 {
 	return p.torrentBeginOffset() + int64(p.length())
 }
 
-func (p *Piece) SetPriority(prio PiecePriority) {
+func (p *Piece) SetPriority(prio piecePriority) {
 	p.t.lock()
 	defer p.t.unlock()
 	p.priority = prio
 	p.t.updatePiecePriority(p.index)
 }
 
-func (p *Piece) uncachedPriority() (ret PiecePriority) {
+func (p *Piece) uncachedPriority() (ret piecePriority) {
 	if p.t.pieceComplete(p.index) || p.t.piecesM.ChunksComplete(p.index) {
 		return PiecePriorityNone
 	}

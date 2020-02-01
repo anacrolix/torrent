@@ -541,7 +541,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 }
 
 // Torrent returns a handle to the given torrent, if it's present in the client.
-func (cl *Client) Torrent(ih metainfo.Hash) (t Torrent, ok bool) {
+func (cl *Client) Torrent(ih metainfo.Hash) (t *torrent, ok bool) {
 	cl.lock()
 	defer cl.unlock()
 	t, ok = cl.torrents[ih]

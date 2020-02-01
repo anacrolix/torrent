@@ -15,7 +15,7 @@ type File struct {
 	offset int64
 	length int64
 	fi     metainfo.FileInfo
-	prio   PiecePriority
+	prio   piecePriority
 }
 
 // Torrent returns the associated torrent
@@ -144,7 +144,7 @@ func (f *File) NewReader() Reader {
 }
 
 // SetPriority the minimum priority for pieces in the File.
-func (f *File) SetPriority(prio PiecePriority) {
+func (f *File) SetPriority(prio piecePriority) {
 	f.t.lock()
 	defer f.t.unlock()
 	if prio == f.prio {
@@ -155,7 +155,7 @@ func (f *File) SetPriority(prio PiecePriority) {
 }
 
 // Priority per File.SetPriority.
-func (f *File) Priority() PiecePriority {
+func (f *File) Priority() piecePriority {
 	f.t.lock()
 	defer f.t.unlock()
 	return f.prio

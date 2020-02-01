@@ -44,6 +44,29 @@ func TuneMaxConnections(m int) Tuner {
 	}
 }
 
+// TuneAddPeers add peers to the torrent.
+func TuneAddPeers(peers ...Peer) Tuner {
+	return func(t *torrent) {
+		t.AddPeers(peers)
+	}
+}
+
+// TuneClientPeer adds a trusted, pending peer for each of the Client's addresses.
+// used for tests.
+func TuneClientPeer(cl *Client) Tuner {
+	return func(t *torrent) {
+		ps := []Peer{}
+		for _, la := range cl.ListenAddrs() {
+			ps = append(ps, Peer{
+				IP:      missinggo.AddrIP(la),
+				Port:    missinggo.AddrPort(la),
+				Trusted: true,
+			})
+		}
+		t.AddPeers(ps)
+	}
+}
+
 // Torrent represents the state of a torrent within a client.
 // interface is currently being used to ease the transition of to a cleaner API.
 // Many methods should not be called before the info is available,
@@ -51,19 +74,16 @@ func TuneMaxConnections(m int) Tuner {
 type Torrent interface {
 	Metadata() Metadata
 	Tune(...Tuner) error
-	Name() string                // TODO: remove, should be pulled from Torrent()
-	Metainfo() metainfo.MetaInfo // TODO: remove, should be pulled from Torrent()
-	BytesCompleted() int64       // TODO: maybe should be pulled from torrent, it has a reference to the storage implementation.
+	Name() string                // TODO: remove, should be pulled from Metadata()
+	Metainfo() metainfo.MetaInfo // TODO: remove, should be pulled from Metadata()
+	BytesCompleted() int64       // TODO: maybe should be pulled from torrent, it has a reference to the storage implementation. or maybe part of the Stats call?
 	VerifyData()                 // TODO: maybe should be pulled from torrent, it has a reference to the storage implementation.
-	AddClientPeer(cl *Client)    // TODO: remove, this should only be used in tests.
 	NewReader() Reader           // TODO: maybe should be pulled from torrent, it has a reference to the storage implementation.
-	Seeding() bool               //
-	Stats() TorrentStats         //
-	Info() *metainfo.Info        // TODO: remove, this should be pulled from Torrent()
+	Stats() TorrentStats         // TODO: rename TorrentStats, it stutters.
+	Info() *metainfo.Info        // TODO: remove, this should be pulled from Metadata()
 	GotInfo() <-chan struct{}    // TODO: remove, torrents should never be returned in they don't have the meta info.
 	DownloadAll()                // TODO: rethink this. does it even need to exist or can it be rolled up into Start/Download.
-	Files() []*File              // TODO: maybe should be pulled from torrent, it has a reference to the storage implementation.
-	AddPeers(pp []Peer)
+	Files() []*File              // TODO: maybe should be pulled from Metadata(), it has a reference to the storage implementation.
 	SubscribePieceStateChanges() *pubsub.Subscription
 	PieceStateRuns() []PieceStateRun
 }
@@ -221,7 +241,7 @@ func (t *torrent) Metadata() Metadata {
 	}
 }
 
-// Tune
+// Tune the settings of the torrent.
 func (t *torrent) Tune(tuning ...Tuner) error {
 	for _, opt := range tuning {
 		opt(t)
@@ -1565,14 +1585,17 @@ func (t *torrent) Stats() TorrentStats {
 }
 
 func (t *torrent) statsLocked() (ret TorrentStats) {
+	ret.Seeding = t.seeding()
 	ret.ActivePeers = len(t.conns)
 	ret.HalfOpenPeers = len(t.halfOpen)
 	ret.PendingPeers = t.peers.Len()
-	ret.TotalPeers = t.numTotalPeers()
-	ret.ConnectedSeeders = 0
-
 	t.piecesM.Snapshot(&ret)
 
+	// TODO: these can be moved to the connections directly.
+	// moving it will reduce the need to iterate the connections
+	// to compute the stats.
+	ret.TotalPeers = t.numTotalPeers()
+	ret.ConnectedSeeders = 0
 	for c := range t.conns {
 		if all, ok := c.peerHasAllPieces(); all && ok {
 			ret.ConnectedSeeders++
@@ -1829,20 +1852,6 @@ func (t *torrent) initiateConn(peer Peer) {
 	go t.cln.outgoingConnection(t, addr, peer.Source, peer.Trusted)
 }
 
-// Adds each a trusted, pending peer for each of the Client's addresses.
-func (t *torrent) AddClientPeer(cl *Client) {
-	t.AddPeers(func() (ps []Peer) {
-		for _, la := range cl.ListenAddrs() {
-			ps = append(ps, Peer{
-				IP:      missinggo.AddrIP(la),
-				Port:    missinggo.AddrPort(la),
-				Trusted: true,
-			})
-		}
-		return
-	}())
-}
-
 func (t *torrent) noLongerHalfOpen(addr string) {
 	t.lock()
 	defer t.unlock()
@@ -1944,14 +1953,6 @@ func (t *torrent) BytesCompleted() int64 {
 // A state change is when the PieceState for a piece alters in value.
 func (t *torrent) SubscribePieceStateChanges() *pubsub.Subscription {
 	return t.pieceStateChanges.Subscribe()
-}
-
-// Returns true if the torrent is currently being seeded. This occurs when the
-// client is willing to upload without wanting anything in return.
-func (t *torrent) Seeding() bool {
-	t.lock()
-	defer t.unlock()
-	return t.seeding()
 }
 
 // Clobbers the torrent display name. The display name is used as the torrent

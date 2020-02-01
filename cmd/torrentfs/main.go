@@ -19,7 +19,7 @@ import (
 	"github.com/anacrolix/tagflag"
 
 	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/fs"
+	torrentfs "github.com/anacrolix/torrent/fs"
 	"github.com/anacrolix/torrent/util/dirwatch"
 )
 
@@ -60,11 +60,12 @@ func exitSignalHandlers(fs *torrentfs.TorrentFS) {
 }
 
 func addTestPeer(client *torrent.Client) {
+	p := torrent.Peer{
+		IP:   args.TestPeer.IP,
+		Port: args.TestPeer.Port,
+	}
 	for _, t := range client.Torrents() {
-		t.AddPeers([]torrent.Peer{{
-			IP:   args.TestPeer.IP,
-			Port: args.TestPeer.Port,
-		}})
+		t.Tune(torrent.TuneAddPeers(p))
 	}
 }
 
@@ -90,8 +91,7 @@ func mainExitCode() int {
 	cfg.DataDir = args.DownloadDir
 	cfg.DisableTrackers = args.DisableTrackers
 	cfg.NoUpload = true // Ensure that downloads are responsive.
-	cfg.SetListenAddr(args.ListenAddr.String())
-	client, err := torrent.NewClient(cfg)
+	client, err := torrent.NewAutobindSpecified(args.ListenAddr.String()).Bind(torrent.NewClient(cfg))
 	if err != nil {
 		log.Print(err)
 		return 1

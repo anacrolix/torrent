@@ -41,15 +41,15 @@ func torrentBar(t torrent.Torrent) {
 			return "getting info"
 		}
 
-		if t.Seeding() {
+		stats := t.Stats()
+
+		if stats.Seeding {
 			return "seeding"
 		}
 
 		if t.BytesCompleted() == t.Info().TotalLength() {
 			return "completed"
 		}
-
-		stats := t.Stats()
 
 		return fmt.Sprintf(
 			"(%d) downloading (%s/%s) peers(%d) completed(%d/%d) missing(%d) outstanding(%d) unverified(%d)",
@@ -127,7 +127,7 @@ func addTorrents(client *torrent.Client) error {
 			return xerrors.Errorf("adding torrent for %q: %w", arg, err)
 		}
 		torrentBar(t)
-		t.AddPeers(func() (ret []torrent.Peer) {
+		t.Tune(torrent.TuneAddPeers(func() (ret []torrent.Peer) {
 			for _, ta := range flags.TestPeer {
 				ret = append(ret, torrent.Peer{
 					IP:   ta.IP,
@@ -135,7 +135,8 @@ func addTorrents(client *torrent.Client) error {
 				})
 			}
 			return
-		}())
+		}()...))
+
 		go func() {
 			<-t.GotInfo()
 			t.DownloadAll()
@@ -204,6 +205,7 @@ func mainErr() error {
 	if stdoutAndStderrAreSameFile() {
 		log.SetOutput(progress.Bypass())
 	}
+	autobind := torrent.NewAutobind()
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableAcceptRateLimiting = true
 	clientConfig.NoDHT = !flags.Dht
@@ -222,7 +224,7 @@ func mainErr() error {
 		clientConfig.DefaultStorage = storage.NewMMap("")
 	}
 	if flags.Addr != "" {
-		clientConfig.SetListenAddr(flags.Addr)
+		autobind = torrent.NewAutobindSpecified(flags.Addr)
 	}
 	if flags.UploadRate != -1 {
 		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(flags.UploadRate), 256<<10)
@@ -244,7 +246,7 @@ func mainErr() error {
 		stop.Set()
 	}()
 
-	client, err := torrent.NewClient(clientConfig)
+	client, err := autobind.Bind(torrent.NewClient(clientConfig))
 	if err != nil {
 		return xerrors.Errorf("creating client: %v", err)
 	}

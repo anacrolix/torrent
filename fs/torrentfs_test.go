@@ -94,7 +94,7 @@ func TestUnmountWedged(t *testing.T) {
 	cfg.NoDHT = true
 	cfg.DisableTCP = true
 	cfg.DisableUTP = true
-	client, err := torrent.NewClient(cfg)
+	client, err := torrent.NewAutobind().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	defer client.Close()
 	tt, _, err := client.MaybeStart(torrent.NewFromMetaInfo(layout.Metainfo))
@@ -170,9 +170,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	cfg.DisableTrackers = true
 	cfg.NoDHT = true
 	cfg.Seed = true
-	cfg.ListenPort = 0
-	cfg.ListenHost = torrent.LoopbackListenHost
-	seeder, err := torrent.NewClient(cfg)
+	seeder, err := torrent.NewAutobindLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	defer seeder.Close()
 	defer testutil.ExportStatusWriter(seeder, "s")()
@@ -190,15 +188,13 @@ func TestDownloadOnDemand(t *testing.T) {
 	cfg.NoDHT = true
 	cfg.DisableTCP = true
 	cfg.DefaultStorage = storage.NewMMap(filepath.Join(layout.BaseDir, "download"))
-	cfg.ListenHost = torrent.LoopbackListenHost
-	cfg.ListenPort = 0
-	leecher, err := torrent.NewClient(cfg)
+	leecher, err := torrent.NewAutobindLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	testutil.ExportStatusWriter(leecher, "l")()
 	defer leecher.Close()
 	leecherTorrent, _, err := leecher.MaybeStart(torrent.NewFromMetaInfo(layout.Metainfo))
 	require.NoError(t, err)
-	leecherTorrent.AddClientPeer(seeder)
+	leecherTorrent.Tune(torrent.TuneClientPeer(seeder))
 	fs := New(leecher)
 	defer fs.Destroy()
 	root, _ := fs.Root()

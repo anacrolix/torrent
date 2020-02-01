@@ -28,6 +28,8 @@ github.com/anacrolix/dht/v2 v2.0.1 h1:gOHJ+OKqJ4Eb48OYStZm4AlWr1/nSA2TWlzb/+t36S
 github.com/anacrolix/dht/v2 v2.0.1/go.mod h1:GbTT8BaEtfqab/LPd5tY41f3GvYeii3mmDUK300Ycyo=
 github.com/anacrolix/dht/v2 v2.2.1-0.20191103020011-1dba080fb358 h1:Fji8X0K+FTn9UUupodVCCnQG7wNXETUARGT+8P5s+N0=
 github.com/anacrolix/dht/v2 v2.2.1-0.20191103020011-1dba080fb358/go.mod h1:d7ARx3WpELh9uOEEr0+8wvQeVTOkPse4UU6dKpv4q0E=
+github.com/anacrolix/dht/v2 v2.3.1 h1:kEQ6SQrY/p4ageA4KkraA5hCrHiCg79Xb3XrxyZUVtA=
+github.com/anacrolix/dht/v2 v2.3.1/go.mod h1:lFjYQPwXAvfkfNh+jmeJqgVLTfdlF/6gIy50byACQa0=
 github.com/anacrolix/dht/v2 v2.3.2-0.20200103043204-8dce00767ebd/go.mod h1:cgjKyErDnKS6Mej5D1fEqBKg3KwFF2kpFZJp3L6/fGI=
 github.com/anacrolix/dht/v2 v2.5.0 h1:AYoGu41z2fellHU9zdFZOQFr8E3epyAGWk6RfOz5UVE=
 github.com/anacrolix/dht/v2 v2.5.0/go.mod h1:7RLvyOjm+ZPA7vgFRP+1eRjFzrh27p/nF0VCk5LcjoU=
@@ -49,6 +51,8 @@ github.com/anacrolix/log v0.3.0/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgw
 github.com/anacrolix/log v0.3.1-0.20190913000754-831e4ffe0174/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgwU9jwU=
 github.com/anacrolix/log v0.3.1-0.20191001111012-13cede988bcd h1:E3J4yy2mfow1JAM2vWMWO4L1EUNuugmxMhk1dhX4bbU=
 github.com/anacrolix/log v0.3.1-0.20191001111012-13cede988bcd/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgwU9jwU=
+github.com/anacrolix/log v0.4.0 h1:sOT4yO5Q5+eVONFxKsVCLisyLSOXb+si+tYmFEMCy88=
+github.com/anacrolix/log v0.4.0/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgwU9jwU=
 github.com/anacrolix/log v0.5.0/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgwU9jwU=
 github.com/anacrolix/log v0.6.0 h1:5y+wtTWoecbrAWWuoBCH7UuGFiD6q2jnQxrLK01RC+Q=
 github.com/anacrolix/log v0.6.0/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgwU9jwU=
@@ -247,6 +251,8 @@ github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
+github.com/pkg/profile v1.4.0 h1:uCmaf4vVbWAOZz36k1hrQD7ijGRzLwaME8Am/7a4jZI=
+github.com/pkg/profile v1.4.0/go.mod h1:NWz/XGvpEW1FyYQ7fCx4dqYBLlfTcE+A9FLAkNKqjFE=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prometheus/client_golang v0.9.1/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=

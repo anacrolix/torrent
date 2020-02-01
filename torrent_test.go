@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -173,8 +172,8 @@ func TestPieceHashFailed(t *testing.T) {
 // Check the behaviour of Torrent.Metainfo when metadata is not completed.
 func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	cfg := TestingConfig()
-	cfg.Debug = log.New(os.Stderr, "[debug] ", log.Flags())
-	cl, err := NewClient(cfg)
+	// cfg.Debug = log.New(os.Stderr, "[debug] ", log.Flags())
+	cl, err := NewAutobindLoopback().Bind(NewClient(cfg))
 	require.NoError(t, err)
 	defer cl.Close()
 

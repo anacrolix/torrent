@@ -117,7 +117,7 @@ func main() {
 
 	rootGroup.Client.DataDir = tmpdir
 
-	client, err := torrent.NewClient(rootGroup.Client)
+	client, err := torrent.NewAutobind().Bind(torrent.NewClient(rootGroup.Client))
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)
 	}
@@ -155,7 +155,7 @@ func main() {
 			}
 			return t
 		}()
-		t.AddPeers(testPeers)
+		t.Tune(torrent.TuneAddPeers(testPeers))
 
 		go func() {
 			defer close(done)

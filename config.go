@@ -9,8 +9,6 @@ import (
 
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/expect"
 	"github.com/anacrolix/missinggo/v2/conntrack"
 	"golang.org/x/time/rate"
 
@@ -27,11 +25,7 @@ type ClientConfig struct {
 	// Store torrent file data in this directory unless .DefaultStorage is
 	// specified.
 	DataDir string `long:"data-dir" description:"directory to store downloaded torrent data"`
-	// The address to listen for new uTP and TCP bittorrent protocol
-	// connections. DHT shares a UDP socket with uTP unless configured
-	// otherwise.
-	ListenHost              func(network string) string
-	ListenPort              int
+
 	NoDefaultPortForwarding bool
 	UpnpID                  string
 	// Don't announce to trackers. This only leaves DHT to discover peers.
@@ -156,13 +150,24 @@ func (cfg *ClientConfig) debug() llog {
 	return llog{logger: cfg.Debug}
 }
 
-// SetListenAddr ...
-func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
-	host, port, err := missinggo.ParseHostPort(addr)
-	expect.Nil(err)
-	cfg.ListenHost = func(string) string { return host }
-	cfg.ListenPort = port
-	return cfg
+func (cfg *ClientConfig) listenOnNetwork(n network) bool {
+	if n.Ipv4 && cfg.DisableIPv4 {
+		return false
+	}
+
+	if n.Ipv6 && cfg.DisableIPv6 {
+		return false
+	}
+
+	if n.TCP && cfg.DisableTCP {
+		return false
+	}
+
+	if n.UDP && cfg.DisableUTP && cfg.NoDHT {
+		return false
+	}
+
+	return true
 }
 
 // NewDefaultClientConfig default client configuration.
@@ -180,7 +185,6 @@ func NewDefaultClientConfig() *ClientConfig {
 		TorrentPeersLowWater:           50,
 		HandshakesTimeout:              4 * time.Second,
 		DhtStartingNodes:               dht.GlobalBootstrapAddrs,
-		ListenHost:                     func(string) string { return "" },
 		UploadRateLimiter:              unlimited,
 		DownloadRateLimiter:            unlimited,
 		ConnTracker:                    conntrack.NewInstance(),
@@ -191,7 +195,6 @@ func NewDefaultClientConfig() *ClientConfig {
 		},
 		CryptoSelector: mse.DefaultCryptoSelector,
 		CryptoProvides: mse.AllSupportedCrypto,
-		ListenPort:     0,
 		Logger:         log.New(log.Writer(), "[torrent] ", log.Flags()),
 		Warn:           discard{},
 		Debug:          discard{},

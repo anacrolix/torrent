@@ -20,7 +20,7 @@ func main() {
 		Magnet []string
 	}{}
 	tagflag.Parse(&args)
-	cl, err := torrent.NewClient(nil)
+	cl, err := torrent.NewAutobind().Bind(torrent.NewClient(nil))
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)
 	}

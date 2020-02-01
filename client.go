@@ -28,6 +28,7 @@ import (
 	"golang.org/x/time/rate"
 	"golang.org/x/xerrors"
 
+	"github.com/anacrolix/torrent/internal/x/stringsx"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
@@ -122,6 +123,36 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 	cl.event.Broadcast()
 
 	return dlt, true, nil
+}
+
+// Download the specified torrent.
+// Download differs from Start in that it blocks until the torrent is completely downloaded.
+// the provided ctx is used to timeout the download, but it only timeout with regards
+// to fetching the torrent info.
+func (cl *Client) Download(ctx context.Context, t Metadata, dst io.Writer, options ...Tuner) (err error) {
+	var (
+		dlt *torrent
+	)
+
+	if dlt, _, err = cl.start(t); err != nil {
+		return err
+	}
+
+	select {
+	case <-dlt.GotInfo():
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	// copy into the destination
+	// TODO: wrap the destination in a context writer to timeout the copy
+	if n, err := io.Copy(dst, dlt.NewReader()); err != nil {
+		return err
+	} else if n != dlt.Length() {
+		return errors.Errorf("download failed, missing data %d != %d", n, dlt.Length())
+	}
+
+	return nil
 }
 
 // Stop the specified torrent, this halts all network activity around the torrent
@@ -242,6 +273,12 @@ func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 		cfg = NewDefaultClientConfig()
 	}
 
+	if cfg.HTTPProxy == nil && cfg.ProxyURL != "" {
+		if fixedURL, err := url.Parse(cfg.ProxyURL); err == nil {
+			cfg.HTTPProxy = http.ProxyURL(fixedURL)
+		}
+	}
+
 	cl := &Client{
 		config:            cfg,
 		dopplegangerAddrs: make(map[string]struct{}),
@@ -275,94 +312,22 @@ func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 		cl.ipBlockList = cfg.IPBlocklist
 	}
 
-	if cfg.PeerID != "" {
-		copy(cl.peerID[:], cfg.PeerID)
-	} else {
-		o := copy(cl.peerID[:], cfg.Bep20)
-		_, err = rand.Read(cl.peerID[o:])
-		if err != nil {
-			panic("error generating peer id")
-		}
-	}
-
-	if cl.config.HTTPProxy == nil && cl.config.ProxyURL != "" {
-		if fixedURL, err := url.Parse(cl.config.ProxyURL); err == nil {
-			cl.config.HTTPProxy = http.ProxyURL(fixedURL)
-		}
-	}
-
-	if cl.conns, err = listenAll(cl.listenNetworks(), cl.config.ListenHost, cl.config.ListenPort, cl.config.ProxyURL, cl.firewallCallback); err != nil {
-		return nil, err
-	}
-	// Check for panics.
-	cl.LocalPort()
-
-	for _, s := range cl.conns {
-		if peerNetworkEnabled(parseNetworkString(s.Addr().Network()), cl.config) {
-			go cl.acceptConnections(s)
-		}
-	}
-
-	go cl.forwardPort()
-	if !cfg.NoDHT {
-		for _, s := range cl.conns {
-			if pc, ok := s.(net.PacketConn); ok {
-				ds, err := cl.newDhtServer(pc)
-				if err != nil {
-					panic(err)
-				}
-				cl.dhtServers = append(cl.dhtServers, ds)
-			}
-		}
+	o := copy(cl.peerID[:], stringsx.Default(cfg.PeerID, cfg.Bep20))
+	if _, err = rand.Read(cl.peerID[o:]); err != nil {
+		return nil, errors.Wrap(err, "error generating peer id")
 	}
 
 	return cl, nil
 }
 
 func (cl *Client) firewallCallback(net.Addr) bool {
-	// cl.rLock()
 	block := !cl.wantConns()
-	// cl.rUnlock()
 	if block {
 		metrics.Add("connections firewalled", 1)
 	} else {
 		metrics.Add("connections not firewalled", 1)
 	}
 	return block
-}
-
-func (cl *Client) enabledPeerNetworks() (ns []network) {
-	for _, n := range allPeerNetworks {
-		if peerNetworkEnabled(n, cl.config) {
-			ns = append(ns, n)
-		}
-	}
-	return
-}
-
-func (cl *Client) listenOnNetwork(n network) bool {
-	if n.Ipv4 && cl.config.DisableIPv4 {
-		return false
-	}
-	if n.Ipv6 && cl.config.DisableIPv6 {
-		return false
-	}
-	if n.TCP && cl.config.DisableTCP {
-		return false
-	}
-	if n.UDP && cl.config.DisableUTP && cl.config.NoDHT {
-		return false
-	}
-	return true
-}
-
-func (cl *Client) listenNetworks() (ns []network) {
-	for _, n := range allPeerNetworks {
-		if cl.listenOnNetwork(n) {
-			ns = append(ns, n)
-		}
-	}
-	return
 }
 
 func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
@@ -379,24 +344,45 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 		StartingNodes:      cl.config.DhtStartingNodes,
 		ConnectionTracking: cl.config.ConnTracker,
 		OnQuery:            cl.config.DHTOnQuery,
-		// Logger:             cl.logger.WithValues("dht", conn.LocalAddr().String()),
 	}
 
-	s, err = dht.NewServer(&cfg)
-	if err == nil {
-		go func() {
-			ts, err := s.Bootstrap()
-			if err != nil {
-				cl.config.errors().Println(errors.Wrap(err, "error bootstrapping dht"))
-			}
-			cl.config.info().Printf("%v completed bootstrap (%v)\n", s, ts)
-		}()
+	if s, err = dht.NewServer(&cfg); err != nil {
+		return s, err
 	}
-	return
+	go func() {
+		ts, err := s.Bootstrap()
+		if err != nil {
+			cl.config.errors().Println(errors.Wrap(err, "error bootstrapping dht"))
+		}
+		cl.config.info().Printf("%v completed bootstrap (%v)\n", s, ts)
+	}()
+	return s, nil
 }
 
-// Bind the net listener to this client.
-func (cl *Client) Bind(s net.Listener) error {
+// Bind the socket to this client.
+func (cl *Client) Bind(s socket) (err error) {
+	if err = cl.bindDHT(s); err != nil {
+		return err
+	}
+
+	go cl.forwardPort()
+	go cl.acceptConnections(s)
+
+	cl.lock()
+	cl.conns = append(cl.conns, s)
+	cl.unlock()
+
+	return nil
+}
+
+func (cl *Client) bindDHT(s socket) (err error) {
+	if pc, ok := s.(net.PacketConn); ok && !cl.config.NoDHT {
+		ds, err := cl.newDhtServer(pc)
+		if err != nil {
+			return err
+		}
+		cl.dhtServers = append(cl.dhtServers, ds)
+	}
 	return nil
 }
 
@@ -501,7 +487,7 @@ func (cl *Client) acceptConnections(l net.Listener) {
 
 		conn, err := l.Accept()
 		if err != nil {
-			cl.config.warn().Println(errors.Wrap(err, "error accepting connection"))
+			cl.config.debug().Println(errors.Wrap(err, "error accepting connection"))
 			continue
 		}
 
@@ -537,7 +523,7 @@ func (cl *Client) acceptConnection(conn net.Conn) {
 		return
 	}
 
-	cl.config.debug().Printf("accepted %s connection from %s\n", conn.RemoteAddr().Network(), conn.RemoteAddr())
+	// cl.config.debug().Printf("accepted %s connection from %s\n", conn.RemoteAddr().Network(), conn.RemoteAddr())
 	metrics.Add(fmt.Sprintf("accepted conn network=%s", conn.RemoteAddr().Network()), 1)
 	go cl.incomingConnection(conn)
 }

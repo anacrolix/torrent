@@ -1,5 +1,6 @@
 package torrent
 
+// TorrentStats high level stats about the torrent.
 type TorrentStats struct {
 	// Aggregates stats over all connections past and present. Some values may
 	// not have much meaning in the aggregate context.
@@ -18,4 +19,6 @@ type TorrentStats struct {
 	ActivePeers      int
 	ConnectedSeeders int
 	HalfOpenPeers    int
+
+	Seeding bool
 }

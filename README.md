@@ -9,7 +9,7 @@ use more idiomatic code, improve horizontal scalability, remove extraneous depen
 - smaller API surface. simplifying use, while still maintaining almost full functionality provided (some read ahead logic is broken, which is risky anyways due to the data being unvalidated).
 - refactored the single lock used for all torrents out. this means the torrents do not contend with each other for the singe lock.
 - removed a number of panic making the code safer to use (more to do here).
-- ability to use arbitrary socket implementations.
+- ability to use arbitrary socket implementations, as long as they are IP/Port based.
 
 ## improvements planned
 - performance enhancements.

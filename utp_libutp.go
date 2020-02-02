@@ -3,10 +3,10 @@
 package torrent
 
 import (
-	"github.com/anacrolix/go-libutp"
+	utp "github.com/anacrolix/go-libutp"
 )
 
-func NewUtpSocket(network, addr string, fc firewallCallback) (utpSocket, error) {
+func newUTPSocket(network, addr string, fc firewallCallback) (utpSocket, error) {
 	s, err := utp.NewSocket(network, addr)
 	if s == nil {
 		return nil, err

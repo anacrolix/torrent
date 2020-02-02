@@ -140,7 +140,7 @@ func listenAllRetry(nahs []networkAndHost, port int, proxyURL string, f firewall
 type firewallCallback func(net.Addr) bool
 
 func listenUtp(network, addr, proxyURL string, fc firewallCallback) (s socket, err error) {
-	us, err := NewUtpSocket(network, addr, fc)
+	us, err := newUTPSocket(network, addr, fc)
 	if err != nil {
 		return
 	}

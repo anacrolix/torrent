@@ -64,7 +64,7 @@ func addTestPeer(client *torrent.Client) {
 		Port: args.TestPeer.Port,
 	}
 	for _, t := range client.Torrents() {
-		t.Tune(torrent.TuneAddPeers(p))
+		t.Tune(torrent.TunePeers(p))
 	}
 }
 

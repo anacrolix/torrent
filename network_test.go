@@ -23,7 +23,7 @@ func testListenerNetwork(
 }
 
 func listenUtpListener(net, addr string) (l net.Listener, err error) {
-	l, err = NewUtpSocket(net, addr, nil)
+	l, err = newUTPSocket(net, addr, nil)
 	return
 }
 

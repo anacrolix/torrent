@@ -42,8 +42,8 @@ func TuneMaxConnections(m int) Tuner {
 	}
 }
 
-// TuneAddPeers add peers to the torrent.
-func TuneAddPeers(peers ...Peer) Tuner {
+// TunePeers add peers to the torrent.
+func TunePeers(peers ...Peer) Tuner {
 	return func(t *torrent) {
 		t.AddPeers(peers)
 	}

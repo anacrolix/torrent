@@ -122,25 +122,46 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 	return dlt, true, nil
 }
 
+func (cl *Client) _download(ctx context.Context, m Metadata, options ...Tuner) (t *torrent, err error) {
+	if t, _, err = cl.start(m); err != nil {
+		return t, err
+	}
+
+	t.Tune(options...)
+
+	select {
+	case <-t.GotInfo():
+	case <-ctx.Done():
+		return t, ctx.Err()
+	}
+
+	return t, nil
+}
+
 // Download the specified torrent.
-// Download differs from Start in that it blocks until the torrent is completely downloaded.
-// the provided ctx is used to timeout the download, but it only timeout with regards
-// to fetching the torrent info.
-func (cl *Client) Download(ctx context.Context, t Metadata, dst io.Writer, options ...Tuner) (err error) {
+// Download differs from Start in that it blocks until the metadata is downloaded and returns a
+// valid reader for use.
+func (cl *Client) Download(ctx context.Context, m Metadata, options ...Tuner) (r Reader, err error) {
 	var (
 		dlt *torrent
 	)
 
-	if dlt, _, err = cl.start(t); err != nil {
-		return err
+	if dlt, err = cl._download(ctx, m, options...); err != nil {
+		return r, err
 	}
 
-	dlt.Tune(options...)
+	return dlt.NewReader(), nil
+}
 
-	select {
-	case <-dlt.GotInfo():
-	case <-ctx.Done():
-		return ctx.Err()
+// DownloadInto downloads the torrent into the provided destination. see Download for more information.
+// TODO: context timeout only applies to fetching metadata, not the entire download.
+func (cl *Client) DownloadInto(ctx context.Context, m Metadata, dst io.Writer, options ...Tuner) (err error) {
+	var (
+		dlt *torrent
+	)
+
+	if dlt, err = cl._download(ctx, m, options...); err != nil {
+		return err
 	}
 
 	// copy into the destination
@@ -538,7 +559,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 }
 
 // Torrent returns a handle to the given torrent, if it's present in the client.
-func (cl *Client) Torrent(ih metainfo.Hash) (t *torrent, ok bool) {
+func (cl *Client) Torrent(ih metainfo.Hash) (t Torrent, ok bool) {
 	cl.lock()
 	defer cl.unlock()
 	t, ok = cl.torrents[ih]

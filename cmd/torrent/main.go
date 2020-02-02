@@ -128,7 +128,7 @@ func addTorrents(client *torrent.Client) error {
 			return xerrors.Errorf("adding torrent for %q: %w", arg, err)
 		}
 		torrentBar(t)
-		t.Tune(torrent.TuneAddPeers(func() (ret []torrent.Peer) {
+		t.Tune(torrent.TunePeers(func() (ret []torrent.Peer) {
 			for _, ta := range flags.TestPeer {
 				ret = append(ret, torrent.Peer{
 					IP:   ta.IP,

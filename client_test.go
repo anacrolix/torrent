@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -52,6 +51,19 @@ func TestingSeedConfig(dir string) *ClientConfig {
 	cfg.Seed = true
 	cfg.DataDir = dir
 	return cfg
+}
+
+func TestingLeechConfig(dir string) *ClientConfig {
+	cfg := TestingConfig()
+	cfg.Seed = true
+	cfg.DataDir = dir
+	return cfg
+}
+
+func autotempdir(t *testing.T) string {
+	s, err := ioutil.TempDir(tempDir(), "")
+	require.NoError(t, err)
+	return s
 }
 
 func TestClientDefault(t *testing.T) {
@@ -523,23 +535,16 @@ func TestDownload(t *testing.T) {
 	metadata, err := NewFromMetaInfo(mi)
 	require.NoError(t, err)
 
-	cfg := TestingConfig()
-	cfg.Seed = true
-	cfg.DataDir = greetingTempDir
-	seeder, err := NewAutobindLoopback().Bind(NewClient(cfg))
+	seeder, err := NewAutobindLoopback().Bind(NewClient(TestingSeedConfig(greetingTempDir)))
 	require.NoError(t, err)
 	defer seeder.Close()
-	defer testutil.ExportStatusWriter(seeder, "s")()
-	require.NoError(t, seeder.Download(context.Background(), metadata, ioutil.Discard))
+	require.NoError(t, seeder.DownloadInto(context.Background(), metadata, ioutil.Discard))
 
-	lcfg := TestingConfig()
-	lcfg.DataDir, err = ioutil.TempDir("", "")
-	require.Nil(t, err)
-	defer os.RemoveAll(lcfg.DataDir)
+	lcfg := TestingLeechConfig(autotempdir(t))
 	leecher, err := NewAutobindLoopback().Bind(NewClient(lcfg))
 	require.NoError(t, err)
 	defer leecher.Close()
-	require.NoError(t, leecher.Download(context.Background(), metadata, buf, TuneClientPeer(seeder)))
+	require.NoError(t, leecher.DownloadInto(context.Background(), metadata, buf, TuneClientPeer(seeder)))
 	require.Equal(t, "hello, world\n", buf.String())
 }
 
@@ -560,7 +565,7 @@ func TestDownloadMetadataTimeout(t *testing.T) {
 	defer leecher.Close()
 	ctx, done := context.WithTimeout(context.Background(), 0)
 	defer done()
-	require.Equal(t, context.DeadlineExceeded, leecher.Download(ctx, metadata, buf))
+	require.Equal(t, context.DeadlineExceeded, leecher.DownloadInto(ctx, metadata, buf))
 }
 
 // We read from a piece which is marked completed, but is missing data.
@@ -1154,38 +1159,35 @@ func TestObfuscatedHeaderFallbackSeederRequiresLeecherPrefersNot(t *testing.T) {
 
 func TestRandomSizedTorrents(t *testing.T) {
 	n := rand.Int63n(128 * bytesx.KiB)
-	tempdir, err := ioutil.TempDir("", strings.ToLower(t.Name()))
+	seeder, err := NewAutobindLoopback().Bind(NewClient(TestingSeedConfig(autotempdir(t))))
 	require.NoError(t, err)
-	defer os.RemoveAll(tempdir)
+	defer seeder.Close()
 
-	data, err := testutil.RandomDataTorrent(tempdir, n)
+	leecher, err := NewAutobindLoopback().Bind(NewClient(TestingLeechConfig(autotempdir(t))))
+	require.NoError(t, err)
+	defer leecher.Close()
+
+	testTransferRandomData(t, n, seeder, leecher)
+}
+
+func testTransferRandomData(t *testing.T, n int64, from, to *Client) {
+	data, err := testutil.RandomDataTorrent(from.config.DataDir, n)
 	require.NoError(t, err)
 	defer os.Remove(data.Name())
 
 	metadata, err := NewFromFile(data.Name())
 	require.NoError(t, err)
-
-	cfg := TestingSeedConfig(tempdir)
-	seeder, err := NewAutobindLoopback().Bind(NewClient(cfg))
-	require.NoError(t, err)
-	defer seeder.Close()
-	require.NoError(t, seeder.Download(context.Background(), metadata, ioutil.Discard))
-
-	lcfg := TestingConfig()
-	defer os.RemoveAll(lcfg.DataDir)
-	leecher, err := NewAutobindLoopback().Bind(NewClient(lcfg))
-	require.NoError(t, err)
-	defer leecher.Close()
+	require.NoError(t, from.DownloadInto(context.Background(), metadata, ioutil.Discard))
 
 	digest := md5.New()
-	require.NoError(t, leecher.Download(context.Background(), metadata, digest, TuneClientPeer(seeder)))
+	require.NoError(t, to.DownloadInto(context.Background(), metadata, digest, TuneClientPeer(from)))
 	require.NotNil(t, digest.Sum(nil), "invalid digest - cannot be nil: generated torrent length %d", n)
 	require.Equal(t, md5x.Stream(data), digest.Sum(nil), "digest mismatch: generated torrent length", n)
 	// log.Println("random torrent", n, hex.EncodeToString(digest.Sum(nil)), data.Name(), metadata.DisplayName)
 }
 
 func TestClientAddressInUse(t *testing.T) {
-	s, _ := NewUtpSocket("udp", ":50007", nil)
+	s, _ := newUTPSocket("udp", ":50007", nil)
 	if s != nil {
 		defer s.Close()
 	}

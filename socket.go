@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/perf"
 	"github.com/pkg/errors"
 	"golang.org/x/net/proxy"
 )
@@ -62,13 +61,11 @@ func listenTCP(network, address, proxyURL string) (s socket, err error) {
 			return nil, err
 		}
 		return tcpSocket{dl, func(ctx context.Context, addr string) (conn net.Conn, err error) {
-			defer perf.ScopeTimerErr(&err)()
 			return dialer.Dial(network, addr)
 		}}, nil
 	}
 	dialer := net.Dialer{}
 	return tcpSocket{l, func(ctx context.Context, addr string) (conn net.Conn, err error) {
-		defer perf.ScopeTimerErr(&err)()
 		return dialer.DialContext(ctx, network, addr)
 	}}, nil
 }
@@ -177,7 +174,6 @@ type utpSocketSocket struct {
 }
 
 func (me utpSocketSocket) Dial(ctx context.Context, addr string) (conn net.Conn, err error) {
-	defer perf.ScopeTimerErr(&err)()
 	if me.d != nil {
 		return me.d.Dial(me.network, addr)
 	}

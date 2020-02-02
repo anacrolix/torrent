@@ -29,6 +29,7 @@ import (
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/internal/x/bytesx"
 	"github.com/anacrolix/torrent/internal/x/md5x"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
@@ -1152,7 +1153,7 @@ func TestObfuscatedHeaderFallbackSeederRequiresLeecherPrefersNot(t *testing.T) {
 }
 
 func TestRandomSizedTorrents(t *testing.T) {
-	n := rand.Int63n(1 << 16)
+	n := rand.Int63n(128 * bytesx.KiB)
 	tempdir, err := ioutil.TempDir("", strings.ToLower(t.Name()))
 	require.NoError(t, err)
 	defer os.RemoveAll(tempdir)

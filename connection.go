@@ -16,13 +16,13 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
-	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/prioritybitmap"
 	"github.com/anacrolix/multiless"
 	"github.com/pkg/errors"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/x/bitmapx"
+	"github.com/anacrolix/torrent/internal/x/bytesx"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
@@ -696,7 +696,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		cn.writeBuffer.Write(msg.MustMarshalBinary())
 		cn.wroteMsg(&msg)
 		metrics.Add(fmt.Sprintf("messages filled of type %s", msg.Type.String()), 1)
-		return cn.writeBuffer.Len() < 1<<16 // 64KiB
+		return cn.writeBuffer.Len() < 64*bytesx.KiB
 	}
 
 	for attempts := 0; ; attempts++ {
@@ -841,22 +841,6 @@ func (cn *connection) PostBitfield() {
 func (cn *connection) updateRequests() {
 	// l2.Output(2, fmt.Sprintf("(%d) c(%p) - notifying writer\n", os.Getpid(), cn))
 	cn.writerCond.Broadcast()
-}
-
-// Emits the indices in the Bitmaps bms in order, never repeating any index.
-// skip is mutated during execution, and its initial values will never be
-// emitted.
-func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
-	return func(cb iter.Callback) {
-		for _, bm := range bms {
-			if !iter.All(func(i interface{}) bool {
-				skip.Add(i.(int))
-				return cb(i)
-			}, bitmap.Sub(bm, *skip).Iter) {
-				return
-			}
-		}
-	}
 }
 
 // The connection should download highest priority pieces first, without any

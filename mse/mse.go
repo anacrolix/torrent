@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/anacrolix/missinggo/perf"
 	"github.com/bradfitz/iter"
 )
 
@@ -538,7 +537,7 @@ func InitiateHandshake(rw io.ReadWriter, skey []byte, initialPayload []byte, cry
 		ia:             initialPayload,
 		cryptoProvides: cryptoProvides,
 	}
-	defer perf.ScopeTimerErr(&err)()
+
 	return h.Do()
 }
 

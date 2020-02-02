@@ -1,9 +1,5 @@
 package metainfo
 
-import (
-	"github.com/anacrolix/missinggo"
-)
-
 type Piece struct {
 	Info *Info
 	i    pieceIndex
@@ -23,7 +19,7 @@ func (p Piece) Offset() int64 {
 }
 
 func (p Piece) Hash() (ret Hash) {
-	missinggo.CopyExact(&ret, p.Info.Pieces[p.i*HashSize:(p.i+1)*HashSize])
+	copy(ret[:], p.Info.Pieces[p.i*HashSize:(p.i+1)*HashSize])
 	return
 }
 

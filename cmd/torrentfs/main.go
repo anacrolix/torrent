@@ -15,7 +15,6 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
 
 	"github.com/anacrolix/torrent"

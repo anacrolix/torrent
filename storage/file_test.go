@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/anacrolix/missinggo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/anacrolix/torrent/internal/x/bytesx"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -23,7 +23,7 @@ func TestShortFile(t *testing.T) {
 	info := &metainfo.Info{
 		Name:        "a",
 		Length:      2,
-		PieceLength: missinggo.MiB,
+		PieceLength: bytesx.MiB,
 	}
 	ts, err := s.OpenTorrent(info, metainfo.Hash{})
 	assert.NoError(t, err)

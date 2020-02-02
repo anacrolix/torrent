@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/anacrolix/envpprof"
 	"github.com/dustin/go-humanize"
 	"github.com/jessevdk/go-flags"
 

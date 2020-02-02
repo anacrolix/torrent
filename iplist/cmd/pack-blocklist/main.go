@@ -4,9 +4,9 @@ package main
 
 import (
 	"bufio"
+	"log"
 	"os"
 
-	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/tagflag"
 
 	"github.com/anacrolix/torrent/iplist"
@@ -16,12 +16,12 @@ func main() {
 	tagflag.Parse(nil)
 	l, err := iplist.NewFromReader(os.Stdin)
 	if err != nil {
-		missinggo.Fatal(err)
+		log.Fatal(err)
 	}
 	wb := bufio.NewWriter(os.Stdout)
 	defer wb.Flush()
 	err = l.WritePacked(wb)
 	if err != nil {
-		missinggo.Fatal(err)
+		log.Fatal(err)
 	}
 }

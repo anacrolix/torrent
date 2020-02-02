@@ -14,11 +14,12 @@ type TorrentStats struct {
 	Completed   int
 
 	// Ordered by expected descending quantities (if all is well).
-	TotalPeers       int
-	PendingPeers     int
-	ActivePeers      int
-	ConnectedSeeders int
-	HalfOpenPeers    int
+	MaximumAllowedPeers int
+	TotalPeers          int
+	PendingPeers        int
+	ActivePeers         int
+	ConnectedSeeders    int
+	HalfOpenPeers       int
 
 	Seeding bool
 }

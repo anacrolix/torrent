@@ -43,22 +43,23 @@ const (
 func newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort) (c *connection) {
 	return &connection{
 		// _mu:             newDebugLock(&stdsync.RWMutex{}),
-		_mu:             &sync.RWMutex{},
-		conn:            nc,
-		outgoing:        outgoing,
-		Choked:          true,
-		PeerChoked:      true,
-		PeerMaxRequests: 250,
-		writeBuffer:     new(bytes.Buffer),
-		remoteAddr:      remoteAddr,
-		touched:         roaring.NewBitmap(),
-		fastset:         roaring.NewBitmap(),
-		claimed:         roaring.NewBitmap(),
-		blacklisted:     roaring.NewBitmap(),
-		sentHaves:       roaring.NewBitmap(),
-		requests:        make(map[uint64]request, maxRequests),
-		PeerRequests:    make(map[request]struct{}, maxRequests),
-		drop:            make(chan error, 1),
+		_mu:              &sync.RWMutex{},
+		conn:             nc,
+		outgoing:         outgoing,
+		Choked:           true,
+		PeerChoked:       true,
+		PeerMaxRequests:  250,
+		writeBuffer:      new(bytes.Buffer),
+		remoteAddr:       remoteAddr,
+		touched:          roaring.NewBitmap(),
+		fastset:          roaring.NewBitmap(),
+		claimed:          roaring.NewBitmap(),
+		blacklisted:      roaring.NewBitmap(),
+		sentHaves:        roaring.NewBitmap(),
+		requests:         make(map[uint64]request, maxRequests),
+		PeerRequests:     make(map[request]struct{}, maxRequests),
+		drop:             make(chan error, 1),
+		PeerExtensionIDs: make(map[pp.ExtensionName]pp.ExtensionNumber),
 	}
 }
 
@@ -240,8 +241,7 @@ func (cn *connection) localAddr() net.Addr {
 }
 
 func (cn *connection) supportsExtension(ext pp.ExtensionName) bool {
-	_, ok := cn.PeerExtensionIDs[ext]
-	return ok
+	return cn.extension(ext) != 0
 }
 
 // The best guess at number of pieces in the torrent for this peer.
@@ -412,7 +412,7 @@ func (cn *connection) Post(msg pp.Message) {
 }
 
 func (cn *connection) requestMetadataPiece(index int) {
-	eID := cn.PeerExtensionIDs[pp.ExtensionNameMetadata]
+	eID := cn.extension(pp.ExtensionNameMetadata)
 	if eID == 0 {
 		return
 	}
@@ -613,11 +613,18 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 
 	max := cn.nominalMaxRequests() - len(cn.requests)
 	if reqs, err = cn.t.piecesM.Pop(max, bitmapx.AndNot(available, cn.blacklisted)); stderrors.As(err, &empty{}) {
+		// clear the blacklist when we run out of work to do.
+		cn.cmu().Lock()
+		cn.blacklisted.Clear()
+		cn.cmu().Unlock()
+
 		if len(reqs) == 0 {
-			// if cn.t.piecesM.Missing() > 0 {
+			// if cn.t.piecesM.Missing() > 0 && cn.t.piecesM.Missing() < 5 {
+			// 	ug := available.Clone()
+			// 	ug.And(cn.t.piecesM.missing)
 			// 	cn.t.config.info().Printf(
-			// 		"(%d) - c(%p) empty queue - available(%d) - outstanding (%d) missing(%d) - %s\n",
-			// 		os.Getpid(), cn, available.GetCardinality(), len(cn.requests), cn.t.piecesM.Missing(), bitmapx.Debug(cn.t.piecesM.missing),
+			// 		"(%d) - c(%p) empty queue - available(%d) - outstanding (%d) missing(%d - %s) want(%s) blacklisted(%s)\n",
+			// 		os.Getpid(), cn, available.GetCardinality(), len(cn.requests), cn.t.piecesM.Missing(), bitmapx.Debug(cn.t.piecesM.missing), bitmapx.Debug(ug), bitmapx.Debug(cn.blacklisted),
 			// 	)
 			// }
 			return
@@ -725,10 +732,6 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 
 		// TODO: Minimize wakeups....
 		if cn.writeBuffer.Len() == 0 {
-			// clear the blacklist when we run out of work to do.
-			cn.cmu().Lock()
-			cn.blacklisted.Clear()
-			cn.cmu().Unlock()
 			// let the loop spin for a couple iterations when there is nothing to write.
 			// this helps prevent some stalls should be able to remove later.
 			if attempts < 50 {
@@ -785,12 +788,16 @@ func (cn *connection) checkFailures() {
 		return
 	}
 
+	// log.Output(2, fmt.Sprintf("c(%p) detected failed chunks: %s", cn, bitmapx.Debug(failed)))
+
 	iter := failed.ReverseIterator()
-	for iter.HasNext() {
-		pid := int(iter.Next())
-		cn.stats.incrementPiecesDirtiedBad()
-		if !cn.t.piecesM.ChunksComplete(pid) {
-			cn.t.piecesM.ChunksRetry(pid)
+	for prev, pid := -1, 0; iter.HasNext(); prev = pid {
+		pid = cn.t.piecesM.pindex(int(iter.Next()))
+		if pid != prev {
+			cn.stats.incrementPiecesDirtiedBad()
+			if !cn.t.piecesM.ChunksComplete(pid) {
+				cn.t.piecesM.ChunksRetry(pid)
+			}
 		}
 	}
 
@@ -1010,14 +1017,22 @@ func (cn *connection) peerSentHaveNone() error {
 	return nil
 }
 
+func (cn *connection) extension(id pp.ExtensionName) pp.ExtensionNumber {
+	cn._mu.RLock()
+	defer cn._mu.RUnlock()
+	return cn.PeerExtensionIDs[pp.ExtensionNameMetadata]
+}
+
 func (cn *connection) requestPendingMetadata() {
 	if cn.t.haveInfo() {
 		return
 	}
-	if cn.PeerExtensionIDs[pp.ExtensionNameMetadata] == 0 {
+
+	if cn.extension(pp.ExtensionNameMetadata) == 0 {
 		// Peer doesn't support this.
 		return
 	}
+
 	// Request metadata pieces that we don't have in a random order.
 	var pending []int
 	for index := 0; index < cn.t.metadataPieceCount(); index++ {
@@ -1333,14 +1348,14 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 			cn.PeerMaxRequests = d.Reqq
 		}
 		cn.PeerClientName = d.V
-		if cn.PeerExtensionIDs == nil {
-			cn.PeerExtensionIDs = make(map[pp.ExtensionName]pp.ExtensionNumber, len(d.M))
-		}
+
 		for name, id := range d.M {
-			if _, ok := cn.PeerExtensionIDs[name]; !ok {
+			if !cn.supportsExtension(name) {
 				metrics.Add(fmt.Sprintf("peers supporting extension %q", name), 1)
 			}
+			cn.cmu().Lock()
 			cn.PeerExtensionIDs[name] = id
+			cn.cmu().Unlock()
 		}
 		if d.MetadataSize != 0 {
 			if err = t.setMetadataSize(d.MetadataSize); err != nil {
@@ -1460,14 +1475,13 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 		cn.t.pendAllChunkSpecs(pieceIndex(req.Index))
 	}
 
-	cn.onDirtiedPiece(pieceIndex(req.Index))
+	cn.cmu().Lock()
+	cn.touched.AddInt(cn.t.piecesM.requestCID(req))
+	cn.cmu().Unlock()
+
 	cn.t.publishPieceChange(pieceIndex(req.Index))
 
 	return nil
-}
-
-func (cn *connection) onDirtiedPiece(piece pieceIndex) {
-	cn.touched.Add(uint32(piece))
 }
 
 func (cn *connection) uploadAllowed() bool {

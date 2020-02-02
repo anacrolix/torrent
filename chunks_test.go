@@ -189,6 +189,13 @@ func TestChunkLength(t *testing.T) {
 
 }
 
+func TestChunkFill(t *testing.T) {
+	c := newChunks(1<<8, tinyTorrentInfo())
+	filled := c.fill(roaring.NewBitmap())
+	require.Equal(t, uint64(c.cmaximum), filled.GetCardinality())
+	require.Equal(t, uint64(c.cmaximum)-1, uint64(filled.Maximum()))
+}
+
 func TestChunksRequests(t *testing.T) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
@@ -277,16 +284,16 @@ func TestChunksFailed(t *testing.T) {
 
 	require.Equal(t, 13, c.Missing())
 
-	reqs, err := c.Pop(1, c.missing.Clone())
+	reqs, err := c.Pop(5, c.missing.Clone())
 	require.NoError(t, err)
-	for _, req := range reqs {
-		touched.AddInt(int(req.Index))
-		c.ChunksFailed(int(req.Index))
+	for _, r := range reqs {
+		touched.AddInt(c.requestCID(r))
 	}
+	c.ChunksFailed(0)
 
-	assert.Equal(t, uint64(1), c.failed.GetCardinality())
+	assert.Equal(t, int(len(reqs)), int(c.failed.GetCardinality()))
 	union := c.Failed(touched)
-	assert.Equal(t, uint64(1), union.GetCardinality())
+	assert.Equal(t, uint64(len(reqs)), union.GetCardinality())
 	assert.Equal(t, uint64(0), c.failed.GetCardinality())
 }
 

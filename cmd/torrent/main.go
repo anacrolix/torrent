@@ -52,11 +52,12 @@ func torrentBar(t torrent.Torrent) {
 		}
 
 		return fmt.Sprintf(
-			"(%d) downloading (%s/%s) peers(%d) completed(%d/%d) missing(%d) outstanding(%d) unverified(%d)",
+			"(%d) downloading (%s/%s) peers(%d/%d) completed(%d/%d) missing(%d) outstanding(%d) unverified(%d)",
 			os.Getpid(),
 			humanize.Bytes(uint64(t.BytesCompleted())),
 			humanize.Bytes(uint64(t.Info().TotalLength())),
 			stats.ActivePeers,
+			stats.MaximumAllowedPeers,
 			stats.Completed,
 			t.Info().NumPieces(),
 			stats.Missing,

@@ -179,7 +179,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		UpnpID:                         "anacrolix/torrent",
 		NominalDialTimeout:             20 * time.Second,
 		MinDialTimeout:                 3 * time.Second,
-		EstablishedConnsPerTorrent:     100,
+		EstablishedConnsPerTorrent:     50,
 		HalfOpenConnsPerTorrent:        25,
 		TorrentPeersHighWater:          500,
 		TorrentPeersLowWater:           50,

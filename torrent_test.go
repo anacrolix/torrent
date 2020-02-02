@@ -165,7 +165,7 @@ func TestPieceHashFailed(t *testing.T) {
 
 	// the piece should be marked as a failure. this means the connections will
 	// retry the piece either during their write loop or during their cleanup phase.
-	require.True(t, tt.piecesM.Failed(tt.piecesM.failed).Contains(1))
+	require.True(t, tt.piecesM.Failed(tt.piecesM.failed).Contains(5))
 	tt.unlock()
 }
 

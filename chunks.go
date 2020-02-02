@@ -219,8 +219,24 @@ func (t *chunks) pindex(cidx int) int {
 	return int(pindex(int64(cidx), t.meta.PieceLength, t.clength))
 }
 
-func (t *chunks) fill(b *roaring.Bitmap) {
+func (t *chunks) fill(b *roaring.Bitmap) *roaring.Bitmap {
 	b.AddRange(0, uint64(t.cmaximum))
+	return b
+}
+
+func (t *chunks) peek(available *roaring.Bitmap) (cidx int, req request, err error) {
+	if !t.missing.Intersects(available) {
+		return cidx, req, empty{Outstanding: len(t.outstanding), Missing: int(t.missing.GetCardinality())}
+	}
+	union := available.Clone()
+	union.And(t.missing)
+
+	cidx = int(union.Minimum())
+	if req, err = t.request(int64(cidx), int(-1*(cidx+1))); err != nil {
+		return cidx, req, errors.Wrap(err, "invalid request")
+	}
+
+	return cidx, req, nil
 }
 
 // ChunksMissing checks if the given piece has any missing chunks.
@@ -244,23 +260,25 @@ func (t *chunks) ChunksMissing(pid int) bool {
 func (t *chunks) ChunksAvailable(pid int) bool {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
-	available := true
 	for _, c := range t.chunks(pid) {
-		available = available && t.unverified.ContainsInt(c)
+		if t.unverified.ContainsInt(c) {
+			continue
+		}
+		return false
 	}
 
-	return available
+	return true
 }
 
 // ChunksHashing return true iff any chunk for the given piece has been marked as unverified.
 func (t *chunks) ChunksHashing(pid int) bool {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	for _, c := range t.chunks(pid) {
 		if t.unverified.ContainsInt(c) {
@@ -275,8 +293,8 @@ func (t *chunks) ChunksHashing(pid int) bool {
 func (t *chunks) ChunksComplete(pid int) bool {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return t.completed.ContainsInt(pid)
 }
 
@@ -344,10 +362,6 @@ func (t *chunks) ChunksRelease(idx int) (changed bool) {
 	return changed
 }
 
-func (t *chunks) UpdateAvailability() {
-	// t.completed
-}
-
 // ChunksRetry releases all the chunks for the given piece back into the missing
 // pool.
 func (t *chunks) ChunksRetry(idx int) {
@@ -386,27 +400,12 @@ func (t *chunks) Priority(idx int) int {
 	return int(0)
 }
 
-func (t *chunks) peek(available *roaring.Bitmap) (cidx int, req request, err error) {
-	if !t.missing.Intersects(available) {
-		return cidx, req, empty{Outstanding: len(t.outstanding), Missing: int(t.missing.GetCardinality())}
-	}
-	union := available.Clone()
-	union.And(t.missing)
-
-	cidx = int(union.Minimum())
-	if req, err = t.request(int64(cidx), int(-1*(cidx+1))); err != nil {
-		return cidx, req, errors.Wrap(err, "invalid request")
-	}
-
-	return cidx, req, nil
-}
-
 // Peek at the request based on availability.
 func (t *chunks) Peek(available *roaring.Bitmap) (req request, err error) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	_, req, err = t.peek(available)
 	return req, err
 }
@@ -526,37 +525,12 @@ func (t *chunks) FailuresReset() {
 	t.failed.Clear()
 }
 
-// Failed returns the union of the current failures and the provided completed mapping.
-func (t *chunks) Failed(touched *roaring.Bitmap) *roaring.Bitmap {
-	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
-	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
-	t.mu.RLock()
-	union := t.failed.Clone()
-	t.mu.RUnlock()
-
-	if touched.IsEmpty() {
-		return bitmapx.Lazy(nil)
-	}
-
-	if union.IsEmpty() {
-		return bitmapx.Lazy(nil)
-	}
-
-	union.And(touched)
-
-	t.mu.Lock()
-	t.failed.AndNot(union)
-	t.mu.Unlock()
-
-	return union
-}
-
 // Outstanding returns a copy of the outstanding requests
 func (t *chunks) Outstanding() (dup map[uint64]request) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	dup = make(map[uint64]request, len(t.outstanding))
 	for i, r := range t.outstanding {
@@ -665,11 +639,38 @@ func (t *chunks) Complete(pid int) (changed bool) {
 	return changed
 }
 
+// Failed returns the union of the current failures and the provided completed mapping.
+func (t *chunks) Failed(touched *roaring.Bitmap) *roaring.Bitmap {
+	if touched.IsEmpty() {
+		return bitmapx.Lazy(nil)
+	}
+
+	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
+	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
+	t.mu.RLock()
+	union := t.failed.Clone()
+	t.mu.RUnlock()
+
+	if union.IsEmpty() {
+		return bitmapx.Lazy(nil)
+	}
+	// log.Output(2, fmt.Sprintf("c(%p) checking failed chunks: %s %s\n", t, bitmapx.Debug(touched), bitmapx.Debug(t.failed)))
+	union.And(touched)
+
+	t.mu.Lock()
+	t.failed.AndNot(union)
+	t.mu.Unlock()
+	return union
+}
+
 // ChunksFailed mark a piece by index as failed.
 func (t *chunks) ChunksFailed(pid int) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
-	t.mu.Lock()
-	t.failed.AddInt(int(pid))
-	t.mu.Unlock()
+	if chunks := t.chunks(pid); len(chunks) > 0 {
+		t.mu.Lock()
+		t.failed.AddRange(uint64(chunks[0]), uint64(chunks[len(chunks)-1]+1))
+		// log.Output(2, fmt.Sprintf("c(%p) marked failed chunk: (%d) -> (%d -> %d): %s\n", t, pid, chunks[0], chunks[len(chunks)-1], bitmapx.Debug(t.failed)))
+		t.mu.Unlock()
+	}
 }

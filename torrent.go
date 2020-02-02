@@ -1593,6 +1593,7 @@ func (t *torrent) statsLocked() (ret TorrentStats) {
 	// TODO: these can be moved to the connections directly.
 	// moving it will reduce the need to iterate the connections
 	// to compute the stats.
+	ret.MaximumAllowedPeers = t.config.EstablishedConnsPerTorrent
 	ret.TotalPeers = t.numTotalPeers()
 	ret.ConnectedSeeders = 0
 	for c := range t.conns {

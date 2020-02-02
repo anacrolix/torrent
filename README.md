@@ -3,16 +3,15 @@
 [![GoDoc](https://godoc.org/github.com/james-lawrence/torrent?status.svg)](https://godoc.org/github.com/james-lawrence/torrent)
 
 This repository is a refactor of [anacrolix's](https://github.com/anacrolix/torrent), to simplify the API of the library,
-use more idiomatic code, improve horizontal scalability, remove many of the extraneous dependencies, and to add in some extended functionality.
+use more idiomatic code, improve horizontal scalability, remove extraneous dependencies, and to add in some extended functionality.
 
 ## improvements implemented by library
-- smaller API surface. simplifying use, while still maintaining full functionality provided.
+- smaller API surface. simplifying use, while still maintaining almost full functionality provided (some read ahead logic is broken, which is risky anyways due to the data being unvalidated).
 - refactored the single lock used for all torrents out. this means the torrents do not contend with each other for the singe lock.
 - removed a number of panic making the code safer to use (more to do here).
-- ability to use arbitrary net.Listener implementations.
+- ability to use arbitrary socket implementations.
 
 ## improvements planned
-- swappable priority implementation.
 - performance enhancements.
 
 ## Installation

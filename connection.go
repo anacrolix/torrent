@@ -42,7 +42,6 @@ const (
 
 func newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort) (c *connection) {
 	return &connection{
-		// _mu:             newDebugLock(&stdsync.RWMutex{}),
 		_mu:              &sync.RWMutex{},
 		conn:             nc,
 		outgoing:         outgoing,
@@ -70,7 +69,7 @@ type connection struct {
 
 	t *torrent
 
-	_mu rwmutex
+	_mu *sync.RWMutex
 
 	// The actual Conn, used for closing, and setting socket options.
 	conn       net.Conn

@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io"
-	l2 "log"
 	"math/rand"
 	"net"
 	"net/url"
@@ -1393,7 +1392,7 @@ func (t *torrent) deleteConnection(c *connection) (ret bool) {
 func (t *torrent) assertNoPendingRequests() {
 	if outstanding := t.piecesM.Outstanding(); len(outstanding) != 0 {
 		for _, r := range outstanding {
-			l2.Printf("still expecting c(%p) d(%020d) r(%d,%d,%d)", t.piecesM, r.Digest, r.Index, r.Begin, r.Length)
+			t.config.errors().Printf("still expecting c(%p) d(%020d) r(%d,%d,%d)", t.piecesM, r.Digest, r.Index, r.Begin, r.Length)
 		}
 		panic(t.piecesM.outstanding)
 	}

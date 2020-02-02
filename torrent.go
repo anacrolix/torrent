@@ -17,7 +17,6 @@ import (
 	"unsafe"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/google/btree"
 	"github.com/pkg/errors"
 
 	"github.com/anacrolix/dht/v2"
@@ -101,14 +100,10 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		cln:         cl,
 		config:      cl.config,
 		_mu:         m,
-		peers: prioritizedPeers{
-			om: btree.New(32),
-			getPrio: func(p Peer) peerPriority {
-				return bep40PriorityIgnoreError(cl.publicAddr(p.IP), p.addr())
-			},
-		},
-		conns: make(map[*connection]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
-
+		peers: newPeerPool(32, func(p Peer) peerPriority {
+			return bep40PriorityIgnoreError(cl.publicAddr(p.IP), p.addr())
+		}),
+		conns:             make(map[*connection]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
 		halfOpen:          make(map[string]Peer),
 		pieceStateChanges: pubsub.NewPubSub(),
 
@@ -185,7 +180,7 @@ type torrent struct {
 	// active connections if were told about the peer after connecting with
 	// them. That encourages us to reconnect to peers that are well known in
 	// the swarm.
-	peers          prioritizedPeers
+	peers          peerPool
 	wantPeersEvent missinggo.Event
 
 	// An announcer for each tracker URL.
@@ -1202,8 +1197,13 @@ func (t *torrent) lockedOpenNewConns() {
 }
 
 func (t *torrent) openNewConns() {
+	var (
+		ok bool
+		p  Peer
+	)
+
 	defer t.updateWantPeersEvent()
-	for t.peers.Len() != 0 {
+	for {
 		if !t.wantConns() {
 			return
 		}
@@ -1212,9 +1212,11 @@ func (t *torrent) openNewConns() {
 			return
 		}
 
-		if p, ok := t.peers.PopMax(); ok {
-			t.initiateConn(p)
+		if p, ok = t.peers.PopMax(); !ok {
+			return
 		}
+
+		t.initiateConn(p)
 	}
 }
 

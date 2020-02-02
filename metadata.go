@@ -115,7 +115,11 @@ func NewFromFile(path string, options ...Option) (t Metadata, err error) {
 		return t, errors.WithStack(err)
 	}
 
-	return New(metainfo.HashBytes(encoded), options...)
+	if t, err = New(metainfo.HashBytes(encoded), OptionInfo(encoded), OptionDisplayName(info.Name)); err != nil {
+		return t, errors.WithStack(err)
+	}
+
+	return t.merge(options...), nil
 }
 
 // NewFromMagnet creates a torrent from a magnet uri.

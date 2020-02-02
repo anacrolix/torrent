@@ -5,6 +5,8 @@
 package testutil
 
 import (
+	"crypto/rand"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -50,4 +52,26 @@ func GreetingTestTorrent() (tempDir string, metaInfo *metainfo.MetaInfo) {
 	CreateDummyTorrentData(tempDir)
 	metaInfo = GreetingMetaInfo()
 	return
+}
+
+// RandomDataTorrent generates a torrent from random data.
+func RandomDataTorrent(dir string, n int64) (d *os.File, err error) {
+	if d, err = ioutil.TempFile(dir, "random.torrent.*.bin"); err != nil {
+		return d, err
+	}
+	defer func() {
+		if err != nil {
+			os.Remove(d.Name())
+		}
+	}()
+
+	if _, err = io.CopyN(d, rand.Reader, n); err != nil {
+		return d, err
+	}
+
+	if _, err = d.Seek(0, io.SeekStart); err != nil {
+		return d, err
+	}
+
+	return d, nil
 }

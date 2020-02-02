@@ -4,17 +4,13 @@ import (
 	"net"
 	"testing"
 
-	"github.com/google/btree"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestPrioritizedPeers(t *testing.T) {
-	pp := prioritizedPeers{
-		om: btree.New(3),
-		getPrio: func(p Peer) peerPriority {
-			return bep40PriorityIgnoreError(p.addr(), IpPort{IP: net.ParseIP("0.0.0.0")})
-		},
-	}
+	pp := newPeerPool(3, func(p Peer) peerPriority {
+		return bep40PriorityIgnoreError(p.addr(), IpPort{IP: net.ParseIP("0.0.0.0")})
+	})
 	_, ok := pp.DeleteMin()
 	assert.False(t, ok)
 	_, ok = pp.PopMax()
@@ -27,7 +23,7 @@ func TestPrioritizedPeers(t *testing.T) {
 		{IP: net.ParseIP(""), Trusted: true},
 	}
 	for i, p := range ps {
-		t.Logf("peer %d priority: %08x trusted: %t\n", i, pp.getPrio(p), p.Trusted)
+		// t.Logf("peer %d priority: %08x trusted: %t\n", i, pp.getPrio(p), p.Trusted)
 		assert.False(t, pp.Add(p))
 		assert.True(t, pp.Add(p))
 		assert.Equal(t, i+1, pp.Len())

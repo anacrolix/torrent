@@ -6,7 +6,6 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
-	l2 "log"
 	"math/rand"
 	"net"
 	"strconv"
@@ -27,8 +26,6 @@ import (
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
-
-var _ = l2.Print
 
 type peerSource string
 
@@ -1143,7 +1140,7 @@ func (cn *connection) onReadRequest(r request) error {
 	if len(cn.PeerRequests) >= maxRequests {
 		metrics.Add("requests received while queue full", 1)
 		if cn.fastEnabled() {
-			l2.Printf("%p - onReadRequest: PeerRequests >= maxRequests, rejecting request", cn)
+			// log.Printf("%p - onReadRequest: PeerRequests >= maxRequests, rejecting request", cn)
 			cn.reject(r)
 		}
 		// BEP 6 says we may close here if we choose.
@@ -1155,7 +1152,7 @@ func (cn *connection) onReadRequest(r request) error {
 		// from our storage, and can't communicate this to peers
 		// except by reconnecting.
 		requestsReceivedForMissingPieces.Add(1)
-		l2.Output(2, fmt.Sprintf("t(%p) - onReadRequest: requested piece not available: r(%d,%d,%d)", cn.t, r.Index, r.Begin, r.Length))
+		// log.Output(2, fmt.Sprintf("t(%p) - onReadRequest: requested piece not available: r(%d,%d,%d)", cn.t, r.Index, r.Begin, r.Length))
 		return fmt.Errorf("peer requested piece we don't have: %v", r.Index.Int())
 	}
 
@@ -1163,7 +1160,7 @@ func (cn *connection) onReadRequest(r request) error {
 
 	// Check this after we know we have the piece, so that the piece length will be known.
 	if r.Begin+r.Length > cn.t.pieceLength(pieceIndex(r.Index)) {
-		l2.Printf("%p onReadRequest - request has invalid length: %d received (%d+%d), expected (%d)", cn, r.Index, r.Begin, r.Length, cn.t.pieceLength(pieceIndex(r.Index)))
+		// log.Printf("%p onReadRequest - request has invalid length: %d received (%d+%d), expected (%d)", cn, r.Index, r.Begin, r.Length, cn.t.pieceLength(pieceIndex(r.Index)))
 		metrics.Add("bad requests received", 1)
 		return errors.New("bad request")
 	}

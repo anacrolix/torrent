@@ -3,14 +3,17 @@ package torrent
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,12 +24,12 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/dht/v2"
-	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/filecache"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/internal/x/md5x"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
@@ -40,6 +43,13 @@ func TestingConfig() *ClientConfig {
 	cfg.NoDefaultPortForwarding = true
 	cfg.DisableAcceptRateLimiting = true
 	// cfg.Debug = log.New(os.Stderr, "[debug] ", log.Flags())
+	return cfg
+}
+
+func TestingSeedConfig(dir string) *ClientConfig {
+	cfg := TestingConfig()
+	cfg.Seed = true
+	cfg.DataDir = dir
 	return cfg
 }
 
@@ -240,11 +250,6 @@ func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
 }
 
 func TestClientTransferVarious(t *testing.T) {
-	// defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
-	// defer profile.Start(profile.BlockProfile, profile.ProfilePath(".")).Stop()
-	// defer profile.Start(profile.MutexProfile, profile.ProfilePath(".")).Stop()
-	// defer profile.Start(profile.TraceProfile, profile.ProfilePath(".")).Stop()
-
 	count := 0
 	// Leecher storage
 	for _, ls := range []StorageFactory{
@@ -1144,6 +1149,38 @@ func TestObfuscatedHeaderFallbackSeederRequiresLeecherPrefersNot(t *testing.T) {
 			cfg.HeaderObfuscationPolicy.RequirePreferred = false
 		},
 	)
+}
+
+func TestRandomSizedTorrents(t *testing.T) {
+	n := rand.Int63n(1 << 16)
+	tempdir, err := ioutil.TempDir("", strings.ToLower(t.Name()))
+	require.NoError(t, err)
+	defer os.RemoveAll(tempdir)
+
+	data, err := testutil.RandomDataTorrent(tempdir, n)
+	require.NoError(t, err)
+	defer os.Remove(data.Name())
+
+	metadata, err := NewFromFile(data.Name())
+	require.NoError(t, err)
+
+	cfg := TestingSeedConfig(tempdir)
+	seeder, err := NewAutobindLoopback().Bind(NewClient(cfg))
+	require.NoError(t, err)
+	defer seeder.Close()
+	require.NoError(t, seeder.Download(context.Background(), metadata, ioutil.Discard))
+
+	lcfg := TestingConfig()
+	defer os.RemoveAll(lcfg.DataDir)
+	leecher, err := NewAutobindLoopback().Bind(NewClient(lcfg))
+	require.NoError(t, err)
+	defer leecher.Close()
+
+	digest := md5.New()
+	require.NoError(t, leecher.Download(context.Background(), metadata, digest, TuneClientPeer(seeder)))
+	require.NotNil(t, digest.Sum(nil), "invalid digest - cannot be nil: generated torrent length %d", n)
+	require.Equal(t, md5x.Stream(data), digest.Sum(nil), "digest mismatch: generated torrent length", n)
+	// log.Println("random torrent", n, hex.EncodeToString(digest.Sum(nil)), data.Name(), metadata.DisplayName)
 }
 
 func TestClientAddressInUse(t *testing.T) {

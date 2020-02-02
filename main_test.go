@@ -29,8 +29,14 @@ func tempDir() string {
 }
 
 func TestMain(m *testing.M) {
-	code := m.Run()
-	os.RemoveAll(pkgTempDir)
-	// select {}
+	code := func() int {
+		defer os.RemoveAll(pkgTempDir)
+		// defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
+		// defer profile.Start(profile.BlockProfile, profile.ProfilePath(".")).Stop()
+		// defer profile.Start(profile.MutexProfile, profile.ProfilePath(".")).Stop()
+		// defer profile.Start(profile.TraceProfile, profile.ProfilePath(".")).Stop()
+		return m.Run()
+	}()
+
 	os.Exit(code)
 }

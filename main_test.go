@@ -1,10 +1,14 @@
 package torrent
 
 import (
+	"context"
 	"io/ioutil"
 	"log"
 	"os"
+	"syscall"
 	"testing"
+
+	"github.com/anacrolix/torrent/internal/x/debugx"
 )
 
 // A top-level temp dir that lasts for the duration of the package tests, and
@@ -29,6 +33,7 @@ func tempDir() string {
 }
 
 func TestMain(m *testing.M) {
+	go debugx.DumpOnSignal(context.Background(), syscall.SIGUSR2)
 	code := func() int {
 		defer os.RemoveAll(pkgTempDir)
 		// defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()

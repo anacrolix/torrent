@@ -11,7 +11,7 @@ import (
 	"github.com/anacrolix/utp"
 )
 
-func ExampleDownload() {
+func Example_download() {
 	var (
 		err      error
 		metadata torrent.Metadata
@@ -33,7 +33,7 @@ func ExampleDownload() {
 	log.Print("torrent downloaded")
 }
 
-func ExampleCustomNetworkProtocols() {
+func Example_customNetworkProtocols() {
 	var (
 		err      error
 		metadata torrent.Metadata
@@ -63,7 +63,7 @@ func ExampleCustomNetworkProtocols() {
 	log.Print("torrent downloaded")
 }
 
-func ExampleFileReader() {
+func Example_fileReader() {
 	var f torrent.File
 	// Accesses the parts of the torrent pertaining to f. Data will be
 	// downloaded as required, per the configuration of the torrent.Reader.

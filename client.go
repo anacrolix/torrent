@@ -98,7 +98,7 @@ func (cl *Client) MaybeStart(t Metadata, failed error) (dl Torrent, added bool, 
 }
 
 func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
-	if dlt = cl.download(t); dlt != nil {
+	if dlt = cl.lookup(t); dlt != nil {
 		return dlt, false, cl.merge(dlt, t)
 	}
 
@@ -122,7 +122,7 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 	return dlt, true, nil
 }
 
-func (cl *Client) _download(ctx context.Context, m Metadata, options ...Tuner) (t *torrent, err error) {
+func (cl *Client) download(ctx context.Context, m Metadata, options ...Tuner) (t *torrent, err error) {
 	if t, _, err = cl.start(m); err != nil {
 		return t, err
 	}
@@ -146,7 +146,7 @@ func (cl *Client) Download(ctx context.Context, m Metadata, options ...Tuner) (r
 		dlt *torrent
 	)
 
-	if dlt, err = cl._download(ctx, m, options...); err != nil {
+	if dlt, err = cl.download(ctx, m, options...); err != nil {
 		return r, err
 	}
 
@@ -160,7 +160,7 @@ func (cl *Client) DownloadInto(ctx context.Context, m Metadata, dst io.Writer, o
 		dlt *torrent
 	)
 
-	if dlt, err = cl._download(ctx, m, options...); err != nil {
+	if dlt, err = cl.download(ctx, m, options...); err != nil {
 		return err
 	}
 
@@ -197,7 +197,7 @@ func (cl *Client) merge(old *torrent, updated Metadata) (err error) {
 	return nil
 }
 
-func (cl *Client) download(t Metadata) *torrent {
+func (cl *Client) lookup(t Metadata) *torrent {
 	cl.lock()
 	defer cl.unlock()
 

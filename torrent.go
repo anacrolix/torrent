@@ -114,6 +114,7 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		duplicateRequestTimeout: time.Second,
 
 		chunks: newChunks(src.ChunkSize, &metainfo.Info{}),
+		pex:    newPex(),
 	}
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
 	t.event = &sync.Cond{L: tlocker{torrent: t}}
@@ -214,6 +215,9 @@ type torrent struct {
 
 	// digest management determines if pieces are valid.
 	digests digests
+
+	// peer exchange for the current torrent
+	pex *pex
 
 	// A pool of piece priorities []int for assignment to new connections.
 	// These "inclinations" are used to give connections preference for
@@ -1375,6 +1379,7 @@ func (t *torrent) dropConnection(c *connection) {
 
 // Returns true if connection is removed from torrent.Conns.
 func (t *torrent) deleteConnection(c *connection) (ret bool) {
+	t.pex.dropped(c)
 	c.Close()
 	t.lock()
 	// l2.Printf("closed c(%p) - pending(%d)\n", c, len(c.requests))
@@ -1692,6 +1697,7 @@ func (t *torrent) addConnection(c *connection) (err error) {
 	}
 
 	t.conns[c] = struct{}{}
+	t.pex.added(c)
 
 	t.unlock()
 	defer t.lock()

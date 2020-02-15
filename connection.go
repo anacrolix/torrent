@@ -113,11 +113,12 @@ type connection struct {
 	sentHaves        *roaring.Bitmap
 
 	// Stuff controlled by the remote peer.
-	PeerID             PeerID
-	PeerInterested     bool
-	PeerChoked         bool
-	PeerRequests       map[request]struct{}
-	PeerExtensionBytes pp.PeerExtensionBits
+	PeerID                PeerID
+	PeerInterested        bool
+	PeerChoked            bool
+	PeerRequests          map[request]struct{}
+	PeerExtensionBytes    pp.PeerExtensionBits
+	PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
 
 	// bitmaps representing availability of chunks from the peer.
 	blacklisted *roaring.Bitmap // represents chunks which we've temporarily blacklisted.
@@ -1328,6 +1329,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 			cn.PeerMaxRequests = d.Reqq
 		}
 		cn.PeerClientName = d.V
+		cn.PeerPrefersEncryption = d.Encryption
 
 		for name, id := range d.M {
 			if !cn.supportsExtension(name) {
@@ -1343,6 +1345,8 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 			}
 		}
 		cn.requestPendingMetadata()
+		cn.sendInitialPEX()
+		// BUG no sending PEX updates yet
 		return nil
 	case metadataExtendedID:
 		err := t.gotMetadataExtensionMsg(payload, cn)
@@ -1772,6 +1776,33 @@ func (cn *connection) sendInitialMessages(cl *Client, torrent *torrent) {
 			Port: cl.dhtPort(),
 		})
 	}
+}
+
+func (cn *connection) pexPeerFlags() pp.PexPeerFlags {
+	f := pp.PexPeerFlags(0)
+	if cn.PeerPrefersEncryption {
+		f |= pp.PexPrefersEncryption
+	}
+	if cn.outgoing {
+		f |= pp.PexOutgoingConn
+	}
+	return f
+}
+
+func (cn *connection) sendInitialPEX() {
+	eid, ok := cn.PeerExtensionIDs[pp.ExtensionNamePex]
+	if !ok {
+		// peer did not advertise support for the PEX extension
+		return
+	}
+
+	m := cn.t.pex.snapshot()
+	if m == nil {
+		// not enough peers to share — e.g. len(t.conns < 50)
+		return
+	}
+
+	cn.Post(m.Message(eid))
 }
 
 type connectionTrust struct {

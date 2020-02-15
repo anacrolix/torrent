@@ -149,3 +149,20 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	require.NoError(b, <-mrlErr)
 	require.EqualValues(b, b.N, cn.stats.ChunksReadUseful.Int64())
 }
+
+func TestPexPeerFlags(t *testing.T) {
+	var testcases = []struct {
+		conn *connection
+		f    pp.PexPeerFlags
+	}{
+		{&connection{outgoing: false, PeerPrefersEncryption: false}, 0},
+		{&connection{outgoing: false, PeerPrefersEncryption: true}, pp.PexPrefersEncryption},
+		{&connection{outgoing: true, PeerPrefersEncryption: false}, pp.PexOutgoingConn},
+		{&connection{outgoing: true, PeerPrefersEncryption: true}, pp.PexOutgoingConn | pp.PexPrefersEncryption},
+	}
+	for i, tc := range testcases {
+		f := tc.conn.pexPeerFlags()
+		require.EqualValues(t, tc.f, f, i)
+	}
+}
+

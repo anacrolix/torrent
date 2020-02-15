@@ -97,7 +97,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	}
 	assert.Len(b, t.readers, 7)
 	for i := 0; i < int(t.numPieces()); i += 3 {
-		t.piecesM.Complete(i)
+		t.chunks.Complete(i)
 	}
 	t.DownloadPieces(0, t.numPieces())
 	for range iter.N(b.N) {
@@ -159,13 +159,13 @@ func TestPieceHashFailed(t *testing.T) {
 	tt.setChunkSize(2)
 	require.NoError(t, tt.setInfoBytes(mi.InfoBytes))
 	tt.lock()
-	tt.piecesM.Validate(1)
-	require.True(t, tt.piecesM.ChunksAvailable(1))
+	tt.chunks.Validate(1)
+	require.True(t, tt.chunks.ChunksAvailable(1))
 	tt.pieceHashed(1, fmt.Errorf("boom"))
 
 	// the piece should be marked as a failure. this means the connections will
 	// retry the piece either during their write loop or during their cleanup phase.
-	require.True(t, tt.piecesM.Failed(tt.piecesM.failed).Contains(5))
+	require.True(t, tt.chunks.Failed(tt.chunks.failed).Contains(5))
 	tt.unlock()
 }
 

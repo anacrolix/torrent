@@ -113,7 +113,7 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		networkingEnabled:       true,
 		duplicateRequestTimeout: time.Second,
 
-		piecesM: newChunks(src.ChunkSize, &metainfo.Info{}),
+		chunks: newChunks(src.ChunkSize, &metainfo.Info{}),
 	}
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
 	t.event = &sync.Cond{L: tlocker{torrent: t}}
@@ -210,7 +210,7 @@ type torrent struct {
 	readerReadaheadPieces bitmap.Bitmap
 
 	// chunks management tracks the current status of the different chunks
-	piecesM *chunks
+	chunks *chunks
 
 	// digest management determines if pieces are valid.
 	digests digests
@@ -340,7 +340,7 @@ func (t *torrent) KnownSwarm() (ks []Peer) {
 
 func (t *torrent) setChunkSize(size pp.Integer) {
 	t.chunkSize = size
-	*t.piecesM = *newChunks(int(size), func(i *metainfo.Info) *metainfo.Info {
+	*t.chunks = *newChunks(int(size), func(i *metainfo.Info) *metainfo.Info {
 		if i == nil {
 			return &metainfo.Info{}
 		}
@@ -355,15 +355,15 @@ func (t *torrent) setChunkSize(size pp.Integer) {
 }
 
 func (t *torrent) pieceComplete(piece pieceIndex) bool {
-	if t.piecesM == nil {
+	if t.chunks == nil {
 		return false
 	}
 
-	if t.piecesM.completed.IsEmpty() {
+	if t.chunks.completed.IsEmpty() {
 		return false
 	}
 
-	return t.piecesM.ChunksComplete(piece)
+	return t.chunks.ChunksComplete(piece)
 }
 
 func (t *torrent) pieceCompleteUncached(piece pieceIndex) storage.Completion {
@@ -473,8 +473,8 @@ func infoPieceHashes(info *metainfo.Info) (ret [][]byte) {
 }
 
 func (t *torrent) makePieces() {
-	t.piecesM = newChunks(int(t.chunkSize), t.info)
-	t.piecesM.gracePeriod = t.duplicateRequestTimeout
+	t.chunks = newChunks(int(t.chunkSize), t.info)
+	t.chunks.gracePeriod = t.duplicateRequestTimeout
 
 	hashes := infoPieceHashes(t.info)
 	t.pieces = make([]Piece, len(hashes), len(hashes))
@@ -545,9 +545,10 @@ func (t *torrent) onSetInfo() {
 		t.updatePieceCompletion(pieceIndex(i))
 		p := &t.pieces[i]
 		if !p.storageCompletionOk {
-			t.digests.Enqueue(i)
+			t.digests.check(i)
 		}
 	}
+	t.chunks.FailuresReset()
 
 	t.event.Broadcast()
 	t.gotMetainfo.Set()
@@ -820,8 +821,8 @@ func (t *torrent) BytesMissing() int64 {
 }
 
 func (t *torrent) bytesLeft() (left int64) {
-	s := t.piecesM.Snapshot(&TorrentStats{})
-	return t.info.TotalLength() - ((int64(s.Unverified) * int64(t.piecesM.clength)) + (int64(s.Completed) * int64(t.info.PieceLength)))
+	s := t.chunks.Snapshot(&TorrentStats{})
+	return t.info.TotalLength() - ((int64(s.Unverified) * int64(t.chunks.clength)) + (int64(s.Completed) * int64(t.info.PieceLength)))
 }
 
 // Bytes left to give in tracker announces.
@@ -852,7 +853,7 @@ func (t *torrent) numPieces() pieceIndex {
 }
 
 func (t *torrent) numPiecesCompleted() (num int) {
-	return int(t.piecesM.completed.GetCardinality())
+	return int(t.chunks.completed.GetCardinality())
 }
 
 func (t *torrent) close() (err error) {
@@ -924,7 +925,7 @@ func (t *torrent) pieceLength(piece pieceIndex) pp.Integer {
 }
 
 func (t *torrent) haveAnyPieces() bool {
-	return t.piecesM.completed.GetCardinality() != 0
+	return t.chunks.completed.GetCardinality() != 0
 }
 
 func (t *torrent) haveAllPieces() bool {
@@ -932,7 +933,7 @@ func (t *torrent) haveAllPieces() bool {
 		return false
 	}
 
-	return int(t.piecesM.completed.GetCardinality()) == t.numPieces()
+	return int(t.chunks.completed.GetCardinality()) == t.numPieces()
 }
 
 func (t *torrent) havePiece(index pieceIndex) bool {
@@ -947,7 +948,7 @@ func (t *torrent) haveChunk(r request) (ret bool) {
 		return true
 	}
 
-	return t.piecesM.Available(r)
+	return t.chunks.Available(r)
 }
 
 func chunkIndex(cs chunkSpec, chunkSize pp.Integer) int {
@@ -972,7 +973,7 @@ func (t *torrent) wantPieceIndex(index pieceIndex) bool {
 		return false
 	}
 
-	if t.piecesM.ChunksMissing(index) {
+	if t.chunks.ChunksMissing(index) {
 		return true
 	}
 
@@ -1033,7 +1034,7 @@ func (t *torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
 }
 
 func (t *torrent) pieceAllDirty(piece pieceIndex) bool {
-	return t.piecesM.ChunksAvailable(piece)
+	return t.chunks.ChunksAvailable(piece)
 }
 
 func (t *torrent) readersChanged() {
@@ -1088,7 +1089,7 @@ func (t *torrent) updatePiecePriority(piece pieceIndex) {
 	newPrio := p.uncachedPriority()
 
 	if newPrio == PiecePriorityNone {
-		if t.piecesM.ChunksComplete(piece) {
+		if t.chunks.ChunksComplete(piece) {
 			return
 		}
 		// l2.Output(2,
@@ -1102,7 +1103,7 @@ func (t *torrent) updatePiecePriority(piece pieceIndex) {
 		// )
 	}
 
-	if !t.piecesM.ChunksAdjust(piece) {
+	if !t.chunks.ChunksAdjust(piece) {
 		// l2.Output(2, fmt.Sprintf("chunks not adjusted: %d - %d\n", piece, piece))
 		return
 	}
@@ -1159,7 +1160,7 @@ func (t *torrent) forReaderOffsetPieces(f func(begin, end pieceIndex) (more bool
 }
 
 func (t *torrent) piecePriority(piece pieceIndex) piecePriority {
-	return piecePriority(t.piecesM.Priority(piece))
+	return piecePriority(t.chunks.Priority(piece))
 }
 
 func (t *torrent) pendRequest(req request) {
@@ -1246,7 +1247,7 @@ func (t *torrent) updatePieceCompletion(piece pieceIndex) bool {
 		// this completion is to satisfy the test TestCompletedPieceWrongSize
 		// its technically unneeded otherwise.... this is due to the fundmental
 		// issue where existing data isn't checksummed properly.
-		t.piecesM.Complete(piece)
+		t.chunks.Complete(piece)
 		t.onPieceCompleted(piece)
 	} else {
 		t.onIncompletePiece(piece)
@@ -1315,7 +1316,7 @@ func (t *torrent) needData() bool {
 		return true
 	}
 
-	return t.piecesM.Missing() != 0
+	return t.chunks.Missing() != 0
 }
 
 func appendMissingStrings(old, new []string) (ret []string) {
@@ -1392,11 +1393,11 @@ func (t *torrent) deleteConnection(c *connection) (ret bool) {
 }
 
 func (t *torrent) assertNoPendingRequests() {
-	if outstanding := t.piecesM.Outstanding(); len(outstanding) != 0 {
+	if outstanding := t.chunks.Outstanding(); len(outstanding) != 0 {
 		for _, r := range outstanding {
-			t.config.errors().Printf("still expecting c(%p) d(%020d) r(%d,%d,%d)", t.piecesM, r.Digest, r.Index, r.Begin, r.Length)
+			t.config.errors().Printf("still expecting c(%p) d(%020d) r(%d,%d,%d)", t.chunks, r.Digest, r.Index, r.Begin, r.Length)
 		}
-		panic(t.piecesM.outstanding)
+		panic(t.chunks.outstanding)
 	}
 }
 
@@ -1589,7 +1590,7 @@ func (t *torrent) statsLocked() (ret TorrentStats) {
 	ret.ActivePeers = len(t.conns)
 	ret.HalfOpenPeers = len(t.halfOpen)
 	ret.PendingPeers = t.peers.Len()
-	t.piecesM.Snapshot(&ret)
+	t.chunks.Snapshot(&ret)
 
 	// TODO: these can be moved to the connections directly.
 	// moving it will reduce the need to iterate the connections
@@ -1763,13 +1764,13 @@ func (t *torrent) pieceHashed(piece pieceIndex, failure error) error {
 		t.allStats((*ConnStats).incrementPiecesDirtiedGood)
 
 		if err := p.Storage().MarkComplete(); err != nil {
-			t.piecesM.ChunksPend(piece)
-			t.piecesM.ChunksRelease(piece)
+			t.chunks.ChunksPend(piece)
+			t.chunks.ChunksRelease(piece)
 			return errors.Wrapf(err, "%T: error marking piece complete %d: %T - %s", t.storage, piece, err, err)
 		}
-		t.piecesM.Complete(piece)
+		t.chunks.Complete(piece)
 	} else {
-		t.piecesM.ChunksFailed(piece)
+		t.chunks.ChunksFailed(piece)
 
 		t.allStats((*ConnStats).incrementPiecesDirtiedBad)
 
@@ -1829,13 +1830,6 @@ func (t *torrent) VerifyData() {
 // Start the process of connecting to the given peer for the given torrent if
 // appropriate.
 func (t *torrent) initiateConn(peer Peer) {
-	// reset failures when connections are empty.
-	// currently this is important because failures are held onto from the initial checksum.
-	// of current data. we can remove this once that precondition is fixed.
-	if len(t.conns) == 0 {
-		t.piecesM.FailuresReset()
-	}
-
 	if peer.Id == t.cln.peerID {
 		return
 	}

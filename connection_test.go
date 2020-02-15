@@ -39,7 +39,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	c.w = w
 	go c.writer(time.Minute)
 	c.cmu().Lock()
-	c.t.piecesM.completed.Add(1)
+	c.t.chunks.completed.Add(1)
 	c.PostBitfield( /*[]bool{false, true, false}*/ )
 	c.cmu().Unlock()
 	c.cmu().Lock()
@@ -112,7 +112,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	}))
 	t.setChunkSize(defaultChunkSize)
 	t.makePieces()
-	t.piecesM.ChunksPend(0)
+	t.chunks.ChunksPend(0)
 	r, w := net.Pipe()
 	cn := cl.newConnection(r, true, IpPort{})
 	cn.setTorrent(t)

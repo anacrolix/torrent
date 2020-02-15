@@ -207,7 +207,7 @@ func (p *Piece) VerifyData() {
 }
 
 func (p *Piece) queuedForHash() bool {
-	return p.t.piecesM.ChunksComplete(p.index)
+	return p.t.chunks.ChunksComplete(p.index)
 }
 
 func (p *Piece) torrentBeginOffset() int64 {
@@ -226,7 +226,7 @@ func (p *Piece) SetPriority(prio piecePriority) {
 }
 
 func (p *Piece) uncachedPriority() (ret piecePriority) {
-	if p.t.pieceComplete(p.index) || p.t.piecesM.ChunksComplete(p.index) {
+	if p.t.pieceComplete(p.index) || p.t.chunks.ChunksComplete(p.index) {
 		return PiecePriorityNone
 	}
 

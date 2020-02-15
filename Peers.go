@@ -1,7 +1,7 @@
 package torrent
 
 import (
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/v2/krpc"
 
 	"github.com/james-lawrence/torrent/peer_protocol"
 	"github.com/james-lawrence/torrent/tracker"

@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/missinggo/httptoo"
+	"github.com/james-lawrence/torrent/dht/v2/krpc"
 
 	"github.com/james-lawrence/torrent/bencode"
 )

@@ -13,7 +13,7 @@ import (
 	"github.com/anacrolix/stm/stmutil"
 	"github.com/benbjohnson/immutable"
 
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
 
 // Maintains state for an ongoing Announce operation. An Announce is started by calling

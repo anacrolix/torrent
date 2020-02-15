@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
 
 // Marshalled as binary by the UDP client, so be careful making changes.

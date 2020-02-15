@@ -3,7 +3,7 @@ Bencode encoding/decoding sub package. Uses similar API design to Go's json pack
 ## Install
 
 ```sh
-go get github.com/anacrolix/torrent
+go get github.com/james-lawrence/torrent
 ```
 
 ## Usage

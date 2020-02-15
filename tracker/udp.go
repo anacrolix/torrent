@@ -12,9 +12,9 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/pproffd"
+	"github.com/james-lawrence/torrent/dht/v2/krpc"
 	"github.com/pkg/errors"
 )
 

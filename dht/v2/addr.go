@@ -5,7 +5,7 @@ import (
 
 	"github.com/anacrolix/missinggo"
 
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
 
 // Used internally to refer to node network addresses. String() is called a

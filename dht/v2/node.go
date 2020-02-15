@@ -3,7 +3,7 @@ package dht
 import (
 	"time"
 
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
 
 type nodeKey struct {

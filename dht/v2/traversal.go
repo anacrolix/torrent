@@ -7,7 +7,7 @@ import (
 	"github.com/anacrolix/stm"
 	"github.com/anacrolix/stm/stmutil"
 
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
 
 type TraversalStats struct {

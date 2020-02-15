@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/missinggo/v2/conntrack"
 	"github.com/james-lawrence/torrent/dht/v2"
+	"github.com/james-lawrence/torrent/dht/v2/krpc"
 	"golang.org/x/time/rate"
 
 	"github.com/james-lawrence/torrent/iplist"

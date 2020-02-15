@@ -8,7 +8,7 @@ import (
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/stm/stmutil"
 
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
 
 func mustListen(addr string) net.PacketConn {

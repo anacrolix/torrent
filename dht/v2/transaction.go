@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
 
 // Transaction keeps track of a message exchange between nodes, such as a

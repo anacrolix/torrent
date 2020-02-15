@@ -7,8 +7,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/anacrolix/torrent/mse"
-	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/james-lawrence/torrent/mse"
+	pp "github.com/james-lawrence/torrent/peer_protocol"
 )
 
 // Wraps a raw connection and provides the interface we want for using the

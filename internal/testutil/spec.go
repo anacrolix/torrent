@@ -7,8 +7,8 @@ import (
 
 	"github.com/anacrolix/missinggo/expect"
 
-	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/metainfo"
 )
 
 // File ...

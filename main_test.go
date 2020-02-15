@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/anacrolix/torrent/internal/x/debugx"
+	"github.com/james-lawrence/torrent/internal/x/debugx"
 )
 
 // A top-level temp dir that lasts for the duration of the package tests, and

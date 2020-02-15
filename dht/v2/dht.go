@@ -12,8 +12,8 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/v2/conntrack"
-	"github.com/anacrolix/torrent/iplist"
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/james-lawrence/torrent/iplist"
+	"github.com/james-lawrence/torrent/metainfo"
 
 	"github.com/anacrolix/dht/v2/krpc"
 )

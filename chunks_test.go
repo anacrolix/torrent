@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/anacrolix/torrent/internal/testutil"
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/james-lawrence/torrent/internal/testutil"
+	"github.com/james-lawrence/torrent/metainfo"
 )
 
 var _ = spew.Sdump

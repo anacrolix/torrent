@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/james-lawrence/torrent/metainfo"
 )
 
 func TestExtentCompleteRequiredLengths(t *testing.T) {

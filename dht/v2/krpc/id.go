@@ -3,7 +3,7 @@ package krpc
 import (
 	"fmt"
 
-	"github.com/anacrolix/torrent/bencode"
+	"github.com/james-lawrence/torrent/bencode"
 )
 
 type ID [20]byte

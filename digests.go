@@ -9,7 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/pkg/errors"
 )
 

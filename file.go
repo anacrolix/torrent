@@ -5,7 +5,7 @@ import (
 
 	"github.com/anacrolix/missinggo/bitmap"
 
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/james-lawrence/torrent/metainfo"
 )
 
 // File provides access to regions of torrent data that correspond to its files.

@@ -9,8 +9,8 @@ import (
 
 	"github.com/anacrolix/tagflag"
 
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/bencode"
+	"github.com/james-lawrence/torrent"
+	"github.com/james-lawrence/torrent/bencode"
 )
 
 func main() {

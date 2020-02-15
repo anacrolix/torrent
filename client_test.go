@@ -22,17 +22,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
-	"github.com/anacrolix/torrent/dht/v2"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/filecache"
+	"github.com/james-lawrence/torrent/dht/v2"
 
-	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/internal/testutil"
-	"github.com/anacrolix/torrent/internal/x/bytesx"
-	"github.com/anacrolix/torrent/internal/x/md5x"
-	"github.com/anacrolix/torrent/iplist"
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/storage"
+	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/internal/testutil"
+	"github.com/james-lawrence/torrent/internal/x/bytesx"
+	"github.com/james-lawrence/torrent/internal/x/md5x"
+	"github.com/james-lawrence/torrent/iplist"
+	"github.com/james-lawrence/torrent/metainfo"
+	"github.com/james-lawrence/torrent/storage"
 )
 
 func TestingConfig() *ClientConfig {

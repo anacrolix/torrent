@@ -8,7 +8,7 @@ import (
 	"github.com/anacrolix/missinggo/expect"
 	bolt "github.com/etcd-io/bbolt"
 
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/james-lawrence/torrent/metainfo"
 )
 
 const (

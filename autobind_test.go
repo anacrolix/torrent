@@ -3,9 +3,9 @@ package torrent
 import (
 	"testing"
 
-	"github.com/anacrolix/torrent/internal/x/bytesx"
 	"github.com/anacrolix/utp"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/james-lawrence/torrent/internal/x/bytesx"
 	"github.com/stretchr/testify/require"
 )
 

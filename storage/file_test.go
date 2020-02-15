@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/anacrolix/torrent/internal/x/bytesx"
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/james-lawrence/torrent/internal/x/bytesx"
+	"github.com/james-lawrence/torrent/metainfo"
 )
 
 func TestShortFile(t *testing.T) {

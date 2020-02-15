@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"sync/atomic"
 
-	pp "github.com/anacrolix/torrent/peer_protocol"
+	pp "github.com/james-lawrence/torrent/peer_protocol"
 )
 
 // ConnStats various connection-level metrics. At the Torrent level these are

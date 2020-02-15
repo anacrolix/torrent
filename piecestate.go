@@ -1,7 +1,7 @@
 package torrent
 
 import (
-	"github.com/anacrolix/torrent/storage"
+	"github.com/james-lawrence/torrent/storage"
 )
 
 // The current state of a piece.

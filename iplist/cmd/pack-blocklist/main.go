@@ -9,7 +9,7 @@ import (
 
 	"github.com/anacrolix/tagflag"
 
-	"github.com/anacrolix/torrent/iplist"
+	"github.com/james-lawrence/torrent/iplist"
 )
 
 func main() {

@@ -3,7 +3,7 @@
 package metainfo
 
 import (
-	"github.com/anacrolix/torrent/bencode"
+	"github.com/james-lawrence/torrent/bencode"
 )
 
 func Fuzz(b []byte) int {

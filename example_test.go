@@ -6,9 +6,9 @@ import (
 	"log"
 	"net"
 
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/sockets"
 	"github.com/anacrolix/utp"
+	"github.com/james-lawrence/torrent"
+	"github.com/james-lawrence/torrent/sockets"
 )
 
 func Example_download() {

@@ -12,7 +12,7 @@ go get github.com/anacrolix/torrent
 package demo
 
 import (
-	bencode "github.com/anacrolix/torrent/bencode"
+	bencode "github.com/james-lawrence/torrent/bencode"
 )
 
 type Message struct {

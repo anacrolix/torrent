@@ -3,9 +3,9 @@ package torrent
 import (
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/slices"
-	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/storage"
+	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/metainfo"
+	"github.com/james-lawrence/torrent/storage"
 	"github.com/pkg/errors"
 )
 

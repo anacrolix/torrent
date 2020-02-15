@@ -5,7 +5,7 @@ import (
 
 	"github.com/anacrolix/dht/v2/krpc"
 
-	"github.com/anacrolix/torrent/peer_protocol"
+	"github.com/james-lawrence/torrent/peer_protocol"
 )
 
 // Peer connection info, handed about publicly.

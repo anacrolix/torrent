@@ -10,9 +10,9 @@ import (
 
 	"github.com/anacrolix/tagflag"
 
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/tracker"
+	"github.com/james-lawrence/torrent"
+	"github.com/james-lawrence/torrent/metainfo"
+	"github.com/james-lawrence/torrent/tracker"
 )
 
 func argSpec(arg string) (ts torrent.Metadata, err error) {

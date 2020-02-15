@@ -6,8 +6,8 @@ import (
 
 	"github.com/anacrolix/tagflag"
 
-	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/metainfo"
 )
 
 var (

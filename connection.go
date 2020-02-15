@@ -20,11 +20,11 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/pkg/errors"
 
-	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/internal/x/bitmapx"
-	"github.com/anacrolix/torrent/internal/x/bytesx"
-	"github.com/anacrolix/torrent/mse"
-	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/internal/x/bitmapx"
+	"github.com/james-lawrence/torrent/internal/x/bytesx"
+	"github.com/james-lawrence/torrent/mse"
+	pp "github.com/james-lawrence/torrent/peer_protocol"
 )
 
 type peerSource string

@@ -12,7 +12,7 @@ import (
 	"github.com/anacrolix/tagflag"
 	"github.com/bradfitz/iter"
 
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/james-lawrence/torrent/metainfo"
 )
 
 var flags struct {

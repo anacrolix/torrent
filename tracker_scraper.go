@@ -10,7 +10,7 @@ import (
 
 	"github.com/anacrolix/dht/v2/krpc"
 
-	"github.com/anacrolix/torrent/tracker"
+	"github.com/james-lawrence/torrent/tracker"
 )
 
 // Announces a torrent to a tracker at regular intervals, when peers are

@@ -10,7 +10,7 @@ import (
 	"github.com/alexflint/go-arg"
 	"golang.org/x/xerrors"
 
-	"github.com/anacrolix/torrent/mse"
+	"github.com/james-lawrence/torrent/mse"
 )
 
 func main() {

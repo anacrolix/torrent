@@ -9,12 +9,12 @@ import (
 
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/missinggo/v2/conntrack"
-	"github.com/anacrolix/torrent/dht/v2"
+	"github.com/james-lawrence/torrent/dht/v2"
 	"golang.org/x/time/rate"
 
-	"github.com/anacrolix/torrent/iplist"
-	"github.com/anacrolix/torrent/mse"
-	"github.com/anacrolix/torrent/storage"
+	"github.com/james-lawrence/torrent/iplist"
+	"github.com/james-lawrence/torrent/mse"
+	"github.com/james-lawrence/torrent/storage"
 )
 
 // DefaultHTTPUserAgent ...

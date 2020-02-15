@@ -23,13 +23,13 @@ import (
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
-	"github.com/anacrolix/torrent/dht/v2"
+	"github.com/james-lawrence/torrent/dht/v2"
 
-	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/metainfo"
-	pp "github.com/anacrolix/torrent/peer_protocol"
-	"github.com/anacrolix/torrent/storage"
-	"github.com/anacrolix/torrent/tracker"
+	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/metainfo"
+	pp "github.com/james-lawrence/torrent/peer_protocol"
+	"github.com/james-lawrence/torrent/storage"
+	"github.com/james-lawrence/torrent/tracker"
 )
 
 // Tuner runtime tuning of an actively running torrent.

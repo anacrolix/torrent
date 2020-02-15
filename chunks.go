@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
-	"github.com/anacrolix/torrent/metainfo"
-	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/james-lawrence/torrent/metainfo"
+	pp "github.com/james-lawrence/torrent/peer_protocol"
 	"github.com/pkg/errors"
 
-	"github.com/anacrolix/torrent/internal/x/bitmapx"
+	"github.com/james-lawrence/torrent/internal/x/bitmapx"
 )
 
 const (

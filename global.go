@@ -3,7 +3,7 @@ package torrent
 import (
 	"expvar"
 
-	pp "github.com/anacrolix/torrent/peer_protocol"
+	pp "github.com/james-lawrence/torrent/peer_protocol"
 )
 
 const (

@@ -1,7 +1,7 @@
 package metainfo
 
 import (
-	"github.com/anacrolix/torrent/bencode"
+	"github.com/james-lawrence/torrent/bencode"
 )
 
 type UrlList []string

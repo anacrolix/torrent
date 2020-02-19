@@ -58,7 +58,8 @@ type Client struct {
 	peerID         PeerID
 	defaultStorage *storage.Client
 	onClose        []func()
-	conns          []socket
+	dialers        []dialer
+	listeners      []listener
 	dhtServers     []*dht.Server
 	ipBlockList    iplist.Ranger
 	// Our BitTorrent protocol extension bytes, sent in our BT handshakes.
@@ -92,7 +93,7 @@ func (cl *Client) PeerID() PeerID {
 }
 
 func (cl *Client) LocalPort() (port int) {
-	cl.eachListener(func(l socket) bool {
+	cl.eachListener(func(l listener) bool {
 		_port := missinggo.AddrPort(l.Addr())
 		if _port == 0 {
 			panic(l)
@@ -227,28 +228,34 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		}
 	}
 
-	cl.conns, err = listenAll(cl.listenNetworks(), cl.config.ListenHost, cl.config.ListenPort, cl.config.ProxyURL, cl.firewallCallback)
+	sockets, err := listenAll(cl.listenNetworks(), cl.config.ListenHost, cl.config.ListenPort, cl.firewallCallback)
 	if err != nil {
 		return
 	}
+
 	// Check for panics.
 	cl.LocalPort()
 
-	for _, s := range cl.conns {
+	for _, _s := range sockets {
+		s := _s // Go is fucking retarded.
+		cl.onClose = append(cl.onClose, func() { s.Close() })
 		if peerNetworkEnabled(parseNetworkString(s.Addr().Network()), cl.config) {
+			cl.dialers = append(cl.dialers, s)
+			cl.listeners = append(cl.listeners, s)
 			go cl.acceptConnections(s)
 		}
 	}
 
 	go cl.forwardPort()
 	if !cfg.NoDHT {
-		for _, s := range cl.conns {
+		for _, s := range sockets {
 			if pc, ok := s.(net.PacketConn); ok {
 				ds, err := cl.newDhtServer(pc)
 				if err != nil {
 					panic(err)
 				}
 				cl.dhtServers = append(cl.dhtServers, ds)
+				cl.onClose = append(cl.onClose, func() { ds.Close() })
 			}
 		}
 	}
@@ -334,27 +341,17 @@ func (cl *Client) eachDhtServer(f func(*dht.Server)) {
 	}
 }
 
-func (cl *Client) closeSockets() {
-	cl.eachListener(func(l socket) bool {
-		l.Close()
-		return true
-	})
-	cl.conns = nil
-}
-
 // Stops the client. All connections to peers are closed and all activity will
 // come to a halt.
 func (cl *Client) Close() {
 	cl.lock()
 	defer cl.unlock()
 	cl.closed.Set()
-	cl.eachDhtServer(func(s *dht.Server) { s.Close() })
-	cl.closeSockets()
 	for _, t := range cl.torrents {
 		t.close()
 	}
-	for _, f := range cl.onClose {
-		f()
+	for i := range cl.onClose {
+		cl.onClose[len(cl.onClose)-1-i]()
 	}
 	cl.event.Broadcast()
 }
@@ -521,18 +518,14 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) (res dialResult) {
 	func() {
 		cl.lock()
 		defer cl.unlock()
-		cl.eachListener(func(s socket) bool {
+		cl.eachDialer(func(s dialer) bool {
 			func() {
-				network := s.Addr().Network()
-				if !peerNetworkEnabled(parseNetworkString(network), cl.config) {
-					return
-				}
 				left++
 				//cl.logger.Printf("dialing %s on %s/%s", addr, s.Addr().Network(), s.Addr())
 				go func() {
 					resCh <- dialResult{
 						cl.dialFromSocket(ctx, s, addr),
-						network,
+						s.LocalAddr().Network(),
 					}
 				}()
 			}()
@@ -566,11 +559,11 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) (res dialResult) {
 	return res
 }
 
-func (cl *Client) dialFromSocket(ctx context.Context, s socket, addr string) net.Conn {
-	network := s.Addr().Network()
+func (cl *Client) dialFromSocket(ctx context.Context, s dialer, addr string) net.Conn {
+	network := s.LocalAddr().Network()
 	cte := cl.config.ConnTracker.Wait(
 		ctx,
-		conntrack.Entry{network, s.Addr().String(), addr},
+		conntrack.Entry{network, s.LocalAddr().String(), addr},
 		"dial torrent client",
 		0,
 	)
@@ -1264,8 +1257,16 @@ func firstNotNil(ips ...net.IP) net.IP {
 	return nil
 }
 
-func (cl *Client) eachListener(f func(socket) bool) {
-	for _, s := range cl.conns {
+func (cl *Client) eachDialer(f func(dialer) bool) {
+	for _, s := range cl.dialers {
+		if !f(s) {
+			break
+		}
+	}
+}
+
+func (cl *Client) eachListener(f func(listener) bool) {
+	for _, s := range cl.listeners {
 		if !f(s) {
 			break
 		}
@@ -1273,7 +1274,7 @@ func (cl *Client) eachListener(f func(socket) bool) {
 }
 
 func (cl *Client) findListener(f func(net.Listener) bool) (ret net.Listener) {
-	cl.eachListener(func(l socket) bool {
+	cl.eachListener(func(l listener) bool {
 		ret = l
 		return !f(l)
 	})
@@ -1310,7 +1311,7 @@ func (cl *Client) publicAddr(peer net.IP) IpPort {
 func (cl *Client) ListenAddrs() (ret []net.Addr) {
 	cl.lock()
 	defer cl.unlock()
-	cl.eachListener(func(l socket) bool {
+	cl.eachListener(func(l listener) bool {
 		ret = append(ret, l.Addr())
 		return true
 	})

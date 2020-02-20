@@ -1,36 +1,19 @@
 package torrent
 
 import (
-	"io/ioutil"
 	"log"
 	"os"
 	"testing"
 )
 
-// A top-level temp dir that lasts for the duration of the package tests, and
-// is removed at completion.
-var pkgTempDir string
-
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	var err error
-	pkgTempDir, err = ioutil.TempDir("", "torrent.test")
-	if err != nil {
-		panic(err)
-	}
-}
-
-func tempDir() string {
-	ret, err := ioutil.TempDir(pkgTempDir, "")
-	if err != nil {
-		panic(err)
-	}
-	return ret
 }
 
 func TestMain(m *testing.M) {
+	TestingTempDir.Init("torrent.test")
 	code := m.Run()
-	os.RemoveAll(pkgTempDir)
+	TestingTempDir.RemoveAll()
 	// select {}
 	os.Exit(code)
 }

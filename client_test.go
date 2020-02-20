@@ -800,3 +800,15 @@ func TestIssue335(t *testing.T) {
 	assert.True(t, new)
 	require.True(t, cl.WaitAll())
 }
+
+func TestClientDisabledImplicitNetworksButDhtEnabled(t *testing.T) {
+	cfg := TestingConfig()
+	cfg.DisableTCP = true
+	cfg.DisableUTP = true
+	cfg.NoDHT = false
+	cl, err := NewClient(cfg)
+	require.NoError(t, err)
+	defer cl.Close()
+	assert.Empty(t, cl.listeners)
+	assert.NotEmpty(t, cl.DhtServers())
+}

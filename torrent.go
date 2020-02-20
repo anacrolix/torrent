@@ -1359,12 +1359,12 @@ func (t *Torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 	}
 }
 
-func (t *Torrent) announceToDht(impliedPort bool, s *dht.Server) error {
+func (t *Torrent) announceToDht(impliedPort bool, s DhtServer) error {
 	ps, err := s.Announce(t.infoHash, t.cl.incomingPeerPort(), impliedPort)
 	if err != nil {
 		return err
 	}
-	go t.consumeDhtAnnouncePeers(ps.Peers)
+	go t.consumeDhtAnnouncePeers(ps.Peers())
 	select {
 	case <-t.closed.LockedChan(t.cl.locker()):
 	case <-time.After(5 * time.Minute):
@@ -1373,7 +1373,7 @@ func (t *Torrent) announceToDht(impliedPort bool, s *dht.Server) error {
 	return nil
 }
 
-func (t *Torrent) dhtAnnouncer(s *dht.Server) {
+func (t *Torrent) dhtAnnouncer(s DhtServer) {
 	cl := t.cl
 	for {
 		select {

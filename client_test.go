@@ -316,8 +316,8 @@ func TestDHTInheritBlocklist(t *testing.T) {
 	require.NoError(t, err)
 	defer cl.Close()
 	numServers := 0
-	cl.eachDhtServer(func(s *dht.Server) {
-		assert.Equal(t, ipl, s.IPBlocklist())
+	cl.eachDhtServer(func(s DhtServer) {
+		assert.Equal(t, ipl, s.(anacrolixDhtServerWrapper).IPBlocklist())
 		numServers++
 	})
 	assert.EqualValues(t, 2, numServers)
@@ -434,8 +434,8 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	require.NoError(t, err)
 	defer cl.Close()
 	sum := func() (ret int64) {
-		cl.eachDhtServer(func(s *dht.Server) {
-			ret += s.Stats().OutboundQueriesAttempted
+		cl.eachDhtServer(func(s DhtServer) {
+			ret += s.Stats().(dht.ServerStats).OutboundQueriesAttempted
 		})
 		return
 	}

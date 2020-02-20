@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/iter"
@@ -1060,8 +1059,8 @@ func (c *connection) mainReadLoop() (err error) {
 			if msg.Port != 0 {
 				pingAddr.Port = int(msg.Port)
 			}
-			cl.eachDhtServer(func(s *dht.Server) {
-				go s.Ping(&pingAddr, nil)
+			cl.eachDhtServer(func(s DhtServer) {
+				go s.Ping(&pingAddr)
 			})
 		case pp.Suggest:
 			torrent.Add("suggests received", 1)

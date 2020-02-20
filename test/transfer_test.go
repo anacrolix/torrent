@@ -28,6 +28,8 @@ type testClientTransferParams struct {
 	SeederStorage              func(string) storage.ClientImpl
 	SeederUploadRateLimiter    *rate.Limiter
 	LeecherDownloadRateLimiter *rate.Limiter
+	ConfigureSeeder            ConfigureClient
+	ConfigureLeecher           ConfigureClient
 }
 
 func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
@@ -57,8 +59,14 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	} else {
 		cfg.DataDir = greetingTempDir
 	}
+	if ps.ConfigureSeeder.Config != nil {
+		ps.ConfigureSeeder.Config(cfg)
+	}
 	seeder, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
+	if ps.ConfigureSeeder.Client != nil {
+		ps.ConfigureSeeder.Client(seeder)
+	}
 	if ps.ExportClientStatus {
 		defer testutil.ExportStatusWriter(seeder, "s")()
 	}
@@ -83,9 +91,15 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}
 	cfg.Seed = false
 	//cfg.Debug = true
+	if ps.ConfigureLeecher.Config != nil {
+		ps.ConfigureLeecher.Config(cfg)
+	}
 	leecher, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer leecher.Close()
+	if ps.ConfigureLeecher.Client != nil {
+		ps.ConfigureLeecher.Client(leecher)
+	}
 	if ps.ExportClientStatus {
 		defer testutil.ExportStatusWriter(leecher, "l")()
 	}
@@ -334,4 +348,9 @@ func TestSeedAfterDownloading(t *testing.T) {
 		leecher.WaitAll()
 	}()
 	wg.Wait()
+}
+
+type ConfigureClient struct {
+	Config func(*torrent.ClientConfig)
+	Client func(*torrent.Client)
 }

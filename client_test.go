@@ -574,7 +574,7 @@ func TestClientDynamicListenPortAllProtocols(t *testing.T) {
 	defer cl.Close()
 	port := cl.LocalPort()
 	assert.NotEqual(t, 0, port)
-	cl.eachListener(func(s listener) bool {
+	cl.eachListener(func(s Listener) bool {
 		assert.Equal(t, port, missinggo.AddrPort(s.Addr()))
 		return true
 	})

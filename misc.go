@@ -114,7 +114,7 @@ func connIsIpv6(nc interface {
 	LocalAddr() net.Addr
 }) bool {
 	ra := nc.LocalAddr()
-	rip := missinggo.AddrIP(ra)
+	rip := addrIpOrNil(ra)
 	return rip.To4() == nil && rip.To16() != nil
 }
 

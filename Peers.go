@@ -24,8 +24,7 @@ func (me *Peers) AppendFromPex(nas []krpc.NodeAddr, fs []peer_protocol.PexPeerFl
 func (ret Peers) AppendFromTracker(ps []tracker.Peer) Peers {
 	for _, p := range ps {
 		_p := Peer{
-			IP:     p.IP,
-			Port:   p.Port,
+			Addr:   ipPortAddr{p.IP, p.Port},
 			Source: peerSourceTracker,
 		}
 		copy(_p.Id[:], p.ID)

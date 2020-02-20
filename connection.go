@@ -46,7 +46,7 @@ type connection struct {
 	conn       net.Conn
 	outgoing   bool
 	network    string
-	remoteAddr IpPort
+	remoteAddr net.Addr
 	// The Reader and Writer for this Conn, with hooks installed for stats,
 	// limiting, deadlines etc.
 	w io.Writer
@@ -139,14 +139,14 @@ func (cn *connection) expectingChunks() bool {
 
 // Returns true if the connection is over IPv6.
 func (cn *connection) ipv6() bool {
-	ip := cn.remoteAddr.IP
+	ip := addrIpOrNil(cn.remoteAddr)
 	if ip.To4() != nil {
 		return false
 	}
 	return len(ip) == net.IPv6len
 }
 
-// Returns true the dialer has the lower client peer ID. TODO: Find the
+// Returns true the if the dialer/initiator has the lower client peer ID. TODO: Find the
 // specification for this.
 func (cn *connection) isPreferredDirection() bool {
 	return bytes.Compare(cn.t.cl.peerID[:], cn.PeerID[:]) < 0 == cn.outgoing
@@ -1049,9 +1049,13 @@ func (c *connection) mainReadLoop() (err error) {
 			req := newRequestFromMessage(&msg)
 			c.onPeerSentCancel(req)
 		case pp.Port:
+			ipa, ok := tryIpPortFromNetAddr(c.remoteAddr)
+			if !ok {
+				break
+			}
 			pingAddr := net.UDPAddr{
-				IP:   c.remoteAddr.IP,
-				Port: int(c.remoteAddr.Port),
+				IP:   ipa.IP,
+				Port: ipa.Port,
 			}
 			if msg.Port != 0 {
 				pingAddr.Port = int(msg.Port)
@@ -1458,11 +1462,12 @@ func (c *connection) peerPriority() peerPriority {
 }
 
 func (c *connection) remoteIp() net.IP {
-	return c.remoteAddr.IP
+	return addrIpOrNil(c.remoteAddr)
 }
 
 func (c *connection) remoteIpPort() IpPort {
-	return c.remoteAddr
+	ipa, _ := tryIpPortFromNetAddr(c.remoteAddr)
+	return IpPort{ipa.IP, uint16(ipa.Port)}
 }
 
 func (c *connection) String() string {

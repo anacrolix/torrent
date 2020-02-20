@@ -26,9 +26,8 @@ type ClientConfig struct {
 	// Store torrent file data in this directory unless .DefaultStorage is
 	// specified.
 	DataDir string `long:"data-dir" description:"directory to store downloaded torrent data"`
-	// The address to listen for new uTP and TCP bittorrent protocol
-	// connections. DHT shares a UDP socket with uTP unless configured
-	// otherwise.
+	// The address to listen for new uTP and TCP BitTorrent protocol connections. DHT shares a UDP
+	// socket with uTP unless configured otherwise.
 	ListenHost              func(network string) string
 	ListenPort              int
 	NoDefaultPortForwarding bool

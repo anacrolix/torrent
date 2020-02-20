@@ -189,8 +189,7 @@ func (t *Torrent) KnownSwarm() (ks []Peer) {
 
 		ks = append(ks, Peer{
 			Id:     conn.PeerID,
-			IP:     conn.remoteAddr.IP,
-			Port:   int(conn.remoteAddr.Port),
+			Addr:   conn.remoteAddr,
 			Source: conn.Discovery,
 			// > If the connection is encrypted, that's certainly enough to set SupportsEncryption.
 			// > But if we're not connected to them with an encrypted connection, I couldn't say
@@ -253,9 +252,11 @@ func (t *Torrent) addPeer(p Peer) {
 	if t.closed.IsSet() {
 		return
 	}
-	if cl.badPeerIPPort(p.IP, p.Port) {
-		torrent.Add("peers not added because of bad addr", 1)
-		return
+	if ipAddr, ok := tryIpPortFromNetAddr(p.Addr); ok {
+		if cl.badPeerIPPort(ipAddr.IP, ipAddr.Port) {
+			torrent.Add("peers not added because of bad addr", 1)
+			return
+		}
 	}
 	if t.peers.Add(p) {
 		torrent.Add("peers replaced", 1)
@@ -1350,8 +1351,7 @@ func (t *Torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 				continue
 			}
 			t.addPeer(Peer{
-				IP:     cp.IP[:],
-				Port:   cp.Port,
+				Addr:   ipPortAddr{cp.IP, cp.Port},
 				Source: peerSourceDhtGetPeers,
 			})
 		}
@@ -1433,7 +1433,7 @@ func (t *Torrent) numTotalPeers() int {
 		peers[addr] = struct{}{}
 	}
 	t.peers.Each(func(peer Peer) {
-		peers[fmt.Sprintf("%s:%d", peer.IP, peer.Port)] = struct{}{}
+		peers[peer.Addr.String()] = struct{}{}
 	})
 	return len(peers)
 }
@@ -1592,7 +1592,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 
 			if len(bannableTouchers) >= 1 {
 				c := bannableTouchers[0]
-				t.cl.banPeerIP(c.remoteAddr.IP)
+				t.cl.banPeerIP(c.remoteIp())
 				c.Drop()
 			}
 		}
@@ -1738,10 +1738,11 @@ func (t *Torrent) initiateConn(peer Peer) {
 	if peer.Id == t.cl.peerID {
 		return
 	}
-	if t.cl.badPeerIPPort(peer.IP, peer.Port) && !peer.Trusted {
+
+	if t.cl.badPeerAddr(peer.Addr) && !peer.Trusted {
 		return
 	}
-	addr := IpPort{peer.IP, uint16(peer.Port)}
+	addr := peer.Addr
 	if t.addrActive(addr.String()) {
 		return
 	}
@@ -1754,8 +1755,7 @@ func (t *Torrent) AddClientPeer(cl *Client) {
 	t.AddPeers(func() (ps []Peer) {
 		for _, la := range cl.ListenAddrs() {
 			ps = append(ps, Peer{
-				IP:      missinggo.AddrIP(la),
-				Port:    missinggo.AddrPort(la),
+				Addr:    la,
 				Trusted: true,
 			})
 		}

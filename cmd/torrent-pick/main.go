@@ -32,8 +32,7 @@ func resolvedPeerAddrs(ss []string) (ret []torrent.Peer, err error) {
 			return
 		}
 		ret = append(ret, torrent.Peer{
-			IP:   addr.IP,
-			Port: addr.Port,
+			Addr: addr,
 		})
 	}
 	return

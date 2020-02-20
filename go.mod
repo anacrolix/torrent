@@ -11,7 +11,6 @@ require (
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.3.2-0.20200110051601-fc3212fb3984
 	github.com/anacrolix/multiless v0.0.0-20191223025854-070b7994e841
-	github.com/anacrolix/stm v0.2.0
 	github.com/anacrolix/sync v0.2.0
 	github.com/anacrolix/tagflag v1.0.1
 	github.com/anacrolix/upnp v0.1.1
@@ -29,7 +28,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.4.0
 	github.com/tinylib/msgp v1.1.1 // indirect
-	golang.org/x/net v0.0.0-20200114155413-6afb5195e5aa
+	golang.org/x/net v0.0.0-20200114155413-6afb5195e5aa // indirect
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
 )

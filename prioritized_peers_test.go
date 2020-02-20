@@ -19,10 +19,10 @@ func TestPrioritizedPeers(t *testing.T) {
 	assert.Panics(t, func() { pp.PopMax() })
 	assert.False(t, ok)
 	ps := []Peer{
-		{IP: net.ParseIP("1.2.3.4")},
-		{IP: net.ParseIP("1::2")},
-		{IP: net.ParseIP("")},
-		{IP: net.ParseIP(""), Trusted: true},
+		{Addr: ipPortAddr{IP: net.ParseIP("1.2.3.4")}},
+		{Addr: ipPortAddr{IP: net.ParseIP("1::2")}},
+		{Addr: ipPortAddr{IP: net.ParseIP("")}},
+		{Addr: ipPortAddr{IP: net.ParseIP("")}, Trusted: true},
 	}
 	for i, p := range ps {
 		t.Logf("peer %d priority: %08x trusted: %t\n", i, pp.getPrio(p), p.Trusted)

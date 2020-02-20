@@ -10,18 +10,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-type dialer interface {
-	dial(_ context.Context, addr string) (net.Conn, error)
-	LocalAddr() net.Addr
-}
-
-type listener interface {
+type Listener interface {
 	net.Listener
 }
 
 type socket interface {
-	listener
-	dialer
+	Listener
+	Dialer
 }
 
 func listen(n network, addr string, f firewallCallback) (socket, error) {
@@ -39,33 +34,16 @@ func listenTcp(network, address string) (s socket, err error) {
 	l, err := net.Listen(network, address)
 	return tcpSocket{
 		Listener: l,
-		network:  network,
+		NetDialer: NetDialer{
+			Network: network,
+		},
 	}, err
 }
 
 type tcpSocket struct {
 	net.Listener
-	network string
-	dialer  net.Dialer
+	NetDialer
 }
-
-func (me tcpSocket) dial(ctx context.Context, addr string) (_ net.Conn, err error) {
-	defer perf.ScopeTimerErr(&err)()
-	return me.dialer.DialContext(ctx, me.network, addr)
-}
-
-func (me tcpSocket) LocalAddr() net.Addr {
-	return tcpSocketLocalAddr{me.network, me.Listener.Addr().String()}
-}
-
-type tcpSocketLocalAddr struct {
-	network string
-	s       string
-}
-
-func (me tcpSocketLocalAddr) Network() string { return me.network }
-
-func (me tcpSocketLocalAddr) String() string { return "" }
 
 func listenAll(networks []network, getHost func(string) string, port int, f firewallCallback) ([]socket, error) {
 	if len(networks) == 0 {
@@ -128,7 +106,7 @@ type utpSocketSocket struct {
 	network string
 }
 
-func (me utpSocketSocket) dial(ctx context.Context, addr string) (conn net.Conn, err error) {
+func (me utpSocketSocket) Dial(ctx context.Context, addr string) (conn net.Conn, err error) {
 	defer perf.ScopeTimerErr(&err)()
 	return me.utpSocket.DialContext(ctx, me.network, addr)
 }

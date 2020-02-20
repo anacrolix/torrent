@@ -114,8 +114,7 @@ func addTorrents(client *torrent.Client) error {
 		t.AddPeers(func() (ret []torrent.Peer) {
 			for _, ta := range flags.TestPeer {
 				ret = append(ret, torrent.Peer{
-					IP:   ta.IP,
-					Port: ta.Port,
+					Addr: ta,
 				})
 			}
 			return

@@ -31,10 +31,6 @@ import (
 	"github.com/anacrolix/torrent/tracker"
 )
 
-func (t *Torrent) chunkIndexSpec(chunkIndex pp.Integer, piece pieceIndex) chunkSpec {
-	return chunkIndexSpec(chunkIndex, t.pieceLength(piece), t.chunkSize)
-}
-
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
 // available, see .Info and .GotInfo.
 type Torrent struct {
@@ -319,7 +315,7 @@ func infoPieceHashes(info *metainfo.Info) (ret [][]byte) {
 
 func (t *Torrent) makePieces() {
 	hashes := infoPieceHashes(t.info)
-	t.pieces = make([]Piece, len(hashes), len(hashes))
+	t.pieces = make([]Piece, len(hashes))
 	for i, hash := range hashes {
 		piece := &t.pieces[i]
 		piece.t = t
@@ -1105,12 +1101,6 @@ func (t *Torrent) readAt(b []byte, off int64) (n int, err error) {
 	p := &t.pieces[off/t.info.PieceLength]
 	p.waitNoPendingWrites()
 	return p.Storage().ReadAt(b, off-p.Info().Offset())
-}
-
-func (t *Torrent) updateAllPieceCompletions() {
-	for i := pieceIndex(0); i < t.numPieces(); i++ {
-		t.updatePieceCompletion(i)
-	}
 }
 
 // Returns an error if the metadata was completed, but couldn't be set for

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -315,16 +314,6 @@ type testClientTransferParams struct {
 	SeederStorage              func(string) storage.ClientImpl
 	SeederUploadRateLimiter    *rate.Limiter
 	LeecherDownloadRateLimiter *rate.Limiter
-}
-
-func logPieceStateChanges(t *Torrent) {
-	sub := t.SubscribePieceStateChanges()
-	go func() {
-		defer sub.Close()
-		for e := range sub.Values {
-			log.Printf("%p %#v", t, e)
-		}
-	}()
 }
 
 // Creates a seeder and a leecher, and ensures the data transfers when a read
@@ -1142,7 +1131,7 @@ func TestIssue335(t *testing.T) {
 	assert.True(t, new)
 	require.True(t, cl.WaitAll())
 	tor.Drop()
-	tor, new, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	_, new, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	require.NoError(t, err)
 	assert.True(t, new)
 	require.True(t, cl.WaitAll())

@@ -86,7 +86,8 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 			return errors.Wrap(err, "reading piece data")
 		}
 	case Extended:
-		b, err := readByte(r)
+		var b byte
+		b, err = readByte(r)
 		if err != nil {
 			break
 		}

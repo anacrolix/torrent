@@ -105,12 +105,6 @@ func (p *Piece) numChunks() pp.Integer {
 	return p.t.pieceNumChunks(p.index)
 }
 
-func (p *Piece) undirtiedChunkIndices() (ret bitmap.Bitmap) {
-	ret = p._dirtyChunks.Copy()
-	ret.FlipRange(0, bitmap.BitIndex(p.numChunks()))
-	return
-}
-
 func (p *Piece) incrementPendingWrites() {
 	p.pendingWritesMutex.Lock()
 	p.pendingWrites++

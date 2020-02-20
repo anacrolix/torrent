@@ -108,26 +108,26 @@ func assert_equal(t *testing.T, x, y interface{}) {
 	}
 }
 
-type unmarshaler_int struct {
+type unmarshalerInt struct {
 	x int
 }
 
-func (this *unmarshaler_int) UnmarshalBencode(data []byte) error {
-	return Unmarshal(data, &this.x)
+func (me *unmarshalerInt) UnmarshalBencode(data []byte) error {
+	return Unmarshal(data, &me.x)
 }
 
-type unmarshaler_string struct {
+type unmarshalerString struct {
 	x string
 }
 
-func (this *unmarshaler_string) UnmarshalBencode(data []byte) error {
-	this.x = string(data)
+func (me *unmarshalerString) UnmarshalBencode(data []byte) error {
+	me.x = string(data)
 	return nil
 }
 
 func TestUnmarshalerBencode(t *testing.T) {
-	var i unmarshaler_int
-	var ss []unmarshaler_string
+	var i unmarshalerInt
+	var ss []unmarshalerString
 	check_error(t, Unmarshal([]byte("i71e"), &i))
 	assert_equal(t, i.x, 71)
 	check_error(t, Unmarshal([]byte("l5:hello5:fruit3:waye"), &ss))

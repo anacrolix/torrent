@@ -19,9 +19,7 @@ const (
 )
 
 var (
-	torrentfsReadRequests        = expvar.NewInt("torrentfsReadRequests")
-	torrentfsDelayedReadRequests = expvar.NewInt("torrentfsDelayedReadRequests")
-	interruptedReads             = expvar.NewInt("interruptedReads")
+	torrentfsReadRequests = expvar.NewInt("torrentfsReadRequests")
 )
 
 type TorrentFS struct {

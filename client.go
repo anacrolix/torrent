@@ -268,15 +268,6 @@ func (cl *Client) firewallCallback(net.Addr) bool {
 	return block
 }
 
-func (cl *Client) enabledPeerNetworks() (ns []network) {
-	for _, n := range allPeerNetworks {
-		if peerNetworkEnabled(n, cl.config) {
-			ns = append(ns, n)
-		}
-	}
-	return
-}
-
 func (cl *Client) listenOnNetwork(n network) bool {
 	if n.Ipv4 && cl.config.DisableIPv4 {
 		return false
@@ -863,10 +854,9 @@ func (cl *Client) runHandshookConn(c *connection, t *Torrent) {
 			addr := c.conn.RemoteAddr().String()
 			cl.dopplegangerAddrs[addr] = struct{}{}
 		} else {
-			// Because the remote address is not necessarily the same as its
-			// client's torrent listen address, we won't record the remote address
-			// as a doppleganger. Instead, the initiator can record *us* as the
-			// doppleganger.
+			// Because the remote address is not necessarily the same as its client's torrent listen
+			// address, we won't record the remote address as a doppleganger. Instead, the initiator
+			// can record *us* as the doppleganger.
 		}
 		return
 	}

@@ -103,7 +103,7 @@ func (cl *Client) LocalPort() (port int) {
 
 func writeDhtServerStatus(w io.Writer, s DhtServer) {
 	dhtStats := s.Stats()
-	fmt.Fprintf(w, "\tServer ID: %x\n", s.ID())
+	fmt.Fprintf(w, " ID: %x\n", s.ID())
 	spew.Fdump(w, dhtStats)
 }
 

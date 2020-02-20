@@ -19,8 +19,6 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-var DefaultHTTPUserAgent = "Go-Torrent/1.0"
-
 // Probably not safe to modify this after it's given to a Client.
 type ClientConfig struct {
 	// Store torrent file data in this directory unless .DefaultStorage is
@@ -76,11 +74,6 @@ type ClientConfig struct {
 	// Chooses the crypto method to use when receiving connections with header obfuscation.
 	CryptoSelector mse.CryptoSelector
 
-	// Sets usage of Socks5 Proxy. Authentication should be included in the url if needed.
-	// Examples: socks5://demo:demo@192.168.99.100:1080
-	// 			 http://proxy.domain.com:3128
-	ProxyURL string
-
 	IPBlocklist      iplist.Ranger
 	DisableIPv6      bool `long:"disable-ipv6"`
 	DisableIPv4      bool
@@ -89,11 +82,8 @@ type ClientConfig struct {
 	Debug  bool `help:"enable debugging"`
 	Logger log.Logger
 
-	// HTTPProxy defines proxy for HTTP requests.
-	// Format: func(*Request) (*url.URL, error),
-	// or result of http.ProxyURL(HTTPProxy).
-	// By default, it is composed from ClientConfig.ProxyURL,
-	// if not set explicitly in ClientConfig struct
+	// Defines proxy for HTTP requests, such as for trackers. It's commonly set from the result of
+	// "net/http".ProxyURL(HTTPProxy).
 	HTTPProxy func(*http.Request) (*url.URL, error)
 	// HTTPUserAgent changes default UserAgent for HTTP requests
 	HTTPUserAgent string
@@ -150,7 +140,7 @@ func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
 
 func NewDefaultClientConfig() *ClientConfig {
 	cc := &ClientConfig{
-		HTTPUserAgent:                  DefaultHTTPUserAgent,
+		HTTPUserAgent:                  "Go-Torrent/1.0",
 		ExtendedHandshakeClientVersion: "go.torrent dev 20181121",
 		Bep20:                          "-GT0002-",
 		UpnpID:                         "anacrolix/torrent",

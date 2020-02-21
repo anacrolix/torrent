@@ -25,7 +25,7 @@ func (ret Peers) AppendFromTracker(ps []tracker.Peer) Peers {
 	for _, p := range ps {
 		_p := Peer{
 			Addr:   ipPortAddr{p.IP, p.Port},
-			Source: peerSourceTracker,
+			Source: PeerSourceTracker,
 		}
 		copy(_p.Id[:], p.ID)
 		ret = append(ret, _p)

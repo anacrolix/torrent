@@ -8,7 +8,7 @@ import (
 	"github.com/anacrolix/multiless"
 )
 
-func worseConn(l, r *connection) bool {
+func worseConn(l, r *PeerConn) bool {
 	less, ok := multiless.New().Bool(
 		l.useful(), r.useful()).CmpInt64(
 		l.lastHelpful().Sub(r.lastHelpful()).Nanoseconds()).CmpInt64(
@@ -22,7 +22,7 @@ func worseConn(l, r *connection) bool {
 }
 
 type worseConnSlice struct {
-	conns []*connection
+	conns []*PeerConn
 }
 
 var _ heap.Interface = &worseConnSlice{}
@@ -43,7 +43,7 @@ func (me *worseConnSlice) Pop() interface{} {
 }
 
 func (me *worseConnSlice) Push(x interface{}) {
-	me.conns = append(me.conns, x.(*connection))
+	me.conns = append(me.conns, x.(*PeerConn))
 }
 
 func (me worseConnSlice) Swap(i, j int) {

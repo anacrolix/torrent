@@ -105,7 +105,7 @@ func add(n int64, f func(*ConnStats) *Count) func(*ConnStats) {
 
 type connStatsReadWriter struct {
 	rw io.ReadWriter
-	c  *connection
+	c  *PeerConn
 }
 
 func (me connStatsReadWriter) Write(b []byte) (n int, err error) {

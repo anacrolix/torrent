@@ -9,8 +9,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-// The torrent's infohash. This is fixed and cannot change. It uniquely
-// identifies a torrent.
+// The Torrent's infohash. This is fixed and cannot change. It uniquely identifies a torrent.
 func (t *Torrent) InfoHash() metainfo.Hash {
 	return t.infoHash
 }
@@ -243,4 +242,12 @@ func (t *Torrent) AddTrackers(announceList [][]string) {
 
 func (t *Torrent) Piece(i pieceIndex) *Piece {
 	return t.piece(i)
+}
+
+func (t *Torrent) PeerConns() []*PeerConn {
+	ret := make([]*PeerConn, 0, len(t.conns))
+	for c := range t.conns {
+		ret = append(ret, c)
+	}
+	return ret
 }

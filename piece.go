@@ -61,7 +61,7 @@ type Piece struct {
 
 	// Connections that have written data to this piece since its last check.
 	// This can include connections that have closed.
-	dirtiers map[*connection]struct{}
+	dirtiers map[*PeerConn]struct{}
 }
 
 func (p *Piece) String() string {

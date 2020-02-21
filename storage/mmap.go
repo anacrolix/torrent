@@ -19,11 +19,11 @@ type mmapClientImpl struct {
 	pc      PieceCompletion
 }
 
-func NewMMap(baseDir string) ClientImpl {
+func NewMMap(baseDir string) ClientImplCloser {
 	return NewMMapWithCompletion(baseDir, pieceCompletionForDir(baseDir))
 }
 
-func NewMMapWithCompletion(baseDir string, completion PieceCompletion) ClientImpl {
+func NewMMapWithCompletion(baseDir string, completion PieceCompletion) *mmapClientImpl {
 	return &mmapClientImpl{
 		baseDir: baseDir,
 		pc:      completion,

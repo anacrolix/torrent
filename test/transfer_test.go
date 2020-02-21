@@ -24,8 +24,8 @@ type testClientTransferParams struct {
 	Readahead                  int64
 	SetReadahead               bool
 	ExportClientStatus         bool
-	LeecherStorage             func(string) storage.ClientImpl
-	SeederStorage              func(string) storage.ClientImpl
+	LeecherStorage             func(string) storage.ClientImplCloser
+	SeederStorage              func(string) storage.ClientImplCloser
 	SeederUploadRateLimiter    *rate.Limiter
 	LeecherDownloadRateLimiter *rate.Limiter
 	ConfigureSeeder            ConfigureClient
@@ -54,8 +54,9 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}
 	// cfg.ListenAddr = "localhost:4000"
 	if ps.SeederStorage != nil {
-		cfg.DefaultStorage = ps.SeederStorage(greetingTempDir)
-		defer cfg.DefaultStorage.Close()
+		storage := ps.SeederStorage(greetingTempDir)
+		defer storage.Close()
+		cfg.DefaultStorage = storage
 	} else {
 		cfg.DataDir = greetingTempDir
 	}
@@ -84,7 +85,9 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if ps.LeecherStorage == nil {
 		cfg.DataDir = leecherDataDir
 	} else {
-		cfg.DefaultStorage = ps.LeecherStorage(leecherDataDir)
+		storage := ps.LeecherStorage(leecherDataDir)
+		defer storage.Close()
+		cfg.DefaultStorage = storage
 	}
 	if ps.LeecherDownloadRateLimiter != nil {
 		cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
@@ -152,11 +155,11 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 type fileCacheClientStorageFactoryParams struct {
 	Capacity    int64
 	SetCapacity bool
-	Wrapper     func(*filecache.Cache) storage.ClientImpl
+	Wrapper     func(*filecache.Cache) storage.ClientImplCloser
 }
 
 func newFileCacheClientStorageFactory(ps fileCacheClientStorageFactoryParams) storageFactory {
-	return func(dataDir string) storage.ClientImpl {
+	return func(dataDir string) storage.ClientImplCloser {
 		fc, err := filecache.NewCache(dataDir)
 		if err != nil {
 			panic(err)
@@ -168,7 +171,7 @@ func newFileCacheClientStorageFactory(ps fileCacheClientStorageFactoryParams) st
 	}
 }
 
-type storageFactory func(string) storage.ClientImpl
+type storageFactory func(string) storage.ClientImplCloser
 
 func TestClientTransferDefault(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
@@ -197,7 +200,7 @@ func TestClientTransferRateLimitedDownload(t *testing.T) {
 	})
 }
 
-func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
+func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImplCloser {
 	return storage.NewResourcePieces(fc.AsResourceProvider())
 }
 
@@ -245,7 +248,7 @@ func TestClientTransferVarious(t *testing.T) {
 			// Seeder storage
 			for _, ss := range []struct {
 				name string
-				f    func(string) storage.ClientImpl
+				f    func(string) storage.ClientImplCloser
 			}{
 				{"File", storage.NewFile},
 				{"Mmap", storage.NewMMap},

@@ -16,7 +16,7 @@ type piecePerResource struct {
 	p resource.Provider
 }
 
-func NewResourcePieces(p resource.Provider) ClientImpl {
+func NewResourcePieces(p resource.Provider) ClientImplCloser {
 	return &piecePerResource{
 		p: p,
 	}

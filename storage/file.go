@@ -28,11 +28,11 @@ func infoHashPathMaker(baseDir string, info *metainfo.Info, infoHash metainfo.Ha
 }
 
 // All Torrent data stored in this baseDir
-func NewFile(baseDir string) ClientImpl {
+func NewFile(baseDir string) ClientImplCloser {
 	return NewFileWithCompletion(baseDir, pieceCompletionForDir(baseDir))
 }
 
-func NewFileWithCompletion(baseDir string, completion PieceCompletion) ClientImpl {
+func NewFileWithCompletion(baseDir string, completion PieceCompletion) *fileClientImpl {
 	return newFileWithCustomPathMakerAndCompletion(baseDir, nil, completion)
 }
 
@@ -46,7 +46,7 @@ func NewFileWithCustomPathMaker(baseDir string, pathMaker func(baseDir string, i
 	return newFileWithCustomPathMakerAndCompletion(baseDir, pathMaker, pieceCompletionForDir(baseDir))
 }
 
-func newFileWithCustomPathMakerAndCompletion(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string, completion PieceCompletion) ClientImpl {
+func newFileWithCustomPathMakerAndCompletion(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string, completion PieceCompletion) *fileClientImpl {
 	if pathMaker == nil {
 		pathMaker = defaultPathMaker
 	}

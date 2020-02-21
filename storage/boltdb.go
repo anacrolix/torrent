@@ -26,7 +26,7 @@ type boltDBTorrent struct {
 	ih metainfo.Hash
 }
 
-func NewBoltDB(filePath string) ClientImpl {
+func NewBoltDB(filePath string) ClientImplCloser {
 	db, err := bolt.Open(filepath.Join(filePath, "bolt.db"), 0600, &bolt.Options{
 		Timeout: time.Second,
 	})

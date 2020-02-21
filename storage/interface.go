@@ -6,10 +6,14 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
+type ClientImplCloser interface {
+	ClientImpl
+	Close() error
+}
+
 // Represents data storage for an unspecified torrent.
 type ClientImpl interface {
 	OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error)
-	Close() error
 }
 
 // Data storage bound to a torrent.

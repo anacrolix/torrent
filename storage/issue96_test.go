@@ -10,7 +10,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-func testMarkedCompleteMissingOnRead(t *testing.T, csf func(string) ClientImpl) {
+func testMarkedCompleteMissingOnRead(t *testing.T, csf func(string) ClientImplCloser) {
 	td, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(td)

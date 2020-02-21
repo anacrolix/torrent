@@ -28,8 +28,8 @@ func (t *Torrent) Info() *metainfo.Info {
 	return t.info
 }
 
-// Returns a Reader bound to the torrent's data. All read calls block until
-// the data requested is actually available.
+// Returns a Reader bound to the torrent's data. All read calls block until the data requested is
+// actually available. Note that you probably want to ensure the Torrent Info is available first.
 func (t *Torrent) NewReader() Reader {
 	r := reader{
 		mu:        t.cl.locker(),

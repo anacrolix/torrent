@@ -180,7 +180,7 @@ func (cn *PeerConn) peerHasAllPieces() (all bool, known bool) {
 	return bitmap.Flip(cn._peerPieces, 0, bitmap.BitIndex(cn.t.numPieces())).IsEmpty(), true
 }
 
-func (cn *PeerConn) mu() sync.Locker {
+func (cn *PeerConn) locker() *lockWithDeferreds {
 	return cn.t.cl.locker()
 }
 
@@ -570,15 +570,15 @@ func (cn *PeerConn) writer(keepAliveTimeout time.Duration) {
 		keepAliveTimer *time.Timer
 	)
 	keepAliveTimer = time.AfterFunc(keepAliveTimeout, func() {
-		cn.mu().Lock()
-		defer cn.mu().Unlock()
+		cn.locker().Lock()
+		defer cn.locker().Unlock()
 		if time.Since(lastWrite) >= keepAliveTimeout {
 			cn.tickleWriter()
 		}
 		keepAliveTimer.Reset(keepAliveTimeout)
 	})
-	cn.mu().Lock()
-	defer cn.mu().Unlock()
+	cn.locker().Lock()
+	defer cn.locker().Unlock()
 	defer cn.close()
 	defer keepAliveTimer.Stop()
 	frontBuf := new(bytes.Buffer)
@@ -605,9 +605,9 @@ func (cn *PeerConn) writer(keepAliveTimeout time.Duration) {
 		}
 		// Flip the buffers.
 		frontBuf, cn.writeBuffer = cn.writeBuffer, frontBuf
-		cn.mu().Unlock()
+		cn.locker().Unlock()
 		n, err := cn.w.Write(frontBuf.Bytes())
-		cn.mu().Lock()
+		cn.locker().Lock()
 		if n != 0 {
 			lastWrite = time.Now()
 			keepAliveTimer.Reset(keepAliveTimeout)
@@ -1500,6 +1500,13 @@ func (cn *PeerConn) fastest() bool {
 
 func (cn *PeerConn) peerMaxRequests() int {
 	return cn.PeerMaxRequests
+}
+
+// Returns the pieces the peer has claimed to have.
+func (cn *PeerConn) PeerPieces() bitmap.Bitmap {
+	cn.locker().RLock()
+	defer cn.locker().RUnlock()
+	return cn.peerPieces()
 }
 
 func (cn *PeerConn) peerPieces() bitmap.Bitmap {

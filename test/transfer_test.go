@@ -129,6 +129,12 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		r.SetReadahead(ps.Readahead)
 	}
 	assertReadAllGreeting(t, r)
+	assert.NotEmpty(t, seederTorrent.PeerConns())
+	leecherPeerConns := leecherTorrent.PeerConns()
+	assert.NotEmpty(t, leecherPeerConns)
+	for _, pc := range leecherPeerConns {
+		assert.EqualValues(t, leecherTorrent.Info().NumPieces(), pc.PeerPieces().Len())
+	}
 
 	seederStats := seederTorrent.Stats()
 	assert.True(t, 13 <= seederStats.BytesWrittenData.Int64())

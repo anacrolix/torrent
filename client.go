@@ -1394,22 +1394,10 @@ func (cl *Client) unlock() {
 	cl._mu.Unlock()
 }
 
-func (cl *Client) locker() sync.Locker {
-	return clientLocker{cl}
+func (cl *Client) locker() *lockWithDeferreds {
+	return &cl._mu
 }
 
 func (cl *Client) String() string {
 	return fmt.Sprintf("<%[1]T %[1]p>", cl)
-}
-
-type clientLocker struct {
-	*Client
-}
-
-func (cl clientLocker) Lock() {
-	cl.lock()
-}
-
-func (cl clientLocker) Unlock() {
-	cl.unlock()
 }

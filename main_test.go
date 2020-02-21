@@ -4,6 +4,8 @@ import (
 	"log"
 	"os"
 	"testing"
+
+	_ "github.com/anacrolix/envpprof"
 )
 
 func init() {

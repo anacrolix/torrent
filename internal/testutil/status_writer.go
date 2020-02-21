@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync"
 
+	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
 )
 

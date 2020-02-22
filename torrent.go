@@ -40,7 +40,9 @@ type Torrent struct {
 	cl     *Client
 	logger log.Logger
 
-	networkingEnabled bool
+	networkingEnabled      bool
+	dataDownloadDisallowed bool
+	userOnWriteChunkErr    func(error)
 
 	// Determines what chunks to request from peers.
 	requestStrategy requestStrategy
@@ -1809,4 +1811,43 @@ func (cb torrentRequestStrategyCallbacks) requestTimedOut(r request) {
 
 func (t *Torrent) requestStrategyCallbacks() requestStrategyCallbacks {
 	return torrentRequestStrategyCallbacks{t}
+}
+
+func (t *Torrent) onWriteChunkErr(err error) {
+	if t.userOnWriteChunkErr != nil {
+		go t.userOnWriteChunkErr(err)
+		return
+	}
+	t.disallowDataDownloadLocked()
+}
+
+func (t *Torrent) DisallowDataDownload() {
+	t.cl.lock()
+	defer t.cl.unlock()
+	t.disallowDataDownloadLocked()
+}
+
+func (t *Torrent) disallowDataDownloadLocked() {
+	log.Printf("disallowing data download")
+	t.dataDownloadDisallowed = true
+	for c := range t.conns {
+		c.updateRequests()
+	}
+}
+
+func (t *Torrent) AllowDataDownload() {
+	t.cl.lock()
+	defer t.cl.unlock()
+	log.Printf("AllowDataDownload")
+	t.dataDownloadDisallowed = false
+	for c := range t.conns {
+		c.updateRequests()
+	}
+
+}
+
+func (t *Torrent) SetOnWriteChunkError(f func(error)) {
+	t.cl.lock()
+	defer t.cl.unlock()
+	t.userOnWriteChunkErr = f
 }

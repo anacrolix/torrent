@@ -509,7 +509,7 @@ func (cn *PeerConn) request(r request, mw messageWriter) bool {
 }
 
 func (cn *PeerConn) fillWriteBuffer(msg func(pp.Message) bool) {
-	if !cn.t.networkingEnabled {
+	if !cn.t.networkingEnabled || cn.t.dataDownloadDisallowed {
 		if !cn.setInterested(false, msg) {
 			return
 		}
@@ -1246,9 +1246,10 @@ func (c *PeerConn) receiveChunk(msg *pp.Message) error {
 	piece.decrementPendingWrites()
 
 	if err != nil {
-		panic(fmt.Sprintf("error writing chunk: %v", err))
+		c.logger.Printf("error writing received chunk %v: %v", req, err)
 		t.pendRequest(req)
-		t.updatePieceCompletion(pieceIndex(msg.Index))
+		//t.updatePieceCompletion(pieceIndex(msg.Index))
+		t.onWriteChunkErr(err)
 		return nil
 	}
 

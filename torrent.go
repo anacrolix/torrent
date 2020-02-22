@@ -726,7 +726,7 @@ func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite
 	}
-	return
+	return err
 }
 
 func (t *Torrent) bitfield() (bf []bool) {

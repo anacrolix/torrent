@@ -821,7 +821,7 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 	t, err := cl.receiveHandshakes(c)
 	if err != nil {
 		log.Fmsg(
-			"error receiving handshakes: %s", err,
+			"error receiving handshakes on %v: %s", c, err,
 		).AddValue(
 			debugLogValue,
 		).Add(

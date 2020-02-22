@@ -522,8 +522,7 @@ func (cn *PeerConn) fillWriteBuffer(msg func(pp.Message) bool) {
 				}
 			}
 		}
-	}
-	if len(cn.requests) <= cn.requestsLowWater {
+	} else if len(cn.requests) <= cn.requestsLowWater {
 		filledBuffer := false
 		cn.iterPendingPieces(func(pieceIndex pieceIndex) bool {
 			cn.iterPendingRequests(pieceIndex, func(r request) bool {
@@ -1236,12 +1235,11 @@ func (c *PeerConn) receiveChunk(msg *pp.Message) error {
 		defer cl.lock()
 		concurrentChunkWrites.Add(1)
 		defer concurrentChunkWrites.Add(-1)
-		// Write the chunk out. Note that the upper bound on chunk writing
-		// concurrency will be the number of connections. We write inline with
-		// receiving the chunk (with this lock dance), because we want to
-		// handle errors synchronously and I haven't thought of a nice way to
-		// defer any concurrency to the storage and have that notify the
-		// client of errors. TODO: Do that instead.
+		// Write the chunk out. Note that the upper bound on chunk writing concurrency will be the
+		// number of connections. We write inline with receiving the chunk (with this lock dance),
+		// because we want to handle errors synchronously and I haven't thought of a nice way to
+		// defer any concurrency to the storage and have that notify the client of errors. TODO: Do
+		// that instead.
 		return t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
 	}()
 

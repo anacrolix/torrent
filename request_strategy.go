@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/prioritybitmap"
 
@@ -36,15 +35,6 @@ type requestStrategyConnection interface {
 	totalExpectingTime() time.Duration
 	peerMaxRequests() int
 	chunksReceivedWhileExpecting() int64
-}
-
-type requestStrategyDefaults struct{}
-
-func (requestStrategyDefaults) hooks() requestStrategyHooks {
-	return requestStrategyHooks{
-		sentRequest:    func(request) {},
-		deletedRequest: func(request) {},
-	}
 }
 
 type requestStrategy interface {
@@ -145,10 +135,6 @@ func (rs requestStrategyDuplicateRequestTimeout) hooks() requestStrategyHooks {
 	}
 }
 
-func (requestStrategyDefaults) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
-	return prio
-}
-
 func (rs requestStrategyDuplicateRequestTimeout) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
 	for i := pp.Integer(0); i < pp.Integer(p.numChunks()); i++ {
 		if p.dirtyChunks().Get(bitmap.BitIndex(i)) {
@@ -163,18 +149,6 @@ func (rs requestStrategyDuplicateRequestTimeout) iterUndirtiedChunks(p requestSt
 		}
 	}
 	return true
-}
-
-func (requestStrategyDefaults) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
-	chunkIndices := p.dirtyChunks().Copy()
-	chunkIndices.FlipRange(0, bitmap.BitIndex(p.numChunks()))
-	return iter.ForPerm(chunkIndices.Len(), func(i int) bool {
-		ci, err := chunkIndices.RB.Select(uint32(i))
-		if err != nil {
-			panic(err)
-		}
-		return f(p.chunkIndexRequest(pp.Integer(ci)).chunkSpec)
-	})
 }
 
 func (requestStrategyFuzzing) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {
@@ -210,10 +184,6 @@ func (rs requestStrategyFastest) iterPendingPieces(cn requestStrategyConnection,
 	return defaultIterPendingPieces(rs, cn, cb)
 }
 
-func (requestStrategyDefaults) shouldRequestWithoutBias(cn requestStrategyConnection) bool {
-	return false
-}
-
 func (rs requestStrategyDuplicateRequestTimeout) onSentRequest(r request) {
 	rs.lastRequested[r] = time.AfterFunc(rs.duplicateRequestTimeout, func() {
 		rs.timeoutLocker.Lock()
@@ -244,12 +214,6 @@ func (rs requestStrategyDuplicateRequestTimeout) nominalMaxRequests(cn requestSt
 		),
 	))
 }
-func (requestStrategyDefaults) nominalMaxRequests(cn requestStrategyConnection) int {
-	return int(
-		max(64,
-			cn.stats().ChunksReadUseful.Int64()-(cn.stats().ChunksRead.Int64()-cn.stats().ChunksReadUseful.Int64())))
-}
-
 func (rs requestStrategyDuplicateRequestTimeout) wouldDuplicateRecent(r request) bool {
 	// This piece has been requested on another connection, and the duplicate request timer is still
 	// running.

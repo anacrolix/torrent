@@ -28,7 +28,7 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-func torrentBar(t *torrent.Torrent) {
+func torrentBar(t *torrent.Torrent, pieceStates bool) {
 	go func() {
 		if t.Info() == nil {
 			fmt.Printf("getting info for %q\n", t.Name())
@@ -54,7 +54,9 @@ func torrentBar(t *torrent.Torrent) {
 				t.NumPieces(),
 				partialPieces,
 			)
-			//fmt.Println(psrs)
+			if pieceStates {
+				fmt.Println(psrs)
+			}
 			time.Sleep(time.Second)
 		}
 	}()
@@ -104,7 +106,7 @@ func addTorrents(client *torrent.Client) error {
 			return xerrors.Errorf("adding torrent for %q: %w", arg, err)
 		}
 		if flags.Progress {
-			torrentBar(t)
+			torrentBar(t, flags.PieceStates)
 		}
 		t.AddPeers(func() (ret []torrent.Peer) {
 			for _, ta := range flags.TestPeer {
@@ -134,6 +136,7 @@ var flags = struct {
 	Stats           *bool
 	PublicIP        net.IP
 	Progress        bool
+	PieceStates     bool
 	Quiet           bool `help:"discard client logging"`
 	Dht             bool
 	tagflag.StartPos

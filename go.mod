@@ -9,7 +9,7 @@ require (
 	github.com/anacrolix/log v0.6.0
 	github.com/anacrolix/missinggo v1.2.1
 	github.com/anacrolix/missinggo/perf v1.0.0
-	github.com/anacrolix/missinggo/v2 v2.4.0
+	github.com/anacrolix/missinggo/v2 v2.4.1-0.20200227072623-f02f6484f997
 	github.com/anacrolix/multiless v0.0.0-20191223025854-070b7994e841
 	github.com/anacrolix/sync v0.2.0
 	github.com/anacrolix/tagflag v1.0.1
@@ -19,6 +19,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.0.0
+	github.com/elliotchance/orderedmap v1.2.0
 	github.com/etcd-io/bbolt v1.3.3
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/google/btree v1.0.0

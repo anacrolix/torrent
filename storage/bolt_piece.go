@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/binary"
+	"io"
 
 	"github.com/anacrolix/missinggo/x"
 	bolt "github.com/etcd-io/bbolt"
@@ -46,15 +47,16 @@ func (me *boltDBPiece) ReadAt(b []byte, off int64) (n int, err error) {
 	err = me.db.View(func(tx *bolt.Tx) error {
 		db := tx.Bucket(dataBucketKey)
 		if db == nil {
-			return nil
+			return io.EOF
 		}
 		ci := off / chunkSize
 		off %= chunkSize
 		for len(b) != 0 {
 			ck := me.chunkKey(int(ci))
 			_b := db.Get(ck[:])
+			// If the chunk is the wrong size, assume it's missing as we can't rely on the data.
 			if len(_b) != chunkSize {
-				break
+				return io.EOF
 			}
 			n1 := copy(b, _b[off:])
 			off = 0

@@ -36,5 +36,9 @@ func TestShortFile(t *testing.T) {
 	p := info.Piece(0)
 	n, err := io.Copy(&buf, io.NewSectionReader(ts.Piece(p), 0, p.Length()))
 	assert.EqualValues(t, 1, n)
-	assert.Equal(t, io.ErrUnexpectedEOF, err)
+	switch err {
+	case nil, io.EOF:
+	default:
+		t.Errorf("expected nil or EOF error from truncated piece, got %v", err)
+	}
 }

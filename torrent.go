@@ -1682,7 +1682,9 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 	p := t.piece(index)
 	sum, copyErr := t.hashPiece(index)
 	correct := sum == *p.hash
-	if !correct {
+	switch copyErr {
+	case nil, io.EOF:
+	default:
 		log.Fmsg("piece %v (%s) hash failure copy error: %v", p, p.hash.HexString(), copyErr).Log(t.logger)
 	}
 	t.storageLock.RUnlock()

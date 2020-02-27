@@ -169,10 +169,6 @@ func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 				continue
 			}
 			err = err1
-			if err == io.EOF {
-				// Lies.
-				err = io.ErrUnexpectedEOF
-			}
 			return
 		}
 		off -= fi.Length

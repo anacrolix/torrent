@@ -93,7 +93,6 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
 	}
 	cfg.Seed = false
-	//cfg.Debug = true
 	if ps.ConfigureLeecher.Config != nil {
 		ps.ConfigureLeecher.Config(cfg)
 	}

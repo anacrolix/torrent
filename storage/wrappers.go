@@ -69,16 +69,10 @@ func (p Piece) ReadAt(b []byte, off int64) (n int, err error) {
 	if n > len(b) {
 		panic(n)
 	}
-	off += int64(n)
-	if err == io.EOF && off < p.mip.Length() {
-		err = io.ErrUnexpectedEOF
-	}
-	if err == nil && off >= p.mip.Length() {
-		err = io.EOF
-	}
 	if n == 0 && err == nil {
-		err = io.ErrUnexpectedEOF
+		panic("io.Copy will get stuck")
 	}
+	off += int64(n)
 	if off < p.mip.Length() && err != nil {
 		p.MarkNotComplete()
 	}

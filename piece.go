@@ -256,3 +256,7 @@ func (p *Piece) requestStrategyPiece() requestStrategyPiece {
 func (p *Piece) dirtyChunks() bitmap.Bitmap {
 	return p._dirtyChunks
 }
+
+func (p *Piece) State() PieceState {
+	return p.t.PieceState(p.index)
+}

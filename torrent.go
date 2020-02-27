@@ -503,7 +503,7 @@ func (t *Torrent) newMetadataExtensionMessage(c *PeerConn, msgType int, piece in
 	}
 }
 
-func (t *Torrent) pieceStateRuns() (ret []PieceStateRun) {
+func (t *Torrent) pieceStateRuns() (ret PieceStateRuns) {
 	rle := missinggo.NewRunLengthEncoder(func(el interface{}, count uint64) {
 		ret = append(ret, PieceStateRun{
 			PieceState: el.(PieceState),
@@ -518,7 +518,7 @@ func (t *Torrent) pieceStateRuns() (ret []PieceStateRun) {
 }
 
 // Produces a small string representing a PieceStateRun.
-func pieceStateRunStatusChars(psr PieceStateRun) (ret string) {
+func (psr PieceStateRun) String() (ret string) {
 	ret = fmt.Sprintf("%d", psr.Length)
 	ret += func() string {
 		switch psr.Priority {
@@ -576,11 +576,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	}())
 	if t.info != nil {
 		fmt.Fprintf(w, "Num Pieces: %d (%d completed)\n", t.numPieces(), t.numPiecesCompleted())
-		fmt.Fprint(w, "Piece States:")
-		for _, psr := range t.pieceStateRuns() {
-			w.Write([]byte(" "))
-			w.Write([]byte(pieceStateRunStatusChars(psr)))
-		}
+		fmt.Fprintf(w, "Piece States: %s", t.pieceStateRuns())
 		fmt.Fprintln(w)
 	}
 	fmt.Fprintf(w, "Reader Pieces:")

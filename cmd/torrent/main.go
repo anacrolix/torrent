@@ -13,14 +13,13 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/dustin/go-humanize"
 	"golang.org/x/xerrors"
 
 	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
-	humanize "github.com/dustin/go-humanize"
-	"github.com/gosuri/uiprogress"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent"
@@ -29,39 +28,33 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-var progress = uiprogress.New()
-
 func torrentBar(t *torrent.Torrent) {
-	bar := progress.AddBar(1)
-	bar.AppendCompleted()
-	bar.AppendFunc(func(*uiprogress.Bar) (ret string) {
-		select {
-		case <-t.GotInfo():
-		default:
-			return "getting info"
-		}
-		if t.Seeding() {
-			return "seeding"
-		} else if t.BytesCompleted() == t.Info().TotalLength() {
-			return "completed"
-		} else {
-			return fmt.Sprintf("downloading (%s/%s)", humanize.Bytes(uint64(t.BytesCompleted())), humanize.Bytes(uint64(t.Info().TotalLength())))
-		}
-	})
-	bar.PrependFunc(func(*uiprogress.Bar) string {
-		return t.Name()
-	})
 	go func() {
-		<-t.GotInfo()
-		tl := int(t.Info().TotalLength())
-		if tl == 0 {
-			bar.Set(1)
-			return
+		if t.Info() == nil {
+			fmt.Printf("getting info for %q\n", t.Name())
+			<-t.GotInfo()
 		}
-		bar.Total = tl
 		for {
-			bc := t.BytesCompleted()
-			bar.Set(int(bc))
+			var completedPieces, partialPieces int
+			psrs := t.PieceStateRuns()
+			for _, r := range psrs {
+				if r.Complete {
+					completedPieces += r.Length
+				}
+				if r.Partial {
+					partialPieces += r.Length
+				}
+			}
+			fmt.Printf(
+				"downloading %q: %s/%s, %d/%d pieces completed (%d partial)\n",
+				t.Name(),
+				humanize.Bytes(uint64(t.BytesCompleted())),
+				humanize.Bytes(uint64(t.Length())),
+				completedPieces,
+				t.NumPieces(),
+				partialPieces,
+			)
+			//fmt.Println(psrs)
 			time.Sleep(time.Second)
 		}
 	}()
@@ -110,7 +103,9 @@ func addTorrents(client *torrent.Client) error {
 		if err != nil {
 			return xerrors.Errorf("adding torrent for %q: %w", arg, err)
 		}
-		torrentBar(t)
+		if flags.Progress {
+			torrentBar(t)
+		}
 		t.AddPeers(func() (ret []torrent.Peer) {
 			for _, ta := range flags.TestPeer {
 				ret = append(ret, torrent.Peer{
@@ -182,9 +177,6 @@ func main() {
 func mainErr() error {
 	tagflag.Parse(&flags)
 	defer envpprof.Stop()
-	if stdoutAndStderrAreSameFile() {
-		log.Default = log.Logger{log.StreamLogger{W: progress.Bypass(), Fmt: log.LineFormatter}}
-	}
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableAcceptRateLimiting = true
 	clientConfig.NoDHT = !flags.Dht
@@ -237,9 +229,6 @@ func mainErr() error {
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})
-	if flags.Progress {
-		progress.Start()
-	}
 	addTorrents(client)
 	if client.WaitAll() {
 		log.Print("downloaded ALL the torrents")

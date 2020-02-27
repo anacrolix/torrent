@@ -22,7 +22,6 @@ require (
 	github.com/etcd-io/bbolt v1.3.3
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/google/btree v1.0.0
-	github.com/gosuri/uiprogress v0.0.1
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible
 	github.com/pkg/errors v0.9.1

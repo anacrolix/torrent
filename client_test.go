@@ -424,10 +424,9 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	cfg := TestingConfig()
 	cfg.ListenHost = func(string) string { return "" }
 	cfg.NoDHT = false
-	cfg.DhtStartingNodes = func() ([]dht.Addr, error) { return nil, nil }
-	// For now, we want to just jam the nodes into the table, without
-	// verifying them first. Also the DHT code doesn't support mixing secure
-	// and insecure nodes if security is enabled (yet).
+	cfg.DhtStartingNodes = func(string) dht.StartingNodesGetter { return func() ([]dht.Addr, error) { return nil, nil } }
+	// For now, we want to just jam the nodes into the table, without verifying them first. Also the
+	// DHT code doesn't support mixing secure and insecure nodes if security is enabled (yet).
 	// cfg.DHTConfig.NoSecurity = true
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)

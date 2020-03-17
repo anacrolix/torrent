@@ -3,7 +3,7 @@ module github.com/anacrolix/torrent
 require (
 	bazil.org/fuse v0.0.0-20180421153158-65cc252bf669
 	github.com/alexflint/go-arg v1.2.0
-	github.com/anacrolix/dht/v2 v2.5.0
+	github.com/anacrolix/dht/v2 v2.5.1-0.20200317023935-129f05e9b752
 	github.com/anacrolix/envpprof v1.1.0
 	github.com/anacrolix/go-libutp v1.0.2
 	github.com/anacrolix/log v0.6.0

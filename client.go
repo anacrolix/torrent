@@ -315,7 +315,7 @@ func (cl *Client) newAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err
 			}
 			return cl.config.PublicIp4
 		}(),
-		StartingNodes:      cl.config.DhtStartingNodes,
+		StartingNodes:      cl.config.DhtStartingNodes(conn.LocalAddr().Network()),
 		ConnectionTracking: cl.config.ConnTracker,
 		OnQuery:            cl.config.DHTOnQuery,
 		Logger:             cl.logger.WithValues("dht", conn.LocalAddr().String()),

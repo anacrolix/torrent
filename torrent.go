@@ -1384,7 +1384,7 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 		cl.unlock()
 		err := t.announceToDht(true, s)
 		if err != nil {
-			t.logger.Printf("error announcing %q to DHT: %s", t, err)
+			t.logger.WithValues(log.Warning).Printf("error announcing %q to DHT: %s", t, err)
 		}
 	}
 }

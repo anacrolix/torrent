@@ -40,7 +40,8 @@ There are several web-frontends and Android clients among the known public proje
  * [libtorrent](https://gitlab.com/axet/libtorrent)
  * [Remote-Torrent](https://github.com/BruceWangNo1/remote-torrent)
  * [ANT-Downloader](https://github.com/anatasluo/ant)
- 
+ * [Go-PeersToHTTP](https://github.com/WinPooh32/peerstohttp)
+
 ## Help
 
 Communication about the project is primarily through [Gitter](https://gitter.im/anacrolix/torrent) and the [issue tracker](https://github.com/anacrolix/torrent/issues).

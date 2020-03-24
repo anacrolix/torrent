@@ -54,11 +54,9 @@ func (f *File) bytesCompleted() int64 {
 	return f.length - f.bytesLeft()
 }
 
-func (f *File) bytesLeft() (left int64) {
-	pieceSize := int64(f.t.usualPieceSize())
-	firstPieceIndex := f.firstPieceIndex()
-	endPieceIndex := f.endPieceIndex() - 1
-	bitmap.Flip(f.t._completedPieces, firstPieceIndex+1, endPieceIndex).IterTyped(func(piece int) bool {
+func fileBytesLeft(pieceSize int64, firstPieceIndex int, endPieceIndex int, fileOffset int64, fileLength int64, completedPieces bitmap.Bitmap) (left int64) {
+	endPieceIndex--
+	bitmap.Flip(completedPieces, firstPieceIndex+1, endPieceIndex).IterTyped(func(piece int) bool {
 		if piece >= endPieceIndex {
 			return false
 		}
@@ -67,13 +65,17 @@ func (f *File) bytesLeft() (left int64) {
 		}
 		return true
 	})
-	if !f.t.pieceComplete(firstPieceIndex) {
-		left += pieceSize - (f.offset % pieceSize)
+	if !completedPieces.Get(firstPieceIndex) {
+		left += pieceSize - (fileOffset % pieceSize)
 	}
-	if !f.t.pieceComplete(endPieceIndex) {
-		left += (f.offset + f.length) % pieceSize
+	if !completedPieces.Get(endPieceIndex) {
+		left += (fileOffset + fileLength) % pieceSize
 	}
 	return
+}
+
+func (f *File) bytesLeft() (left int64) {
+	return fileBytesLeft(int64(f.t.usualPieceSize()), f.firstPieceIndex(), f.endPieceIndex(), f.offset, f.length, f.t._completedPieces)
 }
 
 // The relative file path for a multi-file torrent, and the torrent name for a

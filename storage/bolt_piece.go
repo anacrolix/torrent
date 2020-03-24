@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/anacrolix/missinggo/x"
-	bolt "github.com/etcd-io/bbolt"
+	bolt "go.etcd.io/bbolt"
 
 	"github.com/anacrolix/torrent/metainfo"
 )

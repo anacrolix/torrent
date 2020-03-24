@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	bolt "go.etcd.io/bbolt"
+	"go.etcd.io/bbolt"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -21,7 +21,7 @@ var (
 )
 
 type boltPieceCompletion struct {
-	db *bolt.DB
+	db *bbolt.DB
 }
 
 var _ PieceCompletion = (*boltPieceCompletion)(nil)
@@ -29,7 +29,7 @@ var _ PieceCompletion = (*boltPieceCompletion)(nil)
 func NewBoltPieceCompletion(dir string) (ret PieceCompletion, err error) {
 	os.MkdirAll(dir, 0770)
 	p := filepath.Join(dir, ".torrent.bolt.db")
-	db, err := bolt.Open(p, 0660, &bolt.Options{
+	db, err := bbolt.Open(p, 0660, &bbolt.Options{
 		Timeout: time.Second,
 	})
 	if err != nil {
@@ -41,7 +41,7 @@ func NewBoltPieceCompletion(dir string) (ret PieceCompletion, err error) {
 }
 
 func (me boltPieceCompletion) Get(pk metainfo.PieceKey) (cn Completion, err error) {
-	err = me.db.View(func(tx *bolt.Tx) error {
+	err = me.db.View(func(tx *bbolt.Tx) error {
 		cb := tx.Bucket(completionBucketKey)
 		if cb == nil {
 			return nil
@@ -67,7 +67,7 @@ func (me boltPieceCompletion) Get(pk metainfo.PieceKey) (cn Completion, err erro
 }
 
 func (me boltPieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
-	return me.db.Update(func(tx *bolt.Tx) error {
+	return me.db.Update(func(tx *bbolt.Tx) error {
 		c, err := tx.CreateBucketIfNotExists(completionBucketKey)
 		if err != nil {
 			return err

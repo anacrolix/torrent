@@ -62,21 +62,24 @@ func fileBytesLeft(
 	fileLength int64,
 	torrentCompletedPieces bitmap.Bitmap,
 ) (left int64) {
-	fileEndPieceIndex--
-	bitmap.Flip(torrentCompletedPieces, fileFirstPieceIndex+1, fileEndPieceIndex).IterTyped(func(piece int) bool {
-		if piece >= fileEndPieceIndex {
-			return false
+	numPiecesSpanned := fileEndPieceIndex - fileFirstPieceIndex
+	switch numPiecesSpanned {
+	case 0:
+	case 1:
+		if !torrentCompletedPieces.Get(fileFirstPieceIndex) {
+			left += fileLength
 		}
-		if piece > fileFirstPieceIndex {
-			left += torrentUsualPieceSize
+	default:
+		if !torrentCompletedPieces.Get(fileFirstPieceIndex) {
+			left += torrentUsualPieceSize - (fileTorrentOffset % torrentUsualPieceSize)
 		}
-		return true
-	})
-	if !torrentCompletedPieces.Get(fileFirstPieceIndex) {
-		left += torrentUsualPieceSize - (fileTorrentOffset % torrentUsualPieceSize)
-	}
-	if !torrentCompletedPieces.Get(fileEndPieceIndex) {
-		left += (fileTorrentOffset + fileLength) % torrentUsualPieceSize
+		if !torrentCompletedPieces.Get(fileEndPieceIndex - 1) {
+			left += fileTorrentOffset + fileLength - int64(fileEndPieceIndex-1)*torrentUsualPieceSize
+		}
+		completedMiddlePieces := torrentCompletedPieces.Copy()
+		completedMiddlePieces.RemoveRange(0, fileFirstPieceIndex+1)
+		completedMiddlePieces.RemoveRange(fileEndPieceIndex-1, bitmap.ToEnd)
+		left += int64(numPiecesSpanned-2-completedMiddlePieces.Len()) * torrentUsualPieceSize
 	}
 	return
 }

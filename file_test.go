@@ -40,19 +40,31 @@ func (me testFileBytesLeft) Run(t *testing.T) {
 }
 
 func TestFileBytesLeft(t *testing.T) {
+
 	testFileBytesLeft{
-		usualPieceSize:  2,
+		usualPieceSize:  3,
 		firstPieceIndex: 1,
 		endPieceIndex:   1,
 		fileOffset:      1,
+		fileLength:      0,
+		expected:        0,
+		name:            "ZeroLengthFile",
+	}.Run(t)
+
+	testFileBytesLeft{
+		usualPieceSize:  2,
+		firstPieceIndex: 1,
+		endPieceIndex:   2,
+		fileOffset:      1,
 		fileLength:      1,
 		expected:        1,
+		name:            "EndOfSecondPiece",
 	}.Run(t)
 
 	testFileBytesLeft{
 		usualPieceSize:  3,
 		firstPieceIndex: 0,
-		endPieceIndex:   0,
+		endPieceIndex:   1,
 		fileOffset:      1,
 		fileLength:      1,
 		expected:        1,
@@ -62,10 +74,44 @@ func TestFileBytesLeft(t *testing.T) {
 	testFileBytesLeft{
 		usualPieceSize:  3,
 		firstPieceIndex: 0,
-		endPieceIndex:   0,
+		endPieceIndex:   1,
 		fileOffset:      1,
 		fileLength:      1,
 		expected:        1,
 		name:            "LandLocked",
+	}.Run(t)
+
+	testFileBytesLeft{
+		usualPieceSize:  3,
+		firstPieceIndex: 1,
+		endPieceIndex:   3,
+		fileOffset:      4,
+		fileLength:      4,
+		expected:        4,
+		name:            "TwoPieces",
+	}.Run(t)
+
+	testFileBytesLeft{
+		usualPieceSize:  3,
+		firstPieceIndex: 1,
+		endPieceIndex:   4,
+		fileOffset:      5,
+		fileLength:      7,
+		expected:        7,
+		name:            "ThreePieces",
+	}.Run(t)
+
+	testFileBytesLeft{
+		usualPieceSize:  3,
+		firstPieceIndex: 1,
+		endPieceIndex:   4,
+		fileOffset:      5,
+		fileLength:      7,
+		expected:        0,
+		completedPieces: func() (ret bitmap.Bitmap) {
+			ret.AddRange(0, 5)
+			return
+		}(),
+		name: "ThreePiecesCompletedAll",
 	}.Run(t)
 }

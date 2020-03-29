@@ -2,8 +2,11 @@ version: 2
 jobs:
   build:
     machine: true
+    # This would be for if we didn't have machine: true. Could help with circleci local execute, which doesn't support VMs?
+    # docker:
+    #   - image: cimg/go:1.13
     environment:
-      GO_BRANCH: release-branch.go1.13
+      GO_BRANCH: release-branch.go1.14
     steps:
       - run: echo $CIRCLE_WORKING_DIRECTORY
       - run: echo $PWD
@@ -11,7 +14,7 @@ jobs:
       - run: echo 'export GOPATH=$HOME/go' >> $BASH_ENV
       - run: echo 'export PATH="$GOPATH/bin:$PATH"' >> $BASH_ENV
       - run: echo $GOPATH
-      - run: which go
+      - run: which go || sudo apt install golang-go
       - run: go version
       - run: |
           cd /usr/local

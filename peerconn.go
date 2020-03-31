@@ -85,13 +85,14 @@ type PeerConn struct {
 	// response.
 	metadataRequests []bool
 	sentHaves        bitmap.Bitmap
+	pexSeq           int
 
 	// Stuff controlled by the remote peer.
-	PeerID             PeerID
-	peerInterested     bool
-	peerChoking        bool
-	peerRequests       map[request]struct{}
-	PeerExtensionBytes pp.PeerExtensionBits
+	PeerID                PeerID
+	peerInterested        bool
+	peerChoking           bool
+	peerRequests          map[request]struct{}
+	PeerExtensionBytes    pp.PeerExtensionBits
 	PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
 	PeerListenPort        int
 	// The pieces the peer has claimed to have.
@@ -1491,6 +1492,11 @@ func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
 		f |= pp.PexSupportsUtp
 	}
 	return f
+}
+
+func (c *PeerConn) pexEvent(t pexEventType) pexEvent {
+	f := c.pexPeerFlags()
+	return pexEvent{t, c.remoteAddr, f}
 }
 
 func (c *PeerConn) String() string {

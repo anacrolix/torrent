@@ -29,77 +29,138 @@ func TestEmptyPexMsg(t *testing.T) {
 	require.NoError(t, bencode.Unmarshal(b, &pm))
 }
 
-func TestPexAppendAdded(t *testing.T) {
+func TestPexAdd(t *testing.T) {
+	addrs4 := []krpc.NodeAddr{
+		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4747}, // 0
+		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4748}, // 1
+		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 2), Port: 4747}, // 2
+		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 2), Port: 4748}, // 3
+	}
+	addrs6 := []krpc.NodeAddr{
+		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4747}, // 0
+		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4748}, // 1
+		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4749}, // 2
+		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4750}, // 3
+	}
+	f := PexPrefersEncryption | PexOutgoingConn
+
 	t.Run("ipv4", func(t *testing.T) {
-		addr := krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4747}
-		f := PexPrefersEncryption | PexOutgoingConn
-		xm := PexMsg{}
-		xm.AppendAdded(addr, f)
-		require.EqualValues(t, len(xm.Added), 1)
-		require.EqualValues(t, len(xm.AddedFlags), 1)
-		require.EqualValues(t, len(xm.Added6), 0)
-		require.EqualValues(t, len(xm.Added6Flags), 0)
-		require.True(t, xm.Added[0].IP.Equal(addr.IP), "IPs should match")
-		require.EqualValues(t, xm.Added[0].Port, addr.Port)
-		require.EqualValues(t, xm.AddedFlags[0], f)
+		addrs := addrs4
+		m := new(PexMsg)
+		m.Drop(addrs[0])
+		m.Add(addrs[1], f)
+		for _, addr := range addrs {
+			m.Add(addr, f)
+		}
+		targ := &PexMsg{
+			Added: krpc.CompactIPv4NodeAddrs{
+				addrs[1],
+				addrs[2],
+				addrs[3],
+			},
+			AddedFlags: []PexPeerFlags{f, f, f},
+			Dropped:    krpc.CompactIPv4NodeAddrs{},
+		}
+		require.EqualValues(t, targ, m)
 	})
 	t.Run("ipv6", func(t *testing.T) {
-		addr := krpc.NodeAddr{IP: net.IPv6loopback, Port: 4747}
-		f := PexPrefersEncryption | PexOutgoingConn
-		xm := PexMsg{}
-		xm.AppendAdded(addr, f)
-		require.EqualValues(t, len(xm.Added), 0)
-		require.EqualValues(t, len(xm.AddedFlags), 0)
-		require.EqualValues(t, len(xm.Added6), 1)
-		require.EqualValues(t, len(xm.Added6Flags), 1)
-		require.True(t, xm.Added6[0].IP.Equal(addr.IP), "IPs should match")
-		require.EqualValues(t, xm.Added6[0].Port, addr.Port)
-		require.EqualValues(t, xm.Added6Flags[0], f)
+		addrs := addrs6
+		m := new(PexMsg)
+		m.Drop(addrs[0])
+		m.Add(addrs[1], f)
+		for _, addr := range addrs {
+			m.Add(addr, f)
+		}
+		targ := &PexMsg{
+			Added6: krpc.CompactIPv6NodeAddrs{
+				addrs[1],
+				addrs[2],
+				addrs[3],
+			},
+			Added6Flags: []PexPeerFlags{f, f, f},
+			Dropped6:    krpc.CompactIPv6NodeAddrs{},
+		}
+		require.EqualValues(t, targ, m)
 	})
-	t.Run("unspecified", func(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
 		addr := krpc.NodeAddr{}
-		xm := PexMsg{}
-		xm.AppendAdded(addr, 0)
-		require.EqualValues(t, len(xm.Added), 0)
-		require.EqualValues(t, len(xm.AddedFlags), 0)
-		require.EqualValues(t, len(xm.Added6), 0)
-		require.EqualValues(t, len(xm.Added6Flags), 0)
+		xm := new(PexMsg)
+		xm.Add(addr, f)
+		require.EqualValues(t, 0, len(xm.Added))
+		require.EqualValues(t, 0, len(xm.AddedFlags))
+		require.EqualValues(t, 0, len(xm.Added6))
+		require.EqualValues(t, 0, len(xm.Added6Flags))
 	})
 }
 
-func TestPexAppendDropped(t *testing.T) {
+func TestPexDrop(t *testing.T) {
+	addrs4 := []krpc.NodeAddr{
+		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4747}, // 0
+		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4748}, // 1
+		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 2), Port: 4747}, // 2
+		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 2), Port: 4748}, // 3
+	}
+	addrs6 := []krpc.NodeAddr{
+		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4747}, // 0
+		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4748}, // 1
+		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4749}, // 2
+		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4750}, // 3
+	}
+	f := PexPrefersEncryption | PexOutgoingConn
+
 	t.Run("ipv4", func(t *testing.T) {
-		addr := krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4747}
-		xm := PexMsg{}
-		xm.AppendDropped(addr)
-		require.EqualValues(t, len(xm.Dropped), 1)
-		require.EqualValues(t, len(xm.Dropped6), 0)
-		require.True(t, xm.Dropped[0].IP.Equal(addr.IP), "IPs should match")
-		require.EqualValues(t, xm.Dropped[0].Port, addr.Port)
+		addrs := addrs4
+		m := new(PexMsg)
+		m.Add(addrs[0], f)
+		m.Drop(addrs[1])
+		for _, addr := range addrs {
+			m.Drop(addr)
+		}
+		targ := &PexMsg{
+			AddedFlags: []PexPeerFlags{},
+			Added:    krpc.CompactIPv4NodeAddrs{},
+			Dropped: krpc.CompactIPv4NodeAddrs{
+				addrs[1],
+				addrs[2],
+				addrs[3],
+			},
+		}
+		require.EqualValues(t, targ, m)
 	})
 	t.Run("ipv6", func(t *testing.T) {
-		addr := krpc.NodeAddr{IP: net.IPv6loopback, Port: 4747}
-		xm := PexMsg{}
-		xm.AppendDropped(addr)
-		require.EqualValues(t, len(xm.Dropped), 0)
-		require.EqualValues(t, len(xm.Dropped6), 1)
-		require.True(t, xm.Dropped6[0].IP.Equal(addr.IP), "IPs should match")
-		require.EqualValues(t, xm.Dropped6[0].Port, addr.Port)
+		addrs := addrs6
+		m := new(PexMsg)
+		m.Add(addrs[0], f)
+		m.Drop(addrs[1])
+		for _, addr := range addrs {
+			m.Drop(addr)
+		}
+		targ := &PexMsg{
+			Added6Flags: []PexPeerFlags{},
+			Added6:    krpc.CompactIPv6NodeAddrs{},
+			Dropped6: krpc.CompactIPv6NodeAddrs{
+				addrs[1],
+				addrs[2],
+				addrs[3],
+			},
+		}
+		require.EqualValues(t, targ, m)
 	})
-	t.Run("unspecified", func(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
 		addr := krpc.NodeAddr{}
-		xm := PexMsg{}
-		xm.AppendDropped(addr)
-		require.EqualValues(t, len(xm.Dropped), 0)
-		require.EqualValues(t, len(xm.Dropped6), 0)
+		xm := new(PexMsg)
+		xm.Drop(addr)
+		require.EqualValues(t, 0, len(xm.Dropped))
+		require.EqualValues(t, 0, len(xm.Dropped6))
 	})
 }
 
 func TestMarshalPexMessage(t *testing.T) {
 	addr := krpc.NodeAddr{IP: net.IP{127, 0, 0, 1}, Port: 0x55aa}
 	f := PexPrefersEncryption | PexOutgoingConn
-	pm := PexMsg{}
-	pm.AppendAdded(addr, f)
+	pm := new(PexMsg)
+	pm.Added = append(pm.Added, addr)
+	pm.AddedFlags = append(pm.AddedFlags, f)
 
 	b, err := bencode.Marshal(pm)
 	require.NoError(t, err)

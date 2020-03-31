@@ -218,35 +218,3 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	assert.False(t, tt.haveAllMetadataPieces())
 	assert.Nil(t, tt.Metainfo().InfoBytes)
 }
-
-func TestTorrentPexInitial(t *testing.T) {
-	v := []*PeerConn{
-		&PeerConn{
-			remoteAddr: &net.UDPAddr{IP:   net.IPv4(172, 17, 0, 2), Port: 5555},
-		},
-		&PeerConn{
-			remoteAddr: &net.UDPAddr{
-				IP:   net.IP{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1},
-				Port: 11111,
-			},
-			outgoing: true,
-		},
-		&PeerConn{
-			remoteAddr: &net.UDPAddr{IP: net.IP(nil), Port: 0},
-		},
-	}
-	torrent := &Torrent{conns: make(map[*PeerConn]struct{})}
-	for _, conn := range v {
-		torrent.conns[conn] = struct{}{}
-	}
-	tx := torrent.pexInitial()
-	require.NotNil(t, tx)
-	require.EqualValues(t, 1, len(tx.Added))
-	require.EqualValues(t, tx.Added[0].UDP().Network(), v[0].remoteAddr.Network())
-	require.EqualValues(t, tx.Added[0].UDP().String(), v[0].remoteAddr.String())
-	require.Zero(t, tx.AddedFlags[0])
-	require.EqualValues(t, 1, len(tx.Added6))
-	require.EqualValues(t, tx.Added6[0].UDP().Network(), v[1].remoteAddr.Network())
-	require.EqualValues(t, tx.Added6[0].UDP().String(), v[1].remoteAddr.String())
-	require.NotZero(t, tx.Added6Flags[0]&pp.PexOutgoingConn)
-}

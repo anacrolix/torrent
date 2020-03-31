@@ -935,21 +935,19 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 }
 
 func (cl *Client) sendInitialPEX(conn *PeerConn, t *Torrent) {
-	peerPexExtendedId, ok := conn.PeerExtensionIDs[pp.ExtensionNamePex]
+	xid, ok := conn.PeerExtensionIDs[pp.ExtensionNamePex]
 	if !ok {
-		// peer did not advertise support for the PEX extension
-		conn.logger.Printf("no PEX support -  not sending initial")
 		return
 	}
-	pexMsg := t.pexInitial()
-	if pexMsg == nil {
-		// not enough peers to share — e.g. len(t.conns < 50)
-		conn.logger.Printf("skipping PEX initial")
+	m, seq := t.pex.Genmsg(0)
+	conn.pexSeq = seq
+	if m.Len() == 0 {
+		cl.logger.Printf("no initial PEX this time")
+		// FIXME see how can we schedule another initial for later
 		return
 	}
-	log.Printf("preparing PEX initial message: %v", pexMsg)
-	tx := pexMsg.Message(peerPexExtendedId)
-	conn.post(tx)
+	conn.logger.Printf("sending initial PEX message: %v", m)
+	conn.post(m.Message(xid))
 }
 
 func (cl *Client) dhtPort() (ret uint16) {

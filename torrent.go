@@ -90,7 +90,7 @@ type Torrent struct {
 	peers          prioritizedPeers
 	wantPeersEvent missinggo.Event
 	// An announcer for each tracker URL.
-	trackerAnnouncers map[string]*trackerScraper
+	trackerAnnouncers map[string]torrentTrackerAnnouncer
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
@@ -590,9 +590,9 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	func() {
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		fmt.Fprintf(tw, "    URL\tNext announce\tLast announce\n")
-		for _, ta := range slices.Sort(slices.FromMapElems(t.trackerAnnouncers), func(l, r *trackerScraper) bool {
-			lu := l.u
-			ru := r.u
+		for _, ta := range slices.Sort(slices.FromMapElems(t.trackerAnnouncers), func(l, r torrentTrackerAnnouncer) bool {
+			lu := l.URL()
+			ru := r.URL()
 			var luns, runs url.URL = lu, ru
 			luns.Scheme = ""
 			runs.Scheme = ""
@@ -600,7 +600,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 			ml.StrictNext(luns.String() == runs.String(), luns.String() < runs.String())
 			ml.StrictNext(lu.String() == ru.String(), lu.String() < ru.String())
 			return ml.Less()
-		}).([]*trackerScraper) {
+		}).([]torrentTrackerAnnouncer) {
 			fmt.Fprintf(tw, "    %s\n", ta.statusLine())
 		}
 		tw.Flush()
@@ -1281,24 +1281,31 @@ func (t *Torrent) startScrapingTracker(_url string) {
 		t.startScrapingTracker(u.String())
 		return
 	}
-	if u.Scheme == "udp4" && (t.cl.config.DisableIPv4Peers || t.cl.config.DisableIPv4) {
-		return
-	}
-	if u.Scheme == "udp6" && t.cl.config.DisableIPv6 {
-		return
-	}
 	if _, ok := t.trackerAnnouncers[_url]; ok {
 		return
 	}
-	newAnnouncer := &trackerScraper{
-		u: *u,
-		t: t,
-	}
+	sl := func() torrentTrackerAnnouncer {
+		switch u.Scheme {
+		case "ws", "wss":
+			return websocketTracker{*u}
+		}
+		if u.Scheme == "udp4" && (t.cl.config.DisableIPv4Peers || t.cl.config.DisableIPv4) {
+			return nil
+		}
+		if u.Scheme == "udp6" && t.cl.config.DisableIPv6 {
+			return nil
+		}
+		newAnnouncer := &trackerScraper{
+			u: *u,
+			t: t,
+		}
+		go newAnnouncer.Run()
+		return newAnnouncer
+	}()
 	if t.trackerAnnouncers == nil {
-		t.trackerAnnouncers = make(map[string]*trackerScraper)
+		t.trackerAnnouncers = make(map[string]torrentTrackerAnnouncer)
 	}
-	t.trackerAnnouncers[_url] = newAnnouncer
-	go newAnnouncer.Run()
+	t.trackerAnnouncers[_url] = sl
 }
 
 // Adds and starts tracker scrapers for tracker URLs that aren't already

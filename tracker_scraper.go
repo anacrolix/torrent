@@ -21,6 +21,15 @@ type trackerScraper struct {
 	lastAnnounce trackerAnnounceResult
 }
 
+type torrentTrackerAnnouncer interface {
+	statusLine() string
+	URL() url.URL
+}
+
+func (me trackerScraper) URL() url.URL {
+	return me.u
+}
+
 func (ts *trackerScraper) statusLine() string {
 	var w bytes.Buffer
 	fmt.Fprintf(&w, "%q\t%s\t%s",

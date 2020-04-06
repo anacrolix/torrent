@@ -3,10 +3,13 @@ package torrent
 import (
 	"fmt"
 	"net/url"
+
+	"github.com/anacrolix/torrent/webtorrent"
 )
 
 type websocketTracker struct {
 	url url.URL
+	*webtorrent.Client
 }
 
 func (me websocketTracker) statusLine() string {

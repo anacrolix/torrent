@@ -1,13 +1,14 @@
-package main
+package webtorrent
 
 import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"sync"
 
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/log"
+
+	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/webtorrent/buffer"
 	"github.com/gorilla/websocket"
 	"github.com/pion/datachannel"
@@ -20,18 +21,11 @@ const (
 
 // Client represents the webtorrent client
 type Client struct {
-	peerID       string
-	peerIDBinary string
-
-	infoHash       string
+	lock           sync.Mutex
+	peerIDBinary   string
 	infoHashBinary string
-	totalLength    int
-
-	offeredPeers map[string]Peer // OfferID to Peer
-
-	tracker *websocket.Conn
-
-	lock *sync.Mutex
+	offeredPeers   map[string]Peer // OfferID to Peer
+	tracker        *websocket.Conn
 }
 
 // Peer represents a remote peer
@@ -40,46 +34,23 @@ type Peer struct {
 	transport *Transport
 }
 
-func NewClient() (*Client, error) {
-	c := &Client{
-		offeredPeers: make(map[string]Peer),
-		lock:         &sync.Mutex{},
+func binaryToJsonString(b []byte) string {
+	var seq []rune
+	for _, v := range b {
+		seq = append(seq, rune(v))
 	}
-
-	randPeerID, err := buffer.RandomBytes(9)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate bytes: %v", err)
-	}
-	peerIDBuffer := buffer.From("-WW0007-" + randPeerID.ToStringBase64())
-	c.peerID = peerIDBuffer.ToStringHex()
-	c.peerIDBinary = peerIDBuffer.ToStringLatin1()
-
-	return c, nil
+	return string(seq)
 }
 
-func (c *Client) LoadFile(p string) error {
-	meta, err := metainfo.LoadFromFile(p)
-	if err != nil {
-		return fmt.Errorf("failed to load meta info: %v\n", err)
+func NewClient(peerId, infoHash [20]byte) *Client {
+	return &Client{
+		offeredPeers:   make(map[string]Peer),
+		peerIDBinary:   binaryToJsonString(peerId[:]),
+		infoHashBinary: binaryToJsonString(infoHash[:]),
 	}
-
-	info, err := meta.UnmarshalInfo()
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal info: %v\n", err)
-	}
-	c.totalLength = int(info.TotalLength())
-
-	c.infoHash = meta.HashInfoBytes().String()
-	b, err := buffer.FromHex(c.infoHash)
-	if err != nil {
-		return fmt.Errorf("failed to create buffer: %v\n", err)
-	}
-	c.infoHashBinary = b.ToStringLatin1()
-
-	return nil
 }
 
-func (c *Client) Run() error {
+func (c *Client) Run(ar tracker.AnnounceRequest) error {
 	t, _, err := websocket.DefaultDialer.Dial(trackerURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to dial tracker: %v", err)
@@ -87,21 +58,21 @@ func (c *Client) Run() error {
 	defer t.Close()
 	c.tracker = t
 
-	go c.announce()
+	go c.announce(ar)
 	c.trackerReadLoop()
 
 	return nil
 }
 
-func (c *Client) announce() {
+func (c *Client) announce(request tracker.AnnounceRequest) error {
 	transpot, offer, err := NewTransport()
 	if err != nil {
-		log.Fatalf("failed to create transport: %v\n", err)
+		return fmt.Errorf("failed to create transport: %w", err)
 	}
 
 	randOfferID, err := buffer.RandomBytes(20)
 	if err != nil {
-		log.Fatalf("failed to generate bytes: %v\n", err)
+		return fmt.Errorf("failed to generate bytes: %w", err)
 	}
 	// OfferID := randOfferID.ToStringHex()
 	offerIDBinary := randOfferID.ToStringLatin1()
@@ -114,33 +85,33 @@ func (c *Client) announce() {
 		Numwant:    1, // If higher we need to create equal amount of offers
 		Uploaded:   0,
 		Downloaded: 0,
-		Left:       int(c.totalLength),
+		Left:       request.Left,
 		Event:      "started",
 		Action:     "announce",
 		InfoHash:   c.infoHashBinary,
 		PeerID:     c.peerIDBinary,
-		Offers: []Offer{
-			{
-				OfferID: offerIDBinary,
-				Offer:   offer,
-			}},
+		Offers: []Offer{{
+			OfferID: offerIDBinary,
+			Offer:   offer,
+		}},
 	}
 
 	data, err := json.Marshal(req)
 	if err != nil {
-		log.Fatal("failed to marshal request:", err)
+		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 	c.lock.Lock()
 	tracker := c.tracker
 	err = tracker.WriteMessage(websocket.TextMessage, data)
 	if err != nil {
-		log.Fatal("write AnnounceRequest:", err)
+		return fmt.Errorf("write AnnounceRequest: %w", err)
 		c.lock.Unlock()
 	}
 	c.lock.Unlock()
+	return nil
 }
 
-func (c *Client) trackerReadLoop() {
+func (c *Client) trackerReadLoop() error {
 
 	c.lock.Lock()
 	tracker := c.tracker
@@ -148,9 +119,9 @@ func (c *Client) trackerReadLoop() {
 	for {
 		_, message, err := tracker.ReadMessage()
 		if err != nil {
-			log.Fatalf("read error: %v", err)
+			return fmt.Errorf("read error: %w", err)
 		}
-		log.Printf("recv: %s", message)
+		log.Printf("recv: %q", message)
 
 		var ar AnnounceResponse
 		if err := json.Unmarshal(message, &ar); err != nil {
@@ -158,14 +129,14 @@ func (c *Client) trackerReadLoop() {
 			continue
 		}
 		if ar.InfoHash != c.infoHashBinary {
-			log.Printf("announce response for different hash: %s", ar.InfoHash)
+			log.Printf("announce response for different hash: expected %q got %q", c.infoHashBinary, ar.InfoHash)
 			continue
 		}
 		switch {
 		case ar.Offer != nil:
 			t, answer, err := NewTransportFromOffer(*ar.Offer, c.handleDataChannel)
 			if err != nil {
-				log.Fatal("write AnnounceResponse:", err)
+				return fmt.Errorf("write AnnounceResponse: %w", err)
 			}
 
 			req := AnnounceResponse{
@@ -178,13 +149,13 @@ func (c *Client) trackerReadLoop() {
 			}
 			data, err := json.Marshal(req)
 			if err != nil {
-				log.Fatal("failed to marshal request:", err)
+				return fmt.Errorf("failed to marshal request: %w", err)
 			}
 
 			c.lock.Lock()
 			err = tracker.WriteMessage(websocket.TextMessage, data)
 			if err != nil {
-				log.Fatal("write AnnounceResponse:", err)
+				return fmt.Errorf("write AnnounceResponse: %w", err)
 				c.lock.Unlock()
 			}
 			c.lock.Unlock()
@@ -196,12 +167,13 @@ func (c *Client) trackerReadLoop() {
 			peer, ok := c.offeredPeers[ar.OfferID]
 			c.lock.Unlock()
 			if !ok {
-				fmt.Printf("could not find peer for offer %s", ar.OfferID)
+				log.Printf("could not find peer for offer %q", ar.OfferID)
 				continue
 			}
+			log.Printf("offer %q got answer %q", ar.OfferID, ar.Answer)
 			err = peer.transport.SetAnswer(*ar.Answer, c.handleDataChannel)
 			if err != nil {
-				log.Fatalf("failed to sent answer: %v", err)
+				return fmt.Errorf("failed to sent answer: %v", err)
 			}
 		}
 	}
@@ -217,7 +189,7 @@ func (c *Client) dcReadLoop(d io.Reader) {
 		buffer := make([]byte, 1024)
 		n, err := d.Read(buffer)
 		if err != nil {
-			log.Fatal("Datachannel closed; Exit the readloop:", err)
+			log.Printf("Datachannel closed; Exit the readloop: %v", err)
 		}
 
 		fmt.Printf("Message from DataChannel: %s\n", string(buffer[:n]))
@@ -228,7 +200,7 @@ type AnnounceRequest struct {
 	Numwant    int     `json:"numwant"`
 	Uploaded   int     `json:"uploaded"`
 	Downloaded int     `json:"downloaded"`
-	Left       int     `json:"left"`
+	Left       int64   `json:"left"`
 	Event      string  `json:"event"`
 	Action     string  `json:"action"`
 	InfoHash   string  `json:"info_hash"`

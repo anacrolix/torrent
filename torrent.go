@@ -29,6 +29,7 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/webtorrent"
 )
 
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
@@ -1287,7 +1288,13 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	sl := func() torrentTrackerAnnouncer {
 		switch u.Scheme {
 		case "ws", "wss":
-			return websocketTracker{*u}
+			wst := websocketTracker{*u, webtorrent.NewClient(t.cl.peerID, t.infoHash)}
+			go func() {
+				err := wst.Client.Run(t.announceRequest(tracker.Started))
+				if err != nil {
+					t.logger.Printf("error running websocket tracker announcer: %v", err)
+				}
+			}()
 		}
 		if u.Scheme == "udp4" && (t.cl.config.DisableIPv4Peers || t.cl.config.DisableIPv4) {
 			return nil

@@ -148,7 +148,7 @@ func (c *Client) trackerReadLoop() {
 	for {
 		_, message, err := tracker.ReadMessage()
 		if err != nil {
-			log.Fatal("read error: %v", err)
+			log.Fatalf("read error: %v", err)
 		}
 		log.Printf("recv: %s", message)
 
@@ -201,7 +201,7 @@ func (c *Client) trackerReadLoop() {
 			}
 			err = peer.transport.SetAnswer(*ar.Answer, c.handleDataChannel)
 			if err != nil {
-				log.Fatal("failed to sent answer: %v", err)
+				log.Fatalf("failed to sent answer: %v", err)
 			}
 		}
 	}

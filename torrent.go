@@ -1316,6 +1316,7 @@ func (t *Torrent) startScrapingTracker(_url string) {
 					t.logger.Printf("error running websocket tracker announcer: %v", err)
 				}
 			}()
+			return wst
 		}
 		if u.Scheme == "udp4" && (t.cl.config.DisableIPv4Peers || t.cl.config.DisableIPv4) {
 			return nil

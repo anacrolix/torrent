@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"container/heap"
+	"context"
 	"crypto/sha1"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"unsafe"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/pion/datachannel"
 
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/log"
@@ -1262,6 +1264,25 @@ func (t *Torrent) seeding() bool {
 	return true
 }
 
+func (t *Torrent) onWebRtcConn(
+	c datachannel.ReadWriteCloser,
+	initiatedLocally bool, // Whether we offered first, or they did.
+) {
+	defer c.Close()
+	pc, err := t.cl.handshakesConnection(context.Background(), webrtcNetConn{c}, t, false, nil, "webrtc")
+	if err != nil {
+		t.logger.Printf("error in handshaking webrtc connection: %v", err)
+	}
+	if initiatedLocally {
+		pc.Discovery = PeerSourceTracker
+	} else {
+		pc.Discovery = PeerSourceIncoming
+	}
+	t.cl.lock()
+	defer t.cl.unlock()
+	t.cl.runHandshookConn(pc, t)
+}
+
 func (t *Torrent) startScrapingTracker(_url string) {
 	if _url == "" {
 		return
@@ -1288,7 +1309,7 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	sl := func() torrentTrackerAnnouncer {
 		switch u.Scheme {
 		case "ws", "wss":
-			wst := websocketTracker{*u, webtorrent.NewClient(t.cl.peerID, t.infoHash)}
+			wst := websocketTracker{*u, webtorrent.NewClient(t.cl.peerID, t.infoHash, t.onWebRtcConn)}
 			go func() {
 				err := wst.Client.Run(t.announceRequest(tracker.Started))
 				if err != nil {

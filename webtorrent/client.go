@@ -3,7 +3,6 @@ package webtorrent
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"sync"
 
 	"github.com/anacrolix/log"
@@ -26,6 +25,7 @@ type Client struct {
 	infoHashBinary string
 	offeredPeers   map[string]Peer // OfferID to Peer
 	tracker        *websocket.Conn
+	onConn         func(_ datachannel.ReadWriteCloser, initiatedLocally bool)
 }
 
 // Peer represents a remote peer
@@ -42,11 +42,14 @@ func binaryToJsonString(b []byte) string {
 	return string(seq)
 }
 
-func NewClient(peerId, infoHash [20]byte) *Client {
+type onDataChannelOpen func(_ datachannel.ReadWriteCloser, initiatedLocally bool)
+
+func NewClient(peerId, infoHash [20]byte, onConn onDataChannelOpen) *Client {
 	return &Client{
 		offeredPeers:   make(map[string]Peer),
 		peerIDBinary:   binaryToJsonString(peerId[:]),
 		infoHashBinary: binaryToJsonString(infoHash[:]),
+		onConn:         onConn,
 	}
 }
 
@@ -134,7 +137,9 @@ func (c *Client) trackerReadLoop() error {
 		}
 		switch {
 		case ar.Offer != nil:
-			t, answer, err := NewTransportFromOffer(*ar.Offer, c.handleDataChannel)
+			t, answer, err := NewTransportFromOffer(*ar.Offer, func(dc datachannel.ReadWriteCloser) {
+				c.onConn(dc, false)
+			})
 			if err != nil {
 				return fmt.Errorf("write AnnounceResponse: %w", err)
 			}
@@ -170,29 +175,14 @@ func (c *Client) trackerReadLoop() error {
 				log.Printf("could not find peer for offer %q", ar.OfferID)
 				continue
 			}
-			log.Printf("offer %q got answer %q", ar.OfferID, ar.Answer)
-			err = peer.transport.SetAnswer(*ar.Answer, c.handleDataChannel)
+			log.Printf("offer %q got answer %v", ar.OfferID, *ar.Answer)
+			err = peer.transport.SetAnswer(*ar.Answer, func(dc datachannel.ReadWriteCloser) {
+				c.onConn(dc, true)
+			})
 			if err != nil {
 				return fmt.Errorf("failed to sent answer: %v", err)
 			}
 		}
-	}
-}
-
-func (c *Client) handleDataChannel(dc datachannel.ReadWriteCloser) {
-	go c.dcReadLoop(dc)
-	//go c.dcWriteLoop(dc)
-}
-
-func (c *Client) dcReadLoop(d io.Reader) {
-	for {
-		buffer := make([]byte, 1024)
-		n, err := d.Read(buffer)
-		if err != nil {
-			log.Printf("Datachannel closed; Exit the readloop: %v", err)
-		}
-
-		fmt.Printf("Message from DataChannel: %s\n", string(buffer[:n]))
 	}
 }
 

@@ -621,8 +621,8 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
 	t.openNewConns()
 }
 
-// Performs initiator handshakes and returns a connection. Returns nil
-// *connection if no connection for valid reasons.
+// Performs initiator handshakes and returns a connection. Returns nil *connection if no connection
+// for valid reasons.
 func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torrent, encryptHeader bool, remoteAddr net.Addr, network string) (c *PeerConn, err error) {
 	c = cl.newConnection(nc, true, remoteAddr, network)
 	c.headerEncrypted = encryptHeader
@@ -850,6 +850,7 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 	cl.runHandshookConn(c, t)
 }
 
+// Client lock must be held before entering this.
 func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) {
 	c.setTorrent(t)
 	if c.PeerID == cl.peerID {

@@ -67,7 +67,7 @@ func NewTransport() (*Transport, webrtc.SessionDescription, error) {
 
 // NewTransportFromOffer creates a transport from a WebRTC offer and and returns a WebRTC answer to
 // be announced.
-func NewTransportFromOffer(offer webrtc.SessionDescription, onOpen func(datachannel.ReadWriteCloser)) (*Transport, webrtc.SessionDescription, error) {
+func NewTransportFromOffer(offer webrtc.SessionDescription, onOpen onDataChannelOpen) (*Transport, webrtc.SessionDescription, error) {
 	peerConnection, err := newPeerConnection()
 	if err != nil {
 		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to peer connection: %v", err)
@@ -77,13 +77,6 @@ func NewTransportFromOffer(offer webrtc.SessionDescription, onOpen func(datachan
 	})
 
 	t := &Transport{pc: peerConnection}
-	peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
-		fmt.Printf("New DataChannel %s %d\n", d.Label(), d.ID())
-		t.lock.Lock()
-		t.dc = d
-		t.lock.Unlock()
-		t.handleOpen(onOpen)
-	})
 
 	err = peerConnection.SetRemoteDescription(offer)
 	if err != nil {
@@ -93,6 +86,15 @@ func NewTransportFromOffer(offer webrtc.SessionDescription, onOpen func(datachan
 	if err != nil {
 		return nil, webrtc.SessionDescription{}, fmt.Errorf("%v", err)
 	}
+	peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
+		fmt.Printf("New DataChannel %s %d\n", d.Label(), d.ID())
+		t.lock.Lock()
+		t.dc = d
+		t.lock.Unlock()
+		t.handleOpen(func(dc datachannel.ReadWriteCloser) {
+			onOpen(dc, DataChannelContext{answer, offer, false})
+		})
+	})
 	err = peerConnection.SetLocalDescription(answer)
 	if err != nil {
 		return nil, webrtc.SessionDescription{}, fmt.Errorf("%v", err)

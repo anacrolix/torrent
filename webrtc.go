@@ -5,29 +5,37 @@ import (
 	"time"
 
 	"github.com/pion/datachannel"
+	"github.com/pion/webrtc/v2"
+
+	"github.com/anacrolix/torrent/webtorrent"
 )
+
+const webrtcNetwork = "webrtc"
 
 type webrtcNetConn struct {
 	datachannel.ReadWriteCloser
+	webtorrent.DataChannelContext
 }
 
 type webrtcNetAddr struct {
+	webrtc.SessionDescription
 }
 
 func (webrtcNetAddr) Network() string {
-	return "webrtc"
+	return webrtcNetwork
 }
 
-func (webrtcNetAddr) String() string {
-	return ""
+func (me webrtcNetAddr) String() string {
+	// TODO: What can I show here that's more like other protocols?
+	return "<WebRTC>"
 }
 
-func (w webrtcNetConn) LocalAddr() net.Addr {
-	return webrtcNetAddr{}
+func (me webrtcNetConn) LocalAddr() net.Addr {
+	return webrtcNetAddr{me.Local}
 }
 
-func (w webrtcNetConn) RemoteAddr() net.Addr {
-	return webrtcNetAddr{}
+func (me webrtcNetConn) RemoteAddr() net.Addr {
+	return webrtcNetAddr{me.Remote}
 }
 
 func (w webrtcNetConn) SetDeadline(t time.Time) error {

@@ -14,24 +14,21 @@ import (
 	"github.com/pion/webrtc/v2"
 )
 
-const (
-	trackerURL = `wss://tracker.openwebtorrent.com/` // For simplicity
-)
-
 // Client represents the webtorrent client
 type Client struct {
 	lock           sync.Mutex
 	peerIDBinary   string
 	infoHashBinary string
-	offeredPeers   map[string]Peer // OfferID to Peer
+	outboundOffers map[string]outboundOffer // OfferID to outboundOffer
 	tracker        *websocket.Conn
-	onConn         func(_ datachannel.ReadWriteCloser, initiatedLocally bool)
+	onConn         onDataChannelOpen
+	logger         log.Logger
 }
 
-// Peer represents a remote peer
-type Peer struct {
-	peerID    string
-	transport *Transport
+// outboundOffer represents an outstanding offer.
+type outboundOffer struct {
+	originalOffer webrtc.SessionDescription
+	transport     *Transport
 }
 
 func binaryToJsonString(b []byte) string {
@@ -42,33 +39,43 @@ func binaryToJsonString(b []byte) string {
 	return string(seq)
 }
 
-type onDataChannelOpen func(_ datachannel.ReadWriteCloser, initiatedLocally bool)
+type DataChannelContext struct {
+	Local, Remote webrtc.SessionDescription
+	LocalOffered  bool
+}
 
-func NewClient(peerId, infoHash [20]byte, onConn onDataChannelOpen) *Client {
+type onDataChannelOpen func(_ datachannel.ReadWriteCloser, dcc DataChannelContext)
+
+func NewClient(peerId, infoHash [20]byte, onConn onDataChannelOpen, logger log.Logger) *Client {
 	return &Client{
-		offeredPeers:   make(map[string]Peer),
+		outboundOffers: make(map[string]outboundOffer),
 		peerIDBinary:   binaryToJsonString(peerId[:]),
 		infoHashBinary: binaryToJsonString(infoHash[:]),
 		onConn:         onConn,
+		logger:         logger,
 	}
 }
 
-func (c *Client) Run(ar tracker.AnnounceRequest) error {
-	t, _, err := websocket.DefaultDialer.Dial(trackerURL, nil)
+func (c *Client) Run(ar tracker.AnnounceRequest, url string) error {
+	t, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
-		return fmt.Errorf("failed to dial tracker: %v", err)
+		return fmt.Errorf("failed to dial tracker: %w", err)
 	}
 	defer t.Close()
+	c.logger.WithValues(log.Info).Printf("dialed tracker %q", url)
 	c.tracker = t
 
-	go c.announce(ar)
-	c.trackerReadLoop()
-
-	return nil
+	go func() {
+		err := c.announce(ar)
+		if err != nil {
+			c.logger.WithValues(log.Error).Printf("error announcing: %v", err)
+		}
+	}()
+	return c.trackerReadLoop()
 }
 
 func (c *Client) announce(request tracker.AnnounceRequest) error {
-	transpot, offer, err := NewTransport()
+	transport, offer, err := NewTransport()
 	if err != nil {
 		return fmt.Errorf("failed to create transport: %w", err)
 	}
@@ -77,11 +84,13 @@ func (c *Client) announce(request tracker.AnnounceRequest) error {
 	if err != nil {
 		return fmt.Errorf("failed to generate bytes: %w", err)
 	}
-	// OfferID := randOfferID.ToStringHex()
 	offerIDBinary := randOfferID.ToStringLatin1()
 
 	c.lock.Lock()
-	c.offeredPeers[offerIDBinary] = Peer{transport: transpot}
+	c.outboundOffers[offerIDBinary] = outboundOffer{
+		transport:     transport,
+		originalOffer: offer,
+	}
 	c.lock.Unlock()
 
 	req := AnnounceRequest{
@@ -124,7 +133,7 @@ func (c *Client) trackerReadLoop() error {
 		if err != nil {
 			return fmt.Errorf("read error: %w", err)
 		}
-		log.Printf("recv: %q", message)
+		c.logger.WithValues(log.Debug).Printf("received message from tracker: %q", message)
 
 		var ar AnnounceResponse
 		if err := json.Unmarshal(message, &ar); err != nil {
@@ -137,9 +146,7 @@ func (c *Client) trackerReadLoop() error {
 		}
 		switch {
 		case ar.Offer != nil:
-			t, answer, err := NewTransportFromOffer(*ar.Offer, func(dc datachannel.ReadWriteCloser) {
-				c.onConn(dc, false)
-			})
+			_, answer, err := NewTransportFromOffer(*ar.Offer, c.onConn)
 			if err != nil {
 				return fmt.Errorf("write AnnounceResponse: %w", err)
 			}
@@ -164,20 +171,21 @@ func (c *Client) trackerReadLoop() error {
 				c.lock.Unlock()
 			}
 			c.lock.Unlock()
-
-			// Do something with the peer
-			_ = Peer{peerID: ar.PeerID, transport: t}
 		case ar.Answer != nil:
 			c.lock.Lock()
-			peer, ok := c.offeredPeers[ar.OfferID]
+			offer, ok := c.outboundOffers[ar.OfferID]
 			c.lock.Unlock()
 			if !ok {
-				log.Printf("could not find peer for offer %q", ar.OfferID)
+				c.logger.WithValues(log.Warning).Printf("could not find offer for id %q", ar.OfferID)
 				continue
 			}
 			log.Printf("offer %q got answer %v", ar.OfferID, *ar.Answer)
-			err = peer.transport.SetAnswer(*ar.Answer, func(dc datachannel.ReadWriteCloser) {
-				c.onConn(dc, true)
+			err = offer.transport.SetAnswer(*ar.Answer, func(dc datachannel.ReadWriteCloser) {
+				c.onConn(dc, DataChannelContext{
+					Local:        offer.originalOffer,
+					Remote:       *ar.Answer,
+					LocalOffered: true,
+				})
 			})
 			if err != nil {
 				return fmt.Errorf("failed to sent answer: %v", err)

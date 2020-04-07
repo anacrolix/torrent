@@ -1266,14 +1266,21 @@ func (t *Torrent) seeding() bool {
 
 func (t *Torrent) onWebRtcConn(
 	c datachannel.ReadWriteCloser,
-	initiatedLocally bool, // Whether we offered first, or they did.
+	dcc webtorrent.DataChannelContext,
 ) {
 	defer c.Close()
-	pc, err := t.cl.handshakesConnection(context.Background(), webrtcNetConn{c}, t, false, nil, "webrtc")
+	pc, err := t.cl.handshakesConnection(
+		context.Background(),
+		webrtcNetConn{c, dcc},
+		t,
+		false,
+		webrtcNetAddr{dcc.Remote},
+		webrtcNetwork,
+	)
 	if err != nil {
 		t.logger.Printf("error in handshaking webrtc connection: %v", err)
 	}
-	if initiatedLocally {
+	if dcc.LocalOffered {
 		pc.Discovery = PeerSourceTracker
 	} else {
 		pc.Discovery = PeerSourceIncoming
@@ -1309,11 +1316,11 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	sl := func() torrentTrackerAnnouncer {
 		switch u.Scheme {
 		case "ws", "wss":
-			wst := websocketTracker{*u, webtorrent.NewClient(t.cl.peerID, t.infoHash, t.onWebRtcConn)}
+			wst := websocketTracker{*u, webtorrent.NewClient(t.cl.peerID, t.infoHash, t.onWebRtcConn, t.logger)}
 			go func() {
-				err := wst.Client.Run(t.announceRequest(tracker.Started))
+				err := wst.Client.Run(t.announceRequest(tracker.Started), u.String())
 				if err != nil {
-					t.logger.Printf("error running websocket tracker announcer: %v", err)
+					t.logger.WithValues(log.Error).Printf("error running websocket tracker announcer: %v", err)
 				}
 			}()
 			return wst

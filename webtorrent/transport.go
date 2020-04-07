@@ -10,24 +10,34 @@ import (
 	"github.com/pion/webrtc/v2"
 )
 
+var (
+	api = func() *webrtc.API {
+		// Enable the detach API (since it's non-standard but more idiomatic)
+		// (This should be done once globally)
+		s := webrtc.SettingEngine{}
+		s.DetachDataChannels()
+		return webrtc.NewAPI(webrtc.WithSettingEngine(s))
+	}()
+	config              = webrtc.Configuration{ICEServers: []webrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}}}
+	newPeerConnectionMu sync.Mutex
+)
+
+func newPeerConnection() (*webrtc.PeerConnection, error) {
+	newPeerConnectionMu.Lock()
+	defer newPeerConnectionMu.Unlock()
+	return api.NewPeerConnection(config)
+}
+
 type Transport struct {
 	pc *webrtc.PeerConnection
 	dc *webrtc.DataChannel
 
-	lock *sync.Mutex
+	lock sync.Mutex
 }
 
-// NewTransport creates a transport and returns a WebRTC offer
-// to be announced
+// NewTransport creates a transport and returns a WebRTC offer to be announced
 func NewTransport() (*Transport, webrtc.SessionDescription, error) {
-	// Enable the detach API (since it's non-standard but more idiomatic)
-	// (This should be done once globally)
-	s := webrtc.SettingEngine{}
-	s.DetachDataChannels()
-	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
-
-	config := webrtc.Configuration{ICEServers: []webrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}}}
-	peerConnection, err := api.NewPeerConnection(config)
+	peerConnection, err := newPeerConnection()
 	if err != nil {
 		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to peer connection: %v\n", err)
 	}
@@ -51,21 +61,14 @@ func NewTransport() (*Transport, webrtc.SessionDescription, error) {
 		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to set local description: %v\n", err)
 	}
 
-	t := &Transport{pc: peerConnection, dc: dataChannel, lock: &sync.Mutex{}}
+	t := &Transport{pc: peerConnection, dc: dataChannel}
 	return t, offer, nil
 }
 
-// NewTransportFromOffer creates a transport from a WebRTC offer and
-// and returns a WebRTC answer to be announced
+// NewTransportFromOffer creates a transport from a WebRTC offer and and returns a WebRTC answer to
+// be announced.
 func NewTransportFromOffer(offer webrtc.SessionDescription, onOpen func(datachannel.ReadWriteCloser)) (*Transport, webrtc.SessionDescription, error) {
-	// Enable the detach API (since it's non-standard but more idiomatic)
-	// (This should be done once globally)
-	s := webrtc.SettingEngine{}
-	s.DetachDataChannels()
-	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
-
-	config := webrtc.Configuration{ICEServers: []webrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}}}
-	peerConnection, err := api.NewPeerConnection(config)
+	peerConnection, err := newPeerConnection()
 	if err != nil {
 		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to peer connection: %v", err)
 	}
@@ -73,7 +76,7 @@ func NewTransportFromOffer(offer webrtc.SessionDescription, onOpen func(datachan
 		fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
 	})
 
-	t := &Transport{pc: peerConnection, lock: &sync.Mutex{}}
+	t := &Transport{pc: peerConnection}
 	peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
 		fmt.Printf("New DataChannel %s %d\n", d.Label(), d.ID())
 		t.lock.Lock()

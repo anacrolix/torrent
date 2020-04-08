@@ -99,14 +99,23 @@ func (m *PexMsg) DeltaLen() int {
 	return lenDropped
 }
 
-func (pexMsg *PexMsg) Message(pexExtendedId ExtensionNumber) Message {
-	payload := bencode.MustMarshal(pexMsg)
+func (m *PexMsg) Message(pexExtendedId ExtensionNumber) Message {
+	payload := bencode.MustMarshal(m)
 	return Message{
 		Type:            Extended,
 		ExtendedID:      pexExtendedId,
 		ExtendedPayload: payload,
 	}
 }
+
+func LoadPexMsg(b []byte) (*PexMsg, error) {
+	m := new(PexMsg) 
+	if err := bencode.Unmarshal(b, m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 
 type PexPeerFlags byte
 

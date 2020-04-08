@@ -934,22 +934,6 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 	}
 }
 
-func (cl *Client) sendInitialPEX(conn *PeerConn, t *Torrent) {
-	xid, ok := conn.PeerExtensionIDs[pp.ExtensionNamePex]
-	if !ok {
-		return
-	}
-	m, seq := t.pex.Genmsg(0)
-	conn.pexSeq = seq
-	if m.Len() == 0 {
-		cl.logger.Printf("no initial PEX this time")
-		// FIXME see how can we schedule another initial for later
-		return
-	}
-	conn.logger.Printf("sending initial PEX message: %v", m)
-	conn.post(m.Message(xid))
-}
-
 func (cl *Client) dhtPort() (ret uint16) {
 	cl.eachDhtServer(func(s DhtServer) {
 		ret = uint16(missinggo.AddrPort(s.Addr()))

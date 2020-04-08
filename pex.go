@@ -72,9 +72,14 @@ func (s *pexState) Add(c *PeerConn) {
 	}
 	e := c.pexEvent(pexAdd)
 	s.ev = append(s.ev, e)
+	c.pex.Listed = true
 }
 
 func (s *pexState) Drop(c *PeerConn) {
+	if !c.pex.Listed {
+		// skip connections which were not previously Added
+		return
+	}
 	e := c.pexEvent(pexDrop)
 	s.nc--
 	if s.nc < pexTargAdded && len(s.hold) < pexMaxHold {

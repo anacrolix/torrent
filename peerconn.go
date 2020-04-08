@@ -85,7 +85,7 @@ type PeerConn struct {
 	// response.
 	metadataRequests []bool
 	sentHaves        bitmap.Bitmap
-	pexSeq           int
+	pex              pexConnState
 
 	// Stuff controlled by the remote peer.
 	PeerID                PeerID
@@ -320,6 +320,9 @@ func (cn *PeerConn) writeStatus(w io.Writer, t *Torrent) {
 func (cn *PeerConn) close() {
 	if !cn.closed.Set() {
 		return
+	}
+	if cn.pex.IsEnabled() {
+		cn.pex.Close()
 	}
 	cn.tickleWriter()
 	cn.discardPieceInclination()
@@ -559,7 +562,9 @@ func (cn *PeerConn) fillWriteBuffer(msg func(pp.Message) bool) {
 		}
 		cn.requestsLowWater = len(cn.requests) / 2
 	}
-
+	if cn.pex.IsEnabled() {
+		cn.pex.Share(msg) // gated internally
+	}
 	cn.upload(msg)
 }
 
@@ -1132,9 +1137,9 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			}
 		}
 		c.requestPendingMetadata()
-		if !cl.config.DisablePEX {
-			cl.sendInitialPEX(c, t)
-			// BUG no sending PEX updates yet
+		if !t.cl.config.DisablePEX {
+			t.pex.Add(c) // we learnt enough now
+			c.pex.Init(c)
 		}
 		return nil
 	case metadataExtendedId:
@@ -1144,25 +1149,10 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		}
 		return nil
 	case pexExtendedId:
-		if cl.config.DisablePEX {
-			// TODO: Maybe close the connection. Check that we're not
-			// advertising that we support PEX if it's disabled.
-			return nil
+		if !c.pex.IsEnabled() {
+			return nil // or hang-up maybe?
 		}
-		c.logger.Printf("incoming PEX message")
-		var pexMsg pp.PexMsg
-		err := bencode.Unmarshal(payload, &pexMsg)
-		if err != nil {
-			return fmt.Errorf("error unmarshalling PEX message: %s", err)
-		}
-		npeers := len(pexMsg.Added6) + len(pexMsg.Added)
-		c.logger.Printf("adding %d peers from PEX", npeers)
-		torrent.Add("pex added6 peers received", int64(len(pexMsg.Added6)))
-		var peers Peers
-		peers.AppendFromPex(pexMsg.Added6, pexMsg.Added6Flags)
-		peers.AppendFromPex(pexMsg.Added, pexMsg.AddedFlags)
-		t.addPeers(peers)
-		return nil
+		return c.pex.Recv(payload)
 	default:
 		return fmt.Errorf("unexpected extended message ID: %v", id)
 	}
@@ -1488,15 +1478,32 @@ func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
 	if c.outgoing {
 		f |= pp.PexOutgoingConn
 	}
-	if c.utp() {
+	if c.remoteAddr != nil && strings.Contains(c.remoteAddr.Network(), "udp") {
 		f |= pp.PexSupportsUtp
 	}
 	return f
 }
 
+func (c *PeerConn) dialAddr() net.Addr {
+	if !c.outgoing && c.PeerListenPort != 0 {
+		switch addr := c.remoteAddr.(type) {
+		case *net.TCPAddr:
+			dialAddr := *addr
+			dialAddr.Port = c.PeerListenPort
+			return &dialAddr
+		case *net.UDPAddr:
+			dialAddr := *addr
+			dialAddr.Port = c.PeerListenPort
+			return &dialAddr
+		}
+	}
+	return c.remoteAddr
+}
+
 func (c *PeerConn) pexEvent(t pexEventType) pexEvent {
 	f := c.pexPeerFlags()
-	return pexEvent{t, c.remoteAddr, f}
+	addr := c.dialAddr()
+	return pexEvent{t, addr, f}
 }
 
 func (c *PeerConn) String() string {

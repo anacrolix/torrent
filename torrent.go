@@ -259,7 +259,7 @@ func (t *Torrent) addPeer(p Peer) {
 	if ipAddr, ok := tryIpPortFromNetAddr(p.Addr); ok {
 		if cl.badPeerIPPort(ipAddr.IP, ipAddr.Port) {
 			torrent.Add("peers not added because of bad addr", 1)
-			cl.logger.Printf("peers not added because of bad addr: %v", p)
+			// cl.logger.Printf("peers not added because of bad addr: %v", p)
 			return
 		}
 	}
@@ -1204,6 +1204,9 @@ func (t *Torrent) deleteConnection(c *PeerConn) (ret bool) {
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
+	if !t.cl.config.DisablePEX {
+		t.pex.Drop(c)
+	}
 	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests()
 	if len(t.conns) == 0 {
@@ -1223,9 +1226,6 @@ func (t *Torrent) assertNoPendingRequests() {
 
 func (t *Torrent) dropConnection(c *PeerConn) {
 	t.cl.event.Broadcast()
-	if !t.cl.config.DisablePEX {
-		t.pex.Drop(c)
-	}
 	c.close()
 	if t.deleteConnection(c) {
 		t.openNewConns()
@@ -1498,8 +1498,8 @@ func (t *Torrent) addConnection(c *PeerConn) (err error) {
 		panic(len(t.conns))
 	}
 	t.conns[c] = struct{}{}
-	if !t.cl.config.DisablePEX {
-		t.pex.Add(c)
+	if !t.cl.config.DisablePEX && !c.PeerExtensionBytes.SupportsExtended() {
+		t.pex.Add(c) // as no further extended handshake expected
 	}
 	return nil
 }

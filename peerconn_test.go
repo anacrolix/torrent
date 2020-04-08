@@ -144,7 +144,11 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	require.EqualValues(b, b.N, cn._stats.ChunksReadUseful.Int64())
 }
 
-func TestPexPeerFlags(t *testing.T) {
+func TestConnPexPeerFlags(t *testing.T) {
+	var (
+		tcpAddr = &net.TCPAddr{IP: net.IPv6loopback, Port: 4848}
+		udpAddr = &net.UDPAddr{IP: net.IPv6loopback, Port: 4848}
+	)
 	var testcases = []struct {
 		conn *PeerConn
 		f    pp.PexPeerFlags
@@ -153,13 +157,52 @@ func TestPexPeerFlags(t *testing.T) {
 		{&PeerConn{outgoing: false, PeerPrefersEncryption: true}, pp.PexPrefersEncryption},
 		{&PeerConn{outgoing: true, PeerPrefersEncryption: false}, pp.PexOutgoingConn},
 		{&PeerConn{outgoing: true, PeerPrefersEncryption: true}, pp.PexOutgoingConn | pp.PexPrefersEncryption},
-		{&PeerConn{network: "udp4"}, pp.PexSupportsUtp},
-		{&PeerConn{outgoing: true, network: "udp6"}, pp.PexOutgoingConn | pp.PexSupportsUtp},
-		{&PeerConn{outgoing: true, network: "tcp4"}, pp.PexOutgoingConn},
-		{&PeerConn{network: "tcp6"}, 0},
+		{&PeerConn{remoteAddr: udpAddr}, pp.PexSupportsUtp},
+		{&PeerConn{remoteAddr: udpAddr, outgoing: true}, pp.PexOutgoingConn | pp.PexSupportsUtp},
+		{&PeerConn{remoteAddr: tcpAddr, outgoing: true}, pp.PexOutgoingConn},
+		{&PeerConn{remoteAddr: tcpAddr}, 0},
 	}
 	for i, tc := range testcases {
 		f := tc.conn.pexPeerFlags()
 		require.EqualValues(t, tc.f, f, i)
+	}
+}
+
+func TestConnPexEvent(t *testing.T) {
+	var (
+		udpAddr     = &net.UDPAddr{IP: net.IPv6loopback, Port: 4848}
+		tcpAddr     = &net.TCPAddr{IP: net.IPv6loopback, Port: 4848}
+		dialTcpAddr = &net.TCPAddr{IP: net.IPv6loopback, Port: 4747}
+		dialUdpAddr = &net.UDPAddr{IP: net.IPv6loopback, Port: 4747}
+	)
+	var testcases = []struct {
+		t pexEventType
+		c *PeerConn
+		e pexEvent
+	}{
+		{
+			pexAdd,
+			&PeerConn{remoteAddr: udpAddr},
+			pexEvent{pexAdd, udpAddr, pp.PexSupportsUtp},
+		},
+		{
+			pexDrop,
+			&PeerConn{remoteAddr: tcpAddr, outgoing: true, PeerListenPort: dialTcpAddr.Port},
+			pexEvent{pexDrop, tcpAddr, pp.PexOutgoingConn},
+		},
+		{
+			pexAdd,
+			&PeerConn{remoteAddr: tcpAddr, PeerListenPort: dialTcpAddr.Port},
+			pexEvent{pexAdd, dialTcpAddr, 0},
+		},
+		{
+			pexDrop,
+			&PeerConn{remoteAddr: udpAddr, PeerListenPort: dialUdpAddr.Port},
+			pexEvent{pexDrop, dialUdpAddr, pp.PexSupportsUtp},
+		},
+	}
+	for i, tc := range testcases {
+		e := tc.c.pexEvent(tc.t)
+		require.EqualValues(t, tc.e, e, i)
 	}
 }

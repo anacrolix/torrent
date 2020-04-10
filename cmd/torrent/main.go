@@ -178,7 +178,24 @@ func main() {
 }
 
 func mainErr() error {
-	tagflag.Parse(&flags)
+	var flags struct {
+		tagflag.StartPos
+		Command string
+		Args    tagflag.ExcessArgs
+	}
+	parser := tagflag.Parse(&flags, tagflag.ParseIntermixed(false))
+	switch flags.Command {
+	case "announce":
+		return announceErr(flags.Args, parser)
+	case "download":
+		return downloadErr(flags.Args, parser)
+	default:
+		return fmt.Errorf("unknown command %q", flags.Command)
+	}
+}
+
+func downloadErr(args []string, parent *tagflag.Parser) error {
+	tagflag.ParseArgs(&flags, args, tagflag.Parent(parent))
 	defer envpprof.Stop()
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableAcceptRateLimiting = true

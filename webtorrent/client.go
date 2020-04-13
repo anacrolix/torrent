@@ -180,7 +180,7 @@ func (c *Client) trackerReadLoop() error {
 				c.logger.WithValues(log.Warning).Printf("could not find offer for id %q", ar.OfferID)
 				continue
 			}
-			log.Printf("offer %q got answer %v", ar.OfferID, *ar.Answer)
+			c.logger.Printf("offer %q got answer %v", ar.OfferID, *ar.Answer)
 			err = offer.transport.SetAnswer(*ar.Answer, func(dc datachannel.ReadWriteCloser) {
 				c.onConn(dc, DataChannelContext{
 					Local:        offer.originalOffer,
@@ -190,7 +190,7 @@ func (c *Client) trackerReadLoop() error {
 				})
 			})
 			if err != nil {
-				return fmt.Errorf("failed to sent answer: %v", err)
+				return fmt.Errorf("failed to sent answer: %w", err)
 			}
 		}
 	}

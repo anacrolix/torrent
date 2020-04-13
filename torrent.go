@@ -1317,7 +1317,10 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	sl := func() torrentTrackerAnnouncer {
 		switch u.Scheme {
 		case "ws", "wss":
-			wst := websocketTracker{*u, webtorrent.NewClient(t.cl.peerID, t.infoHash, t.onWebRtcConn, t.logger)}
+			wst := websocketTracker{*u, webtorrent.NewClient(t.cl.peerID, t.infoHash, t.onWebRtcConn,
+				t.logger.WithText(func(m log.Msg) string {
+					return fmt.Sprintf("%q: %v", u.String(), m.Text())
+				}))}
 			go func() {
 				err := wst.Client.Run(t.announceRequest(tracker.Started), u.String())
 				if err != nil {

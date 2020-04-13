@@ -1320,11 +1320,13 @@ func (t *Torrent) startScrapingTracker(_url string) {
 			wst := websocketTracker{*u, webtorrent.NewTrackerClient(t.cl.peerID, t.infoHash, t.onWebRtcConn,
 				t.logger.WithText(func(m log.Msg) string {
 					return fmt.Sprintf("%q: %v", u.String(), m.Text())
-				}))}
+				}).WithValues(log.Debug))}
 			go func() {
 				err := wst.TrackerClient.Run(t.announceRequest(tracker.Started), u.String())
 				if err != nil {
-					t.logger.WithValues(log.Error).Printf("error running websocket tracker announcer: %v", err)
+					t.logger.WithValues(log.Error).Printf(
+						"error running websocket tracker announcer for %q: %v",
+						u.String(), err)
 				}
 			}()
 			return wst

@@ -130,11 +130,11 @@ func (c *TrackerClient) trackerReadLoop() error {
 
 		var ar AnnounceResponse
 		if err := json.Unmarshal(message, &ar); err != nil {
-			log.Printf("error unmarshaling announce response: %v", err)
+			c.logger.Printf("error unmarshaling announce response: %v", err)
 			continue
 		}
 		if ar.InfoHash != c.infoHashBinary {
-			log.Printf("announce response for different hash: expected %q got %q", c.infoHashBinary, ar.InfoHash)
+			c.logger.Printf("announce response for different hash: expected %q got %q", c.infoHashBinary, ar.InfoHash)
 			continue
 		}
 		switch {

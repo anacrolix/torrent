@@ -1456,8 +1456,8 @@ func (c *PeerConn) setTorrent(t *Torrent) {
 	t.reconcileHandshakeStats(c)
 }
 
-func (c *PeerConn) peerPriority() peerPriority {
-	return bep40PriorityIgnoreError(c.remoteIpPort(), c.t.cl.publicAddr(c.remoteIp()))
+func (c *PeerConn) peerPriority() (peerPriority, error) {
+	return bep40Priority(c.remoteIpPort(), c.t.cl.publicAddr(c.remoteIp()))
 }
 
 func (c *PeerConn) remoteIp() net.IP {

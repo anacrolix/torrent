@@ -12,9 +12,22 @@ func worseConn(l, r *PeerConn) bool {
 	less, ok := multiless.New().Bool(
 		l.useful(), r.useful()).CmpInt64(
 		l.lastHelpful().Sub(r.lastHelpful()).Nanoseconds()).CmpInt64(
-		l.completedHandshake.Sub(r.completedHandshake).Nanoseconds()).Uint32(
-		l.peerPriority(), r.peerPriority()).Uintptr(
-		uintptr(unsafe.Pointer(l)), uintptr(unsafe.Pointer(r))).LessOk()
+		l.completedHandshake.Sub(r.completedHandshake).Nanoseconds()).LazySameLess(
+		func() (same, less bool) {
+			lpp, err := l.peerPriority()
+			if err != nil {
+				same = true
+				return
+			}
+			rpp, err := r.peerPriority()
+			if err != nil {
+				same = true
+				return
+			}
+			return lpp == rpp, lpp < rpp
+		}).Uintptr(
+		uintptr(unsafe.Pointer(l)), uintptr(unsafe.Pointer(r)),
+	).LessOk()
 	if !ok {
 		panic(fmt.Sprintf("cannot differentiate %#v and %#v", l, r))
 	}

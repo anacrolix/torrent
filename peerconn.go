@@ -43,6 +43,7 @@ type PeerConn struct {
 	t *Torrent
 	// The actual Conn, used for closing, and setting socket options.
 	conn       net.Conn
+	connString string
 	outgoing   bool
 	network    string
 	remoteAddr net.Addr
@@ -280,7 +281,7 @@ func (cn *PeerConn) downloadRate() float64 {
 
 func (cn *PeerConn) writeStatus(w io.Writer, t *Torrent) {
 	// \t isn't preserved in <pre> blocks?
-	fmt.Fprintf(w, "%+-55q %s %s-%s\n", cn.PeerID, cn.PeerExtensionBytes, cn.localAddr(), cn.remoteAddr)
+	fmt.Fprintf(w, "%+-55q %s %s\n", cn.PeerID, cn.PeerExtensionBytes, cn.connString)
 	fmt.Fprintf(w, "    last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),

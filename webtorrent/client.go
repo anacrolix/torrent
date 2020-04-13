@@ -41,6 +41,7 @@ func binaryToJsonString(b []byte) string {
 
 type DataChannelContext struct {
 	Local, Remote webrtc.SessionDescription
+	OfferId       string
 	LocalOffered  bool
 }
 
@@ -146,7 +147,7 @@ func (c *Client) trackerReadLoop() error {
 		}
 		switch {
 		case ar.Offer != nil:
-			_, answer, err := NewTransportFromOffer(*ar.Offer, c.onConn)
+			_, answer, err := NewTransportFromOffer(*ar.Offer, c.onConn, ar.OfferID)
 			if err != nil {
 				return fmt.Errorf("write AnnounceResponse: %w", err)
 			}
@@ -184,6 +185,7 @@ func (c *Client) trackerReadLoop() error {
 				c.onConn(dc, DataChannelContext{
 					Local:        offer.originalOffer,
 					Remote:       *ar.Answer,
+					OfferId:      ar.OfferID,
 					LocalOffered: true,
 				})
 			})

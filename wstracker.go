@@ -9,7 +9,7 @@ import (
 
 type websocketTracker struct {
 	url url.URL
-	*webtorrent.Client
+	*webtorrent.TrackerClient
 }
 
 func (me websocketTracker) statusLine() string {

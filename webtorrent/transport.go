@@ -12,8 +12,7 @@ import (
 
 var (
 	api = func() *webrtc.API {
-		// Enable the detach API (since it's non-standard but more idiomatic)
-		// (This should be done once globally)
+		// Enable the detach API (since it's non-standard but more idiomatic).
 		s := webrtc.SettingEngine{}
 		s.DetachDataChannels()
 		return webrtc.NewAPI(webrtc.WithSettingEngine(s))
@@ -28,15 +27,15 @@ func newPeerConnection() (*webrtc.PeerConnection, error) {
 	return api.NewPeerConnection(config)
 }
 
-type Transport struct {
+type transport struct {
 	pc *webrtc.PeerConnection
 	dc *webrtc.DataChannel
 
 	lock sync.Mutex
 }
 
-// NewTransport creates a transport and returns a WebRTC offer to be announced
-func NewTransport() (*Transport, webrtc.SessionDescription, error) {
+// newTransport creates a transport and returns a WebRTC offer to be announced
+func newTransport() (*transport, webrtc.SessionDescription, error) {
 	peerConnection, err := newPeerConnection()
 	if err != nil {
 		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to peer connection: %v\n", err)
@@ -61,13 +60,13 @@ func NewTransport() (*Transport, webrtc.SessionDescription, error) {
 		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to set local description: %v\n", err)
 	}
 
-	t := &Transport{pc: peerConnection, dc: dataChannel}
+	t := &transport{pc: peerConnection, dc: dataChannel}
 	return t, offer, nil
 }
 
-// NewTransportFromOffer creates a transport from a WebRTC offer and and returns a WebRTC answer to
+// newTransportFromOffer creates a transport from a WebRTC offer and and returns a WebRTC answer to
 // be announced.
-func NewTransportFromOffer(offer webrtc.SessionDescription, onOpen onDataChannelOpen, offerId string) (*Transport, webrtc.SessionDescription, error) {
+func newTransportFromOffer(offer webrtc.SessionDescription, onOpen onDataChannelOpen, offerId string) (*transport, webrtc.SessionDescription, error) {
 	peerConnection, err := newPeerConnection()
 	if err != nil {
 		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to peer connection: %v", err)
@@ -76,7 +75,7 @@ func NewTransportFromOffer(offer webrtc.SessionDescription, onOpen onDataChannel
 		fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
 	})
 
-	t := &Transport{pc: peerConnection}
+	t := &transport{pc: peerConnection}
 
 	err = peerConnection.SetRemoteDescription(offer)
 	if err != nil {
@@ -104,7 +103,7 @@ func NewTransportFromOffer(offer webrtc.SessionDescription, onOpen onDataChannel
 }
 
 // SetAnswer sets the WebRTC answer
-func (t *Transport) SetAnswer(answer webrtc.SessionDescription, onOpen func(datachannel.ReadWriteCloser)) error {
+func (t *transport) SetAnswer(answer webrtc.SessionDescription, onOpen func(datachannel.ReadWriteCloser)) error {
 	t.handleOpen(onOpen)
 
 	err := t.pc.SetRemoteDescription(answer)
@@ -114,7 +113,7 @@ func (t *Transport) SetAnswer(answer webrtc.SessionDescription, onOpen func(data
 	return nil
 }
 
-func (t *Transport) handleOpen(onOpen func(datachannel.ReadWriteCloser)) {
+func (t *transport) handleOpen(onOpen func(datachannel.ReadWriteCloser)) {
 	t.lock.Lock()
 	dc := t.dc
 	t.lock.Unlock()

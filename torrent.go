@@ -1322,7 +1322,7 @@ func (t *Torrent) startScrapingTracker(_url string) {
 					return fmt.Sprintf("%q: %v", u.String(), m.Text())
 				}))}
 			go func() {
-				err := wst.Client.Run(t.announceRequest(tracker.Started), u.String())
+				err := wst.TrackerClient.Run(t.announceRequest(tracker.Started), u.String())
 				if err != nil {
 					t.logger.WithValues(log.Error).Printf("error running websocket tracker announcer: %v", err)
 				}

@@ -1,6 +1,7 @@
 package webtorrent
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -8,14 +9,13 @@ import (
 	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/torrent/tracker"
-	"github.com/anacrolix/torrent/webtorrent/buffer"
 	"github.com/gorilla/websocket"
 	"github.com/pion/datachannel"
 	"github.com/pion/webrtc/v2"
 )
 
 // Client represents the webtorrent client
-type Client struct {
+type TrackerClient struct {
 	lock           sync.Mutex
 	peerIDBinary   string
 	infoHashBinary string
@@ -28,15 +28,7 @@ type Client struct {
 // outboundOffer represents an outstanding offer.
 type outboundOffer struct {
 	originalOffer webrtc.SessionDescription
-	transport     *Transport
-}
-
-func binaryToJsonString(b []byte) string {
-	var seq []rune
-	for _, v := range b {
-		seq = append(seq, rune(v))
-	}
-	return string(seq)
+	transport     *transport
 }
 
 type DataChannelContext struct {
@@ -47,8 +39,8 @@ type DataChannelContext struct {
 
 type onDataChannelOpen func(_ datachannel.ReadWriteCloser, dcc DataChannelContext)
 
-func NewClient(peerId, infoHash [20]byte, onConn onDataChannelOpen, logger log.Logger) *Client {
-	return &Client{
+func NewClient(peerId, infoHash [20]byte, onConn onDataChannelOpen, logger log.Logger) *TrackerClient {
+	return &TrackerClient{
 		outboundOffers: make(map[string]outboundOffer),
 		peerIDBinary:   binaryToJsonString(peerId[:]),
 		infoHashBinary: binaryToJsonString(infoHash[:]),
@@ -57,7 +49,7 @@ func NewClient(peerId, infoHash [20]byte, onConn onDataChannelOpen, logger log.L
 	}
 }
 
-func (c *Client) Run(ar tracker.AnnounceRequest, url string) error {
+func (c *TrackerClient) Run(ar tracker.AnnounceRequest, url string) error {
 	t, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to dial tracker: %w", err)
@@ -75,17 +67,18 @@ func (c *Client) Run(ar tracker.AnnounceRequest, url string) error {
 	return c.trackerReadLoop()
 }
 
-func (c *Client) announce(request tracker.AnnounceRequest) error {
-	transport, offer, err := NewTransport()
+func (c *TrackerClient) announce(request tracker.AnnounceRequest) error {
+	transport, offer, err := newTransport()
 	if err != nil {
 		return fmt.Errorf("failed to create transport: %w", err)
 	}
 
-	randOfferID, err := buffer.RandomBytes(20)
+	var randOfferId [20]byte
+	_, err = rand.Read(randOfferId[:])
 	if err != nil {
 		return fmt.Errorf("failed to generate bytes: %w", err)
 	}
-	offerIDBinary := randOfferID.ToStringLatin1()
+	offerIDBinary := binaryToJsonString(randOfferId[:])
 
 	c.lock.Lock()
 	c.outboundOffers[offerIDBinary] = outboundOffer{
@@ -124,7 +117,7 @@ func (c *Client) announce(request tracker.AnnounceRequest) error {
 	return nil
 }
 
-func (c *Client) trackerReadLoop() error {
+func (c *TrackerClient) trackerReadLoop() error {
 
 	c.lock.Lock()
 	tracker := c.tracker
@@ -147,7 +140,7 @@ func (c *Client) trackerReadLoop() error {
 		}
 		switch {
 		case ar.Offer != nil:
-			_, answer, err := NewTransportFromOffer(*ar.Offer, c.onConn, ar.OfferID)
+			_, answer, err := newTransportFromOffer(*ar.Offer, c.onConn, ar.OfferID)
 			if err != nil {
 				return fmt.Errorf("write AnnounceResponse: %w", err)
 			}
@@ -194,34 +187,4 @@ func (c *Client) trackerReadLoop() error {
 			}
 		}
 	}
-}
-
-type AnnounceRequest struct {
-	Numwant    int     `json:"numwant"`
-	Uploaded   int     `json:"uploaded"`
-	Downloaded int     `json:"downloaded"`
-	Left       int64   `json:"left"`
-	Event      string  `json:"event"`
-	Action     string  `json:"action"`
-	InfoHash   string  `json:"info_hash"`
-	PeerID     string  `json:"peer_id"`
-	Offers     []Offer `json:"offers"`
-}
-
-type Offer struct {
-	OfferID string                    `json:"offer_id"`
-	Offer   webrtc.SessionDescription `json:"offer"`
-}
-
-type AnnounceResponse struct {
-	InfoHash   string                     `json:"info_hash"`
-	Action     string                     `json:"action"`
-	Interval   *int                       `json:"interval,omitempty"`
-	Complete   *int                       `json:"complete,omitempty"`
-	Incomplete *int                       `json:"incomplete,omitempty"`
-	PeerID     string                     `json:"peer_id,omitempty"`
-	ToPeerID   string                     `json:"to_peer_id,omitempty"`
-	Answer     *webrtc.SessionDescription `json:"answer,omitempty"`
-	Offer      *webrtc.SessionDescription `json:"offer,omitempty"`
-	OfferID    string                     `json:"offer_id,omitempty"`
 }

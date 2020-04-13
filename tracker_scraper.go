@@ -113,9 +113,9 @@ func (me *trackerScraper) announce(event tracker.AnnounceEvent) (ret trackerAnno
 		ret.Err = fmt.Errorf("error getting ip: %s", err)
 		return
 	}
-	me.t.cl.lock()
+	me.t.cl.rLock()
 	req := me.t.announceRequest(event)
-	me.t.cl.unlock()
+	me.t.cl.rUnlock()
 	//log.Printf("announcing %s %s to %q", me.t, req.Event, me.u.String())
 	res, err := tracker.Announce{
 		HTTPProxy:  me.t.cl.config.HTTPProxy,

@@ -39,7 +39,7 @@ type DataChannelContext struct {
 
 type onDataChannelOpen func(_ datachannel.ReadWriteCloser, dcc DataChannelContext)
 
-func NewClient(peerId, infoHash [20]byte, onConn onDataChannelOpen, logger log.Logger) *TrackerClient {
+func NewTrackerClient(peerId, infoHash [20]byte, onConn onDataChannelOpen, logger log.Logger) *TrackerClient {
 	return &TrackerClient{
 		outboundOffers: make(map[string]outboundOffer),
 		peerIDBinary:   binaryToJsonString(peerId[:]),
@@ -118,7 +118,6 @@ func (c *TrackerClient) announce(request tracker.AnnounceRequest) error {
 }
 
 func (c *TrackerClient) trackerReadLoop() error {
-
 	c.lock.Lock()
 	tracker := c.tracker
 	c.lock.Unlock()

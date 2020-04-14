@@ -38,26 +38,26 @@ type transport struct {
 func newTransport() (*transport, webrtc.SessionDescription, error) {
 	peerConnection, err := newPeerConnection()
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to peer connection: %v\n", err)
+		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to peer connection: %w", err)
 	}
 	dataChannel, err := peerConnection.CreateDataChannel("webrtc-datachannel", nil)
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to data channel: %v\n", err)
+		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to data channel: %w", err)
 	}
 	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
-		fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
+		//fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
 	})
 
 	dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
-		fmt.Printf("Message from DataChannel '%s': '%s'\n", dataChannel.Label(), string(msg.Data))
+		//fmt.Printf("Message from DataChannel '%s': '%s'\n", dataChannel.Label(), string(msg.Data))
 	})
 	offer, err := peerConnection.CreateOffer(nil)
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to create offer: %v\n", err)
+		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to create offer: %w", err)
 	}
 	err = peerConnection.SetLocalDescription(offer)
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to set local description: %v\n", err)
+		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to set local description: %w", err)
 	}
 
 	t := &transport{pc: peerConnection, dc: dataChannel}
@@ -69,24 +69,24 @@ func newTransport() (*transport, webrtc.SessionDescription, error) {
 func newTransportFromOffer(offer webrtc.SessionDescription, onOpen onDataChannelOpen, offerId string) (*transport, webrtc.SessionDescription, error) {
 	peerConnection, err := newPeerConnection()
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to peer connection: %v", err)
+		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to peer connection: %w", err)
 	}
 	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
-		fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
+		//fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
 	})
 
 	t := &transport{pc: peerConnection}
 
 	err = peerConnection.SetRemoteDescription(offer)
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("%v", err)
+		return nil, webrtc.SessionDescription{}, err
 	}
 	answer, err := peerConnection.CreateAnswer(nil)
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("%v", err)
+		return nil, webrtc.SessionDescription{}, err
 	}
 	peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
-		fmt.Printf("New DataChannel %s %d\n", d.Label(), d.ID())
+		//fmt.Printf("New DataChannel %s %d\n", d.Label(), d.ID())
 		t.lock.Lock()
 		t.dc = d
 		t.lock.Unlock()
@@ -96,7 +96,7 @@ func newTransportFromOffer(offer webrtc.SessionDescription, onOpen onDataChannel
 	})
 	err = peerConnection.SetLocalDescription(answer)
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("%v", err)
+		return nil, webrtc.SessionDescription{}, err
 	}
 
 	return t, answer, nil
@@ -118,7 +118,7 @@ func (t *transport) handleOpen(onOpen func(datachannel.ReadWriteCloser)) {
 	dc := t.dc
 	t.lock.Unlock()
 	dc.OnOpen(func() {
-		fmt.Printf("Data channel '%s'-'%d' open.\n", dc.Label(), dc.ID())
+		//fmt.Printf("Data channel '%s'-'%d' open.\n", dc.Label(), dc.ID())
 
 		// Detach the data channel
 		raw, err := dc.Detach()

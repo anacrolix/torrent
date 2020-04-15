@@ -863,6 +863,14 @@ func (c *PeerConn) requestPendingMetadata() {
 
 func (cn *PeerConn) wroteMsg(msg *pp.Message) {
 	torrent.Add(fmt.Sprintf("messages written of type %s", msg.Type.String()), 1)
+	if msg.Type == pp.Extended {
+		for name, id := range cn.PeerExtensionIDs {
+			if id != msg.ExtendedID {
+				continue
+			}
+			torrent.Add(fmt.Sprintf("Extended messages written for protocol %q", name), 1)
+		}
+	}
 	cn.allStats(func(cs *ConnStats) { cs.wroteMsg(msg) })
 }
 

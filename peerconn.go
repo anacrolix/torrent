@@ -564,7 +564,9 @@ func (cn *PeerConn) fillWriteBuffer(msg func(pp.Message) bool) {
 		cn.requestsLowWater = len(cn.requests) / 2
 	}
 	if cn.pex.IsEnabled() {
-		cn.pex.Share(msg) // gated internally
+		if flow := cn.pex.Share(msg); !flow {
+			return
+		}
 	}
 	cn.upload(msg)
 }

@@ -142,24 +142,33 @@ func (me *trackerScraper) Run() {
 		me.t.cl.unlock()
 
 	wait:
+		// Make sure we don't announce for at least a minute since the last one.
 		interval := ar.Interval
 		if interval < time.Minute {
 			interval = time.Minute
 		}
-		wantPeers := me.t.wantPeersEvent.LockedChan(me.t.cl.locker())
+
+		me.t.cl.lock()
+		wantPeers := me.t.wantPeersEvent.C()
+		closed := me.t.closed.C()
+		me.t.cl.unlock()
+
+		// If we want peers, reduce the interval to the minimum.
 		select {
 		case <-wantPeers:
 			if interval > time.Minute {
 				interval = time.Minute
 			}
+			// Now we're at the minimum, don't trigger on it anymore.
 			wantPeers = nil
 		default:
 		}
 
 		select {
-		case <-me.t.closed.LockedChan(me.t.cl.locker()):
+		case <-closed:
 			return
 		case <-wantPeers:
+			// Recalculate the interval.
 			goto wait
 		case <-time.After(time.Until(ar.Completed.Add(interval))):
 		}

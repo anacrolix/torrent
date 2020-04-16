@@ -1379,11 +1379,17 @@ func (t *Torrent) startMissingTrackerScrapers() {
 // Returns an AnnounceRequest with fields filled out to defaults and current
 // values.
 func (t *Torrent) announceRequest(event tracker.AnnounceEvent) tracker.AnnounceRequest {
-	// Note that IPAddress is not set. It's set for UDP inside the tracker
-	// code, since it's dependent on the network in use.
+	// Note that IPAddress is not set. It's set for UDP inside the tracker code, since it's
+	// dependent on the network in use.
 	return tracker.AnnounceRequest{
-		Event:    event,
-		NumWant:  -1,
+		Event: event,
+		NumWant: func() int32 {
+			if t.wantPeers() && len(t.cl.dialers) > 0 {
+				return -1
+			} else {
+				return 0
+			}
+		}(),
 		Port:     uint16(t.cl.incomingPeerPort()),
 		PeerId:   t.cl.peerID,
 		InfoHash: t.infoHash,

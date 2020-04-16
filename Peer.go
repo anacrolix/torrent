@@ -20,6 +20,15 @@ type Peer struct {
 	Trusted bool
 }
 
+func (me Peer) Equal(other Peer) bool {
+	return me.Id == other.Id &&
+		me.Addr.String() == other.Addr.String() &&
+		me.Source == other.Source &&
+		me.SupportsEncryption == other.SupportsEncryption &&
+		me.PexPeerFlags == other.PexPeerFlags &&
+		me.Trusted == other.Trusted
+}
+
 // FromPex generate Peer from peer exchange
 func (me *Peer) FromPex(na krpc.NodeAddr, fs peer_protocol.PexPeerFlags) {
 	me.Addr = ipPortAddr{append([]byte(nil), na.IP...), na.Port}

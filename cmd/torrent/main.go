@@ -141,6 +141,8 @@ var flags = struct {
 	Dht             bool
 	TcpPeers        bool
 	UtpPeers        bool
+	Ipv4            bool
+	Ipv6            bool
 	tagflag.StartPos
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }{
@@ -150,6 +152,8 @@ var flags = struct {
 	Dht:          true,
 	TcpPeers:     true,
 	UtpPeers:     true,
+	Ipv4:         true,
+	Ipv6:         true,
 }
 
 func stdoutAndStderrAreSameFile() bool {
@@ -204,6 +208,8 @@ func downloadErr(args []string, parent *tagflag.Parser) error {
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableTCP = !flags.TcpPeers
 	clientConfig.DisableUTP = !flags.UtpPeers
+	clientConfig.DisableIPv4 = !flags.Ipv4
+	clientConfig.DisableIPv6 = !flags.Ipv6
 	clientConfig.DisableAcceptRateLimiting = true
 	clientConfig.NoDHT = !flags.Dht
 	clientConfig.Debug = flags.Debug

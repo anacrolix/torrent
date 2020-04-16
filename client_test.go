@@ -305,7 +305,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	assert.EqualValues(t, 0, n)
 }
 
-func TestDHTInheritBlocklist(t *testing.T) {
+func TestDhtInheritBlocklist(t *testing.T) {
 	ipl := iplist.New(nil)
 	require.NotNil(t, ipl)
 	cfg := TestingConfig()
@@ -316,7 +316,8 @@ func TestDHTInheritBlocklist(t *testing.T) {
 	defer cl.Close()
 	numServers := 0
 	cl.eachDhtServer(func(s DhtServer) {
-		assert.Equal(t, ipl, s.(anacrolixDhtServerWrapper).IPBlocklist())
+		t.Log(s)
+		assert.Equal(t, ipl, s.(anacrolixDhtServerWrapper).Server.IPBlocklist())
 		numServers++
 	})
 	assert.EqualValues(t, 2, numServers)

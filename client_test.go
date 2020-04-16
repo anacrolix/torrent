@@ -612,7 +612,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 	ih := testutil.GreetingMetaInfo().HashInfoBytes()
 	cfg := TestingConfig()
 	cfg.DisableAcceptRateLimiting = true
-	cfg.dropDuplicatePeerIds = true
+	cfg.DropDuplicatePeerIds = true
 	for i := range iter.N(3) {
 		cl, err := NewClient(cfg)
 		require.NoError(t, err)

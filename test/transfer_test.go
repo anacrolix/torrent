@@ -217,6 +217,15 @@ func testClientTransferSmallCache(t *testing.T, setReadahead bool, readahead int
 		// thought we had.
 		Readahead:          readahead,
 		ExportClientStatus: true,
+
+		// These tests don't work well with more than 1 connection to the seeder.
+		ConfigureLeecher: ConfigureClient{
+			Config: func(cfg *torrent.ClientConfig) {
+				cfg.DropDuplicatePeerIds = true
+				//cfg.DisableIPv6 = true
+				//cfg.DisableUTP = true
+			},
+		},
 	})
 }
 

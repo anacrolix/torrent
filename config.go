@@ -120,7 +120,7 @@ type ClientConfig struct {
 	DisableAcceptRateLimiting bool
 	// Don't add connections that have the same peer ID as an existing
 	// connection for a given Torrent.
-	dropDuplicatePeerIds bool
+	DropDuplicatePeerIds bool
 
 	ConnTracker *conntrack.Instance
 

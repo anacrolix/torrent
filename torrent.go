@@ -90,7 +90,8 @@ type Torrent struct {
 	// active connections if were told about the peer after connecting with
 	// them. That encourages us to reconnect to peers that are well known in
 	// the swarm.
-	peers          prioritizedPeers
+	peers prioritizedPeers
+	// Whether we want to know to know more peers.
 	wantPeersEvent missinggo.Event
 	// An announcer for each tracker URL.
 	trackerAnnouncers map[string]torrentTrackerAnnouncer
@@ -1440,19 +1441,33 @@ func (t *Torrent) announceToDht(impliedPort bool, s DhtServer) error {
 
 func (t *Torrent) dhtAnnouncer(s DhtServer) {
 	cl := t.cl
+	cl.lock()
+	defer cl.unlock()
 	for {
-		select {
-		case <-t.closed.LockedChan(cl.locker()):
-			return
-		case <-t.wantPeersEvent.LockedChan(cl.locker()):
+		for {
+			if t.closed.IsSet() {
+				return
+			}
+			if !t.wantPeers() {
+				goto wait
+			}
+			// TODO: Determine if there's a listener on the port we're announcing.
+			if len(cl.dialers) == 0 && len(cl.listeners) == 0 {
+				goto wait
+			}
+			break
+		wait:
+			cl.event.Wait()
 		}
-		cl.lock()
-		t.numDHTAnnounces++
-		cl.unlock()
-		err := t.announceToDht(true, s)
-		if err != nil {
-			t.logger.WithValues(log.Warning).Printf("error announcing %q to DHT: %s", t, err)
-		}
+		func() {
+			t.numDHTAnnounces++
+			cl.unlock()
+			defer cl.lock()
+			err := t.announceToDht(true, s)
+			if err != nil {
+				t.logger.WithValues(log.Warning).Printf("error announcing %q to DHT: %s", t, err)
+			}
+		}()
 	}
 }
 

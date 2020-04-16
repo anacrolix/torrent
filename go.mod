@@ -6,7 +6,7 @@ require (
 	github.com/anacrolix/dht/v2 v2.5.1-0.20200317023935-129f05e9b752
 	github.com/anacrolix/envpprof v1.1.0
 	github.com/anacrolix/go-libutp v1.0.2
-	github.com/anacrolix/log v0.6.0
+	github.com/anacrolix/log v0.6.1-0.20200416071330-f58a030e6149
 	github.com/anacrolix/missinggo v1.2.1
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.4.1-0.20200227072623-f02f6484f997

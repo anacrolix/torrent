@@ -117,7 +117,7 @@ func (me *trackerScraper) announce(event tracker.AnnounceEvent) (ret trackerAnno
 	me.t.cl.rLock()
 	req := me.t.announceRequest(event)
 	me.t.cl.rUnlock()
-	me.t.logger.WithValues(log.Debug).Printf("announcing to %q: %#v", me.u.String(), req)
+	me.t.logger.WithDefaultLevel(log.Debug).Printf("announcing to %q: %#v", me.u.String(), req)
 	res, err := tracker.Announce{
 		HTTPProxy:  me.t.cl.config.HTTPProxy,
 		UserAgent:  me.t.cl.config.HTTPUserAgent,

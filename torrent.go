@@ -1107,7 +1107,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
 	}
 	if changed {
-		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).WithValues(debugLogValue).Log(t.logger)
+		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).SetLevel(log.Debug).Log(t.logger)
 		t.pieceCompletionChanged(piece)
 	}
 	return changed
@@ -1338,12 +1338,12 @@ func (t *Torrent) startScrapingTracker(_url string) {
 			wst := websocketTracker{*u, webtorrent.NewTrackerClient(t.cl.peerID, t.infoHash, t.onWebRtcConn,
 				t.logger.WithText(func(m log.Msg) string {
 					return fmt.Sprintf("%q: %v", u.String(), m.Text())
-				}).WithValues(log.Debug))}
+				}).WithDefaultLevel(log.Debug))}
 			ar := t.announceRequest(tracker.Started)
 			go func() {
 				err := wst.TrackerClient.Run(ar, u.String())
 				if err != nil {
-					t.logger.WithValues(log.Error).Printf(
+					t.logger.WithDefaultLevel(log.Error).Printf(
 						"error running websocket tracker announcer for %q: %v",
 						u.String(), err)
 				}
@@ -1471,7 +1471,7 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 			defer cl.lock()
 			err := t.announceToDht(true, s)
 			if err != nil {
-				t.logger.WithValues(log.Warning).Printf("error announcing %q to DHT: %s", t, err)
+				t.logger.WithDefaultLevel(log.Warning).Printf("error announcing %q to DHT: %s", t, err)
 			}
 		}()
 	}
@@ -1618,7 +1618,7 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 }
 
 func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
-	t.logger.Log(log.Fstr("hashed piece %d (passed=%t)", piece, passed).WithValues(debugLogValue))
+	t.logger.Log(log.Fstr("hashed piece %d (passed=%t)", piece, passed).SetLevel(log.Debug))
 	p := t.piece(piece)
 	p.numVerifies++
 	t.cl.event.Broadcast()

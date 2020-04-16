@@ -55,13 +55,13 @@ func (c *TrackerClient) Run(ar tracker.AnnounceRequest, url string) error {
 		return fmt.Errorf("failed to dial tracker: %w", err)
 	}
 	defer t.Close()
-	c.logger.WithValues(log.Info).Printf("dialed tracker %q", url)
+	c.logger.WithDefaultLevel(log.Debug).Printf("dialed tracker %q", url)
 	c.tracker = t
 
 	go func() {
 		err := c.announce(ar)
 		if err != nil {
-			c.logger.WithValues(log.Error).Printf("error announcing: %v", err)
+			c.logger.WithDefaultLevel(log.Error).Printf("error announcing: %v", err)
 		}
 	}()
 	return c.trackerReadLoop()
@@ -126,7 +126,7 @@ func (c *TrackerClient) trackerReadLoop() error {
 		if err != nil {
 			return fmt.Errorf("read error: %w", err)
 		}
-		c.logger.WithValues(log.Debug).Printf("received message from tracker: %q", message)
+		c.logger.WithDefaultLevel(log.Debug).Printf("received message from tracker: %q", message)
 
 		var ar AnnounceResponse
 		if err := json.Unmarshal(message, &ar); err != nil {
@@ -169,7 +169,7 @@ func (c *TrackerClient) trackerReadLoop() error {
 			offer, ok := c.outboundOffers[ar.OfferID]
 			c.lock.Unlock()
 			if !ok {
-				c.logger.WithValues(log.Warning).Printf("could not find offer for id %q", ar.OfferID)
+				c.logger.WithDefaultLevel(log.Warning).Printf("could not find offer for id %q", ar.OfferID)
 				continue
 			}
 			c.logger.Printf("offer %q got answer %v", ar.OfferID, *ar.Answer)

@@ -146,17 +146,11 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
-const debugLogValue = log.Debug
-
-func (cl *Client) debugLogFilter(m log.Msg) bool {
-	if cl.config.Debug {
-		return true
-	}
-	return !m.HasValue(debugLogValue)
-}
-
 func (cl *Client) initLogger() {
-	cl.logger = cl.config.Logger.WithValues(cl).WithFilter(cl.debugLogFilter)
+	cl.logger = cl.config.Logger.WithValues(cl)
+	if !cl.config.Debug {
+		cl.logger = cl.logger.FilterLevel(log.Info)
+	}
 }
 
 func (cl *Client) announceKey() int32 {
@@ -443,13 +437,13 @@ func (cl *Client) acceptConnections(l net.Listener) {
 			return
 		}
 		if err != nil {
-			log.Fmsg("error accepting connection: %s", err).AddValue(debugLogValue).Log(cl.logger)
+			log.Fmsg("error accepting connection: %s", err).SetLevel(log.Debug).Log(cl.logger)
 			continue
 		}
 		go func() {
 			if reject != nil {
 				torrent.Add("rejected accepted connections", 1)
-				log.Fmsg("rejecting accepted conn: %v", reject).AddValue(debugLogValue).Log(cl.logger)
+				log.Fmsg("rejecting accepted conn: %v", reject).SetLevel(log.Debug).Log(cl.logger)
 				conn.Close()
 			} else {
 				go cl.incomingConnection(conn)
@@ -458,7 +452,7 @@ func (cl *Client) acceptConnections(l net.Listener) {
 				l.Addr().Network(),
 				conn.LocalAddr(),
 				conn.RemoteAddr(),
-			).AddValue(debugLogValue).Log(cl.logger)
+			).SetLevel(log.Debug).Log(cl.logger)
 			torrent.Add(fmt.Sprintf("accepted conn remote IP len=%d", len(addrIpOrNil(conn.RemoteAddr()))), 1)
 			torrent.Add(fmt.Sprintf("accepted conn network=%s", conn.RemoteAddr().Network()), 1)
 			torrent.Add(fmt.Sprintf("accepted on %s listener", l.Addr().Network()), 1)
@@ -836,11 +830,10 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 	if err != nil {
 		log.Fmsg(
 			"error receiving handshakes on %v: %s", c, err,
-		).AddValue(
-			debugLogValue,
-		).Add(
-			"network", c.network,
-		).Log(cl.logger)
+		).SetLevel(log.Debug).
+			Add(
+				"network", c.network,
+			).Log(cl.logger)
 		torrent.Add("error receiving handshake", 1)
 		cl.lock()
 		cl.onBadAccept(c.remoteAddr)
@@ -849,7 +842,7 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 	}
 	if t == nil {
 		torrent.Add("received handshake for unloaded torrent", 1)
-		log.Fmsg("received handshake for unloaded torrent").AddValue(debugLogValue).Log(cl.logger)
+		log.Fmsg("received handshake for unloaded torrent").SetLevel(log.Debug).Log(cl.logger)
 		cl.lock()
 		cl.onBadAccept(c.remoteAddr)
 		cl.unlock()
@@ -883,7 +876,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) {
 		torrent.Add("completed handshake over ipv6", 1)
 	}
 	if err := t.addConnection(c); err != nil {
-		log.Fmsg("error adding connection: %s", err).AddValues(c, debugLogValue).Log(t.logger)
+		log.Fmsg("error adding connection: %s", err).AddValues(c).SetLevel(log.Debug).Log(t.logger)
 		return
 	}
 	defer t.dropConnection(c)
@@ -1251,9 +1244,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr net.Addr,
 		network:         network,
 		connString:      connString,
 	}
-	c.logger = cl.logger.WithValues(c,
-		log.Debug, // I want messages to default to debug, and can set it here as it's only used by new code
-	).WithText(func(m log.Msg) string {
+	c.logger = cl.logger.WithValues(c).WithDefaultLevel(log.Debug).WithText(func(m log.Msg) string {
 		return fmt.Sprintf("%v: %s", c, m.Text())
 	})
 	c.writerCond.L = cl.locker()

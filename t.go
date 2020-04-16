@@ -254,6 +254,8 @@ func (t *Torrent) Piece(i pieceIndex) *Piece {
 }
 
 func (t *Torrent) PeerConns() []*PeerConn {
+	t.cl.rLock()
+	defer t.cl.rUnlock()
 	ret := make([]*PeerConn, 0, len(t.conns))
 	for c := range t.conns {
 		ret = append(ret, c)

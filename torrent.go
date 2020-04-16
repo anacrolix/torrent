@@ -1065,6 +1065,9 @@ func (t *Torrent) openNewConns() {
 		if len(t.halfOpen) >= t.maxHalfOpen() {
 			return
 		}
+		if len(t.cl.dialers) == 0 {
+			return
+		}
 		p := t.peers.PopMax()
 		t.initiateConn(p)
 	}

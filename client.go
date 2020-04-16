@@ -257,7 +257,12 @@ func (cl *Client) AddDhtServer(d DhtServer) {
 // Adds a Dialer for outgoing connections. All Dialers are used when attempting to connect to a
 // given address for any Torrent.
 func (cl *Client) AddDialer(d Dialer) {
+	cl.lock()
+	defer cl.unlock()
 	cl.dialers = append(cl.dialers, d)
+	for _, t := range cl.torrents {
+		t.openNewConns()
+	}
 }
 
 // Registers a Listener, and starts Accepting on it. You must Close Listeners provided this way

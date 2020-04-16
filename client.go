@@ -1323,13 +1323,15 @@ func (cl *Client) publicIp(peer net.IP) net.IP {
 }
 
 func (cl *Client) findListenerIp(f func(net.IP) bool) net.IP {
-	return addrIpOrNil(
-		cl.findListener(
-			func(l net.Listener) bool {
-				return f(addrIpOrNil(l.Addr()))
-			},
-		).Addr(),
+	l := cl.findListener(
+		func(l net.Listener) bool {
+			return f(addrIpOrNil(l.Addr()))
+		},
 	)
+	if l == nil {
+		return nil
+	}
+	return addrIpOrNil(l.Addr())
 }
 
 // Our IP as a peer should see it.

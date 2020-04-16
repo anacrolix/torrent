@@ -117,11 +117,11 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	//logPieceStateChanges(leecherTorrent)
 
 	// Now do some things with leecher and seeder.
-	leecherTorrent.AddClientPeer(seeder)
+	added := leecherTorrent.AddClientPeer(seeder)
 	// The Torrent should not be interested in obtaining peers, so the one we
 	// just added should be the only one.
 	assert.False(t, leecherTorrent.Seeding())
-	assert.EqualValues(t, 1, leecherTorrent.Stats().PendingPeers)
+	assert.EqualValues(t, added, leecherTorrent.Stats().PendingPeers)
 	r := leecherTorrent.NewReader()
 	defer r.Close()
 	if ps.Responsive {

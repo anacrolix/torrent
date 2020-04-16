@@ -254,24 +254,27 @@ func (t *Torrent) unclosedConnsAsSlice() (ret []*PeerConn) {
 	return
 }
 
-func (t *Torrent) addPeer(p Peer) {
+func (t *Torrent) addPeer(p Peer) (added bool) {
 	cl := t.cl
 	torrent.Add(fmt.Sprintf("peers added by source %q", p.Source), 1)
 	if t.closed.IsSet() {
-		return
+		return false
 	}
 	if ipAddr, ok := tryIpPortFromNetAddr(p.Addr); ok {
 		if cl.badPeerIPPort(ipAddr.IP, ipAddr.Port) {
 			torrent.Add("peers not added because of bad addr", 1)
 			// cl.logger.Printf("peers not added because of bad addr: %v", p)
-			return
+			return false
 		}
 	}
 	if replaced, ok := t.peers.AddReturningReplacedPeer(p); ok {
 		torrent.Add("peers replaced", 1)
 		if !replaced.Equal(p) {
 			t.logger.Printf("added %v replacing %v", p, replaced)
+			added = true
 		}
+	} else {
+		added = true
 	}
 	t.openNewConns()
 	for t.peers.Len() > cl.config.TorrentPeersHighWater {
@@ -280,6 +283,7 @@ func (t *Torrent) addPeer(p Peer) {
 			torrent.Add("excess reserve peers discarded", 1)
 		}
 	}
+	return
 }
 
 func (t *Torrent) invalidateMetadata() {
@@ -1473,10 +1477,13 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 	}
 }
 
-func (t *Torrent) addPeers(peers []Peer) {
+func (t *Torrent) addPeers(peers []Peer) (added int) {
 	for _, p := range peers {
-		t.addPeer(p)
+		if t.addPeer(p) {
+			added++
+		}
 	}
+	return
 }
 
 // The returned TorrentStats may require alignment in memory. See
@@ -1841,8 +1848,8 @@ func (t *Torrent) initiateConn(peer Peer) {
 
 // Adds a trusted, pending peer for each of the given Client's addresses. Typically used in tests to
 // quickly make one Client visible to the Torrent of another Client.
-func (t *Torrent) AddClientPeer(cl *Client) {
-	t.AddPeers(func() (ps []Peer) {
+func (t *Torrent) AddClientPeer(cl *Client) int {
+	return t.AddPeers(func() (ps []Peer) {
 		for _, la := range cl.ListenAddrs() {
 			ps = append(ps, Peer{
 				Addr:    la,

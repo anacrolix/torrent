@@ -1,6 +1,8 @@
 package torrent
 
 import (
+	"hash/maphash"
+
 	"github.com/anacrolix/multiless"
 	"github.com/google/btree"
 )
@@ -12,11 +14,21 @@ type prioritizedPeersItem struct {
 	p    Peer
 }
 
+var hashSeed = maphash.MakeSeed()
+
+func (me prioritizedPeersItem) addrHash() int64 {
+	var h maphash.Hash
+	h.SetSeed(hashSeed)
+	h.WriteString(me.p.Addr.String())
+	return int64(h.Sum64())
+}
+
 func (me prioritizedPeersItem) Less(than btree.Item) bool {
 	other := than.(prioritizedPeersItem)
 	return multiless.New().Bool(
 		me.p.Trusted, other.p.Trusted).Uint32(
-		me.prio, other.prio,
+		me.prio, other.prio).Int64(
+		me.addrHash(), other.addrHash(),
 	).Less()
 }
 
@@ -39,6 +51,17 @@ func (me *prioritizedPeers) Len() int {
 // Returns true if a peer is replaced.
 func (me *prioritizedPeers) Add(p Peer) bool {
 	return me.om.ReplaceOrInsert(prioritizedPeersItem{me.getPrio(p), p}) != nil
+}
+
+// Returns true if a peer is replaced.
+func (me *prioritizedPeers) AddReturningReplacedPeer(p Peer) (ret Peer, ok bool) {
+	item := me.om.ReplaceOrInsert(prioritizedPeersItem{me.getPrio(p), p})
+	if item == nil {
+		return
+	}
+	ret = item.(prioritizedPeersItem).p
+	ok = true
+	return
 }
 
 func (me *prioritizedPeers) DeleteMin() (ret prioritizedPeersItem, ok bool) {

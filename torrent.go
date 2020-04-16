@@ -266,8 +266,9 @@ func (t *Torrent) addPeer(p Peer) {
 			return
 		}
 	}
-	if t.peers.Add(p) {
+	if replaced, ok := t.peers.AddReturningReplacedPeer(p); ok {
 		torrent.Add("peers replaced", 1)
+		t.logger.Printf("added %v replacing %v", p, replaced)
 	}
 	t.openNewConns()
 	for t.peers.Len() > cl.config.TorrentPeersHighWater {

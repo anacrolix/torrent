@@ -255,7 +255,7 @@ func (t *Torrent) unclosedConnsAsSlice() (ret []*PeerConn) {
 
 func (t *Torrent) addPeer(p Peer) {
 	cl := t.cl
-	peersAddedBySource.Add(string(p.Source), 1)
+	torrent.Add(fmt.Sprintf("peers added by source %q", p.Source), 1)
 	if t.closed.IsSet() {
 		return
 	}

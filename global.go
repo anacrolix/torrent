@@ -29,8 +29,6 @@ func defaultPeerExtensionBytes() PeerExtensionBits {
 var (
 	torrent = expvar.NewMap("torrent")
 
-	peersAddedBySource = expvar.NewMap("peersAddedBySource")
-
 	pieceHashedCorrect    = expvar.NewInt("pieceHashedCorrect")
 	pieceHashedNotCorrect = expvar.NewInt("pieceHashedNotCorrect")
 

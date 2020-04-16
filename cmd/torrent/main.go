@@ -148,6 +148,8 @@ var flags = struct {
 	DownloadRate: -1,
 	Progress:     true,
 	Dht:          true,
+	TcpPeers:     true,
+	UtpPeers:     true,
 }
 
 func stdoutAndStderrAreSameFile() bool {

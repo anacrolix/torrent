@@ -134,8 +134,16 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	assert.NotEmpty(t, seederTorrent.PeerConns())
 	leecherPeerConns := leecherTorrent.PeerConns()
 	assert.NotEmpty(t, leecherPeerConns)
+	foundSeeder := false
 	for _, pc := range leecherPeerConns {
-		assert.EqualValues(t, leecherTorrent.Info().NumPieces(), pc.PeerPieces().Len())
+		completed := pc.PeerPieces().Len()
+		t.Logf("peer conn %v has %v completed pieces", pc, completed)
+		if completed == leecherTorrent.Info().NumPieces() {
+			foundSeeder = true
+		}
+	}
+	if !foundSeeder {
+		t.Errorf("didn't find seeder amongst leecher peer conns")
 	}
 
 	seederStats := seederTorrent.Stats()

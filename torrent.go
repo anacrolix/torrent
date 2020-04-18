@@ -270,7 +270,7 @@ func (t *Torrent) addPeer(p Peer) (added bool) {
 	if replaced, ok := t.peers.AddReturningReplacedPeer(p); ok {
 		torrent.Add("peers replaced", 1)
 		if !replaced.Equal(p) {
-			t.logger.Printf("added %v replacing %v", p, replaced)
+			t.logger.WithDefaultLevel(log.Debug).Printf("added %v replacing %v", p, replaced)
 			added = true
 		}
 	} else {
@@ -1343,7 +1343,7 @@ func (t *Torrent) startScrapingTracker(_url string) {
 			go func() {
 				err := wst.TrackerClient.Run(ar, u.String())
 				if err != nil {
-					t.logger.WithDefaultLevel(log.Error).Printf(
+					t.logger.WithDefaultLevel(log.Warning).Printf(
 						"error running websocket tracker announcer for %q: %v",
 						u.String(), err)
 				}

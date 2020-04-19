@@ -30,8 +30,10 @@ func (requestStrategyDefaults) iterUndirtiedChunks(p requestStrategyPiece, f fun
 
 func (requestStrategyDefaults) nominalMaxRequests(cn requestStrategyConnection) int {
 	return int(
-		max(64,
-			cn.stats().ChunksReadUseful.Int64()-(cn.stats().ChunksRead.Int64()-cn.stats().ChunksReadUseful.Int64())))
+		max(
+			64,
+			cn.stats().ChunksReadUseful.Int64()-
+				(cn.stats().ChunksRead.Int64()-cn.stats().ChunksReadUseful.Int64())))
 }
 
 func (requestStrategyDefaults) piecePriority(cn requestStrategyConnection, piece pieceIndex, tpp piecePriority, prio int) int {

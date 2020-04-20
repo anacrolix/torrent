@@ -1297,7 +1297,8 @@ func (t *Torrent) onWebRtcConn(
 		fmt.Sprintf("webrtc offer_id %x", dcc.OfferId),
 	)
 	if err != nil {
-		t.logger.Printf("error in handshaking webrtc connection: %v", err)
+		t.logger.WithDefaultLevel(log.Error).Printf("error in handshaking webrtc connection: %v", err)
+		return
 	}
 	if dcc.LocalOffered {
 		pc.Discovery = PeerSourceTracker
@@ -1306,7 +1307,19 @@ func (t *Torrent) onWebRtcConn(
 	}
 	t.cl.lock()
 	defer t.cl.unlock()
-	t.cl.runHandshookConn(pc, t)
+	err = t.cl.runHandshookConn(pc, t)
+	t.logger.WithDefaultLevel(log.Critical).Printf("error running handshook webrtc conn: %v", err)
+}
+
+func (t *Torrent) logRunHandshookConn(pc *PeerConn, logAll bool, level log.Level) {
+	err := t.cl.runHandshookConn(pc, t)
+	if err != nil || logAll {
+		t.logger.WithDefaultLevel(level).Printf("error running handshook conn: %v", err)
+	}
+}
+
+func (t *Torrent) runHandshookConnLoggingErr(pc *PeerConn) {
+	t.logRunHandshookConn(pc, false, log.Debug)
 }
 
 func (t *Torrent) startScrapingTracker(_url string) {
@@ -1335,17 +1348,30 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	sl := func() torrentTrackerAnnouncer {
 		switch u.Scheme {
 		case "ws", "wss":
-			wst := websocketTracker{*u, webtorrent.NewTrackerClient(t.cl.peerID, t.infoHash, t.onWebRtcConn,
-				t.logger.WithText(func(m log.Msg) string {
-					return fmt.Sprintf("%q: %v", u.String(), m.Text())
-				}).WithDefaultLevel(log.Debug))}
-			ar := t.announceRequest(tracker.Started)
+			wst := websocketTracker{
+				*u,
+				&webtorrent.TrackerClient{
+					Url: u.String(),
+					GetAnnounceRequest: func(event tracker.AnnounceEvent) tracker.AnnounceRequest {
+						t.cl.lock()
+						defer t.cl.unlock()
+						return t.announceRequest(event)
+					},
+					PeerId:   t.cl.peerID,
+					InfoHash: t.infoHash,
+					OnConn:   t.onWebRtcConn,
+					Logger: t.logger.WithText(func(m log.Msg) string {
+						return fmt.Sprintf("%q: %v", u.String(), m.Text())
+					}).WithDefaultLevel(log.Debug),
+				},
+			}
 			go func() {
-				err := wst.TrackerClient.Run(ar, u.String())
+				err := wst.TrackerClient.Run()
 				if err != nil {
 					t.logger.WithDefaultLevel(log.Warning).Printf(
 						"error running websocket tracker announcer for %q: %v",
-						u.String(), err)
+						u.String(), err,
+					)
 				}
 			}()
 			return wst

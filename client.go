@@ -713,7 +713,7 @@ func (cl *Client) outgoingConnection(t *Torrent, addr net.Addr, ps PeerSource, t
 	defer c.close()
 	c.Discovery = ps
 	c.trusted = trusted
-	cl.runHandshookConn(c, t)
+	t.runHandshookConnLoggingErr(c)
 }
 
 // The port number for incoming peer connections. 0 if the client isn't listening.
@@ -851,11 +851,11 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 	torrent.Add("received handshake for loaded torrent", 1)
 	cl.lock()
 	defer cl.unlock()
-	cl.runHandshookConn(c, t)
+	t.runHandshookConnLoggingErr(c)
 }
 
 // Client lock must be held before entering this.
-func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) {
+func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	c.setTorrent(t)
 	if c.PeerID == cl.peerID {
 		if c.outgoing {
@@ -867,7 +867,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) {
 			// address, we won't record the remote address as a doppleganger. Instead, the initiator
 			// can record *us* as the doppleganger.
 		}
-		return
+		return errors.New("local and remote peer ids are the same")
 	}
 	c.conn.SetWriteDeadline(time.Time{})
 	c.r = deadlineReader{c.conn, c.r}
@@ -876,16 +876,12 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) {
 		torrent.Add("completed handshake over ipv6", 1)
 	}
 	if err := t.addConnection(c); err != nil {
-		log.Fmsg("error adding connection: %s", err).AddValues(c).SetLevel(log.Debug).Log(t.logger)
-		return
+		return fmt.Errorf("adding connection: %w", err)
 	}
 	defer t.dropConnection(c)
 	go c.writer(time.Minute)
 	cl.sendInitialMessages(c, t)
-	err := c.mainReadLoop()
-	if err != nil && cl.config.Debug {
-		cl.logger.Printf("error during connection main read loop: %s", err)
-	}
+	return fmt.Errorf("main read loop: %w", c.mainReadLoop())
 }
 
 // See the order given in Transmission's tr_peerMsgsNew.

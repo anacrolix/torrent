@@ -42,9 +42,6 @@ type outboundOffer struct {
 	originalOffer  webrtc.SessionDescription
 	peerConnection wrappedPeerConnection
 	dataChannel    *webrtc.DataChannel
-	// Whether we've received an answer for this offer, and closing its PeerConnection has been
-	// handed off.
-	answered bool
 }
 
 type DataChannelContext struct {
@@ -86,9 +83,6 @@ func (tc *TrackerClient) Run() error {
 
 func (tc *TrackerClient) closeUnusedOffers() {
 	for _, offer := range tc.outboundOffers {
-		if offer.answered {
-			continue
-		}
 		offer.peerConnection.Close()
 	}
 	tc.outboundOffers = nil

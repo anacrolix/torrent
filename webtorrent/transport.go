@@ -130,10 +130,6 @@ func getAnswerForOffer(
 func (t *outboundOffer) setAnswer(answer webrtc.SessionDescription, onOpen func(datachannel.ReadWriteCloser)) error {
 	setDataChannelOnOpen(t.dataChannel, t.peerConnection, onOpen)
 	err := t.peerConnection.SetRemoteDescription(answer)
-	if err == nil {
-		// TODO: Maybe grab this inside the onOpen callback and mark the offer used there.
-		t.answered = true
-	}
 	return err
 }
 

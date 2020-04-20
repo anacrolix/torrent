@@ -6,8 +6,8 @@ import (
 
 type AnnounceRequest struct {
 	Numwant    int     `json:"numwant"`
-	Uploaded   int     `json:"uploaded"`
-	Downloaded int     `json:"downloaded"`
+	Uploaded   int64   `json:"uploaded"`
+	Downloaded int64   `json:"downloaded"`
 	Left       int64   `json:"left"`
 	Event      string  `json:"event"`
 	Action     string  `json:"action"`

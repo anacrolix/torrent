@@ -1,17 +1,21 @@
 package webtorrent
 
 import (
+	"expvar"
 	"fmt"
-	"log"
+	"io"
 	"sync"
+	"time"
 
+	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/pion/datachannel"
 
 	"github.com/pion/webrtc/v2"
 )
 
 var (
-	api = func() *webrtc.API {
+	metrics = expvar.NewMap("webtorrent")
+	api     = func() *webrtc.API {
 		// Enable the detach API (since it's non-standard but more idiomatic).
 		s := webrtc.SettingEngine{}
 		s.DetachDataChannels()
@@ -21,111 +25,152 @@ var (
 	newPeerConnectionMu sync.Mutex
 )
 
-func newPeerConnection() (*webrtc.PeerConnection, error) {
+type wrappedPeerConnection struct {
+	*webrtc.PeerConnection
+	pproffd.CloseWrapper
+}
+
+func (me wrappedPeerConnection) Close() error {
+	return me.CloseWrapper.Close()
+}
+
+func newPeerConnection() (wrappedPeerConnection, error) {
 	newPeerConnectionMu.Lock()
 	defer newPeerConnectionMu.Unlock()
-	return api.NewPeerConnection(config)
+	pc, err := api.NewPeerConnection(config)
+	if err != nil {
+		return wrappedPeerConnection{}, err
+	}
+	return wrappedPeerConnection{
+		pc,
+		pproffd.NewCloseWrapper(pc),
+	}, nil
 }
 
-type transport struct {
-	pc *webrtc.PeerConnection
-	dc *webrtc.DataChannel
-
-	lock sync.Mutex
-}
-
-// newTransport creates a transport and returns a WebRTC offer to be announced
-func newTransport() (*transport, webrtc.SessionDescription, error) {
-	peerConnection, err := newPeerConnection()
+// newOffer creates a transport and returns a WebRTC offer to be announced
+func newOffer() (
+	peerConnection wrappedPeerConnection,
+	dataChannel *webrtc.DataChannel,
+	offer webrtc.SessionDescription,
+	err error,
+) {
+	peerConnection, err = newPeerConnection()
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to peer connection: %w", err)
+		return
 	}
-	dataChannel, err := peerConnection.CreateDataChannel("webrtc-datachannel", nil)
+	dataChannel, err = peerConnection.CreateDataChannel("webrtc-datachannel", nil)
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to data channel: %w", err)
+		peerConnection.Close()
+		return
 	}
-	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
-		//fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
-	})
-
-	dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
-		//fmt.Printf("Message from DataChannel '%s': '%s'\n", dataChannel.Label(), string(msg.Data))
-	})
-	offer, err := peerConnection.CreateOffer(nil)
+	offer, err = peerConnection.CreateOffer(nil)
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to create offer: %w", err)
+		peerConnection.Close()
+		return
 	}
 	err = peerConnection.SetLocalDescription(offer)
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to set local description: %w", err)
+		peerConnection.Close()
+		return
 	}
-
-	t := &transport{pc: peerConnection, dc: dataChannel}
-	return t, offer, nil
+	return
 }
 
-// newTransportFromOffer creates a transport from a WebRTC offer and and returns a WebRTC answer to
-// be announced.
-func newTransportFromOffer(offer webrtc.SessionDescription, onOpen onDataChannelOpen, offerId string) (*transport, webrtc.SessionDescription, error) {
-	peerConnection, err := newPeerConnection()
-	if err != nil {
-		return nil, webrtc.SessionDescription{}, fmt.Errorf("failed to peer connection: %w", err)
-	}
-	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
-		//fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
-	})
-
-	t := &transport{pc: peerConnection}
-
+func initAnsweringPeerConnection(
+	peerConnection wrappedPeerConnection,
+	offerId string,
+	offer webrtc.SessionDescription,
+	onOpen onDataChannelOpen,
+) (answer webrtc.SessionDescription, err error) {
 	err = peerConnection.SetRemoteDescription(offer)
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, err
+		return
 	}
-	answer, err := peerConnection.CreateAnswer(nil)
+	answer, err = peerConnection.CreateAnswer(nil)
 	if err != nil {
-		return nil, webrtc.SessionDescription{}, err
+		return
 	}
+	err = peerConnection.SetLocalDescription(answer)
+	if err != nil {
+		return
+	}
+	timer := time.AfterFunc(30*time.Second, func() {
+		metrics.Add("answering peer connections timed out", 1)
+		peerConnection.Close()
+	})
 	peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
-		//fmt.Printf("New DataChannel %s %d\n", d.Label(), d.ID())
-		t.lock.Lock()
-		t.dc = d
-		t.lock.Unlock()
-		t.handleOpen(func(dc datachannel.ReadWriteCloser) {
+		setDataChannelOnOpen(d, peerConnection, func(dc datachannel.ReadWriteCloser) {
+			timer.Stop()
+			metrics.Add("answering peer connection conversions", 1)
 			onOpen(dc, DataChannelContext{answer, offer, offerId, false})
 		})
 	})
-	err = peerConnection.SetLocalDescription(answer)
-	if err != nil {
-		return nil, webrtc.SessionDescription{}, err
-	}
-
-	return t, answer, nil
+	return
 }
 
-// SetAnswer sets the WebRTC answer
-func (t *transport) SetAnswer(answer webrtc.SessionDescription, onOpen func(datachannel.ReadWriteCloser)) error {
-	t.handleOpen(onOpen)
-
-	err := t.pc.SetRemoteDescription(answer)
+// getAnswerForOffer creates a transport from a WebRTC offer and and returns a WebRTC answer to be
+// announced.
+func getAnswerForOffer(
+	offer webrtc.SessionDescription, onOpen onDataChannelOpen, offerId string,
+) (
+	answer webrtc.SessionDescription, err error,
+) {
+	peerConnection, err := newPeerConnection()
 	if err != nil {
-		return err
+		err = fmt.Errorf("failed to peer connection: %w", err)
+		return
 	}
-	return nil
+	answer, err = initAnsweringPeerConnection(peerConnection, offerId, offer, onOpen)
+	if err != nil {
+		peerConnection.Close()
+	}
+	return
 }
 
-func (t *transport) handleOpen(onOpen func(datachannel.ReadWriteCloser)) {
-	t.lock.Lock()
-	dc := t.dc
-	t.lock.Unlock()
+func (t *outboundOffer) setAnswer(answer webrtc.SessionDescription, onOpen func(datachannel.ReadWriteCloser)) error {
+	setDataChannelOnOpen(t.dataChannel, t.peerConnection, onOpen)
+	err := t.peerConnection.SetRemoteDescription(answer)
+	if err == nil {
+		// TODO: Maybe grab this inside the onOpen callback and mark the offer used there.
+		t.answered = true
+	}
+	return err
+}
+
+type datachannelReadWriter interface {
+	datachannel.Reader
+	datachannel.Writer
+	io.Reader
+	io.Writer
+}
+
+type ioCloserFunc func() error
+
+func (me ioCloserFunc) Close() error {
+	return me()
+}
+
+func setDataChannelOnOpen(
+	dc *webrtc.DataChannel,
+	pc wrappedPeerConnection,
+	onOpen func(closer datachannel.ReadWriteCloser),
+) {
 	dc.OnOpen(func() {
-		//fmt.Printf("Data channel '%s'-'%d' open.\n", dc.Label(), dc.ID())
-
-		// Detach the data channel
 		raw, err := dc.Detach()
 		if err != nil {
-			log.Fatalf("failed to detach: %v", err) // TODO: Error handling
+			// This shouldn't happen if the API is configured correctly, and we call from OnOpen.
+			panic(err)
 		}
-
-		onOpen(raw)
+		onOpen(hookDataChannelCloser(raw, pc))
 	})
+}
+
+func hookDataChannelCloser(dcrwc datachannel.ReadWriteCloser, pc wrappedPeerConnection) datachannel.ReadWriteCloser {
+	return struct {
+		datachannelReadWriter
+		io.Closer
+	}{
+		dcrwc,
+		ioCloserFunc(pc.Close),
+	}
 }

@@ -27,8 +27,12 @@ type TrackerClient struct {
 
 // outboundOffer represents an outstanding offer.
 type outboundOffer struct {
-	originalOffer webrtc.SessionDescription
-	transport     *transport
+	originalOffer  webrtc.SessionDescription
+	peerConnection wrappedPeerConnection
+	dataChannel    *webrtc.DataChannel
+	// Whether we've received an answer for this offer, and closing its PeerConnection has been
+	// handed off.
+	answered bool
 }
 
 type DataChannelContext struct {
@@ -64,33 +68,39 @@ func (c *TrackerClient) Run(ar tracker.AnnounceRequest, url string) error {
 			c.logger.WithDefaultLevel(log.Error).Printf("error announcing: %v", err)
 		}
 	}()
-	return c.trackerReadLoop()
+	err = c.trackerReadLoop(c.tracker)
+	c.lock.Lock()
+	c.lock.Unlock()
+	c.closeUnusedOffers()
+	return err
+}
+
+func (c *TrackerClient) closeUnusedOffers() {
+	for _, offer := range c.outboundOffers {
+		if offer.answered {
+			continue
+		}
+		offer.peerConnection.Close()
+	}
 }
 
 func (c *TrackerClient) announce(request tracker.AnnounceRequest) error {
-	transport, offer, err := newTransport()
-	if err != nil {
-		return fmt.Errorf("failed to create transport: %w", err)
-	}
-
 	var randOfferId [20]byte
-	_, err = rand.Read(randOfferId[:])
+	_, err := rand.Read(randOfferId[:])
 	if err != nil {
-		return fmt.Errorf("failed to generate bytes: %w", err)
+		return fmt.Errorf("generating offer_id bytes: %w", err)
 	}
 	offerIDBinary := binaryToJsonString(randOfferId[:])
 
-	c.lock.Lock()
-	c.outboundOffers[offerIDBinary] = outboundOffer{
-		transport:     transport,
-		originalOffer: offer,
+	pc, dc, offer, err := newOffer()
+	if err != nil {
+		return fmt.Errorf("creating offer: %w", err)
 	}
-	c.lock.Unlock()
 
 	req := AnnounceRequest{
-		Numwant:    1, // If higher we need to create equal amount of offers
-		Uploaded:   0,
-		Downloaded: 0,
+		Numwant:    1, // If higher we need to create equal amount of offers.
+		Uploaded:   request.Uploaded,
+		Downloaded: request.Downloaded,
 		Left:       request.Left,
 		Event:      "started",
 		Action:     "announce",
@@ -104,33 +114,37 @@ func (c *TrackerClient) announce(request tracker.AnnounceRequest) error {
 
 	data, err := json.Marshal(req)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return fmt.Errorf("marshalling request: %w", err)
 	}
+
 	c.lock.Lock()
-	tracker := c.tracker
-	err = tracker.WriteMessage(websocket.TextMessage, data)
+	defer c.lock.Unlock()
+
+	err = c.tracker.WriteMessage(websocket.TextMessage, data)
 	if err != nil {
+		pc.Close()
 		return fmt.Errorf("write AnnounceRequest: %w", err)
-		c.lock.Unlock()
 	}
-	c.lock.Unlock()
+
+	c.outboundOffers[offerIDBinary] = outboundOffer{
+		peerConnection: pc,
+		dataChannel:    dc,
+		originalOffer:  offer,
+	}
 	return nil
 }
 
-func (c *TrackerClient) trackerReadLoop() error {
-	c.lock.Lock()
-	tracker := c.tracker
-	c.lock.Unlock()
+func (c *TrackerClient) trackerReadLoop(tracker *websocket.Conn) error {
 	for {
 		_, message, err := tracker.ReadMessage()
 		if err != nil {
-			return fmt.Errorf("read error: %w", err)
+			return fmt.Errorf("read message error: %w", err)
 		}
 		c.logger.WithDefaultLevel(log.Debug).Printf("received message from tracker: %q", message)
 
 		var ar AnnounceResponse
 		if err := json.Unmarshal(message, &ar); err != nil {
-			c.logger.Printf("error unmarshaling announce response: %v", err)
+			c.logger.WithDefaultLevel(log.Warning).Printf("error unmarshalling announce response: %v", err)
 			continue
 		}
 		if ar.InfoHash != c.infoHashBinary {
@@ -139,7 +153,7 @@ func (c *TrackerClient) trackerReadLoop() error {
 		}
 		switch {
 		case ar.Offer != nil:
-			_, answer, err := newTransportFromOffer(*ar.Offer, c.onConn, ar.OfferID)
+			answer, err := getAnswerForOffer(*ar.Offer, c.onConn, ar.OfferID)
 			if err != nil {
 				return fmt.Errorf("write AnnounceResponse: %w", err)
 			}
@@ -173,7 +187,7 @@ func (c *TrackerClient) trackerReadLoop() error {
 				continue
 			}
 			c.logger.Printf("offer %q got answer %v", ar.OfferID, *ar.Answer)
-			err = offer.transport.SetAnswer(*ar.Answer, func(dc datachannel.ReadWriteCloser) {
+			err = offer.setAnswer(*ar.Answer, func(dc datachannel.ReadWriteCloser) {
 				c.onConn(dc, DataChannelContext{
 					Local:        offer.originalOffer,
 					Remote:       *ar.Answer,
@@ -184,6 +198,7 @@ func (c *TrackerClient) trackerReadLoop() error {
 			if err != nil {
 				return fmt.Errorf("failed to sent answer: %w", err)
 			}
+			offer.answered = true
 		}
 	}
 }

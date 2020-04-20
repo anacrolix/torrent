@@ -53,6 +53,7 @@ type DataChannelContext struct {
 type onDataChannelOpen func(_ datachannel.ReadWriteCloser, dcc DataChannelContext)
 
 func (tc *TrackerClient) doWebsocket() error {
+	metrics.Add("websocket dials", 1)
 	c, _, err := websocket.DefaultDialer.Dial(tc.Url, nil)
 	if err != nil {
 		return fmt.Errorf("dialing tracker: %w", err)
@@ -76,7 +77,7 @@ func (tc *TrackerClient) doWebsocket() error {
 func (tc *TrackerClient) Run() error {
 	for {
 		err := tc.doWebsocket()
-		tc.Logger.Printf("websocket instance ended: %v", err)
+		tc.Logger.WithDefaultLevel(log.Warning).Printf("websocket instance ended: %v", err)
 		time.Sleep(time.Minute)
 	}
 }
@@ -89,6 +90,7 @@ func (tc *TrackerClient) closeUnusedOffers() {
 }
 
 func (tc *TrackerClient) announce(event tracker.AnnounceEvent) error {
+	metrics.Add("outbound announces", 1)
 	var randOfferId [20]byte
 	_, err := rand.Read(randOfferId[:])
 	if err != nil {
@@ -201,7 +203,9 @@ func (tc *TrackerClient) handleAnswer(offerId string, answer webrtc.SessionDescr
 		return
 	}
 	tc.Logger.Printf("offer %q got answer %v", offerId, answer)
+	metrics.Add("outbound offers answered", 1)
 	err := offer.setAnswer(answer, func(dc datachannel.ReadWriteCloser) {
+		metrics.Add("outbound offers answered with datachannel", 1)
 		tc.OnConn(dc, DataChannelContext{
 			Local:        offer.originalOffer,
 			Remote:       answer,

@@ -9,7 +9,7 @@ require (
 	github.com/anacrolix/log v0.6.1-0.20200416071330-f58a030e6149
 	github.com/anacrolix/missinggo v1.2.1
 	github.com/anacrolix/missinggo/perf v1.0.0
-	github.com/anacrolix/missinggo/v2 v2.4.1-0.20200227072623-f02f6484f997
+	github.com/anacrolix/missinggo/v2 v2.4.1-0.20200419051441-747d9d7544c6
 	github.com/anacrolix/multiless v0.0.0-20200413040533-acfd16f65d5d
 	github.com/anacrolix/sync v0.2.0
 	github.com/anacrolix/tagflag v1.1.1-0.20200411025953-9bb5209d56c2
@@ -29,7 +29,6 @@ require (
 	github.com/pion/webrtc/v2 v2.2.4
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.5.1
-	github.com/tinylib/msgp v1.1.1 // indirect
 	go.etcd.io/bbolt v1.3.4
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"time"
 
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/pion/datachannel"
@@ -78,9 +77,7 @@ func newOffer() (
 
 func initAnsweringPeerConnection(
 	peerConnection wrappedPeerConnection,
-	offerId string,
 	offer webrtc.SessionDescription,
-	onOpen onDataChannelOpen,
 ) (answer webrtc.SessionDescription, err error) {
 	err = peerConnection.SetRemoteDescription(offer)
 	if err != nil {
@@ -94,35 +91,22 @@ func initAnsweringPeerConnection(
 	if err != nil {
 		return
 	}
-	timer := time.AfterFunc(30*time.Second, func() {
-		metrics.Add("answering peer connections timed out", 1)
-		peerConnection.Close()
-	})
-	peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
-		setDataChannelOnOpen(d, peerConnection, func(dc datachannel.ReadWriteCloser) {
-			timer.Stop()
-			metrics.Add("answering peer connection conversions", 1)
-			onOpen(dc, DataChannelContext{answer, offer, offerId, false})
-		})
-	})
 	return
 }
 
-// getAnswerForOffer creates a transport from a WebRTC offer and and returns a WebRTC answer to be
+// newAnsweringPeerConnection creates a transport from a WebRTC offer and and returns a WebRTC answer to be
 // announced.
-func getAnswerForOffer(
-	offer webrtc.SessionDescription, onOpen onDataChannelOpen, offerId string,
-) (
-	answer webrtc.SessionDescription, err error,
+func newAnsweringPeerConnection(offer webrtc.SessionDescription) (
+	peerConn wrappedPeerConnection, answer webrtc.SessionDescription, err error,
 ) {
-	peerConnection, err := newPeerConnection()
+	peerConn, err = newPeerConnection()
 	if err != nil {
-		err = fmt.Errorf("failed to peer connection: %w", err)
+		err = fmt.Errorf("failed to create new connection: %w", err)
 		return
 	}
-	answer, err = initAnsweringPeerConnection(peerConnection, offerId, offer, onOpen)
+	answer, err = initAnsweringPeerConnection(peerConn, offer)
 	if err != nil {
-		peerConnection.Close()
+		peerConn.Close()
 	}
 	return
 }

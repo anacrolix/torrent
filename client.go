@@ -23,9 +23,12 @@ import (
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
+	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/webtorrent"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	"github.com/google/btree"
+	"github.com/pion/datachannel"
 	"golang.org/x/time/rate"
 	"golang.org/x/xerrors"
 
@@ -73,6 +76,8 @@ type Client struct {
 
 	acceptLimiter   map[ipStr]int
 	dialRateLimiter *rate.Limiter
+
+	websocketTrackers websocketTrackers
 }
 
 type ipStr string
@@ -239,6 +244,32 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 				cl.onClose = append(cl.onClose, func() { ds.Close() })
 			}
 		}
+	}
+
+	cl.websocketTrackers = websocketTrackers{
+		PeerId: cl.peerID,
+		Logger: cl.logger.WithMap(func(msg log.Msg) log.Msg {
+			return msg.SetLevel(log.Critical)
+		}),
+		GetAnnounceRequest: func(event tracker.AnnounceEvent, infoHash [20]byte) tracker.AnnounceRequest {
+			cl.lock()
+			defer cl.unlock()
+			return cl.torrents[infoHash].announceRequest(event)
+		},
+		OnConn: func(dc datachannel.ReadWriteCloser, dcc webtorrent.DataChannelContext) {
+			cl.lock()
+			defer cl.unlock()
+			t, ok := cl.torrents[dcc.InfoHash]
+			if !ok {
+				cl.logger.WithDefaultLevel(log.Warning).Printf(
+					"got webrtc conn for unloaded torrent with infohash %x",
+					dcc.InfoHash,
+				)
+				dc.Close()
+				return
+			}
+			go t.onWebRtcConn(dc, dcc)
+		},
 	}
 
 	return
@@ -627,9 +658,17 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
 
 // Performs initiator handshakes and returns a connection. Returns nil *connection if no connection
 // for valid reasons.
-func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *Torrent, encryptHeader bool, remoteAddr net.Addr,
-	network, connString string,
-) (c *PeerConn, err error) {
+func (cl *Client) handshakesConnection(
+	ctx context.Context,
+	nc net.Conn,
+	t *Torrent,
+	encryptHeader bool,
+	remoteAddr net.Addr,
+	network,
+	connString string,
+) (
+	c *PeerConn, err error,
+) {
 	c = cl.newConnection(nc, true, remoteAddr, network, connString)
 	c.headerEncrypted = encryptHeader
 	ctx, cancel := context.WithTimeout(ctx, cl.config.HandshakesTimeout)
@@ -881,7 +920,11 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	defer t.dropConnection(c)
 	go c.writer(time.Minute)
 	cl.sendInitialMessages(c, t)
-	return fmt.Errorf("main read loop: %w", c.mainReadLoop())
+	err := c.mainReadLoop()
+	if err != nil {
+		return fmt.Errorf("main read loop: %w", err)
+	}
+	return nil
 }
 
 // See the order given in Transmission's tr_peerMsgsNew.

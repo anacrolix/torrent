@@ -1,6 +1,9 @@
 package webtorrent
 
 import (
+	"fmt"
+	"math"
+
 	"github.com/pion/webrtc/v2"
 )
 
@@ -42,4 +45,22 @@ func binaryToJsonString(b []byte) string {
 		seq = append(seq, rune(v))
 	}
 	return string(seq)
+}
+
+func jsonStringToInfoHash(s string) (ih [20]byte, err error) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		panic(fmt.Sprintf("%q", s))
+	}()
+	for i, c := range []rune(s) {
+		if c < 0 || c > math.MaxUint8 {
+			err = fmt.Errorf("bad infohash string: %v", s)
+			return
+		}
+		ih[i] = byte(c)
+	}
+	return
 }

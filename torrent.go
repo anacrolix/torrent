@@ -1308,7 +1308,9 @@ func (t *Torrent) onWebRtcConn(
 	t.cl.lock()
 	defer t.cl.unlock()
 	err = t.cl.runHandshookConn(pc, t)
-	t.logger.WithDefaultLevel(log.Critical).Printf("error running handshook webrtc conn: %v", err)
+	if err != nil {
+		t.logger.WithDefaultLevel(log.Critical).Printf("error running handshook webrtc conn: %v", err)
+	}
 }
 
 func (t *Torrent) logRunHandshookConn(pc *PeerConn, logAll bool, level log.Level) {
@@ -1320,6 +1322,26 @@ func (t *Torrent) logRunHandshookConn(pc *PeerConn, logAll bool, level log.Level
 
 func (t *Torrent) runHandshookConnLoggingErr(pc *PeerConn) {
 	t.logRunHandshookConn(pc, false, log.Debug)
+}
+
+func (t *Torrent) startWebsocketAnnouncer(u url.URL) torrentTrackerAnnouncer {
+	wtc, release := t.cl.websocketTrackers.Get(u.String())
+	go func() {
+		<-t.closed.LockedChan(t.cl.locker())
+		release()
+	}()
+	wst := websocketTracker{u, wtc}
+	go func() {
+		err := wtc.Announce(tracker.Started, t.infoHash)
+		if err != nil {
+			t.logger.WithDefaultLevel(log.Warning).Printf(
+				"error in initial announce to %q: %v",
+				u.String(), err,
+			)
+		}
+	}()
+	return wst
+
 }
 
 func (t *Torrent) startScrapingTracker(_url string) {
@@ -1348,33 +1370,7 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	sl := func() torrentTrackerAnnouncer {
 		switch u.Scheme {
 		case "ws", "wss":
-			wst := websocketTracker{
-				*u,
-				&webtorrent.TrackerClient{
-					Url: u.String(),
-					GetAnnounceRequest: func(event tracker.AnnounceEvent) tracker.AnnounceRequest {
-						t.cl.lock()
-						defer t.cl.unlock()
-						return t.announceRequest(event)
-					},
-					PeerId:   t.cl.peerID,
-					InfoHash: t.infoHash,
-					OnConn:   t.onWebRtcConn,
-					Logger: t.logger.WithText(func(m log.Msg) string {
-						return fmt.Sprintf("%q: %v", u.String(), m.Text())
-					}).WithDefaultLevel(log.Debug),
-				},
-			}
-			go func() {
-				err := wst.TrackerClient.Run()
-				if err != nil {
-					t.logger.WithDefaultLevel(log.Warning).Printf(
-						"error running websocket tracker announcer for %q: %v",
-						u.String(), err,
-					)
-				}
-			}()
-			return wst
+			return t.startWebsocketAnnouncer(*u)
 		}
 		if u.Scheme == "udp4" && (t.cl.config.DisableIPv4Peers || t.cl.config.DisableIPv4) {
 			return nil

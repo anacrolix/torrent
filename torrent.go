@@ -1330,7 +1330,7 @@ func (t *Torrent) startWebsocketAnnouncer(u url.URL) torrentTrackerAnnouncer {
 		<-t.closed.LockedChan(t.cl.locker())
 		release()
 	}()
-	wst := websocketTracker{u, wtc}
+	wst := websocketTrackerStatus{u, wtc}
 	go func() {
 		err := wtc.Announce(tracker.Started, t.infoHash)
 		if err != nil {

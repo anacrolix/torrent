@@ -12,16 +12,16 @@ import (
 	"github.com/pion/datachannel"
 )
 
-type websocketTracker struct {
+type websocketTrackerStatus struct {
 	url url.URL
-	*webtorrent.TrackerClient
+	tc  *webtorrent.TrackerClient
 }
 
-func (me websocketTracker) statusLine() string {
-	return fmt.Sprintf("%q", me.url.String())
+func (me websocketTrackerStatus) statusLine() string {
+	return fmt.Sprintf("%q: %+v", me.tc.Url, me.tc.Stats())
 }
 
-func (me websocketTracker) URL() url.URL {
+func (me websocketTrackerStatus) URL() url.URL {
 	return me.url
 }
 

@@ -15,6 +15,12 @@ import (
 	"github.com/pion/webrtc/v2"
 )
 
+type TrackerClientStats struct {
+	Dials                  int64
+	ConvertedInboundConns  int64
+	ConvertedOutboundConns int64
+}
+
 // Client represents the webtorrent client
 type TrackerClient struct {
 	Url                string
@@ -28,6 +34,13 @@ type TrackerClient struct {
 	outboundOffers map[string]outboundOffer // OfferID to outboundOffer
 	wsConn         *websocket.Conn
 	closed         bool
+	stats          TrackerClientStats
+}
+
+func (me *TrackerClient) Stats() TrackerClientStats {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	return me.stats
 }
 
 func (me *TrackerClient) peerIdBinary() string {
@@ -53,6 +66,7 @@ type onDataChannelOpen func(_ datachannel.ReadWriteCloser, dcc DataChannelContex
 
 func (tc *TrackerClient) doWebsocket() error {
 	metrics.Add("websocket dials", 1)
+	tc.stats.Dials++
 	c, _, err := websocket.DefaultDialer.Dial(tc.Url, nil)
 	if err != nil {
 		return fmt.Errorf("dialing tracker: %w", err)
@@ -232,6 +246,9 @@ func (tc *TrackerClient) handleOffer(
 		setDataChannelOnOpen(d, peerConnection, func(dc datachannel.ReadWriteCloser) {
 			timer.Stop()
 			metrics.Add("answering peer connection conversions", 1)
+			tc.mu.Lock()
+			tc.stats.ConvertedInboundConns++
+			tc.mu.Unlock()
 			tc.OnConn(dc, DataChannelContext{
 				Local:        answer,
 				Remote:       offer,
@@ -256,6 +273,9 @@ func (tc *TrackerClient) handleAnswer(offerId string, answer webrtc.SessionDescr
 	metrics.Add("outbound offers answered", 1)
 	err := offer.setAnswer(answer, func(dc datachannel.ReadWriteCloser) {
 		metrics.Add("outbound offers answered with datachannel", 1)
+		tc.mu.Lock()
+		tc.stats.ConvertedOutboundConns++
+		tc.mu.Unlock()
 		tc.OnConn(dc, DataChannelContext{
 			Local:        offer.originalOffer,
 			Remote:       answer,

@@ -248,9 +248,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 
 	cl.websocketTrackers = websocketTrackers{
 		PeerId: cl.peerID,
-		Logger: cl.logger.WithMap(func(msg log.Msg) log.Msg {
-			return msg.SetLevel(log.Critical)
-		}),
+		Logger: cl.logger,
 		GetAnnounceRequest: func(event tracker.AnnounceEvent, infoHash [20]byte) tracker.AnnounceRequest {
 			cl.lock()
 			defer cl.unlock()

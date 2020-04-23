@@ -2,10 +2,11 @@ package test
 
 import (
 	"errors"
-	"log"
 	"os"
 	"sync"
 	"testing"
+
+	"github.com/anacrolix/log"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,12 +35,14 @@ func TestReceiveChunkStorageFailure(t *testing.T) {
 	seederClientConfig.Debug = true
 	seederClient, err := torrent.NewClient(seederClientConfig)
 	require.NoError(t, err)
+	defer seederClient.Close()
 	defer testutil.ExportStatusWriter(seederClient, "s")()
 	leecherClientConfig := torrent.TestingConfig()
 	leecherClientConfig.Debug = true
 	justOneNetwork(leecherClientConfig)
 	leecherClient, err := torrent.NewClient(leecherClientConfig)
 	require.NoError(t, err)
+	defer leecherClient.Close()
 	defer testutil.ExportStatusWriter(leecherClient, "l")()
 	info, err := metainfo.UnmarshalInfo()
 	require.NoError(t, err)

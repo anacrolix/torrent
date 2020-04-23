@@ -1184,7 +1184,7 @@ func (c *PeerConn) receiveChunk(msg *pp.Message) error {
 
 	if _, ok := c.validReceiveChunks[req]; !ok {
 		torrent.Add("chunks received unexpected", 1)
-		return errors.New("received unexpected chunk")
+		//return errors.New("received unexpected chunk")
 	}
 	delete(c.validReceiveChunks, req)
 

@@ -34,3 +34,5 @@ require (
 )
 
 go 1.13
+
+exclude bazil.org/fuse v0.0.0-20200419173433-3ba628eaf417

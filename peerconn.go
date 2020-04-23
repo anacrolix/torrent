@@ -1040,7 +1040,9 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		switch msg.Type {
 		case pp.Choke:
 			c.peerChoking = true
-			c.deleteAllRequests()
+			if !c.fastEnabled() {
+				c.deleteAllRequests()
+			}
 			// We can then reset our interest.
 			c.updateRequests()
 			c.updateExpectingChunks()

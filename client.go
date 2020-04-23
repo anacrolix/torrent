@@ -146,7 +146,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
-const debugLogValue = log.Debug
+var debugLogValue = log.Debug
 
 func (cl *Client) debugLogFilter(m log.Msg) bool {
 	if cl.config.Debug {

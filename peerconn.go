@@ -934,7 +934,7 @@ func (c *PeerConn) lastHelpful() (ret time.Time) {
 }
 
 func (c *PeerConn) fastEnabled() bool {
-	return c.PeerExtensionBytes.SupportsFast() && c.t.cl.extensionBytes.SupportsFast()
+	return c.PeerExtensionBytes.SupportsFast() && c.t.cl.config.Extensions.SupportsFast()
 }
 
 func (c *PeerConn) reject(r request) {

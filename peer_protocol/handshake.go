@@ -41,7 +41,7 @@ func (me PeerExtensionBits) String() string {
 
 func NewPeerExtensionBytes(bits ...ExtensionBit) (ret PeerExtensionBits) {
 	for _, b := range bits {
-		ret.SetBit(b)
+		ret.SetBit(b, true)
 	}
 	return
 }
@@ -58,8 +58,12 @@ func (pex PeerExtensionBits) SupportsFast() bool {
 	return pex.GetBit(ExtensionBitFast)
 }
 
-func (pex *PeerExtensionBits) SetBit(bit ExtensionBit) {
-	pex[7-bit/8] |= 1 << (bit % 8)
+func (pex *PeerExtensionBits) SetBit(bit ExtensionBit, on bool) {
+	if on {
+		pex[7-bit/8] |= 1 << (bit % 8)
+	} else {
+		pex[7-bit/8] &^= 1 << (bit % 8)
+	}
 }
 
 func (pex PeerExtensionBits) GetBit(bit ExtensionBit) bool {

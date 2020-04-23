@@ -64,8 +64,6 @@ type Client struct {
 	listeners      []Listener
 	dhtServers     []DhtServer
 	ipBlockList    iplist.Ranger
-	// Our BitTorrent protocol extension bytes, sent in our BT handshakes.
-	extensionBytes pp.PeerExtensionBits
 
 	// Set of addresses that have our client ID. This intentionally will
 	// include ourselves if we end up trying to connect to our own address
@@ -122,6 +120,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	defer w.Flush()
 	fmt.Fprintf(w, "Listen port: %d\n", cl.LocalPort())
 	fmt.Fprintf(w, "Peer ID: %+q\n", cl.PeerID())
+	fmt.Fprintf(w, "Extension bits: %v\n", cl.config.Extensions)
 	fmt.Fprintf(w, "Announce key: %x\n", cl.announceKey())
 	fmt.Fprintf(w, "Banned IPs: %d\n", len(cl.badPeerIPsLocked()))
 	cl.eachDhtServer(func(s DhtServer) {
@@ -186,7 +185,6 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		}
 		cl.Close()
 	}()
-	cl.extensionBytes = defaultPeerExtensionBytes()
 	cl.event.L = cl.locker()
 	storageImpl := cfg.DefaultStorage
 	if storageImpl == nil {
@@ -847,7 +845,7 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 }
 
 func (cl *Client) connBtHandshake(c *PeerConn, ih *metainfo.Hash) (ret metainfo.Hash, err error) {
-	res, err := pp.Handshake(c.rw(), ih, cl.peerID, cl.extensionBytes)
+	res, err := pp.Handshake(c.rw(), ih, cl.peerID, cl.config.Extensions)
 	if err != nil {
 		return
 	}
@@ -927,7 +925,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 
 // See the order given in Transmission's tr_peerMsgsNew.
 func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
-	if conn.PeerExtensionBytes.SupportsExtended() && cl.extensionBytes.SupportsExtended() {
+	if conn.PeerExtensionBytes.SupportsExtended() && cl.config.Extensions.SupportsExtended() {
 		conn.post(pp.Message{
 			Type:       pp.Extended,
 			ExtendedID: pp.HandshakeExtendedID,
@@ -968,7 +966,7 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 		}
 		conn.postBitfield()
 	}()
-	if conn.PeerExtensionBytes.SupportsDHT() && cl.extensionBytes.SupportsDHT() && cl.haveDhtServer() {
+	if conn.PeerExtensionBytes.SupportsDHT() && cl.config.Extensions.SupportsDHT() && cl.haveDhtServer() {
 		conn.post(pp.Message{
 			Type: pp.Port,
 			Port: cl.dhtPort(),

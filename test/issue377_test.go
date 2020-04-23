@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/log"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,15 @@ func justOneNetwork(cc *torrent.ClientConfig) {
 	cc.DisableIPv4 = true
 }
 
+func TestReceiveChunkStorageFailureSeederFastExtensionDisabled(t *testing.T) {
+	testReceiveChunkStorageFailure(t, false)
+}
+
 func TestReceiveChunkStorageFailure(t *testing.T) {
+	testReceiveChunkStorageFailure(t, true)
+}
+
+func testReceiveChunkStorageFailure(t *testing.T, seederFast bool) {
 	seederDataDir, metainfo := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(seederDataDir)
 	seederClientConfig := torrent.TestingConfig()
@@ -33,6 +42,7 @@ func TestReceiveChunkStorageFailure(t *testing.T) {
 	seederClientConfig.DefaultStorage = seederClientStorage
 	seederClientConfig.Seed = true
 	seederClientConfig.Debug = true
+	seederClientConfig.Extensions.SetBit(pp.ExtensionBitFast, seederFast)
 	seederClient, err := torrent.NewClient(seederClientConfig)
 	require.NoError(t, err)
 	defer seederClient.Close()
@@ -64,6 +74,8 @@ func TestReceiveChunkStorageFailure(t *testing.T) {
 	seederTorrent.AddClientPeer(leecherClient)
 	<-leecherTorrent.GotInfo()
 	assertReadAllGreeting(t, leecherTorrent.NewReader())
+	// TODO: Check that PeerConns fastEnabled matches seederFast?
+	//select {}
 }
 
 type pieceState struct {

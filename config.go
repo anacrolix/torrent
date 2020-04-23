@@ -128,6 +128,8 @@ type ClientConfig struct {
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
 
 	DefaultRequestStrategy RequestStrategyMaker
+
+	Extensions PeerExtensionBits
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
@@ -169,6 +171,8 @@ func NewDefaultClientConfig() *ClientConfig {
 		Logger:         log.Default,
 
 		DefaultRequestStrategy: RequestStrategyDuplicateRequestTimeout(5 * time.Second),
+
+		Extensions: defaultPeerExtensionBytes(),
 	}
 	//cc.ConnTracker.SetNoMaxEntries()
 	//cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }

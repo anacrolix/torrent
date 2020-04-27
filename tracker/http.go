@@ -124,6 +124,7 @@ func announceHTTP(opt Announce, _url *url.URL) (ret AnnounceResponse, err error)
 				InsecureSkipVerify: true,
 				ServerName:         opt.ServerName,
 			},
+			DisableKeepAlives: true,
 		},
 	}).Do(req)
 	if err != nil {

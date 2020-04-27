@@ -24,17 +24,16 @@ type trackerScraper struct {
 
 type torrentTrackerAnnouncer interface {
 	statusLine() string
-	URL() url.URL
+	URL() *url.URL
 }
 
-func (me trackerScraper) URL() url.URL {
-	return me.u
+func (me trackerScraper) URL() *url.URL {
+	return &me.u
 }
 
 func (ts *trackerScraper) statusLine() string {
 	var w bytes.Buffer
-	fmt.Fprintf(&w, "%q\t%s\t%s",
-		ts.u.String(),
+	fmt.Fprintf(&w, "next ann: %v, last ann: %v",
 		func() string {
 			na := time.Until(ts.lastAnnounce.Completed.Add(ts.lastAnnounce.Interval))
 			if na > 0 {

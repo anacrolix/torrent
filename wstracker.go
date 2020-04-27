@@ -18,11 +18,11 @@ type websocketTrackerStatus struct {
 }
 
 func (me websocketTrackerStatus) statusLine() string {
-	return fmt.Sprintf("%q: %+v", me.tc.Url, me.tc.Stats())
+	return fmt.Sprintf("%+v", me.tc.Stats())
 }
 
-func (me websocketTrackerStatus) URL() url.URL {
-	return me.url
+func (me websocketTrackerStatus) URL() *url.URL {
+	return &me.url
 }
 
 type refCountedWebtorrentTrackerClient struct {

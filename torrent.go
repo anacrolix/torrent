@@ -603,11 +603,11 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	fmt.Fprintf(w, "Enabled trackers:\n")
 	func() {
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		fmt.Fprintf(tw, "    URL\tNext announce\tLast announce\n")
+		fmt.Fprintf(tw, "    URL\tExtra\n")
 		for _, ta := range slices.Sort(slices.FromMapElems(t.trackerAnnouncers), func(l, r torrentTrackerAnnouncer) bool {
 			lu := l.URL()
 			ru := r.URL()
-			var luns, runs url.URL = lu, ru
+			var luns, runs url.URL = *lu, *ru
 			luns.Scheme = ""
 			runs.Scheme = ""
 			var ml missinggo.MultiLess
@@ -615,7 +615,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 			ml.StrictNext(lu.String() == ru.String(), lu.String() < ru.String())
 			return ml.Less()
 		}).([]torrentTrackerAnnouncer) {
-			fmt.Fprintf(tw, "    %s\n", ta.statusLine())
+			fmt.Fprintf(tw, "    %q\t%v\n", ta.URL(), ta.statusLine())
 		}
 		tw.Flush()
 	}()

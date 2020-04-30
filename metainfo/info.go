@@ -14,14 +14,14 @@ import (
 
 // The info dictionary.
 type Info struct {
-	PieceLength int64  `bencode:"piece length"`
-	Pieces      []byte `bencode:"pieces"`
-	Name        string `bencode:"name"`
-	Length      int64  `bencode:"length,omitempty"`
-	Private     *bool  `bencode:"private,omitempty"`
+	PieceLength int64  `bencode:"piece length"`      // BEP3
+	Pieces      []byte `bencode:"pieces"`            // BEP3
+	Name        string `bencode:"name"`              // BEP3
+	Length      int64  `bencode:"length,omitempty"`  // BEP3, mutually exclusive with Files
+	Private     *bool  `bencode:"private,omitempty"` // BEP27
 	// TODO: Document this field.
 	Source string     `bencode:"source,omitempty"`
-	Files  []FileInfo `bencode:"files,omitempty"`
+	Files  []FileInfo `bencode:"files,omitempty"` // BEP3, mutually exclusive with Length
 }
 
 // This is a helper that sets Files and Pieces from a root path and its

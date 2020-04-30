@@ -4,8 +4,8 @@ import "strings"
 
 // Information specific to a single file inside the MetaInfo structure.
 type FileInfo struct {
-	Length   int64    `bencode:"length"`
-	Path     []string `bencode:"path"`
+	Length   int64    `bencode:"length"` // BEP3
+	Path     []string `bencode:"path"`   // BEP3
 	PathUTF8 []string `bencode:"path.utf-8,omitempty"`
 }
 

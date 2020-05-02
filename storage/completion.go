@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"log"
+	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/torrent/metainfo"
 )

@@ -24,7 +24,7 @@ type TrackerClientStats struct {
 // Client represents the webtorrent client
 type TrackerClient struct {
 	Url                string
-	GetAnnounceRequest func(_ tracker.AnnounceEvent, infoHash [20]byte) tracker.AnnounceRequest
+	GetAnnounceRequest func(_ tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error)
 	PeerId             [20]byte
 	OnConn             onDataChannelOpen
 	Logger             log.Logger
@@ -135,7 +135,10 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 		return fmt.Errorf("creating offer: %w", err)
 	}
 
-	request := tc.GetAnnounceRequest(event, infoHash)
+	request, err := tc.GetAnnounceRequest(event, infoHash)
+	if err != nil {
+		return fmt.Errorf("getting announce parameters: %w", err)
+	}
 
 	req := AnnounceRequest{
 		Numwant:    1, // If higher we need to create equal amount of offers.

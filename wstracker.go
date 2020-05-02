@@ -33,7 +33,7 @@ type refCountedWebtorrentTrackerClient struct {
 type websocketTrackers struct {
 	PeerId             [20]byte
 	Logger             log.Logger
-	GetAnnounceRequest func(event tracker.AnnounceEvent, infoHash [20]byte) tracker.AnnounceRequest
+	GetAnnounceRequest func(event tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error)
 	OnConn             func(datachannel.ReadWriteCloser, webtorrent.DataChannelContext)
 	mu                 sync.Mutex
 	clients            map[string]*refCountedWebtorrentTrackerClient

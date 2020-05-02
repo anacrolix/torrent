@@ -247,10 +247,14 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	cl.websocketTrackers = websocketTrackers{
 		PeerId: cl.peerID,
 		Logger: cl.logger,
-		GetAnnounceRequest: func(event tracker.AnnounceEvent, infoHash [20]byte) tracker.AnnounceRequest {
+		GetAnnounceRequest: func(event tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error) {
 			cl.lock()
 			defer cl.unlock()
-			return cl.torrents[infoHash].announceRequest(event)
+			t, ok := cl.torrents[infoHash]
+			if !ok {
+				return tracker.AnnounceRequest{}, errors.New("torrent not tracked by client")
+			}
+			return t.announceRequest(event), nil
 		},
 		OnConn: func(dc datachannel.ReadWriteCloser, dcc webtorrent.DataChannelContext) {
 			cl.lock()

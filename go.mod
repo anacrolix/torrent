@@ -19,22 +19,21 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.0.0
-	github.com/elliotchance/orderedmap v1.2.1
+	github.com/elliotchance/orderedmap v1.2.2
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/google/btree v1.0.0
 	github.com/gorilla/websocket v1.4.2
 	github.com/jessevdk/go-flags v1.4.0
-	github.com/lucas-clemente/quic-go v0.15.4 // indirect
+	github.com/lucas-clemente/quic-go v0.15.6 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/pion/datachannel v1.4.16
-	github.com/pion/sdp/v2 v2.3.7 // indirect
-	github.com/pion/webrtc/v2 v2.2.5
+	github.com/pion/webrtc/v2 v2.2.7
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.5.1
 	go.etcd.io/bbolt v1.3.4
-	golang.org/x/crypto v0.0.0-20200422194213-44a606286825 // indirect
-	golang.org/x/net v0.0.0-20200421231249-e086a090c8fd // indirect
-	golang.org/x/sys v0.0.0-20200420163511-1957bb5e6d1f // indirect
+	golang.org/x/crypto v0.0.0-20200429183012-4b2356b1ed79 // indirect
+	golang.org/x/net v0.0.0-20200501053045-e0ff5e5a1de5 // indirect
+	golang.org/x/sys v0.0.0-20200501145240-bc7a7d42d5c3 // indirect
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
 )

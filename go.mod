@@ -27,6 +27,7 @@ require (
 	github.com/lucas-clemente/quic-go v0.15.6 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/pion/datachannel v1.4.16
+	github.com/pion/ice v0.7.14 // indirect
 	github.com/pion/webrtc/v2 v2.2.7
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.5.1

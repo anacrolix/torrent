@@ -625,6 +625,7 @@ func (cn *PeerConn) writer(keepAliveTimeout time.Duration) {
 			keepAliveTimer.Reset(keepAliveTimeout)
 		}
 		if err != nil {
+			cn.logger.Printf("error writing: %v", err)
 			return
 		}
 		if n != frontBuf.Len() {
@@ -1022,7 +1023,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			defer cl.lock()
 			err = decoder.Decode(&msg)
 		}()
-		if t.closed.IsSet() || c.closed.IsSet() || err == io.EOF {
+		if t.closed.IsSet() || c.closed.IsSet() {
 			return nil
 		}
 		if err != nil {

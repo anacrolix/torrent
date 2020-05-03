@@ -34,6 +34,7 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 			fmt.Printf("getting info for %q\n", t.Name())
 			<-t.GotInfo()
 		}
+		var lastLine string
 		for {
 			var completedPieces, partialPieces int
 			psrs := t.PieceStateRuns()
@@ -45,7 +46,7 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 					partialPieces += r.Length
 				}
 			}
-			fmt.Printf(
+			line := fmt.Sprintf(
 				"downloading %q: %s/%s, %d/%d pieces completed (%d partial)\n",
 				t.Name(),
 				humanize.Bytes(uint64(t.BytesCompleted())),
@@ -54,6 +55,10 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 				t.NumPieces(),
 				partialPieces,
 			)
+			if line != lastLine {
+				lastLine = line
+				os.Stdout.WriteString(line)
+			}
 			if pieceStates {
 				fmt.Println(psrs)
 			}

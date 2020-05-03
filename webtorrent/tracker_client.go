@@ -50,7 +50,7 @@ func (me *TrackerClient) peerIdBinary() string {
 // outboundOffer represents an outstanding offer.
 type outboundOffer struct {
 	originalOffer  webrtc.SessionDescription
-	peerConnection wrappedPeerConnection
+	peerConnection *wrappedPeerConnection
 	dataChannel    *webrtc.DataChannel
 	infoHash       [20]byte
 }

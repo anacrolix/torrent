@@ -26,29 +26,32 @@ var (
 
 type wrappedPeerConnection struct {
 	*webrtc.PeerConnection
+	closeMu sync.Mutex
 	pproffd.CloseWrapper
 }
 
-func (me wrappedPeerConnection) Close() error {
+func (me *wrappedPeerConnection) Close() error {
+	me.closeMu.Lock()
+	defer me.closeMu.Unlock()
 	return me.CloseWrapper.Close()
 }
 
-func newPeerConnection() (wrappedPeerConnection, error) {
+func newPeerConnection() (*wrappedPeerConnection, error) {
 	newPeerConnectionMu.Lock()
 	defer newPeerConnectionMu.Unlock()
 	pc, err := api.NewPeerConnection(config)
 	if err != nil {
-		return wrappedPeerConnection{}, err
+		return nil, err
 	}
-	return wrappedPeerConnection{
-		pc,
-		pproffd.NewCloseWrapper(pc),
+	return &wrappedPeerConnection{
+		PeerConnection: pc,
+		CloseWrapper:   pproffd.NewCloseWrapper(pc),
 	}, nil
 }
 
 // newOffer creates a transport and returns a WebRTC offer to be announced
 func newOffer() (
-	peerConnection wrappedPeerConnection,
+	peerConnection *wrappedPeerConnection,
 	dataChannel *webrtc.DataChannel,
 	offer webrtc.SessionDescription,
 	err error,
@@ -76,7 +79,7 @@ func newOffer() (
 }
 
 func initAnsweringPeerConnection(
-	peerConnection wrappedPeerConnection,
+	peerConnection *wrappedPeerConnection,
 	offer webrtc.SessionDescription,
 ) (answer webrtc.SessionDescription, err error) {
 	err = peerConnection.SetRemoteDescription(offer)
@@ -97,7 +100,7 @@ func initAnsweringPeerConnection(
 // newAnsweringPeerConnection creates a transport from a WebRTC offer and and returns a WebRTC answer to be
 // announced.
 func newAnsweringPeerConnection(offer webrtc.SessionDescription) (
-	peerConn wrappedPeerConnection, answer webrtc.SessionDescription, err error,
+	peerConn *wrappedPeerConnection, answer webrtc.SessionDescription, err error,
 ) {
 	peerConn, err = newPeerConnection()
 	if err != nil {
@@ -132,7 +135,7 @@ func (me ioCloserFunc) Close() error {
 
 func setDataChannelOnOpen(
 	dc *webrtc.DataChannel,
-	pc wrappedPeerConnection,
+	pc *wrappedPeerConnection,
 	onOpen func(closer datachannel.ReadWriteCloser),
 ) {
 	dc.OnOpen(func() {
@@ -145,7 +148,7 @@ func setDataChannelOnOpen(
 	})
 }
 
-func hookDataChannelCloser(dcrwc datachannel.ReadWriteCloser, pc wrappedPeerConnection) datachannel.ReadWriteCloser {
+func hookDataChannelCloser(dcrwc datachannel.ReadWriteCloser, pc *wrappedPeerConnection) datachannel.ReadWriteCloser {
 	return struct {
 		datachannelReadWriter
 		io.Closer

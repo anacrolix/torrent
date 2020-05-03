@@ -329,7 +329,7 @@ func (cn *PeerConn) close() {
 	cn.discardPieceInclination()
 	cn._pieceRequestOrder.Clear()
 	if cn.conn != nil {
-		go cn.conn.Close()
+		cn.conn.Close()
 	}
 }
 

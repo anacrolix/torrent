@@ -9,6 +9,7 @@ import (
 
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/bradfitz/iter"
+	"github.com/frankban/quicktest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -87,6 +88,7 @@ func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
 }
 
 func BenchmarkConnectionMainReadLoop(b *testing.B) {
+	c := quicktest.New(b)
 	cl := &Client{
 		config: &ClientConfig{
 			DownloadRateLimiter: unlimited,
@@ -140,8 +142,8 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			ts.writeSem.Lock()
 		}
 	}()
-	require.NoError(b, <-mrlErr)
-	require.EqualValues(b, b.N, cn._stats.ChunksReadUseful.Int64())
+	c.Assert([]error{nil, io.EOF}, quicktest.Contains, <-mrlErr)
+	c.Assert(cn._stats.ChunksReadUseful.Int64(), quicktest.Equals, int64(b.N))
 }
 
 func TestConnPexPeerFlags(t *testing.T) {

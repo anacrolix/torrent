@@ -20,6 +20,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/elliotchance/orderedmap v1.2.2
+	github.com/frankban/quicktest v1.9.0
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/google/btree v1.0.0
 	github.com/gorilla/websocket v1.4.2

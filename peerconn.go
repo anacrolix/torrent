@@ -601,7 +601,9 @@ func (cn *PeerConn) writer(keepAliveTimeout time.Duration) {
 				cn.wroteMsg(&msg)
 				cn.writeBuffer.Write(msg.MustMarshalBinary())
 				torrent.Add(fmt.Sprintf("messages filled of type %s", msg.Type.String()), 1)
-				return cn.writeBuffer.Len() < 1<<16 // 64KiB
+				// 64KiB, but temporarily less to work around an issue with WebRTC. TODO: Update
+				// when https://github.com/pion/datachannel/issues/59 is fixed.
+				return cn.writeBuffer.Len() < 1<<15
 			})
 		}
 		if cn.writeBuffer.Len() == 0 && time.Since(lastWrite) >= keepAliveTimeout {

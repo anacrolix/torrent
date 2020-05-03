@@ -270,6 +270,7 @@ func downloadErr(args []string, parent *tagflag.Parser) error {
 		client.WriteStatus(w)
 	})
 	addTorrents(client)
+	defer outputStats(client)
 	if client.WaitAll() {
 		log.Print("downloaded ALL the torrents")
 	} else {
@@ -279,7 +280,6 @@ func downloadErr(args []string, parent *tagflag.Parser) error {
 		outputStats(client)
 		<-stop.C()
 	}
-	outputStats(client)
 	return nil
 }
 

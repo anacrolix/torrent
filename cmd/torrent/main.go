@@ -148,6 +148,7 @@ var flags = struct {
 	UtpPeers        bool
 	Ipv4            bool
 	Ipv6            bool
+	Pex             bool
 	tagflag.StartPos
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }{
@@ -159,6 +160,7 @@ var flags = struct {
 	UtpPeers:     true,
 	Ipv4:         true,
 	Ipv6:         true,
+	Pex:          true,
 }
 
 func stdoutAndStderrAreSameFile() bool {
@@ -221,6 +223,7 @@ func downloadErr(args []string, parent *tagflag.Parser) error {
 	clientConfig.Seed = flags.Seed
 	clientConfig.PublicIp4 = flags.PublicIP
 	clientConfig.PublicIp6 = flags.PublicIP
+	clientConfig.DisablePEX = !flags.Pex
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
 		if err != nil {

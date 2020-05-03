@@ -658,18 +658,17 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
 
 // Performs initiator handshakes and returns a connection. Returns nil *connection if no connection
 // for valid reasons.
-func (cl *Client) handshakesConnection(
+func (cl *Client) initiateProtocolHandshakes(
 	ctx context.Context,
 	nc net.Conn,
 	t *Torrent,
-	encryptHeader bool,
+	outgoing, encryptHeader bool,
 	remoteAddr net.Addr,
-	network,
-	connString string,
+	network, connString string,
 ) (
 	c *PeerConn, err error,
 ) {
-	c = cl.newConnection(nc, true, remoteAddr, network, connString)
+	c = cl.newConnection(nc, outgoing, remoteAddr, network, connString)
 	c.headerEncrypted = encryptHeader
 	ctx, cancel := context.WithTimeout(ctx, cl.config.HandshakesTimeout)
 	defer cancel()
@@ -701,7 +700,7 @@ func (cl *Client) establishOutgoingConnEx(t *Torrent, addr net.Addr, obfuscatedH
 		}
 		return nil, errors.New("dial failed")
 	}
-	c, err := cl.handshakesConnection(context.Background(), nc, t, obfuscatedHeader, addr, dr.Network, regularConnString(nc))
+	c, err := cl.initiateProtocolHandshakes(context.Background(), nc, t, true, obfuscatedHeader, addr, dr.Network, regularConnString(nc))
 	if err != nil {
 		nc.Close()
 	}

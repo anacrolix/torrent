@@ -1287,10 +1287,11 @@ func (t *Torrent) onWebRtcConn(
 	dcc webtorrent.DataChannelContext,
 ) {
 	defer c.Close()
-	pc, err := t.cl.handshakesConnection(
+	pc, err := t.cl.initiateProtocolHandshakes(
 		context.Background(),
 		webrtcNetConn{c, dcc},
 		t,
+		dcc.LocalOffered,
 		false,
 		webrtcNetAddr{dcc.Remote},
 		webrtcNetwork,

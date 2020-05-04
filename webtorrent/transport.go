@@ -148,6 +148,8 @@ func setDataChannelOnOpen(
 	})
 }
 
+// Hooks the datachannel's Close to Close the owning PeerConnection. The datachannel takes ownership
+// and responsibility for the PeerConnection.
 func hookDataChannelCloser(dcrwc datachannel.ReadWriteCloser, pc *wrappedPeerConnection) datachannel.ReadWriteCloser {
 	return struct {
 		datachannelReadWriter

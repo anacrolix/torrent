@@ -1,7 +1,6 @@
 package metainfo
 
 import (
-	"crypto/sha1"
 	"errors"
 	"fmt"
 	"io"
@@ -85,7 +84,7 @@ func (info *Info) writeFiles(w io.Writer, open func(fi FileInfo) (io.ReadCloser,
 
 // Sets Pieces (the block of piece hashes in the Info) by using the passed
 // function to get at the torrent data.
-func (info *Info) GeneratePieces(open func(fi FileInfo) (io.ReadCloser, error)) error {
+func (info *Info) GeneratePieces(open func(fi FileInfo) (io.ReadCloser, error)) (err error) {
 	if info.PieceLength == 0 {
 		return errors.New("piece length must be non-zero")
 	}
@@ -95,26 +94,8 @@ func (info *Info) GeneratePieces(open func(fi FileInfo) (io.ReadCloser, error)) 
 		pw.CloseWithError(err)
 	}()
 	defer pr.Close()
-	var pieces []byte
-	for {
-		hasher := sha1.New()
-		wn, err := io.CopyN(hasher, pr, info.PieceLength)
-		if err == io.EOF {
-			err = nil
-		}
-		if err != nil {
-			return err
-		}
-		if wn == 0 {
-			break
-		}
-		pieces = hasher.Sum(pieces)
-		if wn < info.PieceLength {
-			break
-		}
-	}
-	info.Pieces = pieces
-	return nil
+	info.Pieces, err = GeneratePieces(pr, info.PieceLength, nil)
+	return
 }
 
 func (info *Info) TotalLength() (ret int64) {

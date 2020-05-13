@@ -140,7 +140,12 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		}
 		fmt.Fprint(w, "\n")
 		if t.info != nil {
-			fmt.Fprintf(w, "%f%% of %d bytes (%s)", 100*(1-float64(t.bytesMissingLocked())/float64(t.info.TotalLength())), t.length, humanize.Bytes(uint64(t.info.TotalLength())))
+			fmt.Fprintf(
+				w,
+				"%f%% of %d bytes (%s)",
+				100*(1-float64(t.bytesMissingLocked())/float64(t.info.TotalLength())),
+				*t.length,
+				humanize.Bytes(uint64(*t.length)))
 		} else {
 			w.WriteString("<missing metainfo>")
 		}

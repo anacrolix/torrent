@@ -58,7 +58,7 @@ Downloads torrents from the command-line. This first example does not use `godo`
 
 	$ go get github.com/anacrolix/torrent/cmd/torrent
     # Now 'torrent' should be in $GOPATH/bin, which should be in $PATH.
-	$ torrent 'magnet:?xt=urn:btih:KRWPCX3SJUM4IMM4YF5RPHL6ANPYTQPU'
+	$ torrent download 'magnet:?xt=urn:btih:KRWPCX3SJUM4IMM4YF5RPHL6ANPYTQPU'
     ubuntu-14.04.2-desktop-amd64.iso [===================================================================>]  99% downloading (1.0 GB/1.0 GB)
     2015/04/01 02:08:20 main.go:137: downloaded ALL the torrents
     $ md5sum ubuntu-14.04.2-desktop-amd64.iso

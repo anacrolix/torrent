@@ -30,6 +30,8 @@ type testClientTransferParams struct {
 	LeecherDownloadRateLimiter *rate.Limiter
 	ConfigureSeeder            ConfigureClient
 	ConfigureLeecher           ConfigureClient
+
+	LeecherStartsWithoutMetadata bool
 }
 
 func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
@@ -108,6 +110,9 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	leecherTorrent, new, err := leecher.AddTorrentSpec(func() (ret *torrent.TorrentSpec) {
 		ret = torrent.TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
+		if ps.LeecherStartsWithoutMetadata {
+			ret.InfoBytes = nil
+		}
 		return
 	}())
 	require.NoError(t, err)
@@ -118,12 +123,18 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 
 	// Now do some things with leecher and seeder.
 	added := leecherTorrent.AddClientPeer(seeder)
-	// The Torrent should not be interested in obtaining peers, so the one we
-	// just added should be the only one.
 	assert.False(t, leecherTorrent.Seeding())
-	assert.EqualValues(t, added, leecherTorrent.Stats().PendingPeers)
+	// The leecher will use peers immediately if it doesn't have the metadata. Otherwise, they
+	// should be sitting idle until we demand data.
+	if !ps.LeecherStartsWithoutMetadata {
+		assert.EqualValues(t, added, leecherTorrent.Stats().PendingPeers)
+	}
+	if ps.LeecherStartsWithoutMetadata {
+		<-leecherTorrent.GotInfo()
+	}
 	r := leecherTorrent.NewReader()
 	defer r.Close()
+	go leecherTorrent.SetInfoBytes(mi.InfoBytes)
 	if ps.Responsive {
 		r.SetResponsive()
 	}
@@ -186,6 +197,16 @@ func TestClientTransferDefault(t *testing.T) {
 		LeecherStorage: newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
 			Wrapper: fileCachePieceResourceStorage,
 		}),
+	})
+}
+
+func TestClientTransferDefaultNoMetadata(t *testing.T) {
+	testClientTransfer(t, testClientTransferParams{
+		ExportClientStatus: true,
+		LeecherStorage: newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
+			Wrapper: fileCachePieceResourceStorage,
+		}),
+		LeecherStartsWithoutMetadata: true,
 	})
 }
 

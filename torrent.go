@@ -377,6 +377,9 @@ func (t *Torrent) cacheLength() {
 }
 
 func (t *Torrent) setInfo(info *metainfo.Info) error {
+	if t.info != nil {
+		return errors.New("info already set")
+	}
 	if err := validateInfo(info); err != nil {
 		return fmt.Errorf("bad info: %s", err)
 	}

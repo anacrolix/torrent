@@ -1386,6 +1386,9 @@ func (t *Torrent) startScrapingTracker(_url string) {
 		go newAnnouncer.Run()
 		return newAnnouncer
 	}()
+	if sl == nil {
+		return
+	}
 	if t.trackerAnnouncers == nil {
 		t.trackerAnnouncers = make(map[string]torrentTrackerAnnouncer)
 	}

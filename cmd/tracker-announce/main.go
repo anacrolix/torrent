@@ -1,14 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
-
-	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/tagflag"
 
@@ -76,7 +75,7 @@ func doTracker(tURI string, ar tracker.AnnounceRequest) (hadError bool) {
 			log.Printf("error announcing to %q: %s", tURI, err)
 			continue
 		}
-		spew.Dump(resp)
+		fmt.Printf("response from %q: %+v\n", tURI, resp)
 	}
 	return
 }

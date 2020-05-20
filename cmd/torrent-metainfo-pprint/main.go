@@ -47,6 +47,9 @@ func processReader(r io.Reader) error {
 		"AnnounceList": metainfo.AnnounceList,
 		"UrlList":      metainfo.UrlList,
 	}
+	if len(metainfo.Nodes) >  0 {
+		d["Nodes"] = metainfo.Nodes
+	}
 	if flags.Files {
 		d["Files"] = info.UpvertedFiles()
 	}

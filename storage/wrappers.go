@@ -19,7 +19,10 @@ func NewClient(cl ClientImpl) *Client {
 
 func (cl Client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (*Torrent, error) {
 	t, err := cl.ci.OpenTorrent(info, infoHash)
-	return &Torrent{t}, err
+	if err != nil {
+		return nil, err
+	}
+	return &Torrent{t}, nil
 }
 
 type Torrent struct {

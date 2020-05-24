@@ -25,7 +25,6 @@ BitTorrent features implemented include:
   - 15: UDP Tracker Protocol
   - 20: Peer ID convention ("-GTnnnn-")
   - 23: Tracker Returns Compact Peer Lists
-  - 27: Private torrents
   - 29: uTorrent transport protocol
   - 41: UDP Tracker Protocol Extensions
   - 42: DHT Security extension

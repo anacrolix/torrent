@@ -9,7 +9,7 @@ import (
 )
 
 // Peer connection info, handed about publicly.
-type Peer struct {
+type PeerInfo struct {
 	Id     [20]byte
 	Addr   net.Addr
 	Source PeerSource
@@ -20,7 +20,7 @@ type Peer struct {
 	Trusted bool
 }
 
-func (me Peer) Equal(other Peer) bool {
+func (me PeerInfo) Equal(other PeerInfo) bool {
 	return me.Id == other.Id &&
 		me.Addr.String() == other.Addr.String() &&
 		me.Source == other.Source &&
@@ -29,8 +29,8 @@ func (me Peer) Equal(other Peer) bool {
 		me.Trusted == other.Trusted
 }
 
-// FromPex generate Peer from peer exchange
-func (me *Peer) FromPex(na krpc.NodeAddr, fs peer_protocol.PexPeerFlags) {
+// Generate PeerInfo from peer exchange
+func (me *PeerInfo) FromPex(na krpc.NodeAddr, fs peer_protocol.PexPeerFlags) {
 	me.Addr = ipPortAddr{append([]byte(nil), na.IP...), na.Port}
 	me.Source = PeerSourcePex
 	// If they prefer encryption, they must support it.
@@ -40,6 +40,6 @@ func (me *Peer) FromPex(na krpc.NodeAddr, fs peer_protocol.PexPeerFlags) {
 	me.PexPeerFlags = fs
 }
 
-func (me Peer) addr() IpPort {
+func (me PeerInfo) addr() IpPort {
 	return IpPort{IP: addrIpOrNil(me.Addr), Port: uint16(addrPortOrZero(me.Addr))}
 }

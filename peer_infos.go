@@ -7,11 +7,12 @@ import (
 	"github.com/anacrolix/torrent/tracker"
 )
 
-type Peers []Peer
+// Helper-type used to bulk-manage PeerInfos.
+type peerInfos []PeerInfo
 
-func (me *Peers) AppendFromPex(nas []krpc.NodeAddr, fs []peer_protocol.PexPeerFlags) {
+func (me *peerInfos) AppendFromPex(nas []krpc.NodeAddr, fs []peer_protocol.PexPeerFlags) {
 	for i, na := range nas {
-		var p Peer
+		var p PeerInfo
 		var f peer_protocol.PexPeerFlags
 		if i < len(fs) {
 			f = fs[i]
@@ -21,9 +22,9 @@ func (me *Peers) AppendFromPex(nas []krpc.NodeAddr, fs []peer_protocol.PexPeerFl
 	}
 }
 
-func (ret Peers) AppendFromTracker(ps []tracker.Peer) Peers {
+func (ret peerInfos) AppendFromTracker(ps []tracker.Peer) peerInfos {
 	for _, p := range ps {
-		_p := Peer{
+		_p := PeerInfo{
 			Addr:   ipPortAddr{p.IP, p.Port},
 			Source: PeerSourceTracker,
 		}

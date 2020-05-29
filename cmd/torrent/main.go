@@ -113,9 +113,9 @@ func addTorrents(client *torrent.Client) error {
 		if flags.Progress {
 			torrentBar(t, flags.PieceStates)
 		}
-		t.AddPeers(func() (ret []torrent.Peer) {
+		t.AddPeers(func() (ret []torrent.PeerInfo) {
 			for _, ta := range flags.TestPeer {
-				ret = append(ret, torrent.Peer{
+				ret = append(ret, torrent.PeerInfo{
 					Addr: ta,
 				})
 			}

@@ -1075,13 +1075,13 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		infoHash: ih,
 		peers: prioritizedPeers{
 			om: btree.New(32),
-			getPrio: func(p Peer) peerPriority {
+			getPrio: func(p PeerInfo) peerPriority {
 				return bep40PriorityIgnoreError(cl.publicAddr(addrIpOrNil(p.Addr)), p.addr())
 			},
 		},
 		conns: make(map[*PeerConn]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
 
-		halfOpen:          make(map[string]Peer),
+		halfOpen:          make(map[string]PeerInfo),
 		pieceStateChanges: pubsub.NewPubSub(),
 
 		storageOpener:       storageClient,
@@ -1307,7 +1307,7 @@ func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portO
 	if t == nil {
 		return
 	}
-	t.addPeers([]Peer{{
+	t.addPeers([]PeerInfo{{
 		Addr:   ipPortAddr{ip, port},
 		Source: PeerSourceDhtAnnouncePeer,
 	}})

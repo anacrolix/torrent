@@ -96,7 +96,7 @@ func (s *pexConnState) Recv(payload []byte) error {
 	torrent.Add("pex added peers received", int64(len(rx.Added)))
 	torrent.Add("pex added6 peers received", int64(len(rx.Added6)))
 
-	var peers Peers
+	var peers peerInfos
 	peers.AppendFromPex(rx.Added6, rx.Added6Flags)
 	peers.AppendFromPex(rx.Added, rx.AddedFlags)
 	s.dbg.Printf("adding %d peers from PEX", len(peers))

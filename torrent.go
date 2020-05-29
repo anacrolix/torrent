@@ -83,7 +83,7 @@ type Torrent struct {
 	maxEstablishedConns int
 	// Set of addrs to which we're attempting to connect. Connections are
 	// half-open until all handshakes are completed.
-	halfOpen    map[string]Peer
+	halfOpen    map[string]PeerInfo
 	fastestConn *PeerConn
 
 	// Reserve of peers to connect to. A peer can be both here and in the
@@ -181,9 +181,9 @@ func (t *Torrent) Closed() <-chan struct{} {
 
 // KnownSwarm returns the known subset of the peers in the Torrent's swarm, including active,
 // pending, and half-open peers.
-func (t *Torrent) KnownSwarm() (ks []Peer) {
+func (t *Torrent) KnownSwarm() (ks []PeerInfo) {
 	// Add pending peers to the list
-	t.peers.Each(func(peer Peer) {
+	t.peers.Each(func(peer PeerInfo) {
 		ks = append(ks, peer)
 	})
 
@@ -195,7 +195,7 @@ func (t *Torrent) KnownSwarm() (ks []Peer) {
 	// Add active peers to the list
 	for conn := range t.conns {
 
-		ks = append(ks, Peer{
+		ks = append(ks, PeerInfo{
 			Id:     conn.PeerID,
 			Addr:   conn.remoteAddr,
 			Source: conn.Discovery,
@@ -254,7 +254,7 @@ func (t *Torrent) unclosedConnsAsSlice() (ret []*PeerConn) {
 	return
 }
 
-func (t *Torrent) addPeer(p Peer) (added bool) {
+func (t *Torrent) addPeer(p PeerInfo) (added bool) {
 	cl := t.cl
 	torrent.Add(fmt.Sprintf("peers added by source %q", p.Source), 1)
 	if t.closed.IsSet() {
@@ -1451,7 +1451,7 @@ func (t *Torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 				// Can't do anything with this.
 				continue
 			}
-			t.addPeer(Peer{
+			t.addPeer(PeerInfo{
 				Addr:   ipPortAddr{cp.IP, cp.Port},
 				Source: PeerSourceDhtGetPeers,
 			})
@@ -1506,7 +1506,7 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 	}
 }
 
-func (t *Torrent) addPeers(peers []Peer) (added int) {
+func (t *Torrent) addPeers(peers []PeerInfo) (added int) {
 	for _, p := range peers {
 		if t.addPeer(p) {
 			added++
@@ -1552,7 +1552,7 @@ func (t *Torrent) numTotalPeers() int {
 	for addr := range t.halfOpen {
 		peers[addr] = struct{}{}
 	}
-	t.peers.Each(func(peer Peer) {
+	t.peers.Each(func(peer PeerInfo) {
 		peers[peer.Addr.String()] = struct{}{}
 	})
 	return len(peers)
@@ -1859,7 +1859,7 @@ func (t *Torrent) VerifyData() {
 }
 
 // Start the process of connecting to the given peer for the given torrent if appropriate.
-func (t *Torrent) initiateConn(peer Peer) {
+func (t *Torrent) initiateConn(peer PeerInfo) {
 	if peer.Id == t.cl.peerID {
 		return
 	}
@@ -1878,9 +1878,9 @@ func (t *Torrent) initiateConn(peer Peer) {
 // Adds a trusted, pending peer for each of the given Client's addresses. Typically used in tests to
 // quickly make one Client visible to the Torrent of another Client.
 func (t *Torrent) AddClientPeer(cl *Client) int {
-	return t.AddPeers(func() (ps []Peer) {
+	return t.AddPeers(func() (ps []PeerInfo) {
 		for _, la := range cl.ListenAddrs() {
-			ps = append(ps, Peer{
+			ps = append(ps, PeerInfo{
 				Addr:    la,
 				Trusted: true,
 			})

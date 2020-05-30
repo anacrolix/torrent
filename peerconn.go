@@ -1325,6 +1325,9 @@ func (c *PeerConn) uploadAllowed() bool {
 	if c.t.cl.config.NoUpload {
 		return false
 	}
+	if c.t.dataUploadDisallowed {
+		return false
+	}
 	if c.t.seeding() {
 		return true
 	}

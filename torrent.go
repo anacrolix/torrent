@@ -45,6 +45,7 @@ type Torrent struct {
 
 	networkingEnabled      bool
 	dataDownloadDisallowed bool
+	dataUploadDisallowed   bool
 	userOnWriteChunkErr    func(error)
 
 	// Determines what chunks to request from peers.
@@ -1273,6 +1274,9 @@ func (t *Torrent) seeding() bool {
 	if t.closed.IsSet() {
 		return false
 	}
+	if t.dataUploadDisallowed {
+		return false
+	}
 	if cl.config.NoUpload {
 		return false
 	}
@@ -1967,6 +1971,26 @@ func (t *Torrent) AllowDataDownload() {
 		c.updateRequests()
 	}
 
+}
+
+func (t *Torrent) AllowDataUpload() {
+	t.cl.lock()
+	defer t.cl.unlock()
+	log.Printf("AllowDataUpload")
+	t.dataUploadDisallowed = false
+	for c := range t.conns {
+		c.updateRequests()
+	}
+}
+
+func (t *Torrent) DisallowDataUpload() {
+	t.cl.lock()
+	defer t.cl.unlock()
+	log.Printf("DisallowDataUpload")
+	t.dataUploadDisallowed = true
+	for c := range t.conns {
+		c.updateRequests()
+	}
 }
 
 func (t *Torrent) SetOnWriteChunkError(f func(error)) {

@@ -77,6 +77,8 @@ type Torrent struct {
 	info  *metainfo.Info
 	files *[]*File
 
+	webSeeds map[string]*peer
+
 	// Active peer connections, running message stream loops. TODO: Make this
 	// open (not-closed) connections only.
 	conns               map[*PeerConn]struct{}
@@ -1226,9 +1228,16 @@ func (t *Torrent) deleteConnection(c *PeerConn) (ret bool) {
 	}
 	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests()
-	if len(t.conns) == 0 {
+	if t.numActivePeers() == 0 {
 		t.assertNoPendingRequests()
 	}
+	return
+}
+
+func (t *Torrent) numActivePeers() (num int) {
+	t.iterPeers(func(*peer) {
+		num++
+	})
 	return
 }
 
@@ -1978,6 +1987,18 @@ func (t *Torrent) SetOnWriteChunkError(f func(error)) {
 func (t *Torrent) iterPeers(f func(*peer)) {
 	for pc := range t.conns {
 		f(&pc.peer)
+	}
+	for _, ws := range t.webSeeds {
+		f(ws)
+	}
+}
+
+func (t *Torrent) addWebSeed(url string) {
+	if _, ok := t.webSeeds[url]; ok {
+		return
+	}
+	t.webSeeds[url] = &peer{
+		peerImpl: &webSeed{},
 	}
 }
 

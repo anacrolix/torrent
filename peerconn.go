@@ -41,6 +41,8 @@ type peerImpl interface {
 	cancel(request) bool
 	request(request) bool
 	connectionFlags() string
+	close()
+	postCancel(request)
 	drop()
 }
 
@@ -335,16 +337,20 @@ func (cn *peer) writeStatus(w io.Writer, t *Torrent) {
 	)
 }
 
-func (cn *PeerConn) close() {
+func (cn *peer) close() {
 	if !cn.closed.Set() {
 		return
 	}
+	cn.discardPieceInclination()
+	cn._pieceRequestOrder.Clear()
+	cn.peerImpl.close()
+}
+
+func (cn *PeerConn) close() {
 	if cn.pex.IsEnabled() {
 		cn.pex.Close()
 	}
 	cn.tickleWriter()
-	cn.discardPieceInclination()
-	cn._pieceRequestOrder.Clear()
 	if cn.conn != nil {
 		cn.conn.Close()
 	}
@@ -365,6 +371,15 @@ func (cn *PeerConn) post(msg pp.Message) {
 	// those.
 	cn.wroteMsg(&msg)
 	cn.tickleWriter()
+}
+
+func (cn *PeerConn) write(msg pp.Message) bool {
+	cn.wroteMsg(&msg)
+	cn.writeBuffer.Write(msg.MustMarshalBinary())
+	torrent.Add(fmt.Sprintf("messages filled of type %s", msg.Type.String()), 1)
+	// 64KiB, but temporarily less to work around an issue with WebRTC. TODO: Update
+	// when https://github.com/pion/datachannel/issues/59 is fixed.
+	return cn.writeBuffer.Len() < 1<<15
 }
 
 func (cn *PeerConn) requestMetadataPiece(index int) {
@@ -606,15 +621,6 @@ func (cn *PeerConn) fillWriteBuffer() {
 	cn.upload(cn.write)
 }
 
-func (cn *PeerConn) write(msg pp.Message) bool {
-	cn.wroteMsg(&msg)
-	cn.writeBuffer.Write(msg.MustMarshalBinary())
-	torrent.Add(fmt.Sprintf("messages filled of type %s", msg.Type.String()), 1)
-	// 64KiB, but temporarily less to work around an issue with WebRTC. TODO: Update
-	// when https://github.com/pion/datachannel/issues/59 is fixed.
-	return cn.writeBuffer.Len() < 1<<15
-}
-
 // Routine that writes to the peer. Some of what to write is buffered by
 // activity elsewhere in the Client, and some is determined locally when the
 // connection is writable.
@@ -803,7 +809,7 @@ func (cn *PeerConn) getPieceInclination() []int {
 	return cn.pieceInclination
 }
 
-func (cn *PeerConn) discardPieceInclination() {
+func (cn *peer) discardPieceInclination() {
 	if cn.pieceInclination == nil {
 		return
 	}
@@ -1475,7 +1481,7 @@ func (c *peer) deleteRequest(r request) bool {
 	return true
 }
 
-func (c *PeerConn) deleteAllRequests() {
+func (c *peer) deleteAllRequests() {
 	for r := range c.requests {
 		c.deleteRequest(r)
 	}
@@ -1491,12 +1497,16 @@ func (c *PeerConn) tickleWriter() {
 	c.writerCond.Broadcast()
 }
 
-func (c *PeerConn) postCancel(r request) bool {
+func (c *peer) postCancel(r request) bool {
 	if !c.deleteRequest(r) {
 		return false
 	}
-	c.post(makeCancelMessage(r))
+	c.peerImpl.postCancel(r)
 	return true
+}
+
+func (c *PeerConn) postCancel(r request) {
+	c.post(makeCancelMessage(r))
 }
 
 func (c *PeerConn) sendChunk(r request, msg func(pp.Message) bool) (more bool, err error) {

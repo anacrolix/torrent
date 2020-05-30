@@ -84,7 +84,7 @@ type Torrent struct {
 	// Set of addrs to which we're attempting to connect. Connections are
 	// half-open until all handshakes are completed.
 	halfOpen    map[string]PeerInfo
-	fastestConn *PeerConn
+	fastestConn *peer
 
 	// Reserve of peers to connect to. A peer can be both here and in the
 	// active connections if were told about the peer after connecting with
@@ -1691,7 +1691,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 				c.stats().incrementPiecesDirtiedBad()
 			}
 
-			bannableTouchers := make([]*PeerConn, 0, len(p.dirtiers))
+			bannableTouchers := make([]*peer, 0, len(p.dirtiers))
 			for c := range p.dirtiers {
 				if !c.trusted {
 					bannableTouchers = append(bannableTouchers, c)
@@ -1973,4 +1973,19 @@ func (t *Torrent) SetOnWriteChunkError(f func(error)) {
 	t.cl.lock()
 	defer t.cl.unlock()
 	t.userOnWriteChunkErr = f
+}
+
+func (t *Torrent) iterPeers(f func(*peer)) {
+	for pc := range t.conns {
+		f(&pc.peer)
+	}
+}
+
+func (t *Torrent) peerIsActive(p *peer) (active bool) {
+	t.iterPeers(func(p1 *peer) {
+		if p1 == p {
+			active = true
+		}
+	})
+	return
 }

@@ -1290,6 +1290,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr net.Addr,
 		conn:        nc,
 		writeBuffer: new(bytes.Buffer),
 	}
+	c.peerImpl = c
 	c.logger = cl.logger.WithValues(c).WithDefaultLevel(log.Debug).WithText(func(m log.Msg) string {
 		return fmt.Sprintf("%v: %s", c, m.Text())
 	})

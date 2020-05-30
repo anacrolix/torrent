@@ -546,9 +546,9 @@ func TestPeerInvalidHave(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, _new)
 	defer tt.Drop()
-	cn := &PeerConn{
+	cn := &PeerConn{peer: peer{
 		t: tt,
-	}
+	}}
 	assert.NoError(t, cn.peerSentHave(0))
 	assert.Error(t, cn.peerSentHave(1))
 }

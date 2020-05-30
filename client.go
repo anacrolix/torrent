@@ -1277,15 +1277,18 @@ func (cl *Client) banPeerIP(ip net.IP) {
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr net.Addr, network, connString string) (c *PeerConn) {
 	c = &PeerConn{
-		conn:            nc,
-		outgoing:        outgoing,
-		choking:         true,
-		peerChoking:     true,
-		PeerMaxRequests: 250,
-		writeBuffer:     new(bytes.Buffer),
-		remoteAddr:      remoteAddr,
-		network:         network,
-		connString:      connString,
+		peer: peer{
+			outgoing:        outgoing,
+			choking:         true,
+			peerChoking:     true,
+			PeerMaxRequests: 250,
+
+			remoteAddr: remoteAddr,
+			network:    network,
+			connString: connString,
+		},
+		conn:        nc,
+		writeBuffer: new(bytes.Buffer),
 	}
 	c.logger = cl.logger.WithValues(c).WithDefaultLevel(log.Debug).WithText(func(m log.Msg) string {
 		return fmt.Sprintf("%v: %s", c, m.Text())

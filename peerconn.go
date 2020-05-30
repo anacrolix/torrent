@@ -35,22 +35,12 @@ const (
 	PeerSourcePex             = "X"
 )
 
-// Maintains the state of a connection with a peer.
-type PeerConn struct {
-	// First to ensure 64-bit alignment for atomics. See #262.
-	_stats ConnStats
-
-	t *Torrent
-	// The actual Conn, used for closing, and setting socket options.
-	conn       net.Conn
+type peer struct {
+	t          *Torrent
 	connString string
 	outgoing   bool
 	network    string
 	remoteAddr net.Addr
-	// The Reader and Writer for this Conn, with hooks installed for stats,
-	// limiting, deadlines etc.
-	w io.Writer
-	r io.Reader
 	// True if the connection is operating over MSE obfuscation.
 	headerEncrypted bool
 	cryptoMethod    mse.CryptoMethod
@@ -116,11 +106,26 @@ type PeerConn struct {
 	pieceInclination   []int
 	_pieceRequestOrder prioritybitmap.PriorityBitmap
 
+	logger log.Logger
+}
+
+// Maintains the state of a connection with a peer.
+type PeerConn struct {
+	// First to ensure 64-bit alignment for atomics. See #262.
+	_stats ConnStats
+
+	peer
+
+	// The actual Conn, used for closing, and setting socket options.
+	conn net.Conn
+	// The Reader and Writer for this Conn, with hooks installed for stats,
+	// limiting, deadlines etc.
+	w io.Writer
+	r io.Reader
+
 	writeBuffer *bytes.Buffer
 	uploadTimer *time.Timer
 	writerCond  sync.Cond
-
-	logger log.Logger
 }
 
 func (cn *PeerConn) updateExpectingChunks() {

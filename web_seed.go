@@ -7,6 +7,11 @@ import (
 type webSeed struct {
 	peer       *peer
 	httpClient *http.Client
+	url        string
+}
+
+func (ws *webSeed) postCancel(r request) {
+	panic("implement me")
 }
 
 func (ws *webSeed) writeInterested(interested bool) bool {
@@ -31,3 +36,5 @@ func (ws *webSeed) drop() {
 func (ws *webSeed) updateRequests() {
 	ws.peer.doRequestState()
 }
+
+func (ws *webSeed) _close() {}

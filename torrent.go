@@ -944,12 +944,12 @@ func (t *Torrent) maybeNewConns() {
 
 func (t *Torrent) piecePriorityChanged(piece pieceIndex) {
 	// t.logger.Printf("piece %d priority changed", piece)
-	for c := range t.conns {
+	t.iterPeers(func(c *peer) {
 		if c.updatePiecePriority(piece) {
 			// log.Print("conn piece priority changed")
 			c.updateRequests()
 		}
-	}
+	})
 	t.maybeNewConns()
 	t.publishPieceChange(piece)
 }
@@ -1769,11 +1769,11 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	// 		c.drop()
 	// 	}
 	// }
-	for conn := range t.conns {
+	t.iterPeers(func(conn *peer) {
 		if conn.peerHasPiece(piece) {
 			conn.updateRequests()
 		}
-	}
+	})
 }
 
 func (t *Torrent) tryCreateMorePieceHashers() {
@@ -1933,11 +1933,11 @@ func (cb torrentRequestStrategyCallbacks) requestTimedOut(r request) {
 	torrent.Add("request timeouts", 1)
 	cb.t.cl.lock()
 	defer cb.t.cl.unlock()
-	for cn := range cb.t.conns {
+	cb.t.iterPeers(func(cn *peer) {
 		if cn.peerHasPiece(pieceIndex(r.Index)) {
 			cn.updateRequests()
 		}
-	}
+	})
 
 }
 
@@ -1962,9 +1962,9 @@ func (t *Torrent) DisallowDataDownload() {
 func (t *Torrent) disallowDataDownloadLocked() {
 	log.Printf("disallowing data download")
 	t.dataDownloadDisallowed = true
-	for c := range t.conns {
+	t.iterPeers(func(c *peer) {
 		c.updateRequests()
-	}
+	})
 }
 
 func (t *Torrent) AllowDataDownload() {
@@ -1972,10 +1972,9 @@ func (t *Torrent) AllowDataDownload() {
 	defer t.cl.unlock()
 	log.Printf("AllowDataDownload")
 	t.dataDownloadDisallowed = false
-	for c := range t.conns {
+	t.iterPeers(func(c *peer) {
 		c.updateRequests()
-	}
-
+	})
 }
 
 func (t *Torrent) SetOnWriteChunkError(f func(error)) {
@@ -1997,9 +1996,20 @@ func (t *Torrent) addWebSeed(url string) {
 	if _, ok := t.webSeeds[url]; ok {
 		return
 	}
-	t.webSeeds[url] = &peer{
-		peerImpl: &webSeed{},
+	p := &peer{
+		t:                        t,
+		connString:               url,
+		outgoing:                 true,
+		network:                  "http",
+		reconciledHandshakeStats: true,
+		peerSentHaveAll:          true,
 	}
+	ws := webSeed{
+		peer: p,
+	}
+	p.peerImpl = &ws
+	t.webSeeds[url] = p
+
 }
 
 func (t *Torrent) peerIsActive(p *peer) (active bool) {

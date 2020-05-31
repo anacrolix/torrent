@@ -1091,6 +1091,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		metadataChanged: sync.Cond{
 			L: cl.locker(),
 		},
+		webSeeds: make(map[string]*peer),
 	}
 	t._pendingPieces.NewSet = priorityBitmapStableNewSet
 	t.requestStrategy = cl.config.DefaultRequestStrategy(t.requestStrategyCallbacks(), &cl._mu)
@@ -1232,6 +1233,9 @@ func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (T *Torrent, err error) {
 	var ss []string
 	slices.MakeInto(&ss, mi.Nodes)
 	cl.AddDHTNodes(ss)
+	for _, url := range mi.UrlList {
+		T.addWebSeed(url)
+	}
 	return
 }
 

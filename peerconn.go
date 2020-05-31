@@ -41,7 +41,7 @@ type peerImpl interface {
 	cancel(request) bool
 	request(request) bool
 	connectionFlags() string
-	close()
+	_close()
 	postCancel(request)
 	drop()
 }
@@ -343,10 +343,10 @@ func (cn *peer) close() {
 	}
 	cn.discardPieceInclination()
 	cn._pieceRequestOrder.Clear()
-	cn.peerImpl.close()
+	cn.peerImpl._close()
 }
 
-func (cn *PeerConn) close() {
+func (cn *PeerConn) _close() {
 	if cn.pex.IsEnabled() {
 		cn.pex.Close()
 	}
@@ -757,7 +757,7 @@ func iterUnbiasedPieceRequestOrder(cn requestStrategyConnection, f func(piece pi
 // conceivable that the best connection should do this, since it's least likely to waste our time if
 // assigned to the highest priority pieces, and assigning more than one this role would cause
 // significant wasted bandwidth.
-func (cn *PeerConn) shouldRequestWithoutBias() bool {
+func (cn *peer) shouldRequestWithoutBias() bool {
 	return cn.t.requestStrategy.shouldRequestWithoutBias(cn.requestStrategyConnection())
 }
 
@@ -781,7 +781,7 @@ func (cn *peer) iterPendingRequests(piece pieceIndex, f func(request) bool) bool
 }
 
 // check callers updaterequests
-func (cn *PeerConn) stopRequestingPiece(piece pieceIndex) bool {
+func (cn *peer) stopRequestingPiece(piece pieceIndex) bool {
 	return cn._pieceRequestOrder.Remove(bitmap.BitIndex(piece))
 }
 
@@ -789,7 +789,7 @@ func (cn *PeerConn) stopRequestingPiece(piece pieceIndex) bool {
 // preference. Connection piece priority is specific to a connection and is
 // used to pseudorandomly avoid connections always requesting the same pieces
 // and thus wasting effort.
-func (cn *PeerConn) updatePiecePriority(piece pieceIndex) bool {
+func (cn *peer) updatePiecePriority(piece pieceIndex) bool {
 	tpp := cn.t.piecePriority(piece)
 	if !cn.peerHasPiece(piece) {
 		tpp = PiecePriorityNone
@@ -802,7 +802,7 @@ func (cn *PeerConn) updatePiecePriority(piece pieceIndex) bool {
 	return cn._pieceRequestOrder.Set(bitmap.BitIndex(piece), prio) || cn.shouldRequestWithoutBias()
 }
 
-func (cn *PeerConn) getPieceInclination() []int {
+func (cn *peer) getPieceInclination() []int {
 	if cn.pieceInclination == nil {
 		cn.pieceInclination = cn.t.getConnPieceInclination()
 	}

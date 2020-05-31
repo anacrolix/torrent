@@ -61,7 +61,11 @@ func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 }
 
 func (ts *mmapTorrentStorage) Close() error {
-	return ts.span.Close()
+	errs := ts.span.Close()
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	return nil
 }
 
 type mmapStoragePiece struct {
@@ -113,6 +117,7 @@ func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, e
 			mms.Append(mm)
 		}
 	}
+	mms.InitIndex()
 	return
 }
 

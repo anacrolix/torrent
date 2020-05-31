@@ -43,7 +43,7 @@ func Scan(haystack func() (Length, bool), needle Extent, callback Callback) {
 				if !callback(i, e1) {
 					return
 				}
-				needle.Start -= e1.Length
+				needle.Start = 0
 				needle.Length -= e1.Length
 			}
 		} else {

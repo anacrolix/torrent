@@ -35,15 +35,15 @@ const (
 	PeerSourcePex             = "X"
 )
 
-type peerImpl interface {
-	updateRequests()
-	writeInterested(interested bool) bool
-	cancel(request) bool
-	request(request) bool
-	connectionFlags() string
-	_close()
-	postCancel(request)
-	drop()
+type PeerImpl interface {
+	UpdateRequests()
+	WriteInterested(interested bool) bool
+	Cancel(request) bool
+	Request(request) bool
+	ConnectionFlags() string
+	Close()
+	PostCancel(request)
+	Drop()
 }
 
 type peer struct {
@@ -52,7 +52,7 @@ type peer struct {
 
 	t *Torrent
 
-	peerImpl
+	PeerImpl
 
 	connString string
 	outgoing   bool
@@ -248,7 +248,7 @@ func eventAgeString(t time.Time) string {
 	return fmt.Sprintf("%.2fs ago", time.Since(t).Seconds())
 }
 
-func (cn *PeerConn) connectionFlags() (ret string) {
+func (cn *PeerConn) ConnectionFlags() (ret string) {
 	c := func(b byte) {
 		ret += string([]byte{b})
 	}
@@ -280,7 +280,7 @@ func (cn *peer) statusFlags() (ret string) {
 		c('c')
 	}
 	c('-')
-	ret += cn.connectionFlags()
+	ret += cn.ConnectionFlags()
 	c('-')
 	if cn.peerInterested {
 		c('i')
@@ -343,10 +343,10 @@ func (cn *peer) close() {
 	}
 	cn.discardPieceInclination()
 	cn._pieceRequestOrder.Clear()
-	cn.peerImpl._close()
+	cn.PeerImpl.Close()
 }
 
-func (cn *PeerConn) _close() {
+func (cn *PeerConn) Close() {
 	if cn.pex.IsEnabled() {
 		cn.pex.Close()
 	}
@@ -486,10 +486,10 @@ func (cn *peer) setInterested(interested bool) bool {
 	}
 	cn.updateExpectingChunks()
 	// log.Printf("%p: setting interest: %v", cn, interested)
-	return cn.writeInterested(interested)
+	return cn.WriteInterested(interested)
 }
 
-func (pc *PeerConn) writeInterested(interested bool) bool {
+func (pc *PeerConn) WriteInterested(interested bool) bool {
 	return pc.write(pp.Message{
 		Type: func() pp.MessageType {
 			if interested {
@@ -542,10 +542,10 @@ func (cn *peer) request(r request) bool {
 	cn.t.pendingRequests[r]++
 	cn.t.requestStrategy.hooks().sentRequest(r)
 	cn.updateExpectingChunks()
-	return cn.peerImpl.request(r)
+	return cn.PeerImpl.Request(r)
 }
 
-func (me *PeerConn) request(r request) bool {
+func (me *PeerConn) Request(r request) bool {
 	return me.write(pp.Message{
 		Type:   pp.Request,
 		Index:  r.Index,
@@ -554,7 +554,7 @@ func (me *PeerConn) request(r request) bool {
 	})
 }
 
-func (me *PeerConn) cancel(r request) bool {
+func (me *PeerConn) Cancel(r request) bool {
 	return me.write(makeCancelMessage(r))
 }
 
@@ -567,7 +567,7 @@ func (cn *peer) doRequestState() bool {
 			for r := range cn.requests {
 				cn.deleteRequest(r)
 				// log.Printf("%p: cancelling request: %v", cn, r)
-				if !cn.peerImpl.cancel(r) {
+				if !cn.PeerImpl.Cancel(r) {
 					return false
 				}
 			}
@@ -703,7 +703,7 @@ func (cn *PeerConn) postBitfield() {
 	cn.sentHaves = cn.t._completedPieces.Copy()
 }
 
-func (cn *PeerConn) updateRequests() {
+func (cn *PeerConn) UpdateRequests() {
 	// log.Print("update requests")
 	cn.tickleWriter()
 }
@@ -826,7 +826,7 @@ func (cn *PeerConn) peerPiecesChanged() {
 			}
 		}
 		if prioritiesChanged {
-			cn.updateRequests()
+			cn.UpdateRequests()
 		}
 	}
 }
@@ -847,7 +847,7 @@ func (cn *PeerConn) peerSentHave(piece pieceIndex) error {
 	cn.raisePeerMinPieces(piece + 1)
 	cn._peerPieces.Set(bitmap.BitIndex(piece), true)
 	if cn.updatePiecePriority(piece) {
-		cn.updateRequests()
+		cn.UpdateRequests()
 	}
 	return nil
 }
@@ -1090,7 +1090,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				c.deleteAllRequests()
 			}
 			// We can then reset our interest.
-			c.updateRequests()
+			c.UpdateRequests()
 			c.updateExpectingChunks()
 		case pp.Unchoke:
 			c.peerChoking = false
@@ -1140,7 +1140,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Suggest:
 			torrent.Add("suggests received", 1)
 			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index).SetLevel(log.Debug).Log(c.t.logger)
-			c.updateRequests()
+			c.UpdateRequests()
 		case pp.HaveAll:
 			err = c.onPeerSentHaveAll()
 		case pp.HaveNone:
@@ -1152,7 +1152,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).SetLevel(log.Debug).Log(c.t.logger)
 			c.peerAllowedFast.Add(int(msg.Index))
-			c.updateRequests()
+			c.UpdateRequests()
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 		default:
@@ -1309,7 +1309,7 @@ func (c *peer) receiveChunk(msg *pp.Message) error {
 
 	// Cancel pending requests for this chunk.
 	for c := range t.conns {
-		c.postCancel(req)
+		c.PostCancel(req)
 	}
 
 	err := func() error {
@@ -1440,7 +1440,7 @@ another:
 	return c.choke(msg)
 }
 
-func (cn *PeerConn) drop() {
+func (cn *PeerConn) Drop() {
 	cn.t.dropConnection(cn)
 }
 
@@ -1472,10 +1472,10 @@ func (c *peer) deleteRequest(r request) bool {
 	if n < 0 {
 		panic(n)
 	}
-	c.updateRequests()
+	c.UpdateRequests()
 	c.t.iterPeers(func(_c *peer) {
 		if !_c.interested && _c != c && c.peerHasPiece(pieceIndex(r.Index)) {
-			_c.updateRequests()
+			_c.UpdateRequests()
 		}
 	})
 	return true
@@ -1501,11 +1501,11 @@ func (c *peer) postCancel(r request) bool {
 	if !c.deleteRequest(r) {
 		return false
 	}
-	c.peerImpl.postCancel(r)
+	c.PeerImpl.PostCancel(r)
 	return true
 }
 
-func (c *PeerConn) postCancel(r request) {
+func (c *PeerConn) PostCancel(r request) {
 	c.post(makeCancelMessage(r))
 }
 

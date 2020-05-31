@@ -947,7 +947,7 @@ func (t *Torrent) piecePriorityChanged(piece pieceIndex) {
 	t.iterPeers(func(c *peer) {
 		if c.updatePiecePriority(piece) {
 			// log.Print("conn piece priority changed")
-			c.updateRequests()
+			c.UpdateRequests()
 		}
 	})
 	t.maybeNewConns()
@@ -1725,7 +1725,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 			if len(bannableTouchers) >= 1 {
 				c := bannableTouchers[0]
 				t.cl.banPeerIP(c.remoteIp())
-				c.drop()
+				c.Drop()
 			}
 		}
 		t.onIncompletePiece(piece)
@@ -1771,7 +1771,7 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	// }
 	t.iterPeers(func(conn *peer) {
 		if conn.peerHasPiece(piece) {
-			conn.updateRequests()
+			conn.UpdateRequests()
 		}
 	})
 }
@@ -1935,7 +1935,7 @@ func (cb torrentRequestStrategyCallbacks) requestTimedOut(r request) {
 	defer cb.t.cl.unlock()
 	cb.t.iterPeers(func(cn *peer) {
 		if cn.peerHasPiece(pieceIndex(r.Index)) {
-			cn.updateRequests()
+			cn.UpdateRequests()
 		}
 	})
 
@@ -1963,7 +1963,7 @@ func (t *Torrent) disallowDataDownloadLocked() {
 	log.Printf("disallowing data download")
 	t.dataDownloadDisallowed = true
 	t.iterPeers(func(c *peer) {
-		c.updateRequests()
+		c.UpdateRequests()
 	})
 }
 
@@ -1973,7 +1973,7 @@ func (t *Torrent) AllowDataDownload() {
 	log.Printf("AllowDataDownload")
 	t.dataDownloadDisallowed = false
 	t.iterPeers(func(c *peer) {
-		c.updateRequests()
+		c.UpdateRequests()
 	})
 }
 
@@ -2007,7 +2007,7 @@ func (t *Torrent) addWebSeed(url string) {
 	ws := webSeed{
 		peer: p,
 	}
-	p.peerImpl = &ws
+	p.PeerImpl = &ws
 	t.webSeeds[url] = p
 
 }

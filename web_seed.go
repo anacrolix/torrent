@@ -10,31 +10,31 @@ type webSeed struct {
 	url        string
 }
 
-func (ws *webSeed) postCancel(r request) {
+func (ws *webSeed) PostCancel(r request) {
 	panic("implement me")
 }
 
-func (ws *webSeed) writeInterested(interested bool) bool {
+func (ws *webSeed) WriteInterested(interested bool) bool {
 	return true
 }
 
-func (ws *webSeed) cancel(r request) bool {
+func (ws *webSeed) Cancel(r request) bool {
 	panic("implement me")
 }
 
-func (ws *webSeed) request(r request) bool {
+func (ws *webSeed) Request(r request) bool {
 	panic("implement me")
 }
 
-func (ws *webSeed) connectionFlags() string {
+func (ws *webSeed) ConnectionFlags() string {
 	return "WS"
 }
 
-func (ws *webSeed) drop() {
+func (ws *webSeed) Drop() {
 }
 
-func (ws *webSeed) updateRequests() {
+func (ws *webSeed) UpdateRequests() {
 	ws.peer.doRequestState()
 }
 
-func (ws *webSeed) _close() {}
+func (ws *webSeed) Close() {}

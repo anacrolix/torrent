@@ -29,17 +29,17 @@ func (me Index) iterSegments() func() (Length, bool) {
 	}
 }
 
-func (me Index) Locate(e Extent, output Callback) {
+func (me Index) Locate(e Extent, output Callback) bool {
 	first := sort.Search(len(me.segments), func(i int) bool {
 		_e := me.segments[i]
 		return _e.End() > e.Start
 	})
 	if first == len(me.segments) {
-		return
+		return false
 	}
 	e.Start -= me.segments[first].Start
 	me.segments = me.segments[first:]
-	Scan(me.iterSegments(), e, func(i int, e Extent) bool {
+	return Scan(me.iterSegments(), e, func(i int, e Extent) bool {
 		return output(i+first, e)
 	})
 }

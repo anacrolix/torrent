@@ -8,12 +8,17 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net/http"
 	"net/url"
+	"sort"
 	"sync"
 	"text/tabwriter"
 	"time"
 	"unsafe"
 
+	"github.com/anacrolix/torrent/common"
+	"github.com/anacrolix/torrent/segments"
+	"github.com/anacrolix/torrent/webseed"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pion/datachannel"
 
@@ -74,8 +79,9 @@ type Torrent struct {
 	metainfo metainfo.MetaInfo
 
 	// The info dict. nil if we don't have it (yet).
-	info  *metainfo.Info
-	files *[]*File
+	info      *metainfo.Info
+	fileIndex segments.Index
+	files     *[]*File
 
 	webSeeds map[string]*peer
 
@@ -392,6 +398,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	t.nameMu.Lock()
 	t.info = info
 	t.nameMu.Unlock()
+	t.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
 	t.displayName = "" // Save a few bytes lol.
 	t.initFiles()
 	t.cacheLength()
@@ -630,9 +637,11 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	spew.NewDefaultConfig()
 	spew.Fdump(w, t.statsLocked())
 
-	conns := t.connsAsSlice()
-	slices.Sort(conns, worseConn)
-	for i, c := range conns {
+	peers := t.peersAsSlice()
+	sort.Slice(peers, func(i, j int) bool {
+		return worseConn(peers[i], peers[j])
+	})
+	for i, c := range peers {
 		fmt.Fprintf(w, "%2d. ", i+1)
 		c.writeStatus(w, t)
 	}
@@ -849,10 +858,9 @@ func (t *Torrent) wantPieceIndex(index pieceIndex) bool {
 	})
 }
 
-// The worst connection is one that hasn't been sent, or sent anything useful
-// for the longest. A bad connection is one that usually sends us unwanted
-// pieces, or has been in worser half of the established connections for more
-// than a minute.
+// The worst connection is one that hasn't been sent, or sent anything useful for the longest. A bad
+// connection is one that usually sends us unwanted pieces, or has been in worser half of the
+// established connections for more than a minute.
 func (t *Torrent) worstBadConn() *PeerConn {
 	wcs := worseConnSlice{t.unclosedConnsAsSlice()}
 	heap.Init(&wcs)
@@ -1650,7 +1658,9 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	defer t.cl.unlock()
 	oldMax = t.maxEstablishedConns
 	t.maxEstablishedConns = max
-	wcs := slices.HeapInterface(slices.FromMapKeys(t.conns), worseConn)
+	wcs := slices.HeapInterface(slices.FromMapKeys(t.conns), func(l, r *PeerConn) bool {
+		return worseConn(&l.peer, &r.peer)
+	})
 	for len(t.conns) > t.maxEstablishedConns && wcs.Len() > 0 {
 		t.dropConnection(wcs.Pop().(*PeerConn))
 	}
@@ -1844,10 +1854,10 @@ func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
 	}
 }
 
-func (t *Torrent) connsAsSlice() (ret []*PeerConn) {
-	for c := range t.conns {
-		ret = append(ret, c)
-	}
+func (t *Torrent) peersAsSlice() (ret []*peer) {
+	t.iterPeers(func(p *peer) {
+		ret = append(ret, p)
+	})
 	return
 }
 
@@ -1999,19 +2009,26 @@ func (t *Torrent) addWebSeed(url string) {
 	if _, ok := t.webSeeds[url]; ok {
 		return
 	}
-	p := &peer{
-		t:                        t,
-		connString:               url,
-		outgoing:                 true,
-		network:                  "http",
-		reconciledHandshakeStats: true,
-		peerSentHaveAll:          true,
-	}
 	ws := webSeed{
-		peer: p,
+		peer: peer{
+			t:                        t,
+			connString:               url,
+			outgoing:                 true,
+			network:                  "http",
+			reconciledHandshakeStats: true,
+			peerSentHaveAll:          true,
+			PeerMaxRequests:          10,
+		},
+		client: webseed.Client{
+			HttpClient: http.DefaultClient,
+			Url:        url,
+			FileIndex:  t.fileIndex,
+			Info:       t.info,
+			Events:     make(chan webseed.ClientEvent),
+		},
 	}
-	p.PeerImpl = &ws
-	t.webSeeds[url] = p
+	ws.peer.PeerImpl = &ws
+	t.webSeeds[url] = &ws.peer
 
 }
 

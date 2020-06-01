@@ -1233,9 +1233,9 @@ func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (T *Torrent, err error) {
 	var ss []string
 	slices.MakeInto(&ss, mi.Nodes)
 	cl.AddDHTNodes(ss)
-	//for _, url := range mi.UrlList {
-	//T.addWebSeed(url)
-	//}
+	for _, url := range mi.UrlList {
+		T.addWebSeed(url)
+	}
 	return
 }
 

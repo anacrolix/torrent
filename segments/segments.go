@@ -27,12 +27,12 @@ type (
 	LengthIter = func() (Length, bool)
 )
 
-func Scan(haystack func() (Length, bool), needle Extent, callback Callback) {
+func Scan(haystack LengthIter, needle Extent, callback Callback) bool {
 	i := 0
 	for needle.Length != 0 {
 		l, ok := haystack()
 		if !ok {
-			return
+			return false
 		}
 		if needle.Start < l || needle.Start == l && l == 0 {
 			e1 := Extent{
@@ -41,7 +41,7 @@ func Scan(haystack func() (Length, bool), needle Extent, callback Callback) {
 			}
 			if e1.Length >= 0 {
 				if !callback(i, e1) {
-					return
+					return true
 				}
 				needle.Start = 0
 				needle.Length -= e1.Length
@@ -51,12 +51,13 @@ func Scan(haystack func() (Length, bool), needle Extent, callback Callback) {
 		}
 		i++
 	}
+	return true
 }
 
 func LocaterFromLengthIter(li LengthIter) Locater {
-	return func(e Extent, c Callback) {
-		Scan(li, e, c)
+	return func(e Extent, c Callback) bool {
+		return Scan(li, e, c)
 	}
 }
 
-type Locater func(Extent, Callback)
+type Locater func(Extent, Callback) bool

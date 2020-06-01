@@ -39,6 +39,7 @@ type PeerImpl interface {
 	UpdateRequests()
 	WriteInterested(interested bool) bool
 	Cancel(request) bool
+	// Return true if there's room for more activity.
 	Request(request) bool
 	ConnectionFlags() string
 	Close()
@@ -211,7 +212,7 @@ func (cn *PeerConn) localAddr() net.Addr {
 	return cn.conn.LocalAddr()
 }
 
-func (cn *PeerConn) supportsExtension(ext pp.ExtensionName) bool {
+func (cn *peer) supportsExtension(ext pp.ExtensionName) bool {
 	_, ok := cn.PeerExtensionIDs[ext]
 	return ok
 }
@@ -373,6 +374,7 @@ func (cn *PeerConn) post(msg pp.Message) {
 	cn.tickleWriter()
 }
 
+// Returns true if there's room to write more.
 func (cn *PeerConn) write(msg pp.Message) bool {
 	cn.wroteMsg(&msg)
 	cn.writeBuffer.Write(msg.MustMarshalBinary())
@@ -954,7 +956,7 @@ func (cn *PeerConn) readBytes(n int64) {
 
 // Returns whether the connection could be useful to us. We're seeding and
 // they want data, we don't have metainfo and they can provide it, etc.
-func (c *PeerConn) useful() bool {
+func (c *peer) useful() bool {
 	t := c.t
 	if c.closed.IsSet() {
 		return false
@@ -1448,7 +1450,7 @@ func (cn *peer) netGoodPiecesDirtied() int64 {
 	return cn._stats.PiecesDirtiedGood.Int64() - cn._stats.PiecesDirtiedBad.Int64()
 }
 
-func (c *PeerConn) peerHasWantedPieces() bool {
+func (c *peer) peerHasWantedPieces() bool {
 	return !c._pieceRequestOrder.IsEmpty()
 }
 
@@ -1541,7 +1543,7 @@ func (c *PeerConn) setTorrent(t *Torrent) {
 	t.reconcileHandshakeStats(c)
 }
 
-func (c *PeerConn) peerPriority() (peerPriority, error) {
+func (c *peer) peerPriority() (peerPriority, error) {
 	return bep40Priority(c.remoteIpPort(), c.t.cl.publicAddr(c.remoteIp()))
 }
 
@@ -1549,7 +1551,7 @@ func (c *peer) remoteIp() net.IP {
 	return addrIpOrNil(c.remoteAddr)
 }
 
-func (c *PeerConn) remoteIpPort() IpPort {
+func (c *peer) remoteIpPort() IpPort {
 	ipa, _ := tryIpPortFromNetAddr(c.remoteAddr)
 	return IpPort{ipa.IP, uint16(ipa.Port)}
 }

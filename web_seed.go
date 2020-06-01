@@ -3,6 +3,7 @@ package torrent
 import (
 	"net/http"
 
+	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/webseed"
 )
@@ -66,3 +67,26 @@ func (ws *webSeed) UpdateRequests() {
 }
 
 func (ws *webSeed) Close() {}
+
+func (ws *webSeed) eventProcessor() {
+	for ev := range ws.client.Events {
+		if ev.Err != nil {
+			panic(ev)
+		}
+		r, ok := ws.peer.t.offsetRequest(ev.RequestSpec.Start)
+		if !ok {
+			panic(ev)
+		}
+		ws.peer.t.cl.lock()
+		err := ws.peer.receiveChunk(&pp.Message{
+			Type:  pp.Piece,
+			Index: r.Index,
+			Begin: r.Begin,
+			Piece: ev.Bytes,
+		})
+		ws.peer.t.cl.unlock()
+		if err != nil {
+			panic(err)
+		}
+	}
+}

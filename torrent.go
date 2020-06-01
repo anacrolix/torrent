@@ -741,8 +741,8 @@ func (t *Torrent) requestOffset(r request) int64 {
 	return torrentRequestOffset(*t.length, int64(t.usualPieceSize()), r)
 }
 
-// Return the request that would include the given offset into the torrent
-// data. Returns !ok if there is no such request.
+// Return the request that would include the given offset into the torrent data. Returns !ok if
+// there is no such request.
 func (t *Torrent) offsetRequest(off int64) (req request, ok bool) {
 	return torrentOffsetRequest(*t.length, t.info.PieceLength, int64(t.chunkSize), off)
 }
@@ -2027,9 +2027,9 @@ func (t *Torrent) addWebSeed(url string) {
 			Events:     make(chan webseed.ClientEvent),
 		},
 	}
+	go ws.eventProcessor()
 	ws.peer.PeerImpl = &ws
 	t.webSeeds[url] = &ws.peer
-
 }
 
 func (t *Torrent) peerIsActive(p *peer) (active bool) {

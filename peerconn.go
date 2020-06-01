@@ -329,7 +329,7 @@ func (cn *peer) writeStatus(w io.Writer, t *Torrent) {
 	fmt.Fprintf(w, "    next pieces: %v%s\n",
 		iter.ToSlice(iter.Head(10, cn.iterPendingPiecesUntyped)),
 		func() string {
-			if cn == t.fastestConn {
+			if cn == t.fastestPeer {
 				return " (fastest)"
 			} else {
 				return ""
@@ -1297,10 +1297,10 @@ func (c *peer) receiveChunk(msg *pp.Message) error {
 	c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
 	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
 	c.lastUsefulChunkReceived = time.Now()
-	// if t.fastestConn != c {
+	// if t.fastestPeer != c {
 	// log.Printf("setting fastest connection %p", c)
 	// }
-	t.fastestConn = c
+	t.fastestPeer = c
 
 	// Need to record that it hasn't been written yet, before we attempt to do
 	// anything with it.
@@ -1618,7 +1618,7 @@ func (cn *peer) chunksReceivedWhileExpecting() int64 {
 }
 
 func (cn *peer) fastest() bool {
-	return cn == cn.t.fastestConn
+	return cn == cn.t.fastestPeer
 }
 
 func (cn *peer) peerMaxRequests() int {

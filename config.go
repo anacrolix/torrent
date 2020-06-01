@@ -130,6 +130,8 @@ type ClientConfig struct {
 	DefaultRequestStrategy RequestStrategyMaker
 
 	Extensions PeerExtensionBits
+
+	DisableWebtorrent bool
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {

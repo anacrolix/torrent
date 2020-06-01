@@ -1383,6 +1383,9 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	sl := func() torrentTrackerAnnouncer {
 		switch u.Scheme {
 		case "ws", "wss":
+			if t.cl.config.DisableWebtorrent {
+				return nil
+			}
 			return t.startWebsocketAnnouncer(*u)
 		}
 		if u.Scheme == "udp4" && (t.cl.config.DisableIPv4Peers || t.cl.config.DisableIPv4) {

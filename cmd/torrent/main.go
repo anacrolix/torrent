@@ -144,23 +144,31 @@ var flags = struct {
 	PieceStates     bool
 	Quiet           bool `help:"discard client logging"`
 	Dht             bool
-	TcpPeers        bool
-	UtpPeers        bool
-	Ipv4            bool
-	Ipv6            bool
-	Pex             bool
+
+	TcpPeers   bool
+	UtpPeers   bool
+	Webtorrent bool
+
+	Ipv4 bool
+	Ipv6 bool
+	Pex  bool
+
 	tagflag.StartPos
+
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }{
 	UploadRate:   -1,
 	DownloadRate: -1,
 	Progress:     true,
 	Dht:          true,
-	TcpPeers:     true,
-	UtpPeers:     true,
-	Ipv4:         true,
-	Ipv6:         true,
-	Pex:          true,
+
+	TcpPeers:   true,
+	UtpPeers:   true,
+	Webtorrent: true,
+
+	Ipv4: true,
+	Ipv6: true,
+	Pex:  true,
 }
 
 func stdoutAndStderrAreSameFile() bool {
@@ -224,6 +232,7 @@ func downloadErr(args []string, parent *tagflag.Parser) error {
 	clientConfig.PublicIp4 = flags.PublicIP
 	clientConfig.PublicIp6 = flags.PublicIP
 	clientConfig.DisablePEX = !flags.Pex
+	clientConfig.DisableWebtorrent = !flags.Webtorrent
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
 		if err != nil {

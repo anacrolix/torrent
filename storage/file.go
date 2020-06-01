@@ -194,9 +194,9 @@ func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 		if err == nil {
 			err = closeErr
 		}
-		//if err == nil && int64(n1) != e.Length {
-		//	err = io.ErrShortWrite
-		//}
+		if err == nil && int64(n1) != e.Length {
+			err = io.ErrShortWrite
+		}
 		return err == nil
 	})
 	return

@@ -145,9 +145,10 @@ var flags = struct {
 	Quiet           bool `help:"discard client logging"`
 	Dht             bool
 
-	TcpPeers   bool
-	UtpPeers   bool
-	Webtorrent bool
+	TcpPeers        bool
+	UtpPeers        bool
+	Webtorrent      bool
+	DisableWebseeds bool
 
 	Ipv4 bool
 	Ipv6 bool
@@ -221,6 +222,7 @@ func downloadErr(args []string, parent *tagflag.Parser) error {
 	tagflag.ParseArgs(&flags, args, tagflag.Parent(parent))
 	defer envpprof.Stop()
 	clientConfig := torrent.NewDefaultClientConfig()
+	clientConfig.DisableWebseeds = flags.DisableWebseeds
 	clientConfig.DisableTCP = !flags.TcpPeers
 	clientConfig.DisableUTP = !flags.UtpPeers
 	clientConfig.DisableIPv4 = !flags.Ipv4

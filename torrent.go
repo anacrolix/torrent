@@ -2006,6 +2006,9 @@ func (t *Torrent) iterPeers(f func(*peer)) {
 }
 
 func (t *Torrent) addWebSeed(url string) {
+	if t.cl.config.DisableWebseeds {
+		return
+	}
 	if _, ok := t.webSeeds[url]; ok {
 		return
 	}

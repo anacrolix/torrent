@@ -18,6 +18,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/prioritybitmap"
 	"github.com/anacrolix/multiless"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/pkg/errors"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -44,6 +45,7 @@ type PeerImpl interface {
 	ConnectionFlags() string
 	Close()
 	PostCancel(request)
+	onGotInfo(*metainfo.Info)
 	Drop()
 }
 
@@ -233,13 +235,15 @@ func (cn *peer) completedString() string {
 	return fmt.Sprintf("%d/%d", have, cn.bestPeerNumPieces())
 }
 
-// Correct the PeerPieces slice length. Return false if the existing slice is
-// invalid, such as by receiving badly sized BITFIELD, or invalid HAVE
-// messages.
-func (cn *PeerConn) setNumPieces(num pieceIndex) error {
+func (cn *PeerConn) onGotInfo(info *metainfo.Info) {
+	cn.setNumPieces(info.NumPieces())
+}
+
+// Correct the PeerPieces slice length. Return false if the existing slice is invalid, such as by
+// receiving badly sized BITFIELD, or invalid HAVE messages.
+func (cn *PeerConn) setNumPieces(num pieceIndex) {
 	cn._peerPieces.RemoveRange(bitmap.BitIndex(num), bitmap.ToEnd)
 	cn.peerPiecesChanged()
-	return nil
 }
 
 func eventAgeString(t time.Time) string {

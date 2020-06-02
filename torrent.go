@@ -406,13 +406,11 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	return nil
 }
 
+// This seems to be all the follow-up tasks after info is set, that can't fail.
 func (t *Torrent) onSetInfo() {
-	for conn := range t.conns {
-		if err := conn.setNumPieces(t.numPieces()); err != nil {
-			t.logger.Printf("closing connection: %s", err)
-			conn.close()
-		}
-	}
+	t.iterPeers(func(p *peer) {
+		p.onGotInfo(t.info)
+	})
 	for i := range t.pieces {
 		t.updatePieceCompletion(pieceIndex(i))
 		p := &t.pieces[i]
@@ -2026,12 +2024,13 @@ func (t *Torrent) addWebSeed(url string) {
 		client: webseed.Client{
 			HttpClient: http.DefaultClient,
 			Url:        url,
-			FileIndex:  t.fileIndex,
-			Info:       t.info,
 		},
 		requests: make(map[request]webseed.Request, maxRequests),
 	}
 	ws.peer.PeerImpl = &ws
+	if t.haveInfo() {
+		ws.onGotInfo(t.info)
+	}
 	t.webSeeds[url] = &ws.peer
 }
 

@@ -3,6 +3,8 @@ package torrent
 import (
 	"net/http"
 
+	"github.com/anacrolix/torrent/common"
+	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/webseed"
@@ -30,6 +32,11 @@ type webSeed struct {
 }
 
 var _ PeerImpl = (*webSeed)(nil)
+
+func (ws *webSeed) onGotInfo(info *metainfo.Info) {
+	ws.client.FileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
+	ws.client.Info = info
+}
 
 func (ws *webSeed) PostCancel(r request) {
 	ws.Cancel(r)

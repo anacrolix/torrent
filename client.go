@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -1138,26 +1139,31 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 	return
 }
 
-// Add or merge a torrent spec. If the torrent is already present, the
-// trackers will be merged with the existing ones. If the Info isn't yet
-// known, it will be set. The display name is replaced if the new spec
-// provides one. Returns new if the torrent wasn't already in the client.
-// Note that any `Storage` defined on the spec will be ignored if the
-// torrent is already present (i.e. `new` return value is `true`)
+// Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
+// Torrent.MergeSpec.
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
 	t, new = cl.AddTorrentInfoHashWithStorage(spec.InfoHash, spec.Storage)
+	err = t.MergeSpec(spec)
+	return
+}
+
+// The trackers will be merged with the existing ones. If the Info isn't yet known, it will be set.
+// The display name is replaced if the new spec provides one. Note that any `Storage` is ignored.
+func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	if spec.DisplayName != "" {
 		t.SetDisplayName(spec.DisplayName)
 	}
 	if spec.InfoBytes != nil {
-		err = t.SetInfoBytes(spec.InfoBytes)
+		err := t.SetInfoBytes(spec.InfoBytes)
 		if err != nil {
-			return
+			return err
 		}
 	}
+	cl := t.cl
 	cl.AddDHTNodes(spec.DhtNodes)
 	cl.lock()
 	defer cl.unlock()
+	useTorrentSources(spec.Sources, t)
 	for _, url := range spec.Webseeds {
 		t.addWebSeed(url)
 	}
@@ -1166,7 +1172,53 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 	}
 	t.addTrackers(spec.Trackers)
 	t.maybeNewConns()
-	return
+	return nil
+}
+
+func useTorrentSources(sources []string, t *Torrent) {
+	for _, s := range sources {
+		go func(s string) {
+			err := useTorrentSource(s, t)
+			if err != nil {
+				t.logger.WithDefaultLevel(log.Warning).Printf("using torrent source %q: %v", s, err)
+			} else {
+				t.logger.Printf("successfully used source %q", s)
+			}
+		}(s)
+	}
+}
+
+func useTorrentSource(source string, t *Torrent) error {
+	req, err := http.NewRequest(http.MethodGet, source, nil)
+	if err != nil {
+		panic(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-t.GotInfo():
+		case <-t.Closed():
+		case <-ctx.Done():
+		}
+		cancel()
+	}()
+	req = req.WithContext(ctx)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+	mi, err := metainfo.Load(resp.Body)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+	return t.MergeSpec(TorrentSpecFromMetaInfo(mi))
 }
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {

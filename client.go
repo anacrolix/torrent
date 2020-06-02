@@ -1155,8 +1155,12 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 			return
 		}
 	}
+	cl.AddDHTNodes(spec.DhtNodes)
 	cl.lock()
 	defer cl.unlock()
+	for _, url := range spec.Webseeds {
+		t.addWebSeed(url)
+	}
 	if spec.ChunkSize != 0 {
 		t.setChunkSize(pp.Integer(spec.ChunkSize))
 	}
@@ -1230,12 +1234,6 @@ func (cl *Client) AddMagnet(uri string) (T *Torrent, err error) {
 
 func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (T *Torrent, err error) {
 	T, _, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	var ss []string
-	slices.MakeInto(&ss, mi.Nodes)
-	cl.AddDHTNodes(ss)
-	for _, url := range mi.UrlList {
-		T.addWebSeed(url)
-	}
 	return
 }
 

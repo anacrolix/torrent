@@ -32,22 +32,22 @@ type webSeed struct {
 	peer     peer
 }
 
-var _ PeerImpl = (*webSeed)(nil)
+var _ peerImpl = (*webSeed)(nil)
 
 func (ws *webSeed) onGotInfo(info *metainfo.Info) {
 	ws.client.FileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
 	ws.client.Info = info
 }
 
-func (ws *webSeed) PostCancel(r request) {
-	ws.Cancel(r)
+func (ws *webSeed) _postCancel(r request) {
+	ws.cancel(r)
 }
 
-func (ws *webSeed) WriteInterested(interested bool) bool {
+func (ws *webSeed) writeInterested(interested bool) bool {
 	return true
 }
 
-func (ws *webSeed) Cancel(r request) bool {
+func (ws *webSeed) cancel(r request) bool {
 	ws.requests[r].Cancel()
 	return true
 }
@@ -56,25 +56,25 @@ func (ws *webSeed) intoSpec(r request) webseed.RequestSpec {
 	return webseed.RequestSpec{ws.peer.t.requestOffset(r), int64(r.Length)}
 }
 
-func (ws *webSeed) Request(r request) bool {
+func (ws *webSeed) request(r request) bool {
 	webseedRequest := ws.client.NewRequest(ws.intoSpec(r))
 	ws.requests[r] = webseedRequest
 	go ws.requestResultHandler(r, webseedRequest)
 	return true
 }
 
-func (ws *webSeed) ConnectionFlags() string {
+func (ws *webSeed) connectionFlags() string {
 	return "WS"
 }
 
-func (ws *webSeed) Drop() {
+func (ws *webSeed) drop() {
 }
 
-func (ws *webSeed) UpdateRequests() {
+func (ws *webSeed) updateRequests() {
 	ws.peer.doRequestState()
 }
 
-func (ws *webSeed) Close() {}
+func (ws *webSeed) _close() {}
 
 func (ws *webSeed) requestResultHandler(r request, webseedRequest webseed.Request) {
 	result := <-webseedRequest.Result

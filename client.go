@@ -915,7 +915,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	}
 	c.conn.SetWriteDeadline(time.Time{})
 	c.r = deadlineReader{c.conn, c.r}
-	completedHandshakeConnectionFlags.Add(c.ConnectionFlags(), 1)
+	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
 	if connIsIpv6(c.conn) {
 		torrent.Add("completed handshake over ipv6", 1)
 	}
@@ -1344,7 +1344,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr net.Addr,
 		conn:        nc,
 		writeBuffer: new(bytes.Buffer),
 	}
-	c.PeerImpl = c
+	c.peerImpl = c
 	c.logger = cl.logger.WithValues(c).WithDefaultLevel(log.Debug).WithText(func(m log.Msg) string {
 		return fmt.Sprintf("%v: %s", c, m.Text())
 	})

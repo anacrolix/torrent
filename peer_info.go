@@ -20,7 +20,7 @@ type PeerInfo struct {
 	Trusted bool
 }
 
-func (me PeerInfo) Equal(other PeerInfo) bool {
+func (me PeerInfo) equal(other PeerInfo) bool {
 	return me.Id == other.Id &&
 		me.Addr.String() == other.Addr.String() &&
 		me.Source == other.Source &&

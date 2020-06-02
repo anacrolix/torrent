@@ -1152,8 +1152,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.HaveNone:
 			err = c.peerSentHaveNone()
 		case pp.Reject:
-			c.deleteRequest(newRequestFromMessage(&msg))
-			c.decExpectedChunkReceive(newRequestFromMessage(&msg))
+			c.remoteRejectedRequest(newRequestFromMessage(&msg))
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).SetLevel(log.Debug).Log(c.t.logger)
@@ -1168,6 +1167,11 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			return err
 		}
 	}
+}
+
+func (c *peer) remoteRejectedRequest(r request) {
+	c.deleteRequest(r)
+	c.decExpectedChunkReceive(r)
 }
 
 func (c *peer) decExpectedChunkReceive(r request) {

@@ -24,15 +24,9 @@ type webseedRequest struct {
 }
 
 type webSeed struct {
-	client webseed.Client
-	peer   peer
-}
-
-type webseedClientEvent interface{}
-
-type webseedRequestFailed struct {
-	r   request
-	err error
+	client   webseed.Client
+	requests map[request]webseed.Request
+	peer     peer
 }
 
 var _ PeerImpl = (*webSeed)(nil)
@@ -46,12 +40,18 @@ func (ws *webSeed) WriteInterested(interested bool) bool {
 }
 
 func (ws *webSeed) Cancel(r request) bool {
-	//panic("implement me")
+	ws.requests[r].Cancel()
 	return true
 }
 
+func (ws *webSeed) intoSpec(r request) webseed.RequestSpec {
+	return webseed.RequestSpec{ws.peer.t.requestOffset(r), int64(r.Length)}
+}
+
 func (ws *webSeed) Request(r request) bool {
-	ws.client.Request(webseed.RequestSpec{ws.peer.t.requestOffset(r), int64(r.Length)})
+	webseedRequest := ws.client.NewRequest(ws.intoSpec(r))
+	ws.requests[r] = webseedRequest
+	go ws.requestResultHandler(r, webseedRequest)
 	return true
 }
 
@@ -68,25 +68,17 @@ func (ws *webSeed) UpdateRequests() {
 
 func (ws *webSeed) Close() {}
 
-func (ws *webSeed) eventProcessor() {
-	for ev := range ws.client.Events {
-		if ev.Err != nil {
-			panic(ev)
-		}
-		r, ok := ws.peer.t.offsetRequest(ev.RequestSpec.Start)
-		if !ok {
-			panic(ev)
-		}
-		ws.peer.t.cl.lock()
-		err := ws.peer.receiveChunk(&pp.Message{
-			Type:  pp.Piece,
-			Index: r.Index,
-			Begin: r.Begin,
-			Piece: ev.Bytes,
-		})
-		ws.peer.t.cl.unlock()
-		if err != nil {
-			panic(err)
-		}
+func (ws *webSeed) requestResultHandler(r request, webseedRequest webseed.Request) {
+	webseedRequestResult := <-webseedRequest.Result
+	ws.peer.t.cl.lock()
+	err := ws.peer.receiveChunk(&pp.Message{
+		Type:  pp.Piece,
+		Index: r.Index,
+		Begin: r.Begin,
+		Piece: webseedRequestResult.Bytes,
+	})
+	ws.peer.t.cl.unlock()
+	if err != nil {
+		panic(err)
 	}
 }

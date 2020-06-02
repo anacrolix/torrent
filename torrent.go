@@ -2009,6 +2009,7 @@ func (t *Torrent) addWebSeed(url string) {
 	if _, ok := t.webSeeds[url]; ok {
 		return
 	}
+	const maxRequests = 10
 	ws := webSeed{
 		peer: peer{
 			t:                        t,
@@ -2017,17 +2018,16 @@ func (t *Torrent) addWebSeed(url string) {
 			network:                  "http",
 			reconciledHandshakeStats: true,
 			peerSentHaveAll:          true,
-			PeerMaxRequests:          10,
+			PeerMaxRequests:          maxRequests,
 		},
 		client: webseed.Client{
 			HttpClient: http.DefaultClient,
 			Url:        url,
 			FileIndex:  t.fileIndex,
 			Info:       t.info,
-			Events:     make(chan webseed.ClientEvent),
 		},
+		requests: make(map[request]webseed.Request, maxRequests),
 	}
-	go ws.eventProcessor()
 	ws.peer.PeerImpl = &ws
 	t.webSeeds[url] = &ws.peer
 }

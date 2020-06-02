@@ -13,7 +13,7 @@ import (
 
 type RequestSpec = segments.Extent
 
-type httpRequestResult struct {
+type requestPartResult struct {
 	resp *http.Response
 	err  error
 }
@@ -21,11 +21,16 @@ type httpRequestResult struct {
 type requestPart struct {
 	req    *http.Request
 	e      segments.Extent
-	result chan httpRequestResult
+	result chan requestPartResult
 }
 
-type request struct {
+type Request struct {
 	cancel func()
+	Result chan RequestResult
+}
+
+func (r Request) Cancel() {
+	r.cancel()
 }
 
 type Client struct {
@@ -33,22 +38,14 @@ type Client struct {
 	Url        string
 	FileIndex  segments.Index
 	Info       *metainfo.Info
-
-	requests map[RequestSpec]request
-	Events   chan ClientEvent
 }
 
-type ClientEvent struct {
-	RequestSpec RequestSpec
-	Bytes       []byte
-	Err         error
+type RequestResult struct {
+	Bytes []byte
+	Err   error
 }
 
-func (ws *Client) Cancel(r RequestSpec) {
-	ws.requests[r].cancel()
-}
-
-func (ws *Client) Request(r RequestSpec) {
+func (ws *Client) NewRequest(r RequestSpec) Request {
 	ctx, cancel := context.WithCancel(context.Background())
 	var requestParts []requestPart
 	if !ws.FileIndex.Locate(r, func(i int, e segments.Extent) bool {
@@ -59,12 +56,12 @@ func (ws *Client) Request(r RequestSpec) {
 		req = req.WithContext(ctx)
 		part := requestPart{
 			req:    req,
-			result: make(chan httpRequestResult, 1),
+			result: make(chan requestPartResult, 1),
 			e:      e,
 		}
 		go func() {
 			resp, err := ws.HttpClient.Do(req)
-			part.result <- httpRequestResult{
+			part.result <- requestPartResult{
 				resp: resp,
 				err:  err,
 			}
@@ -74,18 +71,18 @@ func (ws *Client) Request(r RequestSpec) {
 	}) {
 		panic("request out of file bounds")
 	}
-	if ws.requests == nil {
-		ws.requests = make(map[RequestSpec]request)
+	req := Request{
+		cancel: cancel,
+		Result: make(chan RequestResult, 1),
 	}
-	ws.requests[r] = request{cancel}
 	go func() {
 		b, err := readRequestPartResponses(requestParts)
-		ws.Events <- ClientEvent{
-			RequestSpec: r,
-			Bytes:       b,
-			Err:         err,
+		req.Result <- RequestResult{
+			Bytes: b,
+			Err:   err,
 		}
 	}()
+	return req
 }
 
 func recvPartResult(buf io.Writer, part requestPart) error {

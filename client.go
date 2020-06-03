@@ -1148,6 +1148,7 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 }
 
 // The trackers will be merged with the existing ones. If the Info isn't yet known, it will be set.
+// spec.DisallowDataDownload/Upload will be read and applied
 // The display name is replaced if the new spec provides one. Note that any `Storage` is ignored.
 func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	if spec.DisplayName != "" {
@@ -1172,6 +1173,8 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	}
 	t.addTrackers(spec.Trackers)
 	t.maybeNewConns()
+	t.dataDownloadDisallowed = spec.DisallowDataDownload
+	t.dataUploadDisallowed = spec.DisallowDataUpload
 	return nil
 }
 

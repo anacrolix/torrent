@@ -46,6 +46,7 @@ func verifyTorrent(info *metainfo.Info, root string) error {
 		}
 		span.Append(mm)
 	}
+	span.InitIndex()
 	for i := range iter.N(info.NumPieces()) {
 		p := info.Piece(i)
 		hash := sha1.New()
@@ -57,7 +58,7 @@ func verifyTorrent(info *metainfo.Info, root string) error {
 		if !good {
 			return fmt.Errorf("hash mismatch at piece %d", i)
 		}
-		fmt.Printf("%d: %x: %v\n", i, p.Hash(), good)
+		fmt.Printf("%d: %v: %v\n", i, p.Hash(), good)
 	}
 	return nil
 }

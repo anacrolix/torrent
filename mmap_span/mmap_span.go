@@ -1,81 +1,89 @@
 package mmap_span
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"sync"
 
+	"github.com/anacrolix/torrent/segments"
 	"github.com/edsrzf/mmap-go"
 )
 
-type segment struct {
-	*mmap.MMap
-}
-
-func (s segment) Size() int64 {
-	return int64(len(*s.MMap))
-}
-
 type MMapSpan struct {
-	mu sync.RWMutex
-	span
+	mu             sync.RWMutex
+	mMaps          []mmap.MMap
+	segmentLocater segments.Index
 }
 
-func (ms *MMapSpan) Append(mmap mmap.MMap) {
-	ms.span = append(ms.span, segment{&mmap})
+func (ms *MMapSpan) Append(mMap mmap.MMap) {
+	ms.mMaps = append(ms.mMaps, mMap)
 }
 
-func (ms *MMapSpan) Close() error {
+func (ms *MMapSpan) Close() (errs []error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
-	for _, mMap := range ms.span {
-		err := mMap.(segment).Unmap()
+	for _, mMap := range ms.mMaps {
+		err := mMap.Unmap()
 		if err != nil {
-			log.Print(err)
+			errs = append(errs, err)
 		}
 	}
-	return nil
-}
-
-func (ms *MMapSpan) Size() (ret int64) {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-	for _, seg := range ms.span {
-		ret += seg.Size()
-	}
+	// This is for issue 211.
+	ms.mMaps = nil
+	ms.InitIndex()
 	return
 }
 
+func (me *MMapSpan) InitIndex() {
+	i := 0
+	me.segmentLocater = segments.NewIndex(func() (segments.Length, bool) {
+		if i == len(me.mMaps) {
+			return -1, false
+		}
+		l := int64(len(me.mMaps[i]))
+		i++
+		return l, true
+	})
+	//log.Printf("made mmapspan index: %v", me.segmentLocater)
+}
+
 func (ms *MMapSpan) ReadAt(p []byte, off int64) (n int, err error) {
+	//log.Printf("reading %v bytes at %v", len(p), off)
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
-	ms.ApplyTo(off, func(intervalOffset int64, interval sizer) (stop bool) {
-		_n := copy(p, (*interval.(segment).MMap)[intervalOffset:])
-		p = p[_n:]
-		n += _n
-		return len(p) == 0
-	})
-	if len(p) != 0 {
+	n = ms.locateCopy(func(a, b []byte) (_, _ []byte) { return a, b }, p, off)
+	if n != len(p) {
 		err = io.EOF
 	}
 	return
 }
 
-func (ms *MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-	ms.ApplyTo(off, func(iOff int64, i sizer) (stop bool) {
-		mMap := i.(segment)
-		_n := copy((*mMap.MMap)[iOff:], p)
-		// err = mMap.Sync(gommap.MS_ASYNC)
-		// if err != nil {
-		// 	return true
-		// }
+func copyBytes(dst, src []byte) int {
+	return copy(dst, src)
+}
+
+func (ms *MMapSpan) locateCopy(copyArgs func(remainingArgument, mmapped []byte) (dst, src []byte), p []byte, off int64) (n int) {
+	ms.segmentLocater.Locate(segments.Extent{off, int64(len(p))}, func(i int, e segments.Extent) bool {
+		mMapBytes := ms.mMaps[i][e.Start:]
+		//log.Printf("got segment %v: %v, copying %v, %v", i, e, len(p), len(mMapBytes))
+		_n := copyBytes(copyArgs(p, mMapBytes))
 		p = p[_n:]
 		n += _n
-		return len(p) == 0
+		if segments.Int(_n) != e.Length {
+			panic(fmt.Sprintf("did %d bytes, expected to do %d", _n, e.Length))
+		}
+		return true
 	})
-	if err != nil && len(p) != 0 {
+	return
+}
+
+func (ms *MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
+	log.Printf("writing %v bytes at %v", len(p), off)
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+	n = ms.locateCopy(func(a, b []byte) (_, _ []byte) { return b, a }, p, off)
+	if n != len(p) {
 		err = io.ErrShortWrite
 	}
 	return

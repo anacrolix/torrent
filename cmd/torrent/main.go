@@ -113,9 +113,9 @@ func addTorrents(client *torrent.Client) error {
 		if flags.Progress {
 			torrentBar(t, flags.PieceStates)
 		}
-		t.AddPeers(func() (ret []torrent.Peer) {
+		t.AddPeers(func() (ret []torrent.PeerInfo) {
 			for _, ta := range flags.TestPeer {
-				ret = append(ret, torrent.Peer{
+				ret = append(ret, torrent.PeerInfo{
 					Addr: ta,
 				})
 			}
@@ -144,23 +144,32 @@ var flags = struct {
 	PieceStates     bool
 	Quiet           bool `help:"discard client logging"`
 	Dht             bool
+
 	TcpPeers        bool
 	UtpPeers        bool
-	Ipv4            bool
-	Ipv6            bool
-	Pex             bool
+	Webtorrent      bool
+	DisableWebseeds bool
+
+	Ipv4 bool
+	Ipv6 bool
+	Pex  bool
+
 	tagflag.StartPos
+
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
 }{
 	UploadRate:   -1,
 	DownloadRate: -1,
 	Progress:     true,
 	Dht:          true,
-	TcpPeers:     true,
-	UtpPeers:     true,
-	Ipv4:         true,
-	Ipv6:         true,
-	Pex:          true,
+
+	TcpPeers:   true,
+	UtpPeers:   true,
+	Webtorrent: true,
+
+	Ipv4: true,
+	Ipv6: true,
+	Pex:  true,
 }
 
 func stdoutAndStderrAreSameFile() bool {
@@ -213,6 +222,7 @@ func downloadErr(args []string, parent *tagflag.Parser) error {
 	tagflag.ParseArgs(&flags, args, tagflag.Parent(parent))
 	defer envpprof.Stop()
 	clientConfig := torrent.NewDefaultClientConfig()
+	clientConfig.DisableWebseeds = flags.DisableWebseeds
 	clientConfig.DisableTCP = !flags.TcpPeers
 	clientConfig.DisableUTP = !flags.UtpPeers
 	clientConfig.DisableIPv4 = !flags.Ipv4
@@ -224,6 +234,7 @@ func downloadErr(args []string, parent *tagflag.Parser) error {
 	clientConfig.PublicIp4 = flags.PublicIP
 	clientConfig.PublicIp6 = flags.PublicIP
 	clientConfig.DisablePEX = !flags.Pex
+	clientConfig.DisableWebtorrent = !flags.Webtorrent
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
 		if err != nil {

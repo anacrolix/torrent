@@ -221,7 +221,7 @@ func (t *Torrent) Files() []*File {
 	return *t.files
 }
 
-func (t *Torrent) AddPeers(pp []Peer) int {
+func (t *Torrent) AddPeers(pp []PeerInfo) int {
 	cl := t.cl
 	cl.lock()
 	defer cl.unlock()

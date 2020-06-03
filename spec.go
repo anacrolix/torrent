@@ -5,8 +5,8 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-// Specifies a new torrent for adding to a client. There are helpers for
-// magnet URIs and torrent metainfo files.
+// Specifies a new torrent for adding to a client. There are helpers for magnet URIs and torrent
+// metainfo files.
 type TorrentSpec struct {
 	// The tiered tracker URIs.
 	Trackers  [][]string
@@ -14,8 +14,12 @@ type TorrentSpec struct {
 	InfoBytes []byte
 	// The name to use if the Name field from the Info isn't available.
 	DisplayName string
-	// The chunk size to use for outbound requests. Defaults to 16KiB if not
-	// set.
+	Webseeds    []string
+	DhtNodes    []string
+	// The combination of the "xs" and "as" fields in magnet links, for now.
+	Sources []string
+
+	// The chunk size to use for outbound requests. Defaults to 16KiB if not set.
 	ChunkSize int
 	Storage   storage.ClientImpl
 }
@@ -29,20 +33,30 @@ func TorrentSpecFromMagnetURI(uri string) (spec *TorrentSpec, err error) {
 		Trackers:    [][]string{m.Trackers},
 		DisplayName: m.DisplayName,
 		InfoHash:    m.InfoHash,
+		Webseeds:    m.Params["ws"],
+		Sources:     append(m.Params["xs"], m.Params["as"]...),
+		// TODO: What's the parameter for DHT nodes or bootstrap peers in a magnet link?
 	}
 	return
 }
 
-func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) (spec *TorrentSpec) {
-	info, _ := mi.UnmarshalInfo()
-	spec = &TorrentSpec{
-		Trackers:    mi.AnnounceList,
+func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) *TorrentSpec {
+	info, err := mi.UnmarshalInfo()
+	if err != nil {
+		panic(err)
+	}
+	return &TorrentSpec{
+		Trackers:    mi.UpvertedAnnounceList(),
+		InfoHash:    mi.HashInfoBytes(),
 		InfoBytes:   mi.InfoBytes,
 		DisplayName: info.Name,
-		InfoHash:    mi.HashInfoBytes(),
+		Webseeds:    mi.UrlList,
+		DhtNodes: func() (ret []string) {
+			ret = make([]string, len(mi.Nodes))
+			for _, node := range mi.Nodes {
+				ret = append(ret, string(node))
+			}
+			return
+		}(),
 	}
-	if spec.Trackers == nil && mi.Announce != "" {
-		spec.Trackers = [][]string{{mi.Announce}}
-	}
-	return
 }

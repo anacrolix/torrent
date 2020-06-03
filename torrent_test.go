@@ -23,12 +23,12 @@ func r(i, b, l pp.Integer) request {
 	return request{i, chunkSpec{b, l}}
 }
 
-// Check the given Request is correct for various torrent offsets.
+// Check the given request is correct for various torrent offsets.
 func TestTorrentRequest(t *testing.T) {
 	const s = 472183431 // Length of torrent.
 	for _, _case := range []struct {
 		off int64   // An offset into the torrent.
-		req request // The expected Request. The zero value means !ok.
+		req request // The expected request. The zero value means !ok.
 	}{
 		// Invalid offset.
 		{-1, request{}},

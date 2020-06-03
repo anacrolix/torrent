@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -1075,13 +1076,13 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		infoHash: ih,
 		peers: prioritizedPeers{
 			om: btree.New(32),
-			getPrio: func(p Peer) peerPriority {
+			getPrio: func(p PeerInfo) peerPriority {
 				return bep40PriorityIgnoreError(cl.publicAddr(addrIpOrNil(p.Addr)), p.addr())
 			},
 		},
 		conns: make(map[*PeerConn]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
 
-		halfOpen:          make(map[string]Peer),
+		halfOpen:          make(map[string]PeerInfo),
 		pieceStateChanges: pubsub.NewPubSub(),
 
 		storageOpener:       storageClient,
@@ -1091,6 +1092,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		metadataChanged: sync.Cond{
 			L: cl.locker(),
 		},
+		webSeeds: make(map[string]*peer),
 	}
 	t._pendingPieces.NewSet = priorityBitmapStableNewSet
 	t.requestStrategy = cl.config.DefaultRequestStrategy(t.requestStrategyCallbacks(), &cl._mu)
@@ -1137,31 +1139,86 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 	return
 }
 
-// Add or merge a torrent spec. If the torrent is already present, the
-// trackers will be merged with the existing ones. If the Info isn't yet
-// known, it will be set. The display name is replaced if the new spec
-// provides one. Returns new if the torrent wasn't already in the client.
-// Note that any `Storage` defined on the spec will be ignored if the
-// torrent is already present (i.e. `new` return value is `true`)
+// Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
+// Torrent.MergeSpec.
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
 	t, new = cl.AddTorrentInfoHashWithStorage(spec.InfoHash, spec.Storage)
+	err = t.MergeSpec(spec)
+	return
+}
+
+// The trackers will be merged with the existing ones. If the Info isn't yet known, it will be set.
+// The display name is replaced if the new spec provides one. Note that any `Storage` is ignored.
+func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	if spec.DisplayName != "" {
 		t.SetDisplayName(spec.DisplayName)
 	}
 	if spec.InfoBytes != nil {
-		err = t.SetInfoBytes(spec.InfoBytes)
+		err := t.SetInfoBytes(spec.InfoBytes)
 		if err != nil {
-			return
+			return err
 		}
 	}
+	cl := t.cl
+	cl.AddDHTNodes(spec.DhtNodes)
 	cl.lock()
 	defer cl.unlock()
+	useTorrentSources(spec.Sources, t)
+	for _, url := range spec.Webseeds {
+		t.addWebSeed(url)
+	}
 	if spec.ChunkSize != 0 {
 		t.setChunkSize(pp.Integer(spec.ChunkSize))
 	}
 	t.addTrackers(spec.Trackers)
 	t.maybeNewConns()
-	return
+	return nil
+}
+
+func useTorrentSources(sources []string, t *Torrent) {
+	for _, s := range sources {
+		go func(s string) {
+			err := useTorrentSource(s, t)
+			if err != nil {
+				t.logger.WithDefaultLevel(log.Warning).Printf("using torrent source %q: %v", s, err)
+			} else {
+				t.logger.Printf("successfully used source %q", s)
+			}
+		}(s)
+	}
+}
+
+func useTorrentSource(source string, t *Torrent) error {
+	req, err := http.NewRequest(http.MethodGet, source, nil)
+	if err != nil {
+		panic(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-t.GotInfo():
+		case <-t.Closed():
+		case <-ctx.Done():
+		}
+		cancel()
+	}()
+	req = req.WithContext(ctx)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+	mi, err := metainfo.Load(resp.Body)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+	return t.MergeSpec(TorrentSpecFromMetaInfo(mi))
 }
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
@@ -1229,9 +1286,6 @@ func (cl *Client) AddMagnet(uri string) (T *Torrent, err error) {
 
 func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (T *Torrent, err error) {
 	T, _, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	var ss []string
-	slices.MakeInto(&ss, mi.Nodes)
-	cl.AddDHTNodes(ss)
 	return
 }
 
@@ -1277,16 +1331,20 @@ func (cl *Client) banPeerIP(ip net.IP) {
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr net.Addr, network, connString string) (c *PeerConn) {
 	c = &PeerConn{
-		conn:            nc,
-		outgoing:        outgoing,
-		choking:         true,
-		peerChoking:     true,
-		PeerMaxRequests: 250,
-		writeBuffer:     new(bytes.Buffer),
-		remoteAddr:      remoteAddr,
-		network:         network,
-		connString:      connString,
+		peer: peer{
+			outgoing:        outgoing,
+			choking:         true,
+			peerChoking:     true,
+			PeerMaxRequests: 250,
+
+			remoteAddr: remoteAddr,
+			network:    network,
+			connString: connString,
+		},
+		conn:        nc,
+		writeBuffer: new(bytes.Buffer),
 	}
+	c.peerImpl = c
 	c.logger = cl.logger.WithValues(c).WithDefaultLevel(log.Debug).WithText(func(m log.Msg) string {
 		return fmt.Sprintf("%v: %s", c, m.Text())
 	})
@@ -1307,7 +1365,7 @@ func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portO
 	if t == nil {
 		return
 	}
-	t.addPeers([]Peer{{
+	t.addPeers([]PeerInfo{{
 		Addr:   ipPortAddr{ip, port},
 		Source: PeerSourceDhtAnnouncePeer,
 	}})

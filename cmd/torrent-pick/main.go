@@ -24,14 +24,14 @@ import (
 
 // fmt.Fprintf(os.Stderr, "Usage: %s \n", os.Args[0])
 
-func resolvedPeerAddrs(ss []string) (ret []torrent.Peer, err error) {
+func resolvedPeerAddrs(ss []string) (ret []torrent.PeerInfo, err error) {
 	for _, s := range ss {
 		var addr *net.TCPAddr
 		addr, err = net.ResolveTCPAddr("tcp", s)
 		if err != nil {
 			return
 		}
-		ret = append(ret, torrent.Peer{
+		ret = append(ret, torrent.PeerInfo{
 			Addr: addr,
 		})
 	}

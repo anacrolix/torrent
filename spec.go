@@ -22,6 +22,10 @@ type TorrentSpec struct {
 	// The chunk size to use for outbound requests. Defaults to 16KiB if not set.
 	ChunkSize int
 	Storage   storage.ClientImpl
+
+	// Whether to allow data download or upload
+	DisallowDataUpload   bool
+	DisallowDataDownload bool
 }
 
 func TorrentSpecFromMagnetURI(uri string) (spec *TorrentSpec, err error) {

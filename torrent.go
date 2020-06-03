@@ -1975,7 +1975,6 @@ func (t *Torrent) DisallowDataDownload() {
 }
 
 func (t *Torrent) disallowDataDownloadLocked() {
-	log.Printf("disallowing data download")
 	t.dataDownloadDisallowed = true
 	t.iterPeers(func(c *peer) {
 		c.updateRequests()
@@ -1985,7 +1984,6 @@ func (t *Torrent) disallowDataDownloadLocked() {
 func (t *Torrent) AllowDataDownload() {
 	t.cl.lock()
 	defer t.cl.unlock()
-	log.Printf("AllowDataDownload")
 	t.dataDownloadDisallowed = false
 	t.iterPeers(func(c *peer) {
 		c.updateRequests()
@@ -1995,7 +1993,6 @@ func (t *Torrent) AllowDataDownload() {
 func (t *Torrent) AllowDataUpload() {
 	t.cl.lock()
 	defer t.cl.unlock()
-	log.Printf("AllowDataUpload")
 	t.dataUploadDisallowed = false
 	for c := range t.conns {
 		c.updateRequests()
@@ -2005,7 +2002,6 @@ func (t *Torrent) AllowDataUpload() {
 func (t *Torrent) DisallowDataUpload() {
 	t.cl.lock()
 	defer t.cl.unlock()
-	log.Printf("DisallowDataUpload")
 	t.dataUploadDisallowed = true
 	for c := range t.conns {
 		c.updateRequests()

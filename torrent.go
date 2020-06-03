@@ -1397,12 +1397,14 @@ func (t *Torrent) startScrapingTracker(_url string) {
 				return nil
 			}
 			return t.startWebsocketAnnouncer(*u)
-		}
-		if u.Scheme == "udp4" && (t.cl.config.DisableIPv4Peers || t.cl.config.DisableIPv4) {
-			return nil
-		}
-		if u.Scheme == "udp6" && t.cl.config.DisableIPv6 {
-			return nil
+		case "udp4":
+			if t.cl.config.DisableIPv4Peers || t.cl.config.DisableIPv4 {
+				return nil
+			}
+		case "udp6":
+			if t.cl.config.DisableIPv6 {
+				return nil
+			}
 		}
 		newAnnouncer := &trackerScraper{
 			u: *u,

@@ -18,4 +18,5 @@ type peerImpl interface {
 	_postCancel(request)
 	onGotInfo(*metainfo.Info)
 	drop()
+	String() string
 }

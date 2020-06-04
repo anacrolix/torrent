@@ -1,9 +1,9 @@
 package torrent
 
 import (
+	"fmt"
 	"net/http"
 
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -33,6 +33,10 @@ type webSeed struct {
 }
 
 var _ peerImpl = (*webSeed)(nil)
+
+func (ws *webSeed) String() string {
+	return fmt.Sprintf("webseed peer for %q", ws.client.Url)
+}
 
 func (ws *webSeed) onGotInfo(info *metainfo.Info) {
 	ws.client.FileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
@@ -81,7 +85,7 @@ func (ws *webSeed) requestResultHandler(r request, webseedRequest webseed.Reques
 	ws.peer.t.cl.lock()
 	defer ws.peer.t.cl.unlock()
 	if result.Err != nil {
-		log.Printf("webseed request rejected: %v", result.Err)
+		ws.peer.logger.Printf("request %v rejected: %v", r, result.Err)
 		ws.peer.remoteRejectedRequest(r)
 	} else {
 		err := ws.peer.receiveChunk(&pp.Message{

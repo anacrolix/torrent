@@ -2049,6 +2049,7 @@ func (t *Torrent) addWebSeed(url string) {
 		},
 		requests: make(map[request]webseed.Request, maxRequests),
 	}
+	ws.peer.logger = t.logger.WithContextValue(&ws)
 	ws.peer.peerImpl = &ws
 	if t.haveInfo() {
 		ws.onGotInfo(t.info)

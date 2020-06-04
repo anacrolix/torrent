@@ -354,9 +354,7 @@ func (cl *Client) newAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err
 		StartingNodes:      cl.config.DhtStartingNodes(conn.LocalAddr().Network()),
 		ConnectionTracking: cl.config.ConnTracker,
 		OnQuery:            cl.config.DHTOnQuery,
-		Logger: cl.logger.WithText(func(m log.Msg) string {
-			return fmt.Sprintf("dht server on %v: %s", conn.LocalAddr().String(), m.Text())
-		}),
+		Logger:             cl.logger.WithContextText(fmt.Sprintf("dht server on %v", conn.LocalAddr().String())),
 	}
 	s, err = dht.NewServer(&cfg)
 	if err == nil {
@@ -1096,9 +1094,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 	}
 	t._pendingPieces.NewSet = priorityBitmapStableNewSet
 	t.requestStrategy = cl.config.DefaultRequestStrategy(t.requestStrategyCallbacks(), &cl._mu)
-	t.logger = cl.logger.WithValues(t).WithText(func(m log.Msg) string {
-		return fmt.Sprintf("%v: %s", t, m.Text())
-	})
+	t.logger = cl.logger.WithContextValue(t)
 	t.setChunkSize(defaultChunkSize)
 	return
 }
@@ -1348,9 +1344,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr net.Addr,
 		writeBuffer: new(bytes.Buffer),
 	}
 	c.peerImpl = c
-	c.logger = cl.logger.WithValues(c).WithDefaultLevel(log.Debug).WithText(func(m log.Msg) string {
-		return fmt.Sprintf("%v: %s", c, m.Text())
-	})
+	c.logger = cl.logger.WithDefaultLevel(log.Debug).WithContextValue(c)
 	c.writerCond.L = cl.locker()
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{

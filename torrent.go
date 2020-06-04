@@ -2033,7 +2033,7 @@ func (t *Torrent) addWebSeed(url string) {
 		return
 	}
 	const maxRequests = 10
-	ws := webSeed{
+	ws := webseedPeer{
 		peer: peer{
 			t:                        t,
 			connString:               url,

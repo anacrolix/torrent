@@ -1205,9 +1205,6 @@ func useTorrentSource(source string, t *Torrent) error {
 	req = req.WithContext(ctx)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil
-		}
 		return err
 	}
 	mi, err := metainfo.Load(resp.Body)

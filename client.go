@@ -1293,6 +1293,18 @@ func (cl *Client) AddTorrentFromFile(filename string) (T *Torrent, err error) {
 	return cl.AddTorrent(mi)
 }
 
+func (cl *Client) AddTorrentFromUrl(torrentUrl string) (T *Torrent, err error) {
+	resp, err := http.Get(torrentUrl)
+	if err != nil {
+		return nil, err
+	}
+	meta, err := metainfo.Load(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return cl.AddTorrent(meta)
+}
+
 func (cl *Client) DhtServers() []DhtServer {
 	return cl.dhtServers
 }

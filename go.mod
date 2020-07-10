@@ -5,7 +5,7 @@ require (
 	github.com/alexflint/go-arg v1.3.0
 	github.com/anacrolix/dht/v2 v2.6.1-0.20200416071723-3850fa1b802a
 	github.com/anacrolix/envpprof v1.1.0
-	github.com/anacrolix/go-libutp v1.0.2
+	github.com/anacrolix/go-libutp v1.0.3
 	github.com/anacrolix/log v0.7.1-0.20200604014615-c244de44fd2d
 	github.com/anacrolix/missinggo v1.2.1
 	github.com/anacrolix/missinggo/perf v1.0.0

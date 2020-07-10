@@ -59,6 +59,8 @@ github.com/anacrolix/envpprof v1.1.0/go.mod h1:My7T5oSqVfEn4MD4Meczkw/f5lSIndGAK
 github.com/anacrolix/go-libutp v0.0.0-20180522111405-6baeb806518d/go.mod h1:beQSaSxwH2d9Eeu5ijrEnHei5Qhk+J6cDm1QkWFru4E=
 github.com/anacrolix/go-libutp v1.0.2 h1:cL2SfTCO418V+DQRdMEW+RNfO2InLqW6PsSLqHwmGR4=
 github.com/anacrolix/go-libutp v1.0.2/go.mod h1:uIH0A72V++j0D1nnmTjjZUiH/ujPkFxYWkxQ02+7S0U=
+github.com/anacrolix/go-libutp v1.0.3 h1:ei7ie78Usg4cCdUa/GL0J3+RJD86Tp3UwSwY3j7DQvI=
+github.com/anacrolix/go-libutp v1.0.3/go.mod h1:8vSGX5g0b4eebsDBNVQHUXSCwYaN18Lnkse0hUW8/5w=
 github.com/anacrolix/log v0.0.0-20180412014343-2323884b361d h1:G8ITVMWuQL4adKRC3A6aBOo0YFJYcmpS3JFQd+rZrn0=
 github.com/anacrolix/log v0.0.0-20180412014343-2323884b361d/go.mod h1:sf/7c2aTldL6sRQj/4UKyjgVZBu2+M2z9wf7MmwPiew=
 github.com/anacrolix/log v0.3.0 h1:Btxh7GkT4JYWvWJ1uKOwgobf+7q/1eFQaDdCUXCtssw=

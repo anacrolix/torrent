@@ -2,12 +2,14 @@ package torrent
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/webseed"
+	"github.com/pkg/errors"
 )
 
 type webseedPeer struct {
@@ -70,7 +72,11 @@ func (ws *webseedPeer) requestResultHandler(r request, webseedRequest webseed.Re
 	defer ws.peer.t.cl.unlock()
 	if result.Err != nil {
 		ws.peer.logger.Printf("request %v rejected: %v", r, result.Err)
-		ws.peer.remoteRejectedRequest(r)
+		if strings.Contains(errors.Cause(result.Err).Error(), "unsupported protocol scheme") {
+			ws.peer.close()
+		} else {
+			ws.peer.remoteRejectedRequest(r)
+		}
 	} else {
 		err := ws.peer.receiveChunk(&pp.Message{
 			Type:  pp.Piece,

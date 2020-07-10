@@ -67,7 +67,22 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 	}()
 }
 
+type stringAddr string
+
+func (stringAddr) Network() string   { return "" }
+func (me stringAddr) String() string { return string(me) }
+
+func resolveTestPeers(addrs []string) (ret []torrent.PeerInfo) {
+	for _, ta := range flags.TestPeer {
+		ret = append(ret, torrent.PeerInfo{
+			Addr: stringAddr(ta),
+		})
+	}
+	return
+}
+
 func addTorrents(client *torrent.Client) error {
+	testPeers := resolveTestPeers(flags.TestPeer)
 	for _, arg := range flags.Torrent {
 		t, err := func() (*torrent.Torrent, error) {
 			if strings.HasPrefix(arg, "magnet:") {
@@ -113,14 +128,7 @@ func addTorrents(client *torrent.Client) error {
 		if flags.Progress {
 			torrentBar(t, flags.PieceStates)
 		}
-		t.AddPeers(func() (ret []torrent.PeerInfo) {
-			for _, ta := range flags.TestPeer {
-				ret = append(ret, torrent.PeerInfo{
-					Addr: ta,
-				})
-			}
-			return
-		}())
+		t.AddPeers(testPeers)
 		go func() {
 			<-t.GotInfo()
 			t.DownloadAll()
@@ -130,12 +138,12 @@ func addTorrents(client *torrent.Client) error {
 }
 
 var flags = struct {
-	Mmap            bool           `help:"memory-map torrent data"`
-	TestPeer        []*net.TCPAddr `help:"addresses of some starting peers"`
-	Seed            bool           `help:"seed after download is complete"`
-	Addr            string         `help:"network listen addr"`
-	UploadRate      tagflag.Bytes  `help:"max piece bytes to send per second"`
-	DownloadRate    tagflag.Bytes  `help:"max bytes per second down from peers"`
+	Mmap            bool          `help:"memory-map torrent data"`
+	TestPeer        []string      `help:"addresses of some starting peers"`
+	Seed            bool          `help:"seed after download is complete"`
+	Addr            string        `help:"network listen addr"`
+	UploadRate      tagflag.Bytes `help:"max piece bytes to send per second"`
+	DownloadRate    tagflag.Bytes `help:"max bytes per second down from peers"`
 	Debug           bool
 	PackedBlocklist string
 	Stats           *bool

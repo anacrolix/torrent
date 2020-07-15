@@ -1195,6 +1195,9 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			c.logger.Printf("error parsing extended handshake message %q: %s", payload, err)
 			return errors.Wrap(err, "unmarshalling extended handshake payload")
 		}
+		if cb := cl.config.Callbacks.ReadExtendedHandshake; cb != nil {
+			cb(c, &d)
+		}
 		//c.logger.WithDefaultLevel(log.Debug).Printf("received extended handshake message:\n%s", spew.Sdump(d))
 		if d.Reqq != 0 {
 			c.PeerMaxRequests = d.Reqq

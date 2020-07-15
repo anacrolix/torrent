@@ -2,6 +2,7 @@ module github.com/anacrolix/torrent
 
 require (
 	bazil.org/fuse v0.0.0-20200407214033-5883e5a4b512
+	crawshaw.io/sqlite v0.3.2
 	github.com/alexflint/go-arg v1.3.0
 	github.com/anacrolix/dht/v2 v2.6.1-0.20200416071723-3850fa1b802a
 	github.com/anacrolix/envpprof v1.1.0
@@ -26,7 +27,6 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/lucas-clemente/quic-go v0.15.6 // indirect
-	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/pion/datachannel v1.4.16
 	github.com/pion/ice v0.7.14 // indirect
 	github.com/pion/webrtc/v2 v2.2.7

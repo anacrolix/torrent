@@ -860,6 +860,9 @@ func (cl *Client) connBtHandshake(c *PeerConn, ih *metainfo.Hash) (ret metainfo.
 	c.PeerExtensionBytes = res.PeerExtensionBits
 	c.PeerID = res.PeerID
 	c.completedHandshake = time.Now()
+	if cb := cl.config.Callbacks.CompletedHandshake; cb != nil {
+		cb(c, res.Hash)
+	}
 	return
 }
 

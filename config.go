@@ -133,6 +133,8 @@ type ClientConfig struct {
 
 	DisableWebtorrent bool
 	DisableWebseeds   bool
+
+	Callbacks Callbacks
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {

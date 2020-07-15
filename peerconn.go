@@ -1059,6 +1059,9 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			defer cl.lock()
 			err = decoder.Decode(&msg)
 		}()
+		if cb := cl.config.Callbacks.ReadMessage; cb != nil && err == nil {
+			cb(c, &msg)
+		}
 		if t.closed.IsSet() || c.closed.IsSet() {
 			return nil
 		}

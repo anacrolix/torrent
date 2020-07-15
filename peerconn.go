@@ -47,7 +47,7 @@ type peer struct {
 	connString string
 	outgoing   bool
 	network    string
-	remoteAddr net.Addr
+	RemoteAddr net.Addr
 	// True if the connection is operating over MSE obfuscation.
 	headerEncrypted bool
 	cryptoMethod    mse.CryptoMethod
@@ -151,7 +151,7 @@ func (cn *peer) expectingChunks() bool {
 
 // Returns true if the connection is over IPv6.
 func (cn *PeerConn) ipv6() bool {
-	ip := addrIpOrNil(cn.remoteAddr)
+	ip := addrIpOrNil(cn.RemoteAddr)
 	if ip.To4() != nil {
 		return false
 	}
@@ -1119,7 +1119,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			req := newRequestFromMessage(&msg)
 			c.onPeerSentCancel(req)
 		case pp.Port:
-			ipa, ok := tryIpPortFromNetAddr(c.remoteAddr)
+			ipa, ok := tryIpPortFromNetAddr(c.RemoteAddr)
 			if !ok {
 				break
 			}
@@ -1549,11 +1549,11 @@ func (c *peer) peerPriority() (peerPriority, error) {
 }
 
 func (c *peer) remoteIp() net.IP {
-	return addrIpOrNil(c.remoteAddr)
+	return addrIpOrNil(c.RemoteAddr)
 }
 
 func (c *peer) remoteIpPort() IpPort {
-	ipa, _ := tryIpPortFromNetAddr(c.remoteAddr)
+	ipa, _ := tryIpPortFromNetAddr(c.RemoteAddr)
 	return IpPort{ipa.IP, uint16(ipa.Port)}
 }
 
@@ -1565,7 +1565,7 @@ func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
 	if c.outgoing {
 		f |= pp.PexOutgoingConn
 	}
-	if c.remoteAddr != nil && strings.Contains(c.remoteAddr.Network(), "udp") {
+	if c.RemoteAddr != nil && strings.Contains(c.RemoteAddr.Network(), "udp") {
 		f |= pp.PexSupportsUtp
 	}
 	return f
@@ -1573,7 +1573,7 @@ func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
 
 func (c *PeerConn) dialAddr() net.Addr {
 	if !c.outgoing && c.PeerListenPort != 0 {
-		switch addr := c.remoteAddr.(type) {
+		switch addr := c.RemoteAddr.(type) {
 		case *net.TCPAddr:
 			dialAddr := *addr
 			dialAddr.Port = c.PeerListenPort
@@ -1584,7 +1584,7 @@ func (c *PeerConn) dialAddr() net.Addr {
 			return &dialAddr
 		}
 	}
-	return c.remoteAddr
+	return c.RemoteAddr
 }
 
 func (c *PeerConn) pexEvent(t pexEventType) pexEvent {

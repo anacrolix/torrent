@@ -23,7 +23,7 @@ var (
 func TestPexAdded(t *testing.T) {
 	t.Run("noHold", func(t *testing.T) {
 		s := new(pexState)
-		s.Add(&PeerConn{peer: peer{remoteAddr: addrs[0], outgoing: true}})
+		s.Add(&PeerConn{peer: peer{RemoteAddr: addrs[0], outgoing: true}})
 		targ := &pexState{
 			ev: []pexEvent{
 				pexEvent{pexAdd, addrs[0], pp.PexOutgoingConn},
@@ -39,7 +39,7 @@ func TestPexAdded(t *testing.T) {
 			},
 			nc: 0,
 		}
-		s.Add(&PeerConn{peer: peer{remoteAddr: addrs[0]}})
+		s.Add(&PeerConn{peer: peer{RemoteAddr: addrs[0]}})
 		targ := &pexState{
 			hold: []pexEvent{
 				pexEvent{pexDrop, addrs[1], 0},
@@ -59,7 +59,7 @@ func TestPexAdded(t *testing.T) {
 			},
 			nc: pexTargAdded,
 		}
-		s.Add(&PeerConn{peer: peer{remoteAddr: addrs[0]}})
+		s.Add(&PeerConn{peer: peer{RemoteAddr: addrs[0]}})
 		targ := &pexState{
 			hold: []pexEvent{},
 			ev: []pexEvent{
@@ -75,7 +75,7 @@ func TestPexAdded(t *testing.T) {
 func TestPexDropped(t *testing.T) {
 	t.Run("belowTarg", func(t *testing.T) {
 		s := &pexState{nc: 1}
-		s.Drop(&PeerConn{peer: peer{remoteAddr: addrs[0], pex: pexConnState{Listed: true}}})
+		s.Drop(&PeerConn{peer: peer{RemoteAddr: addrs[0], pex: pexConnState{Listed: true}}})
 		targ := &pexState{
 			hold: []pexEvent{pexEvent{pexDrop, addrs[0], 0}},
 			nc:   0,
@@ -84,7 +84,7 @@ func TestPexDropped(t *testing.T) {
 	})
 	t.Run("aboveTarg", func(t *testing.T) {
 		s := &pexState{nc: pexTargAdded + 1}
-		s.Drop(&PeerConn{peer: peer{remoteAddr: addrs[0], pex: pexConnState{Listed: true}}})
+		s.Drop(&PeerConn{peer: peer{RemoteAddr: addrs[0], pex: pexConnState{Listed: true}}})
 		targ := &pexState{
 			ev: []pexEvent{pexEvent{pexDrop, addrs[0], 0}},
 			nc: pexTargAdded,
@@ -93,7 +93,7 @@ func TestPexDropped(t *testing.T) {
 	})
 	t.Run("aboveTargNotListed", func(t *testing.T) {
 		s := &pexState{nc: pexTargAdded + 1}
-		s.Drop(&PeerConn{peer: peer{remoteAddr: addrs[0], pex: pexConnState{Listed: false}}})
+		s.Drop(&PeerConn{peer: peer{RemoteAddr: addrs[0], pex: pexConnState{Listed: false}}})
 		targ := &pexState{nc: pexTargAdded + 1}
 		require.EqualValues(t, targ, s)
 	})

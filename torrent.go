@@ -206,7 +206,7 @@ func (t *Torrent) KnownSwarm() (ks []PeerInfo) {
 
 		ks = append(ks, PeerInfo{
 			Id:     conn.PeerID,
-			Addr:   conn.remoteAddr,
+			Addr:   conn.RemoteAddr,
 			Source: conn.Discovery,
 			// > If the connection is encrypted, that's certainly enough to set SupportsEncryption.
 			// > But if we're not connected to them with an encrypted connection, I couldn't say
@@ -245,7 +245,7 @@ func (t *Torrent) addrActive(addr string) bool {
 		return true
 	}
 	for c := range t.conns {
-		ra := c.remoteAddr
+		ra := c.RemoteAddr
 		if ra.String() == addr {
 			return true
 		}

@@ -881,7 +881,7 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 			).Log(cl.logger)
 		torrent.Add("error receiving handshake", 1)
 		cl.lock()
-		cl.onBadAccept(c.remoteAddr)
+		cl.onBadAccept(c.RemoteAddr)
 		cl.unlock()
 		return
 	}
@@ -889,7 +889,7 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 		torrent.Add("received handshake for unloaded torrent", 1)
 		log.Fmsg("received handshake for unloaded torrent").SetLevel(log.Debug).Log(cl.logger)
 		cl.lock()
-		cl.onBadAccept(c.remoteAddr)
+		cl.onBadAccept(c.RemoteAddr)
 		cl.unlock()
 		return
 	}
@@ -946,7 +946,7 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 					},
 					V:            cl.config.ExtendedHandshakeClientVersion,
 					Reqq:         64, // TODO: Really?
-					YourIp:       pp.CompactIp(addrIpOrNil(conn.remoteAddr)),
+					YourIp:       pp.CompactIp(addrIpOrNil(conn.RemoteAddr)),
 					Encryption:   cl.config.HeaderObfuscationPolicy.Preferred || !cl.config.HeaderObfuscationPolicy.RequirePreferred,
 					Port:         cl.incomingPeerPort(),
 					MetadataSize: torrent.metadataSize(),
@@ -1336,7 +1336,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr net.Addr,
 			peerChoking:     true,
 			PeerMaxRequests: 250,
 
-			remoteAddr: remoteAddr,
+			RemoteAddr: remoteAddr,
 			network:    network,
 			connString: connString,
 		},

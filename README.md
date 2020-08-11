@@ -42,6 +42,7 @@ There are several web-frontends and Android clients among the known public proje
  * [Remote-Torrent](https://github.com/BruceWangNo1/remote-torrent)
  * [ANT-Downloader](https://github.com/anatasluo/ant)
  * [Go-PeersToHTTP](https://github.com/WinPooh32/peerstohttp)
+ * [CortexFoundation/torrentfs](https://github.com/CortexFoundation/torrentfs): P2P file system of cortex full node
 
 ## Help
 

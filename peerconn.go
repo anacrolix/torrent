@@ -1160,8 +1160,9 @@ func (c *PeerConn) mainReadLoop() (err error) {
 }
 
 func (c *peer) remoteRejectedRequest(r request) {
-	c.deleteRequest(r)
-	c.decExpectedChunkReceive(r)
+	if c.deleteRequest(r) {
+		c.decExpectedChunkReceive(r)
+	}
 }
 
 func (c *peer) decExpectedChunkReceive(r request) {

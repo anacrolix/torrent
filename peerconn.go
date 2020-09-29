@@ -44,7 +44,6 @@ type peer struct {
 
 	peerImpl
 
-	connString string
 	outgoing   bool
 	network    string
 	RemoteAddr net.Addr
@@ -86,11 +85,9 @@ type peer struct {
 	pex              pexConnState
 
 	// Stuff controlled by the remote peer.
-	PeerID                PeerID
 	peerInterested        bool
 	peerChoking           bool
 	peerRequests          map[request]struct{}
-	PeerExtensionBytes    pp.PeerExtensionBits
 	PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
 	PeerListenPort        int
 	// The pieces the peer has claimed to have.
@@ -116,9 +113,17 @@ type peer struct {
 	logger log.Logger
 }
 
-// Maintains the state of a connection with a peer.
+// Maintains the state of a BitTorrent-protocol based connection with a peer.
 type PeerConn struct {
 	peer
+
+	// A string that should identify the PeerConn's net.Conn endpoints. The net.Conn could
+	// be wrapping WebRTC, uTP, or TCP etc. Used in writing the conn status for peers.
+	connString string
+
+	// See BEP 3 etc.
+	PeerID             PeerID
+	PeerExtensionBytes pp.PeerExtensionBits
 
 	// The actual Conn, used for closing, and setting socket options.
 	conn net.Conn
@@ -130,6 +135,10 @@ type PeerConn struct {
 	writeBuffer *bytes.Buffer
 	uploadTimer *time.Timer
 	writerCond  sync.Cond
+}
+
+func (cn *PeerConn) connStatusString() string {
+	return fmt.Sprintf("%+-55q %s %s\n", cn.PeerID, cn.PeerExtensionBytes, cn.connString)
 }
 
 func (cn *peer) updateExpectingChunks() {
@@ -295,7 +304,7 @@ func (cn *peer) downloadRate() float64 {
 
 func (cn *peer) writeStatus(w io.Writer, t *Torrent) {
 	// \t isn't preserved in <pre> blocks?
-	fmt.Fprintf(w, "%+-55q %s %s\n", cn.PeerID, cn.PeerExtensionBytes, cn.connString)
+	fmt.Fprintln(w, cn.connStatusString())
 	fmt.Fprintf(w, "    last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),

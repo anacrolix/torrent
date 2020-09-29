@@ -2036,7 +2036,6 @@ func (t *Torrent) addWebSeed(url string) {
 	ws := webseedPeer{
 		peer: peer{
 			t:                        t,
-			connString:               url,
 			outgoing:                 true,
 			network:                  "http",
 			reconciledHandshakeStats: true,

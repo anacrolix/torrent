@@ -20,6 +20,10 @@ type webseedPeer struct {
 
 var _ peerImpl = (*webseedPeer)(nil)
 
+func (me *webseedPeer) connStatusString() string {
+	return me.client.Url
+}
+
 func (ws *webseedPeer) String() string {
 	return fmt.Sprintf("webseed peer for %q", ws.client.Url)
 }

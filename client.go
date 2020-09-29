@@ -495,7 +495,8 @@ func (cl *Client) acceptConnections(l net.Listener) {
 	}
 }
 
-func regularConnString(nc net.Conn) string {
+// Creates the PeerConn.connString for a regular net.Conn PeerConn.
+func regularNetConnPeerConnConnString(nc net.Conn) string {
 	return fmt.Sprintf("%s-%s", nc.LocalAddr(), nc.RemoteAddr())
 }
 
@@ -505,7 +506,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 		tc.SetLinger(0)
 	}
 	c := cl.newConnection(nc, false, nc.RemoteAddr(), nc.RemoteAddr().Network(),
-		regularConnString(nc))
+		regularNetConnPeerConnConnString(nc))
 	c.Discovery = PeerSourceIncoming
 	cl.runReceivedConn(c)
 }
@@ -704,7 +705,7 @@ func (cl *Client) establishOutgoingConnEx(t *Torrent, addr net.Addr, obfuscatedH
 		}
 		return nil, errors.New("dial failed")
 	}
-	c, err := cl.initiateProtocolHandshakes(context.Background(), nc, t, true, obfuscatedHeader, addr, dr.Network, regularConnString(nc))
+	c, err := cl.initiateProtocolHandshakes(context.Background(), nc, t, true, obfuscatedHeader, addr, dr.Network, regularNetConnPeerConnConnString(nc))
 	if err != nil {
 		nc.Close()
 	}
@@ -1338,8 +1339,8 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr net.Addr,
 
 			RemoteAddr: remoteAddr,
 			network:    network,
-			connString: connString,
 		},
+		connString:  connString,
 		conn:        nc,
 		writeBuffer: new(bytes.Buffer),
 	}

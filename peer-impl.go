@@ -19,4 +19,5 @@ type peerImpl interface {
 	onGotInfo(*metainfo.Info)
 	drop()
 	String() string
+	connStatusString() string
 }

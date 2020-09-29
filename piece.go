@@ -48,8 +48,8 @@ type Piece struct {
 	// length can be determined by the request chunkSize in use.
 	_dirtyChunks bitmap.Bitmap
 
-	hashing             bool
 	numVerifies         int64
+	hashing             bool
 	storageCompletionOk bool
 
 	publicPieceState PieceState

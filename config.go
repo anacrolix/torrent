@@ -102,6 +102,7 @@ type ClientConfig struct {
 	MinDialTimeout             time.Duration
 	EstablishedConnsPerTorrent int
 	HalfOpenConnsPerTorrent    int
+	TotalHalfOpenConns         int
 	// Maximum number of peer addresses in reserve.
 	TorrentPeersHighWater int
 	// Minumum number of peers before effort is made to obtain more peers.
@@ -155,6 +156,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		MinDialTimeout:                 3 * time.Second,
 		EstablishedConnsPerTorrent:     50,
 		HalfOpenConnsPerTorrent:        25,
+		TotalHalfOpenConns:             100,
 		TorrentPeersHighWater:          500,
 		TorrentPeersLowWater:           50,
 		HandshakesTimeout:              4 * time.Second,

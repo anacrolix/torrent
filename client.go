@@ -75,6 +75,7 @@ type Client struct {
 
 	acceptLimiter   map[ipStr]int
 	dialRateLimiter *rate.Limiter
+	numHalfOpen     int
 
 	websocketTrackers websocketTrackers
 }
@@ -658,7 +659,10 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
 		panic("invariant broken")
 	}
 	delete(t.halfOpen, addr)
-	t.openNewConns()
+	cl.numHalfOpen--
+	for _, t := range cl.torrents {
+		t.openNewConns()
+	}
 }
 
 // Performs initiator handshakes and returns a connection. Returns nil *connection if no connection

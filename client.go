@@ -78,6 +78,7 @@ type Client struct {
 	numHalfOpen     int
 
 	websocketTrackers websocketTrackers
+	activeAnnounces   map[string]struct{}
 }
 
 type ipStr string

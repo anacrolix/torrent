@@ -20,6 +20,7 @@ type trackerScraper struct {
 	u            url.URL
 	t            *Torrent
 	lastAnnounce trackerAnnounceResult
+	allow, done  func()
 }
 
 type torrentTrackerAnnouncer interface {
@@ -108,6 +109,8 @@ func (me *trackerScraper) announce(event tracker.AnnounceEvent) (ret trackerAnno
 		ret.Completed = time.Now()
 	}()
 	ret.Interval = time.Minute
+	me.allow()
+	defer me.done()
 	ip, err := me.getIp()
 	if err != nil {
 		ret.Err = fmt.Errorf("error getting ip: %s", err)

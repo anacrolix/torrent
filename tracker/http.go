@@ -113,17 +113,18 @@ func announceHTTP(opt Announce, _url *url.URL) (ret AnnounceResponse, err error)
 		req = req.WithContext(opt.Context)
 	}
 	resp, err := (&http.Client{
-		Timeout: time.Second * 15,
+		//Timeout: time.Second * 15,
 		Transport: &http.Transport{
-			Dial: (&net.Dialer{
-				Timeout: 15 * time.Second,
-			}).Dial,
-			Proxy:               opt.HTTPProxy,
-			TLSHandshakeTimeout: 15 * time.Second,
+			//Dial: (&net.Dialer{
+			//	Timeout: 15 * time.Second,
+			//}).Dial,
+			Proxy: opt.HTTPProxy,
+			//TLSHandshakeTimeout: 15 * time.Second,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 				ServerName:         opt.ServerName,
 			},
+			// This is for S3 trackers that hold connections open.
 			DisableKeepAlives: true,
 		},
 	}).Do(req)

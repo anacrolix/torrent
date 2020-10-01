@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -119,8 +120,11 @@ func (me *trackerScraper) announce(event tracker.AnnounceEvent) (ret trackerAnno
 	me.t.cl.rLock()
 	req := me.t.announceRequest(event)
 	me.t.cl.rUnlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 	me.t.logger.WithDefaultLevel(log.Debug).Printf("announcing to %q: %#v", me.u.String(), req)
 	res, err := tracker.Announce{
+		Context:    ctx,
 		HTTPProxy:  me.t.cl.config.HTTPProxy,
 		UserAgent:  me.t.cl.config.HTTPUserAgent,
 		TrackerUrl: me.trackerUrl(ip),

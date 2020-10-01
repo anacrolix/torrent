@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
 )
@@ -69,6 +70,13 @@ func (me Announce) Do() (res AnnounceResponse, err error) {
 	_url, err := url.Parse(me.TrackerUrl)
 	if err != nil {
 		return
+	}
+	if me.Context == nil {
+		// This is just to maintain the old behaviour that should be a timeout of 15s. Users can
+		// override it by providing their own Context.
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		me.Context = ctx
 	}
 	switch _url.Scheme {
 	case "http", "https":

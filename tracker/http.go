@@ -70,6 +70,7 @@ func (me *Peers) UnmarshalBencode(b []byte) (err error) {
 func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts Announce) {
 	q := _url.Query()
 
+	q.Set("key", strconv.FormatInt(int64(ar.Key), 10))
 	q.Set("info_hash", string(ar.InfoHash[:]))
 	q.Set("peer_id", string(ar.PeerId[:]))
 	// AFAICT, port is mandatory, and there's no implied port key.

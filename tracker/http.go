@@ -5,12 +5,12 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/missinggo/httptoo"
@@ -95,12 +95,18 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts Announce) {
 	// According to https://wiki.vuze.com/w/Message_Stream_Encryption. TODO:
 	// Take EncryptionPolicy or something like it as a parameter.
 	q.Set("supportcrypto", "1")
-	if opts.ClientIp4.IP != nil {
-		q.Set("ipv4", opts.ClientIp4.String())
+	doIp := func(versionKey string, ip net.IP) {
+		if ip == nil {
+			return
+		}
+		ipString := ip.String()
+		q.Set(versionKey, ipString)
+		// Let's try listing them. BEP 3 mentions having an "ip" param, and BEP 7 says we can list
+		// addresses for other address-families, although it's not encouraged.
+		q.Add("ip", ipString)
 	}
-	if opts.ClientIp6.IP != nil {
-		q.Set("ipv6", opts.ClientIp6.String())
-	}
+	doIp("ipv4", opts.ClientIp4.IP)
+	doIp("ipv6", opts.ClientIp6.IP)
 	_url.RawQuery = q.Encode()
 }
 

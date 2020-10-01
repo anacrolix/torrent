@@ -47,8 +47,8 @@ import (
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
 type Client struct {
-	// An aggregate of stats over all connections. First in struct to ensure
-	// 64-bit alignment of fields. See #262.
+	// An aggregate of stats over all connections. First in struct to ensure 64-bit alignment of
+	// fields. See #262.
 	stats ConnStats
 
 	_mu    lockWithDeferreds
@@ -1515,4 +1515,10 @@ func (cl *Client) locker() *lockWithDeferreds {
 
 func (cl *Client) String() string {
 	return fmt.Sprintf("<%[1]T %[1]p>", cl)
+}
+
+// Returns connection-level aggregate stats at the Client level. See the comment on
+// TorrentStats.ConnStats.
+func (cl *Client) ConnStats() ConnStats {
+	return cl.stats.Copy()
 }

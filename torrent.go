@@ -1431,7 +1431,7 @@ func (t *Torrent) startScrapingTracker(_url string) {
 				}
 				cl.activeAnnounces[urlString] = struct{}{}
 			},
-			done: func() {
+			done: func(slowdown bool) {
 				cl.lock()
 				defer cl.unlock()
 				delete(cl.activeAnnounces, urlString)

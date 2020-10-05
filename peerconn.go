@@ -138,7 +138,7 @@ type PeerConn struct {
 }
 
 func (cn *PeerConn) connStatusString() string {
-	return fmt.Sprintf("%+-55q %s %s\n", cn.PeerID, cn.PeerExtensionBytes, cn.connString)
+	return fmt.Sprintf("%+-55q %s %s", cn.PeerID, cn.PeerExtensionBytes, cn.connString)
 }
 
 func (cn *peer) updateExpectingChunks() {

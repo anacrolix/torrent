@@ -109,7 +109,7 @@ func readRequestPartResponses(parts []requestPart) ([]byte, error) {
 	for _, part := range parts {
 		err := recvPartResult(&buf, part)
 		if err != nil {
-			return buf.Bytes(), err
+			return buf.Bytes(), fmt.Errorf("reading %q at %q: %w", part.req.URL, part.req.Header.Get("Range"), err)
 		}
 	}
 	return buf.Bytes(), nil

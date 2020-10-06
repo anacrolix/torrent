@@ -3,6 +3,7 @@ package webseed
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 
@@ -10,12 +11,21 @@ import (
 )
 
 // Creates a request per BEP 19.
-func NewRequest(url string, fileIndex int, info *metainfo.Info, offset, length int64) (*http.Request, error) {
+func NewRequest(url_ string, fileIndex int, info *metainfo.Info, offset, length int64) (*http.Request, error) {
 	fileInfo := info.UpvertedFiles()[fileIndex]
-	if strings.HasSuffix(url, "/") {
-		url += path.Join(append([]string{info.Name}, fileInfo.Path...)...)
+	if strings.HasSuffix(url_, "/") {
+		// BEP specifies that we append the file path. We need to escape each component of the path
+		// for things like spaces and '#'.
+		url_ += path.Join(
+			func() (ret []string) {
+				for _, comp := range append([]string{info.Name}, fileInfo.Path...) {
+					ret = append(ret, url.PathEscape(comp))
+				}
+				return
+			}()...,
+		)
 	}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodGet, url_, nil)
 	if err != nil {
 		return nil, err
 	}

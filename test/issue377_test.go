@@ -46,14 +46,14 @@ func testReceiveChunkStorageFailure(t *testing.T, seederFast bool) {
 	seederClient, err := torrent.NewClient(seederClientConfig)
 	require.NoError(t, err)
 	defer seederClient.Close()
-	defer testutil.ExportStatusWriter(seederClient, "s")()
+	defer testutil.ExportStatusWriter(seederClient, "s", t)()
 	leecherClientConfig := torrent.TestingConfig()
 	leecherClientConfig.Debug = true
 	justOneNetwork(leecherClientConfig)
 	leecherClient, err := torrent.NewClient(leecherClientConfig)
 	require.NoError(t, err)
 	defer leecherClient.Close()
-	defer testutil.ExportStatusWriter(leecherClient, "l")()
+	defer testutil.ExportStatusWriter(leecherClient, "l", t)()
 	info, err := metainfo.UnmarshalInfo()
 	require.NoError(t, err)
 	leecherStorage := diskFullStorage{

@@ -465,7 +465,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	seeder, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
-	defer testutil.ExportStatusWriter(seeder, "s")()
+	defer testutil.ExportStatusWriter(seeder, "s", t)()
 	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	seederTorrent.VerifyData()
 	leecherDataDir, err := ioutil.TempDir("", "")
@@ -481,7 +481,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	leecher, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer leecher.Close()
-	defer testutil.ExportStatusWriter(leecher, "l")()
+	defer testutil.ExportStatusWriter(leecher, "l", t)()
 	leecherGreeting, new, err := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
@@ -620,7 +620,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 		defer cl.Close()
 		tt, _ := cl.AddTorrentInfoHash(ih)
 		tt.SetMaxEstablishedConns(2)
-		defer testutil.ExportStatusWriter(cl, fmt.Sprintf("%d", i))()
+		defer testutil.ExportStatusWriter(cl, fmt.Sprintf("%d", i), t)()
 		tts = append(tts, tt)
 	}
 	addPeers := func() {
@@ -700,7 +700,7 @@ func testSeederLeecherPair(t *testing.T, seeder func(*ClientConfig), leecher fun
 	server, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer server.Close()
-	defer testutil.ExportStatusWriter(server, "s")()
+	defer testutil.ExportStatusWriter(server, "s", t)()
 	magnet1 := makeMagnet(t, server, cfg.DataDir, "test1")
 	// Extra torrents are added to test the seeder having to match incoming obfuscated headers
 	// against more than one torrent. See issue #114
@@ -714,7 +714,7 @@ func testSeederLeecherPair(t *testing.T, seeder func(*ClientConfig), leecher fun
 	client, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer client.Close()
-	defer testutil.ExportStatusWriter(client, "c")()
+	defer testutil.ExportStatusWriter(client, "c", t)()
 	tr, err := client.AddMagnet(magnet1)
 	require.NoError(t, err)
 	tr.AddClientPeer(server)

@@ -23,7 +23,6 @@ type testClientTransferParams struct {
 	Responsive                 bool
 	Readahead                  int64
 	SetReadahead               bool
-	ExportClientStatus         bool
 	LeecherStorage             func(string) storage.ClientImplCloser
 	SeederStorage              func(string) storage.ClientImplCloser
 	SeederUploadRateLimiter    *rate.Limiter
@@ -70,9 +69,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if ps.ConfigureSeeder.Client != nil {
 		ps.ConfigureSeeder.Client(seeder)
 	}
-	if ps.ExportClientStatus {
-		defer testutil.ExportStatusWriter(seeder, "s")()
-	}
+	defer testutil.ExportStatusWriter(seeder, "s", t)()
 	seederTorrent, _, _ := seeder.AddTorrentSpec(torrent.TorrentSpecFromMetaInfo(mi))
 	// Run a Stats right after Closing the Client. This will trigger the Stats
 	// panic in #214 caused by RemoteAddr on Closed uTP sockets.
@@ -104,9 +101,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if ps.ConfigureLeecher.Client != nil {
 		ps.ConfigureLeecher.Client(leecher)
 	}
-	if ps.ExportClientStatus {
-		defer testutil.ExportStatusWriter(leecher, "l")()
-	}
+	defer testutil.ExportStatusWriter(leecher, "l", t)()
 	leecherTorrent, new, err := leecher.AddTorrentSpec(func() (ret *torrent.TorrentSpec) {
 		ret = torrent.TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
@@ -193,7 +188,6 @@ type storageFactory func(string) storage.ClientImplCloser
 
 func TestClientTransferDefault(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
-		ExportClientStatus: true,
 		LeecherStorage: newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
 			Wrapper: fileCachePieceResourceStorage,
 		}),
@@ -202,7 +196,6 @@ func TestClientTransferDefault(t *testing.T) {
 
 func TestClientTransferDefaultNoMetadata(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
-		ExportClientStatus: true,
 		LeecherStorage: newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
 			Wrapper: fileCachePieceResourceStorage,
 		}),
@@ -217,7 +210,6 @@ func TestClientTransferRateLimitedUpload(t *testing.T) {
 		// chunks are 2 bytes in length. Then the smallest burst we can run
 		// with is 2. Time taken is (13-burst)/rate.
 		SeederUploadRateLimiter: rate.NewLimiter(11, 2),
-		ExportClientStatus:      true,
 	})
 	require.True(t, time.Since(started) > time.Second)
 }
@@ -244,8 +236,7 @@ func testClientTransferSmallCache(t *testing.T, setReadahead bool, readahead int
 		SetReadahead: setReadahead,
 		// Can't readahead too far or the cache will thrash and drop data we
 		// thought we had.
-		Readahead:          readahead,
-		ExportClientStatus: true,
+		Readahead: readahead,
 
 		// These tests don't work well with more than 1 connection to the seeder.
 		ConfigureLeecher: ConfigureClient{
@@ -285,7 +276,7 @@ func TestClientTransferVarious(t *testing.T) {
 			// Seeder storage
 			for _, ss := range []struct {
 				name string
-				f    func(string) storage.ClientImplCloser
+				f    storageFactory
 			}{
 				{"File", storage.NewFile},
 				{"Mmap", storage.NewMMap},
@@ -331,7 +322,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	seeder, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
-	defer testutil.ExportStatusWriter(seeder, "s")()
+	defer testutil.ExportStatusWriter(seeder, "s", t)()
 	seederTorrent, ok, err := seeder.AddTorrentSpec(torrent.TorrentSpecFromMetaInfo(mi))
 	require.NoError(t, err)
 	assert.True(t, ok)
@@ -345,7 +336,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	leecher, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer leecher.Close()
-	defer testutil.ExportStatusWriter(leecher, "l")()
+	defer testutil.ExportStatusWriter(leecher, "l", t)()
 
 	cfg = torrent.TestingConfig()
 	cfg.Seed = false
@@ -355,7 +346,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	leecherLeecher, _ := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer leecherLeecher.Close()
-	defer testutil.ExportStatusWriter(leecherLeecher, "ll")()
+	defer testutil.ExportStatusWriter(leecherLeecher, "ll", t)()
 	leecherGreeting, ok, err := leecher.AddTorrentSpec(func() (ret *torrent.TorrentSpec) {
 		ret = torrent.TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2

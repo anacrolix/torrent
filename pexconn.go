@@ -41,8 +41,8 @@ func (s *pexConnState) Init(c *PeerConn) {
 	s.xid = xid
 	s.seq = 0
 	s.torrent = c.t
-	s.info = c.t.cl.logger
-	s.dbg = c.logger
+	s.info = c.t.cl.logger.WithDefaultLevel(log.Info)
+	s.dbg = c.logger.WithDefaultLevel(log.Debug)
 	s.readyfn = c.tickleWriter
 	s.gate = make(chan struct{}, 1)
 	s.timer = time.AfterFunc(0, func() {

@@ -1341,7 +1341,7 @@ func (c *peer) receiveChunk(msg *pp.Message) error {
 	piece.decrementPendingWrites()
 
 	if err != nil {
-		c.logger.Printf("error writing received chunk %v: %v", req, err)
+		c.logger.WithDefaultLevel(log.Error).Printf("writing received chunk %v: %v", req, err)
 		t.pendRequest(req)
 		//t.updatePieceCompletion(pieceIndex(msg.Index))
 		t.onWriteChunkErr(err)
@@ -1553,7 +1553,7 @@ func (c *PeerConn) setTorrent(t *Torrent) {
 		panic("connection already associated with a torrent")
 	}
 	c.t = t
-	c.logger.Printf("torrent=%v", t)
+	c.logger.WithDefaultLevel(log.Debug).Printf("set torrent=%v", t)
 	t.reconcileHandshakeStats(c)
 }
 

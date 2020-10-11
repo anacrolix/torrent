@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"bytes"
 	"container/heap"
 	"context"
 	"crypto/sha1"
@@ -792,8 +793,22 @@ func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash, copyErr error)
 	p.waitNoPendingWrites()
 	ip := t.info.Piece(int(piece))
 	pl := ip.Length()
-	_, copyErr = io.CopyN( // Return no error iff pl bytes are copied.
-		hash, io.NewSectionReader(t.pieces[piece].Storage(), 0, pl), pl)
+	pieceReader := io.NewSectionReader(t.pieces[piece].Storage(), 0, pl)
+	var hashSource io.Reader
+	doCopy := func() {
+		// Return no error iff pl bytes are copied.
+		_, copyErr = io.CopyN(hash, hashSource, pl)
+	}
+	const logPieceContents = false
+	if logPieceContents {
+		var examineBuf bytes.Buffer
+		hashSource = io.TeeReader(pieceReader, &examineBuf)
+		doCopy()
+		log.Printf("hashed %q with copy err %v", examineBuf.Bytes(), copyErr)
+	} else {
+		hashSource = pieceReader
+		doCopy()
+	}
 	missinggo.CopyExact(&ret, hash.Sum(nil))
 	return
 }

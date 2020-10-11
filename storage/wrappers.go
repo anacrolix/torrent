@@ -76,8 +76,15 @@ func (p Piece) ReadAt(b []byte, off int64) (n int, err error) {
 		panic("io.Copy will get stuck")
 	}
 	off += int64(n)
-	if off < p.mip.Length() && err != nil {
-		p.MarkNotComplete()
+
+	// Doing this here may be inaccurate. There's legitimate reasons we may fail to read while the
+	// data is still there, such as too many open files. There should probably be a specific error
+	// to return if the data has been lost.
+	if off < p.mip.Length() {
+		if err == io.EOF {
+			p.MarkNotComplete()
+		}
 	}
+
 	return
 }

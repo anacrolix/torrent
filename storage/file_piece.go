@@ -28,13 +28,14 @@ func (fs *filePieceImpl) Completion() Completion {
 		c.Ok = false
 		return c
 	}
-	// If it's allegedly complete, check that its constituent files have the
-	// necessary length.
-	for _, fi := range extentCompleteRequiredLengths(fs.p.Info, fs.p.Offset(), fs.p.Length()) {
-		s, err := os.Stat(fs.fileInfoName(fi))
-		if err != nil || s.Size() < fi.Length {
-			c.Complete = false
-			break
+	if c.Complete {
+		// If it's allegedly complete, check that its constituent files have the necessary length.
+		for _, fi := range extentCompleteRequiredLengths(fs.p.Info, fs.p.Offset(), fs.p.Length()) {
+			s, err := os.Stat(fs.fileInfoName(fi))
+			if err != nil || s.Size() < fi.Length {
+				c.Complete = false
+				break
+			}
 		}
 	}
 	if !c.Complete {

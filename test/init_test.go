@@ -1,6 +1,7 @@
 package test
 
 import (
+	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/torrent"
 )
 

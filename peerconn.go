@@ -1429,20 +1429,23 @@ another:
 			}
 			more, err := c.sendChunk(r, msg)
 			if err != nil {
+				c.logger.WithDefaultLevel(log.Warning).Printf("sending chunk to peer: %v", err)
 				i := pieceIndex(r.Index)
 				if c.t.pieceComplete(i) {
+					// There used to be more code here that just duplicated the following break.
+					// Piece completions are currently cached, so I'm not sure how helpful this
+					// update is, except to pull any completion changes pushed to the storage
+					// backend in failed reads that got us here.
 					c.t.updatePieceCompletion(i)
-					if !c.t.pieceComplete(i) {
-						// We had the piece, but not anymore.
-						break another
-					}
 				}
-				log.Str("error sending chunk to peer").AddValues(c, r, err).Log(c.t.logger)
-				// If we failed to send a chunk, choke the peer to ensure they
-				// flush all their requests. We've probably dropped a piece,
-				// but there's no way to communicate this to the peer. If they
-				// ask for it again, we'll kick them to allow us to send them
-				// an updated bitfield.
+				// If we failed to send a chunk, choke the peer by breaking out of the loop here to
+				// ensure they flush all their requests. We've probably dropped a piece from
+				// storage, but there's no way to communicate this to the peer. If they ask for it
+				// again, we'll kick them to allow us to send them an updated bitfield on the next
+				// connect.
+				if c.choking {
+					c.logger.WithDefaultLevel(log.Warning).Printf("already choking peer, requests might not be rejected correctly")
+				}
 				break another
 			}
 			delete(c.peerRequests, r)

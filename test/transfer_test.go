@@ -221,7 +221,13 @@ func TestClientTransferRateLimitedDownload(t *testing.T) {
 }
 
 func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImplCloser {
-	return storage.NewResourcePieces(fc.AsResourceProvider())
+	return struct {
+		storage.ClientImpl
+		io.Closer
+	}{
+		storage.NewResourcePieces(fc.AsResourceProvider()),
+		ioutil.NopCloser(nil),
+	}
 }
 
 func testClientTransferSmallCache(t *testing.T, setReadahead bool, readahead int64) {

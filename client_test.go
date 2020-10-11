@@ -151,7 +151,7 @@ func TestAddDropManyTorrents(t *testing.T) {
 	}
 }
 
-func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImplCloser {
+func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
 	return storage.NewResourcePieces(fc.AsResourceProvider())
 }
 
@@ -367,7 +367,7 @@ func writeTorrentData(ts *storage.Torrent, info metainfo.Info, b []byte) {
 	}
 }
 
-func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.ClientImplCloser) {
+func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.ClientImpl) {
 	fileCacheDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(fileCacheDir)
@@ -376,7 +376,6 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 	greetingDataTempDir, greetingMetainfo := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingDataTempDir)
 	filePieceStore := csf(fileCache)
-	defer filePieceStore.Close()
 	info, err := greetingMetainfo.UnmarshalInfo()
 	require.NoError(t, err)
 	ih := greetingMetainfo.HashInfoBytes()

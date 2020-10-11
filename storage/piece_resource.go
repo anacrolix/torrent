@@ -16,21 +16,25 @@ type piecePerResource struct {
 	p resource.Provider
 }
 
-func NewResourcePieces(p resource.Provider) ClientImplCloser {
+func NewResourcePieces(p resource.Provider) ClientImpl {
 	return &piecePerResource{
 		p: p,
 	}
 }
 
-func (s *piecePerResource) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
-	return s, nil
+type piecePerResourceTorrentImpl struct {
+	piecePerResource
 }
 
-func (s *piecePerResource) Close() error {
+func (piecePerResourceTorrentImpl) Close() error {
 	return nil
 }
 
-func (s *piecePerResource) Piece(p metainfo.Piece) PieceImpl {
+func (s piecePerResource) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
+	return piecePerResourceTorrentImpl{s}, nil
+}
+
+func (s piecePerResource) Piece(p metainfo.Piece) PieceImpl {
 	return piecePerResourcePiece{
 		mp: p,
 		rp: s.p,

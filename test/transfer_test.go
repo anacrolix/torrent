@@ -4,15 +4,19 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
+	"crawshaw.io/sqlite"
 	"github.com/anacrolix/missinggo/v2/filecache"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/storage"
+	sqliteStorage "github.com/anacrolix/torrent/storage/sqlite"
 	"golang.org/x/time/rate"
 
 	"github.com/stretchr/testify/assert"
@@ -277,6 +281,25 @@ func TestClientTransferVarious(t *testing.T) {
 			Wrapper: fileCachePieceResourceStorage,
 		})},
 		{"Boltdb", storage.NewBoltDB},
+		{"Sqlite", func(dataDir string) storage.ClientImplCloser {
+			path := filepath.Join(dataDir, "sqlite.db")
+			log.Printf("creating sqlite db at %q", path)
+			conn, err := sqlite.OpenConn(fmt.Sprintf("file:%s", path), 0)
+			if err != nil {
+				panic(err)
+			}
+			prov, err := sqliteStorage.NewProvider(conn)
+			if err != nil {
+				panic(err)
+			}
+			return struct {
+				storage.ClientImpl
+				io.Closer
+			}{
+				storage.NewResourcePieces(prov),
+				conn,
+			}
+		}},
 	} {
 		t.Run(fmt.Sprintf("LeecherStorage=%s", ls.name), func(t *testing.T) {
 			// Seeder storage

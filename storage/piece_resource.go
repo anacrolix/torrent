@@ -123,7 +123,7 @@ func (s piecePerResourcePiece) getChunks() (chunks chunks) {
 	for _, n := range names {
 		offset, err := strconv.ParseInt(n, 10, 64)
 		if err != nil {
-			continue
+			panic(err)
 		}
 		i, err := s.rp.NewInstance(path.Join(s.incompleteDirPath(), n))
 		if err != nil {

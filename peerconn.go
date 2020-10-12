@@ -392,7 +392,7 @@ func (cn *PeerConn) requestMetadataPiece(index int) {
 	if index < len(cn.metadataRequests) && cn.metadataRequests[index] {
 		return
 	}
-	cn.logger.Printf("requesting metadata piece %d", index)
+	cn.logger.WithDefaultLevel(log.Debug).Printf("requesting metadata piece %d", index)
 	cn.post(pp.Message{
 		Type:       pp.Extended,
 		ExtendedID: eID,
@@ -670,7 +670,7 @@ func (cn *PeerConn) writer(keepAliveTimeout time.Duration) {
 			keepAliveTimer.Reset(keepAliveTimeout)
 		}
 		if err != nil {
-			cn.logger.Printf("error writing: %v", err)
+			cn.logger.WithDefaultLevel(log.Debug).Printf("error writing: %v", err)
 			return
 		}
 		if n != frontBuf.Len() {

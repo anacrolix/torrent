@@ -1037,7 +1037,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 			return nil
 		}
 		start := (1 << 14) * piece
-		c.logger.Printf("sending metadata piece %d", piece)
+		c.logger.WithDefaultLevel(log.Debug).Printf("sending metadata piece %d", piece)
 		c.post(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]))
 		return nil
 	case pp.RejectMetadataExtensionMsgType:

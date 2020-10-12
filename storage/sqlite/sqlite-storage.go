@@ -3,8 +3,8 @@ package sqliteStorage
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
-	"log"
 	"os"
 	"sync"
 	"time"
@@ -18,7 +18,12 @@ type conn = *sqlite.Conn
 
 func initConn(conn conn) error {
 	return sqlitex.ExecScript(conn, `
-create table if not exists blobs(name, data, primary key (name));
+create table if not exists blobs(
+	name text,
+	last_used timestamp default (datetime('now')),
+	data blob,
+	primary key (name)
+);
 `)
 }
 
@@ -63,7 +68,7 @@ func (i instance) Readdirnames() (names []string, err error) {
 			return nil
 		}, prefix+"%")
 	})
-	log.Printf("readdir %q gave %q", i.location, names)
+	//log.Printf("readdir %q gave %q", i.location, names)
 	return
 }
 
@@ -100,7 +105,7 @@ func (me connBlob) Close() error {
 
 func (i instance) Get() (ret io.ReadCloser, err error) {
 	i.lockConn()
-	blob, err := i.openBlob(i.p.conn, false)
+	blob, err := i.openBlob(i.p.conn, false, true)
 	if err != nil {
 		i.unlockConn()
 		return
@@ -111,10 +116,20 @@ func (i instance) Get() (ret io.ReadCloser, err error) {
 	}}, nil
 }
 
-func (i instance) openBlob(conn conn, write bool) (*sqlite.Blob, error) {
+func (i instance) openBlob(conn conn, write, updateAccess bool) (*sqlite.Blob, error) {
 	rowid, err := i.getBlobRowid(conn)
 	if err != nil {
 		return nil, err
+	}
+	if updateAccess {
+		err = sqlitex.Exec(conn, "update blobs set last_used=datetime('now') where rowid=?", nil, rowid)
+		if err != nil {
+			err = fmt.Errorf("updating last_used: %w", err)
+			return nil, err
+		}
+		if conn.Changes() != 1 {
+			panic(conn.Changes())
+		}
 	}
 	return conn.OpenBlob("main", "blobs", "data", rowid, write)
 }
@@ -162,7 +177,7 @@ func (f fileInfo) Sys() interface{} {
 func (i instance) Stat() (ret os.FileInfo, err error) {
 	i.withConn(func(conn conn) {
 		var blob *sqlite.Blob
-		blob, err = i.openBlob(conn, false)
+		blob, err = i.openBlob(conn, false, false)
 		if err != nil {
 			return
 		}
@@ -175,7 +190,7 @@ func (i instance) Stat() (ret os.FileInfo, err error) {
 func (i instance) ReadAt(p []byte, off int64) (n int, err error) {
 	i.withConn(func(conn conn) {
 		var blob *sqlite.Blob
-		blob, err = i.openBlob(conn, false)
+		blob, err = i.openBlob(conn, false, true)
 		if err != nil {
 			return
 		}

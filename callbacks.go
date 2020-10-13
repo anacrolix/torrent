@@ -10,4 +10,5 @@ type Callbacks struct {
 	CompletedHandshake    func(_ *PeerConn, infoHash InfoHash)
 	ReadMessage           func(*PeerConn, *pp.Message)
 	ReadExtendedHandshake func(*PeerConn, *pp.ExtendedHandshakeMessage)
+	PeerConnClosed        func(*PeerConn)
 }

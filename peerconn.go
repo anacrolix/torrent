@@ -355,6 +355,9 @@ func (cn *PeerConn) _close() {
 	if cn.conn != nil {
 		cn.conn.Close()
 	}
+	if cb := cn.t.cl.config.Callbacks.PeerConnClosed; cb != nil {
+		cb(cn)
+	}
 }
 
 func (cn *peer) peerHasPiece(piece pieceIndex) bool {

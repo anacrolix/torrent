@@ -82,7 +82,6 @@ type peer struct {
 	// response.
 	metadataRequests []bool
 	sentHaves        bitmap.Bitmap
-	pex              pexConnState
 
 	// Stuff controlled by the remote peer.
 	peerInterested        bool
@@ -135,6 +134,8 @@ type PeerConn struct {
 	writeBuffer *bytes.Buffer
 	uploadTimer *time.Timer
 	writerCond  sync.Cond
+
+	pex pexConnState
 }
 
 func (cn *PeerConn) connStatusString() string {

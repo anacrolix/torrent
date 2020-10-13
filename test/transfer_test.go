@@ -271,6 +271,29 @@ func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
 	testClientTransferSmallCache(t, false, -1)
 }
 
+func sqliteClientStorageFactory(connPathMaker func(dataDir string) string) storageFactory {
+	return func(dataDir string) storage.ClientImplCloser {
+		path := connPathMaker(dataDir)
+		log.Printf("opening sqlite db at %q", path)
+		conn, err := sqlite.OpenConn(path, 0)
+		if err != nil {
+			panic(err)
+		}
+		prov, err := sqliteStorage.NewProvider(conn)
+		if err != nil {
+			panic(err)
+		}
+		return struct {
+			storage.ClientImpl
+			io.Closer
+		}{
+			storage.NewResourcePieces(prov),
+			conn,
+		}
+
+	}
+}
+
 func TestClientTransferVarious(t *testing.T) {
 	// Leecher storage
 	for _, ls := range []struct {
@@ -281,25 +304,12 @@ func TestClientTransferVarious(t *testing.T) {
 			Wrapper: fileCachePieceResourceStorage,
 		})},
 		{"Boltdb", storage.NewBoltDB},
-		{"Sqlite", func(dataDir string) storage.ClientImplCloser {
-			path := filepath.Join(dataDir, "sqlite.db")
-			log.Printf("creating sqlite db at %q", path)
-			conn, err := sqlite.OpenConn(fmt.Sprintf("file:%s", path), 0)
-			if err != nil {
-				panic(err)
-			}
-			prov, err := sqliteStorage.NewProvider(conn)
-			if err != nil {
-				panic(err)
-			}
-			return struct {
-				storage.ClientImpl
-				io.Closer
-			}{
-				storage.NewResourcePieces(prov),
-				conn,
-			}
-		}},
+		{"SqliteFile", sqliteClientStorageFactory(func(dataDir string) string {
+			return "file:" + filepath.Join(dataDir, "sqlite.db")
+		})},
+		{"SqliteMemory", sqliteClientStorageFactory(func(dataDir string) string {
+			return "file:memory:?mode=memory"
+		})},
 	} {
 		t.Run(fmt.Sprintf("LeecherStorage=%s", ls.name), func(t *testing.T) {
 			// Seeder storage

@@ -136,6 +136,8 @@ type PeerConn struct {
 	writerCond  sync.Cond
 
 	pex pexConnState
+
+	callbacks *Callbacks
 }
 
 func (cn *PeerConn) connStatusString() string {
@@ -356,7 +358,7 @@ func (cn *PeerConn) _close() {
 	if cn.conn != nil {
 		cn.conn.Close()
 	}
-	if cb := cn.t.cl.config.Callbacks.PeerConnClosed; cb != nil {
+	if cb := cn.callbacks.PeerConnClosed; cb != nil {
 		cb(cn)
 	}
 }
@@ -1072,7 +1074,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			defer cl.lock()
 			err = decoder.Decode(&msg)
 		}()
-		if cb := cl.config.Callbacks.ReadMessage; cb != nil && err == nil {
+		if cb := c.callbacks.ReadMessage; cb != nil && err == nil {
 			cb(c, &msg)
 		}
 		if t.closed.IsSet() || c.closed.IsSet() {
@@ -1209,7 +1211,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			c.logger.Printf("error parsing extended handshake message %q: %s", payload, err)
 			return errors.Wrap(err, "unmarshalling extended handshake payload")
 		}
-		if cb := cl.config.Callbacks.ReadExtendedHandshake; cb != nil {
+		if cb := c.callbacks.ReadExtendedHandshake; cb != nil {
 			cb(c, &d)
 		}
 		//c.logger.WithDefaultLevel(log.Debug).Printf("received extended handshake message:\n%s", spew.Sdump(d))

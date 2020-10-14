@@ -509,6 +509,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 	}
 	c := cl.newConnection(nc, false, nc.RemoteAddr(), nc.RemoteAddr().Network(),
 		regularNetConnPeerConnConnString(nc))
+	defer c.close()
 	c.Discovery = PeerSourceIncoming
 	cl.runReceivedConn(c)
 }
@@ -1348,6 +1349,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr net.Addr,
 		connString:  connString,
 		conn:        nc,
 		writeBuffer: new(bytes.Buffer),
+		callbacks:   &cl.config.Callbacks,
 	}
 	c.peerImpl = c
 	c.logger = cl.logger.WithDefaultLevel(log.Warning).WithContextValue(c)

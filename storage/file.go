@@ -73,7 +73,7 @@ func (fs *fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Has
 	for i, fileInfo := range upvertedFiles {
 		s, err := ToSafeFilePath(append([]string{info.Name}, fileInfo.Path...)...)
 		if err != nil {
-			return nil, fmt.Errorf("file %v has unsafe path %q", i, fileInfo.Path)
+			return nil, fmt.Errorf("file %v has unsafe path %q: %w", i, fileInfo.Path, err)
 		}
 		f := file{
 			path:   filepath.Join(dir, s),

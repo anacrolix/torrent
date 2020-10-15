@@ -2,7 +2,6 @@ package storage
 
 import (
 	"errors"
-	"log"
 	"path/filepath"
 	"strings"
 )
@@ -21,7 +20,6 @@ func ToSafeFilePath(fileInfoComponents ...string) (string, error) {
 	}
 	safeFilePath := filepath.Join(safeComps...)
 	fc := firstComponent(safeFilePath)
-	log.Printf("%q", fc)
 	switch fc {
 	case "..":
 		return "", errors.New("escapes root dir")

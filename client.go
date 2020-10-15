@@ -1150,6 +1150,9 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
 	t, new = cl.AddTorrentInfoHashWithStorage(spec.InfoHash, spec.Storage)
 	err = t.MergeSpec(spec)
+	if err != nil && new {
+		t.Drop()
+	}
 	return
 }
 

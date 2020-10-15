@@ -4,6 +4,7 @@ package main
 import (
 	"expvar"
 	"fmt"
+	stdLog "log"
 	"net"
 	"net/http"
 	"os"
@@ -210,6 +211,7 @@ func main() {
 }
 
 func mainErr() error {
+	stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
 	var flags struct {
 		tagflag.StartPos
 		Command string
@@ -288,7 +290,10 @@ func downloadErr(args []string, parent *tagflag.Parser) error {
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		client.WriteStatus(w)
 	})
-	addTorrents(client)
+	err = addTorrents(client)
+	if err != nil {
+		return fmt.Errorf("adding torrents: %w", err)
+	}
 	defer outputStats(client)
 	if client.WaitAll() {
 		log.Print("downloaded ALL the torrents")

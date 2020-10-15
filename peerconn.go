@@ -1497,7 +1497,12 @@ func (c *peer) deleteRequest(r request) bool {
 	if n < 0 {
 		panic(n)
 	}
-	c.updateRequests()
+	// If a request is rejected, updating the requests for the current peer first will miss the
+	// opportunity to try other peers for that request instead. I'm not sure about the interested
+	// check in the following loop however.
+	if false {
+		c.updateRequests()
+	}
 	c.t.iterPeers(func(_c *peer) {
 		if !_c.interested && _c != c && c.peerHasPiece(pieceIndex(r.Index)) {
 			_c.updateRequests()

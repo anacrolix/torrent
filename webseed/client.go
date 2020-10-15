@@ -3,6 +3,7 @@ package webseed
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -91,8 +92,14 @@ func recvPartResult(buf io.Writer, part requestPart) error {
 		return result.err
 	}
 	defer result.resp.Body.Close()
-	if part.e.Start != 0 && result.resp.StatusCode != http.StatusPartialContent {
-		return fmt.Errorf("expected partial content response got %v", result.resp.StatusCode)
+	switch result.resp.StatusCode {
+	case http.StatusPartialContent:
+	case http.StatusOK:
+		if part.e.Start != 0 {
+			return errors.New("got status ok but request was at offset")
+		}
+	default:
+		return fmt.Errorf("unhandled response status code (%v)", result.resp.StatusCode)
 	}
 	copied, err := io.Copy(buf, result.resp.Body)
 	if err != nil {

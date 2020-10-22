@@ -1598,6 +1598,8 @@ func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
 	return f
 }
 
+// This returns the address to use if we want to dial the peer again. It incorporates the peer's
+// advertised listen port.
 func (c *PeerConn) dialAddr() net.Addr {
 	if !c.outgoing && c.PeerListenPort != 0 {
 		switch addr := c.RemoteAddr.(type) {

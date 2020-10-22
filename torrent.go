@@ -1250,8 +1250,12 @@ func (t *Torrent) deleteConnection(c *PeerConn) (ret bool) {
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
-	if !t.cl.config.DisablePEX {
-		t.pex.Drop(c)
+	// Avoid adding a drop event more than once. Probably we should track whether we've generated
+	// the drop event against the PexConnState instead.
+	if ret {
+		if !t.cl.config.DisablePEX {
+			t.pex.Drop(c)
+		}
 	}
 	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests()

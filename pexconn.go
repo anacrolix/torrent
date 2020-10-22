@@ -64,7 +64,7 @@ func (s *pexConnState) genmsg() *pp.PexMsg {
 		return nil
 	}
 	s.seq = seq
-	return tx
+	return &tx
 }
 
 // Share is called from the writer goroutine if when it is woken up with the write buffers empty

@@ -28,19 +28,142 @@ type pexEvent struct {
 	f    pp.PexPeerFlags
 }
 
-// records the event into the peer protocol PEX message
-func (e *pexEvent) put(m *pp.PexMsg) {
-	switch e.t {
+// Combines the node addr, as required for pp.PexMsg.
+type pexMsgAdded struct {
+	krpc.NodeAddr
+	pp.PexPeerFlags
+}
+
+// Makes generating a PexMsg more efficient.
+type pexMsgFactory struct {
+	added   map[string]pexMsgAdded
+	dropped map[string]krpc.NodeAddr
+}
+
+func (me *pexMsgFactory) DeltaLen() int {
+	return int(max(
+		int64(len(me.added)),
+		int64(len(me.dropped))))
+}
+
+// Returns the key to use to identify a given addr in the factory. Panics if we can't support the
+// addr later in generating a PexMsg (since adding an unusable addr will cause DeltaLen to be out.)
+func (me *pexMsgFactory) addrKey(addr krpc.NodeAddr) string {
+	if addr.IP.To4() != nil {
+		addr.IP = addr.IP.To4()
+	}
+	keyBytes, err := addr.MarshalBinary()
+	if err != nil {
+		panic(err)
+	}
+	switch len(keyBytes) {
+	case compactIpv4NodeAddrElemSize:
+	case compactIpv6NodeAddrElemSize:
+	default:
+		panic(len(keyBytes))
+	}
+	return string(keyBytes)
+}
+
+// Returns whether the entry was added (we can check if we're cancelling out another entry and so
+// won't hit the limit consuming this event).
+func (me *pexMsgFactory) Add(addr krpc.NodeAddr, flags pp.PexPeerFlags) bool {
+	key := me.addrKey(addr)
+	if _, ok := me.dropped[key]; ok {
+		delete(me.dropped, key)
+		return true
+	}
+	if me.DeltaLen() >= pexMaxDelta {
+		return false
+	}
+	if me.added == nil {
+		me.added = make(map[string]pexMsgAdded, pexMaxDelta)
+	}
+	me.added[key] = pexMsgAdded{addr, flags}
+	return true
+
+}
+
+// Returns whether the entry was added (we can check if we're cancelling out another entry and so
+// won't hit the limit consuming this event).
+func (me *pexMsgFactory) Drop(addr krpc.NodeAddr) bool {
+	key := me.addrKey(addr)
+	if _, ok := me.added[key]; ok {
+		delete(me.added, key)
+		return true
+	}
+	if me.DeltaLen() >= pexMaxDelta {
+		return false
+	}
+	if me.dropped == nil {
+		me.dropped = make(map[string]krpc.NodeAddr, pexMaxDelta)
+	}
+	me.dropped[key] = addr
+	return true
+}
+
+// Returns whether the entry was added (we can check if we're cancelling out another entry and so
+// won't hit the limit consuming this event).
+func (me *pexMsgFactory) addEvent(event pexEvent) bool {
+	addr, ok := nodeAddr(event.addr)
+	if !ok {
+		return true
+	}
+	switch event.t {
 	case pexAdd:
-		m.Add(nodeAddr(e.addr), e.f)
+		return me.Add(addr, event.f)
 	case pexDrop:
-		m.Drop(nodeAddr(e.addr))
+		return me.Drop(addr)
+	default:
+		panic(event.t)
 	}
 }
 
-func nodeAddr(addr net.Addr) krpc.NodeAddr {
-	ipport, _ := tryIpPortFromNetAddr(addr)
-	return krpc.NodeAddr{IP: shortestIP(ipport.IP), Port: ipport.Port}
+var compactIpv4NodeAddrElemSize = krpc.CompactIPv4NodeAddrs{}.ElemSize()
+var compactIpv6NodeAddrElemSize = krpc.CompactIPv6NodeAddrs{}.ElemSize()
+
+func (me *pexMsgFactory) PexMsg() (ret pp.PexMsg) {
+	for key, added := range me.added {
+		switch len(key) {
+		case compactIpv4NodeAddrElemSize:
+			ret.Added = append(ret.Added, added.NodeAddr)
+			ret.AddedFlags = append(ret.AddedFlags, added.PexPeerFlags)
+		case compactIpv6NodeAddrElemSize:
+			ret.Added6 = append(ret.Added6, added.NodeAddr)
+			ret.Added6Flags = append(ret.Added6Flags, added.PexPeerFlags)
+		default:
+			panic(key)
+		}
+	}
+	for key, addr := range me.dropped {
+		switch len(key) {
+		case compactIpv4NodeAddrElemSize:
+			ret.Dropped = append(ret.Dropped, addr)
+		case compactIpv6NodeAddrElemSize:
+			ret.Dropped6 = append(ret.Dropped6, addr)
+		default:
+			panic(key)
+		}
+	}
+	return
+}
+
+func mustNodeAddr(addr net.Addr) krpc.NodeAddr {
+	ret, ok := nodeAddr(addr)
+	if !ok {
+		panic(addr)
+	}
+	return ret
+}
+
+// Convert an arbitrary torrent peer Addr into one that can be represented by the compact addr
+// format.
+func nodeAddr(addr net.Addr) (_ krpc.NodeAddr, ok bool) {
+	ipport, ok := tryIpPortFromNetAddr(addr)
+	if !ok {
+		return
+	}
+	return krpc.NodeAddr{IP: shortestIP(ipport.IP), Port: ipport.Port}, true
 }
 
 // mainly for the krpc marshallers
@@ -89,17 +212,16 @@ func (s *pexState) Drop(c *PeerConn) {
 	}
 }
 
-// Generate a PEX message based on the event feed.
-// Also returns an index to pass to the subsequent calls, producing incremental deltas.
-func (s *pexState) Genmsg(start int) (*pp.PexMsg, int) {
-	m := new(pp.PexMsg)
+// Generate a PEX message based on the event feed. Also returns an index to pass to the subsequent
+// calls, producing incremental deltas.
+func (s *pexState) Genmsg(start int) (pp.PexMsg, int) {
+	var factory pexMsgFactory
 	n := start
 	for _, e := range s.ev[start:] {
-		if start > 0 && m.DeltaLen() >= pexMaxDelta {
+		if !factory.addEvent(e) {
 			break
 		}
-		e.put(m)
 		n++
 	}
-	return m, n
+	return factory.PexMsg(), n
 }

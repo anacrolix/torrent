@@ -44,11 +44,11 @@ func TestPexConnState(t *testing.T) {
 
 	x, err := pp.LoadPexMsg(out.ExtendedPayload)
 	require.NoError(t, err)
-	targx := &pp.PexMsg{
+	targx := pp.PexMsg{
 		Added:      krpc.CompactIPv4NodeAddrs(nil),
 		AddedFlags: []pp.PexPeerFlags{},
 		Added6: krpc.CompactIPv6NodeAddrs{
-			nodeAddr(addr),
+			mustNodeAddr(addr),
 		},
 		Added6Flags: []pp.PexPeerFlags{0},
 	}

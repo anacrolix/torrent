@@ -2,6 +2,7 @@ package sqliteStorage
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -27,14 +28,43 @@ create table if not exists blob(
 `)
 }
 
+// Emulates a pool from a single Conn.
+type poolFromConn struct {
+	mu   sync.Mutex
+	conn conn
+}
+
+func (me *poolFromConn) Get(ctx context.Context) conn {
+	me.mu.Lock()
+	return me.conn
+}
+
+func (me *poolFromConn) Put(conn conn) {
+	if conn != me.conn {
+		panic("expected to same conn")
+	}
+	me.mu.Unlock()
+}
+
 func NewProvider(conn *sqlite.Conn) (*provider, error) {
 	err := initConn(conn)
-	return &provider{conn: conn}, err
+	return &provider{&poolFromConn{conn: conn}}, err
+}
+
+func NewProviderPool(pool *sqlitex.Pool) (*provider, error) {
+	conn := pool.Get(context.TODO())
+	defer pool.Put(conn)
+	err := initConn(conn)
+	return &provider{pool: pool}, err
+}
+
+type pool interface {
+	Get(context.Context) conn
+	Put(conn)
 }
 
 type provider struct {
-	mu   sync.Mutex
-	conn conn
+	pool pool
 }
 
 func (p *provider) NewInstance(s string) (resource.Instance, error) {
@@ -47,17 +77,17 @@ type instance struct {
 }
 
 func (i instance) withConn(with func(conn conn)) {
-	i.lockConn()
-	defer i.unlockConn()
-	with(i.p.conn)
+	conn := i.p.pool.Get(context.TODO())
+	defer i.p.pool.Put(conn)
+	with(conn)
 }
 
-func (i instance) lockConn() {
-	i.p.mu.Lock()
+func (i instance) getConn() *sqlite.Conn {
+	return i.p.pool.Get(context.TODO())
 }
 
-func (i instance) unlockConn() {
-	i.p.mu.Unlock()
+func (i instance) putConn(conn *sqlite.Conn) {
+	i.p.pool.Put(conn)
 }
 
 func (i instance) Readdirnames() (names []string, err error) {
@@ -104,15 +134,15 @@ func (me connBlob) Close() error {
 }
 
 func (i instance) Get() (ret io.ReadCloser, err error) {
-	i.lockConn()
-	blob, err := i.openBlob(i.p.conn, false, true)
+	conn := i.getConn()
+	blob, err := i.openBlob(conn, false, true)
 	if err != nil {
-		i.unlockConn()
+		i.putConn(conn)
 		return
 	}
 	var once sync.Once
 	return connBlob{blob, func() {
-		once.Do(i.unlockConn)
+		once.Do(func() { i.putConn(conn) })
 	}}, nil
 }
 
@@ -121,6 +151,8 @@ func (i instance) openBlob(conn conn, write, updateAccess bool) (*sqlite.Blob, e
 	if err != nil {
 		return nil, err
 	}
+	// This seems to cause locking issues with in-memory databases. Is it something to do with not
+	// having WAL?
 	if updateAccess {
 		err = sqlitex.Exec(conn, "update blob set last_used=datetime('now') where rowid=?", nil, rowid)
 		if err != nil {

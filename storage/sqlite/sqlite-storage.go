@@ -18,7 +18,7 @@ type conn = *sqlite.Conn
 
 func initConn(conn conn) error {
 	return sqlitex.ExecScript(conn, `
-create table if not exists blobs(
+create table if not exists blob(
 	name text,
 	last_used timestamp default (datetime('now')),
 	data blob,
@@ -63,7 +63,7 @@ func (i instance) unlockConn() {
 func (i instance) Readdirnames() (names []string, err error) {
 	prefix := i.location + "/"
 	i.withConn(func(conn conn) {
-		err = sqlitex.Exec(conn, "select name from blobs where name like ?", func(stmt *sqlite.Stmt) error {
+		err = sqlitex.Exec(conn, "select name from blob where name like ?", func(stmt *sqlite.Stmt) error {
 			names = append(names, stmt.ColumnText(0)[len(prefix):])
 			return nil
 		}, prefix+"%")
@@ -74,7 +74,7 @@ func (i instance) Readdirnames() (names []string, err error) {
 
 func (i instance) getBlobRowid(conn conn) (rowid int64, err error) {
 	rows := 0
-	err = sqlitex.Exec(conn, "select rowid from blobs where name=?", func(stmt *sqlite.Stmt) error {
+	err = sqlitex.Exec(conn, "select rowid from blob where name=?", func(stmt *sqlite.Stmt) error {
 		rowid = stmt.ColumnInt64(0)
 		rows++
 		return nil
@@ -122,7 +122,7 @@ func (i instance) openBlob(conn conn, write, updateAccess bool) (*sqlite.Blob, e
 		return nil, err
 	}
 	if updateAccess {
-		err = sqlitex.Exec(conn, "update blobs set last_used=datetime('now') where rowid=?", nil, rowid)
+		err = sqlitex.Exec(conn, "update blob set last_used=datetime('now') where rowid=?", nil, rowid)
 		if err != nil {
 			err = fmt.Errorf("updating last_used: %w", err)
 			return nil, err
@@ -131,7 +131,7 @@ func (i instance) openBlob(conn conn, write, updateAccess bool) (*sqlite.Blob, e
 			panic(conn.Changes())
 		}
 	}
-	return conn.OpenBlob("main", "blobs", "data", rowid, write)
+	return conn.OpenBlob("main", "blob", "data", rowid, write)
 }
 
 func (i instance) Put(reader io.Reader) (err error) {
@@ -141,7 +141,7 @@ func (i instance) Put(reader io.Reader) (err error) {
 		return err
 	}
 	i.withConn(func(conn conn) {
-		err = sqlitex.Exec(conn, "insert or replace into blobs(name, data) values(?, ?)", nil, i.location, buf.Bytes())
+		err = sqlitex.Exec(conn, "insert or replace into blob(name, data) values(?, ?)", nil, i.location, buf.Bytes())
 	})
 	return
 }
@@ -213,7 +213,7 @@ func (i instance) WriteAt(bytes []byte, i2 int64) (int, error) {
 
 func (i instance) Delete() (err error) {
 	i.withConn(func(conn conn) {
-		err = sqlitex.Exec(conn, "delete from blobs where name=?", nil, i.location)
+		err = sqlitex.Exec(conn, "delete from blob where name=?", nil, i.location)
 	})
 	return
 }

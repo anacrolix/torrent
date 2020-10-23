@@ -1,0 +1,11 @@
+with recursive excess(
+	usage_with,
+	last_used,
+	blob_rowid,
+	data_length
+) as (
+	select * from (select (select sum(length(data)) from blob), last_used, rowid, length(data) from blob order by last_used, rowid limit 1)
+	union all
+	select usage_with-data_length, blob.last_used, blob.rowid, length(data) from excess join blob
+		on blob.rowid=(select rowid from blob where (last_used, rowid) > (excess.last_used, blob_rowid))
+) select * from excess limit 10;

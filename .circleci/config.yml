@@ -6,7 +6,7 @@ jobs:
     # docker:
     #   - image: cimg/go:1.13
     environment:
-      GO_BRANCH: release-branch.go1.14
+      GO_BRANCH: release-branch.go1.15
     steps:
       - run: echo $CIRCLE_WORKING_DIRECTORY
       - run: echo $PWD

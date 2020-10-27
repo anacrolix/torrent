@@ -209,10 +209,6 @@ func (cn *PeerConn) locker() *lockWithDeferreds {
 	return cn.t.cl.locker()
 }
 
-func (cn *PeerConn) localAddr() net.Addr {
-	return cn.conn.LocalAddr()
-}
-
 func (cn *peer) supportsExtension(ext pp.ExtensionName) bool {
 	_, ok := cn.PeerExtensionIDs[ext]
 	return ok

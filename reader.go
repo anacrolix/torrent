@@ -73,20 +73,6 @@ func (r *reader) SetReadahead(readahead int64) {
 	r.posChanged()
 }
 
-func (r *reader) readable(off int64) (ret bool) {
-	if r.t.closed.IsSet() {
-		return true
-	}
-	req, ok := r.t.offsetRequest(r.torrentOffset(off))
-	if !ok {
-		panic(off)
-	}
-	if r.responsive {
-		return r.t.haveChunk(req)
-	}
-	return r.t.pieceComplete(pieceIndex(req.Index))
-}
-
 // How many bytes are available to read. Max is the most we could require.
 func (r *reader) available(off, max int64) (ret int64) {
 	off += r.offset

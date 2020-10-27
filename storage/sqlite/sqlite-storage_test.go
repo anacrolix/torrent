@@ -24,7 +24,7 @@ func TestSimultaneousIncrementalBlob(t *testing.T) {
 		10)
 	require.NoError(t, err)
 	defer pool.Close()
-	p, err := NewProviderPool(pool)
+	p, err := NewProviderPool(pool, 10)
 	require.NoError(t, err)
 	a, err := p.NewInstance("a")
 	require.NoError(t, err)

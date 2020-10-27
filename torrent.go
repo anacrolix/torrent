@@ -1147,9 +1147,19 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 
 // Non-blocking read. Client lock is not required.
 func (t *Torrent) readAt(b []byte, off int64) (n int, err error) {
-	p := &t.pieces[off/t.info.PieceLength]
-	p.waitNoPendingWrites()
-	return p.Storage().ReadAt(b, off-p.Info().Offset())
+	for len(b) != 0 {
+		p := &t.pieces[off/t.info.PieceLength]
+		p.waitNoPendingWrites()
+		var n1 int
+		n1, err = p.Storage().ReadAt(b, off-p.Info().Offset())
+		if n1 == 0 {
+			break
+		}
+		off += int64(n1)
+		n += n1
+		b = b[n1:]
+	}
+	return
 }
 
 // Returns an error if the metadata was completed, but couldn't be set for

@@ -204,6 +204,8 @@ func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error) (avail int64, e
 	}
 }
 
+// Adds the reader's torrent offset to the reader object offset (for example the reader might be
+// constrainted to a particular file within the torrent).
 func (r *reader) torrentOffset(readerPos int64) int64 {
 	return r.offset + readerPos
 }
@@ -220,10 +222,9 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 		if avail == 0 {
 			return
 		}
-		pi := pieceIndex(r.torrentOffset(pos) / r.t.info.PieceLength)
-		ip := r.t.info.Piece(pi)
-		po := r.torrentOffset(pos) % r.t.info.PieceLength
-		b1 := missinggo.LimitLen(b, ip.Length()-po, avail)
+		firstPieceIndex := pieceIndex(r.torrentOffset(pos) / r.t.info.PieceLength)
+		firstPieceOffset := r.torrentOffset(pos) % r.t.info.PieceLength
+		b1 := missinggo.LimitLen(b, avail)
 		n, err = r.t.readAt(b1, r.torrentOffset(pos))
 		if n != 0 {
 			err = nil
@@ -233,9 +234,9 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 		// TODO: Just reset pieces in the readahead window. This might help
 		// prevent thrashing with small caches and file and piece priorities.
 		r.log(log.Fstr("error reading torrent %s piece %d offset %d, %d bytes: %v",
-			r.t.infoHash.HexString(), pi, po, len(b1), err))
-		if !r.t.updatePieceCompletion(pi) {
-			r.log(log.Fstr("piece %d completion unchanged", pi))
+			r.t.infoHash.HexString(), firstPieceIndex, firstPieceOffset, len(b1), err))
+		if !r.t.updatePieceCompletion(firstPieceIndex) {
+			r.log(log.Fstr("piece %d completion unchanged", firstPieceIndex))
 		}
 		r.t.cl.unlock()
 	}

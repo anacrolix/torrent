@@ -95,6 +95,9 @@ func (r *reader) available(off, max int64) (ret int64) {
 		if !ok {
 			break
 		}
+		if !r.responsive && !r.t.pieceComplete(pieceIndex(req.Index)) {
+			break
+		}
 		if !r.t.haveChunk(req) {
 			break
 		}
@@ -181,13 +184,24 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 
 // Wait until some data should be available to read. Tickles the client if it
 // isn't. Returns how much should be readable without blocking.
-func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error) (avail int64) {
+func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error) (avail int64, err error) {
 	r.t.cl.lock()
 	defer r.t.cl.unlock()
-	for !r.readable(pos) && *ctxErr == nil {
+	for {
+		avail = r.available(pos, wanted)
+		if avail != 0 {
+			return
+		}
+		if r.t.closed.IsSet() {
+			err = errors.New("torrent closed")
+			return
+		}
+		if *ctxErr != nil {
+			err = *ctxErr
+			return
+		}
 		r.waitReadable(pos)
 	}
-	return r.available(pos, wanted)
 }
 
 func (r *reader) torrentOffset(readerPos int64) int64 {
@@ -201,16 +215,10 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 		return
 	}
 	for {
-		avail := r.waitAvailable(pos, int64(len(b)), ctxErr)
+		var avail int64
+		avail, err = r.waitAvailable(pos, int64(len(b)), ctxErr)
 		if avail == 0 {
-			if r.t.closed.IsSet() {
-				err = errors.New("torrent closed")
-				return
-			}
-			if *ctxErr != nil {
-				err = *ctxErr
-				return
-			}
+			return
 		}
 		pi := pieceIndex(r.torrentOffset(pos) / r.t.info.PieceLength)
 		ip := r.t.info.Piece(pi)

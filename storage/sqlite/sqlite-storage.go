@@ -221,20 +221,48 @@ func (i instance) Stat() (ret os.FileInfo, err error) {
 
 func (i instance) ReadAt(p []byte, off int64) (n int, err error) {
 	i.withConn(func(conn conn) {
-		var blob *sqlite.Blob
-		blob, err = i.openBlob(conn, false, true)
-		if err != nil {
-			return
+		if false {
+			var blob *sqlite.Blob
+			blob, err = i.openBlob(conn, false, true)
+			if err != nil {
+				return
+			}
+			defer blob.Close()
+			if off >= blob.Size() {
+				err = io.EOF
+				return
+			}
+			if off+int64(len(p)) > blob.Size() {
+				p = p[:blob.Size()-off]
+			}
+			n, err = blob.ReadAt(p, off)
+		} else {
+			gotRow := false
+			err = sqlitex.Exec(
+				conn,
+				"select substr(data, ?, ?) from blob where name=?",
+				func(stmt *sqlite.Stmt) error {
+					if gotRow {
+						panic("found multiple matching blobs")
+					} else {
+						gotRow = true
+					}
+					n = stmt.ColumnBytes(0, p)
+					return nil
+				},
+				off+1, len(p), i.location,
+			)
+			if err != nil {
+				return
+			}
+			if !gotRow {
+				err = errors.New("blob not found")
+				return
+			}
+			if n < len(p) {
+				err = io.EOF
+			}
 		}
-		defer blob.Close()
-		if off >= blob.Size() {
-			err = io.EOF
-			return
-		}
-		if off+int64(len(p)) > blob.Size() {
-			p = p[:blob.Size()-off]
-		}
-		n, err = blob.ReadAt(p, off)
 	})
 	return
 }

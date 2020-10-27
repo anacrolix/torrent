@@ -140,7 +140,9 @@ func (r *reader) Read(b []byte) (n int, err error) {
 }
 
 func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
-	// This is set under the Client lock if the Context is canceled.
+	// This is set under the Client lock if the Context is canceled. I think we coordinate on a
+	// separate variable so as to avoid false negatives with race conditions due to Contexts being
+	// synchronized.
 	var ctxErr error
 	if ctx.Done() != nil {
 		ctx, cancel := context.WithCancel(ctx)
@@ -158,22 +160,19 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 	// other purposes. That seems reasonable, but unusual.
 	r.opMu.Lock()
 	defer r.opMu.Unlock()
-	for len(b) != 0 {
-		var n1 int
-		n1, err = r.readOnceAt(b, r.pos, &ctxErr)
-		if n1 == 0 {
-			if err == nil {
-				panic("expected error")
-			}
-			break
+	n, err = r.readOnceAt(b, r.pos, &ctxErr)
+	if n == 0 {
+		if err == nil {
+			panic("expected error")
+		} else {
+			return
 		}
-		b = b[n1:]
-		n += n1
-		r.mu.Lock()
-		r.pos += int64(n1)
-		r.posChanged()
-		r.mu.Unlock()
 	}
+
+	r.mu.Lock()
+	r.pos += int64(n)
+	r.posChanged()
+	r.mu.Unlock()
 	if r.pos >= r.length {
 		err = io.EOF
 	} else if err == io.EOF {
@@ -184,7 +183,7 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 
 // Wait until some data should be available to read. Tickles the client if it
 // isn't. Returns how much should be readable without blocking.
-func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error) (avail int64, err error) {
+func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error, wait bool) (avail int64, err error) {
 	r.t.cl.lock()
 	defer r.t.cl.unlock()
 	for {
@@ -198,6 +197,9 @@ func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error) (avail int64, e
 		}
 		if *ctxErr != nil {
 			err = *ctxErr
+			return
+		}
+		if !wait {
 			return
 		}
 		r.waitReadable(pos)
@@ -218,7 +220,7 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 	}
 	for {
 		var avail int64
-		avail, err = r.waitAvailable(pos, int64(len(b)), ctxErr)
+		avail, err = r.waitAvailable(pos, int64(len(b)), ctxErr, n == 0)
 		if avail == 0 {
 			return
 		}

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"crawshaw.io/sqlite"
 	"crawshaw.io/sqlite/sqlitex"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/stretchr/testify/assert"
@@ -16,15 +17,17 @@ import (
 )
 
 func TestSimultaneousIncrementalBlob(t *testing.T) {
+	const poolSize = 10
 	pool, err := sqlitex.Open(
 		// We don't do this in memory, because it seems to have some locking issues with updating
 		// last_used.
 		fmt.Sprintf("file:%s", filepath.Join(t.TempDir(), "sqlite3.db")),
-		0,
-		10)
+		// We can't disable WAL in this test because then we can't open 2 blobs simultaneously for read.
+		sqlite.OpenFlagsDefault, /* &^sqlite.SQLITE_OPEN_WAL */
+		poolSize)
 	require.NoError(t, err)
 	defer pool.Close()
-	p, err := NewProviderPool(pool, 10)
+	p, err := NewProviderPool(pool, poolSize, true)
 	require.NoError(t, err)
 	a, err := p.NewInstance("a")
 	require.NoError(t, err)

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"crawshaw.io/sqlite"
+	"crawshaw.io/sqlite/sqlitex"
 	"github.com/anacrolix/missinggo/v2/filecache"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -275,22 +276,42 @@ func sqliteClientStorageFactory(connPathMaker func(dataDir string) string) stora
 	return func(dataDir string) storage.ClientImplCloser {
 		path := connPathMaker(dataDir)
 		log.Printf("opening sqlite db at %q", path)
-		conn, err := sqlite.OpenConn(path, 0)
-		if err != nil {
-			panic(err)
+		if true {
+			conn, err := sqlite.OpenConn(path, 0)
+			if err != nil {
+				panic(err)
+			}
+			prov, err := sqliteStorage.NewProvider(conn)
+			if err != nil {
+				panic(err)
+			}
+			return struct {
+				storage.ClientImpl
+				io.Closer
+			}{
+				storage.NewResourcePieces(prov),
+				conn,
+			}
+		} else {
+			// Test pool implementation for SQLITE_BUSY when we want SQLITE_LOCKED (so the
+			// crawshaw.io/sqlite unlock notify handler kicks in for us).
+			const poolSize = 1
+			pool, err := sqlitex.Open(path, 0, poolSize)
+			if err != nil {
+				panic(err)
+			}
+			prov, err := sqliteStorage.NewProviderPool(pool, poolSize, false)
+			if err != nil {
+				panic(err)
+			}
+			return struct {
+				storage.ClientImpl
+				io.Closer
+			}{
+				storage.NewResourcePieces(prov),
+				pool,
+			}
 		}
-		prov, err := sqliteStorage.NewProvider(conn)
-		if err != nil {
-			panic(err)
-		}
-		return struct {
-			storage.ClientImpl
-			io.Closer
-		}{
-			storage.NewResourcePieces(prov),
-			conn,
-		}
-
 	}
 }
 
@@ -308,7 +329,7 @@ func TestClientTransferVarious(t *testing.T) {
 			return "file:" + filepath.Join(dataDir, "sqlite.db")
 		})},
 		{"SqliteMemory", sqliteClientStorageFactory(func(dataDir string) string {
-			return "file:memory:?mode=memory"
+			return "file:memory:?mode=memory&cache=shared"
 		})},
 	} {
 		t.Run(fmt.Sprintf("LeecherStorage=%s", ls.name), func(t *testing.T) {

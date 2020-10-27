@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -18,8 +19,22 @@ import (
 
 type conn = *sqlite.Conn
 
-func initConn(conn conn) error {
-	return sqlitex.ExecTransient(conn, `pragma synchronous=off`, nil)
+func initConn(conn conn, wal bool) error {
+	err := sqlitex.ExecTransient(conn, `pragma synchronous=off`, nil)
+	if err != nil {
+		return err
+	}
+	if !wal {
+		err = sqlitex.ExecTransient(conn, `pragma journal_mode=off`, nil)
+		if err != nil {
+			return err
+		}
+	}
+	err = sqlitex.ExecTransient(conn, `pragma mmap_size=1000000000`, nil)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func initSchema(conn conn) error {
@@ -81,7 +96,7 @@ func (me *poolFromConn) Put(conn conn) {
 }
 
 func NewProvider(conn *sqlite.Conn) (_ *provider, err error) {
-	err = initConn(conn)
+	err = initConn(conn, false)
 	if err != nil {
 		return
 	}
@@ -89,8 +104,9 @@ func NewProvider(conn *sqlite.Conn) (_ *provider, err error) {
 	return &provider{&poolFromConn{conn: conn}}, err
 }
 
-func NewProviderPool(pool *sqlitex.Pool, numConns int) (_ *provider, err error) {
-	_, err = initPoolConns(context.TODO(), pool, numConns)
+// Needs the pool size so it can initialize all the connections with pragmas.
+func NewProviderPool(pool *sqlitex.Pool, numConns int, wal bool) (_ *provider, err error) {
+	_, err = initPoolConns(context.TODO(), pool, numConns, wal)
 	if err != nil {
 		return
 	}
@@ -100,7 +116,7 @@ func NewProviderPool(pool *sqlitex.Pool, numConns int) (_ *provider, err error) 
 	return &provider{pool: pool}, err
 }
 
-func initPoolConns(ctx context.Context, pool *sqlitex.Pool, numConn int) (numInited int, err error) {
+func initPoolConns(ctx context.Context, pool *sqlitex.Pool, numConn int, wal bool) (numInited int, err error) {
 	var conns []conn
 	defer func() {
 		for _, c := range conns {
@@ -113,7 +129,7 @@ func initPoolConns(ctx context.Context, pool *sqlitex.Pool, numConn int) (numIni
 			break
 		}
 		conns = append(conns, conn)
-		err = initConn(conn)
+		err = initConn(conn, wal)
 		if err != nil {
 			err = fmt.Errorf("initing conn %v: %w", len(conns), err)
 			return
@@ -143,6 +159,13 @@ type instance struct {
 
 func (i instance) withConn(with func(conn conn)) {
 	conn := i.p.pool.Get(context.TODO())
+	//err := sqlitex.Exec(conn, "pragma synchronous", func(stmt *sqlite.Stmt) error {
+	//	log.Print(stmt.ColumnText(0))
+	//	return nil
+	//})
+	//if err != nil {
+	//	log.Print(err)
+	//}
 	defer i.p.pool.Put(conn)
 	with(conn)
 }
@@ -238,7 +261,15 @@ func (i instance) Put(reader io.Reader) (err error) {
 		return err
 	}
 	i.withConn(func(conn conn) {
-		err = sqlitex.Exec(conn, "insert or replace into blob(name, data) values(?, ?)", nil, i.location, buf.Bytes())
+		for range iter.N(10) {
+			err = sqlitex.Exec(conn, "insert or replace into blob(name, data) values(?, ?)", nil, i.location, buf.Bytes())
+			if err, ok := err.(sqlite.Error); ok && err.Code == sqlite.SQLITE_BUSY {
+				log.Print("sqlite busy")
+				time.Sleep(time.Second)
+				continue
+			}
+			break
+		}
 	})
 	return
 }

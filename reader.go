@@ -199,6 +199,10 @@ func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error, wait bool) (ava
 			err = *ctxErr
 			return
 		}
+		if r.t.dataDownloadDisallowed || !r.t.networkingEnabled {
+			err = errors.New("downloading disabled and data not already available")
+			return
+		}
 		if !wait {
 			return
 		}

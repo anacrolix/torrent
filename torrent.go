@@ -2024,6 +2024,7 @@ func (t *Torrent) onWriteChunkErr(err error) {
 		go t.userOnWriteChunkErr(err)
 		return
 	}
+	t.logger.WithDefaultLevel(log.Critical).Printf("default chunk write error handler: disabling data download")
 	t.disallowDataDownloadLocked()
 }
 
@@ -2038,12 +2039,14 @@ func (t *Torrent) disallowDataDownloadLocked() {
 	t.iterPeers(func(c *peer) {
 		c.updateRequests()
 	})
+	t.tickleReaders()
 }
 
 func (t *Torrent) AllowDataDownload() {
 	t.cl.lock()
 	defer t.cl.unlock()
 	t.dataDownloadDisallowed = false
+	t.tickleReaders()
 	t.iterPeers(func(c *peer) {
 		c.updateRequests()
 	})

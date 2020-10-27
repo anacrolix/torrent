@@ -2,6 +2,8 @@ package test
 
 import (
 	"errors"
+	"io"
+	"io/ioutil"
 	"os"
 	"sync"
 	"testing"
@@ -73,7 +75,27 @@ func testReceiveChunkStorageFailure(t *testing.T, seederFast bool) {
 	// Tell the seeder to find the leecher. Is it guaranteed seeders will always try to do this?
 	seederTorrent.AddClientPeer(leecherClient)
 	<-leecherTorrent.GotInfo()
-	assertReadAllGreeting(t, leecherTorrent.NewReader())
+	r := leecherTorrent.Files()[0].NewReader()
+	defer r.Close()
+	// We can't use assertReadAllGreeting here, because the default storage write error handler
+	// disables data downloads, which now causes Readers to error when they're blocked.
+	if false {
+		assertReadAllGreeting(t, leecherTorrent.NewReader())
+	} else {
+		for func() bool {
+			// We don't seem to need to seek, but that's probably just because the storage failure is
+			// happening on the first read.
+			r.Seek(0, io.SeekStart)
+			output, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Logf("got error while reading: %v", err)
+				return true
+			}
+			assert.EqualValues(t, testutil.GreetingFileContents, output)
+			return false
+		}() {
+		}
+	}
 	// TODO: Check that PeerConns fastEnabled matches seederFast?
 	//select {}
 }

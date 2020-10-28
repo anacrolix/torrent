@@ -1493,17 +1493,26 @@ func (c *peer) deleteRequest(r request) bool {
 	if n < 0 {
 		panic(n)
 	}
-	// If a request is rejected, updating the requests for the current peer first will miss the
-	// opportunity to try other peers for that request instead. I'm not sure about the interested
-	// check in the following loop however.
-	if false {
+	// If a request fails, updating the requests for the current peer first may miss the opportunity
+	// to try other peers for that request instead, depending on the request strategy. This might
+	// only affect webseed peers though, since they synchronously issue new requests: PeerConns do
+	// it in the writer routine.
+	const updateCurrentConnRequestsFirst = false
+	if updateCurrentConnRequestsFirst {
 		c.updateRequests()
 	}
+	// Give other conns a chance to pick up the request.
 	c.t.iterPeers(func(_c *peer) {
-		if !_c.interested && _c != c && c.peerHasPiece(pieceIndex(r.Index)) {
+		// We previously checked that the peer wasn't interested to to only wake connections that
+		// were unable to issue requests due to starvation by the request strategy. There could be
+		// performance ramifications.
+		if _c != c && c.peerHasPiece(pieceIndex(r.Index)) {
 			_c.updateRequests()
 		}
 	})
+	if !updateCurrentConnRequestsFirst {
+		c.updateRequests()
+	}
 	return true
 }
 

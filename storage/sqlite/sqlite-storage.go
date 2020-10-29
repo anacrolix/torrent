@@ -60,10 +60,10 @@ with recursive excess(
 	blob_rowid,
 	data_length
 ) as (
-	select * from (select (select sum(length(data)) from blob) as usage_with, last_used, rowid, length(data) from blob order by last_used, rowid limit 1)
+	select * from (select (select sum(length(cast(data as blob))) from blob) as usage_with, last_used, rowid, length(cast(data as blob)) from blob order by last_used, rowid limit 1)
 		where usage_with >= (select value from setting where name='capacity')
 	union all
-	select usage_with-data_length, blob.last_used, blob.rowid, length(data) from excess join blob
+	select usage_with-data_length, blob.last_used, blob.rowid, length(cast(data as blob)) from excess join blob
 		on blob.rowid=(select rowid from blob where (last_used, rowid) > (excess.last_used, blob_rowid))
 	where usage_with >= (select value from setting where name='capacity')
 ) select * from excess;
@@ -262,7 +262,10 @@ func (i instance) Put(reader io.Reader) (err error) {
 	}
 	i.withConn(func(conn conn) {
 		for range iter.N(10) {
-			err = sqlitex.Exec(conn, "insert or replace into blob(name, data) values(?, ?)", nil, i.location, buf.Bytes())
+			err = sqlitex.Exec(conn,
+				"insert or replace into blob(name, data) values(?, cast(? as blob))",
+				nil,
+				i.location, buf.Bytes())
 			if err, ok := err.(sqlite.Error); ok && err.Code == sqlite.SQLITE_BUSY {
 				log.Print("sqlite busy")
 				time.Sleep(time.Second)
@@ -336,7 +339,7 @@ func (i instance) ReadAt(p []byte, off int64) (n int, err error) {
 			gotRow := false
 			err = sqlitex.Exec(
 				conn,
-				"select substr(data, ?, ?) from blob where name=?",
+				"select substr(cast(data as blob), ?, ?) from blob where name=?",
 				func(stmt *sqlite.Stmt) error {
 					if gotRow {
 						panic("found multiple matching blobs")

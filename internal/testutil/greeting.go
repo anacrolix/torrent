@@ -21,7 +21,8 @@ var Greeting = Torrent{
 }
 
 const (
-	GreetingFileContents = "hello, world\n"
+	// A null in the middle triggers an error if SQLite stores data as text instead of blob.
+	GreetingFileContents = "hello,\x00world\n"
 	GreetingFileName     = "greeting"
 )
 

@@ -2,33 +2,40 @@ package sqliteStorage
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"path/filepath"
 	"sync"
 	"testing"
 
-	"crawshaw.io/sqlite"
-	"crawshaw.io/sqlite/sqlitex"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+func newConnsAndProv(t *testing.T, opts NewPoolOpts) (ConnPool, *provider) {
+	opts.Path = filepath.Join(t.TempDir(), "sqlite3.db")
+	conns, provOpts, err := NewPool(opts)
+	require.NoError(t, err)
+	t.Cleanup(func() { conns.Close() })
+	prov, err := NewProvider(conns, provOpts)
+	require.NoError(t, err)
+	return conns, prov
+}
+
+func TestTextBlobSize(t *testing.T) {
+	_, prov := newConnsAndProv(t, NewPoolOpts{})
+	a, _ := prov.NewInstance("a")
+	a.Put(bytes.NewBufferString("\x00hello"))
+	fi, _ := a.Stat()
+	assert.EqualValues(t, 6, fi.Size())
+}
+
 func TestSimultaneousIncrementalBlob(t *testing.T) {
-	const poolSize = 10
-	pool, err := sqlitex.Open(
-		// We don't do this in memory, because it seems to have some locking issues with updating
-		// last_used.
-		fmt.Sprintf("file:%s", filepath.Join(t.TempDir(), "sqlite3.db")),
-		// We can't disable WAL in this test because then we can't open 2 blobs simultaneously for read.
-		sqlite.OpenFlagsDefault, /* &^sqlite.SQLITE_OPEN_WAL */
-		poolSize)
-	require.NoError(t, err)
-	defer pool.Close()
-	p, err := NewProviderPool(pool, poolSize, true)
-	require.NoError(t, err)
+	_, p := newConnsAndProv(t, NewPoolOpts{
+		NumConns:            2,
+		ConcurrentBlobReads: true,
+	})
 	a, err := p.NewInstance("a")
 	require.NoError(t, err)
 	const contents = "hello, world"

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"crawshaw.io/sqlite/sqlitex"
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/resource"
+	"github.com/anacrolix/torrent/storage"
 )
 
 type conn = *sqlite.Conn
@@ -77,7 +80,75 @@ end;
 `)
 }
 
-// Emulates a pool from a single Conn.
+// A convenience function that creates a connection pool, resource provider, and a pieces storage
+// ClientImpl and returns them all with a Close attached.
+func NewPiecesStorage(opts NewPoolOpts) (_ storage.ClientImplCloser, err error) {
+	conns, provOpts, err := NewPool(opts)
+	if err != nil {
+		return
+	}
+	prov, err := NewProvider(conns, provOpts)
+	if err != nil {
+		return
+	}
+	store := storage.NewResourcePieces(prov)
+	return struct {
+		storage.ClientImpl
+		io.Closer
+	}{
+		store,
+		conns,
+	}, nil
+}
+
+type NewPoolOpts struct {
+	Path     string
+	Memory   bool
+	NumConns int
+	// Forces WAL, disables shared caching.
+	ConcurrentBlobReads bool
+}
+
+// There's some overlap here with NewPoolOpts, and I haven't decided what needs to be done. For now,
+// the fact that the pool opts are a superset, means our helper NewPiecesStorage can just take the
+// top-level option type.
+type ProviderOpts struct {
+	NumConns int
+	// Concurrent blob reads require WAL.
+	ConcurrentBlobRead bool
+}
+
+func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
+	if opts.NumConns == 0 {
+		opts.NumConns = runtime.NumCPU()
+	}
+	if opts.Memory {
+		opts.Path = ":memory:"
+	}
+	values := make(url.Values)
+	if !opts.ConcurrentBlobReads {
+		values.Add("cache", "shared")
+	}
+	path := fmt.Sprintf("file:%s?%s", opts.Path, values.Encode())
+	conns, err := func() (ConnPool, error) {
+		switch opts.NumConns {
+		case 1:
+			conn, err := sqlite.OpenConn(fmt.Sprintf("file:%s", opts.Path), 0)
+			return &poolFromConn{conn: conn}, err
+		default:
+			return sqlitex.Open(path, 0, opts.NumConns)
+		}
+	}()
+	if err != nil {
+		return
+	}
+	return conns, ProviderOpts{
+		NumConns:           opts.NumConns,
+		ConcurrentBlobRead: opts.ConcurrentBlobReads,
+	}, nil
+}
+
+// Emulates a ConnPool from a single Conn. Might be faster than using a sqlitex.Pool.
 type poolFromConn struct {
 	mu   sync.Mutex
 	conn conn
@@ -95,18 +166,13 @@ func (me *poolFromConn) Put(conn conn) {
 	me.mu.Unlock()
 }
 
-func NewProvider(conn *sqlite.Conn) (_ *provider, err error) {
-	err = initConn(conn, false)
-	if err != nil {
-		return
-	}
-	err = initSchema(conn)
-	return &provider{&poolFromConn{conn: conn}}, err
+func (me *poolFromConn) Close() error {
+	return me.conn.Close()
 }
 
-// Needs the pool size so it can initialize all the connections with pragmas.
-func NewProviderPool(pool *sqlitex.Pool, numConns int, wal bool) (_ *provider, err error) {
-	_, err = initPoolConns(context.TODO(), pool, numConns, wal)
+// Needs the ConnPool size so it can initialize all the connections with pragmas.
+func NewProvider(pool ConnPool, opts ProviderOpts) (_ *provider, err error) {
+	_, err = initPoolConns(context.TODO(), pool, opts.NumConns, opts.ConcurrentBlobRead)
 	if err != nil {
 		return
 	}
@@ -116,7 +182,7 @@ func NewProviderPool(pool *sqlitex.Pool, numConns int, wal bool) (_ *provider, e
 	return &provider{pool: pool}, err
 }
 
-func initPoolConns(ctx context.Context, pool *sqlitex.Pool, numConn int, wal bool) (numInited int, err error) {
+func initPoolConns(ctx context.Context, pool ConnPool, numConn int, wal bool) (numInited int, err error) {
 	var conns []conn
 	defer func() {
 		for _, c := range conns {
@@ -139,13 +205,14 @@ func initPoolConns(ctx context.Context, pool *sqlitex.Pool, numConn int, wal boo
 	return
 }
 
-type pool interface {
+type ConnPool interface {
 	Get(context.Context) conn
 	Put(conn)
+	Close() error
 }
 
 type provider struct {
-	pool pool
+	pool ConnPool
 }
 
 func (p *provider) NewInstance(s string) (resource.Instance, error) {

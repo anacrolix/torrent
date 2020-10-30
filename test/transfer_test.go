@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"crawshaw.io/sqlite"
-	"crawshaw.io/sqlite/sqlitex"
 	"github.com/anacrolix/missinggo/v2/filecache"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -272,46 +270,15 @@ func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
 	testClientTransferSmallCache(t, false, -1)
 }
 
-func sqliteClientStorageFactory(connPathMaker func(dataDir string) string) storageFactory {
+func sqliteClientStorageFactory(connOptsMaker func(dataDir string) sqliteStorage.NewPoolOpts) storageFactory {
 	return func(dataDir string) storage.ClientImplCloser {
-		path := connPathMaker(dataDir)
-		log.Printf("opening sqlite db at %q", path)
-		if true {
-			conn, err := sqlite.OpenConn(path, 0)
-			if err != nil {
-				panic(err)
-			}
-			prov, err := sqliteStorage.NewProvider(conn)
-			if err != nil {
-				panic(err)
-			}
-			return struct {
-				storage.ClientImpl
-				io.Closer
-			}{
-				storage.NewResourcePieces(prov),
-				conn,
-			}
-		} else {
-			// Test pool implementation for SQLITE_BUSY when we want SQLITE_LOCKED (so the
-			// crawshaw.io/sqlite unlock notify handler kicks in for us).
-			const poolSize = 1
-			pool, err := sqlitex.Open(path, 0, poolSize)
-			if err != nil {
-				panic(err)
-			}
-			prov, err := sqliteStorage.NewProviderPool(pool, poolSize, false)
-			if err != nil {
-				panic(err)
-			}
-			return struct {
-				storage.ClientImpl
-				io.Closer
-			}{
-				storage.NewResourcePieces(prov),
-				pool,
-			}
+		connOpts := connOptsMaker(dataDir)
+		log.Printf("opening sqlite db: %#v", connOpts)
+		ret, err := sqliteStorage.NewPiecesStorage(connOpts)
+		if err != nil {
+			panic(err)
 		}
+		return ret
 	}
 }
 
@@ -325,11 +292,15 @@ func TestClientTransferVarious(t *testing.T) {
 			Wrapper: fileCachePieceResourceStorage,
 		})},
 		{"Boltdb", storage.NewBoltDB},
-		{"SqliteFile", sqliteClientStorageFactory(func(dataDir string) string {
-			return "file:" + filepath.Join(dataDir, "sqlite.db")
+		{"SqliteFile", sqliteClientStorageFactory(func(dataDir string) sqliteStorage.NewPoolOpts {
+			return sqliteStorage.NewPoolOpts{
+				Path: filepath.Join(dataDir, "sqlite.db"),
+			}
 		})},
-		{"SqliteMemory", sqliteClientStorageFactory(func(dataDir string) string {
-			return "file:memory:?mode=memory&cache=shared"
+		{"SqliteMemory", sqliteClientStorageFactory(func(dataDir string) sqliteStorage.NewPoolOpts {
+			return sqliteStorage.NewPoolOpts{
+				Memory: true,
+			}
 		})},
 	} {
 		t.Run(fmt.Sprintf("LeecherStorage=%s", ls.name), func(t *testing.T) {

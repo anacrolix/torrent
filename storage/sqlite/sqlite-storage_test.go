@@ -17,9 +17,11 @@ func newConnsAndProv(t *testing.T, opts NewPoolOpts) (ConnPool, *provider) {
 	opts.Path = filepath.Join(t.TempDir(), "sqlite3.db")
 	conns, provOpts, err := NewPool(opts)
 	require.NoError(t, err)
-	t.Cleanup(func() { conns.Close() })
+	// sqlitex.Pool.Close doesn't like being called more than once. Let it slide for now.
+	//t.Cleanup(func() { conns.Close() })
 	prov, err := NewProvider(conns, provOpts)
 	require.NoError(t, err)
+	t.Cleanup(func() { prov.Close() })
 	return conns, prov
 }
 

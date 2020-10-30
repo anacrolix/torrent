@@ -1289,14 +1289,16 @@ func (c *peer) receiveChunk(msg *pp.Message) error {
 		torrent.Add("chunks received due to allowed fast", 1)
 	}
 
-	// Request has been satisfied.
-	if c.deleteRequest(req) {
-		if c.expectingChunks() {
-			c._chunksReceivedWhileExpecting++
+	defer func() {
+		// Request has been satisfied.
+		if c.deleteRequest(req) {
+			if c.expectingChunks() {
+				c._chunksReceivedWhileExpecting++
+			}
+		} else {
+			torrent.Add("chunks received unwanted", 1)
 		}
-	} else {
-		torrent.Add("chunks received unwanted", 1)
-	}
+	}()
 
 	// Do we actually want this chunk?
 	if t.haveChunk(req) {

@@ -33,7 +33,7 @@ func initConn(conn conn, wal bool) error {
 			return err
 		}
 	}
-	err = sqlitex.ExecTransient(conn, `pragma mmap_size=1000000000`, nil)
+	err = sqlitex.ExecTransient(conn, `pragma mmap_size=1000000000000`, nil)
 	if err != nil {
 		return err
 	}

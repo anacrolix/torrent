@@ -787,27 +787,18 @@ func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
 	return pp.Integer(t.info.PieceLength)
 }
 
-func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash, copyErr error) {
+func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash, err error) {
 	hash := pieceHash.New()
 	p := t.piece(piece)
 	p.waitNoPendingWrites()
-	ip := t.info.Piece(int(piece))
-	pl := ip.Length()
-	pieceReader := io.NewSectionReader(t.pieces[piece].Storage(), 0, pl)
-	var hashSource io.Reader
-	doCopy := func() {
-		// Return no error iff pl bytes are copied.
-		_, copyErr = io.CopyN(hash, hashSource, pl)
-	}
+	storagePiece := t.pieces[piece].Storage()
 	const logPieceContents = false
 	if logPieceContents {
 		var examineBuf bytes.Buffer
-		hashSource = io.TeeReader(pieceReader, &examineBuf)
-		doCopy()
-		log.Printf("hashed %q with copy err %v", examineBuf.Bytes(), copyErr)
+		err = storagePiece.WriteIncompleteTo(io.MultiWriter(hash, &examineBuf))
+		log.Printf("hashed %q with copy err %v", examineBuf.Bytes(), err)
 	} else {
-		hashSource = pieceReader
-		doCopy()
+		err = storagePiece.WriteIncompleteTo(hash)
 	}
 	missinggo.CopyExact(&ret, hash.Sum(nil))
 	return

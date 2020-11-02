@@ -13,10 +13,10 @@ import (
 )
 
 type piecePerResource struct {
-	p resource.Provider
+	p PieceProvider
 }
 
-func NewResourcePieces(p resource.Provider) ClientImpl {
+func NewResourcePieces(p PieceProvider) ClientImpl {
 	return &piecePerResource{
 		p: p,
 	}
@@ -41,9 +41,27 @@ func (s piecePerResource) Piece(p metainfo.Piece) PieceImpl {
 	}
 }
 
+type PieceProvider interface {
+	resource.Provider
+}
+
+type ConsecutiveChunkWriter interface {
+	WriteConsecutiveChunks(prefix string, _ io.Writer) error
+}
+
 type piecePerResourcePiece struct {
 	mp metainfo.Piece
 	rp resource.Provider
+}
+
+var _ IncompletePieceToWriter = piecePerResourcePiece{}
+
+func (s piecePerResourcePiece) WriteIncompleteTo(w io.Writer) error {
+	if ccw, ok := s.rp.(ConsecutiveChunkWriter); ok {
+		return ccw.WriteConsecutiveChunks(s.incompleteDirPath()+"/", w)
+	}
+	_, err := io.Copy(w, io.NewSectionReader(s.getChunks(), 0, s.mp.Length()))
+	return err
 }
 
 func (s piecePerResourcePiece) Completion() Completion {
@@ -73,6 +91,7 @@ func (s piecePerResourcePiece) ReadAt(b []byte, off int64) (int, error) {
 	if s.Completion().Complete {
 		return s.completed().ReadAt(b, off)
 	}
+	//panic("unexpected ReadAt of incomplete piece")
 	return s.getChunks().ReadAt(b, off)
 }
 

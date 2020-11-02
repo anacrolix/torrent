@@ -38,6 +38,10 @@ type PieceImpl interface {
 	Completion() Completion
 }
 
+type IncompletePieceToWriter interface {
+	WriteIncompleteTo(w io.Writer) error
+}
+
 type Completion struct {
 	Complete bool
 	Ok       bool

@@ -38,6 +38,16 @@ type Piece struct {
 	mip metainfo.Piece
 }
 
+func (p Piece) WriteIncompleteTo(w io.Writer) error {
+	if i, ok := p.PieceImpl.(IncompletePieceToWriter); ok {
+		return i.WriteIncompleteTo(w)
+	}
+	n := p.mip.Length()
+	r := io.NewSectionReader(p, 0, n)
+	_, err := io.CopyN(w, r, n)
+	return err
+}
+
 func (p Piece) WriteAt(b []byte, off int64) (n int, err error) {
 	// Callers should not be writing to completed pieces, but it's too
 	// expensive to be checking this on every single write using uncached

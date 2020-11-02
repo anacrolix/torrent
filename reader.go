@@ -3,6 +3,7 @@ package torrent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 
@@ -229,6 +230,15 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 			r.t.infoHash.HexString(), firstPieceIndex, firstPieceOffset, len(b1), err))
 		if !r.t.updatePieceCompletion(firstPieceIndex) {
 			r.log(log.Fstr("piece %d completion unchanged", firstPieceIndex))
+		}
+		// Update the rest of the piece completions in the readahead window, without alerting to
+		// changes (since only the first piece, the one above, could have generated the read error
+		// we're currently handling).
+		if r.pieces.begin != firstPieceIndex {
+			panic(fmt.Sprint(r.pieces.begin, firstPieceIndex))
+		}
+		for index := r.pieces.begin + 1; index < r.pieces.end; index++ {
+			r.t.updatePieceCompletion(index)
 		}
 		r.t.cl.unlock()
 	}

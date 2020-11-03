@@ -154,6 +154,7 @@ type NewPoolOpts struct {
 	NumConns int
 	// Forces WAL, disables shared caching.
 	ConcurrentBlobReads bool
+	DontInitSchema      bool
 }
 
 // There's some overlap here with NewPoolOpts, and I haven't decided what needs to be done. For now,
@@ -190,6 +191,14 @@ func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
 	if err != nil {
 		return
 	}
+	if !opts.DontInitSchema {
+		conn := conns.Get(context.TODO())
+		defer conns.Put(conn)
+		err = initSchema(conn)
+		if err != nil {
+			return
+		}
+	}
 	return conns, ProviderOpts{
 		NumConns:           opts.NumConns,
 		ConcurrentBlobRead: opts.ConcurrentBlobReads,
@@ -223,12 +232,6 @@ func (me *poolFromConn) Close() error {
 // the ConnPool (since it has to initialize all the connections anyway).
 func NewProvider(pool ConnPool, opts ProviderOpts) (_ *provider, err error) {
 	_, err = initPoolConns(context.TODO(), pool, opts.NumConns, true)
-	if err != nil {
-		return
-	}
-	conn := pool.Get(context.TODO())
-	defer pool.Put(conn)
-	err = initSchema(conn)
 	if err != nil {
 		return
 	}

@@ -325,33 +325,33 @@ func providerWriter(writes <-chan writeRequest, pool ConnPool) {
 		if !ok {
 			return
 		}
-		buf := []writeRequest{first}
-	buffer:
-		for {
-			select {
-			case wr, ok := <-writes:
-				if !ok {
-					break buffer
-				}
-				buf = append(buf, wr)
-			default:
-				break buffer
-			}
-		}
+		buf := []chan<- struct{}{first.done}
 		var cantFail error
 		func() {
 			conn := pool.Get(context.TODO())
 			defer pool.Put(conn)
 			defer sqlitex.Save(conn)(&cantFail)
-			for _, wr := range buf {
-				wr.query(conn)
+			first.query(conn)
+			for {
+				select {
+				case wr, ok := <-writes:
+					if ok {
+						buf = append(buf, wr.done)
+						wr.query(conn)
+						continue
+					}
+				default:
+				}
+				break
 			}
 		}()
+		// Not sure what to do if this failed.
 		if cantFail != nil {
 			panic(cantFail)
 		}
-		for _, wr := range buf {
-			close(wr.done)
+		// Signal done after we know the transaction succeeded.
+		for _, done := range buf {
+			close(done)
 		}
 		//log.Printf("batched %v write queries", len(buf))
 	}

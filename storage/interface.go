@@ -38,6 +38,8 @@ type PieceImpl interface {
 	Completion() Completion
 }
 
+// Optional PieceImpl interface when pieces support a more efficient way to write incomplete chunks
+// out.
 type IncompletePieceToWriter interface {
 	WriteIncompleteTo(w io.Writer) error
 }

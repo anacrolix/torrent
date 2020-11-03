@@ -155,6 +155,8 @@ type NewPoolOpts struct {
 	// Forces WAL, disables shared caching.
 	ConcurrentBlobReads bool
 	DontInitSchema      bool
+	// If non-zero, overrides the existing setting.
+	Capacity int64
 }
 
 // There's some overlap here with NewPoolOpts, and I haven't decided what needs to be done. For now,
@@ -165,6 +167,16 @@ type ProviderOpts struct {
 	// Concurrent blob reads require WAL.
 	ConcurrentBlobRead bool
 	BatchWrites        bool
+}
+
+// Remove any capacity limits.
+func UnlimitCapacity(conn conn) error {
+	return sqlitex.Exec(conn, "delete from setting where key='capacity'", nil)
+}
+
+// Set the capacity limit to exactly this value.
+func SetCapacity(conn conn, cap int64) error {
+	return sqlitex.Exec(conn, "insert into setting values ('capacity', ?)", nil, cap)
 }
 
 func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
@@ -191,10 +203,21 @@ func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
 	if err != nil {
 		return
 	}
+	defer func() {
+		if err != nil {
+			conns.Close()
+		}
+	}()
+	conn := conns.Get(context.TODO())
+	defer conns.Put(conn)
 	if !opts.DontInitSchema {
-		conn := conns.Get(context.TODO())
-		defer conns.Put(conn)
 		err = initSchema(conn)
+		if err != nil {
+			return
+		}
+	}
+	if opts.Capacity != 0 {
+		err = SetCapacity(conn, opts.Capacity)
 		if err != nil {
 			return
 		}

@@ -37,7 +37,7 @@ func mainErr() error {
 	}{
 		CryptoMethod: mse.AllSupportedCrypto,
 	}
-	arg.MustParse(&args)
+	p := arg.MustParse(&args)
 	if args.Dial != nil {
 		cn, err := net.Dial(args.Dial.Network, args.Dial.Address)
 		if err != nil {
@@ -71,6 +71,9 @@ func mainErr() error {
 			log.Fatalf("error receiving: %v", err)
 		}
 		doStreaming(rw)
+	}
+	if p.Subcommand() == nil {
+		p.Fail("missing subcommand")
 	}
 	return nil
 }

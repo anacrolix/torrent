@@ -1354,7 +1354,8 @@ func (c *peer) receiveChunk(msg *pp.Message) error {
 
 	c.onDirtiedPiece(pieceIndex(req.Index))
 
-	if t.pieceAllDirty(pieceIndex(req.Index)) {
+	// We need to ensure the piece is only queued once, so only the last chunk writer gets this job.
+	if t.pieceAllDirty(pieceIndex(req.Index)) && piece.pendingWrites == 0 {
 		t.queuePieceCheck(pieceIndex(req.Index))
 		// We don't pend all chunks here anymore because we don't want code dependent on the dirty
 		// chunk status (such as the haveChunk call above) to have to check all the various other

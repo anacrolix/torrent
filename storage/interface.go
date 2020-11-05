@@ -22,7 +22,8 @@ type TorrentImpl interface {
 	Close() error
 }
 
-// Interacts with torrent piece data.
+// Interacts with torrent piece data. Optional interfaces to implement include io.WriterTo, such as
+// when a piece supports a more efficient way to write out incomplete chunks
 type PieceImpl interface {
 	// These interfaces are not as strict as normally required. They can
 	// assume that the parameters are appropriate for the dimensions of the
@@ -36,12 +37,6 @@ type PieceImpl interface {
 	MarkNotComplete() error
 	// Returns true if the piece is complete.
 	Completion() Completion
-}
-
-// Optional PieceImpl interface when pieces support a more efficient way to write incomplete chunks
-// out.
-type IncompletePieceToWriter interface {
-	WriteIncompleteTo(w io.Writer) error
 }
 
 type Completion struct {

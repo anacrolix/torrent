@@ -795,10 +795,10 @@ func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash, err error) {
 	const logPieceContents = false
 	if logPieceContents {
 		var examineBuf bytes.Buffer
-		err = storagePiece.WriteIncompleteTo(io.MultiWriter(hash, &examineBuf))
+		_, err = storagePiece.WriteTo(io.MultiWriter(hash, &examineBuf))
 		log.Printf("hashed %q with copy err %v", examineBuf.Bytes(), err)
 	} else {
-		err = storagePiece.WriteIncompleteTo(hash)
+		_, err = storagePiece.WriteTo(hash)
 	}
 	missinggo.CopyExact(&ret, hash.Sum(nil))
 	return

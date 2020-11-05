@@ -38,14 +38,17 @@ type Piece struct {
 	mip metainfo.Piece
 }
 
-func (p Piece) WriteIncompleteTo(w io.Writer) error {
-	if i, ok := p.PieceImpl.(IncompletePieceToWriter); ok {
-		return i.WriteIncompleteTo(w)
+var _ io.WriterTo = Piece{}
+
+// Why do we have this wrapper? Well PieceImpl doesn't implement io.Reader, so we can't let io.Copy
+// and friends check for io.WriterTo and fallback for us since they expect an io.Reader.
+func (p Piece) WriteTo(w io.Writer) (int64, error) {
+	if i, ok := p.PieceImpl.(io.WriterTo); ok {
+		return i.WriteTo(w)
 	}
 	n := p.mip.Length()
 	r := io.NewSectionReader(p, 0, n)
-	_, err := io.CopyN(w, r, n)
-	return err
+	return io.CopyN(w, r, n)
 }
 
 func (p Piece) WriteAt(b []byte, off int64) (n int, err error) {

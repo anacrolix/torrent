@@ -307,7 +307,7 @@ type provider struct {
 
 var _ storage.ConsecutiveChunkWriter = (*provider)(nil)
 
-func (p *provider) WriteConsecutiveChunks(prefix string, w io.Writer) (err error) {
+func (p *provider) WriteConsecutiveChunks(prefix string, w io.Writer) (written int64, err error) {
 	p.withConn(func(conn conn) {
 		err = io.EOF
 		err = sqlitex.Exec(conn, `
@@ -321,7 +321,8 @@ func (p *provider) WriteConsecutiveChunks(prefix string, w io.Writer) (err error
 				r := stmt.ColumnReader(0)
 				//offset := stmt.ColumnInt64(1)
 				//log.Printf("got %v bytes at offset %v", r.Len(), offset)
-				_, err := io.Copy(w, r)
+				w1, err := io.Copy(w, r)
+				written += w1
 				return err
 			},
 			len(prefix),

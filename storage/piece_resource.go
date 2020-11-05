@@ -46,7 +46,7 @@ type PieceProvider interface {
 }
 
 type ConsecutiveChunkWriter interface {
-	WriteConsecutiveChunks(prefix string, _ io.Writer) error
+	WriteConsecutiveChunks(prefix string, _ io.Writer) (int64, error)
 }
 
 type piecePerResourcePiece struct {
@@ -54,14 +54,27 @@ type piecePerResourcePiece struct {
 	rp resource.Provider
 }
 
-var _ IncompletePieceToWriter = piecePerResourcePiece{}
+var _ io.WriterTo = piecePerResourcePiece{}
 
-func (s piecePerResourcePiece) WriteIncompleteTo(w io.Writer) error {
+func (s piecePerResourcePiece) WriteTo(w io.Writer) (int64, error) {
 	if ccw, ok := s.rp.(ConsecutiveChunkWriter); ok {
-		return ccw.WriteConsecutiveChunks(s.incompleteDirPath()+"/", w)
+		if s.mustIsComplete() {
+			return ccw.WriteConsecutiveChunks(s.completedInstancePath(), w)
+		} else {
+			return ccw.WriteConsecutiveChunks(s.incompleteDirPath()+"/", w)
+		}
 	}
-	_, err := io.Copy(w, io.NewSectionReader(s.getChunks(), 0, s.mp.Length()))
-	return err
+	return io.Copy(w, io.NewSectionReader(s, 0, s.mp.Length()))
+}
+
+// Returns if the piece is complete. Ok should be true, because we are the definitive source of
+// truth here.
+func (s piecePerResourcePiece) mustIsComplete() bool {
+	completion := s.Completion()
+	if !completion.Ok {
+		panic("must know complete definitively")
+	}
+	return completion.Complete
 }
 
 func (s piecePerResourcePiece) Completion() Completion {
@@ -88,10 +101,9 @@ func (s piecePerResourcePiece) MarkNotComplete() error {
 }
 
 func (s piecePerResourcePiece) ReadAt(b []byte, off int64) (int, error) {
-	if s.Completion().Complete {
+	if s.mustIsComplete() {
 		return s.completed().ReadAt(b, off)
 	}
-	//panic("unexpected ReadAt of incomplete piece")
 	return s.getChunks().ReadAt(b, off)
 }
 
@@ -156,8 +168,12 @@ func (s piecePerResourcePiece) getChunks() (chunks chunks) {
 	return
 }
 
+func (s piecePerResourcePiece) completedInstancePath() string {
+	return path.Join("completed", s.mp.Hash().HexString())
+}
+
 func (s piecePerResourcePiece) completed() resource.Instance {
-	i, err := s.rp.NewInstance(path.Join("completed", s.mp.Hash().HexString()))
+	i, err := s.rp.NewInstance(s.completedInstancePath())
 	if err != nil {
 		panic(err)
 	}

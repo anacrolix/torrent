@@ -67,53 +67,43 @@ func (me *pexMsgFactory) addrKey(addr krpc.NodeAddr) string {
 
 // Returns whether the entry was added (we can check if we're cancelling out another entry and so
 // won't hit the limit consuming this event).
-func (me *pexMsgFactory) Add(addr krpc.NodeAddr, flags pp.PexPeerFlags) bool {
+func (me *pexMsgFactory) Add(addr krpc.NodeAddr, flags pp.PexPeerFlags) {
 	key := me.addrKey(addr)
 	if _, ok := me.dropped[key]; ok {
 		delete(me.dropped, key)
-		return true
-	}
-	if me.DeltaLen() >= pexMaxDelta {
-		return false
+		return
 	}
 	if me.added == nil {
 		me.added = make(map[string]pexMsgAdded, pexMaxDelta)
 	}
 	me.added[key] = pexMsgAdded{addr, flags}
-	return true
 
 }
 
 // Returns whether the entry was added (we can check if we're cancelling out another entry and so
 // won't hit the limit consuming this event).
-func (me *pexMsgFactory) Drop(addr krpc.NodeAddr) bool {
+func (me *pexMsgFactory) Drop(addr krpc.NodeAddr) {
 	key := me.addrKey(addr)
 	if _, ok := me.added[key]; ok {
 		delete(me.added, key)
-		return true
-	}
-	if me.DeltaLen() >= pexMaxDelta {
-		return false
+		return
 	}
 	if me.dropped == nil {
 		me.dropped = make(map[string]krpc.NodeAddr, pexMaxDelta)
 	}
 	me.dropped[key] = addr
-	return true
 }
 
-// Returns whether the entry was added (we can check if we're cancelling out another entry and so
-// won't hit the limit consuming this event).
-func (me *pexMsgFactory) addEvent(event pexEvent) bool {
+func (me *pexMsgFactory) addEvent(event pexEvent) {
 	addr, ok := nodeAddr(event.addr)
 	if !ok {
-		return true
+		return
 	}
 	switch event.t {
 	case pexAdd:
-		return me.Add(addr, event.f)
+		me.Add(addr, event.f)
 	case pexDrop:
-		return me.Drop(addr)
+		me.Drop(addr)
 	default:
 		panic(event.t)
 	}
@@ -218,9 +208,10 @@ func (s *pexState) Genmsg(start int) (pp.PexMsg, int) {
 	var factory pexMsgFactory
 	n := start
 	for _, e := range s.ev[start:] {
-		if !factory.addEvent(e) {
+		if start > 0 && factory.DeltaLen() >= pexMaxDelta {
 			break
 		}
+		factory.addEvent(e)
 		n++
 	}
 	return factory.PexMsg(), n

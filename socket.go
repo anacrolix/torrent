@@ -11,12 +11,17 @@ import (
 )
 
 type Listener interface {
-	net.Listener
+	// Accept waits for and returns the next connection to the listener.
+	Accept() (net.Conn, error)
+
+	// Addr returns the listener's network address.
+	Addr() net.Addr
 }
 
 type socket interface {
 	Listener
 	Dialer
+	Close() error
 }
 
 func listen(n network, addr string, f firewallCallback) (socket, error) {

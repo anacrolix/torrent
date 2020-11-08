@@ -240,6 +240,8 @@ func (p *Piece) uncachedPriority() (ret piecePriority) {
 	return
 }
 
+// Tells the Client to refetch the completion status from storage, updating priority etc. if
+// necessary. Might be useful if you know the state of the piece data has changed externally.
 func (p *Piece) UpdateCompletion() {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()

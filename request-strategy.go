@@ -67,17 +67,17 @@ type requestStrategyFastest struct {
 	requestStrategyDefaults
 }
 
-func newRequestStrategyMaker(rs requestStrategy) RequestStrategyMaker {
+func newRequestStrategyMaker(rs requestStrategy) requestStrategyMaker {
 	return func(requestStrategyCallbacks, sync.Locker) requestStrategy {
 		return rs
 	}
 }
 
-func RequestStrategyFastest() RequestStrategyMaker {
+func RequestStrategyFastest() requestStrategyMaker {
 	return newRequestStrategyMaker(requestStrategyFastest{})
 }
 
-func RequestStrategyFuzzing() RequestStrategyMaker {
+func RequestStrategyFuzzing() requestStrategyMaker {
 	return newRequestStrategyMaker(requestStrategyFuzzing{})
 }
 
@@ -110,9 +110,10 @@ type requestStrategyDuplicateRequestTimeout struct {
 	timeoutLocker sync.Locker
 }
 
-type RequestStrategyMaker func(callbacks requestStrategyCallbacks, clientLocker sync.Locker) requestStrategy
+// Generates a request strategy instance for a given torrent. callbacks are probably specific to the torrent.
+type requestStrategyMaker func(callbacks requestStrategyCallbacks, clientLocker sync.Locker) requestStrategy
 
-func RequestStrategyDuplicateRequestTimeout(duplicateRequestTimeout time.Duration) RequestStrategyMaker {
+func RequestStrategyDuplicateRequestTimeout(duplicateRequestTimeout time.Duration) requestStrategyMaker {
 	return func(callbacks requestStrategyCallbacks, clientLocker sync.Locker) requestStrategy {
 		return requestStrategyDuplicateRequestTimeout{
 			duplicateRequestTimeout: duplicateRequestTimeout,

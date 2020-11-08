@@ -455,7 +455,7 @@ func (cl *Client) rejectAccepted(conn net.Conn) error {
 	return nil
 }
 
-func (cl *Client) acceptConnections(l net.Listener) {
+func (cl *Client) acceptConnections(l Listener) {
 	for {
 		conn, err := l.Accept()
 		torrent.Add("client listener accepts", 1)
@@ -1178,7 +1178,7 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 		}
 	}
 	cl := t.cl
-	cl.AddDHTNodes(spec.DhtNodes)
+	cl.AddDhtNodes(spec.DhtNodes)
 	cl.lock()
 	defer cl.unlock()
 	useTorrentSources(spec.Sources, t)
@@ -1293,7 +1293,7 @@ func (cl *Client) torrentsAsSlice() (ret []*Torrent) {
 }
 
 func (cl *Client) AddMagnet(uri string) (T *Torrent, err error) {
-	spec, err := TorrentSpecFromMagnetURI(uri)
+	spec, err := TorrentSpecFromMagnetUri(uri)
 	if err != nil {
 		return
 	}
@@ -1318,7 +1318,7 @@ func (cl *Client) DhtServers() []DhtServer {
 	return cl.dhtServers
 }
 
-func (cl *Client) AddDHTNodes(nodes []string) {
+func (cl *Client) AddDhtNodes(nodes []string) {
 	for _, n := range nodes {
 		hmp := missinggo.SplitHostMaybePort(n)
 		ip := net.ParseIP(hmp.Host)
@@ -1412,7 +1412,7 @@ func (cl *Client) eachListener(f func(Listener) bool) {
 	}
 }
 
-func (cl *Client) findListener(f func(net.Listener) bool) (ret net.Listener) {
+func (cl *Client) findListener(f func(Listener) bool) (ret Listener) {
 	cl.eachListener(func(l Listener) bool {
 		ret = l
 		return !f(l)
@@ -1437,7 +1437,7 @@ func (cl *Client) publicIp(peer net.IP) net.IP {
 
 func (cl *Client) findListenerIp(f func(net.IP) bool) net.IP {
 	l := cl.findListener(
-		func(l net.Listener) bool {
+		func(l Listener) bool {
 			return f(addrIpOrNil(l.Addr()))
 		},
 	)

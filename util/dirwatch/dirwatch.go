@@ -116,7 +116,7 @@ func scanDir(dirName string) (ee map[metainfo.Hash]entity) {
 				break
 			}
 			for _, uri := range uris {
-				m, err := metainfo.ParseMagnetURI(uri)
+				m, err := metainfo.ParseMagnetUri(uri)
 				if err != nil {
 					log.Printf("error parsing %q in file %q: %s", uri, fullName, err)
 					continue

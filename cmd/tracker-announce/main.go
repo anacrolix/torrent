@@ -18,7 +18,7 @@ import (
 
 func argSpec(arg string) (ts *torrent.TorrentSpec, err error) {
 	if strings.HasPrefix(arg, "magnet:") {
-		return torrent.TorrentSpecFromMagnetURI(arg)
+		return torrent.TorrentSpecFromMagnetUri(arg)
 	}
 	mi, err := metainfo.LoadFromFile(arg)
 	if err != nil {

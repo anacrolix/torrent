@@ -28,8 +28,8 @@ type TorrentSpec struct {
 	DisallowDataDownload bool
 }
 
-func TorrentSpecFromMagnetURI(uri string) (spec *TorrentSpec, err error) {
-	m, err := metainfo.ParseMagnetURI(uri)
+func TorrentSpecFromMagnetUri(uri string) (spec *TorrentSpec, err error) {
+	m, err := metainfo.ParseMagnetUri(uri)
 	if err != nil {
 		return
 	}

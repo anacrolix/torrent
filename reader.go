@@ -11,12 +11,18 @@ import (
 	"github.com/anacrolix/missinggo"
 )
 
+// Accesses Torrent data via a Client. Reads block until the data is available. Seeks and readahead
+// also drive Client behaviour.
 type Reader interface {
 	io.Reader
 	io.Seeker
 	io.Closer
 	missinggo.ReadContexter
+	// Configure the number of bytes ahead of a read that should also be prioritized in preparation
+	// for further reads.
 	SetReadahead(int64)
+	// Don't wait for pieces to complete and be verified. Read calls return as soon as they can when
+	// the underlying chunks become available.
 	SetResponsive()
 }
 
@@ -25,33 +31,26 @@ type pieceRange struct {
 	begin, end pieceIndex
 }
 
-// Accesses Torrent data via a Client. Reads block until the data is
-// available. Seeks and readahead also drive Client behaviour.
 type reader struct {
 	t          *Torrent
 	responsive bool
-	// Adjust the read/seek window to handle Readers locked to File extents
-	// and the like.
+	// Adjust the read/seek window to handle Readers locked to File extents and the like.
 	offset, length int64
-	// Ensure operations that change the position are exclusive, like Read()
-	// and Seek().
+	// Ensure operations that change the position are exclusive, like Read() and Seek().
 	opMu sync.Mutex
 
-	// Required when modifying pos and readahead, or reading them without
-	// opMu.
+	// Required when modifying pos and readahead, or reading them without opMu.
 	mu        sync.Locker
 	pos       int64
 	readahead int64
-	// The cached piece range this reader wants downloaded. The zero value
-	// corresponds to nothing. We cache this so that changes can be detected,
-	// and bubbled up to the Torrent only as required.
+	// The cached piece range this reader wants downloaded. The zero value corresponds to nothing.
+	// We cache this so that changes can be detected, and bubbled up to the Torrent only as
+	// required.
 	pieces pieceRange
 }
 
-var _ io.ReadCloser = &reader{}
+var _ io.ReadCloser = (*reader)(nil)
 
-// Don't wait for pieces to complete and be verified. Read calls return as
-// soon as they can when the underlying chunks become available.
 func (r *reader) SetResponsive() {
 	r.responsive = true
 	r.t.cl.event.Broadcast()
@@ -63,8 +62,6 @@ func (r *reader) SetNonResponsive() {
 	r.t.cl.event.Broadcast()
 }
 
-// Configure the number of bytes ahead of a read that should also be
-// prioritized in preparation for further reads.
 func (r *reader) SetReadahead(readahead int64) {
 	r.mu.Lock()
 	r.readahead = readahead
@@ -101,13 +98,11 @@ func (r *reader) available(off, max int64) (ret int64) {
 }
 
 func (r *reader) waitReadable(off int64) {
-	// We may have been sent back here because we were told we could read but
-	// it failed.
+	// We may have been sent back here because we were told we could read but it failed.
 	r.t.cl.event.Wait()
 }
 
-// Calculates the pieces this reader wants downloaded, ignoring the cached
-// value at r.pieces.
+// Calculates the pieces this reader wants downloaded, ignoring the cached value at r.pieces.
 func (r *reader) piecesUncached() (ret pieceRange) {
 	ra := r.readahead
 	if ra < 1 {
@@ -143,8 +138,8 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 			r.t.cl.unlock()
 		}()
 	}
-	// Hmmm, if a Read gets stuck, this means you can't change position for
-	// other purposes. That seems reasonable, but unusual.
+	// Hmmm, if a Read gets stuck, this means you can't change position for other purposes. That
+	// seems reasonable, but unusual.
 	r.opMu.Lock()
 	defer r.opMu.Unlock()
 	n, err = r.readOnceAt(b, r.pos, &ctxErr)
@@ -168,8 +163,8 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 	return
 }
 
-// Wait until some data should be available to read. Tickles the client if it
-// isn't. Returns how much should be readable without blocking.
+// Wait until some data should be available to read. Tickles the client if it isn't. Returns how
+// much should be readable without blocking.
 func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error, wait bool) (avail int64, err error) {
 	r.t.cl.lock()
 	defer r.t.cl.unlock()
@@ -244,6 +239,7 @@ func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err erro
 	}
 }
 
+// Hodor
 func (r *reader) Close() error {
 	r.t.cl.lock()
 	defer r.t.cl.unlock()

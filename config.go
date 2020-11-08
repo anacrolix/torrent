@@ -128,7 +128,7 @@ type ClientConfig struct {
 	// OnQuery hook func
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
 
-	DefaultRequestStrategy RequestStrategyMaker
+	DefaultRequestStrategy requestStrategyMaker
 
 	Extensions PeerExtensionBits
 

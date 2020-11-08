@@ -25,7 +25,7 @@ func init() {
 
 // Converting from our Magnet type to URL string.
 func TestMagnetString(t *testing.T) {
-	m, err := ParseMagnetURI(exampleMagnet.String())
+	m, err := ParseMagnetUri(exampleMagnet.String())
 	require.NoError(t, err)
 	assert.EqualValues(t, exampleMagnet, m)
 }
@@ -37,18 +37,18 @@ func TestParseMagnetURI(t *testing.T) {
 
 	// parsing the legit Magnet URI with btih-formatted xt should not return errors
 	uri = "magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU"
-	_, err = ParseMagnetURI(uri)
+	_, err = ParseMagnetUri(uri)
 	if err != nil {
 		t.Errorf("Attempting parsing the proper Magnet btih URI:\"%v\" failed with err: %v", uri, err)
 	}
 
 	// Checking if the magnet instance struct is built correctly from parsing
-	m, err = ParseMagnetURI(exampleMagnetURI)
+	m, err = ParseMagnetUri(exampleMagnetURI)
 	assert.EqualValues(t, exampleMagnet, m)
 	assert.NoError(t, err)
 
 	// empty string URI case
-	_, err = ParseMagnetURI("")
+	_, err = ParseMagnetUri("")
 	if err == nil {
 		t.Errorf("Parsing empty string as URI should have returned an error but didn't")
 	}
@@ -56,14 +56,14 @@ func TestParseMagnetURI(t *testing.T) {
 	// only BTIH (BitTorrent info hash)-formatted magnet links are currently supported
 	// must return error correctly when encountering other URN formats
 	uri = "magnet:?xt=urn:sha1:YNCKHTQCWBTRNJIV4WNAE52SJUQCZO5C"
-	_, err = ParseMagnetURI(uri)
+	_, err = ParseMagnetUri(uri)
 	if err == nil {
 		t.Errorf("Magnet URI with non-BTIH URNs (like \"%v\") are not supported and should return an error", uri)
 	}
 
 	// resilience to the broken hash
 	uri = "magnet:?xt=urn:btih:this hash is really broken"
-	_, err = ParseMagnetURI(uri)
+	_, err = ParseMagnetUri(uri)
 	if err == nil {
 		t.Errorf("Failed to detect broken Magnet URI: %v", uri)
 	}

@@ -9,7 +9,7 @@
 
 This repository implements BitTorrent-related packages and command-line utilities in Go. The emphasis is on use as a library from other projects. It's been used 24/7 in production by downstream services since late 2014. The implementation was specifically created to explore Go's concurrency capabilities, and to include the ability to stream data directly from the BitTorrent network. To this end it [supports seeking, readaheads and other features](https://godoc.org/github.com/anacrolix/torrent#Reader) exposing torrents and their files with the various Go idiomatic `io` package interfaces. This is also demonstrated through [torrentfs](#torrentfs).
 
-There is [support for protocol encryption, DHT, PEX, uTP, and various extensions](https://godoc.org/github.com/anacrolix/torrent). There are [several data storage backends provided](https://godoc.org/github.com/anacrolix/torrent/storage): blob, file, bolt, and mmap, to name a few. You can [write your own](https://godoc.org/github.com/anacrolix/torrent/storage#ClientImpl) to store data for example on S3, or in a database. 
+There is [support for protocol encryption, DHT, PEX, uTP, and various extensions](https://godoc.org/github.com/anacrolix/torrent). There are [several data storage backends provided](https://godoc.org/github.com/anacrolix/torrent/storage): blob, file, bolt, mmap, and sqlite, to name a few. You can [write your own](https://godoc.org/github.com/anacrolix/torrent/storage#ClientImpl) to store data for example on S3, or in a database. 
 
 Some noteworthy package dependencies that can be used for other purposes include:
 
@@ -58,9 +58,9 @@ Note that the [`godo`](https://github.com/anacrolix/godo) command which is invok
 
 Downloads torrents from the command-line. This first example does not use `godo`.
 
-	$ go get github.com/anacrolix/torrent/cmd/torrent
+    $ go get github.com/anacrolix/torrent/cmd/torrent
     # Now 'torrent' should be in $GOPATH/bin, which should be in $PATH.
-	$ torrent download 'magnet:?xt=urn:btih:KRWPCX3SJUM4IMM4YF5RPHL6ANPYTQPU'
+    $ torrent download 'magnet:?xt=urn:btih:KRWPCX3SJUM4IMM4YF5RPHL6ANPYTQPU'
     ubuntu-14.04.2-desktop-amd64.iso [===================================================================>]  99% downloading (1.0 GB/1.0 GB)
     2015/04/01 02:08:20 main.go:137: downloaded ALL the torrents
     $ md5sum ubuntu-14.04.2-desktop-amd64.iso
@@ -88,4 +88,4 @@ torrentfs mounts a FUSE filesystem at `-mountDir`. The contents are the torrents
 Creates a magnet link from a torrent file. Note the extracted trackers, display name, and info hash.
 
     $ godo github.com/anacrolix/torrent/cmd/torrent-magnet < ubuntu-14.04.2-desktop-amd64.iso.torrent
-	magnet:?xt=urn:btih:546cf15f724d19c4319cc17b179d7e035f89c1f4&dn=ubuntu-14.04.2-desktop-amd64.iso&tr=http%3A%2F%2Ftorrent.ubuntu.com%3A6969%2Fannounce&tr=http%3A%2F%2Fipv6.torrent.ubuntu.com%3A6969%2Fannounce
+    magnet:?xt=urn:btih:546cf15f724d19c4319cc17b179d7e035f89c1f4&dn=ubuntu-14.04.2-desktop-amd64.iso&tr=http%3A%2F%2Ftorrent.ubuntu.com%3A6969%2Fannounce&tr=http%3A%2F%2Fipv6.torrent.ubuntu.com%3A6969%2Fannounce

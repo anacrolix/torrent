@@ -12,11 +12,23 @@ import (
 )
 
 var (
-	addrs = []net.Addr{
+	addrs6 = []net.Addr{
 		&net.TCPAddr{IP: net.IPv6loopback, Port: 4747},
 		&net.TCPAddr{IP: net.IPv6loopback, Port: 4748},
+		&net.TCPAddr{IP: net.IPv6loopback, Port: 4749},
+		&net.TCPAddr{IP: net.IPv6loopback, Port: 4750},
+	}
+	addrs4 = []net.Addr{
 		&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4747},
 		&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4748},
+		&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4749},
+		&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4750},
+	}
+	addrs = []net.Addr{
+		addrs6[0],
+		addrs6[1],
+		addrs4[0],
+		addrs4[1],
 	}
 	f = pp.PexOutgoingConn
 )
@@ -109,6 +121,14 @@ func TestPexReset(t *testing.T) {
 	s.Reset()
 	targ := new(pexState)
 	require.EqualValues(t, targ, s)
+}
+
+func mustNodeAddr(addr net.Addr) krpc.NodeAddr {
+	ret, ok := nodeAddr(addr)
+	if !ok {
+		panic(addr)
+	}
+	return ret
 }
 
 var testcases = []struct {
@@ -239,24 +259,17 @@ var testcases = []struct {
 // deterministic. Because the flags are in a different array, we can't just use testify's
 // ElementsMatch because the ordering *does* still matter between an added addr and its flags.
 type comparablePexMsg struct {
-	added, added6     []pexMsgAdded
-	dropped, dropped6 []krpc.NodeAddr
-}
-
-func (me *comparablePexMsg) makeAdded(addrs []krpc.NodeAddr, flags []pp.PexPeerFlags) (ret []pexMsgAdded) {
-	for i, addr := range addrs {
-		ret = append(ret, pexMsgAdded{
-			NodeAddr:     addr,
-			PexPeerFlags: flags[i],
-		})
-	}
-	return
+	added, added6           []krpc.NodeAddr
+	addedFlags, added6Flags []pp.PexPeerFlags
+	dropped, dropped6       []krpc.NodeAddr
 }
 
 // Such Rust-inspired.
 func (me *comparablePexMsg) From(f pp.PexMsg) {
-	me.added = me.makeAdded(f.Added, f.AddedFlags)
-	me.added6 = me.makeAdded(f.Added6, f.Added6Flags)
+	me.added = f.Added
+	me.addedFlags = f.AddedFlags
+	me.added6 = f.Added6
+	me.added6Flags = f.Added6Flags
 	me.dropped = f.Dropped
 	me.dropped6 = f.Dropped6
 }
@@ -265,7 +278,9 @@ func (me *comparablePexMsg) From(f pp.PexMsg) {
 // in pexMsgFactory that preserve insert ordering.
 func (actual comparablePexMsg) AssertEqual(t *testing.T, expected comparablePexMsg) {
 	assert.ElementsMatch(t, expected.added, actual.added)
+	assert.ElementsMatch(t, expected.addedFlags, actual.addedFlags)
 	assert.ElementsMatch(t, expected.added6, actual.added6)
+	assert.ElementsMatch(t, expected.added6Flags, actual.added6Flags)
 	assert.ElementsMatch(t, expected.dropped, actual.dropped)
 	assert.ElementsMatch(t, expected.dropped6, actual.dropped6)
 }
@@ -321,60 +336,47 @@ func TestPexInitialNoCutoff(t *testing.T) {
 }
 
 func TestPexAdd(t *testing.T) {
-	addrs4 := []krpc.NodeAddr{
-		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4747}, // 0
-		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4748}, // 1
-		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 2), Port: 4747}, // 2
-		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 2), Port: 4748}, // 3
-	}
-	addrs6 := []krpc.NodeAddr{
-		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4747}, // 0
-		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4748}, // 1
-		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4749}, // 2
-		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4750}, // 3
-	}
-	f := pp.PexPrefersEncryption | pp.PexOutgoingConn
-
 	t.Run("ipv4", func(t *testing.T) {
 		addrs := addrs4
 		var m pexMsgFactory
-		m.Drop(addrs[0])
-		m.Add(addrs[1], f)
+		m.addEvent(pexEvent{pexDrop, addrs[0], 0})
+		m.addEvent(pexEvent{pexAdd, addrs[1], f})
 		for _, addr := range addrs {
-			m.Add(addr, f)
+			m.addEvent(pexEvent{pexAdd, addr, f})
 		}
 		targ := pp.PexMsg{
 			Added: krpc.CompactIPv4NodeAddrs{
-				addrs[1],
-				addrs[2],
-				addrs[3],
+				mustNodeAddr(addrs[1]),
+				mustNodeAddr(addrs[2]),
+				mustNodeAddr(addrs[3]),
 			},
 			AddedFlags: []pp.PexPeerFlags{f, f, f},
 		}
-		assertPexMsgsEqual(t, targ, m.PexMsg())
+		out := m.PexMsg()
+		assertPexMsgsEqual(t, targ, out)
 	})
 	t.Run("ipv6", func(t *testing.T) {
 		addrs := addrs6
 		var m pexMsgFactory
-		m.Drop(addrs[0])
-		m.Add(addrs[1], f)
+		m.addEvent(pexEvent{pexDrop, addrs[0], 0})
+		m.addEvent(pexEvent{pexAdd, addrs[1], f})
 		for _, addr := range addrs {
-			m.Add(addr, f)
+			m.addEvent(pexEvent{pexAdd, addr, f})
 		}
 		targ := pp.PexMsg{
 			Added6: krpc.CompactIPv6NodeAddrs{
-				addrs[1],
-				addrs[2],
-				addrs[3],
+				mustNodeAddr(addrs[1]),
+				mustNodeAddr(addrs[2]),
+				mustNodeAddr(addrs[3]),
 			},
 			Added6Flags: []pp.PexPeerFlags{f, f, f},
 		}
 		assertPexMsgsEqual(t, targ, m.PexMsg())
 	})
 	t.Run("empty", func(t *testing.T) {
-		addr := krpc.NodeAddr{}
+		nullAddr := &net.TCPAddr{}
 		var xm pexMsgFactory
-		assert.Panics(t, func() { xm.Add(addr, f) })
+		xm.addEvent(pexEvent{pexAdd, nullAddr, f})
 		m := xm.PexMsg()
 		require.EqualValues(t, 0, len(m.Added))
 		require.EqualValues(t, 0, len(m.AddedFlags))
@@ -384,33 +386,19 @@ func TestPexAdd(t *testing.T) {
 }
 
 func TestPexDrop(t *testing.T) {
-	addrs4 := []krpc.NodeAddr{
-		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4747}, // 0
-		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4748}, // 1
-		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 2), Port: 4747}, // 2
-		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 2), Port: 4748}, // 3
-	}
-	addrs6 := []krpc.NodeAddr{
-		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4747}, // 0
-		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4748}, // 1
-		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4749}, // 2
-		krpc.NodeAddr{IP: net.IPv6loopback, Port: 4750}, // 3
-	}
-	f := pp.PexPrefersEncryption | pp.PexOutgoingConn
-
 	t.Run("ipv4", func(t *testing.T) {
 		addrs := addrs4
 		var m pexMsgFactory
-		m.Add(addrs[0], f)
-		m.Drop(addrs[1])
+		m.addEvent(pexEvent{pexAdd, addrs[0], f})
+		m.addEvent(pexEvent{pexDrop, addrs[1], 0})
 		for _, addr := range addrs {
-			m.Drop(addr)
+			m.addEvent(pexEvent{pexDrop, addr, 0})
 		}
 		targ := pp.PexMsg{
 			Dropped: krpc.CompactIPv4NodeAddrs{
-				addrs[1],
-				addrs[2],
-				addrs[3],
+				mustNodeAddr(addrs[1]),
+				mustNodeAddr(addrs[2]),
+				mustNodeAddr(addrs[3]),
 			},
 		}
 		assertPexMsgsEqual(t, targ, m.PexMsg())
@@ -418,24 +406,24 @@ func TestPexDrop(t *testing.T) {
 	t.Run("ipv6", func(t *testing.T) {
 		addrs := addrs6
 		var m pexMsgFactory
-		m.Add(addrs[0], f)
-		m.Drop(addrs[1])
+		m.addEvent(pexEvent{pexAdd, addrs[0], f})
+		m.addEvent(pexEvent{pexDrop, addrs[1], 0})
 		for _, addr := range addrs {
-			m.Drop(addr)
+			m.addEvent(pexEvent{pexDrop, addr, 0})
 		}
 		targ := pp.PexMsg{
 			Dropped6: krpc.CompactIPv6NodeAddrs{
-				addrs[1],
-				addrs[2],
-				addrs[3],
+				mustNodeAddr(addrs[1]),
+				mustNodeAddr(addrs[2]),
+				mustNodeAddr(addrs[3]),
 			},
 		}
 		assertPexMsgsEqual(t, targ, m.PexMsg())
 	})
 	t.Run("empty", func(t *testing.T) {
-		addr := krpc.NodeAddr{}
+		nullAddr := &net.TCPAddr{}
 		var xm pexMsgFactory
-		require.Panics(t, func() { xm.Drop(addr) })
+		xm.addEvent(pexEvent{pexDrop, nullAddr, f})
 		m := xm.PexMsg()
 		require.EqualValues(t, 0, len(m.Dropped))
 		require.EqualValues(t, 0, len(m.Dropped6))

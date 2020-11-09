@@ -28,16 +28,10 @@ type pexEvent struct {
 	f    pp.PexPeerFlags
 }
 
-// Combines the node addr, as required for pp.PexMsg.
-type pexMsgAdded struct {
-	krpc.NodeAddr
-	pp.PexPeerFlags
-}
-
-// Makes generating a PexMsg more efficient.
+// facilitates efficient de-duplication while generating PEX messages
 type pexMsgFactory struct {
-	added   map[string]pexMsgAdded
-	dropped map[string]krpc.NodeAddr
+	added   map[addrKey]pexEvent
+	dropped map[addrKey]pexEvent
 }
 
 func (me *pexMsgFactory) DeltaLen() int {
@@ -46,104 +40,84 @@ func (me *pexMsgFactory) DeltaLen() int {
 		int64(len(me.dropped))))
 }
 
-// Returns the key to use to identify a given addr in the factory. Panics if we can't support the
-// addr later in generating a PexMsg (since adding an unusable addr will cause DeltaLen to be out.)
-func (me *pexMsgFactory) addrKey(addr krpc.NodeAddr) string {
-	if addr.IP.To4() != nil {
-		addr.IP = addr.IP.To4()
-	}
-	keyBytes, err := addr.MarshalBinary()
-	if err != nil {
-		panic(err)
-	}
-	switch len(keyBytes) {
-	case compactIpv4NodeAddrElemSize:
-	case compactIpv6NodeAddrElemSize:
-	default:
-		panic(len(keyBytes))
-	}
-	return string(keyBytes)
+type addrKey string
+
+// Returns the key to use to identify a given addr in the factory.
+func (me *pexMsgFactory) addrKey(addr net.Addr) addrKey {
+	return addrKey(addr.String())
 }
 
 // Returns whether the entry was added (we can check if we're cancelling out another entry and so
 // won't hit the limit consuming this event).
-func (me *pexMsgFactory) Add(addr krpc.NodeAddr, flags pp.PexPeerFlags) {
-	key := me.addrKey(addr)
+func (me *pexMsgFactory) add(e pexEvent) {
+	key := me.addrKey(e.addr)
 	if _, ok := me.dropped[key]; ok {
 		delete(me.dropped, key)
 		return
 	}
 	if me.added == nil {
-		me.added = make(map[string]pexMsgAdded, pexMaxDelta)
+		me.added = make(map[addrKey]pexEvent, pexMaxDelta)
 	}
-	me.added[key] = pexMsgAdded{addr, flags}
-
+	me.added[key] = e
 }
 
 // Returns whether the entry was added (we can check if we're cancelling out another entry and so
 // won't hit the limit consuming this event).
-func (me *pexMsgFactory) Drop(addr krpc.NodeAddr) {
-	key := me.addrKey(addr)
+func (me *pexMsgFactory) drop(e pexEvent) {
+	key := me.addrKey(e.addr)
 	if _, ok := me.added[key]; ok {
 		delete(me.added, key)
 		return
 	}
 	if me.dropped == nil {
-		me.dropped = make(map[string]krpc.NodeAddr, pexMaxDelta)
+		me.dropped = make(map[addrKey]pexEvent, pexMaxDelta)
 	}
-	me.dropped[key] = addr
+	me.dropped[key] = e
 }
 
 func (me *pexMsgFactory) addEvent(event pexEvent) {
-	addr, ok := nodeAddr(event.addr)
-	if !ok {
-		return
-	}
 	switch event.t {
 	case pexAdd:
-		me.Add(addr, event.f)
+		me.add(event)
 	case pexDrop:
-		me.Drop(addr)
+		me.drop(event)
 	default:
 		panic(event.t)
 	}
 }
 
-var compactIpv4NodeAddrElemSize = krpc.CompactIPv4NodeAddrs{}.ElemSize()
-var compactIpv6NodeAddrElemSize = krpc.CompactIPv6NodeAddrs{}.ElemSize()
-
 func (me *pexMsgFactory) PexMsg() (ret pp.PexMsg) {
 	for key, added := range me.added {
-		switch len(key) {
-		case compactIpv4NodeAddrElemSize:
-			ret.Added = append(ret.Added, added.NodeAddr)
-			ret.AddedFlags = append(ret.AddedFlags, added.PexPeerFlags)
-		case compactIpv6NodeAddrElemSize:
-			ret.Added6 = append(ret.Added6, added.NodeAddr)
-			ret.Added6Flags = append(ret.Added6Flags, added.PexPeerFlags)
+		addr, ok := nodeAddr(added.addr)
+		if !ok {
+			continue
+		}
+		switch len(addr.IP) {
+		case net.IPv4len:
+			ret.Added = append(ret.Added, addr)
+			ret.AddedFlags = append(ret.AddedFlags, added.f)
+		case net.IPv6len:
+			ret.Added6 = append(ret.Added6, addr)
+			ret.Added6Flags = append(ret.Added6Flags, added.f)
 		default:
 			panic(key)
 		}
 	}
-	for key, addr := range me.dropped {
-		switch len(key) {
-		case compactIpv4NodeAddrElemSize:
+	for key, dropped := range me.dropped {
+		addr, ok := nodeAddr(dropped.addr)
+		if !ok {
+			continue
+		}
+		switch len(addr.IP) {
+		case net.IPv4len:
 			ret.Dropped = append(ret.Dropped, addr)
-		case compactIpv6NodeAddrElemSize:
+		case net.IPv6len:
 			ret.Dropped6 = append(ret.Dropped6, addr)
 		default:
 			panic(key)
 		}
 	}
 	return
-}
-
-func mustNodeAddr(addr net.Addr) krpc.NodeAddr {
-	ret, ok := nodeAddr(addr)
-	if !ok {
-		panic(addr)
-	}
-	return ret
 }
 
 // Convert an arbitrary torrent peer Addr into one that can be represented by the compact addr

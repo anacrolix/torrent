@@ -288,6 +288,38 @@ func TestPexGenmsg(t *testing.T) {
 	}
 }
 
+// generate 𝑛 distinct values of net.Addr
+func addrgen(n int) chan net.Addr {
+	c := make(chan net.Addr)
+	go func() {
+		for i := 4747; i < 65535 && n > 0; i++ {
+			c <- &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: i}
+			n--
+		}
+		close(c)
+	}()
+	return c
+}
+
+func TestPexInitialNoCutoff(t *testing.T) {
+	const n = 2 * pexMaxDelta
+	var s pexState
+
+	c := addrgen(n)
+	for addr := range c {
+		s.Add(&PeerConn{peer: peer{RemoteAddr: addr}})
+	}
+	m, seq := s.Genmsg(0)
+
+	require.EqualValues(t, n, seq)
+	require.EqualValues(t, n, len(m.Added))
+	require.EqualValues(t, n, len(m.AddedFlags))
+	require.EqualValues(t, 0, len(m.Added6))
+	require.EqualValues(t, 0, len(m.Added6Flags))
+	require.EqualValues(t, 0, len(m.Dropped))
+	require.EqualValues(t, 0, len(m.Dropped6))
+}
+
 func TestPexAdd(t *testing.T) {
 	addrs4 := []krpc.NodeAddr{
 		krpc.NodeAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4747}, // 0

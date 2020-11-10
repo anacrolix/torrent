@@ -307,11 +307,11 @@ func TestPexGenmsg(t *testing.T) {
 func addrgen(n int) chan net.Addr {
 	c := make(chan net.Addr)
 	go func() {
+		defer close(c)
 		for i := 4747; i < 65535 && n > 0; i++ {
 			c <- &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: i}
 			n--
 		}
-		close(c)
 	}()
 	return c
 }
@@ -334,6 +334,24 @@ func TestPexInitialNoCutoff(t *testing.T) {
 	require.EqualValues(t, 0, len(m.Dropped))
 	require.EqualValues(t, 0, len(m.Dropped6))
 }
+
+func benchmarkPexInitialN(b *testing.B, npeers int) {
+	for i := 0; i < b.N; i++ {
+		var s pexState
+		c := addrgen(npeers)
+		for addr := range c {
+			s.Add(&PeerConn{peer: peer{RemoteAddr: addr}})
+			s.Genmsg(0)
+		}
+	}
+}
+
+// obtain at least 5 points, e.g. to plot a graph
+func BenchmarkPexInitial4(b *testing.B)   { benchmarkPexInitialN(b, 4) }
+func BenchmarkPexInitial50(b *testing.B)  { benchmarkPexInitialN(b, 50) }
+func BenchmarkPexInitial100(b *testing.B) { benchmarkPexInitialN(b, 100) }
+func BenchmarkPexInitial200(b *testing.B) { benchmarkPexInitialN(b, 200) }
+func BenchmarkPexInitial400(b *testing.B) { benchmarkPexInitialN(b, 400) }
 
 func TestPexAdd(t *testing.T) {
 	t.Run("ipv4", func(t *testing.T) {

@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"net"
+	"sync"
 
 	"github.com/anacrolix/dht/v2/krpc"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -140,15 +141,23 @@ func shortestIP(ip net.IP) net.IP {
 
 // Per-torrent PEX state
 type pexState struct {
-	ev   []pexEvent // event feed, append-only
-	hold []pexEvent // delayed drops
-	nc   int        // net number of alive conns
+	ev        []pexEvent    // event feed, append-only
+	hold      []pexEvent    // delayed drops
+	nc        int           // net number of alive conns
+	initCache pexMsgFactory // last generated initial message
+	initSeq   int           // number of events which went into initCache
+	initLock  sync.RWMutex  // serialise access to initCache and initSeq
 }
 
+// Reset wipes the state clean, releasing resources. Called from Torrent.Close().
 func (s *pexState) Reset() {
 	s.ev = nil
 	s.hold = nil
 	s.nc = 0
+	s.initLock.Lock()
+	s.initCache = pexMsgFactory{}
+	s.initSeq = 0
+	s.initLock.Unlock()
 }
 
 func (s *pexState) Add(c *PeerConn) {
@@ -179,6 +188,10 @@ func (s *pexState) Drop(c *PeerConn) {
 // Generate a PEX message based on the event feed. Also returns an index to pass to the subsequent
 // calls, producing incremental deltas.
 func (s *pexState) Genmsg(start int) (pp.PexMsg, int) {
+	if start == 0 {
+		return s.genmsg0()
+	}
+
 	var factory pexMsgFactory
 	n := start
 	for _, e := range s.ev[start:] {
@@ -189,4 +202,18 @@ func (s *pexState) Genmsg(start int) (pp.PexMsg, int) {
 		n++
 	}
 	return factory.PexMsg(), n
+}
+
+func (s *pexState) genmsg0() (pp.PexMsg, int) {
+	s.initLock.Lock()
+	for _, e := range s.ev[s.initSeq:] {
+		s.initCache.addEvent(e)
+		s.initSeq++
+	}
+	s.initLock.Unlock()
+	s.initLock.RLock()
+	n := s.initSeq
+	msg := s.initCache.PexMsg()
+	s.initLock.RUnlock()
+	return msg, n
 }

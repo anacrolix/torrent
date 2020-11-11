@@ -3,7 +3,6 @@ package mmap_span
 import (
 	"fmt"
 	"io"
-	"log"
 	"sync"
 
 	"github.com/anacrolix/torrent/segments"
@@ -79,7 +78,7 @@ func (ms *MMapSpan) locateCopy(copyArgs func(remainingArgument, mmapped []byte) 
 }
 
 func (ms *MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
-	log.Printf("writing %v bytes at %v", len(p), off)
+	// log.Printf("writing %v bytes at %v", len(p), off)
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 	n = ms.locateCopy(func(a, b []byte) (_, _ []byte) { return b, a }, p, off)

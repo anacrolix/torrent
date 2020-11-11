@@ -10,27 +10,40 @@ import (
 	"sync/atomic"
 
 	"github.com/anacrolix/tagflag"
-
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/davecgh/go-spew/spew"
 )
 
-func argSpec(arg string) (ts *torrent.TorrentSpec, err error) {
+func argSpec(arg string) (ts *torrent.TorrentSpec, _ error) {
 	if strings.HasPrefix(arg, "magnet:") {
 		return torrent.TorrentSpecFromMagnetUri(arg)
 	}
-	mi, err := metainfo.LoadFromFile(arg)
-	if err != nil {
+	mi, fileErr := metainfo.LoadFromFile(arg)
+	if fileErr == nil {
+		ts = torrent.TorrentSpecFromMetaInfo(mi)
 		return
 	}
-	ts = torrent.TorrentSpecFromMetaInfo(mi)
-	return
+	var ih torrent.InfoHash
+	ihErr := ih.FromHexString(arg)
+	if ihErr == nil {
+		ts = &torrent.TorrentSpec{
+			InfoHash: ih,
+		}
+		return
+	}
+	if len(arg) == 40 {
+		return nil, ihErr
+	} else {
+		return nil, fileErr
+	}
 }
 
 func main() {
 	flags := struct {
-		Port uint16
+		Port    uint16
+		Tracker []string
 		tagflag.StartPos
 		Torrents []string `arity:"+"`
 	}{
@@ -39,6 +52,21 @@ func main() {
 	tagflag.Parse(&flags)
 	var exitCode int32
 	var wg sync.WaitGroup
+	startAnnounce := func(ih torrent.InfoHash, tURI string) {
+		ar := tracker.AnnounceRequest{
+			NumWant:  -1,
+			Left:     -1,
+			Port:     flags.Port,
+			InfoHash: ih,
+		}
+		wg.Add(1)
+		go func(tURI string) {
+			defer wg.Done()
+			if doTracker(tURI, ar) {
+				atomic.StoreInt32(&exitCode, 1)
+			}
+		}(tURI)
+	}
 	for _, arg := range flags.Torrents {
 		ts, err := argSpec(arg)
 		if err != nil {
@@ -46,20 +74,11 @@ func main() {
 		}
 		for _, tier := range ts.Trackers {
 			for _, tURI := range tier {
-				ar := tracker.AnnounceRequest{
-					NumWant:  -1,
-					Left:     -1,
-					Port:     flags.Port,
-					InfoHash: ts.InfoHash,
-				}
-				wg.Add(1)
-				go func(tURI string) {
-					defer wg.Done()
-					if doTracker(tURI, ar) {
-						atomic.StoreInt32(&exitCode, 1)
-					}
-				}(tURI)
+				startAnnounce(ts.InfoHash, tURI)
 			}
+		}
+		for _, tUri := range flags.Tracker {
+			startAnnounce(ts.InfoHash, tUri)
 		}
 	}
 	wg.Wait()
@@ -75,7 +94,7 @@ func doTracker(tURI string, ar tracker.AnnounceRequest) (hadError bool) {
 			log.Printf("error announcing to %q: %s", tURI, err)
 			continue
 		}
-		fmt.Printf("response from %q: %+v\n", tURI, resp)
+		fmt.Printf("from %q for %x:\n%s", tURI, ar.InfoHash, spew.Sdump(resp))
 	}
 	return
 }

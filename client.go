@@ -959,8 +959,11 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 					M: map[pp.ExtensionName]pp.ExtensionNumber{
 						pp.ExtensionNameMetadata: metadataExtendedId,
 					},
-					V:            cl.config.ExtendedHandshakeClientVersion,
-					Reqq:         64, // TODO: Really?
+					V: cl.config.ExtendedHandshakeClientVersion,
+					// If peer requests are buffered on read, this instructs the amount of memory
+					// that might be used to cache pending writes. Assuming 512KiB cached for
+					// sending, for 16KiB chunks.
+					Reqq:         1 << 5,
 					YourIp:       pp.CompactIp(addrIpOrNil(conn.RemoteAddr)),
 					Encryption:   cl.config.HeaderObfuscationPolicy.Preferred || !cl.config.HeaderObfuscationPolicy.RequirePreferred,
 					Port:         cl.incomingPeerPort(),

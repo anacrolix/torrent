@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/anacrolix/missinggo/x"
 	"go.etcd.io/bbolt"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -32,7 +31,13 @@ func (me *boltDBPiece) pk() metainfo.PieceKey {
 
 func (me *boltDBPiece) Completion() Completion {
 	c, err := me.pc().Get(me.pk())
-	x.Pie(err)
+	switch err {
+	case bbolt.ErrDatabaseNotOpen:
+		return Completion{}
+	case nil:
+	default:
+		panic(err)
+	}
 	return c
 }
 

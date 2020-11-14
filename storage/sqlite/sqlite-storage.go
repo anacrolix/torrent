@@ -342,6 +342,8 @@ type writeRequest struct {
 	done  chan<- error
 }
 
+var expvars = expvar.NewMap("sqliteStorage")
+
 // Intentionally avoids holding a reference to *provider to allow it to use a finalizer, and to have
 // stronger typing on the writes channel.
 func providerWriter(writes <-chan writeRequest, pool ConnPool) {
@@ -376,13 +378,15 @@ func providerWriter(writes <-chan writeRequest, pool ConnPool) {
 		}()
 		// Not sure what to do if this failed.
 		if cantFail != nil {
-			panic(cantFail)
+			expvars.Add("batchTransactionErrors", 1)
 		}
 		// Signal done after we know the transaction succeeded.
 		for _, done := range buf {
 			done()
 		}
-		//log.Printf("batched %v write queries", len(buf))
+		expvars.Add("batchTransactions", 1)
+		expvars.Add("batchedQueries", int64(len(buf)))
+		log.Printf("batched %v write queries", len(buf))
 	}
 }
 

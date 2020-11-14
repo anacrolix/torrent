@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"expvar"
 	"fmt"
 	"io"
 	"log"
@@ -258,7 +259,7 @@ func NewProvider(pool ConnPool, opts ProviderOpts) (_ *provider, err error) {
 	if err != nil {
 		return
 	}
-	writes := make(chan writeRequest)
+	writes := make(chan writeRequest, 1<<(20-14))
 	prov := &provider{pool: pool, writes: writes, opts: opts}
 	runtime.SetFinalizer(prov, func(p *provider) {
 		// This is done in a finalizer, as it's easier than trying to synchronize on whether the

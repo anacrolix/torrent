@@ -387,7 +387,7 @@ func providerWriter(writes <-chan writeRequest, pool ConnPool) {
 		}
 		expvars.Add("batchTransactions", 1)
 		expvars.Add("batchedQueries", int64(len(buf)))
-		log.Printf("batched %v write queries", len(buf))
+		//log.Printf("batched %v write queries", len(buf))
 	}
 }
 

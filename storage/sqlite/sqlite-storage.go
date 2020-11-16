@@ -477,6 +477,9 @@ func (me connBlob) Close() error {
 
 func (i instance) Get() (ret io.ReadCloser, err error) {
 	conn := i.getConn()
+	if conn == nil {
+		panic("nil sqlite conn")
+	}
 	blob, err := i.openBlob(conn, false, true)
 	if err != nil {
 		i.putConn(conn)

@@ -10,7 +10,7 @@ require (
 	github.com/anacrolix/log v0.7.1-0.20200604014615-c244de44fd2d
 	github.com/anacrolix/missinggo v1.2.1
 	github.com/anacrolix/missinggo/perf v1.0.0
-	github.com/anacrolix/missinggo/v2 v2.4.1-0.20200419051441-747d9d7544c6
+	github.com/anacrolix/missinggo/v2 v2.4.1-0.20201115225934-0b235ba7a31c
 	github.com/anacrolix/multiless v0.0.0-20200413040533-acfd16f65d5d
 	github.com/anacrolix/sync v0.2.0
 	github.com/anacrolix/tagflag v1.1.1-0.20200411025953-9bb5209d56c2
@@ -44,4 +44,4 @@ go 1.13
 
 exclude bazil.org/fuse v0.0.0-20200419173433-3ba628eaf417
 
-replace crawshaw.io/sqlite => github.com/zombiezen/sqlite v0.3.3-0.20200630223153-bdd2fdca1601
+replace crawshaw.io/sqlite => github.com/getlantern/sqlite v0.3.3-0.20201116012831-1a85f453b62f

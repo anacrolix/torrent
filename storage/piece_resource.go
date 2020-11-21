@@ -6,6 +6,7 @@ import (
 	"path"
 	"sort"
 	"strconv"
+	"sync"
 
 	"github.com/anacrolix/missinggo/v2/resource"
 
@@ -103,9 +104,15 @@ func (s piecePerResourcePiece) MarkComplete() error {
 	}()
 	err := s.completed().Put(r)
 	if err == nil {
+		var wg sync.WaitGroup
 		for _, c := range incompleteChunks {
-			c.instance.Delete()
+			wg.Add(1)
+			go func(c chunk) {
+				defer wg.Done()
+				c.instance.Delete()
+			}(c)
 		}
+		wg.Wait()
 	}
 	return err
 }

@@ -8,8 +8,14 @@ import (
 type PieceState struct {
 	Priority piecePriority
 	storage.Completion
-	// The piece is being hashed, or is queued for hash.
+	// The piece is being hashed, or is queued for hash. Deprecated: Use those fields instead.
 	Checking bool
+
+	Hashing       bool
+	QueuedForHash bool
+	// The piece state is being marked in the storage.
+	Marking bool
+
 	// Some of the piece has been obtained.
 	Partial bool
 }

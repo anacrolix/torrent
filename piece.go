@@ -50,6 +50,7 @@ type Piece struct {
 
 	numVerifies         int64
 	hashing             bool
+	marking             bool
 	storageCompletionOk bool
 
 	publicPieceState PieceState

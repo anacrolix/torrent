@@ -500,9 +500,10 @@ func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {
 	p := &t.pieces[index]
 	ret.Priority = t.piecePriority(index)
 	ret.Completion = p.completion()
-	if p.queuedForHash() || p.hashing {
-		ret.Checking = true
-	}
+	ret.QueuedForHash = p.queuedForHash()
+	ret.Hashing = p.hashing
+	ret.Checking = ret.QueuedForHash || ret.Hashing
+	ret.Marking = p.marking
 	if !ret.Complete && t.piecePartiallyDownloaded(index) {
 		ret.Partial = true
 	}
@@ -562,8 +563,14 @@ func (psr PieceStateRun) String() (ret string) {
 			return ""
 		}
 	}()
-	if psr.Checking {
+	if psr.Hashing {
 		ret += "H"
+	}
+	if psr.QueuedForHash {
+		ret += "Q"
+	}
+	if psr.Marking {
+		ret += "M"
 	}
 	if psr.Partial {
 		ret += "P"
@@ -1738,6 +1745,13 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 			pieceHashedNotCorrect.Add(1)
 		}
 	}
+
+	p.marking = true
+	t.publishPieceChange(piece)
+	defer func() {
+		p.marking = false
+		t.publishPieceChange(piece)
+	}()
 
 	if passed {
 		if len(p.dirtiers) != 0 {

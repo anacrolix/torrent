@@ -319,9 +319,11 @@ func (p *provider) WriteConsecutiveChunks(prefix string, w io.Writer) (written i
 				where name like ?||'%'
 				order by offset`,
 			func(stmt *sqlite.Stmt) error {
+				offset := stmt.ColumnInt64(1)
+				if offset != written {
+					return fmt.Errorf("got chunk at offset %v, expected offset %v", offset, written)
+				}
 				r := stmt.ColumnReader(0)
-				//offset := stmt.ColumnInt64(1)
-				//log.Printf("got %v bytes at offset %v", r.Len(), offset)
 				w1, err := io.Copy(w, r)
 				written += w1
 				return err

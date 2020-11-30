@@ -40,7 +40,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
 )
 
-go 1.13
+go 1.15
 
 exclude bazil.org/fuse v0.0.0-20200419173433-3ba628eaf417
 

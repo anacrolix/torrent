@@ -133,7 +133,17 @@ func addTorrents(client *torrent.Client) error {
 		t.AddPeers(testPeers)
 		go func() {
 			<-t.GotInfo()
-			t.DownloadAll()
+			if len(flags.File) == 0 {
+				t.DownloadAll()
+			} else {
+				for _, f := range t.Files() {
+					for _, fileArg := range flags.File {
+						if f.DisplayPath() == fileArg {
+							f.Download()
+						}
+					}
+				}
+			}
 		}()
 	}
 	return nil
@@ -185,6 +195,7 @@ type DownloadCmd struct {
 	Ipv6 bool
 	Pex  bool
 
+	File    []string
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri" arg:"positional"`
 }
 

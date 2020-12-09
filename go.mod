@@ -4,7 +4,7 @@ require (
 	bazil.org/fuse v0.0.0-20200407214033-5883e5a4b512
 	crawshaw.io/sqlite v0.3.2
 	github.com/alexflint/go-arg v1.3.0
-	github.com/anacrolix/dht/v2 v2.6.1-0.20200416071723-3850fa1b802a
+	github.com/anacrolix/dht/v2 v2.7.0
 	github.com/anacrolix/envpprof v1.1.0
 	github.com/anacrolix/go-libutp v1.0.3
 	github.com/anacrolix/log v0.7.1-0.20200604014615-c244de44fd2d

@@ -142,6 +142,7 @@ func (me *trackerScraper) announce(event tracker.AnnounceEvent) (ret trackerAnno
 		ClientIp4:  krpc.NodeAddr{IP: me.t.cl.config.PublicIp4},
 		ClientIp6:  krpc.NodeAddr{IP: me.t.cl.config.PublicIp6},
 	}.Do()
+	me.t.logger.WithDefaultLevel(log.Debug).Printf("announce to %q returned %#v: %v", me.u.String(), res, err)
 	if err != nil {
 		ret.Err = fmt.Errorf("announcing: %w", err)
 		return

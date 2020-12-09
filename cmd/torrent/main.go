@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alexflint/go-arg"
 	"github.com/anacrolix/missinggo"
 	"github.com/dustin/go-humanize"
 	"golang.org/x/xerrors"
@@ -138,16 +139,37 @@ func addTorrents(client *torrent.Client) error {
 	return nil
 }
 
-var flags = struct {
+var flags struct {
+	Debug bool
+	Stats *bool
+
+	*DownloadCmd  `arg:"subcommand:download"`
+	*ListFilesCmd `arg:"subcommand:list-files"`
+}
+
+//DownloadCmd: &DownloadCmd{
+//	UploadRate:   -1,
+//	DownloadRate: -1,
+//	Progress:     true,
+//	Dht:          true,
+//
+//	TcpPeers:   true,
+//	UtpPeers:   true,
+//	Webtorrent: true,
+//
+//	Ipv4: true,
+//	Ipv6: true,
+//	Pex:  true,
+//},
+
+type DownloadCmd struct {
 	Mmap            bool          `help:"memory-map torrent data"`
 	TestPeer        []string      `help:"addresses of some starting peers"`
 	Seed            bool          `help:"seed after download is complete"`
 	Addr            string        `help:"network listen addr"`
-	UploadRate      tagflag.Bytes `help:"max piece bytes to send per second"`
+	UploadRate      tagflag.Bytes `help:"max piece bytes to send per second" default:"-1"`
 	DownloadRate    tagflag.Bytes `help:"max bytes per second down from peers"`
-	Debug           bool
 	PackedBlocklist string
-	Stats           *bool
 	PublicIP        net.IP
 	Progress        bool
 	PieceStates     bool
@@ -163,22 +185,11 @@ var flags = struct {
 	Ipv6 bool
 	Pex  bool
 
-	tagflag.StartPos
+	Torrent []string `arity:"+" help:"torrent file path or magnet uri" arg:"positional"`
+}
 
-	Torrent []string `arity:"+" help:"torrent file path or magnet uri"`
-}{
-	UploadRate:   -1,
-	DownloadRate: -1,
-	Progress:     true,
-	Dht:          true,
-
-	TcpPeers:   true,
-	UtpPeers:   true,
-	Webtorrent: true,
-
-	Ipv4: true,
-	Ipv6: true,
-	Pex:  true,
+type ListFilesCmd struct {
+	TorrentPath string `arg:"positional"`
 }
 
 func stdoutAndStderrAreSameFile() bool {
@@ -212,24 +223,32 @@ func main() {
 
 func mainErr() error {
 	stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
-	var flags struct {
-		tagflag.StartPos
-		Command string
-		Args    tagflag.ExcessArgs
-	}
-	parser := tagflag.Parse(&flags, tagflag.ParseIntermixed(false))
-	switch flags.Command {
-	case "announce":
-		return announceErr(flags.Args, parser)
-	case "download":
-		return downloadErr(flags.Args, parser)
+	p := arg.MustParse(&flags)
+	switch {
+	//case :
+	//	return announceErr(flags.Args, parser)
+	case flags.DownloadCmd != nil:
+		return downloadErr()
+	case flags.ListFilesCmd != nil:
+		mi, err := metainfo.LoadFromFile(flags.ListFilesCmd.TorrentPath)
+		if err != nil {
+			return fmt.Errorf("loading from file %q: %v", flags.ListFilesCmd.TorrentPath, err)
+		}
+		info, err := mi.UnmarshalInfo()
+		if err != nil {
+			return fmt.Errorf("unmarshalling info from metainfo at %q: %v", flags.ListFilesCmd.TorrentPath, err)
+		}
+		for _, f := range info.UpvertedFiles() {
+			fmt.Println(f.DisplayPath(&info))
+		}
+		return nil
 	default:
-		return fmt.Errorf("unknown command %q", flags.Command)
+		p.Fail(fmt.Sprintf("unexpected subcommand: %v", p.Subcommand()))
+		panic("unreachable")
 	}
 }
 
-func downloadErr(args []string, parent *tagflag.Parser) error {
-	tagflag.ParseArgs(&flags, args, tagflag.Parent(parent))
+func downloadErr() error {
 	defer envpprof.Stop()
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableWebseeds = flags.DisableWebseeds

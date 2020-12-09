@@ -178,22 +178,22 @@ type DownloadCmd struct {
 	Seed            bool          `help:"seed after download is complete"`
 	Addr            string        `help:"network listen addr"`
 	UploadRate      tagflag.Bytes `help:"max piece bytes to send per second" default:"-1"`
-	DownloadRate    tagflag.Bytes `help:"max bytes per second down from peers"`
+	DownloadRate    tagflag.Bytes `help:"max bytes per second down from peers" default:"-1"`
 	PackedBlocklist string
 	PublicIP        net.IP
-	Progress        bool
+	Progress        bool `default:"true"`
 	PieceStates     bool
 	Quiet           bool `help:"discard client logging"`
-	Dht             bool
+	Dht             bool `default:"true"`
 
-	TcpPeers        bool
-	UtpPeers        bool
-	Webtorrent      bool
+	TcpPeers        bool `default:"true"`
+	UtpPeers        bool `default:"true"`
+	Webtorrent      bool `default:"true"`
 	DisableWebseeds bool
 
-	Ipv4 bool
-	Ipv6 bool
-	Pex  bool
+	Ipv4 bool `default:"true"`
+	Ipv6 bool `default:"true"`
+	Pex  bool `default:"true"`
 
 	File    []string
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri" arg:"positional"`

@@ -4,6 +4,7 @@ package main
 import (
 	"expvar"
 	"fmt"
+	"io"
 	stdLog "log"
 	"net"
 	"net/http"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/alexflint/go-arg"
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/torrent/bencode"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	"golang.org/x/xerrors"
 
@@ -153,8 +156,12 @@ var flags struct {
 	Debug bool
 	Stats *bool
 
-	*DownloadCmd  `arg:"subcommand:download"`
-	*ListFilesCmd `arg:"subcommand:list-files"`
+	*DownloadCmd      `arg:"subcommand:download"`
+	*ListFilesCmd     `arg:"subcommand:list-files"`
+	*SpewBencodingCmd `arg:"subcommand:spew-bencoding"`
+}
+
+type SpewBencodingCmd struct {
 }
 
 //DownloadCmd: &DownloadCmd{
@@ -251,6 +258,20 @@ func mainErr() error {
 		}
 		for _, f := range info.UpvertedFiles() {
 			fmt.Println(f.DisplayPath(&info))
+		}
+		return nil
+	case flags.SpewBencodingCmd != nil:
+		d := bencode.NewDecoder(os.Stdin)
+		for i := 0; ; i++ {
+			var v interface{}
+			err := d.Decode(&v)
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("decoding message index %d: %w", i, err)
+			}
+			spew.Dump(v)
 		}
 		return nil
 	default:

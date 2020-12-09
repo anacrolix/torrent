@@ -153,6 +153,22 @@ func (me *trackerScraper) announce(event tracker.AnnounceEvent) (ret trackerAnno
 	return
 }
 
+// Returns whether we can shorten the interval, and sets notify to a channel that receives when we
+// might change our mind, or leaves it if we won't.
+func (me *trackerScraper) canIgnoreInterval(notify *<-chan struct{}) bool {
+	gotInfo := me.t.GotInfo()
+	select {
+	case <-gotInfo:
+		// Private trackers really don't like us announcing more than they specify. They're also
+		// tracking us very carefully, so it's best to comply.
+		private := me.t.info.Private
+		return private == nil || !*private
+	default:
+		*notify = gotInfo
+		return false
+	}
+}
+
 func (me *trackerScraper) Run() {
 	defer me.announceStopped()
 	// make sure first announce is a "started"
@@ -165,7 +181,7 @@ func (me *trackerScraper) Run() {
 		me.lastAnnounce = ar
 		me.t.cl.unlock()
 
-	wait:
+	recalculate:
 		// Make sure we don't announce for at least a minute since the last one.
 		interval := ar.Interval
 		if interval < time.Minute {
@@ -177,23 +193,26 @@ func (me *trackerScraper) Run() {
 		closed := me.t.closed.C()
 		me.t.cl.unlock()
 
-		// If we want peers, reduce the interval to the minimum.
+		// If we want peers, reduce the interval to the minimum if it's appropriate.
+
+		// A channel that receives when we should reconsider our interval. Starts as nil since that
+		// never receives.
+		var reconsider <-chan struct{}
 		select {
 		case <-wantPeers:
-			if interval > time.Minute {
+			if interval > time.Minute && me.canIgnoreInterval(&reconsider) {
 				interval = time.Minute
 			}
-			// Now we're at the minimum, don't trigger on it anymore.
-			wantPeers = nil
 		default:
+			reconsider = wantPeers
 		}
 
 		select {
 		case <-closed:
 			return
-		case <-wantPeers:
+		case <-reconsider:
 			// Recalculate the interval.
-			goto wait
+			goto recalculate
 		case <-time.After(time.Until(ar.Completed.Add(interval))):
 		}
 	}

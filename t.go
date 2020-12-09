@@ -16,6 +16,7 @@ func (t *Torrent) InfoHash() metainfo.Hash {
 
 // Returns a channel that is closed when the info (.Info()) for the torrent has become available.
 func (t *Torrent) GotInfo() <-chan struct{} {
+	// TODO: We shouldn't need to lock to take a channel here, if the event is only ever set.
 	t.cl.lock()
 	defer t.cl.unlock()
 	return t.gotMetainfo.C()

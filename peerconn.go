@@ -663,7 +663,7 @@ func (cn *PeerConn) writer(keepAliveTimeout time.Duration) {
 		if cn.writeBuffer.Len() == 0 {
 			cn.fillWriteBuffer()
 		}
-		if cn.writeBuffer.Len() == 0 && time.Since(lastWrite) >= keepAliveTimeout {
+		if cn.writeBuffer.Len() == 0 && time.Since(lastWrite) >= keepAliveTimeout && cn.useful() {
 			cn.writeBuffer.Write(pp.Message{Keepalive: true}.MustMarshalBinary())
 			postedKeepalives.Add(1)
 		}

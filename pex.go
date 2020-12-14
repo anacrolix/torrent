@@ -3,6 +3,7 @@ package torrent
 import (
 	"net"
 	"sync"
+	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -181,6 +182,7 @@ func shortestIP(ip net.IP) net.IP {
 type pexState struct {
 	ev        []pexEvent    // event feed, append-only
 	hold      []pexEvent    // delayed drops
+	rest      time.Time     // cooldown deadline on inbound
 	nc        int           // net number of alive conns
 	initCache pexMsgFactory // last generated initial message
 	initSeq   int           // number of events which went into initCache
@@ -192,6 +194,7 @@ func (s *pexState) Reset() {
 	s.ev = nil
 	s.hold = nil
 	s.nc = 0
+	s.rest = time.Time{}
 	s.initLock.Lock()
 	s.initCache = pexMsgFactory{}
 	s.initSeq = 0

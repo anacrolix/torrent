@@ -88,6 +88,15 @@ func (s *pexConnState) Share(postfn messageWriter) bool {
 
 // Recv is called from the reader goroutine
 func (s *pexConnState) Recv(payload []byte) error {
+	if !s.torrent.wantPeers() {
+		s.dbg.Printf("peer reserve ok, incoming PEX discarded")
+		return nil
+	}
+	if time.Now().Before(s.torrent.pex.rest) {
+		s.dbg.Printf("in cooldown period, incoming PEX discarded")
+		return nil
+	}
+
 	rx, err := pp.LoadPexMsg(payload)
 	if err != nil {
 		return fmt.Errorf("error unmarshalling PEX message: %s", err)
@@ -100,8 +109,10 @@ func (s *pexConnState) Recv(payload []byte) error {
 	peers.AppendFromPex(rx.Added6, rx.Added6Flags)
 	peers.AppendFromPex(rx.Added, rx.AddedFlags)
 	s.dbg.Printf("adding %d peers from PEX", len(peers))
-	s.torrent.addPeers(peers)
-	// s.dbg.Print("known swarm now:", s.torrent.KnownSwarm())
+	if len(peers) > 0 {
+		s.torrent.pex.rest = time.Now().Add(pexInterval)
+		s.torrent.addPeers(peers)
+	}
 
 	// one day we may also want to:
 	// - check if the peer is not flooding us with PEX updates

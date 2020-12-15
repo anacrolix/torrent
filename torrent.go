@@ -1438,32 +1438,9 @@ func (t *Torrent) startScrapingTracker(_url string) {
 				return nil
 			}
 		}
-		urlString := (*u).String()
-		cl := t.cl
 		newAnnouncer := &trackerScraper{
 			u: *u,
 			t: t,
-			allow: func() {
-				cl.lock()
-				defer cl.unlock()
-				if cl.activeAnnounces == nil {
-					cl.activeAnnounces = make(map[string]struct{})
-				}
-				for {
-					if _, ok := cl.activeAnnounces[urlString]; ok {
-						cl.event.Wait()
-					} else {
-						break
-					}
-				}
-				cl.activeAnnounces[urlString] = struct{}{}
-			},
-			done: func(slowdown bool) {
-				cl.lock()
-				defer cl.unlock()
-				delete(cl.activeAnnounces, urlString)
-				cl.event.Broadcast()
-			},
 		}
 		go newAnnouncer.Run()
 		return newAnnouncer

@@ -78,7 +78,56 @@ type Client struct {
 	numHalfOpen     int
 
 	websocketTrackers websocketTrackers
-	activeAnnounces   map[string]struct{}
+
+	activeAnnouncesMu sync.Mutex
+	// Limits concurrent use of a trackers by URL. Push into the channel to use a slot, and receive
+	// to free up a slot.
+	activeAnnounces map[string]*activeAnnouncesValueType
+}
+
+type activeAnnouncesValueType struct {
+	ch   chan struct{}
+	refs int
+}
+
+type activeAnnouncesValueRef struct {
+	r   *activeAnnouncesValueType
+	url string
+	cl  *Client
+}
+
+func (me activeAnnouncesValueRef) C() chan struct{} {
+	return me.r.ch
+}
+
+func (me activeAnnouncesValueRef) Drop() {
+	me.cl.activeAnnouncesMu.Lock()
+	defer me.cl.activeAnnouncesMu.Unlock()
+	me.r.refs--
+	if me.r.refs == 0 {
+		delete(me.cl.activeAnnounces, me.url)
+	}
+}
+
+func (cl *Client) getAnnounceRef(url string) activeAnnouncesValueRef {
+	cl.activeAnnouncesMu.Lock()
+	defer cl.activeAnnouncesMu.Unlock()
+	if cl.activeAnnounces == nil {
+		cl.activeAnnounces = make(map[string]*activeAnnouncesValueType)
+	}
+	v, ok := cl.activeAnnounces[url]
+	if !ok {
+		v = &activeAnnouncesValueType{
+			ch: make(chan struct{}, 2),
+		}
+		cl.activeAnnounces[url] = v
+	}
+	v.refs++
+	return activeAnnouncesValueRef{
+		r:   v,
+		url: url,
+		cl:  cl,
+	}
 }
 
 type ipStr string

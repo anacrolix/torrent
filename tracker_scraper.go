@@ -112,7 +112,7 @@ func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEv
 	ret.Interval = time.Minute
 
 	// Limit concurrent use of the same tracker URL by the Client.
-	ref := me.t.cl.getAnnounceRef(me.u.String())
+	ref := me.t.cl.activeAnnounceLimiter.GetRef(me.u.String())
 	defer ref.Drop()
 	select {
 	case <-ctx.Done():

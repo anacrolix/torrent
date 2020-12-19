@@ -55,14 +55,10 @@ type requestStrategyCallbacks interface {
 	requestTimedOut(request)
 }
 
-// Favour higher priority pieces with some fuzzing to reduce overlaps and wastage across
-// connections.
 type requestStrategyFuzzing struct {
 	requestStrategyDefaults
 }
 
-// The fastest connection downloads strictly in order of priority, while all others adhere to their
-// piece inclinations.
 type requestStrategyFastest struct {
 	requestStrategyDefaults
 }
@@ -73,10 +69,14 @@ func newRequestStrategyMaker(rs requestStrategy) requestStrategyMaker {
 	}
 }
 
+// The fastest connection downloads strictly in order of priority, while all others adhere to their
+// piece inclinations.
 func RequestStrategyFastest() requestStrategyMaker {
 	return newRequestStrategyMaker(requestStrategyFastest{})
 }
 
+// Favour higher priority pieces with some fuzzing to reduce overlaps and wastage across
+// connections.
 func RequestStrategyFuzzing() requestStrategyMaker {
 	return newRequestStrategyMaker(requestStrategyFuzzing{})
 }
@@ -94,8 +94,6 @@ func (requestStrategyFastest) shouldRequestWithoutBias(cn requestStrategyConnect
 	return false
 }
 
-// Requests are strictly by piece priority, and not duplicated until duplicateRequestTimeout is
-// reached.
 type requestStrategyDuplicateRequestTimeout struct {
 	requestStrategyDefaults
 	// How long to avoid duplicating a pending request.
@@ -113,6 +111,8 @@ type requestStrategyDuplicateRequestTimeout struct {
 // Generates a request strategy instance for a given torrent. callbacks are probably specific to the torrent.
 type requestStrategyMaker func(callbacks requestStrategyCallbacks, clientLocker sync.Locker) requestStrategy
 
+// Requests are strictly by piece priority, and not duplicated until duplicateRequestTimeout is
+// reached.
 func RequestStrategyDuplicateRequestTimeout(duplicateRequestTimeout time.Duration) requestStrategyMaker {
 	return func(callbacks requestStrategyCallbacks, clientLocker sync.Locker) requestStrategy {
 		return requestStrategyDuplicateRequestTimeout{

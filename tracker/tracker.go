@@ -66,6 +66,9 @@ type Announce struct {
 	Context   context.Context
 }
 
+// The code *is* the documentation.
+const DefaultTrackerAnnounceTimeout = 15 * time.Second
+
 func (me Announce) Do() (res AnnounceResponse, err error) {
 	_url, err := url.Parse(me.TrackerUrl)
 	if err != nil {
@@ -75,7 +78,7 @@ func (me Announce) Do() (res AnnounceResponse, err error) {
 		// This is just to maintain the old behaviour that should be a timeout of 15s. Users can
 		// override it by providing their own Context. See comments elsewhere about longer timeouts
 		// acting as rate limiting overloaded trackers.
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), DefaultTrackerAnnounceTimeout)
 		defer cancel()
 		me.Context = ctx
 	}

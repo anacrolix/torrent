@@ -136,13 +136,15 @@ func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEv
 	me.t.cl.rLock()
 	req := me.t.announceRequest(event)
 	me.t.cl.rUnlock()
-	// The default timeout is currently 15s, and that works well as backpressure on concurrent
-	// access to the tracker.
-	//ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	//defer cancel()
+	// The default timeout works well as backpressure on concurrent access to the tracker. Since
+	// we're passing our own Context now, we will include that timeout ourselves to maintain similar
+	// behavior to previously, albeit with this context now being cancelled when the Torrent is
+	// closed.
+	ctx, cancel := context.WithTimeout(ctx, tracker.DefaultTrackerAnnounceTimeout)
+	defer cancel()
 	me.t.logger.WithDefaultLevel(log.Debug).Printf("announcing to %q: %#v", me.u.String(), req)
 	res, err := tracker.Announce{
-		//Context:    ctx,
+		Context:    ctx,
 		HTTPProxy:  me.t.cl.config.HTTPProxy,
 		UserAgent:  me.t.cl.config.HTTPUserAgent,
 		TrackerUrl: me.trackerUrl(ip),
@@ -243,7 +245,7 @@ func (me *trackerScraper) Run() {
 }
 
 func (me *trackerScraper) announceStopped() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), tracker.DefaultTrackerAnnounceTimeout)
 	defer cancel()
 	me.announce(ctx, tracker.Stopped)
 }

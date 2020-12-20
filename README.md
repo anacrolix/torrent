@@ -26,7 +26,11 @@ Install the library package with `go get github.com/anacrolix/torrent`, or the p
 
 There are some small [examples](https://godoc.org/github.com/anacrolix/torrent#pkg-examples) in the package documentation.
 
-## Downstream projects
+## Mentions
+
+ * @anacrolix and this repo are in [Console 32](https://console.substack.com/p/console-32).
+
+### Downstream projects
 
 There are several web-frontends and Android clients among the known public projects:
 

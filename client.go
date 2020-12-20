@@ -24,7 +24,7 @@ import (
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
-	"github.com/anacrolix/torrent/internal/string-limiter"
+	"github.com/anacrolix/torrent/internal/limiter"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/webtorrent"
 	"github.com/davecgh/go-spew/spew"
@@ -80,7 +80,7 @@ type Client struct {
 
 	websocketTrackers websocketTrackers
 
-	activeAnnounceLimiter string_limiter.Instance
+	activeAnnounceLimiter limiter.Instance
 }
 
 type ipStr string

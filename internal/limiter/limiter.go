@@ -1,15 +1,17 @@
-package string_limiter
+package limiter
 
 import "sync"
 
-// Manages resources with a limited number of concurrent slots for use keyed by a string.
+type Key = interface{}
+
+// Manages resources with a limited number of concurrent slots for use for each key.
 type Instance struct {
 	SlotsPerKey int
 
 	mu sync.Mutex
 	// Limits concurrent use of a resource. Push into the channel to use a slot, and receive to free
 	// up a slot.
-	active map[string]*activeValueType
+	active map[Key]*activeValueType
 }
 
 type activeValueType struct {
@@ -19,7 +21,7 @@ type activeValueType struct {
 
 type ActiveValueRef struct {
 	v *activeValueType
-	k string
+	k Key
 	i *Instance
 }
 
@@ -40,11 +42,11 @@ func (me ActiveValueRef) Drop() {
 
 // Get a reference to the values for a key. You should make sure to call Drop exactly once on the
 // returned value when done.
-func (i *Instance) GetRef(key string) ActiveValueRef {
+func (i *Instance) GetRef(key Key) ActiveValueRef {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if i.active == nil {
-		i.active = make(map[string]*activeValueType)
+		i.active = make(map[Key]*activeValueType)
 	}
 	v, ok := i.active[key]
 	if !ok {

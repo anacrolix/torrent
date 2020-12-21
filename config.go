@@ -118,6 +118,8 @@ type ClientConfig struct {
 	PublicIp4 net.IP
 	PublicIp6 net.IP
 
+	// Accept rate limiting affects excessive connection attempts from IPs that fail during
+	// handshakes or request torrents that we don't have.
 	DisableAcceptRateLimiting bool
 	// Don't add connections that have the same peer ID as an existing
 	// connection for a given Torrent.

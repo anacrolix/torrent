@@ -36,8 +36,8 @@ type AnnounceResponse struct {
 type AnnounceEvent int32
 
 func (e AnnounceEvent) String() string {
-	// See BEP 3, "event".
-	return []string{"empty", "completed", "started", "stopped"}[e]
+	// See BEP 3, "event", and https://github.com/anacrolix/torrent/issues/416#issuecomment-751427001.
+	return []string{"", "completed", "started", "stopped"}[e]
 }
 
 const (

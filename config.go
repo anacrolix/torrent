@@ -170,13 +170,35 @@ func (cfg *ClientConfig) listenOnNetwork(n network) bool {
 	return true
 }
 
+// ClientConfigOption options for the client configuration
+type ClientConfigOption func(*ClientConfig)
+
+// ClientConfigDisableIPv6 disables ipv6 address.
+func ClientConfigDisableIPv6(c *ClientConfig) {
+	c.DisableIPv6 = true
+}
+
+// ClientConfigInfoLogger set the info logger
+func ClientConfigInfoLogger(l *log.Logger) ClientConfigOption {
+	return func(c *ClientConfig) {
+		c.Logger = l
+	}
+}
+
+// ClientConfigSeed enable/disable seeding
+func ClientConfigSeed(b bool) ClientConfigOption {
+	return func(c *ClientConfig) {
+		c.Seed = b
+	}
+}
+
 // NewDefaultClientConfig default client configuration.
-func NewDefaultClientConfig() *ClientConfig {
+func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 	cc := &ClientConfig{
 		HTTPUserAgent:                  DefaultHTTPUserAgent,
 		ExtendedHandshakeClientVersion: "go.torrent dev 20181121",
 		Bep20:                          "-GT0002-",
-		UpnpID:                         "anacrolix/torrent",
+		UpnpID:                         "james-lawrence/torrent",
 		NominalDialTimeout:             20 * time.Second,
 		MinDialTimeout:                 3 * time.Second,
 		EstablishedConnsPerTorrent:     200,
@@ -198,6 +220,10 @@ func NewDefaultClientConfig() *ClientConfig {
 		Logger:         log.New(log.Writer(), "[torrent] ", log.Flags()),
 		Warn:           discard{},
 		Debug:          discard{},
+	}
+
+	for _, opt := range options {
+		opt(cc)
 	}
 
 	return cc

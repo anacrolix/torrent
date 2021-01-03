@@ -56,15 +56,14 @@ func (mi MetaInfo) Write(w io.Writer) error {
 	return bencode.NewEncoder(w).Encode(mi)
 }
 
-// Set good default values in preparation for creating a new MetaInfo file.
+// SetDefaults set good default values in preparation for creating a new MetaInfo file.
 func (mi *MetaInfo) SetDefaults() {
 	mi.Comment = "yoloham"
 	mi.CreatedBy = "github.com/james-lawrence/torrent"
 	mi.CreationDate = time.Now().Unix()
-	// mi.Info.PieceLength = 256 * 1024
 }
 
-// Creates a Magnet from a MetaInfo.
+// Magnet creates a Magnet from a MetaInfo.
 func (mi *MetaInfo) Magnet(displayName string, infoHash Hash) (m Magnet) {
 	for t := range mi.UpvertedAnnounceList().DistinctValues() {
 		m.Trackers = append(m.Trackers, t)
@@ -74,7 +73,7 @@ func (mi *MetaInfo) Magnet(displayName string, infoHash Hash) (m Magnet) {
 	return
 }
 
-// Returns the announce list converted from the old single announce field if
+// UpvertedAnnounceList returns the announce list converted from the old single announce field if
 // necessary.
 func (mi *MetaInfo) UpvertedAnnounceList() AnnounceList {
 	if mi.AnnounceList.OverridesAnnounce(mi.Announce) {
@@ -84,4 +83,13 @@ func (mi *MetaInfo) UpvertedAnnounceList() AnnounceList {
 		return [][]string{{mi.Announce}}
 	}
 	return nil
+}
+
+// NodeList return nodes as a string slice.
+func (mi *MetaInfo) NodeList() (ret []string) {
+	ret = make([]string, len(mi.Nodes))
+	for _, node := range mi.Nodes {
+		ret = append(ret, string(node))
+	}
+	return ret
 }

@@ -1,1 +1,4 @@
 .torrent.bolt.db
+seeds
+vendor
+*.iso

@@ -978,7 +978,7 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 	)
 	t.setInfoBytes(src.InfoBytes)
 	t.addTrackers(src.Trackers)
-	cl.AddDHTNodes(src.Nodes)
+	cl.AddDHTNodes(src.DHTNodes)
 
 	return t
 }

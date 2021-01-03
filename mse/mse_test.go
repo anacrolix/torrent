@@ -79,12 +79,13 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 	}()
 	go func() {
 		defer wg.Done()
-		b, cm, err := ReceiveHandshake(b, sliceIter([][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")}), cryptoSelect)
-		require.NoError(t, err)
-		assert.Equal(t, cryptoSelect(cryptoProvides), cm)
+		res := ReceiveHandshakeEx(b, sliceIter([][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")}), cryptoSelect)
+		require.NoError(t, res.error)
+		assert.EqualValues(t, "yep", res.SecretKey)
+		b := res.ReadWriter
+		assert.Equal(t, cryptoSelect(cryptoProvides), res.CryptoMethod)
 		go b.Write([]byte(bData))
-		// Need to be exact here, as there are several reads, and net.Pipe is
-		// most synchronous.
+		// Need to be exact here, as there are several reads, and net.Pipe is most synchronous.
 		msg := make([]byte, len(ia)+len(aData))
 		n, _ := io.ReadFull(b, msg[:])
 		if n != len(msg) {

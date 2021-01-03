@@ -542,14 +542,28 @@ func InitiateHandshake(rw io.ReadWriter, skey []byte, initialPayload []byte, cry
 	return h.Do()
 }
 
-func ReceiveHandshake(rw io.ReadWriter, skeys SecretKeyIter, selectCrypto CryptoSelector) (ret io.ReadWriter, method CryptoMethod, err error) {
+type HandshakeResult struct {
+	io.ReadWriter
+	CryptoMethod
+	error
+	SecretKey []byte
+}
+
+func ReceiveHandshake(rw io.ReadWriter, skeys SecretKeyIter, selectCrypto CryptoSelector) (io.ReadWriter, CryptoMethod, error) {
+	res := ReceiveHandshakeEx(rw, skeys, selectCrypto)
+	return res.ReadWriter, res.CryptoMethod, res.error
+}
+
+func ReceiveHandshakeEx(rw io.ReadWriter, skeys SecretKeyIter, selectCrypto CryptoSelector) (ret HandshakeResult) {
 	h := handshake{
 		conn:         rw,
 		initer:       false,
 		skeys:        skeys,
 		chooseMethod: selectCrypto,
 	}
-	return h.Do()
+	ret.ReadWriter, ret.CryptoMethod, ret.error = h.Do()
+	ret.SecretKey = h.skey
+	return
 }
 
 // A function that given a function, calls it with secret keys until it

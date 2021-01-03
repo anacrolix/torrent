@@ -24,7 +24,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/elliotchance/orderedmap v1.3.0
-	github.com/frankban/quicktest v1.9.0
+	github.com/frankban/quicktest v1.11.3
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/golang/snappy v0.0.2 // indirect

@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -20,7 +21,6 @@ import (
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/sync"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/dustin/go-humanize"
 	"github.com/james-lawrence/torrent/dht/v2"
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 	"github.com/pkg/errors"
@@ -110,6 +110,7 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 
 	cl.lock()
 	defer cl.unlock()
+	log.Println("announcing", dlt.Name())
 	cl.eachDhtServer(func(s *dht.Server) {
 		go dlt.dhtAnnouncer(s)
 	})
@@ -263,22 +264,20 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	spew.Fdump(w, &cl.stats)
 	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.torrentsAsSlice()))
 	fmt.Fprintln(w)
-	for _, t := range slices.Sort(cl.torrentsAsSlice(), func(l, r *torrent) bool {
-		return l.InfoHash().AsString() < r.InfoHash().AsString()
-	}).([]*torrent) {
-		if t.name() == "" {
+	for _, t := range slices.Sort(cl.torrentsAsSlice(), func(l, r Torrent) bool {
+		return l.Metadata().InfoHash.AsString() < r.Metadata().InfoHash.AsString()
+	}).([]Torrent) {
+		metadata := t.Metadata()
+		if metadata.DisplayName == "" {
 			fmt.Fprint(w, "<unknown name>")
 		} else {
-			fmt.Fprint(w, t.name())
+			fmt.Fprint(w, metadata.DisplayName)
 		}
 		fmt.Fprint(w, "\n")
-		if t.info != nil {
-			fmt.Fprintf(w, "%f%% of %d bytes (%s)", 100*(1-float64(t.BytesMissing())/float64(t.info.TotalLength())), t.info.TotalLength(), humanize.Bytes(uint64(t.info.TotalLength())))
-		} else {
-			w.WriteString("<missing metainfo>")
+
+		if t, ok := t.(*torrent); ok {
+			t.writeStatus(w)
 		}
-		fmt.Fprint(w, "\n")
-		t.writeStatus(w)
 		fmt.Fprintln(w)
 	}
 }

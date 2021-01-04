@@ -30,7 +30,6 @@ require (
 	github.com/huandu/xstrings v1.3.0 // indirect
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/mattn/go-isatty v0.0.12 // indirect
-	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.4.0
 	github.com/spaolacci/murmur3 v1.1.0 // indirect

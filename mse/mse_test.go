@@ -253,3 +253,28 @@ func BenchmarkPipeRC4(t *testing.B) {
 		}
 	}
 }
+
+func BenchmarkSkeysReceive(b *testing.B) {
+	var skeys [][]byte
+	for range iter.N(100000) {
+		skeys = append(skeys, make([]byte, 20))
+	}
+	fillRand(b, skeys...)
+	initSkey := skeys[len(skeys)/2]
+	//c := qt.New(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range iter.N(b.N) {
+		initiator, receiver := net.Pipe()
+		go func() {
+			_, _, err := InitiateHandshake(initiator, initSkey, nil, AllSupportedCrypto)
+			if err != nil {
+				panic(err)
+			}
+		}()
+		res := ReceiveHandshakeEx(receiver, sliceIter(skeys), DefaultCryptoSelector)
+		if res.error != nil {
+			panic(res.error)
+		}
+	}
+}

@@ -3,20 +3,18 @@ package main
 import (
 	"fmt"
 
-	"github.com/anacrolix/tagflag"
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/tracker"
 )
 
-func announceErr(args []string, parent *tagflag.Parser) error {
-	var flags struct {
-		tagflag.StartPos
-		Tracker  string
-		InfoHash torrent.InfoHash
-	}
-	tagflag.ParseArgs(&flags, args, tagflag.Parent(parent))
+type AnnounceCmd struct {
+	Tracker  string `arg:"positional"`
+	InfoHash torrent.InfoHash
+}
+
+func announceErr() error {
 	response, err := tracker.Announce{
 		TrackerUrl: flags.Tracker,
 		Request: tracker.AnnounceRequest{

@@ -159,25 +159,10 @@ var flags struct {
 	*DownloadCmd      `arg:"subcommand:download"`
 	*ListFilesCmd     `arg:"subcommand:list-files"`
 	*SpewBencodingCmd `arg:"subcommand:spew-bencoding"`
+	*AnnounceCmd      `arg:"subcommand:announce"`
 }
 
-type SpewBencodingCmd struct {
-}
-
-//DownloadCmd: &DownloadCmd{
-//	UploadRate:   -1,
-//	DownloadRate: -1,
-//	Progress:     true,
-//	Dht:          true,
-//
-//	TcpPeers:   true,
-//	UtpPeers:   true,
-//	Webtorrent: true,
-//
-//	Ipv4: true,
-//	Ipv6: true,
-//	Pex:  true,
-//},
+type SpewBencodingCmd struct{}
 
 type DownloadCmd struct {
 	Mmap            bool          `help:"memory-map torrent data"`
@@ -243,6 +228,8 @@ func mainErr() error {
 	stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
 	p := arg.MustParse(&flags)
 	switch {
+	case flags.AnnounceCmd != nil:
+		return announceErr()
 	//case :
 	//	return announceErr(flags.Args, parser)
 	case flags.DownloadCmd != nil:

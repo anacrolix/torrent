@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 
 	"github.com/anacrolix/missinggo/x"
-	bolt "github.com/etcd-io/bbolt"
+	bolt "go.etcd.io/bbolt"
 
 	"github.com/james-lawrence/torrent/metainfo"
 )

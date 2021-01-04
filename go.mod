@@ -21,7 +21,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.0.0
-	github.com/etcd-io/bbolt v1.3.3
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/glycerine/go-unsnap-stream v0.0.0-20190901134440-81cf024a9e0a // indirect
 	github.com/google/btree v1.0.0
@@ -36,7 +35,7 @@ require (
 	github.com/stretchr/testify v1.4.0
 	github.com/tinylib/msgp v1.1.1 // indirect
 	github.com/willf/bloom v2.0.3+incompatible
-	go.etcd.io/bbolt v1.3.3 // indirect
+	go.etcd.io/bbolt v1.3.3
 	golang.org/x/net v0.0.0-20200114155413-6afb5195e5aa
 	golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9 // indirect
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0

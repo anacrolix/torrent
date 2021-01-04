@@ -201,7 +201,7 @@ func (cn *peer) cumInterest() time.Duration {
 	return ret
 }
 
-func (cn *PeerConn) peerHasAllPieces() (all bool, known bool) {
+func (cn *peer) peerHasAllPieces() (all bool, known bool) {
 	if cn.peerSentHaveAll {
 		return true, true
 	}
@@ -349,10 +349,10 @@ func (cn *peer) close() {
 	}
 	cn.discardPieceInclination()
 	cn._pieceRequestOrder.Clear()
-	cn.peerImpl._close()
+	cn.peerImpl.onClose()
 }
 
-func (cn *PeerConn) _close() {
+func (cn *PeerConn) onClose() {
 	if cn.pex.IsEnabled() {
 		cn.pex.Close()
 	}

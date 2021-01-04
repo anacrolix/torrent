@@ -14,7 +14,7 @@ type peerImpl interface {
 	// Return true if there's room for more activity.
 	request(request) bool
 	connectionFlags() string
-	_close()
+	onClose()
 	_postCancel(request)
 	onGotInfo(*metainfo.Info)
 	drop()

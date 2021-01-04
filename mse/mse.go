@@ -19,7 +19,6 @@ import (
 	"sync"
 
 	"github.com/anacrolix/missinggo/perf"
-	"github.com/bradfitz/iter"
 )
 
 const (
@@ -286,16 +285,20 @@ func (h *handshake) postWrite(b []byte) error {
 	return nil
 }
 
-func xor(dst, src []byte) (ret []byte) {
-	max := len(dst)
-	if max > len(src) {
-		max = len(src)
+func xor(a, b []byte) (ret []byte) {
+	max := len(a)
+	if max > len(b) {
+		max = len(b)
 	}
-	ret = make([]byte, 0, max)
-	for i := range iter.N(max) {
-		ret = append(ret, dst[i]^src[i])
-	}
+	ret = make([]byte, max)
+	xorInPlace(ret, a, b)
 	return
+}
+
+func xorInPlace(dst, a, b []byte) {
+	for i := range dst {
+		dst[i] = a[i] ^ b[i]
+	}
 }
 
 func marshal(w io.Writer, data ...interface{}) (err error) {
@@ -438,9 +441,17 @@ func (h *handshake) receiverSteps() (ret io.ReadWriter, chosen CryptoMethod, err
 	if err != nil {
 		return
 	}
+	expectedHash := hash(req3, h.s[:])
+	eachHash := sha1.New()
+	var sum, xored [sha1.Size]byte
 	err = ErrNoSecretKeyMatch
 	h.skeys(func(skey []byte) bool {
-		if bytes.Equal(xor(hash(req2, skey), hash(req3, h.s[:])), b[:]) {
+		eachHash.Reset()
+		eachHash.Write(req2)
+		eachHash.Write(skey)
+		eachHash.Sum(sum[:0])
+		xorInPlace(xored[:], sum[:], expectedHash)
+		if bytes.Equal(xored[:], b[:]) {
 			h.skey = skey
 			err = nil
 			return false

@@ -12,7 +12,7 @@ type AnnounceRequest struct {
 	Uploaded   int64   `json:"uploaded"`
 	Downloaded int64   `json:"downloaded"`
 	Left       int64   `json:"left"`
-	Event      string  `json:"event"`
+	Event      string  `json:"event,omitempty"`
 	Action     string  `json:"action"`
 	InfoHash   string  `json:"info_hash"`
 	PeerID     string  `json:"peer_id"`

@@ -13,20 +13,19 @@ import (
 	"github.com/anacrolix/missinggo/slices"
 )
 
-// The info dictionary.
+// Info dictionary.
 type Info struct {
-	PieceLength int64  `bencode:"piece length"`
-	Pieces      []byte `bencode:"pieces"`
-	Name        string `bencode:"name"`
-	Length      int64  `bencode:"length,omitempty"`
-	Private     *bool  `bencode:"private,omitempty"`
-	// TODO: Document this field.
+	PieceLength  int64      `bencode:"piece length"`
+	Pieces       []byte     `bencode:"pieces"`
+	Name         string     `bencode:"name"`
+	Length       int64      `bencode:"length,omitempty"`
+	Private      *bool      `bencode:"private,omitempty"`
 	Source       string     `bencode:"source,omitempty"`
 	Files        []FileInfo `bencode:"files,omitempty"`
 	cachedLength int64      // used to cache the total length of the torrent
 }
 
-// This is a helper that sets Files and Pieces from a root path and its
+// BuildFromFilePath this is a helper that sets Files and Pieces from a root path and its
 // children.
 func (info *Info) BuildFromFilePath(root string) (err error) {
 	info.Name = filepath.Base(root)

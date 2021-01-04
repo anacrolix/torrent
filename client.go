@@ -1091,6 +1091,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort) (
 }
 
 func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portOk bool) {
+	cl.config.DHTAnnouncePeer(ih, ip, port, portOk)
 	cl.lock()
 	defer cl.unlock()
 	t := cl.torrent(ih)

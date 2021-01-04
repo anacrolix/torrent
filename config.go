@@ -10,6 +10,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/conntrack"
 	"github.com/james-lawrence/torrent/dht/v2"
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/metainfo"
 	"golang.org/x/time/rate"
 
 	"github.com/james-lawrence/torrent/iplist"
@@ -131,7 +132,8 @@ type ClientConfig struct {
 	ConnTracker *conntrack.Instance
 
 	// OnQuery hook func
-	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
+	DHTOnQuery      func(query *krpc.Msg, source net.Addr) (propagate bool)
+	DHTAnnouncePeer func(ih metainfo.Hash, ip net.IP, port int, portOk bool)
 }
 
 func (cfg *ClientConfig) errors() llog {
@@ -215,11 +217,12 @@ func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 			Preferred:        true,
 			RequirePreferred: false,
 		},
-		CryptoSelector: mse.DefaultCryptoSelector,
-		CryptoProvides: mse.AllSupportedCrypto,
-		Logger:         log.New(log.Writer(), "[torrent] ", log.Flags()),
-		Warn:           discard{},
-		Debug:          discard{},
+		CryptoSelector:  mse.DefaultCryptoSelector,
+		CryptoProvides:  mse.AllSupportedCrypto,
+		Logger:          log.New(log.Writer(), "[torrent] ", log.Flags()),
+		Warn:            discard{},
+		Debug:           discard{},
+		DHTAnnouncePeer: func(ih metainfo.Hash, ip net.IP, port int, portOk bool) {},
 	}
 
 	for _, opt := range options {

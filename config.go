@@ -124,6 +124,10 @@ type ClientConfig struct {
 	// Don't add connections that have the same peer ID as an existing
 	// connection for a given Torrent.
 	DropDuplicatePeerIds bool
+	// Drop peers that are complete if we are also complete and have no use for the peer. This is a
+	// bit of a special case, since a peer could also be useless if they're just not interested, or
+	// we don't intend to obtain all of a torrent's data.
+	DropMutuallyCompletePeers bool
 
 	ConnTracker *conntrack.Instance
 
@@ -170,6 +174,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		DownloadRateLimiter:       unlimited,
 		ConnTracker:               conntrack.NewInstance(),
 		DisableAcceptRateLimiting: true,
+		DropMutuallyCompletePeers: true,
 		HeaderObfuscationPolicy: HeaderObfuscationPolicy{
 			Preferred:        true,
 			RequirePreferred: false,

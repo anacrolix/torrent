@@ -53,6 +53,8 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	// Create seeder and a Torrent.
 	cfg := torrent.TestingConfig()
 	cfg.Seed = true
+	// Some test instances don't like this being on, even when there's no cache involved.
+	cfg.DropMutuallyCompletePeers = false
 	if ps.SeederUploadRateLimiter != nil {
 		cfg.UploadRateLimiter = ps.SeederUploadRateLimiter
 	}
@@ -84,6 +86,8 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
 	cfg = torrent.TestingConfig()
+	// See the seeder client config comment.
+	cfg.DropMutuallyCompletePeers = false
 	if ps.LeecherStorage == nil {
 		cfg.DataDir = leecherDataDir
 	} else {
@@ -142,7 +146,12 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	assertReadAllGreeting(t, r)
 	assert.NotEmpty(t, seederTorrent.PeerConns())
 	leecherPeerConns := leecherTorrent.PeerConns()
-	assert.NotEmpty(t, leecherPeerConns)
+	if cfg.DropMutuallyCompletePeers {
+		// I don't think we can assume it will be empty already, due to timing.
+		//assert.Empty(t, leecherPeerConns)
+	} else {
+		assert.NotEmpty(t, leecherPeerConns)
+	}
 	foundSeeder := false
 	for _, pc := range leecherPeerConns {
 		completed := pc.PeerPieces().Len()

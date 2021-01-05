@@ -527,7 +527,9 @@ func TestTorrentDownloadAllThenCancel(t *testing.T) {
 
 // Ensure that it's an error for a peer to send an invalid have message.
 func TestPeerInvalidHave(t *testing.T) {
-	cl, err := NewClient(TestingConfig())
+	cfg := TestingConfig()
+	cfg.DropMutuallyCompletePeers = false
+	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()
 	info := metainfo.Info{
@@ -548,6 +550,7 @@ func TestPeerInvalidHave(t *testing.T) {
 	cn := &PeerConn{peer: peer{
 		t: tt,
 	}}
+	cn.peerImpl = cn
 	assert.NoError(t, cn.peerSentHave(0))
 	assert.Error(t, cn.peerSentHave(1))
 }

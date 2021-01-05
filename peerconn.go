@@ -843,6 +843,7 @@ func (cn *PeerConn) peerPiecesChanged() {
 			cn.updateRequests()
 		}
 	}
+	cn.t.maybeDropMutuallyCompletePeer(&cn.peer)
 }
 
 func (cn *PeerConn) raisePeerMinPieces(newMin pieceIndex) {
@@ -860,6 +861,7 @@ func (cn *PeerConn) peerSentHave(piece pieceIndex) error {
 	}
 	cn.raisePeerMinPieces(piece + 1)
 	cn._peerPieces.Set(bitmap.BitIndex(piece), true)
+	cn.t.maybeDropMutuallyCompletePeer(&cn.peer)
 	if cn.updatePiecePriority(piece) {
 		cn.updateRequests()
 	}

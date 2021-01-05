@@ -826,6 +826,26 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 	return t.haveInfo() && t.pieceComplete(index)
 }
 
+func (t *Torrent) maybeDropMutuallyCompletePeer(
+	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's okay?
+	p *peer,
+) {
+	if !t.cl.config.DropMutuallyCompletePeers {
+		return
+	}
+	if !t.haveAllPieces() {
+		return
+	}
+	if all, known := p.peerHasAllPieces(); !(known && all) {
+		return
+	}
+	if p.useful() {
+		return
+	}
+	log.Printf("dropping %v, which is mutually complete", p)
+	p.drop()
+}
+
 func (t *Torrent) haveChunk(r request) (ret bool) {
 	// defer func() {
 	// 	log.Println("have chunk", r, ret)
@@ -1808,6 +1828,7 @@ func (t *Torrent) onPieceCompleted(piece pieceIndex) {
 	t.cancelRequestsForPiece(piece)
 	for conn := range t.conns {
 		conn.have(piece)
+		t.maybeDropMutuallyCompletePeer(&conn.peer)
 	}
 }
 

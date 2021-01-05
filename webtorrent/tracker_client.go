@@ -35,6 +35,7 @@ type TrackerClient struct {
 	wsConn         *websocket.Conn
 	closed         bool
 	stats          TrackerClientStats
+	pingTicker     *time.Ticker
 }
 
 func (me *TrackerClient) Stats() TrackerClientStats {
@@ -78,7 +79,23 @@ func (tc *TrackerClient) doWebsocket() error {
 	tc.cond.Broadcast()
 	tc.mu.Unlock()
 	tc.announceOffers()
+	closeChan := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-tc.pingTicker.C:
+				err := c.WriteMessage(websocket.PingMessage, []byte{})
+				if err != nil {
+					return
+				}
+			case <-closeChan:
+				return
+			default:
+			}
+		}
+	}()
 	err = tc.trackerReadLoop(tc.wsConn)
+	close(closeChan)
 	tc.mu.Lock()
 	c.Close()
 	tc.mu.Unlock()
@@ -86,6 +103,7 @@ func (tc *TrackerClient) doWebsocket() error {
 }
 
 func (tc *TrackerClient) Run() error {
+	tc.pingTicker = time.NewTicker(60 * time.Second)
 	tc.cond.L = &tc.mu
 	tc.mu.Lock()
 	for !tc.closed {
@@ -112,6 +130,7 @@ func (tc *TrackerClient) Close() error {
 		tc.wsConn.Close()
 	}
 	tc.closeUnusedOffers()
+	tc.pingTicker.Stop()
 	tc.mu.Unlock()
 	tc.cond.Broadcast()
 	return nil

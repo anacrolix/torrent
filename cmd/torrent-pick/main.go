@@ -18,6 +18,7 @@ import (
 	"github.com/jessevdk/go-flags"
 
 	"github.com/james-lawrence/torrent"
+	"github.com/james-lawrence/torrent/autobind"
 	"github.com/james-lawrence/torrent/metainfo"
 )
 
@@ -116,7 +117,7 @@ func main() {
 
 	rootGroup.Client.DataDir = tmpdir
 
-	client, err := torrent.NewAutobind().Bind(torrent.NewClient(rootGroup.Client))
+	client, err := autobind.New().Bind(torrent.NewClient(rootGroup.Client))
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)
 	}

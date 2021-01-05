@@ -24,6 +24,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/james-lawrence/torrent"
+	"github.com/james-lawrence/torrent/autobind"
 	"github.com/james-lawrence/torrent/iplist"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
@@ -210,7 +211,7 @@ func mainErr() error {
 		defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
 	}
 
-	autobind := torrent.NewAutobind()
+	autobinder := autobind.New()
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableAcceptRateLimiting = true
 	clientConfig.NoDHT = !flags.Dht
@@ -229,7 +230,7 @@ func mainErr() error {
 		clientConfig.DefaultStorage = storage.NewMMap("")
 	}
 	if flags.Addr != "" {
-		autobind = torrent.NewAutobindSpecified(flags.Addr)
+		autobinder = autobind.NewSpecified(flags.Addr)
 	}
 	if flags.UploadRate != -1 {
 		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(flags.UploadRate), 256<<10)
@@ -251,7 +252,7 @@ func mainErr() error {
 		stop.Set()
 	}()
 
-	client, err := autobind.Bind(torrent.NewClient(clientConfig))
+	client, err := autobinder.Bind(torrent.NewClient(clientConfig))
 	if err != nil {
 		return xerrors.Errorf("creating client: %v", err)
 	}

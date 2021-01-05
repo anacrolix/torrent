@@ -1,4 +1,4 @@
-package torrent
+package torrent_test
 
 import (
 	"context"
@@ -7,14 +7,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/james-lawrence/torrent"
 	"github.com/james-lawrence/torrent/internal/testutil"
 )
 
 func TestReaderReadContext(t *testing.T) {
-	cl, err := NewClient(TestingConfig())
+	cl, err := torrent.NewClient(torrent.TestingConfig(t))
 	require.NoError(t, err)
 	defer cl.Close()
-	ts, err := NewFromMetaInfo(testutil.GreetingMetaInfo())
+	ts, err := torrent.NewFromMetaInfo(testutil.GreetingMetaInfo())
 	require.NoError(t, err)
 	tt, _, err := cl.Start(ts)
 	require.NoError(t, err)

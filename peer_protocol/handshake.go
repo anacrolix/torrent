@@ -72,7 +72,7 @@ type HandshakeResult struct {
 	metainfo.Hash
 }
 
-// ih is nil if we expect the peer to declare the InfoHash, such as when the peer initiated the
+// Handshake ih is nil if we expect the peer to declare the InfoHash, such as when the peer initiated the
 // connection. Returns ok if the Handshake was successful, and err if there was an unexpected
 // condition other than the peer simply abandoning the Handshake.
 func Handshake(
@@ -109,6 +109,7 @@ func Handshake(
 
 	post([]byte(Protocol))
 	post(extensions[:])
+
 	if ih != nil { // We already know what we want.
 		post(ih[:])
 		post(peerID[:])

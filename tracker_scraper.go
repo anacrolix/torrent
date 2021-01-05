@@ -65,9 +65,6 @@ func (me *trackerScraper) getIp() (ip net.IP, err error) {
 		return
 	}
 	for _, ip = range ips {
-		if me.t.cln.ipIsBlocked(ip) {
-			continue
-		}
 		switch me.u.Scheme {
 		case "udp4":
 			if ip.To4() == nil {

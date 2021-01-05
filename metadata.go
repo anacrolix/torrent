@@ -79,7 +79,8 @@ type Metadata struct {
 	Storage   storage.ClientImpl
 }
 
-func (t Metadata) merge(options ...Option) Metadata {
+// Merge Metadata options into the current metadata.
+func (t Metadata) Merge(options ...Option) Metadata {
 	for _, opt := range options {
 		opt(&t)
 	}
@@ -91,7 +92,7 @@ func (t Metadata) merge(options ...Option) Metadata {
 func New(info metainfo.Hash, options ...Option) (t Metadata, err error) {
 	t = Metadata{
 		InfoHash: info,
-	}.merge(options...)
+	}.Merge(options...)
 
 	return t, nil
 }
@@ -128,7 +129,7 @@ func NewFromFile(path string, options ...Option) (t Metadata, err error) {
 		return t, errors.WithStack(err)
 	}
 
-	return t.merge(options...), nil
+	return t.Merge(options...), nil
 }
 
 // NewFromMagnet creates a torrent from a magnet uri.

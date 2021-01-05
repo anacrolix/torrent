@@ -1,4 +1,4 @@
-package torrent
+package autobind
 
 import "strings"
 
@@ -38,20 +38,4 @@ func parseNetworkString(network string) (ret network) {
 	ret.UDP = c("udp")
 	ret.TCP = c("tcp")
 	return
-}
-
-func peerNetworkEnabled(n network, cfg *ClientConfig) bool {
-	if cfg.DisableUTP && n.UDP {
-		return false
-	}
-	if cfg.DisableTCP && n.TCP {
-		return false
-	}
-	if cfg.DisableIPv6 && n.Ipv6 {
-		return false
-	}
-	if cfg.DisableIPv4 && n.Ipv4 {
-		return false
-	}
-	return true
 }

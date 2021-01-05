@@ -1,12 +1,13 @@
 // +build !cgo disable_libutp
 
-package torrent
+package utpx
 
 import (
 	"github.com/anacrolix/utp"
 )
 
-func newUTPSocket(network, addr string, _ firewallCallback) (utpSocket, error) {
+// New UTP Socket
+func New(network, addr string) (Socket, error) {
 	s, err := utp.NewSocket(network, addr)
 	if s == nil {
 		return nil, err

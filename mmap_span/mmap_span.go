@@ -2,7 +2,6 @@ package mmap_span
 
 import (
 	"io"
-	"log"
 	"sync"
 
 	"github.com/edsrzf/mmap-go"
@@ -29,9 +28,8 @@ func (ms *MMapSpan) Close() error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	for _, mMap := range ms.span {
-		err := mMap.(segment).Unmap()
-		if err != nil {
-			log.Print(err)
+		if err := mMap.(segment).Unmap(); err != nil {
+			return err
 		}
 	}
 	return nil

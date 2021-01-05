@@ -21,10 +21,13 @@ func testFile(t *testing.T, filename string) {
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
 
-	if len(info.Files) == 1 {
+	switch len(info.Files) {
+	case 0:
+		t.Logf("Single file: %s (length: %d)\n", info.Name, info.Length)
+	case 1:
 		t.Logf("Single file: %s (length: %d)\n", info.Name, info.Files[0].Length)
-	} else {
-		t.Logf("Multiple files: %s\n", info.Name)
+	default:
+		t.Logf("Multiple files: %d %s\n", len(info.Files), info.Name)
 		for _, f := range info.Files {
 			t.Logf(" - %s (length: %d)\n", path.Join(f.Path...), f.Length)
 		}

@@ -1,10 +1,11 @@
-package torrent
+package autobind
 
 import (
 	"net"
 	"testing"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/james-lawrence/torrent/internal/utpx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -12,18 +13,18 @@ import (
 func testListenerNetwork(
 	t *testing.T,
 	listenFunc func(net, addr string) (net.Listener, error),
-	expectedNet, givenNet, addr string, validIp4 bool,
+	expectedNet, givenNet, addr string, validIP4 bool,
 ) {
 	l, err := listenFunc(givenNet, addr)
 	require.NoError(t, err)
 	defer l.Close()
 	assert.EqualValues(t, expectedNet, l.Addr().Network())
 	ip := missinggo.AddrIP(l.Addr())
-	assert.Equal(t, validIp4, ip.To4() != nil, ip)
+	assert.Equal(t, validIP4, ip.To4() != nil, ip)
 }
 
 func listenUtpListener(net, addr string) (l net.Listener, err error) {
-	l, err = newUTPSocket(net, addr, nil)
+	l, err = utpx.New(net, addr)
 	return
 }
 

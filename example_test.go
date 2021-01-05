@@ -8,6 +8,7 @@ import (
 
 	"github.com/anacrolix/utp"
 	"github.com/james-lawrence/torrent"
+	"github.com/james-lawrence/torrent/autobind"
 	"github.com/james-lawrence/torrent/sockets"
 )
 
@@ -17,7 +18,7 @@ func Example_download() {
 		metadata torrent.Metadata
 	)
 
-	c, _ := torrent.NewDefaultClient()
+	c, _ := autobind.NewDefaultClient()
 	defer c.Close()
 
 	if metadata, err = torrent.NewFromMagnet("magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU"); err != nil {

@@ -1,17 +1,34 @@
-package torrent
+package testutil
 
 import (
 	"errors"
+	"io/ioutil"
 	"math/rand"
 	"strings"
 
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
+	"github.com/stretchr/testify/require"
 )
 
-type badStorage struct{}
+type tt interface {
+	require.TestingT
+	TempDir() string
+}
 
-var _ storage.ClientImpl = badStorage{}
+// Autodir generates random directory under the testing temp dir.
+func Autodir(t tt) string {
+	dir, err := ioutil.TempDir(t.TempDir(), "")
+	require.NoError(t, err)
+	return dir
+}
+
+// NewBadStorage used for tests.
+func NewBadStorage() storage.ClientImpl {
+	return badStorage{}
+}
+
+type badStorage struct{}
 
 func (bs badStorage) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.TorrentImpl, error) {
 	return bs, nil

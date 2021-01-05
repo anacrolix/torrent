@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"net/url"
@@ -231,11 +232,11 @@ type torrent struct {
 // Metadata provides enough information to lookup the torrent again.
 func (t *torrent) Metadata() Metadata {
 	return Metadata{
-		DisplayName: t.displayName,
+		DisplayName: t.name(),
 		InfoHash:    t.infoHash,
 		ChunkSize:   int(t.chunkSize),
 		InfoBytes:   t.metadataBytes,
-		// Trackers: TODO
+		Trackers:    t.metainfo.AnnounceList,
 	}
 }
 
@@ -408,11 +409,7 @@ func (t *torrent) addPeer(p Peer) {
 	peersAddedBySource.Add(string(p.Source), 1)
 
 	if t.closed.IsSet() {
-		return
-	}
-
-	if t.cln.badPeerIPPort(p.IP, p.Port) {
-		metrics.Add("peers not added because of bad addr", 1)
+		log.Println("torrent.addPeer closed")
 		return
 	}
 
@@ -632,9 +629,6 @@ func (t *torrent) setMetadataSize(bytes int) (err error) {
 func (t *torrent) name() string {
 	t.nameMu.RLock()
 	defer t.nameMu.RUnlock()
-	if t.haveInfo() {
-		return t.info.Name
-	}
 	return t.displayName
 }
 
@@ -1840,16 +1834,13 @@ func (t *torrent) initiateConn(peer Peer) {
 		return
 	}
 
-	if t.cln.badPeerIPPort(peer.IP, peer.Port) && !peer.Trusted {
-		return
-	}
-
 	addr := IpPort{IP: peer.IP, Port: uint16(peer.Port)}
 	if t.addrActive(addr.String()) {
 		return
 	}
 
 	t.halfOpen[addr.String()] = peer
+
 	go t.cln.outgoingConnection(t, addr, peer.Source, peer.Trusted)
 }
 

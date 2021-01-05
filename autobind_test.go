@@ -1,29 +1,22 @@
-package torrent
+package torrent_test
 
 import (
 	"testing"
 
-	"github.com/anacrolix/utp"
-	"github.com/davecgh/go-spew/spew"
+	"github.com/james-lawrence/torrent"
+	"github.com/james-lawrence/torrent/internal/testutil"
 	"github.com/james-lawrence/torrent/internal/x/bytesx"
 	"github.com/stretchr/testify/require"
 )
 
-var _ = spew.Sdump
-
-func TestAutobindSockets(t *testing.T) {
-	autosocket := func() socket {
-		s, err := utp.NewSocket("udp", "localhost:0")
-		require.NoError(t, err)
-		return utpSocketSocket{utpSocket: s, network: "udp", d: nil}
-	}
-
-	s, err := NewSocketsBind(autosocket()).Bind(NewClient(TestingSeedConfig(autotempdir(t))))
+func TestSocketsBindSockets(t *testing.T) {
+	s, err := torrent.Autosocket(t).Bind(torrent.NewClient(TestingSeedConfig(t, testutil.Autodir(t))))
 	require.NoError(t, err)
 	defer s.Close()
 
-	l, err := NewSocketsBind(autosocket()).Bind(NewClient(TestingLeechConfig(autotempdir(t))))
+	l, err := torrent.Autosocket(t).Bind(torrent.NewClient(TestingLeechConfig(t, testutil.Autodir(t))))
 	require.NoError(t, err)
 	defer l.Close()
+
 	testTransferRandomData(t, bytesx.KiB, s, l)
 }

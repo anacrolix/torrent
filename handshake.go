@@ -40,10 +40,10 @@ func handleEncryption(
 ) {
 	if !policy.RequirePreferred || !policy.Preferred {
 		var protocol [len(pp.Protocol)]byte
-		_, err = io.ReadFull(rw, protocol[:])
-		if err != nil {
-			return
+		if _, err = io.ReadFull(rw, protocol[:]); err != nil {
+			return ret, headerEncrypted, cryptoMethod, err
 		}
+
 		rw = struct {
 			io.Reader
 			io.Writer

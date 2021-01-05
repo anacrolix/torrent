@@ -18,6 +18,7 @@ import (
 	"github.com/anacrolix/tagflag"
 
 	"github.com/james-lawrence/torrent"
+	"github.com/james-lawrence/torrent/autobind"
 	torrentfs "github.com/james-lawrence/torrent/fs"
 	"github.com/james-lawrence/torrent/util/dirwatch"
 )
@@ -90,7 +91,7 @@ func mainExitCode() int {
 	cfg.DataDir = args.DownloadDir
 	cfg.DisableTrackers = args.DisableTrackers
 	cfg.NoUpload = true // Ensure that downloads are responsive.
-	client, err := torrent.NewAutobindSpecified(args.ListenAddr.String()).Bind(torrent.NewClient(cfg))
+	client, err := autobind.NewSpecified(args.ListenAddr.String()).Bind(torrent.NewClient(cfg))
 	if err != nil {
 		log.Print(err)
 		return 1

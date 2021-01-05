@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/james-lawrence/torrent/connections"
+
 	"github.com/anacrolix/missinggo/v2/conntrack"
 	"github.com/james-lawrence/torrent/dht/v2"
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
@@ -58,10 +60,7 @@ type ClientConfig struct {
 
 	// User-provided Client peer ID. If not present, one is generated automatically.
 	PeerID string
-	// For the bittorrent protocol.
-	DisableUTP bool
-	// For the bittorrent protocol.
-	DisableTCP bool `long:"disable-tcp"`
+
 	// Called to instantiate storage for each added torrent. Builtin backends
 	// are in the storage package. If not set, the "file" implementation is
 	// used.
@@ -131,6 +130,8 @@ type ClientConfig struct {
 
 	ConnTracker *conntrack.Instance
 
+	connections.Handshaker
+
 	// OnQuery hook func
 	DHTOnQuery      func(query *krpc.Msg, source net.Addr) (propagate bool)
 	DHTAnnouncePeer func(ih metainfo.Hash, ip net.IP, port int, portOk bool)
@@ -150,26 +151,6 @@ func (cfg *ClientConfig) info() llog {
 
 func (cfg *ClientConfig) debug() llog {
 	return llog{logger: cfg.Debug}
-}
-
-func (cfg *ClientConfig) listenOnNetwork(n network) bool {
-	if n.Ipv4 && cfg.DisableIPv4 {
-		return false
-	}
-
-	if n.Ipv6 && cfg.DisableIPv6 {
-		return false
-	}
-
-	if n.TCP && cfg.DisableTCP {
-		return false
-	}
-
-	if n.UDP && cfg.DisableUTP && cfg.NoDHT {
-		return false
-	}
-
-	return true
 }
 
 // ClientConfigOption options for the client configuration
@@ -223,6 +204,9 @@ func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 		Warn:            discard{},
 		Debug:           discard{},
 		DHTAnnouncePeer: func(ih metainfo.Hash, ip net.IP, port int, portOk bool) {},
+		Handshaker: connections.NewHandshaker(
+			connections.AutoFirewall(),
+		),
 	}
 
 	for _, opt := range options {

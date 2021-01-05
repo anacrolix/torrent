@@ -21,7 +21,7 @@ import (
 func TestSendBitfieldThenHave(t *testing.T) {
 	t.SkipNow()
 	cl := Client{
-		config: TestingConfig(),
+		config: TestingConfig(t),
 	}
 	ts, err := New(metainfo.Hash{})
 	require.NoError(t, err)
@@ -165,4 +165,3 @@ func TestPexPeerFlags(t *testing.T) {
 		require.EqualValues(t, tc.f, f, i)
 	}
 }
-

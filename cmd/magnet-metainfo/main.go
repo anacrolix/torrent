@@ -10,6 +10,7 @@ import (
 	"github.com/anacrolix/tagflag"
 
 	"github.com/james-lawrence/torrent"
+	"github.com/james-lawrence/torrent/autobind"
 	"github.com/james-lawrence/torrent/bencode"
 )
 
@@ -19,7 +20,7 @@ func main() {
 		Magnet []string
 	}{}
 	tagflag.Parse(&args)
-	cl, err := torrent.NewAutobind().Bind(torrent.NewClient(nil))
+	cl, err := autobind.New().Bind(torrent.NewClient(nil))
 	if err != nil {
 		log.Fatalf("error creating client: %s", err)
 	}

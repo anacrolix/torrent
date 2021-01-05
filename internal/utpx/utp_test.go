@@ -1,4 +1,4 @@
-package torrent
+package utpx
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewUTPSocketErrorNilInterface(t *testing.T) {
-	s, err := newUTPSocket("fix", "your:language", nil)
+	s, err := New("fix", "your:language")
 	assert.Error(t, err)
 	if s != nil {
 		t.Fatalf("expected nil, got %#v", s)

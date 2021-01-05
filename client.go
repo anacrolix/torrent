@@ -23,6 +23,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/james-lawrence/torrent/dht/v2"
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/sockets"
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
 	"golang.org/x/xerrors"
@@ -395,13 +396,31 @@ func (cl *Client) Bind(s socket) (err error) {
 }
 
 func (cl *Client) bindDHT(s socket) (err error) {
-	if pc, ok := s.(net.PacketConn); ok && !cl.config.NoDHT {
-		ds, err := cl.newDhtServer(pc)
-		if err != nil {
-			return err
-		}
-		cl.dhtServers = append(cl.dhtServers, ds)
+	var (
+		ok bool
+		ss sockets.Socket
+		pc net.PacketConn
+	)
+
+	if cl.config.NoDHT {
+		return nil
 	}
+
+	if ss, ok = s.(sockets.Socket); !ok {
+		return nil
+	}
+
+	if pc, ok = ss.Listener.(net.PacketConn); !ok {
+		return nil
+	}
+
+	ds, err := cl.newDhtServer(pc)
+	if err != nil {
+		return err
+	}
+
+	cl.dhtServers = append(cl.dhtServers, ds)
+
 	return nil
 }
 

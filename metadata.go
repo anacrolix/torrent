@@ -1,6 +1,8 @@
 package torrent
 
 import (
+	"time"
+
 	"github.com/anacrolix/missinggo"
 	"github.com/james-lawrence/torrent/bencode"
 	"github.com/james-lawrence/torrent/metainfo"
@@ -187,4 +189,13 @@ func NewFromMetaInfo(mi *metainfo.MetaInfo, options ...Option) (t Metadata, err 
 		mi.HashInfoBytes(),
 		options...,
 	)
+}
+
+// Metainfo generate metainfo from the metadata.
+func (t Metadata) Metainfo() metainfo.MetaInfo {
+	return metainfo.MetaInfo{
+		AnnounceList: make([][]string, 0),
+		InfoBytes:    t.InfoBytes,
+		CreationDate: time.Now().Unix(),
+	}
 }

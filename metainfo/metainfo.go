@@ -1,6 +1,7 @@
 package metainfo
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"time"
@@ -92,4 +93,17 @@ func (mi *MetaInfo) NodeList() (ret []string) {
 		ret = append(ret, string(node))
 	}
 	return ret
+}
+
+// Encode metainfo to store.
+func Encode(mi MetaInfo) (encoded []byte, err error) {
+	var (
+		buf = bytes.NewBufferString("")
+	)
+
+	if err = bencode.NewEncoder(buf).Encode(mi); err != nil {
+		return encoded, err
+	}
+
+	return buf.Bytes(), nil
 }

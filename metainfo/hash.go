@@ -2,7 +2,6 @@ package metainfo
 
 import (
 	"crypto/sha1"
-	"encoding"
 	"encoding/hex"
 	"fmt"
 )

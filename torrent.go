@@ -842,7 +842,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	if p.useful() {
 		return
 	}
-	log.Printf("dropping %v, which is mutually complete", p)
+	t.logger.WithDefaultLevel(log.Debug).Printf("dropping %v, which is mutually complete", p)
 	p.drop()
 }
 

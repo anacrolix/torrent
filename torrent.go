@@ -255,16 +255,16 @@ func (t *torrent) locker() sync.Locker {
 
 func (t *torrent) _lock(depth int) {
 	// updated := atomic.AddUint64(&t.lcount, 1)
-	// l2.Output(depth, fmt.Sprintf("t(%p) lock initiated - %d", t, updated))
+	// log.Output(depth, fmt.Sprintf("t(%p) lock initiated - %d", t, updated))
 	t._mu.Lock()
-	// l2.Output(depth, fmt.Sprintf("t(%p) lock completed - %d", t, updated))
+	// log.Output(depth, fmt.Sprintf("t(%p) lock completed - %d", t, updated))
 }
 
 func (t *torrent) _unlock(depth int) {
 	// updated := atomic.AddUint64(&t.ucount, 1)
-	// l2.Output(depth, fmt.Sprintf("t(%p) unlock initiated - %d", t, updated))
+	// log.Output(depth, fmt.Sprintf("t(%p) unlock initiated - %d", t, updated))
 	t._mu.Unlock()
-	// l2.Output(depth, fmt.Sprintf("t(%p) unlock completed - %d", t, updated))
+	// log.Output(depth, fmt.Sprintf("t(%p) unlock completed - %d", t, updated))
 }
 
 func (t *torrent) _rlock(depth int) {
@@ -1401,7 +1401,7 @@ func (t *torrent) assertNoPendingRequests() {
 }
 
 func (t *torrent) wantPeers() bool {
-	if t.closed.IsSet() || t.wantPeersEvent.IsSet() {
+	if t.closed.IsSet() {
 		return false
 	}
 
@@ -1457,14 +1457,6 @@ func (t *torrent) startScrapingTracker(_url string) {
 		t.startScrapingTracker(u.String())
 		u.Scheme = "udp6"
 		t.startScrapingTracker(u.String())
-		return
-	}
-
-	if u.Scheme == "udp4" && (t.config.DisableIPv4Peers || t.config.DisableIPv4) {
-		return
-	}
-
-	if u.Scheme == "udp6" && t.config.DisableIPv6 {
 		return
 	}
 
@@ -1565,6 +1557,7 @@ func (t *torrent) dhtAnnouncer(s *dht.Server) {
 		t.lock()
 		t.numDHTAnnounces++
 		t.unlock()
+
 		if err := t.announceToDht(true, s); err != nil {
 			t.config.errors().Println(t, errors.Wrap(err, "error announcing to DHT"))
 			time.Sleep(time.Second)
@@ -2070,12 +2063,6 @@ func (t *torrent) String() string {
 	}
 
 	return t.infoHash.HexString()
-}
-
-func (t *torrent) AddTrackers(announceList [][]string) {
-	t.lock()
-	defer t.unlock()
-	t.addTrackers(announceList)
 }
 
 func (t *torrent) Piece(i pieceIndex) *Piece {

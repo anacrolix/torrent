@@ -29,7 +29,6 @@ import (
 
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/x/stringsx"
-	"github.com/james-lawrence/torrent/iplist"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/mse"
 	pp "github.com/james-lawrence/torrent/peer_protocol"
@@ -53,12 +52,12 @@ type Client struct {
 
 	config *ClientConfig
 
-	peerID          PeerID
-	defaultStorage  *storage.Client
-	onClose         []func()
-	conns           []socket
-	dhtServers      []*dht.Server
-	ipBlockList     iplist.Ranger
+	peerID         PeerID
+	defaultStorage *storage.Client
+	onClose        []func()
+	conns          []socket
+	dhtServers     []*dht.Server
+
 	extensionBytes  pp.PeerExtensionBits // Our BitTorrent protocol extension bytes, sent in our BT handshakes.
 	torrents        map[metainfo.Hash]*torrent
 	dialRateLimiter *rate.Limiter
@@ -306,9 +305,6 @@ func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 		})
 	}
 	cl.defaultStorage = storage.NewClient(storageImpl)
-	if cfg.IPBlocklist != nil {
-		cl.ipBlockList = cfg.IPBlocklist
-	}
 
 	o := copy(cl.peerID[:], stringsx.Default(cfg.PeerID, cfg.Bep20))
 	if _, err = rand.Read(cl.peerID[o:]); err != nil {
@@ -330,7 +326,6 @@ func (cl *Client) firewallCallback(net.Addr) bool {
 
 func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	cfg := dht.ServerConfig{
-		IPBlocklist:    cl.ipBlockList,
 		Conn:           conn,
 		OnAnnouncePeer: cl.onDHTAnnouncePeer,
 		PublicIP: func() net.IP {
@@ -548,6 +543,10 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) (conn net.Conn, er
 
 	return nil, err
 
+	// type dialResult struct {
+	// 	Conn net.Conn
+	// 	cause error
+	// }
 	// resCh := make(chan dialResult, left)
 	// for _, cs := range conns {
 	// 	go func(cs socket) {

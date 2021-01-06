@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"expvar"
 	"fmt"
 	"io/ioutil"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/james-lawrence/torrent"
 	"github.com/james-lawrence/torrent/autobind"
+	"github.com/james-lawrence/torrent/internal/x/debugx"
 	"github.com/james-lawrence/torrent/iplist"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
@@ -194,6 +196,7 @@ func exitSignalHandlers(notify *missinggo.SynchronizedEvent) {
 }
 
 func main() {
+	go debugx.DumpOnSignal(context.Background(), syscall.SIGUSR2)
 	if err := mainErr(); err != nil {
 		log.Printf("error in main: %v\n", err)
 		os.Exit(1)
@@ -224,7 +227,7 @@ func mainErr() error {
 			return xerrors.Errorf("loading blocklist: %v", err)
 		}
 		defer blocklist.Close()
-		clientConfig.IPBlocklist = blocklist
+		// clientConfig.IPBlocklist = blocklist
 	}
 	if flags.Mmap {
 		clientConfig.DefaultStorage = storage.NewMMap("")

@@ -15,7 +15,6 @@ import (
 	"github.com/james-lawrence/torrent/metainfo"
 	"golang.org/x/time/rate"
 
-	"github.com/james-lawrence/torrent/iplist"
 	"github.com/james-lawrence/torrent/mse"
 	"github.com/james-lawrence/torrent/storage"
 )
@@ -77,9 +76,6 @@ type ClientConfig struct {
 	// 			 http://proxy.domain.com:3128
 	ProxyURL string
 
-	IPBlocklist      iplist.Ranger
-	DisableIPv6      bool `long:"disable-ipv6"`
-	DisableIPv4      bool
 	DisableIPv4Peers bool
 	Logger           logger // standard logging for errors, defaults to stderr
 	Warn             logger // warn logging
@@ -155,11 +151,6 @@ func (cfg *ClientConfig) debug() llog {
 
 // ClientConfigOption options for the client configuration
 type ClientConfigOption func(*ClientConfig)
-
-// ClientConfigDisableIPv6 disables ipv6 address.
-func ClientConfigDisableIPv6(c *ClientConfig) {
-	c.DisableIPv6 = true
-}
 
 // ClientConfigInfoLogger set the info logger
 func ClientConfigInfoLogger(l *log.Logger) ClientConfigOption {

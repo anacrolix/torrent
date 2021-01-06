@@ -96,7 +96,6 @@ func GlobalBootstrapAddrs() (addrs []Addr, err error) {
 		"dht.aelitis.com:6881",     // Vuze
 		"router.silotis.us:6881",   // IPv6
 		"dht.libtorrent.org:25401", // @arvidn's
-
 	} {
 		host, port, err := net.SplitHostPort(s)
 		if err != nil {

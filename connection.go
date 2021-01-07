@@ -40,8 +40,11 @@ const (
 )
 
 func newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort) (c *connection) {
+	_mu := &sync.RWMutex{}
+
 	return &connection{
-		_mu:              &sync.RWMutex{},
+		_mu:              _mu,
+		writerCond:       sync.NewCond(_mu),
 		conn:             nc,
 		outgoing:         outgoing,
 		Choked:           true,
@@ -129,7 +132,7 @@ type connection struct {
 	// pieces we've accepted chunks for from the peer.
 	touched *roaring.Bitmap
 
-	// // The pieces the peer has claimed to have.
+	// The pieces the peer has claimed to have.
 	// peerPieces bitmap.Bitmap
 
 	// The peer has everything. This can occur due to a special message, when
@@ -150,7 +153,7 @@ type connection struct {
 
 	writeBuffer *bytes.Buffer
 	uploadTimer *time.Timer
-	writerCond  sync.Cond
+	writerCond  *sync.Cond
 
 	drop chan error
 }
@@ -582,7 +585,6 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		return
 	}
 
-	// l2.Printf("(%d) - c(%p) filling buffer - available(%d) - outstanding (%d)\n", os.Getpid(), cn, cn.peerPieces.Len(), len(cn.requests))
 	filledBuffer := false
 
 	if cn.peerSentHaveAll && cn.claimed.IsEmpty() {
@@ -592,7 +594,6 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	}
 
 	if cn.PeerChoked && !cn.fastset.IsEmpty() {
-		// l2.Printf("(%d) - c(%p) only requesting fast set\n", os.Getpid(), cn)
 		available = cn.fastset.Clone()
 	} else {
 		available = cn.claimed.Clone()
@@ -615,12 +616,12 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		cn.cmu().Unlock()
 
 		if len(reqs) == 0 {
-			// if cn.t.piecesM.Missing() > 0 && cn.t.piecesM.Missing() < 5 {
+			// if cn.t.chunks.Missing() > 0 && cn.t.chunks.Missing() < 5 {
 			// 	ug := available.Clone()
 			// 	ug.And(cn.t.piecesM.missing)
 			// 	cn.t.config.info().Printf(
 			// 		"(%d) - c(%p) empty queue - available(%d) - outstanding (%d) missing(%d - %s) want(%s) blacklisted(%s)\n",
-			// 		os.Getpid(), cn, available.GetCardinality(), len(cn.requests), cn.t.piecesM.Missing(), bitmapx.Debug(cn.t.piecesM.missing), bitmapx.Debug(ug), bitmapx.Debug(cn.blacklisted),
+			// 		os.Getpid(), cn, available.GetCardinality(), len(cn.requests), cn.t.chunks.Missing(), bitmapx.Debug(cn.t.chunks.missing), bitmapx.Debug(ug), bitmapx.Debug(cn.blacklisted),
 			// 	)
 			// }
 			return
@@ -631,21 +632,14 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	}
 
 	for max, req = range reqs {
-		// l2.Printf("c(%p) - popped d(%020d) r(%d,%d,%d) - %v\n", cn, req.Digest, req.Index, req.Begin, req.Length, err)
-
 		if cn.closed.IsSet() {
-			// l2.Printf("c(%p) closed break - d(%020d) r(%d,%d,%d)\n", cn, req.Digest, req.Index, req.Begin, req.Length)
 			break
 		}
 
 		// Choking is looked at here because our interest is dependent
 		// on whether we'd make requests in its absence.
 		if cn.PeerChoked && !cn.fastset.ContainsInt(cn.t.chunks.requestCID(req)) {
-			// l2.Printf("c(%p) choked - d(%020d) r(%d,%d,%d)\n", cn, req.Digest, req.Index, req.Begin, req.Length)
 			continue
-		} else if cn.PeerChoked {
-			// l2.Printf("c(%p) - allowed fast request r(%d,%d,%d) (%d)\n", cn, req.Index, req.Begin, req.Length, req.Priority)
-			metrics.Add("allowed fast requests sent", 1)
 		}
 
 		if filledBuffer = !cn.request(req, msg); filledBuffer {

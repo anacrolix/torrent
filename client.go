@@ -604,9 +604,25 @@ func forgettableDialError(err error) bool {
 	return strings.Contains(err.Error(), "no suitable address found")
 }
 
-// Performs initiator handshakes and returns a connection. Returns nil
-// *connection if no connection for valid reasons.
-func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *torrent, encryptHeader bool, remoteAddr IpPort) (c *connection, err error) {
+// Returns nil connection and nil error if no connection could be established
+// for valid reasons.
+func (cl *Client) establishOutgoingConnEx(ctx context.Context, t *torrent, addr IpPort, obfuscatedHeader bool) (c *connection, err error) {
+	var (
+		nc net.Conn
+	)
+
+	dialCtx, dcancel := context.WithTimeout(ctx, t.dialTimeout())
+	defer dcancel()
+
+	if nc, err = cl.dialFirst(dialCtx, addr.String()); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			nc.Close()
+		}
+	}()
+
 	dl := time.Now().Add(cl.config.HandshakesTimeout)
 	ctx, cancel := context.WithDeadline(ctx, dl)
 	defer cancel()
@@ -615,32 +631,11 @@ func (cl *Client) handshakesConnection(ctx context.Context, nc net.Conn, t *torr
 		return nil, err
 	}
 
-	c = cl.newConnection(nc, true, remoteAddr)
-	c.headerEncrypted = encryptHeader
+	c = cl.newConnection(nc, true, addr)
+	c.headerEncrypted = obfuscatedHeader
 
 	if err = cl.initiateHandshakes(c, t); err != nil {
 		return nil, err
-	}
-
-	return c, nil
-}
-
-// Returns nil connection and nil error if no connection could be established
-// for valid reasons.
-func (cl *Client) establishOutgoingConnEx(t *torrent, addr IpPort, obfuscatedHeader bool) (c *connection, err error) {
-	var (
-		nc net.Conn
-	)
-
-	dialCtx, cancel := context.WithTimeout(context.Background(), t.dialTimeout())
-	defer cancel()
-
-	if nc, err = cl.dialFirst(dialCtx, addr.String()); err != nil {
-		return nil, err
-	}
-
-	if c, err = cl.handshakesConnection(context.Background(), nc, t, obfuscatedHeader, addr); err != nil {
-		nc.Close()
 	}
 
 	return c, err
@@ -648,9 +643,9 @@ func (cl *Client) establishOutgoingConnEx(t *torrent, addr IpPort, obfuscatedHea
 
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
-func (cl *Client) establishOutgoingConn(t *torrent, addr IpPort) (c *connection, err error) {
+func (cl *Client) establishOutgoingConn(ctx context.Context, t *torrent, addr IpPort) (c *connection, err error) {
 	obfuscatedHeaderFirst := cl.config.HeaderObfuscationPolicy.Preferred
-	if c, err = cl.establishOutgoingConnEx(t, addr, obfuscatedHeaderFirst); err == nil {
+	if c, err = cl.establishOutgoingConnEx(ctx, t, addr, obfuscatedHeaderFirst); err == nil {
 		return c, nil
 	}
 
@@ -661,7 +656,7 @@ func (cl *Client) establishOutgoingConn(t *torrent, addr IpPort) (c *connection,
 	}
 
 	// Try again with encryption if we didn't earlier, or without if we did.
-	if c, err = cl.establishOutgoingConnEx(t, addr, !obfuscatedHeaderFirst); err != nil {
+	if c, err = cl.establishOutgoingConnEx(ctx, t, addr, !obfuscatedHeaderFirst); err != nil {
 		return c, err
 	}
 
@@ -670,15 +665,15 @@ func (cl *Client) establishOutgoingConn(t *torrent, addr IpPort) (c *connection,
 
 // Called to dial out and run a connection. The addr we're given is already
 // considered half-open.
-func (cl *Client) outgoingConnection(t *torrent, addr IpPort, ps peerSource, trusted bool) {
+func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr IpPort, ps peerSource, trusted bool) {
 	var (
 		c   *connection
 		err error
 	)
 
-	cl.dialRateLimiter.Wait(context.Background())
+	cl.dialRateLimiter.Wait(ctx)
 
-	if c, err = cl.establishOutgoingConn(t, addr); err != nil {
+	if c, err = cl.establishOutgoingConn(ctx, t, addr); err != nil {
 		t.noLongerHalfOpen(addr.String())
 		cl.config.debug().Println(errors.Wrapf(err, "error establishing connection to %v", addr))
 		return
@@ -991,7 +986,6 @@ func (cl *Client) AddDHTNodes(nodes []string) {
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort) (c *connection) {
 	c = newConnection(nc, outgoing, remoteAddr)
-	c.writerCond.L = c._mu
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
 		l: cl.config.DownloadRateLimiter,

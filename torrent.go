@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"container/heap"
+	"context"
 	"crypto/sha1"
 	"fmt"
 	"io"
@@ -1215,7 +1216,7 @@ func (t *torrent) openNewConns() {
 			return
 		}
 
-		t.initiateConn(p)
+		t.initiateConn(context.Background(), p)
 	}
 }
 
@@ -1822,7 +1823,7 @@ func (t *torrent) VerifyData() {
 
 // Start the process of connecting to the given peer for the given torrent if
 // appropriate.
-func (t *torrent) initiateConn(peer Peer) {
+func (t *torrent) initiateConn(ctx context.Context, peer Peer) {
 	if peer.ID == t.cln.peerID {
 		return
 	}
@@ -1834,7 +1835,7 @@ func (t *torrent) initiateConn(peer Peer) {
 
 	t.halfOpen[addr.String()] = peer
 
-	go t.cln.outgoingConnection(t, addr, peer.Source, peer.Trusted)
+	go t.cln.outgoingConnection(ctx, t, addr, peer.Source, peer.Trusted)
 }
 
 func (t *torrent) noLongerHalfOpen(addr string) {

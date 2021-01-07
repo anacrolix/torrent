@@ -18,6 +18,9 @@ const (
 	pexExtendedID
 )
 
+// PeerExtensionBits define what extensions are available.
+type PeerExtensionBits = pp.ExtensionBits
+
 func defaultPeerExtensionBytes() PeerExtensionBits {
 	return pp.NewExtensionBits(pp.ExtensionBitDHT, pp.ExtensionBitExtended, pp.ExtensionBitFast)
 }

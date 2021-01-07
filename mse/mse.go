@@ -261,6 +261,7 @@ func (h *handshake) writer() {
 			}
 			h.writeCond.Wait()
 		}
+
 		b := h.writes[0]
 		h.writes = h.writes[1:]
 		h.writeMu.Unlock()
@@ -425,18 +426,17 @@ var ErrNoSecretKeyMatch = errors.New("no skey matched")
 
 func (h *handshake) receiverSteps() (ret io.ReadWriter, chosen CryptoMethod, err error) {
 	// There is up to 512 bytes of padding, then the 20 byte hash.
-	err = readUntil(io.LimitReader(h.conn, 532), hash(req1, h.s[:]))
-	if err != nil {
-		if err == io.EOF {
-			err = errors.New("failed to synchronize on S hash")
-		}
-		return
+	if err = readUntil(io.LimitReader(h.conn, 532), hash(req1, h.s[:])); err == io.EOF {
+		return ret, chosen, errors.New("failed to synchronize on S hash")
+	} else if err != nil {
+		return ret, chosen, err
 	}
+
 	var b [20]byte
-	_, err = io.ReadFull(h.conn, b[:])
-	if err != nil {
-		return
+	if _, err = io.ReadFull(h.conn, b[:]); err != nil {
+		return ret, chosen, err
 	}
+
 	err = ErrNoSecretKeyMatch
 	h.skeys(func(skey []byte) bool {
 		if bytes.Equal(xor(hash(req2, skey), hash(req3, h.s[:])), b[:]) {
@@ -447,7 +447,7 @@ func (h *handshake) receiverSteps() (ret io.ReadWriter, chosen CryptoMethod, err
 		return true
 	})
 	if err != nil {
-		return
+		return ret, chosen, err
 	}
 	r := newCipherReader(newEncrypt(true, h.s[:], h.skey), h.conn)
 	var (
@@ -456,15 +456,13 @@ func (h *handshake) receiverSteps() (ret io.ReadWriter, chosen CryptoMethod, err
 		padLen   uint16
 	)
 
-	err = unmarshal(r, vc[:], &provides, &padLen)
-	if err != nil {
-		return
+	if err = unmarshal(r, vc[:], &provides, &padLen); err != nil {
+		return ret, chosen, err
 	}
 	cryptoProvidesCount.Add(strconv.FormatUint(uint64(provides), 16), 1)
 	chosen = h.chooseMethod(provides)
-	_, err = io.CopyN(ioutil.Discard, r, int64(padLen))
-	if err != nil {
-		return
+	if _, err = io.CopyN(ioutil.Discard, r, int64(padLen)); err != nil {
+		return ret, chosen, err
 	}
 	var lenIA uint16
 	unmarshal(r, &lenIA)
@@ -475,29 +473,31 @@ func (h *handshake) receiverSteps() (ret io.ReadWriter, chosen CryptoMethod, err
 	buf := &bytes.Buffer{}
 	w := cipherWriter{h.newEncrypt(false), buf, nil}
 	padLen = uint16(newPadLen())
-	err = marshal(&w, &vc, uint32(chosen), padLen, zeroPad[:padLen])
-	if err != nil {
-		return
+
+	if err = marshal(&w, &vc, uint32(chosen), padLen, zeroPad[:padLen]); err != nil {
+		return ret, chosen, err
 	}
-	err = h.postWrite(buf.Bytes())
-	if err != nil {
-		return
+
+	if err = h.postWrite(buf.Bytes()); err != nil {
+		return ret, chosen, err
 	}
+
 	switch chosen {
 	case CryptoMethodRC4:
 		ret = readWriter{
 			io.MultiReader(bytes.NewReader(h.ia), r),
 			&cipherWriter{w.c, h.conn, nil},
 		}
+		return ret, chosen, err
 	case CryptoMethodPlaintext:
 		ret = readWriter{
 			io.MultiReader(bytes.NewReader(h.ia), h.conn),
 			h.conn,
 		}
+		return ret, chosen, err
 	default:
-		err = errors.New("chosen crypto method is not supported")
+		return ret, chosen, errors.New("chosen crypto method is not supported")
 	}
-	return
 }
 
 func (h *handshake) Do() (ret io.ReadWriter, method CryptoMethod, err error) {

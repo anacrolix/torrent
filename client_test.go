@@ -820,6 +820,7 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 			cfg.HeaderObfuscationPolicy.RequirePreferred = true
 		},
 		func(cfg *torrent.ClientConfig) {
+			cfg.HeaderObfuscationPolicy.Preferred = true
 			cfg.HeaderObfuscationPolicy.RequirePreferred = false
 		},
 	)

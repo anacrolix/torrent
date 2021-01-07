@@ -4,9 +4,43 @@ import (
 	"bytes"
 	"encoding/hex"
 	"io"
+	"log"
+	"unicode"
 
 	"github.com/pkg/errors"
 )
+
+func debug(in []byte) (r string) {
+	s := []rune(string(in))
+	o := make([]rune, 0, len(s))
+	for _, r := range s {
+		if unicode.IsSpace(r) {
+			var c []rune
+			switch r {
+			case '\n':
+				c = []rune{'\\', 'n'}
+			case '\r':
+				c = []rune{'\\', 'r'}
+			case '\t':
+				c = []rune{'\\', 't'}
+			case ' ':
+				c = []rune{' '}
+			}
+
+			o = append(o, c...)
+			continue
+		}
+
+		if !unicode.IsPrint(r) {
+			o = append(o, []rune(hex.EncodeToString([]byte([]byte{byte(r)})))...)
+			// o = append(o, []rune(fmt.Sprintf("%U", r))...)
+			continue
+		}
+		o = append(o, r)
+	}
+
+	return string(o)
+}
 
 // HandshakeMessage writes the handshake into a destination.
 type HandshakeMessage struct {
@@ -19,7 +53,7 @@ func (t HandshakeMessage) WriteTo(dst io.Writer) (n int64, err error) {
 
 	written := copy(buf[:20], []byte(Protocol))
 	written += copy(buf[20:28], t.Extensions[:])
-
+	// log.Println("WRITING HANDSHAKE MESSAGE", debug(buf))
 	nw, err := dst.Write(buf)
 	return int64(nw), err
 }
@@ -135,29 +169,6 @@ func (pex ExtensionBits) GetBit(bit uint) bool {
 	return pex[7-bit/8]&(1<<(bit%8)) != 0
 }
 
-// HandshakeOutgoing perform an outgoing handshake.
-func HandshakeOutgoing(sock io.ReadWriter, bits ExtensionBits, peering HandshakeInfoMessage) (resbits ExtensionBits, res HandshakeInfoMessage, err error) {
-	var (
-		msg = HandshakeMessage{
-			Extensions: bits,
-		}
-	)
-
-	if _, err := msg.WriteTo(sock); err != nil {
-		return resbits, res, err
-	}
-
-	if _, err := peering.WriteTo(sock); err != nil {
-		return resbits, res, err
-	}
-
-	if _, err := res.ReadFrom(sock); err != nil {
-		return resbits, res, err
-	}
-
-	return resbits, res, err
-}
-
 // Handshake ...
 type Handshake struct {
 	Bits   ExtensionBits
@@ -209,10 +220,12 @@ func (t Handshake) Incoming(sock io.ReadWriter) (pbits ExtensionBits, pinfo Hand
 	)
 
 	if _, err := pmsg.ReadFrom(sock); err != nil {
+		log.Println("incoming checkpoint 2", err)
 		return pbits, pinfo, err
 	}
 
 	if _, err := pinfo.ReadFrom(sock); err != nil {
+		log.Println("incoming checkpoint 3", err)
 		return pbits, pinfo, err
 	}
 

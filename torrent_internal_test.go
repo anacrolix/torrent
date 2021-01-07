@@ -110,7 +110,10 @@ func TestPieceHashFailed(t *testing.T) {
 // Check the behaviour of Torrent.Metainfo when metadata is not completed.
 func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	cfg := TestingConfig(t)
-
+	// cfg.HeaderObfuscationPolicy = HeaderObfuscationPolicy{
+	// 	Preferred:        false,
+	// 	RequirePreferred: false,
+	// }
 	// cfg.Debug = log.New(os.Stderr, "[debug] ", log.Flags())
 	cl, err := Autosocket(t).Bind(NewClient(cfg))
 	require.NoError(t, err)
@@ -130,6 +133,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 
 	var pex PeerExtensionBits
 	pex.SetBit(pp.ExtensionBitExtended)
+
 	ebits, info, err := pp.Handshake{
 		Bits:   pex,
 		PeerID: [20]byte{},

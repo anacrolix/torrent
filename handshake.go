@@ -7,8 +7,8 @@ import (
 	"net"
 	"time"
 
+	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/mse"
-	pp "github.com/james-lawrence/torrent/peer_protocol"
 )
 
 // Wraps a raw connection and provides the interface we want for using the
@@ -66,4 +66,4 @@ func handleEncryption(
 }
 
 // PeerExtensionBits define what extensions are available.
-type PeerExtensionBits = pp.PeerExtensionBits
+type PeerExtensionBits = pp.ExtensionBits

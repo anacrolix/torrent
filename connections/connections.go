@@ -7,31 +7,6 @@ import (
 	"github.com/james-lawrence/torrent/internal/netx"
 )
 
-// Protocol represents the protocol that current owns the connection.
-// to promote from one stage to another NewDownloading(p.Detach())
-type Protocol interface {
-	// Detach MUST stop all background activity for the connection
-	// such as reading/writing to the socket before returning.
-	Detach() Connection
-}
-
-// Connection to a peer within the DHT.
-type Connection interface {
-	net.Conn
-}
-
-type connecting struct {
-	Connection
-}
-
-type downloading struct {
-	Connection
-}
-
-type seeding struct {
-	Connection
-}
-
 // Handshaker accepts connections from a net listener and performs
 // a handshake to ensure the connection is acceptable.
 type Handshaker interface {

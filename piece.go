@@ -7,7 +7,7 @@ import (
 	"github.com/anacrolix/missinggo/bitmap"
 
 	"github.com/james-lawrence/torrent/metainfo"
-	pp "github.com/james-lawrence/torrent/peer_protocol"
+	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/storage"
 )
 

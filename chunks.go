@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
+	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/metainfo"
-	pp "github.com/james-lawrence/torrent/peer_protocol"
 	"github.com/pkg/errors"
 
 	"github.com/james-lawrence/torrent/internal/x/bitmapx"

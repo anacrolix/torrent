@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
-	pp "github.com/james-lawrence/torrent/peer_protocol"
+	pp "github.com/james-lawrence/torrent/btprotocol"
 )
 
 func newPex() *pex {

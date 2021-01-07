@@ -27,11 +27,11 @@ import (
 	"golang.org/x/time/rate"
 	"golang.org/x/xerrors"
 
+	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/x/stringsx"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/mse"
-	pp "github.com/james-lawrence/torrent/peer_protocol"
 	"github.com/james-lawrence/torrent/storage"
 )
 
@@ -58,7 +58,7 @@ type Client struct {
 	conns          []socket
 	dhtServers     []*dht.Server
 
-	extensionBytes  pp.PeerExtensionBits // Our BitTorrent protocol extension bytes, sent in our BT handshakes.
+	extensionBytes  pp.ExtensionBits // Our BitTorrent protocol extension bytes, sent in our BT handshakes.
 	torrents        map[metainfo.Hash]*torrent
 	dialRateLimiter *rate.Limiter
 }
@@ -737,14 +737,18 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 		}
 	}
 
-	ih, err := cl.connBtHandshake(c, &t.infoHash)
+	ebits, info, err := pp.Handshake{
+		PeerID: cl.peerID,
+		Bits:   cl.extensionBytes,
+	}.Outgoing(c.rw(), t.infoHash)
+
 	if err != nil {
-		return xerrors.Errorf("bittorrent protocol handshake: %w", err)
+		return errors.Wrap(err, "bittorrent protocol handshake failure")
 	}
 
-	if ih != t.infoHash {
-		return errors.New("bittorrent protocol handshake: peer infohash didn't match")
-	}
+	c.PeerExtensionBytes = ebits
+	c.PeerID = info.PeerID
+	c.completedHandshake = time.Now()
 
 	return nil
 }
@@ -776,9 +780,9 @@ func (cl *Client) forSkeys(f func([]byte) bool) {
 // Do encryption and bittorrent handshakes as receiver.
 func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	var (
-		rw       io.ReadWriter
-		infoHash metainfo.Hash
+		rw io.ReadWriter
 	)
+
 	rw, c.headerEncrypted, c.cryptoMethod, err = handleEncryption(c.rw(), cl.forSkeys, cl.config.HeaderObfuscationPolicy, cl.config.CryptoSelector)
 	if err != nil {
 		return nil, err
@@ -786,15 +790,24 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	c.setRW(rw)
 
 	if cl.config.HeaderObfuscationPolicy.RequirePreferred && c.headerEncrypted != cl.config.HeaderObfuscationPolicy.Preferred {
-		return nil, errors.New("connection not have required header obfuscation")
+		return nil, errors.New("connection does not have the required header obfuscation")
 	}
 
-	if infoHash, err = cl.connBtHandshake(c, nil); err != nil {
-		return nil, xerrors.Errorf("during bt handshake: %w", err)
+	ebits, info, err := pp.Handshake{
+		PeerID: cl.peerID,
+		Bits:   cl.extensionBytes,
+	}.Incoming(c.rw())
+
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid handshake failed")
 	}
+
+	c.PeerExtensionBytes = ebits
+	c.PeerID = info.PeerID
+	c.completedHandshake = time.Now()
 
 	cl.lock()
-	t = cl.torrents[infoHash]
+	t = cl.torrents[info.Hash]
 	cl.unlock()
 
 	if t == nil {
@@ -802,18 +815,6 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	}
 
 	return t, nil
-}
-
-func (cl *Client) connBtHandshake(c *connection, ih *metainfo.Hash) (ret metainfo.Hash, err error) {
-	res, err := pp.Handshake(c.rw(), ih, cl.peerID, cl.extensionBytes)
-	if err != nil {
-		return
-	}
-	ret = res.Hash
-	c.PeerExtensionBytes = res.PeerExtensionBits
-	c.PeerID = res.PeerID
-	c.completedHandshake = time.Now()
-	return
 }
 
 func (cl *Client) runReceivedConn(c *connection) {

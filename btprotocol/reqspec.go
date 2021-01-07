@@ -1,4 +1,4 @@
-package peer_protocol
+package btprotocol
 
 import "fmt"
 

@@ -23,10 +23,10 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/james-lawrence/torrent/bencode"
+	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/x/bitmapx"
 	"github.com/james-lawrence/torrent/internal/x/bytesx"
 	"github.com/james-lawrence/torrent/mse"
-	pp "github.com/james-lawrence/torrent/peer_protocol"
 )
 
 type peerSource string
@@ -119,7 +119,7 @@ type connection struct {
 	PeerInterested        bool
 	PeerChoked            bool
 	PeerRequests          map[request]struct{}
-	PeerExtensionBytes    pp.PeerExtensionBits
+	PeerExtensionBytes    pp.ExtensionBits
 	PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
 
 	// bitmaps representing availability of chunks from the peer.

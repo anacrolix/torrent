@@ -18,7 +18,6 @@ import (
 	"github.com/james-lawrence/torrent/bencode"
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 	"github.com/james-lawrence/torrent/iplist"
-	"github.com/james-lawrence/torrent/logonce"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/pkg/errors"
 
@@ -131,6 +130,7 @@ func (s *Server) Addr() net.Addr {
 	return s.socket.LocalAddr()
 }
 
+// NewDefaultServerConfig ...
 func NewDefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
 		Conn:               mustListen(":0"),
@@ -216,13 +216,14 @@ func (s *Server) String() string {
 	return fmt.Sprintf("dht server on %s", s.socket.LocalAddr())
 }
 
-// Packets to and from any address matching a range in the list are dropped.
+// SetIPBlockList packets to and from any address matching a range in the list are dropped.
 func (s *Server) SetIPBlockList(list iplist.Ranger) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ipBlockList = list
 }
 
+// IPBlocklist ....
 func (s *Server) IPBlocklist() iplist.Ranger {
 	return s.ipBlockList
 }
@@ -307,9 +308,9 @@ func (s *Server) serve() error {
 		}
 		expvars.Add("packets read", 1)
 		if n == len(b) {
-			logonce.Stderr.Printf("received dht packet exceeds buffer size")
-			continue
+			return errors.New("received dht packet exceeds buffer size")
 		}
+
 		if missinggo.AddrPort(addr) == 0 {
 			readZeroPort.Add(1)
 			continue

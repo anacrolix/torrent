@@ -7,9 +7,9 @@ import (
 
 	"github.com/bradfitz/iter"
 	"github.com/james-lawrence/torrent/bencode"
+	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/testutil"
 	"github.com/james-lawrence/torrent/metainfo"
-	pp "github.com/james-lawrence/torrent/peer_protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -110,6 +110,7 @@ func TestPieceHashFailed(t *testing.T) {
 // Check the behaviour of Torrent.Metainfo when metadata is not completed.
 func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	cfg := TestingConfig(t)
+
 	// cfg.Debug = log.New(os.Stderr, "[debug] ", log.Flags())
 	cl, err := Autosocket(t).Bind(NewClient(cfg))
 	require.NoError(t, err)
@@ -129,12 +130,15 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 
 	var pex PeerExtensionBits
 	pex.SetBit(pp.ExtensionBitExtended)
-	hr, err := pp.Handshake(nc, &ih, [20]byte{}, pex)
-	require.NoError(t, err)
-	assert.True(t, hr.PeerExtensionBits.GetBit(pp.ExtensionBitExtended))
-	assert.EqualValues(t, cl.PeerID(), hr.PeerID)
-	assert.EqualValues(t, ih, hr.Hash)
+	ebits, info, err := pp.Handshake{
+		Bits:   pex,
+		PeerID: [20]byte{},
+	}.Outgoing(nc, ih)
 
+	require.NoError(t, err)
+	assert.True(t, ebits.GetBit(pp.ExtensionBitExtended))
+	assert.EqualValues(t, cl.PeerID(), info.PeerID)
+	assert.EqualValues(t, ih, info.Hash)
 	assert.EqualValues(t, 0, tt.(*torrent).metadataSize())
 
 	func() {

@@ -4,6 +4,8 @@ import (
 	"log"
 	"os"
 
+	"github.com/james-lawrence/torrent/internal/x/bytesx"
+
 	"github.com/anacrolix/tagflag"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -46,8 +48,9 @@ func main() {
 		mi.CreatedBy = args.CreatedBy
 	}
 	info := metainfo.Info{
-		PieceLength: 256 * 1024,
+		PieceLength: 256 * bytesx.KiB,
 	}
+
 	err := info.BuildFromFilePath(args.Root)
 	if err != nil {
 		log.Fatal(err)

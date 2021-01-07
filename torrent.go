@@ -27,8 +27,8 @@ import (
 	"github.com/james-lawrence/torrent/dht/v2"
 
 	"github.com/james-lawrence/torrent/bencode"
+	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/metainfo"
-	pp "github.com/james-lawrence/torrent/peer_protocol"
 	"github.com/james-lawrence/torrent/storage"
 	"github.com/james-lawrence/torrent/tracker"
 )
@@ -326,7 +326,7 @@ func (t *torrent) KnownSwarm() (ks []Peer) {
 	// Add active peers to the list
 	for conn := range t.conns {
 		ks = append(ks, Peer{
-			Id:     conn.PeerID,
+			ID:     conn.PeerID,
 			IP:     conn.remoteAddr.IP,
 			Port:   int(conn.remoteAddr.Port),
 			Source: conn.Discovery,
@@ -1823,7 +1823,7 @@ func (t *torrent) VerifyData() {
 // Start the process of connecting to the given peer for the given torrent if
 // appropriate.
 func (t *torrent) initiateConn(peer Peer) {
-	if peer.Id == t.cln.peerID {
+	if peer.ID == t.cln.peerID {
 		return
 	}
 

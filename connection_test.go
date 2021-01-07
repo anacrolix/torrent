@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/james-lawrence/torrent/metainfo"
-	pp "github.com/james-lawrence/torrent/peer_protocol"
+	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/storage"
 )
 

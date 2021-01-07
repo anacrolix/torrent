@@ -11,7 +11,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/james-lawrence/torrent/metainfo"
-	pp "github.com/james-lawrence/torrent/peer_protocol"
+	pp "github.com/james-lawrence/torrent/btprotocol"
 )
 
 type chunkSpec struct {

@@ -312,16 +312,6 @@ func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 	return cl, nil
 }
 
-func (cl *Client) firewallCallback(net.Addr) bool {
-	block := !cl.wantConns()
-	if block {
-		metrics.Add("connections firewalled", 1)
-	} else {
-		metrics.Add("connections not firewalled", 1)
-	}
-	return block
-}
-
 func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	cfg := dht.ServerConfig{
 		Conn:           conn,

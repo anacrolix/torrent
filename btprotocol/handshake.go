@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"io"
-	"log"
 	"unicode"
 
 	"github.com/pkg/errors"
@@ -220,12 +219,10 @@ func (t Handshake) Incoming(sock io.ReadWriter) (pbits ExtensionBits, pinfo Hand
 	)
 
 	if _, err := pmsg.ReadFrom(sock); err != nil {
-		log.Println("incoming checkpoint 2", err)
 		return pbits, pinfo, err
 	}
 
 	if _, err := pinfo.ReadFrom(sock); err != nil {
-		log.Println("incoming checkpoint 3", err)
 		return pbits, pinfo, err
 	}
 

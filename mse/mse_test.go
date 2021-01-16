@@ -87,7 +87,7 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 		go b.Write([]byte(bData))
 		// Need to be exact here, as there are several reads, and net.Pipe is most synchronous.
 		msg := make([]byte, len(ia)+len(aData))
-		n, _ := io.ReadFull(b, msg[:])
+		n, _ := io.ReadFull(b, msg)
 		if n != len(msg) {
 			t.FailNow()
 		}

@@ -60,14 +60,14 @@ var (
 )
 
 func isSubPath(parent, child string) bool {
-	if len(parent) == 0 {
+	if parent == "" {
 		return len(child) > 0
 	}
 	if !strings.HasPrefix(child, parent) {
 		return false
 	}
 	extra := child[len(parent):]
-	if len(extra) == 0 {
+	if extra == "" {
 		return false
 	}
 	// Not just a file with more stuff on the end.

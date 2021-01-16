@@ -133,7 +133,7 @@ func (cr *cipherWriter) Write(b []byte) (n int, err error) {
 			return ret
 		}
 	}()
-	cr.c.XORKeyStream(be[:], b)
+	cr.c.XORKeyStream(be, b)
 	n, err = cr.w.Write(be[:len(b)])
 	if n != len(b) {
 		// The cipher will have advanced beyond the callers stream position.

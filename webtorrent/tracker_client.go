@@ -92,7 +92,7 @@ func (tc *TrackerClient) doWebsocket() error {
 				}
 			case <-closeChan:
 				return
-			default:
+
 			}
 		}
 	}()

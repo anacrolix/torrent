@@ -84,7 +84,9 @@ func (tc *TrackerClient) doWebsocket() error {
 		for {
 			select {
 			case <-tc.pingTicker.C:
+				tc.mu.Lock()
 				err := c.WriteMessage(websocket.PingMessage, []byte{})
+				tc.mu.Unlock()
 				if err != nil {
 					return
 				}

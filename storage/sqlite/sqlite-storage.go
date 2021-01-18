@@ -347,7 +347,7 @@ type provider struct {
 var _ storage.ConsecutiveChunkWriter = (*provider)(nil)
 
 func (p *provider) WriteConsecutiveChunks(prefix string, w io.Writer) (written int64, err error) {
-	err = p.withConn(func(conn conn) error {
+	err = p.withConn(func(_ context.Context, conn conn) error {
 		err = io.EOF
 		err = sqlitex.Exec(conn, `
 				select
@@ -393,8 +393,12 @@ type writeRequest struct {
 var expvars = expvar.NewMap("sqliteStorage")
 
 func runQueryWithLabels(query withConn, labels pprof.LabelSet, conn conn) (err error) {
-	pprof.Do(context.Background(), labels, func(context.Context) {
-		err = query(conn)
+	pprof.Do(context.Background(), labels, func(ctx context.Context) {
+		// We pass in the context in the hope that the CPU profiler might incorporate sqlite
+		// activity the action that triggered it. It doesn't seem that way, since those calls don't
+		// take a context.Context themselves. It may come in useful in the goroutine profiles
+		// though, and doesn't hurt to expose it here for other purposes should things change.
+		err = query(ctx, conn)
 	})
 	return
 }
@@ -455,7 +459,7 @@ type instance struct {
 }
 
 func getLabels(skip int) pprof.LabelSet {
-	return pprof.Labels("f", func() string {
+	return pprof.Labels("sqlite-storage-action", func() string {
 		var pcs [8]uintptr
 		runtime.Callers(skip+3, pcs[:])
 		fs := runtime.CallersFrames(pcs[:])
@@ -486,7 +490,7 @@ func (p *provider) withConn(with withConn, write bool, skip int) error {
 	}
 }
 
-type withConn func(conn) error
+type withConn func(context.Context, conn) error
 
 func (i instance) withConn(with withConn, write bool) error {
 	return i.p.withConn(with, write, 1)
@@ -502,7 +506,7 @@ func (i instance) putConn(conn *sqlite.Conn) {
 
 func (i instance) Readdirnames() (names []string, err error) {
 	prefix := i.location + "/"
-	err = i.withConn(func(conn conn) error {
+	err = i.withConn(func(_ context.Context, conn conn) error {
 		return sqlitex.Exec(conn, "select name from blob where name like ?", func(stmt *sqlite.Stmt) error {
 			names = append(names, stmt.ColumnText(0)[len(prefix):])
 			return nil
@@ -580,7 +584,7 @@ func (i instance) openBlob(conn conn, write, updateAccess bool) (*sqlite.Blob, e
 }
 
 func (i instance) PutSized(reader io.Reader, size int64) (err error) {
-	err = i.withConn(func(conn conn) error {
+	err = i.withConn(func(_ context.Context, conn conn) error {
 		err := sqlitex.Exec(conn, "insert or replace into blob(name, data) values(?, zeroblob(?))",
 			nil,
 			i.location, size)
@@ -607,7 +611,7 @@ func (i instance) Put(reader io.Reader) (err error) {
 	if false {
 		return i.PutSized(&buf, int64(buf.Len()))
 	} else {
-		return i.withConn(func(conn conn) error {
+		return i.withConn(func(_ context.Context, conn conn) error {
 			for range iter.N(10) {
 				err = sqlitex.Exec(conn,
 					"insert or replace into blob(name, data) values(?, cast(? as blob))",
@@ -654,7 +658,7 @@ func (f fileInfo) Sys() interface{} {
 }
 
 func (i instance) Stat() (ret os.FileInfo, err error) {
-	err = i.withConn(func(conn conn) error {
+	err = i.withConn(func(_ context.Context, conn conn) error {
 		var blob *sqlite.Blob
 		blob, err = i.openBlob(conn, false, false)
 		if err != nil {
@@ -668,7 +672,7 @@ func (i instance) Stat() (ret os.FileInfo, err error) {
 }
 
 func (i instance) ReadAt(p []byte, off int64) (n int, err error) {
-	err = i.withConn(func(conn conn) error {
+	err = i.withConn(func(_ context.Context, conn conn) error {
 		if false {
 			var blob *sqlite.Blob
 			blob, err = i.openBlob(conn, false, true)
@@ -721,7 +725,7 @@ func (i instance) WriteAt(bytes []byte, i2 int64) (int, error) {
 }
 
 func (i instance) Delete() error {
-	return i.withConn(func(conn conn) error {
+	return i.withConn(func(_ context.Context, conn conn) error {
 		return sqlitex.Exec(conn, "delete from blob where name=?", nil, i.location)
 	}, true)
 }

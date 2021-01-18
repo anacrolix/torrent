@@ -20,7 +20,7 @@ type piecePerResource struct {
 
 type ResourcePiecesOpts struct {
 	LeaveIncompleteChunks bool
-	AllowSizedPuts        bool
+	NoSizedPuts           bool
 }
 
 func NewResourcePieces(p PieceProvider) ClientImpl {
@@ -119,7 +119,7 @@ func (s piecePerResourcePiece) MarkComplete() error {
 	}()
 	completedInstance := s.completed()
 	err := func() error {
-		if sp, ok := completedInstance.(SizedPutter); ok && s.opts.AllowSizedPuts {
+		if sp, ok := completedInstance.(SizedPutter); ok && !s.opts.NoSizedPuts {
 			return sp.PutSized(r, s.mp.Length())
 		} else {
 			return completedInstance.Put(r)

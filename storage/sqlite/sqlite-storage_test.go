@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
@@ -40,8 +41,7 @@ func TestTextBlobSize(t *testing.T) {
 
 func TestSimultaneousIncrementalBlob(t *testing.T) {
 	_, p := newConnsAndProv(t, NewPoolOpts{
-		NumConns:            3,
-		ConcurrentBlobReads: true,
+		NumConns: 3,
 	})
 	a, err := p.NewInstance("a")
 	require.NoError(t, err)
@@ -77,14 +77,17 @@ func BenchmarkMarkComplete(b *testing.B) {
 			//b.Logf("storage db path: %q", dbPath)
 			ci, err := NewPiecesStorage(NewPiecesStorageOpts{
 				NewPoolOpts: NewPoolOpts{
-					Path: dbPath,
-					//Capacity:            4*pieceSize - 1,
-					ConcurrentBlobReads: false,
-					PageSize:            1 << 14,
-					Memory:              memory,
+					Path:                  dbPath,
+					Capacity:              4*pieceSize - 1,
+					NoConcurrentBlobReads: false,
+					PageSize:              1 << 14,
+					Memory:                memory,
 				},
 				ProvOpts: func(opts *ProviderOpts) {
 					opts.BatchWrites = true
+				},
+				ResourcePiecesOpts: storage.ResourcePiecesOpts{
+					NoSizedPuts: false || memory,
 				},
 			})
 			c.Assert(err, qt.IsNil)

@@ -181,9 +181,9 @@ type NewPoolOpts struct {
 	Memory   bool
 	NumConns int
 	// Forces WAL, disables shared caching.
-	ConcurrentBlobReads bool
-	DontInitSchema      bool
-	PageSize            int
+	NoConcurrentBlobReads bool
+	DontInitSchema        bool
+	PageSize              int
 	// If non-zero, overrides the existing setting.
 	Capacity int64
 }
@@ -194,8 +194,8 @@ type NewPoolOpts struct {
 type ProviderOpts struct {
 	NumConns int
 	// Concurrent blob reads require WAL.
-	ConcurrentBlobRead bool
-	BatchWrites        bool
+	NoConcurrentBlobReads bool
+	BatchWrites           bool
 }
 
 // Remove any capacity limits.
@@ -216,7 +216,7 @@ func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
 		opts.Path = ":memory:"
 	}
 	values := make(url.Values)
-	if !opts.ConcurrentBlobReads {
+	if opts.NoConcurrentBlobReads || opts.Memory {
 		values.Add("cache", "shared")
 	}
 	path := fmt.Sprintf("file:%s?%s", opts.Path, values.Encode())
@@ -255,9 +255,9 @@ func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
 		}
 	}
 	return conns, ProviderOpts{
-		NumConns:           opts.NumConns,
-		ConcurrentBlobRead: opts.ConcurrentBlobReads,
-		BatchWrites:        true,
+		NumConns:              opts.NumConns,
+		NoConcurrentBlobReads: opts.NoConcurrentBlobReads || opts.Memory,
+		BatchWrites:           true,
 	}, nil
 }
 
@@ -286,8 +286,9 @@ func (me *poolFromConn) Close() error {
 // Needs the ConnPool size so it can initialize all the connections with pragmas. Takes ownership of
 // the ConnPool (since it has to initialize all the connections anyway).
 func NewProvider(pool ConnPool, opts ProviderOpts) (_ *provider, err error) {
-	_, err = initPoolConns(context.TODO(), pool, opts.NumConns, true)
+	_, err = initPoolConns(context.TODO(), pool, opts.NumConns, !opts.NoConcurrentBlobReads)
 	if err != nil {
+		err = fmt.Errorf("initing pool conns: %w", err)
 		return
 	}
 	prov := &provider{pool: pool, opts: opts}

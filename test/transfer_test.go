@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -282,8 +281,8 @@ func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
 func sqliteClientStorageFactory(connOptsMaker func(dataDir string) sqliteStorage.NewPoolOpts) storageFactory {
 	return func(dataDir string) storage.ClientImplCloser {
 		connOpts := connOptsMaker(dataDir)
-		log.Printf("opening sqlite db: %#v", connOpts)
-		ret, err := sqliteStorage.NewPiecesStorage(connOpts)
+		//log.Printf("opening sqlite db: %#v", connOpts)
+		ret, err := sqliteStorage.NewPiecesStorage(sqliteStorage.NewPiecesStorageOpts{NewPoolOpts: connOpts})
 		if err != nil {
 			panic(err)
 		}

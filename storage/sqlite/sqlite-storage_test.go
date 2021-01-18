@@ -2,17 +2,15 @@ package sqliteStorage
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
-	"math/rand"
 	"path/filepath"
 	"sync"
 	"testing"
 
 	_ "github.com/anacrolix/envpprof"
-	"github.com/anacrolix/missinggo/iter"
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/storage"
+	test_storage "github.com/anacrolix/torrent/storage/test"
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,33 +68,28 @@ func TestSimultaneousIncrementalBlob(t *testing.T) {
 }
 
 func BenchmarkMarkComplete(b *testing.B) {
-	const pieceSize = 8 << 20
+	const pieceSize = 2 << 20
+	const capacity = 0
 	c := qt.New(b)
-	data := make([]byte, pieceSize)
-	rand.Read(data)
-	dbPath := filepath.Join(b.TempDir(), "storage.db")
-	b.Logf("storage db path: %q", dbPath)
-	ci, err := NewPiecesStorage(NewPoolOpts{
-		Path:                dbPath,
-		Capacity:            pieceSize,
-		ConcurrentBlobReads: true,
-	})
-	c.Assert(err, qt.IsNil)
-	defer ci.Close()
-	ti, err := ci.OpenTorrent(nil, metainfo.Hash{})
-	c.Assert(err, qt.IsNil)
-	defer ti.Close()
-	pi := ti.Piece(metainfo.Piece{
-		Info: &metainfo.Info{
-			Pieces:      make([]byte, metainfo.HashSize),
-			PieceLength: pieceSize,
-			Length:      pieceSize,
-		},
-	})
-	// Do it untimed the first time to prime the cache.
-	storage.BenchmarkPieceMarkComplete(b, pi, data)
-	b.ResetTimer()
-	for range iter.N(b.N) {
-		storage.BenchmarkPieceMarkComplete(b, pi, data)
+	for _, memory := range []bool{false, true} {
+		b.Run(fmt.Sprintf("Memory=%v", memory), func(b *testing.B) {
+			dbPath := filepath.Join(b.TempDir(), "storage.db")
+			//b.Logf("storage db path: %q", dbPath)
+			ci, err := NewPiecesStorage(NewPiecesStorageOpts{
+				NewPoolOpts: NewPoolOpts{
+					Path: dbPath,
+					//Capacity:            4*pieceSize - 1,
+					ConcurrentBlobReads: false,
+					PageSize:            1 << 14,
+					Memory:              memory,
+				},
+				ProvOpts: func(opts *ProviderOpts) {
+					opts.BatchWrites = true
+				},
+			})
+			c.Assert(err, qt.IsNil)
+			defer ci.Close()
+			test_storage.BenchmarkPieceMarkComplete(b, ci, pieceSize, 16, capacity)
+		})
 	}
 }

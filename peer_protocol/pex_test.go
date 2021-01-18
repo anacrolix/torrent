@@ -36,13 +36,13 @@ func TestMarshalPexMessage(t *testing.T) {
 	pm.Added = append(pm.Added, addr)
 	pm.AddedFlags = append(pm.AddedFlags, f)
 
-	b, err := bencode.Marshal(pm)
+	_, err := bencode.Marshal(pm)
 	require.NoError(t, err)
 
 	pexExtendedId := ExtensionNumber(7)
 	msg := pm.Message(pexExtendedId)
 	expected := []byte("\x00\x00\x00\x4c\x14\x07d5:added6:\x7f\x00\x00\x01\x55\xaa7:added.f1:\x116:added60:8:added6.f0:7:dropped0:8:dropped60:e")
-	b, err = msg.MarshalBinary()
+	b, err := msg.MarshalBinary()
 	require.NoError(t, err)
 	require.EqualValues(t, b, expected)
 

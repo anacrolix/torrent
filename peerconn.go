@@ -1393,7 +1393,7 @@ func (c *peer) receiveChunk(msg *pp.Message) error {
 
 	// Cancel pending requests for this chunk.
 	for c := range t.conns {
-		c._postCancel(req)
+		c.postCancel(req)
 	}
 
 	err := func() error {

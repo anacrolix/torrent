@@ -92,16 +92,16 @@ with recursive excess (
 			length(cast(data as blob))
 		from blob order by last_used, rowid limit 1
 	)
-	where usage_with >= (select value from setting where name='capacity')
+	where usage_with > (select value from setting where name='capacity')
 	union all
 	select 
-		usage_with-data_length,
+		usage_with-data_length as new_usage_with,
 		blob.last_used,
 		blob.rowid,
 		length(cast(data as blob))
 	from excess join blob
 	on blob.rowid=(select rowid from blob where (last_used, rowid) > (excess.last_used, blob_rowid))
-	where usage_with >= (select value from setting where name='capacity')
+	where new_usage_with > (select value from setting where name='capacity')
 )
 select * from excess;
 

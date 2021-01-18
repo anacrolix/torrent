@@ -57,6 +57,8 @@ github.com/anacrolix/dht/v2 v2.6.1-0.20200416071723-3850fa1b802a h1:58guripRs92D
 github.com/anacrolix/dht/v2 v2.6.1-0.20200416071723-3850fa1b802a/go.mod h1:7jf6kAZRU7FFwyeLP3f4LVH8WglAHdMte1mGcq8HQAg=
 github.com/anacrolix/dht/v2 v2.7.0 h1:c+Nr0zcgWtWmLLc6G+wscPLGDlDplH1VA/krXhkg9D4=
 github.com/anacrolix/dht/v2 v2.7.0/go.mod h1:bOymFQlAwhOosbmcw3U2tWuIkF0lr4wXlCBB3mZ8aYo=
+github.com/anacrolix/dht/v2 v2.7.1 h1:4y4Dl1CD6ctrSP61YcIbgES2rmFLbuxYRRYLrMSji4Y=
+github.com/anacrolix/dht/v2 v2.7.1/go.mod h1:RjeKbveVwjnaVj5os4y/NQwqEoDWHigo5rdge9MP52k=
 github.com/anacrolix/envpprof v0.0.0-20180404065416-323002cec2fa h1:xCaATLKmn39QqLs3tUZYr6eKvezJV+FYvVOLTklxK6U=
 github.com/anacrolix/envpprof v0.0.0-20180404065416-323002cec2fa/go.mod h1:KgHhUaQMc8cC0+cEflSgCFNFbKwi5h54gqtVn8yhP7c=
 github.com/anacrolix/envpprof v1.0.0 h1:AwZ+mBP4rQ5f7JSsrsN3h7M2xDW/xSE66IPVOqlnuUc=
@@ -125,6 +127,8 @@ github.com/anacrolix/stm v0.1.0/go.mod h1:ZKz7e7ERWvP0KgL7WXfRjBXHNRhlVRlbBQecqF
 github.com/anacrolix/stm v0.1.1-0.20191106051447-e749ba3531cf/go.mod h1:zoVQRvSiGjGoTmbM0vSLIiaKjWtNPeTvXUSdJQA4hsg=
 github.com/anacrolix/stm v0.2.0 h1:q4IrMj/PPQM2OgHkQcWEVmiOXcuf0Kkil2rWasQeGkU=
 github.com/anacrolix/stm v0.2.0/go.mod h1:zoVQRvSiGjGoTmbM0vSLIiaKjWtNPeTvXUSdJQA4hsg=
+github.com/anacrolix/stm v0.2.1-0.20201002073511-c35a2c748c6a h1:iFheJfoyyo9PS30gHOJ88DRfpFOaM9U+emmJlH7xUhc=
+github.com/anacrolix/stm v0.2.1-0.20201002073511-c35a2c748c6a/go.mod h1:spImf/rXwiAUoYYJK1YCZeWkpaHZ3kzjGFjwK5OStfU=
 github.com/anacrolix/sync v0.0.0-20171108081538-eee974e4f8c1/go.mod h1:+u91KiUuf0lyILI6x3n/XrW7iFROCZCG+TjgK8nW52w=
 github.com/anacrolix/sync v0.0.0-20180611022320-3c4cb11f5a01/go.mod h1:+u91KiUuf0lyILI6x3n/XrW7iFROCZCG+TjgK8nW52w=
 github.com/anacrolix/sync v0.0.0-20180808010631-44578de4e778 h1:XpCDEixzXOB8yaTW/4YBzKrJdMcFI0DzpPTYNv75wzk=

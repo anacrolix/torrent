@@ -6,7 +6,7 @@ require (
 	github.com/RoaringBitmap/roaring v0.5.5 // indirect
 	github.com/alangpierce/go-forceexport v0.0.0-20160317203124-8f1d6941cd75 // indirect
 	github.com/alexflint/go-arg v1.3.0
-	github.com/anacrolix/dht/v2 v2.7.0
+	github.com/anacrolix/dht/v2 v2.7.1
 	github.com/anacrolix/envpprof v1.1.0
 	github.com/anacrolix/go-libutp v1.0.3
 	github.com/anacrolix/log v0.7.1-0.20200604014615-c244de44fd2d

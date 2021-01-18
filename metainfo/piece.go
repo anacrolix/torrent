@@ -5,7 +5,7 @@ import (
 )
 
 type Piece struct {
-	Info *Info
+	Info *Info // Can we embed the fields here instead, or is it something to do with saving memory?
 	i    pieceIndex
 }
 

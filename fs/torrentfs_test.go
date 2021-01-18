@@ -2,7 +2,6 @@ package torrentfs
 
 import (
 	"context"
-	netContext "context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -202,9 +201,9 @@ func TestDownloadOnDemand(t *testing.T) {
 	fs := New(leecher)
 	defer fs.Destroy()
 	root, _ := fs.Root()
-	node, _ := root.(fusefs.NodeStringLookuper).Lookup(netContext.Background(), "greeting")
+	node, _ := root.(fusefs.NodeStringLookuper).Lookup(context.Background(), "greeting")
 	var attr fuse.Attr
-	node.Attr(netContext.Background(), &attr)
+	node.Attr(context.Background(), &attr)
 	size := attr.Size
 	data := make([]byte, size)
 	h, err := node.(fusefs.NodeOpener).Open(context.TODO(), nil, nil)
@@ -215,7 +214,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	var n int
 	for n < len(data) {
 		resp := fuse.ReadResponse{Data: data[n:]}
-		err := h.(fusefs.HandleReader).Read(netContext.Background(), &fuse.ReadRequest{
+		err := h.(fusefs.HandleReader).Read(context.Background(), &fuse.ReadRequest{
 			Size:   int(size) - n,
 			Offset: int64(n),
 		}, &resp)

@@ -152,7 +152,12 @@ func TestAddDropManyTorrents(t *testing.T) {
 }
 
 func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
-	return storage.NewResourcePieces(fc.AsResourceProvider())
+	return storage.NewResourcePiecesOpts(
+		fc.AsResourceProvider(),
+		storage.ResourcePiecesOpts{
+			LeaveIncompleteChunks: true,
+		},
+	)
 }
 
 func TestMergingTrackersByAddingSpecs(t *testing.T) {

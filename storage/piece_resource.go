@@ -14,12 +14,22 @@ import (
 )
 
 type piecePerResource struct {
-	p PieceProvider
+	rp   PieceProvider
+	opts ResourcePiecesOpts
+}
+
+type ResourcePiecesOpts struct {
+	LeaveIncompleteChunks bool
+	AllowSizedPuts        bool
 }
 
 func NewResourcePieces(p PieceProvider) ClientImpl {
+	return NewResourcePiecesOpts(p, ResourcePiecesOpts{})
+}
+
+func NewResourcePiecesOpts(p PieceProvider, opts ResourcePiecesOpts) ClientImpl {
 	return &piecePerResource{
-		p: p,
+		rp: p,
 	}
 }
 
@@ -37,8 +47,8 @@ func (s piecePerResource) OpenTorrent(info *metainfo.Info, infoHash metainfo.Has
 
 func (s piecePerResource) Piece(p metainfo.Piece) PieceImpl {
 	return piecePerResourcePiece{
-		mp: p,
-		rp: s.p,
+		mp:               p,
+		piecePerResource: s,
 	}
 }
 
@@ -52,7 +62,7 @@ type ConsecutiveChunkWriter interface {
 
 type piecePerResourcePiece struct {
 	mp metainfo.Piece
-	rp resource.Provider
+	piecePerResource
 }
 
 var _ io.WriterTo = piecePerResourcePiece{}
@@ -90,6 +100,10 @@ func (s piecePerResourcePiece) Completion() Completion {
 	}
 }
 
+type SizedPutter interface {
+	PutSized(io.Reader, int64) error
+}
+
 func (s piecePerResourcePiece) MarkComplete() error {
 	incompleteChunks := s.getChunks()
 	r, w := io.Pipe()
@@ -102,8 +116,19 @@ func (s piecePerResourcePiece) MarkComplete() error {
 		}
 		w.CloseWithError(err)
 	}()
-	err := s.completed().Put(r)
-	if err == nil {
+	completedInstance := s.completed()
+	err := func() error {
+		if sp, ok := completedInstance.(SizedPutter); ok && s.opts.AllowSizedPuts {
+			return sp.PutSized(r, s.mp.Length())
+		} else {
+			return completedInstance.Put(r)
+		}
+	}()
+	if err == nil && !s.opts.LeaveIncompleteChunks {
+		// I think we do this synchronously here since we don't want callers to act on the completed
+		// piece if we're concurrently still deleting chunks. The caller may decide to start
+		// downloading chunks again and won't expect us to delete them. It seems to be much faster
+		// to let the resource provider do this if possible.
 		var wg sync.WaitGroup
 		for _, c := range incompleteChunks {
 			wg.Add(1)

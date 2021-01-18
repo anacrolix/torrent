@@ -52,6 +52,7 @@ func initSchema(conn conn) error {
 -- We have to opt into this before creating any tables, or before a vacuum to enable it. It means we
 -- can trim the database file size with partial vacuums without having to do a full vacuum, which 
 -- locks everything.
+pragma page_size=16384;
 pragma auto_vacuum=incremental;
 
 create table if not exists blob (
@@ -139,7 +140,10 @@ func NewPiecesStorage(opts NewPoolOpts) (_ storage.ClientImplCloser, err error) 
 		conns.Close()
 		return
 	}
-	store := storage.NewResourcePieces(prov)
+	store := storage.NewResourcePiecesOpts(prov, storage.ResourcePiecesOpts{
+		LeaveIncompleteChunks: true,
+		AllowSizedPuts:        true,
+	})
 	return struct {
 		storage.ClientImpl
 		io.Closer
@@ -259,15 +263,20 @@ func NewProvider(pool ConnPool, opts ProviderOpts) (_ *provider, err error) {
 	if err != nil {
 		return
 	}
-	writes := make(chan writeRequest, 1<<(20-14))
-	prov := &provider{pool: pool, writes: writes, opts: opts}
-	runtime.SetFinalizer(prov, func(p *provider) {
-		// This is done in a finalizer, as it's easier than trying to synchronize on whether the
-		// channel has been closed. It also means that the provider writer can pass back errors from
-		// a closed ConnPool.
-		close(p.writes)
-	})
-	go providerWriter(writes, prov.pool)
+	prov := &provider{pool: pool, opts: opts}
+	if opts.BatchWrites {
+		if opts.NumConns < 2 {
+			err = errors.New("batch writes requires more than 1 conn")
+			return
+		}
+		writes := make(chan writeRequest)
+		prov.writes = writes
+		// This is retained for backwards compatibility. It may not be necessary.
+		runtime.SetFinalizer(prov, func(p *provider) {
+			p.Close()
+		})
+		go providerWriter(writes, prov.pool)
+	}
 	return prov, nil
 }
 
@@ -301,9 +310,11 @@ type ConnPool interface {
 }
 
 type provider struct {
-	pool   ConnPool
-	writes chan<- writeRequest
-	opts   ProviderOpts
+	pool     ConnPool
+	writes   chan<- writeRequest
+	opts     ProviderOpts
+	closed   sync.Once
+	closeErr error
 }
 
 var _ storage.ConsecutiveChunkWriter = (*provider)(nil)
@@ -337,7 +348,13 @@ func (p *provider) WriteConsecutiveChunks(prefix string, w io.Writer) (written i
 }
 
 func (me *provider) Close() error {
-	return me.pool.Close()
+	me.closed.Do(func() {
+		if me.writes != nil {
+			close(me.writes)
+		}
+		me.closeErr = me.pool.Close()
+	})
+	return me.closeErr
 }
 
 type writeRequest struct {
@@ -350,6 +367,11 @@ var expvars = expvar.NewMap("sqliteStorage")
 // Intentionally avoids holding a reference to *provider to allow it to use a finalizer, and to have
 // stronger typing on the writes channel.
 func providerWriter(writes <-chan writeRequest, pool ConnPool) {
+	conn := pool.Get(context.TODO())
+	if conn == nil {
+		return
+	}
+	defer pool.Put(conn)
 	for {
 		first, ok := <-writes
 		if !ok {
@@ -358,11 +380,6 @@ func providerWriter(writes <-chan writeRequest, pool ConnPool) {
 		var buf []func()
 		var cantFail error
 		func() {
-			conn := pool.Get(context.TODO())
-			if conn == nil {
-				return
-			}
-			defer pool.Put(conn)
 			defer sqlitex.Save(conn)(&cantFail)
 			firstErr := first.query(conn)
 			buf = append(buf, func() { first.done <- firstErr })
@@ -513,28 +530,50 @@ func (i instance) openBlob(conn conn, write, updateAccess bool) (*sqlite.Blob, e
 	return conn.OpenBlob("main", "blob", "data", rowid, write)
 }
 
+func (i instance) PutSized(reader io.Reader, size int64) (err error) {
+	err = i.withConn(func(conn conn) error {
+		err := sqlitex.Exec(conn, "insert or replace into blob(name, data) values(?, zeroblob(?))",
+			nil,
+			i.location, size)
+		if err != nil {
+			return err
+		}
+		blob, err := i.openBlob(conn, true, false)
+		if err != nil {
+			return err
+		}
+		defer blob.Close()
+		_, err = io.Copy(blob, reader)
+		return err
+	}, true)
+	return
+}
+
 func (i instance) Put(reader io.Reader) (err error) {
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, reader)
 	if err != nil {
 		return err
 	}
-	err = i.withConn(func(conn conn) error {
-		for range iter.N(10) {
-			err = sqlitex.Exec(conn,
-				"insert or replace into blob(name, data) values(?, cast(? as blob))",
-				nil,
-				i.location, buf.Bytes())
-			if err, ok := err.(sqlite.Error); ok && err.Code == sqlite.SQLITE_BUSY {
-				log.Print("sqlite busy")
-				time.Sleep(time.Second)
-				continue
+	if false {
+		return i.PutSized(&buf, int64(buf.Len()))
+	} else {
+		return i.withConn(func(conn conn) error {
+			for range iter.N(10) {
+				err = sqlitex.Exec(conn,
+					"insert or replace into blob(name, data) values(?, cast(? as blob))",
+					nil,
+					i.location, buf.Bytes())
+				if err, ok := err.(sqlite.Error); ok && err.Code == sqlite.SQLITE_BUSY {
+					log.Print("sqlite busy")
+					time.Sleep(time.Second)
+					continue
+				}
+				break
 			}
-			break
-		}
-		return err
-	}, true)
-	return
+			return err
+		}, true)
+	}
 }
 
 type fileInfo struct {

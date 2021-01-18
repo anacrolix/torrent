@@ -42,7 +42,7 @@ func TestTextBlobSize(t *testing.T) {
 
 func TestSimultaneousIncrementalBlob(t *testing.T) {
 	_, p := newConnsAndProv(t, NewPoolOpts{
-		NumConns:            2,
+		NumConns:            3,
 		ConcurrentBlobReads: true,
 	})
 	a, err := p.NewInstance("a")
@@ -76,7 +76,11 @@ func BenchmarkMarkComplete(b *testing.B) {
 	rand.Read(data)
 	dbPath := filepath.Join(b.TempDir(), "storage.db")
 	b.Logf("storage db path: %q", dbPath)
-	ci, err := NewPiecesStorage(NewPoolOpts{Path: dbPath, Capacity: pieceSize})
+	ci, err := NewPiecesStorage(NewPoolOpts{
+		Path:                dbPath,
+		Capacity:            pieceSize,
+		ConcurrentBlobReads: true,
+	})
 	c.Assert(err, qt.IsNil)
 	defer ci.Close()
 	ti, err := ci.OpenTorrent(nil, metainfo.Hash{})
@@ -89,6 +93,8 @@ func BenchmarkMarkComplete(b *testing.B) {
 			Length:      pieceSize,
 		},
 	})
+	// Do it untimed the first time to prime the cache.
+	storage.BenchmarkPieceMarkComplete(b, pi, data)
 	b.ResetTimer()
 	for range iter.N(b.N) {
 		storage.BenchmarkPieceMarkComplete(b, pi, data)

@@ -27,6 +27,7 @@ func BenchmarkPieceMarkComplete(tb testing.TB, pi PieceImpl, data []byte) {
 		}(off)
 	}
 	wg.Wait()
+	//pi.MarkNotComplete()
 	// This might not apply if users of this benchmark don't cache with the expected capacity.
 	c.Assert(pi.Completion(), qt.Equals, Completion{Complete: false, Ok: true})
 	c.Assert(pi.MarkComplete(), qt.IsNil)

@@ -29,7 +29,8 @@ func NewResourcePieces(p PieceProvider) ClientImpl {
 
 func NewResourcePiecesOpts(p PieceProvider, opts ResourcePiecesOpts) ClientImpl {
 	return &piecePerResource{
-		rp: p,
+		rp:   p,
+		opts: opts,
 	}
 }
 

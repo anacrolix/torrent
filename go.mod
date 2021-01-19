@@ -8,7 +8,7 @@ require (
 	github.com/alexflint/go-arg v1.3.0
 	github.com/anacrolix/dht/v2 v2.7.1
 	github.com/anacrolix/envpprof v1.1.0
-	github.com/anacrolix/go-libutp v1.0.3
+	github.com/anacrolix/go-libutp v1.0.4
 	github.com/anacrolix/log v0.7.1-0.20200604014615-c244de44fd2d
 	github.com/anacrolix/missinggo v1.2.1
 	github.com/anacrolix/missinggo/perf v1.0.0
@@ -29,7 +29,7 @@ require (
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/golang/snappy v0.0.2 // indirect
 	github.com/google/btree v1.0.0
-	github.com/google/uuid v1.1.2 // indirect
+	github.com/google/uuid v1.1.5 // indirect
 	github.com/gorilla/websocket v1.4.2
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/jessevdk/go-flags v1.4.0
@@ -38,9 +38,10 @@ require (
 	github.com/pion/dtls/v2 v2.0.4 // indirect
 	github.com/pion/quic v0.1.4 // indirect
 	github.com/pion/rtcp v1.2.6 // indirect
+	github.com/pion/rtp v1.6.2 // indirect
 	github.com/pion/sctp v1.7.11 // indirect
 	github.com/pion/srtp v1.5.2 // indirect
-	github.com/pion/transport v0.12.0 // indirect
+	github.com/pion/transport v0.12.2 // indirect
 	github.com/pion/turn/v2 v2.0.5 // indirect
 	github.com/pion/webrtc/v2 v2.2.26
 	github.com/pkg/errors v0.9.1
@@ -48,10 +49,10 @@ require (
 	github.com/tinylib/msgp v1.1.5 // indirect
 	github.com/willf/bitset v1.1.11 // indirect
 	go.etcd.io/bbolt v1.3.5
-	golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9 // indirect
-	golang.org/x/net v0.0.0-20201209123823-ac852fbbde11 // indirect
+	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
+	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a // indirect
-	golang.org/x/sys v0.0.0-20201207223542-d4d67f95c62d // indirect
+	golang.org/x/sys v0.0.0-20210113181707-4bcb84eeeb78 // indirect
 	golang.org/x/time v0.0.0-20201208040808-7e3f01d25324
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 	google.golang.org/protobuf v1.25.0 // indirect

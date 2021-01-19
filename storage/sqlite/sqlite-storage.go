@@ -147,8 +147,8 @@ func initSchema(conn conn, pageSize int, triggers bool) error {
 
 type NewPiecesStorageOpts struct {
 	NewPoolOpts
-	ProvOpts func(*ProviderOpts)
-	storage.ResourcePiecesOpts
+	ProvOpts    func(*ProviderOpts)
+	StorageOpts func(*storage.ResourcePiecesOpts)
 }
 
 // A convenience function that creates a connection pool, resource provider, and a pieces storage
@@ -166,7 +166,13 @@ func NewPiecesStorage(opts NewPiecesStorageOpts) (_ storage.ClientImplCloser, er
 		conns.Close()
 		return
 	}
-	store := storage.NewResourcePiecesOpts(prov, opts.ResourcePiecesOpts)
+	storageOpts := storage.ResourcePiecesOpts{
+		NoSizedPuts: provOpts.NoConcurrentBlobReads,
+	}
+	if f := opts.StorageOpts; f != nil {
+		f(&storageOpts)
+	}
+	store := storage.NewResourcePiecesOpts(prov, storageOpts)
 	return struct {
 		storage.ClientImpl
 		io.Closer

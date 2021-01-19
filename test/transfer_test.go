@@ -278,11 +278,11 @@ func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
 	testClientTransferSmallCache(t, false, -1)
 }
 
-func sqliteClientStorageFactory(connOptsMaker func(dataDir string) sqliteStorage.NewPoolOpts) storageFactory {
+func sqliteClientStorageFactory(optsMaker func(dataDir string) sqliteStorage.NewPiecesStorageOpts) storageFactory {
 	return func(dataDir string) storage.ClientImplCloser {
-		connOpts := connOptsMaker(dataDir)
-		//log.Printf("opening sqlite db: %#v", connOpts)
-		ret, err := sqliteStorage.NewPiecesStorage(sqliteStorage.NewPiecesStorageOpts{NewPoolOpts: connOpts})
+		opts := optsMaker(dataDir)
+		//log.Printf("opening sqlite db: %#v", opts)
+		ret, err := sqliteStorage.NewPiecesStorage(opts)
 		if err != nil {
 			panic(err)
 		}
@@ -300,14 +300,18 @@ func TestClientTransferVarious(t *testing.T) {
 			Wrapper: fileCachePieceResourceStorage,
 		})},
 		{"Boltdb", storage.NewBoltDB},
-		{"SqliteFile", sqliteClientStorageFactory(func(dataDir string) sqliteStorage.NewPoolOpts {
-			return sqliteStorage.NewPoolOpts{
-				Path: filepath.Join(dataDir, "sqlite.db"),
+		{"SqliteFile", sqliteClientStorageFactory(func(dataDir string) sqliteStorage.NewPiecesStorageOpts {
+			return sqliteStorage.NewPiecesStorageOpts{
+				NewPoolOpts: sqliteStorage.NewPoolOpts{
+					Path: filepath.Join(dataDir, "sqlite.db"),
+				},
 			}
 		})},
-		{"SqliteMemory", sqliteClientStorageFactory(func(dataDir string) sqliteStorage.NewPoolOpts {
-			return sqliteStorage.NewPoolOpts{
-				Memory: true,
+		{"SqliteMemory", sqliteClientStorageFactory(func(dataDir string) sqliteStorage.NewPiecesStorageOpts {
+			return sqliteStorage.NewPiecesStorageOpts{
+				NewPoolOpts: sqliteStorage.NewPoolOpts{
+					Memory: true,
+				},
 			}
 		})},
 	} {

@@ -347,7 +347,8 @@ type provider struct {
 	pool     ConnPool
 	writes   chan<- writeRequest
 	opts     ProviderOpts
-	closed   sync.Once
+	closeMu  sync.RWMutex
+	closed   bool
 	closeErr error
 }
 
@@ -382,12 +383,16 @@ func (p *provider) WriteConsecutiveChunks(prefix string, w io.Writer) (written i
 }
 
 func (me *provider) Close() error {
-	me.closed.Do(func() {
-		if me.writes != nil {
-			close(me.writes)
-		}
-		me.closeErr = me.pool.Close()
-	})
+	me.closeMu.Lock()
+	defer me.closeMu.Unlock()
+	if me.closed {
+		return me.closeErr
+	}
+	if me.writes != nil {
+		close(me.writes)
+	}
+	me.closeErr = me.pool.Close()
+	me.closed = true
 	return me.closeErr
 }
 
@@ -481,11 +486,17 @@ func getLabels(skip int) pprof.LabelSet {
 func (p *provider) withConn(with withConn, write bool, skip int) error {
 	if write && p.opts.BatchWrites {
 		done := make(chan error)
+		p.closeMu.RLock()
+		if p.closed {
+			p.closeMu.RUnlock()
+			return errors.New("closed")
+		}
 		p.writes <- writeRequest{
 			query:  with,
 			done:   done,
 			labels: getLabels(skip + 1),
 		}
+		p.closeMu.RUnlock()
 		return <-done
 	} else {
 		conn := p.pool.Get(context.TODO())

@@ -49,7 +49,7 @@ func initConn(conn conn, wal bool) error {
 	return nil
 }
 
-func initSchema(conn conn, pageSize int, triggers bool) error {
+func InitSchema(conn conn, pageSize int, triggers bool) error {
 	if pageSize != 0 {
 		err := sqlitex.ExecScript(conn, fmt.Sprintf("pragma page_size=%d", pageSize))
 		if err != nil {
@@ -249,7 +249,7 @@ func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
 		if opts.PageSize == 0 {
 			opts.PageSize = 1 << 14
 		}
-		err = initSchema(conn, opts.PageSize, true)
+		err = InitSchema(conn, opts.PageSize, true)
 		if err != nil {
 			return
 		}

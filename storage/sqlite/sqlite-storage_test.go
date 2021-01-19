@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	_ "github.com/anacrolix/envpprof"
-	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
@@ -85,9 +84,6 @@ func BenchmarkMarkComplete(b *testing.B) {
 				},
 				ProvOpts: func(opts *ProviderOpts) {
 					opts.BatchWrites = true
-				},
-				ResourcePiecesOpts: storage.ResourcePiecesOpts{
-					NoSizedPuts: false || memory,
 				},
 			})
 			c.Assert(err, qt.IsNil)

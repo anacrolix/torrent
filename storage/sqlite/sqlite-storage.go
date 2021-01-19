@@ -73,6 +73,8 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 			key text primary key,
 			value
 		);
+
+		create index if not exists blob_last_used on blob(last_used);
 		
 		-- While sqlite *seems* to be faster to get sum(length(data)) instead of 
 		-- sum(length(cast(data as blob))), it may still require a large table scan at start-up or with a 

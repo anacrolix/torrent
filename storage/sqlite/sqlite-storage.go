@@ -77,7 +77,7 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 		create index if not exists blob_last_used on blob(last_used);
 		
 		-- While sqlite *seems* to be faster to get sum(length(data)) instead of 
-		-- sum(length(cast(data as blob))), it may still require a large table scan at start-up or with a 
+		-- sum(length(data)), it may still require a large table scan at start-up or with a 
 		-- cold-cache. With this we can be assured that it doesn't.
 		insert or ignore into blob_meta values ('size', 0);
 		
@@ -99,7 +99,7 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 					(select value from blob_meta where key='size') as usage_with,
 					last_used,
 					rowid,
-					length(cast(data as blob))
+					length(data)
 				from blob order by last_used, rowid limit 1
 			)
 			where usage_with > (select value from setting where name='capacity')
@@ -108,7 +108,7 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 				usage_with-data_length as new_usage_with,
 				blob.last_used,
 				blob.rowid,
-				length(cast(data as blob))
+				length(data)
 			from excess join blob
 			on blob.rowid=(select rowid from blob where (last_used, rowid) > (excess.last_used, blob_rowid))
 			where new_usage_with > (select value from setting where name='capacity')
@@ -361,7 +361,7 @@ func (p *provider) WriteConsecutiveChunks(prefix string, w io.Writer) (written i
 		err = io.EOF
 		err = sqlitex.Exec(conn, `
 				select
-					cast(data as blob),
+					data,
 					cast(substr(name, ?+1) as integer) as offset
 				from blob
 				where name like ?||'%'
@@ -712,7 +712,7 @@ func (i instance) ReadAt(p []byte, off int64) (n int, err error) {
 			gotRow := false
 			err = sqlitex.Exec(
 				conn,
-				"select substr(cast(data as blob), ?, ?) from blob where name=?",
+				"select substr(data, ?, ?) from blob where name=?",
 				func(stmt *sqlite.Stmt) error {
 					if gotRow {
 						panic("found multiple matching blobs")

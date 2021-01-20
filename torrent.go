@@ -2114,6 +2114,7 @@ func (t *Torrent) addWebSeed(url string) {
 			reconciledHandshakeStats: true,
 			peerSentHaveAll:          true,
 			PeerMaxRequests:          maxRequests,
+			RemoteAddr:               remoteAddrFromUrl(url),
 		},
 		client: webseed.Client{
 			HttpClient: http.DefaultClient,

@@ -1378,6 +1378,9 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 	c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
 	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
+	for _, f := range c.t.cl.config.Callbacks.ReceivedUsefulData {
+		f(ReceivedUsefulDataEvent{c, msg})
+	}
 	c.lastUsefulChunkReceived = time.Now()
 	// if t.fastestPeer != c {
 	// log.Printf("setting fastest connection %p", c)

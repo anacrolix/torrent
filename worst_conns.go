@@ -8,7 +8,7 @@ import (
 	"github.com/anacrolix/multiless"
 )
 
-func worseConn(l, r *peer) bool {
+func worseConn(l, r *Peer) bool {
 	less, ok := multiless.New().Bool(
 		l.useful(), r.useful()).CmpInt64(
 		l.lastHelpful().Sub(r.lastHelpful()).Nanoseconds()).CmpInt64(
@@ -45,7 +45,7 @@ func (me worseConnSlice) Len() int {
 }
 
 func (me worseConnSlice) Less(i, j int) bool {
-	return worseConn(&me.conns[i].peer, &me.conns[j].peer)
+	return worseConn(&me.conns[i].Peer, &me.conns[j].Peer)
 }
 
 func (me *worseConnSlice) Pop() interface{} {

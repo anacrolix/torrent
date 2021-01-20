@@ -15,7 +15,7 @@ import (
 type webseedPeer struct {
 	client   webseed.Client
 	requests map[request]webseed.Request
-	peer     peer
+	peer     Peer
 }
 
 var _ peerImpl = (*webseedPeer)(nil)

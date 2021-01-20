@@ -85,7 +85,7 @@ type Torrent struct {
 	fileIndex segments.Index
 	files     *[]*File
 
-	webSeeds map[string]*peer
+	webSeeds map[string]*Peer
 
 	// Active peer connections, running message stream loops. TODO: Make this
 	// open (not-closed) connections only.
@@ -94,7 +94,7 @@ type Torrent struct {
 	// Set of addrs to which we're attempting to connect. Connections are
 	// half-open until all handshakes are completed.
 	halfOpen    map[string]PeerInfo
-	fastestPeer *peer
+	fastestPeer *Peer
 
 	// Reserve of peers to connect to. A peer can be both here and in the
 	// active connections if were told about the peer after connecting with
@@ -410,7 +410,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 
 // This seems to be all the follow-up tasks after info is set, that can't fail.
 func (t *Torrent) onSetInfo() {
-	t.iterPeers(func(p *peer) {
+	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info)
 	})
 	for i := range t.pieces {
@@ -828,7 +828,7 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 
 func (t *Torrent) maybeDropMutuallyCompletePeer(
 	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's okay?
-	p *peer,
+	p *Peer,
 ) {
 	if !t.cl.config.DropMutuallyCompletePeers {
 		return
@@ -984,7 +984,7 @@ func (t *Torrent) maybeNewConns() {
 
 func (t *Torrent) piecePriorityChanged(piece pieceIndex) {
 	// t.logger.Printf("piece %d priority changed", piece)
-	t.iterPeers(func(c *peer) {
+	t.iterPeers(func(c *Peer) {
 		if c.updatePiecePriority(piece) {
 			// log.Print("conn piece priority changed")
 			c.updateRequests()
@@ -1294,7 +1294,7 @@ func (t *Torrent) deleteConnection(c *PeerConn) (ret bool) {
 }
 
 func (t *Torrent) numActivePeers() (num int) {
-	t.iterPeers(func(*peer) {
+	t.iterPeers(func(*Peer) {
 		num++
 	})
 	return
@@ -1715,7 +1715,7 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	oldMax = t.maxEstablishedConns
 	t.maxEstablishedConns = max
 	wcs := slices.HeapInterface(slices.FromMapKeys(t.conns), func(l, r *PeerConn) bool {
-		return worseConn(&l.peer, &r.peer)
+		return worseConn(&l.Peer, &r.Peer)
 	})
 	for len(t.conns) > t.maxEstablishedConns && wcs.Len() > 0 {
 		t.dropConnection(wcs.Pop().(*PeerConn))
@@ -1782,7 +1782,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 				c.stats().incrementPiecesDirtiedBad()
 			}
 
-			bannableTouchers := make([]*peer, 0, len(p.dirtiers))
+			bannableTouchers := make([]*Peer, 0, len(p.dirtiers))
 			for c := range p.dirtiers {
 				if !c.trusted {
 					bannableTouchers = append(bannableTouchers, c)
@@ -1828,7 +1828,7 @@ func (t *Torrent) onPieceCompleted(piece pieceIndex) {
 	t.cancelRequestsForPiece(piece)
 	for conn := range t.conns {
 		conn.have(piece)
-		t.maybeDropMutuallyCompletePeer(&conn.peer)
+		t.maybeDropMutuallyCompletePeer(&conn.Peer)
 	}
 }
 
@@ -1852,7 +1852,7 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	// 		c.drop()
 	// 	}
 	// }
-	t.iterPeers(func(conn *peer) {
+	t.iterPeers(func(conn *Peer) {
 		if conn.peerHasPiece(piece) {
 			conn.updateRequests()
 		}
@@ -1924,8 +1924,8 @@ func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
 	}
 }
 
-func (t *Torrent) peersAsSlice() (ret []*peer) {
-	t.iterPeers(func(p *peer) {
+func (t *Torrent) peersAsSlice() (ret []*Peer) {
+	t.iterPeers(func(p *Peer) {
 		ret = append(ret, p)
 	})
 	return
@@ -2016,7 +2016,7 @@ func (cb torrentRequestStrategyCallbacks) requestTimedOut(r request) {
 	torrent.Add("request timeouts", 1)
 	cb.t.cl.lock()
 	defer cb.t.cl.unlock()
-	cb.t.iterPeers(func(cn *peer) {
+	cb.t.iterPeers(func(cn *Peer) {
 		if cn.peerHasPiece(pieceIndex(r.Index)) {
 			cn.updateRequests()
 		}
@@ -2045,7 +2045,7 @@ func (t *Torrent) DisallowDataDownload() {
 
 func (t *Torrent) disallowDataDownloadLocked() {
 	t.dataDownloadDisallowed = true
-	t.iterPeers(func(c *peer) {
+	t.iterPeers(func(c *Peer) {
 		c.updateRequests()
 	})
 	t.tickleReaders()
@@ -2056,7 +2056,7 @@ func (t *Torrent) AllowDataDownload() {
 	defer t.cl.unlock()
 	t.dataDownloadDisallowed = false
 	t.tickleReaders()
-	t.iterPeers(func(c *peer) {
+	t.iterPeers(func(c *Peer) {
 		c.updateRequests()
 	})
 }
@@ -2089,9 +2089,9 @@ func (t *Torrent) SetOnWriteChunkError(f func(error)) {
 	t.userOnWriteChunkErr = f
 }
 
-func (t *Torrent) iterPeers(f func(*peer)) {
+func (t *Torrent) iterPeers(f func(*Peer)) {
 	for pc := range t.conns {
-		f(&pc.peer)
+		f(&pc.Peer)
 	}
 	for _, ws := range t.webSeeds {
 		f(ws)
@@ -2107,7 +2107,7 @@ func (t *Torrent) addWebSeed(url string) {
 	}
 	const maxRequests = 10
 	ws := webseedPeer{
-		peer: peer{
+		peer: Peer{
 			t:                        t,
 			outgoing:                 true,
 			network:                  "http",
@@ -2129,8 +2129,8 @@ func (t *Torrent) addWebSeed(url string) {
 	t.webSeeds[url] = &ws.peer
 }
 
-func (t *Torrent) peerIsActive(p *peer) (active bool) {
-	t.iterPeers(func(p1 *peer) {
+func (t *Torrent) peerIsActive(p *Peer) (active bool) {
+	t.iterPeers(func(p1 *Peer) {
 		if p1 == p {
 			active = true
 		}

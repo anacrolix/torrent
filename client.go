@@ -1114,7 +1114,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		metadataChanged: sync.Cond{
 			L: cl.locker(),
 		},
-		webSeeds: make(map[string]*peer),
+		webSeeds: make(map[string]*Peer),
 	}
 	t._pendingPieces.NewSet = priorityBitmapStableNewSet
 	t.requestStrategy = cl.config.DefaultRequestStrategy(t.requestStrategyCallbacks(), &cl._mu)
@@ -1368,7 +1368,7 @@ func (cl *Client) banPeerIP(ip net.IP) {
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr net.Addr, network, connString string) (c *PeerConn) {
 	c = &PeerConn{
-		peer: peer{
+		Peer: Peer{
 			outgoing:        outgoing,
 			choking:         true,
 			peerChoking:     true,

@@ -106,7 +106,7 @@ func chunkIndexSpec(index pp.Integer, pieceLength, chunkSize pp.Integer) chunkSp
 	return ret
 }
 
-func connLessTrusted(l, r *peer) bool {
+func connLessTrusted(l, r *Peer) bool {
 	return l.trust().Less(r.trust())
 }
 

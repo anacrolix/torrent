@@ -1,8 +1,6 @@
 package torrent
 
 import (
-	"net"
-
 	"github.com/anacrolix/dht/v2/krpc"
 
 	"github.com/anacrolix/torrent/peer_protocol"
@@ -11,7 +9,7 @@ import (
 // Peer connection info, handed about publicly.
 type PeerInfo struct {
 	Id     [20]byte
-	Addr   net.Addr
+	Addr   PeerRemoteAddr
 	Source PeerSource
 	// Peer is known to support encryption.
 	SupportsEncryption bool
@@ -41,5 +39,6 @@ func (me *PeerInfo) FromPex(na krpc.NodeAddr, fs peer_protocol.PexPeerFlags) {
 }
 
 func (me PeerInfo) addr() IpPort {
-	return IpPort{IP: addrIpOrNil(me.Addr), Port: uint16(addrPortOrZero(me.Addr))}
+	ipPort, _ := tryIpPortFromNetAddr(me.Addr)
+	return IpPort{ipPort.IP, uint16(ipPort.Port)}
 }

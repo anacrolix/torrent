@@ -42,6 +42,10 @@ type peerRequestState struct {
 	data []byte
 }
 
+type PeerRemoteAddr interface {
+	String() string
+}
+
 type Peer struct {
 	// First to ensure 64-bit alignment for atomics. See #262.
 	_stats ConnStats
@@ -52,7 +56,7 @@ type Peer struct {
 
 	outgoing   bool
 	network    string
-	RemoteAddr net.Addr
+	RemoteAddr PeerRemoteAddr
 	// True if the connection is operating over MSE obfuscation.
 	headerEncrypted bool
 	cryptoMethod    mse.CryptoMethod
@@ -169,7 +173,7 @@ func (cn *Peer) expectingChunks() bool {
 
 // Returns true if the connection is over IPv6.
 func (cn *PeerConn) ipv6() bool {
-	ip := addrIpOrNil(cn.RemoteAddr)
+	ip := cn.remoteIp()
 	if ip.To4() != nil {
 		return false
 	}
@@ -1626,7 +1630,8 @@ func (c *Peer) peerPriority() (peerPriority, error) {
 }
 
 func (c *Peer) remoteIp() net.IP {
-	return addrIpOrNil(c.RemoteAddr)
+	host, _, _ := net.SplitHostPort(c.RemoteAddr.String())
+	return net.ParseIP(host)
 }
 
 func (c *Peer) remoteIpPort() IpPort {
@@ -1642,7 +1647,7 @@ func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
 	if c.outgoing {
 		f |= pp.PexOutgoingConn
 	}
-	if c.RemoteAddr != nil && strings.Contains(c.RemoteAddr.Network(), "udp") {
+	if c.utp() {
 		f |= pp.PexSupportsUtp
 	}
 	return f
@@ -1650,7 +1655,7 @@ func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
 
 // This returns the address to use if we want to dial the peer again. It incorporates the peer's
 // advertised listen port.
-func (c *PeerConn) dialAddr() net.Addr {
+func (c *PeerConn) dialAddr() PeerRemoteAddr {
 	if !c.outgoing && c.PeerListenPort != 0 {
 		switch addr := c.RemoteAddr.(type) {
 		case *net.TCPAddr:

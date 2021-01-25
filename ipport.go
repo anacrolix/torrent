@@ -56,12 +56,15 @@ func (me ipPortAddr) String() string {
 	return net.JoinHostPort(me.IP.String(), strconv.FormatInt(int64(me.Port), 10))
 }
 
-func tryIpPortFromNetAddr(na net.Addr) (ret ipPortAddr, ok bool) {
-	ret.IP = addrIpOrNil(na)
-	if ret.IP == nil {
-		return
+func tryIpPortFromNetAddr(addr PeerRemoteAddr) (ipPortAddr, bool) {
+	ok := true
+	host, port, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		ok = false
 	}
-	ret.Port = addrPortOrZero(na)
-	ok = true
-	return
+	portI64, err := strconv.ParseInt(port, 10, 0)
+	if err != nil {
+		ok = false
+	}
+	return ipPortAddr{net.ParseIP(host), int(portI64)}, ok
 }

@@ -25,7 +25,7 @@ const (
 // represents a single connection (t=pexAdd) or disconnection (t=pexDrop) event
 type pexEvent struct {
 	t    pexEventType
-	addr net.Addr
+	addr PeerRemoteAddr
 	f    pp.PexPeerFlags
 }
 
@@ -45,7 +45,7 @@ func (me *pexMsgFactory) DeltaLen() int {
 type addrKey string
 
 // Returns the key to use to identify a given addr in the factory.
-func (me *pexMsgFactory) addrKey(addr net.Addr) addrKey {
+func (me *pexMsgFactory) addrKey(addr PeerRemoteAddr) addrKey {
 	return addrKey(addr.String())
 }
 
@@ -161,12 +161,10 @@ func (me *pexMsgFactory) PexMsg() pp.PexMsg {
 
 // Convert an arbitrary torrent peer Addr into one that can be represented by the compact addr
 // format.
-func nodeAddr(addr net.Addr) (_ krpc.NodeAddr, ok bool) {
-	ipport, ok := tryIpPortFromNetAddr(addr)
-	if !ok {
-		return
-	}
-	return krpc.NodeAddr{IP: shortestIP(ipport.IP), Port: ipport.Port}, true
+func nodeAddr(addr PeerRemoteAddr) (krpc.NodeAddr, bool) {
+	ipport, _ := tryIpPortFromNetAddr(addr)
+	ok := ipport.IP != nil
+	return krpc.NodeAddr{IP: shortestIP(ipport.IP), Port: ipport.Port}, ok
 }
 
 // mainly for the krpc marshallers

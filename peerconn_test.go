@@ -159,10 +159,10 @@ func TestConnPexPeerFlags(t *testing.T) {
 		{&PeerConn{Peer: Peer{outgoing: false, PeerPrefersEncryption: true}}, pp.PexPrefersEncryption},
 		{&PeerConn{Peer: Peer{outgoing: true, PeerPrefersEncryption: false}}, pp.PexOutgoingConn},
 		{&PeerConn{Peer: Peer{outgoing: true, PeerPrefersEncryption: true}}, pp.PexOutgoingConn | pp.PexPrefersEncryption},
-		{&PeerConn{Peer: Peer{RemoteAddr: udpAddr}}, pp.PexSupportsUtp},
-		{&PeerConn{Peer: Peer{RemoteAddr: udpAddr, outgoing: true}}, pp.PexOutgoingConn | pp.PexSupportsUtp},
-		{&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, outgoing: true}}, pp.PexOutgoingConn},
-		{&PeerConn{Peer: Peer{RemoteAddr: tcpAddr}}, 0},
+		{&PeerConn{Peer: Peer{RemoteAddr: udpAddr, network: udpAddr.Network()}}, pp.PexSupportsUtp},
+		{&PeerConn{Peer: Peer{RemoteAddr: udpAddr, network: udpAddr.Network(), outgoing: true}}, pp.PexOutgoingConn | pp.PexSupportsUtp},
+		{&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, network: tcpAddr.Network(), outgoing: true}}, pp.PexOutgoingConn},
+		{&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, network: tcpAddr.Network()}}, 0},
 	}
 	for i, tc := range testcases {
 		f := tc.conn.pexPeerFlags()
@@ -184,22 +184,22 @@ func TestConnPexEvent(t *testing.T) {
 	}{
 		{
 			pexAdd,
-			&PeerConn{Peer: Peer{RemoteAddr: udpAddr}},
+			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, network: udpAddr.Network()}},
 			pexEvent{pexAdd, udpAddr, pp.PexSupportsUtp},
 		},
 		{
 			pexDrop,
-			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, outgoing: true, PeerListenPort: dialTcpAddr.Port}},
+			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, network: tcpAddr.Network(), outgoing: true, PeerListenPort: dialTcpAddr.Port}},
 			pexEvent{pexDrop, tcpAddr, pp.PexOutgoingConn},
 		},
 		{
 			pexAdd,
-			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, PeerListenPort: dialTcpAddr.Port}},
+			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, network: tcpAddr.Network(), PeerListenPort: dialTcpAddr.Port}},
 			pexEvent{pexAdd, dialTcpAddr, 0},
 		},
 		{
 			pexDrop,
-			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, PeerListenPort: dialUdpAddr.Port}},
+			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, network: udpAddr.Network(), PeerListenPort: dialUdpAddr.Port}},
 			pexEvent{pexDrop, dialUdpAddr, pp.PexSupportsUtp},
 		},
 	}

@@ -2110,7 +2110,7 @@ func (t *Torrent) addWebSeed(url string) {
 		peer: Peer{
 			t:                        t,
 			outgoing:                 true,
-			network:                  "http",
+			Network:                  "http",
 			reconciledHandshakeStats: true,
 			peerSentHaveAll:          true,
 			PeerMaxRequests:          maxRequests,

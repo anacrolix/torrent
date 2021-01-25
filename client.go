@@ -895,7 +895,7 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 			"error receiving handshakes on %v: %s", c, err,
 		).SetLevel(log.Debug).
 			Add(
-				"network", c.network,
+				"network", c.Network,
 			).Log(cl.logger)
 		torrent.Add("error receiving handshake", 1)
 		cl.lock()
@@ -1368,6 +1368,9 @@ func (cl *Client) banPeerIP(ip net.IP) {
 }
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemoteAddr, network, connString string) (c *PeerConn) {
+	if network == "" {
+		panic(remoteAddr)
+	}
 	c = &PeerConn{
 		Peer: Peer{
 			outgoing:        outgoing,
@@ -1376,7 +1379,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemot
 			PeerMaxRequests: 250,
 
 			RemoteAddr: remoteAddr,
-			network:    network,
+			Network:    network,
 		},
 		connString:  connString,
 		conn:        nc,

@@ -24,13 +24,13 @@ func TestSendBitfieldThenHave(t *testing.T) {
 		config: TestingConfig(),
 	}
 	cl.initLogger()
-	c := cl.newConnection(nil, false, nil, "", "")
+	c := cl.newConnection(nil, false, nil, "io.Pipe", "")
 	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
 	c.t.setInfo(&metainfo.Info{
 		Pieces: make([]byte, metainfo.HashSize*3),
 	})
 	r, w := io.Pipe()
-	c.r = r
+	//c.r = r
 	c.w = w
 	go c.writer(time.Minute)
 	c.locker().Lock()
@@ -109,7 +109,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	t.setChunkSize(defaultChunkSize)
 	t._pendingPieces.Set(0, PiecePriorityNormal.BitmapPriority())
 	r, w := net.Pipe()
-	cn := cl.newConnection(r, true, nil, "", "")
+	cn := cl.newConnection(r, true, r.RemoteAddr(), r.RemoteAddr().Network(), regularNetConnPeerConnConnString(r))
 	cn.setTorrent(t)
 	mrlErr := make(chan error)
 	msg := pp.Message{
@@ -159,10 +159,10 @@ func TestConnPexPeerFlags(t *testing.T) {
 		{&PeerConn{Peer: Peer{outgoing: false, PeerPrefersEncryption: true}}, pp.PexPrefersEncryption},
 		{&PeerConn{Peer: Peer{outgoing: true, PeerPrefersEncryption: false}}, pp.PexOutgoingConn},
 		{&PeerConn{Peer: Peer{outgoing: true, PeerPrefersEncryption: true}}, pp.PexOutgoingConn | pp.PexPrefersEncryption},
-		{&PeerConn{Peer: Peer{RemoteAddr: udpAddr, network: udpAddr.Network()}}, pp.PexSupportsUtp},
-		{&PeerConn{Peer: Peer{RemoteAddr: udpAddr, network: udpAddr.Network(), outgoing: true}}, pp.PexOutgoingConn | pp.PexSupportsUtp},
-		{&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, network: tcpAddr.Network(), outgoing: true}}, pp.PexOutgoingConn},
-		{&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, network: tcpAddr.Network()}}, 0},
+		{&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network()}}, pp.PexSupportsUtp},
+		{&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network(), outgoing: true}}, pp.PexOutgoingConn | pp.PexSupportsUtp},
+		{&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true}}, pp.PexOutgoingConn},
+		{&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network()}}, 0},
 	}
 	for i, tc := range testcases {
 		f := tc.conn.pexPeerFlags()
@@ -184,22 +184,22 @@ func TestConnPexEvent(t *testing.T) {
 	}{
 		{
 			pexAdd,
-			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, network: udpAddr.Network()}},
+			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network()}},
 			pexEvent{pexAdd, udpAddr, pp.PexSupportsUtp},
 		},
 		{
 			pexDrop,
-			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, network: tcpAddr.Network(), outgoing: true, PeerListenPort: dialTcpAddr.Port}},
+			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true, PeerListenPort: dialTcpAddr.Port}},
 			pexEvent{pexDrop, tcpAddr, pp.PexOutgoingConn},
 		},
 		{
 			pexAdd,
-			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, network: tcpAddr.Network(), PeerListenPort: dialTcpAddr.Port}},
+			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), PeerListenPort: dialTcpAddr.Port}},
 			pexEvent{pexAdd, dialTcpAddr, 0},
 		},
 		{
 			pexDrop,
-			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, network: udpAddr.Network(), PeerListenPort: dialUdpAddr.Port}},
+			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network(), PeerListenPort: dialUdpAddr.Port}},
 			pexEvent{pexDrop, dialUdpAddr, pp.PexSupportsUtp},
 		},
 	}

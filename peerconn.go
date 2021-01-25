@@ -55,7 +55,7 @@ type Peer struct {
 	peerImpl
 
 	outgoing   bool
-	network    string
+	Network    string
 	RemoteAddr PeerRemoteAddr
 	// True if the connection is operating over MSE obfuscation.
 	headerEncrypted bool
@@ -275,7 +275,7 @@ func (cn *PeerConn) connectionFlags() (ret string) {
 }
 
 func (cn *PeerConn) utp() bool {
-	return parseNetworkString(cn.network).Udp
+	return parseNetworkString(cn.Network).Udp
 }
 
 // Inspired by https://github.com/transmission/transmission/wiki/Peer-Status-Text.

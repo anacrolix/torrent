@@ -18,7 +18,7 @@ func TestPexConnState(t *testing.T) {
 	cl.initLogger()
 	torrent := cl.newTorrent(metainfo.Hash{}, nil)
 	addr := &net.TCPAddr{IP: net.IPv6loopback, Port: 4747}
-	c := cl.newConnection(nil, false, addr, "", "")
+	c := cl.newConnection(nil, false, addr, addr.Network(), "")
 	c.PeerExtensionIDs = make(map[pp.ExtensionName]pp.ExtensionNumber)
 	c.PeerExtensionIDs[pp.ExtensionNamePex] = pexExtendedId
 	c.writerCond.L.Lock()

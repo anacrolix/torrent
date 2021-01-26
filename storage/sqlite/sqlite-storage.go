@@ -220,21 +220,22 @@ func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
 	if opts.NumConns == 0 {
 		opts.NumConns = runtime.NumCPU()
 	}
+	path := url.PathEscape(opts.Path)
 	if opts.Memory {
-		opts.Path = ":memory:"
+		path = ":memory:"
 	}
 	values := make(url.Values)
 	if opts.NoConcurrentBlobReads || opts.Memory {
 		values.Add("cache", "shared")
 	}
-	path := fmt.Sprintf("file:%s?%s", opts.Path, values.Encode())
+	uri := fmt.Sprintf("file:%s?%s", path, values.Encode())
 	conns, err := func() (ConnPool, error) {
 		switch opts.NumConns {
 		case 1:
-			conn, err := sqlite.OpenConn(path, 0)
+			conn, err := sqlite.OpenConn(uri, 0)
 			return &poolFromConn{conn: conn}, err
 		default:
-			return sqlitex.Open(path, 0, opts.NumConns)
+			return sqlitex.Open(uri, 0, opts.NumConns)
 		}
 	}()
 	if err != nil {

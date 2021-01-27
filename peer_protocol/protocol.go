@@ -23,7 +23,9 @@ const (
 	Request       MessageType = 6
 	Piece         MessageType = 7
 	Cancel        MessageType = 8
-	Port          MessageType = 9
+
+	// BEP 5
+	Port MessageType = 9
 
 	// BEP 6 - Fast extension
 	Suggest     MessageType = 0x0d // 13

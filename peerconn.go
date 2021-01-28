@@ -1403,10 +1403,13 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	// waiting for it to be written to storage.
 	piece.unpendChunkIndex(chunkIndex(req.ChunkSpec, t.chunkSize))
 
-	// Cancel pending requests for this chunk.
-	for c := range t.conns {
-		c.postCancel(req)
-	}
+	// Cancel pending requests for this chunk from *other* peers.
+	t.iterPeers(func(p *Peer) {
+		if p == c {
+			return
+		}
+		p.postCancel(req)
+	})
 
 	err := func() error {
 		cl.unlock()

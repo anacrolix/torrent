@@ -13,7 +13,8 @@ import (
 )
 
 type webseedPeer struct {
-	client   webseed.Client
+	client webseed.Client
+	// TODO: Remove finished entries from this.
 	requests map[Request]webseed.Request
 	peer     Peer
 }

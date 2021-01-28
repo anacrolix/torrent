@@ -1365,7 +1365,14 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		torrent.Add("chunks received due to allowed fast", 1)
 	}
 
-	defer func() {
+	// TODO: This needs to happen immediately, to prevent cancels occurring asynchronously when have
+	// actually already received the piece, while we have the Client unlocked to write the data out.
+	{
+		if _, ok := c.requests[req]; ok {
+			for _, f := range c.callbacks.ReceivedRequested {
+				f(PeerMessageEvent{c, msg})
+			}
+		}
 		// Request has been satisfied.
 		if c.deleteRequest(req) {
 			if c.expectingChunks() {
@@ -1374,7 +1381,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		} else {
 			torrent.Add("chunks received unwanted", 1)
 		}
-	}()
+	}
 
 	// Do we actually want this chunk?
 	if t.haveChunk(req) {

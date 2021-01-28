@@ -2117,10 +2117,13 @@ func (t *Torrent) addWebSeed(url string) {
 			Network:                  "http",
 			reconciledHandshakeStats: true,
 			peerSentHaveAll:          true,
-			PeerMaxRequests:          maxRequests,
-			RemoteAddr:               remoteAddrFromUrl(url),
+			// TODO: Raise this limit, and instead limit concurrent fetches.
+			PeerMaxRequests: maxRequests,
+			RemoteAddr:      remoteAddrFromUrl(url),
 		},
 		client: webseed.Client{
+			// TODO: Investigate a MaxConnsPerHost in the transport for this, possibly in a global
+			// Client.
 			HttpClient: http.DefaultClient,
 			Url:        url,
 		},

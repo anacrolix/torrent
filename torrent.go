@@ -2120,6 +2120,7 @@ func (t *Torrent) addWebSeed(url string) {
 			// TODO: Raise this limit, and instead limit concurrent fetches.
 			PeerMaxRequests: maxRequests,
 			RemoteAddr:      remoteAddrFromUrl(url),
+			callbacks:       t.callbacks(),
 		},
 		client: webseed.Client{
 			// TODO: Investigate a MaxConnsPerHost in the transport for this, possibly in a global

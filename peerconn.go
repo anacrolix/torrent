@@ -1747,3 +1747,8 @@ func (cn *Peer) stats() *ConnStats {
 func (cn *Peer) torrent() requestStrategyTorrent {
 	return cn.t.requestStrategyTorrent()
 }
+
+func (p *Peer) TryAsPeerConn() (*PeerConn, bool) {
+	pc, ok := p.peerImpl.(*PeerConn)
+	return pc, ok
+}

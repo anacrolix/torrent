@@ -14,7 +14,7 @@ import (
 type requestStrategyPiece interface {
 	numChunks() pp.Integer
 	dirtyChunks() bitmap.Bitmap
-	chunkIndexRequest(i pp.Integer) request
+	chunkIndexRequest(i pp.Integer) Request
 }
 
 type requestStrategyTorrent interface {
@@ -39,7 +39,7 @@ type requestStrategyConnection interface {
 
 type requestStrategy interface {
 	iterPendingPieces(requestStrategyConnection, func(pieceIndex) bool) bool
-	iterUndirtiedChunks(requestStrategyPiece, func(chunkSpec) bool) bool
+	iterUndirtiedChunks(requestStrategyPiece, func(ChunkSpec) bool) bool
 	nominalMaxRequests(requestStrategyConnection) int
 	shouldRequestWithoutBias(requestStrategyConnection) bool
 	piecePriority(requestStrategyConnection, pieceIndex, piecePriority, int) int
@@ -47,12 +47,12 @@ type requestStrategy interface {
 }
 
 type requestStrategyHooks struct {
-	sentRequest    func(request)
-	deletedRequest func(request)
+	sentRequest    func(Request)
+	deletedRequest func(Request)
 }
 
 type requestStrategyCallbacks interface {
-	requestTimedOut(request)
+	requestTimedOut(Request)
 }
 
 type requestStrategyFuzzing struct {
@@ -103,7 +103,7 @@ type requestStrategyDuplicateRequestTimeout struct {
 
 	// The last time we requested a chunk. Deleting the request from any connection will clear this
 	// value.
-	lastRequested map[request]*time.Timer
+	lastRequested map[Request]*time.Timer
 	// The lock to take when running a request timeout handler.
 	timeoutLocker sync.Locker
 }
@@ -118,7 +118,7 @@ func RequestStrategyDuplicateRequestTimeout(duplicateRequestTimeout time.Duratio
 		return requestStrategyDuplicateRequestTimeout{
 			duplicateRequestTimeout: duplicateRequestTimeout,
 			callbacks:               callbacks,
-			lastRequested:           make(map[request]*time.Timer),
+			lastRequested:           make(map[Request]*time.Timer),
 			timeoutLocker:           clientLocker,
 		}
 	}
@@ -126,7 +126,7 @@ func RequestStrategyDuplicateRequestTimeout(duplicateRequestTimeout time.Duratio
 
 func (rs requestStrategyDuplicateRequestTimeout) hooks() requestStrategyHooks {
 	return requestStrategyHooks{
-		deletedRequest: func(r request) {
+		deletedRequest: func(r Request) {
 			if t, ok := rs.lastRequested[r]; ok {
 				t.Stop()
 				delete(rs.lastRequested, r)
@@ -136,7 +136,7 @@ func (rs requestStrategyDuplicateRequestTimeout) hooks() requestStrategyHooks {
 	}
 }
 
-func (rs requestStrategyDuplicateRequestTimeout) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
+func (rs requestStrategyDuplicateRequestTimeout) iterUndirtiedChunks(p requestStrategyPiece, f func(ChunkSpec) bool) bool {
 	for i := pp.Integer(0); i < pp.Integer(p.numChunks()); i++ {
 		if p.dirtyChunks().Get(bitmap.BitIndex(i)) {
 			continue
@@ -145,7 +145,7 @@ func (rs requestStrategyDuplicateRequestTimeout) iterUndirtiedChunks(p requestSt
 		if rs.wouldDuplicateRecent(r) {
 			continue
 		}
-		if !f(r.chunkSpec) {
+		if !f(r.ChunkSpec) {
 			return false
 		}
 	}
@@ -185,7 +185,7 @@ func (rs requestStrategyFastest) iterPendingPieces(cn requestStrategyConnection,
 	return defaultIterPendingPieces(rs, cn, cb)
 }
 
-func (rs requestStrategyDuplicateRequestTimeout) onSentRequest(r request) {
+func (rs requestStrategyDuplicateRequestTimeout) onSentRequest(r Request) {
 	rs.lastRequested[r] = time.AfterFunc(rs.duplicateRequestTimeout, func() {
 		rs.timeoutLocker.Lock()
 		delete(rs.lastRequested, r)
@@ -215,7 +215,7 @@ func (rs requestStrategyDuplicateRequestTimeout) nominalMaxRequests(cn requestSt
 		),
 	))
 }
-func (rs requestStrategyDuplicateRequestTimeout) wouldDuplicateRecent(r request) bool {
+func (rs requestStrategyDuplicateRequestTimeout) wouldDuplicateRecent(r Request) bool {
 	// This piece has been requested on another connection, and the duplicate request timer is still
 	// running.
 	_, ok := rs.lastRequested[r]

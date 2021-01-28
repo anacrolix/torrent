@@ -11,12 +11,12 @@ type requestStrategyDefaults struct{}
 
 func (requestStrategyDefaults) hooks() requestStrategyHooks {
 	return requestStrategyHooks{
-		sentRequest:    func(request) {},
-		deletedRequest: func(request) {},
+		sentRequest:    func(Request) {},
+		deletedRequest: func(Request) {},
 	}
 }
 
-func (requestStrategyDefaults) iterUndirtiedChunks(p requestStrategyPiece, f func(chunkSpec) bool) bool {
+func (requestStrategyDefaults) iterUndirtiedChunks(p requestStrategyPiece, f func(ChunkSpec) bool) bool {
 	chunkIndices := p.dirtyChunks().Copy()
 	chunkIndices.FlipRange(0, bitmap.BitIndex(p.numChunks()))
 	return iter.ForPerm(chunkIndices.Len(), func(i int) bool {
@@ -24,7 +24,7 @@ func (requestStrategyDefaults) iterUndirtiedChunks(p requestStrategyPiece, f fun
 		if err != nil {
 			panic(err)
 		}
-		return f(p.chunkIndexRequest(pp.Integer(ci)).chunkSpec)
+		return f(p.chunkIndexRequest(pp.Integer(ci)).ChunkSpec)
 	})
 }
 

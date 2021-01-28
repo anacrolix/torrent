@@ -1380,11 +1380,11 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemot
 
 			RemoteAddr: remoteAddr,
 			Network:    network,
+			callbacks:  &cl.config.Callbacks,
 		},
 		connString:  connString,
 		conn:        nc,
 		writeBuffer: new(bytes.Buffer),
-		callbacks:   &cl.config.Callbacks,
 	}
 	c.peerImpl = c
 	c.logger = cl.logger.WithDefaultLevel(log.Warning).WithContextValue(c)
@@ -1395,6 +1395,9 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemot
 		r: c.r,
 	}
 	c.logger.WithDefaultLevel(log.Debug).Printf("initialized with remote %v over network %v (outgoing=%t)", remoteAddr, network, outgoing)
+	for _, f := range cl.config.Callbacks.NewPeer {
+		f(&c.Peer)
+	}
 	return
 }
 

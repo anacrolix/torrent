@@ -108,7 +108,7 @@ func TestTorrentInitialState(t *testing.T) {
 	tor.cl.lock()
 	assert.EqualValues(t, 3, tor.pieceNumPendingChunks(0))
 	tor.cl.unlock()
-	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
+	assert.EqualValues(t, ChunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
 }
 
 func TestReducedDialTimeout(t *testing.T) {

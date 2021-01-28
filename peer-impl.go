@@ -10,12 +10,12 @@ import (
 type peerImpl interface {
 	updateRequests()
 	writeInterested(interested bool) bool
-	cancel(request) bool
+	cancel(Request) bool
 	// Return true if there's room for more activity.
-	request(request) bool
+	request(Request) bool
 	connectionFlags() string
 	onClose()
-	_postCancel(request)
+	_postCancel(Request)
 	onGotInfo(*metainfo.Info)
 	drop()
 	String() string

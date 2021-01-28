@@ -20,9 +20,21 @@ type Callbacks struct {
 	ReceiveEncryptedHandshakeSkeys mse.SecretKeyIter
 
 	ReceivedUsefulData []func(ReceivedUsefulDataEvent)
+	ReceivedRequested  []func(PeerMessageEvent)
+	DeletedRequest     []func(PeerRequestEvent)
+	SentRequest        []func(PeerRequestEvent)
+	PeerClosed         []func(*Peer)
+	NewPeer            []func(*Peer)
 }
 
-type ReceivedUsefulDataEvent struct {
+type ReceivedUsefulDataEvent = PeerMessageEvent
+
+type PeerMessageEvent struct {
 	Peer    *Peer
 	Message *pp.Message
+}
+
+type PeerRequestEvent struct {
+	Peer *Peer
+	Request
 }

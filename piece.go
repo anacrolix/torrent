@@ -82,7 +82,7 @@ func (p *Piece) pendingChunkIndex(chunkIndex int) bool {
 	return !p._dirtyChunks.Contains(chunkIndex)
 }
 
-func (p *Piece) pendingChunk(cs chunkSpec, chunkSize pp.Integer) bool {
+func (p *Piece) pendingChunk(cs ChunkSpec, chunkSize pp.Integer) bool {
 	return p.pendingChunkIndex(chunkIndex(cs, chunkSize))
 }
 
@@ -137,12 +137,12 @@ func (p *Piece) chunkIndexDirty(chunk pp.Integer) bool {
 	return p._dirtyChunks.Contains(bitmap.BitIndex(chunk))
 }
 
-func (p *Piece) chunkIndexSpec(chunk pp.Integer) chunkSpec {
+func (p *Piece) chunkIndexSpec(chunk pp.Integer) ChunkSpec {
 	return chunkIndexSpec(chunk, p.length(), p.chunkSize())
 }
 
-func (p *Piece) chunkIndexRequest(chunkIndex pp.Integer) request {
-	return request{
+func (p *Piece) chunkIndexRequest(chunkIndex pp.Integer) Request {
+	return Request{
 		pp.Integer(p.index),
 		chunkIndexSpec(chunkIndex, p.length(), p.chunkSize()),
 	}

@@ -14,7 +14,7 @@ import (
 
 type webseedPeer struct {
 	client   webseed.Client
-	requests map[request]webseed.Request
+	requests map[Request]webseed.Request
 	peer     Peer
 }
 
@@ -33,7 +33,7 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
 	ws.client.Info = info
 }
 
-func (ws *webseedPeer) _postCancel(r request) {
+func (ws *webseedPeer) _postCancel(r Request) {
 	ws.cancel(r)
 }
 
@@ -41,16 +41,16 @@ func (ws *webseedPeer) writeInterested(interested bool) bool {
 	return true
 }
 
-func (ws *webseedPeer) cancel(r request) bool {
+func (ws *webseedPeer) cancel(r Request) bool {
 	ws.requests[r].Cancel()
 	return true
 }
 
-func (ws *webseedPeer) intoSpec(r request) webseed.RequestSpec {
+func (ws *webseedPeer) intoSpec(r Request) webseed.RequestSpec {
 	return webseed.RequestSpec{ws.peer.t.requestOffset(r), int64(r.Length)}
 }
 
-func (ws *webseedPeer) request(r request) bool {
+func (ws *webseedPeer) request(r Request) bool {
 	webseedRequest := ws.client.NewRequest(ws.intoSpec(r))
 	ws.requests[r] = webseedRequest
 	go ws.requestResultHandler(r, webseedRequest)
@@ -71,12 +71,12 @@ func (ws *webseedPeer) updateRequests() {
 
 func (ws *webseedPeer) onClose() {}
 
-func (ws *webseedPeer) requestResultHandler(r request, webseedRequest webseed.Request) {
+func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Request) {
 	result := <-webseedRequest.Result
 	ws.peer.t.cl.lock()
 	defer ws.peer.t.cl.unlock()
 	if result.Err != nil {
-		ws.peer.logger.Printf("request %v rejected: %v", r, result.Err)
+		ws.peer.logger.Printf("Request %v rejected: %v", r, result.Err)
 		// Always close for now. We need to filter out temporary errors, but this is a nightmare in
 		// Go. Currently a bad webseed URL can starve out the good ones due to the chunk selection
 		// algorithm.

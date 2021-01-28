@@ -53,6 +53,7 @@ type Peer struct {
 	t *Torrent
 
 	peerImpl
+	callbacks *Callbacks
 
 	outgoing   bool
 	Network    string
@@ -82,12 +83,12 @@ type Peer struct {
 	_chunksReceivedWhileExpecting       int64
 
 	choking          bool
-	requests         map[request]struct{}
+	requests         map[Request]struct{}
 	requestsLowWater int
 	// Chunks that we might reasonably expect to receive from the peer. Due to
 	// latency, buffering, and implementation differences, we may receive
 	// chunks that are no longer in the set of requests actually want.
-	validReceiveChunks map[request]int
+	validReceiveChunks map[Request]int
 	// Indexed by metadata piece, set to true if posted and pending a
 	// response.
 	metadataRequests []bool
@@ -96,7 +97,7 @@ type Peer struct {
 	// Stuff controlled by the remote peer.
 	peerInterested        bool
 	peerChoking           bool
-	peerRequests          map[request]*peerRequestState
+	peerRequests          map[Request]*peerRequestState
 	PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
 	PeerListenPort        int
 	// The pieces the peer has claimed to have.
@@ -146,8 +147,6 @@ type PeerConn struct {
 	writerCond  sync.Cond
 
 	pex pexConnState
-
-	callbacks *Callbacks
 }
 
 func (cn *PeerConn) connStatusString() string {
@@ -354,6 +353,9 @@ func (cn *Peer) close() {
 	cn.discardPieceInclination()
 	cn._pieceRequestOrder.Clear()
 	cn.peerImpl.onClose()
+	for _, f := range cn.callbacks.PeerClosed {
+		f(cn)
+	}
 }
 
 func (cn *PeerConn) onClose() {
@@ -451,7 +453,7 @@ func (cn *Peer) totalExpectingTime() (ret time.Duration) {
 
 }
 
-func (cn *PeerConn) onPeerSentCancel(r request) {
+func (cn *PeerConn) onPeerSentCancel(r Request) {
 	if _, ok := cn.peerRequests[r]; !ok {
 		torrent.Add("unexpected cancels received", 1)
 		return
@@ -523,7 +525,7 @@ func (pc *PeerConn) writeInterested(interested bool) bool {
 // are okay.
 type messageWriter func(pp.Message) bool
 
-func (cn *Peer) request(r request) bool {
+func (cn *Peer) request(r Request) bool {
 	if _, ok := cn.requests[r]; ok {
 		panic("chunk already requested")
 	}
@@ -550,20 +552,23 @@ func (cn *Peer) request(r request) bool {
 		panic("piece is queued for hash")
 	}
 	if cn.requests == nil {
-		cn.requests = make(map[request]struct{})
+		cn.requests = make(map[Request]struct{})
 	}
 	cn.requests[r] = struct{}{}
 	if cn.validReceiveChunks == nil {
-		cn.validReceiveChunks = make(map[request]int)
+		cn.validReceiveChunks = make(map[Request]int)
 	}
 	cn.validReceiveChunks[r]++
 	cn.t.pendingRequests[r]++
 	cn.t.requestStrategy.hooks().sentRequest(r)
 	cn.updateExpectingChunks()
+	for _, f := range cn.callbacks.SentRequest {
+		f(PeerRequestEvent{cn, r})
+	}
 	return cn.peerImpl.request(r)
 }
 
-func (me *PeerConn) request(r request) bool {
+func (me *PeerConn) request(r Request) bool {
 	return me.write(pp.Message{
 		Type:   pp.Request,
 		Index:  r.Index,
@@ -572,7 +577,7 @@ func (me *PeerConn) request(r request) bool {
 	})
 }
 
-func (me *PeerConn) cancel(r request) bool {
+func (me *PeerConn) cancel(r Request) bool {
 	return me.write(makeCancelMessage(r))
 }
 
@@ -593,7 +598,7 @@ func (cn *Peer) doRequestState() bool {
 	} else if len(cn.requests) <= cn.requestsLowWater {
 		filledBuffer := false
 		cn.iterPendingPieces(func(pieceIndex pieceIndex) bool {
-			cn.iterPendingRequests(pieceIndex, func(r request) bool {
+			cn.iterPendingRequests(pieceIndex, func(r Request) bool {
 				if !cn.setInterested(true) {
 					filledBuffer = true
 					return false
@@ -789,11 +794,11 @@ func (cn *Peer) iterPendingPiecesUntyped(f iter.Callback) {
 	cn.iterPendingPieces(func(i pieceIndex) bool { return f(i) })
 }
 
-func (cn *Peer) iterPendingRequests(piece pieceIndex, f func(request) bool) bool {
+func (cn *Peer) iterPendingRequests(piece pieceIndex, f func(Request) bool) bool {
 	return cn.t.requestStrategy.iterUndirtiedChunks(
 		cn.t.piece(piece).requestStrategyPiece(),
-		func(cs chunkSpec) bool {
-			return f(request{pp.Integer(piece), cs})
+		func(cs ChunkSpec) bool {
+			return f(Request{pp.Integer(piece), cs})
 		},
 	)
 }
@@ -1003,7 +1008,7 @@ func (c *PeerConn) fastEnabled() bool {
 	return c.PeerExtensionBytes.SupportsFast() && c.t.cl.config.Extensions.SupportsFast()
 }
 
-func (c *PeerConn) reject(r request) {
+func (c *PeerConn) reject(r Request) {
 	if !c.fastEnabled() {
 		panic("fast not enabled")
 	}
@@ -1011,7 +1016,7 @@ func (c *PeerConn) reject(r request) {
 	delete(c.peerRequests, r)
 }
 
-func (c *PeerConn) onReadRequest(r request) error {
+func (c *PeerConn) onReadRequest(r Request) error {
 	requestedChunkLengths.Add(strconv.FormatUint(r.Length.Uint64(), 10), 1)
 	if _, ok := c.peerRequests[r]; ok {
 		torrent.Add("duplicate requests received", 1)
@@ -1043,10 +1048,10 @@ func (c *PeerConn) onReadRequest(r request) error {
 	// Check this after we know we have the piece, so that the piece length will be known.
 	if r.Begin+r.Length > c.t.pieceLength(pieceIndex(r.Index)) {
 		torrent.Add("bad requests received", 1)
-		return errors.New("bad request")
+		return errors.New("bad Request")
 	}
 	if c.peerRequests == nil {
-		c.peerRequests = make(map[request]*peerRequestState, maxRequests)
+		c.peerRequests = make(map[Request]*peerRequestState, maxRequests)
 	}
 	value := &peerRequestState{}
 	c.peerRequests[r] = value
@@ -1055,7 +1060,7 @@ func (c *PeerConn) onReadRequest(r request) error {
 	return nil
 }
 
-func (c *PeerConn) peerRequestDataReader(r request, prs *peerRequestState) {
+func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 	b, err := readPeerRequestData(r, c)
 	c.locker().Lock()
 	defer c.locker().Unlock()
@@ -1072,8 +1077,8 @@ func (c *PeerConn) peerRequestDataReader(r request, prs *peerRequestState) {
 
 // If this is maintained correctly, we might be able to support optional synchronous reading for
 // chunk sending, the way it used to work.
-func (c *PeerConn) peerRequestDataReadFailed(err error, r request) {
-	c.logger.WithDefaultLevel(log.Warning).Printf("error reading chunk for peer request %v: %v", r, err)
+func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
+	c.logger.WithDefaultLevel(log.Warning).Printf("error reading chunk for peer Request %v: %v", r, err)
 	i := pieceIndex(r.Index)
 	if c.t.pieceComplete(i) {
 		// There used to be more code here that just duplicated the following break. Piece
@@ -1092,7 +1097,7 @@ func (c *PeerConn) peerRequestDataReadFailed(err error, r request) {
 	c.choke(c.post)
 }
 
-func readPeerRequestData(r request, c *PeerConn) ([]byte, error) {
+func readPeerRequestData(r Request, c *PeerConn) ([]byte, error) {
 	b := make([]byte, r.Length)
 	p := c.t.info.Piece(int(r.Index))
 	n, err := c.t.readAt(b, p.Offset()+int64(r.Begin))
@@ -1241,13 +1246,13 @@ func (c *PeerConn) mainReadLoop() (err error) {
 	}
 }
 
-func (c *Peer) remoteRejectedRequest(r request) {
+func (c *Peer) remoteRejectedRequest(r Request) {
 	if c.deleteRequest(r) {
 		c.decExpectedChunkReceive(r)
 	}
 }
 
-func (c *Peer) decExpectedChunkReceive(r request) {
+func (c *Peer) decExpectedChunkReceive(r Request) {
 	count := c.validReceiveChunks[r]
 	if count == 1 {
 		delete(c.validReceiveChunks, r)
@@ -1396,7 +1401,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	piece.incrementPendingWrites()
 	// Record that we have the chunk, so we aren't trying to download it while
 	// waiting for it to be written to storage.
-	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, t.chunkSize))
+	piece.unpendChunkIndex(chunkIndex(req.ChunkSpec, t.chunkSize))
 
 	// Cancel pending requests for this chunk.
 	for c := range t.conns {
@@ -1537,11 +1542,14 @@ func (c *Peer) numLocalRequests() int {
 	return len(c.requests)
 }
 
-func (c *Peer) deleteRequest(r request) bool {
+func (c *Peer) deleteRequest(r Request) bool {
 	if _, ok := c.requests[r]; !ok {
 		return false
 	}
 	delete(c.requests, r)
+	for _, f := range c.callbacks.DeletedRequest {
+		f(PeerRequestEvent{c, r})
+	}
 	c.updateExpectingChunks()
 	c.t.requestStrategy.hooks().deletedRequest(r)
 	pr := c.t.pendingRequests
@@ -1594,7 +1602,7 @@ func (c *PeerConn) tickleWriter() {
 	c.writerCond.Broadcast()
 }
 
-func (c *Peer) postCancel(r request) bool {
+func (c *Peer) postCancel(r Request) bool {
 	if !c.deleteRequest(r) {
 		return false
 	}
@@ -1602,11 +1610,11 @@ func (c *Peer) postCancel(r request) bool {
 	return true
 }
 
-func (c *PeerConn) _postCancel(r request) {
+func (c *PeerConn) _postCancel(r Request) {
 	c.post(makeCancelMessage(r))
 }
 
-func (c *PeerConn) sendChunk(r request, msg func(pp.Message) bool, state *peerRequestState) (more bool) {
+func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool, state *peerRequestState) (more bool) {
 	c.lastChunkSent = time.Now()
 	return msg(pp.Message{
 		Type:  pp.Piece,

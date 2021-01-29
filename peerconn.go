@@ -167,7 +167,7 @@ func (cn *Peer) updateExpectingChunks() {
 }
 
 func (cn *Peer) expectingChunks() bool {
-	return cn.interested && !cn.peerChoking
+	return len(cn.requests) != 0 && !cn.peerChoking
 }
 
 // Returns true if the connection is over IPv6.

@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -92,7 +93,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	for range iter.N(7) {
 		r := t.NewReader()
 		r.SetReadahead(32 << 20)
-		r.Seek(3500000, 0)
+		r.Seek(3500000, io.SeekStart)
 	}
 	assert.Len(b, t.readers, 7)
 	for i := 0; i < int(t.numPieces()); i += 3 {

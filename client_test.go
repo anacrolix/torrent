@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/bradfitz/iter"
+	"github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -202,9 +204,7 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 	assert.True(t, new)
 	r := tt.NewReader()
 	defer r.Close()
-	b, err = ioutil.ReadAll(r)
-	assert.Len(t, b, 13)
-	assert.NoError(t, err)
+	quicktest.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), quicktest.IsNil)
 }
 
 func BenchmarkAddLargeTorrent(b *testing.B) {
@@ -411,9 +411,7 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 	assert.Equal(t, alreadyCompleted, psrs[0].Complete)
 	if alreadyCompleted {
 		r := tt.NewReader()
-		b, err := ioutil.ReadAll(r)
-		assert.NoError(t, err)
-		assert.EqualValues(t, testutil.GreetingFileContents, b)
+		quicktest.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), quicktest.IsNil)
 	}
 }
 

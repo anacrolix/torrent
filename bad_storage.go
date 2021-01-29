@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"strings"
 
+	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
 )
@@ -48,7 +49,7 @@ func (p badStoragePiece) MarkNotComplete() error {
 }
 
 func (p badStoragePiece) randomlyTruncatedDataString() string {
-	return "hello, world\n"[:rand.Intn(14)]
+	return testutil.GreetingFileContents[:rand.Intn(14)]
 }
 
 func (p badStoragePiece) ReadAt(b []byte, off int64) (n int, err error) {

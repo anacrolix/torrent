@@ -3,10 +3,10 @@ package test
 import (
 	"errors"
 	"io"
-	"io/ioutil"
 	"os"
 	"sync"
 	"testing"
+	"testing/iotest"
 
 	"github.com/anacrolix/log"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -86,12 +86,10 @@ func testReceiveChunkStorageFailure(t *testing.T, seederFast bool) {
 			// We don't seem to need to seek, but that's probably just because the storage failure is
 			// happening on the first read.
 			r.Seek(0, io.SeekStart)
-			output, err := ioutil.ReadAll(r)
-			if err != nil {
+			if err := iotest.TestReader(r, []byte(testutil.GreetingFileContents)); err != nil {
 				t.Logf("got error while reading: %v", err)
 				return true
 			}
-			assert.EqualValues(t, testutil.GreetingFileContents, output)
 			return false
 		}() {
 		}

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/anacrolix/missinggo/v2/filecache"
@@ -15,6 +16,7 @@ import (
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/storage"
 	sqliteStorage "github.com/anacrolix/torrent/storage/sqlite"
+	"github.com/frankban/quicktest"
 	"golang.org/x/time/rate"
 
 	"github.com/stretchr/testify/assert"
@@ -39,9 +41,7 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 	pos, err := r.Seek(0, io.SeekStart)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 0, pos)
-	_greeting, err := ioutil.ReadAll(r)
-	assert.NoError(t, err)
-	assert.EqualValues(t, testutil.GreetingFileContents, string(_greeting))
+	quicktest.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), quicktest.IsNil)
 }
 
 // Creates a seeder and a leecher, and ensures the data transfers when a read
@@ -413,9 +413,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 		defer wg.Done()
 		r := llg.NewReader()
 		defer r.Close()
-		b, err := ioutil.ReadAll(r)
-		require.NoError(t, err)
-		assert.EqualValues(t, testutil.GreetingFileContents, b)
+		quicktest.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), quicktest.IsNil)
 	}()
 	done := make(chan struct{})
 	defer close(done)

@@ -628,6 +628,9 @@ func (cn *Peer) doRequestState() bool {
 			return false
 		}
 		cn.requestsLowWater = len(cn.requests) / 2
+		if len(cn.requests) == 0 {
+			return cn.setInterested(false)
+		}
 	}
 	return true
 }

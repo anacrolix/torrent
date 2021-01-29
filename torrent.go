@@ -26,6 +26,7 @@ import (
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
@@ -2118,17 +2119,20 @@ func (t *Torrent) addWebSeed(url string) {
 			reconciledHandshakeStats: true,
 			peerSentHaveAll:          true,
 			// TODO: Raise this limit, and instead limit concurrent fetches.
-			PeerMaxRequests: maxRequests,
+			PeerMaxRequests: 32,
 			RemoteAddr:      remoteAddrFromUrl(url),
 			callbacks:       t.callbacks(),
 		},
 		client: webseed.Client{
-			// TODO: Investigate a MaxConnsPerHost in the transport for this, possibly in a global
-			// Client.
+			// Consider a MaxConnsPerHost in the transport for this, possibly in a global Client.
 			HttpClient: http.DefaultClient,
 			Url:        url,
 		},
-		requests: make(map[Request]webseed.Request, maxRequests),
+		activeRequests: make(map[Request]webseed.Request, maxRequests),
+	}
+	ws.requesterCond.L = t.cl.locker()
+	for range iter.N(maxRequests) {
+		go ws.requester()
 	}
 	for _, f := range t.callbacks().NewPeer {
 		f(&ws.peer)

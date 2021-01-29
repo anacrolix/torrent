@@ -3,6 +3,7 @@ package torrent
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
@@ -13,10 +14,10 @@ import (
 )
 
 type webseedPeer struct {
-	client webseed.Client
-	// TODO: Remove finished entries from this.
-	requests map[Request]webseed.Request
-	peer     Peer
+	client         webseed.Client
+	activeRequests map[Request]webseed.Request
+	requesterCond  sync.Cond
+	peer           Peer
 }
 
 var _ peerImpl = (*webseedPeer)(nil)
@@ -43,7 +44,11 @@ func (ws *webseedPeer) writeInterested(interested bool) bool {
 }
 
 func (ws *webseedPeer) cancel(r Request) bool {
-	ws.requests[r].Cancel()
+	active, ok := ws.activeRequests[r]
+	if !ok {
+		return false
+	}
+	active.Cancel()
 	return true
 }
 
@@ -52,10 +57,33 @@ func (ws *webseedPeer) intoSpec(r Request) webseed.RequestSpec {
 }
 
 func (ws *webseedPeer) request(r Request) bool {
-	webseedRequest := ws.client.NewRequest(ws.intoSpec(r))
-	ws.requests[r] = webseedRequest
-	go ws.requestResultHandler(r, webseedRequest)
+	ws.requesterCond.Signal()
 	return true
+}
+
+func (ws *webseedPeer) doRequest(r Request) {
+	webseedRequest := ws.client.NewRequest(ws.intoSpec(r))
+	ws.activeRequests[r] = webseedRequest
+	ws.requesterCond.L.Unlock()
+	ws.requestResultHandler(r, webseedRequest)
+	ws.requesterCond.L.Lock()
+	delete(ws.activeRequests, r)
+}
+
+func (ws *webseedPeer) requester() {
+	ws.requesterCond.L.Lock()
+	defer ws.requesterCond.L.Unlock()
+start:
+	for !ws.peer.closed.IsSet() {
+		for r := range ws.peer.requests {
+			if _, ok := ws.activeRequests[r]; ok {
+				continue
+			}
+			ws.doRequest(r)
+			goto start
+		}
+		ws.requesterCond.Wait()
+	}
 }
 
 func (ws *webseedPeer) connectionFlags() string {
@@ -70,7 +98,9 @@ func (ws *webseedPeer) updateRequests() {
 	ws.peer.doRequestState()
 }
 
-func (ws *webseedPeer) onClose() {}
+func (ws *webseedPeer) onClose() {
+	ws.requesterCond.Broadcast()
+}
 
 func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Request) {
 	result := <-webseedRequest.Result

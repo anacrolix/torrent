@@ -7,7 +7,7 @@ require (
 	github.com/alangpierce/go-forceexport v0.0.0-20160317203124-8f1d6941cd75 // indirect
 	github.com/alexflint/go-arg v1.3.0
 	github.com/anacrolix/dht/v2 v2.8.0
-	github.com/anacrolix/envpprof v1.1.0
+	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/go-libutp v1.0.4
 	github.com/anacrolix/log v0.8.0
 	github.com/anacrolix/missinggo v1.2.1
@@ -26,6 +26,7 @@ require (
 	github.com/elliotchance/orderedmap v1.3.0
 	github.com/frankban/quicktest v1.11.3
 	github.com/fsnotify/fsnotify v1.4.9
+	github.com/glycerine/go-unsnap-stream v0.0.0-20210130063903-47dfef350d96 // indirect
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/golang/snappy v0.0.2 // indirect
 	github.com/google/btree v1.0.0
@@ -45,6 +46,7 @@ require (
 	github.com/pion/turn/v2 v2.0.5 // indirect
 	github.com/pion/webrtc/v2 v2.2.26
 	github.com/pkg/errors v0.9.1
+	github.com/rs/dnscache v0.0.0-20210201191234-295bba877686 // indirect
 	github.com/stretchr/testify v1.6.1
 	github.com/tinylib/msgp v1.1.5 // indirect
 	github.com/willf/bitset v1.1.11 // indirect

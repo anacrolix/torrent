@@ -81,6 +81,8 @@ github.com/anacrolix/envpprof v1.0.1 h1:lShFeOuHFuzLAfyP6WplWvIfHKmbKu1u9/rDOtcF
 github.com/anacrolix/envpprof v1.0.1/go.mod h1:My7T5oSqVfEn4MD4Meczkw/f5lSIndGAKu/0SM/rkf4=
 github.com/anacrolix/envpprof v1.1.0 h1:hz8QWMN1fA01YNQsUtVvl9hBXQWWMxSnHHoOK9IdrNY=
 github.com/anacrolix/envpprof v1.1.0/go.mod h1:My7T5oSqVfEn4MD4Meczkw/f5lSIndGAKu/0SM/rkf4=
+github.com/anacrolix/envpprof v1.1.1 h1:sHQCyj7HtiSfaZAzL2rJrQdyS7odLqlwO6nhk/tG/j8=
+github.com/anacrolix/envpprof v1.1.1/go.mod h1:My7T5oSqVfEn4MD4Meczkw/f5lSIndGAKu/0SM/rkf4=
 github.com/anacrolix/go-libutp v0.0.0-20180522111405-6baeb806518d/go.mod h1:beQSaSxwH2d9Eeu5ijrEnHei5Qhk+J6cDm1QkWFru4E=
 github.com/anacrolix/go-libutp v1.0.2 h1:cL2SfTCO418V+DQRdMEW+RNfO2InLqW6PsSLqHwmGR4=
 github.com/anacrolix/go-libutp v1.0.2/go.mod h1:uIH0A72V++j0D1nnmTjjZUiH/ujPkFxYWkxQ02+7S0U=
@@ -271,6 +273,8 @@ github.com/glycerine/go-unsnap-stream v0.0.0-20181221182339-f9677308dec2 h1:Ujru
 github.com/glycerine/go-unsnap-stream v0.0.0-20181221182339-f9677308dec2/go.mod h1:/20jfyN9Y5QPEAprSgKAUr+glWDY39ZiUEAYOEv5dsE=
 github.com/glycerine/go-unsnap-stream v0.0.0-20190901134440-81cf024a9e0a h1:FQqoVvjbiUioBBFUL5up+h+GdCa/AnJsL/1bIs/veSI=
 github.com/glycerine/go-unsnap-stream v0.0.0-20190901134440-81cf024a9e0a/go.mod h1:/20jfyN9Y5QPEAprSgKAUr+glWDY39ZiUEAYOEv5dsE=
+github.com/glycerine/go-unsnap-stream v0.0.0-20210130063903-47dfef350d96 h1:rCXyLrgJ598XNj7KTqPzAvwTzlyvI+clqasoNfLQStE=
+github.com/glycerine/go-unsnap-stream v0.0.0-20210130063903-47dfef350d96/go.mod h1:/20jfyN9Y5QPEAprSgKAUr+glWDY39ZiUEAYOEv5dsE=
 github.com/glycerine/goconvey v0.0.0-20180728074245-46e3a41ad493 h1:OTanQnFt0bi5iLFSdbEVA/idR6Q2WhCm+deb7ir2CcM=
 github.com/glycerine/goconvey v0.0.0-20180728074245-46e3a41ad493/go.mod h1:Ogl1Tioa0aV7gstGFO7KhffUsb9M4ydbEbbxpcEDc24=
 github.com/glycerine/goconvey v0.0.0-20190315024820-982ee783a72e h1:SiEs4J3BKVIeaWrH3tKaz3QLZhJ68iJ/A4xrzIoE5+Y=
@@ -639,6 +643,8 @@ github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a h1:9ZKAASQSHhD
 github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
 github.com/rs/dnscache v0.0.0-20190621150935-06bb5526f76b h1:vQr7k9nLapW7xKl8qYc6+S5VHuhvdDF1vVzTFbWrptE=
 github.com/rs/dnscache v0.0.0-20190621150935-06bb5526f76b/go.mod h1:qe5TWALJ8/a1Lqznoc5BDHpYX/8HU60Hm2AwRmqzxqA=
+github.com/rs/dnscache v0.0.0-20210201191234-295bba877686 h1:IJ6Df0uxPDtNoByV0KkzVKNseWvZFCNM/S9UoyOMCSI=
+github.com/rs/dnscache v0.0.0-20210201191234-295bba877686/go.mod h1:qe5TWALJ8/a1Lqznoc5BDHpYX/8HU60Hm2AwRmqzxqA=
 github.com/russross/blackfriday v1.5.2 h1:HyvC0ARfnZBqnXwABFeSZHpKvJHJJfPz81GNueLj0oo=
 github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
 github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 h1:GHRpF1pTW19a8tTFrMLUcfWwyC0pnifVo2ClaLq+hP8=

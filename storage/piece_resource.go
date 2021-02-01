@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"path"
 	"sort"
@@ -57,8 +58,8 @@ type PieceProvider interface {
 	resource.Provider
 }
 
-type ConsecutiveChunkWriter interface {
-	WriteConsecutiveChunks(prefix string, _ io.Writer) (int64, error)
+type ConsecutiveChunkReader interface {
+	ReadConsecutiveChunks(prefix string) (io.ReadCloser, error)
 }
 
 type piecePerResourcePiece struct {
@@ -69,18 +70,27 @@ type piecePerResourcePiece struct {
 var _ io.WriterTo = piecePerResourcePiece{}
 
 func (s piecePerResourcePiece) WriteTo(w io.Writer) (int64, error) {
-	if ccw, ok := s.rp.(ConsecutiveChunkWriter); ok {
-		if s.mustIsComplete() {
-			return ccw.WriteConsecutiveChunks(s.completedInstancePath(), w)
-		} else {
-			return s.writeConsecutiveIncompleteChunks(ccw, w)
+	if s.mustIsComplete() {
+		r, err := s.completed().Get()
+		if err != nil {
+			return 0, fmt.Errorf("getting complete instance: %w", err)
 		}
+		defer r.Close()
+		return io.Copy(w, r)
+	}
+	if ccr, ok := s.rp.(ConsecutiveChunkReader); ok {
+		return s.writeConsecutiveIncompleteChunks(ccr, w)
 	}
 	return io.Copy(w, io.NewSectionReader(s, 0, s.mp.Length()))
 }
 
-func (s piecePerResourcePiece) writeConsecutiveIncompleteChunks(ccw ConsecutiveChunkWriter, w io.Writer) (int64, error) {
-	return ccw.WriteConsecutiveChunks(s.incompleteDirPath()+"/", w)
+func (s piecePerResourcePiece) writeConsecutiveIncompleteChunks(ccw ConsecutiveChunkReader, w io.Writer) (int64, error) {
+	r, err := ccw.ReadConsecutiveChunks(s.incompleteDirPath() + "/")
+	if err != nil {
+		return 0, err
+	}
+	defer r.Close()
+	return io.Copy(w, r)
 }
 
 // Returns if the piece is complete. Ok should be true, because we are the definitive source of
@@ -107,18 +117,18 @@ type SizedPutter interface {
 
 func (s piecePerResourcePiece) MarkComplete() error {
 	incompleteChunks := s.getChunks()
-	r, w := io.Pipe()
-	go func() {
-		var err error
-		if ccw, ok := s.rp.(ConsecutiveChunkWriter); ok {
-			_, err = s.writeConsecutiveIncompleteChunks(ccw, w)
-		} else {
-			_, err = io.Copy(w, io.NewSectionReader(incompleteChunks, 0, s.mp.Length()))
+	r, err := func() (io.ReadCloser, error) {
+		if ccr, ok := s.rp.(ConsecutiveChunkReader); ok {
+			return ccr.ReadConsecutiveChunks(s.incompleteDirPath() + "/")
 		}
-		w.CloseWithError(err)
+		return io.NopCloser(io.NewSectionReader(incompleteChunks, 0, s.mp.Length())), nil
 	}()
+	if err != nil {
+		return fmt.Errorf("getting incomplete chunks reader: %w", err)
+	}
+	defer r.Close()
 	completedInstance := s.completed()
-	err := func() error {
+	err = func() error {
 		if sp, ok := completedInstance.(SizedPutter); ok && !s.opts.NoSizedPuts {
 			return sp.PutSized(r, s.mp.Length())
 		} else {

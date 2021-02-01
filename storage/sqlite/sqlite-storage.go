@@ -267,6 +267,7 @@ func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
 		NumConns:              opts.NumConns,
 		NoConcurrentBlobReads: opts.NoConcurrentBlobReads || opts.Memory,
 		BatchWrites:           true,
+		//BatchWrites:           opts.NumConns > 1,
 	}, nil
 }
 
@@ -355,34 +356,43 @@ type provider struct {
 	closeErr error
 }
 
-var _ storage.ConsecutiveChunkWriter = (*provider)(nil)
+var _ storage.ConsecutiveChunkReader = (*provider)(nil)
 
-func (p *provider) WriteConsecutiveChunks(prefix string, w io.Writer) (written int64, err error) {
-	err = p.withConn(func(_ context.Context, conn conn) error {
-		err = io.EOF
-		err = sqlitex.Exec(conn, `
+func (p *provider) ReadConsecutiveChunks(prefix string) (io.ReadCloser, error) {
+	runner, err := p.getReadWithConnRunner()
+	if err != nil {
+		return nil, err
+	}
+	r, w := io.Pipe()
+	go func() {
+		err = runner(func(_ context.Context, conn conn) error {
+			var written int64
+			err = sqlitex.Exec(conn, `
 				select
 					data,
 					cast(substr(name, ?+1) as integer) as offset
 				from blob
 				where name like ?||'%'
 				order by offset`,
-			func(stmt *sqlite.Stmt) error {
-				offset := stmt.ColumnInt64(1)
-				if offset != written {
-					return fmt.Errorf("got chunk at offset %v, expected offset %v", offset, written)
-				}
-				r := stmt.ColumnReader(0)
-				w1, err := io.Copy(w, r)
-				written += w1
-				return err
-			},
-			len(prefix),
-			prefix,
-		)
-		return err
-	}, false, 0)
-	return
+				func(stmt *sqlite.Stmt) error {
+					offset := stmt.ColumnInt64(1)
+					if offset != written {
+						return fmt.Errorf("got chunk at offset %v, expected offset %v", offset, written)
+					}
+					// TODO: Avoid intermediate buffers here
+					r := stmt.ColumnReader(0)
+					w1, err := io.Copy(w, r)
+					written += w1
+					return err
+				},
+				len(prefix),
+				prefix,
+			)
+			return err
+		})
+		w.CloseWithError(err)
+	}()
+	return r, nil
 }
 
 func (me *provider) Close() error {
@@ -502,13 +512,27 @@ func (p *provider) withConn(with withConn, write bool, skip int) error {
 		p.closeMu.RUnlock()
 		return <-done
 	} else {
-		conn := p.pool.Get(context.TODO())
-		if conn == nil {
-			return errors.New("couldn't get pool conn")
+		runner, err := p.getReadWithConnRunner()
+		if err != nil {
+			return err
 		}
-		defer p.pool.Put(conn)
-		return runQueryWithLabels(with, getLabels(skip+1), conn)
+		return runner(with)
 	}
+}
+
+// Obtains a DB conn and returns a withConn for executing with it. If no error is returned from this
+// function, the runner *must* be used or the conn is leaked.
+func (p *provider) getReadWithConnRunner() (with func(withConn) error, err error) {
+	conn := p.pool.Get(context.TODO())
+	if conn == nil {
+		err = errors.New("couldn't get pool conn")
+		return
+	}
+	with = func(with withConn) error {
+		defer p.pool.Put(conn)
+		return runQueryWithLabels(with, getLabels(1), conn)
+	}
+	return
 }
 
 type withConn func(context.Context, conn) error

@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"testing/iotest"
@@ -33,6 +34,7 @@ type testClientTransferParams struct {
 	LeecherDownloadRateLimiter *rate.Limiter
 	ConfigureSeeder            ConfigureClient
 	ConfigureLeecher           ConfigureClient
+	GOMAXPROCS                 int
 
 	LeecherStartsWithoutMetadata bool
 }
@@ -47,6 +49,16 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 // Creates a seeder and a leecher, and ensures the data transfers when a read
 // is attempted on the leecher.
 func testClientTransfer(t *testing.T, ps testClientTransferParams) {
+
+	prevGOMAXPROCS := runtime.GOMAXPROCS(ps.GOMAXPROCS)
+	newGOMAXPROCS := prevGOMAXPROCS
+	if ps.GOMAXPROCS > 0 {
+		newGOMAXPROCS = ps.GOMAXPROCS
+	}
+	defer func() {
+		quicktest.Check(t, runtime.GOMAXPROCS(prevGOMAXPROCS), quicktest.ContentEquals, newGOMAXPROCS)
+	}()
+
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
 	// Create seeder and a Torrent.
@@ -290,30 +302,45 @@ func sqliteClientStorageFactory(optsMaker func(dataDir string) sqliteStorage.New
 	}
 }
 
-func TestClientTransferVarious(t *testing.T) {
-	// Leecher storage
-	for _, ls := range []struct {
-		name string
-		f    storageFactory
-	}{
-		{"Filecache", newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
-			Wrapper: fileCachePieceResourceStorage,
-		})},
-		{"Boltdb", storage.NewBoltDB},
-		{"SqliteFile", sqliteClientStorageFactory(func(dataDir string) sqliteStorage.NewPiecesStorageOpts {
+type leecherStorageTestCase struct {
+	name       string
+	f          storageFactory
+	gomaxprocs int
+}
+
+func sqliteLeecherStorageTestCase(numConns int) leecherStorageTestCase {
+	return leecherStorageTestCase{
+		fmt.Sprintf("SqliteFile,NumConns=%v", numConns),
+		sqliteClientStorageFactory(func(dataDir string) sqliteStorage.NewPiecesStorageOpts {
 			return sqliteStorage.NewPiecesStorageOpts{
 				NewPoolOpts: sqliteStorage.NewPoolOpts{
-					Path: filepath.Join(dataDir, "sqlite.db"),
+					Path:     filepath.Join(dataDir, "sqlite.db"),
+					NumConns: numConns,
 				},
 			}
-		})},
+		}),
+		numConns,
+	}
+}
+
+func TestClientTransferVarious(t *testing.T) {
+	// Leecher storage
+	for _, ls := range []leecherStorageTestCase{
+		{"Filecache", newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
+			Wrapper: fileCachePieceResourceStorage,
+		}), 0},
+		{"Boltdb", storage.NewBoltDB, 0},
+		//sqliteLeecherStorageTestCase(1),
+		sqliteLeecherStorageTestCase(2),
+		// This should use a number of connections equal to the number of CPUs
+		sqliteLeecherStorageTestCase(0),
 		{"SqliteMemory", sqliteClientStorageFactory(func(dataDir string) sqliteStorage.NewPiecesStorageOpts {
 			return sqliteStorage.NewPiecesStorageOpts{
 				NewPoolOpts: sqliteStorage.NewPoolOpts{
 					Memory: true,
 				},
 			}
-		})},
+		}), 0},
 	} {
 		t.Run(fmt.Sprintf("LeecherStorage=%s", ls.name), func(t *testing.T) {
 			// Seeder storage
@@ -332,6 +359,7 @@ func TestClientTransferVarious(t *testing.T) {
 									Responsive:     responsive,
 									SeederStorage:  ss.f,
 									LeecherStorage: ls.f,
+									GOMAXPROCS:     ls.gomaxprocs,
 								})
 							})
 							for _, readahead := range []int64{-1, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20} {
@@ -342,6 +370,7 @@ func TestClientTransferVarious(t *testing.T) {
 										SetReadahead:   true,
 										Readahead:      readahead,
 										LeecherStorage: ls.f,
+										GOMAXPROCS:     ls.gomaxprocs,
 									})
 								})
 							}

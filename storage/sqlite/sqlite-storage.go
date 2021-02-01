@@ -265,9 +265,8 @@ func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
 	}
 	return conns, ProviderOpts{
 		NumConns:              opts.NumConns,
-		NoConcurrentBlobReads: opts.NoConcurrentBlobReads || opts.Memory,
-		BatchWrites:           true,
-		//BatchWrites:           opts.NumConns > 1,
+		NoConcurrentBlobReads: opts.NoConcurrentBlobReads || opts.Memory || opts.NumConns == 1,
+		BatchWrites:           opts.NumConns > 1,
 	}, nil
 }
 

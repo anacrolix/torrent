@@ -330,7 +330,7 @@ func TestClientTransferVarious(t *testing.T) {
 			Wrapper: fileCachePieceResourceStorage,
 		}), 0},
 		{"Boltdb", storage.NewBoltDB, 0},
-		//sqliteLeecherStorageTestCase(1),
+		sqliteLeecherStorageTestCase(1),
 		sqliteLeecherStorageTestCase(2),
 		// This should use a number of connections equal to the number of CPUs
 		sqliteLeecherStorageTestCase(0),

@@ -28,12 +28,12 @@ func mainErr() error {
 			Address        string `arg:"positional"`
 			SecretKey      string `arg:"positional"`
 			InitialPayload []byte
-		} `arg:"subcommand""`
+		} `arg:"subcommand"`
 		Listen *struct {
 			Network    string   `arg:"positional"`
 			Address    string   `arg:"positional"`
 			SecretKeys []string `arg:"positional"`
-		} `arg:"subcommand""`
+		} `arg:"subcommand"`
 	}{
 		CryptoMethod: mse.AllSupportedCrypto,
 	}

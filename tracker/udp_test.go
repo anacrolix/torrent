@@ -186,6 +186,7 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 		}(url)
 	}
 	wg.Wait()
+	cancel()
 }
 
 // Check that URLPath option is done correctly.

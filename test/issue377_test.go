@@ -119,12 +119,12 @@ func (me *diskFullStorage) Piece(p metainfo.Piece) storage.PieceImpl {
 	}
 }
 
-func (me diskFullStorage) Close() error {
+func (me *diskFullStorage) Close() error {
 	return nil
 }
 
-func (d diskFullStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
-	return &d, nil
+func (d *diskFullStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
+	return d, nil
 }
 
 type pieceImpl struct {

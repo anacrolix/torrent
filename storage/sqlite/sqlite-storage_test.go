@@ -72,23 +72,27 @@ func BenchmarkMarkComplete(b *testing.B) {
 	c := qt.New(b)
 	for _, memory := range []bool{false, true} {
 		b.Run(fmt.Sprintf("Memory=%v", memory), func(b *testing.B) {
-			dbPath := filepath.Join(b.TempDir(), "storage.db")
-			//b.Logf("storage db path: %q", dbPath)
-			ci, err := NewPiecesStorage(NewPiecesStorageOpts{
-				NewPoolOpts: NewPoolOpts{
-					Path:                  dbPath,
-					Capacity:              4*pieceSize - 1,
-					NoConcurrentBlobReads: false,
-					PageSize:              1 << 14,
-					Memory:                memory,
-				},
-				ProvOpts: func(opts *ProviderOpts) {
-					opts.BatchWrites = true
-				},
-			})
-			c.Assert(err, qt.IsNil)
-			defer ci.Close()
-			test_storage.BenchmarkPieceMarkComplete(b, ci, pieceSize, 16, capacity)
+			for _, batchWrites := range []bool{false, true} {
+				b.Run(fmt.Sprintf("BatchWrites=%v", batchWrites), func(b *testing.B) {
+					dbPath := filepath.Join(b.TempDir(), "storage.db")
+					//b.Logf("storage db path: %q", dbPath)
+					ci, err := NewPiecesStorage(NewPiecesStorageOpts{
+						NewPoolOpts: NewPoolOpts{
+							Path:                  dbPath,
+							Capacity:              4*pieceSize - 1,
+							NoConcurrentBlobReads: false,
+							PageSize:              1 << 14,
+							Memory:                memory,
+						},
+						ProvOpts: func(opts *ProviderOpts) {
+							opts.BatchWrites = batchWrites
+						},
+					})
+					c.Assert(err, qt.IsNil)
+					defer ci.Close()
+					test_storage.BenchmarkPieceMarkComplete(b, ci, pieceSize, 16, capacity)
+				})
+			}
 		})
 	}
 }

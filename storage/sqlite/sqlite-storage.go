@@ -496,13 +496,13 @@ func getLabels(skip int) pprof.LabelSet {
 }
 
 func (p *provider) withConn(with withConn, write bool, skip int) error {
+	p.closeMu.RLock()
+	if p.closed {
+		p.closeMu.RUnlock()
+		return errors.New("closed")
+	}
 	if write && p.opts.BatchWrites {
 		done := make(chan error)
-		p.closeMu.RLock()
-		if p.closed {
-			p.closeMu.RUnlock()
-			return errors.New("closed")
-		}
 		p.writes <- writeRequest{
 			query:  with,
 			done:   done,
@@ -511,6 +511,7 @@ func (p *provider) withConn(with withConn, write bool, skip int) error {
 		p.closeMu.RUnlock()
 		return <-done
 	} else {
+		defer p.closeMu.RUnlock()
 		runner, err := p.getReadWithConnRunner()
 		if err != nil {
 			return err

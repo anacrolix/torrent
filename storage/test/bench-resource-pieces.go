@@ -18,7 +18,10 @@ const chunkSize = 1 << 14
 
 func BenchmarkPieceMarkComplete(b *testing.B, ci storage.ClientImpl, pieceSize int64, numPieces int, capacity int64) {
 	c := qt.New(b)
-	ti, err := ci.OpenTorrent(nil, metainfo.Hash{})
+	ti, err := ci.OpenTorrent(&metainfo.Info{
+		Pieces:      make([]byte, metainfo.HashSize*numPieces),
+		PieceLength: pieceSize,
+	}, metainfo.Hash{})
 	c.Assert(err, qt.IsNil)
 	defer ti.Close()
 	info := &metainfo.Info{

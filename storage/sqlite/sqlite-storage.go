@@ -25,7 +25,7 @@ import (
 
 type conn = *sqlite.Conn
 
-func initConn(conn conn, wal bool) error {
+func initConn(conn conn, opts ProviderOpts) error {
 	// Recursive triggers are required because we need to trim the blob_meta size after trimming to
 	// capacity. Hopefully we don't hit the recursion limit, and if we do, there's an error thrown.
 	err := sqlitex.ExecTransient(conn, "pragma recursive_triggers=on", nil)
@@ -36,15 +36,17 @@ func initConn(conn conn, wal bool) error {
 	if err != nil {
 		return err
 	}
-	if !wal {
+	if opts.NoConcurrentBlobReads {
 		err = sqlitex.ExecTransient(conn, `pragma journal_mode=off`, nil)
 		if err != nil {
 			return err
 		}
 	}
-	err = sqlitex.ExecTransient(conn, `pragma mmap_size=1000000000000`, nil)
-	if err != nil {
-		return err
+	if opts.MmapSizeOk {
+		err = sqlitex.ExecTransient(conn, fmt.Sprintf(`pragma mmap_size=%d`, opts.MmapSize), nil)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -204,6 +206,8 @@ type ProviderOpts struct {
 	// Concurrent blob reads require WAL.
 	NoConcurrentBlobReads bool
 	BatchWrites           bool
+	MmapSize              int64
+	MmapSizeOk            bool
 }
 
 // Remove any capacity limits.
@@ -267,6 +271,8 @@ func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
 		NumConns:              opts.NumConns,
 		NoConcurrentBlobReads: opts.NoConcurrentBlobReads || opts.Memory || opts.NumConns == 1,
 		BatchWrites:           opts.NumConns > 1,
+		MmapSize:              1 << 23, // 8 MiB
+		MmapSizeOk:            true,
 	}, nil
 }
 
@@ -295,7 +301,7 @@ func (me *poolFromConn) Close() error {
 // Needs the ConnPool size so it can initialize all the connections with pragmas. Takes ownership of
 // the ConnPool (since it has to initialize all the connections anyway).
 func NewProvider(pool ConnPool, opts ProviderOpts) (_ *provider, err error) {
-	_, err = initPoolConns(context.TODO(), pool, opts.NumConns, !opts.NoConcurrentBlobReads)
+	_, err = initPoolConns(context.TODO(), pool, opts)
 	if err != nil {
 		err = fmt.Errorf("initing pool conns: %w", err)
 		return
@@ -317,20 +323,20 @@ func NewProvider(pool ConnPool, opts ProviderOpts) (_ *provider, err error) {
 	return prov, nil
 }
 
-func initPoolConns(ctx context.Context, pool ConnPool, numConn int, wal bool) (numInited int, err error) {
+func initPoolConns(ctx context.Context, pool ConnPool, opts ProviderOpts) (numInited int, err error) {
 	var conns []conn
 	defer func() {
 		for _, c := range conns {
 			pool.Put(c)
 		}
 	}()
-	for range iter.N(numConn) {
+	for range iter.N(opts.NumConns) {
 		conn := pool.Get(ctx)
 		if conn == nil {
 			break
 		}
 		conns = append(conns, conn)
-		err = initConn(conn, wal)
+		err = initConn(conn, opts)
 		if err != nil {
 			err = fmt.Errorf("initing conn %v: %w", len(conns), err)
 			return

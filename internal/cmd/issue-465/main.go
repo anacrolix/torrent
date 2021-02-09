@@ -12,7 +12,8 @@ import (
 
 func main() {
 	if err := dlTorrents("."); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "fatal error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
@@ -23,6 +24,9 @@ func dlTorrents(dir string) error {
 	if err != nil {
 		return err
 	}
+	http.HandleFunc("/torrentClientStatus", func(w http.ResponseWriter, r *http.Request) {
+		cl.WriteStatus(w)
+	})
 	ids := []string{
 		"urlteam_2021-02-03-21-17-02",
 		"urlteam_2021-02-02-11-17-02",
@@ -38,7 +42,7 @@ func dlTorrents(dir string) error {
 	for _, id := range ids {
 		t, err := addTorrentFromURL(cl, fmt.Sprintf("https://archive.org/download/%s/%s_archive.torrent", id, id))
 		if err != nil {
-			return err
+			return fmt.Errorf("downloading metainfo for %q: %w", id, err)
 		}
 		t.DownloadAll()
 	}

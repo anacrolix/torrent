@@ -312,6 +312,9 @@ func (cn *Peer) downloadRate() float64 {
 
 func (cn *Peer) writeStatus(w io.Writer, t *Torrent) {
 	// \t isn't preserved in <pre> blocks?
+	if cn.closed.IsSet() {
+		fmt.Fprint(w, "CLOSED: ")
+	}
 	fmt.Fprintln(w, cn.connStatusString())
 	fmt.Fprintf(w, "    last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
 		eventAgeString(cn.lastMessageReceived),
@@ -787,11 +790,14 @@ func (cn *Peer) shouldRequestWithoutBias() bool {
 	return cn.t.requestStrategy.shouldRequestWithoutBias(cn.requestStrategyConnection())
 }
 
-func (cn *Peer) iterPendingPieces(f func(pieceIndex) bool) bool {
+func (cn *Peer) iterPendingPieces(f func(pieceIndex) bool) {
 	if !cn.t.haveInfo() {
-		return false
+		return
 	}
-	return cn.t.requestStrategy.iterPendingPieces(cn, f)
+	if cn.closed.IsSet() {
+		return
+	}
+	cn.t.requestStrategy.iterPendingPieces(cn, f)
 }
 func (cn *Peer) iterPendingPiecesUntyped(f iter.Callback) {
 	cn.iterPendingPieces(func(i pieceIndex) bool { return f(i) })

@@ -3,7 +3,6 @@ package webseed
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -86,6 +85,15 @@ func (ws *Client) NewRequest(r RequestSpec) Request {
 	return req
 }
 
+type ErrBadResponse struct {
+	Msg      string
+	Response *http.Response
+}
+
+func (me ErrBadResponse) Error() string {
+	return me.Msg
+}
+
 func recvPartResult(buf io.Writer, part requestPart) error {
 	result := <-part.result
 	if result.err != nil {
@@ -96,10 +104,13 @@ func recvPartResult(buf io.Writer, part requestPart) error {
 	case http.StatusPartialContent:
 	case http.StatusOK:
 		if part.e.Start != 0 {
-			return errors.New("got status ok but request was at offset")
+			return ErrBadResponse{"got status ok but request was at offset", result.resp}
 		}
 	default:
-		return fmt.Errorf("unhandled response status code (%v)", result.resp.StatusCode)
+		return ErrBadResponse{
+			fmt.Sprintf("unhandled response status code (%v)", result.resp.StatusCode),
+			result.resp,
+		}
 	}
 	copied, err := io.Copy(buf, result.resp.Body)
 	if err != nil {

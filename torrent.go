@@ -674,6 +674,13 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 				return nil
 			}
 		}(),
+		UrlList: func() []string {
+			ret := make([]string, 0, len(t.webSeeds))
+			for url := range t.webSeeds {
+				ret = append(ret, url)
+			}
+			return ret
+		}(),
 	}
 }
 

@@ -187,6 +187,9 @@ func NewPiecesStorage(opts NewPiecesStorageOpts) (_ storage.ClientImplCloser, er
 }
 
 type NewPoolOpts struct {
+	// See https://www.sqlite.org/c3ref/open.html. NB: "If the filename is an empty string, then a
+	// private, temporary on-disk database will be created. This private database will be
+	// automatically deleted as soon as the database connection is closed."
 	Path     string
 	Memory   bool
 	NumConns int

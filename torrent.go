@@ -742,9 +742,9 @@ func (t *Torrent) close() (err error) {
 		t.storage.Close()
 		t.storageLock.Unlock()
 	}
-	for conn := range t.conns {
-		conn.close()
-	}
+	t.iterPeers(func(p *Peer) {
+		p.close()
+	})
 	t.pex.Reset()
 	t.cl.event.Broadcast()
 	t.pieceStateChanges.Close()

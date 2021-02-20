@@ -361,6 +361,9 @@ func (cl *Client) newAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err
 		OnQuery:            cl.config.DHTOnQuery,
 		Logger:             cl.logger.WithContextText(fmt.Sprintf("dht server on %v", conn.LocalAddr().String())),
 	}
+	if f := cl.config.ConfigureAnacrolixDhtServer; f != nil {
+		f(&cfg)
+	}
 	s, err = dht.NewServer(&cfg)
 	if err == nil {
 		go func() {

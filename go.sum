@@ -58,6 +58,7 @@ github.com/alexflint/go-scalar v1.0.0 h1:NGupf1XV/Xb04wXskDFzS0KWOLH632W/EO4fAFi
 github.com/alexflint/go-scalar v1.0.0/go.mod h1:GpHzbCOZXEKMEcygYQ5n/aa4Aq84zbxjy3MxYW0gjYw=
 github.com/anacrolix/dht v0.0.0-20180412060941-24cbf25b72a4 h1:0yHJvFiGQhJ1gSHJOR8xzmnx45orEt7uiIB6guf0+zc=
 github.com/anacrolix/dht v0.0.0-20180412060941-24cbf25b72a4/go.mod h1:hQfX2BrtuQsLQMYQwsypFAab/GvHg8qxwVi4OJdR1WI=
+github.com/anacrolix/dht v1.0.1 h1:a7zVMiZWfPiToAUbjMZYeI3UvmsDP3j8vH5EDIAjM9c=
 github.com/anacrolix/dht/v2 v2.0.1 h1:gOHJ+OKqJ4Eb48OYStZm4AlWr1/nSA2TWlzb/+t36SA=
 github.com/anacrolix/dht/v2 v2.0.1/go.mod h1:GbTT8BaEtfqab/LPd5tY41f3GvYeii3mmDUK300Ycyo=
 github.com/anacrolix/dht/v2 v2.2.1-0.20191103020011-1dba080fb358 h1:Fji8X0K+FTn9UUupodVCCnQG7wNXETUARGT+8P5s+N0=

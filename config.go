@@ -37,6 +37,9 @@ type ClientConfig struct {
 	// Don't create a DHT.
 	NoDHT            bool `long:"disable-dht"`
 	DhtStartingNodes func(network string) dht.StartingNodesGetter
+	// Called for each anacrolix/dht Server created for the Client.
+	ConfigureAnacrolixDhtServer func(*dht.ServerConfig)
+
 	// Never send chunks to peers.
 	NoUpload bool `long:"no-upload"`
 	// Disable uploading even when it isn't fair.

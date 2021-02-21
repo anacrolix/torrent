@@ -12,7 +12,7 @@ import (
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/gorilla/websocket"
 	"github.com/pion/datachannel"
-	"github.com/pion/webrtc/v2"
+	"github.com/pion/webrtc/v3"
 )
 
 type TrackerClientStats struct {

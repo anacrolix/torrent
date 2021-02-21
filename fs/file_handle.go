@@ -3,6 +3,7 @@ package torrentfs
 import (
 	"context"
 	"io"
+	"log"
 
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
@@ -26,7 +27,8 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 	if req.Dir {
 		panic("read on directory")
 	}
-	pos, err := me.r.Seek(req.Offset, io.SeekStart)
+	r := me.r
+	pos, err := r.Seek(req.Offset, io.SeekStart)
 	if err != nil {
 		panic(err)
 	}
@@ -44,10 +46,15 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 		me.fn.FS.event.Broadcast()
 		me.fn.FS.mu.Unlock()
 		var n int
-		r := missinggo.ContextedReader{me.r, ctx}
-		n, readErr = r.Read(resp.Data)
-		if readErr == io.EOF {
-			readErr = nil
+		r := missinggo.ContextedReader{r, ctx}
+		log.Printf("reading %v bytes at %v", len(resp.Data), req.Offset)
+		if true {
+			n, readErr = io.ReadFull(r, resp.Data)
+		} else {
+			n, readErr = r.Read(resp.Data)
+			if readErr == io.EOF {
+				readErr = nil
+			}
 		}
 		resp.Data = resp.Data[:n]
 	}()

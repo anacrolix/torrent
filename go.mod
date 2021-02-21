@@ -6,7 +6,7 @@ require (
 	github.com/RoaringBitmap/roaring v0.5.5 // indirect
 	github.com/alangpierce/go-forceexport v0.0.0-20160317203124-8f1d6941cd75 // indirect
 	github.com/alexflint/go-arg v1.3.0
-	github.com/anacrolix/dht/v2 v2.8.0
+	github.com/anacrolix/dht/v2 v2.8.1-0.20210221225335-7a6713a749f9
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/go-libutp v1.0.4
 	github.com/anacrolix/log v0.8.0
@@ -15,7 +15,7 @@ require (
 	github.com/anacrolix/missinggo/v2 v2.5.0
 	github.com/anacrolix/multiless v0.0.0-20200413040533-acfd16f65d5d
 	github.com/anacrolix/sync v0.2.0
-	github.com/anacrolix/tagflag v1.1.1-0.20200411025953-9bb5209d56c2
+	github.com/anacrolix/tagflag v1.2.0
 	github.com/anacrolix/upnp v0.1.2-0.20200416075019-5e9378ed1425
 	github.com/anacrolix/utp v0.1.0
 	github.com/benbjohnson/immutable v0.3.0 // indirect

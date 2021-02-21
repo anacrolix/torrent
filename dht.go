@@ -6,6 +6,7 @@ import (
 
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
+	peer_store "github.com/anacrolix/dht/v2/peer-store"
 )
 
 type DhtServer interface {
@@ -16,6 +17,11 @@ type DhtServer interface {
 	Ping(addr *net.UDPAddr)
 	Announce(hash [20]byte, port int, impliedPort bool) (DhtAnnounce, error)
 	WriteStatus(io.Writer)
+}
+
+// Optional interface for DhtServer's that can expose their peer store (if any).
+type PeerStorer interface {
+	PeerStore() peer_store.Interface
 }
 
 type DhtAnnounce interface {

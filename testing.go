@@ -1,16 +1,14 @@
 package torrent
 
 import (
-	"github.com/anacrolix/torrent/internal/tmproot"
+	"testing"
 )
 
-var TestingTempDir tmproot.Dir
-
-func TestingConfig() *ClientConfig {
+func TestingConfig(t testing.TB) *ClientConfig {
 	cfg := NewDefaultClientConfig()
 	cfg.ListenHost = LoopbackListenHost
 	cfg.NoDHT = true
-	cfg.DataDir = TestingTempDir.NewSub()
+	cfg.DataDir = t.TempDir()
 	cfg.DisableTrackers = true
 	cfg.NoDefaultPortForwarding = true
 	cfg.DisableAcceptRateLimiting = true

@@ -25,7 +25,7 @@ func TestUnixConns(t *testing.T) {
 		},
 		Client: func(cl *torrent.Client) {
 			cl.AddDialer(torrent.NetDialer{Network: "unix"})
-			l, err := net.Listen("unix", filepath.Join(torrent.TestingTempDir.NewSub(), "socket"))
+			l, err := net.Listen("unix", filepath.Join(t.TempDir(), "socket"))
 			if err != nil {
 				panic(err)
 			}

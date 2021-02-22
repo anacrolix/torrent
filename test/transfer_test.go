@@ -62,7 +62,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
 	// Create seeder and a Torrent.
-	cfg := torrent.TestingConfig()
+	cfg := torrent.TestingConfig(t)
 	cfg.Seed = true
 	// Some test instances don't like this being on, even when there's no cache involved.
 	cfg.DropMutuallyCompletePeers = false
@@ -96,7 +96,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
-	cfg = torrent.TestingConfig()
+	cfg = torrent.TestingConfig(t)
 	// See the seeder client config comment.
 	cfg.DropMutuallyCompletePeers = false
 	if ps.LeecherStorage == nil {
@@ -388,7 +388,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
 
-	cfg := torrent.TestingConfig()
+	cfg := torrent.TestingConfig(t)
 	cfg.Seed = true
 	cfg.DataDir = greetingTempDir
 	seeder, err := torrent.NewClient(cfg)
@@ -400,7 +400,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	assert.True(t, ok)
 	seederTorrent.VerifyData()
 
-	cfg = torrent.TestingConfig()
+	cfg = torrent.TestingConfig(t)
 	cfg.Seed = true
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)
@@ -410,7 +410,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	defer leecher.Close()
 	defer testutil.ExportStatusWriter(leecher, "l", t)()
 
-	cfg = torrent.TestingConfig()
+	cfg = torrent.TestingConfig(t)
 	cfg.Seed = false
 	cfg.DataDir, err = ioutil.TempDir("", "")
 	require.NoError(t, err)

@@ -14,7 +14,7 @@ import (
 )
 
 func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	// Ensure the data is present when the torrent is added, and not obtained
 	// over the network as the test runs.
 	cfg.DownloadRateLimiter = rate.NewLimiter(0, 0)

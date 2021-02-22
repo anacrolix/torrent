@@ -13,9 +13,7 @@ func init() {
 }
 
 func TestMain(m *testing.M) {
-	TestingTempDir.Init("torrent.test")
 	code := m.Run()
-	TestingTempDir.RemoveAll()
 	// select {}
 	os.Exit(code)
 }

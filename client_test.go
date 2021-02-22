@@ -29,7 +29,7 @@ import (
 )
 
 func TestClientDefault(t *testing.T) {
-	cl, err := NewClient(TestingConfig())
+	cl, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
 	cl.Close()
 }
@@ -41,7 +41,7 @@ func TestClientNilConfig(t *testing.T) {
 }
 
 func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	pc, err := storage.NewBoltPieceCompletion(cfg.DataDir)
 	require.NoError(t, err)
 	ci := storage.NewFileWithCompletion(cfg.DataDir, pc)
@@ -57,7 +57,7 @@ func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
 }
 
 func TestAddDropTorrent(t *testing.T) {
-	cl, err := NewClient(TestingConfig())
+	cl, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
 	defer cl.Close()
 	dir, mi := testutil.GreetingTestTorrent()
@@ -93,12 +93,12 @@ func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
 	cl := &Client{
-		config: TestingConfig(),
+		config: TestingConfig(t),
 	}
 	cl.initLogger()
 	tor := cl.newTorrent(
 		mi.HashInfoBytes(),
-		storage.NewFileWithCompletion(TestingTempDir.NewSub(), storage.NewMapPieceCompletion()),
+		storage.NewFileWithCompletion(t.TempDir(), storage.NewMapPieceCompletion()),
 	)
 	tor.setChunkSize(2)
 	tor.cl.lock()
@@ -140,7 +140,7 @@ func TestReducedDialTimeout(t *testing.T) {
 }
 
 func TestAddDropManyTorrents(t *testing.T) {
-	cl, err := NewClient(TestingConfig())
+	cl, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
 	defer cl.Close()
 	for i := range iter.N(1000) {
@@ -163,7 +163,7 @@ func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
 }
 
 func TestMergingTrackersByAddingSpecs(t *testing.T) {
-	cl, err := NewClient(TestingConfig())
+	cl, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
 	defer cl.Close()
 	spec := TorrentSpec{}
@@ -181,7 +181,7 @@ func TestMergingTrackersByAddingSpecs(t *testing.T) {
 
 // We read from a piece which is marked completed, but is missing data.
 func TestCompletedPieceWrongSize(t *testing.T) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.DefaultStorage = badStorage{}
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
@@ -208,7 +208,7 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 }
 
 func BenchmarkAddLargeTorrent(b *testing.B) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(b)
 	cfg.DisableTCP = true
 	cfg.DisableUTP = true
 	cl, err := NewClient(cfg)
@@ -227,7 +227,7 @@ func BenchmarkAddLargeTorrent(b *testing.B) {
 func TestResponsive(t *testing.T) {
 	seederDataDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(seederDataDir)
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.Seed = true
 	cfg.DataDir = seederDataDir
 	seeder, err := NewClient(cfg)
@@ -238,7 +238,7 @@ func TestResponsive(t *testing.T) {
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(leecherDataDir)
-	cfg = TestingConfig()
+	cfg = TestingConfig(t)
 	cfg.DataDir = leecherDataDir
 	leecher, err := NewClient(cfg)
 	require.Nil(t, err)
@@ -270,7 +270,7 @@ func TestResponsive(t *testing.T) {
 func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	seederDataDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(seederDataDir)
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.Seed = true
 	cfg.DataDir = seederDataDir
 	seeder, err := NewClient(cfg)
@@ -281,7 +281,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	leecherDataDir, err := ioutil.TempDir("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(leecherDataDir)
-	cfg = TestingConfig()
+	cfg = TestingConfig(t)
 	cfg.DataDir = leecherDataDir
 	leecher, err := NewClient(cfg)
 	require.Nil(t, err)
@@ -313,7 +313,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 func TestDhtInheritBlocklist(t *testing.T) {
 	ipl := iplist.New(nil)
 	require.NotNil(t, ipl)
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.IPBlocklist = ipl
 	cfg.NoDHT = false
 	cl, err := NewClient(cfg)
@@ -331,7 +331,7 @@ func TestDhtInheritBlocklist(t *testing.T) {
 // Check that stuff is merged in subsequent AddTorrentSpec for the same
 // infohash.
 func TestAddTorrentSpecMerging(t *testing.T) {
-	cl, err := NewClient(TestingConfig())
+	cl, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
 	defer cl.Close()
 	dir, mi := testutil.GreetingTestTorrent()
@@ -351,7 +351,7 @@ func TestAddTorrentSpecMerging(t *testing.T) {
 func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	os.RemoveAll(dir)
-	cl, _ := NewClient(TestingConfig())
+	cl, _ := NewClient(TestingConfig(t))
 	defer cl.Close()
 	tt, _, _ := cl.AddTorrentSpec(&TorrentSpec{
 		InfoHash: mi.HashInfoBytes(),
@@ -395,7 +395,7 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 			require.NoError(t, greetingData.Piece(p).MarkComplete())
 		}
 	}
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	// TODO: Disable network option?
 	cfg.DisableTCP = true
 	cfg.DisableUTP = true
@@ -424,7 +424,7 @@ func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
 }
 
 func TestAddMetainfoWithNodes(t *testing.T) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.ListenHost = func(string) string { return "" }
 	cfg.NoDHT = false
 	cfg.DhtStartingNodes = func(string) dht.StartingNodesGetter { return func() ([]dht.Addr, error) { return nil, nil } }
@@ -461,7 +461,7 @@ type testDownloadCancelParams struct {
 func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.Seed = true
 	cfg.DataDir = greetingTempDir
 	seeder, err := NewClient(cfg)
@@ -530,7 +530,7 @@ func TestTorrentDownloadAllThenCancel(t *testing.T) {
 
 // Ensure that it's an error for a peer to send an invalid have message.
 func TestPeerInvalidHave(t *testing.T) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.DropMutuallyCompletePeers = false
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
@@ -561,9 +561,9 @@ func TestPeerInvalidHave(t *testing.T) {
 func TestPieceCompletedInStorageButNotClient(t *testing.T) {
 	greetingTempDir, greetingMetainfo := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.DataDir = greetingTempDir
-	seeder, err := NewClient(TestingConfig())
+	seeder, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
 	seeder.AddTorrentSpec(&TorrentSpec{
 		InfoBytes: greetingMetainfo.InfoBytes,
@@ -573,7 +573,7 @@ func TestPieceCompletedInStorageButNotClient(t *testing.T) {
 // Check that when the listen port is 0, all the protocols listened on have
 // the same port, and it isn't zero.
 func TestClientDynamicListenPortAllProtocols(t *testing.T) {
-	cl, err := NewClient(TestingConfig())
+	cl, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
 	defer cl.Close()
 	port := cl.LocalPort()
@@ -585,7 +585,7 @@ func TestClientDynamicListenPortAllProtocols(t *testing.T) {
 }
 
 func TestClientDynamicListenTCPOnly(t *testing.T) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.DisableUTP = true
 	cfg.DisableTCP = false
 	cl, err := NewClient(cfg)
@@ -595,7 +595,7 @@ func TestClientDynamicListenTCPOnly(t *testing.T) {
 }
 
 func TestClientDynamicListenUTPOnly(t *testing.T) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.DisableTCP = true
 	cfg.DisableUTP = false
 	cl, err := NewClient(cfg)
@@ -616,7 +616,7 @@ func totalConns(tts []*Torrent) (ret int) {
 func TestSetMaxEstablishedConn(t *testing.T) {
 	var tts []*Torrent
 	ih := testutil.GreetingMetaInfo().HashInfoBytes()
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.DisableAcceptRateLimiting = true
 	cfg.DropDuplicatePeerIds = true
 	for i := range iter.N(3) {
@@ -697,7 +697,7 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 // Test that the leecher can download a torrent in its entirety from the seeder. Note that the
 // seeder config is done first.
 func testSeederLeecherPair(t *testing.T, seeder func(*ClientConfig), leecher func(*ClientConfig)) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.Seed = true
 	cfg.DataDir = filepath.Join(cfg.DataDir, "server")
 	os.Mkdir(cfg.DataDir, 0755)
@@ -713,7 +713,7 @@ func testSeederLeecherPair(t *testing.T, seeder func(*ClientConfig), leecher fun
 	for i := 0; i < 100; i++ {
 		makeMagnet(t, server, cfg.DataDir, fmt.Sprintf("test%d", i+2))
 	}
-	cfg = TestingConfig()
+	cfg = TestingConfig(t)
 	cfg.DataDir = filepath.Join(cfg.DataDir, "client")
 	leecher(cfg)
 	client, err := NewClient(cfg)
@@ -764,14 +764,14 @@ func TestClientAddressInUse(t *testing.T) {
 	if s != nil {
 		defer s.Close()
 	}
-	cfg := TestingConfig().SetListenAddr(":50007")
+	cfg := TestingConfig(t).SetListenAddr(":50007")
 	cl, err := NewClient(cfg)
 	require.Error(t, err)
 	require.Nil(t, cl)
 }
 
 func TestClientHasDhtServersWhenUtpDisabled(t *testing.T) {
-	cc := TestingConfig()
+	cc := TestingConfig(t)
 	cc.DisableUTP = true
 	cc.NoDHT = false
 	cl, err := NewClient(cc)
@@ -783,7 +783,7 @@ func TestClientHasDhtServersWhenUtpDisabled(t *testing.T) {
 func TestIssue335(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.Seed = false
 	cfg.Debug = true
 	cfg.DataDir = dir
@@ -806,7 +806,7 @@ func TestIssue335(t *testing.T) {
 }
 
 func TestClientDisabledImplicitNetworksButDhtEnabled(t *testing.T) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.DisableTCP = true
 	cfg.DisableUTP = true
 	cfg.NoDHT = false

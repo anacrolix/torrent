@@ -67,6 +67,9 @@ func (me boltPieceCompletion) Get(pk metainfo.PieceKey) (cn Completion, err erro
 }
 
 func (me boltPieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
+	if c, err := me.Get(pk); err == nil && c.Ok && c.Complete == b {
+		return nil
+	}
 	return me.db.Update(func(tx *bbolt.Tx) error {
 		c, err := tx.CreateBucketIfNotExists(completionBucketKey)
 		if err != nil {

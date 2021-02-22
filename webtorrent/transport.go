@@ -9,7 +9,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/pion/datachannel"
 
-	"github.com/pion/webrtc/v2"
+	"github.com/pion/webrtc/v3"
 )
 
 var (
@@ -70,11 +70,16 @@ func newOffer() (
 		peerConnection.Close()
 		return
 	}
+
+	gatherComplete := webrtc.GatheringCompletePromise(peerConnection.PeerConnection)
 	err = peerConnection.SetLocalDescription(offer)
 	if err != nil {
 		peerConnection.Close()
 		return
 	}
+	<-gatherComplete
+
+	offer = *peerConnection.LocalDescription()
 	return
 }
 
@@ -90,10 +95,15 @@ func initAnsweringPeerConnection(
 	if err != nil {
 		return
 	}
+
+	gatherComplete := webrtc.GatheringCompletePromise(peerConnection.PeerConnection)
 	err = peerConnection.SetLocalDescription(answer)
 	if err != nil {
 		return
 	}
+	<-gatherComplete
+
+	answer = *peerConnection.LocalDescription()
 	return
 }
 

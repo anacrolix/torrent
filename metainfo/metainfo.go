@@ -2,6 +2,7 @@ package metainfo
 
 import (
 	"io"
+	"net/url"
 	"os"
 	"time"
 
@@ -80,8 +81,8 @@ func (mi *MetaInfo) Magnet(infoHash *Hash, info *Info) (m Magnet) {
 	} else {
 		m.InfoHash = mi.HashInfoBytes()
 	}
-	//m.Params = make(url.Values)
-	//m.Params["ws"] = mi.UrlList
+	m.Params = make(url.Values)
+	m.Params["ws"] = mi.UrlList
 	return
 }
 

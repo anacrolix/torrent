@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/anacrolix/missinggo"
@@ -123,7 +124,14 @@ func TestMetainfoWithListURLList(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, mi.UrlList, 3)
 	qt.Assert(t, mi.Magnet(nil, nil).String(), qt.ContentEquals,
-		"magnet:?xt=urn:btih:d4b197dff199aad447a9a352e31528adbbd97922&tr=http%3A%2F%2Fbt1.archive.org%3A6969%2Fannounce&tr=http%3A%2F%2Fbt2.archive.org%3A6969%2Fannounce")
+		strings.Join([]string{
+			"magnet:?xt=urn:btih:d4b197dff199aad447a9a352e31528adbbd97922",
+			"tr=http%3A%2F%2Fbt1.archive.org%3A6969%2Fannounce",
+			"tr=http%3A%2F%2Fbt2.archive.org%3A6969%2Fannounce",
+			"ws=https%3A%2F%2Farchive.org%2Fdownload%2F",
+			"ws=http%3A%2F%2Fia601600.us.archive.org%2F26%2Fitems%2F",
+			"ws=http%3A%2F%2Fia801600.us.archive.org%2F26%2Fitems%2F",
+		}, "&"))
 }
 
 func TestMetainfoWithStringURLList(t *testing.T) {
@@ -131,7 +139,12 @@ func TestMetainfoWithStringURLList(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, mi.UrlList, 1)
 	qt.Assert(t, mi.Magnet(nil, nil).String(), qt.ContentEquals,
-		"magnet:?xt=urn:btih:9da24e606e4ed9c7b91c1772fb5bf98f82bd9687&tr=http%3A%2F%2Fbt1.archive.org%3A6969%2Fannounce&tr=http%3A%2F%2Fbt2.archive.org%3A6969%2Fannounce")
+		strings.Join([]string{
+			"magnet:?xt=urn:btih:9da24e606e4ed9c7b91c1772fb5bf98f82bd9687",
+			"tr=http%3A%2F%2Fbt1.archive.org%3A6969%2Fannounce",
+			"tr=http%3A%2F%2Fbt2.archive.org%3A6969%2Fannounce",
+			"ws=https%3A%2F%2Farchive.org%2Fdownload%2F",
+		}, "&"))
 }
 
 // https://github.com/anacrolix/torrent/issues/247

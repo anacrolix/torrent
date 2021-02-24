@@ -672,7 +672,7 @@ func makeMagnet(t *testing.T, cl *Client, dir string, name string) string {
 	require.NoError(t, err)
 	mi.InfoBytes, err = bencode.Marshal(info)
 	require.NoError(t, err)
-	magnet := mi.Magnet(name, mi.HashInfoBytes()).String()
+	magnet := mi.Magnet(nil, &info).String()
 	tr, err := cl.AddTorrent(&mi)
 	require.NoError(t, err)
 	require.True(t, tr.Seeding())

@@ -76,7 +76,7 @@ func TestMagnetize(t *testing.T) {
 
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
-	m := mi.Magnet(info.Name, mi.HashInfoBytes())
+	m := mi.Magnet(nil, &info)
 
 	assert.EqualValues(t, "bootstrap.dat", m.DisplayName)
 

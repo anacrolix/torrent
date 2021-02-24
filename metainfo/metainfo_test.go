@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/missinggo"
+	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -121,12 +122,16 @@ func TestMetainfoWithListURLList(t *testing.T) {
 	mi, err := LoadFromFile("testdata/SKODAOCTAVIA336x280_archive.torrent")
 	require.NoError(t, err)
 	assert.Len(t, mi.UrlList, 3)
+	qt.Assert(t, mi.Magnet(nil, nil).String(), qt.ContentEquals,
+		"magnet:?xt=urn:btih:d4b197dff199aad447a9a352e31528adbbd97922&tr=http%3A%2F%2Fbt1.archive.org%3A6969%2Fannounce&tr=http%3A%2F%2Fbt2.archive.org%3A6969%2Fannounce")
 }
 
 func TestMetainfoWithStringURLList(t *testing.T) {
 	mi, err := LoadFromFile("testdata/flat-url-list.torrent")
 	require.NoError(t, err)
 	assert.Len(t, mi.UrlList, 1)
+	qt.Assert(t, mi.Magnet(nil, nil).String(), qt.ContentEquals,
+		"magnet:?xt=urn:btih:9da24e606e4ed9c7b91c1772fb5bf98f82bd9687&tr=http%3A%2F%2Fbt1.archive.org%3A6969%2Fannounce&tr=http%3A%2F%2Fbt2.archive.org%3A6969%2Fannounce")
 }
 
 // https://github.com/anacrolix/torrent/issues/247

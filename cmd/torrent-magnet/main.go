@@ -23,5 +23,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(os.Stdout, "%s\n", mi.Magnet(info.Name, mi.HashInfoBytes()).String())
+	fmt.Fprintf(os.Stdout, "%s\n", mi.Magnet(nil, &info).String())
 }

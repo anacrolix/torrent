@@ -81,7 +81,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		numPieces   = 13410
 		pieceLength = 256 << 10
 	)
-	cl := &Client{config: TestingConfig()}
+	cl := &Client{config: TestingConfig(b)}
 	cl.initLogger()
 	t := cl.newTorrent(metainfo.Hash{}, nil)
 	require.NoError(b, t.setInfo(&metainfo.Info{
@@ -132,7 +132,7 @@ func testEmptyFilesAndZeroPieceLength(t *testing.T, cfg *ClientConfig) {
 }
 
 func TestEmptyFilesAndZeroPieceLengthWithFileStorage(t *testing.T) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	ci := storage.NewFile(cfg.DataDir)
 	defer ci.Close()
 	cfg.DefaultStorage = ci
@@ -140,7 +140,7 @@ func TestEmptyFilesAndZeroPieceLengthWithFileStorage(t *testing.T) {
 }
 
 func TestEmptyFilesAndZeroPieceLengthWithMMapStorage(t *testing.T) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	ci := storage.NewMMap(cfg.DataDir)
 	defer ci.Close()
 	cfg.DefaultStorage = ci
@@ -150,7 +150,7 @@ func TestEmptyFilesAndZeroPieceLengthWithMMapStorage(t *testing.T) {
 func TestPieceHashFailed(t *testing.T) {
 	mi := testutil.GreetingMetaInfo()
 	cl := new(Client)
-	cl.config = TestingConfig()
+	cl.config = TestingConfig(t)
 	cl.initLogger()
 	tt := cl.newTorrent(mi.HashInfoBytes(), badStorage{})
 	tt.setChunkSize(2)
@@ -166,7 +166,7 @@ func TestPieceHashFailed(t *testing.T) {
 
 // Check the behaviour of Torrent.Metainfo when metadata is not completed.
 func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
-	cfg := TestingConfig()
+	cfg := TestingConfig(t)
 	cfg.Debug = true
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)

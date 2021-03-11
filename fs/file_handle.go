@@ -26,7 +26,8 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 	if req.Dir {
 		panic("read on directory")
 	}
-	pos, err := me.r.Seek(req.Offset, io.SeekStart)
+	r := me.r
+	pos, err := r.Seek(req.Offset, io.SeekStart)
 	if err != nil {
 		panic(err)
 	}
@@ -44,10 +45,19 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 		me.fn.FS.event.Broadcast()
 		me.fn.FS.mu.Unlock()
 		var n int
-		r := missinggo.ContextedReader{me.r, ctx}
-		n, readErr = r.Read(resp.Data)
-		if readErr == io.EOF {
-			readErr = nil
+		r := missinggo.ContextedReader{r, ctx}
+		//log.Printf("reading %v bytes at %v", len(resp.Data), req.Offset)
+		if true {
+			// A user reported on that on freebsd 12.2, the system requires that reads are
+			// completely filled. Their system only asks for 64KiB at a time. I've seen systems that
+			// can demand up to 16MiB at a time, so this gets tricky. For now, I'll restore the old
+			// behaviour from before 2a7352a, which nobody reported problems with.
+			n, readErr = io.ReadFull(r, resp.Data)
+		} else {
+			n, readErr = r.Read(resp.Data)
+			if readErr == io.EOF {
+				readErr = nil
+			}
 		}
 		resp.Data = resp.Data[:n]
 	}()

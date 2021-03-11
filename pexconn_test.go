@@ -13,7 +13,7 @@ import (
 
 func TestPexConnState(t *testing.T) {
 	cl := Client{
-		config: TestingConfig(),
+		config: TestingConfig(t),
 	}
 	cl.initLogger()
 	torrent := cl.newTorrent(metainfo.Hash{}, nil)

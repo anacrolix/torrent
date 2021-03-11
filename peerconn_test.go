@@ -21,7 +21,7 @@ import (
 // Have that would potentially alter it.
 func TestSendBitfieldThenHave(t *testing.T) {
 	cl := Client{
-		config: TestingConfig(),
+		config: TestingConfig(t),
 	}
 	cl.initLogger()
 	c := cl.newConnection(nil, false, nil, "io.Pipe", "")

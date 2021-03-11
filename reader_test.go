@@ -11,7 +11,7 @@ import (
 )
 
 func TestReaderReadContext(t *testing.T) {
-	cl, err := NewClient(TestingConfig())
+	cl, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
 	defer cl.Close()
 	tt, err := cl.AddTorrent(testutil.GreetingMetaInfo())

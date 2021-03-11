@@ -51,7 +51,7 @@ func (me anacrolixDhtServerWrapper) Announce(hash [20]byte, port int, impliedPor
 }
 
 func (me anacrolixDhtServerWrapper) Ping(addr *net.UDPAddr) {
-	me.Server.Ping(addr, nil)
+	me.Server.Ping(addr)
 }
 
 var _ DhtServer = anacrolixDhtServerWrapper{}

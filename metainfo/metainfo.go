@@ -70,7 +70,7 @@ func (mi *MetaInfo) SetDefaults() {
 
 // Creates a Magnet from a MetaInfo. Optional infohash and parsed info can be provided.
 func (mi *MetaInfo) Magnet(infoHash *Hash, info *Info) (m Magnet) {
-	for t := range mi.UpvertedAnnounceList().DistinctValues() {
+	for _, t := range mi.UpvertedAnnounceList().DistinctValues() {
 		m.Trackers = append(m.Trackers, t)
 	}
 	if info != nil {

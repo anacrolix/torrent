@@ -12,7 +12,6 @@ import (
 	"testing/iotest"
 	"time"
 
-	"github.com/bradfitz/iter"
 	"github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -143,7 +142,7 @@ func TestAddDropManyTorrents(t *testing.T) {
 	cl, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
 	defer cl.Close()
-	for i := range iter.N(1000) {
+	for i := 0; i < 1000; i++ {
 		var spec TorrentSpec
 		binary.PutVarint(spec.InfoHash[:], int64(i))
 		tt, new, err := cl.AddTorrentSpec(&spec)
@@ -215,7 +214,7 @@ func BenchmarkAddLargeTorrent(b *testing.B) {
 	require.NoError(b, err)
 	defer cl.Close()
 	b.ReportAllocs()
-	for range iter.N(b.N) {
+	for i := 0; i < b.N; i++ {
 		t, err := cl.AddTorrentFromFile("testdata/bootstrap.dat.torrent")
 		if err != nil {
 			b.Fatal(err)
@@ -366,7 +365,7 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 }
 
 func writeTorrentData(ts *storage.Torrent, info metainfo.Info, b []byte) {
-	for i := range iter.N(info.NumPieces()) {
+	for i := 0; i < info.NumPieces(); i++ {
 		p := info.Piece(i)
 		ts.Piece(p).WriteAt(b[p.Offset():p.Offset()+p.Length()], 0)
 	}
@@ -619,7 +618,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 	cfg := TestingConfig(t)
 	cfg.DisableAcceptRateLimiting = true
 	cfg.DropDuplicatePeerIds = true
-	for i := range iter.N(3) {
+	for i := 0; i < 3; i++ {
 		cl, err := NewClient(cfg)
 		require.NoError(t, err)
 		defer cl.Close()

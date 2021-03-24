@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo/pubsub"
-	"github.com/bradfitz/iter"
 	"github.com/frankban/quicktest"
 	"github.com/stretchr/testify/require"
 
@@ -129,7 +128,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	go func() {
 		defer w.Close()
 		ts.writeSem.Lock()
-		for range iter.N(b.N) {
+		for i := 0; i < b.N; i++ {
 			cl.lock()
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.

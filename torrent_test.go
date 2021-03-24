@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -90,7 +89,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		Length:      pieceLength * numPieces,
 	}))
 	assert.EqualValues(b, 13410, t.numPieces())
-	for range iter.N(7) {
+	for i := 0; i < 7; i++ {
 		r := t.NewReader()
 		r.SetReadahead(32 << 20)
 		r.Seek(3500000, io.SeekStart)
@@ -100,7 +99,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		t._completedPieces.Set(i, true)
 	}
 	t.DownloadPieces(0, t.numPieces())
-	for range iter.N(b.N) {
+	for i := 0; i < b.N; i++ {
 		t.updateAllPiecePriorities()
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,7 +40,7 @@ func init() {
 
 func TestIPv4RangeLen(t *testing.T) {
 	ranges, _ := sampleRanges(t)
-	for i := range iter.N(3) {
+	for i := 0; i < 3; i++ {
 		if len(ranges[i].First) != 4 {
 			t.FailNow()
 		}

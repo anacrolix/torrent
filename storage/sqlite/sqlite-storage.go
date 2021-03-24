@@ -18,7 +18,6 @@ import (
 
 	"crawshaw.io/sqlite"
 	"crawshaw.io/sqlite/sqlitex"
-	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/resource"
 	"github.com/anacrolix/torrent/storage"
 )
@@ -333,7 +332,7 @@ func initPoolConns(ctx context.Context, pool ConnPool, opts ProviderOpts) (numIn
 			pool.Put(c)
 		}
 	}()
-	for range iter.N(opts.NumConns) {
+	for i := 0 ; i < opts.NumConns; i++ {
 		conn := pool.Get(ctx)
 		if conn == nil {
 			break
@@ -672,7 +671,7 @@ func (i instance) Put(reader io.Reader) (err error) {
 		return i.PutSized(&buf, int64(buf.Len()))
 	} else {
 		return i.withConn(func(_ context.Context, conn conn) error {
-			for range iter.N(10) {
+			for j := 0; j < 10; j++ {
 				err = sqlitex.Exec(conn,
 					"insert or replace into blob(name, data) values(?, cast(? as blob))",
 					nil,

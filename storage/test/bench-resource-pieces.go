@@ -10,7 +10,6 @@ import (
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
-	"github.com/bradfitz/iter"
 	qt "github.com/frankban/quicktest"
 )
 
@@ -32,7 +31,7 @@ func BenchmarkPieceMarkComplete(b *testing.B, ci storage.ClientImpl, pieceSize i
 	rand.Read(info.Pieces)
 	data := make([]byte, pieceSize)
 	oneIter := func() {
-		for pieceIndex := range iter.N(numPieces) {
+		for pieceIndex := 0; pieceIndex < numPieces; pieceIndex++ {
 			pi := ti.Piece(info.Piece(pieceIndex))
 			rand.Read(data)
 			var wg sync.WaitGroup
@@ -65,12 +64,12 @@ func BenchmarkPieceMarkComplete(b *testing.B, ci storage.ClientImpl, pieceSize i
 	}
 	// Fill the cache
 	if capacity > 0 {
-		for range iter.N(int((capacity + info.TotalLength() - 1) / info.TotalLength())) {
+		for i := 0; i < int((capacity + info.TotalLength() - 1) / info.TotalLength()); i++ {
 			oneIter()
 		}
 	}
 	b.ResetTimer()
-	for range iter.N(b.N) {
+	for i := 0; i < b.N; i++ {
 		oneIter()
 	}
 }

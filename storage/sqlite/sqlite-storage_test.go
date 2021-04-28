@@ -67,8 +67,8 @@ func TestSimultaneousIncrementalBlob(t *testing.T) {
 }
 
 func BenchmarkMarkComplete(b *testing.B) {
-	const pieceSize = 2 << 20
-	const capacity = 0
+	const pieceSize = test_storage.DefaultPieceSize
+	const capacity = test_storage.DefaultCapacity
 	c := qt.New(b)
 	for _, memory := range []bool{false, true} {
 		b.Run(fmt.Sprintf("Memory=%v", memory), func(b *testing.B) {
@@ -90,7 +90,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 					})
 					c.Assert(err, qt.IsNil)
 					defer ci.Close()
-					test_storage.BenchmarkPieceMarkComplete(b, ci, pieceSize, 16, capacity)
+					test_storage.BenchmarkPieceMarkComplete(b, ci, pieceSize, test_storage.DefaultNumPieces, capacity)
 				})
 			}
 		})

@@ -14,37 +14,47 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-const chunkSize = 1 << 14
+const (
+	ChunkSize        = 1 << 14
+	DefaultPieceSize = 2 << 20
+	DefaultCapacity  = 0
+	DefaultNumPieces = 16
+)
 
-func BenchmarkPieceMarkComplete(b *testing.B, ci storage.ClientImpl, pieceSize int64, numPieces int, capacity int64) {
+func BenchmarkPieceMarkComplete(
+	b *testing.B, ci storage.ClientImpl,
+	pieceSize int64, numPieces int, capacity int64,
+) {
+	const check = true
 	c := qt.New(b)
-	ti, err := ci.OpenTorrent(&metainfo.Info{
-		Pieces:      make([]byte, metainfo.HashSize*numPieces),
-		PieceLength: pieceSize,
-	}, metainfo.Hash{})
-	c.Assert(err, qt.IsNil)
-	defer ti.Close()
 	info := &metainfo.Info{
 		Pieces:      make([]byte, numPieces*metainfo.HashSize),
 		PieceLength: pieceSize,
 		Length:      pieceSize * int64(numPieces),
+		Name:        "TorrentName",
 	}
+	ti, err := ci.OpenTorrent(info, metainfo.Hash{})
+	c.Assert(err, qt.IsNil)
+	defer ti.Close()
 	rand.Read(info.Pieces)
 	data := make([]byte, pieceSize)
+	b.SetBytes(int64(numPieces) * pieceSize)
 	oneIter := func() {
 		for pieceIndex := range iter.N(numPieces) {
 			pi := ti.Piece(info.Piece(pieceIndex))
-			rand.Read(data)
+			if check {
+				rand.Read(data)
+			}
 			var wg sync.WaitGroup
-			for off := int64(0); off < int64(len(data)); off += chunkSize {
+			for off := int64(0); off < int64(len(data)); off += ChunkSize {
 				wg.Add(1)
 				go func(off int64) {
 					defer wg.Done()
-					n, err := pi.WriteAt(data[off:off+chunkSize], off)
+					n, err := pi.WriteAt(data[off:off+ChunkSize], off)
 					if err != nil {
 						panic(err)
 					}
-					if n != chunkSize {
+					if n != ChunkSize {
 						panic(n)
 					}
 				}(off)
@@ -57,10 +67,12 @@ func BenchmarkPieceMarkComplete(b *testing.B, ci storage.ClientImpl, pieceSize i
 			c.Assert(pi.Completion(), qt.Equals, storage.Completion{Complete: false, Ok: true})
 			c.Assert(pi.MarkComplete(), qt.IsNil)
 			c.Assert(pi.Completion(), qt.Equals, storage.Completion{true, true})
-			readData, err := ioutil.ReadAll(io.NewSectionReader(pi, 0, int64(len(data))))
-			c.Assert(err, qt.IsNil)
-			c.Assert(len(readData), qt.Equals, len(data))
-			c.Assert(bytes.Equal(readData, data), qt.IsTrue)
+			if check {
+				readData, err := ioutil.ReadAll(io.NewSectionReader(pi, 0, int64(len(data))))
+				c.Assert(err, qt.IsNil)
+				c.Assert(len(readData), qt.Equals, len(data))
+				c.Assert(bytes.Equal(readData, data), qt.IsTrue)
+			}
 		}
 	}
 	// Fill the cache

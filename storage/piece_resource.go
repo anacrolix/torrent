@@ -191,7 +191,11 @@ func (s piecePerResourcePiece) WriteAt(b []byte, off int64) (n int, err error) {
 		panic(err)
 	}
 	r := bytes.NewReader(b)
-	err = i.Put(r)
+	if sp, ok := i.(SizedPutter); ok {
+		err = sp.PutSized(r, r.Size())
+	} else {
+		err = i.Put(r)
+	}
 	n = len(b) - r.Len()
 	return
 }

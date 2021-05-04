@@ -1,6 +1,5 @@
 # torrent
 
-[![Join the chat at https://gitter.im/anacrolix/torrent](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/anacrolix/torrent?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![GoDoc](https://godoc.org/github.com/anacrolix/torrent?status.svg)](https://godoc.org/github.com/anacrolix/torrent)
 [![CircleCI](https://circleci.com/gh/anacrolix/torrent.svg?style=shield)](https://circleci.com/gh/anacrolix/torrent)
 [![Astronomer Rating](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fastronomer.ullaakut.eu%2Fshields%3Fowner%3Danacrolix%26name%3Dtorrent)](https://github.com/ullaakut/astronomer)
@@ -50,7 +49,7 @@ There are several web-frontends and Android clients among the known public proje
 
 ## Help
 
-Communication about the project is primarily through [Gitter](https://gitter.im/anacrolix/torrent) and the [issue tracker](https://github.com/anacrolix/torrent/issues).
+Communication about the project is primarily through [Discussions](https://github.com/anacrolix/torrent/discussions) and the [issue tracker](https://github.com/anacrolix/torrent/issues).
 
 ## Command packages
 

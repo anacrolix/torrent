@@ -98,16 +98,16 @@ type piece struct {
 }
 
 func (p2 piece) getBlob() *sqlite.Blob {
+	rowid, err := rowidForBlob(p2.conn, p2.name, p2.length)
+	if err != nil {
+		panic(err)
+	}
 	if *p2.blob != nil {
 		err := (*p2.blob).Close()
 		if err != nil {
 			panic(err)
 		}
 		*p2.blob = nil
-	}
-	rowid, err := rowidForBlob(p2.conn, p2.name, p2.length)
-	if err != nil {
-		panic(err)
 	}
 	*p2.blob, err = p2.conn.OpenBlob("main", "blob", "data", rowid, true)
 	if err != nil {
@@ -144,7 +144,7 @@ func (p2 piece) MarkComplete() error {
 }
 
 func (p2 piece) MarkNotComplete() error {
-	panic("implement me")
+	return sqlitex.Exec(p2.conn, "update blob set verified=false where name=?", nil, p2.name)
 }
 
 func (p2 piece) Completion() (ret storage.Completion) {

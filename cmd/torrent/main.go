@@ -35,12 +35,13 @@ import (
 
 func torrentBar(t *torrent.Torrent, pieceStates bool) {
 	go func() {
+		start := time.Now()
 		if t.Info() == nil {
-			fmt.Printf("getting torrent info for %q\n", t.Name())
+			fmt.Printf("%v: getting torrent info for %q\n", time.Since(start), t.Name())
 			<-t.GotInfo()
 		}
 		var lastLine string
-		for {
+		for range time.Tick(time.Second) {
 			var completedPieces, partialPieces int
 			psrs := t.PieceStateRuns()
 			for _, r := range psrs {
@@ -52,7 +53,8 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 				}
 			}
 			line := fmt.Sprintf(
-				"downloading %q: %s/%s, %d/%d pieces completed (%d partial)\n",
+				"%v: downloading %q: %s/%s, %d/%d pieces completed (%d partial)\n",
+				time.Since(start),
 				t.Name(),
 				humanize.Bytes(uint64(t.BytesCompleted())),
 				humanize.Bytes(uint64(t.Length())),
@@ -67,7 +69,6 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 			if pieceStates {
 				fmt.Println(psrs)
 			}
-			time.Sleep(time.Second)
 		}
 	}()
 }

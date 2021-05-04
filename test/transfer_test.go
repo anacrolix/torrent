@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -110,6 +111,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
 	}
 	cfg.Seed = false
+	cfg.Debug = true
 	if ps.ConfigureLeecher.Config != nil {
 		ps.ConfigureLeecher.Config(cfg)
 	}
@@ -330,6 +332,20 @@ func TestClientTransferVarious(t *testing.T) {
 			Wrapper: fileCachePieceResourceStorage,
 		}), 0},
 		{"Boltdb", storage.NewBoltDB, 0},
+		{"SqliteDirect", func(s string) storage.ClientImplCloser {
+			path := filepath.Join(s, "sqlite3.db")
+			log.Print(path)
+			cl, err := sqliteStorage.NewDirectStorage(sqliteStorage.NewDirectStorageOpts{
+				NewPoolOpts: sqliteStorage.NewPoolOpts{
+					Path: path,
+				},
+				ProvOpts: nil,
+			})
+			if err != nil {
+				panic(err)
+			}
+			return cl
+		}, 0},
 		sqliteLeecherStorageTestCase(1),
 		sqliteLeecherStorageTestCase(2),
 		// This should use a number of connections equal to the number of CPUs
@@ -362,7 +378,7 @@ func TestClientTransferVarious(t *testing.T) {
 									GOMAXPROCS:     ls.gomaxprocs,
 								})
 							})
-							for _, readahead := range []int64{-1, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20} {
+							for _, readahead := range []int64{-1, 0, 1, 2, 9, 20} {
 								t.Run(fmt.Sprintf("readahead=%v", readahead), func(t *testing.T) {
 									testClientTransfer(t, testClientTransferParams{
 										SeederStorage:  ss.f,

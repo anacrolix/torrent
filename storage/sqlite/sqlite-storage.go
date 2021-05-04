@@ -68,6 +68,7 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 			name text,
 			last_used timestamp default (datetime('now')),
 			data blob,
+			verified bool,
 			primary key (name)
 		);
 		

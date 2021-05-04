@@ -1,6 +1,5 @@
 # torrent
 
-[![GoDoc](https://godoc.org/github.com/anacrolix/torrent?status.svg)](https://godoc.org/github.com/anacrolix/torrent)
 [![CircleCI](https://circleci.com/gh/anacrolix/torrent.svg?style=shield)](https://circleci.com/gh/anacrolix/torrent)
 [![Astronomer Rating](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fastronomer.ullaakut.eu%2Fshields%3Fowner%3Danacrolix%26name%3Dtorrent)](https://github.com/ullaakut/astronomer)
 [![GitHub Release](https://img.shields.io/github/release/anacrolix/torrent.svg)](https://github.com/anacrolix/torrent/releases)

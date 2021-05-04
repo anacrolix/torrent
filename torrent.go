@@ -494,7 +494,10 @@ func (t *Torrent) name() string {
 	if t.haveInfo() {
 		return t.info.Name
 	}
-	return t.displayName
+	if t.displayName != "" {
+		return t.displayName
+	}
+	return "infohash:" + t.infoHash.HexString()
 }
 
 func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {

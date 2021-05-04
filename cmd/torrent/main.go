@@ -36,7 +36,7 @@ import (
 func torrentBar(t *torrent.Torrent, pieceStates bool) {
 	go func() {
 		if t.Info() == nil {
-			fmt.Printf("getting info for %q\n", t.Name())
+			fmt.Printf("getting torrent info for %q\n", t.Name())
 			<-t.GotInfo()
 		}
 		var lastLine string

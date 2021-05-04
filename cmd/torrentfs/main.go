@@ -2,7 +2,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -16,10 +16,11 @@ import (
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
 	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/tagflag"
 
 	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/fs"
+	torrentfs "github.com/anacrolix/torrent/fs"
 	"github.com/anacrolix/torrent/util/dirwatch"
 )
 
@@ -37,7 +38,7 @@ var (
 		MetainfoDir: func() string {
 			_user, err := user.Current()
 			if err != nil {
-				log.Fatal(err)
+				panic(err)
 			}
 			return filepath.Join(_user.HomeDir, ".config/transmission/torrents")
 		}(),
@@ -68,19 +69,22 @@ func addTestPeer(client *torrent.Client) {
 }
 
 func main() {
-	os.Exit(mainExitCode())
+	err := mainErr()
+	if err != nil {
+		log.Printf("error in main: %v", err)
+		os.Exit(1)
+	}
 }
 
-func mainExitCode() int {
+func mainErr() error {
 	tagflag.Parse(&args)
 	if args.MountDir == "" {
 		os.Stderr.WriteString("y u no specify mountpoint?\n")
-		return 2
+		os.Exit(2)
 	}
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	conn, err := fuse.Mount(args.MountDir)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("mounting: %w", err)
 	}
 	defer fuse.Unmount(args.MountDir)
 	// TODO: Think about the ramifications of exiting not due to a signal.
@@ -92,8 +96,7 @@ func mainExitCode() int {
 	cfg.SetListenAddr(args.ListenAddr.String())
 	client, err := torrent.NewClient(cfg)
 	if err != nil {
-		log.Print(err)
-		return 1
+		return fmt.Errorf("creating torrent client: %w", err)
 	}
 	// This is naturally exported via GOPPROF=http.
 	http.DefaultServeMux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
@@ -101,9 +104,9 @@ func mainExitCode() int {
 	})
 	dw, err := dirwatch.New(args.MetainfoDir)
 	if err != nil {
-		log.Printf("error watching torrent dir: %s", err)
-		return 1
+		return fmt.Errorf("watching torrent dir: %w", err)
 	}
+	dw.Logger = dw.Logger.FilterLevel(log.Info)
 	go func() {
 		for ev := range dw.Events {
 			switch ev.Change {
@@ -141,11 +144,11 @@ func mainExitCode() int {
 	}
 
 	if err := fusefs.Serve(conn, fs); err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("serving fuse fs: %w", err)
 	}
 	<-conn.Ready
 	if err := conn.MountError; err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("mount error: %w", err)
 	}
-	return 0
+	return nil
 }

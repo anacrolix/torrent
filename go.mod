@@ -6,10 +6,10 @@ require (
 	github.com/RoaringBitmap/roaring v0.6.0 // indirect
 	github.com/alexflint/go-arg v1.3.0
 	github.com/anacrolix/confluence v1.7.1-0.20210311004351-d642adb8546c // indirect
-	github.com/anacrolix/dht/v2 v2.9.0
+	github.com/anacrolix/dht/v2 v2.9.1
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/go-libutp v1.0.4
-	github.com/anacrolix/log v0.8.0
+	github.com/anacrolix/log v0.9.0
 	github.com/anacrolix/missinggo v1.2.1
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.5.0
@@ -25,7 +25,6 @@ require (
 	github.com/elliotchance/orderedmap v1.4.0
 	github.com/frankban/quicktest v1.11.3
 	github.com/fsnotify/fsnotify v1.4.9
-	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/btree v1.0.1
 	github.com/gorilla/websocket v1.4.2
 	github.com/jessevdk/go-flags v1.4.0

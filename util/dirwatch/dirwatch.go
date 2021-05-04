@@ -4,15 +4,14 @@ package dirwatch
 
 import (
 	"bufio"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
-	"github.com/fsnotify/fsnotify"
-
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/fsnotify/fsnotify"
 )
 
 type Change uint
@@ -40,6 +39,7 @@ type Instance struct {
 	dirName  string
 	Events   chan Event
 	dirState map[metainfo.Hash]entity
+	Logger   log.Logger
 }
 
 func (i *Instance) Close() {
@@ -49,7 +49,7 @@ func (i *Instance) Close() {
 func (i *Instance) handleEvents() {
 	defer close(i.Events)
 	for e := range i.w.Events {
-		log.Printf("event: %s", e)
+		i.Logger.WithDefaultLevel(log.Debug).Printf("event: %v", e)
 		if e.Op == fsnotify.Write {
 			// TODO: Special treatment as an existing torrent may have changed.
 		} else {
@@ -203,6 +203,7 @@ func New(dirName string) (i *Instance, err error) {
 		dirName:  dirName,
 		Events:   make(chan Event),
 		dirState: make(map[metainfo.Hash]entity, 0),
+		Logger:   log.Default,
 	}
 	go func() {
 		i.refresh()

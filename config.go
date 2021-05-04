@@ -185,7 +185,6 @@ func NewDefaultClientConfig() *ClientConfig {
 		CryptoSelector: mse.DefaultCryptoSelector,
 		CryptoProvides: mse.AllSupportedCrypto,
 		ListenPort:     42069,
-		Logger:         log.Default,
 
 		DefaultRequestStrategy: RequestStrategyDuplicateRequestTimeout(5 * time.Second),
 

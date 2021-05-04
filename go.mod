@@ -15,7 +15,7 @@ require (
 	github.com/anacrolix/missinggo/v2 v2.5.0
 	github.com/anacrolix/multiless v0.1.0
 	github.com/anacrolix/sync v0.2.0
-	github.com/anacrolix/tagflag v1.2.0
+	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/upnp v0.1.2-0.20200416075019-5e9378ed1425
 	github.com/anacrolix/utp v0.1.0
 	github.com/bradfitz/iter v0.0.0-20191230175014-e8f45d346db8

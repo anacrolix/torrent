@@ -165,12 +165,12 @@ var flags struct {
 type SpewBencodingCmd struct{}
 
 type DownloadCmd struct {
-	Mmap            bool          `help:"memory-map torrent data"`
-	TestPeer        []string      `help:"addresses of some starting peers"`
-	Seed            bool          `help:"seed after download is complete"`
-	Addr            string        `help:"network listen addr"`
-	UploadRate      tagflag.Bytes `help:"max piece bytes to send per second" default:"-1"`
-	DownloadRate    tagflag.Bytes `help:"max bytes per second down from peers" default:"-1"`
+	Mmap            bool           `help:"memory-map torrent data"`
+	TestPeer        []string       `help:"addresses of some starting peers"`
+	Seed            bool           `help:"seed after download is complete"`
+	Addr            string         `help:"network listen addr"`
+	UploadRate      *tagflag.Bytes `help:"max piece bytes to send per second"`
+	DownloadRate    *tagflag.Bytes `help:"max bytes per second down from peers"`
 	PackedBlocklist string
 	PublicIP        net.IP
 	Progress        bool `default:"true"`
@@ -297,11 +297,11 @@ func downloadErr() error {
 	if flags.Addr != "" {
 		clientConfig.SetListenAddr(flags.Addr)
 	}
-	if flags.UploadRate != -1 {
-		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(flags.UploadRate), 256<<10)
+	if flags.UploadRate != nil {
+		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(*flags.UploadRate), 256<<10)
 	}
-	if flags.DownloadRate != -1 {
-		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(flags.DownloadRate), 1<<20)
+	if flags.DownloadRate != nil {
+		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(*flags.DownloadRate), 1<<20)
 	}
 	if flags.Quiet {
 		clientConfig.Logger = log.Discard

@@ -1,6 +1,7 @@
 package sqliteStorage
 
 import (
+	"errors"
 	"sync"
 
 	"crawshaw.io/sqlite"
@@ -98,17 +99,32 @@ type piece struct {
 	length int64
 }
 
-func (p2 piece) ReadAt(p []byte, off int64) (n int, err error) {
+func (p2 piece) doAtIoWithBlob(
+	atIo func(*sqlite.Blob) func([]byte, int64) (int, error),
+	p []byte,
+	off int64,
+) (n int, err error) {
 	p2.l.Lock()
 	defer p2.l.Unlock()
-	blob := p2.getBlob()
-	return blob.ReadAt(p, off)
+	n, err = atIo(p2.getBlob())(p, off)
+	var se sqlite.Error
+	if !errors.As(err, &se) || se.Code != sqlite.SQLITE_ABORT {
+		return
+	}
+	p2.blobWouldExpire()
+	return atIo(p2.getBlob())(p, off)
+}
+
+func (p2 piece) ReadAt(p []byte, off int64) (n int, err error) {
+	return p2.doAtIoWithBlob(func(blob *sqlite.Blob) func([]byte, int64) (int, error) {
+		return blob.ReadAt
+	}, p, off)
 }
 
 func (p2 piece) WriteAt(p []byte, off int64) (n int, err error) {
-	p2.l.Lock()
-	defer p2.l.Unlock()
-	return p2.getBlob().WriteAt(p, off)
+	return p2.doAtIoWithBlob(func(blob *sqlite.Blob) func([]byte, int64) (int, error) {
+		return blob.WriteAt
+	}, p, off)
 }
 
 func (p2 piece) MarkComplete() error {
@@ -122,7 +138,6 @@ func (p2 piece) MarkComplete() error {
 	if changes != 1 {
 		panic(changes)
 	}
-	p2.blobWouldExpire()
 	return nil
 }
 
@@ -136,7 +151,6 @@ func (p2 piece) blobWouldExpire() {
 }
 
 func (p2 piece) MarkNotComplete() error {
-	p2.blobWouldExpire()
 	return sqlitex.Exec(p2.conn, "update blob set verified=false where name=?", nil, p2.name)
 }
 

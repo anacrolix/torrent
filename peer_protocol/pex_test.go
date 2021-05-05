@@ -48,7 +48,7 @@ func TestMarshalPexMessage(t *testing.T) {
 
 	msg = Message{}
 	dec := Decoder{
-		R:         bufio.NewReader(bytes.NewBuffer(b)),
+		R:         bufio.NewReader(bytes.NewReader(b)),
 		MaxLength: 128,
 	}
 	pmOut := PexMsg{}

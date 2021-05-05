@@ -7,6 +7,7 @@ import (
 )
 
 type mapPieceCompletion struct {
+	// TODO: Can probably improve the synchronization here.
 	mu sync.Mutex
 	m  map[metainfo.PieceKey]bool
 }

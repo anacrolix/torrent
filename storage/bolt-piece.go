@@ -9,7 +9,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-type boltDBPiece struct {
+type boltPiece struct {
 	db  *bbolt.DB
 	p   metainfo.Piece
 	ih  metainfo.Hash
@@ -17,19 +17,19 @@ type boltDBPiece struct {
 }
 
 var (
-	_             PieceImpl = (*boltDBPiece)(nil)
+	_             PieceImpl = (*boltPiece)(nil)
 	dataBucketKey           = []byte("data")
 )
 
-func (me *boltDBPiece) pc() PieceCompletionGetSetter {
+func (me *boltPiece) pc() PieceCompletionGetSetter {
 	return boltPieceCompletion{me.db}
 }
 
-func (me *boltDBPiece) pk() metainfo.PieceKey {
+func (me *boltPiece) pk() metainfo.PieceKey {
 	return metainfo.PieceKey{me.ih, me.p.Index()}
 }
 
-func (me *boltDBPiece) Completion() Completion {
+func (me *boltPiece) Completion() Completion {
 	c, err := me.pc().Get(me.pk())
 	switch err {
 	case bbolt.ErrDatabaseNotOpen:
@@ -41,14 +41,14 @@ func (me *boltDBPiece) Completion() Completion {
 	return c
 }
 
-func (me *boltDBPiece) MarkComplete() error {
+func (me *boltPiece) MarkComplete() error {
 	return me.pc().Set(me.pk(), true)
 }
 
-func (me *boltDBPiece) MarkNotComplete() error {
+func (me *boltPiece) MarkNotComplete() error {
 	return me.pc().Set(me.pk(), false)
 }
-func (me *boltDBPiece) ReadAt(b []byte, off int64) (n int, err error) {
+func (me *boltPiece) ReadAt(b []byte, off int64) (n int, err error) {
 	err = me.db.View(func(tx *bbolt.Tx) error {
 		db := tx.Bucket(dataBucketKey)
 		if db == nil {
@@ -74,13 +74,13 @@ func (me *boltDBPiece) ReadAt(b []byte, off int64) (n int, err error) {
 	return
 }
 
-func (me *boltDBPiece) chunkKey(index int) (ret [26]byte) {
+func (me *boltPiece) chunkKey(index int) (ret [26]byte) {
 	copy(ret[:], me.key[:])
 	binary.BigEndian.PutUint16(ret[24:], uint16(index))
 	return
 }
 
-func (me *boltDBPiece) WriteAt(b []byte, off int64) (n int, err error) {
+func (me *boltPiece) WriteAt(b []byte, off int64) (n int, err error) {
 	err = me.db.Update(func(tx *bbolt.Tx) error {
 		db, err := tx.CreateBucketIfNotExists(dataBucketKey)
 		if err != nil {

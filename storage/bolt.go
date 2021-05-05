@@ -12,17 +12,17 @@ import (
 )
 
 const (
-	// Chosen to match the usual chunk size in a torrent client. This way,
-	// most chunk writes are to exactly one full item in bbolt DB.
+	// Chosen to match the usual chunk size in a torrent client. This way, most chunk writes are to
+	// exactly one full item in bbolt DB.
 	chunkSize = 1 << 14
 )
 
-type boltDBClient struct {
+type boltClient struct {
 	db *bbolt.DB
 }
 
-type boltDBTorrent struct {
-	cl *boltDBClient
+type boltTorrent struct {
+	cl *boltClient
 	ih metainfo.Hash
 }
 
@@ -32,19 +32,19 @@ func NewBoltDB(filePath string) ClientImplCloser {
 	})
 	expect.Nil(err)
 	db.NoSync = true
-	return &boltDBClient{db}
+	return &boltClient{db}
 }
 
-func (me *boltDBClient) Close() error {
+func (me *boltClient) Close() error {
 	return me.db.Close()
 }
 
-func (me *boltDBClient) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
-	return &boltDBTorrent{me, infoHash}, nil
+func (me *boltClient) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
+	return &boltTorrent{me, infoHash}, nil
 }
 
-func (me *boltDBTorrent) Piece(p metainfo.Piece) PieceImpl {
-	ret := &boltDBPiece{
+func (me *boltTorrent) Piece(p metainfo.Piece) PieceImpl {
+	ret := &boltPiece{
 		p:  p,
 		db: me.cl.db,
 		ih: me.ih,
@@ -54,4 +54,4 @@ func (me *boltDBTorrent) Piece(p metainfo.Piece) PieceImpl {
 	return ret
 }
 
-func (boltDBTorrent) Close() error { return nil }
+func (boltTorrent) Close() error { return nil }

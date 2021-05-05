@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
@@ -68,42 +69,51 @@ func TestSimultaneousIncrementalBlob(t *testing.T) {
 
 func BenchmarkMarkComplete(b *testing.B) {
 	const pieceSize = test_storage.DefaultPieceSize
-	const capacity = test_storage.DefaultCapacity
+	const capacity = test_storage.DefaultNumPieces * pieceSize / 2
 	c := qt.New(b)
-	for _, memory := range []bool{false, true} {
-		b.Run(fmt.Sprintf("Memory=%v", memory), func(b *testing.B) {
-			for _, batchWrites := range []bool{false, true} {
-				b.Run(fmt.Sprintf("BatchWrites=%v", batchWrites), func(b *testing.B) {
-					dbPath := filepath.Join(b.TempDir(), "storage.db")
-					//b.Logf("storage db path: %q", dbPath)
-					newPoolOpts := NewPoolOpts{
-						Path:                  dbPath,
-						Capacity:              4*pieceSize - 1,
-						NoConcurrentBlobReads: false,
-						PageSize:              1 << 14,
-						Memory:                memory,
-					}
-					provOpts := func(opts *ProviderOpts) {
-						opts.BatchWrites = batchWrites
-					}
-					b.Run("SqlitePieceStorage", func(b *testing.B) {
-						ci, err := NewPiecesStorage(NewPiecesStorageOpts{
-							NewPoolOpts: newPoolOpts,
-							ProvOpts:    provOpts,
+	for _, storage := range []struct {
+		name  string
+		maker func(newPoolOpts NewPoolOpts, provOpts func(*ProviderOpts)) storage.ClientImplCloser
+	}{
+		{"SqliteDirect", func(newPoolOpts NewPoolOpts, provOpts func(*ProviderOpts)) storage.ClientImplCloser {
+			ci, err := NewDirectStorage(NewDirectStorageOpts{
+				NewPoolOpts: newPoolOpts,
+				ProvOpts:    provOpts,
+			})
+			c.Assert(err, qt.IsNil)
+			return ci
+		}},
+		{"SqlitePieceStorage", func(newPoolOpts NewPoolOpts, provOpts func(*ProviderOpts)) storage.ClientImplCloser {
+			ci, err := NewPiecesStorage(NewPiecesStorageOpts{
+				NewPoolOpts: newPoolOpts,
+				ProvOpts:    provOpts,
+			})
+			c.Assert(err, qt.IsNil)
+			return ci
+		}},
+	} {
+		b.Run(storage.name, func(b *testing.B) {
+			for _, memory := range []bool{false, true} {
+				b.Run(fmt.Sprintf("Memory=%v", memory), func(b *testing.B) {
+					for _, batchWrites := range []bool{false, true} {
+						b.Run(fmt.Sprintf("BatchWrites=%v", batchWrites), func(b *testing.B) {
+							dbPath := filepath.Join(b.TempDir(), "storage.db")
+							//b.Logf("storage db path: %q", dbPath)
+							newPoolOpts := NewPoolOpts{
+								Path:                  dbPath,
+								Capacity:              capacity,
+								NoConcurrentBlobReads: false,
+								PageSize:              1 << 14,
+								Memory:                memory,
+							}
+							provOpts := func(opts *ProviderOpts) {
+								opts.BatchWrites = batchWrites
+							}
+							ci := storage.maker(newPoolOpts, provOpts)
+							defer ci.Close()
+							test_storage.BenchmarkPieceMarkComplete(b, ci, pieceSize, test_storage.DefaultNumPieces, capacity)
 						})
-						c.Assert(err, qt.IsNil)
-						defer ci.Close()
-						test_storage.BenchmarkPieceMarkComplete(b, ci, pieceSize, test_storage.DefaultNumPieces, capacity)
-					})
-					b.Run("SqliteDirect", func(b *testing.B) {
-						ci, err := NewDirectStorage(NewDirectStorageOpts{
-							NewPoolOpts: newPoolOpts,
-							ProvOpts:    provOpts,
-						})
-						c.Assert(err, qt.IsNil)
-						defer ci.Close()
-						test_storage.BenchmarkPieceMarkComplete(b, ci, pieceSize, test_storage.DefaultNumPieces, capacity)
-					})
+					}
 				})
 			}
 		})

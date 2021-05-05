@@ -23,7 +23,10 @@ const (
 
 func BenchmarkPieceMarkComplete(
 	b *testing.B, ci storage.ClientImpl,
-	pieceSize int64, numPieces int, capacity int64,
+	pieceSize int64, numPieces int,
+	// This drives any special handling around capacity that may be configured into the storage
+	// implementation.
+	capacity int64,
 ) {
 	const check = true
 	c := qt.New(b)
@@ -60,16 +63,18 @@ func BenchmarkPieceMarkComplete(
 				}(off)
 			}
 			wg.Wait()
+			b.StopTimer()
 			if capacity == 0 {
 				pi.MarkNotComplete()
 			}
+			b.StartTimer()
 			// This might not apply if users of this benchmark don't cache with the expected capacity.
 			c.Assert(pi.Completion(), qt.Equals, storage.Completion{Complete: false, Ok: true})
 			c.Assert(pi.MarkComplete(), qt.IsNil)
 			c.Assert(pi.Completion(), qt.Equals, storage.Completion{true, true})
 			if check {
 				readData, err := ioutil.ReadAll(io.NewSectionReader(pi, 0, int64(len(data))))
-				c.Assert(err, qt.IsNil)
+				c.Check(err, qt.IsNil)
 				c.Assert(len(readData), qt.Equals, len(data))
 				c.Assert(bytes.Equal(readData, data), qt.IsTrue)
 			}

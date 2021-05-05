@@ -31,16 +31,17 @@ func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, er
 		return
 	}
 	return &client{
-		prov: prov,
-		conn: prov.pool.Get(nil),
+		prov:  prov,
+		conn:  prov.pool.Get(nil),
+		blobs: make(map[string]*sqlite.Blob),
 	}, nil
 }
 
 type client struct {
-	l    sync.Mutex
-	prov *provider
-	conn conn
-	blob *sqlite.Blob
+	l     sync.Mutex
+	prov  *provider
+	conn  conn
+	blobs map[string]*sqlite.Blob
 }
 
 func (c *client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
@@ -48,8 +49,8 @@ func (c *client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (stora
 }
 
 func (c *client) Close() error {
-	if c.blob != nil {
-		c.blob.Close()
+	for _, b := range c.blobs {
+		b.Close()
 	}
 	c.prov.pool.Put(c.conn)
 	return c.prov.Close()
@@ -82,7 +83,7 @@ func (t torrent) Piece(p metainfo.Piece) storage.PieceImpl {
 	t.c.l.Lock()
 	defer t.c.l.Unlock()
 	name := p.Hash().HexString()
-	return piece{t.c.conn, name, &t.c.l, p.Length(), &t.c.blob}
+	return piece{t.c.conn, &t.c.l, name, t.c.blobs, p.Length()}
 }
 
 func (t torrent) Close() error {
@@ -91,29 +92,10 @@ func (t torrent) Close() error {
 
 type piece struct {
 	conn   conn
-	name   string
 	l      *sync.Mutex
+	name   string
+	blobs  map[string]*sqlite.Blob
 	length int64
-	blob   **sqlite.Blob
-}
-
-func (p2 piece) getBlob() *sqlite.Blob {
-	rowid, err := rowidForBlob(p2.conn, p2.name, p2.length)
-	if err != nil {
-		panic(err)
-	}
-	if *p2.blob != nil {
-		err := (*p2.blob).Close()
-		if err != nil {
-			panic(err)
-		}
-		*p2.blob = nil
-	}
-	*p2.blob, err = p2.conn.OpenBlob("main", "blob", "data", rowid, true)
-	if err != nil {
-		panic(err)
-	}
-	return *p2.blob
 }
 
 func (p2 piece) ReadAt(p []byte, off int64) (n int, err error) {
@@ -140,10 +122,21 @@ func (p2 piece) MarkComplete() error {
 	if changes != 1 {
 		panic(changes)
 	}
+	p2.blobWouldExpire()
 	return nil
 }
 
+func (p2 piece) blobWouldExpire() {
+	blob, ok := p2.blobs[p2.name]
+	if !ok {
+		return
+	}
+	blob.Close()
+	delete(p2.blobs, p2.name)
+}
+
 func (p2 piece) MarkNotComplete() error {
+	p2.blobWouldExpire()
 	return sqlitex.Exec(p2.conn, "update blob set verified=false where name=?", nil, p2.name)
 }
 
@@ -159,4 +152,27 @@ func (p2 piece) Completion() (ret storage.Completion) {
 		panic(err)
 	}
 	return
+}
+
+func (p2 piece) closeBlobIfExists() {
+	if b, ok := p2.blobs[p2.name]; ok {
+		b.Close()
+		delete(p2.blobs, p2.name)
+	}
+}
+
+func (p2 piece) getBlob() *sqlite.Blob {
+	blob, ok := p2.blobs[p2.name]
+	if !ok {
+		rowid, err := rowidForBlob(p2.conn, p2.name, p2.length)
+		if err != nil {
+			panic(err)
+		}
+		blob, err = p2.conn.OpenBlob("main", "blob", "data", rowid, true)
+		if err != nil {
+			panic(err)
+		}
+		p2.blobs[p2.name] = blob
+	}
+	return blob
 }

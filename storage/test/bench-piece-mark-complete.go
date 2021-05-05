@@ -2,8 +2,6 @@ package test_storage
 
 import (
 	"bytes"
-	"io"
-	"io/ioutil"
 	"math/rand"
 	"sync"
 	"testing"
@@ -28,7 +26,6 @@ func BenchmarkPieceMarkComplete(
 	// implementation.
 	capacity int64,
 ) {
-	const check = true
 	c := qt.New(b)
 	info := &metainfo.Info{
 		Pieces:      make([]byte, numPieces*metainfo.HashSize),
@@ -38,16 +35,17 @@ func BenchmarkPieceMarkComplete(
 	}
 	ti, err := ci.OpenTorrent(info, metainfo.Hash{})
 	c.Assert(err, qt.IsNil)
-	defer ti.Close()
+	tw := storage.Torrent{ti}
+	defer tw.Close()
 	rand.Read(info.Pieces)
 	data := make([]byte, pieceSize)
+	readData := make([]byte, pieceSize)
 	b.SetBytes(int64(numPieces) * pieceSize)
 	oneIter := func() {
 		for pieceIndex := range iter.N(numPieces) {
-			pi := ti.Piece(info.Piece(pieceIndex))
-			if check {
-				rand.Read(data)
-			}
+			pi := tw.Piece(info.Piece(pieceIndex))
+			rand.Read(data)
+			b.StartTimer()
 			var wg sync.WaitGroup
 			for off := int64(0); off < int64(len(data)); off += ChunkSize {
 				wg.Add(1)
@@ -63,21 +61,18 @@ func BenchmarkPieceMarkComplete(
 				}(off)
 			}
 			wg.Wait()
-			b.StopTimer()
 			if capacity == 0 {
 				pi.MarkNotComplete()
 			}
-			b.StartTimer()
 			// This might not apply if users of this benchmark don't cache with the expected capacity.
 			c.Assert(pi.Completion(), qt.Equals, storage.Completion{Complete: false, Ok: true})
 			c.Assert(pi.MarkComplete(), qt.IsNil)
 			c.Assert(pi.Completion(), qt.Equals, storage.Completion{true, true})
-			if check {
-				readData, err := ioutil.ReadAll(io.NewSectionReader(pi, 0, int64(len(data))))
-				c.Check(err, qt.IsNil)
-				c.Assert(len(readData), qt.Equals, len(data))
-				c.Assert(bytes.Equal(readData, data), qt.IsTrue)
-			}
+			n, err := pi.WriteTo(bytes.NewBuffer(readData[:0]))
+			b.StopTimer()
+			c.Assert(err, qt.IsNil)
+			c.Assert(n, qt.Equals, int64(len(data)))
+			c.Assert(bytes.Equal(readData[:n], data), qt.IsTrue)
 		}
 	}
 	// Fill the cache

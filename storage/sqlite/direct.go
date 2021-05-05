@@ -11,36 +11,41 @@ import (
 )
 
 type NewDirectStorageOpts struct {
-	NewPoolOpts
-	ProvOpts func(*ProviderOpts)
+	NewConnOpts
+	InitDbOpts
 }
 
 // A convenience function that creates a connection pool, resource provider, and a pieces storage
 // ClientImpl and returns them all with a Close attached.
 func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, err error) {
-	conns, provOpts, err := NewPool(opts.NewPoolOpts)
+	conn, err := newConn(opts.NewConnOpts)
 	if err != nil {
 		return
 	}
-	if f := opts.ProvOpts; f != nil {
-		f(&provOpts)
+	journalMode := "delete"
+	if opts.Memory {
+		journalMode = "off"
 	}
-	provOpts.BatchWrites = false
-	prov, err := NewProvider(conns, provOpts)
+	err = initConn(conn, InitConnOpts{
+		SetJournalMode: journalMode,
+		MmapSizeOk:     true,
+		MmapSize:       1 << 25,
+	})
 	if err != nil {
-		conns.Close()
+		return
+	}
+	err = initDatabase(conn, opts.InitDbOpts)
+	if err != nil {
 		return
 	}
 	return &client{
-		prov:  prov,
-		conn:  prov.pool.Get(nil),
+		conn:  conn,
 		blobs: make(map[string]*sqlite.Blob),
 	}, nil
 }
 
 type client struct {
 	l     sync.Mutex
-	prov  *provider
 	conn  conn
 	blobs map[string]*sqlite.Blob
 }
@@ -53,8 +58,7 @@ func (c *client) Close() error {
 	for _, b := range c.blobs {
 		b.Close()
 	}
-	c.prov.pool.Put(c.conn)
-	return c.prov.Close()
+	return c.conn.Close()
 }
 
 type torrent struct {
@@ -106,6 +110,7 @@ func (p2 piece) doAtIoWithBlob(
 ) (n int, err error) {
 	p2.l.Lock()
 	defer p2.l.Unlock()
+	//defer p2.blobWouldExpire()
 	n, err = atIo(p2.getBlob())(p, off)
 	var se sqlite.Error
 	if !errors.As(err, &se) || se.Code != sqlite.SQLITE_ABORT {

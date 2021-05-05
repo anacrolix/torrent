@@ -15,7 +15,6 @@ import (
 const (
 	ChunkSize        = 1 << 14
 	DefaultPieceSize = 2 << 20
-	DefaultCapacity  = 0
 	DefaultNumPieces = 16
 )
 

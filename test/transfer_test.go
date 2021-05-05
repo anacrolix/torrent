@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -111,7 +110,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
 	}
 	cfg.Seed = false
-	cfg.Debug = true
+	//cfg.Debug = true
 	if ps.ConfigureLeecher.Config != nil {
 		ps.ConfigureLeecher.Config(cfg)
 	}
@@ -313,13 +312,10 @@ type leecherStorageTestCase struct {
 func sqliteLeecherStorageTestCase(numConns int) leecherStorageTestCase {
 	return leecherStorageTestCase{
 		fmt.Sprintf("SqliteFile,NumConns=%v", numConns),
-		sqliteClientStorageFactory(func(dataDir string) sqliteStorage.NewPiecesStorageOpts {
-			return sqliteStorage.NewPiecesStorageOpts{
-				NewPoolOpts: sqliteStorage.NewPoolOpts{
-					Path:     filepath.Join(dataDir, "sqlite.db"),
-					NumConns: numConns,
-				},
-			}
+		sqliteClientStorageFactory(func(dataDir string) (opts sqliteStorage.NewPiecesStorageOpts) {
+			opts.Path = filepath.Join(dataDir, "sqlite.db")
+			opts.NumConns = numConns
+			return
 		}),
 		numConns,
 	}
@@ -334,13 +330,9 @@ func TestClientTransferVarious(t *testing.T) {
 		{"Boltdb", storage.NewBoltDB, 0},
 		{"SqliteDirect", func(s string) storage.ClientImplCloser {
 			path := filepath.Join(s, "sqlite3.db")
-			log.Print(path)
-			cl, err := sqliteStorage.NewDirectStorage(sqliteStorage.NewDirectStorageOpts{
-				NewPoolOpts: sqliteStorage.NewPoolOpts{
-					Path: path,
-				},
-				ProvOpts: nil,
-			})
+			var opts sqliteStorage.NewDirectStorageOpts
+			opts.Path = path
+			cl, err := sqliteStorage.NewDirectStorage(opts)
 			if err != nil {
 				panic(err)
 			}
@@ -350,12 +342,9 @@ func TestClientTransferVarious(t *testing.T) {
 		sqliteLeecherStorageTestCase(2),
 		// This should use a number of connections equal to the number of CPUs
 		sqliteLeecherStorageTestCase(0),
-		{"SqliteMemory", sqliteClientStorageFactory(func(dataDir string) sqliteStorage.NewPiecesStorageOpts {
-			return sqliteStorage.NewPiecesStorageOpts{
-				NewPoolOpts: sqliteStorage.NewPoolOpts{
-					Memory: true,
-				},
-			}
+		{"SqliteMemory", sqliteClientStorageFactory(func(dataDir string) (opts sqliteStorage.NewPiecesStorageOpts) {
+			opts.Memory = true
+			return
 		}), 0},
 	} {
 		t.Run(fmt.Sprintf("LeecherStorage=%s", ls.name), func(t *testing.T) {

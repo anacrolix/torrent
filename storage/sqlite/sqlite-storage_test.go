@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/torrent/storage"
@@ -72,7 +73,12 @@ func TestSimultaneousIncrementalBlob(t *testing.T) {
 
 func BenchmarkMarkComplete(b *testing.B) {
 	const pieceSize = test_storage.DefaultPieceSize
-	const capacity = test_storage.DefaultNumPieces * pieceSize / 2
+	const noTriggers = false
+	var capacity int64 = test_storage.DefaultNumPieces * pieceSize / 2
+	if noTriggers {
+		// Since we won't push out old pieces, we have to mark them incomplete manually.
+		capacity = 0
+	}
 	runBench := func(b *testing.B, ci storage.ClientImpl) {
 		test_storage.BenchmarkPieceMarkComplete(b, ci, pieceSize, test_storage.DefaultNumPieces, capacity)
 	}
@@ -84,6 +90,10 @@ func BenchmarkMarkComplete(b *testing.B) {
 				opts.Memory = memory
 				opts.Path = filepath.Join(b.TempDir(), "storage.db")
 				opts.Capacity = capacity
+				opts.CacheBlobs = true
+				//opts.GcBlobs = true
+				opts.BlobFlushInterval = time.Second
+				opts.NoTriggers = noTriggers
 				directBench := func(b *testing.B) {
 					ci, err := NewDirectStorage(opts)
 					if errors.Is(err, UnexpectedJournalMode) {
@@ -93,10 +103,10 @@ func BenchmarkMarkComplete(b *testing.B) {
 					defer ci.Close()
 					runBench(b, ci)
 				}
-				for _, journalMode := range []string{"", "wal", "off", "delete", "memory"} {
+				for _, journalMode := range []string{"", "wal", "off", "truncate", "delete", "persist", "memory"} {
 					opts.SetJournalMode = journalMode
 					b.Run("JournalMode="+journalMode, func(b *testing.B) {
-						for _, mmapSize := range []int64{-1, 0, 1 << 24, 1 << 25, 1 << 26} {
+						for _, mmapSize := range []int64{-1, 0, 1 << 23, 1 << 24, 1 << 25} {
 							if memory && mmapSize >= 0 {
 								continue
 							}

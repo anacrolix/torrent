@@ -251,7 +251,8 @@ type InitDbOpts struct {
 	DontInitSchema bool
 	PageSize       int
 	// If non-zero, overrides the existing setting.
-	Capacity int64
+	Capacity   int64
+	NoTriggers bool
 }
 
 // There's some overlap here with NewPoolOpts, and I haven't decided what needs to be done. For now,
@@ -300,7 +301,7 @@ func initDatabase(conn conn, opts InitDbOpts) (err error) {
 		if opts.PageSize == 0 {
 			opts.PageSize = 1 << 14
 		}
-		err = InitSchema(conn, opts.PageSize, true)
+		err = InitSchema(conn, opts.PageSize, !opts.NoTriggers)
 		if err != nil {
 			return
 		}

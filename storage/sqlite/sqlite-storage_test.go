@@ -2,6 +2,7 @@ package sqliteStorage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,6 +13,7 @@ import (
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"
+	"github.com/dustin/go-humanize"
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,10 +84,36 @@ func BenchmarkMarkComplete(b *testing.B) {
 				opts.Memory = memory
 				opts.Path = filepath.Join(b.TempDir(), "storage.db")
 				opts.Capacity = capacity
-				ci, err := NewDirectStorage(opts)
-				c.Assert(err, qt.IsNil)
-				defer ci.Close()
-				runBench(b, ci)
+				directBench := func(b *testing.B) {
+					ci, err := NewDirectStorage(opts)
+					if errors.Is(err, UnexpectedJournalMode) {
+						b.Skipf("setting journal mode %q: %v", opts.SetJournalMode, err)
+					}
+					c.Assert(err, qt.IsNil)
+					defer ci.Close()
+					runBench(b, ci)
+				}
+				for _, journalMode := range []string{"", "wal", "off", "delete", "memory"} {
+					opts.SetJournalMode = journalMode
+					b.Run("JournalMode="+journalMode, func(b *testing.B) {
+						for _, mmapSize := range []int64{-1, 0, 1 << 24, 1 << 25, 1 << 26} {
+							if memory && mmapSize >= 0 {
+								continue
+							}
+							b.Run(fmt.Sprintf("MmapSize=%s", func() string {
+								if mmapSize < 0 {
+									return "default"
+								} else {
+									return humanize.IBytes(uint64(mmapSize))
+								}
+							}()), func(b *testing.B) {
+								opts.MmapSize = mmapSize
+								opts.MmapSizeOk = true
+								directBench(b)
+							})
+						}
+					})
+				}
 			})
 			b.Run("ResourcePieces", func(b *testing.B) {
 				for _, batchWrites := range []bool{false, true} {

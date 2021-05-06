@@ -13,6 +13,7 @@ import (
 type NewDirectStorageOpts struct {
 	NewConnOpts
 	InitDbOpts
+	InitConnOpts
 }
 
 // A convenience function that creates a connection pool, resource provider, and a pieces storage
@@ -22,16 +23,9 @@ func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, er
 	if err != nil {
 		return
 	}
-	journalMode := "delete"
-	if opts.Memory {
-		journalMode = "off"
-	}
-	err = initConn(conn, InitConnOpts{
-		SetJournalMode: journalMode,
-		MmapSizeOk:     true,
-		MmapSize:       1 << 25,
-	})
+	err = initConn(conn, opts.InitConnOpts)
 	if err != nil {
+		conn.Close()
 		return
 	}
 	err = initDatabase(conn, opts.InitDbOpts)

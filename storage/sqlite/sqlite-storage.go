@@ -38,6 +38,8 @@ func (me InitConnOpts) JournalMode() string {
 	return "wal"
 }
 
+var UnexpectedJournalMode = errors.New("unexpected journal mode")
+
 func initConn(conn conn, opts InitConnOpts) error {
 	// Recursive triggers are required because we need to trim the blob_meta size after trimming to
 	// capacity. Hopefully we don't hit the recursion limit, and if we do, there's an error thrown.
@@ -53,7 +55,7 @@ func initConn(conn conn, opts InitConnOpts) error {
 		err = sqlitex.ExecTransient(conn, fmt.Sprintf(`pragma journal_mode=%s`, opts.SetJournalMode), func(stmt *sqlite.Stmt) error {
 			ret := stmt.ColumnText(0)
 			if ret != opts.SetJournalMode {
-				panic(ret)
+				return UnexpectedJournalMode
 			}
 			return nil
 		})
@@ -62,7 +64,10 @@ func initConn(conn conn, opts InitConnOpts) error {
 		}
 	}
 	if !opts.MmapSizeOk {
-		opts.MmapSize = 1 << 24 // 8 MiB
+		// Set the default. Currently it seems the library picks reasonable defaults, especially for
+		// wal.
+		opts.MmapSize = -1
+		//opts.MmapSize = 1 << 24 // 8 MiB
 	}
 	if opts.MmapSize >= 0 {
 		err = sqlitex.ExecTransient(conn, fmt.Sprintf(`pragma mmap_size=%d`, opts.MmapSize), nil)

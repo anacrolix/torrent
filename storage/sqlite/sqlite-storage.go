@@ -299,7 +299,10 @@ func newOpenUri(opts NewConnOpts) string {
 func initDatabase(conn conn, opts InitDbOpts) (err error) {
 	if !opts.DontInitSchema {
 		if opts.PageSize == 0 {
-			opts.PageSize = 1 << 14
+			// There doesn't seem to be an optimal size. I did try with the standard chunk size, but
+			// the difference is not convincing.
+
+			//opts.PageSize = 1 << 14
 		}
 		err = InitSchema(conn, opts.PageSize, !opts.NoTriggers)
 		if err != nil {

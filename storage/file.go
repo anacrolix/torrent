@@ -40,14 +40,14 @@ func NewFileWithCompletion(baseDir string, completion PieceCompletion) *fileClie
 }
 
 // File storage with data partitioned by infohash.
-func NewFileByInfoHash(baseDir string) ClientImpl {
+func NewFileByInfoHash(baseDir string) ClientImplCloser {
 	return NewFileWithCustomPathMaker(baseDir, infoHashPathMaker)
 }
 
 // Allows passing a function to determine the path for storing torrent data. The function is
 // responsible for sanitizing the info if it uses some part of it (for example sanitizing
 // info.Name).
-func NewFileWithCustomPathMaker(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string) ClientImpl {
+func NewFileWithCustomPathMaker(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string) ClientImplCloser {
 	return newFileWithCustomPathMakerAndCompletion(baseDir, pathMaker, pieceCompletionForDir(baseDir))
 }
 

@@ -36,7 +36,7 @@ func NewFile(baseDir string) ClientImplCloser {
 }
 
 func NewFileWithCompletion(baseDir string, completion PieceCompletion) *fileClientImpl {
-	return newFileWithCustomPathMakerAndCompletion(baseDir, nil, completion)
+	return NewFileWithCustomPathMakerAndCompletion(baseDir, nil, completion)
 }
 
 // File storage with data partitioned by infohash.
@@ -48,10 +48,11 @@ func NewFileByInfoHash(baseDir string) ClientImplCloser {
 // responsible for sanitizing the info if it uses some part of it (for example sanitizing
 // info.Name).
 func NewFileWithCustomPathMaker(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string) ClientImplCloser {
-	return newFileWithCustomPathMakerAndCompletion(baseDir, pathMaker, pieceCompletionForDir(baseDir))
+	return NewFileWithCustomPathMakerAndCompletion(baseDir, pathMaker, pieceCompletionForDir(baseDir))
 }
 
-func newFileWithCustomPathMakerAndCompletion(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string, completion PieceCompletion) *fileClientImpl {
+// Allows passing custom PieceCompletion 
+func NewFileWithCustomPathMakerAndCompletion(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string, completion PieceCompletion) *fileClientImpl {
 	if pathMaker == nil {
 		pathMaker = defaultPathMaker
 	}

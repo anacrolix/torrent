@@ -41,30 +41,23 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
 	ws.client.Info = info
 }
 
-func (ws *webseedPeer) _postCancel(r Request) {
-	ws.cancel(r)
-}
-
 func (ws *webseedPeer) writeInterested(interested bool) bool {
 	return true
 }
 
-func (ws *webseedPeer) cancel(r Request) bool {
+func (ws *webseedPeer) _cancel(r Request) {
 	active, ok := ws.activeRequests[r]
-	if !ok {
-		return false
+	if ok {
+		active.Cancel()
 	}
-	active.Cancel()
-	return true
 }
 
 func (ws *webseedPeer) intoSpec(r Request) webseed.RequestSpec {
 	return webseed.RequestSpec{ws.peer.t.requestOffset(r), int64(r.Length)}
 }
 
-func (ws *webseedPeer) request(r Request) bool {
+func (ws *webseedPeer) _request(r Request) {
 	ws.requesterCond.Signal()
-	return true
 }
 
 func (ws *webseedPeer) doRequest(r Request) {

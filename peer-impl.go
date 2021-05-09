@@ -10,12 +10,14 @@ import (
 type peerImpl interface {
 	updateRequests()
 	writeInterested(interested bool) bool
-	cancel(Request) bool
-	// Return true if there's room for more activity.
-	request(Request) bool
+
+	// Neither of these return buffer room anymore, because they're currently both posted. There's
+	// also PeerConn.writeBufferFull for when/where it matters.
+	_cancel(Request)
+	_request(Request)
+
 	connectionFlags() string
 	onClose()
-	_postCancel(Request)
 	onGotInfo(*metainfo.Info)
 	drop()
 	String() string

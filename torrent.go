@@ -55,9 +55,6 @@ type Torrent struct {
 	dataUploadDisallowed   bool
 	userOnWriteChunkErr    func(error)
 
-	// Determines what chunks to request from peers.
-	requestStrategy requestStrategy
-
 	closed   missinggo.Event
 	infoHash metainfo.Hash
 	pieces   []Piece
@@ -150,6 +147,29 @@ type Torrent struct {
 	pex pexState
 }
 
+func (t *Torrent) pieceAvailability(i pieceIndex) (count int) {
+	t.iterPeers(func(peer *Peer) {
+		if peer.peerHasPiece(i) {
+			count++
+		}
+	})
+	return
+}
+
+func (t *Torrent) sortPieceRequestOrder(sl []pieceIndex) {
+	if len(sl) != t.numPieces() {
+		panic(len(sl))
+	}
+	availability := make([]int, len(sl))
+	t.iterPeers(func(peer *Peer) {
+		for i := range availability {
+			if peer.peerHasPiece(i) {
+				availability[i]++
+			}
+		}
+	})
+}
+
 func (t *Torrent) numConns() int {
 	return len(t.conns)
 }
@@ -166,15 +186,8 @@ func (t *Torrent) readerReadaheadPieces() bitmap.Bitmap {
 	return t._readerReadaheadPieces
 }
 
-func (t *Torrent) ignorePieces() bitmap.Bitmap {
-	ret := t._completedPieces.Copy()
-	ret.Union(t.piecesQueuedForHash)
-	for i := 0; i < t.numPieces(); i++ {
-		if t.piece(i).hashing {
-			ret.Set(i, true)
-		}
-	}
-	return ret
+func (t *Torrent) ignorePieceForRequests(i pieceIndex) bool {
+	return !t.wantPieceIndex(i)
 }
 
 func (t *Torrent) pendingPieces() *prioritybitmap.PriorityBitmap {
@@ -413,6 +426,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 
 // This seems to be all the follow-up tasks after info is set, that can't fail.
 func (t *Torrent) onSetInfo() {
+	t.cl.clientPieceRequestOrder.addPieces(t, t.numPieces())
 	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info)
 	})
@@ -2026,30 +2040,6 @@ func (t *Torrent) piece(i int) *Piece {
 	return &t.pieces[i]
 }
 
-func (t *Torrent) requestStrategyTorrent() requestStrategyTorrent {
-	return t
-}
-
-type torrentRequestStrategyCallbacks struct {
-	t *Torrent
-}
-
-func (cb torrentRequestStrategyCallbacks) requestTimedOut(r Request) {
-	torrent.Add("Request timeouts", 1)
-	cb.t.cl.lock()
-	defer cb.t.cl.unlock()
-	cb.t.iterPeers(func(cn *Peer) {
-		if cn.peerHasPiece(pieceIndex(r.Index)) {
-			cn.updateRequests()
-		}
-	})
-
-}
-
-func (t *Torrent) requestStrategyCallbacks() requestStrategyCallbacks {
-	return torrentRequestStrategyCallbacks{t}
-}
-
 func (t *Torrent) onWriteChunkErr(err error) {
 	if t.userOnWriteChunkErr != nil {
 		go t.userOnWriteChunkErr(err)
@@ -2111,7 +2101,7 @@ func (t *Torrent) SetOnWriteChunkError(f func(error)) {
 	t.userOnWriteChunkErr = f
 }
 
-func (t *Torrent) iterPeers(f func(*Peer)) {
+func (t *Torrent) iterPeers(f func(p *Peer)) {
 	for pc := range t.conns {
 		f(&pc.Peer)
 	}

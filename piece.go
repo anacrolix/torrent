@@ -144,7 +144,7 @@ func (p *Piece) chunkIndexSpec(chunk pp.Integer) ChunkSpec {
 func (p *Piece) chunkIndexRequest(chunkIndex pp.Integer) Request {
 	return Request{
 		pp.Integer(p.index),
-		chunkIndexSpec(chunkIndex, p.length(), p.chunkSize()),
+		p.chunkIndexSpec(chunkIndex),
 	}
 }
 
@@ -259,14 +259,22 @@ func (p *Piece) allChunksDirty() bool {
 	return p._dirtyChunks.Len() == int(p.numChunks())
 }
 
-func (p *Piece) requestStrategyPiece() requestStrategyPiece {
-	return p
-}
-
 func (p *Piece) dirtyChunks() bitmap.Bitmap {
 	return p._dirtyChunks
 }
 
 func (p *Piece) State() PieceState {
 	return p.t.PieceState(p.index)
+}
+
+func (p *Piece) iterUndirtiedChunks(f func(ChunkSpec) bool) bool {
+	for i := pp.Integer(0); i < p.numChunks(); i++ {
+		if p.chunkIndexDirty(i) {
+			continue
+		}
+		if !f(p.chunkIndexSpec(i)) {
+			return false
+		}
+	}
+	return true
 }

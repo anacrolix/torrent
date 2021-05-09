@@ -337,16 +337,16 @@ func (cn *Peer) writeStatus(w io.Writer, t *Torrent) {
 		cn.statusFlags(),
 		cn.downloadRate()/(1<<10),
 	)
-	fmt.Fprintf(w, "    next pieces: %v%s\n",
-		iter.ToSlice(iter.Head(10, cn.iterPendingPiecesUntyped)),
-		func() string {
-			if cn == t.fastestPeer {
-				return " (fastest)"
-			} else {
-				return ""
-			}
-		}(),
-	)
+	//fmt.Fprintf(w, "    next pieces: %v%s\n",
+	//	iter.ToSlice(iter.Head(10, cn.iterPendingPiecesUntyped)),
+	//	func() string {
+	//		if cn == t.fastestPeer {
+	//			return " (fastest)"
+	//		} else {
+	//			return ""
+	//		}
+	//	}(),
+	//)
 }
 
 func (cn *Peer) close() {
@@ -402,7 +402,12 @@ func (cn *PeerConn) write(msg pp.Message) bool {
 	cn.wroteMsg(&msg)
 	cn.writeBuffer.Write(msg.MustMarshalBinary())
 	torrent.Add(fmt.Sprintf("messages filled of type %s", msg.Type.String()), 1)
-	return cn.writeBuffer.Len() < writeBufferHighWaterLen
+	cn.tickleWriter()
+	return !cn.writeBufferFull()
+}
+
+func (cn *PeerConn) writeBufferFull() bool {
+	return cn.writeBuffer.Len() >= writeBufferHighWaterLen
 }
 
 func (cn *PeerConn) requestMetadataPiece(index int) {
@@ -440,11 +445,7 @@ func (cn *PeerConn) requestedMetadataPiece(index int) bool {
 
 // The actual value to use as the maximum outbound requests.
 func (cn *Peer) nominalMaxRequests() (ret int) {
-	return int(clamp(
-		1,
-		int64(cn.PeerMaxRequests),
-		int64(cn.t.requestStrategy.nominalMaxRequests(cn.requestStrategyConnection())),
-	))
+	return cn.PeerMaxRequests
 }
 
 func (cn *Peer) totalExpectingTime() (ret time.Duration) {
@@ -528,12 +529,12 @@ func (pc *PeerConn) writeInterested(interested bool) bool {
 // are okay.
 type messageWriter func(pp.Message) bool
 
-func (cn *Peer) request(r Request) bool {
+func (cn *Peer) request(r Request) (more bool, err error) {
 	if _, ok := cn.requests[r]; ok {
-		panic("chunk already requested")
+		return true, nil
 	}
 	if !cn.peerHasPiece(pieceIndex(r.Index)) {
-		panic("requesting piece peer doesn't have")
+		return true, errors.New("requesting piece peer doesn't have")
 	}
 	if !cn.t.peerIsActive(cn) {
 		panic("requesting but not in active conns")
@@ -545,7 +546,7 @@ func (cn *Peer) request(r Request) bool {
 		if cn.peerAllowedFast.Get(int(r.Index)) {
 			torrent.Add("allowed fast requests sent", 1)
 		} else {
-			panic("requesting while choking and not allowed fast")
+			return cn.setInterested(true), errors.New("requesting while choked and not allowed fast")
 		}
 	}
 	if cn.t.hashingPiece(pieceIndex(r.Index)) {
@@ -563,12 +564,11 @@ func (cn *Peer) request(r Request) bool {
 	}
 	cn.validReceiveChunks[r]++
 	cn.t.pendingRequests[r]++
-	cn.t.requestStrategy.hooks().sentRequest(r)
 	cn.updateExpectingChunks()
 	for _, f := range cn.callbacks.SentRequest {
 		f(PeerRequestEvent{cn, r})
 	}
-	return cn.peerImpl.request(r)
+	return cn.peerImpl.request(r), nil
 }
 
 func (me *PeerConn) request(r Request) bool {
@@ -584,64 +584,7 @@ func (me *PeerConn) cancel(r Request) bool {
 	return me.write(makeCancelMessage(r))
 }
 
-func (cn *Peer) doRequestState() bool {
-	if !cn.t.networkingEnabled || cn.t.dataDownloadDisallowed {
-		if !cn.setInterested(false) {
-			return false
-		}
-		if len(cn.requests) != 0 {
-			for r := range cn.requests {
-				cn.deleteRequest(r)
-				// log.Printf("%p: cancelling request: %v", cn, r)
-				if !cn.peerImpl.cancel(r) {
-					return false
-				}
-			}
-		}
-	} else if len(cn.requests) <= cn.requestsLowWater {
-		filledBuffer := false
-		cn.iterPendingPieces(func(pieceIndex pieceIndex) bool {
-			cn.iterPendingRequests(pieceIndex, func(r Request) bool {
-				if !cn.setInterested(true) {
-					filledBuffer = true
-					return false
-				}
-				if len(cn.requests) >= cn.nominalMaxRequests() {
-					return false
-				}
-				// Choking is looked at here because our interest is dependent
-				// on whether we'd make requests in its absence.
-				if cn.peerChoking {
-					if !cn.peerAllowedFast.Get(bitmap.BitIndex(r.Index)) {
-						return false
-					}
-				}
-				if _, ok := cn.requests[r]; ok {
-					return true
-				}
-				filledBuffer = !cn.request(r)
-				return !filledBuffer
-			})
-			return !filledBuffer
-		})
-		if filledBuffer {
-			// If we didn't completely top up the requests, we shouldn't mark
-			// the low water, since we'll want to top up the requests as soon
-			// as we have more write buffer space.
-			return false
-		}
-		cn.requestsLowWater = len(cn.requests) / 2
-		if len(cn.requests) == 0 {
-			return cn.setInterested(false)
-		}
-	}
-	return true
-}
-
 func (cn *PeerConn) fillWriteBuffer() {
-	if !cn.doRequestState() {
-		return
-	}
 	if cn.pex.IsEnabled() {
 		if flow := cn.pex.Share(cn.write); !flow {
 			return
@@ -743,10 +686,13 @@ func (cn *PeerConn) updateRequests() {
 func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 	return func(cb iter.Callback) {
 		for _, bm := range bms {
-			bm.Sub(*skip)
 			if !iter.All(
-				func(i interface{}) bool {
-					skip.Add(i.(int))
+				func(_i interface{}) bool {
+					i := _i.(int)
+					if skip.Contains(i) {
+						return true
+					}
+					skip.Add(i)
 					return cb(i)
 				},
 				bm.Iter,
@@ -755,62 +701,6 @@ func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 			}
 		}
 	}
-}
-
-func iterUnbiasedPieceRequestOrder(cn requestStrategyConnection, f func(piece pieceIndex) bool) bool {
-	now, readahead := cn.torrent().readerPiecePriorities()
-	skip := bitmap.Flip(cn.peerPieces(), 0, cn.torrent().numPieces())
-	skip.Union(cn.torrent().ignorePieces())
-	// Return an iterator over the different priority classes, minus the skip pieces.
-	return iter.All(
-		func(_piece interface{}) bool {
-			return f(pieceIndex(_piece.(bitmap.BitIndex)))
-		},
-		iterBitmapsDistinct(&skip, now, readahead),
-		// We have to iterate _pendingPieces separately because it isn't a Bitmap.
-		func(cb iter.Callback) {
-			cn.torrent().pendingPieces().IterTyped(func(piece int) bool {
-				if skip.Contains(piece) {
-					return true
-				}
-				more := cb(piece)
-				skip.Add(piece)
-				return more
-			})
-		},
-	)
-}
-
-// The connection should download highest priority pieces first, without any inclination toward
-// avoiding wastage. Generally we might do this if there's a single connection, or this is the
-// fastest connection, and we have active readers that signal an ordering preference. It's
-// conceivable that the best connection should do this, since it's least likely to waste our time if
-// assigned to the highest priority pieces, and assigning more than one this role would cause
-// significant wasted bandwidth.
-func (cn *Peer) shouldRequestWithoutBias() bool {
-	return cn.t.requestStrategy.shouldRequestWithoutBias(cn.requestStrategyConnection())
-}
-
-func (cn *Peer) iterPendingPieces(f func(pieceIndex) bool) {
-	if !cn.t.haveInfo() {
-		return
-	}
-	if cn.closed.IsSet() {
-		return
-	}
-	cn.t.requestStrategy.iterPendingPieces(cn, f)
-}
-func (cn *Peer) iterPendingPiecesUntyped(f iter.Callback) {
-	cn.iterPendingPieces(func(i pieceIndex) bool { return f(i) })
-}
-
-func (cn *Peer) iterPendingRequests(piece pieceIndex, f func(Request) bool) bool {
-	return cn.t.requestStrategy.iterUndirtiedChunks(
-		cn.t.piece(piece).requestStrategyPiece(),
-		func(cs ChunkSpec) bool {
-			return f(Request{pp.Integer(piece), cs})
-		},
-	)
 }
 
 // check callers updaterequests
@@ -831,8 +721,7 @@ func (cn *Peer) updatePiecePriority(piece pieceIndex) bool {
 		return cn.stopRequestingPiece(piece)
 	}
 	prio := cn.getPieceInclination()[piece]
-	prio = cn.t.requestStrategy.piecePriority(cn, piece, tpp, prio)
-	return cn._pieceRequestOrder.Set(bitmap.BitIndex(piece), prio) || cn.shouldRequestWithoutBias()
+	return cn._pieceRequestOrder.Set(bitmap.BitIndex(piece), prio)
 }
 
 func (cn *Peer) getPieceInclination() []int {
@@ -1571,7 +1460,6 @@ func (c *Peer) deleteRequest(r Request) bool {
 		f(PeerRequestEvent{c, r})
 	}
 	c.updateExpectingChunks()
-	c.t.requestStrategy.hooks().deletedRequest(r)
 	pr := c.t.pendingRequests
 	pr[r]--
 	n := pr[r]
@@ -1722,10 +1610,6 @@ func (l connectionTrust) Less(r connectionTrust) bool {
 	return multiless.New().Bool(l.Implicit, r.Implicit).Int64(l.NetGoodPiecesDirted, r.NetGoodPiecesDirted).Less()
 }
 
-func (cn *Peer) requestStrategyConnection() requestStrategyConnection {
-	return cn
-}
-
 func (cn *Peer) chunksReceivedWhileExpecting() int64 {
 	return cn._chunksReceivedWhileExpecting
 }
@@ -1759,10 +1643,6 @@ func (cn *Peer) pieceRequestOrder() *prioritybitmap.PriorityBitmap {
 
 func (cn *Peer) stats() *ConnStats {
 	return &cn._stats
-}
-
-func (cn *Peer) torrent() requestStrategyTorrent {
-	return cn.t.requestStrategyTorrent()
 }
 
 func (p *Peer) TryAsPeerConn() (*PeerConn, bool) {

@@ -137,8 +137,6 @@ type ClientConfig struct {
 	// OnQuery hook func
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
 
-	DefaultRequestStrategy requestStrategyMaker
-
 	Extensions PeerExtensionBits
 
 	DisableWebtorrent bool
@@ -185,10 +183,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		CryptoSelector: mse.DefaultCryptoSelector,
 		CryptoProvides: mse.AllSupportedCrypto,
 		ListenPort:     42069,
-
-		DefaultRequestStrategy: RequestStrategyDuplicateRequestTimeout(5 * time.Second),
-
-		Extensions: defaultPeerExtensionBytes(),
+		Extensions:     defaultPeerExtensionBytes(),
 	}
 	//cc.ConnTracker.SetNoMaxEntries()
 	//cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }

@@ -81,6 +81,8 @@ type Client struct {
 	websocketTrackers websocketTrackers
 
 	activeAnnounceLimiter limiter.Instance
+
+	clientPieceRequestOrder
 }
 
 type ipStr string
@@ -292,6 +294,8 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 			go t.onWebRtcConn(dc, dcc)
 		},
 	}
+
+	go cl.requester()
 
 	return
 }
@@ -1139,7 +1143,6 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		webSeeds: make(map[string]*Peer),
 	}
 	t._pendingPieces.NewSet = priorityBitmapStableNewSet
-	t.requestStrategy = cl.config.DefaultRequestStrategy(t.requestStrategyCallbacks(), &cl._mu)
 	t.logger = cl.logger.WithContextValue(t)
 	t.setChunkSize(defaultChunkSize)
 	return

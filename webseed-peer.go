@@ -24,6 +24,10 @@ type webseedPeer struct {
 
 var _ peerImpl = (*webseedPeer)(nil)
 
+func (me *webseedPeer) writeBufferFull() bool {
+	return false
+}
+
 func (me *webseedPeer) connStatusString() string {
 	return me.client.Url
 }
@@ -99,7 +103,6 @@ func (ws *webseedPeer) connectionFlags() string {
 func (ws *webseedPeer) drop() {}
 
 func (ws *webseedPeer) updateRequests() {
-	ws.peer.doRequestState()
 }
 
 func (ws *webseedPeer) onClose() {

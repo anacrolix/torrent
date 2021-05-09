@@ -20,4 +20,5 @@ type peerImpl interface {
 	drop()
 	String() string
 	connStatusString() string
+	writeBufferFull() bool
 }

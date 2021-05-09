@@ -533,6 +533,9 @@ func (cn *Peer) request(r Request) (more bool, err error) {
 	if _, ok := cn.requests[r]; ok {
 		return true, nil
 	}
+	if cn.numLocalRequests() >= cn.nominalMaxRequests() {
+		return true, errors.New("too many outstanding requests")
+	}
 	if !cn.peerHasPiece(pieceIndex(r.Index)) {
 		return true, errors.New("requesting piece peer doesn't have")
 	}

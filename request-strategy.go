@@ -4,7 +4,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/bradfitz/iter"
@@ -115,7 +114,7 @@ func (cl *Client) doRequests() {
 				req := Request{pp.Integer(p.index), chunk}
 				_, err := peer.request(req)
 				if err == nil {
-					log.Printf("requested %v", req)
+					//log.Printf("requested %v", req)
 					break
 				}
 			}

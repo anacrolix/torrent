@@ -192,7 +192,6 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 type fileCacheClientStorageFactoryParams struct {
 	Capacity    int64
 	SetCapacity bool
-	Wrapper     func(*filecache.Cache) storage.ClientImplCloser
 }
 
 func newFileCacheClientStorageFactory(ps fileCacheClientStorageFactoryParams) storageFactory {
@@ -201,10 +200,22 @@ func newFileCacheClientStorageFactory(ps fileCacheClientStorageFactoryParams) st
 		if err != nil {
 			panic(err)
 		}
+		var sharedCapacity *int64
 		if ps.SetCapacity {
+			sharedCapacity = &ps.Capacity
 			fc.SetCapacity(ps.Capacity)
 		}
-		return ps.Wrapper(fc)
+		return struct {
+			storage.ClientImpl
+			io.Closer
+		}{
+			storage.NewResourcePiecesOpts(
+				fc.AsResourceProvider(),
+				storage.ResourcePiecesOpts{
+					Capacity: sharedCapacity,
+				}),
+			ioutil.NopCloser(nil),
+		}
 	}
 }
 
@@ -212,17 +223,13 @@ type storageFactory func(string) storage.ClientImplCloser
 
 func TestClientTransferDefault(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
-		LeecherStorage: newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
-			Wrapper: fileCachePieceResourceStorage,
-		}),
+		LeecherStorage: newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{}),
 	})
 }
 
 func TestClientTransferDefaultNoMetadata(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
-		LeecherStorage: newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
-			Wrapper: fileCachePieceResourceStorage,
-		}),
+		LeecherStorage:               newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{}),
 		LeecherStartsWithoutMetadata: true,
 	})
 }
@@ -244,16 +251,6 @@ func TestClientTransferRateLimitedDownload(t *testing.T) {
 	})
 }
 
-func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImplCloser {
-	return struct {
-		storage.ClientImpl
-		io.Closer
-	}{
-		storage.NewResourcePieces(fc.AsResourceProvider()),
-		ioutil.NopCloser(nil),
-	}
-}
-
 func testClientTransferSmallCache(t *testing.T, setReadahead bool, readahead int64) {
 	testClientTransfer(t, testClientTransferParams{
 		LeecherStorage: newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
@@ -261,7 +258,6 @@ func testClientTransferSmallCache(t *testing.T, setReadahead bool, readahead int
 			// Going below the piece length means it can't complete a piece so
 			// that it can be hashed.
 			Capacity: 5,
-			Wrapper:  fileCachePieceResourceStorage,
 		}),
 		SetReadahead: setReadahead,
 		// Can't readahead too far or the cache will thrash and drop data we
@@ -324,9 +320,7 @@ func sqliteLeecherStorageTestCase(numConns int) leecherStorageTestCase {
 func TestClientTransferVarious(t *testing.T) {
 	// Leecher storage
 	for _, ls := range []leecherStorageTestCase{
-		{"Filecache", newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{
-			Wrapper: fileCachePieceResourceStorage,
-		}), 0},
+		{"Filecache", newFileCacheClientStorageFactory(fileCacheClientStorageFactoryParams{}), 0},
 		{"Boltdb", storage.NewBoltDB, 0},
 		{"SqliteDirect", func(s string) storage.ClientImplCloser {
 			path := filepath.Join(s, "sqlite3.db")

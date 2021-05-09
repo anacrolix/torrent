@@ -98,7 +98,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	ts := &torrentStorage{}
 	t := &Torrent{
 		cl:                cl,
-		storage:           &storage.Torrent{TorrentImpl: ts},
+		storage:           &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}},
 		pieceStateChanges: pubsub.NewPubSub(),
 	}
 	require.NoError(b, t.setInfo(&metainfo.Info{

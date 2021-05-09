@@ -61,7 +61,22 @@ func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, er
 	if opts.BlobFlushInterval != 0 {
 		cl.blobFlusher = time.AfterFunc(opts.BlobFlushInterval, cl.blobFlusherFunc)
 	}
+	cl.capacity = cl.getCapacity
 	return cl, nil
+}
+
+func (cl *client) getCapacity() (ret *int64) {
+	cl.l.Lock()
+	defer cl.l.Unlock()
+	err := sqlitex.Exec(cl.conn, "select value from setting where name='capacity'", func(stmt *sqlite.Stmt) error {
+		ret = new(int64)
+		*ret = stmt.ColumnInt64(0)
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	return
 }
 
 type client struct {
@@ -71,6 +86,7 @@ type client struct {
 	blobFlusher *time.Timer
 	opts        NewDirectStorageOpts
 	closed      bool
+	capacity    func() *int64
 }
 
 func (c *client) blobFlusherFunc() {
@@ -91,7 +107,8 @@ func (c *client) flushBlobs() {
 }
 
 func (c *client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
-	return torrent{c}, nil
+	t := torrent{c}
+	return storage.TorrentImpl{Piece: t.Piece, Close: t.Close, Capacity: &c.capacity}, nil
 }
 
 func (c *client) Close() error {

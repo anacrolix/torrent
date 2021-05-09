@@ -17,9 +17,11 @@ type ClientImpl interface {
 }
 
 // Data storage bound to a torrent.
-type TorrentImpl interface {
-	Piece(metainfo.Piece) PieceImpl
-	Close() error
+type TorrentImpl struct {
+	Piece func(metainfo.Piece) PieceImpl
+	Close func() error
+	// Storages that share the same value, will provide a pointer to the same function.
+	Capacity *func() *int64
 }
 
 // Interacts with torrent piece data. Optional interfaces to implement include io.WriterTo, such as

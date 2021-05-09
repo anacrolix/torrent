@@ -17,6 +17,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/webseed"
@@ -91,8 +92,7 @@ type Torrent struct {
 	maxEstablishedConns int
 	// Set of addrs to which we're attempting to connect. Connections are
 	// half-open until all handshakes are completed.
-	halfOpen    map[string]PeerInfo
-	fastestPeer *Peer
+	halfOpen map[string]PeerInfo
 
 	// Reserve of peers to connect to. A peer can be both here and in the
 	// active connections if were told about the peer after connecting with
@@ -154,20 +154,6 @@ func (t *Torrent) pieceAvailability(i pieceIndex) (count int) {
 		}
 	})
 	return
-}
-
-func (t *Torrent) sortPieceRequestOrder(sl []pieceIndex) {
-	if len(sl) != t.numPieces() {
-		panic(len(sl))
-	}
-	availability := make([]int, len(sl))
-	t.iterPeers(func(peer *Peer) {
-		for i := range availability {
-			if peer.peerHasPiece(i) {
-				availability[i]++
-			}
-		}
-	})
 }
 
 func (t *Torrent) numConns() int {
@@ -665,8 +651,15 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	spew.Fdump(w, t.statsLocked())
 
 	peers := t.peersAsSlice()
-	sort.Slice(peers, func(i, j int) bool {
-		return worseConn(peers[i], peers[j])
+	sort.Slice(peers, func(_i, _j int) bool {
+		i := peers[_i]
+		j := peers[_j]
+		if less, ok := multiless.New().EagerSameLess(
+			i.downloadRate() == j.downloadRate(), i.downloadRate() < j.downloadRate(),
+		).LessOk(); ok {
+			return less
+		}
+		return worseConn(i, j)
 	})
 	for i, c := range peers {
 		fmt.Fprintf(w, "%2d. ", i+1)

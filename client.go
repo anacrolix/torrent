@@ -968,6 +968,10 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	return nil
 }
 
+// If peer requests are buffered on read, this instructs the amount of memory that might be used to
+// cache pending writes. Assuming 512KiB cached for sending, for 16KiB chunks.
+const localClientReqq = 1 << 5
+
 // See the order given in Transmission's tr_peerMsgsNew.
 func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 	if conn.PeerExtensionBytes.SupportsExtended() && cl.config.Extensions.SupportsExtended() {
@@ -979,11 +983,8 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 					M: map[pp.ExtensionName]pp.ExtensionNumber{
 						pp.ExtensionNameMetadata: metadataExtendedId,
 					},
-					V: cl.config.ExtendedHandshakeClientVersion,
-					// If peer requests are buffered on read, this instructs the amount of memory
-					// that might be used to cache pending writes. Assuming 512KiB cached for
-					// sending, for 16KiB chunks.
-					Reqq:         1 << 5,
+					V:            cl.config.ExtendedHandshakeClientVersion,
+					Reqq:         localClientReqq,
 					YourIp:       pp.CompactIp(conn.remoteIp()),
 					Encryption:   cl.config.HeaderObfuscationPolicy.Preferred || !cl.config.HeaderObfuscationPolicy.RequirePreferred,
 					Port:         cl.incomingPeerPort(),

@@ -20,9 +20,10 @@ type ConnStats struct {
 	BytesWritten     Count
 	BytesWrittenData Count
 
-	BytesRead           Count
-	BytesReadData       Count
-	BytesReadUsefulData Count
+	BytesRead                   Count
+	BytesReadData               Count
+	BytesReadUsefulData         Count
+	BytesReadUsefulIntendedData Count
 
 	ChunksWritten Count
 

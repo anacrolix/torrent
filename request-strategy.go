@@ -31,6 +31,10 @@ func (me *clientPieceRequestOrder) addPieces(t *Torrent, numPieces pieceIndex) {
 	}
 }
 
+func (me *clientPieceRequestOrder) Len() int {
+	return len(me.pieces)
+}
+
 func (me *clientPieceRequestOrder) removePieces(t *Torrent) {
 	newPieces := make([]pieceRequestOrderPiece, 0, len(me.pieces)-t.numPieces())
 	for _, p := range me.pieces {
@@ -118,9 +122,6 @@ func (cl *Client) doRequests() {
 	// For a given piece, the set of allPeers indices that absorbed requests for the piece.
 	contributed := make(map[int]struct{})
 	for _, p := range requestOrder.pieces {
-		if p.t.ignorePieceForRequests(p.index) {
-			continue
-		}
 		peers := allPeers[p.t]
 		torrentPiece := p.t.piece(p.index)
 		if left := storageLeft[p.t.storage.Capacity]; left != nil {
@@ -128,6 +129,9 @@ func (cl *Client) doRequests() {
 				continue
 			}
 			*left -= int64(torrentPiece.length())
+		}
+		if p.t.ignorePieceForRequests(p.index) {
+			continue
 		}
 		p.t.piece(p.index).iterUndirtiedChunks(func(chunk ChunkSpec) bool {
 			req := Request{pp.Integer(p.index), chunk}

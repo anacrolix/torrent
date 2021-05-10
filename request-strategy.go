@@ -81,7 +81,7 @@ func (cl *Client) requester() {
 		select {
 		case <-cl.closed.LockedChan(cl.locker()):
 			return
-		case <-time.After(10 * time.Millisecond):
+		case <-time.After(100 * time.Millisecond):
 		}
 	}
 }

@@ -87,7 +87,8 @@ func (cl *Client) requester() {
 }
 
 func (cl *Client) doRequests() {
-	requestOrder := clientPieceRequestOrder{}
+	requestOrder := &cl.pieceRequestOrder
+	requestOrder.pieces = requestOrder.pieces[:0]
 	allPeers := make(map[*Torrent][]*Peer)
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
 	// TorrentImpl.

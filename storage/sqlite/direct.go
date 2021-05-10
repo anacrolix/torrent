@@ -211,13 +211,6 @@ func (p2 piece) Completion() (ret storage.Completion) {
 	return
 }
 
-func (p2 piece) closeBlobIfExists() {
-	if b, ok := p2.blobs[p2.name]; ok {
-		b.Close()
-		delete(p2.blobs, p2.name)
-	}
-}
-
 func (p2 piece) getBlob() *sqlite.Blob {
 	blob, ok := p2.blobs[p2.name]
 	if !ok {

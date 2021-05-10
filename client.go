@@ -81,8 +81,6 @@ type Client struct {
 	websocketTrackers websocketTrackers
 
 	activeAnnounceLimiter limiter.Instance
-
-	clientPieceRequestOrder
 }
 
 type ipStr string

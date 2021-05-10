@@ -412,7 +412,6 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 
 // This seems to be all the follow-up tasks after info is set, that can't fail.
 func (t *Torrent) onSetInfo() {
-	t.cl.clientPieceRequestOrder.addPieces(t, t.numPieces())
 	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info)
 	})

@@ -96,9 +96,10 @@ func (cl *Client) doRequests() {
 	for _, t := range cl.torrents {
 		// TODO: We could do metainfo requests here.
 		if t.haveInfo() {
-			if t.storage.Capacity != nil {
-				if _, ok := storageLeft[t.storage.Capacity]; !ok {
-					storageLeft[t.storage.Capacity] = (*t.storage.Capacity)()
+			key := t.storage.Capacity
+			if key != nil {
+				if _, ok := storageLeft[key]; !ok {
+					storageLeft[key] = (*key)()
 				}
 			}
 			requestOrder.addPieces(t, t.numPieces())

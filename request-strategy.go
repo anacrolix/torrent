@@ -19,7 +19,7 @@ type pieceRequestOrderPiece struct {
 	index        pieceIndex
 	prio         piecePriority
 	partial      bool
-	availability int
+	availability int64
 }
 
 func (me *clientPieceRequestOrder) addPieces(t *Torrent, numPieces pieceIndex) {
@@ -45,12 +45,13 @@ func (me clientPieceRequestOrder) sort() {
 	sort.SliceStable(me.pieces, me.less)
 }
 
-func (me clientPieceRequestOrder) update() {
+func (me *clientPieceRequestOrder) update() {
 	for i := range me.pieces {
 		p := &me.pieces[i]
-		p.prio = p.t.piece(p.index).uncachedPriority()
+		tp := p.t.piece(p.index)
+		p.prio = tp.uncachedPriority()
 		p.partial = p.t.piecePartiallyDownloaded(p.index)
-		p.availability = p.t.pieceAvailability(p.index)
+		p.availability = tp.availability
 	}
 }
 
@@ -61,7 +62,7 @@ func (me clientPieceRequestOrder) less(_i, _j int) bool {
 		int(j.prio), int(i.prio),
 	).Bool(
 		j.partial, i.partial,
-	).Int(
+	).Int64(
 		i.availability, j.availability,
 	).Less()
 }

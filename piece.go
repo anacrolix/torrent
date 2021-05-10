@@ -55,6 +55,7 @@ type Piece struct {
 
 	publicPieceState PieceState
 	priority         piecePriority
+	availability     int64
 
 	// This can be locked when the Client lock is taken, but probably not vice versa.
 	pendingWritesMutex sync.Mutex

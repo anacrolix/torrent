@@ -46,7 +46,7 @@ func (me *clientPieceRequestOrder) removePieces(t *Torrent) {
 }
 
 func (me clientPieceRequestOrder) sort() {
-	sort.SliceStable(me.pieces, me.less)
+	sort.Slice(me.pieces, me.less)
 }
 
 func (me *clientPieceRequestOrder) update() {

@@ -766,7 +766,7 @@ func (cl *Client) outgoingConnection(t *Torrent, addr PeerRemoteAddr, ps PeerSou
 	c, err := cl.establishOutgoingConn(t, addr)
 	cl.lock()
 	defer cl.unlock()
-	// Don't release lock between here and addConnection, unless it's for
+	// Don't release lock between here and addPeerConn, unless it's for
 	// failure.
 	cl.noLongerHalfOpen(t, addr.String())
 	if err != nil {
@@ -951,7 +951,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	if connIsIpv6(c.conn) {
 		torrent.Add("completed handshake over ipv6", 1)
 	}
-	if err := t.addConnection(c); err != nil {
+	if err := t.addPeerConn(c); err != nil {
 		return fmt.Errorf("adding connection: %w", err)
 	}
 	defer t.dropConnection(c)

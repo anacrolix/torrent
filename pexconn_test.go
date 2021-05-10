@@ -23,7 +23,7 @@ func TestPexConnState(t *testing.T) {
 	c.PeerExtensionIDs[pp.ExtensionNamePex] = pexExtendedId
 	c.writerCond.L.Lock()
 	c.setTorrent(torrent)
-	torrent.addConnection(c)
+	torrent.addPeerConn(c)
 
 	c.pex.Init(c)
 	require.True(t, c.pex.IsEnabled(), "should get enabled")

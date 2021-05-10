@@ -1283,7 +1283,7 @@ func (t *Torrent) SetInfoBytes(b []byte) (err error) {
 }
 
 // Returns true if connection is removed from torrent.Conns.
-func (t *Torrent) deleteConnection(c *PeerConn) (ret bool) {
+func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 	if !c.closed.IsSet() {
 		panic("connection is not closed")
 		// There are behaviours prevented by the closed state that will fail
@@ -1325,7 +1325,7 @@ func (t *Torrent) assertNoPendingRequests() {
 func (t *Torrent) dropConnection(c *PeerConn) {
 	t.cl.event.Broadcast()
 	c.close()
-	if t.deleteConnection(c) {
+	if t.deletePeerConn(c) {
 		t.openNewConns()
 	}
 }
@@ -1665,7 +1665,7 @@ func (t *Torrent) reconcileHandshakeStats(c *PeerConn) {
 }
 
 // Returns true if the connection is added.
-func (t *Torrent) addConnection(c *PeerConn) (err error) {
+func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 	defer func() {
 		if err == nil {
 			torrent.Add("added connections", 1)
@@ -1683,7 +1683,7 @@ func (t *Torrent) addConnection(c *PeerConn) (err error) {
 		}
 		if left, ok := c.hasPreferredNetworkOver(c0); ok && left {
 			c0.close()
-			t.deleteConnection(c0)
+			t.deletePeerConn(c0)
 		} else {
 			return errors.New("existing connection preferred")
 		}
@@ -1694,7 +1694,7 @@ func (t *Torrent) addConnection(c *PeerConn) (err error) {
 			return errors.New("don't want conns")
 		}
 		c.close()
-		t.deleteConnection(c)
+		t.deletePeerConn(c)
 	}
 	if len(t.conns) >= t.maxEstablishedConns {
 		panic(len(t.conns))

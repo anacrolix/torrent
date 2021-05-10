@@ -975,7 +975,7 @@ const localClientReqq = 1 << 5
 // See the order given in Transmission's tr_peerMsgsNew.
 func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 	if conn.PeerExtensionBytes.SupportsExtended() && cl.config.Extensions.SupportsExtended() {
-		conn.post(pp.Message{
+		conn.write(pp.Message{
 			Type:       pp.Extended,
 			ExtendedID: pp.HandshakeExtendedID,
 			ExtendedPayload: func() []byte {
@@ -1004,11 +1004,11 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 	func() {
 		if conn.fastEnabled() {
 			if torrent.haveAllPieces() {
-				conn.post(pp.Message{Type: pp.HaveAll})
+				conn.write(pp.Message{Type: pp.HaveAll})
 				conn.sentHaves.AddRange(0, bitmap.BitIndex(conn.t.NumPieces()))
 				return
 			} else if !torrent.haveAnyPieces() {
-				conn.post(pp.Message{Type: pp.HaveNone})
+				conn.write(pp.Message{Type: pp.HaveNone})
 				conn.sentHaves.Clear()
 				return
 			}
@@ -1016,7 +1016,7 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 		conn.postBitfield()
 	}()
 	if conn.PeerExtensionBytes.SupportsDHT() && cl.config.Extensions.SupportsDHT() && cl.haveDhtServer() {
-		conn.post(pp.Message{
+		conn.write(pp.Message{
 			Type: pp.Port,
 			Port: cl.dhtPort(),
 		})
@@ -1074,12 +1074,12 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 		return err
 	case pp.RequestMetadataExtensionMsgType:
 		if !t.haveMetadataPiece(piece) {
-			c.post(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
+			c.write(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
 			return nil
 		}
 		start := (1 << 14) * piece
 		c.logger.WithDefaultLevel(log.Debug).Printf("sending metadata piece %d", piece)
-		c.post(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]))
+		c.write(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]))
 		return nil
 	case pp.RejectMetadataExtensionMsgType:
 		return nil

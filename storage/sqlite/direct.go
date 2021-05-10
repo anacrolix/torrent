@@ -133,17 +133,17 @@ type piece struct {
 	*client
 }
 
-func (p2 piece) doAtIoWithBlob(
+func (p piece) doAtIoWithBlob(
 	atIo func(*sqlite.Blob) func([]byte, int64) (int, error),
-	p []byte,
+	b []byte,
 	off int64,
 ) (n int, err error) {
-	p2.l.Lock()
-	defer p2.l.Unlock()
-	if !p2.opts.CacheBlobs {
-		defer p2.forgetBlob()
+	p.l.Lock()
+	defer p.l.Unlock()
+	if !p.opts.CacheBlobs {
+		defer p.forgetBlob()
 	}
-	n, err = atIo(p2.getBlob())(p, off)
+	n, err = atIo(p.getBlob())(b, off)
 	if err == nil {
 		return
 	}
@@ -151,59 +151,59 @@ func (p2 piece) doAtIoWithBlob(
 	if !errors.As(err, &se) {
 		return
 	}
-	if se.Code != sqlite.SQLITE_ABORT && !(p2.opts.GcBlobs && se.Code == sqlite.SQLITE_ERROR && se.Msg == "invalid blob") {
+	if se.Code != sqlite.SQLITE_ABORT && !(p.opts.GcBlobs && se.Code == sqlite.SQLITE_ERROR && se.Msg == "invalid blob") {
 		return
 	}
-	p2.forgetBlob()
-	return atIo(p2.getBlob())(p, off)
+	p.forgetBlob()
+	return atIo(p.getBlob())(b, off)
 }
 
-func (p2 piece) ReadAt(p []byte, off int64) (n int, err error) {
-	return p2.doAtIoWithBlob(func(blob *sqlite.Blob) func([]byte, int64) (int, error) {
+func (p piece) ReadAt(b []byte, off int64) (n int, err error) {
+	return p.doAtIoWithBlob(func(blob *sqlite.Blob) func([]byte, int64) (int, error) {
 		return blob.ReadAt
-	}, p, off)
+	}, b, off)
 }
 
-func (p2 piece) WriteAt(p []byte, off int64) (n int, err error) {
-	return p2.doAtIoWithBlob(func(blob *sqlite.Blob) func([]byte, int64) (int, error) {
+func (p piece) WriteAt(b []byte, off int64) (n int, err error) {
+	return p.doAtIoWithBlob(func(blob *sqlite.Blob) func([]byte, int64) (int, error) {
 		return blob.WriteAt
-	}, p, off)
+	}, b, off)
 }
 
-func (p2 piece) MarkComplete() error {
-	p2.l.Lock()
-	defer p2.l.Unlock()
-	err := sqlitex.Exec(p2.conn, "update blob set verified=true where name=?", nil, p2.name)
+func (p piece) MarkComplete() error {
+	p.l.Lock()
+	defer p.l.Unlock()
+	err := sqlitex.Exec(p.conn, "update blob set verified=true where name=?", nil, p.name)
 	if err != nil {
 		return err
 	}
-	changes := p2.conn.Changes()
+	changes := p.conn.Changes()
 	if changes != 1 {
 		panic(changes)
 	}
 	return nil
 }
 
-func (p2 piece) forgetBlob() {
-	blob, ok := p2.blobs[p2.name]
+func (p piece) forgetBlob() {
+	blob, ok := p.blobs[p.name]
 	if !ok {
 		return
 	}
 	blob.Close()
-	delete(p2.blobs, p2.name)
+	delete(p.blobs, p.name)
 }
 
-func (p2 piece) MarkNotComplete() error {
-	return sqlitex.Exec(p2.conn, "update blob set verified=false where name=?", nil, p2.name)
+func (p piece) MarkNotComplete() error {
+	return sqlitex.Exec(p.conn, "update blob set verified=false where name=?", nil, p.name)
 }
 
-func (p2 piece) Completion() (ret storage.Completion) {
-	p2.l.Lock()
-	defer p2.l.Unlock()
-	err := sqlitex.Exec(p2.conn, "select verified from blob where name=?", func(stmt *sqlite.Stmt) error {
+func (p piece) Completion() (ret storage.Completion) {
+	p.l.Lock()
+	defer p.l.Unlock()
+	err := sqlitex.Exec(p.conn, "select verified from blob where name=?", func(stmt *sqlite.Stmt) error {
 		ret.Complete = stmt.ColumnInt(0) != 0
 		return nil
-	}, p2.name)
+	}, p.name)
 	ret.Ok = err == nil
 	if err != nil {
 		panic(err)
@@ -211,26 +211,26 @@ func (p2 piece) Completion() (ret storage.Completion) {
 	return
 }
 
-func (p2 piece) getBlob() *sqlite.Blob {
-	blob, ok := p2.blobs[p2.name]
+func (p piece) getBlob() *sqlite.Blob {
+	blob, ok := p.blobs[p.name]
 	if !ok {
-		rowid, err := rowidForBlob(p2.conn, p2.name, p2.length)
+		rowid, err := rowidForBlob(p.conn, p.name, p.length)
 		if err != nil {
 			panic(err)
 		}
-		blob, err = p2.conn.OpenBlob("main", "blob", "data", rowid, true)
+		blob, err = p.conn.OpenBlob("main", "blob", "data", rowid, true)
 		if err != nil {
 			panic(err)
 		}
-		if p2.opts.GcBlobs {
+		if p.opts.GcBlobs {
 			herp := new(byte)
 			runtime.SetFinalizer(herp, func(*byte) {
-				p2.l.Lock()
-				defer p2.l.Unlock()
+				p.l.Lock()
+				defer p.l.Unlock()
 				blob.Close()
 			})
 		}
-		p2.blobs[p2.name] = blob
+		p.blobs[p.name] = blob
 	}
 	return blob
 }

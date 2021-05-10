@@ -165,6 +165,7 @@ func (cl *Client) doRequests() {
 		})
 		// Move requestees for this piece to the back.
 		lastIndex := len(peers) - 1
+		// Probably should sort the contributees, to make the ordering more deterministic.
 		for peerIndex := range contributed {
 			peers[peerIndex], peers[lastIndex] = peers[lastIndex], peers[peerIndex]
 			delete(contributed, peerIndex)
@@ -179,33 +180,3 @@ func (cl *Client) doRequests() {
 		})
 	}
 }
-
-//func (requestStrategyDefaults) iterUndirtiedChunks(p requestStrategyPiece, f func(ChunkSpec) bool) bool {
-//	chunkIndices := p.dirtyChunks().Copy()
-//	chunkIndices.FlipRange(0, bitmap.BitIndex(p.numChunks()))
-//	return iter.ForPerm(chunkIndices.Len(), func(i int) bool {
-//		ci, err := chunkIndices.RB.Select(uint32(i))
-//		if err != nil {
-//			panic(err)
-//		}
-//		return f(p.chunkIndexRequest(pp.Integer(ci)).ChunkSpec)
-//	})
-//}
-
-//
-//func iterUnbiasedPieceRequestOrder(
-//	cn requestStrategyConnection,
-//	f func(piece pieceIndex) bool,
-//	pieceRequestOrder []pieceIndex,
-//) bool {
-//	cn.torrent().sortPieceRequestOrder(pieceRequestOrder)
-//	for _, i := range pieceRequestOrder {
-//		if !cn.peerHasPiece(i) || cn.torrent().ignorePieceForRequests(i) {
-//			continue
-//		}
-//		if !f(i) {
-//			return false
-//		}
-//	}
-//	return true
-//}

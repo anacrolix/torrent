@@ -36,7 +36,6 @@ var (
 	// Count of connections to peer with same client ID.
 	connsToSelf        = expvar.NewInt("connsToSelf")
 	receivedKeepalives = expvar.NewInt("receivedKeepalives")
-	postedKeepalives   = expvar.NewInt("postedKeepalives")
 	// Requests received for pieces we don't have.
 	requestsReceivedForMissingPieces = expvar.NewInt("requestsReceivedForMissingPieces")
 	requestedChunkLengths            = expvar.NewMap("requestedChunkLengths")

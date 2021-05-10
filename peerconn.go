@@ -680,7 +680,7 @@ func (cn *PeerConn) writer(keepAliveTimeout time.Duration) {
 		}
 		if cn.writeBuffer.Len() == 0 && time.Since(lastWrite) >= keepAliveTimeout && cn.useful() {
 			cn.writeBuffer.Write(pp.Message{Keepalive: true}.MustMarshalBinary())
-			postedKeepalives.Add(1)
+			torrent.Add("written keepalives", 1)
 		}
 		if cn.writeBuffer.Len() == 0 {
 			// TODO: Minimize wakeups....

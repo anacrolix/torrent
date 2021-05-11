@@ -3,6 +3,7 @@ package torrent
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -19,7 +20,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/prioritybitmap"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/pkg/errors"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/mse"
@@ -1291,7 +1291,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		var d pp.ExtendedHandshakeMessage
 		if err := bencode.Unmarshal(payload, &d); err != nil {
 			c.logger.Printf("error parsing extended handshake message %q: %s", payload, err)
-			return errors.Wrap(err, "unmarshalling extended handshake payload")
+			return fmt.Errorf("unmarshalling extended handshake payload: %w", err)
 		}
 		if cb := c.callbacks.ReadExtendedHandshake; cb != nil {
 			cb(c, &d)
@@ -1314,7 +1314,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		}
 		if d.MetadataSize != 0 {
 			if err = t.setMetadataSize(d.MetadataSize); err != nil {
-				return errors.Wrapf(err, "setting metadata size to %d", d.MetadataSize)
+				return fmt.Errorf("setting metadata size to %d: %w", d.MetadataSize, err)
 			}
 		}
 		c.requestPendingMetadata()

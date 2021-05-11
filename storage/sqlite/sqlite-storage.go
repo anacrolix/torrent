@@ -26,6 +26,7 @@ import (
 type conn = *sqlite.Conn
 
 type InitConnOpts struct {
+	SetSynchronous string
 	SetJournalMode string
 	MmapSizeOk     bool  // If false, a package-specific default will be used.
 	MmapSize       int64 // If MmapSizeOk is set, use sqlite default if < 0, otherwise this value.
@@ -40,16 +41,18 @@ func (me InitConnOpts) JournalMode() string {
 
 var UnexpectedJournalMode = errors.New("unexpected journal mode")
 
-func initConn(conn conn, opts InitConnOpts) error {
+func initConn(conn conn, opts InitConnOpts) (err error) {
 	// Recursive triggers are required because we need to trim the blob_meta size after trimming to
 	// capacity. Hopefully we don't hit the recursion limit, and if we do, there's an error thrown.
-	err := sqlitex.ExecTransient(conn, "pragma recursive_triggers=on", nil)
+	err = sqlitex.ExecTransient(conn, "pragma recursive_triggers=on", nil)
 	if err != nil {
 		return err
 	}
-	err = sqlitex.ExecTransient(conn, `pragma synchronous=off`, nil)
-	if err != nil {
-		return err
+	if opts.SetSynchronous != "" {
+		err = sqlitex.ExecTransient(conn, `pragma synchronous=`+opts.SetSynchronous, nil)
+		if err != nil {
+			return err
+		}
 	}
 	if opts.SetJournalMode != "" {
 		err = sqlitex.ExecTransient(conn, fmt.Sprintf(`pragma journal_mode=%s`, opts.SetJournalMode), func(stmt *sqlite.Stmt) error {

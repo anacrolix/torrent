@@ -27,6 +27,7 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/google/btree v1.0.1
 	github.com/gorilla/websocket v1.4.2
+	github.com/jackc/pgx/v4 v4.11.0 // indirect
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/pion/datachannel v1.4.21
 	github.com/pion/rtp v1.6.5 // indirect

@@ -26,6 +26,7 @@ func defaultPeerExtensionBytes() PeerExtensionBits {
 
 func init() {
 	torrent.Set("peers supporting extension", &peersSupportingExtension)
+	torrent.Set("chunks received", &chunksReceived)
 }
 
 // I could move a lot of these counters to their own file, but I suspect they
@@ -33,6 +34,7 @@ func init() {
 var (
 	torrent                  = expvar.NewMap("torrent")
 	peersSupportingExtension expvar.Map
+	chunksReceived           expvar.Map
 
 	pieceHashedCorrect    = expvar.NewInt("pieceHashedCorrect")
 	pieceHashedNotCorrect = expvar.NewInt("pieceHashedNotCorrect")

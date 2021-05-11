@@ -1357,22 +1357,22 @@ func (cn *PeerConn) rw() io.ReadWriter {
 func (c *Peer) receiveChunk(msg *pp.Message) error {
 	t := c.t
 	cl := t.cl
-	torrent.Add("chunks received", 1)
+	chunksReceived.Add("total", 1)
 
 	req := newRequestFromMessage(msg)
 
 	if c.peerChoking {
-		torrent.Add("chunks received while choking", 1)
+		chunksReceived.Add("while choked", 1)
 	}
 
 	if c.validReceiveChunks[req] <= 0 {
-		torrent.Add("chunks received unexpected", 1)
+		chunksReceived.Add("unexpected", 1)
 		return errors.New("received unexpected chunk")
 	}
 	c.decExpectedChunkReceive(req)
 
 	if c.peerChoking && c.peerAllowedFast.Get(int(req.Index)) {
-		torrent.Add("chunks received due to allowed fast", 1)
+		chunksReceived.Add("due to allowed fast", 1)
 	}
 
 	// TODO: This needs to happen immediately, to prevent cancels occurring asynchronously when have
@@ -1389,13 +1389,13 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 				c._chunksReceivedWhileExpecting++
 			}
 		} else {
-			torrent.Add("chunks received unwanted", 1)
+			chunksReceived.Add("unwanted", 1)
 		}
 	}
 
 	// Do we actually want this chunk?
 	if t.haveChunk(req) {
-		torrent.Add("chunks received wasted", 1)
+		chunksReceived.Add("wasted", 1)
 		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
 		return nil
 	}

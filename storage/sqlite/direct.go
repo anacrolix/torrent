@@ -221,6 +221,8 @@ func (p piece) forgetBlob() {
 }
 
 func (p piece) MarkNotComplete() error {
+	p.l.Lock()
+	defer p.l.Unlock()
 	return sqlitex.Exec(p.conn, "update blob set verified=false where name=?", nil, p.name)
 }
 

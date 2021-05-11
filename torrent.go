@@ -2175,7 +2175,6 @@ func (t *Torrent) addWebSeed(url string) {
 			outgoing:                 true,
 			Network:                  "http",
 			reconciledHandshakeStats: true,
-			peerSentHaveAll:          true,
 			// TODO: Raise this limit, and instead limit concurrent fetches.
 			PeerMaxRequests: 32,
 			RemoteAddr:      remoteAddrFromUrl(url),

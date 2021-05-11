@@ -1308,7 +1308,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		c.PeerPrefersEncryption = d.Encryption
 		for name, id := range d.M {
 			if _, ok := c.PeerExtensionIDs[name]; !ok {
-				torrent.Add(fmt.Sprintf("peers supporting extension %q", name), 1)
+				peersSupportingExtension.Add(string(name), 1)
 			}
 			c.PeerExtensionIDs[name] = id
 		}

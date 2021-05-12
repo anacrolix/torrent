@@ -83,18 +83,33 @@ func BenchmarkMarkComplete(b *testing.B) {
 		test_storage.BenchmarkPieceMarkComplete(b, ci, pieceSize, test_storage.DefaultNumPieces, capacity)
 	}
 	c := qt.New(b)
+	b.Run("CustomDirect", func(b *testing.B) {
+		var opts NewDirectStorageOpts
+		opts.Capacity = capacity
+		opts.BlobFlushInterval = time.Second
+		opts.CacheBlobs = true
+		opts.SetJournalMode = "off"
+		benchOpts := func(b *testing.B) {
+			opts.Path = filepath.Join(b.TempDir(), "storage.db")
+			ci, err := NewDirectStorage(opts)
+			c.Assert(err, qt.IsNil)
+			defer ci.Close()
+			runBench(b, ci)
+		}
+		b.Run("Control", benchOpts)
+	})
 	for _, memory := range []bool{false, true} {
 		b.Run(fmt.Sprintf("Memory=%v", memory), func(b *testing.B) {
 			b.Run("Direct", func(b *testing.B) {
 				var opts NewDirectStorageOpts
 				opts.Memory = memory
-				opts.Path = filepath.Join(b.TempDir(), "storage.db")
 				opts.Capacity = capacity
 				opts.CacheBlobs = true
 				//opts.GcBlobs = true
 				opts.BlobFlushInterval = time.Second
 				opts.NoTriggers = noTriggers
 				directBench := func(b *testing.B) {
+					opts.Path = filepath.Join(b.TempDir(), "storage.db")
 					ci, err := NewDirectStorage(opts)
 					if errors.Is(err, UnexpectedJournalMode) {
 						b.Skipf("setting journal mode %q: %v", opts.SetJournalMode, err)

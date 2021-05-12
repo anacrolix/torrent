@@ -116,6 +116,13 @@ func writeDhtServerStatus(w io.Writer, s DhtServer) {
 	spew.Fdump(w, dhtStats)
 }
 
+// Passed Function will be executed when the Client Closes
+func (cl *Client) DoOnClose(f func()) {
+	cl.rLock()
+	defer cl.rUnlock()
+	cl.onClose = append(cl.onClose, f)
+}
+
 // Writes out a human readable status of the client, such as for writing to a
 // HTTP status page.
 func (cl *Client) WriteStatus(_w io.Writer) {

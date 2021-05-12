@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -366,8 +367,19 @@ func (cn *Peer) writeStatus(w io.Writer, t *Torrent) {
 		cn.downloadRate()/(1<<10),
 	)
 	fmt.Fprintf(w, "    requested pieces:")
+	type pieceNumRequestsType struct {
+		piece       pieceIndex
+		numRequests int
+	}
+	var pieceNumRequests []pieceNumRequestsType
 	for piece, count := range cn.numRequestsByPiece() {
-		fmt.Fprintf(w, " %v (%v)", piece, count)
+		pieceNumRequests = append(pieceNumRequests, pieceNumRequestsType{piece, count})
+	}
+	sort.Slice(pieceNumRequests, func(i, j int) bool {
+		return pieceNumRequests[i].piece < pieceNumRequests[j].piece
+	})
+	for _, elem := range pieceNumRequests {
+		fmt.Fprintf(w, " %v(%v)", elem.piece, elem.numRequests)
 	}
 	fmt.Fprintf(w, "\n")
 }

@@ -180,10 +180,7 @@ func (cl *Client) doRequests() {
 		}
 		sortPeersForPiece := func() {
 			sort.Slice(peersForPiece, func(i, j int) bool {
-				return multiless.New().Bool(
-					peersForPiece[j].canFitRequest(),
-					peersForPiece[i].canFitRequest(),
-				).Int(
+				return multiless.New().Int(
 					peersForPiece[i].requestsInPiece,
 					peersForPiece[j].requestsInPiece,
 				).Int(
@@ -207,14 +204,27 @@ func (cl *Client) doRequests() {
 			req := Request{pp.Integer(p.index), chunk}
 			pendingChunksRemaining--
 			sortPeersForPiece()
-			for i, peer := range peersForPiece {
-				if i > pendingChunksRemaining {
+			skipped := 0
+			// Try up to the number of peers that could legitimately receive the request equal to
+			// the number of chunks left. This should ensure that only the best peers serve the last
+			// few chunks in a piece.
+			for _, peer := range peersForPiece {
+				if !peer.canFitRequest() || !peer.hasPiece(p.index) || (!peer.pieceAllowedFast(p.index) && peer.choking()) {
+					continue
+				}
+				if skipped > pendingChunksRemaining {
 					break
 				}
-				if peer.hasExistingRequest(req) && peer.canFitRequest() {
-					peer.addNextRequest(req)
-					return true
+				if !peer.hasExistingRequest(req) {
+					skipped++
+					continue
 				}
+				if !peer.pieceAllowedFast(p.index) {
+					// We must stay interested for this.
+					peer.nextInterest = true
+				}
+				peer.addNextRequest(req)
+				return true
 			}
 			for _, peer := range peersForPiece {
 				if !peer.canFitRequest() {
@@ -236,6 +246,9 @@ func (cl *Client) doRequests() {
 			}
 			return true
 		})
+		if pendingChunksRemaining != 0 {
+			panic(pendingChunksRemaining)
+		}
 		for _, peer := range peersForPiece {
 			if peer.canRequestPiece(p.index) {
 				peer.requestablePiecesRemaining--

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 	"sync"
 	"text/tabwriter"
 	"time"
@@ -553,13 +554,17 @@ func (t *Torrent) newMetadataExtensionMessage(c *PeerConn, msgType int, piece in
 }
 
 type pieceAvailabilityRun struct {
-	availability int64
 	count        pieceIndex
+	availability int64
+}
+
+func (me pieceAvailabilityRun) String() string {
+	return fmt.Sprintf("%v(%v)", me.count, me.availability)
 }
 
 func (t *Torrent) pieceAvailabilityRuns() (ret []pieceAvailabilityRun) {
 	rle := missinggo.NewRunLengthEncoder(func(el interface{}, count uint64) {
-		ret = append(ret, pieceAvailabilityRun{el.(int64), int(count)})
+		ret = append(ret, pieceAvailabilityRun{availability: el.(int64), count: int(count)})
 	})
 	for _, p := range t.pieces {
 		rle.Append(p.availability, 1)
@@ -652,7 +657,12 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	if t.info != nil {
 		fmt.Fprintf(w, "Num Pieces: %d (%d completed)\n", t.numPieces(), t.numPiecesCompleted())
 		fmt.Fprintf(w, "Piece States: %s\n", t.pieceStateRuns())
-		fmt.Fprintf(w, "Piece availability: %v\n", t.pieceAvailabilityRuns())
+		fmt.Fprintf(w, "Piece availability: %v\n", strings.Join(func() (ret []string) {
+			for _, run := range t.pieceAvailabilityRuns() {
+				ret = append(ret, run.String())
+			}
+			return
+		}(), " "))
 	}
 	fmt.Fprintf(w, "Reader Pieces:")
 	t.forReaderOffsetPieces(func(begin, end pieceIndex) (again bool) {

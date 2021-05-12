@@ -554,6 +554,8 @@ func TestPeerInvalidHave(t *testing.T) {
 		t: tt,
 	}}
 	cn.peerImpl = cn
+	cl.lock()
+	defer cl.unlock()
 	assert.NoError(t, cn.peerSentHave(0))
 	assert.Error(t, cn.peerSentHave(1))
 }

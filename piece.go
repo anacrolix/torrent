@@ -11,33 +11,6 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-// Describes the importance of obtaining a particular piece.
-type piecePriority byte
-
-func (pp *piecePriority) Raise(maybe piecePriority) bool {
-	if maybe > *pp {
-		*pp = maybe
-		return true
-	}
-	return false
-}
-
-// Priority for use in PriorityBitmap
-func (me piecePriority) BitmapPriority() int {
-	return -int(me)
-}
-
-const (
-	PiecePriorityNone      piecePriority = iota // Not wanted. Must be the zero value.
-	PiecePriorityNormal                         // Wanted.
-	PiecePriorityHigh                           // Wanted a lot.
-	PiecePriorityReadahead                      // May be required soon.
-	// Succeeds a piece where a read occurred. Currently the same as Now,
-	// apparently due to issues with caching.
-	PiecePriorityNext
-	PiecePriorityNow // A Reader is reading in this piece. Highest urgency.
-)
-
 type Piece struct {
 	// The completed piece SHA1 hash, from the metainfo "pieces" field.
 	hash  *metainfo.Hash
@@ -272,7 +245,7 @@ func (p *Piece) State() PieceState {
 	return p.t.PieceState(p.index)
 }
 
-func (p *Piece) iterUndirtiedChunks(f func(ChunkSpec) bool) bool {
+func (p *Piece) iterUndirtiedChunks(f func(cs ChunkSpec) bool) bool {
 	for i := pp.Integer(0); i < p.numChunks(); i++ {
 		if p.chunkIndexDirty(i) {
 			continue

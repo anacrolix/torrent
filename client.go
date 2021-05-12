@@ -25,6 +25,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
 	"github.com/anacrolix/torrent/internal/limiter"
+	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/webtorrent"
 	"github.com/davecgh/go-spew/spew"
@@ -82,7 +83,7 @@ type Client struct {
 
 	activeAnnounceLimiter limiter.Instance
 
-	pieceRequestOrder clientPieceRequestOrder
+	pieceRequestOrder request_strategy.ClientPieceOrder
 }
 
 type ipStr string

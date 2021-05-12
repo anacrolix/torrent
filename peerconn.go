@@ -173,15 +173,16 @@ func (cn *Peer) expectingChunks() bool {
 	if !cn.interested {
 		return false
 	}
-	if !cn.peerChoking {
-		return true
-	}
 	for r := range cn.requests {
-		if cn.peerAllowedFast.Contains(bitmap.BitIndex(r.Index)) {
+		if !cn.remoteChokingPiece(r.Index.Int()) {
 			return true
 		}
 	}
 	return false
+}
+
+func (cn *Peer) remoteChokingPiece(piece pieceIndex) bool {
+	return cn.peerChoking && !cn.peerAllowedFast.Contains(bitmap.BitIndex(piece))
 }
 
 // Returns true if the connection is over IPv6.
@@ -542,13 +543,7 @@ func (pc *PeerConn) writeInterested(interested bool) bool {
 // are okay.
 type messageWriter func(pp.Message) bool
 
-func (cn *Peer) request(r Request) error {
-	if _, ok := cn.requests[r]; ok {
-		return nil
-	}
-	if cn.numLocalRequests() >= cn.nominalMaxRequests() {
-		return errors.New("too many outstanding requests")
-	}
+func (cn *Peer) shouldRequest(r Request) error {
 	if !cn.peerHasPiece(pieceIndex(r.Index)) {
 		return errors.New("requesting piece peer doesn't have")
 	}
@@ -564,15 +559,18 @@ func (cn *Peer) request(r Request) error {
 	if cn.t.pieceQueuedForHash(pieceIndex(r.Index)) {
 		panic("piece is queued for hash")
 	}
-	if !cn.setInterested(true) {
-		return errors.New("write buffer full after expressing interest")
+	return nil
+}
+
+func (cn *Peer) request(r Request) error {
+	if err := cn.shouldRequest(r); err != nil {
+		panic(err)
 	}
-	if cn.peerChoking {
-		if cn.peerAllowedFast.Get(int(r.Index)) {
-			torrent.Add("allowed fast requests sent", 1)
-		} else {
-			errors.New("peer choking and piece not in allowed fast set")
-		}
+	if _, ok := cn.requests[r]; ok {
+		return nil
+	}
+	if cn.numLocalRequests() >= cn.nominalMaxRequests() {
+		return errors.New("too many outstanding requests")
 	}
 	if cn.requests == nil {
 		cn.requests = make(map[Request]struct{})

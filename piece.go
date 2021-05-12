@@ -222,10 +222,7 @@ func (p *Piece) SetPriority(prio piecePriority) {
 	p.t.updatePiecePriority(p.index)
 }
 
-func (p *Piece) uncachedPriority() (ret piecePriority) {
-	if p.t.pieceComplete(p.index) || p.t.pieceQueuedForHash(p.index) || p.t.hashingPiece(p.index) {
-		return PiecePriorityNone
-	}
+func (p *Piece) purePriority() (ret piecePriority) {
 	for _, f := range p.files {
 		ret.Raise(f.prio)
 	}
@@ -240,6 +237,13 @@ func (p *Piece) uncachedPriority() (ret piecePriority) {
 	}
 	ret.Raise(p.priority)
 	return
+}
+
+func (p *Piece) uncachedPriority() (ret piecePriority) {
+	if p.t.pieceComplete(p.index) || p.t.pieceQueuedForHash(p.index) || p.t.hashingPiece(p.index) {
+		return PiecePriorityNone
+	}
+	return p.purePriority()
 }
 
 // Tells the Client to refetch the completion status from storage, updating priority etc. if

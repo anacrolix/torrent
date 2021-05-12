@@ -151,6 +151,16 @@ func min(as ...int64) int64 {
 	return ret
 }
 
+func minInt(as ...int) int {
+	ret := as[0]
+	for _, a := range as[1:] {
+		if a < ret {
+			ret = a
+		}
+	}
+	return ret
+}
+
 var unlimited = rate.NewLimiter(rate.Inf, 0)
 
 type (

@@ -40,6 +40,7 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 			fmt.Printf("%v: getting torrent info for %q\n", time.Since(start), t.Name())
 			<-t.GotInfo()
 		}
+		lastStats := t.Stats()
 		var lastLine string
 		for range time.Tick(time.Second) {
 			var completedPieces, partialPieces int
@@ -52,8 +53,9 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 					partialPieces += r.Length
 				}
 			}
+			stats := t.Stats()
 			line := fmt.Sprintf(
-				"%v: downloading %q: %s/%s, %d/%d pieces completed (%d partial)\n",
+				"%v: downloading %q: %s/%s, %d/%d pieces completed (%d partial): %v/s\n",
 				time.Since(start),
 				t.Name(),
 				humanize.Bytes(uint64(t.BytesCompleted())),
@@ -61,6 +63,7 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 				completedPieces,
 				t.NumPieces(),
 				partialPieces,
+				humanize.Bytes(uint64(stats.BytesReadUsefulData.Int64()-lastStats.BytesReadUsefulData.Int64())),
 			)
 			if line != lastLine {
 				lastLine = line
@@ -69,6 +72,7 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 			if pieceStates {
 				fmt.Println(psrs)
 			}
+			lastStats = stats
 		}
 	}()
 }
@@ -155,7 +159,6 @@ func addTorrents(client *torrent.Client) error {
 
 var flags struct {
 	Debug bool
-	Stats *bool
 
 	*DownloadCmd      `arg:"subcommand:download"`
 	*ListFilesCmd     `arg:"subcommand:list-files"`
@@ -176,8 +179,9 @@ type DownloadCmd struct {
 	PublicIP        net.IP
 	Progress        bool `default:"true"`
 	PieceStates     bool
-	Quiet           bool `help:"discard client logging"`
-	Dht             bool `default:"true"`
+	Quiet           bool  `help:"discard client logging"`
+	Stats           *bool `help:"print stats at termination"`
+	Dht             bool  `default:"true"`
 
 	TcpPeers        bool `default:"true"`
 	UtpPeers        bool `default:"true"`

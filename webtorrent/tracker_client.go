@@ -67,7 +67,9 @@ type onDataChannelOpen func(_ datachannel.ReadWriteCloser, dcc DataChannelContex
 
 func (tc *TrackerClient) doWebsocket() error {
 	metrics.Add("websocket dials", 1)
+	tc.mu.Lock()
 	tc.stats.Dials++
+	tc.mu.Unlock()
 	c, _, err := websocket.DefaultDialer.Dial(tc.Url, nil)
 	if err != nil {
 		return fmt.Errorf("dialing tracker: %w", err)

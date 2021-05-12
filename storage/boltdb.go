@@ -1,3 +1,5 @@
+// +build !noboltdb
+
 package storage
 
 import (

@@ -1,4 +1,4 @@
-// +build cgo
+// +build cgo,!nosqlite3
 
 package storage
 

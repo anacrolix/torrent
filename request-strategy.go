@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"log"
 	"time"
 	"unsafe"
 
@@ -95,7 +94,7 @@ func applyPeerNextRequestState(_p request_strategy.PeerId, rp request_strategy.P
 		if err != nil {
 			panic(err)
 		} else {
-			log.Print(req)
+			//log.Print(req)
 		}
 	}
 }

@@ -1,12 +1,12 @@
 package request_strategy
 
 import (
+	"math"
 	"sort"
 
 	"github.com/anacrolix/multiless"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/types"
-	"github.com/davecgh/go-spew/spew"
 )
 
 type (
@@ -164,23 +164,27 @@ func (requestOrder *ClientPieceOrder) DoRequests(torrents []*Torrent) map[PeerId
 		if f := torrentPiece.IterPendingChunks; f != nil {
 			f(func(chunk types.ChunkSpec) {
 				req := Request{pp.Integer(p.index), chunk}
-				pendingChunksRemaining--
+				defer func() { pendingChunksRemaining-- }()
 				sortPeersForPiece()
-				spew.Dump(peersForPiece)
 				skipped := 0
 				// Try up to the number of peers that could legitimately receive the request equal to
 				// the number of chunks left. This should ensure that only the best peers serve the last
 				// few chunks in a piece.
+				lowestNumRequestsInPiece := math.MaxInt16
 				for _, peer := range peersForPiece {
 					if !peer.canFitRequest() || !peer.HasPiece(p.index) || (!peer.pieceAllowedFastOrDefault(p.index) && peer.Choking) {
 						continue
 					}
-					if skipped >= pendingChunksRemaining {
+					if skipped+1 >= pendingChunksRemaining {
 						break
 					}
 					if f := peer.HasExistingRequest; f == nil || !f(req) {
 						skipped++
+						lowestNumRequestsInPiece = peer.requestsInPiece
 						continue
+					}
+					if peer.requestsInPiece > lowestNumRequestsInPiece {
+						break
 					}
 					if !peer.pieceAllowedFastOrDefault(p.index) {
 						// We must stay interested for this.

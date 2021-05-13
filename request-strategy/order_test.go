@@ -34,7 +34,50 @@ func (i intPeerId) Uintptr() uintptr {
 	return uintptr(i)
 }
 
-func TestStealingFromSlowerPeers(t *testing.T) {
+func TestStealingFromSlowerPeer(t *testing.T) {
+	c := qt.New(t)
+	order := ClientPieceOrder{}
+	basePeer := Peer{
+		HasPiece: func(i pieceIndex) bool {
+			return true
+		},
+		MaxRequests:  math.MaxInt16,
+		DownloadRate: 2,
+	}
+	// Slower than the stealers, but has all requests already.
+	stealee := basePeer
+	stealee.DownloadRate = 1
+	stealee.HasExistingRequest = func(r Request) bool {
+		return true
+	}
+	stealee.Id = intPeerId(1)
+	firstStealer := basePeer
+	firstStealer.Id = intPeerId(2)
+	secondStealer := basePeer
+	secondStealer.Id = intPeerId(3)
+	results := order.DoRequests([]*Torrent{{
+		Pieces: []Piece{{
+			Request:           true,
+			NumPendingChunks:  5,
+			IterPendingChunks: chunkIter(0, 1, 2, 3, 4),
+		}},
+		Peers: []Peer{
+			stealee,
+			firstStealer,
+			secondStealer,
+		},
+	}})
+	c.Assert(results, qt.HasLen, 3)
+	check := func(p PeerId, l int) {
+		c.Check(results[p].Requests, qt.HasLen, l)
+		c.Check(results[p].Interested, qt.Equals, l > 0)
+	}
+	check(stealee.Id, 1)
+	check(firstStealer.Id, 2)
+	check(secondStealer.Id, 2)
+}
+
+func TestStealingFromSlowerPeersBasic(t *testing.T) {
 	c := qt.New(t)
 	order := ClientPieceOrder{}
 	basePeer := Peer{
@@ -78,5 +121,52 @@ func TestStealingFromSlowerPeers(t *testing.T) {
 			Interested: false,
 			Requests:   requestSetFromSlice(),
 		},
+	})
+}
+
+func TestPeerKeepsExistingIfReasonable(t *testing.T) {
+	c := qt.New(t)
+	order := ClientPieceOrder{}
+	basePeer := Peer{
+		HasPiece: func(i pieceIndex) bool {
+			return true
+		},
+		MaxRequests:  math.MaxInt16,
+		DownloadRate: 2,
+	}
+	// Slower than the stealers, but has all requests already.
+	stealee := basePeer
+	stealee.DownloadRate = 1
+	keepReq := r(0, 0)
+	stealee.HasExistingRequest = func(r Request) bool {
+		return r == keepReq
+	}
+	stealee.Id = intPeerId(1)
+	firstStealer := basePeer
+	firstStealer.Id = intPeerId(2)
+	secondStealer := basePeer
+	secondStealer.Id = intPeerId(3)
+	results := order.DoRequests([]*Torrent{{
+		Pieces: []Piece{{
+			Request:           true,
+			NumPendingChunks:  4,
+			IterPendingChunks: chunkIter(0, 1, 3, 4),
+		}},
+		Peers: []Peer{
+			stealee,
+			firstStealer,
+			secondStealer,
+		},
+	}})
+	c.Assert(results, qt.HasLen, 3)
+	check := func(p PeerId, l int) {
+		c.Check(results[p].Requests, qt.HasLen, l)
+		c.Check(results[p].Interested, qt.Equals, l > 0)
+	}
+	check(firstStealer.Id, 2)
+	check(secondStealer.Id, 1)
+	c.Check(results[stealee.Id], qt.ContentEquals, PeerNextRequestState{
+		Interested: true,
+		Requests:   requestSetFromSlice(keepReq),
 	})
 }

@@ -13,3 +13,10 @@ type Piece struct {
 	NumPendingChunks  int
 	IterPendingChunks func(func(types.ChunkSpec))
 }
+
+func (p *Piece) iterPendingChunksWrapper(f func(ChunkSpec)) {
+	i := p.IterPendingChunks
+	if i != nil {
+		i(f)
+	}
+}

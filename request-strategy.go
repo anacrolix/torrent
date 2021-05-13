@@ -52,9 +52,9 @@ func (cl *Client) doRequests() {
 			if p.closed.IsSet() {
 				return
 			}
-			rst.Peers = append(rst.Peers, &request_strategy.Peer{
+			rst.Peers = append(rst.Peers, request_strategy.Peer{
 				HasPiece:    p.peerHasPiece,
-				MaxRequests: p.nominalMaxRequests,
+				MaxRequests: p.nominalMaxRequests(),
 				HasExistingRequest: func(r request_strategy.Request) bool {
 					_, ok := p.requests[r]
 					return ok
@@ -65,7 +65,7 @@ func (cl *Client) doRequests() {
 				},
 				DownloadRate: p.downloadRate(),
 				Age:          time.Since(p.completedHandshake),
-				Id:           unsafe.Pointer(p),
+				Id:           (*peerId)(p),
 			})
 		})
 		ts = append(ts, rst)
@@ -76,8 +76,14 @@ func (cl *Client) doRequests() {
 	}
 }
 
-func applyPeerNextRequestState(_p request_strategy.PeerPointer, rp request_strategy.PeerNextRequestState) {
-	p := (*Peer)(_p)
+type peerId Peer
+
+func (p *peerId) Uintptr() uintptr {
+	return uintptr(unsafe.Pointer(p))
+}
+
+func applyPeerNextRequestState(_p request_strategy.PeerId, rp request_strategy.PeerNextRequestState) {
+	p := (*Peer)(_p.(*peerId))
 	p.setInterested(rp.Interested)
 	for req := range p.requests {
 		if _, ok := rp.Requests[req]; !ok {

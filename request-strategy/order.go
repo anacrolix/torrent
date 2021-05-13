@@ -6,12 +6,15 @@ import (
 	"github.com/anacrolix/multiless"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/types"
+	"github.com/davecgh/go-spew/spew"
 )
 
 type (
 	Request       = types.Request
 	pieceIndex    = types.PieceIndex
 	piecePriority = types.PiecePriority
+	// This can be made into a type-param later, will be great for testing.
+	ChunkSpec = types.ChunkSpec
 )
 
 type ClientPieceOrder struct {
@@ -43,13 +46,13 @@ func (me ClientPieceOrder) less(_i, _j int) bool {
 }
 
 type requestsPeer struct {
-	*Peer
+	Peer
 	nextState                  PeerNextRequestState
 	requestablePiecesRemaining int
 }
 
 func (rp *requestsPeer) canFitRequest() bool {
-	return len(rp.nextState.Requests) < rp.MaxRequests()
+	return len(rp.nextState.Requests) < rp.MaxRequests
 }
 
 // Returns true if it is added and wasn't there before.
@@ -69,7 +72,6 @@ type peersForPieceRequests struct {
 
 func (me *peersForPieceRequests) addNextRequest(r Request) {
 	if me.requestsPeer.addNextRequest(r) {
-		return
 		me.requestsInPiece++
 	}
 }
@@ -77,10 +79,10 @@ func (me *peersForPieceRequests) addNextRequest(r Request) {
 type Torrent struct {
 	Pieces   []Piece
 	Capacity *func() *int64
-	Peers    []*Peer // not closed.
+	Peers    []Peer // not closed.
 }
 
-func (requestOrder *ClientPieceOrder) DoRequests(torrents []*Torrent) map[PeerPointer]PeerNextRequestState {
+func (requestOrder *ClientPieceOrder) DoRequests(torrents []*Torrent) map[PeerId]PeerNextRequestState {
 	requestOrder.pieces = requestOrder.pieces[:0]
 	allPeers := make(map[*Torrent][]*requestsPeer)
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
@@ -153,57 +155,60 @@ func (requestOrder *ClientPieceOrder) DoRequests(torrents []*Torrent) map[PeerPo
 					int64(peersForPiece[j].Age), int64(peersForPiece[i].Age),
 					// TODO: Probably peer priority can come next
 				).Uintptr(
-					uintptr(peersForPiece[j].Id),
-					uintptr(peersForPiece[i].Id),
+					peersForPiece[i].Id.Uintptr(),
+					peersForPiece[j].Id.Uintptr(),
 				).MustLess()
 			})
 		}
 		pendingChunksRemaining := int(p.NumPendingChunks)
-		torrentPiece.IterPendingChunks(func(chunk types.ChunkSpec) {
-			req := Request{pp.Integer(p.index), chunk}
-			pendingChunksRemaining--
-			sortPeersForPiece()
-			skipped := 0
-			// Try up to the number of peers that could legitimately receive the request equal to
-			// the number of chunks left. This should ensure that only the best peers serve the last
-			// few chunks in a piece.
-			for _, peer := range peersForPiece {
-				if !peer.canFitRequest() || !peer.HasPiece(p.index) || (!peer.PieceAllowedFast(p.index) && peer.Choking) {
-					continue
-				}
-				if skipped > pendingChunksRemaining {
-					break
-				}
-				if !peer.HasExistingRequest(req) {
-					skipped++
-					continue
-				}
-				if !peer.PieceAllowedFast(p.index) {
-					// We must stay interested for this.
-					peer.nextState.Interested = true
-				}
-				peer.addNextRequest(req)
-				return
-			}
-			for _, peer := range peersForPiece {
-				if !peer.canFitRequest() {
-					continue
-				}
-				if !peer.HasPiece(p.index) {
-					continue
-				}
-				if !peer.PieceAllowedFast(p.index) {
-					// TODO: Verify that's okay to stay uninterested if we request allowed fast
-					// pieces.
-					peer.nextState.Interested = true
-					if peer.Choking {
+		if f := torrentPiece.IterPendingChunks; f != nil {
+			f(func(chunk types.ChunkSpec) {
+				req := Request{pp.Integer(p.index), chunk}
+				pendingChunksRemaining--
+				sortPeersForPiece()
+				spew.Dump(peersForPiece)
+				skipped := 0
+				// Try up to the number of peers that could legitimately receive the request equal to
+				// the number of chunks left. This should ensure that only the best peers serve the last
+				// few chunks in a piece.
+				for _, peer := range peersForPiece {
+					if !peer.canFitRequest() || !peer.HasPiece(p.index) || (!peer.pieceAllowedFastOrDefault(p.index) && peer.Choking) {
 						continue
 					}
+					if skipped >= pendingChunksRemaining {
+						break
+					}
+					if f := peer.HasExistingRequest; f == nil || !f(req) {
+						skipped++
+						continue
+					}
+					if !peer.pieceAllowedFastOrDefault(p.index) {
+						// We must stay interested for this.
+						peer.nextState.Interested = true
+					}
+					peer.addNextRequest(req)
+					return
 				}
-				peer.addNextRequest(req)
-				return
-			}
-		})
+				for _, peer := range peersForPiece {
+					if !peer.canFitRequest() {
+						continue
+					}
+					if !peer.HasPiece(p.index) {
+						continue
+					}
+					if !peer.pieceAllowedFastOrDefault(p.index) {
+						// TODO: Verify that's okay to stay uninterested if we request allowed fast
+						// pieces.
+						peer.nextState.Interested = true
+						if peer.Choking {
+							continue
+						}
+					}
+					peer.addNextRequest(req)
+					return
+				}
+			})
+		}
 		if pendingChunksRemaining != 0 {
 			panic(pendingChunksRemaining)
 		}
@@ -213,7 +218,7 @@ func (requestOrder *ClientPieceOrder) DoRequests(torrents []*Torrent) map[PeerPo
 			}
 		}
 	}
-	ret := make(map[PeerPointer]PeerNextRequestState)
+	ret := make(map[PeerId]PeerNextRequestState)
 	for _, peers := range allPeers {
 		for _, rp := range peers {
 			if rp.requestablePiecesRemaining != 0 {

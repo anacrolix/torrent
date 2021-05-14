@@ -17,7 +17,7 @@ func addrPortOrZero(addr net.Addr) int {
 		if err != nil {
 			return 0
 		}
-		i64, err := strconv.ParseInt(port, 0, 0)
+		i64, err := strconv.ParseUint(port, 0, 16)
 		if err != nil {
 			panic(err)
 		}

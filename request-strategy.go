@@ -26,7 +26,10 @@ func (cl *Client) requester() {
 func (cl *Client) doRequests() {
 	ts := make([]*request_strategy.Torrent, 0, len(cl.torrents))
 	for _, t := range cl.torrents {
-		rst := &request_strategy.Torrent{}
+		rst := &request_strategy.Torrent{
+			StableId: uintptr(unsafe.Pointer(t)),
+			//MaxUnverifiedBytes: 1 << 20,
+		}
 		if t.storage != nil {
 			rst.Capacity = t.storage.Capacity
 		}

@@ -86,6 +86,11 @@ func TestStealingFromSlowerPeer(t *testing.T) {
 	check(secondStealer.Id, 2)
 }
 
+func checkNumRequestsAndInterest(c *qt.C, next PeerNextRequestState, num int, interest bool) {
+	c.Check(next.Requests, qt.HasLen, num)
+	c.Check(next.Interested, qt.Equals, interest)
+}
+
 func TestStealingFromSlowerPeersBasic(t *testing.T) {
 	c := qt.New(t)
 	order := ClientPieceOrder{}
@@ -106,7 +111,7 @@ func TestStealingFromSlowerPeersBasic(t *testing.T) {
 	firstStealer.Id = intPeerId(2)
 	secondStealer := basePeer
 	secondStealer.Id = intPeerId(3)
-	c.Assert(order.DoRequests([]*Torrent{{
+	results := order.DoRequests([]*Torrent{{
 		Pieces: []Piece{{
 			Request:           true,
 			NumPendingChunks:  2,
@@ -117,20 +122,10 @@ func TestStealingFromSlowerPeersBasic(t *testing.T) {
 			firstStealer,
 			secondStealer,
 		},
-	}}), qt.ContentEquals, map[PeerId]PeerNextRequestState{
-		intPeerId(2): {
-			Interested: true,
-			Requests:   requestSetFromSlice(r(0, 0)),
-		},
-		intPeerId(3): {
-			Interested: true,
-			Requests:   requestSetFromSlice(r(0, 1)),
-		},
-		stealee.Id: {
-			Interested: false,
-			Requests:   requestSetFromSlice(),
-		},
-	})
+	}})
+	checkNumRequestsAndInterest(c, results[firstStealer.Id], 1, true)
+	checkNumRequestsAndInterest(c, results[secondStealer.Id], 1, true)
+	checkNumRequestsAndInterest(c, results[stealee.Id], 0, false)
 }
 
 func TestPeerKeepsExistingIfReasonable(t *testing.T) {

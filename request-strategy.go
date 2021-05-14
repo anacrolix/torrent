@@ -27,8 +27,7 @@ func (cl *Client) doRequests() {
 	ts := make([]request_strategy.Torrent, 0, len(cl.torrents))
 	for _, t := range cl.torrents {
 		rst := request_strategy.Torrent{
-			StableId:           uintptr(unsafe.Pointer(t)),
-			MaxUnverifiedBytes: 10 << 20,
+			StableId: uintptr(unsafe.Pointer(t)),
 		}
 		if t.storage != nil {
 			rst.Capacity = t.storage.Capacity
@@ -72,7 +71,10 @@ func (cl *Client) doRequests() {
 		})
 		ts = append(ts, rst)
 	}
-	nextPeerStates := cl.pieceRequestOrder.DoRequests(ts)
+	nextPeerStates := request_strategy.Run(request_strategy.Input{
+		Torrents:           ts,
+		MaxUnverifiedBytes: cl.config.MaxUnverifiedBytes,
+	})
 	for p, state := range nextPeerStates {
 		applyPeerNextRequestState(p, state)
 	}

@@ -84,12 +84,12 @@ type filterPiece struct {
 	Piece
 }
 
-func getRequestablePieces(torrents []Torrent) (ret []requestablePiece) {
+func getRequestablePieces(input Input) (ret []requestablePiece) {
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
 	// TorrentImpl.
 	storageLeft := make(map[*func() *int64]*int64)
 	var pieces []filterPiece
-	for _, _t := range torrents {
+	for _, _t := range input.Torrents {
 		// TODO: We could do metainfo requests here.
 		t := &filterTorrent{
 			Torrent:         _t,
@@ -111,6 +111,7 @@ func getRequestablePieces(torrents []Torrent) (ret []requestablePiece) {
 		}
 	}
 	sortFilterPieces(pieces)
+	var allTorrentsUnverifiedBytes int64
 	for _, piece := range pieces {
 		if left := piece.t.storageLeft; left != nil {
 			if *left < int64(piece.Length) {
@@ -119,12 +120,18 @@ func getRequestablePieces(torrents []Torrent) (ret []requestablePiece) {
 			*left -= int64(piece.Length)
 		}
 		if !piece.Request || piece.NumPendingChunks == 0 {
+			// TODO: Clarify exactly what is verified. Stuff that's being hashed should be
+			// considered unverified and hold up further requests.
 			continue
 		}
 		if piece.t.MaxUnverifiedBytes != 0 && piece.t.unverifiedBytes+piece.Length > piece.t.MaxUnverifiedBytes {
 			continue
 		}
+		if input.MaxUnverifiedBytes != 0 && allTorrentsUnverifiedBytes+piece.Length > input.MaxUnverifiedBytes {
+			continue
+		}
 		piece.t.unverifiedBytes += piece.Length
+		allTorrentsUnverifiedBytes += piece.Length
 		ret = append(ret, requestablePiece{
 			index:             piece.index,
 			t:                 piece.t.Torrent,
@@ -135,9 +142,15 @@ func getRequestablePieces(torrents []Torrent) (ret []requestablePiece) {
 	return
 }
 
+type Input struct {
+	Torrents           []Torrent
+	MaxUnverifiedBytes int64
+}
+
 // TODO: We could do metainfo requests here.
-func (requestOrder *ClientPieceOrder) DoRequests(torrents []Torrent) map[PeerId]PeerNextRequestState {
-	requestPieces := getRequestablePieces(torrents)
+func Run(input Input) map[PeerId]PeerNextRequestState {
+	requestPieces := getRequestablePieces(input)
+	torrents := input.Torrents
 	allPeers := make(map[uintptr][]*requestsPeer, len(torrents))
 	for _, t := range torrents {
 		peers := make([]*requestsPeer, 0, len(t.Peers))

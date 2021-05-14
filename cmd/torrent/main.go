@@ -169,19 +169,20 @@ var flags struct {
 type SpewBencodingCmd struct{}
 
 type DownloadCmd struct {
-	Mmap            bool           `help:"memory-map torrent data"`
-	TestPeer        []string       `help:"addresses of some starting peers"`
-	Seed            bool           `help:"seed after download is complete"`
-	Addr            string         `help:"network listen addr"`
-	UploadRate      *tagflag.Bytes `help:"max piece bytes to send per second"`
-	DownloadRate    *tagflag.Bytes `help:"max bytes per second down from peers"`
-	PackedBlocklist string
-	PublicIP        net.IP
-	Progress        bool `default:"true"`
-	PieceStates     bool
-	Quiet           bool  `help:"discard client logging"`
-	Stats           *bool `help:"print stats at termination"`
-	Dht             bool  `default:"true"`
+	Mmap               bool           `help:"memory-map torrent data"`
+	TestPeer           []string       `help:"addresses of some starting peers"`
+	Seed               bool           `help:"seed after download is complete"`
+	Addr               string         `help:"network listen addr"`
+	MaxUnverifiedBytes tagflag.Bytes  `help:"maximum number bytes to have pending verification"`
+	UploadRate         *tagflag.Bytes `help:"max piece bytes to send per second"`
+	DownloadRate       *tagflag.Bytes `help:"max bytes per second down from peers"`
+	PackedBlocklist    string
+	PublicIP           net.IP
+	Progress           bool `default:"true"`
+	PieceStates        bool
+	Quiet              bool  `help:"discard client logging"`
+	Stats              *bool `help:"print stats at termination"`
+	Dht                bool  `default:"true"`
 
 	TcpPeers        bool `default:"true"`
 	UtpPeers        bool `default:"true"`
@@ -311,6 +312,7 @@ func downloadErr() error {
 	if flags.Quiet {
 		clientConfig.Logger = log.Discard
 	}
+	clientConfig.MaxUnverifiedBytes = flags.MaxUnverifiedBytes.Int64()
 
 	var stop missinggo.SynchronizedEvent
 	defer func() {

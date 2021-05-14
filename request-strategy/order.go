@@ -187,11 +187,18 @@ func allocatePendingChunks(p pieceRequestOrderPiece, peers []*requestsPeer) {
 	preallocated := make(map[ChunkSpec]*peersForPieceRequests, p.NumPendingChunks)
 	p.iterPendingChunksWrapper(func(spec ChunkSpec) {
 		req := Request{pp.Integer(p.index), spec}
-		for _, p := range peersForPiece {
-			if h := p.HasExistingRequest; h != nil && h(req) {
-				preallocated[spec] = p
-				p.addNextRequest(req)
+		for _, peer := range peersForPiece {
+			if h := peer.HasExistingRequest; h == nil || !h(req) {
+				continue
 			}
+			if !peer.canFitRequest() {
+				continue
+			}
+			if !peer.canRequestPiece(p.index) {
+				continue
+			}
+			preallocated[spec] = peer
+			peer.addNextRequest(req)
 		}
 	})
 	pendingChunksRemaining := int(p.NumPendingChunks)

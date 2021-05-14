@@ -21,8 +21,11 @@ type piecePerResource struct {
 }
 
 type ResourcePiecesOpts struct {
+	// After marking a piece complete, don't bother deleting its incomplete blobs.
 	LeaveIncompleteChunks bool
-	NoSizedPuts           bool
+	// Sized puts require being able to stream from a statement executed on another connection.
+	// Without them, we buffer the entire read and then put that.
+	NoSizedPuts bool
 }
 
 func NewResourcePieces(p PieceProvider) ClientImpl {

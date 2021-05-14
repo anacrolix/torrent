@@ -25,7 +25,22 @@ import (
 
 type conn = *sqlite.Conn
 
-func initConn(conn conn, opts ProviderOpts) error {
+type InitConnOpts struct {
+	SetJournalMode string
+	MmapSizeOk     bool  // If false, a package-specific default will be used.
+	MmapSize       int64 // If MmapSizeOk is set, use sqlite default if < 0, otherwise this value.
+}
+
+func (me InitConnOpts) JournalMode() string {
+	if me.SetJournalMode != "" {
+		return me.SetJournalMode
+	}
+	return "wal"
+}
+
+var UnexpectedJournalMode = errors.New("unexpected journal mode")
+
+func initConn(conn conn, opts InitConnOpts) error {
 	// Recursive triggers are required because we need to trim the blob_meta size after trimming to
 	// capacity. Hopefully we don't hit the recursion limit, and if we do, there's an error thrown.
 	err := sqlitex.ExecTransient(conn, "pragma recursive_triggers=on", nil)
@@ -36,13 +51,25 @@ func initConn(conn conn, opts ProviderOpts) error {
 	if err != nil {
 		return err
 	}
-	if opts.NoConcurrentBlobReads {
-		err = sqlitex.ExecTransient(conn, `pragma journal_mode=off`, nil)
+	if opts.SetJournalMode != "" {
+		err = sqlitex.ExecTransient(conn, fmt.Sprintf(`pragma journal_mode=%s`, opts.SetJournalMode), func(stmt *sqlite.Stmt) error {
+			ret := stmt.ColumnText(0)
+			if ret != opts.SetJournalMode {
+				return UnexpectedJournalMode
+			}
+			return nil
+		})
 		if err != nil {
 			return err
 		}
 	}
-	if opts.MmapSizeOk {
+	if !opts.MmapSizeOk {
+		// Set the default. Currently it seems the library picks reasonable defaults, especially for
+		// wal.
+		opts.MmapSize = -1
+		//opts.MmapSize = 1 << 24 // 8 MiB
+	}
+	if opts.MmapSize >= 0 {
 		err = sqlitex.ExecTransient(conn, fmt.Sprintf(`pragma mmap_size=%d`, opts.MmapSize), nil)
 		if err != nil {
 			return err
@@ -68,6 +95,7 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 			name text,
 			last_used timestamp default (datetime('now')),
 			data blob,
+			verified bool,
 			primary key (name)
 		);
 		
@@ -151,6 +179,7 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 
 type NewPiecesStorageOpts struct {
 	NewPoolOpts
+	InitDbOpts
 	ProvOpts    func(*ProviderOpts)
 	StorageOpts func(*storage.ResourcePiecesOpts)
 }
@@ -158,9 +187,16 @@ type NewPiecesStorageOpts struct {
 // A convenience function that creates a connection pool, resource provider, and a pieces storage
 // ClientImpl and returns them all with a Close attached.
 func NewPiecesStorage(opts NewPiecesStorageOpts) (_ storage.ClientImplCloser, err error) {
-	conns, provOpts, err := NewPool(opts.NewPoolOpts)
+	conns, err := NewPool(opts.NewPoolOpts)
 	if err != nil {
 		return
+	}
+	err = initPoolDatabase(conns, opts.InitDbOpts)
+	if err != nil {
+		return
+	}
+	provOpts := ProviderOpts{
+		BatchWrites: conns.NumConns() > 1,
 	}
 	if f := opts.ProvOpts; f != nil {
 		f(&provOpts)
@@ -170,8 +206,27 @@ func NewPiecesStorage(opts NewPiecesStorageOpts) (_ storage.ClientImplCloser, er
 		conns.Close()
 		return
 	}
+	var (
+		journalMode string
+	)
+	withPoolConn(conns, func(c conn) {
+		err = sqlitex.Exec(c, "pragma journal_mode", func(stmt *sqlite.Stmt) error {
+			journalMode = stmt.ColumnText(0)
+			return nil
+		})
+	})
+	if err != nil {
+		err = fmt.Errorf("getting journal mode: %w", err)
+		prov.Close()
+		return
+	}
+	if journalMode == "" {
+		err = errors.New("didn't get journal mode")
+		prov.Close()
+		return
+	}
 	storageOpts := storage.ResourcePiecesOpts{
-		NoSizedPuts: provOpts.NoConcurrentBlobReads,
+		NoSizedPuts: journalMode != "wal" || conns.NumConns() == 1,
 	}
 	if f := opts.StorageOpts; f != nil {
 		f(&storageOpts)
@@ -187,30 +242,25 @@ func NewPiecesStorage(opts NewPiecesStorageOpts) (_ storage.ClientImplCloser, er
 }
 
 type NewPoolOpts struct {
-	// See https://www.sqlite.org/c3ref/open.html. NB: "If the filename is an empty string, then a
-	// private, temporary on-disk database will be created. This private database will be
-	// automatically deleted as soon as the database connection is closed."
-	Path     string
-	Memory   bool
+	NewConnOpts
+	InitConnOpts
 	NumConns int
-	// Forces WAL, disables shared caching.
-	NoConcurrentBlobReads bool
-	DontInitSchema        bool
-	PageSize              int
+}
+
+type InitDbOpts struct {
+	DontInitSchema bool
+	PageSize       int
 	// If non-zero, overrides the existing setting.
-	Capacity int64
+	Capacity   int64
+	NoTriggers bool
 }
 
 // There's some overlap here with NewPoolOpts, and I haven't decided what needs to be done. For now,
 // the fact that the pool opts are a superset, means our helper NewPiecesStorage can just take the
 // top-level option type.
-type ProviderOpts struct {
-	NumConns int
-	// Concurrent blob reads require WAL.
-	NoConcurrentBlobReads bool
-	BatchWrites           bool
-	MmapSize              int64
-	MmapSizeOk            bool
+type PoolConf struct {
+	NumConns    int
+	JournalMode string
 }
 
 // Remove any capacity limits.
@@ -223,10 +273,18 @@ func SetCapacity(conn conn, cap int64) error {
 	return sqlitex.Exec(conn, "insert into setting values ('capacity', ?)", nil, cap)
 }
 
-func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
-	if opts.NumConns == 0 {
-		opts.NumConns = runtime.NumCPU()
-	}
+type NewConnOpts struct {
+	// See https://www.sqlite.org/c3ref/open.html. NB: "If the filename is an empty string, then a
+	// private, temporary on-disk database will be created. This private database will be
+	// automatically deleted as soon as the database connection is closed."
+	Path   string
+	Memory bool
+	// Whether multiple blobs will not be read simultaneously. Enables journal mode other than WAL,
+	// and NumConns < 2.
+	NoConcurrentBlobReads bool
+}
+
+func newOpenUri(opts NewConnOpts) string {
 	path := url.PathEscape(opts.Path)
 	if opts.Memory {
 		path = ":memory:"
@@ -235,31 +293,18 @@ func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
 	if opts.NoConcurrentBlobReads || opts.Memory {
 		values.Add("cache", "shared")
 	}
-	uri := fmt.Sprintf("file:%s?%s", path, values.Encode())
-	conns, err := func() (ConnPool, error) {
-		switch opts.NumConns {
-		case 1:
-			conn, err := sqlite.OpenConn(uri, 0)
-			return &poolFromConn{conn: conn}, err
-		default:
-			return sqlitex.Open(uri, 0, opts.NumConns)
-		}
-	}()
-	if err != nil {
-		return
-	}
-	defer func() {
-		if err != nil {
-			conns.Close()
-		}
-	}()
-	conn := conns.Get(context.TODO())
-	defer conns.Put(conn)
+	return fmt.Sprintf("file:%s?%s", path, values.Encode())
+}
+
+func initDatabase(conn conn, opts InitDbOpts) (err error) {
 	if !opts.DontInitSchema {
 		if opts.PageSize == 0 {
-			opts.PageSize = 1 << 14
+			// There doesn't seem to be an optimal size. I did try with the standard chunk size, but
+			// the difference is not convincing.
+
+			//opts.PageSize = 1 << 14
 		}
-		err = InitSchema(conn, opts.PageSize, true)
+		err = InitSchema(conn, opts.PageSize, !opts.NoTriggers)
 		if err != nil {
 			return
 		}
@@ -270,13 +315,55 @@ func NewPool(opts NewPoolOpts) (_ ConnPool, _ ProviderOpts, err error) {
 			return
 		}
 	}
-	return conns, ProviderOpts{
-		NumConns:              opts.NumConns,
-		NoConcurrentBlobReads: opts.NoConcurrentBlobReads || opts.Memory || opts.NumConns == 1,
-		BatchWrites:           opts.NumConns > 1,
-		MmapSize:              1 << 23, // 8 MiB
-		MmapSizeOk:            true,
-	}, nil
+	return
+}
+
+func initPoolDatabase(pool ConnPool, opts InitDbOpts) (err error) {
+	withPoolConn(pool, func(c conn) {
+		err = initDatabase(c, opts)
+	})
+	return
+}
+
+func newConn(opts NewConnOpts) (conn, error) {
+	return sqlite.OpenConn(newOpenUri(opts), 0)
+}
+
+type poolWithNumConns struct {
+	*sqlitex.Pool
+	numConns int
+}
+
+func (me poolWithNumConns) NumConns() int {
+	return me.numConns
+}
+
+func NewPool(opts NewPoolOpts) (_ ConnPool, err error) {
+	if opts.NumConns == 0 {
+		opts.NumConns = runtime.NumCPU()
+	}
+	conns, err := func() (ConnPool, error) {
+		switch opts.NumConns {
+		case 1:
+			conn, err := newConn(opts.NewConnOpts)
+			return &poolFromConn{conn: conn}, err
+		default:
+			_pool, err := sqlitex.Open(newOpenUri(opts.NewConnOpts), 0, opts.NumConns)
+			return poolWithNumConns{_pool, opts.NumConns}, err
+		}
+	}()
+	if err != nil {
+		return
+	}
+	defer func() {
+		if err != nil {
+			conns.Close()
+		}
+	}()
+	return conns, initPoolConns(nil, conns, InitPoolOpts{
+		NumConns:     opts.NumConns,
+		InitConnOpts: opts.InitConnOpts,
+	})
 }
 
 // Emulates a ConnPool from a single Conn. Might be faster than using a sqlitex.Pool.
@@ -301,20 +388,17 @@ func (me *poolFromConn) Close() error {
 	return me.conn.Close()
 }
 
+func (poolFromConn) NumConns() int { return 1 }
+
+type ProviderOpts struct {
+	BatchWrites bool
+}
+
 // Needs the ConnPool size so it can initialize all the connections with pragmas. Takes ownership of
 // the ConnPool (since it has to initialize all the connections anyway).
 func NewProvider(pool ConnPool, opts ProviderOpts) (_ *provider, err error) {
-	_, err = initPoolConns(context.TODO(), pool, opts)
-	if err != nil {
-		err = fmt.Errorf("initing pool conns: %w", err)
-		return
-	}
 	prov := &provider{pool: pool, opts: opts}
 	if opts.BatchWrites {
-		if opts.NumConns < 2 {
-			err = errors.New("batch writes requires more than 1 conn")
-			return
-		}
 		writes := make(chan writeRequest)
 		prov.writes = writes
 		// This is retained for backwards compatibility. It may not be necessary.
@@ -326,7 +410,12 @@ func NewProvider(pool ConnPool, opts ProviderOpts) (_ *provider, err error) {
 	return prov, nil
 }
 
-func initPoolConns(ctx context.Context, pool ConnPool, opts ProviderOpts) (numInited int, err error) {
+type InitPoolOpts struct {
+	NumConns int
+	InitConnOpts
+}
+
+func initPoolConns(ctx context.Context, pool ConnPool, opts InitPoolOpts) (err error) {
 	var conns []conn
 	defer func() {
 		for _, c := range conns {
@@ -339,12 +428,11 @@ func initPoolConns(ctx context.Context, pool ConnPool, opts ProviderOpts) (numIn
 			break
 		}
 		conns = append(conns, conn)
-		err = initConn(conn, opts)
+		err = initConn(conn, opts.InitConnOpts)
 		if err != nil {
 			err = fmt.Errorf("initing conn %v: %w", len(conns), err)
 			return
 		}
-		numInited++
 	}
 	return
 }
@@ -353,6 +441,13 @@ type ConnPool interface {
 	Get(context.Context) conn
 	Put(conn)
 	Close() error
+	NumConns() int
+}
+
+func withPoolConn(pool ConnPool, with func(conn)) {
+	c := pool.Get(nil)
+	defer pool.Put(c)
+	with(c)
 }
 
 type provider struct {

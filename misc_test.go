@@ -23,14 +23,20 @@ func TestTorrentOffsetRequest(t *testing.T) {
 	check(13, 5, 13, Request{}, false)
 }
 
-func TestIterBitmapsDistinct(t *testing.T) {
-	var skip, first, second bitmap.Bitmap
-	skip.Add(1)
-	first.Add(1, 0, 3)
-	second.Add(1, 2, 0)
-	skipCopy := skip.Copy()
-	assert.Equal(t, []interface{}{0, 3, 2}, iter.ToSlice(iterBitmapsDistinct(&skipCopy, first, second)))
-	assert.Equal(t, []int{1}, skip.ToSortedSlice())
+func BenchmarkIterBitmapsDistinct(t *testing.B) {
+	t.ReportAllocs()
+	for range iter.N(t.N) {
+		var skip, first, second bitmap.Bitmap
+		skip.Add(1)
+		first.Add(1, 0, 3)
+		second.Add(1, 2, 0)
+		skipCopy := skip.Copy()
+		t.StartTimer()
+		output := iter.ToSlice(iterBitmapsDistinct(&skipCopy, first, second))
+		t.StopTimer()
+		assert.Equal(t, []interface{}{0, 3, 2}, output)
+		assert.Equal(t, []int{1}, skip.ToSortedSlice())
+	}
 }
 
 func TestSpewConnStats(t *testing.T) {

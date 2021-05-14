@@ -130,7 +130,7 @@ func MustMarshal(v interface{}) []byte {
 // Unmarshal the bencode value in the 'data' to a value pointed by the 'v'
 // pointer, return a non-nil error if any.
 func Unmarshal(data []byte, v interface{}) (err error) {
-	buf := bytes.NewBuffer(data)
+	buf := bytes.NewReader(data)
 	e := Decoder{r: buf}
 	err = e.Decode(v)
 	if err == nil && buf.Len() != 0 {

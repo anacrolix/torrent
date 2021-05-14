@@ -10,7 +10,7 @@ import (
 func BenchmarkMarkComplete(b *testing.B) {
 	bench := func(b *testing.B, ci storage.ClientImpl) {
 		test_storage.BenchmarkPieceMarkComplete(
-			b, ci, test_storage.DefaultPieceSize, test_storage.DefaultNumPieces, test_storage.DefaultCapacity)
+			b, ci, test_storage.DefaultPieceSize, test_storage.DefaultNumPieces, 0)
 	}
 	b.Run("File", func(b *testing.B) {
 		ci := storage.NewFile(b.TempDir())

@@ -743,12 +743,13 @@ func (cn *PeerConn) updateRequests() {
 func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 	return func(cb iter.Callback) {
 		for _, bm := range bms {
+			bm.Sub(*skip)
 			if !iter.All(
 				func(i interface{}) bool {
 					skip.Add(i.(int))
 					return cb(i)
 				},
-				bitmap.Sub(bm, *skip).Iter,
+				bm.Iter,
 			) {
 				return
 			}

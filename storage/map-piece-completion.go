@@ -7,31 +7,27 @@ import (
 )
 
 type mapPieceCompletion struct {
-	mu sync.Mutex
-	m  map[metainfo.PieceKey]bool
+	m sync.Map
 }
 
 var _ PieceCompletion = (*mapPieceCompletion)(nil)
 
 func NewMapPieceCompletion() PieceCompletion {
-	return &mapPieceCompletion{m: make(map[metainfo.PieceKey]bool)}
+	return &mapPieceCompletion{}
 }
 
 func (*mapPieceCompletion) Close() error { return nil }
 
 func (me *mapPieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err error) {
-	me.mu.Lock()
-	defer me.mu.Unlock()
-	c.Complete, c.Ok = me.m[pk]
+	v, ok := me.m.Load(pk)
+	if ok {
+		c.Complete = v.(bool)
+	}
+	c.Ok = ok
 	return
 }
 
 func (me *mapPieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
-	me.mu.Lock()
-	defer me.mu.Unlock()
-	if me.m == nil {
-		me.m = make(map[metainfo.PieceKey]bool)
-	}
-	me.m[pk] = b
+	me.m.Store(pk, b)
 	return nil
 }

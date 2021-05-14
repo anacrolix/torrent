@@ -166,8 +166,11 @@ func (t *Torrent) decPieceAvailability(i pieceIndex) {
 }
 
 func (t *Torrent) incPieceAvailability(i pieceIndex) {
-	p := t.piece(i)
-	p.availability++
+	// If we don't the info, this should be reconciled when we do.
+	if t.haveInfo() {
+		p := t.piece(i)
+		p.availability++
+	}
 }
 
 func (t *Torrent) numConns() int {

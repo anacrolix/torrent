@@ -1,9 +1,11 @@
+//go:build cgo
 // +build cgo
 
 package storage
 
 import (
 	"path/filepath"
+	"sync"
 
 	"crawshaw.io/sqlite"
 	"crawshaw.io/sqlite/sqlitex"
@@ -12,6 +14,7 @@ import (
 )
 
 type sqlitePieceCompletion struct {
+	mu sync.Mutex
 	db *sqlite.Conn
 }
 
@@ -28,11 +31,13 @@ func NewSqlitePieceCompletion(dir string) (ret *sqlitePieceCompletion, err error
 		db.Close()
 		return
 	}
-	ret = &sqlitePieceCompletion{db}
+	ret = &sqlitePieceCompletion{db: db}
 	return
 }
 
 func (me *sqlitePieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err error) {
+	me.mu.Lock()
+	defer me.mu.Unlock()
 	err = sqlitex.Exec(
 		me.db, `select complete from piece_completion where infohash=? and "index"=?`,
 		func(stmt *sqlite.Stmt) error {
@@ -45,6 +50,8 @@ func (me *sqlitePieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err er
 }
 
 func (me *sqlitePieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
+	me.mu.Lock()
+	defer me.mu.Unlock()
 	return sqlitex.Exec(
 		me.db,
 		`insert or replace into piece_completion(infohash, "index", complete) values(?, ?, ?)`,
@@ -52,6 +59,12 @@ func (me *sqlitePieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
 		pk.InfoHash.HexString(), pk.Index, b)
 }
 
-func (me *sqlitePieceCompletion) Close() error {
-	return me.db.Close()
+func (me *sqlitePieceCompletion) Close() (err error) {
+	me.mu.Lock()
+	defer me.mu.Unlock()
+	if me.db != nil {
+		err = me.db.Close()
+		me.db = nil
+	}
+	return
 }

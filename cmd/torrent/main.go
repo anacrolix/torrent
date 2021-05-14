@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/alexflint/go-arg"
+	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/davecgh/go-spew/spew"
@@ -23,7 +24,6 @@ import (
 
 	"github.com/anacrolix/log"
 
-	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
 	"golang.org/x/time/rate"
 
@@ -223,6 +223,7 @@ func exitSignalHandlers(notify *missinggo.SynchronizedEvent) {
 }
 
 func main() {
+	defer envpprof.Stop()
 	if err := mainErr(); err != nil {
 		log.Printf("error in main: %v", err)
 		os.Exit(1)
@@ -273,7 +274,6 @@ func mainErr() error {
 }
 
 func downloadErr() error {
-	defer envpprof.Stop()
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableWebseeds = flags.DisableWebseeds
 	clientConfig.DisableTCP = !flags.TcpPeers

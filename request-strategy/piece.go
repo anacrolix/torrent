@@ -4,6 +4,8 @@ import (
 	"github.com/anacrolix/torrent/types"
 )
 
+type ChunksIter func(func(types.ChunkSpec))
+
 type Piece struct {
 	Request           bool
 	Priority          piecePriority
@@ -11,10 +13,10 @@ type Piece struct {
 	Availability      int64
 	Length            int64
 	NumPendingChunks  int
-	IterPendingChunks func(func(types.ChunkSpec))
+	IterPendingChunks ChunksIter
 }
 
-func (p *Piece) iterPendingChunksWrapper(f func(ChunkSpec)) {
+func (p Piece) iterPendingChunksWrapper(f func(ChunkSpec)) {
 	i := p.IterPendingChunks
 	if i != nil {
 		i(f)

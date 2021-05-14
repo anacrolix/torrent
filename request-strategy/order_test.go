@@ -64,7 +64,7 @@ func TestStealingFromSlowerPeer(t *testing.T) {
 	firstStealer.Id = intPeerId(2)
 	secondStealer := basePeer
 	secondStealer.Id = intPeerId(3)
-	results := order.DoRequests([]*Torrent{{
+	results := order.DoRequests([]Torrent{{
 		Pieces: []Piece{{
 			Request:           true,
 			NumPendingChunks:  5,
@@ -111,7 +111,7 @@ func TestStealingFromSlowerPeersBasic(t *testing.T) {
 	firstStealer.Id = intPeerId(2)
 	secondStealer := basePeer
 	secondStealer.Id = intPeerId(3)
-	results := order.DoRequests([]*Torrent{{
+	results := order.DoRequests([]Torrent{{
 		Pieces: []Piece{{
 			Request:           true,
 			NumPendingChunks:  2,
@@ -150,7 +150,7 @@ func TestPeerKeepsExistingIfReasonable(t *testing.T) {
 	firstStealer.Id = intPeerId(2)
 	secondStealer := basePeer
 	secondStealer.Id = intPeerId(3)
-	results := order.DoRequests([]*Torrent{{
+	results := order.DoRequests([]Torrent{{
 		Pieces: []Piece{{
 			Request:           true,
 			NumPendingChunks:  4,
@@ -198,7 +198,7 @@ func TestDontStealUnnecessarily(t *testing.T) {
 	firstStealer.Id = intPeerId(2)
 	secondStealer := basePeer
 	secondStealer.Id = intPeerId(3)
-	results := order.DoRequests([]*Torrent{{
+	results := order.DoRequests([]Torrent{{
 		Pieces: []Piece{{
 			Request:           true,
 			NumPendingChunks:  9,

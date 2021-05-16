@@ -158,6 +158,9 @@ func (t *Torrent) pieceAvailabilityFromPeers(i pieceIndex) (count int) {
 }
 
 func (t *Torrent) decPieceAvailability(i pieceIndex) {
+	if !t.haveInfo() {
+		return
+	}
 	p := t.piece(i)
 	if p.availability <= 0 {
 		panic(p.availability)

@@ -86,9 +86,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 	b.Run("CustomDirect", func(b *testing.B) {
 		var opts NewDirectStorageOpts
 		opts.Capacity = capacity
-		opts.BlobFlushInterval = time.Second
-		opts.CacheBlobs = true
-		opts.SetJournalMode = "off"
+		opts.NoTriggers = noTriggers
 		benchOpts := func(b *testing.B) {
 			opts.Path = filepath.Join(b.TempDir(), "storage.db")
 			ci, err := NewDirectStorage(opts)
@@ -96,9 +94,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 			defer ci.Close()
 			runBench(b, ci)
 		}
-		b.Run("Control", benchOpts)
-		opts.PageSize = 1 << 16
-		b.Run("64KiB_PageSize", benchOpts)
+		b.Run("Default", benchOpts)
 	})
 	for _, memory := range []bool{false, true} {
 		b.Run(fmt.Sprintf("Memory=%v", memory), func(b *testing.B) {
@@ -106,7 +102,6 @@ func BenchmarkMarkComplete(b *testing.B) {
 				var opts NewDirectStorageOpts
 				opts.Memory = memory
 				opts.Capacity = capacity
-				opts.CacheBlobs = true
 				//opts.GcBlobs = true
 				opts.BlobFlushInterval = time.Second
 				opts.NoTriggers = noTriggers
@@ -124,7 +119,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 				for _, journalMode := range []string{"", "wal", "off", "truncate", "delete", "persist", "memory"} {
 					opts.SetJournalMode = journalMode
 					b.Run("JournalMode="+journalMode, func(b *testing.B) {
-						for _, mmapSize := range []int64{-1, 0, 1 << 23, 1 << 24, 1 << 25} {
+						for _, mmapSize := range []int64{-1} {
 							if memory && mmapSize >= 0 {
 								continue
 							}

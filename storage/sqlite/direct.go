@@ -18,7 +18,7 @@ type NewDirectStorageOpts struct {
 	InitDbOpts
 	InitConnOpts
 	GcBlobs           bool
-	CacheBlobs        bool
+	NoCacheBlobs      bool
 	BlobFlushInterval time.Duration
 }
 
@@ -29,6 +29,11 @@ func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, er
 	if err != nil {
 		return
 	}
+	if opts.PageSize == 0 {
+		// The largest size sqlite supports. I think we want this to be the smallest piece size we
+		// can expect, which is probably 1<<17.
+		opts.PageSize = 1 << 16
+	}
 	err = initDatabase(conn, opts.InitDbOpts)
 	if err != nil {
 		conn.Close()
@@ -38,6 +43,11 @@ func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, er
 	if err != nil {
 		conn.Close()
 		return
+	}
+	if opts.BlobFlushInterval == 0 && !opts.GcBlobs {
+		// This is influenced by typical busy timeouts, of 5-10s. We want to give other connections
+		// a few chances at getting a transaction through.
+		opts.BlobFlushInterval = time.Second
 	}
 	cl := &client{
 		conn:  conn,
@@ -153,7 +163,7 @@ func (p piece) doAtIoWithBlob(
 ) (n int, err error) {
 	p.l.Lock()
 	defer p.l.Unlock()
-	if !p.opts.CacheBlobs {
+	if p.opts.NoCacheBlobs {
 		defer p.forgetBlob()
 	}
 	blob, err := p.getBlob(create)

@@ -160,6 +160,27 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
+// Change DownloadRateLimiter of Client
+func (cl *Client) ChangeDownloadRateLimiter(r *rate.Limiter) {
+	cl.lock()
+	defer cl.unlock()
+	cl.config.DownloadRateLimiter = r
+}
+
+// Change UploadRateLimiter of Client
+func (cl *Client) ChangeUploadRateLimiter(r *rate.Limiter) {
+	cl.lock()
+	defer cl.unlock()
+	cl.config.UploadRateLimiter = r
+}
+
+// Change IPBlocklist of Client
+func (cl *Client) ChangeIPBlockList(bl iplist.Ranger) {
+	cl.lock()
+	defer cl.unlock()
+	cl.ipBlockList = bl
+}
+
 // Filters things that are less than warning from UPnP discovery.
 func upnpDiscoverLogFilter(m log.Msg) bool {
 	level, ok := m.GetLevel()

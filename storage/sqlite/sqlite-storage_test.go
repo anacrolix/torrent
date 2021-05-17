@@ -27,6 +27,7 @@ func newConnsAndProv(t *testing.T, opts NewPoolOpts) (ConnPool, *provider) {
 	// sqlitex.Pool.Close doesn't like being called more than once. Let it slide for now.
 	//t.Cleanup(func() { pool.Close() })
 	qt.Assert(t, initPoolDatabase(pool, InitDbOpts{}), qt.IsNil)
+	qt.Assert(t, initPoolConns(nil, pool, opts.InitConnOpts), qt.IsNil)
 	prov, err := NewProvider(pool, ProviderOpts{BatchWrites: pool.NumConns() > 1})
 	require.NoError(t, err)
 	t.Cleanup(func() { prov.Close() })

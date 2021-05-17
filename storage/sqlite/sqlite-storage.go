@@ -26,17 +26,10 @@ import (
 type conn = *sqlite.Conn
 
 type InitConnOpts struct {
-	SetSynchronous string
+	SetSynchronous int
 	SetJournalMode string
 	MmapSizeOk     bool  // If false, a package-specific default will be used.
 	MmapSize       int64 // If MmapSizeOk is set, use sqlite default if < 0, otherwise this value.
-}
-
-func (me InitConnOpts) JournalMode() string {
-	if me.SetJournalMode != "" {
-		return me.SetJournalMode
-	}
-	return "wal"
 }
 
 type UnexpectedJournalMode struct {
@@ -47,18 +40,42 @@ func (me UnexpectedJournalMode) Error() string {
 	return fmt.Sprintf("unexpected journal mode: %q", me.JournalMode)
 }
 
+func setSynchronous(conn conn, syncInt int) (err error) {
+	err = sqlitex.ExecTransient(conn, fmt.Sprintf(`pragma synchronous=%v`, syncInt), nil)
+	if err != nil {
+		return err
+	}
+	var (
+		actual   int
+		actualOk bool
+	)
+	err = sqlitex.ExecTransient(conn, `pragma synchronous`, func(stmt *sqlite.Stmt) error {
+		actual = stmt.ColumnInt(0)
+		actualOk = true
+		return nil
+	})
+	if err != nil {
+		return
+	}
+	if !actualOk {
+		return errors.New("synchronous setting query didn't return anything")
+	}
+	if actual != syncInt {
+		return fmt.Errorf("set synchronous %q, got %q", syncInt, actual)
+	}
+	return nil
+}
+
 func initConn(conn conn, opts InitConnOpts) (err error) {
+	err = setSynchronous(conn, opts.SetSynchronous)
+	if err != nil {
+		return
+	}
 	// Recursive triggers are required because we need to trim the blob_meta size after trimming to
 	// capacity. Hopefully we don't hit the recursion limit, and if we do, there's an error thrown.
 	err = sqlitex.ExecTransient(conn, "pragma recursive_triggers=on", nil)
 	if err != nil {
 		return err
-	}
-	if opts.SetSynchronous != "" {
-		err = sqlitex.ExecTransient(conn, `pragma synchronous=`+opts.SetSynchronous, nil)
-		if err != nil {
-			return err
-		}
 	}
 	if opts.SetJournalMode != "" {
 		err = sqlitex.ExecTransient(conn, fmt.Sprintf(`pragma journal_mode=%s`, opts.SetJournalMode), func(stmt *sqlite.Stmt) error {

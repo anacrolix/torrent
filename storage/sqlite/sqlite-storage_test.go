@@ -97,6 +97,8 @@ func BenchmarkMarkComplete(b *testing.B) {
 			runBench(b, ci)
 		}
 		b.Run("Control", benchOpts)
+		opts.PageSize = 1 << 16
+		b.Run("64KiB_PageSize", benchOpts)
 	})
 	for _, memory := range []bool{false, true} {
 		b.Run(fmt.Sprintf("Memory=%v", memory), func(b *testing.B) {
@@ -111,7 +113,8 @@ func BenchmarkMarkComplete(b *testing.B) {
 				directBench := func(b *testing.B) {
 					opts.Path = filepath.Join(b.TempDir(), "storage.db")
 					ci, err := NewDirectStorage(opts)
-					if errors.Is(err, UnexpectedJournalMode) {
+					var ujm UnexpectedJournalMode
+					if errors.As(err, &ujm) {
 						b.Skipf("setting journal mode %q: %v", opts.SetJournalMode, err)
 					}
 					c.Assert(err, qt.IsNil)

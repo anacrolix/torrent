@@ -29,13 +29,14 @@ func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, er
 	if err != nil {
 		return
 	}
-	err = initConn(conn, opts.InitConnOpts)
+	err = initDatabase(conn, opts.InitDbOpts)
 	if err != nil {
 		conn.Close()
 		return
 	}
-	err = initDatabase(conn, opts.InitDbOpts)
+	err = initConn(conn, opts.InitConnOpts)
 	if err != nil {
+		conn.Close()
 		return
 	}
 	cl := &client{

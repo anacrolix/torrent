@@ -39,7 +39,13 @@ func (me InitConnOpts) JournalMode() string {
 	return "wal"
 }
 
-var UnexpectedJournalMode = errors.New("unexpected journal mode")
+type UnexpectedJournalMode struct {
+	JournalMode string
+}
+
+func (me UnexpectedJournalMode) Error() string {
+	return fmt.Sprintf("unexpected journal mode: %q", me.JournalMode)
+}
 
 func initConn(conn conn, opts InitConnOpts) (err error) {
 	// Recursive triggers are required because we need to trim the blob_meta size after trimming to
@@ -58,7 +64,7 @@ func initConn(conn conn, opts InitConnOpts) (err error) {
 		err = sqlitex.ExecTransient(conn, fmt.Sprintf(`pragma journal_mode=%s`, opts.SetJournalMode), func(stmt *sqlite.Stmt) error {
 			ret := stmt.ColumnText(0)
 			if ret != opts.SetJournalMode {
-				return UnexpectedJournalMode
+				return UnexpectedJournalMode{ret}
 			}
 			return nil
 		})
@@ -81,14 +87,34 @@ func initConn(conn conn, opts InitConnOpts) (err error) {
 	return nil
 }
 
-func InitSchema(conn conn, pageSize int, triggers bool) error {
-	if pageSize != 0 {
-		err := sqlitex.ExecScript(conn, fmt.Sprintf("pragma page_size=%d", pageSize))
-		if err != nil {
-			return err
-		}
+func setPageSize(conn conn, pageSize int) error {
+	if pageSize == 0 {
+		return nil
 	}
-	err := sqlitex.ExecScript(conn, `
+	var retSize int64
+	err := sqlitex.ExecTransient(conn, fmt.Sprintf(`pragma page_size=%d`, pageSize), nil)
+	if err != nil {
+		return err
+	}
+	err = sqlitex.ExecTransient(conn, "pragma page_size", func(stmt *sqlite.Stmt) error {
+		retSize = stmt.ColumnInt64(0)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if retSize != int64(pageSize) {
+		return fmt.Errorf("requested page size %v but got %v", pageSize, retSize)
+	}
+	return nil
+}
+
+func InitSchema(conn conn, pageSize int, triggers bool) error {
+	err := setPageSize(conn, pageSize)
+	if err != nil {
+		return fmt.Errorf("setting page size: %w", err)
+	}
+	err = sqlitex.ExecScript(conn, `
 		-- We have to opt into this before creating any tables, or before a vacuum to enable it. It means we
 		-- can trim the database file size with partial vacuums without having to do a full vacuum, which 
 		-- locks everything.
@@ -196,6 +222,15 @@ func NewPiecesStorage(opts NewPiecesStorageOpts) (_ storage.ClientImplCloser, er
 	}
 	err = initPoolDatabase(conns, opts.InitDbOpts)
 	if err != nil {
+		conns.Close()
+		return
+	}
+	if opts.SetJournalMode == "" && !opts.Memory {
+		opts.SetJournalMode = "wal"
+	}
+	err = initPoolConns(nil, conns, opts.InitConnOpts)
+	if err != nil {
+		conns.Close()
 		return
 	}
 	provOpts := ProviderOpts{
@@ -305,7 +340,7 @@ func initDatabase(conn conn, opts InitDbOpts) (err error) {
 			// There doesn't seem to be an optimal size. I did try with the standard chunk size, but
 			// the difference is not convincing.
 
-			//opts.PageSize = 1 << 14
+			opts.PageSize = 1 << 14
 		}
 		err = InitSchema(conn, opts.PageSize, !opts.NoTriggers)
 		if err != nil {
@@ -328,8 +363,15 @@ func initPoolDatabase(pool ConnPool, opts InitDbOpts) (err error) {
 	return
 }
 
+// Go fmt, why you so shit?
+const openConnFlags = 0 |
+	sqlite.SQLITE_OPEN_READWRITE |
+	sqlite.SQLITE_OPEN_CREATE |
+	sqlite.SQLITE_OPEN_URI |
+	sqlite.SQLITE_OPEN_NOMUTEX
+
 func newConn(opts NewConnOpts) (conn, error) {
-	return sqlite.OpenConn(newOpenUri(opts), 0)
+	return sqlite.OpenConn(newOpenUri(opts), openConnFlags)
 }
 
 type poolWithNumConns struct {
@@ -345,28 +387,14 @@ func NewPool(opts NewPoolOpts) (_ ConnPool, err error) {
 	if opts.NumConns == 0 {
 		opts.NumConns = runtime.NumCPU()
 	}
-	conns, err := func() (ConnPool, error) {
-		switch opts.NumConns {
-		case 1:
-			conn, err := newConn(opts.NewConnOpts)
-			return &poolFromConn{conn: conn}, err
-		default:
-			_pool, err := sqlitex.Open(newOpenUri(opts.NewConnOpts), 0, opts.NumConns)
-			return poolWithNumConns{_pool, opts.NumConns}, err
-		}
-	}()
-	if err != nil {
-		return
+	switch opts.NumConns {
+	case 1:
+		conn, err := newConn(opts.NewConnOpts)
+		return &poolFromConn{conn: conn}, err
+	default:
+		_pool, err := sqlitex.Open(newOpenUri(opts.NewConnOpts), openConnFlags, opts.NumConns)
+		return poolWithNumConns{_pool, opts.NumConns}, err
 	}
-	defer func() {
-		if err != nil {
-			conns.Close()
-		}
-	}()
-	return conns, initPoolConns(nil, conns, InitPoolOpts{
-		NumConns:     opts.NumConns,
-		InitConnOpts: opts.InitConnOpts,
-	})
 }
 
 // Emulates a ConnPool from a single Conn. Might be faster than using a sqlitex.Pool.
@@ -418,20 +446,20 @@ type InitPoolOpts struct {
 	InitConnOpts
 }
 
-func initPoolConns(ctx context.Context, pool ConnPool, opts InitPoolOpts) (err error) {
+func initPoolConns(ctx context.Context, pool ConnPool, opts InitConnOpts) (err error) {
 	var conns []conn
 	defer func() {
 		for _, c := range conns {
 			pool.Put(c)
 		}
 	}()
-	for range iter.N(opts.NumConns) {
+	for range iter.N(pool.NumConns()) {
 		conn := pool.Get(ctx)
 		if conn == nil {
 			break
 		}
 		conns = append(conns, conn)
-		err = initConn(conn, opts.InitConnOpts)
+		err = initConn(conn, opts)
 		if err != nil {
 			err = fmt.Errorf("initing conn %v: %w", len(conns), err)
 			return

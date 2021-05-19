@@ -53,6 +53,10 @@ func (cl *Client) doRequests() {
 			if p.closed.IsSet() {
 				return
 			}
+			if p.piecesReceivedSinceLastRequestUpdate > p.maxPiecesReceivedBetweenRequestUpdates {
+				p.maxPiecesReceivedBetweenRequestUpdates = p.piecesReceivedSinceLastRequestUpdate
+			}
+			p.piecesReceivedSinceLastRequestUpdate = 0
 			rst.Peers = append(rst.Peers, request_strategy.Peer{
 				HasPiece:    p.peerHasPiece,
 				MaxRequests: p.nominalMaxRequests(),

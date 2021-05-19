@@ -989,7 +989,8 @@ func (c *PeerConn) onReadRequest(r Request) error {
 		}
 		return nil
 	}
-	if len(c.peerRequests) >= maxRequests {
+	// TODO: What if they've already requested this?
+	if len(c.peerRequests) >= localClientReqq {
 		torrent.Add("requests received while queue full", 1)
 		if c.fastEnabled() {
 			c.reject(r)
@@ -1010,7 +1011,7 @@ func (c *PeerConn) onReadRequest(r Request) error {
 		return errors.New("bad Request")
 	}
 	if c.peerRequests == nil {
-		c.peerRequests = make(map[Request]*peerRequestState, maxRequests)
+		c.peerRequests = make(map[Request]*peerRequestState, localClientReqq)
 	}
 	value := &peerRequestState{}
 	c.peerRequests[r] = value

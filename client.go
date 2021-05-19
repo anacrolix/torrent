@@ -969,8 +969,9 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	return nil
 }
 
-// If peer requests are buffered on read, this instructs the amount of memory that might be used to
-// cache pending writes. Assuming 512KiB cached for sending, for 16KiB chunks.
+// Maximum pending requests we allow peers to send us. If peer requests are buffered on read, this
+// instructs the amount of memory that might be used to cache pending writes. Assuming 512KiB
+// (1<<19) cached for sending, for 16KiB (1<<14) chunks.
 const localClientReqq = 1 << 5
 
 // See the order given in Transmission's tr_peerMsgsNew.

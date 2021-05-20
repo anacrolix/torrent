@@ -22,7 +22,8 @@ func (me *BroadcastCond) Broadcast() {
 }
 
 // Should be called before releasing locks on resources that might trigger subsequent Broadcasts.
-func (me *BroadcastCond) WaitChan() <-chan struct{} {
+// The channel is closed when the condition changes.
+func (me *BroadcastCond) Signaled() Signaled {
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	if me.ch == nil {

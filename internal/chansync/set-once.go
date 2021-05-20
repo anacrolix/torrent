@@ -9,7 +9,8 @@ type SetOnce struct {
 	closeOnce sync.Once
 }
 
-func (me *SetOnce) Chan() <-chan struct{} {
+// Returns a channel that is closed when the event is flagged.
+func (me *SetOnce) Done() Done {
 	me.init()
 	return me.ch
 }

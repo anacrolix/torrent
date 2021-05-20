@@ -36,7 +36,7 @@ func TestPexConnState(t *testing.T) {
 		out = m
 		return true
 	}
-	<-c.messageWriter.writeCond.WaitChan()
+	<-c.messageWriter.writeCond.Signaled()
 	c.pex.Share(testWriter)
 	require.True(t, writerCalled)
 	require.EqualValues(t, pp.Extended, out.Type)

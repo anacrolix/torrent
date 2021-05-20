@@ -5,23 +5,34 @@ import (
 	"unsafe"
 
 	"github.com/anacrolix/missinggo/v2/bitmap"
+
+	"github.com/anacrolix/torrent/internal/chansync"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/types"
 )
 
 func (cl *Client) requester() {
 	for {
-		func() {
+		update := func() chansync.Signaled {
 			cl.lock()
 			defer cl.unlock()
 			cl.doRequests()
+			return cl.updateRequests.Signaled()
 		}()
+		// We can probably tune how often to heed this signal. TODO: Currently disabled to retain
+		// existing behaviour, while the signalling is worked out.
+		update = nil
 		select {
 		case <-cl.closed.LockedChan(cl.locker()):
 			return
+		case <-update:
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
+}
+
+func (cl *Client) tickleRequester() {
+	cl.updateRequests.Broadcast()
 }
 
 func (cl *Client) doRequests() {
@@ -62,7 +73,7 @@ func (cl *Client) doRequests() {
 				HasPiece:    p.peerHasPiece,
 				MaxRequests: p.nominalMaxRequests(),
 				HasExistingRequest: func(r request_strategy.Request) bool {
-					_, ok := p.requests[r]
+					_, ok := p.actualRequestState.Requests[r]
 					return ok
 				},
 				Choking: p.peerChoking,
@@ -81,7 +92,7 @@ func (cl *Client) doRequests() {
 		MaxUnverifiedBytes: cl.config.MaxUnverifiedBytes,
 	})
 	for p, state := range nextPeerStates {
-		applyPeerNextRequestState(p, state)
+		setPeerNextRequestState(p, state)
 	}
 }
 
@@ -91,20 +102,35 @@ func (p *peerId) Uintptr() uintptr {
 	return uintptr(unsafe.Pointer(p))
 }
 
-func applyPeerNextRequestState(_p request_strategy.PeerId, rp request_strategy.PeerNextRequestState) {
+func setPeerNextRequestState(_p request_strategy.PeerId, rp request_strategy.PeerNextRequestState) {
 	p := (*Peer)(_p.(*peerId))
-	p.setInterested(rp.Interested)
-	for req := range p.requests {
-		if _, ok := rp.Requests[req]; !ok {
-			p.cancel(req)
+	p.nextRequestState = rp
+	p.onNextRequestStateChanged()
+}
+
+func (p *Peer) applyNextRequestState() bool {
+	next := p.nextRequestState
+	current := p.actualRequestState
+	if !p.setInterested(next.Interested) {
+		return false
+	}
+	for req := range current.Requests {
+		if _, ok := next.Requests[req]; !ok {
+			if !p.cancel(req) {
+				return false
+			}
 		}
 	}
-	for req := range rp.Requests {
-		err := p.request(req)
+	for req := range next.Requests {
+		more, err := p.request(req)
 		if err != nil {
 			panic(err)
 		} else {
 			//log.Print(req)
 		}
+		if !more {
+			return false
+		}
 	}
+	return true
 }

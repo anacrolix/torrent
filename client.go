@@ -33,12 +33,12 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/internal/chansync"
 	"github.com/anacrolix/torrent/internal/limiter"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/webtorrent"
@@ -81,7 +81,7 @@ type Client struct {
 
 	activeAnnounceLimiter limiter.Instance
 
-	pieceRequestOrder request_strategy.ClientPieceOrder
+	updateRequests chansync.BroadcastCond
 }
 
 type ipStr string

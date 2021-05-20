@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
@@ -21,13 +20,11 @@ import (
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/missinggo/v2/conntrack"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
-	"github.com/anacrolix/torrent/internal/limiter"
-	request_strategy "github.com/anacrolix/torrent/request-strategy"
-	"github.com/anacrolix/torrent/tracker"
-	"github.com/anacrolix/torrent/webtorrent"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	"github.com/google/btree"
@@ -35,15 +32,16 @@ import (
 	"golang.org/x/time/rate"
 	"golang.org/x/xerrors"
 
-	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/conntrack"
-
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/internal/limiter"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/webtorrent"
 )
 
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
@@ -967,32 +965,6 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 		return fmt.Errorf("main read loop: %w", err)
 	}
 	return nil
-}
-
-func (pc *PeerConn) startWriter() {
-	w := &pc.messageWriter
-	*w = peerConnWriter{
-		fillWriteBuffer: func() {
-			pc.locker().Lock()
-			defer pc.locker().Unlock()
-			pc.fillWriteBuffer()
-		},
-		closed: &pc.closed,
-		logger: pc.logger,
-		w:      pc.w,
-		keepAlive: func() bool {
-			pc.locker().Lock()
-			defer pc.locker().Unlock()
-			return pc.useful()
-		},
-		writeBuffer: new(bytes.Buffer),
-	}
-	go func() {
-		defer pc.locker().Unlock()
-		defer pc.close()
-		defer pc.locker().Lock()
-		pc.messageWriter.run(time.Minute)
-	}()
 }
 
 // Maximum pending requests we allow peers to send us. If peer requests are buffered on read, this

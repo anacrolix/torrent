@@ -12,6 +12,7 @@ import (
 	"testing/iotest"
 	"time"
 
+	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/filecache"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -168,7 +169,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	for _, pc := range leecherPeerConns {
 		completed := pc.PeerPieces().Len()
 		t.Logf("peer conn %v has %v completed pieces", pc, completed)
-		if completed == leecherTorrent.Info().NumPieces() {
+		if completed == bitmap.BitRange(leecherTorrent.Info().NumPieces()) {
 			foundSeeder = true
 		}
 	}

@@ -53,7 +53,7 @@ func (p *Piece) Storage() storage.Piece {
 }
 
 func (p *Piece) pendingChunkIndex(chunkIndex int) bool {
-	return !p._dirtyChunks.Contains(chunkIndex)
+	return !p._dirtyChunks.Contains(bitmap.BitIndex(chunkIndex))
 }
 
 func (p *Piece) pendingChunk(cs ChunkSpec, chunkSize pp.Integer) bool {
@@ -69,12 +69,12 @@ func (p *Piece) numDirtyChunks() pp.Integer {
 }
 
 func (p *Piece) unpendChunkIndex(i int) {
-	p._dirtyChunks.Add(i)
+	p._dirtyChunks.Add(bitmap.BitIndex(i))
 	p.t.tickleReaders()
 }
 
 func (p *Piece) pendChunkIndex(i int) {
-	p._dirtyChunks.Remove(i)
+	p._dirtyChunks.Remove(bitmap.BitIndex(i))
 }
 
 func (p *Piece) numChunks() pp.Integer {
@@ -199,7 +199,7 @@ func (p *Piece) purePriority() (ret piecePriority) {
 	for _, f := range p.files {
 		ret.Raise(f.prio)
 	}
-	if p.t.readerNowPieces().Contains(int(p.index)) {
+	if p.t.readerNowPieces().Contains(bitmap.BitIndex(p.index)) {
 		ret.Raise(PiecePriorityNow)
 	}
 	// if t._readerNowPieces.Contains(piece - 1) {
@@ -234,7 +234,7 @@ func (p *Piece) completion() (ret storage.Completion) {
 }
 
 func (p *Piece) allChunksDirty() bool {
-	return p._dirtyChunks.Len() == int(p.numChunks())
+	return p._dirtyChunks.Len() == bitmap.BitRange(p.numChunks())
 }
 
 func (p *Piece) dirtyChunks() bitmap.Bitmap {

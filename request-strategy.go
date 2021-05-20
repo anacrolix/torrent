@@ -4,6 +4,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/anacrolix/missinggo/v2/bitmap"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/types"
 )
@@ -66,7 +67,7 @@ func (cl *Client) doRequests() {
 				},
 				Choking: p.peerChoking,
 				PieceAllowedFast: func(i pieceIndex) bool {
-					return p.peerAllowedFast.Contains(i)
+					return p.peerAllowedFast.Contains(bitmap.BitIndex(i))
 				},
 				DownloadRate: p.downloadRate(),
 				Age:          time.Since(p.completedHandshake),

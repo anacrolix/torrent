@@ -232,7 +232,7 @@ func (cn *Peer) peerHasAllPieces() (all bool, known bool) {
 	if !cn.t.haveInfo() {
 		return false, false
 	}
-	return bitmap.Flip(cn._peerPieces, 0, bitmap.BitIndex(cn.t.numPieces())).IsEmpty(), true
+	return bitmap.Flip(cn._peerPieces, 0, bitmap.BitRange(cn.t.numPieces())).IsEmpty(), true
 }
 
 func (cn *PeerConn) locker() *lockWithDeferreds {
@@ -267,7 +267,7 @@ func (cn *PeerConn) onGotInfo(info *metainfo.Info) {
 // Correct the PeerPieces slice length. Return false if the existing slice is invalid, such as by
 // receiving badly sized BITFIELD, or invalid HAVE messages.
 func (cn *PeerConn) setNumPieces(num pieceIndex) {
-	cn._peerPieces.RemoveRange(bitmap.BitIndex(num), bitmap.ToEnd)
+	cn._peerPieces.RemoveRange(bitmap.BitRange(num), bitmap.ToEnd)
 	cn.peerPiecesChanged()
 }
 
@@ -730,10 +730,10 @@ func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 			if !iter.All(
 				func(_i interface{}) bool {
 					i := _i.(int)
-					if skip.Contains(i) {
+					if skip.Contains(bitmap.BitIndex(i)) {
 						return true
 					}
-					skip.Add(i)
+					skip.Add(bitmap.BitIndex(i))
 					return cb(i)
 				},
 				bm.Iter,
@@ -746,7 +746,7 @@ func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 
 // check callers updaterequests
 func (cn *Peer) stopRequestingPiece(piece pieceIndex) bool {
-	return cn._pieceRequestOrder.Remove(bitmap.BitIndex(piece))
+	return cn._pieceRequestOrder.Remove(piece)
 }
 
 // This is distinct from Torrent piece priority, which is the user's
@@ -762,7 +762,7 @@ func (cn *Peer) updatePiecePriority(piece pieceIndex) bool {
 		return cn.stopRequestingPiece(piece)
 	}
 	prio := cn.getPieceInclination()[piece]
-	return cn._pieceRequestOrder.Set(bitmap.BitIndex(piece), prio)
+	return cn._pieceRequestOrder.Set(piece, prio)
 }
 
 func (cn *Peer) getPieceInclination() []int {
@@ -835,15 +835,15 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 	for i, have := range bf {
 		if have {
 			cn.raisePeerMinPieces(pieceIndex(i) + 1)
-			if !pp.Contains(i) {
+			if !pp.Contains(bitmap.BitIndex(i)) {
 				cn.t.incPieceAvailability(i)
 			}
 		} else {
-			if pp.Contains(i) {
+			if pp.Contains(bitmap.BitIndex(i)) {
 				cn.t.decPieceAvailability(i)
 			}
 		}
-		cn._peerPieces.Set(i, have)
+		cn._peerPieces.Set(bitmap.BitIndex(i), have)
 	}
 	cn.peerPiecesChanged()
 	return nil
@@ -854,7 +854,7 @@ func (cn *Peer) onPeerHasAllPieces() {
 	if t.haveInfo() {
 		pp := cn.newPeerPieces()
 		for i := range iter.N(t.numPieces()) {
-			if !pp.Contains(i) {
+			if !pp.Contains(bitmap.BitIndex(i)) {
 				t.incPieceAvailability(i)
 			}
 		}
@@ -1198,7 +1198,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).SetLevel(log.Debug).Log(c.t.logger)
-			c.peerAllowedFast.Add(int(msg.Index))
+			c.peerAllowedFast.Add(bitmap.BitIndex(msg.Index))
 			c.updateRequests()
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
@@ -1326,7 +1326,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	}
 	c.decExpectedChunkReceive(req)
 
-	if c.peerChoking && c.peerAllowedFast.Get(int(req.Index)) {
+	if c.peerChoking && c.peerAllowedFast.Get(bitmap.BitIndex(req.Index)) {
 		chunksReceived.Add("due to allowed fast", 1)
 	}
 
@@ -1658,11 +1658,12 @@ func (cn *PeerConn) PeerPieces() bitmap.Bitmap {
 	return cn.newPeerPieces()
 }
 
-// Returns a new Bitmap that includes bits for all pieces we have.
+// Returns a new Bitmap that includes bits for all pieces the peer claims to have.
 func (cn *Peer) newPeerPieces() bitmap.Bitmap {
 	ret := cn._peerPieces.Copy()
 	if cn.peerSentHaveAll {
-		ret.AddRange(0, cn.t.numPieces())
+
+		ret.AddRange(0, bitmap.BitRange(cn.t.numPieces()))
 	}
 	return ret
 }

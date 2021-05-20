@@ -396,7 +396,9 @@ func (p *Peer) close() {
 	p.discardPieceInclination()
 	p._pieceRequestOrder.Clear()
 	p.peerImpl.onClose()
-	p.t.decPeerPieceAvailability(p)
+	if p.t != nil {
+		p.t.decPeerPieceAvailability(p)
+	}
 	for _, f := range p.callbacks.PeerClosed {
 		f(p)
 	}
@@ -1651,19 +1653,23 @@ func (cn *Peer) peerMaxRequests() int {
 	return cn.PeerMaxRequests
 }
 
-// Returns the pieces the peer has claimed to have.
+// Returns the pieces the peer could have based on their claims. If we don't know how many pieces
+// are in the torrent, it could be a very large range the peer has sent HaveAll.
 func (cn *PeerConn) PeerPieces() bitmap.Bitmap {
 	cn.locker().RLock()
 	defer cn.locker().RUnlock()
 	return cn.newPeerPieces()
 }
 
-// Returns a new Bitmap that includes bits for all pieces the peer claims to have.
+// Returns a new Bitmap that includes bits for all pieces the peer could have based on their claims.
 func (cn *Peer) newPeerPieces() bitmap.Bitmap {
 	ret := cn._peerPieces.Copy()
 	if cn.peerSentHaveAll {
-
-		ret.AddRange(0, bitmap.BitRange(cn.t.numPieces()))
+		if cn.t.haveInfo() {
+			ret.AddRange(0, bitmap.BitRange(cn.t.numPieces()))
+		} else {
+			ret.AddRange(0, bitmap.ToEnd)
+		}
 	}
 	return ret
 }

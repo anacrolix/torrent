@@ -436,16 +436,18 @@ func (t *Torrent) onSetInfo() {
 		p.onGotInfo(t.info)
 	})
 	for i := range t.pieces {
-		t.updatePieceCompletion(pieceIndex(i))
 		p := &t.pieces[i]
-		if !p.storageCompletionOk {
-			// t.logger.Printf("piece %s completion unknown, queueing check", p)
-			t.queuePieceCheck(pieceIndex(i))
-		}
+		// Need to add availability before updating piece completion, as that may result in conns
+		// being dropped.
 		if p.availability != 0 {
 			panic(p.availability)
 		}
 		p.availability = int64(t.pieceAvailabilityFromPeers(i))
+		t.updatePieceCompletion(pieceIndex(i))
+		if !p.storageCompletionOk {
+			// t.logger.Printf("piece %s completion unknown, queueing check", p)
+			t.queuePieceCheck(pieceIndex(i))
+		}
 	}
 	t.cl.event.Broadcast()
 	t.gotMetainfo.Set()
@@ -1374,6 +1376,9 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 }
 
 func (t *Torrent) decPeerPieceAvailability(p *Peer) {
+	if !t.haveInfo() {
+		return
+	}
 	p.newPeerPieces().IterTyped(func(i int) bool {
 		p.t.decPieceAvailability(i)
 		return true

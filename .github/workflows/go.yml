@@ -23,3 +23,9 @@ jobs:
 
     - name: Bench
       run: go test -run @ -bench .
+
+    - name: Test on 386
+      run: GOARCH=386 go test ./... -count 2 -bench . || true
+
+    - name: torrentfs end-to-end test
+      run: fs/test.sh

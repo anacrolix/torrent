@@ -12,8 +12,8 @@ require (
 	github.com/anacrolix/log v0.9.0
 	github.com/anacrolix/missinggo v1.2.1
 	github.com/anacrolix/missinggo/perf v1.0.0
-	github.com/anacrolix/missinggo/v2 v2.5.0
-	github.com/anacrolix/multiless v0.1.1-0.20210510014912-3f17cb19bda9
+	github.com/anacrolix/missinggo/v2 v2.5.1-0.20210520011502-b3d95d6b1d02
+	github.com/anacrolix/multiless v0.1.1-0.20210520040635-10ee7b5f3cff
 	github.com/anacrolix/sync v0.2.0
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/upnp v0.1.2-0.20200416075019-5e9378ed1425

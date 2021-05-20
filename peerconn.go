@@ -11,18 +11,18 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/prioritybitmap"
 	"github.com/anacrolix/multiless"
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/internal/chansync"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
@@ -68,7 +68,7 @@ type Peer struct {
 	cryptoMethod    mse.CryptoMethod
 	Discovery       PeerSource
 	trusted         bool
-	closed          missinggo.Event
+	closed          chansync.SetOnce
 	// Set true after we've added our ConnStats generated during handshake to
 	// other ConnStat instances as determined when the *Torrent became known.
 	reconciledHandshakeStats bool
@@ -148,11 +148,10 @@ type PeerConn struct {
 	w io.Writer
 	r io.Reader
 
-	writeBuffer *bytes.Buffer
-	uploadTimer *time.Timer
-	writerCond  sync.Cond
+	messageWriter peerConnWriter
 
-	pex pexConnState
+	uploadTimer *time.Timer
+	pex         pexConnState
 }
 
 func (cn *PeerConn) connStatusString() string {
@@ -429,17 +428,25 @@ const writeBufferHighWaterLen = 1 << 15
 // done asynchronously, so it may be that we're not able to honour backpressure from this method.
 func (cn *PeerConn) write(msg pp.Message) bool {
 	torrent.Add(fmt.Sprintf("messages written of type %s", msg.Type.String()), 1)
-	// We don't need to track bytes here because a connection.w Writer wrapper takes care of that
-	// (although there's some delay between us recording the message, and the connection writer
+	// We don't need to track bytes here because the connection's Writer has that behaviour injected
+	// (although there's some delay between us buffering the message, and the connection writer
 	// flushing it out.).
-	cn.writeBuffer.Write(msg.MustMarshalBinary())
+	notFull := cn.messageWriter.write(msg)
 	// Last I checked only Piece messages affect stats, and we don't write those.
 	cn.wroteMsg(&msg)
 	cn.tickleWriter()
+	return notFull
+}
+
+func (cn *peerConnWriter) write(msg pp.Message) bool {
+	cn.mu.Lock()
+	defer cn.mu.Unlock()
+	cn.writeBuffer.Write(msg.MustMarshalBinary())
+	cn.writeCond.Broadcast()
 	return !cn.writeBufferFull()
 }
 
-func (cn *PeerConn) writeBufferFull() bool {
+func (cn *peerConnWriter) writeBufferFull() bool {
 	return cn.writeBuffer.Len() >= writeBufferHighWaterLen
 }
 
@@ -636,25 +643,38 @@ func (cn *PeerConn) fillWriteBuffer() {
 	cn.upload(cn.write)
 }
 
+type peerConnWriter struct {
+	// Must not be called with the local mutex held, as it will call back into the write method.
+	fillWriteBuffer func()
+	closed          *chansync.SetOnce
+	logger          log.Logger
+	w               io.Writer
+	keepAlive       func() bool
+
+	mu        sync.Mutex
+	writeCond chansync.BroadcastCond
+	// Pointer so we can swap with the "front buffer".
+	writeBuffer *bytes.Buffer
+}
+
 // Routine that writes to the peer. Some of what to write is buffered by
 // activity elsewhere in the Client, and some is determined locally when the
 // connection is writable.
-func (cn *PeerConn) writer(keepAliveTimeout time.Duration) {
+func (cn *peerConnWriter) run(keepAliveTimeout time.Duration) {
 	var (
 		lastWrite      time.Time = time.Now()
 		keepAliveTimer *time.Timer
 	)
 	keepAliveTimer = time.AfterFunc(keepAliveTimeout, func() {
-		cn.locker().Lock()
-		defer cn.locker().Unlock()
+		cn.mu.Lock()
+		defer cn.mu.Unlock()
 		if time.Since(lastWrite) >= keepAliveTimeout {
-			cn.tickleWriter()
+			cn.writeCond.Broadcast()
 		}
 		keepAliveTimer.Reset(keepAliveTimeout)
 	})
-	cn.locker().Lock()
-	defer cn.locker().Unlock()
-	defer cn.close()
+	cn.mu.Lock()
+	defer cn.mu.Unlock()
 	defer keepAliveTimer.Stop()
 	frontBuf := new(bytes.Buffer)
 	for {
@@ -662,22 +682,31 @@ func (cn *PeerConn) writer(keepAliveTimeout time.Duration) {
 			return
 		}
 		if cn.writeBuffer.Len() == 0 {
-			cn.fillWriteBuffer()
+			func() {
+				cn.mu.Unlock()
+				defer cn.mu.Lock()
+				cn.fillWriteBuffer()
+			}()
 		}
-		if cn.writeBuffer.Len() == 0 && time.Since(lastWrite) >= keepAliveTimeout && cn.useful() {
+		if cn.writeBuffer.Len() == 0 && time.Since(lastWrite) >= keepAliveTimeout && cn.keepAlive() {
 			cn.writeBuffer.Write(pp.Message{Keepalive: true}.MustMarshalBinary())
 			torrent.Add("written keepalives", 1)
 		}
 		if cn.writeBuffer.Len() == 0 {
-			// TODO: Minimize wakeups....
-			cn.writerCond.Wait()
+			writeCond := cn.writeCond.WaitChan()
+			cn.mu.Unlock()
+			select {
+			case <-cn.closed.Chan():
+			case <-writeCond:
+			}
+			cn.mu.Lock()
 			continue
 		}
 		// Flip the buffers.
 		frontBuf, cn.writeBuffer = cn.writeBuffer, frontBuf
-		cn.locker().Unlock()
+		cn.mu.Unlock()
 		n, err := cn.w.Write(frontBuf.Bytes())
-		cn.locker().Lock()
+		cn.mu.Lock()
 		if n != 0 {
 			lastWrite = time.Now()
 			keepAliveTimer.Reset(keepAliveTimeout)
@@ -1463,7 +1492,7 @@ func (c *PeerConn) uploadAllowed() bool {
 
 func (c *PeerConn) setRetryUploadTimer(delay time.Duration) {
 	if c.uploadTimer == nil {
-		c.uploadTimer = time.AfterFunc(delay, c.writerCond.Broadcast)
+		c.uploadTimer = time.AfterFunc(delay, c.tickleWriter)
 	} else {
 		c.uploadTimer.Reset(delay)
 	}
@@ -1558,7 +1587,7 @@ func (c *Peer) deleteAllRequests() {
 // This is called when something has changed that should wake the writer, such as putting stuff into
 // the writeBuffer, or changing some state that the writer can act on.
 func (c *PeerConn) tickleWriter() {
-	c.writerCond.Broadcast()
+	c.messageWriter.writeCond.Broadcast()
 }
 
 func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool, state *peerRequestState) (more bool) {

@@ -5,7 +5,6 @@ import (
 	"net"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/bradfitz/iter"
@@ -32,7 +31,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	r, w := io.Pipe()
 	//c.r = r
 	c.w = w
-	go c.writer(time.Minute)
+	c.startWriter()
 	c.locker().Lock()
 	c.t._completedPieces.Add(1)
 	c.postBitfield( /*[]bool{false, true, false}*/ )

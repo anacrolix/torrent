@@ -21,7 +21,7 @@ func TestPexConnState(t *testing.T) {
 	c := cl.newConnection(nil, false, addr, addr.Network(), "")
 	c.PeerExtensionIDs = make(map[pp.ExtensionName]pp.ExtensionNumber)
 	c.PeerExtensionIDs[pp.ExtensionNamePex] = pexExtendedId
-	c.writerCond.L.Lock()
+	c.messageWriter.mu.Lock()
 	c.setTorrent(torrent)
 	torrent.addPeerConn(c)
 
@@ -36,7 +36,7 @@ func TestPexConnState(t *testing.T) {
 		out = m
 		return true
 	}
-	c.writerCond.Wait()
+	<-c.messageWriter.writeCond.WaitChan()
 	c.pex.Share(testWriter)
 	require.True(t, writerCalled)
 	require.EqualValues(t, pp.Extended, out.Type)

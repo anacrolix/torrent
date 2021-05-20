@@ -960,13 +960,39 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 		return fmt.Errorf("adding connection: %w", err)
 	}
 	defer t.dropConnection(c)
-	go c.writer(time.Minute)
+	c.startWriter()
 	cl.sendInitialMessages(c, t)
 	err := c.mainReadLoop()
 	if err != nil {
 		return fmt.Errorf("main read loop: %w", err)
 	}
 	return nil
+}
+
+func (pc *PeerConn) startWriter() {
+	w := &pc.messageWriter
+	*w = peerConnWriter{
+		fillWriteBuffer: func() {
+			pc.locker().Lock()
+			defer pc.locker().Unlock()
+			pc.fillWriteBuffer()
+		},
+		closed: &pc.closed,
+		logger: pc.logger,
+		w:      pc.w,
+		keepAlive: func() bool {
+			pc.locker().Lock()
+			defer pc.locker().Unlock()
+			return pc.useful()
+		},
+		writeBuffer: new(bytes.Buffer),
+	}
+	go func() {
+		defer pc.locker().Unlock()
+		defer pc.close()
+		defer pc.locker().Lock()
+		pc.messageWriter.run(time.Minute)
+	}()
 }
 
 // Maximum pending requests we allow peers to send us. If peer requests are buffered on read, this
@@ -1409,13 +1435,11 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemot
 			Network:    network,
 			callbacks:  &cl.config.Callbacks,
 		},
-		connString:  connString,
-		conn:        nc,
-		writeBuffer: new(bytes.Buffer),
+		connString: connString,
+		conn:       nc,
 	}
 	c.peerImpl = c
 	c.logger = cl.logger.WithDefaultLevel(log.Warning).WithContextValue(c)
-	c.writerCond.L = cl.locker()
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
 		l: cl.config.DownloadRateLimiter,

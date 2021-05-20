@@ -74,6 +74,7 @@ func (me *peersForPieceRequests) addNextRequest(r Request) {
 type requestablePiece struct {
 	index             pieceIndex
 	t                 Torrent
+	alwaysReallocate  bool
 	NumPendingChunks  int
 	IterPendingChunks ChunksIter
 }
@@ -137,6 +138,7 @@ func getRequestablePieces(input Input) (ret []requestablePiece) {
 			t:                 piece.t.Torrent,
 			NumPendingChunks:  piece.NumPendingChunks,
 			IterPendingChunks: piece.iterPendingChunksWrapper,
+			alwaysReallocate:  piece.Priority >= types.PiecePriorityNext,
 		})
 	}
 	return
@@ -201,23 +203,42 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 			}
 		}
 	}()
-	sortPeersForPiece := func(byHasRequest *Request) {
+	sortPeersForPiece := func(req *Request) {
 		sort.Slice(peersForPiece, func(i, j int) bool {
-			ml := multiless.New().Int(
-				peersForPiece[i].requestsInPiece,
-				peersForPiece[j].requestsInPiece,
-			).Int(
+			byHasRequest := func() multiless.Computation {
+				ml := multiless.New()
+				if req != nil {
+					_, iHas := peersForPiece[i].nextState.Requests[*req]
+					_, jHas := peersForPiece[j].nextState.Requests[*req]
+					ml = ml.Bool(jHas, iHas)
+				}
+				return ml
+			}()
+			ml := multiless.New()
+			// We always "reallocate", that is force even striping amongst peers that are either on
+			// the last piece they can contribute too, or for pieces marked for this behaviour.
+			// Striping prevents starving peers of requests, and will always re-balance to the
+			// fastest known peers.
+			if !p.alwaysReallocate {
+				ml = ml.Bool(
+					peersForPiece[j].requestablePiecesRemaining == 1,
+					peersForPiece[i].requestablePiecesRemaining == 1)
+			}
+			if p.alwaysReallocate || peersForPiece[j].requestablePiecesRemaining == 1 {
+				ml = ml.Int(
+					peersForPiece[i].requestsInPiece,
+					peersForPiece[j].requestsInPiece)
+			} else {
+				ml = ml.AndThen(byHasRequest)
+			}
+			ml = ml.Int(
 				peersForPiece[i].requestablePiecesRemaining,
 				peersForPiece[j].requestablePiecesRemaining,
 			).Float64(
 				peersForPiece[j].DownloadRate,
 				peersForPiece[i].DownloadRate,
 			)
-			if byHasRequest != nil {
-				_, iHas := peersForPiece[i].nextState.Requests[*byHasRequest]
-				_, jHas := peersForPiece[j].nextState.Requests[*byHasRequest]
-				ml = ml.Bool(jHas, iHas)
-			}
+			ml = ml.AndThen(byHasRequest)
 			return ml.Int64(
 				int64(peersForPiece[j].Age), int64(peersForPiece[i].Age),
 				// TODO: Probably peer priority can come next

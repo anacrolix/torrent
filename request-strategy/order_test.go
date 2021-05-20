@@ -187,7 +187,9 @@ func TestDontStealUnnecessarily(t *testing.T) {
 	// Slower than the stealers, but has all requests already.
 	stealee := basePeer
 	stealee.DownloadRate = 1
-	keepReqs := requestSetFromSlice(r(0, 0), r(0, 1), r(0, 2))
+	keepReqs := requestSetFromSlice(
+		r(3, 2), r(3, 4), r(3, 6), r(3, 8),
+		r(4, 0), r(4, 1), r(4, 7), r(4, 8))
 	stealee.HasExistingRequest = func(r Request) bool {
 		_, ok := keepReqs[r]
 		return ok
@@ -197,12 +199,41 @@ func TestDontStealUnnecessarily(t *testing.T) {
 	firstStealer.Id = intPeerId(2)
 	secondStealer := basePeer
 	secondStealer.Id = intPeerId(3)
+	secondStealer.HasPiece = func(i pieceIndex) bool {
+		switch i {
+		case 1, 3:
+			return true
+		default:
+			return false
+		}
+	}
 	results := Run(Input{Torrents: []Torrent{{
-		Pieces: []Piece{{
-			Request:           true,
-			NumPendingChunks:  9,
-			IterPendingChunks: chunkIterRange(9),
-		}},
+		Pieces: []Piece{
+			{
+				Request:           true,
+				NumPendingChunks:  0,
+				IterPendingChunks: chunkIterRange(9),
+			},
+			{
+				Request:           true,
+				NumPendingChunks:  7,
+				IterPendingChunks: chunkIterRange(7),
+			},
+			{
+				Request:           true,
+				NumPendingChunks:  0,
+				IterPendingChunks: chunkIterRange(0),
+			},
+			{
+				Request:           true,
+				NumPendingChunks:  9,
+				IterPendingChunks: chunkIterRange(9),
+			},
+			{
+				Request:           true,
+				NumPendingChunks:  9,
+				IterPendingChunks: chunkIterRange(9),
+			}},
 		Peers: []Peer{
 			firstStealer,
 			stealee,
@@ -215,10 +246,10 @@ func TestDontStealUnnecessarily(t *testing.T) {
 		c.Check(results[p].Requests, qt.HasLen, l)
 		c.Check(results[p].Interested, qt.Equals, l > 0)
 	}
-	check(firstStealer.Id, 3)
-	check(secondStealer.Id, 3)
+	check(firstStealer.Id, 5)
+	check(secondStealer.Id, 7+9)
 	c.Check(results[stealee.Id], qt.ContentEquals, PeerNextRequestState{
 		Interested: true,
-		Requests:   keepReqs,
+		Requests:   requestSetFromSlice(r(4, 0), r(4, 1), r(4, 7), r(4, 8)),
 	})
 }

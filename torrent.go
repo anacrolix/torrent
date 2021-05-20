@@ -18,13 +18,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/anacrolix/multiless"
-	"github.com/anacrolix/torrent/common"
-	"github.com/anacrolix/torrent/segments"
-	"github.com/anacrolix/torrent/webseed"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/pion/datachannel"
-
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
@@ -34,12 +27,18 @@ import (
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/prioritybitmap"
+	"github.com/anacrolix/multiless"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/pion/datachannel"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
 )
 
@@ -574,8 +573,8 @@ func (t *Torrent) pieceAvailabilityRuns() (ret []pieceAvailabilityRun) {
 	rle := missinggo.NewRunLengthEncoder(func(el interface{}, count uint64) {
 		ret = append(ret, pieceAvailabilityRun{availability: el.(int64), count: int(count)})
 	})
-	for _, p := range t.pieces {
-		rle.Append(p.availability, 1)
+	for i := range t.pieces {
+		rle.Append(t.pieces[i].availability, 1)
 	}
 	rle.Flush()
 	return

@@ -1,3 +1,6 @@
+//go:build cgo
+// +build cgo
+
 package sqliteStorage
 
 import (
@@ -12,12 +15,13 @@ import (
 	"time"
 
 	_ "github.com/anacrolix/envpprof"
-	"github.com/anacrolix/torrent/storage"
-	test_storage "github.com/anacrolix/torrent/storage/test"
 	"github.com/dustin/go-humanize"
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/anacrolix/torrent/storage"
+	test_storage "github.com/anacrolix/torrent/storage/test"
 )
 
 func newConnsAndProv(t *testing.T, opts NewPoolOpts) (ConnPool, *provider) {

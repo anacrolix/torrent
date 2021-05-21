@@ -1,3 +1,6 @@
+//go:build cgo
+// +build cgo
+
 package main
 
 import (
@@ -7,6 +10,7 @@ import (
 
 	"crawshaw.io/sqlite"
 	"github.com/alexflint/go-arg"
+
 	sqliteStorage "github.com/anacrolix/torrent/storage/sqlite"
 )
 

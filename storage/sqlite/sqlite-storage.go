@@ -1,3 +1,6 @@
+//go:build cgo
+// +build cgo
+
 package sqliteStorage
 
 import (
@@ -20,6 +23,7 @@ import (
 	"crawshaw.io/sqlite/sqlitex"
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/resource"
+
 	"github.com/anacrolix/torrent/storage"
 )
 

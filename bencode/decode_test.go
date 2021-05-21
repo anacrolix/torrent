@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -144,7 +145,7 @@ func TestIgnoreUnmarshalTypeError(t *testing.T) {
 	}{}
 	require.Error(t, Unmarshal([]byte("d6:Normal5:helloe"), &s))
 	assert.NoError(t, Unmarshal([]byte("d6:Ignore5:helloe"), &s))
-	require.Nil(t, Unmarshal([]byte("d6:Ignorei42ee"), &s))
+	qt.Assert(t, Unmarshal([]byte("d6:Ignorei42ee"), &s), qt.IsNil)
 	assert.EqualValues(t, 42, s.Ignore)
 }
 

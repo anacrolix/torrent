@@ -1,9 +1,11 @@
 package request_strategy
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/anacrolix/multiless"
+
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/types"
 )
@@ -160,7 +162,7 @@ func Run(input Input) map[PeerId]PeerNextRequestState {
 			peers = append(peers, &requestsPeer{
 				Peer: p,
 				nextState: PeerNextRequestState{
-					Requests: make(map[Request]struct{}),
+					Requests: make(map[Request]struct{}, p.MaxRequests),
 				},
 			})
 		}
@@ -182,10 +184,27 @@ func Run(input Input) map[PeerId]PeerNextRequestState {
 			if rp.requestablePiecesRemaining != 0 {
 				panic(rp.requestablePiecesRemaining)
 			}
+			if _, ok := ret[rp.Id]; ok {
+				panic(fmt.Sprintf("duplicate peer id: %v", rp.Id))
+			}
 			ret[rp.Id] = rp.nextState
 		}
 	}
 	return ret
+}
+
+// Checks that a sorted peersForPiece slice makes sense.
+func ensureValidSortedPeersForPieceRequests(peers []*peersForPieceRequests, sortLess func(_, _ int) bool) {
+	if !sort.SliceIsSorted(peers, sortLess) {
+		panic("not sorted")
+	}
+	peerMap := make(map[*peersForPieceRequests]struct{}, len(peers))
+	for _, p := range peers {
+		if _, ok := peerMap[p]; ok {
+			panic(p)
+		}
+		peerMap[p] = struct{}{}
+	}
 }
 
 func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
@@ -204,7 +223,7 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 		}
 	}()
 	sortPeersForPiece := func(req *Request) {
-		sort.Slice(peersForPiece, func(i, j int) bool {
+		less := func(i, j int) bool {
 			byHasRequest := func() multiless.Computation {
 				ml := multiless.New()
 				if req != nil {
@@ -246,9 +265,13 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 				peersForPiece[i].Id.Uintptr(),
 				peersForPiece[j].Id.Uintptr(),
 			).MustLess()
-		})
+		}
+		sort.Slice(peersForPiece, less)
+		ensureValidSortedPeersForPieceRequests(peersForPiece, less)
 	}
-	preallocated := make(map[ChunkSpec]*peersForPieceRequests, p.NumPendingChunks)
+	// Chunks can be preassigned several times, if peers haven't been able to update their "actual"
+	// with "next" request state before another request strategy run occurs.
+	preallocated := make(map[ChunkSpec][]*peersForPieceRequests, p.NumPendingChunks)
 	p.IterPendingChunks(func(spec ChunkSpec) {
 		req := Request{pp.Integer(p.index), spec}
 		for _, peer := range peersForPiece {
@@ -261,7 +284,7 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 			if !peer.canRequestPiece(p.index) {
 				continue
 			}
-			preallocated[spec] = peer
+			preallocated[spec] = append(preallocated[spec], peer)
 			peer.addNextRequest(req)
 		}
 	})
@@ -292,12 +315,16 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 		}
 	})
 chunk:
-	for chunk, prePeer := range preallocated {
+	for chunk, prePeers := range preallocated {
 		pendingChunksRemaining--
 		req := Request{pp.Integer(p.index), chunk}
-		prePeer.requestsInPiece--
+		for _, pp := range prePeers {
+			pp.requestsInPiece--
+		}
 		sortPeersForPiece(&req)
-		delete(prePeer.nextState.Requests, req)
+		for _, pp := range prePeers {
+			delete(pp.nextState.Requests, req)
+		}
 		for _, peer := range peersForPiece {
 			if !peer.canFitRequest() {
 				continue

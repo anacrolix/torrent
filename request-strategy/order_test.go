@@ -4,9 +4,10 @@ import (
 	"math"
 	"testing"
 
-	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/bradfitz/iter"
 	qt "github.com/frankban/quicktest"
+
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 func r(i pieceIndex, begin int) Request {
@@ -252,4 +253,45 @@ func TestDontStealUnnecessarily(t *testing.T) {
 		Interested: true,
 		Requests:   requestSetFromSlice(r(4, 0), r(4, 1), r(4, 7), r(4, 8)),
 	})
+}
+
+// This tests a situation where multiple peers had the same existing request, due to "actual" and
+// "next" request states being out of sync. This reasonable occurs when a peer hasn't fully updated
+// its actual request state since the last request strategy run.
+func TestDuplicatePreallocations(t *testing.T) {
+	peer := func(id int, downloadRate float64) Peer {
+		return Peer{
+			HasExistingRequest: func(r Request) bool {
+				return true
+			},
+			MaxRequests: 2,
+			HasPiece: func(i pieceIndex) bool {
+				return true
+			},
+			Id:           intPeerId(id),
+			DownloadRate: downloadRate,
+		}
+	}
+	results := Run(Input{
+		Torrents: []Torrent{{
+			Pieces: []Piece{{
+				Request:           true,
+				NumPendingChunks:  1,
+				IterPendingChunks: chunkIterRange(1),
+			}, {
+				Request:           true,
+				NumPendingChunks:  1,
+				IterPendingChunks: chunkIterRange(1),
+			}},
+			Peers: []Peer{
+				// The second peer was be marked as the preallocation, clobbering the first. The
+				// first peer is preferred, and the piece isn't striped, so it gets preallocated a
+				// request, and then gets reallocated from the peer the same request.
+				peer(1, 2),
+				peer(2, 1),
+			},
+		}},
+	})
+	c := qt.New(t)
+	c.Assert(2, qt.Equals, len(results[intPeerId(1)].Requests)+len(results[intPeerId(2)].Requests))
 }

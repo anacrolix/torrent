@@ -110,6 +110,10 @@ func (ws *webseedPeer) onClose() {
 
 func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Request) {
 	result := <-webseedRequest.Result
+	// We do this here rather than inside receiveChunk, since we want to count errors too. I'm not
+	// sure if we can divine which errors indicate cancellation on our end without hitting the
+	// network though.
+	ws.peer.doChunkReadStats(int64(len(result.Bytes)))
 	ws.peer.t.cl.lock()
 	defer ws.peer.t.cl.unlock()
 	if result.Err != nil {

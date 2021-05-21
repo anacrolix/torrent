@@ -856,10 +856,6 @@ func (cn *PeerConn) wroteMsg(msg *pp.Message) {
 	cn.allStats(func(cs *ConnStats) { cs.wroteMsg(msg) })
 }
 
-func (cn *PeerConn) readMsg(msg *pp.Message) {
-	cn.allStats(func(cs *ConnStats) { cs.readMsg(msg) })
-}
-
 // After handshake, we know what Torrent and Client stats to include for a
 // connection.
 func (cn *Peer) postHandshakeStats(f func(*ConnStats)) {
@@ -1065,7 +1061,6 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		if err != nil {
 			return err
 		}
-		c.readMsg(&msg)
 		c.lastMessageReceived = time.Now()
 		if msg.Keepalive {
 			receivedKeepalives.Add(1)
@@ -1105,6 +1100,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			r := newRequestFromMessage(&msg)
 			err = c.onReadRequest(r)
 		case pp.Piece:
+			c.doChunkReadStats(int64(len(msg.Piece)))
 			err = c.receiveChunk(&msg)
 			if len(msg.Piece) == int(t.chunkSize) {
 				t.chunkPool.Put(&msg.Piece)
@@ -1253,10 +1249,12 @@ func (cn *PeerConn) rw() io.ReadWriter {
 	}{cn.r, cn.w}
 }
 
+func (c *Peer) doChunkReadStats(size int64) {
+	c.allStats(func(cs *ConnStats) { cs.receivedChunk(size) })
+}
+
 // Handle a received chunk from a peer.
 func (c *Peer) receiveChunk(msg *pp.Message) error {
-	t := c.t
-	cl := t.cl
 	chunksReceived.Add("total", 1)
 
 	req := newRequestFromMessage(msg)
@@ -1295,6 +1293,9 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 			chunksReceived.Add("unwanted", 1)
 		}
 	}
+
+	t := c.t
+	cl := t.cl
 
 	// Do we actually want this chunk?
 	if t.haveChunk(req) {

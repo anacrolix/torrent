@@ -79,14 +79,9 @@ func (cs *ConnStats) wroteMsg(msg *pp.Message) {
 	}
 }
 
-func (cs *ConnStats) readMsg(msg *pp.Message) {
-	// We want to also handle extended metadata pieces here, but we wouldn't
-	// have decoded the extended payload yet.
-	switch msg.Type {
-	case pp.Piece:
-		cs.ChunksRead.Add(1)
-		cs.BytesReadData.Add(int64(len(msg.Piece)))
-	}
+func (cs *ConnStats) receivedChunk(size int64) {
+	cs.ChunksRead.Add(1)
+	cs.BytesReadData.Add(size)
 }
 
 func (cs *ConnStats) incrementPiecesDirtiedGood() {

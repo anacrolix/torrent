@@ -9,7 +9,7 @@ on:
 jobs:
 
   build:
-    timeout-minutes: 20
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -22,21 +22,18 @@ jobs:
     - name: Download Go modules
       run: go mod download
 
-    - name: build
+    - name: Build
       run: go build ./...
 
     - name: Test
-      run: go test -race ./... -bench . -benchtime 1x
+      run: go test -race ./...
 
     - name: Bench
-      run: go test -run @ -bench ./...
+      run: go test -run @ -bench . ./...
 
     - name: Test on 386
       run: GOARCH=386 go test ./... -bench .
       continue-on-error: true
-
-    - name: Install godo
-      run: go install github.com/anacrolix/godo@latest
 
     - name: Install godo
       run: go install github.com/anacrolix/godo@latest

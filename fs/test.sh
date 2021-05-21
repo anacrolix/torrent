@@ -11,7 +11,7 @@ popd
 file="$debian_file"
 # file=sintel.mp4
 while [ ! -e "mnt/$file" ]; do sleep 1; done
-pv "mnt/$file" | md5sum
+pv -f "mnt/$file" | md5sum
 # expect e221f43f4fdd409250908fc4305727d4
 sudo umount mnt
 wait || echo "wait returned" $?

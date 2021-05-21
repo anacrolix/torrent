@@ -19,14 +19,17 @@ jobs:
       with:
         go-version: 1.16
 
+    - name: Download Go modules
+      run: go mod download
+
     - name: Test
-      run: go test -race -count 2 -v ./... -bench . -benchtime 2x
+      run: go test -race ./... -bench . -benchtime 1x
 
     - name: Bench
       run: go test -run @ -bench .
 
     - name: Test on 386
-      run: GOARCH=386 go test ./... -count 2 -bench . || true
+      run: GOARCH=386 go test ./... -bench . || true
 
     - name: torrentfs end-to-end test
       run: fs/test.sh

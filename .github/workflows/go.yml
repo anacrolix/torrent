@@ -31,5 +31,8 @@ jobs:
     - name: Test on 386
       run: GOARCH=386 go test ./... -bench . || true
 
+    - name: Install godo
+      run: go install github.com/anacrolix/godo@latest
+
     - name: torrentfs end-to-end test
       run: fs/test.sh

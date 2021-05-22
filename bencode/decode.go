@@ -243,21 +243,27 @@ func getDictField(dict reflect.Type, key string) dictField {
 	}
 }
 
-type structField struct {
-	r   reflect.StructField
-	tag tag
-}
-
 var (
 	structFieldsMu sync.Mutex
 	structFields   = map[reflect.Type]map[string]dictField{}
 )
 
-func parseStructFields(struct_ reflect.Type, each func(string, dictField)) {
+func parseStructFields(struct_ reflect.Type, each func(key string, df dictField)) {
 	for _i, n := 0, struct_.NumField(); _i < n; _i++ {
 		i := _i
 		f := struct_.Field(i)
 		if f.Anonymous {
+			parseStructFields(f.Type.Elem(), func(key string, df dictField) {
+				innerGet := df.Get
+				df.Get = func(value reflect.Value) func(reflect.Value) {
+					anonPtr := value.Field(i)
+					if anonPtr.IsNil() {
+						anonPtr.Set(reflect.New(f.Type.Elem()))
+					}
+					return innerGet(anonPtr.Elem())
+				}
+				each(key, df)
+			})
 			continue
 		}
 		tagStr := f.Tag.Get("bencode")

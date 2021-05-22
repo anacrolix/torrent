@@ -133,13 +133,16 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 		e.reflectString(v.String())
 	case reflect.Struct:
 		e.writeString("d")
-		for _, ef := range encodeFields(v.Type()) {
-			field_value := v.Field(ef.i)
-			if ef.omit_empty && isEmptyValue(field_value) {
+		for _, ef := range getEncodeFields(v.Type()) {
+			fieldValue := ef.i(v)
+			if !fieldValue.IsValid() {
+				continue
+			}
+			if ef.omitEmpty && isEmptyValue(fieldValue) {
 				continue
 			}
 			e.reflectString(ef.tag)
-			e.reflectValue(field_value)
+			e.reflectValue(fieldValue)
 		}
 		e.writeString("e")
 	case reflect.Map:
@@ -190,9 +193,9 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 }
 
 type encodeField struct {
-	i          int
-	tag        string
-	omit_empty bool
+	i         func(v reflect.Value) reflect.Value
+	tag       string
+	omitEmpty bool
 }
 
 type encodeFieldsSortType []encodeField
@@ -206,31 +209,47 @@ var (
 	encodeFieldsCache = make(map[reflect.Type][]encodeField)
 )
 
-func encodeFields(t reflect.Type) []encodeField {
+func getEncodeFields(t reflect.Type) []encodeField {
 	typeCacheLock.RLock()
 	fs, ok := encodeFieldsCache[t]
 	typeCacheLock.RUnlock()
 	if ok {
 		return fs
 	}
-
+	fs = makeEncodeFields(t)
 	typeCacheLock.Lock()
 	defer typeCacheLock.Unlock()
-	fs, ok = encodeFieldsCache[t]
-	if ok {
-		return fs
-	}
+	encodeFieldsCache[t] = fs
+	return fs
+}
 
-	for i, n := 0, t.NumField(); i < n; i++ {
+func makeEncodeFields(t reflect.Type) (fs []encodeField) {
+	for _i, n := 0, t.NumField(); _i < n; _i++ {
+		i := _i
 		f := t.Field(i)
 		if f.PkgPath != "" {
 			continue
 		}
 		if f.Anonymous {
+			anonEFs := makeEncodeFields(f.Type.Elem())
+			for aefi := range anonEFs {
+				anonEF := anonEFs[aefi]
+				bottomField := anonEF
+				bottomField.i = func(v reflect.Value) reflect.Value {
+					v = v.Field(i)
+					if v.IsNil() {
+						return reflect.Value{}
+					}
+					return anonEF.i(v.Elem())
+				}
+				fs = append(fs, bottomField)
+			}
 			continue
 		}
 		var ef encodeField
-		ef.i = i
+		ef.i = func(v reflect.Value) reflect.Value {
+			return v.Field(i)
+		}
 		ef.tag = f.Name
 
 		tv := getTag(f.Tag)
@@ -240,11 +259,10 @@ func encodeFields(t reflect.Type) []encodeField {
 		if tv.Key() != "" {
 			ef.tag = tv.Key()
 		}
-		ef.omit_empty = tv.OmitEmpty()
+		ef.omitEmpty = tv.OmitEmpty()
 		fs = append(fs, ef)
 	}
 	fss := encodeFieldsSortType(fs)
 	sort.Sort(fss)
-	encodeFieldsCache[t] = fs
 	return fs
 }

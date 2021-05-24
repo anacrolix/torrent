@@ -1538,17 +1538,23 @@ func (t *Torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 	cl := t.cl
 	for v := range pvs {
 		cl.lock()
+		added := 0
 		for _, cp := range v.Peers {
 			if cp.Port == 0 {
 				// Can't do anything with this.
 				continue
 			}
-			t.addPeer(PeerInfo{
+			if t.addPeer(PeerInfo{
 				Addr:   ipPortAddr{cp.IP, cp.Port},
 				Source: PeerSourceDhtGetPeers,
-			})
+			}) {
+				added++
+			}
 		}
 		cl.unlock()
+		if added != 0 {
+			//log.Printf("added %v peers from dht for %v", added, t.InfoHash().HexString())
+		}
 	}
 }
 

@@ -18,7 +18,7 @@ type ClientImpl interface {
 
 // Data storage bound to a torrent.
 type TorrentImpl struct {
-	Piece func(metainfo.Piece) PieceImpl
+	Piece func(p metainfo.Piece) PieceImpl
 	Close func() error
 	// Storages that share the same value, will provide a pointer to the same function.
 	Capacity *func() *int64

@@ -19,8 +19,8 @@ import (
 	"github.com/anacrolix/missinggo/v2/prioritybitmap"
 	"github.com/anacrolix/multiless"
 
+	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/internal/chansync"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"

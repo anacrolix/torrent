@@ -6,7 +6,7 @@ import (
 
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
-	"github.com/anacrolix/torrent/internal/chansync"
+	"github.com/anacrolix/chansync"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/types"
 )

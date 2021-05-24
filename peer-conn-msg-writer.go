@@ -5,10 +5,10 @@ import (
 	"io"
 	"time"
 
+	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/sync"
 
-	"github.com/anacrolix/torrent/internal/chansync"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 

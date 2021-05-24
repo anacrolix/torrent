@@ -32,8 +32,9 @@ import (
 	"golang.org/x/time/rate"
 	"golang.org/x/xerrors"
 
+	"github.com/anacrolix/chansync"
+
 	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/internal/chansync"
 	"github.com/anacrolix/torrent/internal/limiter"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
@@ -260,7 +261,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 				if err != nil {
 					panic(err)
 				}
-				cl.dhtServers = append(cl.dhtServers, anacrolixDhtServerWrapper{ds})
+				cl.dhtServers = append(cl.dhtServers, AnacrolixDhtServerWrapper{ds})
 				cl.onClose = append(cl.onClose, func() { ds.Close() })
 			}
 		}
@@ -312,6 +313,10 @@ func (cl *Client) AddDialer(d Dialer) {
 	for _, t := range cl.torrents {
 		t.openNewConns()
 	}
+}
+
+func (cl *Client) Listeners() []Listener {
+	return cl.listeners
 }
 
 // Registers a Listener, and starts Accepting on it. You must Close Listeners provided this way

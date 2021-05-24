@@ -253,14 +253,19 @@ func parseStructFields(struct_ reflect.Type, each func(key string, df dictField)
 		i := _i
 		f := struct_.Field(i)
 		if f.Anonymous {
-			parseStructFields(f.Type.Elem(), func(key string, df dictField) {
+			t := f.Type
+			if t.Kind() == reflect.Ptr {
+				t = t.Elem()
+			}
+			parseStructFields(t, func(key string, df dictField) {
 				innerGet := df.Get
 				df.Get = func(value reflect.Value) func(reflect.Value) {
 					anonPtr := value.Field(i)
-					if anonPtr.IsNil() {
+					if anonPtr.Kind() == reflect.Ptr && anonPtr.IsNil() {
 						anonPtr.Set(reflect.New(f.Type.Elem()))
+						anonPtr = anonPtr.Elem()
 					}
-					return innerGet(anonPtr.Elem())
+					return innerGet(anonPtr)
 				}
 				each(key, df)
 			})

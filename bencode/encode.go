@@ -231,16 +231,24 @@ func makeEncodeFields(t reflect.Type) (fs []encodeField) {
 			continue
 		}
 		if f.Anonymous {
-			anonEFs := makeEncodeFields(f.Type.Elem())
+			t := f.Type
+			if t.Kind() == reflect.Ptr {
+				t = t.Elem()
+			}
+			anonEFs := makeEncodeFields(t)
 			for aefi := range anonEFs {
 				anonEF := anonEFs[aefi]
 				bottomField := anonEF
 				bottomField.i = func(v reflect.Value) reflect.Value {
 					v = v.Field(i)
-					if v.IsNil() {
-						return reflect.Value{}
+					if v.Kind() == reflect.Ptr {
+						if v.IsNil() {
+							// This will skip serializing this value.
+							return reflect.Value{}
+						}
+						v = v.Elem()
 					}
-					return anonEF.i(v.Elem())
+					return anonEF.i(v)
 				}
 				fs = append(fs, bottomField)
 			}

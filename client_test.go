@@ -322,7 +322,7 @@ func TestDhtInheritBlocklist(t *testing.T) {
 	numServers := 0
 	cl.eachDhtServer(func(s DhtServer) {
 		t.Log(s)
-		assert.Equal(t, ipl, s.(anacrolixDhtServerWrapper).Server.IPBlocklist())
+		assert.Equal(t, ipl, s.(AnacrolixDhtServerWrapper).Server.IPBlocklist())
 		numServers++
 	})
 	assert.EqualValues(t, 2, numServers)

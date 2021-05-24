@@ -387,6 +387,8 @@ func (t *Torrent) cacheLength() {
 	t.length = &l
 }
 
+// TODO: This shouldn't fail for storage reasons. Instead we should handle storage failure
+// separately.
 func (t *Torrent) setInfo(info *metainfo.Info) error {
 	if err := validateInfo(info); err != nil {
 		return fmt.Errorf("bad info: %s", err)
@@ -1193,8 +1195,9 @@ func (t *Torrent) readAt(b []byte, off int64) (n int, err error) {
 	return
 }
 
-// Returns an error if the metadata was completed, but couldn't be set for
-// some reason. Blame it on the last peer to contribute.
+// Returns an error if the metadata was completed, but couldn't be set for some reason. Blame it on
+// the last peer to contribute. TODO: Actually we shouldn't blame peers for failure to open storage
+// etc. Also we should probably cached metadata pieces per-Peer, to isolate failure appropriately.
 func (t *Torrent) maybeCompleteMetadata() error {
 	if t.haveInfo() {
 		// Nothing to do.

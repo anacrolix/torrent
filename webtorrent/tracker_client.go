@@ -1,16 +1,19 @@
 package webtorrent
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
 	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/torrent/tracker"
-	"github.com/gorilla/websocket"
+	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 	"github.com/pion/datachannel"
 	"github.com/pion/webrtc/v3"
 )
@@ -32,7 +35,7 @@ type TrackerClient struct {
 	mu             sync.Mutex
 	cond           sync.Cond
 	outboundOffers map[string]outboundOffer // OfferID to outboundOffer
-	wsConn         *websocket.Conn
+	wsConn         *net.Conn
 	closed         bool
 	stats          TrackerClientStats
 	pingTicker     *time.Ticker
@@ -70,14 +73,14 @@ func (tc *TrackerClient) doWebsocket() error {
 	tc.mu.Lock()
 	tc.stats.Dials++
 	tc.mu.Unlock()
-	c, _, err := websocket.DefaultDialer.Dial(tc.Url, nil)
+	c, _, _, err := ws.DefaultDialer.Dial(context.Background(), tc.Url)
 	if err != nil {
 		return fmt.Errorf("dialing tracker: %w", err)
 	}
 	defer c.Close()
 	tc.Logger.WithDefaultLevel(log.Info).Printf("connected")
 	tc.mu.Lock()
-	tc.wsConn = c
+	tc.wsConn = &c
 	tc.cond.Broadcast()
 	tc.mu.Unlock()
 	tc.announceOffers()
@@ -87,7 +90,7 @@ func (tc *TrackerClient) doWebsocket() error {
 			select {
 			case <-tc.pingTicker.C:
 				tc.mu.Lock()
-				err := c.WriteMessage(websocket.PingMessage, []byte{})
+				err := wsutil.WriteServerMessage(c, ws.OpPing, []byte{})
 				tc.mu.Unlock()
 				if err != nil {
 					return
@@ -131,7 +134,7 @@ func (tc *TrackerClient) Close() error {
 	tc.mu.Lock()
 	tc.closed = true
 	if tc.wsConn != nil {
-		tc.wsConn.Close()
+		(*tc.wsConn).Close()
 	}
 	tc.closeUnusedOffers()
 	tc.pingTicker.Stop()
@@ -238,12 +241,12 @@ func (tc *TrackerClient) writeMessage(data []byte) error {
 		}
 		tc.cond.Wait()
 	}
-	return tc.wsConn.WriteMessage(websocket.TextMessage, data)
+	return wsutil.WriteServerText(*tc.wsConn, data)
 }
 
-func (tc *TrackerClient) trackerReadLoop(tracker *websocket.Conn) error {
+func (tc *TrackerClient) trackerReadLoop(tracker *net.Conn) error {
 	for {
-		_, message, err := tracker.ReadMessage()
+		message, _, err := wsutil.ReadClientData(*tracker)
 		if err != nil {
 			return fmt.Errorf("read message error: %w", err)
 		}

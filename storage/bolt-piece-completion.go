@@ -1,3 +1,6 @@
+//go:build !noboltdb
+// +build !noboltdb
+
 package storage
 
 import (

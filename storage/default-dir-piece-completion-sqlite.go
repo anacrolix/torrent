@@ -1,5 +1,5 @@
-//go:build cgo
-// +build cgo
+//go:build cgo && !nosqlite
+// +build cgo,!nosqlite
 
 package storage
 

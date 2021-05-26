@@ -1058,7 +1058,15 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 		}
 		t.saveMetadataPiece(piece, payload[begin:])
 		c.lastUsefulChunkReceived = time.Now()
-		return t.maybeCompleteMetadata()
+		err = t.maybeCompleteMetadata()
+		if err != nil {
+			// Log this at the Torrent-level, as we don't partition metadata by Peer yet, so we
+			// don't know who to blame. TODO: Also errors can be returned here that aren't related
+			// to verifying metadata, which should be fixed. This should be tagged with metadata, so
+			// log consumers can filter for this message.
+			t.logger.WithDefaultLevel(log.Warning).Printf("error completing metadata: %v", err)
+		}
+		return err
 	case pp.RequestMetadataExtensionMsgType:
 		if !t.haveMetadataPiece(piece) {
 			c.post(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))

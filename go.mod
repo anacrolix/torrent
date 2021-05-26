@@ -25,8 +25,10 @@ require (
 	github.com/elliotchance/orderedmap v1.4.0
 	github.com/frankban/quicktest v1.11.3
 	github.com/fsnotify/fsnotify v1.4.9
+	github.com/gobwas/httphead v0.1.0 // indirect
+	github.com/gobwas/pool v0.2.1 // indirect
+	github.com/gobwas/ws v1.0.4
 	github.com/google/btree v1.0.1
-	github.com/gorilla/websocket v1.4.2
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/pion/datachannel v1.4.21
 	github.com/pion/rtp v1.6.5 // indirect

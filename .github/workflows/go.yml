@@ -1,0 +1,46 @@
+name: Go
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+
+  build:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.16
+
+    - name: Download Go modules
+      run: go mod download
+
+    - name: Build
+      run: go build ./...
+
+    - name: Test
+      run: go test -race ./...
+
+    - name: Bench
+      run: go test -run @ -bench . ./...
+
+    - name: Test on 386
+      run: GOARCH=386 go test ./... -bench .
+      continue-on-error: true
+
+    - name: Install godo
+      run: go install github.com/anacrolix/godo@latest
+
+    - name: Apt packages
+      run: sudo apt install pv fuse
+
+    - name: torrentfs end-to-end test
+      run: fs/test.sh
+      timeout-minutes: 10

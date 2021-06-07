@@ -810,10 +810,20 @@ func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
 }
 
 func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash, err error) {
-	hash := pieceHash.New()
 	p := t.piece(piece)
 	p.waitNoPendingWrites()
 	storagePiece := t.pieces[piece].Storage()
+
+	//Does the backend want to do its own hashing?
+	if i, ok := storagePiece.PieceImpl.(storage.SelfHashing); ok {
+		var sum metainfo.Hash
+		log.Printf("A piece decided to self-hash: %d", piece)
+		sum, err = i.SelfHash()
+		missinggo.CopyExact(&ret, sum)
+		return
+	}
+
+	hash := pieceHash.New()
 	const logPieceContents = false
 	if logPieceContents {
 		var examineBuf bytes.Buffer

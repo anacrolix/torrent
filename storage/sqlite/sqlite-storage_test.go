@@ -5,6 +5,7 @@ package sqliteStorage
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -34,7 +35,7 @@ func newConnsAndProv(t *testing.T, opts NewPoolOpts) (ConnPool, *provider) {
 	if !opts.Memory && opts.SetJournalMode == "" {
 		opts.SetJournalMode = "wal"
 	}
-	qt.Assert(t, initPoolConns(nil, pool, opts.InitConnOpts), qt.IsNil)
+	qt.Assert(t, initPoolConns(context.TODO(), pool, opts.InitConnOpts), qt.IsNil)
 	prov, err := NewProvider(pool, ProviderOpts{BatchWrites: pool.NumConns() > 1})
 	require.NoError(t, err)
 	t.Cleanup(func() { prov.Close() })

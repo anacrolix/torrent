@@ -252,7 +252,7 @@ func NewPiecesStorage(opts NewPiecesStorageOpts) (_ storage.ClientImplCloser, er
 	if opts.SetJournalMode == "" && !opts.Memory {
 		opts.SetJournalMode = "wal"
 	}
-	err = initPoolConns(nil, conns, opts.InitConnOpts)
+	err = initPoolConns(context.TODO(), conns, opts.InitConnOpts)
 	if err != nil {
 		conns.Close()
 		return
@@ -494,7 +494,7 @@ type ConnPool interface {
 }
 
 func withPoolConn(pool ConnPool, with func(conn)) {
-	c := pool.Get(nil)
+	c := pool.Get(context.TODO())
 	defer pool.Put(c)
 	with(c)
 }

@@ -4,8 +4,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/bits-and-blooms/bloom/v3"
 	"github.com/pkg/errors"
-	"github.com/willf/bloom"
 )
 
 // Firewall used to prevent connections.

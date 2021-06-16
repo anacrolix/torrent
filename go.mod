@@ -17,6 +17,7 @@ require (
 	github.com/anacrolix/upnp v0.1.1
 	github.com/anacrolix/utp v0.0.0-20180219060659-9e0e1d1d0572
 	github.com/benbjohnson/immutable v0.2.0
+	github.com/bits-and-blooms/bloom/v3 v3.0.1
 	github.com/bradfitz/iter v0.0.0-20191230175014-e8f45d346db8
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
@@ -31,10 +32,8 @@ require (
 	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.4.0
-	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/stretchr/testify v1.4.0
 	github.com/tinylib/msgp v1.1.1 // indirect
-	github.com/willf/bloom v2.0.3+incompatible
 	go.etcd.io/bbolt v1.3.6
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0

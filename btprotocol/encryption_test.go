@@ -30,7 +30,7 @@ func TestEncryptionHandshakeRoundTrip(t *testing.T) {
 		require.Equal(t, rw, buffered)
 	}()
 
-	rw, err := p1.Outgoing(c1, key, mse.CryptoMethodRC4)
+	rw, _, err := p1.Outgoing(c1, key, mse.CryptoMethodRC4)
 	<-p2done
 
 	require.NoError(t, err)

@@ -3,7 +3,7 @@ module github.com/anacrolix/torrent
 require (
 	bazil.org/fuse v0.0.0-20200407214033-5883e5a4b512
 	crawshaw.io/sqlite v0.3.3-0.20210127221821-98b1f83c5508
-	github.com/RoaringBitmap/roaring v0.6.0 // indirect
+	github.com/RoaringBitmap/roaring v0.7.2 // indirect
 	github.com/alexflint/go-arg v1.3.0
 	github.com/anacrolix/confluence v1.7.1-0.20210311004351-d642adb8546c // indirect
 	github.com/anacrolix/dht/v2 v2.9.1

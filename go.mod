@@ -2,7 +2,7 @@ module github.com/james-lawrence/torrent
 
 require (
 	bazil.org/fuse v0.0.0-20200117225306-7b5117fecadc
-	github.com/RoaringBitmap/roaring v0.4.21
+	github.com/RoaringBitmap/roaring v0.7.4
 	github.com/alexflint/go-arg v1.2.0
 	github.com/anacrolix/envpprof v1.1.0 // indirect
 	github.com/anacrolix/go-libutp v1.0.2
@@ -23,7 +23,6 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/fsnotify/fsnotify v1.4.7
-	github.com/glycerine/go-unsnap-stream v0.0.0-20190901134440-81cf024a9e0a // indirect
 	github.com/google/btree v1.0.0
 	github.com/gosuri/uilive v0.0.4 // indirect
 	github.com/gosuri/uiprogress v0.0.1
@@ -33,11 +32,10 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.4.0
 	github.com/stretchr/testify v1.4.0
-	github.com/tinylib/msgp v1.1.1 // indirect
 	go.etcd.io/bbolt v1.3.6
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
-	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 	gopkg.in/yaml.v2 v2.2.7 // indirect
 )
 

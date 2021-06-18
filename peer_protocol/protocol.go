@@ -41,7 +41,7 @@ const (
 const (
 	HandshakeExtendedID = 0
 
-	RequestMetadataExtensionMsgType = 0
-	DataMetadataExtensionMsgType    = 1
-	RejectMetadataExtensionMsgType  = 2
+	RequestMetadataExtensionMsgType ExtendedMetadataRequestMsgType = 0
+	DataMetadataExtensionMsgType                                   = 1
+	RejectMetadataExtensionMsgType                                 = 2
 )

@@ -544,19 +544,15 @@ func (t *Torrent) metadataPieceSize(piece int) int {
 	return metadataPieceSize(len(t.metadataBytes), piece)
 }
 
-func (t *Torrent) newMetadataExtensionMessage(c *PeerConn, msgType int, piece int, data []byte) pp.Message {
-	d := map[string]int{
-		"msg_type": msgType,
-		"piece":    piece,
-	}
-	if data != nil {
-		d["total_size"] = len(t.metadataBytes)
-	}
-	p := bencode.MustMarshal(d)
+func (t *Torrent) newMetadataExtensionMessage(c *PeerConn, msgType pp.ExtendedMetadataRequestMsgType, piece int, data []byte) pp.Message {
 	return pp.Message{
-		Type:            pp.Extended,
-		ExtendedID:      c.PeerExtensionIDs[pp.ExtensionNameMetadata],
-		ExtendedPayload: append(p, data...),
+		Type:       pp.Extended,
+		ExtendedID: c.PeerExtensionIDs[pp.ExtensionNameMetadata],
+		ExtendedPayload: append(bencode.MustMarshal(pp.ExtendedMetadataRequestMsg{
+			Piece:     piece,
+			TotalSize: len(t.metadataBytes),
+			Type:      msgType,
+		}), data...),
 	}
 }
 

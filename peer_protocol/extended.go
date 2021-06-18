@@ -1,6 +1,8 @@
 package peer_protocol
 
-import "net"
+import (
+	"net"
+)
 
 // http://www.bittorrent.org/beps/bep_0010.html
 type (
@@ -26,7 +28,6 @@ type (
 const (
 	// http://www.bittorrent.org/beps/bep_0011.html
 	ExtensionNamePex ExtensionName = "ut_pex"
-	// http://bittorrent.org/beps/bep_0009.html. Note that there's an
-	// LT_metadata, but I've never implemented it.
-	ExtensionNameMetadata = "ut_metadata"
+
+	ExtensionDeleteNumber ExtensionNumber = 0
 )

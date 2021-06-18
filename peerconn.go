@@ -443,27 +443,14 @@ func (cn *PeerConn) write(msg pp.Message) bool {
 
 func (cn *PeerConn) requestMetadataPiece(index int) {
 	eID := cn.PeerExtensionIDs[pp.ExtensionNameMetadata]
-	if eID == 0 {
+	if eID == pp.ExtensionDeleteNumber {
 		return
 	}
 	if index < len(cn.metadataRequests) && cn.metadataRequests[index] {
 		return
 	}
 	cn.logger.WithDefaultLevel(log.Debug).Printf("requesting metadata piece %d", index)
-	cn.write(pp.Message{
-		Type:       pp.Extended,
-		ExtendedID: eID,
-		ExtendedPayload: func() []byte {
-			b, err := bencode.Marshal(map[string]int{
-				"msg_type": pp.RequestMetadataExtensionMsgType,
-				"piece":    index,
-			})
-			if err != nil {
-				panic(err)
-			}
-			return b
-		}(),
-	})
+	cn.write(pp.MetadataExtensionRequestMsg(eID, index))
 	for index >= len(cn.metadataRequests) {
 		cn.metadataRequests = append(cn.metadataRequests, false)
 	}

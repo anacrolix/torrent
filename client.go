@@ -1020,25 +1020,21 @@ func (cl *Client) haveDhtServer() (ret bool) {
 
 // Process incoming ut_metadata message.
 func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerConn) error {
-	var d map[string]int
+	var d pp.ExtendedMetadataRequestMsg
 	err := bencode.Unmarshal(payload, &d)
 	if _, ok := err.(bencode.ErrUnusedTrailingBytes); ok {
 	} else if err != nil {
 		return fmt.Errorf("error unmarshalling bencode: %s", err)
 	}
-	msgType, ok := d["msg_type"]
-	if !ok {
-		return errors.New("missing msg_type field")
-	}
-	piece := d["piece"]
-	switch msgType {
+	piece := d.Piece
+	switch d.Type {
 	case pp.DataMetadataExtensionMsgType:
 		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.MetadataChunksRead }))
 		if !c.requestedMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
 		c.metadataRequests[piece] = false
-		begin := len(payload) - metadataPieceSize(d["total_size"], piece)
+		begin := len(payload) - d.PieceSize()
 		if begin < 0 || begin >= len(payload) {
 			return fmt.Errorf("data has bad offset in payload: %d", begin)
 		}
@@ -1055,7 +1051,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 		return err
 	case pp.RequestMetadataExtensionMsgType:
 		if !t.haveMetadataPiece(piece) {
-			c.write(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
+			c.write(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d.Piece, nil))
 			return nil
 		}
 		start := (1 << 14) * piece

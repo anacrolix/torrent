@@ -1643,17 +1643,33 @@ func (t *Torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 	}
 }
 
-func (t *Torrent) announceToDht(impliedPort bool, s DhtServer) error {
-	ps, err := s.Announce(t.infoHash, t.cl.incomingPeerPort(), impliedPort)
+// Announce using the provided DHT server. Peers are consumed automatically. done is closed when the
+// announce ends. stop will force the announce to end.
+func (t *Torrent) AnnounceToDht(s DhtServer) (done <-chan struct{}, stop func(), err error) {
+	ps, err := s.Announce(t.infoHash, t.cl.incomingPeerPort(), true)
+	if err != nil {
+		return
+	}
+	_done := make(chan struct{})
+	done = _done
+	stop = ps.Close
+	go func() {
+		t.consumeDhtAnnouncePeers(ps.Peers())
+		close(_done)
+	}()
+	return
+}
+
+func (t *Torrent) announceToDht(s DhtServer) error {
+	_, stop, err := t.AnnounceToDht(s)
 	if err != nil {
 		return err
 	}
-	go t.consumeDhtAnnouncePeers(ps.Peers())
 	select {
 	case <-t.closed.LockedChan(t.cl.locker()):
 	case <-time.After(5 * time.Minute):
 	}
-	ps.Close()
+	stop()
 	return nil
 }
 
@@ -1681,7 +1697,7 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 			t.numDHTAnnounces++
 			cl.unlock()
 			defer cl.lock()
-			err := t.announceToDht(true, s)
+			err := t.announceToDht(s)
 			if err != nil {
 				t.logger.WithDefaultLevel(log.Warning).Printf("error announcing %q to DHT: %s", t, err)
 			}

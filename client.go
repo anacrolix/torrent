@@ -22,7 +22,6 @@ import (
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	"github.com/anacrolix/missinggo/v2/conntrack"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
 	"github.com/davecgh/go-spew/spew"
@@ -257,7 +256,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	if !cfg.NoDHT {
 		for _, s := range sockets {
 			if pc, ok := s.(net.PacketConn); ok {
-				ds, err := cl.newAnacrolixDhtServer(pc)
+				ds, err := cl.NewAnacrolixDhtServer(pc)
 				if err != nil {
 					panic(err)
 				}
@@ -363,7 +362,8 @@ func (cl *Client) listenNetworks() (ns []network) {
 	return
 }
 
-func (cl *Client) newAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
+// Creates an anacrolix/dht Server, as would be done internally in NewClient, for the given conn.
+func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	cfg := dht.ServerConfig{
 		IPBlocklist:    cl.ipBlockList,
 		Conn:           conn,
@@ -374,10 +374,9 @@ func (cl *Client) newAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err
 			}
 			return cl.config.PublicIp4
 		}(),
-		StartingNodes:      cl.config.DhtStartingNodes(conn.LocalAddr().Network()),
-		ConnectionTracking: cl.config.ConnTracker,
-		OnQuery:            cl.config.DHTOnQuery,
-		Logger:             cl.logger.WithContextText(fmt.Sprintf("dht server on %v", conn.LocalAddr().String())),
+		StartingNodes: cl.config.DhtStartingNodes(conn.LocalAddr().Network()),
+		OnQuery:       cl.config.DHTOnQuery,
+		Logger:        cl.logger.WithContextText(fmt.Sprintf("dht server on %v", conn.LocalAddr().String())),
 	}
 	if f := cl.config.ConfigureAnacrolixDhtServer; f != nil {
 		f(&cfg)
@@ -639,21 +638,6 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) (res dialResult) {
 }
 
 func (cl *Client) dialFromSocket(ctx context.Context, s Dialer, addr string) net.Conn {
-	network := s.LocalAddr().Network()
-	cte := cl.config.ConnTracker.Wait(
-		ctx,
-		conntrack.Entry{network, s.LocalAddr().String(), addr},
-		"dial torrent client",
-		0,
-	)
-	// Try to avoid committing to a dial if the context is complete as it's difficult to determine
-	// which dial errors allow us to forget the connection tracking entry handle.
-	if ctx.Err() != nil {
-		if cte != nil {
-			cte.Forget()
-		}
-		return nil
-	}
 	c, err := s.Dial(ctx, addr)
 	// This is a bit optimistic, but it looks non-trivial to thread this through the proxy code. Set
 	// it now in case we close the connection forthwith.
@@ -661,19 +645,7 @@ func (cl *Client) dialFromSocket(ctx context.Context, s Dialer, addr string) net
 		tc.SetLinger(0)
 	}
 	countDialResult(err)
-	if c == nil {
-		if err != nil && forgettableDialError(err) {
-			cte.Forget()
-		} else {
-			cte.Done()
-		}
-		return nil
-	}
-	return closeWrapper{c, func() error {
-		err := c.Close()
-		cte.Done()
-		return err
-	}}
+	return c
 }
 
 func forgettableDialError(err error) bool {
@@ -1180,7 +1152,9 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 
 	t = cl.newTorrent(infoHash, specStorage)
 	cl.eachDhtServer(func(s DhtServer) {
-		go t.dhtAnnouncer(s)
+		if cl.config.PeriodicallyAnnounceTorrentsToDht {
+			go t.dhtAnnouncer(s)
+		}
 	})
 	cl.torrents[infoHash] = t
 	cl.clearAcceptLimits()

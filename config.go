@@ -11,7 +11,6 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/expect"
-	"github.com/anacrolix/missinggo/v2/conntrack"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/iplist"
@@ -38,7 +37,8 @@ type ClientConfig struct {
 	NoDHT            bool `long:"disable-dht"`
 	DhtStartingNodes func(network string) dht.StartingNodesGetter
 	// Called for each anacrolix/dht Server created for the Client.
-	ConfigureAnacrolixDhtServer func(*dht.ServerConfig)
+	ConfigureAnacrolixDhtServer       func(*dht.ServerConfig)
+	PeriodicallyAnnounceTorrentsToDht bool
 
 	// Never send chunks to peers.
 	NoUpload bool `long:"no-upload"`
@@ -134,8 +134,6 @@ type ClientConfig struct {
 	// we don't intend to obtain all of a torrent's data.
 	DropMutuallyCompletePeers bool
 
-	ConnTracker *conntrack.Instance
-
 	// OnQuery hook func
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
 
@@ -172,12 +170,12 @@ func NewDefaultClientConfig() *ClientConfig {
 		DhtStartingNodes: func(network string) dht.StartingNodesGetter {
 			return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }
 		},
-		ListenHost:                func(string) string { return "" },
-		UploadRateLimiter:         unlimited,
-		DownloadRateLimiter:       unlimited,
-		ConnTracker:               conntrack.NewInstance(),
-		DisableAcceptRateLimiting: true,
-		DropMutuallyCompletePeers: true,
+		PeriodicallyAnnounceTorrentsToDht: true,
+		ListenHost:                        func(string) string { return "" },
+		UploadRateLimiter:                 unlimited,
+		DownloadRateLimiter:               unlimited,
+		DisableAcceptRateLimiting:         true,
+		DropMutuallyCompletePeers:         true,
 		HeaderObfuscationPolicy: HeaderObfuscationPolicy{
 			Preferred:        true,
 			RequirePreferred: false,

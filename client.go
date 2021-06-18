@@ -248,7 +248,9 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		if peerNetworkEnabled(parseNetworkString(s.Addr().Network()), cl.config) {
 			cl.dialers = append(cl.dialers, s)
 			cl.listeners = append(cl.listeners, s)
-			go cl.acceptConnections(s)
+			if cl.config.AcceptPeerConnections {
+				go cl.acceptConnections(s)
+			}
 		}
 	}
 
@@ -322,12 +324,14 @@ func (cl *Client) Listeners() []Listener {
 // yourself.
 func (cl *Client) AddListener(l Listener) {
 	cl.listeners = append(cl.listeners, l)
-	go cl.acceptConnections(l)
+	if cl.config.AcceptPeerConnections {
+		go cl.acceptConnections(l)
+	}
 }
 
 func (cl *Client) firewallCallback(net.Addr) bool {
 	cl.rLock()
-	block := !cl.wantConns()
+	block := !cl.wantConns() || !cl.config.AcceptPeerConnections
 	cl.rUnlock()
 	if block {
 		torrent.Add("connections firewalled", 1)

@@ -133,6 +133,8 @@ type ClientConfig struct {
 	// bit of a special case, since a peer could also be useless if they're just not interested, or
 	// we don't intend to obtain all of a torrent's data.
 	DropMutuallyCompletePeers bool
+	// Whether to accept peer connections at all.
+	AcceptPeerConnections bool
 
 	// OnQuery hook func
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
@@ -180,10 +182,11 @@ func NewDefaultClientConfig() *ClientConfig {
 			Preferred:        true,
 			RequirePreferred: false,
 		},
-		CryptoSelector: mse.DefaultCryptoSelector,
-		CryptoProvides: mse.AllSupportedCrypto,
-		ListenPort:     42069,
-		Extensions:     defaultPeerExtensionBytes(),
+		CryptoSelector:        mse.DefaultCryptoSelector,
+		CryptoProvides:        mse.AllSupportedCrypto,
+		ListenPort:            42069,
+		Extensions:            defaultPeerExtensionBytes(),
+		AcceptPeerConnections: true,
 	}
 	//cc.ConnTracker.SetNoMaxEntries()
 	//cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }

@@ -24,7 +24,7 @@ func TestUnixConns(t *testing.T) {
 			cfg.Debug = true
 		},
 		Client: func(cl *torrent.Client) {
-			cl.AddDialer(torrent.NetDialer{Network: "unix"})
+			cl.AddDialer(torrent.NetworkDialer{Network: "unix", Dialer: torrent.DefaultNetDialer})
 			l, err := net.Listen("unix", filepath.Join(t.TempDir(), "socket"))
 			if err != nil {
 				panic(err)

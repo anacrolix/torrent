@@ -39,15 +39,16 @@ func listenTcp(network, address string) (s socket, err error) {
 	l, err := net.Listen(network, address)
 	return tcpSocket{
 		Listener: l,
-		NetDialer: NetDialer{
+		NetworkDialer: NetworkDialer{
 			Network: network,
+			Dialer:  DefaultNetDialer,
 		},
 	}, err
 }
 
 type tcpSocket struct {
 	net.Listener
-	NetDialer
+	NetworkDialer
 }
 
 func listenAll(networks []network, getHost func(string) string, port int, f firewallCallback) ([]socket, error) {

@@ -106,9 +106,14 @@ func listenUtp(network, addr string, fc firewallCallback) (socket, error) {
 	return utpSocketSocket{us, network}, err
 }
 
+// utpSocket wrapper, additionally wrapped for the torrent package's socket interface.
 type utpSocketSocket struct {
 	utpSocket
 	network string
+}
+
+func (me utpSocketSocket) DialerNetwork() string {
+	return me.network
 }
 
 func (me utpSocketSocket) Dial(ctx context.Context, addr string) (conn net.Conn, err error) {

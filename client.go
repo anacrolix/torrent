@@ -553,9 +553,9 @@ func (cl *Client) torrent(ih metainfo.Hash) *Torrent {
 	return cl.torrents[ih]
 }
 
-type dialResult struct {
-	Conn    net.Conn
-	Network string
+type DialResult struct {
+	Conn   net.Conn
+	Dialer Dialer
 }
 
 func countDialResult(err error) {
@@ -581,14 +581,19 @@ func (cl *Client) dopplegangerAddr(addr string) bool {
 }
 
 // Returns a connection over UTP or TCP, whichever is first to connect.
-func (cl *Client) dialFirst(ctx context.Context, addr string) (res dialResult) {
+func (cl *Client) dialFirst(ctx context.Context, addr string) (res DialResult) {
+	return DialFirst(ctx, addr, cl.dialers)
+}
+
+// Returns a connection over UTP or TCP, whichever is first to connect.
+func DialFirst(ctx context.Context, addr string, dialers []Dialer) (res DialResult) {
 	{
 		t := perf.NewTimer(perf.CallerName(0))
 		defer func() {
 			if res.Conn == nil {
 				t.Mark(fmt.Sprintf("returned no conn (context: %v)", ctx.Err()))
 			} else {
-				t.Mark("returned conn over " + res.Network)
+				t.Mark("returned conn over " + res.Dialer.DialerNetwork())
 			}
 		}()
 	}
@@ -596,24 +601,17 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) (res dialResult) {
 	// As soon as we return one connection, cancel the others.
 	defer cancel()
 	left := 0
-	resCh := make(chan dialResult, left)
-	func() {
-		cl.lock()
-		defer cl.unlock()
-		cl.eachDialer(func(s Dialer) bool {
-			func() {
-				left++
-				//cl.logger.Printf("dialing %s on %s/%s", addr, s.Addr().Network(), s.Addr())
-				go func() {
-					resCh <- dialResult{
-						cl.dialFromSocket(ctx, s, addr),
-						s.LocalAddr().Network(),
-					}
-				}()
-			}()
-			return true
-		})
-	}()
+	resCh := make(chan DialResult, left)
+	for _, _s := range dialers {
+		left++
+		s := _s
+		go func() {
+			resCh <- DialResult{
+				dialFromSocket(ctx, s, addr),
+				s,
+			}
+		}()
+	}
 	// Wait for a successful connection.
 	func() {
 		defer perf.ScopeTimer()()
@@ -633,15 +631,10 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) (res dialResult) {
 	if res.Conn != nil {
 		go torrent.Add(fmt.Sprintf("network dialed first: %s", res.Conn.RemoteAddr().Network()), 1)
 	}
-	//if res.Conn != nil {
-	//	cl.logger.Printf("first connection for %s from %s/%s", addr, res.Conn.LocalAddr().Network(), res.Conn.LocalAddr().String())
-	//} else {
-	//	cl.logger.Printf("failed to dial %s", addr)
-	//}
 	return res
 }
 
-func (cl *Client) dialFromSocket(ctx context.Context, s Dialer, addr string) net.Conn {
+func dialFromSocket(ctx context.Context, s Dialer, addr string) net.Conn {
 	c, err := s.Dial(ctx, addr)
 	// This is a bit optimistic, but it looks non-trivial to thread this through the proxy code. Set
 	// it now in case we close the connection forthwith.
@@ -711,7 +704,7 @@ func (cl *Client) establishOutgoingConnEx(t *Torrent, addr PeerRemoteAddr, obfus
 		}
 		return nil, errors.New("dial failed")
 	}
-	c, err := cl.initiateProtocolHandshakes(context.Background(), nc, t, true, obfuscatedHeader, addr, dr.Network, regularNetConnPeerConnConnString(nc))
+	c, err := cl.initiateProtocolHandshakes(context.Background(), nc, t, true, obfuscatedHeader, addr, dr.Dialer.DialerNetwork(), regularNetConnPeerConnConnString(nc))
 	if err != nil {
 		nc.Close()
 	}

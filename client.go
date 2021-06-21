@@ -778,12 +778,12 @@ func (cl *Client) initiateHandshakes(c *PeerConn, t *Torrent) error {
 		)
 		c.setRW(rw)
 		if err != nil {
-			return xerrors.Errorf("header obfuscation handshake: %w", err)
+			return fmt.Errorf("header obfuscation handshake: %w", err)
 		}
 	}
 	ih, err := cl.connBtHandshake(c, &t.infoHash)
 	if err != nil {
-		return xerrors.Errorf("bittorrent protocol handshake: %w", err)
+		return fmt.Errorf("bittorrent protocol handshake: %w", err)
 	}
 	if ih != t.infoHash {
 		return errors.New("bittorrent protocol handshake: peer infohash didn't match")

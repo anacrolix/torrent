@@ -541,7 +541,11 @@ func (h *handshake) Do() (ret io.ReadWriter, method CryptoMethod, err error) {
 	return
 }
 
-func InitiateHandshake(rw io.ReadWriter, skey []byte, initialPayload []byte, cryptoProvides CryptoMethod) (ret io.ReadWriter, method CryptoMethod, err error) {
+func InitiateHandshake(
+	rw io.ReadWriter, skey []byte, initialPayload []byte, cryptoProvides CryptoMethod,
+) (
+	ret io.ReadWriter, method CryptoMethod, err error,
+) {
 	h := handshake{
 		conn:           rw,
 		initer:         true,

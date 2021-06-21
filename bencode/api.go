@@ -127,8 +127,10 @@ func MustMarshal(v interface{}) []byte {
 	return b
 }
 
-// Unmarshal the bencode value in the 'data' to a value pointed by the 'v'
-// pointer, return a non-nil error if any.
+// Unmarshal the bencode value in the 'data' to a value pointed by the 'v' pointer, return a non-nil
+// error if any. If there are trailing bytes, this results in ErrUnusedTrailingBytes, but the value
+// will be valid. It's probably more consistent to use Decoder.Decode if you want to rely on this
+// behaviour (inspired by Rust's serde here).
 func Unmarshal(data []byte, v interface{}) (err error) {
 	buf := bytes.NewReader(data)
 	e := Decoder{r: buf}

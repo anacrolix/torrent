@@ -147,24 +147,6 @@ func BenchmarkMarkComplete(b *testing.B) {
 					})
 				}
 			})
-			b.Run("ResourcePieces", func(b *testing.B) {
-				for _, batchWrites := range []bool{false, true} {
-					b.Run(fmt.Sprintf("BatchWrites=%v", batchWrites), func(b *testing.B) {
-						var opts NewPiecesStorageOpts
-						opts.Path = filepath.Join(b.TempDir(), "storage.db")
-						//b.Logf("storage db path: %q", dbPath)
-						opts.Capacity = capacity
-						opts.Memory = memory
-						opts.ProvOpts = func(opts *ProviderOpts) {
-							opts.BatchWrites = batchWrites
-						}
-						ci, err := NewPiecesStorage(opts)
-						c.Assert(err, qt.IsNil)
-						defer ci.Close()
-						runBench(b, ci)
-					})
-				}
-			})
 		})
 	}
 }

@@ -288,34 +288,10 @@ func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
 	testClientTransferSmallCache(t, false, -1)
 }
 
-func sqliteClientStorageFactory(optsMaker func(dataDir string) sqliteStorage.NewPiecesStorageOpts) storageFactory {
-	return func(dataDir string) storage.ClientImplCloser {
-		opts := optsMaker(dataDir)
-		//log.Printf("opening sqlite db: %#v", opts)
-		ret, err := sqliteStorage.NewPiecesStorage(opts)
-		if err != nil {
-			panic(err)
-		}
-		return ret
-	}
-}
-
 type leecherStorageTestCase struct {
 	name       string
 	f          storageFactory
 	gomaxprocs int
-}
-
-func sqliteLeecherStorageTestCase(numConns int) leecherStorageTestCase {
-	return leecherStorageTestCase{
-		fmt.Sprintf("SqliteFile,NumConns=%v", numConns),
-		sqliteClientStorageFactory(func(dataDir string) (opts sqliteStorage.NewPiecesStorageOpts) {
-			opts.Path = filepath.Join(dataDir, "sqlite.db")
-			opts.NumConns = numConns
-			return
-		}),
-		numConns,
-	}
 }
 
 func TestClientTransferVarious(t *testing.T) {
@@ -333,14 +309,6 @@ func TestClientTransferVarious(t *testing.T) {
 			}
 			return cl
 		}, 0},
-		sqliteLeecherStorageTestCase(1),
-		sqliteLeecherStorageTestCase(2),
-		// This should use a number of connections equal to the number of CPUs
-		sqliteLeecherStorageTestCase(0),
-		{"SqliteMemory", sqliteClientStorageFactory(func(dataDir string) (opts sqliteStorage.NewPiecesStorageOpts) {
-			opts.Memory = true
-			return
-		}), 0},
 	} {
 		t.Run(fmt.Sprintf("LeecherStorage=%s", ls.name), func(t *testing.T) {
 			// Seeder storage

@@ -124,7 +124,7 @@ func (me *diskFullStorage) Close() error {
 }
 
 func (d *diskFullStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
-	return d, nil
+	return storage.TorrentImpl{Piece: d.Piece, Close: d.Close}, nil
 }
 
 type pieceImpl struct {

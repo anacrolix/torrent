@@ -15,11 +15,9 @@ type badStorage struct{}
 var _ storage.ClientImpl = badStorage{}
 
 func (bs badStorage) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.TorrentImpl, error) {
-	return bs, nil
-}
-
-func (bs badStorage) Close() error {
-	return nil
+	return storage.TorrentImpl{
+		Piece: bs.Piece,
+	}, nil
 }
 
 func (bs badStorage) Piece(p metainfo.Piece) storage.PieceImpl {

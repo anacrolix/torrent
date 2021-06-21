@@ -24,6 +24,10 @@ type webseedPeer struct {
 
 var _ peerImpl = (*webseedPeer)(nil)
 
+func (me *webseedPeer) writeBufferFull() bool {
+	return false
+}
+
 func (me *webseedPeer) connStatusString() string {
 	return me.client.Url
 }
@@ -37,20 +41,15 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
 	ws.client.Info = info
 }
 
-func (ws *webseedPeer) _postCancel(r Request) {
-	ws.cancel(r)
-}
-
 func (ws *webseedPeer) writeInterested(interested bool) bool {
 	return true
 }
 
-func (ws *webseedPeer) cancel(r Request) bool {
+func (ws *webseedPeer) _cancel(r Request) bool {
 	active, ok := ws.activeRequests[r]
-	if !ok {
-		return false
+	if ok {
+		active.Cancel()
 	}
-	active.Cancel()
 	return true
 }
 
@@ -58,7 +57,7 @@ func (ws *webseedPeer) intoSpec(r Request) webseed.RequestSpec {
 	return webseed.RequestSpec{ws.peer.t.requestOffset(r), int64(r.Length)}
 }
 
-func (ws *webseedPeer) request(r Request) bool {
+func (ws *webseedPeer) _request(r Request) bool {
 	ws.requesterCond.Signal()
 	return true
 }
@@ -79,7 +78,7 @@ func (ws *webseedPeer) requester() {
 	defer ws.requesterCond.L.Unlock()
 start:
 	for !ws.peer.closed.IsSet() {
-		for r := range ws.peer.requests {
+		for r := range ws.peer.actualRequestState.Requests {
 			if _, ok := ws.activeRequests[r]; ok {
 				continue
 			}
@@ -99,7 +98,6 @@ func (ws *webseedPeer) connectionFlags() string {
 func (ws *webseedPeer) drop() {}
 
 func (ws *webseedPeer) updateRequests() {
-	ws.peer.doRequestState()
 }
 
 func (ws *webseedPeer) onClose() {
@@ -112,6 +110,10 @@ func (ws *webseedPeer) onClose() {
 
 func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Request) {
 	result := <-webseedRequest.Result
+	// We do this here rather than inside receiveChunk, since we want to count errors too. I'm not
+	// sure if we can divine which errors indicate cancellation on our end without hitting the
+	// network though.
+	ws.peer.doChunkReadStats(int64(len(result.Bytes)))
 	ws.peer.t.cl.lock()
 	defer ws.peer.t.cl.unlock()
 	if result.Err != nil {
@@ -145,4 +147,8 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			panic(err)
 		}
 	}
+}
+
+func (me *webseedPeer) onNextRequestStateChanged() {
+	me.peer.applyNextRequestState()
 }

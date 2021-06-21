@@ -35,7 +35,7 @@ func BenchmarkIterBitmapsDistinct(t *testing.B) {
 		output := iter.ToSlice(iterBitmapsDistinct(&skipCopy, first, second))
 		t.StopTimer()
 		assert.Equal(t, []interface{}{0, 3, 2}, output)
-		assert.Equal(t, []int{1}, skip.ToSortedSlice())
+		assert.Equal(t, []bitmap.BitIndex{1}, skip.ToSortedSlice())
 	}
 }
 

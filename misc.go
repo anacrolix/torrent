@@ -5,29 +5,27 @@ import (
 	"net"
 
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/torrent/types"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
-type ChunkSpec struct {
-	Begin, Length pp.Integer
-}
+type (
+	Request       = types.Request
+	ChunkSpec     = types.ChunkSpec
+	piecePriority = types.PiecePriority
+)
 
-type Request struct {
-	Index pp.Integer
-	ChunkSpec
-}
-
-func (r Request) ToMsg(mt pp.MessageType) pp.Message {
-	return pp.Message{
-		Type:   mt,
-		Index:  r.Index,
-		Begin:  r.Begin,
-		Length: r.Length,
-	}
-}
+const (
+	PiecePriorityNormal    = types.PiecePriorityNormal
+	PiecePriorityNone      = types.PiecePriorityNone
+	PiecePriorityNow       = types.PiecePriorityNow
+	PiecePriorityReadahead = types.PiecePriorityReadahead
+	PiecePriorityNext      = types.PiecePriorityNext
+	PiecePriorityHigh      = types.PiecePriorityHigh
+)
 
 func newRequest(index, begin, length pp.Integer) Request {
 	return Request{index, ChunkSpec{begin, length}}
@@ -142,6 +140,16 @@ func max(as ...int64) int64 {
 }
 
 func min(as ...int64) int64 {
+	ret := as[0]
+	for _, a := range as[1:] {
+		if a < ret {
+			ret = a
+		}
+	}
+	return ret
+}
+
+func minInt(as ...int) int {
 	ret := as[0]
 	for _, a := range as[1:] {
 		if a < ret {

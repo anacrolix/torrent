@@ -29,11 +29,11 @@ type DhtAnnounce interface {
 	Peers() <-chan dht.PeersValues
 }
 
-type anacrolixDhtServerWrapper struct {
+type AnacrolixDhtServerWrapper struct {
 	*dht.Server
 }
 
-func (me anacrolixDhtServerWrapper) Stats() interface{} {
+func (me AnacrolixDhtServerWrapper) Stats() interface{} {
 	return me.Server.Stats()
 }
 
@@ -45,13 +45,13 @@ func (me anacrolixDhtAnnounceWrapper) Peers() <-chan dht.PeersValues {
 	return me.Announce.Peers
 }
 
-func (me anacrolixDhtServerWrapper) Announce(hash [20]byte, port int, impliedPort bool) (DhtAnnounce, error) {
+func (me AnacrolixDhtServerWrapper) Announce(hash [20]byte, port int, impliedPort bool) (DhtAnnounce, error) {
 	ann, err := me.Server.Announce(hash, port, impliedPort)
 	return anacrolixDhtAnnounceWrapper{ann}, err
 }
 
-func (me anacrolixDhtServerWrapper) Ping(addr *net.UDPAddr) {
+func (me AnacrolixDhtServerWrapper) Ping(addr *net.UDPAddr) {
 	me.Server.Ping(addr)
 }
 
-var _ DhtServer = anacrolixDhtServerWrapper{}
+var _ DhtServer = AnacrolixDhtServerWrapper{}

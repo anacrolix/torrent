@@ -322,7 +322,7 @@ func TestDhtInheritBlocklist(t *testing.T) {
 	numServers := 0
 	cl.eachDhtServer(func(s DhtServer) {
 		t.Log(s)
-		assert.Equal(t, ipl, s.(anacrolixDhtServerWrapper).Server.IPBlocklist())
+		assert.Equal(t, ipl, s.(AnacrolixDhtServerWrapper).Server.IPBlocklist())
 		numServers++
 	})
 	assert.EqualValues(t, 2, numServers)
@@ -554,6 +554,8 @@ func TestPeerInvalidHave(t *testing.T) {
 		t: tt,
 	}}
 	cn.peerImpl = cn
+	cl.lock()
+	defer cl.unlock()
 	assert.NoError(t, cn.peerSentHave(0))
 	assert.Error(t, cn.peerSentHave(1))
 }

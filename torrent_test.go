@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,8 +97,8 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		r.Seek(3500000, io.SeekStart)
 	}
 	assert.Len(b, t.readers, 7)
-	for i := 0; i < int(t.numPieces()); i += 3 {
-		t._completedPieces.Set(i, true)
+	for i := 0; i < t.numPieces(); i += 3 {
+		t._completedPieces.Set(bitmap.BitIndex(i), true)
 	}
 	t.DownloadPieces(0, t.numPieces())
 	for range iter.N(b.N) {

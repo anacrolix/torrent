@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
@@ -18,15 +17,14 @@ import (
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
+	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/missinggo/v2/conntrack"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
-	"github.com/anacrolix/torrent/internal/limiter"
-	"github.com/anacrolix/torrent/tracker"
-	"github.com/anacrolix/torrent/webtorrent"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	"github.com/google/btree"
@@ -34,15 +32,17 @@ import (
 	"golang.org/x/time/rate"
 	"golang.org/x/xerrors"
 
-	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/conntrack"
+	"github.com/anacrolix/chansync"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/internal/limiter"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/webtorrent"
 )
 
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
@@ -81,6 +81,8 @@ type Client struct {
 	websocketTrackers websocketTrackers
 
 	activeAnnounceLimiter limiter.Instance
+
+	updateRequests chansync.BroadcastCond
 }
 
 type ipStr string
@@ -259,7 +261,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 				if err != nil {
 					panic(err)
 				}
-				cl.dhtServers = append(cl.dhtServers, anacrolixDhtServerWrapper{ds})
+				cl.dhtServers = append(cl.dhtServers, AnacrolixDhtServerWrapper{ds})
 				cl.onClose = append(cl.onClose, func() { ds.Close() })
 			}
 		}
@@ -293,6 +295,8 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		},
 	}
 
+	go cl.requester()
+
 	return
 }
 
@@ -309,6 +313,10 @@ func (cl *Client) AddDialer(d Dialer) {
 	for _, t := range cl.torrents {
 		t.openNewConns()
 	}
+}
+
+func (cl *Client) Listeners() []Listener {
+	return cl.listeners
 }
 
 // Registers a Listener, and starts Accepting on it. You must Close Listeners provided this way
@@ -955,7 +963,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 		return fmt.Errorf("adding connection: %w", err)
 	}
 	defer t.dropConnection(c)
-	go c.writer(time.Minute)
+	c.startWriter()
 	cl.sendInitialMessages(c, t)
 	err := c.mainReadLoop()
 	if err != nil {
@@ -964,10 +972,15 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	return nil
 }
 
+// Maximum pending requests we allow peers to send us. If peer requests are buffered on read, this
+// instructs the amount of memory that might be used to cache pending writes. Assuming 512KiB
+// (1<<19) cached for sending, for 16KiB (1<<14) chunks.
+const localClientReqq = 1 << 5
+
 // See the order given in Transmission's tr_peerMsgsNew.
 func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 	if conn.PeerExtensionBytes.SupportsExtended() && cl.config.Extensions.SupportsExtended() {
-		conn.post(pp.Message{
+		conn.write(pp.Message{
 			Type:       pp.Extended,
 			ExtendedID: pp.HandshakeExtendedID,
 			ExtendedPayload: func() []byte {
@@ -975,11 +988,8 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 					M: map[pp.ExtensionName]pp.ExtensionNumber{
 						pp.ExtensionNameMetadata: metadataExtendedId,
 					},
-					V: cl.config.ExtendedHandshakeClientVersion,
-					// If peer requests are buffered on read, this instructs the amount of memory
-					// that might be used to cache pending writes. Assuming 512KiB cached for
-					// sending, for 16KiB chunks.
-					Reqq:         1 << 5,
+					V:            cl.config.ExtendedHandshakeClientVersion,
+					Reqq:         localClientReqq,
 					YourIp:       pp.CompactIp(conn.remoteIp()),
 					Encryption:   cl.config.HeaderObfuscationPolicy.Preferred || !cl.config.HeaderObfuscationPolicy.RequirePreferred,
 					Port:         cl.incomingPeerPort(),
@@ -999,11 +1009,11 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 	func() {
 		if conn.fastEnabled() {
 			if torrent.haveAllPieces() {
-				conn.post(pp.Message{Type: pp.HaveAll})
-				conn.sentHaves.AddRange(0, bitmap.BitIndex(conn.t.NumPieces()))
+				conn.write(pp.Message{Type: pp.HaveAll})
+				conn.sentHaves.AddRange(0, bitmap.BitRange(conn.t.NumPieces()))
 				return
 			} else if !torrent.haveAnyPieces() {
-				conn.post(pp.Message{Type: pp.HaveNone})
+				conn.write(pp.Message{Type: pp.HaveNone})
 				conn.sentHaves.Clear()
 				return
 			}
@@ -1011,7 +1021,7 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 		conn.postBitfield()
 	}()
 	if conn.PeerExtensionBytes.SupportsDHT() && cl.config.Extensions.SupportsDHT() && cl.haveDhtServer() {
-		conn.post(pp.Message{
+		conn.write(pp.Message{
 			Type: pp.Port,
 			Port: cl.dhtPort(),
 		})
@@ -1069,12 +1079,12 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 		return err
 	case pp.RequestMetadataExtensionMsgType:
 		if !t.haveMetadataPiece(piece) {
-			c.post(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
+			c.write(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
 			return nil
 		}
 		start := (1 << 14) * piece
 		c.logger.WithDefaultLevel(log.Debug).Printf("sending metadata piece %d", piece)
-		c.post(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]))
+		c.write(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]))
 		return nil
 	case pp.RejectMetadataExtensionMsgType:
 		return nil
@@ -1139,7 +1149,6 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		webSeeds: make(map[string]*Peer),
 	}
 	t._pendingPieces.NewSet = priorityBitmapStableNewSet
-	t.requestStrategy = cl.config.DefaultRequestStrategy(t.requestStrategyCallbacks(), &cl._mu)
 	t.logger = cl.logger.WithContextValue(t)
 	t.setChunkSize(defaultChunkSize)
 	return
@@ -1403,13 +1412,11 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemot
 			Network:    network,
 			callbacks:  &cl.config.Callbacks,
 		},
-		connString:  connString,
-		conn:        nc,
-		writeBuffer: new(bytes.Buffer),
+		connString: connString,
+		conn:       nc,
 	}
 	c.peerImpl = c
 	c.logger = cl.logger.WithDefaultLevel(log.Warning).WithContextValue(c)
-	c.writerCond.L = cl.locker()
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
 		l: cl.config.DownloadRateLimiter,

@@ -30,14 +30,14 @@ func NewMMapWithCompletion(baseDir string, completion PieceCompletion) *mmapClie
 	}
 }
 
-func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (t TorrentImpl, err error) {
+func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (_ TorrentImpl, err error) {
 	span, err := mMapTorrent(info, s.baseDir)
-	t = &mmapTorrentStorage{
+	t := &mmapTorrentStorage{
 		infoHash: infoHash,
 		span:     span,
 		pc:       s.pc,
 	}
-	return
+	return TorrentImpl{Piece: t.Piece, Close: t.Close}, err
 }
 
 func (s *mmapClientImpl) Close() error {

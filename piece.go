@@ -11,33 +11,6 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-// Describes the importance of obtaining a particular piece.
-type piecePriority byte
-
-func (pp *piecePriority) Raise(maybe piecePriority) bool {
-	if maybe > *pp {
-		*pp = maybe
-		return true
-	}
-	return false
-}
-
-// Priority for use in PriorityBitmap
-func (me piecePriority) BitmapPriority() int {
-	return -int(me)
-}
-
-const (
-	PiecePriorityNone      piecePriority = iota // Not wanted. Must be the zero value.
-	PiecePriorityNormal                         // Wanted.
-	PiecePriorityHigh                           // Wanted a lot.
-	PiecePriorityReadahead                      // May be required soon.
-	// Succeeds a piece where a read occurred. Currently the same as Now,
-	// apparently due to issues with caching.
-	PiecePriorityNext
-	PiecePriorityNow // A Reader is reading in this piece. Highest urgency.
-)
-
 type Piece struct {
 	// The completed piece SHA1 hash, from the metainfo "pieces" field.
 	hash  *metainfo.Hash
@@ -55,6 +28,7 @@ type Piece struct {
 
 	publicPieceState PieceState
 	priority         piecePriority
+	availability     int64
 
 	// This can be locked when the Client lock is taken, but probably not vice versa.
 	pendingWritesMutex sync.Mutex
@@ -79,7 +53,7 @@ func (p *Piece) Storage() storage.Piece {
 }
 
 func (p *Piece) pendingChunkIndex(chunkIndex int) bool {
-	return !p._dirtyChunks.Contains(chunkIndex)
+	return !p._dirtyChunks.Contains(bitmap.BitIndex(chunkIndex))
 }
 
 func (p *Piece) pendingChunk(cs ChunkSpec, chunkSize pp.Integer) bool {
@@ -95,12 +69,12 @@ func (p *Piece) numDirtyChunks() pp.Integer {
 }
 
 func (p *Piece) unpendChunkIndex(i int) {
-	p._dirtyChunks.Add(i)
+	p._dirtyChunks.Add(bitmap.BitIndex(i))
 	p.t.tickleReaders()
 }
 
 func (p *Piece) pendChunkIndex(i int) {
-	p._dirtyChunks.Remove(i)
+	p._dirtyChunks.Remove(bitmap.BitIndex(i))
 }
 
 func (p *Piece) numChunks() pp.Integer {
@@ -144,7 +118,7 @@ func (p *Piece) chunkIndexSpec(chunk pp.Integer) ChunkSpec {
 func (p *Piece) chunkIndexRequest(chunkIndex pp.Integer) Request {
 	return Request{
 		pp.Integer(p.index),
-		chunkIndexSpec(chunkIndex, p.length(), p.chunkSize()),
+		p.chunkIndexSpec(chunkIndex),
 	}
 }
 
@@ -221,14 +195,11 @@ func (p *Piece) SetPriority(prio piecePriority) {
 	p.t.updatePiecePriority(p.index)
 }
 
-func (p *Piece) uncachedPriority() (ret piecePriority) {
-	if p.t.pieceComplete(p.index) || p.t.pieceQueuedForHash(p.index) || p.t.hashingPiece(p.index) {
-		return PiecePriorityNone
-	}
+func (p *Piece) purePriority() (ret piecePriority) {
 	for _, f := range p.files {
 		ret.Raise(f.prio)
 	}
-	if p.t.readerNowPieces().Contains(int(p.index)) {
+	if p.t.readerNowPieces().Contains(bitmap.BitIndex(p.index)) {
 		ret.Raise(PiecePriorityNow)
 	}
 	// if t._readerNowPieces.Contains(piece - 1) {
@@ -239,6 +210,13 @@ func (p *Piece) uncachedPriority() (ret piecePriority) {
 	}
 	ret.Raise(p.priority)
 	return
+}
+
+func (p *Piece) uncachedPriority() (ret piecePriority) {
+	if p.t.pieceComplete(p.index) || p.t.pieceQueuedForHash(p.index) || p.t.hashingPiece(p.index) {
+		return PiecePriorityNone
+	}
+	return p.purePriority()
 }
 
 // Tells the Client to refetch the completion status from storage, updating priority etc. if
@@ -256,11 +234,7 @@ func (p *Piece) completion() (ret storage.Completion) {
 }
 
 func (p *Piece) allChunksDirty() bool {
-	return p._dirtyChunks.Len() == int(p.numChunks())
-}
-
-func (p *Piece) requestStrategyPiece() requestStrategyPiece {
-	return p
+	return p._dirtyChunks.Len() == bitmap.BitRange(p.numChunks())
 }
 
 func (p *Piece) dirtyChunks() bitmap.Bitmap {
@@ -269,4 +243,16 @@ func (p *Piece) dirtyChunks() bitmap.Bitmap {
 
 func (p *Piece) State() PieceState {
 	return p.t.PieceState(p.index)
+}
+
+func (p *Piece) iterUndirtiedChunks(f func(cs ChunkSpec) bool) bool {
+	for i := pp.Integer(0); i < p.numChunks(); i++ {
+		if p.chunkIndexDirty(i) {
+			continue
+		}
+		if !f(p.chunkIndexSpec(i)) {
+			return false
+		}
+	}
+	return true
 }

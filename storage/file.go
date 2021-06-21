@@ -67,14 +67,16 @@ func (me *fileClientImpl) Close() error {
 	return me.pc.Close()
 }
 
-func (fs *fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
+func (fs *fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (_ TorrentImpl, err error) {
 	dir := fs.pathMaker(fs.baseDir, info, infoHash)
 	upvertedFiles := info.UpvertedFiles()
 	files := make([]file, 0, len(upvertedFiles))
 	for i, fileInfo := range upvertedFiles {
-		s, err := ToSafeFilePath(append([]string{info.Name}, fileInfo.Path...)...)
+		var s string
+		s, err = ToSafeFilePath(append([]string{info.Name}, fileInfo.Path...)...)
 		if err != nil {
-			return nil, fmt.Errorf("file %v has unsafe path %q: %w", i, fileInfo.Path, err)
+			err = fmt.Errorf("file %v has unsafe path %q: %w", i, fileInfo.Path, err)
+			return
 		}
 		f := file{
 			path:   filepath.Join(dir, s),
@@ -83,16 +85,21 @@ func (fs *fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Has
 		if f.length == 0 {
 			err = CreateNativeZeroLengthFile(f.path)
 			if err != nil {
-				return nil, fmt.Errorf("creating zero length file: %w", err)
+				err = fmt.Errorf("creating zero length file: %w", err)
+				return
 			}
 		}
 		files = append(files, f)
 	}
-	return &fileTorrentImpl{
+	t := &fileTorrentImpl{
 		files,
 		segments.NewIndex(common.LengthIterFromUpvertedFiles(upvertedFiles)),
 		infoHash,
 		fs.pc,
+	}
+	return TorrentImpl{
+		Piece: t.Piece,
+		Close: t.Close,
 	}, nil
 }
 

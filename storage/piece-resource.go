@@ -26,6 +26,7 @@ type ResourcePiecesOpts struct {
 	// Sized puts require being able to stream from a statement executed on another connection.
 	// Without them, we buffer the entire read and then put that.
 	NoSizedPuts bool
+	Capacity    *int64
 }
 
 func NewResourcePieces(p PieceProvider) ClientImpl {
@@ -49,10 +50,11 @@ func (piecePerResourceTorrentImpl) Close() error {
 }
 
 func (s piecePerResource) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
-	return piecePerResourceTorrentImpl{
+	t := piecePerResourceTorrentImpl{
 		s,
 		make([]sync.RWMutex, info.NumPieces()),
-	}, nil
+	}
+	return TorrentImpl{Piece: t.Piece, Close: t.Close}, nil
 }
 
 func (s piecePerResourceTorrentImpl) Piece(p metainfo.Piece) PieceImpl {

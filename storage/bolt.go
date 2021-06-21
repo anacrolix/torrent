@@ -43,7 +43,11 @@ func (me *boltClient) Close() error {
 }
 
 func (me *boltClient) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
-	return &boltTorrent{me, infoHash}, nil
+	t := &boltTorrent{me, infoHash}
+	return TorrentImpl{
+		Piece: t.Piece,
+		Close: t.Close,
+	}, nil
 }
 
 func (me *boltTorrent) Piece(p metainfo.Piece) PieceImpl {

@@ -50,6 +50,7 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 // Creates a seeder and a leecher, and ensures the data transfers when a read
 // is attempted on the leecher.
 func testClientTransfer(t *testing.T, ps testClientTransferParams) {
+	t.Parallel()
 
 	prevGOMAXPROCS := runtime.GOMAXPROCS(ps.GOMAXPROCS)
 	newGOMAXPROCS := prevGOMAXPROCS

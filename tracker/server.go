@@ -10,6 +10,7 @@ import (
 
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/torrent/tracker/udp"
 )
 
 type torrent struct {
@@ -36,7 +37,7 @@ func marshal(parts ...interface{}) (ret []byte, err error) {
 	return
 }
 
-func (s *server) respond(addr net.Addr, rh ResponseHeader, parts ...interface{}) (err error) {
+func (s *server) respond(addr net.Addr, rh udp.ResponseHeader, parts ...interface{}) (err error) {
 	b, err := marshal(append([]interface{}{rh}, parts...)...)
 	if err != nil {
 		return
@@ -61,34 +62,34 @@ func (s *server) serveOne() (err error) {
 		return
 	}
 	r := bytes.NewReader(b[:n])
-	var h RequestHeader
-	err = readBody(r, &h)
+	var h udp.RequestHeader
+	err = udp.Read(r, &h)
 	if err != nil {
 		return
 	}
 	switch h.Action {
-	case ActionConnect:
-		if h.ConnectionId != connectRequestConnectionId {
+	case udp.ActionConnect:
+		if h.ConnectionId != udp.ConnectRequestConnectionId {
 			return
 		}
 		connId := s.newConn()
-		err = s.respond(addr, ResponseHeader{
-			ActionConnect,
+		err = s.respond(addr, udp.ResponseHeader{
+			udp.ActionConnect,
 			h.TransactionId,
-		}, ConnectionResponse{
+		}, udp.ConnectionResponse{
 			connId,
 		})
 		return
-	case ActionAnnounce:
+	case udp.ActionAnnounce:
 		if _, ok := s.conns[h.ConnectionId]; !ok {
-			s.respond(addr, ResponseHeader{
+			s.respond(addr, udp.ResponseHeader{
 				TransactionId: h.TransactionId,
-				Action:        ActionError,
+				Action:        udp.ActionError,
 			}, []byte("not connected"))
 			return
 		}
 		var ar AnnounceRequest
-		err = readBody(r, &ar)
+		err = udp.Read(r, &ar)
 		if err != nil {
 			return
 		}
@@ -104,10 +105,10 @@ func (s *server) serveOne() (err error) {
 		if err != nil {
 			panic(err)
 		}
-		err = s.respond(addr, ResponseHeader{
+		err = s.respond(addr, udp.ResponseHeader{
 			TransactionId: h.TransactionId,
-			Action:        ActionAnnounce,
-		}, AnnounceResponseHeader{
+			Action:        udp.ActionAnnounce,
+		}, udp.AnnounceResponseHeader{
 			Interval: 900,
 			Leechers: t.Leechers,
 			Seeders:  t.Seeders,
@@ -115,9 +116,9 @@ func (s *server) serveOne() (err error) {
 		return
 	default:
 		err = fmt.Errorf("unhandled action: %d", h.Action)
-		s.respond(addr, ResponseHeader{
+		s.respond(addr, udp.ResponseHeader{
 			TransactionId: h.TransactionId,
-			Action:        ActionError,
+			Action:        udp.ActionError,
 		}, []byte("unhandled action"))
 		return
 	}

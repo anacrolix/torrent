@@ -23,8 +23,8 @@ import (
 )
 
 var trackers = []string{
-	"udp://tracker.coppersurfer.tk:6969",
-	"udp://tracker.leechers-paradise.org:6969",
+	"udp://tracker.opentrackr.org:1337/announce",
+	"udp://tracker.openbittorrent.com:6969/announce",
 }
 
 // Ensure net.IPs are stored big-endian, to match the way they're read from

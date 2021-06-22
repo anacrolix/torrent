@@ -8,6 +8,7 @@ import (
 
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/missinggo"
+	trHttp "github.com/anacrolix/torrent/tracker/http"
 	"github.com/anacrolix/torrent/tracker/udp"
 )
 
@@ -73,7 +74,7 @@ func (c *udpAnnounce) Do(req AnnounceRequest) (res AnnounceResponse, err error) 
 	res.Leechers = h.Leechers
 	res.Seeders = h.Seeders
 	for _, cp := range nas.NodeAddrs() {
-		res.Peers = append(res.Peers, Peer{}.FromNodeAddr(cp))
+		res.Peers = append(res.Peers, trHttp.Peer{}.FromNodeAddr(cp))
 	}
 	return
 }

@@ -1,8 +1,10 @@
-package tracker
+package http
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
+	"expvar"
 	"fmt"
 	"io"
 	"math"
@@ -13,9 +15,37 @@ import (
 
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/missinggo/httptoo"
-
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/tracker/shared"
+	"github.com/anacrolix/torrent/tracker/udp"
 )
+
+var vars = expvar.NewMap("tracker/http")
+
+type Client struct {
+	hc *http.Client
+}
+
+type NewClientOpts struct {
+	Proxy      func(*http.Request) (*url.URL, error)
+	ServerName string
+}
+
+func NewClient(opts NewClientOpts) Client {
+	return Client{
+		hc: &http.Client{
+			Transport: &http.Transport{
+				Proxy: opts.Proxy,
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+					ServerName:         opts.ServerName,
+				},
+				// This is for S3 trackers that hold connections open.
+				DisableKeepAlives: true,
+			},
+		},
+	}
+}
 
 type HttpResponse struct {
 	FailureReason string `bencode:"failure reason"`
@@ -66,7 +96,7 @@ func (me *Peers) UnmarshalBencode(b []byte) (err error) {
 	}
 }
 
-func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts Announce) {
+func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts AnnounceOpt) {
 	q := _url.Query()
 
 	q.Set("key", strconv.FormatInt(int64(ar.Key), 10))
@@ -86,7 +116,7 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts Announce) {
 	}
 	q.Set("left", strconv.FormatInt(left, 10))
 
-	if ar.Event != None {
+	if ar.Event != shared.None {
 		q.Set("event", ar.Event.String())
 	}
 	// http://stackoverflow.com/questions/17418004/why-does-tracker-server-not-understand-my-request-bittorrent-protocol
@@ -104,36 +134,27 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts Announce) {
 		// addresses for other address-families, although it's not encouraged.
 		q.Add("ip", ipString)
 	}
-	doIp("ipv4", opts.ClientIp4.IP)
-	doIp("ipv6", opts.ClientIp6.IP)
+	doIp("ipv4", opts.ClientIp4)
+	doIp("ipv6", opts.ClientIp6)
 	_url.RawQuery = q.Encode()
 }
 
-func announceHTTP(opt Announce, _url *url.URL) (ret AnnounceResponse, err error) {
+type AnnounceOpt struct {
+	UserAgent  string
+	HostHeader string
+	ClientIp4  net.IP
+	ClientIp6  net.IP
+}
+
+type AnnounceRequest = udp.AnnounceRequest
+
+func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceOpt, _url *url.URL) (ret AnnounceResponse, err error) {
 	_url = httptoo.CopyURL(_url)
-	setAnnounceParams(_url, &opt.Request, opt)
-	req, err := http.NewRequest("GET", _url.String(), nil)
+	setAnnounceParams(_url, &ar, opt)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, _url.String(), nil)
 	req.Header.Set("User-Agent", opt.UserAgent)
 	req.Host = opt.HostHeader
-	if opt.Context != nil {
-		req = req.WithContext(opt.Context)
-	}
-	resp, err := (&http.Client{
-		//Timeout: time.Second * 15,
-		Transport: &http.Transport{
-			//Dial: (&net.Dialer{
-			//	Timeout: 15 * time.Second,
-			//}).Dial,
-			Proxy: opt.HTTPProxy,
-			//TLSHandshakeTimeout: 15 * time.Second,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-				ServerName:         opt.ServerName,
-			},
-			// This is for S3 trackers that hold connections open.
-			DisableKeepAlives: true,
-		},
-	}).Do(req)
+	resp, err := cl.hc.Do(req)
 	if err != nil {
 		return
 	}
@@ -174,4 +195,11 @@ func announceHTTP(opt Announce, _url *url.URL) (ret AnnounceResponse, err error)
 		})
 	}
 	return
+}
+
+type AnnounceResponse struct {
+	Interval int32 // Minimum seconds the local peer should wait before next announce.
+	Leechers int32
+	Seeders  int32
+	Peers    []Peer
 }

@@ -8,26 +8,25 @@ import (
 	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
+	trHttp "github.com/anacrolix/torrent/tracker/http"
+	"github.com/anacrolix/torrent/tracker/shared"
 	"github.com/anacrolix/torrent/tracker/udp"
+)
+
+const (
+	None      = shared.None
+	Started   = shared.Started
+	Stopped   = shared.Stopped
+	Completed = shared.Completed
 )
 
 type AnnounceRequest = udp.AnnounceRequest
 
-type AnnounceResponse struct {
-	Interval int32 // Minimum seconds the local peer should wait before next announce.
-	Leechers int32
-	Seeders  int32
-	Peers    []Peer
-}
+type AnnounceResponse = trHttp.AnnounceResponse
+
+type Peer = trHttp.Peer
 
 type AnnounceEvent = udp.AnnounceEvent
-
-const (
-	None      AnnounceEvent = iota
-	Completed               // The local peer just completed the torrent.
-	Started                 // The local peer has just resumed this torrent.
-	Stopped                 // The local peer is leaving the swarm.
-)
 
 var (
 	ErrBadScheme = errors.New("unknown scheme")
@@ -66,7 +65,16 @@ func (me Announce) Do() (res AnnounceResponse, err error) {
 	}
 	switch _url.Scheme {
 	case "http", "https":
-		return announceHTTP(me, _url)
+		cl := trHttp.NewClient(trHttp.NewClientOpts{
+			Proxy:      me.HTTPProxy,
+			ServerName: me.ServerName,
+		})
+		return cl.Announce(me.Context, me.Request, trHttp.AnnounceOpt{
+			UserAgent:  me.UserAgent,
+			HostHeader: me.HostHeader,
+			ClientIp4:  me.ClientIp4.IP,
+			ClientIp6:  me.ClientIp6.IP,
+		}, _url)
 	case "udp", "udp4", "udp6":
 		return announceUDP(me, _url)
 	default:

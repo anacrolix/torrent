@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"net/url"
@@ -25,69 +23,6 @@ import (
 var trackers = []string{
 	"udp://tracker.opentrackr.org:1337/announce",
 	"udp://tracker.openbittorrent.com:6969/announce",
-}
-
-// Ensure net.IPs are stored big-endian, to match the way they're read from
-// the wire.
-func TestNetIPv4Bytes(t *testing.T) {
-	ip := net.IP([]byte{127, 0, 0, 1})
-	if ip.String() != "127.0.0.1" {
-		t.FailNow()
-	}
-	if string(ip) != "\x7f\x00\x00\x01" {
-		t.Fatal([]byte(ip))
-	}
-}
-
-func TestMarshalAnnounceResponse(t *testing.T) {
-	peers := krpc.CompactIPv4NodeAddrs{
-		{[]byte{127, 0, 0, 1}, 2},
-		{[]byte{255, 0, 0, 3}, 4},
-	}
-	b, err := peers.MarshalBinary()
-	require.NoError(t, err)
-	require.EqualValues(t,
-		"\x7f\x00\x00\x01\x00\x02\xff\x00\x00\x03\x00\x04",
-		b)
-	require.EqualValues(t, 12, binary.Size(udp.AnnounceResponseHeader{}))
-}
-
-// Failure to write an entire packet to UDP is expected to given an error.
-func TestLongWriteUDP(t *testing.T) {
-	t.Parallel()
-	l, err := net.ListenUDP("udp4", nil)
-	require.NoError(t, err)
-	defer l.Close()
-	c, err := net.DialUDP("udp", nil, l.LocalAddr().(*net.UDPAddr))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Close()
-	for msgLen := 1; ; msgLen *= 2 {
-		n, err := c.Write(make([]byte, msgLen))
-		if err != nil {
-			require.Contains(t, err.Error(), "message too long")
-			return
-		}
-		if n < msgLen {
-			t.FailNow()
-		}
-	}
-}
-
-func TestShortBinaryRead(t *testing.T) {
-	var data udp.ResponseHeader
-	err := binary.Read(bytes.NewBufferString("\x00\x00\x00\x01"), binary.BigEndian, &data)
-	if err != io.ErrUnexpectedEOF {
-		t.FailNow()
-	}
-}
-
-func TestConvertInt16ToInt(t *testing.T) {
-	i := 50000
-	if int(uint16(int16(i))) != 50000 {
-		t.FailNow()
-	}
 }
 
 func TestAnnounceLocalhost(t *testing.T) {

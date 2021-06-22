@@ -115,6 +115,7 @@ func (c *udpAnnounce) Do(req AnnounceRequest) (res AnnounceResponse, err error) 
 	// Clearly this limits the request URI to 255 bytes. BEP 41 supports
 	// longer but I'm not fussed.
 	options := append([]byte{optionTypeURLData, byte(len(reqURI))}, []byte(reqURI)...)
+	vars.Add("udp tracker announces", 1)
 	b, err := c.request(ActionAnnounce, req, options)
 	if err != nil {
 		return
@@ -288,6 +289,7 @@ func (c *udpAnnounce) connect() (err error) {
 		}
 		c.socket = pproffd.WrapNetConn(c.socket)
 	}
+	vars.Add("udp tracker connects", 1)
 	b, err := c.request(ActionConnect, nil, nil)
 	if err != nil {
 		return

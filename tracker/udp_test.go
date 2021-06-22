@@ -139,7 +139,8 @@ func TestUDPTracker(t *testing.T) {
 	}
 	rand.Read(req.PeerId[:])
 	copy(req.InfoHash[:], []uint8{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1})
-	var ctx context.Context
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultTrackerAnnounceTimeout)
+	defer cancel()
 	if dl, ok := t.Deadline(); ok {
 		var cancel func()
 		ctx, cancel = context.WithDeadline(context.Background(), dl.Add(-time.Second))
@@ -172,7 +173,7 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 	rand.Read(req.PeerId[:])
 	rand.Read(req.InfoHash[:])
 	wg := sync.WaitGroup{}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultTrackerAnnounceTimeout)
 	defer cancel()
 	if dl, ok := t.Deadline(); ok {
 		var cancel func()

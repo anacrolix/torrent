@@ -1,13 +1,9 @@
 package tracker
 
 import (
-	"encoding"
 	"encoding/binary"
-	"net"
 	"net/url"
 
-	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/anacrolix/missinggo/v2"
 	trHttp "github.com/anacrolix/torrent/tracker/http"
 	"github.com/anacrolix/torrent/tracker/udp"
 )
@@ -17,56 +13,24 @@ type udpAnnounce struct {
 	a   *Announce
 }
 
-func (c *udpAnnounce) Close() error {
-	return nil
-}
-
-func (c *udpAnnounce) ipv6(conn net.Conn) bool {
-	if c.a.UdpNetwork == "udp6" {
-		return true
-	}
-	rip := missinggo.AddrIP(conn.RemoteAddr())
-	return rip.To16() != nil && rip.To4() == nil
-}
-
 func (c *udpAnnounce) Do(req AnnounceRequest) (res AnnounceResponse, err error) {
-	conn, err := net.Dial(c.dialNetwork(), c.url.Host)
+	cl, err := udp.NewConnClient(udp.NewConnClientOpts{
+		Network: c.dialNetwork(),
+		Host:    c.url.Host,
+		Ipv6:    nil,
+	})
 	if err != nil {
 		return
 	}
-	defer conn.Close()
-	if c.ipv6(conn) {
-		// BEP 15
-		req.IPAddress = 0
-	} else if req.IPAddress == 0 && c.a.ClientIp4.IP != nil {
+	defer cl.Close()
+	if req.IPAddress == 0 && c.a.ClientIp4.IP != nil {
+		// I think we're taking bytes in big-endian order (all IPs), and writing it to a natively
+		// ordered uint32. This will be correctly ordered when written back out by the UDP client
+		// later. I'm ignoring the fact that IPv6 announces shouldn't have an IP address, we have a
+		// perfectly good IPv4 address.
 		req.IPAddress = binary.BigEndian.Uint32(c.a.ClientIp4.IP.To4())
 	}
-	d := udp.Dispatcher{}
-	go func() {
-		for {
-			b := make([]byte, 0x800)
-			n, err := conn.Read(b)
-			if err != nil {
-				break
-			}
-			d.Dispatch(b[:n])
-		}
-	}()
-	cl := udp.Client{
-		Dispatcher: &d,
-		Writer:     conn,
-	}
-	nas := func() interface {
-		encoding.BinaryUnmarshaler
-		NodeAddrs() []krpc.NodeAddr
-	} {
-		if c.ipv6(conn) {
-			return &krpc.CompactIPv6NodeAddrs{}
-		} else {
-			return &krpc.CompactIPv4NodeAddrs{}
-		}
-	}()
-	h, err := cl.Announce(c.a.Context, req, nas, udp.Options{RequestUri: c.url.RequestURI()})
+	h, nas, err := cl.Announce(c.a.Context, req, udp.Options{RequestUri: c.url.RequestURI()})
 	if err != nil {
 		return
 	}
@@ -92,6 +56,5 @@ func announceUDP(opt Announce, _url *url.URL) (AnnounceResponse, error) {
 		url: *_url,
 		a:   &opt,
 	}
-	defer ua.Close()
 	return ua.Do(opt.Request)
 }

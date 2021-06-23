@@ -183,7 +183,7 @@ func (h *handshake) establishS() error {
 	var b [96]byte
 	_, err := io.ReadFull(h.conn, b[:])
 	if err != nil {
-		return fmt.Errorf("error reading Y: %s", err)
+		return fmt.Errorf("error reading Y: %w", err)
 	}
 	var Y, S big.Int
 	Y.SetBytes(b[:])
@@ -524,7 +524,7 @@ func (h *handshake) Do() (ret io.ReadWriter, method CryptoMethod, err error) {
 	}()
 	err = h.establishS()
 	if err != nil {
-		err = fmt.Errorf("error while establishing secret: %s", err)
+		err = fmt.Errorf("error while establishing secret: %w", err)
 		return
 	}
 	pad := make([]byte, newPadLen())

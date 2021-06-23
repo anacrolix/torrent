@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 )
 
 // Accesses Torrent data via a Client. Reads block until the data is available. Seeks and readahead

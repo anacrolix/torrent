@@ -1,7 +1,7 @@
 package metainfo
 
 import (
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 )
 
 type Piece struct {

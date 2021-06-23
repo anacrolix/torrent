@@ -1,3 +1,6 @@
+//go:build !wasm
+// +build !wasm
+
 package iplist
 
 import (

@@ -5,8 +5,8 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/perf"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/pkg/errors"
 )
 

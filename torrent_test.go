@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
@@ -135,14 +135,6 @@ func testEmptyFilesAndZeroPieceLength(t *testing.T, cfg *ClientConfig) {
 func TestEmptyFilesAndZeroPieceLengthWithFileStorage(t *testing.T) {
 	cfg := TestingConfig(t)
 	ci := storage.NewFile(cfg.DataDir)
-	defer ci.Close()
-	cfg.DefaultStorage = ci
-	testEmptyFilesAndZeroPieceLength(t, cfg)
-}
-
-func TestEmptyFilesAndZeroPieceLengthWithMMapStorage(t *testing.T) {
-	cfg := TestingConfig(t)
-	ci := storage.NewMMap(cfg.DataDir)
 	defer ci.Close()
 	cfg.DefaultStorage = ci
 	testEmptyFilesAndZeroPieceLength(t, cfg)

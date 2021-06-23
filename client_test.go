@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/dht/v2"
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/filecache"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -36,22 +36,6 @@ func TestClientDefault(t *testing.T) {
 
 func TestClientNilConfig(t *testing.T) {
 	cl, err := NewClient(nil)
-	require.NoError(t, err)
-	cl.Close()
-}
-
-func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
-	cfg := TestingConfig(t)
-	pc, err := storage.NewBoltPieceCompletion(cfg.DataDir)
-	require.NoError(t, err)
-	ci := storage.NewFileWithCompletion(cfg.DataDir, pc)
-	defer ci.Close()
-	cfg.DefaultStorage = ci
-	cl, err := NewClient(cfg)
-	require.NoError(t, err)
-	cl.Close()
-	// And again, https://github.com/anacrolix/torrent/issues/158
-	cl, err = NewClient(cfg)
 	require.NoError(t, err)
 	cl.Close()
 }
@@ -780,31 +764,6 @@ func TestClientHasDhtServersWhenUtpDisabled(t *testing.T) {
 	require.NoError(t, err)
 	defer cl.Close()
 	assert.NotEmpty(t, cl.DhtServers())
-}
-
-func TestIssue335(t *testing.T) {
-	dir, mi := testutil.GreetingTestTorrent()
-	defer os.RemoveAll(dir)
-	cfg := TestingConfig(t)
-	cfg.Seed = false
-	cfg.Debug = true
-	cfg.DataDir = dir
-	comp, err := storage.NewBoltPieceCompletion(dir)
-	require.NoError(t, err)
-	defer comp.Close()
-	cfg.DefaultStorage = storage.NewMMapWithCompletion(dir, comp)
-	cl, err := NewClient(cfg)
-	require.NoError(t, err)
-	defer cl.Close()
-	tor, new, err := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	require.NoError(t, err)
-	assert.True(t, new)
-	require.True(t, cl.WaitAll())
-	tor.Drop()
-	_, new, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	require.NoError(t, err)
-	assert.True(t, new)
-	require.True(t, cl.WaitAll())
 }
 
 func TestClientDisabledImplicitNetworksButDhtEnabled(t *testing.T) {

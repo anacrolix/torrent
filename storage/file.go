@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/segments"
 
@@ -51,7 +51,7 @@ func NewFileWithCustomPathMaker(baseDir string, pathMaker func(baseDir string, i
 	return NewFileWithCustomPathMakerAndCompletion(baseDir, pathMaker, pieceCompletionForDir(baseDir))
 }
 
-// Allows passing custom PieceCompletion 
+// Allows passing custom PieceCompletion
 func NewFileWithCustomPathMakerAndCompletion(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string, completion PieceCompletion) *fileClientImpl {
 	if pathMaker == nil {
 		pathMaker = defaultPathMaker

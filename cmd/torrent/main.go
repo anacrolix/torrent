@@ -16,7 +16,7 @@ import (
 
 	"github.com/alexflint/go-arg"
 	"github.com/anacrolix/envpprof"
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"

@@ -7,7 +7,7 @@ import (
 	"net/url"
 
 	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 	trHttp "github.com/anacrolix/torrent/tracker/http"
 	"github.com/anacrolix/torrent/tracker/udp"
 )

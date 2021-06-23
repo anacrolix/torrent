@@ -5,16 +5,16 @@ require (
 	crawshaw.io/sqlite v0.3.3-0.20210127221821-98b1f83c5508
 	github.com/RoaringBitmap/roaring v0.6.0 // indirect
 	github.com/alexflint/go-arg v1.3.0
-	github.com/anacrolix/chansync v0.0.0-20210524073341-a336ebc2de92 // indirect
+	github.com/anacrolix/chansync v0.0.0-20210524073341-a336ebc2de92
 	github.com/anacrolix/confluence v1.7.1-0.20210311004351-d642adb8546c // indirect
 	github.com/anacrolix/dht/v2 v2.9.1
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/go-libutp v1.0.4
 	github.com/anacrolix/log v0.9.0
-	github.com/anacrolix/missinggo v1.2.1
+	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0
-	github.com/anacrolix/missinggo/v2 v2.5.1-0.20210520011502-b3d95d6b1d02
-	github.com/anacrolix/multiless v0.1.1-0.20210520040635-10ee7b5f3cff
+	github.com/anacrolix/missinggo/v2 v2.5.1
+	github.com/anacrolix/multiless v0.1.1-0.20210529082330-de2f6cf29619
 	github.com/anacrolix/sync v0.3.0
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/upnp v0.1.2-0.20200416075019-5e9378ed1425
@@ -42,6 +42,6 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 )
 
-go 1.15
+go 1.16
 
 exclude bazil.org/fuse v0.0.0-20200419173433-3ba628eaf417

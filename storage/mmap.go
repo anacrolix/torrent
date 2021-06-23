@@ -1,3 +1,6 @@
+//go:build !wasm
+// +build !wasm
+
 package storage
 
 import (
@@ -7,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/metainfo"

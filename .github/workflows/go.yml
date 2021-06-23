@@ -35,6 +35,9 @@ jobs:
       run: GOARCH=386 go test ./... -bench .
       continue-on-error: true
 
+    - name: Some packages compile for WebAssembly
+      run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
+
     - name: Install godo
       run: go install github.com/anacrolix/godo@latest
 

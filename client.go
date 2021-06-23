@@ -460,6 +460,9 @@ func (cl *Client) waitAccept() {
 
 // TODO: Apply filters for non-standard networks, particularly rate-limiting.
 func (cl *Client) rejectAccepted(conn net.Conn) error {
+	if !cl.wantConns() {
+		return errors.New("don't want conns right now")
+	}
 	ra := conn.RemoteAddr()
 	if rip := addrIpOrNil(ra); rip != nil {
 		if cl.config.DisableIPv4Peers && rip.To4() != nil {

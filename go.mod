@@ -13,7 +13,7 @@ require (
 	github.com/anacrolix/log v0.9.0
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0
-	github.com/anacrolix/missinggo/v2 v2.5.1
+	github.com/anacrolix/missinggo/v2 v2.5.2-0.20210623112532-e21e4ddc477d
 	github.com/anacrolix/multiless v0.1.1-0.20210529082330-de2f6cf29619
 	github.com/anacrolix/sync v0.3.0
 	github.com/anacrolix/tagflag v1.3.0

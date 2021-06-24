@@ -110,6 +110,8 @@ func (cl *Client) request(ctx context.Context, action Action, body []byte) (resp
 		respChan <- dr
 	})
 	defer t.End()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	writeErr := make(chan error, 1)
 	go func() {
 		writeErr <- cl.requestWriter(ctx, action, body, t.Id())

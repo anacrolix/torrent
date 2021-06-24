@@ -51,10 +51,17 @@ type Announce struct {
 const DefaultTrackerAnnounceTimeout = 15 * time.Second
 
 func (me Announce) Do() (res AnnounceResponse, err error) {
-	_url, err := url.Parse(me.TrackerUrl)
+	cl, err := NewClient(me.TrackerUrl, NewClientOpts{
+		Http: trHttp.NewClientOpts{
+			Proxy:      me.HTTPProxy,
+			ServerName: me.ServerName,
+		},
+		UdpNetwork: me.UdpNetwork,
+	})
 	if err != nil {
 		return
 	}
+	defer cl.Close()
 	if me.Context == nil {
 		// This is just to maintain the old behaviour that should be a timeout of 15s. Users can
 		// override it by providing their own Context. See comments elsewhere about longer timeouts
@@ -63,22 +70,10 @@ func (me Announce) Do() (res AnnounceResponse, err error) {
 		defer cancel()
 		me.Context = ctx
 	}
-	switch _url.Scheme {
-	case "http", "https":
-		cl := trHttp.NewClient(trHttp.NewClientOpts{
-			Proxy:      me.HTTPProxy,
-			ServerName: me.ServerName,
-		})
-		return cl.Announce(me.Context, me.Request, trHttp.AnnounceOpt{
-			UserAgent:  me.UserAgent,
-			HostHeader: me.HostHeader,
-			ClientIp4:  me.ClientIp4.IP,
-			ClientIp6:  me.ClientIp6.IP,
-		}, _url)
-	case "udp", "udp4", "udp6":
-		return announceUDP(me, _url)
-	default:
-		err = ErrBadScheme
-		return
-	}
+	return cl.Announce(me.Context, me.Request, trHttp.AnnounceOpt{
+		UserAgent:  me.UserAgent,
+		HostHeader: me.HostHeader,
+		ClientIp4:  me.ClientIp4.IP,
+		ClientIp6:  me.ClientIp6.IP,
+	})
 }

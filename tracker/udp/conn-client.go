@@ -54,17 +54,20 @@ func ipv6(opt *bool, network string, conn net.Conn) bool {
 	return rip.To16() != nil && rip.To4() == nil
 }
 
-func NewConnClient(opts NewConnClientOpts) (cc ConnClient, err error) {
-	cc.conn, err = net.Dial(opts.Network, opts.Host)
+func NewConnClient(opts NewConnClientOpts) (cc *ConnClient, err error) {
+	conn, err := net.Dial(opts.Network, opts.Host)
 	if err != nil {
 		return
 	}
-	cc.ipv6 = ipv6(opts.Ipv6, opts.Network, cc.conn)
-	go cc.reader()
-	cc.cl = Client{
-		Dispatcher: &cc.d,
-		Writer:     cc.conn,
+	cc = &ConnClient{
+		cl: Client{
+			Writer: conn,
+		},
+		conn: conn,
+		ipv6: ipv6(opts.Ipv6, opts.Network, conn),
 	}
+	cc.cl.Dispatcher = &cc.d
+	go cc.reader()
 	return
 }
 

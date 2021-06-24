@@ -3,7 +3,6 @@ package http
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"expvar"
 	"fmt"
 	"io"
@@ -13,7 +12,6 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/missinggo/httptoo"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/tracker/shared"
@@ -21,80 +19,6 @@ import (
 )
 
 var vars = expvar.NewMap("tracker/http")
-
-type Client struct {
-	hc *http.Client
-}
-
-type NewClientOpts struct {
-	Proxy      func(*http.Request) (*url.URL, error)
-	ServerName string
-}
-
-func NewClient(opts NewClientOpts) Client {
-	return Client{
-		hc: &http.Client{
-			Transport: &http.Transport{
-				Proxy: opts.Proxy,
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-					ServerName:         opts.ServerName,
-				},
-				// This is for S3 trackers that hold connections open.
-				DisableKeepAlives: true,
-			},
-		},
-	}
-}
-
-type HttpResponse struct {
-	FailureReason string `bencode:"failure reason"`
-	Interval      int32  `bencode:"interval"`
-	TrackerId     string `bencode:"tracker id"`
-	Complete      int32  `bencode:"complete"`
-	Incomplete    int32  `bencode:"incomplete"`
-	Peers         Peers  `bencode:"peers"`
-	// BEP 7
-	Peers6 krpc.CompactIPv6NodeAddrs `bencode:"peers6"`
-}
-
-type Peers []Peer
-
-func (me *Peers) UnmarshalBencode(b []byte) (err error) {
-	var _v interface{}
-	err = bencode.Unmarshal(b, &_v)
-	if err != nil {
-		return
-	}
-	switch v := _v.(type) {
-	case string:
-		vars.Add("http responses with string peers", 1)
-		var cnas krpc.CompactIPv4NodeAddrs
-		err = cnas.UnmarshalBinary([]byte(v))
-		if err != nil {
-			return
-		}
-		for _, cp := range cnas {
-			*me = append(*me, Peer{
-				IP:   cp.IP[:],
-				Port: int(cp.Port),
-			})
-		}
-		return
-	case []interface{}:
-		vars.Add("http responses with list peers", 1)
-		for _, i := range v {
-			var p Peer
-			p.FromDictInterface(i.(map[string]interface{}))
-			*me = append(*me, p)
-		}
-		return
-	default:
-		vars.Add("http responses with unhandled peers type", 1)
-		err = fmt.Errorf("unsupported type: %T", _v)
-		return
-	}
-}
 
 func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts AnnounceOpt) {
 	q := _url.Query()
@@ -148,8 +72,8 @@ type AnnounceOpt struct {
 
 type AnnounceRequest = udp.AnnounceRequest
 
-func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceOpt, _url *url.URL) (ret AnnounceResponse, err error) {
-	_url = httptoo.CopyURL(_url)
+func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceOpt) (ret AnnounceResponse, err error) {
+	_url := httptoo.CopyURL(cl.url_)
 	setAnnounceParams(_url, &ar, opt)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, _url.String(), nil)
 	req.Header.Set("User-Agent", opt.UserAgent)

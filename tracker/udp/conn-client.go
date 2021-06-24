@@ -2,7 +2,6 @@ package udp
 
 import (
 	"context"
-	"log"
 	"net"
 
 	"github.com/anacrolix/dht/v2/krpc"
@@ -35,7 +34,7 @@ func (cc *ConnClient) reader() {
 		}
 		err = cc.d.Dispatch(b[:n])
 		if err != nil {
-			log.Printf("dispatching packet received on %v: %v", cc.conn, err)
+			//log.Printf("dispatching packet received on %v (%q): %v", cc.conn, string(b[:n]), err)
 		}
 	}
 }

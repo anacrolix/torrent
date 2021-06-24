@@ -22,11 +22,7 @@ func (cl *Client) Announce(
 ) (
 	respHdr AnnounceResponseHeader, err error,
 ) {
-	body, err := marshal(req)
-	if err != nil {
-		return
-	}
-	respBody, err := cl.request(ctx, ActionAnnounce, append(body, opts.Encode()...))
+	respBody, err := cl.request(ctx, ActionAnnounce, append(mustMarshal(req), opts.Encode()...))
 	if err != nil {
 		return
 	}
@@ -39,6 +35,32 @@ func (cl *Client) Announce(
 	err = peers.UnmarshalBinary(r.Bytes())
 	if err != nil {
 		err = fmt.Errorf("reading response peers: %w", err)
+	}
+	return
+}
+
+func (cl *Client) Scrape(
+	ctx context.Context, ihs []InfoHash,
+) (
+	out ScrapeResponse, err error,
+) {
+	// There's no way to pass options in a scrape, since we don't when the request body ends.
+	respBody, err := cl.request(ctx, ActionScrape, mustMarshal(ScrapeRequest(ihs)))
+	if err != nil {
+		return
+	}
+	r := bytes.NewBuffer(respBody)
+	for r.Len() != 0 {
+		var item ScrapeInfohashResult
+		err = Read(r, &item)
+		if err != nil {
+			return
+		}
+		out = append(out, item)
+	}
+	if len(out) > len(ihs) {
+		err = fmt.Errorf("got %v results but expected %v", len(out), len(ihs))
+		return
 	}
 	return
 }

@@ -15,7 +15,7 @@ type NewConnClientOpts struct {
 }
 
 type ConnClient struct {
-	cl      Client
+	Client  Client
 	conn    net.Conn
 	d       Dispatcher
 	readErr error
@@ -59,13 +59,13 @@ func NewConnClient(opts NewConnClientOpts) (cc *ConnClient, err error) {
 		return
 	}
 	cc = &ConnClient{
-		cl: Client{
+		Client: Client{
 			Writer: conn,
 		},
 		conn: conn,
 		ipv6: ipv6(opts.Ipv6, opts.Network, conn),
 	}
-	cc.cl.Dispatcher = &cc.d
+	cc.Client.Dispatcher = &cc.d
 	go cc.reader()
 	return
 }
@@ -86,6 +86,6 @@ func (c *ConnClient) Announce(
 			return &krpc.CompactIPv4NodeAddrs{}
 		}
 	}()
-	h, err = c.cl.Announce(ctx, req, nas, opts)
+	h, err = c.Client.Announce(ctx, req, nas, opts)
 	return
 }

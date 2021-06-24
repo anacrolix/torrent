@@ -9,9 +9,11 @@ import (
 )
 
 type Client interface {
-	Announce(context.Context, AnnounceRequest, trHttp.AnnounceOpt) (AnnounceResponse, error)
+	Announce(context.Context, AnnounceRequest, AnnounceOpt) (AnnounceResponse, error)
 	Close() error
 }
+
+type AnnounceOpt = trHttp.AnnounceOpt
 
 type NewClientOpts struct {
 	Http trHttp.NewClientOpts

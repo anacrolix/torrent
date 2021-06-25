@@ -14,8 +14,9 @@ type Client struct {
 type ProxyFunc func(*http.Request) (*url.URL, error)
 
 type NewClientOpts struct {
-	Proxy      ProxyFunc
-	ServerName string
+	Proxy          ProxyFunc
+	ServerName     string
+	AllowKeepAlive bool
 }
 
 func NewClient(url_ *url.URL, opts NewClientOpts) Client {
@@ -29,7 +30,7 @@ func NewClient(url_ *url.URL, opts NewClientOpts) Client {
 					ServerName:         opts.ServerName,
 				},
 				// This is for S3 trackers that hold connections open.
-				DisableKeepAlives: true,
+				DisableKeepAlives: !opts.AllowKeepAlive,
 			},
 		},
 	}

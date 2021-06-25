@@ -9,8 +9,9 @@ import (
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/expect"
+	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/torrent/version"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/iplist"
@@ -157,10 +158,10 @@ func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
 
 func NewDefaultClientConfig() *ClientConfig {
 	cc := &ClientConfig{
-		HTTPUserAgent:                  "Go-Torrent/1.0",
-		ExtendedHandshakeClientVersion: "go.torrent dev 20181121",
-		Bep20:                          "-GT0002-",
-		UpnpID:                         "anacrolix/torrent",
+		HTTPUserAgent:                  version.DefaultHttpUserAgent,
+		ExtendedHandshakeClientVersion: version.DefaultExtendedHandshakeClientVersion,
+		Bep20:                          version.DefaultBep20Prefix,
+		UpnpID:                         version.DefaultUpnpId,
 		NominalDialTimeout:             20 * time.Second,
 		MinDialTimeout:                 3 * time.Second,
 		EstablishedConnsPerTorrent:     50,

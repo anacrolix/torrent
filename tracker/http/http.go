@@ -16,6 +16,7 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/tracker/shared"
 	"github.com/anacrolix/torrent/tracker/udp"
+	"github.com/anacrolix/torrent/version"
 )
 
 var vars = expvar.NewMap("tracker/http")
@@ -76,7 +77,13 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 	_url := httptoo.CopyURL(cl.url_)
 	setAnnounceParams(_url, &ar, opt)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, _url.String(), nil)
-	req.Header.Set("User-Agent", opt.UserAgent)
+	userAgent := opt.UserAgent
+	if userAgent == "" {
+		userAgent = version.DefaultHttpUserAgent
+	}
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	}
 	req.Host = opt.HostHeader
 	resp, err := cl.hc.Do(req)
 	if err != nil {

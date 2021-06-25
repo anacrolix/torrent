@@ -66,7 +66,7 @@ func (cl *Client) Scrape(
 }
 
 func (cl *Client) connect(ctx context.Context) (err error) {
-	if time.Since(cl.connIdIssued) < time.Minute {
+	if !cl.connIdIssued.IsZero() && time.Since(cl.connIdIssued) < time.Minute {
 		return nil
 	}
 	respBody, err := cl.request(ctx, ActionConnect, nil)

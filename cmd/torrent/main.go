@@ -18,6 +18,7 @@ import (
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/version"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	"golang.org/x/xerrors"
@@ -164,7 +165,10 @@ var flags struct {
 	*ListFilesCmd     `arg:"subcommand:list-files"`
 	*SpewBencodingCmd `arg:"subcommand:spew-bencoding"`
 	*AnnounceCmd      `arg:"subcommand:announce"`
+	*VersionCmd       `arg:"subcommand:version"`
 }
+
+type VersionCmd struct{}
 
 type SpewBencodingCmd struct{}
 
@@ -267,6 +271,11 @@ func mainErr() error {
 			}
 			spew.Dump(v)
 		}
+		return nil
+	case flags.VersionCmd != nil:
+		fmt.Printf("HTTP User-Agent: %q\n", version.DefaultHttpUserAgent)
+		fmt.Printf("Torrent client version: %q\n", version.DefaultExtendedHandshakeClientVersion)
+		fmt.Printf("Torrent version prefix: %q\n", version.DefaultBep20Prefix)
 		return nil
 	default:
 		p.Fail(fmt.Sprintf("unexpected subcommand: %v", p.Subcommand()))

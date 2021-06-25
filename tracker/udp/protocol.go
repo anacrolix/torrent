@@ -53,11 +53,21 @@ type AnnounceResponseHeader struct {
 	Seeders  int32
 }
 
+type InfoHash = [20]byte
+
 func marshal(data interface{}) (b []byte, err error) {
 	var buf bytes.Buffer
 	err = binary.Write(&buf, binary.BigEndian, data)
 	b = buf.Bytes()
 	return
+}
+
+func mustMarshal(data interface{}) []byte {
+	b, err := marshal(data)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func Write(w io.Writer, data interface{}) error {

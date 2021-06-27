@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 )
 
 type Client struct {
+	mu           sync.Mutex
 	connId       ConnectionId
 	connIdIssued time.Time
 	Dispatcher   *Dispatcher
@@ -66,6 +68,10 @@ func (cl *Client) Scrape(
 }
 
 func (cl *Client) connect(ctx context.Context) (err error) {
+	// We could get fancier here and use RWMutex, and even fire off the connection asynchronously
+	// and provide a grace period while it resolves.
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
 	if !cl.connIdIssued.IsZero() && time.Since(cl.connIdIssued) < time.Minute {
 		return nil
 	}

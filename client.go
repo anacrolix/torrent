@@ -92,6 +92,23 @@ func (cl *Client) BadPeerIPs() []string {
 	return cl.badPeerIPsLocked()
 }
 
+func (cl *Client) IsSeeding() (ret bool) {
+	cl.rLock()
+	defer cl.rUnlock()
+	if cl.config != nil {
+		return cl.config.Seed
+	}
+	return
+}
+
+func (cl *Client) SetSeed(v bool) {
+	cl._mu.Lock()
+	if cl.config != nil {
+		cl.config.Seed = v
+	}
+	cl._mu.Unlock()
+}
+
 func (cl *Client) badPeerIPsLocked() []string {
 	return slices.FromMapKeys(cl.badPeerIPs).([]string)
 }

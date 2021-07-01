@@ -92,6 +92,7 @@ func (cl *Client) BadPeerIPs() []string {
 	return cl.badPeerIPsLocked()
 }
 
+// Returns whether seeding is enabled
 func (cl *Client) IsSeeding() (ret bool) {
 	cl.rLock()
 	defer cl.rUnlock()
@@ -101,6 +102,7 @@ func (cl *Client) IsSeeding() (ret bool) {
 	return
 }
 
+// Enable/Disable Seeding
 func (cl *Client) SetSeed(v bool) {
 	cl._mu.Lock()
 	if cl.config != nil {

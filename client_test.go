@@ -54,6 +54,17 @@ func TestAddDropTorrent(t *testing.T) {
 	tt.Drop()
 }
 
+func TestSeed(t *testing.T) {
+	tc := TestingConfig(t)
+	tc.Seed = false
+	cl, err := NewClient(tc)
+	require.NoError(t, err)
+	defer cl.Close()
+	assert.False(t, cl.IsSeeding())
+	cl.SetSeed(true)
+	assert.True(t, cl.IsSeeding())
+}
+
 func TestAddTorrentNoSupportedTrackerSchemes(t *testing.T) {
 	// TODO?
 	t.SkipNow()

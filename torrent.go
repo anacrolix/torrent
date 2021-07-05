@@ -1444,7 +1444,7 @@ func (t *Torrent) seeding() bool {
 	if cl.config.NoUpload {
 		return false
 	}
-	if !cl.config.Seed {
+	if !cl.IsSeeding() {
 		return false
 	}
 	if cl.config.DisableAggressiveUpload && t.needData() {

@@ -52,6 +52,7 @@ type Client struct {
 	stats ConnStats
 
 	_mu    lockWithDeferreds
+	seedmu sync.Mutex
 	event  sync.Cond
 	closed missinggo.Event
 
@@ -94,8 +95,8 @@ func (cl *Client) BadPeerIPs() []string {
 
 // Returns whether seeding is enabled
 func (cl *Client) IsSeeding() (ret bool) {
-	cl.rLock()
-	defer cl.rUnlock()
+	cl.seedmu.Lock()
+	defer cl.seedmu.Unlock()
 	if cl.config != nil {
 		return cl.config.Seed
 	}
@@ -104,11 +105,11 @@ func (cl *Client) IsSeeding() (ret bool) {
 
 // Enable/Disable Seeding
 func (cl *Client) SetSeed(v bool) {
-	cl._mu.Lock()
+	cl.seedmu.Lock()
 	if cl.config != nil {
 		cl.config.Seed = v
 	}
-	cl._mu.Unlock()
+	cl.seedmu.Unlock()
 }
 
 func (cl *Client) badPeerIPsLocked() []string {

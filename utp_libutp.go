@@ -1,3 +1,4 @@
+//go:build cgo && !disable_libutp
 // +build cgo,!disable_libutp
 
 package torrent

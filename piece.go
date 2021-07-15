@@ -107,6 +107,12 @@ func (p *Piece) waitNoPendingWrites() {
 	p.pendingWritesMutex.Unlock()
 }
 
+func (p *Piece) isNoPendingWrites() bool {
+	p.pendingWritesMutex.Lock()
+	defer p.pendingWritesMutex.Unlock()
+	return p.pendingWrites == 0
+}
+
 func (p *Piece) chunkIndexDirty(chunk pp.Integer) bool {
 	return p._dirtyChunks.Contains(bitmap.BitIndex(chunk))
 }

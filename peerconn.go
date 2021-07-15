@@ -1324,6 +1324,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		defer cl.lock()
 		concurrentChunkWrites.Add(1)
 		defer concurrentChunkWrites.Add(-1)
+		defer piece.decrementPendingWrites()
 		// Write the chunk out. Note that the upper bound on chunk writing concurrency will be the
 		// number of connections. We write inline with receiving the chunk (with this lock dance),
 		// because we want to handle errors synchronously and I haven't thought of a nice way to
@@ -1331,8 +1332,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// that instead.
 		return t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
 	}()
-
-	piece.decrementPendingWrites()
 
 	if err != nil {
 		c.logger.WithDefaultLevel(log.Error).Printf("writing received chunk %v: %v", req, err)
@@ -1345,7 +1344,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	c.onDirtiedPiece(pieceIndex(req.Index))
 
 	// We need to ensure the piece is only queued once, so only the last chunk writer gets this job.
-	if t.pieceAllDirty(pieceIndex(req.Index)) && piece.pendingWrites == 0 {
+	if t.pieceAllDirty(pieceIndex(req.Index)) && piece.isNoPendingWrites() {
 		t.queuePieceCheck(pieceIndex(req.Index))
 		// We don't pend all chunks here anymore because we don't want code dependent on the dirty
 		// chunk status (such as the haveChunk call above) to have to check all the various other

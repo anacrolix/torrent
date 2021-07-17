@@ -64,7 +64,6 @@ func (me *sqlitePieceCompletion) Close() (err error) {
 	defer me.mu.Unlock()
 	if me.db != nil {
 		err = me.db.Close()
-		me.db = nil
 	}
 	return
 }

@@ -3,6 +3,7 @@ package torrent
 import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
+	"unsafe"
 )
 
 // Specifies a new torrent for adding to a client. There are helpers for magnet URIs and torrent
@@ -57,12 +58,6 @@ func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) *TorrentSpec {
 		InfoBytes:   mi.InfoBytes,
 		DisplayName: info.Name,
 		Webseeds:    mi.UrlList,
-		DhtNodes: func() (ret []string) {
-			ret = make([]string, len(mi.Nodes))
-			for _, node := range mi.Nodes {
-				ret = append(ret, string(node))
-			}
-			return
-		}(),
+		DhtNodes: *(*[]string)(unsafe.Pointer(&mi.Nodes)),
 	}
 }

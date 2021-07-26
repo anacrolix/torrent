@@ -25,10 +25,9 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts AnnounceOpt) {
 	q := _url.Query()
 
 	q.Set("key", strconv.FormatInt(int64(ar.Key), 10))
-	q.Set("info_hash", string(ar.InfoHash[:]))
 	q.Set("peer_id", string(ar.PeerId[:]))
 	// AFAICT, port is mandatory, and there's no implied port key.
-	q.Set("port", fmt.Sprintf("%d", ar.Port))
+	q.Set("port", strconv.FormatInt(int64(ar.Port), 10))
 	q.Set("uploaded", strconv.FormatInt(ar.Uploaded, 10))
 	q.Set("downloaded", strconv.FormatInt(ar.Downloaded, 10))
 
@@ -61,7 +60,8 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts AnnounceOpt) {
 	}
 	doIp("ipv4", opts.ClientIp4)
 	doIp("ipv6", opts.ClientIp6)
-	_url.RawQuery = q.Encode()
+	// Don't use QueryEscape for 'info_hash', for it encodes spaces to '+' instead of '%20'
+	_url.RawQuery = q.Encode() + "&info_hash=" + url.PathEscape(string(ar.InfoHash[:]))
 }
 
 type AnnounceOpt struct {

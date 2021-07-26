@@ -14,7 +14,7 @@ func trailingPath(infoName string, pathComps []string) string {
 	return path.Join(
 		func() (ret []string) {
 			for _, comp := range append([]string{infoName}, pathComps...) {
-				ret = append(ret, url.QueryEscape(comp))
+				ret = append(ret, url.PathEscape(comp))
 			}
 			return
 		}()...,

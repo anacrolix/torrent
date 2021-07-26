@@ -11,6 +11,7 @@ type Dispatcher struct {
 	transactions map[TransactionId]Transaction
 }
 
+// The caller owns b.
 func (me *Dispatcher) Dispatch(b []byte) error {
 	buf := bytes.NewBuffer(b)
 	var rh ResponseHeader
@@ -23,7 +24,7 @@ func (me *Dispatcher) Dispatch(b []byte) error {
 	if t, ok := me.transactions[rh.TransactionId]; ok {
 		t.h(DispatchedResponse{
 			Header: rh,
-			Body:   buf.Bytes(),
+			Body:   append([]byte(nil), buf.Bytes()...),
 		})
 		return nil
 	} else {

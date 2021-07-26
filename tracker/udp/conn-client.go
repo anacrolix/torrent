@@ -23,8 +23,8 @@ type ConnClient struct {
 }
 
 func (cc *ConnClient) reader() {
+	b := make([]byte, 0x800)
 	for {
-		b := make([]byte, 0x800)
 		n, err := cc.conn.Read(b)
 		if err != nil {
 			// TODO: Do bad things to the dispatcher, and incoming calls to the client if we have a

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/anacrolix/missinggo/httptoo"
 	"github.com/anacrolix/torrent/bencode"
@@ -60,8 +61,9 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts AnnounceOpt) {
 	}
 	doIp("ipv4", opts.ClientIp4)
 	doIp("ipv6", opts.ClientIp6)
-	// Don't use QueryEscape for 'info_hash', for it encodes spaces to '+' instead of '%20'
-	_url.RawQuery = q.Encode() + "&info_hash=" + url.PathEscape(string(ar.InfoHash[:]))
+	// Force encoding spaces to '%20' instead of '+'
+	_url.RawQuery = q.Encode() + 
+		"&info_hash=" + strings.ReplaceAll(url.QueryEscape(string(ar.InfoHash[:])), "+", "%20")
 }
 
 type AnnounceOpt struct {

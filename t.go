@@ -203,12 +203,17 @@ func (t *Torrent) initFiles() {
 		} else {
 			path = fi.Path
 		}
+		dp := t.info.Name
+		if len(fi.Path) != 0 {
+			dp = strings.Join(fi.Path, "/")
+		}
 		*t.files = append(*t.files, &File{
 			t,
 			strings.Join(append([]string{t.info.Name}, path...), "/"),
 			offset,
 			fi.Length,
 			fi,
+			dp,
 			PiecePriorityNone,
 		})
 		offset += fi.Length

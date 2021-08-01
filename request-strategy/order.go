@@ -21,7 +21,7 @@ type (
 type ClientPieceOrder struct{}
 
 type filterTorrent struct {
-	Torrent
+	*Torrent
 	unverifiedBytes int64
 	// Potentially shared with other torrents.
 	storageLeft *int64
@@ -29,8 +29,8 @@ type filterTorrent struct {
 
 func sortFilterPieces(pieces []filterPiece) {
 	sort.Slice(pieces, func(_i, _j int) bool {
-		i := pieces[_i]
-		j := pieces[_j]
+		i := &pieces[_i]
+		j := &pieces[_j]
 		return multiless.New().Int(
 			int(j.Priority), int(i.Priority),
 		).Bool(
@@ -75,7 +75,7 @@ func (me *peersForPieceRequests) addNextRequest(r Request) {
 
 type requestablePiece struct {
 	index             pieceIndex
-	t                 Torrent
+	t                 *Torrent
 	alwaysReallocate  bool
 	NumPendingChunks  int
 	IterPendingChunks ChunksIter
@@ -84,18 +84,23 @@ type requestablePiece struct {
 type filterPiece struct {
 	t     *filterTorrent
 	index pieceIndex
-	Piece
+	*Piece
 }
 
 func getRequestablePieces(input Input) (ret []requestablePiece) {
+	maxPieces := 0
+	for i := range input.Torrents {
+		maxPieces += len(input.Torrents[i].Pieces)
+	}
+	pieces := make([]filterPiece, 0, maxPieces)
+	ret = make([]requestablePiece, 0, maxPieces)
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
 	// TorrentImpl.
 	storageLeft := make(map[*func() *int64]*int64)
-	var pieces []filterPiece
-	for _, _t := range input.Torrents {
+	for _t := range input.Torrents {
 		// TODO: We could do metainfo requests here.
 		t := &filterTorrent{
-			Torrent:         _t,
+			Torrent:         &input.Torrents[_t],
 			unverifiedBytes: 0,
 		}
 		key := t.Capacity
@@ -105,11 +110,11 @@ func getRequestablePieces(input Input) (ret []requestablePiece) {
 			}
 			t.storageLeft = storageLeft[key]
 		}
-		for i, tp := range t.Pieces {
+		for i := range t.Pieces {
 			pieces = append(pieces, filterPiece{
 				t:     t,
 				index: i,
-				Piece: tp,
+				Piece: &t.Pieces[i],
 			})
 		}
 	}

@@ -1323,7 +1323,11 @@ func (cl *Client) AddMagnet(uri string) (T *Torrent, err error) {
 }
 
 func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (T *Torrent, err error) {
-	T, _, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	ts, err := TorrentSpecFromMetaInfoErr(mi)
+	if err != nil {
+		return
+	}
+	T, _, err = cl.AddTorrentSpec(ts)
 	return
 }
 

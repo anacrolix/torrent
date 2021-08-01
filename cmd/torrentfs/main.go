@@ -114,7 +114,7 @@ func mainErr() error {
 				if ev.TorrentFilePath != "" {
 					_, err := client.AddTorrentFromFile(ev.TorrentFilePath)
 					if err != nil {
-						log.Printf("error adding torrent to client: %s", err)
+						log.Printf("error adding torrent from file %q to client: %v", ev.TorrentFilePath, err)
 					}
 				} else if ev.MagnetURI != "" {
 					_, err := client.AddMagnet(ev.MagnetURI)

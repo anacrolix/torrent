@@ -1,6 +1,8 @@
 package torrent
 
 import (
+	"fmt"
+
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
 )
@@ -46,10 +48,10 @@ func TorrentSpecFromMagnetUri(uri string) (spec *TorrentSpec, err error) {
 	return
 }
 
-func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) *TorrentSpec {
+func TorrentSpecFromMetaInfoErr(mi *metainfo.MetaInfo) (*TorrentSpec, error) {
 	info, err := mi.UnmarshalInfo()
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("unmarshalling info: %w", err)
 	}
 	return &TorrentSpec{
 		Trackers:    mi.UpvertedAnnounceList(),
@@ -64,5 +66,13 @@ func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) *TorrentSpec {
 			}
 			return
 		}(),
+	}, nil
+}
+
+func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) *TorrentSpec {
+	ts, err := TorrentSpecFromMetaInfoErr(mi)
+	if err != nil {
+		panic(err)
 	}
+	return ts
 }

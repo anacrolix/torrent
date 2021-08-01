@@ -53,7 +53,7 @@ type Client struct {
 
 	_mu    lockWithDeferreds
 	event  sync.Cond
-	closed missinggo.Event
+	closed chansync.SetOnce
 
 	config *ClientConfig
 	logger log.Logger
@@ -398,10 +398,8 @@ func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err
 	return
 }
 
-func (cl *Client) Closed() <-chan struct{} {
-	cl.lock()
-	defer cl.unlock()
-	return cl.closed.C()
+func (cl *Client) Closed() chansync.Done {
+	return cl.closed.Done()
 }
 
 func (cl *Client) eachDhtServer(f func(DhtServer)) {
@@ -1518,7 +1516,7 @@ func (cl *Client) clearAcceptLimits() {
 func (cl *Client) acceptLimitClearer() {
 	for {
 		select {
-		case <-cl.closed.LockedChan(cl.locker()):
+		case <-cl.closed.Done():
 			return
 		case <-time.After(15 * time.Minute):
 			cl.lock()

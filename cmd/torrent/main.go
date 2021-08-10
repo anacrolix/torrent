@@ -164,7 +164,7 @@ var flags struct {
 	*DownloadCmd      `arg:"subcommand:download"`
 	*ListFilesCmd     `arg:"subcommand:list-files"`
 	*SpewBencodingCmd `arg:"subcommand:spew-bencoding"`
-	*AnnounceCmd      `arg:"subcommand:announce"`
+	//*AnnounceCmd      `arg:"subcommand:announce"`
 	*VersionCmd       `arg:"subcommand:version"`
 }
 
@@ -239,8 +239,8 @@ func mainErr() error {
 	stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
 	p := arg.MustParse(&flags)
 	switch {
-	case flags.AnnounceCmd != nil:
-		return announceErr()
+	//case flags.AnnounceCmd != nil:
+	//	return announceErr()
 	//case :
 	//	return announceErr(flags.Args, parser)
 	case flags.DownloadCmd != nil:

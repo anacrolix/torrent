@@ -58,6 +58,9 @@ func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, er
 		blobs: make(map[string]*sqlite.Blob),
 		opts:  opts,
 	}
+	// Avoid race with cl.blobFlusherFunc
+	cl.l.Lock()
+	defer cl.l.Unlock()
 	if opts.BlobFlushInterval != 0 {
 		cl.blobFlusher = time.AfterFunc(opts.BlobFlushInterval, cl.blobFlusherFunc)
 	}

@@ -1,7 +1,9 @@
 // Downloads torrents from the command-line.
 // 
 // Example run:
-// $ go run cmd/torrent/main.go download https://releases.ubuntu.com/20.04/ubuntu-20.04.2-live-server-amd64.iso.torrent                                                
+// $ go run cmd/torrent/main.go download --addr localhost:42070 https://releases.ubuntu.com/20.04/ubuntu-20.04.2-live-server-amd64.iso.torrent    
+// 2021-08-10T02:02:24-0700 NONE  client.go:395: dht server on 127.0.0.1:42070 (node id 34169972f3528b159c0b02be758a084793fcea9a) completed bootstrap (dht.TraversalStats{NumAddrsTried:9, NumResponses:0})
+// 2021-08-10T02:02:24-0700 NONE  client.go:395: dht server on [::1]:42070 (node id 5add5bc7b138f7b149fa70cd00a24312995f938f) completed bootstrap (dht.TraversalStats{NumAddrsTried:9, NumResponses:0})
 // 1.03236333s: downloading "ubuntu-20.04.2-live-server-amd64.iso": 0 B/1.2 GB, 0/4636 pieces completed (0 partial): 0 B/s
 // 2.001421913s: downloading "ubuntu-20.04.2-live-server-amd64.iso": 475 kB/1.2 GB, 1/4636 pieces completed (2 partial): 475 kB/s
 // 3.143916633s: downloading "ubuntu-20.04.2-live-server-amd64.iso": 3.5 MB/1.2 GB, 10/4636 pieces completed (9 partial): 3.0 MB/s

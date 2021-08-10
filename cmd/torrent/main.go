@@ -1,4 +1,15 @@
 // Downloads torrents from the command-line.
+// 
+// Example run:
+// $ go run cmd/torrent/main.go download https://releases.ubuntu.com/20.04/ubuntu-20.04.2-live-server-amd64.iso.torrent                                                
+// 1.03236333s: downloading "ubuntu-20.04.2-live-server-amd64.iso": 0 B/1.2 GB, 0/4636 pieces completed (0 partial): 0 B/s
+// 2.001421913s: downloading "ubuntu-20.04.2-live-server-amd64.iso": 475 kB/1.2 GB, 1/4636 pieces completed (2 partial): 475 kB/s
+// 3.143916633s: downloading "ubuntu-20.04.2-live-server-amd64.iso": 3.5 MB/1.2 GB, 10/4636 pieces completed (9 partial): 3.0 MB/s
+// 4.045550543s: downloading "ubuntu-20.04.2-live-server-amd64.iso": 8.9 MB/1.2 GB, 21/4636 pieces completed (19 partial): 5.4 MB/s
+// 5.001778786s: downloading "ubuntu-20.04.2-live-server-amd64.iso": 18 MB/1.2 GB, 65/4636 pieces completed (10 partial): 8.7 MB/s
+// 6.092551802s: downloading "ubuntu-20.04.2-live-server-amd64.iso": 23 MB/1.2 GB, 86/4636 pieces completed (9 partial): 5.8 MB/s
+// ...
+
 package main
 
 import (

@@ -60,7 +60,7 @@ func TorrentSpecFromMetaInfoErr(mi *metainfo.MetaInfo) (*TorrentSpec, error) {
 		DisplayName: info.Name,
 		Webseeds:    mi.UrlList,
 		DhtNodes: func() (ret []string) {
-			ret = make([]string, len(mi.Nodes))
+			ret = make([]string, 0, len(mi.Nodes))
 			for _, node := range mi.Nodes {
 				ret = append(ret, string(node))
 			}

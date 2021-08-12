@@ -102,7 +102,7 @@ func (d *Decoder) throwSyntaxError(offset int64, err error) {
 }
 
 // called when 'i' was consumed
-func (d *Decoder) parseInt(v reflect.Value) {
+func (d *Decoder) parseInt(v reflect.Value) error {
 	start := d.Offset - 1
 	d.readUntil('e')
 	if d.buf.Len() == 0 {
@@ -120,10 +120,10 @@ func (d *Decoder) parseInt(v reflect.Value) {
 		checkForIntParseError(err, start)
 
 		if v.OverflowInt(n) {
-			panic(&UnmarshalTypeError{
-				Value: "integer " + s,
-				Type:  v.Type(),
-			})
+			return &UnmarshalTypeError{
+				BencodeTypeName:     "int",
+				UnmarshalTargetType: v.Type(),
+			}
 		}
 		v.SetInt(n)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -131,21 +131,22 @@ func (d *Decoder) parseInt(v reflect.Value) {
 		checkForIntParseError(err, start)
 
 		if v.OverflowUint(n) {
-			panic(&UnmarshalTypeError{
-				Value: "integer " + s,
-				Type:  v.Type(),
-			})
+			return &UnmarshalTypeError{
+				BencodeTypeName:     "int",
+				UnmarshalTargetType: v.Type(),
+			}
 		}
 		v.SetUint(n)
 	case reflect.Bool:
 		v.SetBool(s != "0")
 	default:
-		panic(&UnmarshalTypeError{
-			Value: "integer " + s,
-			Type:  v.Type(),
-		})
+		return &UnmarshalTypeError{
+			BencodeTypeName:     "int",
+			UnmarshalTargetType: v.Type(),
+		}
 	}
 	d.buf.Reset()
+	return nil
 }
 
 func (d *Decoder) parseString(v reflect.Value) error {
@@ -198,8 +199,8 @@ func (d *Decoder) parseString(v reflect.Value) error {
 	read(d.buf.Bytes()[:length])
 	// I believe we return here to support "ignore_unmarshal_type_error".
 	return &UnmarshalTypeError{
-		Value: "string",
-		Type:  v.Type(),
+		BencodeTypeName:     "string",
+		UnmarshalTargetType: v.Type(),
 	}
 }
 
@@ -238,7 +239,7 @@ func getDictField(dict reflect.Type, key string) (_ dictField, err error) {
 		//	})
 		//}
 	default:
-		err = fmt.Errorf("can't parse bencode dict items into %v", k)
+		err = fmt.Errorf("can't assign bencode dict items into a %v", k)
 		return
 	}
 }
@@ -347,8 +348,9 @@ func (d *Decoder) parseDict(v reflect.Value) error {
 		//log.Printf("parsing into %v", setValue.Type())
 		ok, err = d.parseValue(setValue)
 		if err != nil {
-			if _, ok := err.(*UnmarshalTypeError); !ok || !df.Tags.IgnoreUnmarshalTypeError() {
-				return fmt.Errorf("parsing value for key %q: %s", keyStr, err)
+			var target *UnmarshalTypeError
+			if !(errors.As(err, &target) && df.Tags.IgnoreUnmarshalTypeError()) {
+				return fmt.Errorf("parsing value for key %q: %w", keyStr, err)
 			}
 		}
 		if !ok {
@@ -369,8 +371,8 @@ func (d *Decoder) parseList(v reflect.Value) error {
 		}
 		if l.Elem().Len() != 1 {
 			return &UnmarshalTypeError{
-				Value: "list",
-				Type:  v.Type(),
+				BencodeTypeName:     "list",
+				UnmarshalTargetType: v.Type(),
 			}
 		}
 		v.Set(l.Elem().Index(0))
@@ -527,8 +529,7 @@ func (d *Decoder) parseValue(v reflect.Value) (bool, error) {
 	case 'l':
 		return true, d.parseList(v)
 	case 'i':
-		d.parseInt(v)
-		return true, nil
+		return true, d.parseInt(v)
 	default:
 		if b >= '0' && b <= '9' {
 			// It's a string.

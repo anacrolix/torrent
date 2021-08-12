@@ -41,12 +41,18 @@ func (e *UnmarshalInvalidArgError) Error() string {
 
 // Unmarshaler spotted a value that was not appropriate for a given Go value.
 type UnmarshalTypeError struct {
-	Value string
-	Type  reflect.Type
+	BencodeTypeName     string
+	UnmarshalTargetType reflect.Type
 }
 
+// This could probably be a value type, but we may already have users assuming
+// that it's passed by pointer.
 func (e *UnmarshalTypeError) Error() string {
-	return fmt.Sprintf("cannot unmarshal a bencode %s into a %s", e.Value, e.Type)
+	return fmt.Sprintf(
+		"can't unmarshal a bencode %v into a %v",
+		e.BencodeTypeName,
+		e.UnmarshalTargetType,
+	)
 }
 
 // Unmarshaler tried to write to an unexported (therefore unwritable) field.

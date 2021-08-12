@@ -211,9 +211,9 @@ type dictField struct {
 }
 
 // Returns specifics for parsing a dict field value.
-func getDictField(dict reflect.Type, key string) dictField {
+func getDictField(dict reflect.Type, key string) (_ dictField, err error) {
 	// get valuev as a map value or as a struct field
-	switch dict.Kind() {
+	switch k := dict.Kind(); k {
 	case reflect.Map:
 		return dictField{
 			Type: dict.Elem(),
@@ -227,9 +227,9 @@ func getDictField(dict reflect.Type, key string) dictField {
 					mapValue.SetMapIndex(reflect.ValueOf(key).Convert(dict.Key()), value)
 				}
 			},
-		}
+		}, nil
 	case reflect.Struct:
-		return getStructFieldForKey(dict, key)
+		return getStructFieldForKey(dict, key), nil
 		//if sf.r.PkgPath != "" {
 		//	panic(&UnmarshalFieldError{
 		//		Key:   key,
@@ -238,8 +238,8 @@ func getDictField(dict reflect.Type, key string) dictField {
 		//	})
 		//}
 	default:
-		panic("unimplemented")
-		return dictField{}
+		err = fmt.Errorf("can't parse bencode dict items into %v", k)
+		return
 	}
 }
 
@@ -313,20 +313,22 @@ func getStructFieldForKey(struct_ reflect.Type, key string) (f dictField) {
 }
 
 func (d *Decoder) parseDict(v reflect.Value) error {
-	// so, at this point 'd' byte was consumed, let's just read key/value
-	// pairs one by one
+	// At this point 'd' byte was consumed, now read key/value pairs
 	for {
 		var keyStr string
 		keyValue := reflect.ValueOf(&keyStr).Elem()
 		ok, err := d.parseValue(keyValue)
 		if err != nil {
-			return fmt.Errorf("error parsing dict key: %s", err)
+			return fmt.Errorf("error parsing dict key: %w", err)
 		}
 		if !ok {
 			return nil
 		}
 
-		df := getDictField(v.Type(), keyStr)
+		df, err := getDictField(v.Type(), keyStr)
+		if err != nil {
+			return fmt.Errorf("parsing bencode dict into %v: %w", v.Type(), err)
+		}
 
 		// now we need to actually parse it
 		if df.Type == nil {

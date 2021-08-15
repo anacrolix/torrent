@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Vet
-        run: go vet ./...
+        run: go vet -composites=false ./...
 
   staticcheck:
     name: Staticcheck

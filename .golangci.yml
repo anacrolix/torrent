@@ -1,0 +1,9 @@
+linters-settings:
+  staticcheck:
+    # Select the Go version to target. The default is '1.13'.
+    go: "1.15"
+    checks: ["all", "-U1000"]
+
+  govet:
+    disable:
+      - composites

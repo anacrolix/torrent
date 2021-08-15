@@ -7,42 +7,31 @@ on:
     branches: [ master ]
 
 jobs:
-  gosec:
-    name: Check Security
+  golint:
+    name: Lint
     runs-on: ubuntu-latest
     env:
       GO111MODULE: on
     steps:
       - uses: actions/checkout@v2
-      - uses: securego/gosec@master
+      - uses: golangci/golangci-lint-action@v2
         with:
-          args: '-exclude=G505 -no-fail -fmt sarif -out results.sarif ./...'
-      - uses: github/codeql-action/upload-sarif@v1
-        with:
-          sarif_file: results.sarif
+          version: latest
 
-  gofmt:
-    name: Check Formatting
-    runs-on: ubuntu-latest
-    env:
-      GO111MODULE: on
-    steps:
-      - uses: actions/checkout@v2
-      - name: Check formatting
-        run: test -z $(gofmt -e -l -s .)
+          # Optional: working directory, useful for monorepos
+          # working-directory: somedir
 
-  govet:
-    name: Vet
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Vet
-        run: go vet -composites=false ./...
+          # Optional: golangci-lint command line arguments.
+          # args: --issues-exit-code=0
 
-  staticcheck:
-    name: Staticcheck
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Run staticcheck
-        run: staticcheck -checks inherit,-U1000 ./...
+          # Optional: show only new issues if it's a pull request. The default value is `false`.
+          only-new-issues: true
+
+          # Optional: if set to true then the action will use pre-installed Go.
+          skip-go-installation: true
+
+          # Optional: if set to true then the action don't cache or restore ~/go/pkg.
+          # skip-pkg-cache: true
+
+          # Optional: if set to true then the action don't cache or restore ~/.cache/go-build.
+          # skip-build-cache: true

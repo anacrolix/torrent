@@ -672,7 +672,7 @@ func (d *Decoder) parseListInterface() interface{} {
 		list = append(list, valuei)
 	}
 	if list == nil {
-		list = make([]interface{}, 0, 0)
+		list = make([]interface{}, 0)
 	}
 	return list
 }

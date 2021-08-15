@@ -17,7 +17,7 @@ var (
 
 func (i MessageType) String() string {
 	switch {
-	case 0 <= i && i <= 9:
+	case i <= 9:
 		return _MessageType_name_0[_MessageType_index_0[i]:_MessageType_index_0[i+1]]
 	case 13 <= i && i <= 17:
 		i -= 13

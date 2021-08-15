@@ -39,7 +39,7 @@ func TestPexAdded(t *testing.T) {
 		s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0], outgoing: true}})
 		targ := &pexState{
 			ev: []pexEvent{
-				pexEvent{pexAdd, addrs[0], pp.PexOutgoingConn},
+				{pexAdd, addrs[0], pp.PexOutgoingConn},
 			},
 			nc: 1,
 		}
@@ -48,17 +48,17 @@ func TestPexAdded(t *testing.T) {
 	t.Run("belowTarg", func(t *testing.T) {
 		s := &pexState{
 			hold: []pexEvent{
-				pexEvent{pexDrop, addrs[1], 0},
+				{pexDrop, addrs[1], 0},
 			},
 			nc: 0,
 		}
 		s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}})
 		targ := &pexState{
 			hold: []pexEvent{
-				pexEvent{pexDrop, addrs[1], 0},
+				{pexDrop, addrs[1], 0},
 			},
 			ev: []pexEvent{
-				pexEvent{pexAdd, addrs[0], 0},
+				{pexAdd, addrs[0], 0},
 			},
 			nc: 1,
 		}
@@ -68,7 +68,7 @@ func TestPexAdded(t *testing.T) {
 		holdAddr := &net.TCPAddr{IP: net.IPv6loopback, Port: 4848}
 		s := &pexState{
 			hold: []pexEvent{
-				pexEvent{pexDrop, holdAddr, 0},
+				{pexDrop, holdAddr, 0},
 			},
 			nc: pexTargAdded,
 		}
@@ -76,8 +76,8 @@ func TestPexAdded(t *testing.T) {
 		targ := &pexState{
 			hold: []pexEvent{},
 			ev: []pexEvent{
-				pexEvent{pexDrop, holdAddr, 0},
-				pexEvent{pexAdd, addrs[0], 0},
+				{pexDrop, holdAddr, 0},
+				{pexAdd, addrs[0], 0},
 			},
 			nc: pexTargAdded + 1,
 		}
@@ -90,7 +90,7 @@ func TestPexDropped(t *testing.T) {
 		s := &pexState{nc: 1}
 		s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}, pex: pexConnState{Listed: true}})
 		targ := &pexState{
-			hold: []pexEvent{pexEvent{pexDrop, addrs[0], 0}},
+			hold: []pexEvent{{pexDrop, addrs[0], 0}},
 			nc:   0,
 		}
 		require.EqualValues(t, targ, s)
@@ -99,7 +99,7 @@ func TestPexDropped(t *testing.T) {
 		s := &pexState{nc: pexTargAdded + 1}
 		s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}, pex: pexConnState{Listed: true}})
 		targ := &pexState{
-			ev: []pexEvent{pexEvent{pexDrop, addrs[0], 0}},
+			ev: []pexEvent{{pexDrop, addrs[0], 0}},
 			nc: pexTargAdded,
 		}
 		require.EqualValues(t, targ, s)
@@ -114,8 +114,8 @@ func TestPexDropped(t *testing.T) {
 
 func TestPexReset(t *testing.T) {
 	s := &pexState{
-		hold: []pexEvent{pexEvent{pexDrop, addrs[0], 0}},
-		ev:   []pexEvent{pexEvent{pexAdd, addrs[1], 0}},
+		hold: []pexEvent{{pexDrop, addrs[0], 0}},
+		ev:   []pexEvent{{pexAdd, addrs[1], 0}},
 		nc:   1,
 	}
 	s.Reset()
@@ -149,10 +149,10 @@ var testcases = []struct {
 		name: "add4",
 		in: &pexState{
 			ev: []pexEvent{
-				pexEvent{pexAdd, addrs[0], f},
-				pexEvent{pexAdd, addrs[1], f},
-				pexEvent{pexAdd, addrs[2], f},
-				pexEvent{pexAdd, addrs[3], f},
+				{pexAdd, addrs[0], f},
+				{pexAdd, addrs[1], f},
+				{pexAdd, addrs[2], f},
+				{pexAdd, addrs[3], f},
 			},
 		},
 		arg: 0,
@@ -175,8 +175,8 @@ var testcases = []struct {
 		arg:  0,
 		in: &pexState{
 			ev: []pexEvent{
-				pexEvent{pexDrop, addrs[0], f},
-				pexEvent{pexDrop, addrs[2], f},
+				{pexDrop, addrs[0], f},
+				{pexDrop, addrs[2], f},
 			},
 		},
 		targM: pp.PexMsg{
@@ -194,9 +194,9 @@ var testcases = []struct {
 		arg:  0,
 		in: &pexState{
 			ev: []pexEvent{
-				pexEvent{pexAdd, addrs[0], f},
-				pexEvent{pexAdd, addrs[1], f},
-				pexEvent{pexDrop, addrs[0], f},
+				{pexAdd, addrs[0], f},
+				{pexAdd, addrs[1], f},
+				{pexDrop, addrs[0], f},
 			},
 		},
 		targM: pp.PexMsg{
@@ -212,14 +212,14 @@ var testcases = []struct {
 		arg:  0,
 		in: &pexState{
 			ev: []pexEvent{
-				pexEvent{pexAdd, addrs[0], f},
-				pexEvent{pexAdd, addrs[1], f},
-				pexEvent{pexAdd, addrs[2], f},
+				{pexAdd, addrs[0], f},
+				{pexAdd, addrs[1], f},
+				{pexAdd, addrs[2], f},
 			},
 			hold: []pexEvent{
-				pexEvent{pexDrop, addrs[0], f},
-				pexEvent{pexDrop, addrs[2], f},
-				pexEvent{pexDrop, addrs[1], f},
+				{pexDrop, addrs[0], f},
+				{pexDrop, addrs[2], f},
+				{pexDrop, addrs[1], f},
 			},
 		},
 		targM: pp.PexMsg{
@@ -240,8 +240,8 @@ var testcases = []struct {
 		arg:  1,
 		in: &pexState{
 			ev: []pexEvent{
-				pexEvent{pexAdd, addrs[0], f},
-				pexEvent{pexAdd, addrs[1], f},
+				{pexAdd, addrs[0], f},
+				{pexAdd, addrs[1], f},
 			},
 		},
 		targM: pp.PexMsg{

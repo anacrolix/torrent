@@ -3,7 +3,7 @@ package torrent
 import (
 	"testing"
 
-	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/RoaringBitmap/roaring"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -28,14 +28,14 @@ type testFileBytesLeft struct {
 	endPieceIndex   int
 	fileOffset      int64
 	fileLength      int64
-	completedPieces bitmap.Bitmap
+	completedPieces roaring.Bitmap
 	expected        int64
 	name            string
 }
 
 func (me testFileBytesLeft) Run(t *testing.T) {
 	t.Run(me.name, func(t *testing.T) {
-		assert.EqualValues(t, me.expected, fileBytesLeft(me.usualPieceSize, me.firstPieceIndex, me.endPieceIndex, me.fileOffset, me.fileLength, me.completedPieces))
+		assert.EqualValues(t, me.expected, fileBytesLeft(me.usualPieceSize, me.firstPieceIndex, me.endPieceIndex, me.fileOffset, me.fileLength, &me.completedPieces))
 	})
 }
 
@@ -108,7 +108,7 @@ func TestFileBytesLeft(t *testing.T) {
 		fileOffset:      5,
 		fileLength:      7,
 		expected:        0,
-		completedPieces: func() (ret bitmap.Bitmap) {
+		completedPieces: func() (ret roaring.Bitmap) {
 			ret.AddRange(0, 5)
 			return
 		}(),

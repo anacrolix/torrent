@@ -98,7 +98,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	}
 	assert.Len(b, t.readers, 7)
 	for i := 0; i < t.numPieces(); i += 3 {
-		t._completedPieces.Set(bitmap.BitIndex(i), true)
+		t._completedPieces.Add(bitmap.BitIndex(i))
 	}
 	t.DownloadPieces(0, t.numPieces())
 	for range iter.N(b.N) {

@@ -916,11 +916,11 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 			connsToSelf.Add(1)
 			addr := c.conn.RemoteAddr().String()
 			cl.dopplegangerAddrs[addr] = struct{}{}
-		} else {
+		} /* else {
 			// Because the remote address is not necessarily the same as its client's torrent listen
 			// address, we won't record the remote address as a doppleganger. Instead, the initiator
 			// can record *us* as the doppleganger.
-		}
+		} */
 		return errors.New("local and remote peer ids are the same")
 	}
 	c.conn.SetWriteDeadline(time.Time{})

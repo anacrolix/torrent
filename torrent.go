@@ -1643,9 +1643,9 @@ func (t *Torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 			}
 		}
 		cl.unlock()
-		if added != 0 {
-			//log.Printf("added %v peers from dht for %v", added, t.InfoHash().HexString())
-		}
+		// if added != 0 {
+		// 	log.Printf("added %v peers from dht for %v", added, t.InfoHash().HexString())
+		// }
 	}
 }
 

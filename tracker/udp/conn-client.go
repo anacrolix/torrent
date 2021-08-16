@@ -32,10 +32,10 @@ func (cc *ConnClient) reader() {
 			cc.readErr = err
 			break
 		}
-		err = cc.d.Dispatch(b[:n])
-		if err != nil {
-			//log.Printf("dispatching packet received on %v (%q): %v", cc.conn, string(b[:n]), err)
-		}
+		_ = cc.d.Dispatch(b[:n])
+		// if err != nil {
+		// 	log.Printf("dispatching packet received on %v (%q): %v", cc.conn, string(b[:n]), err)
+		// }
 	}
 }
 

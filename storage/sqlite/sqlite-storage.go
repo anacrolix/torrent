@@ -137,10 +137,10 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 	}
 	err = sqlitex.ExecScript(conn, `
 		-- We have to opt into this before creating any tables, or before a vacuum to enable it. It means we
-		-- can trim the database file size with partial vacuums without having to do a full vacuum, which 
+		-- can trim the database file size with partial vacuums without having to do a full vacuum, which
 		-- locks everything.
 		pragma auto_vacuum=incremental;
-		
+
 		create table if not exists blob (
 			name text,
 			last_used timestamp default (datetime('now')),
@@ -148,24 +148,24 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 			verified bool,
 			primary key (name)
 		);
-		
+
 		create table if not exists blob_meta (
 			key text primary key,
 			value
 		);
 
 		create index if not exists blob_last_used on blob(last_used);
-		
-		-- While sqlite *seems* to be faster to get sum(length(data)) instead of 
-		-- sum(length(data)), it may still require a large table scan at start-up or with a 
+
+		-- While sqlite *seems* to be faster to get sum(length(data)) instead of
+		-- sum(length(data)), it may still require a large table scan at start-up or with a
 		-- cold-cache. With this we can be assured that it doesn't.
 		insert or ignore into blob_meta values ('size', 0);
-		
+
 		create table if not exists setting (
 			name primary key on conflict replace,
 			value
 		);
-	
+
 		create view if not exists deletable_blob as
 		with recursive excess (
 			usage_with,
@@ -173,9 +173,9 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 			blob_rowid,
 			data_length
 		) as (
-			select * 
+			select *
 			from (
-				select 
+				select
 					(select value from blob_meta where key='size') as usage_with,
 					last_used,
 					rowid,
@@ -184,7 +184,7 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 			)
 			where usage_with > (select value from setting where name='capacity')
 			union all
-			select 
+			select
 				usage_with-data_length as new_usage_with,
 				blob.last_used,
 				blob.rowid,
@@ -206,14 +206,14 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 				update blob_meta set value=value+length(cast(new.data as blob)) where key='size';
 				delete from blob where rowid in (select blob_rowid from deletable_blob);
 			end;
-			
+
 			create trigger if not exists after_update_blob
 			after update of data on blob
 			begin
 				update blob_meta set value=value+length(cast(new.data as blob))-length(cast(old.data as blob)) where key='size';
 				delete from blob where rowid in (select blob_rowid from deletable_blob);
 			end;
-			
+
 			create trigger if not exists after_delete_blob
 			after delete on blob
 			begin
@@ -368,7 +368,7 @@ func (me *poolFromConn) Close() error {
 	return me.conn.Close()
 }
 
-func (poolFromConn) NumConns() int { return 1 }
+func (me *poolFromConn) NumConns() int { return 1 }
 
 type ProviderOpts struct {
 	BatchWrites bool

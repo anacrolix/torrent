@@ -114,15 +114,19 @@ func (c *client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (stora
 	return storage.TorrentImpl{Piece: t.Piece, Close: t.Close, Capacity: &c.capacity}, nil
 }
 
-func (c *client) Close() error {
+func (c *client) Close() (err error) {
 	c.l.Lock()
 	defer c.l.Unlock()
 	c.flushBlobs()
-	c.closed = true
 	if c.opts.BlobFlushInterval != 0 {
 		c.blobFlusher.Stop()
 	}
-	return c.conn.Close()
+	if !c.closed {
+		c.closed = true
+		err = c.conn.Close()
+		c.conn = nil
+	}
+	return
 }
 
 type torrent struct {

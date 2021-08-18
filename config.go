@@ -118,6 +118,9 @@ type ClientConfig struct {
 	// impact of a few bad apples. 4s loses 1% of successful handshakes that
 	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
 	HandshakesTimeout time.Duration
+	// How long between writes before sending a keep alive message on a peer connection that we want
+	// to maintain.
+	KeepAliveTimeout time.Duration
 
 	// The IP addresses as our peers should see them. May differ from the
 	// local interfaces due to NAT or other network configurations.
@@ -170,6 +173,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		TorrentPeersHighWater:          500,
 		TorrentPeersLowWater:           50,
 		HandshakesTimeout:              4 * time.Second,
+		KeepAliveTimeout:               time.Minute,
 		DhtStartingNodes: func(network string) dht.StartingNodesGetter {
 			return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }
 		},

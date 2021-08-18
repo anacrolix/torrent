@@ -63,6 +63,8 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 		lastWrite      time.Time = time.Now()
 		keepAliveTimer *time.Timer
 	)
+	cn.mu.Lock()
+	defer cn.mu.Unlock()
 	keepAliveTimer = time.AfterFunc(keepAliveTimeout, func() {
 		cn.mu.Lock()
 		defer cn.mu.Unlock()
@@ -71,8 +73,6 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 		}
 		keepAliveTimer.Reset(keepAliveTimeout)
 	})
-	cn.mu.Lock()
-	defer cn.mu.Unlock()
 	defer keepAliveTimer.Stop()
 	frontBuf := new(bytes.Buffer)
 	for {

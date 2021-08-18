@@ -79,14 +79,16 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 		if cn.closed.IsSet() {
 			return
 		}
+		keepAlive := false
 		if cn.writeBuffer.Len() == 0 {
 			func() {
 				cn.mu.Unlock()
 				defer cn.mu.Lock()
 				cn.fillWriteBuffer()
+				keepAlive = cn.keepAlive()
 			}()
 		}
-		if cn.writeBuffer.Len() == 0 && time.Since(lastWrite) >= keepAliveTimeout && cn.keepAlive() {
+		if cn.writeBuffer.Len() == 0 && time.Since(lastWrite) >= keepAliveTimeout && keepAlive {
 			cn.writeBuffer.Write(pp.Message{Keepalive: true}.MustMarshalBinary())
 			torrent.Add("written keepalives", 1)
 		}

@@ -250,6 +250,13 @@ func TestClientTransferRateLimitedUpload(t *testing.T) {
 func TestClientTransferRateLimitedDownload(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
 		LeecherDownloadRateLimiter: rate.NewLimiter(512, 512),
+		ConfigureSeeder: ConfigureClient{
+			Config: func(cfg *torrent.ClientConfig) {
+				// If we send too many keep alives, we consume all the leechers available download
+				// rate. The default isn't exposed, but a minute is pretty reasonable.
+				cfg.KeepAliveTimeout = time.Minute
+			},
+		},
 	})
 }
 
@@ -427,6 +434,6 @@ func TestSeedAfterDownloading(t *testing.T) {
 }
 
 type ConfigureClient struct {
-	Config func(*torrent.ClientConfig)
-	Client func(*torrent.Client)
+	Config func(cfg *torrent.ClientConfig)
+	Client func(cl *torrent.Client)
 }

@@ -1,10 +1,6 @@
-name: Linter
+name: GolangCI-Lint
 
-on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+on: [push, pull_request]
 
 jobs:
   golint:

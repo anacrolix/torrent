@@ -115,13 +115,6 @@ func (p *Piece) chunkIndexSpec(chunk pp.Integer) ChunkSpec {
 	return chunkIndexSpec(chunk, p.length(), p.chunkSize())
 }
 
-func (p *Piece) chunkIndexRequest(chunkIndex pp.Integer) Request {
-	return Request{
-		pp.Integer(p.index),
-		p.chunkIndexSpec(chunkIndex),
-	}
-}
-
 func (p *Piece) numDirtyBytes() (ret pp.Integer) {
 	// defer func() {
 	// 	if ret > p.length() {
@@ -235,10 +228,6 @@ func (p *Piece) completion() (ret storage.Completion) {
 
 func (p *Piece) allChunksDirty() bool {
 	return p._dirtyChunks.Len() == bitmap.BitRange(p.numChunks())
-}
-
-func (p *Piece) dirtyChunks() bitmap.Bitmap {
-	return p._dirtyChunks
 }
 
 func (p *Piece) State() PieceState {

@@ -1583,10 +1583,6 @@ func (l connectionTrust) Less(r connectionTrust) bool {
 	return multiless.New().Bool(l.Implicit, r.Implicit).Int64(l.NetGoodPiecesDirted, r.NetGoodPiecesDirted).Less()
 }
 
-func (cn *Peer) peerMaxRequests() int {
-	return cn.PeerMaxRequests
-}
-
 // Returns the pieces the peer could have based on their claims. If we don't know how many pieces
 // are in the torrent, it could be a very large range the peer has sent HaveAll.
 func (cn *PeerConn) PeerPieces() bitmap.Bitmap {
@@ -1606,10 +1602,6 @@ func (cn *Peer) newPeerPieces() bitmap.Bitmap {
 		}
 	}
 	return ret
-}
-
-func (cn *Peer) pieceRequestOrder() *prioritybitmap.PriorityBitmap {
-	return &cn._pieceRequestOrder
 }
 
 func (cn *Peer) stats() *ConnStats {

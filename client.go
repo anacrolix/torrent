@@ -444,18 +444,6 @@ func (cl *Client) wantConns() bool {
 	return false
 }
 
-func (cl *Client) waitAccept() {
-	for {
-		if cl.closed.IsSet() {
-			return
-		}
-		if cl.wantConns() {
-			return
-		}
-		cl.event.Wait()
-	}
-}
-
 // TODO: Apply filters for non-standard networks, particularly rate-limiting.
 func (cl *Client) rejectAccepted(conn net.Conn) error {
 	if !cl.wantConns() {
@@ -1425,14 +1413,6 @@ func firstNotNil(ips ...net.IP) net.IP {
 		}
 	}
 	return nil
-}
-
-func (cl *Client) eachDialer(f func(Dialer) bool) {
-	for _, s := range cl.dialers {
-		if !f(s) {
-			break
-		}
-	}
 }
 
 func (cl *Client) eachListener(f func(Listener) bool) {

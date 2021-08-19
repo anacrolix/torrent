@@ -176,14 +176,6 @@ func (t *Torrent) incPieceAvailability(i pieceIndex) {
 	}
 }
 
-func (t *Torrent) numConns() int {
-	return len(t.conns)
-}
-
-func (t *Torrent) numReaders() int {
-	return len(t.readers)
-}
-
 func (t *Torrent) readerNowPieces() bitmap.Bitmap {
 	return t._readerNowPieces
 }

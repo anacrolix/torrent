@@ -537,7 +537,11 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 	}
 	c := cl.newConnection(nc, false, nc.RemoteAddr(), nc.RemoteAddr().Network(),
 		regularNetConnPeerConnConnString(nc))
-	defer c.close()
+	defer func() {
+		cl.lock()
+		defer cl.unlock()
+		c.close()
+	}()
 	c.Discovery = PeerSourceIncoming
 	cl.runReceivedConn(c)
 }

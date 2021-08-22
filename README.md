@@ -15,7 +15,7 @@ Some noteworthy package dependencies that can be used for other purposes include
 
 ## Installation
 
-Install the library package with `go get github.com/anacrolix/torrent`, or the provided cmds with `go get github.com/anacrolix/torrent/cmd/...`.
+Install the library package with `go get github.com/anacrolix/torrent`, or the provided cmds with `go install github.com/anacrolix/torrent/cmd/...@latest`.
 
 ## Library examples
 

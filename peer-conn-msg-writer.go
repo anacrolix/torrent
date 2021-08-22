@@ -60,6 +60,7 @@ type peerConnMsgWriter struct {
 // connection is writable.
 func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 	lastWrite := time.Now()
+	keepAliveTimer := time.NewTimer(keepAliveTimeout)
 	frontBuf := new(bytes.Buffer)
 	for {
 		if cn.closed.IsSet() {
@@ -78,7 +79,7 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 			select {
 			case <-cn.closed.Done():
 			case <-writeCond:
-			case <-time.After(time.Until(lastWrite.Add(keepAliveTimeout))):
+			case <-keepAliveTimer.C:
 			}
 			continue
 		}
@@ -88,6 +89,7 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 		n, err := cn.w.Write(frontBuf.Bytes())
 		if n != 0 {
 			lastWrite = time.Now()
+			keepAliveTimer.Reset(keepAliveTimeout)
 		}
 		if err != nil {
 			cn.logger.WithDefaultLevel(log.Debug).Printf("error writing: %v", err)

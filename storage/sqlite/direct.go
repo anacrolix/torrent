@@ -26,15 +26,13 @@ type NewDirectStorageOpts struct {
 	BlobFlushInterval time.Duration
 }
 
-// A convenience function that creates a connection pool, resource provider, and a pieces storage
-// ClientImpl and returns them all with a Close attached.
-func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, err error) {
+func NewSquirrelCache(opts NewDirectStorageOpts) (_ *SquirrelCache, err error) {
 	conn, err := newConn(opts.NewConnOpts)
 	if err != nil {
 		return
 	}
 	if opts.PageSize == 0 {
-		// The largest size sqlite supports. I think we want this to be the smallest piece size we
+		// The largest size sqlite supports. I think we want this to be the smallest SquirrelBlob size we
 		// can expect, which is probably 1<<17.
 		opts.PageSize = 1 << 16
 	}
@@ -53,7 +51,7 @@ func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, er
 		// a few chances at getting a transaction through.
 		opts.BlobFlushInterval = time.Second
 	}
-	cl := &client{
+	cl := &SquirrelCache{
 		conn:  conn,
 		blobs: make(map[string]*sqlite.Blob),
 		opts:  opts,
@@ -68,7 +66,17 @@ func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, er
 	return cl, nil
 }
 
-func (cl *client) getCapacity() (ret *int64) {
+// A convenience function that creates a connection pool, resource provider, and a pieces storage
+// ClientImpl and returns them all with a Close attached.
+func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, err error) {
+	cache, err := NewSquirrelCache(opts)
+	if err != nil {
+		return
+	}
+	return &client{cache}, nil
+}
+
+func (cl *SquirrelCache) getCapacity() (ret *int64) {
 	cl.l.Lock()
 	defer cl.l.Unlock()
 	err := sqlitex.Exec(cl.conn, "select value from setting where name='capacity'", func(stmt *sqlite.Stmt) error {
@@ -82,7 +90,7 @@ func (cl *client) getCapacity() (ret *int64) {
 	return
 }
 
-type client struct {
+type SquirrelCache struct {
 	l           sync.Mutex
 	conn        conn
 	blobs       map[string]*sqlite.Blob
@@ -92,7 +100,11 @@ type client struct {
 	capacity    func() *int64
 }
 
-func (c *client) blobFlusherFunc() {
+type client struct {
+	*SquirrelCache
+}
+
+func (c *SquirrelCache) blobFlusherFunc() {
 	c.l.Lock()
 	defer c.l.Unlock()
 	c.flushBlobs()
@@ -101,7 +113,7 @@ func (c *client) blobFlusherFunc() {
 	}
 }
 
-func (c *client) flushBlobs() {
+func (c *SquirrelCache) flushBlobs() {
 	for key, b := range c.blobs {
 		// Need the lock to prevent racing with the GC finalizers.
 		b.Close()
@@ -109,12 +121,12 @@ func (c *client) flushBlobs() {
 	}
 }
 
-func (c *client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
+func (c *SquirrelCache) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
 	t := torrent{c}
 	return storage.TorrentImpl{Piece: t.Piece, Close: t.Close, Capacity: &c.capacity}, nil
 }
 
-func (c *client) Close() (err error) {
+func (c *SquirrelCache) Close() (err error) {
 	c.l.Lock()
 	defer c.l.Unlock()
 	c.flushBlobs()
@@ -130,7 +142,7 @@ func (c *client) Close() (err error) {
 }
 
 type torrent struct {
-	c *client
+	c *SquirrelCache
 }
 
 func rowidForBlob(c conn, name string, length int64, create bool) (rowid int64, err error) {
@@ -163,27 +175,29 @@ func rowidForBlob(c conn, name string, length int64, create bool) (rowid int64, 
 }
 
 func (t torrent) Piece(p metainfo.Piece) storage.PieceImpl {
-	t.c.l.Lock()
-	defer t.c.l.Unlock()
 	name := p.Hash().HexString()
-	return piece{
+	return piece{SquirrelBlob{
 		name,
 		p.Length(),
 		t.c,
-	}
+	}}
 }
 
 func (t torrent) Close() error {
 	return nil
 }
 
-type piece struct {
+type SquirrelBlob struct {
 	name   string
 	length int64
-	*client
+	*SquirrelCache
 }
 
-func (p piece) doAtIoWithBlob(
+type piece struct {
+	SquirrelBlob
+}
+
+func (p SquirrelBlob) doAtIoWithBlob(
 	atIo func(*sqlite.Blob) func([]byte, int64) (int, error),
 	b []byte,
 	off int64,
@@ -224,13 +238,13 @@ func (p piece) doAtIoWithBlob(
 	return atIo(blob)(b, off)
 }
 
-func (p piece) ReadAt(b []byte, off int64) (n int, err error) {
+func (p SquirrelBlob) ReadAt(b []byte, off int64) (n int, err error) {
 	return p.doAtIoWithBlob(func(blob *sqlite.Blob) func([]byte, int64) (int, error) {
 		return blob.ReadAt
 	}, b, off, false)
 }
 
-func (p piece) WriteAt(b []byte, off int64) (n int, err error) {
+func (p SquirrelBlob) WriteAt(b []byte, off int64) (n int, err error) {
 	return p.doAtIoWithBlob(func(blob *sqlite.Blob) func([]byte, int64) (int, error) {
 		return blob.WriteAt
 	}, b, off, true)
@@ -250,7 +264,7 @@ func (p piece) MarkComplete() error {
 	return nil
 }
 
-func (p piece) forgetBlob() {
+func (p SquirrelBlob) forgetBlob() {
 	blob, ok := p.blobs[p.name]
 	if !ok {
 		return
@@ -279,7 +293,7 @@ func (p piece) Completion() (ret storage.Completion) {
 	return
 }
 
-func (p piece) getBlob(create bool) (*sqlite.Blob, error) {
+func (p SquirrelBlob) getBlob(create bool) (*sqlite.Blob, error) {
 	blob, ok := p.blobs[p.name]
 	if !ok {
 		rowid, err := rowidForBlob(p.conn, p.name, p.length, create)

@@ -71,6 +71,10 @@ func setSynchronous(conn conn, syncInt int) (err error) {
 }
 
 func initConn(conn conn, opts InitConnOpts) (err error) {
+	err = sqlitex.ExecTransient(conn, "pragma foreign_keys=on", nil)
+	if err != nil {
+		return err
+	}
 	err = setSynchronous(conn, opts.SetSynchronous)
 	if err != nil {
 		return
@@ -166,6 +170,13 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 			value
 		);
 
+		create table if not exists tag (
+			blob_name references blob(name),
+			tag_name,
+			value,
+			primary key (blob_name, tag_name)
+		);
+
 		create view if not exists deletable_blob as
 		with recursive excess (
 			usage_with,
@@ -200,6 +211,12 @@ func InitSchema(conn conn, pageSize int, triggers bool) error {
 	}
 	if triggers {
 		err := sqlitex.ExecScript(conn, `
+			create trigger if not exists delete_blob_tags_before_blob_deleted
+			before delete on blob
+			begin
+				delete from tag where blob_name=old.name;
+			end;
+
 			create trigger if not exists after_insert_blob
 			after insert on blob
 			begin

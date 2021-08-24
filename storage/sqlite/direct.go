@@ -6,6 +6,7 @@ package sqliteStorage
 import (
 	"errors"
 	"fmt"
+	"io"
 	"runtime"
 	"sync"
 	"time"
@@ -73,7 +74,7 @@ func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, er
 	if err != nil {
 		return
 	}
-	return &client{cache}, nil
+	return client{cache}, nil
 }
 
 func (cl *SquirrelCache) getCapacity() (ret *int64) {
@@ -121,8 +122,8 @@ func (c *SquirrelCache) flushBlobs() {
 	}
 }
 
-func (c *SquirrelCache) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
-	t := torrent{c}
+func (c client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
+	t := torrent{c.SquirrelCache}
 	return storage.TorrentImpl{Piece: t.Piece, Close: t.Close, Capacity: &c.capacity}, nil
 }
 
@@ -175,12 +176,15 @@ func rowidForBlob(c conn, name string, length int64, create bool) (rowid int64, 
 }
 
 func (t torrent) Piece(p metainfo.Piece) storage.PieceImpl {
-	name := p.Hash().HexString()
-	return piece{SquirrelBlob{
-		name,
+	ret := piece{sb: SquirrelBlob{
+		p.Hash().HexString(),
 		p.Length(),
 		t.c,
-	}}
+	},
+	}
+	ret.ReaderAt = &ret.sb
+	ret.WriterAt = &ret.sb
+	return ret
 }
 
 func (t torrent) Close() error {
@@ -194,7 +198,9 @@ type SquirrelBlob struct {
 }
 
 type piece struct {
-	SquirrelBlob
+	sb SquirrelBlob
+	io.ReaderAt
+	io.WriterAt
 }
 
 func (p SquirrelBlob) doAtIoWithBlob(
@@ -250,18 +256,15 @@ func (p SquirrelBlob) WriteAt(b []byte, off int64) (n int, err error) {
 	}, b, off, true)
 }
 
-func (p piece) MarkComplete() error {
+func (p SquirrelBlob) SetTag(name string, value interface{}) error {
 	p.l.Lock()
 	defer p.l.Unlock()
-	err := sqlitex.Exec(p.conn, "update blob set verified=true where name=?", nil, p.name)
-	if err != nil {
-		return err
-	}
-	changes := p.conn.Changes()
-	if changes != 1 {
-		panic(changes)
-	}
-	return nil
+	return sqlitex.Exec(p.conn, "insert or replace into tag (blob_name, tag_name, value) values (?, ?, ?)", nil,
+		p.name, name, value)
+}
+
+func (p piece) MarkComplete() error {
+	return p.sb.SetTag("verified", true)
 }
 
 func (p SquirrelBlob) forgetBlob() {
@@ -274,18 +277,22 @@ func (p SquirrelBlob) forgetBlob() {
 }
 
 func (p piece) MarkNotComplete() error {
+	return p.sb.SetTag("verified", false)
+}
+
+func (p SquirrelBlob) GetTag(name string, result func(*sqlite.Stmt)) error {
 	p.l.Lock()
 	defer p.l.Unlock()
-	return sqlitex.Exec(p.conn, "update blob set verified=false where name=?", nil, p.name)
+	return sqlitex.Exec(p.conn, "select value from tag where blob_name=? and tag_name=?", func(stmt *sqlite.Stmt) error {
+		result(stmt)
+		return nil
+	}, p.name, name)
 }
 
 func (p piece) Completion() (ret storage.Completion) {
-	p.l.Lock()
-	defer p.l.Unlock()
-	err := sqlitex.Exec(p.conn, "select verified from blob where name=?", func(stmt *sqlite.Stmt) error {
+	err := p.sb.GetTag("verified", func(stmt *sqlite.Stmt) {
 		ret.Complete = stmt.ColumnInt(0) != 0
-		return nil
-	}, p.name)
+	})
 	ret.Ok = err == nil
 	if err != nil {
 		panic(err)

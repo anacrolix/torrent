@@ -176,11 +176,12 @@ func rowidForBlob(c conn, name string, length int64, create bool) (rowid int64, 
 }
 
 func (t torrent) Piece(p metainfo.Piece) storage.PieceImpl {
-	ret := piece{sb: SquirrelBlob{
-		p.Hash().HexString(),
-		p.Length(),
-		t.c,
-	},
+	ret := piece{
+		sb: SquirrelBlob{
+			p.Hash().HexString(),
+			p.Length(),
+			t.c,
+		},
 	}
 	ret.ReaderAt = &ret.sb
 	ret.WriterAt = &ret.sb

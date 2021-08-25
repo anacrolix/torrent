@@ -11,6 +11,7 @@ import (
 	"time"
 
 	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/squirrel"
 	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"
 	"github.com/dustin/go-humanize"
@@ -30,7 +31,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 	}
 	c := qt.New(b)
 	b.Run("CustomDirect", func(b *testing.B) {
-		var opts NewDirectStorageOpts
+		var opts squirrel.NewCacheOpts
 		opts.Capacity = capacity
 		opts.NoTriggers = noTriggers
 		benchOpts := func(b *testing.B) {
@@ -54,7 +55,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 				directBench := func(b *testing.B) {
 					opts.Path = filepath.Join(b.TempDir(), "storage.db")
 					ci, err := NewDirectStorage(opts)
-					var ujm UnexpectedJournalMode
+					var ujm squirrel.UnexpectedJournalMode
 					if errors.As(err, &ujm) {
 						b.Skipf("setting journal mode %q: %v", opts.SetJournalMode, err)
 					}

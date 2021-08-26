@@ -26,6 +26,13 @@ func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, er
 	}, nil
 }
 
+func NewWrappingClient(cache *squirrel.Cache) storage.ClientImpl {
+	return &client{
+		cache,
+		cache.GetCapacity,
+	}
+}
+
 type client struct {
 	*squirrel.Cache
 	capacity func() *int64

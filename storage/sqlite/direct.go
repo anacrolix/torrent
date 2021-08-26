@@ -22,7 +22,8 @@ func NewDirectStorage(opts NewDirectStorageOpts) (_ storage.ClientImplCloser, er
 	}
 	return &client{
 		cache,
-		cache.GetCapacity}, nil
+		cache.GetCapacity,
+	}, nil
 }
 
 type client struct {
@@ -41,11 +42,7 @@ type torrent struct {
 
 func (t torrent) Piece(p metainfo.Piece) storage.PieceImpl {
 	ret := piece{
-		sb: squirrel.Blob{
-			p.Hash().HexString(),
-			p.Length(),
-			t.c,
-		},
+		sb: t.c.OpenWithLength(p.Hash().HexString(), p.Length()),
 	}
 	ret.ReaderAt = &ret.sb
 	ret.WriterAt = &ret.sb

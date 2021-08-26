@@ -3,8 +3,8 @@ module github.com/anacrolix/torrent
 require (
 	bazil.org/fuse v0.0.0-20200407214033-5883e5a4b512
 	crawshaw.io/sqlite v0.3.3-0.20210127221821-98b1f83c5508
-	github.com/RoaringBitmap/roaring v0.9.4 // indirect
-	github.com/alexflint/go-arg v1.3.0
+	github.com/RoaringBitmap/roaring v0.9.4
+	github.com/alexflint/go-arg v1.4.2
 	github.com/anacrolix/chansync v0.1.0
 	github.com/anacrolix/confluence v1.8.0 // indirect
 	github.com/anacrolix/dht/v2 v2.10.3
@@ -15,7 +15,6 @@ require (
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.5.2
 	github.com/anacrolix/multiless v0.1.1-0.20210529082330-de2f6cf29619
-	github.com/anacrolix/squirrel v0.0.0-00010101000000-000000000000
 	github.com/anacrolix/sync v0.4.0
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/upnp v0.1.2-0.20200416075019-5e9378ed1425
@@ -25,7 +24,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/elliotchance/orderedmap v1.4.0
-	github.com/frankban/quicktest v1.11.3
+	github.com/frankban/quicktest v1.13.1
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/google/btree v1.0.1
 	github.com/gorilla/websocket v1.4.2
@@ -49,14 +48,15 @@ require (
 require (
 	github.com/alexflint/go-scalar v1.0.0 // indirect
 	github.com/anacrolix/mmsg v1.0.0 // indirect
+	github.com/anacrolix/squirrel v0.1.0 // indirect
 	github.com/anacrolix/stm v0.3.0-alpha // indirect
 	github.com/benbjohnson/immutable v0.3.0 // indirect
 	github.com/bits-and-blooms/bitset v1.2.0 // indirect
-	github.com/google/go-cmp v0.5.4 // indirect
+	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect
-	github.com/kr/pretty v0.2.1 // indirect
-	github.com/kr/text v0.1.0 // indirect
+	github.com/kr/pretty v0.3.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/pion/dtls/v2 v2.0.9 // indirect
 	github.com/pion/logging v0.2.2 // indirect
@@ -70,6 +70,7 @@ require (
 	github.com/pion/turn/v2 v2.0.5 // indirect
 	github.com/pion/udp v0.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rogpeppe/go-internal v1.6.1 // indirect
 	github.com/rs/dnscache v0.0.0-20210201191234-295bba877686 // indirect
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect

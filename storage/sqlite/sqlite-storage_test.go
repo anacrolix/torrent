@@ -55,7 +55,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 				directBench := func(b *testing.B) {
 					opts.Path = filepath.Join(b.TempDir(), "storage.db")
 					ci, err := NewDirectStorage(opts)
-					var ujm squirrel.UnexpectedJournalMode
+					var ujm squirrel.ErrUnexpectedJournalMode
 					if errors.As(err, &ujm) {
 						b.Skipf("setting journal mode %q: %v", opts.SetJournalMode, err)
 					}

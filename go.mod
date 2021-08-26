@@ -15,6 +15,7 @@ require (
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.5.2
 	github.com/anacrolix/multiless v0.1.1-0.20210529082330-de2f6cf29619
+	github.com/anacrolix/squirrel v0.1.0
 	github.com/anacrolix/sync v0.4.0
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/upnp v0.1.2-0.20200416075019-5e9378ed1425
@@ -48,7 +49,6 @@ require (
 require (
 	github.com/alexflint/go-scalar v1.0.0 // indirect
 	github.com/anacrolix/mmsg v1.0.0 // indirect
-	github.com/anacrolix/squirrel v0.1.0 // indirect
 	github.com/anacrolix/stm v0.3.0-alpha // indirect
 	github.com/benbjohnson/immutable v0.3.0 // indirect
 	github.com/bits-and-blooms/bitset v1.2.0 // indirect

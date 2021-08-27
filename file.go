@@ -101,26 +101,32 @@ type FilePieceState struct {
 }
 
 // Returns the state of pieces in this file.
-func (f *File) State() (ret []FilePieceState) {
+func (f *File) State() []FilePieceState {
 	f.t.cl.rLock()
 	defer f.t.cl.rUnlock()
-	pieceSize := int64(f.t.usualPieceSize())
-	off := f.offset % pieceSize
-	remaining := f.length
-	for i := pieceIndex(f.offset / pieceSize); ; i++ {
-		if remaining == 0 {
-			break
-		}
-		len1 := pieceSize - off
-		if len1 > remaining {
-			len1 = remaining
-		}
-		ps := f.t.pieceState(i)
-		ret = append(ret, FilePieceState{len1, ps})
-		off = 0
-		remaining -= len1
+	if f.length == 0 {
+		return nil
 	}
-	return
+	pieceSize := int64(f.t.usualPieceSize())
+	startPieceIdx := pieceIndex(f.offset / pieceSize)
+	startPieceOffset := f.offset % pieceSize
+	if startPieceOffset + f.length <= pieceSize {
+		return []FilePieceState{{f.length, f.t.pieceState(startPieceIdx)}}
+	}
+
+	endPieceIdx := pieceIndex((f.offset+f.length-1) / pieceSize)
+	endPieceOffset := (f.offset+f.length-1) % pieceSize
+
+	if endPieceIdx-startPieceIdx+1 < 2 { // invariant check for BCE
+		panic("")
+	}
+	ret := make([]FilePieceState, endPieceIdx-startPieceIdx+1)
+	ret[0] = FilePieceState{pieceSize - startPieceOffset, f.t.pieceState(startPieceIdx)}
+	for i := 1; i < len(ret)-1; i++ {
+		ret[i] = FilePieceState{pieceSize, f.t.pieceState(startPieceIdx+i)}
+	}
+	ret[len(ret)-1] = FilePieceState{endPieceOffset+1, f.t.pieceState(endPieceIdx)}
+	return ret
 }
 
 // Requests that all pieces containing data in the file be downloaded.

@@ -16,7 +16,6 @@ import (
 	"sync"
 	"text/tabwriter"
 	"time"
-	"unsafe"
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/dht/v2"
@@ -360,7 +359,7 @@ func (t *Torrent) makePieces() {
 		piece.t = t
 		piece.index = pieceIndex(i)
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
-		piece.hash = (*metainfo.Hash)(unsafe.Pointer(&hash[0]))
+		piece.hash = (*metainfo.Hash)(hash)
 		files := *t.files
 		beginFile := pieceFirstFileIndex(piece.torrentBeginOffset(), files)
 		endFile := pieceEndFileIndex(piece.torrentEndOffset(), files)

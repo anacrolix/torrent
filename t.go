@@ -44,20 +44,26 @@ func (t *Torrent) NewReader() Reader {
 
 type PieceStateRuns []PieceStateRun
 
-func (me PieceStateRuns) String() string {
-	ss := make([]string, 0, len(me))
-	for _, psr := range me {
-		ss = append(ss, psr.String())
+func (me PieceStateRuns) String() (s string) {
+	if len(me) > 0 {
+		var sb strings.Builder
+		sb.WriteString(me[0].String())
+		for i := 1; i < len(me); i += 1 {
+			sb.WriteByte(' ')
+			sb.WriteString(me[i].String())
+		}
+		return sb.String()
 	}
-	return strings.Join(ss, " ")
+	return
 }
 
 // Returns the state of pieces of the torrent. They are grouped into runs of same state. The sum of
 // the state run-lengths is the number of pieces in the torrent.
-func (t *Torrent) PieceStateRuns() PieceStateRuns {
+func (t *Torrent) PieceStateRuns() (runs PieceStateRuns) {
 	t.cl.rLock()
-	defer t.cl.rUnlock()
-	return t.pieceStateRuns()
+	runs = t.pieceStateRuns()
+	t.cl.rUnlock()
+	return
 }
 
 func (t *Torrent) PieceState(piece pieceIndex) PieceState {

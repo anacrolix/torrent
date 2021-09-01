@@ -26,7 +26,15 @@ type Info struct {
 // This is a helper that sets Files and Pieces from a root path and its
 // children.
 func (info *Info) BuildFromFilePath(root string) (err error) {
-	info.Name = filepath.Base(root)
+	info.Name = func() string {
+		b := filepath.Base(root)
+		switch b {
+		case ".", "..", string(filepath.Separator):
+			return ""
+		default:
+			return b
+		}
+	}()
 	info.Files = nil
 	err = filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
 		if err != nil {

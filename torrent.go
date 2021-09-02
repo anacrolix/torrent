@@ -796,13 +796,16 @@ func (t *Torrent) close() (err error) {
 	t.closed.Set()
 	t.tickleReaders()
 	if t.storage != nil {
-		go func() {
+		func() {
 			t.storageLock.Lock()
 			defer t.storageLock.Unlock()
 			if f := t.storage.Close; f != nil {
-				f()
+				err = f()
 			}
 		}()
+		if err != nil {
+			fmt.Println("Error closing storage: ", err)
+		}
 	}
 	t.iterPeers(func(p *Peer) {
 		p.close()

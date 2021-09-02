@@ -414,13 +414,19 @@ func (cl *Client) Close() {
 	cl.lock()
 	defer cl.unlock()
 	cl.closed.Set()
+	var closeGroup sync.WaitGroup //Close everything concurrently, but wait for them to finish.
 	for _, t := range cl.torrents {
-		t.close()
+		closeGroup.Add(1)		
+		go func() {
+			defer closeGroup.Done()
+			t.close()
+		}()
 	}
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}
 	cl.event.Broadcast()
+	closeGroup.Wait()
 }
 
 func (cl *Client) ipBlockRange(ip net.IP) (r iplist.Range, blocked bool) {

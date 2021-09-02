@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -332,11 +333,12 @@ func downloadErr() error {
 	if err != nil {
 		return xerrors.Errorf("creating client: %v", err)
 	}
-	defer client.Close()
+	var clientClose sync.Once //In certain situations, close was being called more than once.
+	defer clientClose.Do(client.Close)
 	go exitSignalHandlers(&stop)
 	go func() {
 		<-stop.C()
-		client.Close()
+		clientClose.Do(client.Close)
 	}()
 
 	// Write status on the root path on the default HTTP muxer. This will be bound to localhost

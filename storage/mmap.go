@@ -22,6 +22,7 @@ type mmapClientImpl struct {
 	pc      PieceCompletion
 }
 
+// TODO: Support all the same native filepath configuration that NewFileOpts provides.
 func NewMMap(baseDir string) ClientImplCloser {
 	return NewMMapWithCompletion(baseDir, pieceCompletionForDir(baseDir))
 }

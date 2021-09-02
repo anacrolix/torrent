@@ -13,73 +13,63 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-// File-based storage for torrents, that isn't yet bound to a particular
-// torrent.
+// File-based storage for torrents, that isn't yet bound to a particular torrent.
 type fileClientImpl struct {
-	baseDir   string
-	pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string
-	pc        PieceCompletion
+	opts NewFileClientOpts
 }
 
-// The Default path maker just returns the current path
-func defaultPathMaker(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string {
-	return baseDir
-}
-
-func infoHashPathMaker(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string {
-	return filepath.Join(baseDir, infoHash.HexString())
-}
-
-// All Torrent data stored in this baseDir
+// All Torrent data stored in this baseDir. The info names of each torrent are used as directories.
 func NewFile(baseDir string) ClientImplCloser {
 	return NewFileWithCompletion(baseDir, pieceCompletionForDir(baseDir))
 }
 
-func NewFileWithCompletion(baseDir string, completion PieceCompletion) *fileClientImpl {
-	return NewFileWithCustomPathMakerAndCompletion(baseDir, nil, completion)
+type NewFileClientOpts struct {
+	// The base directory for all downloads.
+	ClientBaseDir   string
+	FilePathMaker   FilePathMaker
+	TorrentDirMaker TorrentDirFilePathMaker
+	PieceCompletion PieceCompletion
 }
 
-// File storage with data partitioned by infohash.
-func NewFileByInfoHash(baseDir string) ClientImplCloser {
-	return NewFileWithCustomPathMaker(baseDir, infoHashPathMaker)
-}
-
-// Allows passing a function to determine the path for storing torrent data. The function is
-// responsible for sanitizing the info if it uses some part of it (for example sanitizing
-// info.Name).
-func NewFileWithCustomPathMaker(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string) ClientImplCloser {
-	return NewFileWithCustomPathMakerAndCompletion(baseDir, pathMaker, pieceCompletionForDir(baseDir))
-}
-
-// Allows passing custom PieceCompletion
-func NewFileWithCustomPathMakerAndCompletion(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string, completion PieceCompletion) *fileClientImpl {
-	if pathMaker == nil {
-		pathMaker = defaultPathMaker
+// NewFileOpts creates a new ClientImplCloser that stores files using the OS native filesystem.
+func NewFileOpts(opts NewFileClientOpts) ClientImplCloser {
+	if opts.TorrentDirMaker == nil {
+		opts.TorrentDirMaker = defaultPathMaker
 	}
-	return &fileClientImpl{
-		baseDir:   baseDir,
-		pathMaker: pathMaker,
-		pc:        completion,
+	if opts.FilePathMaker == nil {
+		opts.FilePathMaker = func(opts FilePathMakerOpts) string {
+			var parts []string
+			if opts.Info.Name != metainfo.NoName {
+				parts = append(parts, opts.Info.Name)
+			}
+			return filepath.Join(append(parts, opts.File.Path...)...)
+		}
 	}
+	if opts.PieceCompletion == nil {
+		opts.PieceCompletion = pieceCompletionForDir(opts.ClientBaseDir)
+	}
+	return fileClientImpl{opts}
 }
 
-func (me *fileClientImpl) Close() error {
-	return me.pc.Close()
+func (me fileClientImpl) Close() error {
+	return me.opts.PieceCompletion.Close()
 }
 
-func (fs *fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (_ TorrentImpl, err error) {
-	dir := fs.pathMaker(fs.baseDir, info, infoHash)
+func (fs fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (_ TorrentImpl, err error) {
+	dir := fs.opts.TorrentDirMaker(fs.opts.ClientBaseDir, info, infoHash)
 	upvertedFiles := info.UpvertedFiles()
 	files := make([]file, 0, len(upvertedFiles))
 	for i, fileInfo := range upvertedFiles {
-		var s string
-		s, err = ToSafeFilePath(append([]string{info.Name}, fileInfo.Path...)...)
-		if err != nil {
-			err = fmt.Errorf("file %v has unsafe path %q: %w", i, fileInfo.Path, err)
+		filePath := filepath.Join(dir, fs.opts.FilePathMaker(FilePathMakerOpts{
+			Info: info,
+			File: &fileInfo,
+		}))
+		if !isSubFilepath(dir, filePath) {
+			err = fmt.Errorf("file %v: path %q is not sub path of %q", i, filePath, dir)
 			return
 		}
 		f := file{
-			path:   filepath.Join(dir, s),
+			path:   filePath,
 			length: fileInfo.Length,
 		}
 		if f.length == 0 {
@@ -95,7 +85,7 @@ func (fs *fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Has
 		files,
 		segments.NewIndex(common.LengthIterFromUpvertedFiles(upvertedFiles)),
 		infoHash,
-		fs.pc,
+		fs.opts.PieceCompletion,
 	}
 	return TorrentImpl{
 		Piece: t.Piece,

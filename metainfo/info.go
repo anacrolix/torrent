@@ -23,14 +23,23 @@ type Info struct {
 	Files  []FileInfo `bencode:"files,omitempty"` // BEP3, mutually exclusive with Length
 }
 
-// This is a helper that sets Files and Pieces from a root path and its
-// children.
+// The Info.Name field is "advisory". For multi-file torrents it's usually a suggested directory
+// name. There are situations where we don't want a directory (like using the contents of a torrent
+// as the immediate contents of a directory), or the name is invalid. Transmission will inject the
+// name of the torrent file if it doesn't like the name, resulting in a different infohash
+// (https://github.com/transmission/transmission/issues/1775). To work around these situations, we
+// will use a sentinel name for compatibility with Transmission and to signal to our own client that
+// we intended to have no directory name. By exposing it in the API we can check for references to
+// this behaviour within this implementation.
+const NoName = "-"
+
+// This is a helper that sets Files and Pieces from a root path and its children.
 func (info *Info) BuildFromFilePath(root string) (err error) {
 	info.Name = func() string {
 		b := filepath.Base(root)
 		switch b {
 		case ".", "..", string(filepath.Separator):
-			return ""
+			return NoName
 		default:
 			return b
 		}

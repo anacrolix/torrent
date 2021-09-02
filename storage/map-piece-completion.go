@@ -7,6 +7,7 @@ import (
 )
 
 type mapPieceCompletion struct {
+	// TODO: Generics
 	m sync.Map
 }
 

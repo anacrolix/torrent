@@ -355,8 +355,12 @@ func downloadErr() error {
 		return xerrors.New("y u no complete torrents?!")
 	}
 	if flags.Seed {
-		outputStats(client)
-		<-stop.C()
+		if len(client.Torrents()) == 0 {
+			log.Print("no torrents to seed")
+		} else {
+			outputStats(client)
+			<-stop.C()
+		}
 	}
 	return nil
 }

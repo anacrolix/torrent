@@ -12,9 +12,9 @@ import (
 
 var (
 	builtinAnnounceList = [][]string{
-		{"udp://tracker.openbittorrent.com:80"},
-		{"udp://tracker.publicbt.com:80"},
-		{"udp://tracker.istole.it:6969"},
+		{"http://p4p.arenabg.com:1337/announce"},
+		{"udp://tracker.opentrackr.org:1337/announce"},
+		{"udp://tracker.openbittorrent.com:6969/announce"},
 	}
 )
 

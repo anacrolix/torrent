@@ -449,7 +449,7 @@ func (t *Torrent) onSetInfo() {
 }
 
 // Called when metadata for a torrent becomes available.
-func (t *Torrent) setInfoBytes(b []byte) error {
+func (t *Torrent) setInfoBytesLocked(b []byte) error {
 	if metainfo.HashBytes(b) != t.infoHash {
 		return errors.New("info bytes have wrong hash")
 	}
@@ -1280,7 +1280,7 @@ func (t *Torrent) maybeCompleteMetadata() error {
 		// Don't have enough metadata pieces.
 		return nil
 	}
-	err := t.setInfoBytes(t.metadataBytes)
+	err := t.setInfoBytesLocked(t.metadataBytes)
 	if err != nil {
 		t.invalidateMetadata()
 		return fmt.Errorf("error setting info bytes: %s", err)
@@ -1355,7 +1355,7 @@ func (t *Torrent) bytesCompleted() int64 {
 func (t *Torrent) SetInfoBytes(b []byte) (err error) {
 	t.cl.lock()
 	defer t.cl.unlock()
-	return t.setInfoBytes(b)
+	return t.setInfoBytesLocked(b)
 }
 
 // Returns true if connection is removed from torrent.Conns.
@@ -1658,7 +1658,7 @@ func (t *Torrent) AnnounceToDht(s DhtServer) (done <-chan struct{}, stop func(),
 	return
 }
 
-func (t *Torrent) announceToDht(s DhtServer) error {
+func (t *Torrent) timeboxedAnnounceToDht(s DhtServer) error {
 	_, stop, err := t.AnnounceToDht(s)
 	if err != nil {
 		return err
@@ -1695,7 +1695,7 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 			t.numDHTAnnounces++
 			cl.unlock()
 			defer cl.lock()
-			err := t.announceToDht(s)
+			err := t.timeboxedAnnounceToDht(s)
 			if err != nil {
 				t.logger.WithDefaultLevel(log.Warning).Printf("error announcing %q to DHT: %s", t, err)
 			}

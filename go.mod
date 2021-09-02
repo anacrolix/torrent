@@ -7,7 +7,7 @@ require (
 	github.com/alexflint/go-arg v1.4.2
 	github.com/anacrolix/chansync v0.1.0
 	github.com/anacrolix/confluence v1.8.0 // indirect
-	github.com/anacrolix/dht/v2 v2.10.3
+	github.com/anacrolix/dht/v2 v2.10.5-0.20210902001729-06cc4fe90e53
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/go-libutp v1.0.4
 	github.com/anacrolix/log v0.9.0

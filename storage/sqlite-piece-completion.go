@@ -4,18 +4,19 @@
 package storage
 
 import (
+	"errors"
 	"path/filepath"
 	"sync"
 
 	"crawshaw.io/sqlite"
 	"crawshaw.io/sqlite/sqlitex"
-
 	"github.com/anacrolix/torrent/metainfo"
 )
 
 type sqlitePieceCompletion struct {
-	mu sync.Mutex
-	db *sqlite.Conn
+	mu     sync.Mutex
+	closed bool
+	db     *sqlite.Conn
 }
 
 var _ PieceCompletion = (*sqlitePieceCompletion)(nil)
@@ -52,6 +53,9 @@ func (me *sqlitePieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err er
 func (me *sqlitePieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
 	me.mu.Lock()
 	defer me.mu.Unlock()
+	if me.closed {
+		return errors.New("closed")
+	}
 	return sqlitex.Exec(
 		me.db,
 		`insert or replace into piece_completion(infohash, "index", complete) values(?, ?, ?)`,
@@ -62,9 +66,11 @@ func (me *sqlitePieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
 func (me *sqlitePieceCompletion) Close() (err error) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
-	if me.db != nil {
-		err = me.db.Close()
-		me.db = nil
+	if me.closed {
+		return
 	}
+	err = me.db.Close()
+	me.db = nil
+	me.closed = true
 	return
 }

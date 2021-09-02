@@ -97,11 +97,6 @@ func (r *reader) available(off, max int64) (ret int64) {
 	return
 }
 
-func (r *reader) waitReadable(off int64) {
-	// We may have been sent back here because we were told we could read but it failed.
-	r.t.cl.event.Wait()
-}
-
 // Calculates the pieces this reader wants downloaded, ignoring the cached value at r.pieces.
 func (r *reader) piecesUncached() (ret pieceRange) {
 	ra := r.readahead
@@ -122,27 +117,11 @@ func (r *reader) Read(b []byte) (n int, err error) {
 }
 
 func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
-	// This is set under the Client lock if the Context is canceled. I think we coordinate on a
-	// separate variable so as to avoid false negatives with race conditions due to Contexts being
-	// synchronized.
-	var ctxErr error
-	if ctx.Done() != nil {
-		ctx, cancel := context.WithCancel(ctx)
-		// Abort the goroutine when the function returns.
-		defer cancel()
-		go func() {
-			<-ctx.Done()
-			r.t.cl.lock()
-			ctxErr = ctx.Err()
-			r.t.tickleReaders()
-			r.t.cl.unlock()
-		}()
-	}
 	// Hmmm, if a Read gets stuck, this means you can't change position for other purposes. That
 	// seems reasonable, but unusual.
 	r.opMu.Lock()
 	defer r.opMu.Unlock()
-	n, err = r.readOnceAt(b, r.pos, &ctxErr)
+	n, err = r.readOnceAt(ctx, b, r.pos)
 	if n == 0 {
 		if err == nil && len(b) > 0 {
 			panic("expected error")
@@ -163,32 +142,44 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 	return
 }
 
+var closedChan = make(chan struct{})
+
+func init() {
+	close(closedChan)
+}
+
 // Wait until some data should be available to read. Tickles the client if it isn't. Returns how
 // much should be readable without blocking.
-func (r *reader) waitAvailable(pos, wanted int64, ctxErr *error, wait bool) (avail int64, err error) {
-	r.t.cl.lock()
-	defer r.t.cl.unlock()
+func (r *reader) waitAvailable(ctx context.Context, pos, wanted int64, wait bool) (avail int64, err error) {
+	t := r.t
 	for {
+		r.t.cl.rLock()
 		avail = r.available(pos, wanted)
+		readerCond := t.piece(int((r.offset + pos) / t.info.PieceLength)).readerCond.Signaled()
+		r.t.cl.rUnlock()
 		if avail != 0 {
 			return
 		}
-		if r.t.closed.IsSet() {
+		var dontWait <-chan struct{}
+		if !wait || wanted == 0 {
+			dontWait = closedChan
+		}
+		select {
+		case <-r.t.closed.Done():
 			err = errors.New("torrent closed")
 			return
-		}
-		if *ctxErr != nil {
-			err = *ctxErr
+		case <-ctx.Done():
+			err = ctx.Err()
 			return
-		}
-		if r.t.dataDownloadDisallowed || !r.t.networkingEnabled {
-			err = errors.New("downloading disabled and data not already available")
+		case <-r.t.dataDownloadDisallowed.On():
+			err = errors.New("torrent data downloading disabled")
+		case <-r.t.networkingEnabled.Off():
+			err = errors.New("torrent networking disabled")
 			return
-		}
-		if !wait || wanted == 0 {
+		case <-dontWait:
 			return
+		case <-readerCond:
 		}
-		r.waitReadable(pos)
 	}
 }
 
@@ -199,14 +190,14 @@ func (r *reader) torrentOffset(readerPos int64) int64 {
 }
 
 // Performs at most one successful read to torrent storage.
-func (r *reader) readOnceAt(b []byte, pos int64, ctxErr *error) (n int, err error) {
+func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, err error) {
 	if pos >= r.length {
 		err = io.EOF
 		return
 	}
 	for {
 		var avail int64
-		avail, err = r.waitAvailable(pos, int64(len(b)), ctxErr, n == 0)
+		avail, err = r.waitAvailable(ctx, pos, int64(len(b)), n == 0)
 		if avail == 0 {
 			return
 		}

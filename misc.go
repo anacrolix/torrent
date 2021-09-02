@@ -52,8 +52,11 @@ func metadataPieceSize(totalSize int, piece int) int {
 }
 
 // Return the request that would include the given offset into the torrent data.
-func torrentOffsetRequest(torrentLength, pieceSize, chunkSize, offset int64) (
-	r Request, ok bool) {
+func torrentOffsetRequest(
+	torrentLength, pieceSize, chunkSize, offset int64,
+) (
+	r Request, ok bool,
+) {
 	if offset < 0 || offset >= torrentLength {
 		return
 	}

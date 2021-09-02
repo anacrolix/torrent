@@ -1097,12 +1097,12 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		storageOpener:       storageClient,
 		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
 
-		networkingEnabled: true,
 		metadataChanged: sync.Cond{
 			L: cl.locker(),
 		},
 		webSeeds: make(map[string]*Peer),
 	}
+	t.networkingEnabled.Set()
 	t._pendingPieces.NewSet = priorityBitmapStableNewSet
 	t.logger = cl.logger.WithContextValue(t)
 	t.setChunkSize(defaultChunkSize)
@@ -1198,7 +1198,7 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	}
 	t.addTrackers(spec.Trackers)
 	t.maybeNewConns()
-	t.dataDownloadDisallowed = spec.DisallowDataDownload
+	t.dataDownloadDisallowed.SetBool(spec.DisallowDataDownload)
 	t.dataUploadDisallowed = spec.DisallowDataUpload
 	return nil
 }

@@ -216,7 +216,6 @@ func (me *trackerScraper) Run() {
 
 		me.t.cl.lock()
 		wantPeers := me.t.wantPeersEvent.C()
-		closed := me.t.closed.C()
 		me.t.cl.unlock()
 
 		// If we want peers, reduce the interval to the minimum if it's appropriate.
@@ -234,7 +233,7 @@ func (me *trackerScraper) Run() {
 		}
 
 		select {
-		case <-closed:
+		case <-me.t.closed.Done():
 			return
 		case <-reconsider:
 			// Recalculate the interval.

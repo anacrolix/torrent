@@ -997,11 +997,8 @@ func (cl *Client) dhtPort() (ret uint16) {
 	return
 }
 
-func (cl *Client) haveDhtServer() (ret bool) {
-	cl.eachDhtServer(func(_ DhtServer) {
-		ret = true
-	})
-	return
+func (cl *Client) haveDhtServer() bool {
+	return len(cl.dhtServers) > 0
 }
 
 // Process incoming ut_metadata message.

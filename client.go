@@ -1207,46 +1207,47 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 }
 
 func useTorrentSources(sources []string, t *Torrent) {
-	for _, s := range sources {
-		go func(s string) {
-			err := useTorrentSource(s, t)
-			if err != nil {
+	ctx := context.Background()
+	for i := 0; i < len(sources); i += 1 {
+		s := sources[i]
+		go func() {
+			if err := useTorrentSource(ctx, s, t); err != nil {
 				t.logger.WithDefaultLevel(log.Warning).Printf("using torrent source %q: %v", s, err)
 			} else {
 				t.logger.Printf("successfully used source %q", s)
 			}
-		}(s)
+		}()
 	}
 }
 
-func useTorrentSource(source string, t *Torrent) error {
-	req, err := http.NewRequest(http.MethodGet, source, nil)
-	if err != nil {
-		panic(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
+func useTorrentSource(ctx context.Context, source string, t *Torrent) (err error) {
+	ctxWithCancel, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
 		select {
 		case <-t.GotInfo():
 		case <-t.Closed():
-		case <-ctx.Done():
+		case <-ctxWithCancel.Done():
 		}
 		cancel()
 	}()
-	req = req.WithContext(ctx)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
+	var req *http.Request
+	if req, err = http.NewRequestWithContext(ctxWithCancel, http.MethodGet, source, nil); err != nil {
+		panic(err)
 	}
-	mi, err := metainfo.Load(resp.Body)
-	if err != nil {
+	var resp *http.Response
+	if resp, err = http.DefaultClient.Do(req); err == nil {
+		var mi metainfo.MetaInfo
+		err = bencode.NewDecoder(resp.Body).Decode(&mi)
+		resp.Body.Close()
+		if err == nil {
+			return t.MergeSpec(TorrentSpecFromMetaInfo(&mi))
+		}
 		if ctx.Err() != nil {
 			return nil
 		}
-		return err
 	}
-	return t.MergeSpec(TorrentSpecFromMetaInfo(mi))
+	return
 }
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {

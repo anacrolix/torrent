@@ -1290,15 +1290,19 @@ func (cl *Client) WaitAll() bool {
 }
 
 // Returns handles to all the torrents loaded in the Client.
-func (cl *Client) Torrents() []*Torrent {
+func (cl *Client) Torrents() (ts []*Torrent) {
 	cl.lock()
-	defer cl.unlock()
-	return cl.torrentsAsSlice()
+	ts = cl.torrentsAsSlice()
+	cl.unlock()
+	return
 }
 
 func (cl *Client) torrentsAsSlice() (ret []*Torrent) {
+	ret = make([]*Torrent, len(cl.torrents))
+	i := 0
 	for _, t := range cl.torrents {
-		ret = append(ret, t)
+		ret[i] = t
+		i += 1
 	}
 	return
 }

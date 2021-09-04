@@ -5,7 +5,7 @@ require (
 	crawshaw.io/sqlite v0.3.3-0.20210127221821-98b1f83c5508
 	github.com/RoaringBitmap/roaring v0.9.4
 	github.com/alexflint/go-arg v1.4.2
-	github.com/anacrolix/chansync v0.1.0
+	github.com/anacrolix/chansync v0.1.1-0.20210904130811-9cd7139c8dd9
 	github.com/anacrolix/confluence v1.8.0 // indirect
 	github.com/anacrolix/dht/v2 v2.10.5-0.20210902001729-06cc4fe90e53
 	github.com/anacrolix/envpprof v1.1.1

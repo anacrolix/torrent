@@ -412,20 +412,18 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 // come to a halt.
 func (cl *Client) Close() {
 	cl.lock()
-	defer cl.unlock()
 	cl.closed.Set()
 	var closeGroup sync.WaitGroup //Close everything concurrently, but wait for them to finish.
 	for _, t := range cl.torrents {
-		closeGroup.Add(1)		
-		go func() {
-			defer closeGroup.Done()
-			t.close()
+		func() {
+			t.close(&closeGroup)
 		}()
 	}
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}
 	cl.event.Broadcast()
+	cl.unlock()
 	closeGroup.Wait()
 }
 
@@ -1261,11 +1259,13 @@ func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
 		err = fmt.Errorf("no such torrent")
 		return
 	}
-	err = t.close()
+	var wG sync.WaitGroup
+	err = t.close(&wG)
 	if err != nil {
 		panic(err)
 	}
 	delete(cl.torrents, infoHash)
+	wG.Wait()
 	return
 }
 

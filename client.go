@@ -142,7 +142,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	})
 	spew.Fdump(w, &cl.stats)
 	torrentsSlice := cl.torrentsAsSlice()
-	fmt.Fprintf(w, "# Torrents: %d\n", len(torrentsAsSlice))
+	fmt.Fprintf(w, "# Torrents: %d\n", len(torrentsSlice))
 	fmt.Fprintln(w)
 	sort.Slice(torrentsSlice, func(l, r int) bool {
 		return torrentsSlice[l].infoHash.AsString() < torrentsSlice[r].infoHash.AsString()

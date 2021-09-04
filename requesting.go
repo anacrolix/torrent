@@ -12,25 +12,31 @@ import (
 )
 
 func (cl *Client) requester() {
-	for {
-		update := func() chansync.Signaled {
-			cl.lock()
-			defer cl.unlock()
-			cl.doRequests()
-			return cl.updateRequests.Signaled()
-		}()
-		select {
-		case <-cl.closed.Done():
-			return
-		case <-time.After(100 * time.Millisecond):
-		}
-		select {
-		case <-cl.closed.Done():
-			return
-		case <-update:
-		case <-time.After(time.Second):
-		}
+	var update chansync.Signaled
+	checkReqs := func() {
+		cl.lock()
+		cl.doRequests()
+		update = cl.updateRequests.Signaled()
+		cl.unlock()	
 	}
+	checkReqs()
+	timer := time.NewTimer(100 * time.Millisecond)
+LOOP:
+	for {
+		select {
+		case <-cl.closed.Done(): break LOOP
+		case <-timer.C:
+		}
+		timer.Reset(time.Second)
+		select {
+		case <-cl.closed.Done(): break LOOP
+		case <-update:
+		case <-timer.C:
+		}
+		checkReqs()
+		timer.Reset(100 * time.Millisecond)
+	}
+	timer.Stop()
 }
 
 func (cl *Client) tickleRequester() {

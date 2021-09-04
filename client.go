@@ -1463,11 +1463,11 @@ func (cl *Client) publicAddr(peer net.IP) IpPort {
 // ListenAddrs addresses currently being listened to.
 func (cl *Client) ListenAddrs() (ret []net.Addr) {
 	cl.lock()
-	defer cl.unlock()
-	cl.eachListener(func(l Listener) bool {
-		ret = append(ret, l.Addr())
-		return true
-	})
+	ret = make([]net.Addr, len(cl.listeners))
+	for i := 0; i < len(cl.listeners); i += 1 {
+		ret[i] = cl.listeners[i].Addr()
+	}
+	cl.unlock()
 	return
 }
 

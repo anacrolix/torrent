@@ -51,21 +51,22 @@ type tcpSocket struct {
 	NetworkDialer
 }
 
-func listenAll(networks []network, getHost func(string) string, port int, f firewallCallback) ([]socket, error) {
+func listenAll(networks []network, getHost func(string) string, port int, f firewallCallback) (ss []socket, err error) {
 	if len(networks) == 0 {
-		return nil, nil
+		return
 	}
-	var nahs []networkAndHost
-	for _, n := range networks {
-		nahs = append(nahs, networkAndHost{n, getHost(n.String())})
+	nahs := make([]networkAndHost, len(networks))
+	for i := 0; i < len(networks); i += 1 {
+		nahs[i] = networkAndHost{networks[i], getHost(networks[i].String())}
 	}
+	var retry bool
 	for {
-		ss, retry, err := listenAllRetry(nahs, port, f)
-		if !retry {
-			return ss, err
+		if ss, retry, err = listenAllRetry(nahs, port, f); !retry {
+			return
 		}
 	}
 }
+
 
 type networkAndHost struct {
 	Network network

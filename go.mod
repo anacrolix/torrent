@@ -5,9 +5,9 @@ require (
 	crawshaw.io/sqlite v0.3.3-0.20210127221821-98b1f83c5508
 	github.com/RoaringBitmap/roaring v0.9.4
 	github.com/alexflint/go-arg v1.4.2
-	github.com/anacrolix/chansync v0.1.0
+	github.com/anacrolix/chansync v0.1.1-0.20210904130811-9cd7139c8dd9
 	github.com/anacrolix/confluence v1.8.0 // indirect
-	github.com/anacrolix/dht/v2 v2.10.3
+	github.com/anacrolix/dht/v2 v2.10.5-0.20210902001729-06cc4fe90e53
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/go-libutp v1.0.4
 	github.com/anacrolix/log v0.9.0
@@ -15,6 +15,7 @@ require (
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.5.2
 	github.com/anacrolix/multiless v0.1.1-0.20210529082330-de2f6cf29619
+	github.com/anacrolix/squirrel v0.1.0
 	github.com/anacrolix/sync v0.4.0
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/upnp v0.1.2-0.20200416075019-5e9378ed1425

@@ -995,17 +995,14 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 }
 
 func (cl *Client) dhtPort() (ret uint16) {
-	cl.eachDhtServer(func(s DhtServer) {
-		ret = uint16(missinggo.AddrPort(s.Addr()))
-	})
-	return
+	if len(cl.dhtServers) == 0 {
+		return
+	}
+	return uint16(missinggo.AddrPort(cl.dhtServers[len(cl.dhtServers)-1].Addr()))
 }
 
-func (cl *Client) haveDhtServer() (ret bool) {
-	cl.eachDhtServer(func(_ DhtServer) {
-		ret = true
-	})
-	return
+func (cl *Client) haveDhtServer() bool {
+	return len(cl.dhtServers) > 0
 }
 
 // Process incoming ut_metadata message.
@@ -1104,12 +1101,12 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		storageOpener:       storageClient,
 		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
 
-		networkingEnabled: true,
 		metadataChanged: sync.Cond{
 			L: cl.locker(),
 		},
 		webSeeds: make(map[string]*Peer),
 	}
+	t.networkingEnabled.Set()
 	t._pendingPieces.NewSet = priorityBitmapStableNewSet
 	t.logger = cl.logger.WithContextValue(t)
 	t.setChunkSize(defaultChunkSize)
@@ -1205,7 +1202,7 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	}
 	t.addTrackers(spec.Trackers)
 	t.maybeNewConns()
-	t.dataDownloadDisallowed = spec.DisallowDataDownload
+	t.dataDownloadDisallowed.SetBool(spec.DisallowDataDownload)
 	t.dataUploadDisallowed = spec.DisallowDataUpload
 	return nil
 }

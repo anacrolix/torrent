@@ -4,81 +4,19 @@
 package sqliteStorage
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
 	_ "github.com/anacrolix/envpprof"
-	"github.com/dustin/go-humanize"
-	qt "github.com/frankban/quicktest"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
+	"github.com/anacrolix/squirrel"
 	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"
+	"github.com/dustin/go-humanize"
+	qt "github.com/frankban/quicktest"
 )
-
-func newConnsAndProv(t *testing.T, opts NewPoolOpts) (ConnPool, *provider) {
-	opts.Path = filepath.Join(t.TempDir(), "sqlite3.db")
-	pool, err := NewPool(opts)
-	qt.Assert(t, err, qt.IsNil)
-	// sqlitex.Pool.Close doesn't like being called more than once. Let it slide for now.
-	//t.Cleanup(func() { pool.Close() })
-	qt.Assert(t, initPoolDatabase(pool, InitDbOpts{}), qt.IsNil)
-	if !opts.Memory && opts.SetJournalMode == "" {
-		opts.SetJournalMode = "wal"
-	}
-	qt.Assert(t, initPoolConns(context.TODO(), pool, opts.InitConnOpts), qt.IsNil)
-	prov, err := NewProvider(pool, ProviderOpts{BatchWrites: pool.NumConns() > 1})
-	require.NoError(t, err)
-	t.Cleanup(func() { prov.Close() })
-	return pool, prov
-}
-
-func TestTextBlobSize(t *testing.T) {
-	_, prov := newConnsAndProv(t, NewPoolOpts{})
-	a, _ := prov.NewInstance("a")
-	err := a.Put(bytes.NewBufferString("\x00hello"))
-	qt.Assert(t, err, qt.IsNil)
-	fi, err := a.Stat()
-	qt.Assert(t, err, qt.IsNil)
-	assert.EqualValues(t, 6, fi.Size())
-}
-
-func TestSimultaneousIncrementalBlob(t *testing.T) {
-	_, p := newConnsAndProv(t, NewPoolOpts{
-		NumConns: 3,
-	})
-	a, err := p.NewInstance("a")
-	require.NoError(t, err)
-	const contents = "hello, world"
-	require.NoError(t, a.Put(bytes.NewReader([]byte("hello, world"))))
-	rc1, err := a.Get()
-	require.NoError(t, err)
-	rc2, err := a.Get()
-	require.NoError(t, err)
-	var b1, b2 []byte
-	var e1, e2 error
-	var wg sync.WaitGroup
-	doRead := func(b *[]byte, e *error, rc io.ReadCloser, n int) {
-		defer wg.Done()
-		defer rc.Close()
-		*b, *e = ioutil.ReadAll(rc)
-		require.NoError(t, *e, n)
-		assert.EqualValues(t, contents, *b)
-	}
-	wg.Add(2)
-	go doRead(&b2, &e2, rc2, 2)
-	go doRead(&b1, &e1, rc1, 1)
-	wg.Wait()
-}
 
 func BenchmarkMarkComplete(b *testing.B) {
 	const pieceSize = test_storage.DefaultPieceSize
@@ -93,7 +31,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 	}
 	c := qt.New(b)
 	b.Run("CustomDirect", func(b *testing.B) {
-		var opts NewDirectStorageOpts
+		var opts squirrel.NewCacheOpts
 		opts.Capacity = capacity
 		opts.NoTriggers = noTriggers
 		benchOpts := func(b *testing.B) {
@@ -117,7 +55,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 				directBench := func(b *testing.B) {
 					opts.Path = filepath.Join(b.TempDir(), "storage.db")
 					ci, err := NewDirectStorage(opts)
-					var ujm UnexpectedJournalMode
+					var ujm squirrel.ErrUnexpectedJournalMode
 					if errors.As(err, &ujm) {
 						b.Skipf("setting journal mode %q: %v", opts.SetJournalMode, err)
 					}

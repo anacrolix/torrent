@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -20,6 +21,8 @@ type Piece struct {
 	// Chunks we've written to since the last check. The chunk offset and
 	// length can be determined by the request chunkSize in use.
 	_dirtyChunks bitmap.Bitmap
+
+	readerCond chansync.BroadcastCond
 
 	numVerifies         int64
 	hashing             bool
@@ -70,7 +73,7 @@ func (p *Piece) numDirtyChunks() pp.Integer {
 
 func (p *Piece) unpendChunkIndex(i int) {
 	p._dirtyChunks.Add(bitmap.BitIndex(i))
-	p.t.tickleReaders()
+	p.readerCond.Broadcast()
 }
 
 func (p *Piece) pendChunkIndex(i int) {

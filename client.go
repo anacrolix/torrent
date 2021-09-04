@@ -991,10 +991,10 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 }
 
 func (cl *Client) dhtPort() (ret uint16) {
-	cl.eachDhtServer(func(s DhtServer) {
-		ret = uint16(missinggo.AddrPort(s.Addr()))
-	})
-	return
+	if len(cl.dhtServers) == 0 {
+		return
+	}
+	return uint16(missinggo.AddrPort(cl.dhtServers[len(cl.dhtServers)-1].Addr()))
 }
 
 func (cl *Client) haveDhtServer() bool {

@@ -855,7 +855,7 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 		cl.lock()
 		t = cl.torrents[ih]
 		cl.unlock()
-		return t, nil
+		return
 	}
 	return nil, fmt.Errorf("during bt handshake: %w", err)
 }

@@ -789,20 +789,20 @@ func (t *Torrent) numPiecesCompleted() (num pieceIndex) {
 	return pieceIndex(t._completedPieces.GetCardinality())
 }
 
-func (t *Torrent) close(wG *sync.WaitGroup) (err error) {
+func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	t.closed.Set()
 	if t.storage != nil {
-		wG.Add(1)
+		wg.Add(1)
 		go func() {
 			t.storageLock.Lock()
 			defer t.storageLock.Unlock()
+			defer wg.Done()
 			if f := t.storage.Close; f != nil {
-				err = f()
-				if err != nil {
-					fmt.Println("Error closing storage: ", err)
+				err1 := f()
+				if err1 != nil {
+					t.logger.WithDefaultLevel(log.Warning).Printf("error closing storage: %v", err1)
 				}
 			}
-			wG.Done()
 		}()
 
 	}

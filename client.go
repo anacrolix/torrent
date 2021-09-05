@@ -413,11 +413,9 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 func (cl *Client) Close() {
 	cl.lock()
 	cl.closed.Set()
-	var closeGroup sync.WaitGroup //Close everything concurrently, but wait for them to finish.
+	var closeGroup sync.WaitGroup //WaitGroup for any concurrent cleanup before returning.
 	for _, t := range cl.torrents {
-		func() {
-			t.close(&closeGroup)
-		}()
+		t.close(&closeGroup)
 	}
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()

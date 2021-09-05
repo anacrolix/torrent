@@ -794,9 +794,9 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	if t.storage != nil {
 		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			t.storageLock.Lock()
 			defer t.storageLock.Unlock()
-			defer wg.Done()
 			if f := t.storage.Close; f != nil {
 				err1 := f()
 				if err1 != nil {
@@ -804,7 +804,6 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 				}
 			}
 		}()
-
 	}
 	t.iterPeers(func(p *Peer) {
 		p.close()

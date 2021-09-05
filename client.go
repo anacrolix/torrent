@@ -411,11 +411,13 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 // Stops the client. All connections to peers are closed and all activity will
 // come to a halt.
 func (cl *Client) Close() {
+	var closeGroup sync.WaitGroup //WaitGroup for any concurrent cleanup to complete before returning.
+	defer closeGroup.Wait() //defer is LIFO. We want to Wait() after cl.unlock()
 	cl.lock()
 	defer cl.unlock()
 	cl.closed.Set()
 	for _, t := range cl.torrents {
-		t.close()
+		t.close(&closeGroup)
 	}
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
@@ -1252,7 +1254,9 @@ func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
 		err = fmt.Errorf("no such torrent")
 		return
 	}
-	err = t.close()
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	err = t.close(&wg)
 	if err != nil {
 		panic(err)
 	}

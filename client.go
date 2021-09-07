@@ -1506,6 +1506,7 @@ func (cl *Client) acceptLimitClearer() {
 			cl.clearAcceptLimits()
 			cl.unlock()
 		}
+		timer.Reset(15 * time.Minute)
 	}
 }
 

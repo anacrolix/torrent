@@ -850,13 +850,14 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 		err = errors.New("connection does not have required header obfuscation")
 		return
 	}
-	if ih, err := cl.connBtHandshake(c, nil); err == nil {
-		cl.lock()
-		t = cl.torrents[ih]
-		cl.unlock()
-		return
+	ih, err := cl.connBtHandshake(c, nil)
+	if err != nil {
+		return nil, fmt.Errorf("during bt handshake: %w", err)
 	}
-	return nil, fmt.Errorf("during bt handshake: %w", err)
+	cl.lock()
+	t = cl.torrents[ih]
+	cl.unlock()
+	return
 }
 
 func (cl *Client) connBtHandshake(c *PeerConn, ih *metainfo.Hash) (ret metainfo.Hash, err error) {

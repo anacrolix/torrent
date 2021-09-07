@@ -55,6 +55,8 @@ Here I'll describe what some of the packages in `./cmd` do. See [installation](#
 
 ### torrent
 
+#### torrent download
+
 Downloads torrents from the command-line.
 
     $ torrent download 'magnet:?xt=urn:btih:KRWPCX3SJUM4IMM4YF5RPHL6ANPYTQPU'
@@ -65,6 +67,15 @@ Downloads torrents from the command-line.
     1b305d585b1918f297164add46784116  ubuntu-14.04.2-desktop-amd64.iso
     $ echo such amaze
     wow
+
+#### torrent metainfo magnet
+
+Creates a magnet link from a torrent file. Note the extracted trackers, display name, and info hash.
+
+    $ torrent metainfo testdata/debian-10.8.0-amd64-netinst.iso.torrent magnet
+    magnet:?xt=urn:btih:4090c3c2a394a49974dfbbf2ce7ad0db3cdeddd7&dn=debian-10.8.0-amd64-netinst.iso&tr=http%3A%2F%2Fbttracker.debian.org%3A6969%2Fannounce
+
+See `torrent metainfo --help` for other metainfo related commands.
 
 ### torrentfs
 
@@ -81,9 +92,3 @@ torrentfs mounts a FUSE filesystem at `-mountDir`. The contents are the torrents
     996MB 0:04:40 [3.55MB/s] [========================================>] 100%
     1b305d585b1918f297164add46784116  -
 
-### torrent-magnet
-
-Creates a magnet link from a torrent file. Note the extracted trackers, display name, and info hash.
-
-    $ torrent-magnet < torrents/ubuntu-14.04.2-desktop-amd64.iso.torrent
-    magnet:?xt=urn:btih:546cf15f724d19c4319cc17b179d7e035f89c1f4&dn=ubuntu-14.04.2-desktop-amd64.iso&tr=http%3A%2F%2Ftorrent.ubuntu.com%3A6969%2Fannounce&tr=http%3A%2F%2Fipv6.torrent.ubuntu.com%3A6969%2Fannounce

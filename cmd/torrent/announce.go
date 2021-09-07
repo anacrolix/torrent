@@ -14,7 +14,7 @@ type AnnounceCmd struct {
 	InfoHash torrent.InfoHash
 }
 
-func announceErr() error {
+func announceErr(flags AnnounceCmd) error {
 	response, err := tracker.Announce{
 		TrackerUrl: flags.Tracker,
 		Request: tracker.AnnounceRequest{

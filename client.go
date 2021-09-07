@@ -147,8 +147,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	sort.Slice(torrentsSlice, func(l, r int) bool {
 		return torrentsSlice[l].infoHash.AsString() < torrentsSlice[r].infoHash.AsString()
 	})
-	for i := 0; i < len(torrentsSlice); i += 1 {
-		t := torrentsSlice[i]
+	for _, t := range torrentsSlice {
 		if t.name() == "" {
 			fmt.Fprint(w, "<unknown name>")
 		} else {
@@ -703,7 +702,7 @@ func (cl *Client) establishOutgoingConnEx(t *Torrent, addr PeerRemoteAddr, obfus
 	nc := dr.Conn
 	if nc == nil {
 		if dialCtx.Err() != nil {
-			return nil, xerrors.Errorf("dialing: %w", dialCtx.Err())
+			return nil, fmt.Errorf("dialing: %w", dialCtx.Err())
 		}
 		return nil, errors.New("dial failed")
 	}

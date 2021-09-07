@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,7 +20,6 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
-	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pproffd"
@@ -29,7 +29,6 @@ import (
 	"github.com/google/btree"
 	"github.com/pion/datachannel"
 	"golang.org/x/time/rate"
-	"golang.org/x/xerrors"
 
 	"github.com/anacrolix/chansync"
 
@@ -86,15 +85,23 @@ type Client struct {
 
 type ipStr string
 
-func (cl *Client) BadPeerIPs() []string {
+func (cl *Client) BadPeerIPs() (ips []string) {
 	cl.rLock()
-	defer cl.rUnlock()
-	return cl.badPeerIPsLocked()
+	ips = cl.badPeerIPsLocked()
+	cl.rUnlock()
+	return
 }
 
-func (cl *Client) badPeerIPsLocked() []string {
-	return slices.FromMapKeys(cl.badPeerIPs).([]string)
+func (cl *Client) badPeerIPsLocked() (ips []string) {
+	ips = make([]string, len(cl.badPeerIPs))
+	i := 0
+	for k := range cl.badPeerIPs {
+		ips[i] = k
+		i += 1
+	}
+	return
 }
+
 
 func (cl *Client) PeerID() PeerID {
 	return cl.peerID
@@ -134,11 +141,13 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		writeDhtServerStatus(w, s)
 	})
 	spew.Fdump(w, &cl.stats)
-	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.torrentsAsSlice()))
+	torrentsSlice := cl.torrentsAsSlice()
+	fmt.Fprintf(w, "# Torrents: %d\n", len(torrentsSlice))
 	fmt.Fprintln(w)
-	for _, t := range slices.Sort(cl.torrentsAsSlice(), func(l, r *Torrent) bool {
-		return l.InfoHash().AsString() < r.InfoHash().AsString()
-	}).([]*Torrent) {
+	sort.Slice(torrentsSlice, func(l, r int) bool {
+		return torrentsSlice[l].infoHash.AsString() < torrentsSlice[r].infoHash.AsString()
+	})
+	for _, t := range torrentsSlice {
 		if t.name() == "" {
 			fmt.Fprint(w, "<unknown name>")
 		} else {
@@ -695,7 +704,7 @@ func (cl *Client) establishOutgoingConnEx(t *Torrent, addr PeerRemoteAddr, obfus
 	nc := dr.Conn
 	if nc == nil {
 		if dialCtx.Err() != nil {
-			return nil, xerrors.Errorf("dialing: %w", dialCtx.Err())
+			return nil, fmt.Errorf("dialing: %w", dialCtx.Err())
 		}
 		return nil, errors.New("dial failed")
 	}
@@ -845,8 +854,7 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 	}
 	ih, err := cl.connBtHandshake(c, nil)
 	if err != nil {
-		err = xerrors.Errorf("during bt handshake: %w", err)
-		return
+		return nil, fmt.Errorf("during bt handshake: %w", err)
 	}
 	cl.lock()
 	t = cl.torrents[ih]

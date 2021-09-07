@@ -2094,15 +2094,15 @@ func (t *Torrent) initiateConn(peer PeerInfo) {
 // Adds a trusted, pending peer for each of the given Client's addresses. Typically used in tests to
 // quickly make one Client visible to the Torrent of another Client.
 func (t *Torrent) AddClientPeer(cl *Client) int {
-	return t.AddPeers(func() (ps []PeerInfo) {
-		for _, la := range cl.ListenAddrs() {
-			ps = append(ps, PeerInfo{
-				Addr:    la,
-				Trusted: true,
-			})
+	addrs := cl.ListenAddrs()
+	ps := make([]PeerInfo, len(addrs))
+	for i := 0; i < len(ps); i += 1 {
+		ps[i] = PeerInfo{
+			Addr:    addrs[i],
+			Trusted: true,
 		}
-		return
-	}())
+	}
+	return t.AddPeers(ps)
 }
 
 // All stats that include this Torrent. Useful when we want to increment ConnStats but not for every

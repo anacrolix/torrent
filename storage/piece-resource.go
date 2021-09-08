@@ -256,7 +256,8 @@ func (s piecePerResourcePiece) getChunks() (chunks chunks) {
 }
 
 func (s piecePerResourcePiece) completedInstancePath() string {
-	return path.Join("completed", s.mp.Hash().HexString())
+	h := s.mp.Hash()
+	return path.Join("completed", h.HexString())
 }
 
 func (s piecePerResourcePiece) completed() resource.Instance {
@@ -267,8 +268,9 @@ func (s piecePerResourcePiece) completed() resource.Instance {
 	return i
 }
 
-func (s piecePerResourcePiece) incompleteDirPath() string {
-	return path.Join("incompleted", s.mp.Hash().HexString())
+func (s piecePerResourcePiece) incompleteDirPath() string 
+	h := s.mp.Hash()
+	return path.Join("incompleted", h.HexString())
 }
 
 func (s piecePerResourcePiece) incompleteDir() resource.DirInstance {

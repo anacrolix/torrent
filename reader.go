@@ -250,24 +250,27 @@ func (r *reader) posChanged() {
 }
 
 func (r *reader) Seek(off int64, whence int) (ret int64, err error) {
-	r.opMu.Lock()
-	defer r.opMu.Unlock()
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	switch whence {
 	case io.SeekStart:
+		r.opMu.Lock()
+		r.mu.Lock()
 		r.pos = off
 	case io.SeekCurrent:
+		r.opMu.Lock()
+		r.mu.Lock()
 		r.pos += off
 	case io.SeekEnd:
+		r.opMu.Lock()
+		r.mu.Lock()
 		r.pos = r.length + off
 	default:
-		err = errors.New("bad whence")
+		return 0, errors.New("bad whence")
 	}
+	r.posChanged()
 	ret = r.pos
 
-	r.posChanged()
+	r.mu.Unlock()
+	r.opMu.Unlock()
 	return
 }
 

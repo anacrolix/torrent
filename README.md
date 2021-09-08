@@ -50,7 +50,7 @@ Communication about the project is primarily through [Discussions](https://githu
 
 ## Command packages
 
-Here I'll describe what some of the packages in `./cmd` do. Install them with `go get github.com/anacrolix/torrent/cmd/...`.
+Here I'll describe what some of the packages in `./cmd` do. See [installation](#installation) to make them available.
 
 ### torrent
 

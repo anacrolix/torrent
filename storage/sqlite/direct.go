@@ -48,8 +48,9 @@ type torrent struct {
 }
 
 func (t torrent) Piece(p metainfo.Piece) storage.PieceImpl {
+	h := p.Hash()
 	ret := piece{
-		sb: t.c.OpenWithLength(p.Hash().HexString(), p.Length()),
+		sb: t.c.OpenWithLength(h.HexString(), p.Length()),
 	}
 	ret.ReaderAt = &ret.sb
 	ret.WriterAt = &ret.sb

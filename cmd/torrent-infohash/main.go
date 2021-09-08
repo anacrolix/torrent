@@ -20,6 +20,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("%s: %s\n", mi.HashInfoBytes().HexString(), arg)
+		hashInfoBytes := mi.HashInfoBytes()
+		fmt.Printf("%s: %s\n", hashInfoBytes.HexString(), arg)
 	}
 }

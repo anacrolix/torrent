@@ -1835,14 +1835,29 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	defer t.cl.unlock()
 	oldMax = t.maxEstablishedConns
 	t.maxEstablishedConns = max
-	wcs := slices.HeapInterface(slices.FromMapKeys(t.conns), func(l, r *PeerConn) bool {
+
+	dropCount := len(t.conns) - t.maxEstablishedConns
+	if dropCount <= 0 {
+		t.openNewConns()
+		return
+	}
+
+	pcs := make([]*PeerConn, len(t.conns))
+	i := 0
+	for k := range t.conns {
+		pcs[i] = k
+		i++
+	}
+
+	// TODO: Use a selection algorithm like introselect/quickselect instead of heap
+	wcs := slices.HeapInterface(pcs, func(l, r *PeerConn) bool {
 		return worseConn(&l.Peer, &r.Peer)
 	})
-	for len(t.conns) > t.maxEstablishedConns && wcs.Len() > 0 {
+	for i := 0; i < dropCount; i += 1 {
 		t.dropConnection(wcs.Pop().(*PeerConn))
 	}
 	t.openNewConns()
-	return oldMax
+	return
 }
 
 func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {

@@ -192,32 +192,36 @@ func (r *reader) torrentOffset(readerPos int64) int64 {
 // Performs at most one successful read to torrent storage.
 func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, err error) {
 	if pos >= r.length {
-		err = io.EOF
+		return 0, io.EOF
+	}
+	var avail int64
+	if avail, err = r.waitAvailable(ctx, pos, int64(len(b)), true); avail == 0 {
 		return
 	}
+	b1 := b
+	if int(avail) < len(b) {
+		b1 = b[:avail]
+	}
+	if n, err = r.t.readAt(b1, r.torrentOffset(pos)); n != 0 {
+		return n, nil
+	}
+	return r.readOnceAtSlow(ctx, b, pos, b1)
+}
+
+func (r *reader) readOnceAtSlow(ctx context.Context, b []byte, pos int64, b1 []byte) (n int, err error) {
+	tOffset := r.torrentOffset(pos)
+	firstPieceIndex, firstPieceOffset := pieceIndex(tOffset/r.t.info.PieceLength), tOffset%r.t.info.PieceLength
+	logFmsg := fmt.Sprintf("error reading torrent %s piece %d offset %d, ",
+		r.t.infoHash.HexString(), firstPieceIndex, firstPieceOffset)
 	for {
-		var avail int64
-		avail, err = r.waitAvailable(ctx, pos, int64(len(b)), n == 0)
-		if avail == 0 {
-			return
-		}
-		firstPieceIndex := pieceIndex(r.torrentOffset(pos) / r.t.info.PieceLength)
-		firstPieceOffset := r.torrentOffset(pos) % r.t.info.PieceLength
-		b1 := missinggo.LimitLen(b, avail)
-		n, err = r.t.readAt(b1, r.torrentOffset(pos))
-		if n != 0 {
-			err = nil
-			return
-		}
 		r.t.cl.lock()
 		// TODO: Just reset pieces in the readahead window. This might help
 		// prevent thrashing with small caches and file and piece priorities.
-		r.log(log.Fstr("error reading torrent %s piece %d offset %d, %d bytes: %v",
-			r.t.infoHash.HexString(), firstPieceIndex, firstPieceOffset, len(b1), err))
+		r.log(log.Str(logFmsg + fmt.Sprintf("%d bytes: %v", len(b1), err)))
 		if !r.t.updatePieceCompletion(firstPieceIndex) {
 			r.log(log.Fstr("piece %d completion unchanged", firstPieceIndex))
 		}
-		// Update the rest of the piece completions in the readahead window, without alerting to
+		// Update the rest of the piece completions in the readahead window, without alerting
 		// changes (since only the first piece, the one above, could have generated the read error
 		// we're currently handling).
 		if r.pieces.begin != firstPieceIndex {
@@ -227,8 +231,19 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 			r.t.updatePieceCompletion(index)
 		}
 		r.t.cl.unlock()
+		var avail int64
+		if avail, err = r.waitAvailable(ctx, pos, int64(len(b)), true); avail == 0 {
+			return
+		}
+		if int(avail) < len(b) {
+			b1 = b[:avail]
+		}
+		if n, err = r.t.readAt(b1, tOffset); n != 0 {
+			return n, nil
+		}
 	}
 }
+
 
 // Hodor
 func (r *reader) Close() error {

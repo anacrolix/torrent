@@ -23,7 +23,7 @@ There are some small [examples](https://godoc.org/github.com/anacrolix/torrent#p
 
 ## Mentions
 
- * [@anacrolix](https://github.com/anacrolix) and this repo are in [Console 32](https://console.substack.com/p/console-32).
+ * [@anacrolix](https://github.com/anacrolix) is interviewed about this repo in [Console 32](https://console.substack.com/p/console-32).
 
 ### Downstream projects
 

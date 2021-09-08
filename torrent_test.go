@@ -68,7 +68,8 @@ func TestAppendToCopySlice(t *testing.T) {
 
 func TestTorrentString(t *testing.T) {
 	tor := &Torrent{}
-	s := tor.InfoHash().HexString()
+	h := tor.InfoHash()
+	s := h.HexString()
 	if s != "0000000000000000000000000000000000000000" {
 		t.FailNow()
 	}

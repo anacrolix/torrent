@@ -122,8 +122,8 @@ type Torrent struct {
 	metadataCompletedChunks []bool
 	metadataChanged         sync.Cond
 
-	// Set when .Info is obtained.
-	gotMetainfo missinggo.Event
+	// Closed when .Info is obtained.
+	gotMetainfoC chan struct{}
 
 	readers                map[*reader]struct{}
 	_readerNowPieces       bitmap.Bitmap
@@ -306,10 +306,11 @@ func (t *Torrent) addPeer(p PeerInfo) (added bool) {
 }
 
 func (t *Torrent) invalidateMetadata() {
-	for i := range t.metadataCompletedChunks {
+	for i := 0; i < len(t.metadataCompletedChunks); i++ {
 		t.metadataCompletedChunks[i] = false
 	}
 	t.nameMu.Lock()
+	t.gotMetainfoC = make(chan struct{})
 	t.info = nil
 	t.nameMu.Unlock()
 }
@@ -439,7 +440,7 @@ func (t *Torrent) onSetInfo() {
 		}
 	}
 	t.cl.event.Broadcast()
-	t.gotMetainfo.Set()
+	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
 	t.pendingRequests = make(map[Request]int)
 	t.tryCreateMorePieceHashers()

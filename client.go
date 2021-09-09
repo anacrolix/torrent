@@ -1207,6 +1207,7 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 }
 
 func useTorrentSources(sources []string, t *Torrent) {
+	// TODO: bind context to the lifetime of *Torrent so that it's cancelled if the torrent closes
 	ctx := context.Background()
 	for i := 0; i < len(sources); i += 1 {
 		s := sources[i]
@@ -1221,34 +1222,36 @@ func useTorrentSources(sources []string, t *Torrent) {
 }
 
 func useTorrentSource(ctx context.Context, source string, t *Torrent) (err error) {
-	ctxWithCancel, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
 		select {
 		case <-t.GotInfo():
 		case <-t.Closed():
-		case <-ctxWithCancel.Done():
+		case <-ctx.Done():
 		}
 		cancel()
 	}()
 	var req *http.Request
-	if req, err = http.NewRequestWithContext(ctxWithCancel, http.MethodGet, source, nil); err != nil {
+	if req, err = http.NewRequestWithContext(ctx, http.MethodGet, source, nil); err != nil {
 		panic(err)
 	}
 	var resp *http.Response
-	if resp, err = http.DefaultClient.Do(req); err == nil {
-		var mi metainfo.MetaInfo
-		err = bencode.NewDecoder(resp.Body).Decode(&mi)
-		resp.Body.Close()
-		if err == nil {
-			return t.MergeSpec(TorrentSpecFromMetaInfo(&mi))
-		}
+	if resp, err = http.DefaultClient.Do(req); err != nil {
+		return
+	}
+	var mi metainfo.MetaInfo
+	err = bencode.NewDecoder(resp.Body).Decode(&mi)
+	resp.Body.Close()
+	if err != nil {
 		if ctx.Err() != nil {
 			return nil
 		}
+		return
 	}
-	return
+	return t.MergeSpec(TorrentSpecFromMetaInfo(&mi))
 }
+
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
 	t, ok := cl.torrents[infoHash]

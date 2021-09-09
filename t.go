@@ -37,12 +37,12 @@ func (t *Torrent) NewReader() Reader {
 
 func (t *Torrent) newReader(offset, length int64) Reader {
 	r := reader{
-		mu:        t.cl.locker(),
-		t:         t,
-		readahead: 5 * 1024 * 1024,
-		offset:    offset,
-		length:    length,
+		mu:     t.cl.locker(),
+		t:      t,
+		offset: offset,
+		length: length,
 	}
+	r.readaheadFunc = r.sqrtReadahead
 	t.addReader(&r)
 	return &r
 }

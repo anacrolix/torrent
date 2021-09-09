@@ -420,17 +420,18 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 // Stops the client. All connections to peers are closed and all activity will
 // come to a halt.
 func (cl *Client) Close() {
-	var closeGroup sync.WaitGroup //WaitGroup for any concurrent cleanup to complete before returning.
-	defer closeGroup.Wait() //defer is LIFO. We want to Wait() after cl.unlock()
+	var closeGroup sync.WaitGroup // for any concurrent cleanup to complete before returning.
 	cl.lock()
-	defer cl.unlock()
-	cl.closed.Set()
 	for _, t := range cl.torrents {
-		t.close(&closeGroup)
+		if err := t.close(&closeGroup); err != nil {
+			panic(err)
+		}
 	}
-	for i := range cl.onClose {
-		cl.onClose[len(cl.onClose)-1-i]()
+	for i := len(cl.onClose)-1; i >= 0; i -= 1 {
+		cl.onClose[i]()
 	}
+	cl.unlock()
+	closeGroup.Wait() // Wait() only after cl.unlock()
 	cl.event.Broadcast()
 }
 
@@ -1257,19 +1258,17 @@ func useTorrentSource(source string, t *Torrent) error {
 }
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
-	t, ok := cl.torrents[infoHash]
-	if !ok {
-		err = fmt.Errorf("no such torrent")
+	if t := cl.torrents[infoHash]; t != nil {
+		delete(cl.torrents, infoHash)
+		var wg sync.WaitGroup
+		if err := t.close(&wg); err != nil {
+			panic(err)
+		}
+		wg.Wait()
 		return
 	}
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	err = t.close(&wg)
-	if err != nil {
-		panic(err)
-	}
-	delete(cl.torrents, infoHash)
-	return
+	// TODO: should be unreachable for (*Torrent).Drop()? 
+	return errors.New("no such torrent")
 }
 
 func (cl *Client) allTorrentsCompleted() bool {

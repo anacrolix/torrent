@@ -91,8 +91,8 @@ func (t *Torrent) PieceBytesMissing(piece int) int64 {
 // or connected peers.
 func (t *Torrent) Drop() {
 	t.cl.lock()
-	defer t.cl.unlock()
-	t.cl.dropTorrent(t.infoHash)
+	t.cl.dropTorrent(t.infoHash) // TODO: Check/panic on error?
+	t.cl.unlock()
 }
 
 // Number of bytes of the entire torrent we have completed. This is the sum of

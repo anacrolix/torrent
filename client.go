@@ -1499,7 +1499,7 @@ func (cl *Client) acceptLimitClearer() {
 	for {
 		select {
 		case <-cl.closed.Done():
-			timer.Stop()
+			ticker.Stop()
 			return
 		case <-ticker.C:
 			cl.lock()

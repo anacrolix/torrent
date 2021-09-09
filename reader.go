@@ -40,8 +40,11 @@ type reader struct {
 	opMu sync.Mutex
 
 	// Required when modifying pos and readahead, or reading them without opMu.
-	mu        sync.Locker
-	pos       int64
+	mu  sync.Locker
+	pos int64
+	// Reads have been initiated since the last seek. This is used to prevent readahead occuring
+	// after a seek or with a new reader at the starting position.
+	reading   bool
 	readahead int64
 	// Function to dynamically calculate readahead. If nil, readahead is static.
 	readaheadFunc func() int64
@@ -113,6 +116,9 @@ func (r *reader) piecesUncached() (ret pieceRange) {
 		// anything.
 		ra = 1
 	}
+	if !r.reading {
+		ra = 0
+	}
 	if ra > r.length-r.pos {
 		ra = r.length - r.pos
 	}
@@ -129,6 +135,14 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 	// seems reasonable, but unusual.
 	r.opMu.Lock()
 	defer r.opMu.Unlock()
+	if len(b) > 0 {
+		r.reading = true
+		// TODO: Rework reader piece priorities so we don't have to push updates in to the Client
+		// and take the lock here.
+		r.mu.Lock()
+		r.posChanged()
+		r.mu.Unlock()
+	}
 	n, err = r.readOnceAt(ctx, b, r.pos)
 	if n == 0 {
 		if err == nil && len(b) > 0 {
@@ -280,6 +294,7 @@ func (r *reader) Seek(off int64, whence int) (newPos int64, err error) {
 	if newPos == r.pos {
 		return
 	}
+	r.reading = false
 	r.pos = newPos
 	r.contiguousReadStartPos = newPos
 

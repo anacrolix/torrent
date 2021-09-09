@@ -35,6 +35,10 @@ func TestClientDefault(t *testing.T) {
 }
 
 func TestClientNilConfig(t *testing.T) {
+	// The default config will put crap in the working directory.
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	os.Chdir(t.TempDir())
 	cl, err := NewClient(nil)
 	require.NoError(t, err)
 	cl.Close()

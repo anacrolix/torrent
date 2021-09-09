@@ -102,7 +102,6 @@ func (cl *Client) badPeerIPsLocked() (ips []string) {
 	return
 }
 
-
 func (cl *Client) PeerID() PeerID {
 	return cl.peerID
 }
@@ -420,8 +419,8 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 // Stops the client. All connections to peers are closed and all activity will
 // come to a halt.
 func (cl *Client) Close() {
-	var closeGroup sync.WaitGroup //WaitGroup for any concurrent cleanup to complete before returning.
-	defer closeGroup.Wait() //defer is LIFO. We want to Wait() after cl.unlock()
+	var closeGroup sync.WaitGroup // WaitGroup for any concurrent cleanup to complete before returning.
+	defer closeGroup.Wait()       // defer is LIFO. We want to Wait() after cl.unlock()
 	cl.lock()
 	defer cl.unlock()
 	cl.closed.Set()
@@ -1258,7 +1257,6 @@ func useTorrentSource(ctx context.Context, source string, t *Torrent) (err error
 	}
 	return t.MergeSpec(TorrentSpecFromMetaInfo(&mi))
 }
-
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
 	t, ok := cl.torrents[infoHash]

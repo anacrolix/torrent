@@ -1495,18 +1495,17 @@ func (cl *Client) clearAcceptLimits() {
 }
 
 func (cl *Client) acceptLimitClearer() {
-	timer := time.NewTimer(15 * time.Minute)
+	ticker := time.NewTicker(15 * time.Minute)
 	for {
 		select {
 		case <-cl.closed.Done():
 			timer.Stop()
 			return
-		case <-timer.C:
+		case <-ticker.C:
 			cl.lock()
 			cl.clearAcceptLimits()
 			cl.unlock()
 		}
-		timer.Reset(15 * time.Minute)
 	}
 }
 

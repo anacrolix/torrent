@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"sync"
 
 	"github.com/anacrolix/log"
@@ -292,7 +291,7 @@ func (r *reader) log(m log.Msg) {
 	r.t.logger.Log(m.Skip(1))
 }
 
-// Implementation inspired from an arbitrary comment I found on HN.
-func (r *reader) sqrtReadahead() int64 {
-	return int64(math.Sqrt(float64(r.pos - r.contiguousReadStartPos)))
+// Implementation inspired by https://news.ycombinator.com/item?id=27019613.
+func (r *reader) defaultReadaheadFunc() int64 {
+	return r.pos - r.contiguousReadStartPos
 }

@@ -263,14 +263,13 @@ func (t *Torrent) addrActive(addr string) bool {
 	return false
 }
 
-func (t *Torrent) unclosedConnsAsSlice() (ret []*PeerConn) {
-	ret = make([]*PeerConn, 0, len(t.conns))
+func (t *Torrent) appendUnclosedConns(ret []*PeerConn) []*PeerConn {
 	for c := range t.conns {
 		if !c.closed.IsSet() {
 			ret = append(ret, c)
 		}
 	}
-	return
+	return ret
 }
 
 func (t *Torrent) addPeer(p PeerInfo) (added bool) {
@@ -974,11 +973,25 @@ func (t *Torrent) wantPieceIndex(index pieceIndex) bool {
 	})
 }
 
+// A pool of []*PeerConn, to reduce allocations in functions that need to index or sort Torrent
+// conns (which is a map).
+var peerConnSlices sync.Pool
+
 // The worst connection is one that hasn't been sent, or sent anything useful for the longest. A bad
-// connection is one that usually sends us unwanted pieces, or has been in worser half of the
-// established connections for more than a minute.
-func (t *Torrent) worstBadConn() *PeerConn {
-	wcs := worseConnSlice{t.unclosedConnsAsSlice()}
+// connection is one that usually sends us unwanted pieces, or has been in the worse half of the
+// established connections for more than a minute. This is O(n log n). If there was a way to not
+// consider the position of a conn relative to the total number, it could be reduced to O(n).
+func (t *Torrent) worstBadConn() (ret *PeerConn) {
+	var sl []*PeerConn
+	getInterface := peerConnSlices.Get()
+	if getInterface == nil {
+		sl = make([]*PeerConn, 0, len(t.conns))
+	} else {
+		sl = getInterface.([]*PeerConn)[:0]
+	}
+	sl = t.appendUnclosedConns(sl)
+	defer peerConnSlices.Put(sl)
+	wcs := worseConnSlice{sl}
 	heap.Init(&wcs)
 	for wcs.Len() != 0 {
 		c := heap.Pop(&wcs).(*PeerConn)

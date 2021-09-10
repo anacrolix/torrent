@@ -49,6 +49,8 @@ github.com/anacrolix/chansync v0.1.0 h1:4cIfJmEV8sYkSEMW2AXnPjX6iQT4plqELJ65pLna
 github.com/anacrolix/chansync v0.1.0/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
 github.com/anacrolix/chansync v0.1.1-0.20210904130811-9cd7139c8dd9 h1:Jk3Mdr+XbO1uvf/+nUXjb/M1dPDNPQThxKmS5MLGE+w=
 github.com/anacrolix/chansync v0.1.1-0.20210904130811-9cd7139c8dd9/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
+github.com/anacrolix/chansync v0.2.1-0.20210910114620-14955c95ded9 h1:jfSupvl9p7Bkd9snD6DrjxDmsYjJeYxSqhQa/I9wV3I=
+github.com/anacrolix/chansync v0.2.1-0.20210910114620-14955c95ded9/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
 github.com/anacrolix/confluence v1.7.1-0.20210221224747-9cb14aa2c53a/go.mod h1:T0JHvSaf9UfoiUdCtCOUuRroHm/tauUJTbLc6/vd5YA=
 github.com/anacrolix/confluence v1.7.1-0.20210221225853-90405640e928/go.mod h1:NoLcfoRet+kYttjLXJRmh4qBVrylJsfIItik5GGj21A=
 github.com/anacrolix/confluence v1.7.1-0.20210311004351-d642adb8546c/go.mod h1:KCZ3eObqKECNeZg0ekAoJVakHMP3gAdR8i0bQ26IkzM=

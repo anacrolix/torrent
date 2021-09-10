@@ -23,47 +23,63 @@ import (
 var vars = expvar.NewMap("tracker/http")
 
 func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts AnnounceOpt) {
-	q := _url.Query()
+	res :=        "key"     + "=" + strconv.FormatInt(int64(ar.Key),10)   +
+		"&" + "peer_id" + "=" + url.QueryEscape(string(ar.PeerId[:])) +
+		// AFAICT, port is mandatory, and there's no implied port key.
+		"&" + "port"      + "=" + strconv.FormatInt(int64(ar.Port), 10) +
+		"&" + "uploaded"  + "=" + strconv.FormatInt(ar.Uploaded, 10)    +
+		"&" + "downloaded"+ "=" + strconv.FormatInt(ar.Downloaded, 10)  +
+		// The AWS S3 tracker returns "400 Bad Request: left(-1) was not in the valid range 0 -
+		// 9223372036854775807" if left is out of range, or "500 Internal Server Error: Internal Server
+		// Error" if omitted entirely.
+		// Here we set left to math.MaxInt64 if it's -1. We do this by clearing the sign bit
+		"&" + "left" + "=" + strconv.FormatInt(ar.Left & math.MaxInt64, 10) +
 
-	q.Set("key", strconv.FormatInt(int64(ar.Key), 10))
-	q.Set("peer_id", string(ar.PeerId[:]))
-	// AFAICT, port is mandatory, and there's no implied port key.
-	q.Set("port", strconv.FormatInt(int64(ar.Port), 10))
-	q.Set("uploaded", strconv.FormatInt(ar.Uploaded, 10))
-	q.Set("downloaded", strconv.FormatInt(ar.Downloaded, 10))
-
-	// The AWS S3 tracker returns "400 Bad Request: left(-1) was not in the valid range 0 -
-	// 9223372036854775807" if left is out of range, or "500 Internal Server Error: Internal Server
-	// Error" if omitted entirely.
-	left := ar.Left
-	if left < 0 {
-		left = math.MaxInt64
-	}
-	q.Set("left", strconv.FormatInt(left, 10))
-
-	if ar.Event != shared.None {
-		q.Set("event", ar.Event.String())
-	}
-	// http://stackoverflow.com/questions/17418004/why-does-tracker-server-not-understand-my-request-bittorrent-protocol
-	q.Set("compact", "1")
-	// According to https://wiki.vuze.com/w/Message_Stream_Encryption. TODO:
-	// Take EncryptionPolicy or something like it as a parameter.
-	q.Set("supportcrypto", "1")
-	doIp := func(versionKey string, ip net.IP) {
-		if ip == nil {
+		func() (event string) { 
+			if ar.Event != shared.None { 
+				event = "&" + "event" + "=" + ar.Event.String()
+			}
 			return
-		}
-		ipString := ip.String()
-		q.Set(versionKey, ipString)
+		}() +
+
+		// http://stackoverflow.com/questions/17418004/why-does-tracker-server-not-understand-my-request-bittorrent-protocol
+		"&" + "compact" + "=" + "1" +
+
+		// According to https://wiki.vuze.com/w/Message_Stream_Encryption. TODO:
+		// Take EncryptionPolicy or something like it as a parameter.
+		"&" + "supportcrypto" + "=" + "1" +
+
 		// Let's try listing them. BEP 3 mentions having an "ip" param, and BEP 7 says we can list
 		// addresses for other address-families, although it's not encouraged.
-		q.Add("ip", ipString)
-	}
-	doIp("ipv4", opts.ClientIp4)
-	doIp("ipv6", opts.ClientIp6)
-	// Force encoding spaces to '%20' instead of '+'
-	_url.RawQuery = q.Encode() + 
-		"&info_hash=" + strings.ReplaceAll(url.QueryEscape(string(ar.InfoHash[:])), "+", "%20")
+		func() (ipstr string) {
+			if opts.ClientIp4 != nil {
+				ipv4 := url.QueryEscape(opts.ClientIp4.String())
+				ipstr = "&" + "ip4" + "=" + ipv4 +
+					"&" + "ip" + "=" + ipv4
+			}
+			return
+		}() +
+		func() (ipstr string) {
+			if opts.ClientIp6 != nil {
+				ipv6 := url.QueryEscape(opts.ClientIp6.String())
+				ipstr = "&" + "ipv6" + "=" + ipv6 +
+					"&" + "ip" + "=" + ipv6
+			}
+			return
+		}() +
+
+		"&" + "info_hash" + "="  + strings.ReplaceAll(url.QueryEscape(string(ar.InfoHash[:])), "+", "%20") +
+
+		func() (qstr string) {
+			if qstr = _url.Query().Encode(); qstr != "" {
+				qstr = "&" + qstr
+			}
+			return
+		}() +
+
+		""
+
+	_url.RawQuery = res
 }
 
 type AnnounceOpt struct {

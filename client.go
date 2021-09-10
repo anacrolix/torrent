@@ -1498,15 +1498,20 @@ func (cl *Client) acceptLimitClearer() {
 	ticker := time.NewTicker(15 * time.Minute)
 	for {
 		select {
-		case <-cl.closed.Done():
-			ticker.Stop()
-			return
+		case <-cl.closed: goto END
 		case <-ticker.C:
+			select {
+			case <-cl.closed: goto END
+			default:
+			}
 			cl.lock()
 			cl.clearAcceptLimits()
 			cl.unlock()
 		}
 	}
+END:
+	ticker.Stop()
+	return
 }
 
 func (cl *Client) rateLimitAccept(ip net.IP) bool {

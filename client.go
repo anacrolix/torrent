@@ -1498,10 +1498,10 @@ func (cl *Client) acceptLimitClearer() {
 	ticker := time.NewTicker(15 * time.Minute)
 	for {
 		select {
-		case <-cl.closed: goto END
+		case <-cl.closed.Done(): goto END
 		case <-ticker.C:
 			select {
-			case <-cl.closed: goto END
+			case <-cl.closed.Done(): goto END
 			default:
 			}
 			cl.lock()

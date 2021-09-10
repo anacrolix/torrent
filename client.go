@@ -1258,15 +1258,13 @@ func useTorrentSource(ctx context.Context, source string, t *Torrent) (err error
 	return t.MergeSpec(TorrentSpecFromMetaInfo(&mi))
 }
 
-func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
+func (cl *Client) dropTorrent(infoHash metainfo.Hash, wg *sync.WaitGroup) (err error) {
 	t, ok := cl.torrents[infoHash]
 	if !ok {
 		err = fmt.Errorf("no such torrent")
 		return
 	}
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	err = t.close(&wg)
+	err = t.close(wg)
 	if err != nil {
 		panic(err)
 	}

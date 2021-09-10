@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/anacrolix/missinggo/pubsub"
+	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -95,9 +96,11 @@ func (t *Torrent) PieceBytesMissing(piece int) int64 {
 // this. No data corruption can, or should occur to either the torrent's data,
 // or connected peers.
 func (t *Torrent) Drop() {
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	t.cl.lock()
 	defer t.cl.unlock()
-	t.cl.dropTorrent(t.infoHash)
+	t.cl.dropTorrent(t.infoHash, &wg)
 }
 
 // Number of bytes of the entire torrent we have completed. This is the sum of

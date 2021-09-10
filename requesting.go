@@ -1,9 +1,10 @@
 package torrent
 
 import (
+	"math"
 	"time"
 	"unsafe"
-
+	
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
 	"github.com/anacrolix/chansync"
@@ -12,25 +13,42 @@ import (
 )
 
 func (cl *Client) requester() {
+	var update chansync.Signaled
+	// NewTimer that can't possibly expire before we Stop() it.
+	timer := time.NewTimer(math.MaxInt64)
+	timer.Stop()
 	for {
-		update := func() chansync.Signaled {
-			cl.lock()
-			defer cl.unlock()
-			cl.doRequests()
-			return cl.updateRequests.Signaled()
-		}()
 		select {
-		case <-cl.closed.Done():
-			return
-		case <-time.After(100 * time.Millisecond):
+		case <-cl.closed.Done(): goto STOP
+		default:
 		}
+
+		cl.lock()
+		cl.doRequests()
+		update = cl.updateRequests.Signaled()
+		cl.unlock()
+
+		timer.Reset(100*time.Millisecond)
 		select {
-		case <-cl.closed.Done():
-			return
-		case <-update:
-		case <-time.After(time.Second):
+		case <-cl.closed.Done(): goto STOP
+		case <-timer.C:  // timer fired; can Reset() without Stop()
+			timer.Reset(time.Second)
+			select {
+			case <-cl.closed.Done(): goto STOP
+			case <-update:
+				// Ensure timer is stopped and drained before next loop.
+				// It may be possible that the timer has expired as we reach this point,
+				// so we check for expiration and drain if needed. Otherwise just stop timer.
+				if !timer.Stop() {
+					<-timer.C
+				}
+			case <-timer.C:
+			}
+			// timer should be ready for any Resets by this point
 		}
 	}
+STOP:
+	timer.Stop()
 }
 
 func (cl *Client) tickleRequester() {

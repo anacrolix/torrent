@@ -11,7 +11,7 @@ import (
 type Node string
 
 var (
-	_ bencode.Unmarshaler = new(Node)
+	_ bencode.Unmarshaler = (*Node)(nil)
 )
 
 func (n *Node) UnmarshalBencode(b []byte) (err error) {

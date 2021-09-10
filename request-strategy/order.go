@@ -228,12 +228,14 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 		}
 	}()
 	sortPeersForPiece := func(req *Request) {
-		less := func(i, j int) bool {
+		less := func(_i, _j int) bool {
+			i := peersForPiece[_i]
+			j := peersForPiece[_j]
 			byHasRequest := func() multiless.Computation {
 				ml := multiless.New()
 				if req != nil {
-					_, iHas := peersForPiece[i].nextState.Requests[*req]
-					_, jHas := peersForPiece[j].nextState.Requests[*req]
+					_, iHas := i.nextState.Requests[*req]
+					_, jHas := j.nextState.Requests[*req]
 					ml = ml.Bool(jHas, iHas)
 				}
 				return ml
@@ -245,30 +247,30 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 			// fastest known peers.
 			if !p.alwaysReallocate {
 				ml = ml.Bool(
-					peersForPiece[j].requestablePiecesRemaining == 1,
-					peersForPiece[i].requestablePiecesRemaining == 1)
+					j.requestablePiecesRemaining == 1,
+					i.requestablePiecesRemaining == 1)
 			}
-			if p.alwaysReallocate || peersForPiece[j].requestablePiecesRemaining == 1 {
+			if p.alwaysReallocate || j.requestablePiecesRemaining == 1 {
 				ml = ml.Int(
-					peersForPiece[i].requestsInPiece,
-					peersForPiece[j].requestsInPiece)
+					i.requestsInPiece,
+					j.requestsInPiece)
 			} else {
 				ml = ml.AndThen(byHasRequest)
 			}
 			ml = ml.Int(
-				peersForPiece[i].requestablePiecesRemaining,
-				peersForPiece[j].requestablePiecesRemaining,
+				i.requestablePiecesRemaining,
+				j.requestablePiecesRemaining,
 			).Float64(
-				peersForPiece[j].DownloadRate,
-				peersForPiece[i].DownloadRate,
+				j.DownloadRate,
+				i.DownloadRate,
 			)
 			ml = ml.AndThen(byHasRequest)
 			return ml.Int64(
-				int64(peersForPiece[j].Age), int64(peersForPiece[i].Age),
+				int64(j.Age), int64(i.Age),
 				// TODO: Probably peer priority can come next
 			).Uintptr(
-				peersForPiece[i].Id.Uintptr(),
-				peersForPiece[j].Id.Uintptr(),
+				i.Id.Uintptr(),
+				j.Id.Uintptr(),
 			).MustLess()
 		}
 		sort.Slice(peersForPiece, less)

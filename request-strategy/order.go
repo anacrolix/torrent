@@ -274,7 +274,7 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 			).MustLess()
 		}
 		sort.Slice(peersForPiece, less)
-		ensureValidSortedPeersForPieceRequests(peersForPiece, less)
+		//ensureValidSortedPeersForPieceRequests(peersForPiece, less)
 	}
 	// Chunks can be preassigned several times, if peers haven't been able to update their "actual"
 	// with "next" request state before another request strategy run occurs.

@@ -237,14 +237,11 @@ func (p *Piece) State() PieceState {
 	return p.t.PieceState(p.index)
 }
 
-func (p *Piece) iterUndirtiedChunks(f func(cs ChunkSpec) bool) bool {
+func (p *Piece) iterUndirtiedChunks(f func(cs ChunkSpec)) {
 	for i := pp.Integer(0); i < p.numChunks(); i++ {
 		if p.chunkIndexDirty(i) {
 			continue
 		}
-		if !f(p.chunkIndexSpec(i)) {
-			return false
-		}
+		f(p.chunkIndexSpec(i))
 	}
-	return true
 }

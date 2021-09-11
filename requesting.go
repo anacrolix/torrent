@@ -8,7 +8,6 @@ import (
 
 	"github.com/anacrolix/chansync"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
-	"github.com/anacrolix/torrent/types"
 )
 
 func (cl *Client) requester() {
@@ -50,18 +49,13 @@ func (cl *Client) doRequests() {
 		for i := range t.pieces {
 			p := &t.pieces[i]
 			rst.Pieces = append(rst.Pieces, request_strategy.Piece{
-				Request:          !t.ignorePieceForRequests(i),
-				Priority:         p.purePriority(),
-				Partial:          t.piecePartiallyDownloaded(i),
-				Availability:     p.availability,
-				Length:           int64(p.length()),
-				NumPendingChunks: int(t.pieceNumPendingChunks(i)),
-				IterPendingChunks: func(f func(types.ChunkSpec)) {
-					p.iterUndirtiedChunks(func(cs ChunkSpec) bool {
-						f(cs)
-						return true
-					})
-				},
+				Request:           !t.ignorePieceForRequests(i),
+				Priority:          p.purePriority(),
+				Partial:           t.piecePartiallyDownloaded(i),
+				Availability:      p.availability,
+				Length:            int64(p.length()),
+				NumPendingChunks:  int(t.pieceNumPendingChunks(i)),
+				IterPendingChunks: p.iterUndirtiedChunks,
 			})
 		}
 		t.iterPeers(func(p *Peer) {

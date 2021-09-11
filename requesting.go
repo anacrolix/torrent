@@ -46,6 +46,7 @@ func (cl *Client) doRequests() {
 		if t.storage != nil {
 			rst.Capacity = t.storage.Capacity
 		}
+		rst.Pieces = make([]request_strategy.Piece, 0, len(t.pieces))
 		for i := range t.pieces {
 			p := &t.pieces[i]
 			rst.Pieces = append(rst.Pieces, request_strategy.Piece{

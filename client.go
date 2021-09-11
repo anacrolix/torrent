@@ -232,14 +232,16 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		cl.ipBlockList = cfg.IPBlocklist
 	}
 
-	if cfg.PeerID != "" {
-		missinggo.CopyExact(&cl.peerID, cfg.PeerID)
-	} else {
-		o := copy(cl.peerID[:], cfg.Bep20)
-		_, err = rand.Read(cl.peerID[o:])
-		if err != nil {
-			panic("error generating peer id")
+	switch len(cfg.PeerID) {
+	case len(cl.peerID):
+		copy(cl.peerID[:], cfg.PeerID)
+	case 0:
+		if _, err = rand.Read(cl.peerID[copy(cl.peerID[:], cfg.Bep20):]); err != nil {
+			panic("PeerID rand: " + err.Error())
 		}
+	default:
+		srcPeerIdLen, peerIdLen := uint64(len(cfg.PeerID)), uint64(len(cl.peerID))
+		panic("cfg.PeerID len " + strconv.FormatUint(srcPeerIdLen,10) + " != PeerID len " + strconv.FormatUint(peerIdLen, 10))
 	}
 
 	sockets, err := listenAll(cl.listenNetworks(), cl.config.ListenHost, cl.config.ListenPort, cl.firewallCallback)

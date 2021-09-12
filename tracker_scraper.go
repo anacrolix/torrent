@@ -65,7 +65,7 @@ type trackerAnnounceResult struct {
 	Completed time.Time
 }
 
-func (me *TrackerScraper) getIp() (ip net.IP, err error) {
+func (me *trackerScraper) getIp() (ip net.IP, err error) {
 	switch ips, er := net.LookupIP(me.u.Hostname()); {
 	case er != nil:
 		return nil, er

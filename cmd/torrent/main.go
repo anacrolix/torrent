@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"expvar"
 	"fmt"
 	"io"
@@ -22,7 +23,6 @@ import (
 	"github.com/anacrolix/torrent/version"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
-	"golang.org/x/xerrors"
 
 	"github.com/anacrolix/log"
 
@@ -100,23 +100,23 @@ func addTorrents(client *torrent.Client) error {
 			if strings.HasPrefix(arg, "magnet:") {
 				t, err := client.AddMagnet(arg)
 				if err != nil {
-					return nil, xerrors.Errorf("error adding magnet: %w", err)
+					return nil, fmt.Errorf("error adding magnet: %w", err)
 				}
 				return t, nil
 			} else if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
 				response, err := http.Get(arg)
 				if err != nil {
-					return nil, xerrors.Errorf("Error downloading torrent file: %s", err)
+					return nil, fmt.Errorf("Error downloading torrent file: %s", err)
 				}
 
 				metaInfo, err := metainfo.Load(response.Body)
 				defer response.Body.Close()
 				if err != nil {
-					return nil, xerrors.Errorf("error loading torrent file %q: %s\n", arg, err)
+					return nil, fmt.Errorf("error loading torrent file %q: %s\n", arg, err)
 				}
 				t, err := client.AddTorrent(metaInfo)
 				if err != nil {
-					return nil, xerrors.Errorf("adding torrent: %w", err)
+					return nil, fmt.Errorf("adding torrent: %w", err)
 				}
 				return t, nil
 			} else if strings.HasPrefix(arg, "infohash:") {
@@ -125,17 +125,17 @@ func addTorrents(client *torrent.Client) error {
 			} else {
 				metaInfo, err := metainfo.LoadFromFile(arg)
 				if err != nil {
-					return nil, xerrors.Errorf("error loading torrent file %q: %s\n", arg, err)
+					return nil, fmt.Errorf("error loading torrent file %q: %s\n", arg, err)
 				}
 				t, err := client.AddTorrent(metaInfo)
 				if err != nil {
-					return nil, xerrors.Errorf("adding torrent: %w", err)
+					return nil, fmt.Errorf("adding torrent: %w", err)
 				}
 				return t, nil
 			}
 		}()
 		if err != nil {
-			return xerrors.Errorf("adding torrent for %q: %w", arg, err)
+			return fmt.Errorf("adding torrent for %q: %w", arg, err)
 		}
 		if flags.Progress {
 			torrentBar(t, flags.PieceStates)
@@ -302,7 +302,7 @@ func downloadErr() error {
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
 		if err != nil {
-			return xerrors.Errorf("loading blocklist: %v", err)
+			return fmt.Errorf("loading blocklist: %v", err)
 		}
 		defer blocklist.Close()
 		clientConfig.IPBlocklist = blocklist
@@ -331,7 +331,7 @@ func downloadErr() error {
 
 	client, err := torrent.NewClient(clientConfig)
 	if err != nil {
-		return xerrors.Errorf("creating client: %v", err)
+		return fmt.Errorf("creating client: %v", err)
 	}
 	var clientClose sync.Once //In certain situations, close was being called more than once.
 	defer clientClose.Do(client.Close)
@@ -354,7 +354,7 @@ func downloadErr() error {
 	if client.WaitAll() {
 		log.Print("downloaded ALL the torrents")
 	} else {
-		return xerrors.New("y u no complete torrents?!")
+		return errors.New("y u no complete torrents?!")
 	}
 	if flags.Seed {
 		if len(client.Torrents()) == 0 {

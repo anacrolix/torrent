@@ -54,6 +54,27 @@ type reader struct {
 
 var _ io.ReadSeekCloser = (*reader)(nil)
 
+var readerPool = sync.Pool {
+	New: func() interface{} { return &reader{} },
+}
+
+func newReader(t *Torrent,
+	offset, length, pos, readahead int64,
+	responsive bool,
+	readAheadFunc func() int64,
+) (r *reader) {
+	r = readerPool.Get().(*reader)
+	r.t = t
+	r.offset = offset
+	r.length = length
+	r.mu = t.cl.locker()
+	r.pos = pos
+	r.readahead = readahead
+	r.readaheadFunc = readAheadFunc
+	r.responsive = responsive
+	return
+}
+
 func (r *reader) SetResponsive() {
 	r.responsive = true
 	r.t.cl.event.Broadcast()

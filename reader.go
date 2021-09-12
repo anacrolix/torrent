@@ -36,13 +36,18 @@ type reader struct {
 	responsive bool
 	// Adjust the read/seek window to handle Readers locked to File extents and the like.
 	offset, length int64
-	// Ensure operations that change the position are exclusive, like Read() and Seek().
-	opMu sync.Mutex
 
 	// Required when modifying pos and readahead, or reading them without opMu.
-	mu        sync.Locker
-	pos       int64
+	mu  sync.Locker
+	pos int64
+	// Reads have been initiated since the last seek. This is used to prevent readahead occuring
+	// after a seek or with a new reader at the starting position.
+	reading   bool
 	readahead int64
+	// Function to dynamically calculate readahead. If nil, readahead is static.
+	readaheadFunc func() int64
+	// Position that reads have continued contiguously from.
+	contiguousReadStartPos int64
 	// The cached piece range this reader wants downloaded. The zero value corresponds to nothing.
 	// We cache this so that changes can be detected, and bubbled up to the Torrent only as
 	// required.
@@ -64,10 +69,9 @@ func (r *reader) SetNonResponsive() {
 
 func (r *reader) SetReadahead(readahead int64) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.readahead = readahead
-	r.mu.Unlock()
-	r.t.cl.lock()
-	defer r.t.cl.unlock()
+	r.readaheadFunc = nil
 	r.posChanged()
 }
 
@@ -100,10 +104,16 @@ func (r *reader) available(off, max int64) (ret int64) {
 // Calculates the pieces this reader wants downloaded, ignoring the cached value at r.pieces.
 func (r *reader) piecesUncached() (ret pieceRange) {
 	ra := r.readahead
+	if r.readaheadFunc != nil {
+		ra = r.readaheadFunc()
+	}
 	if ra < 1 {
 		// Needs to be at least 1, because [x, x) means we don't want
 		// anything.
 		ra = 1
+	}
+	if !r.reading {
+		ra = 0
 	}
 	if ra > r.length-r.pos {
 		ra = r.length - r.pos
@@ -117,10 +127,14 @@ func (r *reader) Read(b []byte) (n int, err error) {
 }
 
 func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
-	// Hmmm, if a Read gets stuck, this means you can't change position for other purposes. That
-	// seems reasonable, but unusual.
-	r.opMu.Lock()
-	defer r.opMu.Unlock()
+	if len(b) > 0 {
+		r.reading = true
+		// TODO: Rework reader piece priorities so we don't have to push updates in to the Client
+		// and take the lock here.
+		r.mu.Lock()
+		r.posChanged()
+		r.mu.Unlock()
+	}
 	n, err = r.readOnceAt(ctx, b, r.pos)
 	if n == 0 {
 		if err == nil && len(b) > 0 {
@@ -249,31 +263,35 @@ func (r *reader) posChanged() {
 	r.t.readerPosChanged(from, to)
 }
 
-func (r *reader) Seek(off int64, whence int) (ret int64, err error) {
+func (r *reader) Seek(off int64, whence int) (newPos int64, err error) {
 	switch whence {
 	case io.SeekStart:
-		r.opMu.Lock()
+		newPos = off
 		r.mu.Lock()
-		r.pos = off
 	case io.SeekCurrent:
-		r.opMu.Lock()
 		r.mu.Lock()
-		r.pos += off
+		newPos = r.pos + off
 	case io.SeekEnd:
-		r.opMu.Lock()
+		newPos = r.length + off
 		r.mu.Lock()
-		r.pos = r.length + off
 	default:
 		return 0, errors.New("bad whence")
 	}
-	r.posChanged()
-	ret = r.pos
-
+	if newPos != r.pos {
+		r.reading = false
+		r.pos = newPos
+		r.contiguousReadStartPos = newPos
+		r.posChanged()
+	}
 	r.mu.Unlock()
-	r.opMu.Unlock()
 	return
 }
 
 func (r *reader) log(m log.Msg) {
 	r.t.logger.Log(m.Skip(1))
+}
+
+// Implementation inspired by https://news.ycombinator.com/item?id=27019613.
+func (r *reader) defaultReadaheadFunc() int64 {
+	return r.pos - r.contiguousReadStartPos
 }

@@ -36,11 +36,12 @@ func processReader(r io.Reader) error {
 		fmt.Printf("%s\n", info.Name)
 		return nil
 	}
+	hibs := metainfo.HashInfoBytes()
 	d := map[string]interface{}{
 		"Name":         info.Name,
 		"NumPieces":    info.NumPieces(),
 		"PieceLength":  info.PieceLength,
-		"InfoHash":     metainfo.HashInfoBytes().HexString(),
+		"InfoHash":     hibs.HexString(),
 		"NumFiles":     len(info.UpvertedFiles()),
 		"TotalLength":  info.TotalLength(),
 		"Announce":     metainfo.Announce,

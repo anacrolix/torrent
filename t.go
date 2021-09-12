@@ -37,15 +37,9 @@ func (t *Torrent) NewReader() Reader {
 }
 
 func (t *Torrent) newReader(offset, length int64) Reader {
-	r := reader{
-		mu:     t.cl.locker(),
-		t:      t,
-		offset: offset,
-		length: length,
-	}
-	r.readaheadFunc = r.defaultReadaheadFunc
-	t.addReader(&r)
-	return &r
+	r := newReader(t, offset, length, 0, 0, false)
+	t.addReader(r)
+	return r
 }
 
 type PieceStateRuns []PieceStateRun

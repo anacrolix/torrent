@@ -65,10 +65,12 @@ type trackerAnnounceResult struct {
 	Completed time.Time
 }
 
-func (me *trackerScraper) getIp() (ip net.IP, err error) {
+func (me *TrackerScraper) getIp() (ip net.IP, err error) {
 	switch ips, er := net.LookupIP(me.u.Hostname()); {
-	case er != nil:     return nil, er
-	case len(ips) == 0: return nil, errors.New("no ips")
+	case er != nil:
+		return nil, er
+	case len(ips) == 0:
+		return nil, errors.New("no ips")
 	default:
 		switch ipIsBlocked := me.t.cl.ipIsBlocked; me.u.Scheme {
 		case "udp4", "udp6":

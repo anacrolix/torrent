@@ -58,6 +58,9 @@ var readerPool = sync.Pool {
 	New: func() interface{} { return &reader{} },
 }
 
+// Create a minimal *reader. *Torrent must be not nil and properly initialized.
+// Calling with a readahead value <= 0 creates a reader that uses (*reader).defaultReadaheadFunc
+// as its readaheadFunc member. A readahead value > 0 automatically sets readaheadFunc to nil.
 func newReader(t *Torrent,
 	offset, length, pos, readahead int64,
 	responsive bool,
@@ -68,7 +71,11 @@ func newReader(t *Torrent,
 	r.length = length
 	r.mu = t.cl.locker()
 	r.pos = pos
-	r.setReadaheadLocked(readahead, r.defaultReadaheadFunc)
+	if readahead <= 0 {
+		r.setReadaheadLocked(0, r.defaultReadaheadFunc)	
+	} else {
+		r.setReadaheadLocked(readahead, nil)	
+	}
 	r.responsive = responsive
 	return
 }
@@ -77,6 +84,7 @@ func (r *reader) setReadaheadLocked(readahead int64, readaheadFunc func() int64)
 	r.readahead = readahead
 	r.readaheadFunc = readaheadFunc
 }
+
 func (r *reader) SetResponsive() {
 	r.responsive = true
 	r.t.cl.event.Broadcast()
@@ -264,11 +272,17 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 	}
 }
 
+func (r *reader) free() {
+	r.t = nil
+	readerPool.Put(r)
+}
+
 // Hodor
 func (r *reader) Close() error {
 	r.t.cl.lock()
-	defer r.t.cl.unlock()
 	r.t.deleteReader(r)
+	r.t.cl.unlock()
+	r.free()
 	return nil
 }
 

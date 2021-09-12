@@ -66,32 +66,28 @@ type trackerAnnounceResult struct {
 }
 
 func (me *trackerScraper) getIp() (ip net.IP, err error) {
-	ips, err := net.LookupIP(me.u.Hostname())
-	if err != nil {
-		return
-	}
-	if len(ips) == 0 {
-		err = errors.New("no ips")
-		return
-	}
-	for _, ip = range ips {
-		if me.t.cl.ipIsBlocked(ip) {
-			continue
-		}
-		switch me.u.Scheme {
-		case "udp4":
-			if ip.To4() == nil {
-				continue
+	switch ips, er := net.LookupIP(me.u.Hostname()); {
+	case er != nil:     return nil, er
+	case len(ips) == 0: return nil, errors.New("no ips")
+	default:
+		switch ipIsBlocked := me.t.cl.ipIsBlocked; me.u.Scheme {
+		case "udp4", "udp6":
+			for i := 0; i < len(ips); i++ {
+				ip = ips[i]
+				if !ipIsBlocked(ip) && ip.To4() != nil {
+					return
+				}
 			}
-		case "udp6":
-			if ip.To4() != nil {
-				continue
+		default:
+			for i := 0; i < len(ips); i++ {
+				ip = ips[i]
+				if !ipIsBlocked(ip) {
+					return
+				}
 			}
 		}
-		return
+		return nil, errors.New("no acceptable ips")
 	}
-	err = errors.New("no acceptable ips")
-	return
 }
 
 func (me *trackerScraper) trackerUrl(ip net.IP) string {

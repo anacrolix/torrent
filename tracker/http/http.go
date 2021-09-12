@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/anacrolix/missinggo/httptoo"
 	"github.com/anacrolix/torrent/bencode"
@@ -61,7 +62,9 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts AnnounceOpt) {
 	}
 	doIp("ipv4", opts.ClientIp4)
 	doIp("ipv6", opts.ClientIp6)
-	_url.RawQuery = q.Encode()
+	// We're operating purely on query-escaped strings, where + would have already been encoded to
+	// %2B, and + has no other special meaning. See https://github.com/anacrolix/torrent/issues/534.
+	_url.RawQuery = strings.ReplaceAll(q.Encode(), "+", "%20")
 }
 
 type AnnounceOpt struct {

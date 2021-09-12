@@ -1,9 +1,12 @@
 package http
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/tracker/udp"
+	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,4 +50,25 @@ func TestUnmarshalHttpResponsePeers6NotCompact(t *testing.T) {
 		[]byte("d6:peers6lee"),
 		&hr,
 	))
+}
+
+// Checks that infohash bytes that correspond to spaces are escaped with %20 instead of +. See
+// https://github.com/anacrolix/torrent/issues/534
+func TestSetAnnounceInfohashParamWithSpaces(t *testing.T) {
+	someUrl := &url.URL{}
+	ihBytes := [20]uint8{
+		0x2b, 0x76, 0xa, 0xa1, 0x78, 0x93, 0x20, 0x30, 0xc8, 0x47,
+		0xdc, 0xdf, 0x8e, 0xae, 0xbf, 0x56, 0xa, 0x1b, 0xd1, 0x6c}
+	setAnnounceParams(
+		someUrl,
+		&udp.AnnounceRequest{
+			InfoHash: ihBytes,
+		},
+		AnnounceOpt{})
+	t.Logf("%q", someUrl)
+	qt.Assert(t, someUrl.Query().Get("info_hash"), qt.Equals, string(ihBytes[:]))
+	qt.Check(t,
+		someUrl.String(),
+		qt.Contains,
+		"info_hash=%2Bv%0A%A1x%93%200%C8G%DC%DF%8E%AE%BFV%0A%1B%D1l")
 }

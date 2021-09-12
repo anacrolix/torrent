@@ -69,10 +69,10 @@ func (r *reader) SetNonResponsive() {
 
 func (r *reader) SetReadahead(readahead int64) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.readahead = readahead
 	r.readaheadFunc = nil
 	r.posChanged()
+	r.mu.Unlock()
 }
 
 // How many bytes are available to read. Max is the most we could require.
@@ -247,8 +247,8 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 // Hodor
 func (r *reader) Close() error {
 	r.t.cl.lock()
-	defer r.t.cl.unlock()
 	r.t.deleteReader(r)
+	r.t.cl.unlock()
 	return nil
 }
 

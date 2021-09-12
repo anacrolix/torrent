@@ -61,7 +61,6 @@ var readerPool = sync.Pool {
 func newReader(t *Torrent,
 	offset, length, pos, readahead int64,
 	responsive bool,
-	readAheadFunc func() int64,
 ) (r *reader) {
 	r = readerPool.Get().(*reader)
 	r.t = t
@@ -69,12 +68,15 @@ func newReader(t *Torrent,
 	r.length = length
 	r.mu = t.cl.locker()
 	r.pos = pos
-	r.readahead = readahead
-	r.readaheadFunc = readAheadFunc
+	r.setReadaheadLocked(readahead, r.defaultReadaheadFunc)
 	r.responsive = responsive
 	return
 }
 
+func (r *reader) setReadaheadLocked(readahead int64, readaheadFunc func() int64) {
+	r.readahead = readahead
+	r.readaheadFunc = readaheadFunc
+}
 func (r *reader) SetResponsive() {
 	r.responsive = true
 	r.t.cl.event.Broadcast()
@@ -88,10 +90,9 @@ func (r *reader) SetNonResponsive() {
 
 func (r *reader) SetReadahead(readahead int64) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.readahead = readahead
-	r.readaheadFunc = nil
+	r.setReadaheadLocked(readahead, nil)
 	r.posChanged()
+	r.mu.Unlock()
 }
 
 // How many bytes are available to read. Max is the most we could require.

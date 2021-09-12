@@ -54,7 +54,7 @@ func TestFileOptsSafeFilePathHandling(t *testing.T) {
 				},
 			}
 			client := NewFileOpts(NewFileClientOpts{
-				ClientBaseDir: "somedir",
+				ClientBaseDir: t.TempDir(),
 			})
 			defer func() { c.Check(client.Close(), qt.IsNil) }()
 			torImpl, err := client.OpenTorrent(&info, metainfo.Hash{})

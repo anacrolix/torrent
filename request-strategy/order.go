@@ -3,6 +3,7 @@ package request_strategy
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/anacrolix/multiless"
 
@@ -199,12 +200,12 @@ func Run(input Input) map[PeerId]PeerNextRequestState {
 }
 
 // Checks that a sorted peersForPiece slice makes sense.
-func ensureValidSortedPeersForPieceRequests(peers []*peersForPieceRequests, sortLess func(_, _ int) bool) {
-	if !sort.SliceIsSorted(peers, sortLess) {
+func ensureValidSortedPeersForPieceRequests(peers peersForPieceSorter) {
+	if !sort.IsSorted(peers) {
 		panic("not sorted")
 	}
-	peerMap := make(map[*peersForPieceRequests]struct{}, len(peers))
-	for _, p := range peers {
+	peerMap := make(map[*peersForPieceRequests]struct{}, peers.Len())
+	for _, p := range peers.peersForPiece {
 		if _, ok := peerMap[p]; ok {
 			panic(p)
 		}
@@ -212,8 +213,80 @@ func ensureValidSortedPeersForPieceRequests(peers []*peersForPieceRequests, sort
 	}
 }
 
+var peersForPiecesPool sync.Pool
+
+func makePeersForPiece(cap int) []*peersForPieceRequests {
+	got := peersForPiecesPool.Get()
+	if got == nil {
+		return make([]*peersForPieceRequests, 0, cap)
+	}
+	return got.([]*peersForPieceRequests)[:0]
+}
+
+type peersForPieceSorter struct {
+	peersForPiece []*peersForPieceRequests
+	req           *Request
+	p             requestablePiece
+}
+
+func (me peersForPieceSorter) Len() int {
+	return len(me.peersForPiece)
+}
+
+func (me peersForPieceSorter) Swap(i, j int) {
+	me.peersForPiece[i], me.peersForPiece[j] = me.peersForPiece[j], me.peersForPiece[i]
+}
+
+func (me peersForPieceSorter) Less(_i, _j int) bool {
+	i := me.peersForPiece[_i]
+	j := me.peersForPiece[_j]
+	req := me.req
+	p := me.p
+	byHasRequest := func() multiless.Computation {
+		ml := multiless.New()
+		if req != nil {
+			_, iHas := i.nextState.Requests[*req]
+			_, jHas := j.nextState.Requests[*req]
+			ml = ml.Bool(jHas, iHas)
+		}
+		return ml
+	}()
+	ml := multiless.New()
+	// We always "reallocate", that is force even striping amongst peers that are either on
+	// the last piece they can contribute too, or for pieces marked for this behaviour.
+	// Striping prevents starving peers of requests, and will always re-balance to the
+	// fastest known peers.
+	if !p.alwaysReallocate {
+		ml = ml.Bool(
+			j.requestablePiecesRemaining == 1,
+			i.requestablePiecesRemaining == 1)
+	}
+	if p.alwaysReallocate || j.requestablePiecesRemaining == 1 {
+		ml = ml.Int(
+			i.requestsInPiece,
+			j.requestsInPiece)
+	} else {
+		ml = ml.AndThen(byHasRequest)
+	}
+	ml = ml.Int(
+		i.requestablePiecesRemaining,
+		j.requestablePiecesRemaining,
+	).Float64(
+		j.DownloadRate,
+		i.DownloadRate,
+	)
+	ml = ml.AndThen(byHasRequest)
+	return ml.Int64(
+		int64(j.Age), int64(i.Age),
+		// TODO: Probably peer priority can come next
+	).Uintptr(
+		i.Id.Uintptr(),
+		j.Id.Uintptr(),
+	).MustLess()
+}
+
 func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
-	peersForPiece := make([]*peersForPieceRequests, 0, len(peers))
+	peersForPiece := makePeersForPiece(len(peers))
 	for _, peer := range peers {
 		peersForPiece = append(peersForPiece, &peersForPieceRequests{
 			requestsInPiece: 0,
@@ -226,53 +299,16 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 				peer.requestablePiecesRemaining--
 			}
 		}
+		peersForPiecesPool.Put(peersForPiece)
 	}()
+	peersForPieceSorter := peersForPieceSorter{
+		peersForPiece: peersForPiece,
+		p:             p,
+	}
 	sortPeersForPiece := func(req *Request) {
-		less := func(i, j int) bool {
-			byHasRequest := func() multiless.Computation {
-				ml := multiless.New()
-				if req != nil {
-					_, iHas := peersForPiece[i].nextState.Requests[*req]
-					_, jHas := peersForPiece[j].nextState.Requests[*req]
-					ml = ml.Bool(jHas, iHas)
-				}
-				return ml
-			}()
-			ml := multiless.New()
-			// We always "reallocate", that is force even striping amongst peers that are either on
-			// the last piece they can contribute too, or for pieces marked for this behaviour.
-			// Striping prevents starving peers of requests, and will always re-balance to the
-			// fastest known peers.
-			if !p.alwaysReallocate {
-				ml = ml.Bool(
-					peersForPiece[j].requestablePiecesRemaining == 1,
-					peersForPiece[i].requestablePiecesRemaining == 1)
-			}
-			if p.alwaysReallocate || peersForPiece[j].requestablePiecesRemaining == 1 {
-				ml = ml.Int(
-					peersForPiece[i].requestsInPiece,
-					peersForPiece[j].requestsInPiece)
-			} else {
-				ml = ml.AndThen(byHasRequest)
-			}
-			ml = ml.Int(
-				peersForPiece[i].requestablePiecesRemaining,
-				peersForPiece[j].requestablePiecesRemaining,
-			).Float64(
-				peersForPiece[j].DownloadRate,
-				peersForPiece[i].DownloadRate,
-			)
-			ml = ml.AndThen(byHasRequest)
-			return ml.Int64(
-				int64(peersForPiece[j].Age), int64(peersForPiece[i].Age),
-				// TODO: Probably peer priority can come next
-			).Uintptr(
-				peersForPiece[i].Id.Uintptr(),
-				peersForPiece[j].Id.Uintptr(),
-			).MustLess()
-		}
-		sort.Slice(peersForPiece, less)
-		ensureValidSortedPeersForPieceRequests(peersForPiece, less)
+		peersForPieceSorter.req = req
+		sort.Sort(&peersForPieceSorter)
+		//ensureValidSortedPeersForPieceRequests(peersForPieceSorter)
 	}
 	// Chunks can be preassigned several times, if peers haven't been able to update their "actual"
 	// with "next" request state before another request strategy run occurs.

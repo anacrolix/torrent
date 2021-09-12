@@ -102,7 +102,6 @@ func (cl *Client) badPeerIPsLocked() (ips []string) {
 	return
 }
 
-
 func (cl *Client) PeerID() PeerID {
 	return cl.peerID
 }
@@ -420,18 +419,20 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 // Stops the client. All connections to peers are closed and all activity will
 // come to a halt.
 func (cl *Client) Close() {
-	var closeGroup sync.WaitGroup //WaitGroup for any concurrent cleanup to complete before returning.
-	defer closeGroup.Wait() //defer is LIFO. We want to Wait() after cl.unlock()
-	cl.lock()
-	defer cl.unlock()
 	cl.closed.Set()
+	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
+	cl.lock()
+	cl.event.Broadcast()
 	for _, t := range cl.torrents {
 		t.close(&closeGroup)
 	}
+	cl.unlock()
+	closeGroup.Wait() // defer is LIFO. We want to Wait() after cl.unlock()
+	cl.lock()
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}
-	cl.event.Broadcast()
+	cl.unlock()
 }
 
 func (cl *Client) ipBlockRange(ip net.IP) (r iplist.Range, blocked bool) {
@@ -1214,24 +1215,22 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 }
 
 func useTorrentSources(sources []string, t *Torrent) {
-	for _, s := range sources {
-		go func(s string) {
-			err := useTorrentSource(s, t)
-			if err != nil {
+	// TODO: bind context to the lifetime of *Torrent so that it's cancelled if the torrent closes
+	ctx := context.Background()
+	for i := 0; i < len(sources); i += 1 {
+		s := sources[i]
+		go func() {
+			if err := useTorrentSource(ctx, s, t); err != nil {
 				t.logger.WithDefaultLevel(log.Warning).Printf("using torrent source %q: %v", s, err)
 			} else {
 				t.logger.Printf("successfully used source %q", s)
 			}
-		}(s)
+		}()
 	}
 }
 
-func useTorrentSource(source string, t *Torrent) error {
-	req, err := http.NewRequest(http.MethodGet, source, nil)
-	if err != nil {
-		panic(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
+func useTorrentSource(ctx context.Context, source string, t *Torrent) (err error) {
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
 		select {
@@ -1241,30 +1240,33 @@ func useTorrentSource(source string, t *Torrent) error {
 		}
 		cancel()
 	}()
-	req = req.WithContext(ctx)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
+	var req *http.Request
+	if req, err = http.NewRequestWithContext(ctx, http.MethodGet, source, nil); err != nil {
+		panic(err)
 	}
-	mi, err := metainfo.Load(resp.Body)
+	var resp *http.Response
+	if resp, err = http.DefaultClient.Do(req); err != nil {
+		return
+	}
+	var mi metainfo.MetaInfo
+	err = bencode.NewDecoder(resp.Body).Decode(&mi)
+	resp.Body.Close()
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil
 		}
-		return err
+		return
 	}
-	return t.MergeSpec(TorrentSpecFromMetaInfo(mi))
+	return t.MergeSpec(TorrentSpecFromMetaInfo(&mi))
 }
 
-func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
+func (cl *Client) dropTorrent(infoHash metainfo.Hash, wg *sync.WaitGroup) (err error) {
 	t, ok := cl.torrents[infoHash]
 	if !ok {
 		err = fmt.Errorf("no such torrent")
 		return
 	}
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	err = t.close(&wg)
+	err = t.close(wg)
 	if err != nil {
 		panic(err)
 	}

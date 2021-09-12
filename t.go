@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/anacrolix/missinggo/pubsub"
+	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -32,12 +33,17 @@ func (t *Torrent) Info() *metainfo.Info {
 // Returns a Reader bound to the torrent's data. All read calls block until the data requested is
 // actually available. Note that you probably want to ensure the Torrent Info is available first.
 func (t *Torrent) NewReader() Reader {
+	return t.newReader(0, *t.length)
+}
+
+func (t *Torrent) newReader(offset, length int64) Reader {
 	r := reader{
-		mu:        t.cl.locker(),
-		t:         t,
-		readahead: 5 * 1024 * 1024,
-		length:    *t.length,
+		mu:     t.cl.locker(),
+		t:      t,
+		offset: offset,
+		length: length,
 	}
+	r.readaheadFunc = r.defaultReadaheadFunc
 	t.addReader(&r)
 	return &r
 }
@@ -90,9 +96,11 @@ func (t *Torrent) PieceBytesMissing(piece int) int64 {
 // this. No data corruption can, or should occur to either the torrent's data,
 // or connected peers.
 func (t *Torrent) Drop() {
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	t.cl.lock()
 	defer t.cl.unlock()
-	t.cl.dropTorrent(t.infoHash)
+	t.cl.dropTorrent(t.infoHash, &wg)
 }
 
 // Number of bytes of the entire torrent we have completed. This is the sum of

@@ -84,7 +84,10 @@ func (cl *Client) doRequests() {
 				},
 				DownloadRate: p.downloadRate(),
 				Age:          time.Since(p.completedHandshake),
-				Id:           (*peerId)(p),
+				Id: peerId{
+					Peer: p,
+					ptr:  uintptr(unsafe.Pointer(p)),
+				},
 			})
 		})
 		ts = append(ts, rst)
@@ -98,14 +101,17 @@ func (cl *Client) doRequests() {
 	}
 }
 
-type peerId Peer
+type peerId struct {
+	*Peer
+	ptr uintptr
+}
 
-func (p *peerId) Uintptr() uintptr {
-	return uintptr(unsafe.Pointer(p))
+func (p peerId) Uintptr() uintptr {
+	return p.ptr
 }
 
 func setPeerNextRequestState(_p request_strategy.PeerId, rp request_strategy.PeerNextRequestState) {
-	p := (*Peer)(_p.(*peerId))
+	p := _p.(peerId).Peer
 	p.nextRequestState = rp
 	p.onNextRequestStateChanged()
 }

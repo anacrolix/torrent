@@ -126,7 +126,7 @@ func Handshake(
 
 	copyExact := func(dst []byte, src []byte) {
 		if dstLen, srcLen := uint64(len(dst)), uint64(len(src)); dstLen != srcLen {
-			panic("dst len " + strconv.FormatUint(dstLen,10) + " != src len " + strconv.FormatUint(srcLen,10))
+			panic("dst len " + strconv.FormatUint(dstLen, 10) + " != src len " + strconv.FormatUint(srcLen, 10))
 		}
 		copy(dst, src)
 	}

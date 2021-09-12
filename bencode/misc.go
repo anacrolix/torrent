@@ -21,8 +21,10 @@ func bytesAsString(b []byte) string {
 	if len(b) == 0 {
 		return ""
 	}
-	return *(*string)(unsafe.Pointer(&reflect.StringHeader{
-		uintptr(unsafe.Pointer(&b[0])),
-		len(b),
-	}))
+	// See https://github.com/golang/go/issues/40701.
+	var s string
+	hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	hdr.Data = uintptr(unsafe.Pointer(&b[0]))
+	hdr.Len = len(b)
+	return s
 }

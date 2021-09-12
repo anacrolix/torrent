@@ -110,10 +110,11 @@ func (cl *Client) PeerID() PeerID {
 // numbers are the same, due to support for custom listeners. Returns zero if no port number is
 // found.
 func (cl *Client) LocalPort() (port int) {
-	cl.eachListener(func(l Listener) bool {
-		port = addrPortOrZero(l.Addr())
-		return port == 0
-	})
+	for i := 0; i < len(cl.listeners); i += 1 {
+		if port = addrPortOrZero(cl.listeners[i].Addr()); port != 0 {
+			return
+		}
+	}
 	return
 }
 
@@ -1435,12 +1436,14 @@ func (cl *Client) eachListener(f func(Listener) bool) {
 }
 
 func (cl *Client) findListener(f func(Listener) bool) (ret Listener) {
-	cl.eachListener(func(l Listener) bool {
-		ret = l
-		return !f(l)
-	})
-	return
+	for i := 0; i < len(cl.listeners); i += 1 {
+		if ret = cl.listeners[i]; f(ret) {
+			return
+		}
+	}
+	return nil
 }
+
 
 func (cl *Client) publicIp(peer net.IP) net.IP {
 	// TODO: Use BEP 10 to determine how peers are seeing us.
@@ -1477,11 +1480,11 @@ func (cl *Client) publicAddr(peer net.IP) IpPort {
 // ListenAddrs addresses currently being listened to.
 func (cl *Client) ListenAddrs() (ret []net.Addr) {
 	cl.lock()
-	defer cl.unlock()
-	cl.eachListener(func(l Listener) bool {
-		ret = append(ret, l.Addr())
-		return true
-	})
+	ret = make([]net.Addr, len(cl.listeners))
+	for i := 0; i < len(cl.listeners); i += 1 {
+		ret[i] = cl.listeners[i].Addr()
+	}
+	cl.unlock()
 	return
 }
 

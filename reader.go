@@ -14,9 +14,7 @@ import (
 // Accesses Torrent data via a Client. Reads block until the data is available. Seeks and readahead
 // also drive Client behaviour.
 type Reader interface {
-	io.Reader
-	io.Seeker
-	io.Closer
+	io.ReadSeekCloser
 	missinggo.ReadContexter
 	// Configure the number of bytes ahead of a read that should also be prioritized in preparation
 	// for further reads.
@@ -54,7 +52,7 @@ type reader struct {
 	pieces pieceRange
 }
 
-var _ io.ReadCloser = (*reader)(nil)
+var _ io.ReadSeekCloser = (*reader)(nil)
 
 func (r *reader) SetResponsive() {
 	r.responsive = true

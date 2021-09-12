@@ -101,33 +101,33 @@ type FilePieceState struct {
 }
 
 // Returns the state of pieces in this file.
-func (f *File) State() []FilePieceState {
+func (f *File) State() (ret []FilePieceState) {
 	f.t.cl.rLock()
-	defer f.t.cl.rUnlock()
-	if f.length == 0 {
-		return nil
-	}
-	pieceSize := int64(f.t.usualPieceSize())
-	startPieceIdx := pieceIndex(f.offset / pieceSize)
-	startPieceOffset := f.offset % pieceSize
-	if startPieceOffset + f.length <= pieceSize {
-		return []FilePieceState{{f.length, f.t.pieceState(startPieceIdx)}}
-	}
+	if f.length > 0 {
+		pieceSize := int64(f.t.usualPieceSize())
+		startPieceIdx := pieceIndex(f.offset / pieceSize)
+		startPieceOffset := f.offset % pieceSize
+		if startPieceOffset+f.length <= pieceSize {
+			ret = []FilePieceState{{f.length, f.t.pieceState(startPieceIdx)}}
+		} else {
+			endPieceIdx := pieceIndex((f.offset + f.length - 1) / pieceSize)
+			endPieceOffset := (f.offset + f.length - 1) % pieceSize
 
-	endPieceIdx := pieceIndex((f.offset+f.length-1) / pieceSize)
-	endPieceOffset := (f.offset+f.length-1) % pieceSize
-
-	if endPieceIdx-startPieceIdx+1 < 2 { // invariant check for BCE
-		panic("")
+			if endPieceIdx-startPieceIdx+1 < 2 { // invariant check for BCE
+				panic("")
+			}
+			ret = make([]FilePieceState, endPieceIdx-startPieceIdx+1)
+			ret[0] = FilePieceState{pieceSize - startPieceOffset, f.t.pieceState(startPieceIdx)}
+			for i := 1; i < len(ret)-1; i++ {
+				ret[i] = FilePieceState{pieceSize, f.t.pieceState(startPieceIdx + i)}
+			}
+			ret[len(ret)-1] = FilePieceState{endPieceOffset + 1, f.t.pieceState(endPieceIdx)}
+		}
 	}
-	ret := make([]FilePieceState, endPieceIdx-startPieceIdx+1)
-	ret[0] = FilePieceState{pieceSize - startPieceOffset, f.t.pieceState(startPieceIdx)}
-	for i := 1; i < len(ret)-1; i++ {
-		ret[i] = FilePieceState{pieceSize, f.t.pieceState(startPieceIdx+i)}
-	}
-	ret[len(ret)-1] = FilePieceState{endPieceOffset+1, f.t.pieceState(endPieceIdx)}
-	return ret
+	f.t.cl.rUnlock()
+	return
 }
+
 
 // Requests that all pieces containing data in the file be downloaded.
 func (f *File) Download() {

@@ -15,10 +15,11 @@ func (me *lockWithDeferreds) Lock() {
 }
 
 func (me *lockWithDeferreds) Unlock() {
-	for _, a := range me.unlockActions {
-		a()
+	unlockActions := me.unlockActions
+	for i := 0; i < len(unlockActions); i += 1 {
+		unlockActions[i]()
 	}
-	me.unlockActions = me.unlockActions[:0]
+	me.unlockActions = unlockActions[:0]
 	me.internal.Unlock()
 }
 

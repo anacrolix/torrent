@@ -54,11 +54,12 @@ func verifyTorrent(info *metainfo.Info, root string) error {
 		if err != nil {
 			return err
 		}
-		good := bytes.Equal(hash.Sum(nil), p.Hash().Bytes())
+		h := p.Hash()
+		good := bytes.Equal(hash.Sum(nil), h.Bytes())
 		if !good {
 			return fmt.Errorf("hash mismatch at piece %d", i)
 		}
-		fmt.Printf("%d: %v: %v\n", i, p.Hash(), good)
+		fmt.Printf("%d: %v: %v\n", i, h, good)
 	}
 	return nil
 }

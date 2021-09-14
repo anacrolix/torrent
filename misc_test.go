@@ -25,7 +25,7 @@ func TestTorrentOffsetRequest(t *testing.T) {
 
 func BenchmarkIterBitmapsDistinct(t *testing.B) {
 	t.ReportAllocs()
-	for range iter.N(t.N) {
+	for i := 0; i < t.N; i += 1 {
 		var skip, first, second bitmap.Bitmap
 		skip.Add(1)
 		first.Add(1, 0, 3)

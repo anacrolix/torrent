@@ -784,9 +784,9 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 func (cn *Peer) onPeerHasAllPieces() {
 	t := cn.t
 	if t.haveInfo() {
-		pp := cn.newPeerPieces()
-		for i := range iter.N(t.numPieces()) {
-			if !pp.Contains(bitmap.BitIndex(i)) {
+		npp, pc := cn.newPeerPieces(), t.numPieces()
+		for i := 0; i < pc; i += 1 {
+			if !npp.Contains(bitmap.BitIndex(i)) {
 				t.incPieceAvailability(i)
 			}
 		}

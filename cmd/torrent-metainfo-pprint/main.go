@@ -11,7 +11,6 @@ import (
 
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
-	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -55,7 +54,7 @@ func processReader(r io.Reader) error {
 	}
 	if flags.PieceHashes {
 		d["PieceHashes"] = func() (ret []string) {
-			for i := range iter.N(info.NumPieces()) {
+			for i, numPieces := 0, info.NumPieces(); i < numPieces; i += 1 {
 				ret = append(ret, hex.EncodeToString(info.Pieces[i*20:(i+1)*20]))
 			}
 			return

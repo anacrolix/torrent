@@ -21,7 +21,6 @@ import (
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
@@ -2237,7 +2236,7 @@ func (t *Torrent) addWebSeed(url string) {
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
 	}
 	ws.requesterCond.L = t.cl.locker()
-	for range iter.N(maxRequests) {
+	for i := 0; i < maxRequests; i += 1 {
 		go ws.requester()
 	}
 	for _, f := range t.callbacks().NewPeer {

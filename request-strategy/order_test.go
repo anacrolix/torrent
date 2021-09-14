@@ -4,7 +4,6 @@ import (
 	"math"
 	"testing"
 
-	"github.com/bradfitz/iter"
 	qt "github.com/frankban/quicktest"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -16,7 +15,7 @@ func r(i pieceIndex, begin int) Request {
 
 func chunkIterRange(end int) func(func(ChunkSpec)) {
 	return func(f func(ChunkSpec)) {
-		for offset := range iter.N(end) {
+		for offset := 0; offset < end; offset += 1 {
 			f(ChunkSpec{pp.Integer(offset), 1})
 		}
 	}

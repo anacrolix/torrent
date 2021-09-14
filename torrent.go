@@ -481,19 +481,19 @@ func (t *Torrent) haveAllMetadataPieces() bool {
 }
 
 // TODO: Propagate errors to disconnect peer.
-func (t *Torrent) setMetadataSize(bytes int) (err error) {
+func (t *Torrent) setMetadataSize(size int) (err error) {
 	if t.haveInfo() {
 		// We already know the correct metadata size.
 		return
 	}
-	if bytes <= 0 || bytes > 10000000 { // 10MB, pulled from my ass.
+	if uint32(size) > maxMetadataSize {
 		return errors.New("bad size")
 	}
-	if t.metadataBytes != nil && len(t.metadataBytes) == int(bytes) {
+	if len(t.metadataBytes) == size {
 		return
 	}
-	t.metadataBytes = make([]byte, bytes)
-	t.metadataCompletedChunks = make([]bool, (bytes+(1<<14)-1)/(1<<14))
+	t.metadataBytes = make([]byte, size)
+	t.metadataCompletedChunks = make([]bool, (size+(1<<14)-1)/(1<<14))
 	t.metadataChanged.Broadcast()
 	for c := range t.conns {
 		c.requestPendingMetadata()

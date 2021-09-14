@@ -14,6 +14,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/anacrolix/torrent/types"
 )
 
 // Ensure that no race exists between sending a bitfield, and a subsequent
@@ -106,7 +107,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		PieceLength: 1 << 20,
 	}))
 	t.setChunkSize(defaultChunkSize)
-	t._pendingPieces.Set(0, PiecePriorityNormal.BitmapPriority())
+	t._pendingPieces.Set(0, types.PiecePriorityNormal.BitmapPriority())
 	r, w := net.Pipe()
 	cn := cl.newConnection(r, true, r.RemoteAddr(), r.RemoteAddr().Network(), regularNetConnPeerConnConnString(r))
 	cn.setTorrent(t)
@@ -133,7 +134,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.
 			t.pieces[0]._dirtyChunks.Clear()
-			cn.validReceiveChunks = map[Request]int{newRequestFromMessage(&msg): 1}
+			cn.validReceiveChunks = map[types.Request]int{newRequestFromMessage(&msg): 1}
 			cl.unlock()
 			n, err := w.Write(wb)
 			require.NoError(b, err)

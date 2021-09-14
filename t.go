@@ -99,10 +99,10 @@ func (t *Torrent) PieceBytesMissing(piece int) int64 {
 // or connected peers.
 func (t *Torrent) Drop() {
 	var wg sync.WaitGroup
-	defer wg.Wait()
 	t.cl.lock()
-	defer t.cl.unlock()
 	t.cl.dropTorrent(t.infoHash, &wg)
+	t.cl.unlock()
+	wg.Wait()
 }
 
 // Number of bytes of the entire torrent we have completed. This is the sum of

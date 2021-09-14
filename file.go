@@ -145,7 +145,7 @@ func (f *File) NewReader() Reader {
 }
 
 // Sets the minimum priority for pieces in the File.
-func (f *File) SetPriority(prio piecePriority) {
+func (f *File) SetPriority(prio PiecePriority) {
 	f.t.cl.lock()
 	if prio != f.prio {
 		f.prio = prio
@@ -155,7 +155,7 @@ func (f *File) SetPriority(prio piecePriority) {
 }
 
 // Returns the priority per File.SetPriority.
-func (f *File) Priority() (prio piecePriority) {
+func (f *File) Priority() (prio PiecePriority) {
 	f.t.cl.lock()
 	prio = f.prio
 	f.t.cl.unlock()

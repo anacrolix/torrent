@@ -5,6 +5,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
 	"github.com/anacrolix/torrent/metainfo"
+	. "github.com/anacrolix/torrent/types"
 )
 
 // Provides access to regions of torrent data that correspond to its files.
@@ -15,7 +16,7 @@ type File struct {
 	length      int64
 	fi          metainfo.FileInfo
 	displayPath string
-	prio        piecePriority
+	prio        PiecePriority
 }
 
 func (f *File) Torrent() *Torrent {

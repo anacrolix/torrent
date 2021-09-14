@@ -10,6 +10,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	. "github.com/anacrolix/torrent/types"
 )
 
 type Piece struct {
@@ -30,7 +31,7 @@ type Piece struct {
 	storageCompletionOk bool
 
 	publicPieceState PieceState
-	priority         piecePriority
+	priority         PiecePriority
 	availability     int64
 
 	// This can be locked when the Client lock is taken, but probably not vice versa.
@@ -184,14 +185,14 @@ func (p *Piece) torrentEndOffset() int64 {
 	return p.torrentBeginOffset() + int64(p.length())
 }
 
-func (p *Piece) SetPriority(prio piecePriority) {
+func (p *Piece) SetPriority(prio PiecePriority) {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()
 	p.priority = prio
 	p.t.updatePiecePriority(p.index)
 }
 
-func (p *Piece) purePriority() (ret piecePriority) {
+func (p *Piece) purePriority() (ret PiecePriority) {
 	for _, f := range p.files {
 		ret.Raise(f.prio)
 	}
@@ -208,7 +209,7 @@ func (p *Piece) purePriority() (ret piecePriority) {
 	return
 }
 
-func (p *Piece) uncachedPriority() (ret piecePriority) {
+func (p *Piece) uncachedPriority() (ret PiecePriority) {
 	if p.t.pieceComplete(p.index) || p.t.pieceQueuedForHash(p.index) || p.t.hashingPiece(p.index) {
 		return PiecePriorityNone
 	}

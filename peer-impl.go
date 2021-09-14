@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/types"
 )
 
 // Contains implementation details that differ between peer types, like Webseeds and regular
@@ -14,8 +15,8 @@ type peerImpl interface {
 
 	// Neither of these return buffer room anymore, because they're currently both posted. There's
 	// also PeerConn.writeBufferFull for when/where it matters.
-	_cancel(Request) bool
-	_request(Request) bool
+	_cancel(types.Request) bool
+	_request(types.Request) bool
 
 	connectionFlags() string
 	onClose()

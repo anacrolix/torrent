@@ -41,7 +41,7 @@ func init() {
 
 func TestIPv4RangeLen(t *testing.T) {
 	ranges, _ := sampleRanges(t)
-	for i := range iter.N(3) {
+	for i := 0; i < 3; i += 1 {
 		if len(ranges[i].First) != 4 {
 			t.FailNow()
 		}

@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/bradfitz/iter"
-
 	"github.com/anacrolix/torrent/bencode"
 )
 
@@ -40,7 +38,7 @@ func BenchmarkMarshalThenUnmarshalKrpcMsg(tb *testing.B) {
 	}
 	tb.ReportAllocs()
 	tb.ResetTimer()
-	for range iter.N(tb.N) {
+	for i := 0; i < tb.N; i += 1 {
 		marshalAndUnmarshal(tb, orig)
 	}
 }

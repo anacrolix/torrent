@@ -11,7 +11,6 @@ import (
 
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/tagflag"
-	"github.com/bradfitz/iter"
 
 	"github.com/anacrolix/torrent/metainfo"
 )

@@ -30,6 +30,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/prioritybitmap"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
+	"github.com/anacrolix/torrent"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pion/datachannel"
 
@@ -40,7 +41,7 @@ import (
 	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
-	. "github.com/anacrolix/torrent/types"
+	"github.com/anacrolix/torrent/types"
 	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
 )
@@ -145,7 +146,7 @@ type Torrent struct {
 	connPieceInclinationPool sync.Pool
 
 	// Count of each request across active connections.
-	pendingRequests map[Request]int
+	pendingRequests map[types.Request]int
 
 	pex pexState
 }
@@ -442,7 +443,7 @@ func (t *Torrent) onSetInfo() {
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
-	t.pendingRequests = make(map[Request]int)
+	t.pendingRequests = make(map[types.Request]int)
 	t.tryCreateMorePieceHashers()
 }
 
@@ -586,15 +587,15 @@ func (psr PieceStateRun) String() (ret string) {
 	ret = fmt.Sprintf("%d", psr.Length)
 	ret += func() string {
 		switch psr.Priority {
-		case PiecePriorityNext:
+		case types.PiecePriorityNext:
 			return "N"
-		case PiecePriorityNormal:
+		case types.PiecePriorityNormal:
 			return "."
-		case PiecePriorityReadahead:
+		case types.PiecePriorityReadahead:
 			return "R"
-		case PiecePriorityNow:
+		case types.PiecePriorityNow:
 			return "!"
-		case PiecePriorityHigh:
+		case types.PiecePriorityHigh:
 			return "H"
 		default:
 			return ""
@@ -816,13 +817,13 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	return
 }
 
-func (t *Torrent) requestOffset(r Request) int64 {
+func (t *Torrent) requestOffset(r types.Request) int64 {
 	return torrentRequestOffset(*t.length, int64(t.usualPieceSize()), r)
 }
 
 // Return the request that would include the given offset into the torrent data. Returns !ok if
 // there is no such request.
-func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
+func (t *Torrent) offsetRequest(off int64) (req types.Request, ok bool) {
 	return torrentOffsetRequest(*t.length, t.info.PieceLength, int64(t.chunkSize), off)
 }
 
@@ -909,7 +910,7 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 }
 
 func (t *Torrent) maybeDropMutuallyCompletePeer(
-	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's okay?
+// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's okay?
 	p *Peer,
 ) {
 	if !t.cl.config.DropMutuallyCompletePeers {
@@ -928,7 +929,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	p.drop()
 }
 
-func (t *Torrent) haveChunk(r Request) (ret bool) {
+func (t *Torrent) haveChunk(r types.Request) (ret bool) {
 	// defer func() {
 	// 	log.Println("have chunk", r, ret)
 	// }()
@@ -942,7 +943,7 @@ func (t *Torrent) haveChunk(r Request) (ret bool) {
 	return !p.pendingChunk(r.ChunkSpec, t.chunkSize)
 }
 
-func chunkIndex(cs ChunkSpec, chunkSize pp.Integer) int {
+func chunkIndex(cs types.ChunkSpec, chunkSize pp.Integer) int {
 	return int(cs.Begin / chunkSize)
 }
 
@@ -1097,7 +1098,7 @@ func (t *Torrent) updatePiecePriority(piece pieceIndex) {
 	p := &t.pieces[piece]
 	newPrio := p.uncachedPriority()
 	// t.logger.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
-	if newPrio == PiecePriorityNone {
+	if newPrio == types.PiecePriorityNone {
 		if !t._pendingPieces.Remove(int(piece)) {
 			return
 		}
@@ -1157,22 +1158,22 @@ func (t *Torrent) forReaderOffsetPieces(f func(begin, end pieceIndex) (more bool
 	return true
 }
 
-func (t *Torrent) piecePriority(piece pieceIndex) PiecePriority {
+func (t *Torrent) piecePriority(piece pieceIndex) types.PiecePriority {
 	prio, ok := t._pendingPieces.GetPriority(piece)
 	if !ok {
-		return PiecePriorityNone
+		return types.PiecePriorityNone
 	}
 	if prio > 0 {
 		panic(prio)
 	}
-	ret := PiecePriority(-prio)
-	if ret == PiecePriorityNone {
+	ret := types.PiecePriority(-prio)
+	if ret == types.PiecePriorityNone {
 		panic(piece)
 	}
 	return ret
 }
 
-func (t *Torrent) pendRequest(req Request) {
+func (t *Torrent) pendRequest(req types.Request) {
 	ci := chunkIndex(req.ChunkSpec, t.chunkSize)
 	t.pieces[req.Index].pendChunkIndex(ci)
 }
@@ -2235,7 +2236,7 @@ func (t *Torrent) addWebSeed(url string) {
 			HttpClient: WebseedHttpClient,
 			Url:        url,
 		},
-		activeRequests: make(map[Request]webseed.Request, maxRequests),
+		activeRequests: make(map[types.Request]webseed.Request, maxRequests),
 	}
 	ws.requesterCond.L = t.cl.locker()
 	for range iter.N(maxRequests) {

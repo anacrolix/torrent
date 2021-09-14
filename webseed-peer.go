@@ -13,11 +13,12 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/webseed"
+	"github.com/anacrolix/torrent/types"
 )
 
 type webseedPeer struct {
 	client         webseed.Client
-	activeRequests map[Request]webseed.Request
+	activeRequests map[types.Request]webseed.Request
 	requesterCond  sync.Cond
 	peer           Peer
 }
@@ -45,7 +46,7 @@ func (ws *webseedPeer) writeInterested(interested bool) bool {
 	return true
 }
 
-func (ws *webseedPeer) _cancel(r Request) bool {
+func (ws *webseedPeer) _cancel(r types.Request) bool {
 	active, ok := ws.activeRequests[r]
 	if ok {
 		active.Cancel()
@@ -53,16 +54,16 @@ func (ws *webseedPeer) _cancel(r Request) bool {
 	return true
 }
 
-func (ws *webseedPeer) intoSpec(r Request) webseed.RequestSpec {
+func (ws *webseedPeer) intoSpec(r types.Request) webseed.RequestSpec {
 	return webseed.RequestSpec{ws.peer.t.requestOffset(r), int64(r.Length)}
 }
 
-func (ws *webseedPeer) _request(r Request) bool {
+func (ws *webseedPeer) _request(r types.Request) bool {
 	ws.requesterCond.Signal()
 	return true
 }
 
-func (ws *webseedPeer) doRequest(r Request) {
+func (ws *webseedPeer) doRequest(r types.Request) {
 	webseedRequest := ws.client.NewRequest(ws.intoSpec(r))
 	ws.activeRequests[r] = webseedRequest
 	func() {
@@ -108,7 +109,7 @@ func (ws *webseedPeer) onClose() {
 	ws.requesterCond.Broadcast()
 }
 
-func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Request) {
+func (ws *webseedPeer) requestResultHandler(r types.Request, webseedRequest webseed.Request) {
 	result := <-webseedRequest.Result
 	// We do this here rather than inside receiveChunk, since we want to count errors too. I'm not
 	// sure if we can divine which errors indicate cancellation on our end without hitting the

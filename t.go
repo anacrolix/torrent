@@ -202,10 +202,10 @@ func (t *Torrent) CancelPieces(begin, end pieceIndex) {
 func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex) {
 	for i := begin; i < end; i++ {
 		p := &t.pieces[i]
-		if p.priority == PiecePriorityNone {
+		if p.priority == types.PiecePriorityNone {
 			continue
 		}
-		p.priority = PiecePriorityNone
+		p.priority = types.PiecePriorityNone
 		t.updatePiecePriority(i)
 	}
 }

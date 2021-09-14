@@ -111,12 +111,8 @@ func connLessTrusted(l, r *Peer) bool {
 	return l.trust().Less(r.trust())
 }
 
-func connIsIpv6(nc interface {
-	LocalAddr() net.Addr
-}) bool {
-	ra := nc.LocalAddr()
-	rip := addrIpOrNil(ra)
-	return rip.To4() == nil && rip.To16() != nil
+func connIsIpv6(localAddr net.Addr) bool {
+	return strings.Count(localAddr.String(), ":") >= 2
 }
 
 func clamp(min, value, max int64) int64 {

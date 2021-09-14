@@ -10,7 +10,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
-	. "github.com/anacrolix/torrent/types"
+	"github.com/anacrolix/torrent/types"
 )
 
 type Piece struct {
@@ -31,7 +31,7 @@ type Piece struct {
 	storageCompletionOk bool
 
 	publicPieceState PieceState
-	priority         PiecePriority
+	priority         types.PiecePriority
 	availability     int64
 
 	// This can be locked when the Client lock is taken, but probably not vice versa.
@@ -60,7 +60,7 @@ func (p *Piece) pendingChunkIndex(chunkIndex int) bool {
 	return !p._dirtyChunks.Contains(bitmap.BitIndex(chunkIndex))
 }
 
-func (p *Piece) pendingChunk(cs ChunkSpec, chunkSize pp.Integer) bool {
+func (p *Piece) pendingChunk(cs types.ChunkSpec, chunkSize pp.Integer) bool {
 	return p.pendingChunkIndex(chunkIndex(cs, chunkSize))
 }
 
@@ -115,7 +115,7 @@ func (p *Piece) chunkIndexDirty(chunk pp.Integer) bool {
 	return p._dirtyChunks.Contains(bitmap.BitIndex(chunk))
 }
 
-func (p *Piece) chunkIndexSpec(chunk pp.Integer) ChunkSpec {
+func (p *Piece) chunkIndexSpec(chunk pp.Integer) types.ChunkSpec {
 	return chunkIndexSpec(chunk, p.length(), p.chunkSize())
 }
 
@@ -185,33 +185,33 @@ func (p *Piece) torrentEndOffset() int64 {
 	return p.torrentBeginOffset() + int64(p.length())
 }
 
-func (p *Piece) SetPriority(prio PiecePriority) {
+func (p *Piece) SetPriority(prio types.PiecePriority) {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()
 	p.priority = prio
 	p.t.updatePiecePriority(p.index)
 }
 
-func (p *Piece) purePriority() (ret PiecePriority) {
+func (p *Piece) purePriority() (ret types.PiecePriority) {
 	for _, f := range p.files {
 		ret.Raise(f.prio)
 	}
 	if p.t.readerNowPieces().Contains(bitmap.BitIndex(p.index)) {
-		ret.Raise(PiecePriorityNow)
+		ret.Raise(types.PiecePriorityNow)
 	}
 	// if t._readerNowPieces.Contains(piece - 1) {
 	// 	return PiecePriorityNext
 	// }
 	if p.t.readerReadaheadPieces().Contains(bitmap.BitIndex(p.index)) {
-		ret.Raise(PiecePriorityReadahead)
+		ret.Raise(types.PiecePriorityReadahead)
 	}
 	ret.Raise(p.priority)
 	return
 }
 
-func (p *Piece) uncachedPriority() (ret PiecePriority) {
+func (p *Piece) uncachedPriority() (ret types.PiecePriority) {
 	if p.t.pieceComplete(p.index) || p.t.pieceQueuedForHash(p.index) || p.t.hashingPiece(p.index) {
-		return PiecePriorityNone
+		return types.PiecePriorityNone
 	}
 	return p.purePriority()
 }
@@ -238,7 +238,7 @@ func (p *Piece) State() PieceState {
 	return p.t.PieceState(p.index)
 }
 
-func (p *Piece) iterUndirtiedChunks(f func(cs ChunkSpec) bool) bool {
+func (p *Piece) iterUndirtiedChunks(f func(cs types.ChunkSpec) bool) bool {
 	for i := pp.Integer(0); i < p.numChunks(); i++ {
 		if p.chunkIndexDirty(i) {
 			continue

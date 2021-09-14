@@ -8,6 +8,7 @@ import (
 	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/types"
 )
 
 // The Torrent's infohash. This is fixed and cannot change. It uniquely identifies a torrent.
@@ -186,7 +187,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 func (t *Torrent) downloadPiecesLocked(begin, end pieceIndex) {
 	for i := begin; i < end; i++ {
-		if t.pieces[i].priority.Raise(PiecePriorityNormal) {
+		if t.pieces[i].priority.Raise(types.PiecePriorityNormal) {
 			t.updatePiecePriority(i)
 		}
 	}

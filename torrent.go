@@ -21,7 +21,6 @@ import (
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"

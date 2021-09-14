@@ -10,21 +10,7 @@ import (
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-)
-
-type (
-	Request       = types.Request
-	ChunkSpec     = types.ChunkSpec
-	piecePriority = types.PiecePriority
-)
-
-const (
-	PiecePriorityNormal    = types.PiecePriorityNormal
-	PiecePriorityNone      = types.PiecePriorityNone
-	PiecePriorityNow       = types.PiecePriorityNow
-	PiecePriorityReadahead = types.PiecePriorityReadahead
-	PiecePriorityNext      = types.PiecePriorityNext
-	PiecePriorityHigh      = types.PiecePriorityHigh
+	.  "github.com/anacrolix/torrent/types"
 )
 
 func newRequest(index, begin, length pp.Integer) Request {

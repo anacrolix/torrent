@@ -231,7 +231,7 @@ func (t *Torrent) initFiles() {
 			fi.Length,
 			fi,
 			dp,
-			PiecePriorityNone,
+			types.PiecePriorityNone,
 		})
 		offset += fi.Length
 	}

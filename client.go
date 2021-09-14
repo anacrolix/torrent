@@ -191,32 +191,35 @@ func (cl *Client) announceKey() int32 {
 	return int32(binary.BigEndian.Uint32(cl.peerID[16:20]))
 }
 
+// Initializes a bare minimum Client. *Client and *ClientConfig must not be nil.
+func (cl *Client) init(cfg *ClientConfig) {
+	cl.config = cfg
+	cl.dopplegangerAddrs = make(map[string]struct{})
+	cl.torrents = make(map[metainfo.Hash]*Torrent)
+	cl.dialRateLimiter = rate.NewLimiter(10, 10)
+	cl.activeAnnounceLimiter.SlotsPerKey = 2
+	
+	cl.event.L = cl.locker()
+	cl.ipBlockList = cfg.IPBlocklist
+}
+
 func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	if cfg == nil {
 		cfg = NewDefaultClientConfig()
 		cfg.ListenPort = 0
 	}
-	defer func() {
-		if err != nil {
-			cl = nil
-		}
-	}()
-	cl = &Client{
-		config:            cfg,
-		dopplegangerAddrs: make(map[string]struct{}),
-		torrents:          make(map[metainfo.Hash]*Torrent),
-		dialRateLimiter:   rate.NewLimiter(10, 10),
-	}
-	cl.activeAnnounceLimiter.SlotsPerKey = 2
+	var client Client
+	client.init(cfg)
+	cl = &client
 	go cl.acceptLimitClearer()
 	cl.initLogger()
 	defer func() {
-		if err == nil {
-			return
+		if err != nil {
+			cl.Close()
+			cl = nil
 		}
-		cl.Close()
 	}()
-	cl.event.L = cl.locker()
+	
 	storageImpl := cfg.DefaultStorage
 	if storageImpl == nil {
 		// We'd use mmap by default but HFS+ doesn't support sparse files.
@@ -229,9 +232,6 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		storageImpl = storageImplCloser
 	}
 	cl.defaultStorage = storage.NewClient(storageImpl)
-	if cfg.IPBlocklist != nil {
-		cl.ipBlockList = cfg.IPBlocklist
-	}
 
 	if cfg.PeerID != "" {
 		missinggo.CopyExact(&cl.peerID, cfg.PeerID)

@@ -12,9 +12,8 @@ import (
 )
 
 func TestPexConnState(t *testing.T) {
-	cl := Client{
-		config: TestingConfig(t),
-	}
+	var cl Client
+	cl.init(TestingConfig(t))
 	cl.initLogger()
 	torrent := cl.newTorrent(metainfo.Hash{}, nil)
 	addr := &net.TCPAddr{IP: net.IPv6loopback, Port: 4747}
@@ -23,7 +22,9 @@ func TestPexConnState(t *testing.T) {
 	c.PeerExtensionIDs[pp.ExtensionNamePex] = pexExtendedId
 	c.messageWriter.mu.Lock()
 	c.setTorrent(torrent)
-	torrent.addPeerConn(c)
+	if err := torrent.addPeerConn(c); err != nil {
+		t.Log(err)
+	}
 
 	c.pex.Init(c)
 	require.True(t, c.pex.IsEnabled(), "should get enabled")

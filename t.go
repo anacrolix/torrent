@@ -243,11 +243,11 @@ func (t *Torrent) Files() []*File {
 	return *t.files
 }
 
-func (t *Torrent) AddPeers(pp []PeerInfo) int {
-	cl := t.cl
-	cl.lock()
-	defer cl.unlock()
-	return t.addPeers(pp)
+func (t *Torrent) AddPeers(pp []PeerInfo) (n int) {
+	t.cl.lock()
+	n = t.addPeers(pp)
+	t.cl.unlock()
+	return
 }
 
 // Marks the entire torrent for download. Requires the info first, see

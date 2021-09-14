@@ -5,7 +5,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
 	"github.com/anacrolix/torrent/metainfo"
-	. "github.com/anacrolix/torrent/types"
+	"github.com/anacrolix/torrent/types"
 )
 
 // Provides access to regions of torrent data that correspond to its files.
@@ -16,7 +16,7 @@ type File struct {
 	length      int64
 	fi          metainfo.FileInfo
 	displayPath string
-	prio        PiecePriority
+	prio        types.PiecePriority
 }
 
 func (f *File) Torrent() *Torrent {
@@ -126,7 +126,7 @@ func (f *File) State() (ret []FilePieceState) {
 
 // Requests that all pieces containing data in the file be downloaded.
 func (f *File) Download() {
-	f.SetPriority(PiecePriorityNormal)
+	f.SetPriority(types.PiecePriorityNormal)
 }
 
 func byteRegionExclusivePieces(off, size, pieceSize int64) (begin, end int) {
@@ -137,7 +137,7 @@ func byteRegionExclusivePieces(off, size, pieceSize int64) (begin, end int) {
 
 // Deprecated: Use File.SetPriority.
 func (f *File) Cancel() {
-	f.SetPriority(PiecePriorityNone)
+	f.SetPriority(types.PiecePriorityNone)
 }
 
 func (f *File) NewReader() Reader {
@@ -145,7 +145,7 @@ func (f *File) NewReader() Reader {
 }
 
 // Sets the minimum priority for pieces in the File.
-func (f *File) SetPriority(prio PiecePriority) {
+func (f *File) SetPriority(prio types.PiecePriority) {
 	f.t.cl.lock()
 	if prio != f.prio {
 		f.prio = prio
@@ -155,7 +155,7 @@ func (f *File) SetPriority(prio PiecePriority) {
 }
 
 // Returns the priority per File.SetPriority.
-func (f *File) Priority() (prio PiecePriority) {
+func (f *File) Priority() (prio types.PiecePriority) {
 	f.t.cl.lock()
 	prio = f.prio
 	f.t.cl.unlock()

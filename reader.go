@@ -48,6 +48,9 @@ type reader struct {
 	// required.
 	pieces pieceRange
 
+	// Internal identifier used to index a []*reader
+	idx uint32
+	
 	// Reads have been initiated since the last seek. This is used to prevent readaheads occurring
 	// after a seek or with a new reader at the starting position.
 	reading    bool

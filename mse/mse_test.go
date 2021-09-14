@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	_ "github.com/anacrolix/envpprof"
-	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -114,7 +113,7 @@ func TestHandshakeSelectPlaintext(t *testing.T) {
 }
 
 func BenchmarkHandshakeDefault(b *testing.B) {
-	for range iter.N(b.N) {
+	for i := 0; i < b.N; i += 1 {
 		allHandshakeTests(b, AllSupportedCrypto, DefaultCryptoSelector)
 	}
 }
@@ -171,7 +170,7 @@ func benchmarkStream(t *testing.B, crypto CryptoMethod) {
 	t.StopTimer()
 	t.SetBytes(int64(len(ia) + len(a) + len(b)))
 	t.ResetTimer()
-	for range iter.N(t.N) {
+	for i := 0; i < t.N; i += 1 {
 		ac, bc := net.Pipe()
 		ar := make([]byte, len(b))
 		br := make([]byte, len(ia)+len(a))
@@ -239,7 +238,7 @@ func BenchmarkPipeRC4(t *testing.B) {
 	b := make([]byte, len(a))
 	t.SetBytes(int64(len(a)))
 	t.ResetTimer()
-	for range iter.N(t.N) {
+	for i := 0; i < t.N; i += 1 {
 		n, _ = w.Write(a)
 		if n != len(a) {
 			t.FailNow()
@@ -256,7 +255,7 @@ func BenchmarkPipeRC4(t *testing.B) {
 
 func BenchmarkSkeysReceive(b *testing.B) {
 	var skeys [][]byte
-	for range iter.N(100000) {
+	for i := 0; i < 100000; i += 1 {
 		skeys = append(skeys, make([]byte, 20))
 	}
 	fillRand(b, skeys...)
@@ -264,7 +263,7 @@ func BenchmarkSkeysReceive(b *testing.B) {
 	//c := qt.New(b)
 	b.ReportAllocs()
 	b.ResetTimer()
-	for range iter.N(b.N) {
+	for i := 0; i < b.N; i += 1 {
 		initiator, receiver := net.Pipe()
 		go func() {
 			_, _, err := InitiateHandshake(initiator, initSkey, nil, AllSupportedCrypto)

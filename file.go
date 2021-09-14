@@ -44,13 +44,14 @@ func (f *File) Length() int64 {
 
 // Number of bytes of the entire file we have completed. This is the sum of
 // completed pieces, and dirtied chunks of incomplete pieces.
-func (f *File) BytesCompleted() int64 {
+func (f *File) BytesCompleted() (n int64) {
 	f.t.cl.rLock()
-	defer f.t.cl.rUnlock()
-	return f.bytesCompleted()
+	n = f.bytesCompletedLocked()
+	f.t.cl.rUnlock()
+	return
 }
 
-func (f *File) bytesCompleted() int64 {
+func (f *File) bytesCompletedLocked() int64 {
 	return f.length - f.bytesLeft()
 }
 
@@ -146,19 +147,19 @@ func (f *File) NewReader() Reader {
 // Sets the minimum priority for pieces in the File.
 func (f *File) SetPriority(prio piecePriority) {
 	f.t.cl.lock()
-	defer f.t.cl.unlock()
-	if prio == f.prio {
-		return
+	if prio != f.prio {
+		f.prio = prio
+		f.t.updatePiecePriorities(f.firstPieceIndex(), f.endPieceIndex())
 	}
-	f.prio = prio
-	f.t.updatePiecePriorities(f.firstPieceIndex(), f.endPieceIndex())
+	f.t.cl.unlock()
 }
 
 // Returns the priority per File.SetPriority.
-func (f *File) Priority() piecePriority {
+func (f *File) Priority() (prio piecePriority) {
 	f.t.cl.lock()
-	defer f.t.cl.unlock()
-	return f.prio
+	prio = f.prio
+	f.t.cl.unlock()
+	return
 }
 
 // Returns the index of the first piece containing data for the file.

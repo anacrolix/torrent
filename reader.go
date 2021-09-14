@@ -30,26 +30,29 @@ type pieceRange struct {
 }
 
 type reader struct {
-	t          *Torrent
-	responsive bool
+	t   *Torrent
 	// Adjust the read/seek window to handle Readers locked to File extents and the like.
 	offset, length int64
-
-	// Required when modifying pos and readahead, or reading them without opMu.
-	mu  sync.Locker
-	pos int64
-	// Reads have been initiated since the last seek. This is used to prevent readahead occuring
-	// after a seek or with a new reader at the starting position.
-	reading   bool
-	readahead int64
+	
 	// Function to dynamically calculate readahead. If nil, readahead is static.
 	readaheadFunc func() int64
+	
+	// Required when modifying pos and readahead.
+	mu  sync.Locker
+
+	readahead, pos int64
 	// Position that reads have continued contiguously from.
 	contiguousReadStartPos int64
 	// The cached piece range this reader wants downloaded. The zero value corresponds to nothing.
 	// We cache this so that changes can be detected, and bubbled up to the Torrent only as
 	// required.
 	pieces pieceRange
+
+	// Reads have been initiated since the last seek. This is used to prevent readaheads occurring
+	// after a seek or with a new reader at the starting position.
+	reading    bool
+	responsive bool
+
 }
 
 var _ io.ReadSeekCloser = (*reader)(nil)
@@ -98,7 +101,8 @@ func (r *reader) SetNonResponsive() {
 
 func (r *reader) SetReadahead(readahead int64) {
 	r.mu.Lock()
-	r.setReadaheadLocked(readahead, nil)
+	r.readahead = readahead
+	r.readaheadFunc = nil
 	r.posChanged()
 	r.mu.Unlock()
 }
@@ -298,31 +302,26 @@ func (r *reader) posChanged() {
 }
 
 func (r *reader) Seek(off int64, whence int) (newPos int64, err error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	newPos, err = func() (int64, error) {
-		switch whence {
-		case io.SeekStart:
-			return off, err
-		case io.SeekCurrent:
-			return r.pos + off, nil
-		case io.SeekEnd:
-			return r.length + off, nil
-		default:
-			return r.pos, errors.New("bad whence")
-		}
-	}()
-	if err != nil {
-		return
+	switch whence {
+	case io.SeekStart:
+		newPos = off
+		r.mu.Lock()
+	case io.SeekCurrent:
+		r.mu.Lock()
+		newPos = r.pos + off
+	case io.SeekEnd:
+		newPos = r.length + off
+		r.mu.Lock()
+	default:
+		return 0, errors.New("bad whence")
 	}
-	if newPos == r.pos {
-		return
+	if newPos != r.pos {
+		r.reading = false
+		r.pos = newPos
+		r.contiguousReadStartPos = newPos
+		r.posChanged()
 	}
-	r.reading = false
-	r.pos = newPos
-	r.contiguousReadStartPos = newPos
-
-	r.posChanged()
+	r.mu.Unlock()
 	return
 }
 

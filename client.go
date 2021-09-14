@@ -110,10 +110,11 @@ func (cl *Client) PeerID() PeerID {
 // numbers are the same, due to support for custom listeners. Returns zero if no port number is
 // found.
 func (cl *Client) LocalPort() (port int) {
-	cl.eachListener(func(l Listener) bool {
-		port = addrPortOrZero(l.Addr())
-		return port == 0
-	})
+	for i := 0; i < len(cl.listeners); i += 1 {
+		if port = addrPortOrZero(cl.listeners[i].Addr()); port != 0 {
+			return
+		}
+	}
 	return
 }
 
@@ -190,32 +191,35 @@ func (cl *Client) announceKey() int32 {
 	return int32(binary.BigEndian.Uint32(cl.peerID[16:20]))
 }
 
+// Initializes a bare minimum Client. *Client and *ClientConfig must not be nil.
+func (cl *Client) init(cfg *ClientConfig) {
+	cl.config = cfg
+	cl.dopplegangerAddrs = make(map[string]struct{})
+	cl.torrents = make(map[metainfo.Hash]*Torrent)
+	cl.dialRateLimiter = rate.NewLimiter(10, 10)
+	cl.activeAnnounceLimiter.SlotsPerKey = 2
+	
+	cl.event.L = cl.locker()
+	cl.ipBlockList = cfg.IPBlocklist
+}
+
 func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	if cfg == nil {
 		cfg = NewDefaultClientConfig()
 		cfg.ListenPort = 0
 	}
-	defer func() {
-		if err != nil {
-			cl = nil
-		}
-	}()
-	cl = &Client{
-		config:            cfg,
-		dopplegangerAddrs: make(map[string]struct{}),
-		torrents:          make(map[metainfo.Hash]*Torrent),
-		dialRateLimiter:   rate.NewLimiter(10, 10),
-	}
-	cl.activeAnnounceLimiter.SlotsPerKey = 2
+	var client Client
+	client.init(cfg)
+	cl = &client
 	go cl.acceptLimitClearer()
 	cl.initLogger()
 	defer func() {
-		if err == nil {
-			return
+		if err != nil {
+			cl.Close()
+			cl = nil
 		}
-		cl.Close()
 	}()
-	cl.event.L = cl.locker()
+	
 	storageImpl := cfg.DefaultStorage
 	if storageImpl == nil {
 		// We'd use mmap by default but HFS+ doesn't support sparse files.
@@ -228,9 +232,6 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		storageImpl = storageImplCloser
 	}
 	cl.defaultStorage = storage.NewClient(storageImpl)
-	if cfg.IPBlocklist != nil {
-		cl.ipBlockList = cfg.IPBlocklist
-	}
 
 	if cfg.PeerID != "" {
 		missinggo.CopyExact(&cl.peerID, cfg.PeerID)
@@ -1112,6 +1113,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 			L: cl.locker(),
 		},
 		webSeeds: make(map[string]*Peer),
+		gotMetainfoC: make(chan struct{}),
 	}
 	t.networkingEnabled.Set()
 	t._pendingPieces.NewSet = priorityBitmapStableNewSet
@@ -1435,12 +1437,14 @@ func (cl *Client) eachListener(f func(Listener) bool) {
 }
 
 func (cl *Client) findListener(f func(Listener) bool) (ret Listener) {
-	cl.eachListener(func(l Listener) bool {
-		ret = l
-		return !f(l)
-	})
-	return
+	for i := 0; i < len(cl.listeners); i += 1 {
+		if ret = cl.listeners[i]; f(ret) {
+			return
+		}
+	}
+	return nil
 }
+
 
 func (cl *Client) publicIp(peer net.IP) net.IP {
 	// TODO: Use BEP 10 to determine how peers are seeing us.
@@ -1477,11 +1481,11 @@ func (cl *Client) publicAddr(peer net.IP) IpPort {
 // ListenAddrs addresses currently being listened to.
 func (cl *Client) ListenAddrs() (ret []net.Addr) {
 	cl.lock()
-	defer cl.unlock()
-	cl.eachListener(func(l Listener) bool {
-		ret = append(ret, l.Addr())
-		return true
-	})
+	ret = make([]net.Addr, len(cl.listeners))
+	for i := 0; i < len(cl.listeners); i += 1 {
+		ret[i] = cl.listeners[i].Addr()
+	}
+	cl.unlock()
 	return
 }
 

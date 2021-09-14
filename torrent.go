@@ -21,7 +21,6 @@ import (
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
@@ -122,8 +121,8 @@ type Torrent struct {
 	metadataCompletedChunks []bool
 	metadataChanged         sync.Cond
 
-	// Set when .Info is obtained.
-	gotMetainfo missinggo.Event
+	// Closed when .Info is obtained.
+	gotMetainfoC chan struct{}
 
 	readers                map[*reader]struct{}
 	_readerNowPieces       bitmap.Bitmap
@@ -305,10 +304,11 @@ func (t *Torrent) addPeer(p PeerInfo) (added bool) {
 }
 
 func (t *Torrent) invalidateMetadata() {
-	for i := range t.metadataCompletedChunks {
+	for i := 0; i < len(t.metadataCompletedChunks); i++ {
 		t.metadataCompletedChunks[i] = false
 	}
 	t.nameMu.Lock()
+	t.gotMetainfoC = make(chan struct{})
 	t.info = nil
 	t.nameMu.Unlock()
 }
@@ -438,7 +438,7 @@ func (t *Torrent) onSetInfo() {
 		}
 	}
 	t.cl.event.Broadcast()
-	t.gotMetainfo.Set()
+	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
 	t.pendingRequests = make(map[Request]int)
 	t.tryCreateMorePieceHashers()
@@ -481,19 +481,19 @@ func (t *Torrent) haveAllMetadataPieces() bool {
 }
 
 // TODO: Propagate errors to disconnect peer.
-func (t *Torrent) setMetadataSize(bytes int) (err error) {
+func (t *Torrent) setMetadataSize(size int) (err error) {
 	if t.haveInfo() {
 		// We already know the correct metadata size.
 		return
 	}
-	if bytes <= 0 || bytes > 10000000 { // 10MB, pulled from my ass.
+	if uint32(size) > maxMetadataSize {
 		return errors.New("bad size")
 	}
-	if t.metadataBytes != nil && len(t.metadataBytes) == int(bytes) {
+	if len(t.metadataBytes) == size {
 		return
 	}
-	t.metadataBytes = make([]byte, bytes)
-	t.metadataCompletedChunks = make([]bool, (bytes+(1<<14)-1)/(1<<14))
+	t.metadataBytes = make([]byte, size)
+	t.metadataCompletedChunks = make([]bool, (size+(1<<14)-1)/(1<<14))
 	t.metadataChanged.Broadcast()
 	for c := range t.conns {
 		c.requestPendingMetadata()
@@ -2236,7 +2236,7 @@ func (t *Torrent) addWebSeed(url string) {
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
 	}
 	ws.requesterCond.L = t.cl.locker()
-	for range iter.N(maxRequests) {
+	for i := 0; i < maxRequests; i += 1 {
 		go ws.requester()
 	}
 	for _, f := range t.callbacks().NewPeer {

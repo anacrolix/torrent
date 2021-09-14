@@ -8,7 +8,6 @@ import (
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
-	"github.com/bradfitz/iter"
 	qt "github.com/frankban/quicktest"
 )
 
@@ -41,7 +40,7 @@ func BenchmarkPieceMarkComplete(
 	readData := make([]byte, pieceSize)
 	b.SetBytes(int64(numPieces) * pieceSize)
 	oneIter := func() {
-		for pieceIndex := range iter.N(numPieces) {
+		for pieceIndex := 0; pieceIndex < numPieces; pieceIndex += 1 {
 			pi := tw.Piece(info.Piece(pieceIndex))
 			rand.Read(data)
 			b.StartTimer()
@@ -76,12 +75,13 @@ func BenchmarkPieceMarkComplete(
 	}
 	// Fill the cache
 	if capacity > 0 {
-		for range iter.N(int((capacity + info.TotalLength() - 1) / info.TotalLength())) {
+		iterN := int((capacity + info.TotalLength() - 1) / info.TotalLength())
+		for i := 0; i < iterN; i += 1 {
 			oneIter()
 		}
 	}
 	b.ResetTimer()
-	for range iter.N(b.N) {
+	for i := 0; i < b.N; i += 1 {
 		oneIter()
 	}
 }

@@ -382,7 +382,7 @@ func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err
 		Conn:           conn,
 		OnAnnouncePeer: cl.onDHTAnnouncePeer,
 		PublicIP: func() net.IP {
-			if connIsIpv6(conn) && cl.config.PublicIp6 != nil {
+			if connIsIpv6(conn.LocalAddr()) && cl.config.PublicIp6 != nil {
 				return cl.config.PublicIp6
 			}
 			return cl.config.PublicIp4
@@ -930,7 +930,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	c.conn.SetWriteDeadline(time.Time{})
 	c.r = deadlineReader{c.conn, c.r}
 	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
-	if connIsIpv6(c.conn) {
+	if connIsIpv6(c.conn.LocalAddr()) {
 		torrent.Add("completed handshake over ipv6", 1)
 	}
 	if err := t.addPeerConn(c); err != nil {

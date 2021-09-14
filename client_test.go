@@ -76,9 +76,8 @@ func TestPieceHashSize(t *testing.T) {
 func TestTorrentInitialState(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	cl := &Client{
-		config: TestingConfig(t),
-	}
+	var cl Client
+	cl.init(TestingConfig(t))
 	cl.initLogger()
 	tor := cl.newTorrent(
 		mi.HashInfoBytes(),

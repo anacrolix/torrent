@@ -19,15 +19,14 @@ import (
 // Ensure that no race exists between sending a bitfield, and a subsequent
 // Have that would potentially alter it.
 func TestSendBitfieldThenHave(t *testing.T) {
-	cl := Client{
-		config: TestingConfig(t),
-	}
+	var cl Client
+	cl.init(TestingConfig(t))
 	cl.initLogger()
 	c := cl.newConnection(nil, false, nil, "io.Pipe", "")
 	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
-	c.t.setInfo(&metainfo.Info{
-		Pieces: make([]byte, metainfo.HashSize*3),
-	})
+	if err := c.t.setInfo(&metainfo.Info{ Pieces: make([]byte, metainfo.HashSize*3) }); err != nil {
+		t.Log(err)
+	}
 	r, w := io.Pipe()
 	//c.r = r
 	c.w = w
@@ -88,15 +87,14 @@ func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
 
 func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	c := quicktest.New(b)
-	cl := &Client{
-		config: &ClientConfig{
-			DownloadRateLimiter: unlimited,
-		},
-	}
+	var cl Client
+	cl.init(&ClientConfig{
+		DownloadRateLimiter: unlimited,
+	})
 	cl.initLogger()
 	ts := &torrentStorage{}
 	t := &Torrent{
-		cl:                cl,
+		cl:                &cl,
 		storage:           &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}},
 		pieceStateChanges: pubsub.NewPubSub(),
 	}
@@ -126,7 +124,6 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	wb := msg.MustMarshalBinary()
 	b.SetBytes(int64(len(msg.Piece)))
 	go func() {
-		defer w.Close()
 		ts.writeSem.Lock()
 		for range iter.N(b.N) {
 			cl.lock()
@@ -139,6 +136,9 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			require.NoError(b, err)
 			require.EqualValues(b, len(wb), n)
 			ts.writeSem.Lock()
+		}
+		if err := w.Close(); err != nil {
+			panic(err)
 		}
 	}()
 	c.Assert([]error{nil, io.EOF}, quicktest.Contains, <-mrlErr)

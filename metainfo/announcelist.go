@@ -2,34 +2,49 @@ package metainfo
 
 type AnnounceList [][]string
 
-func (al AnnounceList) Clone() (ret AnnounceList) {
-	for _, tier := range al {
-		ret = append(ret, append([]string(nil), tier...))
+func (al AnnounceList) Clone() (dup AnnounceList) {
+	dup = make([][]string, len(al))
+	for i := 0; i < len(al); i += 1 {
+		dup[i] = make([]string, len(al[i]))
+		copy(dup[i], al[i])
 	}
 	return
 }
 
 // Whether the AnnounceList should be preferred over a single URL announce.
-func (al AnnounceList) OverridesAnnounce(announce string) bool {
-	for _, tier := range al {
-		for _, url := range tier {
-			if url != "" || announce == "" {
+func (al AnnounceList) OverridesAnnounce(announce string) (b bool) {
+	if announce == "" {
+		return true
+	}
+	for tier := 0; tier < len(al); tier += 1 {
+		url, i := al[tier], 0
+		for i < len(url) {
+			if url[i] != "" {
 				return true
 			}
+			i++
 		}
 	}
-	return false
+	return
 }
 
 func (al AnnounceList) DistinctValues() (ret []string) {
+	if len(al) == 0 {
+		return
+	}
 	seen := make(map[string]struct{})
-	for _, tier := range al {
-		for _, v := range tier {
+	for tier := range al {
+		for _, v := range al[tier] {
 			if _, ok := seen[v]; !ok {
 				seen[v] = struct{}{}
-				ret = append(ret, v)
 			}
 		}
+	}
+	i := 0
+	ret = make([]string, len(seen))
+	for k := range seen {
+		ret[i] = k
+		i++
 	}
 	return
 }

@@ -3,6 +3,8 @@ package torrent
 import (
 	"errors"
 	"net"
+	"strings"
+	"unsafe"
 
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/torrent/types"
@@ -111,7 +113,19 @@ func connLessTrusted(l, r *Peer) bool {
 	return l.trust().Less(r.trust())
 }
 
+// Check if a local network address is IPv6
 func connIsIpv6(localAddr net.Addr) bool {
+	// Method of checking used by (*net).UDPAddr and (*net).TCPAddr here
+	// is effectively the same as calling `.To4() == nil && .To16() != nil`
+	switch raw := localAddr.(type) {
+	case *net.TCPAddr:
+		return len(raw.IP) == net.IPv6len &&
+			// 12 byte array used here is an unexported global variable in net/ip called `v4InV6Prefix`
+			*(*[12]byte)(unsafe.Pointer(&raw.IP[0])) != [12]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}
+	case *net.UDPAddr:
+		return len(raw.IP) == net.IPv6len &&
+			*(*[12]byte)(unsafe.Pointer(&raw.IP[0])) != [12]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}
+	}
 	return strings.Count(localAddr.String(), ":") >= 2
 }
 

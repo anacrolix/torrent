@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
@@ -59,7 +58,7 @@ func TestRateLimitReaders(t *testing.T) {
 	}
 	reads := make(chan read)
 	done := make(chan struct{})
-	for range iter.N(numReaders) {
+	for i := 0; i < numReaders; i += 1 {
 		r, w := io.Pipe()
 		ws = append(ws, w)
 		cs = append(cs, w)
@@ -99,7 +98,7 @@ func TestRateLimitReaders(t *testing.T) {
 	}()
 	written := 0
 	go func() {
-		for range iter.N(writeRounds) {
+		for i := 0; i < writeRounds; i += 1 {
 			err := writeN(ws, bytesPerRound)
 			if err != nil {
 				log.Printf("error writing: %s", err)

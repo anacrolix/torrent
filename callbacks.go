@@ -3,6 +3,7 @@ package torrent
 import (
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/anacrolix/torrent/types"
 )
 
 // These are called synchronously, and do not pass ownership of arguments (do not expect to retain
@@ -36,5 +37,5 @@ type PeerMessageEvent struct {
 
 type PeerRequestEvent struct {
 	Peer *Peer
-	Request
+	types.Request
 }

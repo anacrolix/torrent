@@ -425,16 +425,19 @@ func (cl *Client) Close() {
 	cl.lock()
 	cl.event.Broadcast()
 	for _, t := range cl.torrents {
-		t.close(&closeGroup)
+		if err := t.close(&closeGroup); err != nil {
+			panic(err)
+		}
 	}
 	cl.unlock()
-	closeGroup.Wait() // defer is LIFO. We want to Wait() after cl.unlock()
+	closeGroup.Wait()
 	cl.lock()
-	for i := range cl.onClose {
-		cl.onClose[len(cl.onClose)-1-i]()
+	for i := len(cl.onClose)-1; i >= 0; i -= 1 {
+		cl.onClose[i]()
 	}
 	cl.unlock()
 }
+
 
 func (cl *Client) ipBlockRange(ip net.IP) (r iplist.Range, blocked bool) {
 	if cl.ipBlockList == nil {

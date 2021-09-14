@@ -44,13 +44,14 @@ func (f *File) Length() int64 {
 
 // Number of bytes of the entire file we have completed. This is the sum of
 // completed pieces, and dirtied chunks of incomplete pieces.
-func (f *File) BytesCompleted() int64 {
+func (f *File) BytesCompleted() (n int64) {
 	f.t.cl.rLock()
-	defer f.t.cl.rUnlock()
-	return f.bytesCompleted()
+	n = f.bytesCompletedLocked()
+	f.t.cl.rUnlock()
+	return
 }
 
-func (f *File) bytesCompleted() int64 {
+func (f *File) bytesCompletedLocked() int64 {
 	return f.length - f.bytesLeft()
 }
 

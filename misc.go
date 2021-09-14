@@ -5,19 +5,18 @@ import (
 	"net"
 
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/torrent/types"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	.  "github.com/anacrolix/torrent/types"
+	"github.com/anacrolix/torrent/types"
 )
 
-func newRequest(index, begin, length pp.Integer) Request {
-	return Request{index, ChunkSpec{begin, length}}
+func newRequest(index, begin, length pp.Integer) types.Request {
+	return types.Request{index, types.ChunkSpec{begin, length}}
 }
 
-func newRequestFromMessage(msg *pp.Message) Request {
+func newRequestFromMessage(msg *pp.Message) types.Request {
 	switch msg.Type {
 	case pp.Request, pp.Cancel, pp.Reject:
 		return newRequest(msg.Index, msg.Begin, msg.Length)
@@ -41,7 +40,7 @@ func metadataPieceSize(totalSize int, piece int) int {
 func torrentOffsetRequest(
 	torrentLength, pieceSize, chunkSize, offset int64,
 ) (
-	r Request, ok bool,
+	r types.Request, ok bool,
 ) {
 	if offset < 0 || offset >= torrentLength {
 		return
@@ -61,7 +60,7 @@ func torrentOffsetRequest(
 	return
 }
 
-func torrentRequestOffset(torrentLength, pieceSize int64, r Request) (off int64) {
+func torrentRequestOffset(torrentLength, pieceSize int64, r types.Request) (off int64) {
 	off = int64(r.Index)*pieceSize + int64(r.Begin)
 	if off < 0 || off >= torrentLength {
 		panic("invalid Request")
@@ -85,8 +84,8 @@ func validateInfo(info *metainfo.Info) error {
 	return nil
 }
 
-func chunkIndexSpec(index pp.Integer, pieceLength, chunkSize pp.Integer) ChunkSpec {
-	ret := ChunkSpec{pp.Integer(index) * chunkSize, chunkSize}
+func chunkIndexSpec(index pp.Integer, pieceLength, chunkSize pp.Integer) types.ChunkSpec {
+	ret := types.ChunkSpec{pp.Integer(index) * chunkSize, chunkSize}
 	if ret.Begin+ret.Length > pieceLength {
 		ret.Length = pieceLength - ret.Begin
 	}

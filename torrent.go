@@ -124,7 +124,7 @@ type Torrent struct {
 	// Closed when .Info is obtained.
 	gotMetainfoC chan struct{}
 
-	readers                map[*reader]struct{}
+	readers                readers
 	_readerNowPieces       bitmap.Bitmap
 	_readerReadaheadPieces bitmap.Bitmap
 
@@ -1143,8 +1143,9 @@ func (t *Torrent) byteRegionPieces(off, size int64) (begin, end pieceIndex) {
 // regions for all readers. The reader regions should not be merged as some
 // callers depend on this method to enumerate readers.
 func (t *Torrent) forReaderOffsetPieces(f func(begin, end pieceIndex) (more bool)) (all bool) {
-	for r := range t.readers {
-		p := r.pieces
+	rdrs := t.readers
+	for i := 0; i < len(rdrs); i += 1 {
+		p := rdrs[i].pieces
 		if p.begin >= p.end {
 			continue
 		}

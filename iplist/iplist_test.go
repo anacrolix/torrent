@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -40,6 +40,7 @@ import (
 	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
+	. "github.com/anacrolix/torrent/types"
 	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
 )
@@ -1156,7 +1157,7 @@ func (t *Torrent) forReaderOffsetPieces(f func(begin, end pieceIndex) (more bool
 	return true
 }
 
-func (t *Torrent) piecePriority(piece pieceIndex) piecePriority {
+func (t *Torrent) piecePriority(piece pieceIndex) PiecePriority {
 	prio, ok := t._pendingPieces.GetPriority(piece)
 	if !ok {
 		return PiecePriorityNone
@@ -1164,7 +1165,7 @@ func (t *Torrent) piecePriority(piece pieceIndex) piecePriority {
 	if prio > 0 {
 		panic(prio)
 	}
-	ret := piecePriority(-prio)
+	ret := PiecePriority(-prio)
 	if ret == PiecePriorityNone {
 		panic(piece)
 	}

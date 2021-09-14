@@ -1263,17 +1263,14 @@ func useTorrentSource(ctx context.Context, source string, t *Torrent) (err error
 }
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash, wg *sync.WaitGroup) (err error) {
-	t, ok := cl.torrents[infoHash]
-	if !ok {
-		err = fmt.Errorf("no such torrent")
+	if t := cl.torrents[infoHash]; t != nil {
+		delete(cl.torrents, infoHash)
+		if err = t.close(wg); err != nil {
+			panic(err)
+		}
 		return
 	}
-	err = t.close(wg)
-	if err != nil {
-		panic(err)
-	}
-	delete(cl.torrents, infoHash)
-	return
+	return errors.New("no such torrent")
 }
 
 func (cl *Client) allTorrentsCompleted() bool {

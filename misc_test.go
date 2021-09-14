@@ -7,12 +7,13 @@ import (
 
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/torrent/types"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestTorrentOffsetRequest(t *testing.T) {
-	check := func(tl, ps, off int64, expected Request, ok bool) {
+	check := func(tl, ps, off int64, expected types.Request, ok bool) {
 		req, _ok := torrentOffsetRequest(tl, ps, defaultChunkSize, off)
 		assert.Equal(t, _ok, ok)
 		assert.Equal(t, req, expected)
@@ -20,7 +21,7 @@ func TestTorrentOffsetRequest(t *testing.T) {
 	check(13, 5, 0, newRequest(0, 0, 5), true)
 	check(13, 5, 3, newRequest(0, 0, 5), true)
 	check(13, 5, 11, newRequest(2, 0, 3), true)
-	check(13, 5, 13, Request{}, false)
+	check(13, 5, 13, types.Request{}, false)
 }
 
 func BenchmarkIterBitmapsDistinct(t *testing.B) {

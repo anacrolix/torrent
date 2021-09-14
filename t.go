@@ -162,16 +162,13 @@ func (t *Torrent) Metainfo() metainfo.MetaInfo {
 
 func (t *Torrent) addReader(r *reader) {
 	t.cl.lock()
-	defer t.cl.unlock()
-	if t.readers == nil {
-		t.readers = make(map[*reader]struct{})
-	}
-	t.readers[r] = struct{}{}
+	t.readers.Push(r)
 	r.posChanged()
+	t.cl.unlock()
 }
 
 func (t *Torrent) deleteReader(r *reader) {
-	delete(t.readers, r)
+	t.readers.Delete(r)
 	t.readersChanged()
 }
 

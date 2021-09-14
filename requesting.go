@@ -56,7 +56,7 @@ func (cl *Client) doRequests() {
 				Length:           int64(p.length()),
 				NumPendingChunks: int(t.pieceNumPendingChunks(i)),
 				IterPendingChunks: func(f func(types.ChunkSpec)) {
-					p.iterUndirtiedChunks(func(cs ChunkSpec) bool {
+					p.iterUndirtiedChunks(func(cs types.ChunkSpec) bool {
 						f(cs)
 						return true
 					})

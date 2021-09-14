@@ -1114,6 +1114,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		},
 		webSeeds: make(map[string]*Peer),
 		gotMetainfoC: make(chan struct{}),
+		wantPeersEvent: new(chan struct{}),
 	}
 	t.networkingEnabled.Set()
 	t._pendingPieces.NewSet = priorityBitmapStableNewSet

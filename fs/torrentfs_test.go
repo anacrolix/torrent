@@ -177,7 +177,8 @@ func TestDownloadOnDemand(t *testing.T) {
 	defer testutil.ExportStatusWriter(seeder, "s", t)()
 	// Just to mix things up, the seeder starts with the data, but the leecher
 	// starts with the metainfo.
-	seederTorrent, err := seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.HashInfoBytes().HexString()))
+	hib := layout.Metainfo.HashInfoBytes()
+	seederTorrent, err := seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", hib.HexString()))
 	require.NoError(t, err)
 	go func() {
 		// Wait until we get the metainfo, then check for the data.

@@ -168,14 +168,13 @@ func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEv
 
 // Returns whether we can shorten the interval, and sets notify to a channel that receives when we
 // might change our mind, or leaves it if we won't.
-func (me *trackerScraper) canIgnoreInterval(notify *<-chan struct{}) bool {
+func (me *TrackerScraper) canIgnoreInterval(notify *<-chan struct{}) bool {
 	gotInfo := me.t.GotInfo()
 	select {
 	case <-gotInfo:
 		// Private trackers really don't like us announcing more than they specify. They're also
 		// tracking us very carefully, so it's best to comply.
-		private := me.t.info.Private
-		return private == nil || !*private
+		return !me.t.info.Private
 	default:
 		*notify = gotInfo
 		return false

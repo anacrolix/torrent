@@ -19,26 +19,27 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/anacrolix/torrent/types"
 )
 
-func r(i, b, l pp.Integer) Request {
-	return Request{i, ChunkSpec{b, l}}
+func r(i, b, l pp.Integer) types.Request {
+	return types.Request{i, types.ChunkSpec{b, l}}
 }
 
 // Check the given request is correct for various torrent offsets.
 func TestTorrentRequest(t *testing.T) {
 	const s = 472183431 // Length of torrent.
 	for _, _case := range []struct {
-		off int64   // An offset into the torrent.
-		req Request // The expected request. The zero value means !ok.
+		off int64         // An offset into the torrent.
+		req types.Request // The expected request. The zero value means !ok.
 	}{
 		// Invalid offset.
-		{-1, Request{}},
+		{-1, types.Request{}},
 		{0, r(0, 0, 16384)},
 		// One before the end of a piece.
 		{1<<18 - 1, r(0, 1<<18-16384, 16384)},
 		// Offset beyond torrent length.
-		{472 * 1 << 20, Request{}},
+		{472 * 1 << 20, types.Request{}},
 		// One before the end of the torrent. Complicates the chunk length.
 		{s - 1, r((s-1)/(1<<18), (s-1)%(1<<18)/(16384)*(16384), 12935)},
 		{1, r(0, 0, 16384)},
@@ -48,7 +49,7 @@ func TestTorrentRequest(t *testing.T) {
 		{16384, r(0, 16384, 16384)},
 	} {
 		req, ok := torrentOffsetRequest(472183431, 1<<18, 16384, _case.off)
-		if (_case.req == Request{}) == ok {
+		if (_case.req == types.Request{}) == ok {
 			t.Fatalf("expected %v, got %v", _case.req, req)
 		}
 		if req != _case.req {

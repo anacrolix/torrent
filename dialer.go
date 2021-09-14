@@ -3,6 +3,8 @@ package torrent
 import (
 	"context"
 	"net"
+
+	"golang.org/x/net/proxy"
 )
 
 // Dialers have the network locked in.
@@ -11,18 +13,13 @@ type Dialer interface {
 	DialerNetwork() string
 }
 
-// An interface to ease wrapping dialers that explicitly include a network parameter.
-type DialContexter interface {
-	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
-}
-
 // Used by wrappers of standard library network types.
 var DefaultNetDialer = &net.Dialer{}
 
 // Adapts a DialContexter to the Dial interface in this package.
 type NetworkDialer struct {
 	Network string
-	Dialer  DialContexter
+	Dialer  proxy.ContextDialer
 }
 
 func (me NetworkDialer) DialerNetwork() string {

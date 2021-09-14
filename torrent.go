@@ -30,7 +30,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/prioritybitmap"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
-	"github.com/anacrolix/torrent"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pion/datachannel"
 

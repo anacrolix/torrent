@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 
 	"github.com/anacrolix/tagflag"
-	"github.com/bradfitz/iter"
 	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -47,7 +46,7 @@ func verifyTorrent(info *metainfo.Info, root string) error {
 		span.Append(mm)
 	}
 	span.InitIndex()
-	for i := range iter.N(info.NumPieces()) {
+	for i, numPieces := 0, info.NumPieces(); i < numPieces; i += 1 {
 		p := info.Piece(i)
 		hash := sha1.New()
 		_, err := io.Copy(hash, io.NewSectionReader(span, p.Offset(), p.Length()))

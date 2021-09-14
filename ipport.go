@@ -48,23 +48,22 @@ type ipPortAddr struct {
 	Port int
 }
 
-func (ipPortAddr) Network() string {
-	return ""
+func (ipPortAddr) Network() (s string) {
+	return
 }
 
 func (me ipPortAddr) String() string {
-	return net.JoinHostPort(me.IP.String(), strconv.FormatInt(int64(me.Port), 10))
+	return net.JoinHostPort(me.IP.String(), strconv.FormatUint(uint64(me.Port), 10))
 }
 
-func tryIpPortFromNetAddr(addr PeerRemoteAddr) (ipPortAddr, bool) {
-	ok := true
-	host, port, err := net.SplitHostPort(addr.String())
-	if err != nil {
-		ok = false
+func tryIpPortFromNetAddr(addr PeerRemoteAddr) (ipa ipPortAddr, ok bool) {
+	if host, port, err := net.SplitHostPort(addr.String()); err == nil {
+		ipa.IP = net.ParseIP(host)
+		if portI64, err := strconv.ParseUint(port, 10, 0); err == nil {
+			ipa.Port = int(portI64)
+			return ipa, true
+		}
 	}
-	portI64, err := strconv.ParseInt(port, 10, 0)
-	if err != nil {
-		ok = false
-	}
-	return ipPortAddr{net.ParseIP(host), int(portI64)}, ok
+	return
 }
+

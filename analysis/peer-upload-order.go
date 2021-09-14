@@ -7,12 +7,13 @@ import (
 
 	"github.com/anacrolix/torrent"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/anacrolix/torrent/types"
 	"github.com/elliotchance/orderedmap"
 )
 
 type peerData struct {
 	requested   *orderedmap.OrderedMap
-	haveDeleted map[torrent.Request]bool
+	haveDeleted map[types.Request]bool
 }
 
 // Tracks the order that peers upload requests that we've sent them.
@@ -33,7 +34,7 @@ func (me *PeerUploadOrder) onNewPeer(p *torrent.Peer) {
 	}
 	me.peers[p] = &peerData{
 		requested:   orderedmap.NewOrderedMap(),
-		haveDeleted: make(map[torrent.Request]bool),
+		haveDeleted: make(map[types.Request]bool),
 	}
 }
 
@@ -52,7 +53,7 @@ func (me *PeerUploadOrder) Install(cbs *torrent.Callbacks) {
 	cbs.DeletedRequest = append(cbs.DeletedRequest, me.deletedRequest)
 }
 
-func (me *PeerUploadOrder) report(desc string, req torrent.Request, peer *torrent.Peer) {
+func (me *PeerUploadOrder) report(desc string, req types.Request, peer *torrent.Peer) {
 	peerConn, ok := peer.TryAsPeerConn()
 	var peerId *torrent.PeerID
 	if ok {
@@ -62,9 +63,9 @@ func (me *PeerUploadOrder) report(desc string, req torrent.Request, peer *torren
 }
 
 func (me *PeerUploadOrder) onReceivedRequested(event torrent.PeerMessageEvent) {
-	req := torrent.Request{
+	req := types.Request{
 		event.Message.Index,
-		torrent.ChunkSpec{
+		types.ChunkSpec{
 			Begin:  event.Message.Begin,
 			Length: pp.Integer(len(event.Message.Piece)),
 		},
@@ -80,7 +81,7 @@ func (me *PeerUploadOrder) onReceivedRequested(event torrent.PeerMessageEvent) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	peerData := me.peers[event.Peer]
-	if peerData.requested.Front().Key.(torrent.Request) == req {
+	if peerData.requested.Front().Key.(types.Request) == req {
 		log.Print(makeLogMsg("got next requested piece"))
 	} else if _, ok := peerData.requested.Get(req); ok {
 		log.Print(makeLogMsg(fmt.Sprintf(

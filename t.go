@@ -180,8 +180,8 @@ func (t *Torrent) deleteReader(r *reader) {
 // has been obtained, see Torrent.Info and Torrent.GotInfo.
 func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	t.cl.lock()
-	defer t.cl.unlock()
 	t.downloadPiecesLocked(begin, end)
+	t.cl.unlock()
 }
 
 func (t *Torrent) downloadPiecesLocked(begin, end pieceIndex) {
@@ -194,8 +194,8 @@ func (t *Torrent) downloadPiecesLocked(begin, end pieceIndex) {
 
 func (t *Torrent) CancelPieces(begin, end pieceIndex) {
 	t.cl.lock()
-	defer t.cl.unlock()
 	t.cancelPiecesLocked(begin, end)
+	t.cl.unlock()
 }
 
 func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex) {

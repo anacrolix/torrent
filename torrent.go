@@ -711,27 +711,23 @@ func (t *Torrent) haveInfo() bool {
 
 // Returns a run-time generated MetaInfo that includes the info bytes and
 // announce-list as currently known to the client.
-func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
-	return metainfo.MetaInfo{
-		CreationDate: time.Now().Unix(),
-		Comment:      "dynamic metainfo from client",
-		CreatedBy:    "go.torrent",
-		AnnounceList: t.metainfo.UpvertedAnnounceList().Clone(),
-		InfoBytes: func() []byte {
-			if t.haveInfo() {
-				return t.metadataBytes
-			} else {
-				return nil
-			}
-		}(),
-		UrlList: func() []string {
-			ret := make([]string, 0, len(t.webSeeds))
-			for url := range t.webSeeds {
-				ret = append(ret, url)
-			}
-			return ret
-		}(),
+func (t *Torrent) newMetaInfo() (mi metainfo.MetaInfo) {
+	mi.CreationDate = time.Now().Unix()
+	mi.Comment = "dynamic metainfo from client"
+	mi.CreatedBy = "go.torrent"
+	mi.AnnounceList = t.metainfo.UpvertedAnnounceList().Clone()
+	if t.haveInfo() {
+		mi.InfoBytes = t.metadataBytes
 	}
+
+	urls := make([]string, len(t.webSeeds))
+	i := 0
+	for u := range t.webSeeds {
+		urls[i] = u
+		i += 1
+	}
+	mi.UrlList = urls
+	return
 }
 
 func (t *Torrent) BytesMissing() int64 {

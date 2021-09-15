@@ -1367,8 +1367,9 @@ func (t *Torrent) bytesCompleted() int64 {
 
 func (t *Torrent) SetInfoBytes(b []byte) (err error) {
 	t.cl.lock()
-	defer t.cl.unlock()
-	return t.setInfoBytesLocked(b)
+	err = t.setInfoBytesLocked(b)
+	t.cl.unlock()
+	return
 }
 
 // Returns true if connection is removed from torrent.Conns.

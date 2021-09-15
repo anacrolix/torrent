@@ -88,11 +88,11 @@ func (t *Torrent) NumPieces() pieceIndex {
 }
 
 // Get missing bytes count for specific piece.
-func (t *Torrent) PieceBytesMissing(piece int) int64 {
+func (t *Torrent) PieceBytesMissing(piece int) (left int64) {
 	t.cl.lock()
-	defer t.cl.unlock()
-
-	return int64(t.pieces[piece].bytesLeft())
+	left = int64(t.pieces[piece].bytesLeft())
+	t.cl.unlock()
+	return
 }
 
 // Drop the torrent from the client, and close it. It's always safe to do

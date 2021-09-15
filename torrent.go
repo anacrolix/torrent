@@ -2203,9 +2203,11 @@ func (t *Torrent) callbacks() *Callbacks {
 	return &t.cl.config.Callbacks
 }
 
+const maxWebSeedRequests = 10
+
 var WebseedHttpClient = &http.Client{
 	Transport: &http.Transport{
-		MaxConnsPerHost: 10,
+		MaxConnsPerHost: maxWebSeedRequests,
 	},
 }
 
@@ -2216,7 +2218,6 @@ func (t *Torrent) addWebSeed(url string) {
 	if _, ok := t.webSeeds[url]; ok {
 		return
 	}
-	const maxRequests = 10
 	ws := webseedPeer{
 		peer: Peer{
 			t:                        t,
@@ -2233,10 +2234,10 @@ func (t *Torrent) addWebSeed(url string) {
 			HttpClient: WebseedHttpClient,
 			Url:        url,
 		},
-		activeRequests: make(map[Request]webseed.Request, maxRequests),
+		activeRequests: make(map[Request]webseed.Request, maxWebSeedRequests),
 	}
 	ws.requesterCond.L = t.cl.locker()
-	for i := 0; i < maxRequests; i += 1 {
+	for i := 0; i < maxWebSeedRequests; i += 1 {
 		go ws.requester()
 	}
 	for _, f := range t.callbacks().NewPeer {

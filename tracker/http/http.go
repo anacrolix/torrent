@@ -42,7 +42,7 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts AnnounceOpt) {
 	}
 	q.Set("left", strconv.FormatInt(left, 10))
 
-	if ar.Event != shared.None {
+	if ar.Event != shared.AnnounceEventNone {
 		q.Set("event", ar.Event.String())
 	}
 	// http://stackoverflow.com/questions/17418004/why-does-tracker-server-not-understand-my-request-bittorrent-protocol

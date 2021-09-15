@@ -1717,9 +1717,9 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 }
 
 func (t *Torrent) addPeers(peers []PeerInfo) (added int) {
-	for _, p := range peers {
-		if t.addPeer(p) {
-			added++
+	for i := 0; i < len(peers); i += 1 {
+		if t.addPeer(peers[i]) {
+			added += 1
 		}
 	}
 	return

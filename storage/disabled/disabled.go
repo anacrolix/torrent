@@ -9,11 +9,9 @@ import (
 
 type Client struct{}
 
-var capacity int64
-
 func (c Client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
-	capFunc := func() *int64 {
-		return &capacity
+	capFunc := func() (int64, bool) {
+		return 0, true
 	}
 	return storage.TorrentImpl{
 		Piece: func(piece metainfo.Piece) storage.PieceImpl {
@@ -24,10 +22,6 @@ func (c Client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storag
 		},
 		Capacity: &capFunc,
 	}, nil
-}
-
-func (c Client) capacity() *int64 {
-	return &capacity
 }
 
 type Piece struct{}

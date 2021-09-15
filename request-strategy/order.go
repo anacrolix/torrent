@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/anacrolix/multiless"
+	"github.com/anacrolix/torrent/storage"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/types"
@@ -96,8 +97,8 @@ func getRequestablePieces(input Input) (ret []requestablePiece) {
 	pieces := make([]filterPiece, 0, maxPieces)
 	ret = make([]requestablePiece, 0, maxPieces)
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
-	// TorrentImpl.
-	storageLeft := make(map[*func() *int64]*int64)
+	// TorrentImpl. A nil value means no capacity limit.
+	storageLeft := make(map[storage.TorrentCapacity]*int64)
 	for _t := range input.Torrents {
 		// TODO: We could do metainfo requests here.
 		t := &filterTorrent{
@@ -107,7 +108,12 @@ func getRequestablePieces(input Input) (ret []requestablePiece) {
 		key := t.Capacity
 		if key != nil {
 			if _, ok := storageLeft[key]; !ok {
-				storageLeft[key] = (*key)()
+				capacity, ok := (*key)()
+				if ok {
+					storageLeft[key] = &capacity
+				} else {
+					storageLeft[key] = nil
+				}
 			}
 			t.storageLeft = storageLeft[key]
 		}

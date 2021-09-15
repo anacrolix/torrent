@@ -124,6 +124,8 @@ github.com/anacrolix/multiless v0.1.1-0.20210529082330-de2f6cf29619 h1:ZkusP2EHx
 github.com/anacrolix/multiless v0.1.1-0.20210529082330-de2f6cf29619/go.mod h1:TrCLEZfIDbMVfLoQt5tOoiBS/uq4y8+ojuEVVvTNPX4=
 github.com/anacrolix/squirrel v0.1.0 h1:Zz7XUFUr2ozhsTvzwLdmrFpduoTHtBNTB/KZQ4Ivh00=
 github.com/anacrolix/squirrel v0.1.0/go.mod h1:YzgVvikMdFD441oTWlNG189bpKabO9Sbf3uCSVgca04=
+github.com/anacrolix/squirrel v0.1.1-0.20210914065657-81bc5ecdc43a h1:8LAUQgDPqnzuF/WrGQzTY6i+bVO/FpA90Hi6jXA+2vQ=
+github.com/anacrolix/squirrel v0.1.1-0.20210914065657-81bc5ecdc43a/go.mod h1:YzgVvikMdFD441oTWlNG189bpKabO9Sbf3uCSVgca04=
 github.com/anacrolix/stm v0.1.0/go.mod h1:ZKz7e7ERWvP0KgL7WXfRjBXHNRhlVRlbBQecqFtPq+A=
 github.com/anacrolix/stm v0.1.1-0.20191106051447-e749ba3531cf/go.mod h1:zoVQRvSiGjGoTmbM0vSLIiaKjWtNPeTvXUSdJQA4hsg=
 github.com/anacrolix/stm v0.2.0/go.mod h1:zoVQRvSiGjGoTmbM0vSLIiaKjWtNPeTvXUSdJQA4hsg=

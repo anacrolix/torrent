@@ -16,12 +16,16 @@ type ClientImpl interface {
 	OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error)
 }
 
+type TorrentCapacity *func() (cap int64, capped bool)
+
 // Data storage bound to a torrent.
 type TorrentImpl struct {
 	Piece func(p metainfo.Piece) PieceImpl
 	Close func() error
-	// Storages that share the same value, will provide a pointer to the same function.
-	Capacity *func() *int64
+	// Storages that share the same space, will provide equal pointers. The function is called once
+	// to determine the storage for torrents sharing the same function pointer, and mutated in
+	// place.
+	Capacity TorrentCapacity
 }
 
 // Interacts with torrent piece data. Optional interfaces to implement include:

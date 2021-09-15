@@ -35,7 +35,7 @@ func NewWrappingClient(cache *squirrel.Cache) storage.ClientImpl {
 
 type client struct {
 	*squirrel.Cache
-	capacity func() *int64
+	capacity func() (int64, bool)
 }
 
 func (c *client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {

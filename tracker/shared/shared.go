@@ -1,10 +1,17 @@
 package shared
 
-import "github.com/anacrolix/torrent/tracker/udp"
+type AnnounceEvent int32
 
 const (
-	None      udp.AnnounceEvent = iota
-	Completed                   // The local peer just completed the torrent.
-	Started                     // The local peer has just resumed this torrent.
-	Stopped                     // The local peer is leaving the swarm.
+	AnnounceEventNone AnnounceEvent = iota      //
+	
+	// Local peer just completed the torrent.
+	AnnouncedEventCompleted                     // completed
+	// local peer has just resumed this torrent.
+	AnnounceEventStarted                        // started
+	// Local peer is leaving the swarm.
+	AnnounceEventStopped                        // stopped
 )
+
+// TODO: Incorporate use of stringer for AnnounceEvent:
+// go:generate stringer -type=AnnounceEvent -trimprefix=AnnounceEvent -linecomment

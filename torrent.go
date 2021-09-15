@@ -1727,10 +1727,11 @@ func (t *Torrent) addPeers(peers []PeerInfo) (added int) {
 
 // The returned TorrentStats may require alignment in memory. See
 // https://github.com/anacrolix/torrent/issues/383.
-func (t *Torrent) Stats() TorrentStats {
+func (t *Torrent) Stats() (stats TorrentStats) {
 	t.cl.rLock()
-	defer t.cl.rUnlock()
-	return t.statsLocked()
+	stats = t.statsLocked()
+	t.cl.rUnlock()
+	return
 }
 
 func (t *Torrent) statsLocked() (ret TorrentStats) {

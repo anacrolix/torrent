@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"reflect"
 	"sync/atomic"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -41,11 +40,21 @@ type ConnStats struct {
 }
 
 func (me *ConnStats) Copy() (ret ConnStats) {
-	for i := 0; i < reflect.TypeOf(ConnStats{}).NumField(); i++ {
-		n := reflect.ValueOf(me).Elem().Field(i).Addr().Interface().(*Count).Int64()
-		reflect.ValueOf(&ret).Elem().Field(i).Addr().Interface().(*Count).Add(n)
+	return ConnStats{
+		Count{atomic.LoadInt64(&me.BytesWritten.n)},
+		Count{atomic.LoadInt64(&me.BytesWrittenData.n)},
+		Count{atomic.LoadInt64(&me.BytesRead.n)},
+		Count{atomic.LoadInt64(&me.BytesReadData.n)},
+		Count{atomic.LoadInt64(&me.BytesReadUsefulData.n)},
+		Count{atomic.LoadInt64(&me.BytesReadUsefulIntendedData.n)},
+		Count{atomic.LoadInt64(&me.ChunksWritten.n)},
+		Count{atomic.LoadInt64(&me.ChunksRead.n)},
+		Count{atomic.LoadInt64(&me.ChunksReadUseful.n)},
+		Count{atomic.LoadInt64(&me.ChunksReadWasted.n)},
+		Count{atomic.LoadInt64(&me.MetadataChunksRead.n)},
+		Count{atomic.LoadInt64(&me.PiecesDirtiedGood.n)},
+		Count{atomic.LoadInt64(&me.PiecesDirtiedBad.n)},
 	}
-	return
 }
 
 type Count struct {

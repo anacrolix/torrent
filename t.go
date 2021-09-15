@@ -110,10 +110,11 @@ func (t *Torrent) Drop() {
 // completed pieces, and dirtied chunks of incomplete pieces. Do not use this
 // for download rate, as it can go down when pieces are lost or fail checks.
 // Sample Torrent.Stats.DataBytesRead for actual file data download rate.
-func (t *Torrent) BytesCompleted() int64 {
+func (t *Torrent) BytesCompleted() (n int64) {
 	t.cl.rLock()
-	defer t.cl.rUnlock()
-	return t.bytesCompleted()
+	n = t.bytesCompleted()
+	t.cl.rUnlock()
+	return
 }
 
 // The subscription emits as (int) the index of pieces as their state changes.
@@ -124,11 +125,10 @@ func (t *Torrent) SubscribePieceStateChanges() *pubsub.Subscription {
 
 // Returns true if the torrent is currently being seeded. This occurs when the
 // client is willing to upload without wanting anything in return.
-func (t *Torrent) Seeding() (ret bool) {
+func (t *Torrent) Seeding() bool {
 	t.cl.lock()
-	ret = t.seeding()
-	t.cl.unlock()
-	return
+	defer t.cl.unlock()
+	return t.seeding()
 }
 
 // Clobbers the torrent display name if metainfo is unavailable.

@@ -154,10 +154,11 @@ func (t *Torrent) Length() int64 {
 
 // Returns a run-time generated metainfo for the torrent that includes the
 // info bytes and announce-list as currently known to the client.
-func (t *Torrent) Metainfo() metainfo.MetaInfo {
+func (t *Torrent) Metainfo() (info metainfo.MetaInfo) {
 	t.cl.lock()
-	defer t.cl.unlock()
-	return t.newMetaInfo()
+	info = t.newMetaInfo()
+	t.cl.unlock()
+	return
 }
 
 func (t *Torrent) addReader(r *reader) {

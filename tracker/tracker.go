@@ -14,19 +14,18 @@ import (
 )
 
 const (
-	None      = shared.None
-	Started   = shared.Started
-	Stopped   = shared.Stopped
-	Completed = shared.Completed
+	None      = shared.AnnounceEventNone
+	Started   = shared.AnnounceEventStarted
+	Stopped   = shared.AnnounceEventStopped
+	Completed = shared.AnnouncedEventCompleted
 )
 
-type AnnounceRequest = udp.AnnounceRequest
-
-type AnnounceResponse = trHttp.AnnounceResponse
-
-type Peer = trHttp.Peer
-
-type AnnounceEvent = udp.AnnounceEvent
+type (
+	AnnounceRequest  = udp.AnnounceRequest
+	AnnounceResponse = trHttp.AnnounceResponse
+	Peer             = trHttp.Peer
+	AnnounceEvent    = shared.AnnounceEvent
+)
 
 var (
 	ErrBadScheme = errors.New("unknown scheme")

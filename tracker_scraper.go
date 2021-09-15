@@ -20,7 +20,11 @@ import (
 type trackerScraper struct {
 	u            url.URL
 	t            *Torrent
-	lastAnnounce trackerAnnounceResult
+	
+	// Holds the most recent *trackerAnnounceResult.
+	// atomic.Value is used to read/write without a client lock.
+	// TODO: Swap for something better when generics come around
+	lastTrackerAnnounceResult atomic.Value
 }
 
 type torrentTrackerAnnouncer interface {
@@ -28,33 +32,37 @@ type torrentTrackerAnnouncer interface {
 	URL() *url.URL
 }
 
-func (me trackerScraper) URL() *url.URL {
+// Get url without copying
+func (me *trackerScraper) URL() *url.URL {
 	return &me.u
 }
 
+func (ts *trackerScraper) writeStatusLine(w io.StringWriter) {
+	la := ts.lastTrackerAnnounceResult.Load().(trackerAnnounceResult)
+	w.WriteString("next ann: ")
+	w.WriteString(func() string {
+			switch na := time.Until(la.Completed.Add(la.Interval)); {
+			case na > time.Second:
+				return (na / time.Second * time.Second).String()
+			}
+			return "anytime"
+		}())
+	w.WriteString(", " + "last ann: ")
+	w.WriteString(func() string {
+		switch {
+		default:
+			return strconv.Itoa(la.NumPeers) + " peers"
+		case la.Completed.IsZero():
+			return "never"
+		case la.Err != nil:
+			return la.Err.Error()
+		}
+	}())
+}
+
 func (ts *trackerScraper) statusLine() string {
-	var w bytes.Buffer
-	fmt.Fprintf(&w, "next ann: %v, last ann: %v",
-		func() string {
-			na := time.Until(ts.lastAnnounce.Completed.Add(ts.lastAnnounce.Interval))
-			if na > 0 {
-				na /= time.Second
-				na *= time.Second
-				return na.String()
-			} else {
-				return "anytime"
-			}
-		}(),
-		func() string {
-			if ts.lastAnnounce.Err != nil {
-				return ts.lastAnnounce.Err.Error()
-			}
-			if ts.lastAnnounce.Completed.IsZero() {
-				return "never"
-			}
-			return fmt.Sprintf("%d peers", ts.lastAnnounce.NumPeers)
-		}(),
-	)
+	var w strings.Builder
+	ts.writeStatusLine(&w)
 	return w.String()
 }
 
@@ -203,9 +211,7 @@ func (me *trackerScraper) Run() {
 		ar := me.announce(ctx, e)
 		// after first announce, get back to regular "none"
 		e = tracker.None
-		me.t.cl.lock()
-		me.lastAnnounce = ar
-		me.t.cl.unlock()
+		me.lastTrackerAnnounceResult.Store(ar)
 
 	recalculate:
 		// Make sure we don't announce for at least a minute since the last one.

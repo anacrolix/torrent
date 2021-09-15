@@ -2062,9 +2062,16 @@ func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
 }
 
 func (t *Torrent) peersAsSlice() (ret []*Peer) {
-	t.iterPeers(func(p *Peer) {
-		ret = append(ret, p)
-	})
+	ret = make([]*Peer, len(t.conns)+len(t.webSeeds))
+	i := 0
+	for pc := range t.conns {
+		ret[i] = &pc.Peer
+		i++
+	}
+	for _, ws := range t.webSeeds {
+		ret[i] = ws
+		i++
+	}
 	return
 }
 

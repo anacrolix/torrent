@@ -2186,8 +2186,8 @@ func (t *Torrent) DisallowDataUpload() {
 // or if nil, a critical message is logged, and data download is disabled.
 func (t *Torrent) SetOnWriteChunkError(f func(error)) {
 	t.cl.lock()
-	defer t.cl.unlock()
 	t.userOnWriteChunkErr = f
+	t.cl.unlock()
 }
 
 func (t *Torrent) iterPeers(f func(p *Peer)) {

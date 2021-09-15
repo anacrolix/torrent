@@ -503,16 +503,18 @@ func (t *Torrent) setMetadataSize(size int) (err error) {
 
 // The current working name for the torrent. Either the name in the info dict,
 // or a display name given such as by the dn value in a magnet link, or "".
-func (t *Torrent) name() string {
+func (t *Torrent) name() (ret string) {
 	t.nameMu.RLock()
-	defer t.nameMu.RUnlock()
-	if t.haveInfo() {
-		return t.info.Name
+	switch info := t.info; {
+	case info != nil:
+		ret = info.Name
+	case t.displayName != "":
+		ret = t.displayName
+	default:
+		ret = "infohash:" + t.infoHash.HexString()
 	}
-	if t.displayName != "" {
-		return t.displayName
-	}
-	return "infohash:" + t.infoHash.HexString()
+	t.nameMu.RUnlock()
+	return 
 }
 
 func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {

@@ -396,15 +396,14 @@ func (t *Torrent) cacheLength() {
 
 // TODO: This shouldn't fail for storage reasons. Instead we should handle storage failure
 // separately.
-func (t *Torrent) setInfo(info *metainfo.Info) error {
-	if err := validateInfo(info); err != nil {
-		return fmt.Errorf("bad info: %s", err)
+func (t *Torrent) setInfo(info *metainfo.Info) (err error) {
+	if err = validateInfo(info); err != nil {
+		return fmt.Errorf("bad info: %w", err)
 	}
 	if t.storageOpener != nil {
-		var err error
 		t.storage, err = t.storageOpener.OpenTorrent(info, t.infoHash)
 		if err != nil {
-			return fmt.Errorf("error opening torrent storage: %s", err)
+			return fmt.Errorf("error opening torrent storage: %w", err)
 		}
 	}
 	t.nameMu.Lock()
@@ -413,7 +412,6 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	t.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
 	t.displayName = "" // Save a few bytes lol.
 	t.initFiles()
-	t.cacheLength()
 	t.makePieces()
 	return nil
 }

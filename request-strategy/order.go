@@ -206,7 +206,7 @@ func Run(input Input) map[PeerId]PeerNextRequestState {
 }
 
 // Checks that a sorted peersForPiece slice makes sense.
-func ensureValidSortedPeersForPieceRequests(peers peersForPieceSorter) {
+func ensureValidSortedPeersForPieceRequests(peers *peersForPieceSorter) {
 	if !sort.IsSorted(peers) {
 		panic("not sorted")
 	}
@@ -235,19 +235,19 @@ type peersForPieceSorter struct {
 	p             requestablePiece
 }
 
-func (me peersForPieceSorter) Len() int {
+func (me *peersForPieceSorter) Len() int {
 	return len(me.peersForPiece)
 }
 
-func (me peersForPieceSorter) Swap(i, j int) {
+func (me *peersForPieceSorter) Swap(i, j int) {
 	me.peersForPiece[i], me.peersForPiece[j] = me.peersForPiece[j], me.peersForPiece[i]
 }
 
-func (me peersForPieceSorter) Less(_i, _j int) bool {
+func (me *peersForPieceSorter) Less(_i, _j int) bool {
 	i := me.peersForPiece[_i]
 	j := me.peersForPiece[_j]
 	req := me.req
-	p := me.p
+	p := &me.p
 	byHasRequest := func() multiless.Computation {
 		ml := multiless.New()
 		if req != nil {
@@ -281,6 +281,9 @@ func (me peersForPieceSorter) Less(_i, _j int) bool {
 		j.DownloadRate,
 		i.DownloadRate,
 	)
+	if ml.Ok() {
+		return ml.Less()
+	}
 	ml = ml.AndThen(byHasRequest)
 	return ml.Int64(
 		int64(j.Age), int64(i.Age),

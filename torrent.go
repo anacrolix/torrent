@@ -2043,13 +2043,13 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 	}
 	t.storageLock.RUnlock()
 	t.cl.lock()
-	defer t.cl.unlock()
 	p.hashing = false
 	t.updatePiecePriority(index)
 	t.pieceHashed(index, correct, copyErr)
 	t.publishPieceChange(index)
 	t.activePieceHashes--
 	t.tryCreateMorePieceHashers()
+	t.cl.unlock()
 }
 
 // Return the connections that touched a piece, and clear the entries while doing it.

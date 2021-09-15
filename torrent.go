@@ -825,12 +825,12 @@ func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
 }
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
-	defer perf.ScopeTimerErr(&err)()
 	n, err := t.pieces[piece].Storage().WriteAt(data, begin)
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite
 	}
-	return err
+	perf.ScopeTimerErr(&err)()
+	return
 }
 
 func (t *Torrent) bitfield() (bf []bool) {

@@ -124,10 +124,11 @@ func (t *Torrent) SubscribePieceStateChanges() *pubsub.Subscription {
 
 // Returns true if the torrent is currently being seeded. This occurs when the
 // client is willing to upload without wanting anything in return.
-func (t *Torrent) Seeding() bool {
+func (t *Torrent) Seeding() (ret bool) {
 	t.cl.lock()
-	defer t.cl.unlock()
-	return t.seeding()
+	ret = t.seeding()
+	t.cl.unlock()
+	return
 }
 
 // Clobbers the torrent display name. The display name is used as the torrent

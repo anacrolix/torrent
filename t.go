@@ -210,32 +210,53 @@ func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex) {
 	}
 }
 
+// Initialize files and cache torrent length
 func (t *Torrent) initFiles() {
-	var offset int64
-	t.files = new([]*File)
-	for _, fi := range t.info.UpvertedFiles() {
-		var path []string
-		if len(fi.PathUTF8) != 0 {
-			path = fi.PathUTF8
-		} else {
-			path = fi.Path
-		}
-		dp := t.info.Name
-		if len(fi.Path) != 0 {
-			dp = strings.Join(fi.Path, "/")
-		}
-		*t.files = append(*t.files, &File{
-			t,
-			strings.Join(append([]string{t.info.Name}, path...), "/"),
-			offset,
-			fi.Length,
-			fi,
-			dp,
-			PiecePriorityNone,
-		})
-		offset += fi.Length
-	}
+	t.length = new(int64)
+	if len(t.info.Files) == 0 {
+		t.files = &[]*File{{
+			t:           t,
+			path:        t.info.Name,
+			length:      t.info.Length,
+			fi:          metainfo.FileInfo{Length: t.info.Length},
+			displayPath: t.info.Name,
+		}}
+		*t.length = t.info.Length
+	} else {
+		var offset int64
+		infoFiles := t.info.Files
+		files := make([]*File, len(infoFiles))
+		for i := 0; i < len(files); i += 1 {
+			fi := infoFiles[i]
 
+			path := fi.Path
+			if len(fi.PathUTF8) != 0 {
+				path = fi.PathUTF8 // Assume presence of PathUTF8 to be unlikely
+			}
+
+			var pathStr strings.Builder
+			dp := t.info.Name
+			if len(path) != 0 {
+				dp = strings.Join(path, "/")
+				pathStr.Grow(len(t.info.Name) + len("/") + len(dp))
+				pathStr.WriteString(t.info.Name)
+				pathStr.WriteByte('/')
+			}
+			pathStr.WriteString(dp)
+
+			files[i] = &File{
+				t:           t,
+				path:        pathStr.String(),
+				offset:      offset,
+				length:      fi.Length,
+				fi:          fi,
+				displayPath: dp,
+			}
+			offset += fi.Length
+		}
+		t.files = &files
+		*t.length = offset
+	}
 }
 
 // Returns handles to the files in the torrent. This requires that the Info is

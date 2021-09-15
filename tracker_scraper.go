@@ -1,12 +1,16 @@
 package torrent
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"math"
 	"net"
 	"net/url"
+	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"

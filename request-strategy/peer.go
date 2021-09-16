@@ -34,5 +34,5 @@ func (p *Peer) pieceAllowedFastOrDefault(i pieceIndex) bool {
 
 // TODO: This might be used in more places I think.
 func (p *Peer) canRequestPiece(i pieceIndex) bool {
-	return p.HasPiece(i) && (!p.Choking || (p.PieceAllowedFast != nil && p.PieceAllowedFast(i)))
+	return (!p.Choking || p.pieceAllowedFastOrDefault(i)) && p.HasPiece(i)
 }

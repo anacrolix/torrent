@@ -183,29 +183,32 @@ func (me *trackerScraper) canIgnoreInterval(notify *<-chan struct{}) bool {
 }
 
 func (me *trackerScraper) Run() {
-
+	
 	defer me.announceStopped()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	t := me.t
 	go func() {
 		defer cancel()
 		select {
 		case <-ctx.Done():
-		case <-me.t.Closed():
+		case <-t.Closed():
 		}
 	}()
 
 	// make sure first announce is a "started"
 	e := tracker.Started
-
+	
+	cl := t.cl
+	wantPeersEvent := t.wantPeersEvent
 	for {
 		ar := me.announce(ctx, e)
 		// after first announce, get back to regular "none"
 		e = tracker.None
-		me.t.cl.lock()
+		cl.lock()
 		me.lastAnnounce = ar
-		me.t.cl.unlock()
+		cl.unlock()
 
 	recalculate:
 		// Make sure we don't announce for at least a minute since the last one.
@@ -214,10 +217,10 @@ func (me *trackerScraper) Run() {
 			interval = time.Minute
 		}
 
-		me.t.cl.lock()
-		wantPeers := me.t.wantPeersEvent.C()
-		me.t.cl.unlock()
-
+		cl.lock()
+		wantPeers := wantPeersEvent.C()
+		cl.unlock()
+		
 		// If we want peers, reduce the interval to the minimum if it's appropriate.
 
 		// A channel that receives when we should reconsider our interval. Starts as nil since that
@@ -233,7 +236,7 @@ func (me *trackerScraper) Run() {
 		}
 
 		select {
-		case <-me.t.closed.Done():
+		case <-t.closed.Done():
 			return
 		case <-reconsider:
 			// Recalculate the interval.

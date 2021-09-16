@@ -297,6 +297,13 @@ func (me *peersForPieceSorter) Less(_i, _j int) bool {
 func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 	peersForPiece := makePeersForPiece(len(peers))
 	for _, peer := range peers {
+		if !peer.canRequestPiece(p.index) {
+			continue
+		}
+		if !peer.canFitRequest() {
+			peer.requestablePiecesRemaining--
+			continue
+		}
 		peersForPiece = append(peersForPiece, &peersForPieceRequests{
 			requestsInPiece: 0,
 			requestsPeer:    peer,
@@ -317,7 +324,7 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 	sortPeersForPiece := func(req *Request) {
 		peersForPieceSorter.req = req
 		sort.Sort(&peersForPieceSorter)
-		//ensureValidSortedPeersForPieceRequests(peersForPieceSorter)
+		//ensureValidSortedPeersForPieceRequests(&peersForPieceSorter)
 	}
 	// Chunks can be preassigned several times, if peers haven't been able to update their "actual"
 	// with "next" request state before another request strategy run occurs.

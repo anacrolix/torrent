@@ -40,6 +40,7 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/util"
 	"github.com/anacrolix/torrent/webtorrent"
 )
 
@@ -1114,7 +1115,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		},
 		webSeeds: make(map[string]*Peer),
 		gotMetainfoC: make(chan struct{}),
-		wantPeersEvent: new(chan struct{}),
+		wantPeersEvent: util.MakeChanEmptyStruct(),
 	}
 	t.networkingEnabled.Set()
 	t._pendingPieces.NewSet = priorityBitmapStableNewSet

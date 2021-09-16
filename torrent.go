@@ -39,6 +39,7 @@ import (
 	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/util"
 	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
 )
@@ -100,8 +101,8 @@ type Torrent struct {
 	// them. That encourages us to reconnect to peers that are well known in
 	// the swarm.
 	peers prioritizedPeers
-	// Whether we want to know to know more peers.
-	wantPeersEvent missinggo.Event
+	// Whether we want to know more peers.
+	wantPeersEvent util.ChanEmptyStruct
 	// An announcer for each tracker URL.
 	trackerAnnouncers map[string]torrentTrackerAnnouncer
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
@@ -1441,9 +1442,9 @@ func (t *Torrent) wantPeers() bool {
 
 func (t *Torrent) updateWantPeersEvent() {
 	if t.wantPeers() {
-		t.wantPeersEvent.Set()
+		t.wantPeersEvent.Close()
 	} else {
-		t.wantPeersEvent.Clear()
+		t.wantPeersEvent.ResetIfClosed()
 	}
 }
 

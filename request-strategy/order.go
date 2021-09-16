@@ -311,9 +311,7 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 	}
 	defer func() {
 		for _, peer := range peersForPiece {
-			if peer.canRequestPiece(p.index) {
-				peer.requestablePiecesRemaining--
-			}
+			peer.requestablePiecesRemaining--
 		}
 		peersForPiecesPool.Put(peersForPiece)
 	}()
@@ -338,9 +336,6 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 			if !peer.canFitRequest() {
 				continue
 			}
-			if !peer.canRequestPiece(p.index) {
-				continue
-			}
 			preallocated[spec] = append(preallocated[spec], peer)
 			peer.addNextRequest(req)
 		}
@@ -355,9 +350,6 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 		sortPeersForPiece(nil)
 		for _, peer := range peersForPiece {
 			if !peer.canFitRequest() {
-				continue
-			}
-			if !peer.HasPiece(p.index) {
 				continue
 			}
 			if !peer.pieceAllowedFastOrDefault(p.index) {
@@ -384,9 +376,6 @@ chunk:
 		}
 		for _, peer := range peersForPiece {
 			if !peer.canFitRequest() {
-				continue
-			}
-			if !peer.HasPiece(p.index) {
 				continue
 			}
 			if !peer.pieceAllowedFastOrDefault(p.index) {

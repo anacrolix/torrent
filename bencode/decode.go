@@ -635,30 +635,26 @@ func (d *Decoder) parseStringInterface() interface{} {
 	return s
 }
 
-func (d *Decoder) parseDictInterface() interface{} {
-	dict := make(map[string]interface{})
-	for {
-		keyi, ok := d.parseValueInterface()
-		if !ok {
-			break
-		}
-
-		key, ok := keyi.(string)
-		if !ok {
+func (d *Decoder) parseDictInterface() (dict map[string]interface{}) {
+	dict = make(map[string]interface{})
+	keyi, _ := d.parseValueInterface()
+	for keyi != nil {
+		switch key := keyi.(type) {
+		case string:
+			valuei, _ := d.parseValueInterface()
+			if valuei == nil {
+				return
+			}
+			dict[key] = valuei
+		default:
 			panic(&SyntaxError{
 				Offset: d.Offset,
 				What:   errors.New("non-string key in a dict"),
 			})
 		}
-
-		valuei, ok := d.parseValueInterface()
-		if !ok {
-			break
-		}
-
-		dict[key] = valuei
+		keyi, _ = d.parseValueInterface()
 	}
-	return dict
+	return
 }
 
 func (d *Decoder) parseListInterface() interface{} {

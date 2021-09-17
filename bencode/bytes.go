@@ -8,9 +8,10 @@ var (
 	_ Marshaler   = Bytes{}
 )
 
-func (me *Bytes) UnmarshalBencode(b []byte) error {
-	*me = append([]byte(nil), b...)
-	return nil
+func (me *Bytes) UnmarshalBencode(b []byte) (ret error) {
+	*me = make([]byte, len(b))
+	copy(*me, b)
+	return
 }
 
 func (me Bytes) MarshalBencode() ([]byte, error) {

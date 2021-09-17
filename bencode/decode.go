@@ -661,18 +661,12 @@ func (d *Decoder) parseDictInterface() interface{} {
 	return dict
 }
 
-func (d *Decoder) parseListInterface() interface{} {
-	var list []interface{}
-	for {
-		valuei, ok := d.parseValueInterface()
-		if !ok {
-			break
-		}
-
+func (d *Decoder) parseListInterface() (list []interface{}) {
+	list = []interface{}{}
+	valuei, ok := d.parseValueInterface()
+	for ok {
 		list = append(list, valuei)
+		valuei, ok = d.parseValueInterface()
 	}
-	if list == nil {
-		list = make([]interface{}, 0)
-	}
-	return list
+	return
 }

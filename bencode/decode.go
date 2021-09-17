@@ -13,10 +13,7 @@ import (
 )
 
 type Decoder struct {
-	r interface {
-		io.ByteScanner
-		io.Reader
-	}
+	r *scanner
 	// Sum of bytes used to Decode values.
 	Offset int64
 	buf    bytes.Buffer

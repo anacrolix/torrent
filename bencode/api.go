@@ -156,7 +156,7 @@ func (me ErrUnusedTrailingBytes) Error() string {
 }
 
 func NewDecoder(r io.Reader) *Decoder {
-	return &Decoder{r: &scanner{r: r}}
+	return &Decoder{r: &scanner{Reader: r}}
 }
 
 func NewEncoder(w io.Writer) *Encoder {

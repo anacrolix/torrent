@@ -8,31 +8,26 @@ import (
 // Implements io.ByteScanner over io.Reader, for use in Decoder, to ensure
 // that as little as the undecoded input Reader is consumed as possible.
 type scanner struct {
-	r      io.Reader
+	io.Reader
 	b      [1]byte // Buffer for ReadByte
 	unread bool    // True if b has been unread, and so should be returned next
 }
 
-func (me *scanner) Read(b []byte) (int, error) {
-	return me.r.Read(b)
-}
+var errAlreadyUnreadByte = errors.New("byte already unread")
 
 func (me *scanner) ReadByte() (byte, error) {
 	if me.unread {
 		me.unread = false
-		return me.b[0], nil
+	} else if n, err := me.Read(me.b[:]); n != 1 {
+		return me.b[0], err
 	}
-	n, err := me.r.Read(me.b[:])
-	if n == 1 {
-		err = nil
-	}
-	return me.b[0], err
+	return me.b[0], nil
 }
 
-func (me *scanner) UnreadByte() error {
+func (me *scanner) UnreadByte() (ret error) {
 	if me.unread {
-		return errors.New("byte already unread")
+		return errAlreadyUnreadByte
 	}
 	me.unread = true
-	return nil
+	return
 }

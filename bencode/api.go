@@ -2,9 +2,9 @@ package bencode
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"reflect"
+	"strconv"
 
 	"github.com/anacrolix/missinggo/expect"
 )
@@ -48,11 +48,7 @@ type UnmarshalTypeError struct {
 // This could probably be a value type, but we may already have users assuming
 // that it's passed by pointer.
 func (e *UnmarshalTypeError) Error() string {
-	return fmt.Sprintf(
-		"can't unmarshal a bencode %v into a %v",
-		e.BencodeTypeName,
-		e.UnmarshalTargetType,
-	)
+	return "can't unmarshal a bencode " + e.BencodeTypeName + " into a " + e.UnmarshalTargetType.String()
 }
 
 // Unmarshaler tried to write to an unexported (therefore unwritable) field.
@@ -74,7 +70,7 @@ type SyntaxError struct {
 }
 
 func (e *SyntaxError) Error() string {
-	return fmt.Sprintf("bencode: syntax error (offset: %d): %s", e.Offset, e.What)
+	return "bencode: syntax error (offset: " + strconv.FormatInt(e.Offset, 10) +  "): " + e.What.Error()
 }
 
 // A non-nil error was returned after calling MarshalBencode on a type which
@@ -139,10 +135,9 @@ func MustMarshal(v interface{}) []byte {
 // behaviour (inspired by Rust's serde here).
 func Unmarshal(data []byte, v interface{}) (err error) {
 	buf := bytes.NewReader(data)
-	e := Decoder{r: buf}
-	err = e.Decode(v)
+	err = (&Decoder{r: buf}).Decode(v)
 	if err == nil && buf.Len() != 0 {
-		err = ErrUnusedTrailingBytes{buf.Len()}
+		return ErrUnusedTrailingBytes{buf.Len()}
 	}
 	return
 }
@@ -151,8 +146,8 @@ type ErrUnusedTrailingBytes struct {
 	NumUnusedBytes int
 }
 
-func (me ErrUnusedTrailingBytes) Error() string {
-	return fmt.Sprintf("%d unused trailing bytes", me.NumUnusedBytes)
+func (me ErrUnusedTrailingBytes) Error() (err string) {
+	return strconv.FormatUint(uint64(me.NumUnusedBytes), 10) + " unused trailing bytes"
 }
 
 func NewDecoder(r io.Reader) *Decoder {

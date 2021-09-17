@@ -582,31 +582,34 @@ func (d *Decoder) parseValueInterface() (interface{}, bool) {
 }
 
 func (d *Decoder) parseIntInterface() (ret interface{}) {
-	start := d.Offset - 1
 	d.readUntil('e')
-	if d.buf.Len() == 0 {
-		panic(&SyntaxError{
-			Offset: start,
-			What:   errors.New("empty integer value"),
-		})
-	}
-
-	n, err := strconv.ParseInt(d.buf.String(), 10, 64)
-	if ne, ok := err.(*strconv.NumError); ok && ne.Err == strconv.ErrRange {
-		i := new(big.Int)
-		_, ok := i.SetString(d.buf.String(), 10)
-		if !ok {
-			panic(&SyntaxError{
-				Offset: start,
-				What:   errors.New("failed to parse integer"),
-			})
+	// no-copy bytes to string conversion is safe here
+	bs, err := bytesAsString(d.buf.Bytes()), error(nil)
+	switch ilen := len(bs); {
+	case ilen > 0 && ilen < 19: // fast path
+		// There can be ~18.96 decimal digits in an int64.
+		// If the we have 18 bytes or less, we can be sure there's no need for big.Int
+		ret, err = strconv.ParseInt(bs, 10, 64)
+		if err != nil {
+			panic(&SyntaxError{Offset: d.Offset-1, What: err})
 		}
-		ret = i
-	} else {
-		checkForIntParseError(err, start)
-		ret = n
+	case ilen == 0:
+		panic(&SyntaxError{Offset: d.Offset-1, What: errors.New("empty integer value")})
+	case ilen > 0 && ilen < 21: // With negative sign, longest int64 is 20 chars
+		if ret, err = strconv.ParseInt(bs, 10, 64); err == nil {
+			break
+		}
+		// On error, ParseInt always returns a *NumError
+		if err.(*strconv.NumError).Err != strconv.ErrRange {
+			panic(&SyntaxError{Offset: d.Offset-1, What: err})
+		}
+		fallthrough
+	default:
+		if ret, _ = (&big.Int{}).SetString(bs, 10); ret.(*big.Int) != nil {
+			break
+		}
+		panic(&SyntaxError{Offset: d.Offset-1, What: errors.New("failed to parse integer")})
 	}
-
 	d.buf.Reset()
 	return
 }

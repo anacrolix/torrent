@@ -1,9 +1,5 @@
 package metainfo
 
-import (
-	"github.com/anacrolix/missinggo/v2"
-)
-
 type Piece struct {
 	Info *Info // Can we embed the fields here instead, or is it something to do with saving memory?
 	i    pieceIndex
@@ -23,7 +19,7 @@ func (p Piece) Offset() int64 {
 }
 
 func (p Piece) Hash() (ret Hash) {
-	missinggo.CopyExact(&ret, p.Info.Pieces[p.i*HashSize:(p.i+1)*HashSize])
+	copy(ret[:], p.Info.Pieces[p.i*HashSize:(p.i+1)*HashSize])
 	return
 }
 

@@ -198,7 +198,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 	cl.torrents = make(map[metainfo.Hash]*Torrent)
 	cl.dialRateLimiter = rate.NewLimiter(10, 10)
 	cl.activeAnnounceLimiter.SlotsPerKey = 2
-	
+
 	cl.event.L = cl.locker()
 	cl.ipBlockList = cfg.IPBlocklist
 }
@@ -219,7 +219,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 			cl = nil
 		}
 	}()
-	
+
 	storageImpl := cfg.DefaultStorage
 	if storageImpl == nil {
 		// We'd use mmap by default but HFS+ doesn't support sparse files.
@@ -1112,7 +1112,7 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 		metadataChanged: sync.Cond{
 			L: cl.locker(),
 		},
-		webSeeds: make(map[string]*Peer),
+		webSeeds:     make(map[string]*Peer),
 		gotMetainfoC: make(chan struct{}),
 	}
 	t.networkingEnabled.Set()
@@ -1444,7 +1444,6 @@ func (cl *Client) findListener(f func(Listener) bool) (ret Listener) {
 	}
 	return nil
 }
-
 
 func (cl *Client) publicIp(peer net.IP) net.IP {
 	// TODO: Use BEP 10 to determine how peers are seeing us.

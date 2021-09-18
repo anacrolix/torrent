@@ -365,7 +365,7 @@ func (cn *Peer) writeStatus(w io.Writer, t *Torrent) {
 		&cn._stats.ChunksReadUseful,
 		&cn._stats.ChunksRead,
 		&cn._stats.ChunksWritten,
-		cn.numLocalRequests(),
+		len(cn.actualRequestState.Requests),
 		cn.nominalMaxRequests(),
 		cn.PeerMaxRequests,
 		len(cn.peerRequests),
@@ -463,7 +463,7 @@ func (cn *PeerConn) requestedMetadataPiece(index int) bool {
 
 // The actual value to use as the maximum outbound requests.
 func (cn *Peer) nominalMaxRequests() (ret maxRequests) {
-	return int(clamp(1, 2*int64(cn.maxPiecesReceivedBetweenRequestUpdates), int64(cn.PeerMaxRequests)))
+	return maxRequests(clamp(1, int64(cn.PeerMaxRequests), 128))
 }
 
 func (cn *Peer) totalExpectingTime() (ret time.Duration) {
@@ -576,7 +576,7 @@ func (cn *Peer) request(r Request) (more bool, err error) {
 	if _, ok := cn.actualRequestState.Requests[r]; ok {
 		return true, nil
 	}
-	if cn.numLocalRequests() >= cn.nominalMaxRequests() {
+	if len(cn.actualRequestState.Requests) >= cn.nominalMaxRequests() {
 		return true, errors.New("too many outstanding requests")
 	}
 	if cn.actualRequestState.Requests == nil {
@@ -653,7 +653,7 @@ func (cn *PeerConn) postBitfield() {
 }
 
 func (cn *PeerConn) updateRequests() {
-	cn.t.cl.tickleRequester()
+	cn.tickleWriter()
 }
 
 // Emits the indices in the Bitmaps bms in order, never repeating any index.
@@ -1451,10 +1451,6 @@ func (cn *Peer) netGoodPiecesDirtied() int64 {
 
 func (c *Peer) peerHasWantedPieces() bool {
 	return !c._pieceRequestOrder.IsEmpty()
-}
-
-func (c *Peer) numLocalRequests() int {
-	return len(c.actualRequestState.Requests)
 }
 
 func (c *Peer) deleteRequest(r Request) bool {

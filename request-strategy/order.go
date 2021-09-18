@@ -1,11 +1,13 @@
 package request_strategy
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"sync"
 
 	"github.com/anacrolix/multiless"
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -41,9 +43,12 @@ func sortFilterPieces(pieces []filterPiece) {
 			i.Availability, j.Availability,
 		).Int(
 			i.index, j.index,
-		).Uintptr(
-			i.t.StableId, j.t.StableId,
-		).MustLess()
+		).Lazy(func() multiless.Computation {
+			return multiless.New().Cmp(bytes.Compare(
+				i.t.InfoHash[:],
+				j.t.InfoHash[:],
+			))
+		}).MustLess()
 	})
 }
 
@@ -170,7 +175,7 @@ func Run(input Input) map[PeerId]PeerNextRequestState {
 		})
 	})
 	torrents := input.Torrents
-	allPeers := make(map[uintptr][]*requestsPeer, len(torrents))
+	allPeers := make(map[metainfo.Hash][]*requestsPeer, len(torrents))
 	for _, t := range torrents {
 		peers := make([]*requestsPeer, 0, len(t.Peers))
 		for _, p := range t.Peers {
@@ -181,17 +186,17 @@ func Run(input Input) map[PeerId]PeerNextRequestState {
 				},
 			})
 		}
-		allPeers[t.StableId] = peers
+		allPeers[t.InfoHash] = peers
 	}
 	for _, piece := range requestPieces {
-		for _, peer := range allPeers[piece.t.StableId] {
+		for _, peer := range allPeers[piece.t.InfoHash] {
 			if peer.canRequestPiece(piece.index) {
 				peer.requestablePiecesRemaining++
 			}
 		}
 	}
 	for _, piece := range requestPieces {
-		allocatePendingChunks(piece, allPeers[piece.t.StableId])
+		allocatePendingChunks(piece, allPeers[piece.t.InfoHash])
 	}
 	ret := make(map[PeerId]PeerNextRequestState)
 	for _, peers := range allPeers {

@@ -305,7 +305,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		},
 	}
 
-	go cl.requester()
+	//go cl.requester()
 
 	return
 }

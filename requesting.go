@@ -5,6 +5,7 @@ import (
 	"unsafe"
 
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 
 	"github.com/anacrolix/chansync"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
@@ -43,7 +44,7 @@ func (cl *Client) getRequestStrategyInput() request_strategy.Input {
 	ts := make([]request_strategy.Torrent, 0, len(cl.torrents))
 	for _, t := range cl.torrents {
 		rst := request_strategy.Torrent{
-			StableId: uintptr(unsafe.Pointer(t)),
+			InfoHash: t.infoHash,
 		}
 		if t.storage != nil {
 			rst.Capacity = t.storage.Capacity
@@ -119,28 +120,72 @@ func setPeerNextRequestState(_p request_strategy.PeerId, rp request_strategy.Pee
 }
 
 func (p *Peer) applyNextRequestState() bool {
-	next := p.nextRequestState
-	current := p.actualRequestState
-	if !p.setInterested(next.Interested) {
-		return false
+	if len(p.actualRequestState.Requests) > p.nominalMaxRequests()/2 {
+		return true
 	}
-	for req := range current.Requests {
-		if _, ok := next.Requests[req]; !ok {
-			if !p.cancel(req) {
-				return false
+	type piece struct {
+		index   int
+		endGame bool
+	}
+	var pieceOrder []piece
+	request_strategy.GetRequestablePieces(
+		p.t.cl.getRequestStrategyInput(),
+		func(t *request_strategy.Torrent, rsp *request_strategy.Piece, pieceIndex int) {
+			if t.InfoHash != p.t.infoHash {
+				return
+			}
+			if !p.peerHasPiece(pieceIndex) {
+				return
+			}
+			pieceOrder = append(pieceOrder, piece{
+				index:   pieceIndex,
+				endGame: rsp.Priority == PiecePriorityNow,
+			})
+		},
+	)
+	more := true
+	interested := false
+	for _, endGameIter := range []bool{false, true} {
+		for _, piece := range pieceOrder {
+			tp := p.t.piece(piece.index)
+			tp.iterUndirtiedChunks(func(cs ChunkSpec) {
+				req := Request{pp.Integer(piece.index), cs}
+				if !piece.endGame && !endGameIter && p.t.pendingRequests[req] > 0 {
+					return
+				}
+				interested = true
+				more = p.setInterested(true)
+				if !more {
+					return
+				}
+				if len(p.actualRequestState.Requests) >= p.nominalMaxRequests() {
+					return
+				}
+				if p.peerChoking && !p.peerAllowedFast.Contains(bitmap.BitIndex(req.Index)) {
+					return
+				}
+				var err error
+				more, err = p.request(req)
+				if err != nil {
+					panic(err)
+				}
+			})
+			if interested && len(p.actualRequestState.Requests) >= p.nominalMaxRequests() {
+				break
+			}
+			if !more {
+				break
 			}
 		}
-	}
-	for req := range next.Requests {
-		more, err := p.request(req)
-		if err != nil {
-			panic(err)
-		} /* else {
-			log.Print(req)
-		} */
 		if !more {
-			return false
+			break
 		}
 	}
-	return true
+	if !more {
+		return false
+	}
+	if !interested {
+		p.setInterested(false)
+	}
+	return more
 }

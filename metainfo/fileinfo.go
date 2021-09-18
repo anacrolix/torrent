@@ -17,12 +17,14 @@ func (fi *FileInfo) DisplayPath(info *Info) string {
 	}
 }
 
-func (me FileInfo) Offset(info *Info) (ret int64) {
-	for _, fi := range info.UpvertedFiles() {
-		if me.DisplayPath(info) == fi.DisplayPath(info) {
+func (fi *FileInfo) Offset(info *Info) (ret int64) {
+	files := info.UpvertedFiles()
+	dp := fi.DisplayPath(info)
+	for i := 0; i < len(files); i += 1 {
+		if dp == files[i].DisplayPath(info) {
 			return
 		}
-		ret += fi.Length
+		ret += files[i].Length
 	}
 	panic("not found")
 }

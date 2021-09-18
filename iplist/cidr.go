@@ -29,11 +29,11 @@ func ParseCIDRListReader(r io.Reader) (ret []Range, err error) {
 
 // Returns the last, inclusive IP in a net.IPNet.
 func IPNetLast(in *net.IPNet) (last net.IP) {
-	if len(in.IP) != len(in.Mask) {
-		panic("wat")
-	}
-	last = make(net.IP, len(in.IP))
-	for i := 0; i < len(last) && i < len(in.IP) && len(in.IP) == len(in.Mask); i++ {
+    last = make(net.IP, len(in.IP))
+	for i := 0; i < len(last) && i < len(in.IP); i++ {
+        if len(in.IP) != len(in.Mask) {
+            panic("wat")
+        }
 		last[i] = in.IP[i] | ^in.Mask[i]
 	}
 	return

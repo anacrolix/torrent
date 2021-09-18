@@ -10,18 +10,13 @@ var (
 	_ bencode.Unmarshaler = (*UrlList)(nil)
 )
 
-func (me *UrlList) UnmarshalBencode(b []byte) error {
-	if len(b) == 0 {
-		return nil
+func (me *UrlList) UnmarshalBencode(b []byte) (err error) {
+	if len(b) < 1 {
+		return
 	}
 	if b[0] == 'l' {
-		var l []string
-		err := bencode.Unmarshal(b, &l)
-		*me = l
-		return err
+		return bencode.Unmarshal(b, me)
 	}
-	var s string
-	err := bencode.Unmarshal(b, &s)
-	*me = []string{s}
-	return err
+	*me = append((*me)[:0], "")
+	return bencode.Unmarshal(b, &(*me)[0])
 }

@@ -653,6 +653,9 @@ func (cn *PeerConn) postBitfield() {
 }
 
 func (cn *PeerConn) updateRequests() {
+	if len(cn.actualRequestState.Requests) != 0 {
+		return
+	}
 	cn.tickleWriter()
 }
 

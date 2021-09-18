@@ -3,8 +3,8 @@ package bencode
 type Bytes []byte
 
 var (
-	_ Unmarshaler = &Bytes{}
-	_ Marshaler   = &Bytes{}
+	_ Unmarshaler = (*Bytes)(nil)
+	_ Marshaler   = (*Bytes)(nil)
 	_ Marshaler   = Bytes{}
 )
 

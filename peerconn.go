@@ -563,6 +563,9 @@ func (cn *Peer) shouldRequest(r Request) error {
 	if cn.t.pieceQueuedForHash(pieceIndex(r.Index)) {
 		panic("piece is queued for hash")
 	}
+	if cn.peerChoking && !cn.peerAllowedFast.Contains(bitmap.BitIndex(r.Index)) {
+		panic("peer choking and piece not allowed fast")
+	}
 	return nil
 }
 

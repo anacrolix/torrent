@@ -17,6 +17,6 @@ func (me *UrlList) UnmarshalBencode(b []byte) (err error) {
 	if b[0] == 'l' {
 		return bencode.Unmarshal(b, me)
 	}
-	*me = append((*me)[:0], "")
+	*me = make([]string, 1)
 	return bencode.Unmarshal(b, &(*me)[0])
 }

@@ -89,13 +89,13 @@ type filterPiece struct {
 	*Piece
 }
 
-func getRequestablePieces(input Input) (ret []requestablePiece) {
+// Calls f with requestable pieces in order.
+func GetRequestablePieces(input Input, f func(t *Torrent, p *Piece, pieceIndex int)) {
 	maxPieces := 0
 	for i := range input.Torrents {
 		maxPieces += len(input.Torrents[i].Pieces)
 	}
 	pieces := make([]filterPiece, 0, maxPieces)
-	ret = make([]requestablePiece, 0, maxPieces)
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
 	// TorrentImpl. A nil value means no capacity limit.
 	storageLeft := make(map[storage.TorrentCapacity]*int64)
@@ -147,13 +147,7 @@ func getRequestablePieces(input Input) (ret []requestablePiece) {
 		}
 		piece.t.unverifiedBytes += piece.Length
 		allTorrentsUnverifiedBytes += piece.Length
-		ret = append(ret, requestablePiece{
-			index:             piece.index,
-			t:                 piece.t.Torrent,
-			NumPendingChunks:  piece.NumPendingChunks,
-			IterPendingChunks: piece.iterPendingChunksWrapper,
-			alwaysReallocate:  piece.Priority >= types.PiecePriorityNext,
-		})
+		f(piece.t.Torrent, piece.Piece, piece.index)
 	}
 	return
 }
@@ -165,7 +159,16 @@ type Input struct {
 
 // TODO: We could do metainfo requests here.
 func Run(input Input) map[PeerId]PeerNextRequestState {
-	requestPieces := getRequestablePieces(input)
+	var requestPieces []requestablePiece
+	GetRequestablePieces(input, func(t *Torrent, piece *Piece, pieceIndex int) {
+		requestPieces = append(requestPieces, requestablePiece{
+			index:             pieceIndex,
+			t:                 t,
+			NumPendingChunks:  piece.NumPendingChunks,
+			IterPendingChunks: piece.iterPendingChunksWrapper,
+			alwaysReallocate:  piece.Priority >= types.PiecePriorityNext,
+		})
+	})
 	torrents := input.Torrents
 	allPeers := make(map[uintptr][]*requestsPeer, len(torrents))
 	for _, t := range torrents {

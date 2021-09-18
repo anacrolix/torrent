@@ -39,7 +39,7 @@ func (cl *Client) tickleRequester() {
 	cl.updateRequests.Broadcast()
 }
 
-func (cl *Client) doRequests() {
+func (cl *Client) getRequestStrategyInput() request_strategy.Input {
 	ts := make([]request_strategy.Torrent, 0, len(cl.torrents))
 	for _, t := range cl.torrents {
 		rst := request_strategy.Torrent{
@@ -90,10 +90,14 @@ func (cl *Client) doRequests() {
 		})
 		ts = append(ts, rst)
 	}
-	nextPeerStates := request_strategy.Run(request_strategy.Input{
+	return request_strategy.Input{
 		Torrents:           ts,
 		MaxUnverifiedBytes: cl.config.MaxUnverifiedBytes,
-	})
+	}
+}
+
+func (cl *Client) doRequests() {
+	nextPeerStates := request_strategy.Run(cl.getRequestStrategyInput())
 	for p, state := range nextPeerStates {
 		setPeerNextRequestState(p, state)
 	}

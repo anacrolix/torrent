@@ -7,7 +7,8 @@ import (
 type Torrent struct {
 	Pieces   []Piece
 	Capacity storage.TorrentCapacity
-	Peers    []Peer // not closed.
+	// Unclosed Peers. Not necessary for getting requestable piece ordering.
+	Peers []Peer
 	// Some value that's unique and stable between runs. Could even use the infohash?
 	StableId uintptr
 

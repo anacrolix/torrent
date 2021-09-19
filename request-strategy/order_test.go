@@ -4,36 +4,29 @@ import (
 	"math"
 	"testing"
 
+	"github.com/RoaringBitmap/roaring"
 	qt "github.com/frankban/quicktest"
-
-	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/google/go-cmp/cmp"
 )
 
-func r(i pieceIndex, begin int) Request {
-	return Request{pp.Integer(i), ChunkSpec{pp.Integer(begin), 1}}
-}
-
-func chunkIterRange(end int) func(func(ChunkSpec)) {
-	return func(f func(ChunkSpec)) {
-		for offset := 0; offset < end; offset += 1 {
-			f(ChunkSpec{pp.Integer(offset), 1})
+func chunkIterRange(end ChunkIndex) ChunksIter {
+	return func(f func(ChunkIndex)) {
+		for offset := ChunkIndex(0); offset < end; offset += 1 {
+			f(offset)
 		}
 	}
 }
 
-func chunkIter(offsets ...int) func(func(ChunkSpec)) {
-	return func(f func(ChunkSpec)) {
+func chunkIter(offsets ...ChunkIndex) ChunksIter {
+	return func(f func(ChunkIndex)) {
 		for _, offset := range offsets {
-			f(ChunkSpec{pp.Integer(offset), 1})
+			f(offset)
 		}
 	}
 }
 
-func requestSetFromSlice(rs ...Request) (ret map[Request]struct{}) {
-	ret = make(map[Request]struct{}, len(rs))
-	for _, r := range rs {
-		ret[r] = struct{}{}
-	}
+func requestSetFromSlice(rs ...RequestIndex) (ret roaring.Bitmap) {
+	ret.AddMany(rs)
 	return
 }
 
@@ -42,6 +35,8 @@ type intPeerId int
 func (i intPeerId) Uintptr() uintptr {
 	return uintptr(i)
 }
+
+func hasAllRequests(RequestIndex) bool { return true }
 
 func TestStealingFromSlowerPeer(t *testing.T) {
 	c := qt.New(t)
@@ -55,15 +50,14 @@ func TestStealingFromSlowerPeer(t *testing.T) {
 	// Slower than the stealers, but has all requests already.
 	stealee := basePeer
 	stealee.DownloadRate = 1
-	stealee.HasExistingRequest = func(r Request) bool {
-		return true
-	}
+	stealee.HasExistingRequest = hasAllRequests
 	stealee.Id = intPeerId(1)
 	firstStealer := basePeer
 	firstStealer.Id = intPeerId(2)
 	secondStealer := basePeer
 	secondStealer.Id = intPeerId(3)
 	results := Run(Input{Torrents: []Torrent{{
+		ChunksPerPiece: 9,
 		Pieces: []Piece{{
 			Request:           true,
 			NumPendingChunks:  5,
@@ -77,8 +71,9 @@ func TestStealingFromSlowerPeer(t *testing.T) {
 	}}})
 
 	c.Assert(results, qt.HasLen, 3)
-	check := func(p PeerId, l int) {
-		c.Check(results[p].Requests, qt.HasLen, l)
+	check := func(p PeerId, l uint64) {
+		addressableBm := results[p].Requests
+		c.Check(addressableBm.GetCardinality(), qt.ContentEquals, l)
 		c.Check(results[p].Interested, qt.Equals, l > 0)
 	}
 	check(stealee.Id, 1)
@@ -86,8 +81,9 @@ func TestStealingFromSlowerPeer(t *testing.T) {
 	check(secondStealer.Id, 2)
 }
 
-func checkNumRequestsAndInterest(c *qt.C, next PeerNextRequestState, num int, interest bool) {
-	c.Check(next.Requests, qt.HasLen, num)
+func checkNumRequestsAndInterest(c *qt.C, next PeerNextRequestState, num uint64, interest bool) {
+	addressableBm := next.Requests
+	c.Check(addressableBm.GetCardinality(), qt.ContentEquals, num)
 	c.Check(next.Interested, qt.Equals, interest)
 }
 
@@ -102,15 +98,14 @@ func TestStealingFromSlowerPeersBasic(t *testing.T) {
 	}
 	stealee := basePeer
 	stealee.DownloadRate = 1
-	stealee.HasExistingRequest = func(r Request) bool {
-		return true
-	}
+	stealee.HasExistingRequest = hasAllRequests
 	stealee.Id = intPeerId(1)
 	firstStealer := basePeer
 	firstStealer.Id = intPeerId(2)
 	secondStealer := basePeer
 	secondStealer.Id = intPeerId(3)
 	results := Run(Input{Torrents: []Torrent{{
+		ChunksPerPiece: 9,
 		Pieces: []Piece{{
 			Request:           true,
 			NumPendingChunks:  2,
@@ -128,6 +123,10 @@ func TestStealingFromSlowerPeersBasic(t *testing.T) {
 	checkNumRequestsAndInterest(c, results[stealee.Id], 0, false)
 }
 
+func checkResultsRequestsLen(t *testing.T, reqs roaring.Bitmap, l uint64) {
+	qt.Check(t, reqs.GetCardinality(), qt.Equals, l)
+}
+
 func TestPeerKeepsExistingIfReasonable(t *testing.T) {
 	c := qt.New(t)
 	basePeer := Peer{
@@ -140,8 +139,8 @@ func TestPeerKeepsExistingIfReasonable(t *testing.T) {
 	// Slower than the stealers, but has all requests already.
 	stealee := basePeer
 	stealee.DownloadRate = 1
-	keepReq := r(0, 0)
-	stealee.HasExistingRequest = func(r Request) bool {
+	keepReq := RequestIndex(0)
+	stealee.HasExistingRequest = func(r RequestIndex) bool {
 		return r == keepReq
 	}
 	stealee.Id = intPeerId(1)
@@ -150,6 +149,7 @@ func TestPeerKeepsExistingIfReasonable(t *testing.T) {
 	secondStealer := basePeer
 	secondStealer.Id = intPeerId(3)
 	results := Run(Input{Torrents: []Torrent{{
+		ChunksPerPiece: 9,
 		Pieces: []Piece{{
 			Request:           true,
 			NumPendingChunks:  4,
@@ -163,17 +163,28 @@ func TestPeerKeepsExistingIfReasonable(t *testing.T) {
 	}}})
 
 	c.Assert(results, qt.HasLen, 3)
-	check := func(p PeerId, l int) {
-		c.Check(results[p].Requests, qt.HasLen, l)
+	check := func(p PeerId, l uint64) {
+		checkResultsRequestsLen(t, results[p].Requests, l)
 		c.Check(results[p].Interested, qt.Equals, l > 0)
 	}
 	check(firstStealer.Id, 2)
 	check(secondStealer.Id, 1)
-	c.Check(results[stealee.Id], qt.ContentEquals, PeerNextRequestState{
-		Interested: true,
-		Requests:   requestSetFromSlice(keepReq),
-	})
+	c.Check(
+		results[stealee.Id],
+		peerNextRequestStateChecker,
+		PeerNextRequestState{
+			Interested: true,
+			Requests:   requestSetFromSlice(keepReq),
+		},
+	)
 }
+
+var peerNextRequestStateChecker = qt.CmpEquals(
+	cmp.Transformer(
+		"bitmap",
+		func(bm roaring.Bitmap) []uint32 {
+			return bm.ToArray()
+		}))
 
 func TestDontStealUnnecessarily(t *testing.T) {
 	c := qt.New(t)
@@ -187,12 +198,14 @@ func TestDontStealUnnecessarily(t *testing.T) {
 	// Slower than the stealers, but has all requests already.
 	stealee := basePeer
 	stealee.DownloadRate = 1
+	r := func(i, c RequestIndex) RequestIndex {
+		return i*9 + c
+	}
 	keepReqs := requestSetFromSlice(
 		r(3, 2), r(3, 4), r(3, 6), r(3, 8),
 		r(4, 0), r(4, 1), r(4, 7), r(4, 8))
-	stealee.HasExistingRequest = func(r Request) bool {
-		_, ok := keepReqs[r]
-		return ok
+	stealee.HasExistingRequest = func(r RequestIndex) bool {
+		return keepReqs.Contains(r)
 	}
 	stealee.Id = intPeerId(1)
 	firstStealer := basePeer
@@ -208,6 +221,7 @@ func TestDontStealUnnecessarily(t *testing.T) {
 		}
 	}
 	results := Run(Input{Torrents: []Torrent{{
+		ChunksPerPiece: 9,
 		Pieces: []Piece{
 			{
 				Request:           true,
@@ -242,16 +256,20 @@ func TestDontStealUnnecessarily(t *testing.T) {
 	}}})
 
 	c.Assert(results, qt.HasLen, 3)
-	check := func(p PeerId, l int) {
-		c.Check(results[p].Requests, qt.HasLen, l)
+	check := func(p PeerId, l uint64) {
+		checkResultsRequestsLen(t, results[p].Requests, l)
 		c.Check(results[p].Interested, qt.Equals, l > 0)
 	}
 	check(firstStealer.Id, 5)
 	check(secondStealer.Id, 7+9)
-	c.Check(results[stealee.Id], qt.ContentEquals, PeerNextRequestState{
-		Interested: true,
-		Requests:   requestSetFromSlice(r(4, 0), r(4, 1), r(4, 7), r(4, 8)),
-	})
+	c.Check(
+		results[stealee.Id],
+		peerNextRequestStateChecker,
+		PeerNextRequestState{
+			Interested: true,
+			Requests:   requestSetFromSlice(r(4, 0), r(4, 1), r(4, 7), r(4, 8)),
+		},
+	)
 }
 
 // This tests a situation where multiple peers had the same existing request, due to "actual" and
@@ -260,10 +278,8 @@ func TestDontStealUnnecessarily(t *testing.T) {
 func TestDuplicatePreallocations(t *testing.T) {
 	peer := func(id int, downloadRate float64) Peer {
 		return Peer{
-			HasExistingRequest: func(r Request) bool {
-				return true
-			},
-			MaxRequests: 2,
+			HasExistingRequest: hasAllRequests,
+			MaxRequests:        2,
 			HasPiece: func(i pieceIndex) bool {
 				return true
 			},
@@ -273,6 +289,7 @@ func TestDuplicatePreallocations(t *testing.T) {
 	}
 	results := Run(Input{
 		Torrents: []Torrent{{
+			ChunksPerPiece: 1,
 			Pieces: []Piece{{
 				Request:           true,
 				NumPendingChunks:  1,
@@ -292,5 +309,7 @@ func TestDuplicatePreallocations(t *testing.T) {
 		}},
 	})
 	c := qt.New(t)
-	c.Assert(2, qt.Equals, len(results[intPeerId(1)].Requests)+len(results[intPeerId(2)].Requests))
+	req1 := results[intPeerId(1)].Requests
+	req2 := results[intPeerId(2)].Requests
+	c.Assert(uint64(2), qt.Equals, req1.GetCardinality()+req2.GetCardinality())
 }

@@ -11,7 +11,8 @@ type Torrent struct {
 	// Unclosed Peers. Not necessary for getting requestable piece ordering.
 	Peers []Peer
 	// Some value that's unique and stable between runs. Could even use the infohash?
-	InfoHash metainfo.Hash
+	InfoHash       metainfo.Hash
+	ChunksPerPiece int
 
 	MaxUnverifiedBytes int64
 }

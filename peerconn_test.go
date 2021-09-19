@@ -23,7 +23,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	cl.initLogger()
 	c := cl.newConnection(nil, false, nil, "io.Pipe", "")
 	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
-	if err := c.t.setInfo(&metainfo.Info{ Pieces: make([]byte, metainfo.HashSize*3) }); err != nil {
+	if err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)}); err != nil {
 		t.Log(err)
 	}
 	r, w := io.Pipe()
@@ -129,7 +129,9 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.
 			t.pieces[0]._dirtyChunks.Clear()
-			cn.validReceiveChunks = map[Request]int{newRequestFromMessage(&msg): 1}
+			cn.validReceiveChunks = map[RequestIndex]int{
+				t.requestIndexFromRequest(newRequestFromMessage(&msg)): 1,
+			}
 			cl.unlock()
 			n, err := w.Write(wb)
 			require.NoError(b, err)

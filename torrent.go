@@ -143,7 +143,7 @@ type Torrent struct {
 	connPieceInclinationPool sync.Pool
 
 	// Count of each request across active connections.
-	pendingRequests map[Request]int
+	pendingRequests map[RequestIndex]int
 
 	pex pexState
 }
@@ -440,7 +440,7 @@ func (t *Torrent) onSetInfo() {
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
-	t.pendingRequests = make(map[Request]int)
+	t.pendingRequests = make(map[RequestIndex]int)
 	t.tryCreateMorePieceHashers()
 }
 
@@ -842,8 +842,12 @@ func (t *Torrent) bitfield() (bf []bool) {
 	return
 }
 
-func (t *Torrent) pieceNumChunks(piece pieceIndex) pp.Integer {
-	return (t.pieceLength(piece) + t.chunkSize - 1) / t.chunkSize
+func (t *Torrent) chunksPerRegularPiece() uint32 {
+	return uint32((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
+}
+
+func (t *Torrent) pieceNumChunks(piece pieceIndex) chunkIndexType {
+	return chunkIndexType((t.pieceLength(piece) + t.chunkSize - 1) / t.chunkSize)
 }
 
 func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex) {
@@ -940,8 +944,8 @@ func (t *Torrent) haveChunk(r Request) (ret bool) {
 	return !p.pendingChunk(r.ChunkSpec, t.chunkSize)
 }
 
-func chunkIndex(cs ChunkSpec, chunkSize pp.Integer) int {
-	return int(cs.Begin / chunkSize)
+func chunkIndexFromChunkSpec(cs ChunkSpec, chunkSize pp.Integer) chunkIndexType {
+	return chunkIndexType(cs.Begin / chunkSize)
 }
 
 func (t *Torrent) wantPieceIndex(index pieceIndex) bool {
@@ -1033,7 +1037,7 @@ func (t *Torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
 	if t.pieceComplete(piece) {
 		return 0
 	}
-	return t.pieceNumChunks(piece) - t.pieces[piece].numDirtyChunks()
+	return pp.Integer(t.pieceNumChunks(piece)) - t.pieces[piece].numDirtyChunks()
 }
 
 func (t *Torrent) pieceAllDirty(piece pieceIndex) bool {
@@ -1170,9 +1174,8 @@ func (t *Torrent) piecePriority(piece pieceIndex) piecePriority {
 	return ret
 }
 
-func (t *Torrent) pendRequest(req Request) {
-	ci := chunkIndex(req.ChunkSpec, t.chunkSize)
-	t.pieces[req.Index].pendChunkIndex(ci)
+func (t *Torrent) pendRequest(req RequestIndex) {
+	t.piece(int(req / t.chunksPerRegularPiece())).pendChunkIndex(req % t.chunksPerRegularPiece())
 }
 
 func (t *Torrent) pieceCompletionChanged(piece pieceIndex) {
@@ -2258,4 +2261,20 @@ func (t *Torrent) peerIsActive(p *Peer) (active bool) {
 		}
 	})
 	return
+}
+
+func (t *Torrent) requestIndexToRequest(ri RequestIndex) Request {
+	index := ri / t.chunksPerRegularPiece()
+	return Request{
+		pp.Integer(index),
+		t.piece(int(index)).chunkIndexSpec(pp.Integer(ri % t.chunksPerRegularPiece())),
+	}
+}
+
+func (t *Torrent) requestIndexFromRequest(r Request) RequestIndex {
+	return t.chunksPerRegularPiece()*uint32(r.Index) + uint32(r.Begin/t.chunkSize)
+}
+
+func (t *Torrent) numChunks() RequestIndex {
+	return RequestIndex((t.Length() + int64(t.chunkSize) - 1) / int64(t.chunkSize))
 }

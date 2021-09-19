@@ -2,11 +2,13 @@ package request_strategy
 
 import (
 	"time"
+
+	"github.com/RoaringBitmap/roaring"
 )
 
 type PeerNextRequestState struct {
 	Interested bool
-	Requests   map[Request]struct{}
+	Requests   roaring.Bitmap
 }
 
 type PeerId interface {
@@ -16,7 +18,7 @@ type PeerId interface {
 type Peer struct {
 	HasPiece           func(i pieceIndex) bool
 	MaxRequests        int
-	HasExistingRequest func(r Request) bool
+	HasExistingRequest func(r RequestIndex) bool
 	Choking            bool
 	PieceAllowedFast   func(pieceIndex) bool
 	DownloadRate       float64

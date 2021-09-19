@@ -78,11 +78,17 @@ func (ws *webseedPeer) requester() {
 	defer ws.requesterCond.L.Unlock()
 start:
 	for !ws.peer.closed.IsSet() {
-		for r := range ws.peer.actualRequestState.Requests {
+		restart := false
+		ws.peer.actualRequestState.Requests.Iterate(func(x uint32) bool {
+			r := ws.peer.t.requestIndexToRequest(x)
 			if _, ok := ws.activeRequests[r]; ok {
-				continue
+				return true
 			}
 			ws.doRequest(r)
+			restart = true
+			return false
+		})
+		if restart {
 			goto start
 		}
 		ws.requesterCond.Wait()
@@ -134,7 +140,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			}() {
 			ws.peer.close()
 		} else {
-			ws.peer.remoteRejectedRequest(r)
+			ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r))
 		}
 	} else {
 		err := ws.peer.receiveChunk(&pp.Message{

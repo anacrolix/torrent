@@ -55,12 +55,12 @@ func (p *Piece) Storage() storage.Piece {
 	return p.t.storage.Piece(p.Info())
 }
 
-func (p *Piece) pendingChunkIndex(chunkIndex int) bool {
+func (p *Piece) pendingChunkIndex(chunkIndex chunkIndexType) bool {
 	return !p._dirtyChunks.Contains(bitmap.BitIndex(chunkIndex))
 }
 
 func (p *Piece) pendingChunk(cs ChunkSpec, chunkSize pp.Integer) bool {
-	return p.pendingChunkIndex(chunkIndex(cs, chunkSize))
+	return p.pendingChunkIndex(chunkIndexFromChunkSpec(cs, chunkSize))
 }
 
 func (p *Piece) hasDirtyChunks() bool {
@@ -71,17 +71,17 @@ func (p *Piece) numDirtyChunks() pp.Integer {
 	return pp.Integer(p._dirtyChunks.Len())
 }
 
-func (p *Piece) unpendChunkIndex(i int) {
+func (p *Piece) unpendChunkIndex(i chunkIndexType) {
 	p._dirtyChunks.Add(bitmap.BitIndex(i))
 	p.readerCond.Broadcast()
 }
 
-func (p *Piece) pendChunkIndex(i int) {
+func (p *Piece) pendChunkIndex(i RequestIndex) {
 	p._dirtyChunks.Remove(bitmap.BitIndex(i))
 }
 
 func (p *Piece) numChunks() pp.Integer {
-	return p.t.pieceNumChunks(p.index)
+	return pp.Integer(p.t.pieceNumChunks(p.index))
 }
 
 func (p *Piece) incrementPendingWrites() {
@@ -237,11 +237,15 @@ func (p *Piece) State() PieceState {
 	return p.t.PieceState(p.index)
 }
 
-func (p *Piece) iterUndirtiedChunks(f func(cs ChunkSpec)) {
-	for i := pp.Integer(0); i < p.numChunks(); i++ {
-		if p.chunkIndexDirty(i) {
+func (p *Piece) iterUndirtiedChunks(f func(cs chunkIndexType)) {
+	for i := chunkIndexType(0); i < chunkIndexType(p.numChunks()); i++ {
+		if p.chunkIndexDirty(pp.Integer(i)) {
 			continue
 		}
-		f(p.chunkIndexSpec(i))
+		f(i)
 	}
+}
+
+func (p *Piece) requestIndexOffset() RequestIndex {
+	return RequestIndex(p.index) * p.t.chunksPerRegularPiece()
 }

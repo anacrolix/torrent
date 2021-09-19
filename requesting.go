@@ -5,7 +5,6 @@ import (
 	"unsafe"
 
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	pp "github.com/anacrolix/torrent/peer_protocol"
 
 	"github.com/anacrolix/chansync"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
@@ -43,8 +42,13 @@ func (cl *Client) tickleRequester() {
 func (cl *Client) getRequestStrategyInput() request_strategy.Input {
 	ts := make([]request_strategy.Torrent, 0, len(cl.torrents))
 	for _, t := range cl.torrents {
+		if !t.haveInfo() {
+			// This would be removed if metadata is handled here.
+			continue
+		}
 		rst := request_strategy.Torrent{
-			InfoHash: t.infoHash,
+			InfoHash:       t.infoHash,
+			ChunksPerPiece: (t.usualPieceSize() + int(t.chunkSize) - 1) / int(t.chunkSize),
 		}
 		if t.storage != nil {
 			rst.Capacity = t.storage.Capacity
@@ -73,9 +77,8 @@ func (cl *Client) getRequestStrategyInput() request_strategy.Input {
 			rst.Peers = append(rst.Peers, request_strategy.Peer{
 				HasPiece:    p.peerHasPiece,
 				MaxRequests: p.nominalMaxRequests(),
-				HasExistingRequest: func(r request_strategy.Request) bool {
-					_, ok := p.actualRequestState.Requests[r]
-					return ok
+				HasExistingRequest: func(r RequestIndex) bool {
+					return p.actualRequestState.Requests.Contains(r)
 				},
 				Choking: p.peerChoking,
 				PieceAllowedFast: func(i pieceIndex) bool {
@@ -119,8 +122,11 @@ func setPeerNextRequestState(_p request_strategy.PeerId, rp request_strategy.Pee
 	p.onNextRequestStateChanged()
 }
 
+type RequestIndex = request_strategy.RequestIndex
+type chunkIndexType = request_strategy.ChunkIndex
+
 func (p *Peer) applyNextRequestState() bool {
-	if len(p.actualRequestState.Requests) > p.nominalMaxRequests()/2 {
+	if p.actualRequestState.Requests.GetCardinality() > uint64(p.nominalMaxRequests()/2) {
 		return true
 	}
 	type piece struct {
@@ -148,8 +154,8 @@ func (p *Peer) applyNextRequestState() bool {
 	for _, endGameIter := range []bool{false, true} {
 		for _, piece := range pieceOrder {
 			tp := p.t.piece(piece.index)
-			tp.iterUndirtiedChunks(func(cs ChunkSpec) {
-				req := Request{pp.Integer(piece.index), cs}
+			tp.iterUndirtiedChunks(func(cs chunkIndexType) {
+				req := cs + tp.requestIndexOffset()
 				if !piece.endGame && !endGameIter && p.t.pendingRequests[req] > 0 {
 					return
 				}
@@ -158,10 +164,10 @@ func (p *Peer) applyNextRequestState() bool {
 				if !more {
 					return
 				}
-				if len(p.actualRequestState.Requests) >= p.nominalMaxRequests() {
+				if maxRequests(p.actualRequestState.Requests.GetCardinality()) >= p.nominalMaxRequests() {
 					return
 				}
-				if p.peerChoking && !p.peerAllowedFast.Contains(bitmap.BitIndex(req.Index)) {
+				if p.peerChoking && !p.peerAllowedFast.Contains(bitmap.BitIndex(piece.index)) {
 					return
 				}
 				var err error
@@ -170,7 +176,7 @@ func (p *Peer) applyNextRequestState() bool {
 					panic(err)
 				}
 			})
-			if interested && len(p.actualRequestState.Requests) >= p.nominalMaxRequests() {
+			if interested && maxRequests(p.actualRequestState.Requests.GetCardinality()) >= p.nominalMaxRequests() {
 				break
 			}
 			if !more {

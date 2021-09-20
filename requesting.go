@@ -132,6 +132,11 @@ func (p *Peer) applyNextRequestState() bool {
 		}
 	}
 	for req := range next.Requests {
+		// This could happen if the peer chokes us between the next state being generated, and us
+		// trying to transmit the state.
+		if p.peerChoking && !p.peerAllowedFast.Contains(bitmap.BitIndex(req.Index)) {
+			continue
+		}
 		more, err := p.request(req)
 		if err != nil {
 			panic(err)

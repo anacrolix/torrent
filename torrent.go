@@ -842,12 +842,12 @@ func (t *Torrent) bitfield() (bf []bool) {
 	return
 }
 
-func (t *Torrent) chunksPerRegularPiece() uint32 {
-	return uint32((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
-}
-
 func (t *Torrent) pieceNumChunks(piece pieceIndex) chunkIndexType {
 	return chunkIndexType((t.pieceLength(piece) + t.chunkSize - 1) / t.chunkSize)
+}
+
+func (t *Torrent) chunksPerRegularPiece() uint32 {
+	return uint32((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
 }
 
 func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex) {

@@ -305,7 +305,9 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		},
 	}
 
-	//go cl.requester()
+	if !peerRequesting {
+		go cl.requester()
+	}
 
 	return
 }

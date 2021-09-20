@@ -655,10 +655,14 @@ func (cn *PeerConn) postBitfield() {
 }
 
 func (cn *PeerConn) updateRequests() {
-	if cn.actualRequestState.Requests.GetCardinality() != 0 {
+	if peerRequesting {
+		if cn.actualRequestState.Requests.GetCardinality() != 0 {
+			return
+		}
+		cn.tickleWriter()
 		return
 	}
-	cn.tickleWriter()
+	cn.t.cl.tickleRequester()
 }
 
 // Emits the indices in the Bitmaps bms in order, never repeating any index.

@@ -4,6 +4,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
 	"github.com/anacrolix/chansync"
@@ -208,12 +209,10 @@ func (p *Peer) applyNextRequestState() bool {
 		return false
 	}
 	more := true
-	current.Requests.Iterate(func(req uint32) bool {
-		if !next.Requests.Contains(req) {
-			more = p.cancel(req)
-			return more
-		}
-		return true
+	cancel := roaring.AndNot(&current.Requests, &next.Requests)
+	cancel.Iterate(func(req uint32) bool {
+		more = p.cancel(req)
+		return more
 	})
 	if !more {
 		return false

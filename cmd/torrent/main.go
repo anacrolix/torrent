@@ -359,7 +359,7 @@ func downloadErr(flags downloadFlags) error {
 	if client.WaitAll() {
 		log.Print("downloaded ALL the torrents")
 	} else {
-		return errors.New("y u no complete torrents?!")
+		err = errors.New("y u no complete torrents?!")
 	}
 	if flags.Seed {
 		if len(client.Torrents()) == 0 {
@@ -378,7 +378,7 @@ func downloadErr(flags downloadFlags) error {
 		humanize.Bytes(uint64(clStats.BytesRead.Int64())),
 		100*float64(clStats.BytesReadUsefulData.Int64())/float64(clStats.BytesRead.Int64()),
 		humanize.Bytes(uint64(sentOverhead)))
-	return nil
+	return err
 }
 
 func outputStats(cl *torrent.Client, args downloadFlags) {

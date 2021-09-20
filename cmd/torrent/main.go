@@ -42,7 +42,8 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 		}
 		lastStats := t.Stats()
 		var lastLine string
-		for range time.Tick(time.Second) {
+		interval := 3 * time.Second
+		for range time.Tick(interval) {
 			var completedPieces, partialPieces int
 			psrs := t.PieceStateRuns()
 			for _, r := range psrs {
@@ -54,6 +55,9 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 				}
 			}
 			stats := t.Stats()
+			byteRate := int64(time.Second)
+			byteRate *= stats.BytesReadUsefulData.Int64() - lastStats.BytesReadUsefulData.Int64()
+			byteRate /= int64(interval)
 			line := fmt.Sprintf(
 				"%v: downloading %q: %s/%s, %d/%d pieces completed (%d partial): %v/s\n",
 				time.Since(start),
@@ -63,7 +67,7 @@ func torrentBar(t *torrent.Torrent, pieceStates bool) {
 				completedPieces,
 				t.NumPieces(),
 				partialPieces,
-				humanize.Bytes(uint64(stats.BytesReadUsefulData.Int64()-lastStats.BytesReadUsefulData.Int64())),
+				humanize.Bytes(uint64(byteRate)),
 			)
 			if line != lastLine {
 				lastLine = line

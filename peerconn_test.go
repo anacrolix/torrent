@@ -128,7 +128,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			cl.lock()
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.
-			t.pieces[0]._dirtyChunks.Clear()
+			t.pendAllChunkSpecs(0)
 			cn.validReceiveChunks = map[RequestIndex]int{
 				t.requestIndexFromRequest(newRequestFromMessage(&msg)): 1,
 			}

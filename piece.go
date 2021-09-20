@@ -18,9 +18,6 @@ type Piece struct {
 	t     *Torrent
 	index pieceIndex
 	files []*File
-	// Chunks we've written to since the last check. The chunk offset and
-	// length can be determined by the request chunkSize in use.
-	_dirtyChunks bitmap.Bitmap
 
 	readerCond chansync.BroadcastCond
 
@@ -56,7 +53,7 @@ func (p *Piece) Storage() storage.Piece {
 }
 
 func (p *Piece) pendingChunkIndex(chunkIndex chunkIndexType) bool {
-	return !p._dirtyChunks.Contains(bitmap.BitIndex(chunkIndex))
+	return !p.chunkIndexDirty(chunkIndex)
 }
 
 func (p *Piece) pendingChunk(cs ChunkSpec, chunkSize pp.Integer) bool {
@@ -64,24 +61,27 @@ func (p *Piece) pendingChunk(cs ChunkSpec, chunkSize pp.Integer) bool {
 }
 
 func (p *Piece) hasDirtyChunks() bool {
-	return p._dirtyChunks.Len() != 0
+	return p.numDirtyChunks() != 0
 }
 
-func (p *Piece) numDirtyChunks() pp.Integer {
-	return pp.Integer(p._dirtyChunks.Len())
+func (p *Piece) numDirtyChunks() chunkIndexType {
+	return chunkIndexType(roaringBitmapRangeCardinality(
+		&p.t.dirtyChunks,
+		p.requestIndexOffset(),
+		p.t.pieceRequestIndexOffset(p.index+1)))
 }
 
 func (p *Piece) unpendChunkIndex(i chunkIndexType) {
-	p._dirtyChunks.Add(bitmap.BitIndex(i))
+	p.t.dirtyChunks.Add(p.requestIndexOffset() + i)
 	p.readerCond.Broadcast()
 }
 
 func (p *Piece) pendChunkIndex(i RequestIndex) {
-	p._dirtyChunks.Remove(bitmap.BitIndex(i))
+	p.t.dirtyChunks.Remove(p.requestIndexOffset() + i)
 }
 
-func (p *Piece) numChunks() pp.Integer {
-	return pp.Integer(p.t.pieceNumChunks(p.index))
+func (p *Piece) numChunks() chunkIndexType {
+	return p.t.pieceNumChunks(p.index)
 }
 
 func (p *Piece) incrementPendingWrites() {
@@ -110,12 +110,12 @@ func (p *Piece) waitNoPendingWrites() {
 	p.pendingWritesMutex.Unlock()
 }
 
-func (p *Piece) chunkIndexDirty(chunk pp.Integer) bool {
-	return p._dirtyChunks.Contains(bitmap.BitIndex(chunk))
+func (p *Piece) chunkIndexDirty(chunk chunkIndexType) bool {
+	return p.t.dirtyChunks.Contains(p.requestIndexOffset() + chunk)
 }
 
-func (p *Piece) chunkIndexSpec(chunk pp.Integer) ChunkSpec {
-	return chunkIndexSpec(chunk, p.length(), p.chunkSize())
+func (p *Piece) chunkIndexSpec(chunk chunkIndexType) ChunkSpec {
+	return chunkIndexSpec(pp.Integer(chunk), p.length(), p.chunkSize())
 }
 
 func (p *Piece) numDirtyBytes() (ret pp.Integer) {
@@ -141,7 +141,7 @@ func (p *Piece) chunkSize() pp.Integer {
 	return p.t.chunkSize
 }
 
-func (p *Piece) lastChunkIndex() pp.Integer {
+func (p *Piece) lastChunkIndex() chunkIndexType {
 	return p.numChunks() - 1
 }
 
@@ -230,7 +230,7 @@ func (p *Piece) completion() (ret storage.Completion) {
 }
 
 func (p *Piece) allChunksDirty() bool {
-	return p._dirtyChunks.Len() == bitmap.BitRange(p.numChunks())
+	return p.numDirtyChunks() == p.numChunks()
 }
 
 func (p *Piece) State() PieceState {
@@ -238,8 +238,8 @@ func (p *Piece) State() PieceState {
 }
 
 func (p *Piece) iterUndirtiedChunks(f func(cs chunkIndexType)) {
-	for i := chunkIndexType(0); i < chunkIndexType(p.numChunks()); i++ {
-		if p.chunkIndexDirty(pp.Integer(i)) {
+	for i := chunkIndexType(0); i < p.numChunks(); i++ {
+		if p.chunkIndexDirty(i) {
 			continue
 		}
 		f(i)
@@ -247,5 +247,5 @@ func (p *Piece) iterUndirtiedChunks(f func(cs chunkIndexType)) {
 }
 
 func (p *Piece) requestIndexOffset() RequestIndex {
-	return RequestIndex(p.index) * p.t.chunksPerRegularPiece()
+	return p.t.pieceRequestIndexOffset(p.index)
 }

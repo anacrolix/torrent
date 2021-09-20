@@ -144,6 +144,8 @@ type Torrent struct {
 
 	// Count of each request across active connections.
 	pendingRequests map[RequestIndex]int
+	// Chunks we've written to since the corresponding piece was last checked.
+	dirtyChunks roaring.Bitmap
 
 	pex pexState
 }
@@ -851,7 +853,9 @@ func (t *Torrent) chunksPerRegularPiece() uint32 {
 }
 
 func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex) {
-	t.pieces[pieceIndex]._dirtyChunks.Clear()
+	t.dirtyChunks.RemoveRange(
+		uint64(t.pieceRequestIndexOffset(pieceIndex)),
+		uint64(t.pieceRequestIndexOffset(pieceIndex+1)))
 }
 
 func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
@@ -1037,11 +1041,11 @@ func (t *Torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
 	if t.pieceComplete(piece) {
 		return 0
 	}
-	return pp.Integer(t.pieceNumChunks(piece)) - t.pieces[piece].numDirtyChunks()
+	return pp.Integer(t.pieceNumChunks(piece) - t.pieces[piece].numDirtyChunks())
 }
 
 func (t *Torrent) pieceAllDirty(piece pieceIndex) bool {
-	return t.pieces[piece]._dirtyChunks.Len() == bitmap.BitRange(t.pieceNumChunks(piece))
+	return t.pieces[piece].allChunksDirty()
 }
 
 func (t *Torrent) readersChanged() {
@@ -2267,14 +2271,18 @@ func (t *Torrent) requestIndexToRequest(ri RequestIndex) Request {
 	index := ri / t.chunksPerRegularPiece()
 	return Request{
 		pp.Integer(index),
-		t.piece(int(index)).chunkIndexSpec(pp.Integer(ri % t.chunksPerRegularPiece())),
+		t.piece(int(index)).chunkIndexSpec(ri % t.chunksPerRegularPiece()),
 	}
 }
 
 func (t *Torrent) requestIndexFromRequest(r Request) RequestIndex {
-	return t.chunksPerRegularPiece()*uint32(r.Index) + uint32(r.Begin/t.chunkSize)
+	return t.pieceRequestIndexOffset(pieceIndex(r.Index)) + uint32(r.Begin/t.chunkSize)
 }
 
 func (t *Torrent) numChunks() RequestIndex {
 	return RequestIndex((t.Length() + int64(t.chunkSize) - 1) / int64(t.chunkSize))
+}
+
+func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex) RequestIndex {
+	return RequestIndex(piece) * t.chunksPerRegularPiece()
 }

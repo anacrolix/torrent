@@ -181,10 +181,12 @@ func (cn *Peer) expectingChunks() bool {
 	if !cn.actualRequestState.Interested {
 		return false
 	}
-	if cn.peerAllowedFast.IterTyped(func(_i int) bool {
-		i := RequestIndex(_i)
-		return cn.actualRequestState.Requests.Rank((i+1)*cn.t.chunksPerRegularPiece())-
-			cn.actualRequestState.Requests.Rank(i*cn.t.chunksPerRegularPiece()) == 0
+	if cn.peerAllowedFast.IterTyped(func(i int) bool {
+		return roaringBitmapRangeCardinality(
+			&cn.actualRequestState.Requests,
+			cn.t.pieceRequestIndexOffset(i),
+			cn.t.pieceRequestIndexOffset(i+1),
+		) == 0
 	}) {
 		return true
 	}

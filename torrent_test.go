@@ -148,7 +148,9 @@ func TestPieceHashFailed(t *testing.T) {
 	tt.setChunkSize(2)
 	require.NoError(t, tt.setInfoBytesLocked(mi.InfoBytes))
 	tt.cl.lock()
-	tt.pieces[1]._dirtyChunks.AddRange(0, 3)
+	tt.dirtyChunks.AddRange(
+		uint64(tt.pieceRequestIndexOffset(1)),
+		uint64(tt.pieceRequestIndexOffset(1)+3))
 	require.True(t, tt.pieceAllDirty(1))
 	tt.pieceHashed(1, false, nil)
 	// Dirty chunks should be cleared so we can try again.

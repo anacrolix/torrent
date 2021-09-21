@@ -237,7 +237,30 @@ func (p *Piece) State() PieceState {
 	return p.t.PieceState(p.index)
 }
 
-func (p *Piece) iterUndirtiedChunks(f func(cs chunkIndexType)) {
+func (p *Piece) iterUndirtiedChunks(f func(chunkIndexType)) {
+	// Use an iterator to jump between dirty bits.
+	if true {
+		it := p.t.dirtyChunks.Iterator()
+		startIndex := p.requestIndexOffset()
+		endIndex := startIndex + p.numChunks()
+		it.AdvanceIfNeeded(startIndex)
+		lastDirty := startIndex - 1
+		for it.HasNext() {
+			next := it.Next()
+			if next >= endIndex {
+				break
+			}
+			for index := lastDirty + 1; index < next; index++ {
+				f(index - startIndex)
+			}
+			lastDirty = next
+		}
+		for index := lastDirty + 1; index < endIndex; index++ {
+			f(index - startIndex)
+		}
+		return
+	}
+	// The original implementation.
 	for i := chunkIndexType(0); i < p.numChunks(); i++ {
 		if p.chunkIndexDirty(i) {
 			continue

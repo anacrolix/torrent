@@ -195,12 +195,6 @@ type DownloadCmd struct {
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri" arg:"positional"`
 }
 
-func stdoutAndStderrAreSameFile() bool {
-	fi1, _ := os.Stdout.Stat()
-	fi2, _ := os.Stderr.Stat()
-	return os.SameFile(fi1, fi2)
-}
-
 func statsEnabled(flags downloadFlags) bool {
 	if flags.Stats == nil {
 		return flags.Debug

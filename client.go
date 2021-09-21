@@ -451,6 +451,9 @@ func (cl *Client) ipIsBlocked(ip net.IP) bool {
 }
 
 func (cl *Client) wantConns() bool {
+	if cl.config.AlwaysWantConns {
+		return true
+	}
 	for _, t := range cl.torrents {
 		if t.wantConns() {
 			return true

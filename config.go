@@ -139,6 +139,9 @@ type ClientConfig struct {
 	DropMutuallyCompletePeers bool
 	// Whether to accept peer connections at all.
 	AcceptPeerConnections bool
+	// Whether a Client should want conns without delegating to any attached Torrents. This is
+	// useful when torrents might be added dynmically in callbacks for example.
+	AlwaysWantConns bool
 
 	// OnQuery hook func
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)

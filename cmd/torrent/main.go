@@ -178,9 +178,9 @@ type DownloadCmd struct {
 	PublicIP           net.IP
 	Progress           bool `default:"true"`
 	PieceStates        bool
-	Quiet              bool  `help:"discard client logging"`
-	Stats              *bool `help:"print stats at termination"`
-	Dht                bool  `default:"true"`
+	Quiet              bool `help:"discard client logging"`
+	Stats              bool `help:"print stats at termination"`
+	Dht                bool `default:"true"`
 
 	TcpPeers        bool `default:"true"`
 	UtpPeers        bool `default:"true"`
@@ -196,10 +196,7 @@ type DownloadCmd struct {
 }
 
 func statsEnabled(flags downloadFlags) bool {
-	if flags.Stats == nil {
-		return flags.Debug
-	}
-	return *flags.Stats
+	return flags.Stats
 }
 
 func exitSignalHandlers(notify *missinggo.SynchronizedEvent) {

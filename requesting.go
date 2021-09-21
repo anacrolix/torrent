@@ -12,7 +12,7 @@ import (
 )
 
 // Calculate requests individually for each peer.
-const peerRequesting = true
+const peerRequesting = false
 
 func (cl *Client) requester() {
 	for {

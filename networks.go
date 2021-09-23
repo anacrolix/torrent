@@ -40,18 +40,14 @@ func parseNetworkString(network string) (ret network) {
 	return
 }
 
-func peerNetworkEnabled(n network, cfg *ClientConfig) bool {
-	if cfg.DisableUTP && n.Udp {
-		return false
+func peerNetworkEnabled(n network, cfg *ClientConfig) (ret bool) {
+	switch {
+	case cfg.DisableUTP && n.Udp:
+	case cfg.DisableTCP && n.Tcp:
+	case cfg.DisableIPv6 && n.Ipv6:
+	case cfg.DisableIPv4 && n.Ipv4:
+	default:
+		return true
 	}
-	if cfg.DisableTCP && n.Tcp {
-		return false
-	}
-	if cfg.DisableIPv6 && n.Ipv6 {
-		return false
-	}
-	if cfg.DisableIPv4 && n.Ipv4 {
-		return false
-	}
-	return true
+	return
 }

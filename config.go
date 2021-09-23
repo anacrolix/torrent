@@ -10,7 +10,6 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/expect"
 	"github.com/anacrolix/torrent/version"
 	"golang.org/x/time/rate"
 
@@ -156,7 +155,9 @@ type ClientConfig struct {
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
 	host, port, err := missinggo.ParseHostPort(addr)
-	expect.Nil(err)
+	if err != nil {
+		panic(err)
+	}
 	cfg.ListenHost = func(string) string { return host }
 	cfg.ListenPort = port
 	return cfg

@@ -29,15 +29,22 @@ func (n network) String() (ret string) {
 	return
 }
 
-func parseNetworkString(network string) (ret network) {
-	c := func(s string) bool {
-		return strings.Contains(network, s)
+func parseNetworkString(netw string) (ret network) {
+	switch netw {
+	case "udp4":
+		return network{Udp: true, Ipv4: true}
+	case "udp6":
+		return network{Udp: true, Ipv6: true}
+	case "tcp4":
+		return network{Tcp: true, Ipv4: true}
+	case "tcp6":
+		return network{Tcp: true, Ipv6: true}
+	case "udp":
+		return network{Udp: true}
+	case "tcp":
+		return network{Tcp: true}
 	}
-	ret.Ipv4 = c("4")
-	ret.Ipv6 = c("6")
-	ret.Udp = c("udp")
-	ret.Tcp = c("tcp")
-	return
+	panic("")
 }
 
 func peerNetworkEnabled(n network, cfg *ClientConfig) bool {

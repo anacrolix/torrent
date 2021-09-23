@@ -17,15 +17,21 @@ type network struct {
 }
 
 func (n network) String() (ret string) {
-	a := func(b bool, s string) {
-		if b {
-			ret += s
-		}
+	switch {
+	case n.Udp && n.Ipv4:
+		return "udp4"
+	case n.Tcp && n.Ipv4:
+		return "tcp4"
+	case n.Udp && n.Ipv6:
+		return "udp6"
+	case n.Tcp && n.Ipv6:
+		return "tcp6"
+	case n.Tcp:
+		return "tcp"
+	case n.Udp:
+		return "udp"
 	}
-	a(n.Udp, "udp")
-	a(n.Tcp, "tcp")
-	a(n.Ipv4, "4")
-	a(n.Ipv6, "6")
+	panic("")
 	return
 }
 

@@ -2,12 +2,12 @@ package torrent
 
 import "strings"
 
-var allPeerNetworks = func() (ret []network) {
-	for _, s := range []string{"tcp4", "tcp6", "udp4", "udp6"} {
-		ret = append(ret, parseNetworkString(s))
-	}
-	return
-}()
+var allPeerNetworks = []network{
+	{Tcp: true, Ipv4: true},
+	{Tcp: true, Ipv6: true},
+	{Udp: true, Ipv4: true},
+	{Udp: true, Ipv6: true},
+}
 
 type network struct {
 	Ipv4 bool

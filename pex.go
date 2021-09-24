@@ -9,7 +9,7 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
-type pexEventType int
+type pexEventType int8
 
 const (
 	pexAdd pexEventType = iota
@@ -25,9 +25,9 @@ const (
 
 // represents a single connection (t=pexAdd) or disconnection (t=pexDrop) event
 type pexEvent struct {
-	t    pexEventType
 	addr PeerRemoteAddr
 	f    pp.PexPeerFlags
+	t    pexEventType
 }
 
 // facilitates efficient de-duplication while generating PEX messages

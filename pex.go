@@ -38,9 +38,10 @@ type pexMsgFactory struct {
 }
 
 func (me *pexMsgFactory) DeltaLen() int {
-	return int(max(
-		int64(len(me.added)),
-		int64(len(me.dropped))))
+	if len(me.added) > len(me.dropped) {
+		return len(me.added)
+	}
+	return len(me.dropped)
 }
 
 type addrKey string

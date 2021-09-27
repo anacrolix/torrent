@@ -55,7 +55,7 @@ func addrEqual(a, b *krpc.NodeAddr) bool {
 }
 
 func addrIndex(v []krpc.NodeAddr, a *krpc.NodeAddr) int {
-	for i := range v {
+	for i := 0; i < len(v); i += 1 {
 		if addrEqual(&v[i], a) {
 			return i
 		}

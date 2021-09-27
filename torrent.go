@@ -736,10 +736,12 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 	}
 }
 
-func (t *Torrent) BytesMissing() int64 {
+// Get bytes left
+func (t *Torrent) BytesMissing() (n int64) {
 	t.cl.rLock()
-	defer t.cl.rUnlock()
-	return t.bytesMissingLocked()
+	n = t.bytesMissingLocked()
+	t.cl.rUnlock()
+	return
 }
 
 func (t *Torrent) bytesMissingLocked() int64 {

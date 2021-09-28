@@ -611,27 +611,21 @@ func (d *Decoder) parseIntInterface() (ret interface{}) {
 	return
 }
 
-func (d *Decoder) parseStringInterface() (s string) {
+func (d *Decoder) parseStringInterface() string {
 	// read the string length first
 	d.readUntil(':')
 	length, err := strconv.ParseInt(bytesAsString(d.buf.Bytes()), 10, 64)
 	if err != nil {
-		panic(&SyntaxError{Offset: d.Offset-1, What: err})
+		panic(&SyntaxError{Offset: d.Offset - 1, What: err})
 	}
 	d.buf.Reset()
-	n, err := d.buf.ReadFrom(io.LimitReader(d.r, length))
-	d.Offset += n
-	switch err {
-	case nil:
-		s = d.buf.String()
-		d.buf.Reset()
-		return		
-	case io.EOF:
-		err = io.ErrUnexpectedEOF
-	default:
-		err = errors.New("unexpected I/O error: " + err.Error())
+	b := make([]byte, length)
+	n, err := io.ReadFull(d.r, b)
+	d.Offset += int64(n)
+	if err != nil {
+		panic(&SyntaxError{Offset: d.Offset, What: err})
 	}
-	panic(&SyntaxError{Offset: d.Offset, What: err})
+	return bytesAsString(b)
 }
 
 func (d *Decoder) parseDictInterface() interface{} {

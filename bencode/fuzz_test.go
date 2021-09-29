@@ -3,10 +3,16 @@
 package bencode
 
 import (
+	"math/big"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/google/go-cmp/cmp"
 )
+
+var bencodeInterfaceChecker = qt.CmpEquals(cmp.Comparer(func(a, b *big.Int) bool {
+	return a.Cmp(b) == 0
+}))
 
 func Fuzz(f *testing.F) {
 	f.Fuzz(func(t *testing.T, b []byte) {
@@ -21,6 +27,6 @@ func Fuzz(f *testing.F) {
 		var d0 interface{}
 		err = Unmarshal(b0, &d0)
 		c.Assert(err, qt.IsNil)
-		c.Assert(d0, qt.DeepEquals, d)
+		c.Assert(d0, bencodeInterfaceChecker, d)
 	})
 }

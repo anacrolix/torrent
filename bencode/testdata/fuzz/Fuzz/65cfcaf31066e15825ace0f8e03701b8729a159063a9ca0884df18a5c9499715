@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("i62208002200000000:00{݃y\u007f m.\x16\t\fZL\x18'\xad\xe7\xc4e")

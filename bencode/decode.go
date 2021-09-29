@@ -614,7 +614,7 @@ func (d *Decoder) parseIntInterface() (ret interface{}) {
 func (d *Decoder) parseStringInterface() string {
 	// read the string length first
 	d.readUntil(':')
-	length, err := strconv.ParseInt(bytesAsString(d.buf.Bytes()), 10, 64)
+	length, err := strconv.ParseInt(bytesAsString(d.buf.Bytes()), 10, 32)
 	if err != nil {
 		panic(&SyntaxError{Offset: d.Offset - 1, What: err})
 	}

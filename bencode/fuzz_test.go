@@ -15,6 +15,9 @@ var bencodeInterfaceChecker = qt.CmpEquals(cmp.Comparer(func(a, b *big.Int) bool
 }))
 
 func Fuzz(f *testing.F) {
+	for _, ret := range random_encode_tests {
+		f.Add([]byte(ret.expected))
+	}
 	f.Fuzz(func(t *testing.T, b []byte) {
 		c := qt.New(t)
 		var d interface{}

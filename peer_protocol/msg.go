@@ -58,7 +58,7 @@ func (msg Message) MustMarshalBinary() []byte {
 }
 
 func (msg Message) MarshalBinary() (data []byte, err error) {
-	buf := &bytes.Buffer{}
+	var buf bytes.Buffer
 	if !msg.Keepalive {
 		err = buf.WriteByte(byte(msg.Type))
 		if err != nil {
@@ -67,10 +67,10 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 		switch msg.Type {
 		case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
 		case Have:
-			err = binary.Write(buf, binary.BigEndian, msg.Index)
+			err = binary.Write(&buf, binary.BigEndian, msg.Index)
 		case Request, Cancel, Reject:
 			for _, i := range []Integer{msg.Index, msg.Begin, msg.Length} {
-				err = binary.Write(buf, binary.BigEndian, i)
+				err = binary.Write(&buf, binary.BigEndian, i)
 				if err != nil {
 					break
 				}
@@ -79,7 +79,7 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 			_, err = buf.Write(marshalBitfield(msg.Bitfield))
 		case Piece:
 			for _, i := range []Integer{msg.Index, msg.Begin} {
-				err = binary.Write(buf, binary.BigEndian, i)
+				err = binary.Write(&buf, binary.BigEndian, i)
 				if err != nil {
 					return
 				}
@@ -98,7 +98,7 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 			}
 			_, err = buf.Write(msg.ExtendedPayload)
 		case Port:
-			err = binary.Write(buf, binary.BigEndian, msg.Port)
+			err = binary.Write(&buf, binary.BigEndian, msg.Port)
 		default:
 			err = fmt.Errorf("unknown message type: %v", msg.Type)
 		}

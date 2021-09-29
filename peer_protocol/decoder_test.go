@@ -70,7 +70,7 @@ func TestDecodeShortPieceEOF(t *testing.T) {
 	var m Message
 	require.NoError(t, d.Decode(&m))
 	assert.Len(t, m.Piece, 1)
-	assert.Equal(t, io.EOF, d.Decode(&m))
+	assert.ErrorIs(t, d.Decode(&m), io.EOF)
 }
 
 func TestDecodeOverlongPiece(t *testing.T) {

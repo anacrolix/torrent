@@ -20,12 +20,9 @@ type Decoder struct {
 // io.EOF is returned if the source terminates cleanly on a message boundary.
 func (d *Decoder) Decode(msg *Message) (err error) {
 	var length Integer
-	err = binary.Read(d.R, binary.BigEndian, &length)
+	err = length.ReadFrom(d.R)
 	if err != nil {
-		if err != io.EOF {
-			err = fmt.Errorf("error reading message length: %w", err)
-		}
-		return
+		return fmt.Errorf("reading message length: %w", err)
 	}
 	if length > d.MaxLength {
 		return errors.New("message too long")

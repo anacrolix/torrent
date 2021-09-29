@@ -154,7 +154,7 @@ func (d *Decoder) parseString(v reflect.Value) error {
 
 	// read the string length first
 	d.readUntil(':')
-	length, err := strconv.ParseInt(bytesAsString(d.buf.Bytes()), 10, 0)
+	length, err := strconv.ParseInt(bytesAsString(d.buf.Bytes()), 10, 32)
 	checkForIntParseError(err, start)
 
 	defer d.buf.Reset()

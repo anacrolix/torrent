@@ -1,7 +1,9 @@
 package peer_protocol
 
 import (
+	"bufio"
 	"bytes"
+	"encoding"
 	"encoding/binary"
 	"fmt"
 )
@@ -18,6 +20,11 @@ type Message struct {
 	ExtendedPayload      []byte
 	Port                 uint16
 }
+
+var _ interface {
+	encoding.BinaryUnmarshaler
+	encoding.BinaryMarshaler
+} = (*Message)(nil)
 
 func MakeCancelMessage(piece, offset, length Integer) Message {
 	return Message{
@@ -115,4 +122,18 @@ func marshalBitfield(bf []bool) (b []byte) {
 		b[i/8] = c
 	}
 	return
+}
+
+func (me *Message) UnmarshalBinary(b []byte) error {
+	d := Decoder{
+		R: bufio.NewReader(bytes.NewReader(b)),
+	}
+	err := d.Decode(me)
+	if err != nil {
+		return err
+	}
+	if d.R.Buffered() != 0 {
+		return fmt.Errorf("%d trailing bytes", d.R.Buffered())
+	}
+	return nil
 }

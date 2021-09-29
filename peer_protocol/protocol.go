@@ -12,6 +12,11 @@ func (mt MessageType) FastExtension() bool {
 	return mt >= Suggest && mt <= AllowedFast
 }
 
+func (mt *MessageType) UnmarshalBinary(b []byte) error {
+	*mt = MessageType(b[0])
+	return nil
+}
+
 const (
 	// BEP 3
 	Choke         MessageType = 0

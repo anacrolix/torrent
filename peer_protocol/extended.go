@@ -31,3 +31,8 @@ const (
 
 	ExtensionDeleteNumber ExtensionNumber = 0
 )
+
+func (me *ExtensionNumber) UnmarshalBinary(b []byte) error {
+	*me = ExtensionNumber(b[0])
+	return nil
+}

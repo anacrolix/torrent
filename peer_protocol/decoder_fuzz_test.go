@@ -3,7 +3,11 @@ package peer_protocol
 import (
 	"bufio"
 	"bytes"
+	"errors"
+	"io"
 	"testing"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func FuzzDecoder(f *testing.F) {
@@ -11,13 +15,31 @@ func FuzzDecoder(f *testing.F) {
 	f.Add([]byte("\x00\x00\x00\x01\x00"))
 	f.Add([]byte("\x00\x00\x00\x03\x14\x00"))
 	f.Fuzz(func(t *testing.T, b []byte) {
+		c := qt.New(t)
 		d := Decoder{
-			R: bufio.NewReader(bytes.NewReader(b)),
+			R:         bufio.NewReader(bytes.NewReader(b)),
+			MaxLength: 0x100,
 		}
-		var m Message
-		err := d.Decode(&m)
-		if err != nil {
-			t.Skip(err)
+		var ms []Message
+		for {
+			var m Message
+			err := d.Decode(&m)
+			t.Log(err)
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err == nil {
+				c.Assert(m, qt.Not(qt.Equals), Message{})
+				ms = append(ms, m)
+				continue
+			} else {
+				t.Skip(err)
+			}
 		}
+		var buf bytes.Buffer
+		for _, m := range ms {
+			buf.Write(m.MustMarshalBinary())
+		}
+		c.Assert(buf.Bytes(), qt.DeepEquals, b)
 	})
 }

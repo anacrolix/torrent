@@ -2,41 +2,31 @@ package peer_protocol
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"sync"
 	"testing"
 
+	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkDecodePieces(t *testing.B) {
-	r, w := io.Pipe()
 	const pieceLen = 1 << 14
-	msg := Message{
+	inputMsg := Message{
 		Type:  Piece,
 		Index: 0,
 		Begin: 1,
 		Piece: make([]byte, pieceLen),
 	}
-	b, err := msg.MarshalBinary()
-	require.NoError(t, err)
+	b := inputMsg.MustMarshalBinary()
 	t.SetBytes(int64(len(b)))
-	defer r.Close()
-	go func() {
-		defer w.Close()
-		for {
-			n, err := w.Write(b)
-			if err == io.ErrClosedPipe {
-				return
-			}
-			require.NoError(t, err)
-			require.Equal(t, len(b), n)
-		}
-	}()
+	var r bytes.Reader
+	// Try to somewhat emulate what torrent.Client would do. But the goal is to get decoding as fast
+	// as possible and let consumers apply their own adjustments.
 	d := Decoder{
-		// Emulate what package torrent's client would do.
-		R:         bufio.NewReader(r),
+		R:         bufio.NewReaderSize(&r, 1<<10),
 		MaxLength: 1 << 18,
 		Pool: &sync.Pool{
 			New: func() interface{} {
@@ -45,9 +35,20 @@ func BenchmarkDecodePieces(t *testing.B) {
 			},
 		},
 	}
+	c := qt.New(t)
+	t.ReportAllocs()
+	t.ResetTimer()
 	for i := 0; i < t.N; i += 1 {
+		r.Reset(b)
 		var msg Message
-		require.NoError(t, d.Decode(&msg))
+		err := d.Decode(&msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// This is very expensive, and should be discovered in tests rather than a benchmark.
+		if false {
+			c.Assert(msg, qt.DeepEquals, inputMsg)
+		}
 		// WWJD
 		d.Pool.Put(&msg.Piece)
 	}

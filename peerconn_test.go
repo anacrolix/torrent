@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"errors"
 	"io"
 	"net"
 	"sync"
@@ -107,7 +108,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	r, w := net.Pipe()
 	cn := cl.newConnection(r, true, r.RemoteAddr(), r.RemoteAddr().Network(), regularNetConnPeerConnConnString(r))
 	cn.setTorrent(t)
-	mrlErr := make(chan error)
+	mrlErrChan := make(chan error)
 	msg := pp.Message{
 		Type:  pp.Piece,
 		Piece: make([]byte, defaultChunkSize),
@@ -116,9 +117,9 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		cl.lock()
 		err := cn.mainReadLoop()
 		if err != nil {
-			mrlErr <- err
+			mrlErrChan <- err
 		}
-		close(mrlErr)
+		close(mrlErrChan)
 	}()
 	wb := msg.MustMarshalBinary()
 	b.SetBytes(int64(len(msg.Piece)))
@@ -142,7 +143,10 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			panic(err)
 		}
 	}()
-	c.Assert([]error{nil, io.EOF}, quicktest.Contains, <-mrlErr)
+	mrlErr := <-mrlErrChan
+	if mrlErr != nil && !errors.Is(mrlErr, io.EOF) {
+		c.Fatal(mrlErr)
+	}
 	c.Assert(cn._stats.ChunksReadUseful.Int64(), quicktest.Equals, int64(b.N))
 }
 

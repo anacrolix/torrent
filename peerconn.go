@@ -1107,7 +1107,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				t.chunkPool.Put(&msg.Piece)
 			}
 			if err != nil {
-				err = fmt.Errorf("receiving chunk: %s", err)
+				err = fmt.Errorf("receiving chunk: %w", err)
 			}
 		case pp.Cancel:
 			req := newRequestFromMessage(&msg)

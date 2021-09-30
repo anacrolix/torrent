@@ -1,3 +1,5 @@
+//go:build go1.18
+
 package peer_protocol
 
 import (
@@ -41,5 +43,16 @@ func FuzzDecoder(f *testing.F) {
 			buf.Write(m.MustMarshalBinary())
 		}
 		c.Assert(buf.Bytes(), qt.DeepEquals, b)
+	})
+}
+
+func FuzzMessageMarshalBinary(f *testing.F) {
+	f.Fuzz(func(t *testing.T, b []byte) {
+		var m Message
+		if err := m.UnmarshalBinary(b); err != nil {
+			t.Skip(err)
+		}
+		b0 := m.MustMarshalBinary()
+		qt.Assert(t, b0, qt.DeepEquals, b)
 	})
 }

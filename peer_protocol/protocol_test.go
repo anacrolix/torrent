@@ -82,7 +82,7 @@ func TestShortRead(t *testing.T) {
 	}
 	msg := new(Message)
 	err := dec.Decode(msg)
-	if !strings.Contains(err.Error(), "1 bytes unused in message type 0") {
+	if !strings.Contains(err.Error(), "1 unused bytes in message type Choke") {
 		t.Fatal(err)
 	}
 }

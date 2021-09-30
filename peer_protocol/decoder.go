@@ -20,7 +20,7 @@ type Decoder struct {
 // io.EOF is returned if the source terminates cleanly on a message boundary.
 func (d *Decoder) Decode(msg *Message) (err error) {
 	var length Integer
-	err = length.ReadFrom(d.R)
+	err = length.Read(d.R)
 	if err != nil {
 		return fmt.Errorf("reading message length: %w", err)
 	}

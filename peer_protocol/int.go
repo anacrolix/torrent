@@ -1,27 +1,27 @@
 package peer_protocol
 
 import (
-	"bytes"
 	"encoding/binary"
 	"io"
+
+	"github.com/pkg/errors"
 )
 
 type Integer uint32
 
-func (i *Integer) Read(r io.Reader) error {
-	return binary.Read(r, binary.BigEndian, i)
-}
-
 func (i *Integer) UnmarshalBinary(b []byte) error {
-	return i.Read(bytes.NewReader(b))
+	if len(b) != 4 {
+		return errors.New("expected 4 bytes")
+	}
+	*i = Integer(binary.BigEndian.Uint32(b))
+	return nil
 }
 
-func (i *Integer) ReadFrom(r io.Reader) error {
+func (i *Integer) Read(r io.Reader) error {
 	var b [4]byte
 	n, err := r.Read(b[:])
 	if n == 4 {
-		*i = Integer(binary.BigEndian.Uint32(b[:]))
-		return nil
+		return i.UnmarshalBinary(b[:])
 	}
 	if err == nil {
 		return io.ErrUnexpectedEOF

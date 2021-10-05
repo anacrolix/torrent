@@ -1408,8 +1408,8 @@ func (t *Torrent) decPeerPieceAvailability(p *Peer) {
 	if !t.haveInfo() {
 		return
 	}
-	p.newPeerPieces().IterTyped(func(i int) bool {
-		p.t.decPieceAvailability(i)
+	p.newPeerPieces().Iterate(func(i uint32) bool {
+		p.t.decPieceAvailability(pieceIndex(i))
 		return true
 	})
 }

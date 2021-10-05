@@ -168,7 +168,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}
 	foundSeeder := false
 	for _, pc := range leecherPeerConns {
-		completed := pc.PeerPieces().Len()
+		completed := pc.PeerPieces().GetCardinality()
 		t.Logf("peer conn %v has %v completed pieces", pc, completed)
 		if completed == bitmap.BitRange(leecherTorrent.Info().NumPieces()) {
 			foundSeeder = true

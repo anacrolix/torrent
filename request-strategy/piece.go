@@ -1,6 +1,10 @@
 package request_strategy
 
-type ChunksIter func(func(ChunkIndex))
+type ChunksIterFunc func(func(ChunkIndex))
+
+type ChunksIter interface {
+	Iter(func(ChunkIndex))
+}
 
 type Piece struct {
 	Request           bool
@@ -15,6 +19,6 @@ type Piece struct {
 func (p Piece) iterPendingChunksWrapper(f func(ChunkIndex)) {
 	i := p.IterPendingChunks
 	if i != nil {
-		i(f)
+		i.Iter(f)
 	}
 }

@@ -121,7 +121,7 @@ type Peer struct {
 	peerMinPieces pieceIndex
 	// Pieces we've accepted chunks for from the peer.
 	peerTouchedPieces map[pieceIndex]struct{}
-	peerAllowedFast   bitmap.Bitmap
+	peerAllowedFast   roaring.Bitmap
 
 	PeerMaxRequests  maxRequests // Maximum pending requests the peer allows.
 	PeerExtensionIDs map[pp.ExtensionName]pp.ExtensionNumber
@@ -182,16 +182,19 @@ func (cn *Peer) expectingChunks() bool {
 	if !cn.actualRequestState.Interested {
 		return false
 	}
-	if cn.peerAllowedFast.IterTyped(func(i int) bool {
-		return roaringBitmapRangeCardinality(
-			&cn.actualRequestState.Requests,
-			cn.t.pieceRequestIndexOffset(i),
-			cn.t.pieceRequestIndexOffset(i+1),
-		) == 0
-	}) {
+	if !cn.peerChoking {
 		return true
 	}
-	return !cn.peerChoking
+	haveAllowedFastRequests := false
+	cn.peerAllowedFast.Iterate(func(i uint32) bool {
+		haveAllowedFastRequests = roaringBitmapRangeCardinality(
+			&cn.actualRequestState.Requests,
+			cn.t.pieceRequestIndexOffset(pieceIndex(i)),
+			cn.t.pieceRequestIndexOffset(pieceIndex(i+1)),
+		) == 0
+		return !haveAllowedFastRequests
+	})
+	return haveAllowedFastRequests
 }
 
 func (cn *Peer) remoteChokingPiece(piece pieceIndex) bool {
@@ -1276,7 +1279,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	}
 	c.decExpectedChunkReceive(req)
 
-	if c.peerChoking && c.peerAllowedFast.Get(bitmap.BitIndex(ppReq.Index)) {
+	if c.peerChoking && c.peerAllowedFast.Contains(bitmap.BitIndex(ppReq.Index)) {
 		chunksReceived.Add("due to allowed fast", 1)
 	}
 

@@ -16,25 +16,22 @@ type PeerId interface {
 }
 
 type Peer struct {
-	HasPiece           func(i pieceIndex) bool
-	MaxRequests        int
-	HasExistingRequest func(r RequestIndex) bool
-	Choking            bool
-	PieceAllowedFast   func(pieceIndex) bool
-	DownloadRate       float64
-	Age                time.Duration
+	Pieces           roaring.Bitmap
+	MaxRequests      int
+	ExistingRequests roaring.Bitmap
+	Choking          bool
+	PieceAllowedFast roaring.Bitmap
+	DownloadRate     float64
+	Age              time.Duration
 	// This is passed back out at the end, so must support equality. Could be a type-param later.
 	Id PeerId
 }
 
-func (p *Peer) pieceAllowedFastOrDefault(i pieceIndex) bool {
-	if f := p.PieceAllowedFast; f != nil {
-		return f(i)
-	}
-	return false
-}
-
 // TODO: This might be used in more places I think.
 func (p *Peer) canRequestPiece(i pieceIndex) bool {
-	return (!p.Choking || p.pieceAllowedFastOrDefault(i)) && p.HasPiece(i)
+	return (!p.Choking || p.PieceAllowedFast.Contains(uint32(i))) && p.HasPiece(i)
+}
+
+func (p *Peer) HasPiece(i pieceIndex) bool {
+	return p.Pieces.Contains(uint32(i))
 }

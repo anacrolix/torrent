@@ -1,11 +1,14 @@
 package torrent
 
 import (
+	"encoding/gob"
 	"fmt"
 	"sync"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	request_strategy "github.com/anacrolix/torrent/request-strategy"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -237,27 +240,50 @@ func (p *Piece) State() PieceState {
 	return p.t.PieceState(p.index)
 }
 
-func (p *Piece) iterUndirtiedChunks(f func(chunkIndexType)) {
-	// Use an iterator to jump between dirty bits.
-	if true {
-		it := p.t.dirtyChunks.Iterator()
-		startIndex := p.requestIndexOffset()
-		endIndex := startIndex + p.numChunks()
-		it.AdvanceIfNeeded(startIndex)
-		lastDirty := startIndex - 1
-		for it.HasNext() {
-			next := it.Next()
-			if next >= endIndex {
-				break
-			}
-			for index := lastDirty + 1; index < next; index++ {
-				f(index - startIndex)
-			}
-			lastDirty = next
+func init() {
+	gob.Register(undirtiedChunksIter{})
+}
+
+type undirtiedChunksIter struct {
+	TorrentDirtyChunks *roaring.Bitmap
+	StartRequestIndex  RequestIndex
+	EndRequestIndex    RequestIndex
+}
+
+func (me undirtiedChunksIter) Iter(f func(chunkIndexType)) {
+	it := me.TorrentDirtyChunks.Iterator()
+	startIndex := me.StartRequestIndex
+	endIndex := me.EndRequestIndex
+	it.AdvanceIfNeeded(startIndex)
+	lastDirty := startIndex - 1
+	for it.HasNext() {
+		next := it.Next()
+		if next >= endIndex {
+			break
 		}
-		for index := lastDirty + 1; index < endIndex; index++ {
+		for index := lastDirty + 1; index < next; index++ {
 			f(index - startIndex)
 		}
+		lastDirty = next
+	}
+	for index := lastDirty + 1; index < endIndex; index++ {
+		f(index - startIndex)
+	}
+	return
+}
+
+func (p *Piece) undirtiedChunksIter() request_strategy.ChunksIter {
+	// Use an iterator to jump between dirty bits.
+	return undirtiedChunksIter{
+		TorrentDirtyChunks: &p.t.dirtyChunks,
+		StartRequestIndex:  p.requestIndexOffset(),
+		EndRequestIndex:    p.requestIndexOffset() + p.numChunks(),
+	}
+}
+
+func (p *Piece) iterUndirtiedChunks(f func(chunkIndexType)) {
+	if true {
+		p.undirtiedChunksIter().Iter(f)
 		return
 	}
 	// The original implementation.

@@ -1,6 +1,7 @@
 package request_strategy
 
 import (
+	"encoding/gob"
 	"math"
 	"testing"
 
@@ -9,19 +10,28 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func chunkIterRange(end ChunkIndex) ChunksIter {
-	return func(f func(ChunkIndex)) {
-		for offset := ChunkIndex(0); offset < end; offset += 1 {
-			f(offset)
-		}
+func init() {
+	gob.Register(chunkIterRange(0))
+	gob.Register(sliceChunksIter{})
+}
+
+type chunkIterRange ChunkIndex
+
+func (me chunkIterRange) Iter(f func(ChunkIndex)) {
+	for offset := ChunkIndex(0); offset < ChunkIndex(me); offset += 1 {
+		f(offset)
 	}
 }
 
+type sliceChunksIter []ChunkIndex
+
 func chunkIter(offsets ...ChunkIndex) ChunksIter {
-	return func(f func(ChunkIndex)) {
-		for _, offset := range offsets {
-			f(offset)
-		}
+	return sliceChunksIter(offsets)
+}
+
+func (offsets sliceChunksIter) Iter(f func(ChunkIndex)) {
+	for _, offset := range offsets {
+		f(offset)
 	}
 }
 
@@ -30,27 +40,32 @@ func requestSetFromSlice(rs ...RequestIndex) (ret roaring.Bitmap) {
 	return
 }
 
+func init() {
+	gob.Register(intPeerId(0))
+}
+
 type intPeerId int
 
 func (i intPeerId) Uintptr() uintptr {
 	return uintptr(i)
 }
 
-func hasAllRequests(RequestIndex) bool { return true }
+var hasAllRequests = func() (all roaring.Bitmap) {
+	all.AddRange(0, roaring.MaxRange)
+	return
+}()
 
 func TestStealingFromSlowerPeer(t *testing.T) {
 	c := qt.New(t)
 	basePeer := Peer{
-		HasPiece: func(i pieceIndex) bool {
-			return true
-		},
 		MaxRequests:  math.MaxInt16,
 		DownloadRate: 2,
 	}
+	basePeer.Pieces.Add(0)
 	// Slower than the stealers, but has all requests already.
 	stealee := basePeer
 	stealee.DownloadRate = 1
-	stealee.HasExistingRequest = hasAllRequests
+	stealee.ExistingRequests = hasAllRequests
 	stealee.Id = intPeerId(1)
 	firstStealer := basePeer
 	firstStealer.Id = intPeerId(2)
@@ -90,15 +105,13 @@ func checkNumRequestsAndInterest(c *qt.C, next PeerNextRequestState, num uint64,
 func TestStealingFromSlowerPeersBasic(t *testing.T) {
 	c := qt.New(t)
 	basePeer := Peer{
-		HasPiece: func(i pieceIndex) bool {
-			return true
-		},
 		MaxRequests:  math.MaxInt16,
 		DownloadRate: 2,
 	}
+	basePeer.Pieces.Add(0)
 	stealee := basePeer
 	stealee.DownloadRate = 1
-	stealee.HasExistingRequest = hasAllRequests
+	stealee.ExistingRequests = hasAllRequests
 	stealee.Id = intPeerId(1)
 	firstStealer := basePeer
 	firstStealer.Id = intPeerId(2)
@@ -130,19 +143,15 @@ func checkResultsRequestsLen(t *testing.T, reqs roaring.Bitmap, l uint64) {
 func TestPeerKeepsExistingIfReasonable(t *testing.T) {
 	c := qt.New(t)
 	basePeer := Peer{
-		HasPiece: func(i pieceIndex) bool {
-			return true
-		},
 		MaxRequests:  math.MaxInt16,
 		DownloadRate: 2,
 	}
+	basePeer.Pieces.Add(0)
 	// Slower than the stealers, but has all requests already.
 	stealee := basePeer
 	stealee.DownloadRate = 1
 	keepReq := RequestIndex(0)
-	stealee.HasExistingRequest = func(r RequestIndex) bool {
-		return r == keepReq
-	}
+	stealee.ExistingRequests = requestSetFromSlice(keepReq)
 	stealee.Id = intPeerId(1)
 	firstStealer := basePeer
 	firstStealer.Id = intPeerId(2)
@@ -189,12 +198,10 @@ var peerNextRequestStateChecker = qt.CmpEquals(
 func TestDontStealUnnecessarily(t *testing.T) {
 	c := qt.New(t)
 	basePeer := Peer{
-		HasPiece: func(i pieceIndex) bool {
-			return true
-		},
 		MaxRequests:  math.MaxInt16,
 		DownloadRate: 2,
 	}
+	basePeer.Pieces.AddRange(0, 5)
 	// Slower than the stealers, but has all requests already.
 	stealee := basePeer
 	stealee.DownloadRate = 1
@@ -204,22 +211,15 @@ func TestDontStealUnnecessarily(t *testing.T) {
 	keepReqs := requestSetFromSlice(
 		r(3, 2), r(3, 4), r(3, 6), r(3, 8),
 		r(4, 0), r(4, 1), r(4, 7), r(4, 8))
-	stealee.HasExistingRequest = func(r RequestIndex) bool {
-		return keepReqs.Contains(r)
-	}
+	stealee.ExistingRequests = keepReqs
 	stealee.Id = intPeerId(1)
 	firstStealer := basePeer
 	firstStealer.Id = intPeerId(2)
 	secondStealer := basePeer
 	secondStealer.Id = intPeerId(3)
-	secondStealer.HasPiece = func(i pieceIndex) bool {
-		switch i {
-		case 1, 3:
-			return true
-		default:
-			return false
-		}
-	}
+	secondStealer.Pieces = roaring.Bitmap{}
+	secondStealer.Pieces.Add(1)
+	secondStealer.Pieces.Add(3)
 	results := Run(Input{Torrents: []Torrent{{
 		ChunksPerPiece: 9,
 		Pieces: []Piece{
@@ -277,15 +277,14 @@ func TestDontStealUnnecessarily(t *testing.T) {
 // its actual request state since the last request strategy run.
 func TestDuplicatePreallocations(t *testing.T) {
 	peer := func(id int, downloadRate float64) Peer {
-		return Peer{
-			HasExistingRequest: hasAllRequests,
-			MaxRequests:        2,
-			HasPiece: func(i pieceIndex) bool {
-				return true
-			},
-			Id:           intPeerId(id),
-			DownloadRate: downloadRate,
+		p := Peer{
+			ExistingRequests: hasAllRequests,
+			MaxRequests:      2,
+			Id:               intPeerId(id),
+			DownloadRate:     downloadRate,
 		}
+		p.Pieces.AddRange(0, roaring.MaxRange)
+		return p
 	}
 	results := Run(Input{
 		Torrents: []Torrent{{

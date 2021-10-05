@@ -84,7 +84,7 @@ type requestablePiece struct {
 	t                 *Torrent
 	alwaysReallocate  bool
 	NumPendingChunks  int
-	IterPendingChunks ChunksIter
+	IterPendingChunks ChunksIterFunc
 }
 
 func (p *requestablePiece) chunkIndexToRequestIndex(c ChunkIndex) RequestIndex {
@@ -338,7 +338,7 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 	p.IterPendingChunks(func(spec ChunkIndex) {
 		req := p.chunkIndexToRequestIndex(spec)
 		for _, peer := range peersForPiece {
-			if h := peer.HasExistingRequest; h == nil || !h(req) {
+			if !peer.ExistingRequests.Contains(req) {
 				continue
 			}
 			if !peer.canFitRequest() {
@@ -360,7 +360,7 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 			if !peer.canFitRequest() {
 				continue
 			}
-			if !peer.pieceAllowedFastOrDefault(p.index) {
+			if !peer.PieceAllowedFast.ContainsInt(p.index) {
 				// TODO: Verify that's okay to stay uninterested if we request allowed fast pieces.
 				peer.nextState.Interested = true
 				if peer.Choking {
@@ -389,7 +389,7 @@ chunk:
 			if !peer.canFitRequest() {
 				continue
 			}
-			if !peer.pieceAllowedFastOrDefault(p.index) {
+			if !peer.PieceAllowedFast.ContainsInt(p.index) {
 				// TODO: Verify that's okay to stay uninterested if we request allowed fast pieces.
 				peer.nextState.Interested = true
 				if peer.Choking {

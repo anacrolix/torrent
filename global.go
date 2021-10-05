@@ -10,10 +10,10 @@ import (
 const (
 	pieceHash        = crypto.SHA1
 	defaultChunkSize = 0x4000 // 16KiB
-	
+
 	// Arbitrary maximum of "metadata_size" (see https://www.bittorrent.org/beps/bep_0009.html)
 	// This value is 2x what libtorrent-rasterbar uses, which should be plenty
-	maxMetadataSize uint32 = 8*1024*1024
+	maxMetadataSize uint32 = 8 * 1024 * 1024
 )
 
 // These are our extended message IDs. Peers will use these values to

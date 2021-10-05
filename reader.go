@@ -30,15 +30,15 @@ type pieceRange struct {
 }
 
 type reader struct {
-	t   *Torrent
+	t *Torrent
 	// Adjust the read/seek window to handle Readers locked to File extents and the like.
 	offset, length int64
-	
+
 	// Function to dynamically calculate readahead. If nil, readahead is static.
 	readaheadFunc func() int64
-	
+
 	// Required when modifying pos and readahead.
-	mu  sync.Locker
+	mu sync.Locker
 
 	readahead, pos int64
 	// Position that reads have continued contiguously from.
@@ -52,7 +52,6 @@ type reader struct {
 	// after a seek or with a new reader at the starting position.
 	reading    bool
 	responsive bool
-
 }
 
 var _ io.ReadSeekCloser = (*reader)(nil)

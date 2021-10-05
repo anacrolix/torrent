@@ -78,7 +78,7 @@ func (t *Torrent) PieceState(piece pieceIndex) (ps PieceState) {
 	t.cl.rLock()
 	ps = t.pieceState(piece)
 	t.cl.rUnlock()
-	return 
+	return
 }
 
 // The number of pieces in the torrent. This requires that the info has been

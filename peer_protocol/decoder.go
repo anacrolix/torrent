@@ -67,7 +67,7 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 		}
 		length -= 8
 		dataLen := int64(length)
-		msg.Piece = (*d.Pool.Get().(*[]byte))
+		msg.Piece = *d.Pool.Get().(*[]byte)
 		if int64(cap(msg.Piece)) < dataLen {
 			return errors.New("piece data longer than expected")
 		}

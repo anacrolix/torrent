@@ -44,14 +44,10 @@ github.com/alexflint/go-arg v1.4.2/go.mod h1:9iRbDxne7LcR/GSvEr7ma++GLpdIU1zrghf
 github.com/alexflint/go-scalar v1.0.0/go.mod h1:GpHzbCOZXEKMEcygYQ5n/aa4Aq84zbxjy3MxYW0gjYw=
 github.com/alexflint/go-scalar v1.1.0 h1:aaAouLLzI9TChcPXotr6gUhq+Scr8rl0P9P4PnltbhM=
 github.com/alexflint/go-scalar v1.1.0/go.mod h1:LoFvNMqS1CPrMVltza4LvnGKhaSpc3oyLEBUZVhhS2o=
-github.com/anacrolix/args v0.1.0 h1:gcDj4DgjLhe+f311XqQ8eC6wYyKhZocxXUTeDvezAJ0=
-github.com/anacrolix/args v0.1.0/go.mod h1:RCPBt2vU1GJn4gG9rL+fuYu7ivnE9tmK2pHm63t3yO0=
 github.com/anacrolix/args v0.1.1-0.20210917054839-725094dd33fe h1:YvHyQkMwxP4OdUnudTu6HaU6WqW25ShNgXtUEWjN/tc=
 github.com/anacrolix/args v0.1.1-0.20210917054839-725094dd33fe/go.mod h1:RCPBt2vU1GJn4gG9rL+fuYu7ivnE9tmK2pHm63t3yO0=
 github.com/anacrolix/chansync v0.0.0-20210524073341-a336ebc2de92/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
 github.com/anacrolix/chansync v0.1.0/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
-github.com/anacrolix/chansync v0.1.1-0.20210904130811-9cd7139c8dd9 h1:Jk3Mdr+XbO1uvf/+nUXjb/M1dPDNPQThxKmS5MLGE+w=
-github.com/anacrolix/chansync v0.1.1-0.20210904130811-9cd7139c8dd9/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
 github.com/anacrolix/chansync v0.2.1-0.20210910114620-14955c95ded9 h1:jfSupvl9p7Bkd9snD6DrjxDmsYjJeYxSqhQa/I9wV3I=
 github.com/anacrolix/chansync v0.2.1-0.20210910114620-14955c95ded9/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
 github.com/anacrolix/confluence v1.7.1-0.20210221224747-9cb14aa2c53a/go.mod h1:T0JHvSaf9UfoiUdCtCOUuRroHm/tauUJTbLc6/vd5YA=
@@ -124,8 +120,6 @@ github.com/anacrolix/multiless v0.0.0-20210222022749-ef43011a77ec/go.mod h1:TrCL
 github.com/anacrolix/multiless v0.1.1-0.20210520040635-10ee7b5f3cff/go.mod h1:TrCLEZfIDbMVfLoQt5tOoiBS/uq4y8+ojuEVVvTNPX4=
 github.com/anacrolix/multiless v0.1.1-0.20210529082330-de2f6cf29619 h1:ZkusP2EHxvxm+IymiKJ8DBVE/E6fJkb8K/2+GXZpjAY=
 github.com/anacrolix/multiless v0.1.1-0.20210529082330-de2f6cf29619/go.mod h1:TrCLEZfIDbMVfLoQt5tOoiBS/uq4y8+ojuEVVvTNPX4=
-github.com/anacrolix/squirrel v0.1.0 h1:Zz7XUFUr2ozhsTvzwLdmrFpduoTHtBNTB/KZQ4Ivh00=
-github.com/anacrolix/squirrel v0.1.0/go.mod h1:YzgVvikMdFD441oTWlNG189bpKabO9Sbf3uCSVgca04=
 github.com/anacrolix/squirrel v0.1.1-0.20210914065657-81bc5ecdc43a h1:8LAUQgDPqnzuF/WrGQzTY6i+bVO/FpA90Hi6jXA+2vQ=
 github.com/anacrolix/squirrel v0.1.1-0.20210914065657-81bc5ecdc43a/go.mod h1:YzgVvikMdFD441oTWlNG189bpKabO9Sbf3uCSVgca04=
 github.com/anacrolix/stm v0.1.0/go.mod h1:ZKz7e7ERWvP0KgL7WXfRjBXHNRhlVRlbBQecqFtPq+A=

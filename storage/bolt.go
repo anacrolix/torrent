@@ -1,5 +1,4 @@
 //go:build !noboltdb && !wasm
-// +build !noboltdb,!wasm
 
 package storage
 

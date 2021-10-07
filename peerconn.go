@@ -662,9 +662,7 @@ func (cn *PeerConn) postBitfield() {
 
 func (cn *PeerConn) updateRequests() {
 	if peerRequesting {
-		if cn.actualRequestState.Requests.GetCardinality() != 0 {
-			return
-		}
+		cn.nextRequestState = cn.getDesiredRequestState()
 		cn.tickleWriter()
 		return
 	}
@@ -1320,7 +1318,9 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
 	if deletedRequest {
 		c.piecesReceivedSinceLastRequestUpdate++
-		c.updateRequests()
+		if c.nextRequestState.Requests.GetCardinality() == 0 {
+			c.updateRequests()
+		}
 		c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulIntendedData }))
 	}
 	for _, f := range c.t.cl.config.Callbacks.ReceivedUsefulData {

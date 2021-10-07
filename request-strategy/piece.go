@@ -3,7 +3,7 @@ package request_strategy
 type ChunksIterFunc func(func(ChunkIndex))
 
 type ChunksIter interface {
-	Iter(func(ChunkIndex))
+	Iter(func(ci ChunkIndex))
 }
 
 type Piece struct {

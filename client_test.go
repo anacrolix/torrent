@@ -30,7 +30,7 @@ import (
 func TestClientDefault(t *testing.T) {
 	cl, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
-	cl.Close()
+	require.Empty(t, cl.Close())
 }
 
 func TestClientNilConfig(t *testing.T) {
@@ -40,7 +40,7 @@ func TestClientNilConfig(t *testing.T) {
 	os.Chdir(t.TempDir())
 	cl, err := NewClient(nil)
 	require.NoError(t, err)
-	cl.Close()
+	require.Empty(t, cl.Close())
 }
 
 func TestAddDropTorrent(t *testing.T) {

@@ -422,13 +422,16 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 
 // Stops the client. All connections to peers are closed and all activity will
 // come to a halt.
-func (cl *Client) Close() {
+func (cl *Client) Close() (errs []error) {
 	cl.closed.Set()
 	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
 	cl.lock()
 	cl.event.Broadcast()
 	for _, t := range cl.torrents {
-		t.close(&closeGroup)
+		err := t.close(&closeGroup)
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
 	cl.unlock()
 	closeGroup.Wait() // defer is LIFO. We want to Wait() after cl.unlock()
@@ -437,6 +440,7 @@ func (cl *Client) Close() {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}
 	cl.unlock()
+	return
 }
 
 func (cl *Client) ipBlockRange(ip net.IP) (r iplist.Range, blocked bool) {

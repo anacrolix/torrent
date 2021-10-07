@@ -334,11 +334,11 @@ func downloadErr(flags downloadFlags) error {
 		return fmt.Errorf("creating client: %w", err)
 	}
 	var clientClose sync.Once //In certain situations, close was being called more than once.
-	defer clientClose.Do(client.Close)
+	defer clientClose.Do(func() { client.Close() })
 	go exitSignalHandlers(&stop)
 	go func() {
 		<-stop.C()
-		clientClose.Do(client.Close)
+		clientClose.Do(func() { client.Close() })
 	}()
 
 	// Write status on the root path on the default HTTP muxer. This will be bound to localhost

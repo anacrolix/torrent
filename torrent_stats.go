@@ -13,4 +13,5 @@ type TorrentStats struct {
 	ActivePeers      int
 	ConnectedSeeders int
 	HalfOpenPeers    int
+	PiecesComplete   int
 }

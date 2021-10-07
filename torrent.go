@@ -1760,6 +1760,7 @@ func (t *Torrent) statsLocked() (ret TorrentStats) {
 		}
 	}
 	ret.ConnStats = t.stats.Copy()
+	ret.PiecesComplete = t.numPiecesCompleted()
 	return
 }
 

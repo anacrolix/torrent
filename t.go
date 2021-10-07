@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/sync"
 
@@ -16,12 +17,8 @@ func (t *Torrent) InfoHash() metainfo.Hash {
 }
 
 // Returns a channel that is closed when the info (.Info()) for the torrent has become available.
-func (t *Torrent) GotInfo() (ret <-chan struct{}) {
-	// TODO: We shouldn't need to lock to take a channel here, if the event is only ever set.
-	t.nameMu.RLock()
-	ret = t.gotMetainfoC
-	t.nameMu.RUnlock()
-	return
+func (t *Torrent) GotInfo() events.Done {
+	return t.gotMetainfoC
 }
 
 // Returns the metainfo info dictionary, or nil if it's not yet available.

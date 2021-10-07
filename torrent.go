@@ -19,6 +19,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
+	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
@@ -195,7 +196,7 @@ func (t *Torrent) pendingPieces() *prioritybitmap.PriorityBitmap {
 }
 
 // Returns a channel that is closed when the Torrent is closed.
-func (t *Torrent) Closed() chansync.Done {
+func (t *Torrent) Closed() events.Done {
 	return t.closed.Done()
 }
 

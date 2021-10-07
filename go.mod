@@ -8,9 +8,9 @@ require (
 	github.com/RoaringBitmap/roaring v0.9.4
 	github.com/alexflint/go-arg v1.4.2
 	github.com/anacrolix/args v0.1.1-0.20210917054839-725094dd33fe
-	github.com/anacrolix/chansync v0.2.1-0.20210910114620-14955c95ded9
+	github.com/anacrolix/chansync v0.3.0-0.0.20211007004133-3f72684c4a93
 	github.com/anacrolix/confluence v1.8.0 // indirect
-	github.com/anacrolix/dht/v2 v2.10.5-0.20210902001729-06cc4fe90e53
+	github.com/anacrolix/dht/v2 v2.10.6-0.20211007004332-99263ec9c1c8
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/go-libutp v1.0.4
 	github.com/anacrolix/log v0.9.0

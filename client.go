@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
@@ -409,7 +410,7 @@ func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err
 	return
 }
 
-func (cl *Client) Closed() chansync.Done {
+func (cl *Client) Closed() events.Done {
 	return cl.closed.Done()
 }
 

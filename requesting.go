@@ -7,10 +7,10 @@ import (
 	"unsafe"
 
 	"github.com/RoaringBitmap/roaring"
+	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
-	"github.com/anacrolix/chansync"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 )
 
@@ -19,7 +19,7 @@ const peerRequesting = false
 
 func (cl *Client) requester() {
 	for {
-		update := func() chansync.Signaled {
+		update := func() events.Signaled {
 			cl.lock()
 			defer cl.unlock()
 			cl.doRequests()

@@ -1091,7 +1091,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			c.updateExpectingChunks()
 		case pp.Unchoke:
 			c.peerChoking = false
-			c.tickleWriter()
+			c.updateRequests()
 			c.updateExpectingChunks()
 		case pp.Interested:
 			c.peerInterested = true

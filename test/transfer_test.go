@@ -26,10 +26,13 @@ import (
 )
 
 type testClientTransferParams struct {
-	Responsive                 bool
-	Readahead                  int64
-	SetReadahead               bool
-	LeecherStorage             func(string) storage.ClientImplCloser
+	Responsive     bool
+	Readahead      int64
+	SetReadahead   bool
+	LeecherStorage func(string) storage.ClientImplCloser
+	// TODO: Use a generic option type. This is the capacity of the leecher storage for determining
+	// whether it's possible for the leecher to be Complete. 0 currently means no limit.
+	LeecherStorageCapacity     int64
 	SeederStorage              func(string) storage.ClientImplCloser
 	SeederUploadRateLimiter    *rate.Limiter
 	LeecherDownloadRateLimiter *rate.Limiter
@@ -65,6 +68,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	defer os.RemoveAll(greetingTempDir)
 	// Create seeder and a Torrent.
 	cfg := torrent.TestingConfig(t)
+	//cfg.Debug = true
 	cfg.Seed = true
 	// Some test instances don't like this being on, even when there's no cache involved.
 	cfg.DropMutuallyCompletePeers = false
@@ -93,11 +97,11 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	// panic in #214 caused by RemoteAddr on Closed uTP sockets.
 	defer seederTorrent.Stats()
 	defer seeder.Close()
-	seederTorrent.VerifyData()
+	// Adding a torrent and setting the info should trigger piece checks for everything
+	// automatically. Wait until the seed Torrent agrees that everything is available.
+	<-seederTorrent.Complete.On()
 	// Create leecher and a Torrent.
-	leecherDataDir, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(leecherDataDir)
+	leecherDataDir := t.TempDir()
 	cfg = torrent.TestingConfig(t)
 	// See the seeder client config comment.
 	cfg.DropMutuallyCompletePeers = false
@@ -132,6 +136,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		return
 	}())
 	require.NoError(t, err)
+	assert.False(t, leecherTorrent.Complete.Bool())
 	assert.True(t, new)
 
 	//// This was used when observing coalescing of piece state changes.
@@ -158,6 +163,19 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		r.SetReadahead(ps.Readahead)
 	}
 	assertReadAllGreeting(t, r)
+	info, err := mi.UnmarshalInfo()
+	require.NoError(t, err)
+	canComplete := ps.LeecherStorageCapacity == 0 || ps.LeecherStorageCapacity >= info.TotalLength()
+	if !canComplete {
+		// Reading from a cache doesn't refresh older pieces until we fail to read those, so we need
+		// to force a refresh since we just read the contents from start to finish.
+		go leecherTorrent.VerifyData()
+	}
+	if canComplete {
+		<-leecherTorrent.Complete.On()
+	} else {
+		<-leecherTorrent.Complete.Off()
+	}
 	assert.NotEmpty(t, seederTorrent.PeerConns())
 	leecherPeerConns := leecherTorrent.PeerConns()
 	if cfg.DropMutuallyCompletePeers {
@@ -268,7 +286,8 @@ func testClientTransferSmallCache(t *testing.T, setReadahead bool, readahead int
 			// that it can be hashed.
 			Capacity: 5,
 		}),
-		SetReadahead: setReadahead,
+		LeecherStorageCapacity: 5,
+		SetReadahead:           setReadahead,
 		// Can't readahead too far or the cache will thrash and drop data we
 		// thought we had.
 		Readahead: readahead,

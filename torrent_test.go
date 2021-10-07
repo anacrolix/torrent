@@ -128,6 +128,7 @@ func testEmptyFilesAndZeroPieceLength(t *testing.T, cfg *ClientConfig) {
 	defer tt.Drop()
 	tt.DownloadAll()
 	require.True(t, cl.WaitAll())
+	assert.True(t, tt.Complete.Bool())
 	assert.True(t, missinggo.FilePathExists(fp))
 }
 

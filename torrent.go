@@ -149,6 +149,9 @@ type Torrent struct {
 	dirtyChunks roaring.Bitmap
 
 	pex pexState
+
+	// Is On when all pieces are complete.
+	Complete chansync.Flag
 }
 
 func (t *Torrent) pieceAvailabilityFromPeers(i pieceIndex) (count int) {
@@ -413,6 +416,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	t.nameMu.Lock()
 	t.info = info
 	t.nameMu.Unlock()
+	t.updateComplete()
 	t.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
 	t.displayName = "" // Save a few bytes lol.
 	t.initFiles()
@@ -1264,6 +1268,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	} else {
 		t._completedPieces.Remove(x)
 	}
+	t.updateComplete()
 	if complete && len(p.dirtiers) != 0 {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
 	}
@@ -2288,4 +2293,8 @@ func (t *Torrent) numChunks() RequestIndex {
 
 func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex) RequestIndex {
 	return RequestIndex(piece) * t.chunksPerRegularPiece()
+}
+
+func (t *Torrent) updateComplete() {
+	t.Complete.SetBool(t.haveAllPieces())
 }

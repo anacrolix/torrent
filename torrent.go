@@ -1154,9 +1154,9 @@ func (t *Torrent) byteRegionPieces(off, size int64) (begin, end pieceIndex) {
 	return
 }
 
-// Returns true if all iterations complete without breaking. Returns the read
-// regions for all readers. The reader regions should not be merged as some
-// callers depend on this method to enumerate readers.
+// Returns true if all iterations complete without breaking. Returns the read regions for all
+// readers. The reader regions should not be merged as some callers depend on this method to
+// enumerate readers.
 func (t *Torrent) forReaderOffsetPieces(f func(begin, end pieceIndex) (more bool)) (all bool) {
 	for r := range t.readers {
 		p := r.pieces

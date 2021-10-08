@@ -1060,7 +1060,7 @@ func (t *Torrent) pieceAllDirty(piece pieceIndex) bool {
 
 func (t *Torrent) readersChanged() {
 	t.updateReaderPieces()
-	t.updateAllPiecePriorities()
+	t.updateAllPiecePriorities("Torrent.readersChanged")
 }
 
 func (t *Torrent) updateReaderPieces() {
@@ -1079,15 +1079,15 @@ func (t *Torrent) readerPosChanged(from, to pieceRange) {
 	}
 	if l.end < h.begin {
 		// Two distinct ranges.
-		t.updatePiecePriorities(l.begin, l.end)
-		t.updatePiecePriorities(h.begin, h.end)
+		t.updatePiecePriorities(l.begin, l.end, "Torrent.readerPosChanged")
+		t.updatePiecePriorities(h.begin, h.end, "Torrent.readerPosChanged")
 	} else {
 		// Ranges overlap.
 		end := l.end
 		if h.end > end {
 			end = h.end
 		}
-		t.updatePiecePriorities(l.begin, end)
+		t.updatePiecePriorities(l.begin, end, "Torrent.readerPosChanged")
 	}
 }
 
@@ -1097,17 +1097,17 @@ func (t *Torrent) maybeNewConns() {
 	t.openNewConns()
 }
 
-func (t *Torrent) piecePriorityChanged(piece pieceIndex) {
+func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
 	if t._pendingPieces.Contains(piece) {
 		t.iterPeers(func(c *Peer) {
-			c.updateRequests("piece priority changed")
+			c.updateRequests(reason)
 		})
 	}
 	t.maybeNewConns()
 	t.publishPieceChange(piece)
 }
 
-func (t *Torrent) updatePiecePriority(piece pieceIndex) {
+func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string) {
 	p := &t.pieces[piece]
 	newPrio := p.uncachedPriority()
 	// t.logger.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
@@ -1120,18 +1120,18 @@ func (t *Torrent) updatePiecePriority(piece pieceIndex) {
 			return
 		}
 	}
-	t.piecePriorityChanged(piece)
+	t.piecePriorityChanged(piece, reason)
 }
 
-func (t *Torrent) updateAllPiecePriorities() {
-	t.updatePiecePriorities(0, t.numPieces())
+func (t *Torrent) updateAllPiecePriorities(reason string) {
+	t.updatePiecePriorities(0, t.numPieces(), reason)
 }
 
 // Update all piece priorities in one hit. This function should have the same
 // output as updatePiecePriority, but across all pieces.
-func (t *Torrent) updatePiecePriorities(begin, end pieceIndex) {
+func (t *Torrent) updatePiecePriorities(begin, end pieceIndex, reason string) {
 	for i := begin; i < end; i++ {
-		t.updatePiecePriority(i)
+		t.updatePiecePriority(i, reason)
 	}
 }
 
@@ -1190,14 +1190,14 @@ func (t *Torrent) pendRequest(req RequestIndex) {
 	t.piece(int(req / t.chunksPerRegularPiece())).pendChunkIndex(req % t.chunksPerRegularPiece())
 }
 
-func (t *Torrent) pieceCompletionChanged(piece pieceIndex) {
+func (t *Torrent) pieceCompletionChanged(piece pieceIndex, reason string) {
 	t.cl.event.Broadcast()
 	if t.pieceComplete(piece) {
 		t.onPieceCompleted(piece)
 	} else {
 		t.onIncompletePiece(piece)
 	}
-	t.updatePiecePriority(piece)
+	t.updatePiecePriority(piece, reason)
 }
 
 func (t *Torrent) numReceivedConns() (ret int) {
@@ -1275,7 +1275,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	}
 	if changed {
 		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).SetLevel(log.Debug).Log(t.logger)
-		t.pieceCompletionChanged(piece)
+		t.pieceCompletionChanged(piece, "Torrent.updatePieceCompletion")
 	}
 	return changed
 }
@@ -2030,7 +2030,7 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 	t.piecesQueuedForHash.Remove(bitmap.BitIndex(pi))
 	p.hashing = true
 	t.publishPieceChange(pi)
-	t.updatePiecePriority(pi)
+	t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher")
 	t.storageLock.RLock()
 	t.activePieceHashes++
 	go t.pieceHasher(pi)
@@ -2063,7 +2063,7 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 	defer t.cl.unlock()
 	p.hashing = false
 	t.pieceHashed(index, correct, copyErr)
-	t.updatePiecePriority(index)
+	t.updatePiecePriority(index, "Torrent.pieceHasher")
 	t.activePieceHashes--
 	t.tryCreateMorePieceHashers()
 }
@@ -2091,7 +2091,7 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 	}
 	t.piecesQueuedForHash.Add(bitmap.BitIndex(pieceIndex))
 	t.publishPieceChange(pieceIndex)
-	t.updatePiecePriority(pieceIndex)
+	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck")
 	t.tryCreateMorePieceHashers()
 }
 

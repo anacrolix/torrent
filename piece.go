@@ -191,7 +191,7 @@ func (p *Piece) SetPriority(prio piecePriority) {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()
 	p.priority = prio
-	p.t.updatePiecePriority(p.index)
+	p.t.updatePiecePriority(p.index, "Piece.SetPriority")
 }
 
 func (p *Piece) purePriority() (ret piecePriority) {

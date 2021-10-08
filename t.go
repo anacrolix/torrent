@@ -185,25 +185,25 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 func (t *Torrent) downloadPiecesLocked(begin, end pieceIndex) {
 	for i := begin; i < end; i++ {
 		if t.pieces[i].priority.Raise(PiecePriorityNormal) {
-			t.updatePiecePriority(i)
+			t.updatePiecePriority(i, "Torrent.DownloadPieces")
 		}
 	}
 }
 
-func (t *Torrent) CancelPieces(begin, end pieceIndex) {
+func (t *Torrent) CancelPieces(begin, end pieceIndex, reason string) {
 	t.cl.lock()
-	t.cancelPiecesLocked(begin, end)
+	t.cancelPiecesLocked(begin, end, "Torrent.CancelPieces")
 	t.cl.unlock()
 }
 
-func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex) {
+func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex, reason string) {
 	for i := begin; i < end; i++ {
 		p := &t.pieces[i]
 		if p.priority == PiecePriorityNone {
 			continue
 		}
 		p.priority = PiecePriorityNone
-		t.updatePiecePriority(i)
+		t.updatePiecePriority(i, reason)
 	}
 }
 

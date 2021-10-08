@@ -9,7 +9,7 @@ import (
 // legacy PeerConn methods.
 type peerImpl interface {
 	onNextRequestStateChanged()
-	updateRequests()
+	updateRequests(reason string)
 	writeInterested(interested bool) bool
 
 	// Neither of these return buffer room anymore, because they're currently both posted. There's

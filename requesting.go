@@ -2,47 +2,20 @@ package torrent
 
 import (
 	"container/heap"
+	"context"
 	"encoding/gob"
 	"reflect"
+	"runtime/pprof"
 	"time"
 	"unsafe"
 
 	"github.com/RoaringBitmap/roaring"
-	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
 
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 )
-
-// Calculate requests individually for each peer.
-const peerRequesting = true
-
-func (cl *Client) requester() {
-	for {
-		update := func() events.Signaled {
-			cl.lock()
-			defer cl.unlock()
-			cl.doRequests()
-			return cl.updateRequests.Signaled()
-		}()
-		minWait := time.After(100 * time.Millisecond)
-		maxWait := time.After(1000 * time.Millisecond)
-		select {
-		case <-cl.closed.Done():
-			return
-		case <-minWait:
-		case <-maxWait:
-		}
-		select {
-		case <-cl.closed.Done():
-			return
-		case <-update:
-		case <-maxWait:
-		}
-	}
-}
 
 func (cl *Client) tickleRequester() {
 	cl.updateRequests.Broadcast()
@@ -107,14 +80,6 @@ func (cl *Client) getRequestStrategyInput() request_strategy.Input {
 	}
 }
 
-func (cl *Client) doRequests() {
-	input := cl.getRequestStrategyInput()
-	nextPeerStates := request_strategy.Run(input)
-	for p, state := range nextPeerStates {
-		setPeerNextRequestState(p, state)
-	}
-}
-
 func init() {
 	gob.Register(peerId{})
 }
@@ -151,12 +116,6 @@ func (p *peerId) GobDecode(b []byte) error {
 	}
 	copy(*(*[]byte)(unsafe.Pointer(&dst)), b)
 	return nil
-}
-
-func setPeerNextRequestState(_p request_strategy.PeerId, rp request_strategy.PeerNextRequestState) {
-	p := _p.(peerId).Peer
-	p.nextRequestState = rp
-	p.onNextRequestStateChanged()
 }
 
 type RequestIndex = request_strategy.RequestIndex
@@ -262,7 +221,22 @@ func (p *Peer) getDesiredRequestState() (desired requestState) {
 }
 
 func (p *Peer) applyNextRequestState() bool {
-	next := p.getDesiredRequestState()
+	if p.needRequestUpdate == "" {
+		return true
+	}
+	var more bool
+	pprof.Do(
+		context.Background(),
+		pprof.Labels("update request", p.needRequestUpdate),
+		func(_ context.Context) {
+			next := p.getDesiredRequestState()
+			more = p.applyRequestState(next)
+		},
+	)
+	return more
+}
+
+func (p *Peer) applyRequestState(next requestState) bool {
 	current := p.actualRequestState
 	if !p.setInterested(next.Interested) {
 		return false
@@ -291,5 +265,8 @@ func (p *Peer) applyNextRequestState() bool {
 		} */
 		return more
 	})
+	if more {
+		p.needRequestUpdate = ""
+	}
 	return more
 }

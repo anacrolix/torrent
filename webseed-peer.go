@@ -103,7 +103,7 @@ func (ws *webseedPeer) connectionFlags() string {
 // return bool if this is even possible, and if it isn't, skip to the next drop candidate.
 func (ws *webseedPeer) drop() {}
 
-func (ws *webseedPeer) updateRequests() {
+func (ws *webseedPeer) updateRequests(reason string) {
 }
 
 func (ws *webseedPeer) onClose() {

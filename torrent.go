@@ -428,9 +428,6 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 
 // This seems to be all the follow-up tasks after info is set, that can't fail.
 func (t *Torrent) onSetInfo() {
-	t.iterPeers(func(p *Peer) {
-		p.onGotInfo(t.info)
-	})
 	for i := range t.pieces {
 		p := &t.pieces[i]
 		// Need to add availability before updating piece completion, as that may result in conns
@@ -450,6 +447,10 @@ func (t *Torrent) onSetInfo() {
 	t.updateWantPeersEvent()
 	t.pendingRequests = make(map[RequestIndex]int)
 	t.tryCreateMorePieceHashers()
+	t.iterPeers(func(p *Peer) {
+		p.onGotInfo(t.info)
+		p.updateRequests("onSetInfo")
+	})
 }
 
 // Called when metadata for a torrent becomes available.
@@ -1097,9 +1098,9 @@ func (t *Torrent) maybeNewConns() {
 }
 
 func (t *Torrent) piecePriorityChanged(piece pieceIndex) {
-	if true || t._pendingPieces.Contains(piece) {
+	if t._pendingPieces.Contains(piece) {
 		t.iterPeers(func(c *Peer) {
-			c.updateRequests()
+			c.updateRequests("piece priority changed")
 		})
 	}
 	t.maybeNewConns()
@@ -2007,7 +2008,7 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	// }
 	t.iterPeers(func(conn *Peer) {
 		if conn.peerHasPiece(piece) {
-			conn.updateRequests()
+			conn.updateRequests("piece incomplete")
 		}
 	})
 }
@@ -2183,7 +2184,7 @@ func (t *Torrent) AllowDataUpload() {
 	defer t.cl.unlock()
 	t.dataUploadDisallowed = false
 	for c := range t.conns {
-		c.updateRequests()
+		c.updateRequests("allow data upload")
 	}
 }
 
@@ -2193,7 +2194,7 @@ func (t *Torrent) DisallowDataUpload() {
 	defer t.cl.unlock()
 	t.dataUploadDisallowed = true
 	for c := range t.conns {
-		c.updateRequests()
+		c.updateRequests("disallow data upload")
 	}
 }
 

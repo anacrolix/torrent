@@ -2062,9 +2062,8 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 	t.cl.lock()
 	defer t.cl.unlock()
 	p.hashing = false
-	t.updatePiecePriority(index)
 	t.pieceHashed(index, correct, copyErr)
-	t.publishPieceChange(index)
+	t.updatePiecePriority(index)
 	t.activePieceHashes--
 	t.tryCreateMorePieceHashers()
 }

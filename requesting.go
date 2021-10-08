@@ -262,7 +262,7 @@ func (p *Peer) getDesiredRequestState() (desired requestState) {
 }
 
 func (p *Peer) applyNextRequestState() bool {
-	next := p.nextRequestState
+	next := p.getDesiredRequestState()
 	current := p.actualRequestState
 	if !p.setInterested(next.Interested) {
 		return false

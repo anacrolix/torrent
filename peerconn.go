@@ -17,7 +17,6 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	"github.com/anacrolix/missinggo/v2/prioritybitmap"
 	"github.com/anacrolix/multiless"
 
 	"github.com/anacrolix/chansync"
@@ -126,9 +125,6 @@ type Peer struct {
 	PeerMaxRequests  maxRequests // Maximum pending requests the peer allows.
 	PeerExtensionIDs map[pp.ExtensionName]pp.ExtensionNumber
 	PeerClientName   string
-
-	pieceInclination   []int
-	_pieceRequestOrder prioritybitmap.PriorityBitmap
 
 	logger log.Logger
 }
@@ -404,8 +400,6 @@ func (p *Peer) close() {
 	if !p.closed.Set() {
 		return
 	}
-	p.discardPieceInclination()
-	p._pieceRequestOrder.Clear()
 	p.peerImpl.onClose()
 	if p.t != nil {
 		p.t.decPeerPieceAvailability(p)
@@ -662,7 +656,6 @@ func (cn *PeerConn) postBitfield() {
 
 func (cn *PeerConn) updateRequests() {
 	if peerRequesting {
-		cn.nextRequestState = cn.getDesiredRequestState()
 		cn.tickleWriter()
 		return
 	}
@@ -692,54 +685,8 @@ func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 	}
 }
 
-// check callers updaterequests
-func (cn *Peer) stopRequestingPiece(piece pieceIndex) bool {
-	return cn._pieceRequestOrder.Remove(piece)
-}
-
-// This is distinct from Torrent piece priority, which is the user's
-// preference. Connection piece priority is specific to a connection and is
-// used to pseudorandomly avoid connections always requesting the same pieces
-// and thus wasting effort.
-func (cn *Peer) updatePiecePriority(piece pieceIndex) bool {
-	tpp := cn.t.piecePriority(piece)
-	if !cn.peerHasPiece(piece) {
-		tpp = PiecePriorityNone
-	}
-	if tpp == PiecePriorityNone {
-		return cn.stopRequestingPiece(piece)
-	}
-	prio := cn.getPieceInclination()[piece]
-	return cn._pieceRequestOrder.Set(piece, prio)
-}
-
-func (cn *Peer) getPieceInclination() []int {
-	if cn.pieceInclination == nil {
-		cn.pieceInclination = cn.t.getConnPieceInclination()
-	}
-	return cn.pieceInclination
-}
-
-func (cn *Peer) discardPieceInclination() {
-	if cn.pieceInclination == nil {
-		return
-	}
-	cn.t.putPieceInclination(cn.pieceInclination)
-	cn.pieceInclination = nil
-}
-
 func (cn *Peer) peerPiecesChanged() {
-	if cn.t.haveInfo() {
-		prioritiesChanged := false
-		for i := pieceIndex(0); i < cn.t.numPieces(); i++ {
-			if cn.updatePiecePriority(i) {
-				prioritiesChanged = true
-			}
-		}
-		if prioritiesChanged {
-			cn.updateRequests()
-		}
-	}
+	cn.updateRequests()
 	cn.t.maybeDropMutuallyCompletePeer(cn)
 }
 
@@ -761,10 +708,7 @@ func (cn *PeerConn) peerSentHave(piece pieceIndex) error {
 		cn.t.incPieceAvailability(piece)
 	}
 	cn._peerPieces.Add(uint32(piece))
-	cn.t.maybeDropMutuallyCompletePeer(&cn.Peer)
-	if cn.updatePiecePriority(piece) {
-		cn.updateRequests()
-	}
+	cn.peerPiecesChanged()
 	return nil
 }
 
@@ -1470,7 +1414,10 @@ func (cn *Peer) netGoodPiecesDirtied() int64 {
 }
 
 func (c *Peer) peerHasWantedPieces() bool {
-	return !c._pieceRequestOrder.IsEmpty()
+	// TODO: Can this be done just with AndCardinality?
+	missingPeerHas := c.newPeerPieces()
+	missingPeerHas.AndNot(&c.t._completedPieces)
+	return !missingPeerHas.IsEmpty()
 }
 
 func (c *Peer) deleteRequest(r RequestIndex) bool {

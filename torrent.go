@@ -923,7 +923,8 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 }
 
 func (t *Torrent) maybeDropMutuallyCompletePeer(
-	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's okay?
+	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
+	// okay?
 	p *Peer,
 ) {
 	if !t.cl.config.DropMutuallyCompletePeers {
@@ -1096,13 +1097,11 @@ func (t *Torrent) maybeNewConns() {
 }
 
 func (t *Torrent) piecePriorityChanged(piece pieceIndex) {
-	// t.logger.Printf("piece %d priority changed", piece)
-	t.iterPeers(func(c *Peer) {
-		if c.updatePiecePriority(piece) {
-			// log.Print("conn piece priority changed")
+	if true || t._pendingPieces.Contains(piece) {
+		t.iterPeers(func(c *Peer) {
 			c.updateRequests()
-		}
-	})
+		})
+	}
 	t.maybeNewConns()
 	t.publishPieceChange(piece)
 }

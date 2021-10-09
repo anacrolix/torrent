@@ -212,7 +212,7 @@ func (p *Piece) purePriority() (ret piecePriority) {
 }
 
 func (p *Piece) uncachedPriority() (ret piecePriority) {
-	if p.t.pieceComplete(p.index) || p.t.pieceQueuedForHash(p.index) || p.t.hashingPiece(p.index) {
+	if p.hashing || p.marking || p.t.pieceComplete(p.index) || p.queuedForHash() {
 		return PiecePriorityNone
 	}
 	return p.purePriority()

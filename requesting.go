@@ -140,7 +140,7 @@ func (p peerRequests) Less(i, j int) bool {
 	leftCurrent := p.peer.actualRequestState.Requests.Contains(leftRequest)
 	rightCurrent := p.peer.actualRequestState.Requests.Contains(rightRequest)
 	pending := func(index RequestIndex, current bool) int {
-		ret := t.pendingRequests[index]
+		ret := t.pendingRequests.Get(index)
 		if current {
 			ret--
 		}

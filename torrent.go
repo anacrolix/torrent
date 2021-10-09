@@ -145,7 +145,7 @@ type Torrent struct {
 	connPieceInclinationPool sync.Pool
 
 	// Count of each request across active connections.
-	pendingRequests map[RequestIndex]int
+	pendingRequests pendingRequests
 	// Chunks we've written to since the corresponding piece was last checked.
 	dirtyChunks roaring.Bitmap
 
@@ -445,7 +445,7 @@ func (t *Torrent) onSetInfo() {
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
-	t.pendingRequests = make(map[RequestIndex]int)
+	t.pendingRequests.Init()
 	t.tryCreateMorePieceHashers()
 	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info)
@@ -1429,12 +1429,7 @@ func (t *Torrent) numActivePeers() (num int) {
 }
 
 func (t *Torrent) assertNoPendingRequests() {
-	if len(t.pendingRequests) != 0 {
-		panic(t.pendingRequests)
-	}
-	//if len(t.lastRequested) != 0 {
-	//	panic(t.lastRequested)
-	//}
+	t.pendingRequests.AssertEmpty()
 }
 
 func (t *Torrent) dropConnection(c *PeerConn) {

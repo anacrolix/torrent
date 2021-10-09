@@ -588,7 +588,7 @@ func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 		cn.validReceiveChunks = make(map[RequestIndex]int)
 	}
 	cn.validReceiveChunks[r]++
-	cn.t.pendingRequests[r]++
+	cn.t.pendingRequests.Inc(r)
 	cn.updateExpectingChunks()
 	ppReq := cn.t.requestIndexToRequest(r)
 	for _, f := range cn.callbacks.SentRequest {
@@ -1431,15 +1431,7 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 		f(PeerRequestEvent{c, c.t.requestIndexToRequest(r)})
 	}
 	c.updateExpectingChunks()
-	pr := c.t.pendingRequests
-	pr[r]--
-	n := pr[r]
-	if n == 0 {
-		delete(pr, r)
-	}
-	if n < 0 {
-		panic(n)
-	}
+	c.t.pendingRequests.Dec(r)
 	return true
 }
 

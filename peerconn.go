@@ -466,7 +466,7 @@ func (cn *PeerConn) requestedMetadataPiece(index int) bool {
 
 // The actual value to use as the maximum outbound requests.
 func (cn *Peer) nominalMaxRequests() (ret maxRequests) {
-	return maxRequests(clamp(1, int64(cn.PeerMaxRequests), 128))
+	return maxRequests(clamp(1, int64(cn.PeerMaxRequests), 2048))
 }
 
 func (cn *Peer) totalExpectingTime() (ret time.Duration) {

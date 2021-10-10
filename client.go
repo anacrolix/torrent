@@ -1095,15 +1095,23 @@ func (cl *Client) badPeerIPPort(ip net.IP, port int) bool {
 
 // Return a Torrent ready for insertion into a Client.
 func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (t *Torrent) {
+	return cl.newTorrentOpt(addTorrentOpts{
+		InfoHash: ih,
+		Storage:  specStorage,
+	})
+}
+
+// Return a Torrent ready for insertion into a Client.
+func (cl *Client) newTorrentOpt(opts addTorrentOpts) (t *Torrent) {
 	// use provided storage, if provided
 	storageClient := cl.defaultStorage
-	if specStorage != nil {
-		storageClient = storage.NewClient(specStorage)
+	if opts.Storage != nil {
+		storageClient = storage.NewClient(opts.Storage)
 	}
 
 	t = &Torrent{
 		cl:       cl,
-		infoHash: ih,
+		infoHash: opts.InfoHash,
 		peers: prioritizedPeers{
 			om: btree.New(32),
 			getPrio: func(p PeerInfo) peerPriority {
@@ -1128,7 +1136,10 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 	t.networkingEnabled.Set()
 	t._pendingPieces.NewSet = priorityBitmapStableNewSet
 	t.logger = cl.logger.WithContextValue(t)
-	t.setChunkSize(defaultChunkSize)
+	if opts.ChunkSize == 0 {
+		opts.ChunkSize = defaultChunkSize
+	}
+	t.setChunkSize(opts.ChunkSize)
 	return
 }
 
@@ -1170,11 +1181,54 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 	return
 }
 
+// Adds a torrent by InfoHash with a custom Storage implementation.
+// If the torrent already exists then this Storage is ignored and the
+// existing torrent returned with `new` set to `false`
+func (cl *Client) AddTorrentOpt(opts addTorrentOpts) (t *Torrent, new bool) {
+	infoHash := opts.InfoHash
+	cl.lock()
+	defer cl.unlock()
+	t, ok := cl.torrents[infoHash]
+	if ok {
+		return
+	}
+	new = true
+
+	t = cl.newTorrentOpt(opts)
+	cl.eachDhtServer(func(s DhtServer) {
+		if cl.config.PeriodicallyAnnounceTorrentsToDht {
+			go t.dhtAnnouncer(s)
+		}
+	})
+	cl.torrents[infoHash] = t
+	cl.clearAcceptLimits()
+	t.updateWantPeersEvent()
+	// Tickle Client.waitAccept, new torrent may want conns.
+	cl.event.Broadcast()
+	return
+}
+
+type addTorrentOpts struct {
+	InfoHash  InfoHash
+	Storage   storage.ClientImpl
+	ChunkSize pp.Integer
+}
+
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
 // Torrent.MergeSpec.
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
-	t, new = cl.AddTorrentInfoHashWithStorage(spec.InfoHash, spec.Storage)
-	err = t.MergeSpec(spec)
+	t, new = cl.AddTorrentOpt(addTorrentOpts{
+		InfoHash:  spec.InfoHash,
+		Storage:   spec.Storage,
+		ChunkSize: spec.ChunkSize,
+	})
+	modSpec := *spec
+	if new {
+		// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing
+		// it.
+		modSpec.ChunkSize = 0
+	}
+	err = t.MergeSpec(&modSpec)
 	if err != nil && new {
 		t.Drop()
 	}
@@ -1218,7 +1272,7 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 		})
 	}
 	if spec.ChunkSize != 0 {
-		t.setChunkSize(pp.Integer(spec.ChunkSize))
+		panic("chunk size cannot be changed for existing Torrent")
 	}
 	t.addTrackers(spec.Trackers)
 	t.maybeNewConns()

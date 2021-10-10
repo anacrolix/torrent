@@ -4,14 +4,17 @@ import (
 	"fmt"
 
 	"github.com/anacrolix/torrent/metainfo"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
 )
 
-// Specifies a new torrent for adding to a client. There are helpers for magnet URIs and torrent
-// metainfo files.
+// Specifies a new torrent for adding to a client, or additions to an existing Torrent. There are
+// constructor functions for magnet URIs and torrent metainfo files. TODO: This type should be
+// dismantled into a new Torrent option type, and separate Torrent mutate method(s).
 type TorrentSpec struct {
 	// The tiered tracker URIs.
-	Trackers  [][]string
+	Trackers [][]string
+	// TODO: Move into a "new" Torrent opt type.
 	InfoHash  metainfo.Hash
 	InfoBytes []byte
 	// The name to use if the Name field from the Info isn't available.
@@ -22,10 +25,13 @@ type TorrentSpec struct {
 	// The combination of the "xs" and "as" fields in magnet links, for now.
 	Sources []string
 
-	// The chunk size to use for outbound requests. Defaults to 16KiB if not set.
-	ChunkSize                int
+	// The chunk size to use for outbound requests. Defaults to 16KiB if not set. Can only be set
+	// for new Torrents. TODO: Move into a "new" Torrent opt type.
+	ChunkSize pp.Integer
+	// TODO: Move into a "new" Torrent opt type.
+	Storage storage.ClientImpl
+	
 	DisableInitialPieceCheck bool
-	Storage                  storage.ClientImpl
 
 	// Whether to allow data download or upload
 	DisallowDataUpload   bool

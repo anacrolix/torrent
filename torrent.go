@@ -1405,7 +1405,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 	}
 	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests()
-	if t.numActivePeers() == 0 {
+	if t.numActivePeers() == 0 && t.haveInfo() {
 		t.assertNoPendingRequests()
 	}
 	return

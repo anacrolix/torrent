@@ -24,7 +24,7 @@ func (p *pendingRequests) Inc(r RequestIndex) {
 	p.m.SetValue(_r, prev+1)
 }
 
-func (p *pendingRequests) Init() {
+func (p *pendingRequests) Init(maxIndex RequestIndex) {
 	p.m = roaring.NewDefaultBSI()
 }
 

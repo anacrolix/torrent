@@ -12,7 +12,7 @@ type Torrent struct {
 	Peers []Peer
 	// Some value that's unique and stable between runs. Could even use the infohash?
 	InfoHash       metainfo.Hash
-	ChunksPerPiece int
+	ChunksPerPiece uint32
 
 	MaxUnverifiedBytes int64
 }

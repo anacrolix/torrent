@@ -32,7 +32,7 @@ func (cl *Client) getRequestStrategyInput() request_strategy.Input {
 		}
 		rst := request_strategy.Torrent{
 			InfoHash:       t.infoHash,
-			ChunksPerPiece: (t.usualPieceSize() + int(t.chunkSize) - 1) / int(t.chunkSize),
+			ChunksPerPiece: t.chunksPerRegularPiece(),
 		}
 		if t.storage != nil {
 			rst.Capacity = t.storage.Capacity
@@ -135,8 +135,8 @@ func (p peerRequests) Less(i, j int) bool {
 	leftRequest := p.requestIndexes[i]
 	rightRequest := p.requestIndexes[j]
 	t := p.peer.t
-	leftPieceIndex := leftRequest / t.chunksPerRegularPiece()
-	rightPieceIndex := rightRequest / t.chunksPerRegularPiece()
+	leftPieceIndex := leftRequest / p.torrentStrategyInput.ChunksPerPiece
+	rightPieceIndex := rightRequest / p.torrentStrategyInput.ChunksPerPiece
 	leftCurrent := p.peer.actualRequestState.Requests.Contains(leftRequest)
 	rightCurrent := p.peer.actualRequestState.Requests.Contains(rightRequest)
 	pending := func(index RequestIndex, current bool) int {

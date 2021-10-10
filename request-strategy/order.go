@@ -88,7 +88,7 @@ type requestablePiece struct {
 }
 
 func (p *requestablePiece) chunkIndexToRequestIndex(c ChunkIndex) RequestIndex {
-	return RequestIndex(p.t.ChunksPerPiece*p.index) + RequestIndex(c)
+	return p.t.ChunksPerPiece*uint32(p.index) + c
 }
 
 type filterPiece struct {

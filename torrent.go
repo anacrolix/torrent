@@ -445,7 +445,7 @@ func (t *Torrent) onSetInfo() {
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
-	t.pendingRequests.Init()
+	t.pendingRequests.Init(t.numRequests())
 	t.tryCreateMorePieceHashers()
 	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info)
@@ -859,6 +859,13 @@ func (t *Torrent) pieceNumChunks(piece pieceIndex) chunkIndexType {
 
 func (t *Torrent) chunksPerRegularPiece() uint32 {
 	return uint32((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
+}
+
+func (t *Torrent) numRequests() RequestIndex {
+	if t.numPieces() == 0 {
+		return 0
+	}
+	return uint32(t.numPieces()-1)*t.chunksPerRegularPiece() + t.pieceNumChunks(t.numPieces()-1)
 }
 
 func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex) {
@@ -2281,10 +2288,6 @@ func (t *Torrent) requestIndexToRequest(ri RequestIndex) Request {
 
 func (t *Torrent) requestIndexFromRequest(r Request) RequestIndex {
 	return t.pieceRequestIndexOffset(pieceIndex(r.Index)) + uint32(r.Begin/t.chunkSize)
-}
-
-func (t *Torrent) numChunks() RequestIndex {
-	return RequestIndex((t.Length() + int64(t.chunkSize) - 1) / int64(t.chunkSize))
 }
 
 func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex) RequestIndex {

@@ -23,8 +23,9 @@ type TorrentSpec struct {
 	Sources []string
 
 	// The chunk size to use for outbound requests. Defaults to 16KiB if not set.
-	ChunkSize int
-	Storage   storage.ClientImpl
+	ChunkSize                int
+	DisableInitialPieceCheck bool
+	Storage                  storage.ClientImpl
 
 	// Whether to allow data download or upload
 	DisallowDataUpload   bool

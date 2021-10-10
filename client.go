@@ -1195,6 +1195,7 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	if spec.DisplayName != "" {
 		t.SetDisplayName(spec.DisplayName)
 	}
+	t.initialPieceCheckDisabled = spec.DisableInitialPieceCheck
 	if spec.InfoBytes != nil {
 		err := t.SetInfoBytes(spec.InfoBytes)
 		if err != nil {

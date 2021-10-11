@@ -135,8 +135,9 @@ type Torrent struct {
 	// A cache of completed piece indices.
 	_completedPieces roaring.Bitmap
 	// Pieces that need to be hashed.
-	piecesQueuedForHash bitmap.Bitmap
-	activePieceHashes   int
+	piecesQueuedForHash       bitmap.Bitmap
+	activePieceHashes         int
+	initialPieceCheckDisabled bool
 
 	// A pool of piece priorities []int for assignment to new connections.
 	// These "inclinations" are used to give connections preference for
@@ -439,7 +440,7 @@ func (t *Torrent) onSetInfo() {
 		}
 		p.availability = int64(t.pieceAvailabilityFromPeers(i))
 		t.updatePieceCompletion(pieceIndex(i))
-		if !p.storageCompletionOk {
+		if !t.initialPieceCheckDisabled && !p.storageCompletionOk {
 			// t.logger.Printf("piece %s completion unknown, queueing check", p)
 			t.queuePieceCheck(pieceIndex(i))
 		}

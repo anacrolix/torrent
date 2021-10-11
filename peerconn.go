@@ -274,7 +274,7 @@ func (cn *PeerConn) onGotInfo(info *metainfo.Info) {
 // receiving badly sized BITFIELD, or invalid HAVE messages.
 func (cn *PeerConn) setNumPieces(num pieceIndex) {
 	cn._peerPieces.RemoveRange(bitmap.BitRange(num), bitmap.ToEnd)
-	cn.peerPiecesChanged("got info")
+	cn.peerPiecesChanged()
 }
 
 func eventAgeString(t time.Time) string {
@@ -685,8 +685,7 @@ func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 	}
 }
 
-func (cn *Peer) peerPiecesChanged(reason string) {
-	cn.updateRequests(reason)
+func (cn *Peer) peerPiecesChanged() {
 	cn.t.maybeDropMutuallyCompletePeer(cn)
 }
 
@@ -708,7 +707,10 @@ func (cn *PeerConn) peerSentHave(piece pieceIndex) error {
 		cn.t.incPieceAvailability(piece)
 	}
 	cn._peerPieces.Add(uint32(piece))
-	cn.peerPiecesChanged("have")
+	if cn.t.wantPieceIndex(piece) {
+		cn.updateRequests("have")
+	}
+	cn.peerPiecesChanged()
 	return nil
 }
 
@@ -737,11 +739,14 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 		}
 		if have {
 			cn._peerPieces.Add(uint32(i))
+			if cn.t.wantPieceIndex(i) {
+				cn.updateRequests("bitfield")
+			}
 		} else {
 			cn._peerPieces.Remove(uint32(i))
 		}
 	}
-	cn.peerPiecesChanged("bitfield")
+	cn.peerPiecesChanged()
 	return nil
 }
 
@@ -757,7 +762,10 @@ func (cn *Peer) onPeerHasAllPieces() {
 	}
 	cn.peerSentHaveAll = true
 	cn._peerPieces.Clear()
-	cn.peerPiecesChanged("have all")
+	if cn.t._pendingPieces.Len() != 0 {
+		cn.updateRequests("have all")
+	}
+	cn.peerPiecesChanged()
 }
 
 func (cn *PeerConn) onPeerSentHaveAll() error {
@@ -769,7 +777,7 @@ func (cn *PeerConn) peerSentHaveNone() error {
 	cn.t.decPeerPieceAvailability(&cn.Peer)
 	cn._peerPieces.Clear()
 	cn.peerSentHaveAll = false
-	cn.peerPiecesChanged("have none")
+	cn.peerPiecesChanged()
 	return nil
 }
 

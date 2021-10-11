@@ -1107,6 +1107,15 @@ func (t *Torrent) maybeNewConns() {
 func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
 	if t._pendingPieces.Contains(piece) {
 		t.iterPeers(func(c *Peer) {
+			if c.actualRequestState.Interested {
+				return
+			}
+			if c.actualRequestState.Requests.GetCardinality() != 0 {
+				return
+			}
+			if !c.peerHasPiece(piece) {
+				return
+			}
 			c.updateRequests(reason)
 		})
 	}

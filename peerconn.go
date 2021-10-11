@@ -1118,15 +1118,24 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).SetLevel(log.Debug).Log(c.t.logger)
 			pieceIndex := msg.Index.Int()
-			c.peerAllowedFast.AddInt(pieceIndex)
-			n := roaringBitmapRangeCardinality(
-				&c.actualRequestState.Requests,
-				t.pieceRequestIndexOffset(pieceIndex),
-				t.pieceRequestIndexOffset(pieceIndex+1))
-			if n != 0 {
-				panic(n)
+			// If we have outstanding requests that aren't currently counted toward the combined
+			// outstanding request count, increment them.
+			if c.peerAllowedFast.CheckedAdd(msg.Index.Uint32()) && c.peerChoking &&
+				// The check here could be against having the info, but really what we need to know
+				// is if there are any existing requests.
+				!c.actualRequestState.Requests.IsEmpty() {
+
+				i := c.actualRequestState.Requests.Iterator()
+				i.AdvanceIfNeeded(t.pieceRequestIndexOffset(pieceIndex))
+				for i.HasNext() {
+					r := i.Next()
+					if r >= t.pieceRequestIndexOffset(pieceIndex+1) {
+						break
+					}
+					c.t.pendingRequests.Inc(i.Next())
+				}
 			}
-			c.updateRequests("allowed fast")
+			c.updateRequests("PeerConn.mainReadLoop allowed fast")
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 		default:

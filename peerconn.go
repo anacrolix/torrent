@@ -1035,12 +1035,28 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			c.peerChoking = true
 			if !c.fastEnabled() {
 				c.deleteAllRequests()
+			} else {
+				c.actualRequestState.Requests.Iterate(func(x uint32) bool {
+					if !c.peerAllowedFast.Contains(x / c.t.chunksPerRegularPiece()) {
+						c.t.pendingRequests.Dec(x)
+					}
+					return true
+				})
 			}
 			// We can then reset our interest.
 			c.updateRequests("choked")
 			c.updateExpectingChunks()
 		case pp.Unchoke:
+			if !c.peerChoking {
+				return errors.New("got unchoke but not choked")
+			}
 			c.peerChoking = false
+			c.actualRequestState.Requests.Iterate(func(x uint32) bool {
+				if !c.peerAllowedFast.Contains(x / c.t.chunksPerRegularPiece()) {
+					c.t.pendingRequests.Inc(x)
+				}
+				return true
+			})
 			c.updateRequests("unchoked")
 			c.updateExpectingChunks()
 		case pp.Interested:
@@ -1098,7 +1114,15 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).SetLevel(log.Debug).Log(c.t.logger)
-			c.peerAllowedFast.Add(bitmap.BitIndex(msg.Index))
+			pieceIndex := msg.Index.Int()
+			c.peerAllowedFast.AddInt(pieceIndex)
+			n := roaringBitmapRangeCardinality(
+				&c.actualRequestState.Requests,
+				t.pieceRequestIndexOffset(pieceIndex),
+				t.pieceRequestIndexOffset(pieceIndex+1))
+			if n != 0 {
+				panic(n)
+			}
 			c.updateRequests("allowed fast")
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
@@ -1444,7 +1468,9 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 		f(PeerRequestEvent{c, c.t.requestIndexToRequest(r)})
 	}
 	c.updateExpectingChunks()
-	c.t.pendingRequests.Dec(r)
+	if !c.peerChoking || c.peerAllowedFast.Contains(r/c.t.chunksPerRegularPiece()) {
+		c.t.pendingRequests.Dec(r)
+	}
 	return true
 }
 

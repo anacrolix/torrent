@@ -147,13 +147,22 @@ func (p peerRequests) Less(i, j int) bool {
 		return ret
 	}
 	ml := multiless.New()
+	// Push requests that can't be served right now to the end. But we don't throw them away unless
+	// there's a better alternative. This is for when we're using the fast extension and get choked
+	// but our requests could still be good when we get unchoked.
+	if p.peer.peerChoking {
+		ml = ml.Bool(
+			!p.peer.peerAllowedFast.Contains(leftPieceIndex),
+			!p.peer.peerAllowedFast.Contains(rightPieceIndex),
+		)
+	}
 	ml = ml.Int(
 		pending(leftRequest, leftCurrent),
 		pending(rightRequest, rightCurrent))
 	ml = ml.Bool(rightCurrent, leftCurrent)
 	ml = ml.Int(
-		int(p.torrentStrategyInput.Pieces[leftPieceIndex].Priority),
-		int(p.torrentStrategyInput.Pieces[rightPieceIndex].Priority))
+		int(p.torrentStrategyInput.Pieces[rightPieceIndex].Priority),
+		int(p.torrentStrategyInput.Pieces[leftPieceIndex].Priority))
 	ml = ml.Int(
 		int(p.torrentStrategyInput.Pieces[leftPieceIndex].Availability),
 		int(p.torrentStrategyInput.Pieces[rightPieceIndex].Availability))
@@ -198,15 +207,15 @@ func (p *Peer) getDesiredRequestState() (desired requestState) {
 				return
 			}
 			allowedFast := p.peerAllowedFast.ContainsInt(pieceIndex)
-			if !allowedFast {
-				// We must signal interest to request this piece.
-				desired.Interested = true
-				if p.peerChoking {
-					// We can't request from this piece right now then.
-					return
-				}
-			}
 			rsp.IterPendingChunks.Iter(func(ci request_strategy.ChunkIndex) {
+				if !allowedFast {
+					// We must signal interest to request this..
+					desired.Interested = true
+					if p.peerChoking && !p.actualRequestState.Requests.Contains(ci) {
+						// We can't request this right now.
+						return
+					}
+				}
 				requestHeap.requestIndexes = append(
 					requestHeap.requestIndexes,
 					p.t.pieceRequestIndexOffset(pieceIndex)+ci)

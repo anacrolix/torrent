@@ -608,6 +608,9 @@ func (me *PeerConn) _request(r Request) bool {
 
 func (me *Peer) cancel(r RequestIndex) bool {
 	if me.deleteRequest(r) {
+		if me.actualRequestState.Requests.GetCardinality() == 0 {
+			me.updateRequests("Peer.cancel")
+		}
 		return me.peerImpl._cancel(me.t.requestIndexToRequest(r))
 	}
 	return true
@@ -1137,6 +1140,9 @@ func (c *PeerConn) mainReadLoop() (err error) {
 
 func (c *Peer) remoteRejectedRequest(r RequestIndex) {
 	if c.deleteRequest(r) {
+		if c.actualRequestState.Requests.GetCardinality() == 0 {
+			c.updateRequests("Peer.remoteRejectedRequest")
+		}
 		c.decExpectedChunkReceive(r)
 	}
 }
@@ -1295,7 +1301,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	if deletedRequest {
 		c.piecesReceivedSinceLastRequestUpdate++
 		if c.actualRequestState.Requests.GetCardinality() == 0 {
-			c.updateRequests("piece")
+			c.updateRequests("Peer.receiveChunk deleted request")
 		}
 		c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulIntendedData }))
 	}
@@ -1340,7 +1346,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// Necessary to pass TestReceiveChunkStorageFailureSeederFastExtensionDisabled. I think a
 		// request update runs while we're writing the chunk that just failed. Then we never do a
 		// fresh update after pending the failed request.
-		c.updateRequests("write chunk error")
+		c.updateRequests("Peer.receiveChunk error writing chunk")
 		t.onWriteChunkErr(err)
 		return nil
 	}

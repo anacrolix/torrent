@@ -1425,10 +1425,15 @@ func (cn *Peer) netGoodPiecesDirtied() int64 {
 }
 
 func (c *Peer) peerHasWantedPieces() bool {
-	// TODO: Can this be done just with AndCardinality?
-	missingPeerHas := c.newPeerPieces()
-	missingPeerHas.AndNot(&c.t._completedPieces)
-	return !missingPeerHas.IsEmpty()
+	if c.peerSentHaveAll {
+		return !c.t.haveAllPieces()
+	}
+	if !c.t.haveInfo() {
+		return c._peerPieces.GetCardinality() != 0
+	}
+	return c._peerPieces.Intersects(
+		roaring.FlipInt(&c.t._completedPieces, 0, c.t.numPieces()),
+	)
 }
 
 func (c *Peer) deleteRequest(r RequestIndex) bool {

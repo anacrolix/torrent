@@ -180,8 +180,7 @@ func (p *peerRequests) Pop() interface{} {
 func (p *Peer) getDesiredRequestState() (desired requestState) {
 	input := p.t.cl.getRequestStrategyInput()
 	requestHeap := peerRequests{
-		requestIndexes: nil,
-		peer:           p,
+		peer: p,
 	}
 	for _, t := range input.Torrents {
 		if t.InfoHash == p.t.infoHash {
@@ -198,6 +197,15 @@ func (p *Peer) getDesiredRequestState() (desired requestState) {
 			if !p.peerHasPiece(pieceIndex) {
 				return
 			}
+			allowedFast := p.peerAllowedFast.ContainsInt(pieceIndex)
+			if !allowedFast {
+				// We must signal interest to request this piece.
+				desired.Interested = true
+				if p.peerChoking {
+					// We can't request from this piece right now then.
+					return
+				}
+			}
 			rsp.IterPendingChunks.Iter(func(ci request_strategy.ChunkIndex) {
 				requestHeap.requestIndexes = append(
 					requestHeap.requestIndexes,
@@ -208,14 +216,7 @@ func (p *Peer) getDesiredRequestState() (desired requestState) {
 	heap.Init(&requestHeap)
 	for requestHeap.Len() != 0 && desired.Requests.GetCardinality() < uint64(p.nominalMaxRequests()) {
 		requestIndex := heap.Pop(&requestHeap).(RequestIndex)
-		pieceIndex := requestIndex / p.t.chunksPerRegularPiece()
-		allowedFast := p.peerAllowedFast.Contains(pieceIndex)
-		if !allowedFast {
-			desired.Interested = true
-		}
-		if allowedFast || !p.peerChoking {
-			desired.Requests.Add(requestIndex)
-		}
+		desired.Requests.Add(requestIndex)
 	}
 	return
 }

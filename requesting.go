@@ -127,11 +127,11 @@ type peerRequests struct {
 	torrentStrategyInput request_strategy.Torrent
 }
 
-func (p peerRequests) Len() int {
+func (p *peerRequests) Len() int {
 	return len(p.requestIndexes)
 }
 
-func (p peerRequests) Less(i, j int) bool {
+func (p *peerRequests) Less(i, j int) bool {
 	leftRequest := p.requestIndexes[i]
 	rightRequest := p.requestIndexes[j]
 	t := p.peer.t

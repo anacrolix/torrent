@@ -84,6 +84,7 @@ type Peer struct {
 	// Stuff controlled by the local peer.
 	needRequestUpdate    string
 	actualRequestState   requestState
+	cancelledRequests    roaring.Bitmap
 	lastBecameInterested time.Time
 	priorInterest        time.Duration
 
@@ -607,17 +608,28 @@ func (me *PeerConn) _request(r Request) bool {
 }
 
 func (me *Peer) cancel(r RequestIndex) bool {
-	if me.deleteRequest(r) {
+	if !me.actualRequestState.Requests.Contains(r) {
+		return true
+	}
+	return me._cancel(r)
+}
+
+func (me *PeerConn) _cancel(r RequestIndex) bool {
+	if me.cancelledRequests.Contains(r) {
+		// Already cancelled and waiting for a response.
+		return true
+	}
+	if me.fastEnabled() {
+		me.cancelledRequests.Add(r)
+	} else {
+		if !me.deleteRequest(r) {
+			panic("request not existing should have been guarded")
+		}
 		if me.actualRequestState.Requests.GetCardinality() == 0 {
 			me.updateRequests("Peer.cancel")
 		}
-		return me.peerImpl._cancel(me.t.requestIndexToRequest(r))
 	}
-	return true
-}
-
-func (me *PeerConn) _cancel(r Request) bool {
-	return me.write(makeCancelMessage(r))
+	return me.write(makeCancelMessage(me.t.requestIndexToRequest(r)))
 }
 
 func (cn *PeerConn) fillWriteBuffer() {
@@ -1299,6 +1311,9 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 			if !c.peerChoking {
 				c._chunksReceivedWhileExpecting++
 			}
+			if c.actualRequestState.Requests.GetCardinality() == 0 {
+				c.updateRequests("Peer.receiveChunk deleted request")
+			}
 		} else {
 			chunksReceived.Add("unwanted", 1)
 		}
@@ -1320,9 +1335,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
 	if deletedRequest {
 		c.piecesReceivedSinceLastRequestUpdate++
-		if c.actualRequestState.Requests.GetCardinality() == 0 {
-			c.updateRequests("Peer.receiveChunk deleted request")
-		}
 		c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulIntendedData }))
 	}
 	for _, f := range c.t.cl.config.Callbacks.ReceivedUsefulData {
@@ -1490,6 +1502,7 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 	if !c.actualRequestState.Requests.CheckedRemove(r) {
 		return false
 	}
+	c.cancelledRequests.Remove(r)
 	for _, f := range c.callbacks.DeletedRequest {
 		f(PeerRequestEvent{c, c.t.requestIndexToRequest(r)})
 	}

@@ -11,7 +11,6 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
 
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
@@ -268,18 +267,23 @@ func (p *Peer) applyRequestState(next requestState) bool {
 		return false
 	}
 	next.Requests.Iterate(func(req uint32) bool {
-		// This could happen if the peer chokes us between the next state being generated, and us
-		// trying to transmit the state.
-		if p.peerChoking && !p.peerAllowedFast.Contains(bitmap.BitIndex(req/p.t.chunksPerRegularPiece())) {
-			return true
+		if p.cancelledRequests.Contains(req) {
+			log.Printf("waiting for cancelled request %v", req)
+			return false
+		}
+		if maxRequests(current.Requests.GetCardinality()) >= p.nominalMaxRequests() {
+			log.Printf("not assigning all requests [desired=%v, cancelled=%v, max=%v]",
+				current.Requests.GetCardinality(),
+				p.cancelledRequests.GetCardinality(),
+				p.nominalMaxRequests(),
+			)
+			return false
 		}
 		var err error
 		more, err = p.request(req)
 		if err != nil {
 			panic(err)
-		} /* else {
-			log.Print(req)
-		} */
+		}
 		return more
 	})
 	if more {

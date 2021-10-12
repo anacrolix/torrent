@@ -14,7 +14,7 @@ type peerImpl interface {
 
 	// Neither of these return buffer room anymore, because they're currently both posted. There's
 	// also PeerConn.writeBufferFull for when/where it matters.
-	_cancel(Request) bool
+	_cancel(RequestIndex) bool
 	_request(Request) bool
 
 	connectionFlags() string

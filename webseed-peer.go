@@ -45,10 +45,16 @@ func (ws *webseedPeer) writeInterested(interested bool) bool {
 	return true
 }
 
-func (ws *webseedPeer) _cancel(r Request) bool {
-	active, ok := ws.activeRequests[r]
+func (ws *webseedPeer) _cancel(r RequestIndex) bool {
+	active, ok := ws.activeRequests[ws.peer.t.requestIndexToRequest(r)]
 	if ok {
 		active.Cancel()
+		if !ws.peer.deleteRequest(r) {
+			panic("cancelled webseed request should exist")
+		}
+		if ws.peer.actualRequestState.Requests.GetCardinality() == 0 {
+			ws.peer.updateRequests("webseedPeer._cancel")
+		}
 	}
 	return true
 }

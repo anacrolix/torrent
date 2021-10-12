@@ -1035,7 +1035,9 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		}
 		switch msg.Type {
 		case pp.Choke:
-			c.peerChoking = true
+			if c.peerChoking {
+				break
+			}
 			if !c.fastEnabled() {
 				c.deleteAllRequests()
 			} else {
@@ -1046,6 +1048,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 					return true
 				})
 			}
+			c.peerChoking = true
 			// We can then reset our interest.
 			c.updateRequests("choked")
 			c.updateExpectingChunks()
@@ -1132,7 +1135,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 					if r >= t.pieceRequestIndexOffset(pieceIndex+1) {
 						break
 					}
-					c.t.pendingRequests.Inc(i.Next())
+					c.t.pendingRequests.Inc(r)
 				}
 			}
 			c.updateRequests("PeerConn.mainReadLoop allowed fast")

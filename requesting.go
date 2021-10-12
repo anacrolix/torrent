@@ -144,6 +144,12 @@ func (p *peerRequests) Less(i, j int) bool {
 		if current {
 			ret--
 		}
+		// I have a hunch that this could trigger for requests for chunks that are choked and not
+		// allowed fast, since the current conn shouldn't already be included. It's a very specific
+		// circumstance, and if it triggers I will fix it.
+		if ret < 0 {
+			panic(ret)
+		}
 		return ret
 	}
 	ml := multiless.New()

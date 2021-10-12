@@ -159,10 +159,11 @@ func (p peerRequests) Less(i, j int) bool {
 	ml = ml.Int(
 		pending(leftRequest, leftCurrent),
 		pending(rightRequest, rightCurrent))
-	ml = ml.Bool(rightCurrent, leftCurrent)
+	ml = ml.Bool(!leftCurrent, !rightCurrent)
 	ml = ml.Int(
-		int(p.torrentStrategyInput.Pieces[rightPieceIndex].Priority),
-		int(p.torrentStrategyInput.Pieces[leftPieceIndex].Priority))
+		-int(p.torrentStrategyInput.Pieces[leftPieceIndex].Priority),
+		-int(p.torrentStrategyInput.Pieces[rightPieceIndex].Priority),
+	)
 	ml = ml.Int(
 		int(p.torrentStrategyInput.Pieces[leftPieceIndex].Availability),
 		int(p.torrentStrategyInput.Pieces[rightPieceIndex].Availability))
@@ -171,7 +172,7 @@ func (p peerRequests) Less(i, j int) bool {
 	return ml.MustLess()
 }
 
-func (p peerRequests) Swap(i, j int) {
+func (p *peerRequests) Swap(i, j int) {
 	p.requestIndexes[i], p.requestIndexes[j] = p.requestIndexes[j], p.requestIndexes[i]
 }
 

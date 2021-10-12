@@ -1057,12 +1057,20 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				return errors.New("got unchoke but not choked")
 			}
 			c.peerChoking = false
+			preservedCount := 0
 			c.actualRequestState.Requests.Iterate(func(x uint32) bool {
 				if !c.peerAllowedFast.Contains(x / c.t.chunksPerRegularPiece()) {
+					preservedCount++
 					c.t.pendingRequests.Inc(x)
 				}
 				return true
 			})
+			if preservedCount != 0 {
+				// TODO: Yes this is a debug log but I'm not happy with the state of the logging lib
+				// right now.
+				log.Printf("%v requests were preserved while being choked", preservedCount)
+				torrent.Add("requestsPreservedThroughChoking", int64(preservedCount))
+			}
 			c.updateRequests("unchoked")
 			c.updateExpectingChunks()
 		case pp.Interested:

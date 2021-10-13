@@ -46,7 +46,7 @@ func (cl *Client) getRequestStrategyInput() request_strategy.Input {
 				Availability:      p.availability,
 				Length:            int64(p.length()),
 				NumPendingChunks:  int(t.pieceNumPendingChunks(i)),
-				IterPendingChunks: p.undirtiedChunksIter(),
+				IterPendingChunks: &p.undirtiedChunksIter,
 			})
 		}
 		t.iterPeers(func(p *Peer) {

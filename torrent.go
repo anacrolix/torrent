@@ -363,6 +363,11 @@ func (t *Torrent) makePieces() {
 		beginFile := pieceFirstFileIndex(piece.torrentBeginOffset(), files)
 		endFile := pieceEndFileIndex(piece.torrentEndOffset(), files)
 		piece.files = files[beginFile:endFile]
+		piece.undirtiedChunksIter = undirtiedChunksIter{
+			TorrentDirtyChunks: &t.dirtyChunks,
+			StartRequestIndex:  piece.requestIndexOffset(),
+			EndRequestIndex:    piece.requestIndexOffset() + piece.numChunks(),
+		}
 	}
 }
 

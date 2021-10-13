@@ -777,8 +777,8 @@ func (cn *Peer) onPeerHasAllPieces() {
 	}
 	cn.peerSentHaveAll = true
 	cn._peerPieces.Clear()
-	if cn.t._pendingPieces.Len() != 0 {
-		cn.updateRequests("have all")
+	if !cn.t._pendingPieces.IsEmpty() {
+		cn.updateRequests("Peer.onPeerHasAllPieces")
 	}
 	cn.peerPiecesChanged()
 }
@@ -1491,11 +1491,9 @@ func (c *Peer) peerHasWantedPieces() bool {
 		return !c.t.haveAllPieces()
 	}
 	if !c.t.haveInfo() {
-		return c._peerPieces.GetCardinality() != 0
+		return !c._peerPieces.IsEmpty()
 	}
-	return c._peerPieces.Intersects(
-		roaring.FlipInt(&c.t._completedPieces, 0, c.t.numPieces()),
-	)
+	return c._peerPieces.Intersects(&c.t._pendingPieces)
 }
 
 func (c *Peer) deleteRequest(r RequestIndex) bool {

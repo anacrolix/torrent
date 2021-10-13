@@ -104,7 +104,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		PieceLength: 1 << 20,
 	}))
 	t.setChunkSize(defaultChunkSize)
-	t._pendingPieces.Set(0, PiecePriorityNormal.BitmapPriority())
+	t._pendingPieces.Add(0)
 	r, w := net.Pipe()
 	cn := cl.newConnection(r, true, r.RemoteAddr(), r.RemoteAddr().Network(), regularNetConnPeerConnConnString(r))
 	cn.setTorrent(t)

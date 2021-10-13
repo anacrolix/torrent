@@ -1131,7 +1131,6 @@ func (cl *Client) newTorrentOpt(opts addTorrentOpts) (t *Torrent) {
 		gotMetainfoC: make(chan struct{}),
 	}
 	t.networkingEnabled.Set()
-	t._pendingPieces.NewSet = priorityBitmapStableNewSet
 	t.logger = cl.logger.WithContextValue(t)
 	if opts.ChunkSize == 0 {
 		opts.ChunkSize = defaultChunkSize

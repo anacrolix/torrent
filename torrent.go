@@ -27,7 +27,6 @@ import (
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	"github.com/anacrolix/missinggo/v2/prioritybitmap"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/davecgh/go-spew/spew"
@@ -131,7 +130,7 @@ type Torrent struct {
 
 	// A cache of pieces we need to get. Calculated from various piece and
 	// file priorities and completion states elsewhere.
-	_pendingPieces prioritybitmap.PriorityBitmap
+	_pendingPieces roaring.Bitmap
 	// A cache of completed piece indices.
 	_completedPieces roaring.Bitmap
 	// Pieces that need to be hashed.
@@ -193,10 +192,6 @@ func (t *Torrent) readerReadaheadPieces() bitmap.Bitmap {
 
 func (t *Torrent) ignorePieceForRequests(i pieceIndex) bool {
 	return !t.wantPieceIndex(i)
-}
-
-func (t *Torrent) pendingPieces() *prioritybitmap.PriorityBitmap {
-	return &t._pendingPieces
 }
 
 // Returns a channel that is closed when the Torrent is closed.
@@ -970,32 +965,7 @@ func chunkIndexFromChunkSpec(cs ChunkSpec, chunkSize pp.Integer) chunkIndexType 
 }
 
 func (t *Torrent) wantPieceIndex(index pieceIndex) bool {
-	// TODO: Are these overly conservative, should we be guarding this here?
-	{
-		if !t.haveInfo() {
-			return false
-		}
-		if index < 0 || index >= t.numPieces() {
-			return false
-		}
-	}
-	p := &t.pieces[index]
-	if p.queuedForHash() {
-		return false
-	}
-	if p.hashing {
-		return false
-	}
-	if t.pieceComplete(index) {
-		return false
-	}
-	if t._pendingPieces.Contains(int(index)) {
-		return true
-	}
-	// t.logger.Printf("piece %d not pending", index)
-	return !t.forReaderOffsetPieces(func(begin, end pieceIndex) bool {
-		return index < begin || index >= end
-	})
+	return t._pendingPieces.Contains(uint32(index))
 }
 
 // A pool of []*PeerConn, to reduce allocations in functions that need to index or sort Torrent
@@ -1105,7 +1075,7 @@ func (t *Torrent) maybeNewConns() {
 }
 
 func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
-	if t._pendingPieces.Contains(piece) {
+	if t._pendingPieces.Contains(uint32(piece)) {
 		t.iterPeers(func(c *Peer) {
 			if c.actualRequestState.Interested {
 				return
@@ -1128,11 +1098,11 @@ func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string) {
 	newPrio := p.uncachedPriority()
 	// t.logger.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
 	if newPrio == PiecePriorityNone {
-		if !t._pendingPieces.Remove(int(piece)) {
+		if !t._pendingPieces.CheckedRemove(uint32(piece)) {
 			return
 		}
 	} else {
-		if !t._pendingPieces.Set(int(piece), newPrio.BitmapPriority()) {
+		if !t._pendingPieces.CheckedAdd(uint32(piece)) {
 			return
 		}
 	}
@@ -1188,18 +1158,7 @@ func (t *Torrent) forReaderOffsetPieces(f func(begin, end pieceIndex) (more bool
 }
 
 func (t *Torrent) piecePriority(piece pieceIndex) piecePriority {
-	prio, ok := t._pendingPieces.GetPriority(piece)
-	if !ok {
-		return PiecePriorityNone
-	}
-	if prio > 0 {
-		panic(prio)
-	}
-	ret := piecePriority(-prio)
-	if ret == PiecePriorityNone {
-		panic(piece)
-	}
-	return ret
+	return t.piece(piece).uncachedPriority()
 }
 
 func (t *Torrent) pendRequest(req RequestIndex) {
@@ -1354,7 +1313,7 @@ func (t *Torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
-	return t._pendingPieces.Len() != 0
+	return !t._pendingPieces.IsEmpty()
 }
 
 func appendMissingStrings(old, new []string) (ret []string) {

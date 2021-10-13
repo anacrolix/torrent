@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
+	"expvar"
 	"fmt"
 	"io"
 	"net"
@@ -870,11 +871,20 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 	return
 }
 
+var successfulPeerWireProtocolHandshakePeerReservedBytes expvar.Map
+
+func init() {
+	torrent.Set(
+		"successful_peer_wire_protocol_handshake_peer_reserved_bytes",
+		&successfulPeerWireProtocolHandshakePeerReservedBytes)
+}
+
 func (cl *Client) connBtHandshake(c *PeerConn, ih *metainfo.Hash) (ret metainfo.Hash, err error) {
 	res, err := pp.Handshake(c.rw(), ih, cl.peerID, cl.config.Extensions)
 	if err != nil {
 		return
 	}
+	successfulPeerWireProtocolHandshakePeerReservedBytes.Add(res.PeerExtensionBits.String(), 1)
 	ret = res.Hash
 	c.PeerExtensionBytes = res.PeerExtensionBits
 	c.PeerID = res.PeerID

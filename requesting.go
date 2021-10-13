@@ -273,7 +273,7 @@ func (p *Peer) applyRequestState(next requestState) bool {
 		}
 		if maxRequests(current.Requests.GetCardinality()) >= p.nominalMaxRequests() {
 			log.Printf("not assigning all requests [desired=%v, cancelled=%v, max=%v]",
-				current.Requests.GetCardinality(),
+				next.Requests.GetCardinality(),
 				p.cancelledRequests.GetCardinality(),
 				p.nominalMaxRequests(),
 			)

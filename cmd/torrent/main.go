@@ -347,6 +347,7 @@ func downloadErr(flags downloadFlags) error {
 		client.WriteStatus(w)
 	})
 	err = addTorrents(client, flags)
+	started := time.Now()
 	if err != nil {
 		return fmt.Errorf("adding torrents: %w", err)
 	}
@@ -356,6 +357,13 @@ func downloadErr(flags downloadFlags) error {
 	} else {
 		err = errors.New("y u no complete torrents?!")
 	}
+	clientConnStats := client.ConnStats()
+	log.Printf("average download rate: %v",
+		humanize.Bytes(uint64(
+			time.Duration(
+				clientConnStats.BytesReadUsefulData.Int64(),
+			)*time.Second/time.Since(started),
+		)))
 	if flags.Seed {
 		if len(client.Torrents()) == 0 {
 			log.Print("no torrents to seed")

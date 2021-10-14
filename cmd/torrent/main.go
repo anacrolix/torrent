@@ -377,7 +377,7 @@ func downloadErr(flags downloadFlags) error {
 	clStats := client.ConnStats()
 	sentOverhead := clStats.BytesWritten.Int64() - clStats.BytesWrittenData.Int64()
 	log.Printf(
-		"client read %v, %v was useful data. sent %v non-data bytes",
+		"client read %v, %.1f%% was useful data. sent %v non-data bytes",
 		humanize.Bytes(uint64(clStats.BytesRead.Int64())),
 		100*float64(clStats.BytesReadUsefulData.Int64())/float64(clStats.BytesRead.Int64()),
 		humanize.Bytes(uint64(sentOverhead)))

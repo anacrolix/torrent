@@ -973,7 +973,8 @@ func (c *PeerConn) updateRequestsTimerFunc() {
 		return
 	}
 	if c.actualRequestState.Requests.IsEmpty() {
-		panic("updateRequestsTimer should have been stopped")
+		// If there are no outstanding requests, then a request update should have already run.
+		return
 	}
 	c.updateRequests("updateRequestsTimer")
 }

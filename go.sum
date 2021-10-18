@@ -44,8 +44,6 @@ github.com/alexflint/go-arg v1.4.2/go.mod h1:9iRbDxne7LcR/GSvEr7ma++GLpdIU1zrghf
 github.com/alexflint/go-scalar v1.0.0/go.mod h1:GpHzbCOZXEKMEcygYQ5n/aa4Aq84zbxjy3MxYW0gjYw=
 github.com/alexflint/go-scalar v1.1.0 h1:aaAouLLzI9TChcPXotr6gUhq+Scr8rl0P9P4PnltbhM=
 github.com/alexflint/go-scalar v1.1.0/go.mod h1:LoFvNMqS1CPrMVltza4LvnGKhaSpc3oyLEBUZVhhS2o=
-github.com/anacrolix/args v0.1.1-0.20210917054839-725094dd33fe h1:YvHyQkMwxP4OdUnudTu6HaU6WqW25ShNgXtUEWjN/tc=
-github.com/anacrolix/args v0.1.1-0.20210917054839-725094dd33fe/go.mod h1:RCPBt2vU1GJn4gG9rL+fuYu7ivnE9tmK2pHm63t3yO0=
 github.com/anacrolix/args v0.1.1-0.20211012231536-d5fb5cc2a270 h1:5AxRCDxrVjcIft7G5uXXZwg/O2b+QBIAI5n9krESgTE=
 github.com/anacrolix/args v0.1.1-0.20211012231536-d5fb5cc2a270/go.mod h1:RCPBt2vU1GJn4gG9rL+fuYu7ivnE9tmK2pHm63t3yO0=
 github.com/anacrolix/chansync v0.0.0-20210524073341-a336ebc2de92/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=

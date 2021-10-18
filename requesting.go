@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"context"
 	"encoding/gob"
+	"math/rand"
 	"reflect"
 	"runtime/pprof"
 	"time"
@@ -266,11 +267,15 @@ func (p *Peer) applyRequestState(next requestState) bool {
 	if !more {
 		return false
 	}
-	next.Requests.Iterate(func(req uint32) bool {
+	for _, x := range rand.Perm(int(next.Requests.GetCardinality())) {
+		req, err := next.Requests.Select(uint32(x))
+		if err != nil {
+			panic(err)
+		}
 		if p.cancelledRequests.Contains(req) {
 			// Waiting for a reject or piece message, which will suitably trigger us to update our
 			// requests, so we can skip this one with no additional consideration.
-			return true
+			continue
 		}
 		if maxRequests(current.Requests.GetCardinality()) >= p.nominalMaxRequests() {
 			//log.Printf("not assigning all requests [desired=%v, cancelled=%v, current=%v, max=%v]",
@@ -279,15 +284,16 @@ func (p *Peer) applyRequestState(next requestState) bool {
 			//	current.Requests.GetCardinality(),
 			//	p.nominalMaxRequests(),
 			//)
-			return false
+			break
 		}
-		var err error
 		more, err = p.request(req)
 		if err != nil {
 			panic(err)
 		}
-		return more
-	})
+		if !more {
+			break
+		}
+	}
 	p.updateRequestsTimer.Stop()
 	if more {
 		p.needRequestUpdate = ""

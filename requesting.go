@@ -298,7 +298,7 @@ func (p *Peer) applyRequestState(next requestState) bool {
 	if more {
 		p.needRequestUpdate = ""
 		if !current.Requests.IsEmpty() {
-			p.updateRequestsTimer.Reset(time.Second)
+			p.updateRequestsTimer.Reset(3 * time.Second)
 		}
 	}
 	return more

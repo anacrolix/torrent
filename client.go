@@ -9,6 +9,7 @@ import (
 	"expvar"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"sort"
@@ -956,6 +957,16 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	defer t.dropConnection(c)
 	c.startWriter()
 	cl.sendInitialMessages(c, t)
+	c.updateRequestsTimer = time.AfterFunc(math.MaxInt64, func() {
+		if c.needRequestUpdate != "" {
+			return
+		}
+		if c.actualRequestState.Requests.IsEmpty() {
+			panic("updateRequestsTimer should have been stopped")
+		}
+		c.updateRequests("updateRequestsTimer")
+	})
+	c.updateRequestsTimer.Stop()
 	err := c.mainReadLoop()
 	if err != nil {
 		return fmt.Errorf("main read loop: %w", err)

@@ -253,7 +253,7 @@ func (p *Peer) applyNextRequestState() bool {
 }
 
 func (p *Peer) applyRequestState(next requestState) bool {
-	current := p.actualRequestState
+	current := &p.actualRequestState
 	if !p.setInterested(next.Interested) {
 		return false
 	}
@@ -268,8 +268,9 @@ func (p *Peer) applyRequestState(next requestState) bool {
 	}
 	next.Requests.Iterate(func(req uint32) bool {
 		if p.cancelledRequests.Contains(req) {
-			log.Printf("waiting for cancelled request %v", req)
-			return false
+			// Waiting for a reject or piece message, which will suitably trigger us to update our
+			// requests, so we can skip this one with no additional consideration.
+			return true
 		}
 		if maxRequests(current.Requests.GetCardinality()) >= p.nominalMaxRequests() {
 			log.Printf("not assigning all requests [desired=%v, cancelled=%v, max=%v]",
@@ -288,6 +289,11 @@ func (p *Peer) applyRequestState(next requestState) bool {
 	})
 	if more {
 		p.needRequestUpdate = ""
+		if current.Requests.IsEmpty() {
+			p.updateRequestsTimer.Stop()
+		} else {
+			p.updateRequestsTimer.Reset(time.Second)
+		}
 	}
 	return more
 }

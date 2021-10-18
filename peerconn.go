@@ -84,6 +84,7 @@ type Peer struct {
 	// Stuff controlled by the local peer.
 	needRequestUpdate    string
 	actualRequestState   requestState
+	updateRequestsTimer  *time.Timer
 	cancelledRequests    roaring.Bitmap
 	lastBecameInterested time.Time
 	priorInterest        time.Duration
@@ -413,6 +414,9 @@ func (p *Peer) close() {
 func (cn *PeerConn) onClose() {
 	if cn.pex.IsEnabled() {
 		cn.pex.Close()
+	}
+	if cn.updateRequestsTimer != nil {
+		cn.updateRequestsTimer.Stop()
 	}
 	cn.tickleWriter()
 	if cn.conn != nil {

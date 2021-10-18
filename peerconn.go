@@ -1084,7 +1084,10 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			if preservedCount != 0 {
 				// TODO: Yes this is a debug log but I'm not happy with the state of the logging lib
 				// right now.
-				log.Printf("%v requests were preserved while being choked", preservedCount)
+				log.Printf(
+					"%v requests were preserved while being choked (fast=%v)",
+					preservedCount,
+					c.fastEnabled())
 				torrent.Add("requestsPreservedThroughChoking", int64(preservedCount))
 			}
 			c.updateRequests("unchoked")

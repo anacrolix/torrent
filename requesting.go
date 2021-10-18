@@ -273,11 +273,12 @@ func (p *Peer) applyRequestState(next requestState) bool {
 			return true
 		}
 		if maxRequests(current.Requests.GetCardinality()) >= p.nominalMaxRequests() {
-			log.Printf("not assigning all requests [desired=%v, cancelled=%v, max=%v]",
-				next.Requests.GetCardinality(),
-				p.cancelledRequests.GetCardinality(),
-				p.nominalMaxRequests(),
-			)
+			//log.Printf("not assigning all requests [desired=%v, cancelled=%v, current=%v, max=%v]",
+			//	next.Requests.GetCardinality(),
+			//	p.cancelledRequests.GetCardinality(),
+			//	current.Requests.GetCardinality(),
+			//	p.nominalMaxRequests(),
+			//)
 			return false
 		}
 		var err error
@@ -287,11 +288,10 @@ func (p *Peer) applyRequestState(next requestState) bool {
 		}
 		return more
 	})
+	p.updateRequestsTimer.Stop()
 	if more {
 		p.needRequestUpdate = ""
-		if current.Requests.IsEmpty() {
-			p.updateRequestsTimer.Stop()
-		} else {
+		if !current.Requests.IsEmpty() {
 			p.updateRequestsTimer.Reset(time.Second)
 		}
 	}

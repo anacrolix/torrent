@@ -1085,7 +1085,7 @@ func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
 			if c.actualRequestState.Interested {
 				return
 			}
-			if c.actualRequestState.Requests.GetCardinality() != 0 {
+			if !c.actualRequestState.Requests.IsEmpty() {
 				return
 			}
 			if !c.peerHasPiece(piece) {

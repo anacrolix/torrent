@@ -52,7 +52,7 @@ func (ws *webseedPeer) _cancel(r RequestIndex) bool {
 		if !ws.peer.deleteRequest(r) {
 			panic("cancelled webseed request should exist")
 		}
-		if ws.peer.actualRequestState.Requests.GetCardinality() == 0 {
+		if ws.peer.actualRequestState.Requests.IsEmpty() {
 			ws.peer.updateRequests("webseedPeer._cancel")
 		}
 	}

@@ -625,7 +625,7 @@ func (me *PeerConn) _cancel(r RequestIndex) bool {
 		if !me.deleteRequest(r) {
 			panic("request not existing should have been guarded")
 		}
-		if me.actualRequestState.Requests.GetCardinality() == 0 {
+		if me.actualRequestState.Requests.IsEmpty() {
 			me.updateRequests("Peer.cancel")
 		}
 	}
@@ -1172,7 +1172,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 
 func (c *Peer) remoteRejectedRequest(r RequestIndex) {
 	if c.deleteRequest(r) {
-		if c.actualRequestState.Requests.GetCardinality() == 0 {
+		if c.actualRequestState.Requests.IsEmpty() {
 			c.updateRequests("Peer.remoteRejectedRequest")
 		}
 		c.decExpectedChunkReceive(r)
@@ -1311,7 +1311,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 			if !c.peerChoking {
 				c._chunksReceivedWhileExpecting++
 			}
-			if c.actualRequestState.Requests.GetCardinality() == 0 {
+			if c.actualRequestState.Requests.IsEmpty() {
 				c.updateRequests("Peer.receiveChunk deleted request")
 			}
 		} else {

@@ -19,12 +19,12 @@ func (i *Integer) UnmarshalBinary(b []byte) error {
 
 func (i *Integer) Read(r io.Reader) error {
 	var b [4]byte
-	n, err := r.Read(b[:])
-	if n == 4 {
-		return i.UnmarshalBinary(b[:])
-	}
+	n, err := io.ReadFull(r, b[:])
 	if err == nil {
-		return io.ErrUnexpectedEOF
+		if n != 4 {
+			panic(n)
+		}
+		return i.UnmarshalBinary(b[:])
 	}
 	return err
 }

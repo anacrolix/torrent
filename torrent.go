@@ -1524,7 +1524,7 @@ func (t *Torrent) logRunHandshookConn(pc *PeerConn, logAll bool, level log.Level
 }
 
 func (t *Torrent) runHandshookConnLoggingErr(pc *PeerConn) {
-	t.logRunHandshookConn(pc, false, log.Debug)
+	t.logRunHandshookConn(pc, false, log.Warning)
 }
 
 func (t *Torrent) startWebsocketAnnouncer(u url.URL) torrentTrackerAnnouncer {

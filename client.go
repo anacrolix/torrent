@@ -935,7 +935,8 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 			// address, we won't record the remote address as a doppleganger. Instead, the initiator
 			// can record *us* as the doppleganger.
 		} */
-		return errors.New("local and remote peer ids are the same")
+		t.logger.WithLevel(log.Debug).Printf("local and remote peer ids are the same")
+		return nil
 	}
 	c.conn.SetWriteDeadline(time.Time{})
 	c.r = deadlineReader{c.conn, c.r}

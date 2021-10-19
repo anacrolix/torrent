@@ -1006,6 +1006,12 @@ func runSafeExtraneous(f func()) {
 	}
 }
 
+func (c *PeerConn) logProtocolBehaviour(level log.Level, format string, arg ...interface{}) {
+	c.logger.WithLevel(level).WithContextText(fmt.Sprintf(
+		"peer id %q, ext v %q", c.PeerID, c.PeerClientName,
+	)).Printf(format, arg...)
+}
+
 // Processes incoming BitTorrent wire-protocol messages. The client lock is held upon entry and
 // exit. Returning will end the connection.
 func (c *PeerConn) mainReadLoop() (err error) {
@@ -1071,7 +1077,10 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			c.updateExpectingChunks()
 		case pp.Unchoke:
 			if !c.peerChoking {
-				return errors.New("got unchoke but not choked")
+				// Some clients do this for some reason. Transmission doesn't error on this, so we
+				// won't for consistency.
+				c.logProtocolBehaviour(log.Info, "received unchoke when already unchoked")
+				break
 			}
 			c.peerChoking = false
 			preservedCount := 0

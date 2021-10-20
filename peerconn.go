@@ -1009,7 +1009,7 @@ func runSafeExtraneous(f func()) {
 func (c *PeerConn) logProtocolBehaviour(level log.Level, format string, arg ...interface{}) {
 	c.logger.WithLevel(level).WithContextText(fmt.Sprintf(
 		"peer id %q, ext v %q", c.PeerID, c.PeerClientName,
-	)).Printf(format, arg...)
+	)).SkipCallers(1).Printf(format, arg...)
 }
 
 // Processes incoming BitTorrent wire-protocol messages. The client lock is held upon entry and

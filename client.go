@@ -983,7 +983,7 @@ func (c *Peer) updateRequestsTimerFunc() {
 	if c.needRequestUpdate != "" {
 		return
 	}
-	if c.actualRequestState.Requests.IsEmpty() {
+	if c.isLowOnRequests() {
 		// If there are no outstanding requests, then a request update should have already run.
 		return
 	}

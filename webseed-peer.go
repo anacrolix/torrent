@@ -21,6 +21,8 @@ type webseedPeer struct {
 	activeRequests map[Request]webseed.Request
 	requesterCond  sync.Cond
 	peer           Peer
+	// Number of requester routines.
+	maxRequests int
 }
 
 var _ peerImpl = (*webseedPeer)(nil)
@@ -49,7 +51,7 @@ func (ws *webseedPeer) _cancel(r RequestIndex) bool {
 		if !ws.peer.deleteRequest(r) {
 			panic("cancelled webseed request should exist")
 		}
-		if ws.peer.actualRequestState.Requests.IsEmpty() {
+		if ws.peer.isLowOnRequests() {
 			ws.peer.updateRequests("webseedPeer._cancel")
 		}
 	}
@@ -157,4 +159,8 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			panic(err)
 		}
 	}
+}
+
+func (me *webseedPeer) isLowOnRequests() bool {
+	return me.peer.actualRequestState.Requests.GetCardinality() < uint64(me.maxRequests)
 }

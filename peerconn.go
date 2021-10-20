@@ -630,7 +630,7 @@ func (me *PeerConn) _cancel(r RequestIndex) bool {
 		if !me.deleteRequest(r) {
 			panic("request not existing should have been guarded")
 		}
-		if me.actualRequestState.Requests.IsEmpty() {
+		if me.isLowOnRequests() {
 			me.updateRequests("Peer.cancel")
 		}
 	}
@@ -1195,7 +1195,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 
 func (c *Peer) remoteRejectedRequest(r RequestIndex) {
 	if c.deleteRequest(r) {
-		if c.actualRequestState.Requests.IsEmpty() {
+		if c.isLowOnRequests() {
 			c.updateRequests("Peer.remoteRejectedRequest")
 		}
 		c.decExpectedChunkReceive(r)
@@ -1334,7 +1334,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 			if !c.peerChoking {
 				c._chunksReceivedWhileExpecting++
 			}
-			if c.actualRequestState.Requests.IsEmpty() {
+			if c.isLowOnRequests() {
 				c.updateRequests("Peer.receiveChunk deleted request")
 			}
 		} else {
@@ -1542,9 +1542,6 @@ func (c *Peer) deleteAllRequests() {
 	if !c.actualRequestState.Requests.IsEmpty() {
 		panic(c.actualRequestState.Requests.GetCardinality())
 	}
-	// for c := range c.t.conns {
-	// 	c.tickleWriter()
-	// }
 }
 
 // This is called when something has changed that should wake the writer, such as putting stuff into
@@ -1670,4 +1667,8 @@ func (cn *Peer) stats() *ConnStats {
 func (p *Peer) TryAsPeerConn() (*PeerConn, bool) {
 	pc, ok := p.peerImpl.(*PeerConn)
 	return pc, ok
+}
+
+func (pc *PeerConn) isLowOnRequests() bool {
+	return pc.actualRequestState.Requests.IsEmpty()
 }

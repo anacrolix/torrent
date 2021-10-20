@@ -10,6 +10,8 @@ import (
 type peerImpl interface {
 	// Trigger the actual request state to get updated
 	handleUpdateRequests()
+	// Whether the outstanding local request cardinality is low enough to warrant an update.
+	isLowOnRequests() bool
 	writeInterested(interested bool) bool
 
 	// Neither of these return buffer room anymore, because they're currently both posted. There's

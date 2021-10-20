@@ -1085,7 +1085,7 @@ func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
 			if c.actualRequestState.Interested {
 				return
 			}
-			if !c.actualRequestState.Requests.IsEmpty() {
+			if !c.isLowOnRequests() {
 				return
 			}
 			if !c.peerHasPiece(piece) {
@@ -2225,6 +2225,7 @@ func (t *Torrent) addWebSeed(url string) {
 			Url:        url,
 		},
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
+		maxRequests:    maxRequests,
 	}
 	ws.peer.initUpdateRequestsTimer()
 	ws.requesterCond.L = t.cl.locker()

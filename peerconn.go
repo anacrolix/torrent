@@ -1079,7 +1079,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			if !c.peerChoking {
 				// Some clients do this for some reason. Transmission doesn't error on this, so we
 				// won't for consistency.
-				c.logProtocolBehaviour(log.Info, "received unchoke when already unchoked")
+				c.logProtocolBehaviour(log.Debug, "received unchoke when already unchoked")
 				break
 			}
 			c.peerChoking = false
@@ -1094,7 +1094,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			if preservedCount != 0 {
 				// TODO: Yes this is a debug log but I'm not happy with the state of the logging lib
 				// right now.
-				log.Printf(
+				c.logger.WithLevel(log.Debug).Printf(
 					"%v requests were preserved while being choked (fast=%v)",
 					preservedCount,
 					c.fastEnabled())

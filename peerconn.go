@@ -1665,7 +1665,3 @@ func (p *Peer) TryAsPeerConn() (*PeerConn, bool) {
 	pc, ok := p.peerImpl.(*PeerConn)
 	return pc, ok
 }
-
-func (p *PeerConn) onNextRequestStateChanged() {
-	p.tickleWriter()
-}

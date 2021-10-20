@@ -24,10 +24,6 @@ type webseedPeer struct {
 
 var _ peerImpl = (*webseedPeer)(nil)
 
-func (me *webseedPeer) writeBufferFull() bool {
-	return false
-}
-
 func (me *webseedPeer) connStatusString() string {
 	return me.client.Url
 }
@@ -159,8 +155,4 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			panic(err)
 		}
 	}
-}
-
-func (me *webseedPeer) onNextRequestStateChanged() {
-	me.peer.applyNextRequestState()
 }

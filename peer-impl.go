@@ -8,7 +8,6 @@ import (
 // BitTorrent protocol connections. Some methods are underlined so as to avoid collisions with
 // legacy PeerConn methods.
 type peerImpl interface {
-	onNextRequestStateChanged()
 	updateRequests(reason string)
 	writeInterested(interested bool) bool
 
@@ -23,5 +22,4 @@ type peerImpl interface {
 	drop()
 	String() string
 	connStatusString() string
-	writeBufferFull() bool
 }

@@ -7,7 +7,7 @@ require (
 	crawshaw.io/sqlite v0.3.3-0.20210127221821-98b1f83c5508
 	github.com/RoaringBitmap/roaring v0.9.4
 	github.com/alexflint/go-arg v1.4.2
-	github.com/anacrolix/args v0.1.1-0.20211012231536-d5fb5cc2a270
+	github.com/anacrolix/args v0.1.1-0.20211020052733-53ed238acbd4
 	github.com/anacrolix/chansync v0.3.0-0.0.20211007004133-3f72684c4a93
 	github.com/anacrolix/confluence v1.8.0 // indirect
 	github.com/anacrolix/dht/v2 v2.10.6-0.20211007004332-99263ec9c1c8
@@ -28,7 +28,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/elliotchance/orderedmap v1.4.0
-	github.com/frankban/quicktest v1.13.1
+	github.com/frankban/quicktest v1.14.0
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/google/btree v1.0.1
 	github.com/google/go-cmp v0.5.6

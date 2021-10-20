@@ -219,7 +219,7 @@ func mainErr() error {
 	defer envpprof.Stop()
 	stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
 	debug := args.Flag(args.FlagOpt{Long: "debug"})
-	p := args.ParseMain(
+	args.ParseMain(
 		debug,
 		args.Subcommand("metainfo", metainfoCmd),
 		args.Subcommand("announce", func(p args.SubCmdCtx) error {
@@ -233,17 +233,21 @@ func mainErr() error {
 			return announceErr(cmd)
 		}),
 		args.Subcommand("download", func(p args.SubCmdCtx) error {
-			var dlf DownloadCmd
+			var dlc DownloadCmd
 			err := p.NewParser().AddParams(
-				append(args.FromStruct(&dlf), debug)...,
+				append(args.FromStruct(&dlc), debug)...,
 			).Parse()
 			if err != nil {
 				return err
 			}
-			return downloadErr(downloadFlags{
+			dlf := downloadFlags{
 				Debug:       debug.Bool(),
-				DownloadCmd: dlf,
+				DownloadCmd: dlc,
+			}
+			p.Defer(func() error {
+				return downloadErr(dlf)
 			})
+			return nil
 		}),
 		args.Subcommand(
 			"spew-bencoding",
@@ -271,16 +275,6 @@ func mainErr() error {
 			return nil
 		}),
 	)
-	if p.Err != nil {
-		if errors.Is(p.Err, args.ErrHelped) {
-			return nil
-		}
-		return p.Err
-	}
-	if !p.RanSubCmd {
-		p.PrintChoices(os.Stderr)
-		args.FatalUsage()
-	}
 	return nil
 }
 

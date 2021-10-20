@@ -8,7 +8,8 @@ import (
 // BitTorrent protocol connections. Some methods are underlined so as to avoid collisions with
 // legacy PeerConn methods.
 type peerImpl interface {
-	updateRequests(reason string)
+	// Trigger the actual request state to get updated
+	handleUpdateRequests()
 	writeInterested(interested bool) bool
 
 	// Neither of these return buffer room anymore, because they're currently both posted. There's

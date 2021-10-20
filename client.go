@@ -957,8 +957,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	defer t.dropConnection(c)
 	c.startWriter()
 	cl.sendInitialMessages(c, t)
-	c.updateRequestsTimer = time.AfterFunc(math.MaxInt64, c.updateRequestsTimerFunc)
-	c.updateRequestsTimer.Stop()
+	c.initUpdateRequestsTimer()
 	err := c.mainReadLoop()
 	if err != nil {
 		return fmt.Errorf("main read loop: %w", err)
@@ -966,7 +965,19 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	return nil
 }
 
-func (c *PeerConn) updateRequestsTimerFunc() {
+const check = false
+
+func (p *Peer) initUpdateRequestsTimer() {
+	if check {
+		if p.updateRequestsTimer != nil {
+			panic(p.updateRequestsTimer)
+		}
+	}
+	p.updateRequestsTimer = time.AfterFunc(math.MaxInt64, p.updateRequestsTimerFunc)
+	p.updateRequestsTimer.Stop()
+}
+
+func (c *Peer) updateRequestsTimerFunc() {
 	c.locker().Lock()
 	defer c.locker().Unlock()
 	if c.needRequestUpdate != "" {

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -105,11 +106,12 @@ func (ws *webseedPeer) connectionFlags() string {
 // return bool if this is even possible, and if it isn't, skip to the next drop candidate.
 func (ws *webseedPeer) drop() {}
 
-func (ws *webseedPeer) updateRequests(reason string) {
+func (ws *webseedPeer) handleUpdateRequests() {
+	ws.peer.maybeUpdateActualRequestState()
 }
 
 func (ws *webseedPeer) onClose() {
-	ws.peer.logger.Print("closing")
+	ws.peer.logger.WithLevel(log.Debug).Print("closing")
 	for _, r := range ws.activeRequests {
 		r.Cancel()
 	}

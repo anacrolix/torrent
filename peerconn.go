@@ -243,7 +243,7 @@ func (cn *Peer) peerHasAllPieces() (all bool, known bool) {
 	return roaring.Flip(&cn._peerPieces, 0, bitmap.BitRange(cn.t.numPieces())).IsEmpty(), true
 }
 
-func (cn *PeerConn) locker() *lockWithDeferreds {
+func (cn *Peer) locker() *lockWithDeferreds {
 	return cn.t.cl.locker()
 }
 
@@ -403,6 +403,9 @@ func (p *Peer) close() {
 	if !p.closed.Set() {
 		return
 	}
+	if p.updateRequestsTimer != nil {
+		p.updateRequestsTimer.Stop()
+	}
 	p.peerImpl.onClose()
 	if p.t != nil {
 		p.t.decPeerPieceAvailability(p)
@@ -415,9 +418,6 @@ func (p *Peer) close() {
 func (cn *PeerConn) onClose() {
 	if cn.pex.IsEnabled() {
 		cn.pex.Close()
-	}
-	if cn.updateRequestsTimer != nil {
-		cn.updateRequestsTimer.Stop()
 	}
 	cn.tickleWriter()
 	if cn.conn != nil {
@@ -638,7 +638,7 @@ func (me *PeerConn) _cancel(r RequestIndex) bool {
 }
 
 func (cn *PeerConn) fillWriteBuffer() {
-	if !cn.applyNextRequestState() {
+	if !cn.maybeUpdateActualRequestState() {
 		return
 	}
 	if cn.pex.IsEnabled() {
@@ -674,11 +674,17 @@ func (cn *PeerConn) postBitfield() {
 	cn.sentHaves = bitmap.Bitmap{cn.t._completedPieces.Clone()}
 }
 
-func (cn *PeerConn) updateRequests(reason string) {
+// Sets a reason to update requests, and if there wasn't already one, handle it.
+func (cn *Peer) updateRequests(reason string) {
 	if cn.needRequestUpdate != "" {
 		return
 	}
 	cn.needRequestUpdate = reason
+	cn.handleUpdateRequests()
+}
+
+func (cn *PeerConn) handleUpdateRequests() {
+	// The writer determines the request state as needed when it can write.
 	cn.tickleWriter()
 }
 

@@ -237,7 +237,7 @@ func (p *Peer) getDesiredRequestState() (desired requestState) {
 	return
 }
 
-func (p *Peer) applyNextRequestState() bool {
+func (p *Peer) maybeUpdateActualRequestState() bool {
 	if p.needRequestUpdate == "" {
 		return true
 	}
@@ -253,6 +253,7 @@ func (p *Peer) applyNextRequestState() bool {
 	return more
 }
 
+// Transmit/action the request state to the peer.
 func (p *Peer) applyRequestState(next requestState) bool {
 	current := &p.actualRequestState
 	if !p.setInterested(next.Interested) {
@@ -267,6 +268,12 @@ func (p *Peer) applyRequestState(next requestState) bool {
 	if !more {
 		return false
 	}
+	// We randomize the order in which requests are issued, to reduce the overlap with requests to
+	// other peers. Note that although it really depends on what order the peer services the
+	// requests, if we are only able to issue some requests before buffering, or the peer starts
+	// handling our requests before they've all arrived, then this randomization should reduce
+	// overlap. Note however that if we received the desired requests in priority order, then
+	// randomizing would throw away that benefit.
 	for _, x := range rand.Perm(int(next.Requests.GetCardinality())) {
 		req, err := next.Requests.Select(uint32(x))
 		if err != nil {
@@ -277,6 +284,11 @@ func (p *Peer) applyRequestState(next requestState) bool {
 			// requests, so we can skip this one with no additional consideration.
 			continue
 		}
+		// The cardinality of our desired requests shouldn't exceed the max requests since it's used
+		// in the calculation of the requests. However if we cancelled requests and they haven't
+		// been rejected or serviced yet with the fast extension enabled, we can end up with more
+		// extra outstanding requests. We could subtract the number of outstanding cancels from the
+		// next request cardinality, but peers might not like that.
 		if maxRequests(current.Requests.GetCardinality()) >= p.nominalMaxRequests() {
 			//log.Printf("not assigning all requests [desired=%v, cancelled=%v, current=%v, max=%v]",
 			//	next.Requests.GetCardinality(),

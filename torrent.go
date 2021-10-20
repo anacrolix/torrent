@@ -2226,6 +2226,7 @@ func (t *Torrent) addWebSeed(url string) {
 		},
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
 	}
+	ws.peer.initUpdateRequestsTimer()
 	ws.requesterCond.L = t.cl.locker()
 	for i := 0; i < maxRequests; i += 1 {
 		go ws.requester()

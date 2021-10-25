@@ -51,6 +51,9 @@ func testReceiveChunkStorageFailure(t *testing.T, seederFast bool) {
 	defer testutil.ExportStatusWriter(seederClient, "s", t)()
 	leecherClientConfig := torrent.TestingConfig(t)
 	leecherClientConfig.Debug = true
+	// Don't require fast extension, whether the seeder will provide it or not (so we can test mixed
+	// cases).
+	leecherClientConfig.MinPeerExtensions.SetBit(pp.ExtensionBitFast, false)
 	justOneNetwork(leecherClientConfig)
 	leecherClient, err := torrent.NewClient(leecherClientConfig)
 	require.NoError(t, err)

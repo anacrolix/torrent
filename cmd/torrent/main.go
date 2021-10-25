@@ -22,6 +22,7 @@ import (
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/tagflag"
 	"github.com/anacrolix/torrent/bencode"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/version"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
@@ -186,6 +187,9 @@ type DownloadCmd struct {
 	UtpPeers        bool `default:"true"`
 	Webtorrent      bool `default:"true"`
 	DisableWebseeds bool
+	// Don't progress past handshake for peer connections where the peer doesn't offer the fast
+	// extension.
+	RequireFastExtension bool
 
 	Ipv4 bool `default:"true"`
 	Ipv6 bool `default:"true"`
@@ -315,6 +319,9 @@ func downloadErr(flags downloadFlags) error {
 	}
 	if flags.Quiet {
 		clientConfig.Logger = log.Discard
+	}
+	if flags.RequireFastExtension {
+		clientConfig.MinPeerExtensions.SetBit(pp.ExtensionBitFast, true)
 	}
 	clientConfig.MaxUnverifiedBytes = flags.MaxUnverifiedBytes.Int64()
 

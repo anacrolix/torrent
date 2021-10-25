@@ -980,6 +980,9 @@ func (p *Peer) initUpdateRequestsTimer() {
 func (c *Peer) updateRequestsTimerFunc() {
 	c.locker().Lock()
 	defer c.locker().Unlock()
+	if c.closed.IsSet() {
+		return
+	}
 	if c.needRequestUpdate != "" {
 		return
 	}

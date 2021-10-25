@@ -556,6 +556,8 @@ func (pc *PeerConn) writeInterested(interested bool) bool {
 // are okay.
 type messageWriter func(pp.Message) bool
 
+// This function seems to only used by Peer.request. It's all logic checks, so maybe we can no-op it
+// when we want to go fast.
 func (cn *Peer) shouldRequest(r RequestIndex) error {
 	pi := pieceIndex(r / cn.t.chunksPerRegularPiece())
 	if !cn.peerHasPiece(pi) {
@@ -574,7 +576,11 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 		panic("piece is queued for hash")
 	}
 	if cn.peerChoking && !cn.peerAllowedFast.Contains(bitmap.BitIndex(pi)) {
-		panic("peer choking and piece not allowed fast")
+		// This could occur if we made a request with the fast extension, and then got choked and
+		// haven't had the request rejected yet.
+		if !cn.actualRequestState.Requests.Contains(r) {
+			panic("peer choking and piece not allowed fast")
+		}
 	}
 	return nil
 }

@@ -214,6 +214,7 @@ func (p *Peer) getDesiredRequestState() (desired requestState) {
 			}
 			allowedFast := p.peerAllowedFast.ContainsInt(pieceIndex)
 			rsp.IterPendingChunks.Iter(func(ci request_strategy.ChunkIndex) {
+				r := p.t.pieceRequestIndexOffset(pieceIndex) + ci
 				if !allowedFast {
 					// We must signal interest to request this
 					desired.Interested = true
@@ -221,14 +222,12 @@ func (p *Peer) getDesiredRequestState() (desired requestState) {
 					// have made the request previously (presumably while unchoked), and haven't had
 					// the peer respond yet (and the request was retained because we are using the
 					// fast extension).
-					if p.peerChoking && !p.actualRequestState.Requests.Contains(ci) {
+					if p.peerChoking && !p.actualRequestState.Requests.Contains(r) {
 						// We can't request this right now.
 						return
 					}
 				}
-				requestHeap.requestIndexes = append(
-					requestHeap.requestIndexes,
-					p.t.pieceRequestIndexOffset(pieceIndex)+ci)
+				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
 			})
 		},
 	)

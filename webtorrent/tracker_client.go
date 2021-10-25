@@ -334,7 +334,7 @@ func (tc *TrackerClient) handleAnswer(offerId string, answer webrtc.SessionDescr
 	defer tc.mu.Unlock()
 	offer, ok := tc.outboundOffers[offerId]
 	if !ok {
-		tc.Logger.WithDefaultLevel(log.Warning).Printf("could not find offer for id %q", offerId)
+		tc.Logger.WithDefaultLevel(log.Warning).Printf("could not find offer for id %+q", offerId)
 		return
 	}
 	//tc.Logger.WithDefaultLevel(log.Debug).Printf("offer %q got answer %v", offerId, answer)

@@ -126,6 +126,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	// sure if we can divine which errors indicate cancellation on our end without hitting the
 	// network though.
 	ws.peer.doChunkReadStats(int64(len(result.Bytes)))
+	ws.peer.readBytes(int64(len(result.Bytes)))
 	ws.peer.t.cl.lock()
 	defer ws.peer.t.cl.unlock()
 	if result.Err != nil {

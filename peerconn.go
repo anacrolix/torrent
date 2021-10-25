@@ -869,7 +869,7 @@ func (cn *PeerConn) wroteBytes(n int64) {
 	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesWritten }))
 }
 
-func (cn *PeerConn) readBytes(n int64) {
+func (cn *Peer) readBytes(n int64) {
 	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
 }
 

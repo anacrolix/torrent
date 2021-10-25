@@ -233,6 +233,7 @@ func (p *Peer) getDesiredRequestState() (desired requestState) {
 			})
 		},
 	)
+	p.t.assertPendingRequests()
 	heap.Init(&requestHeap)
 	for requestHeap.Len() != 0 && desired.Requests.GetCardinality() < uint64(p.nominalMaxRequests()) {
 		requestIndex := heap.Pop(&requestHeap).(RequestIndex)

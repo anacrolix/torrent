@@ -30,6 +30,7 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/google/go-cmp/cmp"
 	"github.com/pion/datachannel"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -1385,9 +1386,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 	}
 	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests()
-	if t.numActivePeers() == 0 && t.haveInfo() {
-		t.assertNoPendingRequests()
-	}
+	t.assertPendingRequests()
 	return
 }
 
@@ -1408,8 +1407,21 @@ func (t *Torrent) numActivePeers() (num int) {
 	return
 }
 
-func (t *Torrent) assertNoPendingRequests() {
-	t.pendingRequests.AssertEmpty()
+func (t *Torrent) assertPendingRequests() {
+	var actual pendingRequests
+	if t.haveInfo() {
+		actual.m = make([]int, t.numRequests())
+	}
+	t.iterPeers(func(p *Peer) {
+		p.actualRequestState.Requests.Iterate(func(x uint32) bool {
+			actual.Inc(x)
+			return true
+		})
+	})
+	diff := cmp.Diff(actual.m, t.pendingRequests.m)
+	if diff != "" {
+		panic(diff)
+	}
 }
 
 func (t *Torrent) dropConnection(c *PeerConn) {

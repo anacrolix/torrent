@@ -55,12 +55,11 @@ func (me *websocketTrackers) Get(url string) (*webtorrent.TrackerClient, func())
 				}),
 			},
 		}
-		go func() {
-			err := value.TrackerClient.Run()
+		value.TrackerClient.Start(func(err error) {
 			if err != nil {
 				me.Logger.Printf("error running tracker client for %q: %v", url, err)
 			}
-		}()
+		})
 		if me.clients == nil {
 			me.clients = make(map[string]*refCountedWebtorrentTrackerClient)
 		}

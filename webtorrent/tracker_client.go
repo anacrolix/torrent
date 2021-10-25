@@ -106,9 +106,18 @@ func (tc *TrackerClient) doWebsocket() error {
 	return err
 }
 
-func (tc *TrackerClient) Run() error {
+// Finishes initialization and spawns the run routine, calling onStop when it completes with the
+// result. We don't let the caller just spawn the runner directly, since then we can race against
+// .Close to finish initialization.
+func (tc *TrackerClient) Start(onStop func(error)) {
 	tc.pingTicker = time.NewTicker(60 * time.Second)
 	tc.cond.L = &tc.mu
+	go func() {
+		onStop(tc.run())
+	}()
+}
+
+func (tc *TrackerClient) run() error {
 	tc.mu.Lock()
 	for !tc.closed {
 		tc.mu.Unlock()

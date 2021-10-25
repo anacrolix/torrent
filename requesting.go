@@ -215,6 +215,9 @@ func (p *Peer) getDesiredRequestState() (desired requestState) {
 			allowedFast := p.peerAllowedFast.ContainsInt(pieceIndex)
 			rsp.IterPendingChunks.Iter(func(ci request_strategy.ChunkIndex) {
 				r := p.t.pieceRequestIndexOffset(pieceIndex) + ci
+				//if p.t.pendingRequests.Get(r) != 0 && !p.actualRequestState.Requests.Contains(r) {
+				//	return
+				//}
 				if !allowedFast {
 					// We must signal interest to request this
 					desired.Interested = true

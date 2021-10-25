@@ -1335,6 +1335,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 	// Do we actually want this chunk?
 	if t.haveChunk(ppReq) {
+		//panic(fmt.Sprintf("%+v", ppReq))
 		chunksReceived.Add("wasted", 1)
 		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
 		return nil

@@ -1076,15 +1076,16 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			if !c.fastEnabled() {
 				c.deleteAllRequests()
 			} else {
-				c.actualRequestState.Requests.Iterate(func(x uint32) bool {
-					if !c.peerAllowedFast.Contains(x / c.t.chunksPerRegularPiece()) {
-						c.t.pendingRequests.Dec(x)
-					}
-					return true
-				})
+				// We don't decrement pending requests here, let's wait for the peer to either
+				// reject or satisfy the outstanding requests. Additionally some peers may unchoke
+				// us and resume where they left off, we don't want to have piled on to those chunks
+				// in the meanwhile. I think a peers ability to abuse this should be limited: they
+				// could let us request a lot of stuff, then choke us and never reject, but they're
+				// only a single peer, our chunk balancing should smooth over this abuse.
 			}
 			c.peerChoking = true
-			// We can then reset our interest.
+			// We can now reset our interest. I think we do this after setting the flag in case the
+			// peerImpl updates synchronously (webseeds?).
 			c.updateRequests("choked")
 			c.updateExpectingChunks()
 		case pp.Unchoke:
@@ -1099,7 +1100,6 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			c.actualRequestState.Requests.Iterate(func(x uint32) bool {
 				if !c.peerAllowedFast.Contains(x / c.t.chunksPerRegularPiece()) {
 					preservedCount++
-					c.t.pendingRequests.Inc(x)
 				}
 				return true
 			})
@@ -1169,24 +1169,6 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).SetLevel(log.Debug).Log(c.t.logger)
-			pieceIndex := msg.Index.Int()
-			// If we have outstanding requests that aren't currently counted toward the combined
-			// outstanding request count, increment them.
-			if c.peerAllowedFast.CheckedAdd(msg.Index.Uint32()) && c.peerChoking &&
-				// The check here could be against having the info, but really what we need to know
-				// is if there are any existing requests.
-				!c.actualRequestState.Requests.IsEmpty() {
-
-				i := c.actualRequestState.Requests.Iterator()
-				i.AdvanceIfNeeded(t.pieceRequestIndexOffset(pieceIndex))
-				for i.HasNext() {
-					r := i.Next()
-					if r >= t.pieceRequestIndexOffset(pieceIndex+1) {
-						break
-					}
-					c.t.pendingRequests.Inc(r)
-				}
-			}
 			c.updateRequests("PeerConn.mainReadLoop allowed fast")
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
@@ -1534,9 +1516,7 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 		f(PeerRequestEvent{c, c.t.requestIndexToRequest(r)})
 	}
 	c.updateExpectingChunks()
-	if !c.peerChoking || c.peerAllowedFast.Contains(r/c.t.chunksPerRegularPiece()) {
-		c.t.pendingRequests.Dec(r)
-	}
+	c.t.pendingRequests.Dec(r)
 	return true
 }
 

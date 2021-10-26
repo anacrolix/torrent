@@ -4,13 +4,11 @@ import (
 	"container/heap"
 	"context"
 	"encoding/gob"
-	"math/rand"
 	"reflect"
 	"runtime/pprof"
 	"time"
 	"unsafe"
 
-	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
 
@@ -192,7 +190,12 @@ func (p *peerRequests) Pop() interface{} {
 	return x
 }
 
-func (p *Peer) getDesiredRequestState() (desired requestState) {
+type desiredRequestState struct {
+	Requests   []RequestIndex
+	Interested bool
+}
+
+func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	input := p.t.cl.getRequestStrategyInput()
 	requestHeap := peerRequests{
 		peer: p,
@@ -236,9 +239,9 @@ func (p *Peer) getDesiredRequestState() (desired requestState) {
 	)
 	p.t.assertPendingRequests()
 	heap.Init(&requestHeap)
-	for requestHeap.Len() != 0 && desired.Requests.GetCardinality() < uint64(p.nominalMaxRequests()) {
+	for requestHeap.Len() != 0 && len(desired.Requests) < p.nominalMaxRequests() {
 		requestIndex := heap.Pop(&requestHeap).(RequestIndex)
-		desired.Requests.Add(requestIndex)
+		desired.Requests = append(desired.Requests, requestIndex)
 	}
 	return
 }
@@ -260,13 +263,16 @@ func (p *Peer) maybeUpdateActualRequestState() bool {
 }
 
 // Transmit/action the request state to the peer.
-func (p *Peer) applyRequestState(next requestState) bool {
+func (p *Peer) applyRequestState(next desiredRequestState) bool {
 	current := &p.actualRequestState
 	if !p.setInterested(next.Interested) {
 		return false
 	}
 	more := true
-	cancel := roaring.AndNot(&current.Requests, &next.Requests)
+	cancel := current.Requests.Clone()
+	for _, ri := range next.Requests {
+		cancel.Remove(ri)
+	}
 	cancel.Iterate(func(req uint32) bool {
 		more = p.cancel(req)
 		return more
@@ -274,24 +280,14 @@ func (p *Peer) applyRequestState(next requestState) bool {
 	if !more {
 		return false
 	}
-	// We randomize the order in which requests are issued, to reduce the overlap with requests to
-	// other peers. Note that although it really depends on what order the peer services the
-	// requests, if we are only able to issue some requests before buffering, or the peer starts
-	// handling our requests before they've all arrived, then this randomization should reduce
-	// overlap. Note however that if we received the desired requests in priority order, then
-	// randomizing would throw away that benefit.
-	for _, x := range rand.Perm(int(next.Requests.GetCardinality())) {
-		req, err := next.Requests.Select(uint32(x))
-		if err != nil {
-			panic(err)
-		}
+	for _, req := range next.Requests {
 		if p.cancelledRequests.Contains(req) {
 			// Waiting for a reject or piece message, which will suitably trigger us to update our
 			// requests, so we can skip this one with no additional consideration.
 			continue
 		}
 		// The cardinality of our desired requests shouldn't exceed the max requests since it's used
-		// in the calculation of the requests. However if we cancelled requests and they haven't
+		// in the calculation of the requests. However, if we cancelled requests and they haven't
 		// been rejected or serviced yet with the fast extension enabled, we can end up with more
 		// extra outstanding requests. We could subtract the number of outstanding cancels from the
 		// next request cardinality, but peers might not like that.

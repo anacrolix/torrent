@@ -585,6 +585,14 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 	return nil
 }
 
+func (cn *Peer) mustRequest(r RequestIndex) bool {
+	more, err := cn.request(r)
+	if err != nil {
+		panic(err)
+	}
+	return more
+}
+
 func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 	if err := cn.shouldRequest(r); err != nil {
 		panic(err)

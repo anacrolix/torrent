@@ -304,10 +304,7 @@ func (p *Peer) applyRequestState(next requestState) bool {
 			//)
 			break
 		}
-		more, err = p.request(req)
-		if err != nil {
-			panic(err)
-		}
+		more = p.mustRequest(req)
 		if !more {
 			break
 		}

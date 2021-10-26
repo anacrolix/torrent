@@ -1408,6 +1408,9 @@ func (t *Torrent) numActivePeers() (num int) {
 }
 
 func (t *Torrent) assertPendingRequests() {
+	if !check {
+		return
+	}
 	var actual pendingRequests
 	if t.haveInfo() {
 		actual.m = make([]int, t.numRequests())

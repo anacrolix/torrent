@@ -19,6 +19,7 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	tt := &Torrent{
 		storageOpener: storage.NewClient(storage.NewFile(td)),
 		logger:        log.Default,
+		chunkSize:     defaultChunkSize,
 	}
 	mi := testutil.GreetingMetaInfo()
 	info, err := mi.UnmarshalInfo()

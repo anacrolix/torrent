@@ -3,6 +3,8 @@ package torrent
 import (
 	"testing"
 	"time"
+
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 func TestingConfig(t testing.TB) *ClientConfig {
@@ -15,6 +17,7 @@ func TestingConfig(t testing.TB) *ClientConfig {
 	cfg.DisableAcceptRateLimiting = true
 	cfg.ListenPort = 0
 	cfg.KeepAliveTimeout = time.Millisecond
+	cfg.MinPeerExtensions.SetBit(pp.ExtensionBitFast, true)
 	//cfg.Debug = true
 	//cfg.Logger = cfg.Logger.WithText(func(m log.Msg) string {
 	//	t := m.Text()

@@ -101,7 +101,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	}
 	t.DownloadPieces(0, t.numPieces())
 	for i := 0; i < b.N; i += 1 {
-		t.updateAllPiecePriorities()
+		t.updateAllPiecePriorities("")
 	}
 }
 
@@ -163,6 +163,8 @@ func TestPieceHashFailed(t *testing.T) {
 func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	cfg := TestingConfig(t)
 	cfg.Debug = true
+	// Disable this just because we manually initiate a connection without it.
+	cfg.MinPeerExtensions.SetBit(pp.ExtensionBitFast, false)
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()

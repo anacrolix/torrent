@@ -149,7 +149,7 @@ func (f *File) SetPriority(prio piecePriority) {
 	f.t.cl.lock()
 	if prio != f.prio {
 		f.prio = prio
-		f.t.updatePiecePriorities(f.firstPieceIndex(), f.endPieceIndex())
+		f.t.updatePiecePriorities(f.firstPieceIndex(), f.endPieceIndex(), "File.SetPriority")
 	}
 	f.t.cl.unlock()
 }

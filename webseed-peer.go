@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -20,13 +21,11 @@ type webseedPeer struct {
 	activeRequests map[Request]webseed.Request
 	requesterCond  sync.Cond
 	peer           Peer
+	// Number of requester routines.
+	maxRequests int
 }
 
 var _ peerImpl = (*webseedPeer)(nil)
-
-func (me *webseedPeer) writeBufferFull() bool {
-	return false
-}
 
 func (me *webseedPeer) connStatusString() string {
 	return me.client.Url
@@ -45,10 +44,16 @@ func (ws *webseedPeer) writeInterested(interested bool) bool {
 	return true
 }
 
-func (ws *webseedPeer) _cancel(r Request) bool {
-	active, ok := ws.activeRequests[r]
+func (ws *webseedPeer) _cancel(r RequestIndex) bool {
+	active, ok := ws.activeRequests[ws.peer.t.requestIndexToRequest(r)]
 	if ok {
 		active.Cancel()
+		if !ws.peer.deleteRequest(r) {
+			panic("cancelled webseed request should exist")
+		}
+		if ws.peer.isLowOnRequests() {
+			ws.peer.updateRequests("webseedPeer._cancel")
+		}
 	}
 	return true
 }
@@ -103,11 +108,12 @@ func (ws *webseedPeer) connectionFlags() string {
 // return bool if this is even possible, and if it isn't, skip to the next drop candidate.
 func (ws *webseedPeer) drop() {}
 
-func (ws *webseedPeer) updateRequests() {
+func (ws *webseedPeer) handleUpdateRequests() {
+	ws.peer.maybeUpdateActualRequestState()
 }
 
 func (ws *webseedPeer) onClose() {
-	ws.peer.logger.Print("closing")
+	ws.peer.logger.WithLevel(log.Debug).Print("closing")
 	for _, r := range ws.activeRequests {
 		r.Cancel()
 	}
@@ -120,6 +126,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	// sure if we can divine which errors indicate cancellation on our end without hitting the
 	// network though.
 	ws.peer.doChunkReadStats(int64(len(result.Bytes)))
+	ws.peer.readBytes(int64(len(result.Bytes)))
 	ws.peer.t.cl.lock()
 	defer ws.peer.t.cl.unlock()
 	if result.Err != nil {
@@ -155,6 +162,6 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	}
 }
 
-func (me *webseedPeer) onNextRequestStateChanged() {
-	me.peer.applyNextRequestState()
+func (me *webseedPeer) isLowOnRequests() bool {
+	return me.peer.actualRequestState.Requests.GetCardinality() < uint64(me.maxRequests)
 }

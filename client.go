@@ -6,8 +6,10 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
+	"expvar"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"sort"
@@ -304,10 +306,6 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 			}
 			go t.onWebRtcConn(dc, dcc)
 		},
-	}
-
-	if !peerRequesting {
-		go cl.requester()
 	}
 
 	return
@@ -874,11 +872,20 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 	return
 }
 
+var successfulPeerWireProtocolHandshakePeerReservedBytes expvar.Map
+
+func init() {
+	torrent.Set(
+		"successful_peer_wire_protocol_handshake_peer_reserved_bytes",
+		&successfulPeerWireProtocolHandshakePeerReservedBytes)
+}
+
 func (cl *Client) connBtHandshake(c *PeerConn, ih *metainfo.Hash) (ret metainfo.Hash, err error) {
 	res, err := pp.Handshake(c.rw(), ih, cl.peerID, cl.config.Extensions)
 	if err != nil {
 		return
 	}
+	successfulPeerWireProtocolHandshakePeerReservedBytes.Add(res.PeerExtensionBits.String(), 1)
 	ret = res.Hash
 	c.PeerExtensionBytes = res.PeerExtensionBits
 	c.PeerID = res.PeerID
@@ -925,6 +932,11 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 // Client lock must be held before entering this.
 func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	c.setTorrent(t)
+	for i, b := range cl.config.MinPeerExtensions {
+		if c.PeerExtensionBytes[i]&b != b {
+			return fmt.Errorf("peer did not meet minimum peer extensions: %x", c.PeerExtensionBytes)
+		}
+	}
 	if c.PeerID == cl.peerID {
 		if c.outgoing {
 			connsToSelf.Add(1)
@@ -950,11 +962,40 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	defer t.dropConnection(c)
 	c.startWriter()
 	cl.sendInitialMessages(c, t)
+	c.initUpdateRequestsTimer()
 	err := c.mainReadLoop()
 	if err != nil {
 		return fmt.Errorf("main read loop: %w", err)
 	}
 	return nil
+}
+
+const check = false
+
+func (p *Peer) initUpdateRequestsTimer() {
+	if check {
+		if p.updateRequestsTimer != nil {
+			panic(p.updateRequestsTimer)
+		}
+	}
+	p.updateRequestsTimer = time.AfterFunc(math.MaxInt64, p.updateRequestsTimerFunc)
+	p.updateRequestsTimer.Stop()
+}
+
+func (c *Peer) updateRequestsTimerFunc() {
+	c.locker().Lock()
+	defer c.locker().Unlock()
+	if c.closed.IsSet() {
+		return
+	}
+	if c.needRequestUpdate != "" {
+		return
+	}
+	if c.isLowOnRequests() {
+		// If there are no outstanding requests, then a request update should have already run.
+		return
+	}
+	c.updateRequests("updateRequestsTimer")
 }
 
 // Maximum pending requests we allow peers to send us. If peer requests are buffered on read, this
@@ -1135,7 +1176,6 @@ func (cl *Client) newTorrentOpt(opts addTorrentOpts) (t *Torrent) {
 		gotMetainfoC: make(chan struct{}),
 	}
 	t.networkingEnabled.Set()
-	t._pendingPieces.NewSet = priorityBitmapStableNewSet
 	t.logger = cl.logger.WithContextValue(t)
 	if opts.ChunkSize == 0 {
 		opts.ChunkSize = defaultChunkSize

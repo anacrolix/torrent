@@ -30,7 +30,7 @@ type TorrentSpec struct {
 	ChunkSize pp.Integer
 	// TODO: Move into a "new" Torrent opt type.
 	Storage storage.ClientImpl
-	
+
 	DisableInitialPieceCheck bool
 
 	// Whether to allow data download or upload

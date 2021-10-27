@@ -22,6 +22,7 @@ import (
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/tagflag"
 	"github.com/anacrolix/torrent/bencode"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/version"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
@@ -186,6 +187,9 @@ type DownloadCmd struct {
 	UtpPeers        bool `default:"true"`
 	Webtorrent      bool `default:"true"`
 	DisableWebseeds bool
+	// Don't progress past handshake for peer connections where the peer doesn't offer the fast
+	// extension.
+	RequireFastExtension bool
 
 	Ipv4 bool `default:"true"`
 	Ipv6 bool `default:"true"`
@@ -219,7 +223,7 @@ func mainErr() error {
 	defer envpprof.Stop()
 	stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
 	debug := args.Flag(args.FlagOpt{Long: "debug"})
-	p := args.ParseMain(
+	args.ParseMain(
 		debug,
 		args.Subcommand("metainfo", metainfoCmd),
 		args.Subcommand("announce", func(p args.SubCmdCtx) error {
@@ -233,17 +237,21 @@ func mainErr() error {
 			return announceErr(cmd)
 		}),
 		args.Subcommand("download", func(p args.SubCmdCtx) error {
-			var dlf DownloadCmd
+			var dlc DownloadCmd
 			err := p.NewParser().AddParams(
-				append(args.FromStruct(&dlf), debug)...,
+				append(args.FromStruct(&dlc), debug)...,
 			).Parse()
 			if err != nil {
 				return err
 			}
-			return downloadErr(downloadFlags{
+			dlf := downloadFlags{
 				Debug:       debug.Bool(),
-				DownloadCmd: dlf,
+				DownloadCmd: dlc,
+			}
+			p.Defer(func() error {
+				return downloadErr(dlf)
 			})
+			return nil
 		}),
 		args.Subcommand(
 			"spew-bencoding",
@@ -271,16 +279,6 @@ func mainErr() error {
 			return nil
 		}),
 	)
-	if p.Err != nil {
-		if errors.Is(p.Err, args.ErrHelped) {
-			return nil
-		}
-		return p.Err
-	}
-	if !p.RanSubCmd {
-		p.PrintChoices(os.Stderr)
-		args.FatalUsage()
-	}
 	return nil
 }
 
@@ -322,6 +320,9 @@ func downloadErr(flags downloadFlags) error {
 	if flags.Quiet {
 		clientConfig.Logger = log.Discard
 	}
+	if flags.RequireFastExtension {
+		clientConfig.MinPeerExtensions.SetBit(pp.ExtensionBitFast, true)
+	}
 	clientConfig.MaxUnverifiedBytes = flags.MaxUnverifiedBytes.Int64()
 
 	var stop missinggo.SynchronizedEvent
@@ -347,6 +348,7 @@ func downloadErr(flags downloadFlags) error {
 		client.WriteStatus(w)
 	})
 	err = addTorrents(client, flags)
+	started := time.Now()
 	if err != nil {
 		return fmt.Errorf("adding torrents: %w", err)
 	}
@@ -356,6 +358,13 @@ func downloadErr(flags downloadFlags) error {
 	} else {
 		err = errors.New("y u no complete torrents?!")
 	}
+	clientConnStats := client.ConnStats()
+	log.Printf("average download rate: %v",
+		humanize.Bytes(uint64(
+			time.Duration(
+				clientConnStats.BytesReadUsefulData.Int64(),
+			)*time.Second/time.Since(started),
+		)))
 	if flags.Seed {
 		if len(client.Torrents()) == 0 {
 			log.Print("no torrents to seed")
@@ -369,7 +378,7 @@ func downloadErr(flags downloadFlags) error {
 	clStats := client.ConnStats()
 	sentOverhead := clStats.BytesWritten.Int64() - clStats.BytesWrittenData.Int64()
 	log.Printf(
-		"client read %v, %v was useful data. sent %v non-data bytes",
+		"client read %v, %.1f%% was useful data. sent %v non-data bytes",
 		humanize.Bytes(uint64(clStats.BytesRead.Int64())),
 		100*float64(clStats.BytesReadUsefulData.Int64())/float64(clStats.BytesRead.Int64()),
 		humanize.Bytes(uint64(sentOverhead)))

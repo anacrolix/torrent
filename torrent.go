@@ -27,10 +27,10 @@ import (
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	"github.com/anacrolix/missinggo/v2/prioritybitmap"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/google/go-cmp/cmp"
 	"github.com/pion/datachannel"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -131,7 +131,7 @@ type Torrent struct {
 
 	// A cache of pieces we need to get. Calculated from various piece and
 	// file priorities and completion states elsewhere.
-	_pendingPieces prioritybitmap.PriorityBitmap
+	_pendingPieces roaring.Bitmap
 	// A cache of completed piece indices.
 	_completedPieces roaring.Bitmap
 	// Pieces that need to be hashed.
@@ -145,7 +145,7 @@ type Torrent struct {
 	connPieceInclinationPool sync.Pool
 
 	// Count of each request across active connections.
-	pendingRequests map[RequestIndex]int
+	pendingRequests pendingRequests
 	// Chunks we've written to since the corresponding piece was last checked.
 	dirtyChunks roaring.Bitmap
 
@@ -193,10 +193,6 @@ func (t *Torrent) readerReadaheadPieces() bitmap.Bitmap {
 
 func (t *Torrent) ignorePieceForRequests(i pieceIndex) bool {
 	return !t.wantPieceIndex(i)
-}
-
-func (t *Torrent) pendingPieces() *prioritybitmap.PriorityBitmap {
-	return &t._pendingPieces
 }
 
 // Returns a channel that is closed when the Torrent is closed.
@@ -368,6 +364,11 @@ func (t *Torrent) makePieces() {
 		beginFile := pieceFirstFileIndex(piece.torrentBeginOffset(), files)
 		endFile := pieceEndFileIndex(piece.torrentEndOffset(), files)
 		piece.files = files[beginFile:endFile]
+		piece.undirtiedChunksIter = undirtiedChunksIter{
+			TorrentDirtyChunks: &t.dirtyChunks,
+			StartRequestIndex:  piece.requestIndexOffset(),
+			EndRequestIndex:    piece.requestIndexOffset() + piece.numChunks(),
+		}
 	}
 }
 
@@ -428,9 +429,6 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 
 // This seems to be all the follow-up tasks after info is set, that can't fail.
 func (t *Torrent) onSetInfo() {
-	t.iterPeers(func(p *Peer) {
-		p.onGotInfo(t.info)
-	})
 	for i := range t.pieces {
 		p := &t.pieces[i]
 		// Need to add availability before updating piece completion, as that may result in conns
@@ -448,8 +446,12 @@ func (t *Torrent) onSetInfo() {
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
-	t.pendingRequests = make(map[RequestIndex]int)
+	t.pendingRequests.Init(t.numRequests())
 	t.tryCreateMorePieceHashers()
+	t.iterPeers(func(p *Peer) {
+		p.onGotInfo(t.info)
+		p.updateRequests("onSetInfo")
+	})
 }
 
 // Called when metadata for a torrent becomes available.
@@ -860,6 +862,13 @@ func (t *Torrent) chunksPerRegularPiece() uint32 {
 	return uint32((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
 }
 
+func (t *Torrent) numRequests() RequestIndex {
+	if t.numPieces() == 0 {
+		return 0
+	}
+	return uint32(t.numPieces()-1)*t.chunksPerRegularPiece() + t.pieceNumChunks(t.numPieces()-1)
+}
+
 func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex) {
 	t.dirtyChunks.RemoveRange(
 		uint64(t.pieceRequestIndexOffset(pieceIndex)),
@@ -923,7 +932,8 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 }
 
 func (t *Torrent) maybeDropMutuallyCompletePeer(
-	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's okay?
+	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
+	// okay?
 	p *Peer,
 ) {
 	if !t.cl.config.DropMutuallyCompletePeers {
@@ -961,32 +971,7 @@ func chunkIndexFromChunkSpec(cs ChunkSpec, chunkSize pp.Integer) chunkIndexType 
 }
 
 func (t *Torrent) wantPieceIndex(index pieceIndex) bool {
-	// TODO: Are these overly conservative, should we be guarding this here?
-	{
-		if !t.haveInfo() {
-			return false
-		}
-		if index < 0 || index >= t.numPieces() {
-			return false
-		}
-	}
-	p := &t.pieces[index]
-	if p.queuedForHash() {
-		return false
-	}
-	if p.hashing {
-		return false
-	}
-	if t.pieceComplete(index) {
-		return false
-	}
-	if t._pendingPieces.Contains(int(index)) {
-		return true
-	}
-	// t.logger.Printf("piece %d not pending", index)
-	return !t.forReaderOffsetPieces(func(begin, end pieceIndex) bool {
-		return index < begin || index >= end
-	})
+	return t._pendingPieces.Contains(uint32(index))
 }
 
 // A pool of []*PeerConn, to reduce allocations in functions that need to index or sort Torrent
@@ -1058,7 +1043,7 @@ func (t *Torrent) pieceAllDirty(piece pieceIndex) bool {
 
 func (t *Torrent) readersChanged() {
 	t.updateReaderPieces()
-	t.updateAllPiecePriorities()
+	t.updateAllPiecePriorities("Torrent.readersChanged")
 }
 
 func (t *Torrent) updateReaderPieces() {
@@ -1077,15 +1062,15 @@ func (t *Torrent) readerPosChanged(from, to pieceRange) {
 	}
 	if l.end < h.begin {
 		// Two distinct ranges.
-		t.updatePiecePriorities(l.begin, l.end)
-		t.updatePiecePriorities(h.begin, h.end)
+		t.updatePiecePriorities(l.begin, l.end, "Torrent.readerPosChanged")
+		t.updatePiecePriorities(h.begin, h.end, "Torrent.readerPosChanged")
 	} else {
 		// Ranges overlap.
 		end := l.end
 		if h.end > end {
 			end = h.end
 		}
-		t.updatePiecePriorities(l.begin, end)
+		t.updatePiecePriorities(l.begin, end, "Torrent.readerPosChanged")
 	}
 }
 
@@ -1095,43 +1080,50 @@ func (t *Torrent) maybeNewConns() {
 	t.openNewConns()
 }
 
-func (t *Torrent) piecePriorityChanged(piece pieceIndex) {
-	// t.logger.Printf("piece %d priority changed", piece)
-	t.iterPeers(func(c *Peer) {
-		if c.updatePiecePriority(piece) {
-			// log.Print("conn piece priority changed")
-			c.updateRequests()
-		}
-	})
+func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
+	if t._pendingPieces.Contains(uint32(piece)) {
+		t.iterPeers(func(c *Peer) {
+			if c.actualRequestState.Interested {
+				return
+			}
+			if !c.isLowOnRequests() {
+				return
+			}
+			if !c.peerHasPiece(piece) {
+				return
+			}
+			c.updateRequests(reason)
+		})
+	}
 	t.maybeNewConns()
 	t.publishPieceChange(piece)
 }
 
-func (t *Torrent) updatePiecePriority(piece pieceIndex) {
+func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string) {
 	p := &t.pieces[piece]
 	newPrio := p.uncachedPriority()
 	// t.logger.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
 	if newPrio == PiecePriorityNone {
-		if !t._pendingPieces.Remove(int(piece)) {
+		if !t._pendingPieces.CheckedRemove(uint32(piece)) {
 			return
 		}
 	} else {
-		if !t._pendingPieces.Set(int(piece), newPrio.BitmapPriority()) {
+		if !t._pendingPieces.CheckedAdd(uint32(piece)) {
 			return
 		}
 	}
-	t.piecePriorityChanged(piece)
+	t.piecePriorityChanged(piece, reason)
 }
 
-func (t *Torrent) updateAllPiecePriorities() {
-	t.updatePiecePriorities(0, t.numPieces())
+func (t *Torrent) updateAllPiecePriorities(reason string) {
+	t.updatePiecePriorities(0, t.numPieces(), reason)
 }
 
 // Update all piece priorities in one hit. This function should have the same
 // output as updatePiecePriority, but across all pieces.
-func (t *Torrent) updatePiecePriorities(begin, end pieceIndex) {
+func (t *Torrent) updatePiecePriorities(begin, end pieceIndex, reason string) {
 	for i := begin; i < end; i++ {
-		t.updatePiecePriority(i)
+		t.updatePiecePriority(i, reason)
 	}
 }
 
@@ -1172,32 +1164,21 @@ func (t *Torrent) forReaderOffsetPieces(f func(begin, end pieceIndex) (more bool
 }
 
 func (t *Torrent) piecePriority(piece pieceIndex) piecePriority {
-	prio, ok := t._pendingPieces.GetPriority(piece)
-	if !ok {
-		return PiecePriorityNone
-	}
-	if prio > 0 {
-		panic(prio)
-	}
-	ret := piecePriority(-prio)
-	if ret == PiecePriorityNone {
-		panic(piece)
-	}
-	return ret
+	return t.piece(piece).uncachedPriority()
 }
 
 func (t *Torrent) pendRequest(req RequestIndex) {
 	t.piece(int(req / t.chunksPerRegularPiece())).pendChunkIndex(req % t.chunksPerRegularPiece())
 }
 
-func (t *Torrent) pieceCompletionChanged(piece pieceIndex) {
+func (t *Torrent) pieceCompletionChanged(piece pieceIndex, reason string) {
 	t.cl.event.Broadcast()
 	if t.pieceComplete(piece) {
 		t.onPieceCompleted(piece)
 	} else {
 		t.onIncompletePiece(piece)
 	}
-	t.updatePiecePriority(piece)
+	t.updatePiecePriority(piece, reason)
 }
 
 func (t *Torrent) numReceivedConns() (ret int) {
@@ -1275,7 +1256,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	}
 	if changed {
 		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).SetLevel(log.Debug).Log(t.logger)
-		t.pieceCompletionChanged(piece)
+		t.pieceCompletionChanged(piece, "Torrent.updatePieceCompletion")
 	}
 	return changed
 }
@@ -1338,7 +1319,7 @@ func (t *Torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
-	return t._pendingPieces.Len() != 0
+	return !t._pendingPieces.IsEmpty()
 }
 
 func appendMissingStrings(old, new []string) (ret []string) {
@@ -1405,9 +1386,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 	}
 	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests()
-	if t.numActivePeers() == 0 {
-		t.assertNoPendingRequests()
-	}
+	t.assertPendingRequests()
 	return
 }
 
@@ -1428,13 +1407,24 @@ func (t *Torrent) numActivePeers() (num int) {
 	return
 }
 
-func (t *Torrent) assertNoPendingRequests() {
-	if len(t.pendingRequests) != 0 {
-		panic(t.pendingRequests)
+func (t *Torrent) assertPendingRequests() {
+	if !check {
+		return
 	}
-	//if len(t.lastRequested) != 0 {
-	//	panic(t.lastRequested)
-	//}
+	var actual pendingRequests
+	if t.haveInfo() {
+		actual.m = make([]int, t.numRequests())
+	}
+	t.iterPeers(func(p *Peer) {
+		p.actualRequestState.Requests.Iterate(func(x uint32) bool {
+			actual.Inc(x)
+			return true
+		})
+	})
+	diff := cmp.Diff(actual.m, t.pendingRequests.m)
+	if diff != "" {
+		panic(diff)
+	}
 }
 
 func (t *Torrent) dropConnection(c *PeerConn) {
@@ -1524,7 +1514,7 @@ func (t *Torrent) logRunHandshookConn(pc *PeerConn, logAll bool, level log.Level
 }
 
 func (t *Torrent) runHandshookConnLoggingErr(pc *PeerConn) {
-	t.logRunHandshookConn(pc, false, log.Warning)
+	t.logRunHandshookConn(pc, false, log.Debug)
 }
 
 func (t *Torrent) startWebsocketAnnouncer(u url.URL) torrentTrackerAnnouncer {
@@ -2008,7 +1998,7 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	// }
 	t.iterPeers(func(conn *Peer) {
 		if conn.peerHasPiece(piece) {
-			conn.updateRequests()
+			conn.updateRequests("piece incomplete")
 		}
 	})
 }
@@ -2030,7 +2020,7 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 	t.piecesQueuedForHash.Remove(bitmap.BitIndex(pi))
 	p.hashing = true
 	t.publishPieceChange(pi)
-	t.updatePiecePriority(pi)
+	t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher")
 	t.storageLock.RLock()
 	t.activePieceHashes++
 	go t.pieceHasher(pi)
@@ -2063,7 +2053,7 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 	defer t.cl.unlock()
 	p.hashing = false
 	t.pieceHashed(index, correct, copyErr)
-	t.updatePiecePriority(index)
+	t.updatePiecePriority(index, "Torrent.pieceHasher")
 	t.activePieceHashes--
 	t.tryCreateMorePieceHashers()
 }
@@ -2091,7 +2081,7 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 	}
 	t.piecesQueuedForHash.Add(bitmap.BitIndex(pieceIndex))
 	t.publishPieceChange(pieceIndex)
-	t.updatePiecePriority(pieceIndex)
+	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck")
 	t.tryCreateMorePieceHashers()
 }
 
@@ -2184,7 +2174,7 @@ func (t *Torrent) AllowDataUpload() {
 	defer t.cl.unlock()
 	t.dataUploadDisallowed = false
 	for c := range t.conns {
-		c.updateRequests()
+		c.updateRequests("allow data upload")
 	}
 }
 
@@ -2194,7 +2184,7 @@ func (t *Torrent) DisallowDataUpload() {
 	defer t.cl.unlock()
 	t.dataUploadDisallowed = true
 	for c := range t.conns {
-		c.updateRequests()
+		c.updateRequests("disallow data upload")
 	}
 }
 
@@ -2250,7 +2240,9 @@ func (t *Torrent) addWebSeed(url string) {
 			Url:        url,
 		},
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
+		maxRequests:    maxRequests,
 	}
+	ws.peer.initUpdateRequestsTimer()
 	ws.requesterCond.L = t.cl.locker()
 	for i := 0; i < maxRequests; i += 1 {
 		go ws.requester()
@@ -2286,10 +2278,6 @@ func (t *Torrent) requestIndexToRequest(ri RequestIndex) Request {
 
 func (t *Torrent) requestIndexFromRequest(r Request) RequestIndex {
 	return t.pieceRequestIndexOffset(pieceIndex(r.Index)) + uint32(r.Begin/t.chunkSize)
-}
-
-func (t *Torrent) numChunks() RequestIndex {
-	return RequestIndex((t.Length() + int64(t.chunkSize) - 1) / int64(t.chunkSize))
 }
 
 func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex) RequestIndex {

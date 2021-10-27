@@ -1,46 +1,19 @@
 package torrent
 
 import (
+	"container/heap"
+	"context"
 	"encoding/gob"
 	"reflect"
+	"runtime/pprof"
 	"time"
 	"unsafe"
 
-	"github.com/RoaringBitmap/roaring"
-	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/multiless"
 
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 )
-
-// Calculate requests individually for each peer.
-const peerRequesting = false
-
-func (cl *Client) requester() {
-	for {
-		update := func() events.Signaled {
-			cl.lock()
-			defer cl.unlock()
-			cl.doRequests()
-			return cl.updateRequests.Signaled()
-		}()
-		minWait := time.After(100 * time.Millisecond)
-		maxWait := time.After(1000 * time.Millisecond)
-		select {
-		case <-cl.closed.Done():
-			return
-		case <-minWait:
-		case <-maxWait:
-		}
-		select {
-		case <-cl.closed.Done():
-			return
-		case <-update:
-		case <-maxWait:
-		}
-	}
-}
 
 func (cl *Client) tickleRequester() {
 	cl.updateRequests.Broadcast()
@@ -57,7 +30,7 @@ func (cl *Client) getRequestStrategyInput() request_strategy.Input {
 		}
 		rst := request_strategy.Torrent{
 			InfoHash:       t.infoHash,
-			ChunksPerPiece: (t.usualPieceSize() + int(t.chunkSize) - 1) / int(t.chunkSize),
+			ChunksPerPiece: t.chunksPerRegularPiece(),
 		}
 		if t.storage != nil {
 			rst.Capacity = t.storage.Capacity
@@ -72,7 +45,7 @@ func (cl *Client) getRequestStrategyInput() request_strategy.Input {
 				Availability:      p.availability,
 				Length:            int64(p.length()),
 				NumPendingChunks:  int(t.pieceNumPendingChunks(i)),
-				IterPendingChunks: p.undirtiedChunksIter(),
+				IterPendingChunks: &p.undirtiedChunksIter,
 			})
 		}
 		t.iterPeers(func(p *Peer) {
@@ -102,14 +75,6 @@ func (cl *Client) getRequestStrategyInput() request_strategy.Input {
 	return request_strategy.Input{
 		Torrents:           ts,
 		MaxUnverifiedBytes: cl.config.MaxUnverifiedBytes,
-	}
-}
-
-func (cl *Client) doRequests() {
-	input := cl.getRequestStrategyInput()
-	nextPeerStates := request_strategy.Run(input)
-	for p, state := range nextPeerStates {
-		setPeerNextRequestState(p, state)
 	}
 }
 
@@ -151,94 +116,163 @@ func (p *peerId) GobDecode(b []byte) error {
 	return nil
 }
 
-func setPeerNextRequestState(_p request_strategy.PeerId, rp request_strategy.PeerNextRequestState) {
-	p := _p.(peerId).Peer
-	p.nextRequestState = rp
-	p.onNextRequestStateChanged()
-}
-
 type RequestIndex = request_strategy.RequestIndex
 type chunkIndexType = request_strategy.ChunkIndex
 
-func (p *Peer) applyNextRequestState() bool {
-	if peerRequesting {
-		if p.actualRequestState.Requests.GetCardinality() > uint64(p.nominalMaxRequests()/2) {
-			return true
-		}
-		type piece struct {
-			index   int
-			endGame bool
-		}
-		var pieceOrder []piece
-		request_strategy.GetRequestablePieces(
-			p.t.cl.getRequestStrategyInput(),
-			func(t *request_strategy.Torrent, rsp *request_strategy.Piece, pieceIndex int) {
-				if t.InfoHash != p.t.infoHash {
-					return
-				}
-				if !p.peerHasPiece(pieceIndex) {
-					return
-				}
-				pieceOrder = append(pieceOrder, piece{
-					index:   pieceIndex,
-					endGame: rsp.Priority == PiecePriorityNow,
-				})
-			},
-		)
-		more := true
-		interested := false
-		for _, endGameIter := range []bool{false, true} {
-			for _, piece := range pieceOrder {
-				tp := p.t.piece(piece.index)
-				tp.iterUndirtiedChunks(func(cs chunkIndexType) {
-					req := cs + tp.requestIndexOffset()
-					if !piece.endGame && !endGameIter && p.t.pendingRequests[req] > 0 {
-						return
-					}
-					interested = true
-					more = p.setInterested(true)
-					if !more {
-						return
-					}
-					if maxRequests(p.actualRequestState.Requests.GetCardinality()) >= p.nominalMaxRequests() {
-						return
-					}
-					if p.peerChoking && !p.peerAllowedFast.Contains(bitmap.BitIndex(piece.index)) {
-						return
-					}
-					var err error
-					more, err = p.request(req)
-					if err != nil {
-						panic(err)
-					}
-				})
-				if interested && maxRequests(p.actualRequestState.Requests.GetCardinality()) >= p.nominalMaxRequests() {
-					break
-				}
-				if !more {
-					break
-				}
-			}
-			if !more {
-				break
-			}
-		}
-		if !more {
-			return false
-		}
-		if !interested {
-			p.setInterested(false)
-		}
-		return more
-	}
+type peerRequests struct {
+	requestIndexes       []RequestIndex
+	peer                 *Peer
+	torrentStrategyInput request_strategy.Torrent
+}
 
-	next := p.nextRequestState
-	current := p.actualRequestState
+func (p *peerRequests) Len() int {
+	return len(p.requestIndexes)
+}
+
+func (p *peerRequests) Less(i, j int) bool {
+	leftRequest := p.requestIndexes[i]
+	rightRequest := p.requestIndexes[j]
+	t := p.peer.t
+	leftPieceIndex := leftRequest / p.torrentStrategyInput.ChunksPerPiece
+	rightPieceIndex := rightRequest / p.torrentStrategyInput.ChunksPerPiece
+	leftCurrent := p.peer.actualRequestState.Requests.Contains(leftRequest)
+	rightCurrent := p.peer.actualRequestState.Requests.Contains(rightRequest)
+	pending := func(index RequestIndex, current bool) int {
+		ret := t.pendingRequests.Get(index)
+		if current {
+			ret--
+		}
+		// See https://github.com/anacrolix/torrent/issues/679 for possible issues. This should be
+		// resolved.
+		if ret < 0 {
+			panic(ret)
+		}
+		return ret
+	}
+	ml := multiless.New()
+	// Push requests that can't be served right now to the end. But we don't throw them away unless
+	// there's a better alternative. This is for when we're using the fast extension and get choked
+	// but our requests could still be good when we get unchoked.
+	if p.peer.peerChoking {
+		ml = ml.Bool(
+			!p.peer.peerAllowedFast.Contains(leftPieceIndex),
+			!p.peer.peerAllowedFast.Contains(rightPieceIndex),
+		)
+	}
+	ml = ml.Int(
+		pending(leftRequest, leftCurrent),
+		pending(rightRequest, rightCurrent))
+	ml = ml.Bool(!leftCurrent, !rightCurrent)
+	ml = ml.Int(
+		-int(p.torrentStrategyInput.Pieces[leftPieceIndex].Priority),
+		-int(p.torrentStrategyInput.Pieces[rightPieceIndex].Priority),
+	)
+	ml = ml.Int(
+		int(p.torrentStrategyInput.Pieces[leftPieceIndex].Availability),
+		int(p.torrentStrategyInput.Pieces[rightPieceIndex].Availability))
+	ml = ml.Uint32(leftPieceIndex, rightPieceIndex)
+	ml = ml.Uint32(leftRequest, rightRequest)
+	return ml.MustLess()
+}
+
+func (p *peerRequests) Swap(i, j int) {
+	p.requestIndexes[i], p.requestIndexes[j] = p.requestIndexes[j], p.requestIndexes[i]
+}
+
+func (p *peerRequests) Push(x interface{}) {
+	p.requestIndexes = append(p.requestIndexes, x.(RequestIndex))
+}
+
+func (p *peerRequests) Pop() interface{} {
+	last := len(p.requestIndexes) - 1
+	x := p.requestIndexes[last]
+	p.requestIndexes = p.requestIndexes[:last]
+	return x
+}
+
+type desiredRequestState struct {
+	Requests   []RequestIndex
+	Interested bool
+}
+
+func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
+	input := p.t.cl.getRequestStrategyInput()
+	requestHeap := peerRequests{
+		peer: p,
+	}
+	for _, t := range input.Torrents {
+		if t.InfoHash == p.t.infoHash {
+			requestHeap.torrentStrategyInput = t
+			break
+		}
+	}
+	request_strategy.GetRequestablePieces(
+		input,
+		func(t *request_strategy.Torrent, rsp *request_strategy.Piece, pieceIndex int) {
+			if t.InfoHash != p.t.infoHash {
+				return
+			}
+			if !p.peerHasPiece(pieceIndex) {
+				return
+			}
+			allowedFast := p.peerAllowedFast.ContainsInt(pieceIndex)
+			rsp.IterPendingChunks.Iter(func(ci request_strategy.ChunkIndex) {
+				r := p.t.pieceRequestIndexOffset(pieceIndex) + ci
+				//if p.t.pendingRequests.Get(r) != 0 && !p.actualRequestState.Requests.Contains(r) {
+				//	return
+				//}
+				if !allowedFast {
+					// We must signal interest to request this
+					desired.Interested = true
+					// We can make or will allow sustaining a request here if we're not choked, or
+					// have made the request previously (presumably while unchoked), and haven't had
+					// the peer respond yet (and the request was retained because we are using the
+					// fast extension).
+					if p.peerChoking && !p.actualRequestState.Requests.Contains(r) {
+						// We can't request this right now.
+						return
+					}
+				}
+				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
+			})
+		},
+	)
+	p.t.assertPendingRequests()
+	heap.Init(&requestHeap)
+	for requestHeap.Len() != 0 && len(desired.Requests) < p.nominalMaxRequests() {
+		requestIndex := heap.Pop(&requestHeap).(RequestIndex)
+		desired.Requests = append(desired.Requests, requestIndex)
+	}
+	return
+}
+
+func (p *Peer) maybeUpdateActualRequestState() bool {
+	if p.needRequestUpdate == "" {
+		return true
+	}
+	var more bool
+	pprof.Do(
+		context.Background(),
+		pprof.Labels("update request", p.needRequestUpdate),
+		func(_ context.Context) {
+			next := p.getDesiredRequestState()
+			more = p.applyRequestState(next)
+		},
+	)
+	return more
+}
+
+// Transmit/action the request state to the peer.
+func (p *Peer) applyRequestState(next desiredRequestState) bool {
+	current := &p.actualRequestState
 	if !p.setInterested(next.Interested) {
 		return false
 	}
 	more := true
-	cancel := roaring.AndNot(&current.Requests, &next.Requests)
+	cancel := current.Requests.Clone()
+	for _, ri := range next.Requests {
+		cancel.Remove(ri)
+	}
 	cancel.Iterate(func(req uint32) bool {
 		more = p.cancel(req)
 		return more
@@ -246,20 +280,37 @@ func (p *Peer) applyNextRequestState() bool {
 	if !more {
 		return false
 	}
-	next.Requests.Iterate(func(req uint32) bool {
-		// This could happen if the peer chokes us between the next state being generated, and us
-		// trying to transmit the state.
-		if p.peerChoking && !p.peerAllowedFast.Contains(bitmap.BitIndex(req/p.t.chunksPerRegularPiece())) {
-			return true
+	for _, req := range next.Requests {
+		if p.cancelledRequests.Contains(req) {
+			// Waiting for a reject or piece message, which will suitably trigger us to update our
+			// requests, so we can skip this one with no additional consideration.
+			continue
 		}
-		var err error
-		more, err = p.request(req)
-		if err != nil {
-			panic(err)
-		} /* else {
-			log.Print(req)
-		} */
-		return more
-	})
+		// The cardinality of our desired requests shouldn't exceed the max requests since it's used
+		// in the calculation of the requests. However, if we cancelled requests and they haven't
+		// been rejected or serviced yet with the fast extension enabled, we can end up with more
+		// extra outstanding requests. We could subtract the number of outstanding cancels from the
+		// next request cardinality, but peers might not like that.
+		if maxRequests(current.Requests.GetCardinality()) >= p.nominalMaxRequests() {
+			//log.Printf("not assigning all requests [desired=%v, cancelled=%v, current=%v, max=%v]",
+			//	next.Requests.GetCardinality(),
+			//	p.cancelledRequests.GetCardinality(),
+			//	current.Requests.GetCardinality(),
+			//	p.nominalMaxRequests(),
+			//)
+			break
+		}
+		more = p.mustRequest(req)
+		if !more {
+			break
+		}
+	}
+	p.updateRequestsTimer.Stop()
+	if more {
+		p.needRequestUpdate = ""
+		if !current.Requests.IsEmpty() {
+			p.updateRequestsTimer.Reset(3 * time.Second)
+		}
+	}
 	return more
 }

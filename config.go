@@ -146,6 +146,8 @@ type ClientConfig struct {
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
 
 	Extensions PeerExtensionBits
+	// Bits that peers must have set to proceed past handshakes.
+	MinPeerExtensions PeerExtensionBits
 
 	DisableWebtorrent bool
 	DisableWebseeds   bool

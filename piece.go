@@ -8,7 +8,6 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	request_strategy "github.com/anacrolix/torrent/request-strategy"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -41,6 +40,8 @@ type Piece struct {
 	// Connections that have written data to this piece since its last check.
 	// This can include connections that have closed.
 	dirtiers map[*Peer]struct{}
+
+	undirtiedChunksIter undirtiedChunksIter
 }
 
 func (p *Piece) String() string {
@@ -191,7 +192,7 @@ func (p *Piece) SetPriority(prio piecePriority) {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()
 	p.priority = prio
-	p.t.updatePiecePriority(p.index)
+	p.t.updatePiecePriority(p.index, "Piece.SetPriority")
 }
 
 func (p *Piece) purePriority() (ret piecePriority) {
@@ -244,13 +245,14 @@ func init() {
 	gob.Register(undirtiedChunksIter{})
 }
 
+// Use an iterator to jump between dirty bits.
 type undirtiedChunksIter struct {
 	TorrentDirtyChunks *roaring.Bitmap
 	StartRequestIndex  RequestIndex
 	EndRequestIndex    RequestIndex
 }
 
-func (me undirtiedChunksIter) Iter(f func(chunkIndexType)) {
+func (me *undirtiedChunksIter) Iter(f func(chunkIndexType)) {
 	it := me.TorrentDirtyChunks.Iterator()
 	startIndex := me.StartRequestIndex
 	endIndex := me.EndRequestIndex
@@ -270,29 +272,6 @@ func (me undirtiedChunksIter) Iter(f func(chunkIndexType)) {
 		f(index - startIndex)
 	}
 	return
-}
-
-func (p *Piece) undirtiedChunksIter() request_strategy.ChunksIter {
-	// Use an iterator to jump between dirty bits.
-	return undirtiedChunksIter{
-		TorrentDirtyChunks: &p.t.dirtyChunks,
-		StartRequestIndex:  p.requestIndexOffset(),
-		EndRequestIndex:    p.requestIndexOffset() + p.numChunks(),
-	}
-}
-
-func (p *Piece) iterUndirtiedChunks(f func(chunkIndexType)) {
-	if true {
-		p.undirtiedChunksIter().Iter(f)
-		return
-	}
-	// The original implementation.
-	for i := chunkIndexType(0); i < p.numChunks(); i++ {
-		if p.chunkIndexDirty(i) {
-			continue
-		}
-		f(i)
-	}
 }
 
 func (p *Piece) requestIndexOffset() RequestIndex {

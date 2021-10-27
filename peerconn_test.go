@@ -98,12 +98,12 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		storage:           &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}},
 		pieceStateChanges: pubsub.NewPubSub(),
 	}
+	t.setChunkSize(defaultChunkSize)
 	require.NoError(b, t.setInfo(&metainfo.Info{
 		Pieces:      make([]byte, 20),
 		Length:      1 << 20,
 		PieceLength: 1 << 20,
 	}))
-	t.setChunkSize(defaultChunkSize)
 	t._pendingPieces.Add(0)
 	r, w := net.Pipe()
 	cn := cl.newConnection(r, true, r.RemoteAddr(), r.RemoteAddr().Network(), regularNetConnPeerConnConnString(r))

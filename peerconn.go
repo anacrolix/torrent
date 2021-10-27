@@ -984,6 +984,9 @@ func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 // chunk sending, the way it used to work.
 func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
 	c.logger.WithDefaultLevel(log.Warning).Printf("error reading chunk for peer Request %v: %v", r, err)
+	if c.t.closed.IsSet() {
+		return
+	}
 	i := pieceIndex(r.Index)
 	if c.t.pieceComplete(i) {
 		// There used to be more code here that just duplicated the following break. Piece

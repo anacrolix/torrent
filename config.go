@@ -90,6 +90,9 @@ type ClientConfig struct {
 	// Defines proxy for HTTP requests, such as for trackers. It's commonly set from the result of
 	// "net/http".ProxyURL(HTTPProxy).
 	HTTPProxy func(*http.Request) (*url.URL, error)
+	// Takes a tracker's hostname and requests DNS A and AAAA records.
+	// Used in case DNS lookups require a special setup (i.e., dns-over-https)
+	TrackerIpFetcher func(*url.URL) ([]net.IP, error)
 	// HTTPUserAgent changes default UserAgent for HTTP requests
 	HTTPUserAgent string
 	// Updated occasionally to when there's been some changes to client

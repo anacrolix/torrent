@@ -1,9 +1,10 @@
 //go:build cgo && !disable_libutp
+// +build cgo,!disable_libutp
 
 package torrent
 
 import (
-	utp "github.com/anacrolix/go-libutp"
+	"github.com/anacrolix/go-libutp"
 )
 
 func NewUtpSocket(network, addr string, fc firewallCallback) (utpSocket, error) {

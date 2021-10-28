@@ -21,6 +21,7 @@ type trackerScraper struct {
 	u            url.URL
 	t            *Torrent
 	lastAnnounce trackerAnnounceResult
+	ipFetcher    func(*url.URL) ([]net.IP, error)
 }
 
 type torrentTrackerAnnouncer interface {
@@ -66,7 +67,13 @@ type trackerAnnounceResult struct {
 }
 
 func (me *trackerScraper) getIp() (ip net.IP, err error) {
-	ips, err := net.LookupIP(me.u.Hostname())
+	var ips []net.IP
+	if me.ipFetcher != nil {
+		ips, err = me.ipFetcher(&me.u)
+	} else {
+		// Do a regular dns lookup
+		ips, err = net.LookupIP(me.u.Hostname())
+	}
 	if err != nil {
 		return
 	}

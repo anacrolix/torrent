@@ -162,22 +162,9 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 		}
 		e.writeString("e")
 	case reflect.Slice:
-		if v.Type().Elem().Kind() == reflect.Uint8 {
-			s := v.Bytes()
-			e.reflectByteSlice(s)
-			break
-		}
-		if v.IsNil() {
-			e.writeString("le")
-			break
-		}
-		fallthrough
+		e.reflectSlice(v)
 	case reflect.Array:
-		e.writeString("l")
-		for i, n := 0, v.Len(); i < n; i++ {
-			e.reflectValue(v.Index(i))
-		}
-		e.writeString("e")
+		e.reflectSlice(v.Slice(0, v.Len()))
 	case reflect.Interface:
 		e.reflectValue(v.Elem())
 	case reflect.Ptr:
@@ -190,6 +177,26 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 	default:
 		panic(&MarshalTypeError{v.Type()})
 	}
+}
+
+func (e *Encoder) reflectSlice(v reflect.Value) {
+	if v.Type().Elem().Kind() == reflect.Uint8 {
+		// This can panic if v is not addressable, such as by passing an array of bytes by value. We
+		// could copy them and make a slice to the copy, or the user could just avoid doing this. It
+		// remains to be seen.
+		s := v.Bytes()
+		e.reflectByteSlice(s)
+		return
+	}
+	if v.IsNil() {
+		e.writeString("le")
+		return
+	}
+	e.writeString("l")
+	for i, n := 0, v.Len(); i < n; i++ {
+		e.reflectValue(v.Index(i))
+	}
+	e.writeString("e")
 }
 
 type encodeField struct {

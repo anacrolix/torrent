@@ -1577,9 +1577,9 @@ func (t *Torrent) startScrapingTracker(_url string) {
 			}
 		}
 		newAnnouncer := &trackerScraper{
-			u:         *u,
-			t:         t,
-			ipFetcher: t.cl.config.TrackerIpFetcher,
+			u:               *u,
+			t:               t,
+			lookupTrackerIp: t.cl.config.LookupTrackerIp,
 		}
 		go newAnnouncer.Run()
 		return newAnnouncer

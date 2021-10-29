@@ -18,10 +18,10 @@ import (
 // Announces a torrent to a tracker at regular intervals, when peers are
 // required.
 type trackerScraper struct {
-	u            url.URL
-	t            *Torrent
-	lastAnnounce trackerAnnounceResult
-	ipFetcher    func(*url.URL) ([]net.IP, error)
+	u               url.URL
+	t               *Torrent
+	lastAnnounce    trackerAnnounceResult
+	lookupTrackerIp func(*url.URL) ([]net.IP, error)
 }
 
 type torrentTrackerAnnouncer interface {
@@ -68,8 +68,8 @@ type trackerAnnounceResult struct {
 
 func (me *trackerScraper) getIp() (ip net.IP, err error) {
 	var ips []net.IP
-	if me.ipFetcher != nil {
-		ips, err = me.ipFetcher(&me.u)
+	if me.lookupTrackerIp != nil {
+		ips, err = me.lookupTrackerIp(&me.u)
 	} else {
 		// Do a regular dns lookup
 		ips, err = net.LookupIP(me.u.Hostname())

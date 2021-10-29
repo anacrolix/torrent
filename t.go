@@ -190,7 +190,7 @@ func (t *Torrent) downloadPiecesLocked(begin, end pieceIndex) {
 	}
 }
 
-func (t *Torrent) CancelPieces(begin, end pieceIndex, reason string) {
+func (t *Torrent) CancelPieces(begin, end pieceIndex) {
 	t.cl.lock()
 	t.cancelPiecesLocked(begin, end, "Torrent.CancelPieces")
 	t.cl.unlock()

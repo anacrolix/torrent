@@ -1379,13 +1379,6 @@ func (t *Torrent) decPeerPieceAvailability(p *Peer) {
 	})
 }
 
-func (t *Torrent) numActivePeers() (num int) {
-	t.iterPeers(func(*Peer) {
-		num++
-	})
-	return
-}
-
 func (t *Torrent) assertPendingRequests() {
 	if !check {
 		return

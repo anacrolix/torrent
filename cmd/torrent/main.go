@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"expvar"
 	"fmt"
@@ -254,20 +255,46 @@ func mainErr() error {
 			return nil
 		}),
 		args.Subcommand(
-			"spew-bencoding",
+			"bencode",
 			func(p args.SubCmdCtx) error {
-				d := bencode.NewDecoder(os.Stdin)
-				for i := 0; ; i++ {
-					var v interface{}
-					err := d.Decode(&v)
-					if err == io.EOF {
-						break
-					}
-					if err != nil {
-						return fmt.Errorf("decoding message index %d: %w", i, err)
-					}
-					spew.Dump(v)
+				var print func(interface{}) error
+				if !p.Parse(
+					args.Subcommand("json", func(ctx args.SubCmdCtx) (err error) {
+						ctx.Parse()
+						je := json.NewEncoder(os.Stdout)
+						je.SetIndent("", "  ")
+						print = je.Encode
+						return nil
+					}),
+					args.Subcommand("spew", func(ctx args.SubCmdCtx) (err error) {
+						ctx.Parse()
+						config := spew.NewDefaultConfig()
+						config.DisableCapacities = true
+						config.Indent = "  "
+						print = func(v interface{}) error {
+							config.Dump(v)
+							return nil
+						}
+						return nil
+					}),
+				).RanSubCmd {
+					return errors.New("an output type is required")
 				}
+				d := bencode.NewDecoder(os.Stdin)
+				p.Defer(func() error {
+					for i := 0; ; i++ {
+						var v interface{}
+						err := d.Decode(&v)
+						if err == io.EOF {
+							break
+						}
+						if err != nil {
+							return fmt.Errorf("decoding message index %d: %w", i, err)
+						}
+						print(v)
+					}
+					return nil
+				})
 				return nil
 			},
 			args.Help("reads bencoding from stdin into Go native types and spews the result"),

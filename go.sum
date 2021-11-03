@@ -44,8 +44,10 @@ github.com/alexflint/go-arg v1.4.2/go.mod h1:9iRbDxne7LcR/GSvEr7ma++GLpdIU1zrghf
 github.com/alexflint/go-scalar v1.0.0/go.mod h1:GpHzbCOZXEKMEcygYQ5n/aa4Aq84zbxjy3MxYW0gjYw=
 github.com/alexflint/go-scalar v1.1.0 h1:aaAouLLzI9TChcPXotr6gUhq+Scr8rl0P9P4PnltbhM=
 github.com/alexflint/go-scalar v1.1.0/go.mod h1:LoFvNMqS1CPrMVltza4LvnGKhaSpc3oyLEBUZVhhS2o=
-github.com/anacrolix/args v0.1.1-0.20211020052733-53ed238acbd4 h1:s6KNsoIo4VlU5fqoTVczWqDyM163HzyqoPY0hQJS+9U=
-github.com/anacrolix/args v0.1.1-0.20211020052733-53ed238acbd4/go.mod h1:41JBnF8sKExNVLHPkCdL74jkZc3dSxAkGsk1TuKOUFI=
+github.com/anacrolix/args v0.2.1-0.20211103024302-00380c7cbbec h1:gHr2HG2wRaEQkoDif7ic59iQZsEBeWfa6j+4I4Obj+8=
+github.com/anacrolix/args v0.2.1-0.20211103024302-00380c7cbbec/go.mod h1:41JBnF8sKExNVLHPkCdL74jkZc3dSxAkGsk1TuKOUFI=
+github.com/anacrolix/args v0.3.0 h1:rM2/mjp0b+JXvv5emEL9jm0uBAa8+380iihM3Ynhm0E=
+github.com/anacrolix/args v0.3.0/go.mod h1:41JBnF8sKExNVLHPkCdL74jkZc3dSxAkGsk1TuKOUFI=
 github.com/anacrolix/chansync v0.0.0-20210524073341-a336ebc2de92/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
 github.com/anacrolix/chansync v0.3.0-0.0.20211007004133-3f72684c4a93 h1:sQ8igc3anitrtKPEHRK+RBvuNZP0+DRAa6jskKlq4+k=
 github.com/anacrolix/chansync v0.3.0-0.0.20211007004133-3f72684c4a93/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=

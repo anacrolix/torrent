@@ -109,6 +109,7 @@ func mainErr() error {
 			fmt.Printf("Torrent version prefix: %q\n", version.DefaultBep20Prefix)
 			return nil
 		}),
+		args.Subcommand("serve", serve, args.Help("creates and seeds a torrent from a filepath")),
 	)
 	return nil
 }

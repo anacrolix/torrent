@@ -64,16 +64,18 @@ func (e *Encoder) writeString(s string) {
 }
 
 func (e *Encoder) reflectString(s string) {
-	b := strconv.AppendInt(e.scratch[:0], int64(len(s)), 10)
-	e.write(b)
-	e.writeString(":")
+	e.writeStringPrefix(int64(len(s)))
 	e.writeString(s)
 }
 
-func (e *Encoder) reflectByteSlice(s []byte) {
-	b := strconv.AppendInt(e.scratch[:0], int64(len(s)), 10)
+func (e *Encoder) writeStringPrefix(l int64) {
+	b := strconv.AppendInt(e.scratch[:0], l, 10)
 	e.write(b)
 	e.writeString(":")
+}
+
+func (e *Encoder) reflectByteSlice(s []byte) {
+	e.writeStringPrefix(int64(len(s)))
 	e.write(s)
 }
 
@@ -161,10 +163,8 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 			e.reflectValue(v.MapIndex(key))
 		}
 		e.writeString("e")
-	case reflect.Slice:
-		e.reflectSlice(v)
-	case reflect.Array:
-		e.reflectSlice(v.Slice(0, v.Len()))
+	case reflect.Slice, reflect.Array:
+		e.reflectSequence(v)
 	case reflect.Interface:
 		e.reflectValue(v.Elem())
 	case reflect.Ptr:
@@ -179,11 +179,22 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 	}
 }
 
-func (e *Encoder) reflectSlice(v reflect.Value) {
+func (e *Encoder) reflectSequence(v reflect.Value) {
+	// Use bencode string-type
 	if v.Type().Elem().Kind() == reflect.Uint8 {
-		// This can panic if v is not addressable, such as by passing an array of bytes by value. We
-		// could copy them and make a slice to the copy, or the user could just avoid doing this. It
-		// remains to be seen.
+		if v.Kind() != reflect.Slice {
+			// Can't use []byte optimization
+			if !v.CanAddr() {
+				e.writeStringPrefix(int64(v.Len()))
+				for i := 0; i < v.Len(); i++ {
+					var b [1]byte
+					b[0] = byte(v.Index(i).Uint())
+					e.write(b[:])
+				}
+				return
+			}
+			v = v.Slice(0, v.Len())
+		}
 		s := v.Bytes()
 		e.reflectByteSlice(s)
 		return

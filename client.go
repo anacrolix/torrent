@@ -1137,14 +1137,14 @@ func (cl *Client) badPeerIPPort(ip net.IP, port int) bool {
 
 // Return a Torrent ready for insertion into a Client.
 func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (t *Torrent) {
-	return cl.newTorrentOpt(addTorrentOpts{
+	return cl.newTorrentOpt(AddTorrentOpts{
 		InfoHash: ih,
 		Storage:  specStorage,
 	})
 }
 
 // Return a Torrent ready for insertion into a Client.
-func (cl *Client) newTorrentOpt(opts addTorrentOpts) (t *Torrent) {
+func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	// use provided storage, if provided
 	storageClient := cl.defaultStorage
 	if opts.Storage != nil {
@@ -1225,7 +1225,7 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 // Adds a torrent by InfoHash with a custom Storage implementation.
 // If the torrent already exists then this Storage is ignored and the
 // existing torrent returned with `new` set to `false`
-func (cl *Client) AddTorrentOpt(opts addTorrentOpts) (t *Torrent, new bool) {
+func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	infoHash := opts.InfoHash
 	cl.lock()
 	defer cl.unlock()
@@ -1249,7 +1249,7 @@ func (cl *Client) AddTorrentOpt(opts addTorrentOpts) (t *Torrent, new bool) {
 	return
 }
 
-type addTorrentOpts struct {
+type AddTorrentOpts struct {
 	InfoHash  InfoHash
 	Storage   storage.ClientImpl
 	ChunkSize pp.Integer
@@ -1258,7 +1258,7 @@ type addTorrentOpts struct {
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
 // Torrent.MergeSpec.
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
-	t, new = cl.AddTorrentOpt(addTorrentOpts{
+	t, new = cl.AddTorrentOpt(AddTorrentOpts{
 		InfoHash:  spec.InfoHash,
 		Storage:   spec.Storage,
 		ChunkSize: spec.ChunkSize,

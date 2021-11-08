@@ -28,9 +28,7 @@ type Peer = trHttp.Peer
 
 type AnnounceEvent = udp.AnnounceEvent
 
-var (
-	ErrBadScheme = errors.New("unknown scheme")
-)
+var ErrBadScheme = errors.New("unknown scheme")
 
 type Announce struct {
 	TrackerUrl string

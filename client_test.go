@@ -648,7 +648,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 // Creates a file containing its own name as data. Make a metainfo from that, adds it to the given
 // client, and returns a magnet link.
 func makeMagnet(t *testing.T, cl *Client, dir string, name string) string {
-	os.MkdirAll(dir, 0770)
+	os.MkdirAll(dir, 0o770)
 	file, err := os.Create(filepath.Join(dir, name))
 	require.NoError(t, err)
 	file.Write([]byte(name))
@@ -688,7 +688,7 @@ func testSeederLeecherPair(t *testing.T, seeder func(*ClientConfig), leecher fun
 	cfg := TestingConfig(t)
 	cfg.Seed = true
 	cfg.DataDir = filepath.Join(cfg.DataDir, "server")
-	os.Mkdir(cfg.DataDir, 0755)
+	os.Mkdir(cfg.DataDir, 0o755)
 	seeder(cfg)
 	server, err := NewClient(cfg)
 	require.NoError(t, err)

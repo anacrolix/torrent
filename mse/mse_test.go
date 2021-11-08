@@ -260,7 +260,7 @@ func BenchmarkSkeysReceive(b *testing.B) {
 	}
 	fillRand(b, skeys...)
 	initSkey := skeys[len(skeys)/2]
-	//c := qt.New(b)
+	// c := qt.New(b)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i += 1 {

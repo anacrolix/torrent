@@ -28,7 +28,6 @@ func TestLogExampleRequestMapOrdering(t *testing.T) {
 	for k := range makeTypicalRequests() {
 		t.Log(k)
 	}
-
 }
 
 func TestRequestMapOrderingPersistent(t *testing.T) {

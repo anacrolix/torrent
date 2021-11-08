@@ -45,7 +45,7 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 		me.fn.FS.mu.Unlock()
 		var n int
 		r := missinggo.ContextedReader{r, ctx}
-		//log.Printf("reading %v bytes at %v", len(resp.Data), req.Offset)
+		// log.Printf("reading %v bytes at %v", len(resp.Data), req.Offset)
 		if true {
 			// A user reported on that on freebsd 12.2, the system requires that reads are
 			// completely filled. Their system only asks for 64KiB at a time. I've seen systems that

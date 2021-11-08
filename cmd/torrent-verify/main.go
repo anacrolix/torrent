@@ -64,7 +64,7 @@ func verifyTorrent(info *metainfo.Info, root string) error {
 
 func main() {
 	log.SetFlags(log.Flags() | log.Lshortfile)
-	var flags = struct {
+	flags := struct {
 		DataDir string
 		tagflag.StartPos
 		TorrentFile string

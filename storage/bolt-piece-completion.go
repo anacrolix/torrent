@@ -19,9 +19,7 @@ const (
 	boltDbIncompleteValue = "i"
 )
 
-var (
-	completionBucketKey = []byte("completion")
-)
+var completionBucketKey = []byte("completion")
 
 type boltPieceCompletion struct {
 	db *bbolt.DB
@@ -30,9 +28,9 @@ type boltPieceCompletion struct {
 var _ PieceCompletion = (*boltPieceCompletion)(nil)
 
 func NewBoltPieceCompletion(dir string) (ret PieceCompletion, err error) {
-	os.MkdirAll(dir, 0750)
+	os.MkdirAll(dir, 0o750)
 	p := filepath.Join(dir, ".torrent.bolt.db")
-	db, err := bbolt.Open(p, 0660, &bbolt.Options{
+	db, err := bbolt.Open(p, 0o660, &bbolt.Options{
 		Timeout: time.Second,
 	})
 	if err != nil {

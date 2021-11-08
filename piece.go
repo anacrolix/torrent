@@ -164,10 +164,10 @@ func (p *Piece) VerifyData() {
 	if p.hashing {
 		target++
 	}
-	//log.Printf("target: %d", target)
+	// log.Printf("target: %d", target)
 	p.t.queuePieceCheck(p.index)
 	for {
-		//log.Printf("got %d verifies", p.numVerifies)
+		// log.Printf("got %d verifies", p.numVerifies)
 		if p.numVerifies >= target {
 			break
 		}

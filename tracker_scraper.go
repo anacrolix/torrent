@@ -112,7 +112,6 @@ func (me *trackerScraper) trackerUrl(ip net.IP) string {
 // Return how long to wait before trying again. For most errors, we return 5
 // minutes, a relatively quick turn around for DNS changes.
 func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEvent) (ret trackerAnnounceResult) {
-
 	defer func() {
 		ret.Completed = time.Now()
 	}()
@@ -190,7 +189,6 @@ func (me *trackerScraper) canIgnoreInterval(notify *<-chan struct{}) bool {
 }
 
 func (me *trackerScraper) Run() {
-
 	defer me.announceStopped()
 
 	ctx, cancel := context.WithCancel(context.Background())

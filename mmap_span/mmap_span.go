@@ -44,11 +44,11 @@ func (me *MMapSpan) InitIndex() {
 		i++
 		return l, true
 	})
-	//log.Printf("made mmapspan index: %v", me.segmentLocater)
+	// log.Printf("made mmapspan index: %v", me.segmentLocater)
 }
 
 func (ms *MMapSpan) ReadAt(p []byte, off int64) (n int, err error) {
-	//log.Printf("reading %v bytes at %v", len(p), off)
+	// log.Printf("reading %v bytes at %v", len(p), off)
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 	n = ms.locateCopy(func(a, b []byte) (_, _ []byte) { return a, b }, p, off)
@@ -65,7 +65,7 @@ func copyBytes(dst, src []byte) int {
 func (ms *MMapSpan) locateCopy(copyArgs func(remainingArgument, mmapped []byte) (dst, src []byte), p []byte, off int64) (n int) {
 	ms.segmentLocater.Locate(segments.Extent{off, int64(len(p))}, func(i int, e segments.Extent) bool {
 		mMapBytes := ms.mMaps[i][e.Start:]
-		//log.Printf("got segment %v: %v, copying %v, %v", i, e, len(p), len(mMapBytes))
+		// log.Printf("got segment %v: %v, copying %v, %v", i, e, len(p), len(mMapBytes))
 		_n := copyBytes(copyArgs(p, mMapBytes))
 		p = p[_n:]
 		n += _n

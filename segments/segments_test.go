@@ -67,7 +67,8 @@ func testLocater(t *testing.T, newLocater newLocater) {
 			{0, 1554},
 			{0, 1618},
 			{0, 1546},
-			{0, 8500}})
+			{0, 8500},
+		})
 	assertLocate(t, newLocater,
 		[]Length{1652, 1514, 1554, 1618, 1546, 129241752, 1537, 1536, 1551}, // 128737588
 		Extent{129236992, 16384},
@@ -76,7 +77,8 @@ func testLocater(t *testing.T, newLocater newLocater) {
 			{129229108, 12644},
 			{0, 1537},
 			{0, 1536},
-			{0, 667}})
+			{0, 667},
+		})
 }
 
 func TestScan(t *testing.T) {

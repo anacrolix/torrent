@@ -24,8 +24,10 @@ var safeFilePathTests = []struct {
 	{input: []string{"a", filepath.FromSlash(`b/..`)}, expectErr: false},
 	{input: []string{"a", filepath.FromSlash(`b/../../..`)}, expectErr: true},
 	{input: []string{"a", filepath.FromSlash(`b/../.././..`)}, expectErr: true},
-	{input: []string{
-		filepath.FromSlash(`NewSuperHeroMovie-2019-English-720p.avi /../../../../../Roaming/Microsoft/Windows/Start Menu/Programs/Startup/test3.exe`)},
+	{
+		input: []string{
+			filepath.FromSlash(`NewSuperHeroMovie-2019-English-720p.avi /../../../../../Roaming/Microsoft/Windows/Start Menu/Programs/Startup/test3.exe`),
+		},
 		expectErr: true,
 	},
 }

@@ -224,7 +224,7 @@ func getDictField(dict reflect.Type, key string) (_ dictField, err error) {
 						mapValue.Set(reflect.MakeMap(dict))
 					}
 					// Assigns the value into the map.
-					//log.Printf("map type: %v", mapValue.Type())
+					// log.Printf("map type: %v", mapValue.Type())
 					mapValue.SetMapIndex(reflect.ValueOf(key).Convert(dict.Key()), value)
 				}
 			},
@@ -345,7 +345,7 @@ func (d *Decoder) parseDict(v reflect.Value) error {
 			continue
 		}
 		setValue := reflect.New(df.Type).Elem()
-		//log.Printf("parsing into %v", setValue.Type())
+		// log.Printf("parsing into %v", setValue.Type())
 		ok, err = d.parseValue(setValue)
 		if err != nil {
 			var target *UnmarshalTypeError
@@ -468,7 +468,6 @@ func (d *Decoder) readOneValue() bool {
 	}
 
 	return true
-
 }
 
 func (d *Decoder) parseUnmarshaler(v reflect.Value) bool {

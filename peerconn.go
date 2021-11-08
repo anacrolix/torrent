@@ -481,7 +481,6 @@ func (cn *Peer) totalExpectingTime() (ret time.Duration) {
 		ret += time.Since(cn.lastStartedExpectingToReceiveChunks)
 	}
 	return
-
 }
 
 func (cn *PeerConn) onPeerSentCancel(r Request) {
@@ -961,7 +960,7 @@ func (c *PeerConn) onReadRequest(r Request) error {
 	value := &peerRequestState{}
 	c.peerRequests[r] = value
 	go c.peerRequestDataReader(r, value)
-	//c.tickleWriter()
+	// c.tickleWriter()
 	return nil
 }
 
@@ -1235,7 +1234,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		if cb := c.callbacks.ReadExtendedHandshake; cb != nil {
 			cb(c, &d)
 		}
-		//c.logger.WithDefaultLevel(log.Debug).Printf("received extended handshake message:\n%s", spew.Sdump(d))
+		// c.logger.WithDefaultLevel(log.Debug).Printf("received extended handshake message:\n%s", spew.Sdump(d))
 		if d.Reqq != 0 {
 			c.PeerMaxRequests = d.Reqq
 		}
@@ -1346,7 +1345,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 	// Do we actually want this chunk?
 	if t.haveChunk(ppReq) {
-		//panic(fmt.Sprintf("%+v", ppReq))
+		// panic(fmt.Sprintf("%+v", ppReq))
 		chunksReceived.Add("wasted", 1)
 		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
 		return nil

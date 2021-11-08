@@ -23,8 +23,10 @@ var random_decode_tests = []random_decode_test{
 	{"5:hello", "hello"},
 	{"29:unicode test проверка", "unicode test проверка"},
 	{"d1:ai5e1:b5:helloe", map[string]interface{}{"a": int64(5), "b": "hello"}},
-	{"li5ei10ei15ei20e7:bencodee",
-		[]interface{}{int64(5), int64(10), int64(15), int64(20), "bencode"}},
+	{
+		"li5ei10ei15ei20e7:bencodee",
+		[]interface{}{int64(5), int64(10), int64(15), int64(20), "bencode"},
+	},
 	{"ldedee", []interface{}{map[string]interface{}{}, map[string]interface{}{}}},
 	{"le", []interface{}{}},
 	{"i604919719469385652980544193299329427705624352086e", func() *big.Int {
@@ -135,7 +137,6 @@ func TestUnmarshalerBencode(t *testing.T) {
 	assert_equal(t, ss[0].x, "5:hello")
 	assert_equal(t, ss[1].x, "5:fruit")
 	assert_equal(t, ss[2].x, "3:way")
-
 }
 
 func TestIgnoreUnmarshalTypeError(t *testing.T) {

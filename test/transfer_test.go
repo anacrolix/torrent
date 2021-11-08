@@ -68,7 +68,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	defer os.RemoveAll(greetingTempDir)
 	// Create seeder and a Torrent.
 	cfg := torrent.TestingConfig(t)
-	//cfg.Debug = true
+	// cfg.Debug = true
 	cfg.Seed = true
 	// Some test instances don't like this being on, even when there's no cache involved.
 	cfg.DropMutuallyCompletePeers = false
@@ -116,7 +116,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
 	}
 	cfg.Seed = false
-	//cfg.Debug = true
+	// cfg.Debug = true
 	if ps.ConfigureLeecher.Config != nil {
 		ps.ConfigureLeecher.Config(cfg)
 	}
@@ -180,7 +180,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	leecherPeerConns := leecherTorrent.PeerConns()
 	if cfg.DropMutuallyCompletePeers {
 		// I don't think we can assume it will be empty already, due to timing.
-		//assert.Empty(t, leecherPeerConns)
+		// assert.Empty(t, leecherPeerConns)
 	} else {
 		assert.NotEmpty(t, leecherPeerConns)
 	}
@@ -296,8 +296,8 @@ func testClientTransferSmallCache(t *testing.T, setReadahead bool, readahead int
 		ConfigureLeecher: ConfigureClient{
 			Config: func(cfg *torrent.ClientConfig) {
 				cfg.DropDuplicatePeerIds = true
-				//cfg.DisableIPv6 = true
-				//cfg.DisableUTP = true
+				// cfg.DisableIPv6 = true
+				// cfg.DisableUTP = true
 			},
 		},
 	})

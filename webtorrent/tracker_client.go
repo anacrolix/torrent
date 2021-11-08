@@ -150,7 +150,6 @@ func (tc *TrackerClient) Close() error {
 }
 
 func (tc *TrackerClient) announceOffers() {
-
 	// tc.Announce grabs a lock on tc.outboundOffers. It also handles the case where outboundOffers
 	// is nil. Take ownership of outboundOffers here.
 	tc.mu.Lock()
@@ -256,7 +255,7 @@ func (tc *TrackerClient) trackerReadLoop(tracker *websocket.Conn) error {
 		if err != nil {
 			return fmt.Errorf("read message error: %w", err)
 		}
-		//tc.Logger.WithDefaultLevel(log.Debug).Printf("received message from tracker: %q", message)
+		// tc.Logger.WithDefaultLevel(log.Debug).Printf("received message from tracker: %q", message)
 
 		var ar AnnounceResponse
 		if err := json.Unmarshal(message, &ar); err != nil {
@@ -337,7 +336,7 @@ func (tc *TrackerClient) handleAnswer(offerId string, answer webrtc.SessionDescr
 		tc.Logger.WithDefaultLevel(log.Warning).Printf("could not find offer for id %+q", offerId)
 		return
 	}
-	//tc.Logger.WithDefaultLevel(log.Debug).Printf("offer %q got answer %v", offerId, answer)
+	// tc.Logger.WithDefaultLevel(log.Debug).Printf("offer %q got answer %v", offerId, answer)
 	metrics.Add("outbound offers answered", 1)
 	err := offer.setAnswer(answer, func(dc datachannel.ReadWriteCloser) {
 		metrics.Add("outbound offers answered with datachannel", 1)

@@ -14,9 +14,7 @@ type fileNode struct {
 	f *torrent.File
 }
 
-var (
-	_ fusefs.NodeOpener = fileNode{}
-)
+var _ fusefs.NodeOpener = fileNode{}
 
 func (fn fileNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 	attr.Size = uint64(fn.f.Length())

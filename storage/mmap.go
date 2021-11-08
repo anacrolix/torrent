@@ -132,13 +132,13 @@ func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, e
 
 func mmapFile(name string, size int64) (ret mmap.MMap, err error) {
 	dir := filepath.Dir(name)
-	err = os.MkdirAll(dir, 0750)
+	err = os.MkdirAll(dir, 0o750)
 	if err != nil {
 		err = fmt.Errorf("making directory %q: %s", dir, err)
 		return
 	}
 	var file *os.File
-	file, err = os.OpenFile(name, os.O_CREATE|os.O_RDWR, 0666)
+	file, err = os.OpenFile(name, os.O_CREATE|os.O_RDWR, 0o666)
 	if err != nil {
 		return
 	}

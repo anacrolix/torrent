@@ -68,9 +68,9 @@ func newGreetingLayout() (tl testLayout, err error) {
 		return
 	}
 	tl.Completed = filepath.Join(tl.BaseDir, "completed")
-	os.Mkdir(tl.Completed, 0777)
+	os.Mkdir(tl.Completed, 0o777)
 	tl.MountDir = filepath.Join(tl.BaseDir, "mnt")
-	os.Mkdir(tl.MountDir, 0777)
+	os.Mkdir(tl.MountDir, 0o777)
 	testutil.CreateDummyTorrentData(tl.Completed)
 	tl.Metainfo = testutil.GreetingMetaInfo()
 	return

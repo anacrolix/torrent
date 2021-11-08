@@ -477,7 +477,6 @@ func (cl *Client) rejectAccepted(conn net.Conn) error {
 		}
 		if cl.config.DisableIPv4 && len(rip) == net.IPv4len {
 			return errors.New("ipv4 disabled")
-
 		}
 		if cl.config.DisableIPv6 && len(rip) == net.IPv6len && rip.To4() == nil {
 			return errors.New("ipv6 disabled")
@@ -735,7 +734,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr PeerRemoteAddr) (c *Pee
 		torrent.Add("initiated conn with preferred header obfuscation", 1)
 		return
 	}
-	//cl.logger.Printf("error establishing connection to %s (obfuscatedHeader=%t): %v", addr, obfuscatedHeaderFirst, err)
+	// cl.logger.Printf("error establishing connection to %s (obfuscatedHeader=%t): %v", addr, obfuscatedHeaderFirst, err)
 	if cl.config.HeaderObfuscationPolicy.RequirePreferred {
 		// We should have just tried with the preferred header obfuscation. If it was required,
 		// there's nothing else to try.
@@ -746,7 +745,7 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr PeerRemoteAddr) (c *Pee
 	if err == nil {
 		torrent.Add("initiated conn with fallback header obfuscation", 1)
 	}
-	//cl.logger.Printf("error establishing fallback connection to %v: %v", addr, err)
+	// cl.logger.Printf("error establishing fallback connection to %v: %v", addr, err)
 	return
 }
 

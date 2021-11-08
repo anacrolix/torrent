@@ -256,7 +256,7 @@ func downloadErr(flags downloadFlags) error {
 	if err != nil {
 		return fmt.Errorf("creating client: %w", err)
 	}
-	var clientClose sync.Once //In certain situations, close was being called more than once.
+	var clientClose sync.Once // In certain situations, close was being called more than once.
 	defer clientClose.Do(func() { client.Close() })
 	go exitSignalHandlers(&stop)
 	go func() {

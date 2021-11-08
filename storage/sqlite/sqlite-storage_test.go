@@ -49,7 +49,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 				var opts NewDirectStorageOpts
 				opts.Memory = memory
 				opts.Capacity = capacity
-				//opts.GcBlobs = true
+				// opts.GcBlobs = true
 				opts.BlobFlushInterval = time.Second
 				opts.NoTriggers = noTriggers
 				directBench := func(b *testing.B) {

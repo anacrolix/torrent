@@ -67,7 +67,6 @@ func TestParseMagnetURI(t *testing.T) {
 	if err == nil {
 		t.Errorf("Failed to detect broken Magnet URI: %v", uri)
 	}
-
 }
 
 func TestMagnetize(t *testing.T) {

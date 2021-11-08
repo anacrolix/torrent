@@ -209,7 +209,6 @@ func (t *Torrent) KnownSwarm() (ks []PeerInfo) {
 
 	// Add active peers to the list
 	for conn := range t.conns {
-
 		ks = append(ks, PeerInfo{
 			Id:     conn.PeerID,
 			Addr:   conn.RemoteAddr,
@@ -888,10 +887,10 @@ func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash, err error) {
 	p.waitNoPendingWrites()
 	storagePiece := t.pieces[piece].Storage()
 
-	//Does the backend want to do its own hashing?
+	// Does the backend want to do its own hashing?
 	if i, ok := storagePiece.PieceImpl.(storage.SelfHashing); ok {
 		var sum metainfo.Hash
-		//log.Printf("A piece decided to self-hash: %d", piece)
+		// log.Printf("A piece decided to self-hash: %d", piece)
 		sum, err = i.SelfHash()
 		missinggo.CopyExact(&ret, sum)
 		return
@@ -1506,7 +1505,6 @@ func (t *Torrent) startWebsocketAnnouncer(u url.URL) torrentTrackerAnnouncer {
 		}
 	}()
 	return wst
-
 }
 
 func (t *Torrent) startScrapingTracker(_url string) {

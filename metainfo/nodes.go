@@ -10,9 +10,7 @@ import (
 
 type Node string
 
-var (
-	_ bencode.Unmarshaler = (*Node)(nil)
-)
+var _ bencode.Unmarshaler = (*Node)(nil)
 
 func (n *Node) UnmarshalBencode(b []byte) (err error) {
 	var iface interface{}

@@ -24,28 +24,26 @@ import (
 	"github.com/anacrolix/torrent/util/dirwatch"
 )
 
-var (
-	args = struct {
-		MetainfoDir string `help:"torrent files in this location describe the contents of the mounted filesystem"`
-		DownloadDir string `help:"location to save torrent data"`
-		MountDir    string `help:"location the torrent contents are made available"`
+var args = struct {
+	MetainfoDir string `help:"torrent files in this location describe the contents of the mounted filesystem"`
+	DownloadDir string `help:"location to save torrent data"`
+	MountDir    string `help:"location the torrent contents are made available"`
 
-		DisableTrackers bool
-		TestPeer        *net.TCPAddr
-		ReadaheadBytes  tagflag.Bytes
-		ListenAddr      *net.TCPAddr
-	}{
-		MetainfoDir: func() string {
-			_user, err := user.Current()
-			if err != nil {
-				panic(err)
-			}
-			return filepath.Join(_user.HomeDir, ".config/transmission/torrents")
-		}(),
-		ReadaheadBytes: 10 << 20,
-		ListenAddr:     &net.TCPAddr{},
-	}
-)
+	DisableTrackers bool
+	TestPeer        *net.TCPAddr
+	ReadaheadBytes  tagflag.Bytes
+	ListenAddr      *net.TCPAddr
+}{
+	MetainfoDir: func() string {
+		_user, err := user.Current()
+		if err != nil {
+			panic(err)
+		}
+		return filepath.Join(_user.HomeDir, ".config/transmission/torrents")
+	}(),
+	ReadaheadBytes: 10 << 20,
+	ListenAddr:     &net.TCPAddr{},
+}
 
 func exitSignalHandlers(fs *torrentfs.TorrentFS) {
 	c := make(chan os.Signal, 1)

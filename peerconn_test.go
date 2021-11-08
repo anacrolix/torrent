@@ -28,7 +28,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 		t.Log(err)
 	}
 	r, w := io.Pipe()
-	//c.r = r
+	// c.r = r
 	c.w = w
 	c.startWriter()
 	c.locker().Lock()
@@ -155,7 +155,7 @@ func TestConnPexPeerFlags(t *testing.T) {
 		tcpAddr = &net.TCPAddr{IP: net.IPv6loopback, Port: 4848}
 		udpAddr = &net.UDPAddr{IP: net.IPv6loopback, Port: 4848}
 	)
-	var testcases = []struct {
+	testcases := []struct {
 		conn *PeerConn
 		f    pp.PexPeerFlags
 	}{
@@ -181,7 +181,7 @@ func TestConnPexEvent(t *testing.T) {
 		dialTcpAddr = &net.TCPAddr{IP: net.IPv6loopback, Port: 4747}
 		dialUdpAddr = &net.UDPAddr{IP: net.IPv6loopback, Port: 4747}
 	)
-	var testcases = []struct {
+	testcases := []struct {
 		t pexEventType
 		c *PeerConn
 		e pexEvent

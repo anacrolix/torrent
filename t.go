@@ -232,7 +232,6 @@ func (t *Torrent) initFiles() {
 		})
 		offset += fi.Length
 	}
-
 }
 
 // Returns handles to the files in the torrent. This requires that the Info is

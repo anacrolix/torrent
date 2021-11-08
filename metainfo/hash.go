@@ -59,6 +59,7 @@ var (
 func (h *Hash) UnmarshalText(b []byte) error {
 	return h.FromHexString(string(b))
 }
+
 func (h Hash) MarshalText() (text []byte, err error) {
 	return []byte(h.HexString()), nil
 }

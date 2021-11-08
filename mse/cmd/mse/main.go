@@ -20,7 +20,7 @@ func main() {
 }
 
 func mainErr() error {
-	var args = struct {
+	args := struct {
 		CryptoMethod mse.CryptoMethod
 		Dial         *struct {
 			Network        string `arg:"positional"`

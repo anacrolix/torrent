@@ -10,13 +10,11 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-var (
-	builtinAnnounceList = [][]string{
-		{"http://p4p.arenabg.com:1337/announce"},
-		{"udp://tracker.opentrackr.org:1337/announce"},
-		{"udp://tracker.openbittorrent.com:6969/announce"},
-	}
-)
+var builtinAnnounceList = [][]string{
+	{"http://p4p.arenabg.com:1337/announce"},
+	{"udp://tracker.opentrackr.org:1337/announce"},
+	{"udp://tracker.openbittorrent.com:6969/announce"},
+}
 
 func main() {
 	log.SetFlags(log.Flags() | log.Lshortfile)

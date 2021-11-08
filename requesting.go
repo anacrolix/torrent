@@ -116,8 +116,10 @@ func (p *peerId) GobDecode(b []byte) error {
 	return nil
 }
 
-type RequestIndex = request_strategy.RequestIndex
-type chunkIndexType = request_strategy.ChunkIndex
+type (
+	RequestIndex   = request_strategy.RequestIndex
+	chunkIndexType = request_strategy.ChunkIndex
+)
 
 type peerRequests struct {
 	requestIndexes       []RequestIndex

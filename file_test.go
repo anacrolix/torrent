@@ -40,7 +40,6 @@ func (me testFileBytesLeft) Run(t *testing.T) {
 }
 
 func TestFileBytesLeft(t *testing.T) {
-
 	testFileBytesLeft{
 		usualPieceSize:  3,
 		firstPieceIndex: 1,

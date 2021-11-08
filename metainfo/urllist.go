@@ -6,9 +6,7 @@ import (
 
 type UrlList []string
 
-var (
-	_ bencode.Unmarshaler = (*UrlList)(nil)
-)
+var _ bencode.Unmarshaler = (*UrlList)(nil)
 
 func (me *UrlList) UnmarshalBencode(b []byte) error {
 	if len(b) == 0 {

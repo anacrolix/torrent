@@ -78,7 +78,7 @@ func dstFileName(picked string) string {
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	var rootGroup = struct {
+	rootGroup := struct {
 		Client    *torrent.ClientConfig `group:"Client Options"`
 		TestPeers []string              `long:"test-peer" description:"address of peer to inject to every torrent"`
 		Pick      string                `long:"pick" description:"filename to pick"`

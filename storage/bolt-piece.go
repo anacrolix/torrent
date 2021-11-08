@@ -51,6 +51,7 @@ func (me *boltPiece) MarkComplete() error {
 func (me *boltPiece) MarkNotComplete() error {
 	return me.pc().Set(me.pk(), false)
 }
+
 func (me *boltPiece) ReadAt(b []byte, off int64) (n int, err error) {
 	err = me.db.View(func(tx *bbolt.Tx) error {
 		db := tx.Bucket(dataBucketKey)

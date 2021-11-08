@@ -98,7 +98,7 @@ func testReceiveChunkStorageFailure(t *testing.T, seederFast bool) {
 		}
 	}
 	// TODO: Check that PeerConns fastEnabled matches seederFast?
-	//select {}
+	// select {}
 }
 
 type pieceState struct {

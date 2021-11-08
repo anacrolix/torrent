@@ -330,7 +330,7 @@ func allocatePendingChunks(p requestablePiece, peers []*requestsPeer) {
 	sortPeersForPiece := func(req *RequestIndex) {
 		peersForPieceSorter.req = req
 		sort.Sort(&peersForPieceSorter)
-		//ensureValidSortedPeersForPieceRequests(&peersForPieceSorter)
+		// ensureValidSortedPeersForPieceRequests(&peersForPieceSorter)
 	}
 	// Chunks can be preassigned several times, if peers haven't been able to update their "actual"
 	// with "next" request state before another request strategy run occurs.

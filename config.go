@@ -202,8 +202,8 @@ func NewDefaultClientConfig() *ClientConfig {
 		Extensions:            defaultPeerExtensionBytes(),
 		AcceptPeerConnections: true,
 	}
-	//cc.ConnTracker.SetNoMaxEntries()
-	//cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }
+	// cc.ConnTracker.SetNoMaxEntries()
+	// cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }
 	return cc
 }
 

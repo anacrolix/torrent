@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	var flags = struct {
+	flags := struct {
 		tagflag.StartPos
 		Ips []net.IP
 	}{}

@@ -247,7 +247,8 @@ func TestDontStealUnnecessarily(t *testing.T) {
 				Request:           true,
 				NumPendingChunks:  9,
 				IterPendingChunks: chunkIterRange(9),
-			}},
+			},
+		},
 		Peers: []Peer{
 			firstStealer,
 			stealee,

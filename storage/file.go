@@ -126,7 +126,7 @@ func (fs *fileTorrentImpl) Close() error {
 // writes will ever occur to them (no torrent data is associated with a zero-length file). The
 // caller should make sure the file name provided is safe/sanitized.
 func CreateNativeZeroLengthFile(name string) error {
-	os.MkdirAll(filepath.Dir(name), 0777)
+	os.MkdirAll(filepath.Dir(name), 0o777)
 	var f io.Closer
 	f, err := os.Create(name)
 	if err != nil {
@@ -185,18 +185,18 @@ func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 }
 
 func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
-	//log.Printf("write at %v: %v bytes", off, len(p))
+	// log.Printf("write at %v: %v bytes", off, len(p))
 	fst.fts.segmentLocater.Locate(segments.Extent{off, int64(len(p))}, func(i int, e segments.Extent) bool {
 		name := fst.fts.files[i].path
-		os.MkdirAll(filepath.Dir(name), 0777)
+		os.MkdirAll(filepath.Dir(name), 0o777)
 		var f *os.File
-		f, err = os.OpenFile(name, os.O_WRONLY|os.O_CREATE, 0666)
+		f, err = os.OpenFile(name, os.O_WRONLY|os.O_CREATE, 0o666)
 		if err != nil {
 			return false
 		}
 		var n1 int
 		n1, err = f.WriteAt(p[:e.Length], e.Start)
-		//log.Printf("%v %v wrote %v: %v", i, e, n1, err)
+		// log.Printf("%v %v wrote %v: %v", i, e, n1, err)
 		closeErr := f.Close()
 		n += n1
 		p = p[n1:]

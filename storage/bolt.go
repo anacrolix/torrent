@@ -30,7 +30,7 @@ type boltTorrent struct {
 }
 
 func NewBoltDB(filePath string) ClientImplCloser {
-	db, err := bbolt.Open(filepath.Join(filePath, "bolt.db"), 0600, &bbolt.Options{
+	db, err := bbolt.Open(filepath.Join(filePath, "bolt.db"), 0o600, &bbolt.Options{
 		Timeout: time.Second,
 	})
 	expect.Nil(err)

@@ -15,12 +15,10 @@ import (
 )
 
 const (
-	defaultMode = 0555
+	defaultMode = 0o555
 )
 
-var (
-	torrentfsReadRequests = expvar.NewInt("torrentfsReadRequests")
-)
+var torrentfsReadRequests = expvar.NewInt("torrentfsReadRequests")
 
 type TorrentFS struct {
 	Client       *torrent.Client
@@ -55,9 +53,7 @@ type dirNode struct {
 	node
 }
 
-var (
-	_ fusefs.HandleReadDirAller = dirNode{}
-)
+var _ fusefs.HandleReadDirAller = dirNode{}
 
 func isSubPath(parent, child string) bool {
 	if parent == "" {

@@ -17,8 +17,12 @@ type Reader interface {
 	io.ReadSeekCloser
 	missinggo.ReadContexter
 	// Configure the number of bytes ahead of a read that should also be prioritized in preparation
-	// for further reads.
+	// for further reads. Overridden by non-nil readahead func, see SetReadaheadFunc.
 	SetReadahead(int64)
+	// If non-nil, the provided function is called when the implementation needs to know the
+	// readahead for the current reader. Calls occur during Reads and Seeks, and while the Client is
+	// locked.
+	SetReadaheadFunc(func() int64)
 	// Don't wait for pieces to complete and be verified. Read calls return as soon as they can when
 	// the underlying chunks become available.
 	SetResponsive()
@@ -71,6 +75,13 @@ func (r *reader) SetReadahead(readahead int64) {
 	r.mu.Lock()
 	r.readahead = readahead
 	r.readaheadFunc = nil
+	r.posChanged()
+	r.mu.Unlock()
+}
+
+func (r *reader) SetReadaheadFunc(f func() int64) {
+	r.mu.Lock()
+	r.readaheadFunc = f
 	r.posChanged()
 	r.mu.Unlock()
 }

@@ -21,7 +21,7 @@ type MetaInfo struct {
 	Comment      string  `bencode:"comment,omitempty"`
 	CreatedBy    string  `bencode:"created by,omitempty"`
 	Encoding     string  `bencode:"encoding,omitempty"`
-	UrlList      UrlList `bencode:"url-list,omitempty"` // BEP 19
+	UrlList      UrlList `bencode:"url-list,omitempty"` // BEP 19 WebSeeds
 }
 
 // Load a MetaInfo from an io.Reader. Returns a non-nil error in case of

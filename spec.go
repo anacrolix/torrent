@@ -55,10 +55,12 @@ func TorrentSpecFromMagnetUri(uri string) (spec *TorrentSpec, err error) {
 	return
 }
 
+// The error will be from unmarshalling the info bytes. The TorrentSpec is still filled out as much
+// as possible in this case.
 func TorrentSpecFromMetaInfoErr(mi *metainfo.MetaInfo) (*TorrentSpec, error) {
 	info, err := mi.UnmarshalInfo()
 	if err != nil {
-		return nil, fmt.Errorf("unmarshalling info: %w", err)
+		err = fmt.Errorf("unmarshalling info: %w", err)
 	}
 	return &TorrentSpec{
 		Trackers:    mi.UpvertedAnnounceList(),
@@ -73,9 +75,10 @@ func TorrentSpecFromMetaInfoErr(mi *metainfo.MetaInfo) (*TorrentSpec, error) {
 			}
 			return
 		}(),
-	}, nil
+	}, err
 }
 
+// Panics if there was anything missing from the metainfo.
 func TorrentSpecFromMetaInfo(mi *metainfo.MetaInfo) *TorrentSpec {
 	ts, err := TorrentSpecFromMetaInfoErr(mi)
 	if err != nil {

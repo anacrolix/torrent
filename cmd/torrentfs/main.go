@@ -15,6 +15,7 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
+	"github.com/anacrolix/envpprof"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/tagflag"
@@ -67,6 +68,7 @@ func addTestPeer(client *torrent.Client) {
 }
 
 func main() {
+	defer envpprof.Stop()
 	err := mainErr()
 	if err != nil {
 		log.Printf("error in main: %v", err)

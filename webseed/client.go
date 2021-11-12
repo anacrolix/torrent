@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -123,9 +124,29 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart) error 
 	}
 	switch result.resp.StatusCode {
 	case http.StatusPartialContent:
+		copied, err := io.Copy(buf, result.resp.Body)
+		if err != nil {
+			return err
+		}
+		if copied != part.e.Length {
+			return fmt.Errorf("got %v bytes, expected %v", copied, part.e.Length)
+		}
+		return nil
 	case http.StatusOK:
-		if part.e.Start != 0 {
-			return ErrBadResponse{"got status ok but request was at offset", result.resp}
+		// This number is based on
+		// https://archive.org/download/BloodyPitOfHorror/BloodyPitOfHorror.asr.srt. It seems that
+		// archive.org might be using a webserver implementation that refuses to do partial
+		// responses to small files.
+		if part.e.Start < 48<<10 {
+			log.Printf("resp status ok but requested range [url=%q, range=%q]", part.req.URL, part.req.Header.Get("Range"))
+			discarded, _ := io.CopyN(io.Discard, result.resp.Body, part.e.Start)
+			if discarded != 0 {
+				log.Printf("discarded %v bytes in webseed request response part", discarded)
+			}
+			_, err := io.CopyN(buf, result.resp.Body, part.e.Length)
+			return err
+		} else {
+			return ErrBadResponse{"resp status ok but requested range", result.resp}
 		}
 	default:
 		return ErrBadResponse{
@@ -133,14 +154,6 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart) error 
 			result.resp,
 		}
 	}
-	copied, err := io.Copy(buf, result.resp.Body)
-	if err != nil {
-		return err
-	}
-	if copied != part.e.Length {
-		return fmt.Errorf("got %v bytes, expected %v", copied, part.e.Length)
-	}
-	return nil
 }
 
 func readRequestPartResponses(ctx context.Context, parts []requestPart) ([]byte, error) {

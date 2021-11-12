@@ -82,8 +82,6 @@ type Client struct {
 	websocketTrackers websocketTrackers
 
 	activeAnnounceLimiter limiter.Instance
-
-	updateRequests chansync.BroadcastCond
 }
 
 type ipStr string

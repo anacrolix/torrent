@@ -8,11 +8,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/webseed"
 )
 
@@ -36,8 +35,7 @@ func (ws *webseedPeer) String() string {
 }
 
 func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
-	ws.client.FileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
-	ws.client.Info = info
+	ws.client.SetInfo(info)
 }
 
 func (ws *webseedPeer) writeInterested(interested bool) bool {
@@ -164,4 +162,15 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 
 func (me *webseedPeer) isLowOnRequests() bool {
 	return me.peer.actualRequestState.Requests.GetCardinality() < uint64(me.maxRequests)
+}
+
+func (me *webseedPeer) peerPieces() *roaring.Bitmap {
+	return &me.client.Pieces
+}
+
+func (cn *webseedPeer) peerHasAllPieces() (all, known bool) {
+	if !cn.peer.t.haveInfo() {
+		return true, false
+	}
+	return cn.client.Pieces.GetCardinality() == uint64(cn.peer.t.numPieces()), true
 }

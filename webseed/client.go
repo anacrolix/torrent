@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
+	"github.com/RoaringBitmap/roaring"
+	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
 )
@@ -36,8 +39,23 @@ func (r Request) Cancel() {
 type Client struct {
 	HttpClient *http.Client
 	Url        string
-	FileIndex  segments.Index
-	Info       *metainfo.Info
+	fileIndex  segments.Index
+	info       *metainfo.Info
+	// The pieces we can request with the Url. We're more likely to ban/block at the file-level
+	// given that's how requests are mapped to webseeds, but the torrent.Client works at the piece
+	// level. We can map our file-level adjustments to the pieces here.
+	Pieces roaring.Bitmap
+}
+
+func (me *Client) SetInfo(info *metainfo.Info) {
+	if !strings.HasSuffix(me.Url, "/") && info.IsDir() {
+		// In my experience, this is a non-conforming webseed. For example the
+		// http://ia600500.us.archive.org/1/items URLs in archive.org torrents.
+		return
+	}
+	me.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
+	me.info = info
+	me.Pieces.AddRange(0, uint64(info.NumPieces()))
 }
 
 type RequestResult struct {
@@ -48,8 +66,8 @@ type RequestResult struct {
 func (ws *Client) NewRequest(r RequestSpec) Request {
 	ctx, cancel := context.WithCancel(context.Background())
 	var requestParts []requestPart
-	if !ws.FileIndex.Locate(r, func(i int, e segments.Extent) bool {
-		req, err := NewRequest(ws.Url, i, ws.Info, e.Start, e.Length)
+	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
+		req, err := NewRequest(ws.Url, i, ws.info, e.Start, e.Length)
 		if err != nil {
 			panic(err)
 		}

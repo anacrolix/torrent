@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -25,4 +26,11 @@ type peerImpl interface {
 	drop()
 	String() string
 	connStatusString() string
+
+	// All if the peer should have everything, known if we know that for a fact. For example, we can
+	// guess at how many pieces are in a torrent, and assume they have all pieces based on them
+	// having sent haves for everything, but we don't know for sure. But if they send a have-all
+	// message, then it's clear that they do.
+	peerHasAllPieces() (all, known bool)
+	peerPieces() *roaring.Bitmap
 }

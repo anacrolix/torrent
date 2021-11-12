@@ -2227,7 +2227,6 @@ func (t *Torrent) addWebSeed(url string) {
 		ws.onGotInfo(t.info)
 	}
 	t.webSeeds[url] = &ws.peer
-	ws.peer.onPeerHasAllPieces()
 }
 
 func (t *Torrent) peerIsActive(p *Peer) (active bool) {

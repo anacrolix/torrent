@@ -139,7 +139,11 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart) error 
 		// archive.org might be using a webserver implementation that refuses to do partial
 		// responses to small files.
 		if part.e.Start < 48<<10 {
-			log.Printf("resp status ok but requested range [url=%q, range=%q]", part.req.URL, part.req.Header.Get("Range"))
+			if part.e.Start != 0 {
+				log.Printf("resp status ok but requested range [url=%q, range=%q]",
+					part.req.URL,
+					part.req.Header.Get("Range"))
+			}
 			discarded, _ := io.CopyN(io.Discard, result.resp.Body, part.e.Start)
 			if discarded != 0 {
 				log.Printf("discarded %v bytes in webseed request response part", discarded)

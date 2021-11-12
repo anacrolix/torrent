@@ -44,7 +44,8 @@ type Client struct {
 	info       *metainfo.Info
 	// The pieces we can request with the Url. We're more likely to ban/block at the file-level
 	// given that's how requests are mapped to webseeds, but the torrent.Client works at the piece
-	// level. We can map our file-level adjustments to the pieces here.
+	// level. We can map our file-level adjustments to the pieces here. This probably need to be
+	// private in the future, if Client ever starts removing pieces.
 	Pieces roaring.Bitmap
 }
 

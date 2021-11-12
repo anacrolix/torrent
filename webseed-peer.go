@@ -36,6 +36,12 @@ func (ws *webseedPeer) String() string {
 
 func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
 	ws.client.SetInfo(info)
+	// There should be probably be a callback in Client instead, so it can remove pieces at its whim
+	// too.
+	ws.client.Pieces.Iterate(func(x uint32) bool {
+		ws.peer.t.incPieceAvailability(pieceIndex(x))
+		return true
+	})
 }
 
 func (ws *webseedPeer) writeInterested(interested bool) bool {

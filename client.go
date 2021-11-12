@@ -82,6 +82,7 @@ type Client struct {
 	websocketTrackers websocketTrackers
 
 	activeAnnounceLimiter limiter.Instance
+	webseedHttpClient     *http.Client
 }
 
 type ipStr string
@@ -199,9 +200,14 @@ func (cl *Client) init(cfg *ClientConfig) {
 	cl.torrents = make(map[metainfo.Hash]*Torrent)
 	cl.dialRateLimiter = rate.NewLimiter(10, 10)
 	cl.activeAnnounceLimiter.SlotsPerKey = 2
-
 	cl.event.L = cl.locker()
 	cl.ipBlockList = cfg.IPBlocklist
+	cl.webseedHttpClient = &http.Client{
+		Transport: &http.Transport{
+			Proxy:           cfg.HTTPProxy,
+			MaxConnsPerHost: 10,
+		},
+	}
 }
 
 func NewClient(cfg *ClientConfig) (cl *Client, err error) {

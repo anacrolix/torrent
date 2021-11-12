@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -2180,12 +2179,6 @@ func (t *Torrent) callbacks() *Callbacks {
 	return &t.cl.config.Callbacks
 }
 
-var WebseedHttpClient = &http.Client{
-	Transport: &http.Transport{
-		MaxConnsPerHost: 10,
-	},
-}
-
 func (t *Torrent) addWebSeed(url string) {
 	if t.cl.config.DisableWebseeds {
 		return
@@ -2212,8 +2205,7 @@ func (t *Torrent) addWebSeed(url string) {
 			callbacks:       t.callbacks(),
 		},
 		client: webseed.Client{
-			// Consider a MaxConnsPerHost in the transport for this, possibly in a global Client.
-			HttpClient: WebseedHttpClient,
+			HttpClient: t.cl.webseedHttpClient,
 			Url:        url,
 		},
 		activeRequests: make(map[Request]webseed.Request, maxRequests),

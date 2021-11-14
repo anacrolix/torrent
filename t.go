@@ -42,7 +42,7 @@ func (t *Torrent) newReader(offset, length int64) Reader {
 		offset: offset,
 		length: length,
 	}
-	r.readaheadFunc = r.defaultReadaheadFunc
+	r.readaheadFunc = defaultReadaheadFunc
 	t.addReader(&r)
 	return &r
 }

@@ -144,6 +144,10 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart) error 
 					part.req.URL,
 					part.req.Header.Get("Range"))
 			}
+			// Instead of discarding, we could try receiving all the chunks present in the response
+			// body. I don't know how one would handle multiple chunk requests resulting in an OK
+			// response for the same file. The request algorithm might be need to be smarter for
+			// that.
 			discarded, _ := io.CopyN(io.Discard, result.resp.Body, part.e.Start)
 			if discarded != 0 {
 				log.Printf("discarded %v bytes in webseed request response part", discarded)

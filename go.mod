@@ -10,7 +10,7 @@ require (
 	github.com/anacrolix/args v0.4.1-0.20211104085705-59f0fe94eb8f
 	github.com/anacrolix/chansync v0.3.0
 	github.com/anacrolix/confluence v1.9.0 // indirect
-	github.com/anacrolix/dht/v2 v2.12.1-0.20211112041319-5a641e1d6918
+	github.com/anacrolix/dht/v2 v2.13.0
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/go-libutp v1.0.4
 	github.com/anacrolix/log v0.10.0
@@ -75,9 +75,6 @@ require (
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/rs/dnscache v0.0.0-20210201191234-295bba877686 // indirect
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
-	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/willf/bitset v1.1.11 // indirect
-	github.com/willf/bloom v2.0.3+incompatible // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
@@ -86,5 +83,4 @@ require (
 exclude (
 	bazil.org/fuse v0.0.0-20200419173433-3ba628eaf417
 	bazil.org/fuse v0.0.0-20200524192727-fb710f7dfd05
-	github.com/willf/bitset v1.2.0
 )

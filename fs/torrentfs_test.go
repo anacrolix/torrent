@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"bazil.org/fuse"
-	fusefs "bazil.org/fuse/fs"
+	"github.com/anacrolix/fuse"
+	fusefs "github.com/anacrolix/fuse/fs"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/stretchr/testify/assert"

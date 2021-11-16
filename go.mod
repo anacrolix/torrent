@@ -3,7 +3,6 @@ module github.com/anacrolix/torrent
 go 1.17
 
 require (
-	bazil.org/fuse v0.0.0-20200407214033-5883e5a4b512
 	crawshaw.io/sqlite v0.3.3-0.20210127221821-98b1f83c5508
 	github.com/RoaringBitmap/roaring v0.9.4
 	github.com/alexflint/go-arg v1.4.2
@@ -12,6 +11,7 @@ require (
 	github.com/anacrolix/confluence v1.9.0 // indirect
 	github.com/anacrolix/dht/v2 v2.13.0
 	github.com/anacrolix/envpprof v1.1.1
+	github.com/anacrolix/fuse v0.1.3-0.20211116071634-ed710ec7a030
 	github.com/anacrolix/go-libutp v1.0.4
 	github.com/anacrolix/log v0.10.0
 	github.com/anacrolix/missinggo v1.3.0
@@ -78,9 +78,4 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
-)
-
-exclude (
-	bazil.org/fuse v0.0.0-20200419173433-3ba628eaf417
-	bazil.org/fuse v0.0.0-20200524192727-fb710f7dfd05
 )

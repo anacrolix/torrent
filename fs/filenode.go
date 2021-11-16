@@ -3,8 +3,8 @@ package torrentfs
 import (
 	"context"
 
-	"bazil.org/fuse"
-	fusefs "bazil.org/fuse/fs"
+	"github.com/anacrolix/fuse"
+	fusefs "github.com/anacrolix/fuse/fs"
 
 	"github.com/anacrolix/torrent"
 )

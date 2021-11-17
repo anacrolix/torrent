@@ -260,7 +260,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 
 	for _, _s := range sockets {
 		s := _s // Go is fucking retarded.
-		cl.onClose = append(cl.onClose, func() { s.Close() })
+		cl.onClose = append(cl.onClose, func() { go s.Close() })
 		if peerNetworkEnabled(parseNetworkString(s.Addr().Network()), cl.config) {
 			cl.dialers = append(cl.dialers, s)
 			cl.listeners = append(cl.listeners, s)
@@ -758,6 +758,9 @@ func (cl *Client) establishOutgoingConn(t *Torrent, addr PeerRemoteAddr) (c *Pee
 func (cl *Client) outgoingConnection(t *Torrent, addr PeerRemoteAddr, ps PeerSource, trusted bool) {
 	cl.dialRateLimiter.Wait(context.Background())
 	c, err := cl.establishOutgoingConn(t, addr)
+	if err == nil {
+		c.conn.SetWriteDeadline(time.Time{})
+	}
 	cl.lock()
 	defer cl.unlock()
 	// Don't release lock between here and addPeerConn, unless it's for
@@ -927,6 +930,7 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 		return
 	}
 	torrent.Add("received handshake for loaded torrent", 1)
+	c.conn.SetWriteDeadline(time.Time{})
 	cl.lock()
 	defer cl.unlock()
 	t.runHandshookConnLoggingErr(c)
@@ -943,7 +947,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	if c.PeerID == cl.peerID {
 		if c.outgoing {
 			connsToSelf.Add(1)
-			addr := c.conn.RemoteAddr().String()
+			addr := c.RemoteAddr.String()
 			cl.dopplegangerAddrs[addr] = struct{}{}
 		} /* else {
 			// Because the remote address is not necessarily the same as its client's torrent listen
@@ -953,7 +957,6 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 		t.logger.WithLevel(log.Debug).Printf("local and remote peer ids are the same")
 		return nil
 	}
-	c.conn.SetWriteDeadline(time.Time{})
 	c.r = deadlineReader{c.conn, c.r}
 	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
 	if connIsIpv6(c.conn) {

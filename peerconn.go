@@ -138,7 +138,8 @@ type PeerConn struct {
 	PeerID             PeerID
 	PeerExtensionBytes pp.PeerExtensionBits
 
-	// The actual Conn, used for closing, and setting socket options.
+	// The actual Conn, used for closing, and setting socket options. Do not use methods on this
+	// while holding any mutexes.
 	conn net.Conn
 	// The Reader and Writer for this Conn, with hooks installed for stats,
 	// limiting, deadlines etc.
@@ -426,7 +427,7 @@ func (cn *PeerConn) onClose() {
 	}
 	cn.tickleWriter()
 	if cn.conn != nil {
-		cn.conn.Close()
+		go cn.conn.Close()
 	}
 	if cb := cn.callbacks.PeerConnClosed; cb != nil {
 		cb(cn)

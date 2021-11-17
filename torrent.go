@@ -1468,6 +1468,7 @@ func (t *Torrent) onWebRtcConn(
 	} else {
 		pc.Discovery = PeerSourceIncoming
 	}
+	pc.conn.SetWriteDeadline(time.Time{})
 	t.cl.lock()
 	defer t.cl.unlock()
 	err = t.cl.runHandshookConn(pc, t)

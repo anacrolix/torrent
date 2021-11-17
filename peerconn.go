@@ -242,7 +242,7 @@ func (cn *PeerConn) peerHasAllPieces() (all bool, known bool) {
 	if !cn.t.haveInfo() {
 		return false, false
 	}
-	return roaring.Flip(&cn._peerPieces, 0, bitmap.BitRange(cn.t.numPieces())).IsEmpty(), true
+	return cn._peerPieces.GetCardinality() == uint64(cn.t.numPieces()), true
 }
 
 func (cn *Peer) locker() *lockWithDeferreds {

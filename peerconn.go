@@ -1257,7 +1257,11 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		c.PeerPrefersEncryption = d.Encryption
 		for name, id := range d.M {
 			if _, ok := c.PeerExtensionIDs[name]; !ok {
-				peersSupportingExtension.Add(string(name), 1)
+				peersSupportingExtension.Add(
+					// expvar.Var.String must produce valid JSON. "ut_payme\xeet_address" was being
+					// entered here which caused problems later when unmarshalling.
+					strconv.Quote(string(name)),
+					1)
 			}
 			c.PeerExtensionIDs[name] = id
 		}

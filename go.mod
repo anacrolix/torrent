@@ -49,6 +49,8 @@ require (
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 )
 
+require zombiezen.com/go/sqlite v0.8.0
+
 require (
 	github.com/alexflint/go-scalar v1.1.0 // indirect
 	github.com/anacrolix/mmsg v1.0.0 // indirect
@@ -59,6 +61,7 @@ require (
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/pion/dtls/v2 v2.0.9 // indirect
 	github.com/pion/logging v0.2.2 // indirect
@@ -72,10 +75,15 @@ require (
 	github.com/pion/turn/v2 v2.0.5 // indirect
 	github.com/pion/udp v0.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/rs/dnscache v0.0.0-20210201191234-295bba877686 // indirect
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
+	modernc.org/libc v1.11.3 // indirect
+	modernc.org/mathutil v1.4.1 // indirect
+	modernc.org/memory v1.0.5 // indirect
+	modernc.org/sqlite v1.13.0 // indirect
 )

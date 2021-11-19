@@ -1,5 +1,5 @@
-//go:build cgo && !nosqlite
-// +build cgo,!nosqlite
+//go:build !nosqlite
+// +build !nosqlite
 
 package storage
 
@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"crawshaw.io/sqlite"
-	"crawshaw.io/sqlite/sqlitex"
 	"github.com/anacrolix/torrent/metainfo"
+	"zombiezen.com/go/sqlite"
+	"zombiezen.com/go/sqlite/sqlitex"
 )
 
 type sqlitePieceCompletion struct {

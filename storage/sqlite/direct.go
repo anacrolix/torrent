@@ -6,8 +6,8 @@ package sqliteStorage
 import (
 	"io"
 
-	"crawshaw.io/sqlite"
 	"github.com/anacrolix/squirrel"
+	"zombiezen.com/go/sqlite"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"

@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/anacrolix/fuse"
-	fusefs "github.com/anacrolix/fuse/fs"
 	"github.com/anacrolix/envpprof"
 	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/fuse"
+	fusefs "github.com/anacrolix/fuse/fs"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/tagflag"
 

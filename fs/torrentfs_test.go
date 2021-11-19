@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
+	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/fuse"
 	fusefs "github.com/anacrolix/fuse/fs"
-	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

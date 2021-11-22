@@ -40,7 +40,7 @@ func TestAnnounceLocalhost(t *testing.T) {
 		},
 	}
 	var err error
-	srv.pc, err = net.ListenPacket("udp", ":0")
+	srv.pc, err = net.ListenPacket("udp", "localhost:0")
 	require.NoError(t, err)
 	defer srv.pc.Close()
 	go func() {
@@ -92,7 +92,7 @@ func TestUDPTracker(t *testing.T) {
 		t.Skip(err)
 	}
 	require.NoError(t, err)
-	t.Log(ar)
+	t.Logf("%+v", ar)
 }
 
 func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
@@ -143,7 +143,7 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 
 // Check that URLPath option is done correctly.
 func TestURLPathOption(t *testing.T) {
-	conn, err := net.ListenUDP("udp", nil)
+	conn, err := net.ListenPacket("udp", "localhost:0")
 	if err != nil {
 		panic(err)
 	}
@@ -161,6 +161,7 @@ func TestURLPathOption(t *testing.T) {
 		announceErr <- err
 	}()
 	var b [512]byte
+	// conn.SetReadDeadline(time.Now().Add(time.Second))
 	_, addr, _ := conn.ReadFrom(b[:])
 	r := bytes.NewReader(b[:])
 	var h udp.RequestHeader

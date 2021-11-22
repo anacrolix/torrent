@@ -2,9 +2,9 @@ package udp
 
 import (
 	"context"
+	"log"
 	"net"
 
-	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/missinggo/v2"
 )
 
@@ -20,30 +20,31 @@ type NewConnClientOpts struct {
 // Manages a Client with a specific connection.
 type ConnClient struct {
 	Client  Client
-	conn    net.Conn
+	conn    net.PacketConn
 	d       Dispatcher
 	readErr error
-	ipv6    bool
+	closed  bool
+	newOpts NewConnClientOpts
 }
 
 func (cc *ConnClient) reader() {
 	b := make([]byte, 0x800)
 	for {
-		n, err := cc.conn.Read(b)
+		n, addr, err := cc.conn.ReadFrom(b)
 		if err != nil {
 			// TODO: Do bad things to the dispatcher, and incoming calls to the client if we have a
 			// read error.
 			cc.readErr = err
 			break
 		}
-		_ = cc.d.Dispatch(b[:n])
-		// if err != nil {
-		// 	log.Printf("dispatching packet received on %v (%q): %v", cc.conn, string(b[:n]), err)
-		// }
+		err = cc.d.Dispatch(b[:n], addr)
+		if err != nil {
+			log.Printf("dispatching packet received on %v (%q): %v", cc.conn, string(b[:n]), err)
+		}
 	}
 }
 
-func ipv6(opt *bool, network string, conn net.Conn) bool {
+func ipv6(opt *bool, network string, remoteAddr net.Addr) bool {
 	if opt != nil {
 		return *opt
 	}
@@ -53,21 +54,40 @@ func ipv6(opt *bool, network string, conn net.Conn) bool {
 	case "udp6":
 		return true
 	}
-	rip := missinggo.AddrIP(conn.RemoteAddr())
+	rip := missinggo.AddrIP(remoteAddr)
 	return rip.To16() != nil && rip.To4() == nil
 }
 
+// Allows a UDP Client to write packets to an endpoint without knowing about the network specifics.
+type clientWriter struct {
+	pc      net.PacketConn
+	network string
+	address string
+}
+
+func (me clientWriter) Write(p []byte) (n int, err error) {
+	addr, err := net.ResolveUDPAddr(me.network, me.address)
+	if err != nil {
+		return
+	}
+	return me.pc.WriteTo(p, addr)
+}
+
 func NewConnClient(opts NewConnClientOpts) (cc *ConnClient, err error) {
-	conn, err := net.Dial(opts.Network, opts.Host)
+	conn, err := net.ListenPacket(opts.Network, ":0")
 	if err != nil {
 		return
 	}
 	cc = &ConnClient{
 		Client: Client{
-			Writer: conn,
+			Writer: clientWriter{
+				pc:      conn,
+				network: opts.Network,
+				address: opts.Host,
+			},
 		},
-		conn: conn,
-		ipv6: ipv6(opts.Ipv6, opts.Network, conn),
+		conn:    conn,
+		newOpts: opts,
 	}
 	cc.Client.Dispatcher = &cc.d
 	go cc.reader()
@@ -75,6 +95,7 @@ func NewConnClient(opts NewConnClientOpts) (cc *ConnClient, err error) {
 }
 
 func (c *ConnClient) Close() error {
+	c.closed = true
 	return c.conn.Close()
 }
 
@@ -83,13 +104,7 @@ func (c *ConnClient) Announce(
 ) (
 	h AnnounceResponseHeader, nas AnnounceResponsePeers, err error,
 ) {
-	nas = func() AnnounceResponsePeers {
-		if c.ipv6 {
-			return &krpc.CompactIPv6NodeAddrs{}
-		} else {
-			return &krpc.CompactIPv4NodeAddrs{}
-		}
-	}()
-	h, err = c.Client.Announce(ctx, req, nas, opts)
-	return
+	return c.Client.Announce(ctx, req, opts, func(addr net.Addr) bool {
+		return ipv6(c.newOpts.Ipv6, c.newOpts.Network, addr)
+	})
 }

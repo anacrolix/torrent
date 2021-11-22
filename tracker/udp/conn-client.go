@@ -35,6 +35,9 @@ func (cc *ConnClient) reader() {
 			// TODO: Do bad things to the dispatcher, and incoming calls to the client if we have a
 			// read error.
 			cc.readErr = err
+			if !cc.closed {
+				panic(err)
+			}
 			break
 		}
 		err = cc.d.Dispatch(b[:n], addr)

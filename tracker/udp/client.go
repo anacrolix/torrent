@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -165,7 +164,7 @@ func (cl *Client) request(ctx context.Context, action Action, body []byte) (resp
 			respBody = dr.Body
 			addr = dr.Addr
 		} else if dr.Header.Action == ActionError {
-			err = errors.New(string(dr.Body))
+			err = fmt.Errorf("error response: %s", dr.Body)
 		} else {
 			err = fmt.Errorf("unexpected response action %v", dr.Header.Action)
 		}

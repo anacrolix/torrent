@@ -9,11 +9,15 @@ import (
 )
 
 type NewConnClientOpts struct {
+	// The network to operate to use, such as "udp4", "udp", "udp6".
 	Network string
-	Host    string
-	Ipv6    *bool
+	// Tracker address
+	Host string
+	// If non-nil, forces either IPv4 or IPv6 in the UDP tracker wire protocol.
+	Ipv6 *bool
 }
 
+// Manages a Client with a specific connection.
 type ConnClient struct {
 	Client  Client
 	conn    net.Conn

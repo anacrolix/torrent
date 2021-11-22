@@ -6,6 +6,7 @@ import (
 	"sync"
 )
 
+// Maintains a mapping of transaction IDs to handlers.
 type Dispatcher struct {
 	mu           sync.RWMutex
 	transactions map[TransactionId]Transaction

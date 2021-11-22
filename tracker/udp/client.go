@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+// Client interacts with UDP trackers via its Writer and Dispatcher. It has no knowledge of
+// connection specifics.
 type Client struct {
 	mu           sync.Mutex
 	connId       ConnectionId

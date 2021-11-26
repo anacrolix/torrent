@@ -28,7 +28,6 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/google/go-cmp/cmp"
 	"github.com/pion/datachannel"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -1381,20 +1380,20 @@ func (t *Torrent) assertPendingRequests() {
 	if !check {
 		return
 	}
-	var actual pendingRequests
-	if t.haveInfo() {
-		actual.m = make([]int, t.numRequests())
-	}
-	t.iterPeers(func(p *Peer) {
-		p.actualRequestState.Requests.Iterate(func(x uint32) bool {
-			actual.Inc(x)
-			return true
-		})
-	})
-	diff := cmp.Diff(actual.m, t.pendingRequests.m)
-	if diff != "" {
-		panic(diff)
-	}
+	// var actual pendingRequests
+	// if t.haveInfo() {
+	// 	actual.m = make([]int, t.numRequests())
+	// }
+	// t.iterPeers(func(p *Peer) {
+	// 	p.actualRequestState.Requests.Iterate(func(x uint32) bool {
+	// 		actual.Inc(x)
+	// 		return true
+	// 	})
+	// })
+	// diff := cmp.Diff(actual.m, t.pendingRequests.m)
+	// if diff != "" {
+	// 	panic(diff)
+	// }
 }
 
 func (t *Torrent) dropConnection(c *PeerConn) {

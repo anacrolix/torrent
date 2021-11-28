@@ -1223,6 +1223,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	x := uint32(piece)
 	if complete {
 		t._completedPieces.Add(x)
+		t.openNewConns()
 	} else {
 		t._completedPieces.Remove(x)
 	}
@@ -1811,13 +1812,13 @@ func (t *Torrent) wantConns() bool {
 	if t.closed.IsSet() {
 		return false
 	}
-	if !t.seeding() && !t.needData() {
+	if len(t.conns) >= t.maxEstablishedConns && t.worstBadConn() == nil {
 		return false
 	}
-	if len(t.conns) < t.maxEstablishedConns {
+	if t.seeding() && t.haveAnyPieces() {
 		return true
 	}
-	return t.worstBadConn() != nil
+	return t.needData()
 }
 
 func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {

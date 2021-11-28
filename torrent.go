@@ -1405,6 +1405,7 @@ func (t *Torrent) dropConnection(c *PeerConn) {
 	}
 }
 
+// Peers as in contact information for dialing out.
 func (t *Torrent) wantPeers() bool {
 	if t.closed.IsSet() {
 		return false
@@ -1412,7 +1413,7 @@ func (t *Torrent) wantPeers() bool {
 	if t.peers.Len() > t.cl.config.TorrentPeersLowWater {
 		return false
 	}
-	return t.needData() || t.seeding()
+	return t.wantConns()
 }
 
 func (t *Torrent) updateWantPeersEvent() {

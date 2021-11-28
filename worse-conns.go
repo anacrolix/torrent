@@ -7,15 +7,26 @@ import (
 	"unsafe"
 
 	"github.com/anacrolix/multiless"
+	"github.com/anacrolix/sync"
 )
 
 type worseConnInput struct {
-	Useful             bool
-	LastHelpful        time.Time
-	CompletedHandshake time.Time
-	PeerPriority       peerPriority
-	PeerPriorityErr    error
-	Pointer            uintptr
+	Useful              bool
+	LastHelpful         time.Time
+	CompletedHandshake  time.Time
+	GetPeerPriority     func() (peerPriority, error)
+	getPeerPriorityOnce sync.Once
+	peerPriority        peerPriority
+	peerPriorityErr     error
+	Pointer             uintptr
+}
+
+func (me *worseConnInput) doGetPeerPriority() {
+	me.peerPriority, me.peerPriorityErr = me.GetPeerPriority()
+}
+
+func (me *worseConnInput) doGetPeerPriorityOnce() {
+	me.getPeerPriorityOnce.Do(me.doGetPeerPriority)
 }
 
 func worseConnInputFromPeer(p *Peer) worseConnInput {
@@ -24,23 +35,36 @@ func worseConnInputFromPeer(p *Peer) worseConnInput {
 		LastHelpful:        p.lastHelpful(),
 		CompletedHandshake: p.completedHandshake,
 		Pointer:            uintptr(unsafe.Pointer(p)),
+		GetPeerPriority:    p.peerPriority,
 	}
-	ret.PeerPriority, ret.PeerPriorityErr = p.peerPriority()
 	return ret
 }
 
 func worseConn(_l, _r *Peer) bool {
-	return worseConnInputFromPeer(_l).Less(worseConnInputFromPeer(_r))
+	// TODO: Use generics for ptr to
+	l := worseConnInputFromPeer(_l)
+	r := worseConnInputFromPeer(_r)
+	return l.Less(&r)
 }
 
-func (l worseConnInput) Less(r worseConnInput) bool {
+func (l *worseConnInput) Less(r *worseConnInput) bool {
 	less, ok := multiless.New().Bool(
 		l.Useful, r.Useful).CmpInt64(
 		l.LastHelpful.Sub(r.LastHelpful).Nanoseconds()).CmpInt64(
 		l.CompletedHandshake.Sub(r.CompletedHandshake).Nanoseconds()).LazySameLess(
 		func() (same, less bool) {
-			same = l.PeerPriorityErr != nil || r.PeerPriorityErr != nil || l.PeerPriority == r.PeerPriority
-			less = l.PeerPriority < r.PeerPriority
+			l.doGetPeerPriorityOnce()
+			if l.peerPriorityErr != nil {
+				same = true
+				return
+			}
+			r.doGetPeerPriorityOnce()
+			if r.peerPriorityErr != nil {
+				same = true
+				return
+			}
+			same = l.peerPriority == r.peerPriority
+			less = l.peerPriority < r.peerPriority
 			return
 		}).Uintptr(
 		l.Pointer, r.Pointer,
@@ -53,6 +77,14 @@ func (l worseConnInput) Less(r worseConnInput) bool {
 
 type worseConnSlice struct {
 	conns []*PeerConn
+	keys  []worseConnInput
+}
+
+func (me *worseConnSlice) initKeys() {
+	me.keys = make([]worseConnInput, len(me.conns))
+	for i, c := range me.conns {
+		me.keys[i] = worseConnInputFromPeer(&c.Peer)
+	}
 }
 
 var _ heap.Interface = &worseConnSlice{}
@@ -62,7 +94,7 @@ func (me worseConnSlice) Len() int {
 }
 
 func (me worseConnSlice) Less(i, j int) bool {
-	return worseConn(&me.conns[i].Peer, &me.conns[j].Peer)
+	return me.keys[i].Less(&me.keys[j])
 }
 
 func (me *worseConnSlice) Pop() interface{} {
@@ -73,9 +105,10 @@ func (me *worseConnSlice) Pop() interface{} {
 }
 
 func (me *worseConnSlice) Push(x interface{}) {
-	me.conns = append(me.conns, x.(*PeerConn))
+	panic("not implemented")
 }
 
 func (me worseConnSlice) Swap(i, j int) {
 	me.conns[i], me.conns[j] = me.conns[j], me.conns[i]
+	me.keys[i], me.keys[j] = me.keys[j], me.keys[i]
 }

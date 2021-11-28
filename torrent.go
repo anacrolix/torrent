@@ -908,7 +908,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash, err error) {
 }
 
 func (t *Torrent) haveAnyPieces() bool {
-	return t._completedPieces.GetCardinality() != 0
+	return !t._completedPieces.IsEmpty()
 }
 
 func (t *Torrent) haveAllPieces() bool {

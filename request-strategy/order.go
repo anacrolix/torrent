@@ -2,12 +2,10 @@ package request_strategy
 
 import (
 	"bytes"
-	"fmt"
 	"sort"
 	"sync"
 
 	"github.com/anacrolix/multiless"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
 
 	"github.com/anacrolix/torrent/types"
@@ -163,54 +161,6 @@ func GetRequestablePieces(input Input, f func(t *Torrent, p *Piece, pieceIndex i
 type Input struct {
 	Torrents           []Torrent
 	MaxUnverifiedBytes int64
-}
-
-// TODO: We could do metainfo requests here.
-func Run(input Input) map[PeerId]PeerNextRequestState {
-	var requestPieces []requestablePiece
-	GetRequestablePieces(input, func(t *Torrent, piece *Piece, pieceIndex int) {
-		requestPieces = append(requestPieces, requestablePiece{
-			index:             pieceIndex,
-			t:                 t,
-			NumPendingChunks:  piece.NumPendingChunks,
-			IterPendingChunks: piece.iterPendingChunksWrapper,
-			alwaysReallocate:  piece.Priority >= types.PiecePriorityNext,
-		})
-	})
-	torrents := input.Torrents
-	allPeers := make(map[metainfo.Hash][]*requestsPeer, len(torrents))
-	for _, t := range torrents {
-		peers := make([]*requestsPeer, 0, len(t.Peers))
-		for _, p := range t.Peers {
-			peers = append(peers, &requestsPeer{
-				Peer: p,
-			})
-		}
-		allPeers[t.InfoHash] = peers
-	}
-	for _, piece := range requestPieces {
-		for _, peer := range allPeers[piece.t.InfoHash] {
-			if peer.canRequestPiece(piece.index) {
-				peer.requestablePiecesRemaining++
-			}
-		}
-	}
-	for _, piece := range requestPieces {
-		allocatePendingChunks(piece, allPeers[piece.t.InfoHash])
-	}
-	ret := make(map[PeerId]PeerNextRequestState)
-	for _, peers := range allPeers {
-		for _, rp := range peers {
-			if rp.requestablePiecesRemaining != 0 {
-				panic(rp.requestablePiecesRemaining)
-			}
-			if _, ok := ret[rp.Id]; ok {
-				panic(fmt.Sprintf("duplicate peer id: %v", rp.Id))
-			}
-			ret[rp.Id] = rp.nextState
-		}
-	}
-	return ret
 }
 
 // Checks that a sorted peersForPiece slice makes sense.

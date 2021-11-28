@@ -44,28 +44,6 @@ func (cl *Client) getRequestStrategyInput() request_strategy.Input {
 				IterPendingChunks: &p.undirtiedChunksIter,
 			})
 		}
-		t.iterPeers(func(p *Peer) {
-			if p.closed.IsSet() {
-				return
-			}
-			if p.piecesReceivedSinceLastRequestUpdate > p.maxPiecesReceivedBetweenRequestUpdates {
-				p.maxPiecesReceivedBetweenRequestUpdates = p.piecesReceivedSinceLastRequestUpdate
-			}
-			p.piecesReceivedSinceLastRequestUpdate = 0
-			rst.Peers = append(rst.Peers, request_strategy.Peer{
-				Pieces:           *p.newPeerPieces(),
-				MaxRequests:      p.nominalMaxRequests(),
-				ExistingRequests: p.actualRequestState.Requests,
-				Choking:          p.peerChoking,
-				PieceAllowedFast: p.peerAllowedFast,
-				DownloadRate:     p.downloadRate(),
-				Age:              time.Since(p.completedHandshake),
-				Id: peerId{
-					Peer: p,
-					ptr:  uintptr(unsafe.Pointer(p)),
-				},
-			})
-		})
 		ts = append(ts, rst)
 	}
 	return request_strategy.Input{

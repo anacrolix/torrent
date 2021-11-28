@@ -1525,7 +1525,7 @@ func (cn *Peer) netGoodPiecesDirtied() int64 {
 
 func (c *Peer) peerHasWantedPieces() bool {
 	if all, _ := c.peerHasAllPieces(); all {
-		return !c.t.haveAllPieces()
+		return !c.t.haveAllPieces() && !c.t._pendingPieces.IsEmpty()
 	}
 	if !c.t.haveInfo() {
 		return !c.peerPieces().IsEmpty()

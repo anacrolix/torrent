@@ -1671,7 +1671,10 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 			if t.closed.IsSet() {
 				return
 			}
-			if !t.wantPeers() {
+			// We're also announcing ourselves as a listener, so we don't just want peer addresses.
+			// TODO: We can include the announce_peer step depending on whether we can receive
+			// inbound connections. We should probably only announce once every 15 mins too.
+			if !t.wantConns() {
 				goto wait
 			}
 			// TODO: Determine if there's a listener on the port we're announcing.

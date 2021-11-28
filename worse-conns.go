@@ -3,30 +3,47 @@ package torrent
 import (
 	"container/heap"
 	"fmt"
+	"time"
 	"unsafe"
 
 	"github.com/anacrolix/multiless"
 )
 
-func worseConn(l, r *Peer) bool {
+type worseConnInput struct {
+	Useful             bool
+	LastHelpful        time.Time
+	CompletedHandshake time.Time
+	PeerPriority       peerPriority
+	PeerPriorityErr    error
+	Pointer            uintptr
+}
+
+func worseConnInputFromPeer(p *Peer) worseConnInput {
+	ret := worseConnInput{
+		Useful:             p.useful(),
+		LastHelpful:        p.lastHelpful(),
+		CompletedHandshake: p.completedHandshake,
+		Pointer:            uintptr(unsafe.Pointer(p)),
+	}
+	ret.PeerPriority, ret.PeerPriorityErr = p.peerPriority()
+	return ret
+}
+
+func worseConn(_l, _r *Peer) bool {
+	return worseConnInputFromPeer(_l).Less(worseConnInputFromPeer(_r))
+}
+
+func (l worseConnInput) Less(r worseConnInput) bool {
 	less, ok := multiless.New().Bool(
-		l.useful(), r.useful()).CmpInt64(
-		l.lastHelpful().Sub(r.lastHelpful()).Nanoseconds()).CmpInt64(
-		l.completedHandshake.Sub(r.completedHandshake).Nanoseconds()).LazySameLess(
+		l.Useful, r.Useful).CmpInt64(
+		l.LastHelpful.Sub(r.LastHelpful).Nanoseconds()).CmpInt64(
+		l.CompletedHandshake.Sub(r.CompletedHandshake).Nanoseconds()).LazySameLess(
 		func() (same, less bool) {
-			lpp, err := l.peerPriority()
-			if err != nil {
-				same = true
-				return
-			}
-			rpp, err := r.peerPriority()
-			if err != nil {
-				same = true
-				return
-			}
-			return lpp == rpp, lpp < rpp
+			same = l.PeerPriorityErr != nil || r.PeerPriorityErr != nil || l.PeerPriority == r.PeerPriority
+			less = l.PeerPriority < r.PeerPriority
+			return
 		}).Uintptr(
-		uintptr(unsafe.Pointer(l)), uintptr(unsafe.Pointer(r)),
+		l.Pointer, r.Pointer,
 	).LessOk()
 	if !ok {
 		panic(fmt.Sprintf("cannot differentiate %#v and %#v", l, r))

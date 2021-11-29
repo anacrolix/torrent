@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
+	"net"
 	"sync"
 	"time"
+
+	"github.com/anacrolix/dht/v2/krpc"
 )
 
+// Client interacts with UDP trackers via its Writer and Dispatcher. It has no knowledge of
+// connection specifics.
 type Client struct {
 	mu           sync.Mutex
 	connId       ConnectionId
@@ -20,11 +24,16 @@ type Client struct {
 }
 
 func (cl *Client) Announce(
-	ctx context.Context, req AnnounceRequest, peers AnnounceResponsePeers, opts Options,
+	ctx context.Context, req AnnounceRequest, opts Options,
+	// Decides whether the response body is IPv6 or IPv4, see BEP 15.
+	ipv6 func(net.Addr) bool,
 ) (
-	respHdr AnnounceResponseHeader, err error,
+	respHdr AnnounceResponseHeader,
+	// A slice of krpc.NodeAddr, likely wrapped in an appropriate unmarshalling wrapper.
+	peers AnnounceResponsePeers,
+	err error,
 ) {
-	respBody, err := cl.request(ctx, ActionAnnounce, append(mustMarshal(req), opts.Encode()...))
+	respBody, addr, err := cl.request(ctx, ActionAnnounce, append(mustMarshal(req), opts.Encode()...))
 	if err != nil {
 		return
 	}
@@ -34,6 +43,11 @@ func (cl *Client) Announce(
 		err = fmt.Errorf("reading response header: %w", err)
 		return
 	}
+	if ipv6(addr) {
+		peers = &krpc.CompactIPv6NodeAddrs{}
+	} else {
+		peers = &krpc.CompactIPv4NodeAddrs{}
+	}
 	err = peers.UnmarshalBinary(r.Bytes())
 	if err != nil {
 		err = fmt.Errorf("reading response peers: %w", err)
@@ -41,13 +55,13 @@ func (cl *Client) Announce(
 	return
 }
 
+// There's no way to pass options in a scrape, since we don't when the request body ends.
 func (cl *Client) Scrape(
 	ctx context.Context, ihs []InfoHash,
 ) (
 	out ScrapeResponse, err error,
 ) {
-	// There's no way to pass options in a scrape, since we don't when the request body ends.
-	respBody, err := cl.request(ctx, ActionScrape, mustMarshal(ScrapeRequest(ihs)))
+	respBody, _, err := cl.request(ctx, ActionScrape, mustMarshal(ScrapeRequest(ihs)))
 	if err != nil {
 		return
 	}
@@ -75,7 +89,7 @@ func (cl *Client) connect(ctx context.Context) (err error) {
 	if !cl.connIdIssued.IsZero() && time.Since(cl.connIdIssued) < time.Minute {
 		return nil
 	}
-	respBody, err := cl.request(ctx, ActionConnect, nil)
+	respBody, _, err := cl.request(ctx, ActionConnect, nil)
 	if err != nil {
 		return err
 	}
@@ -132,7 +146,7 @@ func (cl *Client) requestWriter(ctx context.Context, action Action, body []byte,
 	}
 }
 
-func (cl *Client) request(ctx context.Context, action Action, body []byte) (respBody []byte, err error) {
+func (cl *Client) request(ctx context.Context, action Action, body []byte) (respBody []byte, addr net.Addr, err error) {
 	respChan := make(chan DispatchedResponse, 1)
 	t := cl.Dispatcher.NewTransaction(func(dr DispatchedResponse) {
 		respChan <- dr
@@ -148,8 +162,9 @@ func (cl *Client) request(ctx context.Context, action Action, body []byte) (resp
 	case dr := <-respChan:
 		if dr.Header.Action == action {
 			respBody = dr.Body
+			addr = dr.Addr
 		} else if dr.Header.Action == ActionError {
-			err = errors.New(string(dr.Body))
+			err = fmt.Errorf("error response: %s", dr.Body)
 		} else {
 			err = fmt.Errorf("unexpected response action %v", dr.Header.Action)
 		}

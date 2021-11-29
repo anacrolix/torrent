@@ -3,16 +3,18 @@ package udp
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"sync"
 )
 
+// Maintains a mapping of transaction IDs to handlers.
 type Dispatcher struct {
 	mu           sync.RWMutex
 	transactions map[TransactionId]Transaction
 }
 
 // The caller owns b.
-func (me *Dispatcher) Dispatch(b []byte) error {
+func (me *Dispatcher) Dispatch(b []byte, addr net.Addr) error {
 	buf := bytes.NewBuffer(b)
 	var rh ResponseHeader
 	err := Read(buf, &rh)
@@ -25,6 +27,7 @@ func (me *Dispatcher) Dispatch(b []byte) error {
 		t.h(DispatchedResponse{
 			Header: rh,
 			Body:   append([]byte(nil), buf.Bytes()...),
+			Addr:   addr,
 		})
 		return nil
 	} else {
@@ -61,5 +64,8 @@ func (me *Dispatcher) NewTransaction(h TransactionResponseHandler) Transaction {
 
 type DispatchedResponse struct {
 	Header ResponseHeader
-	Body   []byte
+	// Response payload, after the header.
+	Body []byte
+	// Response source address
+	Addr net.Addr
 }

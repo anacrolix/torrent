@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/anacrolix/multiless"
-	"github.com/anacrolix/torrent/storage"
 
 	"github.com/anacrolix/torrent/types"
 )
@@ -26,8 +25,6 @@ type ClientPieceOrder struct{}
 type filterTorrent struct {
 	*Torrent
 	unverifiedBytes int64
-	// Potentially shared with other torrents.
-	storageLeft *int64
 }
 
 func sortFilterPieces(pieces []filterPiece) {
@@ -104,24 +101,16 @@ func GetRequestablePieces(input Input, f func(t *Torrent, p *Piece, pieceIndex i
 	pieces := make([]filterPiece, 0, maxPieces)
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
 	// TorrentImpl. A nil value means no capacity limit.
-	storageLeft := make(map[storage.TorrentCapacity]*int64)
+	var storageLeft *int64
+	if input.Capacity != nil {
+		storageLeft = new(int64)
+		*storageLeft = *input.Capacity
+	}
 	for _t := range input.Torrents {
 		// TODO: We could do metainfo requests here.
 		t := &filterTorrent{
 			Torrent:         &input.Torrents[_t],
 			unverifiedBytes: 0,
-		}
-		key := t.Capacity
-		if key != nil {
-			if _, ok := storageLeft[key]; !ok {
-				capacity, ok := (*key)()
-				if ok {
-					storageLeft[key] = &capacity
-				} else {
-					storageLeft[key] = nil
-				}
-			}
-			t.storageLeft = storageLeft[key]
 		}
 		for i := range t.Pieces {
 			pieces = append(pieces, filterPiece{
@@ -134,11 +123,11 @@ func GetRequestablePieces(input Input, f func(t *Torrent, p *Piece, pieceIndex i
 	sortFilterPieces(pieces)
 	var allTorrentsUnverifiedBytes int64
 	for _, piece := range pieces {
-		if left := piece.t.storageLeft; left != nil {
-			if *left < int64(piece.Length) {
+		if left := storageLeft; left != nil {
+			if *left < piece.Length {
 				continue
 			}
-			*left -= int64(piece.Length)
+			*left -= piece.Length
 		}
 		if !piece.Request || piece.NumPendingChunks == 0 {
 			// TODO: Clarify exactly what is verified. Stuff that's being hashed should be
@@ -159,7 +148,14 @@ func GetRequestablePieces(input Input, f func(t *Torrent, p *Piece, pieceIndex i
 }
 
 type Input struct {
-	Torrents           []Torrent
+	// This is all torrents that share the same capacity below (or likely a single torrent if there
+	// is infinite capacity, since you could just run it separately for each Torrent if that's the
+	// case).
+	Torrents []Torrent
+	// Must not be modified. Non-nil if capacity is not infinite, meaning that pieces of torrents
+	// that share the same capacity key must be incorporated in piece ordering.
+	Capacity *int64
+	// Across all the Torrents. This might be partitioned by storage capacity key now.
 	MaxUnverifiedBytes int64
 }
 

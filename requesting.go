@@ -16,41 +16,60 @@ import (
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 )
 
-func (cl *Client) getRequestStrategyInput() request_strategy.Input {
-	ts := make([]request_strategy.Torrent, 0, len(cl.torrents))
+// Returns what is necessary to run request_strategy.GetRequestablePieces for primaryTorrent.
+func (cl *Client) getRequestStrategyInput(primaryTorrent *Torrent) (input request_strategy.Input) {
+	input.MaxUnverifiedBytes = cl.config.MaxUnverifiedBytes
+	if !primaryTorrent.haveInfo() {
+		return
+	}
+	if capFunc := primaryTorrent.storage.Capacity; capFunc != nil {
+		if cap, ok := (*capFunc)(); ok {
+			input.Capacity = &cap
+		}
+	}
+	if input.Capacity == nil {
+		input.Torrents = []request_strategy.Torrent{primaryTorrent.requestStrategyTorrentInput()}
+		return
+	}
+	input.Torrents = make([]request_strategy.Torrent, 0, len(cl.torrents))
 	for _, t := range cl.torrents {
 		if !t.haveInfo() {
-			// This would be removed if metadata is handled here. We have to guard against not
-			// knowing the piece size. If we have no info, we have no pieces too, so the end result
-			// is the same.
+			// This would be removed if metadata is handled here. Determining chunks per piece
+			// requires the info. If we have no info, we have no pieces too, so the end result is
+			// the same.
 			continue
 		}
-		rst := request_strategy.Torrent{
-			InfoHash:       t.infoHash,
-			ChunksPerPiece: t.chunksPerRegularPiece(),
+		if t.storage.Capacity != primaryTorrent.storage.Capacity {
+			continue
 		}
-		if t.storage != nil {
-			rst.Capacity = t.storage.Capacity
-		}
-		rst.Pieces = make([]request_strategy.Piece, 0, len(t.pieces))
-		for i := range t.pieces {
-			p := &t.pieces[i]
-			rst.Pieces = append(rst.Pieces, request_strategy.Piece{
-				Request:           !t.ignorePieceForRequests(i),
-				Priority:          p.purePriority(),
-				Partial:           t.piecePartiallyDownloaded(i),
-				Availability:      p.availability,
-				Length:            int64(p.length()),
-				NumPendingChunks:  int(t.pieceNumPendingChunks(i)),
-				IterPendingChunks: &p.undirtiedChunksIter,
-			})
-		}
-		ts = append(ts, rst)
+		input.Torrents = append(input.Torrents, t.requestStrategyTorrentInput())
 	}
-	return request_strategy.Input{
-		Torrents:           ts,
-		MaxUnverifiedBytes: cl.config.MaxUnverifiedBytes,
+	return
+}
+
+func (t *Torrent) getRequestStrategyInput() request_strategy.Input {
+	return t.cl.getRequestStrategyInput(t)
+}
+
+func (t *Torrent) requestStrategyTorrentInput() request_strategy.Torrent {
+	rst := request_strategy.Torrent{
+		InfoHash:       t.infoHash,
+		ChunksPerPiece: t.chunksPerRegularPiece(),
 	}
+	rst.Pieces = make([]request_strategy.Piece, 0, len(t.pieces))
+	for i := range t.pieces {
+		p := &t.pieces[i]
+		rst.Pieces = append(rst.Pieces, request_strategy.Piece{
+			Request:           !t.ignorePieceForRequests(i),
+			Priority:          p.purePriority(),
+			Partial:           t.piecePartiallyDownloaded(i),
+			Availability:      p.availability,
+			Length:            int64(p.length()),
+			NumPendingChunks:  int(t.pieceNumPendingChunks(i)),
+			IterPendingChunks: &p.undirtiedChunksIter,
+		})
+	}
+	return rst
 }
 
 func init() {
@@ -173,7 +192,7 @@ type desiredRequestState struct {
 }
 
 func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
-	input := p.t.cl.getRequestStrategyInput()
+	input := p.t.getRequestStrategyInput()
 	requestHeap := peerRequests{
 		peer: p,
 	}

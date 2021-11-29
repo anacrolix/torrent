@@ -98,7 +98,7 @@ type (
 type peerRequests struct {
 	requestIndexes       []RequestIndex
 	peer                 *Peer
-	torrentStrategyInput request_strategy.Torrent
+	torrentStrategyInput *request_strategy.Torrent
 }
 
 func (p *peerRequests) Len() int {
@@ -176,7 +176,8 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	requestHeap := peerRequests{
 		peer: p,
 	}
-	for _, t := range input.Torrents {
+	for i := range input.Torrents {
+		t := &input.Torrents[i]
 		if t.InfoHash == p.t.infoHash {
 			requestHeap.torrentStrategyInput = t
 			break

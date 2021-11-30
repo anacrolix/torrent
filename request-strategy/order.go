@@ -45,8 +45,8 @@ func equalFilterPieces(l, r []filterPiece) bool {
 
 func sortFilterPieces(pieces []filterPiece, indices []int) {
 	sort.Slice(indices, func(_i, _j int) bool {
-		i := &pieces[_i]
-		j := &pieces[_j]
+		i := &pieces[indices[_i]]
+		j := &pieces[indices[_j]]
 		return multiless.New().Int(
 			int(j.Priority), int(i.Priority),
 		).Bool(

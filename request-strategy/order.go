@@ -2,10 +2,13 @@ package request_strategy
 
 import (
 	"bytes"
+	"expvar"
+	"runtime"
 	"sort"
 	"sync"
 
 	"github.com/anacrolix/multiless"
+	"github.com/anacrolix/torrent/metainfo"
 
 	"github.com/anacrolix/torrent/types"
 )
@@ -22,13 +25,26 @@ type (
 
 type ClientPieceOrder struct{}
 
-type filterTorrent struct {
-	*Torrent
-	unverifiedBytes int64
+func equalFilterPieces(l, r []filterPiece) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		lp := &l[i]
+		rp := &r[i]
+		if lp.Priority != rp.Priority ||
+			lp.Partial != rp.Partial ||
+			lp.Availability != rp.Availability ||
+			lp.index != rp.index ||
+			lp.t.InfoHash != rp.t.InfoHash {
+			return false
+		}
+	}
+	return true
 }
 
-func sortFilterPieces(pieces []filterPiece) {
-	sort.Slice(pieces, func(_i, _j int) bool {
+func sortFilterPieces(pieces []filterPiece, indices []int) {
+	sort.Slice(indices, func(_i, _j int) bool {
 		i := &pieces[_i]
 		j := &pieces[_j]
 		return multiless.New().Int(
@@ -87,9 +103,54 @@ func (p *requestablePiece) chunkIndexToRequestIndex(c ChunkIndex) RequestIndex {
 }
 
 type filterPiece struct {
-	t     *filterTorrent
+	t     *Torrent
 	index pieceIndex
 	*Piece
+}
+
+var (
+	sortsMu sync.Mutex
+	sorts   = map[*[]filterPiece][]int{}
+)
+
+func reorderedFilterPieces(pieces []filterPiece, indices []int) (ret []filterPiece) {
+	ret = make([]filterPiece, len(indices))
+	for i, j := range indices {
+		ret[i] = pieces[j]
+	}
+	return
+}
+
+var packageExpvarMap = expvar.NewMap("request-strategy")
+
+func getSortedFilterPieces(unsorted []filterPiece) []filterPiece {
+	sortsMu.Lock()
+	defer sortsMu.Unlock()
+	for key, order := range sorts {
+		if equalFilterPieces(*key, unsorted) {
+			packageExpvarMap.Add("reused filter piece ordering", 1)
+			return reorderedFilterPieces(unsorted, order)
+		}
+	}
+	sorted := append(make([]filterPiece, 0, len(unsorted)), unsorted...)
+	indices := make([]int, len(sorted))
+	for i := 0; i < len(indices); i++ {
+		indices[i] = i
+	}
+	sortFilterPieces(sorted, indices)
+	packageExpvarMap.Add("added filter piece ordering", 1)
+	sorts[&unsorted] = indices
+	runtime.SetFinalizer(&pieceOrderingFinalizer{unsorted: &unsorted}, func(me *pieceOrderingFinalizer) {
+		packageExpvarMap.Add("finalized filter piece ordering", 1)
+		sortsMu.Lock()
+		defer sortsMu.Unlock()
+		delete(sorts, me.unsorted)
+	})
+	return reorderedFilterPieces(unsorted, indices)
+}
+
+type pieceOrderingFinalizer struct {
+	unsorted *[]filterPiece
 }
 
 // Calls f with requestable pieces in order.
@@ -108,20 +169,18 @@ func GetRequestablePieces(input Input, f func(t *Torrent, p *Piece, pieceIndex i
 	}
 	for _t := range input.Torrents {
 		// TODO: We could do metainfo requests here.
-		t := &filterTorrent{
-			Torrent:         &input.Torrents[_t],
-			unverifiedBytes: 0,
-		}
+		t := &input.Torrents[_t]
 		for i := range t.Pieces {
 			pieces = append(pieces, filterPiece{
-				t:     t,
+				t:     &input.Torrents[_t],
 				index: i,
 				Piece: &t.Pieces[i],
 			})
 		}
 	}
-	sortFilterPieces(pieces)
+	pieces = getSortedFilterPieces(pieces)
 	var allTorrentsUnverifiedBytes int64
+	torrentUnverifiedBytes := map[metainfo.Hash]int64{}
 	for _, piece := range pieces {
 		if left := storageLeft; left != nil {
 			if *left < piece.Length {
@@ -134,15 +193,15 @@ func GetRequestablePieces(input Input, f func(t *Torrent, p *Piece, pieceIndex i
 			// considered unverified and hold up further requests.
 			continue
 		}
-		if piece.t.MaxUnverifiedBytes != 0 && piece.t.unverifiedBytes+piece.Length > piece.t.MaxUnverifiedBytes {
+		if piece.t.MaxUnverifiedBytes != 0 && torrentUnverifiedBytes[piece.t.InfoHash]+piece.Length > piece.t.MaxUnverifiedBytes {
 			continue
 		}
 		if input.MaxUnverifiedBytes != 0 && allTorrentsUnverifiedBytes+piece.Length > input.MaxUnverifiedBytes {
 			continue
 		}
-		piece.t.unverifiedBytes += piece.Length
+		torrentUnverifiedBytes[piece.t.InfoHash] += piece.Length
 		allTorrentsUnverifiedBytes += piece.Length
-		f(piece.t.Torrent, piece.Piece, piece.index)
+		f(piece.t, piece.Piece, piece.index)
 	}
 	return
 }

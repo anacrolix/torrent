@@ -1091,6 +1091,9 @@ func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
 			if !c.peerHasPiece(piece) {
 				return
 			}
+			if c.peerChoking && !c.peerAllowedFast.Contains(uint32(piece)) {
+				return
+			}
 			c.updateRequests(reason)
 		})
 	}

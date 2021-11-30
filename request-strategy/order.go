@@ -43,25 +43,37 @@ func equalFilterPieces(l, r []filterPiece) bool {
 	return true
 }
 
-func sortFilterPieces(pieces []filterPiece, indices []int) {
-	sort.Slice(indices, func(_i, _j int) bool {
-		i := &pieces[indices[_i]]
-		j := &pieces[indices[_j]]
-		return multiless.New().Int(
-			int(j.Priority), int(i.Priority),
-		).Bool(
-			j.Partial, i.Partial,
-		).Int64(
-			i.Availability, j.Availability,
-		).Int(
-			i.index, j.index,
-		).Lazy(func() multiless.Computation {
-			return multiless.New().Cmp(bytes.Compare(
-				i.t.InfoHash[:],
-				j.t.InfoHash[:],
-			))
-		}).MustLess()
-	})
+type pieceSorter struct {
+	swap func(i, j int)
+	get  func(i int) *filterPiece
+	len  int
+}
+
+func (me pieceSorter) Len() int {
+	return me.len
+}
+
+func (me pieceSorter) Swap(i, j int) {
+	me.swap(i, j)
+}
+
+func (me pieceSorter) Less(_i, _j int) bool {
+	i := me.get(_i)
+	j := me.get(_j)
+	return multiless.New().Int(
+		int(j.Priority), int(i.Priority),
+	).Bool(
+		j.Partial, i.Partial,
+	).Int64(
+		i.Availability, j.Availability,
+	).Int(
+		i.index, j.index,
+	).Lazy(func() multiless.Computation {
+		return multiless.New().Cmp(bytes.Compare(
+			i.t.InfoHash[:],
+			j.t.InfoHash[:],
+		))
+	}).MustLess()
 }
 
 type requestsPeer struct {
@@ -124,6 +136,19 @@ func reorderedFilterPieces(pieces []filterPiece, indices []int) (ret []filterPie
 var packageExpvarMap = expvar.NewMap("request-strategy")
 
 func getSortedFilterPieces(unsorted []filterPiece) []filterPiece {
+	const cachePieceSorts = false
+	if !cachePieceSorts {
+		sort.Sort(pieceSorter{
+			len: len(unsorted),
+			swap: func(i, j int) {
+				unsorted[i], unsorted[j] = unsorted[j], unsorted[i]
+			},
+			get: func(i int) *filterPiece {
+				return &unsorted[i]
+			},
+		})
+		return unsorted
+	}
 	sortsMu.Lock()
 	defer sortsMu.Unlock()
 	for key, order := range sorts {
@@ -132,12 +157,19 @@ func getSortedFilterPieces(unsorted []filterPiece) []filterPiece {
 			return reorderedFilterPieces(unsorted, order)
 		}
 	}
-	sorted := append(make([]filterPiece, 0, len(unsorted)), unsorted...)
-	indices := make([]int, len(sorted))
+	indices := make([]int, len(unsorted))
 	for i := 0; i < len(indices); i++ {
 		indices[i] = i
 	}
-	sortFilterPieces(sorted, indices)
+	sort.Sort(pieceSorter{
+		len: len(unsorted),
+		swap: func(i, j int) {
+			indices[i], indices[j] = indices[j], indices[i]
+		},
+		get: func(i int) *filterPiece {
+			return &unsorted[indices[i]]
+		},
+	})
 	packageExpvarMap.Add("added filter piece ordering", 1)
 	sorts[&unsorted] = indices
 	runtime.SetFinalizer(&pieceOrderingFinalizer{unsorted: &unsorted}, func(me *pieceOrderingFinalizer) {

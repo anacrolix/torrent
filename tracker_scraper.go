@@ -81,6 +81,12 @@ func (me *trackerScraper) getIp() (ip net.IP, err error) {
 		err = errors.New("no ips")
 		return
 	}
+	me.t.cl.rLock()
+	defer me.t.cl.rUnlock()
+	if me.t.cl.closed.IsSet() {
+		err = errors.New("client is closed")
+		return
+	}
 	for _, ip = range ips {
 		if me.t.cl.ipIsBlocked(ip) {
 			continue

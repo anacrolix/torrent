@@ -503,7 +503,7 @@ func (cl *Client) acceptConnections(l Listener) {
 		cl.rLock()
 		closed := cl.closed.IsSet()
 		var reject error
-		if conn != nil {
+		if !closed && conn != nil {
 			reject = cl.rejectAccepted(conn)
 		}
 		cl.rUnlock()

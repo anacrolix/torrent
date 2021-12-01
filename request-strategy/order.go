@@ -3,12 +3,14 @@ package request_strategy
 import (
 	"bytes"
 	"expvar"
+	"log"
 	"runtime"
 	"sort"
 	"sync"
 
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/google/btree"
 
 	"github.com/anacrolix/torrent/types"
 )
@@ -60,6 +62,15 @@ func (me pieceSorter) Swap(i, j int) {
 func (me pieceSorter) Less(_i, _j int) bool {
 	i := me.get(_i)
 	j := me.get(_j)
+	return pieceOrderLess(i.toPieceOrderInput(), j.toPieceOrderInput()).MustLess()
+}
+
+type pieceOrderInput struct {
+	PieceRequestOrderState
+	PieceRequestOrderKey
+}
+
+func pieceOrderLess(i, j pieceOrderInput) multiless.Computation {
 	return multiless.New().Int(
 		int(j.Priority), int(i.Priority),
 	).Bool(
@@ -67,13 +78,13 @@ func (me pieceSorter) Less(_i, _j int) bool {
 	).Int64(
 		i.Availability, j.Availability,
 	).Int(
-		i.index, j.index,
+		i.Index, j.Index,
 	).Lazy(func() multiless.Computation {
 		return multiless.New().Cmp(bytes.Compare(
-			i.t.InfoHash[:],
-			j.t.InfoHash[:],
+			i.InfoHash[:],
+			j.InfoHash[:],
 		))
-	}).MustLess()
+	})
 }
 
 type requestsPeer struct {
@@ -118,6 +129,15 @@ type filterPiece struct {
 	t     *Torrent
 	index pieceIndex
 	*Piece
+}
+
+func (fp *filterPiece) toPieceOrderInput() (ret pieceOrderInput) {
+	ret.Partial = fp.Partial
+	ret.InfoHash = fp.t.InfoHash
+	ret.Availability = fp.Availability
+	ret.Priority = fp.Priority
+	ret.Index = fp.index
+	return
 }
 
 var (
@@ -186,12 +206,45 @@ type pieceOrderingFinalizer struct {
 }
 
 // Calls f with requestable pieces in order.
-func GetRequestablePieces(input Input, f func(t *Torrent, p *Piece, pieceIndex int)) {
-	maxPieces := 0
-	for i := range input.Torrents {
-		maxPieces += len(input.Torrents[i].Pieces)
+func GetRequestablePieces(input Input, pro *PieceRequestOrder, f func(t *Torrent, p *Piece, pieceIndex int)) {
+	if false {
+		maxPieces := 0
+		for i := range input.Torrents {
+			maxPieces += len(input.Torrents[i].Pieces)
+		}
+		pieces := make([]filterPiece, 0, maxPieces)
+		for _t := range input.Torrents {
+			// TODO: We could do metainfo requests here.
+			t := &input.Torrents[_t]
+			for i := range t.Pieces {
+				pieces = append(pieces, filterPiece{
+					t:     &input.Torrents[_t],
+					index: i,
+					Piece: &t.Pieces[i],
+				})
+			}
+		}
+		pieces = getSortedFilterPieces(pieces)
+		{
+			if len(pieces) != pro.tree.Len() {
+				panic("length doesn't match")
+			}
+			pieces := pieces
+			pro.tree.Ascend(func(i btree.Item) bool {
+				_i := i.(pieceRequestOrderItem)
+				ii := pieceOrderInput{
+					_i.state,
+					_i.key,
+				}
+				if pieces[0].toPieceOrderInput() != ii {
+					panic(_i)
+				}
+				pieces = pieces[1:]
+				return true
+			})
+		}
+		log.Printf("%v pieces passed", len(pieces))
 	}
-	pieces := make([]filterPiece, 0, maxPieces)
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
 	// TorrentImpl. A nil value means no capacity limit.
 	var storageLeft *int64
@@ -199,42 +252,41 @@ func GetRequestablePieces(input Input, f func(t *Torrent, p *Piece, pieceIndex i
 		storageLeft = new(int64)
 		*storageLeft = *input.Capacity
 	}
-	for _t := range input.Torrents {
-		// TODO: We could do metainfo requests here.
-		t := &input.Torrents[_t]
-		for i := range t.Pieces {
-			pieces = append(pieces, filterPiece{
-				t:     &input.Torrents[_t],
-				index: i,
-				Piece: &t.Pieces[i],
-			})
-		}
-	}
-	pieces = getSortedFilterPieces(pieces)
 	var allTorrentsUnverifiedBytes int64
 	torrentUnverifiedBytes := map[metainfo.Hash]int64{}
-	for _, piece := range pieces {
+	pro.tree.Ascend(func(i btree.Item) bool {
+		_i := i.(pieceRequestOrderItem)
+		var piece *Piece
+		var t Torrent
+		for _, t = range input.Torrents {
+			if t.InfoHash == _i.key.InfoHash {
+				piece = &t.Pieces[_i.key.Index]
+				break
+			}
+		}
 		if left := storageLeft; left != nil {
 			if *left < piece.Length {
-				continue
+				return true
 			}
 			*left -= piece.Length
 		}
 		if !piece.Request || piece.NumPendingChunks == 0 {
 			// TODO: Clarify exactly what is verified. Stuff that's being hashed should be
 			// considered unverified and hold up further requests.
-			continue
+
+			return true
 		}
-		if piece.t.MaxUnverifiedBytes != 0 && torrentUnverifiedBytes[piece.t.InfoHash]+piece.Length > piece.t.MaxUnverifiedBytes {
-			continue
+		if t.MaxUnverifiedBytes != 0 && torrentUnverifiedBytes[t.InfoHash]+piece.Length > t.MaxUnverifiedBytes {
+			return true
 		}
 		if input.MaxUnverifiedBytes != 0 && allTorrentsUnverifiedBytes+piece.Length > input.MaxUnverifiedBytes {
-			continue
+			return true
 		}
-		torrentUnverifiedBytes[piece.t.InfoHash] += piece.Length
+		torrentUnverifiedBytes[t.InfoHash] += piece.Length
 		allTorrentsUnverifiedBytes += piece.Length
-		f(piece.t, piece.Piece, piece.index)
-	}
+		f(&t, piece, _i.key.Index)
+		return true
+	})
 	return
 }
 

@@ -27,6 +27,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
+	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	"github.com/google/btree"
@@ -74,6 +75,7 @@ type Client struct {
 	dopplegangerAddrs map[string]struct{}
 	badPeerIPs        map[string]struct{}
 	torrents          map[InfoHash]*Torrent
+	pieceRequestOrder map[storage.TorrentCapacity]*request_strategy.PieceRequestOrder
 
 	acceptLimiter   map[ipStr]int
 	dialRateLimiter *rate.Limiter

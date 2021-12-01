@@ -27,9 +27,11 @@ func (cl *Client) getRequestStrategyInput(primaryTorrent *Torrent) (input reques
 			input.Capacity = &cap
 		}
 	}
-	if input.Capacity == nil {
-		input.Torrents = []request_strategy.Torrent{primaryTorrent.requestStrategyTorrentInput()}
-		return
+	if false {
+		if input.Capacity == nil {
+			input.Torrents = []request_strategy.Torrent{primaryTorrent.requestStrategyTorrentInput()}
+			return
+		}
 	}
 	input.Torrents = make([]request_strategy.Torrent, 0, len(cl.torrents))
 	for _, t := range cl.torrents {
@@ -58,18 +60,30 @@ func (t *Torrent) requestStrategyTorrentInput() request_strategy.Torrent {
 	}
 	rst.Pieces = make([]request_strategy.Piece, 0, len(t.pieces))
 	for i := range t.pieces {
-		p := &t.pieces[i]
-		rst.Pieces = append(rst.Pieces, request_strategy.Piece{
-			Request:           !t.ignorePieceForRequests(i),
-			Priority:          p.purePriority(),
-			Partial:           t.piecePartiallyDownloaded(i),
-			Availability:      p.availability,
-			Length:            int64(p.length()),
-			NumPendingChunks:  int(t.pieceNumPendingChunks(i)),
-			IterPendingChunks: &p.undirtiedChunksIter,
-		})
+		rst.Pieces = append(rst.Pieces, t.makeRequestStrategyPiece(i))
 	}
 	return rst
+}
+
+func (t *Torrent) requestStrategyPieceOrderState(i int) request_strategy.PieceRequestOrderState {
+	return request_strategy.PieceRequestOrderState{
+		Priority:     t.piece(i).purePriority(),
+		Partial:      t.piecePartiallyDownloaded(i),
+		Availability: t.piece(i).availability,
+	}
+}
+
+func (t *Torrent) makeRequestStrategyPiece(i int) request_strategy.Piece {
+	p := &t.pieces[i]
+	return request_strategy.Piece{
+		Request:           !t.ignorePieceForRequests(i),
+		Priority:          p.purePriority(),
+		Partial:           t.piecePartiallyDownloaded(i),
+		Availability:      p.availability,
+		Length:            int64(p.length()),
+		NumPendingChunks:  int(t.pieceNumPendingChunks(i)),
+		IterPendingChunks: &p.undirtiedChunksIter,
+	}
 }
 
 func init() {
@@ -205,6 +219,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	}
 	request_strategy.GetRequestablePieces(
 		input,
+		p.t.cl.pieceRequestOrder[p.t.storage.Capacity],
 		func(t *request_strategy.Torrent, rsp *request_strategy.Piece, pieceIndex int) {
 			if t.InfoHash != p.t.infoHash {
 				return

@@ -27,6 +27,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
+	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pion/datachannel"
 
@@ -165,6 +166,7 @@ func (t *Torrent) decPieceAvailability(i pieceIndex) {
 		panic(p.availability)
 	}
 	p.availability--
+	t.updatePieceRequestOrder(i)
 }
 
 func (t *Torrent) incPieceAvailability(i pieceIndex) {
@@ -172,6 +174,7 @@ func (t *Torrent) incPieceAvailability(i pieceIndex) {
 	if t.haveInfo() {
 		p := t.piece(i)
 		p.availability++
+		t.updatePieceRequestOrder(i)
 	}
 }
 
@@ -424,8 +427,21 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	return nil
 }
 
+func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrderKey {
+	return request_strategy.PieceRequestOrderKey{
+		InfoHash: t.infoHash,
+		Index:    i,
+	}
+}
+
 // This seems to be all the follow-up tasks after info is set, that can't fail.
 func (t *Torrent) onSetInfo() {
+	if t.cl.pieceRequestOrder == nil {
+		t.cl.pieceRequestOrder = make(map[storage.TorrentCapacity]*request_strategy.PieceRequestOrder)
+	}
+	if t.cl.pieceRequestOrder[t.storage.Capacity] == nil {
+		t.cl.pieceRequestOrder[t.storage.Capacity] = request_strategy.NewPieceOrder()
+	}
 	for i := range t.pieces {
 		p := &t.pieces[i]
 		// Need to add availability before updating piece completion, as that may result in conns
@@ -434,6 +450,9 @@ func (t *Torrent) onSetInfo() {
 			panic(p.availability)
 		}
 		p.availability = int64(t.pieceAvailabilityFromPeers(i))
+		t.cl.pieceRequestOrder[t.storage.Capacity].Add(
+			t.pieceRequestOrderKey(i),
+			t.requestStrategyPieceOrderState(i))
 		t.updatePieceCompletion(pieceIndex(i))
 		if !t.initialPieceCheckDisabled && !p.storageCompletionOk {
 			// t.logger.Printf("piece %s completion unknown, queueing check", p)
@@ -797,6 +816,12 @@ func (t *Torrent) numPiecesCompleted() (num pieceIndex) {
 	return pieceIndex(t._completedPieces.GetCardinality())
 }
 
+func (t *Torrent) deletePieceRequestOrder() {
+	for i := 0; i < t.numPieces(); i++ {
+		t.cl.pieceRequestOrder[t.storage.Capacity].Delete(t.pieceRequestOrderKey(i))
+	}
+}
+
 func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	t.closed.Set()
 	if t.storage != nil {
@@ -816,6 +841,9 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	t.iterPeers(func(p *Peer) {
 		p.close()
 	})
+	if t.storage != nil {
+		t.deletePieceRequestOrder()
+	}
 	t.pex.Reset()
 	t.cl.event.Broadcast()
 	t.pieceStateChanges.Close()
@@ -1102,6 +1130,11 @@ func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
 }
 
 func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string) {
+	if !t.closed.IsSet() {
+		// It would be possible to filter on pure-priority changes here to avoid churning the piece
+		// request order.
+		t.updatePieceRequestOrder(piece)
+	}
 	p := &t.pieces[piece]
 	newPrio := p.uncachedPriority()
 	// t.logger.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
@@ -1238,6 +1271,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	} else {
 		t._completedPieces.Remove(x)
 	}
+	p.t.updatePieceRequestOrder(piece)
 	t.updateComplete()
 	if complete && len(p.dirtiers) != 0 {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)

@@ -3,7 +3,6 @@ package request_strategy
 import (
 	"bytes"
 	"expvar"
-	"log"
 	"runtime"
 	"sort"
 	"sync"
@@ -207,44 +206,6 @@ type pieceOrderingFinalizer struct {
 
 // Calls f with requestable pieces in order.
 func GetRequestablePieces(input Input, pro *PieceRequestOrder, f func(t *Torrent, p *Piece, pieceIndex int)) {
-	if false {
-		maxPieces := 0
-		for i := range input.Torrents {
-			maxPieces += len(input.Torrents[i].Pieces)
-		}
-		pieces := make([]filterPiece, 0, maxPieces)
-		for _t := range input.Torrents {
-			// TODO: We could do metainfo requests here.
-			t := &input.Torrents[_t]
-			for i := range t.Pieces {
-				pieces = append(pieces, filterPiece{
-					t:     &input.Torrents[_t],
-					index: i,
-					Piece: &t.Pieces[i],
-				})
-			}
-		}
-		pieces = getSortedFilterPieces(pieces)
-		{
-			if len(pieces) != pro.tree.Len() {
-				panic("length doesn't match")
-			}
-			pieces := pieces
-			pro.tree.Ascend(func(i btree.Item) bool {
-				_i := i.(pieceRequestOrderItem)
-				ii := pieceOrderInput{
-					_i.state,
-					_i.key,
-				}
-				if pieces[0].toPieceOrderInput() != ii {
-					panic(_i)
-				}
-				pieces = pieces[1:]
-				return true
-			})
-		}
-		log.Printf("%v pieces passed", len(pieces))
-	}
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
 	// TorrentImpl. A nil value means no capacity limit.
 	var storageLeft *int64
@@ -256,14 +217,8 @@ func GetRequestablePieces(input Input, pro *PieceRequestOrder, f func(t *Torrent
 	torrentUnverifiedBytes := map[metainfo.Hash]int64{}
 	pro.tree.Ascend(func(i btree.Item) bool {
 		_i := i.(pieceRequestOrderItem)
-		var piece *Piece
-		var t Torrent
-		for _, t = range input.Torrents {
-			if t.InfoHash == _i.key.InfoHash {
-				piece = &t.Pieces[_i.key.Index]
-				break
-			}
-		}
+		var t Torrent = input.Torrents[_i.key.InfoHash]
+		var piece *Piece = &t.Pieces[_i.key.Index]
 		if left := storageLeft; left != nil {
 			if *left < piece.Length {
 				return true
@@ -294,7 +249,7 @@ type Input struct {
 	// This is all torrents that share the same capacity below (or likely a single torrent if there
 	// is infinite capacity, since you could just run it separately for each Torrent if that's the
 	// case).
-	Torrents []Torrent
+	Torrents map[metainfo.Hash]Torrent
 	// Must not be modified. Non-nil if capacity is not infinite, meaning that pieces of torrents
 	// that share the same capacity key must be incorporated in piece ordering.
 	Capacity *int64

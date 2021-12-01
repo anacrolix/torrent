@@ -12,6 +12,7 @@ import (
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
+	"github.com/anacrolix/torrent/metainfo"
 
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 )
@@ -27,13 +28,7 @@ func (cl *Client) getRequestStrategyInput(primaryTorrent *Torrent) (input reques
 			input.Capacity = &cap
 		}
 	}
-	if false {
-		if input.Capacity == nil {
-			input.Torrents = []request_strategy.Torrent{primaryTorrent.requestStrategyTorrentInput()}
-			return
-		}
-	}
-	input.Torrents = make([]request_strategy.Torrent, 0, len(cl.torrents))
+	input.Torrents = make(map[metainfo.Hash]request_strategy.Torrent, len(cl.torrents))
 	for _, t := range cl.torrents {
 		if !t.haveInfo() {
 			// This would be removed if metadata is handled here. Determining chunks per piece
@@ -44,7 +39,7 @@ func (cl *Client) getRequestStrategyInput(primaryTorrent *Torrent) (input reques
 		if t.storage.Capacity != primaryTorrent.storage.Capacity {
 			continue
 		}
-		input.Torrents = append(input.Torrents, t.requestStrategyTorrentInput())
+		input.Torrents[t.infoHash] = t.requestStrategyTorrentInput()
 	}
 	return
 }
@@ -132,7 +127,7 @@ type (
 type peerRequests struct {
 	requestIndexes       []RequestIndex
 	peer                 *Peer
-	torrentStrategyInput *request_strategy.Torrent
+	torrentStrategyInput request_strategy.Torrent
 }
 
 func (p *peerRequests) Len() int {
@@ -210,13 +205,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	requestHeap := peerRequests{
 		peer: p,
 	}
-	for i := range input.Torrents {
-		t := &input.Torrents[i]
-		if t.InfoHash == p.t.infoHash {
-			requestHeap.torrentStrategyInput = t
-			break
-		}
-	}
+	requestHeap.torrentStrategyInput = input.Torrents[p.t.infoHash]
 	request_strategy.GetRequestablePieces(
 		input,
 		p.t.cl.pieceRequestOrder[p.t.storage.Capacity],

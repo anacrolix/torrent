@@ -12,72 +12,15 @@ import (
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
-	"github.com/anacrolix/torrent/metainfo"
 
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 )
-
-// Returns what is necessary to run request_strategy.GetRequestablePieces for primaryTorrent.
-func (cl *Client) getRequestStrategyInput(primaryTorrent *Torrent) (input request_strategy.Input) {
-	input.MaxUnverifiedBytes = cl.config.MaxUnverifiedBytes
-	if !primaryTorrent.haveInfo() {
-		return
-	}
-	if capFunc := primaryTorrent.storage.Capacity; capFunc != nil {
-		if cap, ok := (*capFunc)(); ok {
-			input.Capacity = &cap
-		}
-	}
-	input.Torrents = make(map[metainfo.Hash]request_strategy.Torrent, len(cl.torrents))
-	for _, t := range cl.torrents {
-		if !t.haveInfo() {
-			// This would be removed if metadata is handled here. Determining chunks per piece
-			// requires the info. If we have no info, we have no pieces too, so the end result is
-			// the same.
-			continue
-		}
-		if t.storage.Capacity != primaryTorrent.storage.Capacity {
-			continue
-		}
-		input.Torrents[t.infoHash] = t.requestStrategyTorrentInput()
-	}
-	return
-}
-
-func (t *Torrent) getRequestStrategyInput() request_strategy.Input {
-	return t.cl.getRequestStrategyInput(t)
-}
-
-func (t *Torrent) requestStrategyTorrentInput() request_strategy.Torrent {
-	rst := request_strategy.Torrent{
-		InfoHash:       t.infoHash,
-		ChunksPerPiece: t.chunksPerRegularPiece(),
-	}
-	rst.Pieces = make([]request_strategy.Piece, 0, len(t.pieces))
-	for i := range t.pieces {
-		rst.Pieces = append(rst.Pieces, t.makeRequestStrategyPiece(i))
-	}
-	return rst
-}
 
 func (t *Torrent) requestStrategyPieceOrderState(i int) request_strategy.PieceRequestOrderState {
 	return request_strategy.PieceRequestOrderState{
 		Priority:     t.piece(i).purePriority(),
 		Partial:      t.piecePartiallyDownloaded(i),
 		Availability: t.piece(i).availability,
-	}
-}
-
-func (t *Torrent) makeRequestStrategyPiece(i int) request_strategy.Piece {
-	p := &t.pieces[i]
-	return request_strategy.Piece{
-		Request:           !t.ignorePieceForRequests(i),
-		Priority:          p.purePriority(),
-		Partial:           t.piecePartiallyDownloaded(i),
-		Availability:      p.availability,
-		Length:            int64(p.length()),
-		NumPendingChunks:  int(t.pieceNumPendingChunks(i)),
-		IterPendingChunks: &p.undirtiedChunksIter,
 	}
 }
 
@@ -125,9 +68,8 @@ type (
 )
 
 type peerRequests struct {
-	requestIndexes       []RequestIndex
-	peer                 *Peer
-	torrentStrategyInput request_strategy.Torrent
+	requestIndexes []RequestIndex
+	peer           *Peer
 }
 
 func (p *peerRequests) Len() int {
@@ -138,8 +80,8 @@ func (p *peerRequests) Less(i, j int) bool {
 	leftRequest := p.requestIndexes[i]
 	rightRequest := p.requestIndexes[j]
 	t := p.peer.t
-	leftPieceIndex := leftRequest / p.torrentStrategyInput.ChunksPerPiece
-	rightPieceIndex := rightRequest / p.torrentStrategyInput.ChunksPerPiece
+	leftPieceIndex := leftRequest / t.chunksPerRegularPiece()
+	rightPieceIndex := rightRequest / t.chunksPerRegularPiece()
 	leftCurrent := p.peer.actualRequestState.Requests.Contains(leftRequest)
 	rightCurrent := p.peer.actualRequestState.Requests.Contains(rightRequest)
 	pending := func(index RequestIndex, current bool) int {
@@ -168,13 +110,15 @@ func (p *peerRequests) Less(i, j int) bool {
 		pending(leftRequest, leftCurrent),
 		pending(rightRequest, rightCurrent))
 	ml = ml.Bool(!leftCurrent, !rightCurrent)
+	leftPiece := t.piece(int(leftPieceIndex))
+	rightPiece := t.piece(int(rightPieceIndex))
 	ml = ml.Int(
-		-int(p.torrentStrategyInput.Pieces[leftPieceIndex].Priority),
-		-int(p.torrentStrategyInput.Pieces[rightPieceIndex].Priority),
+		-int(leftPiece.purePriority()),
+		-int(rightPiece.purePriority()),
 	)
 	ml = ml.Int(
-		int(p.torrentStrategyInput.Pieces[leftPieceIndex].Availability),
-		int(p.torrentStrategyInput.Pieces[rightPieceIndex].Availability))
+		int(leftPiece.availability),
+		int(rightPiece.availability))
 	ml = ml.Uint32(leftPieceIndex, rightPieceIndex)
 	ml = ml.Uint32(leftRequest, rightRequest)
 	return ml.MustLess()
@@ -205,19 +149,18 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	requestHeap := peerRequests{
 		peer: p,
 	}
-	requestHeap.torrentStrategyInput = input.Torrents[p.t.infoHash]
 	request_strategy.GetRequestablePieces(
 		input,
 		p.t.cl.pieceRequestOrder[p.t.storage.Capacity],
-		func(t *request_strategy.Torrent, rsp *request_strategy.Piece, pieceIndex int) {
-			if t.InfoHash != p.t.infoHash {
+		func(ih InfoHash, pieceIndex int) {
+			if ih != p.t.infoHash {
 				return
 			}
 			if !p.peerHasPiece(pieceIndex) {
 				return
 			}
 			allowedFast := p.peerAllowedFast.ContainsInt(pieceIndex)
-			rsp.IterPendingChunks.Iter(func(ci request_strategy.ChunkIndex) {
+			p.t.piece(pieceIndex).undirtiedChunksIter.Iter(func(ci request_strategy.ChunkIndex) {
 				r := p.t.pieceRequestIndexOffset(pieceIndex) + ci
 				// if p.t.pendingRequests.Get(r) != 0 && !p.actualRequestState.Requests.Contains(r) {
 				//	return

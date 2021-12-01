@@ -6,7 +6,7 @@ trap 'set +e; sudo umount -f mnt' EXIT
 debian_file=debian-10.8.0-amd64-netinst.iso
 pushd torrents
 cp "$repopath/testdata/$debian_file.torrent" .
-echo 'magnet:?xt=urn:btih:6a9759bffd5c0af65319979fb7832189f4f3c35d&dn=sintel.mp4' > sintel.magnet
+godo -v -race "$repopath/cmd/torrent" metainfo "$repopath/testdata/sintel.torrent" magnet > sintel.magnet
 popd
 file="$debian_file"
 # file=sintel.mp4

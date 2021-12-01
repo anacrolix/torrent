@@ -88,7 +88,7 @@ func GetRequestablePieces(input Input, pro *PieceRequestOrder, f func(ih metainf
 		pieceLength := t.PieceLength()
 		if storageLeft != nil {
 			if *storageLeft < pieceLength {
-				return true
+				return false
 			}
 			*storageLeft -= pieceLength
 		}

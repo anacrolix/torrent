@@ -139,6 +139,7 @@ type Torrent struct {
 
 	// Count of each request across active connections.
 	pendingRequests pendingRequests
+	lastRequested   map[RequestIndex]time.Time
 	// Chunks we've written to since the corresponding piece was last checked.
 	dirtyChunks roaring.Bitmap
 
@@ -463,6 +464,7 @@ func (t *Torrent) onSetInfo() {
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
 	t.pendingRequests.Init(t.numRequests())
+	t.lastRequested = make(map[RequestIndex]time.Time)
 	t.tryCreateMorePieceHashers()
 	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info)
@@ -1110,9 +1112,9 @@ func (t *Torrent) maybeNewConns() {
 func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
 	if t._pendingPieces.Contains(uint32(piece)) {
 		t.iterPeers(func(c *Peer) {
-			if c.actualRequestState.Interested {
-				return
-			}
+			// if c.actualRequestState.Interested {
+			// 	return
+			// }
 			if !c.isLowOnRequests() {
 				return
 			}

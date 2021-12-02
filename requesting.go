@@ -119,6 +119,12 @@ func (p *peerRequests) Less(i, j int) bool {
 	ml = ml.Int(
 		int(leftPiece.availability),
 		int(rightPiece.availability))
+	leftLastRequested := p.peer.t.lastRequested[leftRequest]
+	rightLastRequested := p.peer.t.lastRequested[rightRequest]
+	ml = ml.EagerSameLess(
+		leftLastRequested.Equal(rightLastRequested),
+		leftLastRequested.Before(rightLastRequested),
+	)
 	ml = ml.Uint32(leftPieceIndex, rightPieceIndex)
 	ml = ml.Uint32(leftRequest, rightRequest)
 	return ml.MustLess()
@@ -174,6 +180,13 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 					// fast extension).
 					if p.peerChoking && !p.actualRequestState.Requests.Contains(r) {
 						// We can't request this right now.
+						return
+					}
+				}
+				// Note that we can still be interested if we filter all requests due to being
+				// recently requested from another peer.
+				if !p.actualRequestState.Requests.Contains(r) {
+					if time.Since(p.t.lastRequested[r]) < time.Second {
 						return
 					}
 				}
@@ -276,10 +289,12 @@ func (p *Peer) applyRequestState(next desiredRequestState) bool {
 			break
 		}
 	}
+	// TODO: This may need to change, we might want to update even if there were no requests due to
+	// filtering them for being recently requested already.
 	p.updateRequestsTimer.Stop()
 	if more {
 		p.needRequestUpdate = ""
-		if !current.Requests.IsEmpty() {
+		if current.Interested {
 			p.updateRequestsTimer.Reset(3 * time.Second)
 		}
 	}

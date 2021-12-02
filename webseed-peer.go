@@ -125,10 +125,14 @@ func (ws *webseedPeer) onClose() {
 
 func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Request) {
 	result := <-webseedRequest.Result
+	close(webseedRequest.Result) // one-shot
 	// We do this here rather than inside receiveChunk, since we want to count errors too. I'm not
 	// sure if we can divine which errors indicate cancellation on our end without hitting the
 	// network though.
-	ws.peer.doChunkReadStats(int64(len(result.Bytes)))
+	if len(result.Bytes) != 0 || result.Err == nil {
+		// Increment ChunksRead and friends
+		ws.peer.doChunkReadStats(int64(len(result.Bytes)))
+	}
 	ws.peer.readBytes(int64(len(result.Bytes)))
 	ws.peer.t.cl.lock()
 	defer ws.peer.t.cl.unlock()
@@ -138,6 +142,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	if result.Err != nil {
 		if !errors.Is(result.Err, context.Canceled) && !ws.peer.closed.IsSet() {
 			ws.peer.logger.Printf("Request %v rejected: %v", r, result.Err)
+			// // Here lies my attempt to extract something concrete from Go's error system. RIP.
 			// cfg := spew.NewDefaultConfig()
 			// cfg.DisableMethods = true
 			// cfg.Dump(result.Err)

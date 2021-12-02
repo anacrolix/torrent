@@ -111,6 +111,8 @@ func (ws *webseedPeer) connectionFlags() string {
 func (ws *webseedPeer) drop() {}
 
 func (ws *webseedPeer) handleUpdateRequests() {
+	// Because this is synchronous, webseed peers seem to get first dibs on newly prioritized
+	// pieces.
 	ws.peer.maybeUpdateActualRequestState()
 }
 

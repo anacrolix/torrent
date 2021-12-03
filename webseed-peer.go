@@ -132,6 +132,9 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	ws.peer.readBytes(int64(len(result.Bytes)))
 	ws.peer.t.cl.lock()
 	defer ws.peer.t.cl.unlock()
+	if ws.peer.t.closed.IsSet() {
+		return
+	}
 	if result.Err != nil {
 		if !errors.Is(result.Err, context.Canceled) && !ws.peer.closed.IsSet() {
 			ws.peer.logger.Printf("Request %v rejected: %v", r, result.Err)

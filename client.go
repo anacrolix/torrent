@@ -941,7 +941,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	c.setTorrent(t)
 	for i, b := range cl.config.MinPeerExtensions {
 		if c.PeerExtensionBytes[i]&b != b {
-			return fmt.Errorf("peer did not meet minimum peer extensions: %x", c.PeerExtensionBytes)
+			return fmt.Errorf("peer did not meet minimum peer extensions: %x", c.PeerExtensionBytes[:])
 		}
 	}
 	if c.PeerID == cl.peerID {

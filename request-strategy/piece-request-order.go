@@ -1,6 +1,8 @@
 package request_strategy
 
 import (
+	"fmt"
+
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/google/btree"
 )
@@ -62,7 +64,7 @@ func (me *PieceRequestOrder) Add(key PieceRequestOrderKey, state PieceRequestOrd
 
 func (me *PieceRequestOrder) Update(key PieceRequestOrderKey, state PieceRequestOrderState) {
 	if me.tree.Delete(me.existingItemForKey(key)) == nil {
-		panic(key)
+		panic(fmt.Sprintf("%#v", key))
 	}
 	if me.tree.ReplaceOrInsert(pieceRequestOrderItem{
 		key:   key,
@@ -85,4 +87,5 @@ func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) {
 		panic(key)
 	}
 	delete(me.keys, key)
+	// log.Printf("deleting %#v", key)
 }

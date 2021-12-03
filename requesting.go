@@ -151,6 +151,9 @@ type desiredRequestState struct {
 }
 
 func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
+	if !p.t.haveInfo() {
+		return
+	}
 	input := p.t.getRequestStrategyInput()
 	requestHeap := peerRequests{
 		peer: p,

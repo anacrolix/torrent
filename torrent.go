@@ -2200,10 +2200,12 @@ func (t *Torrent) addWebSeed(url string) {
 	if _, ok := t.webSeeds[url]; ok {
 		return
 	}
-	// I don't think Go http supports pipelining requests. However we can have more ready to go
+	// I don't think Go http supports pipelining requests. However, we can have more ready to go
 	// right away. This value should be some multiple of the number of connections to a host. I
-	// would expect that double maxRequests plus a bit would be appropriate.
-	const maxRequests = 32
+	// would expect that double maxRequests plus a bit would be appropriate. This value is based on
+	// downloading Sintel (08ada5a7a6183aae1e09d831df6748d566095a10) from
+	// "https://webtorrent.io/torrents/".
+	const maxRequests = 16
 	ws := webseedPeer{
 		peer: Peer{
 			t:                        t,
@@ -2228,7 +2230,7 @@ func (t *Torrent) addWebSeed(url string) {
 	ws.peer.initUpdateRequestsTimer()
 	ws.requesterCond.L = t.cl.locker()
 	for i := 0; i < maxRequests; i += 1 {
-		go ws.requester()
+		go ws.requester(i)
 	}
 	for _, f := range t.callbacks().NewPeer {
 		f(&ws.peer)

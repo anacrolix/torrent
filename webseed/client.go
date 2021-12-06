@@ -3,6 +3,7 @@ package webseed
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -162,6 +163,8 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart) error 
 		} else {
 			return ErrBadResponse{"resp status ok but requested range", result.resp}
 		}
+	case http.StatusServiceUnavailable:
+		return ErrTooFast
 	default:
 		return ErrBadResponse{
 			fmt.Sprintf("unhandled response status code (%v)", result.resp.StatusCode),
@@ -169,6 +172,8 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart) error 
 		}
 	}
 }
+
+var ErrTooFast = errors.New("making requests too fast")
 
 func readRequestPartResponses(ctx context.Context, parts []requestPart) (_ []byte, err error) {
 	var buf bytes.Buffer

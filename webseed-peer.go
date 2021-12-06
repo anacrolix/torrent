@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/log"
@@ -69,18 +71,19 @@ func (ws *webseedPeer) _request(r Request) bool {
 	return true
 }
 
-func (ws *webseedPeer) doRequest(r Request) {
+func (ws *webseedPeer) doRequest(r Request) error {
 	webseedRequest := ws.client.NewRequest(ws.intoSpec(r))
 	ws.activeRequests[r] = webseedRequest
-	func() {
+	err := func() error {
 		ws.requesterCond.L.Unlock()
 		defer ws.requesterCond.L.Lock()
-		ws.requestResultHandler(r, webseedRequest)
+		return ws.requestResultHandler(r, webseedRequest)
 	}()
 	delete(ws.activeRequests, r)
+	return err
 }
 
-func (ws *webseedPeer) requester() {
+func (ws *webseedPeer) requester(i int) {
 	ws.requesterCond.L.Lock()
 	defer ws.requesterCond.L.Unlock()
 start:
@@ -91,8 +94,16 @@ start:
 			if _, ok := ws.activeRequests[r]; ok {
 				return true
 			}
-			ws.doRequest(r)
+			err := ws.doRequest(r)
+			ws.requesterCond.L.Unlock()
+			if err != nil {
+				log.Printf("requester %v: error doing webseed request %v: %v", i, r, err)
+			}
 			restart = true
+			if errors.Is(err, webseed.ErrTooFast) {
+				time.Sleep(time.Duration(rand.Int63n(int64(10 * time.Second))))
+			}
+			ws.requesterCond.L.Lock()
 			return false
 		})
 		if restart {
@@ -125,7 +136,7 @@ func (ws *webseedPeer) onClose() {
 	ws.requesterCond.Broadcast()
 }
 
-func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Request) {
+func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Request) error {
 	result := <-webseedRequest.Result
 	close(webseedRequest.Result) // one-shot
 	// We do this here rather than inside receiveChunk, since we want to count errors too. I'm not
@@ -139,10 +150,15 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	ws.peer.t.cl.lock()
 	defer ws.peer.t.cl.unlock()
 	if ws.peer.t.closed.IsSet() {
-		return
+		return nil
 	}
-	if result.Err != nil {
-		if !errors.Is(result.Err, context.Canceled) && !ws.peer.closed.IsSet() {
+	err := result.Err
+	if err != nil {
+		switch {
+		case errors.Is(err, context.Canceled):
+		case errors.Is(err, webseed.ErrTooFast):
+		case ws.peer.closed.IsSet():
+		default:
 			ws.peer.logger.Printf("Request %v rejected: %v", r, result.Err)
 			// // Here lies my attempt to extract something concrete from Go's error system. RIP.
 			// cfg := spew.NewDefaultConfig()
@@ -152,17 +168,18 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			ws.peer.close()
 		}
 		ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r))
-	} else {
-		err := ws.peer.receiveChunk(&pp.Message{
-			Type:  pp.Piece,
-			Index: r.Index,
-			Begin: r.Begin,
-			Piece: result.Bytes,
-		})
-		if err != nil {
-			panic(err)
-		}
+		return err
 	}
+	err = ws.peer.receiveChunk(&pp.Message{
+		Type:  pp.Piece,
+		Index: r.Index,
+		Begin: r.Begin,
+		Piece: result.Bytes,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return err
 }
 
 func (me *webseedPeer) isLowOnRequests() bool {

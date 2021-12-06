@@ -180,6 +180,7 @@ func shortestIP(ip net.IP) net.IP {
 type pexState struct {
 	ev        []pexEvent    // event feed, append-only
 	hold      []pexEvent    // delayed drops
+	off       int           // shift indices in ev by this much
 	rest      time.Time     // cooldown deadline on inbound
 	nc        int           // net number of alive conns
 	initCache pexMsgFactory // last generated initial message
@@ -191,6 +192,7 @@ type pexState struct {
 func (s *pexState) Reset() {
 	s.ev = nil
 	s.hold = nil
+	s.off = 0
 	s.nc = 0
 	s.rest = time.Time{}
 	s.initLock.Lock()
@@ -233,7 +235,7 @@ func (s *pexState) Genmsg(start int) (pp.PexMsg, int) {
 
 	var factory pexMsgFactory
 	n := start
-	for _, e := range s.ev[start:] {
+	for _, e := range s.ev[start-s.off:] {
 		if start > 0 && factory.DeltaLen() >= pexMaxDelta {
 			break
 		}
@@ -245,7 +247,7 @@ func (s *pexState) Genmsg(start int) (pp.PexMsg, int) {
 
 func (s *pexState) genmsg0() (pp.PexMsg, int) {
 	s.initLock.Lock()
-	for _, e := range s.ev[s.initSeq:] {
+	for _, e := range s.ev[s.initSeq-s.off:] {
 		s.initCache.addEvent(e)
 		s.initSeq++
 	}
@@ -256,3 +258,17 @@ func (s *pexState) genmsg0() (pp.PexMsg, int) {
 	s.initLock.RUnlock()
 	return msg, n
 }
+
+// trim the event log (s.ev) so the log starts at seq.
+func (s *pexState) trim(seq int) {
+	if seq <= s.off {
+		return
+	}
+	// BUG lock s.ev
+	n := copy(s.ev, s.ev[seq-s.off:])
+	s.ev = s.ev[:n]
+	s.off += n
+	// BUG unlock s.ev
+}
+
+// c.t.pex.trim(c.t.pexMinSeq()) // BUG probably it is way too expensive to have it here

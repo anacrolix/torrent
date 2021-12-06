@@ -1714,6 +1714,20 @@ func (t *Torrent) addPeers(peers []PeerInfo) (added int) {
 	return
 }
 
+func (t *Torrent) pexMinSeq() int {
+	_, minSeq := t.pex.Genmsg(0) // get s.initSeq with proper locks
+	t.cl.rLock()  // BUG careful! depending on upper call stack it may be held already!
+	defer t.cl.rUnlock()
+	for c := range t.conns {
+		// BUG ignore closed connections
+		seq := c.pex.seq	// BUG! race with t.pex.genmsg() in pexconn.go:/pexConnState/+/genmsg/
+		if seq > 0 && seq < minSeq {
+			minSeq = seq
+		}
+	}
+	return minSeq
+}
+
 // The returned TorrentStats may require alignment in memory. See
 // https://github.com/anacrolix/torrent/issues/383.
 func (t *Torrent) Stats() TorrentStats {

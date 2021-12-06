@@ -189,22 +189,22 @@ func TestConnPexEvent(t *testing.T) {
 		{
 			pexAdd,
 			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network()}},
-			pexEvent{pexAdd, udpAddr, pp.PexSupportsUtp},
+			pexEvent{pexAdd, udpAddr, pp.PexSupportsUtp, nil},
 		},
 		{
 			pexDrop,
 			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true, PeerListenPort: dialTcpAddr.Port}},
-			pexEvent{pexDrop, tcpAddr, pp.PexOutgoingConn},
+			pexEvent{pexDrop, tcpAddr, pp.PexOutgoingConn, nil},
 		},
 		{
 			pexAdd,
 			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), PeerListenPort: dialTcpAddr.Port}},
-			pexEvent{pexAdd, dialTcpAddr, 0},
+			pexEvent{pexAdd, dialTcpAddr, 0, nil},
 		},
 		{
 			pexDrop,
 			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network(), PeerListenPort: dialUdpAddr.Port}},
-			pexEvent{pexDrop, dialUdpAddr, pp.PexSupportsUtp},
+			pexEvent{pexDrop, dialUdpAddr, pp.PexSupportsUtp, nil},
 		},
 	}
 	for i, tc := range testcases {

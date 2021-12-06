@@ -28,6 +28,7 @@ type pexEvent struct {
 	t    pexEventType
 	addr PeerRemoteAddr
 	f    pp.PexPeerFlags
+	next *pexEvent // event feed list
 }
 
 // facilitates efficient de-duplication while generating PEX messages
@@ -145,7 +146,7 @@ func (me *pexMsgFactory) drop(e pexEvent) {
 	me.dropped[key] = struct{}{}
 }
 
-func (me *pexMsgFactory) addEvent(event pexEvent) {
+func (me *pexMsgFactory) append(event pexEvent) {
 	switch event.t {
 	case pexAdd:
 		me.add(event)
@@ -178,36 +179,47 @@ func shortestIP(ip net.IP) net.IP {
 
 // Per-torrent PEX state
 type pexState struct {
-	ev        []pexEvent    // event feed, append-only
-	hold      []pexEvent    // delayed drops
-	rest      time.Time     // cooldown deadline on inbound
-	nc        int           // net number of alive conns
-	initCache pexMsgFactory // last generated initial message
-	initSeq   int           // number of events which went into initCache
-	initLock  sync.RWMutex  // serialise access to initCache and initSeq
+	sync.RWMutex
+	tail *pexEvent     // event feed list
+	hold []pexEvent    // delayed drops
+	rest time.Time     // cooldown deadline on inbound
+	nc   int           // net number of alive conns
+	msg0 pexMsgFactory // initial message
 }
 
 // Reset wipes the state clean, releasing resources. Called from Torrent.Close().
 func (s *pexState) Reset() {
-	s.ev = nil
+	s.Lock()
+	defer s.Unlock()
+	s.tail = nil
 	s.hold = nil
 	s.nc = 0
 	s.rest = time.Time{}
-	s.initLock.Lock()
-	s.initCache = pexMsgFactory{}
-	s.initSeq = 0
-	s.initLock.Unlock()
+	s.msg0 = pexMsgFactory{}
+}
+
+func (s *pexState) append(e *pexEvent) {
+	if s.tail != nil {
+		s.tail.next = e
+	}
+	s.tail = e
+	s.msg0.append(*e)
 }
 
 func (s *pexState) Add(c *PeerConn) {
+	s.Lock()
+	defer s.Unlock()
 	s.nc++
 	if s.nc >= pexTargAdded {
-		s.ev = append(s.ev, s.hold...)
+		for _, e := range s.hold {
+			ne := e
+			s.append(&ne)
+		}
 		s.hold = s.hold[:0]
 	}
 	e := c.pexEvent(pexAdd)
-	s.ev = append(s.ev, e)
 	c.pex.Listed = true
+	s.append(&e)
 }
 
 func (s *pexState) Drop(c *PeerConn) {
@@ -215,44 +227,34 @@ func (s *pexState) Drop(c *PeerConn) {
 		// skip connections which were not previously Added
 		return
 	}
+	s.Lock()
+	defer s.Unlock()
 	e := c.pexEvent(pexDrop)
 	s.nc--
 	if s.nc < pexTargAdded && len(s.hold) < pexMaxHold {
 		s.hold = append(s.hold, e)
 	} else {
-		s.ev = append(s.ev, e)
+		s.append(&e)
 	}
 }
 
-// Generate a PEX message based on the event feed. Also returns an index to pass to the subsequent
-// calls, producing incremental deltas.
-func (s *pexState) Genmsg(start int) (pp.PexMsg, int) {
-	if start == 0 {
-		return s.genmsg0()
+// Generate a PEX message based on the event feed.
+// Also returns a pointer to pass to the subsequent calls
+// to produce incremental deltas.
+func (s *pexState) Genmsg(start *pexEvent) (pp.PexMsg, *pexEvent) {
+	s.RLock()
+	defer s.RUnlock()
+	if start == nil {
+		return s.msg0.PexMsg(), s.tail
 	}
-
-	var factory pexMsgFactory
-	n := start
-	for _, e := range s.ev[start:] {
-		if start > 0 && factory.DeltaLen() >= pexMaxDelta {
+	var msg pexMsgFactory
+	last := start
+	for e := start.next; e != nil; e = e.next {
+		if msg.DeltaLen() >= pexMaxDelta {
 			break
 		}
-		factory.addEvent(e)
-		n++
+		msg.append(*e)
+		last = e
 	}
-	return factory.PexMsg(), n
-}
-
-func (s *pexState) genmsg0() (pp.PexMsg, int) {
-	s.initLock.Lock()
-	for _, e := range s.ev[s.initSeq:] {
-		s.initCache.addEvent(e)
-		s.initSeq++
-	}
-	s.initLock.Unlock()
-	s.initLock.RLock()
-	n := s.initSeq
-	msg := s.initCache.PexMsg()
-	s.initLock.RUnlock()
-	return msg, n
+	return msg.PexMsg(), last
 }

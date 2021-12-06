@@ -48,7 +48,7 @@ func (ws *webseedPeer) writeInterested(interested bool) bool {
 	return true
 }
 
-func (ws *webseedPeer) _cancel(r RequestIndex) bool {
+func (ws *webseedPeer) _cancel(r RequestIndex) {
 	active, ok := ws.activeRequests[ws.peer.t.requestIndexToRequest(r)]
 	if ok {
 		active.Cancel()
@@ -59,7 +59,6 @@ func (ws *webseedPeer) _cancel(r RequestIndex) bool {
 	if ws.peer.isLowOnRequests() {
 		ws.peer.updateRequests("webseedPeer._cancel")
 	}
-	return true
 }
 
 func (ws *webseedPeer) intoSpec(r Request) webseed.RequestSpec {

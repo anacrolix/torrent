@@ -638,17 +638,17 @@ func (me *PeerConn) _request(r Request) bool {
 	})
 }
 
-func (me *Peer) cancel(r RequestIndex) bool {
+func (me *Peer) cancel(r RequestIndex) {
 	if !me.actualRequestState.Requests.Contains(r) {
-		return true
+		panic(r)
 	}
-	return me._cancel(r)
+	me._cancel(r)
 }
 
-func (me *PeerConn) _cancel(r RequestIndex) bool {
+func (me *PeerConn) _cancel(r RequestIndex) {
 	if me.cancelledRequests.Contains(r) {
 		// Already cancelled and waiting for a response.
-		return true
+		panic(r)
 	}
 	// Transmission does not send rejects for received cancels. See
 	// https://github.com/transmission/transmission/pull/2275.
@@ -662,7 +662,7 @@ func (me *PeerConn) _cancel(r RequestIndex) bool {
 			me.updateRequests("Peer.cancel")
 		}
 	}
-	return me.write(makeCancelMessage(me.t.requestIndexToRequest(r)))
+	me.write(makeCancelMessage(me.t.requestIndexToRequest(r)))
 }
 
 func (cn *PeerConn) fillWriteBuffer() {
@@ -1395,12 +1395,12 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	piece.unpendChunkIndex(chunkIndexFromChunkSpec(ppReq.ChunkSpec, t.chunkSize))
 
 	// Cancel pending requests for this chunk from *other* peers.
-	t.iterPeers(func(p *Peer) {
+	if p := t.pendingRequests[req]; p != nil {
 		if p == c {
-			return
+			panic("should not be pending request from conn that just received it")
 		}
 		p.cancel(req)
-	})
+	}
 
 	err := func() error {
 		cl.unlock()

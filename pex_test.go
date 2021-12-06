@@ -30,94 +30,18 @@ var (
 		addrs4[0],
 		addrs4[1],
 	}
-	f = pp.PexOutgoingConn
 )
 
-func TestPexAdded(t *testing.T) {
-	t.Run("noHold", func(t *testing.T) {
-		s := new(pexState)
-		s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0], outgoing: true}})
-		targ := &pexState{
-			ev: []pexEvent{
-				{pexAdd, addrs[0], pp.PexOutgoingConn},
-			},
-			nc: 1,
-		}
-		require.EqualValues(t, targ, s)
-	})
-	t.Run("belowTarg", func(t *testing.T) {
-		s := &pexState{
-			hold: []pexEvent{
-				{pexDrop, addrs[1], 0},
-			},
-			nc: 0,
-		}
-		s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}})
-		targ := &pexState{
-			hold: []pexEvent{
-				{pexDrop, addrs[1], 0},
-			},
-			ev: []pexEvent{
-				{pexAdd, addrs[0], 0},
-			},
-			nc: 1,
-		}
-		require.EqualValues(t, targ, s)
-	})
-	t.Run("aboveTarg", func(t *testing.T) {
-		holdAddr := &net.TCPAddr{IP: net.IPv6loopback, Port: 4848}
-		s := &pexState{
-			hold: []pexEvent{
-				{pexDrop, holdAddr, 0},
-			},
-			nc: pexTargAdded,
-		}
-		s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}})
-		targ := &pexState{
-			hold: []pexEvent{},
-			ev: []pexEvent{
-				{pexDrop, holdAddr, 0},
-				{pexAdd, addrs[0], 0},
-			},
-			nc: pexTargAdded + 1,
-		}
-		require.EqualValues(t, targ, s)
-	})
-}
-
-func TestPexDropped(t *testing.T) {
-	t.Run("belowTarg", func(t *testing.T) {
-		s := &pexState{nc: 1}
-		s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}, pex: pexConnState{Listed: true}})
-		targ := &pexState{
-			hold: []pexEvent{{pexDrop, addrs[0], 0}},
-			nc:   0,
-		}
-		require.EqualValues(t, targ, s)
-	})
-	t.Run("aboveTarg", func(t *testing.T) {
-		s := &pexState{nc: pexTargAdded + 1}
-		s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}, pex: pexConnState{Listed: true}})
-		targ := &pexState{
-			ev: []pexEvent{{pexDrop, addrs[0], 0}},
-			nc: pexTargAdded,
-		}
-		require.EqualValues(t, targ, s)
-	})
-	t.Run("aboveTargNotListed", func(t *testing.T) {
-		s := &pexState{nc: pexTargAdded + 1}
-		s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}, pex: pexConnState{Listed: false}})
-		targ := &pexState{nc: pexTargAdded + 1}
-		require.EqualValues(t, targ, s)
-	})
-}
-
 func TestPexReset(t *testing.T) {
-	s := &pexState{
-		hold: []pexEvent{{pexDrop, addrs[0], 0}},
-		ev:   []pexEvent{{pexAdd, addrs[1], 0}},
-		nc:   1,
+	s := &pexState{}
+	conns := []PeerConn{
+		{Peer: Peer{RemoteAddr: addrs[0]}},
+		{Peer: Peer{RemoteAddr: addrs[1]}},
+		{Peer: Peer{RemoteAddr: addrs[2]}},
 	}
+	s.Add(&conns[0])
+	s.Add(&conns[1])
+	s.Drop(&conns[0])
 	s.Reset()
 	targ := new(pexState)
 	require.EqualValues(t, targ, s)
@@ -132,54 +56,69 @@ func mustNodeAddr(addr net.Addr) krpc.NodeAddr {
 }
 
 var testcases = []struct {
-	name  string
-	in    *pexState
-	arg   int
-	targM pp.PexMsg
-	targS int
+	name   string
+	in     *pexState
+	targ   pp.PexMsg
+	update func(*pexState)
+	targ1  pp.PexMsg
 }{
 	{
-		name:  "empty",
-		in:    &pexState{},
-		arg:   0,
-		targM: pp.PexMsg{},
-		targS: 0,
+		name: "empty",
+		in:   &pexState{},
+		targ: pp.PexMsg{},
+	},
+	{
+		name: "add0",
+		in: func() *pexState {
+			s := new(pexState)
+			nullAddr := &net.TCPAddr{}
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: nullAddr}})
+			return s
+		}(),
+		targ: pp.PexMsg{},
+	},
+	{
+		name: "drop0",
+		in: func() *pexState {
+			nullAddr := &net.TCPAddr{}
+			s := new(pexState)
+			s.Drop(&PeerConn{Peer: Peer{RemoteAddr: nullAddr}, pex: pexConnState{Listed: true}})
+			return s
+		}(),
+		targ: pp.PexMsg{},
 	},
 	{
 		name: "add4",
-		in: &pexState{
-			ev: []pexEvent{
-				{pexAdd, addrs[0], f},
-				{pexAdd, addrs[1], f},
-				{pexAdd, addrs[2], f},
-				{pexAdd, addrs[3], f},
-			},
-		},
-		arg: 0,
-		targM: pp.PexMsg{
+		in: func() *pexState {
+			s := new(pexState)
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}})
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[1], outgoing: true}})
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[2], outgoing: true}})
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[3]}})
+			return s
+		}(),
+		targ: pp.PexMsg{
 			Added: krpc.CompactIPv4NodeAddrs{
 				mustNodeAddr(addrs[2]),
 				mustNodeAddr(addrs[3]),
 			},
-			AddedFlags: []pp.PexPeerFlags{f, f},
+			AddedFlags: []pp.PexPeerFlags{pp.PexOutgoingConn, 0},
 			Added6: krpc.CompactIPv6NodeAddrs{
 				mustNodeAddr(addrs[0]),
 				mustNodeAddr(addrs[1]),
 			},
-			Added6Flags: []pp.PexPeerFlags{f, f},
+			Added6Flags: []pp.PexPeerFlags{0, pp.PexOutgoingConn},
 		},
-		targS: 4,
 	},
 	{
 		name: "drop2",
-		arg:  0,
-		in: &pexState{
-			ev: []pexEvent{
-				{pexDrop, addrs[0], f},
-				{pexDrop, addrs[2], f},
-			},
-		},
-		targM: pp.PexMsg{
+		in: func() *pexState {
+			s := &pexState{nc: pexTargAdded + 2}
+			s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}, pex: pexConnState{Listed: true}})
+			s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[2]}, pex: pexConnState{Listed: true}})
+			return s
+		}(),
+		targ: pp.PexMsg{
 			Dropped: krpc.CompactIPv4NodeAddrs{
 				mustNodeAddr(addrs[2]),
 			},
@@ -187,70 +126,100 @@ var testcases = []struct {
 				mustNodeAddr(addrs[0]),
 			},
 		},
-		targS: 2,
 	},
 	{
 		name: "add2drop1",
-		arg:  0,
-		in: &pexState{
-			ev: []pexEvent{
-				{pexAdd, addrs[0], f},
-				{pexAdd, addrs[1], f},
-				{pexDrop, addrs[0], f},
-			},
-		},
-		targM: pp.PexMsg{
+		in: func() *pexState {
+			conns := []PeerConn{
+				{Peer: Peer{RemoteAddr: addrs[0]}},
+				{Peer: Peer{RemoteAddr: addrs[1]}},
+				{Peer: Peer{RemoteAddr: addrs[2]}},
+			}
+			s := &pexState{nc: pexTargAdded}
+			s.Add(&conns[0])
+			s.Add(&conns[1])
+			s.Drop(&conns[0])
+			s.Drop(&conns[2]) // to be ignored: it wasn't added
+			return s
+		}(),
+		targ: pp.PexMsg{
 			Added6: krpc.CompactIPv6NodeAddrs{
 				mustNodeAddr(addrs[1]),
 			},
-			Added6Flags: []pp.PexPeerFlags{f},
+			Added6Flags: []pp.PexPeerFlags{0},
 		},
-		targS: 3,
 	},
 	{
 		name: "delayed",
-		arg:  0,
-		in: &pexState{
-			ev: []pexEvent{
-				{pexAdd, addrs[0], f},
-				{pexAdd, addrs[1], f},
-				{pexAdd, addrs[2], f},
-			},
-			hold: []pexEvent{
-				{pexDrop, addrs[0], f},
-				{pexDrop, addrs[2], f},
-				{pexDrop, addrs[1], f},
-			},
-		},
-		targM: pp.PexMsg{
+		in: func() *pexState {
+			conns := []PeerConn{
+				{Peer: Peer{RemoteAddr: addrs[0]}},
+				{Peer: Peer{RemoteAddr: addrs[1]}},
+				{Peer: Peer{RemoteAddr: addrs[2]}},
+			}
+			s := new(pexState)
+			s.Add(&conns[0])
+			s.Add(&conns[1])
+			s.Add(&conns[2])
+			s.Drop(&conns[0]) // on hold: s.nc < pexTargAdded
+			s.Drop(&conns[2])
+			s.Drop(&conns[1])
+			return s
+		}(),
+		targ: pp.PexMsg{
 			Added: krpc.CompactIPv4NodeAddrs{
 				mustNodeAddr(addrs[2]),
 			},
-			AddedFlags: []pp.PexPeerFlags{f},
+			AddedFlags: []pp.PexPeerFlags{0},
 			Added6: krpc.CompactIPv6NodeAddrs{
 				mustNodeAddr(addrs[0]),
 				mustNodeAddr(addrs[1]),
 			},
-			Added6Flags: []pp.PexPeerFlags{f, f},
+			Added6Flags: []pp.PexPeerFlags{0, 0},
 		},
-		targS: 3,
 	},
 	{
-		name: "followup",
-		arg:  1,
-		in: &pexState{
-			ev: []pexEvent{
-				{pexAdd, addrs[0], f},
-				{pexAdd, addrs[1], f},
-			},
-		},
-		targM: pp.PexMsg{
+		name: "unheld",
+		in: func() *pexState {
+			conns := []PeerConn{
+				{Peer: Peer{RemoteAddr: addrs[0]}},
+				{Peer: Peer{RemoteAddr: addrs[1]}},
+			}
+			s := &pexState{nc: pexTargAdded - 1}
+			s.Add(&conns[0])
+			s.Drop(&conns[0]) // on hold: s.nc < pexTargAdded
+			s.Add(&conns[1])  // unholds the above
+			return s
+		}(),
+		targ: pp.PexMsg{
 			Added6: krpc.CompactIPv6NodeAddrs{
 				mustNodeAddr(addrs[1]),
 			},
-			Added6Flags: []pp.PexPeerFlags{f},
+			Added6Flags: []pp.PexPeerFlags{0},
 		},
-		targS: 2,
+	},
+	{
+		name: "followup",
+		in: func() *pexState {
+			s := new(pexState)
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}})
+			return s
+		}(),
+		targ: pp.PexMsg{
+			Added6: krpc.CompactIPv6NodeAddrs{
+				mustNodeAddr(addrs[0]),
+			},
+			Added6Flags: []pp.PexPeerFlags{0},
+		},
+		update: func(s *pexState) {
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[1]}})
+		},
+		targ1: pp.PexMsg{
+			Added6: krpc.CompactIPv6NodeAddrs{
+				mustNodeAddr(addrs[1]),
+			},
+			Added6Flags: []pp.PexPeerFlags{0},
+		},
 	},
 }
 
@@ -292,13 +261,18 @@ func assertPexMsgsEqual(t *testing.T, expected, actual pp.PexMsg) {
 	ac.AssertEqual(t, ec)
 }
 
-func TestPexGenmsg(t *testing.T) {
+func TestPexGenmsg0(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := tc.in
-			m, seen := s.Genmsg(tc.arg)
-			assertPexMsgsEqual(t, tc.targM, m)
-			require.EqualValues(t, tc.targS, seen)
+			s := *tc.in
+			m, last := s.Genmsg(nil)
+			assertPexMsgsEqual(t, tc.targ, m)
+			if tc.update != nil {
+				tc.update(&s)
+				m1, last := s.Genmsg(last)
+				assertPexMsgsEqual(t, tc.targ1, m1)
+				assert.NotNil(t, last)
+			}
 		})
 	}
 }
@@ -324,9 +298,8 @@ func TestPexInitialNoCutoff(t *testing.T) {
 	for addr := range c {
 		s.Add(&PeerConn{Peer: Peer{RemoteAddr: addr}})
 	}
-	m, seq := s.Genmsg(0)
+	m, _ := s.Genmsg(nil)
 
-	require.EqualValues(t, n, seq)
 	require.EqualValues(t, n, len(m.Added))
 	require.EqualValues(t, n, len(m.AddedFlags))
 	require.EqualValues(t, 0, len(m.Added6))
@@ -341,7 +314,7 @@ func benchmarkPexInitialN(b *testing.B, npeers int) {
 		c := addrgen(npeers)
 		for addr := range c {
 			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addr}})
-			s.Genmsg(0)
+			s.Genmsg(nil)
 		}
 	}
 }
@@ -352,98 +325,3 @@ func BenchmarkPexInitial50(b *testing.B)  { benchmarkPexInitialN(b, 50) }
 func BenchmarkPexInitial100(b *testing.B) { benchmarkPexInitialN(b, 100) }
 func BenchmarkPexInitial200(b *testing.B) { benchmarkPexInitialN(b, 200) }
 func BenchmarkPexInitial400(b *testing.B) { benchmarkPexInitialN(b, 400) }
-
-func TestPexAdd(t *testing.T) {
-	t.Run("ipv4", func(t *testing.T) {
-		addrs := addrs4
-		var m pexMsgFactory
-		m.addEvent(pexEvent{pexDrop, addrs[0], 0})
-		m.addEvent(pexEvent{pexAdd, addrs[1], f})
-		for _, addr := range addrs {
-			m.addEvent(pexEvent{pexAdd, addr, f})
-		}
-		targ := pp.PexMsg{
-			Added: krpc.CompactIPv4NodeAddrs{
-				mustNodeAddr(addrs[1]),
-				mustNodeAddr(addrs[2]),
-				mustNodeAddr(addrs[3]),
-			},
-			AddedFlags: []pp.PexPeerFlags{f, f, f},
-		}
-		out := m.PexMsg()
-		assertPexMsgsEqual(t, targ, out)
-	})
-	t.Run("ipv6", func(t *testing.T) {
-		addrs := addrs6
-		var m pexMsgFactory
-		m.addEvent(pexEvent{pexDrop, addrs[0], 0})
-		m.addEvent(pexEvent{pexAdd, addrs[1], f})
-		for _, addr := range addrs {
-			m.addEvent(pexEvent{pexAdd, addr, f})
-		}
-		targ := pp.PexMsg{
-			Added6: krpc.CompactIPv6NodeAddrs{
-				mustNodeAddr(addrs[1]),
-				mustNodeAddr(addrs[2]),
-				mustNodeAddr(addrs[3]),
-			},
-			Added6Flags: []pp.PexPeerFlags{f, f, f},
-		}
-		assertPexMsgsEqual(t, targ, m.PexMsg())
-	})
-	t.Run("empty", func(t *testing.T) {
-		nullAddr := &net.TCPAddr{}
-		var xm pexMsgFactory
-		xm.addEvent(pexEvent{pexAdd, nullAddr, f})
-		m := xm.PexMsg()
-		require.EqualValues(t, 0, len(m.Added))
-		require.EqualValues(t, 0, len(m.AddedFlags))
-		require.EqualValues(t, 0, len(m.Added6))
-		require.EqualValues(t, 0, len(m.Added6Flags))
-	})
-}
-
-func TestPexDrop(t *testing.T) {
-	t.Run("ipv4", func(t *testing.T) {
-		addrs := addrs4
-		var m pexMsgFactory
-		m.addEvent(pexEvent{pexAdd, addrs[0], f})
-		m.addEvent(pexEvent{pexDrop, addrs[1], 0})
-		for _, addr := range addrs {
-			m.addEvent(pexEvent{pexDrop, addr, 0})
-		}
-		targ := pp.PexMsg{
-			Dropped: krpc.CompactIPv4NodeAddrs{
-				mustNodeAddr(addrs[1]),
-				mustNodeAddr(addrs[2]),
-				mustNodeAddr(addrs[3]),
-			},
-		}
-		assertPexMsgsEqual(t, targ, m.PexMsg())
-	})
-	t.Run("ipv6", func(t *testing.T) {
-		addrs := addrs6
-		var m pexMsgFactory
-		m.addEvent(pexEvent{pexAdd, addrs[0], f})
-		m.addEvent(pexEvent{pexDrop, addrs[1], 0})
-		for _, addr := range addrs {
-			m.addEvent(pexEvent{pexDrop, addr, 0})
-		}
-		targ := pp.PexMsg{
-			Dropped6: krpc.CompactIPv6NodeAddrs{
-				mustNodeAddr(addrs[1]),
-				mustNodeAddr(addrs[2]),
-				mustNodeAddr(addrs[3]),
-			},
-		}
-		assertPexMsgsEqual(t, targ, m.PexMsg())
-	})
-	t.Run("empty", func(t *testing.T) {
-		nullAddr := &net.TCPAddr{}
-		var xm pexMsgFactory
-		xm.addEvent(pexEvent{pexDrop, nullAddr, f})
-		m := xm.PexMsg()
-		require.EqualValues(t, 0, len(m.Dropped))
-		require.EqualValues(t, 0, len(m.Dropped6))
-	})
-}

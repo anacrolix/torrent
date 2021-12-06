@@ -1634,7 +1634,7 @@ func (c *PeerConn) dialAddr() PeerRemoteAddr {
 func (c *PeerConn) pexEvent(t pexEventType) pexEvent {
 	f := c.pexPeerFlags()
 	addr := c.dialAddr()
-	return pexEvent{t, addr, f}
+	return pexEvent{t, addr, f, nil}
 }
 
 func (c *PeerConn) String() string {

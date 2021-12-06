@@ -18,7 +18,7 @@ const (
 type pexConnState struct {
 	enabled bool
 	xid     pp.ExtensionNumber
-	seq     int
+	last    *pexEvent
 	timer   *time.Timer
 	gate    chan struct{}
 	readyfn func()
@@ -39,7 +39,7 @@ func (s *pexConnState) Init(c *PeerConn) {
 		return
 	}
 	s.xid = xid
-	s.seq = 0
+	s.last = nil
 	s.torrent = c.t
 	s.info = c.t.cl.logger.WithDefaultLevel(log.Info)
 	s.dbg = c.logger.WithDefaultLevel(log.Debug)
@@ -59,11 +59,11 @@ func (s *pexConnState) sched(delay time.Duration) {
 
 // generate next PEX message for the peer; returns nil if nothing yet to send
 func (s *pexConnState) genmsg() *pp.PexMsg {
-	tx, seq := s.torrent.pex.Genmsg(s.seq)
+	tx, last := s.torrent.pex.Genmsg(s.last)
 	if tx.Len() == 0 {
 		return nil
 	}
-	s.seq = seq
+	s.last = last
 	return &tx
 }
 

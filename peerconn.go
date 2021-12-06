@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
@@ -121,7 +122,7 @@ type Peer struct {
 
 	PeerMaxRequests  maxRequests // Maximum pending requests the peer allows.
 	PeerExtensionIDs map[pp.ExtensionName]pp.ExtensionNumber
-	PeerClientName   string
+	PeerClientName   atomic.Value
 
 	logger log.Logger
 }
@@ -1043,7 +1044,7 @@ func runSafeExtraneous(f func()) {
 
 func (c *PeerConn) logProtocolBehaviour(level log.Level, format string, arg ...interface{}) {
 	c.logger.WithLevel(level).WithContextText(fmt.Sprintf(
-		"peer id %q, ext v %q", c.PeerID, c.PeerClientName,
+		"peer id %q, ext v %q", c.PeerID, c.PeerClientName.Load(),
 	)).SkipCallers(1).Printf(format, arg...)
 }
 
@@ -1255,7 +1256,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		if d.Reqq != 0 {
 			c.PeerMaxRequests = d.Reqq
 		}
-		c.PeerClientName = d.V
+		c.PeerClientName.Store(d.V)
 		if c.PeerExtensionIDs == nil {
 			c.PeerExtensionIDs = make(map[pp.ExtensionName]pp.ExtensionNumber, len(d.M))
 		}
@@ -1640,7 +1641,7 @@ func (c *PeerConn) pexEvent(t pexEventType) pexEvent {
 }
 
 func (c *PeerConn) String() string {
-	return fmt.Sprintf("connection %p", c)
+	return fmt.Sprintf("%T %p [id=%q, exts=%v, v=%q]", c, c, c.PeerID, c.PeerExtensionBytes, c.PeerClientName.Load())
 }
 
 func (c *Peer) trust() connectionTrust {

@@ -1,5 +1,7 @@
-//go:build !nosqlite
-// +build !nosqlite
+// modernc.org/sqlite depends on modernc.org/libc which doesn't work for JS (and probably wasm but I
+// think JS is the stronger signal).
+//go:build !js && !nosqlite
+// +build !js,!nosqlite
 
 package storage
 
@@ -12,6 +14,11 @@ import (
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
+
+// sqlite is always the default when available.
+func NewDefaultPieceCompletionForDir(dir string) (PieceCompletion, error) {
+	return NewSqlitePieceCompletion(dir)
+}
 
 type sqlitePieceCompletion struct {
 	mu     sync.Mutex

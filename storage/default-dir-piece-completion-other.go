@@ -1,5 +1,6 @@
-//go:build wasm
-// +build wasm
+// Bolt piece completion is not available, and neither is sqlite.
+//go:build wasm || noboltdb
+// +build wasm noboltdb
 
 package storage
 

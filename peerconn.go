@@ -648,7 +648,9 @@ func (me *PeerConn) _cancel(r RequestIndex) bool {
 		// Already cancelled and waiting for a response.
 		return true
 	}
-	if me.fastEnabled() {
+	// Transmission does not send rejects for received cancels. See
+	// https://github.com/transmission/transmission/pull/2275.
+	if me.fastEnabled() && !me.remoteIsTransmission() {
 		me.cancelledRequests.Add(r)
 	} else {
 		if !me.deleteRequest(r) {
@@ -1687,4 +1689,8 @@ func (p *Peer) TryAsPeerConn() (*PeerConn, bool) {
 
 func (pc *PeerConn) isLowOnRequests() bool {
 	return pc.actualRequestState.Requests.IsEmpty()
+}
+
+func (pc *PeerConn) remoteIsTransmission() bool {
+	return bytes.HasPrefix(pc.PeerID[:], []byte("-TR")) && pc.PeerID[7] == '-'
 }

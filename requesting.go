@@ -99,12 +99,22 @@ func (p *peerRequests) Less(i, j int) bool {
 		return ml.MustLess()
 	}
 	if leftPeer != nil {
+		// The right peer should also be set, or we'd have resolved the computation by now.
 		ml = ml.Uint64(
 			rightPeer.actualRequestState.Requests.GetCardinality(),
 			leftPeer.actualRequestState.Requests.GetCardinality(),
 		)
+		// Could either of the lastRequested be Zero? That's what checking an existing peer is for.
+		leftLast := t.lastRequested[leftRequest]
+		rightLast := t.lastRequested[rightRequest]
+		if leftLast.IsZero() || rightLast.IsZero() {
+			panic("expected non-zero last requested times")
+		}
+		// We want the most-recently requested on the left. Clients like Transmission serve requests
+		// in received order, so the most recently-requested is the one that has the longest until
+		// it will be served and therefore is the best candidate to cancel.
+		ml = ml.CmpInt64(rightLast.Sub(leftLast).Nanoseconds())
 	}
-	ml = ml.CmpInt64(t.lastRequested[rightRequest].Sub(t.lastRequested[leftRequest]).Nanoseconds())
 	leftPiece := t.piece(int(leftPieceIndex))
 	rightPiece := t.piece(int(rightPieceIndex))
 	ml = ml.Int(

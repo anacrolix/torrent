@@ -231,7 +231,14 @@ func (p *Peer) applyRequestState(next desiredRequestState) bool {
 			continue
 		}
 		existing := t.requestingPeer(req)
-		if existing != nil && existing != p && existing.uncancelledRequests() > current.Requests.GetCardinality() {
+		if existing != nil && existing != p {
+			// Don't steal from the poor.
+			diff := int64(current.Requests.GetCardinality()) + 1 - (int64(existing.uncancelledRequests()) - 1)
+			// Steal a request that leaves us with one more request than the existing peer
+			// connection if the stealer more recently received a chunk.
+			if diff > 1 || (diff == 1 && p.lastUsefulChunkReceived.Before(existing.lastUsefulChunkReceived)) {
+				continue
+			}
 			t.cancelRequest(req)
 		}
 		more = p.mustRequest(req)

@@ -153,15 +153,7 @@ func (me *pexMsgFactory) PexMsg() pp.PexMsg {
 func nodeAddr(addr PeerRemoteAddr) (krpc.NodeAddr, bool) {
 	ipport, _ := tryIpPortFromNetAddr(addr)
 	ok := ipport.IP != nil
-	return krpc.NodeAddr{IP: shortestIP(ipport.IP), Port: ipport.Port}, ok
-}
-
-// mainly for the krpc marshallers
-func shortestIP(ip net.IP) net.IP {
-	if ip4 := ip.To4(); ip4 != nil {
-		return ip4
-	}
-	return ip
+	return krpc.NodeAddr{IP: ipport.IP, Port: ipport.Port}, ok
 }
 
 // Per-torrent PEX state

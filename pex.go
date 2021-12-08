@@ -51,19 +51,6 @@ func (me *pexMsgFactory) addrKey(addr PeerRemoteAddr) addrKey {
 	return addrKey(addr.String())
 }
 
-func addrEqual(a, b *krpc.NodeAddr) bool {
-	return a.IP.Equal(b.IP) && a.Port == b.Port
-}
-
-func addrIndex(v []krpc.NodeAddr, a *krpc.NodeAddr) int {
-	for i := 0; i < len(v); i += 1 {
-		if addrEqual(&v[i], a) {
-			return i
-		}
-	}
-	return -1
-}
-
 // Returns whether the entry was added (we can check if we're cancelling out another entry and so
 // won't hit the limit consuming this event).
 func (me *pexMsgFactory) add(e pexEvent) {
@@ -82,7 +69,7 @@ func (me *pexMsgFactory) add(e pexEvent) {
 	switch {
 	case addr.IP.To4() != nil:
 		if _, ok := me.dropped[key]; ok {
-			if i := addrIndex(m.Dropped.NodeAddrs(), &addr); i >= 0 {
+			if i := m.Dropped.Index(addr); i >= 0 {
 				m.Dropped = append(m.Dropped[:i], m.Dropped[i+1:]...)
 			}
 			delete(me.dropped, key)
@@ -92,7 +79,7 @@ func (me *pexMsgFactory) add(e pexEvent) {
 		m.AddedFlags = append(m.AddedFlags, e.f)
 	case len(addr.IP) == net.IPv6len:
 		if _, ok := me.dropped[key]; ok {
-			if i := addrIndex(m.Dropped6.NodeAddrs(), &addr); i >= 0 {
+			if i := m.Dropped6.Index(addr); i >= 0 {
 				m.Dropped6 = append(m.Dropped6[:i], m.Dropped6[i+1:]...)
 			}
 			delete(me.dropped, key)
@@ -124,7 +111,7 @@ func (me *pexMsgFactory) drop(e pexEvent) {
 	switch {
 	case addr.IP.To4() != nil:
 		if _, ok := me.added[key]; ok {
-			if i := addrIndex(m.Added.NodeAddrs(), &addr); i >= 0 {
+			if i := m.Added.Index(addr); i >= 0 {
 				m.Added = append(m.Added[:i], m.Added[i+1:]...)
 				m.AddedFlags = append(m.AddedFlags[:i], m.AddedFlags[i+1:]...)
 			}
@@ -134,7 +121,7 @@ func (me *pexMsgFactory) drop(e pexEvent) {
 		m.Dropped = append(m.Dropped, addr)
 	case len(addr.IP) == net.IPv6len:
 		if _, ok := me.added[key]; ok {
-			if i := addrIndex(m.Added6.NodeAddrs(), &addr); i >= 0 {
+			if i := m.Added6.Index(addr); i >= 0 {
 				m.Added6 = append(m.Added6[:i], m.Added6[i+1:]...)
 				m.Added6Flags = append(m.Added6Flags[:i], m.Added6Flags[i+1:]...)
 			}

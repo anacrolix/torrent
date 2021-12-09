@@ -81,7 +81,7 @@ func GetRequestablePieces(input Input, pro *PieceRequestOrder, f func(ih metainf
 	}
 	var allTorrentsUnverifiedBytes int64
 	pro.tree.Ascend(func(i btree.Item) bool {
-		_i := i.(pieceRequestOrderItem)
+		_i := i.(*pieceRequestOrderItem)
 		ih := _i.key.InfoHash
 		var t Torrent = input.Torrent(ih)
 		var piece Piece = t.Piece(_i.key.Index)

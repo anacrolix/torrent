@@ -105,7 +105,7 @@ func (d *Decoder) throwSyntaxError(offset int64, err error) {
 func (d *Decoder) readInt() error {
 	// start := d.Offset - 1
 	d.readUntil('e')
-	if err := d.bufLeadingZero(); err != nil {
+	if err := d.checkBufferedInt(); err != nil {
 		return err
 	}
 	// if d.buf.Len() == 0 {
@@ -161,10 +161,16 @@ func (d *Decoder) parseInt(v reflect.Value) error {
 	return nil
 }
 
-func (d *Decoder) bufLeadingZero() error {
+func (d *Decoder) checkBufferedInt() error {
 	b := d.buf.Bytes()
-	if len(b) > 1 && b[0] == '0' {
-		return fmt.Errorf("non-zero integer has leading zeroes: %q", b)
+	if len(b) <= 1 {
+		return nil
+	}
+	if b[0] == '-' {
+		b = b[1:]
+	}
+	if b[0] < '1' || b[0] > '9' {
+		return errors.New("invalid leading digit")
 	}
 	return nil
 }
@@ -173,7 +179,7 @@ func (d *Decoder) parseStringLength() (uint64, error) {
 	// We should have already consumed the first byte of the length into the Decoder buf.
 	start := d.Offset - 1
 	d.readUntil(':')
-	if err := d.bufLeadingZero(); err != nil {
+	if err := d.checkBufferedInt(); err != nil {
 		return 0, err
 	}
 	length, err := strconv.ParseUint(bytesAsString(d.buf.Bytes()), 10, 32)

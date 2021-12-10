@@ -211,6 +211,7 @@ func (p *Peer) applyRequestState(next desiredRequestState) bool {
 	}
 	more := true
 	requestHeap := &next.Requests
+	t := p.t
 	heap.Init(requestHeap)
 	for requestHeap.Len() != 0 && maxRequests(current.Requests.GetCardinality()) < p.nominalMaxRequests() {
 		req := heap.Pop(requestHeap).(RequestIndex)
@@ -219,9 +220,9 @@ func (p *Peer) applyRequestState(next desiredRequestState) bool {
 			// requests, so we can skip this one with no additional consideration.
 			continue
 		}
-		existing := p.t.pendingRequests[req]
-		if existing != nil && existing != p && existing.actualRequestState.Requests.GetCardinality()-existing.cancelledRequests.GetCardinality() > current.Requests.GetCardinality() {
-			existing.cancel(req)
+		existing := t.requestingPeer(req)
+		if existing != nil && existing != p && existing.uncancelledRequests() > current.Requests.GetCardinality() {
+			t.cancelRequest(req)
 		}
 		more = p.mustRequest(req)
 		if !more {

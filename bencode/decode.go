@@ -101,17 +101,29 @@ func (d *Decoder) throwSyntaxError(offset int64, err error) {
 	})
 }
 
-// called when 'i' was consumed
+// Assume the 'i' is already consumed. Read and validate the rest of an int into the buffer.
+func (d *Decoder) readInt() error {
+	// start := d.Offset - 1
+	d.readUntil('e')
+	if err := d.bufLeadingZero(); err != nil {
+		return err
+	}
+	// if d.buf.Len() == 0 {
+	// 	panic(&SyntaxError{
+	// 		Offset: start,
+	// 		What:   errors.New("empty integer value"),
+	// 	})
+	// }
+	return nil
+}
+
+// called when 'i' was consumed, for the integer type in v.
 func (d *Decoder) parseInt(v reflect.Value) error {
 	start := d.Offset - 1
-	d.readUntil('e')
-	if d.buf.Len() == 0 {
-		panic(&SyntaxError{
-			Offset: start,
-			What:   errors.New("empty integer value"),
-		})
-	}
 
+	if err := d.readInt(); err != nil {
+		return err
+	}
 	s := bytesAsString(d.buf.Bytes())
 
 	switch v.Kind() {
@@ -149,16 +161,33 @@ func (d *Decoder) parseInt(v reflect.Value) error {
 	return nil
 }
 
-func (d *Decoder) parseString(v reflect.Value) error {
+func (d *Decoder) bufLeadingZero() error {
+	b := d.buf.Bytes()
+	if len(b) > 1 && b[0] == '0' {
+		return fmt.Errorf("non-zero integer has leading zeroes: %q", b)
+	}
+	return nil
+}
+
+func (d *Decoder) parseStringLength() (uint64, error) {
+	// We should have already consumed the first byte of the length into the Decoder buf.
 	start := d.Offset - 1
-
-	// read the string length first
 	d.readUntil(':')
-	length, err := strconv.ParseInt(bytesAsString(d.buf.Bytes()), 10, 32)
+	if err := d.bufLeadingZero(); err != nil {
+		return 0, err
+	}
+	length, err := strconv.ParseUint(bytesAsString(d.buf.Bytes()), 10, 32)
 	checkForIntParseError(err, start)
+	d.buf.Reset()
+	return length, err
+}
 
+func (d *Decoder) parseString(v reflect.Value) error {
+	length, err := d.parseStringLength()
+	if err != nil {
+		return err
+	}
 	defer d.buf.Reset()
-
 	read := func(b []byte) {
 		n, err := io.ReadFull(d.r, b)
 		d.Offset += int64(n)
@@ -231,13 +260,13 @@ func getDictField(dict reflect.Type, key string) (_ dictField, err error) {
 		}, nil
 	case reflect.Struct:
 		return getStructFieldForKey(dict, key), nil
-		//if sf.r.PkgPath != "" {
+		// if sf.r.PkgPath != "" {
 		//	panic(&UnmarshalFieldError{
 		//		Key:   key,
 		//		Type:  dict.Type(),
 		//		Field: sf.r,
 		//	})
-		//}
+		// }
 	default:
 		err = fmt.Errorf("can't assign bencode dict items into a %v", k)
 		return
@@ -580,16 +609,13 @@ func (d *Decoder) parseValueInterface() (interface{}, bool) {
 	}
 }
 
+// Called after 'i', for an arbitrary integer size.
 func (d *Decoder) parseIntInterface() (ret interface{}) {
 	start := d.Offset - 1
-	d.readUntil('e')
-	if d.buf.Len() == 0 {
-		panic(&SyntaxError{
-			Offset: start,
-			What:   errors.New("empty integer value"),
-		})
-	}
 
+	if err := d.readInt(); err != nil {
+		panic(err)
+	}
 	n, err := strconv.ParseInt(d.buf.String(), 10, 64)
 	if ne, ok := err.(*strconv.NumError); ok && ne.Err == strconv.ErrRange {
 		i := new(big.Int)
@@ -611,13 +637,10 @@ func (d *Decoder) parseIntInterface() (ret interface{}) {
 }
 
 func (d *Decoder) parseStringInterface() string {
-	// read the string length first
-	d.readUntil(':')
-	length, err := strconv.ParseInt(bytesAsString(d.buf.Bytes()), 10, 32)
+	length, err := d.parseStringLength()
 	if err != nil {
-		panic(&SyntaxError{Offset: d.Offset - 1, What: err})
+		panic(err)
 	}
-	d.buf.Reset()
 	b := make([]byte, length)
 	n, err := io.ReadFull(d.r, b)
 	d.Offset += int64(n)

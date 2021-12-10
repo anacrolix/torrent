@@ -33,8 +33,8 @@ var random_decode_tests = []random_decode_test{
 		ret, _ := big.NewInt(-1).SetString("604919719469385652980544193299329427705624352086", 10)
 		return ret
 	}()},
-	{"d1:rd6:\xd4/\xe2F\x00\x01e1:t3:\x9a\x87\x011:v4:TR%=1:y1:re", map[string]interface{}{
-		"r": map[string]interface{}{},
+	{"d1:rd6:\xd4/\xe2F\x00\x01i42ee1:t3:\x9a\x87\x011:v4:TR%=1:y1:re", map[string]interface{}{
+		"r": map[string]interface{}{"\xd4/\xe2F\x00\x01": int64(42)},
 		"t": "\x9a\x87\x01",
 		"v": "TR%=",
 		"y": "r",

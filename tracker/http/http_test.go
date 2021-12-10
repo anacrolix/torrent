@@ -16,7 +16,7 @@ func TestUnmarshalHTTPResponsePeerDicts(t *testing.T) {
 	require.NoError(t, bencode.Unmarshal(
 		[]byte("d5:peersl"+
 			"d2:ip7:1.2.3.47:peer id20:thisisthe20bytepeeri4:porti9999ee"+
-			"d7:peer id20:thisisthe20bytepeeri2:ip39:2001:0db8:85a3:0000:0000:8a2e:0370:73344:porti9998ee"+
+			"d2:ip39:2001:0db8:85a3:0000:0000:8a2e:0370:73347:peer id20:thisisthe20bytepeeri4:porti9998ee"+
 			"e"+
 			"6:peers618:123412341234123456"+
 			"e"),

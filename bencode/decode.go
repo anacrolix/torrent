@@ -652,7 +652,9 @@ func (d *Decoder) parseStringInterface() string {
 
 func (d *Decoder) parseDictInterface() interface{} {
 	dict := make(map[string]interface{})
+	lastKey := ""
 	for {
+		start := d.Offset
 		keyi, ok := d.parseValueInterface()
 		if !ok {
 			break
@@ -665,12 +667,16 @@ func (d *Decoder) parseDictInterface() interface{} {
 				What:   errors.New("non-string key in a dict"),
 			})
 		}
-
+		if key <= lastKey {
+			d.throwSyntaxError(start, fmt.Errorf("dict keys unsorted: %q <= %q", key, lastKey))
+		}
+		start = d.Offset
 		valuei, ok := d.parseValueInterface()
 		if !ok {
-			break
+			d.throwSyntaxError(start, fmt.Errorf("dict elem missing value [key=%v]", key))
 		}
 
+		lastKey = key
 		dict[key] = valuei
 	}
 	return dict

@@ -642,14 +642,24 @@ func (d *Decoder) parseIntInterface() (ret interface{}) {
 	return
 }
 
+func (d *Decoder) readBytes(length int) []byte {
+	b, err := io.ReadAll(io.LimitReader(d.r, int64(length)))
+	if err != nil {
+		panic(err)
+	}
+	if len(b) != length {
+		panic(fmt.Errorf("read %v bytes expected %v", len(b), length))
+	}
+	return b
+}
+
 func (d *Decoder) parseStringInterface() string {
 	length, err := d.parseStringLength()
 	if err != nil {
 		panic(err)
 	}
-	b := make([]byte, length)
-	n, err := io.ReadFull(d.r, b)
-	d.Offset += int64(n)
+	b := d.readBytes(int(length))
+	d.Offset += int64(len(b))
 	if err != nil {
 		panic(&SyntaxError{Offset: d.Offset, What: err})
 	}

@@ -34,3 +34,20 @@ func Fuzz(f *testing.F) {
 		c.Assert(d0, bencodeInterfaceChecker, d)
 	})
 }
+
+func FuzzInterfaceRoundTrip(f *testing.F) {
+	for _, ret := range random_encode_tests {
+		f.Add([]byte(ret.expected))
+	}
+	f.Fuzz(func(t *testing.T, b []byte) {
+		c := qt.New(t)
+		var d interface{}
+		err := Unmarshal(b, &d)
+		if err != nil {
+			c.Skip(err)
+		}
+		b0, err := Marshal(d)
+		c.Assert(err, qt.IsNil)
+		c.Check(b0, qt.DeepEquals, b)
+	})
+}

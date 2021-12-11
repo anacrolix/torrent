@@ -1099,7 +1099,7 @@ func (t *Torrent) maybeNewConns() {
 func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
 	if t._pendingPieces.Contains(uint32(piece)) {
 		t.iterPeers(func(c *Peer) {
-			// if c.actualRequestState.Interested {
+			// if c.requestState.Interested {
 			// 	return
 			// }
 			if !c.isLowOnRequests() {
@@ -1420,7 +1420,7 @@ func (t *Torrent) assertPendingRequests() {
 	// 	actual.m = make([]int, t.numRequests())
 	// }
 	// t.iterPeers(func(p *Peer) {
-	// 	p.actualRequestState.Requests.Iterate(func(x uint32) bool {
+	// 	p.requestState.Requests.Iterate(func(x uint32) bool {
 	// 		actual.Inc(x)
 	// 		return true
 	// 	})

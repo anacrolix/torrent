@@ -101,8 +101,8 @@ func (p *peerRequests) Less(i, j int) bool {
 	if leftPeer != nil {
 		// The right peer should also be set, or we'd have resolved the computation by now.
 		ml = ml.Uint64(
-			rightPeer.actualRequestState.Requests.GetCardinality(),
-			leftPeer.actualRequestState.Requests.GetCardinality(),
+			rightPeer.requestState.Requests.GetCardinality(),
+			leftPeer.requestState.Requests.GetCardinality(),
 		)
 		// Could either of the lastRequested be Zero? That's what checking an existing peer is for.
 		leftLast := t.lastRequested[leftRequest]
@@ -171,7 +171,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 			allowedFast := p.peerAllowedFast.ContainsInt(pieceIndex)
 			p.t.piece(pieceIndex).undirtiedChunksIter.Iter(func(ci request_strategy.ChunkIndex) {
 				r := p.t.pieceRequestIndexOffset(pieceIndex) + ci
-				// if p.t.pendingRequests.Get(r) != 0 && !p.actualRequestState.Requests.Contains(r) {
+				// if p.t.pendingRequests.Get(r) != 0 && !p.requestState.Requests.Contains(r) {
 				//	return
 				// }
 				if !allowedFast {
@@ -183,10 +183,14 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 					// have made the request previously (presumably while unchoked), and haven't had
 					// the peer respond yet (and the request was retained because we are using the
 					// fast extension).
-					if p.peerChoking && !p.actualRequestState.Requests.Contains(r) {
+					if p.peerChoking && !p.requestState.Requests.Contains(r) {
 						// We can't request this right now.
 						return
 					}
+				}
+				if p.requestState.Cancelled.Contains(r) {
+					// Can't re-request.
+					return
 				}
 				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
 			})
@@ -215,7 +219,7 @@ func (p *Peer) maybeUpdateActualRequestState() bool {
 
 // Transmit/action the request state to the peer.
 func (p *Peer) applyRequestState(next desiredRequestState) bool {
-	current := &p.actualRequestState
+	current := &p.requestState
 	if !p.setInterested(next.Interested) {
 		return false
 	}
@@ -225,11 +229,6 @@ func (p *Peer) applyRequestState(next desiredRequestState) bool {
 	heap.Init(requestHeap)
 	for requestHeap.Len() != 0 && maxRequests(current.Requests.GetCardinality()) < p.nominalMaxRequests() {
 		req := heap.Pop(requestHeap).(RequestIndex)
-		if p.cancelledRequests.Contains(req) {
-			// Waiting for a reject or piece message, which will suitably trigger us to update our
-			// requests, so we can skip this one with no additional consideration.
-			continue
-		}
 		existing := t.requestingPeer(req)
 		if existing != nil && existing != p {
 			// Don't steal from the poor.

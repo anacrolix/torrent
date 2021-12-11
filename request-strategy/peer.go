@@ -4,7 +4,10 @@ import (
 	"github.com/RoaringBitmap/roaring"
 )
 
-type PeerNextRequestState struct {
+type PeerRequestState struct {
 	Interested bool
-	Requests   roaring.Bitmap
+	// Expecting
+	Requests roaring.Bitmap
+	// Cancelled and waiting response
+	Cancelled roaring.Bitmap
 }

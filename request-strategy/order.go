@@ -43,32 +43,6 @@ func pieceOrderLess(i, j pieceOrderInput) multiless.Computation {
 	})
 }
 
-type requestsPeer struct {
-	Peer
-	nextState                  PeerNextRequestState
-	requestablePiecesRemaining int
-}
-
-func (rp *requestsPeer) canFitRequest() bool {
-	return int(rp.nextState.Requests.GetCardinality()) < rp.MaxRequests
-}
-
-func (rp *requestsPeer) addNextRequest(r RequestIndex) {
-	if !rp.nextState.Requests.CheckedAdd(r) {
-		panic("should only add once")
-	}
-}
-
-type peersForPieceRequests struct {
-	requestsInPiece int
-	*requestsPeer
-}
-
-func (me *peersForPieceRequests) addNextRequest(r RequestIndex) {
-	me.requestsPeer.addNextRequest(r)
-	me.requestsInPiece++
-}
-
 var packageExpvarMap = expvar.NewMap("request-strategy")
 
 // Calls f with requestable pieces in order.

@@ -160,7 +160,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	}
 	request_strategy.GetRequestablePieces(
 		input,
-		p.t.cl.pieceRequestOrder[p.t.storage.Capacity],
+		p.t.getPieceRequestOrder(),
 		func(ih InfoHash, pieceIndex int) {
 			if ih != p.t.infoHash {
 				return

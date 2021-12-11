@@ -75,7 +75,7 @@ type Client struct {
 	dopplegangerAddrs map[string]struct{}
 	badPeerIPs        map[string]struct{}
 	torrents          map[InfoHash]*Torrent
-	pieceRequestOrder map[storage.TorrentCapacity]*request_strategy.PieceRequestOrder
+	pieceRequestOrder map[interface{}]*request_strategy.PieceRequestOrder
 
 	acceptLimiter   map[ipStr]int
 	dialRateLimiter *rate.Limiter

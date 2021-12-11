@@ -437,12 +437,7 @@ func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrder
 
 // This seems to be all the follow-up tasks after info is set, that can't fail.
 func (t *Torrent) onSetInfo() {
-	if t.cl.pieceRequestOrder == nil {
-		t.cl.pieceRequestOrder = make(map[storage.TorrentCapacity]*request_strategy.PieceRequestOrder)
-	}
-	if t.cl.pieceRequestOrder[t.storage.Capacity] == nil {
-		t.cl.pieceRequestOrder[t.storage.Capacity] = request_strategy.NewPieceOrder()
-	}
+	t.initPieceRequestOrder()
 	for i := range t.pieces {
 		p := &t.pieces[i]
 		// Need to add availability before updating piece completion, as that may result in conns
@@ -451,9 +446,7 @@ func (t *Torrent) onSetInfo() {
 			panic(p.availability)
 		}
 		p.availability = int64(t.pieceAvailabilityFromPeers(i))
-		t.cl.pieceRequestOrder[t.storage.Capacity].Add(
-			t.pieceRequestOrderKey(i),
-			t.requestStrategyPieceOrderState(i))
+		t.addRequestOrderPiece(i)
 		t.updatePieceCompletion(pieceIndex(i))
 		if !t.initialPieceCheckDisabled && !p.storageCompletionOk {
 			// t.logger.Printf("piece %s completion unknown, queueing check", p)
@@ -816,12 +809,6 @@ func (t *Torrent) numPieces() pieceIndex {
 
 func (t *Torrent) numPiecesCompleted() (num pieceIndex) {
 	return pieceIndex(t._completedPieces.GetCardinality())
-}
-
-func (t *Torrent) deletePieceRequestOrder() {
-	for i := 0; i < t.numPieces(); i++ {
-		t.cl.pieceRequestOrder[t.storage.Capacity].Delete(t.pieceRequestOrderKey(i))
-	}
 }
 
 func (t *Torrent) close(wg *sync.WaitGroup) (err error) {

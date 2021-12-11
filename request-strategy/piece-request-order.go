@@ -92,3 +92,7 @@ func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) {
 	delete(me.keys, key)
 	// log.Printf("deleting %#v", key)
 }
+
+func (me *PieceRequestOrder) Len() int {
+	return len(me.keys)
+}

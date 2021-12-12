@@ -86,3 +86,8 @@ require (
 	// https://gitlab.com/cznic/sqlite/-/issues/77#note_744477407
 	modernc.org/sqlite v1.14.2-0.20211125151325-d4ed92c0a70f // indirect
 )
+
+retract (
+	// peer-requesting doesn't scale
+	[v1.34.0, v1.38.1]
+)

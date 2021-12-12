@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/bradfitz/iter"
 	qt "github.com/frankban/quicktest"
 )
 
@@ -39,4 +40,38 @@ func TestRequestMapOrderingPersistent(t *testing.T) {
 func TestRequestMapOrderAcrossInstances(t *testing.T) {
 	// This shows that different map instances with the same contents can have the same range order.
 	qt.Assert(t, keysAsSlice(makeTypicalRequests()), qt.ContentEquals, keysAsSlice(makeTypicalRequests()))
+}
+
+// Added for testing repeating loop iteration after shuffling in Peer.applyRequestState.
+func TestForLoopRepeatItem(t *testing.T) {
+	t.Run("ExplicitLoopVar", func(t *testing.T) {
+		once := false
+		var seen []int
+		for i := 0; i < 4; i++ {
+			seen = append(seen, i)
+			if !once && i == 2 {
+				once = true
+				i--
+				// Will i++ still run?
+				continue
+			}
+		}
+		// We can mutate i and it's observed by the loop. No special treatment of the loop var.
+		qt.Assert(t, seen, qt.DeepEquals, []int{0, 1, 2, 2, 3})
+	})
+	t.Run("Range", func(t *testing.T) {
+		once := false
+		var seen []int
+		for i := range iter.N(4) {
+			seen = append(seen, i)
+			if !once && i == 2 {
+				once = true
+				// Can we actually modify the next value of i produced by the range?
+				i--
+				continue
+			}
+		}
+		// Range ignores any mutation to i.
+		qt.Assert(t, seen, qt.DeepEquals, []int{0, 1, 2, 3})
+	})
 }

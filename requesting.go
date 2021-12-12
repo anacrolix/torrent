@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"context"
 	"encoding/gob"
+	"math/rand"
 	"reflect"
 	"runtime/pprof"
 	"time"
@@ -195,9 +196,9 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 			allowedFast := p.peerAllowedFast.ContainsInt(pieceIndex)
 			rsp.IterPendingChunks.Iter(func(ci request_strategy.ChunkIndex) {
 				r := p.t.pieceRequestIndexOffset(pieceIndex) + ci
-				//if p.t.pendingRequests.Get(r) != 0 && !p.actualRequestState.Requests.Contains(r) {
+				// if p.t.pendingRequests.Get(r) != 0 && !p.actualRequestState.Requests.Contains(r) {
 				//	return
-				//}
+				// }
 				if !allowedFast {
 					// We must signal interest to request this
 					desired.Interested = true
@@ -257,7 +258,10 @@ func (p *Peer) applyRequestState(next desiredRequestState) bool {
 	if !more {
 		return false
 	}
-	for _, req := range next.Requests {
+	shuffled := false
+	lastPending := 0
+	for i := 0; i < len(next.Requests); i++ {
+		req := next.Requests[i]
 		if p.cancelledRequests.Contains(req) {
 			// Waiting for a reject or piece message, which will suitably trigger us to update our
 			// requests, so we can skip this one with no additional consideration.
@@ -269,14 +273,38 @@ func (p *Peer) applyRequestState(next desiredRequestState) bool {
 		// extra outstanding requests. We could subtract the number of outstanding cancels from the
 		// next request cardinality, but peers might not like that.
 		if maxRequests(current.Requests.GetCardinality()) >= p.nominalMaxRequests() {
-			//log.Printf("not assigning all requests [desired=%v, cancelled=%v, current=%v, max=%v]",
+			// log.Printf("not assigning all requests [desired=%v, cancelled=%v, current=%v, max=%v]",
 			//	next.Requests.GetCardinality(),
 			//	p.cancelledRequests.GetCardinality(),
 			//	current.Requests.GetCardinality(),
 			//	p.nominalMaxRequests(),
-			//)
+			// )
 			break
 		}
+		otherPending := p.t.pendingRequests.Get(next.Requests[0])
+		if p.actualRequestState.Requests.Contains(next.Requests[0]) {
+			otherPending--
+		}
+		if otherPending < lastPending {
+			// Pending should only rise. It's supposed to be the strongest ordering criteria. If it
+			// doesn't, our shuffling condition could be wrong.
+			panic(lastPending)
+		}
+		// If the request has already been requested by another peer, shuffle this and the rest of
+		// the requests (since according to the increasing condition, the rest of the indices
+		// already have an outstanding request with another peer).
+		if !shuffled && otherPending > 0 {
+			shuffleReqs := next.Requests[i:]
+			rand.Shuffle(len(shuffleReqs), func(i, j int) {
+				shuffleReqs[i], shuffleReqs[j] = shuffleReqs[j], shuffleReqs[i]
+			})
+			// log.Printf("shuffled reqs [%v:%v]", i, len(next.Requests))
+			shuffled = true
+			// Repeat this index
+			i--
+			continue
+		}
+
 		more = p.mustRequest(req)
 		if !more {
 			break

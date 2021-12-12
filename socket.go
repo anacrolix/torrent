@@ -5,6 +5,7 @@ import (
 	"net"
 	"strconv"
 
+	utp "github.com/anacrolix/go-libutp"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/pkg/errors"
@@ -100,7 +101,7 @@ func listenAllRetry(nahs []networkAndHost, port int, f firewallCallback) (ss []s
 	return
 }
 
-type firewallCallback func(net.Addr) bool
+type firewallCallback = utp.FirewallCallback
 
 func listenUtp(network, addr string, fc firewallCallback) (socket, error) {
 	us, err := NewUtpSocket(network, addr, fc)

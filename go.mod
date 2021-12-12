@@ -79,3 +79,8 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 )
+
+retract (
+	// peer-requesting doesn't scale
+	[v1.34.0, v1.38.1]
+)

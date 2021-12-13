@@ -133,6 +133,11 @@ func (ws *webseedPeer) onClose() {
 	for _, r := range ws.activeRequests {
 		r.Cancel()
 	}
+	ws.peer.t.iterPeers(func(p *Peer) {
+		if p.isLowOnRequests() {
+			p.updateRequests("webseedPeer.onClose")
+		}
+	})
 	ws.requesterCond.Broadcast()
 }
 

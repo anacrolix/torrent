@@ -1095,7 +1095,13 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				break
 			}
 			if !c.fastEnabled() {
-				c.deleteAllRequests()
+				if !c.deleteAllRequests().IsEmpty() {
+					c.t.iterPeers(func(p *Peer) {
+						if p.isLowOnRequests() {
+							p.updateRequests("choked by non-fast PeerConn")
+						}
+					})
+				}
 			} else {
 				// We don't decrement pending requests here, let's wait for the peer to either
 				// reject or satisfy the outstanding requests. Additionally, some peers may unchoke
@@ -1554,16 +1560,27 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 	}
 	delete(c.t.pendingRequests, r)
 	delete(c.t.lastRequested, r)
+	// c.t.iterPeers(func(p *Peer) {
+	// 	if p.isLowOnRequests() {
+	// 		p.updateRequests("Peer.deleteRequest")
+	// 	}
+	// })
 	return true
 }
 
-func (c *Peer) deleteAllRequests() {
-	c.requestState.Requests.Clone().Iterate(func(x uint32) bool {
+func (c *Peer) deleteAllRequests() (deleted *roaring.Bitmap) {
+	deleted = c.requestState.Requests.Clone()
+	deleted.Iterate(func(x uint32) bool {
 		if !c.deleteRequest(x) {
 			panic("request should exist")
 		}
 		return true
 	})
+	c.assertNoRequests()
+	return
+}
+
+func (c *Peer) assertNoRequests() {
 	if !c.requestState.Requests.IsEmpty() {
 		panic(c.requestState.Requests.GetCardinality())
 	}

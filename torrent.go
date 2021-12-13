@@ -1396,7 +1396,13 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 		}
 	}
 	torrent.Add("deleted connections", 1)
-	c.deleteAllRequests()
+	if !c.deleteAllRequests().IsEmpty() {
+		t.iterPeers(func(p *Peer) {
+			if p.isLowOnRequests() {
+				p.updateRequests("Torrent.deletePeerConn")
+			}
+		})
+	}
 	t.assertPendingRequests()
 	return
 }

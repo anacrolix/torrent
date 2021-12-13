@@ -87,5 +87,9 @@ require (
 	modernc.org/sqlite v1.14.2-0.20211125151325-d4ed92c0a70f // indirect
 )
 
-// peer-requesting doesn't scale
-retract [v1.34.0, v1.38.1]
+retract (
+	// Doesn't signal interest to peers if choked when piece priorities change.
+	v1.39.0
+	// peer-requesting doesn't scale
+	[v1.34.0, v1.38.1]
+)

@@ -570,6 +570,9 @@ type messageWriter func(pp.Message) bool
 // when we want to go fast.
 func (cn *Peer) shouldRequest(r RequestIndex) error {
 	pi := pieceIndex(r / cn.t.chunksPerRegularPiece())
+	if cn.requestState.Cancelled.Contains(r) {
+		return errors.New("request is cancelled and waiting acknowledgement")
+	}
 	if !cn.peerHasPiece(pi) {
 		return errors.New("requesting piece peer doesn't have")
 	}

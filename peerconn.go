@@ -1586,6 +1586,16 @@ func (c *Peer) assertNoRequests() {
 	}
 }
 
+func (c *Peer) cancelAllRequests() (cancelled *roaring.Bitmap) {
+	cancelled = c.requestState.Requests.Clone()
+	cancelled.Iterate(func(x uint32) bool {
+		c.cancel(x)
+		return true
+	})
+	c.assertNoRequests()
+	return
+}
+
 // This is called when something has changed that should wake the writer, such as putting stuff into
 // the writeBuffer, or changing some state that the writer can act on.
 func (c *PeerConn) tickleWriter() {

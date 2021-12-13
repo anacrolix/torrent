@@ -171,9 +171,6 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 			allowedFast := p.peerAllowedFast.ContainsInt(pieceIndex)
 			p.t.piece(pieceIndex).undirtiedChunksIter.Iter(func(ci request_strategy.ChunkIndex) {
 				r := p.t.pieceRequestIndexOffset(pieceIndex) + ci
-				// if p.t.pendingRequests.Get(r) != 0 && !p.requestState.Requests.Contains(r) {
-				//	return
-				// }
 				if !allowedFast {
 					// We must signal interest to request this. TODO: We could set interested if the
 					// peers pieces (minus the allowed fast set) overlap with our missing pieces if
@@ -189,7 +186,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 					}
 				}
 				if p.requestState.Cancelled.Contains(r) {
-					// Can't re-request.
+					// Can't re-request while awaiting acknowledgement.
 					return
 				}
 				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)

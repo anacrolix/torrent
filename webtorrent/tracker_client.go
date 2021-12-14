@@ -28,6 +28,7 @@ type TrackerClient struct {
 	PeerId             [20]byte
 	OnConn             onDataChannelOpen
 	Logger             log.Logger
+	Dialer             *websocket.Dialer
 
 	mu             sync.Mutex
 	cond           sync.Cond
@@ -70,7 +71,7 @@ func (tc *TrackerClient) doWebsocket() error {
 	tc.mu.Lock()
 	tc.stats.Dials++
 	tc.mu.Unlock()
-	c, _, err := websocket.DefaultDialer.Dial(tc.Url, nil)
+	c, _, err := tc.Dialer.Dial(tc.Url, nil)
 	if err != nil {
 		return fmt.Errorf("dialing tracker: %w", err)
 	}

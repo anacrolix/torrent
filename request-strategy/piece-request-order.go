@@ -4,19 +4,24 @@ import (
 	"fmt"
 
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/google/btree"
+	"github.com/tidwall/btree"
 )
 
 func NewPieceOrder() *PieceRequestOrder {
 	return &PieceRequestOrder{
-		tree: btree.New(32),
+		tree: btree.NewOptions(
+			func(a, b pieceRequestOrderItem) bool {
+				return a.Less(&b)
+			},
+			btree.Options{NoLocks: true}),
 		keys: make(map[PieceRequestOrderKey]PieceRequestOrderState),
 	}
 }
 
 type PieceRequestOrder struct {
-	tree *btree.BTree
-	keys map[PieceRequestOrderKey]PieceRequestOrderState
+	tree     *btree.BTree[pieceRequestOrderItem]
+	keys     map[PieceRequestOrderKey]PieceRequestOrderState
+	pathHint btree.PathHint
 }
 
 type PieceRequestOrderKey struct {
@@ -35,8 +40,7 @@ type pieceRequestOrderItem struct {
 	state PieceRequestOrderState
 }
 
-func (me *pieceRequestOrderItem) Less(other btree.Item) bool {
-	otherConcrete := other.(*pieceRequestOrderItem)
+func (me *pieceRequestOrderItem) Less(otherConcrete *pieceRequestOrderItem) bool {
 	return pieceOrderLess(me, otherConcrete).Less()
 }
 
@@ -44,14 +48,16 @@ func (me *PieceRequestOrder) Add(key PieceRequestOrderKey, state PieceRequestOrd
 	if _, ok := me.keys[key]; ok {
 		panic(key)
 	}
-	if me.tree.ReplaceOrInsert(&pieceRequestOrderItem{
+	if _, ok := me.tree.SetHint(pieceRequestOrderItem{
 		key:   key,
 		state: state,
-	}) != nil {
+	}, &me.pathHint); ok {
 		panic("shouldn't already have this")
 	}
 	me.keys[key] = state
 }
+
+type PieceRequestOrderPathHint = btree.PathHint
 
 func (me *PieceRequestOrder) Update(key PieceRequestOrderKey, state PieceRequestOrderState) {
 	oldState, ok := me.keys[key]
@@ -65,11 +71,11 @@ func (me *PieceRequestOrder) Update(key PieceRequestOrderKey, state PieceRequest
 		key:   key,
 		state: oldState,
 	}
-	if me.tree.Delete(&item) == nil {
+	if _, ok := me.tree.DeleteHint(item, &me.pathHint); !ok {
 		panic(fmt.Sprintf("%#v", key))
 	}
 	item.state = state
-	if me.tree.ReplaceOrInsert(&item) != nil {
+	if _, ok := me.tree.SetHint(item, &me.pathHint); ok {
 		panic(key)
 	}
 	me.keys[key] = state
@@ -84,11 +90,10 @@ func (me *PieceRequestOrder) existingItemForKey(key PieceRequestOrderKey) pieceR
 
 func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) {
 	item := me.existingItemForKey(key)
-	if me.tree.Delete(&item) == nil {
+	if _, ok := me.tree.DeleteHint(item, &me.pathHint); !ok {
 		panic(key)
 	}
 	delete(me.keys, key)
-	// log.Printf("deleting %#v", key)
 }
 
 func (me *PieceRequestOrder) Len() int {

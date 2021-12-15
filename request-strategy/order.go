@@ -6,7 +6,6 @@ import (
 
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/google/btree"
 
 	"github.com/anacrolix/torrent/types"
 )
@@ -52,8 +51,11 @@ func GetRequestablePieces(input Input, pro *PieceRequestOrder, f func(ih metainf
 		storageLeft = &cap
 	}
 	var allTorrentsUnverifiedBytes int64
-	pro.tree.Ascend(func(i btree.Item) bool {
-		_i := i.(*pieceRequestOrderItem)
+	min, ok := pro.tree.Min()
+	if !ok {
+		return
+	}
+	pro.tree.Ascend(min, func(_i pieceRequestOrderItem) bool {
 		ih := _i.key.InfoHash
 		var t Torrent = input.Torrent(ih)
 		var piece Piece = t.Piece(_i.key.Index)

@@ -21,24 +21,19 @@ type (
 	ChunkSpec = types.ChunkSpec
 )
 
-type pieceOrderInput struct {
-	PieceRequestOrderState
-	PieceRequestOrderKey
-}
-
-func pieceOrderLess(i, j pieceOrderInput) multiless.Computation {
+func pieceOrderLess(i, j *pieceRequestOrderItem) multiless.Computation {
 	return multiless.New().Int(
-		int(j.Priority), int(i.Priority),
+		int(j.state.Priority), int(i.state.Priority),
 	).Bool(
-		j.Partial, i.Partial,
+		j.state.Partial, i.state.Partial,
 	).Int64(
-		i.Availability, j.Availability,
+		i.state.Availability, j.state.Availability,
 	).Int(
-		i.Index, j.Index,
+		i.key.Index, j.key.Index,
 	).Lazy(func() multiless.Computation {
 		return multiless.New().Cmp(bytes.Compare(
-			i.InfoHash[:],
-			j.InfoHash[:],
+			i.key.InfoHash[:],
+			j.key.InfoHash[:],
 		))
 	})
 }

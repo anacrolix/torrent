@@ -37,16 +37,7 @@ type pieceRequestOrderItem struct {
 
 func (me *pieceRequestOrderItem) Less(other btree.Item) bool {
 	otherConcrete := other.(*pieceRequestOrderItem)
-	return pieceOrderLess(
-		pieceOrderInput{
-			PieceRequestOrderState: me.state,
-			PieceRequestOrderKey:   me.key,
-		},
-		pieceOrderInput{
-			PieceRequestOrderState: otherConcrete.state,
-			PieceRequestOrderKey:   otherConcrete.key,
-		},
-	).Less()
+	return pieceOrderLess(me, otherConcrete).Less()
 }
 
 func (me *PieceRequestOrder) Add(key PieceRequestOrderKey, state PieceRequestOrderState) {
@@ -63,9 +54,16 @@ func (me *PieceRequestOrder) Add(key PieceRequestOrderKey, state PieceRequestOrd
 }
 
 func (me *PieceRequestOrder) Update(key PieceRequestOrderKey, state PieceRequestOrderState) {
-	item := me.existingItemForKey(key)
-	if item.state == state {
+	oldState, ok := me.keys[key]
+	if !ok {
+		panic("key should have been added already")
+	}
+	if state == oldState {
 		return
+	}
+	item := pieceRequestOrderItem{
+		key:   key,
+		state: oldState,
 	}
 	if me.tree.Delete(&item) == nil {
 		panic(fmt.Sprintf("%#v", key))

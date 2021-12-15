@@ -16,7 +16,7 @@ func NewUtpSocket(network, addr string, fc firewallCallback) (utpSocket, error) 
 		return s, err
 	}
 	if fc != nil {
-		s.SetSyncFirewallCallback(fc)
+		s.SetSyncFirewallCallback(utp.FirewallCallback(fc))
 	}
 	return s, err
 }

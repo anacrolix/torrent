@@ -7,7 +7,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/frankban/quicktest"
 	"github.com/stretchr/testify/require"
 
@@ -93,17 +92,15 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	})
 	cl.initLogger()
 	ts := &torrentStorage{}
-	t := &Torrent{
-		cl:                &cl,
-		storage:           &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}},
-		pieceStateChanges: pubsub.NewPubSub(),
-	}
-	t.setChunkSize(defaultChunkSize)
+	t := cl.newTorrent(metainfo.Hash{}, nil)
+	t.initialPieceCheckDisabled = true
 	require.NoError(b, t.setInfo(&metainfo.Info{
 		Pieces:      make([]byte, 20),
 		Length:      1 << 20,
 		PieceLength: 1 << 20,
 	}))
+	t.storage = &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}}
+	t.onSetInfo()
 	t._pendingPieces.Add(0)
 	r, w := net.Pipe()
 	cn := cl.newConnection(r, true, r.RemoteAddr(), r.RemoteAddr().Network(), regularNetConnPeerConnConnString(r))

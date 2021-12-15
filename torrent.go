@@ -243,6 +243,9 @@ func (t *Torrent) pieceComplete(piece pieceIndex) bool {
 }
 
 func (t *Torrent) pieceCompleteUncached(piece pieceIndex) storage.Completion {
+	if t.storage == nil {
+		return storage.Completion{Complete: false, Ok: true}
+	}
 	return t.pieces[piece].Storage().Completion()
 }
 

@@ -5,6 +5,9 @@ import (
 )
 
 func (t *Torrent) updatePieceRequestOrder(pieceIndex int) {
+	if t.storage == nil {
+		return
+	}
 	t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()].Update(
 		t.pieceRequestOrderKey(pieceIndex),
 		t.requestStrategyPieceOrderState(pieceIndex))
@@ -18,6 +21,9 @@ func (t *Torrent) clientPieceRequestOrderKey() interface{} {
 }
 
 func (t *Torrent) deletePieceRequestOrder() {
+	if t.storage == nil {
+		return
+	}
 	cpro := t.cl.pieceRequestOrder
 	key := t.clientPieceRequestOrderKey()
 	pro := cpro[key]
@@ -30,6 +36,9 @@ func (t *Torrent) deletePieceRequestOrder() {
 }
 
 func (t *Torrent) initPieceRequestOrder() {
+	if t.storage == nil {
+		return
+	}
 	if t.cl.pieceRequestOrder == nil {
 		t.cl.pieceRequestOrder = make(map[interface{}]*request_strategy.PieceRequestOrder)
 	}
@@ -41,6 +50,9 @@ func (t *Torrent) initPieceRequestOrder() {
 }
 
 func (t *Torrent) addRequestOrderPiece(i int) {
+	if t.storage == nil {
+		return
+	}
 	t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()].Add(
 		t.pieceRequestOrderKey(i),
 		t.requestStrategyPieceOrderState(i))

@@ -89,6 +89,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		PieceLength: pieceLength,
 		Length:      pieceLength * numPieces,
 	}))
+	t.onSetInfo()
 	assert.EqualValues(b, 13410, t.numPieces())
 	for i := 0; i < 7; i += 1 {
 		r := t.NewReader()

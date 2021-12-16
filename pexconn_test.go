@@ -26,6 +26,7 @@ func TestPexConnState(t *testing.T) {
 		t.Log(err)
 	}
 
+	connWriteCond := c.messageWriter.writeCond.Signaled()
 	c.pex.Init(c)
 	require.True(t, c.pex.IsEnabled(), "should get enabled")
 	defer c.pex.Close()
@@ -37,7 +38,7 @@ func TestPexConnState(t *testing.T) {
 		out = m
 		return true
 	}
-	<-c.messageWriter.writeCond.Signaled()
+	<-connWriteCond
 	c.pex.Share(testWriter)
 	require.True(t, writerCalled)
 	require.EqualValues(t, pp.Extended, out.Type)

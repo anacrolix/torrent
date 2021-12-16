@@ -26,8 +26,10 @@ func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 	defer cl.Close()
 
 	td, mi := testutil.GreetingTestTorrent()
+	mms := storage.NewMMap(td)
+	defer mms.Close()
 	tt, new, err := cl.AddTorrentSpec(&TorrentSpec{
-		Storage:   storage.NewMMap(td),
+		Storage:   mms,
 		InfoHash:  mi.HashInfoBytes(),
 		InfoBytes: mi.InfoBytes,
 	})

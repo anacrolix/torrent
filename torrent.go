@@ -1995,9 +1995,8 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 }
 
 func (t *Torrent) cancelRequestsForPiece(piece pieceIndex) {
-	// TODO: Make faster
-	for cn := range t.conns {
-		cn.tickleWriter()
+	for ri := t.pieceRequestIndexOffset(piece); ri < t.pieceRequestIndexOffset(piece+1); ri++ {
+		t.cancelRequest(ri)
 	}
 }
 

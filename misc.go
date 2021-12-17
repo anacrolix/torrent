@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/torrent/types"
 	"golang.org/x/time/rate"
@@ -169,3 +170,12 @@ type (
 	InfoHash   = metainfo.Hash
 	IpPort     = missinggo.IpPort
 )
+
+func boolSliceToBitmap(slice []bool) (rb roaring.Bitmap) {
+	for i, b := range slice {
+		if b {
+			rb.AddInt(i)
+		}
+	}
+	return
+}

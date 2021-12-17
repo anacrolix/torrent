@@ -222,8 +222,10 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	pc.peerImpl = &pc
 	tt.conns[&pc] = struct{}{}
 	c.Assert(pc.onPeerSentHaveAll(), qt.IsNil)
+	c.Check(pc.t.connsWithAllPieces, qt.DeepEquals, map[*Peer]struct{}{&pc.Peer: {}})
 	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false})
 	c.Check(pc.peerMinPieces, qt.Equals, 6)
+	c.Check(pc.t.connsWithAllPieces, qt.HasLen, 0)
 	c.Assert(pc.t.setInfo(&metainfo.Info{
 		PieceLength: 0,
 		Pieces:      make([]byte, pieceHash.Size()*7),

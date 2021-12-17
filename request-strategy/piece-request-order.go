@@ -27,7 +27,7 @@ type PieceRequestOrderKey struct {
 type PieceRequestOrderState struct {
 	Priority     piecePriority
 	Partial      bool
-	Availability int64
+	Availability int
 }
 
 type pieceRequestOrderItem struct {

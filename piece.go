@@ -30,7 +30,10 @@ type Piece struct {
 
 	publicPieceState PieceState
 	priority         piecePriority
-	availability     int64
+	// Availability adjustment for this piece relative to len(Torrent.connsWithAllPieces). This is
+	// incremented for any piece a peer has when a peer has a piece, Torrent.haveInfo is true, and
+	// the Peer isn't recorded in Torrent.connsWithAllPieces.
+	relativeAvailability int
 
 	// This can be locked when the Client lock is taken, but probably not vice versa.
 	pendingWritesMutex sync.Mutex
@@ -278,4 +281,8 @@ func (me *undirtiedChunksIter) Iter(f func(chunkIndexType)) {
 
 func (p *Piece) requestIndexOffset() RequestIndex {
 	return p.t.pieceRequestIndexOffset(p.index)
+}
+
+func (p *Piece) availability() int {
+	return len(p.t.connsWithAllPieces) + p.relativeAvailability
 }

@@ -537,8 +537,10 @@ func TestPeerInvalidHave(t *testing.T) {
 	assert.True(t, _new)
 	defer tt.Drop()
 	cn := &PeerConn{Peer: Peer{
-		t: tt,
+		t:         tt,
+		callbacks: &cfg.Callbacks,
 	}}
+	tt.conns[cn] = struct{}{}
 	cn.peerImpl = cn
 	cl.lock()
 	defer cl.unlock()

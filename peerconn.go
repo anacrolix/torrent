@@ -774,28 +774,49 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 		// Ignore known excess pieces.
 		bf = bf[:cn.t.numPieces()]
 	}
-	pp := cn.newPeerPieces()
-	cn.peerSentHaveAll = false
-	for i, have := range bf {
-		if have {
-			cn.raisePeerMinPieces(pieceIndex(i) + 1)
-			if !pp.Contains(bitmap.BitIndex(i)) {
-				cn.t.incPieceAvailability(i)
-			}
-		} else {
-			if pp.Contains(bitmap.BitIndex(i)) {
-				cn.t.decPieceAvailability(i)
-			}
-		}
-		if have {
-			cn._peerPieces.Add(uint32(i))
-			if cn.t.wantPieceIndex(i) {
-				cn.updateRequests("bitfield")
-			}
-		} else {
-			cn._peerPieces.Remove(uint32(i))
-		}
+	bm := boolSliceToBitmap(bf)
+	if cn.t.haveInfo() && pieceIndex(bm.GetCardinality()) == cn.t.numPieces() {
+		cn.onPeerHasAllPieces()
+		return nil
 	}
+	if !bm.IsEmpty() {
+		cn.raisePeerMinPieces(pieceIndex(bm.Maximum()) + 1)
+	}
+	shouldUpdateRequests := false
+	if cn.peerSentHaveAll {
+		if !cn.t.deleteConnWithAllPieces(&cn.Peer) {
+			panic(cn)
+		}
+		cn.peerSentHaveAll = false
+		if !cn._peerPieces.IsEmpty() {
+			panic("if peer has all, we expect no individual peer pieces to be set")
+		}
+	} else {
+		bm.Xor(&cn._peerPieces)
+	}
+	cn.peerSentHaveAll = false
+	// bm is now 'on' for pieces that are changing
+	bm.Iterate(func(x uint32) bool {
+		pi := pieceIndex(x)
+		if cn._peerPieces.Contains(x) {
+			// Then we must be losing this piece
+			cn.t.decPieceAvailability(pi)
+		} else {
+			if !shouldUpdateRequests && cn.t.wantPieceIndex(pieceIndex(x)) {
+				shouldUpdateRequests = true
+			}
+			// We must be gaining this piece
+			cn.t.incPieceAvailability(pieceIndex(x))
+		}
+		return true
+	})
+	// Apply the changes. If we had everything previously, this should be empty, so xor is the same
+	// as or.
+	cn._peerPieces.Xor(&bm)
+	if shouldUpdateRequests {
+		cn.updateRequests("bitfield")
+	}
+	// We didn't guard this before, I see no reason to do it now.
 	cn.peerPiecesChanged()
 	return nil
 }
@@ -803,13 +824,12 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 func (cn *PeerConn) onPeerHasAllPieces() {
 	t := cn.t
 	if t.haveInfo() {
-		npp, pc := cn.newPeerPieces(), t.numPieces()
-		for i := 0; i < pc; i += 1 {
-			if !npp.Contains(bitmap.BitIndex(i)) {
-				t.incPieceAvailability(i)
-			}
-		}
+		cn._peerPieces.Iterate(func(x uint32) bool {
+			t.decPieceAvailability(pieceIndex(x))
+			return true
+		})
 	}
+	t.addConnWithAllPieces(&cn.Peer)
 	cn.peerSentHaveAll = true
 	cn._peerPieces.Clear()
 	if !cn.t._pendingPieces.IsEmpty() {
@@ -824,7 +844,9 @@ func (cn *PeerConn) onPeerSentHaveAll() error {
 }
 
 func (cn *PeerConn) peerSentHaveNone() error {
-	cn.t.decPeerPieceAvailability(&cn.Peer)
+	if cn.peerSentHaveAll {
+		cn.t.decPeerPieceAvailability(&cn.Peer)
+	}
 	cn._peerPieces.Clear()
 	cn.peerSentHaveAll = false
 	cn.peerPiecesChanged()

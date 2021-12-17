@@ -19,7 +19,7 @@ func (t *Torrent) requestStrategyPieceOrderState(i int) request_strategy.PieceRe
 	return request_strategy.PieceRequestOrderState{
 		Priority:     t.piece(i).purePriority(),
 		Partial:      t.piecePartiallyDownloaded(i),
-		Availability: t.piece(i).availability,
+		Availability: t.piece(i).availability(),
 	}
 }
 
@@ -125,8 +125,8 @@ func (p *peerRequests) Less(i, j int) bool {
 		-int(rightPiece.purePriority()),
 	)
 	ml = ml.Int(
-		int(leftPiece.availability),
-		int(rightPiece.availability))
+		int(leftPiece.relativeAvailability),
+		int(rightPiece.relativeAvailability))
 	return ml.Less()
 }
 

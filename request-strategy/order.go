@@ -24,9 +24,12 @@ type (
 func pieceOrderLess(i, j *pieceRequestOrderItem) multiless.Computation {
 	return multiless.New().Int(
 		int(j.state.Priority), int(i.state.Priority),
+		// TODO: Should we match on complete here to prevent churn when availability changes?
 	).Bool(
 		j.state.Partial, i.state.Partial,
-	).Int64(
+	).Int(
+		// If this is done with relative availability, do we lose some determinism? If completeness
+		// is used, would that push this far enough down?
 		i.state.Availability, j.state.Availability,
 	).Int(
 		i.key.Index, j.key.Index,

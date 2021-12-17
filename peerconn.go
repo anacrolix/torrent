@@ -235,7 +235,7 @@ func (cn *Peer) cumInterest() time.Duration {
 	return ret
 }
 
-func (cn *PeerConn) peerHasAllPieces() (all bool, known bool) {
+func (cn *PeerConn) peerHasAllPieces() (all, known bool) {
 	if cn.peerSentHaveAll {
 		return true, true
 	}

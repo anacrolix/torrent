@@ -647,7 +647,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 
 // Creates a file containing its own name as data. Make a metainfo from that, adds it to the given
 // client, and returns a magnet link.
-func makeMagnet(t *testing.T, cl *Client, dir string, name string) string {
+func makeMagnet(t *testing.T, cl *Client, dir, name string) string {
 	os.MkdirAll(dir, 0o770)
 	file, err := os.Create(filepath.Join(dir, name))
 	require.NoError(t, err)
@@ -684,7 +684,7 @@ func TestMultipleTorrentsWithEncryption(t *testing.T) {
 
 // Test that the leecher can download a torrent in its entirety from the seeder. Note that the
 // seeder config is done first.
-func testSeederLeecherPair(t *testing.T, seeder func(*ClientConfig), leecher func(*ClientConfig)) {
+func testSeederLeecherPair(t *testing.T, seeder, leecher func(*ClientConfig)) {
 	cfg := TestingConfig(t)
 	cfg.Seed = true
 	cfg.DataDir = filepath.Join(cfg.DataDir, "server")

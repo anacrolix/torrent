@@ -583,7 +583,7 @@ func countDialResult(err error) {
 	}
 }
 
-func reducedDialTimeout(minDialTimeout, max time.Duration, halfOpenLimit int, pendingPeers int) (ret time.Duration) {
+func reducedDialTimeout(minDialTimeout, max time.Duration, halfOpenLimit, pendingPeers int) (ret time.Duration) {
 	ret = max / time.Duration((pendingPeers+halfOpenLimit)/halfOpenLimit)
 	if ret < minDialTimeout {
 		ret = minDialTimeout

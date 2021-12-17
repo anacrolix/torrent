@@ -2,11 +2,12 @@ package torrent
 
 import (
 	"fmt"
+	"net/url"
+	"sync"
+
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/torrent/tracker/http"
 	"github.com/gorilla/websocket"
-	"net/url"
-	"sync"
 
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/webtorrent"

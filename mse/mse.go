@@ -69,7 +69,7 @@ func hash(parts ...[]byte) []byte {
 	return h.Sum(nil)
 }
 
-func newEncrypt(initer bool, s []byte, skey []byte) (c *rc4.Cipher) {
+func newEncrypt(initer bool, s, skey []byte) (c *rc4.Cipher) {
 	c, err := rc4.NewCipher(hash([]byte(func() string {
 		if initer {
 			return "keyA"
@@ -542,7 +542,7 @@ func (h *handshake) Do() (ret io.ReadWriter, method CryptoMethod, err error) {
 }
 
 func InitiateHandshake(
-	rw io.ReadWriter, skey []byte, initialPayload []byte, cryptoProvides CryptoMethod,
+	rw io.ReadWriter, skey, initialPayload []byte, cryptoProvides CryptoMethod,
 ) (
 	ret io.ReadWriter, method CryptoMethod, err error,
 ) {

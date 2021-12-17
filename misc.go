@@ -43,7 +43,7 @@ func newRequestFromMessage(msg *pp.Message) Request {
 }
 
 // The size in bytes of a metadata extension piece.
-func metadataPieceSize(totalSize int, piece int) int {
+func metadataPieceSize(totalSize, piece int) int {
 	ret := totalSize - piece*(1<<14)
 	if ret > 1<<14 {
 		ret = 1 << 14
@@ -99,7 +99,7 @@ func validateInfo(info *metainfo.Info) error {
 	return nil
 }
 
-func chunkIndexSpec(index pp.Integer, pieceLength, chunkSize pp.Integer) ChunkSpec {
+func chunkIndexSpec(index, pieceLength, chunkSize pp.Integer) ChunkSpec {
 	ret := ChunkSpec{pp.Integer(index) * chunkSize, chunkSize}
 	if ret.Begin+ret.Length > pieceLength {
 		ret.Length = pieceLength - ret.Begin

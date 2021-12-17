@@ -146,7 +146,7 @@ func fillRand(t testing.TB, bs ...[]byte) {
 	}
 }
 
-func readAndWrite(rw io.ReadWriter, r []byte, w []byte) error {
+func readAndWrite(rw io.ReadWriter, r, w []byte) error {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	var wErr error

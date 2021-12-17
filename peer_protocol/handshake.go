@@ -124,7 +124,7 @@ func Handshake(
 		return res, errors.New("unexpected protocol string")
 	}
 
-	copyExact := func(dst []byte, src []byte) {
+	copyExact := func(dst, src []byte) {
 		if dstLen, srcLen := uint64(len(dst)), uint64(len(src)); dstLen != srcLen {
 			panic("dst len " + strconv.FormatUint(dstLen, 10) + " != src len " + strconv.FormatUint(srcLen, 10))
 		}

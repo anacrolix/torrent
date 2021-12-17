@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/frankban/quicktest"
+	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -208,4 +209,30 @@ func TestConnPexEvent(t *testing.T) {
 		e := tc.c.pexEvent(tc.t)
 		require.EqualValues(t, tc.e, e, i)
 	}
+}
+
+func TestHaveAllThenBitfield(t *testing.T) {
+	c := qt.New(t)
+	cl := newTestingClient(t)
+	tt := cl.newTorrentForTesting()
+	// cl.newConnection()
+	pc := PeerConn{
+		Peer: Peer{t: tt},
+	}
+	pc.peerImpl = &pc
+	tt.conns[&pc] = struct{}{}
+	c.Assert(pc.onPeerSentHaveAll(), qt.IsNil)
+	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false})
+	c.Check(pc.peerMinPieces, qt.Equals, 6)
+	c.Assert(pc.t.setInfo(&metainfo.Info{
+		PieceLength: 0,
+		Pieces:      make([]byte, pieceHash.Size()*7),
+	}), qt.IsNil)
+	pc.t.onSetInfo()
+	c.Check(tt.numPieces(), qt.Equals, 7)
+	c.Check(tt.pieceAvailabilityRuns(), qt.DeepEquals, []pieceAvailabilityRun{
+		// The last element of the bitfield is irrelevant, as the Torrent actually only has 7
+		// pieces.
+		{2, 0}, {1, 1}, {1, 0}, {2, 1}, {1, 0},
+	})
 }

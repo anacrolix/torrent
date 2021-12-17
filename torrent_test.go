@@ -143,9 +143,7 @@ func TestEmptyFilesAndZeroPieceLengthWithFileStorage(t *testing.T) {
 
 func TestPieceHashFailed(t *testing.T) {
 	mi := testutil.GreetingMetaInfo()
-	cl := new(Client)
-	cl.config = TestingConfig(t)
-	cl.initLogger()
+	cl := newTestingClient(t)
 	tt := cl.newTorrent(mi.HashInfoBytes(), badStorage{})
 	tt.setChunkSize(2)
 	require.NoError(t, tt.setInfoBytesLocked(mi.InfoBytes))

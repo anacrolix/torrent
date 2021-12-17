@@ -570,17 +570,17 @@ func (t *Torrent) newMetadataExtensionMessage(c *PeerConn, msgType pp.ExtendedMe
 }
 
 type pieceAvailabilityRun struct {
-	count        pieceIndex
-	availability int64
+	Count        pieceIndex
+	Availability int64
 }
 
 func (me pieceAvailabilityRun) String() string {
-	return fmt.Sprintf("%v(%v)", me.count, me.availability)
+	return fmt.Sprintf("%v(%v)", me.Count, me.Availability)
 }
 
 func (t *Torrent) pieceAvailabilityRuns() (ret []pieceAvailabilityRun) {
 	rle := missinggo.NewRunLengthEncoder(func(el interface{}, count uint64) {
-		ret = append(ret, pieceAvailabilityRun{availability: el.(int64), count: int(count)})
+		ret = append(ret, pieceAvailabilityRun{Availability: el.(int64), Count: int(count)})
 	})
 	for i := range t.pieces {
 		rle.Append(t.pieces[i].availability, 1)

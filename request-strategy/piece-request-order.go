@@ -21,7 +21,7 @@ func NewPieceOrder() *PieceRequestOrder {
 type PieceRequestOrder struct {
 	tree     *btree.BTree[pieceRequestOrderItem]
 	keys     map[PieceRequestOrderKey]PieceRequestOrderState
-	pathHint btree.PathHint
+	PathHint *btree.PathHint
 }
 
 type PieceRequestOrderKey struct {
@@ -51,7 +51,7 @@ func (me *PieceRequestOrder) Add(key PieceRequestOrderKey, state PieceRequestOrd
 	if _, ok := me.tree.SetHint(pieceRequestOrderItem{
 		key:   key,
 		state: state,
-	}, &me.pathHint); ok {
+	}, me.PathHint); ok {
 		panic("shouldn't already have this")
 	}
 	me.keys[key] = state
@@ -59,7 +59,10 @@ func (me *PieceRequestOrder) Add(key PieceRequestOrderKey, state PieceRequestOrd
 
 type PieceRequestOrderPathHint = btree.PathHint
 
-func (me *PieceRequestOrder) Update(key PieceRequestOrderKey, state PieceRequestOrderState) {
+func (me *PieceRequestOrder) Update(
+	key PieceRequestOrderKey,
+	state PieceRequestOrderState,
+) {
 	oldState, ok := me.keys[key]
 	if !ok {
 		panic("key should have been added already")
@@ -71,11 +74,11 @@ func (me *PieceRequestOrder) Update(key PieceRequestOrderKey, state PieceRequest
 		key:   key,
 		state: oldState,
 	}
-	if _, ok := me.tree.DeleteHint(item, &me.pathHint); !ok {
+	if _, ok := me.tree.DeleteHint(item, me.PathHint); !ok {
 		panic(fmt.Sprintf("%#v", key))
 	}
 	item.state = state
-	if _, ok := me.tree.SetHint(item, &me.pathHint); ok {
+	if _, ok := me.tree.SetHint(item, me.PathHint); ok {
 		panic(key)
 	}
 	me.keys[key] = state
@@ -90,7 +93,7 @@ func (me *PieceRequestOrder) existingItemForKey(key PieceRequestOrderKey) pieceR
 
 func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) {
 	item := me.existingItemForKey(key)
-	if _, ok := me.tree.DeleteHint(item, &me.pathHint); !ok {
+	if _, ok := me.tree.DeleteHint(item, me.PathHint); !ok {
 		panic(key)
 	}
 	delete(me.keys, key)

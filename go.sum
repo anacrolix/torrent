@@ -12,6 +12,8 @@ github.com/RoaringBitmap/roaring v0.9.4 h1:ckvZSX5gwCRaJYBNe7syNawCU5oruY9gQmjXl
 github.com/RoaringBitmap/roaring v0.9.4/go.mod h1:icnadbWcNyfEHlYdr+tDlOTih1Bf/h+rzPpv4sbomAA=
 github.com/Shopify/sarama v1.19.0/go.mod h1:FVkBWblsNy7DGZRfXLU0O9RCGt5g3g3yEuWXgklEdEo=
 github.com/Shopify/toxiproxy v2.1.4+incompatible/go.mod h1:OXgGpZ6Cli1/URJOF1DMxUHB2q5Ap20/P/eIdh4G0pI=
+github.com/ajwerner/btree v0.0.0-20211201061316-91c8b66ad617 h1:sxP5D87Mq99SZMHhYBmq1yY4AAVkfNY5Wn02B9crYs0=
+github.com/ajwerner/btree v0.0.0-20211201061316-91c8b66ad617/go.mod h1:q37NoqncT41qKc048STsifIt69LfUJ8SrWWcz/yam5k=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
@@ -59,8 +61,8 @@ github.com/anacrolix/missinggo/v2 v2.5.2/go.mod h1:yNvsLrtZYRYCOI+KRH/JM8TodHjtI
 github.com/anacrolix/mmsg v0.0.0-20180515031531-a4a3ba1fc8bb/go.mod h1:x2/ErsYUmT77kezS63+wzZp8E3byYB0gzirM/WMBLfw=
 github.com/anacrolix/mmsg v1.0.0 h1:btC7YLjOn29aTUAExJiVUhQOuf/8rhm+/nWCMAnL3Hg=
 github.com/anacrolix/mmsg v1.0.0/go.mod h1:x8kRaJY/dCrY9Al0PEcj1mb/uFHwP6GCJ9fLl4thEPc=
-github.com/anacrolix/multiless v0.2.0 h1:HtGBBOQcHaJM59RP3ysITId7AMIgiNF4xJucaFh14Ms=
-github.com/anacrolix/multiless v0.2.0/go.mod h1:TrCLEZfIDbMVfLoQt5tOoiBS/uq4y8+ojuEVVvTNPX4=
+github.com/anacrolix/multiless v0.2.1-0.20211218050420-533661eef5dc h1:K047jUtd0Xv4SEpv/5DoBgDvj4ZNpT1SOVtMlFpRrh0=
+github.com/anacrolix/multiless v0.2.1-0.20211218050420-533661eef5dc/go.mod h1:TrCLEZfIDbMVfLoQt5tOoiBS/uq4y8+ojuEVVvTNPX4=
 github.com/anacrolix/squirrel v0.4.0 h1:MOxYwh0mD2rcEJT+N2tFj2Z3dBDrWn6kRxP4qsBxfyk=
 github.com/anacrolix/squirrel v0.4.0/go.mod h1:dJyE7VefQvX0KAKMkOQDGOVEs91a+LvXQ2BjEKl/DIw=
 github.com/anacrolix/stm v0.2.0/go.mod h1:zoVQRvSiGjGoTmbM0vSLIiaKjWtNPeTvXUSdJQA4hsg=

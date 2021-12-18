@@ -1,27 +1,23 @@
 package request_strategy
 
-import (
-	"fmt"
+import "github.com/anacrolix/torrent/metainfo"
 
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/tidwall/btree"
-)
+type Btree interface {
+	Delete(pieceRequestOrderItem)
+	Add(pieceRequestOrderItem)
+	Scan(func(pieceRequestOrderItem) bool)
+}
 
-func NewPieceOrder() *PieceRequestOrder {
+func NewPieceOrder(btree Btree, cap int) *PieceRequestOrder {
 	return &PieceRequestOrder{
-		tree: btree.NewOptions(
-			func(a, b pieceRequestOrderItem) bool {
-				return a.Less(&b)
-			},
-			btree.Options{NoLocks: true}),
-		keys: make(map[PieceRequestOrderKey]PieceRequestOrderState),
+		tree: btree,
+		keys: make(map[PieceRequestOrderKey]PieceRequestOrderState, cap),
 	}
 }
 
 type PieceRequestOrder struct {
-	tree     *btree.BTree[pieceRequestOrderItem]
-	keys     map[PieceRequestOrderKey]PieceRequestOrderState
-	PathHint *btree.PathHint
+	tree Btree
+	keys map[PieceRequestOrderKey]PieceRequestOrderState
 }
 
 type PieceRequestOrderKey struct {
@@ -48,16 +44,9 @@ func (me *PieceRequestOrder) Add(key PieceRequestOrderKey, state PieceRequestOrd
 	if _, ok := me.keys[key]; ok {
 		panic(key)
 	}
-	if _, ok := me.tree.SetHint(pieceRequestOrderItem{
-		key:   key,
-		state: state,
-	}, me.PathHint); ok {
-		panic("shouldn't already have this")
-	}
+	me.tree.Add(pieceRequestOrderItem{key, state})
 	me.keys[key] = state
 }
-
-type PieceRequestOrderPathHint = btree.PathHint
 
 func (me *PieceRequestOrder) Update(
 	key PieceRequestOrderKey,
@@ -70,17 +59,8 @@ func (me *PieceRequestOrder) Update(
 	if state == oldState {
 		return
 	}
-	item := pieceRequestOrderItem{
-		key:   key,
-		state: oldState,
-	}
-	if _, ok := me.tree.DeleteHint(item, me.PathHint); !ok {
-		panic(fmt.Sprintf("%#v", key))
-	}
-	item.state = state
-	if _, ok := me.tree.SetHint(item, me.PathHint); ok {
-		panic(key)
-	}
+	me.tree.Delete(pieceRequestOrderItem{key, oldState})
+	me.tree.Add(pieceRequestOrderItem{key, state})
 	me.keys[key] = state
 }
 
@@ -92,10 +72,7 @@ func (me *PieceRequestOrder) existingItemForKey(key PieceRequestOrderKey) pieceR
 }
 
 func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) {
-	item := me.existingItemForKey(key)
-	if _, ok := me.tree.DeleteHint(item, me.PathHint); !ok {
-		panic(key)
-	}
+	me.tree.Delete(pieceRequestOrderItem{key, me.keys[key]})
 	delete(me.keys, key)
 }
 

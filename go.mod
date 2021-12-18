@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/RoaringBitmap/roaring v0.9.4
+	github.com/ajwerner/btree v0.0.0-20211201061316-91c8b66ad617
 	github.com/alexflint/go-arg v1.4.2
 	github.com/anacrolix/args v0.4.1-0.20211104085705-59f0fe94eb8f
 	github.com/anacrolix/chansync v0.3.0
@@ -15,7 +16,7 @@ require (
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.5.2
-	github.com/anacrolix/multiless v0.2.0
+	github.com/anacrolix/multiless v0.2.1-0.20211218050420-533661eef5dc
 	github.com/anacrolix/squirrel v0.4.0
 	github.com/anacrolix/sync v0.4.0
 	github.com/anacrolix/tagflag v1.3.0

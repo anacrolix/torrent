@@ -8,7 +8,7 @@ require (
 	github.com/anacrolix/args v0.4.1-0.20211104085705-59f0fe94eb8f
 	github.com/anacrolix/chansync v0.3.0
 	github.com/anacrolix/confluence v1.9.0 // indirect
-	github.com/anacrolix/dht/v2 v2.13.1-0.20211209181115-6ae2bd446b12
+	github.com/anacrolix/dht/v2 v2.14.1-0.20211220010335-4062f7927abf
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/fuse v0.2.0
 	github.com/anacrolix/go-libutp v1.1.0

@@ -45,7 +45,7 @@ func (t *Torrent) initPieceRequestOrder() {
 	key := t.clientPieceRequestOrderKey()
 	cpro := t.cl.pieceRequestOrder
 	if cpro[key] == nil {
-		cpro[key] = request_strategy.NewPieceOrder(request_strategy.NewTidwallBtree(), t.numPieces())
+		cpro[key] = request_strategy.NewPieceOrder(request_strategy.NewAjwernerBtree(), t.numPieces())
 	}
 }
 

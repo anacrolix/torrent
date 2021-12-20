@@ -154,6 +154,9 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	if !p.t.haveInfo() {
 		return
 	}
+	if p.t.closed.IsSet() {
+		return
+	}
 	input := p.t.getRequestStrategyInput()
 	requestHeap := peerRequests{
 		peer: p,

@@ -2273,6 +2273,12 @@ func (t *Torrent) addWebSeed(url string) {
 		client: webseed.Client{
 			HttpClient: t.cl.webseedHttpClient,
 			Url:        url,
+			ResponseBodyWrapper: func(r io.Reader) io.Reader {
+				return &rateLimitedReader{
+					l: t.cl.config.DownloadRateLimiter,
+					r: r,
+				}
+			},
 		},
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
 		maxRequests:    maxRequests,

@@ -234,10 +234,11 @@ func downloadErr(flags downloadFlags) error {
 		clientConfig.SetListenAddr(flags.Addr)
 	}
 	if flags.UploadRate != nil {
+		// TODO: I think the upload rate limit could be much lower.
 		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(*flags.UploadRate), 256<<10)
 	}
 	if flags.DownloadRate != nil {
-		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(*flags.DownloadRate), 1<<20)
+		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(*flags.DownloadRate), 1<<16)
 	}
 	if flags.Quiet {
 		clientConfig.Logger = log.Discard

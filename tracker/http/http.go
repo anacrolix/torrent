@@ -23,7 +23,7 @@ import (
 var vars = expvar.NewMap("tracker/http")
 
 func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts AnnounceOpt) {
-	q := _url.Query()
+	q := url.Values{}
 
 	q.Set("key", strconv.FormatInt(int64(ar.Key), 10))
 	q.Set("info_hash", string(ar.InfoHash[:]))
@@ -64,7 +64,14 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts AnnounceOpt) {
 	doIp("ipv6", opts.ClientIp6)
 	// We're operating purely on query-escaped strings, where + would have already been encoded to
 	// %2B, and + has no other special meaning. See https://github.com/anacrolix/torrent/issues/534.
-	_url.RawQuery = strings.ReplaceAll(q.Encode(), "+", "%20")
+	qstr := strings.ReplaceAll(q.Encode(), "+", "%20")
+
+	// Some private trackers require the original query param to be in the first position.
+	if _url.RawQuery != "" {
+		_url.RawQuery += "&" + qstr
+	} else {
+		_url.RawQuery = qstr
+	}
 }
 
 type AnnounceOpt struct {

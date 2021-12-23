@@ -86,6 +86,8 @@ type Peer struct {
 	needRequestUpdate    string
 	requestState         requestState
 	updateRequestsTimer  *time.Timer
+	lastRequestUpdate    time.Time
+	peakRequests         maxRequests
 	lastBecameInterested time.Time
 	priorInterest        time.Duration
 
@@ -445,7 +447,10 @@ func (cn *Peer) peerHasPiece(piece pieceIndex) bool {
 
 // 64KiB, but temporarily less to work around an issue with WebRTC. TODO: Update when
 // https://github.com/pion/datachannel/issues/59 is fixed.
-const writeBufferHighWaterLen = 1 << 15
+const (
+	writeBufferHighWaterLen = 1 << 15
+	writeBufferLowWaterLen  = writeBufferHighWaterLen / 2
+)
 
 // Writes a message into the write buffer. Returns whether it's okay to keep writing. Writing is
 // done asynchronously, so it may be that we're not able to honour backpressure from this method.
@@ -481,9 +486,17 @@ func (cn *PeerConn) requestedMetadataPiece(index int) bool {
 	return index < len(cn.metadataRequests) && cn.metadataRequests[index]
 }
 
+var (
+	interestedMsgLen = len(pp.Message{Type: pp.Interested}.MustMarshalBinary())
+	requestMsgLen    = len(pp.Message{Type: pp.Request}.MustMarshalBinary())
+	// This is the maximum request count that could fit in the write buffer if it's at or below the
+	// low water mark when we run maybeUpdateActualRequestState.
+	maxLocalToRemoteRequests = (writeBufferHighWaterLen - writeBufferLowWaterLen - interestedMsgLen) / requestMsgLen
+)
+
 // The actual value to use as the maximum outbound requests.
-func (cn *Peer) nominalMaxRequests() (ret maxRequests) {
-	return maxRequests(clamp(1, int64(cn.PeerMaxRequests), 2048))
+func (cn *Peer) nominalMaxRequests() maxRequests {
+	return maxRequests(maxInt(1, minInt(cn.PeerMaxRequests, cn.peakRequests*2, maxLocalToRemoteRequests)))
 }
 
 func (cn *Peer) totalExpectingTime() (ret time.Duration) {
@@ -649,6 +662,7 @@ func (me *Peer) cancel(r RequestIndex) {
 			panic("request already cancelled")
 		}
 	}
+	me.decPeakRequests()
 	if me.isLowOnRequests() {
 		me.updateRequests("Peer.cancel")
 	}
@@ -662,9 +676,15 @@ func (me *PeerConn) _cancel(r RequestIndex) bool {
 }
 
 func (cn *PeerConn) fillWriteBuffer() {
-	if !cn.maybeUpdateActualRequestState() {
-		return
+	if cn.messageWriter.writeBuffer.Len() > writeBufferLowWaterLen {
+		// Fully committing to our max requests requires sufficient space (see
+		// maxLocalToRemoteRequests). Flush what we have instead. We also prefer always to make
+		// requests than to do PEX or upload, so we short-circuit before handling those. Any update
+		// request reason will not be cleared, so we'll come right back here when there's space. We
+		// can't do this in maybeUpdateActualRequestState because it's a method on Peer and has no
+		// knowledge of write buffers.
 	}
+	cn.maybeUpdateActualRequestState()
 	if cn.pex.IsEnabled() {
 		if flow := cn.pex.Share(cn.write); !flow {
 			return
@@ -701,6 +721,9 @@ func (cn *PeerConn) postBitfield() {
 // Sets a reason to update requests, and if there wasn't already one, handle it.
 func (cn *Peer) updateRequests(reason string) {
 	if cn.needRequestUpdate != "" {
+		return
+	}
+	if reason != peerUpdateRequestsTimerReason && !cn.isLowOnRequests() {
 		return
 	}
 	cn.needRequestUpdate = reason
@@ -1235,7 +1258,9 @@ func (c *PeerConn) mainReadLoop() (err error) {
 
 // Returns true if it was valid to reject the request.
 func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
-	if !c.deleteRequest(r) && !c.requestState.Cancelled.CheckedRemove(r) {
+	if c.deleteRequest(r) {
+		c.decPeakRequests()
+	} else if !c.requestState.Cancelled.CheckedRemove(r) {
 		return false
 	}
 	if c.isLowOnRequests() {
@@ -1741,10 +1766,6 @@ func (cn *Peer) stats() *ConnStats {
 func (p *Peer) TryAsPeerConn() (*PeerConn, bool) {
 	pc, ok := p.peerImpl.(*PeerConn)
 	return pc, ok
-}
-
-func (pc *PeerConn) isLowOnRequests() bool {
-	return pc.requestState.Requests.IsEmpty() && pc.requestState.Cancelled.IsEmpty()
 }
 
 func (p *Peer) uncancelledRequests() uint64 {

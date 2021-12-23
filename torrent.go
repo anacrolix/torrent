@@ -2241,6 +2241,7 @@ func (t *Torrent) DisallowDataUpload() {
 	defer t.cl.unlock()
 	t.dataUploadDisallowed = true
 	for c := range t.conns {
+		// TODO: This doesn't look right. Shouldn't we tickle writers to choke peers or something instead?
 		c.updateRequests("disallow data upload")
 	}
 }

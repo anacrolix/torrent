@@ -985,8 +985,9 @@ func (p *Peer) initUpdateRequestsTimer() {
 		}
 	}
 	p.updateRequestsTimer = time.AfterFunc(math.MaxInt64, p.updateRequestsTimerFunc)
-	p.updateRequestsTimer.Stop()
 }
+
+const peerUpdateRequestsTimerReason = "updateRequestsTimer"
 
 func (c *Peer) updateRequestsTimerFunc() {
 	c.locker().Lock()
@@ -994,14 +995,15 @@ func (c *Peer) updateRequestsTimerFunc() {
 	if c.closed.IsSet() {
 		return
 	}
-	if c.needRequestUpdate != "" {
-		return
-	}
 	if c.isLowOnRequests() {
 		// If there are no outstanding requests, then a request update should have already run.
 		return
 	}
-	c.updateRequests("updateRequestsTimer")
+	if d := time.Since(c.lastRequestUpdate); d < updateRequestsTimerDuration {
+		log.Printf("spurious timer requests update [interval=%v]", d)
+		return
+	}
+	c.updateRequests(peerUpdateRequestsTimerReason)
 }
 
 // Maximum pending requests we allow peers to send us. If peer requests are buffered on read, this

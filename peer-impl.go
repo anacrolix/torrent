@@ -11,8 +11,6 @@ import (
 type peerImpl interface {
 	// Trigger the actual request state to get updated
 	handleUpdateRequests()
-	// Whether the outstanding local request cardinality is low enough to warrant an update.
-	isLowOnRequests() bool
 	writeInterested(interested bool) bool
 
 	// _cancel initiates cancellation of a request and returns acked if it expects the cancel to be

@@ -238,3 +238,11 @@ func TestHaveAllThenBitfield(t *testing.T) {
 		{2, 0}, {1, 1}, {1, 0}, {2, 1}, {1, 0},
 	})
 }
+
+func TestApplyRequestStateWriteBufferConstraints(t *testing.T) {
+	c := qt.New(t)
+	c.Check(interestedMsgLen, qt.Equals, 5)
+	c.Check(requestMsgLen, qt.Equals, 17)
+	c.Check(maxLocalToRemoteRequests >= 8, qt.IsTrue)
+	c.Logf("max local to remote requests: %v", maxLocalToRemoteRequests)
+}

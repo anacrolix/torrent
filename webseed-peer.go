@@ -187,10 +187,6 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	return err
 }
 
-func (me *webseedPeer) isLowOnRequests() bool {
-	return me.peer.requestState.Requests.GetCardinality() < uint64(me.maxRequests)
-}
-
 func (me *webseedPeer) peerPieces() *roaring.Bitmap {
 	return &me.client.Pieces
 }

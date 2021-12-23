@@ -92,6 +92,17 @@ func (p *peerRequests) Less(i, j int) bool {
 			!p.peer.peerAllowedFast.Contains(rightPieceIndex),
 		)
 	}
+	leftPiece := t.piece(int(leftPieceIndex))
+	rightPiece := t.piece(int(rightPieceIndex))
+	// Putting this first means we can steal requests from lesser-performing peers for our first few
+	// new requests.
+	ml = ml.Int(
+		// Technically we would be happy with the cached priority here, except we don't actually
+		// cache it anymore, and Torrent.piecePriority just does another lookup of *Piece to resolve
+		// the priority through Piece.purePriority, which is probably slower.
+		-int(leftPiece.purePriority()),
+		-int(rightPiece.purePriority()),
+	)
 	leftPeer := t.pendingRequests[leftRequest]
 	rightPeer := t.pendingRequests[rightRequest]
 	ml = ml.Bool(rightPeer == p.peer, leftPeer == p.peer)
@@ -116,15 +127,6 @@ func (p *peerRequests) Less(i, j int) bool {
 		// it will be served and therefore is the best candidate to cancel.
 		ml = ml.CmpInt64(rightLast.Sub(leftLast).Nanoseconds())
 	}
-	leftPiece := t.piece(int(leftPieceIndex))
-	rightPiece := t.piece(int(rightPieceIndex))
-	ml = ml.Int(
-		// Technically we would be happy with the cached priority here, except we don't actually
-		// cache it anymore, and Torrent.piecePriority just does another lookup of *Piece to resolve
-		// the priority through Piece.purePriority, which is probably slower.
-		-int(leftPiece.purePriority()),
-		-int(rightPiece.purePriority()),
-	)
 	ml = ml.Int(
 		int(leftPiece.relativeAvailability),
 		int(rightPiece.relativeAvailability))

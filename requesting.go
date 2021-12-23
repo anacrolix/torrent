@@ -227,7 +227,7 @@ func (p *Peer) applyRequestState(next desiredRequestState) bool {
 	requestHeap := &next.Requests
 	t := p.t
 	heap.Init(requestHeap)
-	for requestHeap.Len() != 0 && maxRequests(current.Requests.GetCardinality()) < p.nominalMaxRequests() {
+	for requestHeap.Len() != 0 && maxRequests(current.Requests.GetCardinality()+current.Cancelled.GetCardinality()) < p.nominalMaxRequests() {
 		req := heap.Pop(requestHeap).(RequestIndex)
 		existing := t.requestingPeer(req)
 		if existing != nil && existing != p {

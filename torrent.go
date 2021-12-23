@@ -593,6 +593,14 @@ func (t *Torrent) pieceAvailabilityRuns() (ret []pieceAvailabilityRun) {
 	return
 }
 
+func (t *Torrent) pieceAvailabilityFrequencies() (freqs []int) {
+	freqs = make([]int, t.numActivePeers()+1)
+	for i := range t.pieces {
+		freqs[t.piece(i).availability()]++
+	}
+	return
+}
+
 func (t *Torrent) pieceStateRuns() (ret PieceStateRuns) {
 	rle := missinggo.NewRunLengthEncoder(func(el interface{}, count uint64) {
 		ret = append(ret, PieceStateRun{
@@ -677,12 +685,27 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	if t.info != nil {
 		fmt.Fprintf(w, "Num Pieces: %d (%d completed)\n", t.numPieces(), t.numPiecesCompleted())
 		fmt.Fprintf(w, "Piece States: %s\n", t.pieceStateRuns())
-		fmt.Fprintf(w, "Piece availability: %v\n", strings.Join(func() (ret []string) {
-			for _, run := range t.pieceAvailabilityRuns() {
-				ret = append(ret, run.String())
-			}
-			return
-		}(), " "))
+		// Generates a huge, unhelpful listing when piece availability is very scattered. Prefer
+		// availability frequencies instead.
+		if false {
+			fmt.Fprintf(w, "Piece availability: %v\n", strings.Join(func() (ret []string) {
+				for _, run := range t.pieceAvailabilityRuns() {
+					ret = append(ret, run.String())
+				}
+				return
+			}(), " "))
+		}
+		fmt.Fprintf(w, "Piece availability frequency: %v\n", strings.Join(
+			func() (ret []string) {
+				for avail, freq := range t.pieceAvailabilityFrequencies() {
+					if freq == 0 {
+						continue
+					}
+					ret = append(ret, fmt.Sprintf("%v: %v", avail, freq))
+				}
+				return
+			}(),
+			", "))
 	}
 	fmt.Fprintf(w, "Reader Pieces:")
 	t.forReaderOffsetPieces(func(begin, end pieceIndex) (again bool) {

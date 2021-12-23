@@ -4,6 +4,7 @@ import (
 	"errors"
 	"expvar"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -140,11 +141,23 @@ func addTorrents(client *torrent.Client, flags downloadFlags) error {
 			<-t.GotInfo()
 			if len(flags.File) == 0 {
 				t.DownloadAll()
+				if flags.LinearDiscard {
+					r := t.NewReader()
+					io.Copy(io.Discard, r)
+					r.Close()
+				}
 			} else {
 				for _, f := range t.Files() {
 					for _, fileArg := range flags.File {
 						if f.DisplayPath() == fileArg {
 							f.Download()
+							if flags.LinearDiscard {
+								r := f.NewReader()
+								go func() {
+									defer r.Close()
+									io.Copy(io.Discard, r)
+								}()
+							}
 						}
 					}
 				}
@@ -161,7 +174,6 @@ type downloadFlags struct {
 
 type DownloadCmd struct {
 	Mmap               bool           `help:"memory-map torrent data"`
-	TestPeer           []string       `help:"addresses of some starting peers"`
 	Seed               bool           `help:"seed after download is complete"`
 	Addr               string         `help:"network listen addr"`
 	MaxUnverifiedBytes tagflag.Bytes  `help:"maximum number bytes to have pending verification"`
@@ -170,7 +182,7 @@ type DownloadCmd struct {
 	PackedBlocklist    string
 	PublicIP           net.IP
 	Progress           bool `default:"true"`
-	PieceStates        bool
+	PieceStates        bool `help:"Output piece state runs at progress intervals."`
 	Quiet              bool `help:"discard client logging"`
 	Stats              bool `help:"print stats at termination"`
 	Dht                bool `default:"true"`
@@ -186,6 +198,9 @@ type DownloadCmd struct {
 	Ipv4 bool `default:"true"`
 	Ipv6 bool `default:"true"`
 	Pex  bool `default:"true"`
+
+	LinearDiscard bool     `help:"Read and discard selected regions from start to finish. Useful for testing simultaneous Reader and static file prioritization."`
+	TestPeer      []string `help:"addresses of some starting peers"`
 
 	File    []string
 	Torrent []string `arity:"+" help:"torrent file path or magnet uri" arg:"positional"`

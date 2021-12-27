@@ -1000,7 +1000,9 @@ func (c *Peer) updateRequestsTimerFunc() {
 		return
 	}
 	if d := time.Since(c.lastRequestUpdate); d < updateRequestsTimerDuration {
-		log.Printf("spurious timer requests update [interval=%v]", d)
+		// These should be benign, Timer.Stop doesn't guarantee that its function won't run if it's
+		// already been fired.
+		torrent.Add("spurious timer requests updates", 1)
 		return
 	}
 	c.updateRequests(peerUpdateRequestsTimerReason)

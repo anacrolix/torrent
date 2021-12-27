@@ -2381,3 +2381,12 @@ func (t *Torrent) deleteConnWithAllPieces(p *Peer) bool {
 func (t *Torrent) numActivePeers() int {
 	return len(t.conns) + len(t.webSeeds)
 }
+
+func (t *Torrent) hasStorageCap() bool {
+	f := t.storage.Capacity
+	if f == nil {
+		return false
+	}
+	_, ok := (*f)()
+	return ok
+}

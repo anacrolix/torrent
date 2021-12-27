@@ -1030,6 +1030,7 @@ func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 		if b == nil {
 			panic("data must be non-nil to trigger send")
 		}
+		torrent.Add("peer request data read successes", 1)
 		prs.data = b
 		c.tickleWriter()
 	}
@@ -1038,7 +1039,14 @@ func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 // If this is maintained correctly, we might be able to support optional synchronous reading for
 // chunk sending, the way it used to work.
 func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
-	c.logger.WithDefaultLevel(log.Warning).Printf("error reading chunk for peer Request %v: %v", r, err)
+	torrent.Add("peer request data read failures", 1)
+	logLevel := log.Warning
+	if c.t.hasStorageCap() {
+		// It's expected that pieces might drop. See
+		// https://github.com/anacrolix/torrent/issues/702#issuecomment-1000953313.
+		logLevel = log.Debug
+	}
+	c.logger.WithDefaultLevel(logLevel).Printf("error reading chunk for peer Request %v: %v", r, err)
 	if c.t.closed.IsSet() {
 		return
 	}

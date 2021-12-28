@@ -2,8 +2,9 @@ package udp
 
 import (
 	"context"
-	"log"
 	"net"
+
+	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/missinggo/v2"
 )
@@ -15,6 +16,8 @@ type NewConnClientOpts struct {
 	Host string
 	// If non-nil, forces either IPv4 or IPv6 in the UDP tracker wire protocol.
 	Ipv6 *bool
+	// Logger to use for internal errors.
+	Logger log.Logger
 }
 
 // Manages a Client with a specific connection.
@@ -42,7 +45,7 @@ func (cc *ConnClient) reader() {
 		}
 		err = cc.d.Dispatch(b[:n], addr)
 		if err != nil {
-			log.Printf("dispatching packet received on %v: %v", cc.conn.LocalAddr(), err)
+			cc.newOpts.Logger.WithLevel(log.Debug).Printf("dispatching packet received on %v: %v", cc.conn.LocalAddr(), err)
 		}
 	}
 }
@@ -81,6 +84,9 @@ func NewConnClient(opts NewConnClientOpts) (cc *ConnClient, err error) {
 	if err != nil {
 		return
 	}
+	if opts.Logger.IsZero() {
+		opts.Logger = log.Default
+	}
 	cc = &ConnClient{
 		Client: Client{
 			Writer: clientWriter{
@@ -97,17 +103,21 @@ func NewConnClient(opts NewConnClientOpts) (cc *ConnClient, err error) {
 	return
 }
 
-func (c *ConnClient) Close() error {
-	c.closed = true
-	return c.conn.Close()
+func (cc *ConnClient) Close() error {
+	cc.closed = true
+	return cc.conn.Close()
 }
 
-func (c *ConnClient) Announce(
+func (cc *ConnClient) Announce(
 	ctx context.Context, req AnnounceRequest, opts Options,
 ) (
 	h AnnounceResponseHeader, nas AnnounceResponsePeers, err error,
 ) {
-	return c.Client.Announce(ctx, req, opts, func(addr net.Addr) bool {
-		return ipv6(c.newOpts.Ipv6, c.newOpts.Network, addr)
+	return cc.Client.Announce(ctx, req, opts, func(addr net.Addr) bool {
+		return ipv6(cc.newOpts.Ipv6, cc.newOpts.Network, addr)
 	})
+}
+
+func (cc *ConnClient) LocalAddr() net.Addr {
+	return cc.conn.LocalAddr()
 }

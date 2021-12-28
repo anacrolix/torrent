@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/dht/v2/krpc"
+	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,4 +73,21 @@ func TestConvertInt16ToInt(t *testing.T) {
 	if int(uint16(int16(i))) != 50000 {
 		t.FailNow()
 	}
+}
+
+func TestConnClientLogDispatchUnknownTransactionId(t *testing.T) {
+	const network = "udp"
+	cc, err := NewConnClient(NewConnClientOpts{
+		Network: network,
+	})
+	c := qt.New(t)
+	c.Assert(err, qt.IsNil)
+	defer cc.Close()
+	pc, err := net.ListenPacket(network, ":0")
+	c.Assert(err, qt.IsNil)
+	defer pc.Close()
+	ccAddr := *cc.LocalAddr().(*net.UDPAddr)
+	ccAddr.IP = net.IPv6loopback
+	_, err = pc.WriteTo(make([]byte, 30), &ccAddr)
+	c.Assert(err, qt.IsNil)
 }

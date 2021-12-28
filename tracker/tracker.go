@@ -3,11 +3,13 @@ package tracker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/anacrolix/log"
 	trHttp "github.com/anacrolix/torrent/tracker/http"
 	"github.com/anacrolix/torrent/tracker/shared"
 	"github.com/anacrolix/torrent/tracker/udp"
@@ -43,6 +45,7 @@ type Announce struct {
 	// If the port is zero, it's assumed to be the same as the Request.Port.
 	ClientIp6 krpc.NodeAddr
 	Context   context.Context
+	Logger    log.Logger
 }
 
 // The code *is* the documentation.
@@ -55,6 +58,7 @@ func (me Announce) Do() (res AnnounceResponse, err error) {
 			ServerName: me.ServerName,
 		},
 		UdpNetwork: me.UdpNetwork,
+		Logger:     me.Logger.WithContextValue(fmt.Sprintf("tracker client for %q", me.TrackerUrl)),
 	})
 	if err != nil {
 		return

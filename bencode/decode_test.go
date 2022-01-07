@@ -2,6 +2,7 @@ package bencode
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"math/big"
 	"reflect"
@@ -192,4 +193,44 @@ func TestUnmarshalDictKeyNotString(t *testing.T) {
 	err := Unmarshal([]byte("di42e3:yese"), &i)
 	t.Log(err)
 	c.Check(err, qt.Not(qt.IsNil))
+}
+
+type arbitraryReader struct{}
+
+func (arbitraryReader) Read(b []byte) (int, error) {
+	return len(b), nil
+}
+
+func decodeHugeString(t *testing.T, strLen int64, header, tail string, v interface{}, maxStrLen MaxStrLen) error {
+	r, w := io.Pipe()
+	go func() {
+		fmt.Fprintf(w, header, strLen)
+		io.CopyN(w, arbitraryReader{}, strLen)
+		w.Write([]byte(tail))
+		w.Close()
+	}()
+	d := NewDecoder(r)
+	d.MaxStrLen = maxStrLen
+	return d.Decode(v)
+
+}
+
+// Ensure that bencode strings in various places obey the Decoder.MaxStrLen field.
+func TestDecodeMaxStrLen(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	test := func(header, tail string, v interface{}, maxStrLen MaxStrLen) {
+		strLen := maxStrLen
+		if strLen == 0 {
+			strLen = DefaultDecodeMaxStrLen
+		}
+		c.Assert(decodeHugeString(t, strLen, header, tail, v, maxStrLen), qt.IsNil)
+		c.Assert(decodeHugeString(t, strLen+1, header, tail, v, maxStrLen), qt.IsNotNil)
+	}
+	test("d%d:", "i0ee", new(interface{}), 0)
+	test("%d:", "", new(interface{}), DefaultDecodeMaxStrLen)
+	test("%d:", "", new([]byte), 1)
+	test("d3:420%d:", "e", new(struct {
+		Hi []byte `bencode:"420"`
+	}), 69)
 }

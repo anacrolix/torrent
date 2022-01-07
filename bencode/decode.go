@@ -12,7 +12,16 @@ import (
 	"sync"
 )
 
+// The default bencode string length limit. This is a poor attempt to prevent excessive memory
+// allocation when parsing, but also leaves the window open to implement a better solution.
+const DefaultDecodeMaxStrLen = 1<<27 - 1 // ~128MiB
+
+type MaxStrLen = int64
+
 type Decoder struct {
+	// Maximum parsed bencode string length. Defaults to DefaultMaxStrLen if zero.
+	MaxStrLen MaxStrLen
+
 	r interface {
 		io.ByteScanner
 		io.Reader
@@ -182,8 +191,14 @@ func (d *Decoder) parseStringLength() (uint64, error) {
 	if err := d.checkBufferedInt(); err != nil {
 		return 0, err
 	}
-	length, err := strconv.ParseUint(bytesAsString(d.buf.Bytes()), 10, 32)
+	// Really the limit should be the uint size for the platform. But we can't pass in an allocator,
+	// or limit total memory use in Go, the best we might hope to do is limit the size of a single
+	// decoded value (by reading it in in-place and then operating on a view).
+	length, err := strconv.ParseUint(bytesAsString(d.buf.Bytes()), 10, 0)
 	checkForIntParseError(err, start)
+	if int64(length) > d.getMaxStrLen() {
+		err = fmt.Errorf("parsed string length %v exceeds limit (%v)", length, DefaultDecodeMaxStrLen)
+	}
 	d.buf.Reset()
 	return length, err
 }
@@ -706,4 +721,11 @@ func (d *Decoder) parseListInterface() (list []interface{}) {
 		valuei, ok = d.parseValueInterface()
 	}
 	return
+}
+
+func (d *Decoder) getMaxStrLen() int64 {
+	if d.MaxStrLen == 0 {
+		return DefaultDecodeMaxStrLen
+	}
+	return d.MaxStrLen
 }

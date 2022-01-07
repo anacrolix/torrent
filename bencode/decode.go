@@ -37,13 +37,20 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 			return
 		}
 		r := recover()
+		if r == nil {
+			return
+		}
 		_, ok := r.(runtime.Error)
 		if ok {
 			panic(r)
 		}
-		err, ok = r.(error)
-		if !ok && r != nil {
+		if err, ok = r.(error); !ok {
 			panic(r)
+		}
+		// Errors thrown from deeper in parsing are unexpected. At value boundaries, errors should
+		// be returned directly (at least until all the panic nonsense is removed entirely).
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
 		}
 	}()
 
@@ -566,7 +573,7 @@ func (d *Decoder) parseValue(v reflect.Value) (bool, error) {
 
 	b, err := d.r.ReadByte()
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 	d.Offset++
 

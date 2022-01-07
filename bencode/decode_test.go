@@ -40,6 +40,7 @@ var random_decode_tests = []random_decode_test{
 		"v": "TR%=",
 		"y": "r",
 	}},
+	{"d0:i420ee", map[string]interface{}{"": int64(420)}},
 }
 
 func TestRandomDecode(t *testing.T) {

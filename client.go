@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"expvar"
@@ -27,6 +28,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
+	"github.com/anacrolix/torrent/option"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
@@ -74,6 +76,7 @@ type Client struct {
 	// through legitimate channels.
 	dopplegangerAddrs map[string]struct{}
 	badPeerIPs        map[string]struct{}
+	bannedPrefixes    map[string]struct{}
 	torrents          map[InfoHash]*Torrent
 	pieceRequestOrder map[interface{}]*request_strategy.PieceRequestOrder
 
@@ -210,6 +213,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 			MaxConnsPerHost: 10,
 		},
 	}
+	cl.bannedPrefixes = make(map[banPrefix]struct{})
 }
 
 func NewClient(cfg *ClientConfig) (cl *Client, err error) {
@@ -1126,6 +1130,12 @@ func (cl *Client) badPeerAddr(addr PeerRemoteAddr) bool {
 	if ipa, ok := tryIpPortFromNetAddr(addr); ok {
 		return cl.badPeerIPPort(ipa.IP, ipa.Port)
 	}
+	addrStr := addr.String()
+	for prefix := range cl.bannedPrefixes {
+		if strings.HasPrefix(addrStr, prefix) {
+			return true
+		}
+	}
 	return false
 }
 
@@ -1185,6 +1195,8 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		webSeeds:     make(map[string]*Peer),
 		gotMetainfoC: make(chan struct{}),
 	}
+	t.smartBanCache.Hash = sha1.Sum
+	t.smartBanCache.Init()
 	t.networkingEnabled.Set()
 	t.logger = cl.logger.WithContextValue(t)
 	if opts.ChunkSize == 0 {
@@ -1508,6 +1520,9 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemot
 		connString: connString,
 		conn:       nc,
 	}
+	if remoteAddr != nil {
+		c.banPrefix = option.Some(remoteAddr.String())
+	}
 	c.peerImpl = c
 	c.logger = cl.logger.WithDefaultLevel(log.Warning).WithContextValue(c)
 	c.setRW(connStatsReadWriter{nc, c})
@@ -1675,4 +1690,8 @@ func (cl *Client) String() string {
 // TorrentStats.ConnStats.
 func (cl *Client) ConnStats() ConnStats {
 	return cl.stats.Copy()
+}
+
+func (cl *Client) banPrefix(prefix banPrefix) {
+	cl.bannedPrefixes[prefix] = struct{}{}
 }

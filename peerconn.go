@@ -19,6 +19,7 @@ import (
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
+	"github.com/anacrolix/torrent/option"
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/torrent/bencode"
@@ -67,6 +68,7 @@ type Peer struct {
 	outgoing   bool
 	Network    string
 	RemoteAddr PeerRemoteAddr
+	banPrefix  option.T[string]
 	// True if the connection is operating over MSE obfuscation.
 	headerEncrypted bool
 	cryptoMethod    mse.CryptoMethod
@@ -1386,6 +1388,11 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 	ppReq := newRequestFromMessage(msg)
 	req := c.t.requestIndexFromRequest(ppReq)
+	t := c.t
+
+	if c.banPrefix.Ok() {
+		t.smartBanCache.RecordBlock(c.banPrefix.Value(), req, msg.Piece)
+	}
 
 	if c.peerChoking {
 		chunksReceived.Add("while choked", 1)
@@ -1425,7 +1432,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		}
 	}
 
-	t := c.t
 	cl := t.cl
 
 	// Do we actually want this chunk?

@@ -147,6 +147,8 @@ type Torrent struct {
 
 	// Is On when all pieces are complete.
 	Complete chansync.Flag
+
+	smartBanCache smartBanCache
 }
 
 func (t *Torrent) selectivePieceAvailabilityFromPeers(i pieceIndex) (count int) {
@@ -939,7 +941,20 @@ func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
 	return pp.Integer(t.info.PieceLength)
 }
 
-func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash, err error) {
+func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex) *blockCheckingWriter {
+	return &blockCheckingWriter{
+		cache:        &t.smartBanCache,
+		requestIndex: t.pieceRequestIndexOffset(piece),
+		chunkSize:    t.chunkSize.Int(),
+	}
+}
+
+func (t *Torrent) hashPiece(piece pieceIndex) (
+	ret metainfo.Hash,
+	// These are peers that sent us blocks that differ from what we hash here.
+	differingPeers map[banPrefix]struct{},
+	err error,
+) {
 	p := t.piece(piece)
 	p.waitNoPendingWrites()
 	storagePiece := t.pieces[piece].Storage()
@@ -955,13 +970,18 @@ func (t *Torrent) hashPiece(piece pieceIndex) (ret metainfo.Hash, err error) {
 
 	hash := pieceHash.New()
 	const logPieceContents = false
+	smartBanWriter := t.smartBanBlockCheckingWriter(piece)
+	writers := []io.Writer{hash, smartBanWriter}
+	var examineBuf bytes.Buffer
 	if logPieceContents {
-		var examineBuf bytes.Buffer
-		_, err = storagePiece.WriteTo(io.MultiWriter(hash, &examineBuf))
-		log.Printf("hashed %q with copy err %v", examineBuf.Bytes(), err)
-	} else {
-		_, err = storagePiece.WriteTo(hash)
+		writers = append(writers, &examineBuf)
 	}
+	_, err = storagePiece.WriteTo(io.MultiWriter(writers...))
+	if logPieceContents {
+		log.Printf("hashed %q with copy err %v", examineBuf.Bytes(), err)
+	}
+	smartBanWriter.Flush()
+	differingPeers = smartBanWriter.badPeers
 	missinggo.CopyExact(&ret, hash.Sum(nil))
 	return
 }
@@ -2106,8 +2126,14 @@ func (t *Torrent) getPieceToHash() (ret pieceIndex, ok bool) {
 
 func (t *Torrent) pieceHasher(index pieceIndex) {
 	p := t.piece(index)
-	sum, copyErr := t.hashPiece(index)
+	sum, failedPeers, copyErr := t.hashPiece(index)
 	correct := sum == *p.hash
+	if correct {
+		for peer := range failedPeers {
+			log.Printf("would smart ban %q for %v here", peer, p)
+			t.cl.banPrefix(peer)
+		}
+	}
 	switch copyErr {
 	case nil, io.EOF:
 	default:
@@ -2299,8 +2325,9 @@ func (t *Torrent) addWebSeed(url string) {
 			// requests mark more often, so recomputation is probably sooner than with regular peer
 			// conns. ~4x maxRequests would be about right.
 			PeerMaxRequests: 128,
-			RemoteAddr:      remoteAddrFromUrl(url),
-			callbacks:       t.callbacks(),
+			// TODO: Set ban prefix?
+			RemoteAddr: remoteAddrFromUrl(url),
+			callbacks:  t.callbacks(),
 		},
 		client: webseed.Client{
 			HttpClient: t.cl.webseedHttpClient,

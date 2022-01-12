@@ -65,10 +65,10 @@ type Peer struct {
 	peerImpl
 	callbacks *Callbacks
 
-	outgoing   bool
-	Network    string
-	RemoteAddr PeerRemoteAddr
-	banPrefix  option.T[string]
+	outgoing     bool
+	Network      string
+	RemoteAddr   PeerRemoteAddr
+	bannableAddr option.T[bannableAddr]
 	// True if the connection is operating over MSE obfuscation.
 	headerEncrypted bool
 	cryptoMethod    mse.CryptoMethod
@@ -1390,8 +1390,8 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	req := c.t.requestIndexFromRequest(ppReq)
 	t := c.t
 
-	if c.banPrefix.Ok() {
-		t.smartBanCache.RecordBlock(c.banPrefix.Value(), req, msg.Piece)
+	if c.bannableAddr.Ok() {
+		t.smartBanCache.RecordBlock(c.bannableAddr.Value(), req, msg.Piece)
 	}
 
 	if c.peerChoking {

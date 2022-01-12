@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"net/url"
 	"sort"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
+	"github.com/anacrolix/torrent/option"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pion/datachannel"
@@ -952,7 +954,7 @@ func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex) *blockCheckingWr
 func (t *Torrent) hashPiece(piece pieceIndex) (
 	ret metainfo.Hash,
 	// These are peers that sent us blocks that differ from what we hash here.
-	differingPeers map[banPrefix]struct{},
+	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
 	p := t.piece(piece)
@@ -2035,8 +2037,11 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 
 			if len(bannableTouchers) >= 1 {
 				c := bannableTouchers[0]
-				t.cl.banPeerIP(c.remoteIp())
-				c.drop()
+				log.Printf("would have banned %v for touching piece %v after failed piece check", c.remoteIp(), piece)
+				if false {
+					t.cl.banPeerIP(c.remoteIp())
+					c.drop()
+				}
 			}
 		}
 		t.onIncompletePiece(piece)
@@ -2124,15 +2129,38 @@ func (t *Torrent) getPieceToHash() (ret pieceIndex, ok bool) {
 	return
 }
 
+func (t *Torrent) dropBannedPeers() {
+	t.iterPeers(func(p *Peer) {
+		remoteIp := p.remoteIp()
+		if remoteIp == nil {
+			if p.bannableAddr.Ok() {
+				log.Printf("can't get remote ip for peer %v", p)
+			}
+			return
+		}
+		netipAddr := netip.MustParseAddr(remoteIp.String())
+		if option.Some(netipAddr) != p.bannableAddr {
+			log.Printf(
+				"peer remote ip does not match its bannable addr [peer=%v, remote ip=%v, bannable addr=%v]",
+				p, remoteIp, p.bannableAddr)
+		}
+		if _, ok := t.cl.badPeerIPs[netipAddr]; ok {
+			p.drop()
+			log.Printf("dropped %v for banned remote IP %v", p, netipAddr)
+		}
+	})
+}
+
 func (t *Torrent) pieceHasher(index pieceIndex) {
 	p := t.piece(index)
 	sum, failedPeers, copyErr := t.hashPiece(index)
 	correct := sum == *p.hash
 	if correct {
 		for peer := range failedPeers {
-			log.Printf("would smart ban %q for %v here", peer, p)
-			t.cl.banPrefix(peer)
+			t.cl.banPeerIP(peer.AsSlice())
+			log.Printf("smart banned %v for piece %v", peer, index)
 		}
+		t.dropBannedPeers()
 	}
 	switch copyErr {
 	case nil, io.EOF:

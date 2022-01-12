@@ -3,19 +3,21 @@ package torrent
 import (
 	"bytes"
 	"crypto/sha1"
+	"net/netip"
 
+	"github.com/anacrolix/torrent/generics"
 	"github.com/anacrolix/torrent/smartban"
 )
 
-type banPrefix = string
+type bannableAddr = netip.Addr
 
-type smartBanCache = smartban.Cache[banPrefix, RequestIndex, [sha1.Size]byte]
+type smartBanCache = smartban.Cache[bannableAddr, RequestIndex, [sha1.Size]byte]
 
 type blockCheckingWriter struct {
 	cache        *smartBanCache
 	requestIndex RequestIndex
 	// Peers that didn't match blocks written now.
-	badPeers    map[banPrefix]struct{}
+	badPeers    map[bannableAddr]struct{}
 	blockBuffer bytes.Buffer
 	chunkSize   int
 }
@@ -23,7 +25,7 @@ type blockCheckingWriter struct {
 func (me *blockCheckingWriter) checkBlock() {
 	b := me.blockBuffer.Next(me.chunkSize)
 	for _, peer := range me.cache.CheckBlock(me.requestIndex, b) {
-		me.badPeers[peer] = struct{}{}
+		generics.MakeMapIfNilAndSet(&me.badPeers, peer, struct{}{})
 	}
 	me.requestIndex++
 }

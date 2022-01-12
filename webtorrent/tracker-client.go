@@ -58,10 +58,17 @@ type outboundOffer struct {
 }
 
 type DataChannelContext struct {
+	// Can these be obtained by just calling the relevant methods on peerConnection?
 	Local, Remote webrtc.SessionDescription
 	OfferId       string
 	LocalOffered  bool
 	InfoHash      [20]byte
+	// This is private as some methods might not be appropriate with data channel context.
+	peerConnection *wrappedPeerConnection
+}
+
+func (me *DataChannelContext) GetSelectedIceCandidatePair() (*webrtc.ICECandidatePair, error) {
+	return me.peerConnection.SCTP().Transport().ICETransport().GetSelectedCandidatePair()
 }
 
 type onDataChannelOpen func(_ datachannel.ReadWriteCloser, dcc DataChannelContext)
@@ -318,11 +325,12 @@ func (tc *TrackerClient) handleOffer(
 			tc.stats.ConvertedInboundConns++
 			tc.mu.Unlock()
 			tc.OnConn(dc, DataChannelContext{
-				Local:        answer,
-				Remote:       offer,
-				OfferId:      offerId,
-				LocalOffered: false,
-				InfoHash:     infoHash,
+				Local:          answer,
+				Remote:         offer,
+				OfferId:        offerId,
+				LocalOffered:   false,
+				InfoHash:       infoHash,
+				peerConnection: peerConnection,
 			})
 		})
 	})
@@ -345,11 +353,12 @@ func (tc *TrackerClient) handleAnswer(offerId string, answer webrtc.SessionDescr
 		tc.stats.ConvertedOutboundConns++
 		tc.mu.Unlock()
 		tc.OnConn(dc, DataChannelContext{
-			Local:        offer.originalOffer,
-			Remote:       answer,
-			OfferId:      offerId,
-			LocalOffered: true,
-			InfoHash:     offer.infoHash,
+			Local:          offer.originalOffer,
+			Remote:         answer,
+			OfferId:        offerId,
+			LocalOffered:   true,
+			InfoHash:       offer.infoHash,
+			peerConnection: offer.peerConnection,
 		})
 	})
 	if err != nil {

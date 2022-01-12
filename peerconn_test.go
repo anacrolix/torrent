@@ -1,7 +1,9 @@
 package torrent
 
 import (
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -245,4 +247,37 @@ func TestApplyRequestStateWriteBufferConstraints(t *testing.T) {
 	c.Check(requestMsgLen, qt.Equals, 17)
 	c.Check(maxLocalToRemoteRequests >= 8, qt.IsTrue)
 	c.Logf("max local to remote requests: %v", maxLocalToRemoteRequests)
+}
+
+func peerConnForPreferredNetworkDirection(localPeerId, remotePeerId int, outgoing, utp, ipv6 bool) *PeerConn {
+	pc := PeerConn{}
+	pc.outgoing = outgoing
+	if utp {
+		pc.Network = "udp"
+	}
+	if ipv6 {
+		pc.RemoteAddr = &net.TCPAddr{IP: net.ParseIP(fmt.Sprintf("::420"))}
+	} else {
+		pc.RemoteAddr = &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4)}
+	}
+	binary.BigEndian.PutUint64(pc.PeerID[:], uint64(remotePeerId))
+	cl := Client{}
+	binary.BigEndian.PutUint64(cl.peerID[:], uint64(localPeerId))
+	pc.t = &Torrent{cl: &cl}
+	return &pc
+}
+
+func TestPreferredNetworkDirection(t *testing.T) {
+	pc := peerConnForPreferredNetworkDirection
+	c := qt.New(t)
+	// Prefer outgoing to higher peer ID
+	c.Assert(pc(1, 2, true, false, false).hasPreferredNetworkOver(pc(1, 2, false, false, false)), qt.IsTrue)
+	c.Assert(pc(1, 2, false, false, false).hasPreferredNetworkOver(pc(1, 2, true, false, false)), qt.IsFalse)
+	c.Assert(pc(2, 1, false, false, false).hasPreferredNetworkOver(pc(2, 1, true, false, false)), qt.IsTrue)
+	// Don't prefer uTP
+	c.Assert(pc(1, 2, false, true, false).hasPreferredNetworkOver(pc(1, 2, false, false, false)), qt.IsFalse)
+	// Prefer IPv6
+	c.Assert(pc(1, 2, false, false, false).hasPreferredNetworkOver(pc(1, 2, false, false, true)), qt.IsFalse)
+	// No difference
+	c.Assert(pc(1, 2, false, false, false).hasPreferredNetworkOver(pc(1, 2, false, false, false)), qt.IsFalse)
 }

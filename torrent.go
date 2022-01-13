@@ -2155,13 +2155,6 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 	p := t.piece(index)
 	sum, failedPeers, copyErr := t.hashPiece(index)
 	correct := sum == *p.hash
-	if correct {
-		for peer := range failedPeers {
-			t.cl.banPeerIP(peer.AsSlice())
-			log.Printf("smart banned %v for piece %v", peer, index)
-		}
-		t.dropBannedPeers()
-	}
 	switch copyErr {
 	case nil, io.EOF:
 	default:
@@ -2170,6 +2163,13 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 	t.storageLock.RUnlock()
 	t.cl.lock()
 	defer t.cl.unlock()
+	if correct {
+		for peer := range failedPeers {
+			t.cl.banPeerIP(peer.AsSlice())
+			log.Printf("smart banned %v for piece %v", peer, index)
+		}
+		t.dropBannedPeers()
+	}
 	p.hashing = false
 	t.pieceHashed(index, correct, copyErr)
 	t.updatePiecePriority(index, "Torrent.pieceHasher")

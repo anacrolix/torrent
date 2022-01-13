@@ -2169,6 +2169,9 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 			log.Printf("smart banned %v for piece %v", peer, index)
 		}
 		t.dropBannedPeers()
+		for ri := t.pieceRequestIndexOffset(index); ri < t.pieceRequestIndexOffset(index+1); ri++ {
+			t.smartBanCache.ForgetBlock(ri)
+		}
 	}
 	p.hashing = false
 	t.pieceHashed(index, correct, copyErr)

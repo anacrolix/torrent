@@ -5,7 +5,7 @@ import (
 	"crypto/sha1"
 	"net/netip"
 
-	"github.com/anacrolix/torrent/generics"
+	"github.com/anacrolix/generics"
 	"github.com/anacrolix/torrent/smartban"
 )
 

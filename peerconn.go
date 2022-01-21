@@ -15,13 +15,12 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
+	"github.com/anacrolix/chansync"
+	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
-	"github.com/anacrolix/torrent/option"
-
-	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
@@ -68,7 +67,7 @@ type Peer struct {
 	outgoing     bool
 	Network      string
 	RemoteAddr   PeerRemoteAddr
-	bannableAddr option.T[bannableAddr]
+	bannableAddr Option[bannableAddr]
 	// True if the connection is operating over MSE obfuscation.
 	headerEncrypted bool
 	cryptoMethod    mse.CryptoMethod

@@ -22,6 +22,7 @@ import (
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
@@ -29,8 +30,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
-	"github.com/anacrolix/torrent/generics"
-	"github.com/anacrolix/torrent/option"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
@@ -39,6 +38,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/chansync"
+	. "github.com/anacrolix/generics"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/limiter"
@@ -1518,7 +1518,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemot
 	if remoteAddr != nil {
 		netipAddrPort, err := netip.ParseAddrPort(remoteAddr.String())
 		if err == nil {
-			c.bannableAddr = option.Some(netipAddrPort.Addr())
+			c.bannableAddr = Some(netipAddrPort.Addr())
 		}
 	}
 	c.peerImpl = c

@@ -20,6 +20,7 @@ import (
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
+	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/pubsub"
@@ -28,7 +29,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
-	"github.com/anacrolix/torrent/option"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pion/datachannel"
@@ -2139,7 +2139,7 @@ func (t *Torrent) dropBannedPeers() {
 			return
 		}
 		netipAddr := netip.MustParseAddr(remoteIp.String())
-		if option.Some(netipAddr) != p.bannableAddr {
+		if Some(netipAddr) != p.bannableAddr {
 			log.Printf(
 				"peer remote ip does not match its bannable addr [peer=%v, remote ip=%v, bannable addr=%v]",
 				p, remoteIp, p.bannableAddr)

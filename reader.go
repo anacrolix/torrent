@@ -310,7 +310,7 @@ func (r *reader) Seek(off int64, whence int) (newPos int64, err error) {
 }
 
 func (r *reader) log(m log.Msg) {
-	r.t.logger.Log(m.Skip(1))
+	r.t.logger.LogLevel(log.Debug, m.Skip(1))
 }
 
 // Implementation inspired by https://news.ycombinator.com/item?id=27019613.

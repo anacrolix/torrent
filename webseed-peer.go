@@ -128,7 +128,7 @@ func (ws *webseedPeer) handleUpdateRequests() {
 }
 
 func (ws *webseedPeer) onClose() {
-	ws.peer.logger.WithLevel(log.Debug).Print("closing")
+	ws.peer.logger.Levelf(log.Debug, "closing")
 	// Just deleting them means we would have to manually cancel active requests.
 	ws.peer.cancelAllRequests()
 	ws.peer.t.iterPeers(func(p *Peer) {

@@ -8,7 +8,7 @@ require (
 	github.com/alexflint/go-arg v1.4.2
 	github.com/anacrolix/args v0.4.1-0.20211104085705-59f0fe94eb8f
 	github.com/anacrolix/chansync v0.3.0
-	github.com/anacrolix/dht/v2 v2.14.1-0.20211220010335-4062f7927abf
+	github.com/anacrolix/dht/v2 v2.15.1
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/fuse v0.2.0
 	github.com/anacrolix/generics v0.0.0-20220121083126-c81e77b56d6d
@@ -45,7 +45,7 @@ require (
 )
 
 require (
-	github.com/alexflint/go-scalar v1.0.0 // indirect
+	github.com/alexflint/go-scalar v1.1.0 // indirect
 	github.com/anacrolix/confluence v1.9.0 // indirect
 	github.com/anacrolix/mmsg v1.0.0 // indirect
 	github.com/anacrolix/stm v0.3.0 // indirect
@@ -82,7 +82,7 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/sys v0.0.0-20211023085530-d6a326fbbf70 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	modernc.org/libc v1.11.82 // indirect
 	modernc.org/mathutil v1.4.1 // indirect
 	modernc.org/memory v1.0.5 // indirect
@@ -97,3 +97,9 @@ retract (
 	// peer-requesting doesn't scale
 	[v1.34.0, v1.38.1]
 )
+
+replace github.com/anacrolix/log => ../log
+
+replace github.com/anacrolix/dht/v2 => ../dht
+
+replace github.com/anacrolix/upnp => ../upnp

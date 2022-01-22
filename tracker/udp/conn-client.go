@@ -45,7 +45,7 @@ func (cc *ConnClient) reader() {
 		}
 		err = cc.d.Dispatch(b[:n], addr)
 		if err != nil {
-			cc.newOpts.Logger.WithLevel(log.Debug).Printf("dispatching packet received on %v: %v", cc.conn.LocalAddr(), err)
+			cc.newOpts.Logger.Levelf(log.Debug, "dispatching packet received on %v: %v", cc.conn.LocalAddr(), err)
 		}
 	}
 }

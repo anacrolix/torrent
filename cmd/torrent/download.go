@@ -255,8 +255,12 @@ func downloadErr(flags downloadFlags) error {
 	if flags.DownloadRate != nil {
 		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(*flags.DownloadRate), 1<<16)
 	}
-	if flags.Quiet {
-		clientConfig.Logger = log.Discard
+	{
+		logger := log.Default.WithNames("main", "client")
+		if flags.Quiet {
+			logger = logger.FilterLevel(log.Critical)
+		}
+		clientConfig.Logger = logger
 	}
 	if flags.RequireFastExtension {
 		clientConfig.MinPeerExtensions.SetBit(pp.ExtensionBitFast, true)

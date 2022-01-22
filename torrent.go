@@ -1302,7 +1302,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
 	}
 	if changed {
-		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).SetLevel(log.Debug).Log(t.logger)
+		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).LogLevel(log.Debug, t.logger)
 		t.pieceCompletionChanged(piece, "Torrent.updatePieceCompletion")
 	}
 	return changed
@@ -1932,7 +1932,9 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 }
 
 func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
-	t.logger.Log(log.Fstr("hashed piece %d (passed=%t)", piece, passed).SetLevel(log.Debug))
+	t.logger.LazyLog(log.Debug, func() log.Msg {
+		return log.Fstr("hashed piece %d (passed=%t)", piece, passed)
+	})
 	p := t.piece(piece)
 	p.numVerifies++
 	t.cl.event.Broadcast()
@@ -1947,7 +1949,10 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		} else {
 			log.Fmsg(
 				"piece %d failed hash: %d connections contributed", piece, len(p.dirtiers),
-			).AddValues(t, p).SetLevel(log.Debug).Log(t.logger)
+			).AddValues(t, p).LogLevel(
+
+				log.Debug, t.logger)
+
 			pieceHashedNotCorrect.Add(1)
 		}
 	}

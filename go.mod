@@ -8,12 +8,12 @@ require (
 	github.com/alexflint/go-arg v1.4.2
 	github.com/anacrolix/args v0.4.1-0.20211104085705-59f0fe94eb8f
 	github.com/anacrolix/chansync v0.3.0
-	github.com/anacrolix/dht/v2 v2.15.1
+	github.com/anacrolix/dht/v2 v2.15.2-0.20220123034220-0538803801cb
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/fuse v0.2.0
 	github.com/anacrolix/generics v0.0.0-20220121083126-c81e77b56d6d
 	github.com/anacrolix/go-libutp v1.1.0
-	github.com/anacrolix/log v0.10.0
+	github.com/anacrolix/log v0.10.1-0.20220123034749-3920702c17f8
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.5.2
@@ -21,7 +21,7 @@ require (
 	github.com/anacrolix/squirrel v0.4.0
 	github.com/anacrolix/sync v0.4.0
 	github.com/anacrolix/tagflag v1.3.0
-	github.com/anacrolix/upnp v0.1.2-0.20200416075019-5e9378ed1425
+	github.com/anacrolix/upnp v0.1.3-0.20220123035249-922794e51c96
 	github.com/anacrolix/utp v0.1.0
 	github.com/bradfitz/iter v0.0.0-20191230175014-e8f45d346db8
 	github.com/davecgh/go-spew v1.1.1
@@ -97,9 +97,3 @@ retract (
 	// peer-requesting doesn't scale
 	[v1.34.0, v1.38.1]
 )
-
-replace github.com/anacrolix/log => ../log
-
-replace github.com/anacrolix/dht/v2 => ../dht
-
-replace github.com/anacrolix/upnp => ../upnp

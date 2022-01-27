@@ -2042,8 +2042,14 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 
 			if len(bannableTouchers) >= 1 {
 				c := bannableTouchers[0]
-				log.Printf("would have banned %v for touching piece %v after failed piece check", c.remoteIp(), piece)
-				if false {
+				if len(bannableTouchers) != 1 {
+					t.logger.Levelf(log.Warning, "would have banned %v for touching piece %v after failed piece check", c.remoteIp(), piece)
+				} else {
+					// Turns out it's still useful to ban peers like this because if there's only a
+					// single peer for a piece, and we never progress that piece to completion, we
+					// will never smart-ban them. Discovered in
+					// https://github.com/anacrolix/torrent/issues/715.
+					t.logger.Levelf(log.Warning, "banning %v for being sole dirtier of piece %v after failed piece check", c.remoteIp(), piece)
 					t.cl.banPeerIP(c.remoteIp())
 					c.drop()
 				}

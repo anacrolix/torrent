@@ -1570,7 +1570,7 @@ func (t *Torrent) onWebRtcConn(
 		false,
 		netConn.RemoteAddr(),
 		webrtcNetwork,
-		fmt.Sprintf("webrtc offer_id %x", dcc.OfferId),
+		fmt.Sprintf("webrtc offer_id %x: %v", dcc.OfferId, regularNetConnPeerConnConnString(netConn)),
 	)
 	if err != nil {
 		t.logger.WithDefaultLevel(log.Error).Printf("error in handshaking webrtc connection: %v", err)

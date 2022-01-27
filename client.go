@@ -178,19 +178,13 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
-// Filters things that are less than warning from UPnP discovery.
-func upnpDiscoverLogFilter(m log.Msg) bool {
-	level, ok := m.GetLevel()
-	return !m.HasValue(UpnpDiscoverLogTag) || (!level.LessThan(log.Warning) && ok)
-}
-
 func (cl *Client) initLogger() {
 	logger := cl.config.Logger
 	if logger.IsZero() {
 		logger = log.Default
-		if !cl.config.Debug {
-			logger = logger.FilterLevel(log.Info).WithFilter(upnpDiscoverLogFilter)
-		}
+	}
+	if cl.config.Debug {
+		logger = logger.FilterLevel(log.Debug)
 	}
 	cl.logger = logger.WithValues(cl)
 }
@@ -518,22 +512,26 @@ func (cl *Client) acceptConnections(l Listener) {
 			return
 		}
 		if err != nil {
-			log.Fmsg("error accepting connection: %s", err).SetLevel(log.Debug).Log(cl.logger)
+			log.Fmsg("error accepting connection: %s", err).LogLevel(log.Debug, cl.logger)
 			continue
 		}
 		go func() {
 			if reject != nil {
 				torrent.Add("rejected accepted connections", 1)
-				log.Fmsg("rejecting accepted conn: %v", reject).SetLevel(log.Debug).Log(cl.logger)
+				cl.logger.LazyLog(log.Debug, func() log.Msg {
+					return log.Fmsg("rejecting accepted conn: %v", reject)
+				})
 				conn.Close()
 			} else {
 				go cl.incomingConnection(conn)
 			}
-			log.Fmsg("accepted %q connection at %q from %q",
-				l.Addr().Network(),
-				conn.LocalAddr(),
-				conn.RemoteAddr(),
-			).SetLevel(log.Debug).Log(cl.logger)
+			cl.logger.LazyLog(log.Debug, func() log.Msg {
+				return log.Fmsg("accepted %q connection at %q from %q",
+					l.Addr().Network(),
+					conn.LocalAddr(),
+					conn.RemoteAddr(),
+				)
+			})
 			torrent.Add(fmt.Sprintf("accepted conn remote IP len=%d", len(addrIpOrNil(conn.RemoteAddr()))), 1)
 			torrent.Add(fmt.Sprintf("accepted conn network=%s", conn.RemoteAddr().Network()), 1)
 			torrent.Add(fmt.Sprintf("accepted on %s listener", l.Addr().Network()), 1)
@@ -913,12 +911,13 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 	}
 	t, err := cl.receiveHandshakes(c)
 	if err != nil {
-		log.Fmsg(
-			"error receiving handshakes on %v: %s", c, err,
-		).SetLevel(log.Debug).
-			Add(
+		cl.logger.LazyLog(log.Debug, func() log.Msg {
+			return log.Fmsg(
+				"error receiving handshakes on %v: %s", c, err,
+			).Add(
 				"network", c.Network,
-			).Log(cl.logger)
+			)
+		})
 		torrent.Add("error receiving handshake", 1)
 		cl.lock()
 		cl.onBadAccept(c.RemoteAddr)
@@ -927,7 +926,9 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 	}
 	if t == nil {
 		torrent.Add("received handshake for unloaded torrent", 1)
-		log.Fmsg("received handshake for unloaded torrent").SetLevel(log.Debug).Log(cl.logger)
+		cl.logger.LazyLog(log.Debug, func() log.Msg {
+			return log.Fmsg("received handshake for unloaded torrent")
+		})
 		cl.lock()
 		cl.onBadAccept(c.RemoteAddr)
 		cl.unlock()
@@ -958,7 +959,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 			// address, we won't record the remote address as a doppleganger. Instead, the initiator
 			// can record *us* as the doppleganger.
 		} */
-		t.logger.WithLevel(log.Debug).Printf("local and remote peer ids are the same")
+		t.logger.Levelf(log.Debug, "local and remote peer ids are the same")
 		return nil
 	}
 	c.r = deadlineReader{c.conn, c.r}
@@ -1196,7 +1197,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	t.smartBanCache.Hash = sha1.Sum
 	t.smartBanCache.Init()
 	t.networkingEnabled.Set()
-	t.logger = cl.logger.WithContextValue(t)
+	t.logger = cl.logger.WithContextValue(t).WithNames("torrent", t.infoHash.HexString())
 	if opts.ChunkSize == 0 {
 		opts.ChunkSize = defaultChunkSize
 	}

@@ -1494,7 +1494,13 @@ func (cl *Client) AddDhtNodes(nodes []string) {
 }
 
 func (cl *Client) banPeerIP(ip net.IP) {
-	generics.MakeMapIfNilAndSet(&cl.badPeerIPs, netip.MustParseAddr(ip.String()), struct{}{})
+	// We can't take this from string, because it will lose netip's v4on6. net.ParseIP parses v4
+	// addresses directly to v4on6, which doesn't compare equal with v4.
+	ipAddr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		panic(ip)
+	}
+	generics.MakeMapIfNilAndSet(&cl.badPeerIPs, ipAddr, struct{}{})
 }
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemoteAddr, network, connString string) (c *PeerConn) {

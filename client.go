@@ -1501,6 +1501,14 @@ func (cl *Client) banPeerIP(ip net.IP) {
 		panic(ip)
 	}
 	generics.MakeMapIfNilAndSet(&cl.badPeerIPs, ipAddr, struct{}{})
+	for _, t := range cl.torrents {
+		t.iterPeers(func(p *Peer) {
+			if p.remoteIp().Equal(ip) {
+				t.logger.Levelf(log.Warning, "dropping peer %v with banned ip %v", p, ip)
+				p.drop()
+			}
+		})
+	}
 }
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemoteAddr, network, connString string) (c *PeerConn) {

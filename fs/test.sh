@@ -8,8 +8,8 @@ pushd torrents
 cp "$repopath/testdata/$debian_file.torrent" .
 godo -v -race "$repopath/cmd/torrent" metainfo "$repopath/testdata/sintel.torrent" magnet > sintel.magnet
 popd
-file="$debian_file"
-# file=sintel.mp4
+#file="$debian_file"
+file=Sintel/Sintel.mp4
 while [ ! -e "mnt/$file" ]; do sleep 1; done
 pv -f "mnt/$file" | md5sum
 # expect e221f43f4fdd409250908fc4305727d4

@@ -35,12 +35,15 @@ jobs:
     - name: Some packages compile for WebAssembly
       run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
 
+
     - name: Install godo
-      run: go install github.com/anacrolix/godo@latest
+      # Need master for cross-compiling fix
+      run: go install github.com/anacrolix/godo@master
 
     - name: Apt packages
       run: sudo apt install pv fuse
 
     - name: torrentfs end-to-end test
-      run: fs/test.sh
+      # Test on 386 for atomic alignment and other bad 64-bit assumptions
+      run: GOARCH=386 fs/test.sh
       timeout-minutes: 10

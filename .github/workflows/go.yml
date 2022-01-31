@@ -34,7 +34,8 @@ jobs:
 
     - name: Some packages compile for WebAssembly
       run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
-
+      # https://github.com/pion/webrtc/issues/2099
+      continue-on-error: true
 
     - name: Install godo
       # Need master for cross-compiling fix

@@ -38,8 +38,10 @@ jobs:
       continue-on-error: true
 
     - name: Install godo
-      # Need master for cross-compiling fix
-      run: go install github.com/anacrolix/godo@master
+      run: |
+        # Need master for cross-compiling fix
+        go install -v -x github.com/anacrolix/godo@master
+        echo $PATH
 
     - name: Apt packages
       run: sudo apt install pv fuse

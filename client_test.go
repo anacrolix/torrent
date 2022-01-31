@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -221,9 +220,7 @@ func TestResponsive(t *testing.T) {
 	defer seeder.Close()
 	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	seederTorrent.VerifyData()
-	leecherDataDir, err := ioutil.TempDir("", "")
-	require.Nil(t, err)
-	defer os.RemoveAll(leecherDataDir)
+	leecherDataDir := t.TempDir()
 	cfg = TestingConfig(t)
 	cfg.DataDir = leecherDataDir
 	leecher, err := NewClient(cfg)
@@ -264,9 +261,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	defer seeder.Close()
 	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	seederTorrent.VerifyData()
-	leecherDataDir, err := ioutil.TempDir("", "")
-	require.Nil(t, err)
-	defer os.RemoveAll(leecherDataDir)
+	leecherDataDir := t.TempDir()
 	cfg = TestingConfig(t)
 	cfg.DataDir = leecherDataDir
 	leecher, err := NewClient(cfg)
@@ -359,9 +354,7 @@ func writeTorrentData(ts *storage.Torrent, info metainfo.Info, b []byte) {
 }
 
 func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.ClientImpl) {
-	fileCacheDir, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(fileCacheDir)
+	fileCacheDir := t.TempDir()
 	fileCache, err := filecache.NewCache(fileCacheDir)
 	require.NoError(t, err)
 	greetingDataTempDir, greetingMetainfo := testutil.GreetingTestTorrent()
@@ -456,9 +449,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	defer testutil.ExportStatusWriter(seeder, "s", t)()
 	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	seederTorrent.VerifyData()
-	leecherDataDir, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(leecherDataDir)
+	leecherDataDir := t.TempDir()
 	fc, err := filecache.NewCache(leecherDataDir)
 	require.NoError(t, err)
 	if ps.SetLeecherStorageCapacity {

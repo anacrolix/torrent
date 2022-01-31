@@ -1,8 +1,6 @@
 package storage
 
 import (
-	"io/ioutil"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,9 +10,7 @@ import (
 )
 
 func TestBoltPieceCompletion(t *testing.T) {
-	td, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(td)
+	td := t.TempDir()
 
 	pc, err := NewBoltPieceCompletion(td)
 	require.NoError(t, err)

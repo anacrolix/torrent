@@ -85,9 +85,7 @@ func touchFile(path string) (err error) {
 }
 
 func TestBuildFromFilePathOrder(t *testing.T) {
-	td, err := ioutil.TempDir("", "anacrolix")
-	require.NoError(t, err)
-	defer os.RemoveAll(td)
+	td := t.TempDir()
 	require.NoError(t, touchFile(filepath.Join(td, "b")))
 	require.NoError(t, touchFile(filepath.Join(td, "a")))
 	info := Info{

@@ -1,8 +1,6 @@
 package storage
 
 import (
-	"io/ioutil"
-	"os"
 	"testing"
 
 	"github.com/anacrolix/missinggo/v2/resource"
@@ -33,22 +31,15 @@ func testIssue95(t *testing.T, c ClientImpl) {
 }
 
 func TestIssue95File(t *testing.T) {
-	td, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(td)
+	td := t.TempDir()
 	testIssue95(t, NewFile(td))
 }
 
 func TestIssue95MMap(t *testing.T) {
-	td, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(td)
+	td := t.TempDir()
 	testIssue95(t, NewMMap(td))
 }
 
 func TestIssue95ResourcePieces(t *testing.T) {
-	td, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(td)
 	testIssue95(t, NewResourcePieces(resource.OSFileProvider{}))
 }

@@ -16,10 +16,11 @@ import (
 )
 
 type webseedPeer struct {
+	// First field for stats alignment.
+	peer           Peer
 	client         webseed.Client
 	activeRequests map[Request]webseed.Request
 	requesterCond  sync.Cond
-	peer           Peer
 	// Number of requester routines.
 	maxRequests int
 }

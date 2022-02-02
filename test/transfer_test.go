@@ -397,9 +397,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 
 	cfg = torrent.TestingConfig(t)
 	cfg.Seed = true
-	cfg.DataDir, err = ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(cfg.DataDir)
+	cfg.DataDir = t.TempDir()
 	leecher, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer leecher.Close()
@@ -407,9 +405,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 
 	cfg = torrent.TestingConfig(t)
 	cfg.Seed = false
-	cfg.DataDir, err = ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(cfg.DataDir)
+	cfg.DataDir = t.TempDir()
 	leecherLeecher, _ := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer leecherLeecher.Close()

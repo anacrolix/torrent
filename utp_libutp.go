@@ -7,8 +7,8 @@ import (
 	utp "github.com/anacrolix/go-libutp"
 )
 
-func NewUtpSocket(network, addr string, fc firewallCallback) (utpSocket, error) {
-	s, err := utp.NewSocket(network, addr)
+func NewUtpSocket(network, addr string, fc firewallCallback, opts ...utp.NewSocketOpt) (utpSocket, error) {
+	s, err := utp.NewSocket(network, addr, opts...)
 	if s == nil {
 		return nil, err
 	}

@@ -28,6 +28,7 @@ jobs:
         ./make.bash
         echo "GOROOT=$HOME/gotip" >> "$GITHUB_ENV"
         echo "$HOME/gotip/bin:$PATH" >> "$GITHUB_PATH"
+        echo "$(go env GOPATH)/bin:$PATH" >> "$GITHUB_PATH"
 
     - name: Test
       run: go test -race -count 2 ./...

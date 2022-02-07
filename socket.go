@@ -5,7 +5,7 @@ import (
 	"net"
 	"strconv"
 
-	utp "github.com/anacrolix/go-libutp"
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/pkg/errors"
@@ -25,12 +25,12 @@ type socket interface {
 	Close() error
 }
 
-func listen(n network, addr string, f firewallCallback, opts ...utp.NewSocketOpt) (socket, error) {
+func listen(n network, addr string, f firewallCallback, logger log.Logger) (socket, error) {
 	switch {
 	case n.Tcp:
 		return listenTcp(n.String(), addr)
 	case n.Udp:
-		return listenUtp(n.String(), addr, f, opts...)
+		return listenUtp(n.String(), addr, f, logger)
 	default:
 		panic(n)
 	}
@@ -52,7 +52,7 @@ type tcpSocket struct {
 	NetworkDialer
 }
 
-func listenAll(networks []network, getHost func(string) string, port int, f firewallCallback, opts ...utp.NewSocketOpt) ([]socket, error) {
+func listenAll(networks []network, getHost func(string) string, port int, f firewallCallback, logger log.Logger) ([]socket, error) {
 	if len(networks) == 0 {
 		return nil, nil
 	}
@@ -61,7 +61,7 @@ func listenAll(networks []network, getHost func(string) string, port int, f fire
 		nahs = append(nahs, networkAndHost{n, getHost(n.String())})
 	}
 	for {
-		ss, retry, err := listenAllRetry(nahs, port, f, opts...)
+		ss, retry, err := listenAllRetry(nahs, port, f, logger)
 		if !retry {
 			return ss, err
 		}
@@ -73,10 +73,10 @@ type networkAndHost struct {
 	Host    string
 }
 
-func listenAllRetry(nahs []networkAndHost, port int, f firewallCallback, opts ...utp.NewSocketOpt) (ss []socket, retry bool, err error) {
+func listenAllRetry(nahs []networkAndHost, port int, f firewallCallback, logger log.Logger) (ss []socket, retry bool, err error) {
 	ss = make([]socket, 1, len(nahs))
 	portStr := strconv.FormatInt(int64(port), 10)
-	ss[0], err = listen(nahs[0].Network, net.JoinHostPort(nahs[0].Host, portStr), f, opts...)
+	ss[0], err = listen(nahs[0].Network, net.JoinHostPort(nahs[0].Host, portStr), f, logger)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "first listen")
 	}
@@ -90,7 +90,7 @@ func listenAllRetry(nahs []networkAndHost, port int, f firewallCallback, opts ..
 	}()
 	portStr = strconv.FormatInt(int64(missinggo.AddrPort(ss[0].Addr())), 10)
 	for _, nah := range nahs[1:] {
-		s, err := listen(nah.Network, net.JoinHostPort(nah.Host, portStr), f, opts...)
+		s, err := listen(nah.Network, net.JoinHostPort(nah.Host, portStr), f, logger)
 		if err != nil {
 			return ss,
 				missinggo.IsAddrInUse(err) && port == 0,
@@ -104,8 +104,8 @@ func listenAllRetry(nahs []networkAndHost, port int, f firewallCallback, opts ..
 // This isn't aliased from go-libutp since that assumes CGO.
 type firewallCallback func(net.Addr) bool
 
-func listenUtp(network, addr string, fc firewallCallback, opts ...utp.NewSocketOpt) (socket, error) {
-	us, err := NewUtpSocket(network, addr, fc, opts...)
+func listenUtp(network, addr string, fc firewallCallback, logger log.Logger) (socket, error) {
+	us, err := NewUtpSocket(network, addr, fc, logger)
 	return utpSocketSocket{us, network}, err
 }
 

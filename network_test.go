@@ -4,6 +4,8 @@ import (
 	"net"
 	"testing"
 
+	"github.com/anacrolix/log"
+
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +25,7 @@ func testListenerNetwork(
 }
 
 func listenUtpListener(net, addr string) (l net.Listener, err error) {
-	l, err = NewUtpSocket(net, addr, nil)
+	l, err = NewUtpSocket(net, addr, nil, log.Default)
 	return
 }
 

@@ -5,10 +5,11 @@ package torrent
 
 import (
 	utp "github.com/anacrolix/go-libutp"
+	"github.com/anacrolix/log"
 )
 
-func NewUtpSocket(network, addr string, fc firewallCallback, opts ...utp.NewSocketOpt) (utpSocket, error) {
-	s, err := utp.NewSocket(network, addr, opts...)
+func NewUtpSocket(network, addr string, fc firewallCallback, logger log.Logger) (utpSocket, error) {
+	s, err := utp.NewSocket(network, addr, utp.WithLogger(logger))
 	if s == nil {
 		return nil, err
 	}

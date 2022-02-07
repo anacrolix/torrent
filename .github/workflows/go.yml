@@ -44,13 +44,19 @@ jobs:
 
     - name: Some packages compile for WebAssembly
       run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
+      # https://github.com/pion/webrtc/issues/2099
+      continue-on-error: true
 
     - name: Install godo
-      run: go install github.com/anacrolix/godo@latest
+      run: |
+        # Need master for cross-compiling fix
+        go install -v -x github.com/anacrolix/godo@master
+        echo $PATH
 
     - name: Apt packages
       run: sudo apt install pv fuse
 
     - name: torrentfs end-to-end test
-      run: fs/test.sh
+      # Test on 386 for atomic alignment and other bad 64-bit assumptions
+      run: GOARCH=386 fs/test.sh
       timeout-minutes: 10

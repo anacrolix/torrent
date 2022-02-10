@@ -5,6 +5,7 @@ on: [push, pull_request]
 jobs:
 
   test:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     strategy:
       matrix:

@@ -45,7 +45,7 @@ runs:
     - name: Install gotip
       if: matrix.go-version == 'tip'
       run: |
-        git clone --depth=1 https://go.googlesource.com/go "$GOTIP_PATH" || true
+        git clone --depth=1 https://github.com/golang/go "$GOTIP_PATH" || true
         cd "$GOTIP_PATH"
         git pull
         echo "GOROOT=$GOTIP_PATH" >> "$GITHUB_ENV"

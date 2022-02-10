@@ -1,0 +1,25 @@
+name: 'Common Go'
+description: 'Checks out, and handles Go setup and caching'
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ matrix.go-version }}
+    - uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        # The OS defines the directories to use, then this is specific to go. The go version could
+        # affect the dependencies. The job can affect what is actually downloaded, and provides
+        # collision resistance. Finally, the hash of the go.sum files ensures a new cache is created
+        # when the dependencies change. Note if this were just a mod cache, we might do this based
+        # on time or something.
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-${{ matrix.go-version }}-${{ github.job }}-
+          ${{ runner.os }}-go-${{ matrix.go-version }}-
+          ${{ runner.os }}-go-
+          

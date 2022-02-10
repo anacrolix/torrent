@@ -62,11 +62,8 @@ func (tl *testLayout) Destroy() error {
 	return os.RemoveAll(tl.BaseDir)
 }
 
-func newGreetingLayout() (tl testLayout, err error) {
-	tl.BaseDir, err = ioutil.TempDir("", "torrentfs")
-	if err != nil {
-		return
-	}
+func newGreetingLayout(t *testing.T) (tl testLayout, err error) {
+	tl.BaseDir = t.TempDir()
 	tl.Completed = filepath.Join(tl.BaseDir, "completed")
 	os.Mkdir(tl.Completed, 0o777)
 	tl.MountDir = filepath.Join(tl.BaseDir, "mnt")
@@ -79,7 +76,7 @@ func newGreetingLayout() (tl testLayout, err error) {
 // Unmount without first killing the FUSE connection while there are FUSE
 // operations blocked inside the filesystem code.
 func TestUnmountWedged(t *testing.T) {
-	layout, err := newGreetingLayout()
+	layout, err := newGreetingLayout(t)
 	require.NoError(t, err)
 	defer func() {
 		err := layout.Destroy()
@@ -161,7 +158,7 @@ func TestUnmountWedged(t *testing.T) {
 }
 
 func TestDownloadOnDemand(t *testing.T) {
-	layout, err := newGreetingLayout()
+	layout, err := newGreetingLayout(t)
 	require.NoError(t, err)
 	defer layout.Destroy()
 	cfg := torrent.NewDefaultClientConfig()

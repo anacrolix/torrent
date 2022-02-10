@@ -1,8 +1,6 @@
 package torrent
 
 import (
-	"io/ioutil"
-	"os"
 	"testing"
 
 	"github.com/anacrolix/log"
@@ -13,9 +11,7 @@ import (
 )
 
 func TestHashPieceAfterStorageClosed(t *testing.T) {
-	td, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(td)
+	td := t.TempDir()
 	tt := &Torrent{
 		storageOpener: storage.NewClient(storage.NewFile(td)),
 		logger:        log.Default,

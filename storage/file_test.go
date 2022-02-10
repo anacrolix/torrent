@@ -3,7 +3,6 @@ package storage
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,9 +15,7 @@ import (
 )
 
 func TestShortFile(t *testing.T) {
-	td, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(td)
+	td := t.TempDir()
 	s := NewFile(td)
 	info := &metainfo.Info{
 		Name:        "a",

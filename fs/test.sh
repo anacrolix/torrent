@@ -13,7 +13,8 @@ trap 'set +e; sudo umount -f mnt' EXIT
 #file="$debian_file"
 file=Sintel/Sintel.mp4
 while [ ! -e "mnt/$file" ]; do sleep 1; done
-pv -f "mnt/$file" | md5sum
-# expect e221f43f4fdd409250908fc4305727d4
+pv -f "mnt/$file" | md5sum -c <(cat <<EOF
+083e808d56aa7b146f513b3458658292  -
+EOF)
 sudo umount mnt
 wait || echo "wait returned" $?

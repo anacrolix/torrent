@@ -1,8 +1,6 @@
 package storage
 
 import (
-	"io/ioutil"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,9 +9,7 @@ import (
 )
 
 func testMarkedCompleteMissingOnRead(t *testing.T, csf func(string) ClientImplCloser) {
-	td, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(td)
+	td := t.TempDir()
 	cs := NewClient(csf(td))
 	info := &metainfo.Info{
 		PieceLength: 1,

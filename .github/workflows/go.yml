@@ -4,8 +4,7 @@ on: [push, pull_request]
 
 jobs:
 
-  build:
-    timeout-minutes: 30
+  test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -13,42 +12,64 @@ jobs:
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
+    - uses: ./.github/actions/go-common
+    - run: go test -race -count 2 ./...
 
-    - name: Set up Go
-      if: matrix.go-version != 'tip'
-      uses: actions/setup-go@v2
-      with:
-        go-version: ${{ matrix.go-version }}
+  test-benchmarks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ 'tip' ]
+      fail-fast: false
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ./.github/actions/go-common
+    - run: go test -race -run @ -bench . -benchtime 2x ./...
 
-    - name: Install gotip
-      if: matrix.go-version == 'tip'
-      run: |
-        git clone --depth=1 https://go.googlesource.com/go "$HOME/gotip"
-        cd "$HOME/gotip/src"
-        ./make.bash
-        echo "GOROOT=$HOME/gotip" >> "$GITHUB_ENV"
-        echo "$(go env GOPATH)/bin:$PATH" >> "$GITHUB_PATH"
-        echo "$HOME/gotip/bin:$PATH" >> "$GITHUB_PATH"
-        env
+  bench:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ 'tip' ]
+      fail-fast: false
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ./.github/actions/go-common
+    - run: go test -run @ -bench . ./...
 
-    - name: Test
-      run: go test -race -count 2 ./...
+  test-386:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ 'tip' ]
+      fail-fast: false
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ./.github/actions/go-common
+    - run: GOARCH=386 go test ./...
+    - run: GOARCH=386 go test ./... -run @ -bench .
 
-    - name: Test Benchmarks
-      run: go test -race -run @ -bench . -benchtime 2x ./...
-
-    - name: Bench
-      run: go test -run @ -bench . ./...
-
-    - name: Test on 386
-      run: GOARCH=386 go test ./... -bench .
-      continue-on-error: true
-
+  build-wasm:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ 'tip' ]
+      fail-fast: false
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ./.github/actions/go-common
     - name: Some packages compile for WebAssembly
-      run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
-      # https://github.com/pion/webrtc/issues/2099
-      continue-on-error: true
+      run: GOOS=js GOARCH=wasm go build -v . ./storage ./tracker/...
 
+  torrentfs:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ 'tip' ]
+      fail-fast: false
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ./.github/actions/go-common
     - name: Install godo
       run: |
         # Need master for cross-compiling fix
@@ -61,4 +82,3 @@ jobs:
     - name: torrentfs end-to-end test
       # Test on 386 for atomic alignment and other bad 64-bit assumptions
       run: GOARCH=386 fs/test.sh
-      timeout-minutes: 10

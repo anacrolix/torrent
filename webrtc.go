@@ -60,9 +60,11 @@ func (me webrtcNetConn) RemoteAddr() net.Addr {
 func (w webrtcNetConn) SetDeadline(t time.Time) error {
 	return nil
 }
+
 func (w webrtcNetConn) SetReadDeadline(t time.Time) error {
 	return nil
 }
+
 func (w webrtcNetConn) SetWriteDeadline(t time.Time) error {
 	return nil
 }

@@ -213,7 +213,6 @@ func decodeHugeString(t *testing.T, strLen int64, header, tail string, v interfa
 	d := NewDecoder(r)
 	d.MaxStrLen = maxStrLen
 	return d.Decode(v)
-
 }
 
 // Ensure that bencode strings in various places obey the Decoder.MaxStrLen field.

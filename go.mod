@@ -10,7 +10,7 @@ require (
 	github.com/anacrolix/dht/v2 v2.15.2-0.20220123034220-0538803801cb
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/fuse v0.2.0
-	github.com/anacrolix/go-libutp v1.1.0
+	github.com/anacrolix/go-libutp v1.2.0
 	github.com/anacrolix/log v0.10.1-0.20220123034749-3920702c17f8
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0
@@ -40,9 +40,6 @@ require (
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 	zombiezen.com/go/sqlite v0.8.0
 )
-
-// https://gitlab.com/cznic/sqlite/-/issues/77#note_744477407
-require modernc.org/sqlite v1.14.2-0.20211125151325-d4ed92c0a70f // indirect
 
 retract (
 	// Doesn't signal interest to peers if choked when piece priorities change.

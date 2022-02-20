@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/RoaringBitmap/roaring v0.9.4
 	github.com/alexflint/go-arg v1.4.2
-	github.com/anacrolix/args v0.4.1-0.20211104085705-59f0fe94eb8f
+	github.com/anacrolix/args v0.5.0
 	github.com/anacrolix/chansync v0.3.0
 	github.com/anacrolix/dht/v2 v2.15.2-0.20220123034220-0538803801cb
 	github.com/anacrolix/envpprof v1.1.1

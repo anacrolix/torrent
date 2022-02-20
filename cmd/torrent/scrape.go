@@ -24,8 +24,8 @@ func scrape(flags ScrapeCmd) error {
 	cc, err := udp.NewConnClient(udp.NewConnClientOpts{
 		Network: trackerUrl.Scheme,
 		Host:    trackerUrl.Host,
-		//Ipv6:    nil,
-		//Logger:  log.Logger{},
+		// Ipv6:    nil,
+		// Logger:  log.Logger{},
 	})
 	if err != nil {
 		return fmt.Errorf("creaing new udp tracker conn client: %w", err)

@@ -10,5 +10,5 @@ enabled = true
   import_root = "github.com/anacrolix/torrent"
 
 [[transformers]]
-name = "gofumpt"
+name = "gofmt"
 enabled = true

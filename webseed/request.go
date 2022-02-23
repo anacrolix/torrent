@@ -10,15 +10,21 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-func trailingPath(infoName string, pathComps []string) string {
+// Escapes path name components suitable for appending to a webseed URL. This works for converting
+// S3 object keys to URLs too.
+func EscapePath(pathComps []string) string {
 	return path.Join(
 		func() (ret []string) {
-			for _, comp := range append([]string{infoName}, pathComps...) {
+			for _, comp := range pathComps {
 				ret = append(ret, url.QueryEscape(comp))
 			}
 			return
 		}()...,
 	)
+}
+
+func trailingPath(infoName string, fileComps []string) string {
+	return EscapePath(append([]string{infoName}, fileComps...))
 }
 
 // Creates a request per BEP 19.

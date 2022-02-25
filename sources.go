@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/anacrolix/log"
@@ -66,6 +67,10 @@ func getTorrentSource(ctx context.Context, source string, hc *http.Client) (mi m
 		return
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("unexpected response status code: %v", resp.StatusCode)
+		return
+	}
 	err = bencode.NewDecoder(resp.Body).Decode(&mi)
 	return
 }

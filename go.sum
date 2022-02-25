@@ -79,8 +79,9 @@ github.com/alexflint/go-scalar v1.0.0/go.mod h1:GpHzbCOZXEKMEcygYQ5n/aa4Aq84zbxj
 github.com/alexflint/go-scalar v1.1.0 h1:aaAouLLzI9TChcPXotr6gUhq+Scr8rl0P9P4PnltbhM=
 github.com/alexflint/go-scalar v1.1.0/go.mod h1:LoFvNMqS1CPrMVltza4LvnGKhaSpc3oyLEBUZVhhS2o=
 github.com/anacrolix/args v0.3.0/go.mod h1:41JBnF8sKExNVLHPkCdL74jkZc3dSxAkGsk1TuKOUFI=
-github.com/anacrolix/args v0.4.1-0.20211104085705-59f0fe94eb8f h1:NEHQxPja+2pvaFtFMUC4k14X1kwInDtX2DSZUNcxJKQ=
 github.com/anacrolix/args v0.4.1-0.20211104085705-59f0fe94eb8f/go.mod h1:41JBnF8sKExNVLHPkCdL74jkZc3dSxAkGsk1TuKOUFI=
+github.com/anacrolix/args v0.5.0 h1:bZCkbtn4QMB4ow2g34R/oqTFwrI6IojysKop6+ZcOSs=
+github.com/anacrolix/args v0.5.0/go.mod h1:Fj/N2PehEwTBE5t/V/9xgTcxDkuYQ+5IBoFw/8gkldI=
 github.com/anacrolix/chansync v0.0.0-20210524073341-a336ebc2de92/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
 github.com/anacrolix/chansync v0.1.0/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
 github.com/anacrolix/chansync v0.2.1-0.20210910114620-14955c95ded9/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
@@ -120,8 +121,9 @@ github.com/anacrolix/fuse v0.2.0/go.mod h1:Kfu02xBwnySDpH3N23BmrP3MDfwAQGRLUCj6X
 github.com/anacrolix/go-libutp v0.0.0-20180522111405-6baeb806518d/go.mod h1:beQSaSxwH2d9Eeu5ijrEnHei5Qhk+J6cDm1QkWFru4E=
 github.com/anacrolix/go-libutp v1.0.2/go.mod h1:uIH0A72V++j0D1nnmTjjZUiH/ujPkFxYWkxQ02+7S0U=
 github.com/anacrolix/go-libutp v1.0.4/go.mod h1:8vSGX5g0b4eebsDBNVQHUXSCwYaN18Lnkse0hUW8/5w=
-github.com/anacrolix/go-libutp v1.1.0 h1:89XK+0NBTaKgSoG/v5OfDK0yoyrt2HInfg46I1BaT2E=
 github.com/anacrolix/go-libutp v1.1.0/go.mod h1:so9zroOUhFPGnIkddyflaCCl+xdTsRSq97/AOQ2/Hjk=
+github.com/anacrolix/go-libutp v1.2.0 h1:sjxoB+/ARiKUR7IK/6wLWyADIBqGmu1fm0xo+8Yy7u0=
+github.com/anacrolix/go-libutp v1.2.0/go.mod h1:RrJ3KcaDcf9Jqp33YL5V/5CBEc6xMc7aJL8wXfuWL50=
 github.com/anacrolix/log v0.0.0-20180412014343-2323884b361d/go.mod h1:sf/7c2aTldL6sRQj/4UKyjgVZBu2+M2z9wf7MmwPiew=
 github.com/anacrolix/log v0.3.0/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgwU9jwU=
 github.com/anacrolix/log v0.3.1-0.20190913000754-831e4ffe0174/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgwU9jwU=

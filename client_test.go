@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/anacrolix/log"
+
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/filecache"
@@ -741,7 +743,7 @@ func TestObfuscatedHeaderFallbackSeederRequiresLeecherPrefersNot(t *testing.T) {
 }
 
 func TestClientAddressInUse(t *testing.T) {
-	s, _ := NewUtpSocket("udp", ":50007", nil)
+	s, _ := NewUtpSocket("udp", ":50007", nil, log.Default)
 	if s != nil {
 		defer s.Close()
 	}

@@ -6,12 +6,12 @@ require (
 	crawshaw.io/sqlite v0.3.3-0.20210127221821-98b1f83c5508
 	github.com/RoaringBitmap/roaring v0.9.4
 	github.com/alexflint/go-arg v1.4.2
-	github.com/anacrolix/args v0.4.1-0.20211104085705-59f0fe94eb8f
+	github.com/anacrolix/args v0.5.0
 	github.com/anacrolix/chansync v0.3.0
 	github.com/anacrolix/dht/v2 v2.15.2-0.20220123034220-0538803801cb
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/fuse v0.2.0
-	github.com/anacrolix/go-libutp v1.1.0
+	github.com/anacrolix/go-libutp v1.2.0
 	github.com/anacrolix/log v0.10.1-0.20220123034749-3920702c17f8
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0

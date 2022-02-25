@@ -147,6 +147,10 @@ type Torrent struct {
 
 	// Is On when all pieces are complete.
 	Complete chansync.Flag
+
+	// Torrent sources in use keyed by the source string.
+	activeSources sync.Map
+	sourcesLogger log.Logger
 }
 
 func (t *Torrent) selectivePieceAvailabilityFromPeers(i pieceIndex) (count int) {
@@ -2308,7 +2312,7 @@ func (t *Torrent) addWebSeed(url string) {
 			callbacks:       t.callbacks(),
 		},
 		client: webseed.Client{
-			HttpClient: t.cl.webseedHttpClient,
+			HttpClient: t.cl.httpClient,
 			Url:        url,
 			ResponseBodyWrapper: func(r io.Reader) io.Reader {
 				return &rateLimitedReader{

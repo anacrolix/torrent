@@ -41,6 +41,16 @@ func mainErr() error {
 			}
 			return announceErr(cmd)
 		}),
+		args.Subcommand("scrape", func(p args.SubCmdCtx) error {
+			var cmd ScrapeCmd
+			err := p.NewParser().AddParams(
+				args.Pos("tracker", &cmd.Tracker),
+				args.Pos("infohash", &cmd.InfoHashes, args.Arity('+'))).Parse()
+			if err != nil {
+				return err
+			}
+			return scrape(cmd)
+		}),
 		args.Subcommand("download", func(p args.SubCmdCtx) error {
 			var dlc DownloadCmd
 			err := p.NewParser().AddParams(

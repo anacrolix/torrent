@@ -4,10 +4,11 @@
 package torrent
 
 import (
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/utp"
 )
 
-func NewUtpSocket(network, addr string, _ firewallCallback) (utpSocket, error) {
+func NewUtpSocket(network, addr string, _ firewallCallback, _ log.Logger) (utpSocket, error) {
 	s, err := utp.NewSocket(network, addr)
 	if s == nil {
 		return nil, err

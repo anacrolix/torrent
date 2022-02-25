@@ -164,7 +164,9 @@ func (cl *Client) request(ctx context.Context, action Action, body []byte) (resp
 			respBody = dr.Body
 			addr = dr.Addr
 		} else if dr.Header.Action == ActionError {
-			err = fmt.Errorf("error response: %s", dr.Body)
+			// I've seen "Connection ID mismatch.^@" in less and other tools, I think they're just
+			// not handling a trailing \x00 nicely.
+			err = fmt.Errorf("error response: %#q", dr.Body)
 		} else {
 			err = fmt.Errorf("unexpected response action %v", dr.Header.Action)
 		}

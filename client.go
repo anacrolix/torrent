@@ -1301,7 +1301,6 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	if spec.DisplayName != "" {
 		t.SetDisplayName(spec.DisplayName)
 	}
-	t.initialPieceCheckDisabled = spec.DisableInitialPieceCheck
 	if spec.InfoBytes != nil {
 		err := t.SetInfoBytes(spec.InfoBytes)
 		if err != nil {
@@ -1312,6 +1311,7 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	cl.AddDhtNodes(spec.DhtNodes)
 	cl.lock()
 	defer cl.unlock()
+	t.initialPieceCheckDisabled = spec.DisableInitialPieceCheck
 	useTorrentSources(spec.Sources, t)
 	for _, url := range spec.Webseeds {
 		t.addWebSeed(url)

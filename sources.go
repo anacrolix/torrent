@@ -33,7 +33,7 @@ func (t *Torrent) useSources(sources []string) {
 			if err != nil {
 				level = log.Warning
 			}
-			t.logger.Levelf(level, "used torrent source %q [err=%q]", s, err)
+			t.logger.Levelf(level, "used torrent source %q [err=%v]", s, err)
 		}()
 	}
 }

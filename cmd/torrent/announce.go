@@ -20,6 +20,7 @@ func announceErr(flags AnnounceCmd) error {
 		Request: tracker.AnnounceRequest{
 			InfoHash: flags.InfoHash,
 			Port:     uint16(torrent.NewDefaultClientConfig().ListenPort),
+			NumWant:  -1,
 		},
 	}.Do()
 	if err != nil {

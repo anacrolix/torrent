@@ -103,7 +103,7 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 	var buf bytes.Buffer
 	io.Copy(&buf, resp.Body)
 	if resp.StatusCode != 200 {
-		err = fmt.Errorf("response from tracker: %s: %s", resp.Status, buf.String())
+		err = fmt.Errorf("response from tracker: %s: %q", resp.Status, buf.Bytes())
 		return
 	}
 	var trackerResponse HttpResponse

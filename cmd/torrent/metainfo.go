@@ -20,6 +20,7 @@ type pprintMetainfoFlags struct {
 func metainfoCmd(ctx args.SubCmdCtx) (err error) {
 	var metainfoPath string
 	var mi *metainfo.MetaInfo
+	// TODO: Treat no subcommand as a failure.
 	return ctx.NewParser().AddParams(
 		args.Pos("torrent file", &metainfoPath, args.AfterParse(func() (err error) {
 			mi, err = metainfo.LoadFromFile(metainfoPath)

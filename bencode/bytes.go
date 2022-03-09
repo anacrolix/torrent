@@ -2,6 +2,7 @@ package bencode
 
 import (
 	"errors"
+	"fmt"
 )
 
 type Bytes []byte
@@ -22,4 +23,8 @@ func (me Bytes) MarshalBencode() ([]byte, error) {
 		return nil, errors.New("marshalled Bytes should not be zero-length")
 	}
 	return me, nil
+}
+
+func (me Bytes) GoString() string {
+	return fmt.Sprintf("bencode.Bytes(%q)", []byte(me))
 }

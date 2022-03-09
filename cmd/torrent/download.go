@@ -186,6 +186,7 @@ type DownloadCmd struct {
 	Quiet              bool `help:"discard client logging"`
 	Stats              bool `help:"print stats at termination"`
 	Dht                bool `default:"true"`
+	PortForward        bool `default:"true"`
 
 	TcpPeers        bool `default:"true"`
 	UtpPeers        bool `default:"true"`
@@ -234,6 +235,7 @@ func downloadErr(flags downloadFlags) error {
 	clientConfig.PublicIp6 = flags.PublicIP
 	clientConfig.DisablePEX = !flags.Pex
 	clientConfig.DisableWebtorrent = !flags.Webtorrent
+	clientConfig.NoDefaultPortForwarding = !flags.PortForward
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
 		if err != nil {

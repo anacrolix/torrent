@@ -23,6 +23,7 @@ func main() {
 		EmptyAnnounceList bool     `name:"n" help:"exclude default announce-list entries"`
 		Comment           string   `name:"t" help:"comment"`
 		CreatedBy         string   `name:"c" help:"created by"`
+		InfoName          *string  `name:"i" help:"override info name (defaults to ROOT)"`
 		tagflag.StartPos
 		Root string
 	}
@@ -49,6 +50,9 @@ func main() {
 	err := info.BuildFromFilePath(args.Root)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if args.InfoName != nil {
+		info.Name = *args.InfoName
 	}
 	mi.InfoBytes, err = bencode.Marshal(info)
 	if err != nil {

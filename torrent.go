@@ -2020,8 +2020,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 
 			if len(bannableTouchers) >= 1 {
 				c := bannableTouchers[0]
-				t.cl.banPeerIP(c.remoteIp())
-				c.drop()
+				c.ban()
 			}
 		}
 		t.onIncompletePiece(piece)

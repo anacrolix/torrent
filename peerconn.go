@@ -1590,6 +1590,10 @@ func (cn *PeerConn) drop() {
 	cn.t.dropConnection(cn)
 }
 
+func (cn *PeerConn) ban() {
+	cn.t.cl.banPeerIP(cn.remoteIp())
+}
+
 func (cn *Peer) netGoodPiecesDirtied() int64 {
 	return cn._stats.PiecesDirtiedGood.Int64() - cn._stats.PiecesDirtiedBad.Int64()
 }

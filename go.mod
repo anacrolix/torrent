@@ -11,7 +11,7 @@ require (
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/fuse v0.2.0
 	github.com/anacrolix/go-libutp v1.2.0
-	github.com/anacrolix/log v0.10.1-0.20220123034749-3920702c17f8
+	github.com/anacrolix/log v0.13.1
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.5.2

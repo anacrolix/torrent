@@ -13,7 +13,7 @@ require (
 	github.com/anacrolix/fuse v0.2.0
 	github.com/anacrolix/generics v0.0.0-20220121083126-c81e77b56d6d
 	github.com/anacrolix/go-libutp v1.1.0
-	github.com/anacrolix/log v0.10.1-0.20220123034749-3920702c17f8
+	github.com/anacrolix/log v0.13.1
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.5.2

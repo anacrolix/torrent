@@ -44,8 +44,9 @@ github.com/anacrolix/go-libutp v1.1.0 h1:89XK+0NBTaKgSoG/v5OfDK0yoyrt2HInfg46I1B
 github.com/anacrolix/go-libutp v1.1.0/go.mod h1:so9zroOUhFPGnIkddyflaCCl+xdTsRSq97/AOQ2/Hjk=
 github.com/anacrolix/log v0.3.0/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgwU9jwU=
 github.com/anacrolix/log v0.6.0/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgwU9jwU=
-github.com/anacrolix/log v0.10.1-0.20220123034749-3920702c17f8 h1:o1KNFCLJ6f5SRMVb70SUFiPnNiazVd0gpMxYfYCsvK4=
 github.com/anacrolix/log v0.10.1-0.20220123034749-3920702c17f8/go.mod h1:GmnE2c0nvz8pOIPUSC9Rawgefy1sDXqposC2wgtBZE4=
+github.com/anacrolix/log v0.13.1 h1:BmVwTdxHd5VcNrLylgKwph4P4wf+5VvPgOK4yi91fTY=
+github.com/anacrolix/log v0.13.1/go.mod h1:D4+CvN8SnruK6zIFS/xPoRJmtvtnxs+CSfDQ+BFxZ68=
 github.com/anacrolix/lsan v0.0.0-20211126052245-807000409a62 h1:P04VG6Td13FHMgS5ZBcJX23NPC/fiC4cp9bXwYujdYM=
 github.com/anacrolix/lsan v0.0.0-20211126052245-807000409a62/go.mod h1:66cFKPCO7Sl4vbFnAaSq7e4OXtdMhRSBagJGWgmpJbM=
 github.com/anacrolix/missinggo v0.0.0-20180725070939-60ef2fbf63df/go.mod h1:kwGiTUTZ0+p4vAz3VbAI5a30t2YbvemcmspjKwrAz5s=

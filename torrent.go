@@ -2049,9 +2049,8 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 					// single peer for a piece, and we never progress that piece to completion, we
 					// will never smart-ban them. Discovered in
 					// https://github.com/anacrolix/torrent/issues/715.
-					t.logger.Levelf(log.Warning, "banning %v for being sole dirtier of piece %v after failed piece check", c.remoteIp(), piece)
-					t.cl.banPeerIP(c.remoteIp())
-					c.drop()
+					t.logger.Levelf(log.Warning, "banning %v for being sole dirtier of piece %v after failed piece check", c, piece)
+					c.ban()
 				}
 			}
 		}
@@ -2156,6 +2155,7 @@ func (t *Torrent) dropBannedPeers() {
 				p, remoteIp, p.bannableAddr)
 		}
 		if _, ok := t.cl.badPeerIPs[netipAddr]; ok {
+			// Should this be a close?
 			p.drop()
 			log.Printf("dropped %v for banned remote IP %v", p, netipAddr)
 		}

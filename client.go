@@ -1505,6 +1505,7 @@ func (cl *Client) banPeerIP(ip net.IP) {
 		t.iterPeers(func(p *Peer) {
 			if p.remoteIp().Equal(ip) {
 				t.logger.Levelf(log.Warning, "dropping peer %v with banned ip %v", p, ip)
+				// Should this be a close?
 				p.drop()
 			}
 		})

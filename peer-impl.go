@@ -20,7 +20,10 @@ type peerImpl interface {
 	connectionFlags() string
 	onClose()
 	onGotInfo(*metainfo.Info)
+	// Drop connection. This may be a no-op if there is no connection.
 	drop()
+	// Rebuke the peer
+	ban()
 	String() string
 	connStatusString() string
 

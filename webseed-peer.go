@@ -114,9 +114,12 @@ func (ws *webseedPeer) connectionFlags() string {
 	return "WS"
 }
 
-// TODO: This is called when banning peers. Perhaps we want to be able to ban webseeds too. We could
-// return bool if this is even possible, and if it isn't, skip to the next drop candidate.
+// Maybe this should drop all existing connections, or something like that.
 func (ws *webseedPeer) drop() {}
+
+func (cn *webseedPeer) ban() {
+	cn.peer.close()
+}
 
 func (ws *webseedPeer) handleUpdateRequests() {
 	// Because this is synchronous, webseed peers seem to get first dibs on newly prioritized

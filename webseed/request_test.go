@@ -21,3 +21,9 @@ func TestTrailingPath(t *testing.T) {
 		"a_1-b_c2/d 3. (e, f).g",
 	)
 }
+
+func TestTrailingPathForEmptyInfoName(t *testing.T) {
+	qt.Check(t, trailingPath("", []string{`ノ┬─┬ノ ︵ ( \o°o)\`}), qt.Equals, "%E3%83%8E%E2%94%AC%E2%94%80%E2%94%AC%E3%83%8E+%EF%B8%B5+%28+%5Co%C2%B0o%29%5C")
+	qt.Check(t, trailingPath("", []string{"hello", "world"}), qt.Equals, "hello/world")
+	qt.Check(t, trailingPath("war", []string{"and", "peace"}), qt.Equals, "war/and/peace")
+}

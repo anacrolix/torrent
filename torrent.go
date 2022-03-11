@@ -2279,6 +2279,14 @@ func (t *Torrent) callbacks() *Callbacks {
 	return &t.cl.config.Callbacks
 }
 
+func (t *Torrent) AddWebSeeds(urls []string) {
+	t.cl.lock()
+	defer t.cl.unlock()
+	for _, u := range urls {
+		t.addWebSeed(u)
+	}
+}
+
 func (t *Torrent) addWebSeed(url string) {
 	if t.cl.config.DisableWebseeds {
 		return

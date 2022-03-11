@@ -24,6 +24,7 @@ func main() {
 		Comment           string   `name:"t" help:"comment"`
 		CreatedBy         string   `name:"c" help:"created by"`
 		InfoName          *string  `name:"i" help:"override info name (defaults to ROOT)"`
+		Url               []string `name:"u" help:"add webseed url"`
 		tagflag.StartPos
 		Root string
 	}
@@ -44,6 +45,7 @@ func main() {
 	if len(args.CreatedBy) > 0 {
 		mi.CreatedBy = args.CreatedBy
 	}
+	mi.UrlList = args.Url
 	info := metainfo.Info{
 		PieceLength: 256 * 1024,
 	}

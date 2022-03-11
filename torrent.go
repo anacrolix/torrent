@@ -2024,8 +2024,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 
 			if len(bannableTouchers) >= 1 {
 				c := bannableTouchers[0]
-				t.cl.banPeerIP(c.remoteIp())
-				c.drop()
+				c.ban()
 			}
 		}
 		t.onIncompletePiece(piece)
@@ -2282,6 +2281,14 @@ func (t *Torrent) iterPeers(f func(p *Peer)) {
 
 func (t *Torrent) callbacks() *Callbacks {
 	return &t.cl.config.Callbacks
+}
+
+func (t *Torrent) AddWebSeeds(urls []string) {
+	t.cl.lock()
+	defer t.cl.unlock()
+	for _, u := range urls {
+		t.addWebSeed(u)
+	}
 }
 
 func (t *Torrent) addWebSeed(url string) {

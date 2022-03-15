@@ -10,7 +10,9 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-func (t *Torrent) useSources(sources []string) {
+// Add HTTP endpoints that serve the metainfo. They will be used if the torrent info isn't obtained
+// yet. The Client HTTP client is used.
+func (t *Torrent) UseSources(sources []string) {
 	select {
 	case <-t.Closed():
 		return

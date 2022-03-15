@@ -1312,10 +1312,10 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	}
 	cl := t.cl
 	cl.AddDhtNodes(spec.DhtNodes)
+	t.UseSources(spec.Sources)
 	cl.lock()
 	defer cl.unlock()
 	t.initialPieceCheckDisabled = spec.DisableInitialPieceCheck
-	t.useSources(spec.Sources)
 	for _, url := range spec.Webseeds {
 		t.addWebSeed(url)
 	}

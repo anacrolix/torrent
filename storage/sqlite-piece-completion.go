@@ -1,5 +1,6 @@
 // modernc.org/sqlite depends on modernc.org/libc which doesn't work for JS (and probably wasm but I
 // think JS is the stronger signal).
+
 //go:build cgo && !nosqlite
 // +build cgo,!nosqlite
 

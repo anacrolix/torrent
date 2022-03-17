@@ -86,7 +86,7 @@ func fileBytesLeft(
 }
 
 func (f *File) bytesLeft() (left int64) {
-	return fileBytesLeft(int64(f.t.usualPieceSize()), f.firstPieceIndex(), f.endPieceIndex(), f.offset, f.length, &f.t._completedPieces)
+	return fileBytesLeft(int64(f.t.usualPieceSize()), f.BeginPieceIndex(), f.EndPieceIndex(), f.offset, f.length, &f.t._completedPieces)
 }
 
 // The relative file path for a multi-file torrent, and the torrent name for a
@@ -149,7 +149,7 @@ func (f *File) SetPriority(prio piecePriority) {
 	f.t.cl.lock()
 	if prio != f.prio {
 		f.prio = prio
-		f.t.updatePiecePriorities(f.firstPieceIndex(), f.endPieceIndex(), "File.SetPriority")
+		f.t.updatePiecePriorities(f.BeginPieceIndex(), f.EndPieceIndex(), "File.SetPriority")
 	}
 	f.t.cl.unlock()
 }
@@ -163,7 +163,7 @@ func (f *File) Priority() (prio piecePriority) {
 }
 
 // Returns the index of the first piece containing data for the file.
-func (f *File) firstPieceIndex() pieceIndex {
+func (f *File) BeginPieceIndex() int {
 	if f.t.usualPieceSize() == 0 {
 		return 0
 	}
@@ -171,7 +171,7 @@ func (f *File) firstPieceIndex() pieceIndex {
 }
 
 // Returns the index of the piece after the last one containing data for the file.
-func (f *File) endPieceIndex() pieceIndex {
+func (f *File) EndPieceIndex() int {
 	if f.t.usualPieceSize() == 0 {
 		return 0
 	}

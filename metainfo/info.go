@@ -13,9 +13,10 @@ import (
 
 // The info dictionary.
 type Info struct {
-	PieceLength int64  `bencode:"piece length"`      // BEP3
-	Pieces      []byte `bencode:"pieces"`            // BEP3
-	Name        string `bencode:"name"`              // BEP3
+	PieceLength int64  `bencode:"piece length"` // BEP3
+	Pieces      []byte `bencode:"pieces"`       // BEP3
+	Name        string `bencode:"name"`         // BEP3
+	NameUtf8    string `bencode:"name.utf-8,omitempty"`
 	Length      int64  `bencode:"length,omitempty"`  // BEP3, mutually exclusive with Files
 	Private     *bool  `bencode:"private,omitempty"` // BEP27
 	// TODO: Document this field.
@@ -151,4 +152,11 @@ func (info *Info) UpvertedFiles() []FileInfo {
 
 func (info *Info) Piece(index int) Piece {
 	return Piece{info, pieceIndex(index)}
+}
+
+func (info Info) BestName() string {
+	if info.NameUtf8 != "" {
+		return info.NameUtf8
+	}
+	return info.Name
 }

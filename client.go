@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"expvar"
@@ -12,6 +13,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,9 +22,9 @@ import (
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
-	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pproffd"
@@ -35,6 +37,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/chansync"
+	. "github.com/anacrolix/generics"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/limiter"
@@ -73,7 +76,7 @@ type Client struct {
 	// include ourselves if we end up trying to connect to our own address
 	// through legitimate channels.
 	dopplegangerAddrs map[string]struct{}
-	badPeerIPs        map[string]struct{}
+	badPeerIPs        map[netip.Addr]struct{}
 	torrents          map[InfoHash]*Torrent
 	pieceRequestOrder map[interface{}]*request_strategy.PieceRequestOrder
 
@@ -100,7 +103,7 @@ func (cl *Client) badPeerIPsLocked() (ips []string) {
 	ips = make([]string, len(cl.badPeerIPs))
 	i := 0
 	for k := range cl.badPeerIPs {
-		ips[i] = k
+		ips[i] = k.String()
 		i += 1
 	}
 	return
@@ -192,7 +195,7 @@ func (cl *Client) announceKey() int32 {
 // Initializes a bare minimum Client. *Client and *ClientConfig must not be nil.
 func (cl *Client) init(cfg *ClientConfig) {
 	cl.config = cfg
-	cl.dopplegangerAddrs = make(map[string]struct{})
+	generics.MakeMap(&cl.dopplegangerAddrs)
 	cl.torrents = make(map[metainfo.Hash]*Torrent)
 	cl.dialRateLimiter = rate.NewLimiter(10, 10)
 	cl.activeAnnounceLimiter.SlotsPerKey = 2
@@ -381,6 +384,7 @@ func (cl *Client) listenNetworks() (ns []network) {
 
 // Creates an anacrolix/dht Server, as would be done internally in NewClient, for the given conn.
 func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
+	logger := cl.logger.WithNames("dht", conn.LocalAddr().String())
 	cfg := dht.ServerConfig{
 		IPBlocklist:    cl.ipBlockList,
 		Conn:           conn,
@@ -393,7 +397,7 @@ func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err
 		}(),
 		StartingNodes: cl.config.DhtStartingNodes(conn.LocalAddr().Network()),
 		OnQuery:       cl.config.DHTOnQuery,
-		Logger:        cl.logger.WithContextText(fmt.Sprintf("dht server on %v", conn.LocalAddr().String())),
+		Logger:        logger,
 	}
 	if f := cl.config.ConfigureAnacrolixDhtServer; f != nil {
 		f(&cfg)
@@ -403,9 +407,9 @@ func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err
 		go func() {
 			ts, err := s.Bootstrap()
 			if err != nil {
-				cl.logger.Printf("error bootstrapping dht: %s", err)
+				logger.Levelf(log.Warning, "error bootstrapping dht: %s", err)
 			}
-			log.Fstr("%v completed bootstrap (%+v)", s, ts).AddValues(s, ts).Log(cl.logger)
+			logger.Levelf(log.Debug, "completed bootstrap: %+v", ts)
 		}()
 	}
 	return
@@ -1142,7 +1146,11 @@ func (cl *Client) badPeerIPPort(ip net.IP, port int) bool {
 	if _, ok := cl.ipBlockRange(ip); ok {
 		return true
 	}
-	if _, ok := cl.badPeerIPs[ip.String()]; ok {
+	ipAddr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		panic(ip)
+	}
+	if _, ok := cl.badPeerIPs[ipAddr]; ok {
 		return true
 	}
 	return false
@@ -1176,8 +1184,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		},
 		conns: make(map[*PeerConn]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
 
-		halfOpen:          make(map[string]PeerInfo),
-		pieceStateChanges: pubsub.NewPubSub(),
+		halfOpen: make(map[string]PeerInfo),
 
 		storageOpener:       storageClient,
 		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
@@ -1188,6 +1195,8 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		webSeeds:     make(map[string]*Peer),
 		gotMetainfoC: make(chan struct{}),
 	}
+	t.smartBanCache.Hash = sha1.Sum
+	t.smartBanCache.Init()
 	t.networkingEnabled.Set()
 	t.logger = cl.logger.WithContextValue(t).WithNames("torrent", t.infoHash.HexString())
 	t.sourcesLogger = t.logger.WithNames("sources")
@@ -1441,11 +1450,13 @@ func (cl *Client) AddDhtNodes(nodes []string) {
 }
 
 func (cl *Client) banPeerIP(ip net.IP) {
-	cl.logger.Printf("banning ip %v", ip)
-	if cl.badPeerIPs == nil {
-		cl.badPeerIPs = make(map[string]struct{})
+	// We can't take this from string, because it will lose netip's v4on6. net.ParseIP parses v4
+	// addresses directly to v4on6, which doesn't compare equal with v4.
+	ipAddr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		panic(ip)
 	}
-	cl.badPeerIPs[ip.String()] = struct{}{}
+	generics.MakeMapIfNilAndSet(&cl.badPeerIPs, ipAddr, struct{}{})
 	for _, t := range cl.torrents {
 		t.iterPeers(func(p *Peer) {
 			if p.remoteIp().Equal(ip) {
@@ -1474,6 +1485,13 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemot
 		},
 		connString: connString,
 		conn:       nc,
+	}
+	// TODO: Need to be much more explicit about this, including allowing non-IP bannable addresses.
+	if remoteAddr != nil {
+		netipAddrPort, err := netip.ParseAddrPort(remoteAddr.String())
+		if err == nil {
+			c.bannableAddr = Some(netipAddrPort.Addr())
+		}
 	}
 	c.peerImpl = c
 	c.logger = cl.logger.WithDefaultLevel(log.Warning).WithContextValue(c)

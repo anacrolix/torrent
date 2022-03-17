@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
+	"github.com/anacrolix/chansync"
+	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
-
-	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
@@ -64,9 +64,10 @@ type Peer struct {
 	peerImpl
 	callbacks *Callbacks
 
-	outgoing   bool
-	Network    string
-	RemoteAddr PeerRemoteAddr
+	outgoing     bool
+	Network      string
+	RemoteAddr   PeerRemoteAddr
+	bannableAddr Option[bannableAddr]
 	// True if the connection is operating over MSE obfuscation.
 	headerEncrypted bool
 	cryptoMethod    mse.CryptoMethod
@@ -1387,6 +1388,11 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 	ppReq := newRequestFromMessage(msg)
 	req := c.t.requestIndexFromRequest(ppReq)
+	t := c.t
+
+	if c.bannableAddr.Ok() {
+		t.smartBanCache.RecordBlock(c.bannableAddr.Value(), req, msg.Piece)
+	}
 
 	if c.peerChoking {
 		chunksReceived.Add("while choked", 1)
@@ -1426,7 +1432,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		}
 	}
 
-	t := c.t
 	cl := t.cl
 
 	// Do we actually want this chunk?

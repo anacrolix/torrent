@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/anacrolix/chansync/events"
-	"github.com/anacrolix/missinggo/pubsub"
+	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -115,7 +115,7 @@ func (t *Torrent) BytesCompleted() int64 {
 
 // The subscription emits as (int) the index of pieces as their state changes.
 // A state change is when the PieceState for a piece alters in value.
-func (t *Torrent) SubscribePieceStateChanges() *pubsub.Subscription {
+func (t *Torrent) SubscribePieceStateChanges() *pubsub.Subscription[PieceStateChange] {
 	return t.pieceStateChanges.Subscribe()
 }
 
@@ -211,23 +211,13 @@ func (t *Torrent) initFiles() {
 	var offset int64
 	t.files = new([]*File)
 	for _, fi := range t.info.UpvertedFiles() {
-		var path []string
-		if len(fi.PathUTF8) != 0 {
-			path = fi.PathUTF8
-		} else {
-			path = fi.Path
-		}
-		dp := t.info.Name
-		if len(fi.Path) != 0 {
-			dp = strings.Join(fi.Path, "/")
-		}
 		*t.files = append(*t.files, &File{
 			t,
-			strings.Join(append([]string{t.info.Name}, path...), "/"),
+			strings.Join(append([]string{t.info.BestName()}, fi.BestPath()...), "/"),
 			offset,
 			fi.Length,
 			fi,
-			dp,
+			fi.DisplayPath(t.info),
 			PiecePriorityNone,
 		})
 		offset += fi.Length

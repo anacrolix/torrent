@@ -1,21 +1,22 @@
 package request_strategy
 
-import (
-	"fmt"
+import "github.com/anacrolix/torrent/metainfo"
 
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/google/btree"
-)
+type Btree interface {
+	Delete(pieceRequestOrderItem)
+	Add(pieceRequestOrderItem)
+	Scan(func(pieceRequestOrderItem) bool)
+}
 
-func NewPieceOrder() *PieceRequestOrder {
+func NewPieceOrder(btree Btree, cap int) *PieceRequestOrder {
 	return &PieceRequestOrder{
-		tree: btree.New(32),
-		keys: make(map[PieceRequestOrderKey]PieceRequestOrderState),
+		tree: btree,
+		keys: make(map[PieceRequestOrderKey]PieceRequestOrderState, cap),
 	}
 }
 
 type PieceRequestOrder struct {
-	tree *btree.BTree
+	tree Btree
 	keys map[PieceRequestOrderKey]PieceRequestOrderState
 }
 
@@ -35,8 +36,7 @@ type pieceRequestOrderItem struct {
 	state PieceRequestOrderState
 }
 
-func (me *pieceRequestOrderItem) Less(other btree.Item) bool {
-	otherConcrete := other.(*pieceRequestOrderItem)
+func (me *pieceRequestOrderItem) Less(otherConcrete *pieceRequestOrderItem) bool {
 	return pieceOrderLess(me, otherConcrete).Less()
 }
 
@@ -44,16 +44,14 @@ func (me *PieceRequestOrder) Add(key PieceRequestOrderKey, state PieceRequestOrd
 	if _, ok := me.keys[key]; ok {
 		panic(key)
 	}
-	if me.tree.ReplaceOrInsert(&pieceRequestOrderItem{
-		key:   key,
-		state: state,
-	}) != nil {
-		panic("shouldn't already have this")
-	}
+	me.tree.Add(pieceRequestOrderItem{key, state})
 	me.keys[key] = state
 }
 
-func (me *PieceRequestOrder) Update(key PieceRequestOrderKey, state PieceRequestOrderState) {
+func (me *PieceRequestOrder) Update(
+	key PieceRequestOrderKey,
+	state PieceRequestOrderState,
+) {
 	oldState, ok := me.keys[key]
 	if !ok {
 		panic("key should have been added already")
@@ -61,17 +59,8 @@ func (me *PieceRequestOrder) Update(key PieceRequestOrderKey, state PieceRequest
 	if state == oldState {
 		return
 	}
-	item := pieceRequestOrderItem{
-		key:   key,
-		state: oldState,
-	}
-	if me.tree.Delete(&item) == nil {
-		panic(fmt.Sprintf("%#v", key))
-	}
-	item.state = state
-	if me.tree.ReplaceOrInsert(&item) != nil {
-		panic(key)
-	}
+	me.tree.Delete(pieceRequestOrderItem{key, oldState})
+	me.tree.Add(pieceRequestOrderItem{key, state})
 	me.keys[key] = state
 }
 
@@ -83,12 +72,8 @@ func (me *PieceRequestOrder) existingItemForKey(key PieceRequestOrderKey) pieceR
 }
 
 func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) {
-	item := me.existingItemForKey(key)
-	if me.tree.Delete(&item) == nil {
-		panic(key)
-	}
+	me.tree.Delete(pieceRequestOrderItem{key, me.keys[key]})
 	delete(me.keys, key)
-	// log.Printf("deleting %#v", key)
 }
 
 func (me *PieceRequestOrder) Len() int {

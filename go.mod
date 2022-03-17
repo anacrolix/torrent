@@ -5,18 +5,20 @@ go 1.18
 require (
 	crawshaw.io/sqlite v0.3.3-0.20210127221821-98b1f83c5508
 	github.com/RoaringBitmap/roaring v0.9.4
+	github.com/ajwerner/btree v0.0.0-20211201061316-91c8b66ad617
 	github.com/alexflint/go-arg v1.4.2
 	github.com/anacrolix/args v0.5.0
 	github.com/anacrolix/chansync v0.3.0
 	github.com/anacrolix/dht/v2 v2.16.2-0.20220311024416-dd658f18fd51
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/fuse v0.2.0
+	github.com/anacrolix/generics v0.0.0-20220217222028-44932cf46edd
 	github.com/anacrolix/go-libutp v1.2.0
 	github.com/anacrolix/log v0.13.1
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.5.4-0.20220317032254-8c5ea4947a0b
-	github.com/anacrolix/multiless v0.2.0
+	github.com/anacrolix/multiless v0.2.1-0.20211218050420-533661eef5dc
 	github.com/anacrolix/squirrel v0.4.1-0.20220122230132-14b040773bac
 	github.com/anacrolix/sync v0.4.0
 	github.com/anacrolix/tagflag v1.3.0
@@ -37,13 +39,13 @@ require (
 	github.com/pion/webrtc/v3 v3.1.24-0.20220208053747-94262c1b2b38
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.7.0
+	github.com/tidwall/btree v0.7.2-0.20211211132910-4215444137fc
 	go.etcd.io/bbolt v1.3.6
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 )
 
 require (
-	github.com/alexflint/go-scalar v1.0.0 // indirect
-	github.com/anacrolix/confluence v1.9.0 // indirect
+	github.com/alexflint/go-scalar v1.1.0 // indirect
 	github.com/anacrolix/mmsg v1.0.0 // indirect
 	github.com/anacrolix/stm v0.3.0 // indirect
 	github.com/benbjohnson/immutable v0.3.0 // indirect

@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [ '1.16', '1.17', 'tip' ]
+        go-version: [ 'tip' ]
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [ '1.17' ]
+        go-version: [ 'tip' ]
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [ '1.17' ]
+        go-version: [ 'tip' ]
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [ '1.16', '1.17' ]
+        go-version: [ 'tip' ]
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [ '1.16', '1.17' ]
+        go-version: [ 'tip' ]
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
@@ -66,7 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [ '1.17' ]
+        go-version: [ 'tip' ]
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
@@ -83,4 +83,3 @@ jobs:
     - name: torrentfs end-to-end test
       # Test on 386 for atomic alignment and other bad 64-bit assumptions
       run: GOARCH=386 fs/test.sh
-      timeout-minutes: 10

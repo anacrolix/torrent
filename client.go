@@ -380,6 +380,7 @@ func (cl *Client) listenNetworks() (ns []network) {
 
 // Creates an anacrolix/dht Server, as would be done internally in NewClient, for the given conn.
 func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
+	logger := cl.logger.WithNames("dht", conn.LocalAddr().String())
 	cfg := dht.ServerConfig{
 		IPBlocklist:    cl.ipBlockList,
 		Conn:           conn,
@@ -392,7 +393,7 @@ func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err
 		}(),
 		StartingNodes: cl.config.DhtStartingNodes(conn.LocalAddr().Network()),
 		OnQuery:       cl.config.DHTOnQuery,
-		Logger:        cl.logger.WithContextText(fmt.Sprintf("dht server on %v", conn.LocalAddr().String())),
+		Logger:        logger,
 	}
 	if f := cl.config.ConfigureAnacrolixDhtServer; f != nil {
 		f(&cfg)
@@ -402,9 +403,9 @@ func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err
 		go func() {
 			ts, err := s.Bootstrap()
 			if err != nil {
-				cl.logger.Printf("error bootstrapping dht: %s", err)
+				logger.Levelf(log.Warning, "error bootstrapping dht: %s", err)
 			}
-			log.Fstr("%v completed bootstrap (%+v)", s, ts).AddValues(s, ts).Log(cl.logger)
+			logger.Levelf(log.Debug, "completed bootstrap: %+v", ts)
 		}()
 	}
 	return

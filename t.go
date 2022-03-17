@@ -211,23 +211,13 @@ func (t *Torrent) initFiles() {
 	var offset int64
 	t.files = new([]*File)
 	for _, fi := range t.info.UpvertedFiles() {
-		var path []string
-		if len(fi.PathUTF8) != 0 {
-			path = fi.PathUTF8
-		} else {
-			path = fi.Path
-		}
-		dp := t.info.Name
-		if len(fi.Path) != 0 {
-			dp = strings.Join(fi.Path, "/")
-		}
 		*t.files = append(*t.files, &File{
 			t,
-			strings.Join(append([]string{t.info.Name}, path...), "/"),
+			strings.Join(append([]string{t.info.BestName()}, fi.BestPath()...), "/"),
 			offset,
 			fi.Length,
 			fi,
-			dp,
+			fi.DisplayPath(t.info),
 			PiecePriorityNone,
 		})
 		offset += fi.Length

@@ -153,3 +153,10 @@ func (info *Info) UpvertedFiles() []FileInfo {
 func (info *Info) Piece(index int) Piece {
 	return Piece{info, pieceIndex(index)}
 }
+
+func (info Info) BestName() string {
+	if info.NameUtf8 != "" {
+		return info.NameUtf8
+	}
+	return info.Name
+}

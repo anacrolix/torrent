@@ -77,6 +77,7 @@ func pprintMetainfo(metainfo *metainfo.MetaInfo, flags pprintMetainfoFlags) erro
 	}
 	d := map[string]interface{}{
 		"Name":         info.Name,
+		"Name.Utf8":    info.NameUtf8,
 		"NumPieces":    info.NumPieces(),
 		"PieceLength":  info.PieceLength,
 		"InfoHash":     metainfo.HashInfoBytes().HexString(),

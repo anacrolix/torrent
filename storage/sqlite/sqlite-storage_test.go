@@ -14,9 +14,27 @@ import (
 	"github.com/anacrolix/squirrel"
 	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"
+	"github.com/anacrolix/torrent/test"
 	"github.com/dustin/go-humanize"
 	qt "github.com/frankban/quicktest"
 )
+
+func TestLeecherStorage(t *testing.T) {
+	test.TestLeecherStorage(t, test.LeecherStorageTestCase{
+		"SqliteDirect",
+		func(s string) storage.ClientImplCloser {
+			path := filepath.Join(s, "sqlite3.db")
+			var opts NewDirectStorageOpts
+			opts.Path = path
+			cl, err := NewDirectStorage(opts)
+			if err != nil {
+				panic(err)
+			}
+			return cl
+		},
+		0,
+	})
+}
 
 func BenchmarkMarkComplete(b *testing.B) {
 	const pieceSize = test_storage.DefaultPieceSize

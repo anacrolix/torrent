@@ -1,6 +1,6 @@
 module github.com/anacrolix/torrent
 
-go 1.16
+go 1.18
 
 require (
 	crawshaw.io/sqlite v0.3.3-0.20210127221821-98b1f83c5508
@@ -39,6 +39,45 @@ require (
 	github.com/stretchr/testify v1.7.0
 	go.etcd.io/bbolt v1.3.6
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
+)
+
+require (
+	github.com/alexflint/go-scalar v1.0.0 // indirect
+	github.com/anacrolix/confluence v1.9.0 // indirect
+	github.com/anacrolix/mmsg v1.0.0 // indirect
+	github.com/anacrolix/stm v0.3.0 // indirect
+	github.com/benbjohnson/immutable v0.3.0 // indirect
+	github.com/bits-and-blooms/bitset v1.2.0 // indirect
+	github.com/google/uuid v1.3.0 // indirect
+	github.com/huandu/xstrings v1.3.2 // indirect
+	github.com/kr/pretty v0.3.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
+	github.com/mschoch/smat v0.2.0 // indirect
+	github.com/pion/dtls/v2 v2.1.2 // indirect
+	github.com/pion/ice/v2 v2.1.20 // indirect
+	github.com/pion/interceptor v0.1.7 // indirect
+	github.com/pion/logging v0.2.2 // indirect
+	github.com/pion/mdns v0.0.5 // indirect
+	github.com/pion/randutil v0.1.0 // indirect
+	github.com/pion/rtcp v1.2.9 // indirect
+	github.com/pion/rtp v1.7.4 // indirect
+	github.com/pion/sctp v1.8.2 // indirect
+	github.com/pion/sdp/v3 v3.0.4 // indirect
+	github.com/pion/srtp/v2 v2.0.5 // indirect
+	github.com/pion/stun v0.3.5 // indirect
+	github.com/pion/transport v0.13.0 // indirect
+	github.com/pion/turn/v2 v2.0.6 // indirect
+	github.com/pion/udp v0.1.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rogpeppe/go-internal v1.8.0 // indirect
+	github.com/rs/dnscache v0.0.0-20210201191234-295bba877686 // indirect
+	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
+	golang.org/x/crypto v0.0.0-20220131195533-30dcbda58838 // indirect
+	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd // indirect
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
+	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 )
 
 retract (

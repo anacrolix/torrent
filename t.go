@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/anacrolix/chansync/events"
-	"github.com/anacrolix/missinggo/pubsub"
+	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -115,7 +115,7 @@ func (t *Torrent) BytesCompleted() int64 {
 
 // The subscription emits as (int) the index of pieces as their state changes.
 // A state change is when the PieceState for a piece alters in value.
-func (t *Torrent) SubscribePieceStateChanges() *pubsub.Subscription {
+func (t *Torrent) SubscribePieceStateChanges() *pubsub.Subscription[PieceStateChange] {
 	return t.pieceStateChanges.Subscribe()
 }
 

@@ -8,14 +8,14 @@ require (
 	github.com/alexflint/go-arg v1.4.2
 	github.com/anacrolix/args v0.5.0
 	github.com/anacrolix/chansync v0.3.0
-	github.com/anacrolix/dht/v2 v2.15.2-0.20220123034220-0538803801cb
+	github.com/anacrolix/dht/v2 v2.16.2-0.20220311024416-dd658f18fd51
 	github.com/anacrolix/envpprof v1.1.1
 	github.com/anacrolix/fuse v0.2.0
 	github.com/anacrolix/go-libutp v1.2.0
 	github.com/anacrolix/log v0.13.1
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0
-	github.com/anacrolix/missinggo/v2 v2.5.2
+	github.com/anacrolix/missinggo/v2 v2.5.4-0.20220317032254-8c5ea4947a0b
 	github.com/anacrolix/multiless v0.2.0
 	github.com/anacrolix/squirrel v0.4.1-0.20220122230132-14b040773bac
 	github.com/anacrolix/sync v0.4.0

@@ -491,8 +491,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 		}
 	}()
 	for !reflect.DeepEqual(completes, expected) {
-		_v := <-psc.Values
-		v := _v.(PieceStateChange)
+		v := <-psc.Values
 		completes[v.Index] = v.Complete
 	}
 }

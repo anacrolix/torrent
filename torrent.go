@@ -21,10 +21,10 @@ import (
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
-	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
@@ -60,7 +60,7 @@ type Torrent struct {
 	infoHash metainfo.Hash
 	pieces   []Piece
 	// Values are the piece indices that changed.
-	pieceStateChanges *pubsub.PubSub
+	pieceStateChanges pubsub.PubSub[PieceStateChange]
 	// The size of chunks to request from peers over the wire. This is
 	// normally 16KiB by convention these days.
 	chunkSize pp.Integer

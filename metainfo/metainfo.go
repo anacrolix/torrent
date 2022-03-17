@@ -72,7 +72,7 @@ func (mi *MetaInfo) SetDefaults() {
 func (mi *MetaInfo) Magnet(infoHash *Hash, info *Info) (m Magnet) {
 	m.Trackers = append(m.Trackers, mi.UpvertedAnnounceList().DistinctValues()...)
 	if info != nil {
-		m.DisplayName = info.Name
+		m.DisplayName = info.BestName()
 	}
 	if infoHash != nil {
 		m.InfoHash = *infoHash

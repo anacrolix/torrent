@@ -54,7 +54,6 @@ func GetRequestablePieces(input Input, pro *PieceRequestOrder, f func(ih metainf
 	pro.tree.Scan(func(_i pieceRequestOrderItem) bool {
 		ih := _i.key.InfoHash
 		var t Torrent = input.Torrent(ih)
-		var piece Piece = t.Piece(_i.key.Index)
 		pieceLength := t.PieceLength()
 		if storageLeft != nil {
 			if *storageLeft < pieceLength {
@@ -62,7 +61,7 @@ func GetRequestablePieces(input Input, pro *PieceRequestOrder, f func(ih metainf
 			}
 			*storageLeft -= pieceLength
 		}
-		if !piece.Request() || piece.NumPendingChunks() == 0 {
+		if t.IgnorePiece(_i.key.Index) {
 			// TODO: Clarify exactly what is verified. Stuff that's being hashed should be
 			// considered unverified and hold up further requests.
 			return true

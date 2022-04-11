@@ -287,7 +287,7 @@ func downloadErr(flags downloadFlags) error {
 	clientConfig.NoDHT = !flags.Dht
 	clientConfig.Debug = flags.Debug
 	clientConfig.Seed = flags.Seed
-	clientConfig.PublicIp4 = flags.PublicIP
+	clientConfig.PublicIp4 = flags.PublicIP.To4()
 	clientConfig.PublicIp6 = flags.PublicIP
 	clientConfig.DisablePEX = !flags.Pex
 	clientConfig.DisableWebtorrent = !flags.Webtorrent

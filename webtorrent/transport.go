@@ -8,7 +8,6 @@ import (
 
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/pion/datachannel"
-
 	"github.com/pion/webrtc/v3"
 )
 
@@ -16,7 +15,6 @@ var (
 	metrics = expvar.NewMap("webtorrent")
 	api     = func() *webrtc.API {
 		// Enable the detach API (since it's non-standard but more idiomatic).
-		s := webrtc.SettingEngine{}
 		s.DetachDataChannels()
 		return webrtc.NewAPI(webrtc.WithSettingEngine(s))
 	}()

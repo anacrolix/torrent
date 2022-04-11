@@ -153,7 +153,7 @@ type Torrent struct {
 	// Torrent sources in use keyed by the source string.
 	activeSources sync.Map
 	sourcesLogger log.Logger
-	
+
 	smartBanCache smartBanCache
 }
 
@@ -850,7 +850,10 @@ func (t *Torrent) numPiecesCompleted() (num pieceIndex) {
 }
 
 func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
-	t.closed.Set()
+	if !t.closed.Set() {
+		err = errors.New("already closed")
+		return
+	}
 	if t.storage != nil {
 		wg.Add(1)
 		go func() {

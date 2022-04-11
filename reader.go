@@ -245,12 +245,20 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 			err = nil
 			return
 		}
+		if r.t.closed.IsSet() {
+			err = fmt.Errorf("reading from closed torrent: %w", err)
+			return
+		}
 		r.t.cl.lock()
 		// I think there's a panic here caused by the Client being closed before obtaining this
 		// lock. TestDropTorrentWithMmapStorageWhileHashing seems to tickle occasionally in CI.
 		func() {
 			// Just add exceptions already.
 			defer r.t.cl.unlock()
+			if r.t.closed.IsSet() {
+				// Can't update because Torrent's piece order is removed from Client.
+				return
+			}
 			// TODO: Just reset pieces in the readahead window. This might help
 			// prevent thrashing with small caches and file and piece priorities.
 			r.log(log.Fstr("error reading torrent %s piece %d offset %d, %d bytes: %v",

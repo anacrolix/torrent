@@ -1352,9 +1352,6 @@ func (cl *Client) dropTorrent(infoHash metainfo.Hash, wg *sync.WaitGroup) (err e
 		return
 	}
 	err = t.close(wg)
-	if err != nil {
-		panic(err)
-	}
 	delete(cl.torrents, infoHash)
 	return
 }

@@ -60,7 +60,7 @@ jobs:
     - uses: actions/checkout@v2
     - uses: ./.github/actions/go-common
     - name: Some packages compile for WebAssembly
-      run: GOOS=js GOARCH=wasm go build -v . ./storage ./tracker/...
+      run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
 
   torrentfs:
     runs-on: ubuntu-latest

@@ -8,24 +8,13 @@ import (
 
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/pion/datachannel"
-	"github.com/pion/logging"
-
 	"github.com/pion/webrtc/v3"
 )
-
-type DiscardLoggerFactory struct{}
-
-func (f *DiscardLoggerFactory) NewLogger(scope string) logging.LeveledLogger {
-	return logging.NewDefaultLeveledLoggerForScope(scope, logging.LogLevelInfo, io.Discard)
-}
 
 var (
 	metrics = expvar.NewMap("webtorrent")
 	api     = func() *webrtc.API {
 		// Enable the detach API (since it's non-standard but more idiomatic).
-		s := webrtc.SettingEngine{
-			LoggerFactory: &DiscardLoggerFactory{},
-		}
 		s.DetachDataChannels()
 		return webrtc.NewAPI(webrtc.WithSettingEngine(s))
 	}()

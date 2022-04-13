@@ -1251,7 +1251,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Reject:
 			req := newRequestFromMessage(&msg)
 			if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req)) {
-				log.Printf("received invalid reject [request=%v, peer=%v]", req, c)
+				c.logger.Printf("received invalid reject [request=%v, peer=%v]", req, c)
 				err = fmt.Errorf("received invalid reject [request=%v]", req)
 			}
 		case pp.AllowedFast:

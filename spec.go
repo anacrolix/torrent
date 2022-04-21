@@ -36,6 +36,10 @@ type TorrentSpec struct {
 	// Whether to allow data download or upload
 	DisallowDataUpload   bool
 	DisallowDataDownload bool
+
+	// Custom encoder for webseed URLs
+	// Leave nil to use the default (url.QueryEscape)
+	EncodeWebSeedUrl func(string) string
 }
 
 func TorrentSpecFromMagnetUri(uri string) (spec *TorrentSpec, err error) {

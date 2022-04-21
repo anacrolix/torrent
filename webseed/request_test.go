@@ -10,7 +10,7 @@ import (
 func TestTrailingPath(t *testing.T) {
 	c := qt.New(t)
 	test := func(parts []string, result string) {
-		unescaped, err := url.QueryUnescape(trailingPath(parts[0], parts[1:]))
+		unescaped, err := url.QueryUnescape(trailingPath(parts[0], parts[1:], url.QueryEscape))
 		if !c.Check(err, qt.IsNil) {
 			return
 		}
@@ -23,7 +23,7 @@ func TestTrailingPath(t *testing.T) {
 }
 
 func TestTrailingPathForEmptyInfoName(t *testing.T) {
-	qt.Check(t, trailingPath("", []string{`ノ┬─┬ノ ︵ ( \o°o)\`}), qt.Equals, "%E3%83%8E%E2%94%AC%E2%94%80%E2%94%AC%E3%83%8E+%EF%B8%B5+%28+%5Co%C2%B0o%29%5C")
-	qt.Check(t, trailingPath("", []string{"hello", "world"}), qt.Equals, "hello/world")
-	qt.Check(t, trailingPath("war", []string{"and", "peace"}), qt.Equals, "war/and/peace")
+	qt.Check(t, trailingPath("", []string{`ノ┬─┬ノ ︵ ( \o°o)\`}, url.QueryEscape), qt.Equals, "%E3%83%8E%E2%94%AC%E2%94%80%E2%94%AC%E3%83%8E+%EF%B8%B5+%28+%5Co%C2%B0o%29%5C")
+	qt.Check(t, trailingPath("", []string{"hello", "world"}, url.QueryEscape), qt.Equals, "hello/world")
+	qt.Check(t, trailingPath("war", []string{"and", "peace"}, url.QueryEscape), qt.Equals, "war/and/peace")
 }

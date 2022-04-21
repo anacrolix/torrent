@@ -2350,15 +2350,28 @@ func (t *Torrent) callbacks() *Callbacks {
 	return &t.cl.config.Callbacks
 }
 
-func (t *Torrent) AddWebSeeds(urls []string) {
+type AddWebSeedsOptions struct {
+	// Custom encoder for webseed URLs
+	// Leave nil to use the default (url.QueryEscape)
+	EncodeUrl func(string) string
+}
+
+
+// Add web seeds to the torrent.
+// If AddWebSeedsOptions is not nil, only the first one is used.
+func (t *Torrent) AddWebSeeds(urls []string, opts ...AddWebSeedsOptions) {
 	t.cl.lock()
 	defer t.cl.unlock()
 	for _, u := range urls {
-		t.addWebSeed(u)
+		if opts == nil {
+			t.addWebSeed(u, nil)
+		} else {
+			t.addWebSeed(u, opts[0].EncodeUrl)
+		}
 	}
 }
 
-func (t *Torrent) addWebSeed(url string) {
+func (t *Torrent) addWebSeed(url string, encodeUrl func(string) string) {
 	if t.cl.config.DisableWebseeds {
 		return
 	}
@@ -2395,6 +2408,7 @@ func (t *Torrent) addWebSeed(url string) {
 					r: r,
 				}
 			},
+			EncodeUrl: encodeUrl,
 		},
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
 		maxRequests:    maxRequests,

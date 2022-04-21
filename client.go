@@ -1326,7 +1326,7 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	defer cl.unlock()
 	t.initialPieceCheckDisabled = spec.DisableInitialPieceCheck
 	for _, url := range spec.Webseeds {
-		t.addWebSeed(url)
+		t.addWebSeed(url, spec.EncodeWebSeedUrl)
 	}
 	for _, peerAddr := range spec.PeerAddrs {
 		t.addPeer(PeerInfo{

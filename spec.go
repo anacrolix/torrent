@@ -6,6 +6,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/anacrolix/torrent/webseed"
 )
 
 // Specifies a new torrent for adding to a client, or additions to an existing Torrent. There are
@@ -39,7 +40,7 @@ type TorrentSpec struct {
 
 	// Custom encoder for webseed URLs
 	// Leave nil to use the default (url.QueryEscape)
-	EncodeWebSeedUrl func(string) string
+	DefaultWebseedEscapePath webseed.PathEscaper
 }
 
 func TorrentSpecFromMagnetUri(uri string) (spec *TorrentSpec, err error) {

@@ -987,7 +987,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 	}
 	_, err = storagePiece.WriteTo(io.MultiWriter(writers...))
 	if logPieceContents {
-		log.Printf("hashed %q with copy err %v", examineBuf.Bytes(), err)
+		t.logger.WithDefaultLevel(log.Debug).Printf("hashed %q with copy err %v", examineBuf.Bytes(), err)
 	}
 	smartBanWriter.Flush()
 	differingPeers = smartBanWriter.badPeers
@@ -2151,20 +2151,20 @@ func (t *Torrent) dropBannedPeers() {
 		remoteIp := p.remoteIp()
 		if remoteIp == nil {
 			if p.bannableAddr.Ok() {
-				log.Printf("can't get remote ip for peer %v", p)
+				t.logger.WithDefaultLevel(log.Debug).Printf("can't get remote ip for peer %v", p)
 			}
 			return
 		}
 		netipAddr := netip.MustParseAddr(remoteIp.String())
 		if Some(netipAddr) != p.bannableAddr {
-			log.Printf(
+			t.logger.WithDefaultLevel(log.Debug).Printf(
 				"peer remote ip does not match its bannable addr [peer=%v, remote ip=%v, bannable addr=%v]",
 				p, remoteIp, p.bannableAddr)
 		}
 		if _, ok := t.cl.badPeerIPs[netipAddr]; ok {
 			// Should this be a close?
 			p.drop()
-			log.Printf("dropped %v for banned remote IP %v", p, netipAddr)
+			t.logger.WithDefaultLevel(log.Debug).Printf("dropped %v for banned remote IP %v", p, netipAddr)
 		}
 	})
 }
@@ -2184,7 +2184,7 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 	if correct {
 		for peer := range failedPeers {
 			t.cl.banPeerIP(peer.AsSlice())
-			log.Printf("smart banned %v for piece %v", peer, index)
+			t.logger.WithDefaultLevel(log.Debug).Printf("smart banned %v for piece %v", peer, index)
 		}
 		t.dropBannedPeers()
 		for ri := t.pieceRequestIndexOffset(index); ri < t.pieceRequestIndexOffset(index+1); ri++ {

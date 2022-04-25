@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -772,4 +774,76 @@ func TestClientDisabledImplicitNetworksButDhtEnabled(t *testing.T) {
 	defer cl.Close()
 	assert.Empty(t, cl.listeners)
 	assert.NotEmpty(t, cl.DhtServers())
+}
+
+func TestBadPeerIpPort(t *testing.T) {
+	for _, tc := range []struct {
+		title      string
+		ip         net.IP
+		port       int
+		expectedOk bool
+		setup      func(*Client)
+	}{
+		{"empty both", nil, 0, true, func(*Client) {}},
+		{"empty/nil ip", nil, 6666, true, func(*Client) {}},
+		{
+			"empty port",
+			net.ParseIP("127.0.0.1/32"),
+			0, true,
+			func(*Client) {},
+		},
+		{
+			"in doppleganger addresses",
+			net.ParseIP("127.0.0.1/32"),
+			2322,
+			true,
+			func(cl *Client) {
+				cl.dopplegangerAddrs["10.0.0.1:2322"] = struct{}{}
+			},
+		},
+		{
+			"in IP block list",
+			net.ParseIP("10.0.0.1"),
+			2322,
+			true,
+			func(cl *Client) {
+				cl.ipBlockList = iplist.New([]iplist.Range{
+					iplist.Range{First: net.ParseIP("10.0.0.1"), Last: net.ParseIP("10.0.0.255")},
+				})
+			},
+		},
+		{
+			"in bad peer IPs",
+			net.ParseIP("10.0.0.1"),
+			2322,
+			true,
+			func(cl *Client) {
+				ipAddr, ok := netip.AddrFromSlice(net.ParseIP("10.0.0.1"))
+				require.True(t, ok)
+				cl.badPeerIPs = map[netip.Addr]struct{}{}
+				cl.badPeerIPs[ipAddr] = struct{}{}
+			},
+		},
+		{
+			"good",
+			net.ParseIP("10.0.0.1"),
+			2322,
+			false,
+			func(cl *Client) {},
+		},
+	} {
+		t.Run(tc.title, func(t *testing.T) {
+			cfg := TestingConfig(t)
+			cfg.DisableTCP = true
+			cfg.DisableUTP = true
+			cfg.NoDHT = false
+			cl, err := NewClient(cfg)
+			require.NoError(t, err)
+			defer cl.Close()
+
+			tc.setup(cl)
+			require.Equal(t, tc.expectedOk, cl.badPeerIPPort(tc.ip, tc.port))
+		})
+	}
+
 }

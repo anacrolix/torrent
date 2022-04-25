@@ -1136,8 +1136,9 @@ func (cl *Client) badPeerAddr(addr PeerRemoteAddr) bool {
 	return false
 }
 
+// Returns whether the IP address and port are considered "bad".
 func (cl *Client) badPeerIPPort(ip net.IP, port int) bool {
-	if port == 0 {
+	if port == 0 || ip == nil {
 		return true
 	}
 	if cl.dopplegangerAddr(net.JoinHostPort(ip.String(), strconv.FormatInt(int64(port), 10))) {

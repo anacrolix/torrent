@@ -15,7 +15,7 @@ func TestEscapePath(t *testing.T) {
 		escaper PathEscaper,
 		unescaper func(string) (string, error),
 	) {
-		unescaped, err := unescaper(escapePath(parts, escaper))
+		unescaped, err := unescaper(escaper(parts))
 		if !c.Check(err, qt.IsNil) {
 			return
 		}
@@ -27,13 +27,13 @@ func TestEscapePath(t *testing.T) {
 	test(
 		[]string{"a_b-c", "d + e.f"},
 		"a_b-c/d + e.f",
-		nil,
+		defaultPathEscaper,
 		url.QueryUnescape,
 	)
 	test(
 		[]string{"a_1-b_c2", "d 3. (e, f).g"},
 		"a_1-b_c2/d 3. (e, f).g",
-		nil,
+		defaultPathEscaper,
 		url.QueryUnescape,
 	)
 
@@ -66,7 +66,7 @@ func TestEscapePath(t *testing.T) {
 }
 
 func TestEscapePathForEmptyInfoName(t *testing.T) {
-	qt.Check(t, escapePath([]string{`ノ┬─┬ノ ︵ ( \o°o)\`}, nil), qt.Equals, "%E3%83%8E%E2%94%AC%E2%94%80%E2%94%AC%E3%83%8E+%EF%B8%B5+%28+%5Co%C2%B0o%29%5C")
-	qt.Check(t, escapePath([]string{"hello", "world"}, nil), qt.Equals, "hello/world")
-	qt.Check(t, escapePath([]string{"war", "and", "peace"}, nil), qt.Equals, "war/and/peace")
+	qt.Check(t, defaultPathEscaper([]string{`ノ┬─┬ノ ︵ ( \o°o)\`}), qt.Equals, "%E3%83%8E%E2%94%AC%E2%94%80%E2%94%AC%E3%83%8E+%EF%B8%B5+%28+%5Co%C2%B0o%29%5C")
+	qt.Check(t, defaultPathEscaper([]string{"hello", "world"}), qt.Equals, "hello/world")
+	qt.Check(t, defaultPathEscaper([]string{"war", "and", "peace"}), qt.Equals, "war/and/peace")
 }

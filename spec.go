@@ -6,7 +6,6 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
-	"github.com/anacrolix/torrent/webseed"
 )
 
 // Specifies a new torrent for adding to a client, or additions to an existing Torrent. There are
@@ -20,9 +19,11 @@ type TorrentSpec struct {
 	InfoBytes []byte
 	// The name to use if the Name field from the Info isn't available.
 	DisplayName string
-	Webseeds    []string
-	DhtNodes    []string
-	PeerAddrs   []string
+	// WebSeed URLs. For additional options add the URLs separately with Torrent.AddWebSeeds
+	// instead.
+	Webseeds  []string
+	DhtNodes  []string
+	PeerAddrs []string
 	// The combination of the "xs" and "as" fields in magnet links, for now.
 	Sources []string
 
@@ -37,10 +38,6 @@ type TorrentSpec struct {
 	// Whether to allow data download or upload
 	DisallowDataUpload   bool
 	DisallowDataDownload bool
-
-	// Custom encoder for webseed URLs
-	// Leave nil to use the default (url.QueryEscape)
-	DefaultWebseedEscapePath webseed.PathEscaper
 }
 
 func TorrentSpecFromMagnetUri(uri string) (spec *TorrentSpec, err error) {

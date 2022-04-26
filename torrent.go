@@ -2350,30 +2350,24 @@ func (t *Torrent) callbacks() *Callbacks {
 	return &t.cl.config.Callbacks
 }
 
-type AddWebseedsOpt func() *AddWebseedOpts
+type AddWebSeedsOpt func(*webseed.Client)
 
-type AddWebseedOpts struct {
-	// Custom encoder for webseed URLs
-	// Leave nil to use the default (url.QueryEscape)
-	PathEscaper webseed.PathEscaper
-}
-
-
-// Add web seeds to the torrent.
-// If opt is not nil, only the first one is used.
-func (t *Torrent) AddWebSeeds(urls []string, opt ...AddWebseedsOpt) {
-	t.cl.lock()
-	defer t.cl.unlock()
-	for _, u := range urls {
-		if opt == nil {
-			t.addWebSeed(u, nil)
-		} else {
-			t.addWebSeed(u, opt[0]().PathEscaper)
-		}
+// Sets the WebSeed trailing path escaper for a webseed.Client.
+func WebSeedPathEscaper(custom webseed.PathEscaper) AddWebSeedsOpt {
+	return func(c *webseed.Client) {
+		c.PathEscaper = custom
 	}
 }
 
-func (t *Torrent) addWebSeed(url string, pathEscaper webseed.PathEscaper) {
+func (t *Torrent) AddWebSeeds(urls []string, opts ...AddWebSeedsOpt) {
+	t.cl.lock()
+	defer t.cl.unlock()
+	for _, u := range urls {
+		t.addWebSeed(u, opts...)
+	}
+}
+
+func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
 	if t.cl.config.DisableWebseeds {
 		return
 	}
@@ -2410,10 +2404,12 @@ func (t *Torrent) addWebSeed(url string, pathEscaper webseed.PathEscaper) {
 					r: r,
 				}
 			},
-			PathEscaper: pathEscaper,
 		},
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
 		maxRequests:    maxRequests,
+	}
+	for _, opt := range opts {
+		opt(&ws.client)
 	}
 	ws.peer.initUpdateRequestsTimer()
 	ws.requesterCond.L = t.cl.locker()

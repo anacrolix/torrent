@@ -41,11 +41,6 @@ func (r Request) Cancel() {
 	r.cancel()
 }
 
-type Spec struct {
-	Urls      []string
-	EncodeUrl func(string) string
-}
-
 type Client struct {
 	HttpClient *http.Client
 	Url        string
@@ -82,7 +77,7 @@ func (ws *Client) NewRequest(r RequestSpec) Request {
 	ctx, cancel := context.WithCancel(context.Background())
 	var requestParts []requestPart
 	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
-		req, err := NewRequestWithOpts(
+		req, err := newRequest(
 			ws.Url, i, ws.info, e.Start, e.Length,
 			ws.PathEscaper,
 		)

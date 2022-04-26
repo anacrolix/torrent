@@ -52,6 +52,7 @@ type Client struct {
 	// private in the future, if Client ever starts removing pieces.
 	Pieces              roaring.Bitmap
 	ResponseBodyWrapper ResponseBodyWrapper
+	PathEscaper         PathEscaper
 }
 
 type ResponseBodyWrapper func(io.Reader) io.Reader
@@ -76,7 +77,10 @@ func (ws *Client) NewRequest(r RequestSpec) Request {
 	ctx, cancel := context.WithCancel(context.Background())
 	var requestParts []requestPart
 	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
-		req, err := NewRequest(ws.Url, i, ws.info, e.Start, e.Length)
+		req, err := newRequest(
+			ws.Url, i, ws.info, e.Start, e.Length,
+			ws.PathEscaper,
+		)
 		if err != nil {
 			panic(err)
 		}

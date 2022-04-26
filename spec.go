@@ -19,9 +19,11 @@ type TorrentSpec struct {
 	InfoBytes []byte
 	// The name to use if the Name field from the Info isn't available.
 	DisplayName string
-	Webseeds    []string
-	DhtNodes    []string
-	PeerAddrs   []string
+	// WebSeed URLs. For additional options add the URLs separately with Torrent.AddWebSeeds
+	// instead.
+	Webseeds  []string
+	DhtNodes  []string
+	PeerAddrs []string
 	// The combination of the "xs" and "as" fields in magnet links, for now.
 	Sources []string
 

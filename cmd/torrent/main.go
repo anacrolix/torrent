@@ -7,14 +7,18 @@ import (
 	"fmt"
 	"io"
 	stdLog "log"
+	"net/http"
 	"os"
 
 	"github.com/anacrolix/args"
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/log"
+	xprometheus "github.com/anacrolix/missinggo/v2/prometheus"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/version"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -22,6 +26,11 @@ func main() {
 		log.Printf("error in main: %v", err)
 		os.Exit(1)
 	}
+}
+
+func init() {
+	prometheus.MustRegister(xprometheus.NewExpvarCollector())
+	http.Handle("/metrics", promhttp.Handler())
 }
 
 func mainErr() error {

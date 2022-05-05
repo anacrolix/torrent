@@ -578,7 +578,7 @@ type messageWriter func(pp.Message) bool
 // This function seems to only used by Peer.request. It's all logic checks, so maybe we can no-op it
 // when we want to go fast.
 func (cn *Peer) shouldRequest(r RequestIndex) error {
-	pi := pieceIndex(r / cn.t.chunksPerRegularPiece())
+	pi := cn.t.pieceIndexOfRequestIndex(r)
 	if cn.requestState.Cancelled.Contains(r) {
 		return errors.New("request is cancelled and waiting acknowledgement")
 	}

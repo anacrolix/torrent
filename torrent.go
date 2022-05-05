@@ -1257,7 +1257,7 @@ func (t *Torrent) piecePriority(piece pieceIndex) piecePriority {
 }
 
 func (t *Torrent) pendRequest(req RequestIndex) {
-	t.piece(int(req / t.chunksPerRegularPiece())).pendChunkIndex(req % t.chunksPerRegularPiece())
+	t.piece(t.pieceIndexOfRequestIndex(req)).pendChunkIndex(req % t.chunksPerRegularPiece())
 }
 
 func (t *Torrent) pieceCompletionChanged(piece pieceIndex, reason string) {
@@ -2437,10 +2437,10 @@ func (t *Torrent) peerIsActive(p *Peer) (active bool) {
 }
 
 func (t *Torrent) requestIndexToRequest(ri RequestIndex) Request {
-	index := ri / t.chunksPerRegularPiece()
+	index := t.pieceIndexOfRequestIndex(ri)
 	return Request{
 		pp.Integer(index),
-		t.piece(int(index)).chunkIndexSpec(ri % t.chunksPerRegularPiece()),
+		t.piece(index).chunkIndexSpec(ri % t.chunksPerRegularPiece()),
 	}
 }
 
@@ -2493,4 +2493,8 @@ func (t *Torrent) hasStorageCap() bool {
 	}
 	_, ok := (*f)()
 	return ok
+}
+
+func (t *Torrent) pieceIndexOfRequestIndex(ri RequestIndex) pieceIndex {
+	return pieceIndex(ri / t.chunksPerRegularPiece())
 }

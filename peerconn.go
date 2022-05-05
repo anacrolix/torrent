@@ -1117,7 +1117,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 
 	decoder := pp.Decoder{
 		R:         bufio.NewReaderSize(c.r, 1<<17),
-		MaxLength: 256 * 1024,
+		MaxLength: c.t.cl.config.MaxResponseLength,
 		Pool:      &t.chunkPool,
 	}
 	for {

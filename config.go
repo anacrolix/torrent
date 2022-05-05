@@ -10,6 +10,7 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/version"
 	"golang.org/x/time/rate"
 
@@ -155,6 +156,10 @@ type ClientConfig struct {
 	DisableWebtorrent bool
 	DisableWebseeds   bool
 
+	// Drop any peer response bigger than this. To prevent DoS or abuse.
+	// TorrentSpec.ChunkSize can't be bigger than this value
+	MaxResponseLength pp.Integer
+
 	Callbacks Callbacks
 }
 
@@ -201,6 +206,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		ListenPort:            42069,
 		Extensions:            defaultPeerExtensionBytes(),
 		AcceptPeerConnections: true,
+		MaxResponseLength:     256 * 1024,
 	}
 	// cc.ConnTracker.SetNoMaxEntries()
 	// cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }

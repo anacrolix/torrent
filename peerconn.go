@@ -8,7 +8,6 @@ import (
 	"io"
 	"math/rand"
 	"net"
-	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -130,13 +129,7 @@ type Peer struct {
 	logger log.Logger
 }
 
-type peerRequests struct {
-	typedRoaring.Bitmap[RequestIndex]
-}
-
-func (p *peerRequests) IterateSnapshot(f func(request_strategy.RequestIndex) bool) {
-	p.Clone().Iterate(f)
-}
+type peerRequests = orderedBitmap[RequestIndex]
 
 func (p *Peer) initRequestState() {
 	p.requestState.Requests = &peerRequests{}
@@ -359,13 +352,25 @@ func (cn *Peer) downloadRate() float64 {
 	return float64(num) / cn.totalExpectingTime().Seconds()
 }
 
-func (cn *Peer) numRequestsByPiece() (ret map[pieceIndex]int) {
-	ret = make(map[pieceIndex]int)
-	cn.requestState.Requests.Iterate(func(x RequestIndex) bool {
-		ret[cn.t.pieceIndexOfRequestIndex(x)]++
+func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int)) {
+	var last Option[pieceIndex]
+	var count int
+	next := func(item Option[pieceIndex]) {
+		if item == last {
+			count++
+		} else {
+			if count != 0 {
+				f(last.Value(), count)
+			}
+			last = item
+			count = 1
+		}
+	}
+	cn.requestState.Requests.Iterate(func(requestIndex request_strategy.RequestIndex) bool {
+		next(Some(cn.t.pieceIndexOfRequestIndex(requestIndex)))
 		return true
 	})
-	return
+	next(None[pieceIndex]())
 }
 
 func (cn *Peer) writeStatus(w io.Writer, t *Torrent) {
@@ -404,20 +409,9 @@ func (cn *Peer) writeStatus(w io.Writer, t *Torrent) {
 		cn.downloadRate()/(1<<10),
 	)
 	fmt.Fprintf(w, "    requested pieces:")
-	type pieceNumRequestsType struct {
-		piece       pieceIndex
-		numRequests int
-	}
-	var pieceNumRequests []pieceNumRequestsType
-	for piece, count := range cn.numRequestsByPiece() {
-		pieceNumRequests = append(pieceNumRequests, pieceNumRequestsType{piece, count})
-	}
-	sort.Slice(pieceNumRequests, func(i, j int) bool {
-		return pieceNumRequests[i].piece < pieceNumRequests[j].piece
+	cn.iterContiguousPieceRequests(func(piece pieceIndex, count int) {
+		fmt.Fprintf(w, " %v(%v)", piece, count)
 	})
-	for _, elem := range pieceNumRequests {
-		fmt.Fprintf(w, " %v(%v)", elem.piece, elem.numRequests)
-	}
 	fmt.Fprintf(w, "\n")
 }
 

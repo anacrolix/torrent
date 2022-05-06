@@ -6,9 +6,7 @@ import (
 
 type PeerRequestState struct {
 	Interested bool
-	// Expecting. TODO: This should be ordered so webseed requesters initiate in the same order they
-	// were assigned.
-	Requests PeerRequests
+	Requests   PeerRequests
 	// Cancelled and waiting response
 	Cancelled typedRoaring.Bitmap[RequestIndex]
 }

@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"container/heap"
 	"context"
 	"encoding/gob"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
+	"github.com/lispad/go-generics-tools/binheap"
 
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 )
@@ -77,8 +77,10 @@ func (p *desiredPeerRequests) Len() int {
 }
 
 func (p *desiredPeerRequests) Less(i, j int) bool {
-	leftRequest := p.requestIndexes[i]
-	rightRequest := p.requestIndexes[j]
+	return p.lessByValue(p.requestIndexes[i], p.requestIndexes[j])
+}
+
+func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex) bool {
 	t := p.peer.t
 	leftPieceIndex := t.pieceIndexOfRequestIndex(leftRequest)
 	rightPieceIndex := t.pieceIndexOfRequestIndex(rightRequest)
@@ -259,7 +261,7 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 		panic("insufficient write buffer")
 	}
 	more := true
-	requestHeap := &next.Requests
+	requestHeap := binheap.FromSlice(next.Requests.requestIndexes, next.Requests.lessByValue)
 	t := p.t
 	originalRequestCount := current.Requests.GetCardinality()
 	// We're either here on a timer, or because we ran out of requests. Both are valid reasons to
@@ -269,9 +271,8 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 			"expected zero existing requests (%v) for update reason %q",
 			originalRequestCount, p.needRequestUpdate))
 	}
-	heap.Init(requestHeap)
 	for requestHeap.Len() != 0 && maxRequests(current.Requests.GetCardinality()+current.Cancelled.GetCardinality()) < p.nominalMaxRequests() {
-		req := heap.Pop(requestHeap).(RequestIndex)
+		req := requestHeap.Pop()
 		existing := t.requestingPeer(req)
 		if existing != nil && existing != p {
 			// Don't steal from the poor.

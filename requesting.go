@@ -96,16 +96,31 @@ func (p *desiredPeerRequests) Less(i, j int) bool {
 	rightPiece := t.piece(rightPieceIndex)
 	// Putting this first means we can steal requests from lesser-performing peers for our first few
 	// new requests.
-	ml = ml.Int(
+	priority := func() piecePriority {
 		// Technically we would be happy with the cached priority here, except we don't actually
 		// cache it anymore, and Torrent.piecePriority just does another lookup of *Piece to resolve
 		// the priority through Piece.purePriority, which is probably slower.
-		-int(leftPiece.purePriority()),
-		-int(rightPiece.purePriority()),
-	)
+		leftPriority := leftPiece.purePriority()
+		rightPriority := rightPiece.purePriority()
+		ml = ml.Int(
+			-int(leftPriority),
+			-int(rightPriority),
+		)
+		if !ml.Ok() {
+			if leftPriority != rightPriority {
+				panic("expected equal")
+			}
+		}
+		return leftPriority
+	}()
+	if ml.Ok() {
+		return ml.MustLess()
+	}
 	leftPeer := t.pendingRequests[leftRequest]
 	rightPeer := t.pendingRequests[rightRequest]
+	// Prefer chunks already requested from this peer.
 	ml = ml.Bool(rightPeer == p.peer, leftPeer == p.peer)
+	// Prefer unrequested chunks.
 	ml = ml.Bool(rightPeer == nil, leftPeer == nil)
 	if ml.Ok() {
 		return ml.MustLess()
@@ -128,8 +143,18 @@ func (p *desiredPeerRequests) Less(i, j int) bool {
 		ml = ml.CmpInt64(rightLast.Sub(leftLast).Nanoseconds())
 	}
 	ml = ml.Int(
-		int(leftPiece.relativeAvailability),
-		int(rightPiece.relativeAvailability))
+		leftPiece.relativeAvailability,
+		rightPiece.relativeAvailability)
+	if priority == PiecePriorityReadahead {
+		// TODO: For readahead in particular, it would be even better to consider distance from the
+		// reader position so that reads earlier in a torrent don't starve reads later in the
+		// torrent. This would probably require reconsideration of how readahead priority works.
+		ml = ml.Int(leftPieceIndex, rightPieceIndex)
+	} else {
+		// TODO: To prevent unnecessarily requesting from disparate pieces, and to ensure pieces are
+		// selected randomly when availability is even, there should be some fixed ordering of
+		// pieces.
+	}
 	return ml.Less()
 }
 

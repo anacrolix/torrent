@@ -158,7 +158,7 @@ type ClientConfig struct {
 
 	// Drop any peer response bigger than this. To prevent DoS or abuse.
 	// TorrentSpec.ChunkSize can't be bigger than this value
-	MaxResponseLength pp.Integer
+	PeerMessageDecoderMaxLength pp.Integer
 
 	Callbacks Callbacks
 }
@@ -201,12 +201,12 @@ func NewDefaultClientConfig() *ClientConfig {
 			Preferred:        true,
 			RequirePreferred: false,
 		},
-		CryptoSelector:        mse.DefaultCryptoSelector,
-		CryptoProvides:        mse.AllSupportedCrypto,
-		ListenPort:            42069,
-		Extensions:            defaultPeerExtensionBytes(),
-		AcceptPeerConnections: true,
-		MaxResponseLength:     256 * 1024,
+		CryptoSelector:              mse.DefaultCryptoSelector,
+		CryptoProvides:              mse.AllSupportedCrypto,
+		ListenPort:                  42069,
+		Extensions:                  defaultPeerExtensionBytes(),
+		AcceptPeerConnections:       true,
+		PeerMessageDecoderMaxLength: 256 * 1024,
 	}
 	// cc.ConnTracker.SetNoMaxEntries()
 	// cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }

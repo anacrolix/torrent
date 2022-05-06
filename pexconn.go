@@ -73,7 +73,7 @@ func (s *pexConnState) Share(postfn messageWriter) bool {
 	select {
 	case <-s.gate:
 		if tx := s.genmsg(); tx != nil {
-			s.dbg.Print("sending PEX message: ", tx)
+			//s.dbg.Print("sending PEX message: ", tx)
 			flow := postfn(tx.Message(s.xid))
 			s.sched(pexInterval)
 			return flow
@@ -89,11 +89,11 @@ func (s *pexConnState) Share(postfn messageWriter) bool {
 // Recv is called from the reader goroutine
 func (s *pexConnState) Recv(payload []byte) error {
 	if !s.torrent.wantPeers() {
-		s.dbg.Printf("peer reserve ok, incoming PEX discarded")
+		//s.dbg.Printf("peer reserve ok, incoming PEX discarded")
 		return nil
 	}
 	if time.Now().Before(s.torrent.pex.rest) {
-		s.dbg.Printf("in cooldown period, incoming PEX discarded")
+		//s.dbg.Printf("in cooldown period, incoming PEX discarded")
 		return nil
 	}
 
@@ -101,14 +101,14 @@ func (s *pexConnState) Recv(payload []byte) error {
 	if err != nil {
 		return fmt.Errorf("error unmarshalling PEX message: %s", err)
 	}
-	s.dbg.Print("incoming PEX message: ", rx)
+	//s.dbg.Print("incoming PEX message: ", rx)
 	torrent.Add("pex added peers received", int64(len(rx.Added)))
 	torrent.Add("pex added6 peers received", int64(len(rx.Added6)))
 
 	var peers peerInfos
 	peers.AppendFromPex(rx.Added6, rx.Added6Flags)
 	peers.AppendFromPex(rx.Added, rx.AddedFlags)
-	s.dbg.Printf("adding %d peers from PEX", len(peers))
+	//s.dbg.Printf("adding %d peers from PEX", len(peers))
 	if len(peers) > 0 {
 		s.torrent.pex.rest = time.Now().Add(pexInterval)
 		s.torrent.addPeers(peers)

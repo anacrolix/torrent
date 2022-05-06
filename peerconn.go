@@ -1685,7 +1685,7 @@ func (c *PeerConn) setTorrent(t *Torrent) {
 		panic("connection already associated with a torrent")
 	}
 	c.t = t
-	c.logger.WithDefaultLevel(log.Debug).Printf("set torrent=%v", t)
+	//c.logger.WithDefaultLevel(log.Debug).Printf("set torrent=%v", t)
 	t.reconcileHandshakeStats(c)
 }
 

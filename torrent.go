@@ -1027,7 +1027,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	if p.useful() {
 		return
 	}
-	//t.logger.WithDefaultLevel(log.Debug).Printf("dropping %v, which is mutually complete", p)
+	t.logger.WithDefaultLevel(log.Debug).Printf("dropping %v, which is mutually complete", p)
 	p.drop()
 }
 
@@ -1331,7 +1331,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
 	}
 	if changed {
-		//log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).LogLevel(log.Debug, t.logger)
+		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).LogLevel(log.Debug, t.logger)
 		t.pieceCompletionChanged(piece, "Torrent.updatePieceCompletion")
 	}
 	return changed
@@ -1600,7 +1600,7 @@ func (t *Torrent) onWebRtcConn(
 func (t *Torrent) logRunHandshookConn(pc *PeerConn, logAll bool, level log.Level) {
 	err := t.cl.runHandshookConn(pc, t)
 	if err != nil || logAll {
-		//t.logger.WithDefaultLevel(level).Printf("error running handshook conn: %v", err)
+		t.logger.WithDefaultLevel(level).Printf("error running handshook conn: %v", err)
 	}
 }
 
@@ -1961,9 +1961,9 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 }
 
 func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
-	//t.logger.LazyLog(log.Debug, func() log.Msg {
-	//	return log.Fstr("hashed piece %d (passed=%t)", piece, passed)
-	//})
+	t.logger.LazyLog(log.Debug, func() log.Msg {
+		return log.Fstr("hashed piece %d (passed=%t)", piece, passed)
+	})
 	p := t.piece(piece)
 	p.numVerifies++
 	t.cl.event.Broadcast()
@@ -2111,7 +2111,7 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 }
 
 func (t *Torrent) tryCreateMorePieceHashers() {
-	for !t.closed.IsSet() && t.activePieceHashes < 16 && t.tryCreatePieceHasher() {
+	for !t.closed.IsSet() && t.activePieceHashes < 2 && t.tryCreatePieceHasher() {
 	}
 }
 

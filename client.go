@@ -514,26 +514,26 @@ func (cl *Client) acceptConnections(l Listener) {
 			return
 		}
 		if err != nil {
-			//log.Fmsg("error accepting connection: %s", err).LogLevel(log.Debug, cl.logger)
+			log.Fmsg("error accepting connection: %s", err).LogLevel(log.Debug, cl.logger)
 			continue
 		}
 		go func() {
 			if reject != nil {
 				torrent.Add("rejected accepted connections", 1)
-				//cl.logger.LazyLog(log.Debug, func() log.Msg {
-				//	return log.Fmsg("rejecting accepted conn: %v", reject)
-				//})
+				cl.logger.LazyLog(log.Debug, func() log.Msg {
+					return log.Fmsg("rejecting accepted conn: %v", reject)
+				})
 				conn.Close()
 			} else {
 				go cl.incomingConnection(conn)
 			}
-			//cl.logger.LazyLog(log.Debug, func() log.Msg {
-			//	return log.Fmsg("accepted %q connection at %q from %q",
-			//		l.Addr().Network(),
-			//		conn.LocalAddr(),
-			//		conn.RemoteAddr(),
-			//	)
-			//})
+			cl.logger.LazyLog(log.Debug, func() log.Msg {
+				return log.Fmsg("accepted %q connection at %q from %q",
+					l.Addr().Network(),
+					conn.LocalAddr(),
+					conn.RemoteAddr(),
+				)
+			})
 			torrent.Add(fmt.Sprintf("accepted conn remote IP len=%d", len(addrIpOrNil(conn.RemoteAddr()))), 1)
 			torrent.Add(fmt.Sprintf("accepted conn network=%s", conn.RemoteAddr().Network()), 1)
 			torrent.Add(fmt.Sprintf("accepted on %s listener", l.Addr().Network()), 1)
@@ -913,13 +913,13 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 	}
 	t, err := cl.receiveHandshakes(c)
 	if err != nil {
-		//cl.logger.LazyLog(log.Debug, func() log.Msg {
-		//	return log.Fmsg(
-		//		"error receiving handshakes on %v: %s", c, err,
-		//	).Add(
-		//		"network", c.Network,
-		//	)
-		//})
+		cl.logger.LazyLog(log.Debug, func() log.Msg {
+			return log.Fmsg(
+				"error receiving handshakes on %v: %s", c, err,
+			).Add(
+				"network", c.Network,
+			)
+		})
 		torrent.Add("error receiving handshake", 1)
 		cl.lock()
 		cl.onBadAccept(c.RemoteAddr)
@@ -928,9 +928,9 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 	}
 	if t == nil {
 		torrent.Add("received handshake for unloaded torrent", 1)
-		//cl.logger.LazyLog(log.Debug, func() log.Msg {
-		//	return log.Fmsg("received handshake for unloaded torrent")
-		//})
+		cl.logger.LazyLog(log.Debug, func() log.Msg {
+			return log.Fmsg("received handshake for unloaded torrent")
+		})
 		cl.lock()
 		cl.onBadAccept(c.RemoteAddr)
 		cl.unlock()
@@ -1498,7 +1498,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemot
 		l: cl.config.DownloadRateLimiter,
 		r: c.r,
 	}
-	//c.logger.WithDefaultLevel(log.Debug).Printf("initialized with remote %v over network %v (outgoing=%t)", remoteAddr, network, outgoing)
+	c.logger.WithDefaultLevel(log.Debug).Printf("initialized with remote %v over network %v (outgoing=%t)", remoteAddr, network, outgoing)
 	for _, f := range cl.config.Callbacks.NewPeer {
 		f(&c.Peer)
 	}

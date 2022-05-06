@@ -92,7 +92,6 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	var cl Client
 	cl.init(&ClientConfig{
 		DownloadRateLimiter: unlimited,
-		MaxResponseLength:   2 * defaultChunkSize,
 	})
 	cl.initLogger()
 	ts := &torrentStorage{}

@@ -463,10 +463,10 @@ func (t *Torrent) onSetInfo() {
 		}
 		p.relativeAvailability = t.selectivePieceAvailabilityFromPeers(i)
 		t.addRequestOrderPiece(i)
-		t.updatePieceCompletion(pieceIndex(i))
+		t.updatePieceCompletion(i)
 		if !t.initialPieceCheckDisabled && !p.storageCompletionOk {
 			// t.logger.Printf("piece %s completion unknown, queueing check", p)
-			t.queuePieceCheck(pieceIndex(i))
+			t.queuePieceCheck(i)
 		}
 	}
 	t.cl.event.Broadcast()

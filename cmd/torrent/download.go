@@ -195,22 +195,24 @@ func addTorrents(ctx context.Context, client *torrent.Client, flags downloadFlag
 func waitForPieces(ctx context.Context, t *torrent.Torrent, beginIndex, endIndex int) {
 	sub := t.SubscribePieceStateChanges()
 	defer sub.Close()
-	pending := make(map[int]struct{})
-	for i := beginIndex; i < endIndex; i++ {
-		pending[i] = struct{}{}
-	}
 	expected := storage.Completion{
 		Complete: true,
 		Ok:       true,
 	}
+	pending := make(map[int]struct{})
+	for i := beginIndex; i < endIndex; i++ {
+		if t.Piece(i).State().Completion != expected {
+			pending[i] = struct{}{}
+		}
+	}
 	for {
+		if len(pending) == 0 {
+			return
+		}
 		select {
 		case ev := <-sub.Values:
 			if ev.Completion == expected {
 				delete(pending, ev.Index)
-			}
-			if len(pending) == 0 {
-				return
 			}
 		case <-ctx.Done():
 			return

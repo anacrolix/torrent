@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/anacrolix/torrent/typed-roaring"
 )
 
 type Piece struct {
@@ -71,7 +71,7 @@ func (p *Piece) hasDirtyChunks() bool {
 }
 
 func (p *Piece) numDirtyChunks() chunkIndexType {
-	return chunkIndexType(roaringBitmapRangeCardinality(
+	return chunkIndexType(roaringBitmapRangeCardinality[RequestIndex](
 		&p.t.dirtyChunks,
 		p.requestIndexOffset(),
 		p.t.pieceRequestIndexOffset(p.index+1)))
@@ -251,7 +251,7 @@ func init() {
 
 // Use an iterator to jump between dirty bits.
 type undirtiedChunksIter struct {
-	TorrentDirtyChunks *roaring.Bitmap
+	TorrentDirtyChunks *typedRoaring.Bitmap[RequestIndex]
 	StartRequestIndex  RequestIndex
 	EndRequestIndex    RequestIndex
 }

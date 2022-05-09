@@ -3,11 +3,11 @@ package torrent
 import (
 	"testing"
 
-	"github.com/RoaringBitmap/roaring"
+	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
 func BenchmarkUndirtiedChunksIter(b *testing.B) {
-	var bitmap roaring.Bitmap
+	var bitmap typedRoaring.Bitmap[RequestIndex]
 	a := undirtiedChunksIter{
 		TorrentDirtyChunks: &bitmap,
 		StartRequestIndex:  69,

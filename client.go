@@ -1484,6 +1484,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemot
 		connString: connString,
 		conn:       nc,
 	}
+	c.initRequestState()
 	// TODO: Need to be much more explicit about this, including allowing non-IP bannable addresses.
 	if remoteAddr != nil {
 		netipAddrPort, err := netip.ParseAddrPort(remoteAddr.String())

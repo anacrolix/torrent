@@ -67,21 +67,21 @@ type (
 	chunkIndexType = request_strategy.ChunkIndex
 )
 
-type peerRequests struct {
+type desiredPeerRequests struct {
 	requestIndexes []RequestIndex
 	peer           *Peer
 }
 
-func (p *peerRequests) Len() int {
+func (p *desiredPeerRequests) Len() int {
 	return len(p.requestIndexes)
 }
 
-func (p *peerRequests) Less(i, j int) bool {
+func (p *desiredPeerRequests) Less(i, j int) bool {
 	leftRequest := p.requestIndexes[i]
 	rightRequest := p.requestIndexes[j]
 	t := p.peer.t
-	leftPieceIndex := leftRequest / t.chunksPerRegularPiece()
-	rightPieceIndex := rightRequest / t.chunksPerRegularPiece()
+	leftPieceIndex := t.pieceIndexOfRequestIndex(leftRequest)
+	rightPieceIndex := t.pieceIndexOfRequestIndex(rightRequest)
 	ml := multiless.New()
 	// Push requests that can't be served right now to the end. But we don't throw them away unless
 	// there's a better alternative. This is for when we're using the fast extension and get choked
@@ -92,8 +92,8 @@ func (p *peerRequests) Less(i, j int) bool {
 			!p.peer.peerAllowedFast.Contains(rightPieceIndex),
 		)
 	}
-	leftPiece := t.piece(int(leftPieceIndex))
-	rightPiece := t.piece(int(rightPieceIndex))
+	leftPiece := t.piece(leftPieceIndex)
+	rightPiece := t.piece(rightPieceIndex)
 	// Putting this first means we can steal requests from lesser-performing peers for our first few
 	// new requests.
 	ml = ml.Int(
@@ -133,15 +133,15 @@ func (p *peerRequests) Less(i, j int) bool {
 	return ml.Less()
 }
 
-func (p *peerRequests) Swap(i, j int) {
+func (p *desiredPeerRequests) Swap(i, j int) {
 	p.requestIndexes[i], p.requestIndexes[j] = p.requestIndexes[j], p.requestIndexes[i]
 }
 
-func (p *peerRequests) Push(x interface{}) {
+func (p *desiredPeerRequests) Push(x interface{}) {
 	p.requestIndexes = append(p.requestIndexes, x.(RequestIndex))
 }
 
-func (p *peerRequests) Pop() interface{} {
+func (p *desiredPeerRequests) Pop() interface{} {
 	last := len(p.requestIndexes) - 1
 	x := p.requestIndexes[last]
 	p.requestIndexes = p.requestIndexes[:last]
@@ -149,7 +149,7 @@ func (p *peerRequests) Pop() interface{} {
 }
 
 type desiredRequestState struct {
-	Requests   peerRequests
+	Requests   desiredPeerRequests
 	Interested bool
 }
 
@@ -161,7 +161,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 		return
 	}
 	input := p.t.getRequestStrategyInput()
-	requestHeap := peerRequests{
+	requestHeap := desiredPeerRequests{
 		peer: p,
 	}
 	request_strategy.GetRequestablePieces(
@@ -174,7 +174,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 			if !p.peerHasPiece(pieceIndex) {
 				return
 			}
-			allowedFast := p.peerAllowedFast.ContainsInt(pieceIndex)
+			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
 			p.t.piece(pieceIndex).undirtiedChunksIter.Iter(func(ci request_strategy.ChunkIndex) {
 				r := p.t.pieceRequestIndexOffset(pieceIndex) + ci
 				if !allowedFast {

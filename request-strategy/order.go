@@ -11,8 +11,8 @@ import (
 )
 
 type (
-	RequestIndex  = uint32
-	ChunkIndex    = uint32
+	RequestIndex  uint32
+	ChunkIndex    = RequestIndex
 	Request       = types.Request
 	pieceIndex    = types.PieceIndex
 	piecePriority = types.PiecePriority

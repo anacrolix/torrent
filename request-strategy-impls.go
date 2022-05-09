@@ -55,10 +55,6 @@ func (r requestStrategyTorrent) IgnorePiece(i int) bool {
 	return false
 }
 
-func (r requestStrategyTorrent) ChunksPerPiece() uint32 {
-	return r.t.chunksPerRegularPiece()
-}
-
 func (r requestStrategyTorrent) PieceLength() int64 {
 	return r.t.info.PieceLength
 }

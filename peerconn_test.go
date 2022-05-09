@@ -221,6 +221,7 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	pc := PeerConn{
 		Peer: Peer{t: tt},
 	}
+	pc.initRequestState()
 	pc.peerImpl = &pc
 	tt.conns[&pc] = struct{}{}
 	c.Assert(pc.onPeerSentHaveAll(), qt.IsNil)

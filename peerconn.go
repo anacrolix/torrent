@@ -26,6 +26,7 @@ import (
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
+	"github.com/anacrolix/torrent/typed-roaring"
 )
 
 type PeerSource string
@@ -120,13 +121,25 @@ type Peer struct {
 	peerMinPieces pieceIndex
 	// Pieces we've accepted chunks for from the peer.
 	peerTouchedPieces map[pieceIndex]struct{}
-	peerAllowedFast   roaring.Bitmap
+	peerAllowedFast   typedRoaring.Bitmap[pieceIndex]
 
 	PeerMaxRequests  maxRequests // Maximum pending requests the peer allows.
 	PeerExtensionIDs map[pp.ExtensionName]pp.ExtensionNumber
 	PeerClientName   atomic.Value
 
 	logger log.Logger
+}
+
+type peerRequests struct {
+	typedRoaring.Bitmap[RequestIndex]
+}
+
+func (p *peerRequests) IterateSnapshot(f func(request_strategy.RequestIndex) bool) {
+	p.Clone().Iterate(f)
+}
+
+func (p *Peer) initRequestState() {
+	p.requestState.Requests = &peerRequests{}
 }
 
 // Maintains the state of a BitTorrent-protocol based connection with a peer.
@@ -189,11 +202,11 @@ func (cn *Peer) expectingChunks() bool {
 		return true
 	}
 	haveAllowedFastRequests := false
-	cn.peerAllowedFast.Iterate(func(i uint32) bool {
-		haveAllowedFastRequests = roaringBitmapRangeCardinality(
-			&cn.requestState.Requests,
-			cn.t.pieceRequestIndexOffset(pieceIndex(i)),
-			cn.t.pieceRequestIndexOffset(pieceIndex(i+1)),
+	cn.peerAllowedFast.Iterate(func(i pieceIndex) bool {
+		haveAllowedFastRequests = roaringBitmapRangeCardinality[RequestIndex](
+			cn.requestState.Requests,
+			cn.t.pieceRequestIndexOffset(i),
+			cn.t.pieceRequestIndexOffset(i+1),
 		) == 0
 		return !haveAllowedFastRequests
 	})
@@ -201,7 +214,7 @@ func (cn *Peer) expectingChunks() bool {
 }
 
 func (cn *Peer) remoteChokingPiece(piece pieceIndex) bool {
-	return cn.peerChoking && !cn.peerAllowedFast.Contains(bitmap.BitIndex(piece))
+	return cn.peerChoking && !cn.peerAllowedFast.Contains(piece)
 }
 
 // Returns true if the connection is over IPv6.
@@ -348,8 +361,8 @@ func (cn *Peer) downloadRate() float64 {
 
 func (cn *Peer) numRequestsByPiece() (ret map[pieceIndex]int) {
 	ret = make(map[pieceIndex]int)
-	cn.requestState.Requests.Iterate(func(x uint32) bool {
-		ret[pieceIndex(x/cn.t.chunksPerRegularPiece())]++
+	cn.requestState.Requests.Iterate(func(x RequestIndex) bool {
+		ret[cn.t.pieceIndexOfRequestIndex(x)]++
 		return true
 	})
 	return
@@ -597,7 +610,7 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 	if cn.t.pieceQueuedForHash(pi) {
 		panic("piece is queued for hash")
 	}
-	if cn.peerChoking && !cn.peerAllowedFast.Contains(bitmap.BitIndex(pi)) {
+	if cn.peerChoking && !cn.peerAllowedFast.Contains(pi) {
 		// This could occur if we made a request with the fast extension, and then got choked and
 		// haven't had the request rejected yet.
 		if !cn.requestState.Requests.Contains(r) {
@@ -1152,13 +1165,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				break
 			}
 			if !c.fastEnabled() {
-				if !c.deleteAllRequests().IsEmpty() {
-					c.t.iterPeers(func(p *Peer) {
-						if p.isLowOnRequests() {
-							p.updateRequests("choked by non-fast PeerConn")
-						}
-					})
-				}
+				c.deleteAllRequests("choked by non-fast PeerConn")
 			} else {
 				// We don't decrement pending requests here, let's wait for the peer to either
 				// reject or satisfy the outstanding requests. Additionally, some peers may unchoke
@@ -1178,8 +1185,8 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			}
 			c.peerChoking = false
 			preservedCount := 0
-			c.requestState.Requests.Iterate(func(x uint32) bool {
-				if !c.peerAllowedFast.Contains(x / c.t.chunksPerRegularPiece()) {
+			c.requestState.Requests.Iterate(func(x RequestIndex) bool {
+				if !c.peerAllowedFast.Contains(c.t.pieceIndexOfRequestIndex(x)) {
 					preservedCount++
 				}
 				return true
@@ -1404,7 +1411,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	}
 	c.decExpectedChunkReceive(req)
 
-	if c.peerChoking && c.peerAllowedFast.Contains(bitmap.BitIndex(ppReq.Index)) {
+	if c.peerChoking && c.peerAllowedFast.Contains(pieceIndex(ppReq.Index)) {
 		chunksReceived.Add("due to allowed fast", 1)
 	}
 
@@ -1636,15 +1643,22 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 	return true
 }
 
-func (c *Peer) deleteAllRequests() (deleted *roaring.Bitmap) {
-	deleted = c.requestState.Requests.Clone()
-	deleted.Iterate(func(x uint32) bool {
+func (c *Peer) deleteAllRequests(reason string) {
+	if c.requestState.Requests.IsEmpty() {
+		return
+	}
+	c.requestState.Requests.IterateSnapshot(func(x RequestIndex) bool {
 		if !c.deleteRequest(x) {
 			panic("request should exist")
 		}
 		return true
 	})
 	c.assertNoRequests()
+	c.t.iterPeers(func(p *Peer) {
+		if p.isLowOnRequests() {
+			p.updateRequests(reason)
+		}
+	})
 	return
 }
 
@@ -1654,9 +1668,8 @@ func (c *Peer) assertNoRequests() {
 	}
 }
 
-func (c *Peer) cancelAllRequests() (cancelled *roaring.Bitmap) {
-	cancelled = c.requestState.Requests.Clone()
-	cancelled.Iterate(func(x uint32) bool {
+func (c *Peer) cancelAllRequests() {
+	c.requestState.Requests.IterateSnapshot(func(x RequestIndex) bool {
 		c.cancel(x)
 		return true
 	})

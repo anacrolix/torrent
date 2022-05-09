@@ -86,7 +86,7 @@ func (ws *webseedPeer) requester(i int) {
 start:
 	for !ws.peer.closed.IsSet() {
 		restart := false
-		ws.peer.requestState.Requests.Iterate(func(x uint32) bool {
+		ws.peer.requestState.Requests.Iterate(func(x RequestIndex) bool {
 			r := ws.peer.t.requestIndexToRequest(x)
 			if _, ok := ws.activeRequests[r]; ok {
 				return true

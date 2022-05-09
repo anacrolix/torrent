@@ -30,6 +30,7 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
+	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pion/datachannel"
 
@@ -143,7 +144,7 @@ type Torrent struct {
 	pendingRequests map[RequestIndex]*Peer
 	lastRequested   map[RequestIndex]time.Time
 	// Chunks we've written to since the corresponding piece was last checked.
-	dirtyChunks roaring.Bitmap
+	dirtyChunks typedRoaring.Bitmap[RequestIndex]
 
 	pex pexState
 
@@ -919,15 +920,15 @@ func (t *Torrent) pieceNumChunks(piece pieceIndex) chunkIndexType {
 	return chunkIndexType((t.pieceLength(piece) + t.chunkSize - 1) / t.chunkSize)
 }
 
-func (t *Torrent) chunksPerRegularPiece() uint32 {
-	return uint32((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
+func (t *Torrent) chunksPerRegularPiece() chunkIndexType {
+	return chunkIndexType((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
 }
 
 func (t *Torrent) numRequests() RequestIndex {
 	if t.numPieces() == 0 {
 		return 0
 	}
-	return uint32(t.numPieces()-1)*t.chunksPerRegularPiece() + t.pieceNumChunks(t.numPieces()-1)
+	return RequestIndex(t.numPieces()-1)*t.chunksPerRegularPiece() + t.pieceNumChunks(t.numPieces()-1)
 }
 
 func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex) {
@@ -1173,7 +1174,7 @@ func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
 			if !c.peerHasPiece(piece) {
 				return
 			}
-			if c.requestState.Interested && c.peerChoking && !c.peerAllowedFast.Contains(uint32(piece)) {
+			if c.requestState.Interested && c.peerChoking && !c.peerAllowedFast.Contains(piece) {
 				return
 			}
 			c.updateRequests(reason)
@@ -1461,13 +1462,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 		}
 	}
 	torrent.Add("deleted connections", 1)
-	if !c.deleteAllRequests().IsEmpty() {
-		t.iterPeers(func(p *Peer) {
-			if p.isLowOnRequests() {
-				p.updateRequests("Torrent.deletePeerConn")
-			}
-		})
-	}
+	c.deleteAllRequests("Torrent.deletePeerConn")
 	t.assertPendingRequests()
 	if t.numActivePeers() == 0 && len(t.connsWithAllPieces) != 0 {
 		panic(t.connsWithAllPieces)
@@ -2408,6 +2403,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
 		maxRequests:    maxRequests,
 	}
+	ws.peer.initRequestState()
 	for _, opt := range opts {
 		opt(&ws.client)
 	}
@@ -2445,7 +2441,7 @@ func (t *Torrent) requestIndexToRequest(ri RequestIndex) Request {
 }
 
 func (t *Torrent) requestIndexFromRequest(r Request) RequestIndex {
-	return t.pieceRequestIndexOffset(pieceIndex(r.Index)) + uint32(r.Begin/t.chunkSize)
+	return t.pieceRequestIndexOffset(pieceIndex(r.Index)) + RequestIndex(r.Begin/t.chunkSize)
 }
 
 func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex) RequestIndex {

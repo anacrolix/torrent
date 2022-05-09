@@ -70,6 +70,7 @@ type (
 type desiredPeerRequests struct {
 	requestIndexes []RequestIndex
 	peer           *Peer
+	pieceStates    map[pieceIndex]request_strategy.PieceRequestOrderState
 }
 
 func (p *desiredPeerRequests) Len() int {
@@ -94,16 +95,16 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 			!p.peer.peerAllowedFast.Contains(rightPieceIndex),
 		)
 	}
-	leftPiece := t.piece(leftPieceIndex)
-	rightPiece := t.piece(rightPieceIndex)
+	leftPiece := p.pieceStates[leftPieceIndex]
+	rightPiece := p.pieceStates[rightPieceIndex]
 	// Putting this first means we can steal requests from lesser-performing peers for our first few
 	// new requests.
 	priority := func() piecePriority {
 		// Technically we would be happy with the cached priority here, except we don't actually
 		// cache it anymore, and Torrent.piecePriority just does another lookup of *Piece to resolve
 		// the priority through Piece.purePriority, which is probably slower.
-		leftPriority := leftPiece.purePriority()
-		rightPriority := rightPiece.purePriority()
+		leftPriority := leftPiece.Priority
+		rightPriority := rightPiece.Priority
 		ml = ml.Int(
 			-int(leftPriority),
 			-int(rightPriority),
@@ -147,8 +148,8 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 		ml = ml.CmpInt64(rightLast.Sub(leftLast).Nanoseconds())
 	}
 	ml = ml.Int(
-		leftPiece.relativeAvailability,
-		rightPiece.relativeAvailability)
+		leftPiece.Availability,
+		rightPiece.Availability)
 	if priority == PiecePriorityReadahead {
 		// TODO: For readahead in particular, it would be even better to consider distance from the
 		// reader position so that reads earlier in a torrent don't starve reads later in the
@@ -191,12 +192,13 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	}
 	input := p.t.getRequestStrategyInput()
 	requestHeap := desiredPeerRequests{
-		peer: p,
+		peer:        p,
+		pieceStates: make(map[pieceIndex]request_strategy.PieceRequestOrderState),
 	}
 	request_strategy.GetRequestablePieces(
 		input,
 		p.t.getPieceRequestOrder(),
-		func(ih InfoHash, pieceIndex int) {
+		func(ih InfoHash, pieceIndex int, pieceExtra request_strategy.PieceRequestOrderState) {
 			if ih != p.t.infoHash {
 				return
 			}
@@ -225,6 +227,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 					return
 				}
 				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
+				requestHeap.pieceStates[pieceIndex] = pieceExtra
 			})
 		},
 	)

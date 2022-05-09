@@ -43,7 +43,10 @@ func pieceOrderLess(i, j *pieceRequestOrderItem) multiless.Computation {
 var packageExpvarMap = expvar.NewMap("request-strategy")
 
 // Calls f with requestable pieces in order.
-func GetRequestablePieces(input Input, pro *PieceRequestOrder, f func(ih metainfo.Hash, pieceIndex int)) {
+func GetRequestablePieces(
+	input Input, pro *PieceRequestOrder,
+	f func(ih metainfo.Hash, pieceIndex int, orderState PieceRequestOrderState),
+) {
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
 	// TorrentImpl. A nil value means no capacity limit.
 	var storageLeft *int64
@@ -70,7 +73,7 @@ func GetRequestablePieces(input Input, pro *PieceRequestOrder, f func(ih metainf
 			return true
 		}
 		allTorrentsUnverifiedBytes += pieceLength
-		f(ih, _i.key.Index)
+		f(ih, _i.key.Index, _i.state)
 		return true
 	})
 	return

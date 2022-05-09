@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"expvar"
 	"fmt"
 	"io"
@@ -352,7 +351,7 @@ func downloadErr(flags downloadFlags) error {
 	if ctx.Err() == nil {
 		log.Print("downloaded ALL the torrents")
 	} else {
-		err = errors.New("y u no complete torrents?!")
+		err = ctx.Err()
 	}
 	clientConnStats := client.ConnStats()
 	log.Printf("average download rate: %v",

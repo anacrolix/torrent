@@ -37,7 +37,7 @@ func mainErr() error {
 	defer envpprof.Stop()
 	stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
 	debug := args.Flag(args.FlagOpt{Long: "debug"})
-	args.ParseMain(
+	return args.ParseMain(
 		debug,
 		args.Subcommand("metainfo", metainfoCmd),
 		args.Subcommand("announce", func(p args.SubCmdCtx) error {
@@ -130,5 +130,4 @@ func mainErr() error {
 		}),
 		args.Subcommand("serve", serve, args.Help("creates and seeds a torrent from a filepath")),
 	)
-	return nil
 }

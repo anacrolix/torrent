@@ -7,7 +7,7 @@ require (
 	github.com/RoaringBitmap/roaring v0.9.4
 	github.com/ajwerner/btree v0.0.0-20211201061316-91c8b66ad617
 	github.com/alexflint/go-arg v1.4.2
-	github.com/anacrolix/args v0.5.0
+	github.com/anacrolix/args v0.5.1-0.20220509024600-c3b77d0b61ac
 	github.com/anacrolix/chansync v0.3.0
 	github.com/anacrolix/dht/v2 v2.16.2-0.20220311024416-dd658f18fd51
 	github.com/anacrolix/envpprof v1.2.1

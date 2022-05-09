@@ -10,7 +10,6 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
-	"github.com/anacrolix/torrent/typed-roaring"
 )
 
 type Piece struct {
@@ -247,35 +246,6 @@ func (p *Piece) State() PieceState {
 
 func init() {
 	gob.Register(undirtiedChunksIter{})
-}
-
-// Use an iterator to jump between dirty bits.
-type undirtiedChunksIter struct {
-	TorrentDirtyChunks *typedRoaring.Bitmap[RequestIndex]
-	StartRequestIndex  RequestIndex
-	EndRequestIndex    RequestIndex
-}
-
-func (me *undirtiedChunksIter) Iter(f func(chunkIndexType)) {
-	it := me.TorrentDirtyChunks.Iterator()
-	startIndex := me.StartRequestIndex
-	endIndex := me.EndRequestIndex
-	it.AdvanceIfNeeded(startIndex)
-	lastDirty := startIndex - 1
-	for it.HasNext() {
-		next := it.Next()
-		if next >= endIndex {
-			break
-		}
-		for index := lastDirty + 1; index < next; index++ {
-			f(index - startIndex)
-		}
-		lastDirty = next
-	}
-	for index := lastDirty + 1; index < endIndex; index++ {
-		f(index - startIndex)
-	}
-	return
 }
 
 func (p *Piece) requestIndexOffset() RequestIndex {

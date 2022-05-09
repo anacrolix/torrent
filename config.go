@@ -201,9 +201,8 @@ func NewDefaultClientConfig() *ClientConfig {
 		ListenPort:            42069,
 		Extensions:            defaultPeerExtensionBytes(),
 		AcceptPeerConnections: true,
+		MaxUnverifiedBytes:    64 << 20,
 	}
-	// cc.ConnTracker.SetNoMaxEntries()
-	// cc.ConnTracker.Timeout = func(conntrack.Entry) time.Duration { return 0 }
 	return cc
 }
 

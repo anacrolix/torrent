@@ -118,8 +118,10 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 	if ml.Ok() {
 		return ml.MustLess()
 	}
-	leftPeer := t.pendingRequests[leftRequest]
-	rightPeer := t.pendingRequests[rightRequest]
+	leftRequestState := t.requestState[leftRequest]
+	rightRequestState := t.requestState[rightRequest]
+	leftPeer := leftRequestState.peer
+	rightPeer := rightRequestState.peer
 	// Prefer chunks already requested from this peer.
 	ml = ml.Bool(rightPeer == p.peer, leftPeer == p.peer)
 	// Prefer unrequested chunks.
@@ -134,8 +136,8 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 			leftPeer.requestState.Requests.GetCardinality(),
 		)
 		// Could either of the lastRequested be Zero? That's what checking an existing peer is for.
-		leftLast := t.lastRequested[leftRequest]
-		rightLast := t.lastRequested[rightRequest]
+		leftLast := leftRequestState.when
+		rightLast := rightRequestState.when
 		if leftLast.IsZero() || rightLast.IsZero() {
 			panic("expected non-zero last requested times")
 		}

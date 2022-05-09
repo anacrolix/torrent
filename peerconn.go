@@ -48,11 +48,10 @@ type PeerRemoteAddr interface {
 	String() string
 }
 
-// Since we have to store all the requests in memory, we can't reasonably exceed what would be
-// indexable with the memory space available.
 type (
-	maxRequests  = int
-	requestState = request_strategy.PeerRequestState
+	// Since we have to store all the requests in memory, we can't reasonably exceed what could be
+	// indexed with the memory space available.
+	maxRequests = int
 )
 
 type Peer struct {
@@ -85,7 +84,7 @@ type Peer struct {
 
 	// Stuff controlled by the local peer.
 	needRequestUpdate    string
-	requestState         requestState
+	requestState         request_strategy.PeerRequestState
 	updateRequestsTimer  *time.Timer
 	lastRequestUpdate    time.Time
 	peakRequests         maxRequests
@@ -637,8 +636,10 @@ func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 		cn.validReceiveChunks = make(map[RequestIndex]int)
 	}
 	cn.validReceiveChunks[r]++
-	cn.t.pendingRequests[r] = cn
-	cn.t.lastRequested[r] = time.Now()
+	cn.t.requestState[r] = requestState{
+		peer: cn,
+		when: time.Now(),
+	}
 	cn.updateExpectingChunks()
 	ppReq := cn.t.requestIndexToRequest(r)
 	for _, f := range cn.callbacks.SentRequest {
@@ -1464,7 +1465,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	piece.unpendChunkIndex(chunkIndexFromChunkSpec(ppReq.ChunkSpec, t.chunkSize))
 
 	// Cancel pending requests for this chunk from *other* peers.
-	if p := t.pendingRequests[req]; p != nil {
+	if p := t.requestingPeer(req); p != nil {
 		if p == c {
 			panic("should not be pending request from conn that just received it")
 		}
@@ -1627,8 +1628,7 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 	if c.t.requestingPeer(r) != c {
 		panic("only one peer should have a given request at a time")
 	}
-	delete(c.t.pendingRequests, r)
-	delete(c.t.lastRequested, r)
+	delete(c.t.requestState, r)
 	// c.t.iterPeers(func(p *Peer) {
 	// 	if p.isLowOnRequests() {
 	// 		p.updateRequests("Peer.deleteRequest")

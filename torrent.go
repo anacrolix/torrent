@@ -140,9 +140,8 @@ type Torrent struct {
 	initialPieceCheckDisabled bool
 
 	connsWithAllPieces map[*Peer]struct{}
-	// Count of each request across active connections.
-	pendingRequests map[RequestIndex]*Peer
-	lastRequested   map[RequestIndex]time.Time
+
+	requestState map[RequestIndex]requestState
 	// Chunks we've written to since the corresponding piece was last checked.
 	dirtyChunks typedRoaring.Bitmap[RequestIndex]
 
@@ -472,8 +471,7 @@ func (t *Torrent) onSetInfo() {
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
-	t.pendingRequests = make(map[RequestIndex]*Peer)
-	t.lastRequested = make(map[RequestIndex]time.Time)
+	t.requestState = make(map[RequestIndex]requestState)
 	t.tryCreateMorePieceHashers()
 	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info)
@@ -2453,16 +2451,20 @@ func (t *Torrent) updateComplete() {
 }
 
 func (t *Torrent) cancelRequest(r RequestIndex) *Peer {
-	p := t.pendingRequests[r]
+	p := t.requestingPeer(r)
 	if p != nil {
 		p.cancel(r)
 	}
-	delete(t.pendingRequests, r)
+	// TODO: This is a check that an old invariant holds. It can be removed after some testing.
+	//delete(t.pendingRequests, r)
+	if _, ok := t.requestState[r]; ok {
+		panic("expected request state to be gone")
+	}
 	return p
 }
 
 func (t *Torrent) requestingPeer(r RequestIndex) *Peer {
-	return t.pendingRequests[r]
+	return t.requestState[r].peer
 }
 
 func (t *Torrent) addConnWithAllPieces(p *Peer) {
@@ -2493,4 +2495,9 @@ func (t *Torrent) hasStorageCap() bool {
 
 func (t *Torrent) pieceIndexOfRequestIndex(ri RequestIndex) pieceIndex {
 	return pieceIndex(ri / t.chunksPerRegularPiece())
+}
+
+type requestState struct {
+	peer *Peer
+	when time.Time
 }

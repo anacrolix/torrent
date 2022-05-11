@@ -157,6 +157,10 @@ type Torrent struct {
 	sourcesLogger log.Logger
 
 	smartBanCache smartBanCache
+
+	// Large allocations reused between request state updates.
+	requestPieceStates []request_strategy.PieceRequestOrderState
+	requestIndexes     []RequestIndex
 }
 
 func (t *Torrent) selectivePieceAvailabilityFromPeers(i pieceIndex) (count int) {
@@ -457,6 +461,7 @@ func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrder
 func (t *Torrent) onSetInfo() {
 	t.initPieceRequestOrder()
 	MakeSliceWithLength(&t.requestState, t.numChunks())
+	MakeSliceWithLength(&t.requestPieceStates, t.numPieces())
 	for i := range t.pieces {
 		p := &t.pieces[i]
 		// Need to add relativeAvailability before updating piece completion, as that may result in conns

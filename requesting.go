@@ -70,7 +70,7 @@ type (
 type desiredPeerRequests struct {
 	requestIndexes []RequestIndex
 	peer           *Peer
-	pieceStates    map[pieceIndex]request_strategy.PieceRequestOrderState
+	pieceStates    []request_strategy.PieceRequestOrderState
 }
 
 func (p *desiredPeerRequests) Len() int {
@@ -95,8 +95,8 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 			!p.peer.peerAllowedFast.Contains(rightPieceIndex),
 		)
 	}
-	leftPiece := p.pieceStates[leftPieceIndex]
-	rightPiece := p.pieceStates[rightPieceIndex]
+	leftPiece := &p.pieceStates[leftPieceIndex]
+	rightPiece := &p.pieceStates[rightPieceIndex]
 	// Putting this first means we can steal requests from lesser-performing peers for our first few
 	// new requests.
 	priority := func() piecePriority {
@@ -193,8 +193,9 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	}
 	input := t.getRequestStrategyInput()
 	requestHeap := desiredPeerRequests{
-		peer:        p,
-		pieceStates: make(map[pieceIndex]request_strategy.PieceRequestOrderState),
+		peer:           p,
+		pieceStates:    t.requestPieceStates,
+		requestIndexes: t.requestIndexes,
 	}
 	request_strategy.GetRequestablePieces(
 		input,
@@ -206,6 +207,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 			if !p.peerHasPiece(pieceIndex) {
 				return
 			}
+			requestHeap.pieceStates[pieceIndex] = pieceExtra
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
 			p.t.piece(pieceIndex).undirtiedChunksIter.Iter(func(ci request_strategy.ChunkIndex) {
 				r := p.t.pieceRequestIndexOffset(pieceIndex) + ci
@@ -228,7 +230,6 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 					return
 				}
 				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
-				requestHeap.pieceStates[pieceIndex] = pieceExtra
 			})
 		},
 	)
@@ -256,6 +257,7 @@ func (p *Peer) maybeUpdateActualRequestState() {
 		func(_ context.Context) {
 			next := p.getDesiredRequestState()
 			p.applyRequestState(next)
+			p.t.requestIndexes = next.Requests.requestIndexes[:0]
 		},
 	)
 }

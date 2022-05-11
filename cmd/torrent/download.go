@@ -242,7 +242,7 @@ type DownloadCmd struct {
 	Mmap               bool           `help:"memory-map torrent data"`
 	Seed               bool           `help:"seed after download is complete"`
 	Addr               string         `help:"network listen addr"`
-	MaxUnverifiedBytes tagflag.Bytes  `help:"maximum number bytes to have pending verification"`
+	MaxUnverifiedBytes *tagflag.Bytes `help:"maximum number bytes to have pending verification"`
 	UploadRate         *tagflag.Bytes `help:"max piece bytes to send per second"`
 	DownloadRate       *tagflag.Bytes `help:"max bytes per second down from peers"`
 	PackedBlocklist    string
@@ -324,7 +324,9 @@ func downloadErr(flags downloadFlags) error {
 	if flags.RequireFastExtension {
 		clientConfig.MinPeerExtensions.SetBit(pp.ExtensionBitFast, true)
 	}
-	clientConfig.MaxUnverifiedBytes = flags.MaxUnverifiedBytes.Int64()
+	if flags.MaxUnverifiedBytes != nil {
+		clientConfig.MaxUnverifiedBytes = flags.MaxUnverifiedBytes.Int64()
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()

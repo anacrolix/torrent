@@ -312,9 +312,14 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 	p.peakRequests = newPeakRequests
 	p.needRequestUpdate = ""
 	p.lastRequestUpdate = time.Now()
-	p.updateRequestsTimer.Reset(updateRequestsTimerDuration)
+	if enableUpdateRequestsTimer {
+		p.updateRequestsTimer.Reset(updateRequestsTimerDuration)
+	}
 }
 
 // This could be set to 10s to match the unchoke/request update interval recommended by some
 // specifications. I've set it shorter to trigger it more often for testing for now.
-const updateRequestsTimerDuration = 3 * time.Second
+const (
+	updateRequestsTimerDuration = 3 * time.Second
+	enableUpdateRequestsTimer   = false
+)

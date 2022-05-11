@@ -991,7 +991,9 @@ func (p *Peer) initUpdateRequestsTimer() {
 			panic(p.updateRequestsTimer)
 		}
 	}
-	p.updateRequestsTimer = time.AfterFunc(math.MaxInt64, p.updateRequestsTimerFunc)
+	if enableUpdateRequestsTimer {
+		p.updateRequestsTimer = time.AfterFunc(math.MaxInt64, p.updateRequestsTimerFunc)
+	}
 }
 
 const peerUpdateRequestsTimerReason = "updateRequestsTimer"

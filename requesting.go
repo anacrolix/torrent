@@ -156,9 +156,7 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 		// torrent. This would probably require reconsideration of how readahead priority works.
 		ml = ml.Int(leftPieceIndex, rightPieceIndex)
 	} else {
-		// TODO: To prevent unnecessarily requesting from disparate pieces, and to ensure pieces are
-		// selected randomly when availability is even, there should be some fixed ordering of
-		// pieces.
+		ml = ml.Int(t.pieceRequestOrder[leftPieceIndex], t.pieceRequestOrder[rightPieceIndex])
 	}
 	return ml.Less()
 }

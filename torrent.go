@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/netip"
 	"net/url"
 	"sort"
@@ -62,6 +63,9 @@ type Torrent struct {
 	closed   chansync.SetOnce
 	infoHash metainfo.Hash
 	pieces   []Piece
+
+	// The order pieces are requested if there's no stronger reason like availability or priority.
+	pieceRequestOrder []int
 	// Values are the piece indices that changed.
 	pieceStateChanges pubsub.PubSub[PieceStateChange]
 	// The size of chunks to request from peers over the wire. This is
@@ -459,6 +463,7 @@ func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrder
 
 // This seems to be all the follow-up tasks after info is set, that can't fail.
 func (t *Torrent) onSetInfo() {
+	t.pieceRequestOrder = rand.Perm(t.numPieces())
 	t.initPieceRequestOrder()
 	MakeSliceWithLength(&t.requestState, t.numChunks())
 	MakeSliceWithLength(&t.requestPieceStates, t.numPieces())
@@ -849,7 +854,7 @@ func (t *Torrent) usualPieceSize() int {
 }
 
 func (t *Torrent) numPieces() pieceIndex {
-	return pieceIndex(t.info.NumPieces())
+	return t.info.NumPieces()
 }
 
 func (t *Torrent) numPiecesCompleted() (num pieceIndex) {

@@ -184,22 +184,23 @@ type desiredRequestState struct {
 }
 
 func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
-	if !p.t.haveInfo() {
+	t := p.t
+	if !t.haveInfo() {
 		return
 	}
-	if p.t.closed.IsSet() {
+	if t.closed.IsSet() {
 		return
 	}
-	input := p.t.getRequestStrategyInput()
+	input := t.getRequestStrategyInput()
 	requestHeap := desiredPeerRequests{
 		peer:        p,
 		pieceStates: make(map[pieceIndex]request_strategy.PieceRequestOrderState),
 	}
 	request_strategy.GetRequestablePieces(
 		input,
-		p.t.getPieceRequestOrder(),
+		t.getPieceRequestOrder(),
 		func(ih InfoHash, pieceIndex int, pieceExtra request_strategy.PieceRequestOrderState) {
-			if ih != p.t.infoHash {
+			if ih != t.infoHash {
 				return
 			}
 			if !p.peerHasPiece(pieceIndex) {
@@ -231,7 +232,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 			})
 		},
 	)
-	p.t.assertPendingRequests()
+	t.assertPendingRequests()
 	desired.Requests = requestHeap
 	return
 }

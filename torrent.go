@@ -143,7 +143,7 @@ type Torrent struct {
 
 	connsWithAllPieces map[*Peer]struct{}
 
-	requestState map[RequestIndex]requestState
+	requestState []requestState
 	// Chunks we've written to since the corresponding piece was last checked.
 	dirtyChunks typedRoaring.Bitmap[RequestIndex]
 
@@ -456,6 +456,7 @@ func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrder
 // This seems to be all the follow-up tasks after info is set, that can't fail.
 func (t *Torrent) onSetInfo() {
 	t.initPieceRequestOrder()
+	MakeSliceWithLength(&t.requestState, t.numChunks())
 	for i := range t.pieces {
 		p := &t.pieces[i]
 		// Need to add relativeAvailability before updating piece completion, as that may result in conns
@@ -474,7 +475,6 @@ func (t *Torrent) onSetInfo() {
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
-	t.requestState = make(map[RequestIndex]requestState)
 	t.tryCreateMorePieceHashers()
 	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info)
@@ -925,7 +925,7 @@ func (t *Torrent) chunksPerRegularPiece() chunkIndexType {
 	return t._chunksPerRegularPiece
 }
 
-func (t *Torrent) numRequests() RequestIndex {
+func (t *Torrent) numChunks() RequestIndex {
 	if t.numPieces() == 0 {
 		return 0
 	}
@@ -1490,7 +1490,7 @@ func (t *Torrent) assertPendingRequests() {
 	}
 	// var actual pendingRequests
 	// if t.haveInfo() {
-	// 	actual.m = make([]int, t.numRequests())
+	// 	actual.m = make([]int, t.numChunks())
 	// }
 	// t.iterPeers(func(p *Peer) {
 	// 	p.requestState.Requests.Iterate(func(x uint32) bool {
@@ -2064,7 +2064,9 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 }
 
 func (t *Torrent) cancelRequestsForPiece(piece pieceIndex) {
-	for ri := t.pieceRequestIndexOffset(piece); ri < t.pieceRequestIndexOffset(piece+1); ri++ {
+	start := t.pieceRequestIndexOffset(piece)
+	end := start + t.pieceNumChunks(piece)
+	for ri := start; ri < end; ri++ {
 		t.cancelRequest(ri)
 	}
 }
@@ -2460,7 +2462,8 @@ func (t *Torrent) cancelRequest(r RequestIndex) *Peer {
 	}
 	// TODO: This is a check that an old invariant holds. It can be removed after some testing.
 	//delete(t.pendingRequests, r)
-	if _, ok := t.requestState[r]; ok {
+	var zeroRequestState requestState
+	if t.requestState[r] != zeroRequestState {
 		panic("expected request state to be gone")
 	}
 	return p

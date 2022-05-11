@@ -12,7 +12,7 @@ require (
 	github.com/anacrolix/dht/v2 v2.16.2-0.20220311024416-dd658f18fd51
 	github.com/anacrolix/envpprof v1.2.1
 	github.com/anacrolix/fuse v0.2.0
-	github.com/anacrolix/generics v0.0.0-20220217222028-44932cf46edd
+	github.com/anacrolix/generics v0.0.0-20220510042907-b50562b436ec
 	github.com/anacrolix/go-libutp v1.2.0
 	github.com/anacrolix/log v0.13.1
 	github.com/anacrolix/missinggo v1.3.0
@@ -85,7 +85,7 @@ require (
 	github.com/rs/dnscache v0.0.0-20210201191234-295bba877686 // indirect
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
 	golang.org/x/crypto v0.0.0-20220131195533-30dcbda58838 // indirect
-	golang.org/x/exp v0.0.0-20220328175248-053ad81199eb // indirect
+	golang.org/x/exp v0.0.0-20220428152302-39d4317da171 // indirect
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect

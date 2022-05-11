@@ -1628,7 +1628,7 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 	if c.t.requestingPeer(r) != c {
 		panic("only one peer should have a given request at a time")
 	}
-	delete(c.t.requestState, r)
+	c.t.requestState[r] = requestState{}
 	// c.t.iterPeers(func(p *Peer) {
 	// 	if p.isLowOnRequests() {
 	// 		p.updateRequests("Peer.deleteRequest")

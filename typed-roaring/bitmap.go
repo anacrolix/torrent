@@ -42,6 +42,7 @@ func (me *Bitmap[T]) Remove(x T) {
 	me.Bitmap.Remove(uint32(x))
 }
 
-func (me *Bitmap[T]) Iterator() Iterator[T] {
-	return Iterator[T]{me.Bitmap.Iterator()}
+// Returns an uninitialized iterator for the type of the receiver.
+func (Bitmap[T]) IteratorType() Iterator[T] {
+	return Iterator[T]{}
 }

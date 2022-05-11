@@ -4,31 +4,20 @@ import (
 	"github.com/anacrolix/torrent/typed-roaring"
 )
 
-// Use an iterator to jump between dirty bits.
-type undirtiedChunksIter struct {
-	TorrentDirtyChunks *typedRoaring.Bitmap[RequestIndex]
-	StartRequestIndex  RequestIndex
-	EndRequestIndex    RequestIndex
-}
-
-func (me *undirtiedChunksIter) Iter(f func(chunkIndexType)) {
-	it := me.TorrentDirtyChunks.Iterator()
-	startIndex := me.StartRequestIndex
-	endIndex := me.EndRequestIndex
-	it.AdvanceIfNeeded(startIndex)
-	lastDirty := startIndex - 1
+func iterBitmapUnsetInRange[T typedRoaring.BitConstraint](it *typedRoaring.Iterator[T], start, end T, f func(T)) {
+	it.AdvanceIfNeeded(start)
+	lastDirty := start - 1
 	for it.HasNext() {
 		next := it.Next()
-		if next >= endIndex {
+		if next >= end {
 			break
 		}
 		for index := lastDirty + 1; index < next; index++ {
-			f(index - startIndex)
+			f(index)
 		}
 		lastDirty = next
 	}
-	for index := lastDirty + 1; index < endIndex; index++ {
-		f(index - startIndex)
+	for index := lastDirty + 1; index < end; index++ {
+		f(index)
 	}
-	return
 }

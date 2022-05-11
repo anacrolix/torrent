@@ -11,9 +11,10 @@ import (
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
+	"github.com/anacrolix/torrent/typed-roaring"
 	"github.com/lispad/go-generics-tools/binheap"
 
-	request_strategy "github.com/anacrolix/torrent/request-strategy"
+	"github.com/anacrolix/torrent/request-strategy"
 )
 
 func (t *Torrent) requestStrategyPieceOrderState(i int) request_strategy.PieceRequestOrderState {
@@ -195,6 +196,8 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 		pieceStates:    t.requestPieceStates,
 		requestIndexes: t.requestIndexes,
 	}
+	// Caller-provided allocation for roaring bitmap iteration.
+	var it typedRoaring.Iterator[RequestIndex]
 	request_strategy.GetRequestablePieces(
 		input,
 		t.getPieceRequestOrder(),
@@ -207,8 +210,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 			}
 			requestHeap.pieceStates[pieceIndex] = pieceExtra
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
-			p.t.piece(pieceIndex).undirtiedChunksIter.Iter(func(ci request_strategy.ChunkIndex) {
-				r := p.t.pieceRequestIndexOffset(pieceIndex) + ci
+			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r request_strategy.RequestIndex) {
 				if !allowedFast {
 					// We must signal interest to request this. TODO: We could set interested if the
 					// peers pieces (minus the allowed fast set) overlap with our missing pieces if

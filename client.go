@@ -19,25 +19,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
+	"github.com/dustin/go-humanize"
+	gbtree "github.com/google/btree"
+	"github.com/pion/datachannel"
+	"golang.org/x/time/rate"
+
+	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/generics"
+	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
-	request_strategy "github.com/anacrolix/torrent/request-strategy"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/dustin/go-humanize"
-	"github.com/google/btree"
-	"github.com/pion/datachannel"
-	"golang.org/x/time/rate"
-
-	"github.com/anacrolix/chansync"
-	. "github.com/anacrolix/generics"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/limiter"
@@ -45,6 +44,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/webtorrent"
@@ -1179,7 +1179,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		cl:       cl,
 		infoHash: opts.InfoHash,
 		peers: prioritizedPeers{
-			om: btree.New(32),
+			om: gbtree.New(32),
 			getPrio: func(p PeerInfo) peerPriority {
 				ipPort := p.addr()
 				return bep40PriorityIgnoreError(cl.publicAddr(ipPort.IP), ipPort)

@@ -390,11 +390,6 @@ func (t *Torrent) makePieces() {
 		beginFile := pieceFirstFileIndex(piece.torrentBeginOffset(), files)
 		endFile := pieceEndFileIndex(piece.torrentEndOffset(), files)
 		piece.files = files[beginFile:endFile]
-		piece.undirtiedChunksIter = undirtiedChunksIter{
-			TorrentDirtyChunks: &t.dirtyChunks,
-			StartRequestIndex:  piece.requestIndexOffset(),
-			EndRequestIndex:    piece.requestIndexOffset() + piece.numChunks(),
-		}
 	}
 }
 
@@ -2511,6 +2506,20 @@ func (t *Torrent) hasStorageCap() bool {
 
 func (t *Torrent) pieceIndexOfRequestIndex(ri RequestIndex) pieceIndex {
 	return pieceIndex(ri / t.chunksPerRegularPiece())
+}
+
+func (t *Torrent) iterUndirtiedRequestIndexesInPiece(
+	reuseIter *typedRoaring.Iterator[RequestIndex],
+	piece pieceIndex,
+	f func(RequestIndex),
+) {
+	reuseIter.Initialize(&t.dirtyChunks)
+	pieceRequestIndexOffset := t.pieceRequestIndexOffset(piece)
+	iterBitmapUnsetInRange(
+		reuseIter,
+		pieceRequestIndexOffset, pieceRequestIndexOffset+t.pieceNumChunks(piece),
+		f,
+	)
 }
 
 type requestState struct {

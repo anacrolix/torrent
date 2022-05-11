@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"encoding/gob"
 	"fmt"
 	"sync"
 
@@ -41,8 +40,6 @@ type Piece struct {
 	// Connections that have written data to this piece since its last check.
 	// This can include connections that have closed.
 	dirtiers map[*Peer]struct{}
-
-	undirtiedChunksIter undirtiedChunksIter
 }
 
 func (p *Piece) String() string {
@@ -242,10 +239,6 @@ func (p *Piece) allChunksDirty() bool {
 
 func (p *Piece) State() PieceState {
 	return p.t.PieceState(p.index)
-}
-
-func init() {
-	gob.Register(undirtiedChunksIter{})
 }
 
 func (p *Piece) requestIndexOffset() RequestIndex {

@@ -32,7 +32,7 @@ func (t *Torrent) Info() (info *metainfo.Info) {
 // Returns a Reader bound to the torrent's data. All read calls block until the data requested is
 // actually available. Note that you probably want to ensure the Torrent Info is available first.
 func (t *Torrent) NewReader() Reader {
-	return t.newReader(0, *t.length)
+	return t.newReader(0, t.length())
 }
 
 func (t *Torrent) newReader(offset, length int64) Reader {
@@ -147,7 +147,7 @@ func (t *Torrent) Name() string {
 // The completed length of all the torrent data, in all its files. This is
 // derived from the torrent info, when it is available.
 func (t *Torrent) Length() int64 {
-	return *t.length
+	return t._length.Value()
 }
 
 // Returns a run-time generated metainfo for the torrent that includes the

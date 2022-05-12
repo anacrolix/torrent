@@ -166,8 +166,8 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 				w,
 				"%f%% of %d bytes (%s)",
 				100*(1-float64(t.bytesMissingLocked())/float64(t.info.TotalLength())),
-				*t.length,
-				humanize.Bytes(uint64(*t.length)))
+				t.length(),
+				humanize.Bytes(uint64(t.length())))
 		} else {
 			w.WriteString("<missing metainfo>")
 		}

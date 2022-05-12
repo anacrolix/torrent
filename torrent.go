@@ -74,7 +74,7 @@ type Torrent struct {
 	chunkPool sync.Pool
 	// Total length of the torrent in bytes. Stored because it's not O(1) to
 	// get this from the info dict.
-	length *int64
+	_length Option[int64]
 
 	// The storage to open when the info dict becomes available.
 	storageOpener *storage.Client
@@ -165,6 +165,10 @@ type Torrent struct {
 	// Large allocations reused between request state updates.
 	requestPieceStates []request_strategy.PieceRequestOrderState
 	requestIndexes     []RequestIndex
+}
+
+func (t *Torrent) length() int64 {
+	return t._length.Value()
 }
 
 func (t *Torrent) selectivePieceAvailabilityFromPeers(i pieceIndex) (count int) {
@@ -420,7 +424,7 @@ func (t *Torrent) cacheLength() {
 	for _, f := range t.info.UpvertedFiles() {
 		l += f.Length
 	}
-	t.length = &l
+	t._length = Some(l)
 }
 
 // TODO: This shouldn't fail for storage reasons. Instead we should handle storage failure
@@ -895,13 +899,13 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 }
 
 func (t *Torrent) requestOffset(r Request) int64 {
-	return torrentRequestOffset(*t.length, int64(t.usualPieceSize()), r)
+	return torrentRequestOffset(t.length(), int64(t.usualPieceSize()), r)
 }
 
 // Return the request that would include the given offset into the torrent data. Returns !ok if
 // there is no such request.
 func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
-	return torrentOffsetRequest(*t.length, t.info.PieceLength, int64(t.chunkSize), off)
+	return torrentOffsetRequest(t.length(), t.info.PieceLength, int64(t.chunkSize), off)
 }
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
@@ -949,7 +953,7 @@ func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
 		return 0
 	}
 	if piece == t.numPieces()-1 {
-		ret := pp.Integer(*t.length % t.info.PieceLength)
+		ret := pp.Integer(t.length() % t.info.PieceLength)
 		if ret != 0 {
 			return ret
 		}
@@ -1225,7 +1229,7 @@ func (t *Torrent) updatePiecePriorities(begin, end pieceIndex, reason string) {
 
 // Returns the range of pieces [begin, end) that contains the extent of bytes.
 func (t *Torrent) byteRegionPieces(off, size int64) (begin, end pieceIndex) {
-	if off >= *t.length {
+	if off >= t.length() {
 		return
 	}
 	if off < 0 {
@@ -1442,7 +1446,7 @@ func (t *Torrent) bytesCompleted() int64 {
 	if !t.haveInfo() {
 		return 0
 	}
-	return *t.length - t.bytesLeft()
+	return t.length() - t.bytesLeft()
 }
 
 func (t *Torrent) SetInfoBytes(b []byte) (err error) {

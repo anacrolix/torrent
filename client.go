@@ -772,7 +772,7 @@ func (cl *Client) outgoingConnection(t *Torrent, addr PeerRemoteAddr, ps PeerSou
 	cl.noLongerHalfOpen(t, addr.String())
 	if err != nil {
 		if cl.config.Debug {
-			cl.logger.Printf("error establishing outgoing connection to %v: %v", addr, err)
+			cl.logger.Levelf(log.Debug, "error establishing outgoing connection to %v: %v", addr, err)
 		}
 		return
 	}

@@ -87,6 +87,8 @@ type Torrent struct {
 	fileIndex segments.Index
 	files     *[]*File
 
+	_chunksPerRegularPiece chunkIndexType
+
 	webSeeds map[string]*Peer
 	// Active peer connections, running message stream loops. TODO: Make this
 	// open (not-closed) connections only.
@@ -434,6 +436,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	t.nameMu.Lock()
 	t.info = info
 	t.nameMu.Unlock()
+	t._chunksPerRegularPiece = chunkIndexType((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
 	t.updateComplete()
 	t.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
 	t.displayName = "" // Save a few bytes lol.
@@ -919,7 +922,7 @@ func (t *Torrent) pieceNumChunks(piece pieceIndex) chunkIndexType {
 }
 
 func (t *Torrent) chunksPerRegularPiece() chunkIndexType {
-	return chunkIndexType((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
+	return t._chunksPerRegularPiece
 }
 
 func (t *Torrent) numRequests() RequestIndex {

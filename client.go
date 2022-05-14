@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anacrolix/torrent/webseed"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
@@ -87,7 +88,10 @@ type Client struct {
 	websocketTrackers websocketTrackers
 
 	activeAnnounceLimiter limiter.Instance
-	httpClient            *http.Client
+
+	httpClient                       webseed.HttpClient
+	httpClientUseDownloadRateLimiter bool
+	dhtAnnounceInterval              time.Duration
 }
 
 type ipStr string
@@ -201,7 +205,17 @@ func (cl *Client) init(cfg *ClientConfig) {
 	cl.activeAnnounceLimiter.SlotsPerKey = 2
 	cl.event.L = cl.locker()
 	cl.ipBlockList = cfg.IPBlocklist
-	cl.httpClient = &http.Client{
+	cl.httpClient = newHTTPClient(cfg)
+	cl.httpClientUseDownloadRateLimiter = cfg.HTTPClientUseDownloadRateLimiter
+	cl.dhtAnnounceInterval = cfg.DhtAnnounceInterval
+}
+
+func newHTTPClient(cfg *ClientConfig) webseed.HttpClient {
+	if cfg.HTTPClient != nil {
+		return cfg.HTTPClient
+	}
+
+	return &http.Client{
 		Transport: &http.Transport{
 			Proxy: cfg.HTTPProxy,
 			// I think this value was observed from some webseeds. It seems reasonable to extend it
@@ -313,6 +327,11 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 			go t.onWebRtcConn(dc, dcc)
 		},
 	}
+
+	torrent.HandleAddHook(cfg.Callbacks.OnTorrentAddEvent)
+	receivedKeepalives.HandleAddHook(cfg.Callbacks.OnKeepAliveReceived)
+	chunksReceived.HandleAddHook(cfg.Callbacks.OnChunkReceived)
+	requestedChunkLengths.HandleAddHook(cfg.Callbacks.OnChunkRequested)
 
 	return
 }
@@ -1197,6 +1216,8 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		},
 		webSeeds:     make(map[string]*Peer),
 		gotMetainfoC: make(chan struct{}),
+
+		dhtAnnounceInterval: cl.dhtAnnounceInterval,
 	}
 	t.smartBanCache.Hash = sha1.Sum
 	t.smartBanCache.Init()

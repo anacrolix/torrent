@@ -1,6 +1,8 @@
 package torrent
 
 import (
+	"expvar"
+
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
@@ -25,6 +27,13 @@ type Callbacks struct {
 	SentRequest        []func(PeerRequestEvent)
 	PeerClosed         []func(*Peer)
 	NewPeer            []func(*Peer)
+
+	// Metric hooks
+	OnTorrentSetEvent   func(key string, value expvar.Var)
+	OnTorrentAddEvent   func(key string, delta int64)
+	OnKeepAliveReceived func(delta int64)
+	OnChunkReceived     func(key string, delta int64)
+	OnChunkRequested    func(key string, delta int64)
 }
 
 type ReceivedUsefulDataEvent = PeerMessageEvent

@@ -126,6 +126,10 @@ type Peer struct {
 	PeerClientName   atomic.Value
 
 	logger log.Logger
+
+	// isWebseed is a helper field which helps to distinguish
+	// between peer types (see a webseedPeer creation).
+	isWebseed bool
 }
 
 type peerRequests = orderedBitmap[RequestIndex]
@@ -168,6 +172,12 @@ type PeerConn struct {
 
 func (cn *PeerConn) connStatusString() string {
 	return fmt.Sprintf("%+-55q %s %s", cn.PeerID, cn.PeerExtensionBytes, cn.connString)
+}
+
+// IsWebseed helps to track (inside a SentRequest callback) which
+// kind of peer is actually being requested.
+func (cn *Peer) IsWebseed() bool {
+	return cn.isWebseed
 }
 
 func (cn *Peer) updateExpectingChunks() {

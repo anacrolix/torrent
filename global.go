@@ -28,16 +28,17 @@ func defaultPeerExtensionBytes() PeerExtensionBits {
 }
 
 func init() {
+	chunksReceived = newExpvarHookMap("chunks_received")
 	torrent.Set("peers supporting extension", &peersSupportingExtension)
-	torrent.Set("chunks received", &chunksReceived)
+	torrent.Set("chunks received", chunksReceived)
 }
 
 // I could move a lot of these counters to their own file, but I suspect they
 // may be attached to a Client someday.
 var (
-	torrent                  = expvar.NewMap("torrent")
+	torrent                  = newExpvarHookMap("torrent")
 	peersSupportingExtension expvar.Map
-	chunksReceived           expvar.Map
+	chunksReceived           *expvarHookMap
 
 	pieceHashedCorrect    = expvar.NewInt("pieceHashedCorrect")
 	pieceHashedNotCorrect = expvar.NewInt("pieceHashedNotCorrect")
@@ -45,10 +46,10 @@ var (
 	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
 	// Count of connections to peer with same client ID.
 	connsToSelf        = expvar.NewInt("connsToSelf")
-	receivedKeepalives = expvar.NewInt("receivedKeepalives")
+	receivedKeepalives = newExpvarHookInt("receivedKeepalives")
 	// Requests received for pieces we don't have.
 	requestsReceivedForMissingPieces = expvar.NewInt("requestsReceivedForMissingPieces")
-	requestedChunkLengths            = expvar.NewMap("requestedChunkLengths")
+	requestedChunkLengths            = newExpvarHookMap("requestedChunkLengths")
 
 	messageTypesReceived = expvar.NewMap("messageTypesReceived")
 

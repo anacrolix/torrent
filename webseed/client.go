@@ -41,8 +41,13 @@ func (r Request) Cancel() {
 	r.cancel()
 }
 
+// HttpClient is an interface of webseed clients.
+type HttpClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 type Client struct {
-	HttpClient *http.Client
+	HttpClient HttpClient
 	Url        string
 	fileIndex  segments.Index
 	info       *metainfo.Info

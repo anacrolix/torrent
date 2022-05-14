@@ -113,6 +113,8 @@ type Torrent struct {
 	trackerAnnouncers map[string]torrentTrackerAnnouncer
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
+	// How many times we have to wait until issuing next announce.
+	dhtAnnounceInterval time.Duration
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
@@ -1780,7 +1782,7 @@ func (t *Torrent) timeboxedAnnounceToDht(s DhtServer) error {
 	}
 	select {
 	case <-t.closed.Done():
-	case <-time.After(5 * time.Minute):
+	case <-time.After(t.dhtAnnounceInterval):
 	}
 	stop()
 	return nil
@@ -2401,20 +2403,25 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
 			// TODO: Set ban prefix?
 			RemoteAddr: remoteAddrFromUrl(url),
 			callbacks:  t.callbacks(),
+			// helps to distinguish between peer types
+			isWebseed: true,
 		},
 		client: webseed.Client{
 			HttpClient: t.cl.httpClient,
 			Url:        url,
-			ResponseBodyWrapper: func(r io.Reader) io.Reader {
-				return &rateLimitedReader{
-					l: t.cl.config.DownloadRateLimiter,
-					r: r,
-				}
-			},
 		},
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
-		maxRequests:    maxRequests,
 	}
+
+	if t.cl.httpClientUseDownloadRateLimiter {
+		ws.client.ResponseBodyWrapper = func(r io.Reader) io.Reader {
+			return &rateLimitedReader{
+				l: t.cl.config.DownloadRateLimiter,
+				r: r,
+			}
+		}
+	}
+
 	ws.peer.initRequestState()
 	for _, opt := range opts {
 		opt(&ws.client)
@@ -2470,7 +2477,7 @@ func (t *Torrent) cancelRequest(r RequestIndex) *Peer {
 		p.cancel(r)
 	}
 	// TODO: This is a check that an old invariant holds. It can be removed after some testing.
-	//delete(t.pendingRequests, r)
+	// delete(t.pendingRequests, r)
 	var zeroRequestState requestState
 	if t.requestState[r] != zeroRequestState {
 		panic("expected request state to be gone")

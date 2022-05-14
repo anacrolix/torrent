@@ -21,8 +21,6 @@ type webseedPeer struct {
 	client         webseed.Client
 	activeRequests map[Request]webseed.Request
 	requesterCond  sync.Cond
-	// Number of requester routines.
-	maxRequests int
 }
 
 var _ peerImpl = (*webseedPeer)(nil)

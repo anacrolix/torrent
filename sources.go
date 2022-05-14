@@ -8,6 +8,7 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/webseed"
 )
 
 // Add HTTP endpoints that serve the metainfo. They will be used if the torrent info isn't obtained
@@ -59,7 +60,7 @@ func (t *Torrent) useActiveTorrentSource(source string) error {
 	return t.MergeSpec(TorrentSpecFromMetaInfo(&mi))
 }
 
-func getTorrentSource(ctx context.Context, source string, hc *http.Client) (mi metainfo.MetaInfo, err error) {
+func getTorrentSource(ctx context.Context, source string, hc webseed.HttpClient) (mi metainfo.MetaInfo, err error) {
 	var req *http.Request
 	if req, err = http.NewRequestWithContext(ctx, http.MethodGet, source, nil); err != nil {
 		return

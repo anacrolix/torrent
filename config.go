@@ -11,6 +11,7 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/torrent/version"
+	"github.com/anacrolix/torrent/webseed"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/iplist"
@@ -36,6 +37,9 @@ type ClientConfig struct {
 	// Don't create a DHT.
 	NoDHT            bool `long:"disable-dht"`
 	DhtStartingNodes func(network string) dht.StartingNodesGetter
+	// DhtAnnounceInterval helps to tune an interval of torrent announcements.
+	DhtAnnounceInterval time.Duration
+
 	// Called for each anacrolix/dht Server created for the Client.
 	ConfigureAnacrolixDhtServer       func(*dht.ServerConfig)
 	PeriodicallyAnnounceTorrentsToDht bool
@@ -154,6 +158,16 @@ type ClientConfig struct {
 
 	DisableWebtorrent bool
 	DisableWebseeds   bool
+	// HTTPClient is used to override default client which is used for
+	// making requests to webseeds and torrent file downloads. This helps
+	// to provide custom logic like metrics, tracing collection, using custom
+	// transports, rate limiting policies, semaphores, etc.
+	// Probably this has to be used to request webseeds only. A client which
+	// requests a torrent files can have different requirements (need an advice here).
+	HTTPClient webseed.HttpClient
+	// HTTPClientUseDownloadRateLimiter helps to disable a default rate limited
+	// body wrapper and provide custom logic inside the client.
+	HTTPClientUseDownloadRateLimiter bool
 
 	Callbacks Callbacks
 }
@@ -183,6 +197,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		TorrentPeersLowWater:           50,
 		HandshakesTimeout:              4 * time.Second,
 		KeepAliveTimeout:               time.Minute,
+		DhtAnnounceInterval:            5 * time.Minute,
 		DhtStartingNodes: func(network string) dht.StartingNodesGetter {
 			return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }
 		},
@@ -202,6 +217,8 @@ func NewDefaultClientConfig() *ClientConfig {
 		Extensions:            defaultPeerExtensionBytes(),
 		AcceptPeerConnections: true,
 		MaxUnverifiedBytes:    64 << 20,
+
+		HTTPClientUseDownloadRateLimiter: true,
 	}
 	return cc
 }

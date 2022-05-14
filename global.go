@@ -40,23 +40,23 @@ var (
 	peersSupportingExtension expvar.Map
 	chunksReceived           *expvarHookMap
 
-	pieceHashedCorrect    = expvar.NewInt("pieceHashedCorrect")
-	pieceHashedNotCorrect = expvar.NewInt("pieceHashedNotCorrect")
+	pieceHashedCorrect    = newExpvarHookInt("pieceHashedCorrect")
+	pieceHashedNotCorrect = newExpvarHookInt("pieceHashedNotCorrect")
 
-	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
+	completedHandshakeConnectionFlags = newExpvarHookMap("completedHandshakeConnectionFlags")
 	// Count of connections to peer with same client ID.
-	connsToSelf        = expvar.NewInt("connsToSelf")
+	connsToSelf        = newExpvarHookInt("connsToSelf")
 	receivedKeepalives = newExpvarHookInt("receivedKeepalives")
 	// Requests received for pieces we don't have.
-	requestsReceivedForMissingPieces = expvar.NewInt("requestsReceivedForMissingPieces")
+	requestsReceivedForMissingPieces = newExpvarHookInt("requestsReceivedForMissingPieces")
 	requestedChunkLengths            = newExpvarHookMap("requestedChunkLengths")
 
-	messageTypesReceived = expvar.NewMap("messageTypesReceived")
+	messageTypesReceived = newExpvarHookMap("messageTypesReceived")
 
 	// Track the effectiveness of Torrent.connPieceInclinationPool.
 	pieceInclinationsReused = expvar.NewInt("pieceInclinationsReused")
 	pieceInclinationsNew    = expvar.NewInt("pieceInclinationsNew")
 	pieceInclinationsPut    = expvar.NewInt("pieceInclinationsPut")
 
-	concurrentChunkWrites = expvar.NewInt("torrentConcurrentChunkWrites")
+	concurrentChunkWrites = newExpvarHookInt("torrentConcurrentChunkWrites")
 )

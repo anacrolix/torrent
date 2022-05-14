@@ -324,10 +324,18 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		},
 	}
 
+	// Metrics interception
 	torrent.HandleAddHook(cfg.Callbacks.OnTorrentAddEvent)
 	receivedKeepalives.HandleAddHook(cfg.Callbacks.OnKeepAliveReceived)
 	chunksReceived.HandleAddHook(cfg.Callbacks.OnChunkReceived)
 	requestedChunkLengths.HandleAddHook(cfg.Callbacks.OnChunkRequested)
+	pieceHashedCorrect.HandleAddHook(cfg.Callbacks.OnPieceHashedCorrect)
+	pieceHashedNotCorrect.HandleAddHook(cfg.Callbacks.OnPieceHashedNotCorrect)
+	connsToSelf.HandleAddHook(cfg.Callbacks.OnConnToSelf)
+	requestsReceivedForMissingPieces.HandleAddHook(cfg.Callbacks.OnRequestReceivedForMissingPiece)
+	completedHandshakeConnectionFlags.HandleAddHook(cfg.Callbacks.OnCompletedHandshakeConnectionFlags)
+	messageTypesReceived.HandleAddHook(cfg.Callbacks.OnMessageTypeReceived)
+	concurrentChunkWrites.HandleAddHook(cfg.Callbacks.OnConcurrentChunkWritten)
 
 	return
 }

@@ -51,3 +51,20 @@ func (me *rateLimitedReader) Read(b []byte) (n int, err error) {
 	}
 	return
 }
+
+// rateLimitedReadCloser is used to close HTTP body to fully intercept body calls.
+type rateLimitedReadCloser struct {
+	rateLimitedReader
+}
+
+func newRateLimitedReadCloser(l *rate.Limiter, r io.Reader) io.ReadCloser {
+	return &rateLimitedReadCloser{rateLimitedReader{l: l, r: r}}
+}
+
+func (me *rateLimitedReadCloser) Close() error {
+	if closer, ok := me.r.(io.Closer); ok {
+		return closer.Close()
+	}
+
+	return nil
+}

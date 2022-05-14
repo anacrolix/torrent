@@ -60,7 +60,7 @@ type Client struct {
 	PathEscaper         PathEscaper
 }
 
-type ResponseBodyWrapper func(io.Reader) io.Reader
+type ResponseBodyWrapper func(io.Reader) io.ReadCloser
 
 func (me *Client) SetInfo(info *metainfo.Info) {
 	if !strings.HasSuffix(me.Url, "/") && info.IsDir() {
@@ -140,11 +140,14 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart) error 
 	if result.err != nil {
 		return result.err
 	}
-	defer result.resp.Body.Close()
-	var body io.Reader = result.resp.Body
+
+	var body = result.resp.Body
 	if part.responseBodyWrapper != nil {
 		body = part.responseBodyWrapper(body)
 	}
+
+	defer body.Close()
+
 	// Prevent further accidental use
 	result.resp.Body = nil
 	if ctx.Err() != nil {

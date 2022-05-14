@@ -89,9 +89,7 @@ type Client struct {
 
 	activeAnnounceLimiter limiter.Instance
 
-	httpClient                       webseed.HttpClient
-	httpClientUseDownloadRateLimiter bool
-	dhtAnnounceInterval              time.Duration
+	httpClient webseed.HttpClient
 }
 
 type ipStr string
@@ -206,8 +204,6 @@ func (cl *Client) init(cfg *ClientConfig) {
 	cl.event.L = cl.locker()
 	cl.ipBlockList = cfg.IPBlocklist
 	cl.httpClient = newHTTPClient(cfg)
-	cl.httpClientUseDownloadRateLimiter = cfg.HTTPClientUseDownloadRateLimiter
-	cl.dhtAnnounceInterval = cfg.DhtAnnounceInterval
 }
 
 func newHTTPClient(cfg *ClientConfig) webseed.HttpClient {
@@ -1216,8 +1212,6 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		},
 		webSeeds:     make(map[string]*Peer),
 		gotMetainfoC: make(chan struct{}),
-
-		dhtAnnounceInterval: cl.dhtAnnounceInterval,
 	}
 	t.smartBanCache.Hash = sha1.Sum
 	t.smartBanCache.Init()

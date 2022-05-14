@@ -165,9 +165,9 @@ type ClientConfig struct {
 	// Probably this has to be used to request webseeds only. A client which
 	// requests a torrent files can have different requirements (need an advice here).
 	HTTPClient webseed.HttpClient
-	// HTTPClientUseDownloadRateLimiter helps to disable a default rate limited
-	// body wrapper and provide custom logic inside the client.
-	HTTPClientUseDownloadRateLimiter bool
+	// HTTPClientResponseBodyWrapper helps to intercept a body reading. For example
+	// release a semaphore when the body
+	HTTPClientResponseBodyWrapper webseed.ResponseBodyWrapper
 
 	Callbacks Callbacks
 }
@@ -217,8 +217,6 @@ func NewDefaultClientConfig() *ClientConfig {
 		Extensions:            defaultPeerExtensionBytes(),
 		AcceptPeerConnections: true,
 		MaxUnverifiedBytes:    64 << 20,
-
-		HTTPClientUseDownloadRateLimiter: true,
 	}
 	return cc
 }

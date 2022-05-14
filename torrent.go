@@ -113,8 +113,6 @@ type Torrent struct {
 	trackerAnnouncers map[string]torrentTrackerAnnouncer
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
-	// How many times we have to wait until issuing next announce.
-	dhtAnnounceInterval time.Duration
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
@@ -1782,7 +1780,7 @@ func (t *Torrent) timeboxedAnnounceToDht(s DhtServer) error {
 	}
 	select {
 	case <-t.closed.Done():
-	case <-time.After(t.dhtAnnounceInterval):
+	case <-time.After(t.cl.config.DhtAnnounceInterval):
 	}
 	stop()
 	return nil
@@ -2413,12 +2411,11 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
 	}
 
-	if t.cl.httpClientUseDownloadRateLimiter {
-		ws.client.ResponseBodyWrapper = func(r io.Reader) io.Reader {
-			return &rateLimitedReader{
-				l: t.cl.config.DownloadRateLimiter,
-				r: r,
-			}
+	if t.cl.config.HTTPClientResponseBodyWrapper != nil {
+		ws.client.ResponseBodyWrapper = t.cl.config.HTTPClientResponseBodyWrapper
+	} else {
+		ws.client.ResponseBodyWrapper = func(r io.Reader) io.ReadCloser {
+			return newRateLimitedReadCloser(t.cl.config.DownloadRateLimiter, r)
 		}
 	}
 

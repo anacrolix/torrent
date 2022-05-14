@@ -166,7 +166,7 @@ type ClientConfig struct {
 	// requests a torrent files can have different requirements (need an advice here).
 	HTTPClient webseed.HttpClient
 	// HTTPClientResponseBodyWrapper helps to intercept a body reading. For example
-	// release a semaphore when the body
+	// release a semaphore when the body reading is done.
 	HTTPClientResponseBodyWrapper webseed.ResponseBodyWrapper
 
 	Callbacks Callbacks

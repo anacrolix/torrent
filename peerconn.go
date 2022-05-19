@@ -351,6 +351,13 @@ func (cn *Peer) downloadRate() float64 {
 	return float64(num) / cn.totalExpectingTime().Seconds()
 }
 
+func (cn *Peer) DownloadRate() float64 {
+	cn.locker().Lock()
+	defer cn.locker().Unlock()
+
+	return cn.downloadRate()
+}
+
 func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int)) {
 	var last Option[pieceIndex]
 	var count int

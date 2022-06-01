@@ -1598,7 +1598,7 @@ func (t *Torrent) onWebRtcConn(
 	defer t.cl.unlock()
 	err = t.cl.runHandshookConn(pc, t)
 	if err != nil {
-		t.logger.WithDefaultLevel(log.Critical).Printf("error running handshook webrtc conn: %v", err)
+		t.logger.WithDefaultLevel(log.Debug).Printf("error running handshook webrtc conn: %v", err)
 	}
 }
 

@@ -12,7 +12,7 @@ require (
 	github.com/anacrolix/dht/v2 v2.16.2-0.20220311024416-dd658f18fd51
 	github.com/anacrolix/envpprof v1.2.1
 	github.com/anacrolix/fuse v0.2.0
-	github.com/anacrolix/generics v0.0.0-20220510042907-b50562b436ec
+	github.com/anacrolix/generics v0.0.0-20220606044612-6c45734a4e5b
 	github.com/anacrolix/go-libutp v1.2.0
 	github.com/anacrolix/log v0.13.1
 	github.com/anacrolix/missinggo v1.3.0
@@ -39,7 +39,7 @@ require (
 	github.com/lispad/go-generics-tools v1.0.0
 	github.com/pion/datachannel v1.5.2
 	github.com/pion/logging v0.2.2
-	github.com/pion/webrtc/v3 v3.1.24-0.20220208053747-94262c1b2b38
+	github.com/pion/webrtc/v3 v3.1.41
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.5.1
 	github.com/stretchr/testify v1.7.1
@@ -63,19 +63,19 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
-	github.com/pion/dtls/v2 v2.1.2 // indirect
-	github.com/pion/ice/v2 v2.1.20 // indirect
-	github.com/pion/interceptor v0.1.7 // indirect
+	github.com/pion/dtls/v2 v2.1.5 // indirect
+	github.com/pion/ice/v2 v2.2.6 // indirect
+	github.com/pion/interceptor v0.1.11 // indirect
 	github.com/pion/mdns v0.0.5 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/rtcp v1.2.9 // indirect
-	github.com/pion/rtp v1.7.4 // indirect
+	github.com/pion/rtp v1.7.13 // indirect
 	github.com/pion/sctp v1.8.2 // indirect
-	github.com/pion/sdp/v3 v3.0.4 // indirect
-	github.com/pion/srtp/v2 v2.0.5 // indirect
+	github.com/pion/sdp/v3 v3.0.5 // indirect
+	github.com/pion/srtp/v2 v2.0.9 // indirect
 	github.com/pion/stun v0.3.5 // indirect
 	github.com/pion/transport v0.13.0 // indirect
-	github.com/pion/turn/v2 v2.0.6 // indirect
+	github.com/pion/turn/v2 v2.0.8 // indirect
 	github.com/pion/udp v0.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
@@ -84,9 +84,9 @@ require (
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/rs/dnscache v0.0.0-20210201191234-295bba877686 // indirect
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
-	golang.org/x/crypto v0.0.0-20220131195533-30dcbda58838 // indirect
+	golang.org/x/crypto v0.0.0-20220516162934-403b01795ae8 // indirect
 	golang.org/x/exp v0.0.0-20220428152302-39d4317da171 // indirect
-	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd // indirect
+	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect

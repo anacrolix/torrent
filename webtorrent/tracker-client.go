@@ -3,10 +3,12 @@ package webtorrent
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/torrent/tracker"
@@ -21,6 +23,8 @@ type TrackerClientStats struct {
 	ConvertedOutboundConns int64
 }
 
+type WebRtcApisGetter func() []*webrtc.API
+
 // Client represents the webtorrent client
 type TrackerClient struct {
 	Url                string
@@ -29,15 +33,18 @@ type TrackerClient struct {
 	OnConn             onDataChannelOpen
 	Logger             log.Logger
 	Dialer             *websocket.Dialer
+	GetAPIs            WebRtcApisGetter
 
 	mu             sync.Mutex
 	cond           sync.Cond
-	outboundOffers map[string]outboundOffer // OfferID to outboundOffer
+	outboundOffers outboundOffersMap // OfferID to outboundOffer
 	wsConn         *websocket.Conn
 	closed         bool
 	stats          TrackerClientStats
 	pingTicker     *time.Ticker
 }
+
+type outboundOffersMap map[string]outboundOffer
 
 func (me *TrackerClient) Stats() TrackerClientStats {
 	me.mu.Lock()
@@ -189,21 +196,41 @@ func (tc *TrackerClient) closeUnusedOffers() {
 
 func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte) error {
 	metrics.Add("outbound announces", 1)
-	var randOfferId [20]byte
-	_, err := rand.Read(randOfferId[:])
-	if err != nil {
-		return fmt.Errorf("generating offer_id bytes: %w", err)
-	}
-	offerIDBinary := binaryToJsonString(randOfferId[:])
 
-	pc, dc, offer, err := newOffer()
-	if err != nil {
-		return fmt.Errorf("creating offer: %w", err)
+	apis := tc.GetAPIs()
+
+	newOffers := make(map[string]outboundOffer, len(apis))
+	cleanupOffers := func() {
+		for _, offer := range newOffers {
+			offer.peerConnection.Close()
+		}
+	}
+
+	// Create a new offer for each API.
+	for _, api := range apis {
+		var randOfferId [20]byte
+		_, err := rand.Read(randOfferId[:])
+		if err != nil {
+			cleanupOffers()
+			return fmt.Errorf("generating offer_id bytes: %w", err)
+		}
+		offerIDBinary := binaryToJsonString(randOfferId[:])
+		pc, dc, offer, err := newOffer(api)
+		if err != nil {
+			cleanupOffers()
+			return fmt.Errorf("creating offer: %w", err)
+		}
+		newOffers[offerIDBinary] = outboundOffer{
+			peerConnection: pc,
+			dataChannel:    dc,
+			infoHash:       infoHash,
+			originalOffer:  offer,
+		}
 	}
 
 	request, err := tc.GetAnnounceRequest(event, infoHash)
 	if err != nil {
-		pc.Close()
+		cleanupOffers()
 		return fmt.Errorf("getting announce parameters: %w", err)
 	}
 
@@ -216,15 +243,18 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 		Action:     "announce",
 		InfoHash:   binaryToJsonString(infoHash[:]),
 		PeerID:     tc.peerIdBinary(),
-		Offers: []Offer{{
-			OfferID: offerIDBinary,
-			Offer:   offer,
-		}},
+		Offers:     make([]Offer, 0, len(newOffers)),
+	}
+	for offerId, offer := range newOffers {
+		req.Offers = append(req.Offers, Offer{
+			OfferID: offerId,
+			Offer:   offer.originalOffer,
+		})
 	}
 
 	data, err := json.Marshal(req)
 	if err != nil {
-		pc.Close()
+		cleanupOffers()
 		return fmt.Errorf("marshalling request: %w", err)
 	}
 
@@ -232,17 +262,12 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 	defer tc.mu.Unlock()
 	err = tc.writeMessage(data)
 	if err != nil {
-		pc.Close()
+		cleanupOffers()
 		return fmt.Errorf("write AnnounceRequest: %w", err)
 	}
-	if tc.outboundOffers == nil {
-		tc.outboundOffers = make(map[string]outboundOffer)
-	}
-	tc.outboundOffers[offerIDBinary] = outboundOffer{
-		peerConnection: pc,
-		dataChannel:    dc,
-		originalOffer:  offer,
-		infoHash:       infoHash,
+	generics.MakeMapIfNil(&tc.outboundOffers)
+	for offerIdBinary, offer := range newOffers {
+		tc.outboundOffers[offerIdBinary] = offer
 	}
 	return nil
 }
@@ -290,9 +315,16 @@ func (tc *TrackerClient) handleOffer(
 	infoHash [20]byte,
 	peerId string,
 ) error {
-	peerConnection, answer, err := newAnsweringPeerConnection(offer)
-	if err != nil {
-		return fmt.Errorf("write AnnounceResponse: %w", err)
+	peerConnection, answer, ok, errs := newAnsweringPeerConnection(offer, tc.GetAPIs())
+	if !ok {
+		if len(errs) == 0 {
+			tc.Logger.Levelf(log.Warning, "no answering peer connection for %v and no errors", offer)
+			return errors.New("no answering peer connection and no errors")
+		}
+		for _, err := range errs {
+			tc.Logger.Levelf(log.Debug, "creating answering peer connection for %v: %v", offer, err)
+		}
+		return fmt.Errorf("creating answering peer connection (first of %v errors): %w", len(errs), errs[0])
 	}
 	response := AnnounceResponse{
 		Action:   "announce",

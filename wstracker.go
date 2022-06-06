@@ -6,11 +6,10 @@ import (
 	"sync"
 
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/torrent/tracker/http"
-	"github.com/gorilla/websocket"
-
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/tracker/http"
 	"github.com/anacrolix/torrent/webtorrent"
+	"github.com/gorilla/websocket"
 	"github.com/pion/datachannel"
 )
 
@@ -37,9 +36,11 @@ type websocketTrackers struct {
 	Logger             log.Logger
 	GetAnnounceRequest func(event tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error)
 	OnConn             func(datachannel.ReadWriteCloser, webtorrent.DataChannelContext)
-	mu                 sync.Mutex
-	clients            map[string]*refCountedWebtorrentTrackerClient
 	Proxy              http.ProxyFunc
+	GetAPIs            webtorrent.WebRtcApisGetter
+
+	mu      sync.Mutex
+	clients map[string]*refCountedWebtorrentTrackerClient
 }
 
 func (me *websocketTrackers) Get(url string) (*webtorrent.TrackerClient, func()) {
@@ -58,6 +59,7 @@ func (me *websocketTrackers) Get(url string) (*webtorrent.TrackerClient, func())
 				Logger: me.Logger.WithText(func(m log.Msg) string {
 					return fmt.Sprintf("tracker client for %q: %v", url, m)
 				}),
+				GetAPIs: me.GetAPIs,
 			},
 		}
 		value.TrackerClient.Start(func(err error) {

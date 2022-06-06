@@ -19,10 +19,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anacrolix/torrent/internal/netpcmc"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
 	"github.com/pion/datachannel"
+	"github.com/pion/webrtc/v3"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/chansync"
@@ -69,8 +71,11 @@ type Client struct {
 	onClose        []func()
 	dialers        []Dialer
 	listeners      []Listener
-	dhtServers     []DhtServer
-	ipBlockList    iplist.Ranger
+	packetConns    []*netpcmc.Multi
+	webRtcApis     []*webrtc.API
+
+	dhtServers  []DhtServer
+	ipBlockList iplist.Ranger
 
 	// Set of addresses that have our client ID. This intentionally will
 	// include ourselves if we end up trying to connect to our own address
@@ -256,11 +261,8 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		return
 	}
 
-	// Check for panics.
-	cl.LocalPort()
-
-	for _, _s := range sockets {
-		s := _s // Go is fucking retarded.
+	for _, s := range sockets {
+		s := s // Go is fucking retarded.
 		cl.onClose = append(cl.onClose, func() { go s.Close() })
 		if peerNetworkEnabled(parseNetworkString(s.Addr().Network()), cl.config) {
 			cl.dialers = append(cl.dialers, s)
@@ -269,19 +271,34 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 				go cl.acceptConnections(s)
 			}
 		}
+		if pc, ok := s.(net.PacketConn); ok {
+			multi := &netpcmc.Multi{
+				Conn:             pc,
+				MinReadBytes:     1500,
+				MaxBufferedReads: 100,
+			}
+			cl.packetConns = append(cl.packetConns, multi)
+			s := webtorrent.NewWebRtcSettingsEngine()
+			s.SetICEUDPMux(webrtc.NewICEUDPMux(nil, multi.NewConsumer(cl.logger)))
+			cl.webRtcApis = append(cl.webRtcApis, webrtc.NewAPI(webrtc.WithSettingEngine(s)))
+		}
 	}
 
+	// Check for panics. Should be done after listeners are added.
+	cl.LocalPort()
+
 	go cl.forwardPort()
+
 	if !cfg.NoDHT {
-		for _, s := range sockets {
-			if pc, ok := s.(net.PacketConn); ok {
-				ds, err := cl.NewAnacrolixDhtServer(pc)
-				if err != nil {
-					panic(err)
-				}
-				cl.dhtServers = append(cl.dhtServers, AnacrolixDhtServerWrapper{ds})
-				cl.onClose = append(cl.onClose, func() { ds.Close() })
+		for _, multi := range cl.packetConns {
+			logger := cl.logger.WithNames("dht", multi.Conn.LocalAddr().String())
+			conn := multi.NewConsumer(logger)
+			server, err := cl.NewAnacrolixDhtServer(conn, logger)
+			if err != nil {
+				panic(err)
 			}
+			cl.dhtServers = append(cl.dhtServers, AnacrolixDhtServerWrapper{server})
+			cl.onClose = append(cl.onClose, func() { server.Close() })
 		}
 	}
 
@@ -312,9 +329,14 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 			}
 			go t.onWebRtcConn(dc, dcc)
 		},
+		GetAPIs: cl.getWebRtcApis,
 	}
 
 	return
+}
+
+func (cl *Client) getWebRtcApis() []*webrtc.API {
+	return cl.webRtcApis
 }
 
 func (cl *Client) AddDhtServer(d DhtServer) {
@@ -383,8 +405,7 @@ func (cl *Client) listenNetworks() (ns []network) {
 }
 
 // Creates an anacrolix/dht Server, as would be done internally in NewClient, for the given conn.
-func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
-	logger := cl.logger.WithNames("dht", conn.LocalAddr().String())
+func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn, logger log.Logger) (s *dht.Server, err error) {
 	cfg := dht.ServerConfig{
 		IPBlocklist:    cl.ipBlockList,
 		Conn:           conn,

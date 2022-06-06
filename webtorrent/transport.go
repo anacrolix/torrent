@@ -13,14 +13,17 @@ import (
 
 var (
 	metrics = expvar.NewMap("webtorrent")
-	api     = func() *webrtc.API {
-		// Enable the detach API (since it's non-standard but more idiomatic).
-		s.DetachDataChannels()
-		return webrtc.NewAPI(webrtc.WithSettingEngine(s))
-	}()
-	config              = webrtc.Configuration{ICEServers: []webrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}}}
-	newPeerConnectionMu sync.Mutex
+	config  = webrtc.Configuration{ICEServers: []webrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}}}
 )
+
+func init() {
+	// Enable the detach API (since it's non-standard but more idiomatic).
+	s.DetachDataChannels()
+}
+
+func NewWebRtcSettingsEngine() webrtc.SettingEngine {
+	return s
+}
 
 type wrappedPeerConnection struct {
 	*webrtc.PeerConnection
@@ -34,9 +37,7 @@ func (me *wrappedPeerConnection) Close() error {
 	return me.CloseWrapper.Close()
 }
 
-func newPeerConnection() (*wrappedPeerConnection, error) {
-	newPeerConnectionMu.Lock()
-	defer newPeerConnectionMu.Unlock()
+func newPeerConnection(api *webrtc.API) (*wrappedPeerConnection, error) {
 	pc, err := api.NewPeerConnection(config)
 	if err != nil {
 		return nil, err
@@ -48,13 +49,15 @@ func newPeerConnection() (*wrappedPeerConnection, error) {
 }
 
 // newOffer creates a transport and returns a WebRTC offer to be announced
-func newOffer() (
+func newOffer(
+	api *webrtc.API,
+) (
 	peerConnection *wrappedPeerConnection,
 	dataChannel *webrtc.DataChannel,
 	offer webrtc.SessionDescription,
 	err error,
 ) {
-	peerConnection, err = newPeerConnection()
+	peerConnection, err = newPeerConnection(api)
 	if err != nil {
 		return
 	}
@@ -105,19 +108,34 @@ func initAnsweringPeerConnection(
 	return
 }
 
-// newAnsweringPeerConnection creates a transport from a WebRTC offer and and returns a WebRTC answer to be
-// announced.
-func newAnsweringPeerConnection(offer webrtc.SessionDescription) (
-	peerConn *wrappedPeerConnection, answer webrtc.SessionDescription, err error,
+// newAnsweringPeerConnection creates a transport from a WebRTC offer and returns a WebRTC answer to
+// be announced.
+func newAnsweringPeerConnection(
+	offer webrtc.SessionDescription,
+	apis []*webrtc.API,
+) (
+	peerConn *wrappedPeerConnection,
+	answer webrtc.SessionDescription,
+	ok bool,
+	errs []error,
 ) {
-	peerConn, err = newPeerConnection()
-	if err != nil {
-		err = fmt.Errorf("failed to create new connection: %w", err)
+	for _, api := range apis {
+		var err error
+		peerConn, err = newPeerConnection(api)
+		if err != nil {
+			err = fmt.Errorf("new peer connection from %v: %w", api, err)
+			errs = append(errs, err)
+			continue
+		}
+		answer, err = initAnsweringPeerConnection(peerConn, offer)
+		if err != nil {
+			peerConn.Close()
+			err = fmt.Errorf("answering %v with %v: %w", offer, peerConn, err)
+			errs = append(errs, err)
+			continue
+		}
+		ok = true
 		return
-	}
-	answer, err = initAnsweringPeerConnection(peerConn, offer)
-	if err != nil {
-		peerConn.Close()
 	}
 	return
 }

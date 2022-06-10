@@ -47,6 +47,7 @@ func (me *boltClient) OpenTorrent(_ *metainfo.Info, infoHash metainfo.Hash) (Tor
 	return TorrentImpl{
 		Piece: t.Piece,
 		Close: t.Close,
+		Flush: t.Flush,
 	}, nil
 }
 
@@ -62,3 +63,4 @@ func (me *boltTorrent) Piece(p metainfo.Piece) PieceImpl {
 }
 
 func (boltTorrent) Close() error { return nil }
+func (boltTorrent) Flush() error { return nil }

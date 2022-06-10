@@ -2461,7 +2461,11 @@ func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex) RequestIndex {
 }
 
 func (t *Torrent) updateComplete() {
+	before := t.Complete.Bool()
 	t.Complete.SetBool(t.haveAllPieces())
+	if !before && t.Complete.Bool() {
+		_ = t.storage.Flush()
+	}
 }
 
 func (t *Torrent) cancelRequest(r RequestIndex) *Peer {

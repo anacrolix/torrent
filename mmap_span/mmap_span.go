@@ -19,11 +19,30 @@ func (ms *MMapSpan) Append(mMap mmap.MMap) {
 	ms.mMaps = append(ms.mMaps, mMap)
 }
 
+func (ms *MMapSpan) Flush() (errs []error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	for _, mMap := range ms.mMaps {
+		err := mMap.Flush()
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	// This is for issue 211.
+	ms.mMaps = nil
+	ms.InitIndex()
+	return
+}
+
 func (ms *MMapSpan) Close() (errs []error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	for _, mMap := range ms.mMaps {
-		err := mMap.Unmap()
+		err := mMap.Flush()
+		if err != nil {
+			errs = append(errs, err)
+		}
+		err = mMap.Unmap()
 		if err != nil {
 			errs = append(errs, err)
 		}

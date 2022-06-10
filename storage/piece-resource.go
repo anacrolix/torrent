@@ -49,12 +49,16 @@ func (piecePerResourceTorrentImpl) Close() error {
 	return nil
 }
 
+func (piecePerResourceTorrentImpl) Flush() error {
+	return nil
+}
+
 func (s piecePerResource) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
 	t := piecePerResourceTorrentImpl{
 		s,
 		make([]sync.RWMutex, info.NumPieces()),
 	}
-	return TorrentImpl{Piece: t.Piece, Close: t.Close}, nil
+	return TorrentImpl{Piece: t.Piece, Close: t.Close, Flush: t.Flush}, nil
 }
 
 func (s piecePerResourceTorrentImpl) Piece(p metainfo.Piece) PieceImpl {

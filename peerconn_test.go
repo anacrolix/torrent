@@ -102,7 +102,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		Length:      1 << 20,
 		PieceLength: 1 << 20,
 	}))
-	t.storage = &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}}
+	t.storage = &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close, Flush: func() error { return nil }}}
 	t.onSetInfo()
 	t._pendingPieces.Add(0)
 	r, w := net.Pipe()

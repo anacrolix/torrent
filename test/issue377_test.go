@@ -126,8 +126,12 @@ func (me *diskFullStorage) Close() error {
 	return nil
 }
 
+func (me *diskFullStorage) Flush() error {
+	return nil
+}
+
 func (d *diskFullStorage) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storage.TorrentImpl, error) {
-	return storage.TorrentImpl{Piece: d.Piece, Close: d.Close}, nil
+	return storage.TorrentImpl{Piece: d.Piece, Close: d.Close, Flush: d.Flush}, nil
 }
 
 type pieceImpl struct {

@@ -30,10 +30,10 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.1.0
 	github.com/elliotchance/orderedmap v1.4.0
-	github.com/frankban/quicktest v1.14.0
+	github.com/frankban/quicktest v1.14.3
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/google/btree v1.0.1
-	github.com/google/go-cmp v0.5.6
+	github.com/google/go-cmp v0.5.7
 	github.com/gorilla/websocket v1.4.2
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/lispad/go-generics-tools v1.0.0

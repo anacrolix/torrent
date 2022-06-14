@@ -1042,6 +1042,7 @@ func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 		}
 		torrent.Add("peer request data read successes", 1)
 		prs.data = b
+		// This might be required for the error case too (#752 and #753).
 		c.tickleWriter()
 	}
 }

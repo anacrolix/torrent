@@ -65,7 +65,7 @@ func serve(ctx args.SubCmdCtx) error {
 		if err != nil {
 			return fmt.Errorf("setting trackers: %w", err)
 		}
-		fmt.Println(ih)
+		fmt.Printf("%v: %v\n", to, to.Metainfo().Magnet(&ih, &info))
 		select {}
 	})
 	return nil

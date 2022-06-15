@@ -60,7 +60,13 @@ func serve(ctx args.SubCmdCtx) error {
 		defer to.Drop()
 		err = to.MergeSpec(&torrent.TorrentSpec{
 			InfoBytes: mi.InfoBytes,
-			Trackers:  [][]string{{}},
+			Trackers: [][]string{{
+				`wss://tracker.btorrent.xyz`,
+				`wss://tracker.openwebtorrent.com`,
+				"http://p4p.arenabg.com:1337/announce",
+				"udp://tracker.opentrackr.org:1337/announce",
+				"udp://tracker.openbittorrent.com:6969/announce",
+			}},
 		})
 		if err != nil {
 			return fmt.Errorf("setting trackers: %w", err)

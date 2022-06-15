@@ -147,7 +147,7 @@ type Torrent struct {
 
 	connsWithAllPieces map[*Peer]struct{}
 
-	requestState []requestState
+	requestState map[RequestIndex]requestState
 	// Chunks we've written to since the corresponding piece was last checked.
 	dirtyChunks typedRoaring.Bitmap[RequestIndex]
 
@@ -464,7 +464,6 @@ func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrder
 func (t *Torrent) onSetInfo() {
 	t.pieceRequestOrder = rand.Perm(t.numPieces())
 	t.initPieceRequestOrder()
-	MakeSliceWithLength(&t.requestState, t.numChunks())
 	MakeSliceWithLength(&t.requestPieceStates, t.numPieces())
 	for i := range t.pieces {
 		p := &t.pieces[i]
@@ -484,6 +483,7 @@ func (t *Torrent) onSetInfo() {
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
+	t.requestState = make(map[RequestIndex]requestState)
 	t.tryCreateMorePieceHashers()
 	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info)
@@ -1598,7 +1598,7 @@ func (t *Torrent) onWebRtcConn(
 	defer t.cl.unlock()
 	err = t.cl.runHandshookConn(pc, t)
 	if err != nil {
-		t.logger.WithDefaultLevel(log.Critical).Printf("error running handshook webrtc conn: %v", err)
+		t.logger.WithDefaultLevel(log.Debug).Printf("error running handshook webrtc conn: %v", err)
 	}
 }
 
@@ -2474,9 +2474,8 @@ func (t *Torrent) cancelRequest(r RequestIndex) *Peer {
 		p.cancel(r)
 	}
 	// TODO: This is a check that an old invariant holds. It can be removed after some testing.
-	// delete(t.pendingRequests, r)
-	var zeroRequestState requestState
-	if t.requestState[r] != zeroRequestState {
+	//delete(t.pendingRequests, r)
+	if _, ok := t.requestState[r]; ok {
 		panic("expected request state to be gone")
 	}
 	return p

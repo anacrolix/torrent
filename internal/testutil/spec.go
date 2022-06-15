@@ -44,6 +44,13 @@ func (t *Torrent) Info(pieceLength int64) metainfo.Info {
 	}
 	if t.IsDir() {
 		info.Length = int64(len(t.Files[0].Data))
+	} else {
+		for _, f := range t.Files {
+			info.Files = append(info.Files, metainfo.FileInfo{
+				Path:   []string{f.Name},
+				Length: int64(len(f.Data)),
+			})
+		}
 	}
 	err := info.GeneratePieces(func(fi metainfo.FileInfo) (io.ReadCloser, error) {
 		return ioutil.NopCloser(strings.NewReader(t.GetFile(strings.Join(fi.Path, "/")).Data)), nil

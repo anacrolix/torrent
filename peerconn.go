@@ -361,6 +361,13 @@ func (cn *Peer) downloadRate() float64 {
 	return float64(num) / cn.totalExpectingTime().Seconds()
 }
 
+func (cn *Peer) DownloadRate() float64 {
+	cn.locker().Lock()
+	defer cn.locker().Unlock()
+
+	return cn.downloadRate()
+}
+
 func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int)) {
 	var last Option[pieceIndex]
 	var count int
@@ -1045,6 +1052,7 @@ func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 		}
 		torrent.Add("peer request data read successes", 1)
 		prs.data = b
+		// This might be required for the error case too (#752 and #753).
 		c.tickleWriter()
 	}
 }
@@ -1638,7 +1646,7 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 	if c.t.requestingPeer(r) != c {
 		panic("only one peer should have a given request at a time")
 	}
-	c.t.requestState[r] = requestState{}
+	delete(c.t.requestState, r)
 	// c.t.iterPeers(func(p *Peer) {
 	// 	if p.isLowOnRequests() {
 	// 		p.updateRequests("Peer.deleteRequest")

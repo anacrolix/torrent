@@ -28,9 +28,6 @@ func (ms *MMapSpan) Flush() (errs []error) {
 			errs = append(errs, err)
 		}
 	}
-	// This is for issue 211.
-	ms.mMaps = nil
-	ms.InitIndex()
 	return
 }
 

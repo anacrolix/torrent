@@ -90,7 +90,6 @@ func (fs fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash
 	return TorrentImpl{
 		Piece: t.Piece,
 		Close: t.Close,
-		Flush: t.Flush,
 	}, nil
 }
 
@@ -120,10 +119,6 @@ func (fts *fileTorrentImpl) Piece(p metainfo.Piece) PieceImpl {
 }
 
 func (fs *fileTorrentImpl) Close() error {
-	return nil
-}
-
-func (fs *fileTorrentImpl) Flush() error {
 	return nil
 }
 

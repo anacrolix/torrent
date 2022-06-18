@@ -40,7 +40,7 @@ type client struct {
 
 func (c *client) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.TorrentImpl, error) {
 	t := torrent{c.Cache}
-	return storage.TorrentImpl{Piece: t.Piece, Close: t.Close, Capacity: &c.capacity, Flush: t.Flush}, nil
+	return storage.TorrentImpl{Piece: t.Piece, Close: t.Close, Capacity: &c.capacity}, nil
 }
 
 type torrent struct {
@@ -57,9 +57,6 @@ func (t torrent) Piece(p metainfo.Piece) storage.PieceImpl {
 }
 
 func (t torrent) Close() error {
-	return nil
-}
-func (t torrent) Flush() error {
 	return nil
 }
 

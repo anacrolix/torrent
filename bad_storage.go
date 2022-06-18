@@ -17,7 +17,6 @@ var _ storage.ClientImpl = badStorage{}
 func (bs badStorage) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.TorrentImpl, error) {
 	return storage.TorrentImpl{
 		Piece: bs.Piece,
-		Flush: func() error { return nil },
 	}, nil
 }
 

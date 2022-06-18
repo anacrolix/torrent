@@ -20,9 +20,6 @@ func (c Client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (storag
 		Close: func() error {
 			return nil
 		},
-		Flush: func() error {
-			return nil
-		},
 		Capacity: &capFunc,
 	}, nil
 }

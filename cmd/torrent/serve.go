@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/anacrolix/args"
+	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/bencode"
@@ -13,10 +13,10 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-func serve(ctx args.SubCmdCtx) error {
-	var filePath string
-	ctx.Parse(args.Pos("filePath", &filePath))
-	ctx.Defer(func() error {
+func serve() (cmd bargle.Command) {
+	filePath := &bargle.Positional[string]{}
+	cmd.Positionals = append(cmd.Positionals, filePath)
+	cmd.DefaultAction = func() error {
 		cfg := torrent.NewDefaultClientConfig()
 		cfg.Seed = true
 		cl, err := torrent.NewClient(cfg)
@@ -35,9 +35,9 @@ func serve(ctx args.SubCmdCtx) error {
 		info := metainfo.Info{
 			PieceLength: pieceLength,
 		}
-		err = info.BuildFromFilePath(filePath)
+		err = info.BuildFromFilePath(filePath.Value)
 		if err != nil {
-			return fmt.Errorf("building info from path %q: %w", filePath, err)
+			return fmt.Errorf("building info from path %q: %w", filePath.Value, err)
 		}
 		for _, fi := range info.Files {
 			log.Printf("added %q", fi.Path)
@@ -54,7 +54,7 @@ func serve(ctx args.SubCmdCtx) error {
 		to, _ := cl.AddTorrentOpt(torrent.AddTorrentOpts{
 			InfoHash: ih,
 			Storage: storage.NewFileOpts(storage.NewFileClientOpts{
-				ClientBaseDir: filePath,
+				ClientBaseDir: filePath.Value,
 				FilePathMaker: func(opts storage.FilePathMakerOpts) string {
 					return filepath.Join(opts.File.Path...)
 				},
@@ -78,6 +78,6 @@ func serve(ctx args.SubCmdCtx) error {
 		}
 		fmt.Printf("%v: %v\n", to, to.Metainfo().Magnet(&ih, &info))
 		select {}
-	})
-	return nil
+	}
+	return
 }

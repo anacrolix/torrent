@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/anacrolix/args"
+	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/bradfitz/iter"
 )
@@ -17,53 +17,64 @@ type pprintMetainfoFlags struct {
 	Files       bool
 }
 
-func metainfoCmd(ctx args.SubCmdCtx) (err error) {
+func metainfoCmd() (cmd bargle.Command) {
 	var metainfoPath string
 	var mi *metainfo.MetaInfo
-	// TODO: Treat no subcommand as a failure.
-	return ctx.NewParser().AddParams(
-		args.Pos("torrent file", &metainfoPath, args.AfterParse(func() (err error) {
-			mi, err = metainfo.LoadFromFile(metainfoPath)
-			return
-		})),
-		args.Subcommand("magnet", func(ctx args.SubCmdCtx) (err error) {
-			info, err := mi.UnmarshalInfo()
-			if err != nil {
-				return
-			}
-			fmt.Fprintf(os.Stdout, "%s\n", mi.Magnet(nil, &info).String())
-			return nil
-		}),
-		args.Subcommand("pprint", func(ctx args.SubCmdCtx) (err error) {
-			var flags pprintMetainfoFlags
-			err = ctx.NewParser().AddParams(args.FromStruct(&flags)...).Parse()
-			if err != nil {
-				return
-			}
-			err = pprintMetainfo(mi, flags)
-			if err != nil {
-				return
-			}
-			if !flags.JustName {
-				os.Stdout.WriteString("\n")
+	// TODO: Test if bargle treats no subcommand as a failure.
+	cmd.Positionals = append(cmd.Positionals,
+		&bargle.Positional[*string]{
+			Name:  "torrent file",
+			Value: &metainfoPath,
+			AfterParseFunc: func(ctx bargle.Context) error {
+				ctx.AfterParse(func() (err error) {
+					mi, err = metainfo.LoadFromFile(metainfoPath)
+					return
+				})
+				return nil
+			},
+		},
+		bargle.Subcommand{Name: "magnet", Command: func() (cmd bargle.Command) {
+			cmd.DefaultAction = func() (err error) {
+				info, err := mi.UnmarshalInfo()
+				if err != nil {
+					return
+				}
+				fmt.Fprintf(os.Stdout, "%s\n", mi.Magnet(nil, &info).String())
+				return nil
 			}
 			return
-		}),
-		args.Subcommand("infohash", func(ctx args.SubCmdCtx) (err error) {
-			fmt.Printf("%s: %s\n", mi.HashInfoBytes().HexString(), metainfoPath)
-			return nil
-		}),
-		args.Subcommand("list-files", func(ctx args.SubCmdCtx) (err error) {
-			info, err := mi.UnmarshalInfo()
-			if err != nil {
-				return fmt.Errorf("unmarshalling info from metainfo at %q: %v", metainfoPath, err)
-			}
-			for _, f := range info.UpvertedFiles() {
-				fmt.Println(f.DisplayPath(&info))
-			}
-			return nil
-		}),
-	).Parse()
+		}()},
+		//bargle.Subcommand{Name: "pprint", Command: func(ctx args.SubCmdCtx) (err error) {
+		//	var flags pprintMetainfoFlags
+		//	err = ctx.NewParser().AddParams(args.FromStruct(&flags)...).Parse()
+		//	if err != nil {
+		//		return
+		//	}
+		//	err = pprintMetainfo(mi, flags)
+		//	if err != nil {
+		//		return
+		//	}
+		//	if !flags.JustName {
+		//		os.Stdout.WriteString("\n")
+		//	}
+		//	return
+		//}},
+		//bargle.Subcommand{Name: "infohash", Command: func(ctx args.SubCmdCtx) (err error) {
+		//	fmt.Printf("%s: %s\n", mi.HashInfoBytes().HexString(), metainfoPath)
+		//	return nil
+		//}},
+		//bargle.Subcommand{Name: "list-files", Command: func(ctx args.SubCmdCtx) (err error) {
+		//	info, err := mi.UnmarshalInfo()
+		//	if err != nil {
+		//		return fmt.Errorf("unmarshalling info from metainfo at %q: %v", metainfoPath, err)
+		//	}
+		//	for _, f := range info.UpvertedFiles() {
+		//		fmt.Println(f.DisplayPath(&info))
+		//	}
+		//	return nil
+		//}},
+	)
+	return
 }
 
 func pprintMetainfo(metainfo *metainfo.MetaInfo, flags pprintMetainfoFlags) error {

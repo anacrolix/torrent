@@ -366,7 +366,7 @@ func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int))
 			count++
 		} else {
 			if count != 0 {
-				f(last.Value(), count)
+				f(last.Value, count)
 			}
 			last = item
 			count = 1
@@ -1400,8 +1400,8 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	req := c.t.requestIndexFromRequest(ppReq)
 	t := c.t
 
-	if c.bannableAddr.Ok() {
-		t.smartBanCache.RecordBlock(c.bannableAddr.Value(), req, msg.Piece)
+	if c.bannableAddr.Ok {
+		t.smartBanCache.RecordBlock(c.bannableAddr.Value, req, msg.Piece)
 	}
 
 	if c.peerChoking {

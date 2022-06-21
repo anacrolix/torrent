@@ -72,7 +72,7 @@ func (ts *mmapTorrentStorage) Close() error {
 	return nil
 }
 func (ts *mmapTorrentStorage) Flush() error {
-	errs := ts.span.Flush()
+	errs := ts.span.FlushAsync()
 	if len(errs) > 0 {
 		return errs[0]
 	}

@@ -2088,6 +2088,7 @@ func (t *Torrent) onPieceCompleted(piece pieceIndex) {
 		conn.have(piece)
 		t.maybeDropMutuallyCompletePeer(&conn.Peer)
 	}
+	t.piece(piece).Storage().MarkComplete()
 }
 
 // Called when a piece is found to be not complete.

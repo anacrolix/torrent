@@ -20,7 +20,7 @@ var (
 	sws = map[string]StatusWriter{}
 )
 
-func ExportStatusWriter(sw StatusWriter, path string, t *testing.T) (release func()) {
+func ExportStatusWriter(sw StatusWriter, path string, t testing.TB) (release func()) {
 	pattern := fmt.Sprintf("/%s/%s", t.Name(), path)
 	t.Logf("exporting status path %q", pattern)
 	release = func() {

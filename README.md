@@ -29,21 +29,21 @@ There are some small [examples](https://godoc.org/github.com/anacrolix/torrent#p
 
 There are several web-frontends and Android clients among the known public projects:
 
- * [Torrent.Express](https://torrent.express/)
- * [Confluence](https://github.com/anacrolix/confluence)
- * [Trickl](https://github.com/arranlomas/Trickl)
+ * [webtor](https://webtor.io/): free cloud BitTorrent-client <!-- looks very extensive, may have diverged from anacrolix/torrent in 2018? -->
+ * [Confluence](https://github.com/anacrolix/confluence): torrent client as a HTTP service <!-- Well of course I know him... He's me -->
+ * [Simple Torrent](https://github.com/boypt/simple-torrent): self-hosted HTTP remote torrent client <!-- 876 stars -->
+ * [TorrServ](https://github.com/YouROK/TorrServer): Torrent streaming server over http <!-- 543 stars -->
+ * [mabel](https://github.com/smmr-software/mabel): Fancy BitTorrent client for the terminal <!-- 237 stars -->
+ * [Android Torrent Client](https://gitlab.com/axet/android-torrent-client): Android torrent client <!-- 29 stars -->
+ * [libtorrent](https://gitlab.com/axet/libtorrent): gomobile wrapper <!-- 15 stars -->
+ * [Go-PeersToHTTP](https://github.com/WinPooh32/peerstohttp): Simple torrent proxy to http stream controlled over REST-like api <!-- 28 stars -->
+ * [CortexFoundation/torrentfs](https://github.com/CortexFoundation/torrentfs): Independent HTTP service for file seeding and P2P file system of cortex full node <!-- 21 stars -->
+ * [goTorrent](https://github.com/deranjer/goTorrent): torrenting server with a React web frontend <!-- 156 stars, inactive since 2020 -->
+ * [Go Peerflix](https://github.com/Sioro-Neoku/go-peerflix) <!-- 449 stars, inactive since 2019 -->
+ * [Remote-Torrent](https://github.com/BruceWangNo1/remote-torrent) <!-- 57 stars, inactive since 2019 -->
+ * [Trickl](https://github.com/arranlomas/Trickl): torrent client for android <!-- 48 stars, inactive since 2018 -->
+ * [ANT-Downloader](https://github.com/anatasluo/ant) <!-- archived -->
  * [Elementum](http://elementum.surge.sh/) (up to version 0.0.71)
- * [goTorrent](https://github.com/deranjer/goTorrent)
- * [Go Peerflix](https://github.com/Sioro-Neoku/go-peerflix)
- * [Simple Torrent](https://github.com/boypt/simple-torrent) (fork of [Cloud Torrent](https://github.com/jpillora/cloud-torrent), unmaintained)
- * [Android Torrent Client](https://gitlab.com/axet/android-torrent-client)
- * [libtorrent](https://gitlab.com/axet/libtorrent)
- * [Remote-Torrent](https://github.com/BruceWangNo1/remote-torrent)
- * [ANT-Downloader](https://github.com/anatasluo/ant)
- * [Go-PeersToHTTP](https://github.com/WinPooh32/peerstohttp)
- * [CortexFoundation/torrentfs](https://github.com/CortexFoundation/torrentfs): P2P file system of cortex full node
- * [TorrServ](https://github.com/YouROK/TorrServer): Torrent streaming server over http.
- * [Webtor](https://webtor.io/): free cloud BitTorrent-client
 
 ## Help
 

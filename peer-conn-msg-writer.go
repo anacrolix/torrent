@@ -86,19 +86,25 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 		// Flip the buffers.
 		frontBuf, cn.writeBuffer = cn.writeBuffer, frontBuf
 		cn.mu.Unlock()
-		n, err := cn.w.Write(frontBuf.Bytes())
-		if n != 0 {
-			lastWrite = time.Now()
-			keepAliveTimer.Reset(keepAliveTimeout)
+		if frontBuf.Len() == 0 {
+			panic("expected non-empty front buffer")
+		}
+		var err error
+		for frontBuf.Len() != 0 {
+			// Limit write size for WebRTC. See https://github.com/pion/datachannel/issues/59.
+			next := frontBuf.Next(1<<16 - 1)
+			var n int
+			n, err = cn.w.Write(next)
+			if err == nil && n != len(next) {
+				panic("expected full write")
+			}
 		}
 		if err != nil {
 			cn.logger.WithDefaultLevel(log.Debug).Printf("error writing: %v", err)
 			return
 		}
-		if n != frontBuf.Len() {
-			panic("short write")
-		}
-		frontBuf.Reset()
+		lastWrite = time.Now()
+		keepAliveTimer.Reset(keepAliveTimeout)
 	}
 }
 

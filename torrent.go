@@ -168,7 +168,7 @@ type Torrent struct {
 }
 
 func (t *Torrent) length() int64 {
-	return t._length.Value()
+	return t._length.Value
 }
 
 func (t *Torrent) selectivePieceAvailabilityFromPeers(i pieceIndex) (count int) {
@@ -2157,7 +2157,7 @@ func (t *Torrent) dropBannedPeers() {
 	t.iterPeers(func(p *Peer) {
 		remoteIp := p.remoteIp()
 		if remoteIp == nil {
-			if p.bannableAddr.Ok() {
+			if p.bannableAddr.Ok {
 				t.logger.WithDefaultLevel(log.Debug).Printf("can't get remote ip for peer %v", p)
 			}
 			return

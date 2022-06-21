@@ -147,7 +147,7 @@ func (t *Torrent) Name() string {
 // The completed length of all the torrent data, in all its files. This is
 // derived from the torrent info, when it is available.
 func (t *Torrent) Length() int64 {
-	return t._length.Value()
+	return t._length.Value
 }
 
 // Returns a run-time generated metainfo for the torrent that includes the

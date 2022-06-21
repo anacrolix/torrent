@@ -23,7 +23,7 @@ func (ms *MMapSpan) Flush() (errs []error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	for _, mMap := range ms.mMaps {
-		err := mMap.Flush()
+		err := mMap.FlushAsync() // ms.Close does blocking flush
 		if err != nil {
 			errs = append(errs, err)
 		}

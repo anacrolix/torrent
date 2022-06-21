@@ -2,6 +2,8 @@ module github.com/anacrolix/torrent
 
 go 1.18
 
+replace github.com/edsrzf/mmap-go => github.com/AskAlexSharov/mmap-go v1.2.0
+
 require (
 	crawshaw.io/sqlite v0.3.3-0.20210127221821-98b1f83c5508
 	github.com/RoaringBitmap/roaring v1.0.1-0.20220510143707-3f418c4f42a4

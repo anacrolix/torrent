@@ -14,8 +14,11 @@ import (
 )
 
 func serve() (cmd bargle.Command) {
-	filePath := &bargle.Positional[string]{}
-	cmd.Positionals = append(cmd.Positionals, filePath)
+	var filePath string
+	cmd.Positionals = append(cmd.Positionals, &bargle.Positional{
+		Value: &bargle.String{Target: &filePath},
+	})
+	cmd.Desc = "creates and seeds a torrent from a filepath"
 	cmd.DefaultAction = func() error {
 		cfg := torrent.NewDefaultClientConfig()
 		cfg.Seed = true
@@ -35,9 +38,9 @@ func serve() (cmd bargle.Command) {
 		info := metainfo.Info{
 			PieceLength: pieceLength,
 		}
-		err = info.BuildFromFilePath(filePath.Value)
+		err = info.BuildFromFilePath(filePath)
 		if err != nil {
-			return fmt.Errorf("building info from path %q: %w", filePath.Value, err)
+			return fmt.Errorf("building info from path %q: %w", filePath, err)
 		}
 		for _, fi := range info.Files {
 			log.Printf("added %q", fi.Path)
@@ -54,7 +57,7 @@ func serve() (cmd bargle.Command) {
 		to, _ := cl.AddTorrentOpt(torrent.AddTorrentOpts{
 			InfoHash: ih,
 			Storage: storage.NewFileOpts(storage.NewFileClientOpts{
-				ClientBaseDir: filePath.Value,
+				ClientBaseDir: filePath,
 				FilePathMaker: func(opts storage.FilePathMakerOpts) string {
 					return filepath.Join(opts.File.Path...)
 				},

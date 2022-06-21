@@ -2,12 +2,14 @@
 package main
 
 import (
+	"fmt"
 	stdLog "log"
 	"net/http"
 
 	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/envpprof"
 	xprometheus "github.com/anacrolix/missinggo/v2/prometheus"
+	"github.com/anacrolix/torrent/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -22,7 +24,9 @@ func main() {
 	main := bargle.Main{}
 	main.Defer(envpprof.Stop)
 	debug := false
-	main.Options = append(main.Options, bargle.Flag{Longs: []string{"debug"}, Value: &debug})
+	debugFlag := bargle.NewFlag(&debug)
+	debugFlag.AddLong("debug")
+	main.Options = append(main.Options, debugFlag.Make())
 	main.Positionals = append(main.Positionals,
 		bargle.Subcommand{Name: "metainfo", Command: metainfoCmd()},
 		//bargle.Subcommand{Name: "announce", Command: func() bargle.Command {
@@ -35,16 +39,15 @@ func main() {
 		//	}
 		//	return announceErr(cmd)
 		//}()},
-		//bargle.Subcommand{Name: "scrape", Command: func() bargle.Command {
-		//	var cmd ScrapeCmd
-		//	err := p.NewParser().AddParams(
-		//		args.Pos("tracker", &cmd.Tracker),
-		//		args.Pos("infohash", &cmd.InfoHashes, args.Arity('+'))).Parse()
-		//	if err != nil {
-		//		return err
-		//	}
-		//	return scrape(cmd)
-		//}()},
+		bargle.Subcommand{Name: "scrape", Command: func() bargle.Command {
+			var scrapeCfg scrapeCfg
+			cmd := bargle.FromStruct(&scrapeCfg)
+			cmd.Desc = "fetch swarm metrics for info-hashes from tracker"
+			cmd.DefaultAction = func() error {
+				return scrape(scrapeCfg)
+			}
+			return cmd
+		}()},
 		bargle.Subcommand{Name: "download", Command: func() bargle.Command {
 			var dlc DownloadCmd
 			cmd := bargle.FromStruct(&dlc)
@@ -100,13 +103,16 @@ func main() {
 		//	}(),
 		//	Desc: "reads bencoding from stdin into Go native types and spews the result",
 		//},
-		//bargle.Subcommand{Name: "version", Command: func() bargle.Command {
-		//	fmt.Printf("HTTP User-Agent: %q\n", version.DefaultHttpUserAgent)
-		//	fmt.Printf("Torrent client version: %q\n", version.DefaultExtendedHandshakeClientVersion)
-		//	fmt.Printf("Torrent version prefix: %q\n", version.DefaultBep20Prefix)
-		//	return nil
-		//}()},
-		bargle.Subcommand{Name: "serve", Command: serve(), Desc: "creates and seeds a torrent from a filepath"},
+		bargle.Subcommand{Name: "version", Command: bargle.Command{
+			DefaultAction: func() error {
+				fmt.Printf("HTTP User-Agent: %q\n", version.DefaultHttpUserAgent)
+				fmt.Printf("Torrent client version: %q\n", version.DefaultExtendedHandshakeClientVersion)
+				fmt.Printf("Torrent version prefix: %q\n", version.DefaultBep20Prefix)
+				return nil
+			},
+			Desc: "prints various protocol default version strings",
+		}},
+		bargle.Subcommand{Name: "serve", Command: serve()},
 	)
 	main.Run()
 }

@@ -22,9 +22,9 @@ func metainfoCmd() (cmd bargle.Command) {
 	var mi *metainfo.MetaInfo
 	// TODO: Test if bargle treats no subcommand as a failure.
 	cmd.Positionals = append(cmd.Positionals,
-		&bargle.Positional[*string]{
+		&bargle.Positional{
 			Name:  "torrent file",
-			Value: &metainfoPath,
+			Value: &bargle.String{Target: &metainfoPath},
 			AfterParseFunc: func(ctx bargle.Context) error {
 				ctx.AfterParse(func() (err error) {
 					mi, err = metainfo.LoadFromFile(metainfoPath)

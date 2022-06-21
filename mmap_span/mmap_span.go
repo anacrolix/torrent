@@ -68,7 +68,7 @@ func (ms *MMapSpan) FlushAt(p []byte, off int64) (err error) {
 	defer ms.mu.Unlock()
 	ms.segmentLocater.Locate(segments.Extent{off, int64(len(p))}, func(i int, e segments.Extent) bool {
 		//TODO: OS knows which pages are dirty,
-		_ = ms.mMaps[i].FlushAsync()
+		_ = ms.mMaps[i].FlushAsyncAt(e.Start, e.Length)
 		return true
 	})
 	return nil
@@ -96,6 +96,7 @@ func (ms *MMapSpan) locateCopy(copyArgs func(remainingArgument, mmapped []byte) 
 		_n := copyBytes(copyArgs(p, mMapBytes))
 		p = p[_n:]
 		n += _n
+
 		if segments.Int(_n) != e.Length {
 			panic(fmt.Sprintf("did %d bytes, expected to do %d", _n, e.Length))
 		}

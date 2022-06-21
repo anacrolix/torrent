@@ -5,8 +5,8 @@ import (
 	"io"
 	"sync"
 
+	"github.com/AskAlexSharov/mmap-go"
 	"github.com/anacrolix/torrent/segments"
-	"github.com/edsrzf/mmap-go"
 )
 
 type MMapSpan struct {

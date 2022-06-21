@@ -10,8 +10,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/AskAlexSharov/mmap-go"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mmap_span"

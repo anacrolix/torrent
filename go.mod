@@ -28,7 +28,6 @@ require (
 	github.com/bradfitz/iter v0.0.0-20191230175014-e8f45d346db8
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
-	github.com/AskAlexSharov/mmap-go v1.4.0
 	github.com/elliotchance/orderedmap v1.4.0
 	github.com/frankban/quicktest v1.14.3
 	github.com/fsnotify/fsnotify v1.5.1
@@ -49,6 +48,7 @@ require (
 )
 
 require (
+	github.com/AskAlexSharov/mmap-go v1.5.0 // indirect
 	github.com/alexflint/go-scalar v1.1.0 // indirect
 	github.com/anacrolix/mmsg v1.0.0 // indirect
 	github.com/anacrolix/stm v0.3.0 // indirect

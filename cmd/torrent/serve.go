@@ -27,8 +27,13 @@ func serve(ctx args.SubCmdCtx) error {
 		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			cl.WriteStatus(w)
 		})
+		totalLength, err := totalLength(filePath)
+		if err != nil {
+			return fmt.Errorf("calculating total length of %q: %v", filePath, err)
+		}
+		pieceLength := choosePieceLength(totalLength)
 		info := metainfo.Info{
-			PieceLength: 1 << 18,
+			PieceLength: pieceLength,
 		}
 		err = info.BuildFromFilePath(filePath)
 		if err != nil {

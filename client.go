@@ -1590,6 +1590,16 @@ func (cl *Client) ListenAddrs() (ret []net.Addr) {
 	return
 }
 
+func (cl *Client) PublicIPs() (ips []net.IP) {
+	if ip := cl.config.PublicIp4; ip != nil {
+		ips = append(ips, ip)
+	}
+	if ip := cl.config.PublicIp6; ip != nil {
+		ips = append(ips, ip)
+	}
+	return
+}
+
 func (cl *Client) onBadAccept(addr PeerRemoteAddr) {
 	ipa, ok := tryIpPortFromNetAddr(addr)
 	if !ok {

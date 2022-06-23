@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -33,13 +34,15 @@ type AnnounceEvent = udp.AnnounceEvent
 var ErrBadScheme = errors.New("unknown scheme")
 
 type Announce struct {
-	TrackerUrl string
-	Request    AnnounceRequest
-	HostHeader string
-	HTTPProxy  func(*http.Request) (*url.URL, error)
-	ServerName string
-	UserAgent  string
-	UdpNetwork string
+	TrackerUrl   string
+	Request      AnnounceRequest
+	HostHeader   string
+	HTTPProxy    func(*http.Request) (*url.URL, error)
+	DialContext  func(ctx context.Context, network, addr string) (net.Conn, error)
+	ListenPacket func(network, addr string) (net.PacketConn, error)
+	ServerName   string
+	UserAgent    string
+	UdpNetwork   string
 	// If the port is zero, it's assumed to be the same as the Request.Port.
 	ClientIp4 krpc.NodeAddr
 	// If the port is zero, it's assumed to be the same as the Request.Port.
@@ -54,11 +57,13 @@ const DefaultTrackerAnnounceTimeout = 15 * time.Second
 func (me Announce) Do() (res AnnounceResponse, err error) {
 	cl, err := NewClient(me.TrackerUrl, NewClientOpts{
 		Http: trHttp.NewClientOpts{
-			Proxy:      me.HTTPProxy,
-			ServerName: me.ServerName,
+			Proxy:       me.HTTPProxy,
+			DialContext: me.DialContext,
+			ServerName:  me.ServerName,
 		},
-		UdpNetwork: me.UdpNetwork,
-		Logger:     me.Logger.WithContextValue(fmt.Sprintf("tracker client for %q", me.TrackerUrl)),
+		UdpNetwork:   me.UdpNetwork,
+		Logger:       me.Logger.WithContextValue(fmt.Sprintf("tracker client for %q", me.TrackerUrl)),
+		ListenPacket: me.ListenPacket,
 	})
 	if err != nil {
 		return

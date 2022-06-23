@@ -1,7 +1,9 @@
 package http
 
 import (
+	"context"
 	"crypto/tls"
+	"net"
 	"net/http"
 	"net/url"
 )
@@ -12,9 +14,11 @@ type Client struct {
 }
 
 type ProxyFunc func(*http.Request) (*url.URL, error)
+type DialContextFunc func(ctx context.Context, network, addr string) (net.Conn, error)
 
 type NewClientOpts struct {
 	Proxy          ProxyFunc
+	DialContext    DialContextFunc
 	ServerName     string
 	AllowKeepAlive bool
 }
@@ -24,6 +28,7 @@ func NewClient(url_ *url.URL, opts NewClientOpts) Client {
 		url_: url_,
 		hc: &http.Client{
 			Transport: &http.Transport{
+				DialContext: opts.DialContext,
 				Proxy: opts.Proxy,
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,

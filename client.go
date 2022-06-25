@@ -973,7 +973,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 		return fmt.Errorf("adding connection: %w", err)
 	}
 	defer t.dropConnection(c)
-	c.startWriter()
+	c.startMessageWriter()
 	cl.sendInitialMessages(c, t)
 	c.initUpdateRequestsTimer()
 	err := c.mainReadLoop()

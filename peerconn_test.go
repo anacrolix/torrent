@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"golang.org/x/time/rate"
 	"io"
 	"net"
 	"sync"
@@ -32,7 +33,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	r, w := io.Pipe()
 	// c.r = r
 	c.w = w
-	c.startWriter()
+	c.startMessageWriter()
 	c.locker().Lock()
 	c.t._completedPieces.Add(1)
 	c.postBitfield( /*[]bool{false, true, false}*/ )
@@ -281,4 +282,33 @@ func TestPreferredNetworkDirection(t *testing.T) {
 	c.Assert(pc(1, 2, false, false, false).hasPreferredNetworkOver(pc(1, 2, false, false, true)), qt.IsFalse)
 	// No difference
 	c.Assert(pc(1, 2, false, false, false).hasPreferredNetworkOver(pc(1, 2, false, false, false)), qt.IsFalse)
+}
+
+func TestReceiveLargeRequest(t *testing.T) {
+	c := qt.New(t)
+	cl := newTestingClient(t)
+	pc := cl.newConnection(nil, false, nil, "test", "")
+	tor := cl.newTorrentForTesting()
+	tor.info = &metainfo.Info{PieceLength: 3 << 20}
+	pc.setTorrent(tor)
+	tor._completedPieces.Add(0)
+	pc.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
+	pc.choking = false
+	pc.initMessageWriter()
+	req := Request{}
+	req.Length = defaultChunkSize
+	c.Assert(pc.fastEnabled(), qt.IsTrue)
+	c.Check(pc.onReadRequest(req, false), qt.IsNil)
+	c.Check(pc.peerRequests, qt.HasLen, 1)
+	req.Length = 2 << 20
+	c.Check(pc.onReadRequest(req, false), qt.IsNil)
+	c.Check(pc.peerRequests, qt.HasLen, 2)
+	pc.peerRequests = nil
+	pc.t.cl.config.UploadRateLimiter = rate.NewLimiter(1, defaultChunkSize)
+	req.Length = defaultChunkSize
+	c.Check(pc.onReadRequest(req, false), qt.IsNil)
+	c.Check(pc.peerRequests, qt.HasLen, 1)
+	req.Length = 2 << 20
+	c.Check(pc.onReadRequest(req, false), qt.IsNil)
+	c.Check(pc.messageWriter.writeBuffer.Len(), qt.Equals, 17)
 }

@@ -12,7 +12,7 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
-func (pc *PeerConn) startWriter() {
+func (pc *PeerConn) initMessageWriter() {
 	w := &pc.messageWriter
 	*w = peerConnMsgWriter{
 		fillWriteBuffer: func() {
@@ -33,12 +33,18 @@ func (pc *PeerConn) startWriter() {
 		},
 		writeBuffer: new(bytes.Buffer),
 	}
-	go func() {
-		defer pc.locker().Unlock()
-		defer pc.close()
-		defer pc.locker().Lock()
-		pc.messageWriter.run(pc.t.cl.config.KeepAliveTimeout)
-	}()
+}
+
+func (pc *PeerConn) startMessageWriter() {
+	pc.initMessageWriter()
+	go pc.messageWriterRunner()
+}
+
+func (pc *PeerConn) messageWriterRunner() {
+	defer pc.locker().Unlock()
+	defer pc.close()
+	defer pc.locker().Lock()
+	pc.messageWriter.run(pc.t.cl.config.KeepAliveTimeout)
 }
 
 type peerConnMsgWriter struct {

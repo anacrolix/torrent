@@ -44,21 +44,21 @@ func metainfoCmd() (cmd bargle.Command) {
 			}
 			return
 		}()},
-		//bargle.Subcommand{Name: "pprint", Command: func(ctx args.SubCmdCtx) (err error) {
-		//	var flags pprintMetainfoFlags
-		//	err = ctx.NewParser().AddParams(args.FromStruct(&flags)...).Parse()
-		//	if err != nil {
-		//		return
-		//	}
-		//	err = pprintMetainfo(mi, flags)
-		//	if err != nil {
-		//		return
-		//	}
-		//	if !flags.JustName {
-		//		os.Stdout.WriteString("\n")
-		//	}
-		//	return
-		//}},
+		bargle.Subcommand{Name: "pprint", Command: func() (cmd bargle.Command) {
+			var flags pprintMetainfoFlags
+			cmd = bargle.FromStruct(&flags)
+			cmd.DefaultAction = func() (err error) {
+				err = pprintMetainfo(mi, flags)
+				if err != nil {
+					return
+				}
+				if !flags.JustName {
+					os.Stdout.WriteString("\n")
+				}
+				return
+			}
+			return
+		}()},
 		//bargle.Subcommand{Name: "infohash", Command: func(ctx args.SubCmdCtx) (err error) {
 		//	fmt.Printf("%s: %s\n", mi.HashInfoBytes().HexString(), metainfoPath)
 		//	return nil

@@ -66,6 +66,8 @@ github.com/anacrolix/args v0.5.1-0.20220509024600-c3b77d0b61ac h1:XWoepbk3zgOQ8j
 github.com/anacrolix/args v0.5.1-0.20220509024600-c3b77d0b61ac/go.mod h1:Fj/N2PehEwTBE5t/V/9xgTcxDkuYQ+5IBoFw/8gkldI=
 github.com/anacrolix/bargle v0.0.0-20220620083758-c3885e1796d1 h1:RijTNFCxug0EBODz/AmqJDA3Ow700v5jJZQL1j+RLvI=
 github.com/anacrolix/bargle v0.0.0-20220620083758-c3885e1796d1/go.mod h1:cC/kX8wL4i1n+63lOrXhPQQlsoxCo0EqV88fGExQwcY=
+github.com/anacrolix/bargle v0.0.0-20220622082028-6c0bfc8b614d h1:eSBxjJUsa4p5lCn8mlp6gOdzhZYZxqr4YHPk8Uwn1iQ=
+github.com/anacrolix/bargle v0.0.0-20220622082028-6c0bfc8b614d/go.mod h1:9xUiZbkh+94FbiIAL1HXpAIBa832f3Mp07rRPl5c5RQ=
 github.com/anacrolix/chansync v0.3.0 h1:lRu9tbeuw3wl+PhMu/r+JJCRu5ArFXIluOgdF0ao6/U=
 github.com/anacrolix/chansync v0.3.0/go.mod h1:DZsatdsdXxD0WiwcGl0nJVwyjCKMDv+knl1q2iBjA2k=
 github.com/anacrolix/dht/v2 v2.18.0 h1:btjVjzjKqO5nKGbJHJ2UmuwiRx+EgX3e+OCHC9+WRz8=

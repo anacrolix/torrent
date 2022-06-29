@@ -28,7 +28,7 @@ func scrape(flags ScrapeCmd) error {
 		//Logger:  log.Logger{},
 	})
 	if err != nil {
-		return fmt.Errorf("creaing new udp tracker conn client: %w", err)
+		return fmt.Errorf("creating new udp tracker conn client: %w", err)
 	}
 	defer cc.Close()
 	var ihs []udp.InfoHash

@@ -43,7 +43,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.5.1
 	github.com/stretchr/testify v1.7.1
-	github.com/tidwall/btree v0.7.2-0.20211211132910-4215444137fc
+	github.com/tidwall/btree v1.3.1
 	go.etcd.io/bbolt v1.3.6
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 )

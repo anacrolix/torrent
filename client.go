@@ -973,7 +973,7 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 		return fmt.Errorf("adding connection: %w", err)
 	}
 	defer t.dropConnection(c)
-	c.startWriter()
+	c.startMessageWriter()
 	cl.sendInitialMessages(c, t)
 	c.initUpdateRequestsTimer()
 	err := c.mainReadLoop()
@@ -1587,6 +1587,16 @@ func (cl *Client) ListenAddrs() (ret []net.Addr) {
 		ret[i] = cl.listeners[i].Addr()
 	}
 	cl.unlock()
+	return
+}
+
+func (cl *Client) PublicIPs() (ips []net.IP) {
+	if ip := cl.config.PublicIp4; ip != nil {
+		ips = append(ips, ip)
+	}
+	if ip := cl.config.PublicIp6; ip != nil {
+		ips = append(ips, ip)
+	}
 	return
 }
 

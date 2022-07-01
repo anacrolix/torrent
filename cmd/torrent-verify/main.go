@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/AskAlexSharov/mmap-go"
 	"github.com/anacrolix/tagflag"
+	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mmap_span"

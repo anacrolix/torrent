@@ -10,7 +10,7 @@ import (
 	"net"
 	"os"
 
-	"github.com/AskAlexSharov/mmap-go"
+	"github.com/edsrzf/mmap-go"
 )
 
 // The packed format is an 8 byte integer of the number of ranges. Then 20

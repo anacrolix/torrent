@@ -10,8 +10,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/AskAlexSharov/mmap-go"
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mmap_span"
@@ -72,7 +72,7 @@ func (ts *mmapTorrentStorage) Close() error {
 	return nil
 }
 func (ts *mmapTorrentStorage) Flush() error {
-	errs := ts.span.FlushAsync()
+	errs := ts.span.Flush()
 	if len(errs) > 0 {
 		return errs[0]
 	}

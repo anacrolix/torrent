@@ -5,8 +5,8 @@ import (
 	"io"
 	"sync"
 
-	"github.com/AskAlexSharov/mmap-go"
 	"github.com/anacrolix/torrent/segments"
+	"github.com/edsrzf/mmap-go"
 )
 
 type MMapSpan struct {
@@ -19,11 +19,11 @@ func (ms *MMapSpan) Append(mMap mmap.MMap) {
 	ms.mMaps = append(ms.mMaps, mMap)
 }
 
-func (ms *MMapSpan) FlushAsync() (errs []error) {
+func (ms *MMapSpan) Flush() (errs []error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	for _, mMap := range ms.mMaps {
-		err := mMap.FlushAsync() // ms.Close does blocking flush
+		err := mMap.Flush() // ms.Close does blocking flush
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -61,17 +61,6 @@ func (me *MMapSpan) InitIndex() {
 		return l, true
 	})
 	// log.Printf("made mmapspan index: %v", me.segmentLocater)
-}
-
-func (ms *MMapSpan) FlushAt(p []byte, off int64) (err error) {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-	ms.segmentLocater.Locate(segments.Extent{off, int64(len(p))}, func(i int, e segments.Extent) bool {
-		//TODO: OS knows which pages are dirty,
-		_ = ms.mMaps[i].FlushAsyncAt(e.Start, e.Length)
-		return true
-	})
-	return nil
 }
 
 func (ms *MMapSpan) ReadAt(p []byte, off int64) (n int, err error) {

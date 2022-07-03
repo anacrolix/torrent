@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/anacrolix/torrent/segments"
 	"github.com/edsrzf/mmap-go"
@@ -22,6 +23,7 @@ func (ms *MMapSpan) Append(mMap mmap.MMap) {
 func (ms *MMapSpan) Flush() (errs []error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
+	defer func(t time.Time) { fmt.Printf("mmap_span.go:26: %s\n", time.Since(t)) }(time.Now())
 	for _, mMap := range ms.mMaps {
 		err := mMap.Flush()
 		if err != nil {

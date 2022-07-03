@@ -20,8 +20,8 @@ func (ms *MMapSpan) Append(mMap mmap.MMap) {
 }
 
 func (ms *MMapSpan) Flush() (errs []error) {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
 	for _, mMap := range ms.mMaps {
 		err := mMap.Flush()
 		if err != nil {

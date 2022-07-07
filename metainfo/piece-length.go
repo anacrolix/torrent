@@ -28,24 +28,24 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package main
+package metainfo
 
 // For more context on why these numbers, see http://wiki.vuze.com/w/Torrent_Piece_Size
-const MinimumPieceLength = 16 * 1024
-const TargetPieceCountLog2 = 10
-const TargetPieceCountMin = 1 << TargetPieceCountLog2
+const minimumPieceLength = 16 * 1024
+const targetPieceCountLog2 = 10
+const targetPieceCountMin = 1 << targetPieceCountLog2
 
-// Target piece count should be < TargetPieceCountMax
-const TargetPieceCountMax = TargetPieceCountMin << 1
+// Target piece count should be < targetPieceCountMax
+const targetPieceCountMax = targetPieceCountMin << 1
 
 // Choose a good piecelength.
-func choosePieceLength(totalLength int64) (pieceLength int64) {
+func ChoosePieceLength(totalLength int64) (pieceLength int64) {
 	// Must be a power of 2.
 	// Must be a multiple of 16KB
 	// Prefer to provide around 1024..2048 pieces.
-	pieceLength = MinimumPieceLength
+	pieceLength = minimumPieceLength
 	pieces := totalLength / pieceLength
-	for pieces >= TargetPieceCountMax {
+	for pieces >= targetPieceCountMax {
 		pieceLength <<= 1
 		pieces >>= 1
 	}

@@ -31,7 +31,7 @@ func serve(ctx args.SubCmdCtx) error {
 		if err != nil {
 			return fmt.Errorf("calculating total length of %q: %v", filePath, err)
 		}
-		pieceLength := choosePieceLength(totalLength)
+		pieceLength := metainfo.ChoosePieceLength(totalLength)
 		info := metainfo.Info{
 			PieceLength: pieceLength,
 		}

@@ -54,6 +54,12 @@ func (p *Piece) Storage() storage.Piece {
 	return p.t.storage.Piece(p.Info())
 }
 
+func (p *Piece) Flush() {
+	if p.t.storage.Flush != nil {
+		_ = p.t.storage.Flush()
+	}
+}
+
 func (p *Piece) pendingChunkIndex(chunkIndex chunkIndexType) bool {
 	return !p.chunkIndexDirty(chunkIndex)
 }

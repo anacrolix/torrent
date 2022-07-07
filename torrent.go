@@ -2007,7 +2007,11 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 			c._stats.incrementPiecesDirtiedGood()
 		}
 		t.clearPieceTouchers(piece)
+		hasDirty := p.hasDirtyChunks()
 		t.cl.unlock()
+		if hasDirty {
+			p.Flush() // You can be synchronous here!
+		}
 		err := p.Storage().MarkComplete()
 		if err != nil {
 			t.logger.Printf("%T: error marking piece complete %d: %s", t.storage, piece, err)

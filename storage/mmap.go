@@ -41,7 +41,7 @@ func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash
 		span:     span,
 		pc:       s.pc,
 	}
-	return TorrentImpl{Piece: t.Piece, Close: t.Close}, err
+	return TorrentImpl{Piece: t.Piece, Close: t.Close, Flush: t.Flush}, err
 }
 
 func (s *mmapClientImpl) Close() error {
@@ -66,6 +66,13 @@ func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 
 func (ts *mmapTorrentStorage) Close() error {
 	errs := ts.span.Close()
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	return nil
+}
+func (ts *mmapTorrentStorage) Flush() error {
+	errs := ts.span.Flush()
 	if len(errs) > 0 {
 		return errs[0]
 	}

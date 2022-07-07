@@ -19,6 +19,18 @@ func (ms *MMapSpan) Append(mMap mmap.MMap) {
 	ms.mMaps = append(ms.mMaps, mMap)
 }
 
+func (ms *MMapSpan) Flush() (errs []error) {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+	for _, mMap := range ms.mMaps {
+		err := mMap.Flush()
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return
+}
+
 func (ms *MMapSpan) Close() (errs []error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
@@ -69,6 +81,7 @@ func (ms *MMapSpan) locateCopy(copyArgs func(remainingArgument, mmapped []byte) 
 		_n := copyBytes(copyArgs(p, mMapBytes))
 		p = p[_n:]
 		n += _n
+
 		if segments.Int(_n) != e.Length {
 			panic(fmt.Sprintf("did %d bytes, expected to do %d", _n, e.Length))
 		}

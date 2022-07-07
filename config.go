@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"net/url"
@@ -90,6 +91,10 @@ type ClientConfig struct {
 	// Defines proxy for HTTP requests, such as for trackers. It's commonly set from the result of
 	// "net/http".ProxyURL(HTTPProxy).
 	HTTPProxy func(*http.Request) (*url.URL, error)
+	// Defines DialContext func to use for HTTP tracker announcements
+	TrackerDialContext func(ctx context.Context, network, addr string) (net.Conn, error)
+	// Defines ListenPacket func to use for UDP tracker announcements
+	TrackerListenPacket func(network, addr string) (net.PacketConn, error)
 	// Takes a tracker's hostname and requests DNS A and AAAA records.
 	// Used in case DNS lookups require a special setup (i.e., dns-over-https)
 	LookupTrackerIp func(*url.URL) ([]net.IP, error)

@@ -9,6 +9,8 @@ import (
 	"github.com/anacrolix/missinggo/v2"
 )
 
+type listenPacketFunc func(network, addr string) (net.PacketConn, error)
+
 type NewConnClientOpts struct {
 	// The network to operate to use, such as "udp4", "udp", "udp6".
 	Network string
@@ -18,6 +20,8 @@ type NewConnClientOpts struct {
 	Ipv6 *bool
 	// Logger to use for internal errors.
 	Logger log.Logger
+	// Custom function to use as a substitute for net.ListenPacket
+	ListenPacket listenPacketFunc
 }
 
 // Manages a Client with a specific connection.
@@ -80,7 +84,13 @@ func (me clientWriter) Write(p []byte) (n int, err error) {
 }
 
 func NewConnClient(opts NewConnClientOpts) (cc *ConnClient, err error) {
-	conn, err := net.ListenPacket(opts.Network, ":0")
+	var conn net.PacketConn
+	if opts.ListenPacket != nil {
+		conn, err = opts.ListenPacket(opts.Network, ":0")
+	} else {
+		conn, err = net.ListenPacket(opts.Network, ":0")
+	}
+
 	if err != nil {
 		return
 	}

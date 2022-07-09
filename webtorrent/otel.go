@@ -13,6 +13,7 @@ const (
 )
 
 func dataChannelStarted(peerConnectionCtx context.Context, dc *webrtc.DataChannel) (dataChannelCtx context.Context, span trace.Span) {
+	trace.SpanFromContext(peerConnectionCtx).AddEvent("starting data channel")
 	dataChannelCtx, span = otel.Tracer(tracerName).Start(peerConnectionCtx, "DataChannel")
 	dc.OnClose(func() {
 		span.End()

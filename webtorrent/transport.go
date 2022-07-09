@@ -169,25 +169,31 @@ func setDataChannelOnOpen(
 	onOpen func(closer datachannel.ReadWriteCloser),
 ) {
 	dc.OnOpen(func() {
-		trace.SpanFromContext(ctx).AddEvent("opened")
+		dataChannelSpan := trace.SpanFromContext(ctx)
+		dataChannelSpan.AddEvent("opened")
 		raw, err := dc.Detach()
 		if err != nil {
 			// This shouldn't happen if the API is configured correctly, and we call from OnOpen.
 			panic(err)
 		}
 		//dc.OnClose()
-		onOpen(hookDataChannelCloser(raw, pc))
+		onOpen(hookDataChannelCloser(raw, pc, dataChannelSpan))
 	})
 }
 
 // Hooks the datachannel's Close to Close the owning PeerConnection. The datachannel takes ownership
 // and responsibility for the PeerConnection.
-func hookDataChannelCloser(dcrwc datachannel.ReadWriteCloser, pc *wrappedPeerConnection) datachannel.ReadWriteCloser {
+func hookDataChannelCloser(dcrwc datachannel.ReadWriteCloser, pc *wrappedPeerConnection, dataChannelSpan trace.Span) datachannel.ReadWriteCloser {
 	return struct {
 		datachannelReadWriter
 		io.Closer
 	}{
 		dcrwc,
-		ioCloserFunc(pc.Close),
+		ioCloserFunc(func() error {
+			dcrwc.Close()
+			pc.Close()
+			dataChannelSpan.End()
+			return nil
+		}),
 	}
 }

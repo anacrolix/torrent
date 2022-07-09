@@ -2,7 +2,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"github.com/anacrolix/log"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/trace"
 	stdLog "log"
 	"net/http"
 
@@ -21,8 +26,25 @@ func init() {
 
 func main() {
 	defer stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
+
+	ctx := context.Background()
+	tracingExporter, err := otlptracegrpc.New(ctx)
+	if err != nil {
+		log.Fatalf("creating tracing exporter: %v", err)
+	}
+	tracingProvider := trace.NewTracerProvider(trace.WithBatcher(tracingExporter))
+	defer tracingProvider.Shutdown(ctx)
+	otel.SetTracerProvider(tracingProvider)
+	//otel.SetTextMapPropagator(
+	//	propagation.NewCompositeTextMapPropagator(
+	//		propagation.TraceContext{},
+	//		propagation.Baggage{},
+	//	),
+	//)
+
 	main := bargle.Main{}
 	main.Defer(envpprof.Stop)
+	main.Defer(func() { tracingProvider.Shutdown(ctx) })
 	debug := false
 	debugFlag := bargle.NewFlag(&debug)
 	debugFlag.AddLong("debug")

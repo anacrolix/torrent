@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/anacrolix/bargle"
+	"github.com/anacrolix/tagflag"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	"os"
@@ -20,8 +21,10 @@ func create() (cmd bargle.Command) {
 		Comment           string   `name:"t" help:"comment"`
 		CreatedBy         string   `name:"c" help:"created by"`
 		InfoName          *string  `name:"i" help:"override info name (defaults to ROOT)"`
+		PieceLength       tagflag.Bytes
 		Url               []string `name:"u" help:"add webseed url"`
-		Root              string   `arg:"positional"`
+		Private           *bool
+		Root              string `arg:"positional"`
 	}
 	cmd = bargle.FromStruct(&args)
 	cmd.Desc = "Creates a torrent metainfo for the file system rooted at ROOT, and outputs it to stdout"
@@ -43,7 +46,10 @@ func create() (cmd bargle.Command) {
 			mi.CreatedBy = args.CreatedBy
 		}
 		mi.UrlList = args.Url
-		info := metainfo.Info{}
+		info := metainfo.Info{
+			PieceLength: args.PieceLength.Int64(),
+			Private:     args.Private,
+		}
 		err = info.BuildFromFilePath(args.Root)
 		if err != nil {
 			return

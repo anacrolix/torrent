@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"sync"
 	"time"
@@ -57,18 +56,17 @@ type outboundOffer struct {
 	originalOffer  webrtc.SessionDescription
 	peerConnection *wrappedPeerConnection
 	infoHash       [20]byte
+	dataChannel    *webrtc.DataChannel
 }
 
 type DataChannelContext struct {
-	// Can these be obtained by just calling the relevant methods on peerConnection?
-	Local, Remote webrtc.SessionDescription
-	OfferId       string
-	LocalOffered  bool
-	InfoHash      [20]byte
+	OfferId      string
+	LocalOffered bool
+	InfoHash     [20]byte
 	// This is private as some methods might not be appropriate with data channel context.
 	peerConnection *wrappedPeerConnection
-	span           trace.Span
-	ctx            context.Context
+	Span           trace.Span
+	Context        context.Context
 }
 
 func (me *DataChannelContext) GetSelectedIceCandidatePair() (*webrtc.ICECandidatePair, error) {
@@ -211,7 +209,7 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 	}
 	offerIDBinary := binaryToJsonString(randOfferId[:])
 
-	pc, offer, err := newOffer(tc.Logger)
+	pc, dc, offer, err := tc.newOffer(tc.Logger, offerIDBinary, infoHash)
 	if err != nil {
 		return fmt.Errorf("creating offer: %w", err)
 	}
@@ -257,6 +255,7 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 		peerConnection: pc,
 		originalOffer:  offer,
 		infoHash:       infoHash,
+		dataChannel:    dc,
 	}
 	return nil
 }
@@ -291,30 +290,43 @@ func (tc *TrackerClient) trackerReadLoop(tracker *websocket.Conn) error {
 				tc.Logger.WithDefaultLevel(log.Warning).Printf("error decoding info_hash in offer: %v", err)
 				break
 			}
-			tc.handleOffer(*ar.Offer, ar.OfferID, ih, ar.PeerID)
+			err = tc.handleOffer(offerContext{
+				SessDesc: *ar.Offer,
+				Id:       ar.OfferID,
+				InfoHash: ih,
+			}, ar.PeerID)
+			if err != nil {
+				tc.Logger.Levelf(log.Error, "handling offer for infohash %x: %v", ih, err)
+			}
 		case ar.Answer != nil:
 			tc.handleAnswer(ar.OfferID, *ar.Answer)
+		default:
+			tc.Logger.Levelf(log.Warning, "unhandled announce response %q", message)
 		}
 	}
 }
 
+type offerContext struct {
+	SessDesc webrtc.SessionDescription
+	Id       string
+	InfoHash [20]byte
+}
+
 func (tc *TrackerClient) handleOffer(
-	offer webrtc.SessionDescription,
-	offerId string,
-	infoHash [20]byte,
+	offerContext offerContext,
 	peerId string,
 ) error {
-	peerConnection, answer, err := newAnsweringPeerConnection(tc.Logger, offer)
+	peerConnection, answer, err := tc.newAnsweringPeerConnection(offerContext)
 	if err != nil {
-		return fmt.Errorf("write AnnounceResponse: %w", err)
+		return fmt.Errorf("creating answering peer connection: %w", err)
 	}
 	response := AnnounceResponse{
 		Action:   "announce",
-		InfoHash: binaryToJsonString(infoHash[:]),
+		InfoHash: binaryToJsonString(offerContext.InfoHash[:]),
 		PeerID:   tc.peerIdBinary(),
 		ToPeerID: peerId,
 		Answer:   &answer,
-		OfferID:  offerId,
+		OfferID:  offerContext.Id,
 	}
 	data, err := json.Marshal(response)
 	if err != nil {
@@ -327,31 +339,6 @@ func (tc *TrackerClient) handleOffer(
 		peerConnection.Close()
 		return fmt.Errorf("writing response: %w", err)
 	}
-	timer := time.AfterFunc(30*time.Second, func() {
-		peerConnection.span.SetStatus(codes.Error, "answer timeout")
-		metrics.Add("answering peer connections timed out", 1)
-		peerConnection.Close()
-	})
-	peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
-		ctx, span := dataChannelStarted(peerConnection.ctx, d)
-		setDataChannelOnOpen(ctx, d, peerConnection, func(dc datachannel.ReadWriteCloser) {
-			timer.Stop()
-			metrics.Add("answering peer connection conversions", 1)
-			tc.mu.Lock()
-			tc.stats.ConvertedInboundConns++
-			tc.mu.Unlock()
-			tc.OnConn(dc, DataChannelContext{
-				Local:          answer,
-				Remote:         offer,
-				OfferId:        offerId,
-				LocalOffered:   false,
-				InfoHash:       infoHash,
-				peerConnection: peerConnection,
-				ctx:            ctx,
-				span:           span,
-			})
-		})
-	})
 	return nil
 }
 
@@ -365,44 +352,13 @@ func (tc *TrackerClient) handleAnswer(offerId string, answer webrtc.SessionDescr
 	}
 	// tc.Logger.WithDefaultLevel(log.Debug).Printf("offer %q got answer %v", offerId, answer)
 	metrics.Add("outbound offers answered", 1)
-	// Why do we create the data channel before setting the remote description? Are we trying to avoid the peer
-	// initiating?
-	dataChannel, err := offer.peerConnection.CreateDataChannel("webrtc-datachannel", nil)
-	if err != nil {
-		err = fmt.Errorf("creating data channel: %w", err)
-		tc.Logger.LevelPrint(log.Error, err)
-		offer.peerConnection.span.RecordError(err)
-		offer.peerConnection.Close()
-		goto deleteOffer
-	}
-	{
-		ctx, span := dataChannelStarted(offer.peerConnection.ctx, dataChannel)
-		setDataChannelOnOpen(ctx, dataChannel, offer.peerConnection, func(dc datachannel.ReadWriteCloser) {
-			metrics.Add("outbound offers answered with datachannel", 1)
-			tc.mu.Lock()
-			tc.stats.ConvertedOutboundConns++
-			tc.mu.Unlock()
-			tc.OnConn(dc, DataChannelContext{
-				Local:          offer.originalOffer,
-				Remote:         answer,
-				OfferId:        offerId,
-				LocalOffered:   true,
-				InfoHash:       offer.infoHash,
-				peerConnection: offer.peerConnection,
-				ctx:            ctx,
-				span:           span,
-			})
-		})
-	}
-	err = offer.peerConnection.SetRemoteDescription(answer)
+	err := offer.peerConnection.SetRemoteDescription(answer)
 	if err != nil {
 		err = fmt.Errorf("using outbound offer answer: %w", err)
 		offer.peerConnection.span.RecordError(err)
-		dataChannel.Close()
-		tc.Logger.WithDefaultLevel(log.Error).Print(err)
+		tc.Logger.LevelPrint(log.Error, err)
 		return
 	}
-deleteOffer:
 	delete(tc.outboundOffers, offerId)
 	go tc.Announce(tracker.None, offer.infoHash)
 }

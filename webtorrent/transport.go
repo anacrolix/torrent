@@ -4,17 +4,21 @@ import (
 	"context"
 	"expvar"
 	"fmt"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-	"io"
-	"sync"
-
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/pion/datachannel"
 	"github.com/pion/webrtc/v3"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+	"io"
+	"sync"
+	"time"
+)
+
+const (
+	dataChannelLabel = "webrtc-datachannel"
 )
 
 var (
@@ -82,11 +86,15 @@ func setAndGatherLocalDescription(peerConnection *wrappedPeerConnection, sdp web
 	return *peerConnection.LocalDescription(), nil
 }
 
-// newOffer creates a transport and returns a WebRTC offer to be announced
-func newOffer(
+// newOffer creates a transport and returns a WebRTC offer to be announced. See
+// https://github.com/pion/webrtc/blob/master/examples/data-channels/jsfiddle/main.go for what this is modelled on.
+func (tc *TrackerClient) newOffer(
 	logger log.Logger,
+	offerId string,
+	infoHash [20]byte,
 ) (
 	peerConnection *wrappedPeerConnection,
+	dataChannel *webrtc.DataChannel,
 	offer webrtc.SessionDescription,
 	err error,
 ) {
@@ -96,6 +104,26 @@ func newOffer(
 	}
 
 	peerConnection.span.SetAttributes(attribute.String(webrtcConnTypeKey, "offer"))
+
+	dataChannel, err = peerConnection.CreateDataChannel(dataChannelLabel, nil)
+	if err != nil {
+		err = fmt.Errorf("creating data channel: %w", err)
+		peerConnection.Close()
+	}
+	initDataChannel(dataChannel, peerConnection, func(dc datachannel.ReadWriteCloser, dcCtx context.Context, dcSpan trace.Span) {
+		metrics.Add("outbound offers answered with datachannel", 1)
+		tc.mu.Lock()
+		tc.stats.ConvertedOutboundConns++
+		tc.mu.Unlock()
+		tc.OnConn(dc, DataChannelContext{
+			OfferId:        offerId,
+			LocalOffered:   true,
+			InfoHash:       infoHash,
+			peerConnection: peerConnection,
+			Context:        dcCtx,
+			Span:           dcSpan,
+		})
+	})
 
 	offer, err = peerConnection.CreateOffer(nil)
 	if err != nil {
@@ -110,38 +138,62 @@ func newOffer(
 	return
 }
 
-func initAnsweringPeerConnection(
-	peerConnection *wrappedPeerConnection,
-	offer webrtc.SessionDescription,
+type onDetachedDataChannelFunc func(detached datachannel.ReadWriteCloser, ctx context.Context, span trace.Span)
+
+func (tc *TrackerClient) initAnsweringPeerConnection(
+	peerConn *wrappedPeerConnection,
+	offerContext offerContext,
 ) (answer webrtc.SessionDescription, err error) {
-	peerConnection.span.SetAttributes(attribute.String(webrtcConnTypeKey, "answer"))
+	peerConn.span.SetAttributes(attribute.String(webrtcConnTypeKey, "answer"))
 
-	err = peerConnection.SetRemoteDescription(offer)
+	timer := time.AfterFunc(30*time.Second, func() {
+		peerConn.span.SetStatus(codes.Error, "answer timeout")
+		metrics.Add("answering peer connections timed out", 1)
+		peerConn.Close()
+	})
+	peerConn.OnDataChannel(func(d *webrtc.DataChannel) {
+		initDataChannel(d, peerConn, func(detached datachannel.ReadWriteCloser, ctx context.Context, span trace.Span) {
+			timer.Stop()
+			metrics.Add("answering peer connection conversions", 1)
+			tc.mu.Lock()
+			tc.stats.ConvertedInboundConns++
+			tc.mu.Unlock()
+			tc.OnConn(detached, DataChannelContext{
+				OfferId:        offerContext.Id,
+				LocalOffered:   false,
+				InfoHash:       offerContext.InfoHash,
+				peerConnection: peerConn,
+				Context:        ctx,
+				Span:           span,
+			})
+		})
+	})
+
+	err = peerConn.SetRemoteDescription(offerContext.SessDesc)
 	if err != nil {
 		return
 	}
-	answer, err = peerConnection.CreateAnswer(nil)
+	answer, err = peerConn.CreateAnswer(nil)
 	if err != nil {
 		return
 	}
 
-	answer, err = setAndGatherLocalDescription(peerConnection, answer)
+	answer, err = setAndGatherLocalDescription(peerConn, answer)
 	return
 }
 
 // newAnsweringPeerConnection creates a transport from a WebRTC offer and returns a WebRTC answer to be announced.
-func newAnsweringPeerConnection(
-	logger log.Logger,
-	offer webrtc.SessionDescription,
+func (tc *TrackerClient) newAnsweringPeerConnection(
+	offerContext offerContext,
 ) (
 	peerConn *wrappedPeerConnection, answer webrtc.SessionDescription, err error,
 ) {
-	peerConn, err = newPeerConnection(logger)
+	peerConn, err = newPeerConnection(tc.Logger)
 	if err != nil {
 		err = fmt.Errorf("failed to create new connection: %w", err)
 		return
 	}
-	answer, err = initAnsweringPeerConnection(peerConn, offer)
+	answer, err = tc.initAnsweringPeerConnection(peerConn, offerContext)
 	if err != nil {
 		peerConn.span.RecordError(err)
 		peerConn.Close()
@@ -162,22 +214,25 @@ func (me ioCloserFunc) Close() error {
 	return me()
 }
 
-func setDataChannelOnOpen(
-	ctx context.Context,
+func initDataChannel(
 	dc *webrtc.DataChannel,
 	pc *wrappedPeerConnection,
-	onOpen func(closer datachannel.ReadWriteCloser),
+	onOpen onDetachedDataChannelFunc,
 ) {
+	var span trace.Span
+	dc.OnClose(func() {
+		span.End()
+	})
 	dc.OnOpen(func() {
-		dataChannelSpan := trace.SpanFromContext(ctx)
-		dataChannelSpan.AddEvent("opened")
+		pc.span.AddEvent("data channel opened")
+		var ctx context.Context
+		ctx, span = otel.Tracer(tracerName).Start(pc.ctx, "DataChannel")
 		raw, err := dc.Detach()
 		if err != nil {
 			// This shouldn't happen if the API is configured correctly, and we call from OnOpen.
 			panic(err)
 		}
-		//dc.OnClose()
-		onOpen(hookDataChannelCloser(raw, pc, dataChannelSpan))
+		onOpen(hookDataChannelCloser(raw, pc, span), ctx, span)
 	})
 }
 

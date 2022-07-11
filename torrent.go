@@ -61,6 +61,7 @@ type Torrent struct {
 	userOnWriteChunkErr    func(error)
 
 	closed   chansync.SetOnce
+	onClose  []func()
 	infoHash metainfo.Hash
 	pieces   []Piece
 
@@ -865,6 +866,9 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 		err = errors.New("already closed")
 		return
 	}
+	for _, f := range t.onClose {
+		f()
+	}
 	if t.storage != nil {
 		wg.Add(1)
 		go func() {
@@ -1614,11 +1618,10 @@ func (t *Torrent) runHandshookConnLoggingErr(pc *PeerConn) {
 }
 
 func (t *Torrent) startWebsocketAnnouncer(u url.URL) torrentTrackerAnnouncer {
-	wtc, release := t.cl.websocketTrackers.Get(u.String())
-	go func() {
-		<-t.closed.Done()
-		release()
-	}()
+	wtc, release := t.cl.websocketTrackers.Get(u.String(), t.infoHash)
+	// This needs to run before the Torrent is dropped from the Client, to prevent a new webtorrent.TrackerClient for
+	// the same info hash before the old one is cleaned up.
+	t.onClose = append(t.onClose, release)
 	wst := websocketTrackerStatus{u, wtc}
 	go func() {
 		err := wtc.Announce(tracker.Started, t.infoHash)

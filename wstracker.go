@@ -42,7 +42,7 @@ type websocketTrackers struct {
 	Proxy              http.ProxyFunc
 }
 
-func (me *websocketTrackers) Get(url string) (*webtorrent.TrackerClient, func()) {
+func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.TrackerClient, func()) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	value, ok := me.clients[url]
@@ -74,6 +74,7 @@ func (me *websocketTrackers) Get(url string) (*webtorrent.TrackerClient, func())
 	return &value.TrackerClient, func() {
 		me.mu.Lock()
 		defer me.mu.Unlock()
+		value.TrackerClient.CloseOffersForInfohash(infoHash)
 		value.refCount--
 		if value.refCount == 0 {
 			value.TrackerClient.Close()

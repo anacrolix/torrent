@@ -187,6 +187,17 @@ func (tc *TrackerClient) closeUnusedOffers() {
 	tc.outboundOffers = nil
 }
 
+func (tc *TrackerClient) CloseOffersForInfohash(infoHash [20]byte) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	for key, offer := range tc.outboundOffers {
+		if offer.infoHash == infoHash {
+			offer.peerConnection.Close()
+			delete(tc.outboundOffers, key)
+		}
+	}
+}
+
 func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte) error {
 	metrics.Add("outbound announces", 1)
 	var randOfferId [20]byte

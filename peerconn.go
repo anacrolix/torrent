@@ -64,10 +64,13 @@ type Peer struct {
 	peerImpl
 	callbacks *Callbacks
 
-	outgoing     bool
-	Network      string
-	RemoteAddr   PeerRemoteAddr
-	bannableAddr Option[bannableAddr]
+	outgoing   bool
+	Network    string
+	RemoteAddr PeerRemoteAddr
+	// The local address as observed by the remote peer. WebRTC seems to get this right without needing hints from the
+	// config.
+	localPublicAddr peerLocalPublicAddr
+	bannableAddr    Option[bannableAddr]
 	// True if the connection is operating over MSE obfuscation.
 	headerEncrypted bool
 	cryptoMethod    mse.CryptoMethod
@@ -1729,7 +1732,7 @@ func (c *PeerConn) setTorrent(t *Torrent) {
 }
 
 func (c *Peer) peerPriority() (peerPriority, error) {
-	return bep40Priority(c.remoteIpPort(), c.t.cl.publicAddr(c.remoteIp()))
+	return bep40Priority(c.remoteIpPort(), c.localPublicAddr)
 }
 
 func (c *Peer) remoteIp() net.IP {

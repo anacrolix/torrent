@@ -1,5 +1,7 @@
 package torrent
 
+type peerLocalPublicAddr = IpPort
+
 func (p *Peer) isLowOnRequests() bool {
 	return p.requestState.Requests.IsEmpty() && p.requestState.Cancelled.IsEmpty()
 }

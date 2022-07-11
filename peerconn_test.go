@@ -25,7 +25,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	var cl Client
 	cl.init(TestingConfig(t))
 	cl.initLogger()
-	c := cl.newConnection(nil, false, nil, "io.Pipe", "")
+	c := cl.newConnection(nil, newConnectionOpts{network: "io.Pipe"})
 	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
 	if err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)}); err != nil {
 		t.Log(err)
@@ -107,7 +107,12 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	t.onSetInfo()
 	t._pendingPieces.Add(0)
 	r, w := net.Pipe()
-	cn := cl.newConnection(r, true, r.RemoteAddr(), r.RemoteAddr().Network(), regularNetConnPeerConnConnString(r))
+	cn := cl.newConnection(r, newConnectionOpts{
+		outgoing:   true,
+		remoteAddr: r.RemoteAddr(),
+		network:    r.RemoteAddr().Network(),
+		connString: regularNetConnPeerConnConnString(r),
+	})
 	cn.setTorrent(t)
 	mrlErrChan := make(chan error)
 	msg := pp.Message{
@@ -287,7 +292,7 @@ func TestPreferredNetworkDirection(t *testing.T) {
 func TestReceiveLargeRequest(t *testing.T) {
 	c := qt.New(t)
 	cl := newTestingClient(t)
-	pc := cl.newConnection(nil, false, nil, "test", "")
+	pc := cl.newConnection(nil, newConnectionOpts{network: "test"})
 	tor := cl.newTorrentForTesting()
 	tor.info = &metainfo.Info{PieceLength: 3 << 20}
 	pc.setTorrent(tor)

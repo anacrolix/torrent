@@ -20,6 +20,10 @@ func TestBep40Priority(t *testing.T) {
 		IpPort{IP: net.ParseIP("123.213.32.10"), Port: 0},
 		IpPort{IP: net.ParseIP("123.213.32.234"), Port: 0},
 	))
+	assert.Equal(t, peerPriority(0x2b41d456), bep40PriorityIgnoreError(
+		IpPort{IP: net.ParseIP("206.248.98.111"), Port: 0},
+		IpPort{IP: net.ParseIP("142.147.89.224"), Port: 0},
+	))
 	assert.EqualValues(t, "\x00\x00\x00\x00", func() []byte {
 		b, _ := bep40PriorityBytes(
 			IpPort{IP: net.ParseIP("123.213.32.234"), Port: 0},

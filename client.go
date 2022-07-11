@@ -551,8 +551,16 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 	if tc, ok := nc.(*net.TCPConn); ok {
 		tc.SetLinger(0)
 	}
-	c := cl.newConnection(nc, false, nc.RemoteAddr(), nc.RemoteAddr().Network(),
-		regularNetConnPeerConnConnString(nc))
+	remoteAddr, _ := tryIpPortFromNetAddr(nc.RemoteAddr())
+	c := cl.newConnection(
+		nc,
+		newConnectionOpts{
+			outgoing:        false,
+			remoteAddr:      nc.RemoteAddr(),
+			localPublicAddr: cl.publicAddr(remoteAddr.IP),
+			network:         nc.RemoteAddr().Network(),
+			connString:      regularNetConnPeerConnConnString(nc),
+		})
 	defer func() {
 		cl.lock()
 		defer cl.unlock()
@@ -687,13 +695,12 @@ func (cl *Client) initiateProtocolHandshakes(
 	ctx context.Context,
 	nc net.Conn,
 	t *Torrent,
-	outgoing, encryptHeader bool,
-	remoteAddr PeerRemoteAddr,
-	network, connString string,
+	encryptHeader bool,
+	newConnOpts newConnectionOpts,
 ) (
 	c *PeerConn, err error,
 ) {
-	c = cl.newConnection(nc, outgoing, remoteAddr, network, connString)
+	c = cl.newConnection(nc, newConnOpts)
 	c.headerEncrypted = encryptHeader
 	ctx, cancel := context.WithTimeout(ctx, cl.config.HandshakesTimeout)
 	defer cancel()
@@ -725,7 +732,15 @@ func (cl *Client) establishOutgoingConnEx(t *Torrent, addr PeerRemoteAddr, obfus
 		}
 		return nil, errors.New("dial failed")
 	}
-	c, err := cl.initiateProtocolHandshakes(context.Background(), nc, t, true, obfuscatedHeader, addr, dr.Dialer.DialerNetwork(), regularNetConnPeerConnConnString(nc))
+	addrIpPort, _ := tryIpPortFromNetAddr(addr)
+	c, err := cl.initiateProtocolHandshakes(context.Background(), nc, t, obfuscatedHeader, newConnectionOpts{
+		outgoing:   true,
+		remoteAddr: addr,
+		// It would be possible to retrieve a public IP from the dialer used here?
+		localPublicAddr: cl.publicAddr(addrIpPort.IP),
+		network:         dr.Dialer.DialerNetwork(),
+		connString:      regularNetConnPeerConnConnString(nc),
+	})
 	if err != nil {
 		nc.Close()
 	}
@@ -1468,28 +1483,37 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	}
 }
 
-func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemoteAddr, network, connString string) (c *PeerConn) {
-	if network == "" {
-		panic(remoteAddr)
+type newConnectionOpts struct {
+	outgoing        bool
+	remoteAddr      PeerRemoteAddr
+	localPublicAddr peerLocalPublicAddr
+	network         string
+	connString      string
+}
+
+func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerConn) {
+	if opts.network == "" {
+		panic(opts.remoteAddr)
 	}
 	c = &PeerConn{
 		Peer: Peer{
-			outgoing:        outgoing,
+			outgoing:        opts.outgoing,
 			choking:         true,
 			peerChoking:     true,
 			PeerMaxRequests: 250,
 
-			RemoteAddr: remoteAddr,
-			Network:    network,
-			callbacks:  &cl.config.Callbacks,
+			RemoteAddr:      opts.remoteAddr,
+			localPublicAddr: opts.localPublicAddr,
+			Network:         opts.network,
+			callbacks:       &cl.config.Callbacks,
 		},
-		connString: connString,
+		connString: opts.connString,
 		conn:       nc,
 	}
 	c.initRequestState()
 	// TODO: Need to be much more explicit about this, including allowing non-IP bannable addresses.
-	if remoteAddr != nil {
-		netipAddrPort, err := netip.ParseAddrPort(remoteAddr.String())
+	if opts.remoteAddr != nil {
+		netipAddrPort, err := netip.ParseAddrPort(opts.remoteAddr.String())
 		if err == nil {
 			c.bannableAddr = Some(netipAddrPort.Addr())
 		}
@@ -1501,7 +1525,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr PeerRemot
 		l: cl.config.DownloadRateLimiter,
 		r: c.r,
 	}
-	c.logger.WithDefaultLevel(log.Debug).Printf("initialized with remote %v over network %v (outgoing=%t)", remoteAddr, network, outgoing)
+	c.logger.WithDefaultLevel(log.Debug).Printf("initialized with remote %v over network %v (outgoing=%t)", opts.remoteAddr, opts.network, opts.outgoing)
 	for _, f := range cl.config.Callbacks.NewPeer {
 		f(&c.Peer)
 	}

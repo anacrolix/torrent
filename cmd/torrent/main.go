@@ -113,6 +113,7 @@ func main() {
 			Desc: "prints various protocol default version strings",
 		}},
 		bargle.Subcommand{Name: "serve", Command: serve()},
+		bargle.Subcommand{Name: "create", Command: create()},
 	)
 	main.Run()
 }

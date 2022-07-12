@@ -1,8 +1,8 @@
 package torrent
 
 import (
-	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/anacrolix/torrent/webtorrent"
@@ -30,9 +30,7 @@ func (webrtcNetAddr) Network() string {
 }
 
 func (me webrtcNetAddr) String() string {
-	// Probably makes sense to return the IP:port expected of most net.Addrs. I'm not sure if
-	// Address would be quoted for IPv6 already. If not, net.JoinHostPort might be appropriate.
-	return fmt.Sprintf("%s:%d", me.Address, me.Port)
+	return net.JoinHostPort(me.Address, strconv.FormatUint(uint64(me.Port), 10))
 }
 
 func (me webrtcNetConn) LocalAddr() net.Addr {

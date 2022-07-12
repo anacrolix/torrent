@@ -191,6 +191,7 @@ func (tc *TrackerClient) announceOffers() {
 func (tc *TrackerClient) closeUnusedOffers() {
 	for _, offer := range tc.outboundOffers {
 		offer.peerConnection.Close()
+		offer.dataChannel.Close()
 	}
 	tc.outboundOffers = nil
 }

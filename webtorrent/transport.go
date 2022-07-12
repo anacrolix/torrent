@@ -232,13 +232,18 @@ func initDataChannel(
 			// This shouldn't happen if the API is configured correctly, and we call from OnOpen.
 			panic(err)
 		}
-		onOpen(hookDataChannelCloser(raw, pc, span), ctx, span)
+		onOpen(hookDataChannelCloser(raw, pc, span, dc), ctx, span)
 	})
 }
 
 // Hooks the datachannel's Close to Close the owning PeerConnection. The datachannel takes ownership
 // and responsibility for the PeerConnection.
-func hookDataChannelCloser(dcrwc datachannel.ReadWriteCloser, pc *wrappedPeerConnection, dataChannelSpan trace.Span) datachannel.ReadWriteCloser {
+func hookDataChannelCloser(
+	dcrwc datachannel.ReadWriteCloser,
+	pc *wrappedPeerConnection,
+	dataChannelSpan trace.Span,
+	originalDataChannel *webrtc.DataChannel,
+) datachannel.ReadWriteCloser {
 	return struct {
 		datachannelReadWriter
 		io.Closer
@@ -247,6 +252,7 @@ func hookDataChannelCloser(dcrwc datachannel.ReadWriteCloser, pc *wrappedPeerCon
 		ioCloserFunc(func() error {
 			dcrwc.Close()
 			pc.Close()
+			originalDataChannel.Close()
 			dataChannelSpan.End()
 			return nil
 		}),

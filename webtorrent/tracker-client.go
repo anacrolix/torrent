@@ -234,6 +234,7 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 		}},
 	})
 	if err != nil {
+		dc.Close()
 		pc.Close()
 	}
 	return err

@@ -127,12 +127,14 @@ func (tc *TrackerClient) newOffer(
 
 	offer, err = peerConnection.CreateOffer(nil)
 	if err != nil {
+		dataChannel.Close()
 		peerConnection.Close()
 		return
 	}
 
 	offer, err = setAndGatherLocalDescription(peerConnection, offer)
 	if err != nil {
+		dataChannel.Close()
 		peerConnection.Close()
 	}
 	return

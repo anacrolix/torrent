@@ -86,8 +86,8 @@ func (t *Torrent) NumPieces() pieceIndex {
 
 // Get missing bytes count for specific piece.
 func (t *Torrent) PieceBytesMissing(piece int) int64 {
-	t.cl.lock()
-	defer t.cl.unlock()
+	t.cl.rLock()
+	defer t.cl.rUnlock()
 
 	return int64(t.pieces[piece].bytesLeft())
 }
@@ -122,9 +122,9 @@ func (t *Torrent) SubscribePieceStateChanges() *pubsub.Subscription[PieceStateCh
 // Returns true if the torrent is currently being seeded. This occurs when the
 // client is willing to upload without wanting anything in return.
 func (t *Torrent) Seeding() (ret bool) {
-	t.cl.lock()
+	t.cl.rLock()
 	ret = t.seeding()
-	t.cl.unlock()
+	t.cl.rUnlock()
 	return
 }
 
@@ -153,8 +153,8 @@ func (t *Torrent) Length() int64 {
 // Returns a run-time generated metainfo for the torrent that includes the
 // info bytes and announce-list as currently known to the client.
 func (t *Torrent) Metainfo() metainfo.MetaInfo {
-	t.cl.lock()
-	defer t.cl.unlock()
+	t.cl.rLock()
+	defer t.cl.rUnlock()
 	return t.newMetaInfo()
 }
 

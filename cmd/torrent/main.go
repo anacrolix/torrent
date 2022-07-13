@@ -2,16 +2,23 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	stdLog "log"
 	"net/http"
+	"os"
+
+	"github.com/davecgh/go-spew/spew"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/envpprof"
 	xprometheus "github.com/anacrolix/missinggo/v2/prometheus"
+
+	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/version"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func init() {
@@ -29,16 +36,14 @@ func main() {
 	main.Options = append(main.Options, debugFlag.Make())
 	main.Positionals = append(main.Positionals,
 		bargle.Subcommand{Name: "metainfo", Command: metainfoCmd()},
-		//bargle.Subcommand{Name: "announce", Command: func() bargle.Command {
-		//	var cmd AnnounceCmd
-		//	err := p.NewParser().AddParams(
-		//		args.Pos("tracker", &cmd.Tracker),
-		//		args.Pos("infohash", &cmd.InfoHash)).Parse()
-		//	if err != nil {
-		//		return err
-		//	}
-		//	return announceErr(cmd)
-		//}()},
+		bargle.Subcommand{Name: "announce", Command: func() bargle.Command {
+			var ac AnnounceCmd
+			cmd := bargle.FromStruct(&ac)
+			cmd.DefaultAction = func() error {
+				return announceErr(ac)
+			}
+			return cmd
+		}()},
 		bargle.Subcommand{Name: "scrape", Command: func() bargle.Command {
 			var scrapeCfg scrapeCfg
 			cmd := bargle.FromStruct(&scrapeCfg)
@@ -59,50 +64,55 @@ func main() {
 			}
 			return cmd
 		}()},
-		//bargle.Subcommand{Name:
-		//	"bencode", Command: func() bargle.Command {
-		//		var print func(interface{}) error
-		//		if !p.Parse(
-		//			args.Subcommand("json", func(ctx args.SubCmdCtx) (err error) {
-		//				ctx.Parse()
-		//				je := json.NewEncoder(os.Stdout)
-		//				je.SetIndent("", "  ")
-		//				print = je.Encode
-		//				return nil
-		//			}),
-		//			args.Subcommand("spew", func(ctx args.SubCmdCtx) (err error) {
-		//				ctx.Parse()
-		//				config := spew.NewDefaultConfig()
-		//				config.DisableCapacities = true
-		//				config.Indent = "  "
-		//				print = func(v interface{}) error {
-		//					config.Dump(v)
-		//					return nil
-		//				}
-		//				return nil
-		//			}),
-		//		).RanSubCmd {
-		//			return errors.New("an output type is required")
-		//		}
-		//		d := bencode.NewDecoder(os.Stdin)
-		//		p.Defer(func() error {
-		//			for i := 0; ; i++ {
-		//				var v interface{}
-		//				err := d.Decode(&v)
-		//				if err == io.EOF {
-		//					break
-		//				}
-		//				if err != nil {
-		//					return fmt.Errorf("decoding message index %d: %w", i, err)
-		//				}
-		//				print(v)
-		//			}
-		//			return nil
-		//		})
-		//		return nil
-		//	}(),
-		//	Desc: "reads bencoding from stdin into Go native types and spews the result",
-		//},
+		bargle.Subcommand{
+			Name: "bencode",
+			Command: func() (cmd bargle.Command) {
+				var print func(interface{}) error
+				cmd.Positionals = append(cmd.Positionals,
+					bargle.Subcommand{Name: "json", Command: func() (cmd bargle.Command) {
+						cmd.DefaultAction = func() error {
+							je := json.NewEncoder(os.Stdout)
+							je.SetIndent("", "  ")
+							print = je.Encode
+							return nil
+						}
+						return
+					}()},
+					bargle.Subcommand{Name: "spew", Command: func() (cmd bargle.Command) {
+						cmd.DefaultAction = func() error {
+							config := spew.NewDefaultConfig()
+							config.DisableCapacities = true
+							config.Indent = "  "
+							print = func(v interface{}) error {
+								config.Dump(v)
+								return nil
+							}
+							return nil
+						}
+						return
+					}()})
+				d := bencode.NewDecoder(os.Stdin)
+				cmd.AfterParseFunc = func(ctx bargle.Context) error {
+					ctx.AfterParse(func() error {
+						for i := 0; ; i++ {
+							var v interface{}
+							err := d.Decode(&v)
+							if err == io.EOF {
+								break
+							}
+							if err != nil {
+								return fmt.Errorf("decoding message index %d: %w", i, err)
+							}
+							print(v)
+						}
+						return nil
+					})
+					return nil
+				}
+				cmd.Desc = "reads bencoding from stdin into Go native types and spews the result"
+				return
+			}(),
+		},
 		bargle.Subcommand{Name: "version", Command: bargle.Command{
 			DefaultAction: func() error {
 				fmt.Printf("HTTP User-Agent: %q\n", version.DefaultHttpUserAgent)

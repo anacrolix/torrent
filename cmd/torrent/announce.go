@@ -10,8 +10,8 @@ import (
 )
 
 type AnnounceCmd struct {
-	Tracker  string `arg:"positional"`
-	InfoHash torrent.InfoHash
+	Tracker  string           `arg:"positional"`
+	InfoHash torrent.InfoHash `arg:"positional"`
 }
 
 func announceErr(flags AnnounceCmd) error {

@@ -156,9 +156,9 @@ func (f *File) SetPriority(prio piecePriority) {
 
 // Returns the priority per File.SetPriority.
 func (f *File) Priority() (prio piecePriority) {
-	f.t.cl.lock()
+	f.t.cl.rLock()
 	prio = f.prio
-	f.t.cl.unlock()
+	f.t.cl.rUnlock()
 	return
 }
 

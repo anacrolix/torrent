@@ -1374,8 +1374,8 @@ func (cl *Client) allTorrentsCompleted() bool {
 // Returns true when all torrents are completely downloaded and false if the
 // client is stopped before that.
 func (cl *Client) WaitAll() bool {
-	cl.rLock()
-	defer cl.rUnlock()
+	cl.lock()
+	defer cl.unlock()
 	for !cl.allTorrentsCompleted() {
 		if cl.closed.IsSet() {
 			return false

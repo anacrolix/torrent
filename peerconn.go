@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"golang.org/x/time/rate"
 	"io"
 	"math/rand"
 	"net"
@@ -27,6 +26,7 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/typed-roaring"
+	"golang.org/x/time/rate"
 )
 
 type PeerSource string
@@ -356,8 +356,8 @@ func (cn *Peer) downloadRate() float64 {
 }
 
 func (cn *Peer) DownloadRate() float64 {
-	cn.locker().Lock()
-	defer cn.locker().Unlock()
+	cn.locker().RLock()
+	defer cn.locker().RUnlock()
 
 	return cn.downloadRate()
 }

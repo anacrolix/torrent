@@ -1719,7 +1719,7 @@ func (t *Torrent) announceRequest(event tracker.AnnounceEvent) tracker.AnnounceR
 		Event: event,
 		NumWant: func() int32 {
 			if t.wantPeers() && len(t.cl.dialers) > 0 {
-				return -1
+				return 200 // Win has UDP packet limit. See: https://github.com/anacrolix/torrent/issues/764
 			} else {
 				return 0
 			}

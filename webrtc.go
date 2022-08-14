@@ -7,6 +7,7 @@ import (
 
 	"github.com/anacrolix/torrent/webtorrent"
 	"github.com/pion/datachannel"
+	"github.com/pion/webrtc/v3"
 )
 
 const webrtcNetwork = "webrtc"

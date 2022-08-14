@@ -12,39 +12,39 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
-func (pc *PeerConn) initMessageWriter() {
-	w := &pc.messageWriter
+func (c *PeerConn) initMessageWriter() {
+	w := &c.messageWriter
 	*w = peerConnMsgWriter{
 		fillWriteBuffer: func() {
-			pc.locker().Lock()
-			defer pc.locker().Unlock()
-			if pc.closed.IsSet() {
+			c.locker().Lock()
+			defer c.locker().Unlock()
+			if c.closed.IsSet() {
 				return
 			}
-			pc.fillWriteBuffer()
+			c.fillWriteBuffer()
 		},
-		closed: &pc.closed,
-		logger: pc.logger,
-		w:      pc.w,
+		closed: &c.closed,
+		logger: c.logger,
+		w:      c.w,
 		keepAlive: func() bool {
-			pc.locker().RLock()
-			defer pc.locker().RUnlock()
-			return pc.useful()
+			c.locker().RLock()
+			defer c.locker().RUnlock()
+			return c.useful()
 		},
 		writeBuffer: new(bytes.Buffer),
 	}
 }
 
-func (pc *PeerConn) startMessageWriter() {
-	pc.initMessageWriter()
-	go pc.messageWriterRunner()
+func (c *PeerConn) startMessageWriter() {
+	c.initMessageWriter()
+	go c.messageWriterRunner()
 }
 
-func (pc *PeerConn) messageWriterRunner() {
-	defer pc.locker().Unlock()
-	defer pc.close()
-	defer pc.locker().Lock()
-	pc.messageWriter.run(pc.t.cl.config.KeepAliveTimeout)
+func (c *PeerConn) messageWriterRunner() {
+	defer c.locker().Unlock()
+	defer c.close()
+	defer c.locker().Lock()
+	c.messageWriter.run(c.t.cl.config.KeepAliveTimeout)
 }
 
 type peerConnMsgWriter struct {

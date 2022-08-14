@@ -182,8 +182,8 @@ type desiredRequestState struct {
 	Interested bool
 }
 
-func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
-	t := p.t
+func (pc *Peer) getDesiredRequestState() (desired desiredRequestState) {
+	t := pc.t
 	if !t.haveInfo() {
 		return
 	}
@@ -192,7 +192,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	}
 	input := t.getRequestStrategyInput()
 	requestHeap := desiredPeerRequests{
-		peer:           p,
+		peer:           pc,
 		pieceStates:    t.requestPieceStates,
 		requestIndexes: t.requestIndexes,
 	}
@@ -205,11 +205,11 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 			if ih != t.infoHash {
 				return
 			}
-			if !p.peerHasPiece(pieceIndex) {
+			if !pc.peerHasPiece(pieceIndex) {
 				return
 			}
 			requestHeap.pieceStates[pieceIndex] = pieceExtra
-			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
+			allowedFast := pc.peerAllowedFast.Contains(pieceIndex)
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r request_strategy.RequestIndex) {
 				if !allowedFast {
 					// We must signal interest to request this. TODO: We could set interested if the
@@ -220,12 +220,12 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 					// have made the request previously (presumably while unchoked), and haven't had
 					// the peer respond yet (and the request was retained because we are using the
 					// fast extension).
-					if p.peerChoking && !p.requestState.Requests.Contains(r) {
+					if pc.peerChoking && !pc.requestState.Requests.Contains(r) {
 						// We can't request this right now.
 						return
 					}
 				}
-				if p.requestState.Cancelled.Contains(r) {
+				if pc.requestState.Cancelled.Contains(r) {
 					// Can't re-request while awaiting acknowledgement.
 					return
 				}
@@ -238,61 +238,61 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	return
 }
 
-func (p *Peer) maybeUpdateActualRequestState() {
-	if p.closed.IsSet() {
+func (pc *Peer) maybeUpdateActualRequestState() {
+	if pc.closed.IsSet() {
 		return
 	}
-	if p.needRequestUpdate == "" {
+	if pc.needRequestUpdate == "" {
 		return
 	}
-	if p.needRequestUpdate == peerUpdateRequestsTimerReason {
-		since := time.Since(p.lastRequestUpdate)
+	if pc.needRequestUpdate == peerUpdateRequestsTimerReason {
+		since := time.Since(pc.lastRequestUpdate)
 		if since < updateRequestsTimerDuration {
 			panic(since)
 		}
 	}
 	pprof.Do(
 		context.Background(),
-		pprof.Labels("update request", p.needRequestUpdate),
+		pprof.Labels("update request", pc.needRequestUpdate),
 		func(_ context.Context) {
-			next := p.getDesiredRequestState()
-			p.applyRequestState(next)
-			p.t.requestIndexes = next.Requests.requestIndexes[:0]
+			next := pc.getDesiredRequestState()
+			pc.applyRequestState(next)
+			pc.t.requestIndexes = next.Requests.requestIndexes[:0]
 		},
 	)
 }
 
 // Transmit/action the request state to the peer.
-func (p *Peer) applyRequestState(next desiredRequestState) {
-	current := &p.requestState
-	if !p.setInterested(next.Interested) {
+func (pc *Peer) applyRequestState(next desiredRequestState) {
+	current := &pc.requestState
+	if !pc.setInterested(next.Interested) {
 		panic("insufficient write buffer")
 	}
 	more := true
 	requestHeap := binheap.FromSlice(next.Requests.requestIndexes, next.Requests.lessByValue)
-	t := p.t
+	t := pc.t
 	originalRequestCount := current.Requests.GetCardinality()
 	// We're either here on a timer, or because we ran out of requests. Both are valid reasons to
 	// alter peakRequests.
-	if originalRequestCount != 0 && p.needRequestUpdate != peerUpdateRequestsTimerReason {
+	if originalRequestCount != 0 && pc.needRequestUpdate != peerUpdateRequestsTimerReason {
 		panic(fmt.Sprintf(
 			"expected zero existing requests (%v) for update reason %q",
-			originalRequestCount, p.needRequestUpdate))
+			originalRequestCount, pc.needRequestUpdate))
 	}
-	for requestHeap.Len() != 0 && maxRequests(current.Requests.GetCardinality()+current.Cancelled.GetCardinality()) < p.nominalMaxRequests() {
+	for requestHeap.Len() != 0 && maxRequests(current.Requests.GetCardinality()+current.Cancelled.GetCardinality()) < pc.nominalMaxRequests() {
 		req := requestHeap.Pop()
 		existing := t.requestingPeer(req)
-		if existing != nil && existing != p {
+		if existing != nil && existing != pc {
 			// Don't steal from the poor.
 			diff := int64(current.Requests.GetCardinality()) + 1 - (int64(existing.uncancelledRequests()) - 1)
 			// Steal a request that leaves us with one more request than the existing peer
 			// connection if the stealer more recently received a chunk.
-			if diff > 1 || (diff == 1 && p.lastUsefulChunkReceived.Before(existing.lastUsefulChunkReceived)) {
+			if diff > 1 || (diff == 1 && pc.lastUsefulChunkReceived.Before(existing.lastUsefulChunkReceived)) {
 				continue
 			}
 			t.cancelRequest(req)
 		}
-		more = p.mustRequest(req)
+		more = pc.mustRequest(req)
 		if !more {
 			break
 		}
@@ -309,11 +309,11 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 	// log.Printf(
 	// 	"requests %v->%v (peak %v->%v) reason %q (peer %v)",
 	// 	originalRequestCount, current.Requests.GetCardinality(), p.peakRequests, newPeakRequests, p.needRequestUpdate, p)
-	p.peakRequests = newPeakRequests
-	p.needRequestUpdate = ""
-	p.lastRequestUpdate = time.Now()
+	pc.peakRequests = newPeakRequests
+	pc.needRequestUpdate = ""
+	pc.lastRequestUpdate = time.Now()
 	if enableUpdateRequestsTimer {
-		p.updateRequestsTimer.Reset(updateRequestsTimerDuration)
+		pc.updateRequestsTimer.Reset(updateRequestsTimerDuration)
 	}
 }
 

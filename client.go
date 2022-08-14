@@ -999,36 +999,36 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 
 const check = false
 
-func (p *Peer) initUpdateRequestsTimer() {
+func (pc *Peer) initUpdateRequestsTimer() {
 	if check {
-		if p.updateRequestsTimer != nil {
-			panic(p.updateRequestsTimer)
+		if pc.updateRequestsTimer != nil {
+			panic(pc.updateRequestsTimer)
 		}
 	}
 	if enableUpdateRequestsTimer {
-		p.updateRequestsTimer = time.AfterFunc(math.MaxInt64, p.updateRequestsTimerFunc)
+		pc.updateRequestsTimer = time.AfterFunc(math.MaxInt64, pc.updateRequestsTimerFunc)
 	}
 }
 
 const peerUpdateRequestsTimerReason = "updateRequestsTimer"
 
-func (p *Peer) updateRequestsTimerFunc() {
-	p.locker().Lock()
-	defer p.locker().Unlock()
-	if p.closed.IsSet() {
+func (pc *Peer) updateRequestsTimerFunc() {
+	pc.locker().Lock()
+	defer pc.locker().Unlock()
+	if pc.closed.IsSet() {
 		return
 	}
-	if p.isLowOnRequests() {
+	if pc.isLowOnRequests() {
 		// If there are no outstanding requests, then a request update should have already run.
 		return
 	}
-	if d := time.Since(p.lastRequestUpdate); d < updateRequestsTimerDuration {
+	if d := time.Since(pc.lastRequestUpdate); d < updateRequestsTimerDuration {
 		// These should be benign, Timer.Stop doesn't guarantee that its function won't run if it's
 		// already been fired.
 		torrent.Add("spurious timer requests updates", 1)
 		return
 	}
-	p.updateRequests(peerUpdateRequestsTimerReason)
+	pc.updateRequests(peerUpdateRequestsTimerReason)
 }
 
 // Maximum pending requests we allow peers to send us. If peer requests are buffered on read, this

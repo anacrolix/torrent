@@ -36,8 +36,8 @@ func (pp *PiecePriority) Raise(maybe PiecePriority) bool {
 }
 
 // Priority for use in PriorityBitmap
-func (me PiecePriority) BitmapPriority() int {
-	return -int(me)
+func (pp PiecePriority) BitmapPriority() int {
+	return -int(pp)
 }
 
 const (

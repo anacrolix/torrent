@@ -29,8 +29,8 @@ type torrentTrackerAnnouncer interface {
 	URL() *url.URL
 }
 
-func (me trackerScraper) URL() *url.URL {
-	return &me.u
+func (ts trackerScraper) URL() *url.URL {
+	return &ts.u
 }
 
 func (ts *trackerScraper) statusLine() string {
@@ -66,13 +66,13 @@ type trackerAnnounceResult struct {
 	Completed time.Time
 }
 
-func (me *trackerScraper) getIp() (ip net.IP, err error) {
+func (ts *trackerScraper) getIp() (ip net.IP, err error) {
 	var ips []net.IP
-	if me.lookupTrackerIp != nil {
-		ips, err = me.lookupTrackerIp(&me.u)
+	if ts.lookupTrackerIp != nil {
+		ips, err = ts.lookupTrackerIp(&ts.u)
 	} else {
 		// Do a regular dns lookup
-		ips, err = net.LookupIP(me.u.Hostname())
+		ips, err = net.LookupIP(ts.u.Hostname())
 	}
 	if err != nil {
 		return
@@ -81,17 +81,17 @@ func (me *trackerScraper) getIp() (ip net.IP, err error) {
 		err = errors.New("no ips")
 		return
 	}
-	me.t.cl.rLock()
-	defer me.t.cl.rUnlock()
-	if me.t.cl.closed.IsSet() {
+	ts.t.cl.rLock()
+	defer ts.t.cl.rUnlock()
+	if ts.t.cl.closed.IsSet() {
 		err = errors.New("client is closed")
 		return
 	}
 	for _, ip = range ips {
-		if me.t.cl.ipIsBlocked(ip) {
+		if ts.t.cl.ipIsBlocked(ip) {
 			continue
 		}
-		switch me.u.Scheme {
+		switch ts.u.Scheme {
 		case "udp4":
 			if ip.To4() == nil {
 				continue
@@ -107,8 +107,8 @@ func (me *trackerScraper) getIp() (ip net.IP, err error) {
 	return
 }
 
-func (me *trackerScraper) trackerUrl(ip net.IP) string {
-	u := me.u
+func (ts *trackerScraper) trackerUrl(ip net.IP) string {
+	u := ts.u
 	if u.Port() != "" {
 		u.Host = net.JoinHostPort(ip.String(), u.Port())
 	}
@@ -117,14 +117,14 @@ func (me *trackerScraper) trackerUrl(ip net.IP) string {
 
 // Return how long to wait before trying again. For most errors, we return 5
 // minutes, a relatively quick turn around for DNS changes.
-func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEvent) (ret trackerAnnounceResult) {
+func (ts *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEvent) (ret trackerAnnounceResult) {
 	defer func() {
 		ret.Completed = time.Now()
 	}()
 	ret.Interval = time.Minute
 
 	// Limit concurrent use of the same tracker URL by the Client.
-	ref := me.t.cl.activeAnnounceLimiter.GetRef(me.u.String())
+	ref := ts.t.cl.activeAnnounceLimiter.GetRef(ts.u.String())
 	defer ref.Drop()
 	select {
 	case <-ctx.Done():
@@ -140,42 +140,42 @@ func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEv
 		}
 	}()
 
-	ip, err := me.getIp()
+	ip, err := ts.getIp()
 	if err != nil {
 		ret.Err = fmt.Errorf("error getting ip: %s", err)
 		return
 	}
-	me.t.cl.rLock()
-	req := me.t.announceRequest(event)
-	me.t.cl.rUnlock()
+	ts.t.cl.rLock()
+	req := ts.t.announceRequest(event)
+	ts.t.cl.rUnlock()
 	// The default timeout works well as backpressure on concurrent access to the tracker. Since
 	// we're passing our own Context now, we will include that timeout ourselves to maintain similar
 	// behavior to previously, albeit with this context now being cancelled when the Torrent is
 	// closed.
 	ctx, cancel := context.WithTimeout(ctx, tracker.DefaultTrackerAnnounceTimeout)
 	defer cancel()
-	me.t.logger.WithDefaultLevel(log.Debug).Printf("announcing to %q: %#v", me.u.String(), req)
+	ts.t.logger.WithDefaultLevel(log.Debug).Printf("announcing to %q: %#v", ts.u.String(), req)
 	res, err := tracker.Announce{
 		Context:      ctx,
-		HTTPProxy:    me.t.cl.config.HTTPProxy,
-		DialContext:  me.t.cl.config.TrackerDialContext,
-		ListenPacket: me.t.cl.config.TrackerListenPacket,
-		UserAgent:    me.t.cl.config.HTTPUserAgent,
-		TrackerUrl:   me.trackerUrl(ip),
+		HTTPProxy:    ts.t.cl.config.HTTPProxy,
+		DialContext:  ts.t.cl.config.TrackerDialContext,
+		ListenPacket: ts.t.cl.config.TrackerListenPacket,
+		UserAgent:    ts.t.cl.config.HTTPUserAgent,
+		TrackerUrl:   ts.trackerUrl(ip),
 		Request:      req,
-		HostHeader:   me.u.Host,
-		ServerName:   me.u.Hostname(),
-		UdpNetwork:   me.u.Scheme,
-		ClientIp4:    krpc.NodeAddr{IP: me.t.cl.config.PublicIp4},
-		ClientIp6:    krpc.NodeAddr{IP: me.t.cl.config.PublicIp6},
-		Logger:       me.t.logger,
+		HostHeader:   ts.u.Host,
+		ServerName:   ts.u.Hostname(),
+		UdpNetwork:   ts.u.Scheme,
+		ClientIp4:    krpc.NodeAddr{IP: ts.t.cl.config.PublicIp4},
+		ClientIp6:    krpc.NodeAddr{IP: ts.t.cl.config.PublicIp6},
+		Logger:       ts.t.logger,
 	}.Do()
-	me.t.logger.WithDefaultLevel(log.Debug).Printf("announce to %q returned %#v: %v", me.u.String(), res, err)
+	ts.t.logger.WithDefaultLevel(log.Debug).Printf("announce to %q returned %#v: %v", ts.u.String(), res, err)
 	if err != nil {
 		ret.Err = fmt.Errorf("announcing: %w", err)
 		return
 	}
-	me.t.AddPeers(peerInfos(nil).AppendFromTracker(res.Peers))
+	ts.t.AddPeers(peerInfos(nil).AppendFromTracker(res.Peers))
 	ret.NumPeers = len(res.Peers)
 	ret.Interval = time.Duration(res.Interval) * time.Second
 	return
@@ -183,13 +183,13 @@ func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEv
 
 // Returns whether we can shorten the interval, and sets notify to a channel that receives when we
 // might change our mind, or leaves it if we won't.
-func (me *trackerScraper) canIgnoreInterval(notify *<-chan struct{}) bool {
-	gotInfo := me.t.GotInfo()
+func (ts *trackerScraper) canIgnoreInterval(notify *<-chan struct{}) bool {
+	gotInfo := ts.t.GotInfo()
 	select {
 	case <-gotInfo:
 		// Private trackers really don't like us announcing more than they specify. They're also
 		// tracking us very carefully, so it's best to comply.
-		private := me.t.info.Private
+		private := ts.t.info.Private
 		return private == nil || !*private
 	default:
 		*notify = gotInfo
@@ -197,8 +197,8 @@ func (me *trackerScraper) canIgnoreInterval(notify *<-chan struct{}) bool {
 	}
 }
 
-func (me *trackerScraper) Run() {
-	defer me.announceStopped()
+func (ts *trackerScraper) Run() {
+	defer ts.announceStopped()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -206,7 +206,7 @@ func (me *trackerScraper) Run() {
 		defer cancel()
 		select {
 		case <-ctx.Done():
-		case <-me.t.Closed():
+		case <-ts.t.Closed():
 		}
 	}()
 
@@ -214,12 +214,12 @@ func (me *trackerScraper) Run() {
 	e := tracker.Started
 
 	for {
-		ar := me.announce(ctx, e)
+		ar := ts.announce(ctx, e)
 		// after first announce, get back to regular "none"
 		e = tracker.None
-		me.t.cl.lock()
-		me.lastAnnounce = ar
-		me.t.cl.unlock()
+		ts.t.cl.lock()
+		ts.lastAnnounce = ar
+		ts.t.cl.unlock()
 
 	recalculate:
 		// Make sure we don't announce for at least a minute since the last one.
@@ -228,9 +228,9 @@ func (me *trackerScraper) Run() {
 			interval = time.Minute
 		}
 
-		me.t.cl.lock()
-		wantPeers := me.t.wantPeersEvent.C()
-		me.t.cl.unlock()
+		ts.t.cl.lock()
+		wantPeers := ts.t.wantPeersEvent.C()
+		ts.t.cl.unlock()
 
 		// If we want peers, reduce the interval to the minimum if it's appropriate.
 
@@ -239,7 +239,7 @@ func (me *trackerScraper) Run() {
 		var reconsider <-chan struct{}
 		select {
 		case <-wantPeers:
-			if interval > time.Minute && me.canIgnoreInterval(&reconsider) {
+			if interval > time.Minute && ts.canIgnoreInterval(&reconsider) {
 				interval = time.Minute
 			}
 		default:
@@ -247,7 +247,7 @@ func (me *trackerScraper) Run() {
 		}
 
 		select {
-		case <-me.t.closed.Done():
+		case <-ts.t.closed.Done():
 			return
 		case <-reconsider:
 			// Recalculate the interval.
@@ -257,8 +257,8 @@ func (me *trackerScraper) Run() {
 	}
 }
 
-func (me *trackerScraper) announceStopped() {
+func (ts *trackerScraper) announceStopped() {
 	ctx, cancel := context.WithTimeout(context.Background(), tracker.DefaultTrackerAnnounceTimeout)
 	defer cancel()
-	me.announce(ctx, tracker.Stopped)
+	ts.announce(ctx, tracker.Stopped)
 }

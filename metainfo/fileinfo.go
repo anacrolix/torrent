@@ -17,9 +17,9 @@ func (fi *FileInfo) DisplayPath(info *Info) string {
 	}
 }
 
-func (me FileInfo) Offset(info *Info) (ret int64) {
+func (fi FileInfo) Offset(info *Info) (ret int64) {
 	for _, fi := range info.UpvertedFiles() {
-		if me.DisplayPath(info) == fi.DisplayPath(info) {
+		if fi.DisplayPath(info) == fi.DisplayPath(info) {
 			return
 		}
 		ret += fi.Length

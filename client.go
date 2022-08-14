@@ -20,20 +20,16 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
 	"github.com/pion/datachannel"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
-	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/generics"
-	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
-	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
@@ -1013,23 +1009,23 @@ func (p *Peer) initUpdateRequestsTimer() {
 
 const peerUpdateRequestsTimerReason = "updateRequestsTimer"
 
-func (c *Peer) updateRequestsTimerFunc() {
-	c.locker().Lock()
-	defer c.locker().Unlock()
-	if c.closed.IsSet() {
+func (p *Peer) updateRequestsTimerFunc() {
+	p.locker().Lock()
+	defer p.locker().Unlock()
+	if p.closed.IsSet() {
 		return
 	}
-	if c.isLowOnRequests() {
+	if p.isLowOnRequests() {
 		// If there are no outstanding requests, then a request update should have already run.
 		return
 	}
-	if d := time.Since(c.lastRequestUpdate); d < updateRequestsTimerDuration {
+	if d := time.Since(p.lastRequestUpdate); d < updateRequestsTimerDuration {
 		// These should be benign, Timer.Stop doesn't guarantee that its function won't run if it's
 		// already been fired.
 		torrent.Add("spurious timer requests updates", 1)
 		return
 	}
-	c.updateRequests(peerUpdateRequestsTimerReason)
+	p.updateRequests(peerUpdateRequestsTimerReason)
 }
 
 // Maximum pending requests we allow peers to send us. If peer requests are buffered on read, this

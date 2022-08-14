@@ -21,12 +21,12 @@ type worseConnInput struct {
 	Pointer             uintptr
 }
 
-func (me *worseConnInput) doGetPeerPriority() {
-	me.peerPriority, me.peerPriorityErr = me.GetPeerPriority()
+func (i *worseConnInput) doGetPeerPriority() {
+	i.peerPriority, i.peerPriorityErr = i.GetPeerPriority()
 }
 
-func (me *worseConnInput) doGetPeerPriorityOnce() {
-	me.getPeerPriorityOnce.Do(me.doGetPeerPriority)
+func (i *worseConnInput) doGetPeerPriorityOnce() {
+	i.getPeerPriorityOnce.Do(i.doGetPeerPriority)
 }
 
 func worseConnInputFromPeer(p *Peer) worseConnInput {
@@ -47,14 +47,14 @@ func worseConn(_l, _r *Peer) bool {
 	return l.Less(&r)
 }
 
-func (l *worseConnInput) Less(r *worseConnInput) bool {
+func (i *worseConnInput) Less(r *worseConnInput) bool {
 	less, ok := multiless.New().Bool(
-		l.Useful, r.Useful).CmpInt64(
-		l.LastHelpful.Sub(r.LastHelpful).Nanoseconds()).CmpInt64(
-		l.CompletedHandshake.Sub(r.CompletedHandshake).Nanoseconds()).LazySameLess(
+		i.Useful, r.Useful).CmpInt64(
+		i.LastHelpful.Sub(r.LastHelpful).Nanoseconds()).CmpInt64(
+		i.CompletedHandshake.Sub(r.CompletedHandshake).Nanoseconds()).LazySameLess(
 		func() (same, less bool) {
-			l.doGetPeerPriorityOnce()
-			if l.peerPriorityErr != nil {
+			i.doGetPeerPriorityOnce()
+			if i.peerPriorityErr != nil {
 				same = true
 				return
 			}
@@ -63,14 +63,14 @@ func (l *worseConnInput) Less(r *worseConnInput) bool {
 				same = true
 				return
 			}
-			same = l.peerPriority == r.peerPriority
-			less = l.peerPriority < r.peerPriority
+			same = i.peerPriority == r.peerPriority
+			less = i.peerPriority < r.peerPriority
 			return
 		}).Uintptr(
-		l.Pointer, r.Pointer,
+		i.Pointer, r.Pointer,
 	).LessOk()
 	if !ok {
-		panic(fmt.Sprintf("cannot differentiate %#v and %#v", l, r))
+		panic(fmt.Sprintf("cannot differentiate %#v and %#v", i, r))
 	}
 	return less
 }
@@ -80,35 +80,35 @@ type worseConnSlice struct {
 	keys  []worseConnInput
 }
 
-func (me *worseConnSlice) initKeys() {
-	me.keys = make([]worseConnInput, len(me.conns))
-	for i, c := range me.conns {
-		me.keys[i] = worseConnInputFromPeer(&c.Peer)
+func (s *worseConnSlice) initKeys() {
+	s.keys = make([]worseConnInput, len(s.conns))
+	for i, c := range s.conns {
+		s.keys[i] = worseConnInputFromPeer(&c.Peer)
 	}
 }
 
 var _ heap.Interface = &worseConnSlice{}
 
-func (me worseConnSlice) Len() int {
-	return len(me.conns)
+func (s worseConnSlice) Len() int {
+	return len(s.conns)
 }
 
-func (me worseConnSlice) Less(i, j int) bool {
-	return me.keys[i].Less(&me.keys[j])
+func (s worseConnSlice) Less(i, j int) bool {
+	return s.keys[i].Less(&s.keys[j])
 }
 
-func (me *worseConnSlice) Pop() interface{} {
-	i := len(me.conns) - 1
-	ret := me.conns[i]
-	me.conns = me.conns[:i]
+func (s *worseConnSlice) Pop() interface{} {
+	i := len(s.conns) - 1
+	ret := s.conns[i]
+	s.conns = s.conns[:i]
 	return ret
 }
 
-func (me *worseConnSlice) Push(x interface{}) {
+func (s *worseConnSlice) Push(x interface{}) {
 	panic("not implemented")
 }
 
-func (me worseConnSlice) Swap(i, j int) {
-	me.conns[i], me.conns[j] = me.conns[j], me.conns[i]
-	me.keys[i], me.keys[j] = me.keys[j], me.keys[i]
+func (s worseConnSlice) Swap(i, j int) {
+	s.conns[i], s.conns[j] = s.conns[j], s.conns[i]
+	s.keys[i], s.keys[j] = s.keys[j], s.keys[i]
 }

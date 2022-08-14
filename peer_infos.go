@@ -10,7 +10,7 @@ import (
 // Helper-type used to bulk-manage PeerInfos.
 type peerInfos []PeerInfo
 
-func (me *peerInfos) AppendFromPex(nas []krpc.NodeAddr, fs []peer_protocol.PexPeerFlags) {
+func (pi *peerInfos) AppendFromPex(nas []krpc.NodeAddr, fs []peer_protocol.PexPeerFlags) {
 	for i, na := range nas {
 		var p PeerInfo
 		var f peer_protocol.PexPeerFlags
@@ -18,18 +18,18 @@ func (me *peerInfos) AppendFromPex(nas []krpc.NodeAddr, fs []peer_protocol.PexPe
 			f = fs[i]
 		}
 		p.FromPex(na, f)
-		*me = append(*me, p)
+		*pi = append(*pi, p)
 	}
 }
 
-func (ret peerInfos) AppendFromTracker(ps []tracker.Peer) peerInfos {
+func (pi peerInfos) AppendFromTracker(ps []tracker.Peer) peerInfos {
 	for _, p := range ps {
 		_p := PeerInfo{
 			Addr:   ipPortAddr{p.IP, p.Port},
 			Source: PeerSourceTracker,
 		}
 		copy(_p.Id[:], p.ID)
-		ret = append(ret, _p)
+		pi = append(pi, _p)
 	}
-	return ret
+	return pi
 }

@@ -27,8 +27,8 @@ type webseedPeer struct {
 
 var _ peerImpl = (*webseedPeer)(nil)
 
-func (me *webseedPeer) connStatusString() string {
-	return me.client.Url
+func (ws *webseedPeer) connStatusString() string {
+	return ws.client.Url
 }
 
 func (ws *webseedPeer) String() string {
@@ -117,8 +117,8 @@ func (ws *webseedPeer) connectionFlags() string {
 // Maybe this should drop all existing connections, or something like that.
 func (ws *webseedPeer) drop() {}
 
-func (cn *webseedPeer) ban() {
-	cn.peer.close()
+func (ws *webseedPeer) ban() {
+	ws.peer.close()
 }
 
 func (ws *webseedPeer) handleUpdateRequests() {
@@ -191,13 +191,13 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	return err
 }
 
-func (me *webseedPeer) peerPieces() *roaring.Bitmap {
-	return &me.client.Pieces
+func (ws *webseedPeer) peerPieces() *roaring.Bitmap {
+	return &ws.client.Pieces
 }
 
-func (cn *webseedPeer) peerHasAllPieces() (all, known bool) {
-	if !cn.peer.t.haveInfo() {
+func (ws *webseedPeer) peerHasAllPieces() (all, known bool) {
+	if !ws.peer.t.haveInfo() {
 		return true, false
 	}
-	return cn.client.Pieces.GetCardinality() == uint64(cn.peer.t.numPieces()), true
+	return ws.client.Pieces.GetCardinality() == uint64(ws.peer.t.numPieces()), true
 }

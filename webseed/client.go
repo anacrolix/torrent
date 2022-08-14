@@ -57,15 +57,15 @@ type Client struct {
 
 type ResponseBodyWrapper func(io.Reader) io.Reader
 
-func (me *Client) SetInfo(info *metainfo.Info) {
-	if !strings.HasSuffix(me.Url, "/") && info.IsDir() {
+func (ws *Client) SetInfo(info *metainfo.Info) {
+	if !strings.HasSuffix(ws.Url, "/") && info.IsDir() {
 		// In my experience, this is a non-conforming webseed. For example the
 		// http://ia600500.us.archive.org/1/items URLs in archive.org torrents.
 		return
 	}
-	me.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
-	me.info = info
-	me.Pieces.AddRange(0, uint64(info.NumPieces()))
+	ws.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
+	ws.info = info
+	ws.Pieces.AddRange(0, uint64(info.NumPieces()))
 }
 
 type RequestResult struct {

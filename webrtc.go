@@ -7,7 +7,6 @@ import (
 
 	"github.com/anacrolix/torrent/webtorrent"
 	"github.com/pion/datachannel"
-	"github.com/pion/webrtc/v3"
 )
 
 const webrtcNetwork = "webrtc"
@@ -33,19 +32,19 @@ func (me webrtcNetAddr) String() string {
 	return net.JoinHostPort(me.Address, strconv.FormatUint(uint64(me.Port), 10))
 }
 
-func (me webrtcNetConn) LocalAddr() net.Addr {
+func (w webrtcNetConn) LocalAddr() net.Addr {
 	// I'm not sure if this evolves over time. It might also be unavailable if the PeerConnection is
 	// closed or closes itself. The same concern applies to RemoteAddr.
-	pair, err := me.DataChannelContext.GetSelectedIceCandidatePair()
+	pair, err := w.DataChannelContext.GetSelectedIceCandidatePair()
 	if err != nil {
 		panic(err)
 	}
 	return webrtcNetAddr{pair.Local}
 }
 
-func (me webrtcNetConn) RemoteAddr() net.Addr {
+func (w webrtcNetConn) RemoteAddr() net.Addr {
 	// See comments on LocalAddr.
-	pair, err := me.DataChannelContext.GetSelectedIceCandidatePair()
+	pair, err := w.DataChannelContext.GetSelectedIceCandidatePair()
 	if err != nil {
 		panic(err)
 	}

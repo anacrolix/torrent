@@ -20,27 +20,29 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
 	"github.com/pion/datachannel"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
+	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
-
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/limiter"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	request_strategy "github.com/anacrolix/torrent/request-strategy"
+	"github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/webtorrent"
@@ -1511,7 +1513,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	if opts.remoteAddr != nil {
 		netipAddrPort, err := netip.ParseAddrPort(opts.remoteAddr.String())
 		if err == nil {
-			c.bannableAddr = Some(netipAddrPort.Addr())
+			c.bannableAddr = generics.Some(netipAddrPort.Addr())
 		}
 	}
 	c.peerImpl = c

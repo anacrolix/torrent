@@ -2,19 +2,25 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	stdLog "log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/envpprof"
+	"github.com/anacrolix/log"
 	xprometheus "github.com/anacrolix/missinggo/v2/prometheus"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -26,10 +32,28 @@ func init() {
 	http.Handle("/metrics", promhttp.Handler())
 }
 
+func shutdownTracerProvider(ctx context.Context, tp *trace.TracerProvider) {
+	started := time.Now()
+	err := tp.Shutdown(ctx)
+	elapsed := time.Since(started)
+	log.Levelf(log.Error, "shutting down tracer provider (took %v): %v", elapsed, err)
+}
+
 func main() {
 	defer stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
+
+	ctx := context.Background()
+	tracingExporter, err := otlptracegrpc.New(ctx)
+	if err != nil {
+		log.Fatalf("creating tracing exporter: %v", err)
+	}
+	tracerProvider := trace.NewTracerProvider(trace.WithBatcher(tracingExporter))
+	defer shutdownTracerProvider(ctx, tracerProvider)
+	otel.SetTracerProvider(tracerProvider)
+
 	main := bargle.Main{}
 	main.Defer(envpprof.Stop)
+	main.Defer(func() { shutdownTracerProvider(ctx, tracerProvider) })
 	debug := false
 	debugFlag := bargle.NewFlag(&debug)
 	debugFlag.AddLong("debug")

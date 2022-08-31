@@ -1,6 +1,9 @@
 package torrent
 
 import (
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"net"
 	"strconv"
 	"time"
@@ -56,13 +59,26 @@ func (me webrtcNetConn) RemoteAddr() net.Addr {
 // PeerConnection or on the channel or some transport?
 
 func (w webrtcNetConn) SetDeadline(t time.Time) error {
+	w.Span.AddEvent("SetDeadline", trace.WithAttributes(attribute.String("time", t.String())))
 	return nil
 }
 
 func (w webrtcNetConn) SetReadDeadline(t time.Time) error {
+	w.Span.AddEvent("SetReadDeadline", trace.WithAttributes(attribute.String("time", t.String())))
 	return nil
 }
 
 func (w webrtcNetConn) SetWriteDeadline(t time.Time) error {
+	w.Span.AddEvent("SetWriteDeadline", trace.WithAttributes(attribute.String("time", t.String())))
 	return nil
+}
+
+func (w webrtcNetConn) Read(b []byte) (n int, err error) {
+	_, span := otel.Tracer(tracerName).Start(w.Context, "Read")
+	defer span.End()
+	span.SetAttributes(attribute.Int("buf_len", len(b)))
+	n, err = w.ReadWriteCloser.Read(b)
+	span.RecordError(err)
+	span.SetAttributes(attribute.Int("bytes_read", n))
+	return
 }

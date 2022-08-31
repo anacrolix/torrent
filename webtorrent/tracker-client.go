@@ -1,9 +1,12 @@
 package webtorrent
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"github.com/anacrolix/generics"
+	"go.opentelemetry.io/otel/trace"
 	"sync"
 	"time"
 
@@ -32,7 +35,7 @@ type TrackerClient struct {
 
 	mu             sync.Mutex
 	cond           sync.Cond
-	outboundOffers map[string]outboundOffer // OfferID to outboundOffer
+	outboundOffers map[string]outboundOfferValue // OfferID to outboundOfferValue
 	wsConn         *websocket.Conn
 	closed         bool
 	stats          TrackerClientStats
@@ -49,22 +52,27 @@ func (me *TrackerClient) peerIdBinary() string {
 	return binaryToJsonString(me.PeerId[:])
 }
 
-// outboundOffer represents an outstanding offer.
 type outboundOffer struct {
+	offerId string
+	outboundOfferValue
+}
+
+// outboundOfferValue represents an outstanding offer.
+type outboundOfferValue struct {
 	originalOffer  webrtc.SessionDescription
 	peerConnection *wrappedPeerConnection
-	dataChannel    *webrtc.DataChannel
 	infoHash       [20]byte
+	dataChannel    *webrtc.DataChannel
 }
 
 type DataChannelContext struct {
-	// Can these be obtained by just calling the relevant methods on peerConnection?
-	Local, Remote webrtc.SessionDescription
-	OfferId       string
-	LocalOffered  bool
-	InfoHash      [20]byte
+	OfferId      string
+	LocalOffered bool
+	InfoHash     [20]byte
 	// This is private as some methods might not be appropriate with data channel context.
 	peerConnection *wrappedPeerConnection
+	Span           trace.Span
+	Context        context.Context
 }
 
 func (me *DataChannelContext) GetSelectedIceCandidatePair() (*webrtc.ICECandidatePair, error) {
@@ -183,6 +191,7 @@ func (tc *TrackerClient) announceOffers() {
 func (tc *TrackerClient) closeUnusedOffers() {
 	for _, offer := range tc.outboundOffers {
 		offer.peerConnection.Close()
+		offer.dataChannel.Close()
 	}
 	tc.outboundOffers = nil
 }
@@ -200,6 +209,9 @@ func (tc *TrackerClient) CloseOffersForInfohash(infoHash [20]byte) {
 
 func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte) error {
 	metrics.Add("outbound announces", 1)
+	if event == tracker.Stopped {
+		return tc.announce(event, infoHash, nil)
+	}
 	var randOfferId [20]byte
 	_, err := rand.Read(randOfferId[:])
 	if err != nil {
@@ -207,19 +219,35 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 	}
 	offerIDBinary := binaryToJsonString(randOfferId[:])
 
-	pc, dc, offer, err := newOffer()
+	pc, dc, offer, err := tc.newOffer(tc.Logger, offerIDBinary, infoHash)
 	if err != nil {
 		return fmt.Errorf("creating offer: %w", err)
 	}
 
+	err = tc.announce(event, infoHash, []outboundOffer{{
+		offerId: offerIDBinary,
+		outboundOfferValue: outboundOfferValue{
+			originalOffer:  offer,
+			peerConnection: pc,
+			infoHash:       infoHash,
+			dataChannel:    dc,
+		}},
+	})
+	if err != nil {
+		dc.Close()
+		pc.Close()
+	}
+	return err
+}
+
+func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte, offers []outboundOffer) error {
 	request, err := tc.GetAnnounceRequest(event, infoHash)
 	if err != nil {
-		pc.Close()
 		return fmt.Errorf("getting announce parameters: %w", err)
 	}
 
 	req := AnnounceRequest{
-		Numwant:    1, // If higher we need to create equal amount of offers.
+		Numwant:    len(offers),
 		Uploaded:   request.Uploaded,
 		Downloaded: request.Downloaded,
 		Left:       request.Left,
@@ -227,15 +255,16 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 		Action:     "announce",
 		InfoHash:   binaryToJsonString(infoHash[:]),
 		PeerID:     tc.peerIdBinary(),
-		Offers: []Offer{{
-			OfferID: offerIDBinary,
-			Offer:   offer,
-		}},
+	}
+	for _, offer := range offers {
+		req.Offers = append(req.Offers, Offer{
+			OfferID: offer.offerId,
+			Offer:   offer.originalOffer,
+		})
 	}
 
 	data, err := json.Marshal(req)
 	if err != nil {
-		pc.Close()
 		return fmt.Errorf("marshalling request: %w", err)
 	}
 
@@ -243,17 +272,10 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 	defer tc.mu.Unlock()
 	err = tc.writeMessage(data)
 	if err != nil {
-		pc.Close()
 		return fmt.Errorf("write AnnounceRequest: %w", err)
 	}
-	if tc.outboundOffers == nil {
-		tc.outboundOffers = make(map[string]outboundOffer)
-	}
-	tc.outboundOffers[offerIDBinary] = outboundOffer{
-		peerConnection: pc,
-		dataChannel:    dc,
-		originalOffer:  offer,
-		infoHash:       infoHash,
+	for _, offer := range offers {
+		generics.MakeMapIfNilAndSet(&tc.outboundOffers, offer.offerId, offer.outboundOfferValue)
 	}
 	return nil
 }
@@ -288,30 +310,43 @@ func (tc *TrackerClient) trackerReadLoop(tracker *websocket.Conn) error {
 				tc.Logger.WithDefaultLevel(log.Warning).Printf("error decoding info_hash in offer: %v", err)
 				break
 			}
-			tc.handleOffer(*ar.Offer, ar.OfferID, ih, ar.PeerID)
+			err = tc.handleOffer(offerContext{
+				SessDesc: *ar.Offer,
+				Id:       ar.OfferID,
+				InfoHash: ih,
+			}, ar.PeerID)
+			if err != nil {
+				tc.Logger.Levelf(log.Error, "handling offer for infohash %x: %v", ih, err)
+			}
 		case ar.Answer != nil:
 			tc.handleAnswer(ar.OfferID, *ar.Answer)
+		default:
+			tc.Logger.Levelf(log.Warning, "unhandled announce response %q", message)
 		}
 	}
 }
 
+type offerContext struct {
+	SessDesc webrtc.SessionDescription
+	Id       string
+	InfoHash [20]byte
+}
+
 func (tc *TrackerClient) handleOffer(
-	offer webrtc.SessionDescription,
-	offerId string,
-	infoHash [20]byte,
+	offerContext offerContext,
 	peerId string,
 ) error {
-	peerConnection, answer, err := newAnsweringPeerConnection(offer)
+	peerConnection, answer, err := tc.newAnsweringPeerConnection(offerContext)
 	if err != nil {
-		return fmt.Errorf("write AnnounceResponse: %w", err)
+		return fmt.Errorf("creating answering peer connection: %w", err)
 	}
 	response := AnnounceResponse{
 		Action:   "announce",
-		InfoHash: binaryToJsonString(infoHash[:]),
+		InfoHash: binaryToJsonString(offerContext.InfoHash[:]),
 		PeerID:   tc.peerIdBinary(),
 		ToPeerID: peerId,
 		Answer:   &answer,
-		OfferID:  offerId,
+		OfferID:  offerContext.Id,
 	}
 	data, err := json.Marshal(response)
 	if err != nil {
@@ -324,27 +359,6 @@ func (tc *TrackerClient) handleOffer(
 		peerConnection.Close()
 		return fmt.Errorf("writing response: %w", err)
 	}
-	timer := time.AfterFunc(30*time.Second, func() {
-		metrics.Add("answering peer connections timed out", 1)
-		peerConnection.Close()
-	})
-	peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
-		setDataChannelOnOpen(d, peerConnection, func(dc datachannel.ReadWriteCloser) {
-			timer.Stop()
-			metrics.Add("answering peer connection conversions", 1)
-			tc.mu.Lock()
-			tc.stats.ConvertedInboundConns++
-			tc.mu.Unlock()
-			tc.OnConn(dc, DataChannelContext{
-				Local:          answer,
-				Remote:         offer,
-				OfferId:        offerId,
-				LocalOffered:   false,
-				InfoHash:       infoHash,
-				peerConnection: peerConnection,
-			})
-		})
-	})
 	return nil
 }
 
@@ -358,22 +372,11 @@ func (tc *TrackerClient) handleAnswer(offerId string, answer webrtc.SessionDescr
 	}
 	// tc.Logger.WithDefaultLevel(log.Debug).Printf("offer %q got answer %v", offerId, answer)
 	metrics.Add("outbound offers answered", 1)
-	err := offer.setAnswer(answer, func(dc datachannel.ReadWriteCloser) {
-		metrics.Add("outbound offers answered with datachannel", 1)
-		tc.mu.Lock()
-		tc.stats.ConvertedOutboundConns++
-		tc.mu.Unlock()
-		tc.OnConn(dc, DataChannelContext{
-			Local:          offer.originalOffer,
-			Remote:         answer,
-			OfferId:        offerId,
-			LocalOffered:   true,
-			InfoHash:       offer.infoHash,
-			peerConnection: offer.peerConnection,
-		})
-	})
+	err := offer.peerConnection.SetRemoteDescription(answer)
 	if err != nil {
-		tc.Logger.WithDefaultLevel(log.Warning).Printf("error using outbound offer answer: %v", err)
+		err = fmt.Errorf("using outbound offer answer: %w", err)
+		offer.peerConnection.span.RecordError(err)
+		tc.Logger.LevelPrint(log.Error, err)
 		return
 	}
 	delete(tc.outboundOffers, offerId)

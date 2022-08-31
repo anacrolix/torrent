@@ -11,12 +11,12 @@ import (
 	"github.com/anacrolix/torrent"
 )
 
-type ScrapeCmd struct {
-	Tracker    string `arg:"positional"`
-	InfoHashes []torrent.InfoHash
+type scrapeCfg struct {
+	Tracker    string             `arg:"positional"`
+	InfoHashes []torrent.InfoHash `arity:"+" arg:"positional"`
 }
 
-func scrape(flags ScrapeCmd) error {
+func scrape(flags scrapeCfg) error {
 	trackerUrl, err := url.Parse(flags.Tracker)
 	if err != nil {
 		return fmt.Errorf("parsing tracker url: %w", err)

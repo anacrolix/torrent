@@ -51,6 +51,7 @@ require (
 require (
 	github.com/alecthomas/atomic v0.1.0-alpha2 // indirect
 	github.com/alexflint/go-scalar v1.1.0 // indirect
+	github.com/anacrolix/bargle v0.0.0-20220630015206-d7a4d433886a // indirect
 	github.com/anacrolix/mmsg v1.0.0 // indirect
 	github.com/anacrolix/stm v0.4.0 // indirect
 	github.com/benbjohnson/immutable v0.3.0 // indirect

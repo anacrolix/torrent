@@ -404,13 +404,7 @@ func (cl *Client) NewAnacrolixDhtServer(conn net.PacketConn) (s *dht.Server, err
 	}
 	s, err = dht.NewServer(&cfg)
 	if err == nil {
-		go func() {
-			ts, err := s.Bootstrap()
-			if err != nil {
-				logger.Levelf(log.Warning, "error bootstrapping dht: %s", err)
-			}
-			logger.Levelf(log.Debug, "completed bootstrap: %+v", ts)
-		}()
+		go s.TableMaintainer()
 	}
 	return
 }

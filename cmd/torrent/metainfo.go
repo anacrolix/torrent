@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+	"net/http"
 
 	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/torrent/metainfo"
@@ -27,7 +29,18 @@ func metainfoCmd() (cmd bargle.Command) {
 			Value: &bargle.String{Target: &metainfoPath},
 			AfterParseFunc: func(ctx bargle.Context) error {
 				ctx.AfterParse(func() (err error) {
-					mi, err = metainfo.LoadFromFile(metainfoPath)
+					if strings.HasPrefix(metainfoPath, "http://") || strings.HasPrefix(metainfoPath, "https://") {
+						response, err := http.Get(metainfoPath)
+						if err != nil {
+							return nil
+						}
+						mi, err = metainfo.Load(response.Body)
+						if err != nil {
+							return nil
+						}
+					} else {
+						mi, err = metainfo.LoadFromFile(metainfoPath)
+					}
 					return
 				})
 				return nil

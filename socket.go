@@ -8,6 +8,7 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/torrent/dialer"
 	"github.com/pkg/errors"
 )
 
@@ -42,7 +43,7 @@ func listenTcp(network, address string) (s socket, err error) {
 		Listener: l,
 		NetworkDialer: NetworkDialer{
 			Network: network,
-			Dialer:  DefaultNetDialer,
+			Dialer:  dialer.Default,
 		},
 	}, err
 }

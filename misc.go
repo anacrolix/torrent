@@ -7,6 +7,7 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/torrent/types"
+	"github.com/anacrolix/torrent/types/infohash"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -177,8 +178,9 @@ var unlimited = rate.NewLimiter(rate.Inf, 0)
 
 type (
 	pieceIndex = int
-	InfoHash   = metainfo.Hash
-	IpPort     = missinggo.IpPort
+	// Deprecated: Use infohash.T directly to avoid unnecessary imports.
+	InfoHash = infohash.T
+	IpPort   = missinggo.IpPort
 )
 
 func boolSliceToBitmap(slice []bool) (rb roaring.Bitmap) {

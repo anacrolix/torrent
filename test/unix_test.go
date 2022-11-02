@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/dialer"
 )
 
 func TestUnixConns(t *testing.T) {
@@ -24,7 +25,7 @@ func TestUnixConns(t *testing.T) {
 			cfg.Debug = true
 		},
 		Client: func(cl *torrent.Client) {
-			cl.AddDialer(torrent.NetworkDialer{Network: "unix", Dialer: torrent.DefaultNetDialer})
+			cl.AddDialer(torrent.NetworkDialer{Network: "unix", Dialer: dialer.Default})
 			l, err := net.Listen("unix", filepath.Join(t.TempDir(), "socket"))
 			if err != nil {
 				panic(err)

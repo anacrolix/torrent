@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/anacrolix/missinggo/slices"
+	"github.com/anacrolix/missinggo/v2/slices"
 )
 
 // The info dictionary.

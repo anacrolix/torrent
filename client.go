@@ -203,7 +203,8 @@ func (cl *Client) init(cfg *ClientConfig) {
 	cl.ipBlockList = cfg.IPBlocklist
 	cl.httpClient = &http.Client{
 		Transport: &http.Transport{
-			Proxy: cfg.HTTPProxy,
+			Proxy:       cfg.HTTPProxy,
+			DialContext: cfg.HTTPDialContext,
 			// I think this value was observed from some webseeds. It seems reasonable to extend it
 			// to other uses of HTTP from the client.
 			MaxConnsPerHost: 10,

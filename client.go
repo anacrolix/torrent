@@ -298,7 +298,8 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 			}
 			return t.announceRequest(event), nil
 		},
-		Proxy: cl.config.HTTPProxy,
+		Proxy:       cl.config.HTTPProxy,
+		DialContext: cl.config.TrackerDialContext,
 		OnConn: func(dc datachannel.ReadWriteCloser, dcc webtorrent.DataChannelContext) {
 			cl.lock()
 			defer cl.unlock()

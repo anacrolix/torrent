@@ -1,7 +1,9 @@
 package torrent
 
 import (
+	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"sync"
 
@@ -40,6 +42,7 @@ type websocketTrackers struct {
 	mu                 sync.Mutex
 	clients            map[string]*refCountedWebtorrentTrackerClient
 	Proxy              http.ProxyFunc
+	DialContext        func(ctx context.Context, network, addr string) (net.Conn, error)
 }
 
 func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.TrackerClient, func()) {
@@ -47,7 +50,7 @@ func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.Tra
 	defer me.mu.Unlock()
 	value, ok := me.clients[url]
 	if !ok {
-		dialer := &websocket.Dialer{Proxy: me.Proxy, HandshakeTimeout: websocket.DefaultDialer.HandshakeTimeout}
+		dialer := &websocket.Dialer{Proxy: me.Proxy, NetDialContext: me.DialContext, HandshakeTimeout: websocket.DefaultDialer.HandshakeTimeout}
 		value = &refCountedWebtorrentTrackerClient{
 			TrackerClient: webtorrent.TrackerClient{
 				Dialer:             dialer,

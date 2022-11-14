@@ -91,6 +91,8 @@ type ClientConfig struct {
 	// Defines proxy for HTTP requests, such as for trackers. It's commonly set from the result of
 	// "net/http".ProxyURL(HTTPProxy).
 	HTTPProxy func(*http.Request) (*url.URL, error)
+	// Defines DialContext func to use for HTTP requests, such as for fetching metainfo and webtorrent seeds
+	HTTPDialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 	// Defines DialContext func to use for HTTP tracker announcements
 	TrackerDialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 	// Defines ListenPacket func to use for UDP tracker announcements

@@ -11,6 +11,7 @@ import (
 
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
+
 	trHttp "github.com/anacrolix/torrent/tracker/http"
 	"github.com/anacrolix/torrent/tracker/shared"
 	"github.com/anacrolix/torrent/tracker/udp"

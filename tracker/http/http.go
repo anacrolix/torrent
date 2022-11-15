@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/anacrolix/missinggo/httptoo"
+
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/tracker/shared"
 	"github.com/anacrolix/torrent/tracker/udp"

@@ -8,12 +8,12 @@ import (
 	"sync"
 
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/torrent/tracker/http"
 	"github.com/gorilla/websocket"
+	"github.com/pion/datachannel"
 
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/tracker/http"
 	"github.com/anacrolix/torrent/webtorrent"
-	"github.com/pion/datachannel"
 )
 
 type websocketTrackerStatus struct {

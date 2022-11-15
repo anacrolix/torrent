@@ -10,8 +10,9 @@ import (
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 type Change uint

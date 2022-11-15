@@ -11,17 +11,16 @@ import (
 	"os"
 	"time"
 
+	"github.com/anacrolix/bargle"
+	"github.com/anacrolix/envpprof"
+	"github.com/anacrolix/log"
+	xprometheus "github.com/anacrolix/missinggo/v2/prometheus"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/trace"
-
-	"github.com/anacrolix/bargle"
-	"github.com/anacrolix/envpprof"
-	"github.com/anacrolix/log"
-	xprometheus "github.com/anacrolix/missinggo/v2/prometheus"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/version"

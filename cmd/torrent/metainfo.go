@@ -4,13 +4,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
-	"net/http"
 
 	"github.com/anacrolix/bargle"
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/bradfitz/iter"
+
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 type pprintMetainfoFlags struct {

@@ -5,17 +5,17 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"github.com/anacrolix/generics"
-	"go.opentelemetry.io/otel/trace"
 	"sync"
 	"time"
 
+	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-
-	"github.com/anacrolix/torrent/tracker"
 	"github.com/gorilla/websocket"
 	"github.com/pion/datachannel"
 	"github.com/pion/webrtc/v3"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/anacrolix/torrent/tracker"
 )
 
 type TrackerClientStats struct {

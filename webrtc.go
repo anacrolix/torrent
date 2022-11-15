@@ -1,16 +1,17 @@
 package torrent
 
 import (
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 	"net"
 	"strconv"
 	"time"
 
-	"github.com/anacrolix/torrent/webtorrent"
 	"github.com/pion/datachannel"
 	"github.com/pion/webrtc/v3"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/anacrolix/torrent/webtorrent"
 )
 
 const webrtcNetwork = "webrtc"

@@ -19,12 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
-	"github.com/dustin/go-humanize"
-	gbtree "github.com/google/btree"
-	"github.com/pion/datachannel"
-	"golang.org/x/time/rate"
-
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
@@ -37,6 +31,11 @@ import (
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/dustin/go-humanize"
+	gbtree "github.com/google/btree"
+	"github.com/pion/datachannel"
+	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/limiter"

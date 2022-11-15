@@ -5,8 +5,8 @@ import (
 	"expvar"
 
 	"github.com/anacrolix/multiless"
-	"github.com/anacrolix/torrent/metainfo"
 
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/types"
 )
 

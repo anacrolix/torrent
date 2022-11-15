@@ -6,6 +6,7 @@ import (
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"

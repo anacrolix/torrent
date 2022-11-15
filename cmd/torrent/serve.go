@@ -7,6 +7,7 @@ import (
 
 	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/log"
+
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"

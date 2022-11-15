@@ -11,12 +11,12 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/torrent/version"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/mse"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/anacrolix/torrent/version"
 )
 
 // Probably not safe to modify this after it's given to a Client.

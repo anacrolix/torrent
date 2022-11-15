@@ -1,11 +1,13 @@
 package main
 
 import (
+	"os"
+
 	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/tagflag"
+
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
-	"os"
 )
 
 var builtinAnnounceList = [][]string{

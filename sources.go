@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/anacrolix/log"
+
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 )

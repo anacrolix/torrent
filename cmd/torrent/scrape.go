@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/anacrolix/torrent/tracker/udp"
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/tracker/udp"
 )
 
 type scrapeCfg struct {

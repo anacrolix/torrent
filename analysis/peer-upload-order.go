@@ -5,9 +5,10 @@ import (
 	"log"
 	"sync"
 
+	"github.com/elliotchance/orderedmap"
+
 	"github.com/anacrolix/torrent"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	"github.com/elliotchance/orderedmap"
 )
 
 type peerData struct {

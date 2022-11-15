@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/anacrolix/log"
+
 	trHttp "github.com/anacrolix/torrent/tracker/http"
 	"github.com/anacrolix/torrent/tracker/udp"
 )

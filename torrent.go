@@ -30,8 +30,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
-	request_strategy "github.com/anacrolix/torrent/request-strategy"
-	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pion/datachannel"
 
@@ -39,9 +37,11 @@ import (
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
+	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
 )

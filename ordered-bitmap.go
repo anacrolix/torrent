@@ -2,8 +2,9 @@ package torrent
 
 import (
 	"github.com/anacrolix/generics"
-	"github.com/anacrolix/torrent/typed-roaring"
 	list "github.com/bahlo/generic-list-go"
+
+	"github.com/anacrolix/torrent/typed-roaring"
 )
 
 type orderedBitmap[T typedRoaring.BitConstraint] struct {

@@ -29,7 +29,7 @@ func NewClient(url_ *url.URL, opts NewClientOpts) Client {
 		hc: &http.Client{
 			Transport: &http.Transport{
 				DialContext: opts.DialContext,
-				Proxy: opts.Proxy,
+				Proxy:       opts.Proxy,
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
 					ServerName:         opts.ServerName,

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/alexflint/go-arg"
+
 	"github.com/anacrolix/torrent/mse"
 )
 

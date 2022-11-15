@@ -6,9 +6,10 @@ import (
 	"sync"
 	"testing"
 
+	qt "github.com/frankban/quicktest"
+
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
-	qt "github.com/frankban/quicktest"
 )
 
 const (

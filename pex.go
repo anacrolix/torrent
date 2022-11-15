@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
+
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 

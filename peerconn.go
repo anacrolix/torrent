@@ -20,13 +20,14 @@ import (
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
+	"golang.org/x/time/rate"
+
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/typed-roaring"
-	"golang.org/x/time/rate"
 )
 
 type PeerSource string

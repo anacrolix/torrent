@@ -8,8 +8,9 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/torrent/dialer"
 	"github.com/pkg/errors"
+
+	"github.com/anacrolix/torrent/dialer"
 )
 
 type Listener interface {

@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"github.com/RoaringBitmap/roaring"
+
 	"github.com/anacrolix/torrent/metainfo"
 )
 

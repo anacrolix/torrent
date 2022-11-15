@@ -11,10 +11,10 @@ import (
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
-	"github.com/anacrolix/torrent/typed-roaring"
 	"github.com/lispad/go-generics-tools/binheap"
 
 	"github.com/anacrolix/torrent/request-strategy"
+	"github.com/anacrolix/torrent/typed-roaring"
 )
 
 func (t *Torrent) requestStrategyPieceOrderState(i int) request_strategy.PieceRequestOrderState {

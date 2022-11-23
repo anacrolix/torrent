@@ -535,7 +535,7 @@ func (t *Torrent) setMetadataSize(size int) (err error) {
 		return
 	}
 	if uint32(size) > maxMetadataSize {
-		return errors.New("bad size")
+		return log.WithLevel(log.Warning, errors.New("bad size"))
 	}
 	if len(t.metadataBytes) == size {
 		return
@@ -1614,7 +1614,7 @@ func (t *Torrent) onWebRtcConn(
 func (t *Torrent) logRunHandshookConn(pc *PeerConn, logAll bool, level log.Level) {
 	err := t.cl.runHandshookConn(pc, t)
 	if err != nil || logAll {
-		t.logger.WithDefaultLevel(level).Printf("error running handshook conn: %v", err)
+		t.logger.WithDefaultLevel(level).Levelf(log.ErrorLevel(err), "error running handshook conn: %v", err)
 	}
 }
 

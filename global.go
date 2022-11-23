@@ -12,8 +12,11 @@ const (
 	defaultChunkSize = 0x4000 // 16KiB
 
 	// Arbitrary maximum of "metadata_size" (see https://www.bittorrent.org/beps/bep_0009.html)
-	// This value is 2x what libtorrent-rasterbar uses, which should be plenty
-	maxMetadataSize uint32 = 8 * 1024 * 1024
+	// libtorrent-rasterbar uses 4MiB at last check. TODO: Add links to values used by other
+	// implementations here. I saw 14143527 in the metainfo for
+	// 3597f16e239aeb8f8524a1a1c4e4725a0a96b470. Large values for legitimate torrents should be
+	// recorded here for consideration.
+	maxMetadataSize uint32 = 16 * 1024 * 1024
 )
 
 // These are our extended message IDs. Peers will use these values to

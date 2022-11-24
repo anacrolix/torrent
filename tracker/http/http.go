@@ -95,6 +95,11 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 	if userAgent != "" {
 		req.Header.Set("User-Agent", userAgent)
 	}
+
+	fmt.Println("announcing with options", opt)
+	// err = opt.HTTPCustomHeaders(req)
+	req.Header.Add("testing-header", "header 1") // TEST
+
 	req.Host = opt.HostHeader
 	resp, err := cl.hc.Do(req)
 	if err != nil {

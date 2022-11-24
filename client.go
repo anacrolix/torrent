@@ -318,6 +318,14 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	return
 }
 
+func (cl *Client) HTTPCustomHeaders(req *http.Request) error {
+	err := cl.config.HTTPCustomHeaders(req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (cl *Client) AddDhtServer(d DhtServer) {
 	cl.dhtServers = append(cl.dhtServers, d)
 }

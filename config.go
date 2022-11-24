@@ -102,6 +102,9 @@ type ClientConfig struct {
 	LookupTrackerIp func(*url.URL) ([]net.IP, error)
 	// HTTPUserAgent changes default UserAgent for HTTP requests
 	HTTPUserAgent string
+	// HTTPCustomHeaders adds custom headers to the request before it's sent.
+	// Useful for adding authentication for use with a private tracker.
+	HTTPCustomHeaders func(*http.Request) error
 	// Updated occasionally to when there's been some changes to client
 	// behaviour in case other clients are assuming anything of us. See also
 	// `bep20`.

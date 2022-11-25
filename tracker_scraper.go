@@ -156,19 +156,20 @@ func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEv
 	defer cancel()
 	me.t.logger.WithDefaultLevel(log.Debug).Printf("announcing to %q: %#v", me.u.String(), req)
 	res, err := tracker.Announce{
-		Context:      ctx,
-		HTTPProxy:    me.t.cl.config.HTTPProxy,
-		DialContext:  me.t.cl.config.TrackerDialContext,
-		ListenPacket: me.t.cl.config.TrackerListenPacket,
-		UserAgent:    me.t.cl.config.HTTPUserAgent,
-		TrackerUrl:   me.trackerUrl(ip),
-		Request:      req,
-		HostHeader:   me.u.Host,
-		ServerName:   me.u.Hostname(),
-		UdpNetwork:   me.u.Scheme,
-		ClientIp4:    krpc.NodeAddr{IP: me.t.cl.config.PublicIp4},
-		ClientIp6:    krpc.NodeAddr{IP: me.t.cl.config.PublicIp6},
-		Logger:       me.t.logger,
+		Context:           ctx,
+		HTTPProxy:         me.t.cl.config.HTTPProxy,
+		HTTPCustomHeaders: me.t.cl.config.HTTPCustomHeaders,
+		DialContext:       me.t.cl.config.TrackerDialContext,
+		ListenPacket:      me.t.cl.config.TrackerListenPacket,
+		UserAgent:         me.t.cl.config.HTTPUserAgent,
+		TrackerUrl:        me.trackerUrl(ip),
+		Request:           req,
+		HostHeader:        me.u.Host,
+		ServerName:        me.u.Hostname(),
+		UdpNetwork:        me.u.Scheme,
+		ClientIp4:         krpc.NodeAddr{IP: me.t.cl.config.PublicIp4},
+		ClientIp6:         krpc.NodeAddr{IP: me.t.cl.config.PublicIp6},
+		Logger:            me.t.logger,
 	}.Do()
 	me.t.logger.WithDefaultLevel(log.Debug).Printf("announce to %q returned %#v: %v", me.u.String(), res, err)
 	if err != nil {

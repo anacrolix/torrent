@@ -98,6 +98,10 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 	}
 
 	err = opt.HTTPCustomHeaders(req)
+	if err != nil {
+		err = fmt.Errorf("error applying custom HTTP request headers: %s", err)
+		return
+	}
 
 	req.Host = opt.HostHeader
 	resp, err := cl.hc.Do(req)

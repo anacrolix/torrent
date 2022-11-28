@@ -97,10 +97,12 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 		req.Header.Set("User-Agent", userAgent)
 	}
 
-	err = opt.HTTPRequestDirector(req)
-	if err != nil {
-		err = fmt.Errorf("error modifying HTTP request: %s", err)
-		return
+	if opt.HTTPRequestDirector != nil {
+		err = opt.HTTPRequestDirector(req)
+		if err != nil {
+			err = fmt.Errorf("error modifying HTTP request: %s", err)
+			return
+		}
 	}
 
 	req.Host = opt.HostHeader

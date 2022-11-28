@@ -100,7 +100,7 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 	if opt.HttpRequestDirector != nil {
 		err = opt.HttpRequestDirector(req)
 		if err != nil {
-			err = fmt.Errorf("error modifying HTTP request: %s", err)
+			err = fmt.Errorf("error modifying HTTP request: %w", err)
 			return
 		}
 	}

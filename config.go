@@ -102,9 +102,9 @@ type ClientConfig struct {
 	LookupTrackerIp func(*url.URL) ([]net.IP, error)
 	// HTTPUserAgent changes default UserAgent for HTTP requests
 	HTTPUserAgent string
-	// HTTPRequestDirector modifies the request before it's sent.
+	// HttpRequestDirector modifies the request before it's sent.
 	// Useful for adding authentication headers, for example
-	HTTPRequestDirector func(*http.Request) error
+	HttpRequestDirector func(*http.Request) error
 	// Updated occasionally to when there's been some changes to client
 	// behaviour in case other clients are assuming anything of us. See also
 	// `bep20`.

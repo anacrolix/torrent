@@ -80,7 +80,7 @@ type AnnounceOpt struct {
 	HostHeader          string
 	ClientIp4           net.IP
 	ClientIp6           net.IP
-	HTTPRequestDirector func(*http.Request) error
+	HttpRequestDirector func(*http.Request) error
 }
 
 type AnnounceRequest = udp.AnnounceRequest
@@ -97,8 +97,8 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 		req.Header.Set("User-Agent", userAgent)
 	}
 
-	if opt.HTTPRequestDirector != nil {
-		err = opt.HTTPRequestDirector(req)
+	if opt.HttpRequestDirector != nil {
+		err = opt.HttpRequestDirector(req)
 		if err != nil {
 			err = fmt.Errorf("error modifying HTTP request: %s", err)
 			return

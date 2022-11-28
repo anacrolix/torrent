@@ -38,8 +38,8 @@ type Announce struct {
 	TrackerUrl          string
 	Request             AnnounceRequest
 	HostHeader          string
-	HTTPProxy           func(*http.Request) (*url.URL, error)
-	HTTPRequestDirector func(*http.Request) error
+	HttpProxy           func(*http.Request) (*url.URL, error)
+	HttpRequestDirector func(*http.Request) error
 	DialContext         func(ctx context.Context, network, addr string) (net.Conn, error)
 	ListenPacket        func(network, addr string) (net.PacketConn, error)
 	ServerName          string
@@ -59,7 +59,7 @@ const DefaultTrackerAnnounceTimeout = 15 * time.Second
 func (me Announce) Do() (res AnnounceResponse, err error) {
 	cl, err := NewClient(me.TrackerUrl, NewClientOpts{
 		Http: trHttp.NewClientOpts{
-			Proxy:       me.HTTPProxy,
+			Proxy:       me.HttpProxy,
 			DialContext: me.DialContext,
 			ServerName:  me.ServerName,
 		},
@@ -84,6 +84,6 @@ func (me Announce) Do() (res AnnounceResponse, err error) {
 		HostHeader:          me.HostHeader,
 		ClientIp4:           me.ClientIp4.IP,
 		ClientIp6:           me.ClientIp6.IP,
-		HTTPRequestDirector: me.HTTPRequestDirector,
+		HttpRequestDirector: me.HttpRequestDirector,
 	})
 }

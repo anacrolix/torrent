@@ -157,8 +157,8 @@ func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEv
 	me.t.logger.WithDefaultLevel(log.Debug).Printf("announcing to %q: %#v", me.u.String(), req)
 	res, err := tracker.Announce{
 		Context:             ctx,
-		HTTPProxy:           me.t.cl.config.HTTPProxy,
-		HTTPRequestDirector: me.t.cl.config.HTTPRequestDirector,
+		HttpProxy:           me.t.cl.config.HTTPProxy,
+		HttpRequestDirector: me.t.cl.config.HttpRequestDirector,
 		DialContext:         me.t.cl.config.TrackerDialContext,
 		ListenPacket:        me.t.cl.config.TrackerListenPacket,
 		UserAgent:           me.t.cl.config.HTTPUserAgent,

@@ -6,9 +6,9 @@ mkdir -p mnt torrents
 # them first and start the fs afterwards.
 pushd torrents
 cp "$repopath/testdata/$debian_file.torrent" .
-godo -v "$repopath/cmd/torrent" metainfo "$repopath/testdata/sintel.torrent" magnet > sintel.magnet
+godo -v -- "$repopath/cmd/torrent" metainfo "$repopath/testdata/sintel.torrent" magnet > sintel.magnet
 popd
-GOPPROF=http godo -v "$repopath/cmd/torrentfs" -mountDir=mnt -metainfoDir=torrents &
+GOPPROF=http godo -v -- "$repopath/cmd/torrentfs" -mountDir=mnt -metainfoDir=torrents &
 trap 'set +e; sudo umount -f mnt' EXIT
 #file="$debian_file"
 file=Sintel/Sintel.mp4

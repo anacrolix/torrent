@@ -99,7 +99,7 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 
 	err = opt.HTTPRequestDirector(req)
 	if err != nil {
-		err = fmt.Errorf("error applying custom HTTP request headers: %s", err)
+		err = fmt.Errorf("error modifying HTTP request: %s", err)
 		return
 	}
 

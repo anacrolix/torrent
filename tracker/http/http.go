@@ -76,11 +76,11 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts AnnounceOpt) {
 }
 
 type AnnounceOpt struct {
-	UserAgent         string
-	HostHeader        string
-	ClientIp4         net.IP
-	ClientIp6         net.IP
-	HTTPCustomHeaders func(*http.Request) error
+	UserAgent           string
+	HostHeader          string
+	ClientIp4           net.IP
+	ClientIp6           net.IP
+	HTTPRequestDirector func(*http.Request) error
 }
 
 type AnnounceRequest = udp.AnnounceRequest
@@ -97,7 +97,7 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 		req.Header.Set("User-Agent", userAgent)
 	}
 
-	err = opt.HTTPCustomHeaders(req)
+	err = opt.HTTPRequestDirector(req)
 	if err != nil {
 		err = fmt.Errorf("error applying custom HTTP request headers: %s", err)
 		return

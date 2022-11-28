@@ -35,16 +35,16 @@ type AnnounceEvent = udp.AnnounceEvent
 var ErrBadScheme = errors.New("unknown scheme")
 
 type Announce struct {
-	TrackerUrl        string
-	Request           AnnounceRequest
-	HostHeader        string
-	HTTPProxy         func(*http.Request) (*url.URL, error)
-	HTTPCustomHeaders func(*http.Request) error
-	DialContext       func(ctx context.Context, network, addr string) (net.Conn, error)
-	ListenPacket      func(network, addr string) (net.PacketConn, error)
-	ServerName        string
-	UserAgent         string
-	UdpNetwork        string
+	TrackerUrl          string
+	Request             AnnounceRequest
+	HostHeader          string
+	HTTPProxy           func(*http.Request) (*url.URL, error)
+	HTTPRequestDirector func(*http.Request) error
+	DialContext         func(ctx context.Context, network, addr string) (net.Conn, error)
+	ListenPacket        func(network, addr string) (net.PacketConn, error)
+	ServerName          string
+	UserAgent           string
+	UdpNetwork          string
 	// If the port is zero, it's assumed to be the same as the Request.Port.
 	ClientIp4 krpc.NodeAddr
 	// If the port is zero, it's assumed to be the same as the Request.Port.
@@ -80,10 +80,10 @@ func (me Announce) Do() (res AnnounceResponse, err error) {
 		me.Context = ctx
 	}
 	return cl.Announce(me.Context, me.Request, trHttp.AnnounceOpt{
-		UserAgent:         me.UserAgent,
-		HostHeader:        me.HostHeader,
-		ClientIp4:         me.ClientIp4.IP,
-		ClientIp6:         me.ClientIp6.IP,
-		HTTPCustomHeaders: me.HTTPCustomHeaders,
+		UserAgent:           me.UserAgent,
+		HostHeader:          me.HostHeader,
+		ClientIp4:           me.ClientIp4.IP,
+		ClientIp6:           me.ClientIp6.IP,
+		HTTPRequestDirector: me.HTTPRequestDirector,
 	})
 }

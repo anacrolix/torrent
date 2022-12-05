@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -40,6 +41,8 @@ type TrackerClient struct {
 	closed         bool
 	stats          TrackerClientStats
 	pingTicker     *time.Ticker
+
+	WebtorrentTrackerHttpHeader func() (http.Header, error)
 }
 
 func (me *TrackerClient) Stats() TrackerClientStats {
@@ -86,7 +89,18 @@ func (tc *TrackerClient) doWebsocket() error {
 	tc.mu.Lock()
 	tc.stats.Dials++
 	tc.mu.Unlock()
-	c, _, err := tc.Dialer.Dial(tc.Url, nil)
+
+	var header http.Header
+	if tc.WebtorrentTrackerHttpHeader != nil {
+		var err error
+		header, err = tc.WebtorrentTrackerHttpHeader()
+		if err != nil {
+			err = fmt.Errorf("error creating webtorrent tracker HTTP header: %w", err)
+			return err
+		}
+	}
+
+	c, _, err := tc.Dialer.Dial(tc.Url, header)
 	if err != nil {
 		return fmt.Errorf("dialing tracker: %w", err)
 	}

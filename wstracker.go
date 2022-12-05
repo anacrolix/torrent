@@ -41,7 +41,7 @@ type websocketTrackers struct {
 	OnConn             func(datachannel.ReadWriteCloser, webtorrent.DataChannelContext)
 	mu                 sync.Mutex
 	clients            map[string]*refCountedWebtorrentTrackerClient
-	Proxy              http.ProxyFunc
+	Proxy              httpTracker.ProxyFunc
 	DialContext        func(ctx context.Context, network, addr string) (net.Conn, error)
 }
 

@@ -1,4 +1,4 @@
-package http
+package httpTracker
 
 import (
 	"net/url"

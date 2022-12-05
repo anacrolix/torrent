@@ -30,8 +30,9 @@ type TorrentImpl struct {
 }
 
 // Interacts with torrent piece data. Optional interfaces to implement include:
-//   io.WriterTo, such as when a piece supports a more efficient way to write out incomplete chunks.
-//   SelfHashing, such as when a piece supports a more efficient way to hash its contents.
+//
+//	io.WriterTo, such as when a piece supports a more efficient way to write out incomplete chunks.
+//	SelfHashing, such as when a piece supports a more efficient way to hash its contents.
 type PieceImpl interface {
 	// These interfaces are not as strict as normally required. They can
 	// assume that the parameters are appropriate for the dimensions of the

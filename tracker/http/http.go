@@ -133,10 +133,10 @@ func (cl Client) Announce(ctx context.Context, ar AnnounceRequest, opt AnnounceO
 	ret.Interval = trackerResponse.Interval
 	ret.Leechers = trackerResponse.Incomplete
 	ret.Seeders = trackerResponse.Complete
-	if len(trackerResponse.Peers) != 0 {
+	if len(trackerResponse.Peers.List) != 0 {
 		vars.Add("http responses with nonempty peers key", 1)
 	}
-	ret.Peers = trackerResponse.Peers
+	ret.Peers = trackerResponse.Peers.List
 	if len(trackerResponse.Peers6) != 0 {
 		vars.Add("http responses with nonempty peers6 key", 1)
 	}

@@ -8,9 +8,9 @@ import (
 )
 
 type Peer struct {
-	IP   net.IP
-	Port int
-	ID   []byte
+	IP   net.IP `bencode:"ip"`
+	Port int    `bencode:"port"`
+	ID   []byte `bencode:"peer id"`
 }
 
 func (p Peer) String() string {

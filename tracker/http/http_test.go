@@ -22,12 +22,12 @@ func TestUnmarshalHTTPResponsePeerDicts(t *testing.T) {
 			"e"),
 		&hr))
 
-	require.Len(t, hr.Peers, 2)
-	assert.Equal(t, []byte("thisisthe20bytepeeri"), hr.Peers[0].ID)
-	assert.EqualValues(t, 9999, hr.Peers[0].Port)
-	assert.EqualValues(t, 9998, hr.Peers[1].Port)
-	assert.NotNil(t, hr.Peers[0].IP)
-	assert.NotNil(t, hr.Peers[1].IP)
+	require.Len(t, hr.Peers.List, 2)
+	assert.Equal(t, []byte("thisisthe20bytepeeri"), hr.Peers.List[0].ID)
+	assert.EqualValues(t, 9999, hr.Peers.List[0].Port)
+	assert.EqualValues(t, 9998, hr.Peers.List[1].Port)
+	assert.NotNil(t, hr.Peers.List[0].IP)
+	assert.NotNil(t, hr.Peers.List[1].IP)
 
 	assert.Len(t, hr.Peers6, 1)
 	assert.EqualValues(t, "1234123412341234", hr.Peers6[0].IP)
@@ -40,7 +40,7 @@ func TestUnmarshalHttpResponseNoPeers(t *testing.T) {
 		[]byte("d6:peers618:123412341234123456e"),
 		&hr,
 	))
-	require.Len(t, hr.Peers, 0)
+	require.Len(t, hr.Peers.List, 0)
 	assert.Len(t, hr.Peers6, 1)
 }
 

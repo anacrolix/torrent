@@ -1,4 +1,4 @@
-package server
+package udpTrackerServer
 
 import (
 	"bytes"
@@ -12,6 +12,8 @@ import (
 
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
+
+	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/tracker/udp"
 )
 
@@ -24,19 +26,7 @@ type ConnectionTracker interface {
 
 type InfoHash = [20]byte
 
-// This is reserved for stuff like filtering by IP version, avoiding an announcer's IP or key,
-// limiting return count, etc.
-type GetPeersOpts struct{}
-
-type PeerInfo struct {
-	netip.AddrPort
-}
-
-type AnnounceTracker interface {
-	TrackAnnounce(ctx context.Context, req udp.AnnounceRequest, addr RequestSourceAddr) error
-	Scrape(ctx context.Context, infoHashes []InfoHash) ([]udp.ScrapeInfohashResult, error)
-	GetPeers(ctx context.Context, infoHash InfoHash, opts GetPeersOpts) ([]PeerInfo, error)
-}
+type AnnounceTracker = tracker.AnnounceTracker
 
 type Server struct {
 	ConnTracker     ConnectionTracker
@@ -46,7 +36,12 @@ type Server struct {
 
 type RequestSourceAddr = net.Addr
 
-func (me *Server) HandleRequest(ctx context.Context, family udp.AddrFamily, source RequestSourceAddr, body []byte) error {
+func (me *Server) HandleRequest(
+	ctx context.Context,
+	family udp.AddrFamily,
+	source RequestSourceAddr,
+	body []byte,
+) error {
 	var h udp.RequestHeader
 	var r bytes.Reader
 	r.Reset(body)
@@ -91,11 +86,16 @@ func (me *Server) handleAnnounce(
 		return err
 	}
 	// TODO: This should be done asynchronously to responding to the announce.
-	err = me.AnnounceTracker.TrackAnnounce(ctx, req, source)
+	announceAddr, err := netip.ParseAddrPort(source.String())
+	if err != nil {
+		err = fmt.Errorf("converting source net.Addr to AnnounceAddr: %w", err)
+		return err
+	}
+	err = me.AnnounceTracker.TrackAnnounce(ctx, req, announceAddr)
 	if err != nil {
 		return err
 	}
-	peers, err := me.AnnounceTracker.GetPeers(ctx, req.InfoHash, GetPeersOpts{})
+	peers, err := me.AnnounceTracker.GetPeers(ctx, req.InfoHash, tracker.GetPeersOpts{})
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,6 @@ func (me *Server) handleAnnounce(
 		err = fmt.Errorf("marshalling compact node addrs: %w", err)
 		return err
 	}
-	log.Print(nodeAddrs)
 	buf.Write(b)
 	n, err := me.SendResponse(buf.Bytes(), source)
 	if err != nil {
@@ -181,7 +180,7 @@ func randomConnectionId() udp.ConnectionId {
 	return int64(binary.BigEndian.Uint64(b[:]))
 }
 
-func RunServer(ctx context.Context, s *Server, pc net.PacketConn, family udp.AddrFamily) error {
+func RunSimple(ctx context.Context, s *Server, pc net.PacketConn, family udp.AddrFamily) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	for {

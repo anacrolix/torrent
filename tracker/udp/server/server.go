@@ -29,9 +29,9 @@ type InfoHash = [20]byte
 type AnnounceTracker = tracker.AnnounceTracker
 
 type Server struct {
-	ConnTracker     ConnectionTracker
-	SendResponse    func(data []byte, addr net.Addr) (int, error)
-	AnnounceTracker AnnounceTracker
+	ConnTracker  ConnectionTracker
+	SendResponse func(data []byte, addr net.Addr) (int, error)
+	Announce     tracker.AnnounceHandler
 }
 
 type RequestSourceAddr = net.Addr
@@ -72,6 +72,9 @@ func (me *Server) handleAnnounce(
 	tid udp.TransactionId,
 	r *bytes.Reader,
 ) error {
+	// Should we set a timeout of 10s or something for the entire response, so that we give up if a
+	// retry is imminent?
+
 	ok, err := me.ConnTracker.Check(ctx, source.String(), connId)
 	if err != nil {
 		err = fmt.Errorf("checking conn id: %w", err)
@@ -91,11 +94,7 @@ func (me *Server) handleAnnounce(
 		err = fmt.Errorf("converting source net.Addr to AnnounceAddr: %w", err)
 		return err
 	}
-	err = me.AnnounceTracker.TrackAnnounce(ctx, req, announceAddr)
-	if err != nil {
-		return err
-	}
-	peers, err := me.AnnounceTracker.GetPeers(ctx, req.InfoHash, tracker.GetPeersOpts{})
+	peers, err := me.Announce.Serve(ctx, req, announceAddr)
 	if err != nil {
 		return err
 	}

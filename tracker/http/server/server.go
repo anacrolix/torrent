@@ -14,11 +14,10 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/tracker"
 	httpTracker "github.com/anacrolix/torrent/tracker/http"
-	udpTrackerServer "github.com/anacrolix/torrent/tracker/udp/server"
 )
 
 type Handler struct {
-	AnnounceTracker udpTrackerServer.AnnounceTracker
+	Announce tracker.AnnounceHandler
 	// Called to derive an announcer's IP if non-nil. If not specified, the Request.RemoteAddr is
 	// used. Necessary for instances running behind reverse proxies for example.
 	RequestHost func(r *http.Request) (netip.Addr, error)
@@ -74,21 +73,15 @@ func (me Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	portU64, err := strconv.ParseUint(vs.Get("port"), 0, 16)
 	addrPort := netip.AddrPortFrom(addr, uint16(portU64))
-	err = me.AnnounceTracker.TrackAnnounce(r.Context(), tracker.AnnounceRequest{
+	peers, err := me.Announce.Serve(r.Context(), tracker.AnnounceRequest{
 		InfoHash: infoHash,
 		PeerId:   peerId,
 		Event:    event,
 		Port:     addrPort.Port(),
 	}, addrPort)
 	if err != nil {
-		log.Printf("error tracking announce: %v", err)
-		http.Error(w, "error tracking announce", http.StatusInternalServerError)
-		return
-	}
-	peers, err := me.AnnounceTracker.GetPeers(r.Context(), infoHash, tracker.GetPeersOpts{})
-	if err != nil {
-		log.Printf("error getting peers: %v", err)
-		http.Error(w, "error getting peers", http.StatusInternalServerError)
+		log.Printf("error serving announce: %v", err)
+		http.Error(w, "error handling announce", http.StatusInternalServerError)
 		return
 	}
 	var resp httpTracker.HttpResponse

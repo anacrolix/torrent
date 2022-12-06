@@ -8,6 +8,7 @@ import (
 
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
+
 	"github.com/anacrolix/torrent/tracker/udp"
 )
 
@@ -160,7 +161,7 @@ func (me *AnnounceHandler) augmentPeersFromUpstream(req AnnounceRequest) augment
 		pendingUpstreams.Wait()
 		cancel()
 		close(peersChan)
-		log.Levelf(log.Debug, "adding %v distinct peers from upstream trackers")
+		log.Levelf(log.Debug, "adding %v distinct peers from upstream trackers", len(peersToTrack))
 		for _, peer := range peersToTrack {
 			addrPort, ok := peer.ToNetipAddrPort()
 			if !ok {

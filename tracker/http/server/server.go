@@ -34,8 +34,6 @@ func unmarshalQueryKeyToArray(w http.ResponseWriter, key string, query url.Value
 	return
 }
 
-var Logger = log.NewLogger("anacrolix", "torrent", "tracker", "http", "server")
-
 // Returns false if there was an error and it was served.
 func (me Handler) requestHostAddr(r *http.Request) (_ netip.Addr, err error) {
 	if me.RequestHost != nil {
@@ -47,6 +45,8 @@ func (me Handler) requestHostAddr(r *http.Request) (_ netip.Addr, err error) {
 	}
 	return netip.ParseAddr(host)
 }
+
+var requestHeadersLogger = log.Default.WithNames("request", "headers")
 
 func (me Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	vs := r.URL.Query()
@@ -64,7 +64,7 @@ func (me Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	Logger.WithNames("request").Levelf(log.Debug, "request RemoteAddr=%q, header=%q", r.RemoteAddr, r.Header)
+	requestHeadersLogger.Levelf(log.Debug, "request RemoteAddr=%q, header=%q", r.RemoteAddr, r.Header)
 	addr, err := me.requestHostAddr(r)
 	if err != nil {
 		log.Printf("error getting requester IP: %v", err)

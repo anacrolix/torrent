@@ -1,24 +1,24 @@
 /*
 Package torrent implements a torrent client. Goals include:
- * Configurable data storage, such as file, mmap, and piece-based.
- * Downloading on demand: torrent.Reader will request only the data required to
-   satisfy Reads, which is ideal for streaming and torrentfs.
+  - Configurable data storage, such as file, mmap, and piece-based.
+  - Downloading on demand: torrent.Reader will request only the data required to
+    satisfy Reads, which is ideal for streaming and torrentfs.
 
 BitTorrent features implemented include:
- * Protocol obfuscation
- * DHT
- * uTP
- * PEX
- * Magnet links
- * IP Blocklists
- * Some IPv6
- * HTTP and UDP tracker clients
- * BEPs:
-  -  3: Basic BitTorrent protocol
-  -  5: DHT
-  -  6: Fast Extension (have all/none only)
-  -  7: IPv6 Tracker Extension
-  -  9: ut_metadata
+  - Protocol obfuscation
+  - DHT
+  - uTP
+  - PEX
+  - Magnet links
+  - IP Blocklists
+  - Some IPv6
+  - HTTP and UDP tracker clients
+  - BEPs:
+  - 3: Basic BitTorrent protocol
+  - 5: DHT
+  - 6: Fast Extension (have all/none only)
+  - 7: IPv6 Tracker Extension
+  - 9: ut_metadata
   - 10: Extension protocol
   - 11: PEX
   - 12: Multitracker metadata extension

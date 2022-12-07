@@ -125,7 +125,7 @@ func (cl *Client) requestWriter(ctx context.Context, action Action, body []byte,
 			return
 		}
 		buf.Reset()
-		err = binary.Write(&buf, binary.BigEndian, RequestHeader{
+		err = Write(&buf, RequestHeader{
 			ConnectionId:  connId,
 			Action:        action,
 			TransactionId: tId,

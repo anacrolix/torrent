@@ -13,7 +13,7 @@ import (
 	"github.com/pion/datachannel"
 
 	"github.com/anacrolix/torrent/tracker"
-	"github.com/anacrolix/torrent/tracker/http"
+	httpTracker "github.com/anacrolix/torrent/tracker/http"
 	"github.com/anacrolix/torrent/webtorrent"
 )
 
@@ -42,7 +42,7 @@ type websocketTrackers struct {
 	OnConn                      func(datachannel.ReadWriteCloser, webtorrent.DataChannelContext)
 	mu                          sync.Mutex
 	clients                     map[string]*refCountedWebtorrentTrackerClient
-	Proxy                       http.ProxyFunc
+	Proxy                       httpTracker.ProxyFunc
 	DialContext                 func(ctx context.Context, network, addr string) (net.Conn, error)
 	WebtorrentTrackerHttpHeader func() (netHttp.Header, error)
 }

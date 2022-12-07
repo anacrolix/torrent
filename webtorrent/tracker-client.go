@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -40,6 +41,8 @@ type TrackerClient struct {
 	closed         bool
 	stats          TrackerClientStats
 	pingTicker     *time.Ticker
+
+	WebsocketTrackerHttpHeader func() http.Header
 }
 
 func (me *TrackerClient) Stats() TrackerClientStats {
@@ -86,7 +89,13 @@ func (tc *TrackerClient) doWebsocket() error {
 	tc.mu.Lock()
 	tc.stats.Dials++
 	tc.mu.Unlock()
-	c, _, err := tc.Dialer.Dial(tc.Url, nil)
+
+	var header http.Header
+	if tc.WebsocketTrackerHttpHeader != nil {
+		header = tc.WebsocketTrackerHttpHeader()
+	}
+
+	c, _, err := tc.Dialer.Dial(tc.Url, header)
 	if err != nil {
 		return fmt.Errorf("dialing tracker: %w", err)
 	}

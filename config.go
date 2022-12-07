@@ -119,7 +119,7 @@ type ClientConfig struct {
 	HttpRequestDirector func(*http.Request) error
 	// WebsocketTrackerHttpHeader returns a custom header to be used when dialing a websocket connection
 	// to the tracker. Useful for adding authentication headers
-	WebsocketTrackerHttpHeader func() (http.Header, error)
+	WebsocketTrackerHttpHeader func() http.Header
 	// Updated occasionally to when there's been some changes to client
 	// behaviour in case other clients are assuming anything of us. See also
 	// `bep20`.

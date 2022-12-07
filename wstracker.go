@@ -44,7 +44,7 @@ type websocketTrackers struct {
 	clients                    map[string]*refCountedWebtorrentTrackerClient
 	Proxy                      httpTracker.ProxyFunc
 	DialContext                func(ctx context.Context, network, addr string) (net.Conn, error)
-	WebsocketTrackerHttpHeader func() (netHttp.Header, error)
+	WebsocketTrackerHttpHeader func() netHttp.Header
 }
 
 func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.TrackerClient, func()) {

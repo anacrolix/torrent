@@ -42,7 +42,7 @@ type TrackerClient struct {
 	stats          TrackerClientStats
 	pingTicker     *time.Ticker
 
-	WebtorrentTrackerHttpHeader func() (http.Header, error)
+	WebsocketTrackerHttpHeader func() (http.Header, error)
 }
 
 func (me *TrackerClient) Stats() TrackerClientStats {
@@ -91,9 +91,9 @@ func (tc *TrackerClient) doWebsocket() error {
 	tc.mu.Unlock()
 
 	var header http.Header
-	if tc.WebtorrentTrackerHttpHeader != nil {
+	if tc.WebsocketTrackerHttpHeader != nil {
 		var err error
-		header, err = tc.WebtorrentTrackerHttpHeader()
+		header, err = tc.WebsocketTrackerHttpHeader()
 		if err != nil {
 			err = fmt.Errorf("error creating webtorrent tracker HTTP header: %w", err)
 			return err

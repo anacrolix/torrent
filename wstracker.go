@@ -36,15 +36,15 @@ type refCountedWebtorrentTrackerClient struct {
 }
 
 type websocketTrackers struct {
-	PeerId                      [20]byte
-	Logger                      log.Logger
-	GetAnnounceRequest          func(event tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error)
-	OnConn                      func(datachannel.ReadWriteCloser, webtorrent.DataChannelContext)
-	mu                          sync.Mutex
-	clients                     map[string]*refCountedWebtorrentTrackerClient
-	Proxy                       httpTracker.ProxyFunc
-	DialContext                 func(ctx context.Context, network, addr string) (net.Conn, error)
-	WebtorrentTrackerHttpHeader func() (netHttp.Header, error)
+	PeerId                     [20]byte
+	Logger                     log.Logger
+	GetAnnounceRequest         func(event tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error)
+	OnConn                     func(datachannel.ReadWriteCloser, webtorrent.DataChannelContext)
+	mu                         sync.Mutex
+	clients                    map[string]*refCountedWebtorrentTrackerClient
+	Proxy                      httpTracker.ProxyFunc
+	DialContext                func(ctx context.Context, network, addr string) (net.Conn, error)
+	WebsocketTrackerHttpHeader func() (netHttp.Header, error)
 }
 
 func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.TrackerClient, func()) {
@@ -63,7 +63,7 @@ func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.Tra
 				Logger: me.Logger.WithText(func(m log.Msg) string {
 					return fmt.Sprintf("tracker client for %q: %v", url, m)
 				}),
-				WebtorrentTrackerHttpHeader: me.WebtorrentTrackerHttpHeader,
+				WebsocketTrackerHttpHeader: me.WebsocketTrackerHttpHeader,
 			},
 		}
 		value.TrackerClient.Start(func(err error) {

@@ -186,6 +186,7 @@ func (me *AnnounceHandler) augmentPeersFromUpstream(req AnnounceRequest) augment
 	doneChan := make(chan struct{})
 	retPeers := make(map[PeerInfo]struct{})
 	go func() {
+		defer close(doneChan)
 		for {
 			select {
 			case peers, ok := <-peersChan:

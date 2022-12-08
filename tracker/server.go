@@ -110,7 +110,7 @@ func (me *AnnounceHandler) Serve(
 	if !op.Ok && len(peers) <= 1 {
 		op.Value, op.Ok = me.ongoingUpstreamAugmentations[infoHash]
 		if !op.Ok {
-			op.Set(me.augmentPeersFromUpstream(req))
+			op.Set(me.augmentPeersFromUpstream(req.InfoHash))
 			generics.MakeMapIfNilAndSet(&me.ongoingUpstreamAugmentations, infoHash, op.Value)
 		}
 	}
@@ -130,10 +130,10 @@ func (me *AnnounceHandler) Serve(
 	return
 }
 
-func (me *AnnounceHandler) augmentPeersFromUpstream(req AnnounceRequest) augmentationOperation {
+func (me *AnnounceHandler) augmentPeersFromUpstream(infoHash [20]byte) augmentationOperation {
 	announceCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	subReq := AnnounceRequest{
-		InfoHash: req.InfoHash,
+		InfoHash: infoHash,
 		PeerId:   me.UpstreamAnnouncePeerId,
 		Event:    None,
 		Key:      0,
@@ -168,7 +168,7 @@ func (me *AnnounceHandler) augmentPeersFromUpstream(req AnnounceRequest) augment
 				continue
 			}
 			trackReq := AnnounceRequest{
-				InfoHash: req.InfoHash,
+				InfoHash: infoHash,
 				Event:    Started,
 				Port:     uint16(peer.Port),
 			}
@@ -179,7 +179,7 @@ func (me *AnnounceHandler) augmentPeersFromUpstream(req AnnounceRequest) augment
 			}
 		}
 		me.mu.Lock()
-		delete(me.ongoingUpstreamAugmentations, req.InfoHash)
+		delete(me.ongoingUpstreamAugmentations, infoHash)
 		me.mu.Unlock()
 	}()
 	curPeersChan := make(chan map[PeerInfo]struct{})

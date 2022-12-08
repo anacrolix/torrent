@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -78,7 +79,8 @@ func (me Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		PeerId:   peerId,
 		Event:    event,
 		Port:     addrPort.Port(),
-	}, addrPort)
+		NumWant:  -1,
+	}, addrPort, tracker.GetPeersOpts{generics.Some[uint](200)})
 	if err != nil {
 		log.Printf("error serving announce: %v", err)
 		http.Error(w, "error handling announce", http.StatusInternalServerError)

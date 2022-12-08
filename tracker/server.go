@@ -14,7 +14,10 @@ import (
 
 // This is reserved for stuff like filtering by IP version, avoiding an announcer's IP or key,
 // limiting return count, etc.
-type GetPeersOpts struct{}
+type GetPeersOpts struct {
+	// Negative numbers are not allowed.
+	MaxCount generics.Option[uint]
+}
 
 type InfoHash = [20]byte
 
@@ -79,7 +82,7 @@ func addMissing(orig []PeerInfo, new peerSet) {
 }
 
 func (me *AnnounceHandler) Serve(
-	ctx context.Context, req AnnounceRequest, addr AnnounceAddr,
+	ctx context.Context, req AnnounceRequest, addr AnnounceAddr, opts GetPeersOpts,
 ) (peers []PeerInfo, err error) {
 	err = me.AnnounceTracker.TrackAnnounce(ctx, req, addr)
 	if err != nil {
@@ -91,7 +94,19 @@ func (me *AnnounceHandler) Serve(
 	me.mu.Lock()
 	op.Value, op.Ok = me.ongoingUpstreamAugmentations[infoHash]
 	me.mu.Unlock()
-	peers, err = me.AnnounceTracker.GetPeers(ctx, infoHash, GetPeersOpts{})
+	// Apply num_want limit to max count. I really can't tell if this is the right place to do it,
+	// but it seems the most flexible.
+	if req.NumWant != -1 {
+		newCount := uint(req.NumWant)
+		if opts.MaxCount.Ok {
+			if newCount < opts.MaxCount.Value {
+				opts.MaxCount.Value = newCount
+			}
+		} else {
+			opts.MaxCount = generics.Some(newCount)
+		}
+	}
+	peers, err = me.AnnounceTracker.GetPeers(ctx, infoHash, opts)
 	if err != nil {
 		return
 	}

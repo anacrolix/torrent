@@ -11,6 +11,7 @@ import (
 	"net/netip"
 
 	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/torrent/tracker"
@@ -94,7 +95,11 @@ func (me *Server) handleAnnounce(
 		err = fmt.Errorf("converting source net.Addr to AnnounceAddr: %w", err)
 		return err
 	}
-	peers, err := me.Announce.Serve(ctx, req, announceAddr)
+	opts := tracker.GetPeersOpts{MaxCount: generics.Some[uint](50)}
+	if addrFamily == udp.AddrFamilyIpv4 {
+		opts.MaxCount = generics.Some[uint](150)
+	}
+	peers, err := me.Announce.Serve(ctx, req, announceAddr, opts)
 	if err != nil {
 		return err
 	}

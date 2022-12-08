@@ -82,7 +82,7 @@ func (me *Server) handleAnnounce(
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("invalid connection id: %v", connId)
+		return fmt.Errorf("incorrect connection id: %x", connId)
 	}
 	var req udp.AnnounceRequest
 	err = udp.Read(r, &req)

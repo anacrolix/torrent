@@ -47,7 +47,7 @@ func (s *server) respond(addr net.Addr, rh udp.ResponseHeader, parts ...interfac
 }
 
 func (s *server) newConn() (ret udp.ConnectionId) {
-	ret = rand.Int63()
+	ret = rand.Uint64()
 	if s.conns == nil {
 		s.conns = make(map[udp.ConnectionId]struct{})
 	}

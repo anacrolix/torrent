@@ -181,7 +181,7 @@ func randomConnectionId() udp.ConnectionId {
 	if err != nil {
 		panic(err)
 	}
-	return int64(binary.BigEndian.Uint64(b[:]))
+	return binary.BigEndian.Uint64(b[:])
 }
 
 func RunSimple(ctx context.Context, s *Server, pc net.PacketConn, family udp.AddrFamily) error {

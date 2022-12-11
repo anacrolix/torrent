@@ -596,6 +596,10 @@ type messageWriter func(pp.Message) bool
 // This function seems to only used by Peer.request. It's all logic checks, so maybe we can no-op it
 // when we want to go fast.
 func (cn *Peer) shouldRequest(r RequestIndex) error {
+	err := cn.t.checkValidReceiveChunk(cn.t.requestIndexToRequest(r))
+	if err != nil {
+		return err
+	}
 	pi := cn.t.pieceIndexOfRequestIndex(r)
 	if cn.requestState.Cancelled.Contains(r) {
 		return errors.New("request is cancelled and waiting acknowledgement")
@@ -1425,8 +1429,13 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	chunksReceived.Add("total", 1)
 
 	ppReq := newRequestFromMessage(msg)
-	req := c.t.requestIndexFromRequest(ppReq)
 	t := c.t
+	err := t.checkValidReceiveChunk(ppReq)
+	if err != nil {
+		err = log.WithLevel(log.Warning, err)
+		return err
+	}
+	req := c.t.requestIndexFromRequest(ppReq)
 
 	if c.bannableAddr.Ok {
 		t.smartBanCache.RecordBlock(c.bannableAddr.Value, req, msg.Piece)
@@ -1508,7 +1517,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		p.cancel(req)
 	}
 
-	err := func() error {
+	err = func() error {
 		cl.unlock()
 		defer cl.lock()
 		concurrentChunkWrites.Add(1)

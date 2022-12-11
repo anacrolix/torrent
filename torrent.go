@@ -2541,3 +2541,22 @@ type requestState struct {
 	peer *Peer
 	when time.Time
 }
+
+// Returns an error if a received chunk is out of bounds in someway.
+func (t *Torrent) checkValidReceiveChunk(r Request) error {
+	if !t.haveInfo() {
+		return errors.New("torrent missing info")
+	}
+	if int(r.Index) >= t.numPieces() {
+		return fmt.Errorf("chunk index %v, torrent num pieces %v", r.Index, t.numPieces())
+	}
+	pieceLength := t.pieceLength(pieceIndex(r.Index))
+	if r.Begin >= pieceLength {
+		return fmt.Errorf("chunk begins beyond end of piece (%v >= %v)", r.Begin, pieceLength)
+	}
+	// We could check chunk lengths here, but chunk request size is not changed often, and tricky
+	// for peers to manipulate as they need to send potentially large buffers to begin with. There
+	// should be considerable checks elsewhere for this case due to the network overhead. We should
+	// catch most of the overflow manipulation stuff by checking index and begin above.
+	return nil
+}

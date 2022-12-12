@@ -18,7 +18,7 @@ import (
 )
 
 type Handler struct {
-	Announce tracker.AnnounceHandler
+	Announce *tracker.AnnounceHandler
 	// Called to derive an announcer's IP if non-nil. If not specified, the Request.RemoteAddr is
 	// used. Necessary for instances running behind reverse proxies for example.
 	RequestHost func(r *http.Request) (netip.Addr, error)

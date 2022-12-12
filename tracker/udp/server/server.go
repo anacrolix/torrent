@@ -32,7 +32,7 @@ type AnnounceTracker = tracker.AnnounceTracker
 type Server struct {
 	ConnTracker  ConnectionTracker
 	SendResponse func(data []byte, addr net.Addr) (int, error)
-	Announce     tracker.AnnounceHandler
+	Announce     *tracker.AnnounceHandler
 }
 
 type RequestSourceAddr = net.Addr

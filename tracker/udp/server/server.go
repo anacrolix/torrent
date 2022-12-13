@@ -13,6 +13,7 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
+	"go.opentelemetry.io/otel"
 
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/tracker/udp"
@@ -37,12 +38,16 @@ type Server struct {
 
 type RequestSourceAddr = net.Addr
 
+var tracer = otel.Tracer("torrent.tracker.udp")
+
 func (me *Server) HandleRequest(
 	ctx context.Context,
 	family udp.AddrFamily,
 	source RequestSourceAddr,
 	body []byte,
 ) error {
+	ctx, span := tracer.Start(ctx, "Server.HandleRequest")
+	defer span.End()
 	var h udp.RequestHeader
 	var r bytes.Reader
 	r.Reset(body)

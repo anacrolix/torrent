@@ -2,12 +2,16 @@ package tracker
 
 import (
 	"context"
+	"encoding/hex"
 	"net/netip"
 	"sync"
 	"time"
 
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/anacrolix/torrent/tracker/udp"
 )
@@ -81,9 +85,30 @@ func addMissing(orig []PeerInfo, new peerSet) {
 	}
 }
 
+var tracer = otel.Tracer("torrent.tracker.udp")
+
 func (me *AnnounceHandler) Serve(
 	ctx context.Context, req AnnounceRequest, addr AnnounceAddr, opts GetPeersOpts,
 ) (peers []PeerInfo, err error) {
+	ctx, span := tracer.Start(
+		ctx,
+		"AnnounceHandler.Serve",
+		trace.WithAttributes(
+			attribute.Int64("announce.request.num_want", int64(req.NumWant)),
+			attribute.Int("announce.request.port", int(req.Port)),
+			attribute.String("announce.request.info_hash", hex.EncodeToString(req.InfoHash[:])),
+			attribute.String("announce.request.event", req.Event.String()),
+			attribute.Int64("announce.get_peers.opts.max_count_value", int64(opts.MaxCount.Value)),
+			attribute.Bool("announce.get_peers.opts.max_count_ok", opts.MaxCount.Ok),
+			attribute.String("announce.source.addr.ip", addr.Addr().String()),
+			attribute.Int("announce.source.addr.port", int(addr.Port())),
+		),
+	)
+	defer span.End()
+	defer func() {
+		span.SetAttributes(attribute.Int("announce.get_peers.len", len(peers)))
+	}()
+
 	err = me.AnnounceTracker.TrackAnnounce(ctx, req, addr)
 	if err != nil {
 		return
@@ -121,8 +146,11 @@ func (me *AnnounceHandler) Serve(
 		}
 	}
 	me.mu.Lock()
-	// If we didn't have an operation, and don't have enough peers, start one.
-	if !op.Ok && len(peers) <= 1 {
+	// If we didn't have an operation, and don't have enough peers, start one. Allowing 1 is
+	// assuming the announcing peer might be that one. Really we should record a value to prevent
+	// duplicate announces. Also don't announce upstream if we got no peers because the caller asked
+	// for none.
+	if !op.Ok && len(peers) <= 1 && opts.MaxCount.UnwrapOr(1) > 0 {
 		op.Value, op.Ok = me.ongoingUpstreamAugmentations[infoHash]
 		if !op.Ok {
 			op.Set(me.augmentPeersFromUpstream(req.InfoHash))

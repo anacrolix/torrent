@@ -104,12 +104,12 @@ func (me *Server) handleAnnounce(
 	if addrFamily == udp.AddrFamilyIpv4 {
 		opts.MaxCount = generics.Some[uint](150)
 	}
-	peers, err := me.Announce.Serve(ctx, req, announceAddr, opts)
-	if err != nil {
-		return err
+	res := me.Announce.Serve(ctx, req, announceAddr, opts)
+	if res.Err != nil {
+		return res.Err
 	}
-	nodeAddrs := make([]krpc.NodeAddr, 0, len(peers))
-	for _, p := range peers {
+	nodeAddrs := make([]krpc.NodeAddr, 0, len(res.Peers))
+	for _, p := range res.Peers {
 		var ip net.IP
 		switch addrFamily {
 		default:
@@ -137,7 +137,9 @@ func (me *Server) handleAnnounce(
 	if err != nil {
 		return err
 	}
-	err = udp.Write(&buf, udp.AnnounceResponseHeader{})
+	err = udp.Write(&buf, udp.AnnounceResponseHeader{
+		Interval: res.Interval.UnwrapOr(5 * 60),
+	})
 	if err != nil {
 		return err
 	}

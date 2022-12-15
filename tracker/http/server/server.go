@@ -74,22 +74,23 @@ func (me Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	portU64, err := strconv.ParseUint(vs.Get("port"), 0, 16)
 	addrPort := netip.AddrPortFrom(addr, uint16(portU64))
-	peers, err := me.Announce.Serve(r.Context(), tracker.AnnounceRequest{
+	res := me.Announce.Serve(r.Context(), tracker.AnnounceRequest{
 		InfoHash: infoHash,
 		PeerId:   peerId,
 		Event:    event,
 		Port:     addrPort.Port(),
 		NumWant:  -1,
-	}, addrPort, tracker.GetPeersOpts{generics.Some[uint](200)})
+	}, addrPort, tracker.GetPeersOpts{MaxCount: generics.Some[uint](200)})
+	err = res.Err
 	if err != nil {
 		log.Printf("error serving announce: %v", err)
 		http.Error(w, "error handling announce", http.StatusInternalServerError)
 		return
 	}
 	var resp httpTracker.HttpResponse
-	resp.Interval = 5 * 60
+	resp.Interval = res.Interval.UnwrapOr(5 * 60)
 	resp.Peers.Compact = true
-	for _, peer := range peers {
+	for _, peer := range res.Peers {
 		if peer.Addr().Is4() {
 			resp.Peers.List = append(resp.Peers.List, tracker.Peer{
 				IP:   peer.Addr().AsSlice(),

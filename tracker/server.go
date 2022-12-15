@@ -34,7 +34,15 @@ type AnnounceAddr = netip.AddrPort
 type AnnounceTracker interface {
 	TrackAnnounce(ctx context.Context, req udp.AnnounceRequest, addr AnnounceAddr) error
 	Scrape(ctx context.Context, infoHashes []InfoHash) ([]udp.ScrapeInfohashResult, error)
-	GetPeers(ctx context.Context, infoHash InfoHash, opts GetPeersOpts) ([]PeerInfo, error)
+	GetPeers(ctx context.Context, infoHash InfoHash, opts GetPeersOpts) ServerAnnounceResult
+}
+
+type ServerAnnounceResult struct {
+	Err      error
+	Peers    []PeerInfo
+	Interval generics.Option[int32]
+	Leechers generics.Option[int32]
+	Seeders  generics.Option[int32]
 }
 
 type AnnounceHandler struct {
@@ -91,7 +99,7 @@ var tracer = otel.Tracer("torrent.tracker.udp")
 
 func (me *AnnounceHandler) Serve(
 	ctx context.Context, req AnnounceRequest, addr AnnounceAddr, opts GetPeersOpts,
-) (peers []PeerInfo, err error) {
+) (ret ServerAnnounceResult) {
 	ctx, span := tracer.Start(
 		ctx,
 		"AnnounceHandler.Serve",
@@ -108,11 +116,11 @@ func (me *AnnounceHandler) Serve(
 	)
 	defer span.End()
 	defer func() {
-		span.SetAttributes(attribute.Int("announce.get_peers.len", len(peers)))
+		span.SetAttributes(attribute.Int("announce.get_peers.len", len(ret.Peers)))
 	}()
 
-	err = me.AnnounceTracker.TrackAnnounce(ctx, req, addr)
-	if err != nil {
+	ret.Err = me.AnnounceTracker.TrackAnnounce(ctx, req, addr)
+	if ret.Err != nil {
 		return
 	}
 	infoHash := req.InfoHash
@@ -133,15 +141,15 @@ func (me *AnnounceHandler) Serve(
 			opts.MaxCount = generics.Some(newCount)
 		}
 	}
-	peers, err = me.AnnounceTracker.GetPeers(ctx, infoHash, opts)
-	if err != nil {
+	ret = me.AnnounceTracker.GetPeers(ctx, infoHash, opts)
+	if ret.Err != nil {
 		return
 	}
 	// Take whatever peers it has ready. If it's finished, it doesn't matter if we do this inside
 	// the mutex or not.
 	if op.Ok {
 		curPeers, done := op.Value.getCurPeersAndDone()
-		addMissing(peers, curPeers)
+		addMissing(ret.Peers, curPeers)
 		if done {
 			// It doesn't get any better with this operation. Forget it.
 			op.Ok = false
@@ -152,7 +160,7 @@ func (me *AnnounceHandler) Serve(
 	// assuming the announcing peer might be that one. Really we should record a value to prevent
 	// duplicate announces. Also don't announce upstream if we got no peers because the caller asked
 	// for none.
-	if !op.Ok && len(peers) <= 1 && opts.MaxCount.UnwrapOr(1) > 0 {
+	if !op.Ok && len(ret.Peers) <= 1 && opts.MaxCount.UnwrapOr(1) > 0 {
 		op.Value, op.Ok = me.ongoingUpstreamAugmentations[infoHash]
 		if !op.Ok {
 			op.Set(me.augmentPeersFromUpstream(req.InfoHash))
@@ -170,7 +178,7 @@ func (me *AnnounceHandler) Serve(
 		case <-op.Value.doneAnnouncing:
 		}
 		cancel()
-		addMissing(peers, op.Value.getCurPeers())
+		addMissing(ret.Peers, op.Value.getCurPeers())
 	}
 	return
 }

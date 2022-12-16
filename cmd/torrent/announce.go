@@ -12,19 +12,24 @@ import (
 
 type AnnounceCmd struct {
 	Event    udp.AnnounceEvent
+	Port     *uint16
 	Tracker  string           `arg:"positional"`
 	InfoHash torrent.InfoHash `arg:"positional"`
 }
 
 func announceErr(flags AnnounceCmd) error {
+	req := tracker.AnnounceRequest{
+		InfoHash: flags.InfoHash,
+		Port:     uint16(torrent.NewDefaultClientConfig().ListenPort),
+		NumWant:  -1,
+		Event:    flags.Event,
+	}
+	if flags.Port != nil {
+		req.Port = *flags.Port
+	}
 	response, err := tracker.Announce{
 		TrackerUrl: flags.Tracker,
-		Request: tracker.AnnounceRequest{
-			InfoHash: flags.InfoHash,
-			Port:     uint16(torrent.NewDefaultClientConfig().ListenPort),
-			NumWant:  -1,
-			Event:    flags.Event,
-		},
+		Request:    req,
 	}.Do()
 	if err != nil {
 		return fmt.Errorf("doing announce: %w", err)

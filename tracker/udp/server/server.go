@@ -14,6 +14,7 @@ import (
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/tracker/udp"
@@ -45,13 +46,18 @@ func (me *Server) HandleRequest(
 	family udp.AddrFamily,
 	source RequestSourceAddr,
 	body []byte,
-) error {
+) (err error) {
 	ctx, span := tracer.Start(ctx, "Server.HandleRequest")
 	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+	}()
 	var h udp.RequestHeader
 	var r bytes.Reader
 	r.Reset(body)
-	err := udp.Read(&r, &h)
+	err = udp.Read(&r, &h)
 	if err != nil {
 		err = fmt.Errorf("reading request header: %w", err)
 		return err

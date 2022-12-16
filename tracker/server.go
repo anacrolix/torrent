@@ -11,6 +11,7 @@ import (
 	"github.com/anacrolix/log"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/anacrolix/torrent/tracker/udp"
@@ -117,6 +118,9 @@ func (me *AnnounceHandler) Serve(
 	defer span.End()
 	defer func() {
 		span.SetAttributes(attribute.Int("announce.get_peers.len", len(ret.Peers)))
+		if ret.Err != nil {
+			span.SetStatus(codes.Error, ret.Err.Error())
+		}
 	}()
 
 	ret.Err = me.AnnounceTracker.TrackAnnounce(ctx, req, addr)

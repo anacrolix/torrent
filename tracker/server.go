@@ -3,6 +3,7 @@ package tracker
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"net/netip"
 	"sync"
 	"time"
@@ -123,8 +124,12 @@ func (me *AnnounceHandler) Serve(
 		}
 	}()
 
+	if req.Port != 0 {
+		addr = netip.AddrPortFrom(addr.Addr(), req.Port)
+	}
 	ret.Err = me.AnnounceTracker.TrackAnnounce(ctx, req, addr)
 	if ret.Err != nil {
+		ret.Err = fmt.Errorf("tracking announce: %w", ret.Err)
 		return
 	}
 	infoHash := req.InfoHash

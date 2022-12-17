@@ -23,6 +23,7 @@ func announceErr(flags AnnounceCmd) error {
 		Port:     uint16(torrent.NewDefaultClientConfig().ListenPort),
 		NumWant:  -1,
 		Event:    flags.Event,
+		Left:     -1,
 	}
 	if flags.Port != nil {
 		req.Port = *flags.Port

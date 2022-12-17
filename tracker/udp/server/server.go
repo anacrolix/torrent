@@ -13,10 +13,10 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
+	trackerServer "github.com/anacrolix/torrent/tracker/server"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 
-	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/tracker/udp"
 )
 
@@ -29,12 +29,12 @@ type ConnectionTracker interface {
 
 type InfoHash = [20]byte
 
-type AnnounceTracker = tracker.AnnounceTracker
+type AnnounceTracker = trackerServer.AnnounceTracker
 
 type Server struct {
 	ConnTracker  ConnectionTracker
 	SendResponse func(data []byte, addr net.Addr) (int, error)
-	Announce     *tracker.AnnounceHandler
+	Announce     *trackerServer.AnnounceHandler
 }
 
 type RequestSourceAddr = net.Addr
@@ -106,7 +106,7 @@ func (me *Server) handleAnnounce(
 		err = fmt.Errorf("converting source net.Addr to AnnounceAddr: %w", err)
 		return err
 	}
-	opts := tracker.GetPeersOpts{MaxCount: generics.Some[uint](50)}
+	opts := trackerServer.GetPeersOpts{MaxCount: generics.Some[uint](50)}
 	if addrFamily == udp.AddrFamilyIpv4 {
 		opts.MaxCount = generics.Some[uint](150)
 	}

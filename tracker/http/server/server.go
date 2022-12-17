@@ -11,6 +11,7 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
+	trackerServer "github.com/anacrolix/torrent/tracker/server"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/tracker"
@@ -18,7 +19,7 @@ import (
 )
 
 type Handler struct {
-	Announce *tracker.AnnounceHandler
+	Announce *trackerServer.AnnounceHandler
 	// Called to derive an announcer's IP if non-nil. If not specified, the Request.RemoteAddr is
 	// used. Necessary for instances running behind reverse proxies for example.
 	RequestHost func(r *http.Request) (netip.Addr, error)
@@ -74,13 +75,20 @@ func (me Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	portU64, err := strconv.ParseUint(vs.Get("port"), 0, 16)
 	addrPort := netip.AddrPortFrom(addr, uint16(portU64))
-	res := me.Announce.Serve(r.Context(), tracker.AnnounceRequest{
-		InfoHash: infoHash,
-		PeerId:   peerId,
-		Event:    event,
-		Port:     addrPort.Port(),
-		NumWant:  -1,
-	}, addrPort, tracker.GetPeersOpts{MaxCount: generics.Some[uint](200)})
+	res := me.Announce.Serve(
+		r.Context(),
+		tracker.AnnounceRequest{
+			InfoHash: infoHash,
+			PeerId:   peerId,
+			Event:    event,
+			Port:     addrPort.Port(),
+			NumWant:  -1,
+		},
+		addrPort,
+		trackerServer.GetPeersOpts{
+			MaxCount: generics.Some[uint](200),
+		},
+	)
 	err = res.Err
 	if err != nil {
 		log.Printf("error serving announce: %v", err)

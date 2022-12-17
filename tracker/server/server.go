@@ -1,4 +1,4 @@
-package tracker
+package trackerServer
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
+	"github.com/anacrolix/torrent/tracker"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -36,7 +37,12 @@ type AnnounceAddr = netip.AddrPort
 type AnnounceTracker interface {
 	TrackAnnounce(ctx context.Context, req udp.AnnounceRequest, addr AnnounceAddr) error
 	Scrape(ctx context.Context, infoHashes []InfoHash) ([]udp.ScrapeInfohashResult, error)
-	GetPeers(ctx context.Context, infoHash InfoHash, opts GetPeersOpts) ServerAnnounceResult
+	GetPeers(
+		ctx context.Context,
+		infoHash InfoHash,
+		opts GetPeersOpts,
+		remote AnnounceAddr,
+	) ServerAnnounceResult
 }
 
 type ServerAnnounceResult struct {
@@ -150,7 +156,7 @@ func (me *AnnounceHandler) Serve(
 			opts.MaxCount = generics.Some(newCount)
 		}
 	}
-	ret = me.AnnounceTracker.GetPeers(ctx, infoHash, opts)
+	ret = me.AnnounceTracker.GetPeers(ctx, infoHash, opts, addr)
 	if ret.Err != nil {
 		return
 	}
@@ -198,7 +204,7 @@ func (me *AnnounceHandler) augmentPeersFromUpstream(infoHash [20]byte) augmentat
 	subReq := AnnounceRequest{
 		InfoHash: infoHash,
 		PeerId:   me.UpstreamAnnouncePeerId,
-		Event:    None,
+		Event:    tracker.None,
 		Key:      0,
 		NumWant:  -1,
 		Port:     0,
@@ -219,7 +225,7 @@ func (me *AnnounceHandler) augmentPeersFromUpstream(infoHash [20]byte) augmentat
 				return
 			}
 			log.Printf("announcing %x upstream to %v", infoHash, url)
-			resp, err := client.Announce(announceCtx, subReq, AnnounceOpt{
+			resp, err := client.Announce(announceCtx, subReq, tracker.AnnounceOpt{
 				UserAgent: "aragorn",
 			})
 			interval := resp.Interval
@@ -253,7 +259,7 @@ func (me *AnnounceHandler) augmentPeersFromUpstream(infoHash [20]byte) augmentat
 			}
 			trackReq := AnnounceRequest{
 				InfoHash: infoHash,
-				Event:    Started,
+				Event:    tracker.Started,
 				Port:     uint16(peer.Port),
 			}
 			copy(trackReq.PeerId[:], peer.ID)

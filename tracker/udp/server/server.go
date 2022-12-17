@@ -145,6 +145,8 @@ func (me *Server) handleAnnounce(
 	}
 	err = udp.Write(&buf, udp.AnnounceResponseHeader{
 		Interval: res.Interval.UnwrapOr(5 * 60),
+		Seeders:  res.Seeders.Value,
+		Leechers: res.Leechers.Value,
 	})
 	if err != nil {
 		return err

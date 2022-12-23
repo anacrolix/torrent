@@ -24,7 +24,12 @@ func EscapePath(pathComps []string) string {
 func defaultPathEscaper(pathComps []string) string {
 	var ret []string
 	for _, comp := range pathComps {
-		ret = append(ret, url.QueryEscape(comp))
+		esc := url.PathEscape(comp)
+		// S3 incorrectly escapes + in paths to spaces, so we add an extra encoding for that. This
+		// seems to be handled correctly regardless of whether an endpoint uses query or path
+		// escaping.
+		esc = strings.ReplaceAll(esc, "+", "%2B")
+		ret = append(ret, esc)
 	}
 	return path.Join(ret...)
 }

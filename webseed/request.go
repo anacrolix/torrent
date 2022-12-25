@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -31,7 +30,7 @@ func defaultPathEscaper(pathComps []string) string {
 		esc = strings.ReplaceAll(esc, "+", "%2B")
 		ret = append(ret, esc)
 	}
-	return path.Join(ret...)
+	return strings.Join(ret, "/")
 }
 
 func trailingPath(

@@ -104,6 +104,9 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 			if err == nil && n != len(next) {
 				panic("expected full write")
 			}
+			if err != nil {
+				break
+			}
 		}
 		if err != nil {
 			cn.logger.WithDefaultLevel(log.Debug).Printf("error writing: %v", err)

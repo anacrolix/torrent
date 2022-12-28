@@ -15,7 +15,9 @@ import (
 	"github.com/anacrolix/log"
 	trackerServer "github.com/anacrolix/torrent/tracker/server"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/anacrolix/torrent/tracker/udp"
 )
@@ -47,7 +49,8 @@ func (me *Server) HandleRequest(
 	source RequestSourceAddr,
 	body []byte,
 ) (err error) {
-	ctx, span := tracer.Start(ctx, "Server.HandleRequest")
+	ctx, span := tracer.Start(ctx, "Server.HandleRequest",
+		trace.WithAttributes(attribute.Int("payload.len", len(body))))
 	defer span.End()
 	defer func() {
 		if err != nil {

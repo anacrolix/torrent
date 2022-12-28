@@ -35,7 +35,7 @@ type AnnounceTracker = trackerServer.AnnounceTracker
 
 type Server struct {
 	ConnTracker  ConnectionTracker
-	SendResponse func(data []byte, addr net.Addr) (int, error)
+	SendResponse func(ctx context.Context, data []byte, addr net.Addr) (int, error)
 	Announce     *trackerServer.AnnounceHandler
 }
 
@@ -160,7 +160,7 @@ func (me *Server) handleAnnounce(
 		return err
 	}
 	buf.Write(b)
-	n, err := me.SendResponse(buf.Bytes(), source)
+	n, err := me.SendResponse(ctx, buf.Bytes(), source)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func (me *Server) handleConnect(ctx context.Context, source RequestSourceAddr, t
 		TransactionId: tid,
 	})
 	udp.Write(&buf, udp.ConnectionResponse{connId})
-	n, err := me.SendResponse(buf.Bytes(), source)
+	n, err := me.SendResponse(ctx, buf.Bytes(), source)
 	if err != nil {
 		return err
 	}

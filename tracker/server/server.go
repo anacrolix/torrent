@@ -87,7 +87,7 @@ func (me augmentationOperation) getCurPeersAndDone() (ret peerSet, done bool) {
 	select {
 	case ret = <-me.curPeers:
 	case <-me.doneAnnouncing:
-		ret = me.finalPeers
+		ret = copyPeerSet(me.finalPeers)
 		done = true
 	}
 	return

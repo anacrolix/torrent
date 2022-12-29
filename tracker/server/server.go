@@ -261,8 +261,11 @@ func (me *AnnounceHandler) augmentPeersFromUpstream(infoHash [20]byte) augmentat
 				InfoHash: infoHash,
 				Event:    tracker.Started,
 				Port:     uint16(peer.Port),
+				// Let's assume upstream peers are leechers without knowing better.
+				Left: -1,
 			}
 			copy(trackReq.PeerId[:], peer.ID)
+			// TODO: How do we know if these peers are leechers or seeders?
 			err := me.AnnounceTracker.TrackAnnounce(context.TODO(), trackReq, addrPort)
 			if err != nil {
 				log.Levelf(log.Error, "error tracking upstream peer: %v", err)

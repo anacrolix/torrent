@@ -205,14 +205,15 @@ func randomConnectionId() udp.ConnectionId {
 func RunSimple(ctx context.Context, s *Server, pc net.PacketConn, family udp.AddrFamily) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	var b [1500]byte
 	for {
-		var b [1500]byte
 		n, addr, err := pc.ReadFrom(b[:])
 		if err != nil {
 			return err
 		}
+		b := append([]byte(nil), b[:n]...)
 		go func() {
-			err := s.HandleRequest(ctx, family, addr, b[:n])
+			err := s.HandleRequest(ctx, family, addr, b)
 			if err != nil {
 				log.Printf("error handling %v byte request from %v: %v", n, addr, err)
 			}

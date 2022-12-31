@@ -770,9 +770,14 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		}
 		return worseConn(i, j)
 	})
+	var buf bytes.Buffer
 	for i, c := range peers {
 		fmt.Fprintf(w, "%2d. ", i+1)
-		c.writeStatus(w, t)
+		buf.Reset()
+		c.writeStatus(&buf, t)
+		w.Write(bytes.TrimRight(
+			bytes.ReplaceAll(buf.Bytes(), []byte("\n"), []byte("\n    ")),
+			" "))
 	}
 }
 
@@ -2425,7 +2430,6 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
 			},
 		},
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
-		maxRequests:    maxRequests,
 	}
 	ws.peer.initRequestState()
 	for _, opt := range opts {

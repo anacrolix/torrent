@@ -16,20 +16,27 @@ import (
 	"github.com/anacrolix/torrent/webseed"
 )
 
+const (
+	webseedPeerUnhandledErrorSleep   = 5 * time.Second
+	webseedPeerCloseOnUnhandledError = false
+)
+
 type webseedPeer struct {
 	// First field for stats alignment.
-	peer           Peer
-	client         webseed.Client
-	activeRequests map[Request]webseed.Request
-	requesterCond  sync.Cond
-	// Number of requester routines.
-	maxRequests int
+	peer             Peer
+	client           webseed.Client
+	activeRequests   map[Request]webseed.Request
+	requesterCond    sync.Cond
+	lastUnhandledErr time.Time
 }
 
 var _ peerImpl = (*webseedPeer)(nil)
 
-func (me *webseedPeer) connStatusString() string {
-	return me.client.Url
+func (me *webseedPeer) peerImplStatusLines() []string {
+	return []string{
+		me.client.Url,
+		fmt.Sprintf("last unhandled error: %v", eventAgeString(me.lastUnhandledErr)),
+	}
 }
 
 func (ws *webseedPeer) String() string {
@@ -86,6 +93,7 @@ func (ws *webseedPeer) requester(i int) {
 	defer ws.requesterCond.L.Unlock()
 start:
 	for !ws.peer.closed.IsSet() {
+		// Restart is set if we don't need to wait for the requestCond before trying again.
 		restart := false
 		ws.peer.requestState.Requests.Iterate(func(x RequestIndex) bool {
 			r := ws.peer.t.requestIndexToRequest(x)
@@ -101,6 +109,7 @@ start:
 			if errors.Is(err, webseed.ErrTooFast) {
 				time.Sleep(time.Duration(rand.Int63n(int64(10 * time.Second))))
 			}
+			time.Sleep(time.Until(ws.lastUnhandledErr.Add(webseedPeerUnhandledErrorSleep)))
 			ws.requesterCond.L.Lock()
 			return false
 		})
@@ -172,8 +181,13 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			// cfg := spew.NewDefaultConfig()
 			// cfg.DisableMethods = true
 			// cfg.Dump(result.Err)
-			log.Printf("closing %v", ws)
-			ws.peer.close()
+
+			if webseedPeerCloseOnUnhandledError {
+				log.Printf("closing %v", ws)
+				ws.peer.close()
+			} else {
+				ws.lastUnhandledErr = time.Now()
+			}
 		}
 		if !ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r)) {
 			panic("invalid reject")

@@ -26,7 +26,7 @@ type peerImpl interface {
 	// Rebuke the peer
 	ban()
 	String() string
-	connStatusString() string
+	peerImplStatusLines() []string
 
 	// All if the peer should have everything, known if we know that for a fact. For example, we can
 	// guess at how many pieces are in a torrent, and assume they have all pieces based on them

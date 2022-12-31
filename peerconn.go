@@ -171,8 +171,8 @@ type PeerConn struct {
 	peerSentHaveAll bool
 }
 
-func (cn *PeerConn) connStatusString() string {
-	return fmt.Sprintf("%+-55q %s %s", cn.PeerID, cn.PeerExtensionBytes, cn.connString)
+func (cn *PeerConn) peerImplStatusLines() []string {
+	return []string{fmt.Sprintf("%+-55q %s %s", cn.PeerID, cn.PeerExtensionBytes, cn.connString)}
 }
 
 func (cn *Peer) updateExpectingChunks() {
@@ -389,14 +389,14 @@ func (cn *Peer) writeStatus(w io.Writer, t *Torrent) {
 	if cn.closed.IsSet() {
 		fmt.Fprint(w, "CLOSED: ")
 	}
-	fmt.Fprintln(w, cn.connStatusString())
+	fmt.Fprintln(w, strings.Join(cn.peerImplStatusLines(), "\n"))
 	prio, err := cn.peerPriority()
 	prioStr := fmt.Sprintf("%08x", prio)
 	if err != nil {
 		prioStr += ": " + err.Error()
 	}
-	fmt.Fprintf(w, "    bep40-prio: %v\n", prioStr)
-	fmt.Fprintf(w, "    last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
+	fmt.Fprintf(w, "bep40-prio: %v\n", prioStr)
+	fmt.Fprintf(w, "last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),
 		eventAgeString(cn.lastHelpful()),
@@ -404,7 +404,7 @@ func (cn *Peer) writeStatus(w io.Writer, t *Torrent) {
 		cn.totalExpectingTime(),
 	)
 	fmt.Fprintf(w,
-		"    %s completed, %d pieces touched, good chunks: %v/%v:%v reqq: %d+%v/(%d/%d):%d/%d, flags: %s, dr: %.1f KiB/s\n",
+		"%s completed, %d pieces touched, good chunks: %v/%v:%v reqq: %d+%v/(%d/%d):%d/%d, flags: %s, dr: %.1f KiB/s\n",
 		cn.completedString(),
 		len(cn.peerTouchedPieces),
 		&cn._stats.ChunksReadUseful,
@@ -419,7 +419,7 @@ func (cn *Peer) writeStatus(w io.Writer, t *Torrent) {
 		cn.statusFlags(),
 		cn.downloadRate()/(1<<10),
 	)
-	fmt.Fprintf(w, "    requested pieces:")
+	fmt.Fprintf(w, "requested pieces:")
 	cn.iterContiguousPieceRequests(func(piece pieceIndex, count int) {
 		fmt.Fprintf(w, " %v(%v)", piece, count)
 	})

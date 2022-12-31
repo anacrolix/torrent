@@ -43,7 +43,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.2
 	github.com/stretchr/testify v1.8.0
-	github.com/tidwall/btree v1.3.1
+	github.com/tidwall/btree v1.6.0
 	go.etcd.io/bbolt v1.3.6
 	go.opentelemetry.io/otel v1.8.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.8.0

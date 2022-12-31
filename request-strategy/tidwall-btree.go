@@ -5,7 +5,7 @@ import (
 )
 
 type tidwallBtree struct {
-	tree     *btree.Generic[pieceRequestOrderItem]
+	tree     *btree.BTreeG[pieceRequestOrderItem]
 	PathHint *btree.PathHint
 }
 
@@ -15,11 +15,11 @@ func (me *tidwallBtree) Scan(f func(pieceRequestOrderItem) bool) {
 
 func NewTidwallBtree() *tidwallBtree {
 	return &tidwallBtree{
-		tree: btree.NewGenericOptions(
+		tree: btree.NewBTreeGOptions(
 			func(a, b pieceRequestOrderItem) bool {
 				return a.Less(&b)
 			},
-			btree.Options{NoLocks: true}),
+			btree.Options{NoLocks: true, Degree: 64}),
 	}
 }
 

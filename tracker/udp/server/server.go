@@ -206,13 +206,24 @@ func RunSimple(ctx context.Context, s *Server, pc net.PacketConn, family udp.Add
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var b [1500]byte
+	// Limit concurrent handled requests.
+	sem := make(chan struct{}, 1000)
 	for {
 		n, addr, err := pc.ReadFrom(b[:])
 		if err != nil {
 			return err
 		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			log.Printf("dropping request from %v: concurrency limit reached", addr)
+			continue
+		case sem <- struct{}{}:
+		}
 		b := append([]byte(nil), b[:n]...)
 		go func() {
+			defer func() { <-sem }()
 			err := s.HandleRequest(ctx, family, addr, b)
 			if err != nil {
 				log.Printf("error handling %v byte request from %v: %v", n, addr, err)

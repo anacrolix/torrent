@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"expvar"
 
+	"github.com/anacrolix/generics"
 	"github.com/anacrolix/multiless"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -54,7 +55,16 @@ func GetRequestablePieces(
 		storageLeft = &cap
 	}
 	var allTorrentsUnverifiedBytes int64
+	var lastItem generics.Option[pieceRequestOrderItem]
 	pro.tree.Scan(func(_i pieceRequestOrderItem) bool {
+		// Check that scan emits pieces in priority order.
+		if lastItem.Ok {
+			if _i.Less(&lastItem.Value) {
+				panic("scan not in order")
+			}
+		}
+		lastItem.Set(_i)
+
 		ih := _i.key.InfoHash
 		var t = input.Torrent(ih)
 		pieceLength := t.PieceLength()

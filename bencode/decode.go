@@ -191,7 +191,7 @@ func (d *Decoder) checkBufferedInt() error {
 	return nil
 }
 
-func (d *Decoder) parseStringLength() (uint64, error) {
+func (d *Decoder) parseStringLength() (int, error) {
 	// We should have already consumed the first byte of the length into the Decoder buf.
 	start := d.Offset - 1
 	d.readUntil(':')
@@ -201,13 +201,13 @@ func (d *Decoder) parseStringLength() (uint64, error) {
 	// Really the limit should be the uint size for the platform. But we can't pass in an allocator,
 	// or limit total memory use in Go, the best we might hope to do is limit the size of a single
 	// decoded value (by reading it in in-place and then operating on a view).
-	length, err := strconv.ParseUint(bytesAsString(d.buf.Bytes()), 10, 0)
+	length, err := strconv.ParseInt(bytesAsString(d.buf.Bytes()), 10, 0)
 	checkForIntParseError(err, start)
 	if int64(length) > d.getMaxStrLen() {
 		err = fmt.Errorf("parsed string length %v exceeds limit (%v)", length, DefaultDecodeMaxStrLen)
 	}
 	d.buf.Reset()
-	return length, err
+	return int(length), err
 }
 
 func (d *Decoder) parseString(v reflect.Value) error {

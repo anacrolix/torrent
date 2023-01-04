@@ -101,6 +101,8 @@ func (me Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var resp httpTracker.HttpResponse
+	resp.Incomplete = res.Leechers.Value
+	resp.Complete = res.Seeders.Value
 	resp.Interval = res.Interval.UnwrapOr(5 * 60)
 	resp.Peers.Compact = true
 	for _, peer := range res.Peers {

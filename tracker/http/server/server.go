@@ -73,8 +73,12 @@ func (me Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error determining your IP", http.StatusBadGateway)
 		return
 	}
-	portU64, err := strconv.ParseUint(vs.Get("port"), 0, 16)
+	portU64, _ := strconv.ParseUint(vs.Get("port"), 0, 16)
 	addrPort := netip.AddrPortFrom(addr, uint16(portU64))
+	left, err := strconv.ParseInt(vs.Get("left"), 0, 64)
+	if err != nil {
+		left = -1
+	}
 	res := me.Announce.Serve(
 		r.Context(),
 		tracker.AnnounceRequest{
@@ -83,6 +87,7 @@ func (me Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Event:    event,
 			Port:     addrPort.Port(),
 			NumWant:  -1,
+			Left:     left,
 		},
 		addrPort,
 		trackerServer.GetPeersOpts{

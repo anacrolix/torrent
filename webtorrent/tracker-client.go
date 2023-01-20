@@ -43,6 +43,8 @@ type TrackerClient struct {
 	pingTicker     *time.Ticker
 
 	WebsocketTrackerHttpHeader func() http.Header
+
+	transportStats []webrtc.StatsReport
 }
 
 func (me *TrackerClient) Stats() TrackerClientStats {
@@ -233,6 +235,14 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 		return fmt.Errorf("creating offer: %w", err)
 	}
 
+	pc.OnClose(func() {
+		stats := pc.GetStats()
+		if tc.transportStats == nil {
+			tc.transportStats = []webrtc.StatsReport{}
+		}
+		tc.transportStats = append(tc.transportStats, stats)
+	})
+
 	err = tc.announce(event, infoHash, []outboundOffer{{
 		offerId: offerIDBinary,
 		outboundOfferValue: outboundOfferValue{
@@ -287,6 +297,10 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 		generics.MakeMapIfNilAndSet(&tc.outboundOffers, offer.offerId, offer.outboundOfferValue)
 	}
 	return nil
+}
+
+func (tc *TrackerClient) TransportStats() []webrtc.StatsReport {
+	return tc.transportStats
 }
 
 func (tc *TrackerClient) writeMessage(data []byte) error {

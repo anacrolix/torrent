@@ -237,9 +237,6 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 
 	pc.OnClose(func() {
 		stats := pc.GetStats()
-		if tc.transportStats == nil {
-			tc.transportStats = []webrtc.StatsReport{}
-		}
 		tc.transportStats = append(tc.transportStats, stats)
 	})
 

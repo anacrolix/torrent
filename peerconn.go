@@ -1003,6 +1003,18 @@ func (c *PeerConn) maximumPeerRequestChunkLength() (_ Option[int]) {
 	return Some(uploadRateLimiter.Burst())
 }
 
+// Returns whether any part of the chunk would lie outside a piece of the given length.
+func chunkOverflowsPiece(cs ChunkSpec, pieceLength pp.Integer) bool {
+	switch {
+	default:
+		return false
+	case cs.Begin+cs.Length > pieceLength:
+	// Check for integer overflow
+	case cs.Begin > pp.IntegerMax-cs.Length:
+	}
+	return true
+}
+
 // startFetch is for testing purposes currently.
 func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
 	requestedChunkLengths.Add(strconv.FormatUint(r.Length.Uint64(), 10), 1)
@@ -1045,10 +1057,11 @@ func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
 		requestsReceivedForMissingPieces.Add(1)
 		return fmt.Errorf("peer requested piece we don't have: %v", r.Index.Int())
 	}
+	pieceLength := c.t.pieceLength(pieceIndex(r.Index))
 	// Check this after we know we have the piece, so that the piece length will be known.
-	if r.Begin+r.Length > c.t.pieceLength(pieceIndex(r.Index)) {
+	if chunkOverflowsPiece(r.ChunkSpec, pieceLength) {
 		torrent.Add("bad requests received", 1)
-		return errors.New("bad Request")
+		return errors.New("chunk overflows piece")
 	}
 	if c.peerRequests == nil {
 		c.peerRequests = make(map[Request]*peerRequestState, localClientReqq)
@@ -1255,6 +1268,9 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Request:
 			r := newRequestFromMessage(&msg)
 			err = c.onReadRequest(r, true)
+			if err != nil {
+				err = fmt.Errorf("on reading request %v: %w", r, err)
+			}
 		case pp.Piece:
 			c.doChunkReadStats(int64(len(msg.Piece)))
 			err = c.receiveChunk(&msg)

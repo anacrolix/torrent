@@ -108,6 +108,8 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	cfg := torrent.TestingConfig(t)
 	// cfg.Debug = true
 	cfg.Seed = true
+	// Less than a piece, more than a single request.
+	cfg.MaxAllocPeerRequestDataPerConn = 4
 	// Some test instances don't like this being on, even when there's no cache involved.
 	cfg.DropMutuallyCompletePeers = false
 	if ps.SeederUploadRateLimiter != nil {

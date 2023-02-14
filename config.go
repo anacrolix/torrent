@@ -148,6 +148,8 @@ type ClientConfig struct {
 	// How long between writes before sending a keep alive message on a peer connection that we want
 	// to maintain.
 	KeepAliveTimeout time.Duration
+	// Maximum bytes to buffer per peer connection for peer request data before it is sent.
+	MaxAllocPeerRequestDataPerConn int64
 
 	// The IP addresses as our peers should see them. May differ from the
 	// local interfaces due to NAT or other network configurations.
@@ -205,6 +207,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		TorrentPeersLowWater:           50,
 		HandshakesTimeout:              4 * time.Second,
 		KeepAliveTimeout:               time.Minute,
+		MaxAllocPeerRequestDataPerConn: 1 << 20,
 		ListenHost:                     func(string) string { return "" },
 		UploadRateLimiter:              unlimited,
 		DownloadRateLimiter:            unlimited,

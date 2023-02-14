@@ -3,6 +3,7 @@ package torrent
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
+	"github.com/anacrolix/torrent/internal/alloclim"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -43,7 +45,8 @@ const (
 )
 
 type peerRequestState struct {
-	data []byte
+	data             []byte
+	allocReservation *alloclim.Reservation
 }
 
 type PeerRemoteAddr interface {
@@ -169,6 +172,8 @@ type PeerConn struct {
 	// The peer has everything. This can occur due to a special message, when
 	// we may not even know the number of pieces in the torrent yet.
 	peerSentHaveAll bool
+
+	peerRequestDataAllocLimiter alloclim.Limiter
 }
 
 func (cn *PeerConn) peerImplStatusLines() []string {
@@ -547,9 +552,16 @@ func (cn *PeerConn) choke(msg messageWriter) (more bool) {
 		Type: pp.Choke,
 	})
 	if !cn.fastEnabled() {
-		cn.peerRequests = nil
+		cn.deleteAllPeerRequests()
 	}
 	return
+}
+
+func (cn *PeerConn) deleteAllPeerRequests() {
+	for _, state := range cn.peerRequests {
+		state.allocReservation.Drop()
+	}
+	cn.peerRequests = nil
 }
 
 func (cn *PeerConn) unchoke(msg func(pp.Message) bool) bool {
@@ -992,7 +1004,11 @@ func (c *PeerConn) reject(r Request) {
 		panic("fast not enabled")
 	}
 	c.write(r.ToMsg(pp.Reject))
-	delete(c.peerRequests, r)
+	// It is possible to reject a request before it is added to peer requests due to being invalid.
+	if state, ok := c.peerRequests[r]; ok {
+		state.allocReservation.Drop()
+		delete(c.peerRequests, r)
+	}
 }
 
 func (c *PeerConn) maximumPeerRequestChunkLength() (_ Option[int]) {
@@ -1066,7 +1082,9 @@ func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
 	if c.peerRequests == nil {
 		c.peerRequests = make(map[Request]*peerRequestState, localClientReqq)
 	}
-	value := &peerRequestState{}
+	value := &peerRequestState{
+		allocReservation: c.peerRequestDataAllocLimiter.Reserve(int64(r.Length)),
+	}
 	c.peerRequests[r] = value
 	if startFetch {
 		// TODO: Limit peer request data read concurrency.
@@ -1076,7 +1094,7 @@ func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
 }
 
 func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
-	b, err := readPeerRequestData(r, c)
+	b, err := c.readPeerRequestData(r, prs)
 	c.locker().Lock()
 	defer c.locker().Unlock()
 	if err != nil {
@@ -1133,7 +1151,20 @@ func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
 	}
 }
 
-func readPeerRequestData(r Request, c *PeerConn) ([]byte, error) {
+func (c *PeerConn) readPeerRequestData(r Request, prs *peerRequestState) ([]byte, error) {
+	// Should we depend on Torrent closure here? I think it's okay to get cancelled from elsewhere,
+	// or fail to read and then cleanup.
+	ctx := context.Background()
+	err := prs.allocReservation.Wait(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			// The error is from the reservation itself. Something is very broken, or we're not
+			// guarding against excessively large requests.
+			err = log.WithLevel(log.Critical, err)
+		}
+		err = fmt.Errorf("waiting for alloc limit reservation: %w", err)
+		return nil, err
+	}
 	b := make([]byte, r.Length)
 	p := c.t.info.Piece(int(r.Index))
 	n, err := c.t.readAt(b, p.Offset()+int64(r.Begin))
@@ -1740,6 +1771,7 @@ func (c *PeerConn) tickleWriter() {
 
 func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool, state *peerRequestState) (more bool) {
 	c.lastChunkSent = time.Now()
+	state.allocReservation.Release()
 	return msg(pp.Message{
 		Type:  pp.Piece,
 		Index: r.Index,

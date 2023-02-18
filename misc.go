@@ -115,7 +115,8 @@ func connLessTrusted(l, r *Peer) bool {
 
 func connIsIpv6(nc interface {
 	LocalAddr() net.Addr
-}) bool {
+},
+) bool {
 	ra := nc.LocalAddr()
 	rip := addrIpOrNil(ra)
 	return rip.To4() == nil && rip.To16() != nil

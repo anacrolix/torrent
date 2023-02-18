@@ -233,14 +233,16 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 		return fmt.Errorf("creating offer: %w", err)
 	}
 
-	err = tc.announce(event, infoHash, []outboundOffer{{
-		offerId: offerIDBinary,
-		outboundOfferValue: outboundOfferValue{
-			originalOffer:  offer,
-			peerConnection: pc,
-			infoHash:       infoHash,
-			dataChannel:    dc,
-		}},
+	err = tc.announce(event, infoHash, []outboundOffer{
+		{
+			offerId: offerIDBinary,
+			outboundOfferValue: outboundOfferValue{
+				originalOffer:  offer,
+				peerConnection: pc,
+				infoHash:       infoHash,
+				dataChannel:    dc,
+			},
+		},
 	})
 	if err != nil {
 		dc.Close()

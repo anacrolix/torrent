@@ -13,8 +13,10 @@ type Client struct {
 	url_ *url.URL
 }
 
-type ProxyFunc func(*http.Request) (*url.URL, error)
-type DialContextFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+type (
+	ProxyFunc       func(*http.Request) (*url.URL, error)
+	DialContextFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+)
 
 type NewClientOpts struct {
 	Proxy          ProxyFunc

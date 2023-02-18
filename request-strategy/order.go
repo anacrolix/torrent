@@ -66,7 +66,7 @@ func GetRequestablePieces(
 		lastItem.Set(_i)
 
 		ih := _i.key.InfoHash
-		var t = input.Torrent(ih)
+		t := input.Torrent(ih)
 		pieceLength := t.PieceLength()
 		if storageLeft != nil {
 			if *storageLeft < pieceLength {

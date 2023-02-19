@@ -23,6 +23,7 @@ import (
 var trackers = []string{
 	"udp://tracker.opentrackr.org:1337/announce",
 	"udp://tracker.openbittorrent.com:6969/announce",
+	"udp://localhost:42069",
 }
 
 func TestAnnounceLocalhost(t *testing.T) {

@@ -3,14 +3,22 @@ package httpTracker
 import (
 	"fmt"
 	"net"
+	"net/netip"
 
 	"github.com/anacrolix/dht/v2/krpc"
 )
 
+// TODO: Use netip.Addr and Option[[20]byte].
 type Peer struct {
 	IP   net.IP `bencode:"ip"`
 	Port int    `bencode:"port"`
 	ID   []byte `bencode:"peer id"`
+}
+
+func (p Peer) ToNetipAddrPort() (addrPort netip.AddrPort, ok bool) {
+	addr, ok := netip.AddrFromSlice(p.IP)
+	addrPort = netip.AddrPortFrom(addr, uint16(p.Port))
+	return
 }
 
 func (p Peer) String() string {

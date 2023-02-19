@@ -6,10 +6,14 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
+	"github.com/anacrolix/generics"
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -214,4 +218,36 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	assert.Equal(t, make([]byte, len(mi.InfoBytes)), tt.metadataBytes)
 	assert.False(t, tt.haveAllMetadataPieces())
 	assert.Nil(t, tt.Metainfo().InfoBytes)
+}
+
+func TestRelativeAvailabilityHaveNone(t *testing.T) {
+	c := qt.New(t)
+	var err error
+	cl := Client{
+		config: TestingConfig(t),
+	}
+	tt := Torrent{
+		cl:           &cl,
+		logger:       log.Default,
+		gotMetainfoC: make(chan struct{}),
+	}
+	tt.setChunkSize(2)
+	generics.MakeMapIfNil(&tt.conns)
+	pc := PeerConn{}
+	pc.t = &tt
+	pc.peerImpl = &pc
+	pc.initRequestState()
+	generics.InitNew(&pc.callbacks)
+	tt.conns[&pc] = struct{}{}
+	err = pc.peerSentHave(0)
+	c.Assert(err, qt.IsNil)
+	info := testutil.Greeting.Info(5)
+	err = tt.setInfo(&info)
+	c.Assert(err, qt.IsNil)
+	tt.onSetInfo()
+	err = pc.peerSentHaveNone()
+	c.Assert(err, qt.IsNil)
+	var wg sync.WaitGroup
+	tt.close(&wg)
+	tt.assertAllPiecesRelativeAvailabilityZero()
 }

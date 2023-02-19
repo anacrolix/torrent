@@ -899,7 +899,7 @@ func (cn *PeerConn) onPeerSentHaveAll() error {
 }
 
 func (cn *PeerConn) peerSentHaveNone() error {
-	if cn.peerSentHaveAll {
+	if !cn.peerSentHaveAll {
 		cn.t.decPeerPieceAvailability(&cn.Peer)
 	}
 	cn._peerPieces.Clear()

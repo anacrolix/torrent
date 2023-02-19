@@ -45,6 +45,9 @@ func (me *prioritizedPeers) Each(f func(PeerInfo)) {
 }
 
 func (me *prioritizedPeers) Len() int {
+	if me == nil || me.om == nil {
+		return 0
+	}
 	return me.om.Len()
 }
 

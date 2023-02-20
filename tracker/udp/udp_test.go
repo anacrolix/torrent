@@ -2,12 +2,18 @@ package udp
 
 import (
 	"bytes"
+	"context"
+	"crypto/rand"
 	"encoding/binary"
 	"io"
 	"net"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
+	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/missinggo/v2/iter"
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/require"
 )
@@ -90,4 +96,42 @@ func TestConnClientLogDispatchUnknownTransactionId(t *testing.T) {
 	ccAddr.IP = net.IPv6loopback
 	_, err = pc.WriteTo(make([]byte, 30), &ccAddr)
 	c.Assert(err, qt.IsNil)
+}
+
+func TestConnectionIdMismatch(t *testing.T) {
+	t.Skip("Server host returns consistent connection ID in limited tests and so isn't effective.")
+	cl, err := NewConnClient(NewConnClientOpts{
+		// This host seems to return `Connection ID missmatch.\x00` every 2 minutes or so under
+		// heavy use.
+		Host: "tracker.torrent.eu.org:451",
+		//Host:    "tracker.opentrackr.org:1337",
+		Network: "udp",
+	})
+	c := qt.New(t)
+	c.Assert(err, qt.IsNil)
+	defer cl.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	// Force every request to use a different connection ID. It's racey, but we want to get a
+	// different ID issued before a request can be sent with an old ID.
+	cl.Client.shouldReconnectOverride = func() bool { return true }
+	started := time.Now()
+	var wg sync.WaitGroup
+	for range iter.N(2) {
+		ar := AnnounceRequest{
+			NumWant: -1,
+			Event:   2,
+		}
+		rand.Read(ar.InfoHash[:])
+		rand.Read(ar.PeerId[:])
+		//spew.Dump(ar)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _, err := cl.Announce(ctx, ar, Options{})
+			// I'm looking for `error response: "Connection ID missmatch.\x00"`.
+			t.Logf("announce error after %v: %v", time.Since(started), err)
+		}()
+	}
+	wg.Wait()
 }

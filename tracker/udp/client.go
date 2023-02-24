@@ -182,6 +182,16 @@ func (cl *Client) requestWriter(ctx context.Context, action Action, body []byte,
 	}
 }
 
+const ConnectionIdMissmatchNul = "Connection ID missmatch.\x00"
+
+type ErrorResponse struct {
+	Message string
+}
+
+func (me ErrorResponse) Error() string {
+	return fmt.Sprintf("error response: %#q", me.Message)
+}
+
 func (cl *Client) request(ctx context.Context, action Action, body []byte) (respBody []byte, addr net.Addr, err error) {
 	respChan := make(chan DispatchedResponse, 1)
 	t := cl.Dispatcher.NewTransaction(func(dr DispatchedResponse) {
@@ -200,9 +210,9 @@ func (cl *Client) request(ctx context.Context, action Action, body []byte) (resp
 			respBody = dr.Body
 			addr = dr.Addr
 		} else if dr.Header.Action == ActionError {
-			// I've seen "Connection ID mismatch.^@" in less and other tools, I think they're just
-			// not handling a trailing \x00 nicely.
-			err = fmt.Errorf("error response: %#q", dr.Body)
+			// udp://tracker.torrent.eu.org:451/announce frequently returns "Connection ID
+			// missmatch.\x00"
+			err = ErrorResponse{Message: string(dr.Body)}
 		} else {
 			err = fmt.Errorf("unexpected response action %v", dr.Header.Action)
 		}

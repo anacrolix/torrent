@@ -13,12 +13,12 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-	trackerServer "github.com/anacrolix/torrent/tracker/server"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	trackerServer "github.com/anacrolix/torrent/tracker/server"
 	"github.com/anacrolix/torrent/tracker/udp"
 )
 

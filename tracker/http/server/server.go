@@ -11,11 +11,11 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-	trackerServer "github.com/anacrolix/torrent/tracker/server"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/tracker"
 	httpTracker "github.com/anacrolix/torrent/tracker/http"
+	trackerServer "github.com/anacrolix/torrent/tracker/server"
 )
 
 type Handler struct {

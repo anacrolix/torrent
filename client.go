@@ -31,7 +31,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
-	"github.com/anacrolix/torrent/types/infohash"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
@@ -47,6 +46,7 @@ import (
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/types/infohash"
 	"github.com/anacrolix/torrent/webtorrent"
 )
 

@@ -10,12 +10,12 @@ import (
 
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/torrent/tracker"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/tracker/udp"
 )
 

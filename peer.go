@@ -126,6 +126,13 @@ const (
 	PeerSourceDirect = "M"
 )
 
+// Returns the Torrent a Peer belongs to. Shouldn't change for the lifetime of the Peer. May be nil
+// if we are the receiving end of a connection and the handshake hasn't been received or accepted
+// yet.
+func (p *Peer) Torrent() *Torrent {
+	return p.t
+}
+
 func (p *Peer) initRequestState() {
 	p.requestState.Requests = &peerRequests{}
 }

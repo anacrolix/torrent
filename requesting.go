@@ -17,6 +17,12 @@ import (
 	"github.com/anacrolix/torrent/typed-roaring"
 )
 
+type (
+	// Since we have to store all the requests in memory, we can't reasonably exceed what could be
+	// indexed with the memory space available.
+	maxRequests = int
+)
+
 func (t *Torrent) requestStrategyPieceOrderState(i int) request_strategy.PieceRequestOrderState {
 	return request_strategy.PieceRequestOrderState{
 		Priority:     t.piece(i).purePriority(),

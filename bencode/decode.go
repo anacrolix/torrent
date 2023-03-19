@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"unsafe"
 )
 
 // The default bencode string length limit. This is a poor attempt to prevent excessive memory
@@ -246,13 +247,25 @@ func (d *Decoder) parseString(v reflect.Value) error {
 		if v.Type().Elem().Kind() != reflect.Uint8 {
 			break
 		}
-		d.buf.Grow(int(length))
+		d.buf.Grow(length)
 		b := d.buf.Bytes()[:length]
 		read(b)
 		reflect.Copy(v, reflect.ValueOf(b))
 		return nil
+	case reflect.Bool:
+		d.buf.Grow(length)
+		b := d.buf.Bytes()[:length]
+		read(b)
+		x, err := strconv.ParseBool(unsafe.String(unsafe.SliceData(b), len(b)))
+		if err != nil {
+			x = length != 0
+		}
+		v.SetBool(x)
+		return nil
 	}
-	d.buf.Grow(int(length))
+	// Can't move this into default clause because some cases above fail through to here after
+	// additional checks.
+	d.buf.Grow(length)
 	read(d.buf.Bytes()[:length])
 	// I believe we return here to support "ignore_unmarshal_type_error".
 	return &UnmarshalTypeError{

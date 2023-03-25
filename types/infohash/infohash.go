@@ -46,7 +46,8 @@ func (t *T) FromHexString(s string) (err error) {
 		return
 	}
 	if n != Size {
-		panic(n)
+		err = fmt.Errorf("decoded hash hex string has bad length: %d", n)
+		return
 	}
 	return
 }

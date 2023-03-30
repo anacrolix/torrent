@@ -49,11 +49,17 @@ func (me *wrappedPeerConnection) Close() error {
 	return err
 }
 
-func newPeerConnection(logger log.Logger) (*wrappedPeerConnection, error) {
+func newPeerConnection(logger log.Logger, iceServers []string) (*wrappedPeerConnection, error) {
 	newPeerConnectionMu.Lock()
 	defer newPeerConnectionMu.Unlock()
 	ctx, span := otel.Tracer(tracerName).Start(context.Background(), "PeerConnection")
-	pc, err := api.NewPeerConnection(config)
+
+	pcConfig := config
+	if iceServers != nil {
+		pcConfig = webrtc.Configuration{ICEServers: []webrtc.ICEServer{{URLs: iceServers}}}
+	}
+
+	pc, err := api.NewPeerConnection(pcConfig)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
@@ -99,7 +105,7 @@ func (tc *TrackerClient) newOffer(
 	offer webrtc.SessionDescription,
 	err error,
 ) {
-	peerConnection, err = newPeerConnection(logger)
+	peerConnection, err = newPeerConnection(logger, tc.ICEServers)
 	if err != nil {
 		return
 	}
@@ -191,7 +197,7 @@ func (tc *TrackerClient) newAnsweringPeerConnection(
 ) (
 	peerConn *wrappedPeerConnection, answer webrtc.SessionDescription, err error,
 ) {
-	peerConn, err = newPeerConnection(tc.Logger)
+	peerConn, err = newPeerConnection(tc.Logger, tc.ICEServers)
 	if err != nil {
 		err = fmt.Errorf("failed to create new connection: %w", err)
 		return

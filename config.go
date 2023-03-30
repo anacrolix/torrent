@@ -180,6 +180,10 @@ type ClientConfig struct {
 	DisableWebseeds   bool
 
 	Callbacks Callbacks
+
+	// ICEServers defines a slice describing servers available to be used by
+	// ICE, such as STUN and TURN servers.
+	ICEServers []string
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {

@@ -45,6 +45,7 @@ type websocketTrackers struct {
 	Proxy                      httpTracker.ProxyFunc
 	DialContext                func(ctx context.Context, network, addr string) (net.Conn, error)
 	WebsocketTrackerHttpHeader func() netHttp.Header
+	ICEServers                 []string
 }
 
 func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.TrackerClient, func()) {
@@ -64,6 +65,7 @@ func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.Tra
 					return fmt.Sprintf("tracker client for %q: %v", url, m)
 				}),
 				WebsocketTrackerHttpHeader: me.WebsocketTrackerHttpHeader,
+				ICEServers:                 me.ICEServers,
 			},
 		}
 		value.TrackerClient.Start(func(err error) {

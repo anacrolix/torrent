@@ -234,3 +234,34 @@ func TestDecodeMaxStrLen(t *testing.T) {
 		Hi []byte `bencode:"420"`
 	}), 69)
 }
+
+// This is for the "github.com/anacrolix/torrent/metainfo".Info.Private field.
+func TestDecodeStringIntoBoolPtr(t *testing.T) {
+	var m struct {
+		Private *bool `bencode:"private,omitempty"`
+	}
+	c := qt.New(t)
+	check := func(msg string, expectNil, expectTrue bool) {
+		m.Private = nil
+		c.Check(Unmarshal([]byte(msg), &m), qt.IsNil, qt.Commentf("%q", msg))
+		if expectNil {
+			c.Check(m.Private, qt.IsNil)
+		} else {
+			if c.Check(m.Private, qt.IsNotNil, qt.Commentf("%q", msg)) {
+				c.Check(*m.Private, qt.Equals, expectTrue, qt.Commentf("%q", msg))
+			}
+		}
+	}
+	check("d7:privatei1ee", false, true)
+	check("d7:privatei0ee", false, false)
+	check("d7:privatei42ee", false, true)
+	// This is a weird case. We could not allocate the bool to indicate it was bad (maybe a bad
+	// serializer which isn't uncommon), but that requires reworking the decoder to handle
+	// automatically. I think if we cared enough we'd create a custom Unmarshaler. Also if we were
+	// worried enough about performance I'd completely rewrite this package.
+	check("d7:private0:e", false, false)
+	check("d7:private1:te", false, true)
+	check("d7:private5:falsee", false, false)
+	check("d7:private1:Fe", false, false)
+	check("d7:private11:bunnyfoofooe", false, true)
+}

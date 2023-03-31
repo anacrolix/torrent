@@ -240,14 +240,16 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 		tc.transportStats = append(tc.transportStats, stats)
 	})
 
-	err = tc.announce(event, infoHash, []outboundOffer{{
-		offerId: offerIDBinary,
-		outboundOfferValue: outboundOfferValue{
-			originalOffer:  offer,
-			peerConnection: pc,
-			infoHash:       infoHash,
-			dataChannel:    dc,
-		}},
+	err = tc.announce(event, infoHash, []outboundOffer{
+		{
+			offerId: offerIDBinary,
+			outboundOfferValue: outboundOfferValue{
+				originalOffer:  offer,
+				peerConnection: pc,
+				infoHash:       infoHash,
+				dataChannel:    dc,
+			},
+		},
 	})
 	if err != nil {
 		dc.Close()

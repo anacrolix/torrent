@@ -1,10 +1,11 @@
 package webtorrent
 
 import (
+	"testing"
+
 	"github.com/anacrolix/log"
 	qt "github.com/frankban/quicktest"
 	"github.com/pion/webrtc/v3"
-	"testing"
 )
 
 func TestClosingPeerConnectionDoesNotCloseUnopenedDataChannel(t *testing.T) {

@@ -895,17 +895,21 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	if t.storage != nil {
 		t.deletePieceRequestOrder()
 	}
+	t.assertAllPiecesRelativeAvailabilityZero()
+	t.pex.Reset()
+	t.cl.event.Broadcast()
+	t.pieceStateChanges.Close()
+	t.updateWantPeersEvent()
+	return
+}
+
+func (t *Torrent) assertAllPiecesRelativeAvailabilityZero() {
 	for i := range t.pieces {
 		p := t.piece(i)
 		if p.relativeAvailability != 0 {
 			panic(fmt.Sprintf("piece %v has relative availability %v", i, p.relativeAvailability))
 		}
 	}
-	t.pex.Reset()
-	t.cl.event.Broadcast()
-	t.pieceStateChanges.Close()
-	t.updateWantPeersEvent()
-	return
 }
 
 func (t *Torrent) requestOffset(r Request) int64 {

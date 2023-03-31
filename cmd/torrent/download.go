@@ -221,7 +221,7 @@ func waitForPieces(ctx context.Context, t *torrent.Torrent, beginIndex, endIndex
 }
 
 func writeMetainfoToFile(mi metainfo.MetaInfo, path string) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0640)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
 	if err != nil {
 		return err
 	}

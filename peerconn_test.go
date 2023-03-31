@@ -4,11 +4,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"golang.org/x/time/rate"
 	"io"
 	"net"
 	"sync"
 	"testing"
+
+	"golang.org/x/time/rate"
 
 	"github.com/frankban/quicktest"
 	qt "github.com/frankban/quicktest"
@@ -316,4 +317,16 @@ func TestReceiveLargeRequest(t *testing.T) {
 	req.Length = 2 << 20
 	c.Check(pc.onReadRequest(req, false), qt.IsNil)
 	c.Check(pc.messageWriter.writeBuffer.Len(), qt.Equals, 17)
+}
+
+func TestChunkOverflowsPiece(t *testing.T) {
+	c := qt.New(t)
+	check := func(begin, length, limit pp.Integer, expected bool) {
+		c.Check(chunkOverflowsPiece(ChunkSpec{begin, length}, limit), qt.Equals, expected)
+	}
+	check(2, 3, 1, true)
+	check(2, pp.IntegerMax, 1, true)
+	check(2, pp.IntegerMax, 3, true)
+	check(2, pp.IntegerMax, pp.IntegerMax, true)
+	check(2, pp.IntegerMax-2, pp.IntegerMax, false)
 }

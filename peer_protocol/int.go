@@ -3,11 +3,18 @@ package peer_protocol
 import (
 	"encoding/binary"
 	"io"
+	"math"
 
 	"github.com/pkg/errors"
 )
 
-type Integer uint32
+type (
+	// An alias for the underlying type of Integer. This is needed for fuzzing.
+	IntegerKind = uint32
+	Integer     IntegerKind
+)
+
+const IntegerMax = math.MaxUint32
 
 func (i *Integer) UnmarshalBinary(b []byte) error {
 	if len(b) != 4 {

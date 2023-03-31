@@ -808,7 +808,7 @@ func TestBadPeerIpPort(t *testing.T) {
 			true,
 			func(cl *Client) {
 				cl.ipBlockList = iplist.New([]iplist.Range{
-					iplist.Range{First: net.ParseIP("10.0.0.1"), Last: net.ParseIP("10.0.0.255")},
+					{First: net.ParseIP("10.0.0.1"), Last: net.ParseIP("10.0.0.255")},
 				})
 			},
 		},
@@ -845,5 +845,4 @@ func TestBadPeerIpPort(t *testing.T) {
 			require.Equal(t, tc.expectedOk, cl.badPeerIPPort(tc.ip, tc.port))
 		})
 	}
-
 }

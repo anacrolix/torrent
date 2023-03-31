@@ -46,6 +46,7 @@ import (
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/types/infohash"
 	"github.com/anacrolix/torrent/webtorrent"
 )
 
@@ -1286,7 +1287,7 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 }
 
 type AddTorrentOpts struct {
-	InfoHash  InfoHash
+	InfoHash  infohash.T
 	Storage   storage.ClientImpl
 	ChunkSize pp.Integer
 }
@@ -1505,6 +1506,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		connString: opts.connString,
 		conn:       nc,
 	}
+	c.peerRequestDataAllocLimiter.Max = cl.config.MaxAllocPeerRequestDataPerConn
 	c.initRequestState()
 	// TODO: Need to be much more explicit about this, including allowing non-IP bannable addresses.
 	if opts.remoteAddr != nil {

@@ -26,7 +26,7 @@ const (
 
 type TransactionId = int32
 
-type ConnectionId = int64
+type ConnectionId = uint64
 
 type ConnectionRequest struct {
 	ConnectionId  ConnectionId

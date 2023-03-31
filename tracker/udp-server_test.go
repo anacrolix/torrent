@@ -21,7 +21,7 @@ type torrent struct {
 
 type server struct {
 	pc    net.PacketConn
-	conns map[int64]struct{}
+	conns map[udp.ConnectionId]struct{}
 	t     map[[20]byte]torrent
 }
 
@@ -46,10 +46,10 @@ func (s *server) respond(addr net.Addr, rh udp.ResponseHeader, parts ...interfac
 	return
 }
 
-func (s *server) newConn() (ret int64) {
-	ret = rand.Int63()
+func (s *server) newConn() (ret udp.ConnectionId) {
+	ret = rand.Uint64()
 	if s.conns == nil {
-		s.conns = make(map[int64]struct{})
+		s.conns = make(map[udp.ConnectionId]struct{})
 	}
 	s.conns[ret] = struct{}{}
 	return

@@ -138,6 +138,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 
 	cfg := torrent.TestingConfig(t)
 	cfg.Seed = true
+	cfg.MaxAllocPeerRequestDataPerConn = 4
 	cfg.DataDir = greetingTempDir
 	seeder, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
@@ -159,6 +160,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	cfg = torrent.TestingConfig(t)
 	cfg.Seed = false
 	cfg.DataDir = t.TempDir()
+	cfg.MaxAllocPeerRequestDataPerConn = 4
 	leecherLeecher, _ := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer leecherLeecher.Close()

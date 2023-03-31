@@ -31,9 +31,11 @@
 package metainfo
 
 // For more context on why these numbers, see http://wiki.vuze.com/w/Torrent_Piece_Size
-const minimumPieceLength = 16 * 1024
-const targetPieceCountLog2 = 10
-const targetPieceCountMin = 1 << targetPieceCountLog2
+const (
+	minimumPieceLength   = 16 * 1024
+	targetPieceCountLog2 = 10
+	targetPieceCountMin  = 1 << targetPieceCountLog2
+)
 
 // Target piece count should be < targetPieceCountMax
 const targetPieceCountMax = targetPieceCountMin << 1

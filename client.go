@@ -1313,13 +1313,6 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err e
 	return
 }
 
-type stringAddr string
-
-var _ net.Addr = stringAddr("")
-
-func (stringAddr) Network() string   { return "" }
-func (me stringAddr) String() string { return string(me) }
-
 // The trackers will be merged with the existing ones. If the Info isn't yet known, it will be set.
 // spec.DisallowDataDownload/Upload will be read and applied
 // The display name is replaced if the new spec provides one. Note that any `Storage` is ignored.
@@ -1344,7 +1337,7 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	}
 	for _, peerAddr := range spec.PeerAddrs {
 		t.addPeer(PeerInfo{
-			Addr:    stringAddr(peerAddr),
+			Addr:    StringAddr(peerAddr),
 			Source:  PeerSourceDirect,
 			Trusted: true,
 		})

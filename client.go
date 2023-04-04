@@ -23,7 +23,7 @@ import (
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/anacrolix/generics"
+	g "github.com/anacrolix/generics"
 	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
@@ -195,7 +195,7 @@ func (cl *Client) announceKey() int32 {
 // Initializes a bare minimum Client. *Client and *ClientConfig must not be nil.
 func (cl *Client) init(cfg *ClientConfig) {
 	cl.config = cfg
-	generics.MakeMap(&cl.dopplegangerAddrs)
+	g.MakeMap(&cl.dopplegangerAddrs)
 	cl.torrents = make(map[metainfo.Hash]*Torrent)
 	cl.dialRateLimiter = rate.NewLimiter(10, 10)
 	cl.activeAnnounceLimiter.SlotsPerKey = 2
@@ -1461,7 +1461,7 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	if !ok {
 		panic(ip)
 	}
-	generics.MakeMapIfNilAndSet(&cl.badPeerIPs, ipAddr, struct{}{})
+	g.MakeMapIfNilAndSet(&cl.badPeerIPs, ipAddr, struct{}{})
 	for _, t := range cl.torrents {
 		t.iterPeers(func(p *Peer) {
 			if p.remoteIp().Equal(ip) {

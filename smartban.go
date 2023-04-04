@@ -5,7 +5,7 @@ import (
 	"crypto/sha1"
 	"net/netip"
 
-	"github.com/anacrolix/generics"
+	g "github.com/anacrolix/generics"
 
 	"github.com/anacrolix/torrent/smartban"
 )
@@ -26,7 +26,7 @@ type blockCheckingWriter struct {
 func (me *blockCheckingWriter) checkBlock() {
 	b := me.blockBuffer.Next(me.chunkSize)
 	for _, peer := range me.cache.CheckBlock(me.requestIndex, b) {
-		generics.MakeMapIfNilAndSet(&me.badPeers, peer, struct{}{})
+		g.MakeMapIfNilAndSet(&me.badPeers, peer, struct{}{})
 	}
 	me.requestIndex++
 }

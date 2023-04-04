@@ -1,7 +1,7 @@
 package torrent
 
 import (
-	"github.com/anacrolix/generics"
+	g "github.com/anacrolix/generics"
 	list "github.com/bahlo/generic-list-go"
 
 	"github.com/anacrolix/torrent/typed-roaring"
@@ -33,7 +33,7 @@ func (o *orderedBitmap[T]) Contains(index T) bool {
 func (o *orderedBitmap[T]) Add(index T) {
 	o.bitmap.Add(index)
 	if _, ok := o.elements[index]; !ok {
-		generics.MakeMapIfNilAndSet(&o.elements, index, o.order.PushBack(index))
+		g.MakeMapIfNilAndSet(&o.elements, index, o.order.PushBack(index))
 	}
 }
 

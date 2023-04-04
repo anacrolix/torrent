@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -34,7 +35,7 @@ func (t *Torrent) UseSources(sources []string) {
 				panic(s)
 			}
 			level := log.Debug
-			if err != nil {
+			if err != nil && !errors.Is(err, context.Canceled) {
 				level = log.Warning
 			}
 			t.logger.Levelf(level, "used torrent source %q [err=%v]", s, err)

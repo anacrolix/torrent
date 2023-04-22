@@ -459,7 +459,7 @@ func (cl *Client) wantConns() bool {
 		return true
 	}
 	for _, t := range cl.torrents {
-		if t.wantConns() {
+		if t.wantIncomingConns() {
 			return true
 		}
 	}

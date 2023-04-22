@@ -1,4 +1,4 @@
-package request_strategy
+package requestStrategy
 
 import (
 	"bytes"

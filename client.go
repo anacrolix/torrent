@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
+
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
@@ -1045,7 +1047,8 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 			ExtendedPayload: func() []byte {
 				msg := pp.ExtendedHandshakeMessage{
 					M: map[pp.ExtensionName]pp.ExtensionNumber{
-						pp.ExtensionNameMetadata: metadataExtendedId,
+						pp.ExtensionNameMetadata:  metadataExtendedId,
+						utHolepunch.ExtensionName: utHolepunchExtendedId,
 					},
 					V:            cl.config.ExtendedHandshakeClientVersion,
 					Reqq:         localClientReqq,

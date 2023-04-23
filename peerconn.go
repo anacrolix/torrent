@@ -9,9 +9,12 @@ import (
 	"io"
 	"math/rand"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
+
+	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
 
 	"github.com/RoaringBitmap/roaring"
 	. "github.com/anacrolix/generics"
@@ -59,6 +62,8 @@ type PeerConn struct {
 	peerSentHaveAll bool
 
 	peerRequestDataAllocLimiter alloclim.Limiter
+
+	outstandingHolepunchingRendezvous map[netip.AddrPort]struct{}
 }
 
 func (cn *PeerConn) peerImplStatusLines() []string {
@@ -879,6 +884,13 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			err = fmt.Errorf("receiving pex message: %w", err)
 		}
 		return
+	case utHolepunchExtendedId:
+		var msg utHolepunch.Msg
+		err = msg.UnmarshalBinary(payload)
+		if err != nil {
+			err = fmt.Errorf("unmarshalling ut_holepunch message: %w", err)
+			return
+		}
 	default:
 		return fmt.Errorf("unexpected extended message ID: %v", id)
 	}
@@ -1049,4 +1061,10 @@ func (cn *PeerConn) PeerPieces() *roaring.Bitmap {
 
 func (pc *PeerConn) remoteIsTransmission() bool {
 	return bytes.HasPrefix(pc.PeerID[:], []byte("-TR")) && pc.PeerID[7] == '-'
+}
+
+func (pc *PeerConn) remoteAddrPort() Option[netip.AddrPort] {
+	return Some(pc.conn.RemoteAddr().(interface {
+		AddrPort() netip.AddrPort
+	}).AddrPort())
 }

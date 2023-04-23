@@ -24,6 +24,7 @@ const (
 const (
 	metadataExtendedId = iota + 1 // 0 is reserved for deleting keys
 	pexExtendedId
+	utHolepunchExtendedId
 )
 
 func defaultPeerExtensionBytes() PeerExtensionBits {

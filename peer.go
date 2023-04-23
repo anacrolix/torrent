@@ -21,7 +21,7 @@ import (
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
-	"github.com/anacrolix/torrent/typed-roaring"
+	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
 type (
@@ -117,6 +117,7 @@ type (
 )
 
 const (
+	PeerSourceUtHolepunch     = "C"
 	PeerSourceTracker         = "Tr"
 	PeerSourceIncoming        = "I"
 	PeerSourceDhtGetPeers     = "Hg" // Peers we found by searching a DHT.

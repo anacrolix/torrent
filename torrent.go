@@ -17,6 +17,8 @@ import (
 	"time"
 	"unsafe"
 
+	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
+
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
@@ -2357,7 +2359,8 @@ func (t *Torrent) VerifyData() {
 	}
 }
 
-// Start the process of connecting to the given peer for the given torrent if appropriate.
+// Start the process of connecting to the given peer for the given torrent if appropriate. I'm not
+// sure all the PeerInfo fields are being used.
 func (t *Torrent) initiateConn(peer PeerInfo) {
 	if peer.Id == t.cl.peerID {
 		return
@@ -2663,4 +2666,73 @@ func (t *Torrent) checkValidReceiveChunk(r Request) error {
 	// should be considerable checks elsewhere for this case due to the network overhead. We should
 	// catch most of the overflow manipulation stuff by checking index and begin above.
 	return nil
+}
+
+func (t *Torrent) peerConnsWithRemoteAddrPort(addrPort netip.AddrPort) (ret []*PeerConn) {
+	for pc := range t.conns {
+		addr := pc.remoteAddrPort()
+		if !(addr.Ok && addr.Value == addrPort) {
+			continue
+		}
+		ret = append(ret, pc)
+	}
+	return
+}
+
+func makeUtHolepunchMsgForPeerConn(
+	recipient *PeerConn,
+	msgType utHolepunch.MsgType,
+	addrPort netip.AddrPort,
+	errCode utHolepunch.ErrCode,
+) pp.Message {
+	utHolepunchMsg := utHolepunch.Msg{
+		MsgType:  msgType,
+		AddrPort: addrPort,
+		ErrCode:  errCode,
+	}
+	extendedPayload, err := utHolepunchMsg.MarshalBinary()
+	if err != nil {
+		panic(err)
+	}
+	return pp.Message{
+		Type:            pp.Extended,
+		ExtendedID:      MapMustGet(recipient.PeerExtensionIDs, utHolepunch.ExtensionName),
+		ExtendedPayload: extendedPayload,
+	}
+}
+
+func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *PeerConn) error {
+	switch msg.MsgType {
+	case utHolepunch.Rendezvous:
+		sendMsg := func(
+			pc *PeerConn,
+			msgType utHolepunch.MsgType,
+			addrPort netip.AddrPort,
+			errCode utHolepunch.ErrCode,
+		) {
+			pc.write(makeUtHolepunchMsgForPeerConn(pc, msgType, addrPort, errCode))
+		}
+		targets := t.peerConnsWithRemoteAddrPort(msg.AddrPort)
+		if len(targets) == 0 {
+			sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NotConnected)
+			break
+		}
+		for _, pc := range targets {
+			if !pc.supportsExtension(utHolepunch.ExtensionName) {
+				sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NoSupport)
+				continue
+			}
+			sendMsg(sender, utHolepunch.Connect, msg.AddrPort, 0)
+			sendMsg(pc, utHolepunch.Connect, sender.remoteAddrPort().Unwrap(), 0)
+		}
+	case utHolepunch.Connect:
+		t.initiateConn(PeerInfo{
+			Addr:   msg.AddrPort,
+			Source: PeerSourceUtHolepunch,
+		})
+	case utHolepunch.Error:
+
+	default:
+		return fmt.Errorf("unhandled msg type %v", msg.MsgType)
+	}
 }

@@ -65,20 +65,30 @@ type PeerConn struct {
 	outstandingHolepunchingRendezvous map[netip.AddrPort]struct{}
 }
 
-func (cn *PeerConn) peerImplStatusLines() []string {
-	lines := make([]string, 0, 2)
-	lines = append(
-		lines,
-		fmt.Sprintf("%+-55q %v %s", cn.PeerID, cn.PeerExtensionBytes, cn.connString))
-	if cn.supportsExtension(pp.ExtensionNamePex) {
-		lines = append(
-			lines,
-			fmt.Sprintf(
-				"pex: %v conns, %v unsent events",
-				cn.pex.remoteLiveConns,
-				cn.pex.numPending()))
+func (cn *PeerConn) pexStatus() string {
+	if !cn.bitExtensionEnabled(pp.ExtensionBitExtended) {
+		return "extended protocol disabled"
 	}
-	return lines
+	if cn.PeerExtensionIDs == nil {
+		return "pending extended handshake"
+	}
+	if !cn.supportsExtension(pp.ExtensionNamePex) {
+		return "unsupported"
+	}
+	return fmt.Sprintf(
+		"%v conns, %v unsent events",
+		len(cn.pex.remoteLiveConns),
+		cn.pex.numPending(),
+	)
+}
+
+func (cn *PeerConn) peerImplStatusLines() []string {
+	return []string{
+		cn.connString,
+		fmt.Sprintf("peer id: %+q", cn.PeerID),
+		fmt.Sprintf("extensions: %v", cn.PeerExtensionBytes),
+		fmt.Sprintf("pex: %s", cn.pexStatus()),
+	}
 }
 
 // Returns true if the connection is over IPv6.
@@ -1068,4 +1078,8 @@ func (pc *PeerConn) remoteAddrPort() Option[netip.AddrPort] {
 	return Some(pc.conn.RemoteAddr().(interface {
 		AddrPort() netip.AddrPort
 	}).AddrPort())
+}
+
+func (pc *PeerConn) bitExtensionEnabled(bit pp.ExtensionBit) bool {
+	return pc.t.cl.config.Extensions.GetBit(bit) && pc.PeerExtensionBytes.GetBit(bit)
 }

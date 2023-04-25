@@ -31,6 +31,7 @@ type pexConnState struct {
 	dbg     log.Logger
 	// Running record of live connections the remote end of the connection purports to have.
 	remoteLiveConns map[netip.AddrPort]g.Option[pp.PexPeerFlags]
+	lastRecv        time.Time
 }
 
 func (s *pexConnState) IsEnabled() bool {
@@ -131,26 +132,20 @@ func (s *pexConnState) Recv(payload []byte) error {
 	s.dbg.Printf("received pex message: %v", rx)
 	torrent.Add("pex added peers received", int64(len(rx.Added)))
 	torrent.Add("pex added6 peers received", int64(len(rx.Added6)))
-	s.updateRemoteLiveConns(rx)
 
-	if !s.torrent.wantPeers() {
-		s.dbg.Printf("peer reserve ok, incoming PEX discarded")
-		return nil
+	// "Clients must batch updates to send no more than 1 PEX message per minute."
+	timeSinceLastRecv := time.Since(s.lastRecv)
+	if timeSinceLastRecv < 45*time.Second {
+		return fmt.Errorf("last received only %v ago", timeSinceLastRecv)
 	}
-	// TODO: This should be per conn, not for the whole Torrent.
-	if time.Now().Before(s.torrent.pex.rest) {
-		s.dbg.Printf("in cooldown period, incoming PEX discarded")
-		return nil
-	}
+	s.lastRecv = time.Now()
+	s.updateRemoteLiveConns(rx)
 
 	var peers peerInfos
 	peers.AppendFromPex(rx.Added6, rx.Added6Flags)
 	peers.AppendFromPex(rx.Added, rx.AddedFlags)
-	s.dbg.Printf("adding %d peers from PEX", len(peers))
-	if len(peers) > 0 {
-		s.torrent.pex.rest = time.Now().Add(pexInterval)
-		s.torrent.addPeers(peers)
-	}
+	added := s.torrent.addPeers(peers)
+	s.dbg.Printf("got %v peers over pex, added %v", len(peers), added)
 
 	// one day we may also want to:
 	// - check if the peer is not flooding us with PEX updates

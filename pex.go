@@ -3,7 +3,6 @@ package torrent
 import (
 	"net"
 	"sync"
-	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
 
@@ -162,7 +161,6 @@ type pexState struct {
 	sync.RWMutex
 	tail *pexEvent     // event feed list
 	hold []pexEvent    // delayed drops
-	rest time.Time     // cooldown deadline on inbound
 	nc   int           // net number of alive conns
 	msg0 pexMsgFactory // initial message
 }
@@ -174,7 +172,6 @@ func (s *pexState) Reset() {
 	s.tail = nil
 	s.hold = nil
 	s.nc = 0
-	s.rest = time.Time{}
 	s.msg0 = pexMsgFactory{}
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
 	. "github.com/anacrolix/generics"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/slices"
@@ -32,6 +33,7 @@ import (
 	"github.com/anacrolix/sync"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pion/datachannel"
+	"golang.org/x/exp/maps"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/common"
@@ -759,24 +761,37 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	spew.NewDefaultConfig()
 	spew.Fdump(w, t.statsLocked())
 
-	peers := t.peersAsSlice()
-	sort.Slice(peers, func(_i, _j int) bool {
-		i := peers[_i]
-		j := peers[_j]
-		if less, ok := multiless.New().EagerSameLess(
-			i.downloadRate() == j.downloadRate(), i.downloadRate() < j.downloadRate(),
-		).LessOk(); ok {
-			return less
-		}
-		return worseConn(i, j)
+	fmt.Fprintf(w, "webseeds:\n")
+	t.writePeerStatuses(w, maps.Values(t.webSeeds))
+
+	peerConns := maps.Keys(t.conns)
+	// Peers without priorities first, then those with. I'm undecided about how to order peers
+	// without priorities.
+	sort.Slice(peerConns, func(li, ri int) bool {
+		l := peerConns[li]
+		r := peerConns[ri]
+		ml := multiless.New()
+		lpp := g.ResultFromTuple(l.peerPriority()).ToOption()
+		rpp := g.ResultFromTuple(r.peerPriority()).ToOption()
+		ml = ml.Bool(lpp.Ok, rpp.Ok)
+		ml = ml.Uint32(rpp.Value, lpp.Value)
+		return ml.Less()
 	})
+
+	fmt.Fprintf(w, "peer conns:\n")
+	t.writePeerStatuses(w, g.SliceMap(peerConns, func(pc *PeerConn) *Peer {
+		return &pc.Peer
+	}))
+}
+
+func (t *Torrent) writePeerStatuses(w io.Writer, peers []*Peer) {
 	var buf bytes.Buffer
-	for i, c := range peers {
-		fmt.Fprintf(w, "%2d. ", i+1)
+	for _, c := range peers {
+		fmt.Fprintf(w, "- ")
 		buf.Reset()
 		c.writeStatus(&buf)
 		w.Write(bytes.TrimRight(
-			bytes.ReplaceAll(buf.Bytes(), []byte("\n"), []byte("\n    ")),
+			bytes.ReplaceAll(buf.Bytes(), []byte("\n"), []byte("\n  ")),
 			" "))
 	}
 }

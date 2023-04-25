@@ -6,7 +6,6 @@ import (
 	"time"
 
 	g "github.com/anacrolix/generics"
-
 	"github.com/anacrolix/log"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"

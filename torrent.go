@@ -2723,7 +2723,7 @@ func sendUtHolepunchMsg(
 func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *PeerConn) error {
 	switch msg.MsgType {
 	case utHolepunch.Rendezvous:
-		log.Printf("got holepunch rendezvous request for %v from %p", msg.AddrPort, sender)
+		t.logger.Printf("got holepunch rendezvous request for %v from %p", msg.AddrPort, sender)
 		sendMsg := sendUtHolepunchMsg
 		targets := t.peerConnsWithRemoteAddrPort(msg.AddrPort)
 		if len(targets) == 0 {
@@ -2740,7 +2740,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 		}
 		return nil
 	case utHolepunch.Connect:
-		log.Printf("got holepunch connect from %v for %v", sender, msg.AddrPort)
+		t.logger.Printf("got holepunch connect from %v for %v", sender, msg.AddrPort)
 		rz, ok := t.utHolepunchRendezvous[msg.AddrPort]
 		if ok {
 			delete(rz.relays, sender)
@@ -2761,7 +2761,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 			delete(rz.relays, sender)
 			rz.relayCond.Broadcast()
 		}
-		log.Printf("received ut_holepunch error message from %v: %v", sender, msg.ErrCode)
+		t.logger.Printf("received ut_holepunch error message from %v: %v", sender, msg.ErrCode)
 		return nil
 	default:
 		return fmt.Errorf("unhandled msg type %v", msg.MsgType)

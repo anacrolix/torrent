@@ -100,10 +100,12 @@ func (cn *PeerConn) ipv6() bool {
 	return len(ip) == net.IPv6len
 }
 
-// Returns true the if the dialer/initiator has the lower client peer ID. TODO: Find the
-// specification for this.
+// Returns true the if the dialer/initiator has the higher client peer ID. See
+// https://github.com/arvidn/libtorrent/blame/272828e1cc37b042dfbbafa539222d8533e99755/src/bt_peer_connection.cpp#L3536-L3557.
+// As far as I can tell, Transmission just keeps the oldest connection.
 func (cn *PeerConn) isPreferredDirection() bool {
-	return bytes.Compare(cn.t.cl.peerID[:], cn.PeerID[:]) < 0 == cn.outgoing
+	// True if our client peer ID is higher than the remote's peer ID.
+	return bytes.Compare(cn.PeerID[:], cn.t.cl.peerID[:]) < 0 == cn.outgoing
 }
 
 // Returns whether the left connection should be preferred over the right one,

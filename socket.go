@@ -59,11 +59,10 @@ func listenTcp(network, address string) (s socket, err error) {
 		NetworkDialer: NetworkDialer{
 			Network: network,
 			Dialer: &net.Dialer{
-				// My hope is that dialling out from a consistent port will improve the
-				// hole-punching behaviour. It might also prevent duplicate connections to the same
-				// peer if the peer does the same thing. There should probably be a fallback dialer
-				// if we fail to configure the socket to reuse ports for whatever reason.
-				LocalAddr: l.Addr(),
+				// Dialling TCP from a local port limits us to a single outgoing TCP connection to
+				// each remote client. Instead this should be a last resort if we need to use holepunching, and only then to connect to other clients that actually try to holepunch TCP.
+				//LocalAddr: l.Addr(),
+
 				// We don't want fallback, as we explicitly manage the IPv4/IPv6 distinction
 				// ourselves, although it's probably not triggered as I think the network is already
 				// constrained to tcp4 or tcp6 at this point.

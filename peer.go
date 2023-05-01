@@ -275,7 +275,7 @@ func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int))
 	next(None[pieceIndex]())
 }
 
-func (cn *Peer) writeStatus(w io.Writer, t *Torrent) {
+func (cn *Peer) writeStatus(w io.Writer) {
 	// \t isn't preserved in <pre> blocks?
 	if cn.closed.IsSet() {
 		fmt.Fprint(w, "CLOSED: ")

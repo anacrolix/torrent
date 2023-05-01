@@ -28,6 +28,7 @@ func (m *PexMsg) Message(pexExtendedId ExtensionNumber) Message {
 	}
 }
 
+// Unmarshals and returns a PEX message.
 func LoadPexMsg(b []byte) (ret PexMsg, err error) {
 	err = bencode.Unmarshal(b, &ret)
 	return

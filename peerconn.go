@@ -62,7 +62,19 @@ type PeerConn struct {
 }
 
 func (cn *PeerConn) peerImplStatusLines() []string {
-	return []string{fmt.Sprintf("%+-55q %s %s", cn.PeerID, cn.PeerExtensionBytes, cn.connString)}
+	lines := make([]string, 0, 2)
+	lines = append(
+		lines,
+		fmt.Sprintf("%+-55q %v %s", cn.PeerID, cn.PeerExtensionBytes, cn.connString))
+	if cn.supportsExtension(pp.ExtensionNamePex) {
+		lines = append(
+			lines,
+			fmt.Sprintf(
+				"pex: %v conns, %v unsent events",
+				cn.pex.remoteLiveConns,
+				cn.pex.numPending()))
+	}
+	return lines
 }
 
 // Returns true if the connection is over IPv6.
@@ -848,6 +860,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		c.requestPendingMetadata()
 		if !t.cl.config.DisablePEX {
 			t.pex.Add(c) // we learnt enough now
+			// This checks the extension is supported internally.
 			c.pex.Init(c)
 		}
 		return nil

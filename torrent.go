@@ -108,7 +108,7 @@ type Torrent struct {
 	// them. That encourages us to reconnect to peers that are well known in
 	// the swarm.
 	peers prioritizedPeers
-	// Whether we want to know to know more peers.
+	// Whether we want to know more peers.
 	wantPeersEvent missinggo.Event
 	// An announcer for each tracker URL.
 	trackerAnnouncers map[string]torrentTrackerAnnouncer
@@ -774,7 +774,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	for i, c := range peers {
 		fmt.Fprintf(w, "%2d. ", i+1)
 		buf.Reset()
-		c.writeStatus(&buf, t)
+		c.writeStatus(&buf)
 		w.Write(bytes.TrimRight(
 			bytes.ReplaceAll(buf.Bytes(), []byte("\n"), []byte("\n    ")),
 			" "))
@@ -1983,6 +1983,7 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 		panic(len(t.conns))
 	}
 	t.conns[c] = struct{}{}
+	t.cl.event.Broadcast()
 	if !t.cl.config.DisablePEX && !c.PeerExtensionBytes.SupportsExtended() {
 		t.pex.Add(c) // as no further extended handshake expected
 	}

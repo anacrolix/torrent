@@ -12,7 +12,7 @@ require (
 	github.com/anacrolix/dht/v2 v2.19.2-0.20221121215055-066ad8494444
 	github.com/anacrolix/envpprof v1.2.1
 	github.com/anacrolix/fuse v0.2.0
-	github.com/anacrolix/generics v0.0.0-20220618083756-f99e35403a60
+	github.com/anacrolix/generics v0.0.0-20230428105757-683593396d68
 	github.com/anacrolix/go-libutp v1.2.0
 	github.com/anacrolix/log v0.13.2-0.20221123232138-02e2764801c3
 	github.com/anacrolix/missinggo v1.3.0

@@ -2,7 +2,10 @@ package torrent
 
 import (
 	"fmt"
+	"net/netip"
 	"time"
+
+	g "github.com/anacrolix/generics"
 
 	"github.com/anacrolix/log"
 
@@ -26,6 +29,8 @@ type pexConnState struct {
 	Listed  bool
 	info    log.Logger
 	dbg     log.Logger
+	// Running record of live connections the remote end of the connection purports to have.
+	remoteLiveConns map[netip.AddrPort]g.Option[pp.PexPeerFlags]
 }
 
 func (s *pexConnState) IsEnabled() bool {
@@ -67,6 +72,13 @@ func (s *pexConnState) genmsg() *pp.PexMsg {
 	return &tx
 }
 
+func (s *pexConnState) numPending() int {
+	if s.torrent == nil {
+		return 0
+	}
+	return s.torrent.pex.numPending(s.last)
+}
+
 // Share is called from the writer goroutine if when it is woken up with the write buffers empty
 // Returns whether there's more room on the send buffer to write to.
 func (s *pexConnState) Share(postfn messageWriter) bool {
@@ -86,24 +98,50 @@ func (s *pexConnState) Share(postfn messageWriter) bool {
 	return true
 }
 
+func (s *pexConnState) updateRemoteLiveConns(rx pp.PexMsg) (errs []error) {
+	for _, dropped := range rx.Dropped {
+		addrPort, _ := ipv4AddrPortFromKrpcNodeAddr(dropped)
+		delete(s.remoteLiveConns, addrPort)
+	}
+	for _, dropped := range rx.Dropped6 {
+		addrPort, _ := ipv6AddrPortFromKrpcNodeAddr(dropped)
+		delete(s.remoteLiveConns, addrPort)
+	}
+	for i, added := range rx.Added {
+		addr := netip.AddrFrom4([4]byte(added.IP.To4()))
+		addrPort := netip.AddrPortFrom(addr, uint16(added.Port))
+		flags := g.SliceGet(rx.AddedFlags, i)
+		g.MakeMapIfNilAndSet(&s.remoteLiveConns, addrPort, flags)
+	}
+	for i, added := range rx.Added6 {
+		addr := netip.AddrFrom16([16]byte(added.IP.To16()))
+		addrPort := netip.AddrPortFrom(addr, uint16(added.Port))
+		flags := g.SliceGet(rx.Added6Flags, i)
+		g.MakeMapIfNilAndSet(&s.remoteLiveConns, addrPort, flags)
+	}
+	return
+}
+
 // Recv is called from the reader goroutine
 func (s *pexConnState) Recv(payload []byte) error {
+	rx, err := pp.LoadPexMsg(payload)
+	if err != nil {
+		return fmt.Errorf("unmarshalling pex message: %w", err)
+	}
+	s.dbg.Printf("received pex message: %v", rx)
+	torrent.Add("pex added peers received", int64(len(rx.Added)))
+	torrent.Add("pex added6 peers received", int64(len(rx.Added6)))
+	s.updateRemoteLiveConns(rx)
+
 	if !s.torrent.wantPeers() {
 		s.dbg.Printf("peer reserve ok, incoming PEX discarded")
 		return nil
 	}
+	// TODO: This should be per conn, not for the whole Torrent.
 	if time.Now().Before(s.torrent.pex.rest) {
 		s.dbg.Printf("in cooldown period, incoming PEX discarded")
 		return nil
 	}
-
-	rx, err := pp.LoadPexMsg(payload)
-	if err != nil {
-		return fmt.Errorf("error unmarshalling PEX message: %s", err)
-	}
-	s.dbg.Print("incoming PEX message: ", rx)
-	torrent.Add("pex added peers received", int64(len(rx.Added)))
-	torrent.Add("pex added6 peers received", int64(len(rx.Added6)))
 
 	var peers peerInfos
 	peers.AppendFromPex(rx.Added6, rx.Added6Flags)

@@ -13,7 +13,7 @@ import (
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/storage"
-	"github.com/frankban/quicktest"
+	qt "github.com/frankban/quicktest"
 	"golang.org/x/time/rate"
 
 	"github.com/stretchr/testify/assert"
@@ -188,7 +188,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 		defer wg.Done()
 		r := llg.NewReader()
 		defer r.Close()
-		quicktest.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), quicktest.IsNil)
+		qt.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), qt.IsNil)
 	}()
 	done := make(chan struct{})
 	defer close(done)

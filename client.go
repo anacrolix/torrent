@@ -686,7 +686,7 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
 	}
 }
 
-// Performs initiator handshakes and returns a connection. Returns nil *connection if no connection
+// Performs initiator handshakes and returns a connection. Returns nil *PeerConn if no connection
 // for valid reasons.
 func (cl *Client) initiateProtocolHandshakes(
 	ctx context.Context,
@@ -730,14 +730,16 @@ func (cl *Client) establishOutgoingConnEx(t *Torrent, addr PeerRemoteAddr, obfus
 		return nil, errors.New("dial failed")
 	}
 	addrIpPort, _ := tryIpPortFromNetAddr(addr)
-	c, err := cl.initiateProtocolHandshakes(context.Background(), nc, t, obfuscatedHeader, newConnectionOpts{
-		outgoing:   true,
-		remoteAddr: addr,
-		// It would be possible to retrieve a public IP from the dialer used here?
-		localPublicAddr: cl.publicAddr(addrIpPort.IP),
-		network:         dr.Dialer.DialerNetwork(),
-		connString:      regularNetConnPeerConnConnString(nc),
-	})
+	c, err := cl.initiateProtocolHandshakes(
+		context.Background(), nc, t, obfuscatedHeader,
+		newConnectionOpts{
+			outgoing:   true,
+			remoteAddr: addr,
+			// It would be possible to retrieve a public IP from the dialer used here?
+			localPublicAddr: cl.publicAddr(addrIpPort.IP),
+			network:         dr.Dialer.DialerNetwork(),
+			connString:      regularNetConnPeerConnConnString(nc),
+		})
 	if err != nil {
 		nc.Close()
 	}
@@ -1510,13 +1512,17 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		}
 	}
 	c.peerImpl = c
-	c.logger = cl.logger.WithDefaultLevel(log.Warning).WithContextValue(c)
+	c.logger = cl.logger.WithDefaultLevel(log.Warning)
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
 		l: cl.config.DownloadRateLimiter,
 		r: c.r,
 	}
-	c.logger.WithDefaultLevel(log.Debug).Printf("initialized with remote %v over network %v (outgoing=%t)", opts.remoteAddr, opts.network, opts.outgoing)
+	c.logger.Levelf(
+		log.Debug,
+		"new PeerConn %p [Client %p remoteAddr %v network %v outgoing %t]",
+		c, cl, opts.remoteAddr, opts.network, opts.outgoing,
+	)
 	for _, f := range cl.config.Callbacks.NewPeer {
 		f(&c.Peer)
 	}

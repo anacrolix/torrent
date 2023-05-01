@@ -145,8 +145,8 @@ func (me *pexMsgFactory) append(event pexEvent) {
 	}
 }
 
-func (me *pexMsgFactory) PexMsg() pp.PexMsg {
-	return me.msg
+func (me *pexMsgFactory) PexMsg() *pp.PexMsg {
+	return &me.msg
 }
 
 // Convert an arbitrary torrent peer Addr into one that can be represented by the compact addr
@@ -225,7 +225,7 @@ func (s *pexState) Genmsg(start *pexEvent) (pp.PexMsg, *pexEvent) {
 	s.RLock()
 	defer s.RUnlock()
 	if start == nil {
-		return s.msg0.PexMsg(), s.tail
+		return *s.msg0.PexMsg(), s.tail
 	}
 	var msg pexMsgFactory
 	last := start
@@ -236,5 +236,18 @@ func (s *pexState) Genmsg(start *pexEvent) (pp.PexMsg, *pexEvent) {
 		msg.append(*e)
 		last = e
 	}
-	return msg.PexMsg(), last
+	return *msg.PexMsg(), last
+}
+
+// The same as Genmsg but just counts up the distinct events that haven't been sent.
+func (s *pexState) numPending(start *pexEvent) (num int) {
+	s.RLock()
+	defer s.RUnlock()
+	if start == nil {
+		return s.msg0.PexMsg().Len()
+	}
+	for e := start.next; e != nil; e = e.next {
+		num++
+	}
+	return
 }

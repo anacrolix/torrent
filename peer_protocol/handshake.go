@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/bits"
 	"strconv"
+	"strings"
+	"unsafe"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -33,8 +36,31 @@ type (
 	PeerExtensionBits [8]byte
 )
 
+var bitTags = []struct {
+	bit ExtensionBit
+	tag string
+}{
+	// Ordered by their base protocol type values (PORT, fast.., EXTENDED)
+	{ExtensionBitDHT, "dht"},
+	{ExtensionBitFast, "fast"},
+	{ExtensionBitExtended, "ext"},
+}
+
 func (pex PeerExtensionBits) String() string {
-	return hex.EncodeToString(pex[:])
+	pexHex := hex.EncodeToString(pex[:])
+	tags := make([]string, 0, len(bitTags)+1)
+	for _, bitTag := range bitTags {
+		if pex.GetBit(bitTag.bit) {
+			tags = append(tags, bitTag.tag)
+			pex.SetBit(bitTag.bit, false)
+		}
+	}
+	unknownCount := bits.OnesCount64(*(*uint64)((unsafe.Pointer(unsafe.SliceData(pex[:])))))
+	if unknownCount != 0 {
+		tags = append(tags, fmt.Sprintf("%v unknown", unknownCount))
+	}
+	return fmt.Sprintf("%v (%s)", pexHex, strings.Join(tags, ", "))
+
 }
 
 func NewPeerExtensionBytes(bits ...ExtensionBit) (ret PeerExtensionBits) {

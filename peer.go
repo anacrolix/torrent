@@ -86,7 +86,6 @@ type (
 		peerChoking           bool
 		peerRequests          map[Request]*peerRequestState
 		PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
-		PeerListenPort        int
 		// The highest possible number of pieces the torrent could have based on
 		// communication with the peer. Generally only useful until we have the
 		// torrent info.

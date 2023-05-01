@@ -6,6 +6,8 @@ import (
 	"testing"
 	"testing/iotest"
 
+	"github.com/anacrolix/log"
+
 	"github.com/anacrolix/torrent/internal/testutil"
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
@@ -23,8 +25,9 @@ func TestHolepunchConnect(t *testing.T) {
 	cfg.MaxAllocPeerRequestDataPerConn = 4
 	cfg.DataDir = greetingTempDir
 	cfg.DisablePEX = true
-	//cfg.Debug = true
+	cfg.Debug = true
 	cfg.AcceptPeerConnections = false
+	//cfg.DisableUTP = true
 	seeder, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
@@ -51,7 +54,7 @@ func TestHolepunchConnect(t *testing.T) {
 	cfg.Seed = false
 	cfg.DataDir = t.TempDir()
 	cfg.MaxAllocPeerRequestDataPerConn = 4
-	cfg.Debug = true
+	//cfg.Debug = true
 	//cfg.DisableUTP = true
 	leecherLeecher, _ := NewClient(cfg)
 	require.NoError(t, err)
@@ -85,9 +88,12 @@ func TestHolepunchConnect(t *testing.T) {
 	waitForConns(seederTorrent)
 	go llg.AddClientPeer(leecher)
 	waitForConns(llg)
+	//time.Sleep(time.Second)
 	llg.cl.lock()
+	targetAddr := seeder.ListenAddrs()[1]
+	log.Printf("trying to initiate to %v", targetAddr)
 	llg.initiateConn(PeerInfo{
-		Addr: seeder.ListenAddrs()[0],
+		Addr: targetAddr,
 	}, true, false)
 	llg.cl.unlock()
 	wg.Wait()

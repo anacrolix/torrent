@@ -2002,8 +2002,9 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 	}
 	t.conns[c] = struct{}{}
 	t.cl.event.Broadcast()
+	// We'll never receive the "p" extended handshake parameter.
 	if !t.cl.config.DisablePEX && !c.PeerExtensionBytes.SupportsExtended() {
-		t.pex.Add(c) // as no further extended handshake expected
+		t.pex.Add(c)
 	}
 	return nil
 }
@@ -2678,10 +2679,13 @@ func (t *Torrent) checkValidReceiveChunk(r Request) error {
 	return nil
 }
 
-func (t *Torrent) peerConnsWithRemoteAddrPort(addrPort netip.AddrPort) (ret []*PeerConn) {
+func (t *Torrent) peerConnsWithDialAddrPort(target netip.AddrPort) (ret []*PeerConn) {
 	for pc := range t.conns {
-		addr := pc.remoteAddrPort()
-		if !(addr.Ok && addr.Value == addrPort) {
+		dialAddr, err := pc.remoteDialAddrPort()
+		if err != nil {
+			continue
+		}
+		if dialAddr != target {
 			continue
 		}
 		ret = append(ret, pc)
@@ -2725,7 +2729,18 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 	case utHolepunch.Rendezvous:
 		t.logger.Printf("got holepunch rendezvous request for %v from %p", msg.AddrPort, sender)
 		sendMsg := sendUtHolepunchMsg
-		targets := t.peerConnsWithRemoteAddrPort(msg.AddrPort)
+		senderAddrPort, err := sender.remoteDialAddrPort()
+		if err != nil {
+			sender.logger.Levelf(
+				log.Warning,
+				"error getting ut_holepunch rendezvous sender's dial address: %v",
+				err,
+			)
+			// There's no better error code. The sender's address itself is invalid. I don't see
+			// this error message being appropriate anywhere else anyway.
+			sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NoSuchPeer)
+		}
+		targets := t.peerConnsWithDialAddrPort(msg.AddrPort)
 		if len(targets) == 0 {
 			sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NotConnected)
 			return nil
@@ -2736,7 +2751,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 				continue
 			}
 			sendMsg(sender, utHolepunch.Connect, msg.AddrPort, 0)
-			sendMsg(pc, utHolepunch.Connect, sender.remoteAddrPort().Unwrap(), 0)
+			sendMsg(pc, utHolepunch.Connect, senderAddrPort, 0)
 		}
 		return nil
 	case utHolepunch.Connect:

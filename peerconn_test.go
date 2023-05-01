@@ -200,17 +200,17 @@ func TestConnPexEvent(t *testing.T) {
 		},
 		{
 			pexDrop,
-			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true, PeerListenPort: dialTcpAddr.Port}},
+			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true}, PeerListenPort: dialTcpAddr.Port},
 			pexEvent{pexDrop, tcpAddr, pp.PexOutgoingConn, nil},
 		},
 		{
 			pexAdd,
-			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), PeerListenPort: dialTcpAddr.Port}},
+			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network()}, PeerListenPort: dialTcpAddr.Port},
 			pexEvent{pexAdd, dialTcpAddr, 0, nil},
 		},
 		{
 			pexDrop,
-			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network(), PeerListenPort: dialUdpAddr.Port}},
+			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network()}, PeerListenPort: dialUdpAddr.Port},
 			pexEvent{pexDrop, dialUdpAddr, pp.PexSupportsUtp, nil},
 		},
 	}

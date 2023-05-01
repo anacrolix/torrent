@@ -15,10 +15,12 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
+	"github.com/anacrolix/generics"
 	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
+	"golang.org/x/exp/maps"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -40,6 +42,7 @@ type PeerConn struct {
 	// See BEP 3 etc.
 	PeerID             PeerID
 	PeerExtensionBytes pp.PeerExtensionBits
+	PeerListenPort     int
 
 	// The actual Conn, used for closing, and setting socket options. Do not use methods on this
 	// while holding any mutexes.
@@ -75,11 +78,25 @@ func (cn *PeerConn) pexStatus() string {
 	if !cn.supportsExtension(pp.ExtensionNamePex) {
 		return "unsupported"
 	}
-	return fmt.Sprintf(
-		"%v conns, %v unsent events",
-		len(cn.pex.remoteLiveConns),
-		cn.pex.numPending(),
-	)
+	if true {
+		return fmt.Sprintf(
+			"%v conns, %v unsent events",
+			len(cn.pex.remoteLiveConns),
+			cn.pex.numPending(),
+		)
+	} else {
+		// This alternative branch prints out the remote live conn addresses.
+		return fmt.Sprintf(
+			"%v conns, %v unsent events",
+			strings.Join(generics.SliceMap(
+				maps.Keys(cn.pex.remoteLiveConns),
+				func(from netip.AddrPort) string {
+					return from.String()
+				}), ","),
+			cn.pex.numPending(),
+		)
+
+	}
 }
 
 func (cn *PeerConn) peerImplStatusLines() []string {
@@ -1049,6 +1066,8 @@ func (c *PeerConn) dialAddr() PeerRemoteAddr {
 			dialAddr := *addr
 			dialAddr.Port = c.PeerListenPort
 			return &dialAddr
+		default:
+			panic(addr)
 		}
 	}
 	return c.RemoteAddr
@@ -1080,6 +1099,11 @@ func (pc *PeerConn) remoteAddrPort() Option[netip.AddrPort] {
 	return Some(pc.conn.RemoteAddr().(interface {
 		AddrPort() netip.AddrPort
 	}).AddrPort())
+}
+
+func (pc *PeerConn) remoteDialAddrPort() (netip.AddrPort, error) {
+	dialAddr := pc.dialAddr()
+	return addrPortFromPeerRemoteAddr(dialAddr)
 }
 
 func (pc *PeerConn) bitExtensionEnabled(bit pp.ExtensionBit) bool {

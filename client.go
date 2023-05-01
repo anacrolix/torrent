@@ -16,7 +16,6 @@ import (
 	"net/netip"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/anacrolix/chansync"
@@ -646,7 +645,7 @@ func DialFirst(ctx context.Context, addr string, dialers []Dialer) (res DialResu
 			res = <-resCh
 		}
 	}()
-	// There are still incompleted dials.
+	// There are still uncompleted dials.
 	go func() {
 		for ; left > 0; left-- {
 			conn := (<-resCh).Conn
@@ -663,17 +662,17 @@ func DialFirst(ctx context.Context, addr string, dialers []Dialer) (res DialResu
 
 func dialFromSocket(ctx context.Context, s Dialer, addr string) net.Conn {
 	c, err := s.Dial(ctx, addr)
+	if err != nil {
+		log.Levelf(log.Debug, "error dialing %q: %v", addr, err)
+	}
 	// This is a bit optimistic, but it looks non-trivial to thread this through the proxy code. Set
-	// it now in case we close the connection forthwith.
+	// it now in case we close the connection forthwith. Note this is also done in the TCP dialer
+	// code to increase the chance it's done.
 	if tc, ok := c.(*net.TCPConn); ok {
 		tc.SetLinger(0)
 	}
 	countDialResult(err)
 	return c
-}
-
-func forgettableDialError(err error) bool {
-	return strings.Contains(err.Error(), "no suitable address found")
 }
 
 func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {

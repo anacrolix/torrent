@@ -519,7 +519,7 @@ func (cn *Peer) peerPiecesChanged() {
 func (cn *Peer) postHandshakeStats(f func(*ConnStats)) {
 	t := cn.t
 	f(&t.stats)
-	f(&t.cl.stats)
+	f(&t.cl.connStats)
 }
 
 // All ConnStats that include this connection. Some objects are not known

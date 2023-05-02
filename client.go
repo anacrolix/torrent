@@ -57,7 +57,7 @@ import (
 type Client struct {
 	// An aggregate of stats over all connections. First in struct to ensure 64-bit alignment of
 	// fields. See #262.
-	stats ConnStats
+	connStats ConnStats
 
 	_mu    lockWithDeferreds
 	event  sync.Cond
@@ -149,7 +149,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		fmt.Fprintf(w, "%s DHT server at %s:\n", s.Addr().Network(), s.Addr().String())
 		writeDhtServerStatus(w, s)
 	})
-	spew.Fdump(w, &cl.stats)
+	dumpStats(w, cl.statsLocked())
 	torrentsSlice := cl.torrentsAsSlice()
 	fmt.Fprintf(w, "# Torrents: %d\n", len(torrentsSlice))
 	fmt.Fprintln(w)
@@ -694,9 +694,7 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string, attemptKey outgoingC
 
 func (cl *Client) countHalfOpenFromTorrents() (count int) {
 	for _, t := range cl.torrents {
-		for _, attempts := range t.halfOpen {
-			count += len(attempts)
-		}
+		count += t.numHalfOpenAttempts()
 	}
 	return
 }
@@ -1783,8 +1781,20 @@ func (cl *Client) String() string {
 	return fmt.Sprintf("<%[1]T %[1]p>", cl)
 }
 
-// Returns connection-level aggregate stats at the Client level. See the comment on
+// Returns connection-level aggregate connStats at the Client level. See the comment on
 // TorrentStats.ConnStats.
 func (cl *Client) ConnStats() ConnStats {
-	return cl.stats.Copy()
+	return cl.connStats.Copy()
+}
+
+func (cl *Client) Stats() ClientStats {
+	cl.rLock()
+	defer cl.rUnlock()
+	return cl.statsLocked()
+}
+
+func (cl *Client) statsLocked() (stats ClientStats) {
+	stats.ConnStats = cl.connStats.Copy()
+	stats.ActiveHalfOpenAttempts = cl.numHalfOpen
+	return
 }

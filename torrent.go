@@ -31,7 +31,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/pion/datachannel"
 	"golang.org/x/exp/maps"
 
@@ -767,8 +766,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 
 	fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
 
-	spew.NewDefaultConfig()
-	spew.Fdump(w, t.statsLocked())
+	dumpStats(w, t.statsLocked())
 
 	fmt.Fprintf(w, "webseeds:\n")
 	t.writePeerStatuses(w, maps.Values(t.webSeeds))
@@ -2455,7 +2453,7 @@ func (t *Torrent) AddClientPeer(cl *Client) int {
 // connection.
 func (t *Torrent) allStats(f func(*ConnStats)) {
 	f(&t.stats)
-	f(&t.cl.stats)
+	f(&t.cl.connStats)
 }
 
 func (t *Torrent) hashingPiece(i pieceIndex) bool {
@@ -2856,6 +2854,13 @@ func (t *Torrent) startHolepunchRendezvous(addrPort netip.AddrPort) (rz *utHolep
 	}
 	if !MakeMapIfNilAndSet(&t.utHolepunchRendezvous, addrPort, rz) {
 		panic("expected to fail earlier if rendezvous already exists")
+	}
+	return
+}
+
+func (t *Torrent) numHalfOpenAttempts() (num int) {
+	for _, attempts := range t.halfOpen {
+		num += len(attempts)
 	}
 	return
 }

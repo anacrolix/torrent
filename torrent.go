@@ -1383,7 +1383,7 @@ func (t *Torrent) openNewConns() (initiated int) {
 			return
 		}
 		p := t.peers.PopMax()
-		t.initiateConn(p, false, false, false)
+		t.initiateConn(p, false, false, false, false)
 		initiated++
 	}
 	return
@@ -2403,6 +2403,7 @@ func (t *Torrent) initiateConn(
 	requireRendezvous bool,
 	skipHolepunchRendezvous bool,
 	ignoreLimits bool,
+	receivedHolepunchConnect bool,
 ) {
 	if peer.Id == t.cl.peerID {
 		return
@@ -2424,10 +2425,11 @@ func (t *Torrent) initiateConn(
 	t.addHalfOpen(addrStr, attemptKey)
 	go t.cl.outgoingConnection(
 		outgoingConnOpts{
-			t:                       t,
-			addr:                    peer.Addr,
-			requireRendezvous:       requireRendezvous,
-			skipHolepunchRendezvous: skipHolepunchRendezvous,
+			t:                        t,
+			addr:                     peer.Addr,
+			requireRendezvous:        requireRendezvous,
+			skipHolepunchRendezvous:  skipHolepunchRendezvous,
+			receivedHolepunchConnect: receivedHolepunchConnect,
 		},
 		peer.Source,
 		peer.Trusted,
@@ -2814,7 +2816,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 			t.initiateConn(PeerInfo{
 				Addr:   msg.AddrPort,
 				Source: PeerSourceUtHolepunch,
-			}, false, true, true)
+			}, false, true, true, true)
 		}
 		return nil
 	case utHolepunch.Error:

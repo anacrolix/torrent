@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/anacrolix/torrent/internal/panicif"
+
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
@@ -89,6 +91,10 @@ type Client struct {
 
 	activeAnnounceLimiter limiter.Instance
 	httpClient            *http.Client
+
+	undialableWithoutHolepunch                                   map[netip.AddrPort]struct{}
+	undialableWithoutHolepunchDialAttemptedAfterHolepunchConnect map[netip.AddrPort]struct{}
+	dialableOnlyAfterHolepunch                                   map[netip.AddrPort]struct{}
 }
 
 type ipStr string
@@ -748,12 +754,8 @@ func (cl *Client) waitForRendezvousConnect(ctx context.Context, rz *utHolepunchR
 
 // Returns nil connection and nil error if no connection could be established for valid reasons.
 func (cl *Client) initiateRendezvousConnect(
-	t *Torrent, addr PeerRemoteAddr,
+	t *Torrent, holepunchAddr netip.AddrPort,
 ) (ok bool, err error) {
-	holepunchAddr, err := addrPortFromPeerRemoteAddr(addr)
-	if err != nil {
-		return
-	}
 	cl.lock()
 	defer cl.unlock()
 	rz, err := t.startHolepunchRendezvous(holepunchAddr)
@@ -783,14 +785,18 @@ func (cl *Client) establishOutgoingConnEx(
 ) {
 	t := opts.t
 	addr := opts.addr
-	var rzOk bool
-	if !opts.skipHolepunchRendezvous {
-		rzOk, err = cl.initiateRendezvousConnect(t, addr)
-		if err != nil {
-			err = fmt.Errorf("initiating rendezvous connect: %w", err)
+	holepunchAddr, err := addrPortFromPeerRemoteAddr(addr)
+	var sentRendezvous bool
+	if err == nil {
+		if !opts.skipHolepunchRendezvous {
+			sentRendezvous, err = cl.initiateRendezvousConnect(t, holepunchAddr)
+			if err != nil {
+				err = fmt.Errorf("initiating rendezvous connect: %w", err)
+			}
 		}
 	}
-	if opts.requireRendezvous && !rzOk {
+	gotHolepunchConnect := (err == nil && sentRendezvous) || opts.receivedHolepunchConnect
+	if opts.requireRendezvous && !sentRendezvous {
 		return nil, err
 	}
 	if err != nil {
@@ -804,11 +810,37 @@ func (cl *Client) establishOutgoingConnEx(
 	defer cancel()
 	dr := cl.dialFirst(dialCtx, addr.String())
 	nc := dr.Conn
+	cl.lock()
+	if gotHolepunchConnect && g.MapContains(cl.undialableWithoutHolepunch, holepunchAddr) {
+		g.MakeMapIfNilAndSet(
+			&cl.undialableWithoutHolepunchDialAttemptedAfterHolepunchConnect,
+			holepunchAddr,
+			struct{}{},
+		)
+	}
+	cl.unlock()
 	if nc == nil {
+		if !sentRendezvous && !gotHolepunchConnect {
+			cl.lock()
+			g.MakeMapIfNilAndSet(&cl.undialableWithoutHolepunch, holepunchAddr, struct{}{})
+			cl.unlock()
+		}
 		if dialCtx.Err() != nil {
 			return nil, fmt.Errorf("dialing: %w", dialCtx.Err())
 		}
 		return nil, errors.New("dial failed")
+	}
+	if gotHolepunchConnect {
+		panicif.False(holepunchAddr.IsValid())
+		cl.lock()
+		if g.MapContains(cl.undialableWithoutHolepunchDialAttemptedAfterHolepunchConnect, holepunchAddr) {
+			g.MakeMapIfNilAndSet(
+				&cl.dialableOnlyAfterHolepunch,
+				holepunchAddr,
+				struct{}{},
+			)
+		}
+		cl.unlock()
 	}
 	addrIpPort, _ := tryIpPortFromNetAddr(addr)
 	c, err := cl.initiateProtocolHandshakes(
@@ -859,6 +891,8 @@ type outgoingConnOpts struct {
 	requireRendezvous bool
 	// Don't send rendezvous requests to eligible relays.
 	skipHolepunchRendezvous bool
+	// Outgoing connection attempt is in response to holepunch connect message.
+	receivedHolepunchConnect bool
 }
 
 // Called to dial out and run a connection. The addr we're given is already
@@ -1795,5 +1829,9 @@ func (cl *Client) Stats() ClientStats {
 func (cl *Client) statsLocked() (stats ClientStats) {
 	stats.ConnStats = cl.connStats.Copy()
 	stats.ActiveHalfOpenAttempts = cl.numHalfOpen
+	stats.NumPeersUndialableWithoutHolepunchDialedAfterHolepunchConnect =
+		len(cl.undialableWithoutHolepunchDialAttemptedAfterHolepunchConnect)
+	stats.NumPeersDialableOnlyAfterHolepunch =
+		len(cl.dialableOnlyAfterHolepunch)
 	return
 }

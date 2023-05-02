@@ -7,3 +7,15 @@ func NotEqual[T comparable](a, b T) {
 		panic(fmt.Sprintf("%v != %v", a, b))
 	}
 }
+
+func False(b bool) {
+	if !b {
+		panic("is false")
+	}
+}
+
+func True(b bool) {
+	if b {
+		panic("is true")
+	}
+}

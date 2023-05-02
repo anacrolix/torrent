@@ -94,9 +94,20 @@ func TestHolepunchConnect(t *testing.T) {
 	log.Printf("trying to initiate to %v", targetAddr)
 	llg.initiateConn(PeerInfo{
 		Addr: targetAddr,
-	}, true, false, false)
+	}, true, false, false, false)
 	llg.cl.unlock()
 	wg.Wait()
+	// These checks would require that the leecher leecher first attempt to connect without
+	// holepunching.
+
+	//llClientStats := leecherLeecher.Stats()
+	//c := qt.New(t)
+	//c.Check(llClientStats.NumPeersDialedRequiringHolepunch, qt.Not(qt.Equals), 0)
+	//c.Check(
+	//	llClientStats.NumPeersDialedRequiringHolepunch,
+	//	qt.Equals,
+	//	llClientStats.NumPeersUndiableWithoutHolepunch,
+	//)
 }
 
 func waitForConns(t *Torrent) {

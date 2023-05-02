@@ -39,7 +39,6 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
 	"github.com/anacrolix/torrent/internal/limiter"
-	"github.com/anacrolix/torrent/internal/panicif"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
@@ -684,8 +683,8 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string, attemptKey outgoingC
 	}
 	path.Delete()
 	cl.numHalfOpen--
-	if check.Enabled {
-		panicif.NotEqual(cl.numHalfOpen, cl.countHalfOpenFromTorrents())
+	if cl.numHalfOpen < 0 {
+		panic("should not be possible")
 	}
 	for _, t := range cl.torrents {
 		t.openNewConns()

@@ -37,6 +37,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/internal/check"
 	"github.com/anacrolix/torrent/internal/limiter"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
@@ -1075,10 +1076,8 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 	return nil
 }
 
-const check = false
-
 func (p *Peer) initUpdateRequestsTimer() {
-	if check {
+	if check.Enabled {
 		if p.updateRequestsTimer != nil {
 			panic(p.updateRequestsTimer)
 		}

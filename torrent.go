@@ -38,6 +38,7 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/internal/check"
+	"github.com/anacrolix/torrent/internal/nestedmaps"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
@@ -105,7 +106,7 @@ type Torrent struct {
 	maxEstablishedConns int
 	// Set of addrs to which we're attempting to connect. Connections are
 	// half-open until all handshakes are completed.
-	halfOpen map[string]PeerInfo
+	halfOpen map[string]map[outgoingConnAttemptKey]*PeerInfo
 	// The final ess is not silent here as it's in the plural.
 	utHolepunchRendezvous map[netip.AddrPort]*utHolepunchRendezvous
 
@@ -174,6 +175,8 @@ type Torrent struct {
 	requestIndexes     []RequestIndex
 }
 
+type outgoingConnAttemptKey = *PeerInfo
+
 func (t *Torrent) length() int64 {
 	return t._length.Value
 }
@@ -238,8 +241,10 @@ func (t *Torrent) KnownSwarm() (ks []PeerInfo) {
 	})
 
 	// Add half-open peers to the list
-	for _, peer := range t.halfOpen {
-		ks = append(ks, peer)
+	for _, attempts := range t.halfOpen {
+		for _, peer := range attempts {
+			ks = append(ks, *peer)
+		}
 	}
 
 	// Add active peers to the list
@@ -1380,7 +1385,7 @@ func (t *Torrent) openNewConns() (initiated int) {
 			return
 		}
 		p := t.peers.PopMax()
-		t.initiateConn(p, false, false)
+		t.initiateConn(p, false, false, false)
 		initiated++
 	}
 	return
@@ -2362,12 +2367,44 @@ func (t *Torrent) VerifyData() {
 	}
 }
 
+func (t *Torrent) connectingToPeerAddr(addrStr string) bool {
+	return len(t.halfOpen[addrStr]) != 0
+}
+
+func (t *Torrent) hasPeerConnForAddr(x PeerRemoteAddr) bool {
+	addrStr := x.String()
+	for c := range t.conns {
+		ra := c.RemoteAddr
+		if ra.String() == addrStr {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *Torrent) getHalfOpenPath(
+	addrStr string,
+	attemptKey outgoingConnAttemptKey,
+) nestedmaps.Path[*PeerInfo] {
+	return nestedmaps.Next(nestedmaps.Next(nestedmaps.Begin(&t.halfOpen), addrStr), attemptKey)
+}
+
+func (t *Torrent) addHalfOpen(addrStr string, attemptKey *PeerInfo) {
+	path := t.getHalfOpenPath(addrStr, attemptKey)
+	if path.Exists() {
+		panic("should be unique")
+	}
+	path.Set(attemptKey)
+	t.cl.numHalfOpen++
+}
+
 // Start the process of connecting to the given peer for the given torrent if appropriate. I'm not
 // sure all the PeerInfo fields are being used.
 func (t *Torrent) initiateConn(
 	peer PeerInfo,
 	requireRendezvous bool,
 	skipHolepunchRendezvous bool,
+	ignoreLimits bool,
 ) {
 	if peer.Id == t.cl.peerID {
 		return
@@ -2376,17 +2413,28 @@ func (t *Torrent) initiateConn(
 		return
 	}
 	addr := peer.Addr
-	if t.addrActive(addr.String()) {
+	addrStr := addr.String()
+	if !ignoreLimits {
+		if t.connectingToPeerAddr(addrStr) {
+			return
+		}
+	}
+	if t.hasPeerConnForAddr(addr) {
 		return
 	}
-	t.cl.numHalfOpen++
-	t.halfOpen[addr.String()] = peer
-	go t.cl.outgoingConnection(outgoingConnOpts{
-		t:                       t,
-		addr:                    peer.Addr,
-		requireRendezvous:       requireRendezvous,
-		skipHolepunchRendezvous: skipHolepunchRendezvous,
-	}, peer.Source, peer.Trusted)
+	attemptKey := &peer
+	t.addHalfOpen(addrStr, attemptKey)
+	go t.cl.outgoingConnection(
+		outgoingConnOpts{
+			t:                       t,
+			addr:                    peer.Addr,
+			requireRendezvous:       requireRendezvous,
+			skipHolepunchRendezvous: skipHolepunchRendezvous,
+		},
+		peer.Source,
+		peer.Trusted,
+		attemptKey,
+	)
 }
 
 // Adds a trusted, pending peer for each of the given Client's addresses. Typically used in tests to
@@ -2768,7 +2816,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 			t.initiateConn(PeerInfo{
 				Addr:   msg.AddrPort,
 				Source: PeerSourceUtHolepunch,
-			}, false, true)
+			}, false, true, true)
 		}
 		return nil
 	case utHolepunch.Error:

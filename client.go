@@ -39,6 +39,7 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
 	"github.com/anacrolix/torrent/internal/limiter"
+	"github.com/anacrolix/torrent/internal/panicif"
 	"github.com/anacrolix/torrent/iplist"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
@@ -676,15 +677,28 @@ func dialFromSocket(ctx context.Context, s Dialer, addr string) net.Conn {
 	return c
 }
 
-func (cl *Client) noLongerHalfOpen(t *Torrent, addr string) {
-	if _, ok := t.halfOpen[addr]; !ok {
-		panic("invariant broken")
+func (cl *Client) noLongerHalfOpen(t *Torrent, addr string, attemptKey outgoingConnAttemptKey) {
+	path := t.getHalfOpenPath(addr, attemptKey)
+	if !path.Exists() {
+		panic("should exist")
 	}
-	delete(t.halfOpen, addr)
+	path.Delete()
 	cl.numHalfOpen--
+	if check.Enabled {
+		panicif.NotEqual(cl.numHalfOpen, cl.countHalfOpenFromTorrents())
+	}
 	for _, t := range cl.torrents {
 		t.openNewConns()
 	}
+}
+
+func (cl *Client) countHalfOpenFromTorrents() (count int) {
+	for _, t := range cl.torrents {
+		for _, attempts := range t.halfOpen {
+			count += len(attempts)
+		}
+	}
+	return
 }
 
 // Performs initiator handshakes and returns a connection. Returns nil *PeerConn if no connection
@@ -852,7 +866,12 @@ type outgoingConnOpts struct {
 
 // Called to dial out and run a connection. The addr we're given is already
 // considered half-open.
-func (cl *Client) outgoingConnection(opts outgoingConnOpts, ps PeerSource, trusted bool) {
+func (cl *Client) outgoingConnection(
+	opts outgoingConnOpts,
+	ps PeerSource,
+	trusted bool,
+	attemptKey outgoingConnAttemptKey,
+) {
 	cl.dialRateLimiter.Wait(context.Background())
 	c, err := cl.establishOutgoingConn(opts)
 	if err == nil {
@@ -862,7 +881,7 @@ func (cl *Client) outgoingConnection(opts outgoingConnOpts, ps PeerSource, trust
 	defer cl.unlock()
 	// Don't release lock between here and addPeerConn, unless it's for
 	// failure.
-	cl.noLongerHalfOpen(opts.t, opts.addr.String())
+	cl.noLongerHalfOpen(opts.t, opts.addr.String(), attemptKey)
 	if err != nil {
 		if cl.config.Debug {
 			cl.logger.Levelf(log.Debug, "error establishing outgoing connection to %v: %v", opts.addr, err)
@@ -1277,8 +1296,6 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 			},
 		},
 		conns: make(map[*PeerConn]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
-
-		halfOpen: make(map[string]PeerInfo),
 
 		storageOpener:       storageClient,
 		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,

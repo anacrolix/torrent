@@ -94,7 +94,7 @@ func TestHolepunchConnect(t *testing.T) {
 	log.Printf("trying to initiate to %v", targetAddr)
 	llg.initiateConn(PeerInfo{
 		Addr: targetAddr,
-	}, true, false)
+	}, true, false, false)
 	llg.cl.unlock()
 	wg.Wait()
 }

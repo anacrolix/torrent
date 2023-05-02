@@ -42,7 +42,9 @@ func TestUtpLocalPortIsReusable(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer remote.Close()
 	var remoteAccepts int32
+	doneAccepting := make(chan struct{})
 	go func() {
+		defer close(doneAccepting)
 		for {
 			c, err := remote.Accept()
 			if err != nil {
@@ -66,5 +68,6 @@ func TestUtpLocalPortIsReusable(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer second.Close()
 	remote.Close()
+	<-doneAccepting
 	c.Assert(atomic.LoadInt32(&remoteAccepts), qt.Equals, int32(2))
 }

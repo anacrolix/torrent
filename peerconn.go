@@ -69,7 +69,7 @@ type PeerConn struct {
 }
 
 func (cn *PeerConn) pexStatus() string {
-	if !cn.bitExtensionEnabled(pp.ExtensionBitExtended) {
+	if !cn.bitExtensionEnabled(pp.ExtensionBitLtep) {
 		return "extended protocol disabled"
 	}
 	if cn.PeerExtensionIDs == nil {

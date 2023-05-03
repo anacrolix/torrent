@@ -28,7 +28,7 @@ const (
 )
 
 func defaultPeerExtensionBytes() PeerExtensionBits {
-	return pp.NewPeerExtensionBytes(pp.ExtensionBitDHT, pp.ExtensionBitExtended, pp.ExtensionBitFast)
+	return pp.NewPeerExtensionBytes(pp.ExtensionBitDht, pp.ExtensionBitLtep, pp.ExtensionBitFast)
 }
 
 func init() {

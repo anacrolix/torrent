@@ -324,6 +324,9 @@ func (p *Peer) close() {
 	if p.updateRequestsTimer != nil {
 		p.updateRequestsTimer.Stop()
 	}
+	for _, prs := range p.peerRequests {
+		prs.allocReservation.Drop()
+	}
 	p.peerImpl.onClose()
 	if p.t != nil {
 		p.t.decPeerPieceAvailability(p)

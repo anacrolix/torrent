@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"expvar"
 	"fmt"
@@ -1038,7 +1039,8 @@ func (cl *Client) connBtHandshake(c *PeerConn, ih *metainfo.Hash) (ret metainfo.
 	if err != nil {
 		return
 	}
-	successfulPeerWireProtocolHandshakePeerReservedBytes.Add(res.PeerExtensionBits.String(), 1)
+	successfulPeerWireProtocolHandshakePeerReservedBytes.Add(
+		hex.EncodeToString(res.PeerExtensionBits[:]), 1)
 	ret = res.Hash
 	c.PeerExtensionBytes = res.PeerExtensionBits
 	c.PeerID = res.PeerID

@@ -785,7 +785,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		return ml.Less()
 	})
 
-	fmt.Fprintf(w, "peer conns:\n")
+	fmt.Fprintf(w, "%v peer conns:\n", len(peerConns))
 	t.writePeerStatuses(w, g.SliceMap(peerConns, func(pc *PeerConn) *Peer {
 		return &pc.Peer
 	}))

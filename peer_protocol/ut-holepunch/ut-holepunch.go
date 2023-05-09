@@ -17,7 +17,6 @@ type (
 	}
 	MsgType  byte
 	AddrType byte
-	ErrCode  uint32
 )
 
 const (
@@ -29,13 +28,6 @@ const (
 const (
 	Ipv4 AddrType = iota
 	Ipv6 AddrType = iota
-)
-
-const (
-	NoSuchPeer ErrCode = iota + 1
-	NotConnected
-	NoSupport
-	NoSelf
 )
 
 func (m *Msg) UnmarshalBinary(b []byte) error {

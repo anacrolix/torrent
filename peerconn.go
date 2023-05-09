@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
-
 	"github.com/RoaringBitmap/roaring"
 	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
@@ -28,6 +26,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
 )
 
 // Maintains the state of a BitTorrent-protocol based connection with a peer.
@@ -891,6 +890,8 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			err = fmt.Errorf("unmarshalling ut_holepunch message: %w", err)
 			return
 		}
+		err = c.t.handleReceivedUtHolepunchMsg(msg, c)
+		return
 	default:
 		return fmt.Errorf("unexpected extended message ID: %v", id)
 	}

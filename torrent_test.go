@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/anacrolix/generics"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
@@ -232,12 +232,12 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 		gotMetainfoC: make(chan struct{}),
 	}
 	tt.setChunkSize(2)
-	generics.MakeMapIfNil(&tt.conns)
+	g.MakeMapIfNil(&tt.conns)
 	pc := PeerConn{}
 	pc.t = &tt
 	pc.peerImpl = &pc
 	pc.initRequestState()
-	generics.InitNew(&pc.callbacks)
+	g.InitNew(&pc.callbacks)
 	tt.conns[&pc] = struct{}{}
 	err = pc.peerSentHave(0)
 	c.Assert(err, qt.IsNil)

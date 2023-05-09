@@ -17,8 +17,6 @@ import (
 	"time"
 	"unsafe"
 
-	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
-
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
@@ -41,6 +39,7 @@ import (
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/storage"
@@ -106,6 +105,8 @@ type Torrent struct {
 	// Set of addrs to which we're attempting to connect. Connections are
 	// half-open until all handshakes are completed.
 	halfOpen map[string]PeerInfo
+	// The final ess is not silent here as it's in the plural.
+	utHolepunchRendezvous map[netip.AddrPort]*utHolepunchRendezvous
 
 	// Reserve of peers to connect to. A peer can be both here and in the
 	// active connections if were told about the peer after connecting with
@@ -1378,7 +1379,7 @@ func (t *Torrent) openNewConns() (initiated int) {
 			return
 		}
 		p := t.peers.PopMax()
-		t.initiateConn(p)
+		t.initiateConn(p, false, false)
 		initiated++
 	}
 	return
@@ -2361,7 +2362,11 @@ func (t *Torrent) VerifyData() {
 
 // Start the process of connecting to the given peer for the given torrent if appropriate. I'm not
 // sure all the PeerInfo fields are being used.
-func (t *Torrent) initiateConn(peer PeerInfo) {
+func (t *Torrent) initiateConn(
+	peer PeerInfo,
+	requireRendezvous bool,
+	skipHolepunchRendezvous bool,
+) {
 	if peer.Id == t.cl.peerID {
 		return
 	}
@@ -2374,7 +2379,12 @@ func (t *Torrent) initiateConn(peer PeerInfo) {
 	}
 	t.cl.numHalfOpen++
 	t.halfOpen[addr.String()] = peer
-	go t.cl.outgoingConnection(t, addr, peer.Source, peer.Trusted)
+	go t.cl.outgoingConnection(outgoingConnOpts{
+		t:                       t,
+		addr:                    peer.Addr,
+		requireRendezvous:       requireRendezvous,
+		skipHolepunchRendezvous: skipHolepunchRendezvous,
+	}, peer.Source, peer.Trusted)
 }
 
 // Adds a trusted, pending peer for each of the given Client's addresses. Typically used in tests to
@@ -2701,21 +2711,24 @@ func makeUtHolepunchMsgForPeerConn(
 	}
 }
 
+func sendUtHolepunchMsg(
+	pc *PeerConn,
+	msgType utHolepunch.MsgType,
+	addrPort netip.AddrPort,
+	errCode utHolepunch.ErrCode,
+) {
+	pc.write(makeUtHolepunchMsgForPeerConn(pc, msgType, addrPort, errCode))
+}
+
 func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *PeerConn) error {
 	switch msg.MsgType {
 	case utHolepunch.Rendezvous:
-		sendMsg := func(
-			pc *PeerConn,
-			msgType utHolepunch.MsgType,
-			addrPort netip.AddrPort,
-			errCode utHolepunch.ErrCode,
-		) {
-			pc.write(makeUtHolepunchMsgForPeerConn(pc, msgType, addrPort, errCode))
-		}
+		log.Printf("got holepunch rendezvous request for %v from %p", msg.AddrPort, sender)
+		sendMsg := sendUtHolepunchMsg
 		targets := t.peerConnsWithRemoteAddrPort(msg.AddrPort)
 		if len(targets) == 0 {
 			sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NotConnected)
-			break
+			return nil
 		}
 		for _, pc := range targets {
 			if !pc.supportsExtension(utHolepunch.ExtensionName) {
@@ -2725,14 +2738,60 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 			sendMsg(sender, utHolepunch.Connect, msg.AddrPort, 0)
 			sendMsg(pc, utHolepunch.Connect, sender.remoteAddrPort().Unwrap(), 0)
 		}
+		return nil
 	case utHolepunch.Connect:
-		t.initiateConn(PeerInfo{
-			Addr:   msg.AddrPort,
-			Source: PeerSourceUtHolepunch,
-		})
+		log.Printf("got holepunch connect from %v for %v", sender, msg.AddrPort)
+		rz, ok := t.utHolepunchRendezvous[msg.AddrPort]
+		if ok {
+			delete(rz.relays, sender)
+			rz.gotConnect.Set()
+			rz.relayCond.Broadcast()
+		} else {
+			// If the rendezvous was removed because we timed out or already got a connect signal,
+			// it doesn't hurt to try again.
+			t.initiateConn(PeerInfo{
+				Addr:   msg.AddrPort,
+				Source: PeerSourceUtHolepunch,
+			}, false, true)
+		}
+		return nil
 	case utHolepunch.Error:
-
+		rz, ok := t.utHolepunchRendezvous[msg.AddrPort]
+		if ok {
+			delete(rz.relays, sender)
+			rz.relayCond.Broadcast()
+		}
+		log.Printf("received ut_holepunch error message from %v: %v", sender, msg.ErrCode)
+		return nil
 	default:
 		return fmt.Errorf("unhandled msg type %v", msg.MsgType)
 	}
+}
+
+func (t *Torrent) startHolepunchRendezvous(addrPort netip.AddrPort) (rz *utHolepunchRendezvous, err error) {
+	if MapContains(t.utHolepunchRendezvous, addrPort) {
+		err = errors.New("rendezvous already exists")
+		return
+	}
+	g.InitNew(&rz)
+	for pc := range t.conns {
+		if !pc.supportsExtension(utHolepunch.ExtensionName) {
+			continue
+		}
+		if pc.supportsExtension(pp.ExtensionNamePex) {
+			if !g.MapContains(pc.pex.remoteLiveConns, addrPort) {
+				continue
+			}
+		}
+		sendUtHolepunchMsg(pc, utHolepunch.Rendezvous, addrPort, 0)
+		MakeMapIfNilAndSet(&rz.relays, pc, struct{}{})
+	}
+	if len(rz.relays) == 0 {
+		err = fmt.Errorf("no eligible relays")
+		return
+	}
+	if !MakeMapIfNilAndSet(&t.utHolepunchRendezvous, addrPort, rz) {
+		panic("expected to fail earlier if rendezvous already exists")
+	}
+	return
 }

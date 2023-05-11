@@ -54,7 +54,8 @@ func TestHolepunchConnect(t *testing.T) {
 	cfg.Seed = false
 	cfg.DataDir = t.TempDir()
 	cfg.MaxAllocPeerRequestDataPerConn = 4
-	//cfg.Debug = true
+	cfg.Debug = true
+	cfg.NominalDialTimeout = time.Second
 	//cfg.DisableUTP = true
 	leecherLeecher, _ := NewClient(cfg)
 	require.NoError(t, err)
@@ -88,26 +89,29 @@ func TestHolepunchConnect(t *testing.T) {
 	waitForConns(seederTorrent)
 	go llg.AddClientPeer(leecher)
 	waitForConns(llg)
-	//time.Sleep(time.Second)
+	time.Sleep(time.Second)
 	llg.cl.lock()
-	targetAddr := seeder.ListenAddrs()[1]
+	targetAddr := seeder.ListenAddrs()[0]
 	log.Printf("trying to initiate to %v", targetAddr)
-	llg.initiateConn(PeerInfo{
-		Addr: targetAddr,
-	}, true, false, false, false)
+	initiateConn(outgoingConnOpts{
+		peerInfo: PeerInfo{
+			Addr: targetAddr,
+		},
+		t:                       llg,
+		requireRendezvous:       true,
+		skipHolepunchRendezvous: false,
+		HeaderObfuscationPolicy: llg.cl.config.HeaderObfuscationPolicy,
+	}, true)
 	llg.cl.unlock()
 	wg.Wait()
-	// These checks would require that the leecher leecher first attempt to connect without
-	// holepunching.
 
-	//llClientStats := leecherLeecher.Stats()
-	//c := qt.New(t)
-	//c.Check(llClientStats.NumPeersDialedRequiringHolepunch, qt.Not(qt.Equals), 0)
-	//c.Check(
-	//	llClientStats.NumPeersDialedRequiringHolepunch,
-	//	qt.Equals,
-	//	llClientStats.NumPeersUndiableWithoutHolepunch,
-	//)
+	llClientStats := leecherLeecher.Stats()
+	c.Check(llClientStats.NumPeersDialableOnlyAfterHolepunch, qt.Not(qt.Equals), 0)
+	c.Check(
+		llClientStats.NumPeersDialableOnlyAfterHolepunch,
+		qt.Equals,
+		llClientStats.NumPeersUndialableWithoutHolepunchDialedAfterHolepunchConnect,
+	)
 }
 
 func waitForConns(t *Torrent) {
@@ -119,4 +123,13 @@ func waitForConns(t *Torrent) {
 		}
 		t.cl.event.Wait()
 	}
+}
+
+func TestDialTcpNotAccepting(t *testing.T) {
+	l, err := net.Listen("tcp", "localhost:0")
+	c := qt.New(t)
+	c.Check(err, qt.IsNil)
+	defer l.Close()
+	_, err = net.Dial("tcp", l.Addr().String())
+	c.Assert(err, qt.IsNotNil)
 }

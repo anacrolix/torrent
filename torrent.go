@@ -106,8 +106,6 @@ type Torrent struct {
 	// Set of addrs to which we're attempting to connect. Connections are
 	// half-open until all handshakes are completed.
 	halfOpen map[string]map[outgoingConnAttemptKey]*PeerInfo
-	// The final ess is not silent here as it's in the plural.
-	utHolepunchRendezvous map[netip.AddrPort]*utHolepunchRendezvous
 
 	// Reserve of peers to connect to. A peer can be both here and in the
 	// active connections if were told about the peer after connecting with
@@ -1383,7 +1381,15 @@ func (t *Torrent) openNewConns() (initiated int) {
 			return
 		}
 		p := t.peers.PopMax()
-		t.initiateConn(p, false, false, false, false)
+		opts := outgoingConnOpts{
+			peerInfo:                 p,
+			t:                        t,
+			requireRendezvous:        false,
+			skipHolepunchRendezvous:  false,
+			receivedHolepunchConnect: false,
+			HeaderObfuscationPolicy:  t.cl.config.HeaderObfuscationPolicy,
+		}
+		initiateConn(opts, false)
 		initiated++
 	}
 	return
@@ -2398,13 +2404,12 @@ func (t *Torrent) addHalfOpen(addrStr string, attemptKey *PeerInfo) {
 
 // Start the process of connecting to the given peer for the given torrent if appropriate. I'm not
 // sure all the PeerInfo fields are being used.
-func (t *Torrent) initiateConn(
-	peer PeerInfo,
-	requireRendezvous bool,
-	skipHolepunchRendezvous bool,
+func initiateConn(
+	opts outgoingConnOpts,
 	ignoreLimits bool,
-	receivedHolepunchConnect bool,
 ) {
+	t := opts.t
+	peer := opts.peerInfo
 	if peer.Id == t.cl.peerID {
 		return
 	}
@@ -2424,15 +2429,7 @@ func (t *Torrent) initiateConn(
 	attemptKey := &peer
 	t.addHalfOpen(addrStr, attemptKey)
 	go t.cl.outgoingConnection(
-		outgoingConnOpts{
-			t:                        t,
-			addr:                     peer.Addr,
-			requireRendezvous:        requireRendezvous,
-			skipHolepunchRendezvous:  skipHolepunchRendezvous,
-			receivedHolepunchConnect: receivedHolepunchConnect,
-		},
-		peer.Source,
-		peer.Trusted,
+		opts,
 		attemptKey,
 	)
 }
@@ -2804,40 +2801,32 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 		}
 		return nil
 	case utHolepunch.Connect:
-		t.logger.Printf("got holepunch connect from %v for %v", sender, msg.AddrPort)
-		rz, ok := t.utHolepunchRendezvous[msg.AddrPort]
-		if ok {
-			delete(rz.relays, sender)
-			rz.gotConnect.Set()
-			rz.relayCond.Broadcast()
-		} else {
-			// If the rendezvous was removed because we timed out or already got a connect signal,
-			// it doesn't hurt to try again.
-			t.initiateConn(PeerInfo{
-				Addr:   msg.AddrPort,
-				Source: PeerSourceUtHolepunch,
-			}, false, true, true, true)
+		opts := outgoingConnOpts{
+			peerInfo: PeerInfo{
+				Addr:         msg.AddrPort,
+				Source:       PeerSourceUtHolepunch,
+				PexPeerFlags: sender.pex.remoteLiveConns[msg.AddrPort].UnwrapOrZeroValue(),
+			},
+			t: t,
+			// Don't attempt to start our own rendezvous if we fail to connect.
+			skipHolepunchRendezvous:  true,
+			receivedHolepunchConnect: true,
+			// Assume that the other end initiated the rendezvous, and will use our preferred
+			// encryption. So we will act normally.
+			HeaderObfuscationPolicy: t.cl.config.HeaderObfuscationPolicy,
 		}
+		initiateConn(opts, true)
 		return nil
 	case utHolepunch.Error:
-		rz, ok := t.utHolepunchRendezvous[msg.AddrPort]
-		if ok {
-			delete(rz.relays, sender)
-			rz.relayCond.Broadcast()
-		}
-		t.logger.Printf("received ut_holepunch error message from %v: %v", sender, msg.ErrCode)
+		t.logger.Levelf(log.Debug, "received ut_holepunch error message from %v: %v", sender, msg.ErrCode)
 		return nil
 	default:
 		return fmt.Errorf("unhandled msg type %v", msg.MsgType)
 	}
 }
 
-func (t *Torrent) startHolepunchRendezvous(addrPort netip.AddrPort) (rz *utHolepunchRendezvous, err error) {
-	if MapContains(t.utHolepunchRendezvous, addrPort) {
-		err = errors.New("rendezvous already exists")
-		return
-	}
-	g.InitNew(&rz)
+func (t *Torrent) startHolepunchRendezvous(addrPort netip.AddrPort) error {
+	rzsSent := 0
 	for pc := range t.conns {
 		if !pc.supportsExtension(utHolepunch.ExtensionName) {
 			continue
@@ -2847,17 +2836,14 @@ func (t *Torrent) startHolepunchRendezvous(addrPort netip.AddrPort) (rz *utHolep
 				continue
 			}
 		}
+		t.logger.Levelf(log.Debug, "sent ut_holepunch rendezvous message to %v for %v", pc, addrPort)
 		sendUtHolepunchMsg(pc, utHolepunch.Rendezvous, addrPort, 0)
-		MakeMapIfNilAndSet(&rz.relays, pc, struct{}{})
+		rzsSent++
 	}
-	if len(rz.relays) == 0 {
-		err = fmt.Errorf("no eligible relays")
-		return
+	if rzsSent == 0 {
+		return errors.New("no eligible relays")
 	}
-	if !MakeMapIfNilAndSet(&t.utHolepunchRendezvous, addrPort, rz) {
-		panic("expected to fail earlier if rendezvous already exists")
-	}
-	return
+	return nil
 }
 
 func (t *Torrent) numHalfOpenAttempts() (num int) {
@@ -2865,4 +2851,19 @@ func (t *Torrent) numHalfOpenAttempts() (num int) {
 		num += len(attempts)
 	}
 	return
+}
+
+func (t *Torrent) getDialTimeoutUnlocked() time.Duration {
+	cl := t.cl
+	cl.rLock()
+	defer cl.rUnlock()
+	return t.dialTimeout()
+}
+
+func (t *Torrent) startHolepunchRendezvousForPeerRemoteAddr(addr PeerRemoteAddr) error {
+	addrPort, err := addrPortFromPeerRemoteAddr(addr)
+	if err != nil {
+		return err
+	}
+	return t.startHolepunchRendezvous(addrPort)
 }

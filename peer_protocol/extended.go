@@ -7,10 +7,12 @@ import (
 // http://www.bittorrent.org/beps/bep_0010.html
 type (
 	ExtendedHandshakeMessage struct {
-		M          map[ExtensionName]ExtensionNumber `bencode:"m"`
-		V          string                            `bencode:"v,omitempty"`
-		Reqq       int                               `bencode:"reqq,omitempty"`
-		Encryption bool                              `bencode:"e,omitempty"`
+		M    map[ExtensionName]ExtensionNumber `bencode:"m"`
+		V    string                            `bencode:"v,omitempty"`
+		Reqq int                               `bencode:"reqq,omitempty"`
+		// The only mention of this I can find is in https://www.bittorrent.org/beps/bep_0011.html
+		// for bit 0x01.
+		Encryption bool `bencode:"e"`
 		// BEP 9
 		MetadataSize int `bencode:"metadata_size,omitempty"`
 		// The local client port. It would be redundant for the receiving side of

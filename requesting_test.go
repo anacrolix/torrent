@@ -3,9 +3,10 @@ package torrent
 import (
 	"testing"
 
-	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/bradfitz/iter"
 	qt "github.com/frankban/quicktest"
+
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 func keysAsSlice(m map[Request]struct{}) (sl []Request) {

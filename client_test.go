@@ -13,15 +13,13 @@ import (
 	"testing/iotest"
 	"time"
 
+	"github.com/anacrolix/dht/v2"
+	"github.com/anacrolix/log"
+	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/missinggo/v2/filecache"
 	"github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/anacrolix/log"
-
-	"github.com/anacrolix/dht/v2"
-	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/filecache"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/testutil"

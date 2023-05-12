@@ -9,11 +9,10 @@ import (
 	"sync"
 	"testing"
 
-	"golang.org/x/time/rate"
-
 	"github.com/frankban/quicktest"
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"

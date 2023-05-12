@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/anacrolix/log"
-
 	"github.com/stretchr/testify/assert"
 )
 

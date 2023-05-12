@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/anacrolix/log"
-
 	qt "github.com/frankban/quicktest"
 )
 

@@ -12,11 +12,12 @@ import (
 
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/squirrel"
+	"github.com/dustin/go-humanize"
+	qt "github.com/frankban/quicktest"
+
 	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"
 	"github.com/anacrolix/torrent/test"
-	"github.com/dustin/go-humanize"
-	qt "github.com/frankban/quicktest"
 )
 
 func TestLeecherStorage(t *testing.T) {

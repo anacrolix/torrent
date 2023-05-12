@@ -4,10 +4,10 @@ import (
 	"net"
 	"testing"
 
+	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/anacrolix/dht/v2/krpc"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 

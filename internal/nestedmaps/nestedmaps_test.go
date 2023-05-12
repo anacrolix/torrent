@@ -3,9 +3,8 @@ package nestedmaps
 import (
 	"testing"
 
-	qt "github.com/frankban/quicktest"
-
 	g "github.com/anacrolix/generics"
+	qt "github.com/frankban/quicktest"
 )
 
 func TestNestedMaps(t *testing.T) {

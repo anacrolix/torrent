@@ -2859,11 +2859,3 @@ func (t *Torrent) getDialTimeoutUnlocked() time.Duration {
 	defer cl.rUnlock()
 	return t.dialTimeout()
 }
-
-func (t *Torrent) startHolepunchRendezvousForPeerRemoteAddr(addr PeerRemoteAddr) error {
-	addrPort, err := addrPortFromPeerRemoteAddr(addr)
-	if err != nil {
-		return err
-	}
-	return t.startHolepunchRendezvous(addrPort)
-}

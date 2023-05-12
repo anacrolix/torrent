@@ -91,9 +91,7 @@ type Client struct {
 	activeAnnounceLimiter limiter.Instance
 	httpClient            *http.Client
 
-	undialableWithoutHolepunch                                   map[netip.AddrPort]struct{}
-	undialableWithoutHolepunchDialAttemptedAfterHolepunchConnect map[netip.AddrPort]struct{}
-	dialableOnlyAfterHolepunch                                   map[netip.AddrPort]struct{}
+	clientHolepunchAddrSets
 }
 
 type ipStr string
@@ -520,6 +518,20 @@ func (cl *Client) acceptConnections(l Listener) {
 			log.Fmsg("error accepting connection: %s", err).LogLevel(log.Debug, cl.logger)
 			continue
 		}
+		{
+			holepunchAddr, holepunchErr := addrPortFromPeerRemoteAddr(conn.RemoteAddr())
+			if holepunchErr == nil {
+				cl.lock()
+				if g.MapContains(
+					cl.undialableWithoutHolepunchDialedAfterHolepunchConnect,
+					holepunchAddr,
+				) {
+					g.MakeMapIfNil(&cl.probablyOnlyConnectedDueToHolepunch)
+					g.MapInsert(cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr, struct{}{})
+				}
+				cl.unlock()
+			}
+		}
 		go func() {
 			if reject != nil {
 				torrent.Add("rejected accepted connections", 1)
@@ -738,12 +750,16 @@ func (cl *Client) dialAndCompleteHandshake(opts outgoingConnOpts) (c *PeerConn, 
 		}
 	}
 	holepunchAddr, holepunchAddrErr := addrPortFromPeerRemoteAddr(addr)
-	if holepunchAddrErr == nil && g.MapContains(cl.undialableWithoutHolepunch, holepunchAddr) && opts.receivedHolepunchConnect {
-		g.MakeMapIfNilAndSet(
-			&cl.undialableWithoutHolepunchDialAttemptedAfterHolepunchConnect,
-			holepunchAddr,
-			struct{}{},
-		)
+	if holepunchAddrErr == nil && opts.receivedHolepunchConnect {
+		cl.lock()
+		if g.MapContains(cl.undialableWithoutHolepunch, holepunchAddr) {
+			g.MakeMapIfNilAndSet(
+				&cl.undialableWithoutHolepunchDialedAfterHolepunchConnect,
+				holepunchAddr,
+				struct{}{},
+			)
+		}
+		cl.unlock()
 	}
 	headerObfuscationPolicy := opts.HeaderObfuscationPolicy
 	obfuscatedHeaderFirst := headerObfuscationPolicy.Preferred
@@ -751,18 +767,24 @@ func (cl *Client) dialAndCompleteHandshake(opts outgoingConnOpts) (c *PeerConn, 
 	if firstDialResult.Conn == nil {
 		// No dialers worked. Try to initiate a holepunching rendezvous.
 		if holepunchAddrErr == nil {
+			cl.lock()
 			if !opts.receivedHolepunchConnect {
-				cl.lock()
 				g.MakeMapIfNilAndSet(&cl.undialableWithoutHolepunch, holepunchAddr, struct{}{})
-				cl.unlock()
 			}
 			opts.t.startHolepunchRendezvous(holepunchAddr)
+			cl.unlock()
 		}
 		err = fmt.Errorf("all initial dials failed")
 		return
 	}
-	if opts.receivedHolepunchConnect && holepunchAddrErr == nil && g.MapContains(cl.undialableWithoutHolepunch, holepunchAddr) {
-		g.MakeMapIfNilAndSet(&cl.dialableOnlyAfterHolepunch, holepunchAddr, struct{}{})
+	if opts.receivedHolepunchConnect && holepunchAddrErr == nil {
+		cl.lock()
+		if g.MapContains(cl.undialableWithoutHolepunch, holepunchAddr) {
+			g.MakeMapIfNilAndSet(&cl.dialableOnlyAfterHolepunch, holepunchAddr, struct{}{})
+		}
+		g.MakeMapIfNil(&cl.dialedSuccessfullyAfterHolepunchConnect)
+		g.MapInsert(cl.dialedSuccessfullyAfterHolepunchConnect, holepunchAddr, struct{}{})
+		cl.unlock()
 	}
 	c, err = doProtocolHandshakeOnDialResult(
 		opts.t,
@@ -1745,14 +1767,4 @@ func (cl *Client) Stats() ClientStats {
 	cl.rLock()
 	defer cl.rUnlock()
 	return cl.statsLocked()
-}
-
-func (cl *Client) statsLocked() (stats ClientStats) {
-	stats.ConnStats = cl.connStats.Copy()
-	stats.ActiveHalfOpenAttempts = cl.numHalfOpen
-	stats.NumPeersUndialableWithoutHolepunchDialedAfterHolepunchConnect =
-		len(cl.undialableWithoutHolepunchDialAttemptedAfterHolepunchConnect)
-	stats.NumPeersDialableOnlyAfterHolepunch =
-		len(cl.dialableOnlyAfterHolepunch)
-	return
 }

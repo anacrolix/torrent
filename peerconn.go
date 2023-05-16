@@ -1056,21 +1056,20 @@ func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
 // This returns the address to use if we want to dial the peer again. It incorporates the peer's
 // advertised listen port.
 func (c *PeerConn) dialAddr() PeerRemoteAddr {
-	if !c.outgoing && c.PeerListenPort != 0 {
-		switch addr := c.RemoteAddr.(type) {
-		case *net.TCPAddr:
-			dialAddr := *addr
-			dialAddr.Port = c.PeerListenPort
-			return &dialAddr
-		case *net.UDPAddr:
-			dialAddr := *addr
-			dialAddr.Port = c.PeerListenPort
-			return &dialAddr
-		default:
-			panic(addr)
-		}
+	if c.outgoing || c.PeerListenPort == 0 {
+		return c.RemoteAddr
 	}
-	return c.RemoteAddr
+	addrPort, err := addrPortFromPeerRemoteAddr(c.RemoteAddr)
+	if err != nil {
+		c.logger.Levelf(
+			log.Warning,
+			"error parsing %q for alternate dial port: %v",
+			c.RemoteAddr,
+			err,
+		)
+		return c.RemoteAddr
+	}
+	return netip.AddrPortFrom(addrPort.Addr(), uint16(c.PeerListenPort))
 }
 
 func (c *PeerConn) pexEvent(t pexEventType) pexEvent {
@@ -1093,12 +1092,6 @@ func (cn *PeerConn) PeerPieces() *roaring.Bitmap {
 
 func (pc *PeerConn) remoteIsTransmission() bool {
 	return bytes.HasPrefix(pc.PeerID[:], []byte("-TR")) && pc.PeerID[7] == '-'
-}
-
-func (pc *PeerConn) remoteAddrPort() Option[netip.AddrPort] {
-	return Some(pc.conn.RemoteAddr().(interface {
-		AddrPort() netip.AddrPort
-	}).AddrPort())
 }
 
 func (pc *PeerConn) remoteDialAddrPort() (netip.AddrPort, error) {

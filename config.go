@@ -140,6 +140,8 @@ type ClientConfig struct {
 	TorrentPeersHighWater int
 	// Minumum number of peers before effort is made to obtain more peers.
 	TorrentPeersLowWater int
+	// Max number of "hasher" goroutines - which do read piece from disk (if need) and hash it
+	PieceHashersPerTorrent int
 
 	// Limit how long handshake can take. This is to reduce the lingering
 	// impact of a few bad apples. 4s loses 1% of successful handshakes that
@@ -205,6 +207,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		TotalHalfOpenConns:             100,
 		TorrentPeersHighWater:          500,
 		TorrentPeersLowWater:           50,
+		PieceHashersPerTorrent:         2,
 		HandshakesTimeout:              4 * time.Second,
 		KeepAliveTimeout:               time.Minute,
 		MaxAllocPeerRequestDataPerConn: 1 << 20,

@@ -149,7 +149,7 @@ type Torrent struct {
 	// Pieces that need to be hashed.
 	piecesQueuedForHash       bitmap.Bitmap
 	activePieceHashes         int
-	maxPieceHashes            int
+	maxPieceHashers           int
 	initialPieceCheckDisabled bool
 
 	connsWithAllPieces map[*Peer]struct{}
@@ -2240,7 +2240,7 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 }
 
 func (t *Torrent) tryCreateMorePieceHashers() {
-	for !t.closed.IsSet() && t.activePieceHashes < 2 && t.tryCreatePieceHasher() {
+	for !t.closed.IsSet() && t.activePieceHashes < t.maxPieceHashers && t.tryCreatePieceHasher() {
 	}
 }
 

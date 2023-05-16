@@ -1287,9 +1287,9 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		metadataChanged: sync.Cond{
 			L: cl.locker(),
 		},
-		webSeeds:       make(map[string]*Peer),
-		gotMetainfoC:   make(chan struct{}),
-		maxPieceHashes: cl.config.PieceHashersPerTorrent,
+		webSeeds:        make(map[string]*Peer),
+		gotMetainfoC:    make(chan struct{}),
+		maxPieceHashers: cl.config.PieceHashersPerTorrent,
 	}
 	t.smartBanCache.Hash = sha1.Sum
 	t.smartBanCache.Init()

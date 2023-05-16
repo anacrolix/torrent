@@ -43,3 +43,10 @@ func addrPortFromPeerRemoteAddr(pra PeerRemoteAddr) (netip.AddrPort, error) {
 		return netip.ParseAddrPort(pra.String())
 	}
 }
+
+func krpcNodeAddrFromAddrPort(addrPort netip.AddrPort) krpc.NodeAddr {
+	return krpc.NodeAddr{
+		IP:   addrPort.Addr().AsSlice(),
+		Port: int(addrPort.Port()),
+	}
+}

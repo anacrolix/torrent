@@ -181,6 +181,7 @@ func TestConnPexPeerFlags(t *testing.T) {
 }
 
 func TestConnPexEvent(t *testing.T) {
+	c := qt.New(t)
 	var (
 		udpAddr     = &net.UDPAddr{IP: net.IPv6loopback, Port: 4848}
 		tcpAddr     = &net.TCPAddr{IP: net.IPv6loopback, Port: 4848}
@@ -195,27 +196,39 @@ func TestConnPexEvent(t *testing.T) {
 		{
 			pexAdd,
 			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network()}},
-			pexEvent{pexAdd, udpAddr, pp.PexSupportsUtp, nil},
+			pexEvent{pexAdd, udpAddr.AddrPort(), pp.PexSupportsUtp, nil},
 		},
 		{
 			pexDrop,
-			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true}, PeerListenPort: dialTcpAddr.Port},
-			pexEvent{pexDrop, tcpAddr, pp.PexOutgoingConn, nil},
+			&PeerConn{
+				Peer:           Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network(), outgoing: true},
+				PeerListenPort: dialTcpAddr.Port,
+			},
+			pexEvent{pexDrop, tcpAddr.AddrPort(), pp.PexOutgoingConn, nil},
 		},
 		{
 			pexAdd,
-			&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network()}, PeerListenPort: dialTcpAddr.Port},
-			pexEvent{pexAdd, dialTcpAddr, 0, nil},
+			&PeerConn{
+				Peer:           Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network()},
+				PeerListenPort: dialTcpAddr.Port,
+			},
+			pexEvent{pexAdd, dialTcpAddr.AddrPort(), 0, nil},
 		},
 		{
 			pexDrop,
-			&PeerConn{Peer: Peer{RemoteAddr: udpAddr, Network: udpAddr.Network()}, PeerListenPort: dialUdpAddr.Port},
-			pexEvent{pexDrop, dialUdpAddr, pp.PexSupportsUtp, nil},
+			&PeerConn{
+				Peer:           Peer{RemoteAddr: udpAddr, Network: udpAddr.Network()},
+				PeerListenPort: dialUdpAddr.Port,
+			},
+			pexEvent{pexDrop, dialUdpAddr.AddrPort(), pp.PexSupportsUtp, nil},
 		},
 	}
 	for i, tc := range testcases {
-		e := tc.c.pexEvent(tc.t)
-		require.EqualValues(t, tc.e, e, i)
+		c.Run(fmt.Sprintf("%v", i), func(c *qt.C) {
+			e, err := tc.c.pexEvent(tc.t)
+			c.Assert(err, qt.IsNil)
+			c.Check(e, qt.Equals, tc.e)
+		})
 	}
 }
 

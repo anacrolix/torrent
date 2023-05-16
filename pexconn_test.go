@@ -53,7 +53,7 @@ func TestPexConnState(t *testing.T) {
 		Added:      krpc.CompactIPv4NodeAddrs(nil),
 		AddedFlags: []pp.PexPeerFlags{},
 		Added6: krpc.CompactIPv6NodeAddrs{
-			mustNodeAddr(addr),
+			krpcNodeAddrFromNetAddr(addr),
 		},
 		Added6Flags: []pp.PexPeerFlags{0},
 	}

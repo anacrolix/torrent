@@ -2,9 +2,8 @@ package torrent
 
 import (
 	"net"
+	"net/netip"
 	"sync"
-
-	"github.com/anacrolix/dht/v2/krpc"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
@@ -26,7 +25,7 @@ const (
 // represents a single connection (t=pexAdd) or disconnection (t=pexDrop) event
 type pexEvent struct {
 	t    pexEventType
-	addr PeerRemoteAddr
+	addr netip.AddrPort
 	f    pp.PexPeerFlags
 	next *pexEvent // event feed list
 }
@@ -34,8 +33,8 @@ type pexEvent struct {
 // facilitates efficient de-duplication while generating PEX messages
 type pexMsgFactory struct {
 	msg     pp.PexMsg
-	added   map[addrKey]struct{}
-	dropped map[addrKey]struct{}
+	added   map[netip.AddrPort]struct{}
+	dropped map[netip.AddrPort]struct{}
 }
 
 func (me *pexMsgFactory) DeltaLen() int {
@@ -44,11 +43,11 @@ func (me *pexMsgFactory) DeltaLen() int {
 		int64(len(me.dropped))))
 }
 
-type addrKey string
+type addrKey = netip.AddrPort
 
 // Returns the key to use to identify a given addr in the factory.
-func (me *pexMsgFactory) addrKey(addr PeerRemoteAddr) addrKey {
-	return addrKey(addr.String())
+func (me *pexMsgFactory) addrKey(addr netip.AddrPort) addrKey {
+	return addr
 }
 
 // Returns whether the entry was added (we can check if we're cancelling out another entry and so
@@ -61,10 +60,7 @@ func (me *pexMsgFactory) add(e pexEvent) {
 	if me.added == nil {
 		me.added = make(map[addrKey]struct{}, pexMaxDelta)
 	}
-	addr, ok := nodeAddr(e.addr)
-	if !ok {
-		return
-	}
+	addr := krpcNodeAddrFromAddrPort(e.addr)
 	m := &me.msg
 	switch {
 	case addr.IP.To4() != nil:
@@ -96,10 +92,7 @@ func (me *pexMsgFactory) add(e pexEvent) {
 // Returns whether the entry was added (we can check if we're cancelling out another entry and so
 // won't hit the limit consuming this event).
 func (me *pexMsgFactory) drop(e pexEvent) {
-	addr, ok := nodeAddr(e.addr)
-	if !ok {
-		return
-	}
+	addr := krpcNodeAddrFromAddrPort(e.addr)
 	key := me.addrKey(e.addr)
 	if me.dropped == nil {
 		me.dropped = make(map[addrKey]struct{}, pexMaxDelta)
@@ -148,14 +141,6 @@ func (me *pexMsgFactory) PexMsg() *pp.PexMsg {
 	return &me.msg
 }
 
-// Convert an arbitrary torrent peer Addr into one that can be represented by the compact addr
-// format.
-func nodeAddr(addr PeerRemoteAddr) (krpc.NodeAddr, bool) {
-	ipport, _ := tryIpPortFromNetAddr(addr)
-	ok := ipport.IP != nil
-	return krpc.NodeAddr{IP: ipport.IP, Port: ipport.Port}, ok
-}
-
 // Per-torrent PEX state
 type pexState struct {
 	sync.RWMutex
@@ -184,6 +169,10 @@ func (s *pexState) append(e *pexEvent) {
 }
 
 func (s *pexState) Add(c *PeerConn) {
+	e, err := c.pexEvent(pexAdd)
+	if err != nil {
+		return
+	}
 	s.Lock()
 	defer s.Unlock()
 	s.nc++
@@ -194,7 +183,6 @@ func (s *pexState) Add(c *PeerConn) {
 		}
 		s.hold = s.hold[:0]
 	}
-	e := c.pexEvent(pexAdd)
 	c.pex.Listed = true
 	s.append(&e)
 }
@@ -204,9 +192,12 @@ func (s *pexState) Drop(c *PeerConn) {
 		// skip connections which were not previously Added
 		return
 	}
+	e, err := c.pexEvent(pexDrop)
+	if err != nil {
+		return
+	}
 	s.Lock()
 	defer s.Unlock()
-	e := c.pexEvent(pexDrop)
 	s.nc--
 	if s.nc < pexTargAdded && len(s.hold) < pexMaxHold {
 		s.hold = append(s.hold, e)

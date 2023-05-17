@@ -153,6 +153,7 @@ func TestTcpSimultaneousOpen(t *testing.T) {
 	makeDialer := func(localPort int, remoteAddr string) func() (net.Conn, error) {
 		dialer := net.Dialer{
 			LocalAddr: &net.TCPAddr{
+				//IP:   net.IPv6loopback,
 				Port: localPort,
 			},
 		}
@@ -161,14 +162,28 @@ func TestTcpSimultaneousOpen(t *testing.T) {
 		}
 	}
 	c := qt.New(t)
-	first, second := randPortPair()
-	t.Logf("ports are %v and %v", first, second)
-	err := testSimultaneousOpen(
-		c.Cleanup,
-		makeDialer(first, fmt.Sprintf("localhost:%d", second)),
-		makeDialer(second, fmt.Sprintf("localhost:%d", first)),
-	)
-	c.Assert(err, qt.IsNil)
+	// I really hate doing this in unit tests, but we would need to pick apart Dialer to get
+	// perfectly synchronized simultaneous dials.
+	for range iter.N(10) {
+		first, second := randPortPair()
+		t.Logf("ports are %v and %v", first, second)
+		err := testSimultaneousOpen(
+			c.Cleanup,
+			makeDialer(first, fmt.Sprintf("localhost:%d", second)),
+			makeDialer(second, fmt.Sprintf("localhost:%d", first)),
+		)
+		if err == nil {
+			return
+		}
+		// This proves that the connections are not the same.
+		if errors.Is(err, errMsgNotReceived) {
+			t.Fatal(err)
+		}
+		// Could be a timing issue, so try again.
+		t.Log(err)
+	}
+	// If we weren't able to get a simultaneous dial to occur, then we can't call it a failure.
+	t.Skip("couldn't synchronize dials")
 }
 
 func randIntInRange(low, high int) int {

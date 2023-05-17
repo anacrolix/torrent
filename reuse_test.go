@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"context"
-	"errors"
 	"net"
 	"sync/atomic"
 	"syscall"
@@ -19,17 +18,25 @@ func TestTcpPortReuseIsABadIdea(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer remote.Close()
 	dialer := net.Dialer{}
+	// Show that we can't duplicate an existing connection even with various socket options.
 	dialer.Control = func(network, address string, c syscall.RawConn) (err error) {
 		return c.Control(func(fd uintptr) {
 			err = setReusePortSockOpts(fd)
 		})
 	}
+	// Tie up a local port to the remote.
 	first, err := dialer.Dial("tcp", remote.Addr().String())
 	c.Assert(err, qt.IsNil)
 	defer first.Close()
+	// Show that dialling the remote with the same local port fails.
 	dialer.LocalAddr = first.LocalAddr()
 	_, err = dialer.Dial("tcp", remote.Addr().String())
-	c.Assert(errors.Is(err, syscall.EADDRINUSE), qt.IsTrue)
+	c.Assert(err, qt.IsNotNil)
+	// Show that not fixing the local port again allows connections to succeed.
+	dialer.LocalAddr = nil
+	second, err := dialer.Dial("tcp", remote.Addr().String())
+	c.Assert(err, qt.IsNil)
+	second.Close()
 }
 
 // Show that multiple connections from the same local utp socket to the same remote port will

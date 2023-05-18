@@ -771,7 +771,9 @@ func (cl *Client) dialAndCompleteHandshake(opts outgoingConnOpts) (c *PeerConn, 
 			if !opts.receivedHolepunchConnect {
 				g.MakeMapIfNilAndSet(&cl.undialableWithoutHolepunch, holepunchAddr, struct{}{})
 			}
-			opts.t.startHolepunchRendezvous(holepunchAddr)
+			if !opts.skipHolepunchRendezvous {
+				opts.t.trySendHolepunchRendezvous(holepunchAddr)
+			}
 			cl.unlock()
 		}
 		err = fmt.Errorf("all initial dials failed")

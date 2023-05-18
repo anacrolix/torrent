@@ -2825,7 +2825,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 	}
 }
 
-func (t *Torrent) startHolepunchRendezvous(addrPort netip.AddrPort) error {
+func (t *Torrent) trySendHolepunchRendezvous(addrPort netip.AddrPort) error {
 	rzsSent := 0
 	for pc := range t.conns {
 		if !pc.supportsExtension(utHolepunch.ExtensionName) {

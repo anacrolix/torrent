@@ -2801,6 +2801,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 		}
 		return nil
 	case utHolepunch.Connect:
+		t.logger.Printf("got holepunch connect request for %v from %p", msg.AddrPort, sender)
 		opts := outgoingConnOpts{
 			peerInfo: PeerInfo{
 				Addr:         msg.AddrPort,

@@ -18,6 +18,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/internal/testutil"
 )
@@ -36,9 +37,12 @@ func TestHolepunchConnect(t *testing.T) {
 	cfg.DisablePEX = true
 	cfg.Debug = true
 	cfg.AcceptPeerConnections = false
-	// Listening, even without accepting, still means the leecher-leecher completes the dial to the seeder, and so it
-	// won't attempt to holepunch.
+	// Listening, even without accepting, still means the leecher-leecher completes the dial to the
+	// seeder, and so it won't attempt to holepunch.
 	cfg.DisableTCP = true
+	// Ensure that responding to holepunch connects don't wait around for the dial limit. We also
+	// have to allow the initial connection to the leecher though, so it can rendezvous for us.
+	cfg.DialRateLimiter = rate.NewLimiter(0, 1)
 	seeder, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
@@ -65,7 +69,7 @@ func TestHolepunchConnect(t *testing.T) {
 	cfg.Seed = false
 	cfg.DataDir = t.TempDir()
 	cfg.MaxAllocPeerRequestDataPerConn = 4
-	cfg.Debug = true
+	//cfg.Debug = true
 	cfg.NominalDialTimeout = time.Second
 	//cfg.DisableUTP = true
 	leecherLeecher, _ := NewClient(cfg)

@@ -731,9 +731,18 @@ func doProtocolHandshakeOnDialResult(
 
 // Returns nil connection and nil error if no connection could be established for valid reasons.
 func (cl *Client) dialAndCompleteHandshake(opts outgoingConnOpts) (c *PeerConn, err error) {
-	err = cl.config.DialRateLimiter.Wait(context.Background())
-	if err != nil {
-		return
+	// It would be better if dial rate limiting could be tested when considering to open connections
+	// instead. Doing it here means if the limit is low, and the half-open limit is high, we could
+	// end up with lots of outgoing connection attempts pending that were initiated on stale data.
+	{
+		dialReservation := cl.config.DialRateLimiter.Reserve()
+		if !opts.receivedHolepunchConnect {
+			if !dialReservation.OK() {
+				err = errors.New("can't make dial limit reservation")
+				return
+			}
+			time.Sleep(dialReservation.Delay())
+		}
 	}
 	torrent.Add("establish outgoing connection", 1)
 	addr := opts.peerInfo.Addr

@@ -1294,7 +1294,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	t.smartBanCache.Hash = sha1.Sum
 	t.smartBanCache.Init()
 	t.networkingEnabled.Set()
-	t.logger = cl.logger.WithContextValue(t).WithNames("torrent", t.infoHash.HexString()).WithDefaultLevel(log.Debug)
+	t.logger = cl.logger.WithDefaultLevel(log.Debug)
 	t.sourcesLogger = t.logger.WithNames("sources")
 	if opts.ChunkSize == 0 {
 		opts.ChunkSize = defaultChunkSize
@@ -1601,8 +1601,8 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	}
 	c.logger.Levelf(
 		log.Debug,
-		"new PeerConn %p [Client %p remoteAddr %v network %v outgoing %t]",
-		c, cl, opts.remoteAddr, opts.network, opts.outgoing,
+		"inited with remoteAddr %v network %v outgoing %t",
+		opts.remoteAddr, opts.network, opts.outgoing,
 	)
 	for _, f := range cl.config.Callbacks.NewPeer {
 		f(&c.Peer)

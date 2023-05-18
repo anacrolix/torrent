@@ -35,7 +35,6 @@ import (
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
 	"github.com/pion/datachannel"
-	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
@@ -82,9 +81,8 @@ type Client struct {
 	torrents          map[InfoHash]*Torrent
 	pieceRequestOrder map[interface{}]*request_strategy.PieceRequestOrder
 
-	acceptLimiter   map[ipStr]int
-	dialRateLimiter *rate.Limiter
-	numHalfOpen     int
+	acceptLimiter map[ipStr]int
+	numHalfOpen   int
 
 	websocketTrackers websocketTrackers
 
@@ -201,7 +199,6 @@ func (cl *Client) init(cfg *ClientConfig) {
 	cl.config = cfg
 	g.MakeMap(&cl.dopplegangerAddrs)
 	cl.torrents = make(map[metainfo.Hash]*Torrent)
-	cl.dialRateLimiter = rate.NewLimiter(10, 10)
 	cl.activeAnnounceLimiter.SlotsPerKey = 2
 	cl.event.L = cl.locker()
 	cl.ipBlockList = cfg.IPBlocklist
@@ -734,6 +731,10 @@ func doProtocolHandshakeOnDialResult(
 
 // Returns nil connection and nil error if no connection could be established for valid reasons.
 func (cl *Client) dialAndCompleteHandshake(opts outgoingConnOpts) (c *PeerConn, err error) {
+	err = cl.config.DialRateLimiter.Wait(context.Background())
+	if err != nil {
+		return
+	}
 	torrent.Add("establish outgoing connection", 1)
 	addr := opts.peerInfo.Addr
 	dialPool := dialPool{
@@ -843,7 +844,6 @@ func (cl *Client) outgoingConnection(
 	opts outgoingConnOpts,
 	attemptKey outgoingConnAttemptKey,
 ) {
-	cl.dialRateLimiter.Wait(context.Background())
 	c, err := cl.dialAndCompleteHandshake(opts)
 	if err == nil {
 		c.conn.SetWriteDeadline(time.Time{})

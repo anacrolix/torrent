@@ -180,6 +180,8 @@ type ClientConfig struct {
 	DisableWebseeds   bool
 
 	Callbacks Callbacks
+
+	DialRateLimiter *rate.Limiter
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
@@ -223,6 +225,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		Extensions:            defaultPeerExtensionBytes(),
 		AcceptPeerConnections: true,
 		MaxUnverifiedBytes:    64 << 20,
+		DialRateLimiter:       rate.NewLimiter(10, 10),
 	}
 	cc.DhtStartingNodes = func(network string) dht.StartingNodesGetter {
 		return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }

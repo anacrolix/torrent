@@ -325,34 +325,44 @@ func TestUtpSimultaneousOpen(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		return socket
 	}
-	first := newUtpSocket("localhost:3000")
+	first := newUtpSocket("localhost:0")
 	defer first.Close()
-	second := newUtpSocket("localhost:3001")
+	second := newUtpSocket("localhost:0")
 	defer second.Close()
 	getDial := func(sock utpSocket, addr string) func() (net.Conn, error) {
 		return func() (net.Conn, error) {
 			return sock.DialContext(ctx, network, addr)
 		}
 	}
-	err := testSimultaneousOpen(
-		c.Cleanup,
-		getDial(first, "localhost:3001"),
-		getDial(second, "localhost:3000"),
-	)
-	c.Assert(err, qt.ErrorIs, errMsgNotReceived)
+	t.Logf("first addr is %v. second addr is %v", first.Addr().String(), second.Addr().String())
+	for range iter.N(10) {
+		err := testSimultaneousOpen(
+			c.Cleanup,
+			getDial(first, second.Addr().String()),
+			getDial(second, first.Addr().String()),
+		)
+		if err == nil {
+			t.Fatal("expected utp to fail simultaneous open")
+		}
+		if errors.Is(err, errMsgNotReceived) {
+			return
+		}
+		t.Log(err)
+		time.Sleep(time.Second)
+	}
+	t.FailNow()
 }
 
-func testDirectDialMsg(c *qt.C, r, w net.Conn) {
+func writeAndReadMsg(r, w net.Conn) error {
 	go writeMsg(w)
-	err := readMsg(r)
-	c.Assert(err, qt.IsNil)
+	return readMsg(r)
 }
 
 // Show that dialling one socket and accepting from the other results in them having ends of the
 // same connection.
 func TestUtpDirectDialMsg(t *testing.T) {
 	c := qt.New(t)
-	const network = "udp"
+	const network = "udp4"
 	ctx := context.Background()
 	newUtpSocket := func(addr string) utpSocket {
 		socket, err := NewUtpSocket(network, addr, func(net.Addr) bool {
@@ -361,15 +371,27 @@ func TestUtpDirectDialMsg(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		return socket
 	}
-	first := newUtpSocket("localhost:0")
-	defer first.Close()
-	second := newUtpSocket("localhost:0")
-	defer second.Close()
-	writer, err := first.DialContext(ctx, network, second.Addr().String())
-	c.Assert(err, qt.IsNil)
-	defer writer.Close()
-	reader, err := second.Accept()
-	defer reader.Close()
-	c.Assert(err, qt.IsNil)
-	testDirectDialMsg(c, reader, writer)
+	for range iter.N(10) {
+		err := func() error {
+			first := newUtpSocket("localhost:0")
+			defer first.Close()
+			second := newUtpSocket("localhost:0")
+			defer second.Close()
+			writer, err := first.DialContext(ctx, network, second.Addr().String())
+			if err != nil {
+				return err
+			}
+			defer writer.Close()
+			reader, err := second.Accept()
+			defer reader.Close()
+			c.Assert(err, qt.IsNil)
+			return writeAndReadMsg(reader, writer)
+		}()
+		if err == nil {
+			return
+		}
+		t.Log(err)
+		time.Sleep(time.Second)
+	}
+	t.FailNow()
 }

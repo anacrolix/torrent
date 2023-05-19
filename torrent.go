@@ -830,7 +830,10 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 	}
 }
 
-// Get bytes left
+// Returns a count of bytes that are not complete in storage, and not pending being written to
+// storage. This value is from the perspective of the download manager, and may not agree with the
+// actual state in storage. If you want read data synchronously you should use a Reader. See
+// https://github.com/anacrolix/torrent/issues/828.
 func (t *Torrent) BytesMissing() (n int64) {
 	t.cl.rLock()
 	n = t.bytesMissingLocked()

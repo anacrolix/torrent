@@ -106,6 +106,7 @@ func (cn *PeerConn) peerImplStatusLines() []string {
 		cn.connString,
 		fmt.Sprintf("peer id: %+q", cn.PeerID),
 		fmt.Sprintf("extensions: %v", cn.PeerExtensionBytes),
+		fmt.Sprintf("ltep extensions: %v", cn.PeerExtensionIDs),
 		fmt.Sprintf("pex: %s", cn.pexStatus()),
 	}
 }

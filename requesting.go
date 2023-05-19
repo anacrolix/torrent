@@ -272,7 +272,7 @@ func (p *Peer) maybeUpdateActualRequestState() {
 func (p *Peer) applyRequestState(next desiredRequestState) {
 	current := &p.requestState
 	if !p.setInterested(next.Interested) {
-		panic("insufficient write buffer")
+		return
 	}
 	more := true
 	requestHeap := binheap.FromSlice(next.Requests.requestIndexes, next.Requests.lessByValue)

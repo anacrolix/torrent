@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
@@ -54,8 +55,10 @@ type PeerConn struct {
 
 	messageWriter peerConnMsgWriter
 
-	uploadTimer *time.Timer
-	pex         pexConnState
+	PeerExtensionIDs map[pp.ExtensionName]pp.ExtensionNumber
+	PeerClientName   atomic.Value
+	uploadTimer      *time.Timer
+	pex              pexConnState
 
 	// The pieces the peer has claimed to have.
 	_peerPieces roaring.Bitmap
@@ -1105,4 +1108,27 @@ func (pc *PeerConn) remoteDialAddrPort() (netip.AddrPort, error) {
 
 func (pc *PeerConn) bitExtensionEnabled(bit pp.ExtensionBit) bool {
 	return pc.t.cl.config.Extensions.GetBit(bit) && pc.PeerExtensionBytes.GetBit(bit)
+}
+
+func (cn *PeerConn) peerPiecesChanged() {
+	cn.t.maybeDropMutuallyCompletePeer(cn)
+}
+
+// Returns whether the connection could be useful to us. We're seeding and
+// they want data, we don't have metainfo and they can provide it, etc.
+func (c *PeerConn) useful() bool {
+	t := c.t
+	if c.closed.IsSet() {
+		return false
+	}
+	if !t.haveInfo() {
+		return c.supportsExtension("ut_metadata")
+	}
+	if t.seeding() && c.peerInterested {
+		return true
+	}
+	if c.peerHasWantedPieces() {
+		return true
+	}
+	return false
 }

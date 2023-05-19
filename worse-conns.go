@@ -34,7 +34,7 @@ type worseConnLensOpts struct {
 	incomingIsBad, outgoingIsBad bool
 }
 
-func worseConnInputFromPeer(p *Peer, opts worseConnLensOpts) worseConnInput {
+func worseConnInputFromPeer(p *PeerConn, opts worseConnLensOpts) worseConnInput {
 	ret := worseConnInput{
 		Useful:             p.useful(),
 		LastHelpful:        p.lastHelpful(),
@@ -48,13 +48,6 @@ func worseConnInputFromPeer(p *Peer, opts worseConnLensOpts) worseConnInput {
 		ret.BadDirection = true
 	}
 	return ret
-}
-
-func worseConn(_l, _r *Peer) bool {
-	// TODO: Use generics for ptr to
-	l := worseConnInputFromPeer(_l, worseConnLensOpts{})
-	r := worseConnInputFromPeer(_r, worseConnLensOpts{})
-	return l.Less(&r)
 }
 
 func (l *worseConnInput) Less(r *worseConnInput) bool {
@@ -94,7 +87,7 @@ type worseConnSlice struct {
 func (me *worseConnSlice) initKeys(opts worseConnLensOpts) {
 	me.keys = make([]worseConnInput, len(me.conns))
 	for i, c := range me.conns {
-		me.keys[i] = worseConnInputFromPeer(&c.Peer, opts)
+		me.keys[i] = worseConnInputFromPeer(c, opts)
 	}
 }
 

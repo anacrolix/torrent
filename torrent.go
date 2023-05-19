@@ -1060,7 +1060,7 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 func (t *Torrent) maybeDropMutuallyCompletePeer(
 	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
 	// okay?
-	p *Peer,
+	p *PeerConn,
 ) {
 	if !t.cl.config.DropMutuallyCompletePeers {
 		return
@@ -2220,7 +2220,7 @@ func (t *Torrent) onPieceCompleted(piece pieceIndex) {
 	t.piece(piece).readerCond.Broadcast()
 	for conn := range t.conns {
 		conn.have(piece)
-		t.maybeDropMutuallyCompletePeer(&conn.Peer)
+		t.maybeDropMutuallyCompletePeer(conn)
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
@@ -94,9 +93,7 @@ type (
 		peerTouchedPieces map[pieceIndex]struct{}
 		peerAllowedFast   typedRoaring.Bitmap[pieceIndex]
 
-		PeerMaxRequests  maxRequests // Maximum pending requests the peer allows.
-		PeerExtensionIDs map[pp.ExtensionName]pp.ExtensionNumber
-		PeerClientName   atomic.Value
+		PeerMaxRequests maxRequests // Maximum pending requests the peer allows.
 
 		logger log.Logger
 	}
@@ -188,7 +185,7 @@ func (cn *Peer) locker() *lockWithDeferreds {
 	return cn.t.cl.locker()
 }
 
-func (cn *Peer) supportsExtension(ext pp.ExtensionName) bool {
+func (cn *PeerConn) supportsExtension(ext pp.ExtensionName) bool {
 	_, ok := cn.PeerExtensionIDs[ext]
 	return ok
 }
@@ -513,10 +510,6 @@ func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 	}
 }
 
-func (cn *Peer) peerPiecesChanged() {
-	cn.t.maybeDropMutuallyCompletePeer(cn)
-}
-
 // After handshake, we know what Torrent and Client stats to include for a
 // connection.
 func (cn *Peer) postHandshakeStats(f func(*ConnStats)) {
@@ -537,25 +530,6 @@ func (cn *Peer) allStats(f func(*ConnStats)) {
 
 func (cn *Peer) readBytes(n int64) {
 	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
-}
-
-// Returns whether the connection could be useful to us. We're seeding and
-// they want data, we don't have metainfo and they can provide it, etc.
-func (c *Peer) useful() bool {
-	t := c.t
-	if c.closed.IsSet() {
-		return false
-	}
-	if !t.haveInfo() {
-		return c.supportsExtension("ut_metadata")
-	}
-	if t.seeding() && c.peerInterested {
-		return true
-	}
-	if c.peerHasWantedPieces() {
-		return true
-	}
-	return false
 }
 
 func (c *Peer) lastHelpful() (ret time.Time) {

@@ -808,6 +808,12 @@ func (cl *Client) dialAndCompleteHandshake(opts outgoingConnOpts) (c *PeerConn, 
 		torrent.Add("initiated conn with preferred header obfuscation", 1)
 		return
 	}
+	c.logger.Levelf(
+		log.Debug,
+		"error doing protocol handshake with header obfuscation %v",
+		obfuscatedHeaderFirst,
+	)
+	firstDialResult.Conn.Close()
 	// We should have just tried with the preferred header obfuscation. If it was required, there's nothing else to try.
 	if headerObfuscationPolicy.RequirePreferred {
 		return
@@ -832,6 +838,12 @@ func (cl *Client) dialAndCompleteHandshake(opts outgoingConnOpts) (c *PeerConn, 
 		torrent.Add("initiated conn with fallback header obfuscation", 1)
 		return
 	}
+	c.logger.Levelf(
+		log.Debug,
+		"error doing protocol handshake with header obfuscation %v",
+		!obfuscatedHeaderFirst,
+	)
+	secondDialResult.Conn.Close()
 	return
 }
 

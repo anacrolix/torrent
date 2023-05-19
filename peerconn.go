@@ -95,7 +95,6 @@ func (cn *PeerConn) pexStatus() string {
 				}), ","),
 			cn.pex.numPending(),
 		)
-
 	}
 }
 

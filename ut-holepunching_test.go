@@ -310,6 +310,7 @@ const defaultMsg = "hello"
 // get separate connections. This means that holepunch connect may result in an accept (and dial)
 // for one or both peers involved.
 func TestUtpSimultaneousOpen(t *testing.T) {
+	t.Parallel()
 	c := qt.New(t)
 	const network = "udp"
 	ctx := context.Background()
@@ -347,6 +348,7 @@ func TestUtpSimultaneousOpen(t *testing.T) {
 		if errors.Is(err, errMsgNotReceived) {
 			return
 		}
+		skipGoUtpDialIssue(t, err)
 		t.Log(err)
 		time.Sleep(time.Second)
 	}
@@ -358,9 +360,16 @@ func writeAndReadMsg(r, w net.Conn) error {
 	return readMsg(r)
 }
 
+func skipGoUtpDialIssue(t *testing.T, err error) {
+	if err.Error() == "timed out waiting for ack" {
+		t.Skip("anacrolix go utp implementation has issues. Use anacrolix/go-libutp by enabling CGO.")
+	}
+}
+
 // Show that dialling one socket and accepting from the other results in them having ends of the
 // same connection.
 func TestUtpDirectDialMsg(t *testing.T) {
+	t.Parallel()
 	c := qt.New(t)
 	const network = "udp4"
 	ctx := context.Background()
@@ -390,6 +399,7 @@ func TestUtpDirectDialMsg(t *testing.T) {
 		if err == nil {
 			return
 		}
+		skipGoUtpDialIssue(t, err)
 		t.Log(err)
 		time.Sleep(time.Second)
 	}

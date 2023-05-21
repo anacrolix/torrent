@@ -1087,7 +1087,7 @@ func (c *PeerConn) pexEvent(t pexEventType) (_ pexEvent, err error) {
 }
 
 func (c *PeerConn) String() string {
-	return fmt.Sprintf("%T %p [id=%q, exts=%v, v=%q]", c, c, c.PeerID, c.PeerExtensionBytes, c.PeerClientName.Load())
+	return fmt.Sprintf("%T %p [id=%+q, exts=%v, v=%q]", c, c, c.PeerID, c.PeerExtensionBytes, c.PeerClientName.Load())
 }
 
 // Returns the pieces the peer could have based on their claims. If we don't know how many pieces

@@ -1,5 +1,9 @@
 package utHolepunch
 
+import (
+	"fmt"
+)
+
 type ErrCode uint32
 
 var _ error = ErrCode(0)
@@ -22,6 +26,6 @@ func (ec ErrCode) Error() string {
 	case NoSelf:
 		return "the target endpoint belongs to the relaying peer"
 	default:
-		panic(ec)
+		return fmt.Sprintf("error code %d", ec)
 	}
 }

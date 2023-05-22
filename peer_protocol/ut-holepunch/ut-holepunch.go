@@ -25,6 +25,19 @@ const (
 	Error
 )
 
+func (me MsgType) String() string {
+	switch me {
+	case Rendezvous:
+		return "rendezvous"
+	case Connect:
+		return "connect"
+	case Error:
+		return "error"
+	default:
+		return fmt.Sprintf("unknown %d", me)
+	}
+}
+
 const (
 	Ipv4 AddrType = iota
 	Ipv6 AddrType = iota

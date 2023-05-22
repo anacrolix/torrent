@@ -2742,18 +2742,11 @@ func (t *Torrent) peerConnsWithDialAddrPort(target netip.AddrPort) (ret []*PeerC
 	return
 }
 
-func makeUtHolepunchMsgForPeerConn(
+func wrapUtHolepunchMsgForPeerConn(
 	recipient *PeerConn,
-	msgType utHolepunch.MsgType,
-	addrPort netip.AddrPort,
-	errCode utHolepunch.ErrCode,
+	msg utHolepunch.Msg,
 ) pp.Message {
-	utHolepunchMsg := utHolepunch.Msg{
-		MsgType:  msgType,
-		AddrPort: addrPort,
-		ErrCode:  errCode,
-	}
-	extendedPayload, err := utHolepunchMsg.MarshalBinary()
+	extendedPayload, err := msg.MarshalBinary()
 	if err != nil {
 		panic(err)
 	}
@@ -2770,14 +2763,41 @@ func sendUtHolepunchMsg(
 	addrPort netip.AddrPort,
 	errCode utHolepunch.ErrCode,
 ) {
-	pc.write(makeUtHolepunchMsgForPeerConn(pc, msgType, addrPort, errCode))
+	holepunchMsg := utHolepunch.Msg{
+		MsgType:  msgType,
+		AddrPort: addrPort,
+		ErrCode:  errCode,
+	}
+	incHolepunchMessagesSent(holepunchMsg)
+	ppMsg := wrapUtHolepunchMsgForPeerConn(pc, holepunchMsg)
+	pc.write(ppMsg)
+}
+
+func incHolepunchMessages(msg utHolepunch.Msg, verb string) {
+	torrent.Add(
+		fmt.Sprintf(
+			"holepunch %v %v messages %v",
+			msg.MsgType,
+			addrPortProtocolStr(msg.AddrPort),
+			verb,
+		),
+		1,
+	)
+}
+
+func incHolepunchMessagesReceived(msg utHolepunch.Msg) {
+	incHolepunchMessages(msg, "received")
+}
+
+func incHolepunchMessagesSent(msg utHolepunch.Msg) {
+	incHolepunchMessages(msg, "sent")
 }
 
 func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *PeerConn) error {
+	incHolepunchMessagesReceived(msg)
 	switch msg.MsgType {
 	case utHolepunch.Rendezvous:
 		t.logger.Printf("got holepunch rendezvous request for %v from %p", msg.AddrPort, sender)
-		torrent.Add("holepunch rendezvous messages received", 1)
 		sendMsg := sendUtHolepunchMsg
 		senderAddrPort, err := sender.remoteDialAddrPort()
 		if err != nil {
@@ -2805,7 +2825,6 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 		}
 		return nil
 	case utHolepunch.Connect:
-		torrent.Add("holepunch connect messages received", 1)
 		t.logger.Printf("got holepunch connect request for %v from %p", msg.AddrPort, sender)
 		opts := outgoingConnOpts{
 			peerInfo: PeerInfo{
@@ -2832,6 +2851,18 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 	}
 }
 
+func addrPortProtocolStr(addrPort netip.AddrPort) string {
+	addr := addrPort.Addr()
+	switch {
+	case addr.Is4():
+		return "ipv4"
+	case addr.Is6():
+		return "ipv6"
+	default:
+		panic(addrPort)
+	}
+}
+
 func (t *Torrent) trySendHolepunchRendezvous(addrPort netip.AddrPort) error {
 	rzsSent := 0
 	for pc := range t.conns {
@@ -2845,7 +2876,6 @@ func (t *Torrent) trySendHolepunchRendezvous(addrPort netip.AddrPort) error {
 		}
 		t.logger.Levelf(log.Debug, "sent ut_holepunch rendezvous message to %v for %v", pc, addrPort)
 		sendUtHolepunchMsg(pc, utHolepunch.Rendezvous, addrPort, 0)
-		torrent.Add("holepunch rendezvous messages sent", 1)
 		rzsSent++
 	}
 	if rzsSent == 0 {

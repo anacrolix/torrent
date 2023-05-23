@@ -147,7 +147,6 @@ func (s *pexConnState) Recv(payload []byte) error {
 	s.dbg.Printf("got %v peers over pex, added %v", len(peers), added)
 
 	// one day we may also want to:
-	// - check if the peer is not flooding us with PEX updates
 	// - handle drops somehow
 	// - detect malicious peers
 

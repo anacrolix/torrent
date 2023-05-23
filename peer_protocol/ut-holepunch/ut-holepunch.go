@@ -54,13 +54,13 @@ func (m *Msg) UnmarshalBinary(b []byte) error {
 	var addr netip.Addr
 	switch addrType {
 	case Ipv4:
-		addr = netip.AddrFrom4([4]byte(b[:4]))
+		addr = netip.AddrFrom4(*(*[4]byte)(b[:4]))
 		b = b[4:]
 	case Ipv6:
 		if len(b) < 22 {
 			return fmt.Errorf("not enough bytes")
 		}
-		addr = netip.AddrFrom16([16]byte(b[:16]))
+		addr = netip.AddrFrom16(*(*[16]byte)(b[:16]))
 		b = b[16:]
 	default:
 		return fmt.Errorf("unhandled addr type value %v", addrType)

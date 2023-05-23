@@ -70,7 +70,7 @@ func (pex PeerExtensionBits) String() string {
 			pex.SetBit(bitTag.bit, false)
 		}
 	}
-	unknownCount := bits.OnesCount64(*(*uint64)((unsafe.Pointer(unsafe.SliceData(pex[:])))))
+	unknownCount := bits.OnesCount64(*(*uint64)((unsafe.Pointer(&pex[0]))))
 	if unknownCount != 0 {
 		tags = append(tags, fmt.Sprintf("%v unknown", unknownCount))
 	}

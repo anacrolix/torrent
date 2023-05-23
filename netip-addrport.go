@@ -17,7 +17,7 @@ func ipv4AddrPortFromKrpcNodeAddr(na krpc.NodeAddr) (_ netip.AddrPort, err error
 		err = fmt.Errorf("not an ipv4 address: %v", na.IP)
 		return
 	}
-	addr := netip.AddrFrom4([4]byte(ip4))
+	addr := netip.AddrFrom4(*(*[4]byte)(ip4))
 	addrPort := netip.AddrPortFrom(addr, uint16(na.Port))
 	return addrPort, nil
 }
@@ -28,7 +28,7 @@ func ipv6AddrPortFromKrpcNodeAddr(na krpc.NodeAddr) (_ netip.AddrPort, err error
 		err = fmt.Errorf("not an ipv4 address: %v", na.IP)
 		return
 	}
-	addr := netip.AddrFrom16([16]byte(ip6))
+	addr := netip.AddrFrom16(*(*[16]byte)(ip6))
 	addrPort := netip.AddrPortFrom(addr, uint16(na.Port))
 	return addrPort, nil
 }

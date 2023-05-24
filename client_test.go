@@ -18,6 +18,7 @@ import (
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/filecache"
 	"github.com/frankban/quicktest"
+	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -888,4 +889,17 @@ func TestBadPeerIpPort(t *testing.T) {
 			require.Equal(t, tc.expectedOk, cl.badPeerIPPort(tc.ip, tc.port))
 		})
 	}
+}
+
+// https://github.com/anacrolix/torrent/issues/837
+func TestClientConfigSetHandlerNotIgnored(t *testing.T) {
+	cfg := NewDefaultClientConfig()
+	cfg.Logger.SetHandlers(log.DiscardHandler)
+	c := qt.New(t)
+	cl, err := NewClient(cfg)
+	c.Assert(err, qt.IsNil)
+	defer cl.Close()
+	c.Assert(cl.logger.Handlers, qt.HasLen, 1)
+	h := cl.logger.Handlers[0].(log.StreamHandler)
+	c.Check(h.W, qt.Equals, io.Discard)
 }

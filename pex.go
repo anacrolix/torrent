@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"time"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
@@ -144,8 +145,11 @@ func (me *pexMsgFactory) PexMsg() *pp.PexMsg {
 // Per-torrent PEX state
 type pexState struct {
 	sync.RWMutex
-	tail *pexEvent     // event feed list
-	hold []pexEvent    // delayed drops
+	tail *pexEvent  // event feed list
+	hold []pexEvent // delayed drops
+	// Torrent-wide cooldown deadline on inbound. This exists to prevent PEX from drowning out other
+	// peer address sources, until that is fixed.
+	rest time.Time
 	nc   int           // net number of alive conns
 	msg0 pexMsgFactory // initial message
 }
@@ -157,6 +161,7 @@ func (s *pexState) Reset() {
 	s.tail = nil
 	s.hold = nil
 	s.nc = 0
+	s.rest = time.Time{}
 	s.msg0 = pexMsgFactory{}
 }
 

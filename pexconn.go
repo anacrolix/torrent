@@ -143,8 +143,16 @@ func (s *pexConnState) Recv(payload []byte) error {
 	var peers peerInfos
 	peers.AppendFromPex(rx.Added6, rx.Added6Flags)
 	peers.AppendFromPex(rx.Added, rx.AddedFlags)
+	if time.Now().Before(s.torrent.pex.rest) {
+		s.dbg.Printf("in cooldown period, incoming PEX discarded")
+		return nil
+	}
 	added := s.torrent.addPeers(peers)
 	s.dbg.Printf("got %v peers over pex, added %v", len(peers), added)
+
+	if len(peers) > 0 {
+		s.torrent.pex.rest = time.Now().Add(pexInterval)
+	}
 
 	// one day we may also want to:
 	// - handle drops somehow

@@ -29,7 +29,6 @@ var (
 		s.DetachDataChannels()
 		return webrtc.NewAPI(webrtc.WithSettingEngine(s))
 	}()
-	config              = webrtc.Configuration{ICEServers: []webrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}}}
 	newPeerConnectionMu sync.Mutex
 )
 
@@ -54,10 +53,7 @@ func newPeerConnection(logger log.Logger, iceServers []string) (*wrappedPeerConn
 	defer newPeerConnectionMu.Unlock()
 	ctx, span := otel.Tracer(tracerName).Start(context.Background(), "PeerConnection")
 
-	pcConfig := config
-	if iceServers != nil {
-		pcConfig = webrtc.Configuration{ICEServers: []webrtc.ICEServer{{URLs: iceServers}}}
-	}
+	pcConfig := webrtc.Configuration{ICEServers: []webrtc.ICEServer{{URLs: iceServers}}}
 
 	pc, err := api.NewPeerConnection(pcConfig)
 	if err != nil {

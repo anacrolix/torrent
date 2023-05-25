@@ -4,10 +4,10 @@ import (
 	"net"
 	"testing"
 
+	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/anacrolix/dht/v2/krpc"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
@@ -47,12 +47,12 @@ func TestPexReset(t *testing.T) {
 	require.EqualValues(t, targ, s)
 }
 
-func mustNodeAddr(addr net.Addr) krpc.NodeAddr {
-	ret, ok := nodeAddr(addr)
-	if !ok {
-		panic(addr)
+func krpcNodeAddrFromNetAddr(addr net.Addr) krpc.NodeAddr {
+	addrPort, err := addrPortFromPeerRemoteAddr(addr)
+	if err != nil {
+		panic(err)
 	}
-	return ret
+	return krpcNodeAddrFromAddrPort(addrPort)
 }
 
 var testcases = []struct {
@@ -99,13 +99,13 @@ var testcases = []struct {
 		}(),
 		targ: pp.PexMsg{
 			Added: krpc.CompactIPv4NodeAddrs{
-				mustNodeAddr(addrs[2]),
-				mustNodeAddr(addrs[3]),
+				krpcNodeAddrFromNetAddr(addrs[2]),
+				krpcNodeAddrFromNetAddr(addrs[3]),
 			},
 			AddedFlags: []pp.PexPeerFlags{pp.PexOutgoingConn, 0},
 			Added6: krpc.CompactIPv6NodeAddrs{
-				mustNodeAddr(addrs[0]),
-				mustNodeAddr(addrs[1]),
+				krpcNodeAddrFromNetAddr(addrs[0]),
+				krpcNodeAddrFromNetAddr(addrs[1]),
 			},
 			Added6Flags: []pp.PexPeerFlags{0, pp.PexOutgoingConn},
 		},
@@ -120,10 +120,10 @@ var testcases = []struct {
 		}(),
 		targ: pp.PexMsg{
 			Dropped: krpc.CompactIPv4NodeAddrs{
-				mustNodeAddr(addrs[2]),
+				krpcNodeAddrFromNetAddr(addrs[2]),
 			},
 			Dropped6: krpc.CompactIPv6NodeAddrs{
-				mustNodeAddr(addrs[0]),
+				krpcNodeAddrFromNetAddr(addrs[0]),
 			},
 		},
 	},
@@ -144,7 +144,7 @@ var testcases = []struct {
 		}(),
 		targ: pp.PexMsg{
 			Added6: krpc.CompactIPv6NodeAddrs{
-				mustNodeAddr(addrs[1]),
+				krpcNodeAddrFromNetAddr(addrs[1]),
 			},
 			Added6Flags: []pp.PexPeerFlags{0},
 		},
@@ -168,12 +168,12 @@ var testcases = []struct {
 		}(),
 		targ: pp.PexMsg{
 			Added: krpc.CompactIPv4NodeAddrs{
-				mustNodeAddr(addrs[2]),
+				krpcNodeAddrFromNetAddr(addrs[2]),
 			},
 			AddedFlags: []pp.PexPeerFlags{0},
 			Added6: krpc.CompactIPv6NodeAddrs{
-				mustNodeAddr(addrs[0]),
-				mustNodeAddr(addrs[1]),
+				krpcNodeAddrFromNetAddr(addrs[0]),
+				krpcNodeAddrFromNetAddr(addrs[1]),
 			},
 			Added6Flags: []pp.PexPeerFlags{0, 0},
 		},
@@ -193,7 +193,7 @@ var testcases = []struct {
 		}(),
 		targ: pp.PexMsg{
 			Added6: krpc.CompactIPv6NodeAddrs{
-				mustNodeAddr(addrs[1]),
+				krpcNodeAddrFromNetAddr(addrs[1]),
 			},
 			Added6Flags: []pp.PexPeerFlags{0},
 		},
@@ -207,7 +207,7 @@ var testcases = []struct {
 		}(),
 		targ: pp.PexMsg{
 			Added6: krpc.CompactIPv6NodeAddrs{
-				mustNodeAddr(addrs[0]),
+				krpcNodeAddrFromNetAddr(addrs[0]),
 			},
 			Added6Flags: []pp.PexPeerFlags{0},
 		},
@@ -216,7 +216,7 @@ var testcases = []struct {
 		},
 		targ1: pp.PexMsg{
 			Added6: krpc.CompactIPv6NodeAddrs{
-				mustNodeAddr(addrs[1]),
+				krpcNodeAddrFromNetAddr(addrs[1]),
 			},
 			Added6Flags: []pp.PexPeerFlags{0},
 		},

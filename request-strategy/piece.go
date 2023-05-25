@@ -1,4 +1,4 @@
-package request_strategy
+package requestStrategy
 
 type ChunksIterFunc func(func(ChunkIndex))
 

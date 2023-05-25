@@ -22,6 +22,7 @@ import (
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
 	. "github.com/anacrolix/generics"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/slices"
@@ -30,13 +31,16 @@ import (
 	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/pion/datachannel"
+	"golang.org/x/exp/maps"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/common"
+	"github.com/anacrolix/torrent/internal/check"
+	"github.com/anacrolix/torrent/internal/nestedmaps"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/storage"
@@ -101,14 +105,14 @@ type Torrent struct {
 	maxEstablishedConns int
 	// Set of addrs to which we're attempting to connect. Connections are
 	// half-open until all handshakes are completed.
-	halfOpen map[string]PeerInfo
+	halfOpen map[string]map[outgoingConnAttemptKey]*PeerInfo
 
 	// Reserve of peers to connect to. A peer can be both here and in the
 	// active connections if were told about the peer after connecting with
 	// them. That encourages us to reconnect to peers that are well known in
 	// the swarm.
 	peers prioritizedPeers
-	// Whether we want to know to know more peers.
+	// Whether we want to know more peers.
 	wantPeersEvent missinggo.Event
 	// An announcer for each tracker URL.
 	trackerAnnouncers map[string]torrentTrackerAnnouncer
@@ -167,6 +171,8 @@ type Torrent struct {
 	requestPieceStates []request_strategy.PieceRequestOrderState
 	requestIndexes     []RequestIndex
 }
+
+type outgoingConnAttemptKey = *PeerInfo
 
 func (t *Torrent) length() int64 {
 	return t._length.Value
@@ -232,8 +238,10 @@ func (t *Torrent) KnownSwarm() (ks []PeerInfo) {
 	})
 
 	// Add half-open peers to the list
-	for _, peer := range t.halfOpen {
-		ks = append(ks, peer)
+	for _, attempts := range t.halfOpen {
+		for _, peer := range attempts {
+			ks = append(ks, *peer)
+		}
 	}
 
 	// Add active peers to the list
@@ -756,27 +764,39 @@ func (t *Torrent) writeStatus(w io.Writer) {
 
 	fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
 
-	spew.NewDefaultConfig()
-	spew.Fdump(w, t.statsLocked())
+	dumpStats(w, t.statsLocked())
 
-	peers := t.peersAsSlice()
-	sort.Slice(peers, func(_i, _j int) bool {
-		i := peers[_i]
-		j := peers[_j]
-		if less, ok := multiless.New().EagerSameLess(
-			i.downloadRate() == j.downloadRate(), i.downloadRate() < j.downloadRate(),
-		).LessOk(); ok {
-			return less
-		}
-		return worseConn(i, j)
+	fmt.Fprintf(w, "webseeds:\n")
+	t.writePeerStatuses(w, maps.Values(t.webSeeds))
+
+	peerConns := maps.Keys(t.conns)
+	// Peers without priorities first, then those with. I'm undecided about how to order peers
+	// without priorities.
+	sort.Slice(peerConns, func(li, ri int) bool {
+		l := peerConns[li]
+		r := peerConns[ri]
+		ml := multiless.New()
+		lpp := g.ResultFromTuple(l.peerPriority()).ToOption()
+		rpp := g.ResultFromTuple(r.peerPriority()).ToOption()
+		ml = ml.Bool(lpp.Ok, rpp.Ok)
+		ml = ml.Uint32(rpp.Value, lpp.Value)
+		return ml.Less()
 	})
+
+	fmt.Fprintf(w, "%v peer conns:\n", len(peerConns))
+	t.writePeerStatuses(w, g.SliceMap(peerConns, func(pc *PeerConn) *Peer {
+		return &pc.Peer
+	}))
+}
+
+func (t *Torrent) writePeerStatuses(w io.Writer, peers []*Peer) {
 	var buf bytes.Buffer
-	for i, c := range peers {
-		fmt.Fprintf(w, "%2d. ", i+1)
+	for _, c := range peers {
+		fmt.Fprintf(w, "- ")
 		buf.Reset()
-		c.writeStatus(&buf, t)
+		c.writeStatus(&buf)
 		w.Write(bytes.TrimRight(
-			bytes.ReplaceAll(buf.Bytes(), []byte("\n"), []byte("\n    ")),
+			bytes.ReplaceAll(buf.Bytes(), []byte("\n"), []byte("\n  ")),
 			" "))
 	}
 }
@@ -810,7 +830,10 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 	}
 }
 
-// Get bytes left
+// Returns a count of bytes that are not complete in storage, and not pending being written to
+// storage. This value is from the perspective of the download manager, and may not agree with the
+// actual state in storage. If you want read data synchronously you should use a Reader. See
+// https://github.com/anacrolix/torrent/issues/828.
 func (t *Torrent) BytesMissing() (n int64) {
 	t.cl.rLock()
 	n = t.bytesMissingLocked()
@@ -1037,7 +1060,7 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 func (t *Torrent) maybeDropMutuallyCompletePeer(
 	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
 	// okay?
-	p *Peer,
+	p *PeerConn,
 ) {
 	if !t.cl.config.DropMutuallyCompletePeers {
 		return
@@ -1051,7 +1074,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	if p.useful() {
 		return
 	}
-	t.logger.WithDefaultLevel(log.Debug).Printf("dropping %v, which is mutually complete", p)
+	p.logger.Levelf(log.Debug, "is mutually complete; dropping")
 	p.drop()
 }
 
@@ -1090,17 +1113,26 @@ func getPeerConnSlice(cap int) []*PeerConn {
 	}
 }
 
-// The worst connection is one that hasn't been sent, or sent anything useful for the longest. A bad
-// connection is one that usually sends us unwanted pieces, or has been in the worse half of the
-// established connections for more than a minute. This is O(n log n). If there was a way to not
-// consider the position of a conn relative to the total number, it could be reduced to O(n).
-func (t *Torrent) worstBadConn() (ret *PeerConn) {
-	wcs := worseConnSlice{conns: t.appendUnclosedConns(getPeerConnSlice(len(t.conns)))}
-	defer peerConnSlices.Put(wcs.conns)
-	wcs.initKeys()
+// Calls the given function with a slice of unclosed conns. It uses a pool to reduce allocations as
+// this is a frequent occurrence.
+func (t *Torrent) withUnclosedConns(f func([]*PeerConn)) {
+	sl := t.appendUnclosedConns(getPeerConnSlice(len(t.conns)))
+	f(sl)
+	peerConnSlices.Put(sl)
+}
+
+func (t *Torrent) worstBadConnFromSlice(opts worseConnLensOpts, sl []*PeerConn) *PeerConn {
+	wcs := worseConnSlice{conns: sl}
+	wcs.initKeys(opts)
 	heap.Init(&wcs)
 	for wcs.Len() != 0 {
 		c := heap.Pop(&wcs).(*PeerConn)
+		if opts.incomingIsBad && !c.outgoing {
+			return c
+		}
+		if opts.outgoingIsBad && c.outgoing {
+			return c
+		}
 		if c._stats.ChunksReadWasted.Int64() >= 6 && c._stats.ChunksReadWasted.Int64() > c._stats.ChunksReadUseful.Int64() {
 			return c
 		}
@@ -1114,6 +1146,17 @@ func (t *Torrent) worstBadConn() (ret *PeerConn) {
 		}
 	}
 	return nil
+}
+
+// The worst connection is one that hasn't been sent, or sent anything useful for the longest. A bad
+// connection is one that usually sends us unwanted pieces, or has been in the worse half of the
+// established connections for more than a minute. This is O(n log n). If there was a way to not
+// consider the position of a conn relative to the total number, it could be reduced to O(n).
+func (t *Torrent) worstBadConn(opts worseConnLensOpts) (ret *PeerConn) {
+	t.withUnclosedConns(func(ucs []*PeerConn) {
+		ret = t.worstBadConnFromSlice(opts, ucs)
+	})
+	return
 }
 
 type PieceStateChange struct {
@@ -1303,6 +1346,15 @@ func (t *Torrent) numReceivedConns() (ret int) {
 	return
 }
 
+func (t *Torrent) numOutgoingConns() (ret int) {
+	for c := range t.conns {
+		if c.outgoing {
+			ret++
+		}
+	}
+	return
+}
+
 func (t *Torrent) maxHalfOpen() int {
 	// Note that if we somehow exceed the maximum established conns, we want
 	// the negative value to have an effect.
@@ -1310,13 +1362,16 @@ func (t *Torrent) maxHalfOpen() int {
 	extraIncoming := int64(t.numReceivedConns() - t.maxEstablishedConns/2)
 	// We want to allow some experimentation with new peers, and to try to
 	// upset an oversupply of received connections.
-	return int(min(max(5, extraIncoming)+establishedHeadroom, int64(t.cl.config.HalfOpenConnsPerTorrent)))
+	return int(min(
+		max(5, extraIncoming)+establishedHeadroom,
+		int64(t.cl.config.HalfOpenConnsPerTorrent),
+	))
 }
 
 func (t *Torrent) openNewConns() (initiated int) {
 	defer t.updateWantPeersEvent()
 	for t.peers.Len() != 0 {
-		if !t.wantConns() {
+		if !t.wantOutgoingConns() {
 			return
 		}
 		if len(t.halfOpen) >= t.maxHalfOpen() {
@@ -1329,7 +1384,15 @@ func (t *Torrent) openNewConns() (initiated int) {
 			return
 		}
 		p := t.peers.PopMax()
-		t.initiateConn(p)
+		opts := outgoingConnOpts{
+			peerInfo:                 p,
+			t:                        t,
+			requireRendezvous:        false,
+			skipHolepunchRendezvous:  false,
+			receivedHolepunchConnect: false,
+			HeaderObfuscationPolicy:  t.cl.config.HeaderObfuscationPolicy,
+		}
+		initiateConn(opts, false)
 		initiated++
 	}
 	return
@@ -1507,7 +1570,7 @@ func (t *Torrent) decPeerPieceAvailability(p *Peer) {
 }
 
 func (t *Torrent) assertPendingRequests() {
-	if !check {
+	if !check.Enabled {
 		return
 	}
 	// var actual pendingRequests
@@ -1542,7 +1605,7 @@ func (t *Torrent) wantPeers() bool {
 	if t.peers.Len() > t.cl.config.TorrentPeersLowWater {
 		return false
 	}
-	return t.wantConns()
+	return t.wantOutgoingConns()
 }
 
 func (t *Torrent) updateWantPeersEvent() {
@@ -1815,7 +1878,7 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 			// We're also announcing ourselves as a listener, so we don't just want peer addresses.
 			// TODO: We can include the announce_peer step depending on whether we can receive
 			// inbound connections. We should probably only announce once every 15 mins too.
-			if !t.wantConns() {
+			if !t.wantAnyConns() {
 				goto wait
 			}
 			// TODO: Determine if there's a listener on the port we're announcing.
@@ -1933,9 +1996,16 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 		}
 	}
 	if len(t.conns) >= t.maxEstablishedConns {
-		c := t.worstBadConn()
+		numOutgoing := t.numOutgoingConns()
+		numIncoming := len(t.conns) - numOutgoing
+		c := t.worstBadConn(worseConnLensOpts{
+			// We've already established that we have too many connections at this point, so we just
+			// need to match what kind we have too many of vs. what we're trying to add now.
+			incomingIsBad: (numIncoming-numOutgoing > 1) && c.outgoing,
+			outgoingIsBad: (numOutgoing-numIncoming > 1) && !c.outgoing,
+		})
 		if c == nil {
-			return errors.New("don't want conns")
+			return errors.New("don't want conn")
 		}
 		c.close()
 		t.deletePeerConn(c)
@@ -1944,13 +2014,15 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 		panic(len(t.conns))
 	}
 	t.conns[c] = struct{}{}
+	t.cl.event.Broadcast()
+	// We'll never receive the "p" extended handshake parameter.
 	if !t.cl.config.DisablePEX && !c.PeerExtensionBytes.SupportsExtended() {
-		t.pex.Add(c) // as no further extended handshake expected
+		t.pex.Add(c)
 	}
 	return nil
 }
 
-func (t *Torrent) wantConns() bool {
+func (t *Torrent) newConnsAllowed() bool {
 	if !t.networkingEnabled.Bool() {
 		return false
 	}
@@ -1960,7 +2032,48 @@ func (t *Torrent) wantConns() bool {
 	if !t.needData() && (!t.seeding() || !t.haveAnyPieces()) {
 		return false
 	}
-	return len(t.conns) < t.maxEstablishedConns || t.worstBadConn() != nil
+	return true
+}
+
+func (t *Torrent) wantAnyConns() bool {
+	if !t.networkingEnabled.Bool() {
+		return false
+	}
+	if t.closed.IsSet() {
+		return false
+	}
+	if !t.needData() && (!t.seeding() || !t.haveAnyPieces()) {
+		return false
+	}
+	return len(t.conns) < t.maxEstablishedConns
+}
+
+func (t *Torrent) wantOutgoingConns() bool {
+	if !t.newConnsAllowed() {
+		return false
+	}
+	if len(t.conns) < t.maxEstablishedConns {
+		return true
+	}
+	numIncomingConns := len(t.conns) - t.numOutgoingConns()
+	return t.worstBadConn(worseConnLensOpts{
+		incomingIsBad: numIncomingConns-t.numOutgoingConns() > 1,
+		outgoingIsBad: false,
+	}) != nil
+}
+
+func (t *Torrent) wantIncomingConns() bool {
+	if !t.newConnsAllowed() {
+		return false
+	}
+	if len(t.conns) < t.maxEstablishedConns {
+		return true
+	}
+	numIncomingConns := len(t.conns) - t.numOutgoingConns()
+	return t.worstBadConn(worseConnLensOpts{
+		incomingIsBad: false,
+		outgoingIsBad: t.numOutgoingConns()-numIncomingConns > 1,
+	}) != nil
 }
 
 func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
@@ -1973,7 +2086,7 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 			return true
 		}),
 	}
-	wcs.initKeys()
+	wcs.initKeys(worseConnLensOpts{})
 	heap.Init(&wcs)
 	for len(t.conns) > t.maxEstablishedConns && wcs.Len() > 0 {
 		t.dropConnection(heap.Pop(&wcs).(*PeerConn))
@@ -2107,7 +2220,7 @@ func (t *Torrent) onPieceCompleted(piece pieceIndex) {
 	t.piece(piece).readerCond.Broadcast()
 	for conn := range t.conns {
 		conn.have(piece)
-		t.maybeDropMutuallyCompletePeer(&conn.Peer)
+		t.maybeDropMutuallyCompletePeer(conn)
 	}
 }
 
@@ -2261,8 +2374,45 @@ func (t *Torrent) VerifyData() {
 	}
 }
 
-// Start the process of connecting to the given peer for the given torrent if appropriate.
-func (t *Torrent) initiateConn(peer PeerInfo) {
+func (t *Torrent) connectingToPeerAddr(addrStr string) bool {
+	return len(t.halfOpen[addrStr]) != 0
+}
+
+func (t *Torrent) hasPeerConnForAddr(x PeerRemoteAddr) bool {
+	addrStr := x.String()
+	for c := range t.conns {
+		ra := c.RemoteAddr
+		if ra.String() == addrStr {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *Torrent) getHalfOpenPath(
+	addrStr string,
+	attemptKey outgoingConnAttemptKey,
+) nestedmaps.Path[*PeerInfo] {
+	return nestedmaps.Next(nestedmaps.Next(nestedmaps.Begin(&t.halfOpen), addrStr), attemptKey)
+}
+
+func (t *Torrent) addHalfOpen(addrStr string, attemptKey *PeerInfo) {
+	path := t.getHalfOpenPath(addrStr, attemptKey)
+	if path.Exists() {
+		panic("should be unique")
+	}
+	path.Set(attemptKey)
+	t.cl.numHalfOpen++
+}
+
+// Start the process of connecting to the given peer for the given torrent if appropriate. I'm not
+// sure all the PeerInfo fields are being used.
+func initiateConn(
+	opts outgoingConnOpts,
+	ignoreLimits bool,
+) {
+	t := opts.t
+	peer := opts.peerInfo
 	if peer.Id == t.cl.peerID {
 		return
 	}
@@ -2270,12 +2420,21 @@ func (t *Torrent) initiateConn(peer PeerInfo) {
 		return
 	}
 	addr := peer.Addr
-	if t.addrActive(addr.String()) {
+	addrStr := addr.String()
+	if !ignoreLimits {
+		if t.connectingToPeerAddr(addrStr) {
+			return
+		}
+	}
+	if t.hasPeerConnForAddr(addr) {
 		return
 	}
-	t.cl.numHalfOpen++
-	t.halfOpen[addr.String()] = peer
-	go t.cl.outgoingConnection(t, addr, peer.Source, peer.Trusted)
+	attemptKey := &peer
+	t.addHalfOpen(addrStr, attemptKey)
+	go t.cl.outgoingConnection(
+		opts,
+		attemptKey,
+	)
 }
 
 // Adds a trusted, pending peer for each of the given Client's addresses. Typically used in tests to
@@ -2296,7 +2455,7 @@ func (t *Torrent) AddClientPeer(cl *Client) int {
 // connection.
 func (t *Torrent) allStats(f func(*ConnStats)) {
 	f(&t.stats)
-	f(&t.cl.stats)
+	f(&t.cl.connStats)
 }
 
 func (t *Torrent) hashingPiece(i pieceIndex) bool {
@@ -2567,4 +2726,174 @@ func (t *Torrent) checkValidReceiveChunk(r Request) error {
 	// should be considerable checks elsewhere for this case due to the network overhead. We should
 	// catch most of the overflow manipulation stuff by checking index and begin above.
 	return nil
+}
+
+func (t *Torrent) peerConnsWithDialAddrPort(target netip.AddrPort) (ret []*PeerConn) {
+	for pc := range t.conns {
+		dialAddr, err := pc.remoteDialAddrPort()
+		if err != nil {
+			continue
+		}
+		if dialAddr != target {
+			continue
+		}
+		ret = append(ret, pc)
+	}
+	return
+}
+
+func wrapUtHolepunchMsgForPeerConn(
+	recipient *PeerConn,
+	msg utHolepunch.Msg,
+) pp.Message {
+	extendedPayload, err := msg.MarshalBinary()
+	if err != nil {
+		panic(err)
+	}
+	return pp.Message{
+		Type:            pp.Extended,
+		ExtendedID:      MapMustGet(recipient.PeerExtensionIDs, utHolepunch.ExtensionName),
+		ExtendedPayload: extendedPayload,
+	}
+}
+
+func sendUtHolepunchMsg(
+	pc *PeerConn,
+	msgType utHolepunch.MsgType,
+	addrPort netip.AddrPort,
+	errCode utHolepunch.ErrCode,
+) {
+	holepunchMsg := utHolepunch.Msg{
+		MsgType:  msgType,
+		AddrPort: addrPort,
+		ErrCode:  errCode,
+	}
+	incHolepunchMessagesSent(holepunchMsg)
+	ppMsg := wrapUtHolepunchMsgForPeerConn(pc, holepunchMsg)
+	pc.write(ppMsg)
+}
+
+func incHolepunchMessages(msg utHolepunch.Msg, verb string) {
+	torrent.Add(
+		fmt.Sprintf(
+			"holepunch %v %v messages %v",
+			msg.MsgType,
+			addrPortProtocolStr(msg.AddrPort),
+			verb,
+		),
+		1,
+	)
+}
+
+func incHolepunchMessagesReceived(msg utHolepunch.Msg) {
+	incHolepunchMessages(msg, "received")
+}
+
+func incHolepunchMessagesSent(msg utHolepunch.Msg) {
+	incHolepunchMessages(msg, "sent")
+}
+
+func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *PeerConn) error {
+	incHolepunchMessagesReceived(msg)
+	switch msg.MsgType {
+	case utHolepunch.Rendezvous:
+		t.logger.Printf("got holepunch rendezvous request for %v from %p", msg.AddrPort, sender)
+		sendMsg := sendUtHolepunchMsg
+		senderAddrPort, err := sender.remoteDialAddrPort()
+		if err != nil {
+			sender.logger.Levelf(
+				log.Warning,
+				"error getting ut_holepunch rendezvous sender's dial address: %v",
+				err,
+			)
+			// There's no better error code. The sender's address itself is invalid. I don't see
+			// this error message being appropriate anywhere else anyway.
+			sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NoSuchPeer)
+		}
+		targets := t.peerConnsWithDialAddrPort(msg.AddrPort)
+		if len(targets) == 0 {
+			sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NotConnected)
+			return nil
+		}
+		for _, pc := range targets {
+			if !pc.supportsExtension(utHolepunch.ExtensionName) {
+				sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NoSupport)
+				continue
+			}
+			sendMsg(sender, utHolepunch.Connect, msg.AddrPort, 0)
+			sendMsg(pc, utHolepunch.Connect, senderAddrPort, 0)
+		}
+		return nil
+	case utHolepunch.Connect:
+		t.logger.Printf("got holepunch connect request for %v from %p", msg.AddrPort, sender)
+		opts := outgoingConnOpts{
+			peerInfo: PeerInfo{
+				Addr:         msg.AddrPort,
+				Source:       PeerSourceUtHolepunch,
+				PexPeerFlags: sender.pex.remoteLiveConns[msg.AddrPort].UnwrapOrZeroValue(),
+			},
+			t: t,
+			// Don't attempt to start our own rendezvous if we fail to connect.
+			skipHolepunchRendezvous:  true,
+			receivedHolepunchConnect: true,
+			// Assume that the other end initiated the rendezvous, and will use our preferred
+			// encryption. So we will act normally.
+			HeaderObfuscationPolicy: t.cl.config.HeaderObfuscationPolicy,
+		}
+		initiateConn(opts, true)
+		return nil
+	case utHolepunch.Error:
+		torrent.Add("holepunch error messages received", 1)
+		t.logger.Levelf(log.Debug, "received ut_holepunch error message from %v: %v", sender, msg.ErrCode)
+		return nil
+	default:
+		return fmt.Errorf("unhandled msg type %v", msg.MsgType)
+	}
+}
+
+func addrPortProtocolStr(addrPort netip.AddrPort) string {
+	addr := addrPort.Addr()
+	switch {
+	case addr.Is4():
+		return "ipv4"
+	case addr.Is6():
+		return "ipv6"
+	default:
+		panic(addrPort)
+	}
+}
+
+func (t *Torrent) trySendHolepunchRendezvous(addrPort netip.AddrPort) error {
+	rzsSent := 0
+	for pc := range t.conns {
+		if !pc.supportsExtension(utHolepunch.ExtensionName) {
+			continue
+		}
+		if pc.supportsExtension(pp.ExtensionNamePex) {
+			if !g.MapContains(pc.pex.remoteLiveConns, addrPort) {
+				continue
+			}
+		}
+		t.logger.Levelf(log.Debug, "sent ut_holepunch rendezvous message to %v for %v", pc, addrPort)
+		sendUtHolepunchMsg(pc, utHolepunch.Rendezvous, addrPort, 0)
+		rzsSent++
+	}
+	if rzsSent == 0 {
+		return errors.New("no eligible relays")
+	}
+	return nil
+}
+
+func (t *Torrent) numHalfOpenAttempts() (num int) {
+	for _, attempts := range t.halfOpen {
+		num += len(attempts)
+	}
+	return
+}
+
+func (t *Torrent) getDialTimeoutUnlocked() time.Duration {
+	cl := t.cl
+	cl.rLock()
+	defer cl.rUnlock()
+	return t.dialTimeout()
 }

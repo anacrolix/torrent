@@ -13,15 +13,14 @@ import (
 	"testing/iotest"
 	"time"
 
-	"github.com/frankban/quicktest"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	"github.com/anacrolix/log"
-
 	"github.com/anacrolix/dht/v2"
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/filecache"
+	"github.com/frankban/quicktest"
+	qt "github.com/frankban/quicktest"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -217,6 +216,50 @@ func TestResponsive(t *testing.T) {
 	seederDataDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(seederDataDir)
 	cfg := TestingConfig(t)
+	cfg.Seed = true
+	cfg.DataDir = seederDataDir
+	seeder, err := NewClient(cfg)
+	require.Nil(t, err)
+	defer seeder.Close()
+	seederTorrent, _, _ := seeder.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	seederTorrent.VerifyData()
+	leecherDataDir := t.TempDir()
+	cfg = TestingConfig(t)
+	cfg.DataDir = leecherDataDir
+	leecher, err := NewClient(cfg)
+	require.Nil(t, err)
+	defer leecher.Close()
+	leecherTorrent, _, _ := leecher.AddTorrentSpec(func() (ret *TorrentSpec) {
+		ret = TorrentSpecFromMetaInfo(mi)
+		ret.ChunkSize = 2
+		return
+	}())
+	leecherTorrent.AddClientPeer(seeder)
+	reader := leecherTorrent.NewReader()
+	defer reader.Close()
+	reader.SetReadahead(0)
+	reader.SetResponsive()
+	b := make([]byte, 2)
+	_, err = reader.Seek(3, io.SeekStart)
+	require.NoError(t, err)
+	_, err = io.ReadFull(reader, b)
+	assert.Nil(t, err)
+	assert.EqualValues(t, "lo", string(b))
+	_, err = reader.Seek(11, io.SeekStart)
+	require.NoError(t, err)
+	n, err := io.ReadFull(reader, b)
+	assert.Nil(t, err)
+	assert.EqualValues(t, 2, n)
+	assert.EqualValues(t, "d\n", string(b))
+}
+
+// TestResponsive was the first test to fail if uTP is disabled and TCP sockets dial from the
+// listening port.
+func TestResponsiveTcpOnly(t *testing.T) {
+	seederDataDir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(seederDataDir)
+	cfg := TestingConfig(t)
+	cfg.DisableUTP = true
 	cfg.Seed = true
 	cfg.DataDir = seederDataDir
 	seeder, err := NewClient(cfg)
@@ -749,6 +792,7 @@ func TestClientAddressInUse(t *testing.T) {
 		defer s.Close()
 	}
 	cfg := TestingConfig(t).SetListenAddr(":50007")
+	cfg.DisableUTP = false
 	cl, err := NewClient(cfg)
 	require.Error(t, err)
 	require.Nil(t, cl)
@@ -845,4 +889,17 @@ func TestBadPeerIpPort(t *testing.T) {
 			require.Equal(t, tc.expectedOk, cl.badPeerIPPort(tc.ip, tc.port))
 		})
 	}
+}
+
+// https://github.com/anacrolix/torrent/issues/837
+func TestClientConfigSetHandlerNotIgnored(t *testing.T) {
+	cfg := NewDefaultClientConfig()
+	cfg.Logger.SetHandlers(log.DiscardHandler)
+	c := qt.New(t)
+	cl, err := NewClient(cfg)
+	c.Assert(err, qt.IsNil)
+	defer cl.Close()
+	c.Assert(cl.logger.Handlers, qt.HasLen, 1)
+	h := cl.logger.Handlers[0].(log.StreamHandler)
+	c.Check(h.W, qt.Equals, io.Discard)
 }

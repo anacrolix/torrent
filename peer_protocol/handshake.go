@@ -5,17 +5,30 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/bits"
 	"strconv"
+	"strings"
+	"unsafe"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
 
 type ExtensionBit uint
 
+// https://www.bittorrent.org/beps/bep_0004.html
+// https://wiki.theory.org/BitTorrentSpecification.html#Reserved_Bytes
 const (
-	ExtensionBitDHT      = 0  // http://www.bittorrent.org/beps/bep_0005.html
-	ExtensionBitExtended = 20 // http://www.bittorrent.org/beps/bep_0010.html
-	ExtensionBitFast     = 2  // http://www.bittorrent.org/beps/bep_0006.html
+	ExtensionBitDht                          = 0 // http://www.bittorrent.org/beps/bep_0005.html
+	ExtensionBitFast                         = 2 // http://www.bittorrent.org/beps/bep_0006.html
+	ExtensionBitV2                           = 7 // "Hybrid torrent legacy to v2 upgrade"
+	ExtensionBitAzureusExtensionNegotiation1 = 16
+	ExtensionBitAzureusExtensionNegotiation2 = 17
+	// LibTorrent Extension Protocol, http://www.bittorrent.org/beps/bep_0010.html
+	ExtensionBitLtep = 20
+	// https://wiki.theory.org/BitTorrent_Location-aware_Protocol_1
+	ExtensionBitLocationAwareProtocol    = 43
+	ExtensionBitAzureusMessagingProtocol = 63 // https://www.bittorrent.org/beps/bep_0004.html
+
 )
 
 func handshakeWriter(w io.Writer, bb <-chan []byte, done chan<- error) {
@@ -33,8 +46,36 @@ type (
 	PeerExtensionBits [8]byte
 )
 
+var bitTags = []struct {
+	bit ExtensionBit
+	tag string
+}{
+	// Ordered by their bit position left to right.
+	{ExtensionBitAzureusMessagingProtocol, "amp"},
+	{ExtensionBitLocationAwareProtocol, "loc"},
+	{ExtensionBitLtep, "ltep"},
+	{ExtensionBitAzureusExtensionNegotiation2, "azen2"},
+	{ExtensionBitAzureusExtensionNegotiation1, "azen1"},
+	{ExtensionBitV2, "v2"},
+	{ExtensionBitFast, "fast"},
+	{ExtensionBitDht, "dht"},
+}
+
 func (pex PeerExtensionBits) String() string {
-	return hex.EncodeToString(pex[:])
+	pexHex := hex.EncodeToString(pex[:])
+	tags := make([]string, 0, len(bitTags)+1)
+	for _, bitTag := range bitTags {
+		if pex.GetBit(bitTag.bit) {
+			tags = append(tags, bitTag.tag)
+			pex.SetBit(bitTag.bit, false)
+		}
+	}
+	unknownCount := bits.OnesCount64(*(*uint64)((unsafe.Pointer(&pex[0]))))
+	if unknownCount != 0 {
+		tags = append(tags, fmt.Sprintf("%v unknown", unknownCount))
+	}
+	return fmt.Sprintf("%v (%s)", pexHex, strings.Join(tags, ", "))
+
 }
 
 func NewPeerExtensionBytes(bits ...ExtensionBit) (ret PeerExtensionBits) {
@@ -45,11 +86,11 @@ func NewPeerExtensionBytes(bits ...ExtensionBit) (ret PeerExtensionBits) {
 }
 
 func (pex PeerExtensionBits) SupportsExtended() bool {
-	return pex.GetBit(ExtensionBitExtended)
+	return pex.GetBit(ExtensionBitLtep)
 }
 
 func (pex PeerExtensionBits) SupportsDHT() bool {
-	return pex.GetBit(ExtensionBitDHT)
+	return pex.GetBit(ExtensionBitDht)
 }
 
 func (pex PeerExtensionBits) SupportsFast() bool {

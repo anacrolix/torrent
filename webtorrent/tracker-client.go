@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anacrolix/generics"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/gorilla/websocket"
 	"github.com/pion/datachannel"
@@ -287,7 +287,7 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 		return fmt.Errorf("write AnnounceRequest: %w", err)
 	}
 	for _, offer := range offers {
-		generics.MakeMapIfNilAndSet(&tc.outboundOffers, offer.offerId, offer.outboundOfferValue)
+		g.MakeMapIfNilAndSet(&tc.outboundOffers, offer.offerId, offer.outboundOfferValue)
 	}
 	return nil
 }

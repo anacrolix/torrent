@@ -357,12 +357,12 @@ func downloadErr(flags downloadFlags) error {
 		err = ctx.Err()
 	}
 	clientConnStats := client.ConnStats()
-	log.Printf("average download rate: %v",
-		humanize.Bytes(uint64(
-			time.Duration(
-				clientConnStats.BytesReadUsefulData.Int64(),
-			)*time.Second/time.Since(started),
-		)))
+	log.Printf(
+		"average download rate: %v/s",
+		humanize.Bytes(uint64(float64(
+			clientConnStats.BytesReadUsefulData.Int64(),
+		)/time.Since(started).Seconds())),
+	)
 	if flags.Seed {
 		if len(client.Torrents()) == 0 {
 			log.Print("no torrents to seed")

@@ -12,9 +12,9 @@ require (
 	github.com/anacrolix/dht/v2 v2.19.2-0.20221121215055-066ad8494444
 	github.com/anacrolix/envpprof v1.2.1
 	github.com/anacrolix/fuse v0.2.0
-	github.com/anacrolix/generics v0.0.0-20220618083756-f99e35403a60
+	github.com/anacrolix/generics v0.0.0-20230428105757-683593396d68
 	github.com/anacrolix/go-libutp v1.2.0
-	github.com/anacrolix/log v0.13.2-0.20221123232138-02e2764801c3
+	github.com/anacrolix/log v0.14.0
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.7.0
@@ -49,6 +49,8 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.8.0
 	go.opentelemetry.io/otel/sdk v1.8.0
 	go.opentelemetry.io/otel/trace v1.8.0
+	golang.org/x/exp v0.0.0-20220613132600-b0d781184e0d
+	golang.org/x/sys v0.5.0
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
 )
 
@@ -98,10 +100,8 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.8.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.18.0 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
-	golang.org/x/exp v0.0.0-20220613132600-b0d781184e0d // indirect
 	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
-	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
 	google.golang.org/genproto v0.0.0-20211118181313-81c1377c94b1 // indirect

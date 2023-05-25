@@ -13,8 +13,8 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/lispad/go-generics-tools/binheap"
 
-	"github.com/anacrolix/torrent/request-strategy"
-	"github.com/anacrolix/torrent/typed-roaring"
+	requestStrategy "github.com/anacrolix/torrent/request-strategy"
+	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
 type (
@@ -23,8 +23,8 @@ type (
 	maxRequests = int
 )
 
-func (t *Torrent) requestStrategyPieceOrderState(i int) request_strategy.PieceRequestOrderState {
-	return request_strategy.PieceRequestOrderState{
+func (t *Torrent) requestStrategyPieceOrderState(i int) requestStrategy.PieceRequestOrderState {
+	return requestStrategy.PieceRequestOrderState{
 		Priority:     t.piece(i).purePriority(),
 		Partial:      t.piecePartiallyDownloaded(i),
 		Availability: t.piece(i).availability(),
@@ -70,14 +70,14 @@ func (p *peerId) GobDecode(b []byte) error {
 }
 
 type (
-	RequestIndex   = request_strategy.RequestIndex
-	chunkIndexType = request_strategy.ChunkIndex
+	RequestIndex   = requestStrategy.RequestIndex
+	chunkIndexType = requestStrategy.ChunkIndex
 )
 
 type desiredPeerRequests struct {
 	requestIndexes []RequestIndex
 	peer           *Peer
-	pieceStates    []request_strategy.PieceRequestOrderState
+	pieceStates    []requestStrategy.PieceRequestOrderState
 }
 
 func (p *desiredPeerRequests) Len() int {
@@ -204,10 +204,10 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	}
 	// Caller-provided allocation for roaring bitmap iteration.
 	var it typedRoaring.Iterator[RequestIndex]
-	request_strategy.GetRequestablePieces(
+	requestStrategy.GetRequestablePieces(
 		input,
 		t.getPieceRequestOrder(),
-		func(ih InfoHash, pieceIndex int, pieceExtra request_strategy.PieceRequestOrderState) {
+		func(ih InfoHash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) {
 			if ih != t.infoHash {
 				return
 			}
@@ -216,7 +216,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 			}
 			requestHeap.pieceStates[pieceIndex] = pieceExtra
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
-			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r request_strategy.RequestIndex) {
+			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
 				if !allowedFast {
 					// We must signal interest to request this. TODO: We could set interested if the
 					// peers pieces (minus the allowed fast set) overlap with our missing pieces if
@@ -272,7 +272,7 @@ func (p *Peer) maybeUpdateActualRequestState() {
 func (p *Peer) applyRequestState(next desiredRequestState) {
 	current := &p.requestState
 	if !p.setInterested(next.Interested) {
-		panic("insufficient write buffer")
+		return
 	}
 	more := true
 	requestHeap := binheap.FromSlice(next.Requests.requestIndexes, next.Requests.lessByValue)

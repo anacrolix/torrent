@@ -1,10 +1,10 @@
-package request_strategy
+package requestStrategy
 
 import (
 	"bytes"
 	"expvar"
 
-	"github.com/anacrolix/generics"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/multiless"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -55,7 +55,7 @@ func GetRequestablePieces(
 		storageLeft = &cap
 	}
 	var allTorrentsUnverifiedBytes int64
-	var lastItem generics.Option[pieceRequestOrderItem]
+	var lastItem g.Option[pieceRequestOrderItem]
 	pro.tree.Scan(func(_i pieceRequestOrderItem) bool {
 		// Check that scan emits pieces in priority order.
 		if lastItem.Ok {

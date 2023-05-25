@@ -4,11 +4,12 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/tracker/udp"
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/tracker/udp"
 )
 
 func TestUnmarshalHTTPResponsePeerDicts(t *testing.T) {

@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/anacrolix/log"
-
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

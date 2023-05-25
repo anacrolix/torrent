@@ -7,10 +7,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/anacrolix/torrent/internal/testutil"
-	"github.com/anacrolix/torrent/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/storage"
 )
 
 func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {

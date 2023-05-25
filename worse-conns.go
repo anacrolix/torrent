@@ -11,6 +11,7 @@ import (
 )
 
 type worseConnInput struct {
+	BadDirection        bool
 	Useful              bool
 	LastHelpful         time.Time
 	CompletedHandshake  time.Time
@@ -29,7 +30,11 @@ func (me *worseConnInput) doGetPeerPriorityOnce() {
 	me.getPeerPriorityOnce.Do(me.doGetPeerPriority)
 }
 
-func worseConnInputFromPeer(p *Peer) worseConnInput {
+type worseConnLensOpts struct {
+	incomingIsBad, outgoingIsBad bool
+}
+
+func worseConnInputFromPeer(p *PeerConn, opts worseConnLensOpts) worseConnInput {
 	ret := worseConnInput{
 		Useful:             p.useful(),
 		LastHelpful:        p.lastHelpful(),
@@ -37,18 +42,17 @@ func worseConnInputFromPeer(p *Peer) worseConnInput {
 		Pointer:            uintptr(unsafe.Pointer(p)),
 		GetPeerPriority:    p.peerPriority,
 	}
+	if opts.incomingIsBad && !p.outgoing {
+		ret.BadDirection = true
+	} else if opts.outgoingIsBad && p.outgoing {
+		ret.BadDirection = true
+	}
 	return ret
-}
-
-func worseConn(_l, _r *Peer) bool {
-	// TODO: Use generics for ptr to
-	l := worseConnInputFromPeer(_l)
-	r := worseConnInputFromPeer(_r)
-	return l.Less(&r)
 }
 
 func (l *worseConnInput) Less(r *worseConnInput) bool {
 	less, ok := multiless.New().Bool(
+		r.BadDirection, l.BadDirection).Bool(
 		l.Useful, r.Useful).CmpInt64(
 		l.LastHelpful.Sub(r.LastHelpful).Nanoseconds()).CmpInt64(
 		l.CompletedHandshake.Sub(r.CompletedHandshake).Nanoseconds()).LazySameLess(
@@ -80,10 +84,10 @@ type worseConnSlice struct {
 	keys  []worseConnInput
 }
 
-func (me *worseConnSlice) initKeys() {
+func (me *worseConnSlice) initKeys(opts worseConnLensOpts) {
 	me.keys = make([]worseConnInput, len(me.conns))
 	for i, c := range me.conns {
-		me.keys[i] = worseConnInputFromPeer(&c.Peer)
+		me.keys[i] = worseConnInputFromPeer(c, opts)
 	}
 }
 

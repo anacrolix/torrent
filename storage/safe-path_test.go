@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/anacrolix/torrent/metainfo"
 	qt "github.com/frankban/quicktest"
+
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 func init() {

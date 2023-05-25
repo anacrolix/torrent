@@ -9,15 +9,16 @@ import (
 	"testing/iotest"
 	"time"
 
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/filecache"
+	qt "github.com/frankban/quicktest"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
+
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/storage"
-	"github.com/frankban/quicktest"
-	"golang.org/x/time/rate"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type fileCacheClientStorageFactoryParams struct {
@@ -132,7 +133,7 @@ func TestFilecacheClientTransferVarious(t *testing.T) {
 
 // Check that after completing leeching, a leecher transitions to a seeding
 // correctly. Connected in a chain like so: Seeder <-> Leecher <-> LeecherLeecher.
-func TestSeedAfterDownloading(t *testing.T) {
+func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
 
@@ -140,6 +141,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 	cfg.Seed = true
 	cfg.MaxAllocPeerRequestDataPerConn = 4
 	cfg.DataDir = greetingTempDir
+	cfg.DisableUTP = disableUtp
 	seeder, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer seeder.Close()
@@ -152,15 +154,21 @@ func TestSeedAfterDownloading(t *testing.T) {
 	cfg = torrent.TestingConfig(t)
 	cfg.Seed = true
 	cfg.DataDir = t.TempDir()
+	cfg.DisableUTP = disableUtp
+	//cfg.Debug = true
+	cfg.Logger = log.Default.WithContextText("leecher")
 	leecher, err := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer leecher.Close()
 	defer testutil.ExportStatusWriter(leecher, "l", t)()
 
 	cfg = torrent.TestingConfig(t)
+	cfg.DisableUTP = disableUtp
 	cfg.Seed = false
 	cfg.DataDir = t.TempDir()
 	cfg.MaxAllocPeerRequestDataPerConn = 4
+	cfg.Logger = log.Default.WithContextText("leecher-leecher")
+	cfg.Debug = true
 	leecherLeecher, _ := torrent.NewClient(cfg)
 	require.NoError(t, err)
 	defer leecherLeecher.Close()
@@ -183,15 +191,17 @@ func TestSeedAfterDownloading(t *testing.T) {
 	// consecutively in LeecherLeecher. This non-deterministically triggered a
 	// case where the leecher wouldn't unchoke the LeecherLeecher.
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	{
+		// Prioritize a region, and ensure it's been hashed, so we want connections.
 		r := llg.NewReader()
-		defer r.Close()
-		quicktest.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), quicktest.IsNil)
-	}()
-	done := make(chan struct{})
-	defer close(done)
+		llg.VerifyData()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer r.Close()
+			qt.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), qt.IsNil)
+		}()
+	}
 	go leecherGreeting.AddClientPeer(seeder)
 	go leecherGreeting.AddClientPeer(leecherLeecher)
 	wg.Add(1)
@@ -201,4 +211,12 @@ func TestSeedAfterDownloading(t *testing.T) {
 		leecher.WaitAll()
 	}()
 	wg.Wait()
+}
+
+func TestSeedAfterDownloadingDisableUtp(t *testing.T) {
+	testSeedAfterDownloading(t, true)
+}
+
+func TestSeedAfterDownloadingAllowUtp(t *testing.T) {
+	testSeedAfterDownloading(t, false)
 }

@@ -1,4 +1,4 @@
-package request_strategy
+package requestStrategy
 
 type Torrent interface {
 	IgnorePiece(int) bool

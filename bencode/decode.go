@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
-	"unsafe"
 )
 
 // The default bencode string length limit. This is a poor attempt to prevent excessive memory
@@ -256,7 +255,7 @@ func (d *Decoder) parseString(v reflect.Value) error {
 		d.buf.Grow(length)
 		b := d.buf.Bytes()[:length]
 		read(b)
-		x, err := strconv.ParseBool(unsafe.String(unsafe.SliceData(b), len(b)))
+		x, err := strconv.ParseBool(bytesAsString(b))
 		if err != nil {
 			x = length != 0
 		}

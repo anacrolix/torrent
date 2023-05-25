@@ -4,13 +4,12 @@ import (
 	"context"
 	"net"
 	"strconv"
+	"syscall"
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/pkg/errors"
-
-	"github.com/anacrolix/torrent/dialer"
 )
 
 type Listener interface {
@@ -38,13 +37,53 @@ func listen(n network, addr string, f firewallCallback, logger log.Logger) (sock
 	}
 }
 
+var tcpListenConfig = net.ListenConfig{
+	Control: func(network, address string, c syscall.RawConn) (err error) {
+		controlErr := c.Control(func(fd uintptr) {
+			err = setReusePortSockOpts(fd)
+		})
+		if err != nil {
+			return
+		}
+		err = controlErr
+		return
+	},
+	// BitTorrent connections manage their own keep-alives.
+	KeepAlive: -1,
+}
+
 func listenTcp(network, address string) (s socket, err error) {
-	l, err := net.Listen(network, address)
+	l, err := tcpListenConfig.Listen(context.Background(), network, address)
 	return tcpSocket{
 		Listener: l,
 		NetworkDialer: NetworkDialer{
 			Network: network,
-			Dialer:  dialer.Default,
+			Dialer: &net.Dialer{
+				// Dialling TCP from a local port limits us to a single outgoing TCP connection to
+				// each remote client. Instead this should be a last resort if we need to use holepunching, and only then to connect to other clients that actually try to holepunch TCP.
+				//LocalAddr: l.Addr(),
+
+				// We don't want fallback, as we explicitly manage the IPv4/IPv6 distinction
+				// ourselves, although it's probably not triggered as I think the network is already
+				// constrained to tcp4 or tcp6 at this point.
+				FallbackDelay: -1,
+				// BitTorrent connections manage their own keep-alives.
+				KeepAlive: tcpListenConfig.KeepAlive,
+				Control: func(network, address string, c syscall.RawConn) (err error) {
+					controlErr := c.Control(func(fd uintptr) {
+						err = setSockNoLinger(fd)
+						if err != nil {
+							// Failing to disable linger is undesirable, but not fatal.
+							log.Printf("error setting linger socket option on tcp socket: %v", err)
+						}
+						err = setReusePortSockOpts(fd)
+					})
+					if err == nil {
+						err = controlErr
+					}
+					return
+				},
+			},
 		},
 	}, err
 }

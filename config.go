@@ -184,6 +184,8 @@ type ClientConfig struct {
 	// ICEServers defines a slice describing servers available to be used by
 	// ICE, such as STUN and TURN servers.
 	ICEServers []string
+
+	DialRateLimiter *rate.Limiter
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
@@ -227,6 +229,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		Extensions:            defaultPeerExtensionBytes(),
 		AcceptPeerConnections: true,
 		MaxUnverifiedBytes:    64 << 20,
+		DialRateLimiter:       rate.NewLimiter(10, 10),
 	}
 	cc.DhtStartingNodes = func(network string) dht.StartingNodesGetter {
 		return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }

@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
@@ -21,7 +20,7 @@ import (
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
-	"github.com/anacrolix/torrent/typed-roaring"
+	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
 type (
@@ -86,7 +85,6 @@ type (
 		peerChoking           bool
 		peerRequests          map[Request]*peerRequestState
 		PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
-		PeerListenPort        int
 		// The highest possible number of pieces the torrent could have based on
 		// communication with the peer. Generally only useful until we have the
 		// torrent info.
@@ -95,9 +93,7 @@ type (
 		peerTouchedPieces map[pieceIndex]struct{}
 		peerAllowedFast   typedRoaring.Bitmap[pieceIndex]
 
-		PeerMaxRequests  maxRequests // Maximum pending requests the peer allows.
-		PeerExtensionIDs map[pp.ExtensionName]pp.ExtensionNumber
-		PeerClientName   atomic.Value
+		PeerMaxRequests maxRequests // Maximum pending requests the peer allows.
 
 		logger log.Logger
 	}
@@ -117,6 +113,7 @@ type (
 )
 
 const (
+	PeerSourceUtHolepunch     = "C"
 	PeerSourceTracker         = "Tr"
 	PeerSourceIncoming        = "I"
 	PeerSourceDhtGetPeers     = "Hg" // Peers we found by searching a DHT.
@@ -188,7 +185,7 @@ func (cn *Peer) locker() *lockWithDeferreds {
 	return cn.t.cl.locker()
 }
 
-func (cn *Peer) supportsExtension(ext pp.ExtensionName) bool {
+func (cn *PeerConn) supportsExtension(ext pp.ExtensionName) bool {
 	_, ok := cn.PeerExtensionIDs[ext]
 	return ok
 }
@@ -275,7 +272,7 @@ func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int))
 	next(None[pieceIndex]())
 }
 
-func (cn *Peer) writeStatus(w io.Writer, t *Torrent) {
+func (cn *Peer) writeStatus(w io.Writer) {
 	// \t isn't preserved in <pre> blocks?
 	if cn.closed.IsSet() {
 		fmt.Fprint(w, "CLOSED: ")
@@ -323,6 +320,9 @@ func (p *Peer) close() {
 	}
 	if p.updateRequestsTimer != nil {
 		p.updateRequestsTimer.Stop()
+	}
+	for _, prs := range p.peerRequests {
+		prs.allocReservation.Drop()
 	}
 	p.peerImpl.onClose()
 	if p.t != nil {
@@ -510,16 +510,12 @@ func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 	}
 }
 
-func (cn *Peer) peerPiecesChanged() {
-	cn.t.maybeDropMutuallyCompletePeer(cn)
-}
-
 // After handshake, we know what Torrent and Client stats to include for a
 // connection.
 func (cn *Peer) postHandshakeStats(f func(*ConnStats)) {
 	t := cn.t
 	f(&t.stats)
-	f(&t.cl.stats)
+	f(&t.cl.connStats)
 }
 
 // All ConnStats that include this connection. Some objects are not known
@@ -534,25 +530,6 @@ func (cn *Peer) allStats(f func(*ConnStats)) {
 
 func (cn *Peer) readBytes(n int64) {
 	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
-}
-
-// Returns whether the connection could be useful to us. We're seeding and
-// they want data, we don't have metainfo and they can provide it, etc.
-func (c *Peer) useful() bool {
-	t := c.t
-	if c.closed.IsSet() {
-		return false
-	}
-	if !t.haveInfo() {
-		return c.supportsExtension("ut_metadata")
-	}
-	if t.seeding() && c.peerInterested {
-		return true
-	}
-	if c.peerHasWantedPieces() {
-		return true
-	}
-	return false
 }
 
 func (c *Peer) lastHelpful() (ret time.Time) {

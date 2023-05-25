@@ -9,14 +9,13 @@ import (
 	"testing/iotest"
 
 	"github.com/anacrolix/log"
-	pp "github.com/anacrolix/torrent/peer_protocol"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
 )
 

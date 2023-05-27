@@ -235,8 +235,8 @@ func (t *Torrent) Files() []*File {
 
 func (t *Torrent) AddPeers(pp []PeerInfo) (n int) {
 	t.cl.lock()
+	defer t.cl.unlock()
 	n = t.addPeers(pp)
-	t.cl.unlock()
 	return
 }
 

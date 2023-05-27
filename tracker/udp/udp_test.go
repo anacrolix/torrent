@@ -57,8 +57,10 @@ func TestLongWriteUDP(t *testing.T) {
 	for msgLen := 1; ; msgLen *= 2 {
 		n, err := c.Write(make([]byte, msgLen))
 		if err != nil {
-			require.Contains(t, err.Error(), "message too long")
-			return
+			if isErrMessageTooLong(err) {
+				return
+			}
+			t.Fatalf("expected message too long error: %v", err)
 		}
 		if n < msgLen {
 			t.FailNow()

@@ -788,13 +788,16 @@ func TestObfuscatedHeaderFallbackSeederRequiresLeecherPrefersNot(t *testing.T) {
 }
 
 func TestClientAddressInUse(t *testing.T) {
-	s, _ := NewUtpSocket("udp", ":50007", nil, log.Default)
+	s, _ := NewUtpSocket("udp", "localhost:50007", nil, log.Default)
 	if s != nil {
 		defer s.Close()
 	}
-	cfg := TestingConfig(t).SetListenAddr(":50007")
+	cfg := TestingConfig(t).SetListenAddr("localhost:50007")
 	cfg.DisableUTP = false
 	cl, err := NewClient(cfg)
+	if err == nil {
+		assert.Nil(t, cl.Close())
+	}
 	require.Error(t, err)
 	require.Nil(t, cl)
 }

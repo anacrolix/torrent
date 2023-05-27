@@ -215,7 +215,11 @@ func (m mmapWithFile) Unmap() (err error) {
 	if m.mmap != nil {
 		err = m.mmap.Unmap()
 	}
-	return errors.Join(err, m.f.Close())
+	fileErr := m.f.Close()
+	if err == nil {
+		err = fileErr
+	}
+	return
 }
 
 func (m mmapWithFile) Bytes() []byte {

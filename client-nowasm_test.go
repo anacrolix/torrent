@@ -59,7 +59,7 @@ func TestIssue335(t *testing.T) {
 	cfg.DefaultStorage = mmapStorage
 	cl, err := NewClient(cfg)
 	c.Assert(err, qt.IsNil)
-	defer logErr(cl.Close, "closing client")
+	defer cl.Close()
 	tor, new, err := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	c.Assert(err, qt.IsNil)
 	c.Assert(new, qt.IsTrue)

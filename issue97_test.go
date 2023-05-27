@@ -12,8 +12,10 @@ import (
 
 func TestHashPieceAfterStorageClosed(t *testing.T) {
 	td := t.TempDir()
+	cs := storage.NewFile(td)
+	defer cs.Close()
 	tt := &Torrent{
-		storageOpener: storage.NewClient(storage.NewFile(td)),
+		storageOpener: storage.NewClient(cs),
 		logger:        log.Default,
 		chunkSize:     defaultChunkSize,
 	}

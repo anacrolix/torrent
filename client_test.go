@@ -592,6 +592,7 @@ func TestPieceCompletedInStorageButNotClient(t *testing.T) {
 	cfg.DataDir = greetingTempDir
 	seeder, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
+	defer seeder.Close()
 	seeder.AddTorrentSpec(&TorrentSpec{
 		InfoBytes: greetingMetainfo.InfoBytes,
 	})

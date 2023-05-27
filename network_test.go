@@ -71,5 +71,11 @@ func TestListenLocalhostNetwork(t *testing.T) {
 	testListenerNetwork(t, listenUtpListener, "udp", "udp6", "[::]:0", false)
 	testListenerNetwork(t, listenUtpListener, "udp", "udp4", "localhost:0", true)
 
-	testAcceptedConnAddr(t, "tcp", false, dialClosure(net.Dial, "tcp"), listenClosure(net.Listen, "tcp6", ":0"))
+	testAcceptedConnAddr(
+		t,
+		"tcp",
+		false,
+		dialClosure(net.Dial, "tcp"),
+		listenClosure(net.Listen, "tcp6", "localhost:0"),
+	)
 }

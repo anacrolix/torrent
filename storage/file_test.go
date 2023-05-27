@@ -17,6 +17,7 @@ import (
 func TestShortFile(t *testing.T) {
 	td := t.TempDir()
 	s := NewFile(td)
+	defer s.Close()
 	info := &metainfo.Info{
 		Name:        "a",
 		Length:      2,

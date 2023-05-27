@@ -10,7 +10,9 @@ import (
 
 func testMarkedCompleteMissingOnRead(t *testing.T, csf func(string) ClientImplCloser) {
 	td := t.TempDir()
-	cs := NewClient(csf(td))
+	cic := csf(td)
+	defer cic.Close()
+	cs := NewClient(cic)
 	info := &metainfo.Info{
 		PieceLength: 1,
 		Files:       []metainfo.FileInfo{{Path: []string{"a"}, Length: 1}},

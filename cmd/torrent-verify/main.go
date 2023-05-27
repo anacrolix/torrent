@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/anacrolix/torrent/storage"
+
 	"github.com/anacrolix/tagflag"
 	"github.com/edsrzf/mmap-go"
 
@@ -16,12 +18,16 @@ import (
 	"github.com/anacrolix/torrent/mmap_span"
 )
 
-func mmapFile(name string) (mm mmap.MMap, err error) {
+func mmapFile(name string) (mm storage.FileMapping, err error) {
 	f, err := os.Open(name)
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() {
+		if err != nil {
+			f.Close()
+		}
+	}()
 	fi, err := f.Stat()
 	if err != nil {
 		return
@@ -29,7 +35,11 @@ func mmapFile(name string) (mm mmap.MMap, err error) {
 	if fi.Size() == 0 {
 		return
 	}
-	return mmap.MapRegion(f, -1, mmap.RDONLY, mmap.COPY, 0)
+	reg, err := mmap.MapRegion(f, -1, mmap.RDONLY, mmap.COPY, 0)
+	if err != nil {
+		return
+	}
+	return storage.WrapFileMapping(reg, f), nil
 }
 
 func verifyTorrent(info *metainfo.Info, root string) error {
@@ -40,7 +50,7 @@ func verifyTorrent(info *metainfo.Info, root string) error {
 		if err != nil {
 			return err
 		}
-		if int64(len(mm)) != file.Length {
+		if int64(len(mm.Bytes())) != file.Length {
 			return fmt.Errorf("file %q has wrong length", filename)
 		}
 		span.Append(mm)

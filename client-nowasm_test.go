@@ -7,7 +7,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	qt "github.com/frankban/quicktest"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -38,24 +39,34 @@ func TestIssue335(t *testing.T) {
 			t.Fatalf("removing torrent dummy data dir: %v", err)
 		}
 	}()
+	logErr := func(f func() error, msg string) {
+		err := f()
+		t.Logf("%s: %v", msg, err)
+		if err != nil {
+			t.Fail()
+		}
+	}
 	cfg := TestingConfig(t)
 	cfg.Seed = false
 	cfg.Debug = true
 	cfg.DataDir = dir
 	comp, err := storage.NewBoltPieceCompletion(dir)
-	require.NoError(t, err)
-	defer comp.Close()
-	cfg.DefaultStorage = storage.NewMMapWithCompletion(dir, comp)
+	c := qt.New(t)
+	c.Assert(err, qt.IsNil)
+	defer logErr(comp.Close, "closing bolt piece completion")
+	mmapStorage := storage.NewMMapWithCompletion(dir, comp)
+	defer logErr(mmapStorage.Close, "closing mmap storage")
+	cfg.DefaultStorage = mmapStorage
 	cl, err := NewClient(cfg)
-	require.NoError(t, err)
-	defer cl.Close()
+	c.Assert(err, qt.IsNil)
+	defer logErr(cl.Close, "closing client")
 	tor, new, err := cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	require.NoError(t, err)
-	assert.True(t, new)
-	require.True(t, cl.WaitAll())
+	c.Assert(err, qt.IsNil)
+	c.Assert(new, qt.IsTrue)
+	c.Assert(cl.WaitAll(), qt.IsTrue)
 	tor.Drop()
 	_, new, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
-	require.NoError(t, err)
-	assert.True(t, new)
-	require.True(t, cl.WaitAll())
+	c.Assert(err, qt.IsNil)
+	c.Assert(new, qt.IsTrue)
+	c.Assert(cl.WaitAll(), qt.IsTrue)
 }

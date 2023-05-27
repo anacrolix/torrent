@@ -124,21 +124,19 @@ func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, e
 			return
 		}
 		fileName := filepath.Join(location, safeName)
-		var mm mmap.MMap
+		var mm FileMapping
 		mm, err = mmapFile(fileName, miFile.Length)
 		if err != nil {
 			err = fmt.Errorf("file %q: %s", miFile.DisplayPath(md), err)
 			return
 		}
-		if mm != nil {
-			mms.Append(mm)
-		}
+		mms.Append(mm)
 	}
 	mms.InitIndex()
 	return
 }
 
-func mmapFile(name string, size int64) (ret mmap.MMap, err error) {
+func mmapFile(name string, size int64) (_ FileMapping, err error) {
 	dir := filepath.Dir(name)
 	err = os.MkdirAll(dir, 0o750)
 	if err != nil {
@@ -150,7 +148,11 @@ func mmapFile(name string, size int64) (ret mmap.MMap, err error) {
 	if err != nil {
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if err != nil {
+			file.Close()
+		}
+	}()
 	var fi os.FileInfo
 	fi, err = file.Stat()
 	if err != nil {
@@ -164,22 +166,61 @@ func mmapFile(name string, size int64) (ret mmap.MMap, err error) {
 			return
 		}
 	}
-	if size == 0 {
-		// Can't mmap() regions with length 0.
+	return func() (ret mmapWithFile, err error) {
+		ret.f = file
+		if size == 0 {
+			// Can't mmap() regions with length 0.
+			return
+		}
+		intLen := int(size)
+		if int64(intLen) != size {
+			err = errors.New("size too large for system")
+			return
+		}
+		ret.mmap, err = mmap.MapRegion(file, intLen, mmap.RDWR, 0, 0)
+		if err != nil {
+			err = fmt.Errorf("error mapping region: %s", err)
+			return
+		}
+		if int64(len(ret.mmap)) != size {
+			panic(len(ret.mmap))
+		}
 		return
+	}()
+}
+
+// Combines a mmapped region and file into a storage Mmap abstraction, which handles closing the
+// mmap file handle.
+func WrapFileMapping(region mmap.MMap, file *os.File) FileMapping {
+	return mmapWithFile{
+		f:    file,
+		mmap: region,
 	}
-	intLen := int(size)
-	if int64(intLen) != size {
-		err = errors.New("size too large for system")
-		return
+}
+
+type FileMapping = mmap_span.Mmap
+
+// Handles closing the mmap's file handle (needed for Windows). Could be implemented differently by
+// OS.
+type mmapWithFile struct {
+	f    *os.File
+	mmap mmap.MMap
+}
+
+func (m mmapWithFile) Flush() error {
+	return m.mmap.Flush()
+}
+
+func (m mmapWithFile) Unmap() (err error) {
+	if m.mmap != nil {
+		err = m.mmap.Unmap()
 	}
-	ret, err = mmap.MapRegion(file, intLen, mmap.RDWR, 0, 0)
-	if err != nil {
-		err = fmt.Errorf("error mapping region: %s", err)
-		return
+	return errors.Join(err, m.f.Close())
+}
+
+func (m mmapWithFile) Bytes() []byte {
+	if m.mmap == nil {
+		return nil
 	}
-	if int64(len(ret)) != size {
-		panic(len(ret))
-	}
-	return
+	return m.mmap
 }

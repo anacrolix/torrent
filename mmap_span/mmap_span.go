@@ -5,18 +5,22 @@ import (
 	"io"
 	"sync"
 
-	"github.com/edsrzf/mmap-go"
-
 	"github.com/anacrolix/torrent/segments"
 )
 
+type Mmap interface {
+	Flush() error
+	Unmap() error
+	Bytes() []byte
+}
+
 type MMapSpan struct {
 	mu             sync.RWMutex
-	mMaps          []mmap.MMap
+	mMaps          []Mmap
 	segmentLocater segments.Index
 }
 
-func (ms *MMapSpan) Append(mMap mmap.MMap) {
+func (ms *MMapSpan) Append(mMap Mmap) {
 	ms.mMaps = append(ms.mMaps, mMap)
 }
 
@@ -53,7 +57,7 @@ func (me *MMapSpan) InitIndex() {
 		if i == len(me.mMaps) {
 			return -1, false
 		}
-		l := int64(len(me.mMaps[i]))
+		l := int64(len(me.mMaps[i].Bytes()))
 		i++
 		return l, true
 	})
@@ -77,7 +81,7 @@ func copyBytes(dst, src []byte) int {
 
 func (ms *MMapSpan) locateCopy(copyArgs func(remainingArgument, mmapped []byte) (dst, src []byte), p []byte, off int64) (n int) {
 	ms.segmentLocater.Locate(segments.Extent{off, int64(len(p))}, func(i int, e segments.Extent) bool {
-		mMapBytes := ms.mMaps[i][e.Start:]
+		mMapBytes := ms.mMaps[i].Bytes()[e.Start:]
 		// log.Printf("got segment %v: %v, copying %v, %v", i, e, len(p), len(mMapBytes))
 		_n := copyBytes(copyArgs(p, mMapBytes))
 		p = p[_n:]

@@ -6,7 +6,7 @@ require (
 	github.com/anacrolix/envpprof v1.2.1
 	github.com/anacrolix/fuse v0.2.0
 	github.com/anacrolix/log v0.14.0
-	github.com/anacrolix/missinggo/v2 v2.7.0
+	github.com/anacrolix/missinggo/v2 v2.7.1
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/torrent v1.47.1-0.20221102120345-c63f7e1bd720
 	github.com/stretchr/testify v1.8.1

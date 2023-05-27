@@ -16,7 +16,7 @@ require (
 	github.com/anacrolix/log v0.14.0
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0
-	github.com/anacrolix/missinggo/v2 v2.7.1
+	github.com/anacrolix/missinggo/v2 v2.7.2-0.20230527121029-a582b4f397b9
 	github.com/anacrolix/multiless v0.3.0
 	github.com/anacrolix/squirrel v0.4.1-0.20220122230132-14b040773bac
 	github.com/anacrolix/sync v0.4.0

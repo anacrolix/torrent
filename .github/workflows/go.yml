@@ -64,6 +64,7 @@ jobs:
       run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
 
   torrentfs:
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     strategy:
       matrix:

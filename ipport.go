@@ -13,13 +13,14 @@ func addrPortOrZero(addr net.Addr) int {
 	case *net.TCPAddr:
 		return raw.Port
 	default:
+		// Consider a unix socket on Windows with a name like "C:notanint".
 		_, port, err := net.SplitHostPort(addr.String())
 		if err != nil {
 			return 0
 		}
 		i64, err := strconv.ParseUint(port, 0, 16)
 		if err != nil {
-			panic(err)
+			return 0
 		}
 		return int(i64)
 	}

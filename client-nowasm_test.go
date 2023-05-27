@@ -32,7 +32,12 @@ func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
 
 func TestIssue335(t *testing.T) {
 	dir, mi := testutil.GreetingTestTorrent()
-	defer os.RemoveAll(dir)
+	defer func() {
+		err := os.RemoveAll(dir)
+		if err != nil {
+			t.Fatalf("removing torrent dummy data dir: %v", err)
+		}
+	}()
 	cfg := TestingConfig(t)
 	cfg.Seed = false
 	cfg.Debug = true

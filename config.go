@@ -181,6 +181,10 @@ type ClientConfig struct {
 
 	Callbacks Callbacks
 
+	// ICEServers defines a slice describing servers available to be used by
+	// ICE, such as STUN and TURN servers.
+	ICEServers []string
+
 	DialRateLimiter *rate.Limiter
 }
 

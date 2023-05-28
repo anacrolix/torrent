@@ -21,6 +21,9 @@ func TestingConfig(t testing.TB) *ClientConfig {
 	cfg.KeepAliveTimeout = time.Millisecond
 	cfg.MinPeerExtensions.SetBit(pp.ExtensionBitFast, true)
 	cfg.Logger = log.Default.WithContextText(t.Name())
+	// 2 would suffice for the greeting test, but 5 is needed for a few other tests. This should be
+	// something slightly higher than the usual chunk size, so it gets tickled in some tests.
+	cfg.MaxAllocPeerRequestDataPerConn = 5
 	//cfg.Debug = true
 	//cfg.Logger = cfg.Logger.WithText(func(m log.Msg) string {
 	//	t := m.Text()

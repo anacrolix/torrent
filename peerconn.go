@@ -589,7 +589,16 @@ func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
 }
 
 func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
-	b, err := c.readPeerRequestData(r, prs)
+	// Should we depend on Torrent closure here? I think it's okay to get cancelled from elsewhere,
+	// or fail to read and then cleanup. Also, we used to hang here if the reservation was never
+	// dropped, that was fixed.
+	ctx := context.Background()
+	err := prs.allocReservation.Wait(ctx)
+	if err != nil {
+		c.logger.WithDefaultLevel(log.Debug).Levelf(log.ErrorLevel(err), "waiting for alloc limit reservation: %v", err)
+		return
+	}
+	b, err := c.readPeerRequestData(r)
 	c.locker().Lock()
 	defer c.locker().Unlock()
 	if err != nil {
@@ -615,7 +624,7 @@ func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
 		// https://github.com/anacrolix/torrent/issues/702#issuecomment-1000953313.
 		logLevel = log.Debug
 	}
-	c.logger.WithDefaultLevel(logLevel).Printf("error reading chunk for peer Request %v: %v", r, err)
+	c.logger.Levelf(logLevel, "error reading chunk for peer Request %v: %v", r, err)
 	if c.t.closed.IsSet() {
 		return
 	}
@@ -646,20 +655,7 @@ func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
 	}
 }
 
-func (c *PeerConn) readPeerRequestData(r Request, prs *peerRequestState) ([]byte, error) {
-	// Should we depend on Torrent closure here? I think it's okay to get cancelled from elsewhere,
-	// or fail to read and then cleanup.
-	ctx := context.Background()
-	err := prs.allocReservation.Wait(ctx)
-	if err != nil {
-		if ctx.Err() == nil {
-			// The error is from the reservation itself. Something is very broken, or we're not
-			// guarding against excessively large requests.
-			err = log.WithLevel(log.Critical, err)
-		}
-		err = fmt.Errorf("waiting for alloc limit reservation: %w", err)
-		return nil, err
-	}
+func (c *PeerConn) readPeerRequestData(r Request) ([]byte, error) {
 	b := make([]byte, r.Length)
 	p := c.t.info.Piece(int(r.Index))
 	n, err := c.t.readAt(b, p.Offset()+int64(r.Begin))

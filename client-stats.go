@@ -2,7 +2,13 @@ package torrent
 
 import (
 	"net/netip"
+
+	g "github.com/anacrolix/generics"
 )
+
+func setAdd[K comparable](m *map[K]struct{}, elem K) {
+	g.MakeMapIfNilAndSet(m, elem, struct{}{})
+}
 
 type clientHolepunchAddrSets struct {
 	undialableWithoutHolepunch                            map[netip.AddrPort]struct{}
@@ -10,6 +16,7 @@ type clientHolepunchAddrSets struct {
 	dialableOnlyAfterHolepunch                            map[netip.AddrPort]struct{}
 	dialedSuccessfullyAfterHolepunchConnect               map[netip.AddrPort]struct{}
 	probablyOnlyConnectedDueToHolepunch                   map[netip.AddrPort]struct{}
+	accepted                                              map[netip.AddrPort]struct{}
 }
 
 type ClientStats struct {

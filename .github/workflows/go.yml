@@ -63,16 +63,18 @@ jobs:
     - name: Some packages compile for WebAssembly
       run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
 
-  torrentfs:
+  torrentfs-linux:
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         go-version: [ '1.20' ]
+        os: [ubuntu-latest]
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
     - uses: ./.github/actions/go-common
+        
     - name: Install godo
       run: |
         # Need master for cross-compiling fix
@@ -85,3 +87,24 @@ jobs:
     - name: torrentfs end-to-end test
       # Test on 386 for atomic alignment and other bad 64-bit assumptions
       run: GOARCH=386 fs/test.sh
+
+  torrentfs-macos:
+    timeout-minutes: 5
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        go-version: [ '1.20' ]
+        os: [macos-latest]
+      fail-fast: false
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ./.github/actions/go-common
+
+    - run: brew install macfuse pv md5sha1sum bash
+        
+    - name: Install godo
+      run: go install -v github.com/anacrolix/godo@master
+
+    - name: torrentfs end-to-end test
+      # Test on 386 for atomic alignment and other bad 64-bit assumptions
+      run: fs/test.sh

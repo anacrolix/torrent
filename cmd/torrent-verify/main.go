@@ -9,13 +9,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/anacrolix/torrent/storage"
-
 	"github.com/anacrolix/tagflag"
 	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mmap_span"
+	"github.com/anacrolix/torrent/storage"
 )
 
 func mmapFile(name string) (mm storage.FileMapping, err error) {

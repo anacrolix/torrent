@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/internal/testutil"

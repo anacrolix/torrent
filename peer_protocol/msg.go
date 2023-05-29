@@ -66,7 +66,7 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 		}
 		switch msg.Type {
 		case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
-		case Have:
+		case Have, AllowedFast, Suggest:
 			err = binary.Write(&buf, binary.BigEndian, msg.Index)
 		case Request, Cancel, Reject:
 			for _, i := range []Integer{msg.Index, msg.Begin, msg.Length} {

@@ -17,7 +17,9 @@ func FuzzDecoder(f *testing.F) {
 	f.Add([]byte("\x00\x00\x00\x00"))
 	f.Add([]byte("\x00\x00\x00\x01\x00"))
 	f.Add([]byte("\x00\x00\x00\x03\x14\x00"))
+	f.Add([]byte("\x00\x00\x00\x01\x07"))
 	f.Fuzz(func(t *testing.T, b []byte) {
+		t.Logf("%q", b)
 		c := qt.New(t)
 		d := Decoder{
 			R:         bufio.NewReader(bytes.NewReader(b)),
@@ -43,7 +45,11 @@ func FuzzDecoder(f *testing.F) {
 		for _, m := range ms {
 			buf.Write(m.MustMarshalBinary())
 		}
-		c.Assert(buf.Bytes(), qt.DeepEquals, b)
+		if len(b) == 0 {
+			c.Assert(buf.Bytes(), qt.HasLen, 0)
+		} else {
+			c.Assert(buf.Bytes(), qt.DeepEquals, b)
+		}
 	})
 }
 

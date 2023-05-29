@@ -155,6 +155,11 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 	cfg.Seed = true
 	cfg.DataDir = t.TempDir()
 	cfg.DisableUTP = disableUtp
+	// Make sure the leecher-leecher doesn't connect directly to the seeder. This is because I
+	// wanted to see if having the higher chunk-sized leecher-leecher would cause the leecher to
+	// error decoding. However it shouldn't because a client should only be receiving pieces sized
+	// to the chunk size it expects.
+	cfg.DisablePEX = true
 	//cfg.Debug = true
 	cfg.Logger = log.Default.WithContextText("leecher")
 	leecher, err := torrent.NewClient(cfg)

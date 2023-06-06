@@ -1718,10 +1718,9 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	}
 	u, err := url.Parse(_url)
 	if err != nil {
-		// URLs with a leading '*' appear to be a uTorrent convention to
-		// disable trackers.
+		// URLs with a leading '*' appear to be a uTorrent convention to disable trackers.
 		if _url[0] != '*' {
-			log.Str("error parsing tracker url").AddValues("url", _url).Log(t.logger)
+			t.logger.Levelf(log.Warning, "error parsing tracker url: %v", err)
 		}
 		return
 	}

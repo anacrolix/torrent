@@ -51,6 +51,7 @@ type PieceImpl interface {
 type Completion struct {
 	Complete bool
 	Ok       bool
+	Err      error
 }
 
 // Allows a storage backend to override hashing (i.e. if it can do it more efficiently than the torrent client can)

@@ -79,8 +79,6 @@ func (p piece) Completion() (ret storage.Completion) {
 		ret.Complete = stmt.ColumnInt(0) != 0
 	})
 	ret.Ok = err == nil
-	if err != nil {
-		panic(err)
-	}
+	ret.Err = err
 	return
 }

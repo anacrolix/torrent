@@ -13,12 +13,13 @@ import (
 	sqliteStorage "github.com/anacrolix/torrent/storage/sqlite"
 )
 
-func TestUseSourcesSqliteStorageClosed(t *testing.T) {
+func TestSqliteStorageClosed(t *testing.T) {
 	c := qt.New(t)
 	cfg := torrent.TestingConfig(t)
 	storage, err := sqliteStorage.NewDirectStorage(sqliteStorage.NewDirectStorageOpts{})
 	defer storage.Close()
 	cfg.DefaultStorage = storage
+	cfg.Debug = true
 	c.Assert(err, qt.IsNil)
 	cl, err := torrent.NewClient(cfg)
 	c.Assert(err, qt.IsNil)
@@ -26,8 +27,15 @@ func TestUseSourcesSqliteStorageClosed(t *testing.T) {
 	l, err := net.Listen("tcp", "localhost:0")
 	c.Assert(err, qt.IsNil)
 	defer l.Close()
-	// We need at least once piece to trigger a call to storage to determine completion state.
-	i := metainfo.Info{Pieces: make([]byte, metainfo.HashSize)}
+	// We need at least once piece to trigger a call to storage to determine completion state. We
+	// need non-zero content length to trigger piece hashing.
+	i := metainfo.Info{
+		Pieces:      make([]byte, metainfo.HashSize),
+		PieceLength: 1,
+		Files: []metainfo.FileInfo{
+			{Length: 1},
+		},
+	}
 	mi := metainfo.MetaInfo{}
 	mi.InfoBytes, err = bencode.Marshal(i)
 	c.Assert(err, qt.IsNil)

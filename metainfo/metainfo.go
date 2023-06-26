@@ -10,10 +10,10 @@ import (
 )
 
 type MetaInfo struct {
-	InfoBytes    bencode.Bytes `bencode:"info,omitempty"`          // BEP 3
-	Announce     string        `bencode:"announce,omitempty"`      // BEP 3
-	AnnounceList AnnounceList  `bencode:"announce-list,omitempty"` // BEP 12
-	Nodes        []Node        `bencode:"nodes,omitempty"`         // BEP 5
+	InfoBytes    bencode.Bytes `bencode:"info,omitempty"`                              // BEP 3
+	Announce     string        `bencode:"announce,omitempty"`                          // BEP 3
+	AnnounceList AnnounceList  `bencode:"announce-list,omitempty"`                     // BEP 12
+	Nodes        []Node        `bencode:"nodes,omitempty,ignore_unmarshal_type_error"` // BEP 5
 	// Where's this specified? Mentioned at
 	// https://wiki.theory.org/index.php/BitTorrentSpecification: (optional) the creation time of
 	// the torrent, in standard UNIX epoch format (integer, seconds since 1-Jan-1970 00:00:00 UTC)

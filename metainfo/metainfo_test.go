@@ -153,3 +153,11 @@ func TestStringCreationDate(t *testing.T) {
 	var mi MetaInfo
 	assert.NoError(t, bencode.Unmarshal([]byte("d13:creation date23:29.03.2018 22:18:14 UTC4:infodee"), &mi))
 }
+
+// See https://github.com/anacrolix/torrent/issues/843.
+func TestUnmarshalEmptyStringNodes(t *testing.T) {
+	var mi MetaInfo
+	c := qt.New(t)
+	err := bencode.Unmarshal([]byte("d5:nodes0:e"), &mi)
+	c.Assert(err, qt.IsNil)
+}

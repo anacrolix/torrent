@@ -1,3 +1,9 @@
+// This infernal language makes me copy conditional compilation expressions around. This test should
+// run if sqlite storage is enabled, period.
+
+//go:build cgo
+// +build cgo
+
 package test
 
 import (

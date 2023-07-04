@@ -42,7 +42,8 @@ func (cc *ConnClient) reader() {
 			// read error.
 			cc.readErr = err
 			if !cc.closed {
-				panic(err)
+				// don't panic, just close the connection, fix https://github.com/anacrolix/torrent/issues/845
+				cc.Close()
 			}
 			break
 		}

@@ -7,9 +7,9 @@ require (
 	github.com/RoaringBitmap/roaring v1.2.3
 	github.com/ajwerner/btree v0.0.0-20211221152037-f427b3e689c0
 	github.com/alexflint/go-arg v1.4.3
-	github.com/anacrolix/bargle v0.0.0-20220630015206-d7a4d433886a
+	github.com/anacrolix/bargle v0.0.0-20221014000746-4f2739072e9d
 	github.com/anacrolix/chansync v0.3.0
-	github.com/anacrolix/dht/v2 v2.19.2-0.20221121215055-066ad8494444
+	github.com/anacrolix/dht/v2 v2.20.0
 	github.com/anacrolix/envpprof v1.2.1
 	github.com/anacrolix/generics v0.0.0-20230428105757-683593396d68
 	github.com/anacrolix/go-libutp v1.2.0
@@ -17,7 +17,7 @@ require (
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.7.2-0.20230527121029-a582b4f397b9
-	github.com/anacrolix/multiless v0.3.0
+	github.com/anacrolix/multiless v0.3.1-0.20221221005021-2d12701f83f7
 	github.com/anacrolix/squirrel v0.4.1
 	github.com/anacrolix/sync v0.4.0
 	github.com/anacrolix/tagflag v1.3.0
@@ -48,7 +48,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.8.0
 	go.opentelemetry.io/otel/sdk v1.8.0
 	go.opentelemetry.io/otel/trace v1.8.0
-	golang.org/x/exp v0.0.0-20220613132600-b0d781184e0d
+	golang.org/x/exp v0.0.0-20221217163422-3c43f8badb15
 	golang.org/x/sys v0.5.0
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
 )
@@ -57,12 +57,12 @@ require (
 	github.com/alecthomas/atomic v0.1.0-alpha2 // indirect
 	github.com/alexflint/go-scalar v1.1.0 // indirect
 	github.com/anacrolix/mmsg v1.0.0 // indirect
-	github.com/anacrolix/stm v0.4.0 // indirect
-	github.com/benbjohnson/immutable v0.3.0 // indirect
+	github.com/anacrolix/stm v0.4.1-0.20221221005312-96d17df0e496 // indirect
+	github.com/benbjohnson/immutable v0.4.1-0.20221220213129-8932b999621d // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.2.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
-	github.com/cespare/xxhash/v2 v2.1.2 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
@@ -103,9 +103,9 @@ require (
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
 	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
-	google.golang.org/genproto v0.0.0-20211118181313-81c1377c94b1 // indirect
-	google.golang.org/grpc v1.46.2 // indirect
-	google.golang.org/protobuf v1.28.0 // indirect
+	google.golang.org/genproto v0.0.0-20230110181048-76db0878b65f // indirect
+	google.golang.org/grpc v1.53.0 // indirect
+	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

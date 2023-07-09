@@ -279,7 +279,7 @@ func peerConnForPreferredNetworkDirection(
 		pc.Network = "udp"
 	}
 	if ipv6 {
-		pc.RemoteAddr = &net.TCPAddr{IP: net.ParseIP(fmt.Sprintf("::420"))}
+		pc.RemoteAddr = &net.TCPAddr{IP: net.ParseIP("::420")}
 	} else {
 		pc.RemoteAddr = &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4)}
 	}

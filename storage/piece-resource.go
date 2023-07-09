@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"path"
 	"sort"
 	"strconv"
@@ -141,7 +140,7 @@ func (s piecePerResourcePiece) MarkComplete() error {
 		if ccr, ok := s.rp.(ConsecutiveChunkReader); ok {
 			return ccr.ReadConsecutiveChunks(s.incompleteDirPath() + "/")
 		}
-		return ioutil.NopCloser(io.NewSectionReader(incompleteChunks, 0, s.mp.Length())), nil
+		return io.NopCloser(io.NewSectionReader(incompleteChunks, 0, s.mp.Length())), nil
 	}()
 	if err != nil {
 		return fmt.Errorf("getting incomplete chunks reader: %w", err)

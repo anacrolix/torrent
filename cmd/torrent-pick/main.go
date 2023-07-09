@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -107,7 +106,7 @@ func main() {
 		return
 	}
 
-	tmpdir, err := ioutil.TempDir("", "torrent-pick-")
+	tmpdir, err := os.MkdirTemp("", "torrent-pick-")
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/url"
 	"sync"
@@ -179,7 +179,7 @@ func TestURLPathOption(t *testing.T) {
 	r = bytes.NewReader(b[:n])
 	udp.Read(r, &h)
 	udp.Read(r, &AnnounceRequest{})
-	all, _ := ioutil.ReadAll(r)
+	all, _ := io.ReadAll(r)
 	if string(all) != "\x02\x09/announce" {
 		t.FailNow()
 	}

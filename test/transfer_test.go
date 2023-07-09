@@ -2,7 +2,6 @@ package test
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"sync"
 	"testing"
@@ -46,7 +45,7 @@ func newFileCacheClientStorageFactory(ps fileCacheClientStorageFactoryParams) St
 				storage.ResourcePiecesOpts{
 					Capacity: sharedCapacity,
 				}),
-			ioutil.NopCloser(nil),
+			io.NopCloser(nil),
 		}
 	}
 }

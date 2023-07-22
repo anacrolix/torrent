@@ -2,7 +2,7 @@ package bencode
 
 import (
 	"bytes"
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,7 +10,7 @@ import (
 )
 
 func loadFile(name string, t *testing.T) []byte {
-	data, err := ioutil.ReadFile(name)
+	data, err := os.ReadFile(name)
 	require.NoError(t, err)
 	return data
 }

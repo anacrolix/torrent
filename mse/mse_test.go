@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/rc4"
 	"io"
-	"io/ioutil"
 	"net"
 	"sync"
 	"testing"
@@ -131,7 +130,7 @@ func (tr *trackReader) Read(b []byte) (n int, err error) {
 
 func TestReceiveRandomData(t *testing.T) {
 	tr := trackReader{rand.Reader, 0}
-	_, _, err := ReceiveHandshake(readWriter{&tr, ioutil.Discard}, nil, DefaultCryptoSelector)
+	_, _, err := ReceiveHandshake(readWriter{&tr, io.Discard}, nil, DefaultCryptoSelector)
 	// No skey matches
 	require.Error(t, err)
 	// Establishing S, and then reading the maximum padding for giving up on

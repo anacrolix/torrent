@@ -35,7 +35,9 @@ type testFileBytesLeft struct {
 
 func (me testFileBytesLeft) Run(t *testing.T) {
 	t.Run(me.name, func(t *testing.T) {
-		assert.EqualValues(t, me.expected, fileBytesLeft(me.usualPieceSize, me.firstPieceIndex, me.endPieceIndex, me.fileOffset, me.fileLength, &me.completedPieces))
+		assert.EqualValues(t, me.expected, fileBytesLeft(me.usualPieceSize, me.firstPieceIndex, me.endPieceIndex, me.fileOffset, me.fileLength, &me.completedPieces, func(pieceIndex int) int64 {
+			return 0
+		}))
 	})
 }
 

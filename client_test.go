@@ -897,7 +897,7 @@ func TestBadPeerIpPort(t *testing.T) {
 
 // https://github.com/anacrolix/torrent/issues/837
 func TestClientConfigSetHandlerNotIgnored(t *testing.T) {
-	cfg := NewDefaultClientConfig()
+	cfg := TestingConfig(t)
 	cfg.Logger.SetHandlers(log.DiscardHandler)
 	c := qt.New(t)
 	cl, err := NewClient(cfg)

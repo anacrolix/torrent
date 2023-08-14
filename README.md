@@ -29,6 +29,7 @@ There are some small [examples](https://godoc.org/github.com/anacrolix/torrent#p
 
 There are several web-frontends, sites, Android clients and supporting services among the known public projects:
 
+ * [cove](https://coveapp.info): Torrent browser with streaming, DHT search, video transcoding and casting.
  * [confluence](https://github.com/anacrolix/confluence): torrent client as a HTTP service <!-- Well of course I know him... He's me -->
  * [exatorrent](https://github.com/varbhat/exatorrent): Elegant self-hostable torrent client <!-- 1.5k stars -->
  * [Simple Torrent](https://github.com/boypt/simple-torrent): self-hosted HTTP remote torrent client <!-- 876 stars -->

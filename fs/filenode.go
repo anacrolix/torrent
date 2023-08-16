@@ -23,6 +23,5 @@ func (fn fileNode) Attr(ctx context.Context, attr *fuse.Attr) error {
 }
 
 func (fn fileNode) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (fusefs.Handle, error) {
-	r := fn.f.NewReader()
-	return fileHandle{fn, r}, nil
+	return fileHandle{fn, fn.f}, nil
 }

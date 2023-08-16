@@ -13,7 +13,7 @@ import (
 
 type fileHandle struct {
 	fn fileNode
-	r  torrent.Reader
+	tf *torrent.File
 }
 
 var _ interface {
@@ -26,7 +26,8 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 	if req.Dir {
 		panic("read on directory")
 	}
-	r := me.r
+	r := me.tf.NewReader()
+	defer r.Close()
 	pos, err := r.Seek(req.Offset, io.SeekStart)
 	if err != nil {
 		panic(err)
@@ -81,5 +82,5 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 }
 
 func (me fileHandle) Release(context.Context, *fuse.ReleaseRequest) error {
-	return me.r.Close()
+	return nil
 }

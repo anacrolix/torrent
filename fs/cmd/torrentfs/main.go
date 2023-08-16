@@ -84,7 +84,7 @@ func mainErr() error {
 		os.Stderr.WriteString("y u no specify mountpoint?\n")
 		os.Exit(2)
 	}
-	conn, err := fuse.Mount(args.MountDir)
+	conn, err := fuse.Mount(args.MountDir, fuse.ReadOnly())
 	if err != nil {
 		return fmt.Errorf("mounting: %w", err)
 	}

@@ -11,7 +11,7 @@ require (
 	github.com/anacrolix/chansync v0.3.0
 	github.com/anacrolix/dht/v2 v2.19.2-0.20221121215055-066ad8494444
 	github.com/anacrolix/envpprof v1.2.1
-	github.com/anacrolix/generics v0.0.0-20230428105757-683593396d68
+	github.com/anacrolix/generics v0.0.0-20230816103846-fe11fdc0e0e3
 	github.com/anacrolix/go-libutp v1.3.1
 	github.com/anacrolix/log v0.14.0
 	github.com/anacrolix/missinggo v1.3.0
@@ -35,7 +35,6 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/gorilla/websocket v1.5.0
 	github.com/jessevdk/go-flags v1.5.0
-	github.com/lispad/go-generics-tools v1.1.0
 	github.com/pion/datachannel v1.5.2
 	github.com/pion/logging v0.2.2
 	github.com/pion/webrtc/v3 v3.1.42

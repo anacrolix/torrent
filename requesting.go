@@ -9,9 +9,9 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
-	"github.com/lispad/go-generics-tools/binheap"
 
 	requestStrategy "github.com/anacrolix/torrent/request-strategy"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
@@ -78,14 +78,6 @@ type desiredPeerRequests struct {
 	requestIndexes []RequestIndex
 	peer           *Peer
 	pieceStates    []requestStrategy.PieceRequestOrderState
-}
-
-func (p *desiredPeerRequests) Len() int {
-	return len(p.requestIndexes)
-}
-
-func (p *desiredPeerRequests) Less(i, j int) bool {
-	return p.lessByValue(p.requestIndexes[i], p.requestIndexes[j])
 }
 
 func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex) bool {
@@ -166,21 +158,6 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 		ml = ml.Int(t.pieceRequestOrder[leftPieceIndex], t.pieceRequestOrder[rightPieceIndex])
 	}
 	return ml.Less()
-}
-
-func (p *desiredPeerRequests) Swap(i, j int) {
-	p.requestIndexes[i], p.requestIndexes[j] = p.requestIndexes[j], p.requestIndexes[i]
-}
-
-func (p *desiredPeerRequests) Push(x interface{}) {
-	p.requestIndexes = append(p.requestIndexes, x.(RequestIndex))
-}
-
-func (p *desiredPeerRequests) Pop() interface{} {
-	last := len(p.requestIndexes) - 1
-	x := p.requestIndexes[last]
-	p.requestIndexes = p.requestIndexes[:last]
-	return x
 }
 
 type desiredRequestState struct {
@@ -275,7 +252,9 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 		return
 	}
 	more := true
-	requestHeap := binheap.FromSlice(next.Requests.requestIndexes, next.Requests.lessByValue)
+	requestHeap := heap.InterfaceForSlice(&next.Requests.requestIndexes, next.Requests.lessByValue)
+	heap.Init(requestHeap)
+
 	t := p.t
 	originalRequestCount := current.Requests.GetCardinality()
 	// We're either here on a timer, or because we ran out of requests. Both are valid reasons to

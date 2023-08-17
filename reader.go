@@ -12,7 +12,7 @@ import (
 )
 
 // Accesses Torrent data via a Client. Reads block until the data is available. Seeks and readahead
-// also drive Client behaviour.
+// also drive Client behaviour. Not safe for concurrent use.
 type Reader interface {
 	io.ReadSeekCloser
 	missinggo.ReadContexter

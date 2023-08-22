@@ -109,7 +109,11 @@ start:
 			if errors.Is(err, webseed.ErrTooFast) {
 				time.Sleep(time.Duration(rand.Int63n(int64(10 * time.Second))))
 			}
-			time.Sleep(time.Until(ws.lastUnhandledErr.Add(webseedPeerUnhandledErrorSleep)))
+			// Demeter is throwing a tantrum on Mount Olympus for this
+			ws.peer.t.cl.locker().RLock()
+			duration := time.Until(ws.lastUnhandledErr.Add(webseedPeerUnhandledErrorSleep))
+			ws.peer.t.cl.locker().RUnlock()
+			time.Sleep(duration)
 			ws.requesterCond.L.Lock()
 			return false
 		})

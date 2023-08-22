@@ -107,6 +107,8 @@ type ClientConfig struct {
 	Debug  bool `help:"enable debugging"`
 	Logger log.Logger
 
+	// Used for torrent sources and webseeding if set.
+	WebTransport http.RoundTripper
 	// Defines proxy for HTTP requests, such as for trackers. It's commonly set from the result of
 	// "net/http".ProxyURL(HTTPProxy).
 	HTTPProxy func(*http.Request) (*url.URL, error)

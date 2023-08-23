@@ -53,6 +53,9 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 			// can demand up to 16MiB at a time, so this gets tricky. For now, I'll restore the old
 			// behaviour from before 2a7352a, which nobody reported problems with.
 			n, readErr = io.ReadFull(r, resp.Data)
+			if readErr == io.ErrUnexpectedEOF {
+				readErr = nil
+		       }
 		} else {
 			n, readErr = r.Read(resp.Data)
 			if readErr == io.EOF {

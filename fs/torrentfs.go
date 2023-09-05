@@ -182,7 +182,7 @@ func (rn rootNode) ReadDirAll(ctx context.Context) (dirents []fuse.Dirent, err e
 }
 
 func (rn rootNode) Attr(ctx context.Context, attr *fuse.Attr) error {
-	attr.Mode = os.ModeDir
+	attr.Mode = os.ModeDir | defaultMode
 	return nil
 }
 

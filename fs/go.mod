@@ -2,8 +2,6 @@ module github.com/anacrolix/torrent/fs
 
 go 1.20
 
-toolchain go1.21.0
-
 require (
 	github.com/anacrolix/envpprof v1.2.1
 	github.com/anacrolix/fuse v0.2.0

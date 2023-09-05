@@ -25,6 +25,8 @@ import (
 	"github.com/anacrolix/torrent/util/dirwatch"
 )
 
+var logger = log.Default.WithNames("main")
+
 var args = struct {
 	MetainfoDir string `help:"torrent files in this location describe the contents of the mounted filesystem"`
 	DownloadDir string `help:"location to save torrent data"`
@@ -71,7 +73,7 @@ func main() {
 	defer envpprof.Stop()
 	err := mainErr()
 	if err != nil {
-		log.Printf("error in main: %v", err)
+		logger.Levelf(log.Error, "error in main: %v", err)
 		os.Exit(1)
 	}
 }
@@ -82,7 +84,7 @@ func mainErr() error {
 		os.Stderr.WriteString("y u no specify mountpoint?\n")
 		os.Exit(2)
 	}
-	conn, err := fuse.Mount(args.MountDir)
+	conn, err := fuse.Mount(args.MountDir, fuse.ReadOnly())
 	if err != nil {
 		return fmt.Errorf("mounting: %w", err)
 	}
@@ -143,9 +145,11 @@ func mainErr() error {
 		}()
 	}
 
+	logger.Levelf(log.Debug, "serving fuse fs")
 	if err := fusefs.Serve(conn, fs); err != nil {
 		return fmt.Errorf("serving fuse fs: %w", err)
 	}
+	logger.Levelf(log.Debug, "fuse fs completed successfully. waiting for conn ready")
 	<-conn.Ready
 	if err := conn.MountError; err != nil {
 		return fmt.Errorf("mount error: %w", err)

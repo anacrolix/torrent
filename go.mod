@@ -3,7 +3,6 @@ module github.com/anacrolix/torrent
 go 1.20
 
 require (
-	crawshaw.io/sqlite v0.3.3-0.20220618202545-d1964889ea3c
 	github.com/RoaringBitmap/roaring v1.2.3
 	github.com/ajwerner/btree v0.0.0-20211221152037-f427b3e689c0
 	github.com/alexflint/go-arg v1.4.3
@@ -18,7 +17,7 @@ require (
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.7.2-0.20230527121029-a582b4f397b9
 	github.com/anacrolix/multiless v0.3.0
-	github.com/anacrolix/squirrel v0.4.1
+	github.com/anacrolix/squirrel v0.4.2-0.20230905083705-0a0b50cc3477
 	github.com/anacrolix/sync v0.4.0
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/upnp v0.1.3-0.20220123035249-922794e51c96
@@ -31,6 +30,7 @@ require (
 	github.com/elliotchance/orderedmap v1.4.0
 	github.com/frankban/quicktest v1.14.4
 	github.com/fsnotify/fsnotify v1.5.4
+	github.com/go-llsqlite/adapter v0.0.0-20230905083127-a7568332b3ac
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.5.9
 	github.com/gorilla/websocket v1.5.0
@@ -48,7 +48,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.8.0
 	go.opentelemetry.io/otel/trace v1.8.0
 	golang.org/x/exp v0.0.0-20220613132600-b0d781184e0d
-	golang.org/x/sys v0.5.0
+	golang.org/x/sys v0.6.0
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
 )
 
@@ -62,6 +62,7 @@ require (
 	github.com/bits-and-blooms/bitset v1.2.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
+	github.com/go-llsqlite/crawshaw v0.0.0-20230904103556-219a9360a2c0 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
@@ -70,6 +71,7 @@ require (
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/mattn/go-isatty v0.0.16 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/pion/dtls/v2 v2.2.4 // indirect
@@ -91,6 +93,7 @@ require (
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.35.0 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
 	github.com/rs/dnscache v0.0.0-20211102005908-e0241e321417 // indirect
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
@@ -106,6 +109,11 @@ require (
 	google.golang.org/grpc v1.46.2 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	modernc.org/libc v1.21.5 // indirect
+	modernc.org/mathutil v1.5.0 // indirect
+	modernc.org/memory v1.4.0 // indirect
+	modernc.org/sqlite v1.20.0 // indirect
+	zombiezen.com/go/sqlite v0.12.0 // indirect
 )
 
 retract (

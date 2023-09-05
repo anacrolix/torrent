@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"crawshaw.io/sqlite"
-	"crawshaw.io/sqlite/sqlitex"
+	"github.com/go-llsqlite/adapter"
+	"github.com/go-llsqlite/adapter/sqlitex"
 
 	"github.com/anacrolix/torrent/metainfo"
 )

@@ -6,7 +6,6 @@ package sqliteStorage
 import (
 	"io"
 
-	"crawshaw.io/sqlite"
 	"github.com/anacrolix/squirrel"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -75,7 +74,7 @@ func (p piece) MarkNotComplete() error {
 }
 
 func (p piece) Completion() (ret storage.Completion) {
-	err := p.sb.GetTag("verified", func(stmt *sqlite.Stmt) {
+	err := p.sb.GetTag("verified", func(stmt squirrel.SqliteStmt) {
 		ret.Complete = stmt.ColumnInt(0) != 0
 	})
 	ret.Ok = err == nil

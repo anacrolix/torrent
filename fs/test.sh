@@ -26,7 +26,9 @@ check_file() {
 }
 
 ( check_file ) &
+check_file_pid=$!
 
+trap "kill $torrentfs_pid $check_file_pid" EXIT
 wait -n
 status=$?
 sudo umount mnt

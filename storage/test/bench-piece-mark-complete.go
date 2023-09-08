@@ -81,6 +81,7 @@ func BenchmarkPieceMarkComplete(
 			oneIter()
 		}
 	}
+	b.StopTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i += 1 {
 		oneIter()

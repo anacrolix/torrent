@@ -823,8 +823,8 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Reject:
 			req := newRequestFromMessage(&msg)
 			if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req)) {
-				c.logger.Printf("received invalid reject [request=%v, peer=%v]", req, c)
-				err = fmt.Errorf("received invalid reject [request=%v]", req)
+				err = fmt.Errorf("received invalid reject for request %v", req)
+				c.logger.Levelf(log.Debug, "%v", err)
 			}
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)

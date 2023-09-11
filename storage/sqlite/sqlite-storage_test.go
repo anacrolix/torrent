@@ -6,14 +6,12 @@ package sqliteStorage
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
-	"testing"
-	"time"
-
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/squirrel"
 	"github.com/dustin/go-humanize"
 	qt "github.com/frankban/quicktest"
+	"path/filepath"
+	"testing"
 
 	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"
@@ -40,7 +38,6 @@ func TestLeecherStorage(t *testing.T) {
 func BenchmarkMarkComplete(b *testing.B) {
 	const pieceSize = test_storage.DefaultPieceSize
 	const noTriggers = false
-	const noCacheBlobs = false
 	var capacity int64 = test_storage.DefaultNumPieces * pieceSize / 2
 	if noTriggers {
 		// Since we won't push out old pieces, we have to mark them incomplete manually.
@@ -54,7 +51,6 @@ func BenchmarkMarkComplete(b *testing.B) {
 		var opts squirrel.NewCacheOpts
 		opts.Capacity = capacity
 		opts.NoTriggers = noTriggers
-		opts.NoCacheBlobs = noCacheBlobs
 		benchOpts := func(b *testing.B) {
 			opts.Path = filepath.Join(b.TempDir(), "storage.db")
 			ci, err := NewDirectStorage(opts)
@@ -70,10 +66,7 @@ func BenchmarkMarkComplete(b *testing.B) {
 				var opts NewDirectStorageOpts
 				opts.Memory = memory
 				opts.Capacity = capacity
-				// opts.GcBlobs = true
-				opts.BlobFlushInterval = time.Second
 				opts.NoTriggers = noTriggers
-				opts.NoCacheBlobs = noCacheBlobs
 				directBench := func(b *testing.B) {
 					opts.Path = filepath.Join(b.TempDir(), "storage.db")
 					ci, err := NewDirectStorage(opts)

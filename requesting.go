@@ -265,7 +265,7 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 			originalRequestCount, p.needRequestUpdate))
 	}
 	for requestHeap.Len() != 0 && maxRequests(current.Requests.GetCardinality()+current.Cancelled.GetCardinality()) < p.nominalMaxRequests() {
-		req := requestHeap.Pop()
+		req := heap.Pop(requestHeap)
 		existing := t.requestingPeer(req)
 		if existing != nil && existing != p {
 			// Don't steal from the poor.

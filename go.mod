@@ -17,7 +17,7 @@ require (
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.7.2-0.20230527121029-a582b4f397b9
 	github.com/anacrolix/multiless v0.3.0
-	github.com/anacrolix/squirrel v0.4.1-0.20230910105314-6458d5a32df3
+	github.com/anacrolix/squirrel v0.4.2-0.20230905083705-0a0b50cc3477
 	github.com/anacrolix/sync v0.4.0
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/upnp v0.1.3-0.20220123035249-922794e51c96

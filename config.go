@@ -2,14 +2,15 @@ package torrent
 
 import (
 	"context"
-	"github.com/anacrolix/dht/v2"
 	"net"
 	"net/http"
 	"net/url"
 	"time"
 
+	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
+	"github.com/anacrolix/missinggo/v2"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/iplist"

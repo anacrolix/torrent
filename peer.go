@@ -20,6 +20,8 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
+
+	. "github.com/anacrolix/generics"
 )
 
 type (

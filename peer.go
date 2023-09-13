@@ -10,6 +10,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
+	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
@@ -20,8 +21,6 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
-
-	. "github.com/anacrolix/generics"
 )
 
 type (

@@ -1,8 +1,6 @@
 module github.com/anacrolix/torrent/fs
 
-go 1.21
-
-toolchain go1.21.0
+go 1.20
 
 require (
 	github.com/anacrolix/envpprof v1.3.0
@@ -38,7 +36,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/edsrzf/mmap-go v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
-	github.com/go-llsqlite/adapter v0.0.0-20230910110622-f955011c1e41 // indirect
+	github.com/go-llsqlite/adapter v0.0.0-20230912124304-94ed0e573c23 // indirect
 	github.com/go-llsqlite/crawshaw v0.0.0-20230910110433-7e901377eb6c // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect

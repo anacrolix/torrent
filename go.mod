@@ -1,8 +1,6 @@
 module github.com/anacrolix/torrent
 
-go 1.21
-
-toolchain go1.21.0
+go 1.20
 
 require (
 	github.com/RoaringBitmap/roaring v1.2.3
@@ -19,7 +17,7 @@ require (
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.7.2-0.20230527121029-a582b4f397b9
 	github.com/anacrolix/multiless v0.3.0
-	github.com/anacrolix/squirrel v0.4.1-0.20230910105314-6458d5a32df3
+	github.com/anacrolix/squirrel v0.4.1-0.20230914124650-d063152cd153
 	github.com/anacrolix/sync v0.4.0
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/upnp v0.1.3-0.20220123035249-922794e51c96
@@ -30,9 +28,9 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.1.0
 	github.com/elliotchance/orderedmap v1.4.0
-	github.com/frankban/quicktest v1.14.4
+	github.com/frankban/quicktest v1.14.6
 	github.com/fsnotify/fsnotify v1.5.4
-	github.com/go-llsqlite/adapter v0.0.0-20230910110622-f955011c1e41
+	github.com/go-llsqlite/adapter v0.0.0-20230912124304-94ed0e573c23
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.5.9
 	github.com/gorilla/websocket v1.5.0

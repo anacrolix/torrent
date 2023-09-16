@@ -22,11 +22,7 @@ func mmapFile(name string) (mm storage.FileMapping, err error) {
 	if err != nil {
 		return
 	}
-	defer func() {
-		if err != nil {
-			f.Close()
-		}
-	}()
+	defer f.Close()
 	fi, err := f.Stat()
 	if err != nil {
 		return

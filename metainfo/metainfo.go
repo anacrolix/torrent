@@ -44,9 +44,8 @@ func LoadFromFile(filename string) (*MetaInfo, error) {
 		return nil, err
 	}
 	defer f.Close()
-	var buf bufio.Reader
-	buf.Reset(f)
-	return Load(&buf)
+	buf := bufio.NewReader(f)
+	return Load(buf)
 }
 
 func (mi MetaInfo) UnmarshalInfo() (info Info, err error) {

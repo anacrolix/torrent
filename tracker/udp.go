@@ -4,13 +4,25 @@ import (
 	"context"
 	"encoding/binary"
 
+	"github.com/anacrolix/generics"
+
 	trHttp "github.com/anacrolix/torrent/tracker/http"
 	"github.com/anacrolix/torrent/tracker/udp"
+	"github.com/anacrolix/torrent/types/infohash"
 )
 
 type udpClient struct {
 	cl         *udp.ConnClient
 	requestUri string
+}
+
+func (c *udpClient) Scrape(ctx context.Context, ihs []infohash.T) (out udp.ScrapeResponse, err error) {
+	return c.cl.Client.Scrape(
+		ctx,
+		generics.SliceMap(ihs, func(from infohash.T) udp.InfoHash {
+			return from
+		}),
+	)
 }
 
 func (c *udpClient) Close() error {

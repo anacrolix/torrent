@@ -9,10 +9,12 @@ import (
 
 	trHttp "github.com/anacrolix/torrent/tracker/http"
 	"github.com/anacrolix/torrent/tracker/udp"
+	"github.com/anacrolix/torrent/types/infohash"
 )
 
 type Client interface {
 	Announce(context.Context, AnnounceRequest, AnnounceOpt) (AnnounceResponse, error)
+	Scrape(ctx context.Context, ihs []infohash.T) (out udp.ScrapeResponse, err error)
 	Close() error
 }
 

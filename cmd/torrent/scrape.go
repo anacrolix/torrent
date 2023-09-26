@@ -3,12 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/url"
 
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/tracker/udp"
+	"github.com/anacrolix/torrent/tracker"
 )
 
 type scrapeCfg struct {
@@ -17,25 +16,13 @@ type scrapeCfg struct {
 }
 
 func scrape(flags scrapeCfg) error {
-	trackerUrl, err := url.Parse(flags.Tracker)
+	cc, err := tracker.NewClient(flags.Tracker, tracker.NewClientOpts{})
 	if err != nil {
-		return fmt.Errorf("parsing tracker url: %w", err)
-	}
-	cc, err := udp.NewConnClient(udp.NewConnClientOpts{
-		Network: trackerUrl.Scheme,
-		Host:    trackerUrl.Host,
-		//Ipv6:    nil,
-		//Logger:  log.Logger{},
-	})
-	if err != nil {
-		return fmt.Errorf("creating new udp tracker conn client: %w", err)
+		err = fmt.Errorf("creating new tracker client: %w", err)
+		return err
 	}
 	defer cc.Close()
-	var ihs []udp.InfoHash
-	for _, ih := range flags.InfoHashes {
-		ihs = append(ihs, ih)
-	}
-	scrapeOut, err := cc.Client.Scrape(context.TODO(), ihs)
+	scrapeOut, err := cc.Scrape(context.TODO(), flags.InfoHashes)
 	if err != nil {
 		return fmt.Errorf("scraping: %w", err)
 	}

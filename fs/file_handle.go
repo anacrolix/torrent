@@ -56,7 +56,7 @@ func (me fileHandle) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse
 			n, readErr = io.ReadFull(r, resp.Data)
 			if readErr == io.ErrUnexpectedEOF {
 				readErr = nil
-		       }
+			}
 		} else {
 			n, readErr = r.Read(resp.Data)
 			if readErr == io.EOF {

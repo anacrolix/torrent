@@ -6,12 +6,13 @@ package sqliteStorage
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
+	"testing"
+
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/squirrel"
 	"github.com/dustin/go-humanize"
 	qt "github.com/frankban/quicktest"
-	"path/filepath"
-	"testing"
 
 	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"

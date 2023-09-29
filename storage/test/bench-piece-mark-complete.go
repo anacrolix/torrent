@@ -18,6 +18,8 @@ const (
 	DefaultNumPieces = 16
 )
 
+// This writes chunks to the storage concurrently, and waits for them all to complete. This matches
+// the behaviour from the peer connection read loop.
 func BenchmarkPieceMarkComplete(
 	b *testing.B, ci storage.ClientImpl,
 	pieceSize int64, numPieces int,

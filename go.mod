@@ -18,8 +18,8 @@ require (
 	github.com/anacrolix/missinggo/perf v1.0.0
 	github.com/anacrolix/missinggo/v2 v2.7.2-0.20230527121029-a582b4f397b9
 	github.com/anacrolix/multiless v0.3.0
-	github.com/anacrolix/squirrel v0.4.1-0.20230914124650-d063152cd153
-	github.com/anacrolix/sync v0.4.0
+	github.com/anacrolix/squirrel v0.5.2-0.20230929042837-b831695f97d1
+	github.com/anacrolix/sync v0.4.1-0.20230926072150-b8cd7cfb92d0
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/upnp v0.1.3-0.20220123035249-922794e51c96
 	github.com/anacrolix/utp v0.1.0
@@ -31,7 +31,7 @@ require (
 	github.com/elliotchance/orderedmap v1.4.0
 	github.com/frankban/quicktest v1.14.6
 	github.com/fsnotify/fsnotify v1.5.4
-	github.com/go-llsqlite/adapter v0.0.0-20230912124304-94ed0e573c23
+	github.com/go-llsqlite/adapter v0.0.0-20230927005056-7f5ce7f0c916
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.5.9
 	github.com/gorilla/websocket v1.5.0
@@ -63,7 +63,7 @@ require (
 	github.com/bits-and-blooms/bitset v1.2.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
-	github.com/go-llsqlite/crawshaw v0.0.0-20230910110433-7e901377eb6c // indirect
+	github.com/go-llsqlite/crawshaw v0.4.0 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect

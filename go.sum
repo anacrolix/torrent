@@ -106,6 +106,8 @@ github.com/anacrolix/multiless v0.3.0 h1:5Bu0DZncjE4e06b9r1Ap2tUY4Au0NToBP5RpuEn
 github.com/anacrolix/multiless v0.3.0/go.mod h1:TrCLEZfIDbMVfLoQt5tOoiBS/uq4y8+ojuEVVvTNPX4=
 github.com/anacrolix/squirrel v0.4.1-0.20230914124650-d063152cd153 h1:B7gIO4QqDyg5YtVfaj+04mG7eSA6NH4g2UoQlvyUl5s=
 github.com/anacrolix/squirrel v0.4.1-0.20230914124650-d063152cd153/go.mod h1:n1kK4S2s3ufQuWZf4Zv0BcEzIEX4aJw0pGB6KK08c6w=
+github.com/anacrolix/squirrel v0.5.2-0.20230929042837-b831695f97d1 h1:r3Gp2Li6Yy/7j8dgn6PWWqMeMV3Ut+EQ5ZJeszYpaLc=
+github.com/anacrolix/squirrel v0.5.2-0.20230929042837-b831695f97d1/go.mod h1:60vdNPUbK1jYWePp39Wqn9whHm12Yb9JEuwOXzLMDuY=
 github.com/anacrolix/stm v0.2.0/go.mod h1:zoVQRvSiGjGoTmbM0vSLIiaKjWtNPeTvXUSdJQA4hsg=
 github.com/anacrolix/stm v0.4.0 h1:tOGvuFwaBjeu1u9X1eIh9TX8OEedEiEQ1se1FjhFnXY=
 github.com/anacrolix/stm v0.4.0/go.mod h1:GCkwqWoAsP7RfLW+jw+Z0ovrt2OO7wRzcTtFYMYY5t8=
@@ -113,6 +115,8 @@ github.com/anacrolix/sync v0.0.0-20180808010631-44578de4e778/go.mod h1:s735Etp3j
 github.com/anacrolix/sync v0.3.0/go.mod h1:BbecHL6jDSExojhNtgTFSBcdGerzNc64tz3DCOj/I0g=
 github.com/anacrolix/sync v0.4.0 h1:T+MdO/u87ir/ijWsTFsPYw5jVm0SMm4kVpg8t4KF38o=
 github.com/anacrolix/sync v0.4.0/go.mod h1:BbecHL6jDSExojhNtgTFSBcdGerzNc64tz3DCOj/I0g=
+github.com/anacrolix/sync v0.4.1-0.20230926072150-b8cd7cfb92d0 h1:M2HtYrYz6CVwo88TfVrGNlc+mSe59KXCBe3gFuEsEto=
+github.com/anacrolix/sync v0.4.1-0.20230926072150-b8cd7cfb92d0/go.mod h1:BbecHL6jDSExojhNtgTFSBcdGerzNc64tz3DCOj/I0g=
 github.com/anacrolix/tagflag v0.0.0-20180109131632-2146c8d41bf0/go.mod h1:1m2U/K6ZT+JZG0+bdMK6qauP49QT4wE5pmhJXOKKCHw=
 github.com/anacrolix/tagflag v1.0.0/go.mod h1:1m2U/K6ZT+JZG0+bdMK6qauP49QT4wE5pmhJXOKKCHw=
 github.com/anacrolix/tagflag v1.1.0/go.mod h1:Scxs9CV10NQatSmbyjqmqmeQNwGzlNe0CMUMIxqHIG8=
@@ -207,8 +211,12 @@ github.com/go-kit/log v0.1.0/go.mod h1:zbhenjAZHb184qTLMA9ZjW7ThYL0H2mk7Q6pNt4vb
 github.com/go-kit/log v0.2.0/go.mod h1:NwTd00d/i8cPZ3xOwwiv2PO5MOcx78fFErGNcVmBjv0=
 github.com/go-llsqlite/adapter v0.0.0-20230912124304-94ed0e573c23 h1:7krbnPREaxbmEaAkZovTNCMjmiZXEy/Gz9isFbqFK0I=
 github.com/go-llsqlite/adapter v0.0.0-20230912124304-94ed0e573c23/go.mod h1:DADrR88ONKPPeSGjFp5iEN55Arx3fi2qXZeKCYDpbmU=
+github.com/go-llsqlite/adapter v0.0.0-20230927005056-7f5ce7f0c916 h1:OyQmpAN302wAopDgwVjgs2HkFawP9ahIEqkUYz7V7CA=
+github.com/go-llsqlite/adapter v0.0.0-20230927005056-7f5ce7f0c916/go.mod h1:DADrR88ONKPPeSGjFp5iEN55Arx3fi2qXZeKCYDpbmU=
 github.com/go-llsqlite/crawshaw v0.0.0-20230910110433-7e901377eb6c h1:pm7z8uwA2q3s8fAsJmKuGckNohqIrw2PRtv6yJ6z0Ro=
 github.com/go-llsqlite/crawshaw v0.0.0-20230910110433-7e901377eb6c/go.mod h1:UdTSzmN3nr5dJNuZCsbPLfhSQB76u16rWh8pn+WFx9Q=
+github.com/go-llsqlite/crawshaw v0.4.0 h1:L02s2jZBBJj80xm1VkkdyB/JlQ/Fi0kLbNHfXA8yrec=
+github.com/go-llsqlite/crawshaw v0.4.0/go.mod h1:/YJdV7uBQaYDE0fwe4z3wwJIZBJxdYzd38ICggWqtaE=
 github.com/go-logfmt/logfmt v0.3.0/go.mod h1:Qt1PoO58o5twSAckw1HlFXLmHsOX5/0LbT9GBnD5lWE=
 github.com/go-logfmt/logfmt v0.4.0/go.mod h1:3RMwSq7FuexP4Kalkev3ejPJsZTpXXBr9+V4qmtdjCk=
 github.com/go-logfmt/logfmt v0.5.0/go.mod h1:wCYkCAKZfumFQihp8CzCvQ3paCTfi41vtzG1KdI/P7A=

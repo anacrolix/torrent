@@ -112,6 +112,12 @@ github.com/anacrolix/sync v0.0.0-20180808010631-44578de4e778/go.mod h1:s735Etp3j
 github.com/anacrolix/sync v0.3.0/go.mod h1:BbecHL6jDSExojhNtgTFSBcdGerzNc64tz3DCOj/I0g=
 github.com/anacrolix/sync v0.4.1-0.20230926072150-b8cd7cfb92d0 h1:M2HtYrYz6CVwo88TfVrGNlc+mSe59KXCBe3gFuEsEto=
 github.com/anacrolix/sync v0.4.1-0.20230926072150-b8cd7cfb92d0/go.mod h1:BbecHL6jDSExojhNtgTFSBcdGerzNc64tz3DCOj/I0g=
+github.com/anacrolix/sync v0.4.1-0.20231010084430-16a382a507b7 h1:nEKxALDw0bDilJHuXgyeYQ55ldQd5o1MQeFr+DJOg20=
+github.com/anacrolix/sync v0.4.1-0.20231010084430-16a382a507b7/go.mod h1:BbecHL6jDSExojhNtgTFSBcdGerzNc64tz3DCOj/I0g=
+github.com/anacrolix/sync v0.5.0 h1:WGhPVyl4/12Bo/xksj1LadLnR1LeBm+RmJzH0br9XUY=
+github.com/anacrolix/sync v0.5.0/go.mod h1:BbecHL6jDSExojhNtgTFSBcdGerzNc64tz3DCOj/I0g=
+github.com/anacrolix/sync v0.5.1 h1:FbGju6GqSjzVoTgcXTUKkF041lnZkG5P0C3T5RL3SGc=
+github.com/anacrolix/sync v0.5.1/go.mod h1:BbecHL6jDSExojhNtgTFSBcdGerzNc64tz3DCOj/I0g=
 github.com/anacrolix/tagflag v0.0.0-20180109131632-2146c8d41bf0/go.mod h1:1m2U/K6ZT+JZG0+bdMK6qauP49QT4wE5pmhJXOKKCHw=
 github.com/anacrolix/tagflag v1.0.0/go.mod h1:1m2U/K6ZT+JZG0+bdMK6qauP49QT4wE5pmhJXOKKCHw=
 github.com/anacrolix/tagflag v1.1.0/go.mod h1:Scxs9CV10NQatSmbyjqmqmeQNwGzlNe0CMUMIxqHIG8=

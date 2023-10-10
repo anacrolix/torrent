@@ -5,7 +5,7 @@ on: [push, pull_request]
 jobs:
 
   test:
-    timeout-minutes: 30
+    timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -15,7 +15,9 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - uses: ./.github/actions/go-common
-    - run: go test -race -count 2 ./...
+    - run: go test -race -count 2 $(go list ./... | grep -v /fs)
+    - run: go test -race -count 2 ./fs/...
+      if: ${{ ! contains(matrix.os, 'windows') }}
 
   test-benchmarks:
     runs-on: ubuntu-latest

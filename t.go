@@ -274,3 +274,13 @@ func (t *Torrent) PeerConns() []*PeerConn {
 	}
 	return ret
 }
+
+func (t *Torrent) WebseedPeerConns() []*Peer {
+	t.cl.rLock()
+	defer t.cl.rUnlock()
+	ret := make([]*Peer, 0, len(t.conns))
+	for _, c := range t.webSeeds {
+		ret = append(ret, c)
+	}
+	return ret
+}

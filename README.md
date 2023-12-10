@@ -61,14 +61,14 @@ Communication about the project is primarily through [Discussions](https://githu
 
 Here I'll describe what some of the packages in `./cmd` do. See [installation](#installation) to make them available.
 
-### torrent
+### `torrent`
 
-#### torrent download
+#### `torrent download`
 
 Downloads torrents from the command-line.
 
     $ torrent download 'magnet:?xt=urn:btih:KRWPCX3SJUM4IMM4YF5RPHL6ANPYTQPU'
-    ... lots of jibba jabber ...
+    ... lots of jibber jabber ...
     downloading "ubuntu-14.04.2-desktop-amd64.iso": 1.0 GB/1.0 GB, 1989/1992 pieces completed (1 partial)
     2015/04/01 02:08:20 main.go:137: downloaded ALL the torrents
     $ md5sum ubuntu-14.04.2-desktop-amd64.iso
@@ -76,7 +76,7 @@ Downloads torrents from the command-line.
     $ echo such amaze
     wow
 
-#### torrent metainfo magnet
+#### `torrent metainfo magnet`
 
 Creates a magnet link from a torrent file. Note the extracted trackers, display name, and info hash.
 
@@ -85,7 +85,7 @@ Creates a magnet link from a torrent file. Note the extracted trackers, display 
 
 See `torrent metainfo --help` for other metainfo related commands.
 
-### torrentfs
+### `torrentfs`
 
 torrentfs mounts a FUSE filesystem at `-mountDir`. The contents are the torrents described by the torrent files and magnet links at `-metainfoDir`. Data for read requests is fetched only as required from the torrent network, and stored at `-downloadDir`.
 

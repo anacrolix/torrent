@@ -1354,31 +1354,16 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 	return t, isNew
 }
 
-// Adds a torrent by InfoHash with a custom Storage implementation. If the torrent already exists
+// AddTorrentOpt adds a torrent by InfoHash with a custom Storage implementation. If the torrent already exists
 // then this Storage is ignored and the existing torrent returned with `new` set to `false`.
-func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
-	infoHash := opts.InfoHash
-	cl.lock()
-	defer cl.unlock()
-	t, ok := cl.torrents[infoHash]
-	if ok {
-		return
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (*Torrent, bool) {
+	t, isNew, err := cl.AddTorrent2(FromTorrentOpts(opts))
+	if err != nil {
+		return nil, false
 	}
-	new = true
 
-	t = cl.newTorrentOpt(opts)
-	cl.eachDhtServer(func(s DhtServer) {
-		if cl.config.PeriodicallyAnnounceTorrentsToDht {
-			go t.dhtAnnouncer(s)
-		}
-	})
-	cl.torrents[infoHash] = t
-	t.setInfoBytesLocked(opts.InfoBytes)
-	cl.clearAcceptLimits()
-	t.updateWantPeersEvent()
-	// Tickle Client.waitAccept, new torrent may want conns.
-	cl.event.Broadcast()
-	return
+	return t, isNew
 }
 
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also

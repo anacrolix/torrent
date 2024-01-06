@@ -1909,3 +1909,66 @@ func FromFilename(filename string) rFile {
 	}
 }
 
+// AddTorrent2 adds a torrent to client from different sources.
+// Returns a torrent object after successful adding. Returns true when torrent was not added
+// to the client before and false in other case.
+func (cl *Client) AddTorrent2(_ context.Context, req addTorrentReq) (*Torrent, bool, error) {
+	switch req := req.(type) {
+	default:
+		return nil, false, fmt.Errorf("unknown request type: %#v", req)
+	case rHash:
+		t, isNew := cl.addTorrentOpt(AddTorrentOpts{
+			InfoHash:  req.Hash,
+			Storage:   nil,
+			ChunkSize: 0,
+			InfoBytes: nil,
+		})
+		return t, isNew, nil
+	case rTorrentOpts:
+		t, isNew := cl.addTorrentOpt(req.Opts)
+		return t, isNew, nil
+	case rTorrentSpec:
+		return cl.addTorrentFromSpec(req.Spec)
+	case rMetaInfo:
+		tSpec, err := TorrentSpecFromMetaInfoErr(req.Meta)
+		if err != nil {
+			return nil, false, fmt.Errorf("torrent spec from metainfo: %w", err)
+		}
+
+		t, isNew, err := cl.addTorrentFromSpec(tSpec)
+		if err != nil {
+			return nil, false, fmt.Errorf("add torrent spec: %w", err)
+		}
+
+		return t, isNew, nil
+	case rMagnetURI:
+		spec, err := TorrentSpecFromMagnetUri(req.URI)
+		if err != nil {
+			return nil, false, fmt.Errorf("torrent spec from magnet uri: %w", err)
+		}
+
+		t, isNew, err := cl.addTorrentFromSpec(spec)
+		if err != nil {
+			return nil, false, fmt.Errorf("add torrent spec: %w", err)
+		}
+
+		return t, isNew, nil
+	case rFile:
+		meta, err := metainfo.LoadFromFile(req.Filename)
+		if err != nil {
+			return nil, false, fmt.Errorf("load metainfo: %w", err)
+		}
+
+		tSpec, err := TorrentSpecFromMetaInfoErr(meta)
+		if err != nil {
+			return nil, false, fmt.Errorf("torrent spec from metainfo: %w", err)
+		}
+
+		t, isNew, err := cl.addTorrentFromSpec(tSpec)
+		if err != nil {
+			return nil, false, fmt.Errorf("add torrent spec: %w", err)
+		}
+
+		return t, isNew, nil
+	}
+}

@@ -1832,3 +1832,80 @@ func (cl *Client) addTorrentFromSpec(spec *TorrentSpec) (*Torrent, bool, error) 
 
 	return t, isNew, nil
 }
+
+// addTorrentReq hide all internal details from consumers of AddTorrent2 and allows you
+// to change it to any other style/way without breaking changes.
+type addTorrentReq interface {
+	isAddTorrentReq()
+}
+
+type rMagnetURI struct {
+	URI string
+}
+
+func (rMagnetURI) isAddTorrentReq() {}
+
+func FromMagnetURI(uri string) rMagnetURI {
+	return rMagnetURI{
+		URI: uri,
+	}
+}
+
+type rTorrentSpec struct {
+	Spec *TorrentSpec
+}
+
+func (rTorrentSpec) isAddTorrentReq() {}
+
+func FromTorrentSpec(spec *TorrentSpec) rTorrentSpec {
+	return rTorrentSpec{
+		Spec: spec,
+	}
+}
+
+type rTorrentOpts struct {
+	Opts AddTorrentOpts
+}
+
+func (rTorrentOpts) isAddTorrentReq() {}
+
+func FromTorrentOpts(opts AddTorrentOpts) rTorrentOpts {
+	return rTorrentOpts{
+		Opts: opts,
+	}
+}
+
+type rHash struct {
+	Hash metainfo.Hash
+}
+
+func (rHash) isAddTorrentReq() {}
+
+func FromHash(hash metainfo.Hash) rHash {
+	return rHash{Hash: hash}
+}
+
+type rMetaInfo struct {
+	Meta *metainfo.MetaInfo
+}
+
+func (rMetaInfo) isAddTorrentReq() {}
+
+func FromMetaInfo(metaInfo *metainfo.MetaInfo) rMetaInfo {
+	return rMetaInfo{
+		Meta: metaInfo,
+	}
+}
+
+type rFile struct {
+	Filename string
+}
+
+func (rFile) isAddTorrentReq() {}
+
+func FromFilename(filename string) rFile {
+	return rFile{
+		Filename: filename,
+	}
+}
+

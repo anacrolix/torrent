@@ -1366,24 +1366,11 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (*Torrent, bool) {
 	return t, isNew
 }
 
-// Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
+// AddTorrentSpec add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
 // Torrent.MergeSpec.
-func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
-	t, new = cl.AddTorrentOpt(AddTorrentOpts{
-		InfoHash:  spec.InfoHash,
-		Storage:   spec.Storage,
-		ChunkSize: spec.ChunkSize,
-	})
-	modSpec := *spec
-	if new {
-		// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing
-		// it.
-		modSpec.ChunkSize = 0
-	}
-	err = t.MergeSpec(&modSpec)
-	if err != nil && new {
-		t.Drop()
-	}
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, isNew bool, err error) {
+	t, isNew, err = cl.AddTorrent2(FromTorrentSpec(spec))
 	return
 }
 

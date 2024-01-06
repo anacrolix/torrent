@@ -1325,8 +1325,15 @@ type Handle interface {
 	io.ReaderAt
 }
 
-func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bool) {
-	return cl.AddTorrentInfoHashWithStorage(infoHash, nil)
+// AddTorrentInfoHash adds a torrent by InfoHash.
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (*Torrent, bool) {
+	t, isNew, err := cl.AddTorrent2(FromHash(infoHash))
+	if err != nil {
+		return nil, false
+	}
+
+	return t, isNew
 }
 
 // Adds a torrent by InfoHash with a custom Storage implementation.

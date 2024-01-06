@@ -1261,6 +1261,13 @@ func (cl *Client) badPeerIPPort(ip net.IP, port int) bool {
 	return false
 }
 
+type AddTorrentOpts struct {
+	InfoHash  infohash.T
+	Storage   storage.ClientImpl
+	ChunkSize pp.Integer
+	InfoBytes []byte
+}
+
 // Return a Torrent ready for insertion into a Client.
 func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (t *Torrent) {
 	return cl.newTorrentOpt(AddTorrentOpts{
@@ -1373,13 +1380,6 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	// Tickle Client.waitAccept, new torrent may want conns.
 	cl.event.Broadcast()
 	return
-}
-
-type AddTorrentOpts struct {
-	InfoHash  infohash.T
-	Storage   storage.ClientImpl
-	ChunkSize pp.Integer
-	InfoBytes []byte
 }
 
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also

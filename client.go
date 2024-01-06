@@ -1787,3 +1787,48 @@ func (cl *Client) Stats() ClientStats {
 	defer cl.rUnlock()
 	return cl.statsLocked()
 }
+
+func (cl *Client) addTorrentOpt(opts AddTorrentOpts) (t *Torrent, isNew bool) {
+	infoHash := opts.InfoHash
+	cl.lock()
+	defer cl.unlock()
+	t, ok := cl.torrents[infoHash]
+	if ok {
+		return
+	}
+	isNew = true
+
+	t = cl.newTorrentOpt(opts)
+	cl.eachDhtServer(func(s DhtServer) {
+		if cl.config.PeriodicallyAnnounceTorrentsToDht {
+			go t.dhtAnnouncer(s)
+		}
+	})
+	cl.torrents[infoHash] = t
+	t.setInfoBytesLocked(opts.InfoBytes)
+	cl.clearAcceptLimits()
+	t.updateWantPeersEvent()
+	// Tickle Client.waitAccept, new torrent may want conns.
+	cl.event.Broadcast()
+	return
+}
+
+func (cl *Client) addTorrentFromSpec(spec *TorrentSpec) (*Torrent, bool, error) {
+	t, isNew := cl.addTorrentOpt(AddTorrentOpts{
+		InfoHash:  spec.InfoHash,
+		Storage:   spec.Storage,
+		ChunkSize: spec.ChunkSize,
+	})
+	modSpec := *spec
+	if isNew {
+		// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing
+		// it.
+		modSpec.ChunkSize = 0
+	}
+
+	if err := t.MergeSpec(&modSpec); err != nil && isNew {
+		t.Drop()
+	}
+
+	return t, isNew, nil
+}

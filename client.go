@@ -1328,7 +1328,7 @@ type Handle interface {
 // AddTorrentInfoHash adds a torrent by InfoHash.
 // Deprecated: use AddTorrent2 instead.
 func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (*Torrent, bool) {
-	t, isNew, err := cl.AddTorrent2(FromHash(infoHash))
+	t, isNew, err := cl.AddTorrent2(context.TODO(), FromHash(infoHash))
 	if err != nil {
 		return nil, false
 	}
@@ -1341,7 +1341,7 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (*Torrent, bool) {
 // existing torrent returned with `new` set to `false`.
 // Deprecated: use AddTorrent2 instead.
 func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStorage storage.ClientImpl) (*Torrent, bool) {
-	t, isNew, err := cl.AddTorrent2(FromTorrentOpts(AddTorrentOpts{
+	t, isNew, err := cl.AddTorrent2(context.TODO(), FromTorrentOpts(AddTorrentOpts{
 		InfoHash:  infoHash,
 		Storage:   specStorage,
 		ChunkSize: 0,
@@ -1358,7 +1358,7 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 // then this Storage is ignored and the existing torrent returned with `new` set to `false`.
 // Deprecated: use AddTorrent2 instead.
 func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (*Torrent, bool) {
-	t, isNew, err := cl.AddTorrent2(FromTorrentOpts(opts))
+	t, isNew, err := cl.AddTorrent2(context.TODO(), FromTorrentOpts(opts))
 	if err != nil {
 		return nil, false
 	}
@@ -1370,28 +1370,28 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (*Torrent, bool) {
 // Torrent.MergeSpec.
 // Deprecated: use AddTorrent2 instead.
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, isNew bool, err error) {
-	t, isNew, err = cl.AddTorrent2(FromTorrentSpec(spec))
+	t, isNew, err = cl.AddTorrent2(context.TODO(), FromTorrentSpec(spec))
 	return
 }
 
 // AddMagnet adds a torrent by magnet URI.
 // Deprecated: use AddTorrent2 instead.
 func (cl *Client) AddMagnet(uri string) (t *Torrent, err error) {
-	t, _, err = cl.AddTorrent2(FromMagnetURI(uri))
+	t, _, err = cl.AddTorrent2(context.TODO(), FromMagnetURI(uri))
 	return
 }
 
 // AddTorrent adds a torrent by MetaInfo.
 // Deprecated: use AddTorrent2 instead.
 func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (t *Torrent, err error) {
-	t, _, err = cl.AddTorrent2(FromMetaInfo(mi))
+	t, _, err = cl.AddTorrent2(context.TODO(), FromMetaInfo(mi))
 	return
 }
 
 // AddTorrentFromFile adds a torrent from filepath.
 // Deprecated: use AddTorrent2 instead.
 func (cl *Client) AddTorrentFromFile(filename string) (t *Torrent, err error) {
-	t, _, err = cl.AddTorrent2(FromFilename(filename))
+	t, _, err = cl.AddTorrent2(context.TODO(), FromFilename(filename))
 	return
 }
 

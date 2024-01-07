@@ -1374,6 +1374,27 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, isNew bool, err
 	return
 }
 
+// AddMagnet adds a torrent by magnet URI.
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddMagnet(uri string) (t *Torrent, err error) {
+	t, _, err = cl.AddTorrent2(FromMagnetURI(uri))
+	return
+}
+
+// AddTorrent adds a torrent by MetaInfo.
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (t *Torrent, err error) {
+	t, _, err = cl.AddTorrent2(FromMetaInfo(mi))
+	return
+}
+
+// AddTorrentFromFile adds a torrent from filepath.
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddTorrentFromFile(filename string) (t *Torrent, err error) {
+	t, _, err = cl.AddTorrent2(FromFilename(filename))
+	return
+}
+
 // The trackers will be merged with the existing ones. If the Info isn't yet known, it will be set.
 // spec.DisallowDataDownload/Upload will be read and applied
 // The display name is replaced if the new spec provides one. Note that any `Storage` is ignored.
@@ -1462,32 +1483,6 @@ func (cl *Client) torrentsAsSlice() (ret []*Torrent) {
 		ret = append(ret, t)
 	}
 	return
-}
-
-func (cl *Client) AddMagnet(uri string) (T *Torrent, err error) {
-	spec, err := TorrentSpecFromMagnetUri(uri)
-	if err != nil {
-		return
-	}
-	T, _, err = cl.AddTorrentSpec(spec)
-	return
-}
-
-func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (T *Torrent, err error) {
-	ts, err := TorrentSpecFromMetaInfoErr(mi)
-	if err != nil {
-		return
-	}
-	T, _, err = cl.AddTorrentSpec(ts)
-	return
-}
-
-func (cl *Client) AddTorrentFromFile(filename string) (T *Torrent, err error) {
-	mi, err := metainfo.LoadFromFile(filename)
-	if err != nil {
-		return
-	}
-	return cl.AddTorrent(mi)
 }
 
 func (cl *Client) DhtServers() []DhtServer {

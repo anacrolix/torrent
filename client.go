@@ -1359,6 +1359,31 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (*Torrent, bool) {
 	return t, isNew
 }
 
+func (cl *Client) addTorrentOpt(opts AddTorrentOpts) (t *Torrent, isNew bool) {
+	infoHash := opts.InfoHash
+	cl.lock()
+	defer cl.unlock()
+	t, ok := cl.torrents[infoHash]
+	if ok {
+		return
+	}
+	isNew = true
+
+	t = cl.newTorrentOpt(opts)
+	cl.eachDhtServer(func(s DhtServer) {
+		if cl.config.PeriodicallyAnnounceTorrentsToDht {
+			go t.dhtAnnouncer(s)
+		}
+	})
+	cl.torrents[infoHash] = t
+	t.setInfoBytesLocked(opts.InfoBytes)
+	cl.clearAcceptLimits()
+	t.updateWantPeersEvent()
+	// Tickle Client.waitAccept, new torrent may want conns.
+	cl.event.Broadcast()
+	return
+}
+
 type AddTorrentOpts struct {
 	InfoHash  infohash.T
 	Storage   storage.ClientImpl
@@ -1752,31 +1777,6 @@ func (cl *Client) Stats() ClientStats {
 	cl.rLock()
 	defer cl.rUnlock()
 	return cl.statsLocked()
-}
-
-func (cl *Client) addTorrentOpt(opts AddTorrentOpts) (t *Torrent, isNew bool) {
-	infoHash := opts.InfoHash
-	cl.lock()
-	defer cl.unlock()
-	t, ok := cl.torrents[infoHash]
-	if ok {
-		return
-	}
-	isNew = true
-
-	t = cl.newTorrentOpt(opts)
-	cl.eachDhtServer(func(s DhtServer) {
-		if cl.config.PeriodicallyAnnounceTorrentsToDht {
-			go t.dhtAnnouncer(s)
-		}
-	})
-	cl.torrents[infoHash] = t
-	t.setInfoBytesLocked(opts.InfoBytes)
-	cl.clearAcceptLimits()
-	t.updateWantPeersEvent()
-	// Tickle Client.waitAccept, new torrent may want conns.
-	cl.event.Broadcast()
-	return
 }
 
 func (cl *Client) addTorrentFromSpec(spec *TorrentSpec) (*Torrent, bool, error) {

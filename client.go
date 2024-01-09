@@ -1399,6 +1399,26 @@ func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, isNew bool, err
 	return
 }
 
+func (cl *Client) addTorrentFromSpec(spec *TorrentSpec) (*Torrent, bool, error) {
+	t, isNew := cl.addTorrentOpt(AddTorrentOpts{
+		InfoHash:  spec.InfoHash,
+		Storage:   spec.Storage,
+		ChunkSize: spec.ChunkSize,
+	})
+	modSpec := *spec
+	if isNew {
+		// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing
+		// it.
+		modSpec.ChunkSize = 0
+	}
+
+	if err := t.MergeSpec(&modSpec); err != nil && isNew {
+		t.Drop()
+	}
+
+	return t, isNew, nil
+}
+
 // AddMagnet adds a torrent by magnet URI.
 // Deprecated: use AddTorrent2 instead.
 func (cl *Client) AddMagnet(uri string) (t *Torrent, err error) {
@@ -1777,26 +1797,6 @@ func (cl *Client) Stats() ClientStats {
 	cl.rLock()
 	defer cl.rUnlock()
 	return cl.statsLocked()
-}
-
-func (cl *Client) addTorrentFromSpec(spec *TorrentSpec) (*Torrent, bool, error) {
-	t, isNew := cl.addTorrentOpt(AddTorrentOpts{
-		InfoHash:  spec.InfoHash,
-		Storage:   spec.Storage,
-		ChunkSize: spec.ChunkSize,
-	})
-	modSpec := *spec
-	if isNew {
-		// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing
-		// it.
-		modSpec.ChunkSize = 0
-	}
-
-	if err := t.MergeSpec(&modSpec); err != nil && isNew {
-		t.Drop()
-	}
-
-	return t, isNew, nil
 }
 
 // addTorrentReq hide all internal details from consumers of AddTorrent2 and allows you

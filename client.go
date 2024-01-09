@@ -1310,14 +1310,6 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	return
 }
 
-// A file-like handle to some torrent data resource.
-type Handle interface {
-	io.Reader
-	io.Seeker
-	io.Closer
-	io.ReaderAt
-}
-
 // addTorrentReq hide all internal details from consumers of AddTorrent2 and allows you
 // to change it to any other style/way without breaking changes.
 type addTorrentReq interface {
@@ -1456,6 +1448,14 @@ func (cl *Client) AddTorrent2(_ context.Context, req addTorrentReq) (*Torrent, b
 
 		return t, isNew, nil
 	}
+}
+
+// A file-like handle to some torrent data resource.
+type Handle interface {
+	io.Reader
+	io.Seeker
+	io.Closer
+	io.ReaderAt
 }
 
 // AddTorrentInfoHash adds a torrent by InfoHash.

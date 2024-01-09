@@ -1048,17 +1048,18 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 }
 
 // Client lock must be held before entering this.
-func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
-	c.setTorrent(t)
+func (t *Torrent) runHandshookConn(pc *PeerConn) error {
+	pc.setTorrent(t)
+	cl := t.cl
 	for i, b := range cl.config.MinPeerExtensions {
-		if c.PeerExtensionBytes[i]&b != b {
-			return fmt.Errorf("peer did not meet minimum peer extensions: %x", c.PeerExtensionBytes[:])
+		if pc.PeerExtensionBytes[i]&b != b {
+			return fmt.Errorf("peer did not meet minimum peer extensions: %x", pc.PeerExtensionBytes[:])
 		}
 	}
-	if c.PeerID == cl.peerID {
-		if c.outgoing {
+	if pc.PeerID == cl.peerID {
+		if pc.outgoing {
 			connsToSelf.Add(1)
-			addr := c.RemoteAddr.String()
+			addr := pc.RemoteAddr.String()
 			cl.dopplegangerAddrs[addr] = struct{}{}
 		} /* else {
 			// Because the remote address is not necessarily the same as its client's torrent listen
@@ -1068,19 +1069,19 @@ func (cl *Client) runHandshookConn(c *PeerConn, t *Torrent) error {
 		t.logger.Levelf(log.Debug, "local and remote peer ids are the same")
 		return nil
 	}
-	c.r = deadlineReader{c.conn, c.r}
-	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
-	if connIsIpv6(c.conn) {
+	pc.r = deadlineReader{pc.conn, pc.r}
+	completedHandshakeConnectionFlags.Add(pc.connectionFlags(), 1)
+	if connIsIpv6(pc.conn) {
 		torrent.Add("completed handshake over ipv6", 1)
 	}
-	if err := t.addPeerConn(c); err != nil {
+	if err := t.addPeerConn(pc); err != nil {
 		return fmt.Errorf("adding connection: %w", err)
 	}
-	defer t.dropConnection(c)
-	c.startMessageWriter()
-	cl.sendInitialMessages(c, t)
-	c.initUpdateRequestsTimer()
-	err := c.mainReadLoop()
+	defer t.dropConnection(pc)
+	pc.startMessageWriter()
+	pc.sendInitialMessages()
+	pc.initUpdateRequestsTimer()
+	err := pc.mainReadLoop()
 	if err != nil {
 		return fmt.Errorf("main read loop: %w", err)
 	}
@@ -1125,9 +1126,11 @@ func (c *Peer) updateRequestsTimerFunc() {
 const localClientReqq = 1024
 
 // See the order given in Transmission's tr_peerMsgsNew.
-func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
-	if conn.PeerExtensionBytes.SupportsExtended() && cl.config.Extensions.SupportsExtended() {
-		conn.write(pp.Message{
+func (pc *PeerConn) sendInitialMessages() {
+	t := pc.t
+	cl := t.cl
+	if pc.PeerExtensionBytes.SupportsExtended() && cl.config.Extensions.SupportsExtended() {
+		pc.write(pp.Message{
 			Type:       pp.Extended,
 			ExtendedID: pp.HandshakeExtendedID,
 			ExtendedPayload: func() []byte {
@@ -1138,10 +1141,10 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 					},
 					V:            cl.config.ExtendedHandshakeClientVersion,
 					Reqq:         localClientReqq,
-					YourIp:       pp.CompactIp(conn.remoteIp()),
+					YourIp:       pp.CompactIp(pc.remoteIp()),
 					Encryption:   cl.config.HeaderObfuscationPolicy.Preferred || !cl.config.HeaderObfuscationPolicy.RequirePreferred,
 					Port:         cl.incomingPeerPort(),
-					MetadataSize: torrent.metadataSize(),
+					MetadataSize: t.metadataSize(),
 					// TODO: We can figure these out specific to the socket used.
 					Ipv4: pp.CompactIp(cl.config.PublicIp4.To4()),
 					Ipv6: cl.config.PublicIp6.To16(),
@@ -1154,21 +1157,21 @@ func (cl *Client) sendInitialMessages(conn *PeerConn, torrent *Torrent) {
 		})
 	}
 	func() {
-		if conn.fastEnabled() {
-			if torrent.haveAllPieces() {
-				conn.write(pp.Message{Type: pp.HaveAll})
-				conn.sentHaves.AddRange(0, bitmap.BitRange(conn.t.NumPieces()))
+		if pc.fastEnabled() {
+			if t.haveAllPieces() {
+				pc.write(pp.Message{Type: pp.HaveAll})
+				pc.sentHaves.AddRange(0, bitmap.BitRange(pc.t.NumPieces()))
 				return
-			} else if !torrent.haveAnyPieces() {
-				conn.write(pp.Message{Type: pp.HaveNone})
-				conn.sentHaves.Clear()
+			} else if !t.haveAnyPieces() {
+				pc.write(pp.Message{Type: pp.HaveNone})
+				pc.sentHaves.Clear()
 				return
 			}
 		}
-		conn.postBitfield()
+		pc.postBitfield()
 	}()
-	if conn.PeerExtensionBytes.SupportsDHT() && cl.config.Extensions.SupportsDHT() && cl.haveDhtServer() {
-		conn.write(pp.Message{
+	if pc.PeerExtensionBytes.SupportsDHT() && cl.config.Extensions.SupportsDHT() && cl.haveDhtServer() {
+		pc.write(pp.Message{
 			Type: pp.Port,
 			Port: cl.dhtPort(),
 		})

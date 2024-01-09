@@ -1677,14 +1677,14 @@ func (t *Torrent) onWebRtcConn(
 	pc.conn.SetWriteDeadline(time.Time{})
 	t.cl.lock()
 	defer t.cl.unlock()
-	err = t.cl.runHandshookConn(pc, t)
+	err = t.runHandshookConn(pc)
 	if err != nil {
 		t.logger.WithDefaultLevel(log.Debug).Printf("error running handshook webrtc conn: %v", err)
 	}
 }
 
 func (t *Torrent) logRunHandshookConn(pc *PeerConn, logAll bool, level log.Level) {
-	err := t.cl.runHandshookConn(pc, t)
+	err := t.runHandshookConn(pc)
 	if err != nil || logAll {
 		t.logger.WithDefaultLevel(level).Levelf(log.ErrorLevel(err), "error running handshook conn: %v", err)
 	}

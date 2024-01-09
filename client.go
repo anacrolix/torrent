@@ -1318,107 +1318,6 @@ type Handle interface {
 	io.ReaderAt
 }
 
-// AddTorrentInfoHash adds a torrent by InfoHash.
-// Deprecated: use AddTorrent2 instead.
-func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (*Torrent, bool) {
-	t, isNew, err := cl.AddTorrent2(context.TODO(), FromHash(infoHash))
-	if err != nil {
-		return nil, false
-	}
-
-	return t, isNew
-}
-
-// AddTorrentInfoHashWithStorage adds a torrent by InfoHash with a custom Storage implementation.
-// If the torrent already exists then this Storage is ignored and the
-// existing torrent returned with `new` set to `false`.
-// Deprecated: use AddTorrent2 instead.
-func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStorage storage.ClientImpl) (*Torrent, bool) {
-	t, isNew, err := cl.AddTorrent2(context.TODO(), FromTorrentOpts(AddTorrentOpts{
-		InfoHash:  infoHash,
-		Storage:   specStorage,
-		ChunkSize: 0,
-		InfoBytes: nil,
-	}))
-	if err != nil {
-		return nil, false
-	}
-
-	return t, isNew
-}
-
-// AddTorrentOpt adds a torrent by InfoHash with a custom Storage implementation. If the torrent already exists
-// then this Storage is ignored and the existing torrent returned with `new` set to `false`.
-// Deprecated: use AddTorrent2 instead.
-func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (*Torrent, bool) {
-	t, isNew, err := cl.AddTorrent2(context.TODO(), FromTorrentOpts(opts))
-	if err != nil {
-		return nil, false
-	}
-
-	return t, isNew
-}
-
-func (cl *Client) addTorrentOpt(opts AddTorrentOpts) (t *Torrent, isNew bool) {
-	infoHash := opts.InfoHash
-	cl.lock()
-	defer cl.unlock()
-	t, ok := cl.torrents[infoHash]
-	if ok {
-		return
-	}
-	isNew = true
-
-	t = cl.newTorrentOpt(opts)
-	cl.eachDhtServer(func(s DhtServer) {
-		if cl.config.PeriodicallyAnnounceTorrentsToDht {
-			go t.dhtAnnouncer(s)
-		}
-	})
-	cl.torrents[infoHash] = t
-	t.setInfoBytesLocked(opts.InfoBytes)
-	cl.clearAcceptLimits()
-	t.updateWantPeersEvent()
-	// Tickle Client.waitAccept, new torrent may want conns.
-	cl.event.Broadcast()
-	return
-}
-
-type AddTorrentOpts struct {
-	InfoHash  infohash.T
-	Storage   storage.ClientImpl
-	ChunkSize pp.Integer
-	InfoBytes []byte
-}
-
-// AddTorrentSpec add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
-// Torrent.MergeSpec.
-// Deprecated: use AddTorrent2 instead.
-func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, isNew bool, err error) {
-	t, isNew, err = cl.AddTorrent2(context.TODO(), FromTorrentSpec(spec))
-	return
-}
-
-func (cl *Client) addTorrentFromSpec(spec *TorrentSpec) (*Torrent, bool, error) {
-	t, isNew := cl.addTorrentOpt(AddTorrentOpts{
-		InfoHash:  spec.InfoHash,
-		Storage:   spec.Storage,
-		ChunkSize: spec.ChunkSize,
-	})
-	modSpec := *spec
-	if isNew {
-		// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing
-		// it.
-		modSpec.ChunkSize = 0
-	}
-
-	if err := t.MergeSpec(&modSpec); err != nil && isNew {
-		t.Drop()
-	}
-
-	return t, isNew, nil
-}
-
 // addTorrentReq hide all internal details from consumers of AddTorrent2 and allows you
 // to change it to any other style/way without breaking changes.
 type addTorrentReq interface {
@@ -1557,6 +1456,107 @@ func (cl *Client) AddTorrent2(_ context.Context, req addTorrentReq) (*Torrent, b
 
 		return t, isNew, nil
 	}
+}
+
+// AddTorrentInfoHash adds a torrent by InfoHash.
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (*Torrent, bool) {
+	t, isNew, err := cl.AddTorrent2(context.TODO(), FromHash(infoHash))
+	if err != nil {
+		return nil, false
+	}
+
+	return t, isNew
+}
+
+// AddTorrentInfoHashWithStorage adds a torrent by InfoHash with a custom Storage implementation.
+// If the torrent already exists then this Storage is ignored and the
+// existing torrent returned with `new` set to `false`.
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStorage storage.ClientImpl) (*Torrent, bool) {
+	t, isNew, err := cl.AddTorrent2(context.TODO(), FromTorrentOpts(AddTorrentOpts{
+		InfoHash:  infoHash,
+		Storage:   specStorage,
+		ChunkSize: 0,
+		InfoBytes: nil,
+	}))
+	if err != nil {
+		return nil, false
+	}
+
+	return t, isNew
+}
+
+// AddTorrentOpt adds a torrent by InfoHash with a custom Storage implementation. If the torrent already exists
+// then this Storage is ignored and the existing torrent returned with `new` set to `false`.
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (*Torrent, bool) {
+	t, isNew, err := cl.AddTorrent2(context.TODO(), FromTorrentOpts(opts))
+	if err != nil {
+		return nil, false
+	}
+
+	return t, isNew
+}
+
+func (cl *Client) addTorrentOpt(opts AddTorrentOpts) (t *Torrent, isNew bool) {
+	infoHash := opts.InfoHash
+	cl.lock()
+	defer cl.unlock()
+	t, ok := cl.torrents[infoHash]
+	if ok {
+		return
+	}
+	isNew = true
+
+	t = cl.newTorrentOpt(opts)
+	cl.eachDhtServer(func(s DhtServer) {
+		if cl.config.PeriodicallyAnnounceTorrentsToDht {
+			go t.dhtAnnouncer(s)
+		}
+	})
+	cl.torrents[infoHash] = t
+	t.setInfoBytesLocked(opts.InfoBytes)
+	cl.clearAcceptLimits()
+	t.updateWantPeersEvent()
+	// Tickle Client.waitAccept, new torrent may want conns.
+	cl.event.Broadcast()
+	return
+}
+
+type AddTorrentOpts struct {
+	InfoHash  infohash.T
+	Storage   storage.ClientImpl
+	ChunkSize pp.Integer
+	InfoBytes []byte
+}
+
+// AddTorrentSpec add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
+// Torrent.MergeSpec.
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, isNew bool, err error) {
+	t, isNew, err = cl.AddTorrent2(context.TODO(), FromTorrentSpec(spec))
+	return
+}
+
+func (cl *Client) addTorrentFromSpec(spec *TorrentSpec) (*Torrent, bool, error) {
+	t, isNew := cl.addTorrentOpt(AddTorrentOpts{
+		InfoHash:  spec.InfoHash,
+		Storage:   spec.Storage,
+		ChunkSize: spec.ChunkSize,
+	})
+	modSpec := *spec
+	if isNew {
+		// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing
+		// it.
+		modSpec.ChunkSize = 0
+	}
+
+	if err := t.MergeSpec(&modSpec); err != nil && isNew {
+		t.Drop()
+	}
+
+	return t, isNew, nil
 }
 
 // The trackers will be merged with the existing ones. If the Info isn't yet known, it will be set.

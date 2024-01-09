@@ -1419,27 +1419,6 @@ func (cl *Client) addTorrentFromSpec(spec *TorrentSpec) (*Torrent, bool, error) 
 	return t, isNew, nil
 }
 
-// AddMagnet adds a torrent by magnet URI.
-// Deprecated: use AddTorrent2 instead.
-func (cl *Client) AddMagnet(uri string) (t *Torrent, err error) {
-	t, _, err = cl.AddTorrent2(context.TODO(), FromMagnetURI(uri))
-	return
-}
-
-// AddTorrent adds a torrent by MetaInfo.
-// Deprecated: use AddTorrent2 instead.
-func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (t *Torrent, err error) {
-	t, _, err = cl.AddTorrent2(context.TODO(), FromMetaInfo(mi))
-	return
-}
-
-// AddTorrentFromFile adds a torrent from filepath.
-// Deprecated: use AddTorrent2 instead.
-func (cl *Client) AddTorrentFromFile(filename string) (t *Torrent, err error) {
-	t, _, err = cl.AddTorrent2(context.TODO(), FromFilename(filename))
-	return
-}
-
 // addTorrentReq hide all internal details from consumers of AddTorrent2 and allows you
 // to change it to any other style/way without breaking changes.
 type addTorrentReq interface {
@@ -1667,6 +1646,27 @@ func (cl *Client) torrentsAsSlice() (ret []*Torrent) {
 	for _, t := range cl.torrents {
 		ret = append(ret, t)
 	}
+	return
+}
+
+// AddMagnet adds a torrent by magnet URI.
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddMagnet(uri string) (t *Torrent, err error) {
+	t, _, err = cl.AddTorrent2(context.TODO(), FromMagnetURI(uri))
+	return
+}
+
+// AddTorrent adds a torrent by MetaInfo.
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddTorrent(mi *metainfo.MetaInfo) (t *Torrent, err error) {
+	t, _, err = cl.AddTorrent2(context.TODO(), FromMetaInfo(mi))
+	return
+}
+
+// AddTorrentFromFile adds a torrent from filepath.
+// Deprecated: use AddTorrent2 instead.
+func (cl *Client) AddTorrentFromFile(filename string) (t *Torrent, err error) {
+	t, _, err = cl.AddTorrent2(context.TODO(), FromFilename(filename))
 	return
 }
 

@@ -324,6 +324,7 @@ func (cn *PeerConn) fillWriteBuffer() {
 		// request reason will not be cleared, so we'll come right back here when there's space. We
 		// can't do this in maybeUpdateActualRequestState because it's a method on Peer and has no
 		// knowledge of write buffers.
+		return
 	}
 	cn.maybeUpdateActualRequestState()
 	if cn.pex.IsEnabled() {
@@ -983,8 +984,8 @@ func (c *PeerConn) setRetryUploadTimer(delay time.Duration) {
 
 // Also handles choking and unchoking of the remote peer.
 func (c *PeerConn) upload(msg func(pp.Message) bool) bool {
-	// Breaking or completing this loop means we don't want to upload to the
-	// peer anymore, and we choke them.
+	// Breaking or completing this loop means we don't want to upload to the peer anymore, and we
+	// choke them.
 another:
 	for c.uploadAllowed() {
 		// We want to upload to the peer.

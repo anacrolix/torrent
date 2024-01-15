@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime/debug"
+	"strings"
 )
 
 var (
@@ -32,9 +33,11 @@ func init() {
 	if buildInfo, ok := debug.ReadBuildInfo(); ok {
 		mainPath = buildInfo.Main.Path
 		mainVersion = buildInfo.Main.Version
+		thisModule := ""
 		// Note that if the main module is the same as this module, we get a version of "(devel)".
 		for _, dep := range append(buildInfo.Deps, &buildInfo.Main) {
-			if dep.Path == thisPkg {
+			if strings.HasPrefix(thisPkg, dep.Path) && len(dep.Path) >= len(thisModule) {
+				thisModule = dep.Path
 				torrentVersion = dep.Version
 			}
 		}

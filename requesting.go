@@ -173,6 +173,9 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	if t.closed.IsSet() {
 		return
 	}
+	if t.dataDownloadDisallowed.Bool() {
+		return
+	}
 	input := t.getRequestStrategyInput()
 	requestHeap := desiredPeerRequests{
 		peer:           p,
@@ -257,13 +260,6 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 
 	t := p.t
 	originalRequestCount := current.Requests.GetCardinality()
-	// We're either here on a timer, or because we ran out of requests. Both are valid reasons to
-	// alter peakRequests.
-	if originalRequestCount != 0 && p.needRequestUpdate != peerUpdateRequestsTimerReason {
-		panic(fmt.Sprintf(
-			"expected zero existing requests (%v) for update reason %q",
-			originalRequestCount, p.needRequestUpdate))
-	}
 	for requestHeap.Len() != 0 && maxRequests(current.Requests.GetCardinality()+current.Cancelled.GetCardinality()) < p.nominalMaxRequests() {
 		req := heap.Pop(requestHeap)
 		existing := t.requestingPeer(req)

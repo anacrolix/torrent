@@ -480,9 +480,6 @@ func (cn *Peer) updateRequests(reason string) {
 	if cn.needRequestUpdate != "" {
 		return
 	}
-	if reason != peerUpdateRequestsTimerReason && !cn.isLowOnRequests() {
-		return
-	}
 	cn.needRequestUpdate = reason
 	cn.handleUpdateRequests()
 }

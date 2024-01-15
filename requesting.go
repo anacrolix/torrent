@@ -260,7 +260,14 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 
 	t := p.t
 	originalRequestCount := current.Requests.GetCardinality()
-	for requestHeap.Len() != 0 && maxRequests(current.Requests.GetCardinality()+current.Cancelled.GetCardinality()) < p.nominalMaxRequests() {
+	for {
+		if requestHeap.Len() == 0 {
+			break
+		}
+		numPending := maxRequests(current.Requests.GetCardinality() + current.Cancelled.GetCardinality())
+		if numPending >= p.nominalMaxRequests() {
+			break
+		}
 		req := heap.Pop(requestHeap)
 		existing := t.requestingPeer(req)
 		if existing != nil && existing != p {

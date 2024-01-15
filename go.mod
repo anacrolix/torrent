@@ -122,4 +122,6 @@ retract (
 	v1.39.0
 	// peer-requesting doesn't scale
 	[v1.34.0, v1.38.1]
+	// Indefinite outgoing requests on storage write errors. https://github.com/anacrolix/torrent/issues/889
+	[v1.29.0, v1.53.2]
 )

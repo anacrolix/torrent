@@ -465,6 +465,7 @@ func (me *Peer) cancel(r RequestIndex) {
 		panic("request not existing should have been guarded")
 	}
 	if me._cancel(r) {
+		// Record that we expect to get a cancel ack.
 		if !me.requestState.Cancelled.CheckedAdd(r) {
 			panic("request already cancelled")
 		}

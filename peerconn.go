@@ -297,9 +297,23 @@ func (me *PeerConn) _request(r Request) bool {
 
 func (me *PeerConn) _cancel(r RequestIndex) bool {
 	me.write(makeCancelMessage(me.t.requestIndexToRequest(r)))
-	// Transmission does not send rejects for received cancels. See
-	// https://github.com/transmission/transmission/pull/2275.
-	return me.fastEnabled() && !me.remoteIsTransmission()
+	return me.remoteRejectsCancels()
+}
+
+// Whether we should expect a reject message after sending a cancel.
+func (me *PeerConn) remoteRejectsCancels() bool {
+	if !me.fastEnabled() {
+		return false
+	}
+	if me.remoteIsTransmission() {
+		// Transmission did not send rejects for received cancels. See
+		// https://github.com/transmission/transmission/pull/2275. Fixed in 4.0.0-beta.1 onward in
+		// https://github.com/transmission/transmission/commit/76719bf34c255da4fca991c2ad3fa4b65d2154b1.
+		// Peer ID prefix scheme described
+		// https://github.com/transmission/transmission/blob/7ec7607bbcf0fa99bd4b157b9b0f0c411d59f45d/CMakeLists.txt#L128-L149.
+		return me.PeerID[3] >= '4'
+	}
+	return true
 }
 
 func (cn *PeerConn) fillWriteBuffer() {

@@ -1097,16 +1097,16 @@ func (c *PeerConn) pexEvent(t pexEventType) (_ pexEvent, err error) {
 	return pexEvent{t, addr, f, nil}, nil
 }
 
-func (c *PeerConn) String() string {
-	return fmt.Sprintf("%T %p [id=%+q, exts=%v, v=%q]", c, c, c.PeerID, c.PeerExtensionBytes, c.PeerClientName.Load())
+func (pc *PeerConn) String() string {
+	return fmt.Sprintf("%T %p [id=%+q, exts=%v, v=%q]", pc, pc, pc.PeerID, pc.PeerExtensionBytes, pc.PeerClientName.Load())
 }
 
 // Returns the pieces the peer could have based on their claims. If we don't know how many pieces
-// are in the torrent, it could be a very large range the peer has sent HaveAll.
-func (cn *PeerConn) PeerPieces() *roaring.Bitmap {
-	cn.locker().RLock()
-	defer cn.locker().RUnlock()
-	return cn.newPeerPieces()
+// are in the torrent, it could be a very large range if the peer has sent HaveAll.
+func (pc *PeerConn) PeerPieces() *roaring.Bitmap {
+	pc.locker().RLock()
+	defer pc.locker().RUnlock()
+	return pc.newPeerPieces()
 }
 
 func (pc *PeerConn) remoteIsTransmission() bool {

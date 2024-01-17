@@ -245,6 +245,8 @@ func (t *Torrent) KnownSwarm() (ks []PeerInfo) {
 	}
 
 	// Add active peers to the list
+	t.cl.rLock()
+	defer t.cl.rUnlock()
 	for conn := range t.conns {
 		ks = append(ks, PeerInfo{
 			Id:     conn.PeerID,

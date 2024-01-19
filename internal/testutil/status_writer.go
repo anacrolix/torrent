@@ -40,7 +40,9 @@ func ExportStatusWriter(sw StatusWriter, path string, t testing.TB) (release fun
 	http.HandleFunc(
 		pattern,
 		func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
 			sw := sws[pattern]
+			mu.Unlock()
 			if sw == nil {
 				http.NotFound(w, r)
 				return

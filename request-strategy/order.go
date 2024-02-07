@@ -67,22 +67,24 @@ func GetRequestablePieces(
 
 		ih := _i.key.InfoHash
 		t := input.Torrent(ih)
+		if t.IgnorePiece(_i.key.Index) {
+			// TODO: Clarify exactly what is verified. Stuff that's being hashed should be
+			// considered unverified and hold up further requests.
+			return true
+		}
+
 		pieceLength := t.PieceLength()
+		allTorrentsUnverifiedBytes += pieceLength
+		if input.MaxUnverifiedBytes() != 0 && allTorrentsUnverifiedBytes > input.MaxUnverifiedBytes() {
+			return false
+		}
 		if storageLeft != nil {
 			if *storageLeft < pieceLength {
 				return false
 			}
 			*storageLeft -= pieceLength
 		}
-		if t.IgnorePiece(_i.key.Index) {
-			// TODO: Clarify exactly what is verified. Stuff that's being hashed should be
-			// considered unverified and hold up further requests.
-			return true
-		}
-		if input.MaxUnverifiedBytes() != 0 && allTorrentsUnverifiedBytes+pieceLength > input.MaxUnverifiedBytes() {
-			return true
-		}
-		allTorrentsUnverifiedBytes += pieceLength
+
 		f(ih, _i.key.Index, _i.state)
 		return true
 	})

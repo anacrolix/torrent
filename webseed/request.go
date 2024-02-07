@@ -1,6 +1,7 @@
 package webseed
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -46,6 +47,7 @@ func trailingPath(
 
 // Creates a request per BEP 19.
 func newRequest(
+	ctx context.Context,
 	url_ string, fileIndex int,
 	info *metainfo.Info,
 	offset, length int64,
@@ -57,7 +59,7 @@ func newRequest(
 		// for things like spaces and '#'.
 		url_ += trailingPath(info.Name, fileInfo.Path, pathEscaper)
 	}
-	req, err := http.NewRequest(http.MethodGet, url_, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url_, nil)
 	if err != nil {
 		return nil, err
 	}

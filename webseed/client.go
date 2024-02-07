@@ -79,13 +79,13 @@ func (ws *Client) NewRequest(r RequestSpec) Request {
 	var requestParts []requestPart
 	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
 		req, err := newRequest(
+			ctx,
 			ws.Url, i, ws.info, e.Start, e.Length,
 			ws.PathEscaper,
 		)
 		if err != nil {
 			panic(err)
 		}
-		req = req.WithContext(ctx)
 		part := requestPart{
 			req:                 req,
 			result:              make(chan requestPartResult, 1),

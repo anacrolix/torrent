@@ -1,6 +1,9 @@
 package requestStrategy
 
-import "github.com/anacrolix/torrent/metainfo"
+import (
+	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/torrent/metainfo"
+)
 
 type Btree interface {
 	Delete(pieceRequestOrderItem)
@@ -21,14 +24,14 @@ type PieceRequestOrder struct {
 }
 
 type PieceRequestOrderKey struct {
-	InfoHash metainfo.Hash
 	Index    int
+	InfoHash metainfo.Hash
 }
 
 type PieceRequestOrderState struct {
+	Availability int
 	Priority     piecePriority
 	Partial      bool
-	Availability int
 }
 
 type pieceRequestOrderItem struct {
@@ -40,28 +43,29 @@ func (me *pieceRequestOrderItem) Less(otherConcrete *pieceRequestOrderItem) bool
 	return pieceOrderLess(me, otherConcrete).Less()
 }
 
-func (me *PieceRequestOrder) Add(key PieceRequestOrderKey, state PieceRequestOrderState) {
-	if _, ok := me.keys[key]; ok {
-		panic(key)
+// Returns the old state if the key was already present.
+func (me *PieceRequestOrder) Add(
+	key PieceRequestOrderKey,
+	state PieceRequestOrderState,
+) (old g.Option[PieceRequestOrderState]) {
+	if old.Value, old.Ok = me.keys[key]; old.Ok {
+		if state == old.Value {
+			return
+		}
+		me.tree.Delete(pieceRequestOrderItem{key, old.Value})
 	}
 	me.tree.Add(pieceRequestOrderItem{key, state})
 	me.keys[key] = state
+	return
 }
 
 func (me *PieceRequestOrder) Update(
 	key PieceRequestOrderKey,
 	state PieceRequestOrderState,
 ) {
-	oldState, ok := me.keys[key]
-	if !ok {
+	if !me.Add(key, state).Ok {
 		panic("key should have been added already")
 	}
-	if state == oldState {
-		return
-	}
-	me.tree.Delete(pieceRequestOrderItem{key, oldState})
-	me.tree.Add(pieceRequestOrderItem{key, state})
-	me.keys[key] = state
 }
 
 func (me *PieceRequestOrder) existingItemForKey(key PieceRequestOrderKey) pieceRequestOrderItem {
@@ -71,9 +75,14 @@ func (me *PieceRequestOrder) existingItemForKey(key PieceRequestOrderKey) pieceR
 	}
 }
 
-func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) {
-	me.tree.Delete(pieceRequestOrderItem{key, me.keys[key]})
+func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) bool {
+	state, ok := me.keys[key]
+	if !ok {
+		return false
+	}
+	me.tree.Delete(pieceRequestOrderItem{key, state})
 	delete(me.keys, key)
+	return true
 }
 
 func (me *PieceRequestOrder) Len() int {

@@ -212,7 +212,8 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 						return
 					}
 				}
-				if p.requestState.Cancelled.Contains(r) {
+				cancelled := &p.requestState.Cancelled
+				if !cancelled.IsEmpty() && cancelled.Contains(r) {
 					// Can't re-request while awaiting acknowledgement.
 					return
 				}
@@ -244,9 +245,17 @@ func (p *Peer) maybeUpdateActualRequestState() {
 		func(_ context.Context) {
 			next := p.getDesiredRequestState()
 			p.applyRequestState(next)
-			p.t.requestIndexes = next.Requests.requestIndexes[:0]
+			p.t.cacheNextRequestIndexesForReuse(next.Requests.requestIndexes)
 		},
 	)
+}
+
+func (t *Torrent) cacheNextRequestIndexesForReuse(slice []RequestIndex) {
+	// The incoming slice can be smaller when getDesiredRequestState short circuits on some
+	// conditions.
+	if cap(slice) > cap(t.requestIndexes) {
+		t.requestIndexes = slice[:0]
+	}
 }
 
 // Whether we should allow sending not interested ("losing interest") to the peer. I noticed
@@ -278,7 +287,11 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 		return
 	}
 	more := true
-	requestHeap := heap.InterfaceForSlice(&next.Requests.requestIndexes, next.Requests.lessByValue)
+	orig := next.Requests.requestIndexes
+	requestHeap := heap.InterfaceForSlice(
+		&next.Requests.requestIndexes,
+		next.Requests.lessByValue,
+	)
 	heap.Init(requestHeap)
 
 	t := p.t
@@ -292,6 +305,9 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 			break
 		}
 		req := heap.Pop(requestHeap)
+		if cap(next.Requests.requestIndexes) != cap(orig) {
+			panic("changed")
+		}
 		existing := t.requestingPeer(req)
 		if existing != nil && existing != p {
 			// Don't steal from the poor.

@@ -170,6 +170,8 @@ type Torrent struct {
 	// Large allocations reused between request state updates.
 	requestPieceStates []request_strategy.PieceRequestOrderState
 	requestIndexes     []RequestIndex
+
+	disableTriggers bool
 }
 
 type outgoingConnAttemptKey = *PeerInfo
@@ -200,7 +202,7 @@ func (t *Torrent) decPieceAvailability(i pieceIndex) {
 		panic(p.relativeAvailability)
 	}
 	p.relativeAvailability--
-	t.updatePieceRequestOrder(i)
+	t.updatePieceRequestOrderPiece(i)
 }
 
 func (t *Torrent) incPieceAvailability(i pieceIndex) {
@@ -208,7 +210,7 @@ func (t *Torrent) incPieceAvailability(i pieceIndex) {
 	if t.haveInfo() {
 		p := t.piece(i)
 		p.relativeAvailability++
-		t.updatePieceRequestOrder(i)
+		t.updatePieceRequestOrderPiece(i)
 	}
 }
 
@@ -1099,7 +1101,7 @@ func chunkIndexFromChunkSpec(cs ChunkSpec, chunkSize pp.Integer) chunkIndexType 
 }
 
 func (t *Torrent) wantPieceIndex(index pieceIndex) bool {
-	return t._pendingPieces.Contains(uint32(index))
+	return !t._pendingPieces.IsEmpty() && t._pendingPieces.Contains(uint32(index))
 }
 
 // A pool of []*PeerConn, to reduce allocations in functions that need to index or sort Torrent
@@ -1256,7 +1258,7 @@ func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex) (pendingChange
 	if !t.closed.IsSet() {
 		// It would be possible to filter on pure-priority changes here to avoid churning the piece
 		// request order.
-		t.updatePieceRequestOrder(piece)
+		t.updatePieceRequestOrderPiece(piece)
 	}
 	p := &t.pieces[piece]
 	newPrio := p.uncachedPriority()
@@ -1269,9 +1271,10 @@ func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex) (pendingChange
 }
 
 func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string) {
-	if t.updatePiecePriorityNoTriggers(piece) {
+	if t.updatePiecePriorityNoTriggers(piece) && !t.disableTriggers {
 		t.onPiecePendingTriggers(piece, reason)
 	}
+	t.updatePieceRequestOrderPiece(piece)
 }
 
 func (t *Torrent) updateAllPiecePriorities(reason string) {
@@ -1415,13 +1418,17 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	} else {
 		t._completedPieces.Remove(x)
 	}
-	p.t.updatePieceRequestOrder(piece)
+	p.t.updatePieceRequestOrderPiece(piece)
 	t.updateComplete()
 	if complete && len(p.dirtiers) != 0 {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
 	}
 	if changed {
-		t.logger.Levelf(log.Debug, "piece %d completion changed: %+v -> %+v", piece, cached, uncached)
+		//slog.Debug(
+		//	"piece completion changed",
+		//	slog.Int("piece", piece),
+		//	slog.Any("from", cached),
+		//	slog.Any("to", uncached))
 		t.pieceCompletionChanged(piece, "Torrent.updatePieceCompletion")
 	}
 	return changed

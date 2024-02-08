@@ -82,13 +82,13 @@ func (p *Piece) numDirtyChunks() chunkIndexType {
 
 func (p *Piece) unpendChunkIndex(i chunkIndexType) {
 	p.t.dirtyChunks.Add(p.requestIndexOffset() + i)
-	p.t.updatePieceRequestOrder(p.index)
+	p.t.updatePieceRequestOrderPiece(p.index)
 	p.readerCond.Broadcast()
 }
 
 func (p *Piece) pendChunkIndex(i RequestIndex) {
 	p.t.dirtyChunks.Remove(p.requestIndexOffset() + i)
-	p.t.updatePieceRequestOrder(p.index)
+	p.t.updatePieceRequestOrderPiece(p.index)
 }
 
 func (p *Piece) numChunks() chunkIndexType {

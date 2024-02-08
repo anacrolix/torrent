@@ -1,10 +1,14 @@
 package torrent
 
 import (
-	"github.com/anacrolix/torrent/typed-roaring"
+	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
-func iterBitmapUnsetInRange[T typedRoaring.BitConstraint](it *typedRoaring.Iterator[T], start, end T, f func(T)) {
+func iterBitmapUnsetInRange[T typedRoaring.BitConstraint](
+	it *typedRoaring.Iterator[T],
+	start, end T,
+	f func(T),
+) {
 	it.AdvanceIfNeeded(start)
 	lastDirty := start - 1
 	for it.HasNext() {

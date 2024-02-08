@@ -68,7 +68,7 @@ func GetRequestablePieces(
 			return true
 		}
 		if input.MaxUnverifiedBytes() != 0 && allTorrentsUnverifiedBytes+pieceLength > input.MaxUnverifiedBytes() {
-			return true
+			return false
 		}
 		allTorrentsUnverifiedBytes += pieceLength
 		f(ih, _i.key.Index, _i.state)

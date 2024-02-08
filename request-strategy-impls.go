@@ -2,38 +2,66 @@ package torrent
 
 import (
 	g "github.com/anacrolix/generics"
+
 	"github.com/anacrolix/torrent/metainfo"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
 )
 
-type requestStrategyInput struct {
-	cl      *Client
-	capFunc storage.TorrentCapacity
+type requestStrategyInputCommon struct {
+	maxUnverifiedBytes int64
 }
 
-func (r requestStrategyInput) Torrent(ih metainfo.Hash) request_strategy.Torrent {
-	return requestStrategyTorrent{g.MapMustGet(r.cl.torrents, ih)}
+func (r requestStrategyInputCommon) MaxUnverifiedBytes() int64 {
+	return r.maxUnverifiedBytes
 }
 
-func (r requestStrategyInput) Capacity() (int64, bool) {
-	if r.capFunc == nil {
-		return 0, false
-	}
+type requestStrategyInputMultiTorrent struct {
+	requestStrategyInputCommon
+	torrents map[metainfo.Hash]*Torrent
+	capFunc  storage.TorrentCapacity
+}
+
+func (r requestStrategyInputMultiTorrent) Torrent(ih metainfo.Hash) request_strategy.Torrent {
+	return requestStrategyTorrent{g.MapMustGet(r.torrents, ih)}
+}
+
+func (r requestStrategyInputMultiTorrent) Capacity() (int64, bool) {
 	return (*r.capFunc)()
 }
 
-func (r requestStrategyInput) MaxUnverifiedBytes() int64 {
-	return r.cl.config.MaxUnverifiedBytes
+type requestStrategyInputSingleTorrent struct {
+	requestStrategyInputCommon
+	t *Torrent
 }
 
-var _ request_strategy.Input = requestStrategyInput{}
+func (r requestStrategyInputSingleTorrent) Torrent(_ metainfo.Hash) request_strategy.Torrent {
+	return requestStrategyTorrent{r.t}
+}
+
+func (r requestStrategyInputSingleTorrent) Capacity() (cap int64, capped bool) {
+	return 0, false
+}
+
+var _ request_strategy.Input = requestStrategyInputSingleTorrent{}
+
+func (cl *Client) getRequestStrategyInputCommon() requestStrategyInputCommon {
+	return requestStrategyInputCommon{cl.config.MaxUnverifiedBytes}
+}
 
 // Returns what is necessary to run request_strategy.GetRequestablePieces for primaryTorrent.
 func (cl *Client) getRequestStrategyInput(primaryTorrent *Torrent) (input request_strategy.Input) {
-	return requestStrategyInput{
-		cl:      cl,
-		capFunc: primaryTorrent.storage.Capacity,
+	if primaryTorrent.storage.Capacity == nil {
+		return requestStrategyInputSingleTorrent{
+			requestStrategyInputCommon: cl.getRequestStrategyInputCommon(),
+			t:                          primaryTorrent,
+		}
+	} else {
+		return requestStrategyInputMultiTorrent{
+			requestStrategyInputCommon: cl.getRequestStrategyInputCommon(),
+			torrents:                   cl.torrents,
+			capFunc:                    primaryTorrent.storage.Capacity,
+		}
 	}
 }
 

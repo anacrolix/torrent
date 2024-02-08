@@ -19,7 +19,7 @@ func benchmarkPieceRequestOrder[B Btree](
 	for range iter.N(b.N) {
 		pro := NewPieceOrder(newBtree(), numPieces)
 		state := PieceRequestOrderState{}
-		doPieces := func(m func(PieceRequestOrderKey)) {
+		doPieces := func(m func(PieceRequestOrderKey) bool) {
 			for i := range iter.N(numPieces) {
 				key := PieceRequestOrderKey{
 					Index: i,
@@ -28,34 +28,38 @@ func benchmarkPieceRequestOrder[B Btree](
 				m(key)
 			}
 		}
-		doPieces(func(key PieceRequestOrderKey) {
-			pro.Add(key, state)
+		doPieces(func(key PieceRequestOrderKey) bool {
+			return !pro.Add(key, state).Ok
 		})
 		state.Availability++
-		doPieces(func(key PieceRequestOrderKey) {
+		doPieces(func(key PieceRequestOrderKey) bool {
 			pro.Update(key, state)
+			return true
 		})
 		pro.tree.Scan(func(item pieceRequestOrderItem) bool {
 			return true
 		})
-		doPieces(func(key PieceRequestOrderKey) {
+		doPieces(func(key PieceRequestOrderKey) bool {
 			state.Priority = piecePriority(key.Index / 4)
 			pro.Update(key, state)
+			return true
 		})
 		pro.tree.Scan(func(item pieceRequestOrderItem) bool {
 			return item.key.Index < 1000
 		})
 		state.Priority = 0
 		state.Availability++
-		doPieces(func(key PieceRequestOrderKey) {
+		doPieces(func(key PieceRequestOrderKey) bool {
 			pro.Update(key, state)
+			return true
 		})
 		pro.tree.Scan(func(item pieceRequestOrderItem) bool {
 			return item.key.Index < 1000
 		})
 		state.Availability--
-		doPieces(func(key PieceRequestOrderKey) {
+		doPieces(func(key PieceRequestOrderKey) bool {
 			pro.Update(key, state)
+			return true
 		})
 		doPieces(pro.Delete)
 		if pro.Len() != 0 {

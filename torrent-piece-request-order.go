@@ -1,17 +1,28 @@
 package torrent
 
 import (
+	g "github.com/anacrolix/generics"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 )
 
-func (t *Torrent) updatePieceRequestOrder(pieceIndex int) {
+func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) {
 	if t.storage == nil {
 		return
 	}
-	if ro, ok := t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()]; ok {
-		ro.Update(
-			t.pieceRequestOrderKey(pieceIndex),
-			t.requestStrategyPieceOrderState(pieceIndex))
+	pro, ok := t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()]
+	if !ok {
+		return
+	}
+	key := t.pieceRequestOrderKey(pieceIndex)
+	if t.hasStorageCap() {
+		pro.Update(key, t.requestStrategyPieceOrderState(pieceIndex))
+		return
+	}
+	pending := !t.ignorePieceForRequests(pieceIndex)
+	if pending {
+		pro.Add(key, t.requestStrategyPieceOrderState(pieceIndex))
+	} else {
+		pro.Delete(key)
 	}
 }
 
@@ -41,9 +52,7 @@ func (t *Torrent) initPieceRequestOrder() {
 	if t.storage == nil {
 		return
 	}
-	if t.cl.pieceRequestOrder == nil {
-		t.cl.pieceRequestOrder = make(map[interface{}]*request_strategy.PieceRequestOrder)
-	}
+	g.MakeMapIfNil(&t.cl.pieceRequestOrder)
 	key := t.clientPieceRequestOrderKey()
 	cpro := t.cl.pieceRequestOrder
 	if cpro[key] == nil {
@@ -55,9 +64,11 @@ func (t *Torrent) addRequestOrderPiece(i int) {
 	if t.storage == nil {
 		return
 	}
-	t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()].Add(
-		t.pieceRequestOrderKey(i),
-		t.requestStrategyPieceOrderState(i))
+	pro := t.getPieceRequestOrder()
+	key := t.pieceRequestOrderKey(i)
+	if t.hasStorageCap() || !t.ignorePieceForRequests(i) {
+		pro.Add(key, t.requestStrategyPieceOrderState(i))
+	}
 }
 
 func (t *Torrent) getPieceRequestOrder() *request_strategy.PieceRequestOrder {

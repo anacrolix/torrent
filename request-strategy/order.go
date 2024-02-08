@@ -66,7 +66,8 @@ func GetRequestablePieces(
 		lastItem.Set(_i)
 
 		ih := _i.key.InfoHash
-		t := input.Torrent(ih)
+		var t Torrent = input.Torrent(ih)
+		var piece Piece = t.Piece(_i.key.Index)
 		pieceLength := t.PieceLength()
 		if storageLeft != nil {
 			if *storageLeft < pieceLength {
@@ -74,7 +75,7 @@ func GetRequestablePieces(
 			}
 			*storageLeft -= pieceLength
 		}
-		if t.IgnorePiece(_i.key.Index) {
+		if !piece.Request() || piece.NumPendingChunks() == 0 {
 			// TODO: Clarify exactly what is verified. Stuff that's being hashed should be
 			// considered unverified and hold up further requests.
 			return true

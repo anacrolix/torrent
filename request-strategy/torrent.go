@@ -1,6 +1,6 @@
 package requestStrategy
 
 type Torrent interface {
-	IgnorePiece(int) bool
+	Piece(int) Piece
 	PieceLength() int64
 }

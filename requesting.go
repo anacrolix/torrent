@@ -9,6 +9,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
@@ -248,9 +249,31 @@ func (p *Peer) maybeUpdateActualRequestState() {
 	)
 }
 
+// Whether we should allow sending not interested ("losing interest") to the peer. I noticed
+// qBitTorrent seems to punish us for sending not interested when we're streaming and don't
+// currently need anything.
+func (p *Peer) allowSendNotInterested() bool {
+	// Except for caching, we're not likely to lose pieces very soon.
+	if p.t.haveAllPieces() {
+		return true
+	}
+	all, known := p.peerHasAllPieces()
+	if all || !known {
+		return false
+	}
+	// Allow losing interest if we have all the pieces the peer has.
+	return roaring.AndNot(p.peerPieces(), &p.t._completedPieces).IsEmpty()
+}
+
 // Transmit/action the request state to the peer.
 func (p *Peer) applyRequestState(next desiredRequestState) {
 	current := &p.requestState
+	// Make interest sticky
+	if !next.Interested && p.requestState.Interested {
+		if !p.allowSendNotInterested() {
+			next.Interested = true
+		}
+	}
 	if !p.setInterested(next.Interested) {
 		return
 	}

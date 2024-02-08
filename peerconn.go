@@ -447,7 +447,7 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 	return nil
 }
 
-func (cn *PeerConn) onPeerHasAllPieces() {
+func (cn *PeerConn) onPeerHasAllPiecesNoTriggers() {
 	t := cn.t
 	if t.haveInfo() {
 		cn._peerPieces.Iterate(func(x uint32) bool {
@@ -458,6 +458,14 @@ func (cn *PeerConn) onPeerHasAllPieces() {
 	t.addConnWithAllPieces(&cn.Peer)
 	cn.peerSentHaveAll = true
 	cn._peerPieces.Clear()
+}
+
+func (cn *PeerConn) onPeerHasAllPieces() {
+	cn.onPeerHasAllPiecesNoTriggers()
+	cn.peerHasAllPiecesTriggers()
+}
+
+func (cn *PeerConn) peerHasAllPiecesTriggers() {
 	if !cn.t._pendingPieces.IsEmpty() {
 		cn.updateRequests("Peer.onPeerHasAllPieces")
 	}
@@ -1044,7 +1052,7 @@ func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool, state *peerRe
 	})
 }
 
-func (c *PeerConn) setTorrent(t *Torrent) {
+func (c *Peer) setTorrent(t *Torrent) {
 	if c.t != nil {
 		panic("connection already associated with a torrent")
 	}

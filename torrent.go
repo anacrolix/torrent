@@ -1166,7 +1166,7 @@ type PieceStateChange struct {
 	PieceState
 }
 
-func (t *Torrent) publishPieceChange(piece pieceIndex) {
+func (t *Torrent) publishPieceStateChange(piece pieceIndex) {
 	t.cl._mu.Defer(func() {
 		cur := t.pieceState(piece)
 		p := &t.pieces[piece]
@@ -1230,7 +1230,7 @@ func (t *Torrent) maybeNewConns() {
 	t.openNewConns()
 }
 
-func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
+func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string) {
 	if t._pendingPieces.Contains(uint32(piece)) {
 		t.iterPeers(func(c *Peer) {
 			// if c.requestState.Interested {
@@ -1249,10 +1249,10 @@ func (t *Torrent) piecePriorityChanged(piece pieceIndex, reason string) {
 		})
 	}
 	t.maybeNewConns()
-	t.publishPieceChange(piece)
+	t.publishPieceStateChange(piece)
 }
 
-func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string) {
+func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex) (pendingChanged bool) {
 	if !t.closed.IsSet() {
 		// It would be possible to filter on pure-priority changes here to avoid churning the piece
 		// request order.
@@ -1262,15 +1262,16 @@ func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string) {
 	newPrio := p.uncachedPriority()
 	// t.logger.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
 	if newPrio == PiecePriorityNone {
-		if !t._pendingPieces.CheckedRemove(uint32(piece)) {
-			return
-		}
+		return t._pendingPieces.CheckedRemove(uint32(piece))
 	} else {
-		if !t._pendingPieces.CheckedAdd(uint32(piece)) {
-			return
-		}
+		return t._pendingPieces.CheckedAdd(uint32(piece))
 	}
-	t.piecePriorityChanged(piece, reason)
+}
+
+func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string) {
+	if t.updatePiecePriorityNoTriggers(piece) {
+		t.onPiecePendingTriggers(piece, reason)
+	}
 }
 
 func (t *Torrent) updateAllPiecePriorities(reason string) {
@@ -1420,7 +1421,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
 	}
 	if changed {
-		log.Fstr("piece %d completion changed: %+v -> %+v", piece, cached, uncached).LogLevel(log.Debug, t.logger)
+		t.logger.Levelf(log.Debug, "piece %d completion changed: %+v -> %+v", piece, cached, uncached)
 		t.pieceCompletionChanged(piece, "Torrent.updatePieceCompletion")
 	}
 	return changed
@@ -1957,7 +1958,7 @@ func (t *Torrent) numTotalPeers() int {
 
 // Reconcile bytes transferred before connection was associated with a
 // torrent.
-func (t *Torrent) reconcileHandshakeStats(c *PeerConn) {
+func (t *Torrent) reconcileHandshakeStats(c *Peer) {
 	if c._stats != (ConnStats{
 		// Handshakes should only increment these fields:
 		BytesWritten: c._stats.BytesWritten,
@@ -2123,10 +2124,10 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	}
 
 	p.marking = true
-	t.publishPieceChange(piece)
+	t.publishPieceStateChange(piece)
 	defer func() {
 		p.marking = false
-		t.publishPieceChange(piece)
+		t.publishPieceStateChange(piece)
 	}()
 
 	if passed {
@@ -2268,7 +2269,7 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 	p := t.piece(pi)
 	t.piecesQueuedForHash.Remove(bitmap.BitIndex(pi))
 	p.hashing = true
-	t.publishPieceChange(pi)
+	t.publishPieceStateChange(pi)
 	t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher")
 	t.storageLock.RLock()
 	t.activePieceHashes++
@@ -2362,7 +2363,7 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 		return
 	}
 	t.piecesQueuedForHash.Add(bitmap.BitIndex(pieceIndex))
-	t.publishPieceChange(pieceIndex)
+	t.publishPieceStateChange(pieceIndex)
 	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck")
 	t.tryCreateMorePieceHashers()
 }

@@ -719,7 +719,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 	cl.event.Broadcast()
 	// We do this because we've written a chunk, and may change PieceState.Partial.
-	t.publishPieceChange(pieceIndex(ppReq.Index))
+	t.publishPieceStateChange(pieceIndex(ppReq.Index))
 
 	return nil
 }

@@ -25,11 +25,11 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	var cl Client
 	cl.init(TestingConfig(t))
 	cl.initLogger()
+	qtc := qt.New(t)
 	c := cl.newConnection(nil, newConnectionOpts{network: "io.Pipe"})
 	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
-	if err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)}); err != nil {
-		t.Log(err)
-	}
+	err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)})
+	qtc.Assert(err, qt.IsNil)
 	r, w := io.Pipe()
 	// c.r = r
 	c.w = w

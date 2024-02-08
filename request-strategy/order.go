@@ -2,7 +2,6 @@ package requestStrategy
 
 import (
 	"bytes"
-	"expvar"
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/multiless"
@@ -40,8 +39,6 @@ func pieceOrderLess(i, j *pieceRequestOrderItem) multiless.Computation {
 		))
 	})
 }
-
-var packageExpvarMap = expvar.NewMap("request-strategy")
 
 // Calls f with requestable pieces in order.
 func GetRequestablePieces(

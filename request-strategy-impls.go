@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/torrent/metainfo"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
@@ -12,7 +13,7 @@ type requestStrategyInput struct {
 }
 
 func (r requestStrategyInput) Torrent(ih metainfo.Hash) request_strategy.Torrent {
-	return requestStrategyTorrent{r.cl.torrents[ih]}
+	return requestStrategyTorrent{g.MapMustGet(r.cl.torrents, ih)}
 }
 
 func (r requestStrategyInput) Capacity() (int64, bool) {

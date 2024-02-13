@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anacrolix/torrent/types/infohash"
+
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/gorilla/websocket"
@@ -43,7 +45,7 @@ type TrackerClient struct {
 	pingTicker     *time.Ticker
 
 	WebsocketTrackerHttpHeader func() http.Header
-	ICEServers                 []string
+	ICEServers                 []webrtc.ICEServer
 }
 
 func (me *TrackerClient) Stats() TrackerClientStats {

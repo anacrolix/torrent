@@ -48,12 +48,12 @@ func (me *wrappedPeerConnection) Close() error {
 	return err
 }
 
-func newPeerConnection(logger log.Logger, iceServers []string) (*wrappedPeerConnection, error) {
+func newPeerConnection(logger log.Logger, iceServers []webrtc.ICEServer) (*wrappedPeerConnection, error) {
 	newPeerConnectionMu.Lock()
 	defer newPeerConnectionMu.Unlock()
 	ctx, span := otel.Tracer(tracerName).Start(context.Background(), "PeerConnection")
 
-	pcConfig := webrtc.Configuration{ICEServers: []webrtc.ICEServer{{URLs: iceServers}}}
+	pcConfig := webrtc.Configuration{ICEServers: iceServers}
 
 	pc, err := api.NewPeerConnection(pcConfig)
 	if err != nil {

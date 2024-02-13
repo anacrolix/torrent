@@ -35,6 +35,7 @@ import (
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
 	"github.com/pion/datachannel"
+	"github.com/pion/webrtc/v3"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
@@ -1841,6 +1842,10 @@ func (cl *Client) locker() *lockWithDeferreds {
 
 func (cl *Client) String() string {
 	return fmt.Sprintf("<%[1]T %[1]p>", cl)
+}
+
+func (cl *Client) ICEServers() []webrtc.ICEServer {
+	return cl.config.ICEServers
 }
 
 // Returns connection-level aggregate connStats at the Client level. See the comment on

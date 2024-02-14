@@ -311,6 +311,13 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		}
 	}
 
+	var ICEServers []webrtc.ICEServer
+	if cl.config.ICEServerList != nil {
+		ICEServers = cl.config.ICEServerList
+	} else if cl.config.ICEServers != nil {
+		ICEServers = []webrtc.ICEServer{{URLs: cl.config.ICEServers}}
+	}
+
 	cl.websocketTrackers = websocketTrackers{
 		PeerId: cl.peerID,
 		Logger: cl.logger,
@@ -329,7 +336,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		},
 		Proxy:                      cl.config.HTTPProxy,
 		WebsocketTrackerHttpHeader: cl.config.WebsocketTrackerHttpHeader,
-		ICEServers:                 cl.config.ICEServers,
+		ICEServers:                 ICEServers,
 		DialContext:                cl.config.TrackerDialContext,
 		OnConn: func(dc datachannel.ReadWriteCloser, dcc webtorrent.DataChannelContext) {
 			cl.lock()
@@ -1845,7 +1852,13 @@ func (cl *Client) String() string {
 }
 
 func (cl *Client) ICEServers() []webrtc.ICEServer {
-	return cl.config.ICEServers
+	var ICEServers []webrtc.ICEServer
+	if cl.config.ICEServerList != nil {
+		ICEServers = cl.config.ICEServerList
+	} else if cl.config.ICEServers != nil {
+		ICEServers = []webrtc.ICEServer{{URLs: cl.config.ICEServers}}
+	}
+	return ICEServers
 }
 
 // Returns connection-level aggregate connStats at the Client level. See the comment on

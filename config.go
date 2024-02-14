@@ -185,9 +185,13 @@ type ClientConfig struct {
 
 	Callbacks Callbacks
 
-	// ICEServers defines a slice describing servers available to be used by
+	// ICEServerList defines a slice describing servers available to be used by
 	// ICE, such as STUN and TURN servers.
-	ICEServers []webrtc.ICEServer
+	ICEServerList []webrtc.ICEServer
+
+	// Legacy support. ICEServers does not support server authentication and therefore
+	// it cannot be used with most TURN servers. Use ICEServerList instead.
+	ICEServers []string
 
 	DialRateLimiter *rate.Limiter
 

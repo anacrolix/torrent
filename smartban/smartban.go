@@ -52,3 +52,9 @@ func (me *Cache[Peer, BlockKey, Hash]) ForgetBlock(key BlockKey) {
 	defer me.lock.Unlock()
 	delete(me.blocks, key)
 }
+
+func (me *Cache[Peer, BlockKey, Hash]) HasBlocks() bool {
+	me.lock.RLock()
+	defer me.lock.RUnlock()
+	return len(me.blocks) != 0
+}

@@ -4,8 +4,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"io"
 	"net"
+	"net/netip"
 	"sync"
 	"testing"
 
@@ -107,29 +109,32 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	t.onSetInfo()
 	t._pendingPieces.Add(0)
 	r, w := net.Pipe()
+	c.Logf("pipe reader remote addr: %v", r.RemoteAddr())
 	cn := cl.newConnection(r, newConnectionOpts{
-		outgoing:   true,
-		remoteAddr: r.RemoteAddr(),
+		outgoing: true,
+		// TODO: This is a hack to give the pipe a bannable remote address.
+		remoteAddr: netip.AddrPortFrom(netip.AddrFrom4([4]byte{1, 2, 3, 4}), 1234),
 		network:    r.RemoteAddr().Network(),
 		connString: regularNetConnPeerConnConnString(r),
 	})
+	c.Assert(cn.bannableAddr.Ok, qt.IsTrue)
 	cn.setTorrent(t)
-	mrlErrChan := make(chan error)
 	msg := pp.Message{
 		Type:  pp.Piece,
 		Piece: make([]byte, defaultChunkSize),
 	}
-	go func() {
+	var errGroup errgroup.Group
+	errGroup.Go(func() error {
 		cl.lock()
 		err := cn.mainReadLoop()
-		if err != nil {
-			mrlErrChan <- err
+		if errors.Is(err, io.EOF) {
+			err = nil
 		}
-		close(mrlErrChan)
-	}()
+		return err
+	})
 	wb := msg.MustMarshalBinary()
 	b.SetBytes(int64(len(msg.Piece)))
-	go func() {
+	errGroup.Go(func() error {
 		ts.writeSem.Lock()
 		for i := 0; i < b.N; i += 1 {
 			cl.lock()
@@ -143,17 +148,19 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			n, err := w.Write(wb)
 			require.NoError(b, err)
 			require.EqualValues(b, len(wb), n)
+			// This is unlocked by a successful write to storage. So this unblocks when that is
+			// done.
 			ts.writeSem.Lock()
 		}
 		if err := w.Close(); err != nil {
 			panic(err)
 		}
-	}()
-	mrlErr := <-mrlErrChan
-	if mrlErr != nil && !errors.Is(mrlErr, io.EOF) {
-		c.Fatal(mrlErr)
-	}
+		return nil
+	})
+	err := errGroup.Wait()
+	c.Assert(err, qt.IsNil)
 	c.Assert(cn._stats.ChunksReadUseful.Int64(), quicktest.Equals, int64(b.N))
+	c.Assert(t.smartBanCache.HasBlocks(), qt.IsTrue)
 }
 
 func TestConnPexPeerFlags(t *testing.T) {

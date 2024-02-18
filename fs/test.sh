@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-echo $BASH_VERSION
+echo BASH_VERSION="$BASH_VERSION"
 set -eux
 repopath="$(cd "$(dirname "$0")/.."; pwd)"
 debian_file=debian-10.8.0-amd64-netinst.iso
@@ -15,7 +15,7 @@ file=Sintel/Sintel.mp4
 
 GOPPROF=http godo -v -- "$repopath/fs/cmd/torrentfs" -mountDir=mnt -metainfoDir=torrents &
 torrentfs_pid=$!
-trap "kill $torrentfs_pid" EXIT
+trap 'kill "$torrentfs_pid"' EXIT
 
 check_file() {
 	while [ ! -e "mnt/$file" ]; do sleep 1; done
@@ -28,7 +28,7 @@ check_file() {
 ( check_file ) &
 check_file_pid=$!
 
-trap "kill $torrentfs_pid $check_file_pid" EXIT
+trap 'kill "$torrentfs_pid" "$check_file_pid"' EXIT
 wait -n
 status=$?
 sudo umount mnt

@@ -4,12 +4,12 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
-	"crypto/sha1"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"expvar"
 	"fmt"
+	"github.com/cespare/xxhash"
 	"io"
 	"math"
 	"net"
@@ -1301,7 +1301,14 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		webSeeds:     make(map[string]*Peer),
 		gotMetainfoC: make(chan struct{}),
 	}
-	t.smartBanCache.Hash = sha1.Sum
+	var salt [8]byte
+	rand.Read(salt[:])
+	t.smartBanCache.Hash = func(b []byte) uint64 {
+		h := xxhash.New()
+		h.Write(salt[:])
+		h.Write(b)
+		return h.Sum64()
+	}
 	t.smartBanCache.Init()
 	t.networkingEnabled.Set()
 	t.logger = cl.logger.WithDefaultLevel(log.Debug)

@@ -19,14 +19,6 @@ const (
 	maxMetadataSize uint32 = 16 * 1024 * 1024
 )
 
-// These are our extended message IDs. Peers will use these values to
-// select which extension a message is intended for.
-const (
-	metadataExtendedId = iota + 1 // 0 is reserved for deleting keys
-	pexExtendedId
-	utHolepunchExtendedId
-)
-
 func defaultPeerExtensionBytes() PeerExtensionBits {
 	return pp.NewPeerExtensionBytes(pp.ExtensionBitDht, pp.ExtensionBitLtep, pp.ExtensionBitFast)
 }

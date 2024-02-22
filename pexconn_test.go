@@ -22,7 +22,7 @@ func TestPexConnState(t *testing.T) {
 		network:    addr.Network(),
 	})
 	c.PeerExtensionIDs = make(map[pp.ExtensionName]pp.ExtensionNumber)
-	c.PeerExtensionIDs[pp.ExtensionNamePex] = pexExtendedId
+	c.PeerExtensionIDs[pp.ExtensionNamePex] = 1
 	c.messageWriter.mu.Lock()
 	c.setTorrent(torrent)
 	if err := torrent.addPeerConn(c); err != nil {
@@ -45,7 +45,8 @@ func TestPexConnState(t *testing.T) {
 	c.pex.Share(testWriter)
 	require.True(t, writerCalled)
 	require.EqualValues(t, pp.Extended, out.Type)
-	require.EqualValues(t, pexExtendedId, out.ExtendedID)
+	require.NotEqualValues(t, out.ExtendedID, 0)
+	require.EqualValues(t, c.PeerExtensionIDs[pp.ExtensionNamePex], out.ExtendedID)
 
 	x, err := pp.LoadPexMsg(out.ExtendedPayload)
 	require.NoError(t, err)

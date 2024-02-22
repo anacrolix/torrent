@@ -45,6 +45,12 @@ type PeerConn struct {
 	PeerExtensionBytes pp.PeerExtensionBits
 	PeerListenPort     int
 
+	// The local extended protocols to advertise in the extended handshake, and to support receiving
+	// from the peer. This will point to the Client default when the PeerConnAdded callback is
+	// invoked. Do not modify this, point it to your own instance. Do not modify the destination
+	// after returning from the callback.
+	LocalLtepProtocolMap *LocalLtepProtocolMap
+
 	// The actual Conn, used for closing, and setting socket options. Do not use methods on this
 	// while holding any mutexes.
 	conn net.Conn
@@ -55,6 +61,7 @@ type PeerConn struct {
 
 	messageWriter peerConnMsgWriter
 
+	// The peer's extension map, as sent in their extended handshake.
 	PeerExtensionIDs map[pp.ExtensionName]pp.ExtensionNumber
 	PeerClientName   atomic.Value
 	uploadTimer      *time.Timer
@@ -877,17 +884,27 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 	}()
 	t := c.t
 	cl := t.cl
-	switch id {
-	case pp.HandshakeExtendedID:
+	{
+		event := PeerConnReadExtensionMessageEvent{
+			PeerConn:        c,
+			ExtensionNumber: id,
+			Payload:         payload,
+		}
+		for _, cb := range c.callbacks.PeerConnReadExtensionMessage {
+			cb(event)
+		}
+	}
+	if id == pp.HandshakeExtendedID {
 		var d pp.ExtendedHandshakeMessage
 		if err := bencode.Unmarshal(payload, &d); err != nil {
 			c.logger.Printf("error parsing extended handshake message %q: %s", payload, err)
 			return fmt.Errorf("unmarshalling extended handshake payload: %w", err)
 		}
+		// Trigger this callback after it's been processed. If you want to handle it yourself, you
+		// should hook PeerConnReadExtensionMessage.
 		if cb := c.callbacks.ReadExtendedHandshake; cb != nil {
 			cb(c, &d)
 		}
-		// c.logger.WithDefaultLevel(log.Debug).Printf("received extended handshake message:\n%s", spew.Sdump(d))
 		if d.Reqq != 0 {
 			c.PeerMaxRequests = d.Reqq
 		}
@@ -919,13 +936,23 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			c.pex.Init(c)
 		}
 		return nil
-	case metadataExtendedId:
+	}
+	extensionName, builtin, err := c.LocalLtepProtocolMap.LookupId(id)
+	if err != nil {
+		return
+	}
+	if !builtin {
+		// User should have taken care of this in PeerConnReadExtensionMessage callback.
+		return nil
+	}
+	switch extensionName {
+	case pp.ExtensionNameMetadata:
 		err := cl.gotMetadataExtensionMsg(payload, t, c)
 		if err != nil {
 			return fmt.Errorf("handling metadata extension message: %w", err)
 		}
 		return nil
-	case pexExtendedId:
+	case pp.ExtensionNamePex:
 		if !c.pex.IsEnabled() {
 			return nil // or hang-up maybe?
 		}
@@ -934,7 +961,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			err = fmt.Errorf("receiving pex message: %w", err)
 		}
 		return
-	case utHolepunchExtendedId:
+	case utHolepunch.ExtensionName:
 		var msg utHolepunch.Msg
 		err = msg.UnmarshalBinary(payload)
 		if err != nil {
@@ -944,7 +971,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		err = c.t.handleReceivedUtHolepunchMsg(msg, c)
 		return
 	default:
-		return fmt.Errorf("unexpected extended message ID: %v", id)
+		panic(fmt.Sprintf("unhandled builtin extension protocol %q", extensionName))
 	}
 }
 
@@ -1151,4 +1178,34 @@ func (c *PeerConn) useful() bool {
 		return true
 	}
 	return false
+}
+
+func makeBuiltinLtepProtocols(pex bool) LocalLtepProtocolMap {
+	ps := []pp.ExtensionName{pp.ExtensionNameMetadata, utHolepunch.ExtensionName}
+	if pex {
+		ps = append(ps, pp.ExtensionNamePex)
+	}
+	return LocalLtepProtocolMap{
+		Index:      ps,
+		NumBuiltin: len(ps),
+	}
+}
+
+func (c *PeerConn) addBuiltinLtepProtocols(pex bool) {
+	c.LocalLtepProtocolMap = &c.t.cl.defaultLocalLtepProtocolMap
+}
+
+func (pc *PeerConn) WriteExtendedMessage(extName pp.ExtensionName, payload []byte) error {
+	pc.locker().Lock()
+	defer pc.locker().Unlock()
+	id := pc.PeerExtensionIDs[extName]
+	if id == 0 {
+		return fmt.Errorf("peer does not support or has disabled extension %q", extName)
+	}
+	pc.write(pp.Message{
+		Type:            pp.Extended,
+		ExtendedID:      id,
+		ExtendedPayload: payload,
+	})
+	return nil
 }

@@ -24,7 +24,7 @@ type (
 	}
 
 	ExtensionName   string
-	ExtensionNumber int
+	ExtensionNumber uint8
 )
 
 const (

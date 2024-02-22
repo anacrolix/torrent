@@ -334,6 +334,13 @@ func (p *Peer) close() {
 	}
 }
 
+func (p *Peer) Close() error {
+	p.locker().Lock()
+	defer p.locker().Unlock()
+	p.close()
+	return nil
+}
+
 // Peer definitely has a piece, for purposes of requesting. So it's not sufficient that we think
 // they do (known=true).
 func (cn *Peer) peerHasPiece(piece pieceIndex) bool {

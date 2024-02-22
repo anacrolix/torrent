@@ -103,7 +103,7 @@ start:
 			err := ws.doRequest(r)
 			ws.requesterCond.L.Unlock()
 			if err != nil && !errors.Is(err, context.Canceled) {
-				log.Printf("requester %v: error doing webseed request %v: %v", i, r, err)
+				ws.peer.logger.Printf("requester %v: error doing webseed request %v: %v", i, r, err)
 			}
 			restart = true
 			if errors.Is(err, webseed.ErrTooFast) {

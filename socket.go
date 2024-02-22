@@ -2,14 +2,17 @@ package torrent
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	g "github.com/anacrolix/generics"
 	"net"
+	"os"
 	"strconv"
 	"syscall"
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/pkg/errors"
 )
 
 type Listener interface {
@@ -111,7 +114,13 @@ type tcpSocket struct {
 	NetworkDialer
 }
 
-func listenAll(networks []network, getHost func(string) string, port int, f firewallCallback, logger log.Logger) ([]socket, error) {
+func listenAll(
+	networks []network,
+	getHost func(string) string,
+	port int,
+	f firewallCallback,
+	logger log.Logger,
+) ([]socket, error) {
 	if len(networks) == 0 {
 		return nil, nil
 	}
@@ -132,13 +141,27 @@ type networkAndHost struct {
 	Host    string
 }
 
-func listenAllRetry(nahs []networkAndHost, port int, f firewallCallback, logger log.Logger) (ss []socket, retry bool, err error) {
-	ss = make([]socket, 1, len(nahs))
-	portStr := strconv.FormatInt(int64(port), 10)
-	ss[0], err = listen(nahs[0].Network, net.JoinHostPort(nahs[0].Host, portStr), f, logger)
-	if err != nil {
-		return nil, false, errors.Wrap(err, "first listen")
+func isUnsupportedNetworkError(err error) bool {
+	var sysErr *os.SyscallError
+	//spewCfg := spew.NewDefaultConfig()
+	//spewCfg.ContinueOnMethod = true
+	//spewCfg.Dump(err)
+	if !errors.As(err, &sysErr) {
+		return false
 	}
+	//spewCfg.Dump(sysErr)
+	//spewCfg.Dump(sysErr.Err.Error())
+	// This might only be Linux specific.
+	return sysErr.Syscall == "bind" && sysErr.Err.Error() == "cannot assign requested address"
+}
+
+func listenAllRetry(
+	nahs []networkAndHost,
+	port int,
+	f firewallCallback,
+	logger log.Logger,
+) (ss []socket, retry bool, err error) {
+	// Close all sockets on error or retry.
 	defer func() {
 		if err != nil || retry {
 			for _, s := range ss {
@@ -147,15 +170,27 @@ func listenAllRetry(nahs []networkAndHost, port int, f firewallCallback, logger 
 			ss = nil
 		}
 	}()
-	portStr = strconv.FormatInt(int64(missinggo.AddrPort(ss[0].Addr())), 10)
-	for _, nah := range nahs[1:] {
-		s, err := listen(nah.Network, net.JoinHostPort(nah.Host, portStr), f, logger)
+	g.MakeSliceWithCap(&ss, len(nahs))
+	portStr := strconv.FormatInt(int64(port), 10)
+	for _, nah := range nahs {
+		var s socket
+		s, err = listen(nah.Network, net.JoinHostPort(nah.Host, portStr), f, logger)
 		if err != nil {
-			return ss,
-				missinggo.IsAddrInUse(err) && port == 0,
-				errors.Wrap(err, "subsequent listen")
+			if isUnsupportedNetworkError(err) {
+				err = nil
+				continue
+			}
+			if len(ss) == 0 {
+				// First relative to a possibly dynamic port (0).
+				err = fmt.Errorf("first listen: %w", err)
+			} else {
+				err = fmt.Errorf("subsequent listen: %w", err)
+			}
+			retry = missinggo.IsAddrInUse(err) && port == 0
+			return
 		}
 		ss = append(ss, s)
+		portStr = strconv.FormatInt(int64(missinggo.AddrPort(ss[0].Addr())), 10)
 	}
 	return
 }

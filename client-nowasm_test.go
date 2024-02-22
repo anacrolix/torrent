@@ -15,6 +15,7 @@ import (
 )
 
 func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
+	c := qt.New(t)
 	cfg := TestingConfig(t)
 	pc, err := storage.NewBoltPieceCompletion(cfg.DataDir)
 	require.NoError(t, err)
@@ -22,7 +23,7 @@ func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
 	defer ci.Close()
 	cfg.DefaultStorage = ci
 	cl, err := NewClient(cfg)
-	require.NoError(t, err)
+	c.Assert(err, qt.IsNil, qt.Commentf("%#v", err))
 	cl.Close()
 	// And again, https://github.com/anacrolix/torrent/issues/158
 	cl, err = NewClient(cfg)

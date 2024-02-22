@@ -21,7 +21,7 @@ import (
 
 func justOneNetwork(cc *torrent.ClientConfig) {
 	cc.DisableTCP = true
-	cc.DisableIPv4 = true
+	cc.DisableIPv6 = true
 }
 
 func TestReceiveChunkStorageFailureSeederFastExtensionDisabled(t *testing.T) {

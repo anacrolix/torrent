@@ -95,7 +95,10 @@ func TestConnClientLogDispatchUnknownTransactionId(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer pc.Close()
 	ccAddr := *cc.LocalAddr().(*net.UDPAddr)
-	ccAddr.IP = net.IPv6loopback
+	ipAddrs, err := net.DefaultResolver.LookupIPAddr(context.Background(), "localhost")
+	c.Assert(err, qt.IsNil)
+	ccAddr.IP = ipAddrs[0].IP
+	ccAddr.Zone = ipAddrs[0].Zone
 	_, err = pc.WriteTo(make([]byte, 30), &ccAddr)
 	c.Assert(err, qt.IsNil)
 }

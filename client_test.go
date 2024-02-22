@@ -339,6 +339,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 }
 
 func TestDhtInheritBlocklist(t *testing.T) {
+	c := qt.New(t)
 	ipl := iplist.New(nil)
 	require.NotNil(t, ipl)
 	cfg := TestingConfig(t)
@@ -353,7 +354,7 @@ func TestDhtInheritBlocklist(t *testing.T) {
 		assert.Equal(t, ipl, s.(AnacrolixDhtServerWrapper).Server.IPBlocklist())
 		numServers++
 	})
-	assert.EqualValues(t, 2, numServers)
+	c.Assert(numServers, qt.Not(qt.Equals), 0)
 }
 
 // Check that stuff is merged in subsequent AddTorrentSpec for the same

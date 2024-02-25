@@ -87,28 +87,15 @@ func newEncrypt(initer bool, s, skey []byte) (c *rc4.Cipher) {
 type cipherReader struct {
 	c  *rc4.Cipher
 	r  io.Reader
-	mu sync.Mutex
 	be []byte
 }
 
 func (cr *cipherReader) Read(b []byte) (n int, err error) {
-	var be []byte
-	cr.mu.Lock()
-	if len(cr.be) >= len(b) {
-		be = cr.be
-		cr.be = nil
-		cr.mu.Unlock()
-	} else {
-		cr.mu.Unlock()
-		be = make([]byte, len(b))
+	if cap(cr.be) < len(b) {
+		cr.be = make([]byte, len(b))
 	}
-	n, err = cr.r.Read(be[:len(b)])
-	cr.c.XORKeyStream(b[:n], be[:n])
-	cr.mu.Lock()
-	if len(be) > len(cr.be) {
-		cr.be = be
-	}
-	cr.mu.Unlock()
+	n, err = cr.r.Read(cr.be[:len(b)])
+	cr.c.XORKeyStream(b[:n], cr.be[:n])
 	return
 }
 

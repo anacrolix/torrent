@@ -11,7 +11,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/slices"
 )
 
-// The info dictionary.
+// The info dictionary. See BEP 3 and BEP 52.
 type Info struct {
 	PieceLength int64  `bencode:"piece length"` // BEP3
 	Pieces      []byte `bencode:"pieces"`       // BEP3
@@ -22,6 +22,10 @@ type Info struct {
 	// TODO: Document this field.
 	Source string     `bencode:"source,omitempty"`
 	Files  []FileInfo `bencode:"files,omitempty"` // BEP3, mutually exclusive with Length
+
+	// BEP 52 (BitTorrent v2)
+	MetaVersion int64    `bencode:"meta version,omitempty"`
+	FileTree    FileTree `bencode:"file tree,omitempty"`
 }
 
 // The Info.Name field is "advisory". For multi-file torrents it's usually a suggested directory
@@ -157,7 +161,7 @@ func (info *Info) Piece(index int) Piece {
 	return Piece{info, pieceIndex(index)}
 }
 
-func (info Info) BestName() string {
+func (info *Info) BestName() string {
 	if info.NameUtf8 != "" {
 		return info.NameUtf8
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 )
 
+// Also known as a torrent file.
 type MetaInfo struct {
 	InfoBytes    bencode.Bytes `bencode:"info,omitempty"`                              // BEP 3
 	Announce     string        `bencode:"announce,omitempty"`                          // BEP 3
@@ -23,10 +24,12 @@ type MetaInfo struct {
 	CreatedBy    string  `bencode:"created by,omitempty"`
 	Encoding     string  `bencode:"encoding,omitempty"`
 	UrlList      UrlList `bencode:"url-list,omitempty"` // BEP 19 WebSeeds
+	// BEP 52 (BitTorrent v2): Keys are file merkle roots (pieces root?), and the values are the
+	// concatenated hashes of the merkle tree layer that corresponds to the piece length.
+	PieceLayers map[string]string `bencode:"piece layers,omitempty"`
 }
 
-// Load a MetaInfo from an io.Reader. Returns a non-nil error in case of
-// failure.
+// Load a MetaInfo from an io.Reader. Returns a non-nil error in case of failure.
 func Load(r io.Reader) (*MetaInfo, error) {
 	var mi MetaInfo
 	d := bencode.NewDecoder(r)
@@ -85,8 +88,7 @@ func (mi MetaInfo) Magnet(infoHash *Hash, info *Info) (m Magnet) {
 	return
 }
 
-// Returns the announce list converted from the old single announce field if
-// necessary.
+// Returns the announce-list converted from the old single announce field if necessary.
 func (mi *MetaInfo) UpvertedAnnounceList() AnnounceList {
 	if mi.AnnounceList.OverridesAnnounce(mi.Announce) {
 		return mi.AnnounceList

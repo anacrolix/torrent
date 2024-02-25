@@ -4,9 +4,13 @@ import "strings"
 
 // Information specific to a single file inside the MetaInfo structure.
 type FileInfo struct {
-	Length   int64    `bencode:"length"` // BEP3
-	Path     []string `bencode:"path"`   // BEP3
+	// BEP3. With BEP 47 this can be optional, but we have no way to describe that without breaking
+	// the API.
+	Length   int64    `bencode:"length"`
+	Path     []string `bencode:"path"` // BEP3
 	PathUtf8 []string `bencode:"path.utf-8,omitempty"`
+
+	ExtendedFileAttrs
 }
 
 func (fi *FileInfo) DisplayPath(info *Info) string {

@@ -18,9 +18,12 @@ type ExtensionBit uint
 // https://www.bittorrent.org/beps/bep_0004.html
 // https://wiki.theory.org/BitTorrentSpecification.html#Reserved_Bytes
 const (
-	ExtensionBitDht                          = 0 // http://www.bittorrent.org/beps/bep_0005.html
-	ExtensionBitFast                         = 2 // http://www.bittorrent.org/beps/bep_0006.html
-	ExtensionBitV2                           = 7 // "Hybrid torrent legacy to v2 upgrade"
+	ExtensionBitDht  = 0 // http://www.bittorrent.org/beps/bep_0005.html
+	ExtensionBitFast = 2 // http://www.bittorrent.org/beps/bep_0006.html
+	// A peer connection initiator can set this when sending a v1 infohash during handshake if they
+	// allow the receiving end to upgrade to v2 by responding with the corresponding v2 infohash.
+	// BEP 52, and BEP 4
+	ExtensionBitV2Upgrade                    = 4
 	ExtensionBitAzureusExtensionNegotiation1 = 16
 	ExtensionBitAzureusExtensionNegotiation2 = 17
 	// LibTorrent Extension Protocol, http://www.bittorrent.org/beps/bep_0010.html
@@ -56,7 +59,7 @@ var bitTags = []struct {
 	{ExtensionBitLtep, "ltep"},
 	{ExtensionBitAzureusExtensionNegotiation2, "azen2"},
 	{ExtensionBitAzureusExtensionNegotiation1, "azen1"},
-	{ExtensionBitV2, "v2"},
+	{ExtensionBitV2Upgrade, "v2"},
 	{ExtensionBitFast, "fast"},
 	{ExtensionBitDht, "dht"},
 }

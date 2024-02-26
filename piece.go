@@ -2,6 +2,8 @@ package torrent
 
 import (
 	"fmt"
+	g "github.com/anacrolix/generics"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	"sync"
 
 	"github.com/anacrolix/chansync"
@@ -13,11 +15,13 @@ import (
 )
 
 type Piece struct {
-	// The completed piece SHA1 hash, from the metainfo "pieces" field.
-	hash  *metainfo.Hash
-	t     *Torrent
-	index pieceIndex
-	files []*File
+	// The completed piece SHA1 hash, from the metainfo "pieces" field. Nil if the info is not V1
+	// compatible.
+	hash   *metainfo.Hash
+	hashV2 g.Option[infohash_v2.T]
+	t      *Torrent
+	index  pieceIndex
+	files  []*File
 
 	readerCond chansync.BroadcastCond
 
@@ -192,7 +196,7 @@ func (p *Piece) torrentBeginOffset() int64 {
 }
 
 func (p *Piece) torrentEndOffset() int64 {
-	return p.torrentBeginOffset() + int64(p.length())
+	return p.torrentBeginOffset() + int64(p.t.usualPieceSize())
 }
 
 func (p *Piece) SetPriority(prio piecePriority) {
@@ -254,4 +258,13 @@ func (p *Piece) requestIndexOffset() RequestIndex {
 
 func (p *Piece) availability() int {
 	return len(p.t.connsWithAllPieces) + p.relativeAvailability
+}
+
+// For v2 torrents, files are aligned to pieces so there should always only be a single file for a
+// given piece.
+func (p *Piece) mustGetOnlyFile() *File {
+	if len(p.files) != 1 {
+		panic(len(p.files))
+	}
+	return p.files[0]
 }

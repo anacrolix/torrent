@@ -57,7 +57,7 @@ func (mi MetaInfo) UnmarshalInfo() (info Info, err error) {
 	return
 }
 
-func (mi MetaInfo) HashInfoBytes() (infoHash Hash) {
+func (mi *MetaInfo) HashInfoBytes() (infoHash Hash) {
 	return HashBytes(mi.InfoBytes)
 }
 

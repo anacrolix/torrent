@@ -30,3 +30,9 @@ The DHT is a bit different: you can't be an active node if you are a badnat, but
 - https://www.bittorrent.org/beps/bep_0055.html
 - https://github.com/anacrolix/torrent/issues/685
 - https://stackoverflow.com/questions/38786438/libutp-%C2%B5tp-and-nat-traversal-udp-hole-punching
+
+### BitTorrent v2
+
+- https://www.bittorrent.org/beps/bep_0052.html
+
+The canonical infohash to use for a torrent will be the v1 infohash, or the short form of the v2 infohash if v1 is not supported. This will apply everywhere that both infohashes are present. If only one 20 byte hash is present, it is always the v1 hash (except in code that interfaces with things that only work with 20 byte hashes, like the DHT).

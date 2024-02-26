@@ -43,6 +43,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
@@ -1291,8 +1292,9 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	}
 
 	t = &Torrent{
-		cl:       cl,
-		infoHash: opts.InfoHash,
+		cl:         cl,
+		infoHash:   opts.InfoHash,
+		infoHashV2: opts.InfoHashV2,
 		peers: prioritizedPeers{
 			om: gbtree.New(32),
 			getPrio: func(p PeerInfo) peerPriority {
@@ -1396,19 +1398,21 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 }
 
 type AddTorrentOpts struct {
-	InfoHash  infohash.T
-	Storage   storage.ClientImpl
-	ChunkSize pp.Integer
-	InfoBytes []byte
+	InfoHash   infohash.T
+	InfoHashV2 g.Option[infohash_v2.T]
+	Storage    storage.ClientImpl
+	ChunkSize  pp.Integer
+	InfoBytes  []byte
 }
 
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
 // Torrent.MergeSpec.
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
 	t, new = cl.AddTorrentOpt(AddTorrentOpts{
-		InfoHash:  spec.InfoHash,
-		Storage:   spec.Storage,
-		ChunkSize: spec.ChunkSize,
+		InfoHash:   spec.InfoHash,
+		InfoHashV2: spec.InfoHashV2,
+		Storage:    spec.Storage,
+		ChunkSize:  spec.ChunkSize,
 	})
 	modSpec := *spec
 	if new {
@@ -1459,7 +1463,7 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	t.maybeNewConns()
 	t.dataDownloadDisallowed.SetBool(spec.DisallowDataDownload)
 	t.dataUploadDisallowed = spec.DisallowDataUpload
-	return nil
+	return t.AddPieceLayers(spec.PieceLayers)
 }
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash, wg *sync.WaitGroup) (err error) {

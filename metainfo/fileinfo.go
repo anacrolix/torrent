@@ -1,6 +1,9 @@
 package metainfo
 
-import "strings"
+import (
+	g "github.com/anacrolix/generics"
+	"strings"
+)
 
 // Information specific to a single file inside the MetaInfo structure.
 type FileInfo struct {
@@ -11,6 +14,10 @@ type FileInfo struct {
 	PathUtf8 []string `bencode:"path.utf-8,omitempty"`
 
 	ExtendedFileAttrs
+
+	// BEP 52. This isn't encoded in a v1 FileInfo, but is exposed here for APIs that expect to deal
+	// v1 files.
+	PiecesRoot g.Option[[32]byte] `bencode:"-"`
 }
 
 func (fi *FileInfo) DisplayPath(info *Info) string {

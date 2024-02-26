@@ -211,19 +211,24 @@ func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex, reason string) {
 }
 
 func (t *Torrent) initFiles() {
+	info := t.info
 	var offset int64
 	t.files = new([]*File)
 	for _, fi := range t.info.UpvertedFiles() {
 		*t.files = append(*t.files, &File{
 			t,
-			strings.Join(append([]string{t.info.BestName()}, fi.BestPath()...), "/"),
+			strings.Join(append([]string{info.BestName()}, fi.BestPath()...), "/"),
 			offset,
 			fi.Length,
 			fi,
-			fi.DisplayPath(t.info),
+			fi.DisplayPath(info),
 			PiecePriorityNone,
+			fi.PiecesRoot,
 		})
 		offset += fi.Length
+		if info.FilesArePieceAligned() {
+			offset = (offset + info.PieceLength - 1) / info.PieceLength * info.PieceLength
+		}
 	}
 }
 

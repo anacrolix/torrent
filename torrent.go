@@ -7,6 +7,8 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
+	"github.com/anacrolix/torrent/merkle"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	"io"
 	"math/rand"
 	"net/netip"
@@ -61,10 +63,13 @@ type Torrent struct {
 	dataUploadDisallowed   bool
 	userOnWriteChunkErr    func(error)
 
-	closed   chansync.SetOnce
-	onClose  []func()
-	infoHash metainfo.Hash
-	pieces   []Piece
+	closed  chansync.SetOnce
+	onClose []func()
+
+	infoHash   metainfo.Hash
+	infoHashV2 g.Option[infohash_v2.T]
+
+	pieces []Piece
 
 	// The order pieces are requested if there's no stronger reason like availability or priority.
 	pieceRequestOrder []int
@@ -383,27 +388,59 @@ func (t *Torrent) metadataSize() int {
 	return len(t.metadataBytes)
 }
 
-func infoPieceHashes(info *metainfo.Info) (ret [][]byte) {
-	for i := 0; i < len(info.Pieces); i += sha1.Size {
-		ret = append(ret, info.Pieces[i:i+sha1.Size])
-	}
-	return
-}
-
 func (t *Torrent) makePieces() {
-	hashes := infoPieceHashes(t.info)
-	t.pieces = make([]Piece, len(hashes))
-	for i, hash := range hashes {
+	t.pieces = make([]Piece, t.info.NumPieces())
+	for i := range t.pieces {
 		piece := &t.pieces[i]
 		piece.t = t
-		piece.index = pieceIndex(i)
+		piece.index = i
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
-		piece.hash = (*metainfo.Hash)(unsafe.Pointer(&hash[0]))
+		if t.info.HasV1() {
+			piece.hash = (*metainfo.Hash)(unsafe.Pointer(
+				unsafe.SliceData(t.info.Pieces[i*sha1.Size : (i+1)*sha1.Size])))
+		}
 		files := *t.files
 		beginFile := pieceFirstFileIndex(piece.torrentBeginOffset(), files)
 		endFile := pieceEndFileIndex(piece.torrentEndOffset(), files)
 		piece.files = files[beginFile:endFile]
+		if t.info.FilesArePieceAligned() {
+			numFiles := len(piece.files)
+			if numFiles != 1 {
+				panic(fmt.Sprintf("%v:%v", beginFile, endFile))
+			}
+		}
 	}
+}
+
+func (t *Torrent) AddPieceLayers(layers map[string]string) (err error) {
+	if layers == nil {
+		return
+	}
+	for _, f := range *t.files {
+		if !f.piecesRoot.Ok {
+			err = fmt.Errorf("no piece root set for file %v", f)
+			return
+		}
+		compactLayer, ok := layers[string(f.piecesRoot.Value[:])]
+		if !ok {
+			continue
+		}
+		var hashes [][32]byte
+		hashes, err = merkle.CompactLayerToSliceHashes(compactLayer)
+		if err != nil {
+			err = fmt.Errorf("bad piece layers for file %q: %w", f, err)
+			return
+		}
+		if len(hashes) != f.numPieces() {
+			err = fmt.Errorf("file %q: got %v hashes expected %v", f, len(hashes), f.numPieces())
+			return
+		}
+		for i := range f.numPieces() {
+			p := t.piece(f.BeginPieceIndex() + i)
+			p.hashV2.Set(hashes[i])
+		}
+	}
+	return nil
 }
 
 // Returns the index of the first file containing the piece. files must be
@@ -421,11 +458,11 @@ func pieceFirstFileIndex(pieceOffset int64, files []*File) int {
 // ordered by offset.
 func pieceEndFileIndex(pieceEndOffset int64, files []*File) int {
 	for i, f := range files {
-		if f.offset+f.length >= pieceEndOffset {
-			return i + 1
+		if f.offset >= pieceEndOffset {
+			return i
 		}
 	}
-	return 0
+	return len(files)
 }
 
 func (t *Torrent) cacheLength() {
@@ -986,6 +1023,14 @@ func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
 	if t.info.PieceLength == 0 {
 		// There will be no variance amongst pieces. Only pain.
 		return 0
+	}
+	if t.info.FilesArePieceAligned() {
+		p := t.piece(piece)
+		file := p.mustGetOnlyFile()
+		if piece == file.EndPieceIndex()-1 {
+			return pp.Integer(file.length - (p.torrentBeginOffset() - file.offset))
+		}
+		return pp.Integer(t.usualPieceSize())
 	}
 	if piece == t.numPieces()-1 {
 		ret := pp.Integer(t.length() % t.info.PieceLength)
@@ -2361,6 +2406,9 @@ func (t *Torrent) peersAsSlice() (ret []*Peer) {
 
 func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 	piece := t.piece(pieceIndex)
+	if piece.hash == nil && !piece.hashV2.Ok {
+		return
+	}
 	if piece.queuedForHash() {
 		return
 	}

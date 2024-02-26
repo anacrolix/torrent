@@ -9,7 +9,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go-version: [ '1.21' ]
+        go-version: [ '1.22' ]
         os: [windows-latest, macos-latest, ubuntu-latest]
       fail-fast: false
     steps:
@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [ '1.21' ]
+        go-version: [ '1.22' ]
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [ '1.21' ]
+        go-version: [ '1.22' ]
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [ '1.21' ]
+        go-version: [ '1.22' ]
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [ '1.21' ]
+        go-version: [ '1.22' ]
       fail-fast: false
     steps:
     - uses: actions/checkout@v2
@@ -74,7 +74,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go-version: [ '1.21' ]
+        go-version: [ '1.22' ]
         os: [ubuntu-latest]
       fail-fast: false
     steps:

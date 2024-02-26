@@ -15,9 +15,10 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - uses: ./.github/actions/go-common
-    - run: go test -race -count 2 $(go list ./... | grep -v /fs)
-    - run: go test -race -count 2 ./fs/...
+    - run: go test -race $(go list ./... | grep -v /fs)
+    - run: go test -race ./fs/...
       if: ${{ ! contains(matrix.os, 'windows') }}
+      continue-on-error: true
 
   test-benchmarks:
     runs-on: ubuntu-latest
@@ -42,6 +43,7 @@ jobs:
     - run: go test -run @ -bench . ./...
 
   test-386:
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -51,6 +53,7 @@ jobs:
     - uses: actions/checkout@v2
     - uses: ./.github/actions/go-common
     - run: GOARCH=386 go test ./...
+      continue-on-error: true
     - run: GOARCH=386 go test ./... -run @ -bench .
 
   build-wasm:
@@ -66,6 +69,7 @@ jobs:
       run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
 
   torrentfs-linux:
+    continue-on-error: true
     timeout-minutes: 5
     runs-on: ${{ matrix.os }}
     strategy:

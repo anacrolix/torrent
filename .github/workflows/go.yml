@@ -80,7 +80,7 @@ jobs:
     - name: Install godo
       run: |
         # Need master for cross-compiling fix
-        go install -v -x github.com/anacrolix/godo@master
+        go install -v -x github.com/anacrolix/godo@v1
         echo $PATH
 
     - name: Apt packages
@@ -89,6 +89,7 @@ jobs:
     - name: torrentfs end-to-end test
       # Test on 386 for atomic alignment and other bad 64-bit assumptions
       run: GOARCH=386 fs/test.sh
+    - run: mount
 
 # Github broke FUSE on MacOS, I'm not sure what the state is.
 

@@ -41,6 +41,11 @@ const (
 
 	// BEP 10
 	Extended MessageType = 20
+
+	// BEP 52
+	HashRequest = 21
+	Hashes      = 22
+	HashReject  = 23
 )
 
 const (

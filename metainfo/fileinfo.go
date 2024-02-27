@@ -28,17 +28,7 @@ func (fi *FileInfo) DisplayPath(info *Info) string {
 	}
 }
 
-func (me FileInfo) Offset(info *Info) (ret int64) {
-	for _, fi := range info.UpvertedFiles() {
-		if me.DisplayPath(info) == fi.DisplayPath(info) {
-			return
-		}
-		ret += fi.Length
-	}
-	panic("not found")
-}
-
-func (fi FileInfo) BestPath() []string {
+func (fi *FileInfo) BestPath() []string {
 	if len(fi.PathUtf8) != 0 {
 		return fi.PathUtf8
 	}

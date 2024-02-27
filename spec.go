@@ -69,13 +69,18 @@ func TorrentSpecFromMetaInfoErr(mi *metainfo.MetaInfo) (*TorrentSpec, error) {
 	if err != nil {
 		err = fmt.Errorf("unmarshalling info: %w", err)
 	}
+	v1Ih := mi.HashInfoBytes()
 	var v2Infohash g.Option[infohash_v2.T]
 	if info.HasV2() {
 		v2Infohash.Set(infohash_v2.HashBytes(mi.InfoBytes))
+		if !info.HasV1() {
+			v1Ih = v2Infohash.Value.ToShort()
+		}
 	}
+
 	return &TorrentSpec{
 		Trackers:    mi.UpvertedAnnounceList(),
-		InfoHash:    mi.HashInfoBytes(),
+		InfoHash:    v1Ih,
 		InfoHashV2:  v2Infohash,
 		PieceLayers: mi.PieceLayers,
 		InfoBytes:   mi.InfoBytes,

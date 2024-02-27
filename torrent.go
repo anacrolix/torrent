@@ -34,14 +34,12 @@ import (
 	"golang.org/x/exp/maps"
 
 	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/internal/check"
 	"github.com/anacrolix/torrent/internal/nestedmaps"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
-	"github.com/anacrolix/torrent/segments"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
@@ -91,9 +89,8 @@ type Torrent struct {
 	metainfo metainfo.MetaInfo
 
 	// The info dict. nil if we don't have it (yet).
-	info      *metainfo.Info
-	fileIndex segments.Index
-	files     *[]*File
+	info  *metainfo.Info
+	files *[]*File
 
 	_chunksPerRegularPiece chunkIndexType
 
@@ -457,7 +454,6 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	t.nameMu.Unlock()
 	t._chunksPerRegularPiece = chunkIndexType((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
 	t.updateComplete()
-	t.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
 	t.displayName = "" // Save a few bytes lol.
 	t.initFiles()
 	t.cacheLength()

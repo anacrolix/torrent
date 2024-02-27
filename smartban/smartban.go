@@ -1,8 +1,9 @@
 package smartban
 
 import (
-	g "github.com/anacrolix/generics"
 	"sync"
+
+	g "github.com/anacrolix/generics"
 )
 
 type Cache[Peer, BlockKey, Hash comparable] struct {

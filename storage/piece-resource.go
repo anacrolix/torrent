@@ -3,13 +3,13 @@ package storage
 import (
 	"bytes"
 	"fmt"
-	"github.com/anacrolix/sync"
 	"io"
 	"path"
 	"sort"
 	"strconv"
 
 	"github.com/anacrolix/missinggo/v2/resource"
+	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/metainfo"
 )

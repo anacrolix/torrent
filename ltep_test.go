@@ -4,15 +4,12 @@ import (
 	"strconv"
 	"testing"
 
-	pp "github.com/anacrolix/torrent/peer_protocol"
-
+	"github.com/anacrolix/sync"
 	qt "github.com/frankban/quicktest"
 
-	"github.com/anacrolix/torrent/internal/testutil"
-
-	"github.com/anacrolix/sync"
-
 	. "github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/internal/testutil"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 const (

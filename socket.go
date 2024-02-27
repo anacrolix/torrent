@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	g "github.com/anacrolix/generics"
 	"net"
 	"os"
 	"strconv"
 	"syscall"
 
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/v2"

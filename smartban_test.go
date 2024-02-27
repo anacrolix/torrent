@@ -2,11 +2,13 @@ package torrent
 
 import (
 	"crypto/sha1"
-	"github.com/anacrolix/missinggo/v2/iter"
-	"github.com/anacrolix/torrent/smartban"
-	"github.com/cespare/xxhash"
 	"net/netip"
 	"testing"
+
+	"github.com/anacrolix/missinggo/v2/iter"
+	"github.com/cespare/xxhash"
+
+	"github.com/anacrolix/torrent/smartban"
 )
 
 func benchmarkSmartBanRecordBlock[Sum comparable](b *testing.B, hash func([]byte) Sum) {

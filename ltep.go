@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	g "github.com/anacrolix/generics"
+
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 

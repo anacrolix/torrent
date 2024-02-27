@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/anacrolix/torrent/merkle"
+	"github.com/anacrolix/torrent/types/infohash"
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	"io"
 	"math/rand"
@@ -538,12 +539,18 @@ func (t *Torrent) onSetInfo() {
 
 // Called when metadata for a torrent becomes available.
 func (t *Torrent) setInfoBytesLocked(b []byte) error {
-	if metainfo.HashBytes(b) != t.infoHash {
+	v2Hash := infohash_v2.HashBytes(b)
+	v1Hash := infohash.HashBytes(b)
+	v2Short := v2Hash.ToShort()
+	if v2Short != t.infoHash && v1Hash != t.infoHash {
 		return errors.New("info bytes have wrong hash")
 	}
 	var info metainfo.Info
 	if err := bencode.Unmarshal(b, &info); err != nil {
 		return fmt.Errorf("error unmarshalling info bytes: %s", err)
+	}
+	if info.HasV2() {
+		t.infoHashV2.Set(v2Hash)
 	}
 	t.metadataBytes = b
 	t.metadataCompletedChunks = nil

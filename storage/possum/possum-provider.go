@@ -5,13 +5,15 @@ package possumTorrentStorage
 import (
 	"cmp"
 	"fmt"
-	"github.com/anacrolix/log"
-	possum "github.com/anacrolix/possum/go"
-	possumResource "github.com/anacrolix/possum/go/resource"
-	"github.com/anacrolix/torrent/storage"
 	"io"
 	"sort"
 	"strconv"
+
+	"github.com/anacrolix/log"
+	possum "github.com/anacrolix/possum/go"
+	possumResource "github.com/anacrolix/possum/go/resource"
+
+	"github.com/anacrolix/torrent/storage"
 )
 
 // Extends possum resource.Provider with an efficient implementation of torrent

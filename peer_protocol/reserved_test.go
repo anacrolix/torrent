@@ -1,8 +1,9 @@
 package peer_protocol
 
 import (
-	qt "github.com/frankban/quicktest"
 	"testing"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func TestV2BitLocation(t *testing.T) {

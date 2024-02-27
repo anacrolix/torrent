@@ -6,6 +6,7 @@ import (
 	"os"
 
 	_ "github.com/anacrolix/envpprof"
+
 	"github.com/anacrolix/torrent"
 )
 

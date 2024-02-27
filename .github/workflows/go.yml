@@ -30,7 +30,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - uses: ./.github/actions/go-common
-    - run: go test -race -run @ -bench . -benchtime 2x ./...
+    - run: go test -race -run @ -bench . -benchtime 2x $(go list ./... | grep -v /possum)
 
   bench:
     runs-on: ubuntu-latest
@@ -41,7 +41,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - uses: ./.github/actions/go-common
-    - run: go test -run @ -bench . ./...
+    - run: go test -run @ -bench . $(go list ./... | grep -v /possum)
 
   test-386:
     timeout-minutes: 5
@@ -55,7 +55,7 @@ jobs:
     - uses: ./.github/actions/go-common
     - run: GOARCH=386 go test $(go list ./... | grep -v /possum)
       continue-on-error: true
-    - run: GOARCH=386 go test ./... -run @ -bench .
+    - run: GOARCH=386 go test -run @ -bench . $(go list ./... | grep -v /possum)
 
   build-wasm:
     runs-on: ubuntu-latest

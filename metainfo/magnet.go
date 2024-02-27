@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	g "github.com/anacrolix/generics"
+
+	"github.com/anacrolix/torrent/types/infohash"
 )
 
 // Magnet link components.
@@ -17,7 +21,7 @@ type Magnet struct {
 	Params      url.Values // All other values, such as "x.pe", "as", "xs" etc.
 }
 
-const xtPrefix = "urn:btih:"
+const btihPrefix = "urn:btih:"
 
 func (m Magnet) String() string {
 	// Deep-copy m.Params
@@ -38,7 +42,7 @@ func (m Magnet) String() string {
 	// implementation.
 	u := url.URL{
 		Scheme:   "magnet",
-		RawQuery: "xt=" + xtPrefix + m.InfoHash.HexString(),
+		RawQuery: "xt=" + btihPrefix + m.InfoHash.HexString(),
 	}
 	if len(vs) != 0 {
 		u.RawQuery += "&" + vs.Encode()
@@ -61,30 +65,37 @@ func ParseMagnetUri(uri string) (m Magnet, err error) {
 		return
 	}
 	q := u.Query()
-	xt := q.Get("xt")
-	m.InfoHash, err = parseInfohash(q.Get("xt"))
-	if err != nil {
-		err = fmt.Errorf("error parsing infohash %q: %w", xt, err)
+	gotInfohash := false
+	for _, xt := range q["xt"] {
+		if gotInfohash {
+			lazyAddParam(&m.Params, "xt", xt)
+			continue
+		}
+		encoded, found := strings.CutPrefix(xt, btihPrefix)
+		if !found {
+			lazyAddParam(&m.Params, "xt", xt)
+			continue
+		}
+		m.InfoHash, err = parseEncodedV1Infohash(encoded)
+		if err != nil {
+			err = fmt.Errorf("error parsing v1 infohash %q: %w", xt, err)
+			return
+		}
+		gotInfohash = true
+	}
+	if !gotInfohash {
+		err = errors.New("missing v1 infohash")
 		return
 	}
-	dropFirst(q, "xt")
-	m.DisplayName = q.Get("dn")
-	dropFirst(q, "dn")
+	q.Del("xt")
+	m.DisplayName = popFirstValue(q, "dn").UnwrapOrZeroValue()
 	m.Trackers = q["tr"]
-	delete(q, "tr")
-	if len(q) == 0 {
-		q = nil
-	}
-	m.Params = q
+	q.Del("tr")
+	copyParams(&m.Params, q)
 	return
 }
 
-func parseInfohash(xt string) (ih Hash, err error) {
-	if !strings.HasPrefix(xt, xtPrefix) {
-		err = errors.New("bad xt parameter prefix")
-		return
-	}
-	encoded := xt[len(xtPrefix):]
+func parseEncodedV1Infohash(encoded string) (ih infohash.T, err error) {
 	decode := func() func(dst, src []byte) (int, error) {
 		switch len(encoded) {
 		case 40:
@@ -109,12 +120,16 @@ func parseInfohash(xt string) (ih Hash, err error) {
 	return
 }
 
-func dropFirst(vs url.Values, key string) {
+func popFirstValue(vs url.Values, key string) g.Option[string] {
 	sl := vs[key]
 	switch len(sl) {
-	case 0, 1:
+	case 0:
+		return g.None[string]()
+	case 1:
 		vs.Del(key)
+		return g.Some(sl[0])
 	default:
 		vs[key] = sl[1:]
+		return g.Some(sl[0])
 	}
 }

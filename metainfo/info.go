@@ -172,7 +172,7 @@ func (info *Info) UpvertedFiles() (files []FileInfo) {
 }
 
 func (info *Info) Piece(index int) Piece {
-	return Piece{info, pieceIndex(index)}
+	return Piece{info, index}
 }
 
 func (info *Info) BestName() string {

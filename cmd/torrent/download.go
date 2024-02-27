@@ -171,10 +171,18 @@ func addTorrents(
 					defer wg.Done()
 					waitForPieces(ctx, t, 0, t.NumPieces())
 				}()
-				if flags.LinearDiscard {
-					r := t.NewReader()
-					io.Copy(io.Discard, r)
-					r.Close()
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					if flags.LinearDiscard {
+						r := t.NewReader()
+						io.Copy(io.Discard, r)
+						r.Close()
+					}
+				}()
+				select {
+				case <-done:
+				case <-ctx.Done():
 				}
 			} else {
 				for _, f := range t.Files() {

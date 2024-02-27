@@ -10,6 +10,7 @@ import (
 	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/types/infohash"
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
+	"hash"
 	"io"
 	"math/rand"
 	"net/netip"
@@ -423,22 +424,35 @@ func (t *Torrent) AddPieceLayers(layers map[string]string) (err error) {
 			return
 		}
 		compactLayer, ok := layers[string(f.piecesRoot.Value[:])]
-		if !ok {
-			continue
-		}
 		var hashes [][32]byte
-		hashes, err = merkle.CompactLayerToSliceHashes(compactLayer)
-		if err != nil {
-			err = fmt.Errorf("bad piece layers for file %q: %w", f, err)
-			return
+		if ok {
+			hashes, err = merkle.CompactLayerToSliceHashes(compactLayer)
+			if err != nil {
+				err = fmt.Errorf("bad piece layers for file %q: %w", f, err)
+				return
+			}
+		} else if f.length > t.info.PieceLength {
+			// BEP 52 is pretty strongly worded about this, even though we should be able to
+			// recover: If a v2 torrent is added by magnet link or infohash, we need to fetch piece
+			// layers ourselves anyway, and that's how we can recover from this.
+			t.logger.Levelf(log.Warning, "no piece layers for file %q", f)
+			continue
+		} else {
+			hashes = [][32]byte{f.piecesRoot.Value}
 		}
 		if len(hashes) != f.numPieces() {
 			err = fmt.Errorf("file %q: got %v hashes expected %v", f, len(hashes), f.numPieces())
 			return
 		}
 		for i := range f.numPieces() {
-			p := t.piece(f.BeginPieceIndex() + i)
-			p.hashV2.Set(hashes[i])
+			pi := f.BeginPieceIndex() + i
+			p := t.piece(pi)
+			// See Torrent.onSetInfo. We want to trigger an initial check if appropriate, if we
+			// didn't yet have a piece hash (can occur with v2 when we don't start with piece
+			// layers).
+			if !p.hashV2.Set(hashes[i]).Ok && p.hash == nil {
+				t.queueInitialPieceCheck(pi)
+			}
 		}
 	}
 	return nil
@@ -521,10 +535,7 @@ func (t *Torrent) onSetInfo() {
 		p.relativeAvailability = t.selectivePieceAvailabilityFromPeers(i)
 		t.addRequestOrderPiece(i)
 		t.updatePieceCompletion(i)
-		if !t.initialPieceCheckDisabled && !p.storageCompletionOk {
-			// t.logger.Printf("piece %s completion unknown, queueing check", p)
-			t.queuePieceCheck(i)
-		}
+		t.queueInitialPieceCheck(i)
 	}
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
@@ -1057,28 +1068,39 @@ func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex) *blockCheckingWr
 }
 
 func (t *Torrent) hashPiece(piece pieceIndex) (
-	ret metainfo.Hash,
+	correct bool,
 	// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
 	p := t.piece(piece)
 	p.waitNoPendingWrites()
-	storagePiece := t.pieces[piece].Storage()
+	storagePiece := p.Storage()
 
-	// Does the backend want to do its own hashing?
-	if i, ok := storagePiece.PieceImpl.(storage.SelfHashing); ok {
-		var sum metainfo.Hash
-		// log.Printf("A piece decided to self-hash: %d", piece)
-		sum, err = i.SelfHash()
-		missinggo.CopyExact(&ret, sum)
-		return
+	var h hash.Hash
+	if p.hash != nil {
+		h = pieceHash.New()
+
+		// Does the backend want to do its own hashing?
+		if i, ok := storagePiece.PieceImpl.(storage.SelfHashing); ok {
+			var sum metainfo.Hash
+			// log.Printf("A piece decided to self-hash: %d", piece)
+			sum, err = i.SelfHash()
+			correct = sum == *p.hash
+			// Can't do smart banning without reading the piece. The smartBanCache is still cleared
+			// in pieceHasher regardless.
+			return
+		}
+
+	} else if p.hashV2.Ok {
+		h = merkle.NewHash()
+	} else {
+		panic("no hash")
 	}
 
-	hash := pieceHash.New()
 	const logPieceContents = false
 	smartBanWriter := t.smartBanBlockCheckingWriter(piece)
-	writers := []io.Writer{hash, smartBanWriter}
+	writers := []io.Writer{h, smartBanWriter}
 	var examineBuf bytes.Buffer
 	if logPieceContents {
 		writers = append(writers, &examineBuf)
@@ -1089,7 +1111,23 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 	}
 	smartBanWriter.Flush()
 	differingPeers = smartBanWriter.badPeers
-	missinggo.CopyExact(&ret, hash.Sum(nil))
+	if p.hash != nil {
+		var sum [20]byte
+		n := len(h.Sum(sum[:0]))
+		if n != 20 {
+			panic(n)
+		}
+		correct = sum == *p.hash
+	} else if p.hashV2.Ok {
+		var sum [32]byte
+		n := len(h.Sum(sum[:0]))
+		if n != 32 {
+			panic(n)
+		}
+		correct = sum == p.hashV2.Value
+	} else {
+		panic("no hash")
+	}
 	return
 }
 
@@ -2169,10 +2207,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		} else {
 			log.Fmsg(
 				"piece %d failed hash: %d connections contributed", piece, len(p.dirtiers),
-			).AddValues(t, p).LogLevel(
-
-				log.Debug, t.logger)
-
+			).AddValues(t, p).LogLevel(log.Info, t.logger)
 			pieceHashedNotCorrect.Add(1)
 		}
 	}
@@ -2368,8 +2403,7 @@ func (t *Torrent) dropBannedPeers() {
 
 func (t *Torrent) pieceHasher(index pieceIndex) {
 	p := t.piece(index)
-	sum, failedPeers, copyErr := t.hashPiece(index)
-	correct := sum == *p.hash
+	correct, failedPeers, copyErr := t.hashPiece(index)
 	switch copyErr {
 	case nil, io.EOF:
 	default:
@@ -2409,6 +2443,12 @@ func (t *Torrent) peersAsSlice() (ret []*Peer) {
 		ret = append(ret, p)
 	})
 	return
+}
+
+func (t *Torrent) queueInitialPieceCheck(i pieceIndex) {
+	if !t.initialPieceCheckDisabled && !t.piece(i).storageCompletionOk {
+		t.queuePieceCheck(i)
+	}
 }
 
 func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {

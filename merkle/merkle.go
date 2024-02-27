@@ -7,8 +7,14 @@ import (
 	"math/bits"
 )
 
+// The leaf block size for BitTorrent v2 Merkle trees.
+const BlockSize = 1 << 14 // 16KiB
+
 func Root(hashes [][sha256.Size]byte) [sha256.Size]byte {
-	if len(hashes) <= 1 {
+	switch len(hashes) {
+	case 0:
+		return sha256.Sum256(nil)
+	case 1:
 		return hashes[0]
 	}
 	numHashes := uint(len(hashes))

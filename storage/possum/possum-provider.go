@@ -17,7 +17,7 @@ import (
 )
 
 // Extends possum resource.Provider with an efficient implementation of torrent
-// storage.ConsecutiveChunkReader.
+// storage.ConsecutiveChunkReader. TODO: This doesn't expose Capacity
 type Provider struct {
 	possumResource.Provider
 	Logger log.Logger

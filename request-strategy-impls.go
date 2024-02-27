@@ -51,7 +51,7 @@ func (cl *Client) getRequestStrategyInputCommon() requestStrategyInputCommon {
 
 // Returns what is necessary to run request_strategy.GetRequestablePieces for primaryTorrent.
 func (cl *Client) getRequestStrategyInput(primaryTorrent *Torrent) (input request_strategy.Input) {
-	if primaryTorrent.storage.Capacity == nil {
+	if !primaryTorrent.hasStorageCap() {
 		return requestStrategyInputSingleTorrent{
 			requestStrategyInputCommon: cl.getRequestStrategyInputCommon(),
 			t:                          primaryTorrent,

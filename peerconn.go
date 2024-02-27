@@ -862,6 +862,8 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			c.updateRequests("PeerConn.mainReadLoop allowed fast")
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
+		case pp.HashRequest, pp.Hashes, pp.HashReject:
+			err = log.WithLevel(log.Warning, fmt.Errorf("received unimplemented BitTorrent v2 message: %v", msg.Type))
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}

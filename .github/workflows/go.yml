@@ -53,9 +53,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - uses: ./.github/actions/go-common
-    - run: GOARCH=386 go test -timeout 1m $(go list ./... | grep -v /possum)
-      continue-on-error: true
-    - run: GOARCH=386 go test -run @ -bench . $(go list ./... | grep -v /possum)
+    - run: GOARCH=386 go test -run @ $(go list ./... | grep -v /possum)
 
   build-wasm:
     runs-on: ubuntu-latest

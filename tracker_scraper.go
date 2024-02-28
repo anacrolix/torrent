@@ -18,6 +18,7 @@ import (
 // Announces a torrent to a tracker at regular intervals, when peers are
 // required.
 type trackerScraper struct {
+	shortInfohash   [20]byte
 	u               url.URL
 	t               *Torrent
 	lastAnnounce    trackerAnnounceResult
@@ -117,7 +118,10 @@ func (me *trackerScraper) trackerUrl(ip net.IP) string {
 
 // Return how long to wait before trying again. For most errors, we return 5
 // minutes, a relatively quick turn around for DNS changes.
-func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEvent) (ret trackerAnnounceResult) {
+func (me *trackerScraper) announce(
+	ctx context.Context,
+	event tracker.AnnounceEvent,
+) (ret trackerAnnounceResult) {
 	defer func() {
 		ret.Completed = time.Now()
 	}()
@@ -146,7 +150,7 @@ func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEv
 		return
 	}
 	me.t.cl.rLock()
-	req := me.t.announceRequest(event)
+	req := me.t.announceRequest(event, me.shortInfohash)
 	me.t.cl.rUnlock()
 	// The default timeout works well as backpressure on concurrent access to the tracker. Since
 	// we're passing our own Context now, we will include that timeout ourselves to maintain similar

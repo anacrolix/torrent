@@ -2,6 +2,7 @@ package metainfo
 
 import (
 	"fmt"
+
 	"github.com/anacrolix/torrent/merkle"
 )
 

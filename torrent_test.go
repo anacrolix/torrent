@@ -71,8 +71,10 @@ func TestAppendToCopySlice(t *testing.T) {
 
 func TestTorrentString(t *testing.T) {
 	tor := &Torrent{}
+	tor.infoHash.Ok = true
+	tor.infoHash.Value[0] = 1
 	s := tor.InfoHash().HexString()
-	if s != "0000000000000000000000000000000000000000" {
+	if s != "0100000000000000000000000000000000000000" {
 		t.FailNow()
 	}
 }
@@ -87,7 +89,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	)
 	cl := &Client{config: TestingConfig(b)}
 	cl.initLogger()
-	t := cl.newTorrent(metainfo.Hash{}, nil)
+	t := cl.newTorrentForTesting()
 	require.NoError(b, t.setInfo(&metainfo.Info{
 		Pieces:      make([]byte, metainfo.HashSize*numPieces),
 		PieceLength: pieceLength,

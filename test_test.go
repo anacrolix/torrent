@@ -19,5 +19,5 @@ func newTestingClient(t testing.TB) *Client {
 }
 
 func (cl *Client) newTorrentForTesting() *Torrent {
-	return cl.newTorrent(metainfo.Hash{}, nil)
+	return cl.newTorrent(metainfo.Hash{1}, nil)
 }

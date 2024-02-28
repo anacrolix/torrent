@@ -7,7 +7,6 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/stretchr/testify/require"
 
-	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
@@ -15,7 +14,7 @@ func TestPexConnState(t *testing.T) {
 	var cl Client
 	cl.init(TestingConfig(t))
 	cl.initLogger()
-	torrent := cl.newTorrent(metainfo.Hash{}, nil)
+	torrent := cl.newTorrentForTesting()
 	addr := &net.TCPAddr{IP: net.IPv6loopback, Port: 4747}
 	c := cl.newConnection(nil, newConnectionOpts{
 		remoteAddr: addr,

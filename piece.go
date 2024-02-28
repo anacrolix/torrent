@@ -2,16 +2,16 @@ package torrent
 
 import (
 	"fmt"
-	g "github.com/anacrolix/generics"
-	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	"sync"
 
 	"github.com/anacrolix/chansync"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
 
 type Piece struct {
@@ -48,7 +48,7 @@ type Piece struct {
 }
 
 func (p *Piece) String() string {
-	return fmt.Sprintf("%s/%d", p.t.infoHash.HexString(), p.index)
+	return fmt.Sprintf("%s/%d", p.t.canonicalShortInfohash().HexString(), p.index)
 }
 
 func (p *Piece) Info() metainfo.Piece {

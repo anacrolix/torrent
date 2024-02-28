@@ -19,6 +19,8 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 		logger:        log.Default,
 		chunkSize:     defaultChunkSize,
 	}
+	tt.infoHash.Ok = true
+	tt.infoHash.Value[0] = 1
 	mi := testutil.GreetingMetaInfo()
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)

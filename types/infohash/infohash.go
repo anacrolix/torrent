@@ -52,6 +52,10 @@ func (t *T) FromHexString(s string) (err error) {
 	return
 }
 
+func (t *T) IsZero() bool {
+	return *t == T{}
+}
+
 var (
 	_ encoding.TextUnmarshaler = (*T)(nil)
 	_ encoding.TextMarshaler   = T{}

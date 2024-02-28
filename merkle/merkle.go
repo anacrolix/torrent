@@ -3,8 +3,9 @@ package merkle
 import (
 	"crypto/sha256"
 	"fmt"
-	g "github.com/anacrolix/generics"
 	"math/bits"
+
+	g "github.com/anacrolix/generics"
 )
 
 // The leaf block size for BitTorrent v2 Merkle trees.

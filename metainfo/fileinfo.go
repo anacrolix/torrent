@@ -1,8 +1,9 @@
 package metainfo
 
 import (
-	g "github.com/anacrolix/generics"
 	"strings"
+
+	g "github.com/anacrolix/generics"
 )
 
 // Information specific to a single file inside the MetaInfo structure.

@@ -112,7 +112,7 @@ func addTorrents(ctx context.Context, client *torrent.Client, flags downloadFlag
 				}
 				t, err := client.AddTorrent(metaInfo)
 				if err != nil {
-					return nil, fmt.Errorf("adding torrent: %w", err)
+					return nil, err
 				}
 				return t, nil
 			} else if strings.HasPrefix(arg, "infohash:") {

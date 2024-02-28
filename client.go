@@ -43,11 +43,11 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/types/infohash"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	"github.com/anacrolix/torrent/webtorrent"
 )
 
@@ -156,7 +156,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	fmt.Fprintf(w, "# Torrents: %d\n", len(torrentsSlice))
 	fmt.Fprintln(w)
 	sort.Slice(torrentsSlice, func(l, r int) bool {
-		return torrentsSlice[l].infoHash.AsString() < torrentsSlice[r].infoHash.AsString()
+		return torrentsSlice[l].canonicalShortInfohash().AsString() < torrentsSlice[r].canonicalShortInfohash().AsString()
 	})
 	for _, t := range torrentsSlice {
 		if t.name() == "" {
@@ -306,14 +306,18 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	cl.websocketTrackers = websocketTrackers{
 		PeerId: cl.peerID,
 		Logger: cl.logger,
-		GetAnnounceRequest: func(event tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error) {
+		GetAnnounceRequest: func(
+			event tracker.AnnounceEvent, infoHash [20]byte,
+		) (
+			tracker.AnnounceRequest, error,
+		) {
 			cl.lock()
 			defer cl.unlock()
 			t, ok := cl.torrents[infoHash]
 			if !ok {
 				return tracker.AnnounceRequest{}, errors.New("torrent not tracked by client")
 			}
-			return t.announceRequest(event), nil
+			return t.announceRequest(event, infoHash), nil
 		},
 		Proxy:                      cl.config.HTTPProxy,
 		WebsocketTrackerHttpHeader: cl.config.WebsocketTrackerHttpHeader,
@@ -903,16 +907,15 @@ func (cl *Client) incomingPeerPort() int {
 	return cl.LocalPort()
 }
 
-func (cl *Client) initiateHandshakes(c *PeerConn, t *Torrent) error {
+func (cl *Client) initiateHandshakes(c *PeerConn, t *Torrent) (err error) {
 	if c.headerEncrypted {
 		var rw io.ReadWriter
-		var err error
 		rw, c.cryptoMethod, err = mse.InitiateHandshake(
 			struct {
 				io.Reader
 				io.Writer
 			}{c.r, c.w},
-			t.infoHash[:],
+			t.canonicalShortInfohash().Bytes(),
 			nil,
 			cl.config.CryptoProvides,
 		)
@@ -921,14 +924,19 @@ func (cl *Client) initiateHandshakes(c *PeerConn, t *Torrent) error {
 			return fmt.Errorf("header obfuscation handshake: %w", err)
 		}
 	}
-	ih, err := cl.connBtHandshake(c, &t.infoHash)
+	ih, err := cl.connBtHandshake(c, t.canonicalShortInfohash())
 	if err != nil {
 		return fmt.Errorf("bittorrent protocol handshake: %w", err)
 	}
-	if ih != t.infoHash {
-		return errors.New("bittorrent protocol handshake: peer infohash didn't match")
+	if g.Some(ih) == t.infoHash {
+		return nil
 	}
-	return nil
+	if t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih {
+		c.v2 = true
+		return nil
+	}
+	err = errors.New("bittorrent protocol handshake: peer infohash didn't match")
+	return
 }
 
 // Calls f with any secret keys. Note that it takes the Client lock, and so must be used from code
@@ -1285,6 +1293,13 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 
 // Return a Torrent ready for insertion into a Client.
 func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
+	var v1InfoHash g.Option[infohash.T]
+	if !opts.InfoHash.IsZero() {
+		v1InfoHash.Set(opts.InfoHash)
+	}
+	if !v1InfoHash.Ok && !opts.InfoHashV2.Ok {
+		panic("v1 infohash must be nonzero or v2 infohash must be set")
+	}
 	// use provided storage, if provided
 	storageClient := cl.defaultStorage
 	if opts.Storage != nil {
@@ -1293,7 +1308,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 
 	t = &Torrent{
 		cl:         cl,
-		infoHash:   opts.InfoHash,
+		infoHash:   v1InfoHash,
 		infoHashV2: opts.InfoHashV2,
 		peers: prioritizedPeers{
 			om: gbtree.New(32),
@@ -1344,10 +1359,13 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 	return cl.AddTorrentInfoHashWithStorage(infoHash, nil)
 }
 
-// Adds a torrent by InfoHash with a custom Storage implementation.
+// Deprecated. Adds a torrent by InfoHash with a custom Storage implementation.
 // If the torrent already exists then this Storage is ignored and the
 // existing torrent returned with `new` set to `false`
-func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStorage storage.ClientImpl) (t *Torrent, new bool) {
+func (cl *Client) AddTorrentInfoHashWithStorage(
+	infoHash metainfo.Hash,
+	specStorage storage.ClientImpl,
+) (t *Torrent, new bool) {
 	cl.lock()
 	defer cl.unlock()
 	t, ok := cl.torrents[infoHash]

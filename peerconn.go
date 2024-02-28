@@ -36,6 +36,9 @@ import (
 type PeerConn struct {
 	Peer
 
+	// BEP 52
+	v2 bool
+
 	// A string that should identify the PeerConn's net.Conn endpoints. The net.Conn could
 	// be wrapping WebRTC, uTP, or TCP etc. Used in writing the conn status for peers.
 	connString string

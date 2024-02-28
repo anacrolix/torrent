@@ -4,8 +4,9 @@
 package main
 
 import (
-	"github.com/anacrolix/torrent/metainfo"
 	"os"
+
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 type argError struct {

@@ -2,12 +2,13 @@ package torrent
 
 import (
 	"fmt"
+
 	g "github.com/anacrolix/generics"
-	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
 
 // Specifies a new torrent for adding to a client, or additions to an existing Torrent. There are
@@ -46,14 +47,15 @@ type TorrentSpec struct {
 }
 
 func TorrentSpecFromMagnetUri(uri string) (spec *TorrentSpec, err error) {
-	m, err := metainfo.ParseMagnetUri(uri)
+	m, err := metainfo.ParseMagnetV2Uri(uri)
 	if err != nil {
 		return
 	}
 	spec = &TorrentSpec{
 		Trackers:    [][]string{m.Trackers},
 		DisplayName: m.DisplayName,
-		InfoHash:    m.InfoHash,
+		InfoHash:    m.InfoHash.UnwrapOrZeroValue(),
+		InfoHashV2:  m.V2InfoHash,
 		Webseeds:    m.Params["ws"],
 		Sources:     append(m.Params["xs"], m.Params["as"]...),
 		PeerAddrs:   m.Params["x.pe"], // BEP 9
@@ -74,7 +76,7 @@ func TorrentSpecFromMetaInfoErr(mi *metainfo.MetaInfo) (*TorrentSpec, error) {
 	if info.HasV2() {
 		v2Infohash.Set(infohash_v2.HashBytes(mi.InfoBytes))
 		if !info.HasV1() {
-			v1Ih = v2Infohash.Value.ToShort()
+			v1Ih = *v2Infohash.Value.ToShort()
 		}
 	}
 

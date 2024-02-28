@@ -29,7 +29,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	cl.initLogger()
 	qtc := qt.New(t)
 	c := cl.newConnection(nil, newConnectionOpts{network: "io.Pipe"})
-	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
+	c.setTorrent(cl.newTorrentForTesting())
 	err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)})
 	qtc.Assert(err, qt.IsNil)
 	r, w := io.Pipe()
@@ -98,7 +98,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	})
 	cl.initLogger()
 	ts := &torrentStorage{}
-	t := cl.newTorrent(metainfo.Hash{}, nil)
+	t := cl.newTorrentForTesting()
 	t.initialPieceCheckDisabled = true
 	require.NoError(b, t.setInfo(&metainfo.Info{
 		Pieces:      make([]byte, 20),

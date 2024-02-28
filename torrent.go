@@ -7,9 +7,6 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
-	"github.com/anacrolix/torrent/merkle"
-	"github.com/anacrolix/torrent/types/infohash"
-	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	"hash"
 	"io"
 	"math/rand"
@@ -36,10 +33,12 @@ import (
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
 	"golang.org/x/exp/maps"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
 	"github.com/anacrolix/torrent/internal/nestedmaps"
+	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
@@ -47,6 +46,8 @@ import (
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
+	"github.com/anacrolix/torrent/types/infohash"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
 )
@@ -68,7 +69,7 @@ type Torrent struct {
 	closed  chansync.SetOnce
 	onClose []func()
 
-	infoHash   metainfo.Hash
+	infoHash   g.Option[metainfo.Hash]
 	infoHashV2 g.Option[infohash_v2.T]
 
 	pieces []Piece
@@ -118,7 +119,7 @@ type Torrent struct {
 	// Whether we want to know more peers.
 	wantPeersEvent missinggo.Event
 	// An announcer for each tracker URL.
-	trackerAnnouncers map[string]torrentTrackerAnnouncer
+	trackerAnnouncers map[torrentTrackerAnnouncerKey]torrentTrackerAnnouncer
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
@@ -175,6 +176,11 @@ type Torrent struct {
 	requestIndexes     []RequestIndex
 
 	disableTriggers bool
+}
+
+type torrentTrackerAnnouncerKey struct {
+	shortInfohash [20]byte
+	url           string
 }
 
 type outgoingConnAttemptKey = *PeerInfo
@@ -496,7 +502,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	}
 	if t.storageOpener != nil {
 		var err error
-		t.storage, err = t.storageOpener.OpenTorrent(info, t.infoHash)
+		t.storage, err = t.storageOpener.OpenTorrent(info, *t.canonicalShortInfohash())
 		if err != nil {
 			return fmt.Errorf("error opening torrent storage: %s", err)
 		}
@@ -515,7 +521,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 
 func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrderKey {
 	return request_strategy.PieceRequestOrderKey{
-		InfoHash: t.infoHash,
+		InfoHash: *t.canonicalShortInfohash(),
 		Index:    i,
 	}
 }
@@ -550,18 +556,23 @@ func (t *Torrent) onSetInfo() {
 
 // Called when metadata for a torrent becomes available.
 func (t *Torrent) setInfoBytesLocked(b []byte) error {
-	v2Hash := infohash_v2.HashBytes(b)
-	v1Hash := infohash.HashBytes(b)
-	v2Short := v2Hash.ToShort()
-	if v2Short != t.infoHash && v1Hash != t.infoHash {
-		return errors.New("info bytes have wrong hash")
+	if t.infoHash.Ok && infohash.HashBytes(b) != t.infoHash.Value {
+		return errors.New("info bytes have wrong v1 hash")
+	}
+	var v2Hash g.Option[infohash_v2.T]
+	if t.infoHashV2.Ok {
+		v2Hash.Set(infohash_v2.HashBytes(b))
+		if v2Hash.Value != t.infoHashV2.Value {
+			return errors.New("info bytes have wrong v2 hash")
+		}
 	}
 	var info metainfo.Info
 	if err := bencode.Unmarshal(b, &info); err != nil {
 		return fmt.Errorf("error unmarshalling info bytes: %s", err)
 	}
-	if info.HasV2() {
-		t.infoHashV2.Set(v2Hash)
+	if !t.infoHashV2.Ok && info.HasV2() {
+		v2Hash.Set(infohash_v2.HashBytes(b))
+		t.infoHashV2.Set(v2Hash.Unwrap())
 	}
 	t.metadataBytes = b
 	t.metadataCompletedChunks = nil
@@ -622,7 +633,7 @@ func (t *Torrent) name() string {
 	if t.displayName != "" {
 		return t.displayName
 	}
-	return "infohash:" + t.infoHash.HexString()
+	return "infohash:" + t.canonicalShortInfohash().HexString()
 }
 
 func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {
@@ -738,7 +749,12 @@ func (psr PieceStateRun) String() (ret string) {
 }
 
 func (t *Torrent) writeStatus(w io.Writer) {
-	fmt.Fprintf(w, "Infohash: %s\n", t.infoHash.HexString())
+	if t.infoHash.Ok {
+		fmt.Fprintf(w, "Infohash: %s\n", t.infoHash.Value.HexString())
+	}
+	if t.infoHashV2.Ok {
+		fmt.Fprintf(w, "Infohash v2: %s\n", t.infoHashV2.Value.HexString())
+	}
 	fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize())
 	if !t.haveInfo() {
 		fmt.Fprintf(w, "Metadata have: ")
@@ -1789,14 +1805,14 @@ func (t *Torrent) runHandshookConnLoggingErr(pc *PeerConn) {
 	t.logRunHandshookConn(pc, false, log.Debug)
 }
 
-func (t *Torrent) startWebsocketAnnouncer(u url.URL) torrentTrackerAnnouncer {
-	wtc, release := t.cl.websocketTrackers.Get(u.String(), t.infoHash)
-	// This needs to run before the Torrent is dropped from the Client, to prevent a new webtorrent.TrackerClient for
-	// the same info hash before the old one is cleaned up.
+func (t *Torrent) startWebsocketAnnouncer(u url.URL, shortInfohash [20]byte) torrentTrackerAnnouncer {
+	wtc, release := t.cl.websocketTrackers.Get(u.String(), shortInfohash)
+	// This needs to run before the Torrent is dropped from the Client, to prevent a new
+	// webtorrent.TrackerClient for the same info hash before the old one is cleaned up.
 	t.onClose = append(t.onClose, release)
 	wst := websocketTrackerStatus{u, wtc}
 	go func() {
-		err := wtc.Announce(tracker.Started, t.infoHash)
+		err := wtc.Announce(tracker.Started, shortInfohash)
 		if err != nil {
 			t.logger.WithDefaultLevel(log.Warning).Printf(
 				"error in initial announce to %q: %v",
@@ -1826,7 +1842,20 @@ func (t *Torrent) startScrapingTracker(_url string) {
 		t.startScrapingTracker(u.String())
 		return
 	}
-	if _, ok := t.trackerAnnouncers[_url]; ok {
+	if t.infoHash.Ok {
+		t.startScrapingTrackerWithInfohash(u, _url, t.infoHash.Value)
+	}
+	if t.infoHashV2.Ok {
+		t.startScrapingTrackerWithInfohash(u, _url, *t.infoHashV2.Value.ToShort())
+	}
+}
+
+func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, shortInfohash [20]byte) {
+	announcerKey := torrentTrackerAnnouncerKey{
+		shortInfohash: shortInfohash,
+		url:           urlStr,
+	}
+	if _, ok := t.trackerAnnouncers[announcerKey]; ok {
 		return
 	}
 	sl := func() torrentTrackerAnnouncer {
@@ -1835,7 +1864,7 @@ func (t *Torrent) startScrapingTracker(_url string) {
 			if t.cl.config.DisableWebtorrent {
 				return nil
 			}
-			return t.startWebsocketAnnouncer(*u)
+			return t.startWebsocketAnnouncer(*u, shortInfohash)
 		case "udp4":
 			if t.cl.config.DisableIPv4Peers || t.cl.config.DisableIPv4 {
 				return nil
@@ -1846,6 +1875,7 @@ func (t *Torrent) startScrapingTracker(_url string) {
 			}
 		}
 		newAnnouncer := &trackerScraper{
+			shortInfohash:   shortInfohash,
 			u:               *u,
 			t:               t,
 			lookupTrackerIp: t.cl.config.LookupTrackerIp,
@@ -1856,10 +1886,10 @@ func (t *Torrent) startScrapingTracker(_url string) {
 	if sl == nil {
 		return
 	}
-	if t.trackerAnnouncers == nil {
-		t.trackerAnnouncers = make(map[string]torrentTrackerAnnouncer)
+	g.MakeMapIfNil(&t.trackerAnnouncers)
+	if g.MapInsert(t.trackerAnnouncers, announcerKey, sl).Ok {
+		panic("tracker announcer already exists")
 	}
-	t.trackerAnnouncers[_url] = sl
 }
 
 // Adds and starts tracker scrapers for tracker URLs that aren't already
@@ -1878,21 +1908,26 @@ func (t *Torrent) startMissingTrackerScrapers() {
 
 // Returns an AnnounceRequest with fields filled out to defaults and current
 // values.
-func (t *Torrent) announceRequest(event tracker.AnnounceEvent) tracker.AnnounceRequest {
+func (t *Torrent) announceRequest(
+	event tracker.AnnounceEvent,
+	shortInfohash [20]byte,
+) tracker.AnnounceRequest {
 	// Note that IPAddress is not set. It's set for UDP inside the tracker code, since it's
 	// dependent on the network in use.
 	return tracker.AnnounceRequest{
 		Event: event,
 		NumWant: func() int32 {
 			if t.wantPeers() && len(t.cl.dialers) > 0 {
-				return 200 // Win has UDP packet limit. See: https://github.com/anacrolix/torrent/issues/764
+				// Windozer has UDP packet limit. See:
+				// https://github.com/anacrolix/torrent/issues/764
+				return 200
 			} else {
 				return 0
 			}
 		}(),
 		Port:     uint16(t.cl.incomingPeerPort()),
 		PeerId:   t.cl.peerID,
-		InfoHash: t.infoHash,
+		InfoHash: shortInfohash,
 		Key:      t.cl.announceKey(),
 
 		// The following are vaguely described in BEP 3.
@@ -1931,20 +1966,60 @@ func (t *Torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 }
 
 // Announce using the provided DHT server. Peers are consumed automatically. done is closed when the
-// announce ends. stop will force the announce to end.
+// announce ends. stop will force the announce to end. This interface is really old-school, and
+// calls a private one that is much more modern. Both v1 and v2 info hashes are announced if they
+// exist.
 func (t *Torrent) AnnounceToDht(s DhtServer) (done <-chan struct{}, stop func(), err error) {
-	ps, err := s.Announce(t.infoHash, t.cl.incomingPeerPort(), true)
-	if err != nil {
-		return
+	var ihs [][20]byte
+	t.cl.lock()
+	t.eachShortInfohash(func(short [20]byte) {
+		ihs = append(ihs, short)
+	})
+	t.cl.unlock()
+	ctx, stop := context.WithCancel(context.Background())
+	eg, ctx := errgroup.WithContext(ctx)
+	for _, ih := range ihs {
+		var ann DhtAnnounce
+		ann, err = s.Announce(ih, t.cl.incomingPeerPort(), true)
+		if err != nil {
+			stop()
+			return
+		}
+		eg.Go(func() error {
+			return t.dhtAnnounceConsumer(ctx, ann)
+		})
 	}
 	_done := make(chan struct{})
 	done = _done
-	stop = ps.Close
 	go func() {
-		t.consumeDhtAnnouncePeers(ps.Peers())
-		close(_done)
+		defer stop()
+		defer close(_done)
+		// Won't this race?
+		err = eg.Wait()
 	}()
 	return
+}
+
+// Announce using the provided DHT server. Peers are consumed automatically. done is closed when the
+// announce ends. stop will force the announce to end.
+func (t *Torrent) dhtAnnounceConsumer(
+	ctx context.Context,
+	ps DhtAnnounce,
+) (
+	err error,
+) {
+	defer ps.Close()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		t.consumeDhtAnnouncePeers(ps.Peers())
+	}()
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-done:
+		return nil
+	}
 }
 
 func (t *Torrent) timeboxedAnnounceToDht(s DhtServer) error {
@@ -3014,4 +3089,20 @@ func (t *Torrent) getDialTimeoutUnlocked() time.Duration {
 	cl.rLock()
 	defer cl.rUnlock()
 	return t.dialTimeout()
+}
+
+func (t *Torrent) canonicalShortInfohash() *infohash.T {
+	if t.infoHash.Ok {
+		return &t.infoHash.Value
+	}
+	return t.infoHashV2.UnwrapPtr().ToShort()
+}
+
+func (t *Torrent) eachShortInfohash(each func(short [20]byte)) {
+	if t.infoHash.Ok {
+		each(t.infoHash.Value)
+	}
+	if t.infoHashV2.Ok {
+		each(*t.infoHashV2.Value.ToShort())
+	}
 }

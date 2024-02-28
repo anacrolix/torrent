@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"strings"
 
+	g "github.com/anacrolix/generics"
 	"github.com/multiformats/go-multihash"
 
-	g "github.com/anacrolix/generics"
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
 

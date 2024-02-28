@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"crypto/sha256"
+
 	"github.com/RoaringBitmap/roaring"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"

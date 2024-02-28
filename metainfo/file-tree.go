@@ -1,10 +1,12 @@
 package metainfo
 
 import (
-	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/torrent/bencode"
-	"golang.org/x/exp/maps"
 	"sort"
+
+	g "github.com/anacrolix/generics"
+	"golang.org/x/exp/maps"
+
+	"github.com/anacrolix/torrent/bencode"
 )
 
 const FileTreePropertiesKey = ""

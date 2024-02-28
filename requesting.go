@@ -189,7 +189,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 		input,
 		t.getPieceRequestOrder(),
 		func(ih InfoHash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) {
-			if ih != t.infoHash {
+			if ih != *t.canonicalShortInfohash() {
 				return
 			}
 			if !p.peerHasPiece(pieceIndex) {

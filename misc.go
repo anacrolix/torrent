@@ -157,16 +157,6 @@ func maxInt(as ...int) int {
 	return ret
 }
 
-func min(as ...int64) int64 {
-	ret := as[0]
-	for _, a := range as[1:] {
-		if a < ret {
-			ret = a
-		}
-	}
-	return ret
-}
-
 func minInt(as ...int) int {
 	ret := as[0]
 	for _, a := range as[1:] {

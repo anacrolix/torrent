@@ -47,3 +47,7 @@ func CompactLayerToSliceHashes(compactLayer string) (hashes [][sha256.Size]byte,
 func RoundUpToPowerOfTwo(n uint) (ret uint) {
 	return 1 << bits.Len(n-1)
 }
+
+func Log2RoundingUp(n uint) (ret uint) {
+	return uint(bits.Len(n - 1))
+}

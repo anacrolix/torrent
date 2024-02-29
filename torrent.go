@@ -416,6 +416,12 @@ func (t *Torrent) makePieces() {
 			if numFiles != 1 {
 				panic(fmt.Sprintf("%v:%v", beginFile, endFile))
 			}
+			if t.info.HasV2() {
+				file := piece.mustGetOnlyFile()
+				if file.numPieces() == 1 {
+					piece.hashV2.Set(file.piecesRoot.Unwrap())
+				}
+			}
 		}
 	}
 }
@@ -647,6 +653,9 @@ func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {
 	if !ret.Complete && t.piecePartiallyDownloaded(index) {
 		ret.Partial = true
 	}
+	if t.info.HasV2() && !p.hashV2.Ok {
+		ret.MissingPieceLayerHash = true
+	}
 	return
 }
 
@@ -744,6 +753,9 @@ func (psr PieceStateRun) String() (ret string) {
 	}
 	if !psr.Ok {
 		ret += "?"
+	}
+	if psr.MissingPieceLayerHash {
+		ret += "h"
 	}
 	return
 }

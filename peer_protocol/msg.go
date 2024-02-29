@@ -9,16 +9,20 @@ import (
 )
 
 // This is a lazy union representing all the possible fields for messages. Go doesn't have ADTs, and
-// I didn't choose to use type-assertions.
+// I didn't choose to use type-assertions. Fields are ordered to minimize struct size and padding.
 type Message struct {
-	Keepalive            bool
-	Type                 MessageType
-	Index, Begin, Length Integer
+	PiecesRoot           [32]byte
 	Piece                []byte
 	Bitfield             []bool
-	ExtendedID           ExtensionNumber
 	ExtendedPayload      []byte
+	Hashes               [][32]byte
+	Index, Begin, Length Integer
+	BaseLayer            Integer
+	ProofLayers          Integer
 	Port                 uint16
+	Type                 MessageType
+	ExtendedID           ExtensionNumber
+	Keepalive            bool
 }
 
 var _ interface {
@@ -58,7 +62,21 @@ func (msg Message) MustMarshalBinary() []byte {
 }
 
 func (msg Message) MarshalBinary() (data []byte, err error) {
+	// It might look like you could have a pool of buffers and preallocate the message length
+	// prefix, but because we have to return []byte, it becomes non-trivial to make this fast. You
+	// will need a benchmark.
 	var buf bytes.Buffer
+	mustWrite := func(data any) {
+		err := binary.Write(&buf, binary.BigEndian, data)
+		if err != nil {
+			panic(err)
+		}
+	}
+	writeConsecutive := func(data ...any) {
+		for _, d := range data {
+			mustWrite(d)
+		}
+	}
 	if !msg.Keepalive {
 		err = buf.WriteByte(byte(msg.Type))
 		if err != nil {
@@ -99,6 +117,9 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 			_, err = buf.Write(msg.ExtendedPayload)
 		case Port:
 			err = binary.Write(&buf, binary.BigEndian, msg.Port)
+		case HashRequest:
+			buf.Write(msg.PiecesRoot[:])
+			writeConsecutive(msg.BaseLayer, msg.Index, msg.Length, msg.ProofLayers)
 		default:
 			err = fmt.Errorf("unknown message type: %v", msg.Type)
 		}

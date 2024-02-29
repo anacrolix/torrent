@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/anacrolix/torrent/merkle"
 	"io"
 	"math/rand"
 	"net"
@@ -79,6 +80,8 @@ type PeerConn struct {
 	peerRequestDataAllocLimiter alloclim.Limiter
 
 	outstandingHolepunchingRendezvous map[netip.AddrPort]struct{}
+
+	sentHashRequests map[hashRequest]struct{}
 }
 
 func (cn *PeerConn) pexStatus() string {
@@ -336,6 +339,7 @@ func (cn *PeerConn) fillWriteBuffer() {
 		// knowledge of write buffers.
 		return
 	}
+	cn.requestMissingHashes()
 	cn.maybeUpdateActualRequestState()
 	if cn.pex.IsEnabled() {
 		if flow := cn.pex.Share(cn.write); !flow {
@@ -1213,4 +1217,77 @@ func (pc *PeerConn) WriteExtendedMessage(extName pp.ExtensionName, payload []byt
 		ExtendedPayload: payload,
 	})
 	return nil
+}
+
+func (pc *PeerConn) requestMissingHashes() {
+	if !pc.t.haveInfo() {
+		return
+	}
+	info := pc.t.info
+	if !info.HasV2() {
+		return
+	}
+	baseLayer := pp.Integer(merkle.Log2RoundingUp(merkle.RoundUpToPowerOfTwo(
+		uint((pc.t.usualPieceSize() + merkle.BlockSize - 1) / merkle.BlockSize)),
+	))
+	for _, file := range info.UpvertedFiles() {
+		piecesRoot := file.PiecesRoot.Unwrap()
+		fileNumPieces := int((file.Length + info.PieceLength - 1) / info.PieceLength)
+		proofLayers := pp.Integer(0)
+		// We would be requesting the leaves, the file must be short enough that we can just do with
+		// the pieces root as the piece hash.
+		if fileNumPieces <= 1 {
+			continue
+		}
+		for index := 0; index < fileNumPieces; index += 512 {
+			// Minimizing to the number of pieces in a file conflicts with the BEP.
+			length := merkle.RoundUpToPowerOfTwo(uint(min(512, fileNumPieces-index)))
+			if length < 2 {
+				// This should have been filtered out by baseLayer and pieces root as piece hash
+				// checks.
+				panic(length)
+			}
+			msg := pp.Message{
+				Type:        pp.HashRequest,
+				PiecesRoot:  piecesRoot,
+				BaseLayer:   baseLayer,
+				Index:       pp.Integer(index),
+				Length:      pp.Integer(length),
+				ProofLayers: proofLayers,
+			}
+			hr := hashRequestFromMessage(msg)
+			if generics.MapContains(pc.sentHashRequests, hr) {
+				continue
+			}
+			pc.write(msg)
+			generics.MakeMapIfNil(&pc.sentHashRequests)
+			pc.sentHashRequests[hr] = struct{}{}
+		}
+	}
+}
+
+type hashRequest struct {
+	piecesRoot                            [32]byte
+	baseLayer, index, length, proofLayers pp.Integer
+}
+
+func (hr hashRequest) toMessage() pp.Message {
+	return pp.Message{
+		Type:        pp.HashRequest,
+		PiecesRoot:  hr.piecesRoot,
+		BaseLayer:   hr.baseLayer,
+		Index:       hr.index,
+		Length:      hr.length,
+		ProofLayers: hr.proofLayers,
+	}
+}
+
+func hashRequestFromMessage(m pp.Message) hashRequest {
+	return hashRequest{
+		piecesRoot:  m.PiecesRoot,
+		baseLayer:   m.BaseLayer,
+		index:       m.Index,
+		length:      m.Length,
+		proofLayers: m.ProofLayers,
+	}
 }

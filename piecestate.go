@@ -18,6 +18,9 @@ type PieceState struct {
 
 	// Some of the piece has been obtained.
 	Partial bool
+
+	// The v2 hash for the piece layer is missing.
+	MissingPieceLayerHash bool
 }
 
 // Represents a series of consecutive pieces with the same state.

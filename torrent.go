@@ -2489,11 +2489,15 @@ func (t *Torrent) dropBannedPeers() {
 
 func (t *Torrent) pieceHasher(index pieceIndex) {
 	p := t.piece(index)
+	// Do we really need to spell out that it's a copy error? If it's a failure to hash the hash
+	// will just be wrong.
 	correct, failedPeers, copyErr := t.hashPiece(index)
 	switch copyErr {
 	case nil, io.EOF:
 	default:
-		log.Fmsg("piece %v (%s) hash failure copy error: %v", p, p.hash.HexString(), copyErr).Log(t.logger)
+		t.logger.Levelf(
+			log.Warning,
+			"error hashing piece %v: %v", index, copyErr)
 	}
 	t.storageLock.RUnlock()
 	t.cl.lock()

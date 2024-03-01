@@ -18,7 +18,8 @@ type FileInfo struct {
 
 	// BEP 52. This isn't encoded in a v1 FileInfo, but is exposed here for APIs that expect to deal
 	// v1 files.
-	PiecesRoot g.Option[[32]byte] `bencode:"-"`
+	PiecesRoot    g.Option[[32]byte] `bencode:"-"`
+	TorrentOffset int64              `bencode:"-"`
 }
 
 func (fi *FileInfo) DisplayPath(info *Info) string {

@@ -155,7 +155,7 @@ func (info *Info) IsDir() bool {
 // single and multi-file torrent infos.
 func (info *Info) UpvertedFiles() (files []FileInfo) {
 	if info.HasV2() {
-		info.FileTree.UpvertedFiles(nil, func(fi FileInfo) {
+		info.FileTree.upvertedFiles(info.PieceLength, func(fi FileInfo) {
 			files = append(files, fi)
 		})
 		return

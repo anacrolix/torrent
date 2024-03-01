@@ -3,12 +3,14 @@ package merkle
 import (
 	"crypto/sha256"
 	"hash"
+	"unsafe"
 )
 
 func NewHash() *Hash {
-	return &Hash{
+	h := &Hash{
 		nextBlock: sha256.New(),
 	}
+	return h
 }
 
 type Hash struct {
@@ -41,7 +43,9 @@ func (h *Hash) Write(p []byte) (n int, err error) {
 }
 
 func (h *Hash) nextBlockSum() (sum [32]byte) {
-	h.nextBlock.Sum(sum[:0])
+	if unsafe.SliceData(h.nextBlock.Sum(sum[:0])) != unsafe.SliceData(sum[:]) {
+		panic("go sux")
+	}
 	return
 }
 
@@ -57,6 +61,7 @@ func (h *Hash) Sum(b []byte) []byte {
 func (h *Hash) Reset() {
 	h.blocks = h.blocks[:0]
 	h.nextBlock.Reset()
+	h.written = 0
 }
 
 func (h *Hash) Size() int {

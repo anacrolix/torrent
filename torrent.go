@@ -2006,8 +2006,7 @@ func (t *Torrent) AnnounceToDht(s DhtServer) (done <-chan struct{}, stop func(),
 	go func() {
 		defer stop()
 		defer close(_done)
-		// Won't this race?
-		err = eg.Wait()
+		eg.Wait()
 	}()
 	return
 }
@@ -3117,4 +3116,13 @@ func (t *Torrent) eachShortInfohash(each func(short [20]byte)) {
 	if t.infoHashV2.Ok {
 		each(*t.infoHashV2.Value.ToShort())
 	}
+}
+
+func (t *Torrent) getFileByPiecesRoot(hash [32]byte) *File {
+	for _, f := range *t.files {
+		if f.piecesRoot.Unwrap() == hash {
+			return f
+		}
+	}
+	return nil
 }

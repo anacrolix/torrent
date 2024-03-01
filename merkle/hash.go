@@ -50,9 +50,7 @@ func (h *Hash) Sum(b []byte) []byte {
 	if h.written != 0 {
 		blocks = append(blocks, h.nextBlockSum())
 	}
-	n := int(RoundUpToPowerOfTwo(uint(len(blocks))))
-	blocks = append(blocks, make([][32]byte, n-len(blocks))...)
-	sum := Root(blocks)
+	sum := RootWithPadHash(blocks, [32]byte{})
 	return append(b, sum[:]...)
 }
 

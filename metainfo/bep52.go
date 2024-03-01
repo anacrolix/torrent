@@ -36,12 +36,7 @@ func ValidatePieceLayers(
 		}
 		var layerHashes [][32]byte
 		layerHashes, err = merkle.CompactLayerToSliceHashes(filePieceLayers)
-		padHash := HashForPiecePad(pieceLength)
-		for uint(len(layerHashes)) < merkle.RoundUpToPowerOfTwo(uint(len(layerHashes))) {
-			layerHashes = append(layerHashes, padHash)
-		}
-		var root [32]byte
-		root = merkle.Root(layerHashes)
+		root := merkle.RootWithPadHash(layerHashes, HashForPiecePad(pieceLength))
 		if root != piecesRoot.Value {
 			err = fmt.Errorf("file %q: expected hash %x got %x", path, piecesRoot.Value, root)
 			return

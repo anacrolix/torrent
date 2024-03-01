@@ -32,6 +32,13 @@ func Root(hashes [][sha256.Size]byte) [sha256.Size]byte {
 	return Root(next)
 }
 
+func RootWithPadHash(hashes [][sha256.Size]byte, padHash [sha256.Size]byte) [sha256.Size]byte {
+	for uint(len(hashes)) < RoundUpToPowerOfTwo(uint(len(hashes))) {
+		hashes = append(hashes, padHash)
+	}
+	return Root(hashes)
+}
+
 func CompactLayerToSliceHashes(compactLayer string) (hashes [][sha256.Size]byte, err error) {
 	g.MakeSliceWithLength(&hashes, len(compactLayer)/sha256.Size)
 	for i := range hashes {

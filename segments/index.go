@@ -17,6 +17,10 @@ type Index struct {
 	segments []Extent
 }
 
+func NewIndexFromSegments(segments []Extent) Index {
+	return Index{segments}
+}
+
 func (me Index) iterSegments() func() (Length, bool) {
 	return func() (Length, bool) {
 		if len(me.segments) == 0 {
@@ -29,6 +33,8 @@ func (me Index) iterSegments() func() (Length, bool) {
 	}
 }
 
+// Returns true if the callback returns false early, or extents are found in the index for all parts
+// of the given extent.
 func (me Index) Locate(e Extent, output Callback) bool {
 	first := sort.Search(len(me.segments), func(i int) bool {
 		_e := me.segments[i]

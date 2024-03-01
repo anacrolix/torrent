@@ -64,7 +64,7 @@ func (me *Client) SetInfo(info *metainfo.Info) {
 		// http://ia600500.us.archive.org/1/items URLs in archive.org torrents.
 		return
 	}
-	me.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
+	me.fileIndex = segments.NewIndexFromSegments(common.TorrentOffsetFileSegments(info))
 	me.info = info
 	me.Pieces.AddRange(0, uint64(info.NumPieces()))
 }

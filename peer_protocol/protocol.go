@@ -6,6 +6,7 @@ const (
 
 type MessageType byte
 
+// golang.org/x/tools/cmd/stringer
 //go:generate stringer -type=MessageType
 
 func (mt MessageType) FastExtension() bool {
@@ -43,9 +44,9 @@ const (
 	Extended MessageType = 20
 
 	// BEP 52
-	HashRequest = 21
-	Hashes      = 22
-	HashReject  = 23
+	HashRequest MessageType = 21
+	Hashes      MessageType = 22
+	HashReject  MessageType = 23
 )
 
 const (

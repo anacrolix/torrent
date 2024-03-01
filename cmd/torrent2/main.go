@@ -4,6 +4,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -38,6 +39,26 @@ func main() {
 					}
 					err = metainfo.ValidatePieceLayers(mi.PieceLayers, &info.FileTree, info.PieceLength)
 					assertOk(err)
+				},
+				"pprint": func() {
+					mi, err := metainfo.LoadFromFile(args[2])
+					assertOk(err)
+					info, err := mi.UnmarshalInfo()
+					assertOk(err)
+					files := info.UpvertedFiles()
+					pieceIndex := 0
+					for _, f := range files {
+						numPieces := int((f.Length + info.PieceLength - 1) / info.PieceLength)
+						endIndex := pieceIndex + numPieces
+						fmt.Printf(
+							"%x: %q: pieces (%v-%v)\n",
+							f.PiecesRoot.Unwrap(),
+							f.BestPath(),
+							pieceIndex,
+							endIndex-1,
+						)
+						pieceIndex = endIndex
+					}
 				},
 			}[args[1]]()
 		},

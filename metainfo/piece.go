@@ -13,7 +13,7 @@ func (p Piece) Length() int64 {
 		pieceLength := p.Info.PieceLength
 		lastFileEnd := int64(0)
 		done := false
-		p.Info.FileTree.UpvertedFiles(nil, func(fi FileInfo) {
+		p.Info.FileTree.upvertedFiles(pieceLength, func(fi FileInfo) {
 			if done {
 				return
 			}

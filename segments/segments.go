@@ -4,16 +4,6 @@ type Int = int64
 
 type Length = Int
 
-func min(i Int, rest ...Int) Int {
-	ret := i
-	for _, i := range rest {
-		if i < ret {
-			ret = i
-		}
-	}
-	return ret
-}
-
 type Extent struct {
 	Start, Length Int
 }
@@ -23,10 +13,12 @@ func (e Extent) End() Int {
 }
 
 type (
-	Callback   = func(int, Extent) bool
+	Callback   = func(segmentIndex int, segmentBounds Extent) bool
 	LengthIter = func() (Length, bool)
 )
 
+// Returns true if callback returns false early, or all segments in the haystack for the needle are
+// found.
 func Scan(haystack LengthIter, needle Extent, callback Callback) bool {
 	i := 0
 	for needle.Length != 0 {

@@ -64,23 +64,35 @@ func (ft *FileTree) orderedKeys() []string {
 	return keys
 }
 
-func (ft *FileTree) UpvertedFiles(path []string, out func(fi FileInfo)) {
+func (ft *FileTree) upvertedFiles(pieceLength int64, out func(fi FileInfo)) {
+	var offset int64
+	ft.upvertedFilesInner(pieceLength, nil, &offset, out)
+}
+
+func (ft *FileTree) upvertedFilesInner(
+	pieceLength int64,
+	path []string,
+	offset *int64,
+	out func(fi FileInfo),
+) {
 	if ft.IsDir() {
 		for _, key := range ft.orderedKeys() {
 			if key == FileTreePropertiesKey {
 				continue
 			}
 			sub := g.MapMustGet(ft.Dir, key)
-			sub.UpvertedFiles(append(path, key), out)
+			sub.upvertedFilesInner(pieceLength, append(path, key), offset, out)
 		}
 	} else {
 		out(FileInfo{
 			Length: ft.File.Length,
 			Path:   append([]string(nil), path...),
 			// BEP 52 requires paths be UTF-8 if possible.
-			PathUtf8:   append([]string(nil), path...),
-			PiecesRoot: ft.PiecesRootAsByteArray(),
+			PathUtf8:      append([]string(nil), path...),
+			PiecesRoot:    ft.PiecesRootAsByteArray(),
+			TorrentOffset: *offset,
 		})
+		*offset += (ft.File.Length + pieceLength - 1) / pieceLength * pieceLength
 	}
 }
 

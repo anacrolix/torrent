@@ -6,7 +6,6 @@ package peer_protocol
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"io"
 	"testing"
 
@@ -30,7 +29,7 @@ func FuzzDecoder(f *testing.F) {
 			var m Message
 			err := d.Decode(&m)
 			t.Log(err)
-			if errors.Is(err, io.EOF) {
+			if err == io.EOF {
 				break
 			}
 			if err == nil {
@@ -41,6 +40,7 @@ func FuzzDecoder(f *testing.F) {
 				t.Skip(err)
 			}
 		}
+		t.Log(ms)
 		var buf bytes.Buffer
 		for _, m := range ms {
 			buf.Write(m.MustMarshalBinary())

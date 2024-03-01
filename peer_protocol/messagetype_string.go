@@ -4,15 +4,41 @@ package peer_protocol
 
 import "strconv"
 
+func _() {
+	// An "invalid array index" compiler error signifies that the constant values have changed.
+	// Re-run the stringer command to generate them again.
+	var x [1]struct{}
+	_ = x[Choke-0]
+	_ = x[Unchoke-1]
+	_ = x[Interested-2]
+	_ = x[NotInterested-3]
+	_ = x[Have-4]
+	_ = x[Bitfield-5]
+	_ = x[Request-6]
+	_ = x[Piece-7]
+	_ = x[Cancel-8]
+	_ = x[Port-9]
+	_ = x[Suggest-13]
+	_ = x[HaveAll-14]
+	_ = x[HaveNone-15]
+	_ = x[Reject-16]
+	_ = x[AllowedFast-17]
+	_ = x[Extended-20]
+	_ = x[HashRequest-21]
+	_ = x[Hashes-22]
+	_ = x[HashReject-23]
+}
+
 const (
 	_MessageType_name_0 = "ChokeUnchokeInterestedNotInterestedHaveBitfieldRequestPieceCancelPort"
 	_MessageType_name_1 = "SuggestHaveAllHaveNoneRejectAllowedFast"
-	_MessageType_name_2 = "Extended"
+	_MessageType_name_2 = "ExtendedHashRequestHashesHashReject"
 )
 
 var (
 	_MessageType_index_0 = [...]uint8{0, 5, 12, 22, 35, 39, 47, 54, 59, 65, 69}
 	_MessageType_index_1 = [...]uint8{0, 7, 14, 22, 28, 39}
+	_MessageType_index_2 = [...]uint8{0, 8, 19, 25, 35}
 )
 
 func (i MessageType) String() string {
@@ -22,8 +48,9 @@ func (i MessageType) String() string {
 	case 13 <= i && i <= 17:
 		i -= 13
 		return _MessageType_name_1[_MessageType_index_1[i]:_MessageType_index_1[i+1]]
-	case i == 20:
-		return _MessageType_name_2
+	case 20 <= i && i <= 23:
+		i -= 20
+		return _MessageType_name_2[_MessageType_index_2[i]:_MessageType_index_2[i+1]]
 	default:
 		return "MessageType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

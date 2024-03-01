@@ -1133,7 +1133,11 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 	if logPieceContents {
 		writers = append(writers, &examineBuf)
 	}
-	_, err = storagePiece.WriteTo(io.MultiWriter(writers...))
+	var written int64
+	written, err = storagePiece.WriteTo(io.MultiWriter(writers...))
+	if err == nil && written != int64(p.length()) {
+		err = io.ErrShortWrite
+	}
 	if logPieceContents {
 		t.logger.WithDefaultLevel(log.Debug).Printf("hashed %q with copy err %v", examineBuf.Bytes(), err)
 	}

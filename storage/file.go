@@ -83,7 +83,7 @@ func (fs fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash
 	}
 	t := &fileTorrentImpl{
 		files,
-		segments.NewIndex(common.LengthIterFromUpvertedFiles(upvertedFiles)),
+		segments.NewIndexFromSegments(common.TorrentOffsetFileSegments(info)),
 		infoHash,
 		fs.opts.PieceCompletion,
 	}

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"github.com/anacrolix/torrent/segments"
 	"io"
 	"log"
 	"os"
@@ -32,12 +33,19 @@ func (fs *filePieceImpl) Completion() Completion {
 	verified := true
 	if c.Complete {
 		// If it's allegedly complete, check that its constituent files have the necessary length.
-		for _, fi := range extentCompleteRequiredLengths(fs.p.Info, fs.p.Offset(), fs.p.Length()) {
-			s, err := os.Stat(fs.files[fi.fileIndex].path)
-			if err != nil || s.Size() < fi.length {
+		if !fs.segmentLocater.Locate(segments.Extent{
+			Start:  fs.p.Offset(),
+			Length: fs.p.Length(),
+		}, func(i int, extent segments.Extent) bool {
+			file := fs.files[i]
+			s, err := os.Stat(file.path)
+			if err != nil || s.Size() < extent.Start+extent.Length {
 				verified = false
-				break
+				return false
 			}
+			return true
+		}) {
+			panic("files do not cover piece extent")
 		}
 	}
 

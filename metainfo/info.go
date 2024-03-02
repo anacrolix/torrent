@@ -168,7 +168,13 @@ func (info *Info) UpvertedFiles() (files []FileInfo) {
 			Path: nil,
 		}}
 	}
-	return info.Files
+	var offset int64
+	for _, fi := range info.Files {
+		fi.TorrentOffset = offset
+		offset += fi.Length
+		files = append(files, fi)
+	}
+	return
 }
 
 func (info *Info) Piece(index int) Piece {

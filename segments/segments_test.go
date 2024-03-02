@@ -1,9 +1,8 @@
 package segments
 
 import (
+	qt "github.com/frankban/quicktest"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func LengthIterFromSlice(ls []Length) LengthIter {
@@ -36,14 +35,21 @@ func (me *collectExtents) scanCallback(i int, e Extent) bool {
 
 type newLocater func(LengthIter) Locater
 
-func assertLocate(t *testing.T, nl newLocater, ls []Length, needle Extent, firstExpectedIndex int, expectedExtents []Extent) {
+func assertLocate(
+	t *testing.T,
+	nl newLocater,
+	ls []Length,
+	needle Extent,
+	firstExpectedIndex int,
+	expectedExtents []Extent,
+) {
 	var actual collectExtents
 	var expected collectExtents
 	for i, e := range expectedExtents {
 		expected.scanCallback(firstExpectedIndex+i, e)
 	}
 	nl(LengthIterFromSlice(ls))(needle, actual.scanCallback)
-	assert.EqualValues(t, expected, actual)
+	qt.Check(t, actual, qt.DeepEquals, expected)
 }
 
 func testLocater(t *testing.T, newLocater newLocater) {

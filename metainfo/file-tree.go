@@ -11,12 +11,15 @@ import (
 
 const FileTreePropertiesKey = ""
 
+type FileTreeFile struct {
+	Length     int64  `bencode:"length"`
+	PiecesRoot string `bencode:"pieces root"`
+}
+
+// The fields here don't need bencode tags as the marshalling is done manually.
 type FileTree struct {
-	File struct {
-		Length     int64  `bencode:"length"`
-		PiecesRoot string `bencode:"pieces root"`
-	}
-	Dir map[string]FileTree
+	File FileTreeFile
+	Dir  map[string]FileTree
 }
 
 func (ft *FileTree) UnmarshalBencode(bytes []byte) (err error) {
@@ -107,7 +110,7 @@ func (ft *FileTree) Walk(path []string, f func(path []string, ft *FileTree)) {
 }
 
 func (ft *FileTree) PiecesRootAsByteArray() (ret g.Option[[32]byte]) {
-	if ft.File.Length == 0 {
+	if ft.File.PiecesRoot == "" {
 		return
 	}
 	n := copy(ret.Value[:], ft.File.PiecesRoot)

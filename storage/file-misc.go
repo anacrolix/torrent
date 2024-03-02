@@ -1,34 +1,20 @@
 package storage
 
-import "github.com/anacrolix/torrent/metainfo"
+import (
+	"github.com/anacrolix/torrent/segments"
+)
 
-type requiredLength struct {
-	fileIndex int
-	length    int64
-}
-
-func extentCompleteRequiredLengths(info *metainfo.Info, off, n int64) (ret []requiredLength) {
-	if n == 0 {
-		return
-	}
-	for i, fi := range info.UpvertedFiles() {
-		if off >= fi.Length {
-			off -= fi.Length
-			continue
-		}
-		n1 := n
-		if off+n1 > fi.Length {
-			n1 = fi.Length - off
-		}
-		ret = append(ret, requiredLength{
-			fileIndex: i,
-			length:    off + n1,
-		})
-		n -= n1
-		if n == 0 {
-			return
-		}
-		off = 0
-	}
-	panic("extent exceeds torrent bounds")
+// Returns the minimum file lengths required for the given extent to exist on disk. Returns false if
+// the extent is not covered by the files in the index.
+func minFileLengthsForTorrentExtent(
+	fileSegmentsIndex segments.Index,
+	off, n int64,
+	each func(fileIndex int, length int64) bool,
+) bool {
+	return fileSegmentsIndex.Locate(segments.Extent{
+		Start:  off,
+		Length: n,
+	}, func(fileIndex int, segmentBounds segments.Extent) bool {
+		return each(fileIndex, segmentBounds.Start+segmentBounds.Length)
+	})
 }

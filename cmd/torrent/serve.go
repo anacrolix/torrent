@@ -44,7 +44,7 @@ func serve() (cmd bargle.Command) {
 			if err != nil {
 				return fmt.Errorf("building info from path %q: %w", filePath, err)
 			}
-			for _, fi := range info.Files {
+			for _, fi := range info.UpvertedFiles() {
 				log.Printf("added %q", fi.Path)
 			}
 			mi := metainfo.MetaInfo{

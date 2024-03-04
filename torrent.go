@@ -2315,6 +2315,11 @@ func (t *Torrent) dropBannedPeers() {
 }
 
 func (t *Torrent) pieceHasher(index pieceIndex) {
+	if err := t.cl.hashersLimit.Acquire(context.Background(), 1); err != nil {
+		return
+	}
+	defer t.cl.hashersLimit.Release(1)
+
 	p := t.piece(index)
 	sum, failedPeers, copyErr := t.hashPiece(index)
 	correct := sum == *p.hash

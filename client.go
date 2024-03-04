@@ -22,11 +22,9 @@ import (
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
-	. "github.com/anacrolix/generics"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/perf"
-	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
@@ -35,6 +33,7 @@ import (
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
 	"github.com/pion/datachannel"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
@@ -91,6 +90,7 @@ type Client struct {
 	clientHolepunchAddrSets
 
 	defaultLocalLtepProtocolMap LocalLtepProtocolMap
+	hashersLimit                *semaphore.Weighted
 }
 
 type ipStr string
@@ -198,6 +198,7 @@ func (cl *Client) announceKey() int32 {
 // Initializes a bare minimum Client. *Client and *ClientConfig must not be nil.
 func (cl *Client) init(cfg *ClientConfig) {
 	cl.config = cfg
+	cl.hashersLimit = semaphore.NewWeighted(9000)
 	g.MakeMap(&cl.dopplegangerAddrs)
 	cl.torrents = make(map[metainfo.Hash]*Torrent)
 	cl.activeAnnounceLimiter.SlotsPerKey = 2

@@ -1,6 +1,7 @@
 package metainfo
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -98,7 +99,7 @@ func (info *Info) writeFiles(w io.Writer, open func(fi FileInfo) (io.ReadCloser,
 		if err != nil {
 			return fmt.Errorf("error opening %v: %s", fi, err)
 		}
-		wn, err := io.CopyN(w, r, fi.Length)
+		wn, err := io.CopyN(w, bufio.NewReaderSize(r, 4*1024*1024), fi.Length)
 		r.Close()
 		if wn != fi.Length {
 			return fmt.Errorf("error copying %v: %s", fi, err)

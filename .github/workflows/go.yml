@@ -17,7 +17,7 @@ jobs:
     - uses: ./.github/actions/go-common
     - run: go test -race $(go list ./... | grep -v /fs | grep -v /possum)
       continue-on-error: true
-    - run: go test -race ./fs/...
+    - run: go test -race -timeout 1m ./fs/...
       if: ${{ ! contains(matrix.os, 'windows') }}
       continue-on-error: true
 

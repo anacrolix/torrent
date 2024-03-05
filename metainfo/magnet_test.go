@@ -4,6 +4,8 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"github.com/davecgh/go-spew/spew"
+	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -111,4 +113,23 @@ func contains(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// Check that we can parse the magnet link generated from a real-world torrent. This was added due
+// to a regression in copyParams.
+func TestParseSintelMagnet(t *testing.T) {
+	c := qt.New(t)
+	mi, err := LoadFromFile("../testdata/sintel.torrent")
+	c.Assert(err, qt.IsNil)
+	m := mi.Magnet(nil, nil)
+	ms := m.String()
+	t.Logf("magnet link: %q", ms)
+	m, err = ParseMagnetUri(ms)
+	c.Check(err, qt.IsNil)
+	spewCfg := spew.NewDefaultConfig()
+	spewCfg.DisableMethods = true
+	spewCfg.Dump(m)
+	m2, err := ParseMagnetV2Uri(ms)
+	spewCfg.Dump(m2)
+	c.Check(err, qt.IsNil)
 }

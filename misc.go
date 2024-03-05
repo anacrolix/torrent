@@ -93,7 +93,9 @@ func validateInfo(info *metainfo.Info) error {
 		if info.TotalLength() != 0 {
 			return errors.New("zero piece length")
 		}
-	} else {
+	} else if !info.HasV2() {
+		// TotalLength returns different values for V1 and V2 depending on whether v1 pad files are
+		// counted. Split the interface into several methods?
 		if int((info.TotalLength()+info.PieceLength-1)/info.PieceLength) != info.NumPieces() {
 			return errors.New("piece count and file lengths are at odds")
 		}
@@ -149,16 +151,6 @@ func maxInt(as ...int) int {
 	ret := as[0]
 	for _, a := range as[1:] {
 		if a > ret {
-			ret = a
-		}
-	}
-	return ret
-}
-
-func min(as ...int64) int64 {
-	ret := as[0]
-	for _, a := range as[1:] {
-		if a < ret {
 			ret = a
 		}
 	}

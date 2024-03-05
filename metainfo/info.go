@@ -17,8 +17,9 @@ type Info struct {
 	Pieces      []byte `bencode:"pieces"`       // BEP3
 	Name        string `bencode:"name"`         // BEP3
 	NameUtf8    string `bencode:"name.utf-8,omitempty"`
-	Length      int64  `bencode:"length,omitempty"`  // BEP3, mutually exclusive with Files
-	Private     *bool  `bencode:"private,omitempty"` // BEP27
+	Length      int64  `bencode:"length,omitempty"` // BEP3, mutually exclusive with Files
+	ExtendedFileAttrs
+	Private *bool `bencode:"private,omitempty"` // BEP27
 	// TODO: Document this field.
 	Source string     `bencode:"source,omitempty"`
 	Files  []FileInfo `bencode:"files,omitempty"` // BEP3, mutually exclusive with Length
@@ -124,28 +125,41 @@ func (info *Info) GeneratePieces(open func(fi FileInfo) (io.ReadCloser, error)) 
 }
 
 func (info *Info) TotalLength() (ret int64) {
-	if info.IsDir() {
-		for _, fi := range info.Files {
-			ret += fi.Length
-		}
-	} else {
-		ret = info.Length
+	for _, fi := range info.UpvertedFiles() {
+		ret += fi.Length
 	}
 	return
 }
 
-func (info *Info) NumPieces() int {
+func (info *Info) NumPieces() (num int) {
+	if info.HasV2() {
+		info.FileTree.Walk(nil, func(path []string, ft *FileTree) {
+			num += int((ft.File.Length + info.PieceLength - 1) / info.PieceLength)
+		})
+		return
+	}
 	return len(info.Pieces) / 20
 }
 
+// Whether all files share the same top-level directory name. If they don't, Info.Name is usually used.
 func (info *Info) IsDir() bool {
+	if info.HasV2() {
+		return info.FileTree.IsDir()
+	}
+	// I wonder if we should check for the existence of Info.Length here instead.
 	return len(info.Files) != 0
 }
 
 // The files field, converted up from the old single-file in the parent info
 // dict if necessary. This is a helper to avoid having to conditionally handle
 // single and multi-file torrent infos.
-func (info *Info) UpvertedFiles() []FileInfo {
+func (info *Info) UpvertedFiles() (files []FileInfo) {
+	if info.HasV2() {
+		info.FileTree.upvertedFiles(info.PieceLength, func(fi FileInfo) {
+			files = append(files, fi)
+		})
+		return
+	}
 	if len(info.Files) == 0 {
 		return []FileInfo{{
 			Length: info.Length,
@@ -154,11 +168,17 @@ func (info *Info) UpvertedFiles() []FileInfo {
 			Path: nil,
 		}}
 	}
-	return info.Files
+	var offset int64
+	for _, fi := range info.Files {
+		fi.TorrentOffset = offset
+		offset += fi.Length
+		files = append(files, fi)
+	}
+	return
 }
 
 func (info *Info) Piece(index int) Piece {
-	return Piece{info, pieceIndex(index)}
+	return Piece{info, index}
 }
 
 func (info *Info) BestName() string {
@@ -166,4 +186,18 @@ func (info *Info) BestName() string {
 		return info.NameUtf8
 	}
 	return info.Name
+}
+
+// Whether the Info can be used as a v2 info dict, including having a V2 infohash.
+func (info *Info) HasV2() bool {
+	return info.MetaVersion == 2
+}
+
+func (info *Info) HasV1() bool {
+	// See Upgrade Path in BEP 52.
+	return info.MetaVersion == 0 || info.MetaVersion == 1 || info.Files != nil || info.Length != 0 || len(info.Pieces) != 0
+}
+
+func (info *Info) FilesArePieceAligned() bool {
+	return info.HasV2()
 }

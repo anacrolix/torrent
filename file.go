@@ -1,7 +1,10 @@
 package torrent
 
 import (
+	"crypto/sha256"
+
 	"github.com/RoaringBitmap/roaring"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -16,6 +19,11 @@ type File struct {
 	fi          metainfo.FileInfo
 	displayPath string
 	prio        piecePriority
+	piecesRoot  g.Option[[sha256.Size]byte]
+}
+
+func (f *File) String() string {
+	return f.Path()
 }
 
 func (f *File) Torrent() *Torrent {
@@ -28,12 +36,12 @@ func (f *File) Offset() int64 {
 }
 
 // The FileInfo from the metainfo.Info to which this file corresponds.
-func (f File) FileInfo() metainfo.FileInfo {
+func (f *File) FileInfo() metainfo.FileInfo {
 	return f.fi
 }
 
 // The file's path components joined by '/'.
-func (f File) Path() string {
+func (f *File) Path() string {
 	return f.path
 }
 
@@ -203,4 +211,8 @@ func (f *File) EndPieceIndex() int {
 		return 0
 	}
 	return pieceIndex((f.offset + f.length + int64(f.t.usualPieceSize()) - 1) / int64(f.t.usualPieceSize()))
+}
+
+func (f *File) numPieces() int {
+	return f.EndPieceIndex() - f.BeginPieceIndex()
 }

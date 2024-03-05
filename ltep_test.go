@@ -1,6 +1,7 @@
 package torrent_test
 
 import (
+	"math/rand"
 	"strconv"
 	"testing"
 
@@ -113,6 +114,7 @@ func TestUserLtep(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer cl2.Close()
 	addOpts := AddTorrentOpts{}
+	rand.Read(addOpts.InfoHash[:])
 	t1, _ := cl1.AddTorrentOpt(addOpts)
 	t2, _ := cl2.AddTorrentOpt(addOpts)
 	defer testutil.ExportStatusWriter(cl1, "cl1", t)()

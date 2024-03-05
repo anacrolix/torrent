@@ -8,7 +8,30 @@ type Piece struct {
 type pieceIndex = int
 
 func (p Piece) Length() int64 {
-	if int(p.i) == p.Info.NumPieces()-1 {
+	if p.Info.HasV2() {
+		var offset int64
+		pieceLength := p.Info.PieceLength
+		lastFileEnd := int64(0)
+		done := false
+		p.Info.FileTree.upvertedFiles(pieceLength, func(fi FileInfo) {
+			if done {
+				return
+			}
+			fileStartPiece := int(offset / pieceLength)
+			if fileStartPiece > p.i {
+				done = true
+				return
+			}
+			lastFileEnd = offset + fi.Length
+			offset = (lastFileEnd + pieceLength - 1) / pieceLength * pieceLength
+		})
+		ret := min(lastFileEnd-int64(p.i)*pieceLength, pieceLength)
+		if ret <= 0 {
+			panic(ret)
+		}
+		return ret
+	}
+	if p.i == p.Info.NumPieces()-1 {
 		return p.Info.TotalLength() - int64(p.i)*p.Info.PieceLength
 	}
 	return p.Info.PieceLength
@@ -23,6 +46,6 @@ func (p Piece) Hash() (ret Hash) {
 	return
 }
 
-func (p Piece) Index() pieceIndex {
+func (p Piece) Index() int {
 	return p.i
 }

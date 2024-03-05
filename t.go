@@ -13,7 +13,7 @@ import (
 
 // The Torrent's infohash. This is fixed and cannot change. It uniquely identifies a torrent.
 func (t *Torrent) InfoHash() metainfo.Hash {
-	return t.infoHash
+	return *t.canonicalShortInfohash()
 }
 
 // Returns a channel that is closed when the info (.Info()) for the torrent has become available.
@@ -100,7 +100,7 @@ func (t *Torrent) Drop() {
 	defer wg.Wait()
 	t.cl.lock()
 	defer t.cl.unlock()
-	err := t.cl.dropTorrent(t.infoHash, &wg)
+	err := t.cl.dropTorrent(*t.canonicalShortInfohash(), &wg)
 	if err != nil {
 		panic(err)
 	}
@@ -211,19 +211,24 @@ func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex, reason string) {
 }
 
 func (t *Torrent) initFiles() {
+	info := t.info
 	var offset int64
 	t.files = new([]*File)
 	for _, fi := range t.info.UpvertedFiles() {
 		*t.files = append(*t.files, &File{
 			t,
-			strings.Join(append([]string{t.info.BestName()}, fi.BestPath()...), "/"),
+			strings.Join(append([]string{info.BestName()}, fi.BestPath()...), "/"),
 			offset,
 			fi.Length,
 			fi,
-			fi.DisplayPath(t.info),
+			fi.DisplayPath(info),
 			PiecePriorityNone,
+			fi.PiecesRoot,
 		})
 		offset += fi.Length
+		if info.FilesArePieceAligned() {
+			offset = (offset + info.PieceLength - 1) / info.PieceLength * info.PieceLength
+		}
 	}
 }
 
@@ -249,7 +254,7 @@ func (t *Torrent) DownloadAll() {
 func (t *Torrent) String() string {
 	s := t.name()
 	if s == "" {
-		return t.infoHash.HexString()
+		return t.canonicalShortInfohash().HexString()
 	} else {
 		return strconv.Quote(s)
 	}

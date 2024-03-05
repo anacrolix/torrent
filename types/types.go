@@ -45,8 +45,8 @@ const (
 	PiecePriorityNormal                         // Wanted.
 	PiecePriorityHigh                           // Wanted a lot.
 	PiecePriorityReadahead                      // May be required soon.
-	// Succeeds a piece where a read occurred. Currently the same as Now,
-	// apparently due to issues with caching.
+	// Succeeds a piece where a read occurred. Currently, the same as Now, apparently due to issues
+	// with caching.
 	PiecePriorityNext
 	PiecePriorityNow // A Reader is reading in this piece. Highest urgency.
 )

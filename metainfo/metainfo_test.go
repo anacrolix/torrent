@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/davecgh/go-spew/spew"
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -159,4 +160,16 @@ func TestUnmarshalEmptyStringNodes(t *testing.T) {
 	c := qt.New(t)
 	err := bencode.Unmarshal([]byte("d5:nodes0:e"), &mi)
 	c.Assert(err, qt.IsNil)
+}
+
+func TestUnmarshalV2Metainfo(t *testing.T) {
+	c := qt.New(t)
+	mi, err := LoadFromFile("../testdata/bittorrent-v2-test.torrent")
+	c.Assert(err, qt.IsNil)
+	info, err := mi.UnmarshalInfo()
+	c.Assert(err, qt.IsNil)
+	spew.Dump(info)
+	c.Check(info.NumPieces(), qt.Not(qt.Equals), 0)
+	err = ValidatePieceLayers(mi.PieceLayers, &info.FileTree, info.PieceLength)
+	c.Check(err, qt.IsNil)
 }

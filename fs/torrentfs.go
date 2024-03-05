@@ -72,7 +72,7 @@ func isSubPath(parent, child string) bool {
 
 func (dn dirNode) ReadDirAll(ctx context.Context) (des []fuse.Dirent, err error) {
 	names := map[string]bool{}
-	for _, fi := range dn.metadata.Files {
+	for _, fi := range dn.metadata.UpvertedFiles() {
 		filePathname := strings.Join(fi.Path, "/")
 		if !isSubPath(dn.path, filePathname) {
 			continue

@@ -261,8 +261,8 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 			}
 			// TODO: Just reset pieces in the readahead window. This might help
 			// prevent thrashing with small caches and file and piece priorities.
-			r.log(log.Fstr("error reading torrent %s piece %d offset %d, %d bytes: %v",
-				r.t.infoHash.HexString(), firstPieceIndex, firstPieceOffset, len(b1), err))
+			r.log(log.Fstr("error reading piece %d offset %d, %d bytes: %v",
+				firstPieceIndex, firstPieceOffset, len(b1), err))
 			if !r.t.updatePieceCompletion(firstPieceIndex) {
 				r.log(log.Fstr("piece %d completion unchanged", firstPieceIndex))
 			}

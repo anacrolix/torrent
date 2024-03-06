@@ -2,12 +2,14 @@ package storage
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"path"
 	"sort"
 	"strconv"
 
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/resource"
 	"github.com/anacrolix/sync"
 
@@ -53,12 +55,13 @@ func (s piecePerResource) OpenTorrent(info *metainfo.Info, infoHash metainfo.Has
 		s,
 		make([]sync.RWMutex, info.NumPieces()),
 	}
-	return TorrentImpl{Piece: t.Piece, Close: t.Close}, nil
+	return TorrentImpl{PieceWithHash: t.Piece, Close: t.Close}, nil
 }
 
-func (s piecePerResourceTorrentImpl) Piece(p metainfo.Piece) PieceImpl {
+func (s piecePerResourceTorrentImpl) Piece(p metainfo.Piece, pieceHash g.Option[[]byte]) PieceImpl {
 	return piecePerResourcePiece{
 		mp:               p,
+		pieceHash:        pieceHash,
 		piecePerResource: s.piecePerResource,
 		mu:               &s.locks[p.Index()],
 	}
@@ -74,6 +77,8 @@ type ConsecutiveChunkReader interface {
 
 type piecePerResourcePiece struct {
 	mp metainfo.Piece
+	// The piece hash if we have it. It could be 20 or 32 bytes depending on the info version.
+	pieceHash g.Option[[]byte]
 	piecePerResource
 	// This protects operations that move complete/incomplete pieces around, which can trigger read
 	// errors that may cause callers to do more drastic things.
@@ -118,7 +123,10 @@ func (s piecePerResourcePiece) mustIsComplete() bool {
 	return completion.Complete
 }
 
-func (s piecePerResourcePiece) Completion() Completion {
+func (s piecePerResourcePiece) Completion() (_ Completion) {
+	if !s.pieceHash.Ok {
+		return
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	fi, err := s.completed().Stat()
@@ -255,7 +263,7 @@ func (s piecePerResourcePiece) getChunks() (chunks chunks) {
 }
 
 func (s piecePerResourcePiece) completedInstancePath() string {
-	return path.Join("completed", s.mp.Hash().HexString())
+	return path.Join("completed", s.hashHex())
 }
 
 func (s piecePerResourcePiece) completed() resource.Instance {
@@ -267,7 +275,7 @@ func (s piecePerResourcePiece) completed() resource.Instance {
 }
 
 func (s piecePerResourcePiece) incompleteDirPath() string {
-	return path.Join("incompleted", s.mp.Hash().HexString())
+	return path.Join("incompleted", s.hashHex())
 }
 
 func (s piecePerResourcePiece) incompleteDir() resource.DirInstance {
@@ -276,4 +284,8 @@ func (s piecePerResourcePiece) incompleteDir() resource.DirInstance {
 		panic(err)
 	}
 	return i.(resource.DirInstance)
+}
+
+func (me piecePerResourcePiece) hashHex() string {
+	return hex.EncodeToString(me.pieceHash.Unwrap())
 }

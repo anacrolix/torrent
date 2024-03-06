@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -29,8 +30,19 @@ type Torrent struct {
 	TorrentImpl
 }
 
+// Deprecated. Use PieceWithHash, as this doesn't work with pure v2 torrents.
 func (t Torrent) Piece(p metainfo.Piece) Piece {
-	return Piece{t.TorrentImpl.Piece(p), p}
+	return t.PieceWithHash(p, g.Some(p.V1Hash().Unwrap().Bytes()))
+}
+
+func (t Torrent) PieceWithHash(p metainfo.Piece, pieceHash g.Option[[]byte]) Piece {
+	var pieceImpl PieceImpl
+	if t.TorrentImpl.PieceWithHash != nil {
+		pieceImpl = t.TorrentImpl.PieceWithHash(p, pieceHash)
+	} else {
+		pieceImpl = t.TorrentImpl.Piece(p)
+	}
+	return Piece{pieceImpl, p}
 }
 
 type Piece struct {

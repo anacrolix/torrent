@@ -4,10 +4,12 @@
 package sqliteStorage
 
 import (
+	"encoding/hex"
 	"io"
 	"sync"
 	"time"
 
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/squirrel"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -63,16 +65,16 @@ func (c *client) capacity() (cap int64, capped bool) {
 func (c *client) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.TorrentImpl, error) {
 	t := torrent{c.cache}
 	capFunc := c.capacity
-	return storage.TorrentImpl{Piece: t.Piece, Close: t.Close, Capacity: &capFunc}, nil
+	return storage.TorrentImpl{PieceWithHash: t.Piece, Close: t.Close, Capacity: &capFunc}, nil
 }
 
 type torrent struct {
 	c *squirrel.Cache
 }
 
-func (t torrent) Piece(p metainfo.Piece) storage.PieceImpl {
+func (t torrent) Piece(p metainfo.Piece, pieceHash g.Option[[]byte]) storage.PieceImpl {
 	ret := piece{
-		sb: t.c.OpenWithLength(p.Hash().HexString(), p.Length()),
+		sb: t.c.OpenWithLength(hex.EncodeToString(pieceHash.Unwrap()), p.Length()),
 	}
 	ret.ReaderAt = &ret.sb
 	ret.WriterAt = &ret.sb

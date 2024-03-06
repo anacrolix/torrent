@@ -56,7 +56,13 @@ func (p *Piece) Info() metainfo.Piece {
 }
 
 func (p *Piece) Storage() storage.Piece {
-	return p.t.storage.Piece(p.Info())
+	var pieceHash g.Option[[]byte]
+	if p.hash != nil {
+		pieceHash.Set(p.hash.Bytes())
+	} else if p.hashV2.Ok {
+		pieceHash.Set(p.hashV2.Value.Bytes())
+	}
+	return p.t.storage.PieceWithHash(p.Info(), pieceHash)
 }
 
 func (p *Piece) Flush() {

@@ -1,12 +1,12 @@
 package storage
 
 import (
-	"github.com/anacrolix/torrent/segments"
 	"io"
 	"log"
 	"os"
 
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/segments"
 )
 
 type filePieceImpl struct {

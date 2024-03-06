@@ -744,7 +744,7 @@ func (t *Torrent) pieceStateRuns() (ret PieceStateRuns) {
 		})
 	})
 	for index := range t.pieces {
-		rle.Append(t.pieceState(pieceIndex(index)), 1)
+		rle.Append(t.pieceState(index), 1)
 	}
 	rle.Flush()
 	return

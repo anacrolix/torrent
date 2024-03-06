@@ -1,8 +1,9 @@
 package segments
 
 import (
-	g "github.com/anacrolix/generics"
 	"sort"
+
+	g "github.com/anacrolix/generics"
 )
 
 func NewIndex(segments LengthIter) (ret Index) {

@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/davecgh/go-spew/spew"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/bencode"

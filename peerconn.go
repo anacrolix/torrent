@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/anacrolix/torrent/merkle"
 	"io"
 	"math/rand"
 	"net"
@@ -27,6 +26,7 @@ import (
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/alloclim"
+	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -883,7 +883,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Hashes:
 			err = c.onReadHashes(&msg)
 		case pp.HashRequest, pp.HashReject:
-			err = log.WithLevel(log.Warning, fmt.Errorf("received unimplemented BitTorrent v2 message: %v", msg.Type))
+			c.logger.Levelf(log.Info, "received unimplemented BitTorrent v2 message: %v", msg.Type)
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}

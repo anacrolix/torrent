@@ -576,8 +576,10 @@ func (t *Torrent) hashInfoBytes(b []byte, info *metainfo.Info) error {
 				return errors.New("invalid v2 info")
 			}
 			t.infoHashV2.Set(v2Hash)
+			t.infoHash.SetNone()
 			if info.HasV1() {
 				cl.torrentsByShortHash[v1Hash] = t
+				t.infoHash.Set(v1Hash)
 			}
 		}
 	} else if t.infoHash.Ok && t.infoHashV2.Ok {
@@ -3151,11 +3153,17 @@ func (t *Torrent) canonicalShortInfohash() *infohash.T {
 }
 
 func (t *Torrent) eachShortInfohash(each func(short [20]byte)) {
+	if t.infoHash.Value == *t.infoHashV2.Value.ToShort() {
+		// This includes zero values, since they both should not be zero. Plus Option should not
+		// allow non-zero values for None.
+		panic("v1 and v2 info hashes should not be the same")
+	}
 	if t.infoHash.Ok {
 		each(t.infoHash.Value)
 	}
 	if t.infoHashV2.Ok {
-		each(*t.infoHashV2.Value.ToShort())
+		v2Short := *t.infoHashV2.Value.ToShort()
+		each(v2Short)
 	}
 }
 

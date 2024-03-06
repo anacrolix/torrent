@@ -3,6 +3,8 @@ package storage
 import (
 	"io"
 
+	g "github.com/anacrolix/generics"
+
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -20,9 +22,13 @@ type TorrentCapacity *func() (cap int64, capped bool)
 
 // Data storage bound to a torrent.
 type TorrentImpl struct {
+	// v2 infos might not have the piece hash available even if we have the info. The
+	// metainfo.Piece.Hash method was removed to enforce this.
 	Piece func(p metainfo.Piece) PieceImpl
-	Close func() error
-	Flush func() error
+	// Preferred over PieceWithHash. Called with the piece hash if it's available.
+	PieceWithHash func(p metainfo.Piece, pieceHash g.Option[[]byte]) PieceImpl
+	Close         func() error
+	Flush         func() error
 	// Storages that share the same space, will provide equal pointers. The function is called once
 	// to determine the storage for torrents sharing the same function pointer, and mutated in
 	// place.

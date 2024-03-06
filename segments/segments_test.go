@@ -1,8 +1,9 @@
 package segments
 
 import (
-	qt "github.com/frankban/quicktest"
 	"testing"
+
+	qt "github.com/frankban/quicktest"
 )
 
 func LengthIterFromSlice(ls []Length) LengthIter {

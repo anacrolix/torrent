@@ -1,14 +1,14 @@
 package storage
 
 import (
-	"github.com/anacrolix/torrent/common"
-	"github.com/anacrolix/torrent/segments"
-	qt "github.com/frankban/quicktest"
 	"testing"
 
+	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/segments"
 )
 
 type requiredLength struct {

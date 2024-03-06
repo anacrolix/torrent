@@ -4,10 +4,10 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
-	g "github.com/anacrolix/generics"
 	"io"
 	"sync"
 
+	g "github.com/anacrolix/generics"
 	"github.com/pkg/errors"
 )
 

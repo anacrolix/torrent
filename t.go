@@ -100,7 +100,7 @@ func (t *Torrent) Drop() {
 	defer wg.Wait()
 	t.cl.lock()
 	defer t.cl.unlock()
-	err := t.cl.dropTorrent(*t.canonicalShortInfohash(), &wg)
+	err := t.cl.dropTorrent(t, &wg)
 	if err != nil {
 		panic(err)
 	}

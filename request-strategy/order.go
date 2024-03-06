@@ -53,8 +53,8 @@ func GetRequestablePieces(
 	var allTorrentsUnverifiedBytes int64
 	pro.tree.Scan(func(_i pieceRequestOrderItem) bool {
 		ih := _i.key.InfoHash
-		var t Torrent = input.Torrent(ih)
-		var piece Piece = t.Piece(_i.key.Index)
+		var t = input.Torrent(ih)
+		var piece = t.Piece(_i.key.Index)
 		pieceLength := t.PieceLength()
 		if storageLeft != nil {
 			if *storageLeft < pieceLength {

@@ -560,25 +560,58 @@ func (t *Torrent) onSetInfo() {
 	})
 }
 
-// Called when metadata for a torrent becomes available.
-func (t *Torrent) setInfoBytesLocked(b []byte) error {
-	if t.infoHash.Ok && infohash.HashBytes(b) != t.infoHash.Value {
-		return errors.New("info bytes have wrong v1 hash")
-	}
-	var v2Hash g.Option[infohash_v2.T]
-	if t.infoHashV2.Ok {
-		v2Hash.Set(infohash_v2.HashBytes(b))
-		if v2Hash.Value != t.infoHashV2.Value {
-			return errors.New("info bytes have wrong v2 hash")
+// Checks the info bytes hash to expected values. Fills in any missing infohashes.
+func (t *Torrent) hashInfoBytes(b []byte, info *metainfo.Info) error {
+	v1Hash := infohash.HashBytes(b)
+	v2Hash := infohash_v2.HashBytes(b)
+	cl := t.cl
+	if t.infoHash.Ok && !t.infoHashV2.Ok {
+		if v1Hash == t.infoHash.Value {
+			if info.HasV2() {
+				t.infoHashV2.Set(v2Hash)
+				cl.torrentsByShortHash[*v2Hash.ToShort()] = t
+			}
+		} else if *v2Hash.ToShort() == t.infoHash.Value {
+			if !info.HasV2() {
+				return errors.New("invalid v2 info")
+			}
+			t.infoHashV2.Set(v2Hash)
+			if info.HasV1() {
+				cl.torrentsByShortHash[v1Hash] = t
+			}
 		}
+	} else if t.infoHash.Ok && t.infoHashV2.Ok {
+		if v1Hash != t.infoHash.Value {
+			return errors.New("incorrect v1 infohash")
+		}
+		if v2Hash != t.infoHashV2.Value {
+			return errors.New("incorrect v2 infohash")
+		}
+	} else if !t.infoHash.Ok && t.infoHashV2.Ok {
+		if v2Hash != t.infoHashV2.Value {
+			return errors.New("incorrect v2 infohash")
+		}
+		if info.HasV1() {
+			t.infoHash.Set(v1Hash)
+			cl.torrentsByShortHash[v1Hash] = t
+		}
+	} else {
+		panic("no expected infohashes")
 	}
+	return nil
+}
+
+// Called when metadata for a torrent becomes available.
+func (t *Torrent) setInfoBytesLocked(b []byte) (err error) {
 	var info metainfo.Info
-	if err := bencode.Unmarshal(b, &info); err != nil {
-		return fmt.Errorf("error unmarshalling info bytes: %s", err)
+	err = bencode.Unmarshal(b, &info)
+	if err != nil {
+		err = fmt.Errorf("unmarshalling info bytes: %w", err)
+		return
 	}
-	if !t.infoHashV2.Ok && info.HasV2() {
-		v2Hash.Set(infohash_v2.HashBytes(b))
-		t.infoHashV2.Set(v2Hash.Unwrap())
+	err = t.hashInfoBytes(b, &info)
+	if err != nil {
+		return
 	}
 	t.metadataBytes = b
 	t.metadataCompletedChunks = nil

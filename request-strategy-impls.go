@@ -59,8 +59,9 @@ func (cl *Client) getRequestStrategyInput(primaryTorrent *Torrent) (input reques
 	} else {
 		return requestStrategyInputMultiTorrent{
 			requestStrategyInputCommon: cl.getRequestStrategyInputCommon(),
-			torrents:                   cl.torrents,
-			capFunc:                    primaryTorrent.storage.Capacity,
+			// TODO: Check this is an appropriate key
+			torrents: cl.torrentsByShortHash,
+			capFunc:  primaryTorrent.storage.Capacity,
 		}
 	}
 }

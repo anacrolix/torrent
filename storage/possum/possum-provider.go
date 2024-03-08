@@ -17,7 +17,9 @@ import (
 )
 
 // Extends possum resource.Provider with an efficient implementation of torrent
-// storage.ConsecutiveChunkReader. TODO: This doesn't expose Capacity
+// storage.ConsecutiveChunkReader. TODO: This doesn't expose Capacity. TODO: Add a MarkComplete
+// method that renames incomplete chunks rather than writing them to a single giant key and deleting
+// them.
 type Provider struct {
 	possumResource.Provider
 	Logger log.Logger

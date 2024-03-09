@@ -111,6 +111,8 @@ github.com/anacrolix/possum/go v0.1.1-0.20240309232535-7d660fa365f8 h1:XDKUI9RHy
 github.com/anacrolix/possum/go v0.1.1-0.20240309232535-7d660fa365f8/go.mod h1:pw5HEMBSiL+otYzHe4q5jGaVuy5unl+Mt4Bx6SDemW8=
 github.com/anacrolix/squirrel v0.6.0 h1:ovfWW42wcGzrVYYI9s56pEYzfeTwtXxCCvSd+KwvUEA=
 github.com/anacrolix/squirrel v0.6.0/go.mod h1:60vdNPUbK1jYWePp39Wqn9whHm12Yb9JEuwOXzLMDuY=
+github.com/anacrolix/squirrel v0.6.4 h1:K6ABRMCms0xwpEIdY3kAaDBUqiUeUYCKLKI0yHTr9IQ=
+github.com/anacrolix/squirrel v0.6.4/go.mod h1:0kFVjOLMOKVOet6ja2ac1vTOrqVbLj2zy2Fjp7+dkE8=
 github.com/anacrolix/stm v0.2.0/go.mod h1:zoVQRvSiGjGoTmbM0vSLIiaKjWtNPeTvXUSdJQA4hsg=
 github.com/anacrolix/stm v0.4.0 h1:tOGvuFwaBjeu1u9X1eIh9TX8OEedEiEQ1se1FjhFnXY=
 github.com/anacrolix/stm v0.4.0/go.mod h1:GCkwqWoAsP7RfLW+jw+Z0ovrt2OO7wRzcTtFYMYY5t8=

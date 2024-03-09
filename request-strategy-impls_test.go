@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"testing"
 
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/iter"
 	"github.com/davecgh/go-spew/spew"
 	qt "github.com/frankban/quicktest"
@@ -12,6 +13,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
 
 func makeRequestStrategyPiece(t request_strategy.Torrent) request_strategy.Piece {
@@ -81,7 +83,8 @@ func BenchmarkRequestStrategy(b *testing.B) {
 	cl := newTestingClient(b)
 	storageClient := storageClient{}
 	tor, new := cl.AddTorrentOpt(AddTorrentOpts{
-		Storage: &storageClient,
+		InfoHashV2: g.Some(infohash_v2.FromHexString("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")),
+		Storage:    &storageClient,
 	})
 	tor.disableTriggers = true
 	c.Assert(new, qt.IsTrue)

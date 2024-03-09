@@ -75,6 +75,10 @@ type ConsecutiveChunkReader interface {
 	ReadConsecutiveChunks(prefix string) (io.ReadCloser, error)
 }
 
+type PrefixDeleter interface {
+	DeletePrefix(prefix string) error
+}
+
 type piecePerResourcePiece struct {
 	mp metainfo.Piece
 	// The piece hash if we have it. It could be 20 or 32 bytes depending on the info version.
@@ -140,7 +144,7 @@ type SizedPutter interface {
 	PutSized(io.Reader, int64) error
 }
 
-func (s piecePerResourcePiece) MarkComplete() error {
+func (s piecePerResourcePiece) MarkComplete() (err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	incompleteChunks := s.getChunks()
@@ -162,11 +166,20 @@ func (s piecePerResourcePiece) MarkComplete() error {
 			return completedInstance.Put(r)
 		}
 	}()
-	if err == nil && !s.opts.LeaveIncompleteChunks {
-		// I think we do this synchronously here since we don't want callers to act on the completed
-		// piece if we're concurrently still deleting chunks. The caller may decide to start
-		// downloading chunks again and won't expect us to delete them. It seems to be much faster
-		// to let the resource provider do this if possible.
+	if err != nil || s.opts.LeaveIncompleteChunks {
+		return
+	}
+
+	// I think we do this synchronously here since we don't want callers to act on the completed
+	// piece if we're concurrently still deleting chunks. The caller may decide to start
+	// downloading chunks again and won't expect us to delete them. It seems to be much faster
+	// to let the resource provider do this if possible.
+	if pd, ok := s.rp.(PrefixDeleter); ok {
+		err = pd.DeletePrefix(s.incompleteDirPath() + "/")
+		if err != nil {
+			err = fmt.Errorf("deleting incomplete prefix: %w", err)
+		}
+	} else {
 		var wg sync.WaitGroup
 		for _, c := range incompleteChunks {
 			wg.Add(1)

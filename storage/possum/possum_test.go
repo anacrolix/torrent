@@ -28,5 +28,11 @@ func BenchmarkProvider(b *testing.B) {
 	clientStorageImpl := storage.NewResourcePiecesOpts(
 		possumTorrentProvider,
 		storage.ResourcePiecesOpts{LeaveIncompleteChunks: true})
-	test_storage.BenchmarkPieceMarkComplete(b, clientStorageImpl, test_storage.DefaultPieceSize, test_storage.DefaultNumPieces, 0)
+	test_storage.BenchmarkPieceMarkComplete(
+		b,
+		clientStorageImpl,
+		test_storage.DefaultPieceSize,
+		test_storage.DefaultNumPieces,
+		0,
+	)
 }

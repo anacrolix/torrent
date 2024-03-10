@@ -654,8 +654,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		}
 	}
 
-	cl := t.cl
-
 	// Do we actually want this chunk?
 	if t.haveChunk(ppReq) {
 		// panic(fmt.Sprintf("%+v", ppReq))
@@ -692,9 +690,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		p.cancel(req)
 	}
 
-	err = func() error {
-		cl.unlock()
-		defer cl.lock()
+	go func() {
 		// Opportunistically do this here while we aren't holding the client lock.
 		recordBlockForSmartBan()
 		concurrentChunkWrites.Add(1)
@@ -704,8 +700,25 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// because we want to handle errors synchronously and I haven't thought of a nice way to
 		// defer any concurrency to the storage and have that notify the client of errors. TODO: Do
 		// that instead.
-		return t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
+		err := t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
+		c.afterChunkWrite(err, msg)
 	}()
+
+	return nil
+}
+
+func (c *Peer) afterChunkWrite(err error, msg *pp.Message) {
+	t := c.t
+	cl := t.cl
+	ppReq := newRequestFromMessage(msg)
+	req := c.t.requestIndexFromRequest(ppReq)
+	piece := &t.pieces[ppReq.Index]
+
+	t.putChunkPool(msg.Piece)
+	concurrentChunkWrites.Add(-1)
+
+	cl.lock()
+	defer cl.unlock()
 
 	piece.decrementPendingWrites()
 
@@ -717,7 +730,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// fresh update after pending the failed request.
 		c.updateRequests("Peer.receiveChunk error writing chunk")
 		t.onWriteChunkErr(err)
-		return nil
+		return
 	}
 
 	c.onDirtiedPiece(pieceIndex(ppReq.Index))
@@ -734,8 +747,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	cl.event.Broadcast()
 	// We do this because we've written a chunk, and may change PieceState.Partial.
 	t.publishPieceStateChange(pieceIndex(ppReq.Index))
-
-	return nil
 }
 
 func (c *Peer) onDirtiedPiece(piece pieceIndex) {

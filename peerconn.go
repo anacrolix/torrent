@@ -836,10 +836,9 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Piece:
 			c.doChunkReadStats(int64(len(msg.Piece)))
 			err = c.receiveChunk(&msg)
-			if len(msg.Piece) == int(t.chunkSize) {
-				t.chunkPool.Put(&msg.Piece)
-			}
 			if err != nil {
+				// receiveChunk only does this if it doesn't error.
+				t.putChunkPool(msg.Piece)
 				err = fmt.Errorf("receiving chunk: %w", err)
 			}
 		case pp.Cancel:

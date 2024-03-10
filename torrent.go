@@ -3175,3 +3175,9 @@ func (t *Torrent) getFileByPiecesRoot(hash [32]byte) *File {
 	}
 	return nil
 }
+
+func (t *Torrent) putChunkPool(b []byte) {
+	if len(b) == int(t.chunkSize) {
+		t.chunkPool.Put(&b)
+	}
+}

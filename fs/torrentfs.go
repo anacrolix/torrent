@@ -73,16 +73,16 @@ func isSubPath(parent, child string) bool {
 func (dn dirNode) ReadDirAll(ctx context.Context) (des []fuse.Dirent, err error) {
 	names := map[string]bool{}
 	for _, fi := range dn.metadata.UpvertedFiles() {
-		filePathname := strings.Join(fi.Path, "/")
+		filePathname := strings.Join(fi.BestPath(), "/")
 		if !isSubPath(dn.path, filePathname) {
 			continue
 		}
 		var name string
 		if dn.path == "" {
-			name = fi.Path[0]
+			name = fi.BestPath()[0]
 		} else {
 			dirPathname := strings.Split(dn.path, "/")
-			name = fi.Path[len(dirPathname)]
+			name = fi.BestPath()[len(dirPathname)]
 		}
 		if names[name] {
 			continue
@@ -91,7 +91,7 @@ func (dn dirNode) ReadDirAll(ctx context.Context) (des []fuse.Dirent, err error)
 		de := fuse.Dirent{
 			Name: name,
 		}
-		if len(fi.Path) == len(dn.path)+1 {
+		if len(fi.BestPath()) == len(dn.path)+1 {
 			de.Type = fuse.DT_File
 		} else {
 			de.Type = fuse.DT_Dir
@@ -168,7 +168,7 @@ func (rn rootNode) ReadDirAll(ctx context.Context) (dirents []fuse.Dirent, err e
 			continue
 		}
 		dirents = append(dirents, fuse.Dirent{
-			Name: info.Name,
+			Name: info.BestName(),
 			Type: func() fuse.DirentType {
 				if !info.IsDir() {
 					return fuse.DT_File

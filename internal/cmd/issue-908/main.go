@@ -49,7 +49,7 @@ func main() {
 		log.Fatal(err)
 	}
 	for _, fi := range info.Files {
-		log.Printf("added %q", fi.Path)
+		log.Printf("added %q", fi.BestPath())
 	}
 	mi := &metainfo.MetaInfo{
 		InfoBytes: bencode.MustMarshal(info),

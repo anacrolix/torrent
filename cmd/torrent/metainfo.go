@@ -97,7 +97,7 @@ func pprintMetainfo(metainfo *metainfo.MetaInfo, flags pprintMetainfoFlags) erro
 		return fmt.Errorf("error unmarshalling info: %s", err)
 	}
 	if flags.JustName {
-		fmt.Printf("%s\n", info.Name)
+		fmt.Printf("%s\n", info.BestName())
 		return nil
 	}
 	d := map[string]interface{}{

@@ -44,7 +44,7 @@ func main() {
 			<-t.GotInfo()
 			mi := t.Metainfo()
 			t.Drop()
-			f, err := os.Create(t.Info().Name + ".torrent")
+			f, err := os.Create(t.Info().BestName() + ".torrent")
 			if err != nil {
 				log.Fatalf("error creating torrent metainfo file: %s", err)
 			}

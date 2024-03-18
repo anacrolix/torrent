@@ -39,10 +39,10 @@ func NewFileOpts(opts NewFileClientOpts) ClientImplCloser {
 	if opts.FilePathMaker == nil {
 		opts.FilePathMaker = func(opts FilePathMakerOpts) string {
 			var parts []string
-			if opts.Info.Name != metainfo.NoName {
-				parts = append(parts, opts.Info.Name)
+			if opts.Info.BestName() != metainfo.NoName {
+				parts = append(parts, opts.Info.BestName())
 			}
-			return filepath.Join(append(parts, opts.File.Path...)...)
+			return filepath.Join(append(parts, opts.File.BestPath()...)...)
 		}
 	}
 	if opts.PieceCompletion == nil {

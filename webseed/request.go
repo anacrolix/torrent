@@ -57,7 +57,7 @@ func newRequest(
 	if strings.HasSuffix(url_, "/") {
 		// BEP specifies that we append the file path. We need to escape each component of the path
 		// for things like spaces and '#'.
-		url_ += trailingPath(info.Name, fileInfo.Path, pathEscaper)
+		url_ += trailingPath(info.BestName(), fileInfo.BestPath(), pathEscaper)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url_, nil)
 	if err != nil {

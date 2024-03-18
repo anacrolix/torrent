@@ -130,7 +130,7 @@ func TestUnmountWedged(t *testing.T) {
 	}()
 	go func() {
 		defer cancel()
-		_, err := ioutil.ReadFile(filepath.Join(layout.MountDir, tt.Info().Name))
+		_, err := ioutil.ReadFile(filepath.Join(layout.MountDir, tt.Info().BestName()))
 		require.Error(t, err)
 	}()
 

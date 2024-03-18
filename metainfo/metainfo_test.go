@@ -24,9 +24,9 @@ func testFile(t *testing.T, filename string) {
 	require.NoError(t, err)
 
 	if len(info.Files) == 1 {
-		t.Logf("Single file: %s (length: %d)\n", info.Name, info.Files[0].Length)
+		t.Logf("Single file: %s (length: %d)\n", info.BestName(), info.Files[0].Length)
 	} else {
-		t.Logf("Multiple files: %s\n", info.Name)
+		t.Logf("Multiple files: %s\n", info.BestName())
 		for _, f := range info.Files {
 			t.Logf(" - %s (length: %d)\n", path.Join(f.Path...), f.Length)
 		}

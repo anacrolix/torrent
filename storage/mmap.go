@@ -119,7 +119,7 @@ func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, e
 	}()
 	for _, miFile := range md.UpvertedFiles() {
 		var safeName string
-		safeName, err = ToSafeFilePath(append([]string{md.Name}, miFile.Path...)...)
+		safeName, err = ToSafeFilePath(append([]string{md.BestName()}, miFile.BestPath()...)...)
 		if err != nil {
 			return
 		}

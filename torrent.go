@@ -363,7 +363,6 @@ func (t *Torrent) invalidateMetadata() {
 		t.metadataCompletedChunks[i] = false
 	}
 	t.nameMu.Lock()
-	t.gotMetainfoC = make(chan struct{})
 	t.info = nil
 	t.nameMu.Unlock()
 }

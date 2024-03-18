@@ -77,13 +77,13 @@ func (info *Info) BuildFromFilePath(root string) (err error) {
 		return
 	}
 	slices.Sort(info.Files, func(l, r FileInfo) bool {
-		return strings.Join(l.Path, "/") < strings.Join(r.Path, "/")
+		return strings.Join(l.BestPath(), "/") < strings.Join(r.BestPath(), "/")
 	})
 	if info.PieceLength == 0 {
 		info.PieceLength = ChoosePieceLength(info.TotalLength())
 	}
 	err = info.GeneratePieces(func(fi FileInfo) (io.ReadCloser, error) {
-		return os.Open(filepath.Join(root, strings.Join(fi.Path, string(filepath.Separator))))
+		return os.Open(filepath.Join(root, strings.Join(fi.BestPath(), string(filepath.Separator))))
 	})
 	if err != nil {
 		err = fmt.Errorf("error generating pieces: %s", err)

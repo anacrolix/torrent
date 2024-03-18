@@ -86,7 +86,7 @@ func TorrentSpecFromMetaInfoErr(mi *metainfo.MetaInfo) (*TorrentSpec, error) {
 		InfoHashV2:  v2Infohash,
 		PieceLayers: mi.PieceLayers,
 		InfoBytes:   mi.InfoBytes,
-		DisplayName: info.Name,
+		DisplayName: info.BestName(),
 		Webseeds:    mi.UrlList,
 		DhtNodes: func() (ret []string) {
 			ret = make([]string, 0, len(mi.Nodes))

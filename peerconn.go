@@ -183,20 +183,30 @@ func (cn *PeerConn) peerPieces() *roaring.Bitmap {
 	return &cn._peerPieces
 }
 
-func (cn *PeerConn) connectionFlags() (ret string) {
-	c := func(b byte) {
-		ret += string([]byte{b})
+func (cn *PeerConn) connectionFlags() string {
+	var sb strings.Builder
+	add := func(s string) {
+		if sb.Len() > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(s)
+	}
+	// From first relevant to last.
+	add(string(cn.Discovery))
+	if cn.utp() {
+		add("U")
 	}
 	if cn.cryptoMethod == mse.CryptoMethodRC4 {
-		c('E')
+		add("E")
 	} else if cn.headerEncrypted {
-		c('e')
+		add("e")
 	}
-	ret += string(cn.Discovery)
-	if cn.utp() {
-		c('U')
+	if cn.v2 {
+		add("v2")
+	} else {
+		add("v1")
 	}
-	return
+	return sb.String()
 }
 
 func (cn *PeerConn) utp() bool {
@@ -883,7 +893,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Hashes:
 			err = c.onReadHashes(&msg)
 		case pp.HashRequest, pp.HashReject:
-			c.logger.Levelf(log.Info, "received unimplemented BitTorrent v2 message: %v", msg.Type)
+			c.protocolLogger.Levelf(log.Info, "received unimplemented BitTorrent v2 message: %v", msg.Type)
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}
@@ -1241,6 +1251,9 @@ func (pc *PeerConn) requestMissingHashes() {
 	}
 	info := pc.t.info
 	if !info.HasV2() {
+		return
+	}
+	if !pc.v2 {
 		return
 	}
 	baseLayer := pp.Integer(merkle.Log2RoundingUp(merkle.RoundUpToPowerOfTwo(

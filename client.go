@@ -1016,6 +1016,10 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 	}
 	cl.lock()
 	t = cl.torrentsByShortHash[ih]
+	if t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih {
+		torrent.Add("v2 handshakes received", 1)
+		c.v2 = true
+	}
 	cl.unlock()
 	return
 }
@@ -1662,7 +1666,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	}
 	c.peerImpl = c
 	c.logger = cl.logger.WithDefaultLevel(log.Warning)
-	c.logger = c.logger.WithContextText(fmt.Sprintf("%T %p", c, c))
+	c.logger = c.logger.WithContextText(fmt.Sprintf("%T %p", c, c)).WithNames(protocolLoggingName)
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
 		l: cl.config.DownloadRateLimiter,

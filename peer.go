@@ -96,7 +96,8 @@ type (
 
 		PeerMaxRequests maxRequests // Maximum pending requests the peer allows.
 
-		logger log.Logger
+		logger         log.Logger
+		protocolLogger log.Logger
 	}
 
 	PeerSource string
@@ -225,9 +226,9 @@ func (cn *Peer) statusFlags() (ret string) {
 	if cn.choking {
 		c('c')
 	}
-	c('-')
+	c(':')
 	ret += cn.connectionFlags()
-	c('-')
+	c(':')
 	if cn.peerInterested {
 		c('i')
 	}

@@ -927,7 +927,12 @@ func (cl *Client) initiateHandshakes(c *PeerConn, t *Torrent) (err error) {
 			return fmt.Errorf("header obfuscation handshake: %w", err)
 		}
 	}
-	ih, err := cl.connBtHandshake(c, t.canonicalShortInfohash())
+	localReservedBits := cl.config.Extensions
+	handshakeIh := *t.canonicalShortInfohash()
+	// If we're sending the v1 infohash, and we know the v2 infohash, set the v2 upgrade bit. This
+	// means the peer can send the v2 infohash in the handshake to upgrade the connection.
+	localReservedBits.SetBit(pp.ExtensionBitV2Upgrade, g.Some(handshakeIh) == t.infoHash && t.infoHashV2.Ok)
+	ih, err := cl.connBtHandshake(c, &handshakeIh, localReservedBits)
 	if err != nil {
 		return fmt.Errorf("bittorrent protocol handshake: %w", err)
 	}
@@ -935,6 +940,7 @@ func (cl *Client) initiateHandshakes(c *PeerConn, t *Torrent) (err error) {
 		return nil
 	}
 	if t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih {
+		torrent.Add("initiated handshakes upgraded to v2", 1)
 		c.v2 = true
 		return nil
 	}
@@ -1004,7 +1010,7 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 		err = errors.New("connection does not have required header obfuscation")
 		return
 	}
-	ih, err := cl.connBtHandshake(c, nil)
+	ih, err := cl.connBtHandshake(c, nil, cl.config.Extensions)
 	if err != nil {
 		return nil, fmt.Errorf("during bt handshake: %w", err)
 	}
@@ -1022,8 +1028,8 @@ func init() {
 		&successfulPeerWireProtocolHandshakePeerReservedBytes)
 }
 
-func (cl *Client) connBtHandshake(c *PeerConn, ih *metainfo.Hash) (ret metainfo.Hash, err error) {
-	res, err := pp.Handshake(c.rw(), ih, cl.peerID, cl.config.Extensions)
+func (cl *Client) connBtHandshake(c *PeerConn, ih *metainfo.Hash, reservedBits PeerExtensionBits) (ret metainfo.Hash, err error) {
+	res, err := pp.Handshake(c.rw(), ih, cl.peerID, reservedBits)
 	if err != nil {
 		return
 	}

@@ -212,6 +212,7 @@ func (p *Piece) SetPriority(prio PiecePriority) {
 	p.t.updatePiecePriority(p.index, "Piece.SetPriority")
 }
 
+// This is priority based only on piece, file and reader priorities.
 func (p *Piece) purePriority() (ret PiecePriority) {
 	for _, f := range p.files {
 		ret.Raise(f.prio)
@@ -233,7 +234,8 @@ func (p *Piece) ignoreForRequests() bool {
 	return p.hashing || p.marking || !p.haveHash() || p.t.pieceComplete(p.index) || p.queuedForHash()
 }
 
-func (p *Piece) uncachedPriority() (ret piecePriority) {
+// This is the priority adjusted for piece state like completion, hashing etc.
+func (p *Piece) effectivePriority() (ret PiecePriority) {
 	if p.ignoreForRequests() {
 		return PiecePriorityNone
 	}

@@ -685,7 +685,7 @@ func (t *Torrent) name() string {
 
 func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {
 	p := &t.pieces[index]
-	ret.Priority = t.piecePriority(index)
+	ret.Priority = p.effectivePriority()
 	ret.Completion = p.completion()
 	ret.QueuedForHash = p.queuedForHash()
 	ret.Hashing = p.hashing
@@ -1420,7 +1420,7 @@ func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex) (pendingChange
 		t.updatePieceRequestOrderPiece(piece)
 	}
 	p := t.piece(piece)
-	newPrio := p.uncachedPriority()
+	newPrio := p.effectivePriority()
 	// t.logger.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
 	if newPrio == PiecePriorityNone && p.haveHash() {
 		return t._pendingPieces.CheckedRemove(uint32(piece))
@@ -1482,10 +1482,6 @@ func (t *Torrent) forReaderOffsetPieces(f func(begin, end pieceIndex) (more bool
 		}
 	}
 	return true
-}
-
-func (t *Torrent) piecePriority(piece pieceIndex) piecePriority {
-	return t.piece(piece).uncachedPriority()
 }
 
 func (t *Torrent) pendRequest(req RequestIndex) {

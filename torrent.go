@@ -425,22 +425,26 @@ func (t *Torrent) makePieces() {
 	}
 }
 
-func (t *Torrent) AddPieceLayers(layers map[string]string) (err error) {
+func (t *Torrent) AddPieceLayers(layers map[string]string) (errs []error) {
 	if layers == nil {
 		return
 	}
+files:
 	for _, f := range *t.files {
 		if !f.piecesRoot.Ok {
-			err = fmt.Errorf("no piece root set for file %v", f)
-			return
+			err := fmt.Errorf("no piece root set for file %v", f)
+			errs = append(errs, err)
+			continue files
 		}
 		compactLayer, ok := layers[string(f.piecesRoot.Value[:])]
 		var hashes [][32]byte
 		if ok {
+			var err error
 			hashes, err = merkle.CompactLayerToSliceHashes(compactLayer)
 			if err != nil {
 				err = fmt.Errorf("bad piece layers for file %q: %w", f, err)
-				return
+				errs = append(errs, err)
+				continue files
 			}
 		} else if f.length > t.info.PieceLength {
 			// BEP 52 is pretty strongly worded about this, even though we should be able to
@@ -452,8 +456,16 @@ func (t *Torrent) AddPieceLayers(layers map[string]string) (err error) {
 			hashes = [][32]byte{f.piecesRoot.Value}
 		}
 		if len(hashes) != f.numPieces() {
-			err = fmt.Errorf("file %q: got %v hashes expected %v", f, len(hashes), f.numPieces())
-			return
+			errs = append(
+				errs,
+				fmt.Errorf("file %q: got %v hashes expected %v", f, len(hashes), f.numPieces()),
+			)
+			continue files
+		}
+		root := merkle.RootWithPadHash(hashes, metainfo.HashForPiecePad(t.info.PieceLength))
+		if root != f.piecesRoot.Value {
+			errs = append(errs, fmt.Errorf("%v: expected hash %x got %x", f, f.piecesRoot.Value, root))
+			continue files
 		}
 		for i := range f.numPieces() {
 			pi := f.BeginPieceIndex() + i
@@ -461,7 +473,7 @@ func (t *Torrent) AddPieceLayers(layers map[string]string) (err error) {
 			p.setV2Hash(hashes[i])
 		}
 	}
-	return nil
+	return
 }
 
 // Returns the index of the first file containing the piece. files must be

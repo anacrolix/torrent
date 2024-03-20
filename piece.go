@@ -284,6 +284,7 @@ func (p *Piece) setV2Hash(v2h [32]byte) {
 	// See Torrent.onSetInfo. We want to trigger an initial check if appropriate, if we didn't yet
 	// have a piece hash (can occur with v2 when we don't start with piece layers).
 	if !p.hashV2.Set(v2h).Ok && p.hash == nil {
+		p.t.updatePieceCompletion(p.index)
 		p.t.queueInitialPieceCheck(p.index)
 	}
 }

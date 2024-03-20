@@ -1263,7 +1263,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 			return nil
 		}
 		start := (1 << 14) * piece
-		c.logger.WithDefaultLevel(log.Debug).Printf("sending metadata piece %d", piece)
+		c.protocolLogger.WithDefaultLevel(log.Debug).Printf("sending metadata piece %d", piece)
 		c.write(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]))
 		return nil
 	case pp.RejectMetadataExtensionMsgType:
@@ -1665,8 +1665,8 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		}
 	}
 	c.peerImpl = c
-	c.logger = cl.logger.WithDefaultLevel(log.Warning)
-	c.logger = c.logger.WithContextText(fmt.Sprintf("%T %p", c, c)).WithNames(protocolLoggingName)
+	c.logger = cl.logger.WithDefaultLevel(log.Warning).WithContextText(fmt.Sprintf("%T %p", c, c))
+	c.protocolLogger = c.logger.WithNames(protocolLoggingName)
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
 		l: cl.config.DownloadRateLimiter,

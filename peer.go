@@ -96,8 +96,7 @@ type (
 
 		PeerMaxRequests maxRequests // Maximum pending requests the peer allows.
 
-		logger         log.Logger
-		protocolLogger log.Logger
+		logger log.Logger
 	}
 
 	PeerSource string

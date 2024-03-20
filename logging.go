@@ -1,3 +1,6 @@
 package torrent
 
-const protocolLoggingName = "protocol"
+const (
+	protocolLoggingName = "protocol"
+	v2HashesLogName     = "v2hashes"
+)

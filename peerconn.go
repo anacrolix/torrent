@@ -37,6 +37,9 @@ import (
 type PeerConn struct {
 	Peer
 
+	// Move to PeerConn?
+	protocolLogger log.Logger
+
 	// BEP 52
 	v2 bool
 
@@ -248,7 +251,7 @@ func (cn *PeerConn) requestMetadataPiece(index int) {
 	if index < len(cn.metadataRequests) && cn.metadataRequests[index] {
 		return
 	}
-	cn.logger.WithDefaultLevel(log.Debug).Printf("requesting metadata piece %d", index)
+	cn.protocolLogger.WithDefaultLevel(log.Debug).Printf("requesting metadata piece %d", index)
 	cn.write(pp.MetadataExtensionRequestMsg(eID, index))
 	for index >= len(cn.metadataRequests) {
 		cn.metadataRequests = append(cn.metadataRequests, false)
@@ -608,7 +611,7 @@ func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
 	}
 	if opt := c.maximumPeerRequestChunkLength(); opt.Ok && int(r.Length) > opt.Value {
 		err := fmt.Errorf("peer requested chunk too long (%v)", r.Length)
-		c.logger.Levelf(log.Warning, err.Error())
+		c.protocolLogger.Levelf(log.Warning, err.Error())
 		if c.fastEnabled() {
 			c.reject(r)
 			return nil
@@ -701,7 +704,7 @@ func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
 			// If fast isn't enabled, I think we would have wiped all peer requests when we last
 			// choked, and requests while we're choking would be ignored. It could be possible that
 			// a peer request data read completed concurrently to it being deleted elsewhere.
-			c.logger.WithDefaultLevel(log.Warning).Printf("already choking peer, requests might not be rejected correctly")
+			c.protocolLogger.WithDefaultLevel(log.Warning).Printf("already choking peer, requests might not be rejected correctly")
 		}
 		// Choking a non-fast peer should cause them to flush all their requests.
 		c.choke(c.write)
@@ -725,7 +728,7 @@ func (c *PeerConn) readPeerRequestData(r Request) ([]byte, error) {
 }
 
 func (c *PeerConn) logProtocolBehaviour(level log.Level, format string, arg ...interface{}) {
-	c.logger.WithContextText(fmt.Sprintf(
+	c.protocolLogger.WithContextText(fmt.Sprintf(
 		"peer id %q, ext v %q", c.PeerID, c.PeerClientName.Load(),
 	)).SkipCallers(1).Levelf(level, format, arg...)
 }
@@ -814,7 +817,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			if preservedCount != 0 {
 				// TODO: Yes this is a debug log but I'm not happy with the state of the logging lib
 				// right now.
-				c.logger.Levelf(log.Debug,
+				c.protocolLogger.Levelf(log.Debug,
 					"%v requests were preserved while being choked (fast=%v)",
 					preservedCount,
 					c.fastEnabled())
@@ -882,7 +885,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			req := newRequestFromMessage(&msg)
 			if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req)) {
 				err = fmt.Errorf("received invalid reject for request %v", req)
-				c.logger.Levelf(log.Debug, "%v", err)
+				c.protocolLogger.Levelf(log.Debug, "%v", err)
 			}
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
@@ -929,7 +932,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 	if id == pp.HandshakeExtendedID {
 		var d pp.ExtendedHandshakeMessage
 		if err := bencode.Unmarshal(payload, &d); err != nil {
-			c.logger.Printf("error parsing extended handshake message %q: %s", payload, err)
+			c.protocolLogger.Printf("error parsing extended handshake message %q: %s", payload, err)
 			return fmt.Errorf("unmarshalling extended handshake payload: %w", err)
 		}
 		// Trigger this callback after it's been processed. If you want to handle it yourself, you
@@ -1294,7 +1297,7 @@ file:
 				panic(length)
 			}
 			if length%2 != 0 {
-				pc.logger.Levelf(log.Warning, "requesting odd hashes length %d", length)
+				pc.protocolLogger.Levelf(log.Warning, "requesting odd hashes length %d", length)
 			}
 			msg := pp.Message{
 				Type:        pp.HashRequest,
@@ -1333,7 +1336,7 @@ func (pc *PeerConn) onReadHashes(msg *pp.Message) (err error) {
 		metainfo.HashForPiecePad(int64(pc.t.usualPieceSize())))
 	expectedPiecesRoot := file.piecesRoot.Unwrap()
 	if root == expectedPiecesRoot {
-		pc.logger.WithNames(v2HashesLogName).Levelf(
+		pc.protocolLogger.WithNames(v2HashesLogName).Levelf(
 			log.Info,
 			"got piece hashes for file %v (num pieces %v)",
 			file, file.numPieces())
@@ -1342,7 +1345,7 @@ func (pc *PeerConn) onReadHashes(msg *pp.Message) (err error) {
 			pc.t.piece(torrentPieceIndex).hashV2.Set(peerHash)
 		}
 	} else {
-		pc.logger.WithNames(v2HashesLogName).Levelf(
+		pc.protocolLogger.WithNames(v2HashesLogName).Levelf(
 			log.Debug,
 			"peer file piece hashes root mismatch: %x != %x",
 			root, expectedPiecesRoot)

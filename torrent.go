@@ -144,8 +144,8 @@ type Torrent struct {
 	_readerNowPieces       bitmap.Bitmap
 	_readerReadaheadPieces bitmap.Bitmap
 
-	// A cache of pieces we need to get. Calculated from various piece and
-	// file priorities and completion states elsewhere.
+	// A cache of pieces we need to get. Calculated from various piece and file priorities and
+	// completion states elsewhere. Includes piece data and piece v2 hashes.
 	_pendingPieces roaring.Bitmap
 	// A cache of completed piece indices.
 	_completedPieces roaring.Bitmap
@@ -232,7 +232,7 @@ func (t *Torrent) readerReadaheadPieces() bitmap.Bitmap {
 }
 
 func (t *Torrent) ignorePieceForRequests(i pieceIndex) bool {
-	return !t.wantPieceIndex(i)
+	return t.piece(i).ignoreForRequests()
 }
 
 // Returns a channel that is closed when the Torrent is closed.
@@ -458,12 +458,7 @@ func (t *Torrent) AddPieceLayers(layers map[string]string) (err error) {
 		for i := range f.numPieces() {
 			pi := f.BeginPieceIndex() + i
 			p := t.piece(pi)
-			// See Torrent.onSetInfo. We want to trigger an initial check if appropriate, if we
-			// didn't yet have a piece hash (can occur with v2 when we don't start with piece
-			// layers).
-			if !p.hashV2.Set(hashes[i]).Ok && p.hash == nil {
-				t.queueInitialPieceCheck(pi)
-			}
+			p.setV2Hash(hashes[i])
 		}
 	}
 	return nil
@@ -1170,7 +1165,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 	var written int64
 	written, err = storagePiece.WriteTo(io.MultiWriter(writers...))
 	if err == nil && written != int64(p.length()) {
-		err = io.ErrShortWrite
+		err = fmt.Errorf("wrote %v bytes from storage, piece has length %v", written, p.length())
 	}
 	if logPieceContents {
 		t.logger.WithDefaultLevel(log.Debug).Printf("hashed %q with copy err %v", examineBuf.Bytes(), err)
@@ -1411,10 +1406,10 @@ func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex) (pendingChange
 		// request order.
 		t.updatePieceRequestOrderPiece(piece)
 	}
-	p := &t.pieces[piece]
+	p := t.piece(piece)
 	newPrio := p.uncachedPriority()
 	// t.logger.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
-	if newPrio == PiecePriorityNone {
+	if newPrio == PiecePriorityNone && p.haveHash() {
 		return t._pendingPieces.CheckedRemove(uint32(piece))
 	} else {
 		return t._pendingPieces.CheckedAdd(uint32(piece))

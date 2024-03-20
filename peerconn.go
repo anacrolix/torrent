@@ -1245,20 +1245,15 @@ func (pc *PeerConn) WriteExtendedMessage(extName pp.ExtensionName, payload []byt
 	return nil
 }
 
+func (pc *PeerConn) shouldRequestHashes() bool {
+	return pc.t.haveInfo() && pc.v2 && pc.t.info.HasV2()
+}
+
 func (pc *PeerConn) requestMissingHashes() {
-	if pc.peerChoking {
-		return
-	}
-	if !pc.t.haveInfo() {
+	if !pc.shouldRequestHashes() {
 		return
 	}
 	info := pc.t.info
-	if !info.HasV2() {
-		return
-	}
-	if !pc.v2 {
-		return
-	}
 	baseLayer := pp.Integer(merkle.Log2RoundingUp(merkle.RoundUpToPowerOfTwo(
 		uint((pc.t.usualPieceSize() + merkle.BlockSize - 1) / merkle.BlockSize)),
 	))
@@ -1342,7 +1337,7 @@ func (pc *PeerConn) onReadHashes(msg *pp.Message) (err error) {
 			file, file.numPieces())
 		for filePieceIndex, peerHash := range filePieceHashes {
 			torrentPieceIndex := file.BeginPieceIndex() + filePieceIndex
-			pc.t.piece(torrentPieceIndex).hashV2.Set(peerHash)
+			pc.t.piece(torrentPieceIndex).setV2Hash(peerHash)
 		}
 	} else {
 		pc.protocolLogger.WithNames(v2HashesLogName).Levelf(

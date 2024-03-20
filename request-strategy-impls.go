@@ -89,7 +89,7 @@ type requestStrategyPiece struct {
 }
 
 func (r requestStrategyPiece) Request() bool {
-	return !r.p.ignoreForRequests()
+	return !r.p.ignoreForRequests() && r.p.purePriority() != PiecePriorityNone
 }
 
 func (r requestStrategyPiece) NumPendingChunks() int {

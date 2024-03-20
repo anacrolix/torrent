@@ -24,7 +24,7 @@ type MetaInfo struct {
 	CreatedBy    string  `bencode:"created by,omitempty"`
 	Encoding     string  `bencode:"encoding,omitempty"`
 	UrlList      UrlList `bencode:"url-list,omitempty"` // BEP 19 WebSeeds
-	// BEP 52 (BitTorrent v2): Keys are file merkle roots (pieces root?), and the values are the
+	// BEP 52 (BitTorrent v2): Keys are file merkle roots ("pieces root"s), and the values are the
 	// concatenated hashes of the merkle tree layer that corresponds to the piece length.
 	PieceLayers map[string]string `bencode:"piece layers,omitempty"`
 }

@@ -922,7 +922,7 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 	return metainfo.MetaInfo{
 		CreationDate: time.Now().Unix(),
 		Comment:      "dynamic metainfo from client",
-		CreatedBy:    "go.torrent",
+		CreatedBy:    "https://github.com/anacrolix/torrent",
 		AnnounceList: t.metainfo.UpvertedAnnounceList().Clone(),
 		InfoBytes: func() []byte {
 			if t.haveInfo() {
@@ -938,6 +938,7 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 			}
 			return ret
 		}(),
+		PieceLayers: t.pieceLayers(),
 	}
 }
 
@@ -3168,4 +3169,35 @@ func (t *Torrent) getFileByPiecesRoot(hash [32]byte) *File {
 		}
 	}
 	return nil
+}
+
+func (t *Torrent) pieceLayers() (pieceLayers map[string]string) {
+	if t.files == nil {
+		return
+	}
+	files := *t.files
+	g.MakeMapWithCap(&pieceLayers, len(files))
+file:
+	for _, f := range files {
+		if !f.piecesRoot.Ok {
+			continue
+		}
+		key := f.piecesRoot.Value
+		var value strings.Builder
+		for i := f.BeginPieceIndex(); i < f.EndPieceIndex(); i++ {
+			hashOpt := t.piece(i).hashV2
+			if !hashOpt.Ok {
+				// All hashes must be present. This implementation should handle missing files, so move on to the next file.
+				continue file
+			}
+			value.Write(hashOpt.Value[:])
+		}
+		if value.Len() == 0 {
+			// Non-empty files are not recorded in piece layers.
+			continue
+		}
+		// If multiple files have the same root that shouldn't matter.
+		pieceLayers[string(key[:])] = value.String()
+	}
+	return
 }

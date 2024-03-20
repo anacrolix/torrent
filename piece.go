@@ -31,7 +31,7 @@ type Piece struct {
 	storageCompletionOk bool
 
 	publicPieceState PieceState
-	priority         piecePriority
+	priority         PiecePriority
 	// Availability adjustment for this piece relative to len(Torrent.connsWithAllPieces). This is
 	// incremented for any piece a peer has when a peer has a piece, Torrent.haveInfo is true, and
 	// the Peer isn't recorded in Torrent.connsWithAllPieces.
@@ -205,14 +205,14 @@ func (p *Piece) torrentEndOffset() int64 {
 	return p.torrentBeginOffset() + int64(p.t.usualPieceSize())
 }
 
-func (p *Piece) SetPriority(prio piecePriority) {
+func (p *Piece) SetPriority(prio PiecePriority) {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()
 	p.priority = prio
 	p.t.updatePiecePriority(p.index, "Piece.SetPriority")
 }
 
-func (p *Piece) purePriority() (ret piecePriority) {
+func (p *Piece) purePriority() (ret PiecePriority) {
 	for _, f := range p.files {
 		ret.Raise(f.prio)
 	}

@@ -17,7 +17,7 @@ import (
 type (
 	Request       = types.Request
 	ChunkSpec     = types.ChunkSpec
-	piecePriority = types.PiecePriority
+	PiecePriority = types.PiecePriority
 )
 
 const (

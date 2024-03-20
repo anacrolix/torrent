@@ -99,9 +99,9 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 	rightPiece := &p.pieceStates[rightPieceIndex]
 	// Putting this first means we can steal requests from lesser-performing peers for our first few
 	// new requests.
-	priority := func() piecePriority {
+	priority := func() PiecePriority {
 		// Technically we would be happy with the cached priority here, except we don't actually
-		// cache it anymore, and Torrent.piecePriority just does another lookup of *Piece to resolve
+		// cache it anymore, and Torrent.PiecePriority just does another lookup of *Piece to resolve
 		// the priority through Piece.purePriority, which is probably slower.
 		leftPriority := leftPiece.Priority
 		rightPriority := rightPiece.Priority

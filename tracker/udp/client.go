@@ -167,7 +167,12 @@ func (cl *Client) writeRequest(
 	return
 }
 
-func (cl *Client) requestWriter(ctx context.Context, action Action, body []byte, tId TransactionId) (err error) {
+func (cl *Client) requestWriter(
+	ctx context.Context,
+	action Action,
+	body []byte,
+	tId TransactionId,
+) (err error) {
 	var buf bytes.Buffer
 	for n := 0; ; n++ {
 		err = cl.writeRequest(ctx, action, body, tId, &buf)
@@ -192,7 +197,11 @@ func (me ErrorResponse) Error() string {
 	return fmt.Sprintf("error response: %#q", me.Message)
 }
 
-func (cl *Client) request(ctx context.Context, action Action, body []byte) (respBody []byte, addr net.Addr, err error) {
+func (cl *Client) request(
+	ctx context.Context,
+	action Action,
+	body []byte,
+) (respBody []byte, addr net.Addr, err error) {
 	respChan := make(chan DispatchedResponse, 1)
 	t := cl.Dispatcher.NewTransaction(func(dr DispatchedResponse) {
 		respChan <- dr

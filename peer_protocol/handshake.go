@@ -22,7 +22,7 @@ const (
 	ExtensionBitFast = 2 // http://www.bittorrent.org/beps/bep_0006.html
 	// A peer connection initiator can set this when sending a v1 infohash during handshake if they
 	// allow the receiving end to upgrade to v2 by responding with the corresponding v2 infohash.
-	// BEP 52, and BEP 4
+	// BEP 52, and BEP 4. TODO: Set by default and then clear it when it's not appropriate to send.
 	ExtensionBitV2Upgrade                    = 4
 	ExtensionBitAzureusExtensionNegotiation1 = 16
 	ExtensionBitAzureusExtensionNegotiation2 = 17

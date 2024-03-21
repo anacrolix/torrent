@@ -192,7 +192,7 @@ func (cl *Client) initLogger() {
 		logger = log.Default
 	}
 	if cl.config.Debug {
-		logger = logger.FilterLevel(log.Debug)
+		logger = logger.WithFilterLevel(log.Debug)
 	}
 	cl.logger = logger.WithValues(cl)
 }
@@ -667,7 +667,7 @@ func DialFirst(ctx context.Context, addr string, dialers []Dialer) (res DialResu
 func dialFromSocket(ctx context.Context, s Dialer, addr string) net.Conn {
 	c, err := s.Dial(ctx, addr)
 	if err != nil {
-		log.Levelf(log.Debug, "error dialing %q: %v", addr, err)
+		log.ContextLogger(ctx).Levelf(log.Debug, "error dialing %q: %v", addr, err)
 	}
 	// This is a bit optimistic, but it looks non-trivial to thread this through the proxy code. Set
 	// it now in case we close the connection forthwith. Note this is also done in the TCP dialer

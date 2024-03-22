@@ -603,13 +603,12 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 			network:         nc.RemoteAddr().Network(),
 			connString:      regularNetConnPeerConnConnString(nc),
 		})
-	defer func() {
-		cl.lock()
-		defer cl.unlock()
-		c.close()
-	}()
 	c.Discovery = PeerSourceIncoming
 	cl.runReceivedConn(c)
+
+	cl.lock()
+	c.close()
+	cl.unlock()
 }
 
 // Returns a handle to the given torrent, if it's present in the client.
@@ -1014,13 +1013,15 @@ func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("during bt handshake: %w", err)
 	}
+
 	cl.lock()
 	t = cl.torrentsByShortHash[ih]
-	if t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih {
+	if t != nil && t.infoHashV2.Ok && *t.infoHashV2.Value.ToShort() == ih {
 		torrent.Add("v2 handshakes received", 1)
 		c.v2 = true
 	}
 	cl.unlock()
+
 	return
 }
 

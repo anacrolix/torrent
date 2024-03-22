@@ -425,7 +425,7 @@ func (t *Torrent) makePieces() {
 	}
 }
 
-func (t *Torrent) AddPieceLayers(layers map[string]string) (errs []error) {
+func (t *Torrent) addPieceLayersLocked(layers map[string]string) (errs []error) {
 	if layers == nil {
 		return
 	}
@@ -474,6 +474,12 @@ files:
 		}
 	}
 	return
+}
+
+func (t *Torrent) AddPieceLayers(layers map[string]string) (errs []error) {
+	t.cl.lock()
+	defer t.cl.unlock()
+	return t.addPieceLayersLocked(layers)
 }
 
 // Returns the index of the first file containing the piece. files must be

@@ -1508,7 +1508,7 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	t.maybeNewConns()
 	t.dataDownloadDisallowed.SetBool(spec.DisallowDataDownload)
 	t.dataUploadDisallowed = spec.DisallowDataUpload
-	return errors.Join(t.AddPieceLayers(spec.PieceLayers)...)
+	return errors.Join(t.addPieceLayersLocked(spec.PieceLayers)...)
 }
 
 func (cl *Client) dropTorrent(t *Torrent, wg *sync.WaitGroup) (err error) {

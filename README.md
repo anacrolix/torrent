@@ -45,6 +45,7 @@ There are several web-frontends, sites, Android clients, storage backends and su
  * [libtorrent](https://gitlab.com/axet/libtorrent): gomobile wrapper <!-- 15 stars -->
  * [Go-PeersToHTTP](https://github.com/WinPooh32/peerstohttp): Simple torrent proxy to http stream controlled over REST-like api <!-- 28 stars -->
  * [CortexFoundation/torrentfs](https://github.com/CortexFoundation/torrentfs): Independent HTTP service for file seeding and P2P file system of cortex full node <!-- 21 stars -->
+ * [Torrent WebDAV Client](https://github.com/Jipok/torrent-webdav): Automatic torrent download, streaming, WebDAV server and client. <!-- 1 star, https://github.com/anacrolix/torrent/issues/917 --> 
  * [goTorrent](https://github.com/deranjer/goTorrent): torrenting server with a React web frontend <!-- 156 stars, inactive since 2020 -->
  * [Go Peerflix](https://github.com/Sioro-Neoku/go-peerflix): Start watching the movie while your torrent is still downloading! <!-- 449 stars, inactive since 2019 -->
  * [hTorrent](https://github.com/pojntfx/htorrent): HTTP to BitTorrent gateway with seeking support. <!-- 102 stars -->

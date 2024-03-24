@@ -35,10 +35,26 @@ func (p Piece) Length() int64 {
 		}
 		return ret
 	}
-	if p.i == p.Info.NumPieces()-1 {
-		return p.Info.TotalLength() - int64(p.i)*p.Info.PieceLength
+	return p.V1Length()
+}
+
+func (p Piece) V1Length() int64 {
+	i := p.i
+	lastPiece := p.Info.NumPieces() - 1
+	switch {
+	case 0 <= i && i < lastPiece:
+		return p.Info.PieceLength
+	case lastPiece >= 0 && i == lastPiece:
+		files := p.Info.UpvertedFiles()
+		lastFile := files[len(files)-1]
+		length := lastFile.TorrentOffset + lastFile.Length - int64(i)*p.Info.PieceLength
+		if length <= 0 || length > p.Info.PieceLength {
+			panic(length)
+		}
+		return length
+	default:
+		panic(i)
 	}
-	return p.Info.PieceLength
 }
 
 func (p Piece) Offset() int64 {

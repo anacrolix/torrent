@@ -11,14 +11,13 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
-	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
 
 type Piece struct {
 	// The completed piece SHA1 hash, from the metainfo "pieces" field. Nil if the info is not V1
 	// compatible.
 	hash   *metainfo.Hash
-	hashV2 g.Option[infohash_v2.T]
+	hashV2 g.Option[[32]byte]
 	t      *Torrent
 	index  pieceIndex
 	files  []*File
@@ -52,7 +51,7 @@ func (p *Piece) String() string {
 }
 
 func (p *Piece) Info() metainfo.Piece {
-	return p.t.info.Piece(int(p.index))
+	return p.t.info.Piece(p.index)
 }
 
 func (p *Piece) Storage() storage.Piece {
@@ -60,7 +59,7 @@ func (p *Piece) Storage() storage.Piece {
 	if p.hash != nil {
 		pieceHash.Set(p.hash.Bytes())
 	} else if p.hashV2.Ok {
-		pieceHash.Set(p.hashV2.Value.Bytes())
+		pieceHash.Set(p.hashV2.Value[:])
 	}
 	return p.t.storage.PieceWithHash(p.Info(), pieceHash)
 }

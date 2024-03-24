@@ -22,6 +22,7 @@ func TestShortFile(t *testing.T) {
 		Name:        "a",
 		Length:      2,
 		PieceLength: missinggo.MiB,
+		Pieces:      make([]byte, 20),
 	}
 	ts, err := s.OpenTorrent(info, metainfo.Hash{})
 	assert.NoError(t, err)

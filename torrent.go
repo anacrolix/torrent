@@ -1153,10 +1153,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 	p.waitNoPendingWrites()
 	storagePiece := p.Storage()
 
-	var h hash.Hash
 	if p.hash != nil {
-		h = pieceHash.New()
-
 		// Does the backend want to do its own hashing?
 		if i, ok := storagePiece.PieceImpl.(storage.SelfHashing); ok {
 			var sum metainfo.Hash
@@ -1167,31 +1164,8 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 			// in pieceHasher regardless.
 			return
 		}
-
-	} else if p.hashV2.Ok {
-		h = merkle.NewHash()
-	} else {
-		panic("no hash")
-	}
-
-	const logPieceContents = false
-	smartBanWriter := t.smartBanBlockCheckingWriter(piece)
-	writers := []io.Writer{h, smartBanWriter}
-	var examineBuf bytes.Buffer
-	if logPieceContents {
-		writers = append(writers, &examineBuf)
-	}
-	var written int64
-	written, err = storagePiece.WriteTo(io.MultiWriter(writers...))
-	if err == nil && written != int64(p.length()) {
-		err = fmt.Errorf("wrote %v bytes from storage, piece has length %v", written, p.length())
-	}
-	if logPieceContents {
-		t.logger.WithDefaultLevel(log.Debug).Printf("hashed %q with copy err %v", examineBuf.Bytes(), err)
-	}
-	smartBanWriter.Flush()
-	differingPeers = smartBanWriter.badPeers
-	if p.hash != nil {
+		h := pieceHash.New()
+		differingPeers, err = t.hashPieceWithSpecificHash(piece, h, t.info.FilesArePieceAligned())
 		var sum [20]byte
 		n := len(h.Sum(sum[:0]))
 		if n != 20 {
@@ -1199,6 +1173,8 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 		}
 		correct = sum == *p.hash
 	} else if p.hashV2.Ok {
+		h := merkle.NewHash()
+		differingPeers, err = t.hashPieceWithSpecificHash(piece, h, false)
 		var sum [32]byte
 		n := len(h.Sum(sum[:0]))
 		if n != 32 {
@@ -1207,6 +1183,57 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 		correct = sum == p.hashV2.Value
 	} else {
 		panic("no hash")
+	}
+	return
+}
+
+func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash, padV1 bool) (
+	// These are peers that sent us blocks that differ from what we hash here.
+	differingPeers map[bannableAddr]struct{},
+	err error,
+) {
+	p := t.piece(piece)
+	p.waitNoPendingWrites()
+	storagePiece := p.Storage()
+
+	const logPieceContents = false
+	smartBanWriter := t.smartBanBlockCheckingWriter(piece)
+	writers := []io.Writer{h, smartBanWriter}
+	var examineBuf bytes.Buffer
+	if logPieceContents {
+		writers = append(writers, &examineBuf)
+	}
+	multiWriter := io.MultiWriter(writers...)
+	{
+		var written int64
+		written, err = storagePiece.WriteTo(multiWriter)
+		if err == nil && written != int64(p.length()) {
+			err = fmt.Errorf("wrote %v bytes from storage, piece has length %v", written, p.length())
+			// Skip smart banning since we can't blame them for storage issues. A short write would
+			// ban peers for all recorded blocks that weren't just written.
+			return
+		}
+	}
+	// Flush before writing padding, since we would not have recorded the padding blocks.
+	smartBanWriter.Flush()
+	differingPeers = smartBanWriter.badPeers
+	// For a hybrid torrent, we work with the v2 files, but if we use a v1 hash, we can assume that
+	// the pieces are padded with zeroes.
+	if padV1 {
+		paddingLen := p.Info().V1Length() - p.Info().Length()
+		written, err := io.CopyN(multiWriter, zeroReader, paddingLen)
+		if written != paddingLen {
+			panic(fmt.Sprintf(
+				"piece %v: wrote %v bytes of padding, expected %v, error: %v",
+				piece,
+				written,
+				paddingLen,
+				err,
+			))
+		}
+	}
+	if logPieceContents {
+		t.logger.WithNames("hashing").Levelf(log.Debug, "hashed %q with copy err %v", examineBuf.Bytes(), err)
 	}
 	return
 }
@@ -2420,7 +2447,12 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 					// single peer for a piece, and we never progress that piece to completion, we
 					// will never smart-ban them. Discovered in
 					// https://github.com/anacrolix/torrent/issues/715.
-					t.logger.Levelf(log.Warning, "banning %v for being sole dirtier of piece %v after failed piece check", c, piece)
+					t.logger.Levelf(
+						log.Warning,
+						"banning %v for being sole dirtier of piece %v after failed piece check",
+						c,
+						piece,
+					)
 					c.ban()
 				}
 			}
@@ -2543,7 +2575,7 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 	switch copyErr {
 	case nil, io.EOF:
 	default:
-		t.logger.Levelf(
+		t.logger.WithNames("hashing").Levelf(
 			log.Warning,
 			"error hashing piece %v: %v", index, copyErr)
 	}

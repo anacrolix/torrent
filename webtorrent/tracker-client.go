@@ -5,10 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"github.com/anacrolix/torrent/types/infohash"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/anacrolix/torrent/types/infohash"
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
@@ -309,7 +310,7 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 				Err: err,
 			},
 			Event:    "",
-			InfoHash: infohash.HashBytes(infoHash[:]).HexString(),
+			InfoHash: infohash.T(infoHash).HexString(),
 		})
 	}
 	if err != nil {
@@ -340,7 +341,7 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 			Err: nil,
 		},
 		Event:    req.Event,
-		InfoHash: binaryToJsonString(infoHash[:]),
+		InfoHash: infohash.T(infoHash).HexString(),
 	}
 
 	data, err := json.Marshal(req)

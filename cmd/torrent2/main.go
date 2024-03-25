@@ -5,8 +5,12 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
+	"github.com/anacrolix/log"
+
+	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -61,6 +65,15 @@ func main() {
 					}
 				},
 			}[args[1]]()
+		},
+		"merkle": func() {
+			h := merkle.NewHash()
+			n, err := io.Copy(h, os.Stdin)
+			log.Printf("copied %v bytes", n)
+			if err != nil {
+				panic(err)
+			}
+			fmt.Printf("%x\n", h.Sum(nil))
 		},
 	}[args[0]]()
 }

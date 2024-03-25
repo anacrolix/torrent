@@ -49,11 +49,11 @@ func metainfoCmd() (cmd bargle.Command) {
 		},
 		bargle.Subcommand{Name: "magnet", Command: func() (cmd bargle.Command) {
 			cmd.DefaultAction = func() (err error) {
-				info, err := mi.UnmarshalInfo()
+				m, err := mi.MagnetV2()
 				if err != nil {
 					return
 				}
-				fmt.Fprintf(os.Stdout, "%s\n", mi.Magnet(nil, &info).String())
+				fmt.Fprintf(os.Stdout, "%v\n", m.String())
 				return nil
 			}
 			return

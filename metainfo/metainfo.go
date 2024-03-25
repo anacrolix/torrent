@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/torrent/bencode"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
 
 // Also known as a torrent file.
@@ -72,7 +73,8 @@ func (mi *MetaInfo) SetDefaults() {
 	mi.CreationDate = time.Now().Unix()
 }
 
-// Creates a Magnet from a MetaInfo. Optional infohash and parsed info can be provided.
+// Deprecated: Use MagnetV2. Creates a Magnet from a MetaInfo. Optional infohash and parsed info can
+// be provided.
 func (mi MetaInfo) Magnet(infoHash *Hash, info *Info) (m Magnet) {
 	m.Trackers = append(m.Trackers, mi.UpvertedAnnounceList().DistinctValues()...)
 	if info != nil {
@@ -82,6 +84,25 @@ func (mi MetaInfo) Magnet(infoHash *Hash, info *Info) (m Magnet) {
 		m.InfoHash = *infoHash
 	} else {
 		m.InfoHash = mi.HashInfoBytes()
+	}
+	m.Params = make(url.Values)
+	m.Params["ws"] = mi.UrlList
+	return
+}
+
+// Creates a MagnetV2 from a MetaInfo. This supports v1, hybrid, and v2 magnet links.
+func (mi *MetaInfo) MagnetV2() (m MagnetV2, err error) {
+	m.Trackers = append(m.Trackers, mi.UpvertedAnnounceList().DistinctValues()...)
+	info, err := mi.UnmarshalInfo()
+	if err != nil {
+		return
+	}
+	m.DisplayName = info.BestName()
+	if info.HasV1() {
+		m.InfoHash.Set(mi.HashInfoBytes())
+	}
+	if info.HasV2() {
+		m.V2InfoHash.Set(infohash_v2.HashBytes(mi.InfoBytes))
 	}
 	m.Params = make(url.Values)
 	m.Params["ws"] = mi.UrlList

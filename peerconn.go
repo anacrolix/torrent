@@ -1269,6 +1269,11 @@ func (pc *PeerConn) requestMissingHashes() {
 file:
 	for _, file := range info.UpvertedFiles() {
 		fileNumPieces := int((file.Length + info.PieceLength - 1) / info.PieceLength)
+		// We would be requesting the leaves, the file must be short enough that we can just do with
+		// the pieces root as the piece hash.
+		if fileNumPieces <= 1 {
+			continue
+		}
 		curFileBeginPiece := nextFileBeginPiece
 		nextFileBeginPiece += fileNumPieces
 		haveAllHashes := true
@@ -1282,11 +1287,6 @@ file:
 			}
 		}
 		if haveAllHashes {
-			continue
-		}
-		// We would be requesting the leaves, the file must be short enough that we can just do with
-		// the pieces root as the piece hash.
-		if fileNumPieces <= 1 {
 			continue
 		}
 		piecesRoot := file.PiecesRoot.Unwrap()

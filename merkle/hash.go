@@ -16,11 +16,12 @@ func NewHash() *Hash {
 type Hash struct {
 	blocks    [][32]byte
 	nextBlock hash.Hash
-	written   int
+	// How many bytes have been written to nextBlock so far.
+	nextBlockWritten int
 }
 
 func (h *Hash) remaining() int {
-	return BlockSize - h.written
+	return BlockSize - h.nextBlockWritten
 }
 
 func (h *Hash) Write(p []byte) (n int, err error) {
@@ -28,12 +29,12 @@ func (h *Hash) Write(p []byte) (n int, err error) {
 		var n1 int
 		n1, err = h.nextBlock.Write(p[:min(len(p), h.remaining())])
 		n += n1
-		h.written += n1
+		h.nextBlockWritten += n1
 		p = p[n1:]
 		if h.remaining() == 0 {
 			h.blocks = append(h.blocks, h.nextBlockSum())
 			h.nextBlock.Reset()
-			h.written = 0
+			h.nextBlockWritten = 0
 		}
 		if err != nil {
 			break
@@ -49,11 +50,25 @@ func (h *Hash) nextBlockSum() (sum [32]byte) {
 	return
 }
 
-func (h *Hash) Sum(b []byte) []byte {
+func (h *Hash) curBlocks() [][32]byte {
 	blocks := h.blocks
-	if h.written != 0 {
+	if h.nextBlockWritten != 0 {
 		blocks = append(blocks, h.nextBlockSum())
 	}
+	return blocks
+}
+
+func (h *Hash) Sum(b []byte) []byte {
+	sum := RootWithPadHash(h.curBlocks(), [32]byte{})
+	return append(b, sum[:]...)
+}
+
+// Sums by extending with zero hashes for blocks missing to meet the given length. Necessary for
+// piece layers hashes for file tail blocks that don't pad to the piece length.
+func (h *Hash) SumMinLength(b []byte, length int) []byte {
+	blocks := h.curBlocks()
+	minBlocks := (length + BlockSize - 1) / BlockSize
+	blocks = append(blocks, make([][32]byte, minBlocks-len(blocks))...)
 	sum := RootWithPadHash(blocks, [32]byte{})
 	return append(b, sum[:]...)
 }
@@ -61,7 +76,7 @@ func (h *Hash) Sum(b []byte) []byte {
 func (h *Hash) Reset() {
 	h.blocks = h.blocks[:0]
 	h.nextBlock.Reset()
-	h.written = 0
+	h.nextBlockWritten = 0
 }
 
 func (h *Hash) Size() int {

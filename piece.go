@@ -58,6 +58,8 @@ func (p *Piece) Storage() storage.Piece {
 	var pieceHash g.Option[[]byte]
 	if p.hash != nil {
 		pieceHash.Set(p.hash.Bytes())
+	} else if !p.hasPieceLayer() {
+		pieceHash.Set(p.mustGetOnlyFile().piecesRoot.UnwrapPtr()[:])
 	} else if p.hashV2.Ok {
 		pieceHash.Set(p.hashV2.Value[:])
 	}
@@ -292,9 +294,15 @@ func (p *Piece) setV2Hash(v2h [32]byte) {
 
 // Can't do certain things if we don't know the piece hash.
 func (p *Piece) haveHash() bool {
-	return p.hash != nil || p.hashV2.Ok
+	if p.hash != nil {
+		return true
+	}
+	if !p.hasPieceLayer() {
+		return true
+	}
+	return p.hashV2.Ok
 }
 
-func pieceStateAllowsMessageWrites(p *Piece, pc *PeerConn) bool {
-	return (pc.shouldRequestHashes() && !p.haveHash()) || !p.t.ignorePieceForRequests(p.index)
+func (p *Piece) hasPieceLayer() bool {
+	return int64(p.length()) > p.t.info.PieceLength
 }

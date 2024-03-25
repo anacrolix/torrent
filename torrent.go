@@ -410,18 +410,6 @@ func (t *Torrent) makePieces() {
 		beginFile := pieceFirstFileIndex(piece.torrentBeginOffset(), files)
 		endFile := pieceEndFileIndex(piece.torrentEndOffset(), files)
 		piece.files = files[beginFile:endFile]
-		if t.info.FilesArePieceAligned() {
-			numFiles := len(piece.files)
-			if numFiles != 1 {
-				panic(fmt.Sprintf("%v:%v", beginFile, endFile))
-			}
-			if t.info.HasV2() {
-				file := piece.mustGetOnlyFile()
-				if file.numPieces() == 1 {
-					piece.hashV2.Set(file.piecesRoot.Unwrap())
-				}
-			}
-		}
 	}
 }
 
@@ -431,6 +419,9 @@ func (t *Torrent) addPieceLayersLocked(layers map[string]string) (errs []error) 
 	}
 files:
 	for _, f := range *t.files {
+		if f.numPieces() <= 1 {
+			continue
+		}
 		if !f.piecesRoot.Ok {
 			err := fmt.Errorf("no piece root set for file %v", f)
 			errs = append(errs, err)
@@ -446,14 +437,14 @@ files:
 				errs = append(errs, err)
 				continue files
 			}
-		} else if f.length > t.info.PieceLength {
-			// BEP 52 is pretty strongly worded about this, even though we should be able to
-			// recover: If a v2 torrent is added by magnet link or infohash, we need to fetch piece
-			// layers ourselves anyway, and that's how we can recover from this.
-			t.logger.Levelf(log.Warning, "no piece layers for file %q", f)
-			continue
 		} else {
-			hashes = [][32]byte{f.piecesRoot.Value}
+			if f.length > t.info.PieceLength {
+				// BEP 52 is pretty strongly worded about this, even though we should be able to
+				// recover: If a v2 torrent is added by magnet link or infohash, we need to fetch
+				// piece layers ourselves anyway, and that's how we can recover from this.
+				t.logger.Levelf(log.Warning, "no piece layers for file %q", f)
+			}
+			continue files
 		}
 		if len(hashes) != f.numPieces() {
 			errs = append(
@@ -700,7 +691,7 @@ func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {
 	if !ret.Complete && t.piecePartiallyDownloaded(index) {
 		ret.Partial = true
 	}
-	if t.info.HasV2() && !p.hashV2.Ok {
+	if t.info.HasV2() && !p.hashV2.Ok && p.hasPieceLayer() {
 		ret.MissingPieceLayerHash = true
 	}
 	return
@@ -1165,45 +1156,65 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 			return
 		}
 		h := pieceHash.New()
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, h, t.info.FilesArePieceAligned())
-		var sum [20]byte
-		n := len(h.Sum(sum[:0]))
-		if n != 20 {
-			panic(n)
+		differingPeers, err = t.hashPieceWithSpecificHash(piece, h)
+		// For a hybrid torrent, we work with the v2 files, but if we use a v1 hash, we can assume that
+		// the pieces are padded with zeroes.
+		if t.info.FilesArePieceAligned() {
+			paddingLen := p.Info().V1Length() - p.Info().Length()
+			written, err := io.CopyN(h, zeroReader, paddingLen)
+			if written != paddingLen {
+				panic(fmt.Sprintf(
+					"piece %v: wrote %v bytes of padding, expected %v, error: %v",
+					piece,
+					written,
+					paddingLen,
+					err,
+				))
+			}
 		}
+		var sum [20]byte
+		sumExactly(sum[:], h.Sum)
 		correct = sum == *p.hash
 	} else if p.hashV2.Ok {
 		h := merkle.NewHash()
-		differingPeers, err = t.hashPieceWithSpecificHash(piece, h, false)
+		differingPeers, err = t.hashPieceWithSpecificHash(piece, h)
 		var sum [32]byte
-		n := len(h.Sum(sum[:0]))
-		if n != 32 {
-			panic(n)
-		}
+		// What about the final piece in a torrent? From BEP 52: "The layer is chosen so that one
+		// hash covers piece length bytes.". Note that if a piece doesn't have a hash in piece
+		// layers it's because it's not larger than the piece length.
+		sumExactly(sum[:], func(b []byte) []byte {
+			return h.SumMinLength(b, int(t.info.PieceLength))
+		})
 		correct = sum == p.hashV2.Value
 	} else {
-		panic("no hash")
+		expected := p.mustGetOnlyFile().piecesRoot.Unwrap()
+		h := merkle.NewHash()
+		differingPeers, err = t.hashPieceWithSpecificHash(piece, h)
+		var sum [32]byte
+		// This is *not* padded to piece length.
+		sumExactly(sum[:], h.Sum)
+		correct = sum == expected
 	}
 	return
 }
 
-func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash, padV1 bool) (
+func sumExactly(dst []byte, sum func(b []byte) []byte) {
+	n := len(sum(dst[:0]))
+	if n != len(dst) {
+		panic(n)
+	}
+}
+
+func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
 	// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
 	p := t.piece(piece)
-	p.waitNoPendingWrites()
 	storagePiece := p.Storage()
 
-	const logPieceContents = false
 	smartBanWriter := t.smartBanBlockCheckingWriter(piece)
-	writers := []io.Writer{h, smartBanWriter}
-	var examineBuf bytes.Buffer
-	if logPieceContents {
-		writers = append(writers, &examineBuf)
-	}
-	multiWriter := io.MultiWriter(writers...)
+	multiWriter := io.MultiWriter(h, smartBanWriter)
 	{
 		var written int64
 		written, err = storagePiece.WriteTo(multiWriter)
@@ -1217,24 +1228,6 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash, padV1
 	// Flush before writing padding, since we would not have recorded the padding blocks.
 	smartBanWriter.Flush()
 	differingPeers = smartBanWriter.badPeers
-	// For a hybrid torrent, we work with the v2 files, but if we use a v1 hash, we can assume that
-	// the pieces are padded with zeroes.
-	if padV1 {
-		paddingLen := p.Info().V1Length() - p.Info().Length()
-		written, err := io.CopyN(multiWriter, zeroReader, paddingLen)
-		if written != paddingLen {
-			panic(fmt.Sprintf(
-				"piece %v: wrote %v bytes of padding, expected %v, error: %v",
-				piece,
-				written,
-				paddingLen,
-				err,
-			))
-		}
-	}
-	if logPieceContents {
-		t.logger.WithNames("hashing").Levelf(log.Debug, "hashed %q with copy err %v", examineBuf.Bytes(), err)
-	}
 	return
 }
 
@@ -2623,7 +2616,7 @@ func (t *Torrent) queueInitialPieceCheck(i pieceIndex) {
 
 func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 	piece := t.piece(pieceIndex)
-	if piece.hash == nil && !piece.hashV2.Ok {
+	if !piece.haveHash() {
 		return
 	}
 	if piece.queuedForHash() {
@@ -3233,7 +3226,8 @@ file:
 		for i := f.BeginPieceIndex(); i < f.EndPieceIndex(); i++ {
 			hashOpt := t.piece(i).hashV2
 			if !hashOpt.Ok {
-				// All hashes must be present. This implementation should handle missing files, so move on to the next file.
+				// All hashes must be present. This implementation should handle missing files, so
+				// move on to the next file.
 				continue file
 			}
 			value.Write(hashOpt.Value[:])

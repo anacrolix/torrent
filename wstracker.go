@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/anacrolix/torrent/webtorrent"
-
 	"github.com/anacrolix/log"
 	"github.com/gorilla/websocket"
 	"github.com/pion/datachannel"

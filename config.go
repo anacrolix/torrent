@@ -7,12 +7,11 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/pion/webrtc/v3"
-
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/pion/webrtc/v3"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/iplist"

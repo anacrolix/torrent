@@ -109,8 +109,6 @@ github.com/anacrolix/multiless v0.3.0 h1:5Bu0DZncjE4e06b9r1Ap2tUY4Au0NToBP5RpuEn
 github.com/anacrolix/multiless v0.3.0/go.mod h1:TrCLEZfIDbMVfLoQt5tOoiBS/uq4y8+ojuEVVvTNPX4=
 github.com/anacrolix/possum/go v0.1.1-0.20240309232535-7d660fa365f8 h1:XDKUI9RHyhyfGXVXb/4N+l5kGo5jQITrrbF7EZPLuak=
 github.com/anacrolix/possum/go v0.1.1-0.20240309232535-7d660fa365f8/go.mod h1:pw5HEMBSiL+otYzHe4q5jGaVuy5unl+Mt4Bx6SDemW8=
-github.com/anacrolix/squirrel v0.6.0 h1:ovfWW42wcGzrVYYI9s56pEYzfeTwtXxCCvSd+KwvUEA=
-github.com/anacrolix/squirrel v0.6.0/go.mod h1:60vdNPUbK1jYWePp39Wqn9whHm12Yb9JEuwOXzLMDuY=
 github.com/anacrolix/squirrel v0.6.4 h1:K6ABRMCms0xwpEIdY3kAaDBUqiUeUYCKLKI0yHTr9IQ=
 github.com/anacrolix/squirrel v0.6.4/go.mod h1:0kFVjOLMOKVOet6ja2ac1vTOrqVbLj2zy2Fjp7+dkE8=
 github.com/anacrolix/stm v0.2.0/go.mod h1:zoVQRvSiGjGoTmbM0vSLIiaKjWtNPeTvXUSdJQA4hsg=

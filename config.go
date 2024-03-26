@@ -11,6 +11,7 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/pion/webrtc/v3"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/iplist"
@@ -183,8 +184,13 @@ type ClientConfig struct {
 
 	Callbacks Callbacks
 
-	// ICEServers defines a slice describing servers available to be used by
+	// ICEServerList defines a slice describing servers available to be used by
 	// ICE, such as STUN and TURN servers.
+	ICEServerList []webrtc.ICEServer
+
+	// Deprecated. ICEServers does not support server authentication and therefore
+	// it cannot be used with most TURN servers. Use ICEServerList instead.
+	// ICEServers is kept for legacy support.
 	ICEServers []string
 
 	DialRateLimiter *rate.Limiter

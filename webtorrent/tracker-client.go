@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anacrolix/torrent/types/infohash"
-
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/gorilla/websocket"

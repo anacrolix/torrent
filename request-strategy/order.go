@@ -67,6 +67,9 @@ func GetRequestablePieces(
 			// considered unverified and hold up further requests.
 			return true
 		}
+		if _i.state.Availability == 0 {
+			return false
+		}
 		if input.MaxUnverifiedBytes() != 0 && allTorrentsUnverifiedBytes+pieceLength > input.MaxUnverifiedBytes() {
 			return false
 		}

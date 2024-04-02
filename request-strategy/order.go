@@ -50,11 +50,14 @@ func GetRequestablePieces(
 	if cap, ok := input.Capacity(); ok {
 		storageLeft = &cap
 	}
-	var allTorrentsUnverifiedBytes int64
-	pro.tree.Scan(func(_i pieceRequestOrderItem) bool {
-		ih := _i.key.InfoHash
+	var (
+		allTorrentsUnverifiedBytes int64
+		maxUnverifiedBytes         = input.MaxUnverifiedBytes()
+	)
+	pro.tree.Scan(func(item pieceRequestOrderItem) bool {
+		ih := item.key.InfoHash
 		var t = input.Torrent(ih)
-		var piece = t.Piece(_i.key.Index)
+		var piece = t.Piece(item.key.Index)
 		pieceLength := t.PieceLength()
 		if storageLeft != nil {
 			if *storageLeft < pieceLength {
@@ -67,11 +70,11 @@ func GetRequestablePieces(
 			// considered unverified and hold up further requests.
 			return true
 		}
-		if input.MaxUnverifiedBytes() != 0 && allTorrentsUnverifiedBytes+pieceLength > input.MaxUnverifiedBytes() {
+		if maxUnverifiedBytes != 0 && allTorrentsUnverifiedBytes+pieceLength > maxUnverifiedBytes {
 			return false
 		}
 		allTorrentsUnverifiedBytes += pieceLength
-		f(ih, _i.key.Index, _i.state)
+		f(ih, item.key.Index, item.state)
 		return true
 	})
 	return

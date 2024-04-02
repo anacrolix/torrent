@@ -88,12 +88,12 @@ type requestStrategyPiece struct {
 	p *Piece
 }
 
+func (r requestStrategyPiece) CountUnverified() bool {
+	return r.p.hashing || r.p.marking || r.p.queuedForHash()
+}
+
 func (r requestStrategyPiece) Request() bool {
 	return !r.p.ignoreForRequests() && r.p.purePriority() != PiecePriorityNone
 }
 
-func (r requestStrategyPiece) NumPendingChunks() int {
-	return int(r.p.t.pieceNumPendingChunks(r.p.index))
-}
-
-var _ request_strategy.Piece = (*requestStrategyPiece)(nil)
+var _ request_strategy.Piece = requestStrategyPiece{}

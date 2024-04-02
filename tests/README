@@ -1,0 +1,1 @@
+This directory contains integration style tests that probably run too long for regular unit testing. It's a separate module to avoid getting run by ./... in the root.

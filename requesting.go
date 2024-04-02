@@ -191,12 +191,12 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	requestStrategy.GetRequestablePieces(
 		input,
 		t.getPieceRequestOrder(),
-		func(ih InfoHash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) {
+		func(ih InfoHash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) bool {
 			if ih != *t.canonicalShortInfohash() {
-				return
+				return false
 			}
 			if !p.peerHasPiece(pieceIndex) {
-				return
+				return false
 			}
 			requestHeap.pieceStates[pieceIndex].Set(pieceExtra)
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
@@ -222,6 +222,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 				}
 				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
 			})
+			return true
 		},
 	)
 	t.assertPendingRequests()

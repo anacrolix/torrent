@@ -1,17 +1,18 @@
 package webseed_partial_seed
 
 import (
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/internal/testutil"
-	qt "github.com/frankban/quicktest"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/internal/testutil"
+	qt "github.com/frankban/quicktest"
 )
 
-func testdataDir() string {
+func testSrcDir() string {
 	_, b, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(b), "../../testdata")
+	return filepath.Dir(b)
 }
 
 func makeSeederClient(t *testing.T) *torrent.Client {
@@ -54,7 +55,7 @@ func TestWebseedPartialSeed(t *testing.T) {
 	defer seederClient.Close()
 	testutil.ExportStatusWriter(seederClient, "seeder", t)
 	const infoHashHex = "a88fda5954e89178c372716a6a78b8180ed4dad3"
-	metainfoPath := filepath.Join(testdataDir(), "test.img.torrent")
+	metainfoPath := filepath.Join(testSrcDir(), "test.img.torrent")
 	seederTorrent, err := seederClient.AddTorrentFromFile(metainfoPath)
 	assertOk(err)
 	leecherClient := makeLeecherClient(t)

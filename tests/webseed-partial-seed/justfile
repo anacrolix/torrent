@@ -1,0 +1,10 @@
+setup:
+    python3 -m venv .
+    bin/pip install rangehttpserver
+    mkfile -n 500m test.img
+
+run-server:
+    bin/python -m RangeHTTPServer 3003
+
+run-test:
+    GOPPROF=http go test -race -v .

@@ -42,7 +42,8 @@ func pieceOrderLess(i, j *pieceRequestOrderItem) multiless.Computation {
 // Calls f with requestable pieces in order.
 func GetRequestablePieces(
 	input Input, pro *PieceRequestOrder,
-	f func(ih metainfo.Hash, pieceIndex int, orderState PieceRequestOrderState),
+	// Returns true if the piece should be considered against the unverified bytes limit.
+	requestPiece func(ih metainfo.Hash, pieceIndex int, orderState PieceRequestOrderState) bool,
 ) {
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
 	// TorrentImpl. A nil value means no capacity limit.
@@ -59,23 +60,26 @@ func GetRequestablePieces(
 		var t = input.Torrent(ih)
 		var piece = t.Piece(item.key.Index)
 		pieceLength := t.PieceLength()
+		// Storage limits will always apply against requestable pieces, since we need to keep the
+		// highest priority pieces, even if they're complete or in an undesirable state.
 		if storageLeft != nil {
 			if *storageLeft < pieceLength {
 				return false
 			}
 			*storageLeft -= pieceLength
 		}
-		if !piece.Request() || piece.NumPendingChunks() == 0 {
-			// TODO: Clarify exactly what is verified. Stuff that's being hashed should be
-			// considered unverified and hold up further requests.
+		if piece.Request() {
+			if !requestPiece(ih, item.key.Index, item.state) {
+				// No blocks are being considered from this piece, so it won't result in unverified
+				// bytes.
+				return true
+			}
+		} else if !piece.CountUnverified() {
+			// The piece is pristine, and we're not considering it for requests.
 			return true
 		}
-		if maxUnverifiedBytes != 0 && allTorrentsUnverifiedBytes+pieceLength > maxUnverifiedBytes {
-			return false
-		}
 		allTorrentsUnverifiedBytes += pieceLength
-		f(ih, item.key.Index, item.state)
-		return true
+		return maxUnverifiedBytes == 0 || allTorrentsUnverifiedBytes < maxUnverifiedBytes
 	})
 	return
 }

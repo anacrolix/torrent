@@ -1,0 +1,3 @@
+This directory does tests for https://github.com/anacrolix/torrent/discussions/916. See the justfile too.
+
+You want to ensure that the seeder and leecher progress completed pieces in lock step. The bug was that the leecher would reach the end of its max unverified bytes window before hitting a piece that the seeder had available.

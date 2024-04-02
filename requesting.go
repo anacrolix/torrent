@@ -9,6 +9,8 @@ import (
 	"time"
 	"unsafe"
 
+	g "github.com/anacrolix/generics"
+
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/log"
@@ -78,7 +80,7 @@ type (
 type desiredPeerRequests struct {
 	requestIndexes []RequestIndex
 	peer           *Peer
-	pieceStates    []requestStrategy.PieceRequestOrderState
+	pieceStates    []g.Option[requestStrategy.PieceRequestOrderState]
 }
 
 func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex) bool {
@@ -95,8 +97,8 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 			!p.peer.peerAllowedFast.Contains(rightPieceIndex),
 		)
 	}
-	leftPiece := &p.pieceStates[leftPieceIndex]
-	rightPiece := &p.pieceStates[rightPieceIndex]
+	leftPiece := p.pieceStates[leftPieceIndex].UnwrapPtr()
+	rightPiece := p.pieceStates[rightPieceIndex].UnwrapPtr()
 	// Putting this first means we can steal requests from lesser-performing peers for our first few
 	// new requests.
 	priority := func() PiecePriority {
@@ -183,6 +185,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 		pieceStates:    t.requestPieceStates,
 		requestIndexes: t.requestIndexes,
 	}
+	clear(requestHeap.pieceStates)
 	// Caller-provided allocation for roaring bitmap iteration.
 	var it typedRoaring.Iterator[RequestIndex]
 	requestStrategy.GetRequestablePieces(
@@ -195,7 +198,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 			if !p.peerHasPiece(pieceIndex) {
 				return
 			}
-			requestHeap.pieceStates[pieceIndex] = pieceExtra
+			requestHeap.pieceStates[pieceIndex].Set(pieceExtra)
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
 				if !allowedFast {

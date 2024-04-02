@@ -172,7 +172,7 @@ type Torrent struct {
 	smartBanCache smartBanCache
 
 	// Large allocations reused between request state updates.
-	requestPieceStates []request_strategy.PieceRequestOrderState
+	requestPieceStates []g.Option[request_strategy.PieceRequestOrderState]
 	requestIndexes     []RequestIndex
 
 	disableTriggers bool

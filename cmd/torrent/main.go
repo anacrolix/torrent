@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/pkg/profile"
 	"golang.org/x/xerrors"
 
 	"github.com/anacrolix/tagflag"
@@ -208,10 +207,6 @@ func mainErr() error {
 	tagflag.Parse(&flags)
 	if stdoutAndStderrAreSameFile() {
 		log.SetOutput(progress.Bypass())
-	}
-
-	if flags.CPU {
-		defer profile.Start(profile.CPUProfile, profile.ProfilePath(".")).Stop()
 	}
 
 	autobinder := autobind.New()

@@ -23,7 +23,8 @@ func (cl *Client) forwardPort() {
 	if cl.config.NoDefaultPortForwarding {
 		return
 	}
-	ds := upnp.Discover(0, 2*time.Second, alog.Discard)
+
+	ds := upnp.Discover(0, 2*time.Second, alog.Default.WithValues(cl).WithValues("upnp-discover"))
 	cl.config.debug().Printf("discovered %d upnp devices\n", len(ds))
 	cl.lock()
 	port := cl.incomingPeerPort()

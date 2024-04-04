@@ -5,11 +5,11 @@ import (
 	crand "crypto/rand"
 	_ "crypto/sha1"
 	"errors"
+	"log"
 	"math/rand"
 	"net"
 	"time"
 
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/v2/conntrack"
 	"github.com/james-lawrence/torrent/iplist"
@@ -63,7 +63,7 @@ type ServerConfig struct {
 
 	ConnectionTracking *conntrack.Instance
 
-	Logger log.Logger
+	Logger *log.Logger
 }
 
 // ServerStats instance is returned by Server.Stats() and stores Server metrics

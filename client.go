@@ -19,7 +19,6 @@ import (
 
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/sync"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/james-lawrence/torrent/dht/v2"
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
@@ -45,7 +44,7 @@ type Client struct {
 	ucount uint64
 
 	_mu    *stdsync.RWMutex
-	event  sync.Cond
+	event  stdsync.Cond
 	closed chan struct{}
 
 	config *ClientConfig
@@ -1098,7 +1097,7 @@ func (cl *Client) unlock() {
 	// l2.Output(2, fmt.Sprintf("%p unlock completed - %d", cl, updated))
 }
 
-func (cl *Client) locker() sync.Locker {
+func (cl *Client) locker() stdsync.Locker {
 	return clientLocker{cl}
 }
 

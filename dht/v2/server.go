@@ -6,15 +6,15 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"runtime/pprof"
+	"sync"
 	"text/tabwriter"
 	"time"
 
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/v2/conntrack"
-	"github.com/anacrolix/sync"
 	"github.com/james-lawrence/torrent/bencode"
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 	"github.com/james-lawrence/torrent/iplist"
@@ -154,21 +154,12 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 			SecureNodeId(&c.NodeId, c.PublicIP)
 		}
 	}
-	// If Logger is empty, emulate the old behaviour: Everything is logged to the default location,
+
+	// If Logger is empty, emulate the old behaviour: Everything is logged to stderr location,
 	// and there are no debug messages.
-	if c.Logger.LoggerImpl == nil {
-		c.Logger = log.Default.WithFilter(func(m log.Msg) bool {
-			return !m.HasValue(log.Debug)
-		})
+	if c.Logger == nil {
+		c.Logger = log.Default()
 	}
-	// Add log.Debug by default.
-	c.Logger = c.Logger.WithMap(func(m log.Msg) log.Msg {
-		var l log.Level
-		if m.GetValueByType(&l) {
-			return m
-		}
-		return m.WithValues(log.Debug)
-	})
 
 	s = &Server{
 		config:      *c,
@@ -496,10 +487,10 @@ func (s *Server) reply(addr Addr, t string, r krpc.Return) {
 	if err != nil {
 		panic(err)
 	}
-	log.Fmsg("replying to %q", addr).Log(s.logger())
+	s.logger().Printf("replying to %q\n", addr)
 	wrote, err := s.writeToNode(context.Background(), b, addr, false, true)
 	if err != nil {
-		s.config.Logger.Printf("error replying to %s: %s", addr, err)
+		s.logger().Printf("error replying to %s: %s", addr, err)
 	}
 	if wrote {
 		expvars.Add("replied to peer", 1)
@@ -638,9 +629,9 @@ func (s *Server) validToken(token string, addr Addr) bool {
 
 func (s *Server) connTrackEntryForAddr(a Addr) conntrack.Entry {
 	return conntrack.Entry{
-		s.socket.LocalAddr().Network(),
-		s.socket.LocalAddr().String(),
-		a.String(),
+		Protocol:   s.socket.LocalAddr().Network(),
+		LocalAddr:  s.socket.LocalAddr().String(),
+		RemoteAddr: a.String(),
 	}
 }
 
@@ -701,7 +692,7 @@ func (s *Server) makeQueryBytes(q string, a *krpc.MsgArgs, t string) []byte {
 
 func (s *Server) queryContext(ctx context.Context, addr Addr, q string, a *krpc.MsgArgs) (reply krpc.Msg, writes numWrites, err error) {
 	defer func(started time.Time) {
-		s.logger().WithValues(log.Debug, q).Printf(
+		s.logger().Printf(
 			"queryContext(%v) returned after %v (err=%v, reply.Y=%v, reply.E=%v, writes=%v)",
 			q, time.Since(started), err, reply.Y, reply.E, writes)
 	}(time.Now())
@@ -943,6 +934,6 @@ func (s *Server) AddNodesFromFile(fileName string) (added int, err error) {
 	return
 }
 
-func (s *Server) logger() log.Logger {
+func (s *Server) logger() *log.Logger {
 	return s.config.Logger
 }

@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"time"
 
@@ -117,10 +118,34 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 	}
 }
 
+func (cn *peerConnMsgWriter) writeToBuffer(msg pp.Message) (err error) {
+	originalLen := cn.writeBuffer.Len()
+	defer func() {
+		if err != nil {
+			// Since an error occurred during buffer write, revert buffer to its original state before the write.
+			cn.writeBuffer.Truncate(originalLen)
+		}
+	}()
+	length, err := msg.GetDataLength()
+	if err != nil {
+		return err
+	}
+	// Pre-calculate buffer capacity to avoid multiple reallocations.
+	const msgBufLen = 4 // uint32
+	cn.writeBuffer.Grow(length + msgBufLen)
+	// Write message length to buffer.
+	err = binary.Write(cn.writeBuffer, binary.BigEndian, uint32(length))
+	// Write message data to buffer.
+	if !msg.Keepalive {
+		_, err = msg.WriteTo(cn.writeBuffer)
+	}
+	return err
+}
+
 func (cn *peerConnMsgWriter) write(msg pp.Message) bool {
 	cn.mu.Lock()
 	defer cn.mu.Unlock()
-	cn.writeBuffer.Write(msg.MustMarshalBinary())
+	cn.writeToBuffer(msg)
 	cn.writeCond.Broadcast()
 	return !cn.writeBufferFull()
 }

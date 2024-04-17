@@ -6,6 +6,7 @@ import (
 	"encoding"
 	"encoding/binary"
 	"fmt"
+	"io"
 )
 
 // This is a lazy union representing all the possible fields for messages. Go doesn't have ADTs, and
@@ -61,68 +62,97 @@ func (msg Message) MustMarshalBinary() []byte {
 	return b
 }
 
+func (msg Message) WriteTo(w io.Writer) (n int64, err error) {
+	dw := newDataWriter(w)
+	defer func() {
+		n = dw.GetBytesWritten()
+	}()
+
+	err = dw.WriteByte(byte(msg.Type))
+	if err != nil {
+		return
+	}
+
+	switch msg.Type {
+	case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
+	case Have, AllowedFast, Suggest:
+		err = dw.BinaryWrite(binary.BigEndian, msg.Index)
+	case Request, Cancel, Reject:
+		for _, i := range []Integer{msg.Index, msg.Begin, msg.Length} {
+			err = dw.BinaryWrite(binary.BigEndian, i)
+			if err != nil {
+				break
+			}
+		}
+	case Bitfield:
+		_, err = dw.Write(marshalBitfield(msg.Bitfield))
+	case Piece:
+		for _, i := range []Integer{msg.Index, msg.Begin} {
+			err = dw.BinaryWrite(binary.BigEndian, i)
+			if err != nil {
+				return
+			}
+		}
+		written, err := dw.Write(msg.Piece)
+		if err != nil {
+			break
+		}
+		if written != len(msg.Piece) {
+			panic(written)
+		}
+	case Extended:
+		err = dw.WriteByte(byte(msg.ExtendedID))
+		if err != nil {
+			return
+		}
+		_, err = dw.Write(msg.ExtendedPayload)
+	case Port:
+		err = dw.BinaryWrite(binary.BigEndian, msg.Port)
+	default:
+		err = fmt.Errorf("unknown message type: %v", msg.Type)
+	}
+	return
+}
+
+const (
+	msgTypeLen       = 1 // byte
+	msgIndexLen      = 4 // uint32
+	msgBeginLen      = 4 // uint32
+	msgExtendedIDLen = 1 // byte
+	msgPortLen       = 2 // uint16
+)
+
+func (msg Message) GetDataLength() (length int, err error) {
+	if !msg.Keepalive {
+		length += msgTypeLen
+		switch msg.Type {
+		case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
+		case Have, AllowedFast, Suggest:
+			length += msgIndexLen
+		case Request, Cancel, Reject:
+			length += msgIndexLen + msgBeginLen + msgBeginLen
+		case Bitfield:
+			length += (len(msg.Bitfield) + 7) / 8
+		case Piece:
+			length += msgIndexLen + msgBeginLen + len(msg.Piece)
+		case Extended:
+			length += msgExtendedIDLen + len(msg.ExtendedPayload)
+		case Port:
+			length += msgPortLen
+		default:
+			err = fmt.Errorf("unknown message type: %v", msg.Type)
+		}
+	}
+	return
+}
+
 func (msg Message) MarshalBinary() (data []byte, err error) {
 	// It might look like you could have a pool of buffers and preallocate the message length
 	// prefix, but because we have to return []byte, it becomes non-trivial to make this fast. You
 	// will need a benchmark.
 	var buf bytes.Buffer
-	mustWrite := func(data any) {
-		err := binary.Write(&buf, binary.BigEndian, data)
-		if err != nil {
-			panic(err)
-		}
-	}
-	writeConsecutive := func(data ...any) {
-		for _, d := range data {
-			mustWrite(d)
-		}
-	}
 	if !msg.Keepalive {
-		err = buf.WriteByte(byte(msg.Type))
-		if err != nil {
-			return
-		}
-		switch msg.Type {
-		case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
-		case Have, AllowedFast, Suggest:
-			err = binary.Write(&buf, binary.BigEndian, msg.Index)
-		case Request, Cancel, Reject:
-			for _, i := range []Integer{msg.Index, msg.Begin, msg.Length} {
-				err = binary.Write(&buf, binary.BigEndian, i)
-				if err != nil {
-					break
-				}
-			}
-		case Bitfield:
-			_, err = buf.Write(marshalBitfield(msg.Bitfield))
-		case Piece:
-			for _, i := range []Integer{msg.Index, msg.Begin} {
-				err = binary.Write(&buf, binary.BigEndian, i)
-				if err != nil {
-					return
-				}
-			}
-			n, err := buf.Write(msg.Piece)
-			if err != nil {
-				break
-			}
-			if n != len(msg.Piece) {
-				panic(n)
-			}
-		case Extended:
-			err = buf.WriteByte(byte(msg.ExtendedID))
-			if err != nil {
-				return
-			}
-			_, err = buf.Write(msg.ExtendedPayload)
-		case Port:
-			err = binary.Write(&buf, binary.BigEndian, msg.Port)
-		case HashRequest:
-			buf.Write(msg.PiecesRoot[:])
-			writeConsecutive(msg.BaseLayer, msg.Index, msg.Length, msg.ProofLayers)
-		default:
-			err = fmt.Errorf("unknown message type: %v", msg.Type)
-		}
+		_, err = msg.WriteTo(&buf)
 	}
 	data = make([]byte, 4+buf.Len())
 	binary.BigEndian.PutUint32(data, uint32(buf.Len()))
@@ -157,4 +187,44 @@ func (me *Message) UnmarshalBinary(b []byte) error {
 		return fmt.Errorf("%d trailing bytes", d.R.Buffered())
 	}
 	return nil
+}
+
+type dataWriter struct {
+	writer io.Writer
+	n      int64
+}
+
+func (d *dataWriter) BinaryWrite(order binary.ByteOrder, data any) error {
+	err := binary.Write(d.writer, order, data)
+	if err != nil {
+		return err
+	}
+	d.n += int64(binary.Size(data))
+	return nil
+}
+
+func (d *dataWriter) Write(bytes []byte) (int, error) {
+	n, err := d.writer.Write(bytes)
+	if err != nil {
+		return n, err
+	}
+	d.n += int64(n)
+	return n, nil
+}
+
+func (d *dataWriter) WriteByte(b byte) error {
+	n, err := d.Write([]byte{b})
+	if err != nil {
+		return err
+	}
+	d.n += int64(n)
+	return nil
+}
+
+func (d *dataWriter) GetBytesWritten() int64 {
+	return d.n
+}
+
+func newDataWriter(writer io.Writer) *dataWriter {
+	return &dataWriter{writer, 0}
 }

@@ -36,7 +36,8 @@ There are several web-frontends, sites, Android clients, storage backends and su
  * [exatorrent](https://github.com/varbhat/exatorrent): Elegant self-hostable torrent client <!-- 1.5k stars -->
  * [bitmagnet](https://github.com/bitmagnet-io/bitmagnet): A self-hosted BitTorrent indexer, DHT crawler, content classifier and torrent search engine with web UI, GraphQL API and Servarr stack integration. <!-- 1.1k stars --> 
  * [TorrServer](https://github.com/YouROK/TorrServer): Torrent streaming server over http <!-- 984 stars -->
- * [distribyted](https://github.com/distribyted/distribyted): Distribyted is an alternative torrent client. It can expose torrent files as a standard FUSE, webDAV or HTTP endpoint and download them on demand, allowing random reads using a fixed amount of disk space. <!-- 982 stars --> 
+ * [distribyted](https://github.com/distribyted/distribyted): Distribyted is an alternative torrent client. It can expose torrent files as a standard FUSE, webDAV or HTTP endpoint and download them on demand, allowing random reads using a fixed amount of disk space. <!-- 982 stars -->
+ * [Mangayomi](https://github.com/kodjodevf/mangayomi): Cross-platform app that allows users to read manga and stream anime from a variety of sources including BitTorrent. <!-- 940 stars -->
  * [Simple Torrent](https://github.com/boypt/simple-torrent): self-hosted HTTP remote torrent client <!-- 876 stars -->
  * [autobrr](https://github.com/autobrr/autobrr): autobrr redefines download automation for torrents and Usenet, drawing inspiration from tools like trackarr, autodl-irssi, and flexget. <!-- 855 stars -->
  * [mabel](https://github.com/smmr-software/mabel): Fancy BitTorrent client for the terminal <!-- 412 stars -->

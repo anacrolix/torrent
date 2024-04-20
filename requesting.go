@@ -266,13 +266,25 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 	}
 	for requestHeap.Len() != 0 && maxRequests(current.Requests.GetCardinality()+current.Cancelled.GetCardinality()) < p.nominalMaxRequests() {
 		req := heap.Pop(requestHeap)
+		if cap(next.Requests.requestIndexes) != cap(orig) {
+			panic("changed")
+		}
+
+		if p.needRequestUpdate == "Peer.remoteRejectedRequest" {
+			continue
+		}
+
 		existing := t.requestingPeer(req)
 		if existing != nil && existing != p {
+			if p.needRequestUpdate == "Peer.cancel" {
+				continue
+			}
+
 			// Don't steal from the poor.
 			diff := int64(current.Requests.GetCardinality()) + 1 - (int64(existing.uncancelledRequests()) - 1)
 			// Steal a request that leaves us with one more request than the existing peer
 			// connection if the stealer more recently received a chunk.
-			if diff > 1 || (diff == 1 && p.lastUsefulChunkReceived.Before(existing.lastUsefulChunkReceived)) {
+			if diff > 1 || (diff == 1 && !p.lastUsefulChunkReceived.After(existing.lastUsefulChunkReceived)) {
 				continue
 			}
 			t.cancelRequest(req)

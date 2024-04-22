@@ -130,9 +130,6 @@ func (cn *peerConnMsgWriter) writeToBuffer(msg pp.Message) (err error) {
 	if err != nil {
 		return err
 	}
-	// Pre-calculate buffer capacity to avoid multiple reallocations.
-	const msgBufLen = 4 // uint32
-	cn.writeBuffer.Grow(length + msgBufLen)
 	// Write message length to buffer.
 	err = binary.Write(cn.writeBuffer, binary.BigEndian, uint32(length))
 	// Write message data to buffer.

@@ -17,12 +17,12 @@ func PieceMsg(length int64) pp.Message {
 }
 
 const (
+	// 8M
+	MsgLength8M = 8 * 1024 * 1024
 	// 4M
 	MsgLength4M = 4 * 1024 * 1024
 	// 1M
-	MsgLength8M = 1 * 1024 * 1024
-	// 512K
-	MsgLength512K = 512 * 1024
+	MsgLength1M = 1 * 1024 * 1024
 )
 
 func runBenchmarkWriteToBuffer(b *testing.B, length int64) {
@@ -41,16 +41,16 @@ func runBenchmarkWriteToBuffer(b *testing.B, length int64) {
 	}
 }
 
-func BenchmarkWriteToBuffer4M(b *testing.B) {
-	runBenchmarkWriteToBuffer(b, MsgLength4M)
-}
-
 func BenchmarkWriteToBuffer8M(b *testing.B) {
 	runBenchmarkWriteToBuffer(b, MsgLength8M)
 }
 
-func BenchmarkWriteToBuffer512K(b *testing.B) {
-	runBenchmarkWriteToBuffer(b, MsgLength512K)
+func BenchmarkWriteToBuffer4M(b *testing.B) {
+	runBenchmarkWriteToBuffer(b, MsgLength4M)
+}
+
+func BenchmarkWriteToBuffer1M(b *testing.B) {
+	runBenchmarkWriteToBuffer(b, MsgLength1M)
 }
 
 func runBenchmarkMarshalBinaryWrite(b *testing.B, length int64) {
@@ -69,14 +69,14 @@ func runBenchmarkMarshalBinaryWrite(b *testing.B, length int64) {
 	}
 }
 
-func BenchmarkMarshalBinaryWrite4M(b *testing.B) {
-	runBenchmarkMarshalBinaryWrite(b, MsgLength4M)
-}
-
 func BenchmarkMarshalBinaryWrite8M(b *testing.B) {
 	runBenchmarkMarshalBinaryWrite(b, MsgLength8M)
 }
 
-func BenchmarkMarshalBinaryWrite512K(b *testing.B) {
-	runBenchmarkMarshalBinaryWrite(b, MsgLength512K)
+func BenchmarkMarshalBinaryWrite4M(b *testing.B) {
+	runBenchmarkMarshalBinaryWrite(b, MsgLength4M)
+}
+
+func BenchmarkMarshalBinaryWrite1M(b *testing.B) {
+	runBenchmarkMarshalBinaryWrite(b, MsgLength1M)
 }

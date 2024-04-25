@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/dustin/go-humanize"
+
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
@@ -16,41 +18,37 @@ func PieceMsg(length int64) pp.Message {
 	}
 }
 
-const (
-	// 8M
-	MsgLength8M = 8 * 1024 * 1024
-	// 4M
-	MsgLength4M = 4 * 1024 * 1024
-	// 1M
-	MsgLength1M = 1 * 1024 * 1024
-)
+var benchmarkPieceLengths = []int{defaultChunkSize, 1 << 20, 4 << 20, 8 << 20}
 
 func runBenchmarkWriteToBuffer(b *testing.B, length int64) {
 	writer := &peerConnMsgWriter{
 		writeBuffer: &bytes.Buffer{},
 	}
-	msg := PieceMsg(MsgLength4M)
+	msg := PieceMsg(length)
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		b.StopTimer()
+		//b.StopTimer()
 		writer.writeBuffer.Reset()
-		b.StartTimer()
+		//b.StartTimer()
 		writer.writeToBuffer(msg)
 	}
 }
 
-func BenchmarkWriteToBuffer8M(b *testing.B) {
-	runBenchmarkWriteToBuffer(b, MsgLength8M)
-}
-
-func BenchmarkWriteToBuffer4M(b *testing.B) {
-	runBenchmarkWriteToBuffer(b, MsgLength4M)
-}
-
-func BenchmarkWriteToBuffer1M(b *testing.B) {
-	runBenchmarkWriteToBuffer(b, MsgLength1M)
+func BenchmarkWritePieceMsg(b *testing.B) {
+	for _, length := range benchmarkPieceLengths {
+		b.Run(humanize.IBytes(uint64(length)), func(b *testing.B) {
+			b.Run("ToBuffer", func(b *testing.B) {
+				b.SetBytes(int64(length))
+				runBenchmarkWriteToBuffer(b, int64(length))
+			})
+			b.Run("MarshalBinary", func(b *testing.B) {
+				b.SetBytes(int64(length))
+				runBenchmarkMarshalBinaryWrite(b, int64(length))
+			})
+		})
+	}
 }
 
 func runBenchmarkMarshalBinaryWrite(b *testing.B, length int64) {
@@ -62,21 +60,9 @@ func runBenchmarkMarshalBinaryWrite(b *testing.B, length int64) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		b.StopTimer()
+		//b.StopTimer()
 		writer.writeBuffer.Reset()
-		b.StartTimer()
+		//b.StartTimer()
 		writer.writeBuffer.Write(msg.MustMarshalBinary())
 	}
-}
-
-func BenchmarkMarshalBinaryWrite8M(b *testing.B) {
-	runBenchmarkMarshalBinaryWrite(b, MsgLength8M)
-}
-
-func BenchmarkMarshalBinaryWrite4M(b *testing.B) {
-	runBenchmarkMarshalBinaryWrite(b, MsgLength4M)
-}
-
-func BenchmarkMarshalBinaryWrite1M(b *testing.B) {
-	runBenchmarkMarshalBinaryWrite(b, MsgLength1M)
 }

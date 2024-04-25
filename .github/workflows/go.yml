@@ -13,7 +13,7 @@ jobs:
         os: [windows-latest, macos-latest, ubuntu-latest]
       fail-fast: false
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - uses: ./.github/actions/go-common
     - run: go test -race $(go list ./... | grep -v /fs | grep -v /possum)
       continue-on-error: true
@@ -28,7 +28,7 @@ jobs:
         go-version: [ '1.22' ]
       fail-fast: false
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - uses: ./.github/actions/go-common
     - run: go test -race -run @ -bench . -benchtime 2x $(go list ./... | grep -v /possum)
 
@@ -39,7 +39,7 @@ jobs:
         go-version: [ '1.22' ]
       fail-fast: false
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - uses: ./.github/actions/go-common
     - run: go test -run @ -bench . $(go list ./... | grep -v /possum)
 
@@ -62,7 +62,7 @@ jobs:
         go-version: [ '1.22' ]
       fail-fast: false
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - uses: ./.github/actions/go-common
     - name: Some packages compile for WebAssembly
       run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
@@ -77,7 +77,7 @@ jobs:
         os: [ubuntu-latest]
       fail-fast: false
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - uses: ./.github/actions/go-common
         
     - name: Install godo

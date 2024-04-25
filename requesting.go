@@ -9,9 +9,8 @@ import (
 	"time"
 	"unsafe"
 
-	g "github.com/anacrolix/generics"
-
 	"github.com/RoaringBitmap/roaring"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"

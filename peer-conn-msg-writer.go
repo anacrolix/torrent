@@ -117,10 +117,21 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 	}
 }
 
+func (cn *peerConnMsgWriter) writeToBuffer(msg pp.Message) (err error) {
+	originalLen := cn.writeBuffer.Len()
+	defer func() {
+		if err != nil {
+			// Since an error occurred during buffer write, revert buffer to its original state before the write.
+			cn.writeBuffer.Truncate(originalLen)
+		}
+	}()
+	return msg.WriteTo(cn.writeBuffer)
+}
+
 func (cn *peerConnMsgWriter) write(msg pp.Message) bool {
 	cn.mu.Lock()
 	defer cn.mu.Unlock()
-	cn.writeBuffer.Write(msg.MustMarshalBinary())
+	cn.writeToBuffer(msg)
 	cn.writeCond.Broadcast()
 	return !cn.writeBufferFull()
 }

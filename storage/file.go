@@ -90,6 +90,7 @@ func (fs fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash
 	return TorrentImpl{
 		Piece: t.Piece,
 		Close: t.Close,
+		Flush: t.Flush,
 	}, nil
 }
 
@@ -119,6 +120,29 @@ func (fts *fileTorrentImpl) Piece(p metainfo.Piece) PieceImpl {
 }
 
 func (fs *fileTorrentImpl) Close() error {
+	return nil
+}
+
+func fsync(filePath string) (err error) {
+	_ = os.MkdirAll(filepath.Dir(filePath), 0o777)
+	var f *os.File
+	f, err = os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0o666)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err = f.Sync(); err != nil {
+		return err
+	}
+	return f.Close()
+}
+
+func (fts *fileTorrentImpl) Flush() error {
+	for _, f := range fts.files {
+		if err := fsync(f.path); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

@@ -468,6 +468,8 @@ func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 	return cn.peerImpl._request(ppReq), nil
 }
 
+var peerUpdateRequestsPeerCancelReason = "Peer.cancel"
+
 func (me *Peer) cancel(r RequestIndex) {
 	if !me.deleteRequest(r) {
 		panic("request not existing should have been guarded")
@@ -480,7 +482,7 @@ func (me *Peer) cancel(r RequestIndex) {
 	}
 	me.decPeakRequests()
 	if me.isLowOnRequests() {
-		me.updateRequests("Peer.cancel")
+		me.updateRequests(peerUpdateRequestsPeerCancelReason)
 	}
 }
 
@@ -566,6 +568,8 @@ func runSafeExtraneous(f func()) {
 	}
 }
 
+var peerUpdateRequestsRemoteRejectReason = "Peer.remoteRejectedRequest"
+
 // Returns true if it was valid to reject the request.
 func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
 	if c.deleteRequest(r) {
@@ -574,7 +578,7 @@ func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
 		return false
 	}
 	if c.isLowOnRequests() {
-		c.updateRequests("Peer.remoteRejectedRequest")
+		c.updateRequests(peerUpdateRequestsRemoteRejectReason)
 	}
 	c.decExpectedChunkReceive(r)
 	return true

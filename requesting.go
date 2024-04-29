@@ -312,13 +312,20 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 			panic("changed")
 		}
 
-		if p.needRequestUpdate == "Peer.remoteRejectedRequest" {
+		// don't add requests on reciept of a reject - because this causes request back
+		// to potentially permanently unresponive peers - which just adds network noise.  If
+		// the peer can handle more requests it will send an "unchoked" message - which
+		// will cause it to get added back to the request queue
+		if p.needRequestUpdate == peerUpdateRequestsRemoteRejectReason {
 			continue
 		}
 
 		existing := t.requestingPeer(req)
 		if existing != nil && existing != p {
-			if p.needRequestUpdate == "Peer.cancel" {
+			// don't steal on cancel - because this is triggered by t.cancelRequest below
+			// which means that the cancelled can immediately try to steal back a request
+			// it has lost which can lead to circular cancel/add processing
+			if p.needRequestUpdate == peerUpdateRequestsPeerCancelReason {
 				continue
 			}
 

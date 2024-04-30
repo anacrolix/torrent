@@ -27,7 +27,7 @@ type webseedPeer struct {
 	client           webseed.Client
 	activeRequests   map[Request]webseed.Request
 	requesterCond    sync.Cond
-	updateRequestor  *time.Timer
+	updateRequester  *time.Timer
 	lastUnhandledErr time.Time
 }
 
@@ -122,16 +122,16 @@ func (ws *webseedPeer) requester(i int) {
 
 		if !restart {
 			if !ws.peer.t.dataDownloadDisallowed.Bool() && ws.peer.isLowOnRequests() && len(ws.peer.getDesiredRequestState().Requests.requestIndexes) > 0 {
-				if ws.updateRequestor == nil {
-					ws.updateRequestor = time.AfterFunc(updateRequestsTimerDuration, func() { requestUpdate(ws) })
+				if ws.updateRequester == nil {
+					ws.updateRequester = time.AfterFunc(updateRequestsTimerDuration, func() { requestUpdate(ws) })
 				}
 			}
 
 			ws.requesterCond.Wait()
 
-			if ws.updateRequestor != nil {
-				ws.updateRequestor.Stop()
-				ws.updateRequestor = nil
+			if ws.updateRequester != nil {
+				ws.updateRequester.Stop()
+				ws.updateRequester = nil
 			}
 		}
 	}

@@ -27,6 +27,7 @@ type webseedPeer struct {
 	client           webseed.Client
 	activeRequests   map[Request]webseed.Request
 	requesterCond    sync.Cond
+	updateRequestor  *time.Timer
 	lastUnhandledErr time.Time
 }
 
@@ -72,7 +73,6 @@ func (ws *webseedPeer) intoSpec(r Request) webseed.RequestSpec {
 }
 
 func (ws *webseedPeer) _request(r Request) bool {
-	ws.requesterCond.Signal()
 	return true
 }
 
@@ -91,19 +91,21 @@ func (ws *webseedPeer) doRequest(r Request) error {
 func (ws *webseedPeer) requester(i int) {
 	ws.requesterCond.L.Lock()
 	defer ws.requesterCond.L.Unlock()
-start:
+
 	for !ws.peer.closed.IsSet() {
 		// Restart is set if we don't need to wait for the requestCond before trying again.
 		restart := false
+
 		ws.peer.requestState.Requests.Iterate(func(x RequestIndex) bool {
 			r := ws.peer.t.requestIndexToRequest(x)
 			if _, ok := ws.activeRequests[r]; ok {
 				return true
 			}
+
 			err := ws.doRequest(r)
 			ws.requesterCond.L.Unlock()
 			if err != nil && !errors.Is(err, context.Canceled) {
-				log.Printf("requester %v: error doing webseed request %v: %v", i, r, err)
+				ws.peer.logger.Printf("requester %v: error doing webseed request %v: %v", i, r, err)
 			}
 			restart = true
 			if errors.Is(err, webseed.ErrTooFast) {
@@ -117,10 +119,38 @@ start:
 			ws.requesterCond.L.Lock()
 			return false
 		})
-		if restart {
-			goto start
+
+		if !restart {
+			if !ws.peer.t.dataDownloadDisallowed.Bool() && ws.peer.isLowOnRequests() && len(ws.peer.getDesiredRequestState().Requests.requestIndexes) > 0 {
+				if ws.updateRequestor == nil {
+					ws.updateRequestor = time.AfterFunc(updateRequestsTimerDuration, func() { requestUpdate(ws) })
+				}
+			}
+
+			ws.requesterCond.Wait()
+
+			if ws.updateRequestor != nil {
+				ws.updateRequestor.Stop()
+				ws.updateRequestor = nil
+			}
 		}
-		ws.requesterCond.Wait()
+	}
+}
+
+func requestUpdate(ws *webseedPeer) {
+	if ws != nil {
+		if !ws.peer.closed.IsSet() {
+			if len(ws.peer.getDesiredRequestState().Requests.requestIndexes) > 0 {
+				if ws.peer.isLowOnRequests() {
+					if time.Since(ws.peer.lastRequestUpdate) > updateRequestsTimerDuration {
+						ws.peer.updateRequests(peerUpdateRequestsTimerReason)
+						return
+					}
+				}
+
+				ws.requesterCond.Signal()
+			}
+		}
 	}
 }
 
@@ -142,6 +172,7 @@ func (ws *webseedPeer) handleUpdateRequests() {
 		ws.peer.t.cl.lock()
 		defer ws.peer.t.cl.unlock()
 		ws.peer.maybeUpdateActualRequestState()
+		ws.requesterCond.Signal()
 	}()
 }
 

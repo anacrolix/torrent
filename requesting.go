@@ -1,4 +1,4 @@
-ackage torrent
+package torrent
 
 import (
 	"context"

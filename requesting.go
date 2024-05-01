@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/RoaringBitmap/roaring"
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
@@ -78,7 +79,7 @@ type (
 type desiredPeerRequests struct {
 	requestIndexes []RequestIndex
 	peer           *Peer
-	pieceStates    []requestStrategy.PieceRequestOrderState
+	pieceStates    []g.Option[requestStrategy.PieceRequestOrderState]
 }
 
 func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex) bool {
@@ -95,13 +96,13 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 			!p.peer.peerAllowedFast.Contains(rightPieceIndex),
 		)
 	}
-	leftPiece := &p.pieceStates[leftPieceIndex]
-	rightPiece := &p.pieceStates[rightPieceIndex]
+	leftPiece := p.pieceStates[leftPieceIndex].UnwrapPtr()
+	rightPiece := p.pieceStates[rightPieceIndex].UnwrapPtr()
 	// Putting this first means we can steal requests from lesser-performing peers for our first few
 	// new requests.
-	priority := func() piecePriority {
+	priority := func() PiecePriority {
 		// Technically we would be happy with the cached priority here, except we don't actually
-		// cache it anymore, and Torrent.piecePriority just does another lookup of *Piece to resolve
+		// cache it anymore, and Torrent.PiecePriority just does another lookup of *Piece to resolve
 		// the priority through Piece.purePriority, which is probably slower.
 		leftPriority := leftPiece.Priority
 		rightPriority := rightPiece.Priority
@@ -183,19 +184,20 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 		pieceStates:    t.requestPieceStates,
 		requestIndexes: t.requestIndexes,
 	}
+	clear(requestHeap.pieceStates)
 	// Caller-provided allocation for roaring bitmap iteration.
 	var it typedRoaring.Iterator[RequestIndex]
 	requestStrategy.GetRequestablePieces(
 		input,
 		t.getPieceRequestOrder(),
-		func(ih InfoHash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) {
-			if ih != t.infoHash {
-				return
+		func(ih InfoHash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) bool {
+			if ih != *t.canonicalShortInfohash() {
+				return false
 			}
 			if !p.peerHasPiece(pieceIndex) {
-				return
+				return false
 			}
-			requestHeap.pieceStates[pieceIndex] = pieceExtra
+			requestHeap.pieceStates[pieceIndex].Set(pieceExtra)
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
 				if !allowedFast {
@@ -219,6 +221,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 				}
 				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
 			})
+			return true
 		},
 	)
 	t.assertPendingRequests()
@@ -308,13 +311,22 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 		if cap(next.Requests.requestIndexes) != cap(orig) {
 			panic("changed")
 		}
+
+		if p.needRequestUpdate == "Peer.remoteRejectedRequest" {
+			continue
+		}
+
 		existing := t.requestingPeer(req)
 		if existing != nil && existing != p {
+			if p.needRequestUpdate == "Peer.cancel" {
+				continue
+			}
+
 			// Don't steal from the poor.
 			diff := int64(current.Requests.GetCardinality()) + 1 - (int64(existing.uncancelledRequests()) - 1)
 			// Steal a request that leaves us with one more request than the existing peer
 			// connection if the stealer more recently received a chunk.
-			if diff > 1 || (diff == 1 && p.lastUsefulChunkReceived.Before(existing.lastUsefulChunkReceived)) {
+			if diff > 1 || (diff == 1 && !p.lastUsefulChunkReceived.After(existing.lastUsefulChunkReceived)) {
 				continue
 			}
 			t.cancelRequest(req)

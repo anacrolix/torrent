@@ -57,7 +57,7 @@ type (
 		lastChunkSent           time.Time
 
 		// Stuff controlled by the local peer.
-		needRequestUpdate    string
+		needRequestUpdate    updateRequestReason
 		requestState         request_strategy.PeerRequestState
 		updateRequestsTimer  *time.Timer
 		lastRequestUpdate    time.Time
@@ -111,6 +111,8 @@ type (
 	}
 
 	peerRequests = orderedBitmap[RequestIndex]
+
+	updateRequestReason string
 )
 
 const (
@@ -122,6 +124,15 @@ const (
 	PeerSourcePex             = "X"
 	// The peer was given directly, such as through a magnet link.
 	PeerSourceDirect = "M"
+)
+
+// These are grouped because we might vary update request behaviour depending on the reason. I'm not
+// sure about the fact that multiple reasons can be triggered before an update runs, and only the
+// first will count. Possibly we should be signalling what behaviours are appropriate in the next
+// update instead.
+const (
+	peerUpdateRequestsPeerCancelReason   updateRequestReason = "Peer.cancel"
+	peerUpdateRequestsRemoteRejectReason updateRequestReason = "Peer.remoteRejectedRequest"
 )
 
 // Returns the Torrent a Peer belongs to. Shouldn't change for the lifetime of the Peer. May be nil
@@ -468,8 +479,6 @@ func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 	return cn.peerImpl._request(ppReq), nil
 }
 
-var peerUpdateRequestsPeerCancelReason = "Peer.cancel"
-
 func (me *Peer) cancel(r RequestIndex) {
 	if !me.deleteRequest(r) {
 		panic("request not existing should have been guarded")
@@ -487,7 +496,7 @@ func (me *Peer) cancel(r RequestIndex) {
 }
 
 // Sets a reason to update requests, and if there wasn't already one, handle it.
-func (cn *Peer) updateRequests(reason string) {
+func (cn *Peer) updateRequests(reason updateRequestReason) {
 	if cn.needRequestUpdate != "" {
 		return
 	}
@@ -567,8 +576,6 @@ func runSafeExtraneous(f func()) {
 		f()
 	}
 }
-
-var peerUpdateRequestsRemoteRejectReason = "Peer.remoteRejectedRequest"
 
 // Returns true if it was valid to reject the request.
 func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
@@ -790,7 +797,7 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 	return true
 }
 
-func (c *Peer) deleteAllRequests(reason string) {
+func (c *Peer) deleteAllRequests(reason updateRequestReason) {
 	if c.requestState.Requests.IsEmpty() {
 		return
 	}

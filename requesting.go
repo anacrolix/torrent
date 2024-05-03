@@ -244,7 +244,7 @@ func (p *Peer) maybeUpdateActualRequestState() {
 	}
 	pprof.Do(
 		context.Background(),
-		pprof.Labels("update request", p.needRequestUpdate),
+		pprof.Labels("update request", string(p.needRequestUpdate)),
 		func(_ context.Context) {
 			next := p.getDesiredRequestState()
 			p.applyRequestState(next)

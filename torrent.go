@@ -1417,7 +1417,7 @@ func (t *Torrent) maybeNewConns() {
 	t.openNewConns()
 }
 
-func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string) {
+func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason updateRequestReason) {
 	if t._pendingPieces.Contains(uint32(piece)) {
 		t.iterPeers(func(c *Peer) {
 			// if c.requestState.Interested {
@@ -1455,20 +1455,20 @@ func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex) (pendingChange
 	}
 }
 
-func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string) {
+func (t *Torrent) updatePiecePriority(piece pieceIndex, reason updateRequestReason) {
 	if t.updatePiecePriorityNoTriggers(piece) && !t.disableTriggers {
 		t.onPiecePendingTriggers(piece, reason)
 	}
 	t.updatePieceRequestOrderPiece(piece)
 }
 
-func (t *Torrent) updateAllPiecePriorities(reason string) {
+func (t *Torrent) updateAllPiecePriorities(reason updateRequestReason) {
 	t.updatePiecePriorities(0, t.numPieces(), reason)
 }
 
 // Update all piece priorities in one hit. This function should have the same
 // output as updatePiecePriority, but across all pieces.
-func (t *Torrent) updatePiecePriorities(begin, end pieceIndex, reason string) {
+func (t *Torrent) updatePiecePriorities(begin, end pieceIndex, reason updateRequestReason) {
 	for i := begin; i < end; i++ {
 		t.updatePiecePriority(i, reason)
 	}
@@ -1514,7 +1514,7 @@ func (t *Torrent) pendRequest(req RequestIndex) {
 	t.piece(t.pieceIndexOfRequestIndex(req)).pendChunkIndex(req % t.chunksPerRegularPiece())
 }
 
-func (t *Torrent) pieceCompletionChanged(piece pieceIndex, reason string) {
+func (t *Torrent) pieceCompletionChanged(piece pieceIndex, reason updateRequestReason) {
 	t.cl.event.Broadcast()
 	if t.pieceComplete(piece) {
 		t.onPieceCompleted(piece)

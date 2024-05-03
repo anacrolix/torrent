@@ -199,7 +199,7 @@ func (t *Torrent) CancelPieces(begin, end pieceIndex) {
 	t.cl.unlock()
 }
 
-func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex, reason string) {
+func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex, reason updateRequestReason) {
 	for i := begin; i < end; i++ {
 		p := &t.pieces[i]
 		if p.priority == PiecePriorityNone {

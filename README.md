@@ -40,7 +40,8 @@ There are several web-frontends, sites, Android clients, storage backends and su
  * [Mangayomi](https://github.com/kodjodevf/mangayomi): Cross-platform app that allows users to read manga and stream anime from a variety of sources including BitTorrent. <!-- 940 stars -->
  * [Simple Torrent](https://github.com/boypt/simple-torrent): self-hosted HTTP remote torrent client <!-- 876 stars -->
  * [autobrr](https://github.com/autobrr/autobrr): autobrr redefines download automation for torrents and Usenet, drawing inspiration from tools like trackarr, autodl-irssi, and flexget. <!-- 855 stars -->
- * [mabel](https://github.com/smmr-software/mabel): Fancy BitTorrent client for the terminal <!-- 412 stars -->
+ * [mabel](https://github.com/smmr-software/mabel): Fancy BitTorrent client for the terminal <!-- 421 stars -->
+ * [Toru](https://github.com/sweetbbak/toru): Stream anime from the the terminal! <!-- 216 stars -->
  * [webtor.io](https://webtor.io/): free cloud BitTorrent-client <!-- not exclusively anacrolix/torrent maybe? 40-200 stars? -->
  * [Android Torrent Client](https://gitlab.com/axet/android-torrent-client): Android torrent client <!-- 29 stars -->
  * [libtorrent](https://gitlab.com/axet/libtorrent): gomobile wrapper <!-- 15 stars -->

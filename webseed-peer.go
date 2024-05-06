@@ -158,11 +158,12 @@ func (ws *webseedPeer) connectionFlags() string {
 	return "WS"
 }
 
-// Maybe this should drop all existing connections, or something like that.
-func (ws *webseedPeer) drop() {}
+func (ws *webseedPeer) drop() {
+	ws.peer.cancelAllRequests()
+}
 
 func (cn *webseedPeer) ban() {
-	cn.peer.close()
+	cn.peer.drop()
 }
 
 func (ws *webseedPeer) handleUpdateRequests() {

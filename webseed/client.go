@@ -116,7 +116,7 @@ func (me ErrBadResponse) Error() string {
 	return me.Msg
 }
 
-func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *http.Response) error {
+func recvPartResult(ctx context.Context, buf *bytes.Buffer, part requestPart, resp *http.Response) error {
 	defer resp.Body.Close()
 	var body io.Reader = resp.Body
 	if part.responseBodyWrapper != nil {
@@ -133,6 +133,7 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *
 		if err != nil {
 			return err
 		}
+
 		if copied != part.e.Length {
 			return fmt.Errorf("got %v bytes, expected %v", copied, part.e.Length)
 		}
@@ -173,19 +174,18 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *
 
 var ErrTooFast = errors.New("making requests too fast")
 
-func readRequestPartResponses(ctx context.Context, parts []requestPart) (_ []byte, err error) {
+func readRequestPartResponses(ctx context.Context, parts []requestPart) ([]byte, error) {
 	var buf bytes.Buffer
+
 	for _, part := range parts {
-		result, err := part.do()
-
-		if err == nil {
-			err = recvPartResult(ctx, &buf, part, result)
-		}
-
-		if err != nil {
-			err = fmt.Errorf("reading %q at %q: %w", part.req.URL, part.req.Header.Get("Range"), err)
-			break
+		if result, err := part.do(); err != nil {
+			return nil, err
+		} else {
+			if err = recvPartResult(ctx, &buf, part, result); err != nil {
+				return nil, fmt.Errorf("reading %q at %q: %w", part.req.URL, part.req.Header.Get("Range"), err)
+			}
 		}
 	}
-	return buf.Bytes(), err
+
+	return buf.Bytes(), nil
 }

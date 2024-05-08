@@ -2612,6 +2612,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
 				}
 			},
 		},
+		maxRequesters:  maxRequests,
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
 	}
 	ws.peer.initRequestState()
@@ -2620,7 +2621,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
 	}
 	ws.peer.initUpdateRequestsTimer()
 	ws.requesterCond.L = t.cl.locker()
-	for i := 0; i < maxRequests; i += 1 {
+	for i := 0; i < ws.maxRequesters; i += 1 {
 		go ws.requester(i)
 	}
 	for _, f := range t.callbacks().NewPeer {

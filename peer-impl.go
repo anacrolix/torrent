@@ -34,4 +34,6 @@ type peerImpl interface {
 	// message, then it's clear that they do.
 	peerHasAllPieces() (all, known bool)
 	peerPieces() *roaring.Bitmap
+
+	nominalMaxRequests() maxRequests
 }

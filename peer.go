@@ -301,7 +301,7 @@ func (cn *Peer) writeStatus(w io.Writer) {
 		&cn._stats.ChunksWritten,
 		cn.requestState.Requests.GetCardinality(),
 		cn.requestState.Cancelled.GetCardinality(),
-		cn.nominalMaxRequests(),
+		cn.peerImpl.nominalMaxRequests(),
 		cn.PeerMaxRequests,
 		len(cn.peerRequests),
 		localClientReqq,
@@ -441,7 +441,7 @@ func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 	if cn.requestState.Requests.Contains(r) {
 		return true, nil
 	}
-	if maxRequests(cn.requestState.Requests.GetCardinality()) >= cn.nominalMaxRequests() {
+	if maxRequests(cn.requestState.Requests.GetCardinality()) >= cn.peerImpl.nominalMaxRequests() {
 		return true, errors.New("too many outstanding requests")
 	}
 	cn.requestState.Requests.Add(r)

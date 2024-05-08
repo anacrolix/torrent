@@ -26,8 +26,9 @@ type webseedPeer struct {
 	peer              Peer
 	client            webseed.Client
 	activeRequests    map[Request]webseed.Request
-	maxActiveRequests int
-	processedRequests int
+	maxActiveRequests int // the max number of active requests for this peer
+	processedRequests int // the total number of requests this peer has processed
+	maxRequesters     int // the number of requester to run for this peer
 	requesterCond     sync.Cond
 	updateRequestor   *time.Timer
 	lastUnhandledErr  time.Time
@@ -78,6 +79,29 @@ func (ws *webseedPeer) _request(r Request) bool {
 	return true
 }
 
+func (cn *webseedPeer) nominalMaxRequests() maxRequests {
+	interestedPeers := 1
+
+	cn.peer.t.iterPeers(func(peer *Peer) {
+		if peer == &cn.peer {
+			return
+		}
+
+		if !peer.closed.IsSet() {
+			if peer.connectionFlags() != "WS" {
+				if !peer.peerInterested || peer.lastHelpful().IsZero() {
+					return
+				}
+			}
+
+			interestedPeers++
+		}
+	})
+
+	activeRequestsPerPeer := cn.peer.bestPeerNumPieces() / maxInt(1, interestedPeers)
+	return maxInt(1, minInt(cn.peer.PeerMaxRequests, maxInt(maxInt(8, activeRequestsPerPeer), cn.peer.peakRequests*2)))
+}
+
 func (ws *webseedPeer) doRequest(r Request) error {
 	webseedRequest := ws.client.NewRequest(ws.intoSpec(r))
 	ws.activeRequests[r] = webseedRequest
@@ -100,7 +124,7 @@ func (ws *webseedPeer) requester(i int) {
 	ws.requesterCond.L.Lock()
 	defer ws.requesterCond.L.Unlock()
 
-	for !ws.peer.closed.IsSet() {
+	for !ws.peer.closed.IsSet() && i < ws.maxRequesters {
 		// Restart is set if we don't need to wait for the requestCond before trying again.
 		restart := false
 
@@ -121,9 +145,9 @@ func (ws *webseedPeer) requester(i int) {
 				if activeCount < pendingRequests {
 					signals := pendingRequests - activeCount
 
-					if signals > 15 {
+					if signals > ws.maxRequesters {
 						// max responders excluding this
-						signals = 15
+						signals = ws.maxRequesters
 					}
 
 					for s := 0; s < signals; s++ {
@@ -163,9 +187,30 @@ func (ws *webseedPeer) requester(i int) {
 		})
 
 		if !(ws.peer.t.dataDownloadDisallowed.Bool() || ws.peer.t.info == nil) {
+			desiredRequests := len(ws.peer.getDesiredRequestState().Requests.requestIndexes)
+			pendingRequests := int(ws.peer.requestState.Requests.GetCardinality())
+
 			ws.peer.logger.Levelf(log.Debug, "%d: requests %d (a=%d,d=%d) active(c=%d,m=%d) complete(%d/%d) restart(%v)",
-				i, ws.processedRequests, ws.peer.requestState.Requests.GetCardinality(), len(ws.peer.getDesiredRequestState().Requests.requestIndexes),
-				len(ws.activeRequests), ws.maxActiveRequests, ws.peer.t._completedPieces.GetCardinality(), ws.peer.t.NumPieces(), restart)
+				i, ws.processedRequests, pendingRequests, desiredRequests,
+				len(ws.activeRequests), ws.maxActiveRequests, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(), restart)
+
+			if pendingRequests > ws.maxRequesters {
+				if pendingRequests > ws.peer.PeerMaxRequests {
+					pendingRequests = ws.peer.PeerMaxRequests
+				}
+
+				for i := ws.maxRequesters; i < pendingRequests; i++ {
+					go ws.requester(i)
+					ws.maxRequesters++
+				}
+			} else {
+				if pendingRequests < 16 {
+					pendingRequests = 16
+				}
+
+				ws.maxRequesters = pendingRequests
+			}
+
 		}
 
 		if !restart {

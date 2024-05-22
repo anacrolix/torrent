@@ -34,5 +34,5 @@ func (al AnnounceList) DistinctValues() (ret []string) {
 }
 
 func (al AnnounceList) Clear() {
-	clear(al)
+	al = nil
 }

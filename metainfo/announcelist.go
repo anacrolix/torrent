@@ -33,3 +33,7 @@ func (al AnnounceList) DistinctValues() (ret []string) {
 	}
 	return
 }
+
+func (al AnnounceList) Clear() {
+	clear(al)
+}

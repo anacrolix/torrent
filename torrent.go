@@ -32,6 +32,7 @@ import (
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
 	"golang.org/x/exp/maps"
+	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/common"
@@ -2587,17 +2588,30 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
 	// downloading Sintel (08ada5a7a6183aae1e09d831df6748d566095a10) from
 	// "https://webtorrent.io/torrents/".
 	const maxRequests = 16
+
+	// This should affect how often we have to recompute requests for this peer. Note that
+	// because we can request more than 1 thing at a time over HTTP, we will hit the low
+	// requests mark more often, so recomputation is probably sooner than with regular peer
+	// conns. ~4x maxRequests would be about right.
+	peerMaxRequests := 128
+
+	// unless there is more availible bandwith - in which case max requests becomes
+	// the max available pieces that will consune that bandwidth
+
+	if bandwidth := t.cl.config.DownloadRateLimiter.Limit(); bandwidth > 0 && t.info != nil {
+		if maxPieceRequests := int(bandwidth / rate.Limit(t.info.PieceLength)); maxPieceRequests > peerMaxRequests {
+			peerMaxRequests = maxPieceRequests
+		}
+	}
+
 	ws := webseedPeer{
 		peer: Peer{
 			t:                        t,
 			outgoing:                 true,
 			Network:                  "http",
 			reconciledHandshakeStats: true,
-			// This should affect how often we have to recompute requests for this peer. Note that
-			// because we can request more than 1 thing at a time over HTTP, we will hit the low
-			// requests mark more often, so recomputation is probably sooner than with regular peer
-			// conns. ~4x maxRequests would be about right.
-			PeerMaxRequests: 128,
+
+			PeerMaxRequests: peerMaxRequests,
 			// TODO: Set ban prefix?
 			RemoteAddr: remoteAddrFromUrl(url),
 			callbacks:  t.callbacks(),

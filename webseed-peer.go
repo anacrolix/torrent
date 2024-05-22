@@ -29,6 +29,7 @@ type webseedPeer struct {
 	maxActiveRequests int // the max number of active requests for this peer
 	processedRequests int // the total number of requests this peer has processed
 	maxRequesters     int // the number of requester to run for this peer
+	waiting           int // the number of requesters currently waiting for a signal
 	requesterCond     sync.Cond
 	updateRequestor   *time.Timer
 	lastUnhandledErr  time.Time
@@ -118,9 +119,6 @@ func (ws *webseedPeer) doRequest(r Request) error {
 }
 
 func (ws *webseedPeer) requester(i int) {
-
-	ws.peer.Torrent()._pendingPieces.GetCardinality()
-
 	ws.requesterCond.L.Lock()
 	defer ws.requesterCond.L.Unlock()
 
@@ -132,28 +130,6 @@ func (ws *webseedPeer) requester(i int) {
 			r := ws.peer.t.requestIndexToRequest(x)
 			if _, ok := ws.activeRequests[r]; ok {
 				return true
-			}
-
-			// if there are more than one requests in the queue and we don't
-			// have all of the responders activated yet we need to
-			// kick the other requestors into life - otherwise the max parallel
-			// requests will stay below the max  - unless some external action happens
-			if pendingRequests := int(ws.peer.requestState.Requests.GetCardinality()); pendingRequests > 1 {
-				pendingRequests--
-				activeCount := len(ws.activeRequests) + 1
-
-				if activeCount < pendingRequests {
-					signals := pendingRequests - activeCount
-
-					if signals > ws.maxRequesters {
-						// max responders excluding this
-						signals = ws.maxRequesters
-					}
-
-					for s := 0; s < signals; s++ {
-						ws.requesterCond.Signal()
-					}
-				}
 			}
 
 			// note doRequest unlocks ws.requesterCond.L which free the
@@ -190,9 +166,9 @@ func (ws *webseedPeer) requester(i int) {
 			desiredRequests := len(ws.peer.getDesiredRequestState().Requests.requestIndexes)
 			pendingRequests := int(ws.peer.requestState.Requests.GetCardinality())
 
-			ws.peer.logger.Levelf(log.Debug, "%d: requests %d (a=%d,d=%d) active(c=%d,m=%d) complete(%d/%d) restart(%v)",
-				i, ws.processedRequests, pendingRequests, desiredRequests,
-				len(ws.activeRequests), ws.maxActiveRequests, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(), restart)
+			ws.peer.logger.Levelf(log.Debug, "%d: requests %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) complete(%d/%d) restart(%v)",
+				i, ws.processedRequests, pendingRequests, desiredRequests, ws.nominalMaxRequests(),
+				len(ws.activeRequests), ws.maxActiveRequests, ws.waiting, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(), restart)
 
 			if pendingRequests > ws.maxRequesters {
 				if pendingRequests > ws.peer.PeerMaxRequests {
@@ -209,6 +185,7 @@ func (ws *webseedPeer) requester(i int) {
 				}
 
 				ws.maxRequesters = pendingRequests
+				ws.requesterCond.Broadcast()
 			}
 
 		}
@@ -220,11 +197,25 @@ func (ws *webseedPeer) requester(i int) {
 				}
 			}
 
+			ws.waiting++
 			ws.requesterCond.Wait()
+			ws.waiting--
 
 			if ws.updateRequestor != nil {
 				ws.updateRequestor.Stop()
 				ws.updateRequestor = nil
+			}
+		} else {
+			// if there are more than one requests in the queue and we don't
+			// have all of the responders activated yet we need to
+			// kick the other requestors into life - otherwise the max parallel
+			// requests will stay below the max  - unless some external action happens
+			if pendingRequests := int(ws.peer.requestState.Requests.GetCardinality()); pendingRequests > 1 {
+				activeCount := len(ws.activeRequests)
+
+				if activeCount < pendingRequests {
+					ws.requesterCond.Broadcast()
+				}
 			}
 		}
 	}
@@ -233,51 +224,58 @@ func (ws *webseedPeer) requester(i int) {
 var webpeerUnchokeTimerDuration = 15 * time.Second
 
 func requestUpdate(ws *webseedPeer) {
-	if ws != nil && !ws.peer.closed.IsSet() {
-		numPieces := uint64(ws.peer.t.NumPieces())
-		numCompleted := ws.peer.t._completedPieces.GetCardinality()
+	if ws != nil {
+		ws.requesterCond.L.Lock()
+		defer ws.requesterCond.L.Unlock()
 
-		if numCompleted < numPieces {
-			if ws.peer.isLowOnRequests() && time.Since(ws.peer.lastRequestUpdate) > webpeerUnchokeTimerDuration {
-				// if the number of incomplete pieces is less than five adjust this peers
-				// lastUsefulChunkReceived to ensure that it can steal from non web peers
-				// this is to help ensure completion - we may want to add a head call
-				// before doing this to ensure the peer has the file
-				if numPieces-numCompleted < 16 {
-					lastExistingUseful := ws.peer.lastUsefulChunkReceived
+		ws.updateRequestor = nil
 
-					for piece := pieceIndex(0); piece < pieceIndex(numPieces); piece++ {
-						if ws.peer.t._completedPieces.Contains(uint32(piece)) {
-							continue
-						}
+		if !ws.peer.closed.IsSet() {
+			numPieces := uint64(ws.peer.t.NumPieces())
+			numCompleted := ws.peer.t._completedPieces.GetCardinality()
 
-						if existing := ws.peer.t.requestingPeer(RequestIndex(piece)); existing != nil {
-							if existing.connectionFlags() == "WS" {
+			if numCompleted < numPieces {
+				if ws.peer.isLowOnRequests() && time.Since(ws.peer.lastRequestUpdate) > webpeerUnchokeTimerDuration {
+					// if the number of incomplete pieces is less than five adjust this peers
+					// lastUsefulChunkReceived to ensure that it can steal from non web peers
+					// this is to help ensure completion - we may want to add a head call
+					// before doing this to ensure the peer has the file
+					if numPieces-numCompleted < 16 {
+						lastExistingUseful := ws.peer.lastUsefulChunkReceived
+
+						for piece := pieceIndex(0); piece < pieceIndex(numPieces); piece++ {
+							if ws.peer.t._completedPieces.Contains(uint32(piece)) {
 								continue
 							}
 
-							// if the existing client looks like its not producing timely chunks then
-							// adjust our lastUsefulChunkReceived value to make sure we can steal the
-							// piece from it
-							if time.Since(existing.lastUsefulChunkReceived) > webpeerUnchokeTimerDuration {
-								if !lastExistingUseful.After(existing.lastUsefulChunkReceived) {
-									lastExistingUseful = existing.lastUsefulChunkReceived.Add(time.Minute)
+							if existing := ws.peer.t.requestingPeer(RequestIndex(piece)); existing != nil {
+								if existing.connectionFlags() == "WS" {
+									continue
+								}
+
+								// if the existing client looks like its not producing timely chunks then
+								// adjust our lastUsefulChunkReceived value to make sure we can steal the
+								// piece from it
+								if time.Since(existing.lastUsefulChunkReceived) > webpeerUnchokeTimerDuration {
+									if !lastExistingUseful.After(existing.lastUsefulChunkReceived) {
+										lastExistingUseful = existing.lastUsefulChunkReceived.Add(time.Minute)
+									}
 								}
 							}
 						}
+
+						ws.peer.lastUsefulChunkReceived = lastExistingUseful
 					}
 
-					ws.peer.lastUsefulChunkReceived = lastExistingUseful
+					ws.peer.logger.Levelf(log.Debug, "unchoke %d/%d maxRequesters=%d, waiting=%d, (%s)", ws.processedRequests, ws.peer.t.NumPieces(), ws.maxRequesters, ws.waiting, ws.peer.lastUsefulChunkReceived)
+
+					ws.peer.updateRequests("unchoked")
+					return
 				}
-
-				ws.peer.logger.Levelf(log.Debug, "unchoke %d/%d (%s)", ws.processedRequests, ws.peer.t.NumPieces(), ws.peer.lastUsefulChunkReceived)
-
-				ws.peer.updateRequests("unchoked")
-				return
 			}
-		}
 
-		ws.requesterCond.Signal()
+			ws.requesterCond.Signal()
+		}
 	}
 }
 

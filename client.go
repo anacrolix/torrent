@@ -98,6 +98,8 @@ type Client struct {
 	clientHolepunchAddrSets
 
 	defaultLocalLtepProtocolMap LocalLtepProtocolMap
+
+	upnpMappings []*upnpMapping
 }
 
 type ipStr string
@@ -462,6 +464,7 @@ func (cl *Client) Close() (errs []error) {
 			errs = append(errs, err)
 		}
 	}
+	cl.clearPortMappings()
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}

@@ -1708,6 +1708,10 @@ func (t *Torrent) addTrackers(announceList [][]string) {
 	t.updateWantPeersEvent()
 }
 
+func (t *Torrent) clearTrackers() {
+	clear(t.metainfo.AnnounceList)
+}
+
 // Don't call this before the info is available.
 func (t *Torrent) bytesCompleted() int64 {
 	if !t.haveInfo() {

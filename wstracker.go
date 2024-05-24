@@ -31,6 +31,9 @@ func (me websocketTrackerStatus) URL() *url.URL {
 	return &me.url
 }
 
+func (me websocketTrackerStatus) Stop() {
+}
+
 type refCountedWebtorrentTrackerClient struct {
 	webtorrent.TrackerClient
 	refCount int

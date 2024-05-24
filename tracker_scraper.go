@@ -23,11 +23,15 @@ type trackerScraper struct {
 	t               *Torrent
 	lastAnnounce    trackerAnnounceResult
 	lookupTrackerIp func(*url.URL) ([]net.IP, error)
+
+	stopCh chan struct{}
 }
 
 type torrentTrackerAnnouncer interface {
 	statusLine() string
 	URL() *url.URL
+
+	Stop()
 }
 
 func (me trackerScraper) URL() *url.URL {
@@ -202,6 +206,10 @@ func (me *trackerScraper) canIgnoreInterval(notify *<-chan struct{}) bool {
 	}
 }
 
+func (me *trackerScraper) Stop() {
+	close(me.stopCh)
+}
+
 func (me *trackerScraper) Run() {
 	defer me.announceStopped()
 
@@ -252,6 +260,8 @@ func (me *trackerScraper) Run() {
 		}
 
 		select {
+		case <-me.stopCh:
+			return
 		case <-me.t.closed.Done():
 			return
 		case <-reconsider:

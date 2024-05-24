@@ -1708,8 +1708,12 @@ func (t *Torrent) addTrackers(announceList [][]string) {
 	t.updateWantPeersEvent()
 }
 
-func (t *Torrent) clearTrackers() {
+func (t *Torrent) modifyTrackers(announceList [][]string) {
+	for _, v := range t.trackerAnnouncers {
+		v.Stop()
+	}
 	clear(t.metainfo.AnnounceList)
+	t.addTrackers(announceList)
 }
 
 // Don't call this before the info is available.
@@ -1963,6 +1967,7 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, sh
 			u:               *u,
 			t:               t,
 			lookupTrackerIp: t.cl.config.LookupTrackerIp,
+			stopCh:          make(chan struct{}),
 		}
 		go newAnnouncer.Run()
 		return newAnnouncer

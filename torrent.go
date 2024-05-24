@@ -1709,9 +1709,15 @@ func (t *Torrent) addTrackers(announceList [][]string) {
 }
 
 func (t *Torrent) modifyTrackers(announceList [][]string) {
+	var workers errgroup.Group
 	for _, v := range t.trackerAnnouncers {
-		v.Stop()
+		workers.Go(func() error {
+			v.Stop()
+			return nil
+		})
 	}
+	workers.Wait()
+
 	clear(t.metainfo.AnnounceList)
 	t.addTrackers(announceList)
 }

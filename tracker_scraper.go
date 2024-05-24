@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
@@ -24,7 +25,8 @@ type trackerScraper struct {
 	lastAnnounce    trackerAnnounceResult
 	lookupTrackerIp func(*url.URL) ([]net.IP, error)
 
-	stopCh chan struct{}
+	stopOnce sync.Once
+	stopCh   chan struct{}
 }
 
 type torrentTrackerAnnouncer interface {
@@ -207,7 +209,9 @@ func (me *trackerScraper) canIgnoreInterval(notify *<-chan struct{}) bool {
 }
 
 func (me *trackerScraper) Stop() {
-	close(me.stopCh)
+	me.stopOnce.Do(func() {
+		close(me.stopCh)
+	})
 }
 
 func (me *trackerScraper) Run() {

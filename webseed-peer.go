@@ -239,7 +239,7 @@ func requestUpdate(ws *webseedPeer) {
 
 		ws.updateRequestor = nil
 
-		ws.peer.logger.Levelf(log.Debug, "requestUpdate %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) complete(%d/%d) restart(%v)",
+		ws.peer.logger.Levelf(log.Debug, "requestUpdate %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) complete(%d/%d)",
 			ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestState().Requests.requestIndexes),
 			ws.nominalMaxRequests(), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces())
 

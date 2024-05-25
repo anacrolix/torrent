@@ -184,8 +184,10 @@ func (ws *webseedPeer) requester(i int) {
 					pendingRequests = 16
 				}
 
-				ws.maxRequesters = pendingRequests
-				ws.requesterCond.Broadcast()
+				if ws.maxRequesters != pendingRequests {
+					ws.maxRequesters = pendingRequests
+					ws.requesterCond.Broadcast()
+				}
 			}
 
 		}
@@ -193,7 +195,14 @@ func (ws *webseedPeer) requester(i int) {
 		if !restart {
 			if !(ws.peer.t.dataDownloadDisallowed.Bool() || ws.peer.t.Complete.Bool()) {
 				if ws.updateRequestor == nil {
-					ws.updateRequestor = time.AfterFunc(webpeerUnchokeTimerDuration, func() { requestUpdate(ws) })
+					timerDuration := webpeerUnchokeTimerDuration
+
+					// Don't wait for small files
+					if ws.peer.t.NumPieces() == 1 && ws.peer.requestState.Requests.GetCardinality() == 0 {
+						timerDuration = 0
+					}
+
+					ws.updateRequestor = time.AfterFunc(timerDuration, func() { requestUpdate(ws) })
 				}
 			}
 
@@ -230,12 +239,17 @@ func requestUpdate(ws *webseedPeer) {
 
 		ws.updateRequestor = nil
 
+		ws.peer.logger.Levelf(log.Debug, "requestUpdate %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) complete(%d/%d)",
+			ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestState().Requests.requestIndexes),
+			ws.nominalMaxRequests(), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces())
+
 		if !ws.peer.closed.IsSet() {
 			numPieces := uint64(ws.peer.t.NumPieces())
 			numCompleted := ws.peer.t._completedPieces.GetCardinality()
 
 			if numCompleted < numPieces {
-				if ws.peer.isLowOnRequests() && time.Since(ws.peer.lastRequestUpdate) > webpeerUnchokeTimerDuration {
+				// Don't wait for small files
+				if ws.peer.isLowOnRequests() && (numPieces == 1 || time.Since(ws.peer.lastRequestUpdate) > webpeerUnchokeTimerDuration) {
 					// if the number of incomplete pieces is less than five adjust this peers
 					// lastUsefulChunkReceived to ensure that it can steal from non web peers
 					// this is to help ensure completion - we may want to add a head call

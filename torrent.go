@@ -1708,6 +1708,20 @@ func (t *Torrent) addTrackers(announceList [][]string) {
 	t.updateWantPeersEvent()
 }
 
+func (t *Torrent) modifyTrackers(announceList [][]string) {
+	var workers errgroup.Group
+	for _, v := range t.trackerAnnouncers {
+		workers.Go(func() error {
+			v.Stop()
+			return nil
+		})
+	}
+	workers.Wait()
+
+	clear(t.metainfo.AnnounceList)
+	t.addTrackers(announceList)
+}
+
 // Don't call this before the info is available.
 func (t *Torrent) bytesCompleted() int64 {
 	if !t.haveInfo() {
@@ -1959,6 +1973,7 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, sh
 			u:               *u,
 			t:               t,
 			lookupTrackerIp: t.cl.config.LookupTrackerIp,
+			stopCh:          make(chan struct{}),
 		}
 		go newAnnouncer.Run()
 		return newAnnouncer

@@ -266,6 +266,12 @@ func (t *Torrent) AddTrackers(announceList [][]string) {
 	t.addTrackers(announceList)
 }
 
+func (t *Torrent) ModifyTrackers(announceList [][]string) {
+	t.cl.lock()
+	defer t.cl.unlock()
+	t.modifyTrackers(announceList)
+}
+
 func (t *Torrent) Piece(i pieceIndex) *Piece {
 	return t.piece(i)
 }

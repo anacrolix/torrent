@@ -2,6 +2,7 @@ package torrent
 
 import (
 	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/log"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 )
 
@@ -61,6 +62,8 @@ func (t *Torrent) initPieceRequestOrder() {
 }
 
 func (t *Torrent) addRequestOrderPiece(i int) {
+	t.logger.Levelf(log.Debug, "%s: add ropiece: storage=%v cap=%v ignore", t.Name(), t.storage, t.hasStorageCap(), !t.ignorePieceForRequests(i))
+
 	if t.storage == nil {
 		return
 	}

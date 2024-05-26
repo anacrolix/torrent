@@ -493,6 +493,7 @@ func (t *Torrent) onSetInfo() {
 			t.queuePieceCheck(i)
 		}
 	}
+	t.logger.Levelf(log.Debug, "set info: rolen=%d", t.getPieceRequestOrder().Len())
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()

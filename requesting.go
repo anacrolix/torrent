@@ -285,7 +285,7 @@ func (p *Peer) getDesiredRequestStateDebug() (desired desiredRequestState) {
 		},
 	)
 
-	p.logger.Levelf(log.Debug, "desired", "indexes", len(t.requestIndexes), "states", len(t.requestPieceStates), "piece-calls", callCount)
+	p.logger.Levelf(log.Debug, "desired %indexes=%d states=%d calls=%d", len(t.requestIndexes), len(t.requestPieceStates), callCount)
 
 	t.assertPendingRequests()
 	desired.Requests = requestHeap

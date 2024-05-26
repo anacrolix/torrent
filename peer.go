@@ -435,9 +435,9 @@ func (cn *Peer) mustRequest(r RequestIndex) bool {
 }
 
 func (cn *Peer) request(r RequestIndex) (more bool, err error) {
-	if err := cn.shouldRequest(r); err != nil {
-		panic(err)
-	}
+	//if err := cn.shouldRequest(r); err != nil {
+	//	panic(err)
+	//}
 	if cn.requestState.Requests.Contains(r) {
 		return true, nil
 	}

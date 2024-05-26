@@ -23,16 +23,17 @@ const (
 
 type webseedPeer struct {
 	// First field for stats alignment.
-	peer              Peer
-	client            webseed.Client
-	activeRequests    map[Request]webseed.Request
-	maxActiveRequests int // the max number of active requests for this peer
-	processedRequests int // the total number of requests this peer has processed
-	maxRequesters     int // the number of requester to run for this peer
-	waiting           int // the number of requesters currently waiting for a signal
-	requesterCond     sync.Cond
-	updateRequestor   *time.Timer
-	lastUnhandledErr  time.Time
+	peer                 Peer
+	client               webseed.Client
+	activeRequests       map[Request]webseed.Request
+	maxActiveRequests    int // the max number of active requests for this peer
+	processedRequests    int // the total number of requests this peer has processed
+	maxRequesters        int // the number of requester to run for this peer
+	waiting              int // the number of requesters currently waiting for a signal
+	requesterCond        sync.Cond
+	updateRequestor      *time.Timer
+	lastUnhandledErr     time.Time
+	unchokeTimerDuration time.Duration
 }
 
 var _ peerImpl = (*webseedPeer)(nil)
@@ -195,14 +196,14 @@ func (ws *webseedPeer) requester(i int) {
 		if !restart {
 			if !(ws.peer.t.dataDownloadDisallowed.Bool() || ws.peer.t.Complete.Bool()) {
 				if ws.updateRequestor == nil {
-					timerDuration := webpeerUnchokeTimerDuration
-
-					// Don't wait for small files
-					if ws.peer.t.NumPieces() == 1 && ws.peer.requestState.Requests.GetCardinality() == 0 {
-						timerDuration = 0
+					if ws.unchokeTimerDuration == 0 {
+						// Don't wait for small files
+						if ws.peer.t.NumPieces() > 1 || ws.peer.requestState.Requests.GetCardinality() > 0 {
+							ws.unchokeTimerDuration = webpeerUnchokeTimerDuration
+						}
 					}
 
-					ws.updateRequestor = time.AfterFunc(timerDuration, func() { requestUpdate(ws) })
+					ws.updateRequestor = time.AfterFunc(ws.unchokeTimerDuration, func() { requestUpdate(ws) })
 				}
 			}
 
@@ -239,9 +240,10 @@ func requestUpdate(ws *webseedPeer) {
 
 		ws.updateRequestor = nil
 
-		ws.peer.logger.Levelf(log.Debug, "requestUpdate %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) complete(%d/%d)",
+		ws.peer.logger.Levelf(log.Debug, "requestUpdate %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) complete(%d/%d) %s",
 			ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestState().Requests.requestIndexes),
-			ws.nominalMaxRequests(), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces())
+			ws.nominalMaxRequests(), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(),
+			time.Since(ws.peer.lastRequestUpdate))
 
 		if !ws.peer.closed.IsSet() {
 			numPieces := uint64(ws.peer.t.NumPieces())
@@ -267,6 +269,8 @@ func requestUpdate(ws *webseedPeer) {
 									continue
 								}
 
+								ws.peer.logger.Levelf(log.Debug, "update request chunk received: %s, %s", time.Since(existing.lastUsefulChunkReceived), webpeerUnchokeTimerDuration)
+
 								// if the existing client looks like its not producing timely chunks then
 								// adjust our lastUsefulChunkReceived value to make sure we can steal the
 								// piece from it
@@ -281,9 +285,34 @@ func requestUpdate(ws *webseedPeer) {
 						ws.peer.lastUsefulChunkReceived = lastExistingUseful
 					}
 
-					ws.peer.logger.Levelf(log.Debug, "unchoke %d/%d maxRequesters=%d, waiting=%d, (%s)", ws.processedRequests, ws.peer.t.NumPieces(), ws.maxRequesters, ws.waiting, ws.peer.lastUsefulChunkReceived)
+					peerInfo := []string{}
+
+					ws.peer.t.iterPeers(func(p *Peer) {
+						rate := p.downloadRate()
+						pieces := int(p.requestState.Requests.GetCardinality())
+						this := ""
+						if p == &ws.peer {
+							this = "*"
+						}
+						flags := p.connectionFlags()
+						peerInfo = append(peerInfo, fmt.Sprintf("%s%s: %d: %f", this, flags, pieces, rate))
+					})
+
+					ws.peer.logger.Levelf(log.Debug, "unchoke %d/%d/%d maxRequesters=%d, waiting=%d, (%s): peers(%d): %v", ws.processedRequests, numCompleted, numPieces, ws.maxRequesters, ws.waiting, ws.peer.lastUsefulChunkReceived, len(peerInfo), peerInfo)
 
 					ws.peer.updateRequests("unchoked")
+
+					ws.peer.logger.Levelf(log.Debug, "unchoked %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) complete(%d/%d) %s",
+						ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestState().Requests.requestIndexes),
+						ws.nominalMaxRequests(), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(),
+						time.Since(ws.peer.lastRequestUpdate))
+
+					// if the initial unchoke didn't yield a request (for small files) - don't immediately
+					// retry it means its being handled by a prioritized peer
+					if ws.unchokeTimerDuration == 0 && int(ws.peer.requestState.Requests.GetCardinality()) == 0 {
+						ws.unchokeTimerDuration = webpeerUnchokeTimerDuration
+					}
+
 					return
 				}
 			}

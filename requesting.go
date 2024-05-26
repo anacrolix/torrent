@@ -226,6 +226,72 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	return
 }
 
+func (p *Peer) getDesiredRequestStateDebug() (desired desiredRequestState) {
+	t := p.t
+	if !t.haveInfo() {
+		return
+	}
+	if t.closed.IsSet() {
+		return
+	}
+	if t.dataDownloadDisallowed.Bool() {
+		return
+	}
+	input := t.getRequestStrategyInput()
+	requestHeap := desiredPeerRequests{
+		peer:           p,
+		pieceStates:    t.requestPieceStates,
+		requestIndexes: t.requestIndexes,
+	}
+
+	callCount := 0
+	// Caller-provided allocation for roaring bitmap iteration.
+	var it typedRoaring.Iterator[RequestIndex]
+	requestStrategy.GetRequestablePieces(
+		input,
+		t.getPieceRequestOrder(),
+		func(ih InfoHash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) {
+			callCount++
+			if ih != t.infoHash {
+				return
+			}
+			if !p.peerHasPiece(pieceIndex) {
+				return
+			}
+			requestHeap.pieceStates[pieceIndex] = pieceExtra
+			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
+			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
+				if !allowedFast {
+					// We must signal interest to request this. TODO: We could set interested if the
+					// peers pieces (minus the allowed fast set) overlap with our missing pieces if
+					// there are any readers, or any pending pieces.
+					desired.Interested = true
+					// We can make or will allow sustaining a request here if we're not choked, or
+					// have made the request previously (presumably while unchoked), and haven't had
+					// the peer respond yet (and the request was retained because we are using the
+					// fast extension).
+					if p.peerChoking && !p.requestState.Requests.Contains(r) {
+						// We can't request this right now.
+						return
+					}
+				}
+				cancelled := &p.requestState.Cancelled
+				if !cancelled.IsEmpty() && cancelled.Contains(r) {
+					// Can't re-request while awaiting acknowledgement.
+					return
+				}
+				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
+			})
+		},
+	)
+
+	p.logger.Levelf(log.Debug, "desired", "indexes", len(t.requestIndexes), "states", len(t.requestPieceStates), "piece-calls", callCount)
+
+	t.assertPendingRequests()
+	desired.Requests = requestHeap
+	return
+}
+
 func (p *Peer) maybeUpdateActualRequestState() {
 	if p.closed.IsSet() {
 		return

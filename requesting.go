@@ -245,6 +245,8 @@ func (p *Peer) getDesiredRequestStateDebug() (desired desiredRequestState) {
 	}
 
 	callCount := 0
+	iterCount := 0
+
 	// Caller-provided allocation for roaring bitmap iteration.
 	var it typedRoaring.Iterator[RequestIndex]
 	requestStrategy.GetRequestablePieces(
@@ -261,6 +263,7 @@ func (p *Peer) getDesiredRequestStateDebug() (desired desiredRequestState) {
 			requestHeap.pieceStates[pieceIndex] = pieceExtra
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
+				iterCount++
 				if !allowedFast {
 					// We must signal interest to request this. TODO: We could set interested if the
 					// peers pieces (minus the allowed fast set) overlap with our missing pieces if
@@ -285,10 +288,11 @@ func (p *Peer) getDesiredRequestStateDebug() (desired desiredRequestState) {
 		},
 	)
 
-	p.logger.Levelf(log.Debug, "desired %indexes=%d states=%d calls=%d", len(t.requestIndexes), len(t.requestPieceStates), callCount)
-
 	t.assertPendingRequests()
 	desired.Requests = requestHeap
+
+	p.logger.Levelf(log.Debug, "desired req=%d indexes=%d states=%d calls=%d iter=%d", len(requestHeap.requestIndexes), len(t.requestIndexes), len(t.requestPieceStates), callCount, iterCount)
+
 	return
 }
 

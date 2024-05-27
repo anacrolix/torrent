@@ -491,6 +491,9 @@ func (t *Torrent) onSetInfo() {
 		if !t.initialPieceCheckDisabled && !p.storageCompletionOk {
 			// t.logger.Printf("piece %s completion unknown, queueing check", p)
 			t.queuePieceCheck(i)
+		} else {
+			// if piece check is not called the piece priority still needs to be set
+			t.updatePiecePriority(i, "Torrent.OnSetInfo")
 		}
 	}
 	t.logger.Levelf(log.Debug, "%s: set info: peices=%d rolen=%d", t.Name(), len(t.pieces), t.getPieceRequestOrder().Len())
@@ -1256,19 +1259,23 @@ func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string) {
 }
 
 func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex) (pendingChanged bool) {
-	if !t.closed.IsSet() {
-		// It would be possible to filter on pure-priority changes here to avoid churning the piece
-		// request order.
-		t.updatePieceRequestOrderPiece(piece)
-	}
 	p := &t.pieces[piece]
 	newPrio := p.uncachedPriority()
 	// t.logger.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
 	if newPrio == PiecePriorityNone {
-		return t._pendingPieces.CheckedRemove(uint32(piece))
+		pendingChanged = t._pendingPieces.CheckedRemove(uint32(piece))
 	} else {
-		return t._pendingPieces.CheckedAdd(uint32(piece))
+		pendingChanged = t._pendingPieces.CheckedAdd(uint32(piece))
 	}
+	// this needs to happen after t._pendingPieces is set otherwise the
+	// updated pending state is ignored
+	if pendingChanged && !t.closed.IsSet() {
+		// It would be possible to filter on pure-priority changes here to avoid churning the piece
+		// request order.
+		t.updatePieceRequestOrderPiece(piece)
+	}
+
+	return pendingChanged
 }
 
 func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string) {

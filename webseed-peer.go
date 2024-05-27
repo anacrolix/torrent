@@ -167,9 +167,11 @@ func (ws *webseedPeer) requester(i int) {
 			desiredRequests := len(ws.peer.getDesiredRequestState().Requests.requestIndexes)
 			pendingRequests := int(ws.peer.requestState.Requests.GetCardinality())
 
-			ws.peer.logger.Levelf(log.Debug, "%d: requests %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) complete(%d/%d) restart(%v)",
+			ws.peer.logger.Levelf(log.Debug, "%d: requests %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d) complete(%d/%d) restart(%v)",
 				i, ws.processedRequests, pendingRequests, desiredRequests, ws.nominalMaxRequests(),
-				len(ws.activeRequests), ws.maxActiveRequests, ws.waiting, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(), restart)
+				len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
+				ws.peer.t.piecesQueuedForHash.Len(), ws.peer.t.activePieceHashes,
+				ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(), restart)
 
 			if pendingRequests > ws.maxRequesters {
 				if pendingRequests > ws.peer.PeerMaxRequests {
@@ -300,7 +302,7 @@ func requestUpdate(ws *webseedPeer) {
 						peerInfo = append(peerInfo, fmt.Sprintf("%s%s:p=%d,d=%d: %f", this, flags, pieces, desired, rate))
 					})
 
-					ws.peer.logger.Levelf(log.Debug, "unchoke %d/%d/%d maxRequesters=%d, waiting=%d, (%s): peers(%d): %v", ws.processedRequests, numCompleted, numPieces, ws.maxRequesters, ws.waiting, ws.peer.lastUsefulChunkReceived, len(peerInfo), peerInfo)
+					ws.peer.logger.Levelf(log.Debug, "unchoke processed=%d, complete(%d/%d) maxRequesters=%d, waiting=%d, (%s): peers(%d): %v", ws.processedRequests, numCompleted, numPieces, ws.maxRequesters, ws.waiting, ws.peer.lastUsefulChunkReceived, len(peerInfo), peerInfo)
 
 					ws.peer.updateRequests("unchoked")
 

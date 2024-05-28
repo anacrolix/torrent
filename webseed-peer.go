@@ -218,7 +218,7 @@ func (ws *webseedPeer) requester(i int) {
 				ws.updateRequestor = nil
 			}
 
-			if i < ws.maxRequesters && ws.waiting >= ws.maxRequesters {
+			if i >= ws.maxRequesters && ws.waiting >= ws.maxRequesters {
 				// we've been woken by a signal - if we are going to exit
 				// instead of processing we need to pass the signal on
 				ws.requesterCond.Signal()

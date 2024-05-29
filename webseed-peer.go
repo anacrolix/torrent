@@ -8,8 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"sync/atomic"
+
 	"github.com/RoaringBitmap/roaring"
-	"github.com/alecthomas/atomic"
 	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/torrent/metainfo"

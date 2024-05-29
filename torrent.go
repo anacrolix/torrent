@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"net/netip"
 	"net/url"
+	sl "slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -1709,12 +1710,24 @@ func (t *Torrent) addTrackers(announceList [][]string) {
 }
 
 func (t *Torrent) modifyTrackers(announceList [][]string) {
-	var workers errgroup.Group
-	for _, v := range t.trackerAnnouncers {
-		workers.Go(func() error {
-			v.Stop()
-			return nil
-		})
+	var (
+		workers errgroup.Group
+		stop    bool
+	)
+	for k, v := range t.trackerAnnouncers {
+		stop = true
+		for _, trackerURLs := range announceList {
+			if sl.Contains(trackerURLs, k.url) {
+				stop = false
+				break
+			}
+		}
+		if stop {
+			workers.Go(func() error {
+				v.Stop()
+				return nil
+			})
+		}
 	}
 	workers.Wait()
 

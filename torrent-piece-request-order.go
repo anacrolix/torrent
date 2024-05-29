@@ -18,12 +18,12 @@ func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) {
 		pro.Update(key, t.requestStrategyPieceOrderState(pieceIndex))
 		return
 	}
-	pending := !t.ignorePieceForRequests(pieceIndex)
-	if pending {
-		pro.Add(key, t.requestStrategyPieceOrderState(pieceIndex))
-	} else {
-		pro.Delete(key)
-	}
+	//pending := !t.ignorePieceForRequests(pieceIndex)
+	//if pending {
+	pro.Add(key, t.requestStrategyPieceOrderState(pieceIndex))
+	//} else {
+	//	pro.Delete(key)
+	//}
 }
 
 func (t *Torrent) clientPieceRequestOrderKey() interface{} {

@@ -177,6 +177,9 @@ type Torrent struct {
 	// results processor - this allows piece hashers to run free
 	// of the global torrent client lock
 	hashResults chan hashResult
+	// this is static per torrent it i kept locally to avoid
+	// re-
+	clientPieceRequestOrder *request_strategy.PieceRequestOrder
 }
 
 type outgoingConnAttemptKey = *PeerInfo
@@ -501,6 +504,7 @@ func (t *Torrent) onSetInfo() {
 			t.updatePiecePriority(i, "Torrent.OnSetInfo")
 		}
 	}
+	fmt.Println("SETINFO", t.Name(), t.getPieceRequestOrder().Len())
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()

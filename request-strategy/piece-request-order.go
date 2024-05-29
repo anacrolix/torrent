@@ -1,6 +1,8 @@
 package requestStrategy
 
 import (
+	"sync"
+
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -19,6 +21,7 @@ func NewPieceOrder(btree Btree, cap int) *PieceRequestOrder {
 }
 
 type PieceRequestOrder struct {
+	lock sync.RWMutex
 	tree Btree
 	keys map[PieceRequestOrderKey]PieceRequestOrderState
 }
@@ -48,6 +51,8 @@ func (me *PieceRequestOrder) Add(
 	key PieceRequestOrderKey,
 	state PieceRequestOrderState,
 ) (old g.Option[PieceRequestOrderState]) {
+	me.lock.Lock()
+	defer me.lock.Unlock()
 	if old.Value, old.Ok = me.keys[key]; old.Ok {
 		if state == old.Value {
 			return
@@ -69,6 +74,8 @@ func (me *PieceRequestOrder) Update(
 }
 
 func (me *PieceRequestOrder) existingItemForKey(key PieceRequestOrderKey) pieceRequestOrderItem {
+	me.lock.RLock()
+	defer me.lock.RUnlock()
 	return pieceRequestOrderItem{
 		key:   key,
 		state: me.keys[key],
@@ -76,6 +83,8 @@ func (me *PieceRequestOrder) existingItemForKey(key PieceRequestOrderKey) pieceR
 }
 
 func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) bool {
+	me.lock.Lock()
+	defer me.lock.Unlock()
 	state, ok := me.keys[key]
 	if !ok {
 		return false
@@ -86,5 +95,7 @@ func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) bool {
 }
 
 func (me *PieceRequestOrder) Len() int {
+	me.lock.RLock()
+	defer me.lock.RUnlock()
 	return len(me.keys)
 }

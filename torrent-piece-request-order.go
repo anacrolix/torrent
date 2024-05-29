@@ -9,8 +9,8 @@ func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) {
 	if t.storage == nil {
 		return
 	}
-	pro, ok := t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()]
-	if !ok {
+	pro := t.clientPieceRequestOrder
+	if pro == nil {
 		return
 	}
 	key := t.pieceRequestOrderKey(pieceIndex)
@@ -46,6 +46,7 @@ func (t *Torrent) deletePieceRequestOrder() {
 	if pro.Len() == 0 {
 		delete(cpro, key)
 	}
+	t.clientPieceRequestOrder = nil
 }
 
 func (t *Torrent) initPieceRequestOrder() {
@@ -58,6 +59,7 @@ func (t *Torrent) initPieceRequestOrder() {
 	if cpro[key] == nil {
 		cpro[key] = request_strategy.NewPieceOrder(request_strategy.NewAjwernerBtree(), t.numPieces())
 	}
+	t.clientPieceRequestOrder = cpro[key]
 }
 
 func (t *Torrent) addRequestOrderPiece(i int) {
@@ -72,5 +74,5 @@ func (t *Torrent) addRequestOrderPiece(i int) {
 }
 
 func (t *Torrent) getPieceRequestOrder() *request_strategy.PieceRequestOrder {
-	return t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()]
+	return t.clientPieceRequestOrder
 }

@@ -496,6 +496,9 @@ func (t *Torrent) onSetInfo() {
 		p.relativeAvailability = t.selectivePieceAvailabilityFromPeers(i)
 		t.addRequestOrderPiece(i)
 		t.updatePieceCompletion(i)
+
+		t.initialPieceCheckDisabled = true
+
 		if !t.initialPieceCheckDisabled && !p.storageCompletionOk {
 			// t.logger.Printf("piece %s completion unknown, queueing check", p)
 			t.queuePieceCheck(i)

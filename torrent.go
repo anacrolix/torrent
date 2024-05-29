@@ -121,7 +121,7 @@ type Torrent struct {
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
-	nameMu      sync.RWMutex
+	mu          sync.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if
@@ -172,6 +172,11 @@ type Torrent struct {
 	requestIndexes     []RequestIndex
 
 	disableTriggers bool
+
+	// channel for passing hash results to the torrent's hash
+	// results processor - this allows piece hashers to run free
+	// of the global torrent client lock
+	hashResults chan hashResult
 }
 
 type outgoingConnAttemptKey = *PeerInfo
@@ -353,10 +358,10 @@ func (t *Torrent) invalidateMetadata() {
 	for i := 0; i < len(t.metadataCompletedChunks); i++ {
 		t.metadataCompletedChunks[i] = false
 	}
-	t.nameMu.Lock()
+	t.mu.Lock()
 	t.gotMetainfoC = make(chan struct{})
 	t.info = nil
-	t.nameMu.Unlock()
+	t.mu.Unlock()
 }
 
 func (t *Torrent) saveMetadataPiece(index int, data []byte) {
@@ -453,9 +458,9 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 			return fmt.Errorf("error opening torrent storage: %s", err)
 		}
 	}
-	t.nameMu.Lock()
+	t.mu.Lock()
 	t.info = info
-	t.nameMu.Unlock()
+	t.mu.Unlock()
 	t._chunksPerRegularPiece = chunkIndexType((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
 	t.updateComplete()
 	t.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
@@ -496,7 +501,6 @@ func (t *Torrent) onSetInfo() {
 			t.updatePiecePriority(i, "Torrent.OnSetInfo")
 		}
 	}
-	t.logger.Levelf(log.Debug, "%s: set info: peices=%d rolen=%d", t.Name(), len(t.pieces), t.getPieceRequestOrder().Len())
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
@@ -568,8 +572,8 @@ func (t *Torrent) setMetadataSize(size int) (err error) {
 // The current working name for the torrent. Either the name in the info dict,
 // or a display name given such as by the dn value in a magnet link, or "".
 func (t *Torrent) name() string {
-	t.nameMu.RLock()
-	defer t.nameMu.RUnlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	if t.haveInfo() {
 		return t.info.BestName()
 	}
@@ -1013,15 +1017,14 @@ func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex) *blockCheckingWr
 	}
 }
 
-func (t *Torrent) hashPiece(piece pieceIndex) (
+func (t *Torrent) hashPiece(p *Piece) (
 	ret metainfo.Hash,
 	// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
-	p := t.piece(piece)
 	p.waitNoPendingWrites()
-	storagePiece := t.pieces[piece].Storage()
+	storagePiece := p.Storage()
 
 	// Does the backend want to do its own hashing?
 	if i, ok := storagePiece.PieceImpl.(storage.SelfHashing); ok {
@@ -1034,7 +1037,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 
 	hash := pieceHash.New()
 	const logPieceContents = false
-	smartBanWriter := t.smartBanBlockCheckingWriter(piece)
+	smartBanWriter := t.smartBanBlockCheckingWriter(p.index)
 	writers := []io.Writer{hash, smartBanWriter}
 	var examineBuf bytes.Buffer
 	if logPieceContents {
@@ -2269,7 +2272,16 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 }
 
 func (t *Torrent) tryCreateMorePieceHashers() {
-	for !t.closed.IsSet() && t.activePieceHashes < t.cl.config.PieceHashersPerTorrent && t.tryCreatePieceHasher() {
+	if !t.closed.IsSet() && t.hashResults == nil {
+		t.hashResults = make(chan hashResult, t.cl.config.PieceHashersPerTorrent*4)
+		go t.processHashResults()
+	}
+
+	for !t.closed.IsSet() &&
+		t.activePieceHashes < t.cl.config.PieceHashersPerTorrent &&
+		t.activePieceHashes < t.numPieces() &&
+		t.activePieceHashes < int(t.numQueuedForHash()) &&
+		t.tryCreatePieceHasher() {
 	}
 }
 
@@ -2277,22 +2289,94 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 	if t.storage == nil {
 		return false
 	}
-	pi, ok := t.getPieceToHash()
-	if !ok {
-		return false
-	}
-	p := t.piece(pi)
-	t.piecesQueuedForHash.Remove(bitmap.BitIndex(pi))
-	p.hashing = true
-	t.publishPieceStateChange(pi)
-	t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher")
-	t.storageLock.RLock()
+
 	t.activePieceHashes++
-	go t.pieceHasher(pi)
+
+	go func() {
+		defer func() {
+			t.activePieceHashes--
+		}()
+
+		for !t.closed.IsSet() {
+			pi, ok := t.getPieceToHash()
+			if !ok {
+				break
+			}
+			p := t.piece(pi)
+			t.mu.Lock()
+			t.piecesQueuedForHash.Remove(bitmap.BitIndex(pi))
+			t.mu.Unlock()
+			p.hashing = true
+			t.publishPieceStateChange(pi)
+			t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher")
+			t.storageLock.RLock()
+
+			sum, failedPeers, copyErr := t.hashPiece(p)
+			correct := sum == *p.hash
+
+			switch copyErr {
+			case nil, io.EOF:
+			default:
+				log.Fmsg("piece %v (%s) hash failure copy error: %v", p, p.hash.HexString(), copyErr).Log(t.logger)
+			}
+
+			t.storageLock.RUnlock()
+			p.hashing = false
+
+			t.hashResults <- hashResult{pi, correct, failedPeers, copyErr}
+		}
+	}()
+
 	return true
 }
 
+type hashResult struct {
+	index       int
+	correct     bool
+	failedPeers map[netip.Addr]struct{}
+	copyErr     error
+}
+
+func (t *Torrent) processHashResults() {
+
+	for !t.closed.IsSet() {
+		results := []hashResult{<-t.hashResults}
+
+		for done := false; !done; {
+			select {
+			case result := <-t.hashResults:
+				results = append(results, result)
+			default:
+				done = true
+			}
+		}
+
+		func() {
+			t.cl.lock()
+			defer t.cl.unlock()
+
+			for _, result := range results {
+				if result.correct {
+					for peer := range result.failedPeers {
+						t.cl.banPeerIP(peer.AsSlice())
+						t.logger.WithDefaultLevel(log.Debug).Printf("smart banned %v for piece %v", peer, result.index)
+					}
+					t.dropBannedPeers()
+					for ri := t.pieceRequestIndexOffset(result.index); ri < t.pieceRequestIndexOffset(result.index+1); ri++ {
+						t.smartBanCache.ForgetBlock(ri)
+					}
+				}
+				t.pieceHashed(result.index, result.correct, result.copyErr)
+				t.updatePiecePriority(result.index, "Torrent.pieceHasher")
+			}
+		}()
+	}
+}
+
 func (t *Torrent) getPieceToHash() (ret pieceIndex, ok bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
 	t.piecesQueuedForHash.IterTyped(func(i pieceIndex) bool {
 		if t.piece(i).hashing {
 			return true
@@ -2327,35 +2411,6 @@ func (t *Torrent) dropBannedPeers() {
 	})
 }
 
-func (t *Torrent) pieceHasher(index pieceIndex) {
-	p := t.piece(index)
-	sum, failedPeers, copyErr := t.hashPiece(index)
-	correct := sum == *p.hash
-	switch copyErr {
-	case nil, io.EOF:
-	default:
-		log.Fmsg("piece %v (%s) hash failure copy error: %v", p, p.hash.HexString(), copyErr).Log(t.logger)
-	}
-	t.storageLock.RUnlock()
-	t.cl.lock()
-	defer t.cl.unlock()
-	if correct {
-		for peer := range failedPeers {
-			t.cl.banPeerIP(peer.AsSlice())
-			t.logger.WithDefaultLevel(log.Debug).Printf("smart banned %v for piece %v", peer, index)
-		}
-		t.dropBannedPeers()
-		for ri := t.pieceRequestIndexOffset(index); ri < t.pieceRequestIndexOffset(index+1); ri++ {
-			t.smartBanCache.ForgetBlock(ri)
-		}
-	}
-	p.hashing = false
-	t.pieceHashed(index, correct, copyErr)
-	t.updatePiecePriority(index, "Torrent.pieceHasher")
-	t.activePieceHashes--
-	t.tryCreateMorePieceHashers()
-}
-
 // Return the connections that touched a piece, and clear the entries while doing it.
 func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
 	p := t.piece(pi)
@@ -2377,7 +2432,9 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 	if piece.queuedForHash() {
 		return
 	}
+	t.mu.Lock()
 	t.piecesQueuedForHash.Add(bitmap.BitIndex(pieceIndex))
+	t.mu.Unlock()
 	t.publishPieceStateChange(pieceIndex)
 	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck")
 	t.tryCreateMorePieceHashers()
@@ -2480,7 +2537,15 @@ func (t *Torrent) hashingPiece(i pieceIndex) bool {
 }
 
 func (t *Torrent) pieceQueuedForHash(i pieceIndex) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return t.piecesQueuedForHash.Get(bitmap.BitIndex(i))
+}
+
+func (t *Torrent) numQueuedForHash() uint64 {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.piecesQueuedForHash.Len()
 }
 
 func (t *Torrent) dialTimeout() time.Duration {

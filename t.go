@@ -23,9 +23,9 @@ func (t *Torrent) GotInfo() events.Done {
 
 // Returns the metainfo info dictionary, or nil if it's not yet available.
 func (t *Torrent) Info() (info *metainfo.Info) {
-	t.nameMu.RLock()
+	t.mu.RLock()
 	info = t.info
-	t.nameMu.RUnlock()
+	t.mu.RUnlock()
 	return
 }
 
@@ -134,11 +134,11 @@ func (t *Torrent) Seeding() (ret bool) {
 // Clobbers the torrent display name if metainfo is unavailable.
 // The display name is used as the torrent name while the metainfo is unavailable.
 func (t *Torrent) SetDisplayName(dn string) {
-	t.nameMu.Lock()
+	t.mu.Lock()
 	if !t.haveInfo() {
 		t.displayName = dn
 	}
-	t.nameMu.Unlock()
+	t.mu.Unlock()
 }
 
 // The current working name for the torrent. Either the name in the info dict,

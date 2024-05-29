@@ -24,5 +24,5 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tt.setInfo(&info))
 	require.NoError(t, tt.storage.Close())
-	tt.hashPiece(0)
+	tt.hashPiece(&tt.pieces[0])
 }

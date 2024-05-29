@@ -170,7 +170,7 @@ func (ws *webseedPeer) requester(i int) {
 			ws.peer.logger.Levelf(log.Debug, "%d: requests %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d) complete(%d/%d) restart(%v)",
 				i, ws.processedRequests, pendingRequests, desiredRequests, ws.nominalMaxRequests(),
 				len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
-				ws.peer.t.piecesQueuedForHash.Len(), ws.peer.t.activePieceHashes,
+				ws.peer.t.numQueuedForHash(), ws.peer.t.activePieceHashes,
 				ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(), restart)
 
 			if pendingRequests > ws.maxRequesters {
@@ -195,7 +195,19 @@ func (ws *webseedPeer) requester(i int) {
 
 		}
 
-		if !restart {
+		if restart {
+			// if there are more than one requests in the queue and we don't
+			// have all of the responders activated yet we need to kick the other requestors
+			// into life, otherwise the umber of parallel requests will stay below the max
+			// unless some external action happens
+			if pendingRequests := int(ws.peer.requestState.Requests.GetCardinality()); pendingRequests > 1 {
+				activeCount := len(ws.activeRequests)
+
+				if activeCount < pendingRequests {
+					ws.requesterCond.Broadcast()
+				}
+			}
+		} else {
 			if !(ws.peer.t.dataDownloadDisallowed.Bool() || ws.peer.t.Complete.Bool()) {
 				if ws.updateRequestor == nil {
 					if ws.unchokeTimerDuration == 0 {
@@ -222,18 +234,6 @@ func (ws *webseedPeer) requester(i int) {
 				// we've been woken by a signal - if we are going to exit
 				// instead of processing we need to pass the signal on
 				ws.requesterCond.Signal()
-			}
-		} else {
-			// if there are more than one requests in the queue and we don't
-			// have all of the responders activated yet we need to
-			// kick the other requestors into life - otherwise the max parallel
-			// requests will stay below the max  - unless some external action happens
-			if pendingRequests := int(ws.peer.requestState.Requests.GetCardinality()); pendingRequests > 1 {
-				activeCount := len(ws.activeRequests)
-
-				if activeCount < pendingRequests {
-					ws.requesterCond.Broadcast()
-				}
 			}
 		}
 	}

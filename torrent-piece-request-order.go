@@ -18,12 +18,12 @@ func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) {
 		pro.Update(key, t.requestStrategyPieceOrderState(pieceIndex))
 		return
 	}
-	//pending := !t.ignorePieceForRequests(pieceIndex)
-	//if pending {
-	pro.Add(key, t.requestStrategyPieceOrderState(pieceIndex))
-	//} else {
-	//	pro.Delete(key)
-	//}
+	pending := !t.ignorePieceForRequests(pieceIndex)
+	if pending {
+		pro.Add(key, t.requestStrategyPieceOrderState(pieceIndex))
+	} else {
+		pro.Delete(key)
+	}
 }
 
 func (t *Torrent) clientPieceRequestOrderKey() interface{} {
@@ -66,9 +66,9 @@ func (t *Torrent) addRequestOrderPiece(i int) {
 	}
 	pro := t.getPieceRequestOrder()
 	key := t.pieceRequestOrderKey(i)
-	//if t.hasStorageCap() || !t.ignorePieceForRequests(i) {
-	pro.Add(key, t.requestStrategyPieceOrderState(i))
-	//}
+	if t.hasStorageCap() || !t.ignorePieceForRequests(i) {
+		pro.Add(key, t.requestStrategyPieceOrderState(i))
+	}
 }
 
 func (t *Torrent) getPieceRequestOrder() *request_strategy.PieceRequestOrder {

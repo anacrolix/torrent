@@ -62,7 +62,7 @@ func GetRequestablePieces(
 			}
 			*storageLeft -= pieceLength
 		}
-		if /*!piece.Request() ||*/ piece.NumPendingChunks() == 0 {
+		if !piece.Request() || piece.NumPendingChunks() == 0 {
 			// TODO: Clarify exactly what is verified. Stuff that's being hashed should be
 			// considered unverified and hold up further requests.
 			return true

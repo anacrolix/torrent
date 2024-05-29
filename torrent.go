@@ -504,7 +504,6 @@ func (t *Torrent) onSetInfo() {
 			t.updatePiecePriority(i, "Torrent.OnSetInfo")
 		}
 	}
-	fmt.Println("SETINFO", t.Name(), t.getPieceRequestOrder().Len())
 	t.cl.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent()
@@ -2136,7 +2135,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 			pieceHashedCorrect.Add(1)
 		} else {
 			log.Fmsg(
-				"piece %d failed hash: %d connections contributed", piece, len(p.dirtiers),
+				"torrent: %t, piece %d failed hash: %d connections contributed", t.Name(), piece, len(p.dirtiers),
 			).AddValues(t, p).LogLevel(
 
 				log.Debug, t.logger)

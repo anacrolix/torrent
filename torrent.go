@@ -1520,7 +1520,7 @@ func (t *Torrent) needData() bool {
 		return true
 	}
 	t.mu.RLock()
-	defer t.mu.RUnock()
+	defer t.mu.RUnlock()
 	return !t._pendingPieces.IsEmpty()
 }
 

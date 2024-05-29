@@ -466,7 +466,11 @@ func (cn *PeerConn) onPeerHasAllPieces() {
 }
 
 func (cn *PeerConn) peerHasAllPiecesTriggers() {
-	if !cn.t._pendingPieces.IsEmpty() {
+	cn.t.mu.RLock()
+	isEmpty := cn.t._pendingPieces.IsEmpty()
+	cn.t.mu.RUnlock()
+
+	if !isEmpty {
 		cn.updateRequests("Peer.onPeerHasAllPieces")
 	}
 	cn.peerPiecesChanged()
@@ -786,7 +790,12 @@ func (c *PeerConn) mainReadLoop() (err error) {
 
 				torrent.Add("requestsPreservedThroughChoking", int64(preservedCount))
 			}
-			if !c.t._pendingPieces.IsEmpty() {
+
+			c.t.mu.RLock()
+			isEmpty := c.t._pendingPieces.IsEmpty()
+			c.t.mu.RUnlock()
+
+			if !isEmpty {
 				c.updateRequests("unchoked")
 			}
 			c.updateExpectingChunks()

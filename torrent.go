@@ -1114,6 +1114,8 @@ func chunkIndexFromChunkSpec(cs ChunkSpec, chunkSize pp.Integer) chunkIndexType 
 }
 
 func (t *Torrent) wantPieceIndex(index pieceIndex) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return !t._pendingPieces.IsEmpty() && t._pendingPieces.Contains(uint32(index))
 }
 
@@ -1246,7 +1248,11 @@ func (t *Torrent) maybeNewConns() {
 }
 
 func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string) {
-	if t._pendingPieces.Contains(uint32(piece)) {
+	t.mu.RLock()
+	containsPiece := t._pendingPieces.Contains(uint32(piece))
+	t.mu.RUnlock()
+
+	if containsPiece {
 		t.iterPeers(func(c *Peer) {
 			// if c.requestState.Interested {
 			// 	return
@@ -1271,11 +1277,15 @@ func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex) (pendingChange
 	p := &t.pieces[piece]
 	newPrio := p.uncachedPriority()
 	// t.logger.Printf("torrent %p: piece %d: uncached priority: %v", t, piece, newPrio)
-	if newPrio == PiecePriorityNone {
-		pendingChanged = t._pendingPieces.CheckedRemove(uint32(piece))
-	} else {
-		pendingChanged = t._pendingPieces.CheckedAdd(uint32(piece))
-	}
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if newPrio == PiecePriorityNone {
+			pendingChanged = t._pendingPieces.CheckedRemove(uint32(piece))
+		} else {
+			pendingChanged = t._pendingPieces.CheckedAdd(uint32(piece))
+		}
+	}()
 	// this needs to happen after t._pendingPieces is set otherwise the
 	// updated pending state is ignored
 	if pendingChanged && !t.closed.IsSet() {
@@ -1509,6 +1519,8 @@ func (t *Torrent) needData() bool {
 	if !t.haveInfo() {
 		return true
 	}
+	t.mu.RLock()
+	defer t.mu.RUnock()
 	return !t._pendingPieces.IsEmpty()
 }
 

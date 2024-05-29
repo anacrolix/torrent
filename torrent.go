@@ -2295,11 +2295,15 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 		return false
 	}
 
+	t.mu.Lock()
 	t.activePieceHashes++
+	t.mu.Unlock()
 
 	go func() {
 		defer func() {
+			t.mu.Lock()
 			t.activePieceHashes--
+			t.mu.Unlock()
 		}()
 
 		for !t.closed.IsSet() {

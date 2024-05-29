@@ -2134,8 +2134,12 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		if passed {
 			pieceHashedCorrect.Add(1)
 		} else {
+			errs := "<nil>"
+			if hashIoErr != nil {
+				errs = hashIoErr.Error()
+			}
 			log.Fmsg(
-				"torrent: %s, piece %d failed hash: %d connections contributed, err: %s", t.Name(), piece, len(p.dirtiers), hashIoErr,
+				"torrent: %s, piece %d failed hash: %d connections contributed, err: %s", t.Name(), piece, len(p.dirtiers), errs,
 			).AddValues(t, p).LogLevel(log.Debug, t.logger)
 
 			pieceHashedNotCorrect.Add(1)

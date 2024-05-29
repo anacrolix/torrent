@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
+	"github.com/alecthomas/atomic"
 	"github.com/anacrolix/log"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -30,6 +31,7 @@ type webseedPeer struct {
 	processedRequests    int // the total number of requests this peer has processed
 	maxRequesters        int // the number of requester to run for this peer
 	waiting              int // the number of requesters currently waiting for a signal
+	receiving            atomic.Int64
 	requesterCond        sync.Cond
 	updateRequestor      *time.Timer
 	lastUnhandledErr     time.Time
@@ -166,10 +168,10 @@ func (ws *webseedPeer) requester(i int) {
 		if !(ws.peer.t.dataDownloadDisallowed.Bool() || ws.peer.t.info == nil) {
 			desiredRequests := len(ws.peer.getDesiredRequestState().Requests.requestIndexes)
 			pendingRequests := int(ws.peer.requestState.Requests.GetCardinality())
-
-			ws.peer.logger.Levelf(log.Debug, "%d: requests %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d) complete(%d/%d) restart(%v)",
+			receiving := ws.receiving.Load()
+			ws.peer.logger.Levelf(log.Debug, "%d: requests %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,m=%d,w=%d) hashing(q=%d,a=%d) complete(%d/%d) restart(%v)",
 				i, ws.processedRequests, pendingRequests, desiredRequests, ws.nominalMaxRequests(),
-				len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
+				len(ws.activeRequests)-int(receiving), receiving, ws.maxActiveRequests, ws.waiting,
 				ws.peer.t.numQueuedForHash(), ws.peer.t.activePieceHashes,
 				ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(), restart)
 
@@ -248,9 +250,10 @@ func requestUpdate(ws *webseedPeer) {
 
 		ws.updateRequestor = nil
 
-		ws.peer.logger.Levelf(log.Debug, "requestUpdate %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) complete(%d/%d) %s",
+		ws.peer.logger.Levelf(log.Debug, "requestUpdate %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d) complete(%d/%d) %s",
 			ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestState().Requests.requestIndexes),
-			ws.nominalMaxRequests(), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(),
+			ws.nominalMaxRequests(), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
+			ws.peer.t.numQueuedForHash(), ws.peer.t.activePieceHashes, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(),
 			time.Since(ws.peer.lastRequestUpdate))
 
 		if !ws.peer.closed.IsSet() {
@@ -312,9 +315,10 @@ func requestUpdate(ws *webseedPeer) {
 
 					ws.peer.updateRequests("unchoked")
 
-					ws.peer.logger.Levelf(log.Debug, "unchoked %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) complete(%d/%d) %s",
+					ws.peer.logger.Levelf(log.Debug, "unchoked %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d) complete(%d/%d) %s",
 						ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestStateDebug().Requests.requestIndexes),
-						ws.nominalMaxRequests(), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(),
+						ws.nominalMaxRequests(), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
+						ws.peer.t.numQueuedForHash(), ws.peer.t.activePieceHashes, ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(),
 						time.Since(ws.peer.lastRequestUpdate))
 
 					// if the initial unchoke didn't yield a request (for small files) - don't immediately
@@ -370,6 +374,10 @@ func (ws *webseedPeer) onClose() {
 func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Request) error {
 	result := <-webseedRequest.Result
 	close(webseedRequest.Result) // one-shot
+
+	ws.receiving.Add(1)
+	defer ws.receiving.Add(-1)
+
 	// We do this here rather than inside receiveChunk, since we want to count errors too. I'm not
 	// sure if we can divine which errors indicate cancellation on our end without hitting the
 	// network though.

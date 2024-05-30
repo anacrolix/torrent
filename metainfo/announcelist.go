@@ -1,12 +1,13 @@
 package metainfo
 
+import (
+	"slices"
+)
+
 type AnnounceList [][]string
 
-func (al AnnounceList) Clone() (ret AnnounceList) {
-	for _, tier := range al {
-		ret = append(ret, append([]string(nil), tier...))
-	}
-	return
+func (al AnnounceList) Clone() AnnounceList {
+	return slices.Clone(al)
 }
 
 // Whether the AnnounceList should be preferred over a single URL announce.

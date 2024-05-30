@@ -170,10 +170,10 @@ func (ws *webseedPeer) requester(i int) {
 			desiredRequests := len(ws.peer.getDesiredRequestState().Requests.requestIndexes)
 			pendingRequests := int(ws.peer.requestState.Requests.GetCardinality())
 			receiving := ws.receiving.Load()
-			ws.peer.logger.Levelf(log.Debug, "%d: requests %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,m=%d,w=%d) hashing(q=%d,a=%d,r=%d) complete(%d/%d) restart(%v)",
+			ws.peer.logger.Levelf(log.Debug, "%d: requests %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) restart(%v)",
 				i, ws.processedRequests, pendingRequests, desiredRequests, ws.nominalMaxRequests(),
 				len(ws.activeRequests)-int(receiving), receiving, ws.maxActiveRequests, ws.waiting,
-				ws.peer.t.numQueuedForHash(), ws.peer.t.activePieceHashes.Load(), len(ws.peer.t.hashResults),
+				ws.peer.t.numQueuedForHash(), ws.peer.t.activePieceHashes.Load(), ws.peer.t.hashing.Load(), len(ws.peer.t.hashResults),
 				ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(), restart)
 
 			if pendingRequests > ws.maxRequesters {
@@ -251,10 +251,10 @@ func requestUpdate(ws *webseedPeer) {
 
 		ws.updateRequestor = nil
 
-		ws.peer.logger.Levelf(log.Debug, "requestUpdate %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d,r=%d) complete(%d/%d) %s",
+		ws.peer.logger.Levelf(log.Debug, "requestUpdate %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) %s",
 			ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestState().Requests.requestIndexes),
 			ws.nominalMaxRequests(), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
-			ws.peer.t.numQueuedForHash(), ws.peer.t.activePieceHashes.Load(), len(ws.peer.t.hashResults), ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(),
+			ws.peer.t.numQueuedForHash(), ws.peer.t.activePieceHashes.Load(), ws.peer.t.hashing.Load(), len(ws.peer.t.hashResults), ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(),
 			time.Since(ws.peer.lastRequestUpdate))
 
 		if !ws.peer.closed.IsSet() {

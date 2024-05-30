@@ -149,6 +149,7 @@ type Torrent struct {
 	// Pieces that need to be hashed.
 	piecesQueuedForHash       bitmap.Bitmap
 	activePieceHashes         atomic.Int64
+	hashing                   atomic.Int64
 	initialPieceCheckDisabled bool
 
 	connsWithAllPieces map[*Peer]struct{}
@@ -2351,6 +2352,7 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 			t.piecesQueuedForHash.Remove(bitmap.BitIndex(pi))
 			t.mu.Unlock()
 			p.hashing = true
+			t.hashing.Add(1)
 			t.publishPieceStateChange(pi)
 			t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher")
 			t.storageLock.RLock()
@@ -2366,6 +2368,7 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 
 			t.storageLock.RUnlock()
 			p.hashing = false
+			t.hashing.Add(-1)
 
 			t.hashResults <- hashResult{pi, correct, failedPeers, copyErr}
 		}

@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"text/tabwriter"
 	"time"
 	"unsafe"
@@ -147,7 +148,7 @@ type Torrent struct {
 	_completedPieces roaring.Bitmap
 	// Pieces that need to be hashed.
 	piecesQueuedForHash       bitmap.Bitmap
-	activePieceHashes         int
+	activePieceHashes         atomic.Int64
 	initialPieceCheckDisabled bool
 
 	connsWithAllPieces map[*Peer]struct{}
@@ -286,6 +287,8 @@ func (t *Torrent) setChunkSize(size pp.Integer) {
 }
 
 func (t *Torrent) pieceComplete(piece pieceIndex) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return t._completedPieces.Contains(bitmap.BitIndex(piece))
 }
 
@@ -868,6 +871,8 @@ func iterFlipped(b *roaring.Bitmap, end uint64, cb func(uint32) bool) {
 }
 
 func (t *Torrent) bytesLeft() (left int64) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	iterFlipped(&t._completedPieces, uint64(t.numPieces()), func(x uint32) bool {
 		p := t.piece(pieceIndex(x))
 		left += int64(p.length() - p.numDirtyBytes())
@@ -904,6 +909,8 @@ func (t *Torrent) numPieces() pieceIndex {
 }
 
 func (t *Torrent) numPiecesCompleted() (num pieceIndex) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return pieceIndex(t._completedPieces.GetCardinality())
 }
 
@@ -972,6 +979,8 @@ func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 }
 
 func (t *Torrent) bitfield() (bf []bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	bf = make([]bool, t.numPieces())
 	t._completedPieces.Iterate(func(piece uint32) (again bool) {
 		bf[piece] = true
@@ -1060,6 +1069,8 @@ func (t *Torrent) hashPiece(p *Piece) (
 }
 
 func (t *Torrent) haveAnyPieces() bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return !t._completedPieces.IsEmpty()
 }
 
@@ -1067,6 +1078,8 @@ func (t *Torrent) haveAllPieces() bool {
 	if !t.haveInfo() {
 		return false
 	}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return t._completedPieces.GetCardinality() == bitmap.BitRange(t.numPieces())
 }
 
@@ -1440,10 +1453,14 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	p.storageCompletionOk = uncached.Ok
 	x := uint32(piece)
 	if complete {
+		t.mu.Lock()
 		t._completedPieces.Add(x)
+		t.mu.Unlock()
 		t.openNewConns()
 	} else {
+		t.mu.Lock()
 		t._completedPieces.Remove(x)
+		t.mu.Unlock()
 	}
 	p.t.updatePieceRequestOrderPiece(piece)
 	t.updateComplete()
@@ -2297,11 +2314,14 @@ func (t *Torrent) tryCreateMorePieceHashers() {
 		go t.processHashResults()
 	}
 
+	activePieceHashes := int(t.activePieceHashes.Load())
+
 	for !t.closed.IsSet() &&
-		t.activePieceHashes < t.cl.config.PieceHashersPerTorrent &&
-		t.activePieceHashes < t.numPieces() &&
-		t.activePieceHashes < int(t.numQueuedForHash()) &&
+		activePieceHashes < t.cl.config.PieceHashersPerTorrent &&
+		activePieceHashes < t.numPieces() &&
+		activePieceHashes < int(t.numQueuedForHash()) &&
 		t.tryCreatePieceHasher() {
+		activePieceHashes = int(t.activePieceHashes.Load())
 	}
 }
 
@@ -2311,13 +2331,13 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 	}
 
 	t.mu.Lock()
-	t.activePieceHashes++
+	t.activePieceHashes.Add(1)
 	t.mu.Unlock()
 
 	go func() {
 		defer func() {
 			t.mu.Lock()
-			t.activePieceHashes--
+			t.activePieceHashes.Add(-1)
 			t.mu.Unlock()
 		}()
 
@@ -2375,11 +2395,10 @@ func (t *Torrent) processHashResults() {
 			}
 		}
 
-		func() {
-			t.cl.lock()
-			defer t.cl.unlock()
-
-			for _, result := range results {
+		for _, result := range results {
+			func() {
+				t.cl.lock()
+				defer t.cl.unlock()
 				if result.correct {
 					for peer := range result.failedPeers {
 						t.cl.banPeerIP(peer.AsSlice())
@@ -2392,8 +2411,8 @@ func (t *Torrent) processHashResults() {
 				}
 				t.pieceHashed(result.index, result.correct, result.copyErr)
 				t.updatePiecePriority(result.index, "Torrent.pieceHasher")
-			}
-		}()
+			}()
+		}
 	}
 }
 

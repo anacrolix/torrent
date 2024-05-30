@@ -346,6 +346,8 @@ func (p *Peer) allowSendNotInterested() bool {
 		return false
 	}
 	// Allow losing interest if we have all the pieces the peer has.
+	p.t.mu.RLock()
+	defer p.t.mu.RUnlock()
 	return roaring.AndNot(p.peerPieces(), &p.t._completedPieces).IsEmpty()
 }
 

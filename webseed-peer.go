@@ -387,8 +387,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		ws.peer.doChunkReadStats(int64(len(result.Bytes)))
 	}
 	ws.peer.readBytes(int64(len(result.Bytes)))
-	ws.peer.t.cl.lock()
-	defer ws.peer.t.cl.unlock()
+
 	if ws.peer.t.closed.IsSet() {
 		return nil
 	}
@@ -417,6 +416,9 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		}
 		return err
 	}
+
+	ws.peer.t.cl.lock()
+	defer ws.peer.t.cl.unlock()
 
 	err = ws.peer.receiveChunk(&pp.Message{
 		Type:  pp.Piece,

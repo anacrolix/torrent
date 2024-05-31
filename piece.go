@@ -129,6 +129,8 @@ func (p *Piece) waitNoPendingWrites() {
 }
 
 func (p *Piece) chunkIndexDirty(chunk chunkIndexType) bool {
+	p.t.mu.RLock()
+	defer p.t.mu.RUnlock()
 	return p.t.dirtyChunks.Contains(p.requestIndexOffset() + chunk)
 }
 

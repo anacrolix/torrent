@@ -185,6 +185,11 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	}
 	// Caller-provided allocation for roaring bitmap iteration.
 	var it typedRoaring.Iterator[RequestIndex]
+
+	t.mu.RLock()
+	var dirtyChunks = t.dirtyChunks.Clone()
+	t.mu.RUnlock()
+
 	requestStrategy.GetRequestablePieces(
 		input,
 		t.getPieceRequestOrder(),
@@ -197,6 +202,9 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 			}
 			requestHeap.pieceStates[pieceIndex] = pieceExtra
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
+
+			it.Initialize(&dirtyChunks)
+
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
 				if !allowedFast {
 					// We must signal interest to request this. TODO: We could set interested if the

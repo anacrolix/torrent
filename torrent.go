@@ -2876,14 +2876,13 @@ func (t *Torrent) pieceIndexOfRequestIndex(ri RequestIndex) pieceIndex {
 }
 
 func (t *Torrent) iterUndirtiedRequestIndexesInPiece(
-	reuseIter *typedRoaring.Iterator[RequestIndex],
+	iter *typedRoaring.Iterator[RequestIndex],
 	piece pieceIndex,
 	f func(RequestIndex),
 ) {
-	reuseIter.Initialize(&t.dirtyChunks)
 	pieceRequestIndexOffset := t.pieceRequestIndexOffset(piece)
 	iterBitmapUnsetInRange(
-		reuseIter,
+		iter,
 		pieceRequestIndexOffset, pieceRequestIndexOffset+t.pieceNumChunks(piece),
 		f,
 	)

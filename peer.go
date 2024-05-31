@@ -599,6 +599,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 	ppReq := newRequestFromMessage(msg)
 	t := c.t
+	// ok to here
 	err := t.checkValidReceiveChunk(ppReq)
 	if err != nil {
 		err = log.WithLevel(log.Warning, err)

@@ -824,6 +824,8 @@ func (t *Torrent) writePeerStatuses(w io.Writer, peers []*Peer) {
 }
 
 func (t *Torrent) haveInfo() bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return t.info != nil
 }
 

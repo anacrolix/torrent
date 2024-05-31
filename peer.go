@@ -725,7 +725,9 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// request update runs while we're writing the chunk that just failed. Then we never do a
 		// fresh update after pending the failed request.
 		c.updateRequests("Peer.receiveChunk error writing chunk")
+		c.t.cl.unlock() // this is temp - moving t to not use cl locked externally
 		t.onWriteChunkErr(err)
+		c.t.cl.lock()
 		return nil
 	}
 

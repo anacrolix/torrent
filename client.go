@@ -1508,8 +1508,6 @@ func (cl *Client) WaitAll() bool {
 
 // Returns handles to all the torrents loaded in the Client.
 func (cl *Client) Torrents() []*Torrent {
-	cl.rLock()
-	defer cl.rUnlock()
 	return cl.torrentsAsSlice()
 }
 

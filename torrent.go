@@ -32,7 +32,6 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
-	"golang.org/x/exp/maps"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -50,6 +49,54 @@ import (
 	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
 )
+
+type mu struct {
+	sync.RWMutex
+	rlc     atomic.Int32
+	lc      atomic.Int32
+	rlmu    sync.Mutex
+	rlocker [20]string
+	locker  string
+}
+
+func (m *mu) RLock() {
+	m.RWMutex.RLock()
+	m.rlmu.Lock()
+	//m.rlocker[m.rlc.Load()] = string(stack(2))
+	m.rlmu.Unlock()
+	m.rlc.Add(1)
+	//fmt.Println("R", m.rlc, string(dbg.Stack())[:40])
+
+}
+
+func (m *mu) RUnlock() {
+	m.rlc.Add(-1)
+	if m.rlc.Load() < 0 {
+		panic("lock underflow")
+	}
+	//m.rlmu.Lock()
+	//m.rlocker[m.rlc.Load()] = ""
+	//m.rlmu.Unlock()
+	m.RWMutex.RUnlock()
+	//fmt.Println("RUN", m.rlc) //, string(dbg.Stack()))
+}
+
+func (m *mu) Lock() {
+	//fmt.Println("L", m.lc, string(dbg.Stack())[:40])
+	m.RWMutex.Lock()
+	m.lc.Add(1)
+	//m.locker = string(stack(2))
+}
+
+func (m *mu) Unlock() {
+	m.lc.Add(-1)
+	if m.lc.Load() < 0 {
+		panic("lock underflow")
+	}
+	m.locker = ""
+	m.RWMutex.Unlock()
+	//fmt.Println("LUN", m.lc) //, string(dbg.Stack()))
+}
 
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
 // available, see .Info and .GotInfo.
@@ -122,7 +169,7 @@ type Torrent struct {
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
-	mu          sync.RWMutex
+	mu          mu
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if
@@ -807,7 +854,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	dumpStats(w, t.statsLocked())
 
 	fmt.Fprintf(w, "webseeds:\n")
-	t.writePeerStatuses(w, maps.Values(t.webSeeds))
+	t.writePeerStatuses(w, t.webSeedsAsSlice())
 
 	peerConns := t.peerConnsAsSlice()
 	defer peerConns.free()
@@ -865,6 +912,9 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 			}
 		}(),
 		UrlList: func() []string {
+			t.mu.RLock()
+			t.mu.RUnlock()
+
 			ret := make([]string, 0, len(t.webSeeds))
 			for url := range t.webSeeds {
 				ret = append(ret, url)
@@ -1164,6 +1214,17 @@ func (c conns) free() {
 	peerConnSlices.Put(c)
 }
 
+func (t *Torrent) webSeedsAsSlice() (ret []*Peer) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	ret = make([]*Peer, 0, len(t.webSeeds))
+	for _, ws := range t.webSeeds {
+		ret = append(ret, ws)
+	}
+	return ret
+}
+
 func (t *Torrent) peerConnsAsSlice() conns {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -1179,9 +1240,9 @@ func (t *Torrent) peerConnsAsSlice() conns {
 func getPeerConnSlice(cap int) conns {
 	getInterface := peerConnSlices.Get()
 	if getInterface == nil {
-		return make([]*PeerConn, 0, cap)
+		return make(conns, 0, cap)
 	} else {
-		return getInterface.([]*PeerConn)[:0]
+		return getInterface.(conns)[:0]
 	}
 }
 
@@ -2188,11 +2249,13 @@ func (t *Torrent) wantOutgoingConns() bool {
 	}
 
 	t.mu.RLock()
-	if len(t.conns) < t.maxEstablishedConns {
+	lenConns := len(t.conns)
+	t.mu.RUnlock()
+
+	if lenConns < t.maxEstablishedConns {
 		return true
 	}
-	numIncomingConns := len(t.conns) - t.numOutgoingConns()
-	t.mu.RUnlock()
+	numIncomingConns := lenConns - t.numOutgoingConns()
 
 	return t.worstBadConn(worseConnLensOpts{
 		incomingIsBad: numIncomingConns-t.numOutgoingConns() > 1,
@@ -2206,11 +2269,13 @@ func (t *Torrent) wantIncomingConns() bool {
 	}
 
 	t.mu.RLock()
-	if len(t.conns) < t.maxEstablishedConns {
+	lenConns := len(t.conns)
+	t.mu.RUnlock()
+
+	if lenConns < t.maxEstablishedConns {
 		return true
 	}
-	numIncomingConns := len(t.conns) - t.numOutgoingConns()
-	t.mu.RUnlock()
+	numIncomingConns := lenConns - t.numOutgoingConns()
 
 	return t.worstBadConn(worseConnLensOpts{
 		incomingIsBad: false,
@@ -2579,8 +2644,6 @@ func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
 }
 
 func (t *Torrent) peersAsSlice() (ret []*Peer) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
 	t.iterPeers(func(p *Peer) {
 		ret = append(ret, p)
 	})
@@ -2725,53 +2788,79 @@ func (t *Torrent) onWriteChunkErr(err error) {
 		return
 	}
 	t.logger.WithDefaultLevel(log.Critical).Printf("default chunk write error handler: disabling data download")
-	t.disallowDataDownloadLocked()
+	t.DisallowDataDownload()
 }
 
 func (t *Torrent) DisallowDataDownload() {
-	t.cl.lock()
-	defer t.cl.unlock()
-	t.disallowDataDownloadLocked()
-}
+	conns := t.peerConnsAsSlice()
+	defer conns.free()
 
-func (t *Torrent) disallowDataDownloadLocked() {
+	t.mu.Lock()
 	t.dataDownloadDisallowed.Set()
-	t.iterPeers(func(p *Peer) {
-		// Could check if peer request state is empty/not interested?
-		p.updateRequests("disallow data download")
-		p.cancelAllRequests()
-	})
+	t.mu.Unlock()
+
+	for _, c := range conns {
+		func() {
+			t.cl.lock()
+			defer t.cl.unlock()
+			// Could check if peer request state is empty/not interested?
+			c.updateRequests("disallow data download")
+			c.cancelAllRequests()
+		}()
+	}
 }
 
 func (t *Torrent) AllowDataDownload() {
-	t.cl.lock()
-	defer t.cl.unlock()
+	conns := t.peerConnsAsSlice()
+	defer conns.free()
+
+	t.mu.Lock()
 	t.dataDownloadDisallowed.Clear()
-	t.iterPeers(func(p *Peer) {
-		p.updateRequests("allow data download")
-	})
+	t.mu.Unlock()
+
+	for _, c := range conns {
+		func() {
+			t.cl.lock()
+			defer t.cl.unlock()
+			c.updateRequests("allow data download")
+		}()
+	}
 }
 
 // Enables uploading data, if it was disabled.
 func (t *Torrent) AllowDataUpload() {
-	t.cl.lock()
-	defer t.cl.unlock()
+	conns := t.peerConnsAsSlice()
+	defer conns.free()
+
+	t.mu.Lock()
 	t.dataUploadDisallowed = false
-	t.iterPeers(func(p *Peer) {
-		p.updateRequests("allow data upload")
-	})
+	t.mu.Unlock()
+
+	for _, c := range conns {
+		func() {
+			t.cl.lock()
+			defer t.cl.unlock()
+			c.updateRequests("allow data upload")
+		}()
+	}
 }
 
 // Disables uploading data, if it was enabled.
 func (t *Torrent) DisallowDataUpload() {
-	t.cl.lock()
-	defer t.cl.unlock()
-	t.dataUploadDisallowed = true
 	conns := t.peerConnsAsSlice()
 	defer conns.free()
+
+	t.mu.Lock()
+	t.dataUploadDisallowed = true
+	t.mu.Unlock()
+
 	for _, c := range conns {
-		// TODO: This doesn't look right. Shouldn't we tickle writers to choke peers or something instead?
-		c.updateRequests("disallow data upload")
+		func() {
+			t.cl.lock()
+			defer t.cl.unlock()
+			// TODO: This doesn't look right. Shouldn't we tickle writers to choke peers or something instead?
+			c.updateRequests("disallow data upload")
+		}()
 	}
 }
 
@@ -2787,10 +2876,13 @@ func (t *Torrent) iterPeers(f func(p *Peer)) {
 	conns := t.peerConnsAsSlice()
 	defer conns.free()
 
+	webSeeds := t.webSeedsAsSlice()
+
 	for _, pc := range conns {
 		f(&pc.Peer)
 	}
-	for _, ws := range t.webSeeds {
+
+	for _, ws := range webSeeds {
 		f(ws)
 	}
 }
@@ -2817,77 +2909,84 @@ func (t *Torrent) AddWebSeeds(urls []string, opts ...AddWebSeedsOpt) {
 }
 
 func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
-	if t.cl.config.DisableWebseeds {
-		return
-	}
-	if _, ok := t.webSeeds[url]; ok {
-		return
-	}
-	// I don't think Go http supports pipelining requests. However, we can have more ready to go
-	// right away. This value should be some multiple of the number of connections to a host. I
-	// would expect that double maxRequests plus a bit would be appropriate. This value is based on
-	// downloading Sintel (08ada5a7a6183aae1e09d831df6748d566095a10) from
-	// "https://webtorrent.io/torrents/".
-	const maxRequests = 16
+	ws := func() *webseedPeer {
+		t.mu.Lock()
+		defer t.mu.Unlock()
 
-	// This should affect how often we have to recompute requests for this peer. Note that
-	// because we can request more than 1 thing at a time over HTTP, we will hit the low
-	// requests mark more often, so recomputation is probably sooner than with regular peer
-	// conns. ~4x maxRequests would be about right.
-	peerMaxRequests := 128
-
-	// unless there is more availible bandwith - in which case max requests becomes
-	// the max available pieces that will consune that bandwidth
-
-	if bandwidth := t.cl.config.DownloadRateLimiter.Limit(); bandwidth > 0 && t.info != nil {
-		if maxPieceRequests := int(bandwidth / rate.Limit(t.info.PieceLength)); maxPieceRequests > peerMaxRequests {
-			peerMaxRequests = maxPieceRequests
+		if t.cl.config.DisableWebseeds {
+			return nil
 		}
-	}
+		if _, ok := t.webSeeds[url]; ok {
+			return nil
+		}
+		// I don't think Go http supports pipelining requests. However, we can have more ready to go
+		// right away. This value should be some multiple of the number of connections to a host. I
+		// would expect that double maxRequests plus a bit would be appropriate. This value is based on
+		// downloading Sintel (08ada5a7a6183aae1e09d831df6748d566095a10) from
+		// "https://webtorrent.io/torrents/".
+		const maxRequests = 16
 
-	ws := webseedPeer{
-		peer: Peer{
-			t:                        t,
-			outgoing:                 true,
-			Network:                  "http",
-			reconciledHandshakeStats: true,
+		// This should affect how often we have to recompute requests for this peer. Note that
+		// because we can request more than 1 thing at a time over HTTP, we will hit the low
+		// requests mark more often, so recomputation is probably sooner than with regular peer
+		// conns. ~4x maxRequests would be about right.
+		peerMaxRequests := 128
 
-			PeerMaxRequests: peerMaxRequests,
-			// TODO: Set ban prefix?
-			RemoteAddr: remoteAddrFromUrl(url),
-			callbacks:  t.callbacks(),
-		},
-		client: webseed.Client{
-			HttpClient: t.cl.httpClient,
-			Url:        url,
-			ResponseBodyWrapper: func(r io.Reader) io.Reader {
-				return &rateLimitedReader{
-					l: t.cl.config.DownloadRateLimiter,
-					r: r,
-				}
+		// unless there is more availible bandwith - in which case max requests becomes
+		// the max available pieces that will consune that bandwidth
+
+		if bandwidth := t.cl.config.DownloadRateLimiter.Limit(); bandwidth > 0 && t.info != nil {
+			if maxPieceRequests := int(bandwidth / rate.Limit(t.info.PieceLength)); maxPieceRequests > peerMaxRequests {
+				peerMaxRequests = maxPieceRequests
+			}
+		}
+
+		ws := webseedPeer{
+			peer: Peer{
+				t:                        t,
+				outgoing:                 true,
+				Network:                  "http",
+				reconciledHandshakeStats: true,
+
+				PeerMaxRequests: peerMaxRequests,
+				// TODO: Set ban prefix?
+				RemoteAddr: remoteAddrFromUrl(url),
+				callbacks:  t.callbacks(),
 			},
-		},
-		maxRequesters:  maxRequests,
-		activeRequests: make(map[Request]webseed.Request, maxRequests),
-	}
-	ws.peer.initRequestState()
-	for _, opt := range opts {
-		opt(&ws.client)
-	}
-	ws.peer.initUpdateRequestsTimer()
-	ws.requesterCond.L = t.cl.locker()
-	for i := 0; i < ws.maxRequesters; i += 1 {
-		go ws.requester(i)
-	}
-	for _, f := range t.callbacks().NewPeer {
-		f(&ws.peer)
-	}
-	ws.peer.logger = t.logger.WithContextValue(&ws)
-	ws.peer.peerImpl = &ws
-	if t.haveInfo() {
+			client: webseed.Client{
+				HttpClient: t.cl.httpClient,
+				Url:        url,
+				ResponseBodyWrapper: func(r io.Reader) io.Reader {
+					return &rateLimitedReader{
+						l: t.cl.config.DownloadRateLimiter,
+						r: r,
+					}
+				},
+			},
+			maxRequesters:  maxRequests,
+			activeRequests: make(map[Request]webseed.Request, maxRequests),
+		}
+		ws.peer.initRequestState()
+		for _, opt := range opts {
+			opt(&ws.client)
+		}
+		ws.peer.initUpdateRequestsTimer()
+		ws.requesterCond.L = t.cl.locker()
+		for i := 0; i < ws.maxRequesters; i += 1 {
+			go ws.requester(i)
+		}
+		for _, f := range t.callbacks().NewPeer {
+			f(&ws.peer)
+		}
+		ws.peer.logger = t.logger.WithContextValue(&ws)
+		ws.peer.peerImpl = &ws
+		t.webSeeds[url] = &ws.peer
+		return &ws
+	}()
+
+	if ws != nil && t.haveInfo() {
 		ws.onGotInfo(t.info)
 	}
-	t.webSeeds[url] = &ws.peer
 }
 
 func (t *Torrent) peerIsActive(p *Peer) (active bool) {

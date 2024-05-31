@@ -741,7 +741,12 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		if err != nil {
 			return err
 		}
+
+		c.mu.Lock()
+		peerChoking := c.peerChoking
 		c.lastMessageReceived = time.Now()
+		c.mu.Unlock()
+
 		if msg.Keepalive {
 			receivedKeepalives.Add(1)
 			continue
@@ -751,11 +756,14 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			runSafeExtraneous(func() { torrent.Add("fast messages received when extension is disabled", 1) })
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
+
 		switch msg.Type {
 		case pp.Choke:
-			if c.peerChoking {
+			if peerChoking {
 				break
 			}
+
+			c.mu.Lock()
 			if !c.fastEnabled() {
 				c.deleteAllRequests("choked by non-fast PeerConn")
 			} else {
@@ -768,14 +776,16 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			}
 			c.peerChoking = true
 			c.updateExpectingChunks()
+			c.mu.Unlock()
 		case pp.Unchoke:
-			if !c.peerChoking {
+			if !peerChoking {
 				// Some clients do this for some reason. Transmission doesn't error on this, so we
 				// won't for consistency.
 				c.logProtocolBehaviour(log.Debug, "received unchoke when already unchoked")
 				break
 			}
-			c.peerChoking = false
+
+			c.mu.RLock()
 			preservedCount := 0
 			c.requestState.Requests.Iterate(func(x RequestIndex) bool {
 				if !c.peerAllowedFast.Contains(c.t.pieceIndexOfRequestIndex(x)) {
@@ -793,15 +803,20 @@ func (c *PeerConn) mainReadLoop() (err error) {
 
 				torrent.Add("requestsPreservedThroughChoking", int64(preservedCount))
 			}
+			c.mu.RUnlock()
 
 			c.t.mu.RLock()
 			isEmpty := c.t._pendingPieces.IsEmpty()
 			c.t.mu.RUnlock()
 
+			c.mu.Lock()
+			c.peerChoking = false
 			if !isEmpty {
 				c.updateRequests("unchoked")
 			}
 			c.updateExpectingChunks()
+			c.mu.Unlock()
+
 		case pp.Interested:
 			c.peerInterested = true
 			c.tickleWriter()

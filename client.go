@@ -1340,8 +1340,6 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 // If the torrent already exists then this Storage is ignored and the
 // existing torrent returned with `new` set to `false`
 func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStorage storage.ClientImpl) (t *Torrent, new bool) {
-	cl.lock()
-	defer cl.unlock()
 	cl.torrentsMu.Lock()
 	defer cl.torrentsMu.Unlock()
 
@@ -1350,6 +1348,9 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 		return
 	}
 	new = true
+
+	cl.lock()
+	defer cl.unlock()
 
 	t = cl.newTorrent(infoHash, specStorage)
 	cl.eachDhtServer(func(s DhtServer) {
@@ -1371,6 +1372,9 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	infoHash := opts.InfoHash
 	cl.lock()
 	defer cl.unlock()
+	cl.torrentsMu.Lock()
+	defer cl.torrentsMu.Unlock()
+
 	t, ok := cl.torrents[infoHash]
 	if ok {
 		return
@@ -1460,6 +1464,9 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 }
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash, wg *sync.WaitGroup) (err error) {
+	cl.torrentsMu.Lock()
+	defer cl.torrentsMu.Unlock()
+
 	t, ok := cl.torrents[infoHash]
 	if !ok {
 		err = fmt.Errorf("no such torrent")
@@ -1471,6 +1478,9 @@ func (cl *Client) dropTorrent(infoHash metainfo.Hash, wg *sync.WaitGroup) (err e
 }
 
 func (cl *Client) allTorrentsCompleted() bool {
+	cl.torrentsMu.RLock()
+	defer cl.torrentsMu.RUnlock()
+
 	for _, t := range cl.torrents {
 		if !t.haveInfo() {
 			return false

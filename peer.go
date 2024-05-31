@@ -28,6 +28,7 @@ type (
 	Peer struct {
 		// First to ensure 64-bit alignment for atomics. See #262.
 		_stats ConnStats
+		mu     sync.RWMutex
 
 		t *Torrent
 
@@ -377,6 +378,9 @@ func (cn *Peer) totalExpectingTime() (ret time.Duration) {
 }
 
 func (cn *Peer) setInterested(interested bool) bool {
+	cn.mu.Lock()
+	defer cn.mu.Unlock()
+
 	if cn.requestState.Interested == interested {
 		return true
 	}
@@ -443,12 +447,16 @@ func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 	//if err := cn.shouldRequest(r); err != nil {
 	//	panic(err)
 	//}
+	cn.mu.Lock()
+	defer cn.mu.Unlock()
+
 	if cn.requestState.Requests.Contains(r) {
 		return true, nil
 	}
 	if maxRequests(cn.requestState.Requests.GetCardinality()) >= cn.peerImpl.nominalMaxRequests() {
 		return true, errors.New("too many outstanding requests")
 	}
+
 	cn.requestState.Requests.Add(r)
 	if cn.validReceiveChunks == nil {
 		cn.validReceiveChunks = make(map[RequestIndex]int)
@@ -458,6 +466,7 @@ func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 		peer: cn,
 		when: time.Now(),
 	}
+
 	cn.updateExpectingChunks()
 	ppReq := cn.t.requestIndexToRequest(r)
 	for _, f := range cn.callbacks.SentRequest {
@@ -604,7 +613,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		err = log.WithLevel(log.Warning, err)
 		return err
 	}
-	// ok to here
+
 	req := c.t.requestIndexFromRequest(ppReq)
 
 	recordBlockForSmartBan := sync.OnceFunc(func() {
@@ -618,11 +627,12 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	if c.peerChoking {
 		chunksReceived.Add("while choked", 1)
 	}
-
+	// ok to here
 	if c.validReceiveChunks[req] <= 0 {
 		chunksReceived.Add("unexpected", 1)
 		return errors.New("received unexpected chunk")
 	}
+
 	c.decExpectedChunkReceive(req)
 
 	if c.peerChoking && c.peerAllowedFast.Contains(pieceIndex(ppReq.Index)) {
@@ -778,6 +788,9 @@ func (c *Peer) peerHasWantedPieces() bool {
 // Returns true if an outstanding request is removed. Cancelled requests should be handled
 // separately.
 func (c *Peer) deleteRequest(r RequestIndex) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if !c.requestState.Requests.CheckedRemove(r) {
 		return false
 	}

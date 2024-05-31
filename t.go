@@ -266,8 +266,8 @@ func (t *Torrent) Piece(i pieceIndex) *Piece {
 }
 
 func (t *Torrent) PeerConns() []*PeerConn {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	ret := make([]*PeerConn, 0, len(t.conns))
 	for c := range t.conns {
 		ret = append(ret, c)
@@ -276,8 +276,8 @@ func (t *Torrent) PeerConns() []*PeerConn {
 }
 
 func (t *Torrent) WebseedPeerConns() []*Peer {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	ret := make([]*Peer, 0, len(t.conns))
 	for _, c := range t.webSeeds {
 		ret = append(ret, c)

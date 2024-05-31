@@ -133,8 +133,8 @@ func TestHolepunchConnect(t *testing.T) {
 }
 
 func waitForConns(t *Torrent) {
-	t.cl.lock()
-	defer t.cl.unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	for {
 		for range t.conns {
 			return

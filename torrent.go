@@ -2423,6 +2423,7 @@ func (t *Torrent) processHashResults() {
 		for _, result := range results {
 			fmt.Println("RES0")
 			if result.correct {
+				fmt.Println("RES0A")
 				for peer := range result.failedPeers {
 					func() {
 						t.cl.lock()
@@ -2431,7 +2432,9 @@ func (t *Torrent) processHashResults() {
 					}()
 					t.logger.WithDefaultLevel(log.Debug).Printf("smart banned %v for piece %v", peer, result.index)
 				}
+				fmt.Println("RES0B")
 				t.dropBannedPeers()
+				fmt.Println("RES0C")
 				for ri := t.pieceRequestIndexOffset(result.index); ri < t.pieceRequestIndexOffset(result.index+1); ri++ {
 					t.smartBanCache.ForgetBlock(ri)
 				}

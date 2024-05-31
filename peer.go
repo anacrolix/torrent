@@ -292,10 +292,15 @@ func (cn *Peer) writeStatus(w io.Writer) {
 		cn.cumInterest(),
 		cn.totalExpectingTime(),
 	)
+
+	cn.t.mu.RLock()
+	lenPeerTouchedPieces := len(cn.peerTouchedPieces)
+	cn.t.mu.RUnlock()
+
 	fmt.Fprintf(w,
 		"%s completed, %d pieces touched, good chunks: %v/%v:%v reqq: %d+%v/(%d/%d):%d/%d, flags: %s, dr: %.1f KiB/s\n",
 		cn.completedString(),
-		len(cn.peerTouchedPieces),
+		lenPeerTouchedPieces,
 		&cn._stats.ChunksReadUseful,
 		&cn._stats.ChunksRead,
 		&cn._stats.ChunksWritten,
@@ -726,21 +731,26 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 	cl.event.Broadcast()
 	// We do this because we've written a chunk, and may change PieceState.Partial.
-	t.publishPieceStateChange(pieceIndex(ppReq.Index))
+	t.publishPieceStateChange(pieceIndex(ppReq.Index), true)
 
 	return nil
 }
 
 func (c *Peer) onDirtiedPiece(piece pieceIndex) {
+	c.t.mu.Lock()
 	if c.peerTouchedPieces == nil {
 		c.peerTouchedPieces = make(map[pieceIndex]struct{})
 	}
 	c.peerTouchedPieces[piece] = struct{}{}
-	ds := &c.t.pieces[piece].dirtiers
-	if *ds == nil {
-		*ds = make(map[*Peer]struct{})
+	c.t.mu.Unlock()
+
+	p := &c.t.pieces[piece]
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.dirtiers == nil {
+		p.dirtiers = make(map[*Peer]struct{})
 	}
-	(*ds)[c] = struct{}{}
+	p.dirtiers[c] = struct{}{}
 }
 
 func (cn *Peer) netGoodPiecesDirtied() int64 {

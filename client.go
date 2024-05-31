@@ -9,7 +9,6 @@ import (
 	"errors"
 	"expvar"
 	"fmt"
-	"github.com/cespare/xxhash"
 	"io"
 	"math"
 	"net"
@@ -18,6 +17,8 @@ import (
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/cespare/xxhash"
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"

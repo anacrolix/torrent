@@ -18,6 +18,7 @@ type Piece struct {
 	t     *Torrent
 	index pieceIndex
 	files []*File
+	mu    sync.RWMutex
 
 	readerCond chansync.BroadcastCond
 
@@ -74,6 +75,8 @@ func (p *Piece) hasDirtyChunks() bool {
 }
 
 func (p *Piece) numDirtyChunks() chunkIndexType {
+	p.t.mu.RLock()
+	defer p.t.mu.RUnlock()
 	return chunkIndexType(roaringBitmapRangeCardinality[RequestIndex](
 		&p.t.dirtyChunks,
 		p.requestIndexOffset(),
@@ -81,13 +84,17 @@ func (p *Piece) numDirtyChunks() chunkIndexType {
 }
 
 func (p *Piece) unpendChunkIndex(i chunkIndexType) {
+	p.t.mu.Lock()
 	p.t.dirtyChunks.Add(p.requestIndexOffset() + i)
+	p.t.mu.Unlock()
 	p.t.updatePieceRequestOrderPiece(p.index)
 	p.readerCond.Broadcast()
 }
 
 func (p *Piece) pendChunkIndex(i RequestIndex) {
+	p.t.mu.Lock()
 	p.t.dirtyChunks.Remove(p.requestIndexOffset() + i)
+	p.t.mu.Unlock()
 	p.t.updatePieceRequestOrderPiece(p.index)
 }
 

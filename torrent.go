@@ -867,14 +867,11 @@ func (t *Torrent) bytesMissingLocked() int64 {
 	return t.bytesLeft()
 }
 
-func iterFlipped(b *roaring.Bitmap, end uint64, cb func(uint32) bool) {
-	roaring.Flip(b, 0, end).Iterate(cb)
-}
-
 func (t *Torrent) bytesLeft() (left int64) {
 	t.mu.RLock()
-	defer t.mu.RUnlock()
-	iterFlipped(&t._completedPieces, uint64(t.numPieces()), func(x uint32) bool {
+	incomplete := roaring.Flip(&t._completedPieces, 0, uint64(t.numPieces()))
+	t.mu.RUnlock()
+	incomplete.Iterate(func(x uint32) bool {
 		p := t.piece(pieceIndex(x))
 		left += int64(p.length() - p.numDirtyBytes())
 		return true
@@ -1006,6 +1003,8 @@ func (t *Torrent) numChunks() RequestIndex {
 }
 
 func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.dirtyChunks.RemoveRange(
 		uint64(t.pieceRequestIndexOffset(pieceIndex)),
 		uint64(t.pieceRequestIndexOffset(pieceIndex+1)))
@@ -1197,8 +1196,8 @@ type PieceStateChange struct {
 	PieceState
 }
 
-func (t *Torrent) publishPieceStateChange(piece pieceIndex) {
-	t.cl._mu.Defer(func() {
+func (t *Torrent) publishPieceStateChange(piece pieceIndex, deferPublish bool) {
+	publisher := func() {
 		cur := t.pieceState(piece)
 		p := &t.pieces[piece]
 		if cur != p.publicPieceState {
@@ -1208,7 +1207,13 @@ func (t *Torrent) publishPieceStateChange(piece pieceIndex) {
 				cur,
 			})
 		}
-	})
+	}
+
+	if deferPublish {
+		t.cl._mu.Defer(publisher)
+	} else {
+		publisher()
+	}
 }
 
 func (t *Torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
@@ -1284,7 +1289,7 @@ func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string) {
 		})
 	}
 	t.maybeNewConns()
-	t.publishPieceStateChange(piece)
+	t.publishPieceStateChange(piece, true)
 }
 
 func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex) (pendingChanged bool) {
@@ -1465,7 +1470,12 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	}
 	p.t.updatePieceRequestOrderPiece(piece)
 	t.updateComplete()
-	if complete && len(p.dirtiers) != 0 {
+
+	p.mu.RLock()
+	lenDirtiers := len(p.dirtiers)
+	p.mu.RUnlock()
+
+	if complete && lenDirtiers != 0 {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
 	}
 	if changed {
@@ -2171,8 +2181,12 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 			if hashIoErr != nil {
 				errs = hashIoErr.Error()
 			}
+			p.mu.RLock()
+			lenDirtiers := len(p.dirtiers)
+			p.mu.RUnlock()
+
 			log.Fmsg(
-				"torrent: %s, piece %d failed hash: %d connections contributed, err: %s", t.Name(), piece, len(p.dirtiers), errs,
+				"torrent: %s, piece %d failed hash: %d connections contributed, err: %s", t.Name(), piece, lenDirtiers, errs,
 			).AddValues(t, p).LogLevel(log.Debug, t.logger)
 
 			pieceHashedNotCorrect.Add(1)
@@ -2180,13 +2194,14 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	}
 
 	p.marking = true
-	t.publishPieceStateChange(piece)
+	t.publishPieceStateChange(piece, false)
 	defer func() {
 		p.marking = false
-		t.publishPieceStateChange(piece)
+		t.publishPieceStateChange(piece, false)
 	}()
 
 	if passed {
+		p.mu.RLock()
 		if len(p.dirtiers) != 0 {
 			// Don't increment stats above connection-level for every involved connection.
 			t.allStats((*ConnStats).incrementPiecesDirtiedGood)
@@ -2194,67 +2209,76 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		for c := range p.dirtiers {
 			c._stats.incrementPiecesDirtiedGood()
 		}
+		p.mu.RUnlock()
 		t.clearPieceTouchers(piece)
+
+		/* Temp for testing
 		hasDirty := p.hasDirtyChunks()
-		t.cl.unlock()
+
 		if hasDirty {
 			p.Flush() // You can be synchronous here!
 		}
+		*/
 		err := p.Storage().MarkComplete()
 		if err != nil {
 			t.logger.Levelf(log.Warning, "%T: error marking piece complete %d: %s", t.storage, piece, err)
 		}
-		t.cl.lock()
-
 		if t.closed.IsSet() {
 			return
 		}
 		t.pendAllChunkSpecs(piece)
 	} else {
-		if len(p.dirtiers) != 0 && p.allChunksDirty() && hashIoErr == nil {
-			// Peers contributed to all the data for this piece hash failure, and the failure was
-			// not due to errors in the storage (such as data being dropped in a cache).
+		if p.allChunksDirty() && hashIoErr == nil {
+			p.mu.RLock()
 
-			// Increment Torrent and above stats, and then specific connections.
-			t.allStats((*ConnStats).incrementPiecesDirtiedBad)
-			for c := range p.dirtiers {
-				// Y u do dis peer?!
-				c.stats().incrementPiecesDirtiedBad()
-			}
+			if len(p.dirtiers) == 0 {
+				p.mu.RUnlock()
+			} else {
+				// Peers contributed to all the data for this piece hash failure, and the failure was
+				// not due to errors in the storage (such as data being dropped in a cache).
 
-			bannableTouchers := make([]*Peer, 0, len(p.dirtiers))
-			for c := range p.dirtiers {
-				if !c.trusted {
-					bannableTouchers = append(bannableTouchers, c)
+				// Increment Torrent and above stats, and then specific connections.
+				t.allStats((*ConnStats).incrementPiecesDirtiedBad)
+				bannableTouchers := make([]*Peer, 0, len(p.dirtiers))
+
+				for c := range p.dirtiers {
+					if !c.trusted {
+						bannableTouchers = append(bannableTouchers, c)
+					}
+					// Y u do dis peer?!
+					c.stats().incrementPiecesDirtiedBad()
 				}
-			}
-			t.clearPieceTouchers(piece)
-			slices.Sort(bannableTouchers, connLessTrusted)
 
-			if t.cl.config.Debug {
-				t.logger.Printf(
-					"bannable conns by trust for piece %d: %v",
-					piece,
-					func() (ret []connectionTrust) {
-						for _, c := range bannableTouchers {
-							ret = append(ret, c.trust())
-						}
-						return
-					}(),
-				)
-			}
+				p.mu.RUnlock()
 
-			if len(bannableTouchers) >= 1 {
-				c := bannableTouchers[0]
-				if len(bannableTouchers) != 1 {
-					t.logger.Levelf(log.Debug, "would have banned %v for touching piece %v after failed piece check", c.remoteIp(), piece)
-				} else {
-					// Turns out it's still useful to ban peers like this because if there's only a
-					// single peer for a piece, and we never progress that piece to completion, we
-					// will never smart-ban them. Discovered in
-					// https://github.com/anacrolix/torrent/issues/715.
-					t.logger.Levelf(log.Warning, "banning %v for being sole dirtier of piece %v after failed piece check", c, piece)
-					c.ban()
+				t.clearPieceTouchers(piece)
+				slices.Sort(bannableTouchers, connLessTrusted)
+
+				if t.cl.config.Debug {
+					t.logger.Printf(
+						"bannable conns by trust for piece %d: %v",
+						piece,
+						func() (ret []connectionTrust) {
+							for _, c := range bannableTouchers {
+								ret = append(ret, c.trust())
+							}
+							return
+						}(),
+					)
+				}
+
+				if len(bannableTouchers) >= 1 {
+					c := bannableTouchers[0]
+					if len(bannableTouchers) != 1 {
+						t.logger.Levelf(log.Debug, "would have banned %v for touching piece %v after failed piece check", c.remoteIp(), piece)
+					} else {
+						// Turns out it's still useful to ban peers like this because if there's only a
+						// single peer for a piece, and we never progress that piece to completion, we
+						// will never smart-ban them. Discovered in
+						// https://github.com/anacrolix/torrent/issues/715.
+						t.logger.Levelf(log.Warning, "banning %v for being sole dirtier of piece %v after failed piece check", c, piece)
+						c.ban()
+					}
 				}
 			}
 		}
@@ -2302,11 +2326,11 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	// 		c.drop()
 	// 	}
 	// }
-	t.iterPeers(func(conn *Peer) {
+	for _, conn := range t.peersAsSlice() {
 		if conn.peerHasPiece(piece) {
 			conn.updateRequests("piece incomplete")
 		}
-	})
+	}
 }
 
 func (t *Torrent) tryCreateMorePieceHashers() {
@@ -2331,15 +2355,11 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 		return false
 	}
 
-	t.mu.Lock()
 	t.activePieceHashes.Add(1)
-	t.mu.Unlock()
 
 	go func() {
 		defer func() {
-			t.mu.Lock()
 			t.activePieceHashes.Add(-1)
-			t.mu.Unlock()
 		}()
 
 		for !t.closed.IsSet() {
@@ -2353,7 +2373,7 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 			t.mu.Unlock()
 			p.hashing = true
 			t.hashing.Add(1)
-			t.publishPieceStateChange(pi)
+			t.publishPieceStateChange(pi, false)
 			t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher")
 			t.storageLock.RLock()
 
@@ -2399,22 +2419,22 @@ func (t *Torrent) processHashResults() {
 		}
 
 		for _, result := range results {
-			func() {
-				t.cl.lock()
-				defer t.cl.unlock()
-				if result.correct {
-					for peer := range result.failedPeers {
+			if result.correct {
+				for peer := range result.failedPeers {
+					func() {
+						t.cl.lock()
+						defer t.cl.unlock()
 						t.cl.banPeerIP(peer.AsSlice())
-						t.logger.WithDefaultLevel(log.Debug).Printf("smart banned %v for piece %v", peer, result.index)
-					}
-					t.dropBannedPeers()
-					for ri := t.pieceRequestIndexOffset(result.index); ri < t.pieceRequestIndexOffset(result.index+1); ri++ {
-						t.smartBanCache.ForgetBlock(ri)
-					}
+					}()
+					t.logger.WithDefaultLevel(log.Debug).Printf("smart banned %v for piece %v", peer, result.index)
 				}
-				t.pieceHashed(result.index, result.correct, result.copyErr)
-				t.updatePiecePriority(result.index, "Torrent.pieceHasher")
-			}()
+				t.dropBannedPeers()
+				for ri := t.pieceRequestIndexOffset(result.index); ri < t.pieceRequestIndexOffset(result.index+1); ri++ {
+					t.smartBanCache.ForgetBlock(ri)
+				}
+			}
+			t.pieceHashed(result.index, result.correct, result.copyErr)
+			t.updatePiecePriority(result.index, "Torrent.pieceHasher")
 		}
 	}
 }
@@ -2435,31 +2455,40 @@ func (t *Torrent) getPieceToHash() (ret pieceIndex, ok bool) {
 }
 
 func (t *Torrent) dropBannedPeers() {
-	t.iterPeers(func(p *Peer) {
+	for _, p := range t.peersAsSlice() {
 		remoteIp := p.remoteIp()
 		if remoteIp == nil {
 			if p.bannableAddr.Ok {
 				t.logger.WithDefaultLevel(log.Debug).Printf("can't get remote ip for peer %v", p)
 			}
-			return
+			continue
 		}
 		netipAddr := netip.MustParseAddr(remoteIp.String())
 		if Some(netipAddr) != p.bannableAddr {
 			t.logger.WithDefaultLevel(log.Debug).Printf(
 				"peer remote ip does not match its bannable addr [peer=%v, remote ip=%v, bannable addr=%v]",
 				p, remoteIp, p.bannableAddr)
+			continue
 		}
-		if _, ok := t.cl.badPeerIPs[netipAddr]; ok {
+
+		t.cl.lock()
+		_, ok := t.cl.badPeerIPs[netipAddr]
+		t.cl.unlock()
+
+		if ok {
 			// Should this be a close?
 			p.drop()
 			t.logger.WithDefaultLevel(log.Debug).Printf("dropped %v for banned remote IP %v", p, netipAddr)
 		}
-	})
+	}
 }
 
 // Return the connections that touched a piece, and clear the entries while doing it.
 func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
 	p := t.piece(pi)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	for c := range p.dirtiers {
 		delete(c.peerTouchedPieces, pi)
 		delete(p.dirtiers, c)
@@ -2467,6 +2496,8 @@ func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
 }
 
 func (t *Torrent) peersAsSlice() (ret []*Peer) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	t.iterPeers(func(p *Peer) {
 		ret = append(ret, p)
 	})
@@ -2481,7 +2512,7 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 	t.mu.Lock()
 	t.piecesQueuedForHash.Add(bitmap.BitIndex(pieceIndex))
 	t.mu.Unlock()
-	t.publishPieceStateChange(pieceIndex)
+	t.publishPieceStateChange(pieceIndex, true)
 	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck")
 	t.tryCreateMorePieceHashers()
 }

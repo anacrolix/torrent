@@ -2162,8 +2162,6 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 }
 
 func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
-	fmt.Println("PH0")
-	fmt.Println("PH Done")
 	t.logger.LazyLog(log.Debug, func() log.Msg {
 		return log.Fstr("hashed piece %d (passed=%t)", piece, passed)
 	})
@@ -2421,29 +2419,22 @@ func (t *Torrent) processHashResults() {
 		}
 
 		for _, result := range results {
-			fmt.Println("RES0")
 			if result.correct {
-				fmt.Println("RES0A")
 				for peer := range result.failedPeers {
 					func() {
-						t.cl.lock()
-						defer t.cl.unlock()
 						t.cl.banPeerIP(peer.AsSlice())
 					}()
 					t.logger.WithDefaultLevel(log.Debug).Printf("smart banned %v for piece %v", peer, result.index)
 				}
-				fmt.Println("RES0B")
+
 				t.dropBannedPeers()
-				fmt.Println("RES0C")
+
 				for ri := t.pieceRequestIndexOffset(result.index); ri < t.pieceRequestIndexOffset(result.index+1); ri++ {
 					t.smartBanCache.ForgetBlock(ri)
 				}
 			}
-			fmt.Println("RES1")
 			t.pieceHashed(result.index, result.correct, result.copyErr)
-			fmt.Println("RES2")
 			t.updatePiecePriority(result.index, "Torrent.pieceHasher")
-			fmt.Println("RES3")
 		}
 	}
 }
@@ -2480,9 +2471,9 @@ func (t *Torrent) dropBannedPeers() {
 			continue
 		}
 
-		t.cl.lock()
+		t.cl.badPeerIPsMu.RLock()
 		_, ok := t.cl.badPeerIPs[netipAddr]
-		t.cl.unlock()
+		t.cl.badPeerIPsMu.RUnlock()
 
 		if ok {
 			// Should this be a close?

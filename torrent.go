@@ -2421,6 +2421,7 @@ func (t *Torrent) processHashResults() {
 		}
 
 		for _, result := range results {
+			fmt.Println("RES0")
 			if result.correct {
 				for peer := range result.failedPeers {
 					func() {
@@ -2435,8 +2436,11 @@ func (t *Torrent) processHashResults() {
 					t.smartBanCache.ForgetBlock(ri)
 				}
 			}
+			fmt.Println("RES1")
 			t.pieceHashed(result.index, result.correct, result.copyErr)
+			fmt.Println("RES2")
 			t.updatePiecePriority(result.index, "Torrent.pieceHasher")
+			fmt.Println("RES3")
 		}
 	}
 }

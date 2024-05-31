@@ -467,11 +467,12 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	}
 	t.mu.Lock()
 	t.info = info
+	t.displayName = "" // Save a few bytes lol.
 	t.mu.Unlock()
+
 	t._chunksPerRegularPiece = chunkIndexType((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
 	t.updateComplete()
 	t.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
-	t.displayName = "" // Save a few bytes lol.
 	t.initFiles()
 	t.cacheLength()
 	t.makePieces()
@@ -582,11 +583,13 @@ func (t *Torrent) setMetadataSize(size int) (err error) {
 // The current working name for the torrent. Either the name in the info dict,
 // or a display name given such as by the dn value in a magnet link, or "".
 func (t *Torrent) name() string {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
 	if t.haveInfo() {
 		return t.info.BestName()
 	}
+
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
 	if t.displayName != "" {
 		return t.displayName
 	}

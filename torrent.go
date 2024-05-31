@@ -2162,6 +2162,8 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 }
 
 func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
+	fmt.Println("PH0")
+	fmt.Println("PH Done")
 	t.logger.LazyLog(log.Debug, func() log.Msg {
 		return log.Fstr("hashed piece %d (passed=%t)", piece, passed)
 	})

@@ -35,5 +35,5 @@ type peerImpl interface {
 	peerHasAllPieces() (all, known bool)
 	peerPieces() *roaring.Bitmap
 
-	nominalMaxRequests() maxRequests
+	nominalMaxRequests(lock bool) maxRequests
 }

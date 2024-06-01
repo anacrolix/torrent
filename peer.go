@@ -28,7 +28,7 @@ type (
 	Peer struct {
 		// First to ensure 64-bit alignment for atomics. See #262.
 		_stats ConnStats
-		mu     sync.RWMutex
+		mu     mu //sync.RWMutex
 
 		t *Torrent
 
@@ -133,6 +133,9 @@ func (p *Peer) Torrent() *Torrent {
 }
 
 func (p *Peer) initRequestState() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	p.requestState.Requests = &peerRequests{}
 }
 
@@ -172,10 +175,16 @@ func (cn *Peer) expectingChunks() bool {
 }
 
 func (cn *Peer) remoteChokingPiece(piece pieceIndex) bool {
+	cn.mu.RLock()
+	defer cn.mu.RUnlock()
+
 	return cn.peerChoking && !cn.peerAllowedFast.Contains(piece)
 }
 
 func (cn *Peer) cumInterest() time.Duration {
+	cn.mu.RLock()
+	defer cn.mu.RUnlock()
+
 	ret := cn.priorInterest
 	if cn.requestState.Interested {
 		ret += time.Since(cn.lastBecameInterested)
@@ -188,12 +197,19 @@ func (cn *Peer) locker() *lockWithDeferreds {
 }
 
 func (cn *PeerConn) supportsExtension(ext pp.ExtensionName) bool {
+	cn.mu.RLock()
+	defer cn.mu.RUnlock()
 	_, ok := cn.PeerExtensionIDs[ext]
 	return ok
 }
 
 // The best guess at number of pieces in the torrent for this peer.
-func (cn *Peer) bestPeerNumPieces() pieceIndex {
+func (cn *Peer) bestPeerNumPieces(lock bool) pieceIndex {
+	if lock {
+		cn.mu.RLock()
+		defer cn.mu.RUnlock()
+	}
+
 	if cn.t.haveInfo() {
 		return cn.t.numPieces()
 	}
@@ -202,10 +218,11 @@ func (cn *Peer) bestPeerNumPieces() pieceIndex {
 
 func (cn *Peer) completedString() string {
 	have := pieceIndex(cn.peerPieces().GetCardinality())
+	best := cn.bestPeerNumPieces(true)
 	if all, _ := cn.peerHasAllPieces(); all {
-		have = cn.bestPeerNumPieces()
+		have = best
 	}
-	return fmt.Sprintf("%d/%d", have, cn.bestPeerNumPieces())
+	return fmt.Sprintf("%d/%d", have, best)
 }
 
 func eventAgeString(t time.Time) string {
@@ -294,9 +311,9 @@ func (cn *Peer) writeStatus(w io.Writer) {
 		cn.totalExpectingTime(),
 	)
 
-	cn.t.mu.RLock()
+	cn.mu.RLock()
 	lenPeerTouchedPieces := len(cn.peerTouchedPieces)
-	cn.t.mu.RUnlock()
+	cn.mu.RUnlock()
 
 	fmt.Fprintf(w,
 		"%s completed, %d pieces touched, good chunks: %v/%v:%v reqq: %d+%v/(%d/%d):%d/%d, flags: %s, dr: %.1f KiB/s\n",
@@ -307,7 +324,7 @@ func (cn *Peer) writeStatus(w io.Writer) {
 		&cn._stats.ChunksWritten,
 		cn.requestState.Requests.GetCardinality(),
 		cn.requestState.Cancelled.GetCardinality(),
-		cn.peerImpl.nominalMaxRequests(),
+		cn.peerImpl.nominalMaxRequests(true),
 		cn.PeerMaxRequests,
 		len(cn.peerRequests),
 		localClientReqq,
@@ -343,6 +360,9 @@ func (p *Peer) close() {
 // Peer definitely has a piece, for purposes of requesting. So it's not sufficient that we think
 // they do (known=true).
 func (cn *Peer) peerHasPiece(piece pieceIndex) bool {
+	cn.mu.RLock()
+	defer cn.mu.RUnlock()
+
 	if all, known := cn.peerHasAllPieces(); all && known {
 		return true
 	}
@@ -365,7 +385,7 @@ var (
 )
 
 // The actual value to use as the maximum outbound requests.
-func (cn *Peer) nominalMaxRequests() maxRequests {
+func (cn *Peer) nominalMaxRequests(lock bool) maxRequests {
 	return maxInt(1, minInt(cn.PeerMaxRequests, cn.peakRequests*2, maxLocalToRemoteRequests))
 }
 
@@ -378,9 +398,6 @@ func (cn *Peer) totalExpectingTime() (ret time.Duration) {
 }
 
 func (cn *Peer) setInterested(interested bool) bool {
-	cn.mu.Lock()
-	defer cn.mu.Unlock()
-
 	if cn.requestState.Interested == interested {
 		return true
 	}
@@ -407,6 +424,10 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 		return err
 	}
 	pi := cn.t.pieceIndexOfRequestIndex(r)
+
+	cn.mu.RLock()
+	defer cn.mu.RUnlock()
+
 	if cn.requestState.Cancelled.Contains(r) {
 		return errors.New("request is cancelled and waiting acknowledgement")
 	}
@@ -435,25 +456,27 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 	return nil
 }
 
-func (cn *Peer) mustRequest(r RequestIndex) bool {
-	more, err := cn.request(r)
+func (cn *Peer) mustRequest(r RequestIndex, lock bool) bool {
+	more, err := cn.request(r, lock)
 	if err != nil {
 		panic(err)
 	}
 	return more
 }
 
-func (cn *Peer) request(r RequestIndex) (more bool, err error) {
+func (cn *Peer) request(r RequestIndex, lock bool) (more bool, err error) {
+	if lock {
+		cn.mu.Lock()
+		defer cn.mu.Unlock()
+	}
+
 	//if err := cn.shouldRequest(r); err != nil {
 	//	panic(err)
 	//}
-	cn.mu.Lock()
-	defer cn.mu.Unlock()
-
 	if cn.requestState.Requests.Contains(r) {
 		return true, nil
 	}
-	if maxRequests(cn.requestState.Requests.GetCardinality()) >= cn.peerImpl.nominalMaxRequests() {
+	if maxRequests(cn.requestState.Requests.GetCardinality()) >= cn.peerImpl.nominalMaxRequests(false) {
 		return true, errors.New("too many outstanding requests")
 	}
 
@@ -475,8 +498,8 @@ func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 	return cn.peerImpl._request(ppReq), nil
 }
 
-func (me *Peer) cancel(r RequestIndex) {
-	if !me.deleteRequest(r) {
+func (me *Peer) cancel(r RequestIndex, lock bool) {
+	if !me.deleteRequest(r, lock) {
 		panic("request not existing should have been guarded")
 	}
 	if me._cancel(r) {
@@ -486,13 +509,18 @@ func (me *Peer) cancel(r RequestIndex) {
 		}
 	}
 	me.decPeakRequests()
-	if me.isLowOnRequests() {
-		me.updateRequests("Peer.cancel")
+	if me.isLowOnRequests(lock) {
+		me.updateRequests("Peer.cancel", lock)
 	}
 }
 
 // Sets a reason to update requests, and if there wasn't already one, handle it.
-func (cn *Peer) updateRequests(reason string) {
+func (cn *Peer) updateRequests(reason string, lock bool) {
+	if lock {
+		cn.mu.Lock()
+		defer cn.mu.Unlock()
+	}
+
 	if cn.needRequestUpdate != "" {
 		return
 	}
@@ -575,19 +603,28 @@ func runSafeExtraneous(f func()) {
 
 // Returns true if it was valid to reject the request.
 func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
-	if c.deleteRequest(r) {
+	if c.deleteRequest(r, true) {
 		c.decPeakRequests()
-	} else if !c.requestState.Cancelled.CheckedRemove(r) {
-		return false
+	} else {
+		c.mu.RLock()
+		removed := c.requestState.Cancelled.CheckedRemove(r)
+		c.mu.RUnlock()
+
+		if !removed {
+			return false
+		}
 	}
-	if c.isLowOnRequests() {
-		c.updateRequests("Peer.remoteRejectedRequest")
+	if c.isLowOnRequests(true) {
+		c.updateRequests("Peer.remoteRejectedRequest", true)
 	}
 	c.decExpectedChunkReceive(r)
 	return true
 }
 
 func (c *Peer) decExpectedChunkReceive(r RequestIndex) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	count := c.validReceiveChunks[r]
 	if count == 1 {
 		delete(c.validReceiveChunks, r)
@@ -624,18 +661,25 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	// hashing if they're out of bounds.
 	defer recordBlockForSmartBan()
 
-	if c.peerChoking {
+	c.mu.RLock()
+	peerChoking := c.peerChoking
+	validReceiveChunks := c.validReceiveChunks[req]
+	allowedFast := c.peerAllowedFast.Contains(pieceIndex(ppReq.Index))
+	receivedRequest := c.requestState.Requests.Contains(req)
+	c.mu.RUnlock()
+
+	if peerChoking {
 		chunksReceived.Add("while choked", 1)
 	}
-	// ok to here
-	if c.validReceiveChunks[req] <= 0 {
+
+	if validReceiveChunks <= 0 {
 		chunksReceived.Add("unexpected", 1)
 		return errors.New("received unexpected chunk")
 	}
 
 	c.decExpectedChunkReceive(req)
 
-	if c.peerChoking && c.peerAllowedFast.Contains(pieceIndex(ppReq.Index)) {
+	if peerChoking && allowedFast {
 		chunksReceived.Add("due to allowed fast", 1)
 	}
 
@@ -644,20 +688,30 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	// out.
 	intended := false
 	{
-		if c.requestState.Requests.Contains(req) {
+		if receivedRequest {
 			for _, f := range c.callbacks.ReceivedRequested {
 				f(PeerMessageEvent{c, msg})
 			}
 		}
+
+		checkRemove := func() bool {
+			c.mu.RLock()
+			defer c.mu.RUnlock()
+			return c.requestState.Cancelled.CheckedRemove(req)
+		}
+
 		// Request has been satisfied.
-		if c.deleteRequest(req) || c.requestState.Cancelled.CheckedRemove(req) {
+		if c.deleteRequest(req, true) || checkRemove() {
 			intended = true
 			if !c.peerChoking {
 				c._chunksReceivedWhileExpecting++
 			}
-			if c.isLowOnRequests() {
-				c.updateRequests("Peer.receiveChunk deleted request")
+
+			c.mu.Lock()
+			if c.isLowOnRequests(false) {
+				c.updateRequests("Peer.receiveChunk deleted request", false)
 			}
+			c.mu.Unlock()
 		} else {
 			chunksReceived.Add("unintended", 1)
 		}
@@ -672,7 +726,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
 		return nil
 	}
-
+	// ok to here
 	piece := &t.pieces[ppReq.Index]
 
 	c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
@@ -698,7 +752,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		if p == c {
 			panic("should not be pending request from conn that just received it")
 		}
-		p.cancel(req)
+		p.cancel(req, true)
 	}
 
 	err = func() error {
@@ -724,7 +778,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// Necessary to pass TestReceiveChunkStorageFailureSeederFastExtensionDisabled. I think a
 		// request update runs while we're writing the chunk that just failed. Then we never do a
 		// fresh update after pending the failed request.
-		c.updateRequests("Peer.receiveChunk error writing chunk")
+		c.updateRequests("Peer.receiveChunk error writing chunk", true)
 		c.t.cl.unlock() // this is temp - moving t to not use cl locked externally
 		t.onWriteChunkErr(err)
 		c.t.cl.lock()
@@ -750,12 +804,12 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 }
 
 func (c *Peer) onDirtiedPiece(piece pieceIndex) {
-	c.t.mu.Lock()
+	c.mu.Lock()
 	if c.peerTouchedPieces == nil {
 		c.peerTouchedPieces = make(map[pieceIndex]struct{})
 	}
 	c.peerTouchedPieces[piece] = struct{}{}
-	c.t.mu.Unlock()
+	c.mu.Unlock()
 
 	p := &c.t.pieces[piece]
 	p.mu.Lock()
@@ -789,13 +843,16 @@ func (c *Peer) peerHasWantedPieces() bool {
 
 // Returns true if an outstanding request is removed. Cancelled requests should be handled
 // separately.
-func (c *Peer) deleteRequest(r RequestIndex) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *Peer) deleteRequest(r RequestIndex, lock bool) bool {
+	if lock {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+	}
 
 	if !c.requestState.Requests.CheckedRemove(r) {
 		return false
 	}
+
 	for _, f := range c.callbacks.DeletedRequest {
 		f(PeerRequestEvent{c, c.t.requestIndexToRequest(r)})
 	}
@@ -813,22 +870,24 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 }
 
 func (c *Peer) deleteAllRequests(reason string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.requestState.Requests.IsEmpty() {
 		return
 	}
 	c.requestState.Requests.IterateSnapshot(func(x RequestIndex) bool {
-		if !c.deleteRequest(x) {
+		if !c.deleteRequest(x, false) {
 			panic("request should exist")
 		}
 		return true
 	})
 	c.assertNoRequests()
 	c.t.iterPeers(func(p *Peer) {
-		if p.isLowOnRequests() {
-			p.updateRequests(reason)
+		if p.isLowOnRequests(false) {
+			p.updateRequests(reason, false)
 		}
-	})
-	return
+	}, false)
 }
 
 func (c *Peer) assertNoRequests() {
@@ -838,12 +897,14 @@ func (c *Peer) assertNoRequests() {
 }
 
 func (c *Peer) cancelAllRequests() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.requestState.Requests.IterateSnapshot(func(x RequestIndex) bool {
-		c.cancel(x)
+		c.cancel(x, false)
 		return true
 	})
 	c.assertNoRequests()
-	return
 }
 
 func (c *Peer) peerPriority() (peerPriority, error) {
@@ -897,12 +958,18 @@ func (p *Peer) TryAsPeerConn() (*PeerConn, bool) {
 }
 
 func (p *Peer) uncancelledRequests() uint64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.requestState.Requests.GetCardinality()
 }
 
 type peerLocalPublicAddr = IpPort
 
-func (p *Peer) isLowOnRequests() bool {
+func (p *Peer) isLowOnRequests(lock bool) bool {
+	if lock {
+		p.mu.RLock()
+		defer p.mu.RUnlock()
+	}
 	return p.requestState.Requests.IsEmpty() && p.requestState.Cancelled.IsEmpty()
 }
 

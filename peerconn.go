@@ -387,7 +387,7 @@ func (cn *PeerConn) peerSentHave(piece pieceIndex) error {
 	}
 	cn._peerPieces.Add(uint32(piece))
 	if cn.t.wantPieceIndex(piece) {
-		cn.updateRequests("have")
+		cn.updateRequests("have", true)
 	}
 	cn.peerPiecesChanged()
 	return nil
@@ -443,7 +443,7 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 	// as or.
 	cn._peerPieces.Xor(&bm)
 	if shouldUpdateRequests {
-		cn.updateRequests("bitfield")
+		cn.updateRequests("bitfield", true)
 	}
 	// We didn't guard this before, I see no reason to do it now.
 	cn.peerPiecesChanged()
@@ -474,7 +474,7 @@ func (cn *PeerConn) peerHasAllPiecesTriggers() {
 	cn.t.mu.RUnlock()
 
 	if !isEmpty {
-		cn.updateRequests("Peer.onPeerHasAllPieces")
+		cn.updateRequests("Peer.onPeerHasAllPieces", true)
 	}
 	cn.peerPiecesChanged()
 }
@@ -763,7 +763,6 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				break
 			}
 
-			c.mu.Lock()
 			if !c.fastEnabled() {
 				c.deleteAllRequests("choked by non-fast PeerConn")
 			} else {
@@ -774,9 +773,12 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				// could let us request a lot of stuff, then choke us and never reject, but they're
 				// only a single peer, our chunk balancing should smooth over this abuse.
 			}
+
+			c.mu.Lock()
 			c.peerChoking = true
 			c.updateExpectingChunks()
 			c.mu.Unlock()
+
 		case pp.Unchoke:
 			if !peerChoking {
 				// Some clients do this for some reason. Transmission doesn't error on this, so we
@@ -785,7 +787,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				break
 			}
 
-			c.mu.RLock()
+			c.mu.Lock()
 			preservedCount := 0
 			c.requestState.Requests.Iterate(func(x RequestIndex) bool {
 				if !c.peerAllowedFast.Contains(c.t.pieceIndexOfRequestIndex(x)) {
@@ -803,19 +805,23 @@ func (c *PeerConn) mainReadLoop() (err error) {
 
 				torrent.Add("requestsPreservedThroughChoking", int64(preservedCount))
 			}
-			c.mu.RUnlock()
-
-			c.t.mu.RLock()
-			isEmpty := c.t._pendingPieces.IsEmpty()
-			c.t.mu.RUnlock()
-
-			c.mu.Lock()
 			c.peerChoking = false
-			if !isEmpty {
-				c.updateRequests("unchoked")
-			}
-			c.updateExpectingChunks()
 			c.mu.Unlock()
+
+			c.t.mu.Lock()
+			isEmpty := c.t._pendingPieces.IsEmpty()
+			c.t.mu.Unlock()
+
+			func() {
+				c.mu.Lock()
+				defer c.mu.Unlock()
+
+				if !isEmpty {
+					c.updateRequests("unchoked", false)
+				}
+
+				c.updateExpectingChunks()
+			}()
 
 		case pp.Interested:
 			c.peerInterested = true
@@ -865,7 +871,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Suggest:
 			torrent.Add("suggests received", 1)
 			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index).LogLevel(log.Debug, c.t.logger)
-			c.updateRequests("suggested")
+			c.updateRequests("suggested", true)
 		case pp.HaveAll:
 			err = c.onPeerSentHaveAll()
 		case pp.HaveNone:
@@ -879,7 +885,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).LogLevel(log.Debug, c.t.logger)
-			c.updateRequests("PeerConn.mainReadLoop allowed fast")
+			c.updateRequests("PeerConn.mainReadLoop allowed fast", true)
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 		default:

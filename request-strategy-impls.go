@@ -74,7 +74,7 @@ type requestStrategyTorrent struct {
 }
 
 func (r requestStrategyTorrent) Piece(i int) request_strategy.Piece {
-	return (*requestStrategyPiece)(r.t.piece(i))
+	return (*requestStrategyPiece)(r.t.piece(i, true))
 }
 
 func (r requestStrategyTorrent) PieceLength() int64 {
@@ -86,11 +86,11 @@ var _ request_strategy.Torrent = requestStrategyTorrent{}
 type requestStrategyPiece Piece
 
 func (r *requestStrategyPiece) Request() bool {
-	return !r.t.ignorePieceForRequests(r.index)
+	return !r.t.ignorePieceForRequests(r.index, true)
 }
 
 func (r *requestStrategyPiece) NumPendingChunks() int {
-	return int(r.t.pieceNumPendingChunks(r.index))
+	return int(r.t.pieceNumPendingChunks(r.index, true))
 }
 
 var _ request_strategy.Piece = (*requestStrategyPiece)(nil)

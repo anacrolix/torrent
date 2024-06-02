@@ -22,7 +22,7 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	mi := testutil.GreetingMetaInfo()
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
-	require.NoError(t, tt.setInfo(&info))
+	require.NoError(t, tt.setInfo(&info,true))
 	require.NoError(t, tt.storage.Close())
 	tt.hashPiece(&tt.pieces[0])
 }

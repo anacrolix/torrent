@@ -25,7 +25,7 @@ func stack(skip int) string {
 func (me *lockWithDeferreds) Lock() {
 	me.internal.Lock()
 	me.lc.Add(1)
-	//me.locker = stack(2)
+	me.locker = stack(2)
 }
 
 func (me *lockWithDeferreds) Unlock() {

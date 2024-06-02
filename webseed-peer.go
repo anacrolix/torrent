@@ -52,12 +52,12 @@ func (ws *webseedPeer) String() string {
 	return fmt.Sprintf("webseed peer for %q", ws.client.Url)
 }
 
-func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
+func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lock bool) {
 	ws.client.SetInfo(info)
 	// There should be probably be a callback in Client instead, so it can remove pieces at its whim
 	// too.
 	ws.client.Pieces.Iterate(func(x uint32) bool {
-		ws.peer.t.incPieceAvailability(pieceIndex(x))
+		ws.peer.t.incPieceAvailability(pieceIndex(x), lock)
 		return true
 	})
 }
@@ -94,7 +94,7 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool) maxRequests {
 
 		if !peer.closed.IsSet() {
 			if peer.connectionFlags() != "WS" {
-				if !peer.peerInterested || peer.lastHelpful().IsZero() {
+				if !peer.peerInterested || peer.lastHelpful(lock).IsZero() {
 					return
 				}
 			}
@@ -178,8 +178,8 @@ func (ws *webseedPeer) requester(i int) {
 			ws.peer.logger.Levelf(log.Debug, "%d: requests %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) restart(%v)",
 				i, ws.processedRequests, pendingRequests, desiredRequests, ws.nominalMaxRequests(true),
 				len(ws.activeRequests)-int(receiving), receiving, ws.maxActiveRequests, ws.waiting,
-				ws.peer.t.numQueuedForHash(), ws.peer.t.activePieceHashes.Load(), ws.peer.t.hashing.Load(), len(ws.peer.t.hashResults),
-				ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(), restart)
+				ws.peer.t.numQueuedForHash(true), ws.peer.t.activePieceHashes.Load(), ws.peer.t.hashing.Load(), len(ws.peer.t.hashResults),
+				ws.peer.t.numPiecesCompleted(true), ws.peer.t.NumPieces(), restart)
 
 			if pendingRequests > ws.maxRequesters {
 				if pendingRequests > ws.peer.PeerMaxRequests {
@@ -259,12 +259,12 @@ func requestUpdate(ws *webseedPeer) {
 		ws.peer.logger.Levelf(log.Debug, "requestUpdate %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) %s",
 			ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestState(false).Requests.requestIndexes),
 			ws.nominalMaxRequests(true), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
-			ws.peer.t.numQueuedForHash(), ws.peer.t.activePieceHashes.Load(), ws.peer.t.hashing.Load(), len(ws.peer.t.hashResults), ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(),
+			ws.peer.t.numQueuedForHash(true), ws.peer.t.activePieceHashes.Load(), ws.peer.t.hashing.Load(), len(ws.peer.t.hashResults), ws.peer.t.numPiecesCompleted(true), ws.peer.t.NumPieces(),
 			time.Since(ws.peer.lastRequestUpdate))
 
 		if !ws.peer.closed.IsSet() {
 			numPieces := ws.peer.t.NumPieces()
-			numCompleted := ws.peer.t.numPiecesCompleted()
+			numCompleted := ws.peer.t.numPiecesCompleted(true)
 
 			if numCompleted < numPieces {
 				// Don't wait for small files
@@ -277,7 +277,7 @@ func requestUpdate(ws *webseedPeer) {
 						lastExistingUseful := ws.peer.lastUsefulChunkReceived
 
 						for piece := pieceIndex(0); piece < pieceIndex(numPieces); piece++ {
-							if ws.peer.t.pieceComplete(piece) {
+							if ws.peer.t.pieceComplete(piece, true) {
 								continue
 							}
 
@@ -324,7 +324,7 @@ func requestUpdate(ws *webseedPeer) {
 					ws.peer.logger.Levelf(log.Debug, "unchoked %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d) complete(%d/%d) %s",
 						ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestState(true).Requests.requestIndexes),
 						ws.nominalMaxRequests(true), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
-						ws.peer.t.numQueuedForHash(), ws.peer.t.activePieceHashes.Load(), ws.peer.t.numPiecesCompleted(), ws.peer.t.NumPieces(),
+						ws.peer.t.numQueuedForHash(true), ws.peer.t.activePieceHashes.Load(), ws.peer.t.numPiecesCompleted(true), ws.peer.t.NumPieces(),
 						time.Since(ws.peer.lastRequestUpdate))
 
 					// if the initial unchoke didn't yield a request (for small files) - don't immediately
@@ -422,9 +422,6 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		return err
 	}
 
-	ws.peer.t.cl.lock()
-	defer ws.peer.t.cl.unlock()
-
 	err = ws.peer.receiveChunk(&pp.Message{
 		Type:  pp.Piece,
 		Index: r.Index,
@@ -441,8 +438,8 @@ func (me *webseedPeer) peerPieces() *roaring.Bitmap {
 	return &me.client.Pieces
 }
 
-func (cn *webseedPeer) peerHasAllPieces() (all, known bool) {
-	if !cn.peer.t.haveInfo() {
+func (cn *webseedPeer) peerHasAllPieces(lock bool) (all, known bool) {
+	if !cn.peer.t.haveInfo(lock) {
 		return true, false
 	}
 	return cn.client.Pieces.GetCardinality() == uint64(cn.peer.t.numPieces()), true

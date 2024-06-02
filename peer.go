@@ -210,7 +210,7 @@ func (cn *Peer) bestPeerNumPieces(lock bool) pieceIndex {
 		defer cn.mu.RUnlock()
 	}
 
-	if cn.t.haveInfo() {
+	if cn.t.haveInfo(true) {
 		return cn.t.numPieces()
 	}
 	return cn.peerMinPieces
@@ -219,7 +219,7 @@ func (cn *Peer) bestPeerNumPieces(lock bool) pieceIndex {
 func (cn *Peer) completedString() string {
 	have := pieceIndex(cn.peerPieces().GetCardinality())
 	best := cn.bestPeerNumPieces(true)
-	if all, _ := cn.peerHasAllPieces(); all {
+	if all, _ := cn.peerHasAllPieces(true); all {
 		have = best
 	}
 	return fmt.Sprintf("%d/%d", have, best)
@@ -306,7 +306,7 @@ func (cn *Peer) writeStatus(w io.Writer) {
 	fmt.Fprintf(w, "last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),
-		eventAgeString(cn.lastHelpful()),
+		eventAgeString(cn.lastHelpful(true)),
 		cn.cumInterest(),
 		cn.totalExpectingTime(),
 	)
@@ -359,11 +359,11 @@ func (p *Peer) close() {
 
 // Peer definitely has a piece, for purposes of requesting. So it's not sufficient that we think
 // they do (known=true).
-func (cn *Peer) peerHasPiece(piece pieceIndex) bool {
+func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool) bool {
 	cn.mu.RLock()
 	defer cn.mu.RUnlock()
 
-	if all, known := cn.peerHasAllPieces(); all && known {
+	if all, known := cn.peerHasAllPieces(lock); all && known {
 		return true
 	}
 	return cn.peerPieces().ContainsInt(piece)
@@ -431,7 +431,7 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 	if cn.requestState.Cancelled.Contains(r) {
 		return errors.New("request is cancelled and waiting acknowledgement")
 	}
-	if !cn.peerHasPiece(pi) {
+	if !cn.peerHasPiece(pi, true) {
 		return errors.New("requesting piece peer doesn't have")
 	}
 	if !cn.t.peerIsActive(cn) {
@@ -443,7 +443,7 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 	if cn.t.hashingPiece(pi) {
 		panic("piece is being hashed")
 	}
-	if cn.t.pieceQueuedForHash(pi) {
+	if cn.t.pieceQueuedForHash(pi, false) {
 		panic("piece is queued for hash")
 	}
 	if cn.peerChoking && !cn.peerAllowedFast.Contains(pi) {
@@ -555,7 +555,7 @@ func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 // connection.
 func (cn *Peer) postHandshakeStats(f func(*ConnStats)) {
 	t := cn.t
-	f(&t.stats)
+	f(&t.connStats)
 	f(&t.cl.connStats)
 }
 
@@ -573,9 +573,9 @@ func (cn *Peer) readBytes(n int64) {
 	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
 }
 
-func (c *Peer) lastHelpful() (ret time.Time) {
+func (c *Peer) lastHelpful(lockTorrent bool) (ret time.Time) {
 	ret = c.lastUsefulChunkReceived
-	if c.t.seeding() && c.lastChunkSent.After(ret) {
+	if c.t.seeding(lockTorrent) && c.lastChunkSent.After(ret) {
 		ret = c.lastChunkSent
 	}
 	return
@@ -732,13 +732,18 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
 	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
 	if intended {
+		c.mu.Lock()
 		c.piecesReceivedSinceLastRequestUpdate++
+		c.mu.Unlock()
 		c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulIntendedData }))
 	}
-	for _, f := range c.t.cl.config.Callbacks.ReceivedUsefulData {
+	for _, f := range cl.config.Callbacks.ReceivedUsefulData {
 		f(ReceivedUsefulDataEvent{c, msg})
 	}
+
+	c.mu.Lock()
 	c.lastUsefulChunkReceived = time.Now()
+	c.mu.Unlock()
 
 	// Need to record that it hasn't been written yet, before we attempt to do
 	// anything with it.
@@ -755,20 +760,15 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		p.cancel(req, true)
 	}
 
-	err = func() error {
-		cl.unlock()
-		defer cl.lock()
-		// Opportunistically do this here while we aren't holding the client lock.
-		recordBlockForSmartBan()
-		concurrentChunkWrites.Add(1)
-		defer concurrentChunkWrites.Add(-1)
-		// Write the chunk out. Note that the upper bound on chunk writing concurrency will be the
-		// number of connections. We write inline with receiving the chunk (with this lock dance),
-		// because we want to handle errors synchronously and I haven't thought of a nice way to
-		// defer any concurrency to the storage and have that notify the client of errors. TODO: Do
-		// that instead.
-		return t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
-	}()
+	// Opportunistically do this here while we aren't holding the client lock.
+	recordBlockForSmartBan()
+	concurrentChunkWrites.Add(1)
+	defer concurrentChunkWrites.Add(-1)
+	// Write the chunk out. Note that the upper bound on chunk writing concurrency will be the
+	// number of connections. We write inline with receiving the chunk, because we want to handle errors
+	// synchronously and I haven't thought of a nice way to defer any concurrency to the storage and have
+	// that notify the client of errors. TODO: Do that instead.
+	err = t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
 
 	piece.decrementPendingWrites()
 
@@ -779,17 +779,15 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// request update runs while we're writing the chunk that just failed. Then we never do a
 		// fresh update after pending the failed request.
 		c.updateRequests("Peer.receiveChunk error writing chunk", true)
-		c.t.cl.unlock() // this is temp - moving t to not use cl locked externally
 		t.onWriteChunkErr(err)
-		c.t.cl.lock()
 		return nil
 	}
 
 	c.onDirtiedPiece(pieceIndex(ppReq.Index))
 
 	// We need to ensure the piece is only queued once, so only the last chunk writer gets this job.
-	if t.pieceAllDirty(pieceIndex(ppReq.Index)) && piece.pendingWrites == 0 {
-		t.queuePieceCheck(pieceIndex(ppReq.Index))
+	if t.pieceAllDirty(pieceIndex(ppReq.Index), true) && piece.pendingWrites == 0 {
+		t.queuePieceCheck(pieceIndex(ppReq.Index), true)
 		// We don't pend all chunks here anymore because we don't want code dependent on the dirty
 		// chunk status (such as the haveChunk call above) to have to check all the various other
 		// piece states like queued for hash, hashing etc. This does mean that we need to be sure
@@ -798,7 +796,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 	cl.event.Broadcast()
 	// We do this because we've written a chunk, and may change PieceState.Partial.
-	t.publishPieceStateChange(pieceIndex(ppReq.Index), true)
+	t.publishPieceStateChange(pieceIndex(ppReq.Index), false, true)
 
 	return nil
 }
@@ -824,20 +822,21 @@ func (cn *Peer) netGoodPiecesDirtied() int64 {
 	return cn._stats.PiecesDirtiedGood.Int64() - cn._stats.PiecesDirtiedBad.Int64()
 }
 
-func (c *Peer) peerHasWantedPieces() bool {
-	if all, _ := c.peerHasAllPieces(); all {
+func (c *Peer) peerHasWantedPieces(lockTorrent bool) bool {
+	if lockTorrent {
 		c.t.mu.RLock()
-		isEmpty := c.t._pendingPieces.IsEmpty()
-		c.t.mu.RUnlock()
-
-		return !c.t.haveAllPieces() && !isEmpty
+		defer c.t.mu.RUnlock()
 	}
-	if !c.t.haveInfo() {
+
+	if all, _ := c.peerHasAllPieces(false); all {
+		isEmpty := c.t._pendingPieces.IsEmpty()
+
+		return !c.t.haveAllPieces(false) && !isEmpty
+	}
+	if !c.t.haveInfo(false) {
 		return !c.peerPieces().IsEmpty()
 	}
 
-	c.t.mu.RLock()
-	defer c.t.mu.RUnlock()
 	return c.peerPieces().Intersects(&c.t._pendingPieces)
 }
 
@@ -869,9 +868,11 @@ func (c *Peer) deleteRequest(r RequestIndex, lock bool) bool {
 	return true
 }
 
-func (c *Peer) deleteAllRequests(reason string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *Peer) deleteAllRequests(reason string, lock bool, lockTorrent bool) {
+	if lock {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+	}
 
 	if c.requestState.Requests.IsEmpty() {
 		return
@@ -887,7 +888,7 @@ func (c *Peer) deleteAllRequests(reason string) {
 		if p.isLowOnRequests(false) {
 			p.updateRequests(reason, false)
 		}
-	}, false)
+	}, lockTorrent)
 }
 
 func (c *Peer) assertNoRequests() {
@@ -938,8 +939,8 @@ func (l connectionTrust) Less(r connectionTrust) bool {
 func (cn *Peer) newPeerPieces() *roaring.Bitmap {
 	// TODO: Can we use copy on write?
 	ret := cn.peerPieces().Clone()
-	if all, _ := cn.peerHasAllPieces(); all {
-		if cn.t.haveInfo() {
+	if all, _ := cn.peerHasAllPieces(true); all {
+		if cn.t.haveInfo(true) {
 			ret.AddRange(0, bitmap.BitRange(cn.t.numPieces()))
 		} else {
 			ret.AddRange(0, bitmap.ToEnd)

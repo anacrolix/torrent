@@ -338,7 +338,7 @@ func (cl *Client) AddDialer(d Dialer) {
 	defer cl.unlock()
 	cl.dialers = append(cl.dialers, d)
 	for _, t := range cl.torrentsAsSlice() {
-		t.openNewConns()
+		t.openNewConns(true)
 	}
 }
 
@@ -466,7 +466,7 @@ func (cl *Client) wantConns() bool {
 		return true
 	}
 	for _, t := range cl.torrentsAsSlice() {
-		if t.wantIncomingConns() {
+		if t.wantIncomingConns(true) {
 			return true
 		}
 	}
@@ -664,7 +664,7 @@ func dialFromSocket(ctx context.Context, s Dialer, addr string) net.Conn {
 }
 
 func (cl *Client) noLongerHalfOpen(t *Torrent, addr string, attemptKey outgoingConnAttemptKey) {
-	path := t.getHalfOpenPath(addr, attemptKey)
+	path := t.getHalfOpenPath(addr, attemptKey, true)
 	if !path.Exists() {
 		panic("should exist")
 	}
@@ -674,13 +674,13 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string, attemptKey outgoingC
 		panic("should not be possible")
 	}
 	for _, t := range cl.torrentsAsSlice() {
-		t.openNewConns()
+		t.openNewConns(true)
 	}
 }
 
 func (cl *Client) countHalfOpenFromTorrents() (count int) {
 	for _, t := range cl.torrentsAsSlice() {
-		count += t.numHalfOpenAttempts()
+		count += t.numHalfOpenAttempts(true)
 	}
 	return
 }
@@ -1162,11 +1162,11 @@ func (pc *PeerConn) sendInitialMessages() {
 	}
 	func() {
 		if pc.fastEnabled() {
-			if t.haveAllPieces() {
+			if t.haveAllPieces(true) {
 				pc.write(pp.Message{Type: pp.HaveAll})
 				pc.sentHaves.AddRange(0, bitmap.BitRange(pc.t.NumPieces()))
 				return
-			} else if !t.haveAnyPieces() {
+			} else if !t.haveAnyPieces(true) {
 				pc.write(pp.Message{Type: pp.HaveNone})
 				pc.sentHaves.Clear()
 				return
@@ -1340,6 +1340,9 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 // If the torrent already exists then this Storage is ignored and the
 // existing torrent returned with `new` set to `false`
 func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStorage storage.ClientImpl) (t *Torrent, new bool) {
+	fmt.Println("ATIHWS")
+	defer fmt.Println("ATIHWS", "DONE")
+
 	cl.torrentsMu.Lock()
 	defer cl.torrentsMu.Unlock()
 
@@ -1360,7 +1363,7 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 	})
 	cl.torrents[infoHash] = t
 	cl.clearAcceptLimits()
-	t.updateWantPeersEvent()
+	t.updateWantPeersEvent(true)
 	// Tickle Client.waitAccept, new torrent may want conns.
 	cl.event.Broadcast()
 	return
@@ -1369,12 +1372,16 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 // Adds a torrent by InfoHash with a custom Storage implementation. If the torrent already exists
 // then this Storage is ignored and the existing torrent returned with `new` set to `false`.
 func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
+	fmt.Println("ATO")
+	defer fmt.Println("ATO", "DONE")
+
 	infoHash := opts.InfoHash
 	cl.lock()
 	defer cl.unlock()
+	fmt.Println("ATO1")
 	cl.torrentsMu.Lock()
 	defer cl.torrentsMu.Unlock()
-
+	fmt.Println("ATO1A")
 	t, ok := cl.torrents[infoHash]
 	if ok {
 		return
@@ -1382,15 +1389,22 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	new = true
 
 	t = cl.newTorrentOpt(opts)
+	fmt.Println("ATO2")
 	cl.eachDhtServer(func(s DhtServer) {
 		if cl.config.PeriodicallyAnnounceTorrentsToDht {
 			go t.dhtAnnouncer(s)
 		}
 	})
 	cl.torrents[infoHash] = t
-	t.setInfoBytesLocked(opts.InfoBytes)
-	cl.clearAcceptLimits()
-	t.updateWantPeersEvent()
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		fmt.Println("ATO3")
+		t.setInfoBytesLocked(opts.InfoBytes)
+		cl.clearAcceptLimits()
+		t.updateWantPeersEvent(false)
+	}()
+	fmt.Println("ATO4")
 	// Tickle Client.waitAccept, new torrent may want conns.
 	cl.event.Broadcast()
 	return
@@ -1457,13 +1471,16 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 		panic("chunk size cannot be changed for existing Torrent")
 	}
 	t.addTrackers(spec.Trackers)
-	t.maybeNewConns()
+	t.maybeNewConns(true)
 	t.dataDownloadDisallowed.SetBool(spec.DisallowDataDownload)
 	t.dataUploadDisallowed = spec.DisallowDataUpload
 	return nil
 }
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash, wg *sync.WaitGroup) (err error) {
+	fmt.Println("DT")
+	defer fmt.Println("DT", "DONE")
+
 	cl.torrentsMu.Lock()
 	defer cl.torrentsMu.Unlock()
 
@@ -1482,10 +1499,10 @@ func (cl *Client) allTorrentsCompleted() bool {
 	defer cl.torrentsMu.RUnlock()
 
 	for _, t := range cl.torrents {
-		if !t.haveInfo() {
+		if !t.haveInfo(true) {
 			return false
 		}
-		if !t.haveAllPieces() {
+		if !t.haveAllPieces(true) {
 			return false
 		}
 	}
@@ -1583,7 +1600,7 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	cl.badPeerIPsMu.Unlock()
 
 	for _, t := range cl.torrentsAsSlice() {
-		for _, p := range t.peersAsSlice() {
+		for _, p := range t.peersAsSlice(true) {
 			if p.remoteIp().Equal(ip) {
 				t.logger.Levelf(log.Warning, "dropping peer %v with banned ip %v", p, ip)
 				// Should this be a close?

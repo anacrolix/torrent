@@ -20,7 +20,7 @@ type peerImpl interface {
 	_request(Request) bool
 	connectionFlags() string
 	onClose()
-	onGotInfo(*metainfo.Info)
+	onGotInfo(info *metainfo.Info, lock bool)
 	// Drop connection. This may be a no-op if there is no connection.
 	drop()
 	// Rebuke the peer
@@ -32,7 +32,7 @@ type peerImpl interface {
 	// guess at how many pieces are in a torrent, and assume they have all pieces based on them
 	// having sent haves for everything, but we don't know for sure. But if they send a have-all
 	// message, then it's clear that they do.
-	peerHasAllPieces() (all, known bool)
+	peerHasAllPieces(lock bool) (all, known bool)
 	peerPieces() *roaring.Bitmap
 
 	nominalMaxRequests(lock bool) maxRequests

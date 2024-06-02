@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -125,16 +126,14 @@ func (t *Torrent) SubscribePieceStateChanges() *pubsub.Subscription[PieceStateCh
 // Returns true if the torrent is currently being seeded. This occurs when the
 // client is willing to upload without wanting anything in return.
 func (t *Torrent) Seeding() (ret bool) {
-	t.cl.rLock()
-	ret = t.seeding()
-	t.cl.rUnlock()
+	ret = t.seeding(true)
 	return
 }
 
 // Clobbers the torrent display name if metainfo is unavailable.
 // The display name is used as the torrent name while the metainfo is unavailable.
 func (t *Torrent) SetDisplayName(dn string) {
-	if !t.haveInfo() {
+	if !t.haveInfo(true) {
 		t.mu.Lock()
 		t.displayName = dn
 		t.mu.Unlock()
@@ -180,23 +179,27 @@ func (t *Torrent) deleteReader(r *reader) {
 // priority. Piece indexes are not the same as bytes. Requires that the info
 // has been obtained, see Torrent.Info and Torrent.GotInfo.
 func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
-	t.cl.lock()
-	defer t.cl.unlock()
+	fmt.Println("DP0", t.mu.locker)
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.downloadPiecesLocked(begin, end)
 }
 
 func (t *Torrent) downloadPiecesLocked(begin, end pieceIndex) {
+	defer fmt.Println("DP", "DONE")
 	for i := begin; i < end; i++ {
 		if t.pieces[i].priority.Raise(PiecePriorityNormal) {
-			t.updatePiecePriority(i, "Torrent.DownloadPieces")
+			fmt.Println("DP", i, "of", end)
+			t.updatePiecePriority(i, "Torrent.DownloadPieces", false)
+			fmt.Println("DP", i, "of", end, "DONE")
 		}
 	}
 }
 
 func (t *Torrent) CancelPieces(begin, end pieceIndex) {
-	t.cl.lock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.cancelPiecesLocked(begin, end, "Torrent.CancelPieces")
-	t.cl.unlock()
 }
 
 func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex, reason string) {
@@ -206,7 +209,7 @@ func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex, reason string) {
 			continue
 		}
 		p.priority = PiecePriorityNone
-		t.updatePiecePriority(i, reason)
+		t.updatePiecePriority(i, reason, false)
 	}
 }
 
@@ -262,7 +265,7 @@ func (t *Torrent) AddTrackers(announceList [][]string) {
 }
 
 func (t *Torrent) Piece(i pieceIndex) *Piece {
-	return t.piece(i)
+	return t.piece(i, true)
 }
 
 func (t *Torrent) PeerConns() []*PeerConn {

@@ -29,7 +29,7 @@ func (pc *PeerConn) initMessageWriter() {
 		keepAlive: func() bool {
 			pc.locker().RLock()
 			defer pc.locker().RUnlock()
-			return pc.useful()
+			return pc.useful(true)
 		},
 		writeBuffer: new(bytes.Buffer),
 	}

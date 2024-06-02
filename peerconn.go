@@ -139,25 +139,25 @@ func (l *PeerConn) hasPreferredNetworkOver(r *PeerConn) bool {
 	return ml.Less()
 }
 
-func (cn *PeerConn) peerHasAllPieces() (all, known bool) {
+func (cn *PeerConn) peerHasAllPieces(lock bool) (all, known bool) {
 	if cn.peerSentHaveAll {
 		return true, true
 	}
-	if !cn.t.haveInfo() {
+	if !cn.t.haveInfo(lock) {
 		return false, false
 	}
 	return cn._peerPieces.GetCardinality() == uint64(cn.t.numPieces()), true
 }
 
-func (cn *PeerConn) onGotInfo(info *metainfo.Info) {
-	cn.setNumPieces(info.NumPieces())
+func (cn *PeerConn) onGotInfo(info *metainfo.Info, lock bool) {
+	cn.setNumPieces(info.NumPieces(), lock)
 }
 
 // Correct the PeerPieces slice length. Return false if the existing slice is invalid, such as by
 // receiving badly sized BITFIELD, or invalid HAVE messages.
-func (cn *PeerConn) setNumPieces(num pieceIndex) {
+func (cn *PeerConn) setNumPieces(num pieceIndex, lock bool) {
 	cn._peerPieces.RemoveRange(bitmap.BitRange(num), bitmap.ToEnd)
-	cn.peerPiecesChanged()
+	cn.peerPiecesChanged(lock)
 }
 
 func (cn *PeerConn) peerPieces() *roaring.Bitmap {
@@ -350,7 +350,7 @@ func (cn *PeerConn) postBitfield() {
 	if cn.sentHaves.Len() != 0 {
 		panic("bitfield must be first have-related message sent")
 	}
-	if !cn.t.haveAnyPieces() {
+	if !cn.t.haveAnyPieces(true) {
 		return
 	}
 	cn.write(pp.Message{
@@ -375,21 +375,21 @@ func (cn *PeerConn) raisePeerMinPieces(newMin pieceIndex) {
 }
 
 func (cn *PeerConn) peerSentHave(piece pieceIndex) error {
-	if cn.t.haveInfo() && piece >= cn.t.numPieces() || piece < 0 {
+	if cn.t.haveInfo(true) && piece >= cn.t.numPieces() || piece < 0 {
 		return errors.New("invalid piece")
 	}
-	if cn.peerHasPiece(piece) {
+	if cn.peerHasPiece(piece, true) {
 		return nil
 	}
 	cn.raisePeerMinPieces(piece + 1)
-	if !cn.peerHasPiece(piece) {
-		cn.t.incPieceAvailability(piece)
+	if !cn.peerHasPiece(piece, true) {
+		cn.t.incPieceAvailability(piece, true)
 	}
 	cn._peerPieces.Add(uint32(piece))
-	if cn.t.wantPieceIndex(piece) {
+	if cn.t.wantPieceIndex(piece, true) {
 		cn.updateRequests("have", true)
 	}
-	cn.peerPiecesChanged()
+	cn.peerPiecesChanged(true)
 	return nil
 }
 
@@ -399,12 +399,12 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 	}
 	// We know that the last byte means that at most the last 7 bits are wasted.
 	cn.raisePeerMinPieces(pieceIndex(len(bf) - 7))
-	if cn.t.haveInfo() && len(bf) > int(cn.t.numPieces()) {
+	if cn.t.haveInfo(true) && len(bf) > int(cn.t.numPieces()) {
 		// Ignore known excess pieces.
 		bf = bf[:cn.t.numPieces()]
 	}
 	bm := boolSliceToBitmap(bf)
-	if cn.t.haveInfo() && pieceIndex(bm.GetCardinality()) == cn.t.numPieces() {
+	if cn.t.haveInfo(true) && pieceIndex(bm.GetCardinality()) == cn.t.numPieces() {
 		cn.onPeerHasAllPieces()
 		return nil
 	}
@@ -429,13 +429,13 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 		pi := pieceIndex(x)
 		if cn._peerPieces.Contains(x) {
 			// Then we must be losing this piece
-			cn.t.decPieceAvailability(pi)
+			cn.t.decPieceAvailability(pi, true)
 		} else {
-			if !shouldUpdateRequests && cn.t.wantPieceIndex(pieceIndex(x)) {
+			if !shouldUpdateRequests && cn.t.wantPieceIndex(pieceIndex(x), true) {
 				shouldUpdateRequests = true
 			}
 			// We must be gaining this piece
-			cn.t.incPieceAvailability(pieceIndex(x))
+			cn.t.incPieceAvailability(pieceIndex(x), true)
 		}
 		return true
 	})
@@ -446,15 +446,15 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 		cn.updateRequests("bitfield", true)
 	}
 	// We didn't guard this before, I see no reason to do it now.
-	cn.peerPiecesChanged()
+	cn.peerPiecesChanged(true)
 	return nil
 }
 
 func (cn *PeerConn) onPeerHasAllPiecesNoTriggers() {
 	t := cn.t
-	if t.haveInfo() {
+	if t.haveInfo(true) {
 		cn._peerPieces.Iterate(func(x uint32) bool {
-			t.decPieceAvailability(pieceIndex(x))
+			t.decPieceAvailability(pieceIndex(x), true)
 			return true
 		})
 	}
@@ -469,14 +469,15 @@ func (cn *PeerConn) onPeerHasAllPieces() {
 }
 
 func (cn *PeerConn) peerHasAllPiecesTriggers() {
-	cn.t.mu.RLock()
+	cn.t.mu.Lock()
+	defer cn.t.mu.Unlock()
+
 	isEmpty := cn.t._pendingPieces.IsEmpty()
-	cn.t.mu.RUnlock()
 
 	if !isEmpty {
-		cn.updateRequests("Peer.onPeerHasAllPieces", true)
+		cn.updateRequests("Peer.onPeerHasAllPieces", false)
 	}
-	cn.peerPiecesChanged()
+	cn.peerPiecesChanged(false)
 }
 
 func (cn *PeerConn) onPeerSentHaveAll() error {
@@ -490,12 +491,12 @@ func (cn *PeerConn) peerSentHaveNone() error {
 	}
 	cn._peerPieces.Clear()
 	cn.peerSentHaveAll = false
-	cn.peerPiecesChanged()
+	cn.peerPiecesChanged(true)
 	return nil
 }
 
 func (c *PeerConn) requestPendingMetadata() {
-	if c.t.haveInfo() {
+	if c.t.haveInfo(true) {
 		return
 	}
 	if c.PeerExtensionIDs[pp.ExtensionNameMetadata] == 0 {
@@ -593,7 +594,7 @@ func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
 			return err
 		}
 	}
-	if !c.t.havePiece(pieceIndex(r.Index)) {
+	if !c.t.havePiece(pieceIndex(r.Index), true) {
 		// TODO: Tell the peer we don't have the piece, and reject this request.
 		requestsReceivedForMissingPieces.Add(1)
 		return fmt.Errorf("peer requested piece we don't have: %v", r.Index.Int())
@@ -659,12 +660,12 @@ func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
 		return
 	}
 	i := pieceIndex(r.Index)
-	if c.t.pieceComplete(i) {
+	if c.t.pieceComplete(i, true) {
 		// There used to be more code here that just duplicated the following break. Piece
 		// completions are currently cached, so I'm not sure how helpful this update is, except to
 		// pull any completion changes pushed to the storage backend in failed reads that got us
 		// here.
-		c.t.updatePieceCompletion(i)
+		c.t.updatePieceCompletion(i, true)
 	}
 	// We've probably dropped a piece from storage, but there's no way to communicate this to the
 	// peer. If they ask for it again, we kick them allowing us to send them updated piece states if
@@ -710,6 +711,7 @@ func (c *PeerConn) logProtocolBehaviour(level log.Level, format string, arg ...i
 // Processes incoming BitTorrent wire-protocol messages. The client lock is held upon entry and
 // exit. Returning will end the connection.
 func (c *PeerConn) mainReadLoop() (err error) {
+	defer fmt.Println("PML", "DONE")
 	defer func() {
 		if err != nil {
 			torrent.Add("connection.mainReadLoop returned with error", 1)
@@ -726,6 +728,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		Pool:      &t.chunkPool,
 	}
 	for {
+		fmt.Println("PM0")
 		var msg pp.Message
 		func() {
 			cl.unlock()
@@ -735,6 +738,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		if cb := c.callbacks.ReadMessage; cb != nil && err == nil {
 			cb(c, &msg)
 		}
+
 		if t.closed.IsSet() || c.closed.IsSet() {
 			return nil
 		}
@@ -757,27 +761,29 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
+		fmt.Println("PM1", msg.Type)
 		switch msg.Type {
 		case pp.Choke:
 			if peerChoking {
 				break
 			}
 
-			if !c.fastEnabled() {
-				c.deleteAllRequests("choked by non-fast PeerConn")
-			} else {
-				// We don't decrement pending requests here, let's wait for the peer to either
-				// reject or satisfy the outstanding requests. Additionally, some peers may unchoke
-				// us and resume where they left off, we don't want to have piled on to those chunks
-				// in the meanwhile. I think a peer's ability to abuse this should be limited: they
-				// could let us request a lot of stuff, then choke us and never reject, but they're
-				// only a single peer, our chunk balancing should smooth over this abuse.
-			}
-
-			c.mu.Lock()
-			c.peerChoking = true
-			c.updateExpectingChunks()
-			c.mu.Unlock()
+			func() {
+				c.mu.Lock()
+				defer c.mu.Unlock()
+				if !c.fastEnabled() {
+					c.deleteAllRequests("choked by non-fast PeerConn", false, true)
+				} else {
+					// We don't decrement pending requests here, let's wait for the peer to either
+					// reject or satisfy the outstanding requests. Additionally, some peers may unchoke
+					// us and resume where they left off, we don't want to have piled on to those chunks
+					// in the meanwhile. I think a peer's ability to abuse this should be limited: they
+					// could let us request a lot of stuff, then choke us and never reject, but they're
+					// only a single peer, our chunk balancing should smooth over this abuse.
+				}
+				c.peerChoking = true
+				c.updateExpectingChunks()
+			}()
 
 		case pp.Unchoke:
 			if !peerChoking {
@@ -787,34 +793,32 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				break
 			}
 
-			c.mu.Lock()
-			preservedCount := 0
-			c.requestState.Requests.Iterate(func(x RequestIndex) bool {
-				if !c.peerAllowedFast.Contains(c.t.pieceIndexOfRequestIndex(x)) {
-					preservedCount++
-				}
-				return true
-			})
-			if preservedCount != 0 {
-				// TODO: Yes this is a debug log but I'm not happy with the state of the logging lib
-				// right now.
-				c.logger.Levelf(log.Debug,
-					"%v requests were preserved while being choked (fast=%v)",
-					preservedCount,
-					c.fastEnabled())
-
-				torrent.Add("requestsPreservedThroughChoking", int64(preservedCount))
-			}
-			c.peerChoking = false
-			c.mu.Unlock()
-
-			c.t.mu.Lock()
-			isEmpty := c.t._pendingPieces.IsEmpty()
-			c.t.mu.Unlock()
-
 			func() {
 				c.mu.Lock()
 				defer c.mu.Unlock()
+
+				preservedCount := 0
+				c.requestState.Requests.Iterate(func(x RequestIndex) bool {
+					if !c.peerAllowedFast.Contains(c.t.pieceIndexOfRequestIndex(x)) {
+						preservedCount++
+					}
+					return true
+				})
+				if preservedCount != 0 {
+					// TODO: Yes this is a debug log but I'm not happy with the state of the logging lib
+					// right now.
+					c.logger.Levelf(log.Debug,
+						"%v requests were preserved while being choked (fast=%v)",
+						preservedCount,
+						c.fastEnabled())
+
+					torrent.Add("requestsPreservedThroughChoking", int64(preservedCount))
+				}
+				c.peerChoking = false
+
+				c.t.mu.RLock()
+				isEmpty := c.t._pendingPieces.IsEmpty()
+				c.t.mu.RUnlock()
 
 				if !isEmpty {
 					c.updateRequests("unchoked", false)
@@ -824,13 +828,21 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			}()
 
 		case pp.Interested:
-			c.peerInterested = true
-			c.tickleWriter()
+			func() {
+				c.mu.Lock()
+				defer c.mu.Unlock()
+				c.peerInterested = true
+				c.tickleWriter()
+			}()
 		case pp.NotInterested:
-			c.peerInterested = false
-			// We don't clear their requests since it isn't clear in the spec.
-			// We'll probably choke them for this, which will clear them if
-			// appropriate, and is clearly specified.
+			func() {
+				c.mu.Lock()
+				defer c.mu.Unlock()
+				c.peerInterested = false
+				// We don't clear their requests since it isn't clear in the spec.
+				// We'll probably choke them for this, which will clear them if
+				// appropriate, and is clearly specified.
+			}()
 		case pp.Have:
 			err = c.peerSentHave(pieceIndex(msg.Index))
 		case pp.Bitfield:
@@ -843,13 +855,17 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			}
 		case pp.Piece:
 			c.doChunkReadStats(int64(len(msg.Piece)))
-			err = c.receiveChunk(&msg)
-			if len(msg.Piece) == int(t.chunkSize) {
-				t.chunkPool.Put(&msg.Piece)
-			}
-			if err != nil {
-				err = fmt.Errorf("receiving chunk: %w", err)
-			}
+			func() {
+				cl.unlock()
+				defer cl.lock()
+				c.receiveChunk(&msg)
+				if len(msg.Piece) == int(t.chunkSize) {
+					t.chunkPool.Put(&msg.Piece)
+				}
+				if err != nil {
+					err = fmt.Errorf("receiving chunk: %w", err)
+				}
+			}()
 		case pp.Cancel:
 			req := newRequestFromMessage(&msg)
 			c.onPeerSentCancel(req)
@@ -1002,10 +1018,10 @@ func (c *PeerConn) uploadAllowed() bool {
 	if c.t.dataUploadDisallowed {
 		return false
 	}
-	if c.t.seeding() {
+	if c.t.seeding(true) {
 		return true
 	}
-	if !c.peerHasWantedPieces() {
+	if !c.peerHasWantedPieces(true) {
 		return false
 	}
 	// Don't upload more than 100 KiB more than we download.
@@ -1163,24 +1179,24 @@ func (pc *PeerConn) bitExtensionEnabled(bit pp.ExtensionBit) bool {
 	return pc.t.cl.config.Extensions.GetBit(bit) && pc.PeerExtensionBytes.GetBit(bit)
 }
 
-func (cn *PeerConn) peerPiecesChanged() {
-	cn.t.maybeDropMutuallyCompletePeer(cn)
+func (cn *PeerConn) peerPiecesChanged(lock bool) {
+	cn.t.maybeDropMutuallyCompletePeer(cn, lock)
 }
 
 // Returns whether the connection could be useful to us. We're seeding and
 // they want data, we don't have metainfo and they can provide it, etc.
-func (c *PeerConn) useful() bool {
+func (c *PeerConn) useful(lockTorrent bool) bool {
 	t := c.t
 	if c.closed.IsSet() {
 		return false
 	}
-	if !t.haveInfo() {
+	if !t.haveInfo(lockTorrent) {
 		return c.supportsExtension("ut_metadata")
 	}
-	if t.seeding() && c.peerInterested {
+	if t.seeding(lockTorrent) && c.peerInterested {
 		return true
 	}
-	if c.peerHasWantedPieces() {
+	if c.peerHasWantedPieces(lockTorrent) {
 		return true
 	}
 	return false

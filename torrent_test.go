@@ -92,8 +92,8 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		Pieces:      make([]byte, metainfo.HashSize*numPieces),
 		PieceLength: pieceLength,
 		Length:      pieceLength * numPieces,
-	}))
-	t.onSetInfo()
+	}, true))
+	t.onSetInfo(true)
 	assert.EqualValues(b, 13410, t.numPieces())
 	for i := 0; i < 7; i += 1 {
 		r := t.NewReader()
@@ -155,10 +155,10 @@ func TestPieceHashFailed(t *testing.T) {
 	tt.dirtyChunks.AddRange(
 		uint64(tt.pieceRequestIndexOffset(1)),
 		uint64(tt.pieceRequestIndexOffset(1)+3))
-	require.True(t, tt.pieceAllDirty(1))
+	require.True(t, tt.pieceAllDirty(1, true))
 	tt.pieceHashed(1, false, nil)
 	// Dirty chunks should be cleared so we can try again.
-	require.False(t, tt.pieceAllDirty(1))
+	require.False(t, tt.pieceAllDirty(1, true))
 	tt.cl.unlock()
 }
 
@@ -177,7 +177,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 
 	tt, _ := cl.AddTorrentInfoHash(ih)
 	assert.Nil(t, tt.Metainfo().InfoBytes)
-	assert.False(t, tt.haveAllMetadataPieces())
+	assert.False(t, tt.haveAllMetadataPieces(true))
 
 	nc, err := net.Dial("tcp", fmt.Sprintf(":%d", cl.LocalPort()))
 	require.NoError(t, err)
@@ -216,7 +216,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 		tt.metadataChanged.Wait()
 	}()
 	assert.Equal(t, make([]byte, len(mi.InfoBytes)), tt.metadataBytes)
-	assert.False(t, tt.haveAllMetadataPieces())
+	assert.False(t, tt.haveAllMetadataPieces(true))
 	assert.Nil(t, tt.Metainfo().InfoBytes)
 }
 
@@ -242,9 +242,9 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	err = pc.peerSentHave(0)
 	c.Assert(err, qt.IsNil)
 	info := testutil.Greeting.Info(5)
-	err = tt.setInfo(&info)
+	err = tt.setInfo(&info, true)
 	c.Assert(err, qt.IsNil)
-	tt.onSetInfo()
+	tt.onSetInfo(true)
 	err = pc.peerSentHaveNone()
 	c.Assert(err, qt.IsNil)
 	var wg sync.WaitGroup

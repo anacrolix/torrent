@@ -91,9 +91,9 @@ func BenchmarkRequestStrategy(b *testing.B) {
 		Pieces:      make([]byte, numPieces*metainfo.HashSize),
 		PieceLength: pieceLength,
 		Length:      pieceLength * numPieces,
-	})
+	}, true)
 	c.Assert(err, qt.IsNil)
-	tor.onSetInfo()
+	tor.onSetInfo(true)
 	peer := cl.newConnection(nil, newConnectionOpts{
 		network: "test",
 	})
@@ -103,7 +103,7 @@ func BenchmarkRequestStrategy(b *testing.B) {
 	peer.onPeerHasAllPiecesNoTriggers()
 	for i := 0; i < tor.numPieces(); i++ {
 		tor.pieces[i].priority.Raise(PiecePriorityNormal)
-		tor.updatePiecePriorityNoTriggers(i)
+		tor.updatePiecePriorityNoTriggers(i, true)
 	}
 	peer.peerChoking = false
 	//b.StopTimer()
@@ -112,12 +112,12 @@ func BenchmarkRequestStrategy(b *testing.B) {
 	for _ = range iter.N(b.N) {
 		storageClient.completed = 0
 		for pieceIndex := range iter.N(numPieces) {
-			tor.updatePieceCompletion(pieceIndex)
+			tor.updatePieceCompletion(pieceIndex, true)
 		}
 		for completed := 0; completed <= numPieces; completed += 1 {
 			storageClient.completed = completed
 			if completed > 0 {
-				tor.updatePieceCompletion(completed - 1)
+				tor.updatePieceCompletion(completed - 1, true)
 			}
 			// Starting and stopping timers around this part causes lots of GC overhead.
 			rs := peer.getDesiredRequestState(false)

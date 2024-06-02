@@ -119,7 +119,7 @@ func TestHolepunchConnect(t *testing.T) {
 		requireRendezvous:       true,
 		skipHolepunchRendezvous: false,
 		HeaderObfuscationPolicy: llg.cl.config.HeaderObfuscationPolicy,
-	}, true)
+	}, true, true)
 	llg.cl.unlock()
 	wg.Wait()
 

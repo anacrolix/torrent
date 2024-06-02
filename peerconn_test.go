@@ -31,7 +31,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	qtc := qt.New(t)
 	c := cl.newConnection(nil, newConnectionOpts{network: "io.Pipe"})
 	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
-	err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)})
+	err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)}, true)
 	qtc.Assert(err, qt.IsNil)
 	r, w := io.Pipe()
 	// c.r = r
@@ -105,9 +105,9 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		Pieces:      make([]byte, 20),
 		Length:      1 << 20,
 		PieceLength: 1 << 20,
-	}))
+	}, true))
 	t.storage = &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}}
-	t.onSetInfo()
+	t.onSetInfo(true)
 	t._pendingPieces.Add(0)
 	r, w := net.Pipe()
 	c.Logf("pipe reader remote addr: %v", r.RemoteAddr())
@@ -158,7 +158,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			cl.lock()
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.
-			t.pendAllChunkSpecs(0)
+			t.pendAllChunkSpecs(0, true)
 			g.MakeMapIfNil(&cn.validReceiveChunks)
 			eachRequestIndex(func(ri RequestIndex) {
 				cn.validReceiveChunks[ri] = 1
@@ -288,8 +288,8 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	c.Assert(pc.t.setInfo(&metainfo.Info{
 		PieceLength: 0,
 		Pieces:      make([]byte, pieceHash.Size()*7),
-	}), qt.IsNil)
-	pc.t.onSetInfo()
+	}, true), qt.IsNil)
+	pc.t.onSetInfo(true)
 	c.Check(tt.numPieces(), qt.Equals, 7)
 	c.Check(tt.pieceAvailabilityRuns(), qt.DeepEquals, []pieceAvailabilityRun{
 		// The last element of the bitfield is irrelevant, as the Torrent actually only has 7

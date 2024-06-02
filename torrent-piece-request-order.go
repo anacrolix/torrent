@@ -5,7 +5,7 @@ import (
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 )
 
-func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) {
+func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int, lock bool) {
 	if t.storage == nil {
 		return
 	}
@@ -15,12 +15,12 @@ func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) {
 	}
 	key := t.pieceRequestOrderKey(pieceIndex)
 	if t.hasStorageCap() {
-		pro.Update(key, t.requestStrategyPieceOrderState(pieceIndex))
+		pro.Update(key, t.requestStrategyPieceOrderState(pieceIndex, lock))
 		return
 	}
 	//pending := !t.ignorePieceForRequests(pieceIndex)
 	//if pending {
-	pro.Add(key, t.requestStrategyPieceOrderState(pieceIndex))
+	pro.Add(key, t.requestStrategyPieceOrderState(pieceIndex, lock))
 	//} else {
 	//	pro.Delete(key)
 	//}
@@ -62,14 +62,14 @@ func (t *Torrent) initPieceRequestOrder() {
 	t.clientPieceRequestOrder = cpro[key]
 }
 
-func (t *Torrent) addRequestOrderPiece(i int) {
+func (t *Torrent) addRequestOrderPiece(i int, lock bool) {
 	if t.storage == nil {
 		return
 	}
 	pro := t.getPieceRequestOrder()
 	key := t.pieceRequestOrderKey(i)
-	if t.hasStorageCap() || !t.ignorePieceForRequests(i) {
-		pro.Add(key, t.requestStrategyPieceOrderState(i))
+	if t.hasStorageCap() || !t.ignorePieceForRequests(i, lock) {
+		pro.Add(key, t.requestStrategyPieceOrderState(i, lock))
 	}
 }
 

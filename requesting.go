@@ -24,11 +24,12 @@ type (
 	maxRequests = int
 )
 
-func (t *Torrent) requestStrategyPieceOrderState(i int) requestStrategy.PieceRequestOrderState {
+func (t *Torrent) requestStrategyPieceOrderState(i int, lock bool) requestStrategy.PieceRequestOrderState {
+	p := t.piece(i, lock)
 	return requestStrategy.PieceRequestOrderState{
-		Priority:     t.piece(i).purePriority(),
-		Partial:      t.piecePartiallyDownloaded(i),
-		Availability: t.piece(i).availability(),
+		Priority:     p.purePriority(lock),
+		Partial:      t.piecePartiallyDownloaded(i, lock),
+		Availability: p.availability(lock),
 	}
 }
 
@@ -168,7 +169,7 @@ type desiredRequestState struct {
 
 func (p *Peer) getDesiredRequestState(debug bool) (desired desiredRequestState) {
 	t := p.t
-	if !t.haveInfo() {
+	if !t.haveInfo(true) {
 		return
 	}
 	if t.closed.IsSet() {
@@ -201,7 +202,7 @@ func (p *Peer) getDesiredRequestState(debug bool) (desired desiredRequestState) 
 			if ih != t.infoHash {
 				return
 			}
-			if !p.peerHasPiece(pieceIndex) {
+			if !p.peerHasPiece(pieceIndex,true) {
 				return
 			}
 			requestHeap.pieceStates[pieceIndex] = pieceExtra
@@ -297,10 +298,10 @@ func (t *Torrent) cacheNextRequestIndexesForReuse(slice []RequestIndex) {
 // currently need anything.
 func (p *Peer) allowSendNotInterested() bool {
 	// Except for caching, we're not likely to lose pieces very soon.
-	if p.t.haveAllPieces() {
+	if p.t.haveAllPieces(true) {
 		return true
 	}
-	all, known := p.peerHasAllPieces()
+	all, known := p.peerHasAllPieces(true)
 	if all || !known {
 		return false
 	}
@@ -384,7 +385,7 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 			"couldn't fill apply entire request state [newRequests=%v]",
 			current.Requests.GetCardinality()-originalRequestCount))
 	}
-	
+
 	newPeakRequests := maxRequests(current.Requests.GetCardinality() - originalRequestCount)
 	//log.Printf(
 	//	"%s: requests %v->%v (peak %v->%v) reason %q (peer %v)\n",

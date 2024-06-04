@@ -167,42 +167,51 @@ type desiredRequestState struct {
 	Interested bool
 }
 
-func (p *Peer) getDesiredRequestState(debug bool) (desired desiredRequestState) {
+func (p *Peer) getDesiredRequestState(debug bool, lockTorrent bool) (desired desiredRequestState) {
 	t := p.t
-	if !t.haveInfo(true) {
+
+	if lockTorrent {
+		t.mu.RLock()
+	}
+
+	if !t.haveInfo(false) || t.closed.IsSet() || t.dataDownloadDisallowed.Bool() {
+		if lockTorrent {
+			t.mu.RUnlock()
+		}
+
 		return
 	}
-	if t.closed.IsSet() {
-		return
-	}
-	if t.dataDownloadDisallowed.Bool() {
-		return
-	}
+
 	input := t.getRequestStrategyInput()
 	requestHeap := desiredPeerRequests{
 		peer:           p,
 		pieceStates:    t.requestPieceStates,
 		requestIndexes: t.requestIndexes,
 	}
+
+	dirtyChunks := t.dirtyChunks.Clone()
+	infoHash := t.infoHash
+	pieceRequestOrder := t.getPieceRequestOrder()
+
+	if lockTorrent {
+		t.mu.RUnlock()
+	}
+
 	// Caller-provided allocation for roaring bitmap iteration.
 	var it typedRoaring.Iterator[RequestIndex]
-
-	t.mu.RLock()
-	var dirtyChunks = t.dirtyChunks.Clone()
-	t.mu.RUnlock()
 
 	callCount := 0
 	iterCount := 0
 
 	requestStrategy.GetRequestablePieces(
 		input,
-		t.getPieceRequestOrder(),
+		pieceRequestOrder,
 		func(ih InfoHash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) {
 			callCount++
-			if ih != t.infoHash {
+			if ih != infoHash {
 				return
 			}
-			if !p.peerHasPiece(pieceIndex,true) {
+			if !p.peerHasPiece(pieceIndex, true) {
 				return
 			}
 			requestHeap.pieceStates[pieceIndex] = pieceExtra
@@ -245,8 +254,9 @@ func (p *Peer) getDesiredRequestState(debug bool) (desired desiredRequestState) 
 				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
 			})
 		},
-	)
-	t.assertPendingRequests()
+		lockTorrent)
+
+	t.assertPendingRequests(lockTorrent)
 	desired.Requests = requestHeap
 
 	if debug {
@@ -261,7 +271,7 @@ func (p *Peer) getDesiredRequestState(debug bool) (desired desiredRequestState) 
 	return
 }
 
-func (p *Peer) maybeUpdateActualRequestState() {
+func (p *Peer) maybeUpdateActualRequestState(lockTorrent bool) {
 	if p.closed.IsSet() {
 		return
 	}
@@ -278,14 +288,18 @@ func (p *Peer) maybeUpdateActualRequestState() {
 		context.Background(),
 		pprof.Labels("update request", p.needRequestUpdate),
 		func(_ context.Context) {
-			next := p.getDesiredRequestState(false)
+			next := p.getDesiredRequestState(false, lockTorrent)
 			p.applyRequestState(next)
-			p.t.cacheNextRequestIndexesForReuse(next.Requests.requestIndexes)
+			p.t.cacheNextRequestIndexesForReuse(next.Requests.requestIndexes, lockTorrent)
 		},
 	)
 }
 
-func (t *Torrent) cacheNextRequestIndexesForReuse(slice []RequestIndex) {
+func (t *Torrent) cacheNextRequestIndexesForReuse(slice []RequestIndex, lock bool) {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
 	// The incoming slice can be smaller when getDesiredRequestState short circuits on some
 	// conditions.
 	if cap(slice) > cap(t.requestIndexes) {
@@ -334,9 +348,13 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 		&next.Requests.requestIndexes,
 		next.Requests.lessByValue,
 	)
-	heap.Init(requestHeap)
 
 	t := p.t
+
+	t.mu.RLock()
+	heap.Init(requestHeap)
+	t.mu.RUnlock()
+
 	originalRequestCount := current.Requests.GetCardinality()
 
 	for {
@@ -355,7 +373,7 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 		if p.needRequestUpdate == "Peer.remoteRejectedRequest" {
 			continue
 		}
-		existing := t.requestingPeer(req)
+		existing := t.requestingPeer(req, true)
 		if existing != nil && existing != p {
 			if p.needRequestUpdate == "Peer.cancel" {
 				continue
@@ -369,7 +387,7 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 			if diff > 1 || (diff == 1 && !p.lastUsefulChunkReceived.After(existing.lastUsefulChunkReceived)) {
 				continue
 			}
-			t.cancelRequest(req, false)
+			t.cancelRequest(req, true, false)
 		}
 		more = p.mustRequest(req, false)
 		if !more {

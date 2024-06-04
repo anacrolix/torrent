@@ -62,12 +62,12 @@ func (p *Piece) Flush() {
 	}
 }
 
-func (p *Piece) pendingChunkIndex(chunkIndex chunkIndexType) bool {
-	return !p.chunkIndexDirty(chunkIndex)
+func (p *Piece) pendingChunkIndex(chunkIndex chunkIndexType, lock bool) bool {
+	return !p.chunkIndexDirty(chunkIndex, lock)
 }
 
-func (p *Piece) pendingChunk(cs ChunkSpec, chunkSize pp.Integer) bool {
-	return p.pendingChunkIndex(chunkIndexFromChunkSpec(cs, chunkSize))
+func (p *Piece) pendingChunk(cs ChunkSpec, chunkSize pp.Integer, lock bool) bool {
+	return p.pendingChunkIndex(chunkIndexFromChunkSpec(cs, chunkSize), lock)
 }
 
 func (p *Piece) hasDirtyChunks(lock bool) bool {
@@ -85,17 +85,23 @@ func (p *Piece) numDirtyChunks(lock bool) chunkIndexType {
 		p.t.pieceRequestIndexOffset(p.index+1)))
 }
 
-func (p *Piece) unpendChunkIndex(i chunkIndexType) {
-	p.t.mu.Lock()
-	defer p.t.mu.Unlock()
+func (p *Piece) unpendChunkIndex(i chunkIndexType, lock bool) {
+	if lock {
+		p.t.mu.Lock()
+		defer p.t.mu.Unlock()
+	}
+
 	p.t.dirtyChunks.Add(p.requestIndexOffset() + i)
 	p.t.updatePieceRequestOrderPiece(p.index, false)
 	p.readerCond.Broadcast()
 }
 
-func (p *Piece) pendChunkIndex(i RequestIndex) {
-	p.t.mu.Lock()
-	defer p.t.mu.Unlock()
+func (p *Piece) pendChunkIndex(i RequestIndex, lock bool) {
+	if lock {
+		p.t.mu.Lock()
+		defer p.t.mu.Unlock()
+	}
+
 	p.t.dirtyChunks.Remove(p.requestIndexOffset() + i)
 	p.t.updatePieceRequestOrderPiece(p.index, false)
 }
@@ -130,9 +136,11 @@ func (p *Piece) waitNoPendingWrites() {
 	p.pendingWritesMutex.Unlock()
 }
 
-func (p *Piece) chunkIndexDirty(chunk chunkIndexType) bool {
-	p.t.mu.RLock()
-	defer p.t.mu.RUnlock()
+func (p *Piece) chunkIndexDirty(chunk chunkIndexType, lock bool) bool {
+	if lock {
+		p.t.mu.RLock()
+		defer p.t.mu.RUnlock()
+	}
 	return p.t.dirtyChunks.Contains(p.requestIndexOffset() + chunk)
 }
 
@@ -147,7 +155,7 @@ func (p *Piece) numDirtyBytes(lock bool) (ret pp.Integer) {
 	// 	}
 	// }()
 	numRegularDirtyChunks := p.numDirtyChunks(lock)
-	if p.chunkIndexDirty(p.numChunks() - 1) {
+	if p.chunkIndexDirty(p.numChunks()-1, lock) {
 		numRegularDirtyChunks--
 		ret += p.chunkIndexSpec(p.lastChunkIndex()).Length
 	}

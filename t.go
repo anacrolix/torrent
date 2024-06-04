@@ -66,16 +66,11 @@ func (me PieceStateRuns) String() (s string) {
 // Returns the state of pieces of the torrent. They are grouped into runs of same state. The sum of
 // the state run-lengths is the number of pieces in the torrent.
 func (t *Torrent) PieceStateRuns() (runs PieceStateRuns) {
-	t.cl.rLock()
-	runs = t.pieceStateRuns()
-	t.cl.rUnlock()
-	return
+	return t.pieceStateRuns(true)
 }
 
 func (t *Torrent) PieceState(piece pieceIndex) (ps PieceState) {
-	t.cl.rLock()
-	ps = t.pieceState(piece)
-	t.cl.rUnlock()
+	ps = t.pieceState(piece, true)
 	return
 }
 
@@ -180,18 +175,16 @@ func (t *Torrent) deleteReader(r *reader) {
 // has been obtained, see Torrent.Info and Torrent.GotInfo.
 func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	fmt.Println("DP0", t.mu.locker)
+	defer fmt.Println("DP", "DONE")
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.downloadPiecesLocked(begin, end)
 }
 
 func (t *Torrent) downloadPiecesLocked(begin, end pieceIndex) {
-	defer fmt.Println("DP", "DONE")
 	for i := begin; i < end; i++ {
 		if t.pieces[i].priority.Raise(PiecePriorityNormal) {
-			fmt.Println("DP", i, "of", end)
 			t.updatePiecePriority(i, "Torrent.DownloadPieces", false)
-			fmt.Println("DP", i, "of", end, "DONE")
 		}
 	}
 }

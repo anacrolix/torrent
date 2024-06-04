@@ -184,7 +184,7 @@ func (cn *PeerConn) utp() bool {
 	return parseNetworkString(cn.Network).Udp
 }
 
-func (cn *PeerConn) onClose() {
+func (cn *PeerConn) onClose(lockTorrent bool) {
 	if cn.pex.IsEnabled() {
 		cn.pex.Close()
 	}
@@ -326,7 +326,7 @@ func (cn *PeerConn) fillWriteBuffer() {
 		// knowledge of write buffers.
 		return
 	}
-	cn.maybeUpdateActualRequestState()
+	cn.maybeUpdateActualRequestState(true)
 	if cn.pex.IsEnabled() {
 		if flow := cn.pex.Share(cn.write); !flow {
 			return
@@ -363,7 +363,7 @@ func (cn *PeerConn) postBitfield() {
 	cn.sentHaves = bitmap.Bitmap{RB: cn.t._completedPieces.Clone()}
 }
 
-func (cn *PeerConn) handleUpdateRequests() {
+func (cn *PeerConn) handleUpdateRequests(lockTorrent bool) {
 	// The writer determines the request state as needed when it can write.
 	cn.tickleWriter()
 }
@@ -387,7 +387,7 @@ func (cn *PeerConn) peerSentHave(piece pieceIndex) error {
 	}
 	cn._peerPieces.Add(uint32(piece))
 	if cn.t.wantPieceIndex(piece, true) {
-		cn.updateRequests("have", true)
+		cn.updateRequests("have", true, true)
 	}
 	cn.peerPiecesChanged(true)
 	return nil
@@ -413,7 +413,7 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 	}
 	shouldUpdateRequests := false
 	if cn.peerSentHaveAll {
-		if !cn.t.deleteConnWithAllPieces(&cn.Peer) {
+		if !cn.t.deleteConnWithAllPieces(&cn.Peer, true) {
 			panic(cn)
 		}
 		cn.peerSentHaveAll = false
@@ -443,7 +443,7 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 	// as or.
 	cn._peerPieces.Xor(&bm)
 	if shouldUpdateRequests {
-		cn.updateRequests("bitfield", true)
+		cn.updateRequests("bitfield", true, true)
 	}
 	// We didn't guard this before, I see no reason to do it now.
 	cn.peerPiecesChanged(true)
@@ -475,7 +475,7 @@ func (cn *PeerConn) peerHasAllPiecesTriggers() {
 	isEmpty := cn.t._pendingPieces.IsEmpty()
 
 	if !isEmpty {
-		cn.updateRequests("Peer.onPeerHasAllPieces", false)
+		cn.updateRequests("Peer.onPeerHasAllPieces", false, false)
 	}
 	cn.peerPiecesChanged(false)
 }
@@ -487,7 +487,7 @@ func (cn *PeerConn) onPeerSentHaveAll() error {
 
 func (cn *PeerConn) peerSentHaveNone() error {
 	if !cn.peerSentHaveAll {
-		cn.t.decPeerPieceAvailability(&cn.Peer)
+		cn.t.decPeerPieceAvailability(&cn.Peer, true)
 	}
 	cn._peerPieces.Clear()
 	cn.peerSentHaveAll = false
@@ -711,7 +711,6 @@ func (c *PeerConn) logProtocolBehaviour(level log.Level, format string, arg ...i
 // Processes incoming BitTorrent wire-protocol messages. The client lock is held upon entry and
 // exit. Returning will end the connection.
 func (c *PeerConn) mainReadLoop() (err error) {
-	defer fmt.Println("PML", "DONE")
 	defer func() {
 		if err != nil {
 			torrent.Add("connection.mainReadLoop returned with error", 1)
@@ -728,7 +727,6 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		Pool:      &t.chunkPool,
 	}
 	for {
-		fmt.Println("PM0")
 		var msg pp.Message
 		func() {
 			cl.unlock()
@@ -761,7 +759,6 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
-		fmt.Println("PM1", msg.Type)
 		switch msg.Type {
 		case pp.Choke:
 			if peerChoking {
@@ -816,13 +813,14 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				}
 				c.peerChoking = false
 
-				c.t.mu.RLock()
-				isEmpty := c.t._pendingPieces.IsEmpty()
-				c.t.mu.RUnlock()
+				func() {
+					c.t.mu.RLock()
+					defer c.t.mu.RUnlock()
 
-				if !isEmpty {
-					c.updateRequests("unchoked", false)
-				}
+					if !c.t._pendingPieces.IsEmpty() {
+						c.updateRequests("unchoked", false, false)
+					}
+				}()
 
 				c.updateExpectingChunks()
 			}()
@@ -887,7 +885,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Suggest:
 			torrent.Add("suggests received", 1)
 			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index).LogLevel(log.Debug, c.t.logger)
-			c.updateRequests("suggested", true)
+			c.updateRequests("suggested", true, true)
 		case pp.HaveAll:
 			err = c.onPeerSentHaveAll()
 		case pp.HaveNone:
@@ -901,7 +899,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).LogLevel(log.Debug, c.t.logger)
-			c.updateRequests("PeerConn.mainReadLoop allowed fast", true)
+			c.updateRequests("PeerConn.mainReadLoop allowed fast", true, true)
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 		default:
@@ -1076,8 +1074,8 @@ another:
 	return c.choke(msg)
 }
 
-func (cn *PeerConn) drop() {
-	cn.t.dropConnection(cn)
+func (cn *PeerConn) drop(lockTorrent bool) {
+	cn.t.dropConnection(cn, lockTorrent)
 }
 
 func (cn *PeerConn) ban() {

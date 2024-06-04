@@ -52,40 +52,49 @@ import (
 
 type mu struct {
 	sync.RWMutex
-	rlc     atomic.Int32
-	lc      atomic.Int32
-	rlmu    sync.Mutex
-	rlocker [20]string
-	locker  string
+	rlc        atomic.Int32
+	lc         atomic.Int32
+	rlmu       sync.Mutex
+	rlocker    [20]string
+	locker     string
+	nextlocker string
 }
 
 func (m *mu) RLock() {
 	m.RWMutex.RLock()
-	//m.rlmu.Lock()
-	//m.rlocker[m.rlc.Load()] = string(stack(2))
-	//m.rlmu.Unlock()
+	m.rlmu.Lock()
+	m.rlocker[m.rlc.Load()] = string(stack(2))
 	m.rlc.Add(1)
+	m.rlmu.Unlock()
 	//fmt.Println("R", m.rlc, string(dbg.Stack())[:40])
 
 }
 
 func (m *mu) RUnlock() {
+	m.rlmu.Lock()
 	m.rlc.Add(-1)
 	if m.rlc.Load() < 0 {
 		panic("lock underflow")
 	}
-	//m.rlmu.Lock()
-	//m.rlocker[m.rlc.Load()] = ""
-	//m.rlmu.Unlock()
+	m.rlocker[m.rlc.Load()] = ""
+	m.rlmu.Unlock()
 	m.RWMutex.RUnlock()
 	//fmt.Println("RUN", m.rlc) //, string(dbg.Stack()))
 }
 
 func (m *mu) Lock() {
 	//fmt.Println("L", m.lc, string(dbg.Stack())[:40])
+	m.rlmu.Lock()
+	if m.nextlocker == "" {
+		m.nextlocker = string(stack(2))
+	}
+	m.rlmu.Unlock()
 	m.RWMutex.Lock()
 	m.lc.Add(1)
-	m.locker = string(stack(2))
+	m.rlmu.Lock()
+	m.locker = m.nextlocker
+	m.nextlocker = ""
+	m.rlmu.Unlock()
 }
 
 func (m *mu) Unlock() {
@@ -618,7 +627,7 @@ func (t *Torrent) onSetInfo(lock bool) {
 	t.tryCreateMorePieceHashers(false)
 	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info, false)
-		p.updateRequests("onSetInfo", false)
+		p.updateRequests("onSetInfo", false, false)
 	}, false)
 }
 
@@ -714,9 +723,11 @@ func (t *Torrent) name() string {
 	return "infohash:" + t.infoHash.HexString()
 }
 
-func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) pieceState(index pieceIndex, lock bool) (ret PieceState) {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 
 	p := &t.pieces[index]
 	ret.Priority = t.piecePriority(index, false)
@@ -781,9 +792,11 @@ func (t *Torrent) pieceAvailabilityFrequencies() (freqs []int) {
 	return
 }
 
-func (t *Torrent) pieceStateRuns() (ret PieceStateRuns) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+func (t *Torrent) pieceStateRuns(lock bool) (ret PieceStateRuns) {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
 
 	rle := missinggo.NewRunLengthEncoder(func(el interface{}, count uint64) {
 		ret = append(ret, PieceStateRun{
@@ -792,7 +805,7 @@ func (t *Torrent) pieceStateRuns() (ret PieceStateRuns) {
 		})
 	})
 	for index := range t.pieces {
-		rle.Append(t.pieceState(pieceIndex(index)), 1)
+		rle.Append(t.pieceState(pieceIndex(index), false), 1)
 	}
 	rle.Flush()
 	return
@@ -870,7 +883,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	)
 	if t.info != nil {
 		fmt.Fprintf(w, "Num Pieces: %d (%d completed)\n", t.numPieces(), t.numPiecesCompleted(false))
-		fmt.Fprintf(w, "Piece States: %s\n", t.pieceStateRuns())
+		fmt.Fprintf(w, "Piece States: %s\n", t.pieceStateRuns(false))
 		// Generates a huge, unhelpful listing when piece availability is very scattered. Prefer
 		// availability frequencies instead.
 		if false {
@@ -1087,7 +1100,7 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 		}()
 	}
 	t.iterPeers(func(p *Peer) {
-		p.close()
+		p.close(true)
 	}, true)
 	if t.storage != nil {
 		t.deletePieceRequestOrder()
@@ -1268,7 +1281,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 		return
 	}
 	p.logger.Levelf(log.Debug, "is mutually complete; dropping")
-	p.drop()
+	p.drop(lock)
 }
 
 func (t *Torrent) haveChunk(r Request) (ret bool) {
@@ -1285,7 +1298,7 @@ func (t *Torrent) haveChunk(r Request) (ret bool) {
 		return true
 	}
 
-	return !t.piece(int(r.Index), false).pendingChunk(r.ChunkSpec, t.chunkSize)
+	return !t.piece(int(r.Index), false).pendingChunk(r.ChunkSpec, t.chunkSize, false)
 }
 
 func chunkIndexFromChunkSpec(cs ChunkSpec, chunkSize pp.Integer) chunkIndexType {
@@ -1431,7 +1444,7 @@ func (t *Torrent) publishPieceStateChange(piece pieceIndex, deferPublish bool, l
 	}
 
 	publisher := func() {
-		cur := t.pieceState(piece)
+		cur := t.pieceState(piece, lock)
 		p := t.piece(piece, lock)
 		if cur != p.publicPieceState {
 			p.publicPieceState = cur
@@ -1509,6 +1522,7 @@ func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string, lock b
 	containsPiece := t._pendingPieces.Contains(uint32(piece))
 
 	if containsPiece {
+
 		t.iterPeers(func(c *Peer) {
 			// if c.requestState.Interested {
 			// 	return
@@ -1525,7 +1539,7 @@ func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string, lock b
 			if ignore {
 				return
 			}
-			c.updateRequests(reason, false)
+			c.updateRequests(reason, false, false)
 		}, false)
 	}
 	t.maybeNewConns(false)
@@ -1559,8 +1573,6 @@ func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex, lock bool) (pe
 }
 
 func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string, lock bool) {
-	//fmt.Println("UPP0")
-	//defer fmt.Println("UPP", "DONE")
 	if t.updatePiecePriorityNoTriggers(piece, lock) && !t.disableTriggers {
 		t.onPiecePendingTriggers(piece, reason, lock)
 	}
@@ -1622,7 +1634,7 @@ func (t *Torrent) piecePriority(piece pieceIndex, lock bool) piecePriority {
 func (t *Torrent) pendRequest(req RequestIndex) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.piece(t.pieceIndexOfRequestIndex(req), false).pendChunkIndex(req % t.chunksPerRegularPiece())
+	t.piece(t.pieceIndexOfRequestIndex(req), false).pendChunkIndex(req%t.chunksPerRegularPiece(), false)
 }
 
 func (t *Torrent) pieceCompletionChanged(piece pieceIndex, reason string, lock bool) {
@@ -1856,9 +1868,11 @@ func (t *Torrent) SetInfoBytes(b []byte) (err error) {
 }
 
 // Returns true if connection is removed from torrent.Conns.
-func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
 
 	if !c.closed.IsSet() {
 		panic("connection is not closed")
@@ -1876,27 +1890,27 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 	}
 	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests("Torrent.deletePeerConn", true, false)
-	t.assertPendingRequests()
+	t.assertPendingRequests(false)
 	if t.numActivePeers() == 0 && len(t.connsWithAllPieces) != 0 {
 		panic(t.connsWithAllPieces)
 	}
 	return
 }
 
-func (t *Torrent) decPeerPieceAvailability(p *Peer) {
-	if t.deleteConnWithAllPieces(p) {
+func (t *Torrent) decPeerPieceAvailability(p *Peer, lock bool) {
+	if t.deleteConnWithAllPieces(p, lock) {
 		return
 	}
-	if !t.haveInfo(true) {
+	if !t.haveInfo(lock) {
 		return
 	}
 	p.peerPieces().Iterate(func(i uint32) bool {
-		p.t.decPieceAvailability(pieceIndex(i), true)
+		p.t.decPieceAvailability(pieceIndex(i), lock)
 		return true
 	})
 }
 
-func (t *Torrent) assertPendingRequests() {
+func (t *Torrent) assertPendingRequests(lock bool) {
 	if !check.Enabled {
 		return
 	}
@@ -1916,17 +1930,12 @@ func (t *Torrent) assertPendingRequests() {
 	// }
 }
 
-func (t *Torrent) dropConnection(c *PeerConn) {
-	fmt.Println("DC0")
-	defer fmt.Println("DC", "DONE")
+func (t *Torrent) dropConnection(c *PeerConn, lock bool) {
 	t.cl.event.Broadcast()
-	c.close()
-	fmt.Println("DC1")
-	if t.deletePeerConn(c) {
-		fmt.Println("DC2")
-		t.openNewConns(true)
+	c.close(lock)
+	if t.deletePeerConn(c, lock) {
+		t.openNewConns(lock)
 	}
-	fmt.Println("DC3")
 }
 
 // Peers as in contact information for dialing out.
@@ -2332,7 +2341,10 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 		return errors.New("torrent closed")
 	}
 
-	conns := t.peerConnsAsSlice(true)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	conns := t.peerConnsAsSlice(false)
 	defer conns.free()
 
 	for _, c0 := range conns {
@@ -2343,15 +2355,12 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 			continue
 		}
 		if c.hasPreferredNetworkOver(c0) {
-			c0.close()
-			t.deletePeerConn(c0)
+			c0.close(false)
+			t.deletePeerConn(c0, false)
 		} else {
 			return errors.New("existing connection preferred")
 		}
 	}
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
 
 	if len(conns) >= t.maxEstablishedConns {
 		numOutgoing := conns.numOutgoingConns()
@@ -2365,8 +2374,8 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 		if c == nil {
 			return errors.New("don't want conn")
 		}
-		c.close()
-		t.deletePeerConn(c)
+		c.close(false)
+		t.deletePeerConn(c, false)
 	}
 
 	if len(t.conns) >= t.maxEstablishedConns {
@@ -2472,7 +2481,7 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	wcs.initKeys(worseConnLensOpts{})
 	heap.Init(&wcs)
 	for lenConns > t.maxEstablishedConns && wcs.Len() > 0 {
-		t.dropConnection(heap.Pop(&wcs).(*PeerConn))
+		t.dropConnection(heap.Pop(&wcs).(*PeerConn), true)
 		t.mu.RLock()
 		lenConns = len(t.conns)
 		t.mu.RUnlock()
@@ -2613,7 +2622,7 @@ func (t *Torrent) cancelRequestsForPiece(piece pieceIndex, lock bool) {
 	start := t.pieceRequestIndexOffset(piece)
 	end := start + t.pieceNumChunks(piece)
 	for ri := start; ri < end; ri++ {
-		t.cancelRequest(ri, lock)
+		t.cancelRequest(ri, lock, true)
 	}
 }
 
@@ -2650,8 +2659,8 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex, lock bool) {
 	// 	}
 	// }
 	for _, conn := range t.peersAsSlice(lock) {
-		if conn.peerHasPiece(piece, lock) {
-			conn.updateRequests("piece incomplete", lock)
+		if conn.peerHasPiece(piece, true) {
+			conn.updateRequests("piece incomplete", true, lock)
 		}
 	}
 }
@@ -2698,14 +2707,19 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 			if !ok {
 				break
 			}
-			p := t.piece(pi, true)
-			t.mu.Lock()
-			t.piecesQueuedForHash.Remove(bitmap.BitIndex(pi))
-			t.mu.Unlock()
-			p.hashing = true
-			t.hashing.Add(1)
-			t.publishPieceStateChange(pi, false, true)
-			t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher", true)
+
+			var p *Piece
+
+			func() {
+				t.mu.Lock()
+				defer t.mu.Unlock()
+				p = t.piece(pi, false)
+				t.piecesQueuedForHash.Remove(bitmap.BitIndex(pi))
+				p.hashing = true
+				t.hashing.Add(1)
+				t.publishPieceStateChange(pi, false, false)
+				t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher", false)
+			}()
 			t.storageLock.RLock()
 
 			sum, failedPeers, copyErr := t.hashPiece(p)
@@ -2751,9 +2765,7 @@ func (t *Torrent) processHashResults() {
 		for _, result := range results {
 			if result.correct {
 				for peer := range result.failedPeers {
-					func() {
-						t.cl.banPeerIP(peer.AsSlice())
-					}()
+					t.cl.banPeerIP(peer.AsSlice())
 					t.logger.WithDefaultLevel(log.Debug).Printf("smart banned %v for piece %v", peer, result.index)
 				}
 
@@ -2807,7 +2819,7 @@ func (t *Torrent) dropBannedPeers() {
 
 		if ok {
 			// Should this be a close?
-			p.drop()
+			p.drop(true)
 			t.logger.WithDefaultLevel(log.Debug).Printf("dropped %v for banned remote IP %v", p, netipAddr)
 		}
 	}
@@ -2833,12 +2845,11 @@ func (t *Torrent) peersAsSlice(lock bool) (ret []*Peer) {
 }
 
 func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex, lock bool) {
-	fmt.Println("QPC0")
-	defer fmt.Println("QPC", "DONE")
 	piece := t.piece(pieceIndex, lock)
 	if piece.queuedForHash(lock) {
 		return
 	}
+
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()
@@ -2994,34 +3005,36 @@ func (t *Torrent) onWriteChunkErr(err error) {
 
 func (t *Torrent) DisallowDataDownload() {
 	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	conns := t.peerConnsAsSlice(false)
 	defer conns.free()
 	t.dataDownloadDisallowed.Set()
-	t.mu.Unlock()
 
 	for _, c := range conns {
 		func() {
 			t.cl.lock()
 			defer t.cl.unlock()
 			// Could check if peer request state is empty/not interested?
-			c.updateRequests("disallow data download", true)
-			c.cancelAllRequests()
+			c.updateRequests("disallow data download", true, false)
+			c.cancelAllRequests(false)
 		}()
 	}
 }
 
 func (t *Torrent) AllowDataDownload() {
-	t.mu.Lock()
-	conns := t.peerConnsAsSlice(false)
+	//t.mu.Lock()
+	//defer t.mu.Unlock()
+
+	conns := t.peerConnsAsSlice(true)
 	defer conns.free()
 	t.dataDownloadDisallowed.Clear()
-	t.mu.Unlock()
 
 	for _, c := range conns {
 		func() {
 			t.cl.lock()
 			defer t.cl.unlock()
-			c.updateRequests("allow data download", true)
+			c.updateRequests("allow data download", true, true)
 		}()
 	}
 }
@@ -3029,16 +3042,17 @@ func (t *Torrent) AllowDataDownload() {
 // Enables uploading data, if it was disabled.
 func (t *Torrent) AllowDataUpload() {
 	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	conns := t.peerConnsAsSlice(false)
 	defer conns.free()
 	t.dataUploadDisallowed = false
-	t.mu.Unlock()
 
 	for _, c := range conns {
 		func() {
 			t.cl.lock()
 			defer t.cl.unlock()
-			c.updateRequests("allow data upload", true)
+			c.updateRequests("allow data upload", true, false)
 		}()
 	}
 }
@@ -3046,17 +3060,18 @@ func (t *Torrent) AllowDataUpload() {
 // Disables uploading data, if it was enabled.
 func (t *Torrent) DisallowDataUpload() {
 	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	conns := t.peerConnsAsSlice(false)
 	defer conns.free()
 	t.dataUploadDisallowed = true
-	t.mu.Unlock()
 
 	for _, c := range conns {
 		func() {
 			t.cl.lock()
 			defer t.cl.unlock()
 			// TODO: This doesn't look right. Shouldn't we tickle writers to choke peers or something instead?
-			c.updateRequests("disallow data upload", true)
+			c.updateRequests("disallow data upload", true, false)
 		}()
 	}
 }
@@ -3098,6 +3113,9 @@ func WebSeedPathEscaper(custom webseed.PathEscaper) AddWebSeedsOpt {
 }
 
 func (t *Torrent) AddWebSeeds(urls []string, opts ...AddWebSeedsOpt) {
+	//fmt.Println("AWS0", t.cl._mu.locker)
+	//defer fmt.Println("AWS", "DONE")
+
 	t.cl.lock()
 	defer t.cl.unlock()
 	for _, u := range urls {
@@ -3161,6 +3179,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
 		maxRequesters:  maxRequests,
 		activeRequests: make(map[Request]webseed.Request, maxRequests),
 	}
+
 	ws.peer.initRequestState()
 	for _, opt := range opts {
 		opt(&ws.client)
@@ -3210,26 +3229,34 @@ func (t *Torrent) updateComplete(lock bool) {
 	t.Complete.SetBool(t.haveAllPieces(lock))
 }
 
-func (t *Torrent) cancelRequest(r RequestIndex, lockPeer bool) *Peer {
-	p := t.requestingPeer(r)
+func (t *Torrent) cancelRequest(r RequestIndex, lock bool, lockPeer bool) *Peer {
+	p := t.requestingPeer(r, lock)
 	if p != nil {
-		p.cancel(r, lockPeer)
+		p.cancel(r, lockPeer, lock)
 	}
 	// TODO: This is a check that an old invariant holds. It can be removed after some testing.
 	//delete(t.pendingRequests, r)
-	t.mu.RLock()
-	_, ok := t.requestState[r]
-	t.mu.RUnlock()
 
-	if ok {
+	ok := func() bool {
+		if lock {
+			t.mu.RLock()
+			defer t.mu.RUnlock()
+		}
+		_, ok := t.requestState[r]
+		return ok
+	}
+
+	if ok() {
 		panic("expected request state to be gone")
 	}
 	return p
 }
 
-func (t *Torrent) requestingPeer(r RequestIndex) *Peer {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) requestingPeer(r RequestIndex, lock bool) *Peer {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 	if state, ok := t.requestState[r]; ok {
 		return state.peer
 	}
@@ -3246,9 +3273,11 @@ func (t *Torrent) addConnWithAllPieces(p *Peer) {
 	t.connsWithAllPieces[p] = struct{}{}
 }
 
-func (t *Torrent) deleteConnWithAllPieces(p *Peer) bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+func (t *Torrent) deleteConnWithAllPieces(p *Peer, lock bool) bool {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
 
 	_, ok := t.connsWithAllPieces[p]
 	delete(t.connsWithAllPieces, p)
@@ -3292,8 +3321,16 @@ type requestState struct {
 
 // Returns an error if a received chunk is out of bounds in someway.
 func (t *Torrent) checkValidReceiveChunk(r Request) error {
+	locked := t.mu.locker != "" || t.mu.rlocker[0] != ""
+
+	if locked {
+		fmt.Println("CVRC Locked", t.Name(), t.mu.locker, t.mu.nextlocker, t.mu.rlocker)
+	}
 	if !t.haveInfo(true) {
 		return errors.New("torrent missing info")
+	}
+	if locked {
+		fmt.Println("CVRC Has Info")
 	}
 	if int(r.Index) >= t.numPieces() {
 		return fmt.Errorf("chunk index %v, torrent num pieces %v", r.Index, t.numPieces())

@@ -43,6 +43,7 @@ func pieceOrderLess(i, j *pieceRequestOrderItem) multiless.Computation {
 func GetRequestablePieces(
 	input Input, pro *PieceRequestOrder,
 	f func(ih metainfo.Hash, pieceIndex int, orderState PieceRequestOrderState),
+	lockTorrent bool,
 ) {
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
 	// TorrentImpl. A nil value means no capacity limit.
@@ -54,7 +55,8 @@ func GetRequestablePieces(
 	pro.tree.Scan(func(_i pieceRequestOrderItem) bool {
 		ih := _i.key.InfoHash
 		var t Torrent = input.Torrent(ih)
-		var piece Piece = t.Piece(_i.key.Index)
+		var piece Piece = t.Piece(_i.key.Index, lockTorrent)
+
 		pieceLength := t.PieceLength()
 		if storageLeft != nil {
 			if *storageLeft < pieceLength {
@@ -62,11 +64,13 @@ func GetRequestablePieces(
 			}
 			*storageLeft -= pieceLength
 		}
-		if /*!piece.Request() ||*/ piece.NumPendingChunks() == 0 {
+
+		if /*!piece.Request(lockTorrent) ||*/ piece.NumPendingChunks(lockTorrent) == 0 {
 			// TODO: Clarify exactly what is verified. Stuff that's being hashed should be
 			// considered unverified and hold up further requests.
 			return true
 		}
+
 		if input.MaxUnverifiedBytes() != 0 && allTorrentsUnverifiedBytes+pieceLength > input.MaxUnverifiedBytes() {
 			return false
 		}

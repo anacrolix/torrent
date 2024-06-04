@@ -11,7 +11,7 @@ import (
 // legacy PeerConn methods.
 type peerImpl interface {
 	// Trigger the actual request state to get updated
-	handleUpdateRequests()
+	handleUpdateRequests(lockTorrent bool)
 	writeInterested(interested bool) bool
 
 	// _cancel initiates cancellation of a request and returns acked if it expects the cancel to be
@@ -19,10 +19,10 @@ type peerImpl interface {
 	_cancel(RequestIndex) (acked bool)
 	_request(Request) bool
 	connectionFlags() string
-	onClose()
+	onClose(lockTorrent bool)
 	onGotInfo(info *metainfo.Info, lock bool)
 	// Drop connection. This may be a no-op if there is no connection.
-	drop()
+	drop(lockTorrent bool)
 	// Rebuke the peer
 	ban()
 	String() string

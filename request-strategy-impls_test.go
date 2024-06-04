@@ -15,7 +15,7 @@ import (
 )
 
 func makeRequestStrategyPiece(t request_strategy.Torrent) request_strategy.Piece {
-	return t.Piece(0)
+	return t.Piece(0, true)
 }
 
 func TestRequestStrategyPieceDoesntAlloc(t *testing.T) {
@@ -117,11 +117,11 @@ func BenchmarkRequestStrategy(b *testing.B) {
 		for completed := 0; completed <= numPieces; completed += 1 {
 			storageClient.completed = completed
 			if completed > 0 {
-				tor.updatePieceCompletion(completed - 1, true)
+				tor.updatePieceCompletion(completed-1, true)
 			}
 			// Starting and stopping timers around this part causes lots of GC overhead.
-			rs := peer.getDesiredRequestState(false)
-			tor.cacheNextRequestIndexesForReuse(rs.Requests.requestIndexes)
+			rs := peer.getDesiredRequestState(false, true)
+			tor.cacheNextRequestIndexesForReuse(rs.Requests.requestIndexes, true)
 			// End of part that should be timed.
 			remainingChunks := (numPieces - completed) * (pieceLength / chunkSize)
 			c.Assert(rs.Requests.requestIndexes, qt.HasLen, minInt(

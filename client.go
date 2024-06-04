@@ -582,9 +582,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 			connString:      regularNetConnPeerConnConnString(nc),
 		})
 	defer func() {
-		cl.lock()
-		defer cl.unlock()
-		c.close()
+		c.close(true)
 	}()
 	c.Discovery = PeerSourceIncoming
 	cl.runReceivedConn(c)
@@ -864,6 +862,8 @@ func (cl *Client) outgoingConnection(
 	opts outgoingConnOpts,
 	attemptKey outgoingConnAttemptKey,
 ) {
+	//fmt.Println("OC0", cl._mu.locker)
+	//defer fmt.Println("OC", "DONE")
 	c, err := cl.dialAndCompleteHandshake(opts)
 	if err == nil {
 		c.conn.SetWriteDeadline(time.Time{})
@@ -871,6 +871,7 @@ func (cl *Client) outgoingConnection(
 	cl.lock()
 	defer cl.unlock()
 	// Don't release lock between here and addPeerConn, unless it's for failure.
+	//fmt.Println("OC1")
 	cl.noLongerHalfOpen(opts.t, opts.peerInfo.Addr.String(), attemptKey)
 	if err != nil {
 		if cl.config.Debug {
@@ -883,7 +884,7 @@ func (cl *Client) outgoingConnection(
 		}
 		return
 	}
-	defer c.close()
+	defer c.close(true)
 	c.Discovery = opts.peerInfo.Source
 	c.trusted = opts.peerInfo.Trusted
 	opts.t.runHandshookConnLoggingErr(c)
@@ -1081,7 +1082,7 @@ func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 	if err := t.addPeerConn(pc); err != nil {
 		return fmt.Errorf("adding connection: %w", err)
 	}
-	defer t.dropConnection(pc)
+	defer t.dropConnection(pc, true)
 	pc.startMessageWriter()
 	pc.sendInitialMessages()
 	pc.initUpdateRequestsTimer()
@@ -1121,7 +1122,7 @@ func (c *Peer) updateRequestsTimerFunc() {
 		torrent.Add("spurious timer requests updates", 1)
 		return
 	}
-	c.updateRequests(peerUpdateRequestsTimerReason, false)
+	c.updateRequests(peerUpdateRequestsTimerReason, false, true)
 }
 
 // Maximum pending requests we allow peers to send us. If peer requests are buffered on read, this
@@ -1340,9 +1341,6 @@ func (cl *Client) AddTorrentInfoHash(infoHash metainfo.Hash) (t *Torrent, new bo
 // If the torrent already exists then this Storage is ignored and the
 // existing torrent returned with `new` set to `false`
 func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStorage storage.ClientImpl) (t *Torrent, new bool) {
-	fmt.Println("ATIHWS")
-	defer fmt.Println("ATIHWS", "DONE")
-
 	cl.torrentsMu.Lock()
 	defer cl.torrentsMu.Unlock()
 
@@ -1372,16 +1370,12 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 // Adds a torrent by InfoHash with a custom Storage implementation. If the torrent already exists
 // then this Storage is ignored and the existing torrent returned with `new` set to `false`.
 func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
-	fmt.Println("ATO")
-	defer fmt.Println("ATO", "DONE")
-
 	infoHash := opts.InfoHash
 	cl.lock()
 	defer cl.unlock()
-	fmt.Println("ATO1")
 	cl.torrentsMu.Lock()
 	defer cl.torrentsMu.Unlock()
-	fmt.Println("ATO1A")
+
 	t, ok := cl.torrents[infoHash]
 	if ok {
 		return
@@ -1389,7 +1383,6 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	new = true
 
 	t = cl.newTorrentOpt(opts)
-	fmt.Println("ATO2")
 	cl.eachDhtServer(func(s DhtServer) {
 		if cl.config.PeriodicallyAnnounceTorrentsToDht {
 			go t.dhtAnnouncer(s)
@@ -1399,12 +1392,10 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		fmt.Println("ATO3")
 		t.setInfoBytesLocked(opts.InfoBytes)
 		cl.clearAcceptLimits()
 		t.updateWantPeersEvent(false)
 	}()
-	fmt.Println("ATO4")
 	// Tickle Client.waitAccept, new torrent may want conns.
 	cl.event.Broadcast()
 	return
@@ -1600,13 +1591,18 @@ func (cl *Client) banPeerIP(ip net.IP) {
 	cl.badPeerIPsMu.Unlock()
 
 	for _, t := range cl.torrentsAsSlice() {
-		for _, p := range t.peersAsSlice(true) {
-			if p.remoteIp().Equal(ip) {
-				t.logger.Levelf(log.Warning, "dropping peer %v with banned ip %v", p, ip)
-				// Should this be a close?
-				p.drop()
+		func() {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+
+			for _, p := range t.peersAsSlice(false) {
+				if p.remoteIp().Equal(ip) {
+					t.logger.Levelf(log.Warning, "dropping peer %v with banned ip %v", p, ip)
+					// Should this be a close?
+					p.drop(false)
+				}
 			}
-		}
+		}()
 	}
 }
 

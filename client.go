@@ -863,7 +863,7 @@ func (cl *Client) outgoingConnection(
 	attemptKey outgoingConnAttemptKey,
 ) {
 	//fmt.Println("OC0", cl._mu.locker)
-	//defer fmt.Println("OC", "DONE")
+	defer fmt.Println("OC", "DONE")
 	c, err := cl.dialAndCompleteHandshake(opts)
 	if err == nil {
 		c.conn.SetWriteDeadline(time.Time{})
@@ -871,7 +871,7 @@ func (cl *Client) outgoingConnection(
 	cl.lock()
 	defer cl.unlock()
 	// Don't release lock between here and addPeerConn, unless it's for failure.
-	//fmt.Println("OC1")
+	fmt.Println("OC1")
 	cl.noLongerHalfOpen(opts.t, opts.peerInfo.Addr.String(), attemptKey)
 	if err != nil {
 		if cl.config.Debug {

@@ -139,11 +139,11 @@ func (l *PeerConn) hasPreferredNetworkOver(r *PeerConn) bool {
 	return ml.Less()
 }
 
-func (cn *PeerConn) peerHasAllPieces(lock bool) (all, known bool) {
+func (cn *PeerConn) peerHasAllPieces(lockTorrent bool) (all, known bool) {
 	if cn.peerSentHaveAll {
 		return true, true
 	}
-	if !cn.t.haveInfo(lock) {
+	if !cn.t.haveInfo(lockTorrent) {
 		return false, false
 	}
 	return cn._peerPieces.GetCardinality() == uint64(cn.t.numPieces()), true
@@ -374,20 +374,20 @@ func (cn *PeerConn) raisePeerMinPieces(newMin pieceIndex) {
 	}
 }
 
-func (cn *PeerConn) peerSentHave(piece pieceIndex) error {
+func (cn *PeerConn) peerSentHave(piece pieceIndex, lockTorrent bool) error {
 	if cn.t.haveInfo(true) && piece >= cn.t.numPieces() || piece < 0 {
 		return errors.New("invalid piece")
 	}
-	if cn.peerHasPiece(piece, true) {
+	if cn.peerHasPiece(piece, true, lockTorrent) {
 		return nil
 	}
 	cn.raisePeerMinPieces(piece + 1)
-	if !cn.peerHasPiece(piece, true) {
+	if !cn.peerHasPiece(piece, true, lockTorrent) {
 		cn.t.incPieceAvailability(piece, true)
 	}
 	cn._peerPieces.Add(uint32(piece))
-	if cn.t.wantPieceIndex(piece, true) {
-		cn.updateRequests("have", true, true)
+	if cn.t.wantPieceIndex(piece, lockTorrent) {
+		cn.updateRequests("have", true, lockTorrent)
 	}
 	cn.peerPiecesChanged(true)
 	return nil
@@ -842,7 +842,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				// appropriate, and is clearly specified.
 			}()
 		case pp.Have:
-			err = c.peerSentHave(pieceIndex(msg.Index))
+			err = c.peerSentHave(pieceIndex(msg.Index), true)
 		case pp.Bitfield:
 			err = c.peerSentBitfield(msg.Bitfield)
 		case pp.Request:
@@ -1161,7 +1161,7 @@ func (pc *PeerConn) String() string {
 func (pc *PeerConn) PeerPieces() *roaring.Bitmap {
 	pc.locker().RLock()
 	defer pc.locker().RUnlock()
-	return pc.newPeerPieces()
+	return pc.newPeerPieces(true)
 }
 
 func (pc *PeerConn) remoteIsTransmission() bool {
@@ -1177,8 +1177,8 @@ func (pc *PeerConn) bitExtensionEnabled(bit pp.ExtensionBit) bool {
 	return pc.t.cl.config.Extensions.GetBit(bit) && pc.PeerExtensionBytes.GetBit(bit)
 }
 
-func (cn *PeerConn) peerPiecesChanged(lock bool) {
-	cn.t.maybeDropMutuallyCompletePeer(cn, lock)
+func (cn *PeerConn) peerPiecesChanged(lockTorrent bool) {
+	cn.t.maybeDropMutuallyCompletePeer(cn, lockTorrent)
 }
 
 // Returns whether the connection could be useful to us. We're seeding and

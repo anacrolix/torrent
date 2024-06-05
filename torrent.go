@@ -261,7 +261,7 @@ func (t *Torrent) selectivePieceAvailabilityFromPeers(i pieceIndex, lock bool) (
 		if ok() {
 			return
 		}
-		if peer.peerHasPiece(i, lock) {
+		if peer.peerHasPiece(i, true, lock) {
 			count++
 		}
 	}
@@ -1530,7 +1530,7 @@ func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string, lock b
 			if !c.isLowOnRequests(false) {
 				return
 			}
-			if !c.peerHasPiece(piece, false) {
+			if !c.peerHasPiece(piece, true, false) {
 				return
 			}
 
@@ -1539,7 +1539,7 @@ func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string, lock b
 			if ignore {
 				return
 			}
-			c.updateRequests(reason, false, false)
+			c.updateRequests(reason, true, false)
 		}, false)
 	}
 	t.maybeNewConns(false)
@@ -2659,7 +2659,7 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex, lock bool) {
 	// 	}
 	// }
 	for _, conn := range t.peersAsSlice(lock) {
-		if conn.peerHasPiece(piece, true) {
+		if conn.peerHasPiece(piece, true, lock) {
 			conn.updateRequests("piece incomplete", true, lock)
 		}
 	}
@@ -3041,6 +3041,8 @@ func (t *Torrent) AllowDataDownload() {
 
 // Enables uploading data, if it was disabled.
 func (t *Torrent) AllowDataUpload() {
+	fmt.Println("ADU0")
+	defer fmt.Println("ADU", "DONE")
 	t.mu.Lock()
 	defer t.mu.Unlock()
 

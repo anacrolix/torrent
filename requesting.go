@@ -211,7 +211,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lockTorrent bool) (desired des
 			if ih != infoHash {
 				return
 			}
-			if !p.peerHasPiece(pieceIndex, true) {
+			if !p.peerHasPiece(pieceIndex, true, lockTorrent) {
 				return
 			}
 			requestHeap.pieceStates[pieceIndex] = pieceExtra
@@ -289,7 +289,7 @@ func (p *Peer) maybeUpdateActualRequestState(lockTorrent bool) {
 		pprof.Labels("update request", p.needRequestUpdate),
 		func(_ context.Context) {
 			next := p.getDesiredRequestState(false, lockTorrent)
-			p.applyRequestState(next)
+			p.applyRequestState(next, lockTorrent)
 			p.t.cacheNextRequestIndexesForReuse(next.Requests.requestIndexes, lockTorrent)
 		},
 	)
@@ -310,30 +310,32 @@ func (t *Torrent) cacheNextRequestIndexesForReuse(slice []RequestIndex, lock boo
 // Whether we should allow sending not interested ("losing interest") to the peer. I noticed
 // qBitTorrent seems to punish us for sending not interested when we're streaming and don't
 // currently need anything.
-func (p *Peer) allowSendNotInterested() bool {
+func (p *Peer) allowSendNotInterested(lockTorrent bool) bool {
 	// Except for caching, we're not likely to lose pieces very soon.
 	if p.t.haveAllPieces(true) {
 		return true
 	}
-	all, known := p.peerHasAllPieces(true)
+	all, known := p.peerHasAllPieces(lockTorrent)
 	if all || !known {
 		return false
 	}
 	// Allow losing interest if we have all the pieces the peer has.
-	p.t.mu.RLock()
-	defer p.t.mu.RUnlock()
+	if lockTorrent {
+		p.t.mu.RLock()
+		defer p.t.mu.RUnlock()
+	}
 	return roaring.AndNot(p.peerPieces(), &p.t._completedPieces).IsEmpty()
 }
 
 // Transmit/action the request state to the peer.
-func (p *Peer) applyRequestState(next desiredRequestState) {
+func (p *Peer) applyRequestState(next desiredRequestState, lockTorrent bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	current := &p.requestState
 	// Make interest sticky
 	if !next.Interested && current.Interested {
-		if !p.allowSendNotInterested() {
+		if !p.allowSendNotInterested(lockTorrent) {
 			next.Interested = true
 		}
 	}
@@ -351,9 +353,13 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 
 	t := p.t
 
-	t.mu.RLock()
-	heap.Init(requestHeap)
-	t.mu.RUnlock()
+	func() {
+		if lockTorrent {
+			t.mu.RLock()
+			defer t.mu.RUnlock()
+		}
+		heap.Init(requestHeap)
+	}()
 
 	originalRequestCount := current.Requests.GetCardinality()
 
@@ -387,9 +393,9 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 			if diff > 1 || (diff == 1 && !p.lastUsefulChunkReceived.After(existing.lastUsefulChunkReceived)) {
 				continue
 			}
-			t.cancelRequest(req, true, false)
+			t.cancelRequest(req, lockTorrent, false)
 		}
-		more = p.mustRequest(req, false)
+		more = p.mustRequest(req, false, lockTorrent)
 		if !more {
 			break
 		}

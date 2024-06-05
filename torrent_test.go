@@ -239,7 +239,7 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	pc.initRequestState()
 	g.InitNew(&pc.callbacks)
 	tt.conns[&pc] = struct{}{}
-	err = pc.peerSentHave(0)
+	err = pc.peerSentHave(0, true)
 	c.Assert(err, qt.IsNil)
 	info := testutil.Greeting.Info(5)
 	err = tt.setInfo(&info, true)

@@ -581,8 +581,8 @@ func TestPeerInvalidHave(t *testing.T) {
 	cn.peerImpl = cn
 	cl.lock()
 	defer cl.unlock()
-	assert.NoError(t, cn.peerSentHave(0))
-	assert.Error(t, cn.peerSentHave(1))
+	assert.NoError(t, cn.peerSentHave(0, true))
+	assert.Error(t, cn.peerSentHave(1, true))
 }
 
 func TestPieceCompletedInStorageButNotClient(t *testing.T) {

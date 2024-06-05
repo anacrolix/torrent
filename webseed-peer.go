@@ -456,8 +456,8 @@ func (me *webseedPeer) peerPieces() *roaring.Bitmap {
 	return &me.client.Pieces
 }
 
-func (cn *webseedPeer) peerHasAllPieces(lock bool) (all, known bool) {
-	if !cn.peer.t.haveInfo(lock) {
+func (cn *webseedPeer) peerHasAllPieces(lockTorrent bool) (all, known bool) {
+	if !cn.peer.t.haveInfo(lockTorrent) {
 		return true, false
 	}
 	return cn.client.Pieces.GetCardinality() == uint64(cn.peer.t.numPieces()), true

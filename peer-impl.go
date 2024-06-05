@@ -32,7 +32,7 @@ type peerImpl interface {
 	// guess at how many pieces are in a torrent, and assume they have all pieces based on them
 	// having sent haves for everything, but we don't know for sure. But if they send a have-all
 	// message, then it's clear that they do.
-	peerHasAllPieces(lock bool) (all, known bool)
+	peerHasAllPieces(lockTorrent bool) (all, known bool)
 	peerPieces() *roaring.Bitmap
 
 	nominalMaxRequests(lock bool) maxRequests

@@ -359,13 +359,13 @@ func (p *Peer) close(lockTorrent bool) {
 
 // Peer definitely has a piece, for purposes of requesting. So it's not sufficient that we think
 // they do (known=true).
-func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool) bool {
+func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool, lockTorrent bool) bool {
 	if lock {
 		cn.mu.RLock()
 		defer cn.mu.RUnlock()
 	}
 
-	if all, known := cn.peerHasAllPieces(false); all && known {
+	if all, known := cn.peerHasAllPieces(lockTorrent); all && known {
 		return true
 	}
 	return cn.peerPieces().ContainsInt(piece)
@@ -420,7 +420,7 @@ type messageWriter func(pp.Message) bool
 
 // This function seems to only used by Peer.request. It's all logic checks, so maybe we can no-op it
 // when we want to go fast.
-func (cn *Peer) shouldRequest(r RequestIndex) error {
+func (cn *Peer) shouldRequest(r RequestIndex, lockTorrent bool) error {
 	err := cn.t.checkValidReceiveChunk(cn.t.requestIndexToRequest(r))
 	if err != nil {
 		return err
@@ -433,7 +433,7 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 	if cn.requestState.Cancelled.Contains(r) {
 		return errors.New("request is cancelled and waiting acknowledgement")
 	}
-	if !cn.peerHasPiece(pi, true) {
+	if !cn.peerHasPiece(pi, true, lockTorrent) {
 		return errors.New("requesting piece peer doesn't have")
 	}
 	if !cn.t.peerIsActive(cn) {
@@ -458,21 +458,21 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 	return nil
 }
 
-func (cn *Peer) mustRequest(r RequestIndex, lock bool) bool {
-	more, err := cn.request(r, lock)
+func (cn *Peer) mustRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
+	more, err := cn.request(r, lock, lockTorrent)
 	if err != nil {
 		panic(err)
 	}
 	return more
 }
 
-func (cn *Peer) request(r RequestIndex, lock bool) (more bool, err error) {
+func (cn *Peer) request(r RequestIndex, lock bool, lockTorrent bool) (more bool, err error) {
 	if lock {
 		cn.mu.Lock()
 		defer cn.mu.Unlock()
 	}
 
-	//if err := cn.shouldRequest(r); err != nil {
+	//if err := cn.shouldRequest(r,lockTorrent); err != nil {
 	//	panic(err)
 	//}
 	if cn.requestState.Requests.Contains(r) {
@@ -759,6 +759,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	piece.unpendChunkIndex(chunkIndexFromChunkSpec(ppReq.ChunkSpec, t.chunkSize), true)
 
 	// Cancel pending requests for this chunk from *other* peers.
+	fmt.Println("RP", req)
 	if p := t.requestingPeer(req, true); p != nil {
 		if p == c {
 			panic("should not be pending request from conn that just received it")
@@ -872,6 +873,7 @@ func (c *Peer) deleteRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
 			c.t.mu.Lock()
 			defer c.t.mu.Unlock()
 		}
+		fmt.Println("DR", r)
 		delete(c.t.requestState, r)
 	}()
 
@@ -951,10 +953,10 @@ func (l connectionTrust) Less(r connectionTrust) bool {
 }
 
 // Returns a new Bitmap that includes bits for all pieces the peer could have based on their claims.
-func (cn *Peer) newPeerPieces() *roaring.Bitmap {
+func (cn *Peer) newPeerPieces(lockTorrent bool) *roaring.Bitmap {
 	// TODO: Can we use copy on write?
 	ret := cn.peerPieces().Clone()
-	if all, _ := cn.peerHasAllPieces(true); all {
+	if all, _ := cn.peerHasAllPieces(lockTorrent); all {
 		if cn.t.haveInfo(true) {
 			ret.AddRange(0, bitmap.BitRange(cn.t.numPieces()))
 		} else {

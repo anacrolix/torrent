@@ -85,8 +85,8 @@ func (p *Piece) numDirtyChunks(lock bool) chunkIndexType {
 		p.t.pieceRequestIndexOffset(p.index+1)))
 }
 
-func (p *Piece) unpendChunkIndex(i chunkIndexType, lock bool) {
-	if lock {
+func (p *Piece) unpendChunkIndex(i chunkIndexType, lockTorrent bool) {
+	if lockTorrent {
 		p.t.mu.Lock()
 		defer p.t.mu.Unlock()
 	}

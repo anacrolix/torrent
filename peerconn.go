@@ -295,8 +295,8 @@ func (me *PeerConn) _request(r Request) bool {
 	})
 }
 
-func (me *PeerConn) _cancel(r RequestIndex) bool {
-	me.write(makeCancelMessage(me.t.requestIndexToRequest(r)))
+func (me *PeerConn) _cancel(r RequestIndex, lockTorrent bool) bool {
+	me.write(makeCancelMessage(me.t.requestIndexToRequest(r, lockTorrent)))
 	return me.remoteRejectsCancels()
 }
 
@@ -689,7 +689,7 @@ func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
 func (c *PeerConn) readPeerRequestData(r Request) ([]byte, error) {
 	b := make([]byte, r.Length)
 	p := c.t.info.Piece(int(r.Index))
-	n, err := c.t.readAt(b, p.Offset()+int64(r.Begin))
+	n, err := c.t.readAt(b, p.Offset()+int64(r.Begin), true)
 	if n == len(b) {
 		if err == io.EOF {
 			err = nil
@@ -856,7 +856,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			func() {
 				cl.unlock()
 				defer cl.lock()
-				c.receiveChunk(&msg)
+				c.receiveChunk(&msg, true)
 				if len(msg.Piece) == int(t.chunkSize) {
 					t.chunkPool.Put(&msg.Piece)
 				}

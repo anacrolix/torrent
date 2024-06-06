@@ -16,7 +16,7 @@ type peerImpl interface {
 
 	// _cancel initiates cancellation of a request and returns acked if it expects the cancel to be
 	// handled by a follow-up event.
-	_cancel(RequestIndex) (acked bool)
+	_cancel(r RequestIndex, lockTorrent bool) (acked bool)
 	_request(Request) bool
 	connectionFlags() string
 	onClose(lockTorrent bool)
@@ -35,5 +35,5 @@ type peerImpl interface {
 	peerHasAllPieces(lockTorrent bool) (all, known bool)
 	peerPieces() *roaring.Bitmap
 
-	nominalMaxRequests(lock bool) maxRequests
+	nominalMaxRequests(lock bool, lockTorrent bool) maxRequests
 }

@@ -214,11 +214,11 @@ func (p *Peer) getDesiredRequestState(debug bool, lockTorrent bool) (desired des
 			if !p.peerHasPiece(pieceIndex, true, lockTorrent) {
 				return
 			}
+
 			requestHeap.pieceStates[pieceIndex] = pieceExtra
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
 
 			it.Initialize(&dirtyChunks)
-
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
 				iterCount++
 				if !allowedFast {
@@ -312,7 +312,7 @@ func (t *Torrent) cacheNextRequestIndexesForReuse(slice []RequestIndex, lock boo
 // currently need anything.
 func (p *Peer) allowSendNotInterested(lockTorrent bool) bool {
 	// Except for caching, we're not likely to lose pieces very soon.
-	if p.t.haveAllPieces(true) {
+	if p.t.haveAllPieces(lockTorrent) {
 		return true
 	}
 	all, known := p.peerHasAllPieces(lockTorrent)
@@ -329,13 +329,20 @@ func (p *Peer) allowSendNotInterested(lockTorrent bool) bool {
 
 // Transmit/action the request state to the peer.
 func (p *Peer) applyRequestState(next desiredRequestState, lockTorrent bool) {
+	t := p.t
+
+	if lockTorrent {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	current := &p.requestState
 	// Make interest sticky
 	if !next.Interested && current.Interested {
-		if !p.allowSendNotInterested(lockTorrent) {
+		if !p.allowSendNotInterested(false) {
 			next.Interested = true
 		}
 	}
@@ -351,26 +358,21 @@ func (p *Peer) applyRequestState(next desiredRequestState, lockTorrent bool) {
 		next.Requests.lessByValue,
 	)
 
-	t := p.t
-
-	func() {
-		if lockTorrent {
-			t.mu.RLock()
-			defer t.mu.RUnlock()
-		}
-		heap.Init(requestHeap)
-	}()
+	heap.Init(requestHeap)
 
 	originalRequestCount := current.Requests.GetCardinality()
 
 	for {
+
 		if requestHeap.Len() == 0 {
 			break
 		}
+
 		numPending := maxRequests(current.Requests.GetCardinality() + current.Cancelled.GetCardinality())
-		if numPending >= p.peerImpl.nominalMaxRequests(false) {
+		if numPending >= p.peerImpl.nominalMaxRequests(false, false) {
 			break
 		}
+
 		req := heap.Pop(requestHeap)
 		if cap(next.Requests.requestIndexes) != cap(orig) {
 			panic("changed")
@@ -379,7 +381,9 @@ func (p *Peer) applyRequestState(next desiredRequestState, lockTorrent bool) {
 		if p.needRequestUpdate == "Peer.remoteRejectedRequest" {
 			continue
 		}
-		existing := t.requestingPeer(req, true)
+
+		existing := t.requestingPeer(req, false)
+
 		if existing != nil && existing != p {
 			if p.needRequestUpdate == "Peer.cancel" {
 				continue
@@ -393,9 +397,11 @@ func (p *Peer) applyRequestState(next desiredRequestState, lockTorrent bool) {
 			if diff > 1 || (diff == 1 && !p.lastUsefulChunkReceived.After(existing.lastUsefulChunkReceived)) {
 				continue
 			}
-			t.cancelRequest(req, lockTorrent, false)
+
+			t.cancelRequest(req, false, false)
 		}
-		more = p.mustRequest(req, false, lockTorrent)
+
+		more = p.mustRequest(req, false, false)
 		if !more {
 			break
 		}

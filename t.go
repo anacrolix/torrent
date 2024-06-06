@@ -174,8 +174,6 @@ func (t *Torrent) deleteReader(r *reader) {
 // priority. Piece indexes are not the same as bytes. Requires that the info
 // has been obtained, see Torrent.Info and Torrent.GotInfo.
 func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
-	fmt.Println("DP0", t.mu.locker)
-	defer fmt.Println("DP", "DONE")
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.downloadPiecesLocked(begin, end)

@@ -56,14 +56,19 @@ type mu struct {
 	lc         atomic.Int32
 	rlmu       sync.Mutex
 	rlocker    [20]string
+	rlocktime  time.Time
 	locker     string
 	nextlocker string
+	locktime   time.Time
 }
 
 func (m *mu) RLock() {
 	m.RWMutex.RLock()
 	m.rlmu.Lock()
 	m.rlocker[m.rlc.Load()] = string(stack(2))
+	if m.rlc.Load() == 0 {
+		m.rlocktime = time.Now()
+	}
 	m.rlc.Add(1)
 	m.rlmu.Unlock()
 	//fmt.Println("R", m.rlc, string(dbg.Stack())[:40])
@@ -75,6 +80,9 @@ func (m *mu) RUnlock() {
 	m.rlc.Add(-1)
 	if m.rlc.Load() < 0 {
 		panic("lock underflow")
+	}
+	if m.rlc.Load() == 0 {
+		m.rlocktime = time.Time{}
 	}
 	m.rlocker[m.rlc.Load()] = ""
 	m.rlmu.Unlock()
@@ -93,6 +101,7 @@ func (m *mu) Lock() {
 	m.lc.Add(1)
 	m.rlmu.Lock()
 	m.locker = m.nextlocker
+	m.locktime = time.Now()
 	m.nextlocker = ""
 	m.rlmu.Unlock()
 }
@@ -103,6 +112,7 @@ func (m *mu) Unlock() {
 		panic("lock underflow")
 	}
 	m.locker = ""
+	m.locktime = time.Time{}
 	m.RWMutex.Unlock()
 	//fmt.Println("LUN", m.lc) //, string(dbg.Stack()))
 }
@@ -1135,9 +1145,9 @@ func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
 	return torrentOffsetRequest(t.length(), t.info.PieceLength, int64(t.chunkSize), off)
 }
 
-func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
+func (t *Torrent) writeChunk(piece int, begin int64, data []byte, lock bool) (err error) {
 	//defer perf.ScopeTimerErr(&err)()
-	n, err := t.piece(piece, true).Storage().WriteAt(data, begin)
+	n, err := t.piece(piece, lock).Storage().WriteAt(data, begin)
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite
 	}
@@ -1284,12 +1294,14 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	p.drop(lock)
 }
 
-func (t *Torrent) haveChunk(r Request) (ret bool) {
+func (t *Torrent) haveChunk(r Request, lock bool) (ret bool) {
 	// defer func() {
 	// 	log.Println("have chunk", r, ret)
 	// }()
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 
 	if !t.haveInfo(false) {
 		return false
@@ -1707,55 +1719,48 @@ func (t *Torrent) openNewConns(lock bool) (initiated int) {
 }
 
 func (t *Torrent) updatePieceCompletion(piece pieceIndex, lock bool) bool {
-	p := t.piece(piece, lock)
-	uncached := t.pieceCompleteUncached(piece, lock)
-	cached := p.completion(lock)
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
+
+	p := t.piece(piece, false)
+	uncached := t.pieceCompleteUncached(piece, false)
+	cached := p.completion(false)
 	changed := cached != uncached
 	complete := uncached.Complete
 	p.storageCompletionOk = uncached.Ok
 	x := uint32(piece)
-	func() {
-		if lock {
-			t.mu.Lock()
-			defer t.mu.Unlock()
-		}
-		if complete {
-			t._completedPieces.Add(x)
-			t.openNewConns(false)
-		} else {
-			t._completedPieces.Remove(x)
-		}
-	}()
-	p.t.updatePieceRequestOrderPiece(piece, lock)
-	t.updateComplete(lock)
 
-	func() {
-		if lock {
-			t.mu.RLock()
-			defer t.mu.RUnlock()
-		}
-		lenDirtiers := len(p.dirtiers)
+	if complete {
+		t._completedPieces.Add(x)
+		t.openNewConns(false)
+	} else {
+		t._completedPieces.Remove(x)
+	}
+	p.t.updatePieceRequestOrderPiece(piece, false)
+	t.updateComplete(false)
 
-		if complete && lenDirtiers != 0 {
-			t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
-		}
-	}()
+	lenDirtiers := len(p.dirtiers)
 
+	if complete && lenDirtiers != 0 {
+		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
+	}
 	if changed {
 		//slog.Debug(
 		//	"piece completion changed",
 		//	slog.Int("piece", piece),
 		//	slog.Any("from", cached),
 		//	slog.Any("to", uncached))
-		t.pieceCompletionChanged(piece, "Torrent.updatePieceCompletion", lock)
+		t.pieceCompletionChanged(piece, "Torrent.updatePieceCompletion", false)
 	}
 	return changed
 }
 
 // Non-blocking read. Client lock is not required.
-func (t *Torrent) readAt(b []byte, off int64) (n int, err error) {
+func (t *Torrent) readAt(b []byte, off int64, lock bool) (n int, err error) {
 	for len(b) != 0 {
-		p := t.piece(int(off/t.info.PieceLength), true)
+		p := t.piece(int(off/t.info.PieceLength), lock)
 
 		p.waitNoPendingWrites()
 		var n1 int
@@ -2540,7 +2545,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 			c._stats.incrementPiecesDirtiedGood()
 		}
 		p.mu.RUnlock()
-		t.clearPieceTouchers(piece)
+		t.clearPieceTouchers(piece, true)
 
 		/* Temp for testing
 		hasDirty := p.hasDirtyChunks()
@@ -2581,7 +2586,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 
 				p.mu.RUnlock()
 
-				t.clearPieceTouchers(piece)
+				t.clearPieceTouchers(piece, true)
 				slices.Sort(bannableTouchers, connLessTrusted)
 
 				if t.cl.config.Debug {
@@ -2826,8 +2831,8 @@ func (t *Torrent) dropBannedPeers() {
 }
 
 // Return the connections that touched a piece, and clear the entries while doing it.
-func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
-	p := t.piece(pi, true)
+func (t *Torrent) clearPieceTouchers(pi pieceIndex, lock bool) {
+	p := t.piece(pi, lock)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -2960,8 +2965,8 @@ func (t *Torrent) allStats(f func(*ConnStats)) {
 	f(&t.cl.connStats)
 }
 
-func (t *Torrent) hashingPiece(i pieceIndex) bool {
-	return t.piece(i, true).hashing
+func (t *Torrent) hashingPiece(i pieceIndex, lock bool) bool {
+	return t.piece(i, lock).hashing
 }
 
 func (t *Torrent) pieceQueuedForHash(i pieceIndex, lock bool) bool {
@@ -3041,8 +3046,6 @@ func (t *Torrent) AllowDataDownload() {
 
 // Enables uploading data, if it was disabled.
 func (t *Torrent) AllowDataUpload() {
-	fmt.Println("ADU0")
-	defer fmt.Println("ADU", "DONE")
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -3211,11 +3214,11 @@ func (t *Torrent) peerIsActive(p *Peer) (active bool) {
 	return
 }
 
-func (t *Torrent) requestIndexToRequest(ri RequestIndex) Request {
+func (t *Torrent) requestIndexToRequest(ri RequestIndex, lock bool) Request {
 	index := t.pieceIndexOfRequestIndex(ri)
 	return Request{
 		pp.Integer(index),
-		t.piece(index, true).chunkIndexSpec(ri % t.chunksPerRegularPiece()),
+		t.piece(index, lock).chunkIndexSpec(ri % t.chunksPerRegularPiece()),
 	}
 }
 
@@ -3323,16 +3326,8 @@ type requestState struct {
 
 // Returns an error if a received chunk is out of bounds in someway.
 func (t *Torrent) checkValidReceiveChunk(r Request) error {
-	locked := t.mu.locker != "" || t.mu.rlocker[0] != ""
-
-	if locked {
-		fmt.Println("CVRC Locked", t.Name(), t.mu.locker, t.mu.nextlocker, t.mu.rlocker)
-	}
 	if !t.haveInfo(true) {
 		return errors.New("torrent missing info")
-	}
-	if locked {
-		fmt.Println("CVRC Has Info")
 	}
 	if int(r.Index) >= t.numPieces() {
 		return fmt.Errorf("chunk index %v, torrent num pieces %v", r.Index, t.numPieces())

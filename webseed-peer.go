@@ -66,8 +66,8 @@ func (ws *webseedPeer) writeInterested(interested bool) bool {
 	return true
 }
 
-func (ws *webseedPeer) _cancel(r RequestIndex) bool {
-	if active, ok := ws.activeRequests[ws.peer.t.requestIndexToRequest(r)]; ok {
+func (ws *webseedPeer) _cancel(r RequestIndex, lockTorrent bool) bool {
+	if active, ok := ws.activeRequests[ws.peer.t.requestIndexToRequest(r, lockTorrent)]; ok {
 		active.Cancel()
 		// The requester is running and will handle the result.
 		return true
@@ -84,8 +84,13 @@ func (ws *webseedPeer) _request(r Request) bool {
 	return true
 }
 
-func (cn *webseedPeer) nominalMaxRequests(lock bool) maxRequests {
+func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxRequests {
 	interestedPeers := 1
+
+	if lockTorrent {
+		cn.peer.t.mu.RLock()
+		defer cn.peer.t.mu.RUnlock()
+	}
 
 	cn.peer.t.iterPeers(func(peer *Peer) {
 		if peer == &cn.peer {
@@ -94,21 +99,21 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool) maxRequests {
 
 		if !peer.closed.IsSet() {
 			if peer.connectionFlags() != "WS" {
-				if !peer.peerInterested || peer.lastHelpful(lock).IsZero() {
+				if !peer.peerInterested || peer.lastHelpful(false).IsZero() {
 					return
 				}
 			}
 
 			interestedPeers++
 		}
-	}, lock)
+	}, false)
 
 	if lock {
 		cn.peer.mu.RLock()
 		defer cn.peer.mu.RUnlock()
 	}
 
-	activeRequestsPerPeer := cn.peer.bestPeerNumPieces(false) / maxInt(1, interestedPeers)
+	activeRequestsPerPeer := cn.peer.bestPeerNumPieces(false, false) / maxInt(1, interestedPeers)
 	return maxInt(1, minInt(cn.peer.PeerMaxRequests, maxInt(maxInt(8, activeRequestsPerPeer), cn.peer.peakRequests*2)))
 }
 
@@ -136,7 +141,7 @@ func (ws *webseedPeer) requester(i int) {
 		restart := false
 
 		ws.peer.requestState.Requests.Iterate(func(x RequestIndex) bool {
-			r := ws.peer.t.requestIndexToRequest(x)
+			r := ws.peer.t.requestIndexToRequest(x, true)
 			if _, ok := ws.activeRequests[r]; ok {
 				return true
 			}
@@ -172,17 +177,16 @@ func (ws *webseedPeer) requester(i int) {
 		})
 
 		func() {
-			//fmt.Println("RQ0")
-			//defer fmt.Println("RQ0", "DONE")
-			//ws.peer.t.mu.RLock()
-			//defer ws.peer.t.mu.RUnlock()
+			ws.peer.t.mu.RLock()
+			defer ws.peer.t.mu.RUnlock()
 
 			if !(ws.peer.t.dataDownloadDisallowed.Bool() || ws.peer.t.info == nil) {
 				desiredRequests := len(ws.peer.getDesiredRequestState(false, false).Requests.requestIndexes)
 				pendingRequests := int(ws.peer.requestState.Requests.GetCardinality())
 				receiving := ws.receiving.Load()
+
 				ws.peer.logger.Levelf(log.Debug, "%d: requests %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) restart(%v)",
-					i, ws.processedRequests, pendingRequests, desiredRequests, ws.nominalMaxRequests(false),
+					i, ws.processedRequests, pendingRequests, desiredRequests, ws.nominalMaxRequests(true, false),
 					len(ws.activeRequests)-int(receiving), receiving, ws.maxActiveRequests, ws.waiting,
 					ws.peer.t.numQueuedForHash(false), ws.peer.t.activePieceHashes.Load(), ws.peer.t.hashing.Load(), len(ws.peer.t.hashResults),
 					ws.peer.t.numPiecesCompleted(false), ws.peer.t.NumPieces(), restart)
@@ -265,15 +269,16 @@ func requestUpdate(ws *webseedPeer) {
 	if ws != nil {
 		ws.requesterCond.L.Lock()
 		defer ws.requesterCond.L.Unlock()
-		//ws.peer.t.mu.RLock()
-		//defer ws.peer.t.mu.RUnlock()
+		ws.peer.t.mu.RLock()
+		defer ws.peer.t.mu.RUnlock()
 
 		ws.updateRequestor = nil
 
 		ws.peer.logger.Levelf(log.Debug, "requestUpdate %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) %s",
 			ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestState(false, false).Requests.requestIndexes),
-			ws.nominalMaxRequests(false), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
-			ws.peer.t.numQueuedForHash(false), ws.peer.t.activePieceHashes.Load(), ws.peer.t.hashing.Load(), len(ws.peer.t.hashResults), ws.peer.t.numPiecesCompleted(true), ws.peer.t.NumPieces(),
+			ws.nominalMaxRequests(true, false), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
+			ws.peer.t.numQueuedForHash(false), ws.peer.t.activePieceHashes.Load(), ws.peer.t.hashing.Load(), len(ws.peer.t.hashResults),
+			ws.peer.t.numPiecesCompleted(false), ws.peer.t.NumPieces(),
 			time.Since(ws.peer.lastRequestUpdate))
 
 		if !ws.peer.closed.IsSet() {
@@ -337,7 +342,7 @@ func requestUpdate(ws *webseedPeer) {
 
 					ws.peer.logger.Levelf(log.Debug, "unchoked %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d) complete(%d/%d) %s",
 						ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestState(true, false).Requests.requestIndexes),
-						ws.nominalMaxRequests(false), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
+						ws.nominalMaxRequests(true, false), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
 						ws.peer.t.numQueuedForHash(false), ws.peer.t.activePieceHashes.Load(), ws.peer.t.numPiecesCompleted(false), ws.peer.t.NumPieces(),
 						time.Since(ws.peer.lastRequestUpdate))
 
@@ -444,7 +449,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		Index: r.Index,
 		Begin: r.Begin,
 		Piece: result.Bytes,
-	})
+	}, true)
 
 	if err != nil {
 		panic(err)

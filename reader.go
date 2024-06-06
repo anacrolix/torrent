@@ -105,7 +105,7 @@ func (r *reader) available(off, max int64) (ret int64) {
 		if !r.responsive && !r.t.pieceComplete(pieceIndex(req.Index), true) {
 			break
 		}
-		if !r.t.haveChunk(req) {
+		if !r.t.haveChunk(req,true) {
 			break
 		}
 		len1 := int64(req.Length) - (off - r.t.requestOffset(req))
@@ -240,7 +240,7 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 		firstPieceIndex := pieceIndex(r.torrentOffset(pos) / r.t.info.PieceLength)
 		firstPieceOffset := r.torrentOffset(pos) % r.t.info.PieceLength
 		b1 := missinggo.LimitLen(b, avail)
-		n, err = r.t.readAt(b1, r.torrentOffset(pos))
+		n, err = r.t.readAt(b1, r.torrentOffset(pos), true)
 		if n != 0 {
 			err = nil
 			return

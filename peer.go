@@ -7,7 +7,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
@@ -367,37 +366,22 @@ func (p *Peer) close(lockTorrent bool) {
 	}
 }
 
-var phpct1 atomic.Int32
-var phpct1a atomic.Int32
-var phpct2 atomic.Int32
-var phpct3 atomic.Int32
-
 // Peer definitely has a piece, for purposes of requesting. So it's not sufficient that we think
 // they do (known=true).
 func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool, lockTorrent bool) bool {
-	phpct1.Add(1)
 	if lockTorrent {
 		cn.t.mu.RLock()
 		defer cn.t.mu.RUnlock()
 	}
-
-	phpct1.Add(-1)
-	phpct1a.Add(1)
 
 	if lock {
 		cn.mu.RLock()
 		defer cn.mu.RUnlock()
 	}
 
-	phpct1a.Add(-1)
-	phpct2.Add(1)
 	if all, known := cn.peerHasAllPieces(false); all && known {
-		phpct2.Add(-1)
 		return true
 	}
-	phpct2.Add(-1)
-	phpct3.Add(1)
-	defer phpct3.Add(-1)
 
 	return cn.peerPieces().ContainsInt(piece)
 }
@@ -541,7 +525,7 @@ func (cn *Peer) request(r RequestIndex, lock bool, lockTorrent bool) (more bool,
 	return cn.peerImpl._request(ppReq), nil
 }
 
-func (me *Peer) cancel(r RequestIndex, lock bool, lockTorrent bool) {
+func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorrent bool) {
 	if !me.deleteRequest(r, lock, lockTorrent) {
 		panic("request not existing should have been guarded")
 	}
@@ -552,7 +536,7 @@ func (me *Peer) cancel(r RequestIndex, lock bool, lockTorrent bool) {
 		}
 	}
 	me.decPeakRequests()
-	if me.isLowOnRequests(lock) {
+	if updateRequests && me.isLowOnRequests(lock) {
 		me.updateRequests("Peer.cancel", lock, lockTorrent)
 	}
 }
@@ -573,7 +557,7 @@ func (cn *Peer) updateRequests(reason string, lock bool, lockTorrent bool) {
 		return
 	}
 	cn.needRequestUpdate = reason
-	cn.handleUpdateRequests(false)
+	cn.handleUpdateRequests(false, false)
 }
 
 // Emits the indices in the Bitmaps bms in order, never repeating any index.
@@ -763,12 +747,6 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 			if !c.peerChoking {
 				c._chunksReceivedWhileExpecting++
 			}
-
-			c.mu.Lock()
-			if c.isLowOnRequests(false) {
-				c.updateRequests("Peer.receiveChunk deleted request", false, false)
-			}
-			c.mu.Unlock()
 		} else {
 			chunksReceived.Add("unintended", 1)
 		}
@@ -814,7 +792,7 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 		if p == c {
 			panic("should not be pending request from conn that just received it")
 		}
-		p.cancel(req, true, false)
+		p.cancel(req, true, true, false)
 	}
 
 	// Opportunistically do this here while we aren't holding the client lock.
@@ -855,6 +833,13 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 	cl.event.Broadcast()
 	// We do this because we've written a chunk, and may change PieceState.Partial.
 	t.publishPieceStateChange(pieceIndex(ppReq.Index), false, false)
+
+	// this is moved after all processing to avoid request rehere because as we no longer have a
+	if intended {
+		if c.isLowOnRequests(true) {
+			c.updateRequests("Peer.receiveChunk deleted request", true, false)
+		}
+	}
 
 	return nil
 }
@@ -982,7 +967,7 @@ func (c *Peer) cancelAllRequests(lockTorrent bool) {
 	defer c.mu.Unlock()
 
 	c.requestState.Requests.IterateSnapshot(func(x RequestIndex) bool {
-		c.cancel(x, false, false)
+		c.cancel(x, false, false, false)
 		return true
 	})
 	c.assertNoRequests()

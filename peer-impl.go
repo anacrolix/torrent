@@ -11,7 +11,7 @@ import (
 // legacy PeerConn methods.
 type peerImpl interface {
 	// Trigger the actual request state to get updated
-	handleUpdateRequests(lockTorrent bool)
+	handleUpdateRequests(lock bool, lockTorrent bool)
 	writeInterested(interested bool) bool
 
 	// _cancel initiates cancellation of a request and returns acked if it expects the cancel to be

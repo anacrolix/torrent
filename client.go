@@ -1445,24 +1445,24 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	cl := t.cl
 	cl.AddDhtNodes(spec.DhtNodes)
 	t.UseSources(spec.Sources)
-	cl.lock()
-	defer cl.unlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.initialPieceCheckDisabled = spec.DisableInitialPieceCheck
 	for _, url := range spec.Webseeds {
-		t.addWebSeed(url)
+		t.addWebSeed(url, false)
 	}
 	for _, peerAddr := range spec.PeerAddrs {
 		t.addPeer(PeerInfo{
 			Addr:    StringAddr(peerAddr),
 			Source:  PeerSourceDirect,
 			Trusted: true,
-		})
+		}, false)
 	}
 	if spec.ChunkSize != 0 {
 		panic("chunk size cannot be changed for existing Torrent")
 	}
-	t.addTrackers(spec.Trackers)
-	t.maybeNewConns(true)
+	t.addTrackers(spec.Trackers, false)
+	t.maybeNewConns(false)
 	t.dataDownloadDisallowed.SetBool(spec.DisallowDataDownload)
 	t.dataUploadDisallowed = spec.DisallowDataUpload
 	return nil
@@ -1671,7 +1671,7 @@ func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portO
 	t.addPeers([]PeerInfo{{
 		Addr:   ipPortAddr{ip, port},
 		Source: PeerSourceDhtAnnouncePeer,
-	}})
+	}}, true)
 }
 
 func firstNotNil(ips ...net.IP) net.IP {

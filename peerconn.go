@@ -326,7 +326,7 @@ func (cn *PeerConn) fillWriteBuffer() {
 		// knowledge of write buffers.
 		return
 	}
-	cn.maybeUpdateActualRequestState(true)
+	cn.maybeUpdateActualRequestState(true, true)
 	if cn.pex.IsEnabled() {
 		if flow := cn.pex.Share(cn.write); !flow {
 			return
@@ -363,7 +363,7 @@ func (cn *PeerConn) postBitfield() {
 	cn.sentHaves = bitmap.Bitmap{RB: cn.t._completedPieces.Clone()}
 }
 
-func (cn *PeerConn) handleUpdateRequests(lockTorrent bool) {
+func (cn *PeerConn) handleUpdateRequests(lock bool, lockTorrent bool) {
 	// The writer determines the request state as needed when it can write.
 	cn.tickleWriter()
 }

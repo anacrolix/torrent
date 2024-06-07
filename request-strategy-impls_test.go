@@ -120,7 +120,7 @@ func BenchmarkRequestStrategy(b *testing.B) {
 				tor.updatePieceCompletion(completed-1, true)
 			}
 			// Starting and stopping timers around this part causes lots of GC overhead.
-			rs := peer.getDesiredRequestState(false, true)
+			rs := peer.getDesiredRequestState(false, true, true)
 			tor.cacheNextRequestIndexesForReuse(rs.Requests.requestIndexes, true)
 			// End of part that should be timed.
 			remainingChunks := (numPieces - completed) * (pieceLength / chunkSize)

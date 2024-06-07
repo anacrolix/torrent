@@ -167,7 +167,7 @@ type desiredRequestState struct {
 	Interested bool
 }
 
-func (p *Peer) getDesiredRequestState(debug bool, lockTorrent bool) (desired desiredRequestState) {
+func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (desired desiredRequestState) {
 	t := p.t
 
 	if lockTorrent {
@@ -211,7 +211,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lockTorrent bool) (desired des
 			if ih != infoHash {
 				return
 			}
-			if !p.peerHasPiece(pieceIndex, true, lockTorrent) {
+			if !p.peerHasPiece(pieceIndex, lock, lockTorrent) {
 				return
 			}
 
@@ -231,23 +231,32 @@ func (p *Peer) getDesiredRequestState(debug bool, lockTorrent bool) (desired des
 					// the peer respond yet (and the request was retained because we are using the
 					// fast extension).
 
-					p.mu.RLock()
-					peerChoking := p.peerChoking
-					hasRequest := p.requestState.Requests.Contains(r)
-					p.mu.RUnlock()
+					cantRequest := func() bool {
+						if lock {
+							p.mu.RLock()
+							defer p.mu.RUnlock()
+						}
+						peerChoking := p.peerChoking
+						hasRequest := p.requestState.Requests.Contains(r)
+						return peerChoking && !hasRequest
+					}
 
-					if peerChoking && !hasRequest {
+					if cantRequest() {
 						// We can't request this right now.
 						return
 					}
 				}
 
-				p.mu.RLock()
-				cancelled := &p.requestState.Cancelled
-				awaitingCancel := !cancelled.IsEmpty() && cancelled.Contains(r)
-				p.mu.RUnlock()
+				awaitingCancel := func() bool {
+					if lock {
+						p.mu.RLock()
+						defer p.mu.RUnlock()
+					}
+					cancelled := &p.requestState.Cancelled
+					return !cancelled.IsEmpty() && cancelled.Contains(r)
+				}
 
-				if awaitingCancel {
+				if awaitingCancel() {
 					// Can't re-request while awaiting acknowledgement.
 					return
 				}
@@ -271,7 +280,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lockTorrent bool) (desired des
 	return
 }
 
-func (p *Peer) maybeUpdateActualRequestState(lockTorrent bool) {
+func (p *Peer) maybeUpdateActualRequestState(lock bool, lockTorrent bool) {
 	if p.closed.IsSet() {
 		return
 	}
@@ -288,8 +297,8 @@ func (p *Peer) maybeUpdateActualRequestState(lockTorrent bool) {
 		context.Background(),
 		pprof.Labels("update request", p.needRequestUpdate),
 		func(_ context.Context) {
-			next := p.getDesiredRequestState(false, lockTorrent)
-			p.applyRequestState(next, lockTorrent)
+			next := p.getDesiredRequestState(false, lock, lockTorrent)
+			p.applyRequestState(next, lock, lockTorrent)
 			p.t.cacheNextRequestIndexesForReuse(next.Requests.requestIndexes, lockTorrent)
 		},
 	)
@@ -328,7 +337,7 @@ func (p *Peer) allowSendNotInterested(lockTorrent bool) bool {
 }
 
 // Transmit/action the request state to the peer.
-func (p *Peer) applyRequestState(next desiredRequestState, lockTorrent bool) {
+func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorrent bool) {
 	t := p.t
 
 	if lockTorrent {
@@ -336,8 +345,10 @@ func (p *Peer) applyRequestState(next desiredRequestState, lockTorrent bool) {
 		defer t.mu.Unlock()
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	if lock {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+	}
 
 	current := &p.requestState
 	// Make interest sticky
@@ -398,7 +409,7 @@ func (p *Peer) applyRequestState(next desiredRequestState, lockTorrent bool) {
 				continue
 			}
 
-			t.cancelRequest(req, false, false)
+			t.cancelRequest(req, false, false, false)
 		}
 
 		more = p.mustRequest(req, false, false)

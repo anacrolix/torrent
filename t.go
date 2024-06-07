@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -82,8 +81,8 @@ func (t *Torrent) NumPieces() pieceIndex {
 
 // Get missing bytes count for specific piece.
 func (t *Torrent) PieceBytesMissing(piece int) int64 {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	return int64(t.pieces[piece].bytesLeft())
 }
@@ -107,8 +106,6 @@ func (t *Torrent) Drop() {
 // for download rate, as it can go down when pieces are lost or fail checks.
 // Sample Torrent.Stats.DataBytesRead for actual file data download rate.
 func (t *Torrent) BytesCompleted() int64 {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
 	return t.bytesCompleted()
 }
 
@@ -150,14 +147,14 @@ func (t *Torrent) Length() int64 {
 // Returns a run-time generated metainfo for the torrent that includes the
 // info bytes and announce-list as currently known to the client.
 func (t *Torrent) Metainfo() metainfo.MetaInfo {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	return t.newMetaInfo()
 }
 
 func (t *Torrent) addReader(r *reader) {
-	t.cl.lock()
-	defer t.cl.unlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.readers == nil {
 		t.readers = make(map[*reader]struct{})
 	}
@@ -228,9 +225,7 @@ func (t *Torrent) Files() []*File {
 }
 
 func (t *Torrent) AddPeers(pp []PeerInfo) (n int) {
-	t.cl.lock()
-	defer t.cl.unlock()
-	n = t.addPeers(pp)
+	n = t.addPeers(pp, true)
 	return
 }
 
@@ -250,9 +245,7 @@ func (t *Torrent) String() string {
 }
 
 func (t *Torrent) AddTrackers(announceList [][]string) {
-	t.cl.lock()
-	defer t.cl.unlock()
-	t.addTrackers(announceList)
+	t.addTrackers(announceList, true)
 }
 
 func (t *Torrent) Piece(i pieceIndex) *Piece {

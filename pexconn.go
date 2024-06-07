@@ -147,7 +147,7 @@ func (s *pexConnState) Recv(payload []byte) error {
 		s.dbg.Printf("in cooldown period, incoming PEX discarded")
 		return nil
 	}
-	added := s.torrent.addPeers(peers)
+	added := s.torrent.addPeers(peers, true)
 	s.dbg.Printf("got %v peers over pex, added %v", len(peers), added)
 
 	if len(peers) > 0 {

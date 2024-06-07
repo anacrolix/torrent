@@ -65,8 +65,11 @@ type mu struct {
 func (m *mu) RLock() {
 	m.RWMutex.RLock()
 	m.rlmu.Lock()
-	m.rlocker[m.rlc.Load()] = string(stack(2))
-	if m.rlc.Load() == 0 {
+	rlc := m.rlc.Load()
+	if int(rlc) < len(m.rlocker) {
+		m.rlocker[rlc] = string(stack(2))
+	}
+	if rlc == 0 {
 		m.rlocktime = time.Now()
 	}
 	m.rlc.Add(1)
@@ -78,13 +81,16 @@ func (m *mu) RLock() {
 func (m *mu) RUnlock() {
 	m.rlmu.Lock()
 	m.rlc.Add(-1)
-	if m.rlc.Load() < 0 {
+	rlc := m.rlc.Load()
+	if rlc < 0 {
 		panic("lock underflow")
 	}
-	if m.rlc.Load() == 0 {
+	if rlc == 0 {
 		m.rlocktime = time.Time{}
 	}
-	m.rlocker[m.rlc.Load()] = ""
+	if int(rlc) < len(m.rlocker) {
+		m.rlocker[m.rlc.Load()] = ""
+	}
 	m.rlmu.Unlock()
 	m.RWMutex.RUnlock()
 	//fmt.Println("RUN", m.rlc) //, string(dbg.Stack()))
@@ -422,9 +428,11 @@ func (t *Torrent) appendConns(ret []*PeerConn, f func(*PeerConn) bool, lock bool
 	return ret
 }
 
-func (t *Torrent) addPeer(p PeerInfo) (added bool) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+func (t *Torrent) addPeer(p PeerInfo, lock bool) (added bool) {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
 
 	cl := t.cl
 	torrent.Add(fmt.Sprintf("peers added by source %q", p.Source), 1)
@@ -1532,9 +1540,7 @@ func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string, lock b
 		defer t.mu.RUnlock()
 	}
 	containsPiece := t._pendingPieces.Contains(uint32(piece))
-
 	if containsPiece {
-
 		t.iterPeers(func(c *Peer) {
 			// if c.requestState.Interested {
 			// 	return
@@ -1545,10 +1551,7 @@ func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string, lock b
 			if !c.peerHasPiece(piece, true, false) {
 				return
 			}
-
-			ignore := c.requestState.Interested && c.peerChoking && !c.peerAllowedFast.Contains(piece)
-
-			if ignore {
+			if ignore := c.requestState.Interested && c.peerChoking && !c.peerAllowedFast.Contains(piece); ignore {
 				return
 			}
 			c.updateRequests(reason, true, false)
@@ -1848,14 +1851,19 @@ func appendMissingTrackerTiers(existing [][]string, minNumTiers int) (ret [][]st
 	return
 }
 
-func (t *Torrent) addTrackers(announceList [][]string) {
+func (t *Torrent) addTrackers(announceList [][]string, lock bool) {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
+
 	fullAnnounceList := &t.metainfo.AnnounceList
 	t.metainfo.AnnounceList = appendMissingTrackerTiers(*fullAnnounceList, len(announceList))
 	for tierIndex, trackerURLs := range announceList {
 		(*fullAnnounceList)[tierIndex] = appendMissingStrings((*fullAnnounceList)[tierIndex], trackerURLs)
 	}
 	t.startMissingTrackerScrapers()
-	t.updateWantPeersEvent(true)
+	t.updateWantPeersEvent(false)
 }
 
 // Don't call this before the info is available.
@@ -2168,9 +2176,8 @@ func (t *Torrent) announceRequest(event tracker.AnnounceEvent) tracker.AnnounceR
 // Adds peers revealed in an announce until the announce ends, or we have
 // enough peers.
 func (t *Torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
-	cl := t.cl
 	for v := range pvs {
-		cl.lock()
+		t.mu.Lock()
 		added := 0
 		for _, cp := range v.Peers {
 			if cp.Port == 0 {
@@ -2180,11 +2187,11 @@ func (t *Torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 			if t.addPeer(PeerInfo{
 				Addr:   ipPortAddr{cp.IP, cp.Port},
 				Source: PeerSourceDhtGetPeers,
-			}) {
+			}, false) {
 				added++
 			}
 		}
-		cl.unlock()
+		t.mu.Unlock()
 		// if added != 0 {
 		// 	log.Printf("added %v peers from dht for %v", added, t.InfoHash().HexString())
 		// }
@@ -2256,9 +2263,9 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 	}
 }
 
-func (t *Torrent) addPeers(peers []PeerInfo) (added int) {
+func (t *Torrent) addPeers(peers []PeerInfo, lock bool) (added int) {
 	for _, p := range peers {
-		if t.addPeer(p) {
+		if t.addPeer(p, lock) {
 			added++
 		}
 	}
@@ -2627,7 +2634,7 @@ func (t *Torrent) cancelRequestsForPiece(piece pieceIndex, lock bool) {
 	start := t.pieceRequestIndexOffset(piece)
 	end := start + t.pieceNumChunks(piece)
 	for ri := start; ri < end; ri++ {
-		t.cancelRequest(ri, lock, true)
+		t.cancelRequest(ri, true, lock, true)
 	}
 }
 
@@ -3118,19 +3125,18 @@ func WebSeedPathEscaper(custom webseed.PathEscaper) AddWebSeedsOpt {
 }
 
 func (t *Torrent) AddWebSeeds(urls []string, opts ...AddWebSeedsOpt) {
-	//fmt.Println("AWS0", t.cl._mu.locker)
-	//defer fmt.Println("AWS", "DONE")
-
-	t.cl.lock()
-	defer t.cl.unlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	for _, u := range urls {
-		t.addWebSeed(u, opts...)
+		t.addWebSeed(u, false, opts...)
 	}
 }
 
-func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
 
 	if t.cl.config.DisableWebseeds {
 		return
@@ -3190,7 +3196,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
 		opt(&ws.client)
 	}
 	ws.peer.initUpdateRequestsTimer()
-	ws.requesterCond.L = t.cl.locker()
+	ws.requesterCond.L = &sync.Mutex{}
 	for i := 0; i < ws.maxRequesters; i += 1 {
 		go ws.requester(i)
 	}
@@ -3234,10 +3240,10 @@ func (t *Torrent) updateComplete(lock bool) {
 	t.Complete.SetBool(t.haveAllPieces(lock))
 }
 
-func (t *Torrent) cancelRequest(r RequestIndex, lock bool, lockPeer bool) *Peer {
+func (t *Torrent) cancelRequest(r RequestIndex, updateRequests, lock bool, lockPeer bool) *Peer {
 	p := t.requestingPeer(r, lock)
 	if p != nil {
-		p.cancel(r, lockPeer, lock)
+		p.cancel(r, updateRequests, lockPeer, lock)
 	}
 	// TODO: This is a check that an old invariant holds. It can be removed after some testing.
 	//delete(t.pendingRequests, r)

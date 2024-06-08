@@ -21,8 +21,6 @@ func (pc *PeerConn) initMessageWriter() {
 			//count := fwbCount.Add(1)
 			//fmt.Println("FWB0", count, pc.locker().locker)
 			//defer fwbCount.Add(-1)
-			pc.locker().Lock()
-			defer pc.locker().Unlock()
 			if pc.closed.IsSet() {
 				return
 			}

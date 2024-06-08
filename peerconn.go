@@ -325,7 +325,11 @@ func (me *PeerConn) remoteRejectsCancels() bool {
 }
 
 func (cn *PeerConn) fillWriteBuffer() {
-	if cn.messageWriter.writeBuffer.Len() > writeBufferLowWaterLen {
+	cn.mu.RLock()
+	bufferAboveLowWater := cn.messageWriter.writeBuffer.Len() > writeBufferLowWaterLen
+	cn.mu.RUnlock()
+
+	if bufferAboveLowWater {
 		// Fully committing to our max requests requires sufficient space (see
 		// maxLocalToRemoteRequests). Flush what we have instead. We also prefer always to make
 		// requests than to do PEX or upload, so we short-circuit before handling those. Any update
@@ -335,12 +339,18 @@ func (cn *PeerConn) fillWriteBuffer() {
 		return
 	}
 	cn.maybeUpdateActualRequestState(true, true)
-	if cn.pex.IsEnabled() {
-		if flow := cn.pex.Share(cn.write); !flow {
+
+	cn.mu.RLock()
+	pex := cn.pex
+	write := cn.write
+	cn.mu.RUnlock()
+
+	if pex.IsEnabled() {
+		if flow := pex.Share(write); !flow {
 			return
 		}
 	}
-	cn.upload(cn.write)
+	cn.upload(write)
 }
 
 func (cn *PeerConn) have(piece pieceIndex) {

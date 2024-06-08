@@ -1593,13 +1593,9 @@ func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex, lock bool) (pe
 }
 
 func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string, lock bool) {
-	fmt.Println("UPP0", reason)
-	defer fmt.Println("UPP", "DONE")
 	if t.updatePiecePriorityNoTriggers(piece, lock) && !t.disableTriggers {
-		fmt.Println("UPP1")
 		t.onPiecePendingTriggers(piece, reason, lock)
 	}
-	fmt.Println("UPP2")
 	t.updatePieceRequestOrderPiece(piece, lock)
 }
 

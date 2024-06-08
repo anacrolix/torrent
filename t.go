@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -177,6 +178,8 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 }
 
 func (t *Torrent) downloadPiecesLocked(begin, end pieceIndex) {
+	fmt.Println("DPL")
+	fmt.Println("DPL", "DONE")
 	for i := begin; i < end; i++ {
 		if t.pieces[i].priority.Raise(PiecePriorityNormal) {
 			t.updatePiecePriority(i, "Torrent.DownloadPieces", false)

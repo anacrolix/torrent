@@ -53,8 +53,13 @@ func (t *Torrent) initPieceRequestOrder() {
 	if t.storage == nil {
 		return
 	}
+
+	t.cl.lock()
+	defer t.cl.unlock()
+
 	g.MakeMapIfNil(&t.cl.pieceRequestOrder)
 	key := t.clientPieceRequestOrderKey()
+
 	cpro := t.cl.pieceRequestOrder
 	if cpro[key] == nil {
 		cpro[key] = request_strategy.NewPieceOrder(request_strategy.NewAjwernerBtree(), t.numPieces())

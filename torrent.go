@@ -1458,28 +1458,33 @@ type PieceStateChange struct {
 	PieceState
 }
 
-func (t *Torrent) publishPieceStateChange(piece pieceIndex, deferPublish bool, lock bool) {
-	if deferPublish {
-		lock = true
-	}
+func (t *Torrent) publishPieceStateChange(piece pieceIndex, lock bool) {
+	var publisher *pubsub.PubSub[PieceStateChange]
+	var cur PieceState
 
-	publisher := func() {
-		cur := t.pieceState(piece, lock)
-		p := t.piece(piece, lock)
-		if cur != p.publicPieceState {
-			p.publicPieceState = cur
-			t.pieceStateChanges.Publish(PieceStateChange{
+	defer func() {
+		if publisher != nil {
+			publisher.Publish(PieceStateChange{
 				int(piece),
 				cur,
 			})
+
 		}
+	}()
+
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
 	}
 
-	if deferPublish {
-		t.cl._mu.Defer(publisher)
-	} else {
-		publisher()
+	cur = t.pieceState(piece, false)
+	p := t.piece(piece, false)
+	p.mu.Lock()
+	if cur != p.publicPieceState {
+		p.publicPieceState = cur
+		publisher = &t.pieceStateChanges
 	}
+	p.mu.Unlock()
 }
 
 func (t *Torrent) pieceNumPendingChunks(piece pieceIndex, lock bool) pp.Integer {
@@ -1558,7 +1563,7 @@ func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string, lock b
 		}, false)
 	}
 	t.maybeNewConns(false)
-	t.publishPieceStateChange(piece, true, false)
+	t.publishPieceStateChange(piece, false)
 }
 
 func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex, lock bool) (pendingChanged bool) {
@@ -1875,8 +1880,8 @@ func (t *Torrent) bytesCompleted() int64 {
 }
 
 func (t *Torrent) SetInfoBytes(b []byte) (err error) {
-	t.cl.lock()
-	defer t.cl.unlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return t.setInfoBytesLocked(b)
 }
 
@@ -2506,8 +2511,11 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	t.logger.LazyLog(log.Debug, func() log.Msg {
 		return log.Fstr("hashed piece %d (passed=%t)", piece, passed)
 	})
+
 	p := t.piece(piece, true)
+	p.mu.Lock()
 	p.numVerifies++
+	p.mu.Unlock()
 	t.cl.event.Broadcast()
 
 	if t.closed.IsSet() {
@@ -2536,10 +2544,11 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	}
 
 	p.marking = true
-	t.publishPieceStateChange(piece, false, true)
+	t.publishPieceStateChange(piece, true)
+
 	defer func() {
 		p.marking = false
-		t.publishPieceStateChange(piece, false, true)
+		t.publishPieceStateChange(piece, true)
 	}()
 
 	if passed {
@@ -2729,7 +2738,7 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 				t.piecesQueuedForHash.Remove(bitmap.BitIndex(pi))
 				p.hashing = true
 				t.hashing.Add(1)
-				t.publishPieceStateChange(pi, false, false)
+				t.publishPieceStateChange(pi, false)
 				t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher", false)
 			}()
 			t.storageLock.RLock()
@@ -2867,7 +2876,7 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex, lock bool) {
 		defer t.mu.Unlock()
 	}
 	t.piecesQueuedForHash.Add(bitmap.BitIndex(pieceIndex))
-	t.publishPieceStateChange(pieceIndex, false, false)
+	t.publishPieceStateChange(pieceIndex, false)
 	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck", false)
 	t.tryCreateMorePieceHashers(false)
 }

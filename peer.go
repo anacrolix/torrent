@@ -832,7 +832,7 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 
 	cl.event.Broadcast()
 	// We do this because we've written a chunk, and may change PieceState.Partial.
-	t.publishPieceStateChange(pieceIndex(ppReq.Index), false, false)
+	t.publishPieceStateChange(pieceIndex(ppReq.Index), false)
 
 	// this is moved after all processing to avoid request rehere because as we no longer have a
 	if intended {

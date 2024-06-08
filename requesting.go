@@ -339,7 +339,8 @@ func (p *Peer) allowSendNotInterested(lockTorrent bool) bool {
 // Transmit/action the request state to the peer.
 func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorrent bool) {
 	t := p.t
-
+	fmt.Println("ARS")
+	fmt.Println("ARS", "DONE")
 	if lockTorrent {
 		t.mu.Lock()
 		defer t.mu.Unlock()

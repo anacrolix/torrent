@@ -93,7 +93,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		PieceLength: pieceLength,
 		Length:      pieceLength * numPieces,
 	}, true))
-	t.onSetInfo(true)
+	t.onSetInfo(true, true)
 	assert.EqualValues(b, 13410, t.numPieces())
 	for i := 0; i < 7; i += 1 {
 		r := t.NewReader()
@@ -244,7 +244,7 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	info := testutil.Greeting.Info(5)
 	err = tt.setInfo(&info, true)
 	c.Assert(err, qt.IsNil)
-	tt.onSetInfo(true)
+	tt.onSetInfo(true, true)
 	err = pc.peerSentHaveNone()
 	c.Assert(err, qt.IsNil)
 	var wg sync.WaitGroup

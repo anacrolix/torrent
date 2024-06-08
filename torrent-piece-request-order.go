@@ -49,13 +49,15 @@ func (t *Torrent) deletePieceRequestOrder() {
 	t.clientPieceRequestOrder = nil
 }
 
-func (t *Torrent) initPieceRequestOrder() {
+func (t *Torrent) initPieceRequestOrder(lockClient bool) {
 	if t.storage == nil {
 		return
 	}
 
-	t.cl.lock()
-	defer t.cl.unlock()
+	if lockClient {
+		t.cl.lock()
+		defer t.cl.unlock()
+	}
 
 	g.MakeMapIfNil(&t.cl.pieceRequestOrder)
 	key := t.clientPieceRequestOrderKey()

@@ -608,14 +608,14 @@ func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrder
 }
 
 // This seems to be all the follow-up tasks after info is set, that can't fail.
-func (t *Torrent) onSetInfo(lock bool) {
+func (t *Torrent) onSetInfo(lock bool, lockClient bool) {
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 	}
 
 	t.pieceRequestOrder = rand.Perm(t.numPieces())
-	t.initPieceRequestOrder()
+	t.initPieceRequestOrder(lockClient)
 	MakeSliceWithLength(&t.requestPieceStates, t.numPieces())
 	for i := range t.pieces {
 		p := &t.pieces[i]
@@ -666,7 +666,7 @@ func (t *Torrent) setInfoBytesLocked(b []byte) error {
 	if err := t.setInfo(&info, false); err != nil {
 		return err
 	}
-	t.onSetInfo(false)
+	t.onSetInfo(false, true)
 	return nil
 }
 

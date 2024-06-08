@@ -107,7 +107,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		PieceLength: 1 << 20,
 	}, true))
 	t.storage = &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}}
-	t.onSetInfo(true)
+	t.onSetInfo(true, true)
 	t._pendingPieces.Add(0)
 	r, w := net.Pipe()
 	c.Logf("pipe reader remote addr: %v", r.RemoteAddr())
@@ -289,7 +289,7 @@ func TestHaveAllThenBitfield(t *testing.T) {
 		PieceLength: 0,
 		Pieces:      make([]byte, pieceHash.Size()*7),
 	}, true), qt.IsNil)
-	pc.t.onSetInfo(true)
+	pc.t.onSetInfo(true, true)
 	c.Check(tt.numPieces(), qt.Equals, 7)
 	c.Check(tt.pieceAvailabilityRuns(), qt.DeepEquals, []pieceAvailabilityRun{
 		// The last element of the bitfield is irrelevant, as the Torrent actually only has 7

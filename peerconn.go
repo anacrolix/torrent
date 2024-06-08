@@ -909,7 +909,11 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).LogLevel(log.Debug, c.t.logger)
 			c.updateRequests("PeerConn.mainReadLoop allowed fast", true, true)
 		case pp.Extended:
-			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
+			func() {
+				cl.unlock()
+				defer cl.lock()
+				err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
+			}()
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}

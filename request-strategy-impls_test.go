@@ -93,7 +93,7 @@ func BenchmarkRequestStrategy(b *testing.B) {
 		Length:      pieceLength * numPieces,
 	}, true)
 	c.Assert(err, qt.IsNil)
-	tor.onSetInfo(true)
+	tor.onSetInfo(true, true)
 	peer := cl.newConnection(nil, newConnectionOpts{
 		network: "test",
 	})

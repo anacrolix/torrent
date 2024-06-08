@@ -958,7 +958,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	fmt.Fprintf(w, "webseeds:\n")
 	t.writePeerStatuses(w, t.webSeedsAsSlice(false))
 
-	peerConns := t.peerConnsAsSlice(true)
+	peerConns := t.peerConnsAsSlice(false)
 	defer peerConns.free()
 
 	// Peers without priorities first, then those with. I'm undecided about how to order peers
@@ -1545,7 +1545,7 @@ func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string, lock b
 			// if c.requestState.Interested {
 			// 	return
 			// }
-			if !c.isLowOnRequests(false) {
+			if !c.isLowOnRequests(false, false) {
 				return
 			}
 			if !c.peerHasPiece(piece, true, false) {

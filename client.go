@@ -1107,12 +1107,16 @@ func (p *Peer) initUpdateRequestsTimer() {
 const peerUpdateRequestsTimerReason = "updateRequestsTimer"
 
 func (c *Peer) updateRequestsTimerFunc() {
+	c.t.mu.Lock()
+	defer c.t.mu.Unlock()
+	
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	
 	if c.closed.IsSet() {
 		return
 	}
-	if c.isLowOnRequests(false) {
+	if c.isLowOnRequests(false,false) {
 		// If there are no outstanding requests, then a request update should have already run.
 		return
 	}
@@ -1122,7 +1126,7 @@ func (c *Peer) updateRequestsTimerFunc() {
 		torrent.Add("spurious timer requests updates", 1)
 		return
 	}
-	c.updateRequests(peerUpdateRequestsTimerReason, false, true)
+	c.updateRequests(peerUpdateRequestsTimerReason, false, false)
 }
 
 // Maximum pending requests we allow peers to send us. If peer requests are buffered on read, this

@@ -28,6 +28,12 @@ type peerImpl interface {
 	String() string
 	peerImplStatusLines() []string
 
+	// the peers is running low on requests and needs some more
+	// Note: for web peers this means low on web requests - as we
+	// want to drive the http request api while we are processing
+	// its responses
+	isLowOnRequests(lock bool, lockTorrent bool) bool
+
 	// All if the peer should have everything, known if we know that for a fact. For example, we can
 	// guess at how many pieces are in a torrent, and assume they have all pieces based on them
 	// having sent haves for everything, but we don't know for sure. But if they send a have-all

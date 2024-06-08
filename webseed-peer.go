@@ -33,6 +33,7 @@ type webseedPeer struct {
 	maxRequesters        int // the number of requester to run for this peer
 	waiting              int // the number of requesters currently waiting for a signal
 	receiving            atomic.Int64
+	persisting           atomic.Int64
 	requesterCond        sync.Cond
 	updateRequestor      *time.Timer
 	lastUnhandledErr     time.Time
@@ -119,7 +120,7 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 }
 
 func (ws *webseedPeer) doRequest(r Request) error {
-	webseedRequest := ws.client.NewRequest(ws.intoSpec(r))
+	webseedRequest := ws.client.NewRequest(ws.intoSpec(r), &ws.receiving)
 	ws.activeRequests[r] = webseedRequest
 	if activeLen := len(ws.activeRequests); activeLen > ws.maxActiveRequests {
 		ws.maxActiveRequests = activeLen
@@ -165,7 +166,7 @@ func (ws *webseedPeer) requester(i int) {
 
 			ws.requesterCond.L.Unlock()
 			defer ws.requesterCond.L.Lock()
-			
+
 			if errors.Is(err, webseed.ErrTooFast) {
 				time.Sleep(time.Duration(rand.Int63n(int64(10 * time.Second))))
 			}
@@ -236,7 +237,7 @@ func (ws *webseedPeer) requester(i int) {
 
 			if time.Since(ws.lastLog) > 5*time.Second {
 				ws.lastLog = time.Now()
-				go logProgress(ws)
+				go logProgress(ws, "requests", true)
 			}
 
 			ws.waiting++
@@ -259,11 +260,13 @@ func (ws *webseedPeer) requester(i int) {
 
 var webpeerUnchokeTimerDuration = 15 * time.Second
 
-func logProgress(ws *webseedPeer) {
+func logProgress(ws *webseedPeer, label string, lockTorrent bool) {
 	t := ws.peer.t
 
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	if lockTorrent {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 
 	if !t.haveInfo(false) {
 		return
@@ -275,12 +278,13 @@ func logProgress(ws *webseedPeer) {
 	desiredRequests := len(ws.peer.getDesiredRequestState(false, false, false).Requests.requestIndexes)
 	pendingRequests := int(ws.peer.requestState.Requests.GetCardinality())
 	receiving := ws.receiving.Load()
+	persisting := ws.persisting.Load()
 
-	ws.peer.logger.Levelf(log.Debug, "requests %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d)",
-		ws.processedRequests, pendingRequests, desiredRequests, ws.nominalMaxRequests(false, false),
-		len(ws.activeRequests)-int(receiving), receiving, ws.maxActiveRequests, ws.waiting,
+	ws.peer.logger.Levelf(log.Debug, "%s %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,p=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) lastUpdate=%s",
+		label, ws.processedRequests, pendingRequests, desiredRequests, ws.nominalMaxRequests(false, false),
+		len(ws.activeRequests)-int(receiving)-int(persisting), receiving, persisting, ws.maxActiveRequests, ws.waiting,
 		t.numQueuedForHash(false), t.activePieceHashes.Load(), t.hashing.Load(), len(t.hashResults),
-		t.numPiecesCompleted(false), t.NumPieces())
+		t.numPiecesCompleted(false), t.NumPieces(), time.Since(ws.peer.lastRequestUpdate))
 }
 
 func requestUpdate(ws *webseedPeer) {
@@ -292,12 +296,7 @@ func requestUpdate(ws *webseedPeer) {
 
 		ws.updateRequestor = nil
 
-		ws.peer.logger.Levelf(log.Debug, "requestUpdate %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) %s",
-			ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestState(false, true, false).Requests.requestIndexes),
-			ws.nominalMaxRequests(true, false), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
-			ws.peer.t.numQueuedForHash(false), ws.peer.t.activePieceHashes.Load(), ws.peer.t.hashing.Load(), len(ws.peer.t.hashResults),
-			ws.peer.t.numPiecesCompleted(false), ws.peer.t.NumPieces(),
-			time.Since(ws.peer.lastRequestUpdate))
+		logProgress(ws, "requestUpdate", false)
 
 		if !ws.peer.closed.IsSet() {
 			numPieces := ws.peer.t.NumPieces()
@@ -305,7 +304,7 @@ func requestUpdate(ws *webseedPeer) {
 
 			if numCompleted < numPieces {
 				// Don't wait for small files
-				if ws.peer.isLowOnRequests(false) && (numPieces == 1 || time.Since(ws.peer.lastRequestUpdate) > webpeerUnchokeTimerDuration) {
+				if ws.peer.isLowOnRequests(true, false) && (numPieces == 1 || time.Since(ws.peer.lastRequestUpdate) > webpeerUnchokeTimerDuration) {
 					// if the number of incomplete pieces is less than five adjust this peers
 					// lastUsefulChunkReceived to ensure that it can steal from non web peers
 					// this is to help ensure completion - we may want to add a head call
@@ -340,11 +339,13 @@ func requestUpdate(ws *webseedPeer) {
 					}
 
 					peerInfo := []string{}
-
 					ws.peer.t.iterPeers(func(p *Peer) {
+						p.mu.RLock()
+						defer p.mu.RUnlock()
+
 						rate := p.downloadRate()
 						pieces := int(p.requestState.Requests.GetCardinality())
-						desired := len(p.getDesiredRequestState(false, true, false).Requests.requestIndexes)
+						desired := len(p.getDesiredRequestState(false, false, false).Requests.requestIndexes)
 
 						this := ""
 						if p == &ws.peer {
@@ -352,17 +353,22 @@ func requestUpdate(ws *webseedPeer) {
 						}
 						flags := p.connectionFlags()
 						peerInfo = append(peerInfo, fmt.Sprintf("%s%s:p=%d,d=%d: %f", this, flags, pieces, desired, rate))
+
 					}, false)
 
-					ws.peer.logger.Levelf(log.Debug, "unchoke processed=%d, complete(%d/%d) maxRequesters=%d, waiting=%d, (%s): peers(%d): %v", ws.processedRequests, numCompleted, numPieces, ws.maxRequesters, ws.waiting, ws.peer.lastUsefulChunkReceived, len(peerInfo), peerInfo)
+					ws.peer.logger.Levelf(log.Debug, "unchoke processed=%d, complete(%d/%d) maxRequesters=%d, waiting=%d, (%s): peers(%d): %v",
+						ws.processedRequests, numCompleted, numPieces, ws.maxRequesters,
+						ws.waiting, time.Since(ws.peer.lastUsefulChunkReceived), len(peerInfo), peerInfo)
 
-					ws.peer.updateRequests("unchoked", true, false)
+					func() {
+						// update requests may require a write lock on the
+						// torrent so free our read lock first
+						ws.peer.t.mu.RUnlock()
+						defer ws.peer.t.mu.RLock()
+						ws.peer.updateRequests("unchoked", true, true)
+					}()
 
-					ws.peer.logger.Levelf(log.Debug, "unchoked %d (p=%d,d=%d,n=%d) active(c=%d,m=%d,w=%d) hashing(q=%d,a=%d) complete(%d/%d) %s",
-						ws.processedRequests, int(ws.peer.requestState.Requests.GetCardinality()), len(ws.peer.getDesiredRequestState(true, true, false).Requests.requestIndexes),
-						ws.nominalMaxRequests(true, false), len(ws.activeRequests), ws.maxActiveRequests, ws.waiting,
-						ws.peer.t.numQueuedForHash(false), ws.peer.t.activePieceHashes.Load(), ws.peer.t.numPiecesCompleted(false), ws.peer.t.NumPieces(),
-						time.Since(ws.peer.lastRequestUpdate))
+					logProgress(ws, "unchoked", false)
 
 					// if the initial unchoke didn't yield a request (for small files) - don't immediately
 					// retry it means its being handled by a prioritized peer
@@ -391,6 +397,21 @@ func (cn *webseedPeer) ban() {
 	cn.peer.drop(true)
 }
 
+func (cn *webseedPeer) isLowOnRequests(lock bool, lockTorrent bool) bool {
+	if lockTorrent {
+		cn.peer.t.mu.RLock()
+		defer cn.peer.t.mu.RUnlock()
+	}
+
+	if lock {
+		cn.peer.mu.RLock()
+		defer cn.peer.mu.RUnlock()
+	}
+
+	return cn.peer.requestState.Requests.IsEmpty() && cn.peer.requestState.Cancelled.IsEmpty() ||
+		len(cn.activeRequests) <= cn.nominalMaxRequests(false, false)/4
+}
+
 func (ws *webseedPeer) handleUpdateRequests(lock bool, lockTorrent bool) {
 	// Because this is synchronous, webseed peers seem to get first dibs on newly prioritized
 	// pieces.
@@ -403,7 +424,7 @@ func (ws *webseedPeer) onClose(lockTorrent bool) {
 	// Just deleting them means we would have to manually cancel active requests.
 	ws.peer.cancelAllRequests(lockTorrent)
 	ws.peer.t.iterPeers(func(p *Peer) {
-		if p.isLowOnRequests(true) {
+		if p.isLowOnRequests(true, lockTorrent) {
 			p.updateRequests("webseedPeer.onClose", true, lockTorrent)
 		}
 	}, true)
@@ -414,8 +435,8 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	result := <-webseedRequest.Result
 	close(webseedRequest.Result) // one-shot
 
-	ws.receiving.Add(1)
-	defer ws.receiving.Add(-1)
+	ws.persisting.Add(1)
+	defer ws.persisting.Add(-1)
 
 	// We do this here rather than inside receiveChunk, since we want to count errors too. I'm not
 	// sure if we can divine which errors indicate cancellation on our end without hitting the

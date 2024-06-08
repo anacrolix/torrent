@@ -265,8 +265,8 @@ func (cn *Peer) downloadRate() float64 {
 }
 
 func (p *Peer) DownloadRate() float64 {
-	p.locker().RLock()
-	defer p.locker().RUnlock()
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 
 	return p.downloadRate()
 }
@@ -536,7 +536,7 @@ func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorre
 		}
 	}
 	me.decPeakRequests()
-	if updateRequests && me.isLowOnRequests(lock) {
+	if updateRequests && me.isLowOnRequests(lock, lockTorrent) {
 		me.updateRequests("Peer.cancel", lock, lockTorrent)
 	}
 }
@@ -646,7 +646,7 @@ func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
 			return false
 		}
 	}
-	if c.isLowOnRequests(true) {
+	if c.isLowOnRequests(true, true) {
 		c.updateRequests("Peer.remoteRejectedRequest", true, true)
 	}
 	c.decExpectedChunkReceive(r)
@@ -836,7 +836,7 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 
 	// this is moved after all processing to avoid request rehere because as we no longer have a
 	if intended {
-		if c.isLowOnRequests(true) {
+		if c.isLowOnRequests(true, false) {
 			c.updateRequests("Peer.receiveChunk deleted request", true, false)
 		}
 	}
@@ -945,7 +945,7 @@ func (c *Peer) deleteAllRequests(reason string, lock bool, lockTorrent bool) {
 	})
 	c.assertNoRequests()
 	c.t.iterPeers(func(p *Peer) {
-		if p.isLowOnRequests(false) {
+		if p.isLowOnRequests(false, false) {
 			p.updateRequests(reason, false, false)
 		}
 	}, false)
@@ -1003,7 +1003,9 @@ func (l connectionTrust) Less(r connectionTrust) bool {
 // Returns a new Bitmap that includes bits for all pieces the peer could have based on their claims.
 func (cn *Peer) newPeerPieces(lockTorrent bool) *roaring.Bitmap {
 	// TODO: Can we use copy on write?
+	cn.mu.RLock()
 	ret := cn.peerPieces().Clone()
+	cn.mu.RUnlock()
 	if all, _ := cn.peerHasAllPieces(lockTorrent); all {
 		if cn.t.haveInfo(true) {
 			ret.AddRange(0, bitmap.BitRange(cn.t.numPieces()))
@@ -1030,14 +1032,6 @@ func (p *Peer) uncancelledRequests() uint64 {
 }
 
 type peerLocalPublicAddr = IpPort
-
-func (p *Peer) isLowOnRequests(lock bool) bool {
-	if lock {
-		p.mu.RLock()
-		defer p.mu.RUnlock()
-	}
-	return p.requestState.Requests.IsEmpty() && p.requestState.Cancelled.IsEmpty()
-}
 
 func (p *Peer) decPeakRequests() {
 	// // This can occur when peak requests are altered by the update request timer to be lower than

@@ -111,6 +111,14 @@ func (cn *PeerConn) peerImplStatusLines() []string {
 	}
 }
 
+func (p *PeerConn) isLowOnRequests(lock bool, lockTorrent bool) bool {
+	if lock {
+		p.mu.RLock()
+		defer p.mu.RUnlock()
+	}
+	return p.requestState.Requests.IsEmpty() && p.requestState.Cancelled.IsEmpty()
+}
+
 // Returns true if the connection is over IPv6.
 func (cn *PeerConn) ipv6() bool {
 	ip := cn.remoteIp()
@@ -1159,8 +1167,6 @@ func (pc *PeerConn) String() string {
 // Returns the pieces the peer could have based on their claims. If we don't know how many pieces
 // are in the torrent, it could be a very large range if the peer has sent HaveAll.
 func (pc *PeerConn) PeerPieces() *roaring.Bitmap {
-	pc.locker().RLock()
-	defer pc.locker().RUnlock()
 	return pc.newPeerPieces(true)
 }
 

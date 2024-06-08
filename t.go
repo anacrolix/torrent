@@ -173,7 +173,7 @@ func (t *Torrent) deleteReader(r *reader) {
 // has been obtained, see Torrent.Info and Torrent.GotInfo.
 func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	fmt.Println("DPL", begin, end)
-	fmt.Println("DPL", "DONE")
+	defer fmt.Println("DPL", "DONE")
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.downloadPiecesLocked(begin, end)

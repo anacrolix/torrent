@@ -921,10 +921,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Extended:
 			func() {
 				cl.unlock()
-				defer func() {
-					fmt.Println("MRL", "L", cl.locker().locker, "R", cl.locker().rlocker)
-					cl.lock()
-				}()
+				cl.lock()
 				err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 			}()
 		default:

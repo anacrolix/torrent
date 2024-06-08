@@ -340,7 +340,7 @@ func (cn *Peer) writeStatus(w io.Writer) {
 }
 
 func (p *Peer) close(lockTorrent bool) {
-	if lockTorrent {
+	if lockTorrent && p.t != nil {
 		p.t.mu.RLock()
 		defer p.t.mu.RUnlock()
 	}

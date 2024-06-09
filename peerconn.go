@@ -513,7 +513,7 @@ func (cn *PeerConn) peerSentHaveNone() error {
 	return nil
 }
 
-func (c *PeerConn) requestPendingMetadata() {
+func (c *PeerConn) requestPendingMetadata(lockTorrent bool) {
 	if c.t.haveInfo(true) {
 		return
 	}
@@ -524,7 +524,7 @@ func (c *PeerConn) requestPendingMetadata() {
 	// Request metadata pieces that we don't have in a random order.
 	var pending []int
 	for index := 0; index < c.t.metadataPieceCount(); index++ {
-		if !c.t.haveMetadataPiece(index) && !c.requestedMetadataPiece(index) {
+		if !c.t.haveMetadataPiece(index, lockTorrent) && !c.requestedMetadataPiece(index) {
 			pending = append(pending, index)
 		}
 	}
@@ -981,7 +981,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 				return fmt.Errorf("setting metadata size to %d: %w", d.MetadataSize, err)
 			}
 		}
-		c.requestPendingMetadata()
+		c.requestPendingMetadata(true)
 		if !t.cl.config.DisablePEX {
 			t.pex.Add(c) // we learnt enough now
 			// This checks the extension is supported internally.

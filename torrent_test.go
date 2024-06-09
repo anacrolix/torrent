@@ -191,7 +191,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	assert.EqualValues(t, cl.PeerID(), hr.PeerID)
 	assert.EqualValues(t, ih, hr.Hash)
 
-	assert.EqualValues(t, 0, tt.metadataSize())
+	assert.EqualValues(t, 0, tt.metadataSize(true))
 
 	func() {
 		cl.lock()

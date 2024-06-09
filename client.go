@@ -1167,7 +1167,7 @@ func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 					YourIp:       pp.CompactIp(pc.remoteIp()),
 					Encryption:   cl.config.HeaderObfuscationPolicy.Preferred || !cl.config.HeaderObfuscationPolicy.RequirePreferred,
 					Port:         cl.incomingPeerPort(),
-					MetadataSize: t.metadataSize(),
+					MetadataSize: t.metadataSize(lockTorrent),
 					// TODO: We can figure these out specific to the socket used.
 					Ipv4: pp.CompactIp(cl.config.PublicIp4.To4()),
 					Ipv6: cl.config.PublicIp6.To16(),
@@ -1244,7 +1244,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 		}
 		return err
 	case pp.RequestMetadataExtensionMsgType:
-		if !t.haveMetadataPiece(piece) {
+		if !t.haveMetadataPiece(piece, true) {
 			c.write(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d.Piece, nil))
 			return nil
 		}

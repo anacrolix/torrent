@@ -499,9 +499,11 @@ func (t *Torrent) metadataPieceCount() int {
 	return (len(t.metadataBytes) + (1 << 14) - 1) / (1 << 14)
 }
 
-func (t *Torrent) haveMetadataPiece(piece int) bool {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) haveMetadataPiece(piece int, lock bool) bool {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 
 	if t.haveInfo(false) {
 		return (1<<14)*piece < len(t.metadataBytes)
@@ -510,9 +512,11 @@ func (t *Torrent) haveMetadataPiece(piece int) bool {
 	}
 }
 
-func (t *Torrent) metadataSize() int {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) metadataSize(lock bool) int {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 
 	return len(t.metadataBytes)
 }
@@ -692,36 +696,30 @@ func (t *Torrent) haveAllMetadataPieces(lock bool) bool {
 
 // TODO: Propagate errors to disconnect peer.
 func (t *Torrent) setMetadataSize(size int) error {
-	conns, err := func() (conns, error) {
-		t.mu.Lock()
-		defer t.mu.Unlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
-		if t.haveInfo(false) {
-			// We already know the correct metadata size.
-			return nil, nil
-		}
-		if uint32(size) > maxMetadataSize {
-			return nil, log.WithLevel(log.Warning, errors.New("bad size"))
-		}
-		if len(t.metadataBytes) == size {
-			return nil, nil
-		}
-		t.metadataBytes = make([]byte, size)
-		t.metadataCompletedChunks = make([]bool, (size+(1<<14)-1)/(1<<14))
-		t.metadataChanged.Broadcast()
-
-		return t.peerConnsAsSlice(false), nil
-	}()
-
-	if conns == nil {
-		return err
+	if t.haveInfo(false) {
+		// We already know the correct metadata size.
+		return nil
 	}
+	if uint32(size) > maxMetadataSize {
+		return log.WithLevel(log.Warning, errors.New("bad size"))
+	}
+	if len(t.metadataBytes) == size {
+		return nil
+	}
+	t.metadataBytes = make([]byte, size)
+	t.metadataCompletedChunks = make([]bool, (size+(1<<14)-1)/(1<<14))
+	t.metadataChanged.Broadcast()
 
+	conns := t.peerConnsAsSlice(false)
 	defer conns.free()
 
 	for _, c := range conns {
-		c.requestPendingMetadata()
+		c.requestPendingMetadata(false)
 	}
+
 	return nil
 }
 
@@ -879,7 +877,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	defer t.mu.RUnlock()
 
 	fmt.Fprintf(w, "Infohash: %s\n", t.infoHash.HexString())
-	fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize())
+	fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize(false))
 	if !t.haveInfo(false) {
 		fmt.Fprintf(w, "Metadata have: ")
 		for _, h := range t.metadataCompletedChunks {

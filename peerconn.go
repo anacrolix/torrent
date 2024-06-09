@@ -368,7 +368,7 @@ func (cn *PeerConn) postBitfield(lockTorrent bool) {
 	if cn.sentHaves.Len() != 0 {
 		panic("bitfield must be first have-related message sent")
 	}
-	if !cn.t.haveAnyPieces(true) {
+	if !cn.t.haveAnyPieces(lockTorrent) {
 		return
 	}
 	cn.write(pp.Message{

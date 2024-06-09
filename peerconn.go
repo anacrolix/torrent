@@ -365,25 +365,20 @@ func (cn *PeerConn) have(piece pieceIndex) {
 }
 
 func (cn *PeerConn) postBitfield(lockTorrent bool) {
-	fmt.Println("PBF0", lockTorrent)
-	defer fmt.Println("PBF", "DONE")
 	if cn.sentHaves.Len() != 0 {
 		panic("bitfield must be first have-related message sent")
 	}
 	if !cn.t.haveAnyPieces(lockTorrent) {
 		return
 	}
-	fmt.Println("PBF1")
 	cn.write(pp.Message{
 		Type:     pp.Bitfield,
 		Bitfield: cn.t.bitfield(lockTorrent),
 	})
-	fmt.Println("PBF2")
 	if lockTorrent {
 		cn.t.mu.RLock()
 		defer cn.t.mu.RUnlock()
 	}
-	fmt.Println("PBF3")
 	cn.sentHaves = bitmap.Bitmap{RB: cn.t._completedPieces.Clone()}
 }
 

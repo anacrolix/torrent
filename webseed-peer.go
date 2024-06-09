@@ -145,9 +145,8 @@ func (ws *webseedPeer) requester(i int) {
 		restart := false
 
 		ws.peer.requestState.Requests.Iterate(func(x RequestIndex) bool {
-			//fmt.Println("RITR", "L", ws.peer.t.mu.locker, "NL", ws.peer.t.mu.nextlocker)
 			r := ws.peer.t.requestIndexToRequest(x, true)
-			//fmt.Println("RITR", "DONE")
+			
 			if _, ok := ws.activeRequests[r]; ok {
 				return true
 			}

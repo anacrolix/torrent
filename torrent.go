@@ -727,9 +727,6 @@ func (t *Torrent) setMetadataSize(size int) error {
 // or a display name given such as by the dn value in a magnet link, or "".
 func (t *Torrent) name(lock bool) string {
 	if lock {
-		if t.mu.lc.Load() > 0 {
-			fmt.Println("name", "L", t.mu.locker, t.mu.rlocker)
-		}
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 	}
@@ -1597,23 +1594,11 @@ func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex, lock bool) (pe
 	return pendingChanged
 }
 
-var updatePiecePriorityNoTriggersDuration atomic.Int64
-var onPiecePendingTriggersDuration atomic.Int64
-var updatePieceRequestOrderPieceDuration atomic.Int64
-
 func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string, lock bool) {
-	t0 := time.Now()
-	trigger := t.updatePiecePriorityNoTriggers(piece, lock) && !t.disableTriggers
-	updatePiecePriorityNoTriggersDuration.Add(int64(time.Since(t0)))
-
-	if trigger {
-		t0 = time.Now()
+	if t.updatePiecePriorityNoTriggers(piece, lock) && !t.disableTriggers {
 		t.onPiecePendingTriggers(piece, reason, lock)
-		onPiecePendingTriggersDuration.Add(int64(time.Since(t0)))
 	}
-	t0 = time.Now()
 	t.updatePieceRequestOrderPiece(piece, lock)
-	updatePieceRequestOrderPieceDuration.Add(int64(time.Since(t0)))
 }
 
 func (t *Torrent) updateAllPiecePriorities(reason string) {
@@ -3234,7 +3219,6 @@ func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
 	ws.peer.logger = t.logger.WithContextValue(&ws)
 	ws.peer.peerImpl = &ws
 	t.webSeeds[url] = &ws.peer
-	fmt.Println("adding ws for", t.name(false))
 	if t.haveInfo(false) {
 		ws.onGotInfo(t.info, false)
 	}

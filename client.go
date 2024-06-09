@@ -862,8 +862,6 @@ func (cl *Client) outgoingConnection(
 	opts outgoingConnOpts,
 	attemptKey outgoingConnAttemptKey,
 ) {
-	//fmt.Println("OC0", cl._mu.locker)
-	defer fmt.Println("OC", "DONE")
 	c, err := cl.dialAndCompleteHandshake(opts)
 	if err == nil {
 		c.conn.SetWriteDeadline(time.Time{})
@@ -871,7 +869,6 @@ func (cl *Client) outgoingConnection(
 	cl.lock()
 	defer cl.unlock()
 	// Don't release lock between here and addPeerConn, unless it's for failure.
-	fmt.Println("OC1")
 	cl.noLongerHalfOpen(opts.t, opts.peerInfo.Addr.String(), attemptKey)
 	if err != nil {
 		if cl.config.Debug {
@@ -1088,11 +1085,8 @@ func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 		}
 		defer t.dropConnection(pc, false)
 		pc.startMessageWriter(false)
-		fmt.Println("sendInitialMessages")
 		pc.sendInitialMessages(false)
-		fmt.Println("initUpdateRequestsTimer")
 		pc.initUpdateRequestsTimer(true)
-		fmt.Println("done")
 		return nil
 	}(); err != nil {
 		return err
@@ -1152,8 +1146,6 @@ const localClientReqq = 1024
 
 // See the order given in Transmission's tr_peerMsgsNew.
 func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
-	fmt.Println("SIM0", lockTorrent)
-	defer fmt.Println("SIM", "DONE")
 	t := pc.t
 	cl := t.cl
 	if pc.PeerExtensionBytes.SupportsExtended() && cl.config.Extensions.SupportsExtended() {
@@ -1183,9 +1175,8 @@ func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 			}(),
 		})
 	}
-	fmt.Println("SIM1")
+
 	func() {
-		fmt.Println("SIM1A")
 		if pc.fastEnabled() {
 			if t.haveAllPieces(lockTorrent) {
 				pc.write(pp.Message{Type: pp.HaveAll})
@@ -1197,10 +1188,9 @@ func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 				return
 			}
 		}
-		fmt.Println("SIM1B")
 		pc.postBitfield(lockTorrent)
 	}()
-	fmt.Println("SIM2")
+
 	if pc.PeerExtensionBytes.SupportsDHT() && cl.config.Extensions.SupportsDHT() && cl.haveDhtServer() {
 		pc.write(pp.Message{
 			Type: pp.Port,

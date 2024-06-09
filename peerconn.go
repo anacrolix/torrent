@@ -365,8 +365,8 @@ func (cn *PeerConn) have(piece pieceIndex) {
 }
 
 func (cn *PeerConn) postBitfield(lockTorrent bool) {
-	fmt.Println("PBF0",lockTorrent)
-	defer fmt.Println("PBF","DONE")
+	fmt.Println("PBF0", lockTorrent)
+	defer fmt.Println("PBF", "DONE")
 	if cn.sentHaves.Len() != 0 {
 		panic("bitfield must be first have-related message sent")
 	}
@@ -376,7 +376,7 @@ func (cn *PeerConn) postBitfield(lockTorrent bool) {
 	fmt.Println("PBF1")
 	cn.write(pp.Message{
 		Type:     pp.Bitfield,
-		Bitfield: cn.t.bitfield(),
+		Bitfield: cn.t.bitfield(lockTorrent),
 	})
 	fmt.Println("PBF2")
 	if lockTorrent {

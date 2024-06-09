@@ -1165,9 +1165,11 @@ func (t *Torrent) writeChunk(piece int, begin int64, data []byte, lock bool) (er
 	return err
 }
 
-func (t *Torrent) bitfield() (bf []bool) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) bitfield(lock bool) (bf []bool) {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 	bf = make([]bool, t.numPieces())
 	t._completedPieces.Iterate(func(piece uint32) (again bool) {
 		bf[piece] = true

@@ -645,7 +645,7 @@ func (t *Torrent) onSetInfo(lock bool, lockClient bool) {
 	t.tryCreateMorePieceHashers(false)
 	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info, false)
-		p.updateRequests("onSetInfo", false, false)
+		p.updateRequests("Torrent.OnSetInfo", false, false)
 	}, false)
 }
 
@@ -727,9 +727,11 @@ func (t *Torrent) setMetadataSize(size int) error {
 
 // The current working name for the torrent. Either the name in the info dict,
 // or a display name given such as by the dn value in a magnet link, or "".
-func (t *Torrent) name() string {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) name(lock bool) string {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 
 	if t.haveInfo(false) {
 		return t.info.BestName()
@@ -1592,11 +1594,23 @@ func (t *Torrent) updatePiecePriorityNoTriggers(piece pieceIndex, lock bool) (pe
 	return pendingChanged
 }
 
+var updatePiecePriorityNoTriggersDuration atomic.Int64
+var onPiecePendingTriggersDuration atomic.Int64
+var updatePieceRequestOrderPieceDuration atomic.Int64
+
 func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string, lock bool) {
-	if t.updatePiecePriorityNoTriggers(piece, lock) && !t.disableTriggers {
+	t0 := time.Now()
+	trigger := t.updatePiecePriorityNoTriggers(piece, lock) && !t.disableTriggers
+	updatePiecePriorityNoTriggersDuration.Add(int64(time.Since(t0)))
+
+	if trigger {
+		t0 = time.Now()
 		t.onPiecePendingTriggers(piece, reason, lock)
+		onPiecePendingTriggersDuration.Add(int64(time.Since(t0)))
 	}
+	t0 = time.Now()
 	t.updatePieceRequestOrderPiece(piece, lock)
+	updatePieceRequestOrderPieceDuration.Add(int64(time.Since(t0)))
 }
 
 func (t *Torrent) updateAllPiecePriorities(reason string) {
@@ -3215,6 +3229,7 @@ func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
 	ws.peer.logger = t.logger.WithContextValue(&ws)
 	ws.peer.peerImpl = &ws
 	t.webSeeds[url] = &ws.peer
+	fmt.Println("adding ws for", t.name(false))
 	if t.haveInfo(false) {
 		ws.onGotInfo(t.info, false)
 	}

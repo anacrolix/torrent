@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/missinggo/v2/pubsub"
@@ -136,7 +137,7 @@ func (t *Torrent) SetDisplayName(dn string) {
 // The current working name for the torrent. Either the name in the info dict,
 // or a display name given such as by the dn value in a magnet link, or "".
 func (t *Torrent) Name() string {
-	return t.name()
+	return t.name(true)
 }
 
 // The completed length of all the torrent data, in all its files. This is
@@ -148,8 +149,6 @@ func (t *Torrent) Length() int64 {
 // Returns a run-time generated metainfo for the torrent that includes the
 // info bytes and announce-list as currently known to the client.
 func (t *Torrent) Metainfo() metainfo.MetaInfo {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
 	return t.newMetaInfo()
 }
 
@@ -172,35 +171,40 @@ func (t *Torrent) deleteReader(r *reader) {
 // priority. Piece indexes are not the same as bytes. Requires that the info
 // has been obtained, see Torrent.Info and Torrent.GotInfo.
 func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
-	fmt.Println("DPL", begin, end)
-	defer fmt.Println("DPL", "DONE")
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.downloadPiecesLocked(begin, end)
-}
-
-func (t *Torrent) downloadPiecesLocked(begin, end pieceIndex) {
+	fmt.Println("DPL", t.name(true), begin, end)
+	defer fmt.Println("DPL", t.name(true), "DONE")
 	for i := begin; i < end; i++ {
-		if t.pieces[i].priority.Raise(PiecePriorityNormal) {
-			t.updatePiecePriority(i, "Torrent.DownloadPieces", false)
+		if i%5000 == 0 {
+			fmt.Println("DPL", t.name(false), i,
+				"UPP", time.Duration(updatePiecePriorityNoTriggersDuration.Load()),
+				"OT", time.Duration(onPiecePendingTriggersDuration.Load()),
+				"UPRO", time.Duration(updatePieceRequestOrderPieceDuration.Load()))
 		}
+		func() {
+			// don't lock out all processing between pieces while pieces are updated
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			if t.pieces[i].priority.Raise(PiecePriorityNormal) {
+				t.updatePiecePriority(i, "Torrent.DownloadPieces", false)
+			}
+		}()
 	}
 }
 
 func (t *Torrent) CancelPieces(begin, end pieceIndex) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.cancelPiecesLocked(begin, end, "Torrent.CancelPieces")
-}
 
-func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex, reason string) {
 	for i := begin; i < end; i++ {
-		p := &t.pieces[i]
-		if p.priority == PiecePriorityNone {
-			continue
-		}
-		p.priority = PiecePriorityNone
-		t.updatePiecePriority(i, reason, false)
+		func() {
+			// don't lock out all processing between pieces while pieces are updated
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			p := &t.pieces[i]
+			if p.priority == PiecePriorityNone {
+				return
+			}
+			p.priority = PiecePriorityNone
+			t.updatePiecePriority(i, "Torrent.CancelPieces", false)
+		}()
 	}
 }
 
@@ -239,7 +243,7 @@ func (t *Torrent) DownloadAll() {
 }
 
 func (t *Torrent) String() string {
-	s := t.name()
+	s := t.name(true)
 	if s == "" {
 		return t.infoHash.HexString()
 	} else {

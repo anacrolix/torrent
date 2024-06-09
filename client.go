@@ -155,10 +155,10 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		return torrentsSlice[l].infoHash.AsString() < torrentsSlice[r].infoHash.AsString()
 	})
 	for _, t := range torrentsSlice {
-		if t.name() == "" {
+		if t.name(true) == "" {
 			fmt.Fprint(w, "<unknown name>")
 		} else {
-			fmt.Fprint(w, t.name())
+			fmt.Fprint(w, t.name(true))
 		}
 		fmt.Fprint(w, "\n")
 		if t.info != nil {

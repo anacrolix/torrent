@@ -54,14 +54,16 @@ func (ws *webseedPeer) String() string {
 	return fmt.Sprintf("webseed peer for %q", ws.client.Url)
 }
 
-func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lock bool) {
+func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lockTorrent bool) {
 	ws.client.SetInfo(info)
 	// There should be probably be a callback in Client instead, so it can remove pieces at its whim
 	// too.
 	ws.client.Pieces.Iterate(func(x uint32) bool {
-		ws.peer.t.incPieceAvailability(pieceIndex(x), lock)
+		ws.peer.t.incPieceAvailability(pieceIndex(x), lockTorrent)
 		return true
 	})
+
+	ws.peer.updateRequests("info", true, lockTorrent)
 }
 
 func (ws *webseedPeer) writeInterested(interested bool) bool {
@@ -143,9 +145,9 @@ func (ws *webseedPeer) requester(i int) {
 		restart := false
 
 		ws.peer.requestState.Requests.Iterate(func(x RequestIndex) bool {
-			fmt.Println("RITR", "L", ws.peer.t.mu.locker, "NL", ws.peer.t.mu.nextlocker)
+			//fmt.Println("RITR", "L", ws.peer.t.mu.locker, "NL", ws.peer.t.mu.nextlocker)
 			r := ws.peer.t.requestIndexToRequest(x, true)
-			fmt.Println("RITR", "DONE")
+			//fmt.Println("RITR", "DONE")
 			if _, ok := ws.activeRequests[r]; ok {
 				return true
 			}

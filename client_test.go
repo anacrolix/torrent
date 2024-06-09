@@ -519,9 +519,9 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	defer psc.Close()
 
 	leecherGreeting.cl.lock()
-	leecherGreeting.downloadPiecesLocked(0, leecherGreeting.numPieces())
+	leecherGreeting.DownloadPieces(0, leecherGreeting.numPieces())
 	if ps.Cancel {
-		leecherGreeting.cancelPiecesLocked(0, leecherGreeting.NumPieces(), "")
+		leecherGreeting.CancelPieces(0, leecherGreeting.NumPieces())
 	}
 	leecherGreeting.cl.unlock()
 	done := make(chan struct{})

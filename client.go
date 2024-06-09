@@ -1058,7 +1058,7 @@ func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 
-		pc.setTorrent(t,false)
+		pc.setTorrent(t, false)
 		cl := t.cl
 		for i, b := range cl.config.MinPeerExtensions {
 			if pc.PeerExtensionBytes[i]&b != b {
@@ -1088,8 +1088,8 @@ func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 		}
 		defer t.dropConnection(pc, false)
 		pc.startMessageWriter(false)
-		pc.sendInitialMessages()
-		pc.initUpdateRequestsTimer()
+		pc.sendInitialMessages(false)
+		pc.initUpdateRequestsTimer(true)
 
 		return nil
 	}(); err != nil {
@@ -1102,7 +1102,12 @@ func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 	return nil
 }
 
-func (p *Peer) initUpdateRequestsTimer() {
+func (p *Peer) initUpdateRequestsTimer(lock bool) {
+	if lock {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+	}
+
 	if check.Enabled {
 		if p.updateRequestsTimer != nil {
 			panic(p.updateRequestsTimer)
@@ -1144,7 +1149,7 @@ func (c *Peer) updateRequestsTimerFunc() {
 const localClientReqq = 1024
 
 // See the order given in Transmission's tr_peerMsgsNew.
-func (pc *PeerConn) sendInitialMessages() {
+func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 	t := pc.t
 	cl := t.cl
 	if pc.PeerExtensionBytes.SupportsExtended() && cl.config.Extensions.SupportsExtended() {
@@ -1176,11 +1181,11 @@ func (pc *PeerConn) sendInitialMessages() {
 	}
 	func() {
 		if pc.fastEnabled() {
-			if t.haveAllPieces(true) {
+			if t.haveAllPieces(lockTorrent) {
 				pc.write(pp.Message{Type: pp.HaveAll})
 				pc.sentHaves.AddRange(0, bitmap.BitRange(pc.t.NumPieces()))
 				return
-			} else if !t.haveAnyPieces(true) {
+			} else if !t.haveAnyPieces(lockTorrent) {
 				pc.write(pp.Message{Type: pp.HaveNone})
 				pc.sentHaves.Clear()
 				return

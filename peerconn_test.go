@@ -36,7 +36,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	r, w := io.Pipe()
 	// c.r = r
 	c.w = w
-	c.startMessageWriter()
+	c.startMessageWriter(true)
 	c.locker().Lock()
 	c.t._completedPieces.Add(1)
 	c.postBitfield( /*[]bool{false, true, false}*/ )

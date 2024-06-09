@@ -3220,7 +3220,7 @@ func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
 	for _, opt := range opts {
 		opt(&ws.client)
 	}
-	ws.peer.initUpdateRequestsTimer()
+	ws.peer.initUpdateRequestsTimer(true)
 	ws.requesterCond.L = &sync.Mutex{}
 	for i := 0; i < ws.maxRequesters; i += 1 {
 		go ws.requester(i)

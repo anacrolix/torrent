@@ -1088,9 +1088,11 @@ func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 		}
 		defer t.dropConnection(pc, false)
 		pc.startMessageWriter(false)
+		fmt.Println("sendInitialMessages")
 		pc.sendInitialMessages(false)
+		fmt.Println("initUpdateRequestsTimer")
 		pc.initUpdateRequestsTimer(true)
-
+		fmt.Println("done")
 		return nil
 	}(); err != nil {
 		return err

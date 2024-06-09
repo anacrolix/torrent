@@ -30,7 +30,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	cl.initLogger()
 	qtc := qt.New(t)
 	c := cl.newConnection(nil, newConnectionOpts{network: "io.Pipe"})
-	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
+	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil), true)
 	err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)}, true)
 	qtc.Assert(err, qt.IsNil)
 	r, w := io.Pipe()
@@ -119,7 +119,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		connString: regularNetConnPeerConnConnString(r),
 	})
 	c.Assert(cn.bannableAddr.Ok, qt.IsTrue)
-	cn.setTorrent(t)
+	cn.setTorrent(t, true)
 	requestIndexBegin := t.pieceRequestIndexOffset(0)
 	requestIndexEnd := t.pieceRequestIndexOffset(1)
 	eachRequestIndex := func(f func(ri RequestIndex)) {
@@ -369,7 +369,7 @@ func TestReceiveLargeRequest(t *testing.T) {
 	pc := cl.newConnection(nil, newConnectionOpts{network: "test"})
 	tor := cl.newTorrentForTesting()
 	tor.info = &metainfo.Info{PieceLength: 3 << 20}
-	pc.setTorrent(tor)
+	pc.setTorrent(tor, true)
 	tor._completedPieces.Add(0)
 	pc.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
 	pc.choking = false

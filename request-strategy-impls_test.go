@@ -97,7 +97,7 @@ func BenchmarkRequestStrategy(b *testing.B) {
 	peer := cl.newConnection(nil, newConnectionOpts{
 		network: "test",
 	})
-	peer.setTorrent(tor)
+	peer.setTorrent(tor, true)
 	c.Assert(tor.storage, qt.IsNotNil)
 	const chunkSize = defaultChunkSize
 	peer.onPeerHasAllPiecesNoTriggers()

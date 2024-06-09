@@ -1058,7 +1058,7 @@ func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 
-		pc.setTorrent(t)
+		pc.setTorrent(t,false)
 		cl := t.cl
 		for i, b := range cl.config.MinPeerExtensions {
 			if pc.PeerExtensionBytes[i]&b != b {

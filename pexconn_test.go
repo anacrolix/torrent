@@ -24,8 +24,8 @@ func TestPexConnState(t *testing.T) {
 	c.PeerExtensionIDs = make(map[pp.ExtensionName]pp.ExtensionNumber)
 	c.PeerExtensionIDs[pp.ExtensionNamePex] = pexExtendedId
 	c.messageWriter.mu.Lock()
-	c.setTorrent(torrent)
-	if err := torrent.addPeerConn(c); err != nil {
+	c.setTorrent(torrent, true)
+	if err := torrent.addPeerConn(c, true); err != nil {
 		t.Log(err)
 	}
 

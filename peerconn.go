@@ -1121,12 +1121,18 @@ func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool, state *peerRe
 	})
 }
 
-func (c *Peer) setTorrent(t *Torrent) {
+func (c *Peer) setTorrent(t *Torrent, lockTorrent bool) {
 	if c.t != nil {
 		panic("connection already associated with a torrent")
 	}
+
+	if lockTorrent {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
+
 	c.t = t
-	c.logger.WithDefaultLevel(log.Debug).Printf("set torrent=%v", t)
+	c.logger.WithDefaultLevel(log.Debug).Printf("set torrent=%v", t.name(false))
 	t.reconcileHandshakeStats(c)
 }
 

@@ -2361,7 +2361,7 @@ func (t *Torrent) reconcileHandshakeStats(c *Peer) {
 }
 
 // Returns true if the connection is added.
-func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
+func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 	defer func() {
 		if err == nil {
 			torrent.Add("added connections", 1)
@@ -2372,8 +2372,10 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 		return errors.New("torrent closed")
 	}
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	if lockTorrent {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
 
 	conns := t.peerConnsAsSlice(false)
 	defer conns.free()

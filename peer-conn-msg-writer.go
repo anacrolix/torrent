@@ -12,15 +12,10 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
-//var fwbCount atomic.Int64
-
 func (pc *PeerConn) initMessageWriter() {
 	w := &pc.messageWriter
 	*w = peerConnMsgWriter{
 		fillWriteBuffer: func() {
-			//count := fwbCount.Add(1)
-			//fmt.Println("FWB0", count, pc.locker().locker)
-			//defer fwbCount.Add(-1)
 			if pc.closed.IsSet() {
 				return
 			}
@@ -38,15 +33,13 @@ func (pc *PeerConn) initMessageWriter() {
 	}
 }
 
-func (pc *PeerConn) startMessageWriter() {
+func (pc *PeerConn) startMessageWriter(lockTorrent bool) {
 	pc.initMessageWriter()
-	go pc.messageWriterRunner()
+	go pc.messageWriterRunner(lockTorrent)
 }
 
-func (pc *PeerConn) messageWriterRunner() {
-	defer pc.locker().Unlock()
-	defer pc.close(true)
-	defer pc.locker().Lock()
+func (pc *PeerConn) messageWriterRunner(lockTorrent bool) {
+	defer pc.close(lockTorrent)
 	pc.messageWriter.run(pc.t.cl.config.KeepAliveTimeout)
 }
 

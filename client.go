@@ -1054,40 +1054,49 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 
 // Client lock must be held before entering this.
 func (t *Torrent) runHandshookConn(pc *PeerConn) error {
-	pc.setTorrent(t)
-	cl := t.cl
-	for i, b := range cl.config.MinPeerExtensions {
-		if pc.PeerExtensionBytes[i]&b != b {
-			return fmt.Errorf("peer did not meet minimum peer extensions: %x", pc.PeerExtensionBytes[:])
+	if err := func() error {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+
+		pc.setTorrent(t)
+		cl := t.cl
+		for i, b := range cl.config.MinPeerExtensions {
+			if pc.PeerExtensionBytes[i]&b != b {
+				return fmt.Errorf("peer did not meet minimum peer extensions: %x", pc.PeerExtensionBytes[:])
+			}
 		}
-	}
-	if pc.PeerID == cl.peerID {
-		if pc.outgoing {
-			connsToSelf.Add(1)
-			addr := pc.RemoteAddr.String()
-			cl.dopplegangerAddrs[addr] = struct{}{}
-		} /* else {
-			// Because the remote address is not necessarily the same as its client's torrent listen
-			// address, we won't record the remote address as a doppleganger. Instead, the initiator
-			// can record *us* as the doppleganger.
-		} */
-		t.logger.Levelf(log.Debug, "local and remote peer ids are the same")
+		if pc.PeerID == cl.peerID {
+			if pc.outgoing {
+				connsToSelf.Add(1)
+				addr := pc.RemoteAddr.String()
+				cl.dopplegangerAddrs[addr] = struct{}{}
+			} /* else {
+				// Because the remote address is not necessarily the same as its client's torrent listen
+				// address, we won't record the remote address as a doppleganger. Instead, the initiator
+				// can record *us* as the doppleganger.
+			} */
+			t.logger.Levelf(log.Debug, "local and remote peer ids are the same")
+			return nil
+		}
+		pc.r = deadlineReader{pc.conn, pc.r}
+		completedHandshakeConnectionFlags.Add(pc.connectionFlags(), 1)
+		if connIsIpv6(pc.conn) {
+			torrent.Add("completed handshake over ipv6", 1)
+		}
+		if err := t.addPeerConn(pc, false); err != nil {
+			return fmt.Errorf("adding connection: %w", err)
+		}
+		defer t.dropConnection(pc, false)
+		pc.startMessageWriter(false)
+		pc.sendInitialMessages()
+		pc.initUpdateRequestsTimer()
+
 		return nil
+	}(); err != nil {
+		return err
 	}
-	pc.r = deadlineReader{pc.conn, pc.r}
-	completedHandshakeConnectionFlags.Add(pc.connectionFlags(), 1)
-	if connIsIpv6(pc.conn) {
-		torrent.Add("completed handshake over ipv6", 1)
-	}
-	if err := t.addPeerConn(pc); err != nil {
-		return fmt.Errorf("adding connection: %w", err)
-	}
-	defer t.dropConnection(pc, true)
-	pc.startMessageWriter()
-	pc.sendInitialMessages()
-	pc.initUpdateRequestsTimer()
-	err := pc.mainReadLoop()
-	if err != nil {
+
+	if err := pc.mainReadLoop(); err != nil {
 		return fmt.Errorf("main read loop: %w", err)
 	}
 	return nil
@@ -1109,14 +1118,14 @@ const peerUpdateRequestsTimerReason = "updateRequestsTimer"
 func (c *Peer) updateRequestsTimerFunc() {
 	c.t.mu.Lock()
 	defer c.t.mu.Unlock()
-	
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if c.closed.IsSet() {
 		return
 	}
-	if c.isLowOnRequests(false,false) {
+	if c.isLowOnRequests(false, false) {
 		// If there are no outstanding requests, then a request update should have already run.
 		return
 	}

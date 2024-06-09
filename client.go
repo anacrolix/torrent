@@ -1152,7 +1152,7 @@ const localClientReqq = 1024
 
 // See the order given in Transmission's tr_peerMsgsNew.
 func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
-	fmt.Println("SIM0")
+	fmt.Println("SIM0", lockTorrent)
 	defer fmt.Println("SIM", "DONE")
 	t := pc.t
 	cl := t.cl

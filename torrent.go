@@ -729,6 +729,9 @@ func (t *Torrent) setMetadataSize(size int) error {
 // or a display name given such as by the dn value in a magnet link, or "".
 func (t *Torrent) name(lock bool) string {
 	if lock {
+		if t.mu.lc.Load() > 0 {
+			fmt.Println("name", "L", t.mu.locker, t.mu.rlocker)
+		}
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 	}

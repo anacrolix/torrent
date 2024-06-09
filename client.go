@@ -1191,7 +1191,7 @@ func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 				return
 			}
 		}
-		pc.postBitfield()
+		pc.postBitfield(lockTorrent)
 	}()
 	if pc.PeerExtensionBytes.SupportsDHT() && cl.config.Extensions.SupportsDHT() && cl.haveDhtServer() {
 		pc.write(pp.Message{

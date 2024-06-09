@@ -1153,7 +1153,7 @@ const localClientReqq = 1024
 // See the order given in Transmission's tr_peerMsgsNew.
 func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 	fmt.Println("SIM0")
-	fmt.Println("SIM", "DONE")
+	defer fmt.Println("SIM", "DONE")
 	t := pc.t
 	cl := t.cl
 	if pc.PeerExtensionBytes.SupportsExtended() && cl.config.Extensions.SupportsExtended() {
@@ -1185,6 +1185,7 @@ func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 	}
 	fmt.Println("SIM1")
 	func() {
+		fmt.Println("SIM1A")
 		if pc.fastEnabled() {
 			if t.haveAllPieces(lockTorrent) {
 				pc.write(pp.Message{Type: pp.HaveAll})
@@ -1196,6 +1197,7 @@ func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 				return
 			}
 		}
+		fmt.Println("SIM1B")
 		pc.postBitfield(lockTorrent)
 	}()
 	fmt.Println("SIM2")

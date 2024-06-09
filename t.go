@@ -1,10 +1,8 @@
 package torrent
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/missinggo/v2/pubsub"

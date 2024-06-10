@@ -727,6 +727,9 @@ func (t *Torrent) setMetadataSize(size int) error {
 // or a display name given such as by the dn value in a magnet link, or "".
 func (t *Torrent) name(lock bool) string {
 	if lock {
+		if t.mu.lc.Load() > 0 {
+			fmt.Println("name", "L", t.mu.locker, "R", t.mu.rlocker)
+		}
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 	}
@@ -2416,6 +2419,9 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 
 func (t *Torrent) newConnsAllowed(lock bool) bool {
 	if lock {
+		if t.mu.lc.Load() > 0 {
+			fmt.Println("newConnsAllowed", "L", t.mu.locker, "R", t.mu.rlocker)
+		}
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 	}

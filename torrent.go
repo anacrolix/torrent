@@ -2440,9 +2440,6 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 
 func (t *Torrent) newConnsAllowed(lock bool) bool {
 	if lock {
-		if t.mu.lc.Load() > 0 {
-			fmt.Println("newConnsAllowed", "L", t.mu.locker, "R", t.mu.rlocker)
-		}
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 	}

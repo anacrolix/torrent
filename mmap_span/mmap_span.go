@@ -165,9 +165,10 @@ func (ms *MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
 		return
 	}
 
-	ms.mu.Lock()
-	ms.dirtyPieces.Add(uint32(int64(len(p)) / off))
-	ms.mu.Unlock()
+	//Todo
+	//ms.mu.Lock()
+	//ms.dirtyPieces.Add(uint32(int64(len(p)) / off))
+	//ms.mu.Unlock()
 
 	return
 }

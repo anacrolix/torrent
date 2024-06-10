@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/edsrzf/mmap-go"
@@ -35,7 +36,11 @@ func NewMMapWithCompletion(baseDir string, completion PieceCompletion) *mmapClie
 }
 
 func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (_ TorrentImpl, err error) {
-	span, err := mMapTorrent(info, s.baseDir)
+	span, err := mMapTorrent(info, s.baseDir, 1500*time.Millisecond, func() {
+		if commiter, ok := s.pc.(interface{ Commit() }); ok {
+			commiter.Commit()
+		}
+	})
 	t := &mmapTorrentStorage{
 		infoHash: infoHash,
 		span:     span,
@@ -110,8 +115,12 @@ func (sp mmapStoragePiece) MarkNotComplete() error {
 	return nil
 }
 
-func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, err error) {
-	mms = &mmap_span.MMapSpan{}
+func mMapTorrent(md *metainfo.Info, location string, flushTime time.Duration, flushedCallback func()) (mms *mmap_span.MMapSpan, err error) {
+	mms = &mmap_span.MMapSpan{
+		FlushTime:       flushTime,
+		FlushedCallback: flushedCallback,
+	}
+
 	defer func() {
 		if err != nil {
 			mms.Close()

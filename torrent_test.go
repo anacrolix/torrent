@@ -249,5 +249,5 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	var wg sync.WaitGroup
 	tt.close(&wg)
-	tt.assertAllPiecesRelativeAvailabilityZero()
+	tt.assertAllPiecesRelativeAvailabilityZero(true)
 }

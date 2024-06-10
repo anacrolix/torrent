@@ -803,9 +803,11 @@ func (me pieceAvailabilityRun) String() string {
 	return fmt.Sprintf("%v(%v)", me.Count, me.Availability)
 }
 
-func (t *Torrent) pieceAvailabilityRuns() (ret []pieceAvailabilityRun) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) pieceAvailabilityRuns(lock bool) (ret []pieceAvailabilityRun) {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 
 	rle := missinggo.NewRunLengthEncoder(func(el interface{}, count uint64) {
 		ret = append(ret, pieceAvailabilityRun{Availability: el.(int), Count: int(count)})
@@ -817,9 +819,11 @@ func (t *Torrent) pieceAvailabilityRuns() (ret []pieceAvailabilityRun) {
 	return
 }
 
-func (t *Torrent) pieceAvailabilityFrequencies() (freqs []int) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) pieceAvailabilityFrequencies(lock bool) (freqs []int) {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 
 	freqs = make([]int, t.numActivePeers()+1)
 	for i := range t.pieces {
@@ -924,7 +928,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		// availability frequencies instead.
 		if false {
 			fmt.Fprintf(w, "Piece availability: %v\n", strings.Join(func() (ret []string) {
-				for _, run := range t.pieceAvailabilityRuns() {
+				for _, run := range t.pieceAvailabilityRuns(false) {
 					ret = append(ret, run.String())
 				}
 				return
@@ -932,7 +936,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		}
 		fmt.Fprintf(w, "Piece availability frequency: %v\n", strings.Join(
 			func() (ret []string) {
-				for avail, freq := range t.pieceAvailabilityFrequencies() {
+				for avail, freq := range t.pieceAvailabilityFrequencies(false) {
 					if freq == 0 {
 						continue
 					}
@@ -1020,9 +1024,11 @@ func (t *Torrent) haveInfo(lock bool) bool {
 
 // Returns a run-time generated MetaInfo that includes the info bytes and
 // announce-list as currently known to the client.
-func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) newMetaInfo(lock bool) metainfo.MetaInfo {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 
 	return metainfo.MetaInfo{
 		CreationDate: time.Now().Unix(),
@@ -1141,7 +1147,7 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	if t.storage != nil {
 		t.deletePieceRequestOrder()
 	}
-	t.assertAllPiecesRelativeAvailabilityZero()
+	t.assertAllPiecesRelativeAvailabilityZero(true)
 	t.pex.Reset()
 	t.cl.event.Broadcast()
 	t.pieceStateChanges.Close()
@@ -1149,9 +1155,11 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	return
 }
 
-func (t *Torrent) assertAllPiecesRelativeAvailabilityZero() {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) assertAllPiecesRelativeAvailabilityZero(lock bool) {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 
 	for i := range t.pieces {
 		p := &t.pieces[i]
@@ -2266,7 +2274,7 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 			// We're also announcing ourselves as a listener, so we don't just want peer addresses.
 			// TODO: We can include the announce_peer step depending on whether we can receive
 			// inbound connections. We should probably only announce once every 15 mins too.
-			if !t.wantAnyConns() {
+			if !t.wantAnyConns(true) {
 				goto wait
 			}
 			// TODO: Determine if there's a listener on the port we're announcing.
@@ -2454,9 +2462,11 @@ func (t *Torrent) newConnsAllowed(lock bool) bool {
 	return true
 }
 
-func (t *Torrent) wantAnyConns() bool {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) wantAnyConns(lock bool) bool {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 
 	if !t.networkingEnabled.Bool() {
 		return false
@@ -2589,13 +2599,10 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		p.mu.RUnlock()
 		t.clearPieceTouchers(piece, true)
 
-		/* Temp for testing
-		hasDirty := p.hasDirtyChunks()
-
-		if hasDirty {
+		if p.hasDirtyChunks(true) {
 			p.Flush() // You can be synchronous here!
 		}
-		*/
+
 		err := p.Storage().MarkComplete()
 		if err != nil {
 			t.logger.Levelf(log.Warning, "%T: error marking piece complete %d: %s", t.storage, piece, err)
@@ -2750,7 +2757,7 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 		}()
 
 		for !t.closed.IsSet() {
-			pi, ok := t.getPieceToHash()
+			pi, ok := t.getPieceToHash(true)
 			if !ok {
 				break
 			}
@@ -2828,9 +2835,11 @@ func (t *Torrent) processHashResults() {
 	}
 }
 
-func (t *Torrent) getPieceToHash() (ret pieceIndex, ok bool) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) getPieceToHash(lock bool) (ret pieceIndex, ok bool) {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 
 	t.piecesQueuedForHash.IterTyped(func(i pieceIndex) bool {
 		if t.piece(i, false).hashing {
@@ -3027,9 +3036,12 @@ func (t *Torrent) numQueuedForHash(lock bool) uint64 {
 	return t.piecesQueuedForHash.Len()
 }
 
-func (t *Torrent) dialTimeout() time.Duration {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+func (t *Torrent) dialTimeout(lock bool) time.Duration {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
+
 	return reducedDialTimeout(t.cl.config.MinDialTimeout, t.cl.config.NominalDialTimeout, t.cl.config.HalfOpenConnsPerTorrent, t.peers.Len())
 }
 
@@ -3560,11 +3572,4 @@ func (t *Torrent) numHalfOpenAttempts(lock bool) (num int) {
 		num += len(attempts)
 	}
 	return
-}
-
-func (t *Torrent) getDialTimeoutUnlocked() time.Duration {
-	cl := t.cl
-	cl.rLock()
-	defer cl.rUnlock()
-	return t.dialTimeout()
 }

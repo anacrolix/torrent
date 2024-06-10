@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/anacrolix/torrent/segments"
 )
@@ -15,9 +16,12 @@ type Mmap interface {
 }
 
 type MMapSpan struct {
-	mu             sync.RWMutex
-	mMaps          []Mmap
-	segmentLocater segments.Index
+	mu              sync.RWMutex
+	mMaps           []Mmap
+	segmentLocater  segments.Index
+	flushTimer      *time.Timer
+	FlushTime       time.Duration
+	FlushedCallback func()
 }
 
 func (ms *MMapSpan) Append(mMap Mmap) {
@@ -27,18 +31,57 @@ func (ms *MMapSpan) Append(mMap Mmap) {
 func (ms *MMapSpan) Flush() (errs []error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
-	for _, mMap := range ms.mMaps {
-		err := mMap.Flush()
-		if err != nil {
-			errs = append(errs, err)
-		}
+	if ms.flushTimer != nil {
+		ms.flushTimer = time.AfterFunc(ms.FlushTime,
+			func() {
+				// TODO deal with logging errors
+				ms.flushMaps()
+			})
 	}
+	return
+}
+
+func (ms *MMapSpan) flushMaps() (errs []error) {
+	var flushedCallback func()
+
+	errs = func() (errs []error) {
+		ms.mu.RLock()
+		defer ms.mu.RUnlock()
+		if ms.flushTimer != nil {
+			ms.flushTimer = nil
+			/*for _, mMap := range ms.mMaps {
+				err := mMap.Flush()
+				if err != nil {
+					errs = append(errs, err)
+
+				}
+			}*/
+
+			if len(errs) == 0 {
+				flushedCallback = ms.FlushedCallback
+			}
+		}
+
+		return
+	}()
+
+	if flushedCallback != nil {
+		flushedCallback()
+	}
+
 	return
 }
 
 func (ms *MMapSpan) Close() (errs []error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
+
+	if ms.flushTimer != nil {
+		ms.flushTimer.Stop()
+		errs = ms.flushMaps()
+		ms.flushTimer = nil
+	}
+
 	for _, mMap := range ms.mMaps {
 		err := mMap.Unmap()
 		if err != nil {

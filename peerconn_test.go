@@ -291,7 +291,7 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	}, true), qt.IsNil)
 	pc.t.onSetInfo(true, true)
 	c.Check(tt.numPieces(), qt.Equals, 7)
-	c.Check(tt.pieceAvailabilityRuns(), qt.DeepEquals, []pieceAvailabilityRun{
+	c.Check(tt.pieceAvailabilityRuns(true), qt.DeepEquals, []pieceAvailabilityRun{
 		// The last element of the bitfield is irrelevant, as the Torrent actually only has 7
 		// pieces.
 		{2, 0}, {1, 1}, {1, 0}, {2, 1}, {1, 0},

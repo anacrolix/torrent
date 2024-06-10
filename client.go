@@ -762,7 +762,7 @@ func (cl *Client) dialAndCompleteHandshake(opts outgoingConnOpts) (c *PeerConn, 
 		addr:  addr.String(),
 	}
 	defer dialPool.startDrainer()
-	dialTimeout := opts.t.getDialTimeoutUnlocked()
+	dialTimeout := opts.t.dialTimeout(true)
 	{
 		ctx, cancel := context.WithTimeout(context.Background(), dialTimeout)
 		defer cancel()

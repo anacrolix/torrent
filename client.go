@@ -1411,7 +1411,7 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		t.setInfoBytesLocked(opts.InfoBytes)
+		t.setInfoBytes(opts.InfoBytes, false, false)
 		cl.clearAcceptLimits()
 		t.updateWantPeersEvent(false)
 	}()

@@ -613,13 +613,18 @@ func (t *Torrent) pieceRequestOrderKey(i int) request_strategy.PieceRequestOrder
 
 // This seems to be all the follow-up tasks after info is set, that can't fail.
 func (t *Torrent) onSetInfo(lock bool, lockClient bool) {
+	if lockClient {
+		t.cl.lock()
+		defer t.cl.unlock()
+	}
+
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 	}
 
 	t.pieceRequestOrder = rand.Perm(t.numPieces())
-	t.initPieceRequestOrder(lockClient)
+	t.initPieceRequestOrder(false)
 	MakeSliceWithLength(&t.requestPieceStates, t.numPieces())
 	for i := range t.pieces {
 		p := &t.pieces[i]
@@ -654,7 +659,17 @@ func (t *Torrent) onSetInfo(lock bool, lockClient bool) {
 }
 
 // Called when metadata for a torrent becomes available.
-func (t *Torrent) setInfoBytesLocked(b []byte) error {
+func (t *Torrent) setInfoBytes(b []byte, lock bool, lockClient bool) error {
+	if lockClient {
+		t.cl.lock()
+		defer t.cl.unlock()
+	}
+
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
+
 	if metainfo.HashBytes(b) != t.infoHash {
 		return errors.New("info bytes have wrong hash")
 	}
@@ -670,7 +685,7 @@ func (t *Torrent) setInfoBytesLocked(b []byte) error {
 	if err := t.setInfo(&info, false); err != nil {
 		return err
 	}
-	t.onSetInfo(false, true)
+	t.onSetInfo(false, false)
 	return nil
 }
 
@@ -1792,6 +1807,9 @@ func (t *Torrent) readAt(b []byte, off int64, lock bool) (n int, err error) {
 // the last peer to contribute. TODO: Actually we shouldn't blame peers for failure to open storage
 // etc. Also we should probably cached metadata pieces per-Peer, to isolate failure appropriately.
 func (t *Torrent) maybeCompleteMetadata() error {
+	t.cl.lock()
+	defer t.cl.unlock()
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -1803,7 +1821,7 @@ func (t *Torrent) maybeCompleteMetadata() error {
 		// Don't have enough metadata pieces.
 		return nil
 	}
-	err := t.setInfoBytesLocked(t.metadataBytes)
+	err := t.setInfoBytes(t.metadataBytes, false, false)
 	if err != nil {
 		t.invalidateMetadata(false)
 		return fmt.Errorf("error setting info bytes: %s", err)
@@ -1885,9 +1903,7 @@ func (t *Torrent) bytesCompleted() int64 {
 }
 
 func (t *Torrent) SetInfoBytes(b []byte) (err error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.setInfoBytesLocked(b)
+	return t.setInfoBytes(b, true, true)
 }
 
 // Returns true if connection is removed from torrent.Conns.

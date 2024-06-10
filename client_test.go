@@ -90,7 +90,7 @@ func TestTorrentInitialState(t *testing.T) {
 	)
 	tor.setChunkSize(2)
 	tor.cl.lock()
-	err := tor.setInfoBytesLocked(mi.InfoBytes)
+	err := tor.setInfoBytes(mi.InfoBytes, true, false)
 	tor.cl.unlock()
 	require.NoError(t, err)
 	require.Len(t, tor.pieces, 3)

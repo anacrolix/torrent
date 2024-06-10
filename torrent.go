@@ -742,9 +742,6 @@ func (t *Torrent) setMetadataSize(size int) error {
 // or a display name given such as by the dn value in a magnet link, or "".
 func (t *Torrent) name(lock bool) string {
 	if lock {
-		if t.mu.lc.Load() > 0 {
-			fmt.Println("name", "L", t.mu.locker, "R", t.mu.rlocker)
-		}
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 	}
@@ -2727,7 +2724,7 @@ func (t *Torrent) tryCreateMorePieceHashers(lock bool) {
 				defer t.mu.Unlock()
 			}
 			if t.hashResults == nil {
-				t.hashResults = make(chan hashResult, t.cl.config.PieceHashersPerTorrent*4)
+				t.hashResults = make(chan hashResult, t.cl.config.PieceHashersPerTorrent*16)
 				go t.processHashResults()
 			}
 		}()
@@ -3544,10 +3541,10 @@ func (t *Torrent) trySendHolepunchRendezvous(addrPort netip.AddrPort) error {
 	defer conns.free()
 
 	for _, pc := range conns {
-		if !pc.supportsExtension(utHolepunch.ExtensionName,true) {
+		if !pc.supportsExtension(utHolepunch.ExtensionName, true) {
 			continue
 		}
-		if pc.supportsExtension(pp.ExtensionNamePex,true) {
+		if pc.supportsExtension(pp.ExtensionNamePex, true) {
 			if !g.MapContains(pc.pex.remoteLiveConns, addrPort) {
 				continue
 			}

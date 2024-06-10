@@ -356,9 +356,6 @@ func (cl *Client) AddListener(l Listener) {
 }
 
 func (cl *Client) firewallCallback(net.Addr) bool {
-	if cl._mu.lc.Load() > 0 {
-		fmt.Println("firewallCallback", "L", cl._mu.locker, cl._mu.rlocker)
-	}
 	cl.rLock()
 	block := !cl.wantConns() || !cl.config.AcceptPeerConnections
 	cl.rUnlock()
@@ -1488,9 +1485,6 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 }
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash, wg *sync.WaitGroup) (err error) {
-	fmt.Println("DT")
-	defer fmt.Println("DT", "DONE")
-
 	cl.torrentsMu.Lock()
 	defer cl.torrentsMu.Unlock()
 

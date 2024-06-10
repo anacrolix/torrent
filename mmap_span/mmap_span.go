@@ -6,7 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/torrent/segments"
+	"github.com/anacrolix/torrent/types/infohash"
 )
 
 type Mmap interface {
@@ -15,13 +17,17 @@ type Mmap interface {
 	Bytes() []byte
 }
 
+type FlushedCallback func(infoHash infohash.T, flushed roaring.Bitmap)
+
 type MMapSpan struct {
 	mu              sync.RWMutex
 	mMaps           []Mmap
+	dirtyPieces     roaring.Bitmap
 	segmentLocater  segments.Index
+	InfoHash        infohash.T
 	flushTimer      *time.Timer
 	FlushTime       time.Duration
-	FlushedCallback func()
+	FlushedCallback FlushedCallback
 }
 
 func (ms *MMapSpan) Append(mMap Mmap) {
@@ -42,11 +48,14 @@ func (ms *MMapSpan) Flush() (errs []error) {
 }
 
 func (ms *MMapSpan) flushMaps() (errs []error) {
-	var flushedCallback func()
+	var flushedCallback FlushedCallback
+	var dirtyPieces roaring.Bitmap
 
 	errs = func() (errs []error) {
-		ms.mu.RLock()
-		defer ms.mu.RUnlock()
+		ms.mu.Lock()
+		defer ms.mu.Unlock()
+		dirtyPieces = dirtyPieces
+
 		if ms.flushTimer != nil {
 			ms.flushTimer = nil
 			/*for _, mMap := range ms.mMaps {
@@ -59,6 +68,7 @@ func (ms *MMapSpan) flushMaps() (errs []error) {
 
 			if len(errs) == 0 {
 				flushedCallback = ms.FlushedCallback
+				dirtyPieces = roaring.Bitmap{}
 			}
 		}
 
@@ -66,7 +76,7 @@ func (ms *MMapSpan) flushMaps() (errs []error) {
 	}()
 
 	if flushedCallback != nil {
-		flushedCallback()
+		flushedCallback(ms.InfoHash, ms.dirtyPieces)
 	}
 
 	return
@@ -140,11 +150,24 @@ func (ms *MMapSpan) locateCopy(copyArgs func(remainingArgument, mmapped []byte) 
 
 func (ms *MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
 	// log.Printf("writing %v bytes at %v", len(p), off)
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-	n = ms.locateCopy(func(a, b []byte) (_, _ []byte) { return b, a }, p, off)
-	if n != len(p) {
-		err = io.ErrShortWrite
+	n, err = func() (n int, err error) {
+		ms.mu.RLock()
+		defer ms.mu.RUnlock()
+		n = ms.locateCopy(func(a, b []byte) (_, _ []byte) { return b, a }, p, off)
+		if n != len(p) {
+			err = io.ErrShortWrite
+		}
+
+		return
+	}()
+
+	if err != nil {
+		return
 	}
+
+	ms.mu.Lock()
+	ms.dirtyPieces.Add(uint32(int64(len(p)) / off))
+	ms.mu.Unlock()
+
 	return
 }

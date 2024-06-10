@@ -11,11 +11,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mmap_span"
+	"github.com/anacrolix/torrent/types/infohash"
 )
 
 type mmapClientImpl struct {
@@ -36,9 +38,11 @@ func NewMMapWithCompletion(baseDir string, completion PieceCompletion) *mmapClie
 }
 
 func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (_ TorrentImpl, err error) {
-	span, err := mMapTorrent(info, s.baseDir, 1500*time.Millisecond, func() {
-		if commiter, ok := s.pc.(interface{ Commit() }); ok {
-			commiter.Commit()
+	span, err := mMapTorrent(info, infoHash, s.baseDir, 1500*time.Millisecond, func(infoHash infohash.T, flushed roaring.Bitmap) {
+		if committer, ok := s.pc.(interface {
+			Commit(infoHash infohash.T, flushed roaring.Bitmap)
+		}); ok {
+			committer.Commit(infoHash, flushed)
 		}
 	})
 	t := &mmapTorrentStorage{
@@ -115,8 +119,9 @@ func (sp mmapStoragePiece) MarkNotComplete() error {
 	return nil
 }
 
-func mMapTorrent(md *metainfo.Info, location string, flushTime time.Duration, flushedCallback func()) (mms *mmap_span.MMapSpan, err error) {
+func mMapTorrent(md *metainfo.Info, infoHash metainfo.Hash, location string, flushTime time.Duration, flushedCallback mmap_span.FlushedCallback) (mms *mmap_span.MMapSpan, err error) {
 	mms = &mmap_span.MMapSpan{
+		InfoHash:        infoHash,
 		FlushTime:       flushTime,
 		FlushedCallback: flushedCallback,
 	}

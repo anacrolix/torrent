@@ -978,7 +978,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	dumpStats(w, t.stats(false))
 
 	fmt.Fprintf(w, "webseeds:\n")
-	t.writePeerStatuses(w, t.webSeedsAsSlice(false))
+	t.writePeerStatuses(w, t.webSeedsAsSlice(false), false)
 
 	peerConns := t.peerConnsAsSlice(false)
 	defer peerConns.free()
@@ -999,15 +999,15 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	fmt.Fprintf(w, "%v peer conns:\n", len(peerConns))
 	t.writePeerStatuses(w, g.SliceMap(peerConns, func(pc *PeerConn) *Peer {
 		return &pc.Peer
-	}))
+	}), false)
 }
 
-func (t *Torrent) writePeerStatuses(w io.Writer, peers []*Peer) {
+func (t *Torrent) writePeerStatuses(w io.Writer, peers []*Peer, lock bool) {
 	var buf bytes.Buffer
 	for _, c := range peers {
 		fmt.Fprintf(w, "- ")
 		buf.Reset()
-		c.writeStatus(&buf)
+		c.writeStatus(&buf, true, lock)
 		w.Write(bytes.TrimRight(
 			bytes.ReplaceAll(buf.Bytes(), []byte("\n"), []byte("\n  ")),
 			" "))
@@ -1320,7 +1320,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	if !t.haveAllPieces(lock) {
 		return
 	}
-	if all, known := p.peerHasAllPieces(lock); !(known && all) {
+	if all, known := p.peerHasAllPieces(true, lock); !(known && all) {
 		return
 	}
 	if p.useful(lock) {
@@ -1951,7 +1951,7 @@ func (t *Torrent) decPeerPieceAvailability(p *Peer, lock bool) {
 	if !t.haveInfo(lock) {
 		return
 	}
-	p.peerPieces().Iterate(func(i uint32) bool {
+	p.peerPieces(true).Iterate(func(i uint32) bool {
 		p.t.decPieceAvailability(pieceIndex(i), lock)
 		return true
 	})
@@ -2324,7 +2324,7 @@ func (t *Torrent) stats(lock bool) (ret TorrentStats) {
 	ret.TotalPeers = t.numTotalPeers(false)
 	ret.ConnectedSeeders = 0
 	for c := range t.conns {
-		if all, ok := c.peerHasAllPieces(false); all && ok {
+		if all, ok := c.peerHasAllPieces(true, false); all && ok {
 			ret.ConnectedSeeders++
 		}
 	}
@@ -3484,7 +3484,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 			return nil
 		}
 		for _, pc := range targets {
-			if !pc.supportsExtension(utHolepunch.ExtensionName) {
+			if !pc.supportsExtension(utHolepunch.ExtensionName, true) {
 				sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NoSupport)
 				continue
 			}
@@ -3544,10 +3544,10 @@ func (t *Torrent) trySendHolepunchRendezvous(addrPort netip.AddrPort) error {
 	defer conns.free()
 
 	for _, pc := range conns {
-		if !pc.supportsExtension(utHolepunch.ExtensionName) {
+		if !pc.supportsExtension(utHolepunch.ExtensionName,true) {
 			continue
 		}
-		if pc.supportsExtension(pp.ExtensionNamePex) {
+		if pc.supportsExtension(pp.ExtensionNamePex,true) {
 			if !g.MapContains(pc.pex.remoteLiveConns, addrPort) {
 				continue
 			}

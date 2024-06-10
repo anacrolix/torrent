@@ -174,16 +174,20 @@ func (cn *Peer) expectingChunks() bool {
 	return haveAllowedFastRequests
 }
 
-func (cn *Peer) remoteChokingPiece(piece pieceIndex) bool {
-	cn.mu.RLock()
-	defer cn.mu.RUnlock()
+func (cn *Peer) remoteChokingPiece(piece pieceIndex, lock bool) bool {
+	if lock {
+		cn.mu.RLock()
+		defer cn.mu.RUnlock()
+	}
 
 	return cn.peerChoking && !cn.peerAllowedFast.Contains(piece)
 }
 
-func (cn *Peer) cumInterest() time.Duration {
-	cn.mu.RLock()
-	defer cn.mu.RUnlock()
+func (cn *Peer) cumInterest(lock bool) time.Duration {
+	if lock {
+		cn.mu.RLock()
+		defer cn.mu.RUnlock()
+	}
 
 	ret := cn.priorInterest
 	if cn.requestState.Interested {
@@ -196,9 +200,12 @@ func (cn *Peer) locker() *lockWithDeferreds {
 	return cn.t.cl.locker()
 }
 
-func (cn *PeerConn) supportsExtension(ext pp.ExtensionName) bool {
-	cn.mu.RLock()
-	defer cn.mu.RUnlock()
+func (cn *PeerConn) supportsExtension(ext pp.ExtensionName, lock bool) bool {
+	if lock {
+		cn.mu.RLock()
+		defer cn.mu.RUnlock()
+	}
+
 	_, ok := cn.PeerExtensionIDs[ext]
 	return ok
 }
@@ -217,10 +224,10 @@ func (cn *Peer) bestPeerNumPieces(lock bool, lockTorrent bool) pieceIndex {
 	return cn.peerMinPieces
 }
 
-func (cn *Peer) completedString() string {
-	have := pieceIndex(cn.peerPieces().GetCardinality())
-	best := cn.bestPeerNumPieces(true, true)
-	if all, _ := cn.peerHasAllPieces(true); all {
+func (cn *Peer) completedString(lock bool, lockTorrent bool) string {
+	have := pieceIndex(cn.peerPieces(lock).GetCardinality())
+	best := cn.bestPeerNumPieces(lock, lockTorrent)
+	if all, _ := cn.peerHasAllPieces(lock, lockTorrent); all {
 		have = best
 	}
 	return fmt.Sprintf("%d/%d", have, best)
@@ -292,12 +299,23 @@ func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int))
 	next(None[pieceIndex]())
 }
 
-func (cn *Peer) writeStatus(w io.Writer) {
+func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
+
+	if lockTorrent {
+		cn.t.mu.RLock()
+		defer cn.t.mu.RUnlock()
+	}
+
+	if lock {
+		cn.mu.RLock()
+		defer cn.mu.RUnlock()
+	}
+
 	// \t isn't preserved in <pre> blocks?
 	if cn.closed.IsSet() {
 		fmt.Fprint(w, "CLOSED: ")
 	}
-	fmt.Fprintln(w, strings.Join(cn.peerImplStatusLines(), "\n"))
+	fmt.Fprintln(w, strings.Join(cn.peerImplStatusLines(false), "\n"))
 	prio, err := cn.peerPriority()
 	prioStr := fmt.Sprintf("%08x", prio)
 	if err != nil {
@@ -307,25 +325,23 @@ func (cn *Peer) writeStatus(w io.Writer) {
 	fmt.Fprintf(w, "last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),
-		eventAgeString(cn.lastHelpful(true)),
-		cn.cumInterest(),
+		eventAgeString(cn.lastHelpful(false)),
+		cn.cumInterest(false),
 		cn.totalExpectingTime(),
 	)
 
-	cn.mu.RLock()
 	lenPeerTouchedPieces := len(cn.peerTouchedPieces)
-	cn.mu.RUnlock()
 
 	fmt.Fprintf(w,
 		"%s completed, %d pieces touched, good chunks: %v/%v:%v reqq: %d+%v/(%d/%d):%d/%d, flags: %s, dr: %.1f KiB/s\n",
-		cn.completedString(),
+		cn.completedString(false, false),
 		lenPeerTouchedPieces,
 		&cn._stats.ChunksReadUseful,
 		&cn._stats.ChunksRead,
 		&cn._stats.ChunksWritten,
 		cn.requestState.Requests.GetCardinality(),
 		cn.requestState.Cancelled.GetCardinality(),
-		cn.peerImpl.nominalMaxRequests(true, true),
+		cn.peerImpl.nominalMaxRequests(false, false),
 		cn.PeerMaxRequests,
 		len(cn.peerRequests),
 		localClientReqq,
@@ -379,11 +395,11 @@ func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool, lockTorrent bool) bool
 		defer cn.mu.RUnlock()
 	}
 
-	if all, known := cn.peerHasAllPieces(false); all && known {
+	if all, known := cn.peerHasAllPieces(false, false); all && known {
 		return true
 	}
 
-	return cn.peerPieces().ContainsInt(piece)
+	return cn.peerPieces(lock).ContainsInt(piece)
 }
 
 // 64KiB, but temporarily less to work around an issue with WebRTC. TODO: Update when
@@ -865,22 +881,27 @@ func (cn *Peer) netGoodPiecesDirtied() int64 {
 	return cn._stats.PiecesDirtiedGood.Int64() - cn._stats.PiecesDirtiedBad.Int64()
 }
 
-func (c *Peer) peerHasWantedPieces(lockTorrent bool) bool {
+func (c *Peer) peerHasWantedPieces(lock bool, lockTorrent bool) bool {
 	if lockTorrent {
 		c.t.mu.RLock()
 		defer c.t.mu.RUnlock()
 	}
 
-	if all, _ := c.peerHasAllPieces(false); all {
+	if lock {
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+	}
+
+	if all, _ := c.peerHasAllPieces(false, false); all {
 		isEmpty := c.t._pendingPieces.IsEmpty()
 
 		return !c.t.haveAllPieces(false) && !isEmpty
 	}
 	if !c.t.haveInfo(false) {
-		return !c.peerPieces().IsEmpty()
+		return !c.peerPieces(false).IsEmpty()
 	}
 
-	return c.peerPieces().Intersects(&c.t._pendingPieces)
+	return c.peerPieces(false).Intersects(&c.t._pendingPieces)
 }
 
 // Returns true if an outstanding request is removed. Cancelled requests should be handled
@@ -1001,12 +1022,17 @@ func (l connectionTrust) Less(r connectionTrust) bool {
 }
 
 // Returns a new Bitmap that includes bits for all pieces the peer could have based on their claims.
-func (cn *Peer) newPeerPieces(lockTorrent bool) *roaring.Bitmap {
+func (cn *Peer) newPeerPieces(lock bool, lockTorrent bool) (ret *roaring.Bitmap) {
 	// TODO: Can we use copy on write?
-	cn.mu.RLock()
-	ret := cn.peerPieces().Clone()
-	cn.mu.RUnlock()
-	if all, _ := cn.peerHasAllPieces(lockTorrent); all {
+	func() {
+		if lock {
+			cn.mu.RLock()
+			defer cn.mu.RUnlock()
+		}
+		ret = cn.peerPieces(false).Clone()
+	}()
+
+	if all, _ := cn.peerHasAllPieces(lock, lockTorrent); all {
 		if cn.t.haveInfo(true) {
 			ret.AddRange(0, bitmap.BitRange(cn.t.numPieces()))
 		} else {

@@ -26,7 +26,7 @@ type peerImpl interface {
 	// Rebuke the peer
 	ban()
 	String() string
-	peerImplStatusLines() []string
+	peerImplStatusLines(lock bool) []string
 
 	// the peers is running low on requests and needs some more
 	// Note: for web peers this means low on web requests - as we
@@ -38,8 +38,8 @@ type peerImpl interface {
 	// guess at how many pieces are in a torrent, and assume they have all pieces based on them
 	// having sent haves for everything, but we don't know for sure. But if they send a have-all
 	// message, then it's clear that they do.
-	peerHasAllPieces(lockTorrent bool) (all, known bool)
-	peerPieces() *roaring.Bitmap
+	peerHasAllPieces(lock bool, lockTorrent bool) (all, known bool)
+	peerPieces(lock bool) *roaring.Bitmap
 
 	nominalMaxRequests(lock bool, lockTorrent bool) maxRequests
 }

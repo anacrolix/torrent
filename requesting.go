@@ -319,12 +319,12 @@ func (t *Torrent) cacheNextRequestIndexesForReuse(slice []RequestIndex, lock boo
 // Whether we should allow sending not interested ("losing interest") to the peer. I noticed
 // qBitTorrent seems to punish us for sending not interested when we're streaming and don't
 // currently need anything.
-func (p *Peer) allowSendNotInterested(lockTorrent bool) bool {
+func (p *Peer) allowSendNotInterested(lock bool, lockTorrent bool) bool {
 	// Except for caching, we're not likely to lose pieces very soon.
 	if p.t.haveAllPieces(lockTorrent) {
 		return true
 	}
-	all, known := p.peerHasAllPieces(lockTorrent)
+	all, known := p.peerHasAllPieces(lock, lockTorrent)
 	if all || !known {
 		return false
 	}
@@ -333,12 +333,13 @@ func (p *Peer) allowSendNotInterested(lockTorrent bool) bool {
 		p.t.mu.RLock()
 		defer p.t.mu.RUnlock()
 	}
-	return roaring.AndNot(p.peerPieces(), &p.t._completedPieces).IsEmpty()
+	return roaring.AndNot(p.peerPieces(lock), &p.t._completedPieces).IsEmpty()
 }
 
 // Transmit/action the request state to the peer.
 func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorrent bool) {
 	t := p.t
+
 	if lockTorrent {
 		t.mu.Lock()
 		defer t.mu.Unlock()
@@ -352,7 +353,7 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 	current := &p.requestState
 	// Make interest sticky
 	if !next.Interested && current.Interested {
-		if !p.allowSendNotInterested(false) {
+		if !p.allowSendNotInterested(false, false) {
 			next.Interested = true
 		}
 	}

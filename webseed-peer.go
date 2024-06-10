@@ -43,7 +43,12 @@ type webseedPeer struct {
 
 var _ peerImpl = (*webseedPeer)(nil)
 
-func (me *webseedPeer) peerImplStatusLines() []string {
+func (me *webseedPeer) peerImplStatusLines(lock bool) []string {
+	if lock {
+		me.peer.mu.RLock()
+		defer me.peer.mu.RUnlock()
+	}
+
 	return []string{
 		me.client.Url,
 		fmt.Sprintf("last unhandled error: %v", eventAgeString(me.lastUnhandledErr)),
@@ -146,7 +151,7 @@ func (ws *webseedPeer) requester(i int) {
 
 		ws.peer.requestState.Requests.Iterate(func(x RequestIndex) bool {
 			r := ws.peer.t.requestIndexToRequest(x, true)
-			
+
 			if _, ok := ws.activeRequests[r]; ok {
 				return true
 			}
@@ -494,13 +499,24 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	return err
 }
 
-func (me *webseedPeer) peerPieces() *roaring.Bitmap {
+func (me *webseedPeer) peerPieces(lock bool) *roaring.Bitmap {
+	if lock {
+		me.peer.mu.RLock()
+		defer me.peer.mu.RUnlock()
+	}
+
 	return &me.client.Pieces
 }
 
-func (cn *webseedPeer) peerHasAllPieces(lockTorrent bool) (all, known bool) {
+func (cn *webseedPeer) peerHasAllPieces(lock bool, lockTorrent bool) (all, known bool) {
 	if !cn.peer.t.haveInfo(lockTorrent) {
 		return true, false
 	}
+
+	if lock {
+		cn.peer.mu.RLock()
+		defer cn.peer.mu.RUnlock()
+	}
+
 	return cn.client.Pieces.GetCardinality() == uint64(cn.peer.t.numPieces()), true
 }

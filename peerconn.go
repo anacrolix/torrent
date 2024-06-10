@@ -71,14 +71,14 @@ type PeerConn struct {
 	outstandingHolepunchingRendezvous map[netip.AddrPort]struct{}
 }
 
-func (cn *PeerConn) pexStatus() string {
+func (cn *PeerConn) pexStatus(lock bool) string {
 	if !cn.bitExtensionEnabled(pp.ExtensionBitLtep) {
 		return "extended protocol disabled"
 	}
 	if cn.PeerExtensionIDs == nil {
 		return "pending extended handshake"
 	}
-	if !cn.supportsExtension(pp.ExtensionNamePex) {
+	if !cn.supportsExtension(pp.ExtensionNamePex, lock) {
 		return "unsupported"
 	}
 	if true {
@@ -101,13 +101,13 @@ func (cn *PeerConn) pexStatus() string {
 	}
 }
 
-func (cn *PeerConn) peerImplStatusLines() []string {
+func (cn *PeerConn) peerImplStatusLines(lock bool) []string {
 	return []string{
 		cn.connString,
 		fmt.Sprintf("peer id: %+q", cn.PeerID),
 		fmt.Sprintf("extensions: %v", cn.PeerExtensionBytes),
 		fmt.Sprintf("ltep extensions: %v", cn.PeerExtensionIDs),
-		fmt.Sprintf("pex: %s", cn.pexStatus()),
+		fmt.Sprintf("pex: %s", cn.pexStatus(lock)),
 	}
 }
 
@@ -147,12 +147,16 @@ func (l *PeerConn) hasPreferredNetworkOver(r *PeerConn) bool {
 	return ml.Less()
 }
 
-func (cn *PeerConn) peerHasAllPieces(lockTorrent bool) (all, known bool) {
+func (cn *PeerConn) peerHasAllPieces(lock bool, lockTorrent bool) (all, known bool) {
 	if cn.peerSentHaveAll {
 		return true, true
 	}
 	if !cn.t.haveInfo(lockTorrent) {
 		return false, false
+	}
+	if lock {
+		cn.mu.RLock()
+		defer cn.mu.RUnlock()
 	}
 	return cn._peerPieces.GetCardinality() == uint64(cn.t.numPieces()), true
 }
@@ -168,7 +172,12 @@ func (cn *PeerConn) setNumPieces(num pieceIndex, lock bool) {
 	cn.peerPiecesChanged(lock)
 }
 
-func (cn *PeerConn) peerPieces() *roaring.Bitmap {
+func (cn *PeerConn) peerPieces(lock bool) *roaring.Bitmap {
+	if lock {
+		cn.mu.RLock()
+		defer cn.mu.RUnlock()
+	}
+
 	return &cn._peerPieces
 }
 
@@ -1042,7 +1051,7 @@ func (c *PeerConn) uploadAllowed() bool {
 	if c.t.seeding(true) {
 		return true
 	}
-	if !c.peerHasWantedPieces(true) {
+	if !c.peerHasWantedPieces(true, true) {
 		return false
 	}
 	// Don't upload more than 100 KiB more than we download.
@@ -1188,7 +1197,7 @@ func (pc *PeerConn) String() string {
 // Returns the pieces the peer could have based on their claims. If we don't know how many pieces
 // are in the torrent, it could be a very large range if the peer has sent HaveAll.
 func (pc *PeerConn) PeerPieces() *roaring.Bitmap {
-	return pc.newPeerPieces(true)
+	return pc.newPeerPieces(true, true)
 }
 
 func (pc *PeerConn) remoteIsTransmission() bool {
@@ -1216,12 +1225,12 @@ func (c *PeerConn) useful(lockTorrent bool) bool {
 		return false
 	}
 	if !t.haveInfo(lockTorrent) {
-		return c.supportsExtension("ut_metadata")
+		return c.supportsExtension("ut_metadata", true)
 	}
 	if t.seeding(lockTorrent) && c.peerInterested {
 		return true
 	}
-	if c.peerHasWantedPieces(lockTorrent) {
+	if c.peerHasWantedPieces(true, lockTorrent) {
 		return true
 	}
 	return false

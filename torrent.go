@@ -1157,8 +1157,8 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 		}
 		h := pieceHash.New()
 		differingPeers, err = t.hashPieceWithSpecificHash(piece, h)
-		// For a hybrid torrent, we work with the v2 files, but if we use a v1 hash, we can assume that
-		// the pieces are padded with zeroes.
+		// For a hybrid torrent, we work with the v2 files, but if we use a v1 hash, we can assume
+		// that the pieces are padded with zeroes.
 		if t.info.FilesArePieceAligned() {
 			paddingLen := p.Info().V1Length() - p.Info().Length()
 			written, err := io.CopyN(h, zeroReader, paddingLen)

@@ -45,7 +45,7 @@ func (p Piece) V1Length() int64 {
 	case 0 <= i && i < lastPiece:
 		return p.Info.PieceLength
 	case lastPiece >= 0 && i == lastPiece:
-		files := p.Info.UpvertedFiles()
+		files := p.Info.UpvertedV1Files()
 		lastFile := files[len(files)-1]
 		length := lastFile.TorrentOffset + lastFile.Length - int64(i)*p.Info.PieceLength
 		if length <= 0 || length > p.Info.PieceLength {

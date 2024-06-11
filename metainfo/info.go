@@ -150,9 +150,8 @@ func (info *Info) IsDir() bool {
 	return len(info.Files) != 0
 }
 
-// The files field, converted up from the old single-file in the parent info
-// dict if necessary. This is a helper to avoid having to conditionally handle
-// single and multi-file torrent infos.
+// The files field, converted up from the old single-file in the parent info dict if necessary. This
+// is a helper to avoid having to conditionally handle single and multi-file torrent infos.
 func (info *Info) UpvertedFiles() (files []FileInfo) {
 	if info.HasV2() {
 		info.FileTree.upvertedFiles(info.PieceLength, func(fi FileInfo) {
@@ -160,6 +159,12 @@ func (info *Info) UpvertedFiles() (files []FileInfo) {
 		})
 		return
 	}
+	return info.UpvertedV1Files()
+}
+
+// UpvertedFiles but specific to the files listed in the v1 info fields. This will include padding
+// files for example that wouldn't appear in v2 file trees.
+func (info *Info) UpvertedV1Files() (files []FileInfo) {
 	if len(info.Files) == 0 {
 		return []FileInfo{{
 			Length: info.Length,

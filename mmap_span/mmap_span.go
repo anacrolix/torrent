@@ -17,7 +17,7 @@ type Mmap interface {
 	Bytes() []byte
 }
 
-type FlushedCallback func(infoHash infohash.T, flushed roaring.Bitmap)
+type FlushedCallback func(infoHash infohash.T, flushed *roaring.Bitmap)
 
 type MMapSpan struct {
 	mu              sync.RWMutex
@@ -37,7 +37,7 @@ func (ms *MMapSpan) Append(mMap Mmap) {
 func (ms *MMapSpan) Flush() (errs []error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
-	if ms.flushTimer != nil {
+	if ms.flushTimer == nil {
 		ms.flushTimer = time.AfterFunc(ms.FlushTime,
 			func() {
 				// TODO deal with logging errors
@@ -49,12 +49,12 @@ func (ms *MMapSpan) Flush() (errs []error) {
 
 func (ms *MMapSpan) flushMaps() (errs []error) {
 	var flushedCallback FlushedCallback
-	var dirtyPieces roaring.Bitmap
+	var dirtyPieces *roaring.Bitmap
 
 	errs = func() (errs []error) {
 		ms.mu.Lock()
 		defer ms.mu.Unlock()
-		dirtyPieces = dirtyPieces
+		dirtyPieces = ms.dirtyPieces.Clone()
 
 		if ms.flushTimer != nil {
 			ms.flushTimer = nil
@@ -68,7 +68,7 @@ func (ms *MMapSpan) flushMaps() (errs []error) {
 
 			if len(errs) == 0 {
 				flushedCallback = ms.FlushedCallback
-				dirtyPieces = roaring.Bitmap{}
+				ms.dirtyPieces = roaring.Bitmap{}
 			}
 		}
 
@@ -76,7 +76,7 @@ func (ms *MMapSpan) flushMaps() (errs []error) {
 	}()
 
 	if flushedCallback != nil {
-		flushedCallback(ms.InfoHash, ms.dirtyPieces)
+		flushedCallback(ms.InfoHash, dirtyPieces)
 	}
 
 	return
@@ -165,10 +165,9 @@ func (ms *MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
 		return
 	}
 
-	//Todo
-	//ms.mu.Lock()
-	//ms.dirtyPieces.Add(uint32(int64(len(p)) / off))
-	//ms.mu.Unlock()
+	ms.mu.Lock()
+	ms.dirtyPieces.Add(uint32(off / int64(len(p))))
+	ms.mu.Unlock()
 
 	return
 }

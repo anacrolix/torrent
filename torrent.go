@@ -50,6 +50,8 @@ import (
 	"github.com/anacrolix/torrent/webtorrent"
 )
 
+/*
+For lock debugging
 type mu struct {
 	sync.RWMutex
 	rlc        atomic.Int32
@@ -122,6 +124,7 @@ func (m *mu) Unlock() {
 	m.RWMutex.Unlock()
 	//fmt.Println("LUN", m.lc) //, string(dbg.Stack()))
 }
+*/
 
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
 // available, see .Info and .GotInfo.
@@ -194,7 +197,7 @@ type Torrent struct {
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
-	mu          mu
+	mu          sync.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if

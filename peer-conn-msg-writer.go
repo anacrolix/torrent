@@ -16,8 +16,6 @@ func (pc *PeerConn) initMessageWriter() {
 	w := &pc.messageWriter
 	*w = peerConnMsgWriter{
 		fillWriteBuffer: func() {
-			pc.locker().Lock()
-			defer pc.locker().Unlock()
 			if pc.closed.IsSet() {
 				return
 			}
@@ -27,23 +25,19 @@ func (pc *PeerConn) initMessageWriter() {
 		logger: pc.logger,
 		w:      pc.w,
 		keepAlive: func() bool {
-			pc.locker().RLock()
-			defer pc.locker().RUnlock()
-			return pc.useful()
+			return pc.useful(true)
 		},
 		writeBuffer: new(bytes.Buffer),
 	}
 }
 
-func (pc *PeerConn) startMessageWriter() {
+func (pc *PeerConn) startMessageWriter(lockTorrent bool) {
 	pc.initMessageWriter()
-	go pc.messageWriterRunner()
+	go pc.messageWriterRunner(lockTorrent)
 }
 
-func (pc *PeerConn) messageWriterRunner() {
-	defer pc.locker().Unlock()
-	defer pc.close()
-	defer pc.locker().Lock()
+func (pc *PeerConn) messageWriterRunner(lockTorrent bool) {
+	defer pc.close(lockTorrent)
 	pc.messageWriter.run(pc.t.cl.config.KeepAliveTimeout)
 }
 

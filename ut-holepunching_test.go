@@ -119,7 +119,7 @@ func TestHolepunchConnect(t *testing.T) {
 		requireRendezvous:       true,
 		skipHolepunchRendezvous: false,
 		HeaderObfuscationPolicy: llg.cl.config.HeaderObfuscationPolicy,
-	}, true)
+	}, true, true)
 	llg.cl.unlock()
 	wg.Wait()
 
@@ -133,8 +133,8 @@ func TestHolepunchConnect(t *testing.T) {
 }
 
 func waitForConns(t *Torrent) {
-	t.cl.lock()
-	defer t.cl.unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	for {
 		for range t.conns {
 			return

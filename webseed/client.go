@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/RoaringBitmap/roaring"
 
@@ -68,7 +69,7 @@ type RequestResult struct {
 	Err   error
 }
 
-func (ws *Client) NewRequest(r RequestSpec) Request {
+func (ws *Client) NewRequest(r RequestSpec, receivingCounter *atomic.Int64) Request {
 	ctx, cancel := context.WithCancel(context.Background())
 	var requestParts []requestPart
 	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
@@ -98,7 +99,7 @@ func (ws *Client) NewRequest(r RequestSpec) Request {
 		Result: make(chan RequestResult, 1),
 	}
 	go func() {
-		b, err := readRequestPartResponses(ctx, requestParts)
+		b, err := readRequestPartResponses(ctx, requestParts, receivingCounter)
 		req.Result <- RequestResult{
 			Bytes: b,
 			Err:   err,
@@ -174,14 +175,18 @@ func recvPartResult(ctx context.Context, buf *bytes.Buffer, part requestPart, re
 
 var ErrTooFast = errors.New("making requests too fast")
 
-func readRequestPartResponses(ctx context.Context, parts []requestPart) ([]byte, error) {
+func readRequestPartResponses(ctx context.Context, parts []requestPart, receivingCounter *atomic.Int64) ([]byte, error) {
 	var buf bytes.Buffer
 
 	for _, part := range parts {
 		if result, err := part.do(); err != nil {
 			return nil, err
 		} else {
-			if err = recvPartResult(ctx, &buf, part, result); err != nil {
+			if err = func() error {
+				receivingCounter.Add(1)
+				defer receivingCounter.Add(-1)
+				return recvPartResult(ctx, &buf, part, result)
+			}(); err != nil {
 				return nil, fmt.Errorf("reading %q at %q: %w", part.req.URL, part.req.Header.Get("Range"), err)
 			}
 		}

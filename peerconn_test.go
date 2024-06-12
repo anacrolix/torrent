@@ -4,12 +4,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	g "github.com/anacrolix/generics"
 	"io"
 	"net"
 	"net/netip"
 	"sync"
 	"testing"
+
+	g "github.com/anacrolix/generics"
 
 	"github.com/frankban/quicktest"
 	qt "github.com/frankban/quicktest"
@@ -29,16 +30,16 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	cl.initLogger()
 	qtc := qt.New(t)
 	c := cl.newConnection(nil, newConnectionOpts{network: "io.Pipe"})
-	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil))
-	err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)})
+	c.setTorrent(cl.newTorrent(metainfo.Hash{}, nil), true)
+	err := c.t.setInfo(&metainfo.Info{Pieces: make([]byte, metainfo.HashSize*3)}, true)
 	qtc.Assert(err, qt.IsNil)
 	r, w := io.Pipe()
 	// c.r = r
 	c.w = w
-	c.startMessageWriter()
+	c.startMessageWriter(true)
 	c.locker().Lock()
 	c.t._completedPieces.Add(1)
-	c.postBitfield( /*[]bool{false, true, false}*/ )
+	c.postBitfield(true /*[]bool{false, true, false}*/)
 	c.locker().Unlock()
 	c.locker().Lock()
 	c.have(2)
@@ -104,9 +105,9 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		Pieces:      make([]byte, 20),
 		Length:      1 << 20,
 		PieceLength: 1 << 20,
-	}))
+	}, true))
 	t.storage = &storage.Torrent{TorrentImpl: storage.TorrentImpl{Piece: ts.Piece, Close: ts.Close}}
-	t.onSetInfo()
+	t.onSetInfo(true, true)
 	t._pendingPieces.Add(0)
 	r, w := net.Pipe()
 	c.Logf("pipe reader remote addr: %v", r.RemoteAddr())
@@ -118,9 +119,9 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		connString: regularNetConnPeerConnConnString(r),
 	})
 	c.Assert(cn.bannableAddr.Ok, qt.IsTrue)
-	cn.setTorrent(t)
-	requestIndexBegin := t.pieceRequestIndexOffset(0)
-	requestIndexEnd := t.pieceRequestIndexOffset(1)
+	cn.setTorrent(t, true)
+	requestIndexBegin := t.pieceRequestIndexOffset(0,true)
+	requestIndexEnd := t.pieceRequestIndexOffset(1,true)
 	eachRequestIndex := func(f func(ri RequestIndex)) {
 		for ri := requestIndexBegin; ri < requestIndexEnd; ri++ {
 			f(ri)
@@ -157,7 +158,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			cl.lock()
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.
-			t.pendAllChunkSpecs(0)
+			t.pendAllChunkSpecs(0, true)
 			g.MakeMapIfNil(&cn.validReceiveChunks)
 			eachRequestIndex(func(ri RequestIndex) {
 				cn.validReceiveChunks[ri] = 1
@@ -287,10 +288,10 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	c.Assert(pc.t.setInfo(&metainfo.Info{
 		PieceLength: 0,
 		Pieces:      make([]byte, pieceHash.Size()*7),
-	}), qt.IsNil)
-	pc.t.onSetInfo()
+	}, true), qt.IsNil)
+	pc.t.onSetInfo(true, true)
 	c.Check(tt.numPieces(), qt.Equals, 7)
-	c.Check(tt.pieceAvailabilityRuns(), qt.DeepEquals, []pieceAvailabilityRun{
+	c.Check(tt.pieceAvailabilityRuns(true), qt.DeepEquals, []pieceAvailabilityRun{
 		// The last element of the bitfield is irrelevant, as the Torrent actually only has 7
 		// pieces.
 		{2, 0}, {1, 1}, {1, 0}, {2, 1}, {1, 0},
@@ -368,7 +369,7 @@ func TestReceiveLargeRequest(t *testing.T) {
 	pc := cl.newConnection(nil, newConnectionOpts{network: "test"})
 	tor := cl.newTorrentForTesting()
 	tor.info = &metainfo.Info{PieceLength: 3 << 20}
-	pc.setTorrent(tor)
+	pc.setTorrent(tor, true)
 	tor._completedPieces.Add(0)
 	pc.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
 	pc.choking = false

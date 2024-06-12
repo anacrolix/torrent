@@ -5,25 +5,25 @@ import (
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 )
 
-func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) {
+func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int, lock bool) {
 	if t.storage == nil {
 		return
 	}
-	pro, ok := t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()]
-	if !ok {
+	pro := t.clientPieceRequestOrder
+	if pro == nil {
 		return
 	}
 	key := t.pieceRequestOrderKey(pieceIndex)
 	if t.hasStorageCap() {
-		pro.Update(key, t.requestStrategyPieceOrderState(pieceIndex))
+		pro.Update(key, t.requestStrategyPieceOrderState(pieceIndex, lock))
 		return
 	}
-	pending := !t.ignorePieceForRequests(pieceIndex)
-	if pending {
-		pro.Add(key, t.requestStrategyPieceOrderState(pieceIndex))
-	} else {
-		pro.Delete(key)
-	}
+	//pending := !t.ignorePieceForRequests(pieceIndex)
+	//if pending {
+	pro.Add(key, t.requestStrategyPieceOrderState(pieceIndex, lock))
+	//} else {
+	//	pro.Delete(key)
+	//}
 }
 
 func (t *Torrent) clientPieceRequestOrderKey() interface{} {
@@ -46,31 +46,40 @@ func (t *Torrent) deletePieceRequestOrder() {
 	if pro.Len() == 0 {
 		delete(cpro, key)
 	}
+	t.clientPieceRequestOrder = nil
 }
 
-func (t *Torrent) initPieceRequestOrder() {
+func (t *Torrent) initPieceRequestOrder(lockClient bool) {
 	if t.storage == nil {
 		return
 	}
+
+	if lockClient {
+		t.cl.lock()
+		defer t.cl.unlock()
+	}
+
 	g.MakeMapIfNil(&t.cl.pieceRequestOrder)
 	key := t.clientPieceRequestOrderKey()
+
 	cpro := t.cl.pieceRequestOrder
 	if cpro[key] == nil {
 		cpro[key] = request_strategy.NewPieceOrder(request_strategy.NewAjwernerBtree(), t.numPieces())
 	}
+	t.clientPieceRequestOrder = cpro[key]
 }
 
-func (t *Torrent) addRequestOrderPiece(i int) {
+func (t *Torrent) addRequestOrderPiece(i int, lock bool) {
 	if t.storage == nil {
 		return
 	}
 	pro := t.getPieceRequestOrder()
 	key := t.pieceRequestOrderKey(i)
-	if t.hasStorageCap() || !t.ignorePieceForRequests(i) {
-		pro.Add(key, t.requestStrategyPieceOrderState(i))
+	if t.hasStorageCap() || !t.ignorePieceForRequests(i, lock) {
+		pro.Add(key, t.requestStrategyPieceOrderState(i, lock))
 	}
 }
 
 func (t *Torrent) getPieceRequestOrder() *request_strategy.PieceRequestOrder {
-	return t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()]
+	return t.clientPieceRequestOrder
 }

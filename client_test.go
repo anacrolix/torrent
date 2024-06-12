@@ -90,13 +90,13 @@ func TestTorrentInitialState(t *testing.T) {
 	)
 	tor.setChunkSize(2)
 	tor.cl.lock()
-	err := tor.setInfoBytesLocked(mi.InfoBytes)
+	err := tor.setInfoBytes(mi.InfoBytes, true, false)
 	tor.cl.unlock()
 	require.NoError(t, err)
 	require.Len(t, tor.pieces, 3)
-	tor.pendAllChunkSpecs(0)
+	tor.pendAllChunkSpecs(0, true)
 	tor.cl.lock()
-	assert.EqualValues(t, 3, tor.pieceNumPendingChunks(0))
+	assert.EqualValues(t, 3, tor.pieceNumPendingChunks(0, true))
 	tor.cl.unlock()
 	assert.EqualValues(t, ChunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
 }
@@ -519,9 +519,9 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	defer psc.Close()
 
 	leecherGreeting.cl.lock()
-	leecherGreeting.downloadPiecesLocked(0, leecherGreeting.numPieces())
+	leecherGreeting.DownloadPieces(0, leecherGreeting.numPieces())
 	if ps.Cancel {
-		leecherGreeting.cancelPiecesLocked(0, leecherGreeting.NumPieces(), "")
+		leecherGreeting.CancelPieces(0, leecherGreeting.NumPieces())
 	}
 	leecherGreeting.cl.unlock()
 	done := make(chan struct{})
@@ -581,8 +581,8 @@ func TestPeerInvalidHave(t *testing.T) {
 	cn.peerImpl = cn
 	cl.lock()
 	defer cl.unlock()
-	assert.NoError(t, cn.peerSentHave(0))
-	assert.Error(t, cn.peerSentHave(1))
+	assert.NoError(t, cn.peerSentHave(0, true))
+	assert.Error(t, cn.peerSentHave(1, true))
 }
 
 func TestPieceCompletedInStorageButNotClient(t *testing.T) {

@@ -23,9 +23,9 @@ func (t *Torrent) GotInfo() events.Done {
 
 // Returns the metainfo info dictionary, or nil if it's not yet available.
 func (t *Torrent) Info() (info *metainfo.Info) {
-	t.nameMu.RLock()
+	t.mu.RLock()
 	info = t.info
-	t.nameMu.RUnlock()
+	t.mu.RUnlock()
 	return
 }
 
@@ -65,16 +65,11 @@ func (me PieceStateRuns) String() (s string) {
 // Returns the state of pieces of the torrent. They are grouped into runs of same state. The sum of
 // the state run-lengths is the number of pieces in the torrent.
 func (t *Torrent) PieceStateRuns() (runs PieceStateRuns) {
-	t.cl.rLock()
-	runs = t.pieceStateRuns()
-	t.cl.rUnlock()
-	return
+	return t.pieceStateRuns(true)
 }
 
 func (t *Torrent) PieceState(piece pieceIndex) (ps PieceState) {
-	t.cl.rLock()
-	ps = t.pieceState(piece)
-	t.cl.rUnlock()
+	ps = t.pieceState(piece, true)
 	return
 }
 
@@ -86,8 +81,8 @@ func (t *Torrent) NumPieces() pieceIndex {
 
 // Get missing bytes count for specific piece.
 func (t *Torrent) PieceBytesMissing(piece int) int64 {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	return int64(t.pieces[piece].bytesLeft())
 }
@@ -111,8 +106,6 @@ func (t *Torrent) Drop() {
 // for download rate, as it can go down when pieces are lost or fail checks.
 // Sample Torrent.Stats.DataBytesRead for actual file data download rate.
 func (t *Torrent) BytesCompleted() int64 {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
 	return t.bytesCompleted()
 }
 
@@ -125,26 +118,24 @@ func (t *Torrent) SubscribePieceStateChanges() *pubsub.Subscription[PieceStateCh
 // Returns true if the torrent is currently being seeded. This occurs when the
 // client is willing to upload without wanting anything in return.
 func (t *Torrent) Seeding() (ret bool) {
-	t.cl.rLock()
-	ret = t.seeding()
-	t.cl.rUnlock()
+	ret = t.seeding(true)
 	return
 }
 
 // Clobbers the torrent display name if metainfo is unavailable.
 // The display name is used as the torrent name while the metainfo is unavailable.
 func (t *Torrent) SetDisplayName(dn string) {
-	t.nameMu.Lock()
-	if !t.haveInfo() {
+	if !t.haveInfo(true) {
+		t.mu.Lock()
 		t.displayName = dn
+		t.mu.Unlock()
 	}
-	t.nameMu.Unlock()
 }
 
 // The current working name for the torrent. Either the name in the info dict,
 // or a display name given such as by the dn value in a magnet link, or "".
 func (t *Torrent) Name() string {
-	return t.name()
+	return t.name(true)
 }
 
 // The completed length of all the torrent data, in all its files. This is
@@ -156,14 +147,12 @@ func (t *Torrent) Length() int64 {
 // Returns a run-time generated metainfo for the torrent that includes the
 // info bytes and announce-list as currently known to the client.
 func (t *Torrent) Metainfo() metainfo.MetaInfo {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
-	return t.newMetaInfo()
+	return t.newMetaInfo(true)
 }
 
 func (t *Torrent) addReader(r *reader) {
-	t.cl.lock()
-	defer t.cl.unlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.readers == nil {
 		t.readers = make(map[*reader]struct{})
 	}
@@ -180,33 +169,31 @@ func (t *Torrent) deleteReader(r *reader) {
 // priority. Piece indexes are not the same as bytes. Requires that the info
 // has been obtained, see Torrent.Info and Torrent.GotInfo.
 func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
-	t.cl.lock()
-	t.downloadPiecesLocked(begin, end)
-	t.cl.unlock()
-}
-
-func (t *Torrent) downloadPiecesLocked(begin, end pieceIndex) {
 	for i := begin; i < end; i++ {
-		if t.pieces[i].priority.Raise(PiecePriorityNormal) {
-			t.updatePiecePriority(i, "Torrent.DownloadPieces")
-		}
+		func() {
+			// don't lock out all processing between pieces while pieces are updated
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			if t.pieces[i].priority.Raise(PiecePriorityNormal) {
+				t.updatePiecePriority(i, "Torrent.DownloadPieces", false)
+			}
+		}()
 	}
 }
 
 func (t *Torrent) CancelPieces(begin, end pieceIndex) {
-	t.cl.lock()
-	t.cancelPiecesLocked(begin, end, "Torrent.CancelPieces")
-	t.cl.unlock()
-}
-
-func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex, reason string) {
 	for i := begin; i < end; i++ {
-		p := &t.pieces[i]
-		if p.priority == PiecePriorityNone {
-			continue
-		}
-		p.priority = PiecePriorityNone
-		t.updatePiecePriority(i, reason)
+		func() {
+			// don't lock out all processing between pieces while pieces are updated
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			p := &t.pieces[i]
+			if p.priority == PiecePriorityNone {
+				return
+			}
+			p.priority = PiecePriorityNone
+			t.updatePiecePriority(i, "Torrent.CancelPieces", false)
+		}()
 	}
 }
 
@@ -234,9 +221,7 @@ func (t *Torrent) Files() []*File {
 }
 
 func (t *Torrent) AddPeers(pp []PeerInfo) (n int) {
-	t.cl.lock()
-	defer t.cl.unlock()
-	n = t.addPeers(pp)
+	n = t.addPeers(pp, true)
 	return
 }
 
@@ -247,7 +232,7 @@ func (t *Torrent) DownloadAll() {
 }
 
 func (t *Torrent) String() string {
-	s := t.name()
+	s := t.name(true)
 	if s == "" {
 		return t.infoHash.HexString()
 	} else {
@@ -256,18 +241,16 @@ func (t *Torrent) String() string {
 }
 
 func (t *Torrent) AddTrackers(announceList [][]string) {
-	t.cl.lock()
-	defer t.cl.unlock()
-	t.addTrackers(announceList)
+	t.addTrackers(announceList, true)
 }
 
 func (t *Torrent) Piece(i pieceIndex) *Piece {
-	return t.piece(i)
+	return t.piece(i, true)
 }
 
 func (t *Torrent) PeerConns() []*PeerConn {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	ret := make([]*PeerConn, 0, len(t.conns))
 	for c := range t.conns {
 		ret = append(ret, c)
@@ -276,8 +259,8 @@ func (t *Torrent) PeerConns() []*PeerConn {
 }
 
 func (t *Torrent) WebseedPeerConns() []*Peer {
-	t.cl.rLock()
-	defer t.cl.rUnlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	ret := make([]*Peer, 0, len(t.conns))
 	for _, c := range t.webSeeds {
 		ret = append(ret, c)

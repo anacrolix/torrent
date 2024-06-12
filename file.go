@@ -111,8 +111,10 @@ func fileBytesLeft(
 }
 
 func (f *File) bytesLeft() (left int64) {
+	f.t.mu.RLock()
+	defer f.t.mu.RUnlock()
 	return fileBytesLeft(int64(f.t.usualPieceSize()), f.BeginPieceIndex(), f.EndPieceIndex(), f.offset, f.length, &f.t._completedPieces, func(pieceIndex int) int64 {
-		return int64(f.t.piece(pieceIndex).numDirtyBytes())
+		return int64(f.t.piece(pieceIndex, false).numDirtyBytes(false))
 	})
 }
 
@@ -130,8 +132,8 @@ type FilePieceState struct {
 
 // Returns the state of pieces in this file.
 func (f *File) State() (ret []FilePieceState) {
-	f.t.cl.rLock()
-	defer f.t.cl.rUnlock()
+	f.t.mu.RLock()
+	defer f.t.mu.RUnlock()
 	pieceSize := int64(f.t.usualPieceSize())
 	off := f.offset % pieceSize
 	remaining := f.length
@@ -143,7 +145,7 @@ func (f *File) State() (ret []FilePieceState) {
 		if len1 > remaining {
 			len1 = remaining
 		}
-		ps := f.t.pieceState(i)
+		ps := f.t.pieceState(i, false)
 		ret = append(ret, FilePieceState{len1, ps})
 		off = 0
 		remaining -= len1

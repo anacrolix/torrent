@@ -31,13 +31,13 @@ func (me *worseConnInput) doGetPeerPriorityOnce() {
 }
 
 type worseConnLensOpts struct {
-	incomingIsBad, outgoingIsBad bool
+	incomingIsBad, outgoingIsBad, lockTorrent bool
 }
 
-func worseConnInputFromPeer(p *PeerConn, opts worseConnLensOpts) worseConnInput {
+func worseConnInputFromPeer(p *PeerConn, opts worseConnLensOpts) *worseConnInput {
 	ret := worseConnInput{
-		Useful:             p.useful(),
-		LastHelpful:        p.lastHelpful(),
+		Useful:             p.useful(opts.lockTorrent),
+		LastHelpful:        p.lastHelpful(opts.lockTorrent),
 		CompletedHandshake: p.completedHandshake,
 		Pointer:            uintptr(unsafe.Pointer(p)),
 		GetPeerPriority:    p.peerPriority,
@@ -47,7 +47,7 @@ func worseConnInputFromPeer(p *PeerConn, opts worseConnLensOpts) worseConnInput 
 	} else if opts.outgoingIsBad && p.outgoing {
 		ret.BadDirection = true
 	}
-	return ret
+	return &ret
 }
 
 func (l *worseConnInput) Less(r *worseConnInput) bool {
@@ -81,11 +81,11 @@ func (l *worseConnInput) Less(r *worseConnInput) bool {
 
 type worseConnSlice struct {
 	conns []*PeerConn
-	keys  []worseConnInput
+	keys  []*worseConnInput
 }
 
 func (me *worseConnSlice) initKeys(opts worseConnLensOpts) {
-	me.keys = make([]worseConnInput, len(me.conns))
+	me.keys = make([]*worseConnInput, len(me.conns))
 	for i, c := range me.conns {
 		me.keys[i] = worseConnInputFromPeer(c, opts)
 	}
@@ -98,7 +98,7 @@ func (me worseConnSlice) Len() int {
 }
 
 func (me worseConnSlice) Less(i, j int) bool {
-	return me.keys[i].Less(&me.keys[j])
+	return me.keys[i].Less(me.keys[j])
 }
 
 func (me *worseConnSlice) Pop() interface{} {

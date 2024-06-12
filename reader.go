@@ -102,10 +102,10 @@ func (r *reader) available(off, max int64) (ret int64) {
 		if !ok {
 			break
 		}
-		if !r.responsive && !r.t.pieceComplete(pieceIndex(req.Index)) {
+		if !r.responsive && !r.t.pieceComplete(pieceIndex(req.Index), true) {
 			break
 		}
-		if !r.t.haveChunk(req) {
+		if !r.t.haveChunk(req,true) {
 			break
 		}
 		len1 := int64(req.Length) - (off - r.t.requestOffset(req))
@@ -191,7 +191,7 @@ func (r *reader) waitAvailable(ctx context.Context, pos, wanted int64, wait bool
 	for {
 		r.t.cl.rLock()
 		avail = r.available(pos, wanted)
-		readerCond := t.piece(int((r.offset + pos) / t.info.PieceLength)).readerCond.Signaled()
+		readerCond := t.piece(int((r.offset+pos)/t.info.PieceLength), true).readerCond.Signaled()
 		r.t.cl.rUnlock()
 		if avail != 0 {
 			return
@@ -240,7 +240,7 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 		firstPieceIndex := pieceIndex(r.torrentOffset(pos) / r.t.info.PieceLength)
 		firstPieceOffset := r.torrentOffset(pos) % r.t.info.PieceLength
 		b1 := missinggo.LimitLen(b, avail)
-		n, err = r.t.readAt(b1, r.torrentOffset(pos))
+		n, err = r.t.readAt(b1, r.torrentOffset(pos), true)
 		if n != 0 {
 			err = nil
 			return
@@ -263,7 +263,7 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 			// prevent thrashing with small caches and file and piece priorities.
 			r.log(log.Fstr("error reading torrent %s piece %d offset %d, %d bytes: %v",
 				r.t.infoHash.HexString(), firstPieceIndex, firstPieceOffset, len(b1), err))
-			if !r.t.updatePieceCompletion(firstPieceIndex) {
+			if !r.t.updatePieceCompletion(firstPieceIndex, true) {
 				r.log(log.Fstr("piece %d completion unchanged", firstPieceIndex))
 			}
 			// Update the rest of the piece completions in the readahead window, without alerting to
@@ -273,7 +273,7 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 				panic(fmt.Sprint(r.pieces.begin, firstPieceIndex))
 			}
 			for index := r.pieces.begin + 1; index < r.pieces.end; index++ {
-				r.t.updatePieceCompletion(index)
+				r.t.updatePieceCompletion(index, true)
 			}
 		}()
 	}

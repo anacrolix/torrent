@@ -1,6 +1,6 @@
 package requestStrategy
 
 type Piece interface {
-	Request() bool
-	NumPendingChunks() int
+	Request(lockTorrent bool) bool
+	NumPendingChunks(lockTorrent bool) int
 }

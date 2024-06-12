@@ -33,7 +33,6 @@ require (
 	github.com/frankban/quicktest v1.14.6
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/go-llsqlite/adapter v0.0.0-20230927005056-7f5ce7f0c916
-	github.com/go-stack/stack v1.8.1
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.5.9
 	github.com/gorilla/websocket v1.5.0
@@ -51,6 +50,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.8.0
 	go.opentelemetry.io/otel/trace v1.8.0
 	golang.org/x/exp v0.0.0-20230711023510-fffb14384f22
+	golang.org/x/sync v0.3.0
 	golang.org/x/sys v0.15.0
 	golang.org/x/time v0.3.0
 )
@@ -106,7 +106,6 @@ require (
 	go.opentelemetry.io/proto/otlp v0.18.0 // indirect
 	golang.org/x/crypto v0.17.0 // indirect
 	golang.org/x/net v0.12.0 // indirect
-	golang.org/x/sync v0.3.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
 	google.golang.org/genproto v0.0.0-20230711160842-782d3b101e98 // indirect

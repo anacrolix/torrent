@@ -75,8 +75,18 @@ func (ws *webseedPeer) writeInterested(interested bool) bool {
 	return true
 }
 
-func (ws *webseedPeer) _cancel(r RequestIndex, lockTorrent bool) bool {
-	if active, ok := ws.activeRequests[ws.peer.t.requestIndexToRequest(r, lockTorrent)]; ok {
+func (ws *webseedPeer) _cancel(r RequestIndex, lock bool, lockTorrent bool) bool {
+	if lock {
+		ws.peer.mu.RLock()
+	}
+
+	active, ok := ws.activeRequests[ws.peer.t.requestIndexToRequest(r, lockTorrent)]
+
+	if lock {
+		ws.peer.mu.RLock()
+	}
+
+	if ok {
 		active.Cancel()
 		// The requester is running and will handle the result.
 		return true
@@ -128,16 +138,26 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 
 func (ws *webseedPeer) doRequest(r Request) error {
 	webseedRequest := ws.client.NewRequest(ws.intoSpec(r), &ws.receiving)
+
+	ws.peer.mu.Lock()
 	ws.activeRequests[r] = webseedRequest
-	if activeLen := len(ws.activeRequests); activeLen > ws.maxActiveRequests {
+	activeLen := len(ws.activeRequests)
+	ws.peer.mu.Unlock()
+
+	if activeLen > ws.maxActiveRequests {
 		ws.maxActiveRequests = activeLen
 	}
+	
 	err := func() error {
 		ws.requesterCond.L.Unlock()
 		defer ws.requesterCond.L.Lock()
 		return ws.requestResultHandler(r, webseedRequest)
 	}()
+
+	ws.peer.mu.Lock()
 	delete(ws.activeRequests, r)
+	ws.peer.mu.Unlock()
+
 	return err
 }
 
@@ -152,7 +172,11 @@ func (ws *webseedPeer) requester(i int) {
 		ws.peer.requestState.Requests.Iterate(func(x RequestIndex) bool {
 			r := ws.peer.t.requestIndexToRequest(x, true)
 
-			if _, ok := ws.activeRequests[r]; ok {
+			ws.peer.mu.RLock()
+			_, ok := ws.activeRequests[r]
+			ws.peer.mu.RUnlock()
+
+			if ok {
 				return true
 			}
 
@@ -218,7 +242,9 @@ func (ws *webseedPeer) requester(i int) {
 			// into life, otherwise the umber of parallel requests will stay below the max
 			// unless some external action happens
 			if pendingRequests > 1 {
+				ws.peer.mu.RLock()
 				activeCount := len(ws.activeRequests)
+				ws.peer.mu.RUnlock()
 
 				if activeCount < pendingRequests {
 					ws.requesterCond.Broadcast()
@@ -287,10 +313,11 @@ func logProgress(ws *webseedPeer, label string, lockTorrent bool) {
 	pendingRequests := int(ws.peer.requestState.Requests.GetCardinality())
 	receiving := ws.receiving.Load()
 	persisting := ws.persisting.Load()
+	activeCount := len(ws.activeRequests)
 
 	ws.peer.logger.Levelf(log.Debug, "%s %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,p=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) lastUpdate=%s",
 		label, ws.processedRequests, pendingRequests, desiredRequests, ws.nominalMaxRequests(false, false),
-		len(ws.activeRequests)-int(receiving)-int(persisting), receiving, persisting, ws.maxActiveRequests, ws.waiting,
+		activeCount-int(receiving)-int(persisting), receiving, persisting, ws.maxActiveRequests, ws.waiting,
 		t.numQueuedForHash(false), t.activePieceHashes.Load(), t.hashing.Load(), len(t.hashResults),
 		t.numPiecesCompleted(false), t.NumPieces(), time.Since(ws.peer.lastRequestUpdate))
 }

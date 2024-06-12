@@ -552,7 +552,7 @@ func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorre
 	if !me.deleteRequest(r, lock, lockTorrent) {
 		panic("request not existing should have been guarded")
 	}
-	if me._cancel(r, lockTorrent) {
+	if me._cancel(r, lock, lockTorrent) {
 		// Record that we expect to get a cancel ack.
 		if !me.requestState.Cancelled.CheckedAdd(r) {
 			panic("request already cancelled")

@@ -32,6 +32,7 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -2806,6 +2807,12 @@ type hashResult struct {
 }
 
 func (t *Torrent) processHashResults() {
+
+	g, ctx := errgroup.WithContext(context.Background())
+	_, cancel := context.WithCancel(ctx)
+	g.SetLimit(t.cl.config.PieceHashersPerTorrent)
+	defer cancel()
+
 	for !t.closed.IsSet() {
 		results := []hashResult{<-t.hashResults}
 
@@ -2819,20 +2826,26 @@ func (t *Torrent) processHashResults() {
 		}
 
 		for _, result := range results {
-			if result.correct {
-				for peer := range result.failedPeers {
-					t.cl.banPeerIP(peer.AsSlice())
-					t.logger.Levelf(log.Debug, "smart banned %v for piece %v", peer, result.index)
-				}
+			func(result hashResult) {
+				g.Go(func() error {
+					if result.correct {
+						for peer := range result.failedPeers {
+							t.cl.banPeerIP(peer.AsSlice())
+							t.logger.Levelf(log.Debug, "smart banned %v for piece %v", peer, result.index)
+						}
 
-				t.dropBannedPeers()
+						t.dropBannedPeers()
 
-				for ri := t.pieceRequestIndexOffset(result.index, true); ri < t.pieceRequestIndexOffset(result.index+1, true); ri++ {
-					t.smartBanCache.ForgetBlock(ri)
-				}
-			}
-			t.pieceHashed(result.index, result.correct, result.copyErr)
-			t.updatePiecePriority(result.index, "Torrent.pieceHasher", true)
+						for ri := t.pieceRequestIndexOffset(result.index, true); ri < t.pieceRequestIndexOffset(result.index+1, true); ri++ {
+							t.smartBanCache.ForgetBlock(ri)
+						}
+					}
+
+					t.pieceHashed(result.index, result.correct, result.copyErr)
+					t.updatePiecePriority(result.index, "Torrent.pieceHasher", true)
+					return nil
+				})
+			}(result)
 		}
 	}
 }
@@ -3245,7 +3258,7 @@ func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
 		opt(&ws.client)
 	}
 	ws.peer.initUpdateRequestsTimer(true)
-	ws.requesterCond.L = &sync.Mutex{}
+	ws.requesterCond.L = &sync.RWMutex{}
 	for i := 0; i < ws.maxRequesters; i += 1 {
 		go ws.requester(i)
 	}

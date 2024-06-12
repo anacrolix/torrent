@@ -16,7 +16,7 @@ type peerImpl interface {
 
 	// _cancel initiates cancellation of a request and returns acked if it expects the cancel to be
 	// handled by a follow-up event.
-	_cancel(r RequestIndex, lockTorrent bool) (acked bool)
+	_cancel(r RequestIndex, lock bool, lockTorrent bool) (acked bool)
 	_request(Request) bool
 	connectionFlags() string
 	onClose(lockTorrent bool)

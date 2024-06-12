@@ -49,83 +49,8 @@ import (
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
+	"github.com/sasha-s/go-deadlock"
 )
-
-/*
-For lock debugging
-type mu struct {
-	sync.RWMutex
-	rlc        atomic.Int32
-	lc         atomic.Int32
-	rlmu       sync.Mutex
-	rlocker    [20]string
-	rlocktime  time.Time
-	locker     string
-	nextlocker string
-	locktime   time.Time
-}
-
-func (m *mu) RLock() {
-	m.RWMutex.RLock()
-	m.rlmu.Lock()
-	rlc := m.rlc.Load()
-	if int(rlc) < len(m.rlocker) {
-		m.rlocker[rlc] = string(stack(2))
-	}
-	if rlc == 0 {
-		m.rlocktime = time.Now()
-	}
-	m.rlc.Add(1)
-	m.rlmu.Unlock()
-	//fmt.Println("R", m.rlc, string(dbg.Stack())[:40])
-
-}
-
-func (m *mu) RUnlock() {
-	m.rlmu.Lock()
-	m.rlc.Add(-1)
-	rlc := m.rlc.Load()
-	if rlc < 0 {
-		panic("lock underflow")
-	}
-	if rlc == 0 {
-		m.rlocktime = time.Time{}
-	}
-	if int(rlc) < len(m.rlocker) {
-		m.rlocker[m.rlc.Load()] = ""
-	}
-	m.rlmu.Unlock()
-	m.RWMutex.RUnlock()
-	//fmt.Println("RUN", m.rlc) //, string(dbg.Stack()))
-}
-
-func (m *mu) Lock() {
-	//fmt.Println("L", m.lc, string(dbg.Stack())[:40])
-	m.rlmu.Lock()
-	if m.nextlocker == "" {
-		m.nextlocker = string(stack(2))
-	}
-	m.rlmu.Unlock()
-	m.RWMutex.Lock()
-	m.lc.Add(1)
-	m.rlmu.Lock()
-	m.locker = m.nextlocker
-	m.locktime = time.Now()
-	m.nextlocker = ""
-	m.rlmu.Unlock()
-}
-
-func (m *mu) Unlock() {
-	m.lc.Add(-1)
-	if m.lc.Load() < 0 {
-		panic("lock underflow")
-	}
-	m.locker = ""
-	m.locktime = time.Time{}
-	m.RWMutex.Unlock()
-	//fmt.Println("LUN", m.lc) //, string(dbg.Stack()))
-}
-*/
 
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
 // available, see .Info and .GotInfo.
@@ -198,7 +123,7 @@ type Torrent struct {
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
-	mu          sync.RWMutex
+	mu          deadlock.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if

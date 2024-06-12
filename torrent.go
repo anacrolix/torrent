@@ -1205,7 +1205,12 @@ func (t *Torrent) pieceNumChunks(piece pieceIndex) chunkIndexType {
 	return chunkIndexType((t.pieceLength(piece) + t.chunkSize - 1) / t.chunkSize)
 }
 
-func (t *Torrent) chunksPerRegularPiece() chunkIndexType {
+func (t *Torrent) chunksPerRegularPiece(lock bool) chunkIndexType {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
+
 	return t._chunksPerRegularPiece
 }
 
@@ -1213,7 +1218,7 @@ func (t *Torrent) numChunks() RequestIndex {
 	if t.numPieces() == 0 {
 		return 0
 	}
-	return RequestIndex(t.numPieces()-1)*t.chunksPerRegularPiece() + t.pieceNumChunks(t.numPieces()-1)
+	return RequestIndex(t.numPieces()-1)*t.chunksPerRegularPiece(true) + t.pieceNumChunks(t.numPieces()-1)
 }
 
 func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex, lock bool) {
@@ -1223,8 +1228,8 @@ func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex, lock bool) {
 	}
 
 	t.dirtyChunks.RemoveRange(
-		uint64(t.pieceRequestIndexOffset(pieceIndex)),
-		uint64(t.pieceRequestIndexOffset(pieceIndex+1)))
+		uint64(t.pieceRequestIndexOffset(pieceIndex, false)),
+		uint64(t.pieceRequestIndexOffset(pieceIndex+1, false)))
 }
 
 func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
@@ -1241,10 +1246,10 @@ func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
 	return pp.Integer(t.info.PieceLength)
 }
 
-func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex) *blockCheckingWriter {
+func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex, lock bool) *blockCheckingWriter {
 	return &blockCheckingWriter{
 		cache:        &t.smartBanCache,
-		requestIndex: t.pieceRequestIndexOffset(piece),
+		requestIndex: t.pieceRequestIndexOffset(piece, lock),
 		chunkSize:    t.chunkSize.Int(),
 	}
 }
@@ -1269,7 +1274,7 @@ func (t *Torrent) hashPiece(p *Piece) (
 
 	hash := pieceHash.New()
 	const logPieceContents = false
-	smartBanWriter := t.smartBanBlockCheckingWriter(p.index)
+	smartBanWriter := t.smartBanBlockCheckingWriter(p.index, true)
 	writers := []io.Writer{hash, smartBanWriter}
 	var examineBuf bytes.Buffer
 	if logPieceContents {
@@ -1682,7 +1687,7 @@ func (t *Torrent) piecePriority(piece pieceIndex, lock bool) piecePriority {
 func (t *Torrent) pendRequest(req RequestIndex) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.piece(t.pieceIndexOfRequestIndex(req), false).pendChunkIndex(req%t.chunksPerRegularPiece(), false)
+	t.piece(t.pieceIndexOfRequestIndex(req, false), false).pendChunkIndex(req%t.chunksPerRegularPiece(false), false)
 }
 
 func (t *Torrent) pieceCompletionChanged(piece pieceIndex, reason string, lock bool) {
@@ -2670,7 +2675,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 }
 
 func (t *Torrent) cancelRequestsForPiece(piece pieceIndex, lock bool) {
-	start := t.pieceRequestIndexOffset(piece)
+	start := t.pieceRequestIndexOffset(piece, lock)
 	end := start + t.pieceNumChunks(piece)
 	for ri := start; ri < end; ri++ {
 		t.cancelRequest(ri, true, lock, true)
@@ -2817,12 +2822,12 @@ func (t *Torrent) processHashResults() {
 			if result.correct {
 				for peer := range result.failedPeers {
 					t.cl.banPeerIP(peer.AsSlice())
-					t.logger.WithDefaultLevel(log.Debug).Printf("smart banned %v for piece %v", peer, result.index)
+					t.logger.Levelf(log.Debug, "smart banned %v for piece %v", peer, result.index)
 				}
 
 				t.dropBannedPeers()
 
-				for ri := t.pieceRequestIndexOffset(result.index); ri < t.pieceRequestIndexOffset(result.index+1); ri++ {
+				for ri := t.pieceRequestIndexOffset(result.index, true); ri < t.pieceRequestIndexOffset(result.index+1, true); ri++ {
 					t.smartBanCache.ForgetBlock(ri)
 				}
 			}
@@ -3265,19 +3270,19 @@ func (t *Torrent) peerIsActive(p *Peer) (active bool) {
 }
 
 func (t *Torrent) requestIndexToRequest(ri RequestIndex, lock bool) Request {
-	index := t.pieceIndexOfRequestIndex(ri)
+	index := t.pieceIndexOfRequestIndex(ri, lock)
 	return Request{
 		pp.Integer(index),
-		t.piece(index, lock).chunkIndexSpec(ri % t.chunksPerRegularPiece()),
+		t.piece(index, lock).chunkIndexSpec(ri % t.chunksPerRegularPiece(lock)),
 	}
 }
 
-func (t *Torrent) requestIndexFromRequest(r Request) RequestIndex {
-	return t.pieceRequestIndexOffset(pieceIndex(r.Index)) + RequestIndex(r.Begin/t.chunkSize)
+func (t *Torrent) requestIndexFromRequest(r Request, lock bool) RequestIndex {
+	return t.pieceRequestIndexOffset(pieceIndex(r.Index), lock) + RequestIndex(r.Begin/t.chunkSize)
 }
 
-func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex) RequestIndex {
-	return RequestIndex(piece) * t.chunksPerRegularPiece()
+func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex, lock bool) RequestIndex {
+	return RequestIndex(piece) * t.chunksPerRegularPiece(lock)
 }
 
 func (t *Torrent) updateComplete(lock bool) {
@@ -3352,16 +3357,17 @@ func (t *Torrent) hasStorageCap() bool {
 	return ok
 }
 
-func (t *Torrent) pieceIndexOfRequestIndex(ri RequestIndex) pieceIndex {
-	return pieceIndex(ri / t.chunksPerRegularPiece())
+func (t *Torrent) pieceIndexOfRequestIndex(ri RequestIndex, lock bool) pieceIndex {
+	return pieceIndex(ri / t.chunksPerRegularPiece(lock))
 }
 
 func (t *Torrent) iterUndirtiedRequestIndexesInPiece(
 	iter *typedRoaring.Iterator[RequestIndex],
 	piece pieceIndex,
 	f func(RequestIndex),
+	lock bool,
 ) {
-	pieceRequestIndexOffset := t.pieceRequestIndexOffset(piece)
+	pieceRequestIndexOffset := t.pieceRequestIndexOffset(piece, lock)
 	iterBitmapUnsetInRange(
 		iter,
 		pieceRequestIndexOffset, pieceRequestIndexOffset+t.pieceNumChunks(piece),

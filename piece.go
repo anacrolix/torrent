@@ -81,8 +81,8 @@ func (p *Piece) numDirtyChunks(lock bool) chunkIndexType {
 	}
 	return chunkIndexType(roaringBitmapRangeCardinality[RequestIndex](
 		&p.t.dirtyChunks,
-		p.requestIndexOffset(),
-		p.t.pieceRequestIndexOffset(p.index+1)))
+		p.requestIndexOffset(false),
+		p.t.pieceRequestIndexOffset(p.index+1, false)))
 }
 
 func (p *Piece) unpendChunkIndex(i chunkIndexType, lockTorrent bool) {
@@ -91,18 +91,18 @@ func (p *Piece) unpendChunkIndex(i chunkIndexType, lockTorrent bool) {
 		defer p.t.mu.Unlock()
 	}
 
-	p.t.dirtyChunks.Add(p.requestIndexOffset() + i)
+	p.t.dirtyChunks.Add(p.requestIndexOffset(false) + i)
 	p.t.updatePieceRequestOrderPiece(p.index, false)
 	p.readerCond.Broadcast()
 }
 
-func (p *Piece) pendChunkIndex(i RequestIndex, lock bool) {
-	if lock {
+func (p *Piece) pendChunkIndex(i RequestIndex, lockTorrent bool) {
+	if lockTorrent {
 		p.t.mu.Lock()
 		defer p.t.mu.Unlock()
 	}
 
-	p.t.dirtyChunks.Remove(p.requestIndexOffset() + i)
+	p.t.dirtyChunks.Remove(p.requestIndexOffset(false) + i)
 	p.t.updatePieceRequestOrderPiece(p.index, false)
 }
 
@@ -136,12 +136,12 @@ func (p *Piece) waitNoPendingWrites() {
 	p.pendingWritesMutex.Unlock()
 }
 
-func (p *Piece) chunkIndexDirty(chunk chunkIndexType, lock bool) bool {
-	if lock {
+func (p *Piece) chunkIndexDirty(chunk chunkIndexType, lockTorrent bool) bool {
+	if lockTorrent {
 		p.t.mu.RLock()
 		defer p.t.mu.RUnlock()
 	}
-	return p.t.dirtyChunks.Contains(p.requestIndexOffset() + chunk)
+	return p.t.dirtyChunks.Contains(p.requestIndexOffset(false) + chunk)
 }
 
 func (p *Piece) chunkIndexSpec(chunk chunkIndexType) ChunkSpec {
@@ -271,8 +271,8 @@ func (p *Piece) State() PieceState {
 	return p.t.PieceState(p.index)
 }
 
-func (p *Piece) requestIndexOffset() RequestIndex {
-	return p.t.pieceRequestIndexOffset(p.index)
+func (p *Piece) requestIndexOffset(lockTorrent bool) RequestIndex {
+	return p.t.pieceRequestIndexOffset(p.index, lockTorrent)
 }
 
 func (p *Piece) availability(lock bool) int {

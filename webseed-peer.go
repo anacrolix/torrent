@@ -479,9 +479,9 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 				ws.lastUnhandledErr = time.Now()
 			}
 		}
-		if !ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r)) {
+		if index := ws.peer.t.requestIndexFromRequest(r, true); !ws.peer.remoteRejectedRequest(index) {
 			errors.Is(err, context.Canceled)
-			panic("invalid reject")
+			panic(fmt.Sprintf("invalid reject for: %d", index))
 		}
 		return err
 	}

@@ -794,6 +794,9 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			}
 
 			func() {
+				c.t.mu.RLock()
+				defer c.t.mu.RUnlock()
+
 				c.mu.Lock()
 				defer c.mu.Unlock()
 				if !c.fastEnabled() {
@@ -807,7 +810,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 					// only a single peer, our chunk balancing should smooth over this abuse.
 				}
 				c.peerChoking = true
-				c.updateExpectingChunks()
+				c.updateExpectingChunks(false)
 			}()
 
 		case pp.Unchoke:
@@ -819,12 +822,15 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			}
 
 			func() {
+				c.t.mu.RLock()
+				defer c.t.mu.RUnlock()
+
 				c.mu.Lock()
 				defer c.mu.Unlock()
 
 				preservedCount := 0
 				c.requestState.Requests.Iterate(func(x RequestIndex) bool {
-					if !c.peerAllowedFast.Contains(c.t.pieceIndexOfRequestIndex(x)) {
+					if !c.peerAllowedFast.Contains(c.t.pieceIndexOfRequestIndex(x, false)) {
 						preservedCount++
 					}
 					return true
@@ -841,16 +847,11 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				}
 				c.peerChoking = false
 
-				func() {
-					c.t.mu.RLock()
-					defer c.t.mu.RUnlock()
+				if !c.t._pendingPieces.IsEmpty() {
+					c.updateRequests("unchoked", false, false)
+				}
 
-					if !c.t._pendingPieces.IsEmpty() {
-						c.updateRequests("unchoked", false, false)
-					}
-				}()
-
-				c.updateExpectingChunks()
+				c.updateExpectingChunks(false)
 			}()
 
 		case pp.Interested:
@@ -920,7 +921,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			err = c.peerSentHaveNone()
 		case pp.Reject:
 			req := newRequestFromMessage(&msg)
-			if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req)) {
+			if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req, true)) {
 				err = fmt.Errorf("received invalid reject for request %v", req)
 				c.logger.Levelf(log.Debug, "%v", err)
 			}

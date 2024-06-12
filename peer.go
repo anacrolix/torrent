@@ -139,8 +139,8 @@ func (p *Peer) initRequestState() {
 	p.requestState.Requests = &peerRequests{}
 }
 
-func (cn *Peer) updateExpectingChunks() {
-	if cn.expectingChunks() {
+func (cn *Peer) updateExpectingChunks(lockTorrent bool) {
+	if cn.expectingChunks(lockTorrent) {
 		if cn.lastStartedExpectingToReceiveChunks.IsZero() {
 			cn.lastStartedExpectingToReceiveChunks = time.Now()
 		}
@@ -152,7 +152,7 @@ func (cn *Peer) updateExpectingChunks() {
 	}
 }
 
-func (cn *Peer) expectingChunks() bool {
+func (cn *Peer) expectingChunks(lockTorrent bool) bool {
 	if cn.requestState.Requests.IsEmpty() {
 		return false
 	}
@@ -163,11 +163,17 @@ func (cn *Peer) expectingChunks() bool {
 		return true
 	}
 	haveAllowedFastRequests := false
+
+	if lockTorrent {
+		cn.t.mu.RLock()
+		defer cn.t.mu.RUnlock()
+	}
+
 	cn.peerAllowedFast.Iterate(func(i pieceIndex) bool {
 		haveAllowedFastRequests = roaringBitmapRangeCardinality[RequestIndex](
 			cn.requestState.Requests,
-			cn.t.pieceRequestIndexOffset(i),
-			cn.t.pieceRequestIndexOffset(i+1),
+			cn.t.pieceRequestIndexOffset(i, false),
+			cn.t.pieceRequestIndexOffset(i+1, false),
 		) == 0
 		return !haveAllowedFastRequests
 	})
@@ -278,7 +284,7 @@ func (p *Peer) DownloadRate() float64 {
 	return p.downloadRate()
 }
 
-func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int)) {
+func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int), lockTorrent bool) {
 	var last Option[pieceIndex]
 	var count int
 	next := func(item Option[pieceIndex]) {
@@ -292,8 +298,9 @@ func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int))
 			count = 1
 		}
 	}
+
 	cn.requestState.Requests.Iterate(func(requestIndex request_strategy.RequestIndex) bool {
-		next(Some(cn.t.pieceIndexOfRequestIndex(requestIndex)))
+		next(Some(cn.t.pieceIndexOfRequestIndex(requestIndex, lockTorrent)))
 		return true
 	})
 	next(None[pieceIndex]())
@@ -351,7 +358,7 @@ func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
 	fmt.Fprintf(w, "requested pieces:")
 	cn.iterContiguousPieceRequests(func(piece pieceIndex, count int) {
 		fmt.Fprintf(w, " %v(%v)", piece, count)
-	})
+	}, false)
 	fmt.Fprintf(w, "\n")
 }
 
@@ -430,7 +437,7 @@ func (cn *Peer) totalExpectingTime() (ret time.Duration) {
 	return
 }
 
-func (cn *Peer) setInterested(interested bool) bool {
+func (cn *Peer) setInterested(interested bool, lockTorrent bool) bool {
 	if cn.requestState.Interested == interested {
 		return true
 	}
@@ -440,7 +447,7 @@ func (cn *Peer) setInterested(interested bool) bool {
 	} else if !cn.lastBecameInterested.IsZero() {
 		cn.priorInterest += time.Since(cn.lastBecameInterested)
 	}
-	cn.updateExpectingChunks()
+	cn.updateExpectingChunks(lockTorrent)
 	// log.Printf("%p: setting interest: %v", cn, interested)
 	return cn.writeInterested(interested)
 }
@@ -461,7 +468,7 @@ func (cn *Peer) shouldRequest(r RequestIndex, lockTorrent bool) error {
 	if err != nil {
 		return err
 	}
-	pi := cn.t.pieceIndexOfRequestIndex(r)
+	pi := cn.t.pieceIndexOfRequestIndex(r, false)
 
 	cn.mu.RLock()
 	defer cn.mu.RUnlock()
@@ -533,7 +540,7 @@ func (cn *Peer) request(r RequestIndex, lock bool, lockTorrent bool) (more bool,
 		when: time.Now(),
 	}
 
-	cn.updateExpectingChunks()
+	cn.updateExpectingChunks(false)
 	ppReq := cn.t.requestIndexToRequest(r, false)
 	for _, f := range cn.callbacks.SentRequest {
 		f(PeerRequestEvent{cn, ppReq})
@@ -703,7 +710,7 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 		return err
 	}
 
-	req := c.t.requestIndexFromRequest(ppReq)
+	req := c.t.requestIndexFromRequest(ppReq, lockTorrent)
 
 	recordBlockForSmartBan := sync.OnceFunc(func() {
 		c.recordBlockForSmartBan(req, msg.Piece)
@@ -925,7 +932,7 @@ func (c *Peer) deleteRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
 		for _, f := range c.callbacks.DeletedRequest {
 			f(PeerRequestEvent{c, c.t.requestIndexToRequest(r, false)})
 		}
-		c.updateExpectingChunks()
+		c.updateExpectingChunks(false)
 		if c.t.requestingPeer(r, false) != c {
 			panic("only one peer should have a given request at a time")
 		}

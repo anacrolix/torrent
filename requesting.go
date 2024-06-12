@@ -84,8 +84,8 @@ type desiredPeerRequests struct {
 
 func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex) bool {
 	t := p.peer.t
-	leftPieceIndex := t.pieceIndexOfRequestIndex(leftRequest)
-	rightPieceIndex := t.pieceIndexOfRequestIndex(rightRequest)
+	leftPieceIndex := t.pieceIndexOfRequestIndex(leftRequest, false)
+	rightPieceIndex := t.pieceIndexOfRequestIndex(rightRequest, false)
 	ml := multiless.New()
 	// Push requests that can't be served right now to the end. But we don't throw them away unless
 	// there's a better alternative. This is for when we're using the fast extension and get choked
@@ -261,7 +261,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 					return
 				}
 				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
-			})
+			}, lockTorrent)
 		},
 		lockTorrent)
 
@@ -358,7 +358,7 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 		}
 	}
 
-	if !p.setInterested(next.Interested) {
+	if !p.setInterested(next.Interested, false) {
 		return
 	}
 

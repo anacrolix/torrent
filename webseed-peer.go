@@ -76,17 +76,12 @@ func (ws *webseedPeer) writeInterested(interested bool) bool {
 }
 
 func (ws *webseedPeer) _cancel(r RequestIndex, lock bool, lockTorrent bool) bool {
-	if lock {
+	if active, ok := func() (active webseed.Request, ok bool) {
 		ws.peer.mu.RLock()
-	}
-
-	active, ok := ws.activeRequests[ws.peer.t.requestIndexToRequest(r, lockTorrent)]
-
-	if lock {
-		ws.peer.mu.RLock()
-	}
-
-	if ok {
+		defer ws.peer.mu.RUnlock()
+		active, ok = ws.activeRequests[ws.peer.t.requestIndexToRequest(r, lockTorrent)]
+		return
+	}(); ok {
 		active.Cancel()
 		// The requester is running and will handle the result.
 		return true
@@ -147,7 +142,7 @@ func (ws *webseedPeer) doRequest(r Request) error {
 	if activeLen > ws.maxActiveRequests {
 		ws.maxActiveRequests = activeLen
 	}
-	
+
 	err := func() error {
 		ws.requesterCond.L.Unlock()
 		defer ws.requesterCond.L.Lock()

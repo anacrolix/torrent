@@ -2899,12 +2899,24 @@ func (t *Torrent) dropBannedPeers() {
 // Return the connections that touched a piece, and clear the entries while doing it.
 func (t *Torrent) clearPieceTouchers(pi pieceIndex, lock bool) {
 	p := t.piece(pi, lock)
-	p.mu.Lock()
-	defer p.mu.Unlock()
 
-	for c := range p.dirtiers {
-		delete(c.peerTouchedPieces, pi)
-		delete(p.dirtiers, c)
+	for _, c := range func() (dirtiers []*Peer) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		dirtiers = make([]*Peer, 0, len(p.dirtiers))
+		for c := range p.dirtiers {
+			dirtiers = append(dirtiers, c)
+		}
+		return
+	}() {
+		func() {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			delete(c.peerTouchedPieces, pi)
+			delete(p.dirtiers, c)
+		}()
 	}
 }
 

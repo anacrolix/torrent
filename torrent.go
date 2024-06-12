@@ -2900,15 +2900,19 @@ func (t *Torrent) dropBannedPeers() {
 func (t *Torrent) clearPieceTouchers(pi pieceIndex, lock bool) {
 	p := t.piece(pi, lock)
 
-	for _, c := range func() (dirtiers []*Peer) {
+	// get the dirtiers first so we can presever lock order (peer,piece)
+	// in the code below
+	dirtiers := func() []*Peer {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		dirtiers = make([]*Peer, 0, len(p.dirtiers))
+		dirtiers := make([]*Peer, 0, len(p.dirtiers))
 		for c := range p.dirtiers {
 			dirtiers = append(dirtiers, c)
 		}
-		return
-	}() {
+		return dirtiers
+	}()
+
+	for _, c := range dirtiers {
 		func() {
 			c.mu.Lock()
 			defer c.mu.Unlock()

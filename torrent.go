@@ -2742,7 +2742,9 @@ func (t *Torrent) processHashResults() {
 
 	g, ctx := errgroup.WithContext(context.Background())
 	_, cancel := context.WithCancel(ctx)
-	g.SetLimit(t.cl.config.PieceHashersPerTorrent)
+	// this is limited at the moment to avoid exess cpu usage
+	// may need to be dynamically set depending on the queue size
+	g.SetLimit(maxInt(2, t.cl.config.PieceHashersPerTorrent/4))
 	defer cancel()
 
 	for !t.closed.IsSet() {

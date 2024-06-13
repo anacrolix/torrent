@@ -49,7 +49,6 @@ import (
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
-	"github.com/sasha-s/go-deadlock"
 )
 
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
@@ -123,7 +122,7 @@ type Torrent struct {
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
-	mu          deadlock.RWMutex
+	mu/*deadlock*/ sync.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if
@@ -3019,20 +3018,15 @@ func (t *Torrent) onWriteChunkErr(err error) {
 }
 
 func (t *Torrent) DisallowDataDownload() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	conns := t.peerConnsAsSlice(false)
+	conns := t.peerConnsAsSlice(true)
 	defer conns.free()
 	t.dataDownloadDisallowed.Set()
 
 	for _, c := range conns {
 		func() {
-			t.cl.lock()
-			defer t.cl.unlock()
 			// Could check if peer request state is empty/not interested?
-			c.updateRequests("disallow data download", true, false)
-			c.cancelAllRequests(false)
+			c.updateRequests("disallow data download", true, true)
+			c.cancelAllRequests(true)
 		}()
 	}
 }
@@ -3046,48 +3040,34 @@ func (t *Torrent) AllowDataDownload() {
 	t.dataDownloadDisallowed.Clear()
 
 	for _, c := range conns {
-		func() {
-			t.cl.lock()
-			defer t.cl.unlock()
-			c.updateRequests("allow data download", true, true)
-		}()
+		c.updateRequests("allow data download", true, true)
 	}
 }
 
 // Enables uploading data, if it was disabled.
 func (t *Torrent) AllowDataUpload() {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	conns := t.peerConnsAsSlice(false)
 	defer conns.free()
 	t.dataUploadDisallowed = false
+	t.mu.Unlock()
 
 	for _, c := range conns {
-		func() {
-			t.cl.lock()
-			defer t.cl.unlock()
-			c.updateRequests("allow data upload", true, false)
-		}()
+		c.updateRequests("allow data upload", true, true)
 	}
 }
 
 // Disables uploading data, if it was enabled.
 func (t *Torrent) DisallowDataUpload() {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	conns := t.peerConnsAsSlice(false)
 	defer conns.free()
 	t.dataUploadDisallowed = true
+	t.mu.Unlock()
 
 	for _, c := range conns {
-		func() {
-			t.cl.lock()
-			defer t.cl.unlock()
-			// TODO: This doesn't look right. Shouldn't we tickle writers to choke peers or something instead?
-			c.updateRequests("disallow data upload", true, false)
-		}()
+		// TODO: This doesn't look right. Shouldn't we tickle writers to choke peers or something instead?
+		c.updateRequests("disallow data upload", true, true)
 	}
 }
 

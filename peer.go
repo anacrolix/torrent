@@ -16,7 +16,6 @@ import (
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
-	"github.com/sasha-s/go-deadlock"
 
 	"github.com/anacrolix/torrent/internal/alloclim"
 	"github.com/anacrolix/torrent/mse"
@@ -203,7 +202,7 @@ func (cn *Peer) cumInterest(lock bool) time.Duration {
 	return ret
 }
 
-func (cn *Peer) locker() *deadlock.RWMutex { //*lockWithDeferreds {
+func (cn *Peer) locker() /**deadlock.RWMutex {*/ *lockWithDeferreds {
 	return cn.t.cl.locker()
 }
 

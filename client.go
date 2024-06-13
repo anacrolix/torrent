@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
-	"github.com/sasha-s/go-deadlock"
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
@@ -60,7 +59,7 @@ type Client struct {
 	// fields. See #262.
 	connStats ConnStats
 
-	_mu    deadlock.RWMutex //lockWithDeferreds
+	_mu/*deadlock.RWMutex*/ lockWithDeferreds
 	event  sync.Cond
 	closed chansync.SetOnce
 
@@ -336,9 +335,10 @@ func (cl *Client) AddDhtServer(d DhtServer) {
 // given address for any Torrent.
 func (cl *Client) AddDialer(d Dialer) {
 	cl.lock()
-	defer cl.unlock()
 	cl.dialers = append(cl.dialers, d)
-	for _, t := range cl.torrentsAsSlice() {
+	torrents := cl.torrentsAsSlice()
+	cl.unlock()
+	for _, t := range torrents {
 		t.openNewConns(true)
 	}
 }
@@ -357,9 +357,7 @@ func (cl *Client) AddListener(l Listener) {
 }
 
 func (cl *Client) firewallCallback(net.Addr) bool {
-	cl.rLock()
-	block := !cl.wantConns() || !cl.config.AcceptPeerConnections
-	cl.rUnlock()
+	block := !cl.wantConns(true) || !cl.config.AcceptPeerConnections
 	if block {
 		torrent.Add("connections firewalled", 1)
 	} else {
@@ -462,8 +460,16 @@ func (cl *Client) ipIsBlocked(ip net.IP) bool {
 	return blocked
 }
 
-func (cl *Client) wantConns() bool {
-	if cl.config.AlwaysWantConns {
+func (cl *Client) wantConns(lock bool) bool {
+	alwaysWantConns := func() bool {
+		if lock {
+			cl.rLock()
+			defer cl.rUnlock()
+		}
+		return cl.config.AlwaysWantConns
+	}
+
+	if alwaysWantConns() {
 		return true
 	}
 	for _, t := range cl.torrentsAsSlice() {
@@ -475,8 +481,8 @@ func (cl *Client) wantConns() bool {
 }
 
 // TODO: Apply filters for non-standard networks, particularly rate-limiting.
-func (cl *Client) rejectAccepted(conn net.Conn) error {
-	if !cl.wantConns() {
+func (cl *Client) rejectAccepted(conn net.Conn, lock bool) error {
+	if !cl.wantConns(lock) {
 		return errors.New("don't want conns right now")
 	}
 	ra := conn.RemoteAddr()
@@ -525,7 +531,7 @@ func (cl *Client) acceptConnections(l Listener) {
 		closed := cl.closed.IsSet()
 		var reject error
 		if !closed && conn != nil {
-			reject = cl.rejectAccepted(conn)
+			reject = cl.rejectAccepted(conn, false)
 		}
 		cl.rUnlock()
 		if closed {
@@ -1826,7 +1832,7 @@ func (cl *Client) unlock() {
 	cl._mu.Unlock()
 }
 
-func (cl *Client) locker() *deadlock.RWMutex { //*lockWithDeferreds {
+func (cl *Client) locker() /**deadlock.RWMutex {*/ *lockWithDeferreds {
 	return &cl._mu
 }
 

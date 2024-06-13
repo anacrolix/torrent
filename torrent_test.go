@@ -106,7 +106,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	}
 	t.DownloadPieces(0, t.numPieces())
 	for i := 0; i < b.N; i += 1 {
-		t.updateAllPiecePriorities("")
+		t.updateAllPiecePriorities("", true)
 	}
 }
 

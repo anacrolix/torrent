@@ -756,11 +756,8 @@ func (c *PeerConn) mainReadLoop() (err error) {
 	}
 	for {
 		var msg pp.Message
-		func() {
-			cl.unlock()
-			defer cl.lock()
-			err = decoder.Decode(&msg)
-		}()
+		err = decoder.Decode(&msg)
+
 		if cb := c.callbacks.ReadMessage; cb != nil && err == nil {
 			cb(c, &msg)
 		}
@@ -796,9 +793,9 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			func() {
 				c.t.mu.RLock()
 				defer c.t.mu.RUnlock()
-
 				c.mu.Lock()
 				defer c.mu.Unlock()
+
 				if !c.fastEnabled() {
 					c.deleteAllRequests("choked by non-fast PeerConn", false, true)
 				} else {
@@ -824,7 +821,6 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			func() {
 				c.t.mu.RLock()
 				defer c.t.mu.RUnlock()
-
 				c.mu.Lock()
 				defer c.mu.Unlock()
 
@@ -882,17 +878,13 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			}
 		case pp.Piece:
 			c.doChunkReadStats(int64(len(msg.Piece)))
-			func() {
-				cl.unlock()
-				defer cl.lock()
-				c.receiveChunk(&msg, true)
-				if len(msg.Piece) == int(t.chunkSize) {
-					t.chunkPool.Put(&msg.Piece)
-				}
-				if err != nil {
-					err = fmt.Errorf("receiving chunk: %w", err)
-				}
-			}()
+			c.receiveChunk(&msg, true)
+			if len(msg.Piece) == int(t.chunkSize) {
+				t.chunkPool.Put(&msg.Piece)
+			}
+			if err != nil {
+				err = fmt.Errorf("receiving chunk: %w", err)
+			}
 		case pp.Cancel:
 			req := newRequestFromMessage(&msg)
 			c.onPeerSentCancel(req)
@@ -908,9 +900,13 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			if msg.Port != 0 {
 				pingAddr.Port = int(msg.Port)
 			}
-			cl.eachDhtServer(func(s DhtServer) {
-				go s.Ping(&pingAddr)
-			})
+			func() {
+				cl.lock()
+				defer cl.unlock()
+				cl.eachDhtServer(func(s DhtServer) {
+					go s.Ping(&pingAddr)
+				})
+			}()
 		case pp.Suggest:
 			torrent.Add("suggests received", 1)
 			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index).LogLevel(log.Debug, c.t.logger)
@@ -930,11 +926,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).LogLevel(log.Debug, c.t.logger)
 			c.updateRequests("PeerConn.mainReadLoop allowed fast", true, true)
 		case pp.Extended:
-			func() {
-				cl.unlock()
-				defer cl.lock()
-				err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
-			}()
+			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}

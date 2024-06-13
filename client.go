@@ -874,7 +874,6 @@ func (cl *Client) outgoingConnection(
 		c.conn.SetWriteDeadline(time.Time{})
 	}
 	cl.lock()
-	defer cl.unlock()
 	// Don't release lock between here and addPeerConn, unless it's for failure.
 	cl.noLongerHalfOpen(opts.t, opts.peerInfo.Addr.String(), attemptKey)
 	if err != nil {
@@ -886,12 +885,15 @@ func (cl *Client) outgoingConnection(
 				err,
 			)
 		}
+		cl.unlock()
 		return
 	}
 	defer c.close(true)
 	c.Discovery = opts.peerInfo.Source
 	c.trusted = opts.peerInfo.Trusted
-	opts.t.runHandshookConnLoggingErr(c)
+	// runHandshookConn will unlock the connection before calling the
+	// connections main loop - so there is no need to do it here
+	opts.t.runHandshookConnLoggingErr(c, false)
 }
 
 // The port number for incoming peer connections. 0 if the client isn't listening.
@@ -1051,14 +1053,19 @@ func (cl *Client) runReceivedConn(c *PeerConn) {
 	}
 	torrent.Add("received handshake for loaded torrent", 1)
 	c.conn.SetWriteDeadline(time.Time{})
-	cl.lock()
-	defer cl.unlock()
-	t.runHandshookConnLoggingErr(c)
+	t.runHandshookConnLoggingErr(c, true)
 }
 
 // Client lock must be held before entering this.
-func (t *Torrent) runHandshookConn(pc *PeerConn) error {
+func (t *Torrent) runHandshookConn(pc *PeerConn, lockClient bool) error {
 	if err := func() error {
+		if lockClient {
+			t.cl.lock()
+		}
+		// even if the client is pre-locked we unlock it here so
+		// the main loop runs log free - so the caller should not
+		// unlock
+		defer t.cl.unlock()
 		t.mu.Lock()
 		defer t.mu.Unlock()
 

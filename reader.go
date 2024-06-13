@@ -50,7 +50,7 @@ type reader struct {
 	readaheadFunc ReadaheadFunc
 
 	// Required when modifying pos and readahead.
-	mu sync.Locker
+	mu sync.RWMutex
 
 	readahead, pos int64
 	// Position that reads have continued contiguously from.
@@ -80,18 +80,22 @@ func (r *reader) SetNonResponsive() {
 }
 
 func (r *reader) SetReadahead(readahead int64) {
+	r.t.mu.Lock()
+	defer r.t.mu.Unlock()
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.readahead = readahead
 	r.readaheadFunc = nil
-	r.posChanged()
-	r.mu.Unlock()
+	r.posChanged(false, false)
 }
 
 func (r *reader) SetReadaheadFunc(f ReadaheadFunc) {
+	r.t.mu.Lock()
+	defer r.t.mu.Unlock()
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.readaheadFunc = f
-	r.posChanged()
-	r.mu.Unlock()
+	r.posChanged(false, false)
 }
 
 // How many bytes are available to read. Max is the most we could require.
@@ -105,7 +109,7 @@ func (r *reader) available(off, max int64) (ret int64) {
 		if !r.responsive && !r.t.pieceComplete(pieceIndex(req.Index), true) {
 			break
 		}
-		if !r.t.haveChunk(req,true) {
+		if !r.t.haveChunk(req, true) {
 			break
 		}
 		len1 := int64(req.Length) - (off - r.t.requestOffset(req))
@@ -121,7 +125,11 @@ func (r *reader) available(off, max int64) (ret int64) {
 }
 
 // Calculates the pieces this reader wants downloaded, ignoring the cached value at r.pieces.
-func (r *reader) piecesUncached() (ret pieceRange) {
+func (r *reader) piecesUncached(lock bool) (ret pieceRange) {
+	if lock {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+	}
 	ra := r.readahead
 	if r.readaheadFunc != nil {
 		ra = r.readaheadFunc(ReadaheadContext{
@@ -153,9 +161,7 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 		r.reading = true
 		// TODO: Rework reader piece priorities so we don't have to push updates in to the Client
 		// and take the lock here.
-		r.mu.Lock()
-		r.posChanged()
-		r.mu.Unlock()
+		r.posChanged(true, true)
 	}
 	n, err = r.readOnceAt(ctx, b, r.pos)
 	if n == 0 {
@@ -166,9 +172,12 @@ func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
 		}
 	}
 
+	r.t.mu.Lock()
+	defer r.t.mu.Unlock()
+
 	r.mu.Lock()
 	r.pos += int64(n)
-	r.posChanged()
+	r.posChanged(false, false)
 	r.mu.Unlock()
 	if r.pos >= r.length {
 		err = io.EOF
@@ -189,10 +198,10 @@ func init() {
 func (r *reader) waitAvailable(ctx context.Context, pos, wanted int64, wait bool) (avail int64, err error) {
 	t := r.t
 	for {
-		r.t.cl.rLock()
+		t.mu.RLock()
 		avail = r.available(pos, wanted)
 		readerCond := t.piece(int((r.offset+pos)/t.info.PieceLength), true).readerCond.Signaled()
-		r.t.cl.rUnlock()
+		r.t.mu.RUnlock()
 		if avail != 0 {
 			return
 		}
@@ -249,12 +258,12 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 			err = fmt.Errorf("reading from closed torrent: %w", err)
 			return
 		}
-		r.t.cl.lock()
+		r.t.mu.Lock()
 		// I think there's a panic here caused by the Client being closed before obtaining this
 		// lock. TestDropTorrentWithMmapStorageWhileHashing seems to tickle occasionally in CI.
 		func() {
 			// Just add exceptions already.
-			defer r.t.cl.unlock()
+			defer r.t.mu.Unlock()
 			if r.t.closed.IsSet() {
 				// Can't update because Torrent's piece order is removed from Client.
 				return
@@ -263,7 +272,7 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 			// prevent thrashing with small caches and file and piece priorities.
 			r.log(log.Fstr("error reading torrent %s piece %d offset %d, %d bytes: %v",
 				r.t.infoHash.HexString(), firstPieceIndex, firstPieceOffset, len(b1), err))
-			if !r.t.updatePieceCompletion(firstPieceIndex, true) {
+			if !r.t.updatePieceCompletion(firstPieceIndex, false) {
 				r.log(log.Fstr("piece %d completion unchanged", firstPieceIndex))
 			}
 			// Update the rest of the piece completions in the readahead window, without alerting to
@@ -273,7 +282,7 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 				panic(fmt.Sprint(r.pieces.begin, firstPieceIndex))
 			}
 			for index := r.pieces.begin + 1; index < r.pieces.end; index++ {
-				r.t.updatePieceCompletion(index, true)
+				r.t.updatePieceCompletion(index, false)
 			}
 		}()
 	}
@@ -281,24 +290,35 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 
 // Hodor
 func (r *reader) Close() error {
-	r.t.cl.lock()
-	r.t.deleteReader(r)
-	r.t.cl.unlock()
+	r.t.deleteReader(r, true)
 	return nil
 }
 
-func (r *reader) posChanged() {
-	to := r.piecesUncached()
+func (r *reader) posChanged(lock bool, lockTorrent bool) {
+	if lockTorrent {
+		r.t.mu.Lock()
+		defer r.t.mu.Unlock()
+	}
+
+	if lock {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+	}
+
+	to := r.piecesUncached(false)
 	from := r.pieces
 	if to == from {
 		return
 	}
 	r.pieces = to
 	// log.Printf("reader pos changed %v->%v", from, to)
-	r.t.readerPosChanged(from, to)
+	r.t.readerPosChanged(from, to, false)
 }
 
 func (r *reader) Seek(off int64, whence int) (newPos int64, err error) {
+	r.t.mu.Lock()
+	defer r.t.mu.Unlock()
+
 	switch whence {
 	case io.SeekStart:
 		newPos = off
@@ -316,7 +336,7 @@ func (r *reader) Seek(off int64, whence int) (newPos int64, err error) {
 		r.reading = false
 		r.pos = newPos
 		r.contiguousReadStartPos = newPos
-		r.posChanged()
+		r.posChanged(false, false)
 	}
 	r.mu.Unlock()
 	return

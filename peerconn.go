@@ -658,10 +658,8 @@ func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 		return
 	}
 	b, err := c.readPeerRequestData(r)
-	c.locker().Lock()
-	defer c.locker().Unlock()
 	if err != nil {
-		c.peerRequestDataReadFailed(err, r)
+		c.peerRequestDataReadFailed(err, r, true)
 	} else {
 		if b == nil {
 			panic("data must be non-nil to trigger send")
@@ -675,7 +673,12 @@ func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 
 // If this is maintained correctly, we might be able to support optional synchronous reading for
 // chunk sending, the way it used to work.
-func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
+func (c *PeerConn) peerRequestDataReadFailed(err error, r Request, lockTorrent bool) {
+	if lockTorrent {
+		c.t.mu.Lock()
+		defer c.t.mu.Unlock()
+	}
+
 	torrent.Add("peer request data read failures", 1)
 	logLevel := log.Warning
 	if c.t.hasStorageCap() {
@@ -688,12 +691,12 @@ func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
 		return
 	}
 	i := pieceIndex(r.Index)
-	if c.t.pieceComplete(i, true) {
+	if c.t.pieceComplete(i, false) {
 		// There used to be more code here that just duplicated the following break. Piece
 		// completions are currently cached, so I'm not sure how helpful this update is, except to
 		// pull any completion changes pushed to the storage backend in failed reads that got us
 		// here.
-		c.t.updatePieceCompletion(i, true)
+		c.t.updatePieceCompletion(i, false)
 	}
 	// We've probably dropped a piece from storage, but there's no way to communicate this to the
 	// peer. If they ask for it again, we kick them allowing us to send them updated piece states if

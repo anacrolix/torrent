@@ -31,6 +31,7 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
+	"github.com/sasha-s/go-deadlock"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 
@@ -121,7 +122,7 @@ type Torrent struct {
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
-	mu/*deadlock*/ sync.RWMutex
+	mu          deadlock.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if

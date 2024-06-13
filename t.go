@@ -37,13 +37,12 @@ func (t *Torrent) NewReader() Reader {
 
 func (t *Torrent) newReader(offset, length int64) Reader {
 	r := reader{
-		mu:     t.cl.locker(),
 		t:      t,
 		offset: offset,
 		length: length,
 	}
 	r.readaheadFunc = defaultReadaheadFunc
-	t.addReader(&r)
+	t.addReader(&r, true)
 	return &r
 }
 
@@ -150,19 +149,26 @@ func (t *Torrent) Metainfo() metainfo.MetaInfo {
 	return t.newMetaInfo(true)
 }
 
-func (t *Torrent) addReader(r *reader) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+func (t *Torrent) addReader(r *reader, lock bool) {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
 	if t.readers == nil {
 		t.readers = make(map[*reader]struct{})
 	}
 	t.readers[r] = struct{}{}
-	r.posChanged()
+	r.posChanged(true, false)
 }
 
-func (t *Torrent) deleteReader(r *reader) {
+func (t *Torrent) deleteReader(r *reader, lock bool) {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
+
 	delete(t.readers, r)
-	t.readersChanged()
+	t.readersChanged(false)
 }
 
 // Raise the priorities of pieces in the range [begin, end) to at least Normal

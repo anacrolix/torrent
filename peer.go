@@ -202,10 +202,6 @@ func (cn *Peer) cumInterest(lock bool) time.Duration {
 	return ret
 }
 
-func (cn *Peer) locker() /**deadlock.RWMutex {*/ *lockWithDeferreds {
-	return cn.t.cl.locker()
-}
-
 func (cn *PeerConn) supportsExtension(ext pp.ExtensionName, lock bool) bool {
 	if lock {
 		cn.mu.RLock()

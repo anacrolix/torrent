@@ -37,19 +37,19 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	// c.r = r
 	c.w = w
 	c.startMessageWriter(true)
-	c.locker().Lock()
+	c.t.mu.Lock()
 	c.t._completedPieces.Add(1)
-	c.postBitfield(true /*[]bool{false, true, false}*/)
-	c.locker().Unlock()
-	c.locker().Lock()
+	c.postBitfield(false /*[]bool{false, true, false}*/)
+	c.t.mu.Unlock()
+	c.mu.Lock()
 	c.have(2)
-	c.locker().Unlock()
+	c.mu.Unlock()
 	b := make([]byte, 15)
 	n, err := io.ReadFull(r, b)
-	c.locker().Lock()
+	c.mu.Lock()
 	// This will cause connection.writer to terminate.
 	c.closed.Set()
-	c.locker().Unlock()
+	c.mu.Unlock()
 	require.NoError(t, err)
 	require.EqualValues(t, 15, n)
 	// Here we see that the bitfield doesn't have piece 2 set, as that should

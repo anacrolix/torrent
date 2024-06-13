@@ -658,10 +658,8 @@ func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 		return
 	}
 	b, err := c.readPeerRequestData(r)
-	c.locker().Lock()
-	defer c.locker().Unlock()
 	if err != nil {
-		c.peerRequestDataReadFailed(err, r)
+		c.peerRequestDataReadFailed(err, r, true)
 	} else {
 		if b == nil {
 			panic("data must be non-nil to trigger send")
@@ -675,7 +673,12 @@ func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 
 // If this is maintained correctly, we might be able to support optional synchronous reading for
 // chunk sending, the way it used to work.
-func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
+func (c *PeerConn) peerRequestDataReadFailed(err error, r Request, lockTorrent bool) {
+	if lockTorrent {
+		c.t.mu.Lock()
+		defer c.t.mu.Unlock()
+	}
+
 	torrent.Add("peer request data read failures", 1)
 	logLevel := log.Warning
 	if c.t.hasStorageCap() {
@@ -688,12 +691,12 @@ func (c *PeerConn) peerRequestDataReadFailed(err error, r Request) {
 		return
 	}
 	i := pieceIndex(r.Index)
-	if c.t.pieceComplete(i, true) {
+	if c.t.pieceComplete(i, false) {
 		// There used to be more code here that just duplicated the following break. Piece
 		// completions are currently cached, so I'm not sure how helpful this update is, except to
 		// pull any completion changes pushed to the storage backend in failed reads that got us
 		// here.
-		c.t.updatePieceCompletion(i, true)
+		c.t.updatePieceCompletion(i, false)
 	}
 	// We've probably dropped a piece from storage, but there's no way to communicate this to the
 	// peer. If they ask for it again, we kick them allowing us to send them updated piece states if
@@ -756,11 +759,8 @@ func (c *PeerConn) mainReadLoop() (err error) {
 	}
 	for {
 		var msg pp.Message
-		func() {
-			cl.unlock()
-			defer cl.lock()
-			err = decoder.Decode(&msg)
-		}()
+		err = decoder.Decode(&msg)
+
 		if cb := c.callbacks.ReadMessage; cb != nil && err == nil {
 			cb(c, &msg)
 		}
@@ -796,9 +796,9 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			func() {
 				c.t.mu.RLock()
 				defer c.t.mu.RUnlock()
-
 				c.mu.Lock()
 				defer c.mu.Unlock()
+
 				if !c.fastEnabled() {
 					c.deleteAllRequests("choked by non-fast PeerConn", false, true)
 				} else {
@@ -824,7 +824,6 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			func() {
 				c.t.mu.RLock()
 				defer c.t.mu.RUnlock()
-
 				c.mu.Lock()
 				defer c.mu.Unlock()
 
@@ -882,17 +881,13 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			}
 		case pp.Piece:
 			c.doChunkReadStats(int64(len(msg.Piece)))
-			func() {
-				cl.unlock()
-				defer cl.lock()
-				c.receiveChunk(&msg, true)
-				if len(msg.Piece) == int(t.chunkSize) {
-					t.chunkPool.Put(&msg.Piece)
-				}
-				if err != nil {
-					err = fmt.Errorf("receiving chunk: %w", err)
-				}
-			}()
+			c.receiveChunk(&msg, true)
+			if len(msg.Piece) == int(t.chunkSize) {
+				t.chunkPool.Put(&msg.Piece)
+			}
+			if err != nil {
+				err = fmt.Errorf("receiving chunk: %w", err)
+			}
 		case pp.Cancel:
 			req := newRequestFromMessage(&msg)
 			c.onPeerSentCancel(req)
@@ -908,9 +903,13 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			if msg.Port != 0 {
 				pingAddr.Port = int(msg.Port)
 			}
-			cl.eachDhtServer(func(s DhtServer) {
-				go s.Ping(&pingAddr)
-			})
+			func() {
+				cl.lock()
+				defer cl.unlock()
+				cl.eachDhtServer(func(s DhtServer) {
+					go s.Ping(&pingAddr)
+				})
+			}()
 		case pp.Suggest:
 			torrent.Add("suggests received", 1)
 			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index).LogLevel(log.Debug, c.t.logger)
@@ -930,11 +929,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).LogLevel(log.Debug, c.t.logger)
 			c.updateRequests("PeerConn.mainReadLoop allowed fast", true, true)
 		case pp.Extended:
-			func() {
-				cl.unlock()
-				defer cl.lock()
-				err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
-			}()
+			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
 		}

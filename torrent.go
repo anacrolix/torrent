@@ -22,7 +22,6 @@ import (
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
-	. "github.com/anacrolix/generics"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/slices"
@@ -32,6 +31,7 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
+	"github.com/sasha-s/go-deadlock"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 
@@ -80,7 +80,7 @@ type Torrent struct {
 	chunkPool sync.Pool
 	// Total length of the torrent in bytes. Stored because it's not O(1) to
 	// get this from the info dict.
-	_length Option[int64]
+	_length g.Option[int64]
 
 	// The storage to open when the info dict becomes available.
 	storageOpener *storage.Client
@@ -122,7 +122,7 @@ type Torrent struct {
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
-	mu/*deadlock*/ sync.RWMutex
+	mu          deadlock.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if
@@ -499,7 +499,7 @@ func (t *Torrent) cacheLength() {
 	for _, f := range t.info.UpvertedFiles() {
 		l += f.Length
 	}
-	t._length = Some(l)
+	t._length = g.Some(l)
 }
 
 // TODO: This shouldn't fail for storage reasons. Instead we should handle storage failure
@@ -553,7 +553,7 @@ func (t *Torrent) onSetInfo(lock bool, lockClient bool) {
 
 	t.pieceRequestOrder = rand.Perm(t.numPieces())
 	t.initPieceRequestOrder(false)
-	MakeSliceWithLength(&t.requestPieceStates, t.numPieces())
+	g.MakeSliceWithLength(&t.requestPieceStates, t.numPieces())
 	for i := range t.pieces {
 		p := &t.pieces[i]
 		// Need to add relativeAvailability before updating piece completion, as that may result in conns
@@ -875,7 +875,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	t.forReaderOffsetPieces(func(begin, end pieceIndex) (again bool) {
 		fmt.Fprintf(w, " %d:%d", begin, end)
 		return true
-	})
+	}, false)
 	fmt.Fprintln(w)
 
 	fmt.Fprintf(w, "Enabled trackers:\n")
@@ -1458,20 +1458,25 @@ func (t *Torrent) pieceAllDirty(piece pieceIndex, lock bool) bool {
 	return t.piece(piece, lock).allChunksDirty(lock)
 }
 
-func (t *Torrent) readersChanged() {
-	t.updateReaderPieces()
-	t.updateAllPiecePriorities("Torrent.readersChanged")
+func (t *Torrent) readersChanged(lock bool) {
+	t.updateReaderPieces(lock)
+	t.updateAllPiecePriorities("Torrent.readersChanged", lock)
 }
 
-func (t *Torrent) updateReaderPieces() {
-	t._readerNowPieces, t._readerReadaheadPieces = t.readerPiecePriorities()
+func (t *Torrent) updateReaderPieces(lock bool) {
+	t._readerNowPieces, t._readerReadaheadPieces = t.readerPiecePriorities(lock)
 }
 
-func (t *Torrent) readerPosChanged(from, to pieceRange) {
+func (t *Torrent) readerPosChanged(from, to pieceRange, lock bool) {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
+
 	if from == to {
 		return
 	}
-	t.updateReaderPieces()
+	t.updateReaderPieces(false)
 	// Order the ranges, high and low.
 	l, h := from, to
 	if l.begin > h.begin {
@@ -1479,15 +1484,15 @@ func (t *Torrent) readerPosChanged(from, to pieceRange) {
 	}
 	if l.end < h.begin {
 		// Two distinct ranges.
-		t.updatePiecePriorities(l.begin, l.end, "Torrent.readerPosChanged")
-		t.updatePiecePriorities(h.begin, h.end, "Torrent.readerPosChanged")
+		t.updatePiecePriorities(l.begin, l.end, "Torrent.readerPosChanged", false)
+		t.updatePiecePriorities(h.begin, h.end, "Torrent.readerPosChanged", false)
 	} else {
 		// Ranges overlap.
 		end := l.end
 		if h.end > end {
 			end = h.end
 		}
-		t.updatePiecePriorities(l.begin, end, "Torrent.readerPosChanged")
+		t.updatePiecePriorities(l.begin, end, "Torrent.readerPosChanged", false)
 	}
 }
 
@@ -1557,15 +1562,15 @@ func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string, lock bool
 	t.updatePieceRequestOrderPiece(piece, lock)
 }
 
-func (t *Torrent) updateAllPiecePriorities(reason string) {
-	t.updatePiecePriorities(0, t.numPieces(), reason)
+func (t *Torrent) updateAllPiecePriorities(reason string, lock bool) {
+	t.updatePiecePriorities(0, t.numPieces(), reason, lock)
 }
 
 // Update all piece priorities in one hit. This function should have the same
 // output as updatePiecePriority, but across all pieces.
-func (t *Torrent) updatePiecePriorities(begin, end pieceIndex, reason string) {
+func (t *Torrent) updatePiecePriorities(begin, end pieceIndex, reason string, lock bool) {
 	for i := begin; i < end; i++ {
-		t.updatePiecePriority(i, reason, true)
+		t.updatePiecePriority(i, reason, lock)
 	}
 }
 
@@ -1592,7 +1597,12 @@ func (t *Torrent) byteRegionPieces(off, size int64) (begin, end pieceIndex) {
 // Returns true if all iterations complete without breaking. Returns the read regions for all
 // readers. The reader regions should not be merged as some callers depend on this method to
 // enumerate readers.
-func (t *Torrent) forReaderOffsetPieces(f func(begin, end pieceIndex) (more bool)) (all bool) {
+func (t *Torrent) forReaderOffsetPieces(f func(begin, end pieceIndex) (more bool), lock bool) (all bool) {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
+
 	for r := range t.readers {
 		p := r.pieces
 		if p.begin >= p.end {
@@ -1770,14 +1780,14 @@ func (t *Torrent) maybeCompleteMetadata() error {
 	return nil
 }
 
-func (t *Torrent) readerPiecePriorities() (now, readahead bitmap.Bitmap) {
+func (t *Torrent) readerPiecePriorities(lock bool) (now, readahead bitmap.Bitmap) {
 	t.forReaderOffsetPieces(func(begin, end pieceIndex) bool {
 		if end > begin {
 			now.Add(bitmap.BitIndex(begin))
 			readahead.AddRange(bitmap.BitRange(begin)+1, bitmap.BitRange(end))
 		}
 		return true
-	})
+	}, lock)
 	return
 }
 
@@ -2003,23 +2013,21 @@ func (t *Torrent) onWebRtcConn(
 		pc.Discovery = PeerSourceIncoming
 	}
 	pc.conn.SetWriteDeadline(time.Time{})
-	t.cl.lock()
-	defer t.cl.unlock()
-	err = t.runHandshookConn(pc)
+	err = t.runHandshookConn(pc, true)
 	if err != nil {
 		t.logger.WithDefaultLevel(log.Debug).Printf("error running handshook webrtc conn: %v", err)
 	}
 }
 
-func (t *Torrent) logRunHandshookConn(pc *PeerConn, logAll bool, level log.Level) {
-	err := t.runHandshookConn(pc)
+func (t *Torrent) logRunHandshookConn(pc *PeerConn, logAll bool, level log.Level, lockClient bool) {
+	err := t.runHandshookConn(pc, lockClient)
 	if err != nil || logAll {
 		t.logger.WithDefaultLevel(level).Levelf(log.ErrorLevel(err), "error running handshook conn: %v", err)
 	}
 }
 
-func (t *Torrent) runHandshookConnLoggingErr(pc *PeerConn) {
-	t.logRunHandshookConn(pc, false, log.Debug)
+func (t *Torrent) runHandshookConnLoggingErr(pc *PeerConn, lockClient bool) {
+	t.logRunHandshookConn(pc, false, log.Debug, lockClient)
 }
 
 func (t *Torrent) startWebsocketAnnouncer(u url.URL) torrentTrackerAnnouncer {
@@ -2801,7 +2809,7 @@ func (t *Torrent) dropBannedPeers() {
 			continue
 		}
 		netipAddr := netip.MustParseAddr(remoteIp.String())
-		if Some(netipAddr) != p.bannableAddr {
+		if g.Some(netipAddr) != p.bannableAddr {
 			t.logger.WithDefaultLevel(log.Debug).Printf(
 				"peer remote ip does not match its bannable addr [peer=%v, remote ip=%v, bannable addr=%v]",
 				p, remoteIp, p.bannableAddr)
@@ -3357,7 +3365,7 @@ func wrapUtHolepunchMsgForPeerConn(
 	}
 	return pp.Message{
 		Type:            pp.Extended,
-		ExtendedID:      MapMustGet(recipient.PeerExtensionIDs, utHolepunch.ExtensionName),
+		ExtendedID:      g.MapMustGet(recipient.PeerExtensionIDs, utHolepunch.ExtensionName),
 		ExtendedPayload: extendedPayload,
 	}
 }

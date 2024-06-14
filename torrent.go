@@ -420,10 +420,11 @@ func (t *Torrent) saveMetadataPiece(index int, data []byte) {
 	t.metadataCompletedChunks[index] = true
 }
 
-func (t *Torrent) metadataPieceCount() int {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-
+func (t *Torrent) metadataPieceCount(lock bool) int {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 	return (len(t.metadataBytes) + (1 << 14) - 1) / (1 << 14)
 }
 

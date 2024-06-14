@@ -535,7 +535,7 @@ func (c *PeerConn) requestPendingMetadata(lockTorrent bool) {
 	}
 	// Request metadata pieces that we don't have in a random order.
 	var pending []int
-	for index := 0; index < c.t.metadataPieceCount(); index++ {
+	for index := 0; index < c.t.metadataPieceCount(lockTorrent); index++ {
 		if !c.t.haveMetadataPiece(index, lockTorrent) && !c.requestedMetadataPiece(index) {
 			pending = append(pending, index)
 		}

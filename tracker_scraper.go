@@ -39,6 +39,8 @@ func (ts *trackerScraper) statusLine() string {
 	var w bytes.Buffer
 	fmt.Fprintf(&w, "next ann: %v, last ann: %v",
 		func() string {
+			ts.mu.RLock()
+			defer ts.mu.RUnlock()
 			na := time.Until(ts.lastAnnounce.Completed.Add(ts.lastAnnounce.Interval))
 			if na > 0 {
 				na /= time.Second
@@ -49,6 +51,8 @@ func (ts *trackerScraper) statusLine() string {
 			}
 		}(),
 		func() string {
+			ts.mu.RLock()
+			defer ts.mu.RUnlock()
 			if ts.lastAnnounce.Err != nil {
 				return ts.lastAnnounce.Err.Error()
 			}

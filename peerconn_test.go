@@ -120,8 +120,8 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	})
 	c.Assert(cn.bannableAddr.Ok, qt.IsTrue)
 	cn.setTorrent(t, true)
-	requestIndexBegin := t.pieceRequestIndexOffset(0,true)
-	requestIndexEnd := t.pieceRequestIndexOffset(1,true)
+	requestIndexBegin := t.pieceRequestIndexOffset(0, true)
+	requestIndexEnd := t.pieceRequestIndexOffset(1, true)
 	eachRequestIndex := func(f func(ri RequestIndex)) {
 		for ri := requestIndexBegin; ri < requestIndexEnd; ri++ {
 			f(ri)
@@ -373,7 +373,7 @@ func TestReceiveLargeRequest(t *testing.T) {
 	tor._completedPieces.Add(0)
 	pc.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
 	pc.choking = false
-	pc.initMessageWriter()
+	pc.initMessageWriter(true, true)
 	req := Request{}
 	req.Length = defaultChunkSize
 	c.Assert(pc.fastEnabled(), qt.IsTrue)

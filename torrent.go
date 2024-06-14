@@ -1254,7 +1254,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	if all, known := p.peerHasAllPieces(true, lock); !(known && all) {
 		return
 	}
-	if p.useful(lock) {
+	if p.useful(true, lock) {
 		return
 	}
 	p.logger.Levelf(log.Debug, "is mutually complete; dropping")
@@ -1378,23 +1378,30 @@ func (t *Torrent) worstBadConnFromSlice(opts worseConnLensOpts, sl []*PeerConn) 
 	wcs.initKeys(opts)
 	heap.Init(&wcs)
 	for wcs.Len() != 0 {
-		c := heap.Pop(&wcs).(*PeerConn)
-		if opts.incomingIsBad && !c.outgoing {
-			return c
-		}
-		if opts.outgoingIsBad && c.outgoing {
-			return c
-		}
-		if c._stats.ChunksReadWasted.Int64() >= 6 && c._stats.ChunksReadWasted.Int64() > c._stats.ChunksReadUseful.Int64() {
-			return c
-		}
-		// If the connection is in the worst half of the established
-		// connection quota and is older than a minute.
-		if wcs.Len() >= (t.maxEstablishedConns+1)/2 {
-			// Give connections 1 minute to prove themselves.
-			if time.Since(c.completedHandshake) > time.Minute {
+		if c := func(c *PeerConn) *PeerConn {
+			c.mu.RLock()
+			defer c.mu.RUnlock()
+			if opts.incomingIsBad && !c.outgoing {
 				return c
 			}
+			if opts.outgoingIsBad && c.outgoing {
+				return c
+			}
+			if c._stats.ChunksReadWasted.Int64() >= 6 && c._stats.ChunksReadWasted.Int64() > c._stats.ChunksReadUseful.Int64() {
+				return c
+			}
+			// If the connection is in the worst half of the established
+			// connection quota and is older than a minute.
+			if wcs.Len() >= (t.maxEstablishedConns+1)/2 {
+				// Give connections 1 minute to prove themselves.
+				if time.Since(c.completedHandshake) > time.Minute {
+					return c
+				}
+			}
+
+			return nil
+		}(heap.Pop(&wcs).(*PeerConn)); c == nil {
+			return c
 		}
 	}
 	return nil

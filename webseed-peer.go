@@ -113,9 +113,14 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 			return
 		}
 
+		// note we're ignoring lock as the peer here is not 
+		// this peer (see above)
+		peer.mu.RLock()
+		defer peer.mu.RUnlock()
+
 		if !peer.closed.IsSet() {
 			if peer.connectionFlags() != "WS" {
-				if !peer.peerInterested || peer.lastHelpful(false).IsZero() {
+				if !peer.peerInterested || peer.lastHelpful(false, false).IsZero() {
 					return
 				}
 			}

@@ -330,7 +330,7 @@ func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
 	fmt.Fprintf(w, "last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),
-		eventAgeString(cn.lastHelpful(false)),
+		eventAgeString(cn.lastHelpful(false, false)),
 		cn.cumInterest(false),
 		cn.totalExpectingTime(),
 	)
@@ -626,10 +626,20 @@ func (cn *Peer) readBytes(n int64) {
 	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
 }
 
-func (c *Peer) lastHelpful(lockTorrent bool) (ret time.Time) {
-	ret = c.lastUsefulChunkReceived
-	if c.t.seeding(lockTorrent) && c.lastChunkSent.After(ret) {
-		ret = c.lastChunkSent
+func (c *Peer) lastHelpful(lock bool, lockTorrent bool) (ret time.Time) {
+	var lastChunkSent time.Time
+
+	func() {
+		if lock {
+			c.mu.RLock()
+			defer c.mu.RUnlock()
+		}
+		ret = c.lastUsefulChunkReceived
+		lastChunkSent = c.lastChunkSent
+	}()
+
+	if c.t.seeding(lockTorrent) && lastChunkSent.After(ret) {
+		ret = lastChunkSent
 	}
 	return
 }

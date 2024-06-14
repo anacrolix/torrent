@@ -1008,12 +1008,14 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		return nil
 	case pexExtendedId:
 		return func() error {
+			c.t.mu.RLock()
+			defer c.t.mu.RUnlock()
 			c.mu.Lock()
 			defer c.mu.Unlock()
 			if !c.pex.IsEnabled() {
 				return nil // or hang-up maybe?
 			}
-			err = c.pex.Recv(payload)
+			err = c.pex.Recv(payload, false, false)
 			if err != nil {
 				return fmt.Errorf("receiving pex message: %w", err)
 			}
@@ -1134,7 +1136,7 @@ func (c *PeerConn) sendChunk(r Request, msg func(pp.Message, bool) bool, state *
 		Index: r.Index,
 		Begin: r.Begin,
 		Piece: state.data,
-	},true)
+	}, true)
 }
 
 func (c *Peer) setTorrent(t *Torrent, lockTorrent bool) {
@@ -1225,7 +1227,7 @@ func (cn *PeerConn) peerPiecesChanged(lockTorrent bool) {
 
 // Returns whether the connection could be useful to us. We're seeding and
 // they want data, we don't have metainfo and they can provide it, etc.
-func (c *PeerConn) useful(lockTorrent bool) bool {
+func (c *PeerConn) useful(lock bool, lockTorrent bool) bool {
 	t := c.t
 	if c.closed.IsSet() {
 		return false
@@ -1236,7 +1238,7 @@ func (c *PeerConn) useful(lockTorrent bool) bool {
 	if t.seeding(lockTorrent) && c.peerInterested {
 		return true
 	}
-	if c.peerHasWantedPieces(true, lockTorrent) {
+	if c.peerHasWantedPieces(lock, lockTorrent) {
 		return true
 	}
 	return false

@@ -12,7 +12,7 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
-func (pc *PeerConn) initMessageWriter() {
+func (pc *PeerConn) initMessageWriter(lock bool, lockTorrent bool) {
 	w := &pc.messageWriter
 	*w = peerConnMsgWriter{
 		fillWriteBuffer: func() {
@@ -25,14 +25,14 @@ func (pc *PeerConn) initMessageWriter() {
 		logger: pc.logger,
 		w:      pc.w,
 		keepAlive: func() bool {
-			return pc.useful(true)
+			return pc.useful(lock, lockTorrent)
 		},
 		writeBuffer: new(bytes.Buffer),
 	}
 }
 
 func (pc *PeerConn) startMessageWriter(lockTorrent bool) {
-	pc.initMessageWriter()
+	pc.initMessageWriter(true, lockTorrent)
 	go pc.messageWriterRunner(lockTorrent)
 }
 

@@ -123,7 +123,7 @@ func (s *pexConnState) updateRemoteLiveConns(rx pp.PexMsg) (errs []error) {
 }
 
 // Recv is called from the reader goroutine
-func (s *pexConnState) Recv(payload []byte) error {
+func (s *pexConnState) Recv(payload []byte, lockPeer bool, lockTorrent bool) error {
 	rx, err := pp.LoadPexMsg(payload)
 	if err != nil {
 		return fmt.Errorf("unmarshalling pex message: %w", err)
@@ -147,7 +147,7 @@ func (s *pexConnState) Recv(payload []byte) error {
 		s.dbg.Printf("in cooldown period, incoming PEX discarded")
 		return nil
 	}
-	added := s.torrent.addPeers(peers, true)
+	added := s.torrent.addPeers(peers, lockTorrent)
 	s.dbg.Printf("got %v peers over pex, added %v", len(peers), added)
 
 	if len(peers) > 0 {

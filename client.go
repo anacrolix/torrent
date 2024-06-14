@@ -1193,18 +1193,23 @@ func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 	}
 
 	func() {
+		if lockTorrent {
+			pc.t.mu.RLock()
+			defer pc.t.mu.RUnlock()
+		}
+
 		if pc.fastEnabled() {
-			if t.haveAllPieces(lockTorrent) {
+			if t.haveAllPieces(false) {
 				pc.write(pp.Message{Type: pp.HaveAll}, true)
 				pc.sentHaves.AddRange(0, bitmap.BitRange(pc.t.NumPieces()))
 				return
-			} else if !t.haveAnyPieces(lockTorrent) {
+			} else if !t.haveAnyPieces(false) {
 				pc.write(pp.Message{Type: pp.HaveNone}, true)
 				pc.sentHaves.Clear()
 				return
 			}
 		}
-		pc.postBitfield(lockTorrent)
+		pc.postBitfield(false)
 	}()
 
 	if pc.PeerExtensionBytes.SupportsDHT() && cl.config.Extensions.SupportsDHT() && cl.haveDhtServer() {

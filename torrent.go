@@ -1873,7 +1873,9 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 	// the drop event against the PexConnState instead.
 	if ret {
 		if !t.cl.config.DisablePEX {
+			c.mu.Lock()
 			t.pex.Drop(c)
+			c.mu.Unlock()
 		}
 	}
 	torrent.Add("deleted connections", 1)
@@ -2374,7 +2376,9 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 	t.cl.event.Broadcast()
 	// We'll never receive the "p" extended handshake parameter.
 	if !t.cl.config.DisablePEX && !c.PeerExtensionBytes.SupportsExtended() {
+		c.mu.Lock()
 		t.pex.Add(c)
+		c.mu.Unlock()
 	}
 
 	return nil
@@ -2728,8 +2732,11 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 			}
 
 			t.storageLock.RUnlock()
+
+			t.mu.Lock()
 			p.hashing = false
 			t.hashing.Add(-1)
+			t.mu.Unlock()
 
 			t.hashResults <- hashResult{pi, correct, failedPeers, copyErr}
 		}

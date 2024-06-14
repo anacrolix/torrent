@@ -991,9 +991,11 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		}
 		c.requestPendingMetadata(true)
 		if !t.cl.config.DisablePEX {
+			c.mu.Lock()
 			t.pex.Add(c) // we learnt enough now
 			// This checks the extension is supported internally.
 			c.pex.Init(c)
+			c.mu.Unlock()
 		}
 		return nil
 	case metadataExtendedId:

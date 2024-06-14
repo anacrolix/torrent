@@ -140,8 +140,8 @@ func (s *pexConnState) recv(payload []byte, peerLock sync.Locker, lockTorrent bo
 	}
 	peerLock.Lock()
 	s.lastRecv = time.Now()
-	peerLock.Unlock()
 	s.updateRemoteLiveConns(rx)
+	peerLock.Unlock()
 
 	var peers peerInfos
 	peers.AppendFromPex(rx.Added6, rx.Added6Flags)

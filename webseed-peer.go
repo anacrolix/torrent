@@ -315,10 +315,6 @@ func (ws *webseedPeer) logProgress(label string, lockTorrent bool) {
 
 	if lockTorrent {
 		t.mu.RLock()
-		if count := t.mu.rlc.Load(); count > 1 {
-			fmt.Println("LP", count, t.mu.rlocker)
-			defer fmt.Println("LP", count, "DONE", t.mu.rlc.Load())
-		}
 		defer t.mu.RUnlock()
 	}
 

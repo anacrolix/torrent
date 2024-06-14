@@ -475,7 +475,7 @@ func (cl *Client) wantConns(lock bool) bool {
 		if func() (want bool) {
 			st := time.Now()
 			if t.mu.lc.Load() > 0 {
-				fmt.Println(t.name(false), "L", t.mu.locker, "R", t.mu.rlocker, "N", t.mu.nextlocker)
+				fmt.Println("WC", t.name(false), "L", t.mu.locker, "R", t.mu.rlocker, "N", t.mu.nextlocker)
 				defer fmt.Println(t.name(false), "DONE", want, time.Since(st))
 			}
 			if t.wantIncomingConns(true) {

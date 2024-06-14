@@ -36,7 +36,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	r, w := io.Pipe()
 	// c.r = r
 	c.w = w
-	c.startMessageWriter(true)
+	c.startMessageWriter()
 	c.t.mu.Lock()
 	c.t._completedPieces.Add(1)
 	c.postBitfield(false /*[]bool{false, true, false}*/)
@@ -373,7 +373,7 @@ func TestReceiveLargeRequest(t *testing.T) {
 	tor._completedPieces.Add(0)
 	pc.PeerExtensionBytes.SetBit(pp.ExtensionBitFast, true)
 	pc.choking = false
-	pc.initMessageWriter(true, true)
+	pc.initMessageWriter()
 	req := Request{}
 	req.Length = defaultChunkSize
 	c.Assert(pc.fastEnabled(), qt.IsTrue)

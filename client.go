@@ -1101,14 +1101,15 @@ func (t *Torrent) runHandshookConn(pc *PeerConn, lockClient bool) error {
 			return fmt.Errorf("adding connection: %w", err)
 		}
 
+		pc.startMessageWriter()
+		pc.sendInitialMessages(false)
+
 		return nil
 	}(); err != nil {
 		return err
 	}
 
 	defer t.dropConnection(pc, true)
-	pc.startMessageWriter(true)
-	pc.sendInitialMessages(true)
 	pc.initUpdateRequestsTimer(true)
 
 	if err := pc.mainReadLoop(); err != nil {
@@ -1167,6 +1168,7 @@ const localClientReqq = 1024
 func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 	t := pc.t
 	cl := t.cl
+
 	if pc.PeerExtensionBytes.SupportsExtended() && cl.config.Extensions.SupportsExtended() {
 		pc.write(pp.Message{
 			Type:       pp.Extended,
@@ -1195,25 +1197,18 @@ func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 		}, true)
 	}
 
-	func() {
-		if lockTorrent {
-			pc.t.mu.RLock()
-			defer pc.t.mu.RUnlock()
+	if pc.fastEnabled() {
+		if t.haveAllPieces(lockTorrent) {
+			pc.write(pp.Message{Type: pp.HaveAll}, true)
+			pc.sentHaves.AddRange(0, bitmap.BitRange(pc.t.NumPieces()))
+			return
+		} else if !t.haveAnyPieces(lockTorrent) {
+			pc.write(pp.Message{Type: pp.HaveNone}, true)
+			pc.sentHaves.Clear()
+			return
 		}
-
-		if pc.fastEnabled() {
-			if t.haveAllPieces(false) {
-				pc.write(pp.Message{Type: pp.HaveAll}, true)
-				pc.sentHaves.AddRange(0, bitmap.BitRange(pc.t.NumPieces()))
-				return
-			} else if !t.haveAnyPieces(false) {
-				pc.write(pp.Message{Type: pp.HaveNone}, true)
-				pc.sentHaves.Clear()
-				return
-			}
-		}
-		pc.postBitfield(false)
-	}()
+	}
+	pc.postBitfield(lockTorrent)
 
 	if pc.PeerExtensionBytes.SupportsDHT() && cl.config.Extensions.SupportsDHT() && cl.haveDhtServer() {
 		pc.write(pp.Message{

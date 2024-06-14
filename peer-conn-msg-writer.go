@@ -12,7 +12,7 @@ import (
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
-func (pc *PeerConn) initMessageWriter(lock bool, lockTorrent bool) {
+func (pc *PeerConn) initMessageWriter() {
 	w := &pc.messageWriter
 	*w = peerConnMsgWriter{
 		fillWriteBuffer: func() {
@@ -24,20 +24,20 @@ func (pc *PeerConn) initMessageWriter(lock bool, lockTorrent bool) {
 		closed: &pc.closed,
 		logger: pc.logger,
 		w:      pc.w,
-		keepAlive: func() bool {
+		keepAlive: func(lock bool, lockTorrent bool) bool {
 			return pc.useful(lock, lockTorrent)
 		},
 		writeBuffer: new(bytes.Buffer),
 	}
 }
 
-func (pc *PeerConn) startMessageWriter(lockTorrent bool) {
-	pc.initMessageWriter(true, lockTorrent)
-	go pc.messageWriterRunner(lockTorrent)
+func (pc *PeerConn) startMessageWriter() {
+	pc.initMessageWriter()
+	go pc.messageWriterRunner()
 }
 
-func (pc *PeerConn) messageWriterRunner(lockTorrent bool) {
-	defer pc.close(lockTorrent)
+func (pc *PeerConn) messageWriterRunner() {
+	defer pc.close(true)
 	pc.messageWriter.run(pc.t.cl.config.KeepAliveTimeout)
 }
 
@@ -47,7 +47,7 @@ type peerConnMsgWriter struct {
 	closed          *chansync.SetOnce
 	logger          log.Logger
 	w               io.Writer
-	keepAlive       func() bool
+	keepAlive       func(lock bool, lockTorrent bool) bool
 
 	mu        sync.Mutex
 	writeCond chansync.BroadcastCond
@@ -67,7 +67,7 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 			return
 		}
 		cn.fillWriteBuffer()
-		keepAlive := cn.keepAlive()
+		keepAlive := cn.keepAlive(true, true)
 		cn.mu.Lock()
 		if cn.writeBuffer.Len() == 0 && time.Since(lastWrite) >= keepAliveTimeout && keepAlive {
 			cn.writeBuffer.Write(pp.Message{Keepalive: true}.MustMarshalBinary())

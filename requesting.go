@@ -380,7 +380,7 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 		}
 	}
 
-	if !p.setInterested(next.Interested, false) {
+	if !p.setInterested(next.Interested, false, false) {
 		return
 	}
 

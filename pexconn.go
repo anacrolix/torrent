@@ -86,7 +86,7 @@ func (s *pexConnState) Share(postfn messageWriter) bool {
 	case <-s.gate:
 		if tx := s.genmsg(); tx != nil {
 			s.dbg.Print("sending PEX message: ", tx)
-			flow := postfn(tx.Message(s.xid))
+			flow := postfn(tx.Message(s.xid), true)
 			s.sched(pexInterval)
 			return flow
 		} else {

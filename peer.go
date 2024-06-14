@@ -435,7 +435,7 @@ func (cn *Peer) totalExpectingTime() (ret time.Duration) {
 	return
 }
 
-func (cn *Peer) setInterested(interested bool, lockTorrent bool) bool {
+func (cn *Peer) setInterested(interested bool, lock bool, lockTorrent bool) bool {
 	if cn.requestState.Interested == interested {
 		return true
 	}
@@ -447,12 +447,12 @@ func (cn *Peer) setInterested(interested bool, lockTorrent bool) bool {
 	}
 	cn.updateExpectingChunks(lockTorrent)
 	// log.Printf("%p: setting interest: %v", cn, interested)
-	return cn.writeInterested(interested)
+	return cn.writeInterested(interested, lock)
 }
 
 // The function takes a message to be sent, and returns true if more messages
 // are okay.
-type messageWriter func(pp.Message) bool
+type messageWriter func(msg pp.Message, lock bool) bool
 
 // This function seems to only used by Peer.request. It's all logic checks, so maybe we can no-op it
 // when we want to go fast.

@@ -3399,7 +3399,7 @@ func sendUtHolepunchMsg(
 	}
 	incHolepunchMessagesSent(holepunchMsg)
 	ppMsg := wrapUtHolepunchMsgForPeerConn(pc, holepunchMsg)
-	pc.write(ppMsg)
+	pc.write(ppMsg, true)
 }
 
 func incHolepunchMessages(msg utHolepunch.Msg, verb string) {

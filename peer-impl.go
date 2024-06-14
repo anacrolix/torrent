@@ -12,7 +12,7 @@ import (
 type peerImpl interface {
 	// Trigger the actual request state to get updated
 	handleUpdateRequests(lock bool, lockTorrent bool)
-	writeInterested(interested bool) bool
+	writeInterested(interested bool, lock bool) bool
 
 	// _cancel initiates cancellation of a request and returns acked if it expects the cancel to be
 	// handled by a follow-up event.

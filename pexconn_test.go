@@ -36,7 +36,7 @@ func TestPexConnState(t *testing.T) {
 
 	var out pp.Message
 	writerCalled := false
-	testWriter := func(m pp.Message) bool {
+	testWriter := func(m pp.Message, l bool) bool {
 		writerCalled = true
 		out = m
 		return true

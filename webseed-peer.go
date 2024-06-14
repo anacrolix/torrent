@@ -71,7 +71,7 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lockTorrent bool) {
 	ws.peer.updateRequests("info", true, lockTorrent)
 }
 
-func (ws *webseedPeer) writeInterested(interested bool) bool {
+func (ws *webseedPeer) writeInterested(interested bool, lock bool) bool {
 	return true
 }
 

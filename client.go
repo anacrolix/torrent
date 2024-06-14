@@ -1191,17 +1191,17 @@ func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 				}
 				return bencode.MustMarshal(msg)
 			}(),
-		})
+		}, true)
 	}
 
 	func() {
 		if pc.fastEnabled() {
 			if t.haveAllPieces(lockTorrent) {
-				pc.write(pp.Message{Type: pp.HaveAll})
+				pc.write(pp.Message{Type: pp.HaveAll}, true)
 				pc.sentHaves.AddRange(0, bitmap.BitRange(pc.t.NumPieces()))
 				return
 			} else if !t.haveAnyPieces(lockTorrent) {
-				pc.write(pp.Message{Type: pp.HaveNone})
+				pc.write(pp.Message{Type: pp.HaveNone}, true)
 				pc.sentHaves.Clear()
 				return
 			}
@@ -1213,7 +1213,7 @@ func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 		pc.write(pp.Message{
 			Type: pp.Port,
 			Port: cl.dhtPort(),
-		})
+		}, true)
 	}
 }
 
@@ -1261,12 +1261,12 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 		return err
 	case pp.RequestMetadataExtensionMsgType:
 		if !t.haveMetadataPiece(piece, true) {
-			c.write(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d.Piece, nil))
+			c.write(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d.Piece, nil), true)
 			return nil
 		}
 		start := (1 << 14) * piece
 		c.logger.WithDefaultLevel(log.Debug).Printf("sending metadata piece %d", piece)
-		c.write(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]))
+		c.write(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]), true)
 		return nil
 	case pp.RejectMetadataExtensionMsgType:
 		return nil

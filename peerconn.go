@@ -216,13 +216,15 @@ func (cn *PeerConn) onClose(lockTorrent bool) {
 
 // Writes a message into the write buffer. Returns whether it's okay to keep writing. Writing is
 // done asynchronously, so it may be that we're not able to honour backpressure from this method.
-func (cn *PeerConn) write(msg pp.Message) bool {
+func (cn *PeerConn) write(msg pp.Message, lock bool) bool {
 	torrent.Add(fmt.Sprintf("messages written of type %s", msg.Type.String()), 1)
 	// We don't need to track bytes here because the connection's Writer has that behaviour injected
 	// (although there's some delay between us buffering the message, and the connection writer
 	// flushing it out.).
-	cn.mu.Lock()
-	defer cn.mu.Unlock()
+	if lock {
+		cn.mu.Lock()
+		defer cn.mu.Unlock()
+	}
 	notFull := cn.messageWriter.write(msg)
 	// Last I checked only Piece messages affect stats, and we don't write those.
 	cn.wroteMsg(&msg)
@@ -239,7 +241,7 @@ func (cn *PeerConn) requestMetadataPiece(index int) {
 		return
 	}
 	cn.logger.WithDefaultLevel(log.Debug).Printf("requesting metadata piece %d", index)
-	cn.write(pp.MetadataExtensionRequestMsg(eID, index))
+	cn.write(pp.MetadataExtensionRequestMsg(eID, index), true)
 	for index >= len(cn.metadataRequests) {
 		cn.metadataRequests = append(cn.metadataRequests, false)
 	}
@@ -269,7 +271,7 @@ func (cn *PeerConn) choke(msg messageWriter) (more bool) {
 	cn.choking = true
 	more = msg(pp.Message{
 		Type: pp.Choke,
-	})
+	}, true)
 	if !cn.fastEnabled() {
 		cn.deleteAllPeerRequests()
 	}
@@ -283,17 +285,17 @@ func (cn *PeerConn) deleteAllPeerRequests() {
 	cn.peerRequests = nil
 }
 
-func (cn *PeerConn) unchoke(msg func(pp.Message) bool) bool {
+func (cn *PeerConn) unchoke(msg func(pp.Message, bool) bool) bool {
 	if !cn.choking {
 		return true
 	}
 	cn.choking = false
 	return msg(pp.Message{
 		Type: pp.Unchoke,
-	})
+	}, true)
 }
 
-func (pc *PeerConn) writeInterested(interested bool) bool {
+func (pc *PeerConn) writeInterested(interested bool, lock bool) bool {
 	return pc.write(pp.Message{
 		Type: func() pp.MessageType {
 			if interested {
@@ -302,7 +304,7 @@ func (pc *PeerConn) writeInterested(interested bool) bool {
 				return pp.NotInterested
 			}
 		}(),
-	})
+	}, lock)
 }
 
 func (me *PeerConn) _request(r Request) bool {
@@ -311,11 +313,11 @@ func (me *PeerConn) _request(r Request) bool {
 		Index:  r.Index,
 		Begin:  r.Begin,
 		Length: r.Length,
-	})
+	}, true)
 }
 
 func (me *PeerConn) _cancel(r RequestIndex, lock bool, lockTorrent bool) bool {
-	me.write(makeCancelMessage(me.t.requestIndexToRequest(r, lockTorrent)))
+	me.write(makeCancelMessage(me.t.requestIndexToRequest(r, lockTorrent)), true)
 	return me.remoteRejectsCancels()
 }
 
@@ -371,7 +373,7 @@ func (cn *PeerConn) have(piece pieceIndex) {
 	cn.write(pp.Message{
 		Type:  pp.Have,
 		Index: pp.Integer(piece),
-	})
+	}, true)
 	cn.sentHaves.Add(bitmap.BitIndex(piece))
 }
 
@@ -385,7 +387,7 @@ func (cn *PeerConn) postBitfield(lockTorrent bool) {
 	cn.write(pp.Message{
 		Type:     pp.Bitfield,
 		Bitfield: cn.t.bitfield(lockTorrent),
-	})
+	}, true)
 	if lockTorrent {
 		cn.t.mu.RLock()
 		defer cn.t.mu.RUnlock()
@@ -571,7 +573,7 @@ func (c *PeerConn) reject(r Request) {
 	if !c.fastEnabled() {
 		panic("fast not enabled")
 	}
-	c.write(r.ToMsg(pp.Reject))
+	c.write(r.ToMsg(pp.Reject), true)
 	// It is possible to reject a request before it is added to peer requests due to being invalid.
 	if state, ok := c.peerRequests[r]; ok {
 		state.allocReservation.Drop()
@@ -1074,7 +1076,7 @@ func (c *PeerConn) setRetryUploadTimer(delay time.Duration) {
 }
 
 // Also handles choking and unchoking of the remote peer.
-func (c *PeerConn) upload(msg func(pp.Message) bool) bool {
+func (c *PeerConn) upload(msg func(pp.Message, bool) bool) bool {
 	// Breaking or completing this loop means we don't want to upload to the peer anymore, and we
 	// choke them.
 another:
@@ -1124,7 +1126,7 @@ func (c *PeerConn) tickleWriter() {
 	c.messageWriter.writeCond.Broadcast()
 }
 
-func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool, state *peerRequestState) (more bool) {
+func (c *PeerConn) sendChunk(r Request, msg func(pp.Message, bool) bool, state *peerRequestState) (more bool) {
 	c.lastChunkSent = time.Now()
 	state.allocReservation.Release()
 	return msg(pp.Message{
@@ -1132,7 +1134,7 @@ func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool, state *peerRe
 		Index: r.Index,
 		Begin: r.Begin,
 		Piece: state.data,
-	})
+	},true)
 }
 
 func (c *Peer) setTorrent(t *Torrent, lockTorrent bool) {

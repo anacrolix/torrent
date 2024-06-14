@@ -1011,11 +1011,16 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			c.t.mu.RLock()
 			defer c.t.mu.RUnlock()
 			c.mu.Lock()
-			defer c.mu.Unlock()
-			if !c.pex.IsEnabled() {
+			enabled := c.pex.IsEnabled()
+			c.mu.Unlock()
+
+			if !enabled {
 				return nil // or hang-up maybe?
 			}
-			err = c.pex.Recv(payload, false, false)
+
+			// peer must be unlocked for recv - because add peers
+			// may lock it while deciding which peers to drop in worst peers
+			err = c.pex.Recv(payload, false)
 			if err != nil {
 				return fmt.Errorf("receiving pex message: %w", err)
 			}

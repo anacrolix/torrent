@@ -123,7 +123,7 @@ func (s *pexConnState) updateRemoteLiveConns(rx pp.PexMsg) (errs []error) {
 }
 
 // Recv is called from the reader goroutine
-func (s *pexConnState) Recv(payload []byte, lockPeer bool, lockTorrent bool) error {
+func (s *pexConnState) Recv(payload []byte, lockTorrent bool) error {
 	rx, err := pp.LoadPexMsg(payload)
 	if err != nil {
 		return fmt.Errorf("unmarshalling pex message: %w", err)

@@ -543,7 +543,7 @@ func (cn *Peer) request(r RequestIndex, lock bool, lockTorrent bool) (more bool,
 	for _, f := range cn.callbacks.SentRequest {
 		f(PeerRequestEvent{cn, ppReq})
 	}
-	return cn.peerImpl._request(ppReq,false), nil
+	return cn.peerImpl._request(ppReq, false), nil
 }
 
 func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorrent bool) {
@@ -728,113 +728,128 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 	// hashing if they're out of bounds.
 	defer recordBlockForSmartBan()
 
-	if lockTorrent {
-		t.mu.Lock()
-		defer t.mu.Unlock()
-	}
-
-	c.mu.RLock()
-	peerChoking := c.peerChoking
-	validReceiveChunks := c.validReceiveChunks[req]
-	allowedFast := c.peerAllowedFast.Contains(pieceIndex(ppReq.Index))
-	receivedRequest := c.requestState.Requests.Contains(req)
-	c.mu.RUnlock()
-
-	if peerChoking {
-		chunksReceived.Add("while choked", 1)
-	}
-
-	if validReceiveChunks <= 0 {
-		chunksReceived.Add("unexpected", 1)
-		return errors.New("received unexpected chunk")
-	}
-
-	c.decExpectedChunkReceive(req)
-
-	if peerChoking && allowedFast {
-		chunksReceived.Add("due to allowed fast", 1)
-	}
-
-	// The request needs to be deleted immediately to prevent cancels occurring asynchronously when
-	// have actually already received the piece, while we have the Client unlocked to write the data
-	// out.
-	intended := false
-	{
-		if receivedRequest {
-			for _, f := range c.callbacks.ReceivedRequested {
-				f(PeerMessageEvent{c, msg})
-			}
-		}
-
-		checkRemove := func() bool {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			return c.requestState.Cancelled.CheckedRemove(req)
-		}
-
-		// Request has been satisfied.
-		if c.deleteRequest(req, true, false) || checkRemove() {
-			intended = true
-			if !c.peerChoking {
-				c._chunksReceivedWhileExpecting++
-			}
-		} else {
-			chunksReceived.Add("unintended", 1)
-		}
-	}
-
 	cl := t.cl
 
-	// Do we actually want this chunk?
-	if t.haveChunk(ppReq, false) {
-		// panic(fmt.Sprintf("%+v", ppReq))
-		chunksReceived.Add("redundant", 1)
-		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
-		return nil
-	}
-	// ok to here
-	piece := &t.pieces[ppReq.Index]
-
-	c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
-	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
-	if intended {
-		c.mu.Lock()
-		c.piecesReceivedSinceLastRequestUpdate++
-		c.mu.Unlock()
-		c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulIntendedData }))
-	}
-	for _, f := range cl.config.Callbacks.ReceivedUsefulData {
-		f(ReceivedUsefulDataEvent{c, msg})
-	}
-
-	c.mu.Lock()
-	c.lastUsefulChunkReceived = time.Now()
-	c.mu.Unlock()
-
-	// Need to record that it hasn't been written yet, before we attempt to do
-	// anything with it.
-	piece.incrementPendingWrites()
-	// Record that we have the chunk, so we aren't trying to download it while
-	// waiting for it to be written to storage.
-	piece.unpendChunkIndex(chunkIndexFromChunkSpec(ppReq.ChunkSpec, t.chunkSize), false)
-
-	// Cancel pending requests for this chunk from *other* peers.
-	if p := t.requestingPeer(req, false); p != nil {
-		if p == c {
-			panic("should not be pending request from conn that just received it")
+	piece, intended, err := func() (*Piece, bool, error) {
+		if lockTorrent {
+			t.mu.Lock()
+			defer t.mu.Unlock()
 		}
-		p.cancel(req, true, true, false)
+
+		c.mu.RLock()
+		peerChoking := c.peerChoking
+		validReceiveChunks := c.validReceiveChunks[req]
+		allowedFast := c.peerAllowedFast.Contains(pieceIndex(ppReq.Index))
+		receivedRequest := c.requestState.Requests.Contains(req)
+		c.mu.RUnlock()
+
+		if peerChoking {
+			chunksReceived.Add("while choked", 1)
+		}
+
+		if validReceiveChunks <= 0 {
+			chunksReceived.Add("unexpected", 1)
+			return nil, false, errors.New("received unexpected chunk")
+		}
+
+		c.decExpectedChunkReceive(req)
+
+		if peerChoking && allowedFast {
+			chunksReceived.Add("due to allowed fast", 1)
+		}
+
+		// The request needs to be deleted immediately to prevent cancels occurring asynchronously when
+		// have actually already received the piece, while we have the Client unlocked to write the data
+		// out.
+		intended := false
+		{
+			if receivedRequest {
+				for _, f := range c.callbacks.ReceivedRequested {
+					f(PeerMessageEvent{c, msg})
+				}
+			}
+
+			checkRemove := func() bool {
+				c.mu.Lock()
+				defer c.mu.Unlock()
+				return c.requestState.Cancelled.CheckedRemove(req)
+			}
+
+			// Request has been satisfied.
+			if c.deleteRequest(req, true, false) || checkRemove() {
+				intended = true
+				if !c.peerChoking {
+					c._chunksReceivedWhileExpecting++
+				}
+			} else {
+				chunksReceived.Add("unintended", 1)
+			}
+		}
+
+		// Do we actually want this chunk?
+		if t.haveChunk(ppReq, false) {
+			// panic(fmt.Sprintf("%+v", ppReq))
+			chunksReceived.Add("redundant", 1)
+			c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
+			return nil, false, nil
+		}
+
+		piece := &t.pieces[ppReq.Index]
+
+		c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
+		c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
+		if intended {
+			c.mu.Lock()
+			c.piecesReceivedSinceLastRequestUpdate++
+			c.mu.Unlock()
+			c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulIntendedData }))
+		}
+		for _, f := range cl.config.Callbacks.ReceivedUsefulData {
+			f(ReceivedUsefulDataEvent{c, msg})
+		}
+
+		c.mu.Lock()
+		c.lastUsefulChunkReceived = time.Now()
+		c.mu.Unlock()
+
+		// Need to record that it hasn't been written yet, before we attempt to do
+		// anything with it.
+		piece.incrementPendingWrites()
+		// Record that we have the chunk, so we aren't trying to download it while
+		// waiting for it to be written to storage.
+		piece.unpendChunkIndex(chunkIndexFromChunkSpec(ppReq.ChunkSpec, t.chunkSize), false)
+
+		// Cancel pending requests for this chunk from *other* peers.
+		if p := t.requestingPeer(req, false); p != nil {
+			if p == c {
+				panic("should not be pending request from conn that just received it")
+			}
+			p.cancel(req, true, true, false)
+		}
+
+		return piece, intended, err
+	}()
+
+	if piece == nil {
+		return err
 	}
 
 	// Opportunistically do this here while we aren't holding the client lock.
 	recordBlockForSmartBan()
+
 	concurrentChunkWrites.Add(1)
 	defer concurrentChunkWrites.Add(-1)
+
 	// Write the chunk out. Note that the upper bound on chunk writing concurrency will be the
 	// number of connections. We write inline with receiving the chunk, because we want to handle errors
 	// synchronously and I haven't thought of a nice way to defer any concurrency to the storage and have
 	// that notify the client of errors. TODO: Do that instead.
-	err = t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece, false)
+	err = t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece, true)
+
+	if lockTorrent {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
 
 	piece.decrementPendingWrites()
 

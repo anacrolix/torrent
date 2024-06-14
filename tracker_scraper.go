@@ -229,7 +229,7 @@ func (me *trackerScraper) Run() {
 
 		me.t.mu.RLock()
 		wantPeers := me.t.wantPeersEvent.C()
-		me.t.mu.RLock()
+		me.t.mu.RUnlock()
 
 		// If we want peers, reduce the interval to the minimum if it's appropriate.
 

@@ -840,7 +840,8 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 	concurrentChunkWrites.Add(1)
 	defer concurrentChunkWrites.Add(-1)
 
-	// Write the chunk out. Note that the upper bound on chunk writing concurrency will be the
+	// Write the chunk out. This is done with no locks waiting on io 
+	// Note that the upper bound on chunk writing concurrency will be the
 	// number of connections. We write inline with receiving the chunk, because we want to handle errors
 	// synchronously and I haven't thought of a nice way to defer any concurrency to the storage and have
 	// that notify the client of errors. TODO: Do that instead.

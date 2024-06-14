@@ -216,6 +216,9 @@ func (me *trackerScraper) Run() {
 		ar := me.announce(ctx, e)
 		// after first announce, get back to regular "none"
 		e = tracker.None
+		if me.t.mu.lc.Load() > 0 || me.t.mu.rlc.Load() > 0 {
+			fmt.Println("TSR", "L", me.t.mu.locker, "R", me.t.mu.rlocker)
+		}
 		me.t.mu.Lock()
 		me.lastAnnounce = ar
 		me.t.mu.Unlock()

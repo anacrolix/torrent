@@ -16,6 +16,7 @@ import (
 	"net/netip"
 	"sort"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/cespare/xxhash"
@@ -459,6 +460,8 @@ func (cl *Client) ipIsBlocked(ip net.IP) bool {
 	return blocked
 }
 
+var wccount atomic.Int32
+
 func (cl *Client) wantConns(lock bool) bool {
 	alwaysWantConns := func() bool {
 		if lock {
@@ -473,10 +476,11 @@ func (cl *Client) wantConns(lock bool) bool {
 	}
 	for _, t := range cl.torrentsAsSlice() {
 		if func() (want bool) {
+			c := wccount.Add(1)
 			st := time.Now()
 			if t.mu.lc.Load() > 0 {
-				fmt.Println("WC", t.name(false), "L", t.mu.locker, "R", t.mu.rlocker, "N", t.mu.nextlocker)
-				defer fmt.Println(t.name(false), "DONE", want, time.Since(st))
+				fmt.Println("WC", c, t.name(false), "L", t.mu.locker, "R", t.mu.rlocker, "N", t.mu.nextlocker)
+				defer fmt.Println("WC", c, t.name(false), "DONE", want, time.Since(st))
 			}
 			if t.wantIncomingConns(true) {
 				want = true

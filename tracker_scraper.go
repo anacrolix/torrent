@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
@@ -20,6 +21,7 @@ import (
 type trackerScraper struct {
 	u               url.URL
 	t               *Torrent
+	mu              sync.RWMutex
 	lastAnnounce    trackerAnnounceResult
 	lookupTrackerIp func(*url.URL) ([]net.IP, error)
 }
@@ -29,7 +31,7 @@ type torrentTrackerAnnouncer interface {
 	URL() *url.URL
 }
 
-func (me trackerScraper) URL() *url.URL {
+func (me *trackerScraper) URL() *url.URL {
 	return &me.u
 }
 
@@ -217,11 +219,11 @@ func (me *trackerScraper) Run() {
 		// after first announce, get back to regular "none"
 		e = tracker.None
 		if me.t.mu.lc.Load() > 0 || me.t.mu.rlc.Load() > 0 {
-			fmt.Println("TSR", me.t.name(false), "L", me.t.mu.locker, "R", me.t.mu.rlocker, "N", me.t.mu.nextlocker)
+			fmt.Println("TSR", me.t.name(false), ar, "L", me.t.mu.locker, "R", me.t.mu.rlocker, "N", me.t.mu.nextlocker)
 		}
-		me.t.mu.Lock()
+		me.mu.Lock()
 		me.lastAnnounce = ar
-		me.t.mu.Unlock()
+		me.mu.Unlock()
 
 	recalculate:
 		// Make sure we don't announce for at least a minute since the last one.

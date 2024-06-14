@@ -419,6 +419,9 @@ func requestUpdate(ws *webseedPeer) {
 						ws.peer.updateRequests("unchoked", true, true)
 					}()
 
+					next := ws.peer.getDesiredRequestState(false, true, true)
+
+					fmt.Println("UC", "P", ws.peer.requestState.Requests.GetCardinality(), "D", len(next.Requests.requestIndexes))
 					logProgress(ws, "unchoked", false)
 
 					// if the initial unchoke didn't yield a request (for small files) - don't immediately

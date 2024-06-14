@@ -1067,6 +1067,7 @@ func (t *Torrent) runHandshookConn(pc *PeerConn, lockClient bool) error {
 		// the main loop runs log free - so the caller should not
 		// unlock
 		defer t.cl.unlock()
+
 		t.mu.Lock()
 		defer t.mu.Unlock()
 
@@ -1098,14 +1099,16 @@ func (t *Torrent) runHandshookConn(pc *PeerConn, lockClient bool) error {
 		if err := t.addPeerConn(pc, false); err != nil {
 			return fmt.Errorf("adding connection: %w", err)
 		}
-		defer t.dropConnection(pc, false)
-		pc.startMessageWriter(false)
-		pc.sendInitialMessages(false)
-		pc.initUpdateRequestsTimer(true)
+
 		return nil
 	}(); err != nil {
 		return err
 	}
+
+	defer t.dropConnection(pc, true)
+	pc.startMessageWriter(true)
+	pc.sendInitialMessages(true)
+	pc.initUpdateRequestsTimer(true)
 
 	if err := pc.mainReadLoop(); err != nil {
 		return fmt.Errorf("main read loop: %w", err)

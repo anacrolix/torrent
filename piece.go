@@ -221,11 +221,12 @@ func (p *Piece) SetPriority(prio piecePriority) {
 	p.t.updatePiecePriority(p.index, "Piece.SetPriority", false)
 }
 
-func (p *Piece) purePriority(lock bool) (ret piecePriority) {
-	if lock {
+func (p *Piece) purePriority(lockTorrent bool) (ret piecePriority) {
+	if lockTorrent {
 		p.t.mu.RLock()
 		defer p.t.mu.RUnlock()
 	}
+
 	for _, f := range p.files {
 		ret.Raise(f.prio)
 	}
@@ -242,11 +243,17 @@ func (p *Piece) purePriority(lock bool) (ret piecePriority) {
 	return
 }
 
-func (p *Piece) uncachedPriority(lock bool) (ret piecePriority) {
-	if p.hashing || p.marking || p.t.pieceComplete(p.index, lock) || p.queuedForHash(lock) {
+func (p *Piece) uncachedPriority(lockTorrent bool) (ret piecePriority) {
+	if lockTorrent {
+		p.t.mu.RLock()
+		defer p.t.mu.RUnlock()
+	}
+
+	if p.hashing || p.marking || p.t.pieceComplete(p.index, false) || p.queuedForHash(false) {
 		return PiecePriorityNone
 	}
-	return p.purePriority(lock)
+
+	return p.purePriority(false)
 }
 
 // Tells the Client to refetch the completion status from storage, updating priority etc. if

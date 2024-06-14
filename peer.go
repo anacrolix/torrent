@@ -755,8 +755,8 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 		}
 
 		checkRemove := func() bool {
-			c.mu.RLock()
-			defer c.mu.RUnlock()
+			c.mu.Lock()
+			defer c.mu.Unlock()
 			return c.requestState.Cancelled.CheckedRemove(req)
 		}
 

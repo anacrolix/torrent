@@ -2514,10 +2514,16 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		}
 	}
 
-	p.marking = true
-	t.publishPieceStateChange(piece, true)
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		p.marking = true
+		t.publishPieceStateChange(piece, false)
+	}()
 
 	defer func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
 		p.marking = false
 		t.publishPieceStateChange(piece, true)
 	}()

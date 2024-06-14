@@ -215,7 +215,14 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 				return
 			}
 
-			requestHeap.pieceStates[pieceIndex] = pieceExtra
+			func() {
+				if lockTorrent {
+					t.mu.Lock()
+					defer t.mu.Unlock()
+				}
+				requestHeap.pieceStates[pieceIndex] = pieceExtra
+			}()
+			
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
 
 			it.Initialize(&dirtyChunks)
@@ -260,7 +267,14 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 					// Can't re-request while awaiting acknowledgement.
 					return
 				}
-				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
+
+				func() {
+					if lockTorrent {
+						t.mu.Lock()
+						defer t.mu.Unlock()
+					}
+					requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
+				}()
 			}, lockTorrent)
 		},
 		lockTorrent)

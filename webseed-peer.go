@@ -166,47 +166,57 @@ func (ws *webseedPeer) requester(i int) {
 		// Restart is set if we don't need to wait for the requestCond before trying again.
 		restart := false
 
-		ws.peer.requestState.Requests.Iterate(func(x RequestIndex) bool {
-			r := ws.peer.t.requestIndexToRequest(x, true)
+		var request *Request
 
+		func() {
+			ws.peer.t.mu.RLock()
+			defer ws.peer.t.mu.RUnlock()
 			ws.peer.mu.RLock()
-			_, ok := ws.activeRequests[r]
-			ws.peer.mu.RUnlock()
+			defer ws.peer.mu.RUnlock()
 
-			if ok {
-				return true
-			}
+			ws.peer.requestState.Requests.Iterate(func(x RequestIndex) bool {
+				r := ws.peer.t.requestIndexToRequest(x, false)
 
+				if _, ok := ws.activeRequests[r]; ok {
+					return true
+				}
+
+				request = &r
+				return false
+			})
+		}()
+
+		if request != nil {
 			// note doRequest unlocks ws.requesterCond.L which free the
 			// condition to allow other requestors to receive in parallel it
 			// will lock again before it returns so the remainder of the code
 			// here can assume it has a lock
-			err := ws.doRequest(r)
+			err := ws.doRequest(*request)
 
 			if err == nil {
 				ws.processedRequests++
 				restart = ws.peer.requestState.Requests.GetCardinality() > 0
-				return false
-			}
+			} else {
+				if !errors.Is(err, context.Canceled) {
+					ws.peer.logger.Levelf(log.Debug, "requester %v: error doing webseed request %v: %v", i, request, err)
+				}
 
-			if !errors.Is(err, context.Canceled) {
-				ws.peer.logger.Levelf(log.Debug, "requester %v: error doing webseed request %v: %v", i, r, err)
-			}
+				func() {
+					ws.requesterCond.L.Unlock()
+					defer ws.requesterCond.L.Lock()
 
-			ws.requesterCond.L.Unlock()
-			defer ws.requesterCond.L.Lock()
-
-			if errors.Is(err, webseed.ErrTooFast) {
-				time.Sleep(time.Duration(rand.Int63n(int64(10 * time.Second))))
+					if errors.Is(err, webseed.ErrTooFast) {
+						time.Sleep(time.Duration(rand.Int63n(int64(10 * time.Second))))
+					}
+					// Demeter is throwing a tantrum on Mount Olympus for this
+					ws.peer.mu.RLock()
+					duration := time.Until(ws.lastUnhandledErr.Add(webseedPeerUnhandledErrorSleep))
+					ws.peer.mu.RUnlock()
+					time.Sleep(duration)
+					restart = ws.peer.requestState.Requests.GetCardinality() > 0
+				}()
 			}
-			// Demeter is throwing a tantrum on Mount Olympus for this
-			ws.peer.mu.RLock()
-			duration := time.Until(ws.lastUnhandledErr.Add(webseedPeerUnhandledErrorSleep))
-			ws.peer.mu.RUnlock()
-			time.Sleep(duration)
-			restart = ws.peer.requestState.Requests.GetCardinality() > 0
-			return false
-		})
+		}
 
 		pendingRequests := int(ws.peer.requestState.Requests.GetCardinality())
 
@@ -271,9 +281,13 @@ func (ws *webseedPeer) requester(i int) {
 				go logProgress(ws, "requests", true)
 			}
 
+			ws.peer.mu.Lock()
 			ws.waiting++
+			ws.peer.mu.Unlock()
 			ws.requesterCond.Wait()
+			ws.peer.mu.Lock()
 			ws.waiting--
+			ws.peer.mu.Unlock()
 
 			if ws.updateRequestor != nil {
 				ws.updateRequestor.Stop()

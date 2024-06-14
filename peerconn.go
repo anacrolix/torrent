@@ -221,6 +221,8 @@ func (cn *PeerConn) write(msg pp.Message) bool {
 	// We don't need to track bytes here because the connection's Writer has that behaviour injected
 	// (although there's some delay between us buffering the message, and the connection writer
 	// flushing it out.).
+	cn.mu.Lock()
+	defer cn.mu.Unlock()
 	notFull := cn.messageWriter.write(msg)
 	// Last I checked only Piece messages affect stats, and we don't write those.
 	cn.wroteMsg(&msg)

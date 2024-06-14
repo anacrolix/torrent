@@ -1066,6 +1066,11 @@ func (t *Torrent) runHandshookConn(pc *PeerConn, lockClient bool) error {
 		// unlock
 		defer t.cl.unlock()
 
+		st := time.Now()
+		if t.mu.lc.Load() > 0 || t.mu.rlc.Load() > 0 {
+			fmt.Println("RHC", t.name(false), "L", t.mu.locker, "R", t.mu.rlocker, "N", t.mu.nextlocker)
+			defer fmt.Println("RHC", t.name(false), "DONE", time.Since(st))
+		}
 		t.mu.Lock()
 		defer t.mu.Unlock()
 

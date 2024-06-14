@@ -2498,10 +2498,11 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 var wccount atomic.Int64
 
 func (t *Torrent) newConnsAllowed(lock bool) bool {
+	c := wccount.Add(1)
+	defer wccount.Add(-1)
 	if lock {
 		st := time.Now()
 		if t.mu.lc.Load() > 0 || t.mu.rlc.Load() > 0 {
-			c := wccount.Add(1)
 			fmt.Println("CA", c, t.name(false), "L", t.mu.locker, "R", t.mu.rlocker, "N", t.mu.nextlocker)
 			defer fmt.Println("CA", c, t.name(false), "DONE", time.Since(st))
 		}

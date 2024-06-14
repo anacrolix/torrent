@@ -320,8 +320,8 @@ func logProgress(ws *webseedPeer, label string, lockTorrent bool) {
 	ws.peer.mu.RLock()
 	defer ws.peer.mu.RUnlock()
 
-	desiredRequests := len(ws.peer.getDesiredRequestState(false, false, false).Requests.requestIndexes)
-	pendingRequests := int(ws.peer.requestState.Requests.GetCardinality())
+	desiredRequests := ws.peer.desiredRequests(false)
+	pendingRequests := ws.peer.uncancelledRequests(false)
 	receiving := ws.receiving.Load()
 	persisting := ws.persisting.Load()
 	activeCount := len(ws.activeRequests)
@@ -390,8 +390,8 @@ func requestUpdate(ws *webseedPeer) {
 						defer p.mu.RUnlock()
 
 						rate := p.downloadRate()
-						pieces := int(p.requestState.Requests.GetCardinality())
-						desired := len(p.getDesiredRequestState(false, false, false).Requests.requestIndexes)
+						pieces := p.uncancelledRequests(false)
+						desired := p.desiredRequests(false)
 
 						this := ""
 						if p == &ws.peer {
@@ -455,7 +455,7 @@ func (cn *webseedPeer) isLowOnRequests(lock bool, lockTorrent bool) bool {
 	}
 
 	return cn.peer.requestState.Requests.IsEmpty() && cn.peer.requestState.Cancelled.IsEmpty() ||
-		len(cn.activeRequests) <= cn.nominalMaxRequests(false, false)/4
+		len(cn.activeRequests) <= cn.nominalMaxRequests(false, false)
 }
 
 func (ws *webseedPeer) handleUpdateRequests(lock bool, lockTorrent bool) {

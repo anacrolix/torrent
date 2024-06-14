@@ -222,7 +222,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 				}
 				requestHeap.pieceStates[pieceIndex] = pieceExtra
 			}()
-			
+
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
 
 			it.Initialize(&dirtyChunks)
@@ -282,12 +282,20 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 	t.assertPendingRequests(lockTorrent)
 	desired.Requests = requestHeap
 
+	func() {
+		if lock {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+		}
+		p.desiredRequestLen = len(desired.Requests.requestIndexes)
+	}()
+
 	if debug {
 		cap, ok := input.Capacity()
 		maxuv := input.MaxUnverifiedBytes()
 		rolen := t.getPieceRequestOrder().Len()
 
-		p.logger.Levelf(log.Debug, "desired req=%d cap=%d ok=%v maxuv=%d rolen=%d indexes=%d states=%d calls=%d iter=%d", len(requestHeap.requestIndexes),
+		p.logger.Levelf(log.Debug, "desired req=%d cap=%d ok=%v maxuv=%d rolen=%d indexes=%d states=%d calls=%d iter=%d", p.desiredRequestLen,
 			cap, ok, maxuv, rolen, len(t.requestIndexes), len(t.requestPieceStates), callCount, iterCount)
 	}
 
@@ -415,7 +423,7 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 			}
 
 			// Don't steal from the poor.
-			diff := int64(current.Requests.GetCardinality()) + 1 - (int64(existing.uncancelledRequests()) - 1)
+			diff := int64(current.Requests.GetCardinality()) + 1 - (int64(existing.uncancelledRequests(false)) - 1)
 
 			// Steal a request that leaves us with one more request than the existing peer
 			// connection if the stealer more recently received a chunk.

@@ -94,8 +94,10 @@ type (
 		// Pieces we've accepted chunks for from the peer.
 		peerTouchedPieces map[pieceIndex]struct{}
 		peerAllowedFast   typedRoaring.Bitmap[pieceIndex]
-
-		PeerMaxRequests maxRequests // Maximum pending requests the peer allows.
+		// cached value for logging and calculation to avoid repeated calls
+		// to getDesiredRequestState
+		desiredRequestLen int
+		PeerMaxRequests   maxRequests // Maximum pending requests the peer allows.
 
 		logger log.Logger
 	}
@@ -1054,10 +1056,20 @@ func (p *Peer) TryAsPeerConn() (*PeerConn, bool) {
 	return pc, ok
 }
 
-func (p *Peer) uncancelledRequests() uint64 {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+func (p *Peer) uncancelledRequests(lock bool) uint64 {
+	if lock {
+		p.mu.RLock()
+		defer p.mu.RUnlock()
+	}
 	return p.requestState.Requests.GetCardinality()
+}
+
+func (p *Peer) desiredRequests(lock bool) int {
+	if lock {
+		p.mu.RLock()
+		defer p.mu.RUnlock()
+	}
+	return p.desiredRequestLen
 }
 
 type peerLocalPublicAddr = IpPort

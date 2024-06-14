@@ -1513,7 +1513,7 @@ func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string, lock b
 			// if c.requestState.Interested {
 			// 	return
 			// }
-			if !c.isLowOnRequests(false, false) {
+			if !c.isLowOnRequests(true, false) {
 				return
 			}
 			if !c.peerHasPiece(piece, true, false) {
@@ -2525,7 +2525,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 		p.marking = false
-		t.publishPieceStateChange(piece, true)
+		t.publishPieceStateChange(piece, false)
 	}()
 
 	if passed {

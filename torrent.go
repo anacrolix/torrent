@@ -102,12 +102,12 @@ func (m *mu) RUnlock() {
 }
 
 func (m *mu) Lock() {
-	if m.lc.Load() > 0 {
-		fmt.Println(string(stack(2)), "L", m.lc, m.locker)
+	/*if m.lc.Load() > 0 {
+		fmt.Println(string(stack(2)), "L", m.lc.Load(), m.locker)
 	}
 	if m.rlc.Load() > 0 {
-		fmt.Println(string(stack(2)), "R", m.rlc, m.rlocker)
-	}
+		fmt.Println(string(stack(2)), "R", m.rlc.Load(), m.rlocker)
+	}*/
 	m.rlmu.Lock()
 	if m.nextlocker == "" {
 		m.nextlocker = string(stack(2))

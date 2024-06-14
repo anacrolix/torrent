@@ -1006,9 +1006,14 @@ func (t *Torrent) bytesLeft(lock bool) (left int64) {
 }
 
 // Bytes left to give in tracker announces.
-func (t *Torrent) bytesLeftAnnounce() int64 {
-	if t.haveInfo(true) {
-		return t.bytesLeft(true)
+func (t *Torrent) bytesLeftAnnounce(lock bool) int64 {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
+
+	if t.haveInfo(false) {
+		return t.bytesLeft(false)
 	} else {
 		return -1
 	}
@@ -2129,18 +2134,35 @@ func (t *Torrent) startMissingTrackerScrapers() {
 
 // Returns an AnnounceRequest with fields filled out to defaults and current
 // values.
-func (t *Torrent) announceRequest(event tracker.AnnounceEvent) tracker.AnnounceRequest {
+func (t *Torrent) announceRequest(event tracker.AnnounceEvent, lock bool, lockClient bool) tracker.AnnounceRequest {
+	numWant := func() int32 {
+		dialers := func() int {
+			if lockClient {
+				t.cl.rLock()
+				defer t.cl.rUnlock()
+			}
+			return len(t.cl.dialers)
+		}()
+
+		if t.wantPeers(lock) && dialers > 0 {
+			return 200 // Win has UDP packet limit. See: https://github.com/anacrolix/torrent/issues/764
+		} else {
+			return 0
+		}
+	}()
+
+	bytesLeft := t.bytesLeftAnnounce(lock)
+
 	// Note that IPAddress is not set. It's set for UDP inside the tracker code, since it's
 	// dependent on the network in use.
+	if lockClient {
+		t.cl.rLock()
+		defer t.cl.rUnlock()
+	}
+
 	return tracker.AnnounceRequest{
-		Event: event,
-		NumWant: func() int32 {
-			if t.wantPeers(true) && len(t.cl.dialers) > 0 {
-				return 200 // Win has UDP packet limit. See: https://github.com/anacrolix/torrent/issues/764
-			} else {
-				return 0
-			}
-		}(),
+		Event:    event,
+		NumWant:  numWant,
 		Port:     uint16(t.cl.incomingPeerPort()),
 		PeerId:   t.cl.peerID,
 		InfoHash: t.infoHash,
@@ -2148,7 +2170,7 @@ func (t *Torrent) announceRequest(event tracker.AnnounceEvent) tracker.AnnounceR
 
 		// The following are vaguely described in BEP 3.
 
-		Left:     t.bytesLeftAnnounce(),
+		Left:     bytesLeft,
 		Uploaded: t.connStats.BytesWrittenData.Int64(),
 		// There's no mention of wasted or unwanted download in the BEP.
 		Downloaded: t.connStats.BytesReadUsefulData.Int64(),

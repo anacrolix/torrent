@@ -293,15 +293,13 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		PeerId: cl.peerID,
 		Logger: cl.logger,
 		GetAnnounceRequest: func(event tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error) {
-			cl.lock()
-			defer cl.unlock()
 			cl.torrentsMu.RLock()
 			t, ok := cl.torrents[infoHash]
 			cl.torrentsMu.RUnlock()
 			if !ok {
 				return tracker.AnnounceRequest{}, errors.New("torrent not tracked by client")
 			}
-			return t.announceRequest(event), nil
+			return t.announceRequest(event, true, true), nil
 		},
 		Proxy:                      cl.config.HTTPProxy,
 		WebsocketTrackerHttpHeader: cl.config.WebsocketTrackerHttpHeader,
@@ -474,12 +472,9 @@ func (cl *Client) wantConns(lock bool) bool {
 		return true
 	}
 	for _, t := range cl.torrentsAsSlice() {
-		fmt.Println(t.name(false))
 		if t.wantIncomingConns(true) {
-			fmt.Println("WANT")
 			return true
 		}
-		fmt.Println("NEXT")
 	}
 	return false
 }

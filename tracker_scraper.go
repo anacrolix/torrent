@@ -145,9 +145,7 @@ func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEv
 		ret.Err = fmt.Errorf("error getting ip: %s", err)
 		return
 	}
-	me.t.cl.rLock()
-	req := me.t.announceRequest(event)
-	me.t.cl.rUnlock()
+	req := me.t.announceRequest(event, true, true)
 	// The default timeout works well as backpressure on concurrent access to the tracker. Since
 	// we're passing our own Context now, we will include that timeout ourselves to maintain similar
 	// behavior to previously, albeit with this context now being cancelled when the Torrent is
@@ -218,9 +216,9 @@ func (me *trackerScraper) Run() {
 		ar := me.announce(ctx, e)
 		// after first announce, get back to regular "none"
 		e = tracker.None
-		me.t.cl.lock()
+		me.t.mu.Lock()
 		me.lastAnnounce = ar
-		me.t.cl.unlock()
+		me.t.mu.Unlock()
 
 	recalculate:
 		// Make sure we don't announce for at least a minute since the last one.
@@ -229,9 +227,9 @@ func (me *trackerScraper) Run() {
 			interval = time.Minute
 		}
 
-		me.t.cl.lock()
+		me.t.mu.RLock()
 		wantPeers := me.t.wantPeersEvent.C()
-		me.t.cl.unlock()
+		me.t.mu.RLock()
 
 		// If we want peers, reduce the interval to the minimum if it's appropriate.
 

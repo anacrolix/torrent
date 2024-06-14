@@ -283,7 +283,7 @@ func (ws *webseedPeer) requester(i int) {
 
 			if time.Since(ws.lastLog) > 5*time.Second {
 				ws.lastLog = time.Now()
-				go logProgress(ws, "requests", true)
+				go ws.logProgress("requests", true)
 			}
 
 			ws.peer.mu.Lock()
@@ -310,18 +310,15 @@ func (ws *webseedPeer) requester(i int) {
 
 var webpeerUnchokeTimerDuration = 15 * time.Second
 
-var lpcount atomic.Int32
-
-func logProgress(ws *webseedPeer, label string, lockTorrent bool) {
-	if count := lpcount.Add(1); count > 1 {
-		fmt.Println("LP", count)
-	}
-
-	defer lpcount.Add(-1)
+func (ws *webseedPeer) logProgress(label string, lockTorrent bool) {
 	t := ws.peer.t
 
 	if lockTorrent {
 		t.mu.RLock()
+		if count := t.mu.rlc.Load(); count > 1 {
+			fmt.Println("LP", count)
+			defer fmt.Println("LP", count, "DONE")
+		}
 		defer t.mu.RUnlock()
 	}
 
@@ -354,7 +351,7 @@ func requestUpdate(ws *webseedPeer) {
 
 		ws.updateRequestor = nil
 
-		logProgress(ws, "requestUpdate", false)
+		ws.logProgress("requestUpdate", false)
 
 		if !ws.peer.closed.IsSet() {
 			numPieces := ws.peer.t.NumPieces()
@@ -428,7 +425,7 @@ func requestUpdate(ws *webseedPeer) {
 						fmt.Println("UC", "P", ws.peer.requestState.Requests.GetCardinality(), "D", len(next.Requests.requestIndexes))
 					}()
 
-					logProgress(ws, "unchoked", false)
+					ws.logProgress("unchoked", false)
 
 					// if the initial unchoke didn't yield a request (for small files) - don't immediately
 					// retry it means its being handled by a prioritized peer

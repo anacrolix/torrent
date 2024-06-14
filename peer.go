@@ -704,9 +704,6 @@ func (c *Peer) doChunkReadStats(size int64) {
 
 // Handle a received chunk from a peer.
 func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
-	//count := rch1.Add(1)
-	//fmt.Println("RC0", count)
-	//defer fmt.Println("RC", count, "DONE")
 	chunksReceived.Add("total", 1)
 
 	ppReq := newRequestFromMessage(msg)

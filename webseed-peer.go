@@ -310,7 +310,14 @@ func (ws *webseedPeer) requester(i int) {
 
 var webpeerUnchokeTimerDuration = 15 * time.Second
 
+var lpcount atomic.Int32
+
 func logProgress(ws *webseedPeer, label string, lockTorrent bool) {
+	if count := lpcount.Add(1); count > 1 {
+		fmt.Println("LP", count)
+	}
+
+	defer lpcount.Add(-1)
 	t := ws.peer.t
 
 	if lockTorrent {

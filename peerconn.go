@@ -1005,14 +1005,18 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		}
 		return nil
 	case pexExtendedId:
-		if !c.pex.IsEnabled() {
-			return nil // or hang-up maybe?
-		}
-		err = c.pex.Recv(payload)
-		if err != nil {
-			err = fmt.Errorf("receiving pex message: %w", err)
-		}
-		return
+		return func() error {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			if !c.pex.IsEnabled() {
+				return nil // or hang-up maybe?
+			}
+			err = c.pex.Recv(payload)
+			if err != nil {
+				return fmt.Errorf("receiving pex message: %w", err)
+			}
+			return nil
+		}()
 	case utHolepunchExtendedId:
 		var msg utHolepunch.Msg
 		err = msg.UnmarshalBinary(payload)

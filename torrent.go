@@ -1753,8 +1753,6 @@ func (t *Torrent) maxHalfOpen(lock bool) int {
 }
 
 func (t *Torrent) openNewConns(lock bool) (initiated int) {
-	fmt.Println("ONC")
-	defer fmt.Println("ONC", "DONE")
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()

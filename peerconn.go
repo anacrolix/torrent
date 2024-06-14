@@ -526,7 +526,7 @@ func (cn *PeerConn) peerSentHaveNone() error {
 }
 
 func (c *PeerConn) requestPendingMetadata(lockTorrent bool) {
-	if c.t.haveInfo(true) {
+	if c.t.haveInfo(lockTorrent) {
 		return
 	}
 	if c.PeerExtensionIDs[pp.ExtensionNameMetadata] == 0 {

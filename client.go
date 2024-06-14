@@ -472,10 +472,16 @@ func (cl *Client) wantConns(lock bool) bool {
 		return true
 	}
 	for _, t := range cl.torrentsAsSlice() {
-		if t.mu.lc.Load() > 0 {
-			fmt.Println(t.name(false), "L", t.mu.locker, "R", t.mu.rlocker, "N", t.mu.nextlocker)
-		}
-		if t.wantIncomingConns(true) {
+		if func() (want bool) {
+			if t.mu.lc.Load() > 0 {
+				fmt.Println(t.name(false), "L", t.mu.locker, "R", t.mu.rlocker, "N", t.mu.nextlocker)
+				defer fmt.Println(t.name(false), "DONE", want)
+			}
+			if t.wantIncomingConns(true) {
+				want = true
+			}
+			return
+		}() {
 			return true
 		}
 	}

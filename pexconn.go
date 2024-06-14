@@ -3,6 +3,7 @@ package torrent
 import (
 	"fmt"
 	"net/netip"
+	"sync"
 	"time"
 
 	g "github.com/anacrolix/generics"
@@ -123,7 +124,7 @@ func (s *pexConnState) updateRemoteLiveConns(rx pp.PexMsg) (errs []error) {
 }
 
 // Recv is called from the reader goroutine
-func (s *pexConnState) Recv(payload []byte, lockTorrent bool) error {
+func (s *pexConnState) recv(payload []byte, peerLock sync.Locker, lockTorrent bool) error {
 	rx, err := pp.LoadPexMsg(payload)
 	if err != nil {
 		return fmt.Errorf("unmarshalling pex message: %w", err)
@@ -137,7 +138,9 @@ func (s *pexConnState) Recv(payload []byte, lockTorrent bool) error {
 	if timeSinceLastRecv < 45*time.Second {
 		return fmt.Errorf("last received only %v ago", timeSinceLastRecv)
 	}
+	peerLock.Lock()
 	s.lastRecv = time.Now()
+	peerLock.Unlock()
 	s.updateRemoteLiveConns(rx)
 
 	var peers peerInfos

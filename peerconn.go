@@ -1018,9 +1018,11 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 				return nil // or hang-up maybe?
 			}
 
-			// peer must be unlocked for recv - because add peers
-			// may lock it while deciding which peers to drop in worst peers
-			err = c.pex.Recv(payload, false)
+			// peer is passed to recv - it needs to lock it to
+			// update time but unlock for torrent.addpeers
+			// may lock it while deciding which peers to drop in
+			// worst peers
+			err = c.pex.recv(payload, &c.mu, false)
 			if err != nil {
 				return fmt.Errorf("receiving pex message: %w", err)
 			}

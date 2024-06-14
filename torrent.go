@@ -1753,6 +1753,8 @@ func (t *Torrent) maxHalfOpen(lock bool) int {
 }
 
 func (t *Torrent) openNewConns(lock bool) (initiated int) {
+	fmt.Println("ONC")
+	defer fmt.Println("ONC", "DONE")
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()
@@ -2500,16 +2502,20 @@ var wccount atomic.Int64
 func (t *Torrent) newConnsAllowed(lock bool) bool {
 	c := wccount.Add(1)
 	defer wccount.Add(-1)
+	trace := false
 	if lock {
 		st := time.Now()
 		if t.mu.lc.Load() > 0 || t.mu.rlc.Load() > 0 {
 			fmt.Println("CA", c, t.name(false), "L", t.mu.locker, "R", t.mu.rlocker, "N", t.mu.nextlocker)
+			trace = true
 			defer fmt.Println("CA", c, t.name(false), "DONE", time.Since(st))
 		}
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 	}
-
+	if trace {
+		fmt.Println("CA1")
+	}
 	if !t.networkingEnabled.Bool() {
 		return false
 	}

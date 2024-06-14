@@ -543,7 +543,7 @@ func (cn *Peer) request(r RequestIndex, lock bool, lockTorrent bool) (more bool,
 	for _, f := range cn.callbacks.SentRequest {
 		f(PeerRequestEvent{cn, ppReq})
 	}
-	return cn.peerImpl._request(ppReq), nil
+	return cn.peerImpl._request(ppReq,false), nil
 }
 
 func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorrent bool) {

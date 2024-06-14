@@ -307,13 +307,13 @@ func (pc *PeerConn) writeInterested(interested bool, lock bool) bool {
 	}, lock)
 }
 
-func (me *PeerConn) _request(r Request) bool {
+func (me *PeerConn) _request(r Request, lock bool) bool {
 	return me.write(pp.Message{
 		Type:   pp.Request,
 		Index:  r.Index,
 		Begin:  r.Begin,
 		Length: r.Length,
-	}, true)
+	}, lock)
 }
 
 func (me *PeerConn) _cancel(r RequestIndex, lock bool, lockTorrent bool) bool {

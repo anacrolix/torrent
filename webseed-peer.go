@@ -96,7 +96,7 @@ func (ws *webseedPeer) intoSpec(r Request) webseed.RequestSpec {
 	return webseed.RequestSpec{Start: ws.peer.t.requestOffset(r), Length: int64(r.Length)}
 }
 
-func (ws *webseedPeer) _request(r Request) bool {
+func (ws *webseedPeer) _request(r Request, lock bool) bool {
 	return true
 }
 
@@ -113,7 +113,7 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 			return
 		}
 
-		// note we're ignoring lock as the peer here is not 
+		// note we're ignoring lock as the peer here is not
 		// this peer (see above)
 		peer.mu.RLock()
 		defer peer.mu.RUnlock()

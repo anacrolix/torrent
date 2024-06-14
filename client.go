@@ -530,7 +530,10 @@ func (cl *Client) acceptConnections(l Listener) {
 		closed := cl.closed.IsSet()
 		var reject error
 		if !closed && conn != nil {
+			start := time.Now()
+			fmt.Println("RA")
 			reject = cl.rejectAccepted(conn, false)
+			fmt.Println("RA", "DONE", time.Since(start))
 		}
 		cl.rUnlock()
 		if closed {

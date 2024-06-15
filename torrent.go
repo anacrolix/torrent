@@ -31,6 +31,7 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
+	"github.com/sasha-s/go-deadlock"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 
@@ -56,7 +57,7 @@ func stack(skip int) string {
 }
 
 type mu struct {
-	sync.RWMutex
+	deadlock.RWMutex
 	rlc        atomic.Int32
 	lc         atomic.Int32
 	rlmu       sync.Mutex

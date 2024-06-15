@@ -565,21 +565,23 @@ func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorre
 
 // Sets a reason to update requests, and if there wasn't already one, handle it.
 func (cn *Peer) updateRequests(reason string, lock bool, lockTorrent bool) {
-	if lockTorrent {
-		cn.t.mu.Lock()
-		defer cn.t.mu.Unlock()
-	}
+	needUpdate := func() bool {
+		if lock {
+			cn.mu.Lock()
+			defer cn.mu.Unlock()
+		}
 
-	if lock {
-		cn.mu.Lock()
-		defer cn.mu.Unlock()
-	}
+		if cn.needRequestUpdate != "" {
+			return false
+		}
 
-	if cn.needRequestUpdate != "" {
-		return
+		cn.needRequestUpdate = reason
+		return true
+	}()
+
+	if needUpdate {
+		cn.handleUpdateRequests(lock, lockTorrent)
 	}
-	cn.needRequestUpdate = reason
-	cn.handleUpdateRequests(false, false)
 }
 
 // Emits the indices in the Bitmaps bms in order, never repeating any index.

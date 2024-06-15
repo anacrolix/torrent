@@ -471,7 +471,7 @@ func (cl *Client) wantConns(lock bool) bool {
 	if alwaysWantConns() {
 		return true
 	}
-
+	
 	for _, t := range cl.torrentsAsSlice() {
 		if t.wantIncomingConns(true) {
 			return true

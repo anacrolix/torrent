@@ -317,7 +317,7 @@ func (me *PeerConn) _request(r Request, lock bool) bool {
 }
 
 func (me *PeerConn) _cancel(r RequestIndex, lock bool, lockTorrent bool) bool {
-	me.write(makeCancelMessage(me.t.requestIndexToRequest(r, lockTorrent)), true)
+	me.write(makeCancelMessage(me.t.requestIndexToRequest(r, lockTorrent)), lock)
 	return me.remoteRejectsCancels()
 }
 

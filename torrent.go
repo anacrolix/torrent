@@ -1982,14 +1982,20 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 	return
 }
 
-func (t *Torrent) decPeerPieceAvailability(p *Peer, lock bool) {
+func (t *Torrent) decPeerPieceAvailability(p *Peer, lock bool, lockPeer bool) {
 	if t.deleteConnWithAllPieces(p, lock) {
 		return
 	}
 	if !t.haveInfo(lock) {
 		return
 	}
-	p.peerPieces(true).Iterate(func(i uint32) bool {
+
+	if lockPeer {
+		p.mu.RLock()
+		defer p.mu.RUnlock()
+	}
+
+	p.peerPieces(false).Iterate(func(i uint32) bool {
 		p.t.decPieceAvailability(pieceIndex(i), lock)
 		return true
 	})

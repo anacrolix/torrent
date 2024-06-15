@@ -519,7 +519,7 @@ func (cn *PeerConn) onPeerSentHaveAll() error {
 
 func (cn *PeerConn) peerSentHaveNone() error {
 	if !cn.peerSentHaveAll {
-		cn.t.decPeerPieceAvailability(&cn.Peer, true)
+		cn.t.decPeerPieceAvailability(&cn.Peer, true, true)
 	}
 	cn._peerPieces.Clear()
 	cn.peerSentHaveAll = false

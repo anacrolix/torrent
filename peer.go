@@ -381,7 +381,7 @@ func (p *Peer) close(lockTorrent bool) {
 	}
 	p.peerImpl.onClose(false)
 	if p.t != nil {
-		p.t.decPeerPieceAvailability(p, false)
+		p.t.decPeerPieceAvailability(p, false, false)
 	}
 	for _, f := range p.callbacks.PeerClosed {
 		f(p)

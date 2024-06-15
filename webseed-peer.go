@@ -77,7 +77,7 @@ func (ws *webseedPeer) writeInterested(interested bool, lock bool) bool {
 
 func (ws *webseedPeer) _cancel(r RequestIndex, lock bool, lockTorrent bool) bool {
 	if active, ok := func() (active webseed.Request, ok bool) {
-		req := ws.peer.t.requestIndexToRequest(r, true)
+		req := ws.peer.t.requestIndexToRequest(r, lockTorrent)
 
 		if lock {
 			ws.peer.mu.RLock()

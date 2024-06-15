@@ -1240,7 +1240,7 @@ func (c *PeerConn) useful(lock bool, lockTorrent bool) bool {
 		return false
 	}
 	if !t.haveInfo(lockTorrent) {
-		return c.supportsExtension("ut_metadata", true)
+		return c.supportsExtension("ut_metadata", lock)
 	}
 	if t.seeding(lockTorrent) && c.peerInterested {
 		return true

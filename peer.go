@@ -405,7 +405,7 @@ func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool, lockTorrent bool) bool
 		return true
 	}
 
-	return cn.peerPieces(lock).ContainsInt(piece)
+	return cn.peerPieces(false).ContainsInt(piece)
 }
 
 // 64KiB, but temporarily less to work around an issue with WebRTC. TODO: Update when

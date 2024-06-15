@@ -281,15 +281,16 @@ func (ws *webseedPeer) requester(i int) {
 				}
 			}()
 
+			ws.peer.mu.Lock()
 			if time.Since(ws.lastLog) > 5*time.Second {
 				ws.lastLog = time.Now()
 				go ws.logProgress("requests", true)
 			}
-
-			ws.peer.mu.Lock()
 			ws.waiting++
 			ws.peer.mu.Unlock()
+
 			ws.requesterCond.Wait()
+
 			ws.peer.mu.Lock()
 			ws.waiting--
 			ws.peer.mu.Unlock()

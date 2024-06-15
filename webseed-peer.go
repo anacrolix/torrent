@@ -87,7 +87,6 @@ func (ws *webseedPeer) _cancel(r RequestIndex, lock bool, lockTorrent bool) bool
 		active, ok = ws.activeRequests[req]
 		return
 	}(); ok {
-		fmt.Println("CANC", r)
 		active.Cancel()
 		// The requester is running and will handle the result.
 		return true

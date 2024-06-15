@@ -464,10 +464,8 @@ func (cn *webseedPeer) ban() {
 }
 
 func (cn *webseedPeer) isLowOnRequests(lock bool, lockTorrent bool) bool {
-	if lockTorrent {
-		cn.peer.t.mu.RLock()
-		defer cn.peer.t.mu.RUnlock()
-	}
+	// do this before taking the peer lock to avoid lock ordering issues
+	nominalMaxRequests := cn.nominalMaxRequests(lock, lockTorrent)
 
 	if lock {
 		cn.peer.mu.RLock()
@@ -475,7 +473,7 @@ func (cn *webseedPeer) isLowOnRequests(lock bool, lockTorrent bool) bool {
 	}
 
 	return cn.peer.requestState.Requests.IsEmpty() && cn.peer.requestState.Cancelled.IsEmpty() ||
-		len(cn.activeRequests) <= cn.nominalMaxRequests(false, false)
+		len(cn.activeRequests) <= nominalMaxRequests
 }
 
 func (ws *webseedPeer) handleUpdateRequests(lock bool, lockTorrent bool) {

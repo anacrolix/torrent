@@ -441,7 +441,7 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 			t.cancelRequest(req, false, false, false)
 		}
 
-		more = p.mustRequest(req, false, false)
+		more = p.mustRequest(req, nominalMaxRequests, false, false)
 		if !more {
 			break
 		}

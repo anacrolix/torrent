@@ -500,15 +500,15 @@ func (cn *Peer) shouldRequest(r RequestIndex, lockTorrent bool) error {
 	return nil
 }
 
-func (cn *Peer) mustRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
-	more, err := cn.request(r, lock, lockTorrent)
+func (cn *Peer) mustRequest(r RequestIndex, maxRequests int, lock bool, lockTorrent bool) bool {
+	more, err := cn.request(r, maxRequests, lock, lockTorrent)
 	if err != nil {
 		panic(err)
 	}
 	return more
 }
 
-func (cn *Peer) request(r RequestIndex, lock bool, lockTorrent bool) (more bool, err error) {
+func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent bool) (more bool, err error) {
 	if lockTorrent {
 		cn.t.mu.RLock()
 		defer cn.t.mu.RUnlock()
@@ -525,7 +525,7 @@ func (cn *Peer) request(r RequestIndex, lock bool, lockTorrent bool) (more bool,
 	if cn.requestState.Requests.Contains(r) {
 		return true, nil
 	}
-	if maxRequests(cn.requestState.Requests.GetCardinality()) >= cn.peerImpl.nominalMaxRequests(false, false) {
+	if int(cn.requestState.Requests.GetCardinality()) >= maxRequests {
 		return true, errors.New("too many outstanding requests")
 	}
 

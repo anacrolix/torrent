@@ -487,12 +487,15 @@ func (cl *Client) wantConns(lock bool) bool {
 }
 
 // TODO: Apply filters for non-standard networks, particularly rate-limiting.
-func (cl *Client) rejectAccepted(conn net.Conn, lock bool) error {
-	if !cl.wantConns(lock) {
+func (cl *Client) rejectAccepted(conn net.Conn) error {
+	if !cl.wantConns(true) {
 		return errors.New("don't want conns right now")
 	}
 	ra := conn.RemoteAddr()
 	if rip := addrIpOrNil(ra); rip != nil {
+		cl.rLock()
+		defer cl.rUnlock()
+
 		if cl.config.DisableIPv4Peers && rip.To4() != nil {
 			return errors.New("ipv4 peers disabled")
 		}
@@ -535,11 +538,11 @@ func (cl *Client) acceptConnections(l Listener) {
 		conn = pproffd.WrapNetConn(conn)
 		cl.rLock()
 		closed := cl.closed.IsSet()
+		cl.rUnlock()
 		var reject error
 		if !closed && conn != nil {
-			reject = cl.rejectAccepted(conn, false)
+			reject = cl.rejectAccepted(conn)
 		}
-		cl.rUnlock()
 		if closed {
 			if conn != nil {
 				conn.Close()

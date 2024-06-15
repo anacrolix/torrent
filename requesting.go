@@ -371,6 +371,9 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 		defer t.mu.Unlock()
 	}
 
+	// do this before taking the peer lock to avoid lock ordering issues
+	nominalMaxRequests := p.peerImpl.nominalMaxRequests(lock, false)
+
 	if lock {
 		p.mu.Lock()
 		defer p.mu.Unlock()
@@ -406,7 +409,7 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 		}
 
 		numPending := maxRequests(current.Requests.GetCardinality() + current.Cancelled.GetCardinality())
-		if numPending >= p.peerImpl.nominalMaxRequests(false, false) {
+		if numPending >= nominalMaxRequests {
 			break
 		}
 

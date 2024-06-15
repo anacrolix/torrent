@@ -202,6 +202,8 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 
 	callCount := 0
 	iterCount := 0
+	awaitingCancelCount := 0
+	cantRequestCount := 0
 
 	requestStrategy.GetRequestablePieces(
 		input,
@@ -249,6 +251,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 					}
 
 					if cantRequest() {
+						cantRequestCount++
 						// We can't request this right now.
 						return
 					}
@@ -265,6 +268,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 
 				if awaitingCancel() {
 					// Can't re-request while awaiting acknowledgement.
+					awaitingCancelCount++
 					return
 				}
 
@@ -295,8 +299,8 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 		maxuv := input.MaxUnverifiedBytes()
 		rolen := t.getPieceRequestOrder().Len()
 
-		p.logger.Levelf(log.Debug, "desired req=%d cap=%d ok=%v maxuv=%d rolen=%d indexes=%d states=%d calls=%d iter=%d", p.desiredRequestLen,
-			cap, ok, maxuv, rolen, len(t.requestIndexes), len(t.requestPieceStates), callCount, iterCount)
+		p.logger.Levelf(log.Debug, "desired req=%d cap=%d ok=%v maxuv=%d rolen=%d indexes=%d states=%d calls=%d iter=%d cantreq=%d canceling=%d", p.desiredRequestLen,
+			cap, ok, maxuv, rolen, len(t.requestIndexes), len(t.requestPieceStates), callCount, iterCount, cantRequestCount, awaitingCancelCount)
 	}
 
 	return

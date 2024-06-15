@@ -16,6 +16,7 @@ import (
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
+	"github.com/sasha-s/go-deadlock"
 
 	"github.com/anacrolix/torrent/internal/alloclim"
 	"github.com/anacrolix/torrent/mse"
@@ -28,7 +29,7 @@ type (
 	Peer struct {
 		// First to ensure 64-bit alignment for atomics. See #262.
 		_stats ConnStats
-		mu     sync.RWMutex
+		mu     deadlock.RWMutex
 
 		t *Torrent
 
@@ -837,7 +838,7 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 	concurrentChunkWrites.Add(1)
 	defer concurrentChunkWrites.Add(-1)
 
-	// Write the chunk out. This is done with no locks waiting on io 
+	// Write the chunk out. This is done with no locks waiting on io
 	// Note that the upper bound on chunk writing concurrency will be the
 	// number of connections. We write inline with receiving the chunk, because we want to handle errors
 	// synchronously and I haven't thought of a nice way to defer any concurrency to the storage and have

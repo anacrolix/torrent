@@ -38,7 +38,7 @@ type webseedPeer struct {
 	updateRequestor      *time.Timer
 	lastUnhandledErr     time.Time
 	unchokeTimerDuration time.Duration
-	lastLog              time.Time
+	logProcessor         *time.Timer
 }
 
 var _ peerImpl = (*webseedPeer)(nil)
@@ -286,9 +286,15 @@ func (ws *webseedPeer) requester(i int) {
 			}()
 
 			ws.peer.mu.Lock()
-			if time.Since(ws.lastLog) > 5*time.Second {
-				ws.lastLog = time.Now()
-				go ws.logProgress("requests", true)
+			if ws.logProcessor == nil {
+				ws.logProcessor = time.AfterFunc(5*time.Second, func() {
+					defer func() {
+						ws.peer.mu.Lock()
+						ws.logProcessor = nil
+						ws.peer.mu.Unlock()
+					}()
+					ws.logProgress("requests", true)
+				})
 			}
 			ws.waiting++
 			ws.peer.mu.Unlock()

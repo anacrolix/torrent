@@ -332,6 +332,9 @@ func (ws *webseedPeer) logProgress(label string, lockTorrent bool) {
 		return
 	}
 
+	// do this before taking the peer lock to avoid lock ordering issues
+	nominalMaxRequests := ws.nominalMaxRequests(true, false)
+
 	ws.peer.mu.RLock()
 	defer ws.peer.mu.RUnlock()
 
@@ -342,7 +345,7 @@ func (ws *webseedPeer) logProgress(label string, lockTorrent bool) {
 	activeCount := len(ws.activeRequests)
 
 	ws.peer.logger.Levelf(log.Debug, "%s %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,p=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) lastUpdate=%s",
-		label, ws.processedRequests, pendingRequests, desiredRequests, ws.nominalMaxRequests(false, false),
+		label, ws.processedRequests, pendingRequests, desiredRequests, nominalMaxRequests,
 		activeCount-int(receiving)-int(persisting), receiving, persisting, ws.maxActiveRequests, ws.waiting,
 		t.numQueuedForHash(false), t.activePieceHashes.Load(), t.hashing.Load(), len(t.hashResults),
 		t.numPiecesCompleted(false), t.NumPieces(), time.Since(ws.peer.lastRequestUpdate))

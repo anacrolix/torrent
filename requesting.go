@@ -256,7 +256,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 					return
 				}
 
-				requestIndexes = append(requestHeap.requestIndexes, r)
+				requestIndexes = append(requestIndexes, r)
 			}, lockTorrent)
 		},
 		lockTorrent)
@@ -267,7 +267,6 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 			defer t.mu.Unlock()
 		}
 
-		fmt.Println("RIL", len(requestIndexes), len(requestPieceStates))
 		requestHeap.requestIndexes = append(requestHeap.requestIndexes, requestIndexes...)
 
 		for pieceIndex, pieceExtra := range requestPieceStates {

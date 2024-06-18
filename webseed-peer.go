@@ -430,8 +430,6 @@ func requestUpdate(ws *webseedPeer) {
 						ws.peer.t.mu.RUnlock()
 						defer ws.peer.t.mu.RLock()
 						ws.peer.updateRequests("unchoked", true, true)
-						next := ws.peer.getDesiredRequestState(true, true, true)
-						fmt.Println("UC", ws.peer.t.name(true), "P", ws.peer.requestState.Requests.GetCardinality(), "D", len(next.Requests.requestIndexes))
 					}()
 
 					ws.logProgress("unchoked", false)

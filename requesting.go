@@ -15,6 +15,7 @@ import (
 	"github.com/anacrolix/multiless"
 
 	requestStrategy "github.com/anacrolix/torrent/request-strategy"
+	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
@@ -205,6 +206,9 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 	awaitingCancelCount := 0
 	cantRequestCount := 0
 
+	requestPieceStates := map[int]request_strategy.PieceRequestOrderState{}
+	requestIndexes := []RequestIndex{}
+
 	requestStrategy.GetRequestablePieces(
 		input,
 		pieceRequestOrder,
@@ -217,19 +221,18 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 				return
 			}
 
-			func() {
-				if lockTorrent {
-					t.mu.Lock()
-					defer t.mu.Unlock()
-				}
-				requestHeap.pieceStates[pieceIndex] = pieceExtra
-			}()
+			requestPieceStates[pieceIndex] = pieceExtra
 
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
 
 			it.Initialize(&dirtyChunks)
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
 				iterCount++
+				if lock {
+					p.mu.RLock()
+					defer p.mu.RUnlock()
+				}
+
 				if !allowedFast {
 					// We must signal interest to request this. TODO: We could set interested if the
 					// peers pieces (minus the allowed fast set) overlap with our missing pieces if
@@ -240,50 +243,38 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 					// the peer respond yet (and the request was retained because we are using the
 					// fast extension).
 
-					cantRequest := func() bool {
-						if lock {
-							p.mu.RLock()
-							defer p.mu.RUnlock()
-						}
-						peerChoking := p.peerChoking
-						hasRequest := p.requestState.Requests.Contains(r)
-						return peerChoking && !hasRequest
-					}
-
-					if cantRequest() {
+					if p.peerChoking && !p.requestState.Requests.Contains(r) {
 						cantRequestCount++
 						// We can't request this right now.
 						return
 					}
 				}
 
-				awaitingCancel := func() bool {
-					if lock {
-						p.mu.RLock()
-						defer p.mu.RUnlock()
-					}
-					cancelled := &p.requestState.Cancelled
-					return !cancelled.IsEmpty() && cancelled.Contains(r)
-				}
-
-				if awaitingCancel() {
+				if cancelled := &p.requestState.Cancelled; !cancelled.IsEmpty() && cancelled.Contains(r) {
 					// Can't re-request while awaiting acknowledgement.
 					awaitingCancelCount++
 					return
 				}
 
-				func() {
-					if lockTorrent {
-						t.mu.Lock()
-						defer t.mu.Unlock()
-					}
-					requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
-				}()
+				requestIndexes = append(requestHeap.requestIndexes, r)
 			}, lockTorrent)
 		},
 		lockTorrent)
 
-	t.assertPendingRequests(lockTorrent)
+	func() {
+		if lockTorrent {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+		}
+		requestHeap.requestIndexes = append(requestHeap.requestIndexes, requestIndexes...)
+
+		for pieceIndex, pieceExtra := range requestPieceStates {
+			requestHeap.pieceStates[pieceIndex] = pieceExtra
+		}
+
+		t.assertPendingRequests(false)
+	}()
+
 	desired.Requests = requestHeap
 
 	func() {

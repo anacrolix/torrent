@@ -192,7 +192,6 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 
 	dirtyChunks := t.dirtyChunks.Clone()
 	infoHash := t.infoHash
-	pieceRequestOrder := t.getPieceRequestOrder()
 
 	if lockTorrent {
 		t.mu.RUnlock()
@@ -228,7 +227,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 
 	requestStrategy.GetRequestablePieces(
 		input,
-		pieceRequestOrder,
+		requestStrategyTorrent{t},
 		func(ih InfoHash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) {
 			callCount++
 			if ih != infoHash {

@@ -81,6 +81,18 @@ func (r requestStrategyTorrent) PieceLength() int64 {
 	return r.t.info.PieceLength
 }
 
+func (r requestStrategyTorrent) GetPieceRequestOrder() *request_strategy.PieceRequestOrder {
+	return r.t.getPieceRequestOrder()
+}
+
+func (r requestStrategyTorrent) RLock() {
+	r.t.mu.RLock()
+}
+
+func (r requestStrategyTorrent) RUnlock() {
+	r.t.mu.RUnlock()
+}
+
 var _ request_strategy.Torrent = requestStrategyTorrent{}
 
 type requestStrategyPiece Piece

@@ -2880,6 +2880,9 @@ func (t *Torrent) processHashResults() {
 	_, cancel := context.WithCancel(ctx)
 	// this is limited at the moment to avoid exess cpu usage
 	// may need to be dynamically set depending on the queue size
+	// there is a trade off though against memory usage (at the moment)
+	// as if not enough results processors are active memory buffers will
+	// grow leading to oom
 	g.SetLimit(maxInt(runtime.NumCPU()-2, t.cl.config.PieceHashersPerTorrent/2))
 	defer cancel()
 

@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net/netip"
 	"net/url"
+	"runtime"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -2506,24 +2507,10 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 	return nil
 }
 
-var wccount atomic.Int64
-
 func (t *Torrent) newConnsAllowed(lock bool) bool {
-	c := wccount.Add(1)
-	defer wccount.Add(-1)
-	trace := false
 	if lock {
-		st := time.Now()
-		if t.mu.lc.Load() > 0 || t.mu.rlc.Load() > 0 {
-			fmt.Println("CA", c, t.name(false), "L", t.mu.locker, "R", t.mu.rlocker, "N", t.mu.nextlocker)
-			trace = true
-			defer fmt.Println("CA", c, t.name(false), "DONE", time.Since(st))
-		}
 		t.mu.RLock()
 		defer t.mu.RUnlock()
-	}
-	if trace {
-		fmt.Println("CA1")
 	}
 	if !t.networkingEnabled.Bool() {
 		return false
@@ -2893,7 +2880,7 @@ func (t *Torrent) processHashResults() {
 	_, cancel := context.WithCancel(ctx)
 	// this is limited at the moment to avoid exess cpu usage
 	// may need to be dynamically set depending on the queue size
-	g.SetLimit(maxInt(4, t.cl.config.PieceHashersPerTorrent/4))
+	g.SetLimit(maxInt(runtime.NumCPU()-2, t.cl.config.PieceHashersPerTorrent/2))
 	defer cancel()
 
 	for !t.closed.IsSet() {

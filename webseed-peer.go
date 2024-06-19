@@ -147,11 +147,11 @@ func (ws *webseedPeer) doRequest(r Request) error {
 	ws.peer.mu.Lock()
 	ws.activeRequests[r] = webseedRequest
 	activeLen := len(ws.activeRequests)
-	ws.peer.mu.Unlock()
 
 	if activeLen > ws.maxActiveRequests {
 		ws.maxActiveRequests = activeLen
 	}
+	ws.peer.mu.Unlock()
 
 	err := func() error {
 		ws.requesterCond.L.Unlock()

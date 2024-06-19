@@ -198,6 +198,23 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 		t.mu.RUnlock()
 	}
 
+	// having this here ensures lock serialization
+	all, known := p.peerHasAllPieces(lock, lockTorrent)
+	peerHasAllPieces := all && known
+	peerRequests := p.requestState.Requests.Bitmap().Clone()
+
+	if lock {
+		p.mu.RLock()
+	}
+
+	peerPieces := p.peerPieces(false).Clone()
+	peerChoking := p.peerChoking
+	cancelled := p.requestState.Cancelled.Clone()
+
+	if lock {
+		p.mu.RUnlock()
+	}
+
 	// Caller-provided allocation for roaring bitmap iteration.
 	var it typedRoaring.Iterator[RequestIndex]
 
@@ -217,7 +234,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 			if ih != infoHash {
 				return
 			}
-			if !p.peerHasPiece(pieceIndex, lock, lockTorrent) {
+			if !(peerHasAllPieces || peerPieces.ContainsInt(pieceIndex)) {
 				return
 			}
 
@@ -228,10 +245,6 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 			it.Initialize(&dirtyChunks)
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
 				iterCount++
-				if lock {
-					p.mu.RLock()
-					defer p.mu.RUnlock()
-				}
 
 				if !allowedFast {
 					// We must signal interest to request this. TODO: We could set interested if the
@@ -243,14 +256,14 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 					// the peer respond yet (and the request was retained because we are using the
 					// fast extension).
 
-					if p.peerChoking && !p.requestState.Requests.Contains(r) {
+					if peerChoking && !peerRequests.Contains(r) {
 						cantRequestCount++
 						// We can't request this right now.
 						return
 					}
 				}
 
-				if cancelled := &p.requestState.Cancelled; !cancelled.IsEmpty() && cancelled.Contains(r) {
+				if !cancelled.IsEmpty() && cancelled.Contains(r) {
 					// Can't re-request while awaiting acknowledgement.
 					awaitingCancelCount++
 					return
@@ -287,12 +300,19 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 	}()
 
 	if debug {
-		cap, ok := input.Capacity()
-		maxuv := input.MaxUnverifiedBytes()
-		rolen := t.getPieceRequestOrder().Len()
+		func() {
+			if lockTorrent {
+				t.mu.Lock()
+				defer t.mu.Unlock()
+			}
 
-		p.logger.Levelf(log.Debug, "desired req=%d cap=%d ok=%v maxuv=%d rolen=%d indexes=%d states=%d calls=%d iter=%d cantreq=%d canceling=%d", p.desiredRequestLen,
-			cap, ok, maxuv, rolen, len(t.requestIndexes), len(t.requestPieceStates), callCount, iterCount, cantRequestCount, awaitingCancelCount)
+			cap, ok := input.Capacity()
+			maxuv := input.MaxUnverifiedBytes()
+			rolen := t.getPieceRequestOrder().Len()
+
+			p.logger.Levelf(log.Debug, "desired req=%d cap=%d ok=%v maxuv=%d rolen=%d indexes=%d states=%d calls=%d iter=%d cantreq=%d canceling=%d", p.desiredRequestLen,
+				cap, ok, maxuv, rolen, len(t.requestIndexes), len(t.requestPieceStates), callCount, iterCount, cantRequestCount, awaitingCancelCount)
+		}()
 	}
 
 	return

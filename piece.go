@@ -6,6 +6,7 @@ import (
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/sasha-s/go-deadlock"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -18,7 +19,7 @@ type Piece struct {
 	t     *Torrent
 	index pieceIndex
 	files []*File
-	mu    sync.RWMutex
+	mu    deadlock.RWMutex
 
 	readerCond chansync.BroadcastCond
 

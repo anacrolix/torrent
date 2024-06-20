@@ -262,10 +262,12 @@ func (p *Piece) UpdateCompletion() {
 	p.t.updatePieceCompletion(p.index, true)
 }
 
-func (p *Piece) completion(lock bool) (ret storage.Completion) {
-	ret.Complete = p.t.pieceComplete(p.index, lock)
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (p *Piece) completion(lock bool, lockTorrent bool) (ret storage.Completion) {
+	ret.Complete = p.t.pieceComplete(p.index, lockTorrent)
+	if lock {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+	}
 	ret.Ok = p.storageCompletionOk
 	return
 }

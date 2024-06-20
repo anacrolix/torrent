@@ -781,7 +781,7 @@ func (t *Torrent) pieceState(index pieceIndex, lock bool) (ret PieceState) {
 
 	p := &t.pieces[index]
 	ret.Priority = t.piecePriority(index, false)
-	ret.Completion = p.completion(false)
+	ret.Completion = p.completion(true, false)
 	ret.QueuedForHash = p.queuedForHash(false)
 	ret.Hashing = p.hashing
 	ret.Checking = ret.QueuedForHash || ret.Hashing
@@ -1807,7 +1807,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex, lock bool) bool {
 	defer p.mu.Unlock()
 
 	uncached := t.pieceCompleteUncached(piece, false)
-	cached := p.completion(false)
+	cached := p.completion(false, false)
 
 	changed := cached != uncached
 	complete := uncached.Complete

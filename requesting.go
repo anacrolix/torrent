@@ -200,12 +200,12 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 	// having this here ensures lock serialization
 	all, known := p.peerHasAllPieces(lock, lockTorrent)
 	peerHasAllPieces := all && known
-	peerRequests := p.requestState.Requests.Bitmap().Clone()
 
 	if lock {
 		p.mu.RLock()
 	}
 
+	peerRequests := p.requestState.Requests.Bitmap().Clone()
 	peerPieces := p.peerPieces(false).Clone()
 	peerChoking := p.peerChoking
 	cancelled := p.requestState.Cancelled.Clone()

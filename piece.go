@@ -259,13 +259,13 @@ func (p *Piece) uncachedPriority(lockTorrent bool) (ret piecePriority) {
 // Tells the Client to refetch the completion status from storage, updating priority etc. if
 // necessary. Might be useful if you know the state of the piece data has changed externally.
 func (p *Piece) UpdateCompletion() {
-	p.t.mu.Lock()
-	defer p.mu.Unlock()
-	p.t.updatePieceCompletion(p.index, false)
+	p.t.updatePieceCompletion(p.index, true)
 }
 
 func (p *Piece) completion(lock bool) (ret storage.Completion) {
 	ret.Complete = p.t.pieceComplete(p.index, lock)
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	ret.Ok = p.storageCompletionOk
 	return
 }

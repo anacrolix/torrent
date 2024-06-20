@@ -2619,6 +2619,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	p := t.piece(piece, true)
 	p.mu.Lock()
 	p.numVerifies++
+	storageCompletionOk := p.storageCompletionOk
 	p.mu.Unlock()
 	t.cl.event.Broadcast()
 
@@ -2627,7 +2628,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	}
 
 	// Don't score the first time a piece is hashed, it could be an initial check.
-	if p.storageCompletionOk {
+	if storageCompletionOk {
 		if passed {
 			pieceHashedCorrect.Add(1)
 		} else {

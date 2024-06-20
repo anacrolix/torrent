@@ -1804,7 +1804,6 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex, lock bool) bool {
 	p := t.piece(piece, false)
 
 	p.mu.Lock()
-	defer p.mu.Unlock()
 
 	uncached := t.pieceCompleteUncached(piece, false)
 	cached := p.completion(false, false)
@@ -1812,6 +1811,9 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex, lock bool) bool {
 	changed := cached != uncached
 	complete := uncached.Complete
 	p.storageCompletionOk = uncached.Ok
+	lenDirtiers := len(p.dirtiers)
+
+	p.mu.Unlock()
 
 	x := uint32(piece)
 
@@ -1823,8 +1825,6 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex, lock bool) bool {
 	}
 	t.updatePieceRequestOrderPiece(piece, false)
 	t.updateComplete(false)
-
-	lenDirtiers := len(p.dirtiers)
 
 	if complete && lenDirtiers != 0 {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)

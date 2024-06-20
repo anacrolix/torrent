@@ -1802,11 +1802,17 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex, lock bool) bool {
 	}
 
 	p := t.piece(piece, false)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	uncached := t.pieceCompleteUncached(piece, false)
 	cached := p.completion(false)
+
 	changed := cached != uncached
 	complete := uncached.Complete
 	p.storageCompletionOk = uncached.Ok
+
 	x := uint32(piece)
 
 	if complete {
@@ -1815,7 +1821,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex, lock bool) bool {
 	} else {
 		t._completedPieces.Remove(x)
 	}
-	p.t.updatePieceRequestOrderPiece(piece, false)
+	t.updatePieceRequestOrderPiece(piece, false)
 	t.updateComplete(false)
 
 	lenDirtiers := len(p.dirtiers)

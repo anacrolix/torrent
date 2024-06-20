@@ -226,30 +226,39 @@ func (ws *webseedPeer) requester(i int) {
 			}
 		}
 
-		pendingRequests := int(ws.peer.requestState.Requests.GetCardinality())
+		var pendingRequests int
 
-		if !(ws.peer.t.dataDownloadDisallowed.Bool() || ws.peer.t.info == nil) {
-			if pendingRequests > ws.maxRequesters {
-				if pendingRequests > ws.peer.PeerMaxRequests {
-					pendingRequests = ws.peer.PeerMaxRequests
+		func() {
+			ws.peer.t.mu.RLock()
+			defer ws.peer.t.mu.RUnlock()
+			ws.peer.mu.RLock()
+			defer ws.peer.mu.RUnlock()
+
+			pendingRequests = int(ws.peer.requestState.Requests.GetCardinality())
+
+			if !(ws.peer.t.dataDownloadDisallowed.Bool() || ws.peer.t.info == nil) {
+				if pendingRequests > ws.maxRequesters {
+					if pendingRequests > ws.peer.PeerMaxRequests {
+						pendingRequests = ws.peer.PeerMaxRequests
+					}
+
+					for i := ws.maxRequesters; i < pendingRequests; i++ {
+						go ws.requester(i)
+						ws.maxRequesters++
+					}
+				} else {
+					if pendingRequests < 16 {
+						pendingRequests = 16
+					}
+
+					if ws.maxRequesters != pendingRequests {
+						ws.maxRequesters = pendingRequests
+						ws.requesterCond.Broadcast()
+					}
 				}
 
-				for i := ws.maxRequesters; i < pendingRequests; i++ {
-					go ws.requester(i)
-					ws.maxRequesters++
-				}
-			} else {
-				if pendingRequests < 16 {
-					pendingRequests = 16
-				}
-
-				if ws.maxRequesters != pendingRequests {
-					ws.maxRequesters = pendingRequests
-					ws.requesterCond.Broadcast()
-				}
 			}
-
-		}
+		}()
 
 		if restart {
 			// if there are more than one requests in the queue and we don't
@@ -292,6 +301,8 @@ func (ws *webseedPeer) requester(i int) {
 						ws.logProcessor = nil
 						ws.peer.mu.Unlock()
 					}()
+					ws.requesterCond.L.Lock()
+					defer ws.requesterCond.L.Unlock()
 					ws.logProgress("requests", true)
 				})
 			}

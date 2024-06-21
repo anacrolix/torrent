@@ -543,7 +543,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 
 			if webseedPeerCloseOnUnhandledError {
 				log.Levelf(log.Debug, "closing %v", ws)
-				ws.peer.close(true)
+				ws.peer.close(true, true)
 			} else {
 				ws.lastUnhandledErr = time.Now()
 			}

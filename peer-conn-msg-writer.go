@@ -37,7 +37,7 @@ func (pc *PeerConn) startMessageWriter() {
 }
 
 func (pc *PeerConn) messageWriterRunner() {
-	defer pc.close(true)
+	defer pc.close(true, true)
 	pc.messageWriter.run(pc.t.cl.config.KeepAliveTimeout)
 }
 

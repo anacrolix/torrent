@@ -363,14 +363,16 @@ func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
 	fmt.Fprintf(w, "\n")
 }
 
-func (p *Peer) close(lockTorrent bool) {
+func (p *Peer) close(lock bool, lockTorrent bool) {
 	if lockTorrent && p.t != nil {
 		p.t.mu.Lock()
 		defer p.t.mu.Unlock()
 	}
 
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	if lock {
+		p.mu.RLock()
+		defer p.mu.RUnlock()
+	}
 
 	if !p.closed.Set() {
 		return
@@ -399,7 +401,10 @@ func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool, lockTorrent bool) bool
 	}
 
 	if lock {
-		if cn.mu.lc.Load() > 0 || len(cn.mu.nextlocker) > 0 {
+		cn.mu.rlmu.Lock()
+		print := cn.mu.lc.Load() > 0 || len(cn.mu.nextlocker) > 0
+		cn.mu.rlmu.Unlock()
+		if print {
 			fmt.Println("PHP", "L", cn.mu.locker, "R", cn.mu.rlocker, "N", cn.mu.nextlocker)
 		}
 		cn.mu.RLock()

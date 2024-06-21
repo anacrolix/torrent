@@ -1163,7 +1163,7 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 		}()
 	}
 	t.iterPeers(func(p *Peer) {
-		p.close(true)
+		p.close(true, true)
 	}, true)
 	if t.storage != nil {
 		t.deletePieceRequestOrder()
@@ -2041,8 +2041,8 @@ func (t *Torrent) assertPendingRequests(lock bool) {
 
 func (t *Torrent) dropConnection(c *PeerConn, lock bool, lockPeer bool) {
 	t.cl.event.Broadcast()
-	fmt.Println("DC", lockPeer)
-	c.close(lockPeer)
+	fmt.Println("DC", lock, lockPeer)
+	c.close(lockPeer, lock)
 	if t.deletePeerConn(c, lock, lockPeer) {
 		t.openNewConns(lock)
 	}
@@ -2481,7 +2481,7 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 			continue
 		}
 		if c.hasPreferredNetworkOver(c0) {
-			c0.close(false)
+			c0.close(true, false)
 			t.deletePeerConn(c0, false, true)
 		} else {
 			return errors.New("existing connection preferred")
@@ -2500,7 +2500,7 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 		if c == nil {
 			return errors.New("don't want conn")
 		}
-		c.close(false)
+		c.close(true, false)
 		t.deletePeerConn(c, false, true)
 	}
 

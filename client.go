@@ -592,7 +592,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 			connString:      regularNetConnPeerConnConnString(nc),
 		})
 	defer func() {
-		c.close(true)
+		c.close(true, true)
 	}()
 	c.Discovery = PeerSourceIncoming
 	cl.runReceivedConn(c)
@@ -891,7 +891,7 @@ func (cl *Client) outgoingConnection(
 		cl.unlock()
 		return
 	}
-	defer c.close(true)
+	defer c.close(true, true)
 	c.Discovery = opts.peerInfo.Source
 	c.trusted = opts.peerInfo.Trusted
 	// runHandshookConn will unlock the connection before calling the

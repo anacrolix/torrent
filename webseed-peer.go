@@ -203,7 +203,9 @@ func (ws *webseedPeer) requester(i int) {
 
 			if err == nil {
 				ws.processedRequests++
+				ws.peer.mu.RLock()
 				restart = ws.peer.requestState.Requests.GetCardinality() > 0
+				ws.peer.mu.RUnlock()
 			} else {
 				if !errors.Is(err, context.Canceled) {
 					ws.peer.logger.Levelf(log.Debug, "requester %v: error doing webseed request %v: %v", i, request, err)
@@ -221,7 +223,9 @@ func (ws *webseedPeer) requester(i int) {
 					duration := time.Until(ws.lastUnhandledErr.Add(webseedPeerUnhandledErrorSleep))
 					ws.peer.mu.RUnlock()
 					time.Sleep(duration)
+					ws.peer.mu.RUnlock()
 					restart = ws.peer.requestState.Requests.GetCardinality() > 0
+					ws.peer.mu.RUnlock()
 				}()
 			}
 		}

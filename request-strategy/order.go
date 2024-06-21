@@ -65,7 +65,7 @@ func GetRequestablePieces(
 
 		items = make([]pieceRequestOrderItem, 0, pro.Len())
 
-		pro.tree.Scan(func(_i pieceRequestOrderItem) bool {
+		pro.Scan(func(_i pieceRequestOrderItem) bool {
 			items = append(items, _i)
 			return true
 		})

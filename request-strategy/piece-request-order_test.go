@@ -36,7 +36,7 @@ func benchmarkPieceRequestOrder[B Btree](
 			pro.Update(key, state)
 			return true
 		})
-		pro.tree.Scan(func(item pieceRequestOrderItem) bool {
+		pro.Scan(func(item pieceRequestOrderItem) bool {
 			return true
 		})
 		doPieces(func(key PieceRequestOrderKey) bool {
@@ -44,7 +44,7 @@ func benchmarkPieceRequestOrder[B Btree](
 			pro.Update(key, state)
 			return true
 		})
-		pro.tree.Scan(func(item pieceRequestOrderItem) bool {
+		pro.Scan(func(item pieceRequestOrderItem) bool {
 			return item.key.Index < 1000
 		})
 		state.Priority = 0
@@ -53,7 +53,7 @@ func benchmarkPieceRequestOrder[B Btree](
 			pro.Update(key, state)
 			return true
 		})
-		pro.tree.Scan(func(item pieceRequestOrderItem) bool {
+		pro.Scan(func(item pieceRequestOrderItem) bool {
 			return item.key.Index < 1000
 		})
 		state.Availability--

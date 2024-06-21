@@ -2041,7 +2041,7 @@ func (t *Torrent) assertPendingRequests(lock bool) {
 
 func (t *Torrent) dropConnection(c *PeerConn, lock bool, lockPeer bool) {
 	t.cl.event.Broadcast()
-	c.close(lock)
+	c.close(lockPeer)
 	if t.deletePeerConn(c, lock, lockPeer) {
 		t.openNewConns(lock)
 	}

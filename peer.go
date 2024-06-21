@@ -16,7 +16,6 @@ import (
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
-	"github.com/sasha-s/go-deadlock"
 
 	"github.com/anacrolix/torrent/internal/alloclim"
 	"github.com/anacrolix/torrent/mse"
@@ -29,7 +28,7 @@ type (
 	Peer struct {
 		// First to ensure 64-bit alignment for atomics. See #262.
 		_stats ConnStats
-		mu     deadlock.RWMutex
+		mu     mu //sync.RWMutex
 
 		t *Torrent
 
@@ -397,6 +396,9 @@ func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool, lockTorrent bool) bool
 	}
 
 	if lock {
+		if cn.mu.lc > 0 || len(cn.mu.nextlocker) > 0 {
+			fmt.Println("PHP", "L", cn.mu.locker, "R", cn.mu.rlocker, "N", cn.mu.nextlocker)
+		}
 		cn.mu.RLock()
 		defer cn.mu.RUnlock()
 	}

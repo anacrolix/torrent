@@ -402,8 +402,7 @@ func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool, lockTorrent bool) bool
 
 	if lock {
 		cn.mu.rlmu.Lock()
-		print := cn.mu.lc.Load() > 0 || len(cn.mu.nextlocker) > 0
-
+		print := cn.mu.lc.Load() > 0 || cn.mu.rlc.Load() > 0 || len(cn.mu.nextlocker) > 0
 		if print {
 			fmt.Println("PHP", "L", cn.mu.locker, "R", cn.mu.rlocker, "N", cn.mu.nextlocker)
 		}

@@ -1073,8 +1073,8 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 		return nil
 	case pexExtendedId:
 		return func() error {
-			c.t.mu.RLock()
-			defer c.t.mu.RUnlock()
+			c.t.mu.Lock()
+			defer c.t.mu.Unlock()
 			c.mu.Lock()
 			enabled := c.pex.IsEnabled()
 			c.mu.Unlock()

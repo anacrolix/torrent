@@ -146,7 +146,7 @@ func (ws *webseedPeer) doRequest(r Request) error {
 
 	ws.peer.mu.Lock()
 	ws.activeRequests[r] = webseedRequest
-	fmt.Println("DR", ws.peer.t.InfoHash(), r)
+	fmt.Println("DR", ws.peer.t.InfoHash(), r.Index)
 	activeLen := len(ws.activeRequests)
 
 	if activeLen > ws.maxActiveRequests {
@@ -161,7 +161,7 @@ func (ws *webseedPeer) doRequest(r Request) error {
 	}()
 
 	ws.peer.mu.Lock()
-	fmt.Println("DR", ws.peer.t.InfoHash(), r, "DONE")
+	fmt.Println("DR", ws.peer.t.InfoHash(), r.Index, "DONE")
 	delete(ws.activeRequests, r)
 	ws.peer.mu.Unlock()
 

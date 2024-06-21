@@ -1187,7 +1187,7 @@ another:
 }
 
 func (cn *PeerConn) drop(lock bool, lockTorrent bool) {
-	cn.t.dropConnection(cn, lock, lockTorrent)
+	cn.t.dropConnection(cn, lockTorrent, lock)
 }
 
 func (cn *PeerConn) ban() {

@@ -670,8 +670,8 @@ func (t *Torrent) onSetInfo(lock bool, lockClient bool) {
 	t.requestState = make(map[RequestIndex]requestState)
 	t.tryCreateMorePieceHashers(false)
 	t.iterPeers(func(p *Peer) {
-		p.onGotInfo(t.info, false)
-		p.updateRequests("Torrent.OnSetInfo", false, false)
+		p.onGotInfo(t.info, true, false)
+		p.updateRequests("Torrent.OnSetInfo", true, false)
 	}, false)
 }
 
@@ -727,9 +727,11 @@ func (t *Torrent) haveAllMetadataPieces(lock bool) bool {
 }
 
 // TODO: Propagate errors to disconnect peer.
-func (t *Torrent) setMetadataSize(size int) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+func (t *Torrent) setMetadataSize(size int, lock bool) error {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
 
 	if t.haveInfo(false) {
 		// We already know the correct metadata size.
@@ -1337,6 +1339,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	// okay?
 	p *PeerConn,
 	lock bool,
+	lockPeer bool,
 ) {
 	if !t.cl.config.DropMutuallyCompletePeers {
 		return
@@ -1344,10 +1347,10 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	if !t.haveAllPieces(lock) {
 		return
 	}
-	if all, known := p.peerHasAllPieces(true, lock); !(known && all) {
+	if all, known := p.peerHasAllPieces(lockPeer, lock); !(known && all) {
 		return
 	}
-	if p.useful(true, lock) {
+	if p.useful(lockPeer, lock) {
 		return
 	}
 	p.logger.Levelf(log.Debug, "is mutually complete; dropping")
@@ -2763,7 +2766,7 @@ func (t *Torrent) onPieceCompleted(piece pieceIndex, lock bool) {
 	defer conns.free()
 	for _, conn := range conns {
 		conn.have(piece)
-		t.maybeDropMutuallyCompletePeer(conn, lock)
+		t.maybeDropMutuallyCompletePeer(conn, lock, true)
 	}
 }
 
@@ -3346,7 +3349,7 @@ func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
 	ws.peer.peerImpl = &ws
 	t.webSeeds[url] = &ws.peer
 	if t.haveInfo(false) {
-		ws.onGotInfo(t.info, false)
+		ws.onGotInfo(t.info, true, false)
 	}
 }
 
@@ -3413,9 +3416,11 @@ func (t *Torrent) requestingPeer(r RequestIndex, lock bool) *Peer {
 	return nil
 }
 
-func (t *Torrent) addConnWithAllPieces(p *Peer) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+func (t *Torrent) addConnWithAllPieces(p *Peer, lock bool) {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
 
 	if t.connsWithAllPieces == nil {
 		t.connsWithAllPieces = make(map[*Peer]struct{}, t.maxEstablishedConns)

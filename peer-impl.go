@@ -20,7 +20,7 @@ type peerImpl interface {
 	_request(r Request, lock bool) bool
 	connectionFlags() string
 	onClose(lockTorrent bool)
-	onGotInfo(info *metainfo.Info, lock bool)
+	onGotInfo(info *metainfo.Info, lock bool, lockTorrent bool)
 	// Drop connection. This may be a no-op if there is no connection.
 	drop(lockTorrent bool)
 	// Rebuke the peer

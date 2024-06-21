@@ -59,7 +59,7 @@ func (ws *webseedPeer) String() string {
 	return fmt.Sprintf("webseed peer for %q", ws.client.Url)
 }
 
-func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lockTorrent bool) {
+func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lock bool, lockTorrent bool) {
 	ws.client.SetInfo(info)
 	// There should be probably be a callback in Client instead, so it can remove pieces at its whim
 	// too.
@@ -68,7 +68,7 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lockTorrent bool) {
 		return true
 	})
 
-	ws.peer.updateRequests("info", true, lockTorrent)
+	ws.peer.updateRequests("info", lock, lockTorrent)
 }
 
 func (ws *webseedPeer) writeInterested(interested bool, lock bool) bool {

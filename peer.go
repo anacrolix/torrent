@@ -311,6 +311,9 @@ func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
 		defer cn.t.mu.RUnlock()
 	}
 
+	// do this before taking the peer lock to avoid lock ordering issues
+	nominalMaxRequests := cn.peerImpl.nominalMaxRequests(lock, false)
+
 	if lock {
 		cn.mu.RLock()
 		defer cn.mu.RUnlock()
@@ -346,7 +349,7 @@ func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
 		&cn._stats.ChunksWritten,
 		cn.requestState.Requests.GetCardinality(),
 		cn.requestState.Cancelled.GetCardinality(),
-		cn.peerImpl.nominalMaxRequests(false, false),
+		nominalMaxRequests,
 		cn.PeerMaxRequests,
 		len(cn.peerRequests),
 		localClientReqq,

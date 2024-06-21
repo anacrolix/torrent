@@ -148,28 +148,46 @@ func (l *PeerConn) hasPreferredNetworkOver(r *PeerConn) bool {
 }
 
 func (cn *PeerConn) peerHasAllPieces(lock bool, lockTorrent bool) (all, known bool) {
+	if lockTorrent {
+		cn.t.mu.Lock()
+		defer cn.t.mu.Unlock()
+	}
+
+	if lock {
+		cn.mu.Lock()
+		defer cn.mu.Unlock()
+	}
+
 	if cn.peerSentHaveAll {
 		return true, true
 	}
-	if !cn.t.haveInfo(lockTorrent) {
+
+	if !cn.t.haveInfo(false) {
 		return false, false
 	}
-	if lock {
-		cn.mu.RLock()
-		defer cn.mu.RUnlock()
-	}
+
 	return cn._peerPieces.GetCardinality() == uint64(cn.t.numPieces()), true
 }
 
-func (cn *PeerConn) onGotInfo(info *metainfo.Info, lock bool) {
-	cn.setNumPieces(info.NumPieces(), lock)
+func (cn *PeerConn) onGotInfo(info *metainfo.Info, lock bool, lockTorrent bool) {
+	cn.setNumPieces(info.NumPieces(), lock, lockTorrent)
 }
 
 // Correct the PeerPieces slice length. Return false if the existing slice is invalid, such as by
 // receiving badly sized BITFIELD, or invalid HAVE messages.
-func (cn *PeerConn) setNumPieces(num pieceIndex, lock bool) {
+func (cn *PeerConn) setNumPieces(num pieceIndex, lock bool, lockTorrent bool) {
+	if lockTorrent {
+		cn.t.mu.Lock()
+		defer cn.t.mu.Unlock()
+	}
+
+	if lock {
+		cn.mu.Lock()
+		defer cn.mu.Unlock()
+	}
+
 	cn._peerPieces.RemoveRange(bitmap.BitRange(num), bitmap.ToEnd)
-	cn.peerPiecesChanged(lock)
+	cn.peerPiecesChanged(false, false)
 }
 
 func (cn *PeerConn) peerPieces(lock bool) *roaring.Bitmap {
@@ -421,23 +439,33 @@ func (cn *PeerConn) peerSentHave(piece pieceIndex, lockTorrent bool) error {
 	if cn.t.wantPieceIndex(piece, lockTorrent) {
 		cn.updateRequests("have", true, lockTorrent)
 	}
-	cn.peerPiecesChanged(true)
+	cn.peerPiecesChanged(true, lockTorrent)
 	return nil
 }
 
-func (cn *PeerConn) peerSentBitfield(bf []bool) error {
+func (cn *PeerConn) peerSentBitfield(bf []bool, lock bool, lockTorrent bool) error {
+	if lockTorrent {
+		cn.t.mu.Lock()
+		defer cn.t.mu.Unlock()
+	}
+
+	if lock {
+		cn.mu.Lock()
+		defer cn.mu.Unlock()
+	}
+
 	if len(bf)%8 != 0 {
 		panic("expected bitfield length divisible by 8")
 	}
 	// We know that the last byte means that at most the last 7 bits are wasted.
 	cn.raisePeerMinPieces(pieceIndex(len(bf) - 7))
-	if cn.t.haveInfo(true) && len(bf) > int(cn.t.numPieces()) {
+	if cn.t.haveInfo(false) && len(bf) > int(cn.t.numPieces()) {
 		// Ignore known excess pieces.
 		bf = bf[:cn.t.numPieces()]
 	}
 	bm := boolSliceToBitmap(bf)
-	if cn.t.haveInfo(true) && pieceIndex(bm.GetCardinality()) == cn.t.numPieces() {
-		cn.onPeerHasAllPieces()
+	if cn.t.haveInfo(false) && pieceIndex(bm.GetCardinality()) == cn.t.numPieces() {
+		cn.onPeerHasAllPieces(false, false)
 		return nil
 	}
 	if !bm.IsEmpty() {
@@ -445,7 +473,7 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 	}
 	shouldUpdateRequests := false
 	if cn.peerSentHaveAll {
-		if !cn.t.deleteConnWithAllPieces(&cn.Peer, true) {
+		if !cn.t.deleteConnWithAllPieces(&cn.Peer, false) {
 			panic(cn)
 		}
 		cn.peerSentHaveAll = false
@@ -461,13 +489,13 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 		pi := pieceIndex(x)
 		if cn._peerPieces.Contains(x) {
 			// Then we must be losing this piece
-			cn.t.decPieceAvailability(pi, true)
+			cn.t.decPieceAvailability(pi, false)
 		} else {
-			if !shouldUpdateRequests && cn.t.wantPieceIndex(pieceIndex(x), true) {
+			if !shouldUpdateRequests && cn.t.wantPieceIndex(pieceIndex(x), false) {
 				shouldUpdateRequests = true
 			}
 			// We must be gaining this piece
-			cn.t.incPieceAvailability(pieceIndex(x), true)
+			cn.t.incPieceAvailability(pieceIndex(x), false)
 		}
 		return true
 	})
@@ -475,55 +503,83 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 	// as or.
 	cn._peerPieces.Xor(&bm)
 	if shouldUpdateRequests {
-		cn.updateRequests("bitfield", true, true)
+		cn.updateRequests("bitfield", false, false)
 	}
 	// We didn't guard this before, I see no reason to do it now.
-	cn.peerPiecesChanged(true)
+	cn.peerPiecesChanged(false, false)
 	return nil
 }
 
-func (cn *PeerConn) onPeerHasAllPiecesNoTriggers() {
+func (cn *PeerConn) onPeerHasAllPiecesNoTriggers(lock bool, lockTorrent bool) {
+	if lockTorrent {
+		cn.t.mu.Lock()
+		defer cn.t.mu.Unlock()
+	}
+
+	if lock {
+		cn.mu.Lock()
+		defer cn.mu.Unlock()
+	}
+
 	t := cn.t
-	if t.haveInfo(true) {
+
+	if t.haveInfo(lockTorrent) {
 		cn._peerPieces.Iterate(func(x uint32) bool {
 			t.decPieceAvailability(pieceIndex(x), true)
 			return true
 		})
 	}
-	t.addConnWithAllPieces(&cn.Peer)
+	t.addConnWithAllPieces(&cn.Peer, lockTorrent)
 	cn.peerSentHaveAll = true
 	cn._peerPieces.Clear()
 }
 
-func (cn *PeerConn) onPeerHasAllPieces() {
-	cn.onPeerHasAllPiecesNoTriggers()
-	cn.peerHasAllPiecesTriggers()
+func (cn *PeerConn) onPeerHasAllPieces(lock bool, lockTorrent bool) {
+	cn.onPeerHasAllPiecesNoTriggers(lock, lockTorrent)
+	cn.peerHasAllPiecesTriggers(lock, lockTorrent)
 }
 
-func (cn *PeerConn) peerHasAllPiecesTriggers() {
-	cn.t.mu.Lock()
-	defer cn.t.mu.Unlock()
+func (cn *PeerConn) peerHasAllPiecesTriggers(lock bool, lockTorrent bool) {
+	if lockTorrent {
+		cn.t.mu.Lock()
+		defer cn.t.mu.Unlock()
+	}
+
+	if lock {
+		cn.mu.Lock()
+		defer cn.mu.Unlock()
+	}
 
 	isEmpty := cn.t._pendingPieces.IsEmpty()
 
 	if !isEmpty {
 		cn.updateRequests("Peer.onPeerHasAllPieces", false, false)
 	}
-	cn.peerPiecesChanged(false)
+	cn.peerPiecesChanged(false, false)
 }
 
 func (cn *PeerConn) onPeerSentHaveAll() error {
-	cn.onPeerHasAllPieces()
+	cn.onPeerHasAllPieces(true, true)
 	return nil
 }
 
-func (cn *PeerConn) peerSentHaveNone() error {
+func (cn *PeerConn) peerSentHaveNone(lock bool, lockTorrent bool) error {
+	if lockTorrent {
+		cn.t.mu.Lock()
+		defer cn.t.mu.Unlock()
+	}
+
+	if lock {
+		cn.mu.Lock()
+		defer cn.mu.Unlock()
+	}
+
 	if !cn.peerSentHaveAll {
-		cn.t.decPeerPieceAvailability(&cn.Peer, true, true)
+		cn.t.decPeerPieceAvailability(&cn.Peer, false, false)
 	}
 	cn._peerPieces.Clear()
 	cn.peerSentHaveAll = false
-	cn.peerPiecesChanged(true)
+	cn.peerPiecesChanged(false, false)
 	return nil
 }
 
@@ -876,7 +932,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Have:
 			err = c.peerSentHave(pieceIndex(msg.Index), true)
 		case pp.Bitfield:
-			err = c.peerSentBitfield(msg.Bitfield)
+			err = c.peerSentBitfield(msg.Bitfield, true, true)
 		case pp.Request:
 			r := newRequestFromMessage(&msg)
 			err = c.onReadRequest(r, true)
@@ -921,7 +977,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.HaveAll:
 			err = c.onPeerSentHaveAll()
 		case pp.HaveNone:
-			err = c.peerSentHaveNone()
+			err = c.peerSentHaveNone(true, true)
 		case pp.Reject:
 			req := newRequestFromMessage(&msg)
 			if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req, true)) {
@@ -958,48 +1014,57 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 	cl := t.cl
 	switch id {
 	case pp.HandshakeExtendedID:
-		var d pp.ExtendedHandshakeMessage
-		if err := bencode.Unmarshal(payload, &d); err != nil {
-			c.logger.Printf("error parsing extended handshake message %q: %s", payload, err)
-			return fmt.Errorf("unmarshalling extended handshake payload: %w", err)
-		}
-		if cb := c.callbacks.ReadExtendedHandshake; cb != nil {
-			cb(c, &d)
-		}
-		// c.logger.WithDefaultLevel(log.Debug).Printf("received extended handshake message:\n%s", spew.Sdump(d))
-		if d.Reqq != 0 {
-			c.PeerMaxRequests = d.Reqq
-		}
-		c.PeerClientName.Store(d.V)
-		if c.PeerExtensionIDs == nil {
-			c.PeerExtensionIDs = make(map[pp.ExtensionName]pp.ExtensionNumber, len(d.M))
-		}
-		c.PeerListenPort = d.Port
-		c.PeerPrefersEncryption = d.Encryption
-		for name, id := range d.M {
-			if _, ok := c.PeerExtensionIDs[name]; !ok {
-				peersSupportingExtension.Add(
-					// expvar.Var.String must produce valid JSON. "ut_payme\xeet_address" was being
-					// entered here which caused problems later when unmarshalling.
-					strconv.Quote(string(name)),
-					1)
+		return func() error {
+			var d pp.ExtendedHandshakeMessage
+			if err := bencode.Unmarshal(payload, &d); err != nil {
+				c.logger.Printf("error parsing extended handshake message %q: %s", payload, err)
+				return fmt.Errorf("unmarshalling extended handshake payload: %w", err)
 			}
-			c.PeerExtensionIDs[name] = id
-		}
-		if d.MetadataSize != 0 {
-			if err = t.setMetadataSize(d.MetadataSize); err != nil {
-				return fmt.Errorf("setting metadata size to %d: %w", d.MetadataSize, err)
+			if cb := c.callbacks.ReadExtendedHandshake; cb != nil {
+				cb(c, &d)
 			}
-		}
-		c.requestPendingMetadata(true)
-		if !t.cl.config.DisablePEX {
+
+			c.t.mu.RLock()
+			defer c.t.mu.RUnlock()
+
 			c.mu.Lock()
-			t.pex.Add(c) // we learnt enough now
-			// This checks the extension is supported internally.
-			c.pex.Init(c)
+			// c.logger.WithDefaultLevel(log.Debug).Printf("received extended handshake message:\n%s", spew.Sdump(d))
+			if d.Reqq != 0 {
+				c.PeerMaxRequests = d.Reqq
+			}
+			c.PeerClientName.Store(d.V)
+			if c.PeerExtensionIDs == nil {
+				c.PeerExtensionIDs = make(map[pp.ExtensionName]pp.ExtensionNumber, len(d.M))
+			}
+			c.PeerListenPort = d.Port
+			c.PeerPrefersEncryption = d.Encryption
+			for name, id := range d.M {
+				if _, ok := c.PeerExtensionIDs[name]; !ok {
+					peersSupportingExtension.Add(
+						// expvar.Var.String must produce valid JSON. "ut_payme\xeet_address" was being
+						// entered here which caused problems later when unmarshalling.
+						strconv.Quote(string(name)),
+						1)
+				}
+				c.PeerExtensionIDs[name] = id
+			}
 			c.mu.Unlock()
-		}
-		return nil
+
+			if d.MetadataSize != 0 {
+				if err = t.setMetadataSize(d.MetadataSize, false); err != nil {
+					return fmt.Errorf("setting metadata size to %d: %w", d.MetadataSize, err)
+				}
+			}
+			c.requestPendingMetadata(false)
+			if !t.cl.config.DisablePEX {
+				c.mu.Lock()
+				t.pex.Add(c) // we learnt enough now
+				// This checks the extension is supported internally.
+				c.pex.Init(c)
+				c.mu.Unlock()
+			}
+			return nil
+		}()
 	case metadataExtendedId:
 		err := cl.gotMetadataExtensionMsg(payload, t, c)
 		if err != nil {
@@ -1228,8 +1293,8 @@ func (pc *PeerConn) bitExtensionEnabled(bit pp.ExtensionBit) bool {
 	return pc.t.cl.config.Extensions.GetBit(bit) && pc.PeerExtensionBytes.GetBit(bit)
 }
 
-func (cn *PeerConn) peerPiecesChanged(lockTorrent bool) {
-	cn.t.maybeDropMutuallyCompletePeer(cn, lockTorrent)
+func (cn *PeerConn) peerPiecesChanged(lock bool, lockTorrent bool) {
+	cn.t.maybeDropMutuallyCompletePeer(cn, lockTorrent, lock)
 }
 
 // Returns whether the connection could be useful to us. We're seeding and

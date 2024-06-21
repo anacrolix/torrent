@@ -523,13 +523,13 @@ func (cn *PeerConn) onPeerHasAllPiecesNoTriggers(lock bool, lockTorrent bool) {
 
 	t := cn.t
 
-	if t.haveInfo(lockTorrent) {
+	if t.haveInfo(false) {
 		cn._peerPieces.Iterate(func(x uint32) bool {
-			t.decPieceAvailability(pieceIndex(x), true)
+			t.decPieceAvailability(pieceIndex(x), false)
 			return true
 		})
 	}
-	t.addConnWithAllPieces(&cn.Peer, lockTorrent)
+	t.addConnWithAllPieces(&cn.Peer, false)
 	cn.peerSentHaveAll = true
 	cn._peerPieces.Clear()
 }

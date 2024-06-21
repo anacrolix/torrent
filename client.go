@@ -1110,7 +1110,7 @@ func (t *Torrent) runHandshookConn(pc *PeerConn, lockClient bool) error {
 		return err
 	}
 
-	defer t.dropConnection(pc, true)
+	defer t.dropConnection(pc, true, true)
 	pc.initUpdateRequestsTimer(true)
 
 	if err := pc.mainReadLoop(); err != nil {
@@ -1632,7 +1632,7 @@ func (cl *Client) banPeerIP(ip net.IP) {
 				if p.remoteIp().Equal(ip) {
 					t.logger.Levelf(log.Warning, "dropping peer %v with banned ip %v", p, ip)
 					// Should this be a close?
-					p.drop(false)
+					p.drop(true, false)
 				}
 			}
 		}()

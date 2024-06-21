@@ -1186,8 +1186,8 @@ another:
 	return c.choke(msg)
 }
 
-func (cn *PeerConn) drop(lockTorrent bool) {
-	cn.t.dropConnection(cn, lockTorrent)
+func (cn *PeerConn) drop(lock bool, lockTorrent bool) {
+	cn.t.dropConnection(cn, lock, lockTorrent)
 }
 
 func (cn *PeerConn) ban() {

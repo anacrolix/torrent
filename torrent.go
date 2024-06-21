@@ -1354,7 +1354,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 		return
 	}
 	p.logger.Levelf(log.Debug, "is mutually complete; dropping")
-	p.drop(lock)
+	p.drop(lockPeer, lock)
 }
 
 func (t *Torrent) haveChunk(r Request, lock bool) (ret bool) {
@@ -1965,7 +1965,7 @@ func (t *Torrent) SetInfoBytes(b []byte) (err error) {
 }
 
 // Returns true if connection is removed from torrent.Conns.
-func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
+func (t *Torrent) deletePeerConn(c *PeerConn, lock bool, lockPeer bool) (ret bool) {
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()
@@ -1982,13 +1982,17 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 	// the drop event against the PexConnState instead.
 	if ret {
 		if !t.cl.config.DisablePEX {
-			c.mu.Lock()
-			t.pex.Drop(c)
-			c.mu.Unlock()
+			func() {
+				if lockPeer {
+					c.mu.Lock()
+					defer c.mu.Unlock()
+				}
+				t.pex.Drop(c)
+			}()
 		}
 	}
 	torrent.Add("deleted connections", 1)
-	c.deleteAllRequests("Torrent.deletePeerConn", true, false)
+	c.deleteAllRequests("Torrent.deletePeerConn", lockPeer, false)
 	t.assertPendingRequests(false)
 	if t.numActivePeers() == 0 && len(t.connsWithAllPieces) != 0 {
 		panic(t.connsWithAllPieces)
@@ -2035,10 +2039,10 @@ func (t *Torrent) assertPendingRequests(lock bool) {
 	// }
 }
 
-func (t *Torrent) dropConnection(c *PeerConn, lock bool) {
+func (t *Torrent) dropConnection(c *PeerConn, lock bool, lockPeer bool) {
 	t.cl.event.Broadcast()
 	c.close(lock)
-	if t.deletePeerConn(c, lock) {
+	if t.deletePeerConn(c, lock, lockPeer) {
 		t.openNewConns(lock)
 	}
 }
@@ -2477,7 +2481,7 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 		}
 		if c.hasPreferredNetworkOver(c0) {
 			c0.close(false)
-			t.deletePeerConn(c0, false)
+			t.deletePeerConn(c0, false, true)
 		} else {
 			return errors.New("existing connection preferred")
 		}
@@ -2496,7 +2500,7 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 			return errors.New("don't want conn")
 		}
 		c.close(false)
-		t.deletePeerConn(c, false)
+		t.deletePeerConn(c, false, true)
 	}
 
 	if len(t.conns) >= t.maxEstablishedConns {
@@ -2605,7 +2609,7 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	wcs.initKeys(worseConnLensOpts{})
 	heap.Init(&wcs)
 	for lenConns > t.maxEstablishedConns && wcs.Len() > 0 {
-		t.dropConnection(heap.Pop(&wcs).(*PeerConn), true)
+		t.dropConnection(heap.Pop(&wcs).(*PeerConn), true, true)
 		t.mu.RLock()
 		lenConns = len(t.conns)
 		t.mu.RUnlock()
@@ -2973,7 +2977,7 @@ func (t *Torrent) dropBannedPeers() {
 
 		if ok {
 			// Should this be a close?
-			p.drop(true)
+			p.drop(true, true)
 			t.logger.WithDefaultLevel(log.Debug).Printf("dropped %v for banned remote IP %v", p, netipAddr)
 		}
 	}

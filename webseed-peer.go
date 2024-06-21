@@ -468,12 +468,12 @@ func (ws *webseedPeer) connectionFlags() string {
 	return "WS"
 }
 
-func (ws *webseedPeer) drop(lockTorrent bool) {
+func (ws *webseedPeer) drop(lock bool, lockTorrent bool) {
 	ws.peer.cancelAllRequests(lockTorrent)
 }
 
 func (cn *webseedPeer) ban() {
-	cn.peer.drop(true)
+	cn.peer.drop(true, true)
 }
 
 func (cn *webseedPeer) isLowOnRequests(lock bool, lockTorrent bool) bool {

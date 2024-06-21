@@ -223,7 +223,7 @@ func (ws *webseedPeer) requester(i int) {
 					duration := time.Until(ws.lastUnhandledErr.Add(webseedPeerUnhandledErrorSleep))
 					ws.peer.mu.RUnlock()
 					time.Sleep(duration)
-					ws.peer.mu.RUnlock()
+					ws.peer.mu.RLock()
 					restart = ws.peer.requestState.Requests.GetCardinality() > 0
 					ws.peer.mu.RUnlock()
 				}()

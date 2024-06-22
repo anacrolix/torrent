@@ -28,7 +28,7 @@ type (
 	Peer struct {
 		// First to ensure 64-bit alignment for atomics. See #262.
 		_stats ConnStats
-		mu     mu //sync.RWMutex
+		mu     sync.RWMutex
 
 		t *Torrent
 
@@ -401,9 +401,7 @@ func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool, lockTorrent bool) bool
 	}
 
 	if lock {
-		cn.mu.rlmu.Lock()
-		fmt.Println("PHP", "L", cn.mu.locker, "R", cn.mu.rlocker, "N", cn.mu.nextlocker)
-		cn.mu.rlmu.Unlock()
+		fmt.Println("PHP")
 		cn.mu.RLock()
 		fmt.Println("PHP", "HAS RL")
 		defer cn.mu.RUnlock()

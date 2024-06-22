@@ -3389,6 +3389,7 @@ func (t *Torrent) updateComplete(lock bool) {
 func (t *Torrent) cancelRequest(r RequestIndex, updateRequests, lock bool, lockPeer bool) *Peer {
 	p := t.requestingPeer(r, lock)
 	if p != nil {
+		fmt.Println("t.cancelRequest")
 		p.cancel(r, updateRequests, lockPeer, lock)
 	}
 	// TODO: This is a check that an old invariant holds. It can be removed after some testing.

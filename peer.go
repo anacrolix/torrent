@@ -561,7 +561,7 @@ func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorre
 		fmt.Println("CAD", me.t.InfoHash(), r)
 		// Record that we expect to get a cancel ack.
 		if !me.requestState.Cancelled.CheckedAdd(r) {
-			panic("request already cancelled")
+			panic(fmt.Sprintf("request %d: already cancelled for hash: %s", r, me.t.InfoHash()))
 		}
 	}
 	me.decPeakRequests()
@@ -831,6 +831,7 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 			if p == c {
 				panic("should not be pending request from conn that just received it")
 			}
+			fmt.Println("p.receiveChunk")
 			p.cancel(req, true, true, false)
 		}
 
@@ -1025,6 +1026,7 @@ func (c *Peer) cancelAllRequests(lockTorrent bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	fmt.Println("p.cancelAllRequests")
 	c.requestState.Requests.IterateSnapshot(func(x RequestIndex) bool {
 		c.cancel(x, false, false, false)
 		return true

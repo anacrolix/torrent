@@ -401,9 +401,7 @@ func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool, lockTorrent bool) bool
 	}
 
 	if lock {
-		fmt.Println("PHP")
 		cn.mu.RLock()
-		fmt.Println("PHP", "HAS RL")
 		defer cn.mu.RUnlock()
 	}
 

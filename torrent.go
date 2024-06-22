@@ -677,32 +677,34 @@ func (t *Torrent) onSetInfo(lock bool, lockClient bool) {
 
 // Called when metadata for a torrent becomes available.
 func (t *Torrent) setInfoBytes(b []byte, lock bool, lockClient bool) error {
-	if lockClient {
-		t.cl.lock()
-		defer t.cl.unlock()
-	}
+	if err := func() error {
+		if lock {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+		}
 
-	if lock {
-		t.mu.Lock()
-		defer t.mu.Unlock()
-	}
+		if metainfo.HashBytes(b) != t.infoHash {
+			return errors.New("info bytes have wrong hash")
+		}
+		var info metainfo.Info
+		if err := bencode.Unmarshal(b, &info); err != nil {
+			return fmt.Errorf("error unmarshalling info bytes: %s", err)
+		}
+		t.metadataBytes = b
+		t.metadataCompletedChunks = nil
+		if t.info != nil {
+			return nil
+		}
+		if err := t.setInfo(&info, false); err != nil {
+			return err
+		}
 
-	if metainfo.HashBytes(b) != t.infoHash {
-		return errors.New("info bytes have wrong hash")
-	}
-	var info metainfo.Info
-	if err := bencode.Unmarshal(b, &info); err != nil {
-		return fmt.Errorf("error unmarshalling info bytes: %s", err)
-	}
-	t.metadataBytes = b
-	t.metadataCompletedChunks = nil
-	if t.info != nil {
 		return nil
-	}
-	if err := t.setInfo(&info, false); err != nil {
+	}(); err != nil {
 		return err
 	}
-	t.onSetInfo(false, false)
+
+	t.onSetInfo(lock, lockClient)
 	return nil
 }
 

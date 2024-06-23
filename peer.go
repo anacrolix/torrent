@@ -539,6 +539,7 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 		cn.validReceiveChunks = make(map[RequestIndex]int)
 	}
 	cn.validReceiveChunks[r]++
+	fmt.Println("INS", r)
 	cn.t.requestState[r] = requestState{
 		peer: cn,
 		when: time.Now(),
@@ -973,6 +974,7 @@ func (c *Peer) deleteRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
 		return false
 	}
 
+	fmt.Println("DEL", r)
 	delete(c.t.requestState, r)
 
 	// c.t.iterPeers(func(p *Peer) {

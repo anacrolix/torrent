@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
@@ -551,16 +552,21 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 	return cn.peerImpl._request(ppReq, false), nil
 }
 
+var cadct atomic.Int64
+
 func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorrent bool) {
 	if !me.deleteRequest(r, lock, lockTorrent) {
 		panic("request not existing should have been guarded")
 	}
 	if me._cancel(r, lock, lockTorrent) {
-		fmt.Println("CAD", me.t.InfoHash(), r)
+		ct := cadct.Add(1)
+		fmt.Println("CAD", ct, me.t.InfoHash(), r)
 		// Record that we expect to get a cancel ack.
 		if !me.requestState.Cancelled.CheckedAdd(r) {
 			panic(fmt.Sprintf("request %d: already cancelled for hash: %s", r, me.t.InfoHash()))
 		}
+		fmt.Println("CAD", ct, "DONE")
+		cadct.Add(-1)
 	}
 	me.decPeakRequests()
 	if updateRequests && me.isLowOnRequests(lock, lockTorrent) {

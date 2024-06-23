@@ -74,8 +74,8 @@ func (p *Piece) hasDirtyChunks(lock bool) bool {
 	return p.numDirtyChunks(lock) != 0
 }
 
-func (p *Piece) numDirtyChunks(lock bool) chunkIndexType {
-	if lock {
+func (p *Piece) numDirtyChunks(lockTorrent bool) chunkIndexType {
+	if lockTorrent {
 		p.t.mu.RLock()
 		defer p.t.mu.RUnlock()
 	}
@@ -148,14 +148,19 @@ func (p *Piece) chunkIndexSpec(chunk chunkIndexType) ChunkSpec {
 	return chunkIndexSpec(pp.Integer(chunk), p.length(), p.chunkSize())
 }
 
-func (p *Piece) numDirtyBytes(lock bool) (ret pp.Integer) {
+func (p *Piece) numDirtyBytes(lockTorrent bool) (ret pp.Integer) {
 	// defer func() {
 	// 	if ret > p.length() {
 	// 		panic("too many dirty bytes")
 	// 	}
 	// }()
-	numRegularDirtyChunks := p.numDirtyChunks(lock)
-	if p.chunkIndexDirty(p.numChunks()-1, lock) {
+	if lockTorrent {
+		p.t.mu.RLock()
+		defer p.t.mu.RUnlock()
+	}
+
+	numRegularDirtyChunks := p.numDirtyChunks(false)
+	if p.chunkIndexDirty(p.numChunks()-1, false) {
 		numRegularDirtyChunks--
 		ret += p.chunkIndexSpec(p.lastChunkIndex()).Length
 	}

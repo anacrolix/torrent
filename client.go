@@ -156,22 +156,28 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		return torrentsSlice[l].infoHash.AsString() < torrentsSlice[r].infoHash.AsString()
 	})
 	for _, t := range torrentsSlice {
-		if t.name(true) == "" {
-			fmt.Fprint(w, "<unknown name>")
-		} else {
-			fmt.Fprint(w, t.name(true))
-		}
-		fmt.Fprint(w, "\n")
-		if t.info != nil {
-			fmt.Fprintf(
-				w,
-				"%f%% of %d bytes (%s)",
-				100*(1-float64(t.bytesMissingLocked())/float64(t.info.TotalLength())),
-				t.length(),
-				humanize.Bytes(uint64(t.length())))
-		} else {
-			w.WriteString("<missing metainfo>")
-		}
+		func() {
+			t.mu.RLock()
+			defer t.mu.RUnlock()
+
+			if t.name(false) == "" {
+				fmt.Fprint(w, "<unknown name>")
+			} else {
+				fmt.Fprint(w, t.name(false))
+			}
+			fmt.Fprint(w, "\n")
+			if t.info != nil {
+				fmt.Fprintf(
+					w,
+					"%f%% of %d bytes (%s)",
+					100*(1-float64(t.bytesLeft(false))/float64(t.info.TotalLength())),
+					t.length(),
+					humanize.Bytes(uint64(t.length())))
+			} else {
+				w.WriteString("<missing metainfo>")
+			}
+		}()
+
 		fmt.Fprint(w, "\n")
 		t.writeStatus(w)
 		fmt.Fprintln(w)

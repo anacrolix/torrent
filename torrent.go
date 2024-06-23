@@ -1075,13 +1075,7 @@ func (t *Torrent) newMetaInfo(lock bool) metainfo.MetaInfo {
 // actual state in storage. If you want read data synchronously you should use a Reader. See
 // https://github.com/anacrolix/torrent/issues/828.
 func (t *Torrent) BytesMissing() (n int64) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return t.bytesMissingLocked()
-}
-
-func (t *Torrent) bytesMissingLocked() int64 {
-	return t.bytesLeft(false)
+	return t.bytesLeft(true)
 }
 
 func (t *Torrent) bytesLeft(lock bool) (left int64) {
@@ -1235,13 +1229,6 @@ func (t *Torrent) chunksPerRegularPiece(lock bool) chunkIndexType {
 	}
 
 	return t._chunksPerRegularPiece
-}
-
-func (t *Torrent) numChunks() RequestIndex {
-	if t.numPieces() == 0 {
-		return 0
-	}
-	return RequestIndex(t.numPieces()-1)*t.chunksPerRegularPiece(true) + t.pieceNumChunks(t.numPieces()-1)
 }
 
 func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex, lock bool) {

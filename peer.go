@@ -539,7 +539,7 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 		cn.validReceiveChunks = make(map[RequestIndex]int)
 	}
 	cn.validReceiveChunks[r]++
-	fmt.Println("INS", cn.t.InfoHash(), r)
+	fmt.Println("INS", cn.t.InfoHash(), r, "C:", cn.requestState.Cancelled.Contains(r))
 	cn.t.requestState[r] = requestState{
 		peer: cn,
 		when: time.Now(),

@@ -829,7 +829,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 			if p == c {
 				panic("should not be pending request from conn that just received it")
 			}
-			fmt.Println("p.receiveChunk", t.InfoHash(), req)
 			p.cancel(req, true, true, false)
 		}
 
@@ -1022,7 +1021,6 @@ func (c *Peer) cancelAllRequests(lockTorrent bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	fmt.Println("p.cancelAllRequests")
 	c.requestState.Requests.IterateSnapshot(func(x RequestIndex) bool {
 		c.cancel(x, false, false, false)
 		return true

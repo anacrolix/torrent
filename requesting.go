@@ -458,6 +458,7 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 					defer p.mu.Lock()
 				}
 
+				fmt.Println("t.applyRequestState")
 				t.cancelRequest(req, false, false, true)
 			}()
 		}

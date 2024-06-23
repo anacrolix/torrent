@@ -2746,6 +2746,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 func (t *Torrent) cancelRequestsForPiece(piece pieceIndex, lock bool) {
 	start := t.pieceRequestIndexOffset(piece, lock)
 	end := start + t.pieceNumChunks(piece)
+	fmt.Println("t.cancelRequestsForPiece")
 	for ri := start; ri < end; ri++ {
 		t.cancelRequest(ri, true, lock, true)
 	}
@@ -3383,7 +3384,7 @@ func (t *Torrent) cancelRequest(r RequestIndex, updateRequests, lock bool, lockP
 
 	p := t.requestingPeer(r, false)
 	if p != nil {
-		fmt.Println("t.cancelRequest")
+		fmt.Println("t.cancelRequest", t.InfoHash(), r, lock)
 		p.cancel(r, updateRequests, lockPeer, false)
 	}
 	// TODO: This is a check that an old invariant holds. It can be removed after some testing.

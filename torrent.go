@@ -3389,25 +3389,20 @@ func (t *Torrent) updateComplete(lock bool) {
 }
 
 func (t *Torrent) cancelRequest(r RequestIndex, updateRequests, lock bool, lockPeer bool) *Peer {
-	p := t.requestingPeer(r, lock)
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
+
+	p := t.requestingPeer(r, false)
 	if p != nil {
 		fmt.Println("t.cancelRequest")
-		p.cancel(r, updateRequests, lockPeer, lock)
+		p.cancel(r, updateRequests, lockPeer, false)
 	}
 	// TODO: This is a check that an old invariant holds. It can be removed after some testing.
 	//delete(t.pendingRequests, r)
-
-	ok := func() bool {
-		if lock {
-			t.mu.RLock()
-			defer t.mu.RUnlock()
-		}
-		_, ok := t.requestState[r]
-		return ok
-	}
-
-	if ok() {
-		panic("expected request state to be gone")
+	if _, ok := t.requestState[r]; ok {
+		panic("expected request state to be gone after cancel")
 	}
 	return p
 }

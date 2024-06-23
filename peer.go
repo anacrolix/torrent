@@ -711,7 +711,7 @@ func (c *Peer) doChunkReadStats(size int64) {
 }
 
 // Handle a received chunk from a peer.
-func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
+func (c *Peer) receiveChunk(msg *pp.Message) error {
 	chunksReceived.Add("total", 1)
 
 	ppReq := newRequestFromMessage(msg)
@@ -723,7 +723,7 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 		return err
 	}
 
-	req := c.t.requestIndexFromRequest(ppReq, lockTorrent)
+	req := c.t.requestIndexFromRequest(ppReq, true)
 
 	recordBlockForSmartBan := sync.OnceFunc(func() {
 		c.recordBlockForSmartBan(req, msg.Piece)
@@ -736,10 +736,8 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 	cl := t.cl
 
 	piece, intended, err := func() (*Piece, bool, error) {
-		if lockTorrent {
-			t.mu.Lock()
-			defer t.mu.Unlock()
-		}
+		t.mu.Lock()
+		defer t.mu.Unlock()
 
 		c.mu.RLock()
 		peerChoking := c.peerChoking
@@ -829,7 +827,7 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 			if p == c {
 				panic("should not be pending request from conn that just received it")
 			}
-			fmt.Println("p.receiveChunk")
+			fmt.Println("p.receiveChunk", t.InfoHash(), req)
 			p.cancel(req, true, true, false)
 		}
 
@@ -853,10 +851,8 @@ func (c *Peer) receiveChunk(msg *pp.Message, lockTorrent bool) error {
 	// that notify the client of errors. TODO: Do that instead.
 	err = t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece, true)
 
-	if lockTorrent {
-		t.mu.Lock()
-		defer t.mu.Unlock()
-	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	piece.decrementPendingWrites()
 

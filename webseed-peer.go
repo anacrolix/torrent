@@ -565,7 +565,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		Index: r.Index,
 		Begin: r.Begin,
 		Piece: result.Bytes,
-	}, true)
+	})
 
 	if err != nil {
 		panic(err)

@@ -535,6 +535,7 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 	}
 
 	cn.requestState.Requests.Add(r)
+	cn.requestState.Cancelled.Remove(r)
 	if cn.validReceiveChunks == nil {
 		cn.validReceiveChunks = make(map[RequestIndex]int)
 	}

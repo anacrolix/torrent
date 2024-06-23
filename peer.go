@@ -679,9 +679,9 @@ func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
 	if c.deleteRequest(r, true, true) {
 		c.decPeakRequests(true)
 	} else {
-		c.mu.RLock()
+		c.mu.Lock()
 		removed := c.requestState.Cancelled.CheckedRemove(r)
-		c.mu.RUnlock()
+		c.mu.Unlock()
 
 		if !removed {
 			return false

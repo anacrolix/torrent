@@ -570,7 +570,7 @@ func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorre
 		fmt.Println("CAD", ct, "DONE")
 		cadct.Add(-1)
 	}
-	me.decPeakRequests()
+	me.decPeakRequests(lock)
 	if updateRequests && me.isLowOnRequests(lock, lockTorrent) {
 		me.updateRequests("Peer.cancel", lock, lockTorrent)
 	}
@@ -683,7 +683,7 @@ func runSafeExtraneous(f func()) {
 // Returns true if it was valid to reject the request.
 func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
 	if c.deleteRequest(r, true, true) {
-		c.decPeakRequests()
+		c.decPeakRequests(true)
 	} else {
 		c.mu.RLock()
 		removed := c.requestState.Cancelled.CheckedRemove(r)
@@ -1112,13 +1112,17 @@ func (p *Peer) desiredRequests(lock bool) int {
 
 type peerLocalPublicAddr = IpPort
 
-func (p *Peer) decPeakRequests() {
+func (p *Peer) decPeakRequests(lock bool) {
 	// // This can occur when peak requests are altered by the update request timer to be lower than
 	// // the actual number of outstanding requests. Let's let it go negative and see what happens. I
 	// // wonder what happens if maxRequests is not signed.
 	// if p.peakRequests < 1 {
 	// 	panic(p.peakRequests)
 	// }
+	if lock {
+		p.mu.RLock()
+		defer p.mu.RUnlock()
+	}
 	p.peakRequests--
 }
 

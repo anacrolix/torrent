@@ -7,7 +7,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
@@ -535,12 +534,13 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 	}
 
 	cn.requestState.Requests.Add(r)
+	// this is required in case this is a re-request of a previously
+	// cancelled request - we need to clear the cancelled flag
 	cn.requestState.Cancelled.Remove(r)
 	if cn.validReceiveChunks == nil {
 		cn.validReceiveChunks = make(map[RequestIndex]int)
 	}
 	cn.validReceiveChunks[r]++
-	fmt.Println("INS", cn.t.InfoHash(), r, "C:", cn.requestState.Cancelled.Contains(r))
 	cn.t.requestState[r] = requestState{
 		peer: cn,
 		when: time.Now(),
@@ -554,21 +554,15 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 	return cn.peerImpl._request(ppReq, false), nil
 }
 
-var cadct atomic.Int64
-
 func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorrent bool) {
 	if !me.deleteRequest(r, lock, lockTorrent) {
 		panic("request not existing should have been guarded")
 	}
 	if me._cancel(r, lock, lockTorrent) {
-		ct := cadct.Add(1)
-		fmt.Println("CAD", ct, me.t.InfoHash(), r)
 		// Record that we expect to get a cancel ack.
 		if !me.requestState.Cancelled.CheckedAdd(r) {
 			panic(fmt.Sprintf("request %d: already cancelled for hash: %s", r, me.t.InfoHash()))
 		}
-		fmt.Println("CAD", ct, "DONE")
-		cadct.Add(-1)
 	}
 	me.decPeakRequests(lock)
 	if updateRequests && me.isLowOnRequests(lock, lockTorrent) {
@@ -975,7 +969,6 @@ func (c *Peer) deleteRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
 		return false
 	}
 
-	fmt.Println("DEL", c.t.InfoHash(), r)
 	delete(c.t.requestState, r)
 
 	// c.t.iterPeers(func(p *Peer) {

@@ -67,6 +67,7 @@ func (me *Client) SetInfo(info *metainfo.Info) {
 type RequestResult struct {
 	Bytes []byte
 	Err   error
+	Ctx   context.Context
 }
 
 func (ws *Client) NewRequest(r RequestSpec, receivingCounter *atomic.Int64) Request {
@@ -103,6 +104,7 @@ func (ws *Client) NewRequest(r RequestSpec, receivingCounter *atomic.Int64) Requ
 		req.Result <- RequestResult{
 			Bytes: b,
 			Err:   err,
+			Ctx:   ctx,
 		}
 	}()
 	return req

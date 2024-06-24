@@ -529,6 +529,13 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	}
 
 	err := result.Err
+
+	// the call may have been cancelled while it
+	// was in transit (via the chan) 
+	if result.Ctx.Err() != nil {
+		err = result.Ctx.Err()
+	}
+
 	if err != nil {
 		switch {
 		case errors.Is(err, context.Canceled):

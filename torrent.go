@@ -845,7 +845,13 @@ func (t *Torrent) pieceAvailabilityFrequencies(lock bool) (freqs []int) {
 
 	freqs = make([]int, t.numActivePeers()+1)
 	for i := range t.pieces {
-		freqs[t.pieces[i].availability(false)]++
+		freq := t.pieces[i].availability(false)
+
+		for freq >= len(freqs) {
+			freqs = append(freqs, 0)
+		}
+
+		freqs[freq]++
 	}
 	return
 }

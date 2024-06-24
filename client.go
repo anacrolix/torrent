@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
-	"github.com/sasha-s/go-deadlock"
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
@@ -60,7 +59,7 @@ type Client struct {
 	// fields. See #262.
 	connStats ConnStats
 
-	_mu    deadlock.RWMutex /*lockWithDeferreds*/
+	_mu    lockWithDeferreds
 	event  sync.Cond
 	closed chansync.SetOnce
 
@@ -1851,7 +1850,7 @@ func (cl *Client) unlock() {
 	cl._mu.Unlock()
 }
 
-func (cl *Client) locker() *deadlock.RWMutex { // *lockWithDeferreds {
+func (cl *Client) locker() *lockWithDeferreds {
 	return &cl._mu
 }
 

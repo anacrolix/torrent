@@ -32,7 +32,6 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
-	"github.com/sasha-s/go-deadlock"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 
@@ -50,15 +49,11 @@ import (
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
-	stack2 "github.com/go-stack/stack"
 )
 
+/*
 func stack(skip int) string {
 	return stack2.Trace().TrimBelow(stack2.Caller(skip)).String()
-}
-
-func init() {
-	deadlock.Opts.DeadlockTimeout = 3 * time.Minute
 }
 
 type mu struct {
@@ -108,12 +103,6 @@ func (m *mu) RUnlock() {
 }
 
 func (m *mu) Lock() {
-	/*if m.lc.Load() > 0 {
-		fmt.Println(string(stack(2)), "L", m.lc.Load(), m.locker)
-	}
-	if m.rlc.Load() > 0 {
-		fmt.Println(string(stack(2)), "R", m.rlc.Load(), m.rlocker)
-	}*/
 	m.rlmu.Lock()
 	if m.nextlocker == "" {
 		m.nextlocker = string(stack(2))
@@ -138,6 +127,7 @@ func (m *mu) Unlock() {
 	m.RWMutex.Unlock()
 	//fmt.Println("LUN", m.lc) //, string(dbg.Stack()))
 }
+*/
 
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
 // available, see .Info and .GotInfo.
@@ -210,7 +200,7 @@ type Torrent struct {
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
-	mu          mu //deadlock.RWMutex
+	mu          sync.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if
@@ -1990,7 +1980,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool, lockPeer bool) (ret boo
 	c.deleteAllRequests("Torrent.deletePeerConn", lockPeer, false)
 	t.assertPendingRequests(false)
 	if t.numActivePeers() == 0 && len(t.connsWithAllPieces) != 0 {
-		panic(t.connsWithAllPieces)
+		panic(fmt.Sprintf("no active peers, but %d conns with all", len(t.connsWithAllPieces)))
 	}
 	return
 }
@@ -2009,7 +1999,7 @@ func (t *Torrent) decPeerPieceAvailability(p *Peer, lock bool, lockPeer bool) {
 	}
 
 	p.peerPieces(false).Iterate(func(i uint32) bool {
-		p.t.decPieceAvailability(pieceIndex(i), lock)
+		t.decPieceAvailability(pieceIndex(i), lock)
 		return true
 	})
 }

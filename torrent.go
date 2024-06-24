@@ -3311,15 +3311,19 @@ func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
 		client: webseed.Client{
 			HttpClient: t.cl.httpClient,
 			Url:        url,
+			/* Limit requests rather than responses - becuase
+			  otherwise the go http layer buffers causing memory
+			  growth
 			ResponseBodyWrapper: func(r io.Reader) io.Reader {
 				return &rateLimitedReader{
 					l: t.cl.config.DownloadRateLimiter,
 					r: r,
 				}
-			},
+			},*/
 		},
-		maxRequesters:  maxRequests,
-		activeRequests: make(map[Request]webseed.Request, maxRequests),
+		maxRequesters:      maxRequests,
+		activeRequests:     make(map[Request]webseed.Request, maxRequests),
+		requestRateLimiter: t.cl.config.DownloadRateLimiter,
 	}
 
 	ws.peer.initRequestState()

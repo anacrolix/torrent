@@ -12,6 +12,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/log"
+	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -39,6 +40,7 @@ type webseedPeer struct {
 	lastUnhandledErr     time.Time
 	unchokeTimerDuration time.Duration
 	logProcessor         *time.Timer
+	requestRateLimiter   *rate.Limiter
 }
 
 var _ peerImpl = (*webseedPeer)(nil)
@@ -142,7 +144,7 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 }
 
 func (ws *webseedPeer) doRequest(r Request) error {
-	webseedRequest := ws.client.NewRequest(ws.intoSpec(r), &ws.receiving)
+	webseedRequest := ws.client.NewRequest(ws.intoSpec(r), ws.requestRateLimiter, &ws.receiving)
 
 	ws.peer.mu.Lock()
 	ws.activeRequests[r] = webseedRequest
@@ -531,7 +533,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	err := result.Err
 
 	// the call may have been cancelled while it
-	// was in transit (via the chan) 
+	// was in transit (via the chan)
 	if result.Ctx.Err() != nil {
 		err = result.Ctx.Err()
 	}

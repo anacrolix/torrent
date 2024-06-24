@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/RoaringBitmap/roaring"
+	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
@@ -67,9 +68,10 @@ func (me *Client) SetInfo(info *metainfo.Info) {
 type RequestResult struct {
 	Bytes []byte
 	Err   error
+	Ctx   context.Context
 }
 
-func (ws *Client) NewRequest(r RequestSpec, receivingCounter *atomic.Int64) Request {
+func (ws *Client) NewRequest(r RequestSpec, limiter *rate.Limiter, receivingCounter *atomic.Int64) Request {
 	ctx, cancel := context.WithCancel(context.Background())
 	var requestParts []requestPart
 	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
@@ -87,6 +89,9 @@ func (ws *Client) NewRequest(r RequestSpec, receivingCounter *atomic.Int64) Requ
 			responseBodyWrapper: ws.ResponseBodyWrapper,
 		}
 		part.do = func() (*http.Response, error) {
+			if err := limiter.WaitN(ctx, int(r.Length)); err != nil {
+				return nil, err
+			}
 			return ws.HttpClient.Do(req)
 		}
 		requestParts = append(requestParts, part)
@@ -103,6 +108,7 @@ func (ws *Client) NewRequest(r RequestSpec, receivingCounter *atomic.Int64) Requ
 		req.Result <- RequestResult{
 			Bytes: b,
 			Err:   err,
+			Ctx:   ctx,
 		}
 	}()
 	return req

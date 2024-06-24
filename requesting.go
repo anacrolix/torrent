@@ -15,6 +15,7 @@ import (
 	"github.com/anacrolix/multiless"
 
 	requestStrategy "github.com/anacrolix/torrent/request-strategy"
+	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
@@ -191,10 +192,26 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 
 	dirtyChunks := t.dirtyChunks.Clone()
 	infoHash := t.infoHash
-	pieceRequestOrder := t.getPieceRequestOrder()
 
 	if lockTorrent {
 		t.mu.RUnlock()
+	}
+
+	// having this here ensures lock serialization
+	all, known := p.peerHasAllPieces(lock, lockTorrent)
+	peerHasAllPieces := all && known
+
+	if lock {
+		p.mu.RLock()
+	}
+
+	peerRequests := p.requestState.Requests.Bitmap().Clone()
+	peerPieces := p.peerPieces(false).Clone()
+	peerChoking := p.peerChoking
+	cancelled := p.requestState.Cancelled.Clone()
+
+	if lock {
+		p.mu.RUnlock()
 	}
 
 	// Caller-provided allocation for roaring bitmap iteration.
@@ -202,25 +219,32 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 
 	callCount := 0
 	iterCount := 0
+	awaitingCancelCount := 0
+	cantRequestCount := 0
+
+	requestPieceStates := map[int]request_strategy.PieceRequestOrderState{}
+	requestIndexes := []RequestIndex{}
 
 	requestStrategy.GetRequestablePieces(
 		input,
-		pieceRequestOrder,
+		requestStrategyTorrent{t},
 		func(ih InfoHash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) {
 			callCount++
 			if ih != infoHash {
 				return
 			}
-			if !p.peerHasPiece(pieceIndex, lock, lockTorrent) {
+			if !(peerHasAllPieces || peerPieces.ContainsInt(pieceIndex)) {
 				return
 			}
 
-			requestHeap.pieceStates[pieceIndex] = pieceExtra
+			requestPieceStates[pieceIndex] = pieceExtra
+
 			allowedFast := p.peerAllowedFast.Contains(pieceIndex)
 
 			it.Initialize(&dirtyChunks)
 			t.iterUndirtiedRequestIndexesInPiece(&it, pieceIndex, func(r requestStrategy.RequestIndex) {
 				iterCount++
+
 				if !allowedFast {
 					// We must signal interest to request this. TODO: We could set interested if the
 					// peers pieces (minus the allowed fast set) overlap with our missing pieces if
@@ -231,50 +255,63 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 					// the peer respond yet (and the request was retained because we are using the
 					// fast extension).
 
-					cantRequest := func() bool {
-						if lock {
-							p.mu.RLock()
-							defer p.mu.RUnlock()
-						}
-						peerChoking := p.peerChoking
-						hasRequest := p.requestState.Requests.Contains(r)
-						return peerChoking && !hasRequest
-					}
-
-					if cantRequest() {
+					if peerChoking && !peerRequests.Contains(r) {
+						cantRequestCount++
 						// We can't request this right now.
 						return
 					}
 				}
 
-				awaitingCancel := func() bool {
-					if lock {
-						p.mu.RLock()
-						defer p.mu.RUnlock()
-					}
-					cancelled := &p.requestState.Cancelled
-					return !cancelled.IsEmpty() && cancelled.Contains(r)
-				}
-
-				if awaitingCancel() {
+				if !cancelled.IsEmpty() && cancelled.Contains(r) {
 					// Can't re-request while awaiting acknowledgement.
+					awaitingCancelCount++
 					return
 				}
-				requestHeap.requestIndexes = append(requestHeap.requestIndexes, r)
+
+				requestIndexes = append(requestIndexes, r)
 			}, lockTorrent)
 		},
 		lockTorrent)
 
-	t.assertPendingRequests(lockTorrent)
+	func() {
+		if lockTorrent {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+		}
+
+		requestHeap.requestIndexes = append(requestHeap.requestIndexes, requestIndexes...)
+
+		for pieceIndex, pieceExtra := range requestPieceStates {
+			requestHeap.pieceStates[pieceIndex] = pieceExtra
+		}
+
+		t.assertPendingRequests(false)
+	}()
+
 	desired.Requests = requestHeap
 
-	if debug {
-		cap, ok := input.Capacity()
-		maxuv := input.MaxUnverifiedBytes()
-		rolen := t.getPieceRequestOrder().Len()
+	func() {
+		if lock {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+		}
+		p.desiredRequestLen = len(desired.Requests.requestIndexes)
+	}()
 
-		p.logger.Levelf(log.Debug, "desired req=%d cap=%d ok=%v maxuv=%d rolen=%d indexes=%d states=%d calls=%d iter=%d", len(requestHeap.requestIndexes),
-			cap, ok, maxuv, rolen, len(t.requestIndexes), len(t.requestPieceStates), callCount, iterCount)
+	if debug {
+		func() {
+			if lockTorrent {
+				t.mu.Lock()
+				defer t.mu.Unlock()
+			}
+
+			cap, ok := input.Capacity()
+			maxuv := input.MaxUnverifiedBytes()
+			rolen := t.getPieceRequestOrder().Len()
+
+			p.logger.Levelf(log.Debug, "desired req=%d cap=%d ok=%v maxuv=%d rolen=%d indexes=%d states=%d calls=%d iter=%d cantreq=%d canceling=%d", p.desiredRequestLen,
+				cap, ok, maxuv, rolen, len(t.requestIndexes), len(t.requestPieceStates), callCount, iterCount, cantRequestCount, awaitingCancelCount)
+		}()
 	}
 
 	return
@@ -345,6 +382,9 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 		defer t.mu.Unlock()
 	}
 
+	// do this before taking the peer lock to avoid lock ordering issues
+	nominalMaxRequests := p.peerImpl.nominalMaxRequests(lock, false)
+
 	if lock {
 		p.mu.Lock()
 		defer p.mu.Unlock()
@@ -358,7 +398,7 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 		}
 	}
 
-	if !p.setInterested(next.Interested, false) {
+	if !p.setInterested(next.Interested, false, false) {
 		return
 	}
 
@@ -380,7 +420,7 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 		}
 
 		numPending := maxRequests(current.Requests.GetCardinality() + current.Cancelled.GetCardinality())
-		if numPending >= p.peerImpl.nominalMaxRequests(false, false) {
+		if numPending >= nominalMaxRequests {
 			break
 		}
 
@@ -401,7 +441,7 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 			}
 
 			// Don't steal from the poor.
-			diff := int64(current.Requests.GetCardinality()) + 1 - (int64(existing.uncancelledRequests()) - 1)
+			diff := int64(current.Requests.GetCardinality()) + 1 - (int64(existing.uncancelledRequests(false)) - 1)
 
 			// Steal a request that leaves us with one more request than the existing peer
 			// connection if the stealer more recently received a chunk.
@@ -409,10 +449,20 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 				continue
 			}
 
-			t.cancelRequest(req, false, false, false)
+			func() {
+				// peer is not this so remove the current peer lock
+				// while processing the cancel to pereserve lock
+				// ordering
+				if lock {
+					p.mu.Unlock()
+					defer p.mu.Lock()
+				}
+
+				t.cancelRequest(req, false, false, true)
+			}()
 		}
 
-		more = p.mustRequest(req, false, false)
+		more = p.mustRequest(req, nominalMaxRequests, false, false)
 		if !more {
 			break
 		}

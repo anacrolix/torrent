@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
@@ -20,6 +21,7 @@ import (
 type trackerScraper struct {
 	u               url.URL
 	t               *Torrent
+	mu              sync.RWMutex
 	lastAnnounce    trackerAnnounceResult
 	lookupTrackerIp func(*url.URL) ([]net.IP, error)
 }
@@ -29,7 +31,7 @@ type torrentTrackerAnnouncer interface {
 	URL() *url.URL
 }
 
-func (me trackerScraper) URL() *url.URL {
+func (me *trackerScraper) URL() *url.URL {
 	return &me.u
 }
 
@@ -37,6 +39,8 @@ func (ts *trackerScraper) statusLine() string {
 	var w bytes.Buffer
 	fmt.Fprintf(&w, "next ann: %v, last ann: %v",
 		func() string {
+			ts.mu.RLock()
+			defer ts.mu.RUnlock()
 			na := time.Until(ts.lastAnnounce.Completed.Add(ts.lastAnnounce.Interval))
 			if na > 0 {
 				na /= time.Second
@@ -47,6 +51,8 @@ func (ts *trackerScraper) statusLine() string {
 			}
 		}(),
 		func() string {
+			ts.mu.RLock()
+			defer ts.mu.RUnlock()
 			if ts.lastAnnounce.Err != nil {
 				return ts.lastAnnounce.Err.Error()
 			}
@@ -145,9 +151,7 @@ func (me *trackerScraper) announce(ctx context.Context, event tracker.AnnounceEv
 		ret.Err = fmt.Errorf("error getting ip: %s", err)
 		return
 	}
-	me.t.cl.rLock()
-	req := me.t.announceRequest(event)
-	me.t.cl.rUnlock()
+	req := me.t.announceRequest(event, true, true)
 	// The default timeout works well as backpressure on concurrent access to the tracker. Since
 	// we're passing our own Context now, we will include that timeout ourselves to maintain similar
 	// behavior to previously, albeit with this context now being cancelled when the Torrent is
@@ -218,9 +222,9 @@ func (me *trackerScraper) Run() {
 		ar := me.announce(ctx, e)
 		// after first announce, get back to regular "none"
 		e = tracker.None
-		me.t.cl.lock()
+		me.mu.Lock()
 		me.lastAnnounce = ar
-		me.t.cl.unlock()
+		me.mu.Unlock()
 
 	recalculate:
 		// Make sure we don't announce for at least a minute since the last one.
@@ -229,9 +233,9 @@ func (me *trackerScraper) Run() {
 			interval = time.Minute
 		}
 
-		me.t.cl.lock()
+		me.t.mu.RLock()
 		wantPeers := me.t.wantPeersEvent.C()
-		me.t.cl.unlock()
+		me.t.mu.RUnlock()
 
 		// If we want peers, reduce the interval to the minimum if it's appropriate.
 

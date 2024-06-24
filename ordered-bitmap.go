@@ -2,9 +2,8 @@ package torrent
 
 import (
 	g "github.com/anacrolix/generics"
+	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 	list "github.com/bahlo/generic-list-go"
-
-	"github.com/anacrolix/torrent/typed-roaring"
 )
 
 type orderedBitmap[T typedRoaring.BitConstraint] struct {
@@ -56,4 +55,8 @@ func (o *orderedBitmap[T]) CheckedRemove(index T) bool {
 	o.order.Remove(o.elements[index])
 	delete(o.elements, index)
 	return true
+}
+
+func (o *orderedBitmap[T]) Bitmap() *typedRoaring.Bitmap[T] {
+	return &o.bitmap
 }

@@ -12,17 +12,17 @@ import (
 type peerImpl interface {
 	// Trigger the actual request state to get updated
 	handleUpdateRequests(lock bool, lockTorrent bool)
-	writeInterested(interested bool) bool
+	writeInterested(interested bool, lock bool) bool
 
 	// _cancel initiates cancellation of a request and returns acked if it expects the cancel to be
 	// handled by a follow-up event.
 	_cancel(r RequestIndex, lock bool, lockTorrent bool) (acked bool)
-	_request(Request) bool
+	_request(r Request, lock bool) bool
 	connectionFlags() string
 	onClose(lockTorrent bool)
-	onGotInfo(info *metainfo.Info, lock bool)
+	onGotInfo(info *metainfo.Info, lock bool, lockTorrent bool)
 	// Drop connection. This may be a no-op if there is no connection.
-	drop(lockTorrent bool)
+	drop(lock bool, lockTorrent bool)
 	// Rebuke the peer
 	ban()
 	String() string

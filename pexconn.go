@@ -3,6 +3,7 @@ package torrent
 import (
 	"fmt"
 	"net/netip"
+	"sync"
 	"time"
 
 	g "github.com/anacrolix/generics"
@@ -86,7 +87,7 @@ func (s *pexConnState) Share(postfn messageWriter) bool {
 	case <-s.gate:
 		if tx := s.genmsg(); tx != nil {
 			s.dbg.Print("sending PEX message: ", tx)
-			flow := postfn(tx.Message(s.xid))
+			flow := postfn(tx.Message(s.xid), true)
 			s.sched(pexInterval)
 			return flow
 		} else {
@@ -123,7 +124,7 @@ func (s *pexConnState) updateRemoteLiveConns(rx pp.PexMsg) (errs []error) {
 }
 
 // Recv is called from the reader goroutine
-func (s *pexConnState) Recv(payload []byte) error {
+func (s *pexConnState) recv(payload []byte, peerLock sync.Locker, lockTorrent bool) error {
 	rx, err := pp.LoadPexMsg(payload)
 	if err != nil {
 		return fmt.Errorf("unmarshalling pex message: %w", err)
@@ -137,8 +138,10 @@ func (s *pexConnState) Recv(payload []byte) error {
 	if timeSinceLastRecv < 45*time.Second {
 		return fmt.Errorf("last received only %v ago", timeSinceLastRecv)
 	}
+	peerLock.Lock()
 	s.lastRecv = time.Now()
 	s.updateRemoteLiveConns(rx)
+	peerLock.Unlock()
 
 	var peers peerInfos
 	peers.AppendFromPex(rx.Added6, rx.Added6Flags)
@@ -147,7 +150,7 @@ func (s *pexConnState) Recv(payload []byte) error {
 		s.dbg.Printf("in cooldown period, incoming PEX discarded")
 		return nil
 	}
-	added := s.torrent.addPeers(peers, true)
+	added := s.torrent.addPeers(peers, lockTorrent)
 	s.dbg.Printf("got %v peers over pex, added %v", len(peers), added)
 
 	if len(peers) > 0 {

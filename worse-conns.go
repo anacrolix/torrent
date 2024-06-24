@@ -31,13 +31,23 @@ func (me *worseConnInput) doGetPeerPriorityOnce() {
 }
 
 type worseConnLensOpts struct {
-	incomingIsBad, outgoingIsBad, lockTorrent bool
+	incomingIsBad, outgoingIsBad, lockPeer, lockTorrent bool
 }
 
 func worseConnInputFromPeer(p *PeerConn, opts worseConnLensOpts) *worseConnInput {
+	if opts.lockTorrent {
+		p.t.mu.RLock()
+		defer p.t.mu.RUnlock()
+	}
+
+	if opts.lockPeer {
+		p.mu.RLock()
+		defer p.mu.RUnlock()
+	}
+
 	ret := worseConnInput{
-		Useful:             p.useful(opts.lockTorrent),
-		LastHelpful:        p.lastHelpful(opts.lockTorrent),
+		Useful:             p.useful(false, false),
+		LastHelpful:        p.lastHelpful(false, false),
 		CompletedHandshake: p.completedHandshake,
 		Pointer:            uintptr(unsafe.Pointer(p)),
 		GetPeerPriority:    p.peerPriority,
@@ -87,6 +97,7 @@ type worseConnSlice struct {
 func (me *worseConnSlice) initKeys(opts worseConnLensOpts) {
 	me.keys = make([]*worseConnInput, len(me.conns))
 	for i, c := range me.conns {
+		opts.lockPeer = true
 		me.keys[i] = worseConnInputFromPeer(c, opts)
 	}
 }

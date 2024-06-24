@@ -29,4 +29,6 @@ type PeerRequests interface {
 	CheckedRemove(RequestIndex) bool
 	// Iterate a snapshot of the values. It is safe to mutate the underlying data structure.
 	IterateSnapshot(func(RequestIndex) bool)
+
+	Bitmap() *typedRoaring.Bitmap[RequestIndex]
 }

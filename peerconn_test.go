@@ -36,7 +36,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	r, w := io.Pipe()
 	// c.r = r
 	c.w = w
-	c.startMessageWriter(true)
+	c.startMessageWriter()
 	c.t.mu.Lock()
 	c.t._completedPieces.Add(1)
 	c.postBitfield(false /*[]bool{false, true, false}*/)
@@ -120,8 +120,8 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	})
 	c.Assert(cn.bannableAddr.Ok, qt.IsTrue)
 	cn.setTorrent(t, true)
-	requestIndexBegin := t.pieceRequestIndexOffset(0,true)
-	requestIndexEnd := t.pieceRequestIndexOffset(1,true)
+	requestIndexBegin := t.pieceRequestIndexOffset(0, true)
+	requestIndexEnd := t.pieceRequestIndexOffset(1, true)
 	eachRequestIndex := func(f func(ri RequestIndex)) {
 		for ri := requestIndexBegin; ri < requestIndexEnd; ri++ {
 			f(ri)
@@ -282,7 +282,7 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	tt.conns[&pc] = struct{}{}
 	c.Assert(pc.onPeerSentHaveAll(), qt.IsNil)
 	c.Check(pc.t.connsWithAllPieces, qt.DeepEquals, map[*Peer]struct{}{&pc.Peer: {}})
-	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false})
+	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false}, true, true)
 	c.Check(pc.peerMinPieces, qt.Equals, 6)
 	c.Check(pc.t.connsWithAllPieces, qt.HasLen, 0)
 	c.Assert(pc.t.setInfo(&metainfo.Info{

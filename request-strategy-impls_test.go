@@ -100,7 +100,7 @@ func BenchmarkRequestStrategy(b *testing.B) {
 	peer.setTorrent(tor, true)
 	c.Assert(tor.storage, qt.IsNotNil)
 	const chunkSize = defaultChunkSize
-	peer.onPeerHasAllPiecesNoTriggers()
+	peer.onPeerHasAllPiecesNoTriggers(true, true)
 	for i := 0; i < tor.numPieces(); i++ {
 		tor.pieces[i].priority.Raise(PiecePriorityNormal)
 		tor.updatePiecePriorityNoTriggers(i, true)

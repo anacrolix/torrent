@@ -99,3 +99,9 @@ func (me *PieceRequestOrder) Len() int {
 	defer me.lock.RUnlock()
 	return len(me.keys)
 }
+
+func (me *PieceRequestOrder) Scan(f func(pieceRequestOrderItem) bool) {
+	me.lock.RLock()
+	defer me.lock.RUnlock()
+	me.tree.Scan(f)
+}

@@ -35,8 +35,8 @@ func (ms *MMapSpan) Append(mMap Mmap) {
 }
 
 func (ms *MMapSpan) Flush() (errs []error) {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
 	if ms.flushTimer == nil {
 		ms.flushTimer = time.AfterFunc(ms.FlushTime,
 			func() {

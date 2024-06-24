@@ -74,8 +74,8 @@ func (p *Piece) hasDirtyChunks(lock bool) bool {
 	return p.numDirtyChunks(lock) != 0
 }
 
-func (p *Piece) numDirtyChunks(lock bool) chunkIndexType {
-	if lock {
+func (p *Piece) numDirtyChunks(lockTorrent bool) chunkIndexType {
+	if lockTorrent {
 		p.t.mu.RLock()
 		defer p.t.mu.RUnlock()
 	}
@@ -148,14 +148,19 @@ func (p *Piece) chunkIndexSpec(chunk chunkIndexType) ChunkSpec {
 	return chunkIndexSpec(pp.Integer(chunk), p.length(), p.chunkSize())
 }
 
-func (p *Piece) numDirtyBytes(lock bool) (ret pp.Integer) {
+func (p *Piece) numDirtyBytes(lockTorrent bool) (ret pp.Integer) {
 	// defer func() {
 	// 	if ret > p.length() {
 	// 		panic("too many dirty bytes")
 	// 	}
 	// }()
-	numRegularDirtyChunks := p.numDirtyChunks(lock)
-	if p.chunkIndexDirty(p.numChunks()-1, lock) {
+	if lockTorrent {
+		p.t.mu.RLock()
+		defer p.t.mu.RUnlock()
+	}
+
+	numRegularDirtyChunks := p.numDirtyChunks(false)
+	if p.chunkIndexDirty(p.numChunks()-1, false) {
 		numRegularDirtyChunks--
 		ret += p.chunkIndexSpec(p.lastChunkIndex()).Length
 	}
@@ -221,11 +226,12 @@ func (p *Piece) SetPriority(prio piecePriority) {
 	p.t.updatePiecePriority(p.index, "Piece.SetPriority", false)
 }
 
-func (p *Piece) purePriority(lock bool) (ret piecePriority) {
-	if lock {
+func (p *Piece) purePriority(lockTorrent bool) (ret piecePriority) {
+	if lockTorrent {
 		p.t.mu.RLock()
 		defer p.t.mu.RUnlock()
 	}
+
 	for _, f := range p.files {
 		ret.Raise(f.prio)
 	}
@@ -242,23 +248,31 @@ func (p *Piece) purePriority(lock bool) (ret piecePriority) {
 	return
 }
 
-func (p *Piece) uncachedPriority(lock bool) (ret piecePriority) {
-	if p.hashing || p.marking || p.t.pieceComplete(p.index, lock) || p.queuedForHash(lock) {
+func (p *Piece) uncachedPriority(lockTorrent bool) (ret piecePriority) {
+	if lockTorrent {
+		p.t.mu.RLock()
+		defer p.t.mu.RUnlock()
+	}
+
+	if p.hashing || p.marking || p.t.pieceComplete(p.index, false) || p.queuedForHash(false) {
 		return PiecePriorityNone
 	}
-	return p.purePriority(lock)
+
+	return p.purePriority(false)
 }
 
 // Tells the Client to refetch the completion status from storage, updating priority etc. if
 // necessary. Might be useful if you know the state of the piece data has changed externally.
 func (p *Piece) UpdateCompletion() {
-	p.t.mu.Lock()
-	defer p.mu.Unlock()
-	p.t.updatePieceCompletion(p.index, false)
+	p.t.updatePieceCompletion(p.index, true)
 }
 
-func (p *Piece) completion(lock bool) (ret storage.Completion) {
-	ret.Complete = p.t.pieceComplete(p.index, lock)
+func (p *Piece) completion(lock bool, lockTorrent bool) (ret storage.Completion) {
+	ret.Complete = p.t.pieceComplete(p.index, lockTorrent)
+	if lock {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+	}
 	ret.Ok = p.storageCompletionOk
 	return
 }

@@ -57,6 +57,10 @@ func stack(skip int) string {
 	return stack2.Trace().TrimBelow(stack2.Caller(skip)).String()
 }
 
+func init() {
+	deadlock.Opts.DeadlockTimeout = 3 * time.Minute
+}
+
 type mu struct {
 	deadlock.RWMutex
 	rlc        atomic.Int32

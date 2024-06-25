@@ -32,6 +32,7 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
+	"github.com/sasha-s/go-deadlock"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 
@@ -49,9 +50,9 @@ import (
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
+	stack2 "github.com/go-stack/stack"
 )
 
-/*
 func stack(skip int) string {
 	return stack2.Trace().TrimBelow(stack2.Caller(skip)).String()
 }
@@ -127,7 +128,6 @@ func (m *mu) Unlock() {
 	m.RWMutex.Unlock()
 	//fmt.Println("LUN", m.lc) //, string(dbg.Stack()))
 }
-*/
 
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
 // available, see .Info and .GotInfo.
@@ -200,7 +200,7 @@ type Torrent struct {
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
-	mu          sync.RWMutex
+	mu          mu //sync.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if

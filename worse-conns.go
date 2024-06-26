@@ -34,8 +34,8 @@ type worseConnLensOpts struct {
 	incomingIsBad, outgoingIsBad bool
 }
 
-func worseConnInputFromPeer(p *PeerConn, opts worseConnLensOpts) worseConnInput {
-	ret := worseConnInput{
+func worseConnInputFromPeer(p *PeerConn, opts worseConnLensOpts) *worseConnInput {
+	ret := &worseConnInput{
 		Useful:             p.useful(),
 		LastHelpful:        p.lastHelpful(),
 		CompletedHandshake: p.completedHandshake,
@@ -81,24 +81,24 @@ func (l *worseConnInput) Less(r *worseConnInput) bool {
 
 type worseConnSlice struct {
 	conns []*PeerConn
-	keys  []worseConnInput
+	keys  []*worseConnInput
 }
 
 func (me *worseConnSlice) initKeys(opts worseConnLensOpts) {
-	me.keys = make([]worseConnInput, len(me.conns))
+	me.keys = make([]*worseConnInput, len(me.conns))
 	for i, c := range me.conns {
 		me.keys[i] = worseConnInputFromPeer(c, opts)
 	}
 }
 
-var _ heap.Interface = &worseConnSlice{}
+var _ heap.Interface = (*worseConnSlice)(nil)
 
-func (me worseConnSlice) Len() int {
+func (me *worseConnSlice) Len() int {
 	return len(me.conns)
 }
 
-func (me worseConnSlice) Less(i, j int) bool {
-	return me.keys[i].Less(&me.keys[j])
+func (me *worseConnSlice) Less(i, j int) bool {
+	return me.keys[i].Less(me.keys[j])
 }
 
 func (me *worseConnSlice) Pop() interface{} {
@@ -112,7 +112,7 @@ func (me *worseConnSlice) Push(x interface{}) {
 	panic("not implemented")
 }
 
-func (me worseConnSlice) Swap(i, j int) {
+func (me *worseConnSlice) Swap(i, j int) {
 	me.conns[i], me.conns[j] = me.conns[j], me.conns[i]
 	me.keys[i], me.keys[j] = me.keys[j], me.keys[i]
 }

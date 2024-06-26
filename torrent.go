@@ -3361,7 +3361,7 @@ func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
 
 	t.imu.RLock()
 	info := t.info
-	defer t.imu.RUnlock()
+	t.imu.RUnlock()
 
 	if bandwidth := t.cl.config.DownloadRateLimiter.Limit(); bandwidth > 0 && info != nil {
 		if maxPieceRequests := int(bandwidth / rate.Limit(info.PieceLength)); maxPieceRequests > peerMaxRequests {

@@ -1206,7 +1206,7 @@ func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 	}
 
 	if pc.fastEnabled() {
-		if t.haveAllPieces(lockTorrent) {
+		if t.haveAllPieces(lockTorrent, true) {
 			pc.write(pp.Message{Type: pp.HaveAll}, true)
 			pc.sentHaves.AddRange(0, bitmap.BitRange(pc.t.NumPieces()))
 			return
@@ -1533,7 +1533,7 @@ func (cl *Client) allTorrentsCompleted() bool {
 		if !t.haveInfo(true) {
 			return false
 		}
-		if !t.haveAllPieces(true) {
+		if !t.haveAllPieces(true, true) {
 			return false
 		}
 	}

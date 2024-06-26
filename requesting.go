@@ -358,7 +358,7 @@ func (t *Torrent) cacheNextRequestIndexesForReuse(slice []RequestIndex, lock boo
 // currently need anything.
 func (p *Peer) allowSendNotInterested(lock bool, lockTorrent bool) bool {
 	// Except for caching, we're not likely to lose pieces very soon.
-	if p.t.haveAllPieces(lockTorrent) {
+	if p.t.haveAllPieces(lockTorrent, true) {
 		return true
 	}
 	all, known := p.peerHasAllPieces(lock)

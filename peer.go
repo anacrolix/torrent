@@ -929,7 +929,7 @@ func (c *Peer) peerHasWantedPieces(lock bool, lockTorrent bool) bool {
 	if all, _ := c.peerHasAllPieces(false); all {
 		isEmpty := c.t._pendingPieces.IsEmpty()
 
-		return !c.t.haveAllPieces(false) && !isEmpty
+		return !c.t.haveAllPieces(false, true) && !isEmpty
 	}
 	if !c.t.haveInfo(true) {
 		return !c.peerPieces(false).IsEmpty()

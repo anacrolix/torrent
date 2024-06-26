@@ -623,7 +623,7 @@ func (t *Torrent) setInfo(info *metainfo.Info, lock bool) error {
 	t.displayName = "" // Save a few bytes lol.
 
 	t._chunksPerRegularPiece = chunkIndexType((pp.Integer(t.usualPieceSize(false)) + t.chunkSize - 1) / t.chunkSize)
-	t.updateComplete(false)
+	t.updateComplete(false, false)
 	t.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
 	t.initFiles(false)
 	t.cacheLength(false)
@@ -1347,8 +1347,8 @@ func (t *Torrent) haveAnyPieces(lock bool) bool {
 	return !t._completedPieces.IsEmpty()
 }
 
-func (t *Torrent) haveAllPieces(lock bool) bool {
-	if !t.haveInfo(true) {
+func (t *Torrent) haveAllPieces(lock bool, lockInfo bool) bool {
+	if !t.haveInfo(lockInfo) {
 		return false
 	}
 	if lock {
@@ -1372,7 +1372,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	if !t.cl.config.DropMutuallyCompletePeers {
 		return
 	}
-	if !t.haveAllPieces(lock) {
+	if !t.haveAllPieces(lock, true) {
 		return
 	}
 	if all, known := p.peerHasAllPieces(lockPeer); !(known && all) {
@@ -1862,7 +1862,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex, lock bool) bool {
 		t._completedPieces.Remove(x)
 	}
 	t.updatePieceRequestOrderPiece(piece, false)
-	t.updateComplete(false)
+	t.updateComplete(false, true)
 
 	if complete && lenDirtiers != 0 {
 		t.logger.Printf("marked piece %v complete but still has dirtiers", piece)
@@ -3437,8 +3437,8 @@ func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex, lock bool) RequestIn
 	return RequestIndex(piece) * t.chunksPerRegularPiece(lock)
 }
 
-func (t *Torrent) updateComplete(lock bool) {
-	t.Complete.SetBool(t.haveAllPieces(lock))
+func (t *Torrent) updateComplete(lock bool, lockInfo bool) {
+	t.Complete.SetBool(t.haveAllPieces(lock, lockInfo))
 }
 
 func (t *Torrent) cancelRequest(r RequestIndex, updateRequests, lock bool, lockPeer bool) *Peer {

@@ -205,7 +205,7 @@ type Torrent struct {
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
 	mu          deadlock.RWMutex // mu //sync.RWMutex
-	imu         deadlock.RWMutex //sync.RWMutex
+	imu         sync.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if

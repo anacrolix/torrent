@@ -217,16 +217,16 @@ func (p *Piece) queuedForHash(lock bool) bool {
 
 func (p *Piece) torrentBeginOffset(lock bool) int64 {
 	if lock {
-		p.t.imu.Lock()
-		defer p.t.imu.Unlock()
+		p.t.imu.RLock()
+		defer p.t.imu.RUnlock()
 	}
 	return int64(p.index) * p.t.info.PieceLength
 }
 
 func (p *Piece) torrentEndOffset(lock bool) int64 {
 	if lock {
-		p.t.imu.Lock()
-		defer p.t.imu.Unlock()
+		p.t.imu.RLock()
+		defer p.t.imu.RUnlock()
 	}
 	return p.torrentBeginOffset(false) + int64(p.length(false))
 }

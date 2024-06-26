@@ -3283,6 +3283,9 @@ func (t *Torrent) AddWebSeeds(urls []string, opts ...AddWebSeedsOpt) {
 }
 
 func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
+	start := time.Now()
+	fmt.Println("AWS", url, t.info)
+	defer fmt.Println("AWS", url, t.info, "DONE", time.Since(start))
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()

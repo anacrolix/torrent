@@ -617,7 +617,7 @@ func (t *Torrent) setInfo(info *metainfo.Info, lock bool) error {
 	}
 
 	t.imu.Lock()
-	defer t.imu.RUnlock()
+	defer t.imu.Unlock()
 
 	t.info = info
 	t.displayName = "" // Save a few bytes lol.

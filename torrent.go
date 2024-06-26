@@ -778,7 +778,7 @@ func (t *Torrent) name(lock bool) string {
 		defer t.imu.RUnlock()
 	}
 
-	if t.haveInfo(true) {
+	if t.haveInfo(false) {
 		return t.info.BestName()
 	}
 
@@ -936,7 +936,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 
 		fmt.Fprintf(w, "Infohash: %s\n", t.infoHash.HexString())
 		fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize(false))
-		if !t.haveInfo(true) {
+		if !t.haveInfo(false) {
 			fmt.Fprintf(w, "Metadata have: ")
 			for _, h := range t.metadataCompletedChunks {
 				fmt.Fprintf(w, "%c", func() rune {

@@ -106,8 +106,8 @@ func (p *Piece) pendChunkIndex(i RequestIndex, lockTorrent bool) {
 	p.t.updatePieceRequestOrderPiece(p.index, false)
 }
 
-func (p *Piece) numChunks() chunkIndexType {
-	return p.t.pieceNumChunks(p.index)
+func (p *Piece) numChunks(lockInfo bool) chunkIndexType {
+	return p.t.pieceNumChunks(p.index, lockInfo)
 }
 
 func (p *Piece) incrementPendingWrites() {
@@ -148,7 +148,7 @@ func (p *Piece) chunkIndexSpec(chunk chunkIndexType) ChunkSpec {
 	return chunkIndexSpec(pp.Integer(chunk), p.length(true), p.chunkSize())
 }
 
-func (p *Piece) numDirtyBytes(lockTorrent bool) (ret pp.Integer) {
+func (p *Piece) numDirtyBytes(lockTorrent bool, lockInfo bool) (ret pp.Integer) {
 	// defer func() {
 	// 	if ret > p.length() {
 	// 		panic("too many dirty bytes")
@@ -160,7 +160,7 @@ func (p *Piece) numDirtyBytes(lockTorrent bool) (ret pp.Integer) {
 	}
 
 	numRegularDirtyChunks := p.numDirtyChunks(false)
-	if p.chunkIndexDirty(p.numChunks()-1, false) {
+	if p.chunkIndexDirty(p.numChunks(lockInfo)-1, false) {
 		numRegularDirtyChunks--
 		ret += p.chunkIndexSpec(p.lastChunkIndex()).Length
 	}
@@ -177,14 +177,14 @@ func (p *Piece) chunkSize() pp.Integer {
 }
 
 func (p *Piece) lastChunkIndex() chunkIndexType {
-	return p.numChunks() - 1
+	return p.numChunks(true) - 1
 }
 
 func (p *Piece) bytesLeft() (ret pp.Integer) {
 	if p.t.pieceComplete(p.index, true) {
 		return 0
 	}
-	return p.length(true) - p.numDirtyBytes(true)
+	return p.length(true) - p.numDirtyBytes(true, true)
 }
 
 // Forces the piece data to be rehashed.
@@ -294,7 +294,7 @@ func (p *Piece) completion(lock bool, lockTorrent bool) (ret storage.Completion)
 }
 
 func (p *Piece) allChunksDirty(lock bool) bool {
-	return p.numDirtyChunks(lock) == p.numChunks()
+	return p.numDirtyChunks(lock) == p.numChunks(true)
 }
 
 func (p *Piece) State() PieceState {

@@ -114,7 +114,7 @@ func (f *File) bytesLeft() (left int64) {
 	f.t.mu.RLock()
 	defer f.t.mu.RUnlock()
 	return fileBytesLeft(int64(f.t.usualPieceSize(true)), f.BeginPieceIndex(), f.EndPieceIndex(), f.offset, f.length, &f.t._completedPieces, func(pieceIndex int) int64 {
-		return int64(f.t.piece(pieceIndex, false).numDirtyBytes(false))
+		return int64(f.t.piece(pieceIndex, false).numDirtyBytes(false,true))
 	})
 }
 

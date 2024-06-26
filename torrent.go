@@ -1104,7 +1104,7 @@ func (t *Torrent) bytesLeft(lock bool, lockInfo bool) (left int64) {
 	}
 	roaring.Flip(&t._completedPieces, 0, uint64(t.numPieces(lockInfo))).Iterate(func(x uint32) bool {
 		p := t.piece(pieceIndex(x), false)
-		left += int64(p.length(lockInfo) - p.numDirtyBytes(false))
+		left += int64(p.length(lockInfo) - p.numDirtyBytes(false, lockInfo))
 		return true
 	})
 	return
@@ -1252,8 +1252,8 @@ func (t *Torrent) bitfield(lock bool) (bf []bool) {
 	return
 }
 
-func (t *Torrent) pieceNumChunks(piece pieceIndex) chunkIndexType {
-	return chunkIndexType((t.pieceLength(piece, true) + t.chunkSize - 1) / t.chunkSize)
+func (t *Torrent) pieceNumChunks(piece pieceIndex, lockInfo bool) chunkIndexType {
+	return chunkIndexType((t.pieceLength(piece, lockInfo) + t.chunkSize - 1) / t.chunkSize)
 }
 
 func (t *Torrent) chunksPerRegularPiece(lock bool) chunkIndexType {
@@ -1276,8 +1276,8 @@ func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex, lock bool) {
 		uint64(t.pieceRequestIndexOffset(pieceIndex+1, false)))
 }
 
-func (t *Torrent) pieceLength(piece pieceIndex, lock bool) pp.Integer {
-	if lock {
+func (t *Torrent) pieceLength(piece pieceIndex, lockInfo bool) pp.Integer {
+	if lockInfo {
 		t.imu.RLock()
 		defer t.imu.RUnlock()
 	}
@@ -1587,7 +1587,7 @@ func (t *Torrent) pieceNumPendingChunks(piece *Piece, lock bool) pp.Integer {
 		return 0
 	}
 
-	return pp.Integer(t.pieceNumChunks(piece.index) - piece.numDirtyChunks(lock))
+	return pp.Integer(t.pieceNumChunks(piece.index, true) - piece.numDirtyChunks(lock))
 }
 
 func (t *Torrent) pieceAllDirty(piece pieceIndex, lock bool) bool {
@@ -2794,7 +2794,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 
 func (t *Torrent) cancelRequestsForPiece(piece pieceIndex, lock bool) {
 	start := t.pieceRequestIndexOffset(piece, lock)
-	end := start + t.pieceNumChunks(piece)
+	end := start + t.pieceNumChunks(piece, true)
 	for ri := start; ri < end; ri++ {
 		t.cancelRequest(ri, true, lock, true)
 	}
@@ -3519,7 +3519,7 @@ func (t *Torrent) iterUndirtiedRequestIndexesInPiece(
 	pieceRequestIndexOffset := t.pieceRequestIndexOffset(piece, lock)
 	iterBitmapUnsetInRange(
 		iter,
-		pieceRequestIndexOffset, pieceRequestIndexOffset+t.pieceNumChunks(piece),
+		pieceRequestIndexOffset, pieceRequestIndexOffset+t.pieceNumChunks(piece, true),
 		f,
 	)
 }

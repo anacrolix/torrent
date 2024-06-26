@@ -215,9 +215,9 @@ func (cn *PeerConn) supportsExtension(ext pp.ExtensionName, lock bool) bool {
 }
 
 // The best guess at number of pieces in the torrent for this peer.
-func (cn *Peer) bestPeerNumPieces(lock bool, lockTorrent bool) pieceIndex {
-	if cn.t.haveInfo(lockTorrent) {
-		return cn.t.numPieces()
+func (cn *Peer) bestPeerNumPieces(lock bool) pieceIndex {
+	if cn.t.haveInfo(true) {
+		return cn.t.numPieces(true)
 	}
 
 	if lock {
@@ -228,10 +228,10 @@ func (cn *Peer) bestPeerNumPieces(lock bool, lockTorrent bool) pieceIndex {
 	return cn.peerMinPieces
 }
 
-func (cn *Peer) completedString(lock bool, lockTorrent bool) string {
+func (cn *Peer) completedString(lock bool) string {
 	have := pieceIndex(cn.peerPieces(lock).GetCardinality())
-	best := cn.bestPeerNumPieces(lock, lockTorrent)
-	if all, _ := cn.peerHasAllPieces(lock, lockTorrent); all {
+	best := cn.bestPeerNumPieces(lock)
+	if all, _ := cn.peerHasAllPieces(lock); all {
 		have = best
 	}
 	return fmt.Sprintf("%d/%d", have, best)
@@ -342,7 +342,7 @@ func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
 
 	fmt.Fprintf(w,
 		"%s completed, %d pieces touched, good chunks: %v/%v:%v reqq: %d+%v/(%d/%d):%d/%d, flags: %s, dr: %.1f KiB/s\n",
-		cn.completedString(false, false),
+		cn.completedString(false),
 		lenPeerTouchedPieces,
 		&cn._stats.ChunksReadUseful,
 		&cn._stats.ChunksRead,
@@ -405,7 +405,7 @@ func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool, lockTorrent bool) bool
 		defer cn.mu.RUnlock()
 	}
 
-	if all, known := cn.peerHasAllPieces(false, false); all && known {
+	if all, known := cn.peerHasAllPieces(false); all && known {
 		return true
 	}
 
@@ -926,12 +926,12 @@ func (c *Peer) peerHasWantedPieces(lock bool, lockTorrent bool) bool {
 		defer c.mu.RUnlock()
 	}
 
-	if all, _ := c.peerHasAllPieces(false, false); all {
+	if all, _ := c.peerHasAllPieces(false); all {
 		isEmpty := c.t._pendingPieces.IsEmpty()
 
 		return !c.t.haveAllPieces(false) && !isEmpty
 	}
-	if !c.t.haveInfo(false) {
+	if !c.t.haveInfo(true) {
 		return !c.peerPieces(false).IsEmpty()
 	}
 
@@ -1066,9 +1066,9 @@ func (cn *Peer) newPeerPieces(lock bool, lockTorrent bool) (ret *roaring.Bitmap)
 		ret = cn.peerPieces(false).Clone()
 	}()
 
-	if all, _ := cn.peerHasAllPieces(lock, lockTorrent); all {
+	if all, _ := cn.peerHasAllPieces(lock); all {
 		if cn.t.haveInfo(true) {
-			ret.AddRange(0, bitmap.BitRange(cn.t.numPieces()))
+			ret.AddRange(0, bitmap.BitRange(cn.t.numPieces(true)))
 		} else {
 			ret.AddRange(0, bitmap.ToEnd)
 		}

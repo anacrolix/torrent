@@ -305,7 +305,7 @@ func (t *Torrent) decPieceAvailability(i pieceIndex, lock bool) {
 		defer t.mu.Unlock()
 	}
 
-	if !t.haveInfo(false) {
+	if !t.haveInfo(true) {
 		return
 	}
 	p := t.piece(i, false)
@@ -323,7 +323,7 @@ func (t *Torrent) incPieceAvailability(i pieceIndex, lock bool) {
 	}
 
 	// If we don't the info, this should be reconciled when we do.
-	if t.haveInfo(false) {
+	if t.haveInfo(true) {
 		p := t.piece(i, false)
 		p.relativeAvailability++
 		t.updatePieceRequestOrderPiece(i, false)
@@ -494,7 +494,7 @@ func (t *Torrent) saveMetadataPiece(index int, data []byte) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.haveInfo(false) {
+	if t.haveInfo(true) {
 		return
 	}
 	if index >= len(t.metadataCompletedChunks) {
@@ -519,7 +519,7 @@ func (t *Torrent) haveMetadataPiece(piece int, lock bool) bool {
 		defer t.mu.RUnlock()
 	}
 
-	if t.haveInfo(false) {
+	if t.haveInfo(true) {
 		return (1<<14)*piece < len(t.metadataBytes)
 	} else {
 		return piece < len(t.metadataCompletedChunks) && t.metadataCompletedChunks[piece]
@@ -557,8 +557,8 @@ func (t *Torrent) makePieces(lock bool) {
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		piece.hash = (*metainfo.Hash)(unsafe.Pointer(&hash[0]))
 		files := *t.files
-		beginFile := pieceFirstFileIndex(piece.torrentBeginOffset(), files)
-		endFile := pieceEndFileIndex(piece.torrentEndOffset(), files)
+		beginFile := pieceFirstFileIndex(piece.torrentBeginOffset(false), files)
+		endFile := pieceEndFileIndex(piece.torrentEndOffset(false), files)
 		piece.files = files[beginFile:endFile]
 	}
 }
@@ -650,9 +650,10 @@ func (t *Torrent) onSetInfo(lock bool, lockClient bool) {
 		defer t.mu.Unlock()
 	}
 
-	t.pieceRequestOrder = rand.Perm(t.numPieces())
+	numPieces := t.numPieces(true)
+	t.pieceRequestOrder = rand.Perm(numPieces)
 	t.initPieceRequestOrder(false)
-	g.MakeSliceWithLength(&t.requestPieceStates, t.numPieces())
+	g.MakeSliceWithLength(&t.requestPieceStates, numPieces)
 	for i := range t.pieces {
 		p := &t.pieces[i]
 		// Need to add relativeAvailability before updating piece completion, as that may result in conns
@@ -724,7 +725,7 @@ func (t *Torrent) haveAllMetadataPieces(lock bool) bool {
 		defer t.mu.RUnlock()
 	}
 
-	if t.haveInfo(false) {
+	if t.haveInfo(true) {
 		return true
 	}
 	if t.metadataCompletedChunks == nil {
@@ -745,7 +746,7 @@ func (t *Torrent) setMetadataSize(size int, lock bool) error {
 		defer t.mu.Unlock()
 	}
 
-	if t.haveInfo(false) {
+	if t.haveInfo(true) {
 		// We already know the correct metadata size.
 		return nil
 	}
@@ -777,7 +778,7 @@ func (t *Torrent) name(lock bool) string {
 		defer t.imu.RUnlock()
 	}
 
-	if t.haveInfo(false) {
+	if t.haveInfo(true) {
 		return t.info.BestName()
 	}
 
@@ -928,90 +929,93 @@ func (psr PieceStateRun) String() (ret string) {
 func (t *Torrent) writeStatus(w io.Writer) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	t.imu.RLock()
-	defer t.imu.RUnlock()
 
-	fmt.Fprintf(w, "Infohash: %s\n", t.infoHash.HexString())
-	fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize(false))
-	if !t.haveInfo(false) {
-		fmt.Fprintf(w, "Metadata have: ")
-		for _, h := range t.metadataCompletedChunks {
-			fmt.Fprintf(w, "%c", func() rune {
-				if h {
-					return 'H'
-				} else {
-					return '.'
-				}
-			}())
-		}
-		fmt.Fprintln(w)
-	}
-	fmt.Fprintf(w, "Piece length: %s\n",
-		func() string {
-			if t.haveInfo(false) {
-				return fmt.Sprintf("%v (%v chunks)",
-					t.usualPieceSize(false),
-					float64(t.usualPieceSize(false))/float64(t.chunkSize))
-			} else {
-				return "no info"
-			}
-		}(),
-	)
-	if t.info != nil {
-		fmt.Fprintf(w, "Num Pieces: %d (%d completed)\n", t.numPieces(), t.numPiecesCompleted(false))
-		fmt.Fprintf(w, "Piece States: %s\n", t.pieceStateRuns(false))
-		// Generates a huge, unhelpful listing when piece availability is very scattered. Prefer
-		// availability frequencies instead.
-		if false {
-			fmt.Fprintf(w, "Piece availability: %v\n", strings.Join(func() (ret []string) {
-				for _, run := range t.pieceAvailabilityRuns(false) {
-					ret = append(ret, run.String())
-				}
-				return
-			}(), " "))
-		}
-		fmt.Fprintf(w, "Piece availability frequency: %v\n", strings.Join(
-			func() (ret []string) {
-				for avail, freq := range t.pieceAvailabilityFrequencies(false) {
-					if freq == 0 {
-						continue
-					}
-					ret = append(ret, fmt.Sprintf("%v: %v", avail, freq))
-				}
-				return
-			}(),
-			", "))
-	}
-	fmt.Fprintf(w, "Reader Pieces:")
-	t.forReaderOffsetPieces(func(begin, end pieceIndex) (again bool) {
-		fmt.Fprintf(w, " %d:%d", begin, end)
-		return true
-	}, false)
-	fmt.Fprintln(w)
-
-	fmt.Fprintf(w, "Enabled trackers:\n")
 	func() {
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		fmt.Fprintf(tw, "    URL\tExtra\n")
-		for _, ta := range slices.Sort(slices.FromMapElems(t.trackerAnnouncers), func(l, r torrentTrackerAnnouncer) bool {
-			lu := l.URL()
-			ru := r.URL()
-			var luns, runs url.URL = *lu, *ru
-			luns.Scheme = ""
-			runs.Scheme = ""
-			var ml missinggo.MultiLess
-			ml.StrictNext(luns.String() == runs.String(), luns.String() < runs.String())
-			ml.StrictNext(lu.String() == ru.String(), lu.String() < ru.String())
-			return ml.Less()
-		}).([]torrentTrackerAnnouncer) {
-			fmt.Fprintf(tw, "    %q\t%v\n", ta.URL(), ta.statusLine())
+		t.imu.RLock()
+		defer t.imu.RUnlock()
+
+		fmt.Fprintf(w, "Infohash: %s\n", t.infoHash.HexString())
+		fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize(false))
+		if !t.haveInfo(true) {
+			fmt.Fprintf(w, "Metadata have: ")
+			for _, h := range t.metadataCompletedChunks {
+				fmt.Fprintf(w, "%c", func() rune {
+					if h {
+						return 'H'
+					} else {
+						return '.'
+					}
+				}())
+			}
+			fmt.Fprintln(w)
 		}
-		tw.Flush()
+		fmt.Fprintf(w, "Piece length: %s\n",
+			func() string {
+				if t.haveInfo(true) {
+					return fmt.Sprintf("%v (%v chunks)",
+						t.usualPieceSize(false),
+						float64(t.usualPieceSize(false))/float64(t.chunkSize))
+				} else {
+					return "no info"
+				}
+			}(),
+		)
+		if t.info != nil {
+			fmt.Fprintf(w, "Num Pieces: %d (%d completed)\n", t.numPieces(false), t.numPiecesCompleted(false))
+			fmt.Fprintf(w, "Piece States: %s\n", t.pieceStateRuns(false))
+			// Generates a huge, unhelpful listing when piece availability is very scattered. Prefer
+			// availability frequencies instead.
+			if false {
+				fmt.Fprintf(w, "Piece availability: %v\n", strings.Join(func() (ret []string) {
+					for _, run := range t.pieceAvailabilityRuns(false) {
+						ret = append(ret, run.String())
+					}
+					return
+				}(), " "))
+			}
+			fmt.Fprintf(w, "Piece availability frequency: %v\n", strings.Join(
+				func() (ret []string) {
+					for avail, freq := range t.pieceAvailabilityFrequencies(false) {
+						if freq == 0 {
+							continue
+						}
+						ret = append(ret, fmt.Sprintf("%v: %v", avail, freq))
+					}
+					return
+				}(),
+				", "))
+		}
+		fmt.Fprintf(w, "Reader Pieces:")
+		t.forReaderOffsetPieces(func(begin, end pieceIndex) (again bool) {
+			fmt.Fprintf(w, " %d:%d", begin, end)
+			return true
+		}, false)
+		fmt.Fprintln(w)
+
+		fmt.Fprintf(w, "Enabled trackers:\n")
+		func() {
+			tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+			fmt.Fprintf(tw, "    URL\tExtra\n")
+			for _, ta := range slices.Sort(slices.FromMapElems(t.trackerAnnouncers), func(l, r torrentTrackerAnnouncer) bool {
+				lu := l.URL()
+				ru := r.URL()
+				var luns, runs url.URL = *lu, *ru
+				luns.Scheme = ""
+				runs.Scheme = ""
+				var ml missinggo.MultiLess
+				ml.StrictNext(luns.String() == runs.String(), luns.String() < runs.String())
+				ml.StrictNext(lu.String() == ru.String(), lu.String() < ru.String())
+				return ml.Less()
+			}).([]torrentTrackerAnnouncer) {
+				fmt.Fprintf(tw, "    %q\t%v\n", ta.URL(), ta.statusLine())
+			}
+			tw.Flush()
+		}()
+
+		fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
+
+		dumpStats(w, t.stats(false))
 	}()
-
-	fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
-
-	dumpStats(w, t.stats(false))
 
 	fmt.Fprintf(w, "webseeds:\n")
 	t.writePeerStatuses(w, t.webSeedsAsSlice(false), false)
@@ -1038,12 +1042,12 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	}), false)
 }
 
-func (t *Torrent) writePeerStatuses(w io.Writer, peers []*Peer, lock bool) {
+func (t *Torrent) writePeerStatuses(w io.Writer, peers []*Peer, lockTorrent bool) {
 	var buf bytes.Buffer
 	for _, c := range peers {
 		fmt.Fprintf(w, "- ")
 		buf.Reset()
-		c.writeStatus(&buf, true, lock)
+		c.writeStatus(&buf, true, lockTorrent)
 		w.Write(bytes.TrimRight(
 			bytes.ReplaceAll(buf.Bytes(), []byte("\n"), []byte("\n  ")),
 			" "))
@@ -1098,9 +1102,9 @@ func (t *Torrent) bytesLeft(lock bool) (left int64) {
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 	}
-	roaring.Flip(&t._completedPieces, 0, uint64(t.numPieces())).Iterate(func(x uint32) bool {
+	roaring.Flip(&t._completedPieces, 0, uint64(t.numPieces(true))).Iterate(func(x uint32) bool {
 		p := t.piece(pieceIndex(x), false)
-		left += int64(p.length() - p.numDirtyBytes(false))
+		left += int64(p.length(true) - p.numDirtyBytes(false))
 		return true
 	})
 	return
@@ -1113,7 +1117,7 @@ func (t *Torrent) bytesLeftAnnounce(lock bool) int64 {
 		defer t.mu.RUnlock()
 	}
 
-	if t.haveInfo(false) {
+	if t.haveInfo(true) {
 		return t.bytesLeft(false)
 	} else {
 		return -1
@@ -1143,9 +1147,11 @@ func (t *Torrent) usualPieceSize(lock bool) int {
 	return int(t.info.PieceLength)
 }
 
-func (t *Torrent) numPieces() pieceIndex {
-	t.imu.RLock()
-	defer t.imu.RUnlock()
+func (t *Torrent) numPieces(lock bool) pieceIndex {
+	if lock {
+		t.imu.RLock()
+		defer t.imu.RUnlock()
+	}
 	return t.info.NumPieces()
 }
 
@@ -1238,7 +1244,7 @@ func (t *Torrent) bitfield(lock bool) (bf []bool) {
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 	}
-	bf = make([]bool, t.numPieces())
+	bf = make([]bool, t.numPieces(true))
 	t._completedPieces.Iterate(func(piece uint32) (again bool) {
 		bf[piece] = true
 		return true
@@ -1247,7 +1253,7 @@ func (t *Torrent) bitfield(lock bool) (bf []bool) {
 }
 
 func (t *Torrent) pieceNumChunks(piece pieceIndex) chunkIndexType {
-	return chunkIndexType((t.pieceLength(piece) + t.chunkSize - 1) / t.chunkSize)
+	return chunkIndexType((t.pieceLength(piece, true) + t.chunkSize - 1) / t.chunkSize)
 }
 
 func (t *Torrent) chunksPerRegularPiece(lock bool) chunkIndexType {
@@ -1270,15 +1276,17 @@ func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex, lock bool) {
 		uint64(t.pieceRequestIndexOffset(pieceIndex+1, false)))
 }
 
-func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
-	t.imu.RLock()
-	defer t.imu.RUnlock()
+func (t *Torrent) pieceLength(piece pieceIndex, lock bool) pp.Integer {
+	if lock {
+		t.imu.RLock()
+		defer t.imu.RUnlock()
+	}
 
 	if t.info == nil || t.info.PieceLength == 0 {
 		// There will be no variance amongst pieces. Only pain.
 		return 0
 	}
-	if piece == t.numPieces()-1 {
+	if piece == t.numPieces(false)-1 {
 		ret := pp.Integer(t.length(false) % t.info.PieceLength)
 		if ret != 0 {
 			return ret
@@ -1340,7 +1348,7 @@ func (t *Torrent) haveAnyPieces(lock bool) bool {
 }
 
 func (t *Torrent) haveAllPieces(lock bool) bool {
-	if !t.haveInfo(lock) {
+	if !t.haveInfo(true) {
 		return false
 	}
 	if lock {
@@ -1367,7 +1375,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	if !t.haveAllPieces(lock) {
 		return
 	}
-	if all, known := p.peerHasAllPieces(lockPeer, lock); !(known && all) {
+	if all, known := p.peerHasAllPieces(lockPeer); !(known && all) {
 		return
 	}
 	if p.useful(lockPeer, lock) {
@@ -1386,7 +1394,7 @@ func (t *Torrent) haveChunk(r Request, lock bool) (ret bool) {
 		defer t.mu.RUnlock()
 	}
 
-	if !t.haveInfo(false) {
+	if !t.haveInfo(true) {
 		return false
 	}
 	if t.pieceComplete(pieceIndex(r.Index), false) {
@@ -1691,7 +1699,7 @@ func (t *Torrent) updatePiecePriority(piece pieceIndex, reason string, lock bool
 }
 
 func (t *Torrent) updateAllPiecePriorities(reason string, lock bool) {
-	t.updatePiecePriorities(0, t.numPieces(), reason, lock)
+	t.updatePiecePriorities(0, t.numPieces(true), reason, lock)
 }
 
 // Update all piece priorities in one hit. This function should have the same
@@ -1901,7 +1909,7 @@ func (t *Torrent) maybeCompleteMetadata() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.haveInfo(false) {
+	if t.haveInfo(true) {
 		// Nothing to do.
 		return nil
 	}
@@ -1935,7 +1943,7 @@ func (t *Torrent) needData(lock bool) bool {
 	if t.closed.IsSet() {
 		return false
 	}
-	if !t.haveInfo(lock) {
+	if !t.haveInfo(true) {
 		return true
 	}
 	if lock {
@@ -2034,7 +2042,7 @@ func (t *Torrent) decPeerPieceAvailability(p *Peer, lock bool, lockPeer bool) {
 	if t.deleteConnWithAllPieces(p, lock) {
 		return
 	}
-	if !t.haveInfo(lock) {
+	if !t.haveInfo(true) {
 		return
 	}
 
@@ -2431,7 +2439,7 @@ func (t *Torrent) stats(lock bool) (ret TorrentStats) {
 	ret.TotalPeers = t.numTotalPeers(false)
 	ret.ConnectedSeeders = 0
 	for c := range t.conns {
-		if all, ok := c.peerHasAllPieces(true, false); all && ok {
+		if all, ok := c.peerHasAllPieces(true); all && ok {
 			ret.ConnectedSeeders++
 		}
 	}
@@ -2849,7 +2857,7 @@ func (t *Torrent) tryCreateMorePieceHashers(lock bool) {
 
 	for !t.closed.IsSet() &&
 		activePieceHashes < t.cl.config.PieceHashersPerTorrent &&
-		activePieceHashes < t.numPieces() &&
+		activePieceHashes < t.numPieces(true) &&
 		activePieceHashes < int(t.numQueuedForHash(lock)) &&
 		t.tryCreatePieceHasher(lock) {
 		activePieceHashes = int(t.activePieceHashes.Load())
@@ -3526,10 +3534,10 @@ func (t *Torrent) checkValidReceiveChunk(r Request) error {
 	if !t.haveInfo(true) {
 		return errors.New("torrent missing info")
 	}
-	if int(r.Index) >= t.numPieces() {
-		return fmt.Errorf("chunk index %v, torrent num pieces %v", r.Index, t.numPieces())
+	if int(r.Index) >= t.numPieces(true) {
+		return fmt.Errorf("chunk index %v, torrent num pieces %v", r.Index, t.numPieces(true))
 	}
-	pieceLength := t.pieceLength(pieceIndex(r.Index))
+	pieceLength := t.pieceLength(pieceIndex(r.Index), true)
 	if r.Begin >= pieceLength {
 		return fmt.Errorf("chunk begins beyond end of piece (%v >= %v)", r.Begin, pieceLength)
 	}

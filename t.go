@@ -75,7 +75,7 @@ func (t *Torrent) PieceState(piece pieceIndex) (ps PieceState) {
 // The number of pieces in the torrent. This requires that the info has been
 // obtained first.
 func (t *Torrent) NumPieces() pieceIndex {
-	return t.numPieces()
+	return t.numPieces(true)
 }
 
 // Get missing bytes count for specific piece.
@@ -239,7 +239,7 @@ func (t *Torrent) AddPeers(pp []PeerInfo) (n int) {
 // Marks the entire torrent for download. Requires the info first, see
 // GotInfo. Sets piece priorities for historical reasons.
 func (t *Torrent) DownloadAll() {
-	t.DownloadPieces(0, t.numPieces())
+	t.DownloadPieces(0, t.numPieces(true))
 }
 
 func (t *Torrent) String() string {

@@ -145,7 +145,7 @@ func (p *Piece) chunkIndexDirty(chunk chunkIndexType, lockTorrent bool) bool {
 }
 
 func (p *Piece) chunkIndexSpec(chunk chunkIndexType) ChunkSpec {
-	return chunkIndexSpec(pp.Integer(chunk), p.length(), p.chunkSize())
+	return chunkIndexSpec(pp.Integer(chunk), p.length(true), p.chunkSize())
 }
 
 func (p *Piece) numDirtyBytes(lockTorrent bool) (ret pp.Integer) {
@@ -168,8 +168,8 @@ func (p *Piece) numDirtyBytes(lockTorrent bool) (ret pp.Integer) {
 	return
 }
 
-func (p *Piece) length() pp.Integer {
-	return p.t.pieceLength(p.index)
+func (p *Piece) length(lock bool) pp.Integer {
+	return p.t.pieceLength(p.index, lock)
 }
 
 func (p *Piece) chunkSize() pp.Integer {
@@ -184,7 +184,7 @@ func (p *Piece) bytesLeft() (ret pp.Integer) {
 	if p.t.pieceComplete(p.index, true) {
 		return 0
 	}
-	return p.length() - p.numDirtyBytes(true)
+	return p.length(true) - p.numDirtyBytes(true)
 }
 
 // Forces the piece data to be rehashed.
@@ -215,12 +215,20 @@ func (p *Piece) queuedForHash(lock bool) bool {
 	return p.t.pieceQueuedForHash(p.index, lock)
 }
 
-func (p *Piece) torrentBeginOffset() int64 {
+func (p *Piece) torrentBeginOffset(lock bool) int64 {
+	if lock {
+		p.t.imu.Lock()
+		defer p.t.imu.Unlock()
+	}
 	return int64(p.index) * p.t.info.PieceLength
 }
 
-func (p *Piece) torrentEndOffset() int64 {
-	return p.torrentBeginOffset() + int64(p.length())
+func (p *Piece) torrentEndOffset(lock bool) int64 {
+	if lock {
+		p.t.imu.Lock()
+		defer p.t.imu.Unlock()
+	}
+	return p.torrentBeginOffset(false) + int64(p.length(false))
 }
 
 func (p *Piece) SetPriority(prio piecePriority) {

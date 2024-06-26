@@ -147,12 +147,7 @@ func (l *PeerConn) hasPreferredNetworkOver(r *PeerConn) bool {
 	return ml.Less()
 }
 
-func (cn *PeerConn) peerHasAllPieces(lock bool, lockTorrent bool) (all, known bool) {
-	if lockTorrent {
-		cn.t.mu.Lock()
-		defer cn.t.mu.Unlock()
-	}
-
+func (cn *PeerConn) peerHasAllPieces(lock bool) (all, known bool) {
 	if lock {
 		cn.mu.Lock()
 		defer cn.mu.Unlock()
@@ -162,11 +157,11 @@ func (cn *PeerConn) peerHasAllPieces(lock bool, lockTorrent bool) (all, known bo
 		return true, true
 	}
 
-	if !cn.t.haveInfo(false) {
+	if !cn.t.haveInfo(true) {
 		return false, false
 	}
 
-	return cn._peerPieces.GetCardinality() == uint64(cn.t.numPieces()), true
+	return cn._peerPieces.GetCardinality() == uint64(cn.t.numPieces(true)), true
 }
 
 func (cn *PeerConn) onGotInfo(info *metainfo.Info, lock bool, lockTorrent bool) {
@@ -445,7 +440,7 @@ func (cn *PeerConn) raisePeerMinPieces(newMin pieceIndex) {
 }
 
 func (cn *PeerConn) peerSentHave(piece pieceIndex, lockTorrent bool) error {
-	if cn.t.haveInfo(true) && piece >= cn.t.numPieces() || piece < 0 {
+	if cn.t.haveInfo(true) && piece >= cn.t.numPieces(true) || piece < 0 {
 		return errors.New("invalid piece")
 	}
 	if cn.peerHasPiece(piece, true, lockTorrent) {
@@ -479,12 +474,12 @@ func (cn *PeerConn) peerSentBitfield(bf []bool, lock bool, lockTorrent bool) err
 	}
 	// We know that the last byte means that at most the last 7 bits are wasted.
 	cn.raisePeerMinPieces(pieceIndex(len(bf) - 7))
-	if cn.t.haveInfo(false) && len(bf) > int(cn.t.numPieces()) {
+	if cn.t.haveInfo(false) && len(bf) > int(cn.t.numPieces(true)) {
 		// Ignore known excess pieces.
-		bf = bf[:cn.t.numPieces()]
+		bf = bf[:cn.t.numPieces(true)]
 	}
 	bm := boolSliceToBitmap(bf)
-	if cn.t.haveInfo(false) && pieceIndex(bm.GetCardinality()) == cn.t.numPieces() {
+	if cn.t.haveInfo(true) && pieceIndex(bm.GetCardinality()) == cn.t.numPieces(true) {
 		cn.onPeerHasAllPieces(false, false)
 		return nil
 	}
@@ -543,7 +538,7 @@ func (cn *PeerConn) onPeerHasAllPiecesNoTriggers(lock bool, lockTorrent bool) {
 
 	t := cn.t
 
-	if t.haveInfo(false) {
+	if t.haveInfo(true) {
 		cn._peerPieces.Iterate(func(x uint32) bool {
 			t.decPieceAvailability(pieceIndex(x), false)
 			return true
@@ -604,7 +599,7 @@ func (cn *PeerConn) peerSentHaveNone(lock bool, lockTorrent bool) error {
 }
 
 func (c *PeerConn) requestPendingMetadata(lockTorrent bool) {
-	if c.t.haveInfo(lockTorrent) {
+	if c.t.haveInfo(true) {
 		return
 	}
 	if c.PeerExtensionIDs[pp.ExtensionNameMetadata] == 0 {
@@ -718,7 +713,7 @@ func (c *PeerConn) onReadRequest(r Request, startFetch bool, lock bool) error {
 		requestsReceivedForMissingPieces.Add(1)
 		return fmt.Errorf("peer requested piece we don't have: %v", r.Index.Int())
 	}
-	pieceLength := c.t.pieceLength(pieceIndex(r.Index))
+	pieceLength := c.t.pieceLength(pieceIndex(r.Index), true)
 	// Check this after we know we have the piece, so that the piece length will be known.
 	if chunkOverflowsPiece(r.ChunkSpec, pieceLength) {
 		torrent.Add("bad requests received", 1)
@@ -1362,7 +1357,7 @@ func (c *PeerConn) useful(lock bool, lockTorrent bool) bool {
 	if c.closed.IsSet() {
 		return false
 	}
-	if !t.haveInfo(lockTorrent) {
+	if !t.haveInfo(true) {
 		return c.supportsExtension("ut_metadata", lock)
 	}
 	if t.seeding(lockTorrent) && c.peerInterested {

@@ -98,7 +98,7 @@ func TestTorrentInitialState(t *testing.T) {
 	tor.cl.lock()
 	assert.EqualValues(t, 3, tor.pieceNumPendingChunks(&tor.pieces[0], true))
 	tor.cl.unlock()
-	assert.EqualValues(t, ChunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
+	assert.EqualValues(t, ChunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0, true), tor.chunkSize))
 }
 
 func TestReducedDialTimeout(t *testing.T) {
@@ -519,7 +519,7 @@ func testDownloadCancel(t *testing.T, ps testDownloadCancelParams) {
 	defer psc.Close()
 
 	leecherGreeting.cl.lock()
-	leecherGreeting.DownloadPieces(0, leecherGreeting.numPieces())
+	leecherGreeting.DownloadPieces(0, leecherGreeting.numPieces(true))
 	if ps.Cancel {
 		leecherGreeting.CancelPieces(0, leecherGreeting.NumPieces())
 	}

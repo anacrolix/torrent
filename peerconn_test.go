@@ -290,7 +290,7 @@ func TestHaveAllThenBitfield(t *testing.T) {
 		Pieces:      make([]byte, pieceHash.Size()*7),
 	}, true), qt.IsNil)
 	pc.t.onSetInfo(true, true)
-	c.Check(tt.numPieces(), qt.Equals, 7)
+	c.Check(tt.numPieces(true), qt.Equals, 7)
 	c.Check(tt.pieceAvailabilityRuns(true), qt.DeepEquals, []pieceAvailabilityRun{
 		// The last element of the bitfield is irrelevant, as the Torrent actually only has 7
 		// pieces.

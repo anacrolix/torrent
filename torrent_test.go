@@ -94,17 +94,17 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		Length:      pieceLength * numPieces,
 	}, true))
 	t.onSetInfo(true, true)
-	assert.EqualValues(b, 13410, t.numPieces())
+	assert.EqualValues(b, 13410, t.numPieces(true))
 	for i := 0; i < 7; i += 1 {
 		r := t.NewReader()
 		r.SetReadahead(32 << 20)
 		r.Seek(3500000, io.SeekStart)
 	}
 	assert.Len(b, t.readers, 7)
-	for i := 0; i < t.numPieces(); i += 3 {
+	for i := 0; i < t.numPieces(true); i += 3 {
 		t._completedPieces.Add(bitmap.BitIndex(i))
 	}
-	t.DownloadPieces(0, t.numPieces())
+	t.DownloadPieces(0, t.numPieces(true))
 	for i := 0; i < b.N; i += 1 {
 		t.updateAllPiecePriorities("", true)
 	}

@@ -139,7 +139,7 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 		defer cn.peer.mu.RUnlock()
 	}
 
-	activeRequestsPerPeer := cn.peer.bestPeerNumPieces(false, false) / maxInt(1, interestedPeers)
+	activeRequestsPerPeer := cn.peer.bestPeerNumPieces(false) / maxInt(1, interestedPeers)
 	return maxInt(1, minInt(cn.peer.PeerMaxRequests, maxInt(maxInt(8, activeRequestsPerPeer), cn.peer.peakRequests*2)))
 }
 
@@ -285,7 +285,7 @@ func (ws *webseedPeer) requester(i int) {
 				ws.peer.t.mu.RLock()
 				defer ws.peer.t.mu.RUnlock()
 
-				if ws.peer.t.haveInfo(false) && !(ws.peer.t.dataDownloadDisallowed.Bool() || ws.peer.t.Complete.Bool()) {
+				if ws.peer.t.haveInfo(true) && !(ws.peer.t.dataDownloadDisallowed.Bool() || ws.peer.t.Complete.Bool()) {
 					if ws.updateRequestor == nil {
 						if ws.unchokeTimerDuration == 0 {
 							// Don't wait for small files
@@ -345,7 +345,7 @@ func (ws *webseedPeer) logProgress(label string, lockTorrent bool) {
 		defer t.mu.RUnlock()
 	}
 
-	if !t.haveInfo(false) {
+	if !t.haveInfo(true) {
 		return
 	}
 
@@ -592,8 +592,8 @@ func (me *webseedPeer) peerPieces(lock bool) *roaring.Bitmap {
 	return &me.client.Pieces
 }
 
-func (cn *webseedPeer) peerHasAllPieces(lock bool, lockTorrent bool) (all, known bool) {
-	if !cn.peer.t.haveInfo(lockTorrent) {
+func (cn *webseedPeer) peerHasAllPieces(lock bool) (all, known bool) {
+	if !cn.peer.t.haveInfo(true) {
 		return true, false
 	}
 
@@ -602,5 +602,5 @@ func (cn *webseedPeer) peerHasAllPieces(lock bool, lockTorrent bool) (all, known
 		defer cn.peer.mu.RUnlock()
 	}
 
-	return cn.client.Pieces.GetCardinality() == uint64(cn.peer.t.numPieces()), true
+	return cn.client.Pieces.GetCardinality() == uint64(cn.peer.t.numPieces(true)), true
 }

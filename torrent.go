@@ -205,6 +205,7 @@ type Torrent struct {
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
 	mu          deadlock.RWMutex // mu //sync.RWMutex
+	imu         deadlock.RWMutex //sync.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if
@@ -268,7 +269,11 @@ type Torrent struct {
 
 type outgoingConnAttemptKey = *PeerInfo
 
-func (t *Torrent) length() int64 {
+func (t *Torrent) length(lock bool) int64 {
+	if lock {
+		t.imu.RLock()
+		defer t.imu.RUnlock()
+	}
 	return t._length.Value
 }
 
@@ -475,11 +480,9 @@ func (t *Torrent) addPeer(p PeerInfo, lock bool) (added bool) {
 	return
 }
 
-func (t *Torrent) invalidateMetadata(lock bool) {
-	if lock {
-		t.mu.Lock()
-		defer t.mu.Unlock()
-	}
+func (t *Torrent) invalidateMetadata() {
+	t.imu.Lock()
+	defer t.imu.Unlock()
 	for i := 0; i < len(t.metadataCompletedChunks); i++ {
 		t.metadataCompletedChunks[i] = false
 	}
@@ -539,7 +542,12 @@ func infoPieceHashes(info *metainfo.Info) (ret [][]byte) {
 	return
 }
 
-func (t *Torrent) makePieces() {
+func (t *Torrent) makePieces(lock bool) {
+	if lock {
+		t.imu.RLock()
+		defer t.imu.RUnlock()
+	}
+
 	hashes := infoPieceHashes(t.info)
 	t.pieces = make([]Piece, len(hashes))
 	for i, hash := range hashes {
@@ -577,7 +585,12 @@ func pieceEndFileIndex(pieceEndOffset int64, files []*File) int {
 	return 0
 }
 
-func (t *Torrent) cacheLength() {
+func (t *Torrent) cacheLength(lock bool) {
+	if lock {
+		t.imu.Lock()
+		defer t.imu.Unlock()
+	}
+
 	var l int64
 	for _, f := range t.info.UpvertedFiles() {
 		l += f.Length
@@ -603,15 +616,18 @@ func (t *Torrent) setInfo(info *metainfo.Info, lock bool) error {
 		defer t.mu.Unlock()
 	}
 
+	t.imu.Lock()
+	defer t.imu.RUnlock()
+
 	t.info = info
 	t.displayName = "" // Save a few bytes lol.
 
 	t._chunksPerRegularPiece = chunkIndexType((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
 	t.updateComplete(false)
 	t.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
-	t.initFiles()
-	t.cacheLength()
-	t.makePieces()
+	t.initFiles(false)
+	t.cacheLength(false)
+	t.makePieces(false)
 	return nil
 }
 
@@ -757,8 +773,8 @@ func (t *Torrent) setMetadataSize(size int, lock bool) error {
 // or a display name given such as by the dn value in a magnet link, or "".
 func (t *Torrent) name(lock bool) string {
 	if lock {
-		t.mu.RLock()
-		defer t.mu.RUnlock()
+		t.imu.RLock()
+		defer t.imu.RUnlock()
 	}
 
 	if t.haveInfo(false) {
@@ -1034,20 +1050,17 @@ func (t *Torrent) writePeerStatuses(w io.Writer, peers []*Peer, lock bool) {
 
 func (t *Torrent) haveInfo(lock bool) bool {
 	if lock {
-		t.mu.RLock()
-		defer t.mu.RUnlock()
+		t.imu.RLock()
+		defer t.imu.RUnlock()
 	}
 	return t.info != nil
 }
 
 // Returns a run-time generated MetaInfo that includes the info bytes and
 // announce-list as currently known to the client.
-func (t *Torrent) newMetaInfo(lock bool) metainfo.MetaInfo {
-	if lock {
-		t.mu.RLock()
-		defer t.mu.RUnlock()
-	}
-
+func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
+	t.imu.RLock()
+	defer t.imu.RUnlock()
 	return metainfo.MetaInfo{
 		CreationDate: time.Now().Unix(),
 		Comment:      "dynamic metainfo from client",
@@ -1121,10 +1134,14 @@ func (t *Torrent) piecePartiallyDownloaded(piece pieceIndex, lock bool) bool {
 }
 
 func (t *Torrent) usualPieceSize() int {
+	t.imu.RLock()
+	defer t.imu.RUnlock()
 	return int(t.info.PieceLength)
 }
 
 func (t *Torrent) numPieces() pieceIndex {
+	t.imu.RLock()
+	defer t.imu.RUnlock()
 	return t.info.NumPieces()
 }
 
@@ -1187,13 +1204,18 @@ func (t *Torrent) assertAllPiecesRelativeAvailabilityZero(lock bool) {
 }
 
 func (t *Torrent) requestOffset(r Request) int64 {
-	return torrentRequestOffset(t.length(), int64(t.usualPieceSize()), r)
+	return torrentRequestOffset(t.length(true), int64(t.usualPieceSize()), r)
 }
 
 // Return the request that would include the given offset into the torrent data. Returns !ok if
 // there is no such request.
 func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
-	return torrentOffsetRequest(t.length(), t.info.PieceLength, int64(t.chunkSize), off)
+	t.imu.RLock()
+	defer t.imu.RUnlock()
+	if t.info == nil {
+		return
+	}
+	return torrentOffsetRequest(t.length(false), t.info.PieceLength, int64(t.chunkSize), off)
 }
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte, lock bool) (err error) {
@@ -1243,12 +1265,15 @@ func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex, lock bool) {
 }
 
 func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
-	if t.info.PieceLength == 0 {
+	t.imu.RLock()
+	defer t.imu.RUnlock()
+
+	if t.info == nil || t.info.PieceLength == 0 {
 		// There will be no variance amongst pieces. Only pain.
 		return 0
 	}
 	if piece == t.numPieces()-1 {
-		ret := pp.Integer(t.length() % t.info.PieceLength)
+		ret := pp.Integer(t.length(false) % t.info.PieceLength)
 		if ret != 0 {
 			return ret
 		}
@@ -1673,7 +1698,10 @@ func (t *Torrent) updatePiecePriorities(begin, end pieceIndex, reason string, lo
 
 // Returns the range of pieces [begin, end) that contains the extent of bytes.
 func (t *Torrent) byteRegionPieces(off, size int64) (begin, end pieceIndex) {
-	if off >= t.length() {
+	t.imu.RLock()
+	defer t.imu.RUnlock()
+
+	if off >= t.length(false) {
 		return
 	}
 	if off < 0 {
@@ -1839,7 +1867,10 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex, lock bool) bool {
 // Non-blocking read. Client lock is not required.
 func (t *Torrent) readAt(b []byte, off int64, lock bool) (n int, err error) {
 	for len(b) != 0 {
-		p := t.piece(int(off/t.info.PieceLength), lock)
+		t.imu.RLock()
+		pieceLength := t.info.PieceLength
+		t.imu.RUnlock()
+		p := t.piece(int(off/pieceLength), lock)
 
 		p.waitNoPendingWrites()
 		var n1 int
@@ -1874,7 +1905,7 @@ func (t *Torrent) maybeCompleteMetadata() error {
 	}
 	err := t.setInfoBytes(t.metadataBytes, false, false)
 	if err != nil {
-		t.invalidateMetadata(false)
+		t.invalidateMetadata()
 		return fmt.Errorf("error setting info bytes: %s", err)
 	}
 	if t.cl.config.Debug {
@@ -1950,7 +1981,7 @@ func (t *Torrent) bytesCompleted() int64 {
 	if !t.haveInfo(true) {
 		return 0
 	}
-	return t.length() - t.bytesLeft(true)
+	return t.length(true) - t.bytesLeft(true)
 }
 
 func (t *Torrent) SetInfoBytes(b []byte) (err error) {
@@ -3314,8 +3345,12 @@ func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
 	// unless there is more availible bandwith - in which case max requests becomes
 	// the max available pieces that will consune that bandwidth
 
-	if bandwidth := t.cl.config.DownloadRateLimiter.Limit(); bandwidth > 0 && t.info != nil {
-		if maxPieceRequests := int(bandwidth / rate.Limit(t.info.PieceLength)); maxPieceRequests > peerMaxRequests {
+	t.imu.RLock()
+	info := t.info
+	defer t.imu.RUnlock()
+
+	if bandwidth := t.cl.config.DownloadRateLimiter.Limit(); bandwidth > 0 && info != nil {
+		if maxPieceRequests := int(bandwidth / rate.Limit(info.PieceLength)); maxPieceRequests > peerMaxRequests {
 			peerMaxRequests = maxPieceRequests
 		}
 	}
@@ -3357,8 +3392,9 @@ func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
 	ws.peer.logger = t.logger.WithContextValue(&ws)
 	ws.peer.peerImpl = &ws
 	t.webSeeds[url] = &ws.peer
-	if t.haveInfo(false) {
-		ws.onGotInfo(t.info, true, false)
+
+	if info != nil {
+		ws.onGotInfo(info, true, false)
 	}
 }
 

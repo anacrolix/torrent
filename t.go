@@ -32,7 +32,7 @@ func (t *Torrent) Info() (info *metainfo.Info) {
 // Returns a Reader bound to the torrent's data. All read calls block until the data requested is
 // actually available. Note that you probably want to ensure the Torrent Info is available first.
 func (t *Torrent) NewReader() Reader {
-	return t.newReader(0, t.length())
+	return t.newReader(0, t.length(true))
 }
 
 func (t *Torrent) newReader(offset, length int64) Reader {
@@ -140,13 +140,13 @@ func (t *Torrent) Name() string {
 // The completed length of all the torrent data, in all its files. This is
 // derived from the torrent info, when it is available.
 func (t *Torrent) Length() int64 {
-	return t._length.Value
+	return t.length(true)
 }
 
 // Returns a run-time generated metainfo for the torrent that includes the
 // info bytes and announce-list as currently known to the client.
 func (t *Torrent) Metainfo() metainfo.MetaInfo {
-	return t.newMetaInfo(true)
+	return t.newMetaInfo()
 }
 
 func (t *Torrent) addReader(r *reader, lock bool) {
@@ -203,7 +203,12 @@ func (t *Torrent) CancelPieces(begin, end pieceIndex) {
 	}
 }
 
-func (t *Torrent) initFiles() {
+func (t *Torrent) initFiles(lock bool) {
+	if lock {
+		t.imu.RLock()
+		defer t.imu.RUnlock()
+	}
+
 	var offset int64
 	t.files = new([]*File)
 	for _, fi := range t.info.UpvertedFiles() {

@@ -158,6 +158,8 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		func() {
 			t.mu.RLock()
 			defer t.mu.RUnlock()
+			t.imu.RLock()
+			defer t.imu.RUnlock()
 
 			if t.name(false) == "" {
 				fmt.Fprint(w, "<unknown name>")
@@ -170,8 +172,8 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 					w,
 					"%f%% of %d bytes (%s)",
 					100*(1-float64(t.bytesLeft(false))/float64(t.info.TotalLength())),
-					t.length(),
-					humanize.Bytes(uint64(t.length())))
+					t.length(false),
+					humanize.Bytes(uint64(t.length(false))))
 			} else {
 				w.WriteString("<missing metainfo>")
 			}

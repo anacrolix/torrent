@@ -951,7 +951,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		}
 		fmt.Fprintf(w, "Piece length: %s\n",
 			func() string {
-				if t.haveInfo(true) {
+				if t.haveInfo(false) {
 					return fmt.Sprintf("%v (%v chunks)",
 						t.usualPieceSize(false),
 						float64(t.usualPieceSize(false))/float64(t.chunkSize))

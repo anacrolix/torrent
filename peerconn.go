@@ -288,15 +288,20 @@ func (cn *PeerConn) onPeerSentCancel(r Request, lock bool) {
 }
 
 func (cn *PeerConn) choke(msg messageWriter, lock bool) (more bool) {
+	if lock {
+		cn.mu.Lock()
+		defer cn.mu.Unlock()
+	}
+
 	if cn.choking {
 		return true
 	}
 	cn.choking = true
 	more = msg(pp.Message{
 		Type: pp.Choke,
-	}, true)
+	}, false)
 	if !cn.fastEnabled() {
-		cn.deleteAllPeerRequests(lock)
+		cn.deleteAllPeerRequests(false)
 	}
 	return
 }
@@ -325,7 +330,7 @@ func (cn *PeerConn) unchoke(msg func(pp.Message, bool) bool, lock bool) bool {
 	cn.choking = false
 	return msg(pp.Message{
 		Type: pp.Unchoke,
-	}, true)
+	}, false)
 }
 
 func (pc *PeerConn) writeInterested(interested bool, lock bool) bool {
@@ -644,7 +649,7 @@ func (c *PeerConn) reject(r Request, lock bool) {
 	if !c.fastEnabled() {
 		panic("fast not enabled")
 	}
-	c.write(r.ToMsg(pp.Reject), true)
+	c.write(r.ToMsg(pp.Reject), lock)
 	// It is possible to reject a request before it is added to peer requests due to being invalid.
 
 	if lock {

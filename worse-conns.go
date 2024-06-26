@@ -41,9 +41,6 @@ func worseConnInputFromPeer(p *PeerConn, opts worseConnLensOpts) *worseConnInput
 	}
 
 	if opts.lockPeer {
-		if p.mu.lc.Load() > 0 {
-			fmt.Println("WCI", "L", p.mu.locker, "N", p.mu.nextlocker)
-		}
 		p.mu.RLock()
 		defer p.mu.RUnlock()
 	}

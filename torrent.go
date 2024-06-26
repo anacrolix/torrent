@@ -960,30 +960,35 @@ func (t *Torrent) writeStatus(w io.Writer) {
 				}
 			}(),
 		)
-		if t.info != nil {
-			fmt.Fprintf(w, "Num Pieces: %d (%d completed)\n", t.numPieces(false), t.numPiecesCompleted(false))
-			fmt.Fprintf(w, "Piece States: %s\n", t.pieceStateRuns(false))
-			// Generates a huge, unhelpful listing when piece availability is very scattered. Prefer
-			// availability frequencies instead.
-			if false {
-				fmt.Fprintf(w, "Piece availability: %v\n", strings.Join(func() (ret []string) {
-					for _, run := range t.pieceAvailabilityRuns(false) {
-						ret = append(ret, run.String())
-					}
-					return
-				}(), " "))
-			}
-			fmt.Fprintf(w, "Piece availability frequency: %v\n", strings.Join(
-				func() (ret []string) {
-					for avail, freq := range t.pieceAvailabilityFrequencies(false) {
-						if freq == 0 {
-							continue
+		if t.haveInfo(false) {
+			func() {
+				t.imu.RUnlock()
+				defer t.imu.RLock()
+
+				fmt.Fprintf(w, "Num Pieces: %d (%d completed)\n", t.numPieces(false), t.numPiecesCompleted(false))
+				fmt.Fprintf(w, "Piece States: %s\n", t.pieceStateRuns(false))
+				// Generates a huge, unhelpful listing when piece availability is very scattered. Prefer
+				// availability frequencies instead.
+				if false {
+					fmt.Fprintf(w, "Piece availability: %v\n", strings.Join(func() (ret []string) {
+						for _, run := range t.pieceAvailabilityRuns(false) {
+							ret = append(ret, run.String())
 						}
-						ret = append(ret, fmt.Sprintf("%v: %v", avail, freq))
-					}
-					return
-				}(),
-				", "))
+						return
+					}(), " "))
+				}
+				fmt.Fprintf(w, "Piece availability frequency: %v\n", strings.Join(
+					func() (ret []string) {
+						for avail, freq := range t.pieceAvailabilityFrequencies(false) {
+							if freq == 0 {
+								continue
+							}
+							ret = append(ret, fmt.Sprintf("%v: %v", avail, freq))
+						}
+						return
+					}(),
+					", "))
+			}()
 		}
 		fmt.Fprintf(w, "Reader Pieces:")
 		t.forReaderOffsetPieces(func(begin, end pieceIndex) (again bool) {

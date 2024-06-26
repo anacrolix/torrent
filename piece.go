@@ -162,7 +162,7 @@ func (p *Piece) numDirtyBytes(lockTorrent bool, lockInfo bool) (ret pp.Integer) 
 	numRegularDirtyChunks := p.numDirtyChunks(false)
 	if p.chunkIndexDirty(p.numChunks(lockInfo)-1, false) {
 		numRegularDirtyChunks--
-		ret += p.chunkIndexSpec(p.lastChunkIndex()).Length
+		ret += p.chunkIndexSpec(p.lastChunkIndex(lockInfo)).Length
 	}
 	ret += pp.Integer(numRegularDirtyChunks) * p.chunkSize()
 	return
@@ -176,8 +176,8 @@ func (p *Piece) chunkSize() pp.Integer {
 	return p.t.chunkSize
 }
 
-func (p *Piece) lastChunkIndex() chunkIndexType {
-	return p.numChunks(true) - 1
+func (p *Piece) lastChunkIndex(lockInfo bool) chunkIndexType {
+	return p.numChunks(lockInfo) - 1
 }
 
 func (p *Piece) bytesLeft() (ret pp.Integer) {

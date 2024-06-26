@@ -204,7 +204,7 @@ type Torrent struct {
 
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
-	mu          mu //sync.RWMutex
+	mu          deadlock.RWMutex // mu //sync.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if
@@ -2820,15 +2820,22 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 		return false
 	}
 
-	t.activePieceHashes.Add(1)
+	t.mu.RLock()
+	activePieceHashes := &t.activePieceHashes
+	hashing := &t.hashing
+	storageLock := &t.storageLock
+	t.mu.RUnlock()
+
+	activePieceHashes.Add(1)
 
 	go func() {
 		defer func() {
-			t.activePieceHashes.Add(-1)
+			activePieceHashes.Add(-1)
 		}()
 
 		for !t.closed.IsSet() {
 			pi, ok := t.getPieceToHash(true)
+
 			if !ok {
 				break
 			}
@@ -2841,11 +2848,12 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 				p = t.piece(pi, false)
 				t.piecesQueuedForHash.Remove(bitmap.BitIndex(pi))
 				p.hashing = true
-				t.hashing.Add(1)
+				hashing.Add(1)
 				t.publishPieceStateChange(pi, false)
 				t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher", false)
 			}()
-			t.storageLock.RLock()
+
+			storageLock.RLock()
 
 			sum, failedPeers, copyErr := t.hashPiece(p)
 			correct := sum == *p.hash
@@ -2856,12 +2864,12 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 				log.Fmsg("piece %v (%s) hash failure copy error: %v", p, p.hash.HexString(), copyErr).Log(t.logger)
 			}
 
-			t.storageLock.RUnlock()
+			storageLock.RUnlock()
 
 			t.mu.Lock()
 			p.hashing = false
-			t.hashing.Add(-1)
 			t.mu.Unlock()
+			hashing.Add(-1)
 
 			t.hashResults <- hashResult{pi, correct, failedPeers, copyErr}
 		}

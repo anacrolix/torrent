@@ -1019,7 +1019,7 @@ func (t *Torrent) writeStatus(w io.Writer) {
 
 		fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
 
-		dumpStats(w, t.stats(false))
+		dumpStats(w, t.stats(false, false))
 	}()
 
 	fmt.Fprintf(w, "webseeds:\n")
@@ -1380,7 +1380,7 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	if !t.haveAllPieces(lock, true) {
 		return
 	}
-	if all, known := p.peerHasAllPieces(lockPeer); !(known && all) {
+	if all, known := p.peerHasAllPieces(lockPeer, true); !(known && all) {
 		return
 	}
 	if p.useful(lockPeer, lock) {
@@ -2429,10 +2429,10 @@ func (t *Torrent) addPeers(peers []PeerInfo, lock bool) (added int) {
 // The returned TorrentStats may require alignment in memory. See
 // https://github.com/anacrolix/torrent/issues/383.
 func (t *Torrent) Stats() TorrentStats {
-	return t.stats(true)
+	return t.stats(true, true)
 }
 
-func (t *Torrent) stats(lock bool) (ret TorrentStats) {
+func (t *Torrent) stats(lock bool, lockInfo bool) (ret TorrentStats) {
 	if lock {
 		t.mu.RLock()
 		defer t.mu.RUnlock()
@@ -2444,7 +2444,7 @@ func (t *Torrent) stats(lock bool) (ret TorrentStats) {
 	ret.TotalPeers = t.numTotalPeers(false)
 	ret.ConnectedSeeders = 0
 	for c := range t.conns {
-		if all, ok := c.peerHasAllPieces(true); all && ok {
+		if all, ok := c.peerHasAllPieces(true, lockInfo); all && ok {
 			ret.ConnectedSeeders++
 		}
 	}

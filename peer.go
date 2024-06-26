@@ -231,7 +231,7 @@ func (cn *Peer) bestPeerNumPieces(lock bool) pieceIndex {
 func (cn *Peer) completedString(lock bool) string {
 	have := pieceIndex(cn.peerPieces(lock).GetCardinality())
 	best := cn.bestPeerNumPieces(lock)
-	if all, _ := cn.peerHasAllPieces(lock); all {
+	if all, _ := cn.peerHasAllPieces(lock, true); all {
 		have = best
 	}
 	return fmt.Sprintf("%d/%d", have, best)
@@ -405,7 +405,7 @@ func (cn *Peer) peerHasPiece(piece pieceIndex, lock bool, lockTorrent bool) bool
 		defer cn.mu.RUnlock()
 	}
 
-	if all, known := cn.peerHasAllPieces(false); all && known {
+	if all, known := cn.peerHasAllPieces(false, true); all && known {
 		return true
 	}
 
@@ -926,7 +926,7 @@ func (c *Peer) peerHasWantedPieces(lock bool, lockTorrent bool) bool {
 		defer c.mu.RUnlock()
 	}
 
-	if all, _ := c.peerHasAllPieces(false); all {
+	if all, _ := c.peerHasAllPieces(false, true); all {
 		isEmpty := c.t._pendingPieces.IsEmpty()
 
 		return !c.t.haveAllPieces(false, true) && !isEmpty
@@ -1066,7 +1066,7 @@ func (cn *Peer) newPeerPieces(lock bool, lockTorrent bool) (ret *roaring.Bitmap)
 		ret = cn.peerPieces(false).Clone()
 	}()
 
-	if all, _ := cn.peerHasAllPieces(lock); all {
+	if all, _ := cn.peerHasAllPieces(lock, true); all {
 		if cn.t.haveInfo(true) {
 			ret.AddRange(0, bitmap.BitRange(cn.t.numPieces(true)))
 		} else {

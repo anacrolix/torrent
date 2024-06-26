@@ -147,7 +147,7 @@ func (l *PeerConn) hasPreferredNetworkOver(r *PeerConn) bool {
 	return ml.Less()
 }
 
-func (cn *PeerConn) peerHasAllPieces(lock bool) (all, known bool) {
+func (cn *PeerConn) peerHasAllPieces(lock bool, lockTorrentInfo bool) (all, known bool) {
 	if lock {
 		cn.mu.Lock()
 		defer cn.mu.Unlock()
@@ -157,11 +157,11 @@ func (cn *PeerConn) peerHasAllPieces(lock bool) (all, known bool) {
 		return true, true
 	}
 
-	if !cn.t.haveInfo(true) {
+	if !cn.t.haveInfo(lockTorrentInfo) {
 		return false, false
 	}
 
-	return cn._peerPieces.GetCardinality() == uint64(cn.t.numPieces(true)), true
+	return cn._peerPieces.GetCardinality() == uint64(cn.t.numPieces(lockTorrentInfo)), true
 }
 
 func (cn *PeerConn) onGotInfo(info *metainfo.Info, lock bool, lockTorrent bool) {

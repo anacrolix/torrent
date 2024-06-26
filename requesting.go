@@ -198,7 +198,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 	}
 
 	// having this here ensures lock serialization
-	all, known := p.peerHasAllPieces(lock)
+	all, known := p.peerHasAllPieces(lock, true)
 	peerHasAllPieces := all && known
 
 	if lock {
@@ -361,7 +361,7 @@ func (p *Peer) allowSendNotInterested(lock bool, lockTorrent bool) bool {
 	if p.t.haveAllPieces(lockTorrent, true) {
 		return true
 	}
-	all, known := p.peerHasAllPieces(lock)
+	all, known := p.peerHasAllPieces(lock, true)
 	if all || !known {
 		return false
 	}

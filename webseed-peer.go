@@ -592,8 +592,8 @@ func (me *webseedPeer) peerPieces(lock bool) *roaring.Bitmap {
 	return &me.client.Pieces
 }
 
-func (cn *webseedPeer) peerHasAllPieces(lock bool) (all, known bool) {
-	if !cn.peer.t.haveInfo(true) {
+func (cn *webseedPeer) peerHasAllPieces(lock bool, lockTorrentInfo bool) (all, known bool) {
+	if !cn.peer.t.haveInfo(lockTorrentInfo) {
 		return true, false
 	}
 
@@ -602,5 +602,5 @@ func (cn *webseedPeer) peerHasAllPieces(lock bool) (all, known bool) {
 		defer cn.peer.mu.RUnlock()
 	}
 
-	return cn.client.Pieces.GetCardinality() == uint64(cn.peer.t.numPieces(true)), true
+	return cn.client.Pieces.GetCardinality() == uint64(cn.peer.t.numPieces(lockTorrentInfo)), true
 }

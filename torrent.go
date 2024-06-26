@@ -1347,7 +1347,7 @@ func (t *Torrent) haveAllPieces(lock bool) bool {
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 	}
-	return t._completedPieces.GetCardinality() == bitmap.BitRange(t.numPieces())
+	return t._completedPieces.GetCardinality() == bitmap.BitRange(t.info.NumPieces())
 }
 
 func (t *Torrent) havePiece(index pieceIndex, lock bool) bool {

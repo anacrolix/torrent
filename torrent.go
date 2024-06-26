@@ -2834,23 +2834,20 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 		}()
 
 		for !t.closed.IsSet() {
-			pi, ok := t.getPieceToHash(true)
+			p, ok := t.getPieceToHash(true)
 
 			if !ok {
 				break
 			}
 
-			var p *Piece
-
 			func() {
 				t.mu.Lock()
 				defer t.mu.Unlock()
-				p = t.piece(pi, false)
-				t.piecesQueuedForHash.Remove(bitmap.BitIndex(pi))
+				t.piecesQueuedForHash.Remove(bitmap.BitIndex(p.index))
 				p.hashing = true
 				hashing.Add(1)
-				t.publishPieceStateChange(pi, false)
-				t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher", false)
+				t.publishPieceStateChange(p.index, false)
+				t.updatePiecePriority(p.index, "Torrent.tryCreatePieceHasher", false)
 			}()
 
 			storageLock.RLock()
@@ -2871,7 +2868,7 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 			t.mu.Unlock()
 			hashing.Add(-1)
 
-			t.hashResults <- hashResult{pi, correct, failedPeers, copyErr}
+			t.hashResults <- hashResult{p.index, correct, failedPeers, copyErr}
 		}
 	}()
 
@@ -2934,17 +2931,19 @@ func (t *Torrent) processHashResults() {
 	}
 }
 
-func (t *Torrent) getPieceToHash(lock bool) (ret pieceIndex, ok bool) {
+func (t *Torrent) getPieceToHash(lock bool) (peice *Piece, ok bool) {
 	if lock {
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 	}
 
 	t.piecesQueuedForHash.IterTyped(func(i pieceIndex) bool {
-		if t.piece(i, false).hashing {
+		peice = t.piece(i, false)
+
+		if peice.hashing {
 			return true
 		}
-		ret = i
+
 		ok = true
 		return false
 	})

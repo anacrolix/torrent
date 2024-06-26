@@ -2810,21 +2810,27 @@ func (t *Torrent) tryCreateMorePieceHashers(lock bool) {
 		activePieceHashes < t.cl.config.PieceHashersPerTorrent &&
 		activePieceHashes < t.numPieces() &&
 		activePieceHashes < int(t.numQueuedForHash(lock)) &&
-		t.tryCreatePieceHasher() {
+		t.tryCreatePieceHasher(lock) {
 		activePieceHashes = int(t.activePieceHashes.Load())
 	}
 }
 
-func (t *Torrent) tryCreatePieceHasher() bool {
+func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 	if t.storage == nil {
 		return false
 	}
 
-	t.mu.RLock()
+	if lock {
+		t.mu.RLock()
+	}
+
 	activePieceHashes := &t.activePieceHashes
 	hashing := &t.hashing
 	storageLock := &t.storageLock
-	t.mu.RUnlock()
+
+	if lock {
+		t.mu.RUnlock()
+	}
 
 	activePieceHashes.Add(1)
 

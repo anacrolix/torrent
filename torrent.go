@@ -1067,33 +1067,6 @@ func (t *Torrent) haveInfo(lock bool) bool {
 	return t.info != nil
 }
 
-// Returns a run-time generated MetaInfo that includes the info bytes and
-// announce-list as currently known to the client.
-func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
-	t.imu.RLock()
-	defer t.imu.RUnlock()
-	return metainfo.MetaInfo{
-		CreationDate: time.Now().Unix(),
-		Comment:      "dynamic metainfo from client",
-		CreatedBy:    "go.torrent",
-		AnnounceList: t.metainfo.UpvertedAnnounceList().Clone(),
-		InfoBytes: func() []byte {
-			if t.haveInfo(false) {
-				return t.metadataBytes
-			} else {
-				return nil
-			}
-		}(),
-		UrlList: func() []string {
-			ret := make([]string, 0, len(t.webSeeds))
-			for url := range t.webSeeds {
-				ret = append(ret, url)
-			}
-			return ret
-		}(),
-	}
-}
-
 // Returns a count of bytes that are not complete in storage, and not pending being written to
 // storage. This value is from the perspective of the download manager, and may not agree with the
 // actual state in storage. If you want read data synchronously you should use a Reader. See

@@ -3,6 +3,7 @@ package torrent
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/missinggo/v2/pubsub"
@@ -146,7 +147,30 @@ func (t *Torrent) Length() int64 {
 // Returns a run-time generated metainfo for the torrent that includes the
 // info bytes and announce-list as currently known to the client.
 func (t *Torrent) Metainfo() metainfo.MetaInfo {
-	return t.newMetaInfo()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	t.imu.RLock()
+	defer t.imu.RUnlock()
+	return metainfo.MetaInfo{
+		CreationDate: time.Now().Unix(),
+		Comment:      "dynamic metainfo from client",
+		CreatedBy:    "go.torrent",
+		AnnounceList: t.metainfo.UpvertedAnnounceList().Clone(),
+		InfoBytes: func() []byte {
+			if t.haveInfo(false) {
+				return t.metadataBytes
+			} else {
+				return nil
+			}
+		}(),
+		UrlList: func() []string {
+			ret := make([]string, 0, len(t.webSeeds))
+			for url := range t.webSeeds {
+				ret = append(ret, url)
+			}
+			return ret
+		}(),
+	}
 }
 
 func (t *Torrent) addReader(r *reader, lock bool) {

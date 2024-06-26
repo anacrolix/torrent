@@ -171,7 +171,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 				fmt.Fprintf(
 					w,
 					"%f%% of %d bytes (%s)",
-					100*(1-float64(t.bytesLeft(false))/float64(t.info.TotalLength())),
+					100*(1-float64(t.bytesLeft(false, false))/float64(t.info.TotalLength())),
 					t.length(false),
 					humanize.Bytes(uint64(t.length(false))))
 			} else {

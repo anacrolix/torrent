@@ -1094,17 +1094,17 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 // actual state in storage. If you want read data synchronously you should use a Reader. See
 // https://github.com/anacrolix/torrent/issues/828.
 func (t *Torrent) BytesMissing() (n int64) {
-	return t.bytesLeft(true)
+	return t.bytesLeft(true, true)
 }
 
-func (t *Torrent) bytesLeft(lock bool) (left int64) {
+func (t *Torrent) bytesLeft(lock bool, lockInfo bool) (left int64) {
 	if lock {
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 	}
-	roaring.Flip(&t._completedPieces, 0, uint64(t.numPieces(true))).Iterate(func(x uint32) bool {
+	roaring.Flip(&t._completedPieces, 0, uint64(t.numPieces(lockInfo))).Iterate(func(x uint32) bool {
 		p := t.piece(pieceIndex(x), false)
-		left += int64(p.length(true) - p.numDirtyBytes(false))
+		left += int64(p.length(lockInfo) - p.numDirtyBytes(false))
 		return true
 	})
 	return
@@ -1118,7 +1118,7 @@ func (t *Torrent) bytesLeftAnnounce(lock bool) int64 {
 	}
 
 	if t.haveInfo(true) {
-		return t.bytesLeft(false)
+		return t.bytesLeft(false, true)
 	} else {
 		return -1
 	}
@@ -1995,7 +1995,7 @@ func (t *Torrent) bytesCompleted() int64 {
 	if !t.haveInfo(true) {
 		return 0
 	}
-	return t.length(true) - t.bytesLeft(true)
+	return t.length(true) - t.bytesLeft(true, true)
 }
 
 func (t *Torrent) SetInfoBytes(b []byte) (err error) {

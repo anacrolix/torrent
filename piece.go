@@ -144,8 +144,8 @@ func (p *Piece) chunkIndexDirty(chunk chunkIndexType, lockTorrent bool) bool {
 	return p.t.dirtyChunks.Contains(p.requestIndexOffset(false) + chunk)
 }
 
-func (p *Piece) chunkIndexSpec(chunk chunkIndexType) ChunkSpec {
-	return chunkIndexSpec(pp.Integer(chunk), p.length(true), p.chunkSize())
+func (p *Piece) chunkIndexSpec(chunk chunkIndexType, lockInfo bool) ChunkSpec {
+	return chunkIndexSpec(pp.Integer(chunk), p.length(lockInfo), p.chunkSize())
 }
 
 func (p *Piece) numDirtyBytes(lockTorrent bool, lockInfo bool) (ret pp.Integer) {
@@ -162,7 +162,7 @@ func (p *Piece) numDirtyBytes(lockTorrent bool, lockInfo bool) (ret pp.Integer) 
 	numRegularDirtyChunks := p.numDirtyChunks(false)
 	if p.chunkIndexDirty(p.numChunks(lockInfo)-1, false) {
 		numRegularDirtyChunks--
-		ret += p.chunkIndexSpec(p.lastChunkIndex(lockInfo)).Length
+		ret += p.chunkIndexSpec(p.lastChunkIndex(lockInfo), lockInfo).Length
 	}
 	ret += pp.Integer(numRegularDirtyChunks) * p.chunkSize()
 	return

@@ -3430,7 +3430,7 @@ func (t *Torrent) requestIndexToRequest(ri RequestIndex, lock bool) Request {
 	index := t.pieceIndexOfRequestIndex(ri, lock)
 	return Request{
 		pp.Integer(index),
-		t.piece(index, lock).chunkIndexSpec(ri % t.chunksPerRegularPiece(lock)),
+		t.piece(index, lock).chunkIndexSpec(ri%t.chunksPerRegularPiece(lock), true),
 	}
 }
 

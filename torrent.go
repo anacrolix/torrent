@@ -2850,7 +2850,9 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 				t.mu.Lock()
 				defer t.mu.Unlock()
 				t.piecesQueuedForHash.Remove(bitmap.BitIndex(p.index))
+				p.mu.Lock()
 				p.hashing = true
+				p.mu.Unlock()
 				hashing.Add(1)
 				t.publishPieceStateChange(p.index, false)
 				t.updatePiecePriority(p.index, "Torrent.tryCreatePieceHasher", false)
@@ -2869,9 +2871,9 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 
 			storageLock.RUnlock()
 
-			t.mu.Lock()
+			p.mu.Lock()
 			p.hashing = false
-			t.mu.Unlock()
+			p.mu.Unlock()
 			hashing.Add(-1)
 
 			t.hashResults <- hashResult{p.index, correct, failedPeers, copyErr}

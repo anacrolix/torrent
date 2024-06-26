@@ -191,10 +191,14 @@ func (p *Piece) bytesLeft() (ret pp.Integer) {
 func (p *Piece) VerifyData() {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()
+
+	p.mu.RLock()
 	target := p.numVerifies + 1
 	if p.hashing {
 		target++
 	}
+	p.mu.RUnlock()
+
 	// log.Printf("target: %d", target)
 	p.t.queuePieceCheck(p.index, true)
 	for {
@@ -249,12 +253,16 @@ func (p *Piece) purePriority(lockTorrent bool) (ret piecePriority) {
 }
 
 func (p *Piece) uncachedPriority(lockTorrent bool) (ret piecePriority) {
+	p.mu.RLock()
+	processing := p.hashing || p.marking
+	p.mu.Unlock()
+
 	if lockTorrent {
 		p.t.mu.RLock()
 		defer p.t.mu.RUnlock()
 	}
 
-	if p.hashing || p.marking || p.t.pieceComplete(p.index, false) || p.queuedForHash(false) {
+	if processing || p.t.pieceComplete(p.index, false) || p.queuedForHash(false) {
 		return PiecePriorityNone
 	}
 

@@ -528,8 +528,8 @@ func (t *Torrent) haveMetadataPiece(piece int, lock bool) bool {
 
 func (t *Torrent) metadataSize(lock bool) int {
 	if lock {
-		t.mu.RLock()
-		defer t.mu.RUnlock()
+		t.imu.RLock()
+		defer t.imu.RUnlock()
 	}
 
 	return len(t.metadataBytes)
@@ -622,7 +622,7 @@ func (t *Torrent) setInfo(info *metainfo.Info, lock bool) error {
 	t.info = info
 	t.displayName = "" // Save a few bytes lol.
 
-	t._chunksPerRegularPiece = chunkIndexType((pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
+	t._chunksPerRegularPiece = chunkIndexType((pp.Integer(t.usualPieceSize(false)) + t.chunkSize - 1) / t.chunkSize)
 	t.updateComplete(false)
 	t.fileIndex = segments.NewIndex(common.LengthIterFromUpvertedFiles(info.UpvertedFiles()))
 	t.initFiles(false)
@@ -928,6 +928,8 @@ func (psr PieceStateRun) String() (ret string) {
 func (t *Torrent) writeStatus(w io.Writer) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+	t.imu.RLock()
+	defer t.imu.RUnlock()
 
 	fmt.Fprintf(w, "Infohash: %s\n", t.infoHash.HexString())
 	fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize(false))
@@ -948,8 +950,8 @@ func (t *Torrent) writeStatus(w io.Writer) {
 		func() string {
 			if t.haveInfo(false) {
 				return fmt.Sprintf("%v (%v chunks)",
-					t.usualPieceSize(),
-					float64(t.usualPieceSize())/float64(t.chunkSize))
+					t.usualPieceSize(false),
+					float64(t.usualPieceSize(false))/float64(t.chunkSize))
 			} else {
 				return "no info"
 			}
@@ -1133,9 +1135,11 @@ func (t *Torrent) piecePartiallyDownloaded(piece pieceIndex, lock bool) bool {
 	return t.piece(piece, false).hasDirtyChunks(false)
 }
 
-func (t *Torrent) usualPieceSize() int {
-	t.imu.RLock()
-	defer t.imu.RUnlock()
+func (t *Torrent) usualPieceSize(lock bool) int {
+	if lock {
+		t.imu.RLock()
+		defer t.imu.RUnlock()
+	}
 	return int(t.info.PieceLength)
 }
 
@@ -1204,7 +1208,9 @@ func (t *Torrent) assertAllPiecesRelativeAvailabilityZero(lock bool) {
 }
 
 func (t *Torrent) requestOffset(r Request) int64 {
-	return torrentRequestOffset(t.length(true), int64(t.usualPieceSize()), r)
+	t.imu.RLock()
+	defer t.imu.RUnlock()
+	return torrentRequestOffset(t.length(false), int64(t.usualPieceSize(false)), r)
 }
 
 // Return the request that would include the given offset into the torrent data. Returns !ok if

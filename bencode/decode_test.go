@@ -184,7 +184,7 @@ func TestDecodeDictIntoUnsupported(t *testing.T) {
 	c := qt.New(t)
 	err := Unmarshal([]byte("d1:a1:be"), &i)
 	t.Log(err)
-	c.Check(err, qt.Not(qt.IsNil))
+	c.Check(err, qt.IsNotNil)
 }
 
 func TestUnmarshalDictKeyNotString(t *testing.T) {

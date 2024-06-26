@@ -255,7 +255,7 @@ func (p *Piece) purePriority(lockTorrent bool) (ret piecePriority) {
 func (p *Piece) uncachedPriority(lockTorrent bool) (ret piecePriority) {
 	p.mu.RLock()
 	processing := p.hashing || p.marking
-	p.mu.Unlock()
+	p.mu.RUnlock()
 
 	if lockTorrent {
 		p.t.mu.RLock()

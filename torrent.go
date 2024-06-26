@@ -1538,13 +1538,17 @@ func (t *Torrent) publishPieceStateChange(piece pieceIndex, lock bool) {
 	p.mu.Unlock()
 }
 
-func (t *Torrent) pieceNumPendingChunks(piece pieceIndex, lock bool) pp.Integer {
-	if t.pieceComplete(piece, lock) {
+func (t *Torrent) pieceNumPendingChunks(piece *Piece, lock bool) pp.Integer {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
+
+	if t.pieceComplete(piece.index, false) {
 		return 0
 	}
 
-	p := t.piece(piece, lock)
-	return pp.Integer(t.pieceNumChunks(piece) - p.numDirtyChunks(lock))
+	return pp.Integer(t.pieceNumChunks(piece.index) - piece.numDirtyChunks(lock))
 }
 
 func (t *Torrent) pieceAllDirty(piece pieceIndex, lock bool) bool {

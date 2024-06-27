@@ -238,6 +238,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	cl.init(cfg)
 	go cl.acceptLimitClearer()
 	cl.initLogger()
+	//cl.logger.Levelf(log.Critical, "test after init")
 	defer func() {
 		if err != nil {
 			cl.Close()

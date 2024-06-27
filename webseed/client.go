@@ -105,9 +105,9 @@ func (p *pool) get(ctx context.Context, size int64) (buffer, error) {
 	if !ok {
 		pool = &sync.Pool{
 			New: func() interface{} {
-				// add one to capacity to avoid the buffer resizing when it
-				// is written to capacity
-				return bytes.NewBuffer(make([]byte, 0, size+1))
+				// round to the nearest MinRead boundary otherwise io.Copy is going
+				// to result in the buffer getting grown ti around 2x its required size
+				return bytes.NewBuffer(make([]byte, 0, (size/bytes.MinRead+1)*bytes.MinRead))
 			},
 		}
 

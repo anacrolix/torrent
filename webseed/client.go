@@ -94,7 +94,6 @@ func (b buffer) Close() error {
 }
 
 func (p *pool) get(ctx context.Context, size int64) (buffer, error) {
-	fmt.Println("GET", size)
 	if err := p.semMax.Acquire(ctx, size); err != nil {
 		return buffer{}, err
 	}
@@ -106,7 +105,6 @@ func (p *pool) get(ctx context.Context, size int64) (buffer, error) {
 	if !ok {
 		pool = &sync.Pool{
 			New: func() interface{} {
-				fmt.Println("NEW", size)
 				// add one to capacity to avoid the buffer resizing when it
 				// is written to capacity
 				return bytes.NewBuffer(make([]byte, 0, size+1))
@@ -125,8 +123,6 @@ func (p *pool) put(b buffer) {
 	p.mu.RLock()
 	pool, ok := p.buffers[b.size]
 	p.mu.RUnlock()
-
-	fmt.Println("PUT", b.size, b.Len(), ok)
 
 	if ok {
 		b.Reset()

@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -413,7 +414,7 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 	info, err := greetingMetainfo.UnmarshalInfo()
 	require.NoError(t, err)
 	ih := greetingMetainfo.HashInfoBytes()
-	greetingData, err := storage.NewClient(filePieceStore).OpenTorrent(&info, ih)
+	greetingData, err := storage.NewClient(filePieceStore).OpenTorrent(context.Background(), &info, ih)
 	require.NoError(t, err)
 	writeTorrentData(greetingData, info, []byte(testutil.GreetingFileContents))
 	// require.Equal(t, len(testutil.GreetingFileContents), written)

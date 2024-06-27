@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -17,7 +18,7 @@ func TestMmapWindows(t *testing.T) {
 	}()
 	info, err := mi.UnmarshalInfo()
 	c.Assert(err, qt.IsNil)
-	ts, err := cs.OpenTorrent(&info, mi.HashInfoBytes())
+	ts, err := cs.OpenTorrent(context.Background(), &info, mi.HashInfoBytes())
 	c.Assert(err, qt.IsNil)
 	defer func() {
 		c.Check(ts.Close(), qt.IsNil)

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"testing"
 
 	"github.com/anacrolix/missinggo/v2/resource"
@@ -19,10 +20,10 @@ func testIssue95(t *testing.T, ci ClientImpl) {
 		PieceLength: 1,
 	}
 	c := NewClient(ci)
-	t1, err := c.OpenTorrent(&info, metainfo.HashBytes([]byte("a")))
+	t1, err := c.OpenTorrent(context.Background(), &info, metainfo.HashBytes([]byte("a")))
 	require.NoError(t, err)
 	defer t1.Close()
-	t2, err := c.OpenTorrent(&info, metainfo.HashBytes([]byte("b")))
+	t2, err := c.OpenTorrent(context.Background(), &info, metainfo.HashBytes([]byte("b")))
 	require.NoError(t, err)
 	defer t2.Close()
 	t2p := t2.Piece(info.Piece(0))

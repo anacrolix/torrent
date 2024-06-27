@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"io"
 
 	g "github.com/anacrolix/generics"
@@ -15,7 +16,7 @@ type ClientImplCloser interface {
 
 // Represents data storage for an unspecified torrent.
 type ClientImpl interface {
-	OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error)
+	OpenTorrent(ctx context.Context, info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error)
 }
 
 type TorrentCapacity *func() (cap int64, capped bool)

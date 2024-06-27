@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -50,7 +51,11 @@ func (piecePerResourceTorrentImpl) Close() error {
 	return nil
 }
 
-func (s piecePerResource) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
+func (s piecePerResource) OpenTorrent(
+	ctx context.Context,
+	info *metainfo.Info,
+	infoHash metainfo.Hash,
+) (TorrentImpl, error) {
 	t := piecePerResourceTorrentImpl{
 		s,
 		make([]sync.RWMutex, info.NumPieces()),

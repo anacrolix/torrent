@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -24,7 +25,7 @@ func TestShortFile(t *testing.T) {
 		PieceLength: missinggo.MiB,
 		Pieces:      make([]byte, 20),
 	}
-	ts, err := s.OpenTorrent(info, metainfo.Hash{})
+	ts, err := s.OpenTorrent(context.Background(), info, metainfo.Hash{})
 	assert.NoError(t, err)
 	f, err := os.Create(filepath.Join(td, "a"))
 	require.NoError(t, err)

@@ -4,6 +4,7 @@
 package sqliteStorage
 
 import (
+	"context"
 	"encoding/hex"
 	"io"
 	"sync"
@@ -62,7 +63,11 @@ func (c *client) capacity() (cap int64, capped bool) {
 	return
 }
 
-func (c *client) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.TorrentImpl, error) {
+func (c *client) OpenTorrent(
+	context.Context,
+	*metainfo.Info,
+	metainfo.Hash,
+) (storage.TorrentImpl, error) {
 	t := torrent{c.cache}
 	capFunc := c.capacity
 	return storage.TorrentImpl{PieceWithHash: t.Piece, Close: t.Close, Capacity: &capFunc}, nil

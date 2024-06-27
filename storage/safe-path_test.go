@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -60,7 +61,7 @@ func TestFileOptsSafeFilePathHandling(t *testing.T) {
 				ClientBaseDir: t.TempDir(),
 			})
 			defer func() { c.Check(client.Close(), qt.IsNil) }()
-			torImpl, err := client.OpenTorrent(&info, metainfo.Hash{})
+			torImpl, err := client.OpenTorrent(context.Background(), &info, metainfo.Hash{})
 			if _case.expectErr {
 				c.Check(err, qt.Not(qt.IsNil))
 			} else {

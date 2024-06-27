@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"io"
 	"os"
 
@@ -18,8 +19,12 @@ func NewClient(cl ClientImpl) *Client {
 	return &Client{cl}
 }
 
-func (cl Client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (*Torrent, error) {
-	t, err := cl.ci.OpenTorrent(info, infoHash)
+func (cl Client) OpenTorrent(
+	ctx context.Context,
+	info *metainfo.Info,
+	infoHash metainfo.Hash,
+) (*Torrent, error) {
+	t, err := cl.ci.OpenTorrent(ctx, info, infoHash)
 	if err != nil {
 		return nil, err
 	}

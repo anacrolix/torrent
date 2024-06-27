@@ -2,6 +2,7 @@ package test_storage
 
 import (
 	"bytes"
+	"context"
 	"math/rand"
 	"sync"
 	"testing"
@@ -34,7 +35,7 @@ func BenchmarkPieceMarkComplete(
 		Length:      pieceSize * int64(numPieces),
 		Name:        "TorrentName",
 	}
-	ti, err := ci.OpenTorrent(info, metainfo.Hash{})
+	ti, err := ci.OpenTorrent(context.Background(), info, metainfo.Hash{})
 	c.Assert(err, qt.IsNil)
 	tw := storage.Torrent{ti}
 	defer tw.Close()

@@ -4,6 +4,7 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -34,7 +35,11 @@ func NewMMapWithCompletion(baseDir string, completion PieceCompletion) *mmapClie
 	}
 }
 
-func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (_ TorrentImpl, err error) {
+func (s *mmapClientImpl) OpenTorrent(
+	_ context.Context,
+	info *metainfo.Info,
+	infoHash metainfo.Hash,
+) (_ TorrentImpl, err error) {
 	span, err := mMapTorrent(info, s.baseDir)
 	t := &mmapTorrentStorage{
 		infoHash: infoHash,

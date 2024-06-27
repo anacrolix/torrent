@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"errors"
 	"math/rand"
 	"strings"
@@ -14,7 +15,11 @@ type badStorage struct{}
 
 var _ storage.ClientImpl = badStorage{}
 
-func (bs badStorage) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.TorrentImpl, error) {
+func (bs badStorage) OpenTorrent(
+	context.Context,
+	*metainfo.Info,
+	metainfo.Hash,
+) (storage.TorrentImpl, error) {
 	return storage.TorrentImpl{
 		Piece: bs.Piece,
 	}, nil

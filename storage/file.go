@@ -1,11 +1,14 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 
 	"github.com/anacrolix/torrent/common"
@@ -55,8 +58,14 @@ func (me fileClientImpl) Close() error {
 	return me.opts.PieceCompletion.Close()
 }
 
-func (fs fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (_ TorrentImpl, err error) {
+func (fs fileClientImpl) OpenTorrent(
+	ctx context.Context,
+	info *metainfo.Info,
+	infoHash metainfo.Hash,
+) (_ TorrentImpl, err error) {
 	dir := fs.opts.TorrentDirMaker(fs.opts.ClientBaseDir, info, infoHash)
+	logger := log.ContextLogger(ctx).Slogger()
+	logger.DebugContext(ctx, "opened file torrent storage", slog.String("dir", dir))
 	upvertedFiles := info.UpvertedFiles()
 	files := make([]file, 0, len(upvertedFiles))
 	for i, fileInfo := range upvertedFiles {

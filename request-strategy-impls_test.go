@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"io"
 	"runtime"
 	"testing"
@@ -68,6 +69,7 @@ type storageClient struct {
 }
 
 func (s *storageClient) OpenTorrent(
+	_ context.Context,
 	info *metainfo.Info,
 	infoHash metainfo.Hash,
 ) (storage.TorrentImpl, error) {

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"testing"
 
 	g "github.com/anacrolix/generics"
@@ -19,7 +20,7 @@ func testMarkedCompleteMissingOnRead(t *testing.T, csf func(string) ClientImplCl
 		Files:       []metainfo.FileInfo{{Path: []string{"a"}, Length: 1}},
 		Pieces:      make([]byte, 20),
 	}
-	ts, err := cs.OpenTorrent(info, metainfo.Hash{})
+	ts, err := cs.OpenTorrent(context.Background(), info, metainfo.Hash{})
 	require.NoError(t, err)
 	p := ts.PieceWithHash(info.Piece(0), g.None[[]byte]())
 	require.NoError(t, p.MarkComplete())

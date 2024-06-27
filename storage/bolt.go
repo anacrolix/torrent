@@ -4,6 +4,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/binary"
 	"path/filepath"
 	"time"
@@ -42,7 +43,11 @@ func (me *boltClient) Close() error {
 	return me.db.Close()
 }
 
-func (me *boltClient) OpenTorrent(_ *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
+func (me *boltClient) OpenTorrent(
+	_ context.Context,
+	_ *metainfo.Info,
+	infoHash metainfo.Hash,
+) (TorrentImpl, error) {
 	t := &boltTorrent{me, infoHash}
 	return TorrentImpl{
 		Piece: t.Piece,

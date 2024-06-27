@@ -81,12 +81,13 @@ type pool struct {
 }
 
 type buffer struct {
+	size int64
 	*bytes.Buffer
 }
 
 func (b buffer) Close() error {
 	if b.Buffer != nil {
-		bufPool.put(b.Buffer)
+		bufPool.put(b)
 	}
 
 	return nil
@@ -117,22 +118,20 @@ func (p *pool) get(ctx context.Context, size int64) (buffer, error) {
 		p.mu.Unlock()
 	}
 
-	return buffer{pool.Get().(*bytes.Buffer)}, nil
+	return buffer{size, pool.Get().(*bytes.Buffer)}, nil
 }
 
-func (p *pool) put(b *bytes.Buffer) {
-	size := int64(b.Cap() - 1)
-
+func (p *pool) put(b buffer) {
 	p.mu.RLock()
-	pool, ok := p.buffers[size]
+	pool, ok := p.buffers[b.size]
 	p.mu.RUnlock()
 
-	fmt.Println("PUT", size, b.Len(), ok)
+	fmt.Println("PUT", b.size, b.Len(), ok)
 
 	if ok {
 		b.Reset()
-		pool.Put(b)
-		p.semMax.Release(size)
+		pool.Put(b.Buffer)
+		p.semMax.Release(b.size)
 	}
 }
 

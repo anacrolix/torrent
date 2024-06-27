@@ -120,7 +120,7 @@ func (p *pool) get(ctx context.Context, size int64) (buffer, error) {
 
 func (p *pool) put(b *bytes.Buffer) {
 	size := int64(b.Cap())
-	fmt.Println("PUT", size)
+	fmt.Println("PUT", b.Cap(), b.Len())
 	p.mu.RLock()
 	pool, ok := p.buffers[size]
 	p.mu.RUnlock()

@@ -1,9 +1,11 @@
 package torrent
 
 import (
-	"github.com/anacrolix/torrent/metainfo"
-	qt "github.com/frankban/quicktest"
 	"testing"
+
+	qt "github.com/frankban/quicktest"
+
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 func TestIssue949LastPieceZeroPadding(t *testing.T) {

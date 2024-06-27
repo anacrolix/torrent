@@ -1,11 +1,13 @@
 package issue_952
 
 import (
+	"testing"
+
+	qt "github.com/frankban/quicktest"
+
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/types/infohash"
-	qt "github.com/frankban/quicktest"
-	"testing"
 )
 
 type scrapeResponse struct {

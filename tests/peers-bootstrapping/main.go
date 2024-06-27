@@ -3,19 +3,21 @@ package main
 import (
 	"crypto/rand"
 	"fmt"
-	_ "github.com/anacrolix/envpprof"
-	"github.com/anacrolix/log"
-	"github.com/anacrolix/sync"
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/bencode"
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/dustin/go-humanize"
-	"golang.org/x/exp/slog"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
+
+	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/log"
+	"github.com/anacrolix/sync"
+	"github.com/dustin/go-humanize"
+	"golang.org/x/exp/slog"
+
+	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/metainfo"
 )
 
 func assertNil(x any) {

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "github.com/anacrolix/envpprof"
+	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/sync"
 	"github.com/dustin/go-humanize"
@@ -18,6 +18,7 @@ import (
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/storage"
 )
 
 func assertNil(x any) {
@@ -37,6 +38,7 @@ func newClientConfig() *torrent.ClientConfig {
 }
 
 func main() {
+	defer envpprof.Stop()
 	tmpDir, err := os.MkdirTemp("", "peers-bootstrapping")
 	assertNil(err)
 	slog.Info("made temp dir", slog.String("tmpDir", tmpDir))
@@ -56,7 +58,7 @@ func main() {
 	var clients []*torrent.Client
 	var torrents []*torrent.Torrent
 	clientConfig := newClientConfig()
-	clientConfig.DataDir = sourceDir
+	clientConfig.DefaultStorage = storage.NewMMap(sourceDir)
 	initialClient, err := torrent.NewClient(clientConfig)
 	assertNil(err)
 	clientIndex := 0
@@ -91,7 +93,7 @@ func main() {
 		clientIndex := clientIndex
 		storageDir := filepath.Join(tmpDir, fmt.Sprintf("client%v", clientIndex))
 		clientConfig := newClientConfig()
-		clientConfig.DataDir = storageDir
+		clientConfig.DefaultStorage = storage.NewMMap(storageDir)
 		clientConfig.Logger = log.Default.WithValues(slog.Int("clientIndex", clientIndex))
 		//clientConfig.Logger.Levelf(log.Critical, "test")
 		client, err := torrent.NewClient(clientConfig)
@@ -132,4 +134,5 @@ func main() {
 			humanize.Bytes(uint64(read.Int64())),
 		)
 	}
+	assertNil(os.RemoveAll(tmpDir))
 }

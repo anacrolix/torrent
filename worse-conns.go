@@ -47,7 +47,7 @@ func worseConnInputFromPeer(p *PeerConn, opts worseConnLensOpts) *worseConnInput
 
 	ret := worseConnInput{
 		Useful:             p.useful(false, false),
-		LastHelpful:        p.lastHelpful(false, false),
+		LastHelpful:        p.lastHelpful(false, p.t.seeding(false)),
 		CompletedHandshake: p.completedHandshake,
 		Pointer:            uintptr(unsafe.Pointer(p)),
 		GetPeerPriority:    p.peerPriority,

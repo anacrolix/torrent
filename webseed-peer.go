@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"sync"
 	"time"
@@ -113,6 +114,8 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 		defer cn.peer.t.mu.RUnlock()
 	}
 
+	seeding := cn.peer.t.seeding(false)
+
 	cn.peer.t.iterPeers(func(peer *Peer) {
 		if peer == &cn.peer {
 			return
@@ -125,7 +128,7 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 
 		if !peer.closed.IsSet() {
 			if peer.connectionFlags() != "WS" {
-				if !peer.peerInterested || peer.lastHelpful(false, false).IsZero() {
+				if !peer.peerInterested || peer.lastHelpful(false, seeding).IsZero() {
 					return
 				}
 			}
@@ -514,17 +517,45 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	result := <-webseedRequest.Result
 	close(webseedRequest.Result) // one-shot
 
+	defer func() {
+		for _, reader := range result.Readers {
+			reader.Close()
+		}
+	}()
+
 	ws.persisting.Add(1)
 	defer ws.persisting.Add(-1)
+
+	var piece []byte
+
+	if len(result.Readers) == 1 {
+		if buff, ok := result.Readers[0].(interface{ Bytes() []byte }); ok {
+			piece = buff.Bytes()
+		}
+	}
+
+	if len(piece) == 0 {
+		var readers []io.Reader
+
+		// TODO this will cause an additional buffer to
+		// get created - which is not ideal - but would
+		// require receive chunck etc to be io interface
+		// rather than buffer based
+		for _, reader := range result.Readers {
+			readers = append(readers, reader)
+		}
+
+		piece, _ = io.ReadAll(io.MultiReader(readers...))
+	}
 
 	// We do this here rather than inside receiveChunk, since we want to count errors too. I'm not
 	// sure if we can divine which errors indicate cancellation on our end without hitting the
 	// network though.
-	if len(result.Bytes) != 0 || result.Err == nil {
+	if len(piece) != 0 || result.Err == nil {
 		// Increment ChunksRead and friends
-		ws.peer.doChunkReadStats(int64(len(result.Bytes)))
+		ws.peer.doChunkReadStats(int64(len(piece)))
 	}
-	ws.peer.readBytes(int64(len(result.Bytes)))
+	ws.peer.readBytes(int64(len(piece)))
 
 	if ws.peer.t.closed.IsSet() {
 		return nil
@@ -574,12 +605,13 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		Type:  pp.Piece,
 		Index: r.Index,
 		Begin: r.Begin,
-		Piece: result.Bytes,
+		Piece: piece,
 	})
 
 	if err != nil {
 		panic(err)
 	}
+
 	return err
 }
 

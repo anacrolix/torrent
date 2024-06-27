@@ -9,9 +9,11 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/RoaringBitmap/roaring"
+	"golang.org/x/sync/semaphore"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/common"
@@ -24,14 +26,15 @@ type RequestSpec = segments.Extent
 type requestPart struct {
 	req *http.Request
 	e   segments.Extent
-	do  func() (*http.Response, error)
+	do  func() (*http.Response, io.ReadWriteCloser, error)
 	// Wrap http response bodies for such things as download rate limiting.
 	responseBodyWrapper ResponseBodyWrapper
 }
 
 type Request struct {
-	cancel func()
-	Result chan RequestResult
+	cancel  func()
+	Result  chan RequestResult
+	readers []io.Reader
 }
 
 func (r Request) Cancel() {
@@ -66,9 +69,70 @@ func (me *Client) SetInfo(info *metainfo.Info) {
 }
 
 type RequestResult struct {
-	Bytes []byte
-	Err   error
-	Ctx   context.Context
+	Ctx     context.Context
+	Readers []io.ReadCloser
+	Err     error
+}
+
+type pool struct {
+	mu      sync.RWMutex
+	buffers map[int64]*sync.Pool
+	semMax  *semaphore.Weighted
+}
+
+type buffer struct {
+	*bytes.Buffer
+}
+
+func (b buffer) Close() error {
+	if b.Buffer != nil {
+		bufPool.put(b.Buffer)
+	}
+
+	return nil
+}
+
+func (p *pool) get(ctx context.Context, size int64) (buffer, error) {
+	if err := p.semMax.Acquire(ctx, size); err != nil {
+		return buffer{}, err
+	}
+
+	p.mu.RLock()
+	pool, ok := p.buffers[size]
+	p.mu.RUnlock()
+
+	if !ok {
+		pool = &sync.Pool{
+			New: func() interface{} {
+				return bytes.NewBuffer(make([]byte, 0, size))
+			},
+		}
+
+		p.mu.Lock()
+		p.buffers[size] = pool
+		p.mu.Unlock()
+	}
+
+	return buffer{pool.Get().(*bytes.Buffer)}, nil
+}
+
+func (p *pool) put(b *bytes.Buffer) {
+	size := int64(b.Cap())
+
+	p.mu.RLock()
+	pool, ok := p.buffers[size]
+	p.mu.RUnlock()
+
+	if ok {
+		b.Reset()
+		pool.Put(b)
+		p.semMax.Release(size)
+	}
+}
+
+var bufPool = &pool{
+	buffers: map[int64]*sync.Pool{},
+	semMax:  semaphore.NewWeighted(10_000_000_000), // TODO - needs config (should relate machine memory)
 }
 
 func (ws *Client) NewRequest(r RequestSpec, limiter *rate.Limiter, receivingCounter *atomic.Int64) Request {
@@ -88,11 +152,26 @@ func (ws *Client) NewRequest(r RequestSpec, limiter *rate.Limiter, receivingCoun
 			e:                   e,
 			responseBodyWrapper: ws.ResponseBodyWrapper,
 		}
-		part.do = func() (*http.Response, error) {
-			if err := limiter.WaitN(ctx, int(r.Length)); err != nil {
-				return nil, err
+		part.do = func() (*http.Response, io.ReadWriteCloser, error) {
+			buff, err := bufPool.get(ctx, e.Length)
+
+			if err != nil {
+				return nil, nil, err
 			}
-			return ws.HttpClient.Do(req)
+
+			if err := limiter.WaitN(ctx, int(r.Length)); err != nil {
+				buff.Close()
+				return nil, nil, err
+			}
+
+			response, err := ws.HttpClient.Do(req)
+
+			if err != nil {
+				buff.Close()
+				return nil, nil, err
+			}
+
+			return response, buff, err
 		}
 		requestParts = append(requestParts, part)
 		return true
@@ -104,11 +183,20 @@ func (ws *Client) NewRequest(r RequestSpec, limiter *rate.Limiter, receivingCoun
 		Result: make(chan RequestResult, 1),
 	}
 	go func() {
-		b, err := readRequestPartResponses(ctx, requestParts, receivingCounter)
+		readers, err := readRequestPartResponses(ctx, requestParts, receivingCounter)
+
+		if err != nil {
+			for _, reader := range readers {
+				reader.Close()
+			}
+
+			readers = nil
+		}
+
 		req.Result <- RequestResult{
-			Bytes: b,
-			Err:   err,
-			Ctx:   ctx,
+			Readers: readers,
+			Err:     err,
+			Ctx:     ctx,
 		}
 	}()
 	return req
@@ -123,7 +211,7 @@ func (me ErrBadResponse) Error() string {
 	return me.Msg
 }
 
-func recvPartResult(ctx context.Context, buf *bytes.Buffer, part requestPart, resp *http.Response) error {
+func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *http.Response) error {
 	defer resp.Body.Close()
 	var body io.Reader = resp.Body
 	if part.responseBodyWrapper != nil {
@@ -181,22 +269,23 @@ func recvPartResult(ctx context.Context, buf *bytes.Buffer, part requestPart, re
 
 var ErrTooFast = errors.New("making requests too fast")
 
-func readRequestPartResponses(ctx context.Context, parts []requestPart, receivingCounter *atomic.Int64) ([]byte, error) {
-	var buf bytes.Buffer
+func readRequestPartResponses(ctx context.Context, parts []requestPart, receivingCounter *atomic.Int64) ([]io.ReadCloser, error) {
+	var readers []io.ReadCloser
 
 	for _, part := range parts {
-		if result, err := part.do(); err != nil {
-			return nil, err
+		if result, readWriter, err := part.do(); err != nil {
+			return readers, err
 		} else {
 			if err = func() error {
 				receivingCounter.Add(1)
 				defer receivingCounter.Add(-1)
-				return recvPartResult(ctx, &buf, part, result)
+				readers = append(readers, readWriter)
+				return recvPartResult(ctx, readWriter, part, result)
 			}(); err != nil {
-				return nil, fmt.Errorf("reading %q at %q: %w", part.req.URL, part.req.Header.Get("Range"), err)
+				return readers, fmt.Errorf("reading %q at %q: %w", part.req.URL, part.req.Header.Get("Range"), err)
 			}
 		}
 	}
 
-	return buf.Bytes(), nil
+	return readers, nil
 }

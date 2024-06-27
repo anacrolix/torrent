@@ -313,6 +313,7 @@ func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
 
 	// do this before taking the peer lock to avoid lock ordering issues
 	nominalMaxRequests := cn.peerImpl.nominalMaxRequests(lock, false)
+	seeding := cn.t.seeding(false)
 
 	if lock {
 		cn.mu.RLock()
@@ -333,7 +334,7 @@ func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
 	fmt.Fprintf(w, "last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),
-		eventAgeString(cn.lastHelpful(false, false)),
+		eventAgeString(cn.lastHelpful(false, seeding)),
 		cn.cumInterest(false),
 		cn.totalExpectingTime(),
 	)
@@ -636,7 +637,7 @@ func (cn *Peer) readBytes(n int64) {
 	cn.allStats(add(n, func(cs *ConnStats) *Count { return &cs.BytesRead }))
 }
 
-func (c *Peer) lastHelpful(lock bool, lockTorrent bool) (ret time.Time) {
+func (c *Peer) lastHelpful(lock bool, seeding bool) (ret time.Time) {
 	var lastChunkSent time.Time
 
 	func() {
@@ -648,7 +649,7 @@ func (c *Peer) lastHelpful(lock bool, lockTorrent bool) (ret time.Time) {
 		lastChunkSent = c.lastChunkSent
 	}()
 
-	if c.t.seeding(lockTorrent) && lastChunkSent.After(ret) {
+	if seeding && lastChunkSent.After(ret) {
 		ret = lastChunkSent
 	}
 	return

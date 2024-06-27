@@ -133,7 +133,7 @@ func (p *pool) put(b buffer) {
 
 var bufPool = &pool{
 	buffers: map[int64]*sync.Pool{},
-	semMax:  semaphore.NewWeighted(10_000_000_000), // TODO - needs config (should relate machine memory)
+	semMax:  semaphore.NewWeighted(5_000_000_000), // TODO - needs config (should relate machine memory)
 }
 
 func (ws *Client) NewRequest(r RequestSpec, limiter *rate.Limiter, receivingCounter *atomic.Int64) Request {

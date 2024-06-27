@@ -106,7 +106,9 @@ func (p *pool) get(ctx context.Context, size int64) (buffer, error) {
 		pool = &sync.Pool{
 			New: func() interface{} {
 				fmt.Println("NEW", size)
-				return bytes.NewBuffer(make([]byte, 0, size))
+				// add one to capacity to avoid the buffer resizing when it
+				// is written to capacity
+				return bytes.NewBuffer(make([]byte, 0, size+1))
 			},
 		}
 
@@ -119,11 +121,13 @@ func (p *pool) get(ctx context.Context, size int64) (buffer, error) {
 }
 
 func (p *pool) put(b *bytes.Buffer) {
-	size := int64(b.Cap())
-	fmt.Println("PUT", b.Cap(), b.Len())
+	size := int64(b.Cap() - 1)
+
 	p.mu.RLock()
 	pool, ok := p.buffers[size]
 	p.mu.RUnlock()
+
+	fmt.Println("PUT", size, ok)
 
 	if ok {
 		b.Reset()
@@ -155,13 +159,12 @@ func (ws *Client) NewRequest(r RequestSpec, limiter *rate.Limiter, receivingCoun
 			responseBodyWrapper: ws.ResponseBodyWrapper,
 		}
 		part.do = func() (*http.Response, io.ReadWriteCloser, error) {
-			fmt.Println("BP GET", e.Length)
 			buff, err := bufPool.get(ctx, e.Length)
 
 			if err != nil {
 				return nil, nil, err
 			}
-			fmt.Println("BP GOT", e.Length)
+
 			if err := limiter.WaitN(ctx, int(r.Length)); err != nil {
 				buff.Close()
 				return nil, nil, err

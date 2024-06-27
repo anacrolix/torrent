@@ -153,12 +153,13 @@ func (ws *Client) NewRequest(r RequestSpec, limiter *rate.Limiter, receivingCoun
 			responseBodyWrapper: ws.ResponseBodyWrapper,
 		}
 		part.do = func() (*http.Response, io.ReadWriteCloser, error) {
+			fmt.Println("BP GET", e.Length)
 			buff, err := bufPool.get(ctx, e.Length)
 
 			if err != nil {
 				return nil, nil, err
 			}
-
+			fmt.Println("BP GOT", e.Length)
 			if err := limiter.WaitN(ctx, int(r.Length)); err != nil {
 				buff.Close()
 				return nil, nil, err

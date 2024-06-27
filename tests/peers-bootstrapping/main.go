@@ -3,17 +3,16 @@ package main
 import (
 	"crypto/rand"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
-	"path/filepath"
-	"time"
-
 	"github.com/anacrolix/envpprof"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/sync"
 	"github.com/dustin/go-humanize"
 	"golang.org/x/exp/slog"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/bencode"
@@ -31,6 +30,7 @@ func newClientConfig() *torrent.ClientConfig {
 	cfg := torrent.NewDefaultClientConfig()
 	cfg.ListenPort = 0
 	cfg.NoDHT = true
+	cfg.DisablePEX = false
 	cfg.NoDefaultPortForwarding = true
 	cfg.Seed = true
 	cfg.Debug = false
@@ -46,7 +46,8 @@ func main() {
 	assertNil(os.Mkdir(sourceDir, 0o700))
 	f, err := os.Create(filepath.Join(sourceDir, "file"))
 	assertNil(err)
-	_, err = io.CopyN(f, rand.Reader, 1<<30)
+	//  5 GB file
+	_, err = io.CopyN(f, rand.Reader, int64(5)<<30)
 	assertNil(err)
 	assertNil(f.Close())
 	var info metainfo.Info
@@ -78,7 +79,7 @@ func main() {
 	assertNil(err)
 	addClientAndTorrent(initialClient, initialTorrent)
 	//initialTorrent.VerifyData()
-	<-initialTorrent.Complete().On()
+	//<-initialTorrent.Complete().On()
 	var allDownloaded sync.WaitGroup
 	var notCompleted sync.Map
 	http.HandleFunc(
@@ -103,6 +104,8 @@ func main() {
 		allDownloaded.Add(1)
 		notCompleted.Store(clientIndex, nil)
 		go func() {
+			// In our case, the node#1 i.e. the initialTorrent seems to be blocking call. Hence, making it one.
+			<-initialTorrent.Complete().On()
 			<-t.GotInfo()
 			t.DownloadAll()
 			<-t.Complete().On()
@@ -112,6 +115,7 @@ func main() {
 		}()
 		t.AddClientPeer(initialClient)
 	}
+
 	go func() {
 		for range time.Tick(time.Second) {
 			for _, t := range torrents {
@@ -119,6 +123,23 @@ func main() {
 					t.AddClientPeer(cl)
 				}
 			}
+			for clientIndex, cl := range clients {
+				metaInfo := torrents[clientIndex].Metainfo()
+				t, _ := cl.Torrent(metaInfo.HashInfoBytes())
+				pieceComplete := t.Stats().PiecesComplete
+				totalPeers := t.Stats().TotalPeers
+				totalPieces := t.NumPieces()
+				pieceCompleteProgress := (float64(pieceComplete) / float64(totalPieces)) * 100
+				fmt.Printf(
+					"Client %v PiecesCompleted:  %v PieceProgress: %.2f%% TotalPieces: %v TotalPeers: %v\n",
+					clientIndex,
+					pieceComplete,
+					pieceCompleteProgress,
+					totalPieces,
+					totalPeers,
+				)
+			}
+
 		}
 	}()
 	allDownloaded.Wait()

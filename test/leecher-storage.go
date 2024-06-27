@@ -137,7 +137,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	defer seeder.Close()
 	// Adding a torrent and setting the info should trigger piece checks for everything
 	// automatically. Wait until the seed Torrent agrees that everything is available.
-	<-seederTorrent.Complete.On()
+	<-seederTorrent.Complete().On()
 	// Create leecher and a Torrent.
 	leecherDataDir := t.TempDir()
 	cfg = torrent.TestingConfig(t)
@@ -174,7 +174,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		return
 	}())
 	require.NoError(t, err)
-	assert.False(t, leecherTorrent.Complete.Bool())
+	assert.False(t, leecherTorrent.Complete().Bool())
 	assert.True(t, new)
 
 	//// This was used when observing coalescing of piece state changes.
@@ -210,9 +210,9 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		go leecherTorrent.VerifyData()
 	}
 	if canComplete {
-		<-leecherTorrent.Complete.On()
+		<-leecherTorrent.Complete().On()
 	} else {
-		<-leecherTorrent.Complete.Off()
+		<-leecherTorrent.Complete().Off()
 	}
 	assert.NotEmpty(t, seederTorrent.PeerConns())
 	leecherPeerConns := leecherTorrent.PeerConns()

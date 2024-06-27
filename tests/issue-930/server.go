@@ -12,7 +12,7 @@ func server() {
 	go func() {
 		for range time.Tick(time.Second * 5) {
 			for _, torrent := range client.Torrents() {
-				if torrent.Complete.Bool() {
+				if torrent.Complete().Bool() {
 					fmt.Println("Dropping torrent", torrent.InfoHash().HexString())
 					torrent.Drop()
 				}

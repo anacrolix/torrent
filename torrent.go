@@ -163,7 +163,7 @@ type Torrent struct {
 	pex pexState
 
 	// Is On when all pieces are complete.
-	Complete chansync.Flag
+	complete chansync.Flag
 
 	// Torrent sources in use keyed by the source string.
 	activeSources sync.Map
@@ -2930,7 +2930,7 @@ func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex) RequestIndex {
 }
 
 func (t *Torrent) updateComplete() {
-	t.Complete.SetBool(t.haveAllPieces())
+	t.complete.SetBool(t.haveAllPieces())
 }
 
 func (t *Torrent) cancelRequest(r RequestIndex) *Peer {
@@ -3256,4 +3256,9 @@ file:
 		pieceLayers[string(key[:])] = value.String()
 	}
 	return
+}
+
+// Is On when all pieces are complete.
+func (t *Torrent) Complete() chansync.ReadOnlyFlag {
+	return &t.complete
 }

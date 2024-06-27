@@ -127,7 +127,7 @@ func (p *pool) put(b *bytes.Buffer) {
 	pool, ok := p.buffers[size]
 	p.mu.RUnlock()
 
-	fmt.Println("PUT", size, ok)
+	fmt.Println("PUT", size, b.Len(), ok)
 
 	if ok {
 		b.Reset()

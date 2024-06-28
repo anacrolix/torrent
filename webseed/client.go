@@ -1,7 +1,6 @@
 package webseed
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,16 +8,15 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"github.com/RoaringBitmap/roaring"
-	"golang.org/x/sync/semaphore"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
+	"github.com/anacrolix/torrent/storage"
 )
 
 type RequestSpec = segments.Extent
@@ -74,69 +72,7 @@ type RequestResult struct {
 	Err     error
 }
 
-type pool struct {
-	mu      sync.RWMutex
-	buffers map[int64]*sync.Pool
-	semMax  *semaphore.Weighted
-}
-
-type buffer struct {
-	size int64
-	*bytes.Buffer
-}
-
-func (b buffer) Close() error {
-	if b.Buffer != nil {
-		bufPool.put(b)
-	}
-
-	return nil
-}
-
-func (p *pool) get(ctx context.Context, size int64) (buffer, error) {
-	if err := p.semMax.Acquire(ctx, size); err != nil {
-		return buffer{}, err
-	}
-
-	p.mu.RLock()
-	pool, ok := p.buffers[size]
-	p.mu.RUnlock()
-
-	if !ok {
-		pool = &sync.Pool{
-			New: func() interface{} {
-				// round to the nearest MinRead boundary otherwise io.Copy is going
-				// to result in the buffer getting grown ti around 2x its required size
-				return bytes.NewBuffer(make([]byte, 0, (size/bytes.MinRead+1)*bytes.MinRead))
-			},
-		}
-
-		p.mu.Lock()
-		p.buffers[size] = pool
-		p.mu.Unlock()
-	}
-
-	return buffer{size, pool.Get().(*bytes.Buffer)}, nil
-}
-
-func (p *pool) put(b buffer) {
-	p.mu.RLock()
-	pool, ok := p.buffers[b.size]
-	p.mu.RUnlock()
-
-	if ok {
-		b.Reset()
-		pool.Put(b.Buffer)
-		p.semMax.Release(b.size)
-	}
-}
-
-var bufPool = &pool{
-	buffers: map[int64]*sync.Pool{},
-	semMax:  semaphore.NewWeighted(5_000_000_000), // TODO - needs config (should relate machine memory)
-}
-
-func (ws *Client) NewRequest(r RequestSpec, limiter *rate.Limiter, receivingCounter *atomic.Int64) Request {
+func (ws *Client) NewRequest(r RequestSpec, buffers storage.BufferPool, limiter *rate.Limiter, receivingCounter *atomic.Int64) Request {
 	ctx, cancel := context.WithCancel(context.Background())
 	var requestParts []requestPart
 	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
@@ -154,7 +90,7 @@ func (ws *Client) NewRequest(r RequestSpec, limiter *rate.Limiter, receivingCoun
 			responseBodyWrapper: ws.ResponseBodyWrapper,
 		}
 		part.do = func() (*http.Response, io.ReadWriteCloser, error) {
-			buff, err := bufPool.get(ctx, e.Length)
+			buff, err := buffers.Get(ctx, e.Length)
 
 			if err != nil {
 				return nil, nil, err

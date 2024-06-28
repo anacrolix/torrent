@@ -17,6 +17,7 @@ import (
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
+	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/webseed"
 )
 
@@ -146,8 +147,11 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 	return maxInt(1, minInt(cn.peer.PeerMaxRequests, maxInt(maxInt(8, activeRequestsPerPeer), cn.peer.peakRequests*2)))
 }
 
+// TODO this should be config also per client ?
+var limitedBuffPool = storage.NewLimitedBufferPool(bufPool, 5_000_000_000)
+
 func (ws *webseedPeer) doRequest(r Request) error {
-	webseedRequest := ws.client.NewRequest(ws.intoSpec(r), ws.requestRateLimiter, &ws.receiving)
+	webseedRequest := ws.client.NewRequest(ws.intoSpec(r), limitedBuffPool, ws.requestRateLimiter, &ws.receiving)
 
 	ws.peer.mu.Lock()
 	ws.activeRequests[r] = webseedRequest

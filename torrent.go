@@ -53,6 +53,8 @@ import (
 	stack2 "github.com/go-stack/stack"
 )
 
+var bufPool = storage.NewBufferPool()
+
 func stack(skip int) string {
 	return stack2.Trace().TrimBelow(stack2.Caller(skip)).String()
 }
@@ -1274,8 +1276,10 @@ func (t *Torrent) pieceLength(piece pieceIndex, lockInfo bool) pp.Integer {
 }
 
 func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex, pieceLength int64, lock bool) *blockCheckingWriter {
+	blockBuffer, _ := bufPool.Get(context.Background(), pieceLength)
+
 	return &blockCheckingWriter{
-		blockBuffer:  bufPool.get(pieceLength),
+		blockBuffer:  blockBuffer,
 		cache:        &t.smartBanCache,
 		requestIndex: t.pieceRequestIndexOffset(piece, lock),
 		chunkSize:    t.chunkSize.Int(),

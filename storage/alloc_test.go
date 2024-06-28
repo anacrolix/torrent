@@ -1,4 +1,4 @@
-package webseed
+package storage
 
 import (
 	"bytes"
@@ -16,7 +16,9 @@ func (r reader) Read(p []byte) (n int, err error) {
 }
 
 func TestAlloc(t *testing.T) {
-	buff, err := bufPool.get(context.Background(), 2097152)
+	bufPool := NewBufferPool()
+
+	buff, err := bufPool.Get(context.Background(), 2097152)
 
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +30,7 @@ func TestAlloc(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buff, err = bufPool.get(context.Background(), 2097152)
+	buff, err = bufPool.Get(context.Background(), 2097152)
 
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +49,7 @@ func TestAlloc(t *testing.T) {
 
 	source.b.Write(input[:])
 
-	buff, err = bufPool.get(context.Background(), 2097152)
+	buff, err = bufPool.Get(context.Background(), 2097152)
 
 	if err != nil {
 		t.Fatal(err)

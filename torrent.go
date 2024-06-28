@@ -1273,8 +1273,9 @@ func (t *Torrent) pieceLength(piece pieceIndex, lockInfo bool) pp.Integer {
 	return pp.Integer(t.info.PieceLength)
 }
 
-func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex, lock bool) *blockCheckingWriter {
+func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex, pieceLength int64, lock bool) *blockCheckingWriter {
 	return &blockCheckingWriter{
+		blockBuffer:  bufPool.get(pieceLength),
 		cache:        &t.smartBanCache,
 		requestIndex: t.pieceRequestIndexOffset(piece, lock),
 		chunkSize:    t.chunkSize.Int(),
@@ -1301,7 +1302,7 @@ func (t *Torrent) hashPiece(p *Piece) (
 
 	hash := pieceHash.New()
 	const logPieceContents = false
-	smartBanWriter := t.smartBanBlockCheckingWriter(p.index, true)
+	smartBanWriter := t.smartBanBlockCheckingWriter(p.index, int64(p.length(true)), true)
 	writers := []io.Writer{hash, smartBanWriter}
 	var examineBuf bytes.Buffer
 	if logPieceContents {

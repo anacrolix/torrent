@@ -211,7 +211,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	for i := begin; i < end; i++ {
 		func() {
 			// don't lock out all processing between pieces while pieces are updated
-			t.mu.RLock()
+			t.mu.Lock()
 			defer t.mu.Unlock()
 			if t.pieces[i].priority.Raise(PiecePriorityNormal) {
 				if t.updatePiecePriorityNoTriggers(i, false) && !haveTrigger {
@@ -225,7 +225,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 	if !t.disableTriggers && haveTrigger {
 		func() {
-			t.mu.RLock()
+			t.mu.Lock()
 			defer t.mu.Unlock()
 
 			t.iterPeers(func(c *Peer) {

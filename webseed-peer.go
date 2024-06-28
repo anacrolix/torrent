@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"sync"
 	"time"
@@ -113,6 +114,8 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 		defer cn.peer.t.mu.RUnlock()
 	}
 
+	seeding := cn.peer.t.seeding(false)
+
 	cn.peer.t.iterPeers(func(peer *Peer) {
 		if peer == &cn.peer {
 			return
@@ -125,7 +128,7 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 
 		if !peer.closed.IsSet() {
 			if peer.connectionFlags() != "WS" {
-				if !peer.peerInterested || peer.lastHelpful(false, false).IsZero() {
+				if !peer.peerInterested || peer.lastHelpful(false, seeding).IsZero() {
 					return
 				}
 			}
@@ -139,7 +142,7 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 		defer cn.peer.mu.RUnlock()
 	}
 
-	activeRequestsPerPeer := cn.peer.bestPeerNumPieces(false, false) / maxInt(1, interestedPeers)
+	activeRequestsPerPeer := cn.peer.bestPeerNumPieces(false) / maxInt(1, interestedPeers)
 	return maxInt(1, minInt(cn.peer.PeerMaxRequests, maxInt(maxInt(8, activeRequestsPerPeer), cn.peer.peakRequests*2)))
 }
 
@@ -285,7 +288,7 @@ func (ws *webseedPeer) requester(i int) {
 				ws.peer.t.mu.RLock()
 				defer ws.peer.t.mu.RUnlock()
 
-				if ws.peer.t.haveInfo(false) && !(ws.peer.t.dataDownloadDisallowed.Bool() || ws.peer.t.Complete.Bool()) {
+				if ws.peer.t.haveInfo(true) && !(ws.peer.t.dataDownloadDisallowed.Bool() || ws.peer.t.Complete.Bool()) {
 					if ws.updateRequestor == nil {
 						if ws.unchokeTimerDuration == 0 {
 							// Don't wait for small files
@@ -345,7 +348,7 @@ func (ws *webseedPeer) logProgress(label string, lockTorrent bool) {
 		defer t.mu.RUnlock()
 	}
 
-	if !t.haveInfo(false) {
+	if !t.haveInfo(true) {
 		return
 	}
 
@@ -514,29 +517,51 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	result := <-webseedRequest.Result
 	close(webseedRequest.Result) // one-shot
 
+	defer func() {
+		for _, reader := range result.Readers {
+			reader.Close()
+		}
+	}()
+
 	ws.persisting.Add(1)
 	defer ws.persisting.Add(-1)
+
+	var piece []byte
+
+	if len(result.Readers) == 1 {
+		if buff, ok := result.Readers[0].(interface{ Bytes() []byte }); ok {
+			piece = buff.Bytes()
+		}
+	}
+
+	if len(piece) == 0 {
+		var readers []io.Reader
+
+		// TODO this will cause an additional buffer to
+		// get created - which is not ideal - but would
+		// require receive chunck etc to be io interface
+		// rather than buffer based
+		for _, reader := range result.Readers {
+			readers = append(readers, reader)
+		}
+
+		piece, _ = io.ReadAll(io.MultiReader(readers...))
+	}
 
 	// We do this here rather than inside receiveChunk, since we want to count errors too. I'm not
 	// sure if we can divine which errors indicate cancellation on our end without hitting the
 	// network though.
-	if len(result.Bytes) != 0 || result.Err == nil {
+	if len(piece) != 0 || result.Err == nil {
 		// Increment ChunksRead and friends
-		ws.peer.doChunkReadStats(int64(len(result.Bytes)))
+		ws.peer.doChunkReadStats(int64(len(piece)))
 	}
-	ws.peer.readBytes(int64(len(result.Bytes)))
+	ws.peer.readBytes(int64(len(piece)))
 
 	if ws.peer.t.closed.IsSet() {
 		return nil
 	}
 
 	err := result.Err
-
-	// the call may have been cancelled while it
-	// was in transit (via the chan)
-	if result.Ctx.Err() != nil {
-		err = result.Ctx.Err()
-	}
 
 	if err != nil {
 		switch {
@@ -569,16 +594,24 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		return err
 	}
 
+	// the call may have been cancelled while it
+	// was in transit (via the chan)
+	if result.Ctx.Err() != nil {
+		ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, true))
+		return result.Ctx.Err()
+	}
+
 	err = ws.peer.receiveChunk(&pp.Message{
 		Type:  pp.Piece,
 		Index: r.Index,
 		Begin: r.Begin,
-		Piece: result.Bytes,
+		Piece: piece,
 	})
 
 	if err != nil {
 		panic(err)
 	}
+
 	return err
 }
 
@@ -591,8 +624,8 @@ func (me *webseedPeer) peerPieces(lock bool) *roaring.Bitmap {
 	return &me.client.Pieces
 }
 
-func (cn *webseedPeer) peerHasAllPieces(lock bool, lockTorrent bool) (all, known bool) {
-	if !cn.peer.t.haveInfo(lockTorrent) {
+func (cn *webseedPeer) peerHasAllPieces(lock bool, lockTorrentInfo bool) (all, known bool) {
+	if !cn.peer.t.haveInfo(lockTorrentInfo) {
 		return true, false
 	}
 
@@ -601,5 +634,5 @@ func (cn *webseedPeer) peerHasAllPieces(lock bool, lockTorrent bool) (all, known
 		defer cn.peer.mu.RUnlock()
 	}
 
-	return cn.client.Pieces.GetCardinality() == uint64(cn.peer.t.numPieces()), true
+	return cn.client.Pieces.GetCardinality() == uint64(cn.peer.t.numPieces(lockTorrentInfo)), true
 }

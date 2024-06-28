@@ -113,8 +113,8 @@ func fileBytesLeft(
 func (f *File) bytesLeft() (left int64) {
 	f.t.mu.RLock()
 	defer f.t.mu.RUnlock()
-	return fileBytesLeft(int64(f.t.usualPieceSize()), f.BeginPieceIndex(), f.EndPieceIndex(), f.offset, f.length, &f.t._completedPieces, func(pieceIndex int) int64 {
-		return int64(f.t.piece(pieceIndex, false).numDirtyBytes(false))
+	return fileBytesLeft(int64(f.t.usualPieceSize(true)), f.BeginPieceIndex(), f.EndPieceIndex(), f.offset, f.length, &f.t._completedPieces, func(pieceIndex int) int64 {
+		return int64(f.t.piece(pieceIndex, false).numDirtyBytes(false,true))
 	})
 }
 
@@ -134,7 +134,7 @@ type FilePieceState struct {
 func (f *File) State() (ret []FilePieceState) {
 	f.t.mu.RLock()
 	defer f.t.mu.RUnlock()
-	pieceSize := int64(f.t.usualPieceSize())
+	pieceSize := int64(f.t.usualPieceSize(true))
 	off := f.offset % pieceSize
 	remaining := f.length
 	for i := pieceIndex(f.offset / pieceSize); ; i++ {
@@ -193,16 +193,18 @@ func (f *File) Priority() (prio piecePriority) {
 
 // Returns the index of the first piece containing data for the file.
 func (f *File) BeginPieceIndex() int {
-	if f.t.usualPieceSize() == 0 {
+	usualPieceSize := int64(f.t.usualPieceSize(true))
+	if usualPieceSize == 0 {
 		return 0
 	}
-	return pieceIndex(f.offset / int64(f.t.usualPieceSize()))
+	return pieceIndex(f.offset / usualPieceSize)
 }
 
 // Returns the index of the piece after the last one containing data for the file.
 func (f *File) EndPieceIndex() int {
-	if f.t.usualPieceSize() == 0 {
+	usualPieceSize := int64(f.t.usualPieceSize(true))
+	if usualPieceSize == 0 {
 		return 0
 	}
-	return pieceIndex((f.offset + f.length + int64(f.t.usualPieceSize()) - 1) / int64(f.t.usualPieceSize()))
+	return pieceIndex((f.offset + f.length + usualPieceSize - 1) / usualPieceSize)
 }

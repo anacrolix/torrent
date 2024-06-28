@@ -175,7 +175,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 		t.mu.RLock()
 	}
 
-	if !t.haveInfo(false) || t.closed.IsSet() || t.dataDownloadDisallowed.Bool() {
+	if !t.haveInfo(true) || t.closed.IsSet() || t.dataDownloadDisallowed.Bool() {
 		if lockTorrent {
 			t.mu.RUnlock()
 		}
@@ -198,7 +198,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 	}
 
 	// having this here ensures lock serialization
-	all, known := p.peerHasAllPieces(lock, lockTorrent)
+	all, known := p.peerHasAllPieces(lock, true)
 	peerHasAllPieces := all && known
 
 	if lock {
@@ -358,10 +358,10 @@ func (t *Torrent) cacheNextRequestIndexesForReuse(slice []RequestIndex, lock boo
 // currently need anything.
 func (p *Peer) allowSendNotInterested(lock bool, lockTorrent bool) bool {
 	// Except for caching, we're not likely to lose pieces very soon.
-	if p.t.haveAllPieces(lockTorrent) {
+	if p.t.haveAllPieces(lockTorrent, true) {
 		return true
 	}
-	all, known := p.peerHasAllPieces(lock, lockTorrent)
+	all, known := p.peerHasAllPieces(lock, true)
 	if all || !known {
 		return false
 	}

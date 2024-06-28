@@ -3,6 +3,7 @@ package torrent
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/missinggo/v2/pubsub"
@@ -32,7 +33,7 @@ func (t *Torrent) Info() (info *metainfo.Info) {
 // Returns a Reader bound to the torrent's data. All read calls block until the data requested is
 // actually available. Note that you probably want to ensure the Torrent Info is available first.
 func (t *Torrent) NewReader() Reader {
-	return t.newReader(0, t.length())
+	return t.newReader(0, t.length(true))
 }
 
 func (t *Torrent) newReader(offset, length int64) Reader {
@@ -75,7 +76,7 @@ func (t *Torrent) PieceState(piece pieceIndex) (ps PieceState) {
 // The number of pieces in the torrent. This requires that the info has been
 // obtained first.
 func (t *Torrent) NumPieces() pieceIndex {
-	return t.numPieces()
+	return t.numPieces(true)
 }
 
 // Get missing bytes count for specific piece.
@@ -140,13 +141,36 @@ func (t *Torrent) Name() string {
 // The completed length of all the torrent data, in all its files. This is
 // derived from the torrent info, when it is available.
 func (t *Torrent) Length() int64 {
-	return t._length.Value
+	return t.length(true)
 }
 
 // Returns a run-time generated metainfo for the torrent that includes the
 // info bytes and announce-list as currently known to the client.
 func (t *Torrent) Metainfo() metainfo.MetaInfo {
-	return t.newMetaInfo(true)
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	t.imu.RLock()
+	defer t.imu.RUnlock()
+	return metainfo.MetaInfo{
+		CreationDate: time.Now().Unix(),
+		Comment:      "dynamic metainfo from client",
+		CreatedBy:    "go.torrent",
+		AnnounceList: t.metainfo.UpvertedAnnounceList().Clone(),
+		InfoBytes: func() []byte {
+			if t.haveInfo(false) {
+				return t.metadataBytes
+			} else {
+				return nil
+			}
+		}(),
+		UrlList: func() []string {
+			ret := make([]string, 0, len(t.webSeeds))
+			for url := range t.webSeeds {
+				ret = append(ret, url)
+			}
+			return ret
+		}(),
+	}
 }
 
 func (t *Torrent) addReader(r *reader, lock bool) {
@@ -203,7 +227,12 @@ func (t *Torrent) CancelPieces(begin, end pieceIndex) {
 	}
 }
 
-func (t *Torrent) initFiles() {
+func (t *Torrent) initFiles(lock bool) {
+	if lock {
+		t.imu.RLock()
+		defer t.imu.RUnlock()
+	}
+
 	var offset int64
 	t.files = new([]*File)
 	for _, fi := range t.info.UpvertedFiles() {
@@ -234,7 +263,7 @@ func (t *Torrent) AddPeers(pp []PeerInfo) (n int) {
 // Marks the entire torrent for download. Requires the info first, see
 // GotInfo. Sets piece priorities for historical reasons.
 func (t *Torrent) DownloadAll() {
-	t.DownloadPieces(0, t.numPieces())
+	t.DownloadPieces(0, t.numPieces(true))
 }
 
 func (t *Torrent) String() string {

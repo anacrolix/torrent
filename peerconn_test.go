@@ -290,7 +290,7 @@ func TestHaveAllThenBitfield(t *testing.T) {
 		Pieces:      make([]byte, pieceHash.Size()*7),
 	}, true), qt.IsNil)
 	pc.t.onSetInfo(true, true)
-	c.Check(tt.numPieces(), qt.Equals, 7)
+	c.Check(tt.numPieces(true), qt.Equals, 7)
 	c.Check(tt.pieceAvailabilityRuns(true), qt.DeepEquals, []pieceAvailabilityRun{
 		// The last element of the bitfield is irrelevant, as the Torrent actually only has 7
 		// pieces.
@@ -377,18 +377,18 @@ func TestReceiveLargeRequest(t *testing.T) {
 	req := Request{}
 	req.Length = defaultChunkSize
 	c.Assert(pc.fastEnabled(), qt.IsTrue)
-	c.Check(pc.onReadRequest(req, false), qt.IsNil)
+	c.Check(pc.onReadRequest(req, false, true), qt.IsNil)
 	c.Check(pc.peerRequests, qt.HasLen, 1)
 	req.Length = 2 << 20
-	c.Check(pc.onReadRequest(req, false), qt.IsNil)
+	c.Check(pc.onReadRequest(req, false, true), qt.IsNil)
 	c.Check(pc.peerRequests, qt.HasLen, 2)
 	pc.peerRequests = nil
 	pc.t.cl.config.UploadRateLimiter = rate.NewLimiter(1, defaultChunkSize)
 	req.Length = defaultChunkSize
-	c.Check(pc.onReadRequest(req, false), qt.IsNil)
+	c.Check(pc.onReadRequest(req, false, true), qt.IsNil)
 	c.Check(pc.peerRequests, qt.HasLen, 1)
 	req.Length = 2 << 20
-	c.Check(pc.onReadRequest(req, false), qt.IsNil)
+	c.Check(pc.onReadRequest(req, false, true), qt.IsNil)
 	c.Check(pc.messageWriter.writeBuffer.Len(), qt.Equals, 17)
 }
 

@@ -54,6 +54,8 @@ func GetRequestablePieces(
 	var allTorrentsUnverifiedBytes int64
 
 	var items []pieceRequestOrderItem
+	var pieces []Piece
+	var numPendingChunks []int
 
 	func() {
 		if lockTorrent {
@@ -64,16 +66,20 @@ func GetRequestablePieces(
 		pro := t.GetPieceRequestOrder()
 
 		items = make([]pieceRequestOrderItem, 0, pro.Len())
+		pieces = make([]Piece, t.NumPieces())
+		numPendingChunks = make([]int, len(pieces))
 
 		pro.Scan(func(_i pieceRequestOrderItem) bool {
 			items = append(items, _i)
+			pieceIndex := _i.key.Index
+			pieces[pieceIndex] = t.Piece(pieceIndex, false)
+			numPendingChunks[pieceIndex] = pieces[pieceIndex].NumPendingChunks(false)
 			return true
 		})
 	}()
 
 	for _, _i := range items {
 		ih := _i.key.InfoHash
-		var piece Piece = t.Piece(_i.key.Index, lockTorrent)
 
 		pieceLength := t.PieceLength()
 		if storageLeft != nil {
@@ -83,7 +89,8 @@ func GetRequestablePieces(
 			*storageLeft -= pieceLength
 		}
 
-		if /*!piece.Request(lockTorrent) ||*/ piece.NumPendingChunks(lockTorrent) == 0 {
+		/*piece := pieces[_i.key.Index]*/
+		if /*!piece.Request(lockTorrent) ||*/ numPendingChunks[_i.key.Index] == 0 {
 			// TODO: Clarify exactly what is verified. Stuff that's being hashed should be
 			// considered unverified and hold up further requests.
 			continue
@@ -95,8 +102,6 @@ func GetRequestablePieces(
 		allTorrentsUnverifiedBytes += pieceLength
 		f(ih, _i.key.Index, _i.state)
 	}
-
-	return
 }
 
 type Input interface {

@@ -106,8 +106,8 @@ func (p *Piece) pendChunkIndex(i RequestIndex, lockTorrent bool) {
 	p.t.updatePieceRequestOrderPiece(p.index, false)
 }
 
-func (p *Piece) numChunks() chunkIndexType {
-	return p.t.pieceNumChunks(p.index)
+func (p *Piece) numChunks(lockInfo bool) chunkIndexType {
+	return p.t.pieceNumChunks(p.index, lockInfo)
 }
 
 func (p *Piece) incrementPendingWrites() {
@@ -144,11 +144,11 @@ func (p *Piece) chunkIndexDirty(chunk chunkIndexType, lockTorrent bool) bool {
 	return p.t.dirtyChunks.Contains(p.requestIndexOffset(false) + chunk)
 }
 
-func (p *Piece) chunkIndexSpec(chunk chunkIndexType) ChunkSpec {
-	return chunkIndexSpec(pp.Integer(chunk), p.length(), p.chunkSize())
+func (p *Piece) chunkIndexSpec(chunk chunkIndexType, lockInfo bool) ChunkSpec {
+	return chunkIndexSpec(pp.Integer(chunk), p.length(lockInfo), p.chunkSize())
 }
 
-func (p *Piece) numDirtyBytes(lockTorrent bool) (ret pp.Integer) {
+func (p *Piece) numDirtyBytes(lockTorrent bool, lockInfo bool) (ret pp.Integer) {
 	// defer func() {
 	// 	if ret > p.length() {
 	// 		panic("too many dirty bytes")
@@ -160,41 +160,45 @@ func (p *Piece) numDirtyBytes(lockTorrent bool) (ret pp.Integer) {
 	}
 
 	numRegularDirtyChunks := p.numDirtyChunks(false)
-	if p.chunkIndexDirty(p.numChunks()-1, false) {
+	if p.chunkIndexDirty(p.numChunks(lockInfo)-1, false) {
 		numRegularDirtyChunks--
-		ret += p.chunkIndexSpec(p.lastChunkIndex()).Length
+		ret += p.chunkIndexSpec(p.lastChunkIndex(lockInfo), lockInfo).Length
 	}
 	ret += pp.Integer(numRegularDirtyChunks) * p.chunkSize()
 	return
 }
 
-func (p *Piece) length() pp.Integer {
-	return p.t.pieceLength(p.index)
+func (p *Piece) length(lock bool) pp.Integer {
+	return p.t.pieceLength(p.index, lock)
 }
 
 func (p *Piece) chunkSize() pp.Integer {
 	return p.t.chunkSize
 }
 
-func (p *Piece) lastChunkIndex() chunkIndexType {
-	return p.numChunks() - 1
+func (p *Piece) lastChunkIndex(lockInfo bool) chunkIndexType {
+	return p.numChunks(lockInfo) - 1
 }
 
 func (p *Piece) bytesLeft() (ret pp.Integer) {
 	if p.t.pieceComplete(p.index, true) {
 		return 0
 	}
-	return p.length() - p.numDirtyBytes(true)
+	return p.length(true) - p.numDirtyBytes(true, true)
 }
 
 // Forces the piece data to be rehashed.
 func (p *Piece) VerifyData() {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()
+
+	p.mu.RLock()
 	target := p.numVerifies + 1
 	if p.hashing {
 		target++
 	}
+	p.mu.RUnlock()
+
 	// log.Printf("target: %d", target)
 	p.t.queuePieceCheck(p.index, true)
 	for {
@@ -211,12 +215,20 @@ func (p *Piece) queuedForHash(lock bool) bool {
 	return p.t.pieceQueuedForHash(p.index, lock)
 }
 
-func (p *Piece) torrentBeginOffset() int64 {
+func (p *Piece) torrentBeginOffset(lock bool) int64 {
+	if lock {
+		p.t.imu.RLock()
+		defer p.t.imu.RUnlock()
+	}
 	return int64(p.index) * p.t.info.PieceLength
 }
 
-func (p *Piece) torrentEndOffset() int64 {
-	return p.torrentBeginOffset() + int64(p.length())
+func (p *Piece) torrentEndOffset(lock bool) int64 {
+	if lock {
+		p.t.imu.RLock()
+		defer p.t.imu.RUnlock()
+	}
+	return p.torrentBeginOffset(false) + int64(p.length(false))
 }
 
 func (p *Piece) SetPriority(prio piecePriority) {
@@ -249,12 +261,16 @@ func (p *Piece) purePriority(lockTorrent bool) (ret piecePriority) {
 }
 
 func (p *Piece) uncachedPriority(lockTorrent bool) (ret piecePriority) {
+	p.mu.RLock()
+	processing := p.hashing || p.marking
+	p.mu.RUnlock()
+
 	if lockTorrent {
 		p.t.mu.RLock()
 		defer p.t.mu.RUnlock()
 	}
 
-	if p.hashing || p.marking || p.t.pieceComplete(p.index, false) || p.queuedForHash(false) {
+	if processing || p.t.pieceComplete(p.index, false) || p.queuedForHash(false) {
 		return PiecePriorityNone
 	}
 
@@ -278,7 +294,7 @@ func (p *Piece) completion(lock bool, lockTorrent bool) (ret storage.Completion)
 }
 
 func (p *Piece) allChunksDirty(lock bool) bool {
-	return p.numDirtyChunks(lock) == p.numChunks()
+	return p.numDirtyChunks(lock) == p.numChunks(true)
 }
 
 func (p *Piece) State() PieceState {

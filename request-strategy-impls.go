@@ -93,6 +93,10 @@ func (r requestStrategyTorrent) RUnlock() {
 	r.t.mu.RUnlock()
 }
 
+func (r requestStrategyTorrent) NumPieces() pieceIndex {
+	return r.t.NumPieces()
+}
+
 var _ request_strategy.Torrent = requestStrategyTorrent{}
 
 type requestStrategyPiece Piece
@@ -102,7 +106,7 @@ func (r *requestStrategyPiece) Request(lockTorrent bool) bool {
 }
 
 func (r *requestStrategyPiece) NumPendingChunks(lockTorrent bool) int {
-	return int(r.t.pieceNumPendingChunks(r.index, lockTorrent))
+	return int(r.t.pieceNumPendingChunks((*Piece)(r), lockTorrent))
 }
 
 var _ request_strategy.Piece = (*requestStrategyPiece)(nil)

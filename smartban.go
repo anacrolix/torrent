@@ -6,7 +6,6 @@ import (
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/sync"
-	"golang.org/x/sync/semaphore"
 
 	"github.com/anacrolix/torrent/smartban"
 )
@@ -18,7 +17,6 @@ type smartBanCache = smartban.Cache[bannableAddr, RequestIndex, uint64]
 type pool struct {
 	mu      sync.RWMutex
 	buffers map[int64]*sync.Pool
-	semMax  *semaphore.Weighted
 }
 
 type buffer struct {
@@ -64,7 +62,6 @@ func (p *pool) put(b buffer) {
 	if ok {
 		b.Reset()
 		pool.Put(b.Buffer)
-		p.semMax.Release(b.size)
 	}
 }
 

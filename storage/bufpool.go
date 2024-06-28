@@ -115,7 +115,7 @@ type limitedBuffer struct {
 }
 
 func (b limitedBuffer) Close() error {
-	if b.PooledBuffer.Close() != nil {
+	if b.PooledBuffer.Close() == nil {
 		b.semMax.Release(b.poolSize())
 	}
 

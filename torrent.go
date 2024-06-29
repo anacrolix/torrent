@@ -2980,6 +2980,8 @@ func (t *Torrent) getPieceToHash(lock bool) (peice *Piece, ok bool) {
 	t.piecesQueuedForHash.IterTyped(func(i pieceIndex) bool {
 		peice = t.piece(i, false)
 
+		peice.mu.RLock()
+		defer peice.mu.RUnlock()
 		if peice.hashing {
 			return true
 		}
@@ -3023,8 +3025,8 @@ func (t *Torrent) dropBannedPeers() {
 func (t *Torrent) clearPieceTouchers(pi pieceIndex, lock bool) {
 	p := t.piece(pi, lock)
 
-	// get the dirtiers first so we can presever lock order (peer,piece)
-	// in the code below
+	// get the dirtiers first so we can preseve lock order
+	// through serialization for the code below
 	dirtiers := func() []*Peer {
 		p.mu.Lock()
 		defer p.mu.Unlock()
@@ -3032,6 +3034,7 @@ func (t *Torrent) clearPieceTouchers(pi pieceIndex, lock bool) {
 		for c := range p.dirtiers {
 			dirtiers = append(dirtiers, c)
 		}
+		p.dirtiers = nil
 		return dirtiers
 	}()
 
@@ -3039,10 +3042,10 @@ func (t *Torrent) clearPieceTouchers(pi pieceIndex, lock bool) {
 		func() {
 			c.mu.Lock()
 			defer c.mu.Unlock()
-			p.mu.Lock()
-			defer p.mu.Unlock()
 			delete(c.peerTouchedPieces, pi)
-			delete(p.dirtiers, c)
+			if len(c.peerTouchedPieces) == 0 {
+				c.peerTouchedPieces = nil
+			}
 		}()
 	}
 }
@@ -3055,15 +3058,16 @@ func (t *Torrent) peersAsSlice(lock bool) (ret []*Peer) {
 }
 
 func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex, lock bool) {
-	piece := t.piece(pieceIndex, lock)
-	if piece.queuedForHash(lock) {
-		return
-	}
-
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 	}
+
+	piece := t.piece(pieceIndex, false)
+	if piece.queuedForHash(false) {
+		return
+	}
+
 	t.piecesQueuedForHash.Add(bitmap.BitIndex(pieceIndex))
 	t.publishPieceStateChange(pieceIndex, false)
 	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck", false)

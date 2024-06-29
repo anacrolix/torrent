@@ -265,7 +265,7 @@ type Torrent struct {
 	// of the global torrent client lock
 	hashResults chan hashResult
 	// this is static per torrent it i kept locally to avoid
-	// re-
+	// re-looking it up
 	clientPieceRequestOrder *request_strategy.PieceRequestOrder
 }
 

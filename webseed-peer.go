@@ -596,9 +596,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		return result.Ctx.Err()
 	}
 
-	if len(piece) == 0 {
-		fmt.Println("Received empty piece:", r.Index, " from:", ws.peer.String())
-	}
+	fmt.Println("Received piece:", r.Index, "len", len(piece), "from:", ws.peer.String())
 
 	err = ws.peer.receiveChunk(&pp.Message{
 		Type:  pp.Piece,

@@ -19,6 +19,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/anacrolix/torrent/types/infohash"
 	"github.com/anacrolix/torrent/webseed"
 )
 
@@ -596,7 +597,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		return result.Ctx.Err()
 	}
 
-	fmt.Println("Received piece:", r.Index, "len", len(piece), "from:", ws.peer.String())
+	fmt.Println("Received piece:", r.Index, infohash.HashBytes(piece), "len", len(piece), "from:", ws.peer.String())
 
 	err = ws.peer.receiveChunk(&pp.Message{
 		Type:  pp.Piece,

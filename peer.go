@@ -581,7 +581,7 @@ func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorre
 		}
 		me.decPeakRequests(false)
 	}()
-	
+
 	if updateRequests && me.isLowOnRequests(lock, lockTorrent) {
 		me.updateRequests("Peer.cancel", lock, lockTorrent)
 	}
@@ -886,7 +886,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	}
 
 	c.onDirtiedPiece(pieceIndex(ppReq.Index))
-	//fmt.Println("RC10")
 
 	// We need to ensure the piece is only queued once, so only the last chunk writer gets this job.
 	if t.pieceAllDirty(pieceIndex(ppReq.Index), false) && piece.pendingWrites == 0 {

@@ -2898,7 +2898,7 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 			if !correct {
 				b := bytes.NewBuffer(nil)
 				_, _ = p.Storage().WriteTo(b)
-				fmt.Println("failed hash", p.index, p.hash, b.Len())
+				fmt.Println("failed hash", p.index, sum, *p.hash, b.Len())
 			}
 			switch copyErr {
 			case nil, io.EOF:

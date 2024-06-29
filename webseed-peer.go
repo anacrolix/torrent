@@ -487,14 +487,14 @@ func (ws *webseedPeer) drop(lock bool, lockTorrent bool) {
 }
 
 func (cn *webseedPeer) ban() {
-	cn.peer.mu.RLock()
-	banCount := cn.peer.banCount
-	cn.peer.mu.RUnlock()
+	//cn.peer.mu.RLock()
+	//banCount := cn.peer.banCount
+	//cn.peer.mu.RUnlock()
 
-	if banCount > 5 {
-		cn.peer.close(true, true)
-		return
-	}
+	//if banCount > 5 {
+	//	cn.peer.close(true, true)
+	//	return
+	//}
 
 	cn.peer.drop(true, true)
 

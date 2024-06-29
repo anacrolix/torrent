@@ -44,6 +44,7 @@ type webseedPeer struct {
 	unchokeTimerDuration time.Duration
 	logProcessor         *time.Timer
 	requestRateLimiter   *rate.Limiter
+	banCount             int
 }
 
 var _ peerImpl = (*webseedPeer)(nil)
@@ -483,7 +484,20 @@ func (ws *webseedPeer) drop(lock bool, lockTorrent bool) {
 }
 
 func (cn *webseedPeer) ban() {
+	cn.peer.mu.RLock()
+	banCount := cn.banCount
+	cn.peer.mu.RUnlock()
+
+	if banCount > 5 {
+		cn.peer.close(true, true)
+		return
+	}
+
 	cn.peer.drop(true, true)
+
+	cn.peer.mu.Lock()
+	cn.banCount++
+	cn.peer.mu.Unlock()
 }
 
 func (cn *webseedPeer) isLowOnRequests(lock bool, lockTorrent bool) bool {

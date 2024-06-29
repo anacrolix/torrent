@@ -98,8 +98,8 @@ type (
 		// to getDesiredRequestState
 		desiredRequestLen int
 		PeerMaxRequests   maxRequests // Maximum pending requests the peer allows.
-
-		logger log.Logger
+		banCount          int
+		logger            log.Logger
 	}
 
 	PeerSource string

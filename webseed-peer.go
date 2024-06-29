@@ -44,7 +44,6 @@ type webseedPeer struct {
 	unchokeTimerDuration time.Duration
 	logProcessor         *time.Timer
 	requestRateLimiter   *rate.Limiter
-	banCount             int
 }
 
 var _ peerImpl = (*webseedPeer)(nil)
@@ -130,6 +129,10 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 		defer peer.mu.RUnlock()
 
 		if !peer.closed.IsSet() {
+			if peer.banCount > 2 {
+				return
+			}
+
 			if peer.connectionFlags() != "WS" {
 				if !peer.peerInterested || peer.lastHelpful(false, seeding).IsZero() {
 					return
@@ -408,7 +411,7 @@ func requestUpdate(ws *webseedPeer) {
 							}
 
 							if existing := ws.peer.t.requestingPeer(RequestIndex(piece), false); existing != nil {
-								if existing.connectionFlags() == "WS" {
+								if existing.connectionFlags() == "WS" && existing.banCount == 0 {
 									continue
 								}
 
@@ -485,7 +488,7 @@ func (ws *webseedPeer) drop(lock bool, lockTorrent bool) {
 
 func (cn *webseedPeer) ban() {
 	cn.peer.mu.RLock()
-	banCount := cn.banCount
+	banCount := cn.peer.banCount
 	cn.peer.mu.RUnlock()
 
 	if banCount > 5 {
@@ -496,7 +499,7 @@ func (cn *webseedPeer) ban() {
 	cn.peer.drop(true, true)
 
 	cn.peer.mu.Lock()
-	cn.banCount++
+	cn.peer.banCount++
 	cn.peer.mu.Unlock()
 }
 

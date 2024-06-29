@@ -216,8 +216,12 @@ func readRequestPartResponses(ctx context.Context, parts []requestPart, receivin
 			if err = func() error {
 				receivingCounter.Add(1)
 				defer receivingCounter.Add(-1)
+				if err := recvPartResult(ctx, readWriter, part, result); err != nil {
+					readWriter.Close()
+					return err
+				}
 				readers = append(readers, readWriter)
-				return recvPartResult(ctx, readWriter, part, result)
+				return nil
 			}(); err != nil {
 				return readers, fmt.Errorf("reading %q at %q: %w", part.req.URL, part.req.Header.Get("Range"), err)
 			}

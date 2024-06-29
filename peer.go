@@ -556,16 +556,32 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 }
 
 func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorrent bool) {
-	if !me.deleteRequest(r, lock, lockTorrent) {
-		panic("request not existing should have been guarded")
-	}
-	if me._cancel(r, lock, lockTorrent) {
-		// Record that we expect to get a cancel ack.
-		if !me.requestState.Cancelled.CheckedAdd(r) {
-			panic(fmt.Sprintf("request %d: already cancelled for hash: %s", r, me.t.InfoHash()))
+	func() {
+		// keep the torrent and peer locked across the whole
+		// cancel operation to avoid part processing holes
+
+		if lockTorrent {
+			me.t.mu.Lock()
+			defer me.t.mu.Unlock()
 		}
-	}
-	me.decPeakRequests(lock)
+
+		if lock {
+			me.mu.Lock()
+			defer me.mu.Unlock()
+		}
+
+		if !me.deleteRequest(r, false, false) {
+			panic("request not existing should have been guarded")
+		}
+		if me._cancel(r, false, false) {
+			// Record that we expect to get a cancel ack.
+			if !me.requestState.Cancelled.CheckedAdd(r) {
+				panic(fmt.Sprintf("request %d: already cancelled for hash: %s", r, me.t.InfoHash()))
+			}
+		}
+		me.decPeakRequests(false)
+	}()
+	
 	if updateRequests && me.isLowOnRequests(lock, lockTorrent) {
 		me.updateRequests("Peer.cancel", lock, lockTorrent)
 	}

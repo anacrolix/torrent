@@ -15,6 +15,7 @@ import (
 	"github.com/anacrolix/log"
 	"golang.org/x/time/rate"
 
+	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
@@ -538,18 +539,8 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		}
 	}
 
-	if len(piece) == 0 {
-		var readers []io.Reader
-
-		// TODO this will cause an additional buffer to
-		// get created - which is not ideal - but would
-		// require receive chunck etc to be io interface
-		// rather than buffer based
-		for _, reader := range result.Readers {
-			readers = append(readers, reader)
-		}
-
-		piece, _ = io.ReadAll(io.MultiReader(readers...))
+	if piece == nil && len(result.Readers) > 0 {
+		piece, _ = io.ReadAll(common.MultiReadCloser(result.Readers...))
 	}
 
 	// We do this here rather than inside receiveChunk, since we want to count errors too. I'm not
@@ -592,7 +583,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		index := ws.peer.t.requestIndexFromRequest(r, true)
 
 		if !ws.peer.remoteRejectedRequest(index) {
-			panic(fmt.Sprintf("invalid reject %s for: %d", err, index))
+			panic(fmt.Sprintf(`invalid reject "%s" for: %d`, err, index))
 		}
 
 		return err
@@ -603,6 +594,10 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	if result.Ctx.Err() != nil {
 		ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, true))
 		return result.Ctx.Err()
+	}
+
+	if len(piece) == 0 {
+		fmt.Println("Received empty piece:", r.Index, " from:", ws.peer.String())
 	}
 
 	err = ws.peer.receiveChunk(&pp.Message{

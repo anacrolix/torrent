@@ -199,15 +199,58 @@ func (t *Torrent) deleteReader(r *reader, lock bool) {
 // priority. Piece indexes are not the same as bytes. Requires that the info
 // has been obtained, see Torrent.Info and Torrent.GotInfo.
 func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
+	// this used to call t.updatePiecePriority(i, "Torrent.DownloadPieces", false)
+	// however that is expensive for large torrents because it calls
+	// c.updateRequests(reason, true, false) for each piece which forces an iteration
+	// of the piece order tree.  Instead the code below updated the priority with
+	// no triggers and then updated the peers at the end of that process
+
+	changes := map[pieceIndex]struct{}{}
+	haveTrigger := false
+
 	for i := begin; i < end; i++ {
 		func() {
 			// don't lock out all processing between pieces while pieces are updated
 			t.mu.Lock()
 			defer t.mu.Unlock()
 			if t.pieces[i].priority.Raise(PiecePriorityNormal) {
-				t.updatePiecePriority(i, "Torrent.DownloadPieces", false)
+				if t.updatePiecePriorityNoTriggers(i, false) && !haveTrigger {
+					haveTrigger = true
+				}
+
+				changes[i] = struct{}{}
 			}
 		}()
+	}
+
+	if !t.disableTriggers && haveTrigger {
+		func() {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+
+			t.iterPeers(func(c *Peer) {
+				if !c.isLowOnRequests(true, false) {
+					return
+				}
+
+				for piece := range changes {
+					if !c.peerHasPiece(piece, true, false) {
+						return
+					}
+					if ignore := c.requestState.Interested && c.peerChoking && !c.peerAllowedFast.Contains(piece); ignore {
+						return
+					}
+				}
+
+				c.updateRequests("Torrent.DownloadPieces", true, false)
+			}, false)
+
+			t.maybeNewConns(false)
+		}()
+	}
+
+	for piece := range changes {
+		t.publishPieceStateChange(piece, true)
 	}
 }
 

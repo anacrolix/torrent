@@ -53,6 +53,8 @@ import (
 	stack2 "github.com/go-stack/stack"
 )
 
+var bufPool = storage.NewBufferPool()
+
 func stack(skip int) string {
 	return stack2.Trace().TrimBelow(stack2.Caller(skip)).String()
 }
@@ -1273,8 +1275,11 @@ func (t *Torrent) pieceLength(piece pieceIndex, lockInfo bool) pp.Integer {
 	return pp.Integer(t.info.PieceLength)
 }
 
-func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex, lock bool) *blockCheckingWriter {
+func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex, pieceLength int64, lock bool) *blockCheckingWriter {
+	blockBuffer, _ := bufPool.Get(context.Background(), pieceLength)
+
 	return &blockCheckingWriter{
+		blockBuffer:  blockBuffer,
 		cache:        &t.smartBanCache,
 		requestIndex: t.pieceRequestIndexOffset(piece, lock),
 		chunkSize:    t.chunkSize.Int(),
@@ -1301,7 +1306,7 @@ func (t *Torrent) hashPiece(p *Piece) (
 
 	hash := pieceHash.New()
 	const logPieceContents = false
-	smartBanWriter := t.smartBanBlockCheckingWriter(p.index, true)
+	smartBanWriter := t.smartBanBlockCheckingWriter(p.index, int64(p.length(true)), true)
 	writers := []io.Writer{hash, smartBanWriter}
 	var examineBuf bytes.Buffer
 	if logPieceContents {
@@ -2975,6 +2980,8 @@ func (t *Torrent) getPieceToHash(lock bool) (peice *Piece, ok bool) {
 	t.piecesQueuedForHash.IterTyped(func(i pieceIndex) bool {
 		peice = t.piece(i, false)
 
+		peice.mu.RLock()
+		defer peice.mu.RUnlock()
 		if peice.hashing {
 			return true
 		}
@@ -3018,8 +3025,8 @@ func (t *Torrent) dropBannedPeers() {
 func (t *Torrent) clearPieceTouchers(pi pieceIndex, lock bool) {
 	p := t.piece(pi, lock)
 
-	// get the dirtiers first so we can presever lock order (peer,piece)
-	// in the code below
+	// get the dirtiers first so we can preseve lock order
+	// through serialization for the code below
 	dirtiers := func() []*Peer {
 		p.mu.Lock()
 		defer p.mu.Unlock()
@@ -3027,6 +3034,7 @@ func (t *Torrent) clearPieceTouchers(pi pieceIndex, lock bool) {
 		for c := range p.dirtiers {
 			dirtiers = append(dirtiers, c)
 		}
+		p.dirtiers = nil
 		return dirtiers
 	}()
 
@@ -3034,10 +3042,10 @@ func (t *Torrent) clearPieceTouchers(pi pieceIndex, lock bool) {
 		func() {
 			c.mu.Lock()
 			defer c.mu.Unlock()
-			p.mu.Lock()
-			defer p.mu.Unlock()
 			delete(c.peerTouchedPieces, pi)
-			delete(p.dirtiers, c)
+			if len(c.peerTouchedPieces) == 0 {
+				c.peerTouchedPieces = nil
+			}
 		}()
 	}
 }
@@ -3050,15 +3058,16 @@ func (t *Torrent) peersAsSlice(lock bool) (ret []*Peer) {
 }
 
 func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex, lock bool) {
-	piece := t.piece(pieceIndex, lock)
-	if piece.queuedForHash(lock) {
-		return
-	}
-
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 	}
+
+	piece := t.piece(pieceIndex, false)
+	if piece.queuedForHash(false) {
+		return
+	}
+
 	t.piecesQueuedForHash.Add(bitmap.BitIndex(pieceIndex))
 	t.publishPieceStateChange(pieceIndex, false)
 	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck", false)

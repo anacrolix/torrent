@@ -1,12 +1,12 @@
 package torrent
 
 import (
-	"bytes"
 	"net/netip"
 
 	g "github.com/anacrolix/generics"
 
 	"github.com/anacrolix/torrent/smartban"
+	"github.com/anacrolix/torrent/storage"
 )
 
 type bannableAddr = netip.Addr
@@ -18,7 +18,7 @@ type blockCheckingWriter struct {
 	requestIndex RequestIndex
 	// Peers that didn't match blocks written now.
 	badPeers    map[bannableAddr]struct{}
-	blockBuffer bytes.Buffer
+	blockBuffer storage.PooledBuffer
 	chunkSize   int
 }
 
@@ -52,4 +52,6 @@ func (me *blockCheckingWriter) Flush() {
 	for me.blockBuffer.Len() != 0 {
 		me.checkBlock()
 	}
+
+	me.blockBuffer.Close()
 }

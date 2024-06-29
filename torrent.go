@@ -1827,6 +1827,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex, lock bool) bool {
 	p.mu.Lock()
 
 	uncached := t.pieceCompleteUncached(piece, false)
+	fmt.Println("PCMP", t.infoHash, piece, uncached)
 	cached := p.completion(false, false)
 
 	changed := cached != uncached

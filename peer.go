@@ -571,7 +571,7 @@ func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorre
 		}
 
 		if !me.deleteRequest(r, false, false) {
-			panic("request not existing should have been guarded")
+			panic(fmt.Sprintf("request %d not existing: should have been guarded", r))
 		}
 		if me._cancel(r, false, false) {
 			// Record that we expect to get a cancel ack.

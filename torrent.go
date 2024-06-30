@@ -1212,7 +1212,7 @@ func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte, lock bool) (err error) {
 	//defer perf.ScopeTimerErr(&err)()
-	fmt.Println("WRT", t.infoHash, piece, begin, uint32(begin/int64(len(data))))
+	fmt.Println("WRT", t.infoHash, piece)
 	n, err := t.piece(piece, lock).Storage().WriteAt(data, begin)
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite
@@ -2705,7 +2705,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		t.clearPieceTouchers(piece, true)
 
 		if p.hasDirtyChunks(true) {
-			p.Flush() // You can be synchronous here!
+			p.Flush()
 		}
 
 		err := p.Storage().MarkComplete()
@@ -2965,7 +2965,9 @@ func (t *Torrent) processHashResults() {
 					}
 
 					t.pieceHashed(result.index, result.correct, result.copyErr)
+					fmt.Println("UPP", result.index)
 					t.updatePiecePriority(result.index, "Torrent.pieceHasher", true)
+					fmt.Println("UPP", result.index, "DONE")
 					return nil
 				})
 			}(result)

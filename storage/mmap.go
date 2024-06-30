@@ -110,6 +110,7 @@ func (sp mmapStoragePiece) Completion() Completion {
 }
 
 func (sp mmapStoragePiece) MarkComplete() error {
+	fmt.Println("MK", sp.ih, sp.p.Index())
 	sp.pc.Set(sp.pieceKey(), true)
 	return nil
 }

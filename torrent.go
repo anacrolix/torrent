@@ -1212,7 +1212,6 @@ func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte, lock bool) (err error) {
 	//defer perf.ScopeTimerErr(&err)()
-	fmt.Println("WRT", t.infoHash, piece, begin, uint32(begin/int64(len(data))))
 	n, err := t.piece(piece, lock).Storage().WriteAt(data, begin)
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite
@@ -1828,6 +1827,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex, lock bool) bool {
 	p.mu.Lock()
 
 	uncached := t.pieceCompleteUncached(piece, false)
+	fmt.Println("PCMP", t.infoHash, t.numPieces(false), piece, uncached)
 	cached := p.completion(false, false)
 
 	changed := cached != uncached

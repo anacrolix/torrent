@@ -166,7 +166,6 @@ func (ms *MMapSpan) WriteAt(index int, p []byte, off int64) (n int, err error) {
 	}
 
 	ms.mu.Lock()
-	fmt.Println("DRT", off, len(p), index)
 	ms.dirtyPieces.Add(uint32(index))
 	ms.mu.Unlock()
 

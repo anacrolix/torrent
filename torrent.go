@@ -1210,9 +1210,7 @@ func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
 	return torrentOffsetRequest(t.length(false), t.info.PieceLength, int64(t.chunkSize), off)
 }
 
-func (t *Torrent) writeChunk(piece int, begin int64, data []byte, lock bool) (err error) {
-	//defer perf.ScopeTimerErr(&err)()
-	fmt.Println("WRT", t.infoHash, piece)
+func (t *Torrent) writeChunk(piece int, begin int64, data []byte, lock bool) (err error) {cat 
 	n, err := t.piece(piece, lock).Storage().WriteAt(data, begin)
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite

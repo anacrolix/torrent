@@ -58,13 +58,13 @@ func (ms *MMapSpan) flushMaps() (errs []error) {
 
 		if ms.flushTimer != nil {
 			ms.flushTimer = nil
-			/*for _, mMap := range ms.mMaps {
+			for _, mMap := range ms.mMaps {
 				err := mMap.Flush()
 				if err != nil {
 					errs = append(errs, err)
 
 				}
-			}*/
+			}
 
 			if len(errs) == 0 {
 				flushedCallback = ms.FlushedCallback

@@ -63,13 +63,22 @@ type mmapTorrentStorage struct {
 	pc       PieceCompletionGetSetter
 }
 
+type writerAtFunc func(p []byte, off int64) (n int, err error)
+
+func (f writerAtFunc) WriteAt(p []byte, off int64) (n int, err error) {
+	return f(p, off)
+}
+
 func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 	return mmapStoragePiece{
 		pc:       ts.pc,
 		p:        p,
 		ih:       ts.infoHash,
 		ReaderAt: io.NewSectionReader(ts.span, p.Offset(), p.Length()),
-		WriterAt: missinggo.NewSectionWriter(ts.span, p.Offset(), p.Length()),
+		WriterAt: missinggo.NewSectionWriter(
+			writerAtFunc(func(b []byte, off int64) (n int, err error) {
+				return ts.span.WriteAt(p.Index(), b, off)
+			}), p.Offset(), p.Length()),
 	}
 }
 

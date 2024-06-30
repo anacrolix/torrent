@@ -148,7 +148,7 @@ func (ms *MMapSpan) locateCopy(copyArgs func(remainingArgument, mmapped []byte) 
 	return
 }
 
-func (ms *MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
+func (ms *MMapSpan) WriteAt(index int, p []byte, off int64) (n int, err error) {
 	// log.Printf("writing %v bytes at %v", len(p), off)
 	n, err = func() (n int, err error) {
 		ms.mu.RLock()
@@ -166,8 +166,8 @@ func (ms *MMapSpan) WriteAt(p []byte, off int64) (n int, err error) {
 	}
 
 	ms.mu.Lock()
-	fmt.Println("DRT", off, len(p), uint32(off/int64(len(p))))
-	ms.dirtyPieces.Add(uint32(off / int64(len(p))))
+	fmt.Println("DRT", off, len(p), index)
+	ms.dirtyPieces.Add(uint32(index))
 	ms.mu.Unlock()
 
 	return

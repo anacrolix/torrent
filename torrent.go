@@ -2962,9 +2962,7 @@ func (t *Torrent) processHashResults() {
 					}
 
 					t.pieceHashed(result.index, result.correct, result.copyErr)
-					fmt.Println("UPP", result.index)
 					t.updatePiecePriority(result.index, "Torrent.pieceHasher", true)
-					fmt.Println("UPP", result.index, "DONE")
 					return nil
 				})
 			}(result)

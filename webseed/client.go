@@ -176,10 +176,11 @@ var ErrTooFast = errors.New("making requests too fast")
 func readRequestPartResponses(ctx context.Context, parts []requestPart) (_ []byte, err error) {
 	var buf bytes.Buffer
 	for _, part := range parts {
-		result, err := part.do()
+		var resp *http.Response
+		resp, err = part.do()
 
 		if err == nil {
-			err = recvPartResult(ctx, &buf, part, result)
+			err = recvPartResult(ctx, &buf, part, resp)
 		}
 
 		if err != nil {

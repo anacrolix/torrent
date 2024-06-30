@@ -102,15 +102,16 @@ func main() {
 
 		// Adding the special case for master i.e. node0/peer0/client0
 		if clientIndex == 0 {
-			sourceFile := filepath.Join(sourceDir, "file")
-			destFile := filepath.Join(storageDir, "file")
+			//sourceFile := filepath.Join(sourceDir, "file")
+			//destFile := filepath.Join(storageDir, "file")
 
 			clientConfig := newClientConfig()
+			//clientConfig.Debug = true
 			// clientConfig.DefaultStorage = storage.NewMMap(sourceDir) <--- Why doeds this works?!
 
 			// Why the below line doesn't work? In my codebase , the sourceDir and conf.DefaultStorage  is different.
 			// when I uncomment the below line, Client0 seems to be stuck
-			clientConfig.DefaultStorage = storage.NewMMap(storageDir) // <--- This does not work! Why ? !!
+			clientConfig.DefaultStorage = storage.NewMMap(sourceDir) // <--- This does not work! Why ? !!
 
 			clientConfig.Logger = log.Default.WithValues(slog.Int("clientIndex", clientIndex))
 			client, err := torrent.NewClient(clientConfig)
@@ -125,9 +126,9 @@ func main() {
 			//-rw-r--r--  1 adasgupta  staff   5.0G Jun 28 00:41 file
 			//---------------------------------------------------------------------------
 
-			// t, _ := client.AddTorrent(&mi) //<--------- Should we use this? (I'm using this in my code)
+			t, _ := client.AddTorrent(&mi) //<--------- Should we use this? (I'm using this in my code)
 
-			t, _ := client.AddTorrentInfoHash(mi.HashInfoBytes()) //<--- why this can't be used? When I use this, the torrent is stuck
+			//t, _ := client.AddTorrentInfoHash(mi.HashInfoBytes()) //<--- why this can't be used? When I use this, the torrent is stuck
 
 			addClientAndTorrentWebSeed(client, t)
 			t.AddWebSeeds([]string{webSeeds[clientIndex]})
@@ -135,11 +136,6 @@ func main() {
 			notCompleted.Store(clientIndex, nil)
 
 			go func() {
-				// Simulate the peer0/client0 copy operation i.e. From the source directory (where it downloads the binary)
-				// to the destination i.e. config.DefaultStorage
-				if err := os.Link(sourceFile, destFile); err != nil {
-					log.Fatalf("failed to copy directory: %v", err)
-				}
 				<-t.GotInfo()
 				t.DownloadAll()
 				<-t.Complete().On()

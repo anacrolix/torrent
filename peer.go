@@ -28,7 +28,7 @@ type (
 	Peer struct {
 		// First to ensure 64-bit alignment for atomics. See #262.
 		_stats ConnStats
-		mu     mu //sync.RWMutex
+		mu    sync.RWMutex
 
 		t *Torrent
 

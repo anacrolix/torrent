@@ -38,7 +38,7 @@ func NewMMapWithCompletion(baseDir string, completion PieceCompletion) *mmapClie
 }
 
 func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (_ TorrentImpl, err error) {
-	span, err := mMapTorrent(info, infoHash, s.baseDir, 1500*time.Millisecond, func(infoHash infohash.T, flushed *roaring.Bitmap) {
+	span, err := mMapTorrent(info, infoHash, s.baseDir, 15*time.Second, func(infoHash infohash.T, flushed *roaring.Bitmap) {
 		if committer, ok := s.pc.(interface {
 			Flushed(infoHash infohash.T, flushed *roaring.Bitmap)
 		}); ok {

@@ -588,7 +588,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			}
 		}
 
-		if !ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, true), true, true) {
+		if !ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, true)) {
 			err = fmt.Errorf(`received invalid reject "%w", for request %v`, err, r)
 			ws.peer.logger.Levelf(log.Debug, "%v", err)
 		}

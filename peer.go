@@ -692,30 +692,33 @@ func runSafeExtraneous(f func()) {
 }
 
 // Returns true if it was valid to reject the request.
-func (c *Peer) remoteRejectedRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
-	if lockTorrent {
+func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
+	if !func() bool {
 		c.t.mu.Lock()
 		defer c.t.mu.Unlock()
-	}
 
-	if lock {
 		c.mu.Lock()
 		defer c.mu.Unlock()
-	}
 
-	if c.deleteRequest(r, false, false) {
-		c.decPeakRequests(false)
-	} else {
-		removed := c.requestState.Cancelled.CheckedRemove(r)
+		if c.deleteRequest(r, false, false) {
+			c.decPeakRequests(false)
+		} else {
+			removed := c.requestState.Cancelled.CheckedRemove(r)
 
-		if !removed {
-			return false
+			if !removed {
+				return false
+			}
 		}
+
+		return true
+	}() {
+		return false
 	}
-	if c.isLowOnRequests(false, false) {
-		c.updateRequests("Peer.remoteRejectedRequest", false, false)
+
+	if c.isLowOnRequests(true, true) {
+		c.updateRequests("Peer.remoteRejectedRequest", true, true)
 	}
-	c.decExpectedChunkReceive(r, false)
+	c.decExpectedChunkReceive(r, true)
 	return true
 }
 

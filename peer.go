@@ -28,7 +28,7 @@ type (
 	Peer struct {
 		// First to ensure 64-bit alignment for atomics. See #262.
 		_stats ConnStats
-		mu     sync.RWMutex
+		mu    sync.RWMutex
 
 		t *Torrent
 
@@ -98,8 +98,8 @@ type (
 		// to getDesiredRequestState
 		desiredRequestLen int
 		PeerMaxRequests   maxRequests // Maximum pending requests the peer allows.
-
-		logger log.Logger
+		banCount          int
+		logger            log.Logger
 	}
 
 	PeerSource string
@@ -556,16 +556,32 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 }
 
 func (me *Peer) cancel(r RequestIndex, updateRequests bool, lock bool, lockTorrent bool) {
-	if !me.deleteRequest(r, lock, lockTorrent) {
-		panic("request not existing should have been guarded")
-	}
-	if me._cancel(r, lock, lockTorrent) {
-		// Record that we expect to get a cancel ack.
-		if !me.requestState.Cancelled.CheckedAdd(r) {
-			panic(fmt.Sprintf("request %d: already cancelled for hash: %s", r, me.t.InfoHash()))
+	func() {
+		// keep the torrent and peer locked across the whole
+		// cancel operation to avoid part processing holes
+
+		if lockTorrent {
+			me.t.mu.Lock()
+			defer me.t.mu.Unlock()
 		}
-	}
-	me.decPeakRequests(lock)
+
+		if lock {
+			me.mu.Lock()
+			defer me.mu.Unlock()
+		}
+
+		if !me.deleteRequest(r, false, false) {
+			panic(fmt.Sprintf("request %d not existing: should have been guarded", r))
+		}
+		if me._cancel(r, false, false) {
+			// Record that we expect to get a cancel ack.
+			if !me.requestState.Cancelled.CheckedAdd(r) {
+				panic(fmt.Sprintf("request %d: already cancelled for hash: %s", r, me.t.InfoHash()))
+			}
+		}
+		me.decPeakRequests(false)
+	}()
+
 	if updateRequests && me.isLowOnRequests(lock, lockTorrent) {
 		me.updateRequests("Peer.cancel", lock, lockTorrent)
 	}
@@ -677,27 +693,40 @@ func runSafeExtraneous(f func()) {
 
 // Returns true if it was valid to reject the request.
 func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
-	if c.deleteRequest(r, true, true) {
-		c.decPeakRequests(true)
-	} else {
-		c.mu.Lock()
-		removed := c.requestState.Cancelled.CheckedRemove(r)
-		c.mu.Unlock()
+	if !func() bool {
+		c.t.mu.Lock()
+		defer c.t.mu.Unlock()
 
-		if !removed {
-			return false
+		c.mu.Lock()
+		defer c.mu.Unlock()
+
+		if c.deleteRequest(r, false, false) {
+			c.decPeakRequests(false)
+		} else {
+			removed := c.requestState.Cancelled.CheckedRemove(r)
+
+			if !removed {
+				return false
+			}
 		}
+
+		return true
+	}() {
+		return false
 	}
+
 	if c.isLowOnRequests(true, true) {
 		c.updateRequests("Peer.remoteRejectedRequest", true, true)
 	}
-	c.decExpectedChunkReceive(r)
+	c.decExpectedChunkReceive(r, true)
 	return true
 }
 
-func (c *Peer) decExpectedChunkReceive(r RequestIndex) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *Peer) decExpectedChunkReceive(r RequestIndex, lock bool) {
+	if lock {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+	}
 
 	count := c.validReceiveChunks[r]
 	if count == 1 {
@@ -746,7 +775,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		peerChoking := c.peerChoking
 		validReceiveChunks := c.validReceiveChunks[req]
 		allowedFast := c.peerAllowedFast.Contains(pieceIndex(ppReq.Index))
-		receivedRequest := c.requestState.Requests.Contains(req)
 		c.mu.RUnlock()
 
 		if peerChoking {
@@ -758,7 +786,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 			return nil, false, errors.New("received unexpected chunk")
 		}
 
-		c.decExpectedChunkReceive(req)
+		c.decExpectedChunkReceive(req, true)
 
 		if peerChoking && allowedFast {
 			chunksReceived.Add("due to allowed fast", 1)
@@ -768,21 +796,22 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// have actually already received the piece, while we have the Client unlocked to write the data
 		// out.
 		intended := false
-		{
+		func() {
+			c.mu.RLock()
+			receivedRequest := c.requestState.Requests.Contains(req)
+			c.mu.RUnlock()
+
 			if receivedRequest {
 				for _, f := range c.callbacks.ReceivedRequested {
 					f(PeerMessageEvent{c, msg})
 				}
 			}
 
-			checkRemove := func() bool {
-				c.mu.Lock()
-				defer c.mu.Unlock()
-				return c.requestState.Cancelled.CheckedRemove(req)
-			}
+			c.mu.Lock()
+			defer c.mu.Unlock()
 
 			// Request has been satisfied.
-			if c.deleteRequest(req, true, false) || checkRemove() {
+			if c.deleteRequest(req, false, false) || c.requestState.Cancelled.CheckedRemove(req) {
 				intended = true
 				if !c.peerChoking {
 					c._chunksReceivedWhileExpecting++
@@ -790,7 +819,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 			} else {
 				chunksReceived.Add("unintended", 1)
 			}
-		}
+		}()
 
 		// Do we actually want this chunk?
 		if t.haveChunk(ppReq, false) {
@@ -870,7 +899,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	}
 
 	c.onDirtiedPiece(pieceIndex(ppReq.Index))
-	//fmt.Println("RC10")
 
 	// We need to ensure the piece is only queued once, so only the last chunk writer gets this job.
 	if t.pieceAllDirty(pieceIndex(ppReq.Index), false) && piece.pendingWrites == 0 {

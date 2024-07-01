@@ -204,10 +204,10 @@ type Torrent struct {
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
+	mu  sync.RWMutex
+	imu sync.RWMutex
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
-	mu          sync.RWMutex
-	imu         sync.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if
@@ -265,7 +265,7 @@ type Torrent struct {
 	// of the global torrent client lock
 	hashResults chan hashResult
 	// this is static per torrent it i kept locally to avoid
-	// re-
+	// re-looking it up
 	clientPieceRequestOrder *request_strategy.PieceRequestOrder
 }
 
@@ -1211,7 +1211,6 @@ func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
 }
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte, lock bool) (err error) {
-	//defer perf.ScopeTimerErr(&err)()
 	n, err := t.piece(piece, lock).Storage().WriteAt(data, begin)
 	if err == nil && n != len(data) {
 		err = io.ErrShortWrite
@@ -2703,13 +2702,14 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		t.clearPieceTouchers(piece, true)
 
 		if p.hasDirtyChunks(true) {
-			p.Flush() // You can be synchronous here!
+			p.Flush()
 		}
 
 		err := p.Storage().MarkComplete()
 		if err != nil {
 			t.logger.Levelf(log.Warning, "%T: error marking piece complete %d: %s", t.storage, piece, err)
 		}
+
 		if t.closed.IsSet() {
 			return
 		}
@@ -2894,7 +2894,6 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 
 			sum, failedPeers, copyErr := t.hashPiece(p)
 			correct := sum == *p.hash
-
 			switch copyErr {
 			case nil, io.EOF:
 			default:

@@ -15,6 +15,7 @@ import (
 	"github.com/anacrolix/log"
 	"golang.org/x/time/rate"
 
+	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
@@ -128,6 +129,10 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 		defer peer.mu.RUnlock()
 
 		if !peer.closed.IsSet() {
+			if peer.banCount > 2 {
+				return
+			}
+
 			if peer.connectionFlags() != "WS" {
 				if !peer.peerInterested || peer.lastHelpful(false, seeding).IsZero() {
 					return
@@ -406,7 +411,7 @@ func requestUpdate(ws *webseedPeer) {
 							}
 
 							if existing := ws.peer.t.requestingPeer(RequestIndex(piece), false); existing != nil {
-								if existing.connectionFlags() == "WS" {
+								if existing.connectionFlags() == "WS" && existing.banCount == 0 {
 									continue
 								}
 
@@ -483,6 +488,10 @@ func (ws *webseedPeer) drop(lock bool, lockTorrent bool) {
 
 func (cn *webseedPeer) ban() {
 	cn.peer.drop(true, true)
+
+	cn.peer.mu.Lock()
+	cn.peer.banCount++
+	cn.peer.mu.Unlock()
 }
 
 func (cn *webseedPeer) isLowOnRequests(lock bool, lockTorrent bool) bool {
@@ -538,18 +547,8 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		}
 	}
 
-	if len(piece) == 0 {
-		var readers []io.Reader
-
-		// TODO this will cause an additional buffer to
-		// get created - which is not ideal - but would
-		// require receive chunck etc to be io interface
-		// rather than buffer based
-		for _, reader := range result.Readers {
-			readers = append(readers, reader)
-		}
-
-		piece, _ = io.ReadAll(io.MultiReader(readers...))
+	if piece == nil && len(result.Readers) > 0 {
+		piece, _ = io.ReadAll(common.MultiReadCloser(result.Readers...))
 	}
 
 	// We do this here rather than inside receiveChunk, since we want to count errors too. I'm not
@@ -567,18 +566,18 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 
 	err := result.Err
 
+	// the call may have been cancelled while it was in transit (via the chan)
+	if err == nil && result.Ctx.Err() != nil {
+		err = result.Ctx.Err()
+	}
+
 	if err != nil {
 		switch {
 		case errors.Is(err, context.Canceled):
 		case errors.Is(err, webseed.ErrTooFast):
 		case ws.peer.closed.IsSet():
 		default:
-			ws.peer.logger.Printf("Request %v rejected: %v", r, result.Err)
-			// // Here lies my attempt to extract something concrete from Go's error system. RIP.
-			// cfg := spew.NewDefaultConfig()
-			// cfg.DisableMethods = true
-			// cfg.Dump(result.Err)
-
+			ws.peer.logger.Printf("Request %v rejected: %v", r, err)
 			if webseedPeerCloseOnUnhandledError {
 				log.Levelf(log.Debug, "closing %v", ws)
 				ws.peer.close(true, true)
@@ -589,20 +588,12 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			}
 		}
 
-		index := ws.peer.t.requestIndexFromRequest(r, true)
-
-		if !ws.peer.remoteRejectedRequest(index) {
-			panic(fmt.Sprintf("invalid reject %s for: %d", err, index))
+		if !ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, true)) {
+			err = fmt.Errorf(`received invalid reject "%w", for request %v`, err, r)
+			ws.peer.logger.Levelf(log.Debug, "%v", err)
 		}
 
 		return err
-	}
-
-	// the call may have been cancelled while it
-	// was in transit (via the chan)
-	if result.Ctx.Err() != nil {
-		ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, true))
-		return result.Ctx.Err()
 	}
 
 	err = ws.peer.receiveChunk(&pp.Message{

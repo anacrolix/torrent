@@ -95,12 +95,18 @@ func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) bool {
 }
 
 func (me *PieceRequestOrder) Len() int {
+	if me == nil {
+		return 0
+	}
 	me.lock.RLock()
 	defer me.lock.RUnlock()
 	return len(me.keys)
 }
 
 func (me *PieceRequestOrder) Scan(f func(pieceRequestOrderItem) bool) {
+	if me == nil {
+		return
+	}
 	me.lock.RLock()
 	defer me.lock.RUnlock()
 	me.tree.Scan(f)

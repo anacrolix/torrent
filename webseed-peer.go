@@ -588,17 +588,10 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			}
 		}
 
-		func() {
-			ws.peer.t.mu.Lock()
-			defer ws.peer.t.mu.Unlock()
-			ws.peer.mu.Lock()
-			defer ws.peer.mu.Unlock()
-
-			if !ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, false), false, false) {
-				err = fmt.Errorf(`received invalid reject "%w", for request %v`, err, r)
-				ws.peer.logger.Levelf(log.Debug, "%v", err)
-			}
-		}()
+		if !ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, true), true, true) {
+			err = fmt.Errorf(`received invalid reject "%w", for request %v`, err, r)
+			ws.peer.logger.Levelf(log.Debug, "%v", err)
+		}
 
 		return err
 	}

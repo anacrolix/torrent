@@ -204,10 +204,10 @@ type Torrent struct {
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
+	mu  sync.RWMutex
+	imu sync.RWMutex
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
-	mu          sync.RWMutex
-	imu         sync.RWMutex
 	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if

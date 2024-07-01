@@ -692,28 +692,38 @@ func runSafeExtraneous(f func()) {
 }
 
 // Returns true if it was valid to reject the request.
-func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
-	if c.deleteRequest(r, true, true) {
-		c.decPeakRequests(true)
-	} else {
+func (c *Peer) remoteRejectedRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
+	if lockTorrent {
+		c.t.mu.Lock()
+		defer c.t.mu.Unlock()
+	}
+
+	if lock {
 		c.mu.Lock()
+		defer c.mu.Unlock()
+	}
+
+	if c.deleteRequest(r, false, false) {
+		c.decPeakRequests(false)
+	} else {
 		removed := c.requestState.Cancelled.CheckedRemove(r)
-		c.mu.Unlock()
 
 		if !removed {
 			return false
 		}
 	}
-	if c.isLowOnRequests(true, true) {
-		c.updateRequests("Peer.remoteRejectedRequest", true, true)
+	if c.isLowOnRequests(false, false) {
+		c.updateRequests("Peer.remoteRejectedRequest", false, false)
 	}
-	c.decExpectedChunkReceive(r)
+	c.decExpectedChunkReceive(r, false)
 	return true
 }
 
-func (c *Peer) decExpectedChunkReceive(r RequestIndex) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *Peer) decExpectedChunkReceive(r RequestIndex, lock bool) {
+	if lock {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+	}
 
 	count := c.validReceiveChunks[r]
 	if count == 1 {
@@ -762,7 +772,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		peerChoking := c.peerChoking
 		validReceiveChunks := c.validReceiveChunks[req]
 		allowedFast := c.peerAllowedFast.Contains(pieceIndex(ppReq.Index))
-		receivedRequest := c.requestState.Requests.Contains(req)
 		c.mu.RUnlock()
 
 		if peerChoking {
@@ -774,7 +783,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 			return nil, false, errors.New("received unexpected chunk")
 		}
 
-		c.decExpectedChunkReceive(req)
+		c.decExpectedChunkReceive(req, true)
 
 		if peerChoking && allowedFast {
 			chunksReceived.Add("due to allowed fast", 1)
@@ -784,21 +793,22 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// have actually already received the piece, while we have the Client unlocked to write the data
 		// out.
 		intended := false
-		{
+		func() {
+			c.mu.RLock()
+			receivedRequest := c.requestState.Requests.Contains(req)
+			c.mu.RUnlock()
+
 			if receivedRequest {
 				for _, f := range c.callbacks.ReceivedRequested {
 					f(PeerMessageEvent{c, msg})
 				}
 			}
 
-			checkRemove := func() bool {
-				c.mu.Lock()
-				defer c.mu.Unlock()
-				return c.requestState.Cancelled.CheckedRemove(req)
-			}
+			c.mu.Lock()
+			defer c.mu.Unlock()
 
 			// Request has been satisfied.
-			if c.deleteRequest(req, true, false) || checkRemove() {
+			if c.deleteRequest(req, false, false) || c.requestState.Cancelled.CheckedRemove(req) {
 				intended = true
 				if !c.peerChoking {
 					c._chunksReceivedWhileExpecting++
@@ -806,7 +816,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 			} else {
 				chunksReceived.Add("unintended", 1)
 			}
-		}
+		}()
 
 		// Do we actually want this chunk?
 		if t.haveChunk(ppReq, false) {

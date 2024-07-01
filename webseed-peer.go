@@ -566,18 +566,18 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 
 	err := result.Err
 
+	// the call may have been cancelled while it was in transit (via the chan)
+	if err == nil && result.Ctx.Err() != nil {
+		err = result.Ctx.Err()
+	}
+
 	if err != nil {
 		switch {
 		case errors.Is(err, context.Canceled):
 		case errors.Is(err, webseed.ErrTooFast):
 		case ws.peer.closed.IsSet():
 		default:
-			ws.peer.logger.Printf("Request %v rejected: %v", r, result.Err)
-			// // Here lies my attempt to extract something concrete from Go's error system. RIP.
-			// cfg := spew.NewDefaultConfig()
-			// cfg.DisableMethods = true
-			// cfg.Dump(result.Err)
-
+			ws.peer.logger.Printf("Request %v rejected: %v", r, err)
 			if webseedPeerCloseOnUnhandledError {
 				log.Levelf(log.Debug, "closing %v", ws)
 				ws.peer.close(true, true)
@@ -588,20 +588,19 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			}
 		}
 
-		index := ws.peer.t.requestIndexFromRequest(r, true)
+		func() {
+			ws.peer.t.mu.RLock()
+			defer ws.peer.t.mu.RUnlock()
+			ws.peer.mu.Lock()
+			defer ws.peer.mu.Unlock()
 
-		if !ws.peer.remoteRejectedRequest(index) {
-			panic(fmt.Sprintf(`invalid reject "%s" for: %d`, err, index))
-		}
+			if !ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, false), false, false) {
+				err = fmt.Errorf(`received invalid reject "%w", for request %v`, err, r)
+				ws.peer.logger.Levelf(log.Debug, "%v", err)
+			}
+		}()
 
 		return err
-	}
-
-	// the call may have been cancelled while it
-	// was in transit (via the chan)
-	if result.Ctx.Err() != nil {
-		ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, true))
-		return result.Ctx.Err()
 	}
 
 	err = ws.peer.receiveChunk(&pp.Message{

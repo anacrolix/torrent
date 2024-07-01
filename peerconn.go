@@ -1006,10 +1006,17 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			err = c.peerSentHaveNone(true, true)
 		case pp.Reject:
 			req := newRequestFromMessage(&msg)
-			if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req, true)) {
-				err = fmt.Errorf("received invalid reject for request %v", req)
-				c.logger.Levelf(log.Debug, "%v", err)
-			}
+			func() {
+				c.t.mu.RLock()
+				defer c.t.mu.RUnlock()
+				c.mu.Lock()
+				defer c.mu.Unlock()
+
+				if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req, false), false, false) {
+					err = fmt.Errorf("received invalid reject for request %v", req)
+					c.logger.Levelf(log.Debug, "%v", err)
+				}
+			}()
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).LogLevel(log.Debug, c.t.logger)

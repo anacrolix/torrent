@@ -1007,8 +1007,8 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Reject:
 			req := newRequestFromMessage(&msg)
 			func() {
-				c.t.mu.RLock()
-				defer c.t.mu.RUnlock()
+				c.t.mu.Lock()
+				defer c.t.mu.Unlock()
 				c.mu.Lock()
 				defer c.mu.Unlock()
 

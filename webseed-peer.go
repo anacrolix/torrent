@@ -589,8 +589,8 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		}
 
 		func() {
-			ws.peer.t.mu.RLock()
-			defer ws.peer.t.mu.RUnlock()
+			ws.peer.t.mu.Lock()
+			defer ws.peer.t.mu.Unlock()
 			ws.peer.mu.Lock()
 			defer ws.peer.mu.Unlock()
 

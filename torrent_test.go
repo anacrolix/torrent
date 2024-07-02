@@ -245,7 +245,7 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	err = tt.setInfo(&info, true)
 	c.Assert(err, qt.IsNil)
 	tt.onSetInfo(true, true)
-	err = pc.peerSentHaveNone(true, true)
+	err = pc.peerSentHaveNone(true)
 	c.Assert(err, qt.IsNil)
 	var wg sync.WaitGroup
 	tt.close(&wg)

@@ -282,7 +282,7 @@ func TestHaveAllThenBitfield(t *testing.T) {
 	tt.conns[&pc] = struct{}{}
 	c.Assert(pc.onPeerSentHaveAll(), qt.IsNil)
 	c.Check(pc.t.connsWithAllPieces, qt.DeepEquals, map[*Peer]struct{}{&pc.Peer: {}})
-	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false}, true, true)
+	pc.peerSentBitfield([]bool{false, false, true, false, true, true, false, false}, true)
 	c.Check(pc.peerMinPieces, qt.Equals, 6)
 	c.Check(pc.t.connsWithAllPieces, qt.HasLen, 0)
 	c.Assert(pc.t.setInfo(&metainfo.Info{
@@ -376,7 +376,7 @@ func TestReceiveLargeRequest(t *testing.T) {
 	pc.initMessageWriter()
 	req := Request{}
 	req.Length = defaultChunkSize
-	c.Assert(pc.fastEnabled(), qt.IsTrue)
+	c.Assert(pc.fastEnabled(true), qt.IsTrue)
 	c.Check(pc.onReadRequest(req, false, true), qt.IsNil)
 	c.Check(pc.peerRequests, qt.HasLen, 1)
 	req.Length = 2 << 20

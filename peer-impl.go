@@ -23,7 +23,7 @@ type peerImpl interface {
 	onClose(lockTorrent bool)
 	onGotInfo(info *metainfo.Info, lockTorrent bool)
 	// Drop connection. This may be a no-op if there is no connection.
-	drop(lock bool, lockTorrent bool)
+	drop(lockTorrent bool)
 	// Rebuke the peer
 	ban()
 	String() string

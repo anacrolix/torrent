@@ -466,14 +466,14 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 
 			func() {
 				// peer is not this so remove the current peer lock
-				// while processing the cancel to pereserve lock
+				// while processing the cancel to preserve lock
 				// ordering
 				if lock {
 					p.mu.Unlock()
 					defer p.mu.Lock()
 				}
 
-				t.cancelRequest(req, false, false, true)
+				t.cancelRequest(req, false, false)
 			}()
 		}
 

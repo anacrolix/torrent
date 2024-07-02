@@ -73,7 +73,7 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lockTorrent bool) {
 		return true
 	})
 
-	ws.peer.updateRequests("info", true, lockTorrent)
+	ws.peer.updateRequests("info", lockTorrent)
 }
 
 func (ws *webseedPeer) writeInterested(interested bool, lock bool) bool {
@@ -458,7 +458,7 @@ func requestUpdate(ws *webseedPeer) {
 						// torrent so free our read lock first
 						ws.peer.t.mu.RUnlock()
 						defer ws.peer.t.mu.RLock()
-						ws.peer.updateRequests("unchoked", true, true)
+						ws.peer.updateRequests("unchoked",true)
 					}()
 
 					ws.logProgress("unchoked", false)
@@ -482,12 +482,12 @@ func (ws *webseedPeer) connectionFlags() string {
 	return "WS"
 }
 
-func (ws *webseedPeer) drop(lock bool, lockTorrent bool) {
+func (ws *webseedPeer) drop(lockTorrent bool) {
 	ws.peer.cancelAllRequests(lockTorrent)
 }
 
 func (cn *webseedPeer) ban() {
-	cn.peer.drop(true, true)
+	cn.peer.drop(true)
 
 	cn.peer.mu.Lock()
 	cn.peer.banCount++
@@ -520,7 +520,7 @@ func (ws *webseedPeer) onClose(lockTorrent bool) {
 	ws.peer.cancelAllRequests(lockTorrent)
 	ws.peer.t.iterPeers(func(p *Peer) {
 		if p.isLowOnRequests(true, lockTorrent) {
-			p.updateRequests("webseedPeer.onClose", true, lockTorrent)
+			p.updateRequests("webseedPeer.onClose",lockTorrent)
 		}
 	}, true)
 	ws.requesterCond.Broadcast()

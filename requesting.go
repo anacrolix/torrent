@@ -327,13 +327,13 @@ func (p *Peer) maybeUpdateActualRequestState(lock bool, lockTorrent bool) {
 	// that only one peer can update the torrent state at a time
 
 	if lockTorrent {
-		p.mu.RLock()
-		defer p.mu.RUnlock()
+		p.t.mu.Lock()
+		defer p.t.mu.Unlock()
 	}
 
 	if lock {
-		p.mu.RLock()
-		defer p.mu.RUnlock()
+		p.mu.Lock()
+		defer p.mu.Unlock()
 	}
 
 	if p.needRequestUpdate == "" {

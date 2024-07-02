@@ -51,7 +51,6 @@ import (
 	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
 	stack2 "github.com/go-stack/stack"
-	"github.com/sasha-s/go-deadlock"
 )
 
 var bufPool = storage.NewBufferPool()

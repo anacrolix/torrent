@@ -550,11 +550,6 @@ func (cn *PeerConn) onPeerHasAllPiecesNoTriggers(lock bool, lockTorrent bool) {
 }
 
 func (cn *PeerConn) onPeerHasAllPieces(lock bool, lockTorrent bool) {
-	cn.onPeerHasAllPiecesNoTriggers(lock, lockTorrent)
-	cn.peerHasAllPiecesTriggers(lock, lockTorrent)
-}
-
-func (cn *PeerConn) peerHasAllPiecesTriggers(lock bool, lockTorrent bool) {
 	if lockTorrent {
 		cn.t.mu.Lock()
 		defer cn.t.mu.Unlock()
@@ -564,6 +559,8 @@ func (cn *PeerConn) peerHasAllPiecesTriggers(lock bool, lockTorrent bool) {
 		cn.mu.Lock()
 		defer cn.mu.Unlock()
 	}
+
+	cn.onPeerHasAllPiecesNoTriggers(false, false)
 
 	isEmpty := cn.t._pendingPieces.IsEmpty()
 
@@ -1006,10 +1003,10 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			err = c.peerSentHaveNone(true, true)
 		case pp.Reject:
 			req := newRequestFromMessage(&msg)
-				if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req, false)) {
-					err = fmt.Errorf("received invalid reject for request %v", req)
-					c.logger.Levelf(log.Debug, "%v", err)
-				}
+			if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req, false)) {
+				err = fmt.Errorf("received invalid reject for request %v", req)
+				c.logger.Levelf(log.Debug, "%v", err)
+			}
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).LogLevel(log.Debug, c.t.logger)

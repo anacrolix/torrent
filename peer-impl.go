@@ -10,8 +10,9 @@ import (
 // BitTorrent protocol connections. Some methods are underlined so as to avoid collisions with
 // legacy PeerConn methods.
 type peerImpl interface {
-	// Trigger the actual request state to get updated
-	handleUpdateRequests(lock bool, lockTorrent bool)
+	// Trigger the actual request state to get updated.  This call needs control of the
+	// peer lock and assumes it unlocked on entry
+	handleUpdateRequests(lockTorrent bool)
 	writeInterested(interested bool, lock bool) bool
 
 	// _cancel initiates cancellation of a request and returns acked if it expects the cancel to be
@@ -20,7 +21,7 @@ type peerImpl interface {
 	_request(r Request, lock bool) bool
 	connectionFlags() string
 	onClose(lockTorrent bool)
-	onGotInfo(info *metainfo.Info, lock bool, lockTorrent bool)
+	onGotInfo(info *metainfo.Info, lockTorrent bool)
 	// Drop connection. This may be a no-op if there is no connection.
 	drop(lock bool, lockTorrent bool)
 	// Rebuke the peer

@@ -604,7 +604,8 @@ func (cn *Peer) updateRequests(reason string, lock bool, lockTorrent bool) {
 	}()
 
 	if needUpdate {
-		cn.handleUpdateRequests(lock, lockTorrent)
+		// TODO lock should always be true here
+		cn.handleUpdateRequests(lockTorrent)
 	}
 }
 
@@ -1046,9 +1047,6 @@ func (c *Peer) cancelAllRequests(lockTorrent bool) {
 		c.t.mu.Lock()
 		defer c.t.mu.Unlock()
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	c.requestState.Requests.IterateSnapshot(func(x RequestIndex) bool {
 		c.cancel(x, false, false, false)

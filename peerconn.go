@@ -164,8 +164,8 @@ func (cn *PeerConn) peerHasAllPieces(lock bool, lockTorrentInfo bool) (all, know
 	return cn._peerPieces.GetCardinality() == uint64(cn.t.numPieces(lockTorrentInfo)), true
 }
 
-func (cn *PeerConn) onGotInfo(info *metainfo.Info, lock bool, lockTorrent bool) {
-	cn.setNumPieces(info.NumPieces(), lock, lockTorrent)
+func (cn *PeerConn) onGotInfo(info *metainfo.Info, lockTorrent bool) {
+	cn.setNumPieces(info.NumPieces(), true, lockTorrent)
 }
 
 // Correct the PeerPieces slice length. Return false if the existing slice is invalid, such as by
@@ -384,7 +384,7 @@ func (cn *PeerConn) fillWriteBuffer() {
 		// knowledge of write buffers.
 		return
 	}
-	cn.maybeUpdateActualRequestState(true, true)
+	cn.maybeUpdateActualRequestState(true)
 
 	cn.mu.RLock()
 	pex := cn.pex
@@ -428,7 +428,7 @@ func (cn *PeerConn) postBitfield(lockTorrent bool) {
 	cn.sentHaves = bitmap.Bitmap{RB: cn.t._completedPieces.Clone()}
 }
 
-func (cn *PeerConn) handleUpdateRequests(lock bool, lockTorrent bool) {
+func (cn *PeerConn) handleUpdateRequests(lockTorrent bool) {
 	// The writer determines the request state as needed when it can write.
 	cn.tickleWriter()
 }

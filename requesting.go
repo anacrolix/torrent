@@ -317,7 +317,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 	return
 }
 
-func (p *Peer) maybeUpdateActualRequestState(lock bool, lockTorrent bool) {
+func (p *Peer) maybeUpdateActualRequestState(lockTorrent bool) {
 	if p.closed.IsSet() {
 		return
 	}
@@ -331,13 +331,9 @@ func (p *Peer) maybeUpdateActualRequestState(lock bool, lockTorrent bool) {
 		defer p.t.mu.Unlock()
 	}
 
-	needRequestUpdate, lastRequestUpdate := func(lock bool) (string, time.Time) {
-		if lock {
-			p.mu.RLock()
-			defer p.mu.RUnlock()
-		}
-		return p.needRequestUpdate, p.lastRequestUpdate
-	}(lock)
+	p.mu.RLock()
+	needRequestUpdate, lastRequestUpdate := p.needRequestUpdate, p.lastRequestUpdate
+	p.mu.RUnlock()
 
 	if needRequestUpdate == "" {
 		return

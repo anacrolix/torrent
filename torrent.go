@@ -683,7 +683,7 @@ func (t *Torrent) onSetInfo(lock bool, lockClient bool) {
 	t.requestState = make(map[RequestIndex]requestState)
 	t.tryCreateMorePieceHashers(false)
 	t.iterPeers(func(p *Peer) {
-		p.onGotInfo(t.info, true, false)
+		p.onGotInfo(t.info, false)
 		p.updateRequests("Torrent.OnSetInfo", true, false)
 	}, false)
 }
@@ -3394,7 +3394,7 @@ func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
 	t.webSeeds[url] = &ws.peer
 
 	if info != nil {
-		ws.onGotInfo(info, true, false)
+		ws.onGotInfo(info, false)
 	}
 }
 

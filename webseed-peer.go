@@ -64,7 +64,7 @@ func (ws *webseedPeer) String() string {
 	return fmt.Sprintf("webseed peer for %q", ws.client.Url)
 }
 
-func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lock bool, lockTorrent bool) {
+func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lockTorrent bool) {
 	ws.client.SetInfo(info)
 	// There should be probably be a callback in Client instead, so it can remove pieces at its whim
 	// too.
@@ -73,7 +73,7 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lock bool, lockTorrent boo
 		return true
 	})
 
-	ws.peer.updateRequests("info", lock, lockTorrent)
+	ws.peer.updateRequests("info", true, lockTorrent)
 }
 
 func (ws *webseedPeer) writeInterested(interested bool, lock bool) bool {
@@ -507,10 +507,10 @@ func (cn *webseedPeer) isLowOnRequests(lock bool, lockTorrent bool) bool {
 		len(cn.activeRequests) <= nominalMaxRequests
 }
 
-func (ws *webseedPeer) handleUpdateRequests(lock bool, lockTorrent bool) {
-	// Because this is synchronous, webseed peers seem to get first dibs on newly prioritized
-	// pieces.
-	ws.peer.maybeUpdateActualRequestState(lock, lockTorrent)
+func (ws *webseedPeer) handleUpdateRequests(lockTorrent bool) {
+	// Because this is synchronous, webseed peers seem to get first 
+	// dibs on newly prioritized pieces.
+	ws.peer.maybeUpdateActualRequestState(lockTorrent)
 	ws.requesterCond.Signal()
 }
 

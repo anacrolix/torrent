@@ -60,7 +60,7 @@ func stack(skip int) string {
 }
 
 func init() {
-	//deadlock.Opts.DeadlockTimeout = 3 * time.Minute
+	deadlock.Opts.DeadlockTimeout = 3 * time.Minute
 }
 
 type mu struct {
@@ -3236,7 +3236,7 @@ func (t *Torrent) AllowDataDownload() {
 	t.dataDownloadDisallowed.Clear()
 
 	for _, c := range conns {
-		c.updateRequests("allow data download",  true)
+		c.updateRequests("allow data download", true)
 	}
 }
 
@@ -3263,7 +3263,7 @@ func (t *Torrent) DisallowDataUpload() {
 
 	for _, c := range conns {
 		// TODO: This doesn't look right. Shouldn't we tickle writers to choke peers or something instead?
-		c.updateRequests("disallow data upload",  true)
+		c.updateRequests("disallow data upload", true)
 	}
 }
 

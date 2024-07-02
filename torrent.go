@@ -32,6 +32,7 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
+	"github.com/sasha-s/go-deadlock"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 
@@ -49,9 +50,91 @@ import (
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 	"github.com/anacrolix/torrent/webseed"
 	"github.com/anacrolix/torrent/webtorrent"
+	stack2 "github.com/go-stack/stack"
+	"github.com/sasha-s/go-deadlock"
 )
 
 var bufPool = storage.NewBufferPool()
+
+func stack(skip int) string {
+	return stack2.Trace().TrimBelow(stack2.Caller(skip)).String()
+}
+
+func init() {
+	deadlock.Opts.DeadlockTimeout = 3 * time.Minute
+}
+
+type mu struct {
+	deadlock.RWMutex
+	rlc        atomic.Int32
+	lc         atomic.Int32
+	rlmu       sync.Mutex
+	rlocker    [20]string
+	rlocktime  time.Time
+	locker     string
+	nextlocker string
+	locktime   time.Time
+}
+
+func (m *mu) RLock() {
+	m.RWMutex.RLock()
+	m.rlmu.Lock()
+	rlc := m.rlc.Load()
+	if int(rlc) < len(m.rlocker) {
+		m.rlocker[rlc] = string(stack(2))
+	}
+	if rlc == 0 {
+		m.rlocktime = time.Now()
+	}
+	m.rlc.Add(1)
+	m.rlmu.Unlock()
+	//fmt.Println("R", m.rlc, string(dbg.Stack())[:40])
+
+}
+
+func (m *mu) RUnlock() {
+	m.rlmu.Lock()
+	m.rlc.Add(-1)
+	rlc := m.rlc.Load()
+	if rlc < 0 {
+		panic("lock underflow")
+	}
+	if rlc == 0 {
+		m.rlocktime = time.Time{}
+	}
+	if int(rlc) < len(m.rlocker) {
+		m.rlocker[m.rlc.Load()] = ""
+	}
+	m.rlmu.Unlock()
+	m.RWMutex.RUnlock()
+	//fmt.Println("RUN", m.rlc) //, string(dbg.Stack()))
+}
+
+func (m *mu) Lock() {
+	m.rlmu.Lock()
+	if m.nextlocker == "" {
+		m.nextlocker = string(stack(2))
+	}
+	m.rlmu.Unlock()
+	m.RWMutex.Lock()
+	m.lc.Add(1)
+	m.rlmu.Lock()
+	m.locker = m.nextlocker
+	m.locktime = time.Now()
+	m.nextlocker = ""
+	m.rlmu.Unlock()
+}
+
+func (m *mu) Unlock() {
+	m.lc.Add(-1)
+	if m.lc.Load() < 0 {
+		panic("lock underflow")
+	}
+	m.locker = ""
+	m.locktime = time.Time{}
+	m.RWMutex.Unlock()
+	//fmt.Println("LUN", m.lc) //, string(dbg.Stack()))
+}
 
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
 // available, see .Info and .GotInfo.
@@ -122,7 +205,7 @@ type Torrent struct {
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
-	mu  sync.RWMutex
+	mu  mu //sync.RWMutex
 	imu sync.RWMutex
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.

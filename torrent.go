@@ -60,7 +60,7 @@ func stack(skip int) string {
 }
 
 func init() {
-	deadlock.Opts.DeadlockTimeout = 3 * time.Minute
+	//deadlock.Opts.DeadlockTimeout = 3 * time.Minute
 }
 
 type mu struct {

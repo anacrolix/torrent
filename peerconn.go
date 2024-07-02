@@ -349,12 +349,12 @@ func (me *PeerConn) _request(r Request, lock bool) bool {
 
 func (me *PeerConn) _cancel(r RequestIndex, lock bool, lockTorrent bool) bool {
 	me.write(makeCancelMessage(me.t.requestIndexToRequest(r, lockTorrent)), lock)
-	return me.remoteRejectsCancels()
+	return me.remoteRejectsCancels(false)
 }
 
 // Whether we should expect a reject message after sending a cancel.
-func (me *PeerConn) remoteRejectsCancels() bool {
-	if !me.fastEnabled(true) {
+func (me *PeerConn) remoteRejectsCancels(lock bool) bool {
+	if !me.fastEnabled(lock) {
 		return false
 	}
 	if me.remoteIsTransmission() {

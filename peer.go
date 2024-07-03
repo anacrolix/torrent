@@ -370,11 +370,6 @@ func (p *Peer) close(lockTorrent bool) {
 		defer p.t.mu.Unlock()
 	}
 
-	if p.t != nil {
-		fmt.Println("CWAP-CLS", len(p.t.connsWithAllPieces), p.t.numActivePeers(false), p.t.Name())
-		defer fmt.Println("CWAP-CLS-DONE", len(p.t.connsWithAllPieces), p.t.numActivePeers(false), p.t.Name())
-	}
-
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

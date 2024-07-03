@@ -2002,7 +2002,6 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
-	fmt.Println("-CWAP-CN", len(t.connsWithAllPieces), t.numActivePeers(false), t.Name(), c.String())
 	// Avoid adding a drop event more than once. Probably we should track whether we've generated
 	// the drop event against the PexConnState instead.
 	if ret {
@@ -2018,9 +2017,6 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 	c.deleteAllRequests("Torrent.deletePeerConn", false)
 	t.assertPendingRequests(false)
 	if t.numActivePeers(false) == 0 && len(t.connsWithAllPieces) != 0 {
-		for p := range t.connsWithAllPieces {
-			fmt.Println("CWAP", p.t.Name(), p.String())
-		}
 		panic(fmt.Sprintf("no active peers, but %d conns with all", len(t.connsWithAllPieces)))
 	}
 	return
@@ -2531,7 +2527,6 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 	}
 
 	t.conns[c] = struct{}{}
-	fmt.Println("+CWAP-CN", len(t.connsWithAllPieces), t.numActivePeers(false), t.Name(), c.String())
 
 	t.cl.event.Broadcast()
 	// We'll never receive the "p" extended handshake parameter.
@@ -3470,7 +3465,6 @@ func (t *Torrent) addConnWithAllPieces(p *Peer, lock bool) {
 		t.connsWithAllPieces = make(map[*Peer]struct{}, t.maxEstablishedConns)
 	}
 	t.connsWithAllPieces[p] = struct{}{}
-	fmt.Println("+CWAP", len(t.connsWithAllPieces), t.numActivePeers(false), p.t.Name(), p.String())
 }
 
 func (t *Torrent) deleteConnWithAllPieces(p *Peer, lock bool) bool {
@@ -3481,7 +3475,6 @@ func (t *Torrent) deleteConnWithAllPieces(p *Peer, lock bool) bool {
 
 	_, ok := t.connsWithAllPieces[p]
 	delete(t.connsWithAllPieces, p)
-	fmt.Println("-CWAP", len(t.connsWithAllPieces), t.numActivePeers(false), p.t.Name(), p.String())
 	return ok
 }
 

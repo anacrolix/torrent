@@ -42,7 +42,7 @@ func TestPexConnState(t *testing.T) {
 		return true
 	}
 	<-connWriteCond
-	c.pex.Share(testWriter)
+	c.pex.Share(testWriter, &c.mu)
 	require.True(t, writerCalled)
 	require.EqualValues(t, pp.Extended, out.Type)
 	require.EqualValues(t, pexExtendedId, out.ExtendedID)

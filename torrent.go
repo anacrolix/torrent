@@ -856,7 +856,7 @@ func (t *Torrent) pieceAvailabilityFrequencies(lock bool) (freqs []int) {
 		defer t.mu.RUnlock()
 	}
 
-	freqs = make([]int, t.numActivePeers()+1)
+	freqs = make([]int, t.numActivePeers(false)+1)
 	for i := range t.pieces {
 		freq := t.pieces[i].availability(false)
 
@@ -2008,7 +2008,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests("Torrent.deletePeerConn", false)
 	t.assertPendingRequests(false)
-	if t.numActivePeers() == 0 && len(t.connsWithAllPieces) != 0 {
+	if t.numActivePeers(false) == 0 && len(t.connsWithAllPieces) != 0 {
 		for p := range t.connsWithAllPieces {
 			fmt.Println("CWAP", p.String())
 		}
@@ -3478,7 +3478,11 @@ func (t *Torrent) deleteConnWithAllPieces(p *Peer, lock bool) bool {
 	return ok
 }
 
-func (t *Torrent) numActivePeers() int {
+func (t *Torrent) numActivePeers(lock bool) int {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
 	return len(t.conns) + len(t.webSeeds)
 }
 
@@ -3533,7 +3537,12 @@ func (t *Torrent) checkValidReceiveChunk(r Request) error {
 	return nil
 }
 
-func (t *Torrent) peerConnsWithDialAddrPort(target netip.AddrPort) (ret []*PeerConn) {
+func (t *Torrent) peerConnsWithDialAddrPort(target netip.AddrPort, lock bool) (ret []*PeerConn) {
+	if lock {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
+
 	for pc := range t.conns {
 		dialAddr, err := pc.remoteDialAddrPort()
 		if err != nil {
@@ -3615,7 +3624,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 			// this error message being appropriate anywhere else anyway.
 			sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NoSuchPeer)
 		}
-		targets := t.peerConnsWithDialAddrPort(msg.AddrPort)
+		targets := t.peerConnsWithDialAddrPort(msg.AddrPort, true)
 		if len(targets) == 0 {
 			sendMsg(sender, utHolepunch.Error, msg.AddrPort, utHolepunch.NotConnected)
 			return nil

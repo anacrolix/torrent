@@ -390,7 +390,7 @@ func (cn *PeerConn) fillWriteBuffer() {
 	cn.mu.RUnlock()
 
 	if pex.IsEnabled() {
-		if flow := pex.Share(write); !flow {
+		if flow := pex.Share(write, &cn.mu); !flow {
 			return
 		}
 	}

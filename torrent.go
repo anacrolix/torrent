@@ -1994,6 +1994,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
+	fmt.Println("-CON", t.numActivePeers(false), c.String())
 	// Avoid adding a drop event more than once. Probably we should track whether we've generated
 	// the drop event against the PexConnState instead.
 	if ret {
@@ -3454,7 +3455,6 @@ func (t *Torrent) requestingPeer(r RequestIndex, lock bool) *Peer {
 }
 
 func (t *Torrent) addConnWithAllPieces(p *Peer, lock bool) {
-	fmt.Println("+CWAP", p.String())
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()
@@ -3464,10 +3464,10 @@ func (t *Torrent) addConnWithAllPieces(p *Peer, lock bool) {
 		t.connsWithAllPieces = make(map[*Peer]struct{}, t.maxEstablishedConns)
 	}
 	t.connsWithAllPieces[p] = struct{}{}
+	fmt.Println("+CWAP", len(t.connsWithAllPieces), t.numActivePeers(false), p.String())
 }
 
 func (t *Torrent) deleteConnWithAllPieces(p *Peer, lock bool) bool {
-	fmt.Println("-CWAP", p.String())
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()
@@ -3475,6 +3475,7 @@ func (t *Torrent) deleteConnWithAllPieces(p *Peer, lock bool) bool {
 
 	_, ok := t.connsWithAllPieces[p]
 	delete(t.connsWithAllPieces, p)
+	fmt.Println("-CWAP", len(t.connsWithAllPieces), t.numActivePeers(false), p.String())
 	return ok
 }
 

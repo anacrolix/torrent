@@ -64,7 +64,7 @@ func (ws *webseedPeer) String() string {
 	return fmt.Sprintf("webseed peer for %q", ws.client.Url)
 }
 
-func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lock bool, lockTorrent bool) {
+func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lockTorrent bool) {
 	ws.client.SetInfo(info)
 	// There should be probably be a callback in Client instead, so it can remove pieces at its whim
 	// too.
@@ -73,7 +73,7 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info, lock bool, lockTorrent boo
 		return true
 	})
 
-	ws.peer.updateRequests("info", lock, lockTorrent)
+	ws.peer.updateRequests("info", lockTorrent)
 }
 
 func (ws *webseedPeer) writeInterested(interested bool, lock bool) bool {
@@ -458,7 +458,7 @@ func requestUpdate(ws *webseedPeer) {
 						// torrent so free our read lock first
 						ws.peer.t.mu.RUnlock()
 						defer ws.peer.t.mu.RLock()
-						ws.peer.updateRequests("unchoked", true, true)
+						ws.peer.updateRequests("unchoked",true)
 					}()
 
 					ws.logProgress("unchoked", false)
@@ -482,12 +482,12 @@ func (ws *webseedPeer) connectionFlags() string {
 	return "WS"
 }
 
-func (ws *webseedPeer) drop(lock bool, lockTorrent bool) {
+func (ws *webseedPeer) drop(lockTorrent bool) {
 	ws.peer.cancelAllRequests(lockTorrent)
 }
 
 func (cn *webseedPeer) ban() {
-	cn.peer.drop(true, true)
+	cn.peer.drop(true)
 
 	cn.peer.mu.Lock()
 	cn.peer.banCount++
@@ -507,10 +507,10 @@ func (cn *webseedPeer) isLowOnRequests(lock bool, lockTorrent bool) bool {
 		len(cn.activeRequests) <= nominalMaxRequests
 }
 
-func (ws *webseedPeer) handleUpdateRequests(lock bool, lockTorrent bool) {
-	// Because this is synchronous, webseed peers seem to get first dibs on newly prioritized
-	// pieces.
-	ws.peer.maybeUpdateActualRequestState(lock, lockTorrent)
+func (ws *webseedPeer) handleUpdateRequests(lockTorrent bool) {
+	// Because this is synchronous, webseed peers seem to get first 
+	// dibs on newly prioritized pieces.
+	ws.peer.maybeUpdateActualRequestState(lockTorrent)
 	ws.requesterCond.Signal()
 }
 
@@ -520,7 +520,7 @@ func (ws *webseedPeer) onClose(lockTorrent bool) {
 	ws.peer.cancelAllRequests(lockTorrent)
 	ws.peer.t.iterPeers(func(p *Peer) {
 		if p.isLowOnRequests(true, lockTorrent) {
-			p.updateRequests("webseedPeer.onClose", true, lockTorrent)
+			p.updateRequests("webseedPeer.onClose",lockTorrent)
 		}
 	}, true)
 	ws.requesterCond.Broadcast()
@@ -580,7 +580,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			ws.peer.logger.Printf("Request %v rejected: %v", r, err)
 			if webseedPeerCloseOnUnhandledError {
 				log.Levelf(log.Debug, "closing %v", ws)
-				ws.peer.close(true, true)
+				ws.peer.close(true)
 			} else {
 				ws.peer.mu.Lock()
 				ws.lastUnhandledErr = time.Now()

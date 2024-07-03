@@ -599,7 +599,7 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 			connString:      regularNetConnPeerConnConnString(nc),
 		})
 	defer func() {
-		c.close(true, true)
+		c.close(true)
 	}()
 	c.Discovery = PeerSourceIncoming
 	cl.runReceivedConn(c)
@@ -898,7 +898,7 @@ func (cl *Client) outgoingConnection(
 		cl.unlock()
 		return
 	}
-	defer c.close(true, true)
+	defer c.close(true)
 	c.Discovery = opts.peerInfo.Source
 	c.trusted = opts.peerInfo.Trusted
 	// runHandshookConn will unlock the connection before calling the
@@ -1117,7 +1117,7 @@ func (t *Torrent) runHandshookConn(pc *PeerConn, lockClient bool) error {
 		return err
 	}
 
-	defer t.dropConnection(pc, true, true)
+	defer t.dropConnection(pc, true)
 	pc.initUpdateRequestsTimer(true)
 
 	if err := pc.mainReadLoop(); err != nil {
@@ -1148,23 +1148,26 @@ func (c *Peer) updateRequestsTimerFunc() {
 	c.t.mu.Lock()
 	defer c.t.mu.Unlock()
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
 
-	if c.closed.IsSet() {
-		return
-	}
-	if c.isLowOnRequests(false, false) {
-		// If there are no outstanding requests, then a request update should have already run.
-		return
-	}
-	if d := time.Since(c.lastRequestUpdate); d < updateRequestsTimerDuration {
-		// These should be benign, Timer.Stop doesn't guarantee that its function won't run if it's
-		// already been fired.
-		torrent.Add("spurious timer requests updates", 1)
-		return
-	}
-	c.updateRequests(peerUpdateRequestsTimerReason, false, false)
+		if c.closed.IsSet() {
+			return
+		}
+		if c.isLowOnRequests(true, false) {
+			// If there are no outstanding requests, then a request update should have already run.
+			return
+		}
+		if d := time.Since(c.lastRequestUpdate); d < updateRequestsTimerDuration {
+			// These should be benign, Timer.Stop doesn't guarantee that its function won't run if it's
+			// already been fired.
+			torrent.Add("spurious timer requests updates", 1)
+			return
+		}
+	}()
+
+	c.updateRequests(peerUpdateRequestsTimerReason, false)
 }
 
 // Maximum pending requests we allow peers to send us. If peer requests are buffered on read, this
@@ -1205,7 +1208,7 @@ func (pc *PeerConn) sendInitialMessages(lockTorrent bool) {
 		}, true)
 	}
 
-	if pc.fastEnabled() {
+	if pc.fastEnabled(true) {
 		if t.haveAllPieces(lockTorrent, true) {
 			pc.write(pp.Message{Type: pp.HaveAll}, true)
 			pc.sentHaves.AddRange(0, bitmap.BitRange(pc.t.NumPieces()))
@@ -1639,7 +1642,7 @@ func (cl *Client) banPeerIP(ip net.IP) {
 				if p.remoteIp().Equal(ip) {
 					t.logger.Levelf(log.Warning, "dropping peer %v with banned ip %v", p, ip)
 					// Should this be a close?
-					p.drop(true, false)
+					p.drop(false)
 				}
 			}
 		}()

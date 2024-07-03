@@ -317,26 +317,41 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 	return
 }
 
-func (p *Peer) maybeUpdateActualRequestState(lock bool, lockTorrent bool) {
+func (p *Peer) maybeUpdateActualRequestState(lockTorrent bool) {
 	if p.closed.IsSet() {
 		return
 	}
-	if p.needRequestUpdate == "" {
+
+	// hold the torrent lock across the whole state request process
+	// so that its remains atomic for both peer and torrent - this implies
+	// that only one peer can update the torrent state at a time
+
+	if lockTorrent {
+		p.t.mu.Lock()
+		defer p.t.mu.Unlock()
+	}
+
+	p.mu.RLock()
+	needRequestUpdate, lastRequestUpdate := p.needRequestUpdate, p.lastRequestUpdate
+	p.mu.RUnlock()
+
+	if needRequestUpdate == "" {
 		return
 	}
-	if p.needRequestUpdate == peerUpdateRequestsTimerReason {
-		since := time.Since(p.lastRequestUpdate)
+	if needRequestUpdate == peerUpdateRequestsTimerReason {
+		since := time.Since(lastRequestUpdate)
 		if since < updateRequestsTimerDuration {
 			panic(since)
 		}
 	}
+
 	pprof.Do(
 		context.Background(),
 		pprof.Labels("update request", p.needRequestUpdate),
 		func(_ context.Context) {
-			next := p.getDesiredRequestState(false, lock, lockTorrent)
-			p.applyRequestState(next, lock, lockTorrent)
-			p.t.cacheNextRequestIndexesForReuse(next.Requests.requestIndexes, lockTorrent)
+			next := p.getDesiredRequestState(false, true, false)
+			p.applyRequestState(next, true, false)
+			p.t.cacheNextRequestIndexesForReuse(next.Requests.requestIndexes, false)
 		},
 	)
 }
@@ -451,14 +466,14 @@ func (p *Peer) applyRequestState(next desiredRequestState, lock bool, lockTorren
 
 			func() {
 				// peer is not this so remove the current peer lock
-				// while processing the cancel to pereserve lock
+				// while processing the cancel to preserve lock
 				// ordering
 				if lock {
 					p.mu.Unlock()
 					defer p.mu.Lock()
 				}
 
-				t.cancelRequest(req, false, false, true)
+				t.cancelRequest(req, false, false)
 			}()
 		}
 

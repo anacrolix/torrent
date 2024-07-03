@@ -242,7 +242,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 					}
 				}
 
-				c.updateRequests("Torrent.DownloadPieces", true, false)
+				c.updateRequests("Torrent.DownloadPieces", false)
 			}, false)
 
 			t.maybeNewConns(false)

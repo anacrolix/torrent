@@ -82,12 +82,20 @@ func (s *pexConnState) numPending() int {
 
 // Share is called from the writer goroutine if when it is woken up with the write buffers empty
 // Returns whether there's more room on the send buffer to write to.
-func (s *pexConnState) Share(postfn messageWriter) bool {
+type rmu interface {
+	RLock()
+	RUnlock()
+}
+
+func (s *pexConnState) Share(postfn messageWriter, mu rmu) bool {
 	select {
 	case <-s.gate:
 		if tx := s.genmsg(); tx != nil {
+			mu.RLock()
 			s.dbg.Print("sending PEX message: ", tx)
-			flow := postfn(tx.Message(s.xid), true)
+			msg := tx.Message(s.xid)
+			mu.RUnlock()
+			flow := postfn(msg, true)
 			s.sched(pexInterval)
 			return flow
 		} else {

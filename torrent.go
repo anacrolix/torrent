@@ -1994,7 +1994,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
-	fmt.Println("-CON", t.numActivePeers(false), c.String())
+	fmt.Println("-CONN", len(t.connsWithAllPieces), t.numActivePeers(false), c.String())
 	// Avoid adding a drop event more than once. Probably we should track whether we've generated
 	// the drop event against the PexConnState instead.
 	if ret {

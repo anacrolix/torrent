@@ -1165,17 +1165,21 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 			}
 		}()
 	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	t.iterPeers(func(p *Peer) {
-		p.close(true, true)
-	}, true)
+		p.close(false)
+	}, false)
 	if t.storage != nil {
 		t.deletePieceRequestOrder()
 	}
-	t.assertAllPiecesRelativeAvailabilityZero(true)
+	t.assertAllPiecesRelativeAvailabilityZero(false)
 	t.pex.Reset()
 	t.cl.event.Broadcast()
 	t.pieceStateChanges.Close()
-	t.updateWantPeersEvent(true)
+	t.updateWantPeersEvent(false)
 	return
 }
 
@@ -1988,9 +1992,13 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 	}
 
 	if !c.closed.IsSet() {
-		panic("connection is not closed")
-		// There are behaviours prevented by the closed state that will fail
-		// if the connection has been deleted.
+		c.close(false)
+
+		if !c.closed.IsSet() {
+			panic("connection is not closed")
+			// There are behaviours prevented by the closed state that will fail
+			// if the connection has been deleted.
+		}
 	}
 	_, ret = t.conns[c]
 	delete(t.conns, c)
@@ -2059,7 +2067,6 @@ func (t *Torrent) assertPendingRequests(lock bool) {
 
 func (t *Torrent) dropConnection(c *PeerConn, lock bool) {
 	t.cl.event.Broadcast()
-	c.close(true, lock)
 	if t.deletePeerConn(c, lock) {
 		t.openNewConns(lock)
 	}
@@ -2498,7 +2505,6 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 			continue
 		}
 		if c.hasPreferredNetworkOver(c0) {
-			c0.close(true, false)
 			t.deletePeerConn(c0, false)
 		} else {
 			return errors.New("existing connection preferred")
@@ -2517,7 +2523,6 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 		if c == nil {
 			return errors.New("don't want conn")
 		}
-		c.close(true, false)
 		t.deletePeerConn(c, false)
 	}
 
@@ -2526,6 +2531,7 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 	}
 
 	t.conns[c] = struct{}{}
+	fmt.Println("+CWAP-CN", len(t.connsWithAllPieces), t.numActivePeers(false), t.Name(), c.String())
 
 	t.cl.event.Broadcast()
 	// We'll never receive the "p" extended handshake parameter.

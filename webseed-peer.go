@@ -580,7 +580,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			ws.peer.logger.Printf("Request %v rejected: %v", r, err)
 			if webseedPeerCloseOnUnhandledError {
 				log.Levelf(log.Debug, "closing %v", ws)
-				ws.peer.close(true, true)
+				ws.peer.close(true)
 			} else {
 				ws.peer.mu.Lock()
 				ws.lastUnhandledErr = time.Now()

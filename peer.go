@@ -364,16 +364,19 @@ func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
 	fmt.Fprintf(w, "\n")
 }
 
-func (p *Peer) close(lock bool, lockTorrent bool) {
+func (p *Peer) close(lockTorrent bool) {
 	if lockTorrent && p.t != nil {
 		p.t.mu.Lock()
 		defer p.t.mu.Unlock()
 	}
 
-	if lock {
-		p.mu.RLock()
-		defer p.mu.RUnlock()
+	if p.t != nil {
+		fmt.Println("CWAP-CLS", len(p.t.connsWithAllPieces), p.t.numActivePeers(false), p.t.Name())
+		fmt.Println("CWAP-CLS-DONE", len(p.t.connsWithAllPieces), p.t.numActivePeers(false), p.t.Name())
 	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	if !p.closed.Set() {
 		return
@@ -386,7 +389,6 @@ func (p *Peer) close(lock bool, lockTorrent bool) {
 	}
 	p.peerImpl.onClose(false)
 	if p.t != nil {
-		fmt.Println("CWAP-CLS", len(p.t.connsWithAllPieces), p.t.numActivePeers(false), p.t.Name())
 		p.t.decPeerPieceAvailability(p, false, false)
 	}
 	for _, f := range p.callbacks.PeerClosed {

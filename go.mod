@@ -33,7 +33,6 @@ require (
 	github.com/frankban/quicktest v1.14.6
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/go-llsqlite/adapter v0.0.0-20230927005056-7f5ce7f0c916
-	github.com/go-stack/stack v1.8.0
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.5.9
 	github.com/gorilla/websocket v1.5.0
@@ -43,7 +42,6 @@ require (
 	github.com/pion/webrtc/v3 v3.1.42
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.2
-	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/stretchr/testify v1.8.4
 	github.com/tidwall/btree v1.6.0
 	go.etcd.io/bbolt v1.3.6
@@ -79,7 +77,6 @@ require (
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
-	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5 // indirect
 	github.com/pion/dtls/v2 v2.2.4 // indirect
 	github.com/pion/ice/v2 v2.2.6 // indirect
 	github.com/pion/interceptor v0.1.11 // indirect

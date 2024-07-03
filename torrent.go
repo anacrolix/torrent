@@ -2009,6 +2009,9 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 	c.deleteAllRequests("Torrent.deletePeerConn", false)
 	t.assertPendingRequests(false)
 	if t.numActivePeers() == 0 && len(t.connsWithAllPieces) != 0 {
+		for p := range t.connsWithAllPieces {
+			fmt.Println("CWAP", p.String())
+		}
 		panic(fmt.Sprintf("no active peers, but %d conns with all", len(t.connsWithAllPieces)))
 	}
 	return
@@ -3451,6 +3454,7 @@ func (t *Torrent) requestingPeer(r RequestIndex, lock bool) *Peer {
 }
 
 func (t *Torrent) addConnWithAllPieces(p *Peer, lock bool) {
+	fmt.Println("+CWAP", p.String())
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()
@@ -3463,6 +3467,7 @@ func (t *Torrent) addConnWithAllPieces(p *Peer, lock bool) {
 }
 
 func (t *Torrent) deleteConnWithAllPieces(p *Peer, lock bool) bool {
+	fmt.Println("-CWAP", p.String())
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()

@@ -590,7 +590,7 @@ func (cn *PeerConn) peerSentHaveNone(lockTorrent bool) error {
 		defer cn.mu.Unlock()
 
 		if !cn.peerSentHaveAll {
-			fmt.Println("CWAP-PSHN")
+			fmt.Println("CWAP-PSHN", cn.t.Name())
 			cn.t.decPeerPieceAvailability(&cn.Peer, false, false)
 		}
 		cn._peerPieces.Clear()

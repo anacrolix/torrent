@@ -2011,7 +2011,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 	t.assertPendingRequests(false)
 	if t.numActivePeers(false) == 0 && len(t.connsWithAllPieces) != 0 {
 		for p := range t.connsWithAllPieces {
-			fmt.Println("CWAP", p.String())
+			fmt.Println("CWAP", p.t.Name(), p.String())
 		}
 		panic(fmt.Sprintf("no active peers, but %d conns with all", len(t.connsWithAllPieces)))
 	}
@@ -3464,7 +3464,7 @@ func (t *Torrent) addConnWithAllPieces(p *Peer, lock bool) {
 		t.connsWithAllPieces = make(map[*Peer]struct{}, t.maxEstablishedConns)
 	}
 	t.connsWithAllPieces[p] = struct{}{}
-	fmt.Println("+CWAP", len(t.connsWithAllPieces), t.numActivePeers(false), p.String())
+	fmt.Println("+CWAP", len(t.connsWithAllPieces), t.numActivePeers(false), p.t.Name(), p.String())
 }
 
 func (t *Torrent) deleteConnWithAllPieces(p *Peer, lock bool) bool {
@@ -3475,7 +3475,7 @@ func (t *Torrent) deleteConnWithAllPieces(p *Peer, lock bool) bool {
 
 	_, ok := t.connsWithAllPieces[p]
 	delete(t.connsWithAllPieces, p)
-	fmt.Println("-CWAP", len(t.connsWithAllPieces), t.numActivePeers(false), p.String())
+	fmt.Println("-CWAP", len(t.connsWithAllPieces), t.numActivePeers(false), p.t.Name(), p.String())
 	return ok
 }
 

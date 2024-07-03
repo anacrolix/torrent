@@ -386,7 +386,7 @@ func (p *Peer) close(lock bool, lockTorrent bool) {
 	}
 	p.peerImpl.onClose(false)
 	if p.t != nil {
-		fmt.Println("CWAP-CLS", p.t.Name())
+		fmt.Println("CWAP-CLS", len(p.t.connsWithAllPieces), p.t.numActivePeers(false), p.t.Name())
 		p.t.decPeerPieceAvailability(p, false, false)
 	}
 	for _, f := range p.callbacks.PeerClosed {

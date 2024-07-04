@@ -1072,10 +1072,15 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	for _, f := range t.onClose {
 		f()
 	}
+
 	if t.storage != nil {
+		closed := make(chan struct{})
+		defer func() { closed <- struct{}{} }()
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			<-closed
 			t.storageLock.Lock()
 			defer t.storageLock.Unlock()
 			if f := t.storage.Close; f != nil {

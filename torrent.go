@@ -1098,6 +1098,10 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	t.cl.event.Broadcast()
 	t.pieceStateChanges.Close()
 	t.updateWantPeersEvent(false)
+	if t.hashResults != nil {
+		close(t.hashResults)
+		t.hashResults = nil
+	}
 	return
 }
 
@@ -3145,7 +3149,7 @@ func (t *Torrent) DisallowDataDownload() {
 		func() {
 			// Could check if peer request state is empty/not interested?
 			c.updateRequests("disallow data download", true)
-			c.cancelAllRequests(true,true)
+			c.cancelAllRequests(true, true)
 		}()
 	}
 }

@@ -20,6 +20,7 @@ type peerImpl interface {
 	_cancel(r RequestIndex, lock bool, lockTorrent bool) (acked bool)
 	_request(r Request, lock bool) bool
 	connectionFlags() string
+	// onClose is called with the peer locked by close
 	onClose(lockTorrent bool)
 	onGotInfo(info *metainfo.Info, lockTorrent bool)
 	// Drop connection. This may be a no-op if there is no connection.

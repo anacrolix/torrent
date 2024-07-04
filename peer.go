@@ -365,30 +365,42 @@ func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
 }
 
 func (p *Peer) close(lockTorrent bool) {
-	if lockTorrent && p.t != nil {
-		p.t.mu.Lock()
-		defer p.t.mu.Unlock()
-	}
+	func() {
+		if lockTorrent && p.t != nil {
+			p.t.mu.Lock()
+			defer p.t.mu.Unlock()
+		}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+		p.mu.Lock()
+		defer p.mu.Unlock()
 
-	if !p.closed.Set() {
-		return
-	}
-	if p.updateRequestsTimer != nil {
-		p.updateRequestsTimer.Stop()
-	}
-	for _, prs := range p.peerRequests {
-		prs.allocReservation.Drop()
-	}
-	p.peerImpl.onClose(false)
-	if p.t != nil {
-		p.t.decPeerPieceAvailability(p, false, false)
-	}
-	for _, f := range p.callbacks.PeerClosed {
-		f(p)
-	}
+		if !p.closed.Set() {
+			return
+		}
+		if p.updateRequestsTimer != nil {
+			p.updateRequestsTimer.Stop()
+		}
+		for _, prs := range p.peerRequests {
+			prs.allocReservation.Drop()
+		}
+		p.peerImpl.onClose(false)
+		if p.t != nil {
+			p.t.decPeerPieceAvailability(p, false, false)
+		}
+		for _, f := range p.callbacks.PeerClosed {
+			f(p)
+		}
+	}()
+
+	p.t.iterPeers(func(o *Peer) {
+		if o != p {
+			fmt.Println("ONCLOSE1A", p.String())
+			if p.isLowOnRequests(true, lockTorrent) {
+				fmt.Println("ONCLOSE1B", p.String())
+				p.updateRequests("webseedPeer.onClose", lockTorrent)
+			}
+		}
+	}, lockTorrent)
 }
 
 // Peer definitely has a piece, for purposes of requesting. So it's not sufficient that we think

@@ -392,15 +392,17 @@ func (p *Peer) close(lockTorrent bool) {
 		}
 	}()
 
-	p.t.iterPeers(func(o *Peer) {
-		if o != p {
-			fmt.Println("ONCLOSE1A", p.String())
-			if p.isLowOnRequests(true, lockTorrent) {
-				fmt.Println("ONCLOSE1B", p.String())
-				p.updateRequests("webseedPeer.onClose", lockTorrent)
+	if p.t != nil {
+		p.t.iterPeers(func(o *Peer) {
+			if o != p {
+				fmt.Println("ONCLOSE1A", p.String())
+				if p.isLowOnRequests(true, lockTorrent) {
+					fmt.Println("ONCLOSE1B", p.String())
+					p.updateRequests("webseedPeer.onClose", lockTorrent)
+				}
 			}
-		}
-	}, lockTorrent)
+		}, lockTorrent)
+	}
 }
 
 // Peer definitely has a piece, for purposes of requesting. So it's not sufficient that we think

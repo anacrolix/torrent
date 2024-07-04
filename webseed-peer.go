@@ -327,6 +327,10 @@ func (ws *webseedPeer) requester(i int) {
 			ws.waiting++
 			ws.peer.mu.Unlock()
 
+			if ws.peer.closed.IsSet() {
+				break
+			}
+
 			ws.requesterCond.Wait()
 
 			ws.peer.mu.Lock()

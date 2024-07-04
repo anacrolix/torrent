@@ -523,8 +523,9 @@ func (ws *webseedPeer) onClose(lockTorrent bool) {
 	fmt.Println("ONCLOSE1", ws.String())
 	ws.peer.t.iterPeers(func(p *Peer) {
 		if p != &ws.peer {
+			fmt.Println("ONCLOSE1A", p.String())
 			if p.isLowOnRequests(true, lockTorrent) {
-				fmt.Println("ONCLOSE1A", p.String())
+				fmt.Println("ONCLOSE1B", p.String())
 				p.updateRequests("webseedPeer.onClose", lockTorrent)
 			}
 		}

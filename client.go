@@ -452,6 +452,7 @@ func (cl *Client) Close() (errs []error) {
 	cl.closed.Set()
 	cl.unlock()
 	cl.event.Broadcast()
+	fmt.Println("CL CLOSE", "WAIT")
 	closeGroup.Wait() // defer is LIFO. We want to Wait() after cl.unlock()
 	return
 }

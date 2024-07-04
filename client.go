@@ -436,6 +436,8 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 
 // Stops the client. All connections to peers are closed and all activity will come to a halt.
 func (cl *Client) Close() (errs []error) {
+	fmt.Println("CL CLOSE")
+	defer fmt.Println("CL CLOSE", "DONE")
 	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
 	cl.lock()
 	for _, t := range cl.torrentsAsSlice() {

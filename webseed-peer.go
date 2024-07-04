@@ -520,11 +520,15 @@ func (ws *webseedPeer) onClose(lockTorrent bool) {
 	ws.peer.logger.Levelf(log.Debug, "closing")
 	// Just deleting them means we would have to manually cancel active requests.
 	ws.peer.cancelAllRequests(lockTorrent)
+	fmt.Println("ONCLOSE1", ws.String())
 	ws.peer.t.iterPeers(func(p *Peer) {
-		if p.isLowOnRequests(true, lockTorrent) {
-			p.updateRequests("webseedPeer.onClose", lockTorrent)
+		if p != &ws.peer {
+			if p.isLowOnRequests(true, lockTorrent) {
+				p.updateRequests("webseedPeer.onClose", lockTorrent)
+			}
 		}
-	}, true)
+	}, lockTorrent)
+	fmt.Println("ONCLOSE2", ws.String())
 	ws.requesterCond.Broadcast()
 }
 

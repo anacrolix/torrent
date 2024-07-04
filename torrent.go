@@ -1062,6 +1062,8 @@ func (t *Torrent) numPiecesCompleted(lock bool) (num pieceIndex) {
 }
 
 func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
+	fmt.Println("CLOSE", t.Name())
+	defer fmt.Println("CLOSE", "DONE", t.Name())
 	if !t.closed.Set() {
 		err = errors.New("already closed")
 		return

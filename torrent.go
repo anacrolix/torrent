@@ -1062,9 +1062,14 @@ func (t *Torrent) numPiecesCompleted(lock bool) (num pieceIndex) {
 	return pieceIndex(t._completedPieces.GetCardinality())
 }
 
+var clc atomic.Int32
+var stclc atomic.Int32
+
 func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
-	fmt.Println("CLOSE", t.Name())
-	defer fmt.Println("CLOSE", "DONE", t.Name())
+	c := clc.Add(1)
+	defer clc.Add(-1)
+	fmt.Println("CLOSE", c, t.Name())
+	defer fmt.Println("CLOSE", c, "DONE", t.Name())
 	if !t.closed.Set() {
 		err = errors.New("already closed")
 		return
@@ -1079,8 +1084,10 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 
 		wg.Add(1)
 		go func() {
-			fmt.Println("STORAGE CLOSE", t.Name())
-			defer fmt.Println("STORAGE CLOSE", "DONE", t.Name())
+			c := stclc.Add(1)
+			defer stclc.Add(-1)
+			fmt.Println("STORAGE CLOSE", c, t.Name())
+			defer fmt.Println("STORAGE CLOSE", c, "DONE", t.Name())
 			defer wg.Done()
 			<-closed
 			t.storageLock.Lock()

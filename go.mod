@@ -42,6 +42,7 @@ require (
 	github.com/pion/webrtc/v3 v3.1.42
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.2
+	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/stretchr/testify v1.8.4
 	github.com/tidwall/btree v1.6.0
 	go.etcd.io/bbolt v1.3.6
@@ -77,6 +78,7 @@ require (
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
+	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5 // indirect
 	github.com/pion/dtls/v2 v2.2.4 // indirect
 	github.com/pion/ice/v2 v2.2.6 // indirect
 	github.com/pion/interceptor v0.1.11 // indirect

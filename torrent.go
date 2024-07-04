@@ -32,6 +32,7 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
+	"github.com/sasha-s/go-deadlock"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 
@@ -89,7 +90,7 @@ type Torrent struct {
 	// Storage for torrent data.
 	storage *storage.Torrent
 	// Read-locked for using storage, and write-locked for Closing.
-	storageLock sync.RWMutex
+	storageLock deadlock.RWMutex
 
 	// TODO: Only announce stuff is used?
 	metainfo metainfo.MetaInfo

@@ -3145,7 +3145,7 @@ func (t *Torrent) DisallowDataDownload() {
 		func() {
 			// Could check if peer request state is empty/not interested?
 			c.updateRequests("disallow data download", true)
-			c.cancelAllRequests(true)
+			c.cancelAllRequests(true,true)
 		}()
 	}
 }
@@ -3352,7 +3352,11 @@ func (t *Torrent) cancelRequest(r RequestIndex, updateRequests, lock bool) *Peer
 
 	p := t.requestingPeer(r, false)
 	if p != nil {
-		p.cancel(r, updateRequests, false)
+		p.cancel(r, true, false)
+
+		if updateRequests && p.isLowOnRequests(true, lock) {
+			p.updateRequests("Peer.cancelRequest", lock)
+		}
 	}
 	// TODO: This is a check that an old invariant holds. It can be removed after some testing.
 	//delete(t.pendingRequests, r)

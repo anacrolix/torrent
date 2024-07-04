@@ -483,7 +483,7 @@ func (ws *webseedPeer) connectionFlags() string {
 }
 
 func (ws *webseedPeer) drop(lockTorrent bool) {
-	ws.peer.cancelAllRequests(lockTorrent)
+	ws.peer.cancelAllRequests(true, lockTorrent)
 }
 
 func (cn *webseedPeer) ban() {
@@ -519,7 +519,7 @@ func (ws *webseedPeer) onClose(lockTorrent bool) {
 	defer fmt.Println("ONCLOSE", "DONE", ws.String())
 	ws.peer.logger.Levelf(log.Debug, "closing")
 	// Just deleting them means we would have to manually cancel active requests.
-	ws.peer.cancelAllRequests(lockTorrent)
+	ws.peer.cancelAllRequests(false, lockTorrent)
 	fmt.Println("ONCLOSE1", ws.String())
 	ws.peer.t.iterPeers(func(p *Peer) {
 		if p != &ws.peer {

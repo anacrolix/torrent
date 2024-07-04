@@ -553,7 +553,7 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 	return cn.peerImpl._request(ppReq, false), nil
 }
 
-func (me *Peer) cancel(r RequestIndex, updateRequests bool, lockTorrent bool) {
+func (me *Peer) cancel(r RequestIndex, lock bool, lockTorrent bool) {
 	func() {
 		// keep the torrent and peer locked across the whole
 		// cancel operation to avoid part processing holes
@@ -563,8 +563,10 @@ func (me *Peer) cancel(r RequestIndex, updateRequests bool, lockTorrent bool) {
 			defer me.t.mu.Unlock()
 		}
 
-		me.mu.Lock()
-		defer me.mu.Unlock()
+		if lock {
+			me.mu.Lock()
+			defer me.mu.Unlock()
+		}
 
 		if !me.deleteRequest(r, false, false) {
 			panic(fmt.Sprintf("request %d not existing: should have been guarded", r))
@@ -577,10 +579,6 @@ func (me *Peer) cancel(r RequestIndex, updateRequests bool, lockTorrent bool) {
 		}
 		me.decPeakRequests(false)
 	}()
-
-	if updateRequests && me.isLowOnRequests(true, lockTorrent) {
-		me.updateRequests("Peer.cancel", lockTorrent)
-	}
 }
 
 // Sets a reason to update requests, and if there wasn't already one, handle it.
@@ -856,6 +854,9 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 				panic("should not be pending request from conn that just received it")
 			}
 			p.cancel(req, true, false)
+			if p.isLowOnRequests(true, false) {
+				p.updateRequests("Peer.receiveChunk", false)
+			}
 		}
 
 		return piece, intended, err
@@ -1028,16 +1029,22 @@ func (c *Peer) assertNoRequests() {
 	}
 }
 
-func (c *Peer) cancelAllRequests(lockTorrent bool) {
+func (c *Peer) cancelAllRequests(lock bool, lockTorrent bool) {
 	if lockTorrent {
 		c.t.mu.Lock()
 		defer c.t.mu.Unlock()
+	}
+
+	if lock {
+		c.mu.Lock()
+		defer c.mu.Unlock()
 	}
 
 	c.requestState.Requests.IterateSnapshot(func(x RequestIndex) bool {
 		c.cancel(x, false, false)
 		return true
 	})
+
 	c.assertNoRequests()
 }
 

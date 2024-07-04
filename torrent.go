@@ -1540,8 +1540,8 @@ func (t *Torrent) maybeNewConns(lock bool) {
 
 func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string, lock bool) {
 	if lock {
-		t.mu.RLock()
-		defer t.mu.RUnlock()
+		t.mu.Lock()
+		defer t.mu.Unlock()
 	}
 	containsPiece := t._pendingPieces.Contains(uint32(piece))
 	if containsPiece {
@@ -3346,8 +3346,8 @@ func (t *Torrent) updateComplete(lock bool, lockInfo bool) {
 
 func (t *Torrent) cancelRequest(r RequestIndex, updateRequests, lock bool) *Peer {
 	if lock {
-		t.mu.RLock()
-		defer t.mu.RUnlock()
+		t.mu.Lock()
+		defer t.mu.Unlock()
 	}
 
 	p := t.requestingPeer(r, false)

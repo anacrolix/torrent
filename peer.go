@@ -963,43 +963,33 @@ func (c *Peer) peerHasWantedPieces(lock bool, lockTorrent bool) bool {
 	return c.peerPieces(false).Intersects(&c.t._pendingPieces)
 }
 
-// Returns true if an outstanding request is removed. Cancelled requests should be handled
-// separately.
+// Returns true if an outstanding request is removed. Cancelled requests
+// should be handled separately.
 func (c *Peer) deleteRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
 	if lockTorrent {
 		c.t.mu.Lock()
 		defer c.t.mu.Unlock()
 	}
 
-	if !func() bool {
-		if lock {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-		}
+	if lock {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+	}
 
-		if !c.requestState.Requests.CheckedRemove(r) {
-			return false
-		}
-
-		for _, f := range c.callbacks.DeletedRequest {
-			f(PeerRequestEvent{c, c.t.requestIndexToRequest(r, false)})
-		}
-		c.updateExpectingChunks(false)
-		if c.t.requestingPeer(r, false) != c {
-			panic("only one peer should have a given request at a time")
-		}
-		return true
-	}() {
+	if !c.requestState.Requests.CheckedRemove(r) {
 		return false
+	}
+
+	for _, f := range c.callbacks.DeletedRequest {
+		f(PeerRequestEvent{c, c.t.requestIndexToRequest(r, false)})
+	}
+	c.updateExpectingChunks(false)
+	if c.t.requestingPeer(r, false) != c {
+		panic("only one peer should have a given request at a time")
 	}
 
 	delete(c.t.requestState, r)
 
-	// c.t.iterPeers(func(p *Peer) {
-	// 	if p.isLowOnRequests() {
-	// 		p.updateRequests("Peer.deleteRequest")
-	// 	}
-	// })
 	return true
 }
 

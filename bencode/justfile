@@ -1,0 +1,9 @@
+build:
+	GOOS=windows GOARCH=amd64 go test -c -v
+	-rm bencode.test.upx.exe
+	upx -o bencode.test.upx.exe bencode.test.exe
+	# 	-rm bencode.test.upx-exact.exe
+	# 	upx --exact -o bencode.test.upx-exact.exe bencode.test.exe
+
+copy-utm:
+	cp -v bencode.test*.exe ~/utm-shared

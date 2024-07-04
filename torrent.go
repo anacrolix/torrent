@@ -1084,12 +1084,12 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 
 		wg.Add(1)
 		go func() {
+			defer wg.Done()
+			<-closed
 			c := stclc.Add(1)
 			defer stclc.Add(-1)
 			fmt.Println("STORAGE CLOSE", c, t.Name())
 			defer fmt.Println("STORAGE CLOSE", c, "DONE", t.Name())
-			defer wg.Done()
-			<-closed
 			t.storageLock.Lock()
 			defer t.storageLock.Unlock()
 			if f := t.storage.Close; f != nil {

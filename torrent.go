@@ -1069,10 +1069,15 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	for _, f := range t.onClose {
 		f()
 	}
+
 	if t.storage != nil {
+		closed := make(chan struct{})
+		defer func() { closed <- struct{}{} }()
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			<-closed
 			t.storageLock.Lock()
 			defer t.storageLock.Unlock()
 			if f := t.storage.Close; f != nil {
@@ -1098,6 +1103,10 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	t.cl.event.Broadcast()
 	t.pieceStateChanges.Close()
 	t.updateWantPeersEvent(false)
+	if t.hashResults != nil {
+		close(t.hashResults)
+		t.hashResults = nil
+	}
 	return
 }
 
@@ -1540,8 +1549,8 @@ func (t *Torrent) maybeNewConns(lock bool) {
 
 func (t *Torrent) onPiecePendingTriggers(piece pieceIndex, reason string, lock bool) {
 	if lock {
-		t.mu.RLock()
-		defer t.mu.RUnlock()
+		t.mu.Lock()
+		defer t.mu.Unlock()
 	}
 	containsPiece := t._pendingPieces.Contains(uint32(piece))
 	if containsPiece {
@@ -3145,7 +3154,7 @@ func (t *Torrent) DisallowDataDownload() {
 		func() {
 			// Could check if peer request state is empty/not interested?
 			c.updateRequests("disallow data download", true)
-			c.cancelAllRequests(true)
+			c.cancelAllRequests(true, true)
 		}()
 	}
 }
@@ -3346,13 +3355,17 @@ func (t *Torrent) updateComplete(lock bool, lockInfo bool) {
 
 func (t *Torrent) cancelRequest(r RequestIndex, updateRequests, lock bool) *Peer {
 	if lock {
-		t.mu.RLock()
-		defer t.mu.RUnlock()
+		t.mu.Lock()
+		defer t.mu.Unlock()
 	}
 
 	p := t.requestingPeer(r, false)
 	if p != nil {
-		p.cancel(r, updateRequests, false)
+		p.cancel(r, true, false)
+
+		if updateRequests && p.isLowOnRequests(true, lock) {
+			p.updateRequests("Peer.cancelRequest", lock)
+		}
 	}
 	// TODO: This is a check that an old invariant holds. It can be removed after some testing.
 	//delete(t.pendingRequests, r)

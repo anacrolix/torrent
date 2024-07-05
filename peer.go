@@ -365,29 +365,41 @@ func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
 }
 
 func (p *Peer) close(lockTorrent bool) {
-	if lockTorrent && p.t != nil {
-		p.t.mu.Lock()
-		defer p.t.mu.Unlock()
-	}
+	func() {
+		if lockTorrent && p.t != nil {
+			p.t.mu.Lock()
+			defer p.t.mu.Unlock()
+		}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+		p.mu.Lock()
+		defer p.mu.Unlock()
 
-	if !p.closed.Set() {
-		return
-	}
-	if p.updateRequestsTimer != nil {
-		p.updateRequestsTimer.Stop()
-	}
-	for _, prs := range p.peerRequests {
-		prs.allocReservation.Drop()
-	}
-	p.peerImpl.onClose(false)
+		if !p.closed.Set() {
+			return
+		}
+		if p.updateRequestsTimer != nil {
+			p.updateRequestsTimer.Stop()
+		}
+		for _, prs := range p.peerRequests {
+			prs.allocReservation.Drop()
+		}
+		p.peerImpl.onClose(false)
+		if p.t != nil {
+			p.t.decPeerPieceAvailability(p, false, false)
+		}
+		for _, f := range p.callbacks.PeerClosed {
+			f(p)
+		}
+	}()
+
 	if p.t != nil {
-		p.t.decPeerPieceAvailability(p, false, false)
-	}
-	for _, f := range p.callbacks.PeerClosed {
-		f(p)
+		p.t.iterPeers(func(o *Peer) {
+			if o != p {
+				if o.isLowOnRequests(true, lockTorrent) {
+					o.updateRequests("Peer.closed", lockTorrent)
+				}
+			}
+		}, lockTorrent)
 	}
 }
 
@@ -553,7 +565,7 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 	return cn.peerImpl._request(ppReq, false), nil
 }
 
-func (me *Peer) cancel(r RequestIndex, updateRequests bool, lockTorrent bool) {
+func (me *Peer) cancel(r RequestIndex, lock bool, lockTorrent bool) {
 	func() {
 		// keep the torrent and peer locked across the whole
 		// cancel operation to avoid part processing holes
@@ -563,8 +575,10 @@ func (me *Peer) cancel(r RequestIndex, updateRequests bool, lockTorrent bool) {
 			defer me.t.mu.Unlock()
 		}
 
-		me.mu.Lock()
-		defer me.mu.Unlock()
+		if lock {
+			me.mu.Lock()
+			defer me.mu.Unlock()
+		}
 
 		if !me.deleteRequest(r, false, false) {
 			panic(fmt.Sprintf("request %d not existing: should have been guarded", r))
@@ -577,10 +591,6 @@ func (me *Peer) cancel(r RequestIndex, updateRequests bool, lockTorrent bool) {
 		}
 		me.decPeakRequests(false)
 	}()
-
-	if updateRequests && me.isLowOnRequests(true, lockTorrent) {
-		me.updateRequests("Peer.cancel", lockTorrent)
-	}
 }
 
 // Sets a reason to update requests, and if there wasn't already one, handle it.
@@ -856,6 +866,9 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 				panic("should not be pending request from conn that just received it")
 			}
 			p.cancel(req, true, false)
+			if p.isLowOnRequests(true, false) {
+				p.updateRequests("Peer.receiveChunk", false)
+			}
 		}
 
 		return piece, intended, err
@@ -963,43 +976,33 @@ func (c *Peer) peerHasWantedPieces(lock bool, lockTorrent bool) bool {
 	return c.peerPieces(false).Intersects(&c.t._pendingPieces)
 }
 
-// Returns true if an outstanding request is removed. Cancelled requests should be handled
-// separately.
+// Returns true if an outstanding request is removed. Cancelled requests
+// should be handled separately.
 func (c *Peer) deleteRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
 	if lockTorrent {
 		c.t.mu.Lock()
 		defer c.t.mu.Unlock()
 	}
 
-	if !func() bool {
-		if lock {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-		}
+	if lock {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+	}
 
-		if !c.requestState.Requests.CheckedRemove(r) {
-			return false
-		}
-
-		for _, f := range c.callbacks.DeletedRequest {
-			f(PeerRequestEvent{c, c.t.requestIndexToRequest(r, false)})
-		}
-		c.updateExpectingChunks(false)
-		if c.t.requestingPeer(r, false) != c {
-			panic("only one peer should have a given request at a time")
-		}
-		return true
-	}() {
+	if !c.requestState.Requests.CheckedRemove(r) {
 		return false
+	}
+
+	for _, f := range c.callbacks.DeletedRequest {
+		f(PeerRequestEvent{c, c.t.requestIndexToRequest(r, false)})
+	}
+	c.updateExpectingChunks(false)
+	if c.t.requestingPeer(r, false) != c {
+		panic("only one peer should have a given request at a time")
 	}
 
 	delete(c.t.requestState, r)
 
-	// c.t.iterPeers(func(p *Peer) {
-	// 	if p.isLowOnRequests() {
-	// 		p.updateRequests("Peer.deleteRequest")
-	// 	}
-	// })
 	return true
 }
 
@@ -1038,16 +1041,22 @@ func (c *Peer) assertNoRequests() {
 	}
 }
 
-func (c *Peer) cancelAllRequests(lockTorrent bool) {
+func (c *Peer) cancelAllRequests(lock bool, lockTorrent bool) {
 	if lockTorrent {
 		c.t.mu.Lock()
 		defer c.t.mu.Unlock()
+	}
+
+	if lock {
+		c.mu.Lock()
+		defer c.mu.Unlock()
 	}
 
 	c.requestState.Requests.IterateSnapshot(func(x RequestIndex) bool {
 		c.cancel(x, false, false)
 		return true
 	})
+
 	c.assertNoRequests()
 }
 

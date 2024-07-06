@@ -362,8 +362,10 @@ func (cl *Client) AddListener(l Listener) {
 	}
 }
 
+// this function is calles with github.com/anacrolix/go-libutp's global mutex locked
 func (cl *Client) firewallCallback(net.Addr) bool {
-	block := !cl.wantConns(true) || !cl.config.AcceptPeerConnections
+	block := !cl.wantConns() || !cl.config.AcceptPeerConnections
+
 	if block {
 		torrent.Add("connections firewalled", 1)
 	} else {
@@ -466,16 +468,8 @@ func (cl *Client) ipIsBlocked(ip net.IP) bool {
 	return blocked
 }
 
-func (cl *Client) wantConns(lock bool) bool {
-	alwaysWantConns := func() bool {
-		if lock {
-			cl.rLock()
-			defer cl.rUnlock()
-		}
-		return cl.config.AlwaysWantConns
-	}
-
-	if alwaysWantConns() {
+func (cl *Client) wantConns() bool {
+	if cl.config.AlwaysWantConns {
 		return true
 	}
 
@@ -489,7 +483,7 @@ func (cl *Client) wantConns(lock bool) bool {
 
 // TODO: Apply filters for non-standard networks, particularly rate-limiting.
 func (cl *Client) rejectAccepted(conn net.Conn) error {
-	if !cl.wantConns(true) {
+	if !cl.wantConns() {
 		return errors.New("don't want conns right now")
 	}
 	ra := conn.RemoteAddr()

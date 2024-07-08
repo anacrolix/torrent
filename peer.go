@@ -764,6 +764,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	req := c.t.requestIndexFromRequest(ppReq, true)
 
 	recordBlockForSmartBan := sync.OnceFunc(func() {
+		fmt.Println("RCNK", c.t.Name(), msg.Index, len(msg.Piece), c.t.smartBanCache.Hash(msg.Piece))
 		c.recordBlockForSmartBan(req, msg.Piece)
 	})
 	// This needs to occur before we return, but we try to do it when the client is unlocked. It

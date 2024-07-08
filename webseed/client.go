@@ -1,6 +1,7 @@
 package webseed
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -27,6 +28,7 @@ type requestPart struct {
 	do  func() (*http.Response, io.ReadWriteCloser, error)
 	// Wrap http response bodies for such things as download rate limiting.
 	responseBodyWrapper ResponseBodyWrapper
+	hasher              func(b []byte) uint64 // temp for testing
 }
 
 type Request struct {
@@ -72,7 +74,7 @@ type RequestResult struct {
 	Err     error
 }
 
-func (ws *Client) NewRequest(r RequestSpec, buffers storage.BufferPool, limiter *rate.Limiter, receivingCounter *atomic.Int64) Request {
+func (ws *Client) NewRequest(r RequestSpec, buffers storage.BufferPool, limiter *rate.Limiter, receivingCounter *atomic.Int64, hasher func(b []byte) uint64) Request {
 	ctx, cancel := context.WithCancel(context.Background())
 	var requestParts []requestPart
 	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
@@ -110,6 +112,7 @@ func (ws *Client) NewRequest(r RequestSpec, buffers storage.BufferPool, limiter 
 
 			return response, buff, err
 		}
+		part.hasher = hasher
 		requestParts = append(requestParts, part)
 		return true
 	}) {
@@ -148,7 +151,7 @@ func (me ErrBadResponse) Error() string {
 	return me.Msg
 }
 
-func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *http.Response) error {
+func recvPartResult(ctx context.Context, writer io.Writer, part requestPart, resp *http.Response) error {
 	defer resp.Body.Close()
 	var body io.Reader = resp.Body
 	if part.responseBodyWrapper != nil {
@@ -161,7 +164,12 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *
 	}
 	switch resp.StatusCode {
 	case http.StatusPartialContent:
-		copied, err := io.Copy(buf, body)
+		buf, err := io.ReadAll(body)
+		if err != nil {
+			return err
+		}
+		fmt.Println("RECV", part.req.URL, part.e.Start/part.e.Length, len(buf), part.hasher(buf))
+		copied, err := io.Copy(writer, bytes.NewBuffer(buf))
 		if err != nil {
 			return err
 		}
@@ -189,7 +197,7 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *
 			if discarded != 0 {
 				log.Printf("discarded %v bytes in webseed request response part", discarded)
 			}
-			_, err := io.CopyN(buf, body, part.e.Length)
+			_, err := io.CopyN(writer, body, part.e.Length)
 			return err
 		} else {
 			return ErrBadResponse{"resp status ok but requested range", resp}

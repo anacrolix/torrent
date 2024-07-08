@@ -2689,6 +2689,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 						// single peer for a piece, and we never progress that piece to completion, we
 						// will never smart-ban them. Discovered in
 						// https://github.com/anacrolix/torrent/issues/715.
+						fmt.Printf("banning %v for being sole dirtier of piece %v after failed piece check", c, piece)
 						t.logger.Levelf(log.Warning, "banning %v for being sole dirtier of piece %v after failed piece check", c, piece)
 						c.ban()
 					}
@@ -2828,7 +2829,7 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 
 			buf := bytes.NewBuffer(nil)
 			_, _ = p.Storage().WriteTo(buf)
-			fmt.Println("HSH", t.Name(), p.index, p.length, t.smartBanCache.Hash(buf.Bytes()))
+			fmt.Println("HSH", t.Name(), p.index, p.length(true), t.smartBanCache.Hash(buf.Bytes()), correct, sum, *p.hash)
 
 			storageLock.RUnlock()
 

@@ -499,9 +499,9 @@ func (cn *webseedPeer) ban() {
 	cn.peer.mu.Unlock()
 
 	if banCount > 5 && !cn.peer.closed.IsSet() {
-		prev := cn.peer.t.numActivePeers(true)
+		preva, prevc := cn.peer.t.numActivePeers(true), cn.peer.closed.IsSet()
 		cn.peer.close(true)
-		fmt.Println("BCLS", cn.String(), cn.peer.closed.IsSet(), "P", prev, "A", cn.peer.t.numActivePeers(true))
+		fmt.Println("BCLS", cn.String(), "P", prevc, preva, "A", cn.peer.closed.IsSet(), cn.peer.t.numActivePeers(true))
 	}
 }
 

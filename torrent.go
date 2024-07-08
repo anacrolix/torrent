@@ -2827,10 +2827,6 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 				log.Fmsg("piece %v (%s) hash failure copy error: %v", p, p.hash.HexString(), copyErr).Log(t.logger)
 			}
 
-			buf := bytes.NewBuffer(nil)
-			_, _ = p.Storage().WriteTo(buf)
-			fmt.Println("HSH", t.Name(), p.index, p.length(true), t.smartBanCache.Hash(buf.Bytes()), correct, sum, *p.hash)
-
 			storageLock.RUnlock()
 
 			p.mu.Lock()

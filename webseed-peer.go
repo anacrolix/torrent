@@ -156,7 +156,7 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 var limitedBuffPool = storage.NewLimitedBufferPool(bufPool, 5_000_000_000)
 
 func (ws *webseedPeer) doRequest(r Request) error {
-	webseedRequest := ws.client.NewRequest(ws.intoSpec(r), limitedBuffPool, ws.requestRateLimiter, &ws.receiving, ws.peer.t.smartBanCache.Hash)
+	webseedRequest := ws.client.NewRequest(ws.intoSpec(r), limitedBuffPool, ws.requestRateLimiter, &ws.receiving)
 
 	ws.peer.mu.Lock()
 	ws.activeRequests[r] = webseedRequest
@@ -495,7 +495,13 @@ func (cn *webseedPeer) ban() {
 
 	cn.peer.mu.Lock()
 	cn.peer.banCount++
+	banCount := cn.peer.banCount
 	cn.peer.mu.Unlock()
+
+	if banCount > 5 {
+		cn.peer.close(true)
+		fmt.Println("BCLS", cn.String(), cn.peer.t.numActivePeers(true))
+	}
 }
 
 func (cn *webseedPeer) isLowOnRequests(lock bool, lockTorrent bool) bool {

@@ -498,7 +498,7 @@ func (cn *webseedPeer) ban() {
 	banCount := cn.peer.banCount
 	cn.peer.mu.Unlock()
 
-	if banCount > 5 {
+	if banCount > 5 && !cn.peer.closed.IsSet() {
 		prev := cn.peer.t.numActivePeers(true)
 		cn.peer.close(true)
 		fmt.Println("BCLS", cn.String(), cn.peer.closed.IsSet(), "P", prev, "A", cn.peer.t.numActivePeers(true))

@@ -674,6 +674,14 @@ func (c *PeerConn) maximumPeerRequestChunkLength() (_ Option[int]) {
 
 // startFetch is for testing purposes currently.
 func (c *PeerConn) onReadRequest(r Request, startFetch bool, lock bool) error {
+	if !c.t.havePiece(pieceIndex(r.Index), true) {
+		// TODO: Tell the peer we don't have the piece, and reject this request.
+		requestsReceivedForMissingPieces.Add(1)
+		return fmt.Errorf("peer requested piece we don't have: %v", r.Index.Int())
+	}
+
+	pieceLength := c.t.pieceLength(pieceIndex(r.Index), true)
+
 	if lock {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -714,12 +722,6 @@ func (c *PeerConn) onReadRequest(r Request, startFetch bool, lock bool) error {
 			return err
 		}
 	}
-	if !c.t.havePiece(pieceIndex(r.Index), true) {
-		// TODO: Tell the peer we don't have the piece, and reject this request.
-		requestsReceivedForMissingPieces.Add(1)
-		return fmt.Errorf("peer requested piece we don't have: %v", r.Index.Int())
-	}
-	pieceLength := c.t.pieceLength(pieceIndex(r.Index), true)
 	// Check this after we know we have the piece, so that the piece length will be known.
 	if chunkOverflowsPiece(r.ChunkSpec, pieceLength) {
 		torrent.Add("bad requests received", 1)

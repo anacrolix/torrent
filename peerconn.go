@@ -759,7 +759,9 @@ func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 			panic("data must be non-nil to trigger send")
 		}
 		torrent.Add("peer request data read successes", 1)
+		c.mu.Lock()
 		prs.data = b
+		c.mu.Unlock()
 		// This might be required for the error case too (#752 and #753).
 		c.tickleWriter()
 	}
@@ -1213,7 +1215,8 @@ another:
 			}
 			peerRequests = make([]peerRequest, 0, len(c.peerRequests))
 			for r, state := range c.peerRequests {
-				peerRequests = append(peerRequests, peerRequest{r, state})
+				s := *state
+				peerRequests = append(peerRequests, peerRequest{r, &s})
 			}
 		}()
 

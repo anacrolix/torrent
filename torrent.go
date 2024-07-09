@@ -1788,14 +1788,19 @@ func (t *Torrent) maxHalfOpen(lock bool) int {
 }
 
 func (t *Torrent) openNewConns(lock bool) (initiated int) {
+	lc := false
 	if lock {
 		if t.mu.lc.Load() > 0 || t.mu.rlc.Load() > 0 {
+			lc = true
 			fmt.Println("ONC", "L", t.mu.locker, "R", t.mu.rlocker)
 		}
 		t.mu.Lock()
 		defer t.mu.Unlock()
 	}
 
+	if lc {
+		fmt.Println("ONC", "LOCKED", "L", t.mu.locker, "R", t.mu.rlocker)
+	}
 	defer t.updateWantPeersEvent(false)
 
 	for t.peers.Len() != 0 {

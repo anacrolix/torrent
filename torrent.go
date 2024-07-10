@@ -1800,6 +1800,7 @@ func (t *Torrent) openNewConns(lock bool) (initiated int) {
 
 	if lc {
 		fmt.Println("ONC", "LOCKED", "L", t.mu.locker, "R", t.mu.rlocker)
+		defer fmt.Println("ONC", "DONE")
 	}
 	defer t.updateWantPeersEvent(false)
 

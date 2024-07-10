@@ -250,9 +250,9 @@ func (cn *Peer) StatusFlags() (ret string) {
 		ret += string([]byte{b})
 	}
 	if cn.closed.IsSet() {
-		ret = "op-"
-	} else {
 		ret = "cl-"
+	} else {
+		ret = "op-"
 	}
 
 	if cn.requestState.Interested {
@@ -263,12 +263,14 @@ func (cn *Peer) StatusFlags() (ret string) {
 	}
 	c('-')
 	ret += cn.connectionFlags()
-	c('-')
-	if cn.peerInterested {
-		c('i')
-	}
-	if cn.peerChoking {
-		c('c')
+	if cn.peerInterested || cn.peerChoking {
+		c('-')
+		if cn.peerInterested {
+			c('i')
+		}
+		if cn.peerChoking {
+			c('c')
+		}
 	}
 	return
 }

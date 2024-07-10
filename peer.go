@@ -245,10 +245,16 @@ func eventAgeString(t time.Time) string {
 }
 
 // Inspired by https://github.com/transmission/transmission/wiki/Peer-Status-Text.
-func (cn *Peer) statusFlags() (ret string) {
+func (cn *Peer) StatusFlags() (ret string) {
 	c := func(b byte) {
 		ret += string([]byte{b})
 	}
+	if cn.closed.IsSet() {
+		ret = "op-"
+	} else {
+		ret = "cl-"
+	}
+
 	if cn.requestState.Interested {
 		c('i')
 	}
@@ -354,7 +360,7 @@ func (cn *Peer) writeStatus(w io.Writer, lock bool, lockTorrent bool) {
 		cn.PeerMaxRequests,
 		len(cn.peerRequests),
 		localClientReqq,
-		cn.statusFlags(),
+		cn.StatusFlags(),
 		cn.downloadRate()/(1<<10),
 	)
 	fmt.Fprintf(w, "requested pieces:")

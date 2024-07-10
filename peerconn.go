@@ -647,7 +647,7 @@ func (c *PeerConn) fastEnabled(lock bool) bool {
 }
 
 func (c *PeerConn) reject(r Request, lock bool) {
-	if !c.fastEnabled(true) {
+	if !c.fastEnabled(lock) {
 		panic("fast not enabled")
 	}
 	c.write(r.ToMsg(pp.Reject), lock)

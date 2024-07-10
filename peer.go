@@ -250,9 +250,9 @@ func (cn *Peer) StatusFlags() (ret string) {
 		ret += string([]byte{b})
 	}
 	if cn.closed.IsSet() {
-		ret = "cl-"
+		ret = "c-"
 	} else {
-		ret = "op-"
+		ret = "o-"
 	}
 
 	if cn.requestState.Interested {

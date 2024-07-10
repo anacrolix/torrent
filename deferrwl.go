@@ -1,10 +1,12 @@
 package torrent
 
+import "github.com/anacrolix/sync"
+
 // Runs deferred actions on Unlock. Note that actions are assumed to be the results of changes that
 // would only occur with a write lock at present. The race detector should catch instances of defers
 // without the write lock being held.
 type lockWithDeferreds struct {
-	internal      mu //sync.RWMutex
+	internal      sync.RWMutex
 	unlockActions []func()
 
 	//lc       atomic.Int32

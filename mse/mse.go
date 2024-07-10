@@ -16,6 +16,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"sync"
 )
 
 const (
@@ -464,6 +465,18 @@ func (h *handshake) receiverSteps() (ret io.ReadWriter, chosen CryptoMethod, err
 	return
 }
 
+type buffer struct {
+	B []byte
+}
+
+var pool = sync.Pool{
+	New: func() any {
+		return &buffer{
+			B: make([]byte, maxPadLen),
+		}
+	},
+}
+
 func (h *handshake) Do() (ret io.ReadWriter, method CryptoMethod, err error) {
 	err = h.establish()
 	if err != nil {
@@ -471,13 +484,16 @@ func (h *handshake) Do() (ret io.ReadWriter, method CryptoMethod, err error) {
 		return
 	}
 
-	pad := make([]byte, newPadLen())
-	_, err = io.ReadFull(rand.Reader, pad)
+	pad := pool.Get().(*buffer)
+	defer pool.Put(pad)
+
+	size := newPadLen()
+	_, err = io.ReadFull(rand.Reader, pad.B[:size])
 	if err != nil {
 		panic(fmt.Sprintln("unexpected error when reading from random", err))
 	}
 
-	err = h.write(pad)
+	err = h.write(pad.B[:size])
 	if err != nil {
 		return
 	}

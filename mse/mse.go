@@ -531,6 +531,8 @@ func ReceiveHandshakeEx(rw io.ReadWriter, skeys SecretKeyIter, selectCrypto Cryp
 	return
 }
 
+// SecretKeyIter is a function that given a function, calls it with secret keys until it
+// returns false or exhausted.
 type SecretKeyIter func(callback func(skey []byte) (more bool))
 
 func DefaultCryptoSelector(provided CryptoMethod) CryptoMethod {

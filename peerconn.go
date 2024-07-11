@@ -647,7 +647,7 @@ func (c *PeerConn) fastEnabled(lock bool) bool {
 }
 
 func (c *PeerConn) reject(r Request, lock bool) {
-	if !c.fastEnabled(true) {
+	if !c.fastEnabled(lock) {
 		panic("fast not enabled")
 	}
 	c.write(r.ToMsg(pp.Reject), lock)
@@ -674,6 +674,14 @@ func (c *PeerConn) maximumPeerRequestChunkLength() (_ Option[int]) {
 
 // startFetch is for testing purposes currently.
 func (c *PeerConn) onReadRequest(r Request, startFetch bool, lock bool) error {
+	if !c.t.havePiece(pieceIndex(r.Index), true) {
+		// TODO: Tell the peer we don't have the piece, and reject this request.
+		requestsReceivedForMissingPieces.Add(1)
+		return fmt.Errorf("peer requested piece we don't have: %v", r.Index.Int())
+	}
+
+	pieceLength := c.t.pieceLength(pieceIndex(r.Index), true)
+
 	if lock {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -714,12 +722,6 @@ func (c *PeerConn) onReadRequest(r Request, startFetch bool, lock bool) error {
 			return err
 		}
 	}
-	if !c.t.havePiece(pieceIndex(r.Index), true) {
-		// TODO: Tell the peer we don't have the piece, and reject this request.
-		requestsReceivedForMissingPieces.Add(1)
-		return fmt.Errorf("peer requested piece we don't have: %v", r.Index.Int())
-	}
-	pieceLength := c.t.pieceLength(pieceIndex(r.Index), true)
 	// Check this after we know we have the piece, so that the piece length will be known.
 	if chunkOverflowsPiece(r.ChunkSpec, pieceLength) {
 		torrent.Add("bad requests received", 1)
@@ -757,7 +759,9 @@ func (c *PeerConn) peerRequestDataReader(r Request, prs *peerRequestState) {
 			panic("data must be non-nil to trigger send")
 		}
 		torrent.Add("peer request data read successes", 1)
+		c.mu.Lock()
 		prs.data = b
+		c.mu.Unlock()
 		// This might be required for the error case too (#752 and #753).
 		c.tickleWriter()
 	}
@@ -1211,7 +1215,8 @@ another:
 			}
 			peerRequests = make([]peerRequest, 0, len(c.peerRequests))
 			for r, state := range c.peerRequests {
-				peerRequests = append(peerRequests, peerRequest{r, state})
+				s := *state
+				peerRequests = append(peerRequests, peerRequest{r, &s})
 			}
 		}()
 

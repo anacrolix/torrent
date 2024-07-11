@@ -148,7 +148,7 @@ func (me ErrBadResponse) Error() string {
 	return me.Msg
 }
 
-func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *http.Response) error {
+func recvPartResult(ctx context.Context, writer io.Writer, part requestPart, resp *http.Response) error {
 	defer resp.Body.Close()
 	var body io.Reader = resp.Body
 	if part.responseBodyWrapper != nil {
@@ -161,7 +161,7 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *
 	}
 	switch resp.StatusCode {
 	case http.StatusPartialContent:
-		copied, err := io.Copy(buf, body)
+		copied, err := io.Copy(writer, body)
 		if err != nil {
 			return err
 		}
@@ -189,7 +189,7 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *
 			if discarded != 0 {
 				log.Printf("discarded %v bytes in webseed request response part", discarded)
 			}
-			_, err := io.CopyN(buf, body, part.e.Length)
+			_, err := io.CopyN(writer, body, part.e.Length)
 			return err
 		} else {
 			return ErrBadResponse{"resp status ok but requested range", resp}

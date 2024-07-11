@@ -154,8 +154,8 @@ func (ms *MMapSpan) locateCopy(copyArgs func(remainingArgument, mmapped []byte) 
 func (ms *MMapSpan) WriteAt(index int, p []byte, off int64) (n int, err error) {
 	// log.Printf("writing %v bytes at %v", len(p), off)
 	n, err = func() (n int, err error) {
-		ms.mu.RLock()
-		defer ms.mu.RUnlock()
+		ms.mu.Lock()
+		defer ms.mu.Unlock()
 		n = ms.locateCopy(func(a, b []byte) (_, _ []byte) { return b, a }, p, off)
 		if n != len(p) {
 			err = io.ErrShortWrite

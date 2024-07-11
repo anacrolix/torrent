@@ -495,7 +495,12 @@ func (cn *webseedPeer) ban() {
 
 	cn.peer.mu.Lock()
 	cn.peer.banCount++
+	banCount := cn.peer.banCount
 	cn.peer.mu.Unlock()
+
+	if banCount > 16 && !cn.peer.closed.IsSet() {
+		cn.peer.close(true)
+	}
 }
 
 func (cn *webseedPeer) isLowOnRequests(lock bool, lockTorrent bool) bool {

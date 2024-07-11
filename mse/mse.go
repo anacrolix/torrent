@@ -168,6 +168,10 @@ func (h *handshake) establish() error {
 		return err
 	}
 
+	if err := h.w.Flush(); err != nil {
+		return err
+	}
+
 	var b [96]byte
 	_, err := io.ReadFull(h.conn, b[:])
 	if err != nil {

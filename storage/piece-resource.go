@@ -267,25 +267,42 @@ type chunk struct {
 
 type chunks []chunk
 
-func (me chunks) ReadAt(b []byte, off int64) (int, error) {
-	for {
-		if len(me) == 0 {
-			return 0, io.EOF
+func (me chunks) ReadAt(b []byte, off int64) (n int, err error) {
+	i := sort.Search(len(me), func(i int) bool {
+		return me[i].offset > off
+	}) - 1
+	if i == -1 {
+		err = io.EOF
+		return
+	}
+	chunk := me[i]
+	// Go made me do this with it's bullshit named return values and := operator.
+again:
+	n1, err := chunk.instance.ReadAt(b, off-chunk.offset)
+	b = b[n1:]
+	n += n1
+	// Should we check here that we're not io.EOF or nil, per ReadAt's contract? That way we know we
+	// don't have an error anymore for the rest of the block.
+	if len(b) == 0 {
+		// err = nil, so we don't send io.EOF on chunk boundaries?
+		return
+	}
+	off += int64(n1)
+	i++
+	if i >= len(me) {
+		if err == nil {
+			err = io.EOF
 		}
-		if me[0].offset <= off {
-			break
+		return
+	}
+	chunk = me[i]
+	if chunk.offset > off {
+		if err == nil {
+			err = io.ErrUnexpectedEOF
 		}
-		me = me[1:]
+		return
 	}
-	n, err := me[0].instance.ReadAt(b, off-me[0].offset)
-	if n == len(b) {
-		return n, nil
-	}
-	if err == nil || err == io.EOF {
-		n_, err := me[1:].ReadAt(b[n:], off+int64(n))
-		return n + n_, err
-	}
-	return n, err
+	goto again
 }
 
 func (s piecePerResourcePiece) getChunks(dir string) (chunks chunks) {

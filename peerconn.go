@@ -1376,10 +1376,21 @@ func (c *PeerConn) useful(lock bool, lockTorrent bool) bool {
 	if !t.haveInfo(true) {
 		return c.supportsExtension("ut_metadata", lock)
 	}
-	if t.seeding(lockTorrent) && c.peerInterested {
+
+	if lockTorrent {
+		c.t.mu.RLock()
+		defer c.t.mu.RUnlock()
+	}
+
+	if lock {
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+	}
+
+	if t.seeding(false) && c.peerInterested {
 		return true
 	}
-	if c.peerHasWantedPieces(lock, lockTorrent) {
+	if c.peerHasWantedPieces(false, false) {
 		return true
 	}
 	return false

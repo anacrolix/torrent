@@ -1943,6 +1943,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests("Torrent.deletePeerConn", false)
 	t.assertPendingRequests(false)
+
 	if t.numActivePeers(false) == 0 && len(t.connsWithAllPieces) != 0 {
 		panic(fmt.Sprintf("no active peers, but %d conns with all", len(t.connsWithAllPieces)))
 	}
@@ -3390,6 +3391,10 @@ func (t *Torrent) addConnWithAllPieces(p *Peer, lock bool) {
 	if lock {
 		t.mu.Lock()
 		defer t.mu.Unlock()
+	}
+
+	if t.haveAllPieces(false, true) {
+		return
 	}
 
 	if t.connsWithAllPieces == nil {

@@ -716,11 +716,15 @@ func (t *Torrent) pieceState(index pieceIndex, lock bool) (ret PieceState) {
 
 	p := &t.pieces[index]
 	ret.Priority = t.piecePriority(index, false)
-	ret.Completion = p.completion(true, false)
 	ret.QueuedForHash = p.queuedForHash(false)
+
+	p.mu.RLock()
+	ret.Completion = p.completion(false, false)
 	ret.Hashing = p.hashing
 	ret.Checking = ret.QueuedForHash || ret.Hashing
 	ret.Marking = p.marking
+	p.mu.RUnlock()
+
 	if !ret.Complete && t.piecePartiallyDownloaded(index, false) {
 		ret.Partial = true
 	}

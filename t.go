@@ -125,10 +125,11 @@ func (t *Torrent) Seeding() (ret bool) {
 // Clobbers the torrent display name if metainfo is unavailable.
 // The display name is used as the torrent name while the metainfo is unavailable.
 func (t *Torrent) SetDisplayName(dn string) {
-	if !t.haveInfo(true) {
-		t.mu.Lock()
+	t.imu.Lock()
+	defer t.imu.Unlock()
+	
+	if !t.haveInfo(false) {
 		t.displayName = dn
-		t.mu.Unlock()
 	}
 }
 

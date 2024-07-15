@@ -25,6 +25,9 @@ type ConnStats struct {
 	BytesReadUsefulData         Count
 	BytesReadUsefulIntendedData Count
 
+	BytesHashed    Count
+	BytesCompleted Count
+
 	ChunksWritten Count
 
 	ChunksRead       Count

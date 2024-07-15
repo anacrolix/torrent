@@ -211,8 +211,8 @@ func (p *Piece) VerifyData() {
 	// log.Print("done")
 }
 
-func (p *Piece) queuedForHash(lock bool) bool {
-	return p.t.pieceQueuedForHash(p.index, lock)
+func (p *Piece) queuedForHash(lockTorrent bool) bool {
+	return p.t.pieceQueuedForHash(p.index, lockTorrent)
 }
 
 func (p *Piece) torrentBeginOffset(lock bool) int64 {

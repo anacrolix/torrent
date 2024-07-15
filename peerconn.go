@@ -448,7 +448,9 @@ func (cn *PeerConn) peerSentHave(piece pieceIndex, lockTorrent bool) error {
 	if !cn.peerHasPiece(piece, true, lockTorrent) {
 		cn.t.incPieceAvailability(piece, true)
 	}
+	cn.mu.Lock()
 	cn._peerPieces.Add(uint32(piece))
+	cn.mu.Unlock()
 	if cn.t.wantPieceIndex(piece, lockTorrent) {
 		cn.updateRequests("have", lockTorrent)
 	}
@@ -1099,7 +1101,7 @@ func (c *PeerConn) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err
 			c.requestPendingMetadata(false)
 			if !t.cl.config.DisablePEX {
 				c.mu.Lock()
-				t.pex.Add(c) // we learnt enough now
+				t.pex.Add(c, false) // we learnt enough now
 				// This checks the extension is supported internally.
 				c.pex.Init(c)
 				c.mu.Unlock()
@@ -1235,7 +1237,7 @@ another:
 				// Hard to say what to return here.
 				return true
 			}
-			more := c.sendChunk(peerRequest.Request, msg, peerRequest.state)
+			more := c.sendChunk(peerRequest.Request, msg, peerRequest.state, lock)
 
 			func() {
 				if lock {
@@ -1269,8 +1271,14 @@ func (c *PeerConn) tickleWriter() {
 	c.messageWriter.writeCond.Broadcast()
 }
 
-func (c *PeerConn) sendChunk(r Request, msg func(pp.Message, bool) bool, state *peerRequestState) (more bool) {
-	c.lastChunkSent = time.Now()
+func (c *PeerConn) sendChunk(r Request, msg func(pp.Message, bool) bool, state *peerRequestState, lock bool) (more bool) {
+	func() {
+		if lock {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+		}
+		c.lastChunkSent = time.Now()
+	}()
 	state.allocReservation.Release()
 	return msg(pp.Message{
 		Type:  pp.Piece,
@@ -1295,7 +1303,12 @@ func (c *Peer) setTorrent(t *Torrent, lockTorrent bool) {
 	t.reconcileHandshakeStats(c)
 }
 
-func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
+func (c *PeerConn) pexPeerFlags(lock bool) pp.PexPeerFlags {
+	if lock {
+		c.mu.RLock()
+		c.mu.RUnlock()
+	}
+
 	f := pp.PexPeerFlags(0)
 	if c.PeerPrefersEncryption {
 		f |= pp.PexPrefersEncryption
@@ -1311,7 +1324,12 @@ func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
 
 // This returns the address to use if we want to dial the peer again. It incorporates the peer's
 // advertised listen port.
-func (c *PeerConn) dialAddr() PeerRemoteAddr {
+func (c *PeerConn) dialAddr(lock bool) PeerRemoteAddr {
+	if lock {
+		c.mu.RLock()
+		c.mu.RUnlock()
+	}
+
 	if c.outgoing || c.PeerListenPort == 0 {
 		return c.RemoteAddr
 	}
@@ -1328,9 +1346,9 @@ func (c *PeerConn) dialAddr() PeerRemoteAddr {
 	return netip.AddrPortFrom(addrPort.Addr(), uint16(c.PeerListenPort))
 }
 
-func (c *PeerConn) pexEvent(t pexEventType) (_ pexEvent, err error) {
-	f := c.pexPeerFlags()
-	dialAddr := c.dialAddr()
+func (c *PeerConn) pexEvent(t pexEventType, lock bool) (_ pexEvent, err error) {
+	f := c.pexPeerFlags(lock)
+	dialAddr := c.dialAddr(lock)
 	addr, err := addrPortFromPeerRemoteAddr(dialAddr)
 	if err != nil || !addr.IsValid() {
 		err = fmt.Errorf("parsing dial addr %q: %w", dialAddr, err)
@@ -1353,8 +1371,8 @@ func (pc *PeerConn) remoteIsTransmission() bool {
 	return bytes.HasPrefix(pc.PeerID[:], []byte("-TR")) && pc.PeerID[7] == '-'
 }
 
-func (pc *PeerConn) remoteDialAddrPort() (netip.AddrPort, error) {
-	dialAddr := pc.dialAddr()
+func (pc *PeerConn) remoteDialAddrPort(lock bool) (netip.AddrPort, error) {
+	dialAddr := pc.dialAddr(lock)
 	return addrPortFromPeerRemoteAddr(dialAddr)
 }
 
@@ -1376,10 +1394,21 @@ func (c *PeerConn) useful(lock bool, lockTorrent bool) bool {
 	if !t.haveInfo(true) {
 		return c.supportsExtension("ut_metadata", lock)
 	}
-	if t.seeding(lockTorrent) && c.peerInterested {
+
+	if lockTorrent {
+		c.t.mu.RLock()
+		defer c.t.mu.RUnlock()
+	}
+
+	if lock {
+		c.mu.RLock()
+		defer c.mu.RUnlock()
+	}
+
+	if t.seeding(false) && c.peerInterested {
 		return true
 	}
-	if c.peerHasWantedPieces(lock, lockTorrent) {
+	if c.peerHasWantedPieces(false, false) {
 		return true
 	}
 	return false

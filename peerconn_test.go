@@ -212,7 +212,7 @@ func TestConnPexPeerFlags(t *testing.T) {
 		{&PeerConn{Peer: Peer{RemoteAddr: tcpAddr, Network: tcpAddr.Network()}}, 0},
 	}
 	for i, tc := range testcases {
-		f := tc.conn.pexPeerFlags()
+		f := tc.conn.pexPeerFlags(true)
 		require.EqualValues(t, tc.f, f, i)
 	}
 }
@@ -262,7 +262,7 @@ func TestConnPexEvent(t *testing.T) {
 	}
 	for i, tc := range testcases {
 		c.Run(fmt.Sprintf("%v", i), func(c *qt.C) {
-			e, err := tc.c.pexEvent(tc.t)
+			e, err := tc.c.pexEvent(tc.t, true)
 			c.Assert(err, qt.IsNil)
 			c.Check(e, qt.Equals, tc.e)
 		})

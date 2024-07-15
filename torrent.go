@@ -716,11 +716,15 @@ func (t *Torrent) pieceState(index pieceIndex, lock bool) (ret PieceState) {
 
 	p := &t.pieces[index]
 	ret.Priority = t.piecePriority(index, false)
-	ret.Completion = p.completion(true, false)
 	ret.QueuedForHash = p.queuedForHash(false)
+
+	p.mu.RLock()
+	ret.Completion = p.completion(false, false)
 	ret.Hashing = p.hashing
 	ret.Checking = ret.QueuedForHash || ret.Hashing
 	ret.Marking = p.marking
+	p.mu.RUnlock()
+
 	if !ret.Complete && t.piecePartiallyDownloaded(index, false) {
 		ret.Partial = true
 	}
@@ -1936,13 +1940,14 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 			func() {
 				c.mu.Lock()
 				defer c.mu.Unlock()
-				t.pex.Drop(c)
+				t.pex.Drop(c, false)
 			}()
 		}
 	}
 	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests("Torrent.deletePeerConn", false)
 	t.assertPendingRequests(false)
+
 	if t.numActivePeers(false) == 0 && len(t.connsWithAllPieces) != 0 {
 		panic(fmt.Sprintf("no active peers, but %d conns with all", len(t.connsWithAllPieces)))
 	}
@@ -2459,7 +2464,7 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 	// We'll never receive the "p" extended handshake parameter.
 	if !t.cl.config.DisablePEX && !c.PeerExtensionBytes.SupportsExtended() {
 		c.mu.Lock()
-		t.pex.Add(c)
+		t.pex.Add(c, false)
 		c.mu.Unlock()
 	}
 
@@ -3392,6 +3397,10 @@ func (t *Torrent) addConnWithAllPieces(p *Peer, lock bool) {
 		defer t.mu.Unlock()
 	}
 
+	if t.haveAllPieces(false, true) {
+		return
+	}
+
 	if t.connsWithAllPieces == nil {
 		t.connsWithAllPieces = make(map[*Peer]struct{}, t.maxEstablishedConns)
 	}
@@ -3475,7 +3484,7 @@ func (t *Torrent) peerConnsWithDialAddrPort(target netip.AddrPort, lock bool) (r
 	}
 
 	for pc := range t.conns {
-		dialAddr, err := pc.remoteDialAddrPort()
+		dialAddr, err := pc.remoteDialAddrPort(true)
 		if err != nil {
 			continue
 		}
@@ -3544,7 +3553,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 	case utHolepunch.Rendezvous:
 		t.logger.Printf("got holepunch rendezvous request for %v from %p", msg.AddrPort, sender)
 		sendMsg := sendUtHolepunchMsg
-		senderAddrPort, err := sender.remoteDialAddrPort()
+		senderAddrPort, err := sender.remoteDialAddrPort(true)
 		if err != nil {
 			sender.logger.Levelf(
 				log.Warning,

@@ -448,7 +448,9 @@ func (cn *PeerConn) peerSentHave(piece pieceIndex, lockTorrent bool) error {
 	if !cn.peerHasPiece(piece, true, lockTorrent) {
 		cn.t.incPieceAvailability(piece, true)
 	}
+	cn.mu.Lock()
 	cn._peerPieces.Add(uint32(piece))
+	cn.mu.Unlock()
 	if cn.t.wantPieceIndex(piece, lockTorrent) {
 		cn.updateRequests("have", lockTorrent)
 	}

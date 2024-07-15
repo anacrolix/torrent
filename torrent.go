@@ -1940,7 +1940,7 @@ func (t *Torrent) deletePeerConn(c *PeerConn, lock bool) (ret bool) {
 			func() {
 				c.mu.Lock()
 				defer c.mu.Unlock()
-				t.pex.Drop(c)
+				t.pex.Drop(c, false)
 			}()
 		}
 	}
@@ -2464,7 +2464,7 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 	// We'll never receive the "p" extended handshake parameter.
 	if !t.cl.config.DisablePEX && !c.PeerExtensionBytes.SupportsExtended() {
 		c.mu.Lock()
-		t.pex.Add(c)
+		t.pex.Add(c, false)
 		c.mu.Unlock()
 	}
 
@@ -3484,7 +3484,7 @@ func (t *Torrent) peerConnsWithDialAddrPort(target netip.AddrPort, lock bool) (r
 	}
 
 	for pc := range t.conns {
-		dialAddr, err := pc.remoteDialAddrPort()
+		dialAddr, err := pc.remoteDialAddrPort(true)
 		if err != nil {
 			continue
 		}
@@ -3553,7 +3553,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 	case utHolepunch.Rendezvous:
 		t.logger.Printf("got holepunch rendezvous request for %v from %p", msg.AddrPort, sender)
 		sendMsg := sendUtHolepunchMsg
-		senderAddrPort, err := sender.remoteDialAddrPort()
+		senderAddrPort, err := sender.remoteDialAddrPort(true)
 		if err != nil {
 			sender.logger.Levelf(
 				log.Warning,

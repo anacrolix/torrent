@@ -173,8 +173,8 @@ func (s *pexState) append(e *pexEvent) {
 	s.msg0.append(*e)
 }
 
-func (s *pexState) Add(c *PeerConn) {
-	e, err := c.pexEvent(pexAdd)
+func (s *pexState) Add(c *PeerConn, lockPeer bool) {
+	e, err := c.pexEvent(pexAdd, lockPeer)
 	if err != nil {
 		return
 	}
@@ -192,12 +192,12 @@ func (s *pexState) Add(c *PeerConn) {
 	s.append(&e)
 }
 
-func (s *pexState) Drop(c *PeerConn) {
+func (s *pexState) Drop(c *PeerConn, lockPeer bool) {
 	if !c.pex.Listed {
 		// skip connections which were not previously Added
 		return
 	}
-	e, err := c.pexEvent(pexDrop)
+	e, err := c.pexEvent(pexDrop, lockPeer)
 	if err != nil {
 		return
 	}

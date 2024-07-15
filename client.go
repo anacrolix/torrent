@@ -1249,13 +1249,18 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 		if !c.requestedMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
+		
+		c.mu.Lock()
 		c.metadataRequests[piece] = false
+		c.lastUsefulChunkReceived = time.Now()
+		c.mu.Unlock()
+		//
 		begin := len(payload) - d.PieceSize()
 		if begin < 0 || begin >= len(payload) {
 			return fmt.Errorf("data has bad offset in payload: %d", begin)
 		}
 		t.saveMetadataPiece(piece, payload[begin:])
-		c.lastUsefulChunkReceived = time.Now()
+		
 		err = t.maybeCompleteMetadata()
 		if err != nil {
 			// Log this at the Torrent-level, as we don't partition metadata by Peer yet, so we

@@ -39,9 +39,9 @@ func TestPexReset(t *testing.T) {
 		{Peer: Peer{RemoteAddr: addrs[1]}},
 		{Peer: Peer{RemoteAddr: addrs[2]}},
 	}
-	s.Add(&conns[0])
-	s.Add(&conns[1])
-	s.Drop(&conns[0])
+	s.Add(&conns[0], true)
+	s.Add(&conns[1], true)
+	s.Drop(&conns[0], true)
 	s.Reset()
 	targ := new(pexState)
 	require.EqualValues(t, targ, s)
@@ -72,7 +72,7 @@ var testcases = []struct {
 		in: func() *pexState {
 			s := new(pexState)
 			nullAddr := &net.TCPAddr{}
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: nullAddr}})
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: nullAddr}}, true)
 			return s
 		}(),
 		targ: pp.PexMsg{},
@@ -82,7 +82,7 @@ var testcases = []struct {
 		in: func() *pexState {
 			nullAddr := &net.TCPAddr{}
 			s := new(pexState)
-			s.Drop(&PeerConn{Peer: Peer{RemoteAddr: nullAddr}, pex: pexConnState{Listed: true}})
+			s.Drop(&PeerConn{Peer: Peer{RemoteAddr: nullAddr}, pex: pexConnState{Listed: true}}, true)
 			return s
 		}(),
 		targ: pp.PexMsg{},
@@ -91,10 +91,10 @@ var testcases = []struct {
 		name: "add4",
 		in: func() *pexState {
 			s := new(pexState)
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}})
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[1], outgoing: true}})
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[2], outgoing: true}})
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[3]}})
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}}, true)
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[1], outgoing: true}}, true)
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[2], outgoing: true}}, true)
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[3]}}, true)
 			return s
 		}(),
 		targ: pp.PexMsg{
@@ -114,8 +114,8 @@ var testcases = []struct {
 		name: "drop2",
 		in: func() *pexState {
 			s := &pexState{nc: pexTargAdded + 2}
-			s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}, pex: pexConnState{Listed: true}})
-			s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[2]}, pex: pexConnState{Listed: true}})
+			s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}, pex: pexConnState{Listed: true}}, true)
+			s.Drop(&PeerConn{Peer: Peer{RemoteAddr: addrs[2]}, pex: pexConnState{Listed: true}}, true)
 			return s
 		}(),
 		targ: pp.PexMsg{
@@ -136,10 +136,10 @@ var testcases = []struct {
 				{Peer: Peer{RemoteAddr: addrs[2]}},
 			}
 			s := &pexState{nc: pexTargAdded}
-			s.Add(&conns[0])
-			s.Add(&conns[1])
-			s.Drop(&conns[0])
-			s.Drop(&conns[2]) // to be ignored: it wasn't added
+			s.Add(&conns[0], true)
+			s.Add(&conns[1], true)
+			s.Drop(&conns[0], true)
+			s.Drop(&conns[2], true) // to be ignored: it wasn't added
 			return s
 		}(),
 		targ: pp.PexMsg{
@@ -158,12 +158,12 @@ var testcases = []struct {
 				{Peer: Peer{RemoteAddr: addrs[2]}},
 			}
 			s := new(pexState)
-			s.Add(&conns[0])
-			s.Add(&conns[1])
-			s.Add(&conns[2])
-			s.Drop(&conns[0]) // on hold: s.nc < pexTargAdded
-			s.Drop(&conns[2])
-			s.Drop(&conns[1])
+			s.Add(&conns[0], true)
+			s.Add(&conns[1], true)
+			s.Add(&conns[2], true)
+			s.Drop(&conns[0], true) // on hold: s.nc < pexTargAdded
+			s.Drop(&conns[2], true)
+			s.Drop(&conns[1], true)
 			return s
 		}(),
 		targ: pp.PexMsg{
@@ -186,9 +186,9 @@ var testcases = []struct {
 				{Peer: Peer{RemoteAddr: addrs[1]}},
 			}
 			s := &pexState{nc: pexTargAdded - 1}
-			s.Add(&conns[0])
-			s.Drop(&conns[0]) // on hold: s.nc < pexTargAdded
-			s.Add(&conns[1])  // unholds the above
+			s.Add(&conns[0], true)
+			s.Drop(&conns[0], true) // on hold: s.nc < pexTargAdded
+			s.Add(&conns[1], true)  // unholds the above
 			return s
 		}(),
 		targ: pp.PexMsg{
@@ -202,7 +202,7 @@ var testcases = []struct {
 		name: "followup",
 		in: func() *pexState {
 			s := new(pexState)
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}})
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[0]}}, true)
 			return s
 		}(),
 		targ: pp.PexMsg{
@@ -212,7 +212,7 @@ var testcases = []struct {
 			Added6Flags: []pp.PexPeerFlags{0},
 		},
 		update: func(s *pexState) {
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[1]}})
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addrs[1]}}, true)
 		},
 		targ1: pp.PexMsg{
 			Added6: krpc.CompactIPv6NodeAddrs{
@@ -296,7 +296,7 @@ func TestPexInitialNoCutoff(t *testing.T) {
 
 	c := addrgen(n)
 	for addr := range c {
-		s.Add(&PeerConn{Peer: Peer{RemoteAddr: addr}})
+		s.Add(&PeerConn{Peer: Peer{RemoteAddr: addr}}, true)
 	}
 	m, _ := s.Genmsg(nil)
 
@@ -313,7 +313,7 @@ func benchmarkPexInitialN(b *testing.B, npeers int) {
 		var s pexState
 		c := addrgen(npeers)
 		for addr := range c {
-			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addr}})
+			s.Add(&PeerConn{Peer: Peer{RemoteAddr: addr}}, true)
 			s.Genmsg(nil)
 		}
 	}

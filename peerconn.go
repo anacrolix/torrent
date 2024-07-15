@@ -1327,7 +1327,7 @@ func (c *PeerConn) pexPeerFlags(lock bool) pp.PexPeerFlags {
 func (c *PeerConn) dialAddr(lock bool) PeerRemoteAddr {
 	if lock {
 		c.mu.RLock()
-		c.mu.RUnlock()
+		defer c.mu.RUnlock()
 	}
 
 	if c.outgoing || c.PeerListenPort == 0 {

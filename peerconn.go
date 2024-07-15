@@ -1237,7 +1237,7 @@ another:
 				// Hard to say what to return here.
 				return true
 			}
-			more := c.sendChunk(peerRequest.Request, msg, peerRequest.state)
+			more := c.sendChunk(peerRequest.Request, msg, peerRequest.state, lock)
 
 			func() {
 				if lock {
@@ -1271,8 +1271,14 @@ func (c *PeerConn) tickleWriter() {
 	c.messageWriter.writeCond.Broadcast()
 }
 
-func (c *PeerConn) sendChunk(r Request, msg func(pp.Message, bool) bool, state *peerRequestState) (more bool) {
-	c.lastChunkSent = time.Now()
+func (c *PeerConn) sendChunk(r Request, msg func(pp.Message, bool) bool, state *peerRequestState, lock bool) (more bool) {
+	func() {
+		if lock {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+		}
+		c.lastChunkSent = time.Now()
+	}()
 	state.allocReservation.Release()
 	return msg(pp.Message{
 		Type:  pp.Piece,

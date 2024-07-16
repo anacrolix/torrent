@@ -1306,7 +1306,7 @@ func (c *Peer) setTorrent(t *Torrent, lockTorrent bool) {
 func (c *PeerConn) pexPeerFlags(lock bool) pp.PexPeerFlags {
 	if lock {
 		c.mu.RLock()
-		c.mu.RUnlock()
+		defer c.mu.RUnlock()
 	}
 
 	f := pp.PexPeerFlags(0)

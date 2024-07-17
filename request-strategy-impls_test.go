@@ -45,7 +45,7 @@ func (s storagePiece) WriteAt(p []byte, off int64) (n int, err error) {
 	panic("implement me")
 }
 
-func (s storagePiece) MarkComplete() error {
+func (s storagePiece) MarkComplete(awaitFlush bool) error {
 	//TODO implement me
 	panic("implement me")
 }
@@ -53,6 +53,10 @@ func (s storagePiece) MarkComplete() error {
 func (s storagePiece) MarkNotComplete() error {
 	//TODO implement me
 	panic("implement me")
+}
+
+func (s storagePiece) IsNew() bool {
+	return false
 }
 
 func (s storagePiece) Completion() storage.Completion {

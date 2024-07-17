@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/go-llsqlite/adapter"
+	sqlite "github.com/go-llsqlite/adapter"
 	"github.com/go-llsqlite/adapter/sqlitex"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -59,7 +59,7 @@ func (me *sqlitePieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err er
 	return
 }
 
-func (me *sqlitePieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
+func (me *sqlitePieceCompletion) Set(pk metainfo.PieceKey, b bool, awaitFlush bool) error {
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	if me.closed {

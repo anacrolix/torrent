@@ -71,12 +71,16 @@ func (me *torrentStorage) Completion() storage.Completion {
 	return storage.Completion{}
 }
 
-func (me *torrentStorage) MarkComplete() error {
+func (me *torrentStorage) MarkComplete(awaitFlush bool) error {
 	return nil
 }
 
 func (me *torrentStorage) MarkNotComplete() error {
 	return nil
+}
+
+func (me *torrentStorage) IsNew() bool {
+	return false
 }
 
 func (me *torrentStorage) ReadAt([]byte, int64) (int, error) {

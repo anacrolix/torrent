@@ -215,7 +215,9 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 			// don't lock out all processing between pieces while pieces are updated
 			t.mu.Lock()
 			defer t.mu.Unlock()
-			fmt.Println("DP", t.name(false), i, t.pieces[i].completion(true, false).Complete)
+			piece := t.pieces[i]
+			fmt.Println("DP", t.name(false), i, piece.completion(true, false).Complete, piece.Storage().IsNew())
+
 			if t.pieces[i].priority.Raise(PiecePriorityNormal) {
 				if t.updatePiecePriorityNoTriggers(i, false) && !haveTrigger {
 					haveTrigger = true

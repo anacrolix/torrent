@@ -44,12 +44,12 @@ func (me *boltPiece) Completion() Completion {
 	return c
 }
 
-func (me *boltPiece) MarkComplete() error {
-	return me.pc().Set(me.pk(), true)
+func (me *boltPiece) MarkComplete(awaitFlush bool) error {
+	return me.pc().Set(me.pk(), true, awaitFlush)
 }
 
 func (me *boltPiece) MarkNotComplete() error {
-	return me.pc().Set(me.pk(), false)
+	return me.pc().Set(me.pk(), false, false)
 }
 
 func (me *boltPiece) ReadAt(b []byte, off int64) (n int, err error) {
@@ -109,4 +109,8 @@ func (me *boltPiece) WriteAt(b []byte, off int64) (n int, err error) {
 		return nil
 	})
 	return
+}
+
+func (me *boltPiece) IsNew() bool {
+	return false
 }

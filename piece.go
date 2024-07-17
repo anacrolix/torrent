@@ -189,8 +189,8 @@ func (p *Piece) bytesLeft() (ret pp.Integer) {
 
 // Forces the piece data to be rehashed.
 func (p *Piece) VerifyData() {
-	p.t.cl.lock()
-	defer p.t.cl.unlock()
+	p.t.mu.Lock()
+	defer p.t.mu.Unlock()
 
 	p.mu.RLock()
 	target := p.numVerifies + 1

@@ -59,6 +59,7 @@ func (fs fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash
 	dir := fs.opts.TorrentDirMaker(fs.opts.ClientBaseDir, info, infoHash)
 	upvertedFiles := info.UpvertedFiles()
 	files := make([]file, 0, len(upvertedFiles))
+	exists := true
 	for i, fileInfo := range upvertedFiles {
 		filePath := filepath.Join(dir, fs.opts.FilePathMaker(FilePathMakerOpts{
 			Info: info,
@@ -73,6 +74,7 @@ func (fs fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash
 			length: fileInfo.Length,
 		}
 		if f.length == 0 {
+			exists = false
 			err = CreateNativeZeroLengthFile(f.path)
 			if err != nil {
 				err = fmt.Errorf("creating zero length file: %w", err)
@@ -83,6 +85,7 @@ func (fs fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash
 	}
 	t := &fileTorrentImpl{
 		files,
+		!exists,
 		segments.NewIndex(common.LengthIterFromUpvertedFiles(upvertedFiles)),
 		infoHash,
 		fs.opts.PieceCompletion,
@@ -101,6 +104,7 @@ type file struct {
 
 type fileTorrentImpl struct {
 	files          []file
+	created        bool
 	segmentLocater segments.Index
 	infoHash       metainfo.Hash
 	completion     PieceCompletion

@@ -20,7 +20,7 @@ func testMarkedCompleteMissingOnRead(t *testing.T, csf func(string) ClientImplCl
 	ts, err := cs.OpenTorrent(info, metainfo.Hash{})
 	require.NoError(t, err)
 	p := ts.Piece(info.Piece(0))
-	require.NoError(t, p.MarkComplete())
+	require.NoError(t, p.MarkComplete(false))
 	// require.False(t, p.GetIsComplete())
 	n, err := p.ReadAt(make([]byte, 1), 0)
 	require.Error(t, err)

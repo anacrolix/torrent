@@ -99,9 +99,10 @@ func (ts *mmapTorrentStorage) Flush() error {
 }
 
 type mmapStoragePiece struct {
-	pc PieceCompletionGetSetter
-	p  metainfo.Piece
-	ih metainfo.Hash
+	pc      PieceCompletionGetSetter
+	p       metainfo.Piece
+	ih      metainfo.Hash
+	created bool
 	io.ReaderAt
 	io.WriterAt
 }
@@ -118,14 +119,18 @@ func (sp mmapStoragePiece) Completion() Completion {
 	return c
 }
 
-func (sp mmapStoragePiece) MarkComplete() error {
-	sp.pc.Set(sp.pieceKey(), true)
+func (sp mmapStoragePiece) MarkComplete(awaitFlush bool) error {
+	sp.pc.Set(sp.pieceKey(), true, awaitFlush)
 	return nil
 }
 
 func (sp mmapStoragePiece) MarkNotComplete() error {
-	sp.pc.Set(sp.pieceKey(), false)
+	sp.pc.Set(sp.pieceKey(), false, false)
 	return nil
+}
+
+func (sp mmapStoragePiece) IsNew() bool {
+	return sp.created
 }
 
 func mMapTorrent(md *metainfo.Info, infoHash metainfo.Hash, location string, flushTime time.Duration, flushedCallback mmap_span.FlushedCallback) (mms *mmap_span.MMapSpan, err error) {
@@ -140,6 +145,7 @@ func mMapTorrent(md *metainfo.Info, infoHash metainfo.Hash, location string, flu
 			mms.Close()
 		}
 	}()
+
 	for _, miFile := range md.UpvertedFiles() {
 		var safeName string
 		safeName, err = ToSafeFilePath(append([]string{md.Name}, miFile.Path...)...)
@@ -148,24 +154,33 @@ func mMapTorrent(md *metainfo.Info, infoHash metainfo.Hash, location string, flu
 		}
 		fileName := filepath.Join(location, safeName)
 		var mm FileMapping
-		mm, err = mmapFile(fileName, miFile.Length)
+		var exists bool
+		mm, exists, err = mmapFile(fileName, miFile.Length)
 		if err != nil {
 			err = fmt.Errorf("file %q: %s", miFile.DisplayPath(md), err)
 			return
 		}
 		mms.Append(mm)
+		if !exists {
+			mms.Created = true
+		}
 	}
 	mms.InitIndex()
 	return
 }
 
-func mmapFile(name string, size int64) (_ FileMapping, err error) {
+func mmapFile(name string, size int64) (_ FileMapping, exists bool, err error) {
 	dir := filepath.Dir(name)
 	err = os.MkdirAll(dir, 0o750)
 	if err != nil {
 		err = fmt.Errorf("making directory %q: %s", dir, err)
 		return
 	}
+
+	_, err = os.Stat(name)
+
+	exists = err == nil || !errors.Is(err, os.ErrNotExist)
+
 	var file *os.File
 	file, err = os.OpenFile(name, os.O_CREATE|os.O_RDWR, 0o666)
 	if err != nil {
@@ -188,9 +203,13 @@ func mmapFile(name string, size int64) (_ FileMapping, err error) {
 		if err != nil {
 			return
 		}
+		// if the file needs to be resized assume we're creating it
+		exists = false
 	}
-	return func() (ret mmapWithFile, err error) {
+	return func() (ret mmapWithFile, ex bool, err error) {
 		ret.f = file
+		ex = exists
+
 		if size == 0 {
 			// Can't mmap() regions with length 0.
 			return
@@ -226,12 +245,17 @@ type FileMapping = mmap_span.Mmap
 // Handles closing the mmap's file handle (needed for Windows). Could be implemented differently by
 // OS.
 type mmapWithFile struct {
-	f    *os.File
-	mmap mmap.MMap
+	f       *os.File
+	created bool
+	mmap    mmap.MMap
 }
 
 func (m mmapWithFile) Flush() error {
 	return m.mmap.Flush()
+}
+
+func (m mmapWithFile) IsLocal() bool {
+	return !m.created
 }
 
 func (m mmapWithFile) Unmap() (err error) {

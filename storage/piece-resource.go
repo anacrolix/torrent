@@ -128,11 +128,15 @@ func (s piecePerResourcePiece) Completion() Completion {
 	}
 }
 
+func (s piecePerResourcePiece) IsNew() bool {
+	return false
+}
+
 type SizedPutter interface {
 	PutSized(io.Reader, int64) error
 }
 
-func (s piecePerResourcePiece) MarkComplete() error {
+func (s piecePerResourcePiece) MarkComplete(awaitFlush bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	incompleteChunks := s.getChunks()

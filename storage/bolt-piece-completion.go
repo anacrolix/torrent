@@ -67,7 +67,7 @@ func (me boltPieceCompletion) Get(pk metainfo.PieceKey) (cn Completion, err erro
 	return
 }
 
-func (me boltPieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
+func (me boltPieceCompletion) Set(pk metainfo.PieceKey, b bool, awaitFlush bool) error {
 	if c, err := me.Get(pk); err == nil && c.Ok && c.Complete == b {
 		return nil
 	}

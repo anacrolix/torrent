@@ -67,7 +67,7 @@ func BenchmarkPieceMarkComplete(
 			}
 			// This might not apply if users of this benchmark don't cache with the expected capacity.
 			c.Assert(pi.Completion(), qt.Equals, storage.Completion{Complete: false, Ok: true})
-			c.Assert(pi.MarkComplete(), qt.IsNil)
+			c.Assert(pi.MarkComplete(false), qt.IsNil)
 			c.Assert(pi.Completion(), qt.Equals, storage.Completion{Complete: true, Ok: true})
 			n, err := pi.WriteTo(bytes.NewBuffer(readData[:0]))
 			b.StopTimer()

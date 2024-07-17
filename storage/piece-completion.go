@@ -8,7 +8,7 @@ import (
 
 type PieceCompletionGetSetter interface {
 	Get(metainfo.PieceKey) (Completion, error)
-	Set(_ metainfo.PieceKey, complete bool) error
+	Set(_ metainfo.PieceKey, complete bool, awaitFlush bool) error
 }
 
 // Implementations track the completion of pieces. It must be concurrent-safe.

@@ -2632,11 +2632,12 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		p.mu.RUnlock()
 		t.clearPieceTouchers(piece, true)
 
-		if p.hasDirtyChunks(true) {
+		hasDirtyChunks := p.hasDirtyChunks(true)
+		if hasDirtyChunks {
 			p.Flush()
 		}
 
-		err := p.Storage().MarkComplete()
+		err := p.Storage().MarkComplete(!hasDirtyChunks)
 		if err != nil {
 			t.logger.Levelf(log.Warning, "%T: error marking piece complete %d: %s", t.storage, piece, err)
 		}

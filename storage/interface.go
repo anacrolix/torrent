@@ -42,10 +42,11 @@ type PieceImpl interface {
 	// Called when the client believes the piece data will pass a hash check.
 	// The storage can move or mark the piece data as read-only as it sees
 	// fit.
-	MarkComplete() error
+	MarkComplete(awaitFlush bool) error
 	MarkNotComplete() error
 	// Returns true if the piece is complete.
 	Completion() Completion
+	IsNew() bool
 }
 
 type Completion struct {

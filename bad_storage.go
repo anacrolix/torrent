@@ -38,12 +38,16 @@ func (p badStoragePiece) Completion() storage.Completion {
 	return storage.Completion{Complete: true, Ok: true}
 }
 
-func (p badStoragePiece) MarkComplete() error {
+func (p badStoragePiece) MarkComplete(awaitFlush bool) error {
 	return errors.New("psyyyyyyyche")
 }
 
 func (p badStoragePiece) MarkNotComplete() error {
 	return errors.New("psyyyyyyyche")
+}
+
+func (p badStoragePiece) IsNew() bool {
+	return false
 }
 
 func (p badStoragePiece) randomlyTruncatedDataString() string {

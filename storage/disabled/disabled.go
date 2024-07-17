@@ -36,7 +36,7 @@ func (Piece) WriteAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (Piece) MarkComplete() error {
+func (Piece) MarkComplete(awaitFlush bool) error {
 	return errors.New("disabled")
 }
 
@@ -49,4 +49,8 @@ func (Piece) Completion() storage.Completion {
 		Complete: false,
 		Ok:       true,
 	}
+}
+
+func (Piece) IsNew() bool {
+	return false
 }

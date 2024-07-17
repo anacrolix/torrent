@@ -65,7 +65,7 @@ type piece struct {
 	io.WriterAt
 }
 
-func (p piece) MarkComplete() error {
+func (p piece) MarkComplete(awaitFlush bool) error {
 	return p.sb.SetTag("verified", true)
 }
 
@@ -80,4 +80,8 @@ func (p piece) Completion() (ret storage.Completion) {
 	ret.Ok = err == nil
 	ret.Err = err
 	return
+}
+
+func (p piece) IsNew() bool {
+	return false
 }

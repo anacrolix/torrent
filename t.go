@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -127,7 +128,7 @@ func (t *Torrent) Seeding() (ret bool) {
 func (t *Torrent) SetDisplayName(dn string) {
 	t.imu.Lock()
 	defer t.imu.Unlock()
-	
+
 	if !t.haveInfo(false) {
 		t.displayName = dn
 	}
@@ -214,6 +215,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 			// don't lock out all processing between pieces while pieces are updated
 			t.mu.Lock()
 			defer t.mu.Unlock()
+			fmt.Println("DP", t.name(false), i, t.pieces[i].completion(true, false).Complete)
 			if t.pieces[i].priority.Raise(PiecePriorityNormal) {
 				if t.updatePiecePriorityNoTriggers(i, false) && !haveTrigger {
 					haveTrigger = true

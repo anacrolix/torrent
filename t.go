@@ -270,8 +270,8 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 				hashed.Add(int64(piece.length(true)))
 				//fmt.Println("DL hashed", hashed.Load())
 				if sum, _, err := t.hashPiece(piece); err == nil && sum == *piece.hash {
-					storage.MarkComplete(false)
-					t.updatePieceCompletion(i, true)
+					//storage.MarkComplete(false)
+					//t.updatePieceCompletion(i, true)
 					return nil
 				}
 

@@ -252,6 +252,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 			if checkCompletion && !storage.IsNew() {
 				if sum, _, err := t.hashPiece(piece); err == nil && sum == *piece.hash {
+					fmt.Println("DL1", name, "P", i, "COMPLETE")
 					storage.MarkComplete(false)
 					t.updatePieceCompletion(i, true)
 					return nil

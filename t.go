@@ -210,6 +210,12 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	// of the piece order tree.  Instead the code below updates the priority with
 	// no triggers and then updates the peers at the end of that process
 
+	if t.dataDownloadDisallowed.Bool() {
+		return
+	}
+
+	t.disallowDataDownload(true)
+
 	name := t.Name()
 
 	fmt.Println("DL0", name)
@@ -243,6 +249,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 			storage := piece.Storage()
 
 			if completion.Complete {
+				fmt.Println("DL1", name, "P", i, "COMPLETE")
 				return nil
 			}
 
@@ -252,7 +259,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 			if checkCompletion && !storage.IsNew() {
 				if sum, _, err := t.hashPiece(piece); err == nil && sum == *piece.hash {
-					fmt.Println("DL1", name, "P", i, "COMPLETE")
+					fmt.Println("DL2", name, "P", i, "HASH MATCHES")
 					storage.MarkComplete(false)
 					t.updatePieceCompletion(i, true)
 					return nil
@@ -262,6 +269,8 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 				failedHashes++
 				mu.Unlock()
 			}
+
+			fmt.Println("DL3", name, "P", i, "INCOMPLETE")
 
 			if piece.priority.Raise(PiecePriorityNormal) {
 				pendingChanged := t.updatePiecePriorityNoTriggers(i, true)
@@ -285,6 +294,8 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 			t.mu.Lock()
 			defer t.mu.Unlock()
 
+			t.allowDataDownload(false, false)
+
 			t.iterPeers(func(c *Peer) {
 				if !c.isLowOnRequests(true, false) {
 					return
@@ -304,6 +315,8 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 			t.maybeNewConns(false)
 		}()
+	} else {
+		t.allowDataDownload(true, true)
 	}
 
 	for piece := range changes {

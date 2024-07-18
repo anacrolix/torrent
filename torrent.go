@@ -3152,29 +3152,46 @@ func (t *Torrent) onWriteChunkErr(err error) {
 }
 
 func (t *Torrent) DisallowDataDownload() {
-	conns := t.peerConnsAsSlice(true)
+	t.disallowDataDownload(true)
+}
+
+func (t *Torrent) disallowDataDownload(lock bool) {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
+
+	conns := t.peerConnsAsSlice(false)
 	defer conns.free()
 	t.dataDownloadDisallowed.Set()
-
 	for _, c := range conns {
 		func() {
 			// Could check if peer request state is empty/not interested?
-			c.updateRequests("disallow data download", true)
-			c.cancelAllRequests(true, true)
+			c.updateRequests("disallow data download", false)
+			c.cancelAllRequests(true, false)
 		}()
 	}
 }
 
 func (t *Torrent) AllowDataDownload() {
-	//t.mu.Lock()
-	//defer t.mu.Unlock()
+	t.allowDataDownload(true, true)
+}
 
-	conns := t.peerConnsAsSlice(true)
-	defer conns.free()
+func (t *Torrent) allowDataDownload(updateRequests bool, lock bool) {
+	if lock {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+	}
+
 	t.dataDownloadDisallowed.Clear()
 
-	for _, c := range conns {
-		c.updateRequests("allow data download", true)
+	if updateRequests {
+		conns := t.peerConnsAsSlice(false)
+		defer conns.free()
+
+		for _, c := range conns {
+			c.updateRequests("allow data download", false)
+		}
 	}
 }
 

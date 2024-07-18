@@ -231,10 +231,10 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	// there is a trade off though against memory usage (at the moment)
 	// as if not enough results processors are active memory buffers will
 	// grow leading to oom
-	g.SetLimit(maxInt(runtime.NumCPU()*4-3, t.cl.config.PieceHashersPerTorrent/2))
+	g.SetLimit(maxInt(runtime.NumCPU()*8-7, t.cl.config.PieceHashersPerTorrent/2))
 	defer cancel()
 
-	fmt.Println("DL", name, "hashers", maxInt(runtime.NumCPU()*4-3, t.cl.config.PieceHashersPerTorrent/2))
+	fmt.Println("DL", name, "hashers", maxInt(runtime.NumCPU()*8-7, t.cl.config.PieceHashersPerTorrent/2))
 
 	var hashed atomic.Int64
 	var complete atomic.Int64

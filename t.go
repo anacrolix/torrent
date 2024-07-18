@@ -233,8 +233,9 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	// there is a trade off though against memory usage (at the moment)
 	// as if not enough results processors are active memory buffers will
 	// grow leading to oom
-	g.SetLimit(maxInt(runtime.NumCPU()-2, t.cl.config.PieceHashersPerTorrent/2))
+	g.SetLimit(maxInt(runtime.NumCPU()*2-2, t.cl.config.PieceHashersPerTorrent/2))
 	defer cancel()
+
 	for i := begin; i < end; i++ {
 		i := i
 
@@ -259,7 +260,6 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 			if checkCompletion && !storage.IsNew() {
 				if sum, _, err := t.hashPiece(piece); err == nil && sum == *piece.hash {
-					fmt.Println("DL2", name, "P", i, "HASH MATCHES")
 					storage.MarkComplete(false)
 					t.updatePieceCompletion(i, true)
 					return nil
@@ -270,7 +270,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 				mu.Unlock()
 			}
 
-			fmt.Println("DL3", name, "P", i, "INCOMPLETE")
+			fmt.Println("DL3", name, "P", i, "INCOMPLETE", failedHashes)
 
 			if piece.priority.Raise(PiecePriorityNormal) {
 				pendingChanged := t.updatePiecePriorityNoTriggers(i, true)

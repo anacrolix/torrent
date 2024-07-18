@@ -270,7 +270,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 				mu.Unlock()
 			}
 
-			fmt.Println("DL3", name, "P", i, "INCOMPLETE", failedHashes)
+			fmt.Println("DL3", name, "P", i, "INCOMPLETE", checkCompletion, failedHashes)
 
 			if piece.priority.Raise(PiecePriorityNormal) {
 				pendingChanged := t.updatePiecePriorityNoTriggers(i, true)

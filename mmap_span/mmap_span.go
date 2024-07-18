@@ -24,6 +24,7 @@ type MMapSpan struct {
 	mMaps           []Mmap
 	dirtyPieces     roaring.Bitmap
 	segmentLocater  segments.Index
+	Created         bool
 	InfoHash        infohash.T
 	flushTimer      *time.Timer
 	FlushTime       time.Duration

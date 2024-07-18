@@ -28,7 +28,7 @@ func (me *mapPieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err error
 	return
 }
 
-func (me *mapPieceCompletion) Set(pk metainfo.PieceKey, b bool) error {
+func (me *mapPieceCompletion) Set(pk metainfo.PieceKey, b bool, awaitFlush bool) error {
 	me.m.Store(pk, b)
 	return nil
 }

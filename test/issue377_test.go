@@ -166,7 +166,7 @@ func (me pieceImpl) WriteAt(p []byte, off int64) (int, error) {
 	return copy(me.data[off:], p[:1]), errors.New("disk full")
 }
 
-func (me pieceImpl) MarkComplete() error {
+func (me pieceImpl) MarkComplete(awaitFlush bool) error {
 	me.state().complete = true
 	return nil
 }
@@ -180,4 +180,8 @@ func (me pieceImpl) Completion() storage.Completion {
 		Complete: me.state().complete,
 		Ok:       true,
 	}
+}
+
+func (me pieceImpl) IsNew() bool {
+	return false
 }

@@ -44,16 +44,20 @@ func (fs *filePieceImpl) Completion() Completion {
 	if !verified {
 		// The completion was wrong, fix it.
 		c.Complete = false
-		fs.completion.Set(fs.pieceKey(), false)
+		fs.completion.Set(fs.pieceKey(), false, false)
 	}
 
 	return c
 }
 
-func (fs *filePieceImpl) MarkComplete() error {
-	return fs.completion.Set(fs.pieceKey(), true)
+func (fs *filePieceImpl) MarkComplete(awaitFlush bool) error {
+	return fs.completion.Set(fs.pieceKey(), true, awaitFlush)
 }
 
 func (fs *filePieceImpl) MarkNotComplete() error {
-	return fs.completion.Set(fs.pieceKey(), false)
+	return fs.completion.Set(fs.pieceKey(), false, false)
+}
+
+func (fs *filePieceImpl) IsNew() bool {
+	return fs.created
 }

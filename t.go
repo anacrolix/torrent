@@ -1,6 +1,8 @@
 package torrent
 
 import (
+	"context"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -8,6 +10,7 @@ import (
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/sync"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -127,7 +130,7 @@ func (t *Torrent) Seeding() (ret bool) {
 func (t *Torrent) SetDisplayName(dn string) {
 	t.imu.Lock()
 	defer t.imu.Unlock()
-	
+
 	if !t.haveInfo(false) {
 		t.displayName = dn
 	}
@@ -203,31 +206,84 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	// this used to call t.updatePiecePriority(i, "Torrent.DownloadPieces", false)
 	// however that is expensive for large torrents because it calls
 	// c.updateRequests(reason, true, false) for each piece which forces an iteration
-	// of the piece order tree.  Instead the code below updated the priority with
-	// no triggers and then updated the peers at the end of that process
+	// of the piece order tree.  Instead the code below updates the priority with
+	// no triggers and then updates the peers at the end of that process
 
+	if t.dataDownloadDisallowed.Bool() {
+		return
+	}
+
+	t.disallowDataDownload(true)
+
+	mu := sync.RWMutex{}
 	changes := map[pieceIndex]struct{}{}
 	haveTrigger := false
+	failedHashes := 0
+
+	g, ctx := errgroup.WithContext(context.Background())
+	_, cancel := context.WithCancel(ctx)
+	// this is limited at the moment to avoid exess cpu usage
+	// may need to be dynamically set depending on the queue size
+	// there is a trade off though against memory usage (at the moment)
+	// as if not enough results processors are active memory buffers will
+	// grow leading to oom
+	g.SetLimit(maxInt(runtime.NumCPU()*2-1, t.cl.config.PieceHashersPerTorrent/2))
+	defer cancel()
 
 	for i := begin; i < end; i++ {
-		func() {
-			// don't lock out all processing between pieces while pieces are updated
-			t.mu.Lock()
-			defer t.mu.Unlock()
-			if t.pieces[i].priority.Raise(PiecePriorityNormal) {
-				if t.updatePiecePriorityNoTriggers(i, false) && !haveTrigger {
-					haveTrigger = true
+		t.mu.RLock()
+		piece := &t.pieces[i]
+		t.mu.RUnlock()
+
+		g.Go(func() error {
+			piece.Storage()
+
+			completion := piece.completion(true, true)
+			storage := piece.Storage()
+
+			if completion.Complete {
+				return nil
+			}
+
+			mu.RLock()
+			checkCompletion := failedHashes < 8
+			mu.RUnlock()
+
+			if checkCompletion && !storage.IsNew() {
+				if sum, _, err := t.hashPiece(piece); err == nil && sum == *piece.hash {
+					storage.MarkComplete(false)
+					t.updatePieceCompletion(piece.index, true)
+					return nil
 				}
 
-				changes[i] = struct{}{}
+				mu.Lock()
+				failedHashes++
+				mu.Unlock()
 			}
-		}()
+
+			if piece.priority.Raise(PiecePriorityNormal) {
+				pendingChanged := t.updatePiecePriorityNoTriggers(piece.index, true)
+
+				mu.Lock()
+				if pendingChanged && !haveTrigger {
+					haveTrigger = true
+				}
+				changes[piece.index] = struct{}{}
+				mu.Unlock()
+			}
+
+			return nil
+		})
 	}
+
+	g.Wait()
 
 	if !t.disableTriggers && haveTrigger {
 		func() {
 			t.mu.Lock()
 			defer t.mu.Unlock()
+
+			t.allowDataDownload(false, false)
 
 			t.iterPeers(func(c *Peer) {
 				if !c.isLowOnRequests(true, false) {
@@ -248,6 +304,8 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 			t.maybeNewConns(false)
 		}()
+	} else {
+		t.allowDataDownload(true, true)
 	}
 
 	for piece := range changes {
@@ -307,7 +365,7 @@ func (t *Torrent) AddPeers(pp []PeerInfo) (n int) {
 // Marks the entire torrent for download. Requires the info first, see
 // GotInfo. Sets piece priorities for historical reasons.
 func (t *Torrent) DownloadAll() {
-	t.DownloadPieces(0, t.numPieces(true))
+	go t.DownloadPieces(0, t.numPieces(true))
 }
 
 func (t *Torrent) String() string {

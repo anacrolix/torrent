@@ -418,7 +418,7 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 	for i := 0; i < info.NumPieces(); i++ {
 		p := info.Piece(i)
 		if alreadyCompleted {
-			require.NoError(t, greetingData.Piece(p).MarkComplete())
+			require.NoError(t, greetingData.Piece(p).MarkComplete(false))
 		}
 	}
 	cfg := TestingConfig(t)

@@ -244,13 +244,11 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	}()
 
 	for i := begin; i < end; i++ {
-		i := i
+		t.mu.RLock()
+		piece := &t.pieces[i]
+		t.mu.RUnlock()
 
 		g.Go(func() error {
-			t.mu.RLock()
-			piece := &t.pieces[i]
-			t.mu.RUnlock()
-
 			piece.Storage()
 
 			completion := piece.completion(true, true)
@@ -258,7 +256,6 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 			if completion.Complete {
 				complete.Add(int64(piece.length(true)))
-				//fmt.Println("DL complete", complete.Load())
 				return nil
 			}
 
@@ -268,10 +265,9 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 			if checkCompletion && !storage.IsNew() {
 				hashed.Add(int64(piece.length(true)))
-				//fmt.Println("DL hashed", hashed.Load())
 				if sum, _, err := t.hashPiece(piece); err == nil && sum == *piece.hash {
-					//storage.MarkComplete(false)
-					t.updatePieceCompletion(i, true)
+					storage.MarkComplete(false)
+					t.updatePieceCompletion(piece.index, true)
 					return nil
 				}
 
@@ -281,13 +277,13 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 			}
 
 			if piece.priority.Raise(PiecePriorityNormal) {
-				pendingChanged := t.updatePiecePriorityNoTriggers(i, true)
+				pendingChanged := t.updatePiecePriorityNoTriggers(piece.index, true)
 
 				mu.Lock()
 				if pendingChanged && !haveTrigger {
 					haveTrigger = true
 				}
-				changes[i] = struct{}{}
+				changes[piece.index] = struct{}{}
 				mu.Unlock()
 			}
 

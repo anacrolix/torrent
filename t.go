@@ -215,8 +215,6 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 	t.disallowDataDownload(true)
 
-	name := t.Name()
-
 	mu := sync.RWMutex{}
 	changes := map[pieceIndex]struct{}{}
 	haveTrigger := false

@@ -239,7 +239,9 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	var hashed atomic.Int64
 	var complete atomic.Int64
 	start := time.Now()
-	defer fmt.Println("DL", name, "DONE", "C:", complete.Load(), "H:", hashed.Load(), "HR:", float64(hashed.Load())/time.Since(start).Seconds())
+	defer func() {
+		fmt.Println("DL", name, "DONE", "C:", complete.Load(), "H:", hashed.Load(), "HR:", float64(hashed.Load())/time.Since(start).Seconds())
+	}()
 
 	for i := begin; i < end; i++ {
 		i := i
@@ -256,7 +258,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 			if completion.Complete {
 				complete.Add(int64(piece.length(true)))
-				fmt.Println("DL complete", complete.Load())
+				//fmt.Println("DL complete", complete.Load())
 				return nil
 			}
 
@@ -266,7 +268,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 			if checkCompletion && !storage.IsNew() {
 				hashed.Add(int64(piece.length(true)))
-				fmt.Println("DL hashed", hashed.Load())
+				//fmt.Println("DL hashed", hashed.Load())
 				if sum, _, err := t.hashPiece(piece); err == nil && sum == *piece.hash {
 					storage.MarkComplete(false)
 					t.updatePieceCompletion(i, true)

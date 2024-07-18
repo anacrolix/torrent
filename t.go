@@ -213,7 +213,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	name := t.Name()
 
 	fmt.Println("DL0", name)
-	fmt.Println("DL", name, "DONE")
+	defer fmt.Println("DL", name, "DONE")
 
 	mu := sync.RWMutex{}
 	changes := map[pieceIndex]struct{}{}
@@ -230,6 +230,8 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	g.SetLimit(maxInt(runtime.NumCPU()-2, t.cl.config.PieceHashersPerTorrent/2))
 	defer cancel()
 	for i := begin; i < end; i++ {
+		i := i
+
 		g.Go(func() error {
 			t.mu.RLock()
 			piece := &t.pieces[i]

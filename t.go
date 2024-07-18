@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"strconv"
 	"strings"
@@ -218,9 +217,6 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 	name := t.Name()
 
-	fmt.Println("DL0", name)
-	defer fmt.Println("DL", name, "DONE")
-
 	mu := sync.RWMutex{}
 	changes := map[pieceIndex]struct{}{}
 	haveTrigger := false
@@ -250,7 +246,6 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 			storage := piece.Storage()
 
 			if completion.Complete {
-				fmt.Println("DL1", name, "P", i, "COMPLETE")
 				return nil
 			}
 
@@ -269,8 +264,6 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 				failedHashes++
 				mu.Unlock()
 			}
-
-			fmt.Println("DL3", name, "P", i, "INCOMPLETE", checkCompletion, failedHashes)
 
 			if piece.priority.Raise(PiecePriorityNormal) {
 				pendingChanged := t.updatePiecePriorityNoTriggers(i, true)

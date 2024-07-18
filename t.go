@@ -256,7 +256,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 			if completion.Complete {
 				complete.Add(int64(piece.length(true)))
-				fmt.Println("DL complete", hashed.Load())
+				fmt.Println("DL complete", complete.Load())
 				return nil
 			}
 

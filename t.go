@@ -237,8 +237,9 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	fmt.Println("DL", name, "hashers", maxInt(runtime.NumCPU()*4-3, t.cl.config.PieceHashersPerTorrent/2))
 
 	var hashed atomic.Int64
+	var complete atomic.Int64
 	start := time.Now()
-	defer fmt.Println("DL", name, "DONE", "H:", hashed, "R:", float64(hashed.Load())/time.Since(start).Seconds())
+	defer fmt.Println("DL", name, "DONE", "C:", complete.Load(), "H:", hashed.Load(), "HR:", float64(hashed.Load())/time.Since(start).Seconds())
 
 	for i := begin; i < end; i++ {
 		i := i
@@ -254,6 +255,7 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 			storage := piece.Storage()
 
 			if completion.Complete {
+				complete.Add(int64(piece.length(true)))
 				return nil
 			}
 

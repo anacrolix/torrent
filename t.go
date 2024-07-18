@@ -2,11 +2,9 @@ package torrent
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/anacrolix/chansync/events"
@@ -217,8 +215,6 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 
 	t.disallowDataDownload(true)
 
-	name := t.Name()
-
 	mu := sync.RWMutex{}
 	changes := map[pieceIndex]struct{}{}
 	haveTrigger := false
@@ -234,15 +230,6 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 	g.SetLimit(maxInt(runtime.NumCPU()*2-1, t.cl.config.PieceHashersPerTorrent/2))
 	defer cancel()
 
-	fmt.Println("DL", name, "hashers", maxInt(runtime.NumCPU()*2-1, t.cl.config.PieceHashersPerTorrent/2))
-
-	var hashed atomic.Int64
-	var complete atomic.Int64
-	start := time.Now()
-	defer func() {
-		fmt.Println("DL", name, "DONE", "C:", complete.Load(), "H:", hashed.Load(), "HR:", float64(hashed.Load())/time.Since(start).Seconds())
-	}()
-
 	for i := begin; i < end; i++ {
 		t.mu.RLock()
 		piece := &t.pieces[i]
@@ -255,7 +242,6 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 			storage := piece.Storage()
 
 			if completion.Complete {
-				complete.Add(int64(piece.length(true)))
 				return nil
 			}
 
@@ -264,7 +250,6 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 			mu.RUnlock()
 
 			if checkCompletion && !storage.IsNew() {
-				hashed.Add(int64(piece.length(true)))
 				if sum, _, err := t.hashPiece(piece); err == nil && sum == *piece.hash {
 					storage.MarkComplete(false)
 					t.updatePieceCompletion(piece.index, true)

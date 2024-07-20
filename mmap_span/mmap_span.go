@@ -23,6 +23,7 @@ type MMapSpan struct {
 	mu              sync.RWMutex
 	mMaps           []Mmap
 	dirtyPieces     roaring.Bitmap
+	dirtySize       int64
 	segmentLocater  segments.Index
 	Created         bool
 	InfoHash        infohash.T
@@ -35,22 +36,23 @@ func (ms *MMapSpan) Append(mMap Mmap) {
 	ms.mMaps = append(ms.mMaps, mMap)
 }
 
-func (ms *MMapSpan) Flush() (errs []error) {
+func (ms *MMapSpan) Flush(onFlush func(size int64)) (errs []error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	if ms.flushTimer == nil {
 		ms.flushTimer = time.AfterFunc(ms.FlushTime,
 			func() {
 				// TODO deal with logging errors
-				ms.flushMaps(true)
+				ms.flushMaps(onFlush, true)
 			})
 	}
 	return
 }
 
-func (ms *MMapSpan) flushMaps(lock bool) (errs []error) {
+func (ms *MMapSpan) flushMaps(onFlush func(size int64), lock bool) (errs []error) {
 	var flushedCallback FlushedCallback
 	var dirtyPieces *roaring.Bitmap
+	var dirtySize int64
 
 	errs = func() (errs []error) {
 		if lock {
@@ -59,6 +61,7 @@ func (ms *MMapSpan) flushMaps(lock bool) (errs []error) {
 		}
 
 		dirtyPieces = ms.dirtyPieces.Clone()
+		dirtySize = ms.dirtySize
 
 		if ms.flushTimer != nil {
 			ms.flushTimer = nil
@@ -73,6 +76,7 @@ func (ms *MMapSpan) flushMaps(lock bool) (errs []error) {
 			if len(errs) == 0 {
 				flushedCallback = ms.FlushedCallback
 				ms.dirtyPieces = roaring.Bitmap{}
+				ms.dirtySize = 0
 			}
 		}
 
@@ -81,6 +85,9 @@ func (ms *MMapSpan) flushMaps(lock bool) (errs []error) {
 
 	if flushedCallback != nil {
 		flushedCallback(ms.InfoHash, dirtyPieces)
+		if onFlush != nil {
+			onFlush(dirtySize)
+		}
 	}
 
 	return
@@ -92,7 +99,7 @@ func (ms *MMapSpan) Close() (errs []error) {
 
 	if ms.flushTimer != nil {
 		ms.flushTimer.Stop()
-		errs = ms.flushMaps(false)
+		errs = ms.flushMaps(nil, false)
 		ms.flushTimer = nil
 	}
 
@@ -171,6 +178,7 @@ func (ms *MMapSpan) WriteAt(index int, p []byte, off int64) (n int, err error) {
 
 	ms.mu.Lock()
 	ms.dirtyPieces.Add(uint32(index))
+	ms.dirtySize += int64(len(p))
 	ms.mu.Unlock()
 
 	return

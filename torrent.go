@@ -2633,11 +2633,26 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		t.clearPieceTouchers(piece, true)
 
 		hasDirtyChunks := p.hasDirtyChunks(true)
+
+		var err error
+
 		if hasDirtyChunks {
-			p.Flush()
+			p.Flush(func(size int64) {
+				t.allStats(func(cs *ConnStats) {
+					cs.pieceCompleted(size)
+				})
+			})
+
+			err = p.Storage().MarkComplete(true)
+		} else {
+			err = p.Storage().MarkComplete(!hasDirtyChunks)
+			if err == nil {
+				t.allStats(func(cs *ConnStats) {
+					cs.pieceCompleted(int64(p.length(true)))
+				})
+			}
 		}
 
-		err := p.Storage().MarkComplete(!hasDirtyChunks)
 		if err != nil {
 			t.logger.Levelf(log.Warning, "%T: error marking piece complete %d: %s", t.storage, piece, err)
 		}
@@ -2810,9 +2825,12 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 				break
 			}
 
+			var length int64
+
 			func() {
 				t.mu.Lock()
 				defer t.mu.Unlock()
+				length = int64(p.length(false))
 				t.piecesQueuedForHash.Remove(bitmap.BitIndex(p.index))
 				p.mu.Lock()
 				p.hashing = true
@@ -2838,6 +2856,10 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 			p.hashing = false
 			p.mu.Unlock()
 			hashing.Add(-1)
+
+			t.allStats(func(cs *ConnStats) {
+				cs.pieceHashed(length)
+			})
 
 			t.hashResults <- hashResult{p.index, correct, failedPeers, copyErr}
 		}

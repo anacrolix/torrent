@@ -22,7 +22,7 @@ type TorrentCapacity *func() (cap int64, capped bool)
 type TorrentImpl struct {
 	Piece func(p metainfo.Piece) PieceImpl
 	Close func() error
-	Flush func() error
+	Flush func(onFlushed func(size int64)) error
 	// Storages that share the same space, will provide equal pointers. The function is called once
 	// to determine the storage for torrents sharing the same function pointer, and mutated in
 	// place.

@@ -85,10 +85,11 @@ func (ms *MMapSpan) flushMaps(onFlush func(size int64), lock bool) (errs []error
 
 	if flushedCallback != nil {
 		flushedCallback(ms.InfoHash, dirtyPieces)
-		fmt.Println("FDS", onFlush, dirtySize)
-		if onFlush != nil {
-			onFlush(dirtySize)
-		}
+	}
+
+	fmt.Println("FDS", onFlush, dirtySize)
+	if onFlush != nil {
+		onFlush(dirtySize)
 	}
 
 	return

@@ -2634,26 +2634,21 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 
 		hasDirtyChunks := p.hasDirtyChunks(true)
 
-		var err error
-
 		if hasDirtyChunks {
 			p.Flush(func(size int64) {
 				t.allStats(func(cs *ConnStats) {
-					cs.pieceCompleted(size)
+					cs.pieceFlushed(size)
 				})
 			})
-
-			err = p.Storage().MarkComplete(true)
-		} else {
-			err = p.Storage().MarkComplete(!hasDirtyChunks)
-			if err == nil {
-				t.allStats(func(cs *ConnStats) {
-					cs.pieceCompleted(int64(p.length(true)))
-				})
-			}
 		}
 
-		if err != nil {
+		err := p.Storage().MarkComplete(!hasDirtyChunks)
+		
+		if err == nil {
+			t.allStats(func(cs *ConnStats) {
+				cs.pieceCompleted(int64(p.length(true)))
+			})
+		} else {
 			t.logger.Levelf(log.Warning, "%T: error marking piece complete %d: %s", t.storage, piece, err)
 		}
 

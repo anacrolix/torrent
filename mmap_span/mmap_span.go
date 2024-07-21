@@ -85,8 +85,8 @@ func (ms *MMapSpan) flushMaps(onFlush func(size int64), lock bool) (errs []error
 
 	if flushedCallback != nil {
 		flushedCallback(ms.InfoHash, dirtyPieces)
+		fmt.Println("FDS", onFlush, dirtySize)
 		if onFlush != nil {
-			fmt.Println("FDS", dirtySize)
 			onFlush(dirtySize)
 		}
 	}
@@ -180,7 +180,6 @@ func (ms *MMapSpan) WriteAt(index int, p []byte, off int64) (n int, err error) {
 	ms.mu.Lock()
 	ms.dirtyPieces.Add(uint32(index))
 	ms.dirtySize += int64(len(p))
-	fmt.Println("DS", index, int64(len(p)), ms.dirtySize)
 	ms.mu.Unlock()
 
 	return

@@ -448,7 +448,7 @@ func requestUpdate(ws *webseedPeer) {
 						if p == &ws.peer {
 							this = "*"
 						}
-						flags := p.connectionFlags()
+						flags := p.StatusFlags()
 						peerInfo = append(peerInfo, fmt.Sprintf("%s%s:p=%d,d=%d: %f", this, flags, pieces, desired, rate))
 
 					}, false)

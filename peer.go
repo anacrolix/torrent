@@ -395,6 +395,9 @@ func (p *Peer) close(lockTorrent bool) {
 		if p.t != nil {
 			p.t.decPeerPieceAvailability(p, false, false)
 		}
+
+		p.desiredRequestLen = 0
+
 		for _, f := range p.callbacks.PeerClosed {
 			f(p)
 		}
@@ -1138,6 +1141,7 @@ func (p *Peer) desiredRequests(lock bool) int {
 		p.mu.RLock()
 		defer p.mu.RUnlock()
 	}
+
 	return p.desiredRequestLen
 }
 

@@ -184,7 +184,7 @@ func (ws *webseedPeer) requester(i int) {
 	ws.requesterCond.L.Lock()
 	defer ws.requesterCond.L.Unlock()
 
-	for !ws.peer.closed.IsSet() && i < ws.maxRequesters {
+	for !(ws.peer.closed.IsSet() || ws.peer.t.Complete.Bool()) && i < ws.maxRequesters {
 		// Restart is set if we don't need to wait for the requestCond before trying again.
 		restart := false
 

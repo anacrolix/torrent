@@ -217,7 +217,10 @@ func (cl *Client) init(cfg *ClientConfig) {
 			DialContext: cfg.HTTPDialContext,
 			// I think this value was observed from some webseeds. It seems reasonable to extend it
 			// to other uses of HTTP from the client.
-			MaxConnsPerHost: 10,
+			// This has been updated as under heavy load the golang http lib seems to panic, MaxIdleConnsPerHost
+			// is set to stop the http runtime recycling sockets
+			MaxConnsPerHost:     50,
+			MaxIdleConnsPerHost: 25,
 		}
 	}
 }
@@ -1249,7 +1252,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 		if !c.requestedMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
-		
+
 		c.mu.Lock()
 		c.metadataRequests[piece] = false
 		c.lastUsefulChunkReceived = time.Now()
@@ -1260,7 +1263,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 			return fmt.Errorf("data has bad offset in payload: %d", begin)
 		}
 		t.saveMetadataPiece(piece, payload[begin:])
-		
+
 		err = t.maybeCompleteMetadata()
 		if err != nil {
 			// Log this at the Torrent-level, as we don't partition metadata by Peer yet, so we

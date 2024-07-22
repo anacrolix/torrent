@@ -219,8 +219,8 @@ func (cl *Client) init(cfg *ClientConfig) {
 			// to other uses of HTTP from the client.
 			// This has been updated as under heavy load the golang http lib seems to panic, MaxIdleConnsPerHost
 			// is set to stop the http runtime recycling sockets
-			MaxConnsPerHost:     50,
-			MaxIdleConnsPerHost: 25,
+			MaxConnsPerHost:     500,
+			MaxIdleConnsPerHost: 500,
 		}
 	}
 }

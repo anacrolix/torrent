@@ -219,8 +219,10 @@ func (cl *Client) init(cfg *ClientConfig) {
 			// to other uses of HTTP from the client.
 			// This has been updated as under heavy load the golang http lib seems to panic, MaxIdleConnsPerHost
 			// is set to stop the http runtime recycling sockets
-			MaxConnsPerHost:     500,
-			MaxIdleConnsPerHost: 500,
+
+			// attempt to avoid panic: net/http: internal error: connCount underflow
+			//MaxConnsPerHost:     500,
+			MaxIdleConnsPerHost: 50,
 		}
 	}
 }

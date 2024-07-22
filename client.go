@@ -221,8 +221,8 @@ func (cl *Client) init(cfg *ClientConfig) {
 			// is set to stop the http runtime recycling sockets
 
 			// attempt to avoid panic: net/http: internal error: connCount underflow
-			//MaxConnsPerHost:     500,
-			MaxIdleConnsPerHost: 50,
+			MaxConnsPerHost:     0,
+			MaxIdleConnsPerHost: 100,
 		}
 	}
 }

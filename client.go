@@ -215,12 +215,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 		cl.httpClient.Transport = &http.Transport{
 			Proxy:       cfg.HTTPProxy,
 			DialContext: cfg.HTTPDialContext,
-			// I think this value was observed from some webseeds. It seems reasonable to extend it
-			// to other uses of HTTP from the client.
-			// This has been updated as under heavy load the golang http lib seems to panic, MaxIdleConnsPerHost
-			// is set to stop the http runtime recycling sockets
-
-			// attempt to avoid panic: net/http: internal error: connCount underflow
+			// Don't set maxconns - attempt to avoid panic: net/http: internal error: connCount underflow
 			MaxConnsPerHost:     0,
 			MaxIdleConnsPerHost: 100,
 		}

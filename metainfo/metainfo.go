@@ -58,7 +58,7 @@ func LoadFromFile(filename string) (*MetaInfo, error) {
 	return Load(&buf)
 }
 
-func (mi MetaInfo) UnmarshalInfo() (info Info, err error) {
+func (mi *MetaInfo) UnmarshalInfo() (info Info, err error) {
 	err = bencode.Unmarshal(mi.InfoBytes, &info)
 	return
 }
@@ -68,7 +68,7 @@ func (mi *MetaInfo) HashInfoBytes() (infoHash Hash) {
 }
 
 // Encode to bencoded form.
-func (mi MetaInfo) Write(w io.Writer) error {
+func (mi *MetaInfo) Write(w io.Writer) error {
 	return bencode.NewEncoder(w).Encode(mi)
 }
 

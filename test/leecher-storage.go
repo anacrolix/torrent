@@ -9,7 +9,7 @@ import (
 	"testing/iotest"
 
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	"github.com/frankban/quicktest"
+	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
@@ -97,7 +97,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		newGOMAXPROCS = ps.GOMAXPROCS
 	}
 	defer func() {
-		quicktest.Check(t, runtime.GOMAXPROCS(prevGOMAXPROCS), quicktest.ContentEquals, newGOMAXPROCS)
+		qt.Check(t, runtime.GOMAXPROCS(prevGOMAXPROCS), qt.ContentEquals, newGOMAXPROCS)
 	}()
 
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
@@ -251,5 +251,5 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 	pos, err := r.Seek(0, io.SeekStart)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 0, pos)
-	quicktest.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), quicktest.IsNil)
+	qt.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), qt.IsNil)
 }

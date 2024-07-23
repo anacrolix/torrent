@@ -195,7 +195,7 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 	assert.True(t, new)
 	r := tt.NewReader()
 	defer r.Close()
-	quicktest.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), quicktest.IsNil)
+	qt.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), qt.IsNil)
 }
 
 func BenchmarkAddLargeTorrent(b *testing.B) {

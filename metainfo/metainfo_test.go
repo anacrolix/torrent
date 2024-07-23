@@ -48,6 +48,9 @@ func TestFile(t *testing.T) {
 	testFile(t, "testdata/continuum.torrent")
 	testFile(t, "testdata/23516C72685E8DB0C8F15553382A927F185C4F01.torrent")
 	testFile(t, "testdata/trackerless.torrent")
+	_, err := LoadFromFile("testdata/minimal-trailing-newline.torrent")
+	c := qt.New(t)
+	c.Check(err, qt.ErrorMatches, ".*expected EOF")
 }
 
 // Ensure that the correct number of pieces are generated when hashing files.

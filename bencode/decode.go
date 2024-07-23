@@ -69,6 +69,23 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 	return
 }
 
+// Check for EOF in the decoder input stream. Used to assert the input ends on a clean message
+// boundary.
+func (d *Decoder) ReadEOF() error {
+	_, err := d.r.ReadByte()
+	if err == nil {
+		err := d.r.UnreadByte()
+		if err != nil {
+			panic(err)
+		}
+		return errors.New("expected EOF")
+	}
+	if err == io.EOF {
+		return nil
+	}
+	return fmt.Errorf("expected EOF, got %w", err)
+}
+
 func checkForUnexpectedEOF(err error, offset int64) {
 	if err == io.EOF {
 		panic(&SyntaxError{
@@ -582,8 +599,8 @@ func (d *Decoder) parseUnmarshaler(v reflect.Value) bool {
 	return true
 }
 
-// Returns true if there was a value and it's now stored in 'v', otherwise
-// there was an end symbol ("e") and no value was stored.
+// Returns true if there was a value and it's now stored in 'v'. Otherwise, there was an end symbol
+// ("e") and no value was stored.
 func (d *Decoder) parseValue(v reflect.Value) (bool, error) {
 	// we support one level of indirection at the moment
 	if v.Kind() == reflect.Ptr {

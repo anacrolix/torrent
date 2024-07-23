@@ -2,10 +2,12 @@ package bencode
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/big"
 	"reflect"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -264,4 +266,27 @@ func TestDecodeStringIntoBoolPtr(t *testing.T) {
 	check("d7:private5:falsee", false, false)
 	check("d7:private1:Fe", false, false)
 	check("d7:private11:bunnyfoofooe", false, true)
+}
+
+// To set expectations about how our Decoder should work.
+func TestJsonDecoderBehaviour(t *testing.T) {
+	c := qt.New(t)
+	test := func(input string, items int, finalErr error) {
+		d := json.NewDecoder(strings.NewReader(input))
+		actualItems := 0
+		var firstErr error
+		for {
+			var discard any
+			firstErr = d.Decode(&discard)
+			if firstErr != nil {
+				break
+			}
+			actualItems++
+		}
+		c.Check(firstErr, qt.Equals, finalErr)
+		c.Check(actualItems, qt.Equals, items)
+	}
+	test("", 0, io.EOF)
+	test("{}", 1, io.EOF)
+	test("{} {", 1, io.ErrUnexpectedEOF)
 }

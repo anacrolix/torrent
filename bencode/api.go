@@ -139,12 +139,15 @@ func MustMarshal(v interface{}) []byte {
 // behaviour (inspired by Rust's serde here).
 func Unmarshal(data []byte, v interface{}) (err error) {
 	buf := bytes.NewReader(data)
-	e := Decoder{r: buf}
-	err = e.Decode(v)
-	if err == nil && buf.Len() != 0 {
-		err = ErrUnusedTrailingBytes{buf.Len()}
+	dec := Decoder{r: buf}
+	err = dec.Decode(v)
+	if err != nil {
+		return
 	}
-	return
+	if buf.Len() != 0 {
+		return ErrUnusedTrailingBytes{buf.Len()}
+	}
+	return dec.ReadEOF()
 }
 
 type ErrUnusedTrailingBytes struct {

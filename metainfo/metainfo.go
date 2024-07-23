@@ -2,6 +2,7 @@ package metainfo
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -38,7 +39,11 @@ func Load(r io.Reader) (*MetaInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &mi, nil
+	err = d.ReadEOF()
+	if err != nil {
+		err = fmt.Errorf("error after decoding metainfo: %w", err)
+	}
+	return &mi, err
 }
 
 // Convenience function for loading a MetaInfo from a file.

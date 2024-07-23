@@ -215,7 +215,8 @@ func (cl *Client) init(cfg *ClientConfig) {
 		cl.httpClient.Transport = &http.Transport{
 			Proxy:       cfg.HTTPProxy,
 			DialContext: cfg.HTTPDialContext,
-			// Don't set maxconns - attempt to avoid panic: net/http: internal error: connCount underflow
+			// Don't set maxconns - to avoid panic: net/http: internal error: connCount underflow
+			// which is caused under load due to an ongoing issue in the go http transport code
 			MaxConnsPerHost: 0,
 		}
 	}

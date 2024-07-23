@@ -216,8 +216,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 			Proxy:       cfg.HTTPProxy,
 			DialContext: cfg.HTTPDialContext,
 			// Don't set maxconns - attempt to avoid panic: net/http: internal error: connCount underflow
-			MaxConnsPerHost:     0,
-			MaxIdleConnsPerHost: 100,
+			MaxConnsPerHost: 0,
 		}
 	}
 }

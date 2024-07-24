@@ -3,7 +3,7 @@ package types
 // Peer client ID.
 type PeerID [20]byte
 
-// // Pretty prints the ID as hex, except parts that adher to the PeerInfo ID
+// // Pretty prints the ID as hex, except parts that adhere to the PeerInfo ID
 // // Conventions of BEP 20.
 // func (me PeerID) String() string {
 // 	// if me[0] == '-' && me[7] == '-' {

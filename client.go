@@ -215,9 +215,9 @@ func (cl *Client) init(cfg *ClientConfig) {
 		cl.httpClient.Transport = &http.Transport{
 			Proxy:       cfg.HTTPProxy,
 			DialContext: cfg.HTTPDialContext,
-			// I think this value was observed from some webseeds. It seems reasonable to extend it
-			// to other uses of HTTP from the client.
-			MaxConnsPerHost: 10,
+			// Don't set maxconns - to avoid panic: net/http: internal error: connCount underflow
+			// which is caused under load due to an ongoing issue in the go http transport code
+			MaxConnsPerHost: 0,
 		}
 	}
 }
@@ -1249,7 +1249,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 		if !c.requestedMetadataPiece(piece) {
 			return fmt.Errorf("got unexpected piece %d", piece)
 		}
-		
+
 		c.mu.Lock()
 		c.metadataRequests[piece] = false
 		c.lastUsefulChunkReceived = time.Now()
@@ -1260,7 +1260,7 @@ func (cl *Client) gotMetadataExtensionMsg(payload []byte, t *Torrent, c *PeerCon
 			return fmt.Errorf("data has bad offset in payload: %d", begin)
 		}
 		t.saveMetadataPiece(piece, payload[begin:])
-		
+
 		err = t.maybeCompleteMetadata()
 		if err != nil {
 			// Log this at the Torrent-level, as we don't partition metadata by Peer yet, so we

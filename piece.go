@@ -56,9 +56,9 @@ func (p *Piece) Storage() storage.Piece {
 	return p.t.storage.Piece(p.Info())
 }
 
-func (p *Piece) Flush() {
+func (p *Piece) Flush(onFlushed func(size int64)) {
 	if p.t.storage.Flush != nil {
-		_ = p.t.storage.Flush()
+		_ = p.t.storage.Flush(onFlushed)
 	}
 }
 

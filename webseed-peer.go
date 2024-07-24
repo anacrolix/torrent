@@ -184,7 +184,7 @@ func (ws *webseedPeer) requester(i int) {
 	ws.requesterCond.L.Lock()
 	defer ws.requesterCond.L.Unlock()
 
-	for !ws.peer.closed.IsSet() && i < ws.maxRequesters {
+	for !(ws.peer.closed.IsSet() || ws.peer.t.Complete.Bool()) && i < ws.maxRequesters {
 		// Restart is set if we don't need to wait for the requestCond before trying again.
 		restart := false
 
@@ -448,7 +448,7 @@ func requestUpdate(ws *webseedPeer) {
 						if p == &ws.peer {
 							this = "*"
 						}
-						flags := p.connectionFlags()
+						flags := p.StatusFlags()
 						peerInfo = append(peerInfo, fmt.Sprintf("%s%s:p=%d,d=%d: %f", this, flags, pieces, desired, rate))
 
 					}, false)
@@ -498,7 +498,7 @@ func (cn *webseedPeer) ban() {
 	banCount := cn.peer.banCount
 	cn.peer.mu.Unlock()
 
-	if banCount > 16 && !cn.peer.closed.IsSet() {
+	if banCount > 5 && !cn.peer.closed.IsSet() {
 		cn.peer.close(true)
 	}
 }

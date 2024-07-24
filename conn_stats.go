@@ -26,6 +26,7 @@ type ConnStats struct {
 	BytesReadUsefulIntendedData Count
 
 	BytesHashed    Count
+	BytesFlushed   Count
 	BytesCompleted Count
 
 	ChunksWritten Count
@@ -85,6 +86,18 @@ func (cs *ConnStats) wroteMsg(msg *pp.Message) {
 func (cs *ConnStats) receivedChunk(size int64) {
 	cs.ChunksRead.Add(1)
 	cs.BytesReadData.Add(size)
+}
+
+func (cs *ConnStats) pieceHashed(size int64) {
+	cs.BytesHashed.Add(size)
+}
+
+func (cs *ConnStats) pieceCompleted(size int64) {
+	cs.BytesCompleted.Add(size)
+}
+
+func (cs *ConnStats) pieceFlushed(size int64) {
+	cs.BytesFlushed.Add(size)
 }
 
 func (cs *ConnStats) incrementPiecesDirtiedGood() {

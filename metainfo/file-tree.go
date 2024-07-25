@@ -4,9 +4,9 @@ import (
 	"sort"
 
 	g "github.com/anacrolix/generics"
-	"golang.org/x/exp/maps"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/internal/exp/maps"
 )
 
 const FileTreePropertiesKey = ""

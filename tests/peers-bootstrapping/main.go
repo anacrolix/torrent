@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,7 +14,6 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/sync"
 	"github.com/dustin/go-humanize"
-	"golang.org/x/exp/slog"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/bencode"

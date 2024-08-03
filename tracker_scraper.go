@@ -25,8 +25,6 @@ type trackerScraper struct {
 	mu              sync.RWMutex
 	lastAnnounce    trackerAnnounceResult
 	lookupTrackerIp func(*url.URL) ([]net.IP, error)
-	ips             []net.IP
-	lastIpLookup    time.Time
 }
 
 type torrentTrackerAnnouncer interface {
@@ -75,25 +73,50 @@ type trackerAnnounceResult struct {
 	Completed time.Time
 }
 
+type ilu struct {
+	ips        []net.IP
+	lookupTime time.Time
+}
+
+var ipc = map[string]*ilu{}
+var ipcmu sync.RWMutex
+
 func (me *trackerScraper) getIp() (ip net.IP, err error) {
 	// cache the ip lookup for 15 mins, this avoids
 	// spamming DNS on os's that don't cache DNS lookups
 	//  Cache TTL between 1 and 6 hours
 
-	if len(me.ips) == 0 || time.Since(me.lastIpLookup) > time.Hour+time.Duration(rand.Int63n(int64(5*time.Hour))) {
-		me.lastIpLookup = time.Now()
+	ipcmu.RLock()
+	lu := ipc[me.u.String()]
+	ipcmu.RUnlock()
+
+	var ips []net.IP
+
+	if lu != nil && time.Since(lu.lookupTime) > time.Hour+time.Duration(rand.Int63n(int64(5*time.Hour))) {
+		ips = lu.ips
+	}
+
+	if len(ips) == 0 {
 		if me.lookupTrackerIp != nil {
-			me.ips, err = me.lookupTrackerIp(&me.u)
+			ips, err = me.lookupTrackerIp(&me.u)
 		} else {
 			// Do a regular dns lookup
-			me.ips, err = net.LookupIP(me.u.Hostname())
+			ips, err = net.LookupIP(me.u.Hostname())
 		}
 		if err != nil {
 			return
 		}
+
+		ipcmu.Lock()
+		ipc[me.u.String()] = &ilu{
+			ips:        ips,
+			lookupTime: time.Now(),
+		}
+
+		ipcmu.Unlock()
 	}
 
-	if len(me.ips) == 0 {
+	if len(ips) == 0 {
 		err = errors.New("no ips")
 		return
 	}
@@ -103,7 +126,7 @@ func (me *trackerScraper) getIp() (ip net.IP, err error) {
 		err = errors.New("client is closed")
 		return
 	}
-	for _, ip = range me.ips {
+	for _, ip = range ips {
 		if me.t.cl.ipIsBlocked(ip) {
 			continue
 		}
@@ -120,7 +143,6 @@ func (me *trackerScraper) getIp() (ip net.IP, err error) {
 		return
 	}
 
-	me.ips = nil
 	err = errors.New("no acceptable ips")
 	return
 }

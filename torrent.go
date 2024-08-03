@@ -2887,8 +2887,10 @@ func (t *Torrent) processHashResults(hashResults chan hashResult) {
 
 		for done := false; !done; {
 			select {
-			case result := <-hashResults:
-				results = append(results, result)
+			case result, ok := <-hashResults:
+				if ok {
+					results = append(results, result)
+				}
 			default:
 				done = true
 			}

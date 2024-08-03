@@ -2856,7 +2856,13 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 				cs.pieceHashed(length)
 			})
 
-			t.hashResults <- hashResult{p.index, correct, failedPeers, copyErr}
+			t.mu.RLock()
+			hashResults := t.hashResults
+			t.mu.RUnlock()
+
+			if hashResults != nil {
+				hashResults <- hashResult{p.index, correct, failedPeers, copyErr}
+			}
 		}
 	}()
 

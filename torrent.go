@@ -2643,7 +2643,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		}
 
 		err := p.Storage().MarkComplete(!hasDirtyChunks)
-		
+
 		if err == nil {
 			t.allStats(func(cs *ConnStats) {
 				cs.pieceCompleted(int64(p.length(true)))
@@ -2773,7 +2773,7 @@ func (t *Torrent) tryCreateMorePieceHashers(lock bool) {
 			}
 			if t.hashResults == nil {
 				t.hashResults = make(chan hashResult, t.cl.config.PieceHashersPerTorrent*16)
-				go t.processHashResults()
+				go t.processHashResults(t.hashResults)
 			}
 		}()
 	}
@@ -2870,7 +2870,7 @@ type hashResult struct {
 	copyErr     error
 }
 
-func (t *Torrent) processHashResults() {
+func (t *Torrent) processHashResults(hashResults chan hashResult) {
 
 	g, ctx := errgroup.WithContext(context.Background())
 	_, cancel := context.WithCancel(ctx)
@@ -2883,11 +2883,11 @@ func (t *Torrent) processHashResults() {
 	defer cancel()
 
 	for !t.closed.IsSet() {
-		results := []hashResult{<-t.hashResults}
+		results := []hashResult{<-hashResults}
 
 		for done := false; !done; {
 			select {
-			case result := <-t.hashResults:
+			case result := <-hashResults:
 				results = append(results, result)
 			default:
 				done = true

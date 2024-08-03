@@ -78,8 +78,9 @@ type trackerAnnounceResult struct {
 func (me *trackerScraper) getIp() (ip net.IP, err error) {
 	// cache the ip lookup for 15 mins, this avoids
 	// spamming DNS on os's that don't cache DNS lookups
+	//  Cache TTL between 1 and 6 hours
 
-	if len(me.ips) == 0 || time.Since(me.lastIpLookup) > 15*time.Minute+time.Duration(rand.Int63n(int64(5*time.Minute))) {
+	if len(me.ips) == 0 || time.Since(me.lastIpLookup) > time.Hour+time.Duration(rand.Int63n(int64(5*time.Hour))) {
 		me.lastIpLookup = time.Now()
 		if me.lookupTrackerIp != nil {
 			me.ips, err = me.lookupTrackerIp(&me.u)

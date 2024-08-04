@@ -1108,7 +1108,6 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	t.pieceStateChanges.Close()
 	t.updateWantPeersEvent(false)
 	if t.hashResults != nil {
-		fmt.Println("TC", t.name(false))
 		close(t.hashResults)
 		t.hashResults = nil
 	}
@@ -2864,7 +2863,6 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 			select {
 			case hashResults <- hashResult{p.index, correct, failedPeers, copyErr}:
 			case <-t.closed.Done():
-				fmt.Println("HDONE", t.name(true))
 			}
 		}
 	}()

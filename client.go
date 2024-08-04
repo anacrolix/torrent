@@ -440,11 +440,16 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 func (cl *Client) Close() (errs []error) {
 	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
 	cl.lock()
+	var mu sync.Mutex
 	for _, t := range cl.torrentsAsSlice() {
-		err := t.close(&closeGroup)
-		if err != nil {
-			errs = append(errs, err)
-		}
+		go func() {
+			err := t.close(&closeGroup)
+			if err != nil {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+			}
+		}()
 	}
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()

@@ -2857,10 +2857,13 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 			})
 
 			t.mu.RLock()
-			if hashResults := t.hashResults; hashResults != nil {
-				hashResults <- hashResult{p.index, correct, failedPeers, copyErr}
-			}
+			hashResults := t.hashResults
 			t.mu.RUnlock()
+
+			select {
+			case hashResults <- hashResult{p.index, correct, failedPeers, copyErr}:
+			case <-t.closed.Done():
+			}
 		}
 	}()
 

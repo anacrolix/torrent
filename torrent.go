@@ -2890,7 +2890,16 @@ func (t *Torrent) processHashResults(hashResults chan hashResult) {
 	defer cancel()
 
 	for !t.closed.IsSet() {
-		results := []hashResult{<-hashResults}
+		results := []hashResult{}
+
+		select {
+		case result, ok := <-hashResults:
+			if ok {
+				results = append(results, result)
+			}
+		case <-t.closed.Done():
+			return
+		}
 
 		for done := false; !done; {
 			select {
@@ -2898,6 +2907,8 @@ func (t *Torrent) processHashResults(hashResults chan hashResult) {
 				if ok {
 					results = append(results, result)
 				}
+			case <-t.closed.Done():
+				return
 			default:
 				done = true
 			}

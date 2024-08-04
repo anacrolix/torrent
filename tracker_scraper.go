@@ -74,6 +74,7 @@ type trackerAnnounceResult struct {
 }
 
 type ilu struct {
+	err        error
 	ips        []net.IP
 	lookupTime time.Time
 }
@@ -90,33 +91,35 @@ func (me *trackerScraper) getIp() (ip net.IP, err error) {
 	lu := ipc[me.u.String()]
 	ipcmu.RUnlock()
 
-	var ips []net.IP
+	if lu == nil ||
+		time.Since(lu.lookupTime) > time.Hour+time.Duration(rand.Int63n(int64(5*time.Hour))) ||
+		lu.err != nil && time.Since(lu.lookupTime) > 15*time.Minute {
+		var ips []net.IP
 
-	if lu != nil && time.Since(lu.lookupTime) > time.Hour+time.Duration(rand.Int63n(int64(5*time.Hour))) {
-		ips = lu.ips
-	}
-
-	if len(ips) == 0 {
 		if me.lookupTrackerIp != nil {
 			ips, err = me.lookupTrackerIp(&me.u)
 		} else {
 			// Do a regular dns lookup
+			fmt.Println("LU", me.u.Hostname())
 			ips, err = net.LookupIP(me.u.Hostname())
-		}
-		if err != nil {
-			return
 		}
 
 		ipcmu.Lock()
-		ipc[me.u.String()] = &ilu{
+		lu = &ilu{
+			err:        err,
 			ips:        ips,
 			lookupTime: time.Now(),
 		}
-
+		ipc[me.u.String()] = lu
 		ipcmu.Unlock()
+
 	}
 
-	if len(ips) == 0 {
+	if lu.err != nil {
+		return
+	}
+
+	if len(lu.ips) == 0 {
 		err = errors.New("no ips")
 		return
 	}
@@ -126,7 +129,7 @@ func (me *trackerScraper) getIp() (ip net.IP, err error) {
 		err = errors.New("client is closed")
 		return
 	}
-	for _, ip = range ips {
+	for _, ip = range lu.ips {
 		if me.t.cl.ipIsBlocked(ip) {
 			continue
 		}

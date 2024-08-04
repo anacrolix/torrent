@@ -100,7 +100,6 @@ func (me *trackerScraper) getIp() (ip net.IP, err error) {
 			ips, err = me.lookupTrackerIp(&me.u)
 		} else {
 			// Do a regular dns lookup
-			fmt.Println("LU", me.u.Hostname())
 			ips, err = net.LookupIP(me.u.Hostname())
 		}
 

@@ -2863,6 +2863,7 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 			select {
 			case hashResults <- hashResult{p.index, correct, failedPeers, copyErr}:
 			case <-t.closed.Done():
+				fmt.Println("HDONE")
 			}
 		}
 	}()

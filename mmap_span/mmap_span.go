@@ -42,8 +42,15 @@ func (ms *MMapSpan) Flush(onFlush func(size int64)) (errs []error) {
 	if ms.flushTimer == nil {
 		ms.flushTimer = time.AfterFunc(ms.FlushTime,
 			func() {
-				// TODO deal with logging errors
-				ms.flushMaps(onFlush, true)
+				ms.mu.Lock()
+				flushTimer := ms.flushTimer
+				ms.flushTimer = nil
+				ms.mu.Unlock()
+
+				if flushTimer != nil {
+					// TODO deal with logging errors
+					ms.flushMaps(onFlush, true)
+				}
 			})
 	}
 	return
@@ -63,21 +70,18 @@ func (ms *MMapSpan) flushMaps(onFlush func(size int64), lock bool) (errs []error
 		dirtyPieces = ms.dirtyPieces.Clone()
 		dirtySize = ms.dirtySize
 
-		if ms.flushTimer != nil {
-			ms.flushTimer = nil
-			for _, mMap := range ms.mMaps {
-				err := mMap.Flush()
-				if err != nil {
-					errs = append(errs, err)
+		for _, mMap := range ms.mMaps {
+			err := mMap.Flush()
+			if err != nil {
+				errs = append(errs, err)
 
-				}
 			}
+		}
 
-			if len(errs) == 0 {
-				flushedCallback = ms.FlushedCallback
-				ms.dirtyPieces = roaring.Bitmap{}
-				ms.dirtySize = 0
-			}
+		if len(errs) == 0 {
+			flushedCallback = ms.FlushedCallback
+			ms.dirtyPieces = roaring.Bitmap{}
+			ms.dirtySize = 0
 		}
 
 		return

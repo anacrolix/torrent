@@ -440,6 +440,12 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 func (cl *Client) Close() (errs []error) {
 	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
 	cl.lock()
+
+	if cl.closed.IsSet() {
+		cl.unlock()
+		return
+	}
+
 	var mu sync.Mutex
 	for _, t := range cl.torrentsAsSlice() {
 		go func() {
@@ -451,13 +457,14 @@ func (cl *Client) Close() (errs []error) {
 			}
 		}()
 	}
+	cl.closed.Set()
+	cl.unlock()
+	closeGroup.Wait()
+	// don't close resources until torrent closes are complete
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}
-	cl.closed.Set()
-	cl.unlock()
 	cl.event.Broadcast()
-	closeGroup.Wait() // defer is LIFO. We want to Wait() after cl.unlock()
 	return
 }
 

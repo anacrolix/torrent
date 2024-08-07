@@ -102,6 +102,7 @@ func (ms *MMapSpan) Close() (errs []error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
+	fmt.Println("MMS CLS")
 	if ms.flushTimer != nil {
 		ms.flushTimer.Stop()
 		errs = ms.flushMaps(nil, false)

@@ -1106,6 +1106,7 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 			t.storageLock.Lock()
 			defer t.storageLock.Unlock()
 			if f := t.storage.Close; f != nil {
+				fmt.Println("CLS", t.name(true))
 				err1 := f()
 				if err1 != nil {
 					t.logger.WithDefaultLevel(log.Warning).Printf("error closing storage: %v", err1)

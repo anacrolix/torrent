@@ -449,8 +449,12 @@ func (cl *Client) Close() (errs []error) {
 	fmt.Println("CLI CLS")
 	var mu sync.Mutex
 	for _, t := range cl.torrentsAsSlice() {
+		closeGroup.Add(1)
+
 		go func(t *Torrent) {
-			err := t.close(&closeGroup)
+			defer closeGroup.Done()
+
+			err := t.close()
 			if err != nil {
 				mu.Lock()
 				errs = append(errs, err)
@@ -1535,7 +1539,9 @@ func (cl *Client) dropTorrent(infoHash metainfo.Hash, wg *sync.WaitGroup) (err e
 		err = fmt.Errorf("no such torrent")
 		return
 	}
-	err = t.close(wg)
+	wg.Add(1)
+	defer wg.Done()
+	err = t.close()
 	delete(cl.torrents, infoHash)
 	return
 }

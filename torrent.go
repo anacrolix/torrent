@@ -1065,7 +1065,7 @@ func (t *Torrent) numPiecesCompleted(lock bool) (num pieceIndex) {
 	return pieceIndex(t._completedPieces.GetCardinality())
 }
 
-func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
+func (t *Torrent) close() (err error) {
 	if !t.closed.Set() {
 		err = errors.New("already closed")
 		return
@@ -1099,23 +1099,15 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	}()
 
 	if t.storage != nil {
-		closed := make(chan struct{})
-		defer func() { closed <- struct{}{} }()
 		fmt.Println("ST CLS", t.name(true))
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			<-closed
-			t.storageLock.Lock()
-			defer t.storageLock.Unlock()
-			if f := t.storage.Close; f != nil {
-				fmt.Println("CLS", t.name(true))
-				if err := f(); err != nil {
-					fmt.Println("ERR", t.name(true))
-					t.logger.WithDefaultLevel(log.Warning).Printf("error closing storage: %v", err)
-				}
+		t.storageLock.Lock()
+		defer t.storageLock.Unlock()
+		if f := t.storage.Close; f != nil {
+			fmt.Println("CLS", t.name(true))
+			if err := f(); err != nil {
+				t.logger.WithDefaultLevel(log.Warning).Printf("error closing storage: %v", err)
 			}
-		}()
+		}
 	}
 
 	return

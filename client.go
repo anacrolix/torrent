@@ -446,16 +446,17 @@ func (cl *Client) Close() (errs []error) {
 		return
 	}
 
+	fmt.Println("CLI CLS")
 	var mu sync.Mutex
 	for _, t := range cl.torrentsAsSlice() {
-		go func() {
+		go func(t *Torrent) {
 			err := t.close(&closeGroup)
 			if err != nil {
 				mu.Lock()
 				errs = append(errs, err)
 				mu.Unlock()
 			}
-		}()
+		}(t)
 	}
 	cl.closed.Set()
 	cl.unlock()

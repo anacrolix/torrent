@@ -1070,6 +1070,9 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 		err = errors.New("already closed")
 		return
 	}
+
+	fmt.Println("CLS", t.name(true))
+
 	for _, f := range t.onClose {
 		f()
 	}
@@ -1098,7 +1101,7 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 	if t.storage != nil {
 		closed := make(chan struct{})
 		defer func() { closed <- struct{}{} }()
-
+		fmt.Println("ST CLS", t.name(true))
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -1107,9 +1110,9 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 			defer t.storageLock.Unlock()
 			if f := t.storage.Close; f != nil {
 				fmt.Println("CLS", t.name(true))
-				err1 := f()
-				if err1 != nil {
-					t.logger.WithDefaultLevel(log.Warning).Printf("error closing storage: %v", err1)
+				if err := f(); err != nil {
+					fmt.Println("ERR", t.name(true))
+					t.logger.WithDefaultLevel(log.Warning).Printf("error closing storage: %v", err)
 				}
 			}
 		}()

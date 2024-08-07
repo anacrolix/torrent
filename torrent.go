@@ -1074,6 +1074,27 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 		f()
 	}
 
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+
+		t.iterPeers(func(p *Peer) {
+			p.close(false)
+		}, false)
+		if t.storage != nil {
+			t.deletePieceRequestOrder()
+		}
+		t.assertAllPiecesRelativeAvailabilityZero(false)
+		t.pex.Reset()
+		t.cl.event.Broadcast()
+		t.pieceStateChanges.Close()
+		t.updateWantPeersEvent(false)
+		if t.hashResults != nil {
+			close(t.hashResults)
+			t.hashResults = nil
+		}
+	}()
+
 	if t.storage != nil {
 		closed := make(chan struct{})
 		defer func() { closed <- struct{}{} }()
@@ -1093,24 +1114,6 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 		}()
 	}
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	t.iterPeers(func(p *Peer) {
-		p.close(false)
-	}, false)
-	if t.storage != nil {
-		t.deletePieceRequestOrder()
-	}
-	t.assertAllPiecesRelativeAvailabilityZero(false)
-	t.pex.Reset()
-	t.cl.event.Broadcast()
-	t.pieceStateChanges.Close()
-	t.updateWantPeersEvent(false)
-	if t.hashResults != nil {
-		close(t.hashResults)
-		t.hashResults = nil
-	}
 	return
 }
 

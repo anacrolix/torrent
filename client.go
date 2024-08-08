@@ -446,7 +446,6 @@ func (cl *Client) Close() (errs []error) {
 		return
 	}
 
-	fmt.Println("CLI CLS")
 	var mu sync.Mutex
 	for _, t := range cl.torrentsAsSlice() {
 		closeGroup.Add(1)

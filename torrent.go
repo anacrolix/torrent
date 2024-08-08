@@ -1071,8 +1071,6 @@ func (t *Torrent) close() (err error) {
 		return
 	}
 
-	fmt.Println("CLS", t.name(true))
-
 	for _, f := range t.onClose {
 		f()
 	}
@@ -1099,11 +1097,9 @@ func (t *Torrent) close() (err error) {
 	}()
 
 	if t.storage != nil {
-		fmt.Println("ST CLS", t.name(true))
 		t.storageLock.Lock()
 		defer t.storageLock.Unlock()
 		if f := t.storage.Close; f != nil {
-			fmt.Println("CLS", t.name(true))
 			if err := f(); err != nil {
 				t.logger.WithDefaultLevel(log.Warning).Printf("error closing storage: %v", err)
 			}

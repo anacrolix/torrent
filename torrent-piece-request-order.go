@@ -33,10 +33,16 @@ func (t *Torrent) clientPieceRequestOrderKey() interface{} {
 	return t.storage.Capacity
 }
 
-func (t *Torrent) deletePieceRequestOrder() {
+func (t *Torrent) deletePieceRequestOrder(lockClient bool) {
 	if t.storage == nil {
 		return
 	}
+
+	if lockClient {
+		t.cl.lock()
+		defer t.cl.unlock()
+	}
+
 	cpro := t.cl.pieceRequestOrder
 	key := t.clientPieceRequestOrderKey()
 	pro := cpro[key]

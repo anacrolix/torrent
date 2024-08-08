@@ -1082,9 +1082,15 @@ func (t *Torrent) close() (err error) {
 		t.iterPeers(func(p *Peer) {
 			p.close(false)
 		}, false)
-		if t.storage != nil {
-			t.deletePieceRequestOrder()
-		}
+	}()
+
+	if t.storage != nil {
+		t.deletePieceRequestOrder(true)
+	}
+
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
 		t.assertAllPiecesRelativeAvailabilityZero(false)
 		t.pex.Reset()
 		t.cl.event.Broadcast()

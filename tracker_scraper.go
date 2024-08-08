@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/url"
 	"sync"
@@ -72,18 +73,52 @@ type trackerAnnounceResult struct {
 	Completed time.Time
 }
 
+type ilu struct {
+	err        error
+	ips        []net.IP
+	lookupTime time.Time
+}
+
+var ipc = map[string]*ilu{}
+var ipcmu sync.RWMutex
+
 func (me *trackerScraper) getIp() (ip net.IP, err error) {
-	var ips []net.IP
-	if me.lookupTrackerIp != nil {
-		ips, err = me.lookupTrackerIp(&me.u)
-	} else {
-		// Do a regular dns lookup
-		ips, err = net.LookupIP(me.u.Hostname())
+	// cache the ip lookup for 15 mins, this avoids
+	// spamming DNS on os's that don't cache DNS lookups
+	//  Cache TTL between 1 and 6 hours
+
+	ipcmu.RLock()
+	lu := ipc[me.u.String()]
+	ipcmu.RUnlock()
+
+	if lu == nil ||
+		time.Since(lu.lookupTime) > time.Hour+time.Duration(rand.Int63n(int64(5*time.Hour))) ||
+		lu.err != nil && time.Since(lu.lookupTime) > 15*time.Minute {
+		var ips []net.IP
+
+		if me.lookupTrackerIp != nil {
+			ips, err = me.lookupTrackerIp(&me.u)
+		} else {
+			// Do a regular dns lookup
+			ips, err = net.LookupIP(me.u.Hostname())
+		}
+
+		ipcmu.Lock()
+		lu = &ilu{
+			err:        err,
+			ips:        ips,
+			lookupTime: time.Now(),
+		}
+		ipc[me.u.String()] = lu
+		ipcmu.Unlock()
+
 	}
-	if err != nil {
+
+	if lu.err != nil {
 		return
 	}
-	if len(ips) == 0 {
+
+	if len(lu.ips) == 0 {
 		err = errors.New("no ips")
 		return
 	}
@@ -93,7 +128,7 @@ func (me *trackerScraper) getIp() (ip net.IP, err error) {
 		err = errors.New("client is closed")
 		return
 	}
-	for _, ip = range ips {
+	for _, ip = range lu.ips {
 		if me.t.cl.ipIsBlocked(ip) {
 			continue
 		}
@@ -109,6 +144,7 @@ func (me *trackerScraper) getIp() (ip net.IP, err error) {
 		}
 		return
 	}
+
 	err = errors.New("no acceptable ips")
 	return
 }

@@ -1065,52 +1065,53 @@ func (t *Torrent) numPiecesCompleted(lock bool) (num pieceIndex) {
 	return pieceIndex(t._completedPieces.GetCardinality())
 }
 
-func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
+func (t *Torrent) close() (err error) {
 	if !t.closed.Set() {
 		err = errors.New("already closed")
 		return
 	}
+
 	for _, f := range t.onClose {
 		f()
 	}
 
-	if t.storage != nil {
-		closed := make(chan struct{})
-		defer func() { closed <- struct{}{} }()
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			<-closed
-			t.storageLock.Lock()
-			defer t.storageLock.Unlock()
-			if f := t.storage.Close; f != nil {
-				err1 := f()
-				if err1 != nil {
-					t.logger.WithDefaultLevel(log.Warning).Printf("error closing storage: %v", err1)
-				}
+		t.iterPeers(func(p *Peer) {
+			p.close(false)
+		}, false)
+	}()
+
+	if t.storage != nil {
+		t.deletePieceRequestOrder(true)
+	}
+
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.assertAllPiecesRelativeAvailabilityZero(false)
+		t.pex.Reset()
+		t.cl.event.Broadcast()
+		t.pieceStateChanges.Close()
+		t.updateWantPeersEvent(false)
+		if t.hashResults != nil {
+			close(t.hashResults)
+			t.hashResults = nil
+		}
+	}()
+
+	if t.storage != nil {
+		t.storageLock.Lock()
+		defer t.storageLock.Unlock()
+		if f := t.storage.Close; f != nil {
+			if err := f(); err != nil {
+				t.logger.WithDefaultLevel(log.Warning).Printf("error closing storage: %v", err)
 			}
-		}()
+		}
 	}
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	t.iterPeers(func(p *Peer) {
-		p.close(false)
-	}, false)
-	if t.storage != nil {
-		t.deletePieceRequestOrder()
-	}
-	t.assertAllPiecesRelativeAvailabilityZero(false)
-	t.pex.Reset()
-	t.cl.event.Broadcast()
-	t.pieceStateChanges.Close()
-	t.updateWantPeersEvent(false)
-	if t.hashResults != nil {
-		close(t.hashResults)
-		t.hashResults = nil
-	}
 	return
 }
 
@@ -2643,7 +2644,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		}
 
 		err := p.Storage().MarkComplete(!hasDirtyChunks)
-		
+
 		if err == nil {
 			t.allStats(func(cs *ConnStats) {
 				cs.pieceCompleted(int64(p.length(true)))
@@ -2773,7 +2774,7 @@ func (t *Torrent) tryCreateMorePieceHashers(lock bool) {
 			}
 			if t.hashResults == nil {
 				t.hashResults = make(chan hashResult, t.cl.config.PieceHashersPerTorrent*16)
-				go t.processHashResults()
+				go t.processHashResults(t.hashResults)
 			}
 		}()
 	}
@@ -2856,7 +2857,14 @@ func (t *Torrent) tryCreatePieceHasher(lock bool) bool {
 				cs.pieceHashed(length)
 			})
 
-			t.hashResults <- hashResult{p.index, correct, failedPeers, copyErr}
+			t.mu.RLock()
+			hashResults := t.hashResults
+			t.mu.RUnlock()
+
+			select {
+			case hashResults <- hashResult{p.index, correct, failedPeers, copyErr}:
+			case <-t.closed.Done():
+			}
 		}
 	}()
 
@@ -2870,7 +2878,7 @@ type hashResult struct {
 	copyErr     error
 }
 
-func (t *Torrent) processHashResults() {
+func (t *Torrent) processHashResults(hashResults chan hashResult) {
 
 	g, ctx := errgroup.WithContext(context.Background())
 	_, cancel := context.WithCancel(ctx)
@@ -2883,12 +2891,25 @@ func (t *Torrent) processHashResults() {
 	defer cancel()
 
 	for !t.closed.IsSet() {
-		results := []hashResult{<-t.hashResults}
+		results := []hashResult{}
+
+		select {
+		case result, ok := <-hashResults:
+			if ok {
+				results = append(results, result)
+			}
+		case <-t.closed.Done():
+			return
+		}
 
 		for done := false; !done; {
 			select {
-			case result := <-t.hashResults:
-				results = append(results, result)
+			case result, ok := <-hashResults:
+				if ok {
+					results = append(results, result)
+				}
+			case <-t.closed.Done():
+				return
 			default:
 				done = true
 			}

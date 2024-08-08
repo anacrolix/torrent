@@ -440,19 +440,35 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 func (cl *Client) Close() (errs []error) {
 	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
 	cl.lock()
-	for _, t := range cl.torrentsAsSlice() {
-		err := t.close(&closeGroup)
-		if err != nil {
-			errs = append(errs, err)
-		}
+
+	if cl.closed.IsSet() {
+		cl.unlock()
+		return
 	}
-	for i := range cl.onClose {
-		cl.onClose[len(cl.onClose)-1-i]()
+
+	var mu sync.Mutex
+	for _, t := range cl.torrentsAsSlice() {
+		closeGroup.Add(1)
+
+		go func(t *Torrent) {
+			defer closeGroup.Done()
+
+			err := t.close()
+			if err != nil {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+			}
+		}(t)
 	}
 	cl.closed.Set()
 	cl.unlock()
+	closeGroup.Wait()
+	// don't close resources until torrent closes are complete
+	for i := range cl.onClose {
+		cl.onClose[len(cl.onClose)-1-i]()
+	}
 	cl.event.Broadcast()
-	closeGroup.Wait() // defer is LIFO. We want to Wait() after cl.unlock()
 	return
 }
 
@@ -1522,7 +1538,9 @@ func (cl *Client) dropTorrent(infoHash metainfo.Hash, wg *sync.WaitGroup) (err e
 		err = fmt.Errorf("no such torrent")
 		return
 	}
-	err = t.close(wg)
+	wg.Add(1)
+	defer wg.Done()
+	err = t.close()
 	delete(cl.torrents, infoHash)
 	return
 }

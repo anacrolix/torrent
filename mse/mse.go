@@ -12,6 +12,7 @@ import (
 	"errors"
 	"expvar"
 	"fmt"
+	"github.com/anacrolix/torrent/internal/ctxrw"
 	"io"
 	"math"
 	"math/big"
@@ -554,7 +555,7 @@ func InitiateHandshakeContext(
 ) {
 	h := handshake{
 		conn:           rw,
-		ctxConn:        contextedReadWriter(ctx, rw),
+		ctxConn:        ctxrw.WrapReadWriter(ctx, rw),
 		initer:         true,
 		skey:           skey,
 		ia:             initialPayload,
@@ -589,7 +590,7 @@ func ReceiveHandshakeEx(
 ) (ret HandshakeResult) {
 	h := handshake{
 		conn:         rw,
-		ctxConn:      contextedReadWriter(ctx, rw),
+		ctxConn:      ctxrw.WrapReadWriter(ctx, rw),
 		initer:       false,
 		skeys:        skeys,
 		chooseMethod: selectCrypto,

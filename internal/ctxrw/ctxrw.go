@@ -1,4 +1,4 @@
-package mse
+package ctxrw
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func (me contextedWriter) Write(p []byte) (n int, err error) {
 	return contextedReadOrWrite(me.ctx, me.w.Write, p)
 }
 
-func contextedReadWriter(ctx context.Context, rw io.ReadWriter) io.ReadWriter {
+func WrapReadWriter(ctx context.Context, rw io.ReadWriter) io.ReadWriter {
 	return struct {
 		io.Reader
 		io.Writer

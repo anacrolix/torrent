@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -187,7 +188,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 
 	var pex PeerExtensionBits
 	pex.SetBit(pp.ExtensionBitLtep, true)
-	hr, err := pp.Handshake(nc, &ih, [20]byte{}, pex)
+	hr, err := pp.Handshake(context.Background(), nc, &ih, [20]byte{}, pex)
 	require.NoError(t, err)
 	assert.True(t, hr.PeerExtensionBits.GetBit(pp.ExtensionBitLtep))
 	assert.EqualValues(t, cl.PeerID(), hr.PeerID)

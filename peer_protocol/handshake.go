@@ -1,9 +1,11 @@
 package peer_protocol
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/anacrolix/torrent/internal/ctxrw"
 	"io"
 	"math/bits"
 	"strconv"
@@ -122,10 +124,15 @@ type HandshakeResult struct {
 // connection. Returns ok if the Handshake was successful, and err if there was an unexpected
 // condition other than the peer simply abandoning the Handshake.
 func Handshake(
-	sock io.ReadWriter, ih *metainfo.Hash, peerID [20]byte, extensions PeerExtensionBits,
+	ctx context.Context,
+	sock io.ReadWriter,
+	ih *metainfo.Hash,
+	peerID [20]byte,
+	extensions PeerExtensionBits,
 ) (
 	res HandshakeResult, err error,
 ) {
+	sock = ctxrw.WrapReadWriter(ctx, sock)
 	// Bytes to be sent to the peer. Should never block the sender.
 	postCh := make(chan []byte, 4)
 	// A single error value sent when the writer completes.

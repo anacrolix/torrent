@@ -728,7 +728,7 @@ func (cl *Client) initiateProtocolHandshakes(
 	if err != nil {
 		panic(err)
 	}
-	err = cl.initiateHandshakes(c, t)
+	err = cl.initiateHandshakes(ctx, c, t)
 	return
 }
 
@@ -914,10 +914,11 @@ func (cl *Client) incomingPeerPort() int {
 	return cl.LocalPort()
 }
 
-func (cl *Client) initiateHandshakes(c *PeerConn, t *Torrent) (err error) {
+func (cl *Client) initiateHandshakes(ctx context.Context, c *PeerConn, t *Torrent) (err error) {
 	if c.headerEncrypted {
 		var rw io.ReadWriter
-		rw, c.cryptoMethod, err = mse.InitiateHandshake(
+		rw, c.cryptoMethod, err = mse.InitiateHandshakeContext(
+			ctx,
 			struct {
 				io.Reader
 				io.Writer

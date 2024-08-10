@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -65,7 +66,7 @@ func handleEncryption(
 		}
 	}
 	headerEncrypted = true
-	ret, cryptoMethod, err = mse.ReceiveHandshake(rw, skeys, selector)
+	ret, cryptoMethod, err = mse.ReceiveHandshake(context.TODO(), rw, skeys, selector)
 	return
 }
 

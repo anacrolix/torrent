@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -62,7 +63,7 @@ func mainErr() error {
 			return fmt.Errorf("accepting: %w", err)
 		}
 		defer cn.Close()
-		rw, _, err := mse.ReceiveHandshake(cn, func(f func([]byte) bool) {
+		rw, _, err := mse.ReceiveHandshake(context.TODO(), cn, func(f func([]byte) bool) {
 			for _, sk := range args.Listen.SecretKeys {
 				f([]byte(sk))
 			}

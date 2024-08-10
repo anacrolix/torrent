@@ -2,6 +2,7 @@ package mse
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rc4"
 	"io"
@@ -77,7 +78,12 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 	}()
 	go func() {
 		defer wg.Done()
-		res := ReceiveHandshakeEx(b, sliceIter([][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")}), cryptoSelect)
+		res := ReceiveHandshakeEx(
+			context.Background(),
+			b,
+			sliceIter([][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")}),
+			cryptoSelect,
+		)
 		require.NoError(t, res.error)
 		assert.EqualValues(t, "yep", res.SecretKey)
 		b := res.ReadWriter
@@ -130,7 +136,7 @@ func (tr *trackReader) Read(b []byte) (n int, err error) {
 
 func TestReceiveRandomData(t *testing.T) {
 	tr := trackReader{rand.Reader, 0}
-	_, _, err := ReceiveHandshake(readWriter{&tr, io.Discard}, nil, DefaultCryptoSelector)
+	_, _, err := ReceiveHandshake(context.Background(), readWriter{&tr, io.Discard}, nil, DefaultCryptoSelector)
 	// No skey matches
 	require.Error(t, err)
 	// Establishing S, and then reading the maximum padding for giving up on
@@ -185,7 +191,12 @@ func benchmarkStream(t *testing.B, crypto CryptoMethod) {
 		}()
 		func() {
 			defer bc.Close()
-			rw, _, err := ReceiveHandshake(bc, sliceIter([][]byte{[]byte("cats")}), func(CryptoMethod) CryptoMethod { return crypto })
+			rw, _, err := ReceiveHandshake(
+				context.Background(),
+				bc,
+				sliceIter([][]byte{[]byte("cats")}),
+				func(CryptoMethod) CryptoMethod { return crypto },
+			)
 			require.NoError(t, err)
 			require.NoError(t, readAndWrite(rw, br, b))
 		}()
@@ -270,7 +281,7 @@ func BenchmarkSkeysReceive(b *testing.B) {
 				panic(err)
 			}
 		}()
-		res := ReceiveHandshakeEx(receiver, sliceIter(skeys), DefaultCryptoSelector)
+		res := ReceiveHandshakeEx(context.Background(), receiver, sliceIter(skeys), DefaultCryptoSelector)
 		if res.error != nil {
 			panic(res.error)
 		}

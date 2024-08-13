@@ -316,7 +316,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 
 	cl.websocketTrackers = websocketTrackers{
 		PeerId: cl.peerID,
-		Logger: cl.logger,
+		Logger: cl.logger.WithNames("websocketTrackers"),
 		GetAnnounceRequest: func(
 			event tracker.AnnounceEvent, infoHash [20]byte,
 		) (

@@ -234,6 +234,7 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 		return fmt.Errorf("creating offer: %w", err)
 	}
 
+	tc.Logger.Levelf(log.Debug, "announcing offer")
 	err = tc.announce(event, infoHash, []outboundOffer{
 		{
 			offerId: offerIDBinary,
@@ -308,7 +309,7 @@ func (tc *TrackerClient) trackerReadLoop(tracker *websocket.Conn) error {
 		if err != nil {
 			return fmt.Errorf("read message error: %w", err)
 		}
-		// tc.Logger.WithDefaultLevel(log.Debug).Printf("received message from tracker: %q", message)
+		tc.Logger.Levelf(log.Debug, "received message: %q", message)
 
 		var ar AnnounceResponse
 		if err := json.Unmarshal(message, &ar); err != nil {
@@ -333,7 +334,13 @@ func (tc *TrackerClient) trackerReadLoop(tracker *websocket.Conn) error {
 		case ar.Answer != nil:
 			tc.handleAnswer(ar.OfferID, *ar.Answer)
 		default:
-			tc.Logger.Levelf(log.Warning, "unhandled announce response %q", message)
+			// wss://tracker.openwebtorrent.com appears to respond to an initial announces without
+			// an offer or answer. I think that's fine. Let's check it at least contains an
+			// infohash.
+			_, err := jsonStringToInfoHash(ar.InfoHash)
+			if err != nil {
+				tc.Logger.Levelf(log.Warning, "unexpected announce response %q", message)
+			}
 		}
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	app "github.com/anacrolix/gostdapp"
 	"io"
 	stdLog "log"
 	"net/http"
@@ -39,12 +40,15 @@ func shutdownTracerProvider(ctx context.Context, tp *trace.TracerProvider) {
 }
 
 func main() {
+	app.RunContext(mainErr)
+}
+
+func mainErr(ctx context.Context) error {
 	defer stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
 
-	ctx := context.Background()
 	tracingExporter, err := otlptracegrpc.New(ctx)
 	if err != nil {
-		log.Fatalf("creating tracing exporter: %v", err)
+		return fmt.Errorf("creating tracing exporter: %w", err)
 	}
 	tracerProvider := trace.NewTracerProvider(trace.WithBatcher(tracingExporter))
 	defer shutdownTracerProvider(ctx, tracerProvider)
@@ -148,5 +152,8 @@ func main() {
 		bargle.Subcommand{Name: "serve", Command: serve()},
 		bargle.Subcommand{Name: "create", Command: create()},
 	)
+	// Well this sux, this old version of bargle doesn't return so we can let the gostdapp Context
+	// clean up.
 	main.Run()
+	return nil
 }

@@ -1910,10 +1910,11 @@ func (t *Torrent) startWebsocketAnnouncer(u url.URL, shortInfohash [20]byte) tor
 	go func() {
 		err := wtc.Announce(tracker.Started, shortInfohash)
 		if err != nil {
-			t.logger.WithDefaultLevel(log.Warning).Printf(
-				"error in initial announce to %q: %v",
-				u.String(), err,
-			)
+			level := log.Warning
+			if t.closed.IsSet() {
+				level = log.Debug
+			}
+			t.logger.Levelf(level, "error doing initial announce to %q: %v", u.String(), err)
 		}
 	}()
 	return wst

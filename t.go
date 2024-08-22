@@ -256,9 +256,6 @@ func (t *Torrent) DownloadPieces(begin, end pieceIndex) {
 						cs.pieceHashed(size)
 					})
 					storage.MarkComplete(false)
-					t.allStats(func(cs *ConnStats) {
-						cs.pieceCompleted(size)
-					})
 					t.updatePieceCompletion(piece.index, true)
 					return nil
 				}

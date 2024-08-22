@@ -1770,6 +1770,12 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex, lock bool) bool {
 	x := uint32(piece)
 
 	if complete {
+		if !t._completedPieces.Contains(x) {
+			t.allStats(func(cs *ConnStats) {
+				cs.pieceCompleted(p.Info().Length())
+			})
+		}
+
 		t._completedPieces.Add(x)
 		t.openNewConns(false)
 	} else {
@@ -2645,11 +2651,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 
 		err := p.Storage().MarkComplete(!hasDirtyChunks)
 
-		if err == nil {
-			t.allStats(func(cs *ConnStats) {
-				cs.pieceCompleted(int64(p.length(true)))
-			})
-		} else {
+		if err != nil {
 			t.logger.Levelf(log.Warning, "%T: error marking piece complete %d: %s", t.storage, piece, err)
 		}
 

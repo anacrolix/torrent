@@ -49,6 +49,35 @@ func (ft *FileTree) UnmarshalBencode(bytes []byte) (err error) {
 
 var _ bencode.Unmarshaler = (*FileTree)(nil)
 
+func (ft *FileTree) MarshalBencode() (bytes []byte, err error) {
+	if ft.IsDir() {
+		dir := make(map[string]bencode.Bytes, len(ft.Dir))
+		for _, key := range ft.orderedKeys() {
+			if key == FileTreePropertiesKey {
+				continue
+			}
+			sub := g.MapMustGet(ft.Dir, key)
+			subBytes, err := sub.MarshalBencode()
+			if err != nil {
+				return nil, err
+			}
+			dir[key] = subBytes
+		}
+		return bencode.Marshal(dir)
+	} else {
+		fileBytes, err := bencode.Marshal(ft.File)
+		if err != nil {
+			return nil, err
+		}
+		res := map[string]bencode.Bytes{
+			"": fileBytes,
+		}
+		return bencode.Marshal(res)
+	}
+}
+
+var _ bencode.Marshaler = (*FileTree)(nil)
+
 func (ft *FileTree) NumEntries() (num int) {
 	num = len(ft.Dir)
 	if g.MapContains(ft.Dir, FileTreePropertiesKey) {

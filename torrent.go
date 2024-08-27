@@ -2898,7 +2898,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
 	for _, f := range t.callbacks().NewPeer {
 		f(&ws.peer)
 	}
-	ws.peer.logger = t.logger.WithContextValue(&ws)
+	ws.peer.logger = t.logger.WithContextValue(&ws).WithNames("webseed")
 	ws.peer.peerImpl = &ws
 	if t.haveInfo() {
 		ws.onGotInfo(t.info)

@@ -1,0 +1,5 @@
+This directory tests the fix for https://github.com/anacrolix/torrent/issues/964#issuecomment-2295308596. See the justfile too.
+
+The seeder should start fetching from HTTP, despite the webseed being added after Torrent.DownloadAll is called. It should still fetch even if the leecher doesn't connect (disable the AddPeers line).
+
+This whole test should be a unit test but those are annoying to make and not comprehensive (in this case we also have a Python HTTP server that does interesting things).

@@ -84,27 +84,29 @@ func (ws *webseedPeer) requestIteratorLocked(requesterIndex int, x RequestIndex)
 	}
 	webseedRequest := ws.client.StartNewRequest(ws.intoSpec(r))
 	ws.activeRequests[r] = webseedRequest
+	locker := ws.requesterCond.L
 	err := func() error {
-		ws.requesterCond.L.Unlock()
-		defer ws.requesterCond.L.Lock()
+		locker.Unlock()
+		defer locker.Lock()
 		return ws.requestResultHandler(r, webseedRequest)
 	}()
 	delete(ws.activeRequests, r)
-	ws.requesterCond.L.Unlock()
-	defer ws.requesterCond.L.Lock()
 	if err != nil {
 		level := log.Warning
 		if errors.Is(err, context.Canceled) {
 			level = log.Debug
 		}
 		ws.peer.logger.Levelf(level, "requester %v: error doing webseed request %v: %v", requesterIndex, r, err)
-		// This used to occur only on webseed.ErrTooFast but I think it makes sense to slow down
-		// any kind of error. There are maxRequests (in Torrent.addWebSeed) requestors bouncing
-		// around it doesn't hurt to slow a few down if there are issues.
+		// This used to occur only on webseed.ErrTooFast but I think it makes sense to slow down any
+		// kind of error. There are maxRequests (in Torrent.addWebSeed) requestors bouncing around
+		// it doesn't hurt to slow a few down if there are issues.
+		locker.Unlock()
 		select {
 		case <-ws.peer.closed.Done():
 		case <-time.After(time.Duration(rand.Int63n(int64(10 * time.Second)))):
 		}
+		locker.Lock()
+		ws.peer.updateRequests("webseedPeer request errored")
 	}
 	return false
 

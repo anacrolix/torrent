@@ -1,6 +1,7 @@
 package metainfo
 
 import (
+	g "github.com/anacrolix/generics"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,7 @@ import (
 
 func TestMarshalInfo(t *testing.T) {
 	var info Info
+	g.MakeSliceWithLength(&info.Pieces, 0)
 	b, err := bencode.Marshal(info)
 	assert.NoError(t, err)
 	assert.EqualValues(t, "d4:name0:12:piece lengthi0e6:pieces0:e", string(b))

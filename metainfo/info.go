@@ -13,11 +13,12 @@ import (
 
 // The info dictionary. See BEP 3 and BEP 52.
 type Info struct {
-	PieceLength int64  `bencode:"piece length"`     // BEP3
-	Pieces      []byte `bencode:"pieces,omitempty"` // BEP3
-	Name        string `bencode:"name"`             // BEP3
-	NameUtf8    string `bencode:"name.utf-8,omitempty"`
-	Length      int64  `bencode:"length,omitempty"` // BEP3, mutually exclusive with Files
+	PieceLength int64 `bencode:"piece length"` // BEP3
+	// BEP 3. This can be omitted because isn't needed in non-hybrid v2 infos. See BEP 52.
+	Pieces   []byte `bencode:"pieces,omitempty"`
+	Name     string `bencode:"name"` // BEP3
+	NameUtf8 string `bencode:"name.utf-8,omitempty"`
+	Length   int64  `bencode:"length,omitempty"` // BEP3, mutually exclusive with Files
 	ExtendedFileAttrs
 	Private *bool `bencode:"private,omitempty"` // BEP27
 	// TODO: Document this field.

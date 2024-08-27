@@ -1054,6 +1054,11 @@ func (t *Torrent) numPieces(lock bool) pieceIndex {
 		t.imu.RLock()
 		defer t.imu.RUnlock()
 	}
+
+	if t.info == nil {
+		return 0
+	}
+
 	return t.info.NumPieces()
 }
 

@@ -1,6 +1,6 @@
 module github.com/anacrolix/torrent/tests/webseed-partial-seed
 
-go 1.22.3
+go 1.23
 
 require (
 	github.com/anacrolix/torrent v1.56.1

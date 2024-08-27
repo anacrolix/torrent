@@ -3,6 +3,7 @@ package torrent
 import (
 	g "github.com/anacrolix/generics"
 	list "github.com/bahlo/generic-list-go"
+	"iter"
 
 	"github.com/anacrolix/torrent/typed-roaring"
 )
@@ -41,10 +42,22 @@ func (o *orderedBitmap[T]) Rank(index T) uint64 {
 	return o.bitmap.Rank(index)
 }
 
-func (o *orderedBitmap[T]) Iterate(f func(T) bool) {
+func (o *orderedBitmap[T]) Iterate(f func(T) bool) (all bool) {
 	for e := o.order.Front(); e != nil; e = e.Next() {
 		if !f(e.Value) {
 			return
+		}
+	}
+	all = true
+	return
+}
+
+func (o *orderedBitmap[T]) Iterator() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		for e := o.order.Front(); e != nil; e = e.Next() {
+			if !yield(e.Value) {
+				return
+			}
 		}
 	}
 }

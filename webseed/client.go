@@ -68,8 +68,8 @@ type RequestResult struct {
 	Err   error
 }
 
-func (ws *Client) NewRequest(r RequestSpec) Request {
-	ctx, cancel := context.WithCancel(context.Background())
+func (ws *Client) StartNewRequest(r RequestSpec) Request {
+	ctx, cancel := context.WithCancel(context.TODO())
 	var requestParts []requestPart
 	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
 		req, err := newRequest(

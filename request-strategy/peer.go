@@ -2,6 +2,7 @@ package requestStrategy
 
 import (
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
+	"iter"
 )
 
 type PeerRequestState struct {
@@ -24,7 +25,9 @@ type PeerRequests interface {
 	// See roaring.Bitmap.Rank.
 	Rank(RequestIndex) uint64
 	// Must yield in order items were added.
-	Iterate(func(RequestIndex) bool)
+	Iterate(func(RequestIndex) bool) (all bool)
+	// Must yield in order items were added.
+	Iterator() iter.Seq[RequestIndex]
 	// See roaring.Bitmap.CheckedRemove.
 	CheckedRemove(RequestIndex) bool
 	// Iterate a snapshot of the values. It is safe to mutate the underlying data structure.

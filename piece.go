@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -8,6 +9,7 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
+	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/storage"
@@ -307,5 +309,28 @@ func (p *Piece) haveHash() bool {
 }
 
 func (p *Piece) hasPieceLayer() bool {
-	return int64(p.length()) > p.t.info.PieceLength
+	return len(p.files) == 1 && p.files[0].length > p.t.info.PieceLength
+}
+
+func (p *Piece) obtainHashV2() (hash [32]byte, err error) {
+	if p.hashV2.Ok {
+		hash = p.hashV2.Value
+		return
+	}
+	if !p.hasPieceLayer() {
+		hash = p.mustGetOnlyFile().piecesRoot.Unwrap()
+		return
+	}
+	storage := p.Storage()
+	if !storage.Completion().Complete {
+		err = errors.New("piece incomplete")
+		return
+	}
+
+	h := merkle.NewHash()
+	if _, err = storage.WriteTo(h); err != nil {
+		return
+	}
+	h.SumMinLength(hash[:0], int(p.t.info.PieceLength))
+	return
 }

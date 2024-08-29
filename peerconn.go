@@ -895,7 +895,9 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 		case pp.Hashes:
 			err = c.onReadHashes(&msg)
-		case pp.HashRequest, pp.HashReject:
+		case pp.HashRequest:
+			err = c.onHashRequest(&msg)
+		case pp.HashReject:
 			c.protocolLogger.Levelf(log.Info, "received unimplemented BitTorrent v2 message: %v", msg.Type)
 		default:
 			err = fmt.Errorf("received unknown message type: %#v", msg.Type)
@@ -1353,6 +1355,69 @@ func (pc *PeerConn) onReadHashes(msg *pp.Message) (err error) {
 			"peer file piece hashes root mismatch: %x != %x",
 			root, expectedPiecesRoot)
 	}
+	return nil
+}
+
+func (pc *PeerConn) getHashes(msg *pp.Message) ([][32]byte, error) {
+	if msg.ProofLayers != 0 {
+		return nil, errors.New("proof layers not supported")
+	}
+	if msg.Length > 8192 {
+		return nil, fmt.Errorf("requested too many hashes: %d", msg.Length)
+	}
+	file := pc.t.getFileByPiecesRoot(msg.PiecesRoot)
+	if file == nil {
+		return nil, fmt.Errorf("no file for pieces root %x", msg.PiecesRoot)
+	}
+	beginPieceIndex := file.BeginPieceIndex()
+	endPieceIndex := file.EndPieceIndex()
+	length := merkle.RoundUpToPowerOfTwo(uint(endPieceIndex - beginPieceIndex))
+	if uint(msg.Index+msg.Length) > length {
+		return nil, errors.New("invalid hash range")
+	}
+
+	hashes := make([][32]byte, msg.Length)
+	padHash := metainfo.HashForPiecePad(int64(pc.t.usualPieceSize()))
+	for i := range hashes {
+		torrentPieceIndex := beginPieceIndex + int(msg.Index) + i
+		if torrentPieceIndex >= endPieceIndex {
+			hashes[i] = padHash
+			continue
+		}
+		piece := pc.t.piece(torrentPieceIndex)
+		hash, err := piece.obtainHashV2()
+		if err != nil {
+			return nil, fmt.Errorf("can't get hash for piece %d: %w", torrentPieceIndex, err)
+		}
+		hashes[i] = hash
+	}
+	return hashes, nil
+}
+
+func (pc *PeerConn) onHashRequest(msg *pp.Message) error {
+	if !pc.t.info.HasV2() {
+		return errors.New("torrent has no v2 metadata")
+	}
+
+	resp := pp.Message{
+		PiecesRoot:  msg.PiecesRoot,
+		BaseLayer:   msg.BaseLayer,
+		Index:       msg.Index,
+		Length:      msg.Length,
+		ProofLayers: msg.ProofLayers,
+	}
+
+	hashes, err := pc.getHashes(msg)
+	if err != nil {
+		pc.protocolLogger.WithNames(v2HashesLogName).Levelf(log.Debug, "error getting hashes: %v", err)
+		resp.Type = pp.HashReject
+		pc.write(resp)
+		return nil
+	}
+
+	resp.Type = pp.Hashes
+	resp.Hashes = hashes
+	pc.write(resp)
 	return nil
 }
 

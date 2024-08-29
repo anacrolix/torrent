@@ -67,18 +67,19 @@ type MessageWriter interface {
 	io.Writer
 }
 
+func (msg *Message) writeHashCommon(buf MessageWriter) (err error) {
+	if _, err = buf.Write(msg.PiecesRoot[:]); err != nil {
+		return
+	}
+	for _, d := range []Integer{msg.BaseLayer, msg.Index, msg.Length, msg.ProofLayers} {
+		if err = binary.Write(buf, binary.BigEndian, d); err != nil {
+			return
+		}
+	}
+	return nil
+}
+
 func (msg *Message) writePayloadTo(buf MessageWriter) (err error) {
-	mustWrite := func(data any) {
-		err := binary.Write(buf, binary.BigEndian, data)
-		if err != nil {
-			panic(err)
-		}
-	}
-	writeConsecutive := func(data ...any) {
-		for _, d := range data {
-			mustWrite(d)
-		}
-	}
 	if !msg.Keepalive {
 		err = buf.WriteByte(byte(msg.Type))
 		if err != nil {
@@ -119,9 +120,18 @@ func (msg *Message) writePayloadTo(buf MessageWriter) (err error) {
 			_, err = buf.Write(msg.ExtendedPayload)
 		case Port:
 			err = binary.Write(buf, binary.BigEndian, msg.Port)
-		case HashRequest:
-			buf.Write(msg.PiecesRoot[:])
-			writeConsecutive(msg.BaseLayer, msg.Index, msg.Length, msg.ProofLayers)
+		case HashRequest, HashReject:
+			err = msg.writeHashCommon(buf)
+		case Hashes:
+			err = msg.writeHashCommon(buf)
+			if err != nil {
+				return
+			}
+			for _, h := range msg.Hashes {
+				if _, err = buf.Write(h[:]); err != nil {
+					return
+				}
+			}
 		default:
 			err = fmt.Errorf("unknown message type: %v", msg.Type)
 		}

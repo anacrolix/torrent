@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	app "github.com/anacrolix/gostdapp"
 	"io"
 	stdLog "log"
 	"net/http"
 	"os"
 	"time"
+
+	app "github.com/anacrolix/gostdapp"
 
 	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/envpprof"
@@ -150,6 +151,7 @@ func mainErr(ctx context.Context) error {
 			Desc: "prints various protocol default version strings",
 		}},
 		bargle.Subcommand{Name: "serve", Command: serve()},
+		bargle.Subcommand{Name: "serve_muti", Command: serve_muti()},
 		bargle.Subcommand{Name: "create", Command: create()},
 	)
 	// Well this sux, this old version of bargle doesn't return so we can let the gostdapp Context

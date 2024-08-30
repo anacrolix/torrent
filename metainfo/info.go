@@ -92,6 +92,66 @@ func (info *Info) BuildFromFilePath(root string) (err error) {
 	return
 }
 
+// This is a helper that sets Files and Pieces from a root path and its children.
+func (info *Info) BuildFromMutiFilePaths(filePaths ...string) (err error) {
+	root := "."
+
+	info.Name = func() string {
+		b := filepath.Base(root)
+		switch b {
+		case ".", "..", string(filepath.Separator):
+			return NoName
+		default:
+			return b
+		}
+	}()
+	info.Files = nil
+	for _, filePath := range filePaths {
+		st, _ := os.Stat(filePath)
+
+		if st.IsDir() {
+			err = filepath.Walk(filePath, func(path string, fi os.FileInfo, err error) error {
+				if fi.IsDir() {
+					return nil
+				}
+
+				relPath, err := filepath.Rel(root, path)
+				if err != nil {
+					return fmt.Errorf("error getting relative path: %s", err)
+				}
+
+				info.Files = append(info.Files, FileInfo{
+					Path:   strings.Split(relPath, string(filepath.Separator)),
+					Length: fi.Size(),
+				})
+				return nil
+			})
+			if err != nil {
+				fmt.Println(err)
+			}
+		} else {
+			relPath, _ := filepath.Rel(root, filePath)
+			info.Files = append(info.Files, FileInfo{
+				Path:   strings.Split(relPath, string(filepath.Separator)),
+				Length: st.Size(),
+			})
+		}
+	}
+	slices.Sort(info.Files, func(l, r FileInfo) bool {
+		return strings.Join(l.BestPath(), "/") < strings.Join(r.BestPath(), "/")
+	})
+	if info.PieceLength == 0 {
+		info.PieceLength = ChoosePieceLength(info.TotalLength())
+	}
+	err = info.GeneratePieces(func(fi FileInfo) (io.ReadCloser, error) {
+		return os.Open(filepath.Join(root, strings.Join(fi.BestPath(), string(filepath.Separator))))
+	})
+	if err != nil {
+		err = fmt.Errorf("error generating pieces: %s", err)
+	}
+	return
+}
+
 // Concatenates all the files in the torrent into w. open is a function that
 // gets at the contents of the given file.
 func (info *Info) writeFiles(w io.Writer, open func(fi FileInfo) (io.ReadCloser, error)) error {

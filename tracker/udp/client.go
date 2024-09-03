@@ -225,6 +225,9 @@ func (cl *Client) request(
 			// udp://tracker.torrent.eu.org:451/announce frequently returns "Connection ID
 			// missmatch.\x00"
 			err = ErrorResponse{Message: string(dr.Body)}
+			// Force a reconnection. Probably any error is worth doing this for, but the one we're
+			// specifically interested in is ConnectionIdMissmatchNul.
+			cl.connIdIssued = time.Time{}
 		} else {
 			err = fmt.Errorf("unexpected response action %v", dr.Header.Action)
 		}

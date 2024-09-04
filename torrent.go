@@ -124,6 +124,7 @@ type Torrent struct {
 
 	mu  sync.RWMutex
 	imu sync.RWMutex
+
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
 	displayName string
@@ -136,7 +137,7 @@ type Torrent struct {
 	// received that piece.
 	metadataCompletedChunks []bool
 	metadataChanged         sync.Cond
-
+	event                   sync.Cond
 	// Closed when .Info is obtained.
 	gotMetainfoC chan struct{}
 
@@ -595,7 +596,7 @@ func (t *Torrent) onSetInfo(lock bool, lockClient bool) {
 			t.updatePiecePriority(i, "Torrent.OnSetInfo", false)
 		}
 	}
-	t.cl.event.Broadcast()
+	t.event.Broadcast()
 	close(t.gotMetainfoC)
 	t.updateWantPeersEvent(false)
 	t.requestState = make(map[RequestIndex]requestState)
@@ -1098,7 +1099,7 @@ func (t *Torrent) close() (err error) {
 		defer t.mu.Unlock()
 		t.assertAllPiecesRelativeAvailabilityZero(false)
 		t.pex.Reset()
-		t.cl.event.Broadcast()
+		t.event.Broadcast()
 		t.pieceStateChanges.Close()
 		t.updateWantPeersEvent(false)
 		if t.hashResults != nil {
@@ -1553,7 +1554,7 @@ func (t *Torrent) readerPosChanged(from, to pieceRange, lock bool) {
 
 func (t *Torrent) maybeNewConns(lock bool) {
 	// Tickle the accept routine.
-	t.cl.event.Broadcast()
+	t.event.Broadcast()
 	t.openNewConns(lock)
 }
 
@@ -1689,7 +1690,7 @@ func (t *Torrent) pieceCompletionChanged(piece pieceIndex, reason string, lock b
 		defer t.mu.Unlock()
 	}
 
-	t.cl.event.Broadcast()
+	t.event.Broadcast()
 	if t.pieceComplete(piece, false) {
 		t.onPieceCompleted(piece, false)
 	} else {
@@ -2006,7 +2007,7 @@ func (t *Torrent) assertPendingRequests(lock bool) {
 }
 
 func (t *Torrent) dropConnection(c *PeerConn, lock bool) {
-	t.cl.event.Broadcast()
+	t.event.Broadcast()
 	if t.deletePeerConn(c, lock) {
 		t.openNewConns(lock)
 	}
@@ -2305,9 +2306,8 @@ func (t *Torrent) timeboxedAnnounceToDht(s DhtServer) error {
 }
 
 func (t *Torrent) dhtAnnouncer(s DhtServer) {
-	cl := t.cl
-	cl.lock()
-	defer cl.unlock()
+	t.mu.Lock()
+	defer t.mu.Lock()
 	for {
 		for {
 			if t.closed.IsSet() {
@@ -2316,21 +2316,28 @@ func (t *Torrent) dhtAnnouncer(s DhtServer) {
 			// We're also announcing ourselves as a listener, so we don't just want peer addresses.
 			// TODO: We can include the announce_peer step depending on whether we can receive
 			// inbound connections. We should probably only announce once every 15 mins too.
-			if !t.wantAnyConns(true) {
+			if !t.wantAnyConns(false) {
 				goto wait
 			}
-			// TODO: Determine if there's a listener on the port we're announcing.
-			if len(cl.dialers) == 0 && len(cl.listeners) == 0 {
+
+			if func() bool {
+				t.mu.Unlock()
+				defer t.mu.Lock()
+				t.cl.lock()
+				defer t.cl.unlock()
+				// TODO: Determine if there's a listener on the port we're announcing.
+				return len(t.cl.dialers) == 0 && len(t.cl.listeners) == 0
+			}() {
 				goto wait
 			}
 			break
 		wait:
-			cl.event.Wait()
+			t.event.Wait()
 		}
 		func() {
 			t.numDHTAnnounces++
-			cl.unlock()
-			defer cl.lock()
+			t.mu.Unlock()
+			defer t.mu.Lock()
 			err := t.timeboxedAnnounceToDht(s)
 			if err != nil {
 				t.logger.WithDefaultLevel(log.Warning).Printf("error announcing %q to DHT: %s", t, err)
@@ -2472,7 +2479,7 @@ func (t *Torrent) addPeerConn(c *PeerConn, lockTorrent bool) (err error) {
 
 	t.conns[c] = struct{}{}
 
-	t.cl.event.Broadcast()
+	t.event.Broadcast()
 	// We'll never receive the "p" extended handshake parameter.
 	if !t.cl.config.DisablePEX && !c.PeerExtensionBytes.SupportsExtended() {
 		c.mu.Lock()
@@ -2591,7 +2598,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	p.numVerifies++
 	storageCompletionOk := p.storageCompletionOk
 	p.mu.Unlock()
-	t.cl.event.Broadcast()
+	t.event.Broadcast()
 
 	if t.closed.IsSet() {
 		return

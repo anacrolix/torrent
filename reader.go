@@ -70,13 +70,13 @@ var _ io.ReadSeekCloser = (*reader)(nil)
 
 func (r *reader) SetResponsive() {
 	r.responsive = true
-	r.t.cl.event.Broadcast()
+	r.t.event.Broadcast()
 }
 
 // Disable responsive mode. TODO: Remove?
 func (r *reader) SetNonResponsive() {
 	r.responsive = false
-	r.t.cl.event.Broadcast()
+	r.t.event.Broadcast()
 }
 
 func (r *reader) SetReadahead(readahead int64) {

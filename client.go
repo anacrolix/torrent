@@ -60,7 +60,6 @@ type Client struct {
 	connStats ConnStats
 
 	_mu    lockWithDeferreds
-	event  sync.Cond
 	closed chansync.SetOnce
 
 	config *ClientConfig
@@ -206,7 +205,6 @@ func (cl *Client) init(cfg *ClientConfig) {
 	g.MakeMap(&cl.dopplegangerAddrs)
 	cl.torrents = make(map[metainfo.Hash]*Torrent)
 	cl.activeAnnounceLimiter.SlotsPerKey = 2
-	cl.event.L = cl.locker()
 	cl.ipBlockList = cfg.IPBlocklist
 	cl.httpClient = &http.Client{
 		Transport: cfg.WebTransport,
@@ -468,7 +466,6 @@ func (cl *Client) Close() (errs []error) {
 	for i := range cl.onClose {
 		cl.onClose[len(cl.onClose)-1-i]()
 	}
-	cl.event.Broadcast()
 	return
 }
 
@@ -1367,6 +1364,9 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		webSeeds:     make(map[string]*Peer),
 		gotMetainfoC: make(chan struct{}),
 	}
+
+	t.event.L = &t.mu
+
 	var salt [8]byte
 	rand.Read(salt[:])
 	t.smartBanCache.Hash = func(b []byte) uint64 {
@@ -1424,7 +1424,7 @@ func (cl *Client) AddTorrentInfoHashWithStorage(infoHash metainfo.Hash, specStor
 	cl.clearAcceptLimits()
 	t.updateWantPeersEvent(true)
 	// Tickle Client.waitAccept, new torrent may want conns.
-	cl.event.Broadcast()
+	t.event.Broadcast()
 	return
 }
 
@@ -1458,7 +1458,7 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 		t.updateWantPeersEvent(false)
 	}()
 	// Tickle Client.waitAccept, new torrent may want conns.
-	cl.event.Broadcast()
+	t.event.Broadcast()
 	return
 }
 
@@ -1545,32 +1545,40 @@ func (cl *Client) dropTorrent(infoHash metainfo.Hash, wg *sync.WaitGroup) (err e
 	return
 }
 
-func (cl *Client) allTorrentsCompleted() bool {
-	cl.torrentsMu.RLock()
-	defer cl.torrentsMu.RUnlock()
-
-	for _, t := range cl.torrents {
-		if !t.haveInfo(true) {
-			return false
-		}
-		if !t.haveAllPieces(true, true) {
-			return false
-		}
-	}
-	return true
-}
-
 // Returns true when all torrents are completely downloaded and false if the
 // client is stopped before that.
 func (cl *Client) WaitAll() bool {
-	cl.lock()
-	defer cl.unlock()
-	for !cl.allTorrentsCompleted() {
-		if cl.closed.IsSet() {
-			return false
+	torrents := cl.torrentsAsSlice()
+
+	for {
+		for _, t := range torrents {
+			if !func() bool {
+				t.mu.Lock()
+				defer t.mu.Lock()
+
+				for !t.haveInfo(true) || !t.haveAllPieces(true, true) {
+					if cl.closed.IsSet() || t.closed.IsSet() {
+						return false
+					}
+
+					t.event.Wait()
+				}
+
+				return true
+			}() {
+				return false
+			}
 		}
-		cl.event.Wait()
+
+		next := cl.torrentsAsSlice()
+
+		if len(next) <= len(torrents) {
+			break
+		}
+
+		torrents = next
 	}
+
 	return true
 }
 

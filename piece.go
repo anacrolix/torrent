@@ -200,13 +200,13 @@ func (p *Piece) VerifyData() {
 	p.mu.RUnlock()
 
 	// log.Printf("target: %d", target)
-	p.t.queuePieceCheck(p.index, true)
+	p.t.queuePieceCheck(p.index, false)
 	for {
 		// log.Printf("got %d verifies", p.numVerifies)
 		if p.numVerifies >= target {
 			break
 		}
-		p.t.cl.event.Wait()
+		p.t.event.Wait()
 	}
 	// log.Print("done")
 }

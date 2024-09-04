@@ -929,7 +929,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// that chunk pieces are pended at an appropriate time later however.
 	}
 
-	cl.event.Broadcast()
+	t.event.Broadcast()
 	// We do this because we've written a chunk, and may change PieceState.Partial.
 	t.publishPieceStateChange(pieceIndex(ppReq.Index), false)
 

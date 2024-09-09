@@ -2204,7 +2204,7 @@ func (t *Torrent) statsLocked() (ret TorrentStats) {
 func (t *Torrent) numTotalPeers() int {
 	peers := make(map[string]struct{})
 	for conn := range t.conns {
-		ra := conn.conn.RemoteAddr()
+		ra := conn.RemoteAddr
 		if ra == nil {
 			// It's been closed and doesn't support RemoteAddr.
 			continue

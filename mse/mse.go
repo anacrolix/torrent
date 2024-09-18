@@ -12,14 +12,15 @@ import (
 	"errors"
 	"expvar"
 	"fmt"
-	"github.com/anacrolix/torrent/internal/ctxrw"
 	"io"
 	"math"
 	"math/big"
 	"strconv"
 	"sync"
 
-	"github.com/anacrolix/missinggo/perf"
+	"github.com/anacrolix/torrent/internal/ctxrw"
+
+	"github.com/anacrolix/missinggo/v2/perf"
 )
 
 const (

@@ -6,7 +6,7 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/anacrolix/missinggo/expect"
+	"github.com/anacrolix/missinggo/v2/expect"
 )
 
 //----------------------------------------------------------------------------

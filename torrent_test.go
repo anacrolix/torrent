@@ -26,7 +26,7 @@ import (
 )
 
 func r(i, b, l pp.Integer) Request {
-	return Request{i, ChunkSpec{b, l}}
+	return Request{Index: i, ChunkSpec: ChunkSpec{Begin: b, Length: l}}
 }
 
 // Check the given request is correct for various torrent offsets.

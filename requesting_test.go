@@ -20,7 +20,7 @@ func makeTypicalRequests() map[Request]struct{} {
 	m := make(map[Request]struct{})
 	for p := pp.Integer(0); p < 4; p++ {
 		for c := pp.Integer(0); c < 16; c++ {
-			m[Request{p, ChunkSpec{c * defaultChunkSize, defaultChunkSize}}] = struct{}{}
+			m[Request{Index: p, ChunkSpec: ChunkSpec{c * defaultChunkSize, defaultChunkSize}}] = struct{}{}
 		}
 	}
 	return m

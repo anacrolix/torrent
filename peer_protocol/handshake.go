@@ -5,12 +5,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/anacrolix/torrent/internal/ctxrw"
 	"io"
 	"math/bits"
 	"strconv"
 	"strings"
 	"unsafe"
+
+	"github.com/anacrolix/torrent/internal/ctxrw"
 
 	"github.com/anacrolix/torrent/metainfo"
 )

@@ -30,7 +30,7 @@ const (
 )
 
 func newRequest(index, begin, length pp.Integer) Request {
-	return Request{index, ChunkSpec{begin, length}}
+	return Request{Index: index, ChunkSpec: ChunkSpec{Begin: begin, Length: length}}
 }
 
 func newRequestFromMessage(msg *pp.Message) Request {

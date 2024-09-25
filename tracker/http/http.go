@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/anacrolix/missinggo/httptoo"
+	"github.com/anacrolix/missinggo/v2/httptoo"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/tracker/shared"

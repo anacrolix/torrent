@@ -25,10 +25,10 @@ import (
 	. "github.com/anacrolix/generics"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pubsub"
+	"github.com/anacrolix/missinggo/v2/slices"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
@@ -2919,8 +2919,8 @@ func (t *Torrent) peerIsActive(p *Peer) (active bool) {
 func (t *Torrent) requestIndexToRequest(ri RequestIndex) Request {
 	index := t.pieceIndexOfRequestIndex(ri)
 	return Request{
-		pp.Integer(index),
-		t.piece(index).chunkIndexSpec(ri % t.chunksPerRegularPiece()),
+		Index:     pp.Integer(index),
+		ChunkSpec: t.piece(index).chunkIndexSpec(ri % t.chunksPerRegularPiece()),
 	}
 }
 

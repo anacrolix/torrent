@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 )
 
 func isEmptyValue(v reflect.Value) bool {
-	return missinggo.IsEmptyValue(v)
+	return missinggo.IsZeroValue(v)
 }
 
 type Encoder struct {

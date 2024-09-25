@@ -394,7 +394,7 @@ func TestReceiveLargeRequest(t *testing.T) {
 func TestChunkOverflowsPiece(t *testing.T) {
 	c := qt.New(t)
 	check := func(begin, length, limit pp.Integer, expected bool) {
-		c.Check(chunkOverflowsPiece(ChunkSpec{begin, length}, limit), qt.Equals, expected)
+		c.Check(chunkOverflowsPiece(ChunkSpec{Begin: begin, Length: length}, limit), qt.Equals, expected)
 	}
 	check(2, 3, 1, true)
 	check(2, pp.IntegerMax, 1, true)

@@ -8,13 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
-
-	"github.com/anacrolix/missinggo"
 )
-
-func isEmptyValue(v reflect.Value) bool {
-	return missinggo.IsEmptyValue(v)
-}
 
 type Encoder struct {
 	w       io.Writer
@@ -139,7 +133,7 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 			if !fieldValue.IsValid() {
 				continue
 			}
-			if ef.omitEmpty && isEmptyValue(fieldValue) {
+			if ef.omitEmpty && fieldValue.IsValid() {
 				continue
 			}
 			e.reflectString(ef.tag)

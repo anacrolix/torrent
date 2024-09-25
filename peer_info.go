@@ -40,5 +40,5 @@ func (me *PeerInfo) FromPex(na krpc.NodeAddr, fs peer_protocol.PexPeerFlags) {
 
 func (me PeerInfo) addr() IpPort {
 	ipPort, _ := tryIpPortFromNetAddr(me.Addr)
-	return IpPort{ipPort.IP, uint16(ipPort.Port)}
+	return IpPort{IP: ipPort.IP, Port: uint16(ipPort.Port)}
 }

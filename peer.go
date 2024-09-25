@@ -13,8 +13,8 @@ import (
 	"github.com/anacrolix/chansync"
 	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/missinggo/v2/iter"
 	"github.com/anacrolix/multiless"
 
 	"github.com/anacrolix/torrent/internal/alloclim"
@@ -504,25 +504,21 @@ func (cn *Peer) updateRequests(reason updateRequestReason) {
 	cn.handleUpdateRequests()
 }
 
-// Emits the indices in the Bitmaps bms in order, never repeating any index.
-// skip is mutated during execution, and its initial values will never be
-// emitted.
+// iterBitmapsDistinct emits the indices in the Bitmaps bms in order, never repeating any index.
+// skip is mutated during execution, and its initial values will never be emitted.
 func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 	return func(cb iter.Callback) {
 		for _, bm := range bms {
-			if !iter.All(
-				func(_i interface{}) bool {
-					i := _i.(int)
-					if skip.Contains(bitmap.BitIndex(i)) {
-						return true
+			bm.Iter(func(value interface{}) bool {
+				index := value.(int)
+				if !skip.Contains(bitmap.BitIndex(index)) {
+					skip.Add(bitmap.BitIndex(index))
+					if !cb(index) {
+						return false
 					}
-					skip.Add(bitmap.BitIndex(i))
-					return cb(i)
-				},
-				bm.Iter,
-			) {
-				return
-			}
+				}
+				return true
+			})
 		}
 	}
 }
@@ -842,7 +838,7 @@ func (c *Peer) remoteIp() net.IP {
 
 func (c *Peer) remoteIpPort() IpPort {
 	ipa, _ := tryIpPortFromNetAddr(c.RemoteAddr)
-	return IpPort{ipa.IP, uint16(ipa.Port)}
+	return IpPort{IP: ipa.IP, Port: uint16(ipa.Port)}
 }
 
 func (c *Peer) trust() connectionTrust {

@@ -67,7 +67,7 @@ func (ws *webseedPeer) _cancel(r RequestIndex) bool {
 }
 
 func (ws *webseedPeer) intoSpec(r Request) webseed.RequestSpec {
-	return webseed.RequestSpec{ws.peer.t.requestOffset(r), int64(r.Length)}
+	return webseed.RequestSpec{Start: ws.peer.t.requestOffset(r), Length: int64(r.Length)}
 }
 
 func (ws *webseedPeer) _request(r Request) bool {

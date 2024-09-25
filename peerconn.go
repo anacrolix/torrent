@@ -390,7 +390,7 @@ func (cn *PeerConn) postBitfield() {
 		Type:     pp.Bitfield,
 		Bitfield: cn.t.bitfield(),
 	})
-	cn.sentHaves = bitmap.Bitmap{cn.t._completedPieces.Clone()}
+	cn.sentHaves = bitmap.Bitmap{RB: cn.t._completedPieces.Clone()}
 }
 
 func (cn *PeerConn) handleUpdateRequests() {

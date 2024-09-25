@@ -133,7 +133,7 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 			if !fieldValue.IsValid() {
 				continue
 			}
-			if ef.omitEmpty && fieldValue.IsValid() {
+			if ef.omitEmpty && fieldValue.IsZero() {
 				continue
 			}
 			e.reflectString(ef.tag)

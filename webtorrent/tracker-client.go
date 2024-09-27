@@ -237,7 +237,7 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 	}
 
 	// save the leecher peer connections
-	tc.storePeerConnection(offerIDBinary, pc)
+	tc.storePeerConnection(fmt.Sprintf("%x", randOfferId[:]), pc)
 
 	pc.OnClose(func() {
 		delete(tc.rtcPeerConns, offerIDBinary)
@@ -381,7 +381,7 @@ func (tc *TrackerClient) handleOffer(
 	}
 
 	// save the seeder peer connections
-	tc.storePeerConnection(offerContext.Id, peerConnection)
+	tc.storePeerConnection(fmt.Sprintf("%x", offerContext.Id[:]), peerConnection)
 
 	response := AnnounceResponse{
 		Action:   "announce",

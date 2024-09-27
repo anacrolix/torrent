@@ -3003,16 +3003,15 @@ func (t *Torrent) iterUndirtiedRequestIndexesInPiece(
 	)
 }
 
-type webRtcStatsReports []webrtc.StatsReport
+type webRtcStatsReports map[string]webrtc.StatsReport
 
 func (t *Torrent) GetWebRtcPeerConnStats() map[string]webRtcStatsReports {
 	stats := make(map[string]webRtcStatsReports)
 	trackersMap := t.cl.websocketTrackers.clients
 	for i, trackerClient := range trackersMap {
-		ts := trackerClient.TransportStats()
+		ts := trackerClient.RtcPeerConnStats()
 		stats[i] = ts
 	}
-
 	return stats
 }
 

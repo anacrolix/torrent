@@ -1,9 +1,9 @@
 package metainfo
 
 import (
-	g "github.com/anacrolix/generics"
 	"testing"
 
+	g "github.com/anacrolix/generics"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/anacrolix/torrent/bencode"

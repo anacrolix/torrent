@@ -1,9 +1,10 @@
 package torrent
 
 import (
+	"iter"
+
 	g "github.com/anacrolix/generics"
 	list "github.com/bahlo/generic-list-go"
-	"iter"
 
 	"github.com/anacrolix/torrent/typed-roaring"
 )

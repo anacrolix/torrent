@@ -2,8 +2,9 @@ package ctxrw
 
 import (
 	"context"
-	g "github.com/anacrolix/generics"
 	"io"
+
+	g "github.com/anacrolix/generics"
 )
 
 type contextedReader struct {

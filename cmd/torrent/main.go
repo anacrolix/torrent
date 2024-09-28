@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	app "github.com/anacrolix/gostdapp"
 	"io"
 	stdLog "log"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/anacrolix/bargle"
 	"github.com/anacrolix/envpprof"
+	app "github.com/anacrolix/gostdapp"
 	"github.com/anacrolix/log"
 	xprometheus "github.com/anacrolix/missinggo/v2/prometheus"
 	"github.com/davecgh/go-spew/spew"

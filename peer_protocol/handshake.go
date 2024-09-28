@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/anacrolix/missinggo/v2/panicif"
-	"github.com/anacrolix/torrent/internal/ctxrw"
 	"io"
 	"math/bits"
 	"strings"
 	"unsafe"
 
+	"github.com/anacrolix/missinggo/v2/panicif"
+
+	"github.com/anacrolix/torrent/internal/ctxrw"
 	"github.com/anacrolix/torrent/metainfo"
 )
 

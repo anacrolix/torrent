@@ -18,8 +18,6 @@ import (
 	"math/big"
 	"strconv"
 	"sync"
-
-	"github.com/anacrolix/missinggo/perf"
 )
 
 const (
@@ -561,7 +559,6 @@ func InitiateHandshakeContext(
 		ia:             initialPayload,
 		cryptoProvides: cryptoProvides,
 	}
-	defer perf.ScopeTimerErr(&err)()
 	return h.Do(ctx)
 }
 

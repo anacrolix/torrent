@@ -25,7 +25,6 @@ import (
 	. "github.com/anacrolix/generics"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pproffd"
@@ -987,7 +986,6 @@ func (cl *Client) handshakeReceiverSecretKeys() mse.SecretKeyIter {
 
 // Do encryption and bittorrent handshakes as receiver.
 func (cl *Client) receiveHandshakes(c *PeerConn) (t *Torrent, err error) {
-	defer perf.ScopeTimerErr(&err)()
 	var rw io.ReadWriter
 	rw, c.headerEncrypted, c.cryptoMethod, err = handleEncryption(
 		c.rw(),

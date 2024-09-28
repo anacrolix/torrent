@@ -11,7 +11,6 @@ import (
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/perf"
 	"github.com/anacrolix/missinggo/v2"
 )
 
@@ -214,6 +213,5 @@ func (me utpSocketSocket) DialerNetwork() string {
 }
 
 func (me utpSocketSocket) Dial(ctx context.Context, addr string) (conn net.Conn, err error) {
-	defer perf.ScopeTimerErr(&err)()
 	return me.utpSocket.DialContext(ctx, me.network, addr)
 }

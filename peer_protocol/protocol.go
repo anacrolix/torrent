@@ -1,8 +1,18 @@
 package peer_protocol
 
+import (
+	"unsafe"
+)
+
 const (
 	Protocol = "\x13BitTorrent protocol"
 )
+
+var protocolStr = Protocol
+
+func protocolBytes() []byte {
+	return unsafe.Slice(unsafe.StringData(Protocol), len(Protocol))
+}
 
 type MessageType byte
 

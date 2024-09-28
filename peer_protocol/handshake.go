@@ -3,12 +3,11 @@ package peer_protocol
 import (
 	"context"
 	"encoding/hex"
-	"errors"
 	"fmt"
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/torrent/internal/ctxrw"
 	"io"
 	"math/bits"
-	"strconv"
 	"strings"
 	"unsafe"
 
@@ -153,37 +152,39 @@ func Handshake(
 	}()
 
 	post := func(bb []byte) {
-		select {
-		case postCh <- bb:
-		default:
-			panic("mustn't block while posting")
-		}
+		panicif.SendBlocks(postCh, bb)
 	}
 
-	post([]byte(Protocol))
+	post(protocolBytes())
 	post(extensions[:])
 	if ih != nil { // We already know what we want.
 		post(ih[:])
 		post(peerID[:])
 	}
-	var b [68]byte
-	_, err = io.ReadFull(sock, b[:68])
+
+	// Putting an array on the heap still escapes.
+	b := make([]byte, 68)
+	// Read in one hit to avoid potential overhead in underlying reader.
+	_, err = io.ReadFull(sock, b[:])
 	if err != nil {
 		return res, fmt.Errorf("while reading: %w", err)
 	}
-	if string(b[:20]) != Protocol {
-		return res, errors.New("unexpected protocol string")
-	}
 
-	copyExact := func(dst, src []byte) {
-		if dstLen, srcLen := uint64(len(dst)), uint64(len(src)); dstLen != srcLen {
-			panic("dst len " + strconv.FormatUint(dstLen, 10) + " != src len " + strconv.FormatUint(srcLen, 10))
-		}
-		copy(dst, src)
+	p := b[:len(Protocol)]
+	// This gets optimized to runtime.memequal
+	if string(p) != Protocol {
+		return res, fmt.Errorf("unexpected protocol string %q", string(p))
 	}
-	copyExact(res.PeerExtensionBits[:], b[20:28])
-	copyExact(res.Hash[:], b[28:48])
-	copyExact(res.PeerID[:], b[48:68])
+	b = b[len(p):]
+	read := func(dst []byte) {
+		n := copy(dst, b)
+		panicif.NotEq(n, len(dst))
+		b = b[n:]
+	}
+	read(res.PeerExtensionBits[:])
+	read(res.Hash[:])
+	read(res.PeerID[:])
+	panicif.NotEq(len(b), 0)
 	// peerExtensions.Add(res.PeerExtensionBits.String(), 1)
 
 	// TODO: Maybe we can just drop peers here if we're not interested. This

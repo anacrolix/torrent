@@ -17,7 +17,7 @@ require (
 	github.com/anacrolix/log v0.15.3-0.20240627045001-cd912c641d83
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/v2 v2.7.4
-	github.com/anacrolix/multiless v0.3.0
+	github.com/anacrolix/multiless v0.4.0
 	github.com/anacrolix/possum/go v0.1.1-0.20240321122240-a01f3a22f2d1
 	github.com/anacrolix/squirrel v0.6.4
 	github.com/anacrolix/sync v0.5.1
@@ -52,7 +52,6 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.11.1
 	go.opentelemetry.io/otel/sdk v1.11.1
 	go.opentelemetry.io/otel/trace v1.11.1
-	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
 	golang.org/x/sync v0.8.0
 	golang.org/x/sys v0.18.0
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
@@ -137,6 +136,7 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.21.0 // indirect
+	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948 // indirect
 	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect

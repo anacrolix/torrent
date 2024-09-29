@@ -21,7 +21,6 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
-	"golang.org/x/exp/maps"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -103,24 +102,11 @@ func (cn *PeerConn) pexStatus() string {
 	if !cn.supportsExtension(pp.ExtensionNamePex) {
 		return "unsupported"
 	}
-	if true {
-		return fmt.Sprintf(
-			"%v conns, %v unsent events",
-			len(cn.pex.remoteLiveConns),
-			cn.pex.numPending(),
-		)
-	} else {
-		// This alternative branch prints out the remote live conn addresses.
-		return fmt.Sprintf(
-			"%v conns, %v unsent events",
-			strings.Join(generics.SliceMap(
-				maps.Keys(cn.pex.remoteLiveConns),
-				func(from netip.AddrPort) string {
-					return from.String()
-				}), ","),
-			cn.pex.numPending(),
-		)
-	}
+	return fmt.Sprintf(
+		"%v conns, %v unsent events",
+		len(cn.pex.remoteLiveConns),
+		cn.pex.numPending(),
+	)
 }
 
 func (cn *PeerConn) peerImplStatusLines() []string {

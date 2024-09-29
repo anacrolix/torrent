@@ -12,12 +12,13 @@ import (
 	"errors"
 	"expvar"
 	"fmt"
-	"github.com/anacrolix/torrent/internal/ctxrw"
 	"io"
 	"math"
 	"math/big"
 	"strconv"
 	"sync"
+
+	"github.com/anacrolix/torrent/internal/ctxrw"
 )
 
 const (

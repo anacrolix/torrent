@@ -9,10 +9,12 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"iter"
+	"maps"
 	"math/rand"
 	"net/netip"
 	"net/url"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -25,14 +27,12 @@ import (
 	. "github.com/anacrolix/generics"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
-	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -865,24 +865,28 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	fmt.Fprintln(w)
 
 	fmt.Fprintf(w, "Enabled trackers:\n")
-	func() {
+	{
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		fmt.Fprintf(tw, "    URL\tExtra\n")
-		for _, ta := range slices.Sort(slices.FromMapElems(t.trackerAnnouncers), func(l, r torrentTrackerAnnouncer) bool {
-			lu := l.URL()
-			ru := r.URL()
-			var luns, runs url.URL = *lu, *ru
-			luns.Scheme = ""
-			runs.Scheme = ""
-			var ml missinggo.MultiLess
-			ml.StrictNext(luns.String() == runs.String(), luns.String() < runs.String())
-			ml.StrictNext(lu.String() == ru.String(), lu.String() < ru.String())
-			return ml.Less()
-		}).([]torrentTrackerAnnouncer) {
+		sortedTrackerAnnouncers := slices.SortedFunc(
+			maps.Values(t.trackerAnnouncers),
+			func(l, r torrentTrackerAnnouncer) int {
+				lu := l.URL()
+				ru := r.URL()
+				var luns, runs url.URL = *lu, *ru
+				luns.Scheme = ""
+				runs.Scheme = ""
+				var ml multiless.Computation
+				ml = multiless.EagerOrdered(ml, luns.String(), runs.String())
+				ml = multiless.EagerOrdered(ml, lu.String(), ru.String())
+				return ml.OrderingInt()
+			},
+		)
+		for _, ta := range sortedTrackerAnnouncers {
 			fmt.Fprintf(tw, "    %q\t%v\n", ta.URL(), ta.statusLine())
 		}
 		tw.Flush()
-	}()
+	}
 
 	fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
 
@@ -891,29 +895,31 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	fmt.Fprintf(w, "webseeds:\n")
 	t.writePeerStatuses(w, maps.Values(t.webSeeds))
 
-	peerConns := maps.Keys(t.conns)
 	// Peers without priorities first, then those with. I'm undecided about how to order peers
 	// without priorities.
-	sort.Slice(peerConns, func(li, ri int) bool {
-		l := peerConns[li]
-		r := peerConns[ri]
+	peerConns := slices.SortedFunc(maps.Keys(t.conns), func(l, r *PeerConn) int {
 		ml := multiless.New()
 		lpp := g.ResultFromTuple(l.peerPriority()).ToOption()
 		rpp := g.ResultFromTuple(r.peerPriority()).ToOption()
 		ml = ml.Bool(lpp.Ok, rpp.Ok)
 		ml = ml.Uint32(rpp.Value, lpp.Value)
-		return ml.Less()
+		return ml.OrderingInt()
 	})
 
 	fmt.Fprintf(w, "%v peer conns:\n", len(peerConns))
-	t.writePeerStatuses(w, g.SliceMap(peerConns, func(pc *PeerConn) *Peer {
-		return &pc.Peer
-	}))
+	var peerIter iter.Seq[*Peer] = func(yield func(*Peer) bool) {
+		for _, pc := range peerConns {
+			if !yield(&pc.Peer) {
+				return
+			}
+		}
+	}
+	t.writePeerStatuses(w, peerIter)
 }
 
-func (t *Torrent) writePeerStatuses(w io.Writer, peers []*Peer) {
+func (t *Torrent) writePeerStatuses(w io.Writer, peers iter.Seq[*Peer]) {
 	var buf bytes.Buffer
-	for _, c := range peers {
+	for c := range peers {
 		fmt.Fprintf(w, "- ")
 		buf.Reset()
 		c.writeStatus(&buf)
@@ -2433,7 +2439,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 				}
 			}
 			t.clearPieceTouchers(piece)
-			slices.Sort(bannableTouchers, connLessTrusted)
+			slices.SortFunc(bannableTouchers, comparePeerTrust)
 
 			if t.cl.config.Debug {
 				t.logger.Printf(

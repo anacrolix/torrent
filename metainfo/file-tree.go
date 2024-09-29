@@ -1,10 +1,10 @@
 package metainfo
 
 import (
-	"sort"
+	"maps"
+	"slices"
 
 	g "github.com/anacrolix/generics"
-	"golang.org/x/exp/maps"
 
 	"github.com/anacrolix/torrent/bencode"
 )
@@ -91,9 +91,7 @@ func (ft *FileTree) IsDir() bool {
 }
 
 func (ft *FileTree) orderedKeys() []string {
-	keys := maps.Keys(ft.Dir)
-	sort.Strings(keys)
-	return keys
+	return slices.Sorted(maps.Keys(ft.Dir))
 }
 
 func (ft *FileTree) upvertedFiles(pieceLength int64, out func(fi FileInfo)) {

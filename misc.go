@@ -111,8 +111,8 @@ func chunkIndexSpec(index, pieceLength, chunkSize pp.Integer) ChunkSpec {
 	return ret
 }
 
-func connLessTrusted(l, r *Peer) bool {
-	return l.trust().Less(r.trust())
+func comparePeerTrust(l, r *Peer) int {
+	return l.trust().Cmp(r.trust())
 }
 
 func connIsIpv6(nc interface {

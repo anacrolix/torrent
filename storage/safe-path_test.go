@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 
+	"github.com/anacrolix/torrent/internal/qtnew"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -49,7 +50,7 @@ func TestToSafeFilePath(t *testing.T) {
 
 // Check that safe file path handling still exists for the newer file-opt-maker variants.
 func TestFileOptsSafeFilePathHandling(t *testing.T) {
-	c := qt.New(t)
+	c := qtnew.New(t)
 	for i, _case := range safeFilePathTests {
 		c.Run(fmt.Sprintf("Case%v", i), func(c *qt.C) {
 			info := metainfo.Info{
@@ -60,12 +61,12 @@ func TestFileOptsSafeFilePathHandling(t *testing.T) {
 			client := NewFileOpts(NewFileClientOpts{
 				ClientBaseDir: t.TempDir(),
 			})
-			defer func() { c.Check(client.Close(), qt.IsNil) }()
+			defer func() { qt.Check(c, qt.IsNil(client.Close())) }()
 			torImpl, err := client.OpenTorrent(context.Background(), &info, metainfo.Hash{})
 			if _case.expectErr {
-				c.Check(err, qt.Not(qt.IsNil))
+				qt.Check(c, qt.Not(qt.IsNil)(err))
 			} else {
-				c.Check(torImpl.Close(), qt.IsNil)
+				qt.Check(c, qt.IsNil(torImpl.Close()))
 			}
 		})
 	}

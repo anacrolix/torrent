@@ -90,7 +90,7 @@ func (me *Server) handleAnnounce(
 	// Should we set a timeout of 10s or something for the entire response, so that we give up if a
 	// retry is imminent?
 
-	ok, err := me.ConnTracker.Check(ctx, source.String(), connId)
+	ok, err := qt.Check(qt, source.String()(ctx, connId)(me.ConnTracker))
 	if err != nil {
 		err = fmt.Errorf("checking conn id: %w", err)
 		return err

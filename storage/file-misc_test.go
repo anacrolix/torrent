@@ -3,10 +3,11 @@ package storage
 import (
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/anacrolix/torrent/common"
+	"github.com/anacrolix/torrent/internal/qtnew"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
 )
@@ -49,9 +50,9 @@ func TestExtentCompleteRequiredLengthsV2InfoWithGaps(t *testing.T) {
 			},
 		},
 	}
-	c := qt.New(t)
+	c := qtnew.New(t)
 	check := func(off, n int64, expected ...requiredLength) {
-		c.Check(extentCompleteRequiredLengths(info, off, n), qt.DeepEquals, expected)
+		qt.Check(qt, qt.DeepEquals(extentCompleteRequiredLengths(info, off, n), expected)(c))
 	}
 	check(0, 0)
 	check(0, 1, requiredLength{FileIndex: 0, Length: 1})
@@ -72,9 +73,9 @@ func TestExtentCompleteRequiredLengths(t *testing.T) {
 			{Path: []string{"b"}, Length: 3},
 		},
 	}
-	c := qt.New(t)
+	c := qtnew.New(t)
 	check := func(off, n int64, expected ...requiredLength) {
-		c.Check(extentCompleteRequiredLengths(info, off, n), qt.DeepEquals, expected)
+		qt.Check(qt, qt.DeepEquals(extentCompleteRequiredLengths(info, off, n), expected)(c))
 	}
 	assert.Empty(t, extentCompleteRequiredLengths(info, 0, 0))
 	assert.EqualValues(t, []requiredLength{

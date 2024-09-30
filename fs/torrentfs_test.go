@@ -16,6 +16,7 @@ import (
 	"github.com/anacrolix/fuse"
 	fusefs "github.com/anacrolix/fuse/fs"
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -77,7 +78,7 @@ func newGreetingLayout(t *testing.T) (tl testLayout, err error) {
 // operations blocked inside the filesystem code.
 func TestUnmountWedged(t *testing.T) {
 	layout, err := newGreetingLayout(t)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer func() {
 		err := layout.Destroy()
 		if err != nil {
@@ -91,10 +92,10 @@ func TestUnmountWedged(t *testing.T) {
 	cfg.DisableTCP = true
 	cfg.DisableUTP = true
 	client, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer client.Close()
 	tt, err := client.AddTorrent(layout.Metainfo)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	fs := New(client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
 	if err != nil {
@@ -159,7 +160,7 @@ func TestUnmountWedged(t *testing.T) {
 
 func TestDownloadOnDemand(t *testing.T) {
 	layout, err := newGreetingLayout(t)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer layout.Destroy()
 	cfg := torrent.NewDefaultClientConfig()
 	cfg.DataDir = layout.Completed
@@ -169,13 +170,13 @@ func TestDownloadOnDemand(t *testing.T) {
 	cfg.ListenPort = 0
 	cfg.ListenHost = torrent.LoopbackListenHost
 	seeder, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer seeder.Close()
 	defer testutil.ExportStatusWriter(seeder, "s", t)()
 	// Just to mix things up, the seeder starts with the data, but the leecher
 	// starts with the metainfo.
 	seederTorrent, err := seeder.AddMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.HashInfoBytes().HexString()))
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	go func() {
 		// Wait until we get the metainfo, then check for the data.
 		<-seederTorrent.GotInfo()
@@ -189,11 +190,11 @@ func TestDownloadOnDemand(t *testing.T) {
 	cfg.ListenHost = torrent.LoopbackListenHost
 	cfg.ListenPort = 0
 	leecher, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	testutil.ExportStatusWriter(leecher, "l", t)()
 	defer leecher.Close()
 	leecherTorrent, err := leecher.AddTorrent(layout.Metainfo)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	leecherTorrent.AddClientPeer(seeder)
 	fs := New(leecher)
 	defer fs.Destroy()
@@ -204,7 +205,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	size := attr.Size
 	data := make([]byte, size)
 	h, err := node.(fusefs.NodeOpener).Open(context.TODO(), nil, nil)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	// torrent.Reader.Read no longer tries to fill the entire read buffer, so this is a ReadFull for
 	// fusefs.

@@ -9,7 +9,8 @@ import (
 	"io"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	"github.com/anacrolix/torrent/internal/qtnew"
+	qt "github.com/go-quicktest/qt"
 )
 
 func FuzzDecoder(f *testing.F) {
@@ -19,7 +20,7 @@ func FuzzDecoder(f *testing.F) {
 	f.Add([]byte("\x00\x00\x00\x01\x07"))
 	f.Fuzz(func(t *testing.T, b []byte) {
 		t.Logf("%q", b)
-		c := qt.New(t)
+		c := qtnew.New(t)
 		d := Decoder{
 			R:         bufio.NewReader(bytes.NewReader(b)),
 			MaxLength: 0x100,
@@ -33,7 +34,7 @@ func FuzzDecoder(f *testing.F) {
 				break
 			}
 			if err == nil {
-				c.Assert(m, qt.Not(qt.Equals), Message{})
+				qt.Assert(t, qt.Not(qt.Equals)(m, Message{}))
 				ms = append(ms, m)
 				continue
 			} else {
@@ -46,9 +47,9 @@ func FuzzDecoder(f *testing.F) {
 			buf.Write(m.MustMarshalBinary())
 		}
 		if len(b) == 0 {
-			c.Assert(buf.Bytes(), qt.HasLen, 0)
+			qt.Assert(t, qt.HasLen(buf.Bytes(), 0))
 		} else {
-			c.Assert(buf.Bytes(), qt.DeepEquals, b)
+			qt.Assert(t, qt.DeepEquals(buf.Bytes(), b))
 		}
 	})
 }

@@ -6,8 +6,8 @@ import (
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func testListenerNetwork(
@@ -19,7 +19,7 @@ func testListenerNetwork(
 	if isUnsupportedNetworkError(err) {
 		return
 	}
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer l.Close()
 	assert.EqualValues(t, expectedNet, l.Addr().Network())
 	ip := missinggo.AddrIP(l.Addr())
@@ -38,18 +38,18 @@ func testAcceptedConnAddr(
 	listen func() (net.Listener, error),
 ) {
 	l, err := listen()
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer l.Close()
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
 		c, err := dial(l.Addr().String())
-		require.NoError(t, err)
+		qt.Assert(t, qt.IsNil(err))
 		<-done
 		c.Close()
 	}()
 	c, err := l.Accept()
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer c.Close()
 	assert.EqualValues(t, network, c.RemoteAddr().Network())
 	assert.Equal(t, valid4, missinggo.AddrIP(c.RemoteAddr()).To4() == nil)

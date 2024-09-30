@@ -5,13 +5,13 @@ import (
 	"os"
 	"testing"
 
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func loadFile(name string, t *testing.T) []byte {
 	data, err := os.ReadFile(name)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	return data
 }
 
@@ -20,10 +20,10 @@ func testFileInterface(t *testing.T, filename string) {
 
 	var iface interface{}
 	err := Unmarshal(data1, &iface)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	data2, err := Marshal(iface)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	assert.EqualValues(t, data1, data2)
 }

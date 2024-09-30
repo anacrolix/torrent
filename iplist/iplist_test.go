@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -115,7 +116,7 @@ func testLookuperSimple(t *testing.T, iplist Ranger) {
 
 func TestSimple(t *testing.T) {
 	ranges, err := sampleRanges(t)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	require.Len(t, ranges, 5)
 	iplist := New(ranges)
 	testLookuperSimple(t, iplist)

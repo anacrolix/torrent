@@ -9,8 +9,9 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/iter"
 	"github.com/davecgh/go-spew/spew"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 
+	"github.com/anacrolix/torrent/internal/qtnew"
 	"github.com/anacrolix/torrent/metainfo"
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
@@ -22,14 +23,14 @@ func makeRequestStrategyPiece(t request_strategy.Torrent) request_strategy.Piece
 }
 
 func TestRequestStrategyPieceDoesntAlloc(t *testing.T) {
-	c := qt.New(t)
+	c := qtnew.New(t)
 	akshalTorrent := &Torrent{pieces: make([]Piece, 1)}
 	rst := requestStrategyTorrent{akshalTorrent}
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	p := makeRequestStrategyPiece(rst)
 	runtime.ReadMemStats(&after)
-	c.Assert(before.HeapAlloc, qt.Equals, after.HeapAlloc)
+	qt.Assert(t, qt.Equals(before.HeapAlloc, after.HeapAlloc))
 	// We have to use p, or it gets optimized away.
 	spew.Fdump(io.Discard, p)
 }
@@ -81,7 +82,7 @@ func (s *storageClient) OpenTorrent(
 }
 
 func BenchmarkRequestStrategy(b *testing.B) {
-	c := qt.New(b)
+	c := qtnew.New(b)
 	cl := newTestingClient(b)
 	storageClient := storageClient{}
 	tor, new := cl.AddTorrentOpt(AddTorrentOpts{
@@ -89,7 +90,7 @@ func BenchmarkRequestStrategy(b *testing.B) {
 		Storage:    &storageClient,
 	})
 	tor.disableTriggers = true
-	c.Assert(new, qt.IsTrue)
+	qt.Assert(t, qt.IsTrue(new))
 	const pieceLength = 1 << 8 << 10
 	const numPieces = 30_000
 	err := tor.setInfo(&metainfo.Info{
@@ -97,13 +98,13 @@ func BenchmarkRequestStrategy(b *testing.B) {
 		PieceLength: pieceLength,
 		Length:      pieceLength * numPieces,
 	})
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	tor.onSetInfo()
 	peer := cl.newConnection(nil, newConnectionOpts{
 		network: "test",
 	})
 	peer.setTorrent(tor)
-	c.Assert(tor.storage, qt.IsNotNil)
+	qt.Assert(t, qt.IsNotNil(tor.storage))
 	const chunkSize = defaultChunkSize
 	peer.onPeerHasAllPiecesNoTriggers()
 	for i := 0; i < tor.numPieces(); i++ {
@@ -129,9 +130,10 @@ func BenchmarkRequestStrategy(b *testing.B) {
 			tor.cacheNextRequestIndexesForReuse(rs.Requests.requestIndexes)
 			// End of part that should be timed.
 			remainingChunks := (numPieces - completed) * (pieceLength / chunkSize)
-			c.Assert(rs.Requests.requestIndexes, qt.HasLen, minInt(
+			qt.Assert(t, qt.HasLen(rs.Requests.requestIndexes, minInt(
 				remainingChunks,
-				int(cl.config.MaxUnverifiedBytes/chunkSize)))
+				int(cl.config.MaxUnverifiedBytes/chunkSize))))
+
 		}
 	}
 }

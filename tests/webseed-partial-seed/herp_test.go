@@ -6,8 +6,9 @@ import (
 	"testing"
 
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/internal/qtnew"
 	"github.com/anacrolix/torrent/internal/testutil"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 )
 
 func testSrcDir() string {
@@ -50,7 +51,7 @@ func downloadAll(t *torrent.Torrent) {
 }
 
 func TestWebseedPartialSeed(t *testing.T) {
-	c := qt.New(t)
+	c := qtnew.New(t)
 	seederClient := makeSeederClient(t)
 	defer seederClient.Close()
 	testutil.ExportStatusWriter(seederClient, "seeder", t)
@@ -79,5 +80,5 @@ func TestWebseedPartialSeed(t *testing.T) {
 
 	seederTorrent.DownloadAll()
 	allDownloaded := leecherClient.WaitAll()
-	c.Assert(allDownloaded, qt.IsTrue)
+	qt.Assert(t, qt.IsTrue(allDownloaded))
 }

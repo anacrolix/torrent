@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/log"
-	"github.com/stretchr/testify/require"
+	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/storage"
@@ -23,8 +23,8 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	tt.infoHash.Value[0] = 1
 	mi := testutil.GreetingMetaInfo()
 	info, err := mi.UnmarshalInfo()
-	require.NoError(t, err)
-	require.NoError(t, tt.setInfo(&info))
-	require.NoError(t, tt.storage.Close())
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.IsNil(tt.setInfo(&info)))
+	qt.Assert(t, qt.IsNil(tt.storage.Close()))
 	tt.hashPiece(0)
 }

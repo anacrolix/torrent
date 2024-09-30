@@ -10,8 +10,8 @@ import (
 	"testing/iotest"
 
 	"github.com/anacrolix/log"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -46,7 +46,7 @@ func testReceiveChunkStorageFailure(t *testing.T, seederFast bool) {
 	seederClientConfig.Debug = true
 	seederClientConfig.Extensions.SetBit(pp.ExtensionBitFast, seederFast)
 	seederClient, err := torrent.NewClient(seederClientConfig)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer seederClient.Close()
 	defer testutil.ExportStatusWriter(seederClient, "s", t)()
 	leecherClientConfig := torrent.TestingConfig(t)
@@ -56,11 +56,11 @@ func testReceiveChunkStorageFailure(t *testing.T, seederFast bool) {
 	leecherClientConfig.MinPeerExtensions.SetBit(pp.ExtensionBitFast, false)
 	justOneNetwork(leecherClientConfig)
 	leecherClient, err := torrent.NewClient(leecherClientConfig)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer leecherClient.Close()
 	defer testutil.ExportStatusWriter(leecherClient, "l", t)()
 	info, err := metainfo.UnmarshalInfo()
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	leecherStorage := diskFullStorage{
 		pieces: make([]pieceState, info.NumPieces()),
 		data:   make([]byte, info.TotalLength()),
@@ -71,10 +71,10 @@ func testReceiveChunkStorageFailure(t *testing.T, seederFast bool) {
 		Storage:  &leecherStorage,
 	})
 	leecherStorage.t = leecherTorrent
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	assert.True(t, new)
 	seederTorrent, err := seederClient.AddTorrent(metainfo)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	// Tell the seeder to find the leecher. Is it guaranteed seeders will always try to do this?
 	seederTorrent.AddClientPeer(leecherClient)
 	<-leecherTorrent.GotInfo()

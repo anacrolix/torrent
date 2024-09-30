@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/bradfitz/iter"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )

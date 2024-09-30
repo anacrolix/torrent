@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,10 +20,10 @@ import (
 
 func TestWritePacked(t *testing.T) {
 	l, err := NewFromReader(strings.NewReader(sample))
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	var buf bytes.Buffer
 	err = l.WritePacked(&buf)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	require.Equal(t,
 		"\x05\x00\x00\x00\x00\x00\x00\x00"+
 			"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x04\x00"+"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x04\xff"+"\x00\x00\x00\x00\x00\x00\x00\x00"+"\x01\x00\x00\x00"+

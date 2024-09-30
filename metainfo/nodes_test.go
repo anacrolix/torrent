@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -12,7 +13,7 @@ import (
 
 func testFileNodesMatch(t *testing.T, file string, nodes []Node) {
 	mi, err := LoadFromFile(file)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	assert.EqualValues(t, nodes, mi.Nodes)
 }
 
@@ -65,10 +66,11 @@ func TestUnmarshalBadMetainfoNodes(t *testing.T) {
 
 func TestMetainfoEmptyInfoBytes(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, (&MetaInfo{
-		// Include a non-empty field that comes after "info".
+	qt.Assert(t, qt.IsNil((&MetaInfo{
+
 		UrlList: []string{"hello"},
-	}).Write(&buf))
+	}).Write(&buf)))
+
 	var mi MetaInfo
-	require.NoError(t, bencode.Unmarshal(buf.Bytes(), &mi))
+	qt.Assert(t, qt.IsNil(bencode.Unmarshal(buf.Bytes(), &mi)))
 }

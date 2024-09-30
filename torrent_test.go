@@ -14,11 +14,12 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/bencode"
+	"github.com/anacrolix/torrent/internal/qtnew"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -91,11 +92,12 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	cl := &Client{config: TestingConfig(b)}
 	cl.initLogger()
 	t := cl.newTorrentForTesting()
-	require.NoError(b, t.setInfo(&metainfo.Info{
+	qt.Assert(t, qt.IsNil(t.setInfo(&metainfo.Info{
 		Pieces:      make([]byte, metainfo.HashSize*numPieces),
 		PieceLength: pieceLength,
 		Length:      pieceLength * numPieces,
-	}))
+	}))(b))
+
 	t.onSetInfo()
 	assert.EqualValues(b, 13410, t.numPieces())
 	for i := 0; i < 7; i += 1 {
@@ -118,21 +120,21 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 // file-based on the native filesystem based.
 func testEmptyFilesAndZeroPieceLength(t *testing.T, cfg *ClientConfig) {
 	cl, err := NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 	ib, err := bencode.Marshal(metainfo.Info{
 		Name:        "empty",
 		Length:      0,
 		PieceLength: 0,
 	})
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	fp := filepath.Join(cfg.DataDir, "empty")
 	os.Remove(fp)
 	assert.False(t, missinggo.FilePathExists(fp))
 	tt, err := cl.AddTorrent(&metainfo.MetaInfo{
 		InfoBytes: ib,
 	})
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer tt.Drop()
 	tt.DownloadAll()
 	require.True(t, cl.WaitAll())
@@ -153,7 +155,7 @@ func TestPieceHashFailed(t *testing.T) {
 	cl := newTestingClient(t)
 	tt := cl.newTorrent(mi.HashInfoBytes(), badStorage{})
 	tt.setChunkSize(2)
-	require.NoError(t, tt.setInfoBytesLocked(mi.InfoBytes))
+	qt.Assert(t, qt.IsNil(tt.setInfoBytesLocked(mi.InfoBytes)))
 	tt.cl.lock()
 	tt.dirtyChunks.AddRange(
 		uint64(tt.pieceRequestIndexOffset(1)),
@@ -172,7 +174,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	// Disable this just because we manually initiate a connection without it.
 	cfg.MinPeerExtensions.SetBit(pp.ExtensionBitFast, false)
 	cl, err := NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 
 	mi := testutil.GreetingMetaInfo()
@@ -183,13 +185,13 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	assert.False(t, tt.haveAllMetadataPieces())
 
 	nc, err := net.Dial("tcp", fmt.Sprintf(":%d", cl.LocalPort()))
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer nc.Close()
 
 	var pex PeerExtensionBits
 	pex.SetBit(pp.ExtensionBitLtep, true)
 	hr, err := pp.Handshake(context.Background(), nc, &ih, [20]byte{}, pex)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	assert.True(t, hr.PeerExtensionBits.GetBit(pp.ExtensionBitLtep))
 	assert.EqualValues(t, cl.PeerID(), hr.PeerID)
 	assert.EqualValues(t, ih, hr.Hash)
@@ -214,7 +216,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 					return b
 				}(),
 			}.MustMarshalBinary())
-			require.NoError(t, err)
+			qt.Assert(t, qt.IsNil(err))
 		}()
 		tt.metadataChanged.Wait()
 	}()
@@ -224,7 +226,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 }
 
 func TestRelativeAvailabilityHaveNone(t *testing.T) {
-	c := qt.New(t)
+	c := qtnew.New(t)
 	var err error
 	cl := Client{
 		config: TestingConfig(t),
@@ -243,13 +245,13 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	g.InitNew(&pc.callbacks)
 	tt.conns[&pc] = struct{}{}
 	err = pc.peerSentHave(0)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	info := testutil.Greeting.Info(5)
 	err = tt.setInfo(&info)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	tt.onSetInfo()
 	err = pc.peerSentHaveNone()
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	var wg sync.WaitGroup
 	tt.close(&wg)
 	tt.assertAllPiecesRelativeAvailabilityZero()

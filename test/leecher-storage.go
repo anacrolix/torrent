@@ -9,9 +9,8 @@ import (
 	"testing/iotest"
 
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent"
@@ -97,7 +96,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		newGOMAXPROCS = ps.GOMAXPROCS
 	}
 	defer func() {
-		qt.Check(t, runtime.GOMAXPROCS(prevGOMAXPROCS), qt.ContentEquals, newGOMAXPROCS)
+		qt.Check(qt, qt.ContentEquals(runtime.GOMAXPROCS(prevGOMAXPROCS), newGOMAXPROCS)(t))
 	}()
 
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
@@ -125,7 +124,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		ps.ConfigureSeeder.Config(cfg)
 	}
 	seeder, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	if ps.ConfigureSeeder.Client != nil {
 		ps.ConfigureSeeder.Client(seeder)
 	}
@@ -159,7 +158,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		ps.ConfigureLeecher.Config(cfg)
 	}
 	leecher, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer leecher.Close()
 	if ps.ConfigureLeecher.Client != nil {
 		ps.ConfigureLeecher.Client(leecher)
@@ -173,7 +172,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 		}
 		return
 	}())
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	assert.False(t, leecherTorrent.Complete().Bool())
 	assert.True(t, new)
 
@@ -202,7 +201,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	}
 	assertReadAllGreeting(t, r)
 	info, err := mi.UnmarshalInfo()
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	canComplete := ps.LeecherStorageCapacity == 0 || ps.LeecherStorageCapacity >= info.TotalLength()
 	if !canComplete {
 		// Reading from a cache doesn't refresh older pieces until we fail to read those, so we need
@@ -251,5 +250,5 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 	pos, err := r.Seek(0, io.SeekStart)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 0, pos)
-	qt.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), qt.IsNil)
+	qt.Check(t, qt.IsNil(iotest.TestReader(r, []byte(testutil.GreetingFileContents))))
 }

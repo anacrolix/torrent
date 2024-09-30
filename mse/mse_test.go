@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	_ "github.com/anacrolix/envpprof"
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -65,7 +66,7 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 	go func() {
 		defer wg.Done()
 		a, cm, err := InitiateHandshake(a, []byte("yep"), ia, cryptoProvides)
-		require.NoError(t, err)
+		qt.Assert(t, qt.IsNil(err))
 		assert.Equal(t, cryptoSelect(cryptoProvides), cm)
 		go a.Write([]byte(aData))
 
@@ -84,7 +85,7 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 			sliceIter([][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")}),
 			cryptoSelect,
 		)
-		require.NoError(t, res.error)
+		qt.Assert(t, qt.IsNil(res.error))
 		assert.EqualValues(t, "yep", res.SecretKey)
 		b := res.ReadWriter
 		assert.Equal(t, cryptoSelect(cryptoProvides), res.CryptoMethod)
@@ -147,7 +148,7 @@ func TestReceiveRandomData(t *testing.T) {
 func fillRand(t testing.TB, bs ...[]byte) {
 	for _, b := range bs {
 		_, err := rand.Read(b)
-		require.NoError(t, err)
+		qt.Assert(t, qt.IsNil(err))
 	}
 }
 
@@ -186,8 +187,8 @@ func benchmarkStream(t *testing.B, crypto CryptoMethod) {
 			defer ac.Close()
 			defer wg.Done()
 			rw, _, err := InitiateHandshake(ac, []byte("cats"), ia, crypto)
-			require.NoError(t, err)
-			require.NoError(t, readAndWrite(rw, ar, a))
+			qt.Assert(t, qt.IsNil(err))
+			qt.Assert(t, qt.IsNil(readAndWrite(rw, ar, a)))
 		}()
 		func() {
 			defer bc.Close()
@@ -197,8 +198,8 @@ func benchmarkStream(t *testing.B, crypto CryptoMethod) {
 				sliceIter([][]byte{[]byte("cats")}),
 				func(CryptoMethod) CryptoMethod { return crypto },
 			)
-			require.NoError(t, err)
-			require.NoError(t, readAndWrite(rw, br, b))
+			qt.Assert(t, qt.IsNil(err))
+			qt.Assert(t, qt.IsNil(readAndWrite(rw, br, b)))
 		}()
 		wg.Wait()
 		t.StopTimer()
@@ -231,13 +232,13 @@ func BenchmarkPipeRC4(t *testing.B) {
 	require.Equal(t, len(key), n)
 	var buf bytes.Buffer
 	c, err := rc4.NewCipher(key)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	r := cipherReader{
 		c: c,
 		r: &buf,
 	}
 	c, err = rc4.NewCipher(key)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	w := cipherWriter{
 		c: c,
 		w: &buf,

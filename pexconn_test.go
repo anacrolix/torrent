@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/dht/v2/krpc"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/require"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -48,7 +49,7 @@ func TestPexConnState(t *testing.T) {
 	require.EqualValues(t, c.PeerExtensionIDs[pp.ExtensionNamePex], out.ExtendedID)
 
 	x, err := pp.LoadPexMsg(out.ExtendedPayload)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	targx := pp.PexMsg{
 		Added:      krpc.CompactIPv4NodeAddrs(nil),
 		AddedFlags: []pp.PexPeerFlags{},

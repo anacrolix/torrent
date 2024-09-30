@@ -14,7 +14,8 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo/v2/iter"
-	qt "github.com/frankban/quicktest"
+	"github.com/anacrolix/torrent/internal/qtnew"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,7 +37,7 @@ func TestMarshalAnnounceResponse(t *testing.T) {
 		{[]byte{255, 0, 0, 3}, 4},
 	}
 	b, err := peers.MarshalBinary()
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	require.EqualValues(t,
 		"\x7f\x00\x00\x01\x00\x02\xff\x00\x00\x03\x00\x04",
 		b)
@@ -47,7 +48,7 @@ func TestMarshalAnnounceResponse(t *testing.T) {
 func TestLongWriteUDP(t *testing.T) {
 	t.Parallel()
 	l, err := net.ListenUDP("udp4", nil)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer l.Close()
 	c, err := net.DialUDP("udp", nil, l.LocalAddr().(*net.UDPAddr))
 	if err != nil {
@@ -88,19 +89,19 @@ func TestConnClientLogDispatchUnknownTransactionId(t *testing.T) {
 	cc, err := NewConnClient(NewConnClientOpts{
 		Network: network,
 	})
-	c := qt.New(t)
-	c.Assert(err, qt.IsNil)
+	c := qtnew.New(t)
+	qt.Assert(t, qt.IsNil(err))
 	defer cc.Close()
 	pc, err := net.ListenPacket(network, ":0")
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer pc.Close()
 	ccAddr := *cc.LocalAddr().(*net.UDPAddr)
 	ipAddrs, err := net.DefaultResolver.LookupIPAddr(context.Background(), "localhost")
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	ccAddr.IP = ipAddrs[0].IP
 	ccAddr.Zone = ipAddrs[0].Zone
 	_, err = pc.WriteTo(make([]byte, 30), &ccAddr)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 }
 
 func TestConnectionIdMismatch(t *testing.T) {
@@ -112,8 +113,8 @@ func TestConnectionIdMismatch(t *testing.T) {
 		//Host:    "tracker.opentrackr.org:1337",
 		Network: "udp",
 	})
-	c := qt.New(t)
-	c.Assert(err, qt.IsNil)
+	c := qtnew.New(t)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

@@ -15,8 +15,8 @@ import (
 
 	"github.com/anacrolix/dht/v2/krpc"
 	_ "github.com/anacrolix/envpprof"
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/tracker/udp"
 )
@@ -43,10 +43,10 @@ func TestAnnounceLocalhost(t *testing.T) {
 	}
 	var err error
 	srv.pc, err = net.ListenPacket("udp", "localhost:0")
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer srv.pc.Close()
 	go func() {
-		require.NoError(t, srv.serveOne())
+		qt.Assert(t, qt.IsNil(srv.serveOne()))
 	}()
 	req := AnnounceRequest{
 		NumWant: -1,
@@ -55,13 +55,13 @@ func TestAnnounceLocalhost(t *testing.T) {
 	rand.Read(req.PeerId[:])
 	copy(req.InfoHash[:], []uint8{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1})
 	go func() {
-		require.NoError(t, srv.serveOne())
+		qt.Assert(t, qt.IsNil(srv.serveOne()))
 	}()
 	ar, err := Announce{
 		TrackerUrl: fmt.Sprintf("udp://%s/announce", srv.pc.LocalAddr().String()),
 		Request:    req,
 	}.Do()
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	assert.EqualValues(t, 1, ar.Seeders)
 	assert.EqualValues(t, 2, len(ar.Peers))
 }
@@ -93,7 +93,7 @@ func TestUDPTracker(t *testing.T) {
 	if errors.As(err, &ne) {
 		t.Skip(err)
 	}
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	t.Logf("%+v", ar)
 }
 
@@ -190,5 +190,5 @@ func TestURLPathOption(t *testing.T) {
 	})
 	udp.Write(w, udp.AnnounceResponseHeader{})
 	conn.WriteTo(w.Bytes(), addr)
-	require.NoError(t, <-announceErr)
+	qt.Assert(t, qt.IsNil(<-announceErr))
 }

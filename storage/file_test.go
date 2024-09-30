@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -28,9 +28,9 @@ func TestShortFile(t *testing.T) {
 	ts, err := s.OpenTorrent(context.Background(), info, metainfo.Hash{})
 	assert.NoError(t, err)
 	f, err := os.Create(filepath.Join(td, "a"))
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	err = f.Truncate(1)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	f.Close()
 	var buf bytes.Buffer
 	p := info.Piece(0)

@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -14,14 +14,14 @@ import (
 
 func TestUnmarshalHTTPResponsePeerDicts(t *testing.T) {
 	var hr HttpResponse
-	require.NoError(t, bencode.Unmarshal(
+	qt.Assert(t, qt.IsNil(bencode.Unmarshal(
 		[]byte("d5:peersl"+
 			"d2:ip7:1.2.3.47:peer id20:thisisthe20bytepeeri4:porti9999ee"+
 			"d2:ip39:2001:0db8:85a3:0000:0000:8a2e:0370:73347:peer id20:thisisthe20bytepeeri4:porti9998ee"+
 			"e"+
 			"6:peers618:123412341234123456"+
 			"e"),
-		&hr))
+		&hr)))
 
 	require.Len(t, hr.Peers.List, 2)
 	assert.Equal(t, []byte("thisisthe20bytepeeri"), hr.Peers.List[0].ID)
@@ -37,10 +37,11 @@ func TestUnmarshalHTTPResponsePeerDicts(t *testing.T) {
 
 func TestUnmarshalHttpResponseNoPeers(t *testing.T) {
 	var hr HttpResponse
-	require.NoError(t, bencode.Unmarshal(
+	qt.Assert(t, qt.IsNil(bencode.Unmarshal(
 		[]byte("d6:peers618:123412341234123456e"),
 		&hr,
-	))
+	)))
+
 	require.Len(t, hr.Peers.List, 0)
 	assert.Len(t, hr.Peers6, 1)
 }
@@ -69,8 +70,9 @@ func TestSetAnnounceInfohashParamWithSpaces(t *testing.T) {
 		AnnounceOpt{})
 	t.Logf("%q", someUrl)
 	qt.Assert(t, someUrl.Query().Get("info_hash"), qt.Equals, string(ihBytes[:]))
-	qt.Check(t,
+	qt.Check(qt, qt.StringContains(
 		someUrl.String(),
-		qt.Contains,
-		"info_hash=%2Bv%0A%A1x%93%200%C8G%DC%DF%8E%AE%BFV%0A%1B%D1l")
+
+		"info_hash=%2Bv%0A%A1x%93%200%C8G%DC%DF%8E%AE%BFV%0A%1B%D1l")(t))
+
 }

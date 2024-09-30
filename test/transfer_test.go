@@ -10,7 +10,7 @@ import (
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/filecache"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
@@ -142,11 +142,11 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 	cfg.DataDir = greetingTempDir
 	cfg.DisableUTP = disableUtp
 	seeder, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer seeder.Close()
 	defer testutil.ExportStatusWriter(seeder, "s", t)()
 	seederTorrent, ok, err := seeder.AddTorrentSpec(torrent.TorrentSpecFromMetaInfo(mi))
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	assert.True(t, ok)
 	seederTorrent.VerifyData()
 
@@ -162,7 +162,7 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 	//cfg.Debug = true
 	cfg.Logger = log.Default.WithContextText("leecher")
 	leecher, err := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer leecher.Close()
 	defer testutil.ExportStatusWriter(leecher, "l", t)()
 
@@ -174,7 +174,7 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 	cfg.Logger = log.Default.WithContextText("leecher-leecher")
 	cfg.Debug = true
 	leecherLeecher, _ := torrent.NewClient(cfg)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer leecherLeecher.Close()
 	defer testutil.ExportStatusWriter(leecherLeecher, "ll", t)()
 	leecherGreeting, ok, err := leecher.AddTorrentSpec(func() (ret *torrent.TorrentSpec) {
@@ -182,14 +182,14 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 		ret.ChunkSize = 2
 		return
 	}())
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	assert.True(t, ok)
 	llg, ok, err := leecherLeecher.AddTorrentSpec(func() (ret *torrent.TorrentSpec) {
 		ret = torrent.TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 3
 		return
 	}())
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	assert.True(t, ok)
 	// Simultaneously DownloadAll in Leecher, and read the contents
 	// consecutively in LeecherLeecher. This non-deterministically triggered a
@@ -203,7 +203,7 @@ func testSeedAfterDownloading(t *testing.T, disableUtp bool) {
 		go func() {
 			defer wg.Done()
 			defer r.Close()
-			qt.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), qt.IsNil)
+			qt.Check(qt, iotest.TestReader(r, []byte(testutil.GreetingFileContents))(t, qt.IsNil)(qt))
 		}()
 	}
 	go leecherGreeting.AddClientPeer(seeder)

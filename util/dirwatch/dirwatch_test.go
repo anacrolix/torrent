@@ -3,13 +3,13 @@ package dirwatch
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/go-quicktest/qt"
 )
 
 func TestDirwatch(t *testing.T) {
 	tempDirName := t.TempDir()
 	t.Logf("tempdir: %q", tempDirName)
 	dw, err := New(tempDirName)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer dw.Close()
 }

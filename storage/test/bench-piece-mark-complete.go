@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
@@ -28,7 +28,7 @@ func BenchmarkPieceMarkComplete(
 	// implementation.
 	capacity int64,
 ) {
-	c := qt.New(b)
+	t := b
 	info := &metainfo.Info{
 		Pieces:      make([]byte, numPieces*metainfo.HashSize),
 		PieceLength: pieceSize,
@@ -36,7 +36,7 @@ func BenchmarkPieceMarkComplete(
 		Name:        "TorrentName",
 	}
 	ti, err := ci.OpenTorrent(context.Background(), info, metainfo.Hash{})
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	tw := storage.Torrent{ti}
 	defer tw.Close()
 	rand.Read(info.Pieces)
@@ -67,14 +67,14 @@ func BenchmarkPieceMarkComplete(
 				pi.MarkNotComplete()
 			}
 			// This might not apply if users of this benchmark don't cache with the expected capacity.
-			c.Assert(pi.Completion(), qt.Equals, storage.Completion{Complete: false, Ok: true})
-			c.Assert(pi.MarkComplete(), qt.IsNil)
-			c.Assert(pi.Completion(), qt.Equals, storage.Completion{Complete: true, Ok: true})
+			qt.Assert(t, qt.Equals(pi.Completion(), storage.Completion{Complete: false, Ok: true}))
+			qt.Assert(t, qt.IsNil(pi.MarkComplete()))
+			qt.Assert(t, qt.Equals(pi.Completion(), storage.Completion{Complete: true, Ok: true}))
 			n, err := pi.WriteTo(bytes.NewBuffer(readData[:0]))
 			b.StopTimer()
-			c.Assert(err, qt.IsNil)
-			c.Assert(n, qt.Equals, int64(len(data)))
-			c.Assert(bytes.Equal(readData[:n], data), qt.IsTrue)
+			qt.Assert(t, qt.IsNil(err))
+			qt.Assert(t, qt.Equals(n, int64(len(data))))
+			qt.Assert(t, qt.IsTrue(bytes.Equal(readData[:n], data)))
 		}
 	}
 	// Fill the cache

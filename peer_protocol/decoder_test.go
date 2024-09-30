@@ -7,7 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	"github.com/anacrolix/torrent/internal/qtnew"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,7 +36,7 @@ func BenchmarkDecodePieces(t *testing.B) {
 			},
 		},
 	}
-	c := qt.New(t)
+	c := qtnew.New(t)
 	t.ReportAllocs()
 	t.ResetTimer()
 	for i := 0; i < t.N; i += 1 {
@@ -47,7 +48,7 @@ func BenchmarkDecodePieces(t *testing.B) {
 		}
 		// This is very expensive, and should be discovered in tests rather than a benchmark.
 		if false {
-			c.Assert(msg, qt.DeepEquals, inputMsg)
+			qt.Assert(t, qt.DeepEquals(msg, inputMsg))
 		}
 		// WWJD
 		d.Pool.Put(&msg.Piece)
@@ -69,7 +70,7 @@ func TestDecodeShortPieceEOF(t *testing.T) {
 		}},
 	}
 	var m Message
-	require.NoError(t, d.Decode(&m))
+	qt.Assert(t, qt.IsNil(d.Decode(&m)))
 	assert.Len(t, m.Piece, 1)
 	assert.ErrorIs(t, d.Decode(&m), io.EOF)
 }

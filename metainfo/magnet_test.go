@@ -4,10 +4,10 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"github.com/anacrolix/torrent/internal/qtnew"
 	"github.com/davecgh/go-spew/spew"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -28,7 +28,7 @@ func init() {
 // Converting from our Magnet type to URL string.
 func TestMagnetString(t *testing.T) {
 	m, err := ParseMagnetUri(exampleMagnet.String())
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	assert.EqualValues(t, exampleMagnet, m)
 }
 
@@ -73,10 +73,10 @@ func TestParseMagnetURI(t *testing.T) {
 
 func TestMagnetize(t *testing.T) {
 	mi, err := LoadFromFile("../testdata/bootstrap.dat.torrent")
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 
 	info, err := mi.UnmarshalInfo()
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	m := mi.Magnet(nil, &info)
 
 	assert.EqualValues(t, "bootstrap.dat", m.DisplayName)
@@ -118,18 +118,18 @@ func contains(haystack []string, needle string) bool {
 // Check that we can parse the magnet link generated from a real-world torrent. This was added due
 // to a regression in copyParams.
 func TestParseSintelMagnet(t *testing.T) {
-	c := qt.New(t)
+	c := qtnew.New(t)
 	mi, err := LoadFromFile("../testdata/sintel.torrent")
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	m := mi.Magnet(nil, nil)
 	ms := m.String()
 	t.Logf("magnet link: %q", ms)
 	m, err = ParseMagnetUri(ms)
-	c.Check(err, qt.IsNil)
+	qt.Check(c, qt.IsNil(err))
 	spewCfg := spew.NewDefaultConfig()
 	spewCfg.DisableMethods = true
 	spewCfg.Dump(m)
 	m2, err := ParseMagnetV2Uri(ms)
 	spewCfg.Dump(m2)
-	c.Check(err, qt.IsNil)
+	qt.Check(c, qt.IsNil(err))
 }

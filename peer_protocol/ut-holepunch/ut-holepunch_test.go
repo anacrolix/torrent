@@ -5,7 +5,8 @@ import (
 	"net/netip"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	"github.com/anacrolix/torrent/internal/qtnew"
+	qt "github.com/go-quicktest/qt"
 )
 
 var exampleMsgs = []Msg{
@@ -22,19 +23,19 @@ var exampleMsgs = []Msg{
 }
 
 func TestUnmarshalMsg(t *testing.T) {
-	c := qt.New(t)
+	c := qtnew.New(t)
 	for _, m := range exampleMsgs {
 		b, err := m.MarshalBinary()
-		c.Assert(err, qt.IsNil)
+		qt.Assert(t, qt.IsNil(err))
 		expectedLen := 24
 		if m.AddrPort.Addr().Is4() {
 			expectedLen = 12
 		}
-		c.Check(b, qt.HasLen, expectedLen)
+		qt.Check(qt, qt.HasLen(b, expectedLen)(c))
 		var um Msg
 		err = um.UnmarshalBinary(b)
-		c.Assert(err, qt.IsNil)
-		c.Check(um, qt.Equals, m)
+		qt.Assert(t, qt.IsNil(err))
+		qt.Check(qt, qt.Equals(um, m)(c))
 	}
 }
 

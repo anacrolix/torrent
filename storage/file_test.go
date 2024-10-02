@@ -9,8 +9,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -26,19 +25,19 @@ func TestShortFile(t *testing.T) {
 		Pieces:      make([]byte, 20),
 	}
 	ts, err := s.OpenTorrent(context.Background(), info, metainfo.Hash{})
-	assert.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	f, err := os.Create(filepath.Join(td, "a"))
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	err = f.Truncate(1)
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	f.Close()
 	var buf bytes.Buffer
 	p := info.Piece(0)
 	n, err := io.Copy(&buf, io.NewSectionReader(ts.Piece(p), 0, p.Length()))
-	assert.EqualValues(t, 1, n)
+	qt.Check(t, qt.Equals(n, int64(1)))
 	switch err {
 	case nil, io.EOF:
 	default:
-		t.Errorf("expected nil or EOF error from truncated piece, got %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

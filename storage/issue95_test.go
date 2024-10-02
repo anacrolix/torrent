@@ -5,8 +5,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/missinggo/v2/resource"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -21,14 +20,14 @@ func testIssue95(t *testing.T, ci ClientImpl) {
 	}
 	c := NewClient(ci)
 	t1, err := c.OpenTorrent(context.Background(), &info, metainfo.HashBytes([]byte("a")))
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer t1.Close()
 	t2, err := c.OpenTorrent(context.Background(), &info, metainfo.HashBytes([]byte("b")))
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	defer t2.Close()
 	t2p := t2.Piece(info.Piece(0))
-	assert.NoError(t, t1.Close())
-	assert.NotPanics(t, func() { t2p.Completion() })
+	qt.Check(t, qt.IsNil(t1.Close()))
+	t2p.Completion()
 }
 
 func TestIssue95File(t *testing.T) {

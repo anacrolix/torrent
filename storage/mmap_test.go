@@ -4,23 +4,22 @@ import (
 	"context"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	"github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/internal/testutil"
 )
 
 func TestMmapWindows(t *testing.T) {
-	c := qt.New(t)
 	dir, mi := testutil.GreetingTestTorrent()
 	cs := NewMMap(dir)
 	defer func() {
-		c.Check(cs.Close(), qt.IsNil)
+		qt.Check(t, qt.IsNil(cs.Close()))
 	}()
 	info, err := mi.UnmarshalInfo()
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	ts, err := cs.OpenTorrent(context.Background(), &info, mi.HashInfoBytes())
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer func() {
-		c.Check(ts.Close(), qt.IsNil)
+		qt.Check(t, qt.IsNil(ts.Close()))
 	}()
 }

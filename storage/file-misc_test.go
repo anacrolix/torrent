@@ -3,8 +3,7 @@ package storage
 import (
 	"testing"
 
-	qt "github.com/frankban/quicktest"
-	"github.com/stretchr/testify/assert"
+	"github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
@@ -49,9 +48,8 @@ func TestExtentCompleteRequiredLengthsV2InfoWithGaps(t *testing.T) {
 			},
 		},
 	}
-	c := qt.New(t)
 	check := func(off, n int64, expected ...requiredLength) {
-		c.Check(extentCompleteRequiredLengths(info, off, n), qt.DeepEquals, expected)
+		qt.Check(t, qt.DeepEquals(extentCompleteRequiredLengths(info, off, n), expected))
 	}
 	check(0, 0)
 	check(0, 1, requiredLength{FileIndex: 0, Length: 1})
@@ -72,27 +70,26 @@ func TestExtentCompleteRequiredLengths(t *testing.T) {
 			{Path: []string{"b"}, Length: 3},
 		},
 	}
-	c := qt.New(t)
 	check := func(off, n int64, expected ...requiredLength) {
-		c.Check(extentCompleteRequiredLengths(info, off, n), qt.DeepEquals, expected)
+		qt.Assert(t, qt.DeepEquals(extentCompleteRequiredLengths(info, off, n), expected))
 	}
-	assert.Empty(t, extentCompleteRequiredLengths(info, 0, 0))
-	assert.EqualValues(t, []requiredLength{
+	qt.Check(t, qt.HasLen(extentCompleteRequiredLengths(info, 0, 0), 0))
+	qt.Check(t, qt.DeepEquals(extentCompleteRequiredLengths(info, 0, 1), []requiredLength{
 		{FileIndex: 0, Length: 1},
-	}, extentCompleteRequiredLengths(info, 0, 1))
-	assert.EqualValues(t, []requiredLength{
+	}))
+	qt.Check(t, qt.DeepEquals(extentCompleteRequiredLengths(info, 0, 2), []requiredLength{
 		{FileIndex: 0, Length: 2},
-	}, extentCompleteRequiredLengths(info, 0, 2))
-	assert.EqualValues(t, []requiredLength{
+	}))
+	qt.Check(t, qt.DeepEquals(extentCompleteRequiredLengths(info, 0, 3), []requiredLength{
 		{FileIndex: 0, Length: 2},
 		{FileIndex: 1, Length: 1},
-	}, extentCompleteRequiredLengths(info, 0, 3))
-	assert.EqualValues(t, []requiredLength{
+	}))
+	qt.Check(t, qt.DeepEquals(extentCompleteRequiredLengths(info, 2, 2), []requiredLength{
 		{FileIndex: 1, Length: 2},
-	}, extentCompleteRequiredLengths(info, 2, 2))
-	assert.EqualValues(t, []requiredLength{
+	}))
+	qt.Check(t, qt.DeepEquals(extentCompleteRequiredLengths(info, 4, 1), []requiredLength{
 		{FileIndex: 1, Length: 3},
-	}, extentCompleteRequiredLengths(info, 4, 1))
-	assert.Len(t, extentCompleteRequiredLengths(info, 5, 0), 0)
+	}))
+	qt.Check(t, qt.HasLen(extentCompleteRequiredLengths(info, 5, 0), 0))
 	check(6, 1)
 }

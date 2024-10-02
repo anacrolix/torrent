@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	g "github.com/anacrolix/generics"
-	"github.com/stretchr/testify/require"
+	"github.com/go-quicktest/qt"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -21,14 +21,14 @@ func testMarkedCompleteMissingOnRead(t *testing.T, csf func(string) ClientImplCl
 		Pieces:      make([]byte, 20),
 	}
 	ts, err := cs.OpenTorrent(context.Background(), info, metainfo.Hash{})
-	require.NoError(t, err)
+	qt.Assert(t, qt.IsNil(err))
 	p := ts.PieceWithHash(info.Piece(0), g.None[[]byte]())
-	require.NoError(t, p.MarkComplete())
-	// require.False(t, p.GetIsComplete())
+	qt.Check(t, qt.IsNil(p.MarkComplete()))
+	// qt.Assert(t, qt.IsFalse(p.GetIsComplete()))
 	n, err := p.ReadAt(make([]byte, 1), 0)
-	require.Error(t, err)
-	require.EqualValues(t, 0, n)
-	require.False(t, p.Completion().Complete)
+	qt.Check(t, qt.Not(qt.IsNil(err)))
+	qt.Check(t, qt.Equals(n, int(0)))
+	qt.Check(t, qt.IsFalse(p.Completion().Complete))
 }
 
 func TestMarkedCompleteMissingOnReadFile(t *testing.T) {

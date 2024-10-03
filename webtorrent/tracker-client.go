@@ -308,7 +308,7 @@ func (tc *TrackerClient) RtcPeerConnStats() map[string]webrtc.StatsReport {
 	defer tc.mu.Unlock()
 	sr := make(map[string]webrtc.StatsReport)
 	for id, pc := range tc.rtcPeerConns {
-		sr[id] = pc.GetStats()
+		sr[id] = GetPeerConnStats(pc)
 	}
 	return sr
 }

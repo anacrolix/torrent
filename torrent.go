@@ -33,6 +33,7 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
 	"github.com/pion/datachannel"
+	"github.com/pion/webrtc/v3"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -3000,6 +3001,18 @@ func (t *Torrent) iterUndirtiedRequestIndexesInPiece(
 		pieceRequestIndexOffset, pieceRequestIndexOffset+t.pieceNumChunks(piece),
 		f,
 	)
+}
+
+type webRtcStatsReports map[string]webrtc.StatsReport
+
+func (t *Torrent) GetWebRtcPeerConnStats() map[string]webRtcStatsReports {
+	stats := make(map[string]webRtcStatsReports)
+	trackersMap := t.cl.websocketTrackers.clients
+	for i, trackerClient := range trackersMap {
+		ts := trackerClient.RtcPeerConnStats()
+		stats[i] = ts
+	}
+	return stats
 }
 
 type requestState struct {

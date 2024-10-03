@@ -38,14 +38,33 @@ type wrappedPeerConnection struct {
 	pproffd.CloseWrapper
 	span trace.Span
 	ctx  context.Context
+
+	onCloseHandler func()
 }
 
 func (me *wrappedPeerConnection) Close() error {
 	me.closeMu.Lock()
 	defer me.closeMu.Unlock()
+
+	me.onClose()
+
 	err := me.CloseWrapper.Close()
 	me.span.End()
 	return err
+}
+
+func (me *wrappedPeerConnection) OnClose(f func()) {
+	me.closeMu.Lock()
+	defer me.closeMu.Unlock()
+	me.onCloseHandler = f
+}
+
+func (me *wrappedPeerConnection) onClose() {
+	handler := me.onCloseHandler
+
+	if handler != nil {
+		handler()
+	}
 }
 
 func newPeerConnection(logger log.Logger, iceServers []webrtc.ICEServer) (*wrappedPeerConnection, error) {

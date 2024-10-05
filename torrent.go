@@ -2533,6 +2533,10 @@ func (t *Torrent) wantOutgoingConns(lock bool) bool {
 	conns := t.peerConnsAsSlice(lock)
 	defer conns.free()
 
+	if len(conns) < t.maxEstablishedConns {
+		return true
+	}
+
 	numOutgoingConns := conns.numOutgoingConns()
 	numIncomingConns := len(conns) - numOutgoingConns
 

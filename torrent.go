@@ -3655,12 +3655,14 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 	case utHolepunch.Connect:
 		holepunchAddr := msg.AddrPort
 		t.logger.Printf("got holepunch connect request for %v from %p", holepunchAddr, sender)
+		t.cl.lock()
 		if g.MapContains(t.cl.undialableWithoutHolepunch, holepunchAddr) {
 			setAdd(&t.cl.undialableWithoutHolepunchDialedAfterHolepunchConnect, holepunchAddr)
 			if g.MapContains(t.cl.accepted, holepunchAddr) {
 				setAdd(&t.cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr)
 			}
 		}
+		t.cl.unlock()
 		opts := outgoingConnOpts{
 			peerInfo: PeerInfo{
 				Addr:         msg.AddrPort,

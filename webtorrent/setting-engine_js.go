@@ -5,7 +5,7 @@
 package webtorrent
 
 import (
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 // I'm not sure what to do for logging for JS. See

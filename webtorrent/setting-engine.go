@@ -8,7 +8,7 @@ import (
 	"io"
 
 	"github.com/pion/logging"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 var s = webrtc.SettingEngine{

@@ -13,7 +13,7 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/gorilla/websocket"
 	"github.com/pion/datachannel"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/anacrolix/torrent/tracker"

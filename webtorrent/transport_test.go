@@ -5,7 +5,7 @@ import (
 
 	"github.com/anacrolix/log"
 	qt "github.com/frankban/quicktest"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 func TestClosingPeerConnectionDoesNotCloseUnopenedDataChannel(t *testing.T) {

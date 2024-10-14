@@ -4,7 +4,7 @@
 package webtorrent
 
 import (
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 // webrtc.PeerConnection.GetStats() is not currently supported for WASM. Return empty stats.

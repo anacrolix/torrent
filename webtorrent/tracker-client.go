@@ -359,8 +359,9 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 		return fmt.Errorf("write AnnounceRequest: %w", err)
 	}
 	tc.updateTrackerAnnounceStatus(announceStatus)
+	g.MakeMapIfNil(&tc.outboundOffers)
 	for _, offer := range offers {
-		g.MakeMapIfNilAndSet(&tc.outboundOffers, offer.offerId, offer.outboundOfferValue)
+		g.MapInsert(tc.outboundOffers, offer.offerId, offer.outboundOfferValue)
 	}
 	return nil
 }

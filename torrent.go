@@ -3108,6 +3108,11 @@ func (t *Torrent) addHalfOpen(addrStr string, attemptKey *PeerInfo, lock bool) {
 		panic("should be unique")
 	}
 
+	if lock {
+		t.cl.lock()
+		defer t.cl.unlock()
+	}
+
 	path.Set(attemptKey)
 	t.cl.numHalfOpen++
 }
@@ -3663,7 +3668,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 				setAdd(&t.cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr)
 			}
 		}
-
+		t.cl.unlock()
 		opts := outgoingConnOpts{
 			peerInfo: PeerInfo{
 				Addr:         msg.AddrPort,
@@ -3678,8 +3683,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 			// encryption. So we will act normally.
 			HeaderObfuscationPolicy: t.cl.config.HeaderObfuscationPolicy,
 		}
-		initiateConn(opts, true, false)
-		t.cl.unlock()
+		initiateConn(opts, true, true)
 		return nil
 	case utHolepunch.Error:
 		torrent.Add("holepunch error messages received", 1)

@@ -3108,45 +3108,12 @@ func (t *Torrent) addHalfOpen(addrStr string, attemptKey *PeerInfo, lock bool) {
 		panic("should be unique")
 	}
 
-	/*if lock {
-		t.cl.lock()
-		defer t.cl.unlock()
-	}*/
-
 	path.Set(attemptKey)
 	t.cl.numHalfOpen++
 }
 
 // Start the process of connecting to the given peer for the given torrent if appropriate. I'm not
 // sure all the PeerInfo fields are being used.
-/*func initiateConn(opts outgoingConnOpts, ignoreLimits bool, lock bool) {
-	t := opts.t
-	peer := opts.peerInfo
-	if peer.Id == t.cl.peerID {
-		return
-	}
-
-	if t.cl.badPeerAddr(peer.Addr) && !peer.Trusted {
-		return
-	}
-	addr := peer.Addr
-	addrStr := addr.String()
-	if !ignoreLimits {
-		if t.connectingToPeerAddr(addrStr, lock) {
-			return
-		}
-	}
-	if t.hasPeerConnForAddr(addr, lock) {
-		return
-	}
-	attemptKey := &peer
-	t.addHalfOpen(addrStr, attemptKey, lock)
-	go t.cl.outgoingConnection(
-		opts,
-		attemptKey,
-	)
-}*/
-
 func initiateConn(opts outgoingConnOpts, ignoreLimits bool, lock bool, lockCLient bool) {
 	t := opts.t
 	peer := opts.peerInfo

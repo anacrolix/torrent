@@ -1746,7 +1746,7 @@ func (t *Torrent) openNewConns(lock bool) (initiated int) {
 			receivedHolepunchConnect: false,
 			HeaderObfuscationPolicy:  t.cl.config.HeaderObfuscationPolicy,
 		}
-		initiateConn(opts, false, false, false)
+		initiateConn(opts, false, false)
 		initiated++
 	}
 
@@ -2533,10 +2533,6 @@ func (t *Torrent) wantOutgoingConns(lock bool) bool {
 	conns := t.peerConnsAsSlice(lock)
 	defer conns.free()
 
-	if len(conns) < t.maxEstablishedConns {
-		return true
-	}
-
 	numOutgoingConns := conns.numOutgoingConns()
 	numIncomingConns := len(conns) - numOutgoingConns
 
@@ -3107,29 +3103,21 @@ func (t *Torrent) addHalfOpen(addrStr string, attemptKey *PeerInfo, lock bool) {
 	if path.Exists() {
 		panic("should be unique")
 	}
-
 	path.Set(attemptKey)
 	t.cl.numHalfOpen++
 }
 
 // Start the process of connecting to the given peer for the given torrent if appropriate. I'm not
 // sure all the PeerInfo fields are being used.
-func initiateConn(opts outgoingConnOpts, ignoreLimits bool, lock bool, lockCLient bool) {
+func initiateConn(opts outgoingConnOpts, ignoreLimits bool, lock bool) {
 	t := opts.t
 	peer := opts.peerInfo
-
-	if lockCLient {
-		t.cl.rLock()
-		defer t.cl.rUnlock()
-	}
-
 	if peer.Id == t.cl.peerID {
 		return
 	}
 	if t.cl.badPeerAddr(peer.Addr) && !peer.Trusted {
 		return
 	}
-
 	addr := peer.Addr
 	addrStr := addr.String()
 	if !ignoreLimits {
@@ -3142,7 +3130,6 @@ func initiateConn(opts outgoingConnOpts, ignoreLimits bool, lock bool, lockCLien
 	}
 	attemptKey := &peer
 	t.addHalfOpen(addrStr, attemptKey, lock)
-
 	go t.cl.outgoingConnection(
 		opts,
 		attemptKey,
@@ -3664,14 +3651,12 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 	case utHolepunch.Connect:
 		holepunchAddr := msg.AddrPort
 		t.logger.Printf("got holepunch connect request for %v from %p", holepunchAddr, sender)
-		t.cl.lock()
 		if g.MapContains(t.cl.undialableWithoutHolepunch, holepunchAddr) {
 			setAdd(&t.cl.undialableWithoutHolepunchDialedAfterHolepunchConnect, holepunchAddr)
 			if g.MapContains(t.cl.accepted, holepunchAddr) {
 				setAdd(&t.cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr)
 			}
 		}
-		t.cl.unlock()
 		opts := outgoingConnOpts{
 			peerInfo: PeerInfo{
 				Addr:         msg.AddrPort,
@@ -3686,7 +3671,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 			// encryption. So we will act normally.
 			HeaderObfuscationPolicy: t.cl.config.HeaderObfuscationPolicy,
 		}
-		initiateConn(opts, true, true, true)
+		initiateConn(opts, true, true)
 		return nil
 	case utHolepunch.Error:
 		torrent.Add("holepunch error messages received", 1)

@@ -1746,7 +1746,7 @@ func (t *Torrent) openNewConns(lock bool) (initiated int) {
 			receivedHolepunchConnect: false,
 			HeaderObfuscationPolicy:  t.cl.config.HeaderObfuscationPolicy,
 		}
-		initiateConn(opts, false, false)
+		initiateConn(opts, false, false, false)
 		initiated++
 	}
 
@@ -2533,6 +2533,10 @@ func (t *Torrent) wantOutgoingConns(lock bool) bool {
 	conns := t.peerConnsAsSlice(lock)
 	defer conns.free()
 
+	if len(conns) < t.maxEstablishedConns {
+		return true
+	}
+
 	numOutgoingConns := conns.numOutgoingConns()
 	numIncomingConns := len(conns) - numOutgoingConns
 
@@ -3109,9 +3113,15 @@ func (t *Torrent) addHalfOpen(addrStr string, attemptKey *PeerInfo, lock bool) {
 
 // Start the process of connecting to the given peer for the given torrent if appropriate. I'm not
 // sure all the PeerInfo fields are being used.
-func initiateConn(opts outgoingConnOpts, ignoreLimits bool, lock bool) {
+func initiateConn(opts outgoingConnOpts, ignoreLimits bool, lock bool, lockCLient bool) {
 	t := opts.t
 	peer := opts.peerInfo
+
+	if lockCLient {
+		t.cl.rLock()
+		defer t.cl.rUnlock()
+	}
+
 	if peer.Id == t.cl.peerID {
 		return
 	}
@@ -3651,12 +3661,14 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 	case utHolepunch.Connect:
 		holepunchAddr := msg.AddrPort
 		t.logger.Printf("got holepunch connect request for %v from %p", holepunchAddr, sender)
+		t.cl.lock()
 		if g.MapContains(t.cl.undialableWithoutHolepunch, holepunchAddr) {
 			setAdd(&t.cl.undialableWithoutHolepunchDialedAfterHolepunchConnect, holepunchAddr)
 			if g.MapContains(t.cl.accepted, holepunchAddr) {
 				setAdd(&t.cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr)
 			}
 		}
+		t.cl.unlock()
 		opts := outgoingConnOpts{
 			peerInfo: PeerInfo{
 				Addr:         msg.AddrPort,
@@ -3671,7 +3683,7 @@ func (t *Torrent) handleReceivedUtHolepunchMsg(msg utHolepunch.Msg, sender *Peer
 			// encryption. So we will act normally.
 			HeaderObfuscationPolicy: t.cl.config.HeaderObfuscationPolicy,
 		}
-		initiateConn(opts, true, true)
+		initiateConn(opts, true, true, true)
 		return nil
 	case utHolepunch.Error:
 		torrent.Add("holepunch error messages received", 1)

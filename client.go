@@ -33,7 +33,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
-	"github.com/pion/datachannel"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -333,7 +332,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		WebsocketTrackerHttpHeader: cl.config.WebsocketTrackerHttpHeader,
 		ICEServers:                 cl.ICEServers(),
 		DialContext:                cl.config.TrackerDialContext,
-		OnConn: func(dc datachannel.ReadWriteCloser, dcc webtorrent.DataChannelContext) {
+		OnConn: func(dc webtorrent.DataChannelConn, dcc webtorrent.DataChannelContext) {
 			cl.lock()
 			defer cl.unlock()
 			t, ok := cl.torrentsByShortHash[dcc.InfoHash]

@@ -10,7 +10,6 @@ import (
 
 	"github.com/anacrolix/log"
 	"github.com/gorilla/websocket"
-	"github.com/pion/datachannel"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/anacrolix/torrent/tracker"
@@ -43,7 +42,7 @@ type websocketTrackers struct {
 	PeerId                     [20]byte
 	Logger                     log.Logger
 	GetAnnounceRequest         func(event tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error)
-	OnConn                     func(datachannel.ReadWriteCloser, webtorrent.DataChannelContext)
+	OnConn                     func(webtorrent.DataChannelConn, webtorrent.DataChannelContext)
 	mu                         sync.Mutex
 	clients                    map[string]*refCountedWebtorrentTrackerClient
 	Proxy                      httpTracker.ProxyFunc

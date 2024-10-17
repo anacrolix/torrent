@@ -12,7 +12,6 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/gorilla/websocket"
-	"github.com/pion/datachannel"
 	"github.com/pion/webrtc/v4"
 	"go.opentelemetry.io/otel/trace"
 
@@ -85,7 +84,7 @@ func (me *DataChannelContext) GetSelectedIceCandidatePair() (*webrtc.ICECandidat
 	return me.peerConnection.SCTP().Transport().ICETransport().GetSelectedCandidatePair()
 }
 
-type onDataChannelOpen func(_ datachannel.ReadWriteCloser, dcc DataChannelContext)
+type onDataChannelOpen func(_ DataChannelConn, dcc DataChannelContext)
 
 func (tc *TrackerClient) doWebsocket() error {
 	metrics.Add("websocket dials", 1)

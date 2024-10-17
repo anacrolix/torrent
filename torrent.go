@@ -32,7 +32,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
-	"github.com/pion/datachannel"
 	"github.com/pion/webrtc/v4"
 	"golang.org/x/sync/errgroup"
 
@@ -1851,7 +1850,7 @@ func (t *Torrent) seeding() bool {
 }
 
 func (t *Torrent) onWebRtcConn(
-	c datachannel.ReadWriteCloser,
+	c webtorrent.DataChannelConn,
 	dcc webtorrent.DataChannelContext,
 ) {
 	defer c.Close()

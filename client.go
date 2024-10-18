@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/anacrolix/torrent/webtorrent"
+
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
@@ -47,7 +49,6 @@ import (
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/types/infohash"
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
-	"github.com/anacrolix/torrent/webtorrent"
 )
 
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
@@ -312,7 +313,12 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		}
 	}
 
+	var obs *webtorrent.TrackerObserver
+	if cl.config.Observers != nil {
+		obs = &cl.config.Observers.Trackers
+	}
 	cl.websocketTrackers = websocketTrackers{
+		obs:    obs,
 		PeerId: cl.peerID,
 		Logger: cl.logger.WithNames("websocketTrackers"),
 		GetAnnounceRequest: func(
@@ -741,6 +747,11 @@ func doProtocolHandshakeOnDialResult(
 	cl := t.cl
 	nc := dr.Conn
 	addrIpPort, _ := tryIpPortFromNetAddr(addr)
+
+	var obs *PeerObserver
+	if t.cl.config.Observers != nil {
+		obs = &t.cl.config.Observers.Peers
+	}
 	c, err = cl.initiateProtocolHandshakes(
 		context.Background(), nc, t, obfuscatedHeader,
 		newConnectionOpts{
@@ -750,6 +761,7 @@ func doProtocolHandshakeOnDialResult(
 			localPublicAddr: cl.publicAddr(addrIpPort.IP),
 			network:         dr.Dialer.DialerNetwork(),
 			connString:      regularNetConnPeerConnConnString(nc),
+			obs:             obs,
 		})
 	if err != nil {
 		nc.Close()
@@ -1128,8 +1140,19 @@ func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 	pc.startMessageWriter()
 	pc.sendInitialMessages()
 	pc.initUpdateRequestsTimer()
+
+	pc.UpdatePeerConnStatus(PeerStatus{
+		Id: pc.PeerID,
+		Ok: true,
+	})
+
 	err := pc.mainReadLoop()
 	if err != nil {
+		pc.UpdatePeerConnStatus(PeerStatus{
+			Id:  pc.PeerID,
+			Ok:  false,
+			Err: fmt.Sprintf("%s", err),
+		})
 		return fmt.Errorf("main read loop: %w", err)
 	}
 	return nil
@@ -1638,6 +1661,7 @@ type newConnectionOpts struct {
 	localPublicAddr peerLocalPublicAddr
 	network         string
 	connString      string
+	obs             *PeerObserver
 }
 
 func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerConn) {
@@ -1658,6 +1682,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		},
 		connString: opts.connString,
 		conn:       nc,
+		Observers:  opts.obs,
 	}
 	c.peerRequestDataAllocLimiter.Max = cl.config.MaxAllocPeerRequestDataPerConn
 	c.initRequestState()

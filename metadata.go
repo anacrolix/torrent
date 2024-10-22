@@ -3,10 +3,10 @@ package torrent
 import (
 	"time"
 
-	"github.com/anacrolix/missinggo"
 	"github.com/james-lawrence/torrent/bencode"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
+	"github.com/james-lawrence/torrent/x/bytesx"
 	"github.com/pkg/errors"
 )
 
@@ -114,10 +114,10 @@ func NewFromMetaInfoFile(path string, options ...Option) (t Metadata, err error)
 func NewFromFile(path string, options ...Option) (t Metadata, err error) {
 	var (
 		encoded []byte
-		info    = metainfo.Info{PieceLength: missinggo.MiB}
 	)
 
-	if err = info.BuildFromFilePath(path); err != nil {
+	info, err := metainfo.NewFromPath(path, metainfo.OptionPieceLength(bytesx.MiB))
+	if err != nil {
 		return t, errors.WithStack(err)
 	}
 

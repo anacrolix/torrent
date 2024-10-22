@@ -91,10 +91,8 @@ func TestBuildFromFilePathOrder(t *testing.T) {
 	defer os.RemoveAll(td)
 	require.NoError(t, touchFile(filepath.Join(td, "b")))
 	require.NoError(t, touchFile(filepath.Join(td, "a")))
-	info := Info{
-		PieceLength: 1,
-	}
-	require.NoError(t, info.BuildFromFilePath(td))
+	info, err := NewFromPath(td, OptionPieceLength(1))
+	require.NoError(t, err)
 	assert.EqualValues(t, []FileInfo{{
 		Path: []string{"a"},
 	}, {

@@ -47,11 +47,8 @@ func main() {
 	if len(args.CreatedBy) > 0 {
 		mi.CreatedBy = args.CreatedBy
 	}
-	info := metainfo.Info{
-		PieceLength: 256 * bytesx.KiB,
-	}
 
-	err := info.BuildFromFilePath(args.Root)
+	info, err := metainfo.NewFromPath(args.Root, metainfo.OptionPieceLength(256*bytesx.KiB))
 	if err != nil {
 		log.Fatal(err)
 	}

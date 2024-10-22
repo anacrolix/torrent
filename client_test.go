@@ -796,8 +796,10 @@ func makeMagnet(t *testing.T, cl *torrent.Client, dir string, name string) strin
 	file.Close()
 	mi := metainfo.MetaInfo{}
 	mi.SetDefaults()
-	info := metainfo.Info{PieceLength: 256 * 1024}
-	err = info.BuildFromFilePath(filepath.Join(dir, name))
+	info, err := metainfo.NewFromPath(
+		filepath.Join(dir, name),
+		metainfo.OptionPieceLength(256*1024),
+	)
 	require.NoError(t, err)
 	mi.InfoBytes, err = bencode.Marshal(info)
 	require.NoError(t, err)

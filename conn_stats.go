@@ -17,8 +17,9 @@ import (
 // Count, must be aligned on some platforms: See https://github.com/anacrolix/torrent/issues/262.
 type ConnStats struct {
 	// Total bytes on the wire. Includes handshakes and encryption.
-	BytesWritten     Count
-	BytesWrittenData Count
+	BytesWritten         Count
+	BytesWrittenData     Count
+	BytesWrittenDataRate Count //bytes per second
 
 	BytesRead                   Count
 	BytesReadData               Count
@@ -57,6 +58,10 @@ type Count struct {
 }
 
 var _ fmt.Stringer = (*Count)(nil)
+
+func (me *Count) Store(n int64) {
+	atomic.StoreInt64(&me.n, n)
+}
 
 func (me *Count) Add(n int64) {
 	atomic.AddInt64(&me.n, n)

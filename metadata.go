@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"io"
 	"time"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -117,6 +118,27 @@ func NewFromFile(path string, options ...Option) (t Metadata, err error) {
 	)
 
 	info, err := metainfo.NewFromPath(path, metainfo.OptionPieceLength(bytesx.MiB))
+	if err != nil {
+		return t, errors.WithStack(err)
+	}
+
+	if encoded, err = bencode.Marshal(info); err != nil {
+		return t, errors.WithStack(err)
+	}
+
+	if t, err = New(metainfo.HashBytes(encoded), OptionInfo(encoded), OptionDisplayName(info.Name)); err != nil {
+		return t, errors.WithStack(err)
+	}
+
+	return t.Merge(options...), nil
+}
+
+func NewFromReader(src io.Reader, options ...Option) (t Metadata, err error) {
+	var (
+		encoded []byte
+	)
+
+	info, err := metainfo.NewFromReader(src, metainfo.OptionPieceLength(bytesx.MiB))
 	if err != nil {
 		return t, errors.WithStack(err)
 	}

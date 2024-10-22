@@ -222,3 +222,10 @@ func (t Metadata) Metainfo() metainfo.MetaInfo {
 		CreationDate: time.Now().Unix(),
 	}
 }
+
+func NewMagnet(md Metadata) metainfo.Magnet {
+	return metainfo.Magnet{
+		DisplayName: md.DisplayName,
+		InfoHash:    md.InfoHash,
+	}
+}

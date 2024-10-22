@@ -290,6 +290,18 @@ func (p *Peer) DownloadRate() float64 {
 	return p.downloadRate()
 }
 
+func (p *Peer) UploadRate() float64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return float64(p._stats.BytesWrittenDataRate.Int64())
+}
+
+func (p *Peer) BytesUploaded() int64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p._stats.BytesWrittenData.Int64()
+}
+
 func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int), lockTorrent bool) {
 	var last Option[pieceIndex]
 	var count int

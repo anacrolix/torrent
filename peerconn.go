@@ -59,6 +59,7 @@ type PeerConn struct {
 	PeerClientName   atomic.Value
 	uploadTimer      *time.Timer
 	pex              pexConnState
+	lastWriteTime    time.Time
 
 	// The pieces the peer has claimed to have.
 	_peerPieces roaring.Bitmap
@@ -633,7 +634,12 @@ func (cn *PeerConn) wroteMsg(msg *pp.Message) {
 			torrent.Add(fmt.Sprintf("Extended messages written for protocol %q", name), 1)
 		}
 	}
-	cn.allStats(func(cs *ConnStats) { cs.wroteMsg(msg) })
+	cn.allStats(func(cs *ConnStats) {
+		cs.wroteMsg(msg)
+		writeTime := time.Now()
+		cs.BytesWrittenDataRate.Store(int64(float64(len(msg.Piece)) / writeTime.Sub(cn.lastWriteTime).Seconds()))
+		cn.lastWriteTime = writeTime
+	})
 }
 
 func (cn *PeerConn) wroteBytes(n int64) {

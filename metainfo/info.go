@@ -201,3 +201,11 @@ func (info *Info) UpvertedFiles() []FileInfo {
 func (info *Info) Piece(index int) Piece {
 	return Piece{info, pieceIndex(index)}
 }
+
+func (info *Info) Hashes() (ret [][]byte) {
+	for i := 0; i < len(info.Pieces); i += sha1.Size {
+		ret = append(ret, info.Pieces[i:i+sha1.Size])
+	}
+
+	return ret
+}

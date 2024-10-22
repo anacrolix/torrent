@@ -3,7 +3,6 @@ package torrent
 import (
 	"container/heap"
 	"context"
-	"crypto/sha1"
 	"fmt"
 	"io"
 	"log"
@@ -466,20 +465,12 @@ func (t *torrent) metadataSize() int {
 	return len(t.metadataBytes)
 }
 
-func infoPieceHashes(info *metainfo.Info) (ret [][]byte) {
-	for i := 0; i < len(info.Pieces); i += sha1.Size {
-		ret = append(ret, info.Pieces[i:i+sha1.Size])
-	}
-
-	return ret
-}
-
 func (t *torrent) makePieces() {
 	t.chunks = newChunks(int(t.chunkSize), t.info)
 	t.chunks.gracePeriod = t.duplicateRequestTimeout
 
-	hashes := infoPieceHashes(t.info)
-	t.pieces = make([]Piece, len(hashes), len(hashes))
+	hashes := t.info.Hashes()
+	t.pieces = make([]Piece, len(hashes))
 	for i, hash := range hashes {
 		piece := &t.pieces[i]
 		piece.t = t
@@ -487,29 +478,6 @@ func (t *torrent) makePieces() {
 		piece.noPendingWrites.L = &piece.pendingWritesMutex
 		piece.hash = (*metainfo.Hash)(unsafe.Pointer(&hash[0]))
 	}
-}
-
-// Returns the index of the first file containing the piece. files must be
-// ordered by offset.
-func pieceFirstFileIndex(pieceOffset int64, files []*File) int {
-	for i, f := range files {
-		if f.offset+f.length > pieceOffset {
-			return i
-		}
-	}
-
-	return 0
-}
-
-// Returns the index after the last file containing the piece. files must be
-// ordered by offset.
-func pieceEndFileIndex(pieceEndOffset int64, files []*File) int {
-	for i, f := range files {
-		if f.offset+f.length >= pieceEndOffset {
-			return i + 1
-		}
-	}
-	return 0
 }
 
 func (t *torrent) setInfo(info *metainfo.Info) error {

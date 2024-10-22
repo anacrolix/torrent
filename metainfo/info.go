@@ -1,7 +1,9 @@
 package metainfo
 
 import (
+	"crypto/md5"
 	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -25,12 +27,16 @@ func OptionPieceLength(n int64) Option {
 
 func NewFromReader(src io.Reader, options ...Option) (info *Info, err error) {
 	info = langx.Autoptr(langx.Clone(Info{
-		Name:        "",
 		PieceLength: bytesx.MiB,
 	}, options...))
 
-	if info.Pieces, err = ComputePieces(src, info.PieceLength); err != nil {
+	digest := md5.New()
+	if info.Pieces, err = ComputePieces(io.TeeReader(src, digest), info.PieceLength); err != nil {
 		return nil, err
+	}
+
+	if info.Name == "" {
+		info.Name = hex.EncodeToString(digest.Sum(nil))
 	}
 
 	return info, nil

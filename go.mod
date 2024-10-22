@@ -9,7 +9,7 @@ require (
 	github.com/anacrolix/go-libutp v1.3.1
 	github.com/anacrolix/log v0.15.2
 	github.com/anacrolix/missinggo v1.3.0
-	github.com/anacrolix/missinggo/v2 v2.6.0
+	github.com/anacrolix/missinggo/v2 v2.8.0
 	github.com/anacrolix/multiless v0.3.0
 	github.com/anacrolix/stm v0.2.0
 	github.com/anacrolix/tagflag v1.4.0
@@ -42,12 +42,12 @@ require (
 	github.com/anacrolix/sync v0.5.1 // indirect
 	github.com/bits-and-blooms/bitset v1.12.0 // indirect
 	github.com/gosuri/uilive v0.0.4 // indirect
-	github.com/huandu/xstrings v1.4.0 // indirect
+	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
-	golang.org/x/exp v0.0.0-20220428152302-39d4317da171 // indirect
+	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948 // indirect
 	golang.org/x/sys v0.18.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

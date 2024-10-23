@@ -25,6 +25,12 @@ func OptionPieceLength(n int64) Option {
 	}
 }
 
+func OptionDisplayName(s string) Option {
+	return func(i *Info) {
+		i.Name = s
+	}
+}
+
 func NewFromReader(src io.Reader, options ...Option) (info *Info, err error) {
 	info = langx.Autoptr(langx.Clone(Info{
 		PieceLength: bytesx.MiB,

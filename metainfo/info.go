@@ -31,10 +31,14 @@ func NewFromReader(src io.Reader, options ...Option) (info *Info, err error) {
 	}, options...))
 
 	digest := md5.New()
-	if info.Pieces, err = ComputePieces(io.TeeReader(src, digest), info.PieceLength); err != nil {
+	length := readlength(0)
+	wrapped := io.TeeReader(src, digest)
+	wrapped = io.TeeReader(wrapped, &length)
+	if info.Pieces, err = ComputePieces(wrapped, info.PieceLength); err != nil {
 		return nil, err
 	}
 
+	info.Length = int64(length)
 	if info.Name == "" {
 		info.Name = hex.EncodeToString(digest.Sum(nil))
 	}
@@ -208,4 +212,12 @@ func (info *Info) Hashes() (ret [][]byte) {
 	}
 
 	return ret
+}
+
+type readlength uint64
+
+func (t *readlength) Write(b []byte) (int, error) {
+	bn := len(b)
+	atomic.AddUint64((*uint64)(t), uint64(bn))
+	return bn, nil
 }

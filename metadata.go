@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"io"
 	"time"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -133,25 +132,20 @@ func NewFromFile(path string, options ...Option) (t Metadata, err error) {
 	return t.Merge(options...), nil
 }
 
-func NewFromReader(src io.Reader, options ...Option) (t Metadata, err error) {
+// NewFromInfo creates a torrent from metainfo.Info
+func NewFromInfo(i metainfo.Info, options ...Option) (t Metadata, err error) {
 	var (
 		encoded []byte
 	)
 
-	info, err := metainfo.NewFromReader(src, metainfo.OptionPieceLength(bytesx.MiB))
-	if err != nil {
-		return t, errors.WithStack(err)
+	if encoded, err = bencode.Marshal(i); err != nil {
+		return t, err
 	}
 
-	if encoded, err = bencode.Marshal(info); err != nil {
-		return t, errors.WithStack(err)
-	}
-
-	if t, err = New(metainfo.HashBytes(encoded), OptionInfo(encoded), OptionDisplayName(info.Name)); err != nil {
-		return t, errors.WithStack(err)
-	}
-
-	return t.Merge(options...), nil
+	return New(
+		metainfo.HashBytes(encoded),
+		append(options, OptionInfo(encoded), OptionDisplayName(i.Name))...,
+	)
 }
 
 // NewFromMagnet creates a torrent from a magnet uri.
@@ -169,22 +163,6 @@ func NewFromMagnet(uri string) (t Metadata, err error) {
 		OptionDisplayName(m.DisplayName),
 		OptionTrackers([][]string{m.Trackers}),
 		OptionWebseeds(m.Params["ws"]),
-	)
-}
-
-// NewFromInfo creates a torrent from metainfo.Info
-func NewFromInfo(i metainfo.Info, options ...Option) (t Metadata, err error) {
-	var (
-		encoded []byte
-	)
-
-	if encoded, err = bencode.Marshal(i); err != nil {
-		return t, err
-	}
-
-	return New(
-		metainfo.HashBytes(encoded),
-		append(options, OptionInfo(encoded))...,
 	)
 }
 

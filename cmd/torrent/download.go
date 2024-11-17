@@ -328,7 +328,7 @@ func downloadErr(flags downloadFlags) error {
 	}
 	if flags.UploadRate != nil {
 		// TODO: I think the upload rate limit could be much lower.
-		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(*flags.UploadRate), 256<<10)
+		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(*flags.UploadRate), 16<<10)
 	}
 	if flags.DownloadRate != nil {
 		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(*flags.DownloadRate), 1<<16)

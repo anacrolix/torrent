@@ -570,7 +570,15 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 	cn.requestState.Requests.Add(r)
 	// this is required in case this is a re-request of a previously
 	// cancelled request - we need to clear the cancelled flag
-	cn.requestState.Cancelled.Remove(r)
+	//cn.requestState.Cancelled.Remove(r)
+	removed := cn.requestState.Cancelled.CheckedRemove(r)
+	if removed {
+		cn.requestState.CancelCounter.Store(int32(cn.requestState.CancelCounter.Load()) - 1)
+		cn.logger.Levelf(log.Debug, "1 request %d removed by peer remote adderss %s ", r, cn.RemoteAddr.String() + "" + cn.t.info.Name)
+	} else {
+		cn.logger.Levelf(log.Debug, "1 request %d NOT removed by peer remote adderss %s : %s", r, cn.RemoteAddr.String() + "" + cn.t.info.Name)
+	}
+	
 	if cn.validReceiveChunks == nil {
 		cn.validReceiveChunks = make(map[RequestIndex]int)
 	}
@@ -608,8 +616,12 @@ func (me *Peer) cancel(r RequestIndex, lock bool, lockTorrent bool) {
 		}
 		if me._cancel(r, false, false) {
 			// Record that we expect to get a cancel ack.
-			if !me.requestState.Cancelled.CheckedAdd(r) {
+			added := me.requestState.Cancelled.CheckedAdd(r)
+			if !added {
 				panic(fmt.Sprintf("request %d: already cancelled for hash: %s", r, me.t.InfoHash()))
+			} else {
+				me.logger.Levelf(log.Debug, "Add to cancel %d peer remote adderss: %s", r, me.RemoteAddr.String() + "" + me.t.info.Name)
+				me.requestState.CancelCounter.Store(int32(me.requestState.CancelCounter.Load()) + 1)
 			}
 		}
 		me.decPeakRequests(false)
@@ -732,8 +744,15 @@ func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
 		if c.deleteRequest(r, false, false) {
 			c.decPeakRequests(false)
 		} else {
+			
 			removed := c.requestState.Cancelled.CheckedRemove(r)
-
+			if removed  {
+				c.requestState.CancelCounter.Store(int32(c.requestState.CancelCounter.Load()) - 1)
+				c.logger.Levelf(log.Debug, "3 request %d removed by peer remote adderss %s ", r, c.RemoteAddr.String() + "" + c.t.info.Name)
+			} else {
+				c.logger.Levelf(log.Debug, "3 request %d NOT removed by peer remote adderss %s ", r, c.RemoteAddr.String() + "" + c.t.info.Name)
+			}
+			
 			if !removed {
 				return false
 			}
@@ -840,7 +859,16 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 			defer c.mu.Unlock()
 
 			// Request has been satisfied.
-			if c.deleteRequest(req, false, false) || c.requestState.Cancelled.CheckedRemove(req) {
+			
+			removed := c.requestState.Cancelled.CheckedRemove(req)
+			if removed  {
+				c.requestState.CancelCounter.Store(int32(c.requestState.CancelCounter.Load()) - 1)
+				c.logger.Levelf(log.Debug, "2 request %d removed by peer remote adderss %s ", req, c.RemoteAddr.String() + "" + c.t.info.Name)
+			} else {
+				c.logger.Levelf(log.Debug, "2 request %d NOT removed by peer remote adderss %s ", req, c.RemoteAddr.String() + "" + c.t.info.Name)
+			}
+
+			if c.deleteRequest(req, false, false) || removed {
 				intended = true
 				if !c.peerChoking {
 					c._chunksReceivedWhileExpecting++
@@ -853,6 +881,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// Do we actually want this chunk?
 		if t.haveChunk(ppReq, false) {
 			// panic(fmt.Sprintf("%+v", ppReq))
+			c.logger.Levelf(log.Debug, "haveChunk %d peer remote adderss %s: %s", req, c.RemoteAddr.String() + "" + c.t.info.Name)
 			chunksReceived.Add("redundant", 1)
 			c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
 			return nil, false, nil
@@ -885,12 +914,14 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 		// Cancel pending requests for this chunk from *other* peers.
 		if p := t.requestingPeer(req, false); p != nil {
+			p.logger.Levelf(log.Debug, "Cancel pending request %d peer remote adderss %s: %s", req, p.RemoteAddr.String() + "" + p.t.info.Name)
 			if p == c {
 				panic("should not be pending request from conn that just received it")
 			}
 			p.cancel(req, true, false)
 			if p.isLowOnRequests(true, false) {
 				p.updateRequests("Peer.receiveChunk", false)
+				p.logger.Levelf(log.Debug, "peer low on requests, remote adderss %s: %s", req, p.RemoteAddr.String() + "" + p.t.info.Name)
 			}
 		}
 
@@ -1012,7 +1043,9 @@ func (c *Peer) deleteRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
 		defer c.mu.Unlock()
 	}
 
-	if !c.requestState.Requests.CheckedRemove(r) {
+	removed := c.requestState.Requests.CheckedRemove(r)
+	c.logger.Levelf(log.Debug, "1request %d removed by peer remote adderss %s - succesfully: %s", r, c.RemoteAddr.String() + "" + c.t.info.Name, removed)
+	if !removed {
 		return false
 	}
 
@@ -1027,6 +1060,10 @@ func (c *Peer) deleteRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
 	delete(c.t.requestState, r)
 
 	return true
+}
+
+func (c *Peer) GetCancelCount() int {
+	return int(c.requestState.CancelCounter.Load())
 }
 
 func (c *Peer) deleteAllRequests(reason string, lockTorrent bool) {

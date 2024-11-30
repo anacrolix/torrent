@@ -377,11 +377,11 @@ func (ws *webseedPeer) logProgress(label string, lockTorrent bool) {
 	persisting := ws.persisting.Load()
 	activeCount := len(ws.activeRequests)
 
-	ws.peer.logger.Levelf(log.Debug, "%s %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,p=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) lastUpdate=%s",
+	ws.peer.logger.Levelf(log.Debug, "%s %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,p=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) lastUpdate=%s cancelCounter=%d",
 		label, ws.processedRequests, pendingRequests, desiredRequests, nominalMaxRequests,
 		activeCount-int(receiving)-int(persisting), receiving, persisting, ws.maxActiveRequests, ws.waiting,
 		t.numQueuedForHash(false), t.activePieceHashes.Load(), t.hashing.Load(), len(t.hashResults),
-		t.numPiecesCompleted(false), t.NumPieces(), time.Since(ws.peer.lastRequestUpdate))
+		t.numPiecesCompleted(false), t.NumPieces(), time.Since(ws.peer.lastRequestUpdate), ws.peer.GetCancelCount())
 }
 
 func requestUpdate(ws *webseedPeer) {
@@ -443,13 +443,14 @@ func requestUpdate(ws *webseedPeer) {
 						rate := p.downloadRate()
 						pieces := p.uncancelledRequests(false)
 						desired := p.desiredRequests(false)
+						banCount := p.banCount
 
 						this := ""
 						if p == &ws.peer {
 							this = "*"
 						}
 						flags := p.StatusFlags()
-						peerInfo = append(peerInfo, fmt.Sprintf("%s%s:p=%d,d=%d: %f", this, flags, pieces, desired, rate))
+						peerInfo = append(peerInfo, fmt.Sprintf("%s%s:p=%d,d=%d,bc=%d: %f", this, flags, pieces, desired, banCount, rate))
 
 					}, false)
 
@@ -565,6 +566,8 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	ws.peer.readBytes(int64(len(piece)))
 
 	if ws.peer.t.closed.IsSet() {
+		//log
+		ws.peer.logger.Printf("closed %v", ws)
 		return nil
 	}
 

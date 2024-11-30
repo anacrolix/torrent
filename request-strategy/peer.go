@@ -1,6 +1,8 @@
 package requestStrategy
 
 import (
+	"sync/atomic"
+
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
@@ -9,6 +11,7 @@ type PeerRequestState struct {
 	Requests   PeerRequests
 	// Cancelled and waiting response
 	Cancelled typedRoaring.Bitmap[RequestIndex]
+	CancelCounter atomic.Int32
 }
 
 // A set of request indices iterable by order added.

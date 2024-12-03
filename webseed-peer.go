@@ -167,17 +167,9 @@ func (ws *webseedPeer) doRequest(r Request) error {
 	}
 	ws.peer.mu.Unlock()
 
-	err := func() error {
-		ws.requesterCond.L.Unlock()
-		defer ws.requesterCond.L.Lock()
-		return ws.requestResultHandler(r, webseedRequest)
-	}()
-
-	ws.peer.mu.Lock()
-	delete(ws.activeRequests, r)
-	ws.peer.mu.Unlock()
-
-	return err
+	ws.requesterCond.L.Unlock()
+	defer ws.requesterCond.L.Lock()
+	return ws.requestResultHandler(r, webseedRequest)
 }
 
 func (ws *webseedPeer) requester(i int) {
@@ -533,6 +525,11 @@ func (ws *webseedPeer) onClose(lockTorrent bool) {
 func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Request) error {
 	result := <-webseedRequest.Result
 	close(webseedRequest.Result) // one-shot
+
+	// remove the request now to avoid adding unhandled cancels
+	ws.peer.mu.Lock()
+	delete(ws.activeRequests, r)
+	ws.peer.mu.Unlock()
 
 	defer func() {
 		for _, reader := range result.Readers {

@@ -532,6 +532,15 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		}
 	}()
 
+	// remove the request now to avoid adding unhandled cancels
+	ws.peer.mu.Lock()
+	if _, ok := ws.activeRequests[r]; !ok {
+		ws.peer.mu.Unlock()
+		return nil
+	}
+	delete(ws.activeRequests, r)
+	ws.peer.mu.Unlock()
+
 	ws.persisting.Add(1)
 	defer ws.persisting.Add(-1)
 
@@ -553,8 +562,8 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	if len(piece) != 0 || result.Err == nil {
 		// Increment ChunksRead and friends
 		ws.peer.doChunkReadStats(int64(len(piece)))
+		ws.peer.readBytes(int64(len(piece)))
 	}
-	ws.peer.readBytes(int64(len(piece)))
 
 	if ws.peer.t.closed.IsSet() {
 		return nil
@@ -584,11 +593,6 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			}
 		}
 
-		// remove the request now to avoid adding unhandled cancels
-		ws.peer.mu.Lock()
-		delete(ws.activeRequests, r)
-		ws.peer.mu.Unlock()
-
 		if !ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, true)) {
 			err = fmt.Errorf(`received invalid reject "%w", for request %v`, err, r)
 			ws.peer.logger.Levelf(log.Debug, "%v", err)
@@ -603,10 +607,6 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		Begin: r.Begin,
 		Piece: piece,
 	})
-
-	ws.peer.mu.Lock()
-	delete(ws.activeRequests, r)
-	ws.peer.mu.Unlock()
 
 	if err != nil {
 		panic(err)

@@ -264,7 +264,7 @@ func (p *Peer) getDesiredRequestState(debug bool, lock bool, lockTorrent bool) (
 
 				if !cancelled.IsEmpty() && cancelled.Contains(r) {
 					// Can't re-request while awaiting acknowledgement.
-					p.logger.Levelf(log.Debug, "cancelled.Contains %d peer remote adderss %s", r, p.RemoteAddr.String() + "" + p.t.info.Name)
+					LOGDBG(fmt.Sprintf("cancelled.Contains request:%v-%s\n", r, p.RemoteAddr.String() + "/" + p.t.info.Name), "requesting.go->getDesiredRequestState")
 					awaitingCancelCount++
 					return
 				}

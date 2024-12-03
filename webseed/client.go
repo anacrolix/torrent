@@ -30,6 +30,7 @@ type requestPart struct {
 }
 
 type Request struct {
+	ctx    context.Context
 	cancel  func()
 	Result  chan RequestResult
 	readers []io.Reader
@@ -37,6 +38,10 @@ type Request struct {
 
 func (r Request) Cancel() {
 	r.cancel()
+}
+
+func (r Request) Context() context.Context {
+	return r.ctx
 }
 
 type Client struct {
@@ -116,6 +121,7 @@ func (ws *Client) NewRequest(r RequestSpec, buffers storage.BufferPool, limiter 
 		panic("request out of file bounds")
 	}
 	req := Request{
+		ctx:	ctx,
 		cancel: cancel,
 		Result: make(chan RequestResult, 1),
 	}

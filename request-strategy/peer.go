@@ -35,3 +35,50 @@ type PeerRequests interface {
 
 	Bitmap() *typedRoaring.Bitmap[RequestIndex]
 }
+
+/*type SyncBitmap struct {
+    mu     sync.Mutex
+    bitmap typedRoaring.Bitmap[RequestIndex]
+}
+
+func (sb *SyncBitmap) GetCardinality() uint64 {
+    sb.mu.Lock()
+    defer sb.mu.Unlock()
+    return sb.bitmap.GetCardinality()
+}
+
+func (sb *SyncBitmap) Contains(r RequestIndex) bool {
+    sb.mu.Lock()
+    defer sb.mu.Unlock()
+    return sb.bitmap.Contains(r)
+}
+
+func (sb *SyncBitmap) Remove(r RequestIndex) {
+    sb.mu.Lock()
+    defer sb.mu.Unlock()
+    sb.bitmap.Remove(r)
+}
+
+func (sb *SyncBitmap) CheckedAdd(r RequestIndex) bool{
+    sb.mu.Lock()
+    defer sb.mu.Unlock()
+    return sb.bitmap.CheckedAdd(r)
+}
+
+func (sb *SyncBitmap) CheckedRemove(r RequestIndex) bool{
+    sb.mu.Lock()
+    defer sb.mu.Unlock()
+    return sb.bitmap.CheckedRemove(r)
+}
+
+func (sb *SyncBitmap) Clone() typedRoaring.Bitmap[RequestIndex] {
+    sb.mu.Lock()
+    defer sb.mu.Unlock()
+    return sb.bitmap.Clone()
+}
+
+func (sb *SyncBitmap) IsEmpty() bool {
+    sb.mu.Lock()
+    defer sb.mu.Unlock()
+    return sb.bitmap.IsEmpty()
+}*/

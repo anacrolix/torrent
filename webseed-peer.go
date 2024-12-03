@@ -31,7 +31,7 @@ type webseedPeer struct {
 	// First field for stats alignment.
 	peer                 Peer
 	client               webseed.Client
-	activeRequests       map[Request]webseed.Request
+	activeRequests       map[Request]*webseed.Request
 	maxActiveRequests    int // the max number of active requests for this peer
 	processedRequests    int // the total number of requests this peer has processed
 	maxRequesters        int // the number of requester to run for this peer
@@ -81,7 +81,7 @@ func (ws *webseedPeer) writeInterested(interested bool, lock bool) bool {
 }
 
 func (ws *webseedPeer) _cancel(r RequestIndex, lock bool, lockTorrent bool) bool {
-	if active, ok := func() (active webseed.Request, ok bool) {
+	if active, ok := func() (active *webseed.Request, ok bool) {
 		req := ws.peer.t.requestIndexToRequest(r, lockTorrent)
 
 		if lock {
@@ -156,7 +156,8 @@ func (cn *webseedPeer) nominalMaxRequests(lock bool, lockTorrent bool) maxReques
 var limitedBuffPool = storage.NewLimitedBufferPool(bufPool, 5_000_000_000)
 
 func (ws *webseedPeer) doRequest(r Request) error {
-	webseedRequest := ws.client.NewRequest(ws.intoSpec(r), limitedBuffPool, ws.requestRateLimiter, &ws.receiving)
+	webseedRequest := ws.client.NewRequest(ws.intoSpec(r), limitedBuffPool, ws.requestRateLimiter, &ws.receiving,
+		func() { ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, true)) } )
 
 	ws.peer.mu.Lock()
 	ws.activeRequests[r] = webseedRequest
@@ -168,7 +169,13 @@ func (ws *webseedPeer) doRequest(r Request) error {
 	ws.peer.mu.Unlock()
 
 	ws.requesterCond.L.Unlock()
-	defer ws.requesterCond.L.Lock()
+	defer func() {
+		ws.requesterCond.L.Lock()
+		ws.peer.mu.Lock()
+		delete(ws.activeRequests, r)
+		ws.peer.mu.Unlock()
+	}()
+
 	return ws.requestResultHandler(r, webseedRequest)
 }
 
@@ -522,7 +529,7 @@ func (ws *webseedPeer) onClose(lockTorrent bool) {
 	ws.requesterCond.Broadcast()
 }
 
-func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Request) error {
+func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest *webseed.Request) error {
 	result := <-webseedRequest.Result
 	close(webseedRequest.Result) // one-shot
 
@@ -532,14 +539,9 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		}
 	}()
 
-	// remove the request now to avoid adding unhandled cancels
-	ws.peer.mu.Lock()
-	if _, ok := ws.activeRequests[r]; !ok {
-		ws.peer.mu.Unlock()
-		return nil
-	}
-	delete(ws.activeRequests, r)
-	ws.peer.mu.Unlock()
+	webseedRequest.Lock()
+	webseedRequest.Result = nil
+	webseedRequest.Unlock()
 
 	ws.persisting.Add(1)
 	defer ws.persisting.Add(-1)

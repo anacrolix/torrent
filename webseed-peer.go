@@ -526,11 +526,6 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 	result := <-webseedRequest.Result
 	close(webseedRequest.Result) // one-shot
 
-	// remove the request now to avoid adding unhandled cancels
-	ws.peer.mu.Lock()
-	delete(ws.activeRequests, r)
-	ws.peer.mu.Unlock()
-
 	defer func() {
 		for _, reader := range result.Readers {
 			reader.Close()
@@ -589,6 +584,11 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 			}
 		}
 
+		// remove the request now to avoid adding unhandled cancels
+		ws.peer.mu.Lock()
+		delete(ws.activeRequests, r)
+		ws.peer.mu.Unlock()
+
 		if !ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, true)) {
 			err = fmt.Errorf(`received invalid reject "%w", for request %v`, err, r)
 			ws.peer.logger.Levelf(log.Debug, "%v", err)
@@ -603,6 +603,10 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest webseed.Re
 		Begin: r.Begin,
 		Piece: piece,
 	})
+
+	ws.peer.mu.Lock()
+	delete(ws.activeRequests, r)
+	ws.peer.mu.Unlock()
 
 	if err != nil {
 		panic(err)

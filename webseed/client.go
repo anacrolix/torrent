@@ -126,8 +126,9 @@ func (ws *Client) NewRequest(r RequestSpec, buffers storage.BufferPool, limiter 
 		panic("request out of file bounds")
 	}
 	req := &Request{
-		cancel: cancel,
-		Result: make(chan RequestResult, 1),
+		cancel:      cancel,
+		onCancelled: onCancelled,
+		Result:      make(chan RequestResult, 1),
 	}
 	go func() {
 		readers, err := readRequestPartResponses(ctx, requestParts, receivingCounter)

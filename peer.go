@@ -571,6 +571,7 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 	// this is required in case this is a re-request of a previously
 	// cancelled request - we need to clear the cancelled flag
 	cn.requestState.Cancelled.Remove(r)
+	
 	if cn.validReceiveChunks == nil {
 		cn.validReceiveChunks = make(map[RequestIndex]int)
 	}
@@ -606,12 +607,14 @@ func (me *Peer) cancel(r RequestIndex, lock bool, lockTorrent bool) {
 		if !me.deleteRequest(r, false, false) {
 			panic(fmt.Sprintf("request %d not existing: should have been guarded", r))
 		}
+
 		if me._cancel(r, false, false) {
 			// Record that we expect to get a cancel ack.
 			if !me.requestState.Cancelled.CheckedAdd(r) {
 				panic(fmt.Sprintf("request %d: already cancelled for hash: %s", r, me.t.InfoHash()))
-			}
+			} 	
 		}
+
 		me.decPeakRequests(false)
 	}()
 }
@@ -721,20 +724,22 @@ func runSafeExtraneous(f func()) {
 }
 
 // Returns true if it was valid to reject the request.
-func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
+func (c *Peer) remoteRejectedRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
 	if !func() bool {
-		c.t.mu.Lock()
-		defer c.t.mu.Unlock()
+		if lockTorrent {
+			c.t.mu.Lock()
+			defer c.t.mu.Unlock()
+		}
 
-		c.mu.Lock()
-		defer c.mu.Unlock()
+		if lock {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+		}	
 
 		if c.deleteRequest(r, false, false) {
 			c.decPeakRequests(false)
 		} else {
-			removed := c.requestState.Cancelled.CheckedRemove(r)
-
-			if !removed {
+			if !c.requestState.Cancelled.CheckedRemove(r) {
 				return false
 			}
 		}

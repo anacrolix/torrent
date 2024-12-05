@@ -1029,7 +1029,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 			err = c.peerSentHaveNone(true)
 		case pp.Reject:
 			req := newRequestFromMessage(&msg)
-			if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req, false)) {
+			if !c.remoteRejectedRequest(c.t.requestIndexFromRequest(req, false), true, true) {
 				err = fmt.Errorf("received invalid reject for request %v", req)
 				c.logger.Levelf(log.Debug, "%v", err)
 			}

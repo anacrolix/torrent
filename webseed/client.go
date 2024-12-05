@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/RoaringBitmap/roaring"
@@ -30,13 +31,24 @@ type requestPart struct {
 }
 
 type Request struct {
-	cancel  func()
-	Result  chan RequestResult
-	readers []io.Reader
+	sync.Mutex
+	cancel      func()
+	onCancelled func()
+	Result      chan RequestResult
 }
 
-func (r Request) Cancel() {
+func (r *Request) Cancel() bool {
 	r.cancel()
+
+	r.Lock()
+	hasResult := r.Result != nil
+	r.Unlock()
+
+	if !hasResult {
+		r.onCancelled()
+	}
+
+	return hasResult
 }
 
 type Client struct {
@@ -72,7 +84,7 @@ type RequestResult struct {
 	Err     error
 }
 
-func (ws *Client) NewRequest(r RequestSpec, buffers storage.BufferPool, limiter *rate.Limiter, receivingCounter *atomic.Int64) Request {
+func (ws *Client) NewRequest(r RequestSpec, buffers storage.BufferPool, limiter *rate.Limiter, receivingCounter *atomic.Int64, onCancelled func()) *Request {
 	ctx, cancel := context.WithCancel(context.Background())
 	var requestParts []requestPart
 	if !ws.fileIndex.Locate(r, func(i int, e segments.Extent) bool {
@@ -115,9 +127,10 @@ func (ws *Client) NewRequest(r RequestSpec, buffers storage.BufferPool, limiter 
 	}) {
 		panic("request out of file bounds")
 	}
-	req := Request{
-		cancel: cancel,
-		Result: make(chan RequestResult, 1),
+	req := &Request{
+		cancel:      cancel,
+		onCancelled: onCancelled,
+		Result:      make(chan RequestResult, 1),
 	}
 	go func() {
 		readers, err := readRequestPartResponses(ctx, requestParts, receivingCounter)

@@ -1017,9 +1017,7 @@ func (c *Peer) deleteRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
 		defer c.mu.Unlock()
 	}
 
-	removed := c.requestState.Requests.CheckedRemove(r)
-
-	if !removed {
+	if !c.requestState.Requests.CheckedRemove(r) {
 		return false
 	}
 

@@ -446,14 +446,13 @@ func requestUpdate(ws *webseedPeer) {
 						rate := p.downloadRate()
 						pieces := p.uncancelledRequests(false)
 						desired := p.desiredRequests(false)
-						banCount := p.banCount
 
 						this := ""
 						if p == &ws.peer {
 							this = "*"
 						}
 						flags := p.StatusFlags()
-						peerInfo = append(peerInfo, fmt.Sprintf("%s%s:p=%d,d=%d,bc=%d: %f", this, flags, pieces, desired, banCount, rate))
+						peerInfo = append(peerInfo, fmt.Sprintf("%s%s:p=%d,d=%d: %f", this, flags, pieces, desired, rate))
 
 					}, false)
 
@@ -573,8 +572,6 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest *webseed.R
 	}
 
 	if ws.peer.t.closed.IsSet() {
-		//log
-		ws.peer.logger.Printf("closed %v", ws)
 		return nil
 	}
 
@@ -584,8 +581,6 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest *webseed.R
 	if err == nil && result.Ctx.Err() != nil {
 		err = result.Ctx.Err()
 	}
-
-	reqIdx := ws.peer.t.requestIndexFromRequest(r, true)
 
 	if err != nil {
 		switch {
@@ -604,7 +599,7 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest *webseed.R
 			}
 		}
 
-		if !ws.peer.remoteRejectedRequest(reqIdx, true, true) {
+		if !ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r, true), true, true) {
 			err = fmt.Errorf(`received invalid reject "%w", for request %v`, err, r)
 			ws.peer.logger.Levelf(log.Debug, "%v", err)
 		}

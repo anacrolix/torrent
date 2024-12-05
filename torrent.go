@@ -3382,7 +3382,7 @@ func (t *Torrent) addWebSeed(url string, lock bool, opts ...AddWebSeedsOpt) {
 			Url:        url,
 		},
 		maxRequesters:  maxRequests,
-		activeRequests: make(map[Request]webseed.Request, maxRequests),
+		activeRequests: make(map[Request]*webseed.Request, maxRequests),
 		// Limit requests rather than responses - becuase otherwise
 		// the go http layer buffers causing memory growth
 		requestRateLimiter: t.cl.config.DownloadRateLimiter,

@@ -610,7 +610,7 @@ func (me *Peer) cancel(r RequestIndex, lock bool, lockTorrent bool) {
 
 		if me._cancel(r, false, false) {
 			// Record that we expect to get a cancel ack.
-		if !me.requestState.Cancelled.CheckedAdd(r) {
+			if !me.requestState.Cancelled.CheckedAdd(r) {
 				panic(fmt.Sprintf("request %d: already cancelled for hash: %s", r, me.t.InfoHash()))
 			} 	
 		}

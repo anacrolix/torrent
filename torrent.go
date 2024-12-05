@@ -3446,7 +3446,6 @@ func (t *Torrent) cancelRequest(r RequestIndex, updateRequests, lock bool) *Peer
 
 	p := t.requestingPeer(r, false)
 	if p != nil {
-		LOGDBG(fmt.Sprintf("cancelling request:%v-%s\n", r, p.RemoteAddr.String() + "/" + p.t.info.Name), "torrent.go->cancelRequest")
 		p.cancel(r, true, false)
 
 		if updateRequests && p.isLowOnRequests(true, lock) {

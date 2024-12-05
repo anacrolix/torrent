@@ -90,14 +90,13 @@ func (ws *webseedPeer) _cancel(r RequestIndex, lock bool, lockTorrent bool) bool
 		}
 
 		active, ok = ws.activeRequests[req]
-		LOGDBG(fmt.Sprintf("ws.activeRequests[req] active:%v, ok:%v,  request:%v-%s\n", active, ok, r, ws.peer.RemoteAddr.String() + "/" + ws.peer.t.info.Name), "webseed-peer.go->webseedPeer._cancel")
 		return 
 	}(); ok {
 		if lock {
 			ws.peer.mu.RLock()
 			defer ws.peer.mu.RUnlock()
 		}
-		
+
 		// The requester is running and will handle the result.
 		return active.Cancel()
 	}
@@ -381,17 +380,11 @@ func (ws *webseedPeer) logProgress(label string, lockTorrent bool) {
 	persisting := ws.persisting.Load()
 	activeCount := len(ws.activeRequests)
 
-	LOGDBG(fmt.Sprintf("%s %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,p=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) lastUpdate=%s cancelCounter=%d\n",
+	ws.peer.logger.Levelf(log.Debug, "%s %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,p=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) lastUpdate=%s",
 		label, ws.processedRequests, pendingRequests, desiredRequests, nominalMaxRequests,
 		activeCount-int(receiving)-int(persisting), receiving, persisting, ws.maxActiveRequests, ws.waiting,
 		t.numQueuedForHash(false), t.activePieceHashes.Load(), t.hashing.Load(), len(t.hashResults),
-		t.numPiecesCompleted(false), t.NumPieces(), time.Since(ws.peer.lastRequestUpdate), ws.peer.GetCancelCount()), "webseed-peer.go->webseedPeer.logProgress")
-
-	/*ws.peer.logger.Levelf(log.Debug, "%s %d (p=%d,d=%d,n=%d) active(c=%d,r=%d,p=%d,m=%d,w=%d) hashing(q=%d,a=%d,h=%d,r=%d) complete(%d/%d) lastUpdate=%s cancelCounter=%d",
-		label, ws.processedRequests, pendingRequests, desiredRequests, nominalMaxRequests,
-		activeCount-int(receiving)-int(persisting), receiving, persisting, ws.maxActiveRequests, ws.waiting,
-		t.numQueuedForHash(false), t.activePieceHashes.Load(), t.hashing.Load(), len(t.hashResults),
-		t.numPiecesCompleted(false), t.NumPieces(), time.Since(ws.peer.lastRequestUpdate), ws.peer.GetCancelCount())*/
+		t.numPiecesCompleted(false), t.NumPieces(), time.Since(ws.peer.lastRequestUpdate))
 }
 
 func requestUpdate(ws *webseedPeer) {
@@ -611,24 +604,20 @@ func (ws *webseedPeer) requestResultHandler(r Request, webseedRequest *webseed.R
 			}
 		}
 
-		LOGDBG(fmt.Sprintf("strat-remoteRejectedRequest request:%v-%s\n", reqIdx, ws.peer.RemoteAddr.String() + "/" + ws.peer.t.info.Name), "webseed-peer.go->webseedPeer.requestResultHandler")
 		if !ws.peer.remoteRejectedRequest(reqIdx, true, true) {
 			err = fmt.Errorf(`received invalid reject "%w", for request %v`, err, r)
 			ws.peer.logger.Levelf(log.Debug, "%v", err)
 		}
-		LOGDBG(fmt.Sprintf("end-remoteRejectedRequest request:%v-%s\n", reqIdx, ws.peer.RemoteAddr.String() + "/" + ws.peer.t.info.Name), "webseed-peer.go->webseedPeer.requestResultHandler")
 
 		return err
 	}
 
-	LOGDBG(fmt.Sprintf("strat-receiveChunk request:%v-%s\n", reqIdx, ws.peer.RemoteAddr.String() + "/" + ws.peer.t.info.Name), "webseed-peer.go->webseedPeer.requestResultHandler")
 	err = ws.peer.receiveChunk(&pp.Message{
 		Type:  pp.Piece,
 		Index: r.Index,
 		Begin: r.Begin,
 		Piece: piece,
 	})
-	LOGDBG(fmt.Sprintf("end-receiveChunk request:%v-%s\n", reqIdx, ws.peer.RemoteAddr.String() + "/" + ws.peer.t.info.Name), "webseed-peer.go->webseedPeer.requestResultHandler")
 
 	if err != nil {
 		panic(err)

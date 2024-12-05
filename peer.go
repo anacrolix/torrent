@@ -134,37 +134,6 @@ func (p *Peer) Torrent() *Torrent {
 	return p.t
 }
 
-func LOGDBG(msg string, source string) {
-	//create current time string with format [12-03|07:55:09.819]
-	currentTime := time.Now().Format("01-02|15:04:05.000")
-
-	fmt.Printf("[%s] %s - source:%s\n", currentTime, msg, source)
-}
-
-func (p *Peer) AddRequestCancelled(r RequestIndex, source string) bool {
-	result := p.requestState.Cancelled.CheckedAdd(r)
-	if(result) {
-		p.requestState.CancelCounter.Store(int32(p.requestState.CancelCounter.Load()) + 1)
-		LOGDBG(fmt.Sprintf("Added to cancel request:%v-%s\n", r, p.RemoteAddr.String() + "/" + p.t.info.Name), source)
-	} else {
-		LOGDBG(fmt.Sprintf("Already in cancelled request:%v-%s\n", r, p.RemoteAddr.String() + "/" + p.t.info.Name), source)
-	}
-
-	return result
-}
-
-func (p *Peer) RemoveRequestCancelled(r RequestIndex, source string) bool {
-	result := p.requestState.Cancelled.CheckedRemove(r)
-	if(result) {
-		p.requestState.CancelCounter.Store(int32(p.requestState.CancelCounter.Load()) - 1)
-		LOGDBG(fmt.Sprintf("Request removed request:%v-%s", r, p.RemoteAddr.String() + "/" + p.t.info.Name), source)
-	} else {
-		LOGDBG(fmt.Sprintf("Request already in removed request:%v-%s", r, p.RemoteAddr.String() + "/" + p.t.info.Name), source)
-	}
-
-	return result
-}
-
 func (p *Peer) initRequestState() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -601,8 +570,7 @@ func (cn *Peer) request(r RequestIndex, maxRequests int, lock bool, lockTorrent 
 	cn.requestState.Requests.Add(r)
 	// this is required in case this is a re-request of a previously
 	// cancelled request - we need to clear the cancelled flag
-	//cn.requestState.Cancelled.Remove(r)
-	_ = cn.RemoveRequestCancelled(r, "peer.go->Peer.request")
+	cn.requestState.Cancelled.Remove(r)
 	
 	if cn.validReceiveChunks == nil {
 		cn.validReceiveChunks = make(map[RequestIndex]int)
@@ -640,16 +608,12 @@ func (me *Peer) cancel(r RequestIndex, lock bool, lockTorrent bool) {
 			panic(fmt.Sprintf("request %d not existing: should have been guarded", r))
 		}
 
-		LOGDBG(fmt.Sprintf("start-Cancel request:%v-%s\n", r, me.RemoteAddr.String() + "/" + me.t.info.Name), "peer.go->Peer.cancel")
 		if me._cancel(r, false, false) {
 			// Record that we expect to get a cancel ack.
-			added := me.AddRequestCancelled(r, "peer.go->Peer.cancel")
-			if !added {
+		if !me.requestState.Cancelled.CheckedAdd(r) {
 				panic(fmt.Sprintf("request %d: already cancelled for hash: %s", r, me.t.InfoHash()))
 			} 	
 		}
-
-		LOGDBG(fmt.Sprintf("end-Cancel request:%v-%s\n", r, me.RemoteAddr.String() + "/" + me.t.info.Name), "peer.go->Peer.cancel")
 
 		me.decPeakRequests(false)
 	}()
@@ -775,8 +739,7 @@ func (c *Peer) remoteRejectedRequest(r RequestIndex, lock bool, lockTorrent bool
 		if c.deleteRequest(r, false, false) {
 			c.decPeakRequests(false)
 		} else {
-			removed := c.RemoveRequestCancelled(r, "peer.go->Peer.remoteRejectedRequest")
-			if !removed {
+			if !c.requestState.Cancelled.CheckedRemove(r) {
 				return false
 			}
 		}
@@ -882,7 +845,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 			defer c.mu.Unlock()
 
 			// Request has been satisfied.
-			if c.deleteRequest(req, false, false) || c.RemoveRequestCancelled(req, "peer.go->Peer.receiveChunk") {
+			if c.deleteRequest(req, false, false) || c.requestState.Cancelled.CheckedRemove(req) {
 				intended = true
 				if !c.peerChoking {
 					c._chunksReceivedWhileExpecting++
@@ -895,7 +858,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// Do we actually want this chunk?
 		if t.haveChunk(ppReq, false) {
 			// panic(fmt.Sprintf("%+v", ppReq))
-			LOGDBG(fmt.Sprintf("haveChunk request:%v-%s\n", req, c.RemoteAddr.String() + "/" + c.t.info.Name), "peer.go->Peer.receiveChunk")
 			chunksReceived.Add("redundant", 1)
 			c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadWasted }))
 			return nil, false, nil
@@ -928,15 +890,12 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 		// Cancel pending requests for this chunk from *other* peers.
 		if p := t.requestingPeer(req, false); p != nil {
-			LOGDBG(fmt.Sprintf("start-Cancel pending request:%v-%s\n", req, c.RemoteAddr.String() + "/" + c.t.info.Name), "peer.go->Peer.receiveChunk")
 			if p == c {
 				panic("should not be pending request from conn that just received it")
 			}
-			LOGDBG(fmt.Sprintf("end-Cancel pending request:%v-%s\n", req, c.RemoteAddr.String() + "/" + c.t.info.Name), "peer.go->Peer.receiveChunk")
 			p.cancel(req, true, false)
 			if p.isLowOnRequests(true, false) {
 				p.updateRequests("Peer.receiveChunk", false)
-				LOGDBG(fmt.Sprintf("peer low on requests request:%v-%s\n", req, c.RemoteAddr.String() + "/" + c.t.info.Name), "peer.go->Peer.receiveChunk")
 			}
 		}
 
@@ -1077,10 +1036,6 @@ func (c *Peer) deleteRequest(r RequestIndex, lock bool, lockTorrent bool) bool {
 	return true
 }
 
-func (c *Peer) GetCancelCount() int {
-	return int(c.requestState.CancelCounter.Load())
-}
-
 func (c *Peer) deleteAllRequests(reason string, lockTorrent bool) {
 	if lockTorrent {
 		c.t.mu.Lock()
@@ -1128,7 +1083,6 @@ func (c *Peer) cancelAllRequests(lock bool, lockTorrent bool) {
 	}
 
 	c.requestState.Requests.IterateSnapshot(func(x RequestIndex) bool {
-		LOGDBG(fmt.Sprintf("cancelAllRequests request:%v-%s\n", x, c.RemoteAddr.String() + "/" + c.t.info.Name), "peer.go->Peer.cancelAllRequests")
 		c.cancel(x, false, false)
 		return true
 	})
@@ -1224,7 +1178,6 @@ func (p *Peer) decPeakRequests(lock bool) {
 		defer p.mu.RUnlock()
 	}
 	p.peakRequests--
-	p.logger.Levelf(log.Debug, "decPeakRequests %s", p.RemoteAddr.String() + "/" + p.t.info.Name)
 }
 
 func (p *Peer) recordBlockForSmartBan(req RequestIndex, blockData []byte) {

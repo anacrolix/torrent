@@ -37,16 +37,18 @@ type Request struct {
 	Result      chan RequestResult
 }
 
-func (r *Request) Cancel() {
+func (r *Request) Cancel() bool {
 	r.cancel()
 
 	r.Lock()
-	hasResult := r.Result == nil
+	hasResult := r.Result != nil
 	r.Unlock()
 
-	if hasResult {
+	if !hasResult {
 		r.onCancelled()
 	}
+
+	return hasResult
 }
 
 type Client struct {

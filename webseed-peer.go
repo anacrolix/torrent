@@ -97,10 +97,9 @@ func (ws *webseedPeer) _cancel(r RequestIndex, lock bool, lockTorrent bool) bool
 			ws.peer.mu.RLock()
 			defer ws.peer.mu.RUnlock()
 		}
-
-		active.Cancel()
+		
 		// The requester is running and will handle the result.
-		return true
+		return active.Cancel()
 	}
 	// There should be no requester handling this, so no further events will occur.
 	return false

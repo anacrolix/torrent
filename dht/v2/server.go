@@ -135,7 +135,6 @@ func (s *Server) Addr() net.Addr {
 // NewDefaultServerConfig ...
 func NewDefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
-		Conn:               mustListen(":0"),
 		NoSecurity:         true,
 		StartingNodes:      GlobalBootstrapAddrs,
 		ConnectionTracking: conntrack.NewInstance(),
@@ -146,9 +145,6 @@ func NewDefaultServerConfig() *ServerConfig {
 func NewServer(c *ServerConfig) (s *Server, err error) {
 	if c == nil {
 		c = NewDefaultServerConfig()
-	}
-	if c.Conn == nil {
-		return nil, errors.New("non-nil Conn required")
 	}
 	if missinggo.IsZeroValue(c.NodeId) {
 		c.NodeId = RandomNodeID()
@@ -182,7 +178,6 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		s.config.ConnectionTracking = conntrack.NewInstance()
 	}
 	rand.Read(s.tokenServer.secret)
-	s.socket = c.Conn
 	s.id = int160FromByteArray(c.NodeId)
 	s.table.rootID = s.id
 	s.resendDelay = s.config.QueryResendDelay
@@ -190,7 +185,6 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		s.resendDelay = defaultQueryResendDelay
 	}
 
-	go s.serveUntilClosed()
 	return
 }
 
@@ -236,15 +230,13 @@ type UnimplementedHandler struct{}
 
 func (t UnimplementedHandler) Handle(ctx context.Context, source Addr, s *Server, m *krpc.Msg) error {
 	log.Println("unimplemented rpc method was received", m.Q, source.String())
-	s.sendError(source, m.T, krpc.ErrorMethodUnknown)
-	return nil
+	return s.sendError(ctx, source, m.T, krpc.ErrorMethodUnknown)
 }
 
 type HandlerPing struct{}
 
 func (t HandlerPing) Handle(ctx context.Context, src Addr, srv *Server, msg *krpc.Msg) error {
-	srv.reply(src, msg.T, krpc.Return{})
-	return nil
+	return srv.reply(ctx, src, msg.T, krpc.Return{})
 }
 
 type HandlerPeers struct{}
@@ -253,13 +245,12 @@ func (t HandlerPeers) Handle(ctx context.Context, source Addr, s *Server, m *krp
 	var r krpc.Return
 
 	if err := s.setReturnNodes(&r, *m, source); err != nil {
-		s.sendError(source, m.T, *err)
+		s.sendError(ctx, source, m.T, *err)
 		return nil
 	}
 
 	r.Token = langx.Autoptr(s.createToken(source))
-	s.reply(source, m.T, r)
-	return nil
+	return s.reply(ctx, source, m.T, r)
 }
 
 type HandlerAnnounce struct{}
@@ -284,8 +275,7 @@ func (t HandlerAnnounce) Handle(ctx context.Context, source Addr, s *Server, m *
 		}
 		go h(metainfo.Hash(m.A.InfoHash), source.IP(), port, portOk)
 	}
-	s.reply(source, m.T, krpc.Return{})
-	return nil
+	return s.reply(ctx, source, m.T, krpc.Return{})
 }
 
 // locates the nearest peer.
@@ -294,11 +284,9 @@ type HandlerNearestPeer struct{}
 func (t HandlerNearestPeer) Handle(ctx context.Context, source Addr, s *Server, m *krpc.Msg) error {
 	var r krpc.Return
 	if err := s.setReturnNodes(&r, *m, source); err != nil {
-		s.sendError(source, m.T, *err)
-		return nil
+		return s.sendError(ctx, source, m.T, *err)
 	}
-	s.reply(source, m.T, r)
-	return nil
+	return s.reply(ctx, source, m.T, r)
 }
 
 type Muxer interface {
@@ -306,11 +294,13 @@ type Muxer interface {
 	Handler(r *krpc.Msg) (pattern string, fn Handler)
 }
 
-func (s *Server) ServeMux(ctx context.Context, m Muxer) error {
+func (s *Server) ServeMux(ctx context.Context, c net.PacketConn, m Muxer) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.mux = m
-	return nil
+	s.socket = c
+	s.mu.Unlock()
+
+	return s.serveUntilClosed()
 }
 
 func (s *Server) handleQuery(ctx context.Context, source Addr, m krpc.Msg) {
@@ -338,21 +328,20 @@ func (s *Server) handleQuery(ctx context.Context, source Addr, m krpc.Msg) {
 	}
 
 	if err := fn.Handle(ctx, source, s, &m); err != nil {
-		log.Println("unable to handle request", err)
+		log.Println("query failed", source.String(), err)
 		return
 	}
 }
 
-func (s *Server) serveUntilClosed() {
+func (s *Server) serveUntilClosed() error {
 	err := s.serve()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed.IsSet() {
-		return
+		return err // this is a change in behavior may expose other issues. use to be nil.
 	}
-	if err != nil {
-		panic(err)
-	}
+
+	return err
 }
 
 // Returns a description of the Server.
@@ -372,7 +361,7 @@ func (s *Server) IPBlocklist() iplist.Ranger {
 	return s.ipBlockList
 }
 
-func (s *Server) processPacket(b []byte, addr Addr) {
+func (s *Server) processPacket(ctx context.Context, b []byte, addr Addr) {
 	if len(b) < 2 || b[0] != 'd' {
 		// KRPC messages are bencoded dicts.
 		readNotKRPCDict.Add(1)
@@ -414,7 +403,7 @@ func (s *Server) processPacket(b []byte, addr Addr) {
 	}
 	if d.Y == "q" {
 		s.logger().Printf("received query %q from %v", d.Q, addr)
-		s.handleQuery(context.Background(), addr, d)
+		s.handleQuery(ctx, addr, d)
 		return
 	}
 	tk := transactionKey{
@@ -459,7 +448,7 @@ func (s *Server) serve() error {
 			readBlocked.Add(1)
 			continue
 		}
-		s.processPacket(b[:n], NewAddr(addr))
+		s.processPacket(context.Background(), b[:n], NewAddr(addr))
 	}
 }
 
@@ -527,7 +516,7 @@ func (s *Server) setReturnNodes(r *krpc.Return, queryMsg krpc.Msg, querySource A
 	return nil
 }
 
-func (s *Server) sendError(addr Addr, t string, e krpc.Error) {
+func (s *Server) sendError(ctx context.Context, addr Addr, t string, e krpc.Error) error {
 	m := krpc.Msg{
 		T: t,
 		Y: "e",
@@ -535,16 +524,18 @@ func (s *Server) sendError(addr Addr, t string, e krpc.Error) {
 	}
 	b, err := bencode.Marshal(m)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	s.logger().Printf("sending error to %q: %v", addr, e)
-	_, err = s.writeToNode(context.Background(), b, addr, false, true)
+	_, err = s.writeToNode(ctx, b, addr, false, true)
 	if err != nil {
-		s.logger().Printf("error replying to %q: %v", addr, err)
+		return err
 	}
+
+	return nil
 }
 
-func (s *Server) reply(addr Addr, t string, r krpc.Return) {
+func (s *Server) reply(ctx context.Context, addr Addr, t string, r krpc.Return) error {
 	r.ID = s.id.AsByteArray()
 	m := krpc.Msg{
 		T:  t,
@@ -554,16 +545,18 @@ func (s *Server) reply(addr Addr, t string, r krpc.Return) {
 	}
 	b, err := bencode.Marshal(m)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	s.logger().Printf("replying to %q\n", addr)
-	wrote, err := s.writeToNode(context.Background(), b, addr, false, true)
+
+	wrote, err := s.writeToNode(ctx, b, addr, false, true)
 	if err != nil {
-		s.logger().Printf("error replying to %s: %s", addr, err)
+		return err
 	}
 	if wrote {
 		expvars.Add("replied to peer", 1)
 	}
+
+	return nil
 }
 
 // Returns the node if it's in the routing table, adding it if appropriate.
@@ -913,7 +906,9 @@ func (s *Server) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closed.Set()
-	s.socket.Close()
+	if s.socket != nil {
+		s.socket.Close()
+	}
 }
 
 func (s *Server) getPeers(ctx context.Context, addr Addr, infoHash int160) (krpc.Msg, numWrites, error) {

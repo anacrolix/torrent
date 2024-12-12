@@ -12,8 +12,9 @@ import (
 func (s *Server) Bootstrap() (ts TraversalStats, err error) {
 	initialAddrs, err := s.traversalStartingNodes()
 	if err != nil {
-		return
+		return ts, err
 	}
+
 	traversal := newTraversal(s.id)
 	for _, addr := range initialAddrs {
 		stm.Atomically(traversal.pendContact(addr))

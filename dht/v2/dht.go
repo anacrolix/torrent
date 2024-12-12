@@ -36,7 +36,6 @@ type ServerConfig struct {
 	// Set NodeId Manually. Caller must ensure that if NodeId does not conform
 	// to DHT Security Extensions, that NoSecurity is also set.
 	NodeId        [20]byte
-	Conn          net.PacketConn
 	StartingNodes StartingNodesGetter
 	// Disable the DHT security extension:
 	// http://www.libtorrent.org/dht_sec.html.

@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -313,7 +314,6 @@ func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 
 func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	cfg := dht.ServerConfig{
-		Conn:           conn,
 		OnAnnouncePeer: cl.onDHTAnnouncePeer,
 		PublicIP: func() net.IP {
 			if connIsIpv6(conn) && cl.config.PublicIP6 != nil {
@@ -329,6 +329,13 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	if s, err = dht.NewServer(&cfg); err != nil {
 		return s, err
 	}
+
+	go func() {
+		if err = s.ServeMux(context.Background(), conn, dht.DefaultMuxer()); err != nil {
+			log.Println("dht failed", err)
+		}
+	}()
+
 	go func() {
 		ts, err := s.Bootstrap()
 		if err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 	"github.com/james-lawrence/torrent/iplist"
 	"github.com/james-lawrence/torrent/metainfo"
+	"github.com/james-lawrence/torrent/x/langx"
 	"github.com/pkg/errors"
 
 	"github.com/anacrolix/stm"
@@ -38,6 +39,7 @@ type Server struct {
 
 	mu           sync.RWMutex
 	transactions map[transactionKey]*Transaction
+	mux          Muxer
 	nextT        uint64 // unique "t" field for outbound queries
 	table        table
 	closed       missinggo.Event
@@ -164,6 +166,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 	s = &Server{
 		config:      *c,
 		ipBlockList: c.IPBlocklist,
+		mux:         DefaultMuxer(),
 		tokenServer: tokenServer{
 			maxIntervalDelta: 2,
 			interval:         5 * time.Minute,
@@ -186,8 +189,158 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 	if s.resendDelay == nil {
 		s.resendDelay = defaultQueryResendDelay
 	}
+
 	go s.serveUntilClosed()
 	return
+}
+
+func NewMuxer() Muxer {
+	return defaultMuxer{
+		m:        make(map[string]Handler, 10),
+		fallback: UnimplementedHandler{},
+	}
+}
+
+// Standard Muxer configuration used by the server.
+func DefaultMuxer() Muxer {
+	m := NewMuxer()
+	m.Method("ping", HandlerPing{})
+	m.Method("get_peers", HandlerPeers{})
+	m.Method("find_node", HandlerNearestPeer{})
+	m.Method("announce_peer", HandlerAnnounce{})
+	return m
+}
+
+type defaultMuxer struct {
+	m        map[string]Handler
+	fallback Handler
+}
+
+func (t defaultMuxer) Method(name string, fn Handler) {
+	t.m[name] = fn
+}
+
+func (t defaultMuxer) Handler(r *krpc.Msg) (pattern string, fn Handler) {
+	if fn, ok := t.m[r.Q]; ok {
+		return r.Q, fn
+	}
+
+	return r.Q, t.fallback
+}
+
+type Handler interface {
+	Handle(ctx context.Context, src Addr, srv *Server, msg *krpc.Msg) error
+}
+
+type UnimplementedHandler struct{}
+
+func (t UnimplementedHandler) Handle(ctx context.Context, source Addr, s *Server, m *krpc.Msg) error {
+	log.Println("unimplemented rpc method was received", m.Q, source.String())
+	s.sendError(source, m.T, krpc.ErrorMethodUnknown)
+	return nil
+}
+
+type HandlerPing struct{}
+
+func (t HandlerPing) Handle(ctx context.Context, src Addr, srv *Server, msg *krpc.Msg) error {
+	srv.reply(src, msg.T, krpc.Return{})
+	return nil
+}
+
+type HandlerPeers struct{}
+
+func (t HandlerPeers) Handle(ctx context.Context, source Addr, s *Server, m *krpc.Msg) error {
+	var r krpc.Return
+
+	if err := s.setReturnNodes(&r, *m, source); err != nil {
+		s.sendError(source, m.T, *err)
+		return nil
+	}
+
+	r.Token = langx.Autoptr(s.createToken(source))
+	s.reply(source, m.T, r)
+	return nil
+}
+
+type HandlerAnnounce struct{}
+
+func (t HandlerAnnounce) Handle(ctx context.Context, source Addr, s *Server, m *krpc.Msg) error {
+	readAnnouncePeer.Add(1)
+	if !s.validToken(m.A.Token, source) {
+		log.Println("invalid announce token received from:", source.String())
+		return nil
+	}
+
+	if h := s.config.OnAnnouncePeer; h != nil {
+		var port int
+		portOk := false
+		if m.A.Port != nil {
+			port = *m.A.Port
+			portOk = true
+		}
+		if m.A.ImpliedPort {
+			port = source.Port()
+			portOk = true
+		}
+		go h(metainfo.Hash(m.A.InfoHash), source.IP(), port, portOk)
+	}
+	s.reply(source, m.T, krpc.Return{})
+	return nil
+}
+
+// locates the nearest peer.
+type HandlerNearestPeer struct{}
+
+func (t HandlerNearestPeer) Handle(ctx context.Context, source Addr, s *Server, m *krpc.Msg) error {
+	var r krpc.Return
+	if err := s.setReturnNodes(&r, *m, source); err != nil {
+		s.sendError(source, m.T, *err)
+		return nil
+	}
+	s.reply(source, m.T, r)
+	return nil
+}
+
+type Muxer interface {
+	Method(name string, fn Handler)
+	Handler(r *krpc.Msg) (pattern string, fn Handler)
+}
+
+func (s *Server) ServeMux(ctx context.Context, m Muxer) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mux = m
+	return nil
+}
+
+func (s *Server) handleQuery(ctx context.Context, source Addr, m krpc.Msg) {
+	var (
+		pattern string
+		fn      Handler
+	)
+
+	if m.SenderID() != nil {
+		if n, _ := s.getNode(source, int160FromByteArray(*m.SenderID()), !m.ReadOnly); n != nil {
+			n.lastGotQuery = time.Now()
+		}
+	}
+
+	if s.config.OnQuery != nil {
+		propagate := s.config.OnQuery(&m, source.Raw())
+		if !propagate {
+			return
+		}
+	}
+
+	if pattern, fn = s.mux.Handler(&m); fn == nil {
+		log.Println("unable to locate a handler for", pattern)
+		return
+	}
+
+	if err := fn.Handle(ctx, source, s, &m); err != nil {
+		log.Println("unable to handle request", err)
+		return
+	}
 }
 
 func (s *Server) serveUntilClosed() {
@@ -227,30 +380,24 @@ func (s *Server) processPacket(b []byte, addr Addr) {
 	}
 	var d krpc.Msg
 	err := bencode.Unmarshal(b, &d)
-	if _, ok := err.(bencode.ErrUnusedTrailingBytes); ok {
-		// log.Printf("%s: received message packet with %d trailing bytes: %q", s, _err.NumUnusedBytes, b[len(b)-_err.NumUnusedBytes:])
-		expvars.Add("processed packets with trailing bytes", 1)
+	if _err, ok := err.(bencode.ErrUnusedTrailingBytes); ok {
+		log.Printf("%s: received message packet with %d trailing bytes: %q", s, _err.NumUnusedBytes, b[len(b)-_err.NumUnusedBytes:])
 	} else if err != nil {
 		readUnmarshalError.Add(1)
-		func() {
-			if se, ok := err.(*bencode.SyntaxError); ok {
-				// The message was truncated.
-				if int(se.Offset) == len(b) {
-					return
-				}
-				// Some messages seem to drop to nul chars abrubtly.
-				if int(se.Offset) < len(b) && b[se.Offset] == 0 {
-					return
-				}
-				// The message isn't bencode from the first.
-				if se.Offset == 0 {
-					return
-				}
+		if se, ok := err.(*bencode.SyntaxError); ok {
+			// The message was truncated.
+			if int(se.Offset) == len(b) {
+				return
 			}
-			// if missinggo.CryHeard() {
-			// 	log.Printf("%s: received bad krpc message from %s: %s: %+q", s, addr, err, b)
-			// }
-		}()
+			// Some messages seem to drop to nul chars abrubtly.
+			if int(se.Offset) < len(b) && b[se.Offset] == 0 {
+				return
+			}
+			// The message isn't bencode from the first.
+			if se.Offset == 0 {
+				return
+			}
+		}
 		return
 	}
 	s.mu.Lock()
@@ -266,9 +413,8 @@ func (s *Server) processPacket(b []byte, addr Addr) {
 		}
 	}
 	if d.Y == "q" {
-		expvars.Add("received queries", 1)
 		s.logger().Printf("received query %q from %v", d.Q, addr)
-		s.handleQuery(addr, d)
+		s.handleQuery(context.Background(), addr, d)
 		return
 	}
 	tk := transactionKey{
@@ -291,13 +437,13 @@ func (s *Server) processPacket(b []byte, addr Addr) {
 }
 
 func (s *Server) serve() error {
-	var b [0x10000]byte
+	var b [65536]byte
 	for {
 		n, addr, err := s.socket.ReadFrom(b[:])
 		if err != nil {
 			return err
 		}
-		expvars.Add("packets read", 1)
+
 		if n == len(b) {
 			return errors.New("received dht packet exceeds buffer size")
 		}
@@ -379,83 +525,6 @@ func (s *Server) setReturnNodes(r *krpc.Return, queryMsg krpc.Msg, querySource A
 		r.Nodes6 = s.makeReturnNodes(target, func(krpc.NodeAddr) bool { return true })
 	}
 	return nil
-}
-
-func (s *Server) handleQuery(source Addr, m krpc.Msg) {
-	go func() {
-		expvars.Add(fmt.Sprintf("received query %q", m.Q), 1)
-		if a := m.A; a != nil {
-			if a.NoSeed != 0 {
-				expvars.Add("received argument noseed", 1)
-			}
-			if a.Scrape != 0 {
-				expvars.Add("received argument scrape", 1)
-			}
-		}
-	}()
-	if m.SenderID() != nil {
-		if n, _ := s.getNode(source, int160FromByteArray(*m.SenderID()), !m.ReadOnly); n != nil {
-			n.lastGotQuery = time.Now()
-		}
-	}
-	if s.config.OnQuery != nil {
-		propagate := s.config.OnQuery(&m, source.Raw())
-		if !propagate {
-			return
-		}
-	}
-	// Don't respond.
-	if s.config.Passive {
-		return
-	}
-	// TODO: Should we disallow replying to ourself?
-	args := m.A
-	switch m.Q {
-	case "ping":
-		s.reply(source, m.T, krpc.Return{})
-	case "get_peers":
-		var r krpc.Return
-		// TODO: Return values.
-		if err := s.setReturnNodes(&r, m, source); err != nil {
-			s.sendError(source, m.T, *err)
-			break
-		}
-		r.Token = func() *string {
-			t := s.createToken(source)
-			return &t
-		}()
-		s.reply(source, m.T, r)
-	case "find_node":
-		var r krpc.Return
-		if err := s.setReturnNodes(&r, m, source); err != nil {
-			s.sendError(source, m.T, *err)
-			break
-		}
-		s.reply(source, m.T, r)
-	case "announce_peer":
-		readAnnouncePeer.Add(1)
-		if !s.validToken(args.Token, source) {
-			expvars.Add("received announce_peer with invalid token", 1)
-			return
-		}
-		expvars.Add("received announce_peer with valid token", 1)
-		if h := s.config.OnAnnouncePeer; h != nil {
-			var port int
-			portOk := false
-			if args.Port != nil {
-				port = *args.Port
-				portOk = true
-			}
-			if args.ImpliedPort {
-				port = source.Port()
-				portOk = true
-			}
-			go h(metainfo.Hash(args.InfoHash), source.IP(), port, portOk)
-		}
-		s.reply(source, m.T, krpc.Return{})
-	default:
-		s.sendError(source, m.T, krpc.ErrorMethodUnknown)
-	}
 }
 
 func (s *Server) sendError(addr Addr, t string, e krpc.Error) {
@@ -678,11 +747,7 @@ func (s *Server) makeQueryBytes(q string, a *krpc.MsgArgs, t string) []byte {
 		Q: q,
 		A: a,
 	}
-	// BEP 43. Outgoing queries from passive nodes should contain "ro":1 in the top level
-	// dictionary.
-	if s.config.Passive {
-		m.ReadOnly = true
-	}
+
 	b, err := bencode.Marshal(m)
 	if err != nil {
 		panic(err)

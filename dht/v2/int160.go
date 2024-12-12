@@ -71,18 +71,8 @@ func (me *int160) IsZero() bool {
 	return true
 }
 
-func int160FromBytes(b []byte) (ret int160) {
-	ret.SetBytes(b)
-	return
-}
-
 func int160FromByteArray(b [20]byte) (ret int160) {
 	ret.SetBytes(b[:])
-	return
-}
-
-func int160FromByteString(s string) (ret int160) {
-	ret.SetBytes([]byte(s))
 	return
 }
 

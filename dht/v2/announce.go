@@ -133,7 +133,7 @@ func validNodeAddr(addr net.Addr) bool {
 	return true
 }
 
-func (a *Announce) shouldContact(addr krpc.NodeAddr, tx *stm.Tx) bool {
+func (a *Announce) shouldContact(addr krpc.NodeAddr, _ *stm.Tx) bool {
 	if !validNodeAddr(addr.UDP()) {
 		return false
 	}

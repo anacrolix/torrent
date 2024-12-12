@@ -39,13 +39,6 @@ func (tbl *table) bucketForID(id int160) *bucket {
 	return &tbl.buckets[tbl.bucketIndex(id)]
 }
 
-func (tbl *table) numNodes() (num int) {
-	for _, b := range tbl.buckets {
-		num += b.Len()
-	}
-	return
-}
-
 func (tbl *table) bucketIndex(id int160) int {
 	if id == tbl.rootID {
 		panic("nobody puts the root ID in a bucket")

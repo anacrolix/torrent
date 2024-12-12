@@ -3,28 +3,12 @@ package dht
 import (
 	"fmt"
 	"hash/fnv"
-	"net"
 
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/stm/stmutil"
 
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
-
-func mustListen(addr string) net.PacketConn {
-	ret, err := net.ListenPacket("udp", addr)
-	if err != nil {
-		panic(err)
-	}
-	return ret
-}
-
-func addrResolver(addr string) func() ([]Addr, error) {
-	return func() ([]Addr, error) {
-		ua, err := net.ResolveUDPAddr("udp", addr)
-		return []Addr{NewAddr(ua)}, err
-	}
-}
 
 type addrMaybeId struct {
 	Addr krpc.NodeAddr

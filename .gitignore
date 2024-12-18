@@ -3,3 +3,4 @@
 .envrc*
 .DS_Store
 go.work*
+/.env

@@ -4,11 +4,14 @@ import (
 	"context"
 	"expvar"
 	"fmt"
-	"io"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
+	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/pion/datachannel"
 	"github.com/pion/webrtc/v4"
@@ -132,7 +135,7 @@ func (tc *TrackerClient) newOffer(
 		err = fmt.Errorf("creating data channel: %w", err)
 		peerConnection.Close()
 	}
-	initDataChannel(dataChannel, peerConnection, func(dc datachannel.ReadWriteCloser, dcCtx context.Context, dcSpan trace.Span) {
+	initDataChannel(dataChannel, peerConnection, func(dc DataChannelConn, dcCtx context.Context, dcSpan trace.Span) {
 		metrics.Add("outbound offers answered with datachannel", 1)
 		tc.mu.Lock()
 		tc.stats.ConvertedOutboundConns++
@@ -162,7 +165,7 @@ func (tc *TrackerClient) newOffer(
 	return
 }
 
-type onDetachedDataChannelFunc func(detached datachannel.ReadWriteCloser, ctx context.Context, span trace.Span)
+type onDetachedDataChannelFunc func(detached DataChannelConn, ctx context.Context, span trace.Span)
 
 func (tc *TrackerClient) initAnsweringPeerConnection(
 	peerConn *wrappedPeerConnection,
@@ -176,7 +179,7 @@ func (tc *TrackerClient) initAnsweringPeerConnection(
 		peerConn.Close()
 	})
 	peerConn.OnDataChannel(func(d *webrtc.DataChannel) {
-		initDataChannel(d, peerConn, func(detached datachannel.ReadWriteCloser, ctx context.Context, span trace.Span) {
+		initDataChannel(d, peerConn, func(detached DataChannelConn, ctx context.Context, span trace.Span) {
 			timer.Stop()
 			metrics.Add("answering peer connection conversions", 1)
 			tc.mu.Lock()
@@ -225,13 +228,6 @@ func (tc *TrackerClient) newAnsweringPeerConnection(
 	return
 }
 
-type datachannelReadWriter interface {
-	datachannel.Reader
-	datachannel.Writer
-	io.Reader
-	io.Writer
-}
-
 type ioCloserFunc func() error
 
 func (me ioCloserFunc) Close() error {
@@ -256,29 +252,68 @@ func initDataChannel(
 			// This shouldn't happen if the API is configured correctly, and we call from OnOpen.
 			panic(err)
 		}
-		onOpen(hookDataChannelCloser(raw, pc, span, dc), ctx, span)
+		onOpen(wrapDataChannel(raw, pc, span, dc), ctx, span)
 	})
 }
 
-// Hooks the datachannel's Close to Close the owning PeerConnection. The datachannel takes ownership
-// and responsibility for the PeerConnection.
-func hookDataChannelCloser(
+// WebRTC data channel wrapper that supports operating as a peer conn ReadWriteCloser.
+type DataChannelConn struct {
+	ioCloserFunc
+	rawDataChannel datachannel.ReadWriteCloser
+}
+
+func (d DataChannelConn) Read(p []byte) (int, error) {
+	return d.rawDataChannel.Read(p)
+}
+
+// Limit write size for WebRTC data channels. See https://github.com/pion/datachannel/issues/59. The
+// default used to be (1<<16)-1. This will be set to the new appropriate value if it's discovered to
+// still be a limitation. Set WEBTORRENT_MAX_WRITE_SIZE to experiment with it.
+var maxWriteSize = g.None[int]()
+
+func init() {
+	s, ok := os.LookupEnv("WEBTORRENT_MAX_WRITE_SIZE")
+	if !ok {
+		return
+	}
+	i64, err := strconv.ParseInt(s, 0, 0)
+	panicif.Err(err)
+	maxWriteSize = g.Some(int(i64))
+}
+
+func (d DataChannelConn) Write(p []byte) (n int, err error) {
+	for {
+		p1 := p
+		if maxWriteSize.Ok {
+			p1 = p1[:min(len(p1), maxWriteSize.Value)]
+		}
+		var n1 int
+		n1, err = d.rawDataChannel.Write(p1)
+		n += n1
+		p = p[n1:]
+		if err != nil {
+			return
+		}
+		if len(p) == 0 {
+			return
+		}
+	}
+}
+
+func wrapDataChannel(
 	dcrwc datachannel.ReadWriteCloser,
 	pc *wrappedPeerConnection,
 	dataChannelSpan trace.Span,
 	originalDataChannel *webrtc.DataChannel,
-) datachannel.ReadWriteCloser {
-	return struct {
-		datachannelReadWriter
-		io.Closer
-	}{
-		dcrwc,
-		ioCloserFunc(func() error {
+) DataChannelConn {
+	return DataChannelConn{
+		ioCloserFunc: ioCloserFunc(func() error {
 			dcrwc.Close()
 			pc.Close()
 			originalDataChannel.Close()
 			dataChannelSpan.End()
 			return nil
 		}),
+		rawDataChannel: dcrwc,
 	}
 }

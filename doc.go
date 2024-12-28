@@ -23,6 +23,7 @@ BitTorrent features implemented include:
   - 11: PEX
   - 12: Multitracker metadata extension
   - 15: UDP Tracker Protocol
+  - 19: WebSeed
   - 20: Peer ID convention ("-GTnnnn-")
   - 23: Tracker Returns Compact Peer Lists
   - 29: uTorrent transport protocol

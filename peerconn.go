@@ -1443,11 +1443,3 @@ func hashRequestFromMessage(m pp.Message) hashRequest {
 		proofLayers: m.ProofLayers,
 	}
 }
-func (c *PeerConn) UpdatePeerConnStatus(status PeerStatus) {
-	if c.Observers != nil {
-		select {
-		case c.Observers.PeerStatus <- status:
-		default:
-		}
-	}
-}

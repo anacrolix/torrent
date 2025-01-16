@@ -1805,10 +1805,12 @@ func (t *Torrent) dropConnection(c *PeerConn) {
 	t.cl.event.Broadcast()
 	c.close()
 
-	c.UpdatePeerConnStatus(PeerStatus{
-		Id: c.PeerID,
-		Ok: false,
-	})
+	for _, cb := range c.callbacks.StatusUpdated {
+		cb(StatusUpdatedEvent{
+			Event:  PeerDisconnected,
+			PeerId: c.PeerID,
+		})
+	}
 	t.logger.WithDefaultLevel(log.Debug).Printf("dropping connection to %+q, sent peerconn update", c.PeerID)
 
 	if t.deletePeerConn(c) {

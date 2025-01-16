@@ -1141,18 +1141,22 @@ func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 	pc.sendInitialMessages()
 	pc.initUpdateRequestsTimer()
 
-	pc.UpdatePeerConnStatus(PeerStatus{
-		Id: pc.PeerID,
-		Ok: true,
-	})
+	for _, cb := range pc.callbacks.StatusUpdated {
+		cb(StatusUpdatedEvent{
+			Event:  PeerConnected,
+			PeerId: pc.PeerID,
+		})
+	}
 
 	err := pc.mainReadLoop()
 	if err != nil {
-		pc.UpdatePeerConnStatus(PeerStatus{
-			Id:  pc.PeerID,
-			Ok:  false,
-			Err: fmt.Sprintf("%s", err),
-		})
+		for _, cb := range pc.callbacks.StatusUpdated {
+			cb(StatusUpdatedEvent{
+				Event:  PeerDisconnected,
+				Error:  err,
+				PeerId: pc.PeerID,
+			})
+		}
 		return fmt.Errorf("main read loop: %w", err)
 	}
 	return nil

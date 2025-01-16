@@ -34,6 +34,10 @@ type Callbacks struct {
 	// handshake has not yet occurred. This is a good time to alter the supported extension
 	// protocols.
 	PeerConnAdded []func(*PeerConn)
+
+	// Sends status event updates. Useful to inform the user of specific events as they happen,
+	// for logging or to action on.
+	StatusUpdated []func(StatusUpdatedEvent)
 }
 
 type ReceivedUsefulDataEvent = PeerMessageEvent
@@ -54,3 +58,23 @@ type PeerConnReadExtensionMessageEvent struct {
 	ExtensionNumber pp.ExtensionNumber
 	Payload         []byte
 }
+
+type StatusUpdatedEvent struct {
+	Event StatusEvent `json:"event"`
+	Error error       `json:"error"`
+	// The following fields may or may not be populated depending on the event.
+	PeerId   PeerID `json:"peer_id"`
+	Url      string `json:"url"`
+	InfoHash string `json:"info_hash"`
+}
+
+type StatusEvent string
+
+const (
+	PeerConnected             StatusEvent = "peer_connected"
+	PeerDisconnected          StatusEvent = "peer_disconnected"
+	TrackerConnected          StatusEvent = "tracker_connected"
+	TrackerDisconnected       StatusEvent = "tracker_disconnected"
+	TrackerAnnounceSuccessful StatusEvent = "tracker_announce_successful"
+	TrackerAnnounceError      StatusEvent = "tracker_announce_error"
+)

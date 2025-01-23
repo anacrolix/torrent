@@ -80,21 +80,40 @@ func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.Tra
 				),
 				WebsocketTrackerHttpHeader: me.WebsocketTrackerHttpHeader,
 				ICEServers:                 me.ICEServers,
-				OnConnected: func(Error error) {
+				OnConnected: func(err error) {
 					for _, cb := range me.callbacks.StatusUpdated {
 						cb(StatusUpdatedEvent{
 							Event: TrackerConnected,
 							Url:   url,
-							Error: Error,
+							Error: err,
 						})
 					}
 				},
-				OnDisconnected: func(Error error) {
+				OnDisconnected: func(err error) {
 					for _, cb := range me.callbacks.StatusUpdated {
 						cb(StatusUpdatedEvent{
 							Event: TrackerDisconnected,
 							Url:   url,
-							Error: Error,
+							Error: err,
+						})
+					}
+				},
+				OnAnnounceSuccessful: func(ih string) {
+					for _, cb := range me.callbacks.StatusUpdated {
+						cb(StatusUpdatedEvent{
+							Event:    TrackerAnnounceSuccessful,
+							Url:      url,
+							InfoHash: ih,
+						})
+					}
+				},
+				OnAnnounceError: func(ih string, err error) {
+					for _, cb := range me.callbacks.StatusUpdated {
+						cb(StatusUpdatedEvent{
+							Event:    TrackerAnnounceError,
+							Url:      url,
+							Error:    err,
+							InfoHash: ih,
 						})
 					}
 				},

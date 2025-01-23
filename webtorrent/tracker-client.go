@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anacrolix/torrent/types/infohash"
-
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/gorilla/websocket"
@@ -18,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/types/infohash"
 )
 
 type TrackerStatus struct {
@@ -67,8 +66,10 @@ type TrackerClient struct {
 	rtcPeerConns map[string]*wrappedPeerConnection
 
 	// callbacks
-	OnConnected    func(error)
-	OnDisconnected func(error)
+	OnConnected          func(error)
+	OnDisconnected       func(error)
+	OnAnnounceSuccessful func(ih string)
+	OnAnnounceError      func(ih string, err error)
 }
 
 func (me *TrackerClient) Stats() TrackerClientStats {
@@ -157,15 +158,6 @@ func (tc *TrackerClient) doWebsocket() error {
 	c.Close()
 	tc.mu.Unlock()
 	return err
-}
-
-func (tc *TrackerClient) updateTrackerAnnounceStatus(status AnnounceStatus) {
-	if tc.Observers != nil {
-		select {
-		case tc.Observers.AnnounceStatus <- status:
-		default:
-		}
-	}
 }
 
 // Finishes initialization and spawns the run routine, calling onStop when it completes with the
@@ -297,17 +289,7 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte, offers []outboundOffer) error {
 	request, err := tc.GetAnnounceRequest(event, infoHash)
 	if err != nil {
-		tc.updateTrackerAnnounceStatus(AnnounceStatus{
-			TrackerStatus: TrackerStatus{
-				Url: tc.Url,
-				Ok:  false,
-				Err: err,
-			},
-			Event:    "",
-			InfoHash: infohash.T(infoHash).HexString(),
-		})
-	}
-	if err != nil {
+		tc.OnAnnounceError(infohash.T(infoHash).HexString(), err)
 		return fmt.Errorf("getting announce parameters: %w", err)
 	}
 
@@ -328,16 +310,6 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 		})
 	}
 
-	announceStatus := AnnounceStatus{
-		TrackerStatus: TrackerStatus{
-			Url: tc.Url,
-			Ok:  true,
-			Err: nil,
-		},
-		Event:    req.Event,
-		InfoHash: infohash.T(infoHash).HexString(),
-	}
-
 	data, err := json.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("marshalling request: %w", err)
@@ -347,12 +319,10 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 	defer tc.mu.Unlock()
 	err = tc.writeMessage(data)
 	if err != nil {
-		announceStatus.Ok = false
-		announceStatus.Err = err
-		tc.updateTrackerAnnounceStatus(announceStatus)
+		tc.OnAnnounceError(infohash.T(infoHash).HexString(), err)
 		return fmt.Errorf("write AnnounceRequest: %w", err)
 	}
-	tc.updateTrackerAnnounceStatus(announceStatus)
+	tc.OnAnnounceSuccessful(infohash.T(infoHash).HexString())
 	g.MakeMapIfNil(&tc.outboundOffers)
 	for _, offer := range offers {
 		g.MapInsert(tc.outboundOffers, offer.offerId, offer.outboundOfferValue)

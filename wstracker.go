@@ -3,11 +3,12 @@ package torrent
 import (
 	"context"
 	"fmt"
-	"github.com/anacrolix/torrent/webtorrent"
 	"net"
 	netHttp "net/http"
 	"net/url"
 	"sync"
+
+	"github.com/anacrolix/torrent/webtorrent"
 
 	"github.com/anacrolix/log"
 	"github.com/gorilla/websocket"
@@ -50,6 +51,7 @@ type websocketTrackers struct {
 	DialContext                func(ctx context.Context, network, addr string) (net.Conn, error)
 	WebsocketTrackerHttpHeader func() netHttp.Header
 	ICEServers                 []webrtc.ICEServer
+	callbacks                  *Callbacks
 }
 
 func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.TrackerClient, func()) {
@@ -64,6 +66,7 @@ func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.Tra
 		}
 		value = &refCountedWebtorrentTrackerClient{
 			TrackerClient: webtorrent.TrackerClient{
+				// TODO pass in callbacks rather than observers
 				Observers:          me.obs,
 				Dialer:             dialer,
 				Url:                url,
@@ -77,6 +80,24 @@ func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.Tra
 				),
 				WebsocketTrackerHttpHeader: me.WebsocketTrackerHttpHeader,
 				ICEServers:                 me.ICEServers,
+				OnConnected: func(Error error) {
+					for _, cb := range me.callbacks.StatusUpdated {
+						cb(StatusUpdatedEvent{
+							Event: TrackerConnected,
+							Url:   url,
+							Error: Error,
+						})
+					}
+				},
+				OnDisconnected: func(Error error) {
+					for _, cb := range me.callbacks.StatusUpdated {
+						cb(StatusUpdatedEvent{
+							Event: TrackerDisconnected,
+							Url:   url,
+							Error: Error,
+						})
+					}
+				},
 			},
 		}
 		value.TrackerClient.Start(func(err error) {

@@ -65,6 +65,10 @@ type TrackerClient struct {
 	ICEServers                 []webrtc.ICEServer
 
 	rtcPeerConns map[string]*wrappedPeerConnection
+
+	// callbacks
+	OnConnected    func(error)
+	OnDisconnected func(error)
 }
 
 func (me *TrackerClient) Stats() TrackerClientStats {
@@ -119,7 +123,7 @@ func (tc *TrackerClient) doWebsocket() error {
 
 	c, _, err := tc.Dialer.Dial(tc.Url, header)
 	if err != nil {
-		tc.updateTrackerConnStatus(TrackerStatus{tc.Url, false, err})
+		tc.OnDisconnected(err)
 		return fmt.Errorf("dialing tracker: %w", err)
 	}
 	defer c.Close()
@@ -146,22 +150,13 @@ func (tc *TrackerClient) doWebsocket() error {
 			}
 		}
 	}()
-	tc.updateTrackerConnStatus(TrackerStatus{tc.Url, true, nil})
+	tc.OnConnected(nil)
 	err = tc.trackerReadLoop(tc.wsConn)
 	close(closeChan)
 	tc.mu.Lock()
 	c.Close()
 	tc.mu.Unlock()
 	return err
-}
-
-func (tc *TrackerClient) updateTrackerConnStatus(status TrackerStatus) {
-	if tc.Observers != nil {
-		select {
-		case tc.Observers.ConnStatus <- status:
-		default:
-		}
-	}
 }
 
 func (tc *TrackerClient) updateTrackerAnnounceStatus(status AnnounceStatus) {

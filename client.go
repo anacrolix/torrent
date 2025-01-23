@@ -338,6 +338,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		WebsocketTrackerHttpHeader: cl.config.WebsocketTrackerHttpHeader,
 		ICEServers:                 cl.ICEServers(),
 		DialContext:                cl.config.TrackerDialContext,
+		callbacks:                  &cl.config.Callbacks,
 		OnConn: func(dc webtorrent.DataChannelConn, dcc webtorrent.DataChannelContext) {
 			cl.lock()
 			defer cl.unlock()

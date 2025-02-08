@@ -87,6 +87,27 @@ type Torrent interface {
 	PieceStateRuns() []PieceStateRun
 }
 
+// Download a torrent into a writer blocking until completion.
+func DownloadInto(ctx context.Context, dst io.Writer, m Torrent, options ...Tuner) (err error) {
+	if err = m.Tune(options...); err != nil {
+		return err
+	}
+
+	select {
+	case <-m.GotInfo():
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	if n, err := io.Copy(dst, m.NewReader()); err != nil {
+		return err
+	} else if n != m.Info().TotalLength() {
+		return errors.Errorf("download failed, missing data %d != %d", n, m.Info().TotalLength())
+	}
+
+	return nil
+}
+
 func newTorrent(cl *Client, src Metadata) *torrent {
 	// use provided storage, if provided
 	storageClient := cl.defaultStorage

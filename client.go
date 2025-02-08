@@ -324,6 +324,7 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 		StartingNodes:      cl.config.DhtStartingNodes,
 		ConnectionTracking: cl.config.ConnTracker,
 		OnQuery:            cl.config.DHTOnQuery,
+		Logger:             newlogger(cl.config.Logger, "[dht] ", log.Flags()),
 	}
 
 	if s, err = dht.NewServer(&cfg); err != nil {

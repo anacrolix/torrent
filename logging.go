@@ -1,6 +1,10 @@
 package torrent
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+	"log"
+)
 
 // logger is a logger interface compatible with both stdlib and some
 // 3rd party loggers.
@@ -32,4 +36,17 @@ type discard struct{}
 
 func (discard) Output(int, string) error {
 	return nil
+}
+
+type logoutput interface {
+	Writer() io.Writer
+}
+
+// if possible use the provided logger as a base, otherwise fallback to the default
+func newlogger(l logger, prefix string, flags int) *log.Logger {
+	if l, ok := l.(logoutput); ok {
+		return log.New(l.Writer(), prefix, flags)
+	}
+
+	return log.Default()
 }

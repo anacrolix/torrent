@@ -1,15 +1,19 @@
 package dht
 
 import (
+	"context"
+	"log"
 	"sync/atomic"
+	"time"
 
 	"github.com/anacrolix/stm"
+	"golang.org/x/time/rate"
 
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
 
 // Populates the node table.
-func (s *Server) Bootstrap() (ts TraversalStats, err error) {
+func (s *Server) Bootstrap(ctx context.Context) (ts TraversalStats, err error) {
 	initialAddrs, err := s.traversalStartingNodes()
 	if err != nil {
 		return ts, err
@@ -19,8 +23,16 @@ func (s *Server) Bootstrap() (ts TraversalStats, err error) {
 	for _, addr := range initialAddrs {
 		stm.Atomically(traversal.pendContact(addr))
 	}
+
+	l := rate.NewLimiter(rate.Every(time.Second), 1)
+
 	outstanding := stm.NewVar(0)
 	for {
+		if err = l.Wait(ctx); err != nil {
+			log.Println("unable to bootstrap", err)
+			return
+		}
+
 		type txResT struct {
 			done bool
 			io   func()

@@ -337,7 +337,7 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	}()
 
 	go func() {
-		ts, err := s.Bootstrap()
+		ts, err := s.Bootstrap(context.Background())
 		if err != nil {
 			cl.config.errors().Println(errors.Wrap(err, "error bootstrapping dht"))
 		}

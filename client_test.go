@@ -7,8 +7,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -239,16 +237,6 @@ type testClientTransferParams struct {
 	LeecherDownloadRateLimiter *rate.Limiter
 }
 
-func logPieceStateChanges(t torrent.Torrent) {
-	sub := t.SubscribePieceStateChanges()
-	go func() {
-		defer sub.Close()
-		for e := range sub.Values {
-			log.Printf("%p %#v", t, e)
-		}
-	}()
-}
-
 // Creates a seeder and a leecher, and ensures the data transfers when a read
 // is attempted on the leecher.
 func testClientTransfer(t *testing.T, ps testClientTransferParams) {
@@ -284,7 +272,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	// log.Println("SEEDER MISSING PIECES", seederTorrent.(*torrent).piecesM.Missing())
 
 	// Create leecher and a Torrent.
-	leecherDataDir, err := ioutil.TempDir("", "")
+	leecherDataDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(leecherDataDir)
 	cfg = torrent.TestingConfig(t)
@@ -355,7 +343,7 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 	pos, err := r.Seek(0, io.SeekStart)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 0, pos)
-	_greeting, err := ioutil.ReadAll(r)
+	_greeting, err := io.ReadAll(r)
 	assert.NoError(t, err)
 	assert.EqualValues(t, testutil.GreetingFileContents, string(_greeting))
 }
@@ -383,7 +371,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 
 	cfg = torrent.TestingConfig(t)
 	cfg.Seed = true
-	cfg.DataDir, err = ioutil.TempDir("", "")
+	cfg.DataDir, err = os.MkdirTemp("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.DataDir)
 	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
@@ -418,7 +406,7 @@ func TestSeedAfterDownloading(t *testing.T) {
 		defer wg.Done()
 		r := llg.NewReader()
 		defer r.Close()
-		b, err := ioutil.ReadAll(r)
+		b, err := io.ReadAll(r)
 		require.NoError(t, err)
 		assert.EqualValues(t, testutil.GreetingFileContents, b)
 	}()
@@ -468,13 +456,19 @@ func TestDownload(t *testing.T) {
 	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(TestingSeedConfig(t, greetingTempDir)))
 	require.NoError(t, err)
 	defer seeder.Close()
-	require.NoError(t, seeder.DownloadInto(context.Background(), metadata, ioutil.Discard))
+	tor, added, err := seeder.Start(metadata)
+	require.NoError(t, err)
+	require.True(t, added)
+	require.NoError(t, torrent.DownloadInto(context.Background(), io.Discard, tor))
 
 	lcfg := TestingLeechConfig(t, t.TempDir())
 	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(lcfg))
 	require.NoError(t, err)
 	defer leecher.Close()
-	require.NoError(t, leecher.DownloadInto(context.Background(), metadata, buf, torrent.TuneClientPeer(seeder)))
+	ltor, added, err := leecher.Start(metadata)
+	require.NoError(t, err)
+	require.True(t, added)
+	require.NoError(t, torrent.DownloadInto(context.Background(), buf, ltor, torrent.TuneClientPeer(seeder)))
 	require.Equal(t, "hello, world\n", buf.String())
 }
 
@@ -487,7 +481,7 @@ func TestDownloadMetadataTimeout(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := torrent.TestingConfig(t)
-	cfg.DataDir, err = ioutil.TempDir("", "")
+	cfg.DataDir, err = os.MkdirTemp("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(cfg.DataDir)
 	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
@@ -495,7 +489,10 @@ func TestDownloadMetadataTimeout(t *testing.T) {
 	defer leecher.Close()
 	ctx, done := context.WithTimeout(context.Background(), 0)
 	defer done()
-	require.Equal(t, context.DeadlineExceeded, leecher.DownloadInto(ctx, metadata, buf))
+	ltor, added, err := leecher.Start(metadata)
+	require.NoError(t, err)
+	require.True(t, added)
+	require.Equal(t, context.DeadlineExceeded, torrent.DownloadInto(ctx, buf, ltor))
 }
 
 // We read from a piece which is marked completed, but is missing data.
@@ -521,7 +518,7 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 	assert.True(t, new)
 	r := tt.NewReader()
 	defer r.Close()
-	b, err = ioutil.ReadAll(r)
+	b, err = io.ReadAll(r)
 	assert.Len(t, b, 13)
 	assert.NoError(t, err)
 }
@@ -562,7 +559,7 @@ func TestResponsive(t *testing.T) {
 	require.Nil(t, err)
 	seederTorrent, _, _ := seeder.Start(tt)
 	seederTorrent.VerifyData()
-	leecherDataDir, err := ioutil.TempDir("", "")
+	leecherDataDir, err := os.MkdirTemp("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(leecherDataDir)
 	cfg = torrent.TestingConfig(t)
@@ -605,7 +602,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	require.Nil(t, err)
 	seederTorrent, _, _ := seeder.Start(st)
 	seederTorrent.VerifyData()
-	leecherDataDir, err := ioutil.TempDir("", "")
+	leecherDataDir, err := os.MkdirTemp("", "")
 	require.Nil(t, err)
 	defer os.RemoveAll(leecherDataDir)
 	cfg = torrent.TestingConfig(t)
@@ -682,7 +679,7 @@ func writeTorrentData(ts *storage.Torrent, info metainfo.Info, b []byte) {
 }
 
 func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.ClientImpl) {
-	fileCacheDir, err := ioutil.TempDir("", "")
+	fileCacheDir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(fileCacheDir)
 	fileCache, err := filecache.NewCache(fileCacheDir)
@@ -723,7 +720,7 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 	assert.Equal(t, alreadyCompleted, psrs[0].Complete)
 	if alreadyCompleted {
 		r := tt.NewReader()
-		b, err := ioutil.ReadAll(r)
+		b, err := io.ReadAll(r)
 		assert.NoError(t, err)
 		assert.EqualValues(t, testutil.GreetingFileContents, b)
 	}
@@ -777,13 +774,6 @@ func TestClientDynamicListenUTPOnly(t *testing.T) {
 	require.NoError(t, err)
 	defer cl.Close()
 	assert.NotEqual(t, 0, cl.LocalPort())
-}
-
-func totalConns(tts []torrent.Torrent) (ret int) {
-	for _, tt := range tts {
-		ret += tt.Stats().ActivePeers
-	}
-	return
 }
 
 // Creates a file containing its own name as data. Make a metainfo from that, adds it to the given
@@ -923,7 +913,7 @@ func testTransferRandomData(t *testing.T, n int64, from, to *torrent.Client) {
 
 	metadata, err := torrent.NewFromFile(data.Name())
 	require.NoError(t, err)
-	require.NoError(t, from.DownloadInto(context.Background(), metadata, ioutil.Discard))
+	require.NoError(t, from.DownloadInto(context.Background(), metadata, io.Discard))
 
 	digest := md5.New()
 	require.NoError(t, to.DownloadInto(context.Background(), metadata, digest, torrent.TuneClientPeer(from)))

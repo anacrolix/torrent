@@ -2,7 +2,7 @@ package torrent_test
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 
@@ -26,7 +26,7 @@ func Example_download() {
 		return
 	}
 
-	if err = c.DownloadInto(context.Background(), metadata, ioutil.Discard); err != nil {
+	if err = c.DownloadInto(context.Background(), metadata, io.Discard); err != nil {
 		log.Fatalln(err)
 		return
 	}
@@ -56,7 +56,7 @@ func Example_customNetworkProtocols() {
 		return
 	}
 
-	if err = c.DownloadInto(context.Background(), metadata, ioutil.Discard); err != nil {
+	if err = c.DownloadInto(context.Background(), metadata, io.Discard); err != nil {
 		log.Fatalln(err)
 		return
 	}

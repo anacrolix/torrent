@@ -1,6 +1,7 @@
 package krpc
 
 import (
+	"crypto/rand"
 	"fmt"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -20,6 +21,15 @@ func IdFromString(s string) (id ID) {
 		panic(n)
 	}
 	return
+}
+
+// generate a random id.
+func RandomID() (id ID) {
+	_, err := rand.Read(id[:])
+	if err != nil {
+		panic(err)
+	}
+	return id
 }
 
 func (id ID) MarshalBencode() ([]byte, error) {

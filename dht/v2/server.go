@@ -417,7 +417,7 @@ func (s *Server) processPacket(ctx context.Context, b []byte, addr Addr) {
 		return
 	}
 	s.logger().Printf("received response for transaction %q from %v", d.T, addr)
-	go t.handleResponse(d)
+	go t.handleResponse(b, d)
 	if n != nil {
 		n.lastGotResponse = time.Now()
 		n.consecutiveFailures = 0
@@ -715,16 +715,21 @@ func (s *Server) beginQuery(addr Addr, reason string, f func() numWrites) stm.Op
 	}
 }
 
-func (s *Server) query(ctx context.Context, addr Addr, q string, a *krpc.MsgArgs, callback func(krpc.Msg, error)) error {
+func (s *Server) query(ctx context.Context, addr Addr, q string, a *krpc.MsgArgs, callback func([]byte, error)) error {
 	if callback == nil {
-		callback = func(krpc.Msg, error) {}
+		callback = func([]byte, error) {}
 	}
 	go func() {
 		stm.Atomically(
 			s.beginQuery(addr, fmt.Sprintf("send dht query %q", q),
 				func() numWrites {
 					tid, b := s.makeQueryBytes(q, a)
-					m, writes, err := s.queryContext(ctx, addr, q, tid, b)
+					m, writes, err := s.QueryContext(ctx, addr, q, tid, b)
+					if err != nil {
+						callback(m, err)
+						return writes
+					}
+
 					callback(m, err)
 					return writes
 				},
@@ -755,16 +760,16 @@ func (s *Server) makeQueryBytes(q string, a *krpc.MsgArgs) (tid string, b []byte
 	return t, b
 }
 
-func (s *Server) queryContext(ctx context.Context, addr Addr, q string, tid string, msg []byte) (reply krpc.Msg, writes numWrites, err error) {
+func (s *Server) QueryContext(ctx context.Context, addr Addr, q string, tid string, msg []byte) (reply []byte, writes numWrites, err error) {
 	defer func(started time.Time) {
 		s.logger().Printf(
-			"queryContext(%v) returned after %v (err=%v, reply.Y=%v, reply.E=%v, writes=%v)",
-			q, time.Since(started), err, reply.Y, reply.E, writes)
+			"queryContext(%v) returned after %v (err=%v, writes=%v)",
+			q, time.Since(started), err, writes)
 	}(time.Now())
-	replyChan := make(chan krpc.Msg, 1)
+	replyChan := make(chan []byte, 1)
 	t := &Transaction{
-		onResponse: func(m krpc.Msg) {
-			replyChan <- m
+		onResponse: func(b []byte, m krpc.Msg) {
+			replyChan <- b
 		},
 	}
 	tk := transactionKey{
@@ -833,7 +838,19 @@ func (s *Server) Ping(node *net.UDPAddr, callback func(krpc.Msg, error)) error {
 }
 
 func (s *Server) ping(node *net.UDPAddr, callback func(krpc.Msg, error)) error {
-	return s.query(context.Background(), NewAddr(node), "ping", nil, callback)
+	return s.query(context.Background(), NewAddr(node), "ping", nil, func(b []byte, err error) {
+		if callback == nil {
+			return
+		}
+
+		var m krpc.Msg
+		if err != nil {
+			callback(m, err)
+			return
+		}
+		err = bencode.Unmarshal(b, &m)
+		callback(m, err)
+	})
 }
 
 func (s *Server) announcePeer(node Addr, infoHash Int160, port int, token string, impliedPort bool) (m krpc.Msg, writes numWrites, err error) {
@@ -850,12 +867,17 @@ func (s *Server) announcePeer(node Addr, infoHash Int160, port int, token string
 		Token:       token,
 	})
 
-	m, writes, err = s.queryContext(
+	encoded, writes, err := s.QueryContext(
 		context.TODO(), node, q, tid, b,
 	)
 	if err != nil {
 		return
 	}
+
+	if err = bencode.Unmarshal(encoded, &m); err != nil {
+		return
+	}
+
 	if err = m.Error(); err != nil {
 		announceErrors.Add(1)
 		return
@@ -877,15 +899,22 @@ func (s *Server) addResponseNodes(d krpc.Msg) {
 }
 
 // Sends a find_node query to addr. targetID is the node we're looking for.
-func (s *Server) findNode(ctx context.Context, addr Addr, targetID Int160) (krpc.Msg, numWrites, error) {
+func (s *Server) findNode(ctx context.Context, addr Addr, targetID Int160) (m krpc.Msg, writes numWrites, err error) {
 	q := "find_node"
-	tid := s.nextTransactionID()
 	tid, b := s.makeQueryBytes(q, &krpc.MsgArgs{
 		Target: targetID.AsByteArray(),
 		Want:   []krpc.Want{krpc.WantNodes, krpc.WantNodes6},
 	})
 
-	m, writes, err := s.queryContext(ctx, addr, q, tid, b)
+	encoded, writes, err := s.QueryContext(ctx, addr, q, tid, b)
+	if err != nil {
+		return m, writes, err
+	}
+
+	if err = bencode.Unmarshal(encoded, &m); err != nil {
+		return m, writes, err
+	}
+
 	// Scrape peers from the response to put in the server's table before
 	// handing the response back to the caller.
 	s.mu.Lock()
@@ -925,7 +954,7 @@ func (s *Server) Close() {
 	}
 }
 
-func (s *Server) getPeers(ctx context.Context, addr Addr, infoHash Int160) (krpc.Msg, numWrites, error) {
+func (s *Server) getPeers(ctx context.Context, addr Addr, infoHash Int160) (m krpc.Msg, writes numWrites, err error) {
 	q := "get_peers"
 
 	tid, b := s.makeQueryBytes(q, &krpc.MsgArgs{
@@ -933,7 +962,16 @@ func (s *Server) getPeers(ctx context.Context, addr Addr, infoHash Int160) (krpc
 		// TODO: Maybe IPv4-only Servers won't want IPv6 nodes?
 		Want: []krpc.Want{krpc.WantNodes, krpc.WantNodes6},
 	})
-	m, writes, err := s.queryContext(ctx, addr, q, tid, b)
+
+	encoded, writes, err := s.QueryContext(ctx, addr, q, tid, b)
+	if err != nil {
+		return m, writes, err
+	}
+
+	if err = bencode.Unmarshal(encoded, &m); err != nil {
+		return m, writes, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.addResponseNodes(m)

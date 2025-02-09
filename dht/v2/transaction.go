@@ -10,11 +10,11 @@ import (
 // Transaction keeps track of a message exchange between nodes, such as a
 // query message and a response message.
 type Transaction struct {
-	onResponse func(krpc.Msg)
+	onResponse func([]byte, krpc.Msg)
 }
 
-func (t *Transaction) handleResponse(m krpc.Msg) {
-	t.onResponse(m)
+func (t *Transaction) handleResponse(b []byte, m krpc.Msg) {
+	t.onResponse(b, m)
 }
 
 const maxTransactionSends = 3

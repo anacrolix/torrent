@@ -40,10 +40,6 @@ type Client struct {
 	// 64-bit alignment of fields. See #262.
 	stats ConnStats
 
-	// locking counts, TODO remove these.
-	lcount uint64
-	ucount uint64
-
 	_mu    *stdsync.RWMutex
 	event  stdsync.Cond
 	closed chan struct{}
@@ -60,8 +56,6 @@ type Client struct {
 	torrents        map[metainfo.Hash]*torrent
 	dialRateLimiter *rate.Limiter
 }
-
-type ipStr string
 
 // Start the specified torrent.
 // Start adds starts up the torrent within the client downloading the missing pieces

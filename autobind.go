@@ -7,8 +7,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-type firewallCallback func(net.Addr) bool
-
 type dialer interface {
 	Dial(ctx context.Context, addr string) (net.Conn, error)
 }

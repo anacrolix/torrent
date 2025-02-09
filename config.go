@@ -174,6 +174,12 @@ func ClientConfigMuxer(m dht.Muxer) ClientConfigOption {
 	}
 }
 
+func ClientConfigPeerID(s string) ClientConfigOption {
+	return func(c *ClientConfig) {
+		c.PeerID = s
+	}
+}
+
 // NewDefaultClientConfig default client configuration.
 func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 	cc := &ClientConfig{

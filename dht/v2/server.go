@@ -776,11 +776,11 @@ func (s *Server) QueryContext(ctx context.Context, addr Addr, q string, tid stri
 		RemoteAddr: addr.String(),
 	}
 	s.mu.Lock()
-
 	s.stats.OutboundQueriesAttempted++
 	tk.T = tid
 	s.addTransaction(tk, t)
 	s.mu.Unlock()
+
 	sendErr := make(chan error, 1)
 	sendCtx, cancelSend := context.WithCancel(ctx)
 	defer cancelSend()
@@ -794,6 +794,7 @@ func (s *Server) QueryContext(ctx context.Context, addr Addr, q string, tid stri
 		err = ctx.Err()
 	case err = <-sendErr:
 	}
+
 	s.mu.Lock()
 	s.deleteTransaction(tk)
 	if err != nil {

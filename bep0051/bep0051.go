@@ -10,7 +10,9 @@ import (
 )
 
 const (
-	Query = "sample_infohashes"
+	Query  = "sample_infohashes"
+	TTLMin = 0
+	TTLMax = 21600
 )
 
 type Args struct {
@@ -54,6 +56,13 @@ func NewRequest(from krpc.ID, to krpc.ID) Request {
 
 type Sampler interface {
 	Snapshot(max int) (ttl uint, total uint, sample []byte)
+}
+
+// provide a noop implementation that returns no hashes.
+type EmptySampler struct{}
+
+func (t EmptySampler) Snapshot(max int) (ttl uint, total uint, sample []byte) {
+	return TTLMax, 0, []byte{}
 }
 
 func NewEndpoint(s Sampler) Endpoint {

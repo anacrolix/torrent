@@ -9,6 +9,10 @@ import (
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
 
+const (
+	Query = "sample_infohashes"
+)
+
 type Args struct {
 	ID     krpc.ID `bencode:"id"`               // ID of the querying Node
 	Target krpc.ID `bencode:"target,omitempty"` // ID of the node sought
@@ -40,7 +44,7 @@ func NewRequest(from krpc.ID, to krpc.ID) Request {
 	return Request{
 		T: krpc.TimestampTransactionID(),
 		Y: "q",
-		Q: "sample_infohashes",
+		Q: Query,
 		A: Args{
 			ID:     from,
 			Target: to,
@@ -60,7 +64,15 @@ type Endpoint struct {
 	s Sampler
 }
 
-func (t Endpoint) Handle(ctx context.Context, source dht.Addr, s *dht.Server, m *Request) error {
+func (t Endpoint) Handle(ctx context.Context, source dht.Addr, s *dht.Server, raw []byte, _ *krpc.Msg) error {
+	var (
+		m Request
+	)
+
+	if err := bencode.Unmarshal(raw, &m); err != nil {
+		return err
+	}
+
 	ttl, total, sampled := t.s.Snapshot(128)
 	msg := Response{
 		T: m.T,

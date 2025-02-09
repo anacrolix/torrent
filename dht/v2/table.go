@@ -4,10 +4,10 @@ import "errors"
 
 // Node table, with indexes on distance from root ID to bucket, and node addr.
 type table struct {
-	rootID  int160
+	rootID  Int160
 	k       int
 	buckets [160]bucket
-	addrs   map[string]map[int160]struct{}
+	addrs   map[string]map[Int160]struct{}
 }
 
 func (tbl *table) addrNodes(addr Addr) []*node {
@@ -35,15 +35,15 @@ func (tbl *table) dropNode(n *node) {
 	delete(b.nodes, n)
 }
 
-func (tbl *table) bucketForID(id int160) *bucket {
+func (tbl *table) bucketForID(id Int160) *bucket {
 	return &tbl.buckets[tbl.bucketIndex(id)]
 }
 
-func (tbl *table) bucketIndex(id int160) int {
+func (tbl *table) bucketIndex(id Int160) int {
 	if id == tbl.rootID {
 		panic("nobody puts the root ID in a bucket")
 	}
-	var a int160
+	var a Int160
 	a.Xor(&tbl.rootID, &id)
 	index := 160 - a.BitLen()
 	return index
@@ -58,14 +58,14 @@ func (tbl *table) forNodes(f func(*node) bool) bool {
 	return true
 }
 
-func (tbl *table) getNode(addr Addr, id int160) *node {
+func (tbl *table) getNode(addr Addr, id Int160) *node {
 	if id == tbl.rootID {
 		return nil
 	}
 	return tbl.buckets[tbl.bucketIndex(id)].GetNode(addr, id)
 }
 
-func (tbl *table) closestNodes(k int, target int160, filter func(*node) bool) (ret []*node) {
+func (tbl *table) closestNodes(k int, target Int160, filter func(*node) bool) (ret []*node) {
 	for bi := func() int {
 		if target == tbl.rootID {
 			return len(tbl.buckets) - 1
@@ -99,11 +99,11 @@ func (tbl *table) addNode(n *node) error {
 	}
 	b.AddNode(n, tbl.k)
 	if tbl.addrs == nil {
-		tbl.addrs = make(map[string]map[int160]struct{}, 160*tbl.k)
+		tbl.addrs = make(map[string]map[Int160]struct{}, 160*tbl.k)
 	}
 	as := n.addr.String()
 	if tbl.addrs[as] == nil {
-		tbl.addrs[as] = make(map[int160]struct{}, 1)
+		tbl.addrs[as] = make(map[Int160]struct{}, 1)
 	}
 	tbl.addrs[as][n.id] = struct{}{}
 	return nil

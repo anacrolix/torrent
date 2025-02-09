@@ -33,7 +33,7 @@ import (
 // is unable to function properly. Use `NewServer(nil)` to initialize a
 // default node.
 type Server struct {
-	id          int160
+	id          Int160
 	socket      net.PacketConn
 	resendDelay func() time.Duration
 
@@ -178,7 +178,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		s.config.ConnectionTracking = conntrack.NewInstance()
 	}
 	rand.Read(s.tokenServer.secret)
-	s.id = int160FromByteArray(c.NodeId)
+	s.id = Int160FromByteArray(c.NodeId)
 	s.table.rootID = s.id
 	s.resendDelay = s.config.QueryResendDelay
 	if s.resendDelay == nil {
@@ -215,7 +215,7 @@ func (t defaultMuxer) Method(name string, fn Handler) Muxer {
 	return t
 }
 
-func (t defaultMuxer) Handler(r *krpc.Msg) (pattern string, fn Handler) {
+func (t defaultMuxer) Handler(raw []byte, r *krpc.Msg) (pattern string, fn Handler) {
 	if fn, ok := t.m[r.Q]; ok {
 		return r.Q, fn
 	}
@@ -224,25 +224,25 @@ func (t defaultMuxer) Handler(r *krpc.Msg) (pattern string, fn Handler) {
 }
 
 type Handler interface {
-	Handle(ctx context.Context, src Addr, srv *Server, msg *krpc.Msg) error
+	Handle(ctx context.Context, src Addr, srv *Server, raw []byte, msg *krpc.Msg) error
 }
 
 type UnimplementedHandler struct{}
 
-func (t UnimplementedHandler) Handle(ctx context.Context, source Addr, s *Server, m *krpc.Msg) error {
+func (t UnimplementedHandler) Handle(ctx context.Context, source Addr, s *Server, raw []byte, m *krpc.Msg) error {
 	log.Println("unimplemented rpc method was received", m.Q, source.String())
 	return s.sendError(ctx, source, m.T, krpc.ErrorMethodUnknown)
 }
 
 type HandlerPing struct{}
 
-func (t HandlerPing) Handle(ctx context.Context, src Addr, srv *Server, msg *krpc.Msg) error {
+func (t HandlerPing) Handle(ctx context.Context, src Addr, srv *Server, raw []byte, msg *krpc.Msg) error {
 	return srv.reply(ctx, src, msg.T, krpc.Return{})
 }
 
 type HandlerPeers struct{}
 
-func (t HandlerPeers) Handle(ctx context.Context, source Addr, s *Server, m *krpc.Msg) error {
+func (t HandlerPeers) Handle(ctx context.Context, source Addr, s *Server, raw []byte, m *krpc.Msg) error {
 	var r krpc.Return
 
 	if err := s.setReturnNodes(&r, *m, source); err != nil {
@@ -256,7 +256,7 @@ func (t HandlerPeers) Handle(ctx context.Context, source Addr, s *Server, m *krp
 
 type HandlerAnnounce struct{}
 
-func (t HandlerAnnounce) Handle(ctx context.Context, source Addr, s *Server, m *krpc.Msg) error {
+func (t HandlerAnnounce) Handle(ctx context.Context, source Addr, s *Server, raw []byte, m *krpc.Msg) error {
 	readAnnouncePeer.Add(1)
 	if !s.validToken(m.A.Token, source) {
 		log.Println("invalid announce token received from:", source.String())
@@ -282,7 +282,7 @@ func (t HandlerAnnounce) Handle(ctx context.Context, source Addr, s *Server, m *
 // locates the nearest peer.
 type HandlerNearestPeer struct{}
 
-func (t HandlerNearestPeer) Handle(ctx context.Context, source Addr, s *Server, m *krpc.Msg) error {
+func (t HandlerNearestPeer) Handle(ctx context.Context, source Addr, s *Server, raw []byte, m *krpc.Msg) error {
 	var r krpc.Return
 	if err := s.setReturnNodes(&r, *m, source); err != nil {
 		return s.sendError(ctx, source, m.T, *err)
@@ -292,7 +292,7 @@ func (t HandlerNearestPeer) Handle(ctx context.Context, source Addr, s *Server, 
 
 type Muxer interface {
 	Method(name string, fn Handler) Muxer
-	Handler(r *krpc.Msg) (pattern string, fn Handler)
+	Handler(raw []byte, r *krpc.Msg) (pattern string, fn Handler)
 }
 
 func (s *Server) ServeMux(ctx context.Context, c net.PacketConn, m Muxer) error {
@@ -304,14 +304,14 @@ func (s *Server) ServeMux(ctx context.Context, c net.PacketConn, m Muxer) error 
 	return s.serveUntilClosed()
 }
 
-func (s *Server) handleQuery(ctx context.Context, source Addr, m krpc.Msg) {
+func (s *Server) handleQuery(ctx context.Context, source Addr, raw []byte, m krpc.Msg) {
 	var (
 		pattern string
 		fn      Handler
 	)
 
 	if m.SenderID() != nil {
-		if n, _ := s.getNode(source, int160FromByteArray(*m.SenderID()), !m.ReadOnly); n != nil {
+		if n, _ := s.getNode(source, Int160FromByteArray(*m.SenderID()), !m.ReadOnly); n != nil {
 			n.lastGotQuery = time.Now()
 		}
 	}
@@ -323,12 +323,12 @@ func (s *Server) handleQuery(ctx context.Context, source Addr, m krpc.Msg) {
 		}
 	}
 
-	if pattern, fn = s.mux.Handler(&m); fn == nil {
+	if pattern, fn = s.mux.Handler(raw, &m); fn == nil {
 		log.Println("unable to locate a handler for", pattern)
 		return
 	}
 
-	if err := fn.Handle(ctx, source, s, &m); err != nil {
+	if err := fn.Handle(ctx, source, s, raw, &m); err != nil {
 		log.Println("query failed", source.String(), err)
 		return
 	}
@@ -397,14 +397,14 @@ func (s *Server) processPacket(ctx context.Context, b []byte, addr Addr) {
 	}
 	var n *node
 	if sid := d.SenderID(); sid != nil {
-		n, _ = s.getNode(addr, int160FromByteArray(*sid), !d.ReadOnly)
+		n, _ = s.getNode(addr, Int160FromByteArray(*sid), !d.ReadOnly)
 		if n != nil && d.ReadOnly {
 			n.readOnly = true
 		}
 	}
 	if d.Y == "q" {
 		s.logger().Printf("received query %q from %v", d.Q, addr)
-		s.handleQuery(ctx, addr, d)
+		s.handleQuery(ctx, addr, b, d)
 		return
 	}
 	tk := transactionKey{
@@ -463,11 +463,11 @@ func (s *Server) ipBlocked(ip net.IP) (blocked bool) {
 
 // Adds directly to the node table.
 func (s *Server) AddNode(ni krpc.NodeInfo) error {
-	id := int160FromByteArray(ni.ID)
+	id := Int160FromByteArray(ni.ID)
 	if id.IsZero() {
 		return s.Ping(ni.Addr.UDP(), nil)
 	}
-	_, err := s.getNode(NewAddr(ni.Addr.UDP()), int160FromByteArray(ni.ID), true)
+	_, err := s.getNode(NewAddr(ni.Addr.UDP()), Int160FromByteArray(ni.ID), true)
 	return err
 }
 
@@ -494,7 +494,7 @@ func shouldReturnNodes6(queryWants []krpc.Want, querySource net.IP) bool {
 	return querySource.To4() == nil
 }
 
-func (s *Server) makeReturnNodes(target int160, filter func(krpc.NodeAddr) bool) []krpc.NodeInfo {
+func (s *Server) MakeReturnNodes(target Int160, filter func(krpc.NodeAddr) bool) []krpc.NodeInfo {
 	return s.closestGoodNodeInfos(8, target, filter)
 }
 
@@ -507,13 +507,16 @@ func (s *Server) setReturnNodes(r *krpc.Return, queryMsg krpc.Msg, querySource A
 	if queryMsg.A == nil {
 		return &krpcErrMissingArguments
 	}
-	target := int160FromByteArray(queryMsg.A.InfoHash)
+	target := Int160FromByteArray(queryMsg.A.InfoHash)
+
 	if shouldReturnNodes(queryMsg.A.Want, querySource.IP()) {
-		r.Nodes = s.makeReturnNodes(target, func(na krpc.NodeAddr) bool { return na.IP.To4() != nil })
+		r.Nodes = s.MakeReturnNodes(target, func(na krpc.NodeAddr) bool { return na.IP.To4() != nil })
 	}
+
 	if shouldReturnNodes6(queryMsg.A.Want, querySource.IP()) {
-		r.Nodes6 = s.makeReturnNodes(target, func(krpc.NodeAddr) bool { return true })
+		r.Nodes6 = s.MakeReturnNodes(target, func(krpc.NodeAddr) bool { return true })
 	}
+
 	return nil
 }
 
@@ -528,7 +531,7 @@ func (s *Server) sendError(ctx context.Context, addr Addr, t string, e krpc.Erro
 		return err
 	}
 	s.logger().Printf("sending error to %q: %v", addr, e)
-	_, err = s.writeToNode(ctx, b, addr, false, true)
+	_, err = s.SendToNode(ctx, b, addr, false, true)
 	if err != nil {
 		return err
 	}
@@ -549,7 +552,7 @@ func (s *Server) reply(ctx context.Context, addr Addr, t string, r krpc.Return) 
 		return err
 	}
 
-	wrote, err := s.writeToNode(ctx, b, addr, false, true)
+	wrote, err := s.SendToNode(ctx, b, addr, false, true)
 	if err != nil {
 		return err
 	}
@@ -561,7 +564,7 @@ func (s *Server) reply(ctx context.Context, addr Addr, t string, r krpc.Return) 
 }
 
 // Returns the node if it's in the routing table, adding it if appropriate.
-func (s *Server) getNode(addr Addr, id int160, tryAdd bool) (*node, error) {
+func (s *Server) getNode(addr Addr, id Int160, tryAdd bool) (*node, error) {
 	if n := s.table.getNode(addr, id); n != nil {
 		return n, nil
 	}
@@ -618,7 +621,7 @@ func (s *Server) nodeErr(n *node) error {
 	return nil
 }
 
-func (s *Server) writeToNode(ctx context.Context, b []byte, node Addr, wait, rate bool) (wrote bool, err error) {
+func (s *Server) SendToNode(ctx context.Context, b []byte, node Addr, wait, rate bool) (wrote bool, err error) {
 	if list := s.ipBlockList; list != nil {
 		if r, ok := list.Lookup(node.IP()); ok {
 			err = fmt.Errorf("write to %v blocked by %v", node, r)
@@ -712,7 +715,7 @@ func (s *Server) beginQuery(addr Addr, reason string, f func() numWrites) stm.Op
 	}
 }
 
-func (s *Server) query(addr Addr, q string, a *krpc.MsgArgs, callback func(krpc.Msg, error)) error {
+func (s *Server) query(ctx context.Context, addr Addr, q string, a *krpc.MsgArgs, callback func(krpc.Msg, error)) error {
 	if callback == nil {
 		callback = func(krpc.Msg, error) {}
 	}
@@ -720,7 +723,8 @@ func (s *Server) query(addr Addr, q string, a *krpc.MsgArgs, callback func(krpc.
 		stm.Atomically(
 			s.beginQuery(addr, fmt.Sprintf("send dht query %q", q),
 				func() numWrites {
-					m, writes, err := s.queryContext(context.Background(), addr, q, a)
+					tid, b := s.makeQueryBytes(q, a)
+					m, writes, err := s.queryContext(ctx, addr, q, tid, b)
 					callback(m, err)
 					return writes
 				},
@@ -730,7 +734,8 @@ func (s *Server) query(addr Addr, q string, a *krpc.MsgArgs, callback func(krpc.
 	return nil
 }
 
-func (s *Server) makeQueryBytes(q string, a *krpc.MsgArgs, t string) []byte {
+func (s *Server) makeQueryBytes(q string, a *krpc.MsgArgs) (tid string, b []byte) {
+	t := s.nextTransactionID()
 	if a == nil {
 		a = &krpc.MsgArgs{}
 	}
@@ -746,10 +751,11 @@ func (s *Server) makeQueryBytes(q string, a *krpc.MsgArgs, t string) []byte {
 	if err != nil {
 		panic(err)
 	}
-	return b
+
+	return t, b
 }
 
-func (s *Server) queryContext(ctx context.Context, addr Addr, q string, a *krpc.MsgArgs) (reply krpc.Msg, writes numWrites, err error) {
+func (s *Server) queryContext(ctx context.Context, addr Addr, q string, tid string, msg []byte) (reply krpc.Msg, writes numWrites, err error) {
 	defer func(started time.Time) {
 		s.logger().Printf(
 			"queryContext(%v) returned after %v (err=%v, reply.Y=%v, reply.E=%v, writes=%v)",
@@ -765,7 +771,7 @@ func (s *Server) queryContext(ctx context.Context, addr Addr, q string, a *krpc.
 		RemoteAddr: addr.String(),
 	}
 	s.mu.Lock()
-	tid := s.nextTransactionID()
+
 	s.stats.OutboundQueriesAttempted++
 	tk.T = tid
 	s.addTransaction(tk, t)
@@ -774,7 +780,7 @@ func (s *Server) queryContext(ctx context.Context, addr Addr, q string, a *krpc.
 	sendCtx, cancelSend := context.WithCancel(ctx)
 	defer cancelSend()
 	go pprof.Do(sendCtx, pprof.Labels("q", q), func(ctx context.Context) {
-		s.transactionQuerySender(ctx, sendErr, s.makeQueryBytes(q, a, tid), &writes, addr)
+		s.transactionQuerySender(ctx, sendErr, msg, &writes, addr)
 	})
 	expvars.Add(fmt.Sprintf("outbound %s queries", q), 1)
 	select {
@@ -799,7 +805,7 @@ func (s *Server) transactionQuerySender(sendCtx context.Context, sendErr chan<- 
 	err := transactionSender(
 		sendCtx,
 		func() error {
-			wrote, err := s.writeToNode(sendCtx, b, addr, *writes == 0, *writes != 0)
+			wrote, err := s.SendToNode(sendCtx, b, addr, *writes == 0, *writes != 0)
 			if wrote {
 				*writes++
 			}
@@ -827,22 +833,25 @@ func (s *Server) Ping(node *net.UDPAddr, callback func(krpc.Msg, error)) error {
 }
 
 func (s *Server) ping(node *net.UDPAddr, callback func(krpc.Msg, error)) error {
-	return s.query(NewAddr(node), "ping", nil, callback)
+	return s.query(context.Background(), NewAddr(node), "ping", nil, callback)
 }
 
-func (s *Server) announcePeer(node Addr, infoHash int160, port int, token string, impliedPort bool) (m krpc.Msg, writes numWrites, err error) {
+func (s *Server) announcePeer(node Addr, infoHash Int160, port int, token string, impliedPort bool) (m krpc.Msg, writes numWrites, err error) {
 	if port == 0 && !impliedPort {
 		err = errors.New("no port specified")
 		return
 	}
+
+	q := "announce_peer"
+	tid, b := s.makeQueryBytes(q, &krpc.MsgArgs{
+		ImpliedPort: impliedPort,
+		InfoHash:    infoHash.AsByteArray(),
+		Port:        &port,
+		Token:       token,
+	})
+
 	m, writes, err = s.queryContext(
-		context.TODO(), node, "announce_peer",
-		&krpc.MsgArgs{
-			ImpliedPort: impliedPort,
-			InfoHash:    infoHash.AsByteArray(),
-			Port:        &port,
-			Token:       token,
-		},
+		context.TODO(), node, q, tid, b,
 	)
 	if err != nil {
 		return
@@ -863,16 +872,20 @@ func (s *Server) addResponseNodes(d krpc.Msg) {
 		return
 	}
 	d.R.ForAllNodes(func(ni krpc.NodeInfo) {
-		s.getNode(NewAddr(ni.Addr.UDP()), int160FromByteArray(ni.ID), true)
+		s.getNode(NewAddr(ni.Addr.UDP()), Int160FromByteArray(ni.ID), true)
 	})
 }
 
 // Sends a find_node query to addr. targetID is the node we're looking for.
-func (s *Server) findNode(addr Addr, targetID int160) (krpc.Msg, numWrites, error) {
-	m, writes, err := s.queryContext(context.TODO(), addr, "find_node", &krpc.MsgArgs{
+func (s *Server) findNode(ctx context.Context, addr Addr, targetID Int160) (krpc.Msg, numWrites, error) {
+	q := "find_node"
+	tid := s.nextTransactionID()
+	tid, b := s.makeQueryBytes(q, &krpc.MsgArgs{
 		Target: targetID.AsByteArray(),
 		Want:   []krpc.Want{krpc.WantNodes, krpc.WantNodes6},
 	})
+
+	m, writes, err := s.queryContext(ctx, addr, q, tid, b)
 	// Scrape peers from the response to put in the server's table before
 	// handing the response back to the caller.
 	s.mu.Lock()
@@ -912,12 +925,15 @@ func (s *Server) Close() {
 	}
 }
 
-func (s *Server) getPeers(ctx context.Context, addr Addr, infoHash int160) (krpc.Msg, numWrites, error) {
-	m, writes, err := s.queryContext(ctx, addr, "get_peers", &krpc.MsgArgs{
+func (s *Server) getPeers(ctx context.Context, addr Addr, infoHash Int160) (krpc.Msg, numWrites, error) {
+	q := "get_peers"
+
+	tid, b := s.makeQueryBytes(q, &krpc.MsgArgs{
 		InfoHash: infoHash.AsByteArray(),
 		// TODO: Maybe IPv4-only Servers won't want IPv6 nodes?
 		Want: []krpc.Want{krpc.WantNodes, krpc.WantNodes6},
 	})
+	m, writes, err := s.queryContext(ctx, addr, q, tid, b)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.addResponseNodes(m)
@@ -930,7 +946,7 @@ func (s *Server) getPeers(ctx context.Context, addr Addr, infoHash int160) (krpc
 			expvars.Add("get_peers responses with token", 1)
 		}
 		if m.SenderID() != nil && m.R.Token != nil {
-			if n, _ := s.getNode(addr, int160FromByteArray(*m.SenderID()), false); n != nil {
+			if n, _ := s.getNode(addr, Int160FromByteArray(*m.SenderID()), false); n != nil {
 				n.announceToken = m.R.Token
 			}
 		}
@@ -940,7 +956,7 @@ func (s *Server) getPeers(ctx context.Context, addr Addr, infoHash int160) (krpc
 
 func (s *Server) closestGoodNodeInfos(
 	k int,
-	targetID int160,
+	targetID Int160,
 	filter func(krpc.NodeAddr) bool,
 ) (
 	ret []krpc.NodeInfo,
@@ -953,7 +969,7 @@ func (s *Server) closestGoodNodeInfos(
 	return
 }
 
-func (s *Server) closestNodes(k int, target int160, filter func(*node) bool) []*node {
+func (s *Server) closestNodes(k int, target Int160, filter func(*node) bool) []*node {
 	return s.table.closestNodes(k, target, filter)
 }
 

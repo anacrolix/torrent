@@ -27,7 +27,7 @@ func (b *bucket) AddNode(n *node, k int) {
 	b.nodes[n] = struct{}{}
 }
 
-func (b *bucket) GetNode(addr Addr, id int160) *node {
+func (b *bucket) GetNode(addr Addr, id Int160) *node {
 	for n := range b.nodes {
 		if n.hasAddrAndID(addr, id) {
 			return n

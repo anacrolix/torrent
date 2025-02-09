@@ -30,7 +30,7 @@ type Announce struct {
 
 	pending  *stm.Var // How many transactions are still ongoing (int).
 	server   *Server
-	infoHash int160 // Target
+	infoHash Int160 // Target
 	// Count of (probably) distinct addresses we've sent get_peers requests to.
 	numContacted int64
 	// The torrent port that we're announcing.
@@ -68,7 +68,7 @@ func (s *Server) Announce(infoHash [20]byte, port int, impliedPort bool) (*Annou
 	if err != nil {
 		return nil, err
 	}
-	infoHashInt160 := int160FromByteArray(infoHash)
+	infoHashInt160 := Int160FromByteArray(infoHash)
 	a := &Announce{
 		Peers:                make(chan PeersValues, 100),
 		values:               make(chan PeersValues),
@@ -144,7 +144,7 @@ func (a *Announce) shouldContact(addr krpc.NodeAddr, _ *stm.Tx) bool {
 }
 
 func (a *Announce) responseNode(node krpc.NodeInfo) {
-	i := int160FromByteArray(node.ID)
+	i := Int160FromByteArray(node.ID)
 	stm.Atomically(a.pendContact(addrMaybeId{node.Addr, &i}))
 }
 

@@ -12,7 +12,7 @@ import (
 
 type addrMaybeId struct {
 	Addr krpc.NodeAddr
-	Id   *int160
+	Id   *Int160
 }
 
 func (me addrMaybeId) String() string {
@@ -23,7 +23,7 @@ func (me addrMaybeId) String() string {
 	}
 }
 
-func nodesByDistance(target int160) stmutil.Settish {
+func nodesByDistance(target Int160) stmutil.Settish {
 	return stmutil.NewSortedSet(func(_l, _r interface{}) bool {
 		var ml missinggo.MultiLess
 		l := _l.(addrMaybeId)

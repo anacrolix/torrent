@@ -21,13 +21,13 @@ func (me TraversalStats) String() string {
 
 // Prioritizes addrs to try by distance from target, disallowing repeat contacts.
 type traversal struct {
-	targetInfohash      int160
+	targetInfohash      Int160
 	triedAddrs          *stm.Var // Settish of krpc.NodeAddr.String
 	nodesPendingContact *stm.Var // Settish of addrMaybeId sorted by distance from the target
 	addrBestIds         *stm.Var // Mappish Addr to best
 }
 
-func newTraversal(targetInfohash int160) traversal {
+func newTraversal(targetInfohash Int160) traversal {
 	return traversal{
 		targetInfohash:      targetInfohash,
 		triedAddrs:          stm.NewVar(stmutil.NewSet()),
@@ -52,7 +52,7 @@ func (t traversal) pendContact(node addrMaybeId) stm.Operation {
 			if node.Id == nil {
 				return
 			}
-			best := _best.(*int160)
+			best := _best.(*Int160)
 			if best != nil && distance(*best, t.targetInfohash).Cmp(distance(*node.Id, t.targetInfohash)) <= 0 {
 				return
 			}

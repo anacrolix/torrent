@@ -8,7 +8,7 @@ import (
 
 type nodeKey struct {
 	addr Addr
-	id   int160
+	id   Int160
 }
 
 type node struct {
@@ -22,7 +22,7 @@ type node struct {
 	consecutiveFailures int
 }
 
-func (n *node) hasAddrAndID(addr Addr, id int160) bool {
+func (n *node) hasAddrAndID(addr Addr, id Int160) bool {
 	return id == n.id && n.addr.String() == addr.String()
 }
 

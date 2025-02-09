@@ -131,6 +131,7 @@ type ClientConfig struct {
 	// OnQuery hook func
 	DHTOnQuery      func(query *krpc.Msg, source net.Addr) (propagate bool)
 	DHTAnnouncePeer func(ih metainfo.Hash, ip net.IP, port int, portOk bool)
+	DHTMuxer        dht.Muxer
 }
 
 func (cfg *ClientConfig) errors() llog {
@@ -166,6 +167,13 @@ func ClientConfigSeed(b bool) ClientConfigOption {
 	}
 }
 
+// configure what endpoints the dht's will support.
+func ClientConfigMuxer(m dht.Muxer) ClientConfigOption {
+	return func(c *ClientConfig) {
+		c.DHTMuxer = m
+	}
+}
+
 // NewDefaultClientConfig default client configuration.
 func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 	cc := &ClientConfig{
@@ -195,6 +203,7 @@ func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 		Warn:            discard{},
 		Debug:           discard{},
 		DHTAnnouncePeer: func(ih metainfo.Hash, ip net.IP, port int, portOk bool) {},
+		DHTMuxer:        dht.DefaultMuxer(),
 		Handshaker: connections.NewHandshaker(
 			connections.AutoFirewall(),
 		),

@@ -332,7 +332,7 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	}
 
 	go func() {
-		if err = s.ServeMux(context.Background(), conn, dht.DefaultMuxer()); err != nil {
+		if err = s.ServeMux(context.Background(), conn, cl.config.DHTMuxer); err != nil {
 			log.Println("dht failed", err)
 		}
 	}()

@@ -54,9 +54,10 @@ func NewRequest(from krpc.ID, to krpc.ID) Request {
 	}
 }
 
-func NewRequestBinary(from krpc.ID, to krpc.ID) ([]byte, error) {
+func NewRequestBinary(from krpc.ID, to krpc.ID) (Request, []byte, error) {
 	req := NewRequest(from, to)
-	return bencode.Marshal(req)
+	encoded, err := bencode.Marshal(req)
+	return req, encoded, err
 }
 
 type Sampler interface {

@@ -210,8 +210,9 @@ type defaultMuxer struct {
 	fallback Handler
 }
 
-func (t defaultMuxer) Method(name string, fn Handler) {
+func (t defaultMuxer) Method(name string, fn Handler) Muxer {
 	t.m[name] = fn
+	return t
 }
 
 func (t defaultMuxer) Handler(r *krpc.Msg) (pattern string, fn Handler) {
@@ -290,7 +291,7 @@ func (t HandlerNearestPeer) Handle(ctx context.Context, source Addr, s *Server, 
 }
 
 type Muxer interface {
-	Method(name string, fn Handler)
+	Method(name string, fn Handler) Muxer
 	Handler(r *krpc.Msg) (pattern string, fn Handler)
 }
 

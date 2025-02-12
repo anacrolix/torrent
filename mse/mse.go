@@ -374,13 +374,14 @@ func (h *handshake) initerSteps() (ret io.ReadWriter, selected CryptoMethod, err
 	buf := &bytes.Buffer{}
 	padLen := uint16(newPadLen())
 	if len(h.ia) > math.MaxUint16 {
-		err = errors.New("initial payload too large")
-		return
+		return nil, selected, errors.New("initial payload too large")
 	}
+
 	err = marshal(buf, vc[:], h.cryptoProvides, padLen, zeroPad[:padLen], uint16(len(h.ia)), h.ia)
 	if err != nil {
-		return
+		return nil, selected, err
 	}
+
 	e := h.newEncrypt(true)
 	be := make([]byte, buf.Len())
 	e.XORKeyStream(be, buf.Bytes())
@@ -391,35 +392,32 @@ func (h *handshake) initerSteps() (ret io.ReadWriter, selected CryptoMethod, err
 	// Read until the all zero VC. At this point we've only read the 96 byte
 	// public key, Y. There is potentially 512 byte padding, between us and
 	// the 8 byte verification constant.
-	err = readUntil(io.LimitReader(h.conn, 520), eVC[:])
-	if err != nil {
-		if err == io.EOF {
-			err = errors.New("failed to synchronize on VC")
-		} else {
-			err = fmt.Errorf("error reading until VC: %s", err)
-		}
-		return
+	if err = readUntil(io.LimitReader(h.conn, 520), eVC[:]); err == io.EOF {
+		return nil, selected, errors.New("failed to synchronize on VC")
+	} else if err != nil {
+		return nil, selected, fmt.Errorf("error reading until VC: %s", err)
 	}
 	r := newCipherReader(bC, h.conn)
 	var method CryptoMethod
 	err = unmarshal(r, &method, &padLen)
 	if err != nil {
-		return
+		return nil, selected, err
 	}
-	_, err = io.CopyN(ioutil.Discard, r, int64(padLen))
+	_, err = io.CopyN(io.Discard, r, int64(padLen))
 	if err != nil {
-		return
+		return nil, selected, err
 	}
+
 	selected = method & h.cryptoProvides
 	switch selected {
 	case CryptoMethodRC4:
-		ret = readWriter{r, &cipherWriter{e, h.conn, nil}}
+		return readWriter{r, &cipherWriter{e, h.conn, nil}}, selected, nil
 	case CryptoMethodPlaintext:
 		ret = h.conn
+		return h.conn, selected, nil
 	default:
-		err = fmt.Errorf("receiver chose unsupported method: %x", method)
+		return nil, selected, fmt.Errorf("receiver chose unsupported method: %x", method)
 	}
-	return
 }
 
 var ErrNoSecretKeyMatch = errors.New("no skey matched")
@@ -519,14 +517,14 @@ func (h *handshake) Do() (ret io.ReadWriter, method CryptoMethod, err error) {
 	io.ReadFull(rand.Reader, pad)
 	err = h.postWrite(pad)
 	if err != nil {
-		return
+		return nil, method, err
 	}
+
 	if h.initer {
-		ret, method, err = h.initerSteps()
-	} else {
-		ret, method, err = h.receiverSteps()
+		return h.initerSteps()
 	}
-	return
+
+	return h.receiverSteps()
 }
 
 func InitiateHandshake(rw io.ReadWriter, skey []byte, initialPayload []byte, cryptoProvides CryptoMethod) (ret io.ReadWriter, method CryptoMethod, err error) {

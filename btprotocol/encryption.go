@@ -30,7 +30,7 @@ func (t EncryptionHandshake) Incoming(rw io.ReadWriter) (updated io.ReadWriter, 
 	// read the bittorrent protocol magic string initially
 	// in case this connection is not an encrypted connection.
 	if _, err := io.CopyN(buf, rw, 20); err != nil {
-		return updated, updated, err
+		return nil, nil, err
 	} else if buf.String() == Protocol {
 		return rw, buffered{
 			Reader: io.MultiReader(bytes.NewBuffer(buf.Bytes()), rw),

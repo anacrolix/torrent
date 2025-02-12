@@ -218,6 +218,10 @@ func (t Handshake) Incoming(sock io.ReadWriter) (pbits ExtensionBits, pinfo Hand
 		}
 	)
 
+	if sock == nil {
+		panic("incoming socket should never be nil")
+	}
+
 	if _, err := pmsg.ReadFrom(sock); err != nil {
 		return pbits, pinfo, err
 	}

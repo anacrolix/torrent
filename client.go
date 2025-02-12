@@ -794,9 +794,11 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 
 	if rw, buffered, err = encryption.Incoming(rw); err != nil && cl.config.HeaderObfuscationPolicy.RequirePreferred {
 		return t, errors.Wrap(err, "connection does not have the required header obfuscation")
-	} else if err != nil {
+	} else if err != nil && buffered == nil {
 		cl.config.debug().Println("encryption handshake failed", err)
 		return nil, err
+	} else if err != nil {
+		cl.config.debug().Println("encryption handshake failed", err)
 	}
 
 	ebits, info, err := pp.Handshake{

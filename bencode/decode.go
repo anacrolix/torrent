@@ -7,7 +7,6 @@ import (
 	"io"
 	"math/big"
 	"reflect"
-	"runtime"
 	"strconv"
 	"sync"
 )
@@ -30,12 +29,14 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 			return
 		}
 		r := recover()
-		_, ok := r.(runtime.Error)
-		if ok {
-			panic(r)
+		if r == nil {
+			return
 		}
-		err, ok = r.(error)
-		if !ok && r != nil {
+
+		switch x := r.(type) {
+		case error:
+			err = x
+		default:
 			panic(r)
 		}
 	}()

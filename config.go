@@ -180,6 +180,16 @@ func ClientConfigPeerID(s string) ClientConfigOption {
 	}
 }
 
+func ClientConfigStorage(s storage.ClientImpl) ClientConfigOption {
+	return func(c *ClientConfig) {
+		c.DefaultStorage = s
+	}
+}
+
+func ClientConfigStorageDir(s string) ClientConfigOption {
+	return ClientConfigStorage(storage.NewFile(s))
+}
+
 // NewDefaultClientConfig default client configuration.
 func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 	cc := &ClientConfig{

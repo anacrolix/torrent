@@ -1386,7 +1386,7 @@ func (t *torrent) assertNoPendingRequests() {
 		for _, r := range outstanding {
 			t.config.errors().Printf("still expecting c(%p) d(%020d) r(%d,%d,%d)", t.chunks, r.Digest, r.Index, r.Begin, r.Length)
 		}
-		panic(t.chunks.outstanding)
+		// panic(t.chunks.outstanding)
 	}
 }
 

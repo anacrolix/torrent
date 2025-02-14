@@ -197,7 +197,7 @@ func TestChunkFill(t *testing.T) {
 }
 
 func TestChunksRequests(t *testing.T) {
-	greetingTempDir, mi := testutil.GreetingTestTorrent()
+	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
 	defer os.RemoveAll(greetingTempDir)
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
@@ -240,7 +240,7 @@ func TestChunksRequests(t *testing.T) {
 }
 
 func TestChunksVariousCLength(t *testing.T) {
-	greetingTempDir, mi := testutil.GreetingTestTorrent()
+	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
 	defer os.RemoveAll(greetingTempDir)
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
@@ -274,7 +274,7 @@ func TestChunksVariousCLength(t *testing.T) {
 }
 
 func TestChunksFailed(t *testing.T) {
-	greetingTempDir, mi := testutil.GreetingTestTorrent()
+	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
 	defer os.RemoveAll(greetingTempDir)
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)

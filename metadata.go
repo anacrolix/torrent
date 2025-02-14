@@ -149,7 +149,7 @@ func NewFromInfo(i metainfo.Info, options ...Option) (t Metadata, err error) {
 }
 
 // NewFromMagnet creates a torrent from a magnet uri.
-func NewFromMagnet(uri string) (t Metadata, err error) {
+func NewFromMagnet(uri string, options ...Option) (t Metadata, err error) {
 	var (
 		m metainfo.Magnet
 	)
@@ -158,11 +158,17 @@ func NewFromMagnet(uri string) (t Metadata, err error) {
 		return t, errors.WithStack(err)
 	}
 
-	return New(
-		m.InfoHash,
+	options = append([]Option{
 		OptionDisplayName(m.DisplayName),
 		OptionTrackers([][]string{m.Trackers}),
 		OptionWebseeds(m.Params["ws"]),
+	},
+		options...,
+	)
+
+	return New(
+		m.InfoHash,
+		options...,
 	)
 }
 

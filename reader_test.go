@@ -9,13 +9,14 @@ import (
 
 	"github.com/james-lawrence/torrent"
 	"github.com/james-lawrence/torrent/internal/testutil"
+	"github.com/james-lawrence/torrent/storage"
 )
 
 func TestReaderReadContext(t *testing.T) {
 	cl, err := torrent.NewClient(torrent.TestingConfig(t))
 	require.NoError(t, err)
 	defer cl.Close()
-	ts, err := torrent.NewFromMetaInfo(testutil.GreetingMetaInfo())
+	ts, err := torrent.NewFromMetaInfo(testutil.GreetingMetaInfo(), torrent.OptionStorage(storage.NewFile(cl.Config().DataDir)))
 	require.NoError(t, err)
 	tt, _, err := cl.Start(ts)
 	require.NoError(t, err)

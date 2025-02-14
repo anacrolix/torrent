@@ -4,7 +4,6 @@ import (
 	"context"
 	netContext "context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	_ "net/http/pprof"
@@ -64,7 +63,7 @@ func (tl *testLayout) Destroy() error {
 }
 
 func newGreetingLayout() (tl testLayout, err error) {
-	tl.BaseDir, err = ioutil.TempDir("", "torrentfs")
+	tl.BaseDir, err = os.MkdirTemp("", "torrentfs")
 	if err != nil {
 		return
 	}
@@ -98,7 +97,8 @@ func TestUnmountWedged(t *testing.T) {
 	).Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	defer client.Close()
-	tt, _, err := client.MaybeStart(torrent.NewFromMetaInfo(layout.Metainfo))
+
+	tt, _, err := client.MaybeStart(torrent.NewFromMetaInfo(layout.Metainfo, torrent.OptionStorage(storage.NewFile(cfg.DataDir))))
 	require.NoError(t, err)
 	fs := New(client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
@@ -135,7 +135,7 @@ func TestUnmountWedged(t *testing.T) {
 	}()
 	go func() {
 		defer cancel()
-		_, err := ioutil.ReadFile(filepath.Join(layout.MountDir, tt.Info().Name))
+		_, err := os.ReadFile(filepath.Join(layout.MountDir, tt.Info().Name))
 		require.Error(t, err)
 	}()
 
@@ -178,7 +178,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	defer testutil.ExportStatusWriter(seeder, "s")()
 	// Just to mix things up, the seeder starts with the data, but the leecher
 	// starts with the metainfo.
-	seederTorrent, _, err := seeder.MaybeStart(torrent.NewFromMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.HashInfoBytes().HexString())))
+	seederTorrent, _, err := seeder.MaybeStart(torrent.NewFromMagnet(fmt.Sprintf("magnet:?xt=urn:btih:%s", layout.Metainfo.HashInfoBytes().HexString()), torrent.OptionStorage(storage.NewFile(layout.Completed))))
 	require.NoError(t, err)
 	go func() {
 		// Wait until we get the metainfo, then check for the data.
@@ -187,7 +187,6 @@ func TestDownloadOnDemand(t *testing.T) {
 	}()
 	cfg = torrent.NewDefaultClientConfig()
 	cfg.DisableTrackers = true
-	cfg.DefaultStorage = storage.NewMMap(filepath.Join(layout.BaseDir, "download"))
 	leecher, err := autobind.NewLoopback(
 		autobind.DisableTCP,
 		autobind.DisableDHT,
@@ -195,7 +194,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	require.NoError(t, err)
 	testutil.ExportStatusWriter(leecher, "l")()
 	defer leecher.Close()
-	leecherTorrent, _, err := leecher.MaybeStart(torrent.NewFromMetaInfo(layout.Metainfo))
+	leecherTorrent, _, err := leecher.MaybeStart(torrent.NewFromMetaInfo(layout.Metainfo, torrent.OptionStorage(storage.NewMMap(filepath.Join(layout.BaseDir, "download")))))
 	require.NoError(t, err)
 	leecherTorrent.Tune(torrent.TuneClientPeer(seeder))
 	fs := New(leecher)

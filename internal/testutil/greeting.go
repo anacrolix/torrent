@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"testing"
 
 	"github.com/james-lawrence/torrent/metainfo"
 )
@@ -44,14 +45,11 @@ func GreetingMetaInfo() *metainfo.MetaInfo {
 // GreetingTestTorrent a temporary directory containing the completed "greeting" torrent,
 // and a corresponding metainfo describing it. The temporary directory can be
 // cleaned away with os.RemoveAll.
-func GreetingTestTorrent() (tempDir string, metaInfo *metainfo.MetaInfo) {
-	tempDir, err := ioutil.TempDir(os.TempDir(), "")
-	if err != nil {
-		panic(err)
-	}
+func GreetingTestTorrent(t testing.TB) (tempDir string, metaInfo *metainfo.MetaInfo) {
+	tempDir = t.TempDir()
 	CreateDummyTorrentData(tempDir)
 	metaInfo = GreetingMetaInfo()
-	return
+	return tempDir, metaInfo
 }
 
 // RandomDataTorrent generates a torrent from random data.

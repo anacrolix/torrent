@@ -16,7 +16,6 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/james-lawrence/torrent/mse"
-	"github.com/james-lawrence/torrent/storage"
 )
 
 // DefaultHTTPUserAgent ...
@@ -59,11 +58,6 @@ type ClientConfig struct {
 
 	// User-provided Client peer ID. If not present, one is generated automatically.
 	PeerID string
-
-	// Called to instantiate storage for each added torrent. Builtin backends
-	// are in the storage package. If not set, the "file" implementation is
-	// used.
-	DefaultStorage storage.ClientImpl
 
 	HeaderObfuscationPolicy HeaderObfuscationPolicy
 	// The crypto methods to offer when initiating connections with header obfuscation.
@@ -178,16 +172,6 @@ func ClientConfigPeerID(s string) ClientConfigOption {
 	return func(c *ClientConfig) {
 		c.PeerID = s
 	}
-}
-
-func ClientConfigStorage(s storage.ClientImpl) ClientConfigOption {
-	return func(c *ClientConfig) {
-		c.DefaultStorage = s
-	}
-}
-
-func ClientConfigStorageDir(s string) ClientConfigOption {
-	return ClientConfigStorage(storage.NewFile(s))
 }
 
 // NewDefaultClientConfig default client configuration.

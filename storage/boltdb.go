@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/binary"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -27,6 +28,7 @@ type boltDBTorrent struct {
 }
 
 func NewBoltDB(filePath string) ClientImpl {
+	expect.Nil(os.MkdirAll(filePath, 0700))
 	db, err := bolt.Open(filepath.Join(filePath, "bolt.db"), 0600, &bolt.Options{
 		Timeout: time.Second,
 	})

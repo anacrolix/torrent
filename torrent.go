@@ -109,12 +109,6 @@ func DownloadInto(ctx context.Context, dst io.Writer, m Torrent, options ...Tune
 }
 
 func newTorrent(cl *Client, src Metadata) *torrent {
-	// use provided storage, if provided
-	storageClient := cl.defaultStorage
-	if src.Storage != nil {
-		storageClient = storage.NewClient(src.Storage)
-	}
-
 	m := &sync.RWMutex{}
 	t := &torrent{
 		displayName: src.DisplayName,
@@ -125,18 +119,15 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		peers: newPeerPool(32, func(p Peer) peerPriority {
 			return bep40PriorityIgnoreError(cl.publicAddr(p.IP), p.addr())
 		}),
-		conns:             make(map[*connection]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
-		halfOpen:          make(map[string]Peer),
-		pieceStateChanges: pubsub.NewPubSub(),
-
-		storageOpener:       storageClient,
-		maxEstablishedConns: cl.config.EstablishedConnsPerTorrent,
-
+		conns:                   make(map[*connection]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
+		halfOpen:                make(map[string]Peer),
+		pieceStateChanges:       pubsub.NewPubSub(),
+		storageOpener:           storage.NewClient(src.Storage),
+		maxEstablishedConns:     cl.config.EstablishedConnsPerTorrent,
 		networkingEnabled:       true,
 		duplicateRequestTimeout: time.Second,
-
-		chunks: newChunks(src.ChunkSize, &metainfo.Info{}),
-		pex:    newPex(),
+		chunks:                  newChunks(src.ChunkSize, &metainfo.Info{}),
+		pex:                     newPex(),
 	}
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
 	t.event = &sync.Cond{L: tlocker{torrent: t}}
@@ -853,8 +844,8 @@ func (t *torrent) close() (err error) {
 
 	if t.storage != nil {
 		t.storageLock.Lock()
+		defer t.storageLock.Unlock()
 		t.storage.Close()
-		t.storageLock.Unlock()
 	}
 
 	for conn := range t.conns {

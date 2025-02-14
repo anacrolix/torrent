@@ -30,7 +30,6 @@ import (
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/x/stringsx"
 	"github.com/james-lawrence/torrent/metainfo"
-	"github.com/james-lawrence/torrent/storage"
 )
 
 // Client contain zero or more Torrents. A Client manages a blocklist, the
@@ -46,11 +45,10 @@ type Client struct {
 
 	config *ClientConfig
 
-	peerID         PeerID
-	defaultStorage *storage.Client
-	onClose        []func()
-	conns          []socket
-	dhtServers     []*dht.Server
+	peerID     PeerID
+	onClose    []func()
+	conns      []socket
+	dhtServers []*dht.Server
 
 	extensionBytes  pp.ExtensionBits // Our BitTorrent protocol extension bytes, sent in our BT handshakes.
 	torrents        map[metainfo.Hash]*torrent
@@ -306,17 +304,6 @@ func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 
 	cl.extensionBytes = defaultPeerExtensionBytes()
 	cl.event.L = cl.locker()
-	storageImpl := cfg.DefaultStorage
-	if storageImpl == nil {
-		// We'd use mmap but HFS+ doesn't support sparse files.
-		storageImpl = storage.NewFile(cfg.DataDir)
-		cl.onClose = append(cl.onClose, func() {
-			if err := storageImpl.Close(); err != nil {
-				cl.config.errors().Println(errors.Wrap(err, "error closing default storage"))
-			}
-		})
-	}
-	cl.defaultStorage = storage.NewClient(storageImpl)
 
 	o := copy(cl.peerID[:], stringsx.Default(cfg.PeerID, cfg.Bep20))
 	if _, err = rand.Read(cl.peerID[o:]); err != nil {
@@ -536,8 +523,7 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) (conn net.Conn, er
 
 	cl.lock()
 	conns := make([]socket, len(cl.conns))
-	left := copy(conns, cl.conns)
-	_ = left
+	copy(conns, cl.conns)
 	cl.unlock()
 
 	if len(conns) == 0 {

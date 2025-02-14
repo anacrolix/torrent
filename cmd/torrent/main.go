@@ -86,11 +86,11 @@ func torrentBar(t torrent.Torrent) {
 	}()
 }
 
-func addTorrents(client *torrent.Client) error {
+func addTorrents(store storage.ClientImpl, client *torrent.Client) error {
 	for _, arg := range flags.Torrent {
 		t, err := func() (torrent.Torrent, error) {
 			if strings.HasPrefix(arg, "magnet:") {
-				t, _, err := client.MaybeStart(torrent.NewFromMagnet(arg))
+				t, _, err := client.MaybeStart(torrent.NewFromMagnet(arg, torrent.OptionStorage(store)))
 				if err != nil {
 					return nil, xerrors.Errorf("error adding magnet: %w", err)
 				}
@@ -106,7 +106,7 @@ func addTorrents(client *torrent.Client) error {
 				if err != nil {
 					return nil, xerrors.Errorf("error loading torrent file %q: %s\n", arg, err)
 				}
-				t, _, err := client.MaybeStart(torrent.NewFromMetaInfo(metaInfo))
+				t, _, err := client.MaybeStart(torrent.NewFromMetaInfo(metaInfo, torrent.OptionStorage(store)))
 				if err != nil {
 					return nil, xerrors.Errorf("adding torrent: %w", err)
 				}
@@ -209,6 +209,7 @@ func mainErr() error {
 		log.SetOutput(progress.Bypass())
 	}
 
+	store := storage.NewFile("")
 	autobinder := autobind.New()
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableAcceptRateLimiting = true
@@ -225,7 +226,7 @@ func mainErr() error {
 		// clientConfig.IPBlocklist = blocklist
 	}
 	if flags.Mmap {
-		clientConfig.DefaultStorage = storage.NewMMap("")
+		store = storage.NewMMap("")
 	}
 	if flags.Addr != "" {
 		autobinder = autobind.NewSpecified(flags.Addr)
@@ -269,7 +270,7 @@ func mainErr() error {
 	if flags.Progress {
 		progress.Start()
 	}
-	addTorrents(client)
+	addTorrents(store, client)
 	if client.WaitAll() {
 		log.Print("downloaded ALL the torrents")
 	} else {

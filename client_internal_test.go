@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"reflect"
@@ -81,7 +80,7 @@ func DeprecatedExtractClient(t Torrent) *Client {
 }
 
 func TestTorrentInitialState(t *testing.T) {
-	dir, mi := testutil.GreetingTestTorrent()
+	dir, mi := testutil.GreetingTestTorrent(t)
 	defer os.RemoveAll(dir)
 	cl, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
@@ -136,7 +135,7 @@ type TestDownloadCancelParams struct {
 }
 
 func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
-	greetingTempDir, mi := testutil.GreetingTestTorrent()
+	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
 	defer os.RemoveAll(greetingTempDir)
 	cfg := TestingConfig(t)
 	cfg.Seed = true
@@ -145,25 +144,23 @@ func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
 	require.NoError(t, err)
 	defer seeder.Close()
 	defer testutil.ExportStatusWriter(seeder, "s")()
-	tt, err := NewFromMetaInfo(mi)
+	tt, err := NewFromMetaInfo(mi, OptionStorage(storage.NewFile(cfg.DataDir)))
 	require.NoError(t, err)
 	seederTorrent, _, _ := seeder.Start(tt)
 	seederTorrent.VerifyData()
-	leecherDataDir, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
+	leecherDataDir := t.TempDir()
 	defer os.RemoveAll(leecherDataDir)
 	fc, err := filecache.NewCache(leecherDataDir)
 	require.NoError(t, err)
 	if ps.SetLeecherStorageCapacity {
 		fc.SetCapacity(ps.LeecherStorageCapacity)
 	}
-	cfg.DefaultStorage = storage.NewResourcePieces(fc.AsResourceProvider())
 	cfg.DataDir = leecherDataDir
 	leecher, err := b.Bind(NewClient(cfg))
 	require.NoError(t, err)
 	defer leecher.Close()
 	defer testutil.ExportStatusWriter(leecher, "l")()
-	t2, err := NewFromMetaInfo(mi, OptionChunk(2))
+	t2, err := NewFromMetaInfo(mi, OptionChunk(2), OptionStorage(storage.NewResourcePieces(fc.AsResourceProvider())))
 	require.NoError(t, err)
 	leecherGreeting, added, err := leecher.Start(t2)
 	require.NoError(t, err)
@@ -298,7 +295,7 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 		return
 	}
 	assert.EqualValues(t, 0, sum())
-	ts, err := NewFromMetaInfoFile("metainfo/testdata/issue_65a.torrent")
+	ts, err := NewFromMetaInfoFile("metainfo/testdata/issue_65a.torrent", OptionStorage(storage.NewFile(cfg.DataDir)))
 	require.NoError(t, err)
 	tt, _, err := cl.Start(ts)
 	require.NoError(t, err)

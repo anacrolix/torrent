@@ -472,6 +472,8 @@ func (cn *connection) onPeerSentCancel(r request) {
 	if cn.fastEnabled() {
 		cn.reject(r)
 	} else {
+		cn._mu.Lock()
+		defer cn._mu.Unlock()
 		delete(cn.PeerRequests, r)
 	}
 }
@@ -1090,6 +1092,9 @@ func (cn *connection) reject(r request) {
 		panic("fast not enabled")
 	}
 	cn.Post(r.ToMsg(pp.Reject))
+
+	cn._mu.Lock()
+	defer cn._mu.Unlock()
 	delete(cn.PeerRequests, r)
 }
 

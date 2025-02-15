@@ -1813,6 +1813,8 @@ func (t *torrent) initiateConn(ctx context.Context, peer Peer) {
 		return
 	}
 
+	t._mu.Lock()
+	defer t._mu.Unlock()
 	t.halfOpen[addr.String()] = peer
 
 	go t.cln.outgoingConnection(ctx, t, addr, peer.Source, peer.Trusted)

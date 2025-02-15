@@ -19,6 +19,9 @@ func NewNodeAddrFromAddrPort(ap netip.AddrPort) NodeAddr {
 }
 
 func NewNodeAddrFromIPPort(ip net.IP, port int) NodeAddr {
+	if ip == nil {
+		ip = net.IPv4zero
+	}
 	ipaddr := netip.AddrFrom16([16]byte(ip.To16()))
 	if ip.To4() != nil {
 		ipaddr = netip.AddrFrom4([4]byte(ip.To4()))

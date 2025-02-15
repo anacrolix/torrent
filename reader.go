@@ -6,7 +6,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 )
 
 // Reader for a torrent

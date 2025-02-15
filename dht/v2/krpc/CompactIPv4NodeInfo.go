@@ -1,6 +1,10 @@
 package krpc
 
-import "github.com/anacrolix/missinggo/slices"
+import (
+	"net/netip"
+
+	"github.com/anacrolix/missinggo/slices"
+)
 
 type (
 	CompactIPv4NodeInfo []NodeInfo
@@ -10,17 +14,10 @@ func (CompactIPv4NodeInfo) ElemSize() int {
 	return 26
 }
 
-// func (me *CompactIPv4NodeInfo) Scrub() {
-// 	slices.FilterInPlace(me, func(ni *NodeInfo) bool {
-// 		ni.Addr.IP = ni.Addr.IP.To4()
-// 		return ni.Addr.IP != nil
-// 	})
-// }
-
 func (me CompactIPv4NodeInfo) MarshalBinary() ([]byte, error) {
-	return marshalBinarySlice(slices.Map(func(ni NodeInfo) NodeInfo {
-		ni.Addr.IP = ni.Addr.IP.To4()
-		return ni
+	return marshalBinarySlice(slices.Map(func(na NodeInfo) NodeInfo {
+		na.Addr.IP = netip.AddrFrom4(na.Addr.IP.As4())
+		return na
 	}, me).(CompactIPv4NodeInfo))
 }
 

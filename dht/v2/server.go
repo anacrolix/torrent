@@ -13,12 +13,12 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/v2/conntrack"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent/bencode"
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 	"github.com/james-lawrence/torrent/iplist"
 	"github.com/james-lawrence/torrent/metainfo"
+	"github.com/james-lawrence/torrent/x/conntrack"
 	"github.com/james-lawrence/torrent/x/langx"
 	"github.com/pkg/errors"
 
@@ -510,7 +510,7 @@ func (s *Server) setReturnNodes(r *krpc.Return, queryMsg krpc.Msg, querySource A
 	target := Int160FromByteArray(queryMsg.A.InfoHash)
 
 	if shouldReturnNodes(queryMsg.A.Want, querySource.IP()) {
-		r.Nodes = s.MakeReturnNodes(target, func(na krpc.NodeAddr) bool { return na.IP.To4() != nil })
+		r.Nodes = s.MakeReturnNodes(target, func(na krpc.NodeAddr) bool { return na.IP.Is4() })
 	}
 
 	if shouldReturnNodes6(queryMsg.A.Want, querySource.IP()) {
@@ -703,8 +703,8 @@ func (s *Server) connTrackEntryForAddr(a Addr) conntrack.Entry {
 
 type numWrites int
 
-func (s *Server) beginQuery(addr Addr, reason string, f func() numWrites) stm.Operation {
-	return func(tx *stm.Tx) interface{} {
+func (s *Server) beginQuery(addr Addr, reason string, f func() numWrites) stm.Operation[func()] {
+	return func(tx *stm.Tx) func() {
 		tx.Assert(s.sendLimit.AllowStm(tx))
 		cteh := s.config.ConnectionTracking.Allow(tx, s.connTrackEntryForAddr(addr), reason, -1)
 		tx.Assert(cteh != nil)
@@ -734,7 +734,7 @@ func (s *Server) query(ctx context.Context, addr Addr, q string, a *krpc.MsgArgs
 					return writes
 				},
 			),
-		).(func())()
+		)()
 	}()
 	return nil
 }
@@ -752,6 +752,7 @@ func (s *Server) makeQueryBytes(q string, a *krpc.MsgArgs) (tid string, b []byte
 		A: a,
 	}
 
+	// log.Println("DERP", spew.Sdump(m))
 	b, err := bencode.Marshal(m)
 	if err != nil {
 		panic(err)

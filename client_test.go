@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
-	"github.com/anacrolix/missinggo/filecache"
+	"github.com/anacrolix/missinggo/v2/filecache"
 	"github.com/james-lawrence/torrent"
 	"github.com/james-lawrence/torrent/autobind"
 	"github.com/james-lawrence/torrent/connections"

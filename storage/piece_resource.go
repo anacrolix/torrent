@@ -3,7 +3,7 @@ package storage
 import (
 	"path"
 
-	"github.com/anacrolix/missinggo/resource"
+	"github.com/anacrolix/missinggo/v2/resource"
 
 	"github.com/james-lawrence/torrent/metainfo"
 )

@@ -41,7 +41,7 @@ func (s *Server) Bootstrap(ctx context.Context) (ts TraversalStats, err error) {
 			func(tx *stm.Tx) interface{} {
 				addr := traversal.nextAddr(tx)
 				dhtAddr := NewAddr(addr.UDP())
-				tx.Set(outstanding, tx.Get(outstanding).(int)+1)
+				outstanding.Set(tx, outstanding.Get(tx)+1)
 				return txResT{
 					io: s.beginQuery(dhtAddr, "dht bootstrap find_node", func() numWrites {
 						atomic.AddInt64(&ts.NumAddrsTried, 1)
@@ -56,17 +56,18 @@ func (s *Server) Bootstrap(ctx context.Context) (ts TraversalStats, err error) {
 									Addr: ni.Addr,
 									Id:   &id,
 								}))
+								outstanding.Set(tx, outstanding.Get(tx)+1)
 							})
 						}
 						stm.Atomically(stm.VoidOperation(func(tx *stm.Tx) {
-							tx.Set(outstanding, tx.Get(outstanding).(int)-1)
+							outstanding.Set(tx, outstanding.Get(tx)-1)
 						}))
 						return writes
-					})(tx).(func()),
+					})(tx),
 				}
 			},
 			func(tx *stm.Tx) interface{} {
-				tx.Assert(tx.Get(outstanding).(int) == 0)
+				tx.Assert(outstanding.Get(tx) == 0)
 				return txResT{done: true}
 			},
 		)).(txResT)

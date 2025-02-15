@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent"
 	"github.com/james-lawrence/torrent/internal/utpx"
 	"github.com/james-lawrence/torrent/sockets"

@@ -4,7 +4,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent/internal/utpx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

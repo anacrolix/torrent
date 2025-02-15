@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/anacrolix/missinggo/bitmap"
+	"github.com/anacrolix/missinggo/v2/bitmap"
 
-	"github.com/james-lawrence/torrent/metainfo"
 	pp "github.com/james-lawrence/torrent/btprotocol"
+	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
 )
 
@@ -76,7 +76,7 @@ func (p *Piece) pendingChunkIndex(chunkIndex int) bool {
 	if p.dirtyChunks.IsEmpty() {
 		return true
 	}
-	return !p.dirtyChunks.Contains(chunkIndex)
+	return !p.dirtyChunks.Contains(bitmap.BitIndex(chunkIndex))
 }
 
 func (p *Piece) pendingChunk(cs chunkSpec, chunkSize pp.Integer) bool {
@@ -92,12 +92,12 @@ func (p *Piece) numDirtyChunks() pp.Integer {
 }
 
 func (p *Piece) unpendChunkIndex(i int) {
-	p.dirtyChunks.Add(i)
+	p.dirtyChunks.Add(bitmap.BitIndex(i))
 	p.t.tickleReaders()
 }
 
 func (p *Piece) pendChunkIndex(i int) {
-	p.dirtyChunks.Remove(i)
+	p.dirtyChunks.Remove(bitmap.BitIndex(i))
 }
 
 func (p *Piece) numChunks() pp.Integer {
@@ -106,7 +106,7 @@ func (p *Piece) numChunks() pp.Integer {
 
 func (p *Piece) undirtiedChunkIndices() (ret bitmap.Bitmap) {
 	ret = p.dirtyChunks.Copy()
-	ret.FlipRange(0, bitmap.BitIndex(p.numChunks()))
+	ret.FlipRange(0, bitmap.BitRange(p.numChunks()))
 	return
 }
 
@@ -234,7 +234,7 @@ func (p *Piece) uncachedPriority() (ret piecePriority) {
 		ret.Raise(PiecePriorityNow)
 	}
 
-	if p.t.readerReadaheadPieces.Contains(bitmap.BitIndex(p.index)) {
+	if p.t.readerReadaheadPieces.Contains(p.index) {
 		ret.Raise(PiecePriorityReadahead)
 	}
 	ret.Raise(p.priority)

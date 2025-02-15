@@ -2,8 +2,9 @@ package dht
 
 import (
 	"net"
+	"net/netip"
 
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
@@ -24,7 +25,7 @@ type Addr interface {
 type cachedAddr struct {
 	raw  net.Addr
 	port int
-	ip   net.IP
+	ip   netip.Addr
 	s    string
 }
 
@@ -40,7 +41,7 @@ func (ca cachedAddr) KRPC() krpc.NodeAddr {
 }
 
 func (ca cachedAddr) IP() net.IP {
-	return ca.ip
+	return ca.ip.AsSlice()
 }
 
 func (ca cachedAddr) Port() int {
@@ -52,10 +53,11 @@ func (ca cachedAddr) Raw() net.Addr {
 }
 
 func NewAddr(raw net.Addr) Addr {
+	ip, _ := netip.AddrFromSlice(missinggo.AddrIP(raw))
 	return cachedAddr{
 		raw:  raw,
 		s:    raw.String(),
-		ip:   missinggo.AddrIP(raw),
+		ip:   ip,
 		port: missinggo.AddrPort(raw),
 	}
 }

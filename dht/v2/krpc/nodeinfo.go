@@ -2,12 +2,14 @@ package krpc
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"encoding"
 	"encoding/binary"
 	"fmt"
 	"math"
 	"math/rand"
 	"net"
+	"net/netip"
 )
 
 type NodeInfo struct {
@@ -20,9 +22,10 @@ func (me NodeInfo) String() string {
 }
 
 func RandomNodeInfo(ipLen int) (ni NodeInfo) {
-	rand.Read(ni.ID[:])
-	ni.Addr.IP = make(net.IP, ipLen)
-	rand.Read(ni.Addr.IP)
+	tmp := make(net.IP, ipLen)
+	crand.Read(ni.ID[:])
+	crand.Read(tmp)
+	ni.Addr.IP, _ = netip.AddrFromSlice(tmp)
 	ni.Addr.Port = rand.Intn(math.MaxUint16 + 1)
 	return
 }
@@ -35,7 +38,7 @@ var _ interface {
 func (ni NodeInfo) MarshalBinary() ([]byte, error) {
 	var w bytes.Buffer
 	w.Write(ni.ID[:])
-	w.Write(ni.Addr.IP)
+	w.Write(ni.Addr.IP.AsSlice())
 	binary.Write(&w, binary.BigEndian, uint16(ni.Addr.Port))
 	return w.Bytes(), nil
 }

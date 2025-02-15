@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/james-lawrence/torrent/dht/v2/krpc"
 	pp "github.com/james-lawrence/torrent/btprotocol"
+	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
 
 func newPex() *pex {
@@ -31,11 +31,7 @@ func (t *pex) snapshot() *pp.PexMsg {
 
 	tx := &pp.PexMsg{}
 	nodeAddr := func(addr IpPort) krpc.NodeAddr {
-		ip := addr.IP
-		if ip4 := ip.To4(); ip4 != nil {
-			ip = ip4
-		}
-		return krpc.NodeAddr{IP: ip, Port: int(addr.Port)}
+		return krpc.NewNodeAddrFromIPPort(addr.IP, int(addr.Port))
 	}
 
 	n := 0

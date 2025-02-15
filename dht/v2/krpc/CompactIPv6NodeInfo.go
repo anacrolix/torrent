@@ -1,6 +1,8 @@
 package krpc
 
 import (
+	"net/netip"
+
 	"github.com/anacrolix/missinggo/slices"
 )
 
@@ -14,7 +16,7 @@ func (CompactIPv6NodeInfo) ElemSize() int {
 
 func (me CompactIPv6NodeInfo) MarshalBinary() ([]byte, error) {
 	return marshalBinarySlice(slices.Map(func(ni NodeInfo) NodeInfo {
-		ni.Addr.IP = ni.Addr.IP.To16()
+		ni.Addr.IP = netip.AddrFrom16(ni.Addr.IP.As16())
 		return ni
 	}, me).(CompactIPv6NodeInfo))
 }

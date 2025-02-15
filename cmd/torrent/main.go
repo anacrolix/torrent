@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 	"golang.org/x/xerrors"
 
 	"github.com/anacrolix/tagflag"

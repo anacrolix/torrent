@@ -8,12 +8,27 @@ import (
 	"sort"
 	"strconv"
 	"sync"
-
-	"github.com/anacrolix/missinggo"
 )
 
 func isEmptyValue(v reflect.Value) bool {
-	return missinggo.IsEmptyValue(v)
+	switch v.Kind() {
+	case reflect.Func, reflect.Map, reflect.Slice:
+		return v.IsNil()
+	case reflect.Array:
+		z := true
+		for i := 0; i < v.Len(); i++ {
+			z = z && isEmptyValue(v.Index(i))
+		}
+		return z
+	case reflect.Struct:
+		z := true
+		for i := 0; i < v.NumField(); i++ {
+			z = z && isEmptyValue(v.Field(i))
+		}
+		return z
+	}
+
+	return v.IsZero()
 }
 
 // Encoder for bencode

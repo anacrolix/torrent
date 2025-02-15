@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/anacrolix/missinggo/slices"
+	"github.com/anacrolix/missinggo/v2/slices"
 	"github.com/james-lawrence/torrent/bencode"
 )
 
@@ -52,7 +52,7 @@ func marshalBinarySlice(slice elemSizer) (ret []byte, err error) {
 			return
 		}
 		if len(b) != slice.ElemSize() {
-			panic(fmt.Sprintf("marshalled %d bytes, but expected %d", len(b), slice.ElemSize()))
+			panic(fmt.Sprintf("marshalled %T into %d bytes, but expected %d", e, len(b), slice.ElemSize()))
 		}
 		ret = append(ret, b...)
 	}

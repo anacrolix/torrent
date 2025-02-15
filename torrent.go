@@ -20,10 +20,10 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
 
-	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent/dht/v2"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -1499,7 +1499,7 @@ func (t *torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 			}
 
 			t.AddPeer(Peer{
-				IP:     cp.IP[:],
+				IP:     cp.IP.AsSlice(),
 				Port:   cp.Port,
 				Source: peerSourceDhtGetPeers,
 			})

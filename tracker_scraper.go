@@ -113,8 +113,8 @@ func (me *trackerScraper) announce(event tracker.AnnounceEvent) (ret trackerAnno
 		HostHeader: me.u.Host,
 		ServerName: me.u.Hostname(),
 		UdpNetwork: me.u.Scheme,
-		ClientIp4:  krpc.NodeAddr{IP: me.t.config.PublicIP4},
-		ClientIp6:  krpc.NodeAddr{IP: me.t.config.PublicIP6},
+		ClientIp4:  krpc.NewNodeAddrFromIPPort(me.t.config.PublicIP4, 0),
+		ClientIp6:  krpc.NewNodeAddrFromIPPort(me.t.config.PublicIP6, 0),
 	}.Do()
 	if err != nil {
 		ret.Err = fmt.Errorf("error announcing: %s", err)

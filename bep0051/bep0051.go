@@ -96,7 +96,7 @@ func (t Endpoint) Handle(ctx context.Context, source dht.Addr, s *dht.Server, ra
 			Interval:  ttl,
 			Available: total,
 			Sample:    sampled,
-			Nodes:     s.MakeReturnNodes(dht.Int160FromByteArray(m.A.Target), func(na krpc.NodeAddr) bool { return na.IP.To4() != nil }),
+			Nodes:     s.MakeReturnNodes(dht.Int160FromByteArray(m.A.Target), func(na krpc.NodeAddr) bool { return na.IP.Is4() }),
 			Nodes6:    s.MakeReturnNodes(dht.Int160FromByteArray(m.A.Target), func(krpc.NodeAddr) bool { return true }),
 		},
 	}

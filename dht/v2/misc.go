@@ -5,7 +5,7 @@ import (
 	"hash/fnv"
 
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/stm/stmutil"
+	"github.com/james-lawrence/torrent/internal/stmutil"
 
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
@@ -23,11 +23,9 @@ func (me addrMaybeId) String() string {
 	}
 }
 
-func nodesByDistance(target Int160) stmutil.Settish {
-	return stmutil.NewSortedSet(func(_l, _r interface{}) bool {
+func nodesByDistance(target Int160) stmutil.Settish[addrMaybeId] {
+	return stmutil.NewSortedSet(func(l, r addrMaybeId) bool {
 		var ml missinggo.MultiLess
-		l := _l.(addrMaybeId)
-		r := _r.(addrMaybeId)
 		ml.NextBool(r.Id == nil, l.Id == nil)
 		if l.Id != nil && r.Id != nil {
 			d := distance(*l.Id, target).Cmp(distance(*r.Id, target))

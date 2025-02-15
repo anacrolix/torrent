@@ -5,7 +5,7 @@ import (
 
 	"github.com/anacrolix/missinggo/v2/iter"
 	"github.com/anacrolix/stm"
-	"github.com/anacrolix/stm/stmutil"
+	"github.com/james-lawrence/torrent/internal/stmutil"
 
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 )
@@ -22,37 +22,37 @@ func (me TraversalStats) String() string {
 // Prioritizes addrs to try by distance from target, disallowing repeat contacts.
 type traversal struct {
 	targetInfohash      Int160
-	triedAddrs          *stm.Var // Settish of krpc.NodeAddr.String
-	nodesPendingContact *stm.Var // Settish of addrMaybeId sorted by distance from the target
-	addrBestIds         *stm.Var // Mappish Addr to best
+	triedAddrs          *stm.Var[stmutil.Settish[string]]          // Settish of krpc.NodeAddr.String
+	nodesPendingContact *stm.Var[stmutil.Settish[addrMaybeId]]     // Settish of addrMaybeId sorted by distance from the target
+	addrBestIds         *stm.Var[stmutil.Mappish[string, *Int160]] // Mappish Addr to best
 }
 
 func newTraversal(targetInfohash Int160) traversal {
 	return traversal{
 		targetInfohash:      targetInfohash,
-		triedAddrs:          stm.NewVar(stmutil.NewSet()),
+		triedAddrs:          stm.NewVar(stmutil.NewSet[string]()),
 		nodesPendingContact: stm.NewVar(nodesByDistance(targetInfohash)),
-		addrBestIds:         stm.NewVar(stmutil.NewMap()),
+		addrBestIds:         stm.NewVar(stmutil.NewMap[string, *Int160]()),
 	}
 }
 
 func (t traversal) waitFinished(tx *stm.Tx) {
-	tx.Assert(tx.Get(t.nodesPendingContact).(stmutil.Lenner).Len() == 0)
+	tx.Assert(t.nodesPendingContact.Get(tx).Len() == 0)
 }
 
-func (t traversal) pendContact(node addrMaybeId) stm.Operation {
+func (t traversal) pendContact(node addrMaybeId) stm.Operation[struct{}] {
 	return stm.VoidOperation(func(tx *stm.Tx) {
 		nodeAddrString := node.Addr.String()
-		if tx.Get(t.triedAddrs).(stmutil.Settish).Contains(nodeAddrString) {
+		if t.triedAddrs.Get(tx).Contains(nodeAddrString) {
 			return
 		}
-		addrBestIds := tx.Get(t.addrBestIds).(stmutil.Mappish)
-		nodesPendingContact := tx.Get(t.nodesPendingContact).(stmutil.Settish)
-		if _best, ok := addrBestIds.Get(nodeAddrString); ok {
+		addrBestIds := t.addrBestIds.Get(tx)
+		nodesPendingContact := t.nodesPendingContact.Get(tx)
+		if best, ok := addrBestIds.Get(nodeAddrString); ok {
 			if node.Id == nil {
 				return
 			}
-			best := _best.(*Int160)
+
 			if best != nil && distance(*best, t.targetInfohash).Cmp(distance(*node.Id, t.targetInfohash)) <= 0 {
 				return
 			}
@@ -61,20 +61,19 @@ func (t traversal) pendContact(node addrMaybeId) stm.Operation {
 				Id:   best,
 			})
 		}
-		tx.Set(t.addrBestIds, addrBestIds.Set(nodeAddrString, node.Id))
-		nodesPendingContact = nodesPendingContact.Add(node)
-		tx.Set(t.nodesPendingContact, nodesPendingContact)
+		t.addrBestIds.Set(tx, addrBestIds.Set(nodeAddrString, node.Id))
+		t.nodesPendingContact.Set(tx, nodesPendingContact.Add(node))
 	})
 }
 
 func (a traversal) nextAddr(tx *stm.Tx) krpc.NodeAddr {
-	npc := tx.Get(a.nodesPendingContact).(stmutil.Settish)
+	npc := a.nodesPendingContact.Get(tx)
 	first, ok := iter.First(npc.Iter)
 	tx.Assert(ok)
 	addr := first.(addrMaybeId).Addr
 	addrString := addr.String()
-	tx.Set(a.nodesPendingContact, npc.Delete(first))
-	tx.Set(a.addrBestIds, tx.Get(a.addrBestIds).(stmutil.Mappish).Delete(addrString))
-	tx.Set(a.triedAddrs, tx.Get(a.triedAddrs).(stmutil.Settish).Add(addrString))
+	a.nodesPendingContact.Set(tx, npc.Delete(first.(addrMaybeId)))
+	a.addrBestIds.Set(tx, a.addrBestIds.Get(tx).Delete(addrString))
+	a.triedAddrs.Set(tx, a.triedAddrs.Get(tx).Add(addrString))
 	return addr
 }

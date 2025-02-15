@@ -3,14 +3,34 @@ package krpc
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"net"
+	"net/netip"
 	"strconv"
 
 	"github.com/james-lawrence/torrent/bencode"
 )
 
+func NewNodeAddrFromAddrPort(ap netip.AddrPort) NodeAddr {
+	return NodeAddr{
+		IP:   ap.Addr(),
+		Port: int(ap.Port()),
+	}
+}
+
+func NewNodeAddrFromIPPort(ip net.IP, port int) NodeAddr {
+	ipaddr := netip.AddrFrom16([16]byte(ip.To16()))
+	if ip.To4() != nil {
+		ipaddr = netip.AddrFrom4([4]byte(ip.To4()))
+	}
+	return NodeAddr{
+		IP:   ipaddr,
+		Port: port,
+	}
+}
+
 type NodeAddr struct {
-	IP   net.IP
+	IP   netip.Addr
 	Port int
 }
 
@@ -23,9 +43,14 @@ func (me NodeAddr) String() string {
 }
 
 func (me *NodeAddr) UnmarshalBinary(b []byte) error {
-	me.IP = make(net.IP, len(b)-2)
-	copy(me.IP, b[:len(b)-2])
-	me.Port = int(binary.BigEndian.Uint16(b[len(b)-2:]))
+	var (
+		ok     bool
+		offset = len(b) - 2
+	)
+	if me.IP, ok = netip.AddrFromSlice(b[:offset]); !ok {
+		return fmt.Errorf("unable to create netip.Addr from %v", b)
+	}
+	me.Port = int(binary.BigEndian.Uint16(b[offset:]))
 	return nil
 }
 
@@ -40,7 +65,7 @@ func (me *NodeAddr) UnmarshalBencode(b []byte) (err error) {
 
 func (me NodeAddr) MarshalBinary() ([]byte, error) {
 	var b bytes.Buffer
-	b.Write(me.IP)
+	b.Write(me.IP.AsSlice())
 	binary.Write(&b, binary.BigEndian, uint16(me.Port))
 	return b.Bytes(), nil
 }
@@ -51,12 +76,12 @@ func (me NodeAddr) MarshalBencode() ([]byte, error) {
 
 func (me NodeAddr) UDP() *net.UDPAddr {
 	return &net.UDPAddr{
-		IP:   me.IP,
+		IP:   me.IP.AsSlice(),
 		Port: me.Port,
 	}
 }
 
 func (me *NodeAddr) FromUDPAddr(ua *net.UDPAddr) {
-	me.IP = ua.IP
+	me.IP, _ = netip.AddrFromSlice(ua.IP)
 	me.Port = ua.Port
 }

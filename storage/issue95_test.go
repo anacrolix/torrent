@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/anacrolix/missinggo/resource"
+	"github.com/anacrolix/missinggo/v2/resource"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

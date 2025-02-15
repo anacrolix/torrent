@@ -14,7 +14,7 @@ import (
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

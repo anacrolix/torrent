@@ -8,11 +8,10 @@ import (
 	"time"
 
 	"github.com/james-lawrence/torrent/connections"
-
-	"github.com/anacrolix/missinggo/v2/conntrack"
 	"github.com/james-lawrence/torrent/dht/v2"
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 	"github.com/james-lawrence/torrent/metainfo"
+	"github.com/james-lawrence/torrent/x/conntrack"
 	"golang.org/x/time/rate"
 
 	"github.com/james-lawrence/torrent/mse"

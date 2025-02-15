@@ -22,7 +22,7 @@ func (p *Peer) FromDictInterface(d map[string]interface{}) {
 }
 
 func (p Peer) FromNodeAddr(na krpc.NodeAddr) Peer {
-	p.IP = na.IP
+	p.IP = na.IP.AsSlice()
 	p.Port = na.Port
 	return p
 }

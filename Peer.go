@@ -22,7 +22,7 @@ type Peer struct {
 
 // FromPex generate Peer from peer exchange
 func (me *Peer) FromPex(na krpc.NodeAddr, fs btprotocol.PexPeerFlags) {
-	me.IP = append([]byte(nil), na.IP...)
+	me.IP = na.IP.AsSlice()
 	me.Port = na.Port
 	me.Source = peerSourcePex
 	// If they prefer encryption, they must support it.

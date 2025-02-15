@@ -16,9 +16,8 @@ import (
 	"github.com/james-lawrence/torrent/connections"
 
 	"github.com/RoaringBitmap/roaring"
-	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/missinggo/bitmap"
-	"github.com/anacrolix/missinggo/prioritybitmap"
+	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/missinggo/v2/prioritybitmap"
 	"github.com/anacrolix/multiless"
 	"github.com/pkg/errors"
 
@@ -861,7 +860,7 @@ func (cn *connection) shouldRequestWithoutBias() bool {
 }
 
 func (cn *connection) stopRequestingPiece(piece pieceIndex) bool {
-	return cn.pieceRequestOrder.Remove(bitmap.BitIndex(piece))
+	return cn.pieceRequestOrder.Remove(piece)
 }
 
 // This is distinct from Torrent piece priority, which is the user's
@@ -881,7 +880,7 @@ func (cn *connection) updatePiecePriority(piece pieceIndex) bool {
 	}
 	prio := cn.getPieceInclination()[piece]
 
-	return cn.pieceRequestOrder.Set(bitmap.BitIndex(piece), prio) || cn.shouldRequestWithoutBias()
+	return cn.pieceRequestOrder.Set(piece, prio) || cn.shouldRequestWithoutBias()
 }
 
 func (cn *connection) getPieceInclination() []int {

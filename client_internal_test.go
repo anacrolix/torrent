@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anacrolix/missinggo/filecache"
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/missinggo/v2/filecache"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"github.com/james-lawrence/torrent/connections"

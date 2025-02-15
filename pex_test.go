@@ -20,7 +20,7 @@ func TestPEXSnapshot(t *testing.T) {
 	tx := pex.snapshot()
 	require.NotNil(t, tx)
 	require.EqualValues(t, 1, len(tx.Added))
-	if !c1.remoteAddr.IP.Equal(tx.Added[0].IP) {
+	if !c1.remoteAddr.IP.Equal(tx.Added[0].IP.AsSlice()) {
 		require.EqualValues(t, c1.remoteAddr.IP, tx.Added[0].IP)
 	}
 	require.EqualValues(t, c1.remoteAddr.Port, tx.Added[0].Port)

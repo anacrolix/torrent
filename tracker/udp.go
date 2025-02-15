@@ -12,8 +12,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/missinggo/pproffd"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
 	"github.com/pkg/errors"
 )
@@ -109,8 +109,8 @@ func (c *udpAnnounce) Do(req AnnounceRequest) (res AnnounceResponse, err error) 
 	if c.ipv6() {
 		// BEP 15
 		req.IPAddress = 0
-	} else if req.IPAddress == 0 && c.a.ClientIp4.IP != nil {
-		req.IPAddress = binary.BigEndian.Uint32(c.a.ClientIp4.IP.To4())
+	} else if req.IPAddress == 0 && c.a.ClientIp4.IP.Is4() {
+		req.IPAddress = binary.BigEndian.Uint32(c.a.ClientIp4.IP.AsSlice())
 	}
 	// Clearly this limits the request URI to 255 bytes. BEP 41 supports
 	// longer but I'm not fussed.
@@ -177,14 +177,6 @@ func (c *udpAnnounce) write(h *RequestHeader, body interface{}, trailer []byte) 
 		panic("write should send all or error")
 	}
 	return
-}
-
-func read(r io.Reader, data interface{}) error {
-	return binary.Read(r, binary.BigEndian, data)
-}
-
-func write(w io.Writer, data interface{}) error {
-	return binary.Write(w, binary.BigEndian, data)
 }
 
 // args is the binary serializable request body. trailer is optional data

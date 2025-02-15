@@ -24,6 +24,14 @@ var trackers = []string{
 	"udp://tracker.leechers-paradise.org:6969",
 }
 
+func read(r io.Reader, data interface{}) error {
+	return binary.Read(r, binary.BigEndian, data)
+}
+
+func write(w io.Writer, data interface{}) error {
+	return binary.Write(w, binary.BigEndian, data)
+}
+
 // Ensure net.IPs are stored big-endian, to match the way they're read from
 // the wire.
 func TestNetIPv4Bytes(t *testing.T) {
@@ -38,8 +46,8 @@ func TestNetIPv4Bytes(t *testing.T) {
 
 func TestMarshalAnnounceResponse(t *testing.T) {
 	peers := krpc.CompactIPv4NodeAddrs{
-		{[]byte{127, 0, 0, 1}, 2},
-		{[]byte{255, 0, 0, 3}, 4},
+		krpc.NewNodeAddrFromIPPort([]byte{127, 0, 0, 1}, 2),
+		krpc.NewNodeAddrFromIPPort([]byte{255, 0, 0, 3}, 4),
 	}
 	b, err := peers.MarshalBinary()
 	require.NoError(t, err)
@@ -95,8 +103,8 @@ func TestAnnounceLocalhost(t *testing.T) {
 				Seeders:  1,
 				Leechers: 2,
 				Peers: krpc.CompactIPv4NodeAddrs{
-					{[]byte{1, 2, 3, 4}, 5},
-					{[]byte{6, 7, 8, 9}, 10},
+					krpc.NewNodeAddrFromIPPort([]byte{1, 2, 3, 4}, 5),
+					krpc.NewNodeAddrFromIPPort([]byte{6, 7, 8, 9}, 10),
 				},
 			},
 		},
@@ -161,7 +169,10 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 	rand.Read(req.PeerId[:])
 	rand.Read(req.InfoHash[:])
 	wg := sync.WaitGroup{}
-	ctx, cancel := context.WithCancel(context.Background())
+
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+
 	for _, url := range trackers {
 		wg.Add(1)
 		go func(url string) {
@@ -178,13 +189,13 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 			if resp.Leechers != 0 || resp.Seeders != 0 || len(resp.Peers) != 0 {
 				// The info hash we generated was random in 2^160 space. If we
 				// get a hit, something is weird.
-				t.Fatal(resp)
+				cancel(fmt.Errorf("unexpected result: %v", resp))
 			}
 			t.Logf("announced to %s", url)
-			cancel()
 		}(url)
 	}
 	wg.Wait()
+	require.NoError(t, ctx.Err())
 }
 
 // Check that URLPath option is done correctly.

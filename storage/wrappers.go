@@ -4,7 +4,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 
 	"github.com/james-lawrence/torrent/metainfo"
 )

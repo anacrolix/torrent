@@ -30,7 +30,7 @@ func TestUnmarshalHTTPResponsePeerDicts(t *testing.T) {
 	assert.NotNil(t, hr.Peers[1].IP)
 
 	assert.Len(t, hr.Peers6, 1)
-	assert.EqualValues(t, "1234123412341234", hr.Peers6[0].IP)
+	assert.EqualValues(t, "1234123412341234", string(hr.Peers6[0].IP.AsSlice()))
 	assert.EqualValues(t, 0x3536, hr.Peers6[0].Port)
 }
 

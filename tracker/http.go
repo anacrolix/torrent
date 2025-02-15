@@ -47,7 +47,7 @@ func (me *Peers) UnmarshalBencode(b []byte) (err error) {
 		}
 		for _, cp := range cnas {
 			*me = append(*me, Peer{
-				IP:   cp.IP[:],
+				IP:   cp.IP.AsSlice(),
 				Port: int(cp.Port),
 			})
 		}
@@ -94,10 +94,10 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts Announce) {
 	// According to https://wiki.vuze.com/w/Message_Stream_Encryption. TODO:
 	// Take EncryptionPolicy or something like it as a parameter.
 	q.Set("supportcrypto", "1")
-	if opts.ClientIp4.IP != nil {
+	if opts.ClientIp4.IP.Is4() {
 		q.Set("ipv4", opts.ClientIp4.String())
 	}
-	if opts.ClientIp6.IP != nil {
+	if opts.ClientIp6.IP.Is6() {
 		q.Set("ipv6", opts.ClientIp6.String())
 	}
 	_url.RawQuery = q.Encode()
@@ -161,7 +161,7 @@ func announceHTTP(opt Announce, _url *url.URL) (ret AnnounceResponse, err error)
 	}
 	for _, na := range trackerResponse.Peers6 {
 		ret.Peers = append(ret.Peers, Peer{
-			IP:   na.IP,
+			IP:   na.IP.AsSlice(),
 			Port: na.Port,
 		})
 	}

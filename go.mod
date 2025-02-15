@@ -10,12 +10,12 @@ require (
 	github.com/anacrolix/log v0.15.2
 	github.com/anacrolix/missinggo v1.3.0
 	github.com/anacrolix/missinggo/v2 v2.8.0
-	github.com/anacrolix/multiless v0.3.0
-	github.com/anacrolix/stm v0.2.0
+	github.com/anacrolix/multiless v0.4.0
+	github.com/anacrolix/stm v0.5.0
 	github.com/anacrolix/tagflag v1.4.0
 	github.com/anacrolix/upnp v0.1.4
 	github.com/anacrolix/utp v0.2.0
-	github.com/benbjohnson/immutable v0.2.0
+	github.com/benbjohnson/immutable v0.4.3
 	github.com/bits-and-blooms/bloom/v3 v3.7.0
 	github.com/bradfitz/iter v0.0.0-20191230175014-e8f45d346db8
 	github.com/davecgh/go-spew v1.1.1
@@ -33,6 +33,7 @@ require (
 )
 
 require (
+	github.com/alecthomas/atomic v0.1.0-alpha2 // indirect
 	github.com/alexflint/go-scalar v1.2.0 // indirect
 	github.com/anacrolix/generics v0.0.0-20230113004304-d6428d516633 // indirect
 	github.com/anacrolix/missinggo/perf v1.0.0 // indirect

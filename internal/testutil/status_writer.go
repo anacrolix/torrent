@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 )
 
 type StatusWriter interface {

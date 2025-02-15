@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/anacrolix/missinggo"
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/james-lawrence/torrent/metainfo"

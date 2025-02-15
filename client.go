@@ -18,8 +18,8 @@ import (
 
 	"github.com/james-lawrence/torrent/connections"
 
-	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/missinggo/v2/slices"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/james-lawrence/torrent/dht/v2"
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
@@ -973,10 +973,7 @@ func (cl *Client) AddDHTNodes(nodes []string) {
 			continue
 		}
 		ni := krpc.NodeInfo{
-			Addr: krpc.NodeAddr{
-				IP:   ip,
-				Port: hmp.Port,
-			},
+			Addr: krpc.NewNodeAddrFromIPPort(ip, hmp.Port),
 		}
 		cl.eachDhtServer(func(s *dht.Server) {
 			s.AddNode(ni)

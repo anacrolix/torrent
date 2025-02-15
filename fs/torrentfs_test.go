@@ -119,10 +119,7 @@ func TestUnmountWedged(t *testing.T) {
 		})
 		server.Serve(fs)
 	}()
-	<-fuseConn.Ready
-	if err := fuseConn.MountError; err != nil {
-		t.Fatalf("mount error: %s", err)
-	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	// Read the greeting file, though it will never be available. This should
 	// "wedge" FUSE, requiring the fs object to be forcibly destroyed. The

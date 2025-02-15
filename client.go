@@ -187,7 +187,7 @@ func (cl *Client) merge(old *torrent, updated Metadata) (err error) {
 	}
 
 	old.addTrackers(updated.Trackers)
-	old.lockedOpenNewConns()
+	old.openNewConns()
 	cl.event.Broadcast()
 
 	return nil

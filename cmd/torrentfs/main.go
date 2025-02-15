@@ -144,9 +144,6 @@ func mainExitCode() int {
 	if err := fusefs.Serve(conn, fs); err != nil {
 		log.Fatal(err)
 	}
-	<-conn.Ready
-	if err := conn.MountError; err != nil {
-		log.Fatal(err)
-	}
+
 	return 0
 }

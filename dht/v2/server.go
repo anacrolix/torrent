@@ -528,7 +528,7 @@ func (s *Server) sendError(ctx context.Context, addr Addr, t string, e krpc.Erro
 		return err
 	}
 	s.logger().Printf("sending error to %q: %v", addr, e)
-	_, err = s.SendToNode(ctx, b, addr)
+	_, err = s.SendToNode(ctx, b, addr, false)
 	if err != nil {
 		return err
 	}
@@ -549,7 +549,7 @@ func (s *Server) reply(ctx context.Context, addr Addr, t string, r krpc.Return) 
 		return err
 	}
 
-	wrote, err := s.SendToNode(ctx, b, addr)
+	wrote, err := s.SendToNode(ctx, b, addr, false)
 	if err != nil {
 		return err
 	}
@@ -618,7 +618,7 @@ func (s *Server) nodeErr(n *node) error {
 	return nil
 }
 
-func (s *Server) SendToNode(ctx context.Context, b []byte, node Addr) (wrote bool, err error) {
+func (s *Server) SendToNode(ctx context.Context, b []byte, node Addr, wait bool) (wrote bool, err error) {
 	if list := s.ipBlockList; list != nil {
 		if r, ok := list.Lookup(node.IP()); ok {
 			err = fmt.Errorf("write to %v blocked by %v", node, r)
@@ -626,8 +626,10 @@ func (s *Server) SendToNode(ctx context.Context, b []byte, node Addr) (wrote boo
 		}
 	}
 
-	if err = s.sendLimit.Wait(ctx); err != nil {
-		return false, err
+	if wait {
+		if err = s.sendLimit.Wait(ctx); err != nil {
+			return false, err
+		}
 	}
 
 	n, err := s.socket.WriteTo(b, node.Raw())
@@ -795,7 +797,7 @@ func (s *Server) transactionQuerySender(sendCtx context.Context, sendErr chan<- 
 	err := transactionSender(
 		sendCtx,
 		func() error {
-			wrote, err := s.SendToNode(sendCtx, b, addr)
+			wrote, err := s.SendToNode(sendCtx, b, addr, *writes == 0)
 			if wrote {
 				*writes++
 			}

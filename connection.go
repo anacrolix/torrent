@@ -467,7 +467,7 @@ func (cn *connection) totalExpectingTime() (ret time.Duration) {
 func (cn *connection) onPeerSentCancel(r request) {
 	cn._mu.RLock()
 	_, ok := cn.PeerRequests[r]
-	defer cn._mu.RUnlock()
+	cn._mu.RUnlock()
 
 	if !ok {
 		metrics.Add("unexpected cancels received", 1)

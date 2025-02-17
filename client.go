@@ -865,14 +865,18 @@ type Handle interface {
 }
 
 func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
-	cl.lock()
-	defer cl.unlock()
-
+	cl.rLock()
 	t, ok := cl.torrents[infoHash]
+	cl.rUnlock()
+
 	if !ok {
 		return fmt.Errorf("no such torrent")
 	}
+
 	err = t.close()
+
+	cl.lock()
+	defer cl.unlock()
 	delete(cl.torrents, infoHash)
 	return err
 }

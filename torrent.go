@@ -1517,16 +1517,21 @@ func (t *torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 }
 
 func (t *torrent) announceToDht(impliedPort bool, s *dht.Server) error {
-	ps, err := s.Announce(t.infoHash, t.cln.incomingPeerPort(), impliedPort)
+	ctx, done := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer done()
+
+	ps, err := s.Announce(ctx, t.infoHash, t.cln.incomingPeerPort(), impliedPort)
 	if err != nil {
 		return err
 	}
+
+	defer ps.Close()
 	go t.consumeDhtAnnouncePeers(ps.Peers)
 	select {
 	case <-t.closed.LockedChan(t.locker()):
-	case <-time.After(5 * time.Minute):
+	case <-ctx.Done():
 	}
-	ps.Close()
+
 	return nil
 }
 

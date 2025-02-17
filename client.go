@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	stdsync "sync"
 	"sync/atomic"
 	"time"
@@ -435,31 +434,6 @@ func (cl *Client) Close() {
 	cl.event.Broadcast()
 }
 
-func (cl *Client) wantConns() bool {
-	for _, t := range cl.torrents {
-		if t.wantConns() {
-			return true
-		}
-	}
-	return false
-}
-
-func (cl *Client) waitAccept() {
-	for {
-		select {
-		case <-cl.closed:
-			return
-		default:
-		}
-
-		if cl.wantConns() {
-			return
-		}
-
-		cl.event.Wait()
-	}
-}
-
 func (cl *Client) acceptConnections(l net.Listener) {
 	var (
 		err  error
@@ -597,10 +571,6 @@ func (cl *Client) dial(ctx context.Context, d dialer, addr string) (c net.Conn, 
 	}, nil
 }
 
-func forgettableDialError(err error) bool {
-	return strings.Contains(err.Error(), "no suitable address found")
-}
-
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
 func (cl *Client) establishOutgoingConnEx(ctx context.Context, t *torrent, addr IpPort, obfuscatedHeader bool) (c *connection, err error) {
@@ -621,9 +591,6 @@ func (cl *Client) establishOutgoingConnEx(ctx context.Context, t *torrent, addr 
 	}()
 
 	dl := time.Now().Add(cl.config.HandshakesTimeout)
-	ctx, cancel := context.WithDeadline(ctx, dl)
-	defer cancel()
-
 	if err = nc.SetDeadline(dl); err != nil {
 		return nil, err
 	}
@@ -768,17 +735,14 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	var (
 		buffered io.ReadWriter
-		rw       io.ReadWriter
 	)
-
-	rw = c.rw()
 
 	encryption := pp.EncryptionHandshake{
 		Keys:           cl.forSkeys,
 		CryptoSelector: cl.config.CryptoSelector,
 	}
 
-	if rw, buffered, err = encryption.Incoming(rw); err != nil && cl.config.HeaderObfuscationPolicy.RequirePreferred {
+	if _, buffered, err = encryption.Incoming(c.rw()); err != nil && cl.config.HeaderObfuscationPolicy.RequirePreferred {
 		return t, errors.Wrap(err, "connection does not have the required header obfuscation")
 	} else if err != nil && buffered == nil {
 		cl.config.debug().Println("encryption handshake failed", err)

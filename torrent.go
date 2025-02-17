@@ -1248,12 +1248,6 @@ func (t *torrent) readAt(b []byte, off int64) (n int, err error) {
 	return p.Storage().ReadAt(b, off-p.Info().Offset())
 }
 
-func (t *torrent) updateAllPieceCompletions() {
-	for i := pieceIndex(0); i < t.numPieces(); i++ {
-		t.updatePieceCompletion(i)
-	}
-}
-
 // Returns an error if the metadata was completed, but couldn't be set for
 // some reason. Blame it on the last peer to contribute.
 func (t *torrent) maybeCompleteMetadata() error {

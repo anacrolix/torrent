@@ -21,6 +21,7 @@ import (
 	"github.com/james-lawrence/torrent/x/conntrack"
 	"github.com/james-lawrence/torrent/x/langx"
 	"github.com/pkg/errors"
+	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/stm"
 )
@@ -47,11 +48,7 @@ type Server struct {
 	tokenServer  tokenServer // Manages tokens we issue to our queriers.
 	config       ServerConfig
 	stats        ServerStats
-	sendLimit    interface {
-		Wait(ctx context.Context) error
-		Allow() bool
-		AllowStm(tx *stm.Tx) bool
-	}
+	sendLimit    *rate.Limiter
 }
 
 func (s *Server) numGoodNodes() (num int) {
@@ -172,7 +169,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		table: table{
 			k: 8,
 		},
-		sendLimit: defaultSendLimiter,
+		sendLimit: rate.NewLimiter(rate.Every(time.Second/25), 100),
 	}
 	if s.config.ConnectionTracking == nil {
 		s.config.ConnectionTracking = conntrack.NewInstance()
@@ -531,7 +528,7 @@ func (s *Server) sendError(ctx context.Context, addr Addr, t string, e krpc.Erro
 		return err
 	}
 	s.logger().Printf("sending error to %q: %v", addr, e)
-	_, err = s.SendToNode(ctx, b, addr, false, true)
+	_, err = s.SendToNode(ctx, b, addr, false)
 	if err != nil {
 		return err
 	}
@@ -552,7 +549,7 @@ func (s *Server) reply(ctx context.Context, addr Addr, t string, r krpc.Return) 
 		return err
 	}
 
-	wrote, err := s.SendToNode(ctx, b, addr, false, true)
+	wrote, err := s.SendToNode(ctx, b, addr, false)
 	if err != nil {
 		return err
 	}
@@ -621,44 +618,31 @@ func (s *Server) nodeErr(n *node) error {
 	return nil
 }
 
-func (s *Server) SendToNode(ctx context.Context, b []byte, node Addr, wait, rate bool) (wrote bool, err error) {
+func (s *Server) SendToNode(ctx context.Context, b []byte, node Addr, wait bool) (wrote bool, err error) {
 	if list := s.ipBlockList; list != nil {
 		if r, ok := list.Lookup(node.IP()); ok {
 			err = fmt.Errorf("write to %v blocked by %v", node, r)
 			return
 		}
 	}
-	//s.config.Logger.WithValues(log.Debug).Printf("writing to %s: %q", node.String(), b)
-	if rate {
-		if wait {
-			err = s.sendLimit.Wait(ctx)
-			if err != nil {
-				return false, err
-			}
-		} else {
-			if !s.sendLimit.Allow() {
-				return false, errors.New("rate limit exceeded")
-			}
-		}
+
+	if err = s.sendLimit.Wait(ctx); err != nil {
+		return false, err
 	}
+
 	n, err := s.socket.WriteTo(b, node.Raw())
 	writes.Add(1)
-	if rate {
-		expvars.Add("rated writes", 1)
-	} else {
-		expvars.Add("unrated writes", 1)
-	}
 	if err != nil {
 		writeErrors.Add(1)
 		err = fmt.Errorf("error writing %d bytes to %s: %s", len(b), node, err)
 		return
 	}
-	wrote = true
+
 	if n != len(b) {
-		err = io.ErrShortWrite
-		return
+		return true, io.ErrShortWrite
 	}
-	return
+
+	return true, nil
 }
 
 func (s *Server) nextTransactionID() string {
@@ -705,7 +689,6 @@ type numWrites int
 
 func (s *Server) beginQuery(addr Addr, reason string, f func() numWrites) stm.Operation[func()] {
 	return func(tx *stm.Tx) func() {
-		tx.Assert(s.sendLimit.AllowStm(tx))
 		cteh := s.config.ConnectionTracking.Allow(tx, s.connTrackEntryForAddr(addr), reason, -1)
 		tx.Assert(cteh != nil)
 		return func() {
@@ -812,7 +795,7 @@ func (s *Server) transactionQuerySender(sendCtx context.Context, sendErr chan<- 
 	err := transactionSender(
 		sendCtx,
 		func() error {
-			wrote, err := s.SendToNode(sendCtx, b, addr, *writes == 0, *writes != 0)
+			wrote, err := s.SendToNode(sendCtx, b, addr, *writes == 0)
 			if wrote {
 				*writes++
 			}

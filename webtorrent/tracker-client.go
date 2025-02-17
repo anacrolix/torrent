@@ -19,23 +19,6 @@ import (
 	"github.com/anacrolix/torrent/types/infohash"
 )
 
-type TrackerStatus struct {
-	Url string `json:"url"`
-	Ok  bool   `json:"ok"`
-	Err error  `json:"err"`
-}
-
-type AnnounceStatus struct {
-	TrackerStatus
-	Event    string `json:"event"`
-	InfoHash string `json:"info_hash"`
-}
-
-type TrackerObserver struct {
-	ConnStatus     chan TrackerStatus
-	AnnounceStatus chan AnnounceStatus
-}
-
 type TrackerClientStats struct {
 	Dials                  int64
 	ConvertedInboundConns  int64
@@ -50,7 +33,6 @@ type TrackerClient struct {
 	OnConn             onDataChannelOpen
 	Logger             log.Logger
 	Dialer             *websocket.Dialer
-	Observers          *TrackerObserver
 
 	mu             sync.Mutex
 	cond           sync.Cond

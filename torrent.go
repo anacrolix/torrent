@@ -1874,11 +1874,6 @@ func (t *Torrent) onWebRtcConn(
 	}
 	localAddrIpPort := missinggo.IpPortFromNetAddr(netConn.LocalAddr())
 
-	var obs *PeerObserver
-	if t.cl.config.Observers != nil {
-		obs = &t.cl.config.Observers.Peers
-	}
-
 	pc, err := t.cl.initiateProtocolHandshakes(
 		context.Background(),
 		netConn,
@@ -1890,7 +1885,6 @@ func (t *Torrent) onWebRtcConn(
 			localPublicAddr: localAddrIpPort,
 			network:         webrtcNetwork,
 			connString:      fmt.Sprintf("webrtc offer_id %x: %v", dcc.OfferId, regularNetConnPeerConnConnString(netConn)),
-			obs:             obs,
 		},
 	)
 	if err != nil {

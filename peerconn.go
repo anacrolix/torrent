@@ -38,10 +38,6 @@ type PeerStatus struct {
 	Err string // see https://github.com/golang/go/issues/5161
 }
 
-type PeerObserver struct {
-	PeerStatus chan PeerStatus
-}
-
 // Maintains the state of a BitTorrent-protocol based connection with a peer.
 type PeerConn struct {
 	Peer
@@ -100,7 +96,6 @@ type PeerConn struct {
 	// we can verify all the pieces for a file when they're all arrived before submitting them to
 	// the torrent.
 	receivedHashPieces map[[32]byte][][32]byte
-	Observers          *PeerObserver
 }
 
 func (cn *PeerConn) pexStatus() string {

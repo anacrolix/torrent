@@ -313,12 +313,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		}
 	}
 
-	var obs *webtorrent.TrackerObserver
-	if cl.config.Observers != nil {
-		obs = &cl.config.Observers.Trackers
-	}
 	cl.websocketTrackers = websocketTrackers{
-		obs:    obs,
 		PeerId: cl.peerID,
 		Logger: cl.logger.WithNames("websocketTrackers"),
 		GetAnnounceRequest: func(
@@ -749,10 +744,6 @@ func doProtocolHandshakeOnDialResult(
 	nc := dr.Conn
 	addrIpPort, _ := tryIpPortFromNetAddr(addr)
 
-	var obs *PeerObserver
-	if t.cl.config.Observers != nil {
-		obs = &t.cl.config.Observers.Peers
-	}
 	c, err = cl.initiateProtocolHandshakes(
 		context.Background(), nc, t, obfuscatedHeader,
 		newConnectionOpts{
@@ -762,7 +753,6 @@ func doProtocolHandshakeOnDialResult(
 			localPublicAddr: cl.publicAddr(addrIpPort.IP),
 			network:         dr.Dialer.DialerNetwork(),
 			connString:      regularNetConnPeerConnConnString(nc),
-			obs:             obs,
 		})
 	if err != nil {
 		nc.Close()
@@ -1666,7 +1656,6 @@ type newConnectionOpts struct {
 	localPublicAddr peerLocalPublicAddr
 	network         string
 	connString      string
-	obs             *PeerObserver
 }
 
 func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerConn) {
@@ -1687,7 +1676,6 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 		},
 		connString: opts.connString,
 		conn:       nc,
-		Observers:  opts.obs,
 	}
 	c.peerRequestDataAllocLimiter.Max = cl.config.MaxAllocPeerRequestDataPerConn
 	c.initRequestState()

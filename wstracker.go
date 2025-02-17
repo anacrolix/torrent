@@ -46,7 +46,6 @@ type websocketTrackers struct {
 	OnConn                     func(webtorrent.DataChannelConn, webtorrent.DataChannelContext)
 	mu                         sync.Mutex
 	clients                    map[string]*refCountedWebtorrentTrackerClient
-	obs                        *webtorrent.TrackerObserver
 	Proxy                      httpTracker.ProxyFunc
 	DialContext                func(ctx context.Context, network, addr string) (net.Conn, error)
 	WebsocketTrackerHttpHeader func() netHttp.Header
@@ -66,8 +65,6 @@ func (me *websocketTrackers) Get(url string, infoHash [20]byte) (*webtorrent.Tra
 		}
 		value = &refCountedWebtorrentTrackerClient{
 			TrackerClient: webtorrent.TrackerClient{
-				// TODO pass in callbacks rather than observers
-				Observers:          me.obs,
 				Dialer:             dialer,
 				Url:                url,
 				GetAnnounceRequest: me.GetAnnounceRequest,

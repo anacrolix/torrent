@@ -81,9 +81,9 @@ func (s *Server) Announce(infoHash [20]byte, port int, impliedPort bool) (*Annou
 		traversal:            newTraversal(infoHashInt160),
 	}
 	var ctx context.Context
-	ctx, a.cancel = context.WithCancel(context.Background())
+	ctx, a.cancel, a.doneVar = stmutil.ContextDoneVar(context.Background())
 	a.done = ctx.Done()
-	a.doneVar, _ = stmutil.ContextDoneVar(ctx)
+
 	// Function ferries from values to Peers until discovery is halted.
 	go func() {
 		defer close(a.Peers)

@@ -131,9 +131,11 @@ func (i *Instance) Wait(ctx context.Context, e Entry, reason string, p priority)
 		created:  time.Now(),
 	}
 	i.addWaiter(eh)
-	ctxDone, cancel := stmutil.ContextDoneVar(ctx)
-	defer cancel()
-	success := stm.Atomically(func(tx *stm.Tx) interface{} {
+
+	_, done, ctxDone := stmutil.ContextDoneVar(ctx)
+	defer done()
+
+	success := stm.Atomically(func(tx *stm.Tx) bool {
 		es := i.entries.Get(tx)
 		if s, ok := es.Get(e); ok {
 			i.entries.Set(tx, es.Set(e, s.Add(eh)))
@@ -153,7 +155,8 @@ func (i *Instance) Wait(ctx context.Context, e Entry, reason string, p priority)
 		}
 		tx.Retry()
 		panic("unreachable")
-	}).(bool)
+	})
+
 	stm.Atomically(stm.VoidOperation(func(tx *stm.Tx) {
 		i.deleteWaiter(eh, tx)
 	}))

@@ -121,7 +121,7 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		}),
 		conns:                   make(map[*connection]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
 		halfOpen:                make(map[string]Peer),
-		_halfOpenmu:             &sync.Mutex{},
+		_halfOpenmu:             &sync.RWMutex{},
 		pieceStateChanges:       pubsub.NewPubSub(),
 		storageOpener:           storage.NewClient(src.Storage),
 		maxEstablishedConns:     cl.config.EstablishedConnsPerTorrent,
@@ -189,7 +189,7 @@ type torrent struct {
 	// Set of addrs to which we're attempting to connect. Connections are
 	// half-open until all handshakes are completed.
 	halfOpen    map[string]Peer
-	_halfOpenmu *sync.Mutex
+	_halfOpenmu *sync.RWMutex
 
 	fastestConn *connection
 
@@ -329,10 +329,12 @@ func (t *torrent) KnownSwarm() (ks []Peer) {
 		ks = append(ks, peer)
 	})
 
+	t._halfOpenmu.RLock()
 	// Add half-open peers to the list
 	for _, peer := range t.halfOpen {
 		ks = append(ks, peer)
 	}
+	t._halfOpenmu.RUnlock()
 
 	// Add active peers to the list
 	for conn := range t.conns {
@@ -388,15 +390,20 @@ func (t *torrent) pieceCompleteUncached(piece pieceIndex) storage.Completion {
 
 // There's a connection to that address already.
 func (t *torrent) addrActive(addr string) bool {
-	if _, ok := t.halfOpen[addr]; ok {
+	t._halfOpenmu.RLock()
+	_, ok := t.halfOpen[addr]
+	t._halfOpenmu.RUnlock()
+	if ok {
 		return true
 	}
+
 	for c := range t.conns {
 		ra := c.remoteAddr
 		if ra.String() == addr {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -1163,10 +1170,16 @@ func (t *torrent) maxHalfOpen() int {
 }
 
 func (t *torrent) dropHalfOpen(addr string) {
-	if _, ok := t.halfOpen[addr]; !ok {
+	t._halfOpenmu.RLock()
+	_, ok := t.halfOpen[addr]
+	t._halfOpenmu.RUnlock()
+	if !ok {
 		panic("invariant broken")
 	}
+
+	t._halfOpenmu.Lock()
 	delete(t.halfOpen, addr)
+	t._halfOpenmu.Unlock()
 }
 
 func (t *torrent) openNewConns() {
@@ -1178,10 +1191,6 @@ func (t *torrent) openNewConns() {
 	defer t.updateWantPeersEvent()
 	for {
 		if !t.wantConns() {
-			return
-		}
-
-		if len(t.halfOpen) >= t.maxHalfOpen() {
 			return
 		}
 
@@ -1591,9 +1600,11 @@ func (t *torrent) numTotalPeers() int {
 		peers[ra.String()] = struct{}{}
 	}
 
+	t._halfOpenmu.RLock()
 	for addr := range t.halfOpen {
 		peers[addr] = struct{}{}
 	}
+	t._halfOpenmu.RUnlock()
 
 	t.peers.Each(func(peer Peer) {
 		peers[fmt.Sprintf("%s:%d", peer.IP, peer.Port)] = struct{}{}

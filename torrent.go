@@ -1804,6 +1804,15 @@ func (t *Torrent) assertPendingRequests() {
 func (t *Torrent) dropConnection(c *PeerConn) {
 	t.cl.event.Broadcast()
 	c.close()
+
+	for _, cb := range c.callbacks.StatusUpdated {
+		cb(StatusUpdatedEvent{
+			Event:  PeerDisconnected,
+			PeerId: c.PeerID,
+		})
+	}
+	t.logger.WithDefaultLevel(log.Debug).Printf("dropping connection to %+q, sent peerconn update", c.PeerID)
+
 	if t.deletePeerConn(c) {
 		t.openNewConns()
 	}
@@ -1864,6 +1873,7 @@ func (t *Torrent) onWebRtcConn(
 		return
 	}
 	localAddrIpPort := missinggo.IpPortFromNetAddr(netConn.LocalAddr())
+
 	pc, err := t.cl.initiateProtocolHandshakes(
 		context.Background(),
 		netConn,

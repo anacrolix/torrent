@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 
@@ -34,4 +35,14 @@ func TestingConfig(t testing.TB) *ClientConfig {
 	//	return t
 	//})
 	return cfg
+}
+
+func readChannelTimeout[T any](t *testing.T, channel chan T, duration time.Duration) interface{} {
+	select {
+	case s := <-channel:
+		return s
+	case <-time.After(duration):
+		require.Fail(t, "Timeout reading observer channel.")
+	}
+	return nil
 }

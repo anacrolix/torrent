@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/anacrolix/torrent/webtorrent"
+
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
@@ -47,7 +49,6 @@ import (
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/types/infohash"
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
-	"github.com/anacrolix/torrent/webtorrent"
 )
 
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
@@ -332,6 +333,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		WebsocketTrackerHttpHeader: cl.config.WebsocketTrackerHttpHeader,
 		ICEServers:                 cl.ICEServers(),
 		DialContext:                cl.config.TrackerDialContext,
+		callbacks:                  &cl.config.Callbacks,
 		OnConn: func(dc webtorrent.DataChannelConn, dcc webtorrent.DataChannelContext) {
 			cl.lock()
 			defer cl.unlock()
@@ -741,6 +743,7 @@ func doProtocolHandshakeOnDialResult(
 	cl := t.cl
 	nc := dr.Conn
 	addrIpPort, _ := tryIpPortFromNetAddr(addr)
+
 	c, err = cl.initiateProtocolHandshakes(
 		context.Background(), nc, t, obfuscatedHeader,
 		newConnectionOpts{
@@ -1128,8 +1131,23 @@ func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 	pc.startMessageWriter()
 	pc.sendInitialMessages()
 	pc.initUpdateRequestsTimer()
+
+	for _, cb := range pc.callbacks.StatusUpdated {
+		cb(StatusUpdatedEvent{
+			Event:  PeerConnected,
+			PeerId: pc.PeerID,
+		})
+	}
+
 	err := pc.mainReadLoop()
 	if err != nil {
+		for _, cb := range pc.callbacks.StatusUpdated {
+			cb(StatusUpdatedEvent{
+				Event:  PeerDisconnected,
+				Error:  err,
+				PeerId: pc.PeerID,
+			})
+		}
 		return fmt.Errorf("main read loop: %w", err)
 	}
 	return nil

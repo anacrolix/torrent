@@ -5,68 +5,20 @@ import (
 	"os"
 	"testing"
 	"testing/iotest"
-	"time"
 
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/torrent/internal/testutil"
-	"github.com/anacrolix/torrent/types"
 	"github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 )
 
-func TestPeerConnObserverReadStatusOk(t *testing.T) {
-	cfg := TestingConfig(t)
-	cfg.DisableTrackers = false
-	cfg.EstablishedConnsPerTorrent = 1
-	cfg.Observers = &Observers{
-		Peers: PeerObserver{
-			PeerStatus: make(chan PeerStatus),
-		},
-	}
-
-	c, _ := NewClient(cfg)
-	defer c.Close()
-
-	go func() {
-		cfg.Observers.Peers.PeerStatus <- PeerStatus{
-			Ok: true,
-		}
-	}()
-
-	status := readChannelTimeout(t, cfg.Observers.Peers.PeerStatus, 500*time.Millisecond).(PeerStatus)
-	require.True(t, status.Ok)
-	require.Equal(t, "", status.Err)
-}
-
-func TestPeerConnObserverReadStatusErr(t *testing.T) {
-	cfg := TestingConfig(t)
-	cfg.DisableTrackers = false
-	cfg.EstablishedConnsPerTorrent = 1
-	cfg.Observers = &Observers{
-		Peers: PeerObserver{
-			PeerStatus: make(chan PeerStatus),
-		},
-	}
-
-	c, _ := NewClient(cfg)
-	defer c.Close()
-
-	go func() {
-		cfg.Observers.Peers.PeerStatus <- PeerStatus{
-			Err: "test error",
-		}
-	}()
-
-	status := readChannelTimeout(t, cfg.Observers.Peers.PeerStatus, 500*time.Millisecond).(PeerStatus)
-	require.False(t, status.Ok)
-	require.Equal(t, status.Err, "test error")
-}
-
 func TestPeerConnEstablished(t *testing.T) {
-	obs := NewClientObservers()
+	var expectedPeerId PeerID
+	missinggo.CopyExact(&expectedPeerId, "12345123451234512345")
+
 	ps := testClientTransferParams{
 		ConfigureSeeder: ConfigureClient{
 			Config: func(cfg *ClientConfig) {
@@ -75,32 +27,30 @@ func TestPeerConnEstablished(t *testing.T) {
 		},
 		ConfigureLeecher: ConfigureClient{
 			Config: func(cfg *ClientConfig) {
-				// TODO one of UTP or TCP is needed for the transfer
-				// Does this mean we're not doing webtorrent? TBC
 				// cfg.DisableUTP = true
 				cfg.DisableTCP = true
 				cfg.Debug = false
 				cfg.DisableTrackers = true
 				cfg.EstablishedConnsPerTorrent = 1
-				cfg.Observers = obs
+				cfg.Callbacks.StatusUpdated = append(cfg.Callbacks.StatusUpdated,
+					func(e StatusUpdatedEvent) {
+						if e.Event == PeerConnected {
+							require.Equal(t, expectedPeerId, e.PeerId)
+							require.NoError(t, e.Error)
+						}
+					},
+					func(e StatusUpdatedEvent) {
+						if e.Event == PeerDisconnected {
+							require.Equal(t, expectedPeerId, e.PeerId)
+							require.NoError(t, e.Error)
+						}
+					},
+				)
 			},
 		},
 	}
 
-	go testClientTransfer(t, ps)
-
-	status := readChannelTimeout(t, obs.Peers.PeerStatus, 500*time.Millisecond).(PeerStatus)
-	var expectedPeerId types.PeerID
-	missinggo.CopyExact(&expectedPeerId, "12345123451234512345")
-	require.Equal(t, expectedPeerId, status.Id)
-	require.True(t, status.Ok)
-	require.Equal(t, "", status.Err)
-
-	// Peer conn is dropped after transfer is finished. This is the next update we receive.
-	status = readChannelTimeout(t, obs.Peers.PeerStatus, 500*time.Millisecond).(PeerStatus)
-	require.Equal(t, expectedPeerId, status.Id)
-	require.False(t, status.Ok)
-	require.Equal(t, "", status.Err)
+	testClientTransfer(t, ps)
 }
 
 type ConfigureClient struct {

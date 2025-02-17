@@ -106,6 +106,6 @@ func (t Endpoint) Handle(ctx context.Context, source dht.Addr, s *dht.Server, ra
 		return err
 	}
 
-	_, err = s.SendToNode(ctx, b, source, false)
+	_, err = s.SendToNode(ctx, b, source)
 	return err
 }

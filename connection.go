@@ -465,17 +465,23 @@ func (cn *connection) totalExpectingTime() (ret time.Duration) {
 }
 
 func (cn *connection) onPeerSentCancel(r request) {
-	if _, ok := cn.PeerRequests[r]; !ok {
+	cn._mu.RLock()
+	_, ok := cn.PeerRequests[r]
+	defer cn._mu.RUnlock()
+
+	if !ok {
 		metrics.Add("unexpected cancels received", 1)
 		return
 	}
+
 	if cn.fastEnabled() {
 		cn.reject(r)
-	} else {
-		cn._mu.Lock()
-		defer cn._mu.Unlock()
-		delete(cn.PeerRequests, r)
+		return
 	}
+
+	cn._mu.Lock()
+	defer cn._mu.Unlock()
+	delete(cn.PeerRequests, r)
 }
 
 func (cn *connection) Choke(msg messageWriter) (more bool) {

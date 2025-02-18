@@ -169,7 +169,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		table: table{
 			k: 8,
 		},
-		sendLimit: rate.NewLimiter(rate.Every(time.Second/25), 100),
+		sendLimit: rate.NewLimiter(rate.Every(time.Second/1000), 100),
 	}
 	if s.config.ConnectionTracking == nil {
 		s.config.ConnectionTracking = conntrack.NewInstance()

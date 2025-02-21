@@ -8,10 +8,7 @@ import (
 
 func TimestampTransactionID() string {
 	var b [binary.MaxVarintLen64]byte
-	_ = binary.PutUvarint(b[:], rand.Uint64())
-	v2 := b[:2]
-	n := binary.PutVarint(b[:], time.Now().UnixNano())
-	b[2] = v2[0]
-	b[3] = v2[1]
-	return string(b[:n])
+	binary.BigEndian.PutUint64(b[:], uint64(time.Now().UnixNano()))
+	binary.BigEndian.PutUint16(b[binary.MaxVarintLen64-2:], uint16(rand.Uint64()))
+	return string(b[:])
 }

@@ -3,7 +3,6 @@ package dht
 import (
 	"context"
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -41,7 +40,6 @@ type Server struct {
 	mu           sync.RWMutex
 	transactions map[transactionKey]*Transaction
 	mux          Muxer
-	nextT        uint64 // unique "t" field for outbound queries
 	table        table
 	closed       missinggo.Event
 	ipBlockList  iplist.Ranger
@@ -647,13 +645,6 @@ func (s *Server) SendToNode(ctx context.Context, b []byte, node Addr, wait bool)
 	return true, nil
 }
 
-func (s *Server) nextTransactionID() string {
-	var b [binary.MaxVarintLen64]byte
-	n := binary.PutUvarint(b[:], s.nextT)
-	s.nextT++
-	return string(b[:n])
-}
-
 func (s *Server) deleteTransaction(k transactionKey) {
 	delete(s.transactions, k)
 }
@@ -725,7 +716,7 @@ func (s *Server) query(ctx context.Context, addr Addr, q string, a *krpc.MsgArgs
 }
 
 func (s *Server) makeQueryBytes(q string, a *krpc.MsgArgs) (tid string, b []byte) {
-	t := s.nextTransactionID()
+	t := krpc.TimestampTransactionID()
 	if a == nil {
 		a = &krpc.MsgArgs{}
 	}
@@ -737,7 +728,6 @@ func (s *Server) makeQueryBytes(q string, a *krpc.MsgArgs) (tid string, b []byte
 		A: a,
 	}
 
-	// log.Println("DERP", spew.Sdump(m))
 	b, err := bencode.Marshal(m)
 	if err != nil {
 		panic(err)

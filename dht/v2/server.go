@@ -660,7 +660,7 @@ func (s *Server) deleteTransaction(k transactionKey) {
 
 func (s *Server) addTransaction(k transactionKey, t *Transaction) {
 	if _, ok := s.transactions[k]; ok {
-		panic("transaction not unique")
+		panic(fmt.Sprintf("transaction not unique: %s", k.T))
 	}
 	s.transactions[k] = t
 }

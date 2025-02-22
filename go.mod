@@ -21,8 +21,10 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/edsrzf/mmap-go v1.2.0
+	github.com/frankban/quicktest v1.14.6
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/google/btree v1.1.3
+	github.com/google/go-cmp v0.6.0
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
@@ -42,9 +44,12 @@ require (
 	github.com/bits-and-blooms/bitset v1.12.0 // indirect
 	github.com/gosuri/uilive v0.0.4 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rogpeppe/go-internal v1.9.0 // indirect
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948 // indirect
 	golang.org/x/sys v0.30.0 // indirect

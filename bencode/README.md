@@ -27,7 +27,7 @@ func main(){
 	if err != nil {
 		log.Fatal(err)
 	}
-	
+
 	//decode
 	err := bencode.Unmarshal(data, &v)
 	if err != nil {

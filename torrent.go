@@ -2055,7 +2055,7 @@ func (t *torrent) Piece(i pieceIndex) *Piece {
 func (t *torrent) ping(addr net.UDPAddr) {
 	t.cln.eachDhtServer(func(s *dht.Server) {
 		go func() {
-			_, _, err := dht.Ping3S(context.Background(), s, s.ID(), dht.NewAddr(&addr))
+			_, _, err := dht.Ping3S(context.Background(), s, dht.NewAddr(&addr), s.ID())
 			if err != nil {
 				log.Println("failed to ping address", err)
 			}

@@ -11,7 +11,7 @@ import (
 // Errors
 //----------------------------------------------------------------------------
 
-// MarshalTypeError in case the marshaler cannot encode a type, it will return this error. Typical
+// In case if marshaler cannot encode a type, it will return this error. Typical
 // example of such type is float32/float64 which has no bencode representation.
 type MarshalTypeError struct {
 	Type reflect.Type
@@ -21,7 +21,7 @@ func (e *MarshalTypeError) Error() string {
 	return "bencode: unsupported type: " + e.Type.String()
 }
 
-// UnmarshalInvalidArgError argument must be a non-nil value of some pointer type.
+// Unmarshal argument must be a non-nil value of some pointer type.
 type UnmarshalInvalidArgError struct {
 	Type reflect.Type
 }
@@ -37,17 +37,23 @@ func (e *UnmarshalInvalidArgError) Error() string {
 	return "bencode: Unmarshal(nil " + e.Type.String() + ")"
 }
 
-// UnmarshalTypeError spotted a value that was not appropriate for a given Go value.
+// Unmarshaler spotted a value that was not appropriate for a given Go value.
 type UnmarshalTypeError struct {
-	Value string
-	Type  reflect.Type
+	BencodeTypeName     string
+	UnmarshalTargetType reflect.Type
 }
 
+// This could probably be a value type, but we may already have users assuming
+// that it's passed by pointer.
 func (e *UnmarshalTypeError) Error() string {
-	return fmt.Sprintf("cannot unmarshal a bencode %s into a %s", e.Value, e.Type)
+	return fmt.Sprintf(
+		"can't unmarshal a bencode %v into a %v",
+		e.BencodeTypeName,
+		e.UnmarshalTargetType,
+	)
 }
 
-// UnmarshalFieldError tried to write to an unexported (therefore unwritable) field.
+// Unmarshaler tried to write to an unexported (therefore unwritable) field.
 type UnmarshalFieldError struct {
 	Key   string
 	Type  reflect.Type
@@ -59,7 +65,7 @@ func (e *UnmarshalFieldError) Error() string {
 		e.Field.Name + "\" in type: " + e.Type.String()
 }
 
-// SyntaxError malformed bencode input, unmarshaler failed to parse it.
+// Malformed bencode input, unmarshaler failed to parse it.
 type SyntaxError struct {
 	Offset int64 // location of the error
 	What   error // error description
@@ -69,7 +75,7 @@ func (e *SyntaxError) Error() string {
 	return fmt.Sprintf("bencode: syntax error (offset: %d): %s", e.Offset, e.What)
 }
 
-// MarshalerError a non-nil error was returned after calling MarshalBencode on a type which
+// A non-nil error was returned after calling MarshalBencode on a type which
 // implements the Marshaler interface.
 type MarshalerError struct {
 	Type reflect.Type
@@ -80,7 +86,7 @@ func (e *MarshalerError) Error() string {
 	return "bencode: error calling MarshalBencode for type " + e.Type.String() + ": " + e.Err.Error()
 }
 
-// UnmarshalerError a non-nil error was returned after calling UnmarshalBencode on a type which
+// A non-nil error was returned after calling UnmarshalBencode on a type which
 // implements the Unmarshaler interface.
 type UnmarshalerError struct {
 	Type reflect.Type
@@ -95,13 +101,13 @@ func (e *UnmarshalerError) Error() string {
 // Interfaces
 //----------------------------------------------------------------------------
 
-// Marshaler any type which implements this interface, will be marshaled using the
+// Any type which implements this interface, will be marshaled using the
 // specified method.
 type Marshaler interface {
 	MarshalBencode() ([]byte, error)
 }
 
-// Unmarshaler any type which implements this interface, will be unmarshaled using the
+// Any type which implements this interface, will be unmarshaled using the
 // specified method.
 type Unmarshaler interface {
 	UnmarshalBencode([]byte) error
@@ -119,7 +125,6 @@ func Marshal(v interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// MustMarshal encodes the provided value or panics.
 func MustMarshal(v interface{}) []byte {
 	b, err := Marshal(v)
 	if err != nil {
@@ -128,19 +133,23 @@ func MustMarshal(v interface{}) []byte {
 	return b
 }
 
-// Unmarshal the bencode value in the 'data' to a value pointed by the 'v'
-// pointer, return a non-nil error if any.
+// Unmarshal the bencode value in the 'data' to a value pointed by the 'v' pointer, return a non-nil
+// error if any. If there are trailing bytes, this results in ErrUnusedTrailingBytes, but the value
+// will be valid. It's probably more consistent to use Decoder.Decode if you want to rely on this
+// behaviour (inspired by Rust's serde here).
 func Unmarshal(data []byte, v interface{}) (err error) {
-	buf := bytes.NewBuffer(data)
-	e := Decoder{r: buf}
-	err = e.Decode(v)
-	if err == nil && buf.Len() != 0 {
-		err = ErrUnusedTrailingBytes{buf.Len()}
+	buf := bytes.NewReader(data)
+	dec := Decoder{r: buf}
+	err = dec.Decode(v)
+	if err != nil {
+		return
 	}
-	return
+	if buf.Len() != 0 {
+		return ErrUnusedTrailingBytes{buf.Len()}
+	}
+	return dec.ReadEOF()
 }
 
-// ErrUnusedTrailingBytes returned when there are extra bytes at the end of the encoded data.
 type ErrUnusedTrailingBytes struct {
 	NumUnusedBytes int
 }
@@ -149,12 +158,10 @@ func (me ErrUnusedTrailingBytes) Error() string {
 	return fmt.Sprintf("%d unused trailing bytes", me.NumUnusedBytes)
 }
 
-// NewDecoder returns a bencode decoder
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{r: &scanner{r: r}}
 }
 
-// NewEncoder returns a bencode encoder
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{w: w}
 }

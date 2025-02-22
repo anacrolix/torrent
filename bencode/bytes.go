@@ -1,21 +1,30 @@
 package bencode
 
-// Bytes effectively a type alias but adds the marshalling functions.
+import (
+	"errors"
+	"fmt"
+)
+
 type Bytes []byte
 
 var (
-	_ Unmarshaler = &Bytes{}
-	_ Marshaler   = &Bytes{}
+	_ Unmarshaler = (*Bytes)(nil)
+	_ Marshaler   = (*Bytes)(nil)
 	_ Marshaler   = Bytes{}
 )
 
-// UnmarshalBencode bencode decode for the provided bytes
 func (me *Bytes) UnmarshalBencode(b []byte) error {
 	*me = append([]byte(nil), b...)
 	return nil
 }
 
-// MarshalBencode bencode encoder for the current bytes
 func (me Bytes) MarshalBencode() ([]byte, error) {
+	if len(me) == 0 {
+		return nil, errors.New("marshalled Bytes should not be zero-length")
+	}
 	return me, nil
+}
+
+func (me Bytes) GoString() string {
+	return fmt.Sprintf("bencode.Bytes(%q)", []byte(me))
 }

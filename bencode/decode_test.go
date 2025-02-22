@@ -2,44 +2,51 @@ package bencode
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"math/big"
 	"reflect"
+	"strings"
 	"testing"
 
+	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type randomDecodeTest struct {
+type random_decode_test struct {
 	data     string
 	expected interface{}
 }
 
-var randomDecodeTests = []randomDecodeTest{
+var random_decode_tests = []random_decode_test{
 	{"i57e", int64(57)},
 	{"i-9223372036854775808e", int64(-9223372036854775808)},
 	{"5:hello", "hello"},
 	{"29:unicode test проверка", "unicode test проверка"},
 	{"d1:ai5e1:b5:helloe", map[string]interface{}{"a": int64(5), "b": "hello"}},
-	{"li5ei10ei15ei20e7:bencodee",
-		[]interface{}{int64(5), int64(10), int64(15), int64(20), "bencode"}},
+	{
+		"li5ei10ei15ei20e7:bencodee",
+		[]interface{}{int64(5), int64(10), int64(15), int64(20), "bencode"},
+	},
 	{"ldedee", []interface{}{map[string]interface{}{}, map[string]interface{}{}}},
 	{"le", []interface{}{}},
 	{"i604919719469385652980544193299329427705624352086e", func() *big.Int {
 		ret, _ := big.NewInt(-1).SetString("604919719469385652980544193299329427705624352086", 10)
 		return ret
 	}()},
-	{"d1:rd6:\xd4/\xe2F\x00\x01e1:t3:\x9a\x87\x011:v4:TR%=1:y1:re", map[string]interface{}{
-		"r": map[string]interface{}{},
+	{"d1:rd6:\xd4/\xe2F\x00\x01i42ee1:t3:\x9a\x87\x011:v4:TR%=1:y1:re", map[string]interface{}{
+		"r": map[string]interface{}{"\xd4/\xe2F\x00\x01": int64(42)},
 		"t": "\x9a\x87\x01",
 		"v": "TR%=",
 		"y": "r",
 	}},
+	{"d0:i420ee", map[string]interface{}{"": int64(420)}},
 }
 
 func TestRandomDecode(t *testing.T) {
-	for _, test := range randomDecodeTests {
+	for _, test := range random_decode_tests {
 		var value interface{}
 		err := Unmarshal([]byte(test.data), &value)
 		if err != nil {
@@ -96,7 +103,13 @@ func TestDecoderConsecutiveDicts(t *testing.T) {
 	assert.EqualValues(t, 44, d.Offset)
 }
 
-func assertEqual(t *testing.T, x, y interface{}) {
+func check_error(t *testing.T, err error) {
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func assert_equal(t *testing.T, x, y interface{}) {
 	if !reflect.DeepEqual(x, y) {
 		t.Errorf("got: %v (%T), expected: %v (%T)\n", x, x, y, y)
 	}
@@ -106,29 +119,28 @@ type unmarshalerInt struct {
 	x int
 }
 
-func (t *unmarshalerInt) UnmarshalBencode(data []byte) error {
-	return Unmarshal(data, &t.x)
+func (me *unmarshalerInt) UnmarshalBencode(data []byte) error {
+	return Unmarshal(data, &me.x)
 }
 
 type unmarshalerString struct {
 	x string
 }
 
-func (t *unmarshalerString) UnmarshalBencode(data []byte) error {
-	t.x = string(data)
+func (me *unmarshalerString) UnmarshalBencode(data []byte) error {
+	me.x = string(data)
 	return nil
 }
 
 func TestUnmarshalerBencode(t *testing.T) {
 	var i unmarshalerInt
 	var ss []unmarshalerString
-	require.NoError(t, Unmarshal([]byte("i71e"), &i))
-	assertEqual(t, i.x, 71)
-	require.NoError(t, Unmarshal([]byte("l5:hello5:fruit3:waye"), &ss))
-	assertEqual(t, ss[0].x, "5:hello")
-	assertEqual(t, ss[1].x, "5:fruit")
-	assertEqual(t, ss[2].x, "3:way")
-
+	check_error(t, Unmarshal([]byte("i71e"), &i))
+	assert_equal(t, i.x, 71)
+	check_error(t, Unmarshal([]byte("l5:hello5:fruit3:waye"), &ss))
+	assert_equal(t, ss[0].x, "5:hello")
+	assert_equal(t, ss[1].x, "5:fruit")
+	assert_equal(t, ss[2].x, "3:way")
 }
 
 func TestIgnoreUnmarshalTypeError(t *testing.T) {
@@ -138,7 +150,7 @@ func TestIgnoreUnmarshalTypeError(t *testing.T) {
 	}{}
 	require.Error(t, Unmarshal([]byte("d6:Normal5:helloe"), &s))
 	assert.NoError(t, Unmarshal([]byte("d6:Ignore5:helloe"), &s))
-	require.Nil(t, Unmarshal([]byte("d6:Ignorei42ee"), &s))
+	qt.Assert(t, Unmarshal([]byte("d6:Ignorei42ee"), &s), qt.IsNil)
 	assert.EqualValues(t, 42, s.Ignore)
 }
 
@@ -166,4 +178,115 @@ func TestUnmarshalByteArray(t *testing.T) {
 	var ba [2]byte
 	assert.NoError(t, Unmarshal([]byte("2:hi"), &ba))
 	assert.EqualValues(t, "hi", ba[:])
+}
+
+func TestDecodeDictIntoUnsupported(t *testing.T) {
+	// Any type that a dict shouldn't be unmarshallable into.
+	var i int
+	c := qt.New(t)
+	err := Unmarshal([]byte("d1:a1:be"), &i)
+	t.Log(err)
+	c.Check(err, qt.IsNotNil)
+}
+
+func TestUnmarshalDictKeyNotString(t *testing.T) {
+	// Any type that a dict shouldn't be unmarshallable into.
+	var i int
+	c := qt.New(t)
+	err := Unmarshal([]byte("di42e3:yese"), &i)
+	t.Log(err)
+	c.Check(err, qt.Not(qt.IsNil))
+}
+
+type arbitraryReader struct{}
+
+func (arbitraryReader) Read(b []byte) (int, error) {
+	return len(b), nil
+}
+
+func decodeHugeString(t *testing.T, strLen int64, header, tail string, v interface{}, maxStrLen MaxStrLen) error {
+	r, w := io.Pipe()
+	go func() {
+		fmt.Fprintf(w, header, strLen)
+		io.CopyN(w, arbitraryReader{}, strLen)
+		w.Write([]byte(tail))
+		w.Close()
+	}()
+	d := NewDecoder(r)
+	d.MaxStrLen = maxStrLen
+	return d.Decode(v)
+}
+
+// Ensure that bencode strings in various places obey the Decoder.MaxStrLen field.
+func TestDecodeMaxStrLen(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	test := func(header, tail string, v interface{}, maxStrLen MaxStrLen) {
+		strLen := maxStrLen
+		if strLen == 0 {
+			strLen = DefaultDecodeMaxStrLen
+		}
+		c.Assert(decodeHugeString(t, strLen, header, tail, v, maxStrLen), qt.IsNil)
+		c.Assert(decodeHugeString(t, strLen+1, header, tail, v, maxStrLen), qt.IsNotNil)
+	}
+	test("d%d:", "i0ee", new(interface{}), 0)
+	test("%d:", "", new(interface{}), DefaultDecodeMaxStrLen)
+	test("%d:", "", new([]byte), 1)
+	test("d3:420%d:", "e", new(struct {
+		Hi []byte `bencode:"420"`
+	}), 69)
+}
+
+// This is for the "github.com/anacrolix/torrent/metainfo".Info.Private field.
+func TestDecodeStringIntoBoolPtr(t *testing.T) {
+	var m struct {
+		Private *bool `bencode:"private,omitempty"`
+	}
+	c := qt.New(t)
+	check := func(msg string, expectNil, expectTrue bool) {
+		m.Private = nil
+		c.Check(Unmarshal([]byte(msg), &m), qt.IsNil, qt.Commentf("%q", msg))
+		if expectNil {
+			c.Check(m.Private, qt.IsNil)
+		} else {
+			if c.Check(m.Private, qt.IsNotNil, qt.Commentf("%q", msg)) {
+				c.Check(*m.Private, qt.Equals, expectTrue, qt.Commentf("%q", msg))
+			}
+		}
+	}
+	check("d7:privatei1ee", false, true)
+	check("d7:privatei0ee", false, false)
+	check("d7:privatei42ee", false, true)
+	// This is a weird case. We could not allocate the bool to indicate it was bad (maybe a bad
+	// serializer which isn't uncommon), but that requires reworking the decoder to handle
+	// automatically. I think if we cared enough we'd create a custom Unmarshaler. Also if we were
+	// worried enough about performance I'd completely rewrite this package.
+	check("d7:private0:e", false, false)
+	check("d7:private1:te", false, true)
+	check("d7:private5:falsee", false, false)
+	check("d7:private1:Fe", false, false)
+	check("d7:private11:bunnyfoofooe", false, true)
+}
+
+// To set expectations about how our Decoder should work.
+func TestJsonDecoderBehaviour(t *testing.T) {
+	c := qt.New(t)
+	test := func(input string, items int, finalErr error) {
+		d := json.NewDecoder(strings.NewReader(input))
+		actualItems := 0
+		var firstErr error
+		for {
+			var discard any
+			firstErr = d.Decode(&discard)
+			if firstErr != nil {
+				break
+			}
+			actualItems++
+		}
+		c.Check(firstErr, qt.Equals, finalErr)
+		c.Check(actualItems, qt.Equals, items)
+	}
+	test("", 0, io.EOF)
+	test("{}", 1, io.EOF)
+	test("{} {", 1, io.ErrUnexpectedEOF)
 }

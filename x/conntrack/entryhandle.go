@@ -14,7 +14,6 @@ type EntryHandle struct {
 }
 
 func (eh *EntryHandle) Done() {
-	expvars.Add("entry handles done", 1)
 	timeout := eh.timeout()
 	eh.expires = time.Now().Add(timeout)
 	if timeout <= 0 {

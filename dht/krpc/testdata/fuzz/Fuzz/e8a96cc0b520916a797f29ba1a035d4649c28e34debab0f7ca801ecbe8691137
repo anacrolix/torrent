@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("d1:rde1:t1:t1:y1:re")

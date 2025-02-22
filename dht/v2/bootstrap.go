@@ -38,7 +38,7 @@ func (s *Server) Bootstrap(ctx context.Context) (ts TraversalStats, err error) {
 			io   func()
 		}
 		txRes := stm.Atomically(stm.Select(
-			func(tx *stm.Tx) interface{} {
+			func(tx *stm.Tx) txResT {
 				addr := traversal.nextAddr(tx)
 				dhtAddr := NewAddr(addr.UDP())
 				outstanding.Set(tx, outstanding.Get(tx)+1)
@@ -66,11 +66,12 @@ func (s *Server) Bootstrap(ctx context.Context) (ts TraversalStats, err error) {
 					})(tx),
 				}
 			},
-			func(tx *stm.Tx) interface{} {
+			func(tx *stm.Tx) txResT {
 				tx.Assert(outstanding.Get(tx) == 0)
 				return txResT{done: true}
 			},
-		)).(txResT)
+		))
+
 		if txRes.done {
 			break
 		}

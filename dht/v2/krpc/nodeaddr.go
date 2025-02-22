@@ -50,8 +50,12 @@ func (me *NodeAddr) UnmarshalBinary(b []byte) error {
 		ok     bool
 		offset = len(b) - 2
 	)
+	if len(b) < 2 {
+		return fmt.Errorf("node address too short, minimum length is 2 bytes: %d, %q", len(b), b)
+	}
+
 	if me.IP, ok = netip.AddrFromSlice(b[:offset]); !ok {
-		return fmt.Errorf("unable to create netip.Addr from %v", b)
+		return fmt.Errorf("unable to create netip.Addr from %q", b)
 	}
 	me.Port = int(binary.BigEndian.Uint16(b[offset:]))
 	return nil

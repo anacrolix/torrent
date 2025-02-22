@@ -57,12 +57,17 @@ type Client struct {
 // Query torrent info from the dht
 func (cl *Client) Info(ctx context.Context, m Metadata, options ...Tuner) (i *metainfo.Info, err error) {
 	var (
-		t *torrent
+		t     *torrent
+		added bool
 	)
 
-	if t, _, err = cl.start(m); err != nil {
+	if t, added, err = cl.start(m); err != nil {
 		return nil, err
+	} else if !added {
+		log.Println("torrent already started?", m.InfoHash, len(m.InfoBytes))
+		return nil, fmt.Errorf("attempting to require the info for a torrent that is already running")
 	}
+	defer cl.Stop(m)
 
 	t.Tune(options...)
 
@@ -111,6 +116,7 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 	cl.torrents[t.InfoHash] = dlt
 
 	dlt.updateWantPeersEvent()
+
 	// Tickle Client.waitAccept, new torrent may want conns.
 	cl.event.Broadcast()
 
@@ -635,7 +641,11 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr IpPor
 		err error
 	)
 
-	cl.dialRateLimiter.Wait(ctx)
+	cl.config.info().Println("opening connection", t.infoHash)
+	if err = cl.dialRateLimiter.Wait(ctx); err != nil {
+		log.Println("dial rate limit failed", err)
+		return
+	}
 
 	if c, err = cl.establishOutgoingConn(ctx, t, addr); err != nil {
 		t.noLongerHalfOpen(addr.String())
@@ -874,12 +884,11 @@ func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
 		return nil
 	}
 
-	err = t.close()
-
 	cl.lock()
-	defer cl.unlock()
 	delete(cl.torrents, infoHash)
-	return err
+	cl.unlock()
+
+	return t.close()
 }
 
 func (cl *Client) allTorrentsCompleted() bool {

@@ -38,6 +38,8 @@ type ConnStats struct {
 	// verification. Note that a connection may not have been the sole dirtier
 	// of a piece.
 	PiecesDirtiedBad count
+
+	DHTAnnounce count
 }
 
 // Copy returns a copy of the connection stats.

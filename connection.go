@@ -6,8 +6,10 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -674,8 +676,8 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 // activity elsewhere in the Client, and some is determined locally when the
 // connection is writable.
 func (cn *connection) writer(keepAliveTimeout time.Duration) {
-	// cn.t.config.info().Printf("c(%p) writer initiated\n", cn)
-	// defer cn.t.config.info().Printf("c(%p) writer completed\n", cn)
+	cn.t.config.info().Printf("c(%p) writer initiated\n", cn)
+	defer cn.t.config.info().Printf("c(%p) writer completed\n", cn)
 	defer cn.checkFailures()
 	defer cn.deleteAllRequests()
 
@@ -1211,7 +1213,9 @@ func (cn *connection) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
-		// log.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
+		if cn.outgoing {
+			log.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
+		}
 
 		switch msg.Type {
 		case pp.Choke:
@@ -1280,7 +1284,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			if !cn.fastEnabled() {
 				return fmt.Errorf("reject recevied, fast not enabled")
 			}
-			// l2.Printf("(%d) c(%p) REJECTING d(%d) r(%d,%d,%d) cid(%d) cmax(%d) - total(%d) plength(%d) clength(%d)\n", os.Getpid(), cn, req.Digest, req.Index, req.Begin, req.Length, cn.t.piecesM.requestCID(req), cn.t.piecesM.cmaximum, cn.t.info.TotalLength(), cn.t.info.PieceLength, cn.t.piecesM.clength)
+			// log.Printf("(%d) c(%p) REJECTING d(%d) r(%d,%d,%d) cid(%d) cmax(%d) - total(%d) plength(%d) clength(%d)\n", os.Getpid(), cn, req.Digest, req.Index, req.Begin, req.Length, cn.t.info.TotalLength(), cn.t.info.PieceLength)
 			cn.releaseRequest(req)
 			cn.cmu().Lock()
 			cn.blacklisted.AddInt(cn.t.chunks.requestCID(req))
@@ -1307,17 +1311,6 @@ func (cn *connection) mainReadLoop() (err error) {
 }
 
 func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err error) {
-	defer func() {
-		// TODO: Should we still do this?
-		if err != nil {
-			// These clients use their own extension IDs for outgoing message
-			// types, which is incorrect.
-			if bytes.HasPrefix(cn.PeerID[:], []byte("-SD0100-")) || strings.HasPrefix(string(cn.PeerID[:]), "-XL0012-") {
-				err = nil
-			}
-		}
-	}()
-
 	t := cn.t
 	switch id {
 	case pp.HandshakeExtendedID:
@@ -1341,15 +1334,18 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 			cn.cmu().Unlock()
 		}
 		if d.MetadataSize != 0 {
+			log.Println("handshake", d.MetadataSize)
 			if err = t.setMetadataSize(d.MetadataSize); err != nil {
 				return errors.Wrapf(err, "setting metadata size to %d", d.MetadataSize)
 			}
 		}
+
 		cn.requestPendingMetadata()
 		cn.sendInitialPEX()
 		// BUG no sending PEX updates yet
 		return nil
 	case metadataExtendedID:
+		log.Println("metadata extension available")
 		err := t.gotMetadataExtensionMsg(payload, cn)
 		if err != nil {
 			return errors.Errorf("handling metadata extension message: %v", err)

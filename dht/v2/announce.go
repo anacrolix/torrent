@@ -5,6 +5,7 @@ package dht
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"sync/atomic"
 
@@ -13,15 +14,12 @@ import (
 	"github.com/james-lawrence/torrent/internal/stmutil"
 
 	"github.com/james-lawrence/torrent/dht/v2/krpc"
-	"github.com/james-lawrence/torrent/x/conntrack"
 )
 
 // Maintains state for an ongoing Announce operation. An Announce is started by calling
 // Server.Announce.
 type Announce struct {
 	Peers chan PeersValues
-
-	values chan PeersValues // Responses are pushed to this channel.
 
 	// These only exist to support routines relying on channels for synchronization.
 	done    <-chan struct{}
@@ -68,10 +66,10 @@ func (s *Server) Announce(ctx context.Context, infoHash [20]byte, port int, impl
 	if err != nil {
 		return nil, err
 	}
+
 	infoHashInt160 := Int160FromByteArray(infoHash)
 	a := &Announce{
 		Peers:                make(chan PeersValues, 100),
-		values:               make(chan PeersValues),
 		server:               s,
 		infoHash:             infoHashInt160,
 		announcePort:         port,
@@ -83,22 +81,7 @@ func (s *Server) Announce(ctx context.Context, infoHash [20]byte, port int, impl
 	ctx, a.cancel, a.doneVar = stmutil.ContextDoneVar(ctx)
 	a.done = ctx.Done()
 
-	// Function ferries from values to Peers until discovery is halted.
-	go func() {
-		defer close(a.Peers)
-		for {
-			select {
-			case psv := <-a.values:
-				select {
-				case a.Peers <- psv:
-				case <-a.done:
-					return
-				}
-			case <-a.done:
-				return
-			}
-		}
-	}()
+	log.Println("ANNOUNCING WITH", len(startAddrs))
 	for _, n := range startAddrs {
 		stm.Atomically(a.pendContact(n))
 	}
@@ -108,6 +91,7 @@ func (s *Server) Announce(ctx context.Context, infoHash [20]byte, port int, impl
 }
 
 func (a *Announce) closer() {
+	defer log.Println("announce closed", a.infoHash)
 	defer a.cancel()
 	stm.Atomically(stm.VoidOperation(func(tx *stm.Tx) {
 		if a.doneVar.Get(tx) {
@@ -162,7 +146,7 @@ func (a *Announce) maybeAnnouncePeer(to Addr, token *string, peerId *krpc.ID) {
 			token: *token,
 		}))
 	}))
-	//a.server.announcePeer(to, a.infoHash, a.announcePort, *token, a.announcePortImplied, nil)
+	a.server.announcePeer(to, a.infoHash, a.announcePort, *token, a.announcePortImplied)
 }
 
 func (a *Announce) announcePeer(peer pendingAnnouncePeer) numWrites {
@@ -170,37 +154,21 @@ func (a *Announce) announcePeer(peer pendingAnnouncePeer) numWrites {
 	return writes
 }
 
-func (a *Announce) beginAnnouncePeer(tx *stm.Tx) func() {
-	l := a.pendingAnnouncePeers.Get(tx)
-	tx.Assert(l.Len() != 0)
-	x := l.Get(0)
-	a.pendingAnnouncePeers.Set(tx, l.Slice(1, l.Len()))
-	return a.beginQuery(x.Addr, "dht announce announce_peer", func() numWrites {
-		return a.announcePeer(x)
-	})(tx)
-}
-
-func finalizeCteh(cteh *conntrack.EntryHandle, writes numWrites) {
-	if writes == 0 {
-		cteh.Forget()
-		// TODO: panic("how to reverse rate limit?")
-	} else {
-		cteh.Done()
+func (a *Announce) getPeers(ctx context.Context, addr Addr) numWrites {
+	// log.Printf("sending get_peers to %v", addr.String())
+	m, writes, err := a.server.getPeers(ctx, addr, a.infoHash)
+	if err != nil {
+		log.Printf("get_peers response error from %v: %v", addr, err)
+		return writes
 	}
-}
 
-func (a *Announce) getPeers(addr Addr) numWrites {
-	// log.Printf("sending get_peers to %v", node)
-	m, writes, err := a.server.getPeers(context.TODO(), addr, a.infoHash)
-	a.server.logger().Printf("Announce.server.getPeers result: m.Y=%v, numWrites=%v, err=%v", m.Y, writes, err)
-	// log.Printf("get_peers response error from %v: %v", node, err)
+	// a.server.logger().Printf("Announce.server.getPeers result: m.Y=%v, numWrites=%v, err=%v", m.Y, writes, err)
+	log.Printf("get_peers response error from %v: %v", addr.String(), err)
 	// Register suggested nodes closer to the target info-hash.
 	if m.R != nil && m.SenderID() != nil {
-		expvars.Add("announce get_peers response nodes values", int64(len(m.R.Nodes)))
-		expvars.Add("announce get_peers response nodes6 values", int64(len(m.R.Nodes6)))
 		m.R.ForAllNodes(a.responseNode)
 		select {
-		case a.values <- PeersValues{
+		case a.Peers <- PeersValues{
 			Peers: m.R.Values,
 			NodeInfo: krpc.NodeInfo{
 				Addr: addr.KRPC(),
@@ -211,6 +179,7 @@ func (a *Announce) getPeers(addr Addr) numWrites {
 		}
 		a.maybeAnnouncePeer(addr, m.R.Token, m.SenderID())
 	}
+
 	return writes
 }
 
@@ -234,7 +203,7 @@ func (a *Announce) close() {
 func (a *Announce) pendContact(node addrMaybeId) stm.Operation[struct{}] {
 	return stm.VoidOperation(func(tx *stm.Tx) {
 		if !a.shouldContact(node.Addr, tx) {
-			// log.Printf("shouldn't contact (pend): %v", node)
+			log.Printf("shouldn't contact (pend): %v", node)
 			return
 		}
 		a.traversal.pendContact(node)(tx)
@@ -247,15 +216,20 @@ type txResT struct {
 }
 
 func (a *Announce) nodeContactor() {
+	log.Println("node contacting initiated", a.infoHash)
+	defer log.Println("node contacting completed", a.infoHash)
 	for {
 		txRes := stm.Atomically(func(tx *stm.Tx) txResT {
 			if a.doneVar.Get(tx) {
 				return txResT{done: true}
 			}
-			return txResT{run: stm.Select(
+
+			res := stm.Select(
 				a.beginGetPeers,
 				a.beginAnnouncePeer,
-			)(tx)}
+			)(tx)
+
+			return txResT{run: res}
 		})
 		if txRes.done {
 			break
@@ -264,24 +238,46 @@ func (a *Announce) nodeContactor() {
 	}
 }
 
+func (a *Announce) beginAnnouncePeer(tx *stm.Tx) func() {
+	l := a.pendingAnnouncePeers.Get(tx)
+	tx.Assert(l.Len() != 0)
+	x := l.Get(0)
+	a.pendingAnnouncePeers.Set(tx, l.Slice(1, l.Len()))
+	res := a.beginQuery(x.Addr, "dht announce announce_peer", func() numWrites {
+		return a.announcePeer(x)
+	})(tx)
+	log.Println("announce peer res", res != nil)
+	tx.Assert(res != nil)
+	return res
+}
+
 func (a *Announce) beginGetPeers(tx *stm.Tx) func() {
+	// defer func() {
+	// 	if err := recover(); err != nil {
+	// 		log.Printf("PANIC? %T - %v\n", err, err)
+	// 	}
+	// }()
 	addr := a.traversal.nextAddr(tx)
 	dhtAddr := NewAddr(addr.UDP())
-	return a.beginQuery(dhtAddr, "dht announce get_peers", func() numWrites {
-		atomic.AddInt64(&a.numContacted, 1)
-		return a.getPeers(dhtAddr)
+
+	res := a.beginQuery(dhtAddr, "dht announce get_peers", func() numWrites {
+		defer atomic.AddInt64(&a.numContacted, 1)
+		return a.getPeers(context.TODO(), dhtAddr)
 	})(tx)
+	return res
 }
 
 func (a *Announce) beginQuery(addr Addr, reason string, f func() numWrites) stm.Operation[func()] {
 	return func(tx *stm.Tx) func() {
 		a.pending.Set(tx, a.pending.Get(tx)+1)
-		return a.server.beginQuery(addr, reason, func() numWrites {
+		res := a.server.beginQuery(addr, reason, func() numWrites {
 			a.server.logger().Printf("doing %s to %v", reason, addr)
 			defer stm.Atomically(stm.VoidOperation(func(tx *stm.Tx) {
 				a.pending.Set(tx, a.pending.Get(tx)-1)
 			}))
 			return f()
 		})(tx)
+		tx.Assert(res != nil)
+		return res
 	}
 }

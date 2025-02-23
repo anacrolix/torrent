@@ -968,6 +968,15 @@ func (s *Server) Get(ctx context.Context, addr Addr, target bep44.Target, seq *i
 	return s.Query(ctx, addr, qi)
 }
 
+func (s *Server) ClosestGoodNodeInfos(
+	k int,
+	targetID int160.T,
+) (
+	ret []krpc.NodeInfo,
+) {
+	return s.closestGoodNodeInfos(k, targetID, func(na krpc.NodeAddr) bool { return true })
+}
+
 func (s *Server) closestGoodNodeInfos(
 	k int,
 	targetID int160.T,

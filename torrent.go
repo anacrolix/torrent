@@ -1489,7 +1489,7 @@ func (t *torrent) announceRequest(event tracker.AnnounceEvent) tracker.AnnounceR
 func (t *torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 	l := rate.NewLimiter(rate.Every(time.Minute), 1)
 	for v := range pvs {
-		if l.Allow() {
+		if len(v.Peers) > 0 || l.Allow() {
 			log.Println("received peers", t.infoHash, len(v.Peers))
 		}
 		for _, cp := range v.Peers {

@@ -1,6 +1,7 @@
 package dht
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -107,13 +108,12 @@ func TestDHTDefaultConfig(t *testing.T) {
 func TestPing(t *testing.T) {
 	recvConn := mustListen("127.0.0.1:0")
 	srv, err := NewServer(&ServerConfig{
-		Conn:        recvConn,
-		NoSecurity:  true,
-		WaitToReply: true,
+		Conn:       recvConn,
+		NoSecurity: true,
 	})
 	srvUdpAddr := func(s *Server) *net.UDPAddr {
 		return &net.UDPAddr{
-			IP:   []byte{127, 0, 0, 1},
+			IP:   s.Addr().(*net.UDPAddr).IP,
 			Port: s.Addr().(*net.UDPAddr).Port,
 		}
 	}
@@ -122,8 +122,6 @@ func TestPing(t *testing.T) {
 	srv0, err := NewServer(&ServerConfig{
 		Conn:          mustListen("127.0.0.1:0"),
 		StartingNodes: addrResolver(srvUdpAddr(srv).String()),
-		Logger:        log.Default(),
-		WaitToReply:   true,
 	})
 	require.NoError(t, err)
 	defer srv0.Close()
@@ -161,7 +159,9 @@ func TestAnnounceTimeout(t *testing.T) {
 	require.NoError(t, err)
 	var ih [20]byte
 	copy(ih[:], "12341234123412341234")
-	a, err := s.Announce(t.Context(), ih, 0, true)
+	ctx, done := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer done()
+	a, err := s.Announce(ctx, ih, 0, true)
 	assert.NoError(t, err)
 	<-a.Peers
 	a.Close()
@@ -173,8 +173,10 @@ func TestEqualPointers(t *testing.T) {
 }
 
 func TestHook(t *testing.T) {
+	rconn := mustListen("127.0.0.1:0")
+	pconn := mustListen("127.0.0.1:0")
 	pinger, err := NewServer(&ServerConfig{
-		Conn:     mustListen("127.0.0.1:5678"),
+		Conn:     pconn,
 		PublicIP: net.IPv4(127, 0, 0, 1),
 	})
 	require.NoError(t, err)
@@ -182,9 +184,9 @@ func TestHook(t *testing.T) {
 	// Establish server with a hook attached to "ping"
 	hookCalled := make(chan struct{}, 1)
 	receiver, err := NewServer(&ServerConfig{
-		Conn:          mustListen("127.0.0.1:5679"),
+		Conn:          rconn,
 		PublicIP:      net.IPv4(127, 0, 0, 1),
-		StartingNodes: addrResolver("127.0.0.1:5678"),
+		StartingNodes: addrResolver(pconn.LocalAddr().String()),
 		OnQuery: func(m *krpc.Msg, addr net.Addr) bool {
 			t.Logf("receiver got msg: %v", m)
 			if m.Q == "ping" {
@@ -195,17 +197,14 @@ func TestHook(t *testing.T) {
 			}
 			return true
 		},
-		WaitToReply: true,
 	})
 	require.NoError(t, err)
 	defer receiver.Close()
 	// Ping receiver from pinger to trigger hook. Should also receive a response.
 	t.Log("TestHook: Servers created, hook for ping established. Calling Ping.")
-	res := pinger.Ping(&net.UDPAddr{
-		IP:   []byte{127, 0, 0, 1},
-		Port: receiver.Addr().(*net.UDPAddr).Port,
-	})
+	res := pinger.Ping(receiver.Addr())
 	assert.NoError(t, res.Err)
+
 	// Await signal that hook has been called.
 	select {
 	case <-hookCalled:
@@ -275,21 +274,23 @@ func TestBootstrapRace(t *testing.T) {
 	require.NoError(t, err)
 	defer remotePc.Close()
 	serverPc := bootstrapRacePacketConn{
-		read: make(chan read),
+		read:     make(chan read),
+		maxWrite: defaultAttempts,
 	}
 	t.Logf("remote addr: %s", remotePc.LocalAddr())
 	s, err := NewServer(&ServerConfig{
 		Conn:             &serverPc,
 		StartingNodes:    addrResolver(remotePc.LocalAddr().String()),
-		QueryResendDelay: func() time.Duration { return 0 },
-		Logger:           log.Default(),
+		QueryResendDelay: func() time.Duration { return 20 * time.Millisecond },
+		// Logger:           log.Default(),
 	})
 	require.NoError(t, err)
 	defer s.Close()
 	go func() {
-		for i := 0; i < defaultMaxQuerySends-1; i++ {
+		for i := 0; i < serverPc.maxWrite-1; i++ {
 			remotePc.ReadFrom(nil)
 		}
+
 		var b [1024]byte
 		_, addr, _ := remotePc.ReadFrom(b[:])
 		var m krpc.Msg
@@ -317,9 +318,10 @@ type read struct {
 }
 
 type bootstrapRacePacketConn struct {
-	mu     sync.Mutex
-	writes int
-	read   chan read
+	mu       sync.Mutex
+	writes   int
+	maxWrite int
+	read     chan read
 }
 
 func (me *bootstrapRacePacketConn) Close() error {
@@ -345,7 +347,7 @@ func (me *bootstrapRacePacketConn) WriteTo(b []byte, addr net.Addr) (int, error)
 	defer me.mu.Unlock()
 	me.writes++
 	log.Printf("wrote %d times", me.writes)
-	if me.writes == defaultMaxQuerySends {
+	if me.writes == me.maxWrite {
 		var m krpc.Msg
 		bencode.Unmarshal(b[:], &m)
 		m.Y = "r"

@@ -17,7 +17,7 @@ func DefaultMuxer() Muxer {
 	m := NewMuxer()
 	m.Method("ping", HandlerPing{})
 	m.Method("get_peers", HandlerPeers{})
-	m.Method("find_node", HandlerNearestPeer{})
+	m.Method("find_node", BEP0005FindNode{})
 	m.Method("announce_peer", HandlerAnnounce{})
 	// m.Method("put", Bep44Put{})
 	// m.Method("get", Bep44Get{})
@@ -94,17 +94,6 @@ func (t HandlerPeers) Handle(ctx context.Context, src Addr, srv *Server, raw []b
 	}
 
 	return srv.reply(ctx, src, msg.T, r)
-}
-
-// locates the nearest peer.
-type HandlerNearestPeer struct{}
-
-func (t HandlerNearestPeer) Handle(ctx context.Context, source Addr, s *Server, raw []byte, m *krpc.Msg) error {
-	var r krpc.Return
-	if err := s.setReturnNodes(&r, *m, source); err != nil {
-		return s.sendError(ctx, source, m.T, *err)
-	}
-	return s.reply(ctx, source, m.T, r)
 }
 
 type HandlerAnnounce struct{}

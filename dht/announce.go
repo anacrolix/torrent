@@ -8,6 +8,7 @@ import (
 	"log"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
@@ -84,12 +85,12 @@ func (s *Server) Announce(ctx context.Context, infoHash [20]byte, port int, impl
 			ImpliedPort: impliedPort,
 		})}, opts...)
 	}
-	return s.AnnounceTraversal(infoHash, opts...)
+	return s.AnnounceTraversal(ctx, infoHash, opts...)
 }
 
 // Traverses the DHT graph toward nodes that store peers for the infohash, streaming them to the
 // caller.
-func (s *Server) AnnounceTraversal(infoHash [20]byte, opts ...AnnounceOpt) (_ *Announce, err error) {
+func (s *Server) AnnounceTraversal(ctx context.Context, infoHash [20]byte, opts ...AnnounceOpt) (_ *Announce, err error) {
 	infoHashInt160 := int160.FromByteArray(infoHash)
 	a := &Announce{
 		Peers:    make(chan PeersValues),
@@ -115,25 +116,30 @@ func (s *Server) AnnounceTraversal(infoHash [20]byte, opts ...AnnounceOpt) (_ *A
 	}
 	a.traversal.AddNodes(nodes)
 	go func() {
-		<-a.traversal.Stalled()
+		select {
+		case <-a.traversal.Stalled():
+		case <-ctx.Done():
+		}
+
 		a.traversal.Stop()
 		<-a.traversal.Stopped()
 		if a.announcePeerOpts != nil {
-			a.announceClosest()
+			a.announceClosest(ctx)
 		}
 		a.peerAnnounced.Set()
 		close(a.Peers)
 	}()
+
 	return a, nil
 }
 
-func (a *Announce) announceClosest() {
+func (a *Announce) announceClosest(ctx context.Context) {
 	var wg sync.WaitGroup
 	a.traversal.Closest().Range(func(elem dhtutil.Elem) {
 		wg.Add(1)
 		go func() {
 			a.logger().Printf("announce_peer to %v: %v\n",
-				elem, a.announcePeer(elem),
+				elem, a.announcePeer(ctx, elem),
 			)
 			wg.Done()
 		}()
@@ -141,13 +147,13 @@ func (a *Announce) announceClosest() {
 	wg.Wait()
 }
 
-func (a *Announce) announcePeer(peer dhtutil.Elem) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+func (a *Announce) announcePeer(ctx context.Context, peer dhtutil.Elem) error {
+	ctx, done := context.WithTimeout(ctx, 5*time.Second)
+	defer done()
+
 	go func() {
 		select {
 		case <-a.closed.Done():
-			cancel()
 		case <-ctx.Done():
 		}
 	}()
@@ -158,7 +164,6 @@ func (a *Announce) announcePeer(peer dhtutil.Elem) error {
 		a.announcePeerOpts.Port,
 		peer.Data.(string),
 		a.announcePeerOpts.ImpliedPort,
-		QueryRateLimiting{},
 	).Err
 }
 

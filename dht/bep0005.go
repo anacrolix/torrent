@@ -7,6 +7,8 @@ import (
 	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
+const defaultAttempts = 3
+
 func NewMessageRequest(q string, from krpc.ID, a *krpc.MsgArgs) (qi QueryInput, err error) {
 	var (
 		encoded []byte
@@ -25,9 +27,10 @@ func NewMessageRequest(q string, from krpc.ID, a *krpc.MsgArgs) (qi QueryInput, 
 	}
 
 	return QueryInput{
-		Method:  q,
-		Tid:     t,
-		Encoded: encoded,
+		Method:   q,
+		Tid:      t,
+		Encoded:  encoded,
+		NumTries: defaultAttempts,
 	}, nil
 }
 

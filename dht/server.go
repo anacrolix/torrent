@@ -217,6 +217,9 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 	if c.Logger == nil {
 		c.Logger = log.Default()
 	}
+	if c.QueryResendDelay == nil {
+		c.QueryResendDelay = func() time.Duration { return 2 * time.Second }
+	}
 
 	s = &Server{
 		config:      *c,
@@ -529,7 +532,7 @@ func (s *Server) sendError(ctx context.Context, addr Addr, t string, e krpc.Erro
 		return err
 	}
 	s.logger().Printf("sending error to %q: %v", addr, e)
-	_, err = s.SendToNode(ctx, b, addr, false, true)
+	_, err = s.SendToNode(ctx, b, addr, 1)
 	if err != nil {
 		s.logger().Printf("error replying to %q: %v", addr, err)
 		return err
@@ -548,9 +551,9 @@ func (s *Server) reply(ctx context.Context, addr Addr, t string, r krpc.Return) 
 	}
 	b := bencode.MustMarshal(m)
 	s.logger().Printf("replying to %q\n", addr)
-	_, err := s.SendToNode(ctx, b, addr, s.config.WaitToReply, true)
+	_, err := s.SendToNode(ctx, b, addr, 1)
 	if err != nil {
-		s.config.Logger.Printf("error replying to %s: %s\n", addr, err)
+		s.logger().Printf("error replying to %s: %s\n", addr, err)
 		return err
 	}
 
@@ -640,7 +643,7 @@ func (s *Server) nodeErr(n *node) error {
 	return nil
 }
 
-func (s *Server) SendToNode(ctx context.Context, b []byte, node Addr, wait, rate bool) (wrote bool, err error) {
+func (s *Server) SendToNode(ctx context.Context, b []byte, node Addr, maximum int) (wrote bool, err error) {
 	func() {
 		// This is a pain. It would be better if the blocklist returned an error if it was closed
 		// instead.
@@ -657,45 +660,23 @@ func (s *Server) SendToNode(ctx context.Context, b []byte, node Addr, wait, rate
 			}
 		}
 	}()
+
 	if err != nil {
-		return
+		return false, err
 	}
-	// s.config.Logger.WithValues(log.Debug).Printf("writing to %s: %q", node.String(), b)
-	if rate {
-		if wait {
-			err = s.config.SendLimiter.Wait(ctx)
-			if err != nil {
-				err = fmt.Errorf("waiting for rate-limit token: %w", err)
-				return false, err
-			}
-		} else {
-			if !s.config.SendLimiter.Allow() {
-				return false, errors.New("rate limit exceeded")
-			}
-		}
-	}
-	n, err := s.socket.WriteTo(b, node.Raw())
-	writes.Add(1)
-	if rate {
-		expvars.Add("rated writes", 1)
-	} else {
-		expvars.Add("unrated writes", 1)
-	}
+
+	// n, err := s.socket.WriteTo(b, node.Raw())
+	n, err := repeatsend(ctx, s.socket, node.Raw(), b, s.config.QueryResendDelay(), maximum)
 	if err != nil {
-		writeErrors.Add(1)
-		if rate {
-			// Give the token back. nfi if this will actually work.
-			s.config.SendLimiter.AllowN(time.Now(), -1)
-		}
-		err = fmt.Errorf("error writing %d bytes to %s: %s", len(b), node, err)
-		return
+		return false, err
 	}
+
 	wrote = true
 	if n != len(b) {
-		err = io.ErrShortWrite
-		return
+		return wrote, io.ErrShortWrite
 	}
-	return
+
+	return wrote, nil
 }
 
 func (s *Server) deleteTransaction(k transactionKey) {
@@ -772,11 +753,10 @@ type QueryRateLimiting struct {
 
 // The zero value for this uses reasonable/traditional defaults on Server methods.
 type QueryInput struct {
-	Method       string
-	Tid          string
-	Encoded      []byte
-	RateLimiting QueryRateLimiting
-	NumTries     int
+	Method   string
+	Tid      string
+	Encoded  []byte
+	NumTries int
 }
 
 // Performs an arbitrary query. `q` is the query value, defined by the DHT BEP. `a` should contain
@@ -784,9 +764,6 @@ type QueryInput struct {
 // made this way are not interpreted by the Server. More specific methods like FindNode and GetPeers
 // may make use of the response internally before passing it back to the caller.
 func (s *Server) Query(ctx context.Context, addr Addr, input QueryInput) (ret QueryResult) {
-	if input.NumTries == 0 {
-		input.NumTries = defaultMaxQuerySends
-	}
 	defer func(started time.Time) {
 		s.logger().Printf(
 			"Query(%v) returned after %v (err=%v, reply.Y=%v, reply.E=%v, writes=%v)",
@@ -794,9 +771,9 @@ func (s *Server) Query(ctx context.Context, addr Addr, input QueryInput) (ret Qu
 	}(time.Now())
 
 	replyChan := make(chan *QueryResult, 1)
-	// Receives a non-nil error from the sender, and closes when the sender completes.
-	sendErr := make(chan error, 1)
-	sendCtx, cancelSend := context.WithCancel(pprof.WithLabels(ctx, pprof.Labels("q", input.Method)))
+	sctx, done := context.WithCancelCause(pprof.WithLabels(ctx, pprof.Labels("q", input.Method)))
+	// Make sure the query sender stops.
+	defer done(nil)
 
 	t := &transaction{
 		onResponse: func(m []byte, r krpc.Msg) {
@@ -806,7 +783,7 @@ func (s *Server) Query(ctx context.Context, addr Addr, input QueryInput) (ret Qu
 				Reply: r,
 				Err:   r.Error(),
 			}:
-			case <-sendCtx.Done():
+			case <-sctx.Done():
 			}
 		},
 	}
@@ -818,94 +795,32 @@ func (s *Server) Query(ctx context.Context, addr Addr, input QueryInput) (ret Qu
 	tk.T = input.Tid
 	s.addTransaction(tk, t)
 	s.mu.Unlock()
+
 	go func() {
-		err := s.transactionQuerySender(
-			sendCtx,
-			input.Encoded,
-			&ret.Writes,
-			addr,
-			input.RateLimiting,
-			input.NumTries)
+		s.logger().Printf("transmitting initiated %s %q %d\n", input.Method, input.Tid, input.NumTries)
+		_, err := s.SendToNode(sctx, input.Encoded, addr, input.NumTries)
+		s.logger().Printf("transmitting completed %s %q %d %v\n", input.Method, input.Tid, input.NumTries, err)
 		if err != nil {
-			sendErr <- err
+			done(err)
 		}
-		close(sendErr)
+	}()
+
+	defer func() {
+		s.mu.Lock()
+		s.deleteTransaction(tk)
+		s.mu.Unlock()
 	}()
 
 	select {
 	case qr := <-replyChan:
-		ret = *qr
-	case <-ctx.Done():
-		ret.Err = ctx.Err()
-	case ret.Err = <-sendErr:
+		return *qr
+	case <-sctx.Done():
+		return NewQueryResultErr(sctx.Err())
 	}
-
-	// Make sure the query sender stops.
-	cancelSend()
-	// Make sure the query sender has returned, it will either send an error that we didn't catch
-	// above, or the channel will be closed by the sender completing.
-	<-sendErr
-	s.mu.Lock()
-	s.deleteTransaction(tk)
-	s.mu.Unlock()
-
-	return
-}
-
-func (s *Server) transactionQuerySender(
-	sendCtx context.Context,
-	b []byte,
-	writes *numWrites,
-	addr Addr,
-	rateLimiting QueryRateLimiting,
-	numTries int,
-) error {
-	// log.Printf("sending %q", b)
-	err := transactionSender(
-		sendCtx,
-		func() error {
-			wrote, err := s.SendToNode(sendCtx, b, addr,
-				// We only wait for the first write by default if rate-limiting is enabled for this
-				// query.
-				func() bool {
-					if *writes == 0 {
-						return !rateLimiting.NoWaitFirst
-					} else {
-						return rateLimiting.WaitOnRetries
-					}
-				}(),
-				func() bool {
-					if rateLimiting.NotAny {
-						return false
-					}
-					if *writes == 0 {
-						return !rateLimiting.NotFirst
-					}
-					return true
-				}(),
-			)
-			if wrote {
-				*writes++
-			}
-			return err
-		},
-		s.resendDelay,
-		numTries,
-	)
-	if err != nil {
-		return err
-	}
-	select {
-	case <-sendCtx.Done():
-		err = sendCtx.Err()
-	case <-time.After(s.resendDelay()):
-		err = ErrTransactionTimeout
-	}
-	return fmt.Errorf("after %v tries: %w", numTries, err)
 }
 
 // Sends a ping query to the address given.
-func (s *Server) PingQueryInput(node *net.UDPAddr, qi QueryInput) QueryResult {
+func (s *Server) PingQueryInput(node net.Addr, qi QueryInput) QueryResult {
 	addr := NewAddr(node)
 	res := Ping3S(context.Background(), s, addr, s.ID())
 	if res.Err == nil {
@@ -919,7 +834,7 @@ func (s *Server) PingQueryInput(node *net.UDPAddr, qi QueryInput) QueryResult {
 }
 
 // Sends a ping query to the address given.
-func (s *Server) Ping(node *net.UDPAddr) QueryResult {
+func (s *Server) Ping(node net.Addr) QueryResult {
 	return s.PingQueryInput(node, QueryInput{})
 }
 
@@ -941,7 +856,6 @@ func (s *Server) Put(ctx context.Context, node Addr, i bep44.Put, token string, 
 		V:     i.V,
 		K:     langx.Autoderef(i.K),
 	})
-	qi.RateLimiting = rl
 
 	if err != nil {
 		return QueryResult{Err: err}
@@ -952,22 +866,22 @@ func (s *Server) Put(ctx context.Context, node Addr, i bep44.Put, token string, 
 
 func (s *Server) announcePeer(
 	ctx context.Context,
-	node Addr, infoHash int160.T, port int, token string, impliedPort bool, rl QueryRateLimiting,
+	node Addr, infoHash int160.T, port int, token string, impliedPort bool,
 ) (
 	ret QueryResult,
 ) {
+
 	qi, err := NewAnnouncePeerRequest(s.ID(), infoHash.AsByteArray(), port, token, impliedPort)
 	if err != nil {
 		return NewQueryResultErr(err)
 	}
-	qi.RateLimiting = rl
 
 	if ret = s.Query(ctx, node, qi); ret.Err != nil {
 		return ret
 	}
 
-	if krpcError := ret.Reply.Error(); krpcError != nil {
-		return NewQueryResultErr(krpcError)
+	if ret.Err != nil {
+		return ret
 	}
 
 	s.mu.Lock()
@@ -979,13 +893,7 @@ func (s *Server) announcePeer(
 // Sends a find_node query to addr. targetID is the node we're looking for. The Server makes use of
 // some of the response fields.
 func (s *Server) FindNode(addr Addr, targetID int160.T, rl QueryRateLimiting) (ret QueryResult) {
-	qi, err := NewFindRequest(s.ID(), targetID.AsByteArray(), s.config.DefaultWant)
-	if err != nil {
-		return NewQueryResultErr(err)
-	}
-	qi.RateLimiting = rl
-
-	return s.Query(context.TODO(), addr, qi)
+	return FindNode(context.Background(), s, addr, s.ID(), targetID, s.config.DefaultWant)
 }
 
 // Returns how many nodes are in the node table.
@@ -1038,7 +946,6 @@ func (s *Server) GetPeers(
 	if err != nil {
 		return NewQueryResultErr(err)
 	}
-	qi.RateLimiting = rl
 
 	ret = s.Query(ctx, addr, qi)
 	return ret
@@ -1057,7 +964,6 @@ func (s *Server) Get(ctx context.Context, addr Addr, target bep44.Target, seq *i
 	if err != nil {
 		return NewQueryResultErr(err)
 	}
-	qi.RateLimiting = rl
 
 	return s.Query(ctx, addr, qi)
 }
@@ -1280,9 +1186,6 @@ func (s *Server) questionableNodePing(ctx context.Context, addr Addr, id krpc.ID
 
 	// A ping query that will be certain to try at least 3 times.
 	qi.NumTries = 3
-	qi.RateLimiting = QueryRateLimiting{
-		WaitOnRetries: true,
-	}
 
 	res := s.Query(ctx, addr, qi)
 	if res.Err == nil && res.Reply.R != nil {

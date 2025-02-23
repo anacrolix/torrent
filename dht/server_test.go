@@ -88,7 +88,6 @@ import (
 
 func newServer(t *testing.T, l *log.Logger) *Server {
 	cfg := NewDefaultServerConfig()
-	cfg.WaitToReply = true
 
 	cfg.Conn = mustListen("localhost:0")
 	cfg.Logger = l

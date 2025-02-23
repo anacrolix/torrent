@@ -38,9 +38,6 @@ type ServerConfig struct {
 	Conn   net.PacketConn
 	// Don't respond to queries from other nodes.
 	Passive bool
-	// Whether to wait for rate limiting to allow us to reply.
-	WaitToReply bool
-
 	// Called when there are no good nodes to use in the routing table. This might be called any
 	// time when there are no nodes, including during bootstrap if one is performed. Typically it
 	// returns the resolve addresses of bootstrap or "router" nodes that are designed to kick-start

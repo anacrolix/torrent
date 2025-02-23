@@ -16,8 +16,7 @@ import (
 
 func GetPeers(ctx context.Context, s *dht.Server, ih [20]byte, opts ...dht.AnnounceOpt) error {
 	addrs := make(map[string]int)
-	// PSA: Go sucks.
-	a, err := s.AnnounceTraversal(ih, opts...)
+	a, err := s.AnnounceTraversal(ctx, ih, opts...)
 	if err != nil {
 		return err
 	}

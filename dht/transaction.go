@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/james-lawrence/torrent/dht/krpc"
@@ -22,28 +23,33 @@ func (t *transaction) handleResponse(raw []byte, m krpc.Msg) {
 	t.onResponse(raw, m)
 }
 
-const defaultMaxQuerySends = 1
+type socket interface {
+	WriteTo(b []byte, addr net.Addr) (int, error)
+}
 
-func transactionSender(
+func repeatsend(
 	ctx context.Context,
-	send func() error,
-	resendDelay func() time.Duration,
-	maxSends int,
-) error {
-	var delay time.Duration
-	sends := 0
-	for sends < maxSends {
+	s socket,
+	to net.Addr,
+	b []byte,
+	delay time.Duration,
+	maximum int,
+) (n int, last error) {
+	var d time.Duration
+	for attempts := 0; attempts < maximum; attempts++ {
 		select {
-		case <-time.After(delay):
-			err := send()
-			sends++
-			if err != nil {
-				return fmt.Errorf("send %d: %w", sends, err)
-			}
-			delay = resendDelay()
+		case <-time.After(d):
+			n, last = s.WriteTo(b, to)
+			d = delay
+			// log.Println("attempt", attempts, "/", maximum, "in", d)
 		case <-ctx.Done():
-			return ctx.Err()
+			return n, last
 		}
 	}
-	return nil
+
+	if last != nil {
+		return n, fmt.Errorf("error writing %d bytes to %s: %v", len(b), to, last)
+	}
+
+	return n, nil
 }

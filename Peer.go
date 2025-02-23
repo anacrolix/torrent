@@ -4,7 +4,7 @@ import (
 	"net"
 
 	"github.com/james-lawrence/torrent/btprotocol"
-	"github.com/james-lawrence/torrent/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
 // Peer connection info, handed about publicly.
@@ -22,8 +22,8 @@ type Peer struct {
 
 // FromPex generate Peer from peer exchange
 func (me *Peer) FromPex(na krpc.NodeAddr, fs btprotocol.PexPeerFlags) {
-	me.IP = na.IP.AsSlice()
-	me.Port = na.Port
+	me.IP = na.Addr().AsSlice()
+	me.Port = int(na.Port())
 	me.Source = peerSourcePex
 	// If they prefer encryption, they must support it.
 	if fs.Get(btprotocol.PexPrefersEncryption) {

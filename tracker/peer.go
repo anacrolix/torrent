@@ -3,7 +3,7 @@ package tracker
 import (
 	"net"
 
-	"github.com/james-lawrence/torrent/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
 type Peer struct {
@@ -22,7 +22,7 @@ func (p *Peer) FromDictInterface(d map[string]interface{}) {
 }
 
 func (p Peer) FromNodeAddr(na krpc.NodeAddr) Peer {
-	p.IP = na.IP.AsSlice()
-	p.Port = na.Port
+	p.IP = na.Addr().AsSlice()
+	p.Port = int(na.Port())
 	return p
 }

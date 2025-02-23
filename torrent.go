@@ -24,7 +24,7 @@ import (
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/james-lawrence/torrent/dht/v2"
+	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/internal/x/bytesx"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -1383,10 +1383,8 @@ func (t *torrent) wantPeers() bool {
 
 func (t *torrent) updateWantPeersEvent() {
 	if t.wantPeers() {
-		log.Println("peers wanted", t.infoHash)
 		t.wantPeersEvent.Set()
 	} else {
-		log.Println("peers not wanted", t.infoHash)
 		t.wantPeersEvent.Clear()
 	}
 }
@@ -1488,18 +1486,17 @@ func (t *torrent) announceRequest(event tracker.AnnounceEvent) tracker.AnnounceR
 // Adds peers revealed in an announce until the announce ends, or we have
 // enough peers.
 func (t *torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
-	log.Println("consuming peers", t.infoHash)
 	for v := range pvs {
 		log.Println("received peers", t.infoHash, len(v.Peers))
 		for _, cp := range v.Peers {
-			if cp.Port == 0 {
+			if cp.Port() == 0 {
 				// Can't do anything with this.
 				continue
 			}
 
 			t.AddPeer(Peer{
-				IP:     cp.IP.AsSlice(),
-				Port:   cp.Port,
+				IP:     cp.Addr().AsSlice(),
+				Port:   int(cp.Port()),
 				Source: peerSourceDhtGetPeers,
 			})
 		}
@@ -2055,9 +2052,9 @@ func (t *torrent) Piece(i pieceIndex) *Piece {
 func (t *torrent) ping(addr net.UDPAddr) {
 	t.cln.eachDhtServer(func(s *dht.Server) {
 		go func() {
-			_, _, err := dht.Ping3S(context.Background(), s, dht.NewAddr(&addr), s.ID())
-			if err != nil {
-				log.Println("failed to ping address", err)
+			ret := dht.Ping3S(context.Background(), s, dht.NewAddr(&addr), s.ID())
+			if ret.Err != nil {
+				log.Println("failed to ping address", ret.Err)
 			}
 		}()
 	})

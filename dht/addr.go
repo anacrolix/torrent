@@ -2,10 +2,11 @@ package dht
 
 import (
 	"net"
+	"net/netip"
 
 	"github.com/anacrolix/missinggo/v2"
 
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
 // Used internally to refer to node network addresses. String() is called a
@@ -33,9 +34,9 @@ func (ca cachedAddr) String() string {
 }
 
 func (ca cachedAddr) KRPC() krpc.NodeAddr {
+	ip, _ := netip.AddrFromSlice(ca.ip)
 	return krpc.NodeAddr{
-		IP:   ca.ip,
-		Port: ca.port,
+		AddrPort: netip.AddrPortFrom(ip, uint16(ca.port)),
 	}
 }
 

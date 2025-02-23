@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -8,8 +9,8 @@ import (
 	"time"
 
 	"github.com/james-lawrence/torrent/connections"
-	"github.com/james-lawrence/torrent/dht/v2"
-	"github.com/james-lawrence/torrent/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/dht/krpc"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/x/conntrack"
 	"golang.org/x/time/rate"
@@ -34,7 +35,7 @@ type ClientConfig struct {
 
 	// Don't create a DHT.
 	NoDHT            bool `long:"disable-dht"`
-	DhtStartingNodes dht.StartingNodesGetter
+	DhtStartingNodes func(network string) dht.StartingNodesGetter
 	// Never send chunks to peers.
 	NoUpload bool `long:"no-upload"`
 	// Disable uploading even when it isn't fair.
@@ -187,18 +188,21 @@ func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 		TorrentPeersHighWater:          500,
 		TorrentPeersLowWater:           50,
 		HandshakesTimeout:              4 * time.Second,
-		DhtStartingNodes:               dht.GlobalBootstrapAddrs,
-		UploadRateLimiter:              unlimited,
-		DownloadRateLimiter:            unlimited,
-		ConnTracker:                    conntrack.NewInstance(),
-		DisableAcceptRateLimiting:      true,
+		// DhtStartingNodes:               dht.GlobalBootstrapAddrs,
+		DhtStartingNodes: func(network string) dht.StartingNodesGetter {
+			return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }
+		},
+		UploadRateLimiter:         unlimited,
+		DownloadRateLimiter:       unlimited,
+		ConnTracker:               conntrack.NewInstance(),
+		DisableAcceptRateLimiting: true,
 		HeaderObfuscationPolicy: HeaderObfuscationPolicy{
 			Preferred:        true,
 			RequirePreferred: false,
 		},
 		CryptoSelector:  mse.DefaultCryptoSelector,
 		CryptoProvides:  mse.AllSupportedCrypto,
-		Logger:          log.New(log.Writer(), "[torrent] ", log.Flags()),
+		Logger:          log.New(io.Discard, "[torrent] ", log.Flags()),
 		Warn:            discard{},
 		Debug:           discard{},
 		DHTAnnouncePeer: func(ih metainfo.Hash, ip net.IP, port int, portOk bool) {},

@@ -13,7 +13,7 @@ import (
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"github.com/james-lawrence/torrent/connections"
-	"github.com/james-lawrence/torrent/dht/v2"
+	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/internal/testutil"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/sockets"
@@ -280,7 +280,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 func TestAddMetainfoWithNodes(t *testing.T) {
 	cfg := TestingConfig(t)
 	cfg.NoDHT = false
-	cfg.DhtStartingNodes = func() ([]dht.Addr, error) { return nil, nil }
+	cfg.DhtStartingNodes = func(n string) dht.StartingNodesGetter { return func() ([]dht.Addr, error) { return nil, nil } }
 	// For now, we want to just jam the nodes into the table, without
 	// verifying them first. Also the DHT code doesn't support mixing secure
 	// and insecure nodes if security is enabled (yet).

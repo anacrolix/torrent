@@ -6,7 +6,8 @@ import (
 	"reflect"
 
 	"github.com/anacrolix/missinggo/slices"
-	"github.com/anacrolix/torrent/bencode"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/james-lawrence/torrent/bencode"
 )
 
 func unmarshalBencodedBinary(u encoding.BinaryUnmarshaler, b []byte) (err error) {
@@ -58,7 +59,7 @@ func marshalBinarySlice(slice elemSizer) (ret []byte, err error) {
 			return
 		}
 		if len(b) != slice.ElemSize() {
-			panic(fmt.Sprintf("marshalled %d bytes, but expected %d", len(b), slice.ElemSize()))
+			panic(fmt.Sprintf("%T marshalled %d bytes, but expected %d %s", e, len(b), slice.ElemSize(), spew.Sdump(e)))
 		}
 		ret = append(ret, b...)
 	}
@@ -75,7 +76,7 @@ func bencodeBytesResult(b []byte, err error) ([]byte, error) {
 // returns position of x in v, or -1 if not found
 func addrIndex(v []NodeAddr, x NodeAddr) int {
 	for i := 0; i < len(v); i += 1 {
-		if v[i].Equal(x) {
+		if v[i].Compare(x) == 0 {
 			return i
 		}
 	}

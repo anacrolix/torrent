@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/bradfitz/iter"
-	"github.com/james-lawrence/torrent/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/krpc"
 	"github.com/stretchr/testify/require"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -34,7 +34,7 @@ func BenchmarkMarshalThenUnmarshalKrpcMsg(tb *testing.B) {
 		R: &krpc.Return{
 			Token: func() *string { t := "re-up"; return &t }(),
 		},
-		IP:       krpc.NodeAddr{IP: ip, Port: 1337},
+		IP:       krpc.NodeAddr{AddrPort: netip.AddrPortFrom(ip, 1337)},
 		ReadOnly: true,
 	}
 	first := marshalAndUnmarshal(tb, orig)

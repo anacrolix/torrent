@@ -6,11 +6,11 @@ import (
 	"github.com/anacrolix/multiless"
 	"github.com/benbjohnson/immutable"
 
-	"github.com/anacrolix/dht/v2/int160"
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/int160"
+	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
-type Key = krpc.NodeInfoAddrPort
+type Key = krpc.NodeInfo
 
 type Elem struct {
 	Key

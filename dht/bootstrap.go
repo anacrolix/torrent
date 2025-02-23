@@ -5,15 +5,15 @@ import (
 	"errors"
 	"time"
 
-	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/anacrolix/dht/v2/traversal"
+	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/dht/traversal"
 )
 
 type TraversalStats = traversal.Stats
 
 // See BootstrapContext.
-func (s *Server) Bootstrap() (TraversalStats, error) {
-	return s.BootstrapContext(context.Background())
+func (s *Server) Bootstrap(ctx context.Context) (TraversalStats, error) {
+	return s.BootstrapContext(ctx)
 }
 
 // Populates the node table.

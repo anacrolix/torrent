@@ -4,21 +4,23 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"log"
 	"math/big"
 	"net"
 	"testing"
 	"time"
 
 	_ "github.com/anacrolix/envpprof"
-	"github.com/anacrolix/log"
+
 	"github.com/anacrolix/missinggo/inproc"
 	"github.com/anacrolix/sync"
-	"github.com/anacrolix/torrent/bencode"
+	"github.com/james-lawrence/torrent/bencode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/anacrolix/dht/v2/int160"
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/int160"
+	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/internal/netx"
 )
 
 func TestSetNilBigInt(t *testing.T) {
@@ -32,8 +34,12 @@ func TestMarshalCompactNodeInfo(t *testing.T) {
 	}}
 	addr, err := net.ResolveUDPAddr("udp4", "1.2.3.4:5")
 	require.NoError(t, err)
-	cni[0].Addr.FromUDPAddr(addr)
-	cni[0].Addr.IP = cni[0].Addr.IP.To4()
+	ip, err := netx.NetIP(addr)
+	require.NoError(t, err)
+	port, err := netx.NetPort(addr)
+	require.NoError(t, err)
+
+	cni[0].Addr = krpc.NewNodeAddrFromIPPort(ip.To4(), port)
 	b, err := cni.MarshalBinary()
 	require.NoError(t, err)
 	var bb [26]byte
@@ -103,7 +109,7 @@ func TestPing(t *testing.T) {
 	srv, err := NewServer(&ServerConfig{
 		Conn:        recvConn,
 		NoSecurity:  true,
-		Logger:      log.Default,
+		Logger:      log.Default(),
 		WaitToReply: true,
 	})
 	srvUdpAddr := func(s *Server) *net.UDPAddr {
@@ -117,7 +123,7 @@ func TestPing(t *testing.T) {
 	srv0, err := NewServer(&ServerConfig{
 		Conn:          mustListen("127.0.0.1:0"),
 		StartingNodes: addrResolver(srvUdpAddr(srv).String()),
-		Logger:        log.Default,
+		Logger:        log.Default(),
 		WaitToReply:   true,
 	})
 	require.NoError(t, err)
@@ -156,7 +162,7 @@ func TestAnnounceTimeout(t *testing.T) {
 	require.NoError(t, err)
 	var ih [20]byte
 	copy(ih[:], "12341234123412341234")
-	a, err := s.Announce(ih, 0, true)
+	a, err := s.Announce(t.Context(), ih, 0, true)
 	assert.NoError(t, err)
 	<-a.Peers
 	a.Close()
@@ -258,7 +264,7 @@ func TestBadGetPeersResponse(t *testing.T) {
 		require.NoError(t, err)
 		pc.WriteTo(b, addr)
 	}()
-	a, err := s.Announce([20]byte{}, 0, true)
+	a, err := s.Announce(t.Context(), [20]byte{}, 0, true)
 	require.NoError(t, err)
 	// Drain the Announce until it closes.
 	for range a.Peers {
@@ -277,7 +283,7 @@ func TestBootstrapRace(t *testing.T) {
 		Conn:             &serverPc,
 		StartingNodes:    addrResolver(remotePc.LocalAddr().String()),
 		QueryResendDelay: func() time.Duration { return 0 },
-		Logger:           log.Default,
+		Logger:           log.Default(),
 	})
 	require.NoError(t, err)
 	defer s.Close()
@@ -296,7 +302,7 @@ func TestBootstrapRace(t *testing.T) {
 		}
 		remotePc.WriteTo(rb, addr)
 	}()
-	ts, err := s.Bootstrap()
+	ts, err := s.Bootstrap(t.Context())
 	t.Logf("%#v", ts)
 	require.NoError(t, err)
 }

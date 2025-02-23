@@ -5,16 +5,17 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	g "github.com/anacrolix/generics"
 	"log"
 
-	"github.com/anacrolix/args/targets"
-	"github.com/anacrolix/torrent/bencode"
+	g "github.com/anacrolix/generics"
 
-	"github.com/anacrolix/dht/v2"
-	"github.com/anacrolix/dht/v2/bep44"
-	"github.com/anacrolix/dht/v2/exts/getput"
-	"github.com/anacrolix/dht/v2/traversal"
+	"github.com/anacrolix/args/targets"
+	"github.com/james-lawrence/torrent/bencode"
+
+	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/dht/bep44"
+	"github.com/james-lawrence/torrent/dht/exts/getput"
+	"github.com/james-lawrence/torrent/dht/traversal"
 )
 
 type PutCmd struct {

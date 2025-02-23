@@ -4,10 +4,9 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/james-lawrence/torrent/dht/int160"
+	"github.com/james-lawrence/torrent/dht/internal/testutil"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/anacrolix/dht/v2/int160"
-	"github.com/anacrolix/dht/v2/internal/testutil"
 )
 
 func TestSampleAddrsDiffer(t *testing.T) {

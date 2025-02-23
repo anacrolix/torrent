@@ -2,17 +2,17 @@ package main
 
 import (
 	"context"
+	"log"
 	"net"
 	"os"
 	"os/signal"
 	"sync"
 
 	_ "github.com/anacrolix/envpprof"
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/tagflag"
 	"github.com/davecgh/go-spew/spew"
 
-	"github.com/anacrolix/dht/v2"
+	"github.com/james-lawrence/torrent/dht"
 )
 
 func main() {
@@ -32,9 +32,6 @@ func mainErr() int {
 		Infohash [][20]byte
 	}{}
 	tagflag.Parse(&flags)
-	if !flags.Debug {
-		log.Default = log.Default.FilterLevel(log.Info)
-	}
 	s, err := dht.NewServer(func() *dht.ServerConfig {
 		sc := dht.NewDefaultServerConfig()
 		if flags.Addr != "" {
@@ -44,7 +41,7 @@ func mainErr() int {
 			}
 			sc.Conn = conn
 		}
-		sc.Logger = log.Default
+		sc.Logger = log.Default()
 		return sc
 	}())
 	if err != nil {
@@ -59,7 +56,7 @@ func mainErr() int {
 	addrs := make(map[[20]byte]map[string]struct{}, len(flags.Infohash))
 	for _, ih := range flags.Infohash {
 		// PSA: Go sucks.
-		a, err := s.Announce(ih, flags.Port, false, func() (ret []dht.AnnounceOpt) {
+		a, err := s.Announce(ctx, ih, flags.Port, false, func() (ret []dht.AnnounceOpt) {
 			if flags.Scrape {
 				ret = append(ret, dht.Scrape())
 			}
@@ -99,7 +96,7 @@ func mainErr() int {
 					}
 				}
 			}
-			log.Levelf(log.Debug, "finishing traversal")
+			log.Panicln("finishing traversal")
 			<-a.Finished()
 			log.Printf("%v contacted %v nodes", a, a.NumContacted())
 		}(ih)

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/anacrolix/dht/v2/int160"
+	"github.com/james-lawrence/torrent/dht/int160"
 )
 
 // Node table, with indexes on distance from root ID to bucket, and node addr.
@@ -25,15 +25,6 @@ func (tbl *table) randomIdForBucket(bucketIndex int) int160.T {
 		panic(fmt.Sprintf("bucket index for random id %v == %v not %v", randomId, randomIdBucketIndex, bucketIndex))
 	}
 	return randomId
-}
-
-func (tbl *table) addrNodes(addr Addr) []*node {
-	a := tbl.addrs[addr.String()]
-	ret := make([]*node, 0, len(a))
-	for id := range a {
-		ret = append(ret, tbl.getNode(addr, id))
-	}
-	return ret
 }
 
 func (tbl *table) dropNode(n *node) {

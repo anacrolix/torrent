@@ -1,6 +1,6 @@
 package bep44
 
-import "github.com/anacrolix/dht/v2/krpc"
+import "github.com/james-lawrence/torrent/dht/krpc"
 
 var (
 	ErrValueFieldTooBig = krpc.Error{

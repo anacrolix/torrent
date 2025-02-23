@@ -7,8 +7,7 @@ import (
 
 	"github.com/bradfitz/iter"
 	qt "github.com/frankban/quicktest"
-
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
 func TestNoIdFarther(tb *testing.T) {
@@ -63,18 +62,19 @@ func TestCloserThanId(tb *testing.T) {
 func BenchmarkDeterministicAddr(tb *testing.B) {
 	ip := net.ParseIP("1.2.3.4")
 	target := krpc.RandomNodeID().Int160()
+
 	for range iter.N(tb.N) {
 		a := AddrMaybeId{
-			Addr: krpc.NodeAddr{
-				IP:   ip,
-				Port: rand.Int(),
-			}.ToNodeAddrPort(),
+			Addr: krpc.NewNodeAddrFromIPPort(
+				ip,
+				rand.Int(),
+			),
 		}
 		b := AddrMaybeId{
-			Addr: krpc.NodeAddr{
-				IP:   ip,
-				Port: rand.Int(),
-			}.ToNodeAddrPort(),
+			Addr: krpc.NewNodeAddrFromIPPort(
+				ip,
+				rand.Int(),
+			),
 		}
 		if a.CloserThan(b, target) != a.CloserThan(b, target) {
 			tb.Fatal("not deterministic")

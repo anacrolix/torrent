@@ -7,7 +7,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/anacrolix/dht/v2/int160"
+	"github.com/james-lawrence/torrent/dht/int160"
 )
 
 func TestTable(t *testing.T) {

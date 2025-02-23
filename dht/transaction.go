@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
-var TransactionTimeout = errors.New("transaction timed out")
+var ErrTransactionTimeout = errors.New("transaction timed out")
+var ErrTokenInvalid = errors.New("invalid token")
 
 // Transaction keeps track of a message exchange between nodes, such as a
 // query message and a response message.

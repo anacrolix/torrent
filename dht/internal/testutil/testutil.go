@@ -3,9 +3,9 @@ package testutil
 import (
 	"github.com/anacrolix/generics"
 
-	"github.com/anacrolix/dht/v2/int160"
-	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/anacrolix/dht/v2/types"
+	"github.com/james-lawrence/torrent/dht/int160"
+	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/dht/types"
 )
 
 func Int160WithBitSet(bit int) *int160.T {
@@ -21,9 +21,9 @@ var SampleAddrMaybeIds = []addrMaybeId{
 	{Id: generics.Some(int160.T{})},
 	{Id: generics.Some(*Int160WithBitSet(13))},
 	{Id: generics.Some(*Int160WithBitSet(12))},
-	{Addr: krpc.NodeAddr{Port: 1}.ToNodeAddrPort()},
+	{Addr: krpc.NewNodeAddrFromIPPort(nil, 1)},
 	{
 		Id:   generics.Some(*Int160WithBitSet(14)),
-		Addr: krpc.NodeAddr{Port: 1}.ToNodeAddrPort(),
+		Addr: krpc.NewNodeAddrFromIPPort(nil, 1),
 	},
 }

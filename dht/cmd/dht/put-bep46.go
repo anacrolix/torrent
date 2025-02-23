@@ -12,11 +12,11 @@ import (
 	"github.com/anacrolix/torrent/types/infohash"
 	"github.com/multiformats/go-base36"
 
-	"github.com/anacrolix/dht/v2"
-	"github.com/anacrolix/dht/v2/bep44"
-	"github.com/anacrolix/dht/v2/exts/getput"
-	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/anacrolix/dht/v2/traversal"
+	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/dht/bep44"
+	"github.com/james-lawrence/torrent/dht/exts/getput"
+	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/dht/traversal"
 )
 
 type PutMutableInfohash struct {

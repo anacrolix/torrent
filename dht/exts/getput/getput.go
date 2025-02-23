@@ -8,13 +8,13 @@ import (
 	"sync"
 
 	"github.com/anacrolix/log"
-	"github.com/anacrolix/torrent/bencode"
+	"github.com/james-lawrence/torrent/bencode"
 
-	"github.com/anacrolix/dht/v2"
-	"github.com/anacrolix/dht/v2/bep44"
-	k_nearest_nodes "github.com/anacrolix/dht/v2/k-nearest-nodes"
-	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/anacrolix/dht/v2/traversal"
+	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/dht/bep44"
+	k_nearest_nodes "github.com/james-lawrence/torrent/dht/k-nearest-nodes"
+	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/dht/traversal"
 )
 
 type GetResult struct {
@@ -37,7 +37,7 @@ func startGetTraversal(
 			logger := log.ContextLogger(ctx)
 			res := s.Get(ctx, dht.NewAddr(addr.UDP()), target, seq, dht.QueryRateLimiting{})
 			err := res.ToError()
-			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, dht.TransactionTimeout) {
+			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, dht.ErrTransactionTimeout) {
 				logger.Levelf(log.Debug, "error querying %v: %v", addr, err)
 			}
 			if r := res.Reply.R; r != nil {

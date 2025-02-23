@@ -5,8 +5,9 @@ import (
 	"context"
 
 	"github.com/james-lawrence/torrent/bencode"
-	"github.com/james-lawrence/torrent/dht/v2"
-	"github.com/james-lawrence/torrent/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/dht/int160"
+	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
 const (
@@ -89,6 +90,7 @@ func (t Endpoint) Handle(ctx context.Context, source dht.Addr, s *dht.Server, ra
 	}
 
 	ttl, total, sampled := t.s.Snapshot(128)
+
 	msg := Response{
 		T: m.T,
 		R: Sample{
@@ -96,8 +98,8 @@ func (t Endpoint) Handle(ctx context.Context, source dht.Addr, s *dht.Server, ra
 			Interval:  ttl,
 			Available: total,
 			Sample:    sampled,
-			Nodes:     s.MakeReturnNodes(dht.Int160FromByteArray(m.A.Target), func(na krpc.NodeAddr) bool { return na.IP.Is4() }),
-			Nodes6:    s.MakeReturnNodes(dht.Int160FromByteArray(m.A.Target), func(krpc.NodeAddr) bool { return true }),
+			Nodes:     s.MakeReturnNodes(int160.FromByteArray(m.A.Target), func(na krpc.NodeAddr) bool { return na.Addr().Is4() }),
+			Nodes6:    s.MakeReturnNodes(int160.FromByteArray(m.A.Target), func(krpc.NodeAddr) bool { return true }),
 		},
 	}
 
@@ -106,6 +108,6 @@ func (t Endpoint) Handle(ctx context.Context, source dht.Addr, s *dht.Server, ra
 		return err
 	}
 
-	_, err = s.SendToNode(ctx, b, source, false)
+	_, err = s.SendToNode(ctx, b, source, false, false)
 	return err
 }

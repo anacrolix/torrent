@@ -9,7 +9,7 @@ import (
 	"net"
 
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/james-lawrence/torrent/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
 type torrent struct {

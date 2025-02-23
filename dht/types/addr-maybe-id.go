@@ -5,9 +5,8 @@ import (
 
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/multiless"
-
-	"github.com/anacrolix/dht/v2/int160"
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/int160"
+	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
 func AddrMaybeIdSliceFromNodeInfoSlice(nis []krpc.NodeInfo) (ret []AddrMaybeId) {
@@ -15,7 +14,7 @@ func AddrMaybeIdSliceFromNodeInfoSlice(nis []krpc.NodeInfo) (ret []AddrMaybeId) 
 	for _, ni := range nis {
 		id := int160.FromByteArray(ni.ID)
 		ret = append(ret, AddrMaybeId{
-			Addr: ni.Addr.ToNodeAddrPort(),
+			Addr: ni.Addr,
 			Id:   generics.Some(id),
 		})
 	}
@@ -23,7 +22,7 @@ func AddrMaybeIdSliceFromNodeInfoSlice(nis []krpc.NodeInfo) (ret []AddrMaybeId) 
 }
 
 type AddrMaybeId struct {
-	Addr krpc.NodeAddrPort
+	Addr krpc.NodeAddr
 	Id   generics.Option[int160.T]
 }
 
@@ -33,14 +32,14 @@ func (me AddrMaybeId) TryIntoNodeInfo() (ret *krpc.NodeInfo) {
 	}
 	return &krpc.NodeInfo{
 		ID:   me.Id.Value.AsByteArray(),
-		Addr: me.Addr.ToNodeAddr(),
+		Addr: me.Addr,
 	}
 }
 
 func (me *AddrMaybeId) FromNodeInfo(ni krpc.NodeInfo) {
 	id := int160.FromByteArray(ni.ID)
 	*me = AddrMaybeId{
-		Addr: ni.Addr.ToNodeAddrPort(),
+		Addr: ni.Addr,
 		Id:   generics.Some(id),
 	}
 }

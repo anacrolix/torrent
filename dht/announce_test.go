@@ -21,7 +21,7 @@ func TestAnnounceNoStartingNodes(t *testing.T) {
 	defer s.Close()
 	var ih [20]byte
 	copy(ih[:], "blah")
-	_, err = s.Announce(ih, 0, true)
+	_, err = s.Announce(t.Context(), ih, 0, true)
 	require.EqualError(t, err, "no initial nodes")
 }
 
@@ -38,7 +38,7 @@ func TestAnnounceStopsNoPending(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	a, err := s.Announce(randomInfohash(), 0, true)
+	a, err := s.Announce(t.Context(), randomInfohash(), 0, true)
 	require.NoError(t, err)
 	defer a.Close()
 	<-a.Peers

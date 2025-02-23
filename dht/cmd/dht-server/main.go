@@ -2,17 +2,16 @@ package main
 
 import (
 	"context"
-	stdLog "log"
+	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 
 	_ "github.com/anacrolix/envpprof"
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/tagflag"
 
-	"github.com/anacrolix/dht/v2"
+	"github.com/james-lawrence/torrent/dht"
 )
 
 var (
@@ -37,7 +36,7 @@ func saveTable() error {
 }
 
 func main() {
-	stdLog.SetFlags(stdLog.LstdFlags | stdLog.Lshortfile)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	err := mainErr()
 	if err != nil {
 		log.Printf("error in main: %v", err)
@@ -54,7 +53,7 @@ func mainErr() error {
 	defer conn.Close()
 	cfg := dht.NewDefaultServerConfig()
 	cfg.Conn = conn
-	cfg.Logger = log.Default.FilterLevel(log.Info)
+	cfg.Logger = log.Default()
 	cfg.NoSecurity = false
 	s, err = dht.NewServer(cfg)
 	if err != nil {
@@ -80,7 +79,7 @@ func mainErr() error {
 	}()
 	if !flags.NoBootstrap {
 		go func() {
-			if tried, err := s.Bootstrap(); err != nil {
+			if tried, err := s.Bootstrap(ctx); err != nil {
 				log.Printf("error bootstrapping: %s", err)
 			} else {
 				log.Printf("finished bootstrapping: %#v", tried)

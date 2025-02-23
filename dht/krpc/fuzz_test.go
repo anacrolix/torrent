@@ -7,8 +7,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/anacrolix/torrent/bencode"
 	qt "github.com/frankban/quicktest"
+	"github.com/james-lawrence/torrent/bencode"
 )
 
 // Check that if we can unmarshal a Msg that we can marshal it back without an error. We

@@ -6,9 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/anacrolix/torrent/bencode"
+	"github.com/james-lawrence/torrent/bencode"
 
-	"github.com/anacrolix/dht/v2/int160"
+	"github.com/james-lawrence/torrent/dht/int160"
 )
 
 func RandomNodeID() (id ID) {

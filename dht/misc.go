@@ -5,9 +5,9 @@ import (
 
 	"github.com/anacrolix/missinggo/v2/iter"
 
-	"github.com/anacrolix/dht/v2/int160"
-	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/anacrolix/dht/v2/types"
+	"github.com/james-lawrence/torrent/dht/int160"
+	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/dht/types"
 )
 
 func mustListen(addr string) net.PacketConn {

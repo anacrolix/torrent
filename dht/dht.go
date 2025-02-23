@@ -5,20 +5,19 @@ import (
 	"crypto"
 	_ "crypto/sha1"
 	"errors"
-	"math/rand"
+	"log"
 	"net"
 	"time"
 
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/torrent/iplist"
-	"github.com/anacrolix/torrent/metainfo"
 	"golang.org/x/time/rate"
 
-	"github.com/anacrolix/dht/v2/bep44"
-	"github.com/anacrolix/dht/v2/krpc"
-	peer_store "github.com/anacrolix/dht/v2/peer-store"
-	"github.com/anacrolix/dht/v2/transactions"
+	"github.com/james-lawrence/torrent/dht/bep44"
+	"github.com/james-lawrence/torrent/dht/krpc"
+	peer_store "github.com/james-lawrence/torrent/dht/peer-store"
+	"github.com/james-lawrence/torrent/dht/transactions"
+	"github.com/james-lawrence/torrent/iplist"
+	"github.com/james-lawrence/torrent/metainfo"
 )
 
 func defaultQueryResendDelay() time.Duration {
@@ -74,7 +73,7 @@ type ServerConfig struct {
 	// If no Logger is provided, log.Default is used and log.Debug messages are filtered out. Note
 	// that all messages without a log.Level, have log.Debug added to them before being passed to
 	// this Logger.
-	Logger log.Logger
+	Logger *log.Logger
 
 	DefaultWant []krpc.Want
 
@@ -95,10 +94,6 @@ type ServerStats struct {
 	// Nodes that have been blocked.
 	BadNodes                 uint
 	OutboundQueriesAttempted int64
-}
-
-func jitterDuration(average time.Duration, plusMinus time.Duration) time.Duration {
-	return average - plusMinus/2 + time.Duration(rand.Int63n(int64(plusMinus)))
 }
 
 type Peer = krpc.NodeAddr

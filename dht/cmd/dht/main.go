@@ -14,13 +14,13 @@ import (
 	"github.com/anacrolix/args/targets"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/publicip"
-	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/types/infohash"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/james-lawrence/torrent/bencode"
 
-	"github.com/anacrolix/dht/v2"
-	"github.com/anacrolix/dht/v2/bep44"
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/dht/bep44"
+	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
 type serverParams struct {
@@ -158,9 +158,14 @@ func main() {
 					if err != nil {
 						return err
 					}
-					input := dht.QueryInput{}
-					input.MsgArgs.Target = subArgs.Target
-					res := s.Query(ctx, dht.NewAddr(addr), subArgs.Q, input)
+					input, err := dht.NewMessageRequest(subArgs.Q, s.ID(), &krpc.MsgArgs{
+						Target: subArgs.Target,
+					})
+					if err != nil {
+						return err
+					}
+
+					res := s.Query(ctx, dht.NewAddr(addr), input)
 					spew.Dump(res)
 					return nil
 				})
@@ -179,9 +184,14 @@ func main() {
 					if err != nil {
 						return err
 					}
-					input := dht.QueryInput{}
-					input.MsgArgs.Target = subArgs.Target
-					res := s.Query(ctx, dht.NewAddr(addr), subArgs.Q, input)
+					input, err := dht.NewMessageRequest(subArgs.Q, s.ID(), &krpc.MsgArgs{
+						Target: subArgs.Target,
+					})
+					if err != nil {
+						return err
+					}
+
+					res := s.Query(ctx, dht.NewAddr(addr), input)
 					err = res.ToError()
 					if err != nil {
 						return err

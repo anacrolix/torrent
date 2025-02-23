@@ -6,11 +6,12 @@ import (
 	"net/netip"
 	"os"
 
-	"github.com/anacrolix/log"
-	"golang.org/x/exp/constraints"
 	"slices"
 
-	"github.com/anacrolix/dht/v2"
+	"github.com/anacrolix/log"
+	"golang.org/x/exp/constraints"
+
+	"github.com/james-lawrence/torrent/dht"
 )
 
 func GetPeers(ctx context.Context, s *dht.Server, ih [20]byte, opts ...dht.AnnounceOpt) error {

@@ -5,17 +5,17 @@ package dht
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 
 	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/chansync/events"
-	"github.com/anacrolix/log"
 
-	"github.com/anacrolix/dht/v2/int160"
-	dhtutil "github.com/anacrolix/dht/v2/k-nearest-nodes"
-	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/anacrolix/dht/v2/traversal"
+	"github.com/james-lawrence/torrent/dht/int160"
+	dhtutil "github.com/james-lawrence/torrent/dht/k-nearest-nodes"
+	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/dht/traversal"
 )
 
 // Maintains state for an ongoing Announce operation. An Announce is started by calling
@@ -77,7 +77,7 @@ func AnnouncePeer(opts AnnouncePeerOpts) AnnounceOpt {
 // Traverses the DHT graph toward nodes that store peers for the infohash, streaming them to the
 // caller, and announcing the local node to each responding node if port is non-zero or impliedPort
 // is true.
-func (s *Server) Announce(infoHash [20]byte, port int, impliedPort bool, opts ...AnnounceOpt) (_ *Announce, err error) {
+func (s *Server) Announce(ctx context.Context, infoHash [20]byte, port int, impliedPort bool, opts ...AnnounceOpt) (_ *Announce, err error) {
 	if port != 0 || impliedPort {
 		opts = append([]AnnounceOpt{AnnouncePeer(AnnouncePeerOpts{
 			Port:        port,
@@ -132,8 +132,7 @@ func (a *Announce) announceClosest() {
 	a.traversal.Closest().Range(func(elem dhtutil.Elem) {
 		wg.Add(1)
 		go func() {
-			a.logger().Levelf(log.Debug,
-				"announce_peer to %v: %v",
+			a.logger().Printf("announce_peer to %v: %v\n",
 				elem, a.announcePeer(elem),
 			)
 			wg.Done()
@@ -198,7 +197,7 @@ func (a *Announce) Close() {
 	a.closed.Set()
 }
 
-func (a *Announce) logger() log.Logger {
+func (a *Announce) logger() *log.Logger {
 	return a.server.logger()
 }
 

@@ -7,7 +7,7 @@ import (
 
 	"github.com/anacrolix/chansync"
 
-	"github.com/anacrolix/dht/v2/int160"
+	"github.com/james-lawrence/torrent/dht/int160"
 )
 
 type bucket struct {

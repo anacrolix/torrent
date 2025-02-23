@@ -9,11 +9,11 @@ import (
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/sync"
 
-	"github.com/anacrolix/dht/v2/containers"
-	"github.com/anacrolix/dht/v2/int160"
-	k_nearest_nodes "github.com/anacrolix/dht/v2/k-nearest-nodes"
-	"github.com/anacrolix/dht/v2/krpc"
-	"github.com/anacrolix/dht/v2/types"
+	"github.com/james-lawrence/torrent/dht/containers"
+	"github.com/james-lawrence/torrent/dht/int160"
+	k_nearest_nodes "github.com/james-lawrence/torrent/dht/k-nearest-nodes"
+	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/dht/types"
 )
 
 type QueryResult struct {
@@ -154,7 +154,7 @@ func (op *Operation) AddNodes(nodes []types.AddrMaybeId) (added int) {
 	return op.unqueried.Len() - before
 }
 
-func (op *Operation) markQueried(addr krpc.NodeAddrPort) {
+func (op *Operation) markQueried(addr krpc.NodeAddr) {
 	op.queried[addrString(addr.String())] = struct{}{}
 }
 
@@ -220,7 +220,7 @@ func (op *Operation) addClosest(node krpc.NodeInfo, data interface{}) {
 		return
 	}
 	op.closest = op.closest.Push(k_nearest_nodes.Elem{
-		Key:  node.ToNodeInfoAddrPort(),
+		Key:  node,
 		Data: data,
 	})
 }
@@ -250,7 +250,7 @@ func (op *Operation) startQuery() {
 				cancel()
 			}
 		}()
-		res := op.input.DoQuery(ctx, a.Addr.ToNodeAddr())
+		res := op.input.DoQuery(ctx, a.Addr)
 		cancel()
 		if res.ResponseFrom != nil {
 			func() {

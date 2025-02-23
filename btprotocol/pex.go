@@ -2,7 +2,7 @@ package btprotocol
 
 import (
 	"github.com/james-lawrence/torrent/bencode"
-	"github.com/james-lawrence/torrent/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
 // PexMsg http://bittorrent.org/beps/bep_0011.html

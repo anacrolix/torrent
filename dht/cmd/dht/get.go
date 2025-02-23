@@ -7,11 +7,11 @@ import (
 	"log"
 	"os"
 
-	"github.com/anacrolix/torrent/bencode"
+	"github.com/james-lawrence/torrent/bencode"
 
-	"github.com/anacrolix/dht/v2"
-	"github.com/anacrolix/dht/v2/exts/getput"
-	"github.com/anacrolix/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/dht/exts/getput"
+	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
 type GetCmd struct {

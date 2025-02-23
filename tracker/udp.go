@@ -14,7 +14,7 @@ import (
 
 	"github.com/anacrolix/missinggo/pproffd"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/james-lawrence/torrent/dht/v2/krpc"
+	"github.com/james-lawrence/torrent/dht/krpc"
 	"github.com/pkg/errors"
 )
 
@@ -109,8 +109,8 @@ func (c *udpAnnounce) Do(req AnnounceRequest) (res AnnounceResponse, err error) 
 	if c.ipv6() {
 		// BEP 15
 		req.IPAddress = 0
-	} else if req.IPAddress == 0 && c.a.ClientIp4.IP.Is4() {
-		req.IPAddress = binary.BigEndian.Uint32(c.a.ClientIp4.IP.AsSlice())
+	} else if req.IPAddress == 0 && c.a.ClientIp4.AddrPort.Addr().Is4() {
+		req.IPAddress = binary.BigEndian.Uint32(c.a.ClientIp4.AddrPort.Addr().AsSlice())
 	}
 	// Clearly this limits the request URI to 255 bytes. BEP 41 supports
 	// longer but I'm not fussed.

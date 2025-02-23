@@ -16,12 +16,12 @@ import (
 	"time"
 
 	"github.com/james-lawrence/torrent/connections"
+	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/dht/krpc"
 
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/slices"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/james-lawrence/torrent/dht/v2"
-	"github.com/james-lawrence/torrent/dht/v2/krpc"
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
 
@@ -327,10 +327,9 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 			}
 			return cl.config.PublicIP4
 		}(),
-		StartingNodes:      cl.config.DhtStartingNodes,
-		ConnectionTracking: cl.config.ConnTracker,
-		OnQuery:            cl.config.DHTOnQuery,
-		Logger:             newlogger(cl.config.Logger, "[dht] ", log.Flags()),
+		StartingNodes: cl.config.DhtStartingNodes(conn.LocalAddr().Network()),
+		OnQuery:       cl.config.DHTOnQuery,
+		Logger:        newlogger(cl.config.Logger, "dht", log.Flags()),
 	}
 
 	if s, err = dht.NewServer(&cfg); err != nil {
@@ -950,6 +949,7 @@ func (cl *Client) AddDHTNodes(nodes []string) {
 			cl.config.info().Printf("refusing to add DHT node with invalid IP: %q\n", hmp.Host)
 			continue
 		}
+
 		ni := krpc.NodeInfo{
 			Addr: krpc.NewNodeAddrFromIPPort(ip, hmp.Port),
 		}

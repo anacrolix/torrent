@@ -3,7 +3,7 @@ package krpc
 import (
 	"testing"
 
-	"github.com/anacrolix/torrent/bencode"
+	"github.com/james-lawrence/torrent/bencode"
 	"github.com/stretchr/testify/assert"
 )
 

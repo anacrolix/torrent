@@ -15,8 +15,8 @@ func TestUnmarshalSlice(t *testing.T) {
 		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x03\x04\x05\x06\x07"))
 	require.NoError(t, err)
 	require.Len(t, data, 2)
-	assert.Equal(t, "1.2.3.4", data[0].Addr.IP.String())
-	assert.Equal(t, "2.3.4.5", data[1].Addr.IP.String())
+	assert.Equal(t, "1.2.3.4", data[0].Addr.IP().String())
+	assert.Equal(t, "2.3.4.5", data[1].Addr.IP().String())
 }
 
 var nodeAddrIndexTests4 = []struct {
@@ -24,11 +24,11 @@ var nodeAddrIndexTests4 = []struct {
 	a   NodeAddr
 	out int
 }{
-	{[]NodeAddr{{IPv4(172, 16, 1, 1), 11}, {IPv4(192, 168, 0, 3), 11}}, NodeAddr{IPv4(172, 16, 1, 1), 11}, 0},
-	{[]NodeAddr{{IPv4(172, 16, 1, 1), 11}, {IPv4(192, 168, 0, 3), 11}}, NodeAddr{IPv4(192, 168, 0, 3), 11}, 1},
-	{[]NodeAddr{{IPv4(172, 16, 1, 1), 11}, {IPv4(192, 168, 0, 3), 11}}, NodeAddr{IPv4(127, 0, 0, 1), 11}, -1},
-	{[]NodeAddr{}, NodeAddr{IPv4(127, 0, 0, 1), 11}, -1},
-	{[]NodeAddr{}, NodeAddr{}, -1},
+	{v: []NodeAddr{NewNodeAddrFromIPPort(IPv4(172, 16, 1, 1), 11), NewNodeAddrFromIPPort(IPv4(192, 168, 0, 3), 11)}, a: NewNodeAddrFromIPPort(IPv4(172, 16, 1, 1), 11), out: 0},
+	{v: []NodeAddr{NewNodeAddrFromIPPort(IPv4(172, 16, 1, 1), 11), NewNodeAddrFromIPPort(IPv4(192, 168, 0, 3), 11)}, a: NewNodeAddrFromIPPort(IPv4(192, 168, 0, 3), 11), out: 1},
+	{v: []NodeAddr{NewNodeAddrFromIPPort(IPv4(172, 16, 1, 1), 11), NewNodeAddrFromIPPort(IPv4(192, 168, 0, 3), 11)}, a: NewNodeAddrFromIPPort(IPv4(127, 0, 0, 1), 11), out: -1},
+	{v: []NodeAddr{}, a: NewNodeAddrFromIPPort(IPv4(127, 0, 0, 1), 11), out: -1},
+	{v: []NodeAddr{}, a: NodeAddr{}, out: -1},
 }
 
 func TestNodeAddrIndex4(t *testing.T) {
@@ -45,10 +45,10 @@ var nodeAddrIndexTests6 = []struct {
 	a   NodeAddr
 	out int
 }{
-	{[]NodeAddr{{ParseIP("2001::1"), 11}, {ParseIP("4004::1"), 11}}, NodeAddr{ParseIP("2001::1"), 11}, 0},
-	{[]NodeAddr{{ParseIP("2001::1"), 11}, {ParseIP("4004::1"), 11}}, NodeAddr{ParseIP("4004::1"), 11}, 1},
-	{[]NodeAddr{{ParseIP("2001::1"), 11}, {ParseIP("4004::1"), 11}}, NodeAddr{ParseIP("::1"), 11}, -1},
-	{[]NodeAddr{}, NodeAddr{ParseIP("::1"), 11}, -1},
+	{[]NodeAddr{NewNodeAddrFromIPPort(ParseIP("2001::1"), 11), NewNodeAddrFromIPPort(ParseIP("4004::1"), 11)}, NewNodeAddrFromIPPort(ParseIP("2001::1"), 11), 0},
+	{[]NodeAddr{NewNodeAddrFromIPPort(ParseIP("2001::1"), 11), NewNodeAddrFromIPPort(ParseIP("4004::1"), 11)}, NewNodeAddrFromIPPort(ParseIP("4004::1"), 11), 1},
+	{[]NodeAddr{NewNodeAddrFromIPPort(ParseIP("2001::1"), 11), NewNodeAddrFromIPPort(ParseIP("4004::1"), 11)}, NewNodeAddrFromIPPort(ParseIP("::1"), 11), -1},
+	{[]NodeAddr{}, NewNodeAddrFromIPPort(ParseIP("::1"), 11), -1},
 	{[]NodeAddr{}, NodeAddr{}, -1},
 }
 
@@ -66,14 +66,14 @@ var marshalIPv4SliceTests = []struct {
 	out    []byte
 	panics bool
 }{
-	{[]NodeAddr{{net.IP{172, 16, 1, 1}, 3}}, []byte{172, 16, 1, 1, 0, 3}, false},
-	{[]NodeAddr{{net.IPv4(172, 16, 1, 1), 4}}, []byte{172, 16, 1, 1, 0, 4}, false},
-	{[]NodeAddr{{net.IPv4(172, 16, 1, 1), 5}, {net.IPv4(192, 168, 0, 3), 6}}, []byte{
+	{[]NodeAddr{NewNodeAddrFromIPPort(net.IP{172, 16, 1, 1}, 3)}, []byte{172, 16, 1, 1, 0, 3}, false},
+	{[]NodeAddr{NewNodeAddrFromIPPort(net.IPv4(172, 16, 1, 1), 4)}, []byte{172, 16, 1, 1, 0, 4}, false},
+	{[]NodeAddr{NewNodeAddrFromIPPort(net.IPv4(172, 16, 1, 1), 5), NewNodeAddrFromIPPort(net.IPv4(192, 168, 0, 3), 6)}, []byte{
 		172, 16, 1, 1, 0, 5,
 		192, 168, 0, 3, 0, 6,
 	}, false},
-	{[]NodeAddr{{ParseIP("2001::1"), 7}}, nil, true},
-	{[]NodeAddr{{nil, 8}}, nil, true},
+	{[]NodeAddr{NewNodeAddrFromIPPort(ParseIP("2001::1"), 7)}, nil, true},
+	{[]NodeAddr{NewNodeAddrFromIPPort(nil, 8)}, nil, true},
 }
 
 func TestMarshalCompactIPv4NodeAddrs(t *testing.T) {

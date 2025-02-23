@@ -18,7 +18,10 @@ func NewNodeAddrFromAddrPort(ap netip.AddrPort) NodeAddr {
 
 func NewNodeAddrFromIPPort(ip net.IP, port int) NodeAddr {
 	if ip == nil {
-		return NodeAddr{}
+		addr, _ := netip.AddrFromSlice(ip)
+		return NodeAddr{
+			AddrPort: netip.AddrPortFrom(addr, uint16(port)),
+		}
 	}
 
 	ipaddr := netip.AddrFrom16([16]byte(ip.To16()))
@@ -36,6 +39,13 @@ type NodeAddr struct {
 	netip.AddrPort
 }
 
+func (me NodeAddr) String() string {
+	if me.IsValid() {
+		return me.Addr().String()
+	}
+
+	return ""
+}
 func (me NodeAddr) UDP() *net.UDPAddr {
 	return &net.UDPAddr{
 		IP:   me.Addr().AsSlice(),
@@ -52,6 +62,10 @@ func (me NodeAddr) Compare(r NodeAddr) int {
 		multiless.New().Cmp(me.Addr().Compare(r.Addr())),
 		me.Port(), r.Port(),
 	).OrderingInt()
+}
+
+func (me NodeAddr) Equal(r NodeAddr) bool {
+	return me.Compare(r) == 0
 }
 
 func (ni NodeAddr) MarshalBinary() ([]byte, error) {

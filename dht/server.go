@@ -306,16 +306,20 @@ func (s *Server) processPacket(ctx context.Context, b []byte, addr Addr) {
 		}()
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
 	if s.closed.IsSet() {
 		return
 	}
+
 	if d.Y == "q" {
 		s.logger().Printf("received query %q from %v", d.Q, addr)
 		s.handleQuery(ctx, addr, b, d)
 		return
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	tk := transactionKey{
 		RemoteAddr: addr.String(),
 		T:          d.T,
@@ -902,15 +906,15 @@ func (s *Server) transactionQuerySender(
 
 // Sends a ping query to the address given.
 func (s *Server) PingQueryInput(node *net.UDPAddr, qi QueryInput) QueryResult {
-	qi.Method = "ping"
 	addr := NewAddr(node)
-	res := s.Query(context.TODO(), addr, qi)
+	res := Ping3S(context.Background(), s, addr, s.ID())
 	if res.Err == nil {
 		id := res.Reply.SenderID()
 		if id != nil {
 			s.NodeRespondedToPing(addr, id.Int160())
 		}
 	}
+
 	return res
 }
 

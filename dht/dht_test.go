@@ -109,7 +109,6 @@ func TestPing(t *testing.T) {
 	srv, err := NewServer(&ServerConfig{
 		Conn:        recvConn,
 		NoSecurity:  true,
-		Logger:      log.Default(),
 		WaitToReply: true,
 	})
 	srvUdpAddr := func(s *Server) *net.UDPAddr {

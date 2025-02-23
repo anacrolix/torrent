@@ -2,9 +2,10 @@ package containers
 
 import (
 	"github.com/anacrolix/missinggo/v2/iter"
-	"github.com/anacrolix/stm/stmutil"
+
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/dht/types"
+	"github.com/james-lawrence/torrent/internal/stmutil"
 )
 
 type addrMaybeId = types.AddrMaybeId

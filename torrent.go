@@ -19,7 +19,6 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
-	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/missinggo/bitmap"
 	"github.com/anacrolix/missinggo/pubsub"
@@ -1487,11 +1486,11 @@ func (t *torrent) announceRequest(event tracker.AnnounceEvent) tracker.AnnounceR
 // Adds peers revealed in an announce until the announce ends, or we have
 // enough peers.
 func (t *torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
-	l := rate.NewLimiter(rate.Every(time.Minute), 1)
+	// l := rate.NewLimiter(rate.Every(time.Minute), 1)
 	for v := range pvs {
-		if len(v.Peers) > 0 || l.Allow() {
-			log.Println("received peers", t.infoHash, len(v.Peers))
-		}
+		// if len(v.Peers) > 0 || l.Allow() {
+		// 	log.Println("received peers", t.infoHash, len(v.Peers))
+		// }
 		for _, cp := range v.Peers {
 			if cp.Port() == 0 {
 				// Can't do anything with this.

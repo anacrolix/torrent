@@ -230,7 +230,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 			secret:           make([]byte, 20),
 		},
 		table: table{
-			k: 8,
+			k: 128,
 		},
 		store: bep44.NewWrapper(c.Store, c.Exp),
 		mux:   DefaultMuxer(),

@@ -185,7 +185,7 @@ func (c *ServerConfig) InitNodeId() (deterministic bool) {
 			secure = true
 			deterministic = true
 		} else {
-			c.NodeId = RandomNodeID()
+			c.NodeId = krpc.RandomID()
 			secure = !c.NoSecurity && c.PublicIP != nil
 		}
 		if secure {
@@ -1235,7 +1235,3 @@ func validNodeAddr(addr net.Addr) bool {
 	}
 	return true
 }
-
-// func (s *Server) refreshBucket(bucketIndex int) {
-//	targetId := s.table.randomIdForBucket(bucketIndex)
-// }

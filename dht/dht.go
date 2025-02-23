@@ -141,11 +141,6 @@ func ResolveHostPorts(hostPorts []string) (addrs []Addr, err error) {
 	return
 }
 
-// Deprecated: Use function from krpc.
-func RandomNodeID() (id krpc.ID) {
-	return krpc.RandomNodeID()
-}
-
 func MakeDeterministicNodeID(public net.Addr) (id krpc.ID) {
 	h := crypto.SHA1.New()
 	h.Write([]byte(public.String()))

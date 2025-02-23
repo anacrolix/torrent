@@ -67,7 +67,7 @@ func getInsecureIp(nodeId [20]byte, ip net.IP) {
 
 // Show that we can't secure a node ID against more than one IP.
 func TestSecureNodeIdMultipleIps(t *testing.T) {
-	id := RandomNodeID()
+	id := krpc.RandomID()
 	t.Logf("random node id: %x", id)
 	ip4 := make(net.IP, 4)
 	getInsecureIp(id, ip4)

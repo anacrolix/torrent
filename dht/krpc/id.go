@@ -1,19 +1,16 @@
 package krpc
 
 import (
-	crand "crypto/rand"
 	"encoding"
 	"encoding/hex"
 	"fmt"
 
 	"github.com/james-lawrence/torrent/bencode"
-
 	"github.com/james-lawrence/torrent/dht/int160"
 )
 
-func RandomNodeID() (id ID) {
-	crand.Read(id[:])
-	return
+func RandomID() (id ID) {
+	return ID(int160.Random().Bytes())
 }
 
 type ID [20]byte

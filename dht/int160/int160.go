@@ -1,10 +1,24 @@
 package int160
 
 import (
+	"crypto/rand"
 	"encoding/hex"
+	"io"
 	"math"
 	"math/big"
 )
+
+func Random() (id T) {
+	n, err := rand.Read(id.bits[:])
+	if err != nil {
+		panic(err)
+	}
+	if n < len(id.bits[:]) {
+		panic(io.ErrShortWrite)
+	}
+
+	return id
+}
 
 type T struct {
 	bits [20]uint8

@@ -6,7 +6,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/iter"
 
 	"github.com/james-lawrence/torrent/dht/int160"
-	"github.com/james-lawrence/torrent/dht/krpc"
 	"github.com/james-lawrence/torrent/dht/types"
 )
 
@@ -28,7 +27,7 @@ func addrResolver(addr string) func() ([]Addr, error) {
 type addrMaybeId = types.AddrMaybeId
 
 func randomIdInBucket(rootId int160.T, bucketIndex int) int160.T {
-	id := int160.FromByteArray(krpc.RandomNodeID())
+	id := int160.Random()
 	for i := range iter.N(bucketIndex) {
 		id.SetBit(i, rootId.GetBit(i))
 	}

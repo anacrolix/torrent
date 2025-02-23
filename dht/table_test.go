@@ -53,7 +53,7 @@ func TestTable(t *testing.T) {
 
 func TestRandomIdInBucket(t *testing.T) {
 	tbl := table{
-		rootID: int160.FromByteArray(RandomNodeID()),
+		rootID: int160.Random(),
 	}
 	t.Logf("%v: table root id", tbl.rootID)
 	for i := range tbl.buckets {

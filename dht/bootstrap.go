@@ -11,13 +11,8 @@ import (
 
 type TraversalStats = traversal.Stats
 
-// See BootstrapContext.
-func (s *Server) Bootstrap(ctx context.Context) (TraversalStats, error) {
-	return s.BootstrapContext(ctx)
-}
-
 // Populates the node table.
-func (s *Server) BootstrapContext(ctx context.Context) (_ TraversalStats, err error) {
+func (s *Server) Bootstrap(ctx context.Context) (_ TraversalStats, err error) {
 	s.mu.Lock()
 	if s.bootstrappingNow {
 		s.mu.Unlock()

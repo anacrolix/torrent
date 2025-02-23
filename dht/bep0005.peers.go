@@ -15,9 +15,10 @@ func NewPeersRequest(from krpc.ID, id krpc.ID, scrape bool) (qi QueryInput, err 
 		"get_peers",
 		from,
 		&krpc.MsgArgs{
-			Target: id,
-			Scrape: scrapeint,
-			Want:   []krpc.Want{krpc.WantNodes, krpc.WantNodes6},
+			Target:   id,
+			InfoHash: id,
+			Scrape:   scrapeint,
+			Want:     []krpc.Want{krpc.WantNodes, krpc.WantNodes6},
 		},
 	)
 }

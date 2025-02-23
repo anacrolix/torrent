@@ -48,5 +48,5 @@ func newlogger(l logger, prefix string, flags int) *log.Logger {
 		return log.New(l.Writer(), prefix, flags)
 	}
 
-	return log.Default()
+	return log.New(io.Discard, prefix, log.Flags())
 }

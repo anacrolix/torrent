@@ -243,6 +243,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 	if s.resendDelay == nil {
 		s.resendDelay = defaultQueryResendDelay
 	}
+
 	go s.serveUntilClosed()
 	return
 }
@@ -390,15 +391,25 @@ func (s *Server) ipBlocked(ip net.IP) (blocked bool) {
 }
 
 // Adds directly to the node table.
-func (s *Server) AddNode(ni krpc.NodeInfo) error {
-	id := int160.FromByteArray(ni.ID)
-	if id.IsZero() {
-		go s.Ping(ni.Addr.UDP())
-		return nil
+func (s *Server) AddNode(nis ...krpc.NodeInfo) error {
+	addnode := func(n krpc.NodeInfo) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.updateNode(NewAddr(n.Addr.UDP()), (*krpc.ID)(&n.ID), true, func(*node) {})
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.updateNode(NewAddr(ni.Addr.UDP()), (*krpc.ID)(&ni.ID), true, func(*node) {})
+	for _, ni := range nis {
+		id := int160.FromByteArray(ni.ID)
+		if id.IsZero() {
+			go s.Ping(ni.Addr.UDP())
+			return nil
+		}
+
+		if err := addnode(ni); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func wantsContain(ws []krpc.Want, w krpc.Want) bool {

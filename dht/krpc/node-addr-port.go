@@ -3,7 +3,6 @@ package krpc
 import (
 	"bytes"
 	"encoding/binary"
-	"log"
 	"net"
 	"net/netip"
 
@@ -82,7 +81,7 @@ func (ni *NodeAddr) UnmarshalBencode(b []byte) (err error) {
 	if err = decoded.UnmarshalBencode(b); err != nil {
 		return err
 	}
-	log.Println("DERP 2", decoded)
+
 	ni.AddrPort = NewNodeAddrFromIPPort(decoded.IP, decoded.Port).AddrPort
 	return nil
 }

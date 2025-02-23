@@ -325,8 +325,9 @@ func (s *Server) processPacket(ctx context.Context, b []byte, addr Addr) {
 		return
 	}
 	t := s.transactions.Pop(tk)
+
 	// s.logger().Printf("received response for transaction %q from %v", d.T, addr)
-	go t.handleResponse(d)
+	go t.handleResponse(b, d)
 	s.updateNode(addr, d.SenderID(), !d.ReadOnly, func(n *node) {
 		n.lastGotResponse = time.Now()
 		n.failedLastQuestionablePing = false
@@ -720,6 +721,7 @@ func (s *Server) validToken(token string, addr Addr) bool {
 type numWrites int
 
 type QueryResult struct {
+	Raw    []byte
 	Reply  krpc.Msg
 	Writes numWrites
 	Err    error
@@ -729,10 +731,7 @@ func (qr QueryResult) ToError() error {
 	if qr.Err != nil {
 		return qr.Err
 	}
-	e := qr.Reply.Error()
-	if e != nil {
-		return e
-	}
+
 	return nil
 }
 
@@ -789,10 +788,22 @@ func (s *Server) Query(ctx context.Context, addr Addr, input QueryInput) (ret Qu
 			"Query(%v) returned after %v (err=%v, reply.Y=%v, reply.E=%v, writes=%v)",
 			input.Method, time.Since(started), ret.Err, ret.Reply.Y, ret.Reply.E, ret.Writes)
 	}(time.Now())
-	replyChan := make(chan krpc.Msg, 1)
+
+	replyChan := make(chan *QueryResult, 1)
+	// Receives a non-nil error from the sender, and closes when the sender completes.
+	sendErr := make(chan error, 1)
+	sendCtx, cancelSend := context.WithCancel(pprof.WithLabels(ctx, pprof.Labels("q", input.Method)))
+
 	t := &transaction{
-		onResponse: func(m krpc.Msg) {
-			replyChan <- m
+		onResponse: func(m []byte, r krpc.Msg) {
+			select {
+			case replyChan <- &QueryResult{
+				Raw:   m,
+				Reply: r,
+				Err:   r.Error(),
+			}:
+			case <-sendCtx.Done():
+			}
 		},
 	}
 	tk := transactionKey{
@@ -803,9 +814,6 @@ func (s *Server) Query(ctx context.Context, addr Addr, input QueryInput) (ret Qu
 	tk.T = input.Tid
 	s.addTransaction(tk, t)
 	s.mu.Unlock()
-	// Receives a non-nil error from the sender, and closes when the sender completes.
-	sendErr := make(chan error, 1)
-	sendCtx, cancelSend := context.WithCancel(pprof.WithLabels(ctx, pprof.Labels("q", input.Method)))
 	go func() {
 		err := s.transactionQuerySender(
 			sendCtx,
@@ -821,11 +829,13 @@ func (s *Server) Query(ctx context.Context, addr Addr, input QueryInput) (ret Qu
 	}()
 
 	select {
-	case ret.Reply = <-replyChan:
+	case qr := <-replyChan:
+		ret = *qr
 	case <-ctx.Done():
 		ret.Err = ctx.Err()
 	case ret.Err = <-sendErr:
 	}
+
 	// Make sure the query sender stops.
 	cancelSend()
 	// Make sure the query sender has returned, it will either send an error that we didn't catch

@@ -10,13 +10,6 @@ func (CompactIPv4NodeInfo) ElemSize() int {
 	return 26
 }
 
-// func (me *CompactIPv4NodeInfo) Scrub() {
-// 	slices.FilterInPlace(me, func(ni *NodeInfo) bool {
-// 		ni.Addr.IP = ni.Addr.IP.To4()
-// 		return ni.Addr.IP != nil
-// 	})
-// }
-
 func (me CompactIPv4NodeInfo) MarshalBinary() ([]byte, error) {
 	return marshalBinarySlice(slices.Map(func(ni NodeInfo) NodeInfo {
 		ni.Addr = NewNodeAddrFromIPPort(ni.Addr.IP().To4(), int(ni.Addr.Port()))

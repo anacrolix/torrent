@@ -15,11 +15,11 @@ var ErrTokenInvalid = errors.New("invalid token")
 // Transaction keeps track of a message exchange between nodes, such as a
 // query message and a response message.
 type transaction struct {
-	onResponse func(krpc.Msg)
+	onResponse func([]byte, krpc.Msg)
 }
 
-func (t *transaction) handleResponse(m krpc.Msg) {
-	t.onResponse(m)
+func (t *transaction) handleResponse(raw []byte, m krpc.Msg) {
+	t.onResponse(raw, m)
 }
 
 const defaultMaxQuerySends = 1

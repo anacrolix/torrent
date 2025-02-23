@@ -43,22 +43,23 @@ type Response struct {
 	Y string `bencode:"y"` // required: type of the message: r for RESPONSE, e for ERROR
 }
 
-func NewRequest(from krpc.ID, to krpc.ID) Request {
-	return Request{
-		T: krpc.TimestampTransactionID(),
+func NewRequest(from krpc.ID, to krpc.ID) (qi dht.QueryInput, err error) {
+	req := Request{
 		Y: "q",
+		T: krpc.TimestampTransactionID(),
 		Q: Query,
 		A: Args{
 			ID:     from,
 			Target: to,
 		},
 	}
-}
 
-func NewRequestBinary(from krpc.ID, to krpc.ID) (Request, []byte, error) {
-	req := NewRequest(from, to)
 	encoded, err := bencode.Marshal(req)
-	return req, encoded, err
+	return dht.QueryInput{
+		Method:  req.Q,
+		Tid:     req.T,
+		Encoded: encoded,
+	}, err
 }
 
 type Sampler interface {

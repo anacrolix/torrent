@@ -6,7 +6,6 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"strconv"
@@ -1331,7 +1330,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 			cn.cmu().Unlock()
 		}
 		if d.MetadataSize != 0 {
-			log.Println("handshake", d.MetadataSize)
+			// log.Println("handshake", d.MetadataSize)
 			if err = t.setMetadataSize(d.MetadataSize); err != nil {
 				return errors.Wrapf(err, "setting metadata size to %d", d.MetadataSize)
 			}
@@ -1342,7 +1341,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		// BUG no sending PEX updates yet
 		return nil
 	case metadataExtendedID:
-		log.Println("metadata extension available")
+		// log.Println("metadata extension available")
 		err := t.gotMetadataExtensionMsg(payload, cn)
 		if err != nil {
 			return errors.Errorf("handling metadata extension message: %v", err)

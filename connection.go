@@ -856,7 +856,7 @@ func (cn *connection) shouldRequestWithoutBias() bool {
 		return false
 	}
 
-	if len(cn.t.conns) == 1 {
+	if cn.t.conns.length() == 1 {
 		return true
 	}
 

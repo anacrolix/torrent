@@ -120,7 +120,7 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		peers: newPeerPool(32, func(p Peer) peerPriority {
 			return bep40PriorityIgnoreError(cl.publicAddr(p.IP), p.addr())
 		}),
-		conns:                   make(map[*connection]struct{}, 2*cl.config.EstablishedConnsPerTorrent),
+		conns:                   newconnset(2 * cl.config.EstablishedConnsPerTorrent),
 		halfOpen:                make(map[string]Peer),
 		_halfOpenmu:             &sync.RWMutex{},
 		pieceStateChanges:       pubsub.NewPubSub(),
@@ -135,6 +135,59 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 	t.event = &sync.Cond{L: tlocker{torrent: t}}
 	t.setChunkSize(pp.Integer(src.ChunkSize))
 	return t
+}
+
+func newconnset(n int) *conns {
+	return &conns{
+		m: make(map[*connection]struct{}, n),
+	}
+}
+
+type conns struct {
+	_m sync.RWMutex
+	m  map[*connection]struct{}
+}
+
+func (t *conns) insert(c *connection) {
+	t._m.Lock()
+	defer t._m.Unlock()
+	t.m[c] = struct{}{}
+}
+
+func (t *conns) delete(c *connection) int {
+	t._m.Lock()
+	defer t._m.Unlock()
+	delete(t.m, c)
+	return len(t.m)
+}
+
+func (t *conns) filtered(ignore func(*connection) bool) (ret []*connection) {
+	t._m.RLock()
+	defer t._m.RUnlock()
+	ret = make([]*connection, 0, len(t.m))
+	for conn := range t.m {
+		if ignore(conn) {
+			continue
+		}
+		ret = append(ret, conn)
+	}
+	return ret
+}
+
+func (t *conns) list() (ret []*connection) {
+	t._m.RLock()
+	defer t._m.RUnlock()
+	ret = make([]*connection, 0, len(t.m))
+	for conn := range t.m {
+		ret = append(ret, conn)
+	}
+	return ret
+}
+
+func (t *conns) length() int {
+	t._m.RLock()
+	defer t._m.RUnlock()
+	return len(t.m)
 }
 
 // Maintains state of torrent within a Client.
@@ -179,11 +232,11 @@ type torrent struct {
 
 	// The info dict. nil if we don't have it (yet).
 	info  *metainfo.Info
-	files *[]*File
+	files []*File
 
 	// Active peer connections, running message stream loops. TODO: Make this
 	// open (not-closed) connections only.
-	conns map[*connection]struct{}
+	conns *conns
 
 	maxEstablishedConns int
 
@@ -338,7 +391,7 @@ func (t *torrent) KnownSwarm() (ks []Peer) {
 	t._halfOpenmu.RUnlock()
 
 	// Add active peers to the list
-	for conn := range t.conns {
+	for _, conn := range t.conns.list() {
 		ks = append(ks, Peer{
 			ID:     conn.PeerID,
 			IP:     conn.remoteAddr.IP,
@@ -398,7 +451,7 @@ func (t *torrent) addrActive(addr string) bool {
 		return true
 	}
 
-	for c := range t.conns {
+	for _, c := range t.conns.list() {
 		ra := c.remoteAddr
 		if ra.String() == addr {
 			return true
@@ -409,13 +462,7 @@ func (t *torrent) addrActive(addr string) bool {
 }
 
 func (t *torrent) unclosedConnsAsSlice() (ret []*connection) {
-	ret = make([]*connection, 0, len(t.conns))
-	for c := range t.conns {
-		if !c.closed.IsSet() {
-			ret = append(ret, c)
-		}
-	}
-	return
+	return t.conns.filtered(func(c *connection) bool { return c.closed.IsSet() })
 }
 
 func (t *torrent) AddPeer(p Peer) {
@@ -522,7 +569,7 @@ func (t *torrent) setInfo(info *metainfo.Info) (err error) {
 }
 
 func (t *torrent) onSetInfo() {
-	for conn := range t.conns {
+	for _, conn := range t.conns.list() {
 		if err := conn.setNumPieces(t.numPieces()); err != nil {
 			t.config.info().Println(errors.Wrap(err, "closing connection"))
 			conn.Close()
@@ -605,7 +652,7 @@ func (t *torrent) setMetadataSize(bytes int) (err error) {
 	t.metadataCompletedChunks = make([]bool, (bytes+(1<<14)-1)/(1<<14))
 	t.metadataChanged.Broadcast()
 
-	for c := range t.conns {
+	for _, c := range t.conns.list() {
 		c.requestPendingMetadata()
 	}
 
@@ -770,7 +817,7 @@ func (t *torrent) writeStatus(w io.Writer) {
 	spew.NewDefaultConfig()
 	spew.Fdump(w, t.statsLocked())
 
-	conns := t.connsAsSlice()
+	conns := t.conns.list()
 	slices.Sort(conns, worseConn)
 	for i, c := range conns {
 		fmt.Fprintf(w, "%2d. ", i+1)
@@ -861,7 +908,7 @@ func (t *torrent) close() (err error) {
 		}
 	}()
 
-	for conn := range t.conns {
+	for _, conn := range t.conns.list() {
 		conn.Close()
 	}
 
@@ -1351,12 +1398,8 @@ func (t *torrent) deleteConnection(c *connection) (ret bool) {
 	c.Close()
 	t.lock()
 	// l2.Printf("closed c(%p) - pending(%d)\n", c, len(c.requests))
-	_, ret = t.conns[c]
-	delete(t.conns, c)
-	empty := len(t.conns) == 0
+	empty := t.conns.delete(c) == 0
 	t.unlock()
-
-	metrics.Add("deleted connections", 1)
 
 	if empty {
 		t.assertNoPendingRequests()
@@ -1562,7 +1605,7 @@ func (t *torrent) Stats() TorrentStats {
 
 func (t *torrent) statsLocked() (ret TorrentStats) {
 	ret.Seeding = t.seeding()
-	ret.ActivePeers = len(t.conns)
+	ret.ActivePeers = len(t.conns.list())
 	ret.HalfOpenPeers = len(t.halfOpen)
 	ret.PendingPeers = t.peers.Len()
 	t.chunks.Snapshot(&ret)
@@ -1573,7 +1616,7 @@ func (t *torrent) statsLocked() (ret TorrentStats) {
 	ret.MaximumAllowedPeers = t.config.EstablishedConnsPerTorrent
 	ret.TotalPeers = t.numTotalPeers()
 	ret.ConnectedSeeders = 0
-	for c := range t.conns {
+	for _, c := range t.conns.list() {
 		if all, ok := c.peerHasAllPieces(); all && ok {
 			ret.ConnectedSeeders++
 		}
@@ -1587,12 +1630,12 @@ func (t *torrent) statsLocked() (ret TorrentStats) {
 func (t *torrent) numTotalPeers() int {
 	peers := make(map[string]struct{})
 
-	for conn := range t.conns {
-		if conn == nil {
+	for _, c := range t.conns.list() {
+		if c == nil {
 			continue
 		}
 
-		ra := conn.conn.RemoteAddr()
+		ra := c.conn.RemoteAddr()
 		if ra == nil {
 			// It's been closed and doesn't support RemoteAddr.
 			continue
@@ -1643,7 +1686,7 @@ func (t *torrent) addConnection(c *connection) (err error) {
 	t.lock()
 	defer t.unlock()
 
-	for c0 := range t.conns {
+	for _, c0 := range t.conns.list() {
 		if c.PeerID != c0.PeerID {
 			continue
 		}
@@ -1659,7 +1702,7 @@ func (t *torrent) addConnection(c *connection) (err error) {
 		}
 	}
 
-	if len(t.conns) >= t.maxEstablishedConns {
+	if t.conns.length() >= t.maxEstablishedConns {
 		c := t.worstBadConn()
 		if c == nil {
 			return errors.New("don't want conns")
@@ -1668,7 +1711,7 @@ func (t *torrent) addConnection(c *connection) (err error) {
 		dropping = append(dropping, c)
 	}
 
-	t.conns[c] = struct{}{}
+	t.conns.insert(c)
 	t.pex.added(c)
 
 	t.unlock()
@@ -1695,7 +1738,7 @@ func (t *torrent) wantConns() bool {
 		return false
 	}
 
-	if len(t.conns) >= t.maxEstablishedConns {
+	if t.conns.length() >= t.maxEstablishedConns {
 		return false
 	}
 
@@ -1708,7 +1751,7 @@ func (t *torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	t.rLock()
 	wcs := slices.HeapInterface(slices.FromMapKeys(t.conns), worseConn)
 	t.rUnlock()
-	for len(t.conns) > t.maxEstablishedConns && wcs.Len() > 0 {
+	for t.conns.length() > t.maxEstablishedConns && wcs.Len() > 0 {
 		t.dropConnection(wcs.Pop().(*connection))
 	}
 	t.openNewConns()
@@ -1763,7 +1806,7 @@ func (t *torrent) cancelRequestsForPiece(piece pieceIndex) {
 	t.rLock()
 	defer t.rUnlock()
 	// TODO: Make faster
-	for cn := range t.conns {
+	for _, cn := range t.conns.list() {
 		cn.updateRequests()
 	}
 }
@@ -1782,19 +1825,6 @@ func (t *torrent) onIncompletePiece(piece pieceIndex) {
 	if !t.wantPieceIndex(piece) {
 		return
 	}
-}
-
-func (t *torrent) lockedConnsAsSlice() (conns []*connection) {
-	t.rLock()
-	defer t.rUnlock()
-	return t.connsAsSlice()
-}
-
-func (t *torrent) connsAsSlice() (ret []*connection) {
-	for c := range t.conns {
-		ret = append(ret, c)
-	}
-	return
 }
 
 // Forces all the pieces to be re-hashed. See also Piece.VerifyData. This should not be called
@@ -2007,7 +2037,6 @@ func (t *torrent) cancelPiecesLocked(begin, end pieceIndex) {
 
 func (t *torrent) initFiles() {
 	var offset int64
-	t.files = new([]*File)
 	for _, fi := range t.info.UpvertedFiles() {
 		var path []string
 		if len(fi.PathUTF8) != 0 {
@@ -2015,7 +2044,7 @@ func (t *torrent) initFiles() {
 		} else {
 			path = fi.Path
 		}
-		*t.files = append(*t.files, &File{
+		t.files = append(t.files, &File{
 			t,
 			strings.Join(append([]string{t.info.Name}, path...), "/"),
 			offset,
@@ -2030,7 +2059,7 @@ func (t *torrent) initFiles() {
 // Returns handles to the files in the torrent. This requires that the Info is
 // available first.
 func (t *torrent) Files() []*File {
-	return *t.files
+	return t.files
 }
 
 func (t *torrent) AddPeers(pp []Peer) {

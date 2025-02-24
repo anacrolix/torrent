@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"time"
 
@@ -35,13 +36,16 @@ func repeatsend(
 	delay time.Duration,
 	maximum int,
 ) (n int, last error) {
+	if maximum == 0 {
+		log.Println("warning: repeat send called with a maximum of 0 attemtps, this is a bug by client code, but adjusting to default attempts.")
+		maximum = defaultAttempts
+	}
 	var d time.Duration
 	for attempts := 0; attempts < maximum; attempts++ {
 		select {
 		case <-time.After(d):
 			n, last = s.WriteTo(b, to)
 			d = delay
-			// log.Println("attempt", attempts, "/", maximum, "in", d)
 		case <-ctx.Done():
 			return n, last
 		}

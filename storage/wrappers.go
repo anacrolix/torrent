@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"io"
 	"os"
 
@@ -23,11 +24,18 @@ func (cl Client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (*Torr
 }
 
 type Torrent struct {
-	TorrentImpl
+	ti TorrentImpl
 }
 
 func (t Torrent) Piece(p metainfo.Piece) Piece {
-	return Piece{PieceImpl: t.TorrentImpl.Piece(p), mip: p}
+	return Piece{PieceImpl: t.ti.Piece(p), mip: p}
+}
+
+func (t Torrent) Close() error {
+	if t.ti == nil {
+		return fmt.Errorf("attempted to close a nil torrent storage implementation")
+	}
+	return t.ti.Close()
 }
 
 type Piece struct {

@@ -26,12 +26,16 @@ func NewMessageRequest(q string, from krpc.ID, a *krpc.MsgArgs) (qi QueryInput, 
 		return qi, err
 	}
 
+	return NewEncodedRequest(q, m.T, encoded), nil
+}
+
+func NewEncodedRequest(q string, tid string, encoded []byte) (qi QueryInput) {
 	return QueryInput{
 		Method:   q,
-		Tid:      t,
+		Tid:      tid,
 		Encoded:  encoded,
 		NumTries: defaultAttempts,
-	}, nil
+	}
 }
 
 func NewQueryResultErr(err error) QueryResult {

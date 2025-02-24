@@ -55,11 +55,7 @@ func NewRequest(from krpc.ID, to krpc.ID) (qi dht.QueryInput, err error) {
 	}
 
 	encoded, err := bencode.Marshal(req)
-	return dht.QueryInput{
-		Method:  req.Q,
-		Tid:     req.T,
-		Encoded: encoded,
-	}, err
+	return dht.NewEncodedRequest(req.Q, req.T, encoded), err
 }
 
 type Sampler interface {

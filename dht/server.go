@@ -18,6 +18,7 @@ import (
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/iplist"
 	"github.com/james-lawrence/torrent/logonce"
 
@@ -590,7 +591,7 @@ func (s *Server) addNode(n *node) error {
 		}
 	}
 	if err := s.table.addNode(n); err != nil {
-		panic(fmt.Sprintf("expected to add node: %s", err))
+		return fmt.Errorf("expected to add node: %s", err)
 	}
 	return nil
 }
@@ -827,7 +828,7 @@ func (s *Server) Query(ctx context.Context, addr Addr, input QueryInput) (ret Qu
 	case qr := <-replyChan:
 		return *qr
 	case <-sctx.Done():
-		return NewQueryResultErr(sctx.Err())
+		return NewQueryResultErr(errorsx.Compact(context.Cause(sctx), sctx.Err()))
 	}
 }
 

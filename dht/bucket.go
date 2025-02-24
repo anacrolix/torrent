@@ -3,6 +3,7 @@ package dht
 import (
 	"iter"
 	"maps"
+	"sync"
 	"time"
 
 	"github.com/anacrolix/chansync"
@@ -11,6 +12,7 @@ import (
 )
 
 type bucket struct {
+	_m sync.RWMutex
 	// Per the "Routing Table" section of BEP 5.
 	changed     chansync.BroadcastCond
 	lastChanged time.Time
@@ -18,6 +20,8 @@ type bucket struct {
 }
 
 func (b *bucket) Len() int {
+	b._m.RLock()
+	defer b._m.RUnlock()
 	return len(b.nodes)
 }
 
@@ -27,6 +31,8 @@ func (b *bucket) NodeIter() iter.Seq[*node] {
 
 // Returns true if f returns true for all nodes. Iteration stops if f returns false.
 func (b *bucket) EachNode(f func(*node) bool) bool {
+	b._m.RLock()
+	defer b._m.RUnlock()
 	for n := range b.NodeIter() {
 		if !f(n) {
 			return false
@@ -36,6 +42,8 @@ func (b *bucket) EachNode(f func(*node) bool) bool {
 }
 
 func (b *bucket) AddNode(n *node, k int) {
+	b._m.Lock()
+	defer b._m.Unlock()
 	if _, ok := b.nodes[n]; ok {
 		return
 	}
@@ -48,6 +56,8 @@ func (b *bucket) AddNode(n *node, k int) {
 }
 
 func (b *bucket) GetNode(addr Addr, id int160.T) *node {
+	b._m.RLock()
+	defer b._m.RUnlock()
 	for n := range b.nodes {
 		if n.hasAddrAndID(addr, id) {
 			return n

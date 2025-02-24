@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo/v2"
-	"golang.org/x/time/rate"
 
-	"github.com/james-lawrence/torrent/metainfo"
 	pp "github.com/james-lawrence/torrent/btprotocol"
+	"github.com/james-lawrence/torrent/metainfo"
 )
 
 type chunkSpec struct {
@@ -177,18 +176,6 @@ func max(as ...int64) int64 {
 	}
 	return ret
 }
-
-func min(as ...int64) int64 {
-	ret := as[0]
-	for _, a := range as[1:] {
-		if a < ret {
-			ret = a
-		}
-	}
-	return ret
-}
-
-var unlimited = rate.NewLimiter(rate.Inf, 0)
 
 type (
 	pieceIndex = int

@@ -10,9 +10,10 @@ import (
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 
-	"github.com/james-lawrence/torrent/metainfo"
 	pp "github.com/james-lawrence/torrent/btprotocol"
+	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
 )
 
@@ -25,7 +26,8 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	}
 	ts, err := New(metainfo.Hash{})
 	require.NoError(t, err)
-	tt := cl.newTorrent(ts)
+	tt, err := cl.newTorrent(ts)
+	require.NoError(t, err)
 	tt.setInfo(&metainfo.Info{
 		Pieces:      make([]byte, metainfo.HashSize*3),
 		Length:      24 * (1 << 10),
@@ -95,7 +97,7 @@ func (me *torrentStorage) WriteAt(b []byte, _ int64) (int, error) {
 func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	cl := &Client{
 		config: &ClientConfig{
-			DownloadRateLimiter: unlimited,
+			DownloadRateLimiter: rate.NewLimiter(rate.Inf, 0),
 		},
 	}
 

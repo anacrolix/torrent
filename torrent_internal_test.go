@@ -65,7 +65,8 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 	cl := &Client{config: &ClientConfig{}}
 	ts, err := New(metainfo.Hash{})
 	require.NoError(b, err)
-	t := cl.newTorrent(ts)
+	t, err := cl.newTorrent(ts)
+	require.NoError(b, err)
 	require.NoError(b, t.setInfo(&metainfo.Info{
 		Pieces:      make([]byte, metainfo.HashSize*numPieces),
 		PieceLength: pieceLength,
@@ -93,7 +94,8 @@ func TestPieceHashFailed(t *testing.T) {
 	cl.config = TestingConfig(t)
 	ts, err := NewFromMetaInfo(mi, OptionStorage(testutil.NewBadStorage()))
 	require.NoError(t, err)
-	tt := cl.newTorrent(ts)
+	tt, err := cl.newTorrent(ts)
+	require.NoError(t, err)
 	tt.setChunkSize(2)
 	require.NoError(t, tt.setInfoBytes(mi.InfoBytes))
 	tt.lock()
@@ -123,7 +125,8 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	ih := mi.HashInfoBytes()
 	ts, err := New(ih)
 	require.NoError(t, err)
-	tt, _, _ := cl.Start(ts)
+	tt, _, err := cl.Start(ts)
+	require.NoError(t, err)
 	assert.Nil(t, tt.(*torrent).Metainfo().InfoBytes)
 	assert.False(t, tt.(*torrent).haveAllMetadataPieces())
 

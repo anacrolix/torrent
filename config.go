@@ -56,7 +56,10 @@ type ClientConfig struct {
 	// TorrentSpec.ChunkSize).
 	DownloadRateLimiter *rate.Limiter
 
-	BucketLimit int // maximum number of peers per bucket in the DHT.
+	// Rate limit connection dialing
+	dialRateLimiter *rate.Limiter
+
+	bucketLimit int // maximum number of peers per bucket in the DHT.
 
 	// User-provided Client peer ID. If not present, one is generated automatically.
 	PeerID string
@@ -149,9 +152,15 @@ func (cfg *ClientConfig) debug() llog {
 // ClientConfigOption options for the client configuration
 type ClientConfigOption func(*ClientConfig)
 
+func ClientConfigDialRateLimit(l *rate.Limiter) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		cc.dialRateLimiter = l
+	}
+}
+
 func ClientConfigBucketLimit(i int) ClientConfigOption {
 	return func(cc *ClientConfig) {
-		cc.BucketLimit = i
+		cc.bucketLimit = i
 	}
 }
 
@@ -200,8 +209,9 @@ func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 		DhtStartingNodes: func(network string) dht.StartingNodesGetter {
 			return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }
 		},
-		UploadRateLimiter:         unlimited,
-		DownloadRateLimiter:       unlimited,
+		UploadRateLimiter:         rate.NewLimiter(rate.Inf, 0),
+		DownloadRateLimiter:       rate.NewLimiter(rate.Inf, 0),
+		dialRateLimiter:           rate.NewLimiter(rate.Inf, 0),
 		ConnTracker:               conntrack.NewInstance(),
 		DisableAcceptRateLimiting: true,
 		HeaderObfuscationPolicy: HeaderObfuscationPolicy{

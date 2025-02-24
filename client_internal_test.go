@@ -92,7 +92,8 @@ func TestTorrentInitialState(t *testing.T) {
 		OptionInfo(mi.InfoBytes),
 	)
 	require.NoError(t, err)
-	tor := cl.newTorrent(tt)
+	tor, err := cl.newTorrent(tt)
+	require.NoError(t, err)
 
 	require.Len(t, tor.pieces, 3)
 	tor.pendAllChunkSpecs(0)
@@ -244,7 +245,8 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 		defer cl.Close()
 		ts, err := New(mi)
 		require.NoError(t, err)
-		tt, _, _ := cl.Start(ts)
+		tt, _, err := cl.Start(ts)
+		require.NoError(t, err)
 		require.NoError(t, tt.Tune(TuneMaxConnections(2)))
 		defer testutil.ExportStatusWriter(cl, fmt.Sprintf("%d", i))()
 		tts = append(tts, tt)

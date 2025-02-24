@@ -23,7 +23,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/slices"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
-	"golang.org/x/time/rate"
 
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/errorsx"
@@ -49,9 +48,8 @@ type Client struct {
 	conns      []socket
 	dhtServers []*dht.Server
 
-	extensionBytes  pp.ExtensionBits // Our BitTorrent protocol extension bytes, sent in our BT handshakes.
-	torrents        map[metainfo.Hash]*torrent
-	dialRateLimiter *rate.Limiter
+	extensionBytes pp.ExtensionBits // Our BitTorrent protocol extension bytes, sent in our BT handshakes.
+	torrents       map[metainfo.Hash]*torrent
 }
 
 // Query torrent info from the dht
@@ -102,8 +100,11 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 	}
 
 	cl.lock()
-	dlt = cl.newTorrent(t)
+	dlt, err = cl.newTorrent(t)
 	cl.unlock()
+	if err != nil {
+		return nil, false, err
+	}
 
 	cl.merge(dlt, t)
 
@@ -294,11 +295,10 @@ func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 	}
 
 	cl := &Client{
-		config:          cfg,
-		closed:          make(chan struct{}),
-		torrents:        make(map[metainfo.Hash]*torrent),
-		dialRateLimiter: rate.NewLimiter(10, 10),
-		_mu:             &stdsync.RWMutex{},
+		config:   cfg,
+		closed:   make(chan struct{}),
+		torrents: make(map[metainfo.Hash]*torrent),
+		_mu:      &stdsync.RWMutex{},
 	}
 
 	defer func() {
@@ -330,7 +330,7 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 		StartingNodes: cl.config.DhtStartingNodes(conn.LocalAddr().Network()),
 		OnQuery:       cl.config.DHTOnQuery,
 		Logger:        newlogger(cl.config.Logger, "dht", log.Flags()),
-		BucketLimit:   cl.config.BucketLimit,
+		BucketLimit:   cl.config.bucketLimit,
 	}
 
 	if s, err = dht.NewServer(&cfg); err != nil {
@@ -642,7 +642,7 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr IpPor
 	)
 
 	cl.config.info().Println("opening connection", t.infoHash)
-	if err = cl.dialRateLimiter.Wait(ctx); err != nil {
+	if err = cl.config.dialRateLimiter.Wait(ctx); err != nil {
 		log.Println("dial rate limit failed", err)
 		return
 	}
@@ -839,7 +839,7 @@ func (cl *Client) haveDhtServer() (ret bool) {
 }
 
 // Return a Torrent ready for insertion into a Client.
-func (cl *Client) newTorrent(src Metadata) (t *torrent) {
+func (cl *Client) newTorrent(src Metadata) (t *torrent, _ error) {
 	if src.ChunkSize == 0 {
 		src.ChunkSize = defaultChunkSize
 	}
@@ -859,11 +859,17 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent) {
 			cl.event.Broadcast()
 		},
 	)
-	t.setInfoBytes(src.InfoBytes)
+
+	if len(src.InfoBytes) > 0 {
+		if err := t.setInfoBytes(src.InfoBytes); err != nil {
+			log.Println("encountered an error setting info bytes", len(src.InfoBytes))
+			return nil, err
+		}
+	}
 	t.addTrackers(src.Trackers)
 	cl.AddDHTNodes(src.DHTNodes)
 
-	return t
+	return t, nil
 }
 
 // Handle a file-like handle to some torrent data resource.

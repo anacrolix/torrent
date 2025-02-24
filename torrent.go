@@ -499,13 +499,12 @@ func (t *torrent) makePieces() {
 	}
 }
 
-func (t *torrent) setInfo(info *metainfo.Info) error {
+func (t *torrent) setInfo(info *metainfo.Info) (err error) {
 	if err := validateInfo(info); err != nil {
 		return fmt.Errorf("bad info: %s", err)
 	}
 
 	if t.storageOpener != nil {
-		var err error
 		t.storage, err = t.storageOpener.OpenTorrent(info, t.infoHash)
 		if err != nil {
 			return fmt.Errorf("error opening torrent storage: %s", err)

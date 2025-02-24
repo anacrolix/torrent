@@ -17,9 +17,9 @@ import (
 
 	"github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/torrent/logonce"
 	"github.com/james-lawrence/torrent/bencode"
 	"github.com/james-lawrence/torrent/iplist"
+	"github.com/james-lawrence/torrent/logonce"
 
 	"github.com/james-lawrence/torrent/dht/bep44"
 	"github.com/james-lawrence/torrent/dht/int160"

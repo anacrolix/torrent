@@ -859,7 +859,6 @@ func (t *torrent) close() (err error) {
 		defer t.storageLock.Unlock()
 		if t.storage != nil {
 			t.storage.Close()
-			t.storage = nil
 		}
 	}()
 

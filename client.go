@@ -330,6 +330,7 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 		StartingNodes: cl.config.DhtStartingNodes(conn.LocalAddr().Network()),
 		OnQuery:       cl.config.DHTOnQuery,
 		Logger:        newlogger(cl.config.Logger, "dht", log.Flags()),
+		BucketLimit:   cl.config.BucketLimit,
 	}
 
 	if s, err = dht.NewServer(&cfg); err != nil {

@@ -56,6 +56,8 @@ type ClientConfig struct {
 	// TorrentSpec.ChunkSize).
 	DownloadRateLimiter *rate.Limiter
 
+	BucketLimit int // maximum number of peers per bucket in the DHT.
+
 	// User-provided Client peer ID. If not present, one is generated automatically.
 	PeerID string
 
@@ -146,6 +148,12 @@ func (cfg *ClientConfig) debug() llog {
 
 // ClientConfigOption options for the client configuration
 type ClientConfigOption func(*ClientConfig)
+
+func ClientConfigOptionBucketLimit(i int) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		cc.BucketLimit = i
+	}
+}
 
 // ClientConfigInfoLogger set the info logger
 func ClientConfigInfoLogger(l *log.Logger) ClientConfigOption {

@@ -36,6 +36,8 @@ type ServerConfig struct {
 	// to DHT Security Extensions, that NoSecurity is also set.
 	NodeId krpc.ID
 	Conn   net.PacketConn
+	// number of nodes per bucket
+	BucketLimit int
 	// Don't respond to queries from other nodes.
 	Passive bool
 	// Called when there are no good nodes to use in the routing table. This might be called any

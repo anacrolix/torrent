@@ -165,6 +165,7 @@ func NewDefaultServerConfig() *ServerConfig {
 		Exp:           2 * time.Hour,
 		SendLimiter:   DefaultSendLimiter,
 		Logger:        log.Default(),
+		BucketLimit:   8,
 	}
 }
 
@@ -230,7 +231,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 			secret:           make([]byte, 20),
 		},
 		table: table{
-			k: 128,
+			k: c.BucketLimit,
 		},
 		store: bep44.NewWrapper(c.Store, c.Exp),
 		mux:   DefaultMuxer(),

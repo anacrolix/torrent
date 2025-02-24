@@ -18,9 +18,13 @@ func NewClient(cl ClientImpl) *Client {
 	return &Client{cl}
 }
 
-func (cl Client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (*Torrent, error) {
+func (cl Client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (Torrent, error) {
 	t, err := cl.ci.OpenTorrent(info, infoHash)
-	return &Torrent{t}, err
+	return Torrent{t}, err
+}
+
+func NewTorrent(ti TorrentImpl) Torrent {
+	return Torrent{ti: ti}
 }
 
 type Torrent struct {

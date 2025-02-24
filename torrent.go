@@ -25,6 +25,7 @@ import (
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/x/bytesx"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -154,11 +155,13 @@ func (t *conns) insert(c *connection) {
 	t.m[c] = struct{}{}
 }
 
-func (t *conns) delete(c *connection) int {
+func (t *conns) delete(c *connection) (int, bool) {
 	t._m.Lock()
 	defer t._m.Unlock()
+	olen := len(t.m)
 	delete(t.m, c)
-	return len(t.m)
+	nlen := len(t.m)
+	return nlen, olen != nlen
 }
 
 func (t *conns) filtered(ignore func(*connection) bool) (ret []*connection) {
@@ -223,7 +226,7 @@ type torrent struct {
 	// The storage to open when the info dict becomes available.
 	storageOpener *storage.Client
 	// Storage for torrent data.
-	storage *storage.Torrent
+	storage storage.Torrent
 	// Read-locked for using storage, and write-locked for Closing.
 	storageLock sync.RWMutex
 
@@ -897,15 +900,15 @@ func (t *torrent) close() (err error) {
 	t.tickleReaders()
 
 	func() {
-		if t.storage == nil {
-			return
-		}
+		// if t.storage == nil {
+		// 	return
+		// }
 
 		t.storageLock.Lock()
 		defer t.storageLock.Unlock()
-		if t.storage != nil {
-			t.storage.Close()
-		}
+		// if t.storage != nil {
+		t.storage.Close()
+		// }
 	}()
 
 	for _, conn := range t.conns.list() {
@@ -1396,12 +1399,10 @@ func (t *torrent) dropConnection(c *connection) {
 func (t *torrent) deleteConnection(c *connection) (ret bool) {
 	t.pex.dropped(c)
 	c.Close()
-	t.lock()
 	// l2.Printf("closed c(%p) - pending(%d)\n", c, len(c.requests))
-	empty := t.conns.delete(c) == 0
-	t.unlock()
+	nlen, ret := t.conns.delete(c)
 
-	if empty {
+	if nlen == 0 {
 		t.assertNoPendingRequests()
 	}
 
@@ -1748,10 +1749,10 @@ func (t *torrent) wantConns() bool {
 func (t *torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	oldMax = t.maxEstablishedConns
 	t.maxEstablishedConns = max
-	t.rLock()
-	wcs := slices.HeapInterface(slices.FromMapKeys(t.conns), worseConn)
-	t.rUnlock()
-	for t.conns.length() > t.maxEstablishedConns && wcs.Len() > 0 {
+
+	cset := t.conns.list()
+	wcs := slices.HeapInterface(cset, worseConn)
+	for len(cset) > t.maxEstablishedConns && wcs.Len() > 0 {
 		t.dropConnection(wcs.Pop().(*connection))
 	}
 	t.openNewConns()
@@ -2090,7 +2091,7 @@ func (t *torrent) ping(addr net.UDPAddr) {
 	t.cln.eachDhtServer(func(s *dht.Server) {
 		go func() {
 			ret := dht.Ping3S(context.Background(), s, dht.NewAddr(&addr), s.ID())
-			if ret.Err != nil {
+			if errorsx.Ignore(ret.Err, context.DeadlineExceeded) != nil {
 				log.Println("failed to ping address", ret.Err)
 			}
 		}()

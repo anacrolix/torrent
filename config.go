@@ -149,7 +149,7 @@ func (cfg *ClientConfig) debug() llog {
 // ClientConfigOption options for the client configuration
 type ClientConfigOption func(*ClientConfig)
 
-func ClientConfigOptionBucketLimit(i int) ClientConfigOption {
+func ClientConfigBucketLimit(i int) ClientConfigOption {
 	return func(cc *ClientConfig) {
 		cc.BucketLimit = i
 	}

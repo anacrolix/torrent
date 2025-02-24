@@ -850,11 +850,18 @@ func (t *torrent) close() (err error) {
 	t.closed.Set()
 	t.tickleReaders()
 
-	if t.storage != nil {
+	func() {
+		if t.storage == nil {
+			return
+		}
+
 		t.storageLock.Lock()
 		defer t.storageLock.Unlock()
-		t.storage.Close()
-	}
+		if t.storage != nil {
+			t.storage.Close()
+			t.storage = nil
+		}
+	}()
 
 	for conn := range t.conns {
 		conn.Close()

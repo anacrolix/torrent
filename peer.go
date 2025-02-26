@@ -122,6 +122,7 @@ const (
 	PeerSourceDhtGetPeers     = "Hg" // Peers we found by searching a DHT.
 	PeerSourceDhtAnnouncePeer = "Ha" // Peers that were announced to us by a DHT.
 	PeerSourcePex             = "X"
+	peerSourceLPD             = "L"
 	// The peer was given directly, such as through a magnet link.
 	PeerSourceDirect = "M"
 )
@@ -296,12 +297,13 @@ func (cn *Peer) writeStatus(w io.Writer) {
 		prioStr += ": " + err.Error()
 	}
 	fmt.Fprintf(w, "bep40-prio: %v\n", prioStr)
-	fmt.Fprintf(w, "last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
+	fmt.Fprintf(w, "last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s, discovery source: %s\n",
 		eventAgeString(cn.lastMessageReceived),
 		eventAgeString(cn.completedHandshake),
 		eventAgeString(cn.lastHelpful()),
 		cn.cumInterest(),
 		cn.totalExpectingTime(),
+		cn.Discovery,
 	)
 	fmt.Fprintf(w,
 		"%s completed, %d pieces touched, good chunks: %v/%v:%v reqq: %d+%v/(%d/%d):%d/%d, flags: %s, dr: %.1f KiB/s\n",

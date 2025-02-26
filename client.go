@@ -348,6 +348,8 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		},
 	}
 
+	lpdStart(cl)
+
 	return
 }
 
@@ -471,6 +473,7 @@ func (cl *Client) Close() (errs []error) {
 	cl.unlock()
 	cl.event.Broadcast()
 	closeGroup.Wait() // defer is LIFO. We want to Wait() after cl.unlock()
+	lpdStop()
 	return
 }
 
@@ -1442,6 +1445,8 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	t.updateWantPeersEvent()
 	// Tickle Client.waitAccept, new torrent may want conns.
 	cl.event.Broadcast()
+	lpdPeers(t)
+	lpdForce()
 	return
 }
 

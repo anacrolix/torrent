@@ -90,24 +90,24 @@ type Torrent interface {
 }
 
 // Download a torrent into a writer blocking until completion.
-func DownloadInto(ctx context.Context, dst io.Writer, m Torrent, options ...Tuner) (err error) {
+func DownloadInto(ctx context.Context, dst io.Writer, m Torrent, options ...Tuner) (n int64, err error) {
 	if err = m.Tune(options...); err != nil {
-		return err
+		return 0, err
 	}
 
 	select {
 	case <-m.GotInfo():
 	case <-ctx.Done():
-		return ctx.Err()
+		return 0, ctx.Err()
 	}
 
-	if n, err := io.Copy(dst, m.NewReader()); err != nil {
-		return err
+	if n, err = io.Copy(dst, m.NewReader()); err != nil {
+		return n, err
 	} else if n != m.Info().TotalLength() {
-		return errors.Errorf("download failed, missing data %d != %d", n, m.Info().TotalLength())
+		return n, errors.Errorf("download failed, missing data %d != %d", n, m.Info().TotalLength())
 	}
 
-	return nil
+	return n, nil
 }
 
 func newTorrent(cl *Client, src Metadata) *torrent {

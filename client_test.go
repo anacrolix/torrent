@@ -470,7 +470,8 @@ func TestDownload(t *testing.T) {
 	tor, added, err := seeder.Start(metadata)
 	require.NoError(t, err)
 	require.True(t, added)
-	require.NoError(t, torrent.DownloadInto(context.Background(), io.Discard, tor))
+	_, err = torrent.DownloadInto(context.Background(), io.Discard, tor)
+	require.NoError(t, err)
 
 	lcfg := TestingLeechConfig(t, t.TempDir())
 	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(lcfg))
@@ -481,7 +482,8 @@ func TestDownload(t *testing.T) {
 	ltor, added, err := leecher.Start(metadata)
 	require.NoError(t, err)
 	require.True(t, added)
-	require.NoError(t, torrent.DownloadInto(context.Background(), buf, ltor, torrent.TuneClientPeer(seeder)))
+	_, err = torrent.DownloadInto(context.Background(), buf, ltor, torrent.TuneClientPeer(seeder))
+	require.NoError(t, err)
 	require.Equal(t, "hello, world\n", buf.String())
 }
 
@@ -505,7 +507,8 @@ func TestDownloadMetadataTimeout(t *testing.T) {
 	ltor, added, err := leecher.Start(metadata)
 	require.NoError(t, err)
 	require.True(t, added)
-	require.Equal(t, context.DeadlineExceeded, torrent.DownloadInto(ctx, buf, ltor))
+	_, err = torrent.DownloadInto(ctx, buf, ltor)
+	require.Equal(t, context.DeadlineExceeded, err)
 }
 
 // We read from a piece which is marked completed, but is missing data.

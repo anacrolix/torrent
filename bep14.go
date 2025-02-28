@@ -253,6 +253,10 @@ func (m *LPDConn) Close() {
 		m.mcListener.Close()
 		m.mcListener = nil
 	}
+	if m.mcPublisher != nil {
+		m.mcPublisher.Close()
+		m.mcPublisher = nil
+	}
 }
 
 type LPDServer struct {

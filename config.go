@@ -191,6 +191,18 @@ func ClientConfigPeerID(s string) ClientConfigOption {
 	}
 }
 
+func ClientConfigBootstrapFn(fn func(n string) dht.StartingNodesGetter) ClientConfigOption {
+	return func(c *ClientConfig) {
+		c.DhtStartingNodes = fn
+	}
+}
+
+func ClientConfigBootstrapGlobal(c *ClientConfig) {
+	c.DhtStartingNodes = func(network string) dht.StartingNodesGetter {
+		return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }
+	}
+}
+
 // NewDefaultClientConfig default client configuration.
 func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 	cc := &ClientConfig{
@@ -205,9 +217,8 @@ func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 		TorrentPeersHighWater:          500,
 		TorrentPeersLowWater:           50,
 		HandshakesTimeout:              4 * time.Second,
-		// DhtStartingNodes:               dht.GlobalBootstrapAddrs,
 		DhtStartingNodes: func(network string) dht.StartingNodesGetter {
-			return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }
+			return func() ([]dht.Addr, error) { return nil, nil }
 		},
 		UploadRateLimiter:         rate.NewLimiter(rate.Inf, 0),
 		DownloadRateLimiter:       rate.NewLimiter(rate.Inf, 0),

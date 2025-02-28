@@ -157,24 +157,24 @@ func (cl *Client) Download(ctx context.Context, m Metadata, options ...Tuner) (r
 
 // DownloadInto downloads the torrent into the provided destination. see Download for more information.
 // TODO: context timeout only applies to fetching metadata, not the entire download.
-func (cl *Client) DownloadInto(ctx context.Context, m Metadata, dst io.Writer, options ...Tuner) (err error) {
+func (cl *Client) DownloadInto(ctx context.Context, m Metadata, dst io.Writer, options ...Tuner) (n int64, err error) {
 	var (
 		dlt *torrent
 	)
 
 	if dlt, err = cl.download(ctx, m, options...); err != nil {
-		return err
+		return 0, err
 	}
 
 	// copy into the destination
 	// TODO: wrap the destination in a context writer to timeout the copy
 	if n, err := io.Copy(dst, dlt.NewReader()); err != nil {
-		return err
+		return n, err
 	} else if n != dlt.Length() {
-		return errors.Errorf("download failed, missing data %d != %d", n, dlt.Length())
+		return n, errors.Errorf("download failed, missing data %d != %d", n, dlt.Length())
 	}
 
-	return nil
+	return n, nil
 }
 
 // Stop the specified torrent, this halts all network activity around the torrent

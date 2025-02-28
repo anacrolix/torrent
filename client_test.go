@@ -923,13 +923,15 @@ func testTransferRandomData(t *testing.T, n int64, from, to *torrent.Client) {
 
 	metadata, err := torrent.NewFromFile(data.Name(), torrent.OptionStorage(storage.NewFile(from.Config().DataDir)))
 	require.NoError(t, err)
-	require.NoError(t, from.DownloadInto(context.Background(), metadata, io.Discard))
+	_, err = from.DownloadInto(context.Background(), metadata, io.Discard)
+	require.NoError(t, err)
 
 	metadata, err = torrent.NewFromFile(data.Name(), torrent.OptionStorage(storage.NewFile(to.Config().DataDir)))
 	require.NoError(t, err)
 
 	digest := md5.New()
-	require.NoError(t, to.DownloadInto(context.Background(), metadata, digest, torrent.TuneClientPeer(from)))
+	_, err = to.DownloadInto(context.Background(), metadata, digest, torrent.TuneClientPeer(from))
+	require.NoError(t, err)
 	require.NotNil(t, digest.Sum(nil), "invalid digest - cannot be nil: generated torrent length %d", n)
 	require.Equal(t, md5x.Stream(data), digest.Sum(nil), "digest mismatch: generated torrent length", n)
 	// log.Println("random torrent", n, hex.EncodeToString(digest.Sum(nil)), data.Name(), metadata.DisplayName)

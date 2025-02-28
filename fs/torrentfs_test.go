@@ -87,7 +87,7 @@ func TestUnmountWedged(t *testing.T) {
 			t.Log(err)
 		}
 	}()
-	cfg := torrent.NewDefaultClientConfig()
+	cfg := torrent.NewDefaultClientConfig(torrent.ClientConfigBootstrapGlobal)
 	cfg.DataDir = filepath.Join(layout.BaseDir, "incomplete")
 	cfg.DisableTrackers = true
 	client, err := autobind.New(
@@ -163,7 +163,7 @@ func TestDownloadOnDemand(t *testing.T) {
 	layout, err := newGreetingLayout()
 	require.NoError(t, err)
 	defer layout.Destroy()
-	cfg := torrent.NewDefaultClientConfig()
+	cfg := torrent.NewDefaultClientConfig(torrent.ClientConfigBootstrapGlobal)
 	cfg.DataDir = layout.Completed
 	cfg.DisableTrackers = true
 	cfg.Seed = true
@@ -182,7 +182,7 @@ func TestDownloadOnDemand(t *testing.T) {
 		<-seederTorrent.GotInfo()
 		seederTorrent.VerifyData()
 	}()
-	cfg = torrent.NewDefaultClientConfig()
+	cfg = torrent.NewDefaultClientConfig(torrent.ClientConfigBootstrapGlobal)
 	cfg.DisableTrackers = true
 	leecher, err := autobind.NewLoopback(
 		autobind.DisableTCP,

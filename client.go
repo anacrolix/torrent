@@ -285,7 +285,7 @@ func (cl *Client) announceKey() int32 {
 // NewClient create a new client from the provided config. nil is acceptable.
 func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 	if cfg == nil {
-		cfg = NewDefaultClientConfig()
+		cfg = NewDefaultClientConfig(ClientConfigBootstrapGlobal)
 	}
 
 	if cfg.HTTPProxy == nil && cfg.ProxyURL != "" {

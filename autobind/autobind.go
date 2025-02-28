@@ -21,7 +21,7 @@ import (
 
 // NewDefaultClient setup a client and connect a using defaults settings.
 func NewDefaultClient() (c *torrent.Client, err error) {
-	return New().Bind(torrent.NewClient(torrent.NewDefaultClientConfig()))
+	return New().Bind(torrent.NewClient(torrent.NewDefaultClientConfig(torrent.ClientConfigBootstrapGlobal)))
 }
 
 // Option for configuring autobind.

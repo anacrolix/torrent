@@ -28,7 +28,7 @@ type tt interface {
 }
 
 func TestingConfig(t tt) *ClientConfig {
-	cfg := NewDefaultClientConfig()
+	cfg := NewDefaultClientConfig(ClientConfigBootstrapGlobal)
 	cfg.NoDHT = true
 	cfg.DataDir = testutil.Autodir(t)
 	cfg.DisableTrackers = true
@@ -104,7 +104,7 @@ func TestTorrentInitialState(t *testing.T) {
 }
 
 func TestReducedDialTimeout(t *testing.T) {
-	cfg := NewDefaultClientConfig()
+	cfg := NewDefaultClientConfig(ClientConfigBootstrapGlobal)
 	for _, _case := range []struct {
 		Max             time.Duration
 		HalfOpenLimit   int

@@ -26,7 +26,7 @@ func Example_download() {
 		return
 	}
 
-	if err = c.DownloadInto(context.Background(), metadata, io.Discard); err != nil {
+	if _, err = c.DownloadInto(context.Background(), metadata, io.Discard); err != nil {
 		log.Fatalln(err)
 		return
 	}
@@ -48,7 +48,7 @@ func Example_customNetworkProtocols() {
 	defer l.Close()
 
 	s := sockets.New(l, &net.Dialer{LocalAddr: l.Addr()})
-	c, _ := torrent.NewSocketsBind(s).Bind(torrent.NewClient(torrent.NewDefaultClientConfig()))
+	c, _ := torrent.NewSocketsBind(s).Bind(torrent.NewClient(torrent.NewDefaultClientConfig(torrent.ClientConfigBootstrapGlobal)))
 	defer c.Close()
 
 	if metadata, err = torrent.NewFromMagnet("magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU"); err != nil {
@@ -56,7 +56,7 @@ func Example_customNetworkProtocols() {
 		return
 	}
 
-	if err = c.DownloadInto(context.Background(), metadata, io.Discard); err != nil {
+	if _, err = c.DownloadInto(context.Background(), metadata, io.Discard); err != nil {
 		log.Fatalln(err)
 		return
 	}

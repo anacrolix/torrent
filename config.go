@@ -206,6 +206,24 @@ func ClientConfigBootstrapGlobal(c *ClientConfig) {
 	}
 }
 
+// Bootstrap from a file written by dht.WriteNodesToFile
+func ClientConfigBootstrapPeerFile(path string) ClientConfigOption {
+	return ClientConfigBootstrapFn(func(n string) dht.StartingNodesGetter {
+		return func() (res []dht.Addr, err error) {
+			ps, err := dht.ReadNodesFromFile(n)
+			if err != nil {
+				return nil, err
+			}
+
+			for _, p := range ps {
+				res = append(res, dht.NewAddr(p.Addr.UDP()))
+			}
+
+			return res, nil
+		}
+	})
+}
+
 // NewDefaultClientConfig default client configuration.
 func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 	cc := &ClientConfig{

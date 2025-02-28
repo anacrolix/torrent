@@ -153,7 +153,7 @@ func (cfg *ClientConfig) debug() llog {
 type ClientConfigOption func(*ClientConfig)
 
 // useful for default noop configurations.
-func ClientConfigNoopl(c *ClientConfig) {}
+func ClientConfigNoop(c *ClientConfig) {}
 
 func ClientConfigDialRateLimit(l *rate.Limiter) ClientConfigOption {
 	return func(cc *ClientConfig) {

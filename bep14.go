@@ -16,8 +16,6 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-var mu sync.Mutex
-
 // http://bittorrent.org/beps/bep_0014.html
 // TODO http://bittorrent.org/beps/bep_0026.html
 
@@ -78,12 +76,12 @@ func lpdConnNew(network string, host string, lpd *LPDServer) *LPDConn {
 
 func (m *LPDConn) receiver(client *Client) {
 	for {
-		mu.Lock()
+		m.lpd.mu.Lock()
 		if m.mcListener == nil {
-			mu.Unlock()
+			m.lpd.mu.Unlock()
 			return
 		}
-		mu.Unlock()
+		m.lpd.mu.Unlock()
 
 		buf := make([]byte, 2000)
 		_, from, err := m.mcListener.ReadFromUDP(buf)
@@ -122,9 +120,9 @@ func (m *LPDConn) receiver(client *Client) {
 			continue
 		}
 
-		mu.Lock()
+		m.lpd.mu.Lock()
 		if m.lpd == nil { // can be closed already
-			mu.Unlock()
+			m.lpd.mu.Unlock()
 			return
 		}
 		m.lpd.peer(addr.String())
@@ -148,7 +146,7 @@ func (m *LPDConn) receiver(client *Client) {
 			lpdPeer(t, addr.String())
 		}
 		client.unlock()
-		mu.Unlock()
+		m.lpd.mu.Unlock()
 	}
 }
 
@@ -158,18 +156,18 @@ func (m *LPDConn) announcer(client *Client) {
 	var queue []*Torrent
 
 	for {
-		mu.Lock()
+		m.lpd.mu.Lock()
 		m.force.Clear()
-		mu.Unlock()
+		m.lpd.mu.Unlock()
 
 		select {
-		case <-m.stop.LockedChan(&mu):
+		case <-m.stop.LockedChan(&m.lpd.mu):
 			return
-		case <-m.force.LockedChan(&mu):
+		case <-m.force.LockedChan(&m.lpd.mu):
 		case <-time.After(refresh):
 		}
 
-		mu.Lock()
+		m.lpd.mu.Lock()
 		client.lock()
 		// add missing torrent to send queue
 		for t := range client.torrents {
@@ -234,7 +232,7 @@ func (m *LPDConn) announcer(client *Client) {
 				break
 			}
 		}
-		mu.Unlock()
+		m.lpd.mu.Unlock()
 
 		if len(old) > 0 {
 			//log.Println("LPD", string(old), len(old))
@@ -252,7 +250,7 @@ func (m *LPDConn) announcer(client *Client) {
 }
 
 func (m *LPDConn) Close() {
-	mu.Lock()
+	m.lpd.mu.Lock()
 	m.stop.Set()
 	if m.mcListener != nil {
 		m.mcListener.Close()
@@ -262,10 +260,11 @@ func (m *LPDConn) Close() {
 		m.mcPublisher.Close()
 		m.mcPublisher = nil
 	}
-	mu.Unlock()
+	m.lpd.mu.Unlock()
 }
 
 type LPDServer struct {
+	mu sync.Mutex
 	conn4 *LPDConn
 	conn6 *LPDConn
 
@@ -329,8 +328,8 @@ func lpdContains(queue []*Torrent, e *Torrent) (int, bool) {
 }
 
 func (lpd *LPDServer) lpdForce() {
-	mu.Lock()
-	defer mu.Unlock()
+	lpd.mu.Lock()
+	defer lpd.mu.Unlock()
 	if lpd.conn4 != nil {
 		lpd.conn4.force.Set()
 	}
@@ -354,11 +353,11 @@ func (lpd *LPDServer) lpdStop() {
 }
 
 func (lpd *LPDServer) lpdPeers(t *Torrent) {
-	mu.Lock()
+	lpd.mu.Lock()
 	for _, p := range lpd.peers {
 		lpdPeer(t, p)
 	}
-	mu.Unlock()
+	lpd.mu.Unlock()
 }
 
 func lpdPeer(t *Torrent, p string) {

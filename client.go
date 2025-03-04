@@ -98,6 +98,8 @@ type Client struct {
 	defaultLocalLtepProtocolMap LocalLtepProtocolMap
 
 	upnpMappings []*upnpMapping
+
+	lpd *LPDServer
 }
 
 type ipStr string
@@ -348,7 +350,8 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		},
 	}
 
-	lpdStart(cl)
+	cl.lpd =  &LPDServer{}
+	cl.lpd.lpdStart(cl)
 
 	return
 }
@@ -457,7 +460,7 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 
 // Stops the client. All connections to peers are closed and all activity will come to a halt.
 func (cl *Client) Close() (errs []error) {
-	lpdStop()
+	cl.lpd.lpdStop()
 	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
 	cl.lock()
 	for t := range cl.torrents {
@@ -1419,14 +1422,15 @@ func (cl *Client) AddTorrentInfoHashWithStorage(
 func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	infoHash := opts.InfoHash
 	cl.lock()
-	defer cl.unlock()
 	t, ok := cl.torrentsByShortHash[infoHash]
 	if ok {
+		cl.unlock()
 		return
 	}
 	if opts.InfoHashV2.Ok {
 		t, ok = cl.torrentsByShortHash[*opts.InfoHashV2.Value.ToShort()]
 		if ok {
+			cl.unlock()
 			return
 		}
 	}
@@ -1445,8 +1449,11 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	t.updateWantPeersEvent()
 	// Tickle Client.waitAccept, new torrent may want conns.
 	cl.event.Broadcast()
-	lpdPeers(t)
-	lpdForce()
+	cl.unlock()
+
+	cl.lpd.lpdPeers(t)
+	cl.lpd.lpdForce()
+
 	return
 }
 

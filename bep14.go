@@ -16,7 +16,6 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-var lpd *LPDServer
 var mu sync.Mutex
 
 // http://bittorrent.org/beps/bep_0014.html
@@ -41,6 +40,7 @@ type LPDConn struct {
 	stop  missinggo.Event
 	force missinggo.Event
 
+	lpd			*LPDServer
 	network     string // "udp4" or "udp6"
 	addr        *net.UDPAddr
 	mcListener  *net.UDPConn
@@ -48,9 +48,10 @@ type LPDConn struct {
 	host        string // bep14_host4 or bep14_host6
 }
 
-func lpdConnNew(network string, host string) *LPDConn {
+func lpdConnNew(network string, host string, lpd *LPDServer) *LPDConn {
 	m := &LPDConn{}
 
+	m.lpd = lpd
 	m.network = network
 	m.host = host
 
@@ -78,15 +79,14 @@ func lpdConnNew(network string, host string) *LPDConn {
 func (m *LPDConn) receiver(client *Client) {
 	for {
 		mu.Lock()
-		conn := m.mcListener
-		if conn == nil {
+		if m.mcListener == nil {
 			mu.Unlock()
 			return
 		}
 		mu.Unlock()
 
 		buf := make([]byte, 2000)
-		_, from, err := conn.ReadFromUDP(buf)
+		_, from, err := m.mcListener.ReadFromUDP(buf)
 		if err != nil {
 			log.Println("receiver", err)
 			continue
@@ -123,12 +123,12 @@ func (m *LPDConn) receiver(client *Client) {
 		}
 
 		mu.Lock()
-		if lpd == nil { // can be closed already
+		if m.lpd == nil { // can be closed already
 			mu.Unlock()
 			return
 		}
-		lpd.peer(addr.String())
-		lpd.refresh()
+		m.lpd.peer(addr.String())
+		m.lpd.refresh()
 		//log.Println("LPD", m.network, addr.String(), ih)
 		ignore := make(map[*Torrent]bool)
 		for _, ih := range ihs {
@@ -139,12 +139,15 @@ func (m *LPDConn) receiver(client *Client) {
 			}
 		}
 		// LPD is the only source of local IP's. So, add it to all active torrents.
+
+		client.lock()
 		for t := range client.torrents {
 			if _, ok := ignore[t]; ok {
 				continue
 			}
 			lpdPeer(t, addr.String())
 		}
+		client.unlock()
 		mu.Unlock()
 	}
 }
@@ -159,8 +162,6 @@ func (m *LPDConn) announcer(client *Client) {
 		m.force.Clear()
 		mu.Unlock()
 
-		//log.Println("LPD", refresh)
-
 		select {
 		case <-m.stop.LockedChan(&mu):
 			return
@@ -169,6 +170,7 @@ func (m *LPDConn) announcer(client *Client) {
 		}
 
 		mu.Lock()
+		client.lock()
 		// add missing torrent to send queue
 		for t := range client.torrents {
 			if _, ok := lpdContains(queue, t); !ok {
@@ -189,6 +191,8 @@ func (m *LPDConn) announcer(client *Client) {
 				remove = append(remove, t)
 			}
 		}
+		client.unlock()
+
 		for _, t := range remove {
 			if i, ok := lpdContains(queue, t); ok {
 				if next == t { // update next to next+1
@@ -202,7 +206,7 @@ func (m *LPDConn) announcer(client *Client) {
 				queue = append(queue[:i], queue[i+1:]...)
 			}
 		}
-		lpd.refresh()
+		m.lpd.refresh()
 
 		var ihs string
 		var old []byte
@@ -248,6 +252,7 @@ func (m *LPDConn) announcer(client *Client) {
 }
 
 func (m *LPDConn) Close() {
+	mu.Lock()
 	m.stop.Set()
 	if m.mcListener != nil {
 		m.mcListener.Close()
@@ -257,6 +262,7 @@ func (m *LPDConn) Close() {
 		m.mcPublisher.Close()
 		m.mcPublisher = nil
 	}
+	mu.Unlock()
 }
 
 type LPDServer struct {
@@ -266,18 +272,16 @@ type LPDServer struct {
 	peers map[int64]string // active local peers
 }
 
-func lpdStart(client *Client) {
-	lpd = &LPDServer{}
-
+func (lpd *LPDServer) lpdStart(client *Client) {
 	lpd.peers = make(map[int64]string)
 
-	lpd.conn4 = lpdConnNew("udp4", bep14_host4)
+	lpd.conn4 = lpdConnNew("udp4", bep14_host4, lpd)
 	if lpd.conn4 != nil {
 		go lpd.conn4.receiver(client)
 		go lpd.conn4.announcer(client)
 	}
 
-	lpd.conn6 = lpdConnNew("udp6", bep14_host6)
+	lpd.conn6 = lpdConnNew("udp6", bep14_host6, lpd)
 	if lpd.conn6 != nil {
 		go lpd.conn6.receiver(client)
 		go lpd.conn6.announcer(client)
@@ -324,7 +328,9 @@ func lpdContains(queue []*Torrent, e *Torrent) (int, bool) {
 	return -1, false
 }
 
-func lpdForce() {
+func (lpd *LPDServer) lpdForce() {
+	mu.Lock()
+	defer mu.Unlock()
 	if lpd.conn4 != nil {
 		lpd.conn4.force.Set()
 	}
@@ -333,9 +339,7 @@ func lpdForce() {
 	}
 }
 
-func lpdStop() {
-	mu.Lock()
-	defer mu.Unlock()
+func (lpd *LPDServer) lpdStop() {
 	if lpd != nil {
 		if lpd.conn4 != nil {
 			lpd.conn4.Close()
@@ -349,10 +353,12 @@ func lpdStop() {
 	}
 }
 
-func lpdPeers(t *Torrent) {
+func (lpd *LPDServer) lpdPeers(t *Torrent) {
+	mu.Lock()
 	for _, p := range lpd.peers {
 		lpdPeer(t, p)
 	}
+	mu.Unlock()
 }
 
 func lpdPeer(t *Torrent, p string) {

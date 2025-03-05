@@ -4,7 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"net/http"
+	"os"
 	"testing"
+
+	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMultiInfohash(t *testing.T) {
@@ -29,5 +33,42 @@ cookie: name=value
 	}
 	for _, ih := range ihs {
 		t.Log(ih)
+	}
+}
+
+func TestDiscovery(t *testing.T) {
+	config := TestingConfig(t)
+	config.LocalServiceDiscovery = true
+
+	client1, err := NewClient(config)
+	require.NoError(t, err)
+	defer client1.Close()
+	
+	client2, err := NewClient(config)
+	require.NoError(t, err)
+	defer client2.Close()
+
+	greetingTempDir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(greetingTempDir)
+
+	seederTorrent, _, _ := client1.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
+	leecherGreeting, _, _ := client2.AddTorrentSpec(func() (ret *TorrentSpec) {
+		ret = TorrentSpecFromMetaInfo(mi)
+		ret.ChunkSize = 2
+		return
+	}())
+
+	waitForPeers(seederTorrent)
+	waitForPeers(leecherGreeting)
+}
+
+func waitForPeers(t *Torrent) {
+	t.cl.lock()
+	defer t.cl.unlock()
+	for {
+		if t.numTotalPeers() > 0 {
+			return
+		}
+		t.cl.event.Wait()
 	}
 }

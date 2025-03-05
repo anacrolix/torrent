@@ -74,6 +74,15 @@ func lpdConnNew(network string, host string, lpd *LPDServer) *LPDConn {
 	return m
 }
 
+func contains(arr []net.Addr, addr net.Addr) bool {
+	for _, each := range arr {
+		if each == addr {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *LPDConn) receiver(client *Client) {
 	for {
 		m.lpd.mu.RLock()
@@ -120,11 +129,20 @@ func (m *LPDConn) receiver(client *Client) {
 			continue
 		}
 
+		client.rLock()
+		if client.LocalPort() == addr.Port {
+			log.Println("discovered self")
+			client.rUnlock()
+			continue
+		}
+		client.rUnlock()
+
 		m.lpd.mu.Lock()
 		if m.lpd == nil { // can be closed already
 			m.lpd.mu.Unlock()
 			return
 		}
+
 		m.lpd.peer(addr.String())
 		m.lpd.refresh()
 		m.lpd.mu.Unlock()

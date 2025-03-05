@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/stretchr/testify/require"
@@ -58,8 +59,13 @@ func TestDiscovery(t *testing.T) {
 		return
 	}())
 
+	time.Sleep(2 * time.Second)
 	waitForPeers(seederTorrent)
+	require.Equal(t, seederTorrent.numTotalPeers(), 2)
+	require.Equal(t, len(client1.lpd.peers), 2)
 	waitForPeers(leecherGreeting)
+	require.Equal(t, leecherGreeting.numTotalPeers(), 2)
+	require.Equal(t, len(client2.lpd.peers), 2)
 }
 
 func waitForPeers(t *Torrent) {

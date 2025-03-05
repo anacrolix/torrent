@@ -350,8 +350,10 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		},
 	}
 
-	cl.lpd =  &LPDServer{}
-	cl.lpd.lpdStart(cl)
+	if cfg.LocalServiceDiscovery { 
+		cl.lpd =  &LPDServer{}
+		cl.lpd.lpdStart(cl)
+	}
 
 	return
 }
@@ -460,7 +462,9 @@ func (cl *Client) eachDhtServer(f func(DhtServer)) {
 
 // Stops the client. All connections to peers are closed and all activity will come to a halt.
 func (cl *Client) Close() (errs []error) {
-	cl.lpd.lpdStop()
+	if (cl.lpd != nil) {
+		cl.lpd.lpdStop()
+	}
 	var closeGroup sync.WaitGroup // For concurrent cleanup to complete before returning
 	cl.lock()
 	for t := range cl.torrents {
@@ -1451,8 +1455,10 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	cl.event.Broadcast()
 	cl.unlock()
 
-	cl.lpd.lpdPeers(t)
-	cl.lpd.lpdForce()
+	if cl.lpd != nil {
+		cl.lpd.lpdPeers(t)
+		cl.lpd.lpdForce()
+	}
 
 	return
 }

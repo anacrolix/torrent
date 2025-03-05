@@ -196,6 +196,9 @@ type ClientConfig struct {
 	DialRateLimiter *rate.Limiter
 
 	PieceHashersPerTorrent int // default: 2
+
+	//Discover peers in the local network. bep14
+	LocalServiceDiscovery bool
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
@@ -241,6 +244,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		MaxUnverifiedBytes:     64 << 20,
 		DialRateLimiter:        rate.NewLimiter(10, 10),
 		PieceHashersPerTorrent: 2,
+		LocalServiceDiscovery: false,
 	}
 	cc.DhtStartingNodes = func(network string) dht.StartingNodesGetter {
 		return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }

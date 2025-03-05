@@ -127,6 +127,8 @@ func (m *LPDConn) receiver(client *Client) {
 		}
 		m.lpd.peer(addr.String())
 		m.lpd.refresh()
+		m.lpd.mu.Unlock()
+
 		//log.Println("LPD", m.network, addr.String(), ih)
 		ignore := make(map[*Torrent]bool)
 		for _, ih := range ihs {
@@ -136,17 +138,21 @@ func (m *LPDConn) receiver(client *Client) {
 				ignore[t] = true
 			}
 		}
+		
 		// LPD is the only source of local IP's. So, add it to all active torrents.
-
+		torrents := []*Torrent{}
 		client.rLock()
 		for t := range client.torrents {
 			if _, ok := ignore[t]; ok {
 				continue
 			}
-			lpdPeer(t, addr.String())
+			torrents = append(torrents, t)
 		}
 		client.rUnlock()
-		m.lpd.mu.Unlock()
+
+		for _, t := range torrents {
+			lpdPeer(t, addr.String())
+		}
 	}
 }
 
@@ -332,16 +338,26 @@ func (m *LPDConn) Close() {
 }
 
 func (lpd *LPDServer) lpdStop() {
-	lpd.conn4.Close()
-	lpd.conn6.Close()
+	if (lpd != nil) {
+		if (lpd.conn4 != nil) {
+			lpd.conn4.Close()
+		}
+		if (lpd.conn6 != nil) {
+			lpd.conn6.Close()
+		}
+	}
 }
 
 func (lpd *LPDServer) lpdPeers(t *Torrent) {
+	peers := []string{}
 	lpd.mu.RLock()
 	for _, p := range lpd.peers {
-		lpdPeer(t, p)
+		peers = append(peers, p)
 	}
 	lpd.mu.RUnlock()
+	for _, p := range peers {
+		lpdPeer(t, p)
+	}
 }
 
 func lpdPeer(t *Torrent, p string) {

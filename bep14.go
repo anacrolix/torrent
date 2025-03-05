@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo"
-	"github.com/anacrolix/sync"
 	"github.com/anacrolix/torrent/metainfo"
 )
 
@@ -44,6 +43,7 @@ type LPDConn struct {
 	mcListener  *net.UDPConn
 	mcPublisher *net.UDPConn
 	host        string // bep14_host4 or bep14_host6
+	closed		bool
 }
 
 func lpdConnNew(network string, host string, lpd *LPDServer) *LPDConn {
@@ -76,12 +76,12 @@ func lpdConnNew(network string, host string, lpd *LPDServer) *LPDConn {
 
 func (m *LPDConn) receiver(client *Client) {
 	for {
-		m.lpd.mu.Lock()
-		if m.mcListener == nil {
-			m.lpd.mu.Unlock()
+		m.lpd.mu.RLock()
+		if m.closed {
+			m.lpd.mu.RUnlock()
 			return
 		}
-		m.lpd.mu.Unlock()
+		m.lpd.mu.RUnlock()
 
 		buf := make([]byte, 2000)
 		_, from, err := m.mcListener.ReadFromUDP(buf)
@@ -138,14 +138,14 @@ func (m *LPDConn) receiver(client *Client) {
 		}
 		// LPD is the only source of local IP's. So, add it to all active torrents.
 
-		client.lock()
+		client.rLock()
 		for t := range client.torrents {
 			if _, ok := ignore[t]; ok {
 				continue
 			}
 			lpdPeer(t, addr.String())
 		}
-		client.unlock()
+		client.rUnlock()
 		m.lpd.mu.Unlock()
 	}
 }
@@ -168,7 +168,7 @@ func (m *LPDConn) announcer(client *Client) {
 		}
 
 		m.lpd.mu.Lock()
-		client.lock()
+		client.rLock()
 		// add missing torrent to send queue
 		for t := range client.torrents {
 			if _, ok := lpdContains(queue, t); !ok {
@@ -189,7 +189,6 @@ func (m *LPDConn) announcer(client *Client) {
 				remove = append(remove, t)
 			}
 		}
-		client.unlock()
 
 		for _, t := range remove {
 			if i, ok := lpdContains(queue, t); ok {
@@ -210,6 +209,7 @@ func (m *LPDConn) announcer(client *Client) {
 		var old []byte
 
 		port := client.LocalPort()
+		client.rUnlock()
 		count := 0
 		for next != nil {
 			ihs += fmt.Sprintf(bep14_announce_infohash, strings.ToUpper(next.InfoHash().HexString()))
@@ -249,22 +249,8 @@ func (m *LPDConn) announcer(client *Client) {
 	}
 }
 
-func (m *LPDConn) Close() {
-	m.lpd.mu.Lock()
-	m.stop.Set()
-	if m.mcListener != nil {
-		m.mcListener.Close()
-		m.mcListener = nil
-	}
-	if m.mcPublisher != nil {
-		m.mcPublisher.Close()
-		m.mcPublisher = nil
-	}
-	m.lpd.mu.Unlock()
-}
-
 type LPDServer struct {
-	mu sync.Mutex
+	mu    lockWithDeferreds
 	conn4 *LPDConn
 	conn6 *LPDConn
 
@@ -303,16 +289,13 @@ func (m *LPDServer) refresh() {
 
 func (m *LPDServer) peer(peer string) {
 	now := time.Now().UnixNano()
-
 	var remove []int64
 	for k, v := range m.peers {
 		if v == peer {
 			remove = append(remove, k)
 		}
 	}
-
 	m.peers[now] = peer
-
 	for _, v := range remove {
 		delete(m.peers, v)
 	}
@@ -338,26 +321,27 @@ func (lpd *LPDServer) lpdForce() {
 	}
 }
 
+func (m *LPDConn) Close() {
+	m.lpd.mu.Lock()
+	m.stop.Set()
+	m.closed = true
+	m.lpd.mu.Unlock()
+	
+	m.mcListener.Close()
+	m.mcPublisher.Close()
+}
+
 func (lpd *LPDServer) lpdStop() {
-	if lpd != nil {
-		if lpd.conn4 != nil {
-			lpd.conn4.Close()
-			lpd.conn4 = nil
-		}
-		if lpd.conn6 != nil {
-			lpd.conn6.Close()
-			lpd.conn6 = nil
-		}
-		lpd = nil
-	}
+	lpd.conn4.Close()
+	lpd.conn6.Close()
 }
 
 func (lpd *LPDServer) lpdPeers(t *Torrent) {
-	lpd.mu.Lock()
+	lpd.mu.RLock()
 	for _, p := range lpd.peers {
 		lpdPeer(t, p)
 	}
-	lpd.mu.Unlock()
+	lpd.mu.RUnlock()
 }
 
 func lpdPeer(t *Torrent, p string) {

@@ -59,7 +59,7 @@ func TestDiscovery(t *testing.T) {
 		return
 	}())
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 	waitForPeers(seederTorrent)
 	require.Equal(t, seederTorrent.numTotalPeers(), 2)
 	require.Equal(t, len(client1.lpd.peers), 2)

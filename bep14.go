@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 	"log"
 	"net"
 	"net/http"
@@ -46,7 +48,31 @@ type LPDConn struct {
 	closed		bool
 }
 
-func lpdConnNew(network string, host string, lpd *LPDServer) *LPDConn {
+func setMulticastInterface(m *LPDConn, ifi string) error {
+	iface, err := net.InterfaceByName(ifi)
+	if err != nil {
+		log.Printf("Interface error: %v\n", err)
+		return err
+	}
+	if m.network == "udp4" {
+		p := ipv4.NewPacketConn(m.mcPublisher)
+		if err := p.SetMulticastInterface(iface); err != nil {
+			log.Printf("Set multicast interface error: %v\n", err)
+			return err
+		}
+	}
+	if m.network == "upd6" {
+		p := ipv6.NewPacketConn(m.mcPublisher)
+		if err := p.SetMulticastInterface(iface); err != nil {
+			log.Printf("Set multicast interface error: %v\n", err)
+			return err
+		}
+	}
+	return nil
+}
+
+
+func lpdConnNew(network string, host string, lpd *LPDServer, config LocalServiceDiscoveryConfig) *LPDConn {
 	m := &LPDConn{}
 
 	m.lpd = lpd
@@ -65,22 +91,22 @@ func lpdConnNew(network string, host string, lpd *LPDServer) *LPDConn {
 		log.Println("LPD unable to start", err)
 		return nil
 	}
+
 	m.mcPublisher, err = net.DialUDP(network, nil, m.addr)
 	if err != nil {
-		fmt.Println("Error dialing UDP:", err)
+		log.Println("Error dialing UDP:", err)
 		return nil
 	}
 
-	return m
-}
-
-func contains(arr []net.Addr, addr net.Addr) bool {
-	for _, each := range arr {
-		if each == addr {
-			return true
+	if (config.Ifi != "") {
+		setMulticastInterface(m, config.Ifi)
+		if err != nil {
+			log.Println("Error dialing setting multicast interface:", err)
+			return nil
 		}
 	}
-	return false
+	
+	return m
 }
 
 func (m *LPDConn) receiver(client *Client) {
@@ -131,7 +157,6 @@ func (m *LPDConn) receiver(client *Client) {
 
 		client.rLock()
 		if client.LocalPort() == addr.Port {
-			log.Println("discovered self")
 			client.rUnlock()
 			continue
 		}
@@ -284,13 +309,13 @@ type LPDServer struct {
 func (lpd *LPDServer) lpdStart(client *Client) {
 	lpd.peers = make(map[int64]string)
 
-	lpd.conn4 = lpdConnNew("udp4", bep14_host4, lpd)
+	lpd.conn4 = lpdConnNew("udp4", bep14_host4, lpd, client.config.LocalServiceDiscovery)
 	if lpd.conn4 != nil {
 		go lpd.conn4.receiver(client)
 		go lpd.conn4.announcer(client)
 	}
 
-	lpd.conn6 = lpdConnNew("udp6", bep14_host6, lpd)
+	lpd.conn6 = lpdConnNew("udp6", bep14_host6, lpd, client.config.LocalServiceDiscovery)
 	if lpd.conn6 != nil {
 		go lpd.conn6.receiver(client)
 		go lpd.conn6.announcer(client)

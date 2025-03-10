@@ -39,7 +39,7 @@ cookie: name=value
 
 func TestDiscovery(t *testing.T) {
 	config := TestingConfig(t)
-	config.LocalServiceDiscovery = true
+	config.LocalServiceDiscovery = LocalServiceDiscoveryConfig{Enabled: true}
 
 	client1, err := NewClient(config)
 	require.NoError(t, err)
@@ -59,7 +59,7 @@ func TestDiscovery(t *testing.T) {
 		return
 	}())
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 	waitForPeers(seederTorrent)
 	require.Equal(t, seederTorrent.numTotalPeers(), 2)
 	require.Equal(t, len(client1.lpd.peers), 2)

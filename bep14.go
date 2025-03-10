@@ -3,15 +3,17 @@ package torrent
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
-	"golang.org/x/net/ipv4"
-	"golang.org/x/net/ipv6"
 	"log"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 
 	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/torrent/metainfo"
@@ -48,12 +50,7 @@ type LPDConn struct {
 	closed		bool
 }
 
-func setMulticastInterface(m *LPDConn, ifi string) error {
-	iface, err := net.InterfaceByName(ifi)
-	if err != nil {
-		log.Printf("Interface error: %v\n", err)
-		return err
-	}
+func setMulticastInterface(m *LPDConn, iface *net.Interface) error {
 	if m.network == "udp4" {
 		p := ipv4.NewPacketConn(m.mcPublisher)
 		if err := p.SetMulticastInterface(iface); err != nil {
@@ -71,6 +68,41 @@ func setMulticastInterface(m *LPDConn, ifi string) error {
 	return nil
 }
 
+func sourceUdpAddress(iface *net.Interface, network string) (*net.UDPAddr, error) {
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, addr := range addrs {
+		ipNet, ok := addr.(*net.IPNet)
+		if !ok {
+			continue
+		}
+
+		ip := ipNet.IP
+
+		// Skip loopback and link-local addresses
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+			continue
+		}
+
+		switch network {
+		case "udp4":
+			if ip.To4() != nil {
+				return &net.UDPAddr{IP: ip}, nil
+			}
+		case "udp6":
+			if ip.To4() == nil && ip.To16() != nil {
+				return &net.UDPAddr{IP: ip}, nil
+			}
+		default:
+			return nil, errors.New("invalid network type, must be 'udp4' or 'udp6'")
+		}
+	}
+
+	return nil, errors.New("no suitable IP address found")
+}
 
 func lpdConnNew(network string, host string, lpd *LPDServer, config LocalServiceDiscoveryConfig) *LPDConn {
 	m := &LPDConn{}
@@ -99,9 +131,30 @@ func lpdConnNew(network string, host string, lpd *LPDServer, config LocalService
 	}
 
 	if (config.Ifi != "") {
-		setMulticastInterface(m, config.Ifi)
+		iface, err := net.InterfaceByName(config.Ifi)
 		if err != nil {
-			log.Println("Error dialing setting multicast interface:", err)
+			log.Printf("Interface error: %v\n", err)
+			return nil
+		}
+		sourceUdpAddress, err := sourceUdpAddress(iface, network)
+		if err != nil {
+			log.Printf("could not get source udp address: %v\n", err)
+			return nil
+		}
+		m.mcPublisher, err = net.DialUDP(network, sourceUdpAddress, m.addr)
+		if err != nil {
+			log.Println("Error dialing multicast interface:", err)
+			return nil
+		}
+		err = setMulticastInterface(m, iface)
+		if err != nil {
+			log.Println("Error setting multicast interface:", err)
+			return nil
+		}
+	} else {
+		m.mcPublisher, err = net.DialUDP(network, nil, m.addr)
+		if err != nil {
+			log.Println("Error dialing multicast interface:", err)
 			return nil
 		}
 	}

@@ -2,24 +2,37 @@ package torrent
 
 import (
 	"errors"
-	"github.com/anacrolix/torrent/internal/testutil"
-	"github.com/anacrolix/torrent/tracker"
-	"github.com/anacrolix/torrent/webtorrent"
-	"github.com/gorilla/websocket"
-	"github.com/stretchr/testify/require"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/tracker"
+	"github.com/gorilla/websocket"
+	"github.com/stretchr/testify/require"
 )
 
 func TestClientInvalidTracker(t *testing.T) {
+	timeout := time.NewTimer(3 * time.Second)
+	receivedStatusUpdate := make(chan bool)
+	gotTrackerDisconnectedEvt := false
 	cfg := TestingConfig(t)
 	cfg.DisableTrackers = false
-	cfg.Observers = NewClientObservers()
+	cfg.Callbacks.StatusUpdated = append(cfg.Callbacks.StatusUpdated, func(e StatusUpdatedEvent) {
+		if e.Event == TrackerAnnounceError {
+			// ignore
+			return
+		}
+		if e.Event == TrackerDisconnected {
+			gotTrackerDisconnectedEvt = true
+			require.Equal(t, "ws://test.invalid:4242", e.Url)
+			require.Error(t, e.Error)
+		}
+		receivedStatusUpdate <- true
+	})
 
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
@@ -35,11 +48,11 @@ func TestClientInvalidTracker(t *testing.T) {
 	to, err := cl.AddTorrent(mi)
 	require.NoError(t, err)
 
-	status := readChannelTimeout(t, cfg.Observers.Trackers.ConnStatus, 500*time.Millisecond).(webtorrent.TrackerStatus)
-	require.Equal(t, "ws://test.invalid:4242", status.Url)
-	var expected *net.OpError
-	require.ErrorAs(t, expected, &status.Err)
-
+	select {
+	case <-timeout.C:
+	case <-receivedStatusUpdate:
+	}
+	require.True(t, gotTrackerDisconnectedEvt)
 	to.Drop()
 }
 
@@ -67,9 +80,19 @@ func TestClientValidTrackerConn(t *testing.T) {
 	s, trackerUrl := startTestTracker()
 	defer s.Close()
 
+	timeout := time.NewTimer(3 * time.Second)
+	receivedStatusUpdate := make(chan bool)
+	gotTrackerConnectedEvt := false
 	cfg := TestingConfig(t)
 	cfg.DisableTrackers = false
-	cfg.Observers = NewClientObservers()
+	cfg.Callbacks.StatusUpdated = append(cfg.Callbacks.StatusUpdated, func(e StatusUpdatedEvent) {
+		if e.Event == TrackerConnected {
+			gotTrackerConnectedEvt = true
+			require.Equal(t, trackerUrl, e.Url)
+			require.NoError(t, e.Error)
+		}
+		receivedStatusUpdate <- true
+	})
 
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
@@ -85,11 +108,11 @@ func TestClientValidTrackerConn(t *testing.T) {
 	to, err := cl.AddTorrent(mi)
 	require.NoError(t, err)
 
-	status := readChannelTimeout(t, cfg.Observers.Trackers.ConnStatus, 500*time.Millisecond).(webtorrent.TrackerStatus)
-	require.Equal(t, trackerUrl, status.Url)
-	require.True(t, status.Ok)
-	require.Nil(t, status.Err)
-
+	select {
+	case <-timeout.C:
+	case <-receivedStatusUpdate:
+	}
+	require.True(t, gotTrackerConnectedEvt)
 	to.Drop()
 }
 
@@ -97,9 +120,11 @@ func TestClientAnnounceFailure(t *testing.T) {
 	s, trackerUrl := startTestTracker()
 	defer s.Close()
 
+	timeout := time.NewTimer(3 * time.Second)
+	receivedStatusUpdate := make(chan bool)
+	gotTrackerAnnounceErrorEvt := false
 	cfg := TestingConfig(t)
 	cfg.DisableTrackers = false
-	cfg.Observers = NewClientObservers()
 
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
@@ -119,12 +144,26 @@ func TestClientAnnounceFailure(t *testing.T) {
 	to, err := cl.AddTorrent(mi)
 	require.NoError(t, err)
 
-	status := readChannelTimeout(t, cfg.Observers.Trackers.AnnounceStatus, 500*time.Millisecond).(webtorrent.AnnounceStatus)
-	require.Equal(t, trackerUrl, status.Url)
-	require.False(t, status.Ok)
-	require.EqualError(t, status.Err, "test error")
-	require.Empty(t, status.Event)
+	cfg.Callbacks.StatusUpdated = append(cfg.Callbacks.StatusUpdated, func(e StatusUpdatedEvent) {
+		if e.Event == TrackerConnected {
+			// ignore
+			return
+		}
+		if e.Event == TrackerAnnounceError {
+			gotTrackerAnnounceErrorEvt = true
+			require.Equal(t, trackerUrl, e.Url)
+			require.Equal(t, to.InfoHash().HexString(), e.InfoHash)
+			require.Error(t, e.Error)
+			require.Equal(t, "test error", e.Error.Error())
+		}
+		receivedStatusUpdate <- true
+	})
 
+	select {
+	case <-timeout.C:
+	case <-receivedStatusUpdate:
+	}
+	require.True(t, gotTrackerAnnounceErrorEvt)
 	to.Drop()
 }
 
@@ -132,9 +171,11 @@ func TestClientAnnounceSuccess(t *testing.T) {
 	s, trackerUrl := startTestTracker()
 	defer s.Close()
 
+	timeout := time.NewTimer(3 * time.Second)
+	receivedStatusUpdate := make(chan bool)
+	gotTrackerAnnounceSuccessfulEvt := false
 	cfg := TestingConfig(t)
 	cfg.DisableTrackers = false
-	cfg.Observers = NewClientObservers()
 
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
@@ -150,12 +191,25 @@ func TestClientAnnounceSuccess(t *testing.T) {
 	to, err := cl.AddTorrent(mi)
 	require.NoError(t, err)
 
-	status := readChannelTimeout(t, cfg.Observers.Trackers.AnnounceStatus, 500*time.Millisecond).(webtorrent.AnnounceStatus)
-	require.Equal(t, trackerUrl, status.Url)
-	require.True(t, status.Ok)
-	require.Nil(t, status.Err)
-	require.Equal(t, "started", status.Event)
+	cfg.Callbacks.StatusUpdated = append(cfg.Callbacks.StatusUpdated, func(e StatusUpdatedEvent) {
+		if e.Event == TrackerConnected {
+			// ignore
+			return
+		}
+		if e.Event == TrackerAnnounceSuccessful {
+			gotTrackerAnnounceSuccessfulEvt = true
+			require.Equal(t, trackerUrl, e.Url)
+			require.Equal(t, to.InfoHash().HexString(), e.InfoHash)
+			require.NoError(t, e.Error)
+		}
+		receivedStatusUpdate <- true
+	})
 
+	select {
+	case <-timeout.C:
+	case <-receivedStatusUpdate:
+	}
+	require.True(t, gotTrackerAnnounceSuccessfulEvt)
 	to.Drop()
 }
 

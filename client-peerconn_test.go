@@ -19,6 +19,8 @@ func TestPeerConnEstablished(t *testing.T) {
 	var expectedPeerId PeerID
 	missinggo.CopyExact(&expectedPeerId, "12345123451234512345")
 
+	gotPeerConnectedEvt := false
+	gotPeerDisconnectedEvt := false
 	ps := testClientTransferParams{
 		ConfigureSeeder: ConfigureClient{
 			Config: func(cfg *ClientConfig) {
@@ -35,12 +37,14 @@ func TestPeerConnEstablished(t *testing.T) {
 				cfg.Callbacks.StatusUpdated = append(cfg.Callbacks.StatusUpdated,
 					func(e StatusUpdatedEvent) {
 						if e.Event == PeerConnected {
+							gotPeerConnectedEvt = true
 							require.Equal(t, expectedPeerId, e.PeerId)
 							require.NoError(t, e.Error)
 						}
 					},
 					func(e StatusUpdatedEvent) {
 						if e.Event == PeerDisconnected {
+							gotPeerDisconnectedEvt = true
 							require.Equal(t, expectedPeerId, e.PeerId)
 							require.NoError(t, e.Error)
 						}
@@ -51,6 +55,9 @@ func TestPeerConnEstablished(t *testing.T) {
 	}
 
 	testClientTransfer(t, ps)
+	// double check that the callbacks were called
+	require.True(t, gotPeerConnectedEvt)
+	require.True(t, gotPeerDisconnectedEvt)
 }
 
 type ConfigureClient struct {

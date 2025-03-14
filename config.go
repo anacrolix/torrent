@@ -48,7 +48,8 @@ type ClientDhtConfig struct {
 type LocalServiceDiscoveryConfig struct {
 	Enabled bool
 	//interface to multicast announce messages 
-	Ifi string 
+	Ifi string
+	Ip6 bool
 }
 
 // Probably not safe to modify this after it's given to a Client.

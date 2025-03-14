@@ -368,10 +368,12 @@ func (lpd *LPDServer) lpdStart(client *Client) {
 		go lpd.conn4.announcer(client)
 	}
 
-	lpd.conn6 = lpdConnNew("udp6", bep14_host6, lpd, client.config.LocalServiceDiscovery)
-	if lpd.conn6 != nil {
-		go lpd.conn6.receiver(client)
-		go lpd.conn6.announcer(client)
+	if client.config.LocalServiceDiscovery.Ip6 {
+		lpd.conn6 = lpdConnNew("udp6", bep14_host6, lpd, client.config.LocalServiceDiscovery)
+		if lpd.conn6 != nil {
+			go lpd.conn6.receiver(client)
+			go lpd.conn6.announcer(client)
+		}
 	}
 }
 

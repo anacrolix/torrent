@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/stretchr/testify/require"
@@ -39,7 +38,7 @@ cookie: name=value
 
 func TestDiscovery(t *testing.T) {
 	config := TestingConfig(t)
-	config.LocalServiceDiscovery = LocalServiceDiscoveryConfig{Enabled: true}
+	config.LocalServiceDiscovery = LocalServiceDiscoveryConfig{Enabled: true, Ip6: false}
 
 	client1, err := NewClient(config)
 	require.NoError(t, err)
@@ -51,28 +50,28 @@ func TestDiscovery(t *testing.T) {
 
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
-
+	
 	seederTorrent, _, _ := client1.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	leecherGreeting, _, _ := client2.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
 		return
 	}())
-
-	time.Sleep(2 * time.Second)
-	waitForPeers(seederTorrent)
-	require.Equal(t, seederTorrent.numTotalPeers(), 2)
-	require.Equal(t, len(client1.lpd.peers), 2)
-	waitForPeers(leecherGreeting)
-	require.Equal(t, leecherGreeting.numTotalPeers(), 2)
-	require.Equal(t, len(client2.lpd.peers), 2)
+	
+	numPeers := 1
+	waitForPeers(seederTorrent, numPeers)
+	require.Equal(t,	numPeers,		seederTorrent.numTotalPeers())
+	require.Equal(t,	numPeers,		len(client1.lpd.peers))
+	waitForPeers(leecherGreeting, numPeers)
+	require.Equal(t, 	numPeers, 		leecherGreeting.numTotalPeers())
+	require.Equal(t, 	numPeers,		len(client2.lpd.peers))
 }
 
-func waitForPeers(t *Torrent) {
+func waitForPeers(t *Torrent, num int) {
 	t.cl.lock()
 	defer t.cl.unlock()
 	for {
-		if t.numTotalPeers() > 0 {
+		if t.numTotalPeers() == num {
 			return
 		}
 		t.cl.event.Wait()

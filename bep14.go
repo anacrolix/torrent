@@ -41,13 +41,13 @@ type LPDConn struct {
 	stop  missinggo.Event
 	force missinggo.Event
 
-	lpd			*LPDServer
+	lpd         *LPDServer
 	network     string // "udp4" or "udp6"
 	addr        *net.UDPAddr
 	mcListener  *net.UDPConn
 	mcPublisher *net.UDPConn
 	host        string // bep14_host4 or bep14_host6
-	closed		bool
+	closed      bool
 }
 
 func setMulticastInterface(m *LPDConn, iface *net.Interface) error {
@@ -130,7 +130,7 @@ func lpdConnNew(network string, host string, lpd *LPDServer, config LocalService
 		return nil
 	}
 
-	if (config.Ifi != "") {
+	if config.Ifi != "" {
 		iface, err := net.InterfaceByName(config.Ifi)
 		if err != nil {
 			log.Printf("Interface error: %v\n", err)
@@ -158,7 +158,7 @@ func lpdConnNew(network string, host string, lpd *LPDServer, config LocalService
 			return nil
 		}
 	}
-	
+
 	return m
 }
 
@@ -234,7 +234,7 @@ func (m *LPDConn) receiver(client *Client) {
 				ignore[t] = true
 			}
 		}
-		
+
 		// LPD is the only source of local IP's. So, add it to all active torrents.
 		torrents := []*Torrent{}
 		client.rLock()
@@ -430,17 +430,17 @@ func (m *LPDConn) Close() {
 	m.stop.Set()
 	m.closed = true
 	m.lpd.mu.Unlock()
-	
+
 	m.mcListener.Close()
 	m.mcPublisher.Close()
 }
 
 func (lpd *LPDServer) lpdStop() {
-	if (lpd != nil) {
-		if (lpd.conn4 != nil) {
+	if lpd != nil {
+		if lpd.conn4 != nil {
 			lpd.conn4.Close()
 		}
-		if (lpd.conn6 != nil) {
+		if lpd.conn6 != nil {
 			lpd.conn6.Close()
 		}
 	}

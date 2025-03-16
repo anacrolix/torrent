@@ -8,7 +8,7 @@ runs:
       uses: actions/setup-go@v2
       with:
         go-version: ${{ matrix.go-version }}
-    - uses: actions/cache@v2
+    - uses: actions/cache@v3
       with:
         path: |
           ~/.cache/go-build
@@ -28,7 +28,7 @@ runs:
         echo GOTIP_PATH="$HOME/gotip" >> "$GITHUB_ENV"
       if: matrix.go-version == 'tip'
       shell: bash
-    - uses: actions/cache@v2
+    - uses: actions/cache@v3
       if: matrix.go-version == 'tip'
       with:
         path: |

@@ -32,6 +32,12 @@ import (
 	utHolepunch "github.com/anacrolix/torrent/peer_protocol/ut-holepunch"
 )
 
+type PeerStatus struct {
+	Id  PeerID
+	Ok  bool
+	Err string // see https://github.com/golang/go/issues/5161
+}
+
 // Maintains the state of a BitTorrent-protocol based connection with a peer.
 type PeerConn struct {
 	Peer

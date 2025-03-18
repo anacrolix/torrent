@@ -43,28 +43,28 @@ func TestDiscovery(t *testing.T) {
 	client1, err := NewClient(config)
 	require.NoError(t, err)
 	defer client1.Close()
-	
+
 	client2, err := NewClient(config)
 	require.NoError(t, err)
 	defer client2.Close()
 
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
-	
+
 	seederTorrent, _, _ := client1.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
 	leecherGreeting, _, _ := client2.AddTorrentSpec(func() (ret *TorrentSpec) {
 		ret = TorrentSpecFromMetaInfo(mi)
 		ret.ChunkSize = 2
 		return
 	}())
-	
+
 	numPeers := 1
 	waitForPeers(seederTorrent, numPeers)
-	require.Equal(t,	numPeers,		seederTorrent.numTotalPeers())
-	require.Equal(t,	numPeers,		len(client1.lpd.peers))
+	require.Equal(t, numPeers, seederTorrent.numTotalPeers())
+	require.Equal(t, numPeers, len(client1.lpd.peers))
 	waitForPeers(leecherGreeting, numPeers)
-	require.Equal(t, 	numPeers, 		leecherGreeting.numTotalPeers())
-	require.Equal(t, 	numPeers,		len(client2.lpd.peers))
+	require.Equal(t, numPeers, leecherGreeting.numTotalPeers())
+	require.Equal(t, numPeers, len(client2.lpd.peers))
 }
 
 func waitForPeers(t *Torrent, num int) {

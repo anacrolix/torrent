@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anacrolix/missinggo"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 
-	"github.com/anacrolix/missinggo"
 	"github.com/anacrolix/torrent/metainfo"
 )
 

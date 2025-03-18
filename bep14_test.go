@@ -7,8 +7,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/stretchr/testify/require"
+
+	"github.com/anacrolix/torrent/internal/testutil"
 )
 
 func TestMultiInfohash(t *testing.T) {

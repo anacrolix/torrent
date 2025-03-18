@@ -45,6 +45,13 @@ type ClientDhtConfig struct {
 	DHTOnQuery func(query *krpc.Msg, source net.Addr) (propagate bool)
 }
 
+type LocalServiceDiscoveryConfig struct {
+	Enabled bool
+	//interface to multicast announce messages
+	Ifi string
+	Ip6 bool
+}
+
 // Probably not safe to modify this after it's given to a Client.
 type ClientConfig struct {
 	ClientTrackerConfig
@@ -196,6 +203,9 @@ type ClientConfig struct {
 	DialRateLimiter *rate.Limiter
 
 	PieceHashersPerTorrent int // default: 2
+
+	//Discover peers in the local network. bep14
+	LocalServiceDiscovery LocalServiceDiscoveryConfig
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
@@ -241,6 +251,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		MaxUnverifiedBytes:     64 << 20,
 		DialRateLimiter:        rate.NewLimiter(10, 10),
 		PieceHashersPerTorrent: 2,
+		LocalServiceDiscovery:  LocalServiceDiscoveryConfig{Enabled: false},
 	}
 	cc.DhtStartingNodes = func(network string) dht.StartingNodesGetter {
 		return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }

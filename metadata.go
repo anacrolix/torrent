@@ -14,7 +14,7 @@ import (
 type Option func(*Metadata)
 
 // OptionTrackers set the trackers for the torrent.
-func OptionTrackers(trackers [][]string) Option {
+func OptionTrackers(trackers ...[]string) Option {
 	return func(t *Metadata) {
 		t.Trackers = trackers
 	}
@@ -160,7 +160,7 @@ func NewFromMagnet(uri string, options ...Option) (t Metadata, err error) {
 
 	options = append([]Option{
 		OptionDisplayName(m.DisplayName),
-		OptionTrackers([][]string{m.Trackers}),
+		OptionTrackers(m.Trackers),
 		OptionWebseeds(m.Params["ws"]),
 	},
 		options...,
@@ -185,7 +185,7 @@ func NewFromMetaInfo(mi *metainfo.MetaInfo, options ...Option) (t Metadata, err 
 	options = append([]Option{
 		OptionInfo(mi.InfoBytes),
 		OptionDisplayName(info.Name),
-		OptionTrackers(mi.UpvertedAnnounceList()),
+		OptionTrackers(mi.UpvertedAnnounceList()...),
 		OptionWebseeds(mi.UrlList),
 		OptionNodes(mi.NodeList()...),
 	},

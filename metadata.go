@@ -201,9 +201,9 @@ func NewFromMetaInfo(mi *metainfo.MetaInfo, options ...Option) (t Metadata, err 
 // Metainfo generate metainfo from the metadata.
 func (t Metadata) Metainfo() metainfo.MetaInfo {
 	return metainfo.MetaInfo{
-		AnnounceList: make([][]string, 0),
 		InfoBytes:    t.InfoBytes,
 		CreationDate: time.Now().Unix(),
+		AnnounceList: metainfo.AnnounceList(t.Trackers),
 	}
 }
 

@@ -68,6 +68,13 @@ func TuneClientPeer(cl *Client) Tuner {
 	}
 }
 
+// add trackers to the torrent.
+func TuneTrackers(trackers ...[]string) Tuner {
+	return func(t *torrent) {
+		t.addTrackers(trackers)
+	}
+}
+
 // Torrent represents the state of a torrent within a client.
 // interface is currently being used to ease the transition of to a cleaner API.
 // Many methods should not be called before the info is available,

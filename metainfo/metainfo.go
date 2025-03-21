@@ -96,7 +96,7 @@ func (mi *MetaInfo) NodeList() (ret []string) {
 }
 
 // Encode metainfo to store.
-func Encode(mi MetaInfo) (encoded []byte, err error) {
+func Encode(mi any) (encoded []byte, err error) {
 	var (
 		buf = bytes.NewBufferString("")
 	)

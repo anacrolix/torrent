@@ -132,7 +132,7 @@ type Info struct {
 	Pieces       []byte     `bencode:"pieces"`
 	Name         string     `bencode:"name"`
 	Length       int64      `bencode:"length,omitempty"`
-	Private      bool       `bencode:"private,omitempty"`
+	Private      *bool      `bencode:"private,omitempty"` // pointer to handle backwards compatibility
 	Source       string     `bencode:"source,omitempty"`
 	Files        []FileInfo `bencode:"files,omitempty"`
 	cachedLength int64      // used to cache the total length of the torrent

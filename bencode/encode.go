@@ -151,6 +151,7 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 			if !fieldValue.IsValid() {
 				continue
 			}
+
 			if ef.omitEmpty && isEmptyValue(fieldValue) {
 				continue
 			}

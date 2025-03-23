@@ -3,6 +3,7 @@ package torrent
 import (
 	"bufio"
 	"bytes"
+	"log"
 	"net/http"
 	"os"
 	"testing"
@@ -27,7 +28,7 @@ cookie: name=value
 		t.Error("receiver", err)
 		return
 	}
-	var ihs []string = req.Header[http.CanonicalHeaderKey("Infohash")]
+	ihs := req.Header[http.CanonicalHeaderKey("Infohash")]
 	if ihs == nil {
 		t.Error("receiver", "No Infohash")
 		return
@@ -44,10 +45,12 @@ func TestDiscovery(t *testing.T) {
 	client1, err := NewClient(config)
 	require.NoError(t, err)
 	defer client1.Close()
+	testutil.ExportStatusWriter(client1, "1", t)
 
 	client2, err := NewClient(config)
 	require.NoError(t, err)
 	defer client2.Close()
+	testutil.ExportStatusWriter(client2, "2", t)
 
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)

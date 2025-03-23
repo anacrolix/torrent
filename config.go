@@ -47,7 +47,7 @@ type ClientDhtConfig struct {
 
 type LocalServiceDiscoveryConfig struct {
 	Enabled bool
-	//interface to multicast announce messages
+	// Interface on which to multicast announce messages
 	Ifi string
 	Ip6 bool
 }
@@ -204,7 +204,7 @@ type ClientConfig struct {
 
 	PieceHashersPerTorrent int // default: 2
 
-	//Discover peers in the local network. bep14
+	// Discover peers in the local network. See BEP14
 	LocalServiceDiscovery LocalServiceDiscoveryConfig
 }
 

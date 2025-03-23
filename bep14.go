@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/anacrolix/missinggo"
@@ -33,11 +34,14 @@ const (
 		"\r\n"
 	bep14_announce_infohash = "Infohash: %s\r\n"
 	bep14_long_timeout      = 1 * time.Minute
-	bep14_short_timeout     = 2 * time.Second // bep14 - 1 minute. not practial. what if use start/stop another torrent? so make it 2 secs.
-	bep14_max               = 0               // maximum hashes per request, 0 - only limited by udp packet size
+	// bep14 - 1 minute. not practical. what if use start/stop another torrent? so make it 2 secs.
+	// TODO: Trigger this when torrents are added/removed instead, with a minimum delay (coalesce
+	// frequent changes).
+	bep14ShortTimeout = 2 * time.Second
+	bep14_max         = 0 // maximum hashes per request, 0 - only limited by udp packet size
 )
 
-type LPDConn struct {
+type lpdConn struct {
 	stop  missinggo.Event
 	force missinggo.Event
 
@@ -50,7 +54,7 @@ type LPDConn struct {
 	closed      bool
 }
 
-func setMulticastInterface(m *LPDConn, iface *net.Interface) error {
+func setMulticastInterface(m *lpdConn, iface *net.Interface) error {
 	if m.network == "udp4" {
 		p := ipv4.NewPacketConn(m.mcPublisher)
 		if err := p.SetMulticastInterface(iface); err != nil {
@@ -104,8 +108,8 @@ func sourceUdpAddress(iface *net.Interface, network string) (*net.UDPAddr, error
 	return nil, errors.New("no suitable IP address found")
 }
 
-func lpdConnNew(network string, host string, lpd *LPDServer, config LocalServiceDiscoveryConfig) *LPDConn {
-	m := &LPDConn{}
+func lpdConnNew(network string, host string, lpd *LPDServer, config LocalServiceDiscoveryConfig) *lpdConn {
+	m := &lpdConn{}
 
 	m.lpd = lpd
 	m.network = network
@@ -162,7 +166,7 @@ func lpdConnNew(network string, host string, lpd *LPDServer, config LocalService
 	return m
 }
 
-func (m *LPDConn) receiver(client *Client) {
+func (m *lpdConn) receiver(client *Client) {
 	for {
 		m.lpd.mu.RLock()
 		if m.closed {
@@ -174,6 +178,9 @@ func (m *LPDConn) receiver(client *Client) {
 		buf := make([]byte, 2000)
 		_, from, err := m.mcListener.ReadFromUDP(buf)
 		if err != nil {
+			if m.closed {
+				return
+			}
 			log.Println("receiver", err)
 			continue
 		}
@@ -189,8 +196,8 @@ func (m *LPDConn) receiver(client *Client) {
 			continue
 		}
 
-		// bep14 says here can be multiple response headers
-		var ihs []string = req.Header[http.CanonicalHeaderKey("Infohash")]
+		// BEP14 says here can be multiple response headers
+		ihs := req.Header[http.CanonicalHeaderKey("Infohash")]
 		if ihs == nil {
 			log.Println("receiver", "No Infohash")
 			continue
@@ -235,7 +242,7 @@ func (m *LPDConn) receiver(client *Client) {
 			}
 		}
 
-		// LPD is the only source of local IP's. So, add it to all active torrents.
+		// LPD is the only source of local IPs. So add it to all active torrents.
 		torrents := []*Torrent{}
 		client.rLock()
 		for t := range client.torrents {
@@ -252,7 +259,7 @@ func (m *LPDConn) receiver(client *Client) {
 	}
 }
 
-func (m *LPDConn) announcer(client *Client) {
+func (m *lpdConn) announcer(client *Client) {
 	var refresh time.Duration = 0
 	var next *Torrent
 	var queue []*Torrent
@@ -344,7 +351,7 @@ func (m *LPDConn) announcer(client *Client) {
 			}
 		}
 
-		refresh = bep14_short_timeout
+		refresh = bep14ShortTimeout
 		if next == nil { // restart queue
 			refresh = bep14_long_timeout
 		}
@@ -352,9 +359,9 @@ func (m *LPDConn) announcer(client *Client) {
 }
 
 type LPDServer struct {
-	mu    lockWithDeferreds
-	conn4 *LPDConn
-	conn6 *LPDConn
+	mu    sync.RWMutex
+	conn4 *lpdConn
+	conn6 *lpdConn
 
 	peers map[int64]string // active local peers
 }
@@ -425,7 +432,7 @@ func (lpd *LPDServer) lpdForce() {
 	}
 }
 
-func (m *LPDConn) Close() {
+func (m *lpdConn) Close() {
 	m.lpd.mu.Lock()
 	m.stop.Set()
 	m.closed = true

@@ -38,7 +38,7 @@ func GreetingMetaInfo() *metainfo.MetaInfo {
 
 // Gives a temporary directory containing the completed "greeting" torrent,
 // and a corresponding metainfo describing it. The temporary directory can be
-// cleaned away with os.RemoveAll.
+// cleaned away with os.RemoveAll. TODO: Make a version that uses testing.T.TempDir.
 func GreetingTestTorrent() (tempDir string, metaInfo *metainfo.MetaInfo) {
 	tempDir, err := os.MkdirTemp(os.TempDir(), "")
 	if err != nil {

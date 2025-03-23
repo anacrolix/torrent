@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/anacrolix/torrent/tracker"
+	"github.com/anacrolix/torrent/types/infohash"
 )
 
 type TrackerClientStats struct {
@@ -45,6 +46,12 @@ type TrackerClient struct {
 	ICEServers                 []webrtc.ICEServer
 
 	rtcPeerConns map[string]*wrappedPeerConnection
+
+	// callbacks
+	OnConnected          func(error)
+	OnDisconnected       func(error)
+	OnAnnounceSuccessful func(ih string)
+	OnAnnounceError      func(ih string, err error)
 }
 
 func (me *TrackerClient) Stats() TrackerClientStats {
@@ -99,6 +106,7 @@ func (tc *TrackerClient) doWebsocket() error {
 
 	c, _, err := tc.Dialer.Dial(tc.Url, header)
 	if err != nil {
+		tc.OnDisconnected(err)
 		return fmt.Errorf("dialing tracker: %w", err)
 	}
 	defer c.Close()
@@ -125,6 +133,7 @@ func (tc *TrackerClient) doWebsocket() error {
 			}
 		}
 	}()
+	tc.OnConnected(nil)
 	err = tc.trackerReadLoop(tc.wsConn)
 	close(closeChan)
 	tc.mu.Lock()
@@ -262,6 +271,7 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte, offers []outboundOffer) error {
 	request, err := tc.GetAnnounceRequest(event, infoHash)
 	if err != nil {
+		tc.OnAnnounceError(infohash.T(infoHash).HexString(), err)
 		return fmt.Errorf("getting announce parameters: %w", err)
 	}
 
@@ -291,10 +301,13 @@ func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte
 	defer tc.mu.Unlock()
 	err = tc.writeMessage(data)
 	if err != nil {
+		tc.OnAnnounceError(infohash.T(infoHash).HexString(), err)
 		return fmt.Errorf("write AnnounceRequest: %w", err)
 	}
+	tc.OnAnnounceSuccessful(infohash.T(infoHash).HexString())
+	g.MakeMapIfNil(&tc.outboundOffers)
 	for _, offer := range offers {
-		g.MakeMapIfNilAndSet(&tc.outboundOffers, offer.offerId, offer.outboundOfferValue)
+		g.MapInsert(tc.outboundOffers, offer.offerId, offer.outboundOfferValue)
 	}
 	return nil
 }

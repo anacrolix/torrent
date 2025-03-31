@@ -62,6 +62,9 @@ func OptionWebseeds(seeds []string) Option {
 	}
 }
 
+// OptionNoop does nothing, stand in during configurations.
+func OptionNoop(t *Metadata) {}
+
 // Metadata specifies the metadata of a torrent for adding to a client.
 // There are helpers for magnet URIs and torrent metainfo files.
 type Metadata struct {

@@ -14,7 +14,8 @@ type ClientImpl interface {
 
 // Data storage bound to a torrent.
 type TorrentImpl interface {
-	Piece(metainfo.Piece) PieceImpl
+	io.ReaderAt
+	io.WriterAt
 	Close() error
 }
 

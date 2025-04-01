@@ -113,7 +113,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 		PieceLength: 1 << 20,
 	}))
 	t.setChunkSize(defaultChunkSize)
-	t.makePieces()
+	// t.makePieces()
 	t.chunks.ChunksPend(0)
 	r, w := net.Pipe()
 	cn := cl.newConnection(r, true, IpPort{})
@@ -140,7 +140,8 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 			cl.lock()
 			// The chunk must be written to storage everytime, to ensure the
 			// writeSem is unlocked.
-			t.pieces[0].dirtyChunks.Clear()
+			// TODO
+			// t.pieces[0].dirtyChunks.Clear()
 			cl.unlock()
 			n, err := w.Write(wb)
 			require.NoError(b, err)

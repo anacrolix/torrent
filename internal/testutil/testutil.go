@@ -1,10 +1,9 @@
 package testutil
 
 import (
-	"errors"
-	"io/ioutil"
+	"hash/fnv"
 	"math/rand"
-	"strings"
+	"os"
 
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
@@ -18,7 +17,7 @@ type tt interface {
 
 // Autodir generates random directory under the testing temp dir.
 func Autodir(t tt) string {
-	dir, err := ioutil.TempDir(t.TempDir(), "")
+	dir, err := os.MkdirTemp(t.TempDir(), "")
 	require.NoError(t, err)
 	return dir
 }
@@ -30,45 +29,29 @@ func NewBadStorage() storage.ClientImpl {
 
 type badStorage struct{}
 
-func (bs badStorage) OpenTorrent(*metainfo.Info, metainfo.Hash) (storage.TorrentImpl, error) {
-	return bs, nil
+func (bs badStorage) OpenTorrent(info *metainfo.Info, mihash metainfo.Hash) (storage.TorrentImpl, error) {
+	var f = fnv.New64a()
+	_, err := f.Write(mihash[:])
+	return badStorageImpl{src: rand.New(rand.NewSource(int64(f.Sum64())))}, err
 }
 
 func (bs badStorage) Close() error {
 	return nil
 }
 
-func (bs badStorage) Piece(p metainfo.Piece) storage.PieceImpl {
-	return badStoragePiece{p}
+type badStorageImpl struct {
+	src *rand.Rand
 }
 
-type badStoragePiece struct {
-	p metainfo.Piece
+// Close implements storage.TorrentImpl.
+func (p badStorageImpl) Close() error {
+	return nil
 }
 
-var _ storage.PieceImpl = badStoragePiece{}
-
-func (p badStoragePiece) WriteAt(b []byte, off int64) (int, error) {
+func (p badStorageImpl) WriteAt(b []byte, off int64) (int, error) {
 	return 0, nil
 }
 
-func (p badStoragePiece) Completion() storage.Completion {
-	return storage.Completion{Complete: true, Ok: true}
-}
-
-func (p badStoragePiece) MarkComplete() error {
-	return errors.New("psyyyyyyyche")
-}
-
-func (p badStoragePiece) MarkNotComplete() error {
-	return errors.New("psyyyyyyyche")
-}
-
-func (p badStoragePiece) randomlyTruncatedDataString() string {
-	return "hello, world\n"[:rand.Intn(14)]
-}
-
-func (p badStoragePiece) ReadAt(b []byte, off int64) (n int, err error) {
-	r := strings.NewReader(p.randomlyTruncatedDataString())
-	return r.ReadAt(b, off+p.p.Offset())
+func (p badStorageImpl) ReadAt(b []byte, off int64) (n int, err error) {
+	return p.src.Read(b)
 }

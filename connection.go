@@ -73,7 +73,8 @@ type connection struct {
 	_mu *sync.RWMutex
 
 	// The actual Conn, used for closing, and setting socket options.
-	conn       net.Conn
+	conn net.Conn
+
 	outgoing   bool
 	network    string
 	remoteAddr IpPort
@@ -846,25 +847,13 @@ func (cn *connection) updateRequests() {
 
 // The connection should download highest priority pieces first, without any
 // inclination toward avoiding wastage. Generally we might do this if there's
-// a single connection, or this is the fastest connection, and we have active
+// a single connection, or this is the fastest connection (not implemented), and we have active
 // readers that signal an ordering preference. It's conceivable that the best
 // connection should do this, since it's least likely to waste our time if
 // assigned to the highest priority pieces, and assigning more than one this
 // role would cause significant wasted bandwidth.
 func (cn *connection) shouldRequestWithoutBias() bool {
-	if len(cn.t.readers) == 0 {
-		return false
-	}
-
-	if cn.t.conns.length() == 1 {
-		return true
-	}
-
-	if cn == cn.t.fastestConn {
-		return true
-	}
-
-	return false
+	return cn.t.conns.length() == 1 //|| cn.fastest
 }
 
 func (cn *connection) stopRequestingPiece(piece pieceIndex) bool {
@@ -879,13 +868,13 @@ func (cn *connection) updatePiecePriority(piece pieceIndex) bool {
 	cn.cmu().Lock()
 	defer cn.cmu().Unlock()
 
-	tpp := cn.t.piecePriority(piece)
-	if !cn.PeerHasPiece(piece) {
-		tpp = PiecePriorityNone
-	}
-	if tpp == PiecePriorityNone {
-		return cn.stopRequestingPiece(piece)
-	}
+	// tpp := cn.t.piecePriority(piece)
+	// if !cn.PeerHasPiece(piece) {
+	// 	tpp = PiecePriorityNone
+	// }
+	// if tpp == PiecePriorityNone {
+	// 	return cn.stopRequestingPiece(piece)
+	// }
 	prio := cn.getPieceInclination()[piece]
 
 	return cn.pieceRequestOrder.Set(piece, prio) || cn.shouldRequestWithoutBias()
@@ -907,18 +896,20 @@ func (cn *connection) discardPieceInclination() {
 }
 
 func (cn *connection) peerPiecesChanged() {
-	if cn.t.haveInfo() {
-		prioritiesChanged := false
-		for i := pieceIndex(0); i < cn.t.numPieces(); i++ {
-			if cn.updatePiecePriority(i) {
-				prioritiesChanged = true
-			}
-		}
+	if !cn.t.haveInfo() {
+		return
+	}
 
-		if prioritiesChanged {
-			cn.t.event.Broadcast()
-			cn.updateRequests()
+	prioritiesChanged := false
+	for i := pieceIndex(0); i < cn.t.numPieces(); i++ {
+		if cn.updatePiecePriority(i) {
+			prioritiesChanged = true
 		}
+	}
+
+	if prioritiesChanged {
+		cn.t.event.Broadcast()
+		cn.updateRequests()
 	}
 }
 
@@ -1417,21 +1408,19 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 		return nil
 	}
 
-	piece := &cn.t.pieces[req.Index]
-
 	cn.allStats(add(1, func(cs *ConnStats) *count { return &cs.ChunksReadUseful }))
 	cn.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *count { return &cs.BytesReadUsefulData }))
 	cn.lastUsefulChunkReceived = time.Now()
-	cn.t.fastestConn = cn
 
+	// piece := cn.t.piece(int(req.Index))
 	// Need to record that it hasn't been written yet, before we attempt to do
 	// anything with it.
-	piece.incrementPendingWrites()
+	// piece.incrementPendingWrites()
 	// Record that we have the chunk, so we aren't trying to download it while
 	// waiting for it to be written to storage.
-	piece.unpendChunkIndex(chunkIndex(req.chunkSpec, cn.t.chunkSize))
+	// piece.unpendChunkIndex(chunkIndex(req.chunkSpec, cn.t.chunkSize))
 	err := cn.t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
-	piece.decrementPendingWrites()
+	// piece.decrementPendingWrites()
 
 	if err := cn.t.chunks.Verify(req); err != nil {
 		metrics.Add("chunks received unexpected", 1)
@@ -1449,14 +1438,14 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 	// the piece is still wanted, because if it is queued, it won't be wanted.
 	if cn.t.chunks.ChunksAvailable(int(req.Index)) {
 		cn.t.digests.Enqueue(int(req.Index))
-		cn.t.pendAllChunkSpecs(pieceIndex(req.Index))
+		// cn.t.pendAllChunkSpecs(pieceIndex(req.Index))
 	}
 
 	cn.cmu().Lock()
 	cn.touched.AddInt(cn.t.chunks.requestCID(req))
 	cn.cmu().Unlock()
 
-	cn.t.publishPieceChange(pieceIndex(req.Index))
+	// cn.t.publishPieceChange(pieceIndex(req.Index))
 
 	return nil
 }
@@ -1531,15 +1520,15 @@ another:
 
 			more, err := cn.sendChunk(r, msg)
 			if err != nil {
-				i := pieceIndex(r.Index)
-				if cn.t.pieceComplete(i) {
-					cn.t.updatePieceCompletion(i)
-					if !cn.t.pieceComplete(i) {
-						// We had the piece, but not anymore.
-						break another
-					}
-				}
-				cn.t.config.warn().Println("error sending chunk to peer")
+				// i := pieceIndex(r.Index)
+				// if cn.t.pieceComplete(i) {
+				// 	cn.t.updatePieceCompletion(i)
+				// 	if !cn.t.pieceComplete(i) {
+				// 		// We had the piece, but not anymore.
+				// 		break another
+				// 	}
+				// }
+				cn.t.config.warn().Println("error sending chunk to peer", err)
 				// If we failed to send a chunk, choke the peer to ensure they
 				// flush all their requests. We've probably dropped a piece,
 				// but there's no way to communicate this to the peer. If they
@@ -1747,7 +1736,7 @@ func (cn *connection) sendInitialMessages(cl *Client, torrent *torrent) {
 	if cn.fastEnabled() {
 		if torrent.haveAllPieces() {
 			cn.Post(pp.Message{Type: pp.HaveAll})
-			cn.sentHaves.AddRange(0, uint64(cn.t.NumPieces()))
+			cn.sentHaves.AddRange(0, uint64(cn.t.numPieces()))
 			return
 		} else if !torrent.haveAnyPieces() {
 			cn.Post(pp.Message{Type: pp.HaveNone})

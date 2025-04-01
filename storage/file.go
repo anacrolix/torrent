@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/anacrolix/missinggo/v2"
-
 	"github.com/james-lawrence/torrent/metainfo"
 )
 
@@ -71,27 +69,29 @@ func (fs *fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Has
 		dir,
 		info,
 		infoHash,
-		fs.pc,
+		// fs.pc,
 	}, nil
 }
 
 type fileTorrentImpl struct {
-	dir        string
-	info       *metainfo.Info
-	infoHash   metainfo.Hash
-	completion PieceCompletion
+	dir      string
+	info     *metainfo.Info
+	infoHash metainfo.Hash
+	// completion PieceCompletion
 }
 
-func (fts *fileTorrentImpl) Piece(p metainfo.Piece) PieceImpl {
-	// Create a view onto the file-based torrent storage.
-	_io := fileTorrentImplIO{fts}
-	// Return the appropriate segments of this.
-	return &filePieceImpl{
-		fts,
-		p,
-		missinggo.NewSectionWriter(_io, p.Offset(), p.Length()),
-		io.NewSectionReader(_io, p.Offset(), p.Length()),
-	}
+// ReadAt implements TorrentImpl.
+func (fts *fileTorrentImpl) ReadAt(p []byte, off int64) (n int, err error) {
+	return fileTorrentImplIO{fts}.ReadAt(p, off)
+}
+
+// WriteAt implements TorrentImpl.
+func (fts *fileTorrentImpl) WriteAt(p []byte, off int64) (n int, err error) {
+	return fileTorrentImplIO{fts}.WriteAt(p, off)
+}
+
+func (fts *fileTorrentImpl) fileInfoName(fi metainfo.FileInfo) string {
+	return filepath.Join(append([]string{fts.dir, fts.info.Name}, fi.Path...)...)
 }
 
 func (fs *fileTorrentImpl) Close() error {
@@ -212,8 +212,4 @@ func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 		}
 	}
 	return
-}
-
-func (fts *fileTorrentImpl) fileInfoName(fi metainfo.FileInfo) string {
-	return filepath.Join(append([]string{fts.dir, fts.info.Name}, fi.Path...)...)
 }

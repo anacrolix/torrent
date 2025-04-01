@@ -172,16 +172,16 @@ func (info *Info) TotalLength() (ret int64) {
 	if cached := atomic.LoadInt64(&info.cachedLength); cached > 0 {
 		return cached
 	}
+	defer atomic.StoreInt64(&info.cachedLength, ret)
 
-	if info.IsDir() {
-		for _, fi := range info.Files {
-			ret += fi.Length
-		}
-	} else {
-		ret = info.Length
+	if !info.IsDir() {
+		return info.Length
 	}
 
-	atomic.StoreInt64(&info.cachedLength, ret)
+	for _, fi := range info.Files {
+		ret += fi.Length
+	}
+
 	return ret
 }
 
@@ -210,6 +210,23 @@ func (info *Info) UpvertedFiles() []FileInfo {
 
 func (info *Info) Piece(index int) Piece {
 	return Piece{info, pieceIndex(index)}
+}
+
+// func (info *Info) IndexToOffset(index int) int64 {
+// 	return int64(index) * info.PieceLength
+// }
+
+// func (info *Info) OffsetToIndex(offset int64) int64 {
+// 	return offset / info.PieceLength
+// }
+
+func (info *Info) OffsetToLength(offset int64) (length int64) {
+	index := offset / info.PieceLength
+	if index == int64(info.NumPieces()) {
+		return info.TotalLength() % info.PieceLength
+	}
+
+	return info.PieceLength
 }
 
 func (info *Info) Hashes() (ret [][]byte) {

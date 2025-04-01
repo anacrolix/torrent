@@ -4,5 +4,4 @@ import "github.com/anacrolix/missinggo/v2"
 
 type (
 	multiLess = missinggo.MultiLess
-	cmper     = missinggo.SameLessFunc
 )

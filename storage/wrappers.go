@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"fmt"
 	"io"
 	"os"
 
@@ -24,22 +23,11 @@ func (cl Client) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (Torre
 }
 
 func NewTorrent(ti TorrentImpl) Torrent {
-	return Torrent{ti: ti}
+	return Torrent{TorrentImpl: ti}
 }
 
 type Torrent struct {
-	ti TorrentImpl
-}
-
-func (t Torrent) Piece(p metainfo.Piece) Piece {
-	return Piece{PieceImpl: t.ti.Piece(p), mip: p}
-}
-
-func (t Torrent) Close() error {
-	if t.ti == nil {
-		return fmt.Errorf("attempted to close a nil torrent storage implementation")
-	}
-	return t.ti.Close()
+	TorrentImpl
 }
 
 type Piece struct {
@@ -60,7 +48,8 @@ func (p Piece) WriteAt(b []byte, off int64) (n int, err error) {
 	if off+int64(len(b)) > p.mip.Length() {
 		panic("write overflows piece")
 	}
-	b = missinggo.LimitLen(b, p.mip.Length()-off)
+
+	b = b[:min(int64(len(b)), p.mip.Length()-off)]
 	return p.PieceImpl.WriteAt(b, off)
 }
 

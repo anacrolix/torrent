@@ -5,7 +5,6 @@ go 1.23.0
 toolchain go1.24.0
 
 require (
-	bazil.org/fuse v0.0.0-20230120002735-62a210ff1fd5
 	filippo.io/edwards25519 v1.1.0
 	github.com/RoaringBitmap/roaring v1.9.4
 	github.com/alexflint/go-arg v1.5.1

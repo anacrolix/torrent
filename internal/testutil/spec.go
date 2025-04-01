@@ -2,7 +2,6 @@ package testutil
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 
 	"github.com/anacrolix/missinggo/expect"
@@ -48,7 +47,7 @@ func (t *Torrent) Info(pieceLength int64) metainfo.Info {
 		info.Length = int64(len(t.Files[0].Data))
 	}
 	err := info.GeneratePieces(func(fi metainfo.FileInfo) (io.ReadCloser, error) {
-		return ioutil.NopCloser(strings.NewReader(t.GetFile(strings.Join(fi.Path, "/")).Data)), nil
+		return io.NopCloser(strings.NewReader(t.GetFile(strings.Join(fi.Path, "/")).Data)), nil
 	})
 	expect.Nil(err)
 	return info

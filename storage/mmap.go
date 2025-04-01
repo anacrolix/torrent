@@ -46,8 +46,19 @@ func (s *mmapClientImpl) Close() error {
 
 type mmapTorrentStorage struct {
 	infoHash metainfo.Hash
+	info     *metainfo.Info
 	span     *mmap_span.MMapSpan
 	pc       PieceCompletionGetSetter
+}
+
+// ReadAt implements TorrentImpl.
+func (ts *mmapTorrentStorage) ReadAt(p []byte, off int64) (n int, err error) {
+	return io.NewSectionReader(ts.span, off, ts.info.OffsetToLength(off)).Read(p)
+}
+
+// WriteAt implements TorrentImpl.
+func (ts *mmapTorrentStorage) WriteAt(p []byte, off int64) (n int, err error) {
+	return io.NewOffsetWriter(ts.span, off).Write(p)
 }
 
 func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
@@ -73,7 +84,7 @@ type mmapStoragePiece struct {
 }
 
 func (me mmapStoragePiece) pieceKey() metainfo.PieceKey {
-	return metainfo.PieceKey{me.ih, me.p.Index()}
+	return metainfo.PieceKey{InfoHash: me.ih, Index: me.p.Index()}
 }
 
 func (sp mmapStoragePiece) Completion() Completion {

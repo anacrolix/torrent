@@ -2,7 +2,6 @@ package torrent_test
 
 import (
 	"io"
-	"io/ioutil"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,7 +29,7 @@ func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, new)
 
-	r := tt.NewReader()
 	go cl.Stop(ts)
-	io.Copy(ioutil.Discard, r)
+	_, err = io.Copy(io.Discard, torrent.NewReader(tt))
+	require.NoError(t, err)
 }

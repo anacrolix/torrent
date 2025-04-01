@@ -1,12 +1,9 @@
 package storage
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
-	"github.com/anacrolix/missinggo/v2/resource"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/james-lawrence/torrent/metainfo"
@@ -27,28 +24,25 @@ func testIssue95(t *testing.T, c ClientImpl) {
 	}
 	t2, err := c.OpenTorrent(i2, metainfo.HashBytes([]byte("b")))
 	require.NoError(t, err)
-	t2p := t2.Piece(i2.Piece(0))
-	assert.NoError(t, t1.Close())
-	assert.NotPanics(t, func() { t2p.Completion() })
+
+	require.NoError(t, t1.Close())
+	// TODO
+	require.True(t, false)
+	// t2p := t2.Piece(i2.Piece(0))
+	// assert.NotPanics(t, func() { t2p.Completion() })
+	require.NoError(t, t2.Close())
 }
 
 func TestIssue95File(t *testing.T) {
-	td, err := ioutil.TempDir("", "")
+	td, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
 	testIssue95(t, NewFile(td))
 }
 
 func TestIssue95MMap(t *testing.T) {
-	td, err := ioutil.TempDir("", "")
+	td, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
 	testIssue95(t, NewMMap(td))
-}
-
-func TestIssue95ResourcePieces(t *testing.T) {
-	td, err := ioutil.TempDir("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(td)
-	testIssue95(t, NewResourcePieces(resource.OSFileProvider{}))
 }

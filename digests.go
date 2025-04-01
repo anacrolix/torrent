@@ -13,8 +13,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-func newDigests(retrieve func(int) *Piece, complete func(int, error)) digests {
+func newDigests(iora io.ReaderAt, retrieve func(int) *metainfo.Piece, complete func(int, error)) digests {
 	return digests{
+		ReaderAt: iora,
 		retrieve: retrieve,
 		complete: complete,
 		pending:  newBitQueue(),
@@ -24,7 +25,8 @@ func newDigests(retrieve func(int) *Piece, complete func(int, error)) digests {
 
 // digests is responsible correctness of received data.
 type digests struct {
-	retrieve func(int) *Piece
+	ReaderAt io.ReaderAt
+	retrieve func(int) *metainfo.Piece
 	complete func(int, error)
 	// marks whether digest is actively processing.
 	reaping int64
@@ -58,7 +60,7 @@ func (t *digests) check(idx int) {
 	var (
 		err    error
 		digest metainfo.Hash
-		p      *Piece
+		p      *metainfo.Piece
 	)
 
 	if p = t.retrieve(idx); p == nil {
@@ -71,27 +73,24 @@ func (t *digests) check(idx int) {
 		return
 	}
 
-	if digest != *p.hash {
-		t.complete(idx, fmt.Errorf("piece %d digest mismatch %s != %s", idx, hex.EncodeToString(digest[:]), hex.EncodeToString(p.hash[:])))
+	if digest != p.Hash() {
+		t.complete(idx, fmt.Errorf("piece %d digest mismatch %s != %s", idx, hex.EncodeToString(digest[:]), p.Hash().HexString()))
 		return
 	}
 
 	t.complete(idx, nil)
 }
 
-func (t *digests) compute(p *Piece) (ret metainfo.Hash, err error) {
+func (t *digests) compute(p *metainfo.Piece) (ret metainfo.Hash, err error) {
 	c := sha1.New()
-	p.waitNoPendingWrites()
-
-	pl := int64(p.length())
-
-	n, err := io.Copy(c, io.NewSectionReader(p.Storage(), 0, pl))
+	plen := p.Length()
+	n, err := io.Copy(c, io.NewSectionReader(t.ReaderAt, p.Offset(), plen))
 	if err != nil {
-		return ret, errors.Wrapf(err, "piece %d digest failed:", p.index)
+		return ret, errors.Wrapf(err, "piece %d digest failed:", p.Offset)
 	}
 
-	if n != int64(pl) {
-		return ret, fmt.Errorf("piece digest failed short copy %d: %d != %d", p.index, n, pl)
+	if n != plen {
+		return ret, fmt.Errorf("piece digest failed short copy %d: %d != %d", p.Offset, n, plen)
 	}
 
 	copy(ret[:], c.Sum(nil))

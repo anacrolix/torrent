@@ -808,23 +808,6 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent, _ error) {
 	}
 
 	t = newTorrent(cl, src)
-	t.digests = newDigests(
-		t.storage,
-		t.piece,
-		func(idx int, cause error) {
-
-			// TODO?
-			// if err := t.pieceHashed(idx, cause); err != nil {
-			// 	cl.config.debug().Println(err)
-			// }
-			// t.updatePieceCompletion(idx)
-			// t.publishPieceChange(idx)
-			// t.updatePiecePriority(idx)
-
-			t.event.Broadcast()
-			cl.event.Broadcast()
-		},
-	)
 
 	if len(src.InfoBytes) > 0 {
 		if err := t.setInfoBytes(src.InfoBytes); err != nil {

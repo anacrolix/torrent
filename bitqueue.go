@@ -6,8 +6,8 @@ import (
 	"github.com/RoaringBitmap/roaring"
 )
 
-func newBitQueue() bitQueue {
-	return bitQueue{
+func newBitQueue() *bitQueue {
+	return &bitQueue{
 		mu: &sync.RWMutex{},
 		RB: roaring.NewBitmap(),
 	}

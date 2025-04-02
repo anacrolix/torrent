@@ -3,14 +3,49 @@ package torrent
 import (
 	"errors"
 	"io"
+	"log"
 	"sync/atomic"
+
+	"github.com/james-lawrence/torrent/storage"
 )
+
+func newBlockingReader(imp storage.TorrentImpl, c *chunks) *blockingreader {
+	return &blockingreader{
+		TorrentImpl: imp,
+		c:           c,
+	}
+}
+
+type blockingreader struct {
+	storage.TorrentImpl
+	c *chunks
+}
+
+func (t *blockingreader) ReadAt(p []byte, offset int64) (n int, err error) {
+	log.Println("blocking reading initiated", offset)
+	defer log.Println("blocking reading completed", offset)
+
+	t.c.cond.L.Lock()
+	for !t.c.ChunksCompleteForOffset(offset) {
+		t.c.cond.Wait()
+	}
+	t.c.cond.L.Unlock()
+
+	return t.TorrentImpl.ReadAt(p, offset)
+}
 
 // Reader for a torrent
 type Reader interface {
 	io.Reader
 	io.Seeker
 	io.Closer
+}
+
+func NewReader(t Torrent) Reader {
+	return &reader{
+		ReaderAt: t.Storage(),
+		length:   t.Info().TotalLength(),
+	}
 }
 
 // Accesses Torrent data via a Client. Reads block until the data is
@@ -26,8 +61,10 @@ type reader struct {
 var _ io.ReadCloser = &reader{}
 
 func (r *reader) Read(b []byte) (n int, err error) {
+	log.Println("read initiated", r.pos, r.length)
 	n, err = r.ReadAt(b, r.pos)
-	atomic.AddInt64(&r.pos, int64(n))
+	npos := atomic.AddInt64(&r.pos, int64(n))
+	log.Println("read completed", npos, r.length)
 	return n, err
 }
 

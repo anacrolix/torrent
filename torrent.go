@@ -3,7 +3,6 @@ package torrent
 import (
 	"container/heap"
 	"context"
-	_errors "errors"
 	"fmt"
 	"io"
 	"log"
@@ -26,6 +25,7 @@ import (
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/x/bytesx"
+	"github.com/james-lawrence/torrent/x/langx"
 
 	"github.com/james-lawrence/torrent/bencode"
 	pp "github.com/james-lawrence/torrent/btprotocol"
@@ -89,15 +89,6 @@ type Torrent interface {
 	GotInfo() <-chan struct{}     // TODO: remove, torrents should never be returned in they don't have the meta info.
 	Storage() storage.TorrentImpl // temporary replacement for reader.
 	Files() []*File               // TODO: maybe should be pulled from Metadata(), it has a reference to the storage implementation.
-	// SubscribePieceStateChanges() *pubsub.Subscription
-	// PieceStateRuns() []PieceStateRun
-}
-
-func NewReader(t Torrent) Reader {
-	return &reader{
-		ReaderAt: t.Storage(),
-		length:   t.Info().TotalLength(),
-	}
 }
 
 // Download a torrent into a writer blocking until completion.
@@ -109,7 +100,7 @@ func DownloadInto(ctx context.Context, dst io.Writer, m Torrent, options ...Tune
 	select {
 	case <-m.GotInfo():
 	case <-ctx.Done():
-		return 0, ctx.Err()
+		return 0, errorsx.Compact(context.Cause(ctx), ctx.Err())
 	}
 
 	if n, err = io.Copy(dst, NewReader(m)); err != nil {
@@ -122,11 +113,24 @@ func DownloadInto(ctx context.Context, dst io.Writer, m Torrent, options ...Tune
 }
 
 func Verify(ctx context.Context, t Torrent) error {
-	return _errors.ErrUnsupported
+	select {
+	case <-t.GotInfo():
+	case <-ctx.Done():
+		return errorsx.Compact(context.Cause(ctx), ctx.Err())
+	}
+
+	tmp := t.(*torrent)
+
+	for i := 0; i < tmp.numPieces(); i++ {
+		tmp.digests.Enqueue(i)
+	}
+
+	return nil
 }
 
 func newTorrent(cl *Client, src Metadata) *torrent {
 	m := &sync.RWMutex{}
+	chunkcond := sync.NewCond(&sync.Mutex{})
 	t := &torrent{
 		displayName: src.DisplayName,
 		infoHash:    src.InfoHash,
@@ -144,7 +148,8 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		maxEstablishedConns:     cl.config.EstablishedConnsPerTorrent,
 		networkingEnabled:       true,
 		duplicateRequestTimeout: time.Second,
-		chunks:                  newChunks(src.ChunkSize, &metainfo.Info{}),
+		chunkcond:               chunkcond,
+		chunks:                  newChunks(src.ChunkSize, &metainfo.Info{}, chunkcond),
 		pex:                     newPex(),
 	}
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
@@ -235,12 +240,13 @@ type torrent struct {
 	// The size of chunks to request from peers over the wire. This is
 	// normally 16KiB by convention these days.
 	chunkSize pp.Integer
+	chunkcond *sync.Cond
 	chunkPool *sync.Pool
 
 	// The storage to open when the info dict becomes available.
 	storageOpener *storage.Client
 	// Storage for torrent data.
-	storage storage.Torrent
+	storage storage.TorrentImpl
 	// Read-locked for using storage, and write-locked for Closing.
 	storageLock sync.RWMutex
 
@@ -312,7 +318,7 @@ type torrent struct {
 // Returns a Reader bound to the torrent's data. All read calls block until
 // the data requested is actually available.
 func (t *torrent) Storage() storage.TorrentImpl {
-	return t.storage
+	return newBlockingReader(t.storage, t.chunks)
 }
 
 // Metadata provides enough information to lookup the torrent again.
@@ -429,12 +435,8 @@ func (t *torrent) KnownSwarm() (ks []Peer) {
 
 func (t *torrent) setChunkSize(size pp.Integer) {
 	t.chunkSize = size
-	*t.chunks = *newChunks(int(size), func(i *metainfo.Info) *metainfo.Info {
-		if i == nil {
-			return &metainfo.Info{}
-		}
-		return i
-	}(t.info))
+
+	*t.chunks = *newChunks(int(size), langx.DefaultIfZero(&metainfo.Info{}, t.info), t.chunkcond)
 	t.chunkPool = &sync.Pool{
 		New: func() interface{} {
 			b := make([]byte, size)
@@ -548,21 +550,6 @@ func (t *torrent) metadataSize() int {
 	return len(t.metadataBytes)
 }
 
-// func (t *torrent) makePieces() {
-// 	t.chunks = newChunks(int(t.chunkSize), t.info)
-// 	t.chunks.gracePeriod = t.duplicateRequestTimeout
-
-// 	hashes := t.info.Hashes()
-// 	t.pieces = make([]Piece, len(hashes))
-// 	for i, hash := range hashes {
-// 		piece := &t.pieces[i]
-// 		piece.t = t
-// 		piece.index = pieceIndex(i)
-// 		piece.noPendingWrites.L = &piece.pendingWritesMutex
-// 		piece.hash = (*metainfo.Hash)(unsafe.Pointer(&hash[0]))
-// 	}
-// }
-
 func (t *torrent) setInfo(info *metainfo.Info) (err error) {
 	if err := validateInfo(info); err != nil {
 		return fmt.Errorf("bad info: %s", err)
@@ -577,6 +564,7 @@ func (t *torrent) setInfo(info *metainfo.Info) (err error) {
 
 	t.nameMu.Lock()
 	t.info = info
+	t.setChunkSize(t.chunkSize)
 	t.nameMu.Unlock()
 
 	t.initFiles()
@@ -593,13 +581,10 @@ func (t *torrent) onSetInfo() {
 		}
 	}
 
-	// for i := range t.pieces {
-	// 	t.updatePieceCompletion(pieceIndex(i))
-	// 	p := &t.pieces[i]
-	// 	if !p.storageCompletionOk {
-	// 		t.digests.check(i)
-	// 	}
-	// }
+	for i := 0; i < t.numPieces(); i++ {
+		t.chunks.ChunksAdjust(i)
+	}
+
 	t.chunks.FailuresReset()
 
 	t.event.Broadcast()
@@ -625,6 +610,25 @@ func (t *torrent) setInfoBytes(b []byte) error {
 
 	t.metadataBytes = b
 	t.metadataCompletedChunks = nil
+	t.digests = newDigests(
+		t.storage,
+		t.piece,
+		func(idx int, cause error) {
+			// if err := t.pieceHashed(idx, cause); err != nil {
+			// 	cl.config.debug().Println(err)
+			// }
+
+			log.Println("hashed", idx, "/", t.numPieces(), cause, t.chunkSize)
+			t.chunks.Hashed(idx, cause)
+			// t.chunks.Complete(idx) // t.updatePieceCompletion(idx)
+			// t.publishPieceChange(idx)
+
+			// t.updatePiecePriority(idx)
+
+			t.event.Broadcast()
+			t.cln.event.Broadcast() // cause the client to detect completed torrents.
+		},
+	)
 
 	t.onSetInfo()
 
@@ -896,9 +900,9 @@ func (t *torrent) close() (err error) {
 	t.tickleReaders()
 
 	func() {
-		// if t.storage == nil {
-		// 	return
-		// }
+		if t.storage == nil {
+			return
+		}
 
 		t.storageLock.Lock()
 		defer t.storageLock.Unlock()
@@ -912,7 +916,6 @@ func (t *torrent) close() (err error) {
 	}
 
 	t.event.Broadcast()
-	// t.pieceStateChanges.Close()
 
 	return err
 }
@@ -940,10 +943,6 @@ func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 func (t *torrent) pieceNumChunks(piece pieceIndex) pp.Integer {
 	return (t.pieceLength(piece) + t.chunkSize - 1) / t.chunkSize
 }
-
-// func (t *torrent) pendAllChunkSpecs(pieceIndex pieceIndex) {
-// 	t.pieces[pieceIndex].dirtyChunks.Clear()
-// }
 
 func (t *torrent) pieceLength(piece pieceIndex) pp.Integer {
 	if t.info.PieceLength == 0 {
@@ -1806,21 +1805,15 @@ func (t *torrent) cancelRequestsForPiece(piece pieceIndex) {
 	}
 }
 
-// func (t *torrent) onPieceCompleted(piece pieceIndex) {
-// 	t.pendAllChunkSpecs(piece)
-// 	t.cancelRequestsForPiece(piece)
-// }
+func (t *torrent) onPieceCompleted(piece pieceIndex) {
+	t.cancelRequestsForPiece(piece)
+}
 
-// // Called when a piece is found to be not complete.
-// func (t *torrent) onIncompletePiece(piece pieceIndex) {
-// 	if t.pieceAllDirty(piece) {
-// 		t.pendAllChunkSpecs(piece)
-// 	}
-
-// 	if !t.wantPieceIndex(piece) {
-// 		return
-// 	}
-// }
+// Called when a piece is found to be not complete.
+func (t *torrent) onIncompletePiece(piece pieceIndex) {
+	log.Println("on incomplete piece invoked")
+	// t.chunks.ChunksMissing(piece)
+}
 
 // // Forces all the pieces to be re-hashed. See also Piece.VerifyData. This should not be called
 // // before the Info is available.

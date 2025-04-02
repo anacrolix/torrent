@@ -212,13 +212,9 @@ func (info *Info) Piece(index int) Piece {
 	return Piece{info, pieceIndex(index)}
 }
 
-// func (info *Info) IndexToOffset(index int) int64 {
-// 	return int64(index) * info.PieceLength
-// }
-
-// func (info *Info) OffsetToIndex(offset int64) int64 {
-// 	return offset / info.PieceLength
-// }
+func (info *Info) OffsetToIndex(offset int64) int64 {
+	return offset / info.PieceLength
+}
 
 func (info *Info) OffsetToLength(offset int64) (length int64) {
 	index := offset / info.PieceLength

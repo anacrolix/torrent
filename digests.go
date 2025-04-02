@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"runtime"
-	"sync"
 	"sync/atomic"
 
 	"github.com/james-lawrence/torrent/metainfo"
@@ -14,12 +13,14 @@ import (
 )
 
 func newDigests(iora io.ReaderAt, retrieve func(int) *metainfo.Piece, complete func(int, error)) digests {
+	if iora == nil {
+		panic("MISSING STORAGE")
+	}
 	return digests{
 		ReaderAt: iora,
 		retrieve: retrieve,
 		complete: complete,
 		pending:  newBitQueue(),
-		c:        sync.NewCond(&sync.Mutex{}),
 	}
 }
 
@@ -31,8 +32,7 @@ type digests struct {
 	// marks whether digest is actively processing.
 	reaping int64
 	// cache of the pieces that need to be verified.
-	pending bitQueue
-	c       *sync.Cond
+	pending *bitQueue
 }
 
 // Enqueue a piece to check its completed digest.
@@ -84,13 +84,14 @@ func (t *digests) check(idx int) {
 func (t *digests) compute(p *metainfo.Piece) (ret metainfo.Hash, err error) {
 	c := sha1.New()
 	plen := p.Length()
+
 	n, err := io.Copy(c, io.NewSectionReader(t.ReaderAt, p.Offset(), plen))
 	if err != nil {
-		return ret, errors.Wrapf(err, "piece %d digest failed:", p.Offset)
+		return ret, errors.Wrapf(err, "piece %d digest failed", p.Offset())
 	}
 
 	if n != plen {
-		return ret, fmt.Errorf("piece digest failed short copy %d: %d != %d", p.Offset, n, plen)
+		return ret, fmt.Errorf("piece digest failed short copy %d: %d != %d", p.Offset(), n, plen)
 	}
 
 	copy(ret[:], c.Sum(nil))

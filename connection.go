@@ -6,8 +6,10 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -592,7 +594,6 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	if len(cn.requests) > cn.requestsLowWater || cn.t.chunks.Missing() == 0 {
 		return
 	}
-
 	filledBuffer := false
 
 	if cn.peerSentHaveAll && cn.claimed.IsEmpty() {
@@ -740,7 +741,8 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 			cn.cmu().Lock()
 			// l2.Printf("c(%p) writer going to sleep: %d\n", cn, cn.writeBuffer.Len())
 			cn.writerCond.Wait()
-			// l2.Printf("(%d) c(%p) - writer awake: pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, len(cn.requests), cn.t.piecesM.Missing(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
+
+			// log.Printf("(%d) c(%p) - writer awake: pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, len(cn.requests), cn.t.chunks.missing.Len(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
 			cn.cmu().Unlock()
 			continue
 		}
@@ -1202,7 +1204,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
-		// 	log.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
+		log.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
 
 		switch msg.Type {
 		case pp.Choke:
@@ -1376,11 +1378,9 @@ func (cn *connection) rw() io.ReadWriter {
 
 // Handle a received chunk from a peer.
 func (cn *connection) receiveChunk(msg *pp.Message) error {
-	metrics.Add("chunks received", 1)
-
 	req := newRequestFromMessage(msg)
 
-	// log.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
+	log.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
 
 	if cn.PeerChoked {
 		metrics.Add("chunks received while choked", 1)
@@ -1421,17 +1421,17 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 	// piece.unpendChunkIndex(chunkIndex(req.chunkSpec, cn.t.chunkSize))
 	err := cn.t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
 	// piece.decrementPendingWrites()
-
-	if err := cn.t.chunks.Verify(req); err != nil {
-		metrics.Add("chunks received unexpected", 1)
-		return err
-	}
-
 	if err != nil {
 		panic(fmt.Sprintf("error writing chunk: %v", err))
 		// t.pendRequest(req)
 		// t.updatePieceCompletion(pieceIndex(msg.Index))
 		// return nil
+	}
+
+	if err := cn.t.chunks.Verify(req); err != nil {
+		log.Println("unexpected chunks received")
+		// metrics.Add("chunks received unexpected", 1)
+		return err
 	}
 
 	// It's important that the piece is potentially queued before we check if

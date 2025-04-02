@@ -2,6 +2,7 @@ package storage
 
 import (
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -60,6 +61,7 @@ func (me *fileClientImpl) Close() error {
 }
 
 func (fs *fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
+	log.Println("opening file torrent storage")
 	dir := fs.pathMaker(fs.baseDir, info, infoHash)
 	err := CreateNativeZeroLengthFiles(info, dir)
 	if err != nil {
@@ -82,16 +84,14 @@ type fileTorrentImpl struct {
 
 // ReadAt implements TorrentImpl.
 func (fts *fileTorrentImpl) ReadAt(p []byte, off int64) (n int, err error) {
+	log.Println("file storage ReadAt len", len(p), "offset", off)
 	return fileTorrentImplIO{fts}.ReadAt(p, off)
 }
 
 // WriteAt implements TorrentImpl.
 func (fts *fileTorrentImpl) WriteAt(p []byte, off int64) (n int, err error) {
+	log.Println("file storage WriteAt len", len(p), "offset", off)
 	return fileTorrentImplIO{fts}.WriteAt(p, off)
-}
-
-func (fts *fileTorrentImpl) fileInfoName(fi metainfo.FileInfo) string {
-	return filepath.Join(append([]string{fts.dir, fts.info.Name}, fi.Path...)...)
 }
 
 func (fs *fileTorrentImpl) Close() error {
@@ -109,13 +109,15 @@ func CreateNativeZeroLengthFiles(info *metainfo.Info, dir string) (err error) {
 		name := filepath.Join(append([]string{dir, info.Name}, fi.Path...)...)
 		os.MkdirAll(filepath.Dir(name), 0777)
 		var f io.Closer
-		f, err = os.Create(name)
-		if err != nil {
-			break
+
+		if f, err = os.Create(name); err != nil {
+			return err
 		}
+
 		f.Close()
 	}
-	return
+
+	return nil
 }
 
 // Exposes file-based storage of a torrent, as one big ReadWriterAt.
@@ -125,14 +127,16 @@ type fileTorrentImplIO struct {
 
 // Returns EOF on short or missing file.
 func (fst *fileTorrentImplIO) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err error) {
-	f, err := os.Open(fst.fts.fileInfoName(fi))
+	log.Println("reading file", fst.fileInfoName(fi))
+	f, err := os.Open(fst.fileInfoName(fi))
 	if os.IsNotExist(err) {
+		log.Println("checkpoint 0")
 		// File missing is treated the same as a short file.
-		err = io.EOF
-		return
+		return 0, io.EOF
 	}
 	if err != nil {
-		return
+		log.Println("checkpoint 1")
+		return 0, err
 	}
 	defer f.Close()
 	// Limit the read to within the expected bounds of this file.
@@ -150,6 +154,10 @@ func (fst *fileTorrentImplIO) readFileAt(fi metainfo.FileInfo, b []byte, off int
 		}
 	}
 	return
+}
+
+func (fst *fileTorrentImplIO) fileInfoName(fi metainfo.FileInfo) string {
+	return filepath.Join(append([]string{fst.fts.dir, fst.fts.info.Name}, fi.Path...)...)
 }
 
 // Only returns EOF at the end of the torrent. Premature EOF is ErrUnexpectedEOF.
@@ -173,7 +181,7 @@ func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 				// Lies.
 				err = io.ErrUnexpectedEOF
 			}
-			return
+			return n, err
 		}
 		off -= fi.Length
 	}
@@ -191,7 +199,7 @@ func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 		if int64(n1) > fi.Length-off {
 			n1 = int(fi.Length - off)
 		}
-		name := fst.fts.fileInfoName(fi)
+		name := fst.fileInfoName(fi)
 		os.MkdirAll(filepath.Dir(name), 0777)
 		var f *os.File
 		f, err = os.OpenFile(name, os.O_WRONLY|os.O_CREATE, 0666)

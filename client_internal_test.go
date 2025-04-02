@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/filecache"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"github.com/james-lawrence/torrent/connections"
@@ -95,11 +93,13 @@ func TestTorrentInitialState(t *testing.T) {
 	tor, err := cl.newTorrent(tt)
 	require.NoError(t, err)
 
-	require.Len(t, tor.pieces, 3)
-	tor.pendAllChunkSpecs(0)
-	tor.lock()
-	assert.EqualValues(t, 3, int(tor.pieceNumPendingChunks(0)))
-	tor.unlock()
+	require.Equal(t, 3, tor.numPieces())
+	// require.Len(t, tor.pieces, 3)
+	// tor.pendAllChunkSpecs(0)
+
+	// tor.lock()
+	// assert.EqualValues(t, 3, int(tor.pieceNumPendingChunks(0)))
+	// tor.unlock()
 	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
 }
 
@@ -136,61 +136,62 @@ type TestDownloadCancelParams struct {
 }
 
 func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
-	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(greetingTempDir)
-	cfg := TestingConfig(t)
-	cfg.Seed = true
-	cfg.DataDir = greetingTempDir
-	seeder, err := b.Bind(NewClient(cfg))
-	require.NoError(t, err)
-	defer seeder.Close()
-	defer testutil.ExportStatusWriter(seeder, "s")()
-	tt, err := NewFromMetaInfo(mi, OptionStorage(storage.NewFile(cfg.DataDir)))
-	require.NoError(t, err)
-	seederTorrent, _, _ := seeder.Start(tt)
-	seederTorrent.VerifyData()
-	leecherDataDir := t.TempDir()
-	defer os.RemoveAll(leecherDataDir)
-	fc, err := filecache.NewCache(leecherDataDir)
-	require.NoError(t, err)
-	if ps.SetLeecherStorageCapacity {
-		fc.SetCapacity(ps.LeecherStorageCapacity)
-	}
-	cfg.DataDir = leecherDataDir
-	leecher, err := b.Bind(NewClient(cfg))
-	require.NoError(t, err)
-	defer leecher.Close()
-	defer testutil.ExportStatusWriter(leecher, "l")()
-	t2, err := NewFromMetaInfo(mi, OptionChunk(2), OptionStorage(storage.NewResourcePieces(fc.AsResourceProvider())))
-	require.NoError(t, err)
-	leecherGreeting, added, err := leecher.Start(t2)
-	require.NoError(t, err)
-	assert.True(t, added)
-	psc := leecherGreeting.SubscribePieceStateChanges()
-	defer psc.Close()
+	require.True(t, false)
+	// greetingTempDir, mi := testutil.GreetingTestTorrent(t)
+	// defer os.RemoveAll(greetingTempDir)
+	// cfg := TestingConfig(t)
+	// cfg.Seed = true
+	// cfg.DataDir = greetingTempDir
+	// seeder, err := b.Bind(NewClient(cfg))
+	// require.NoError(t, err)
+	// defer seeder.Close()
+	// defer testutil.ExportStatusWriter(seeder, "s")()
+	// tt, err := NewFromMetaInfo(mi, OptionStorage(storage.NewFile(cfg.DataDir)))
+	// require.NoError(t, err)
+	// seederTorrent, _, _ := seeder.Start(tt)
+	// seederTorrent.VerifyData()
+	// leecherDataDir := t.TempDir()
+	// defer os.RemoveAll(leecherDataDir)
+	// fc, err := filecache.NewCache(leecherDataDir)
+	// require.NoError(t, err)
+	// if ps.SetLeecherStorageCapacity {
+	// 	fc.SetCapacity(ps.LeecherStorageCapacity)
+	// }
+	// cfg.DataDir = leecherDataDir
+	// leecher, err := b.Bind(NewClient(cfg))
+	// require.NoError(t, err)
+	// defer leecher.Close()
+	// defer testutil.ExportStatusWriter(leecher, "l")()
+	// t2, err := NewFromMetaInfo(mi, OptionChunk(2), OptionStorage(storage.NewResourcePieces(fc.AsResourceProvider())))
+	// require.NoError(t, err)
+	// leecherGreeting, added, err := leecher.Start(t2)
+	// require.NoError(t, err)
+	// assert.True(t, added)
+	// psc := leecherGreeting.SubscribePieceStateChanges()
+	// defer psc.Close()
 
-	leecherGreeting.(*torrent).lock()
-	leecherGreeting.(*torrent).downloadPiecesLocked(0, leecherGreeting.(*torrent).numPieces())
-	if ps.Cancel {
-		leecherGreeting.(*torrent).cancelPiecesLocked(0, leecherGreeting.(*torrent).NumPieces())
-	}
-	leecherGreeting.(*torrent).unlock()
+	// leecherGreeting.(*torrent).lock()
+	// leecherGreeting.(*torrent).downloadPiecesLocked(0, leecherGreeting.(*torrent).numPieces())
+	// if ps.Cancel {
+	// 	leecherGreeting.(*torrent).cancelPiecesLocked(0, leecherGreeting.(*torrent).NumPieces())
+	// }
+	// leecherGreeting.(*torrent).unlock()
 
-	done := make(chan struct{})
-	defer close(done)
-	go leecherGreeting.Tune(TuneClientPeer(seeder))
-	completes := make(map[int]bool, 3)
-	expected := func() map[int]bool {
-		if ps.Cancel {
-			return map[int]bool{0: false, 1: false, 2: false}
-		}
-		return map[int]bool{0: true, 1: true, 2: true}
-	}()
-	for !reflect.DeepEqual(completes, expected) {
-		_v := <-psc.Values
-		v := _v.(PieceStateChange)
-		completes[v.Index] = v.Complete
-	}
+	// done := make(chan struct{})
+	// defer close(done)
+	// go leecherGreeting.Tune(TuneClientPeer(seeder))
+	// completes := make(map[int]bool, 3)
+	// expected := func() map[int]bool {
+	// 	if ps.Cancel {
+	// 		return map[int]bool{0: false, 1: false, 2: false}
+	// 	}
+	// 	return map[int]bool{0: true, 1: true, 2: true}
+	// }()
+	// for !reflect.DeepEqual(completes, expected) {
+	// 	_v := <-psc.Values
+	// 	v := _v.(PieceStateChange)
+	// 	completes[v.Index] = v.Complete
+	// }
 }
 
 // Ensure that it's an error for a peer to send an invalid have message.

@@ -66,10 +66,6 @@ type torrentStorage struct {
 
 func (me *torrentStorage) Close() error { return nil }
 
-func (me *torrentStorage) Piece(mp metainfo.Piece) storage.PieceImpl {
-	return me
-}
-
 func (me *torrentStorage) Completion() storage.Completion {
 	return storage.Completion{}
 }

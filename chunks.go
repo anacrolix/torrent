@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -29,10 +30,6 @@ func (t empty) Error() string {
 	return fmt.Sprintf("empty queue: outstanding requests(%d) - missing requests(%d)", t.Outstanding, t.Missing)
 }
 
-type bmap interface {
-	ContainsInt(int) bool
-}
-
 func chunksPerPiece(plength, clength int64) int64 {
 	return int64(math.Ceil(float64(plength) / float64(clength)))
 }
@@ -57,10 +54,7 @@ func chunkOffset(pidx, cidx, plength, clength int64) int64 {
 func chunkLength(total, cidx, plength, clength int64, maximum bool) int64 {
 	chunksper := chunksPerPiece(plength, clength)
 
-	maxlength := clength
-	if clength > plength {
-		maxlength = plength
-	}
+	maxlength := min(clength, plength)
 
 	if maximum {
 		max := total % plength
@@ -82,8 +76,9 @@ func pindex(chunk, plength, clength int64) int64 {
 	return chunk / chunksPerPiece(plength, clength)
 }
 
-func newChunks(clength int, m *metainfo.Info) *chunks {
+func newChunks(clength int, m *metainfo.Info, cond *sync.Cond) *chunks {
 	p := &chunks{
+		cond:        cond,
 		mu:          &sync.RWMutex{},
 		meta:        m,
 		cmaximum:    numChunks(m.TotalLength(), m.PieceLength, int64(clength)),
@@ -104,6 +99,7 @@ func newChunks(clength int, m *metainfo.Info) *chunks {
 // and automatically recovers chunks that were requested but not received.
 // the goal here is to have a single source of truth for what chunks are outstanding.
 type chunks struct {
+	cond *sync.Cond
 	meta *metainfo.Info
 
 	// chunk length
@@ -193,6 +189,15 @@ func (t *chunks) chunks(pid int) (cidxs []int) {
 
 	return cidxs
 }
+
+// TODO replace chunks with chunks2
+// func (t *chunks) chunks2(pid int) (min, max int) {
+// 	cpp := chunksPerPiece(t.meta.PieceLength, t.clength)
+// 	cid0 := (pid * int(cpp))
+// 	cidn := cid0 + int(t.cmaximum)
+
+// 	return cid0, cidn
+// }
 
 func (t *chunks) lastChunk(pid int) int {
 	cpp := chunksPerPiece(t.meta.PieceLength, t.clength)
@@ -295,7 +300,13 @@ func (t *chunks) ChunksComplete(pid int) bool {
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+
 	return t.completed.ContainsInt(pid)
+}
+
+func (t *chunks) ChunksCompleteForOffset(offset int64) bool {
+	pid := t.meta.OffsetToIndex(offset)
+	return t.ChunksComplete(int(pid))
 }
 
 // Chunks returns the chunk requests for the given piece.
@@ -620,6 +631,17 @@ func (t *chunks) Validate(pid int) {
 	}
 }
 
+func (t *chunks) Hashed(pid int, cause error) {
+	// Don't score the first time a piece is hashed, it could be an
+	// initial check.
+	if cause == nil {
+		t.Complete(pid)
+		return
+	}
+
+	t.ChunksFailed(pid)
+}
+
 func (t *chunks) Complete(pid int) (changed bool) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
@@ -633,9 +655,11 @@ func (t *chunks) Complete(pid int) (changed bool) {
 		tmp = t.unverified.CheckedRemove(uint32(cidx)) || tmp
 		changed = changed || tmp
 
-		// log.Output(2, fmt.Sprintf("c(%p) marked completed: (%020d - %d) r(%d,%d,%d)\n", t, r.Digest, cidx, r.Index, r.Begin, r.Length))
+		log.Output(2, fmt.Sprintf("c(%p) marked completed: (%020d - %d) r(%d,%d,%d)\n", t, r.Digest, cidx, r.Index, r.Begin, r.Length))
 	}
+
 	t.completed.AddInt(pid)
+	t.cond.Broadcast() // wake anything waiting on completions
 	return changed
 }
 

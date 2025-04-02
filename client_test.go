@@ -26,6 +26,7 @@ import (
 	"github.com/james-lawrence/torrent/connections"
 
 	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/internal/cryptox"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/testutil"
 	"github.com/james-lawrence/torrent/internal/testx"
@@ -675,7 +676,7 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 	}
 }
 
-func writeTorrentData(ts storage.Torrent, info metainfo.Info, b []byte) {
+func writeTorrentData(ts storage.TorrentImpl, info metainfo.Info, b []byte) {
 	for i := range iter.N(info.NumPieces()) {
 		p := info.Piece(i)
 		_ = errorsx.Must(ts.WriteAt(b[p.Offset():p.Offset()+p.Length()], 0))
@@ -916,19 +917,33 @@ func TestRandomSizedTorrents(t *testing.T) {
 	testTransferRandomData(t, n, seeder, leecher)
 }
 
+func Test128KBTorrent(t *testing.T) {
+	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(TestingSeedConfig(t, testutil.Autodir(t))))
+	require.NoError(t, err)
+	defer seeder.Close()
+
+	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(TestingLeechConfig(t, testutil.Autodir(t))))
+	require.NoError(t, err)
+	defer leecher.Close()
+
+	testTransferRandomData(t, 128*bytesx.KiB, seeder, leecher)
+}
+
 func testTransferRandomData(t *testing.T, n int64, from, to *torrent.Client) {
 	ctx, done := testx.Context(t)
 	defer done()
 
-	data, err := testutil.RandomDataTorrent(from.Config().DataDir, n)
+	data, err := testutil.IOTorrent(from.Config().DataDir, cryptox.NewChaCha8(""), n)
 	require.NoError(t, err)
 	defer os.Remove(data.Name())
 
 	metadata, err := torrent.NewFromFile(data.Name(), torrent.OptionStorage(storage.NewFile(from.Config().DataDir)))
 	require.NoError(t, err)
+
 	dl, added, err := from.Start(metadata)
 	require.NoError(t, err)
 	require.True(t, added)
+	require.NoError(t, torrent.Verify(ctx, dl))
 
 	digestseed := md5.New()
 	_, err = torrent.DownloadInto(ctx, digestseed, dl)

@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -59,7 +60,7 @@ func smallpopulate(p *chunks) *chunks {
 func BenchmarkChunksPop(b *testing.B) {
 	info, err := fromFile("testdata/bootstrap.dat.torrent")
 	require.NoError(b, err)
-	p := quickpopulate(newChunks(defaultChunk, &info))
+	p := quickpopulate(newChunks(defaultChunk, &info, sync.NewCond(&sync.Mutex{})))
 
 	n := p.Missing()
 	available := filledbmap(n)
@@ -190,7 +191,7 @@ func TestChunkLength(t *testing.T) {
 }
 
 func TestChunkFill(t *testing.T) {
-	c := newChunks(1<<8, tinyTorrentInfo())
+	c := newChunks(1<<8, tinyTorrentInfo(), sync.NewCond(&sync.Mutex{}))
 	filled := c.fill(roaring.NewBitmap())
 	require.Equal(t, uint64(c.cmaximum), filled.GetCardinality())
 	require.Equal(t, uint64(c.cmaximum)-1, uint64(filled.Maximum()))
@@ -208,7 +209,7 @@ func TestChunksRequests(t *testing.T) {
 		assert.Equal(t, expected, r)
 	}
 
-	c := quickpopulate(newChunks(2, &info))
+	c := quickpopulate(newChunks(2, &info, sync.NewCond(&sync.Mutex{})))
 	r, err := c.request(0, 0)
 	test(request{Index: 0, chunkSpec: chunkSpec{Begin: 0, Length: 2}}, r, err)
 	r, err = c.request(1, 0)
@@ -226,7 +227,7 @@ func TestChunksRequests(t *testing.T) {
 	r, err = c.request(7, 0)
 	test(request{Index: 2, chunkSpec: chunkSpec{Begin: 2, Length: 1}}, r, err)
 
-	c = quickpopulate(newChunks(3, &info))
+	c = quickpopulate(newChunks(3, &info, sync.NewCond(&sync.Mutex{})))
 	r, err = c.request(0, 0)
 	test(request{Index: 0, chunkSpec: chunkSpec{Begin: 0, Length: 3}}, r, err)
 	r, err = c.request(1, 0)
@@ -245,28 +246,28 @@ func TestChunksVariousCLength(t *testing.T) {
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
 
-	c := quickpopulate(newChunks(1, &info))
+	c := quickpopulate(newChunks(1, &info, sync.NewCond(&sync.Mutex{})))
 	require.Equal(t, 13, c.Missing())
 
-	c = quickpopulate(newChunks(2, &info))
+	c = quickpopulate(newChunks(2, &info, sync.NewCond(&sync.Mutex{})))
 	assert.Equal(t, []int{0, 1, 2}, c.chunks(0))
 	assert.Equal(t, []int{3, 4, 5}, c.chunks(1))
 	assert.Equal(t, []int{6, 7}, c.chunks(2))
 	require.Equal(t, 8, c.Missing())
 
-	c = quickpopulate(newChunks(3, &info))
+	c = quickpopulate(newChunks(3, &info, sync.NewCond(&sync.Mutex{})))
 	assert.Equal(t, []int{0, 1}, c.chunks(0))
 	assert.Equal(t, []int{2, 3}, c.chunks(1))
 	assert.Equal(t, []int{4}, c.chunks(2))
 	require.Equal(t, 5, c.Missing())
 
-	c = quickpopulate(newChunks(4, &info))
+	c = quickpopulate(newChunks(4, &info, sync.NewCond(&sync.Mutex{})))
 	assert.Equal(t, []int{0, 1}, c.chunks(0))
 	assert.Equal(t, []int{2, 3}, c.chunks(1))
 	assert.Equal(t, []int{4}, c.chunks(2))
 	require.Equal(t, 5, c.Missing())
 
-	c = quickpopulate(newChunks(5, &info))
+	c = quickpopulate(newChunks(5, &info, sync.NewCond(&sync.Mutex{})))
 	assert.Equal(t, []int{0}, c.chunks(0))
 	assert.Equal(t, []int{1}, c.chunks(1))
 	assert.Equal(t, []int{2}, c.chunks(2))
@@ -279,7 +280,7 @@ func TestChunksFailed(t *testing.T) {
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
 
-	c := quickpopulate(newChunks(1, &info))
+	c := quickpopulate(newChunks(1, &info, sync.NewCond(&sync.Mutex{})))
 	touched := roaring.NewBitmap()
 
 	require.Equal(t, 13, c.Missing())
@@ -300,7 +301,7 @@ func TestChunksFailed(t *testing.T) {
 func TestChunksPop(t *testing.T) {
 	info, err := fromFile("testdata/bootstrap.dat.torrent")
 	require.NoError(t, err)
-	p := quickpopulate(newChunks(int(info.PieceLength), &info))
+	p := quickpopulate(newChunks(int(info.PieceLength), &info, sync.NewCond(&sync.Mutex{})))
 
 	reqs, err := p.Pop(1, p.missing.Clone())
 	require.NoError(t, err)
@@ -320,7 +321,7 @@ func TestChunksPop(t *testing.T) {
 func TestChunksGraceWindow(t *testing.T) {
 	info, err := fromFile("testdata/bootstrap.dat.torrent")
 	require.NoError(t, err)
-	p := smallpopulate(newChunks(defaultChunk, &info))
+	p := smallpopulate(newChunks(defaultChunk, &info, sync.NewCond(&sync.Mutex{})))
 
 	// adjust grace period to be negative to force immediate
 	// recovering of outstanding requests.
@@ -336,7 +337,7 @@ func TestChunksGraceWindow(t *testing.T) {
 }
 
 func TestChunksComplete(t *testing.T) {
-	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
+	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo(), sync.NewCond(&sync.Mutex{})))
 
 	// we start out with 64 chunks missing.
 	require.Equal(t, 64, p.Missing())
@@ -362,7 +363,7 @@ func TestChunksComplete(t *testing.T) {
 }
 
 func TestChunksAvailable(t *testing.T) {
-	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
+	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo(), sync.NewCond(&sync.Mutex{})))
 	require.Equal(t, 64, p.Missing())
 	for _, r := range p.chunksRequests(0) {
 		p.Verify(r)
@@ -371,14 +372,14 @@ func TestChunksAvailable(t *testing.T) {
 }
 
 func TestChunksPend(t *testing.T) {
-	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
+	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo(), sync.NewCond(&sync.Mutex{})))
 	require.Equal(t, 64, p.Missing())
 	p.missing.Remove(0)
 	require.True(t, p.ChunksPend(0))
 }
 
 func TestChunksRelease(t *testing.T) {
-	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
+	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo(), sync.NewCond(&sync.Mutex{})))
 	require.Equal(t, 64, p.Missing())
 	require.False(t, p.ChunksRelease(0))
 }

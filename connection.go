@@ -25,8 +25,8 @@ import (
 
 	"github.com/james-lawrence/torrent/bencode"
 	pp "github.com/james-lawrence/torrent/btprotocol"
+	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/x/bitmapx"
-	"github.com/james-lawrence/torrent/internal/x/bytesx"
 	"github.com/james-lawrence/torrent/mse"
 )
 

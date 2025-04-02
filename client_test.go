@@ -26,12 +26,12 @@ import (
 	"github.com/james-lawrence/torrent/connections"
 
 	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/cryptox"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/testutil"
 	"github.com/james-lawrence/torrent/internal/testx"
 	"github.com/james-lawrence/torrent/internal/utpx"
-	"github.com/james-lawrence/torrent/internal/x/bytesx"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
 )

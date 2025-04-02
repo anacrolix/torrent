@@ -8,8 +8,8 @@ import (
 	"github.com/james-lawrence/torrent/dht/bep44"
 	"github.com/james-lawrence/torrent/dht/krpc"
 	peer_store "github.com/james-lawrence/torrent/dht/peer-store"
+	"github.com/james-lawrence/torrent/internal/langx"
 	"github.com/james-lawrence/torrent/metainfo"
-	"github.com/james-lawrence/torrent/x/langx"
 )
 
 // Standard Muxer configuration used by the server.

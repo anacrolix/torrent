@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/cryptox"
-	"github.com/james-lawrence/torrent/internal/x/bytesx"
 )
 
 func TestMarshalInfo(t *testing.T) {

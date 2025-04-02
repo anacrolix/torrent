@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/james-lawrence/torrent"
+	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/testutil"
-	"github.com/james-lawrence/torrent/internal/x/bytesx"
 	"github.com/stretchr/testify/require"
 )
 

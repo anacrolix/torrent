@@ -23,9 +23,9 @@ import (
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/errorsx"
-	"github.com/james-lawrence/torrent/internal/x/bytesx"
-	"github.com/james-lawrence/torrent/x/langx"
+	"github.com/james-lawrence/torrent/internal/langx"
 
 	"github.com/james-lawrence/torrent/bencode"
 	pp "github.com/james-lawrence/torrent/btprotocol"

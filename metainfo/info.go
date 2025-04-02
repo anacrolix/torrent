@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 
 	"github.com/anacrolix/missinggo/slices"
-	"github.com/james-lawrence/torrent/internal/x/bytesx"
-	"github.com/james-lawrence/torrent/x/langx"
+	"github.com/james-lawrence/torrent/internal/bytesx"
+	"github.com/james-lawrence/torrent/internal/langx"
 )
 
 type Option func(*Info)

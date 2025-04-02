@@ -26,7 +26,7 @@ import (
 
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/errorsx"
-	"github.com/james-lawrence/torrent/internal/x/stringsx"
+	"github.com/james-lawrence/torrent/internal/stringsx"
 	"github.com/james-lawrence/torrent/metainfo"
 )
 

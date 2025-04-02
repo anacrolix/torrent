@@ -32,12 +32,8 @@ var (
 
 	peersAddedBySource = expvar.NewMap("peersAddedBySource")
 
-	pieceHashedCorrect    = expvar.NewInt("pieceHashedCorrect")
-	pieceHashedNotCorrect = expvar.NewInt("pieceHashedNotCorrect")
-
 	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
-	// Count of connections to peer with same client ID.
-	connsToSelf        = expvar.NewInt("connsToSelf")
+
 	receivedKeepalives = expvar.NewInt("receivedKeepalives")
 	postedKeepalives   = expvar.NewInt("postedKeepalives")
 	// Requests received for pieces we don't have.
@@ -50,6 +46,4 @@ var (
 	pieceInclinationsReused = expvar.NewInt("pieceInclinationsReused")
 	pieceInclinationsNew    = expvar.NewInt("pieceInclinationsNew")
 	pieceInclinationsPut    = expvar.NewInt("pieceInclinationsPut")
-
-	concurrentChunkWrites = expvar.NewInt("torrentConcurrentChunkWrites")
 )

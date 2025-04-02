@@ -1,6 +1,30 @@
 package errorsx
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"log"
+)
+
+func Zero[T any](v T, err error) T {
+	if err == nil {
+		return v
+	}
+
+	if cause := log.Output(2, fmt.Sprintln(err)); cause != nil {
+		panic(cause)
+	}
+
+	return v
+}
+
+func Must[T any](v T, err error) T {
+	if err == nil {
+		return v
+	}
+
+	panic(err)
+}
 
 // Compact returns the first non nil error encountered
 func Compact(errors ...error) error {

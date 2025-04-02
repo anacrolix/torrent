@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
-	"github.com/james-lawrence/torrent/x/bytesx"
 	"github.com/pkg/errors"
 )
 

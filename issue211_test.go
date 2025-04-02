@@ -2,19 +2,22 @@ package torrent_test
 
 import (
 	"io"
-	"io/ioutil"
 	"testing"
+	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
 	"github.com/james-lawrence/torrent"
 	"github.com/james-lawrence/torrent/internal/testutil"
+	"github.com/james-lawrence/torrent/internal/testx"
 	"github.com/james-lawrence/torrent/storage"
 )
 
 func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
+	ctx, done := testx.Context(t)
+	defer done()
+
 	cfg := torrent.TestingConfig(t)
 	// Ensure the data is present when the torrent is added, and not obtained
 	// over the network as the test runs.
@@ -28,9 +31,12 @@ func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 	require.NoError(t, err)
 	tt, new, err := cl.Start(ts)
 	require.NoError(t, err)
-	assert.True(t, new)
+	require.True(t, new)
 
-	r := tt.NewReader()
-	go cl.Stop(ts)
-	io.Copy(ioutil.Discard, r)
+	go func() {
+		time.Sleep(5 * time.Millisecond)
+		cl.Stop(ts)
+	}()
+	_, err = torrent.DownloadInto(ctx, io.Discard, tt)
+	require.NoError(t, err)
 }

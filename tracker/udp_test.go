@@ -139,6 +139,7 @@ func TestUDPTracker(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
 	}
+
 	req := AnnounceRequest{
 		NumWant: -1,
 	}
@@ -157,12 +158,12 @@ func TestUDPTracker(t *testing.T) {
 }
 
 func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
-	t.Parallel()
 	if testing.Short() {
 		// This test involves contacting third party servers that may have
 		// unpredictable results.
 		t.SkipNow()
 	}
+
 	req := AnnounceRequest{
 		Event: Stopped,
 	}

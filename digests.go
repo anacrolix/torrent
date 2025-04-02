@@ -6,31 +6,53 @@ import (
 	"fmt"
 	"io"
 	"runtime"
-	"sync"
 	"sync/atomic"
 
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/pkg/errors"
 )
 
-func newDigests(retrieve func(int) *Piece, complete func(int, error)) digests {
+func newDigestsFromTorrent(t *torrent) digests {
+	return newDigests(
+		t.storage,
+		t.piece,
+		func(idx int, cause error) {
+			if t.chunks == nil {
+				panic("gorp")
+			}
+
+			// log.Printf("hashed %p %d / %d - %v", t.chunks, idx+1, t.numPieces(), cause)
+			t.chunks.Hashed(idx, cause)
+
+			t.event.Broadcast()
+			t.cln.event.Broadcast() // cause the client to detect completed torrents.
+		},
+	)
+}
+
+func newDigests(iora io.ReaderAt, retrieve func(int) *metainfo.Piece, complete func(int, error)) digests {
+	if iora == nil {
+		panic("digests require a storage implementation")
+	}
+
+	// log.Printf("new digest %T\n", iora)
 	return digests{
+		ReaderAt: iora,
 		retrieve: retrieve,
 		complete: complete,
 		pending:  newBitQueue(),
-		c:        sync.NewCond(&sync.Mutex{}),
 	}
 }
 
 // digests is responsible correctness of received data.
 type digests struct {
-	retrieve func(int) *Piece
+	ReaderAt io.ReaderAt
+	retrieve func(int) *metainfo.Piece
 	complete func(int, error)
 	// marks whether digest is actively processing.
 	reaping int64
 	// cache of the pieces that need to be verified.
-	pending bitQueue
-	c       *sync.Cond
+	pending *bitQueue
 }
 
 // Enqueue a piece to check its completed digest.
@@ -58,7 +80,7 @@ func (t *digests) check(idx int) {
 	var (
 		err    error
 		digest metainfo.Hash
-		p      *Piece
+		p      *metainfo.Piece
 	)
 
 	if p = t.retrieve(idx); p == nil {
@@ -71,29 +93,28 @@ func (t *digests) check(idx int) {
 		return
 	}
 
-	if digest != *p.hash {
-		t.complete(idx, fmt.Errorf("piece %d digest mismatch %s != %s", idx, hex.EncodeToString(digest[:]), hex.EncodeToString(p.hash[:])))
+	if digest != p.Hash() {
+		t.complete(idx, fmt.Errorf("piece %d digest mismatch %s != %s", idx, hex.EncodeToString(digest[:]), p.Hash().HexString()))
 		return
 	}
 
 	t.complete(idx, nil)
 }
 
-func (t *digests) compute(p *Piece) (ret metainfo.Hash, err error) {
+func (t *digests) compute(p *metainfo.Piece) (ret metainfo.Hash, err error) {
 	c := sha1.New()
-	p.waitNoPendingWrites()
+	plen := p.Length()
 
-	pl := int64(p.length())
-
-	n, err := io.Copy(c, io.NewSectionReader(p.Storage(), 0, pl))
+	n, err := io.Copy(c, io.NewSectionReader(t.ReaderAt, p.Offset(), plen))
 	if err != nil {
-		return ret, errors.Wrapf(err, "piece %d digest failed:", p.index)
+		return ret, errors.Wrapf(err, "piece %d digest failed", p.Offset())
 	}
 
-	if n != int64(pl) {
-		return ret, fmt.Errorf("piece digest failed short copy %d: %d != %d", p.index, n, pl)
+	if n != plen {
+		return ret, fmt.Errorf("piece digest failed short copy %d: %d != %d", p.Offset(), n, plen)
 	}
 
 	copy(ret[:], c.Sum(nil))
+
 	return ret, nil
 }

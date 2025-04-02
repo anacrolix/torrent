@@ -25,8 +25,14 @@ func Example_download() {
 		log.Fatalln(err)
 		return
 	}
+	dl, _, err := c.Start(metadata)
+	if err != nil {
+		log.Fatalln(err)
+		return
+	}
 
-	if _, err = c.DownloadInto(context.Background(), metadata, io.Discard); err != nil {
+	if _, err = torrent.DownloadInto(context.Background(), io.Discard, dl); err != nil {
+		// if _, err = c.DownloadInto(context.Background(), metadata, io.Discard); err != nil {
 		log.Fatalln(err)
 		return
 	}
@@ -56,7 +62,13 @@ func Example_customNetworkProtocols() {
 		return
 	}
 
-	if _, err = c.DownloadInto(context.Background(), metadata, io.Discard); err != nil {
+	dl, _, err := c.Start(metadata)
+	if err != nil {
+		log.Fatalln(err)
+		return
+	}
+
+	if _, err = torrent.DownloadInto(context.Background(), io.Discard, dl); err != nil {
 		log.Fatalln(err)
 		return
 	}

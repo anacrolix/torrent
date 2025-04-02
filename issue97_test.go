@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -12,14 +11,12 @@ import (
 )
 
 func TestHashPieceAfterStorageClosed(t *testing.T) {
-	td, err := ioutil.TempDir("", "")
+	td, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
-	tt := newTorrent(&Client{config: &ClientConfig{}}, Metadata{Storage: storage.NewFile(td)})
-	tt.digests = newDigests(
-		func(idx int) *Piece { return tt.piece(idx) },
-		func(idx int, cause error) {},
-	)
+	store := storage.NewFile(td)
+	tt := newTorrent(&Client{config: &ClientConfig{}}, Metadata{Storage: store})
+	tt.digests = newDigestsFromTorrent(tt)
 
 	mi := testutil.GreetingMetaInfo()
 	info, err := mi.UnmarshalInfo()

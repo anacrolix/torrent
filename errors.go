@@ -1,15 +1,7 @@
 package torrent
 
-import (
-	"fmt"
-	"net"
-)
+import "github.com/pkg/errors"
 
-// banned represents a banned peer.
-type banned struct {
-	IP net.IP
-}
-
-func (t banned) Error() string {
-	return fmt.Sprintf("banned peer: %v", t.IP)
+func ErrTorrentClosed() error {
+	return errors.New("torrent closed")
 }

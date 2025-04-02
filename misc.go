@@ -35,10 +35,6 @@ func (r request) rDigest(i, b, l uint32) uint64 {
 	return digest.Sum64()
 }
 
-func (r request) digest() uint64 {
-	return r.rDigest(uint32(r.Index), uint32(r.Begin), uint32(r.Length))
-}
-
 func (r request) ToMsg(mt pp.MessageType) pp.Message {
 	return pp.Message{
 		Type:   mt,
@@ -110,14 +106,6 @@ func torrentOffsetRequest(torrentLength, pieceSize, chunkSize, offset int64) (
 	return
 }
 
-func torrentRequestOffset(torrentLength, pieceSize int64, r request) (off int64) {
-	off = int64(r.Index)*pieceSize + int64(r.Begin)
-	if off < 0 || off >= torrentLength {
-		panic("invalid request")
-	}
-	return
-}
-
 func validateInfo(info *metainfo.Info) error {
 	if len(info.Pieces)%20 != 0 {
 		return errors.New("pieces has invalid length")
@@ -140,10 +128,6 @@ func chunkIndexSpec(index pp.Integer, pieceLength, chunkSize pp.Integer) chunkSp
 		ret.Length = pieceLength - ret.Begin
 	}
 	return ret
-}
-
-func connLessTrusted(l, r *connection) bool {
-	return l.trust().Less(r.trust())
 }
 
 func connIsIpv6(nc interface {

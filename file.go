@@ -15,7 +15,6 @@ type File struct {
 	offset int64
 	length int64
 	fi     metainfo.FileInfo
-	prio   piecePriority
 }
 
 // Torrent returns the associated torrent
@@ -90,40 +89,6 @@ func (f *File) DisplayPath() string {
 
 }
 
-// FilePieceState the download status of a piece that comprises part of a File.
-type FilePieceState struct {
-	Bytes int64 // Bytes within the piece that are part of this File.
-	PieceState
-}
-
-// State of pieces in this file.
-func (f *File) State() (ret []FilePieceState) {
-	f.t.rLock()
-	defer f.t.rUnlock()
-	pieceSize := int64(f.t.usualPieceSize())
-	off := f.offset % pieceSize
-	remaining := f.length
-	for i := pieceIndex(f.offset / pieceSize); ; i++ {
-		if remaining == 0 {
-			break
-		}
-		len1 := pieceSize - off
-		if len1 > remaining {
-			len1 = remaining
-		}
-		ps := f.t.pieceState(i)
-		ret = append(ret, FilePieceState{len1, ps})
-		off = 0
-		remaining -= len1
-	}
-	return
-}
-
-// Download requests that all pieces containing data in the file be downloaded.
-func (f *File) Download() {
-	f.SetPriority(PiecePriorityNormal)
-}
-
 func byteRegionExclusivePieces(off, size, pieceSize int64) (begin, end int) {
 	begin = int((off + pieceSize - 1) / pieceSize)
 	end = int((off + size) / pieceSize)
@@ -133,32 +98,12 @@ func byteRegionExclusivePieces(off, size, pieceSize int64) (begin, end int) {
 // NewReader returns a reader for the file.
 func (f *File) NewReader() Reader {
 	tr := reader{
-		mu:        f.t.locker(),
-		t:         f.t,
-		readahead: 5 * 1024 * 1024,
-		offset:    f.Offset(),
-		length:    f.Length(),
+		ReaderAt: f.t.storage,
+		offset:   f.Offset(),
+		length:   f.Length(),
 	}
-	f.t.addReader(&tr)
+
 	return &tr
-}
-
-// SetPriority the minimum priority for pieces in the File.
-func (f *File) SetPriority(prio piecePriority) {
-	f.t.lock()
-	defer f.t.unlock()
-	if prio == f.prio {
-		return
-	}
-	f.prio = prio
-	f.t.updatePiecePriorities(f.firstPieceIndex(), f.endPieceIndex())
-}
-
-// Priority per File.SetPriority.
-func (f *File) Priority() piecePriority {
-	f.t.lock()
-	defer f.t.unlock()
-	return f.prio
 }
 
 // Returns the index of the first piece containing data for the file.

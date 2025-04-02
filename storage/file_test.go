@@ -3,7 +3,6 @@ package storage
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,12 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/james-lawrence/torrent/internal/x/bytesx"
+	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/metainfo"
 )
 
 func TestShortFile(t *testing.T) {
-	td, err := ioutil.TempDir("", "")
+	td, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
 	s := NewFile(td)
@@ -34,7 +33,7 @@ func TestShortFile(t *testing.T) {
 	f.Close()
 	var buf bytes.Buffer
 	p := info.Piece(0)
-	n, err := io.Copy(&buf, io.NewSectionReader(ts.Piece(p), 0, p.Length()))
+	n, err := io.Copy(&buf, io.NewSectionReader(ts, p.Offset(), p.Length()))
 	assert.EqualValues(t, 1, n)
 	assert.Equal(t, io.ErrUnexpectedEOF, err)
 }

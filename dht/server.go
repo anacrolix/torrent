@@ -29,7 +29,7 @@ import (
 	"github.com/james-lawrence/torrent/dht/transactions"
 	"github.com/james-lawrence/torrent/dht/traversal"
 	"github.com/james-lawrence/torrent/dht/types"
-	"github.com/james-lawrence/torrent/x/langx"
+	"github.com/james-lawrence/torrent/internal/langx"
 )
 
 // A Server defines parameters for a DHT node server that is able to send

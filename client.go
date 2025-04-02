@@ -26,7 +26,7 @@ import (
 
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/errorsx"
-	"github.com/james-lawrence/torrent/internal/x/stringsx"
+	"github.com/james-lawrence/torrent/internal/stringsx"
 	"github.com/james-lawrence/torrent/metainfo"
 )
 
@@ -124,59 +124,6 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 	return dlt, true, nil
 }
 
-func (cl *Client) download(ctx context.Context, m Metadata, options ...Tuner) (t *torrent, err error) {
-	if t, _, err = cl.start(m); err != nil {
-		return t, err
-	}
-
-	t.Tune(options...)
-
-	select {
-	case <-t.GotInfo():
-	case <-ctx.Done():
-		return t, ctx.Err()
-	}
-
-	return t, nil
-}
-
-// Download the specified torrent.
-// Download differs from Start in that it blocks until the metadata is downloaded and returns a
-// valid reader for use.
-func (cl *Client) Download(ctx context.Context, m Metadata, options ...Tuner) (r Reader, err error) {
-	var (
-		dlt *torrent
-	)
-
-	if dlt, err = cl.download(ctx, m, options...); err != nil {
-		return r, err
-	}
-
-	return dlt.NewReader(), nil
-}
-
-// DownloadInto downloads the torrent into the provided destination. see Download for more information.
-// TODO: context timeout only applies to fetching metadata, not the entire download.
-func (cl *Client) DownloadInto(ctx context.Context, m Metadata, dst io.Writer, options ...Tuner) (n int64, err error) {
-	var (
-		dlt *torrent
-	)
-
-	if dlt, err = cl.download(ctx, m, options...); err != nil {
-		return 0, err
-	}
-
-	// copy into the destination
-	// TODO: wrap the destination in a context writer to timeout the copy
-	if n, err := io.Copy(dst, dlt.NewReader()); err != nil {
-		return n, err
-	} else if n != dlt.Length() {
-		return n, errors.Errorf("download failed, missing data %d != %d", n, dlt.Length())
-	}
-
-	return n, nil
-}
-
 // Stop the specified torrent, this halts all network activity around the torrent
 // for this client.
 func (cl *Client) Stop(t Metadata) (err error) {
@@ -188,7 +135,7 @@ func (cl *Client) merge(old *torrent, updated Metadata) (err error) {
 		old.SetDisplayName(updated.DisplayName)
 	}
 
-	if updated.ChunkSize != 0 {
+	if updated.ChunkSize != int(old.chunkSize) && updated.ChunkSize != 0 {
 		old.setChunkSize(pp.Integer(updated.ChunkSize))
 	}
 
@@ -845,20 +792,6 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent, _ error) {
 	}
 
 	t = newTorrent(cl, src)
-	t.digests = newDigests(
-		func(idx int) *Piece { return t.piece(idx) },
-		func(idx int, cause error) {
-			if err := t.pieceHashed(idx, cause); err != nil {
-				cl.config.debug().Println(err)
-			}
-			t.updatePieceCompletion(idx)
-			t.publishPieceChange(idx)
-			t.updatePiecePriority(idx)
-
-			t.event.Broadcast()
-			cl.event.Broadcast()
-		},
-	)
 
 	if len(src.InfoBytes) > 0 {
 		if err := t.setInfoBytes(src.InfoBytes); err != nil {

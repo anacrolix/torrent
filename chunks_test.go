@@ -125,26 +125,26 @@ func TestNumChunks(t *testing.T) {
 func TestChunkOffset(t *testing.T) {
 	// common denominators
 	// 32 KiB, 8 KiB, 1 KiB
-	assert.Equal(t, int64(0*1<<10), chunkOffset(0, 0, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(1*1<<10), chunkOffset(0, 1, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(2*1<<10), chunkOffset(0, 2, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(3*1<<10), chunkOffset(0, 3, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(4*1<<10), chunkOffset(0, 4, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(5*1<<10), chunkOffset(0, 5, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(6*1<<10), chunkOffset(0, 6, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(7*1<<10), chunkOffset(0, 7, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(0*1<<10), chunkOffset(1, 0, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(1*1<<10), chunkOffset(1, 1, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(2*1<<10), chunkOffset(1, 2, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(3*1<<10), chunkOffset(1, 3, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(4*1<<10), chunkOffset(1, 4, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(5*1<<10), chunkOffset(1, 5, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(6*1<<10), chunkOffset(1, 6, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(7*1<<10), chunkOffset(1, 7, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(0*1<<10), chunkOffset(2, 0, 8*1<<10, 1<<10))
-	assert.Equal(t, int64(7*1<<10), chunkOffset(3, 7, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(0*1<<10), chunkOffset(0, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(1*1<<10), chunkOffset(1, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(2*1<<10), chunkOffset(2, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(3*1<<10), chunkOffset(3, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(4*1<<10), chunkOffset(4, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(5*1<<10), chunkOffset(5, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(6*1<<10), chunkOffset(6, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(7*1<<10), chunkOffset(7, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(0*1<<10), chunkOffset(0, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(1*1<<10), chunkOffset(1, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(2*1<<10), chunkOffset(2, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(3*1<<10), chunkOffset(3, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(4*1<<10), chunkOffset(4, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(5*1<<10), chunkOffset(5, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(6*1<<10), chunkOffset(6, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(7*1<<10), chunkOffset(7, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(0*1<<10), chunkOffset(0, 8*1<<10, 1<<10))
+	assert.Equal(t, int64(7*1<<10), chunkOffset(7, 8*1<<10, 1<<10))
 	// ensure it would capture all of bytes.
-	assert.Equal(t, int64(8*1<<10), chunkOffset(3, 7, 8*1<<10, 1<<10)+1<<10)
+	assert.Equal(t, int64(8*1<<10), chunkOffset(7, 8*1<<10, 1<<10)+1<<10)
 }
 
 func TestChunkLength(t *testing.T) {
@@ -273,6 +273,46 @@ func TestChunksVariousCLength(t *testing.T) {
 	require.Equal(t, 3, c.Missing())
 }
 
+func TestRangeVariousCLength(t *testing.T) {
+	testrange := func(min, max uint64, c *chunks, pid int) {
+		cid0, cidn := c.Range(pid)
+		assert.Equal(t, cid0, min)
+		assert.Equal(t, cidn, max)
+	}
+
+	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
+	defer os.RemoveAll(greetingTempDir)
+	info, err := mi.UnmarshalInfo()
+	require.NoError(t, err)
+
+	c := quickpopulate(newChunks(1, &info))
+	require.Equal(t, 13, c.Missing())
+
+	c = quickpopulate(newChunks(2, &info))
+	testrange(0, 3, c, 0)
+	testrange(3, 6, c, 1)
+	testrange(6, 8, c, 2)
+	require.Equal(t, 8, c.Missing())
+
+	c = quickpopulate(newChunks(3, &info))
+	testrange(0, 2, c, 0)
+	testrange(2, 4, c, 1)
+	testrange(4, 5, c, 2)
+	require.Equal(t, 5, c.Missing())
+
+	c = quickpopulate(newChunks(4, &info))
+	testrange(0, 2, c, 0)
+	testrange(2, 4, c, 1)
+	testrange(4, 5, c, 2)
+	require.Equal(t, 5, c.Missing())
+
+	c = quickpopulate(newChunks(5, &info))
+	testrange(0, 1, c, 0)
+	testrange(1, 2, c, 1)
+	testrange(2, 3, c, 2)
+	require.Equal(t, 3, c.Missing())
+}
+
 func TestChunksFailed(t *testing.T) {
 	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
 	defer os.RemoveAll(greetingTempDir)
@@ -356,6 +396,8 @@ func TestChunksComplete(t *testing.T) {
 	require.False(t, p.ChunksMissing(0))
 	require.False(t, p.ChunksHashing(0))
 	require.True(t, p.ChunksComplete(0))
+
+	require.False(t, p.ChunksComplete(1))
 
 	// we finish with 60 chunks missing.
 	require.Equal(t, 60, p.Missing())

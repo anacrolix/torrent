@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/anacrolix/missinggo/v2"
 	"github.com/edsrzf/mmap-go"
 
 	"github.com/james-lawrence/torrent/metainfo"
@@ -16,82 +15,49 @@ import (
 
 type mmapClientImpl struct {
 	baseDir string
-	pc      PieceCompletion
 }
 
 func NewMMap(baseDir string) ClientImpl {
-	return NewMMapWithCompletion(baseDir, pieceCompletionForDir(baseDir))
-}
-
-func NewMMapWithCompletion(baseDir string, completion PieceCompletion) ClientImpl {
 	return &mmapClientImpl{
 		baseDir: baseDir,
-		pc:      completion,
 	}
 }
 
 func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (t TorrentImpl, err error) {
+	if info == nil {
+		panic("can't open a storage for a nil torrent")
+	}
 	span, err := mMapTorrent(info, s.baseDir)
 	t = &mmapTorrentStorage{
+		info:     info,
 		infoHash: infoHash,
 		span:     span,
-		pc:       s.pc,
 	}
 	return
 }
 
 func (s *mmapClientImpl) Close() error {
-	return s.pc.Close()
+	return nil
 }
 
 type mmapTorrentStorage struct {
 	infoHash metainfo.Hash
+	info     *metainfo.Info
 	span     *mmap_span.MMapSpan
-	pc       PieceCompletionGetSetter
 }
 
-func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
-	return mmapStoragePiece{
-		pc:       ts.pc,
-		p:        p,
-		ih:       ts.infoHash,
-		ReaderAt: io.NewSectionReader(ts.span, p.Offset(), p.Length()),
-		WriterAt: missinggo.NewSectionWriter(ts.span, p.Offset(), p.Length()),
-	}
+// ReadAt implements TorrentImpl.
+func (ts *mmapTorrentStorage) ReadAt(p []byte, off int64) (n int, err error) {
+	return io.NewSectionReader(ts.span, off, ts.info.OffsetToLength(off)).Read(p)
+}
+
+// WriteAt implements TorrentImpl.
+func (ts *mmapTorrentStorage) WriteAt(p []byte, off int64) (n int, err error) {
+	return io.NewOffsetWriter(ts.span, off).Write(p)
 }
 
 func (ts *mmapTorrentStorage) Close() error {
 	return ts.span.Close()
-}
-
-type mmapStoragePiece struct {
-	pc PieceCompletionGetSetter
-	p  metainfo.Piece
-	ih metainfo.Hash
-	io.ReaderAt
-	io.WriterAt
-}
-
-func (me mmapStoragePiece) pieceKey() metainfo.PieceKey {
-	return metainfo.PieceKey{me.ih, me.p.Index()}
-}
-
-func (sp mmapStoragePiece) Completion() Completion {
-	c, err := sp.pc.Get(sp.pieceKey())
-	if err != nil {
-		panic(err)
-	}
-	return c
-}
-
-func (sp mmapStoragePiece) MarkComplete() error {
-	sp.pc.Set(sp.pieceKey(), true)
-	return nil
-}
-
-func (sp mmapStoragePiece) MarkNotComplete() error {
-	sp.pc.Set(sp.pieceKey(), false)
-	return nil
 }
 
 func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, err error) {

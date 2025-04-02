@@ -4,8 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/anacrolix/missinggo/v2"
+	"sync/atomic"
 
 	"github.com/james-lawrence/torrent/metainfo"
 )
@@ -15,7 +14,6 @@ import (
 type fileClientImpl struct {
 	baseDir   string
 	pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string
-	pc        PieceCompletion
 }
 
 // The Default path maker just returns the current path
@@ -29,11 +27,7 @@ func infoHashPathMaker(baseDir string, info *metainfo.Info, infoHash metainfo.Ha
 
 // All Torrent data stored in this baseDir
 func NewFile(baseDir string) ClientImpl {
-	return NewFileWithCompletion(baseDir, pieceCompletionForDir(baseDir))
-}
-
-func NewFileWithCompletion(baseDir string, completion PieceCompletion) ClientImpl {
-	return newFileWithCustomPathMakerAndCompletion(baseDir, nil, completion)
+	return newFileWithCustomPathMakerAndCompletion(baseDir, nil)
 }
 
 // File storage with data partitioned by infohash.
@@ -43,22 +37,21 @@ func NewFileByInfoHash(baseDir string) ClientImpl {
 
 // Allows passing a function to determine the path for storing torrent data
 func NewFileWithCustomPathMaker(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string) ClientImpl {
-	return newFileWithCustomPathMakerAndCompletion(baseDir, pathMaker, pieceCompletionForDir(baseDir))
+	return newFileWithCustomPathMakerAndCompletion(baseDir, pathMaker)
 }
 
-func newFileWithCustomPathMakerAndCompletion(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string, completion PieceCompletion) ClientImpl {
+func newFileWithCustomPathMakerAndCompletion(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string) ClientImpl {
 	if pathMaker == nil {
 		pathMaker = defaultPathMaker
 	}
 	return &fileClientImpl{
 		baseDir:   baseDir,
 		pathMaker: pathMaker,
-		pc:        completion,
 	}
 }
 
 func (me *fileClientImpl) Close() error {
-	return me.pc.Close()
+	return nil
 }
 
 func (fs *fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
@@ -68,33 +61,39 @@ func (fs *fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Has
 		return nil, err
 	}
 	return &fileTorrentImpl{
-		dir,
-		info,
-		infoHash,
-		fs.pc,
+		dir:      dir,
+		info:     info,
+		infoHash: infoHash,
 	}, nil
 }
 
 type fileTorrentImpl struct {
-	dir        string
-	info       *metainfo.Info
-	infoHash   metainfo.Hash
-	completion PieceCompletion
+	closed   atomic.Bool
+	dir      string
+	info     *metainfo.Info
+	infoHash metainfo.Hash
 }
 
-func (fts *fileTorrentImpl) Piece(p metainfo.Piece) PieceImpl {
-	// Create a view onto the file-based torrent storage.
-	_io := fileTorrentImplIO{fts}
-	// Return the appropriate segments of this.
-	return &filePieceImpl{
-		fts,
-		p,
-		missinggo.NewSectionWriter(_io, p.Offset(), p.Length()),
-		io.NewSectionReader(_io, p.Offset(), p.Length()),
+// ReadAt implements TorrentImpl.
+func (fts *fileTorrentImpl) ReadAt(p []byte, off int64) (n int, err error) {
+	if fts.closed.Load() {
+		return 0, ErrClosed()
 	}
+	// log.Println("file storage ReadAt len", len(p), "offset", off)
+	return fileTorrentImplIO{fts}.ReadAt(p, off)
+}
+
+// WriteAt implements TorrentImpl.
+func (fts *fileTorrentImpl) WriteAt(p []byte, off int64) (n int, err error) {
+	if fts.closed.Load() {
+		return 0, ErrClosed()
+	}
+	// log.Printf("file storage WriteAt %p len %d offset %d\n", fts.mu, len(p), off)
+	return fileTorrentImplIO{fts}.WriteAt(p, off)
 }
 
 func (fs *fileTorrentImpl) Close() error {
+	fs.closed.Store(true)
 	return nil
 }
 
@@ -109,13 +108,15 @@ func CreateNativeZeroLengthFiles(info *metainfo.Info, dir string) (err error) {
 		name := filepath.Join(append([]string{dir, info.Name}, fi.Path...)...)
 		os.MkdirAll(filepath.Dir(name), 0777)
 		var f io.Closer
-		f, err = os.Create(name)
-		if err != nil {
-			break
+
+		if f, err = os.Create(name); err != nil {
+			return err
 		}
+
 		f.Close()
 	}
-	return
+
+	return nil
 }
 
 // Exposes file-based storage of a torrent, as one big ReadWriterAt.
@@ -125,14 +126,14 @@ type fileTorrentImplIO struct {
 
 // Returns EOF on short or missing file.
 func (fst *fileTorrentImplIO) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err error) {
-	f, err := os.Open(fst.fts.fileInfoName(fi))
+	// log.Println("reading file", fst.fileInfoName(fi))
+	f, err := os.Open(fst.fileInfoName(fi))
 	if os.IsNotExist(err) {
 		// File missing is treated the same as a short file.
-		err = io.EOF
-		return
+		return 0, io.EOF
 	}
 	if err != nil {
-		return
+		return 0, err
 	}
 	defer f.Close()
 	// Limit the read to within the expected bounds of this file.
@@ -150,6 +151,10 @@ func (fst *fileTorrentImplIO) readFileAt(fi metainfo.FileInfo, b []byte, off int
 		}
 	}
 	return
+}
+
+func (fst *fileTorrentImplIO) fileInfoName(fi metainfo.FileInfo) string {
+	return filepath.Join(append([]string{fst.fts.dir, fst.fts.info.Name}, fi.Path...)...)
 }
 
 // Only returns EOF at the end of the torrent. Premature EOF is ErrUnexpectedEOF.
@@ -173,12 +178,12 @@ func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 				// Lies.
 				err = io.ErrUnexpectedEOF
 			}
-			return
+			return n, err
 		}
 		off -= fi.Length
 	}
-	err = io.EOF
-	return
+
+	return n, io.EOF
 }
 
 func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
@@ -191,13 +196,14 @@ func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 		if int64(n1) > fi.Length-off {
 			n1 = int(fi.Length - off)
 		}
-		name := fst.fts.fileInfoName(fi)
+		name := fst.fileInfoName(fi)
 		os.MkdirAll(filepath.Dir(name), 0777)
 		var f *os.File
 		f, err = os.OpenFile(name, os.O_WRONLY|os.O_CREATE, 0666)
 		if err != nil {
 			return
 		}
+
 		n1, err = f.WriteAt(p[:n1], off)
 		// TODO: On some systems, write errors can be delayed until the Close.
 		f.Close()
@@ -212,8 +218,4 @@ func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 		}
 	}
 	return
-}
-
-func (fts *fileTorrentImpl) fileInfoName(fi metainfo.FileInfo) string {
-	return filepath.Join(append([]string{fts.dir, fts.info.Name}, fi.Path...)...)
 }

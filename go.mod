@@ -5,7 +5,6 @@ go 1.23.0
 toolchain go1.24.0
 
 require (
-	bazil.org/fuse v0.0.0-20230120002735-62a210ff1fd5
 	filippo.io/edwards25519 v1.1.0
 	github.com/RoaringBitmap/roaring v1.9.4
 	github.com/alexflint/go-arg v1.5.1
@@ -31,7 +30,6 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
-	go.etcd.io/bbolt v1.4.0
 	golang.org/x/net v0.35.0
 	golang.org/x/time v0.10.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da

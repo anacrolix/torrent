@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 
 	"github.com/anacrolix/missinggo/slices"
-	"github.com/james-lawrence/torrent/internal/x/bytesx"
-	"github.com/james-lawrence/torrent/x/langx"
+	"github.com/james-lawrence/torrent/internal/bytesx"
+	"github.com/james-lawrence/torrent/internal/langx"
 )
 
 type Option func(*Info)
@@ -50,6 +50,12 @@ func NewFromReader(src io.Reader, options ...Option) (info *Info, err error) {
 	}
 
 	return info, nil
+}
+
+func NewInfo(options ...Option) *Info {
+	return langx.Autoptr(langx.Clone(Info{
+		PieceLength: bytesx.MiB,
+	}, options...))
 }
 
 func NewFromPath(root string, options ...Option) (info *Info, err error) {
@@ -172,16 +178,16 @@ func (info *Info) TotalLength() (ret int64) {
 	if cached := atomic.LoadInt64(&info.cachedLength); cached > 0 {
 		return cached
 	}
+	defer atomic.StoreInt64(&info.cachedLength, ret)
 
-	if info.IsDir() {
-		for _, fi := range info.Files {
-			ret += fi.Length
-		}
-	} else {
-		ret = info.Length
+	if !info.IsDir() {
+		return info.Length
 	}
 
-	atomic.StoreInt64(&info.cachedLength, ret)
+	for _, fi := range info.Files {
+		ret += fi.Length
+	}
+
 	return ret
 }
 
@@ -210,6 +216,23 @@ func (info *Info) UpvertedFiles() []FileInfo {
 
 func (info *Info) Piece(index int) Piece {
 	return Piece{info, pieceIndex(index)}
+}
+
+func (info *Info) OffsetToIndex(offset int64) int64 {
+	return offset / info.PieceLength
+}
+
+func (info *Info) OffsetToLength(offset int64) (length int64) {
+	if info.PieceLength == 0 {
+		return 0
+	}
+
+	index := offset / info.PieceLength
+	if index == int64(info.NumPieces()) {
+		return info.TotalLength() % info.PieceLength
+	}
+
+	return info.PieceLength
 }
 
 func (info *Info) Hashes() (ret [][]byte) {

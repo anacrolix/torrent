@@ -5,11 +5,9 @@ import (
 	"net"
 	"testing"
 
-	"github.com/bradfitz/iter"
 	"github.com/james-lawrence/torrent/bencode"
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/testutil"
-	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,39 +52,34 @@ func TestTorrentString(t *testing.T) {
 	}
 }
 
-// This benchmark is from the observation that a lot of overlapping Readers on
-// a large torrent with small pieces had a lot of overhead in recalculating
-// piece priorities everytime a reader (possibly in another Torrent) changed.
-func BenchmarkUpdatePiecePriorities(b *testing.B) {
-	const (
-		numPieces   = 13410
-		pieceLength = 256 << 10
-	)
-	cl := &Client{config: &ClientConfig{}}
-	ts, err := New(metainfo.Hash{})
-	require.NoError(b, err)
-	t, err := cl.newTorrent(ts)
-	require.NoError(b, err)
-	require.NoError(b, t.setInfo(&metainfo.Info{
-		Pieces:      make([]byte, metainfo.HashSize*numPieces),
-		PieceLength: pieceLength,
-		Length:      pieceLength * numPieces,
-	}))
-	assert.EqualValues(b, 13410, t.numPieces())
-	for range iter.N(7) {
-		r := t.NewReader()
-		r.SetReadahead(32 << 20)
-		r.Seek(3500000, 0)
-	}
-	assert.Len(b, t.readers, 7)
-	for i := 0; i < int(t.numPieces()); i += 3 {
-		t.chunks.Complete(i)
-	}
-	t.DownloadPieces(0, t.numPieces())
-	for range iter.N(b.N) {
-		t.updateAllPiecePriorities()
-	}
-}
+// // This benchmark is from the observation that a lot of overlapping Readers on
+// // a large torrent with small pieces had a lot of overhead in recalculating
+// // piece priorities everytime a reader (possibly in another Torrent) changed.
+// func BenchmarkUpdatePiecePriorities(b *testing.B) {
+// 	const (
+// 		numPieces   = 13410
+// 		pieceLength = 256 << 10
+// 	)
+// 	cl := &Client{config: &ClientConfig{}}
+// 	ts, err := New(metainfo.Hash{})
+// 	require.NoError(b, err)
+// 	t, err := cl.newTorrent(ts)
+// 	require.NoError(b, err)
+// 	require.NoError(b, t.setInfo(&metainfo.Info{
+// 		Pieces:      make([]byte, metainfo.HashSize*numPieces),
+// 		PieceLength: pieceLength,
+// 		Length:      pieceLength * numPieces,
+// 	}))
+// 	assert.EqualValues(b, 13410, t.numPieces())
+
+// 	for i := 0; i < int(t.numPieces()); i += 3 {
+// 		t.chunks.Complete(i)
+// 	}
+// 	t.DownloadPieces(0, t.numPieces())
+// 	for range iter.N(b.N) {
+// 		t.updateAllPiecePriorities()
+// 	}
+// }
 
 func TestPieceHashFailed(t *testing.T) {
 	mi := testutil.GreetingMetaInfo()
@@ -98,15 +91,12 @@ func TestPieceHashFailed(t *testing.T) {
 	require.NoError(t, err)
 	tt.setChunkSize(2)
 	require.NoError(t, tt.setInfoBytes(mi.InfoBytes))
-	tt.lock()
-	tt.chunks.Validate(1)
-	require.True(t, tt.chunks.ChunksAvailable(1))
-	tt.pieceHashed(1, fmt.Errorf("boom"))
+
+	tt.digests.check(1)
 
 	// the piece should be marked as a failure. this means the connections will
 	// retry the piece either during their write loop or during their cleanup phase.
 	require.True(t, tt.chunks.Failed(tt.chunks.failed).Contains(5))
-	tt.unlock()
 }
 
 // Check the behaviour of Torrent.Metainfo when metadata is not completed.

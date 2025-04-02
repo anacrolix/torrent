@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"testing"
@@ -182,8 +181,8 @@ func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
 	_, err = DownloadInto(ctx, io.Discard, leecherGreeting, TuneClientPeer(seeder))
 	require.NoError(t, err)
 
-	min, max := leecherGreeting.(*torrent).chunks.Range(0)
-	log.Println("DERP DERP", min, max, leecherGreeting.(*torrent).chunks.missing.String(), leecherGreeting.(*torrent).chunks.completed.String())
+	// min, max := leecherGreeting.(*torrent).chunks.Range(0)
+	// log.Println("DERP DERP", min, max, leecherGreeting.(*torrent).chunks.missing.String(), leecherGreeting.(*torrent).chunks.completed.String())
 	// TODO: require.Equal(t, ps.Cancel, leecherGreeting.(*torrent).chunks.ChunksMissing(0))
 	require.Equal(t, false, leecherGreeting.(*torrent).chunks.ChunksMissing(0))
 }

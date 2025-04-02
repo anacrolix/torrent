@@ -15,17 +15,11 @@ import (
 
 type mmapClientImpl struct {
 	baseDir string
-	pc      PieceCompletion
 }
 
 func NewMMap(baseDir string) ClientImpl {
-	return NewMMapWithCompletion(baseDir, pieceCompletionForDir(baseDir))
-}
-
-func NewMMapWithCompletion(baseDir string, completion PieceCompletion) ClientImpl {
 	return &mmapClientImpl{
 		baseDir: baseDir,
-		pc:      completion,
 	}
 }
 
@@ -38,20 +32,18 @@ func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash
 		info:     info,
 		infoHash: infoHash,
 		span:     span,
-		pc:       s.pc,
 	}
 	return
 }
 
 func (s *mmapClientImpl) Close() error {
-	return s.pc.Close()
+	return nil
 }
 
 type mmapTorrentStorage struct {
 	infoHash metainfo.Hash
 	info     *metainfo.Info
 	span     *mmap_span.MMapSpan
-	pc       PieceCompletionGetSetter
 }
 
 // ReadAt implements TorrentImpl.

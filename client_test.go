@@ -932,14 +932,11 @@ func TestIssue335(t *testing.T) {
 	cfg := torrent.TestingConfig(t)
 	cfg.Seed = false
 	cfg.DataDir = dir
-	comp, err := storage.NewBoltPieceCompletion(dir)
-	require.NoError(t, err)
-	defer comp.Close()
 
 	cl, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	defer cl.Close()
-	ts, err := torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewMMapWithCompletion(dir, comp)))
+	ts, err := torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewMMap(dir)))
 	require.NoError(t, err)
 	_, added, err := cl.Start(ts)
 	require.NoError(t, err)

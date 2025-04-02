@@ -2,9 +2,9 @@ package storage
 
 import (
 	"io"
-	"log"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/james-lawrence/torrent/metainfo"
 )
@@ -14,7 +14,6 @@ import (
 type fileClientImpl struct {
 	baseDir   string
 	pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string
-	pc        PieceCompletion
 }
 
 // The Default path maker just returns the current path
@@ -28,11 +27,7 @@ func infoHashPathMaker(baseDir string, info *metainfo.Info, infoHash metainfo.Ha
 
 // All Torrent data stored in this baseDir
 func NewFile(baseDir string) ClientImpl {
-	return NewFileWithCompletion(baseDir, pieceCompletionForDir(baseDir))
-}
-
-func NewFileWithCompletion(baseDir string, completion PieceCompletion) ClientImpl {
-	return newFileWithCustomPathMakerAndCompletion(baseDir, nil, completion)
+	return newFileWithCustomPathMakerAndCompletion(baseDir, nil)
 }
 
 // File storage with data partitioned by infohash.
@@ -42,59 +37,63 @@ func NewFileByInfoHash(baseDir string) ClientImpl {
 
 // Allows passing a function to determine the path for storing torrent data
 func NewFileWithCustomPathMaker(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string) ClientImpl {
-	return newFileWithCustomPathMakerAndCompletion(baseDir, pathMaker, pieceCompletionForDir(baseDir))
+	return newFileWithCustomPathMakerAndCompletion(baseDir, pathMaker)
 }
 
-func newFileWithCustomPathMakerAndCompletion(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string, completion PieceCompletion) ClientImpl {
+func newFileWithCustomPathMakerAndCompletion(baseDir string, pathMaker func(baseDir string, info *metainfo.Info, infoHash metainfo.Hash) string) ClientImpl {
 	if pathMaker == nil {
 		pathMaker = defaultPathMaker
 	}
 	return &fileClientImpl{
 		baseDir:   baseDir,
 		pathMaker: pathMaker,
-		pc:        completion,
 	}
 }
 
 func (me *fileClientImpl) Close() error {
-	return me.pc.Close()
+	return nil
 }
 
 func (fs *fileClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error) {
-	log.Println("opening file torrent storage")
 	dir := fs.pathMaker(fs.baseDir, info, infoHash)
 	err := CreateNativeZeroLengthFiles(info, dir)
 	if err != nil {
 		return nil, err
 	}
 	return &fileTorrentImpl{
-		dir,
-		info,
-		infoHash,
-		// fs.pc,
+		dir:      dir,
+		info:     info,
+		infoHash: infoHash,
 	}, nil
 }
 
 type fileTorrentImpl struct {
+	closed   atomic.Bool
 	dir      string
 	info     *metainfo.Info
 	infoHash metainfo.Hash
-	// completion PieceCompletion
 }
 
 // ReadAt implements TorrentImpl.
 func (fts *fileTorrentImpl) ReadAt(p []byte, off int64) (n int, err error) {
-	log.Println("file storage ReadAt len", len(p), "offset", off)
+	if fts.closed.Load() {
+		return 0, ErrClosed()
+	}
+	// log.Println("file storage ReadAt len", len(p), "offset", off)
 	return fileTorrentImplIO{fts}.ReadAt(p, off)
 }
 
 // WriteAt implements TorrentImpl.
 func (fts *fileTorrentImpl) WriteAt(p []byte, off int64) (n int, err error) {
-	log.Println("file storage WriteAt len", len(p), "offset", off)
+	if fts.closed.Load() {
+		return 0, ErrClosed()
+	}
+	// log.Printf("file storage WriteAt %p len %d offset %d\n", fts.mu, len(p), off)
 	return fileTorrentImplIO{fts}.WriteAt(p, off)
 }
 
 func (fs *fileTorrentImpl) Close() error {
+	fs.closed.Store(true)
 	return nil
 }
 
@@ -127,15 +126,13 @@ type fileTorrentImplIO struct {
 
 // Returns EOF on short or missing file.
 func (fst *fileTorrentImplIO) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err error) {
-	log.Println("reading file", fst.fileInfoName(fi))
+	// log.Println("reading file", fst.fileInfoName(fi))
 	f, err := os.Open(fst.fileInfoName(fi))
 	if os.IsNotExist(err) {
-		log.Println("checkpoint 0")
 		// File missing is treated the same as a short file.
 		return 0, io.EOF
 	}
 	if err != nil {
-		log.Println("checkpoint 1")
 		return 0, err
 	}
 	defer f.Close()
@@ -185,8 +182,8 @@ func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 		}
 		off -= fi.Length
 	}
-	err = io.EOF
-	return
+
+	return n, io.EOF
 }
 
 func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
@@ -206,6 +203,7 @@ func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 		if err != nil {
 			return
 		}
+
 		n1, err = f.WriteAt(p[:n1], off)
 		// TODO: On some systems, write errors can be delayed until the Close.
 		f.Close()

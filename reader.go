@@ -3,7 +3,6 @@ package torrent
 import (
 	"errors"
 	"io"
-	"log"
 	"sync/atomic"
 
 	"github.com/james-lawrence/torrent/storage"
@@ -22,16 +21,18 @@ type blockingreader struct {
 }
 
 func (t *blockingreader) ReadAt(p []byte, offset int64) (n int, err error) {
-	log.Println("blocking reading initiated", offset)
-	defer log.Println("blocking reading completed", offset)
-
+	// log.Println("blocking reading initiated", offset)
+	// defer log.Println("blocking reading completed", offset)
+	var allowed int64
 	t.c.cond.L.Lock()
-	for !t.c.ChunksCompleteForOffset(offset) {
+	for allowed = t.c.DataAvailableForOffset(offset); allowed < 0; allowed = t.c.DataAvailableForOffset(offset) {
 		t.c.cond.Wait()
 	}
 	t.c.cond.L.Unlock()
+	allowed = min(allowed, int64(len(p)))
 
-	return t.TorrentImpl.ReadAt(p, offset)
+	// log.Println("reading", offset, allowed, len(p[:allowed]), len(p))
+	return t.TorrentImpl.ReadAt(p[:allowed], offset)
 }
 
 // Reader for a torrent
@@ -61,10 +62,10 @@ type reader struct {
 var _ io.ReadCloser = &reader{}
 
 func (r *reader) Read(b []byte) (n int, err error) {
-	log.Println("read initiated", r.pos, r.length)
+	// log.Println("read initiated", r.pos, r.length)
 	n, err = r.ReadAt(b, r.pos)
-	npos := atomic.AddInt64(&r.pos, int64(n))
-	log.Println("read completed", npos, r.length)
+	atomic.AddInt64(&r.pos, int64(n)) // npos
+	// log.Println("read completed", npos, r.length)
 	return n, err
 }
 
@@ -75,11 +76,13 @@ func (r *reader) Close() error {
 func (r *reader) Seek(off int64, whence int) (ret int64, err error) {
 	switch whence {
 	case io.SeekStart:
-		return atomic.SwapInt64(&r.pos, off), nil
+		atomic.SwapInt64(&r.pos, off)
+		return off, nil
 	case io.SeekCurrent:
 		return atomic.AddInt64(&r.pos, off), nil
 	case io.SeekEnd:
-		return atomic.SwapInt64(&r.pos, r.length+off), nil
+		atomic.SwapInt64(&r.pos, r.length-off)
+		return r.pos, nil
 	default:
 		return -1, errors.ErrUnsupported
 	}

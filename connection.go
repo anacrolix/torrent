@@ -9,7 +9,6 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,7 +19,6 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/prioritybitmap"
-	"github.com/anacrolix/multiless"
 	"github.com/pkg/errors"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -1204,7 +1202,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
-		log.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
+		// log.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
 
 		switch msg.Type {
 		case pp.Choke:
@@ -1380,7 +1378,7 @@ func (cn *connection) rw() io.ReadWriter {
 func (cn *connection) receiveChunk(msg *pp.Message) error {
 	req := newRequestFromMessage(msg)
 
-	log.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
+	// log.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
 
 	if cn.PeerChoked {
 		metrics.Add("chunks received while choked", 1)
@@ -1412,20 +1410,8 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 	cn.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *count { return &cs.BytesReadUsefulData }))
 	cn.lastUsefulChunkReceived = time.Now()
 
-	// piece := cn.t.piece(int(req.Index))
-	// Need to record that it hasn't been written yet, before we attempt to do
-	// anything with it.
-	// piece.incrementPendingWrites()
-	// Record that we have the chunk, so we aren't trying to download it while
-	// waiting for it to be written to storage.
-	// piece.unpendChunkIndex(chunkIndex(req.chunkSpec, cn.t.chunkSize))
-	err := cn.t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece)
-	// piece.decrementPendingWrites()
-	if err != nil {
-		panic(fmt.Sprintf("error writing chunk: %v", err))
-		// t.pendRequest(req)
-		// t.updatePieceCompletion(pieceIndex(msg.Index))
-		// return nil
+	if err := cn.t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece); err != nil {
+		return errors.Wrap(err, "failed to write chunk")
 	}
 
 	if err := cn.t.chunks.Verify(req); err != nil {
@@ -1699,10 +1685,6 @@ func (cn *connection) String() string {
 	return fmt.Sprintf("connection %p", cn)
 }
 
-func (cn *connection) trust() connectionTrust {
-	return connectionTrust{Implicit: cn.trusted, NetGoodPiecesDirted: cn.netGoodPiecesDirtied()}
-}
-
 // See the order given in Transmission's tr_peerMsgsNew.
 func (cn *connection) sendInitialMessages(cl *Client, torrent *torrent) {
 	if cn.PeerExtensionBytes.SupportsExtended() && cl.extensionBytes.SupportsExtended() {
@@ -1780,13 +1762,4 @@ func (cn *connection) sendInitialPEX() {
 	}
 
 	cn.Post(m.Message(eid))
-}
-
-type connectionTrust struct {
-	Implicit            bool
-	NetGoodPiecesDirted int64
-}
-
-func (l connectionTrust) Less(r connectionTrust) bool {
-	return multiless.New().Bool(l.Implicit, r.Implicit).Int64(l.NetGoodPiecesDirted, r.NetGoodPiecesDirted).Less()
 }

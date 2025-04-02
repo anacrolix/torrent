@@ -124,22 +124,6 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 	return dlt, true, nil
 }
 
-func (cl *Client) download(ctx context.Context, m Metadata, options ...Tuner) (t *torrent, err error) {
-	if t, _, err = cl.start(m); err != nil {
-		return t, err
-	}
-
-	t.Tune(options...)
-
-	select {
-	case <-t.GotInfo():
-	case <-ctx.Done():
-		return t, ctx.Err()
-	}
-
-	return t, nil
-}
-
 // Stop the specified torrent, this halts all network activity around the torrent
 // for this client.
 func (cl *Client) Stop(t Metadata) (err error) {
@@ -151,7 +135,7 @@ func (cl *Client) merge(old *torrent, updated Metadata) (err error) {
 		old.SetDisplayName(updated.DisplayName)
 	}
 
-	if updated.ChunkSize != 0 {
+	if updated.ChunkSize != int(old.chunkSize) && updated.ChunkSize != 0 {
 		old.setChunkSize(pp.Integer(updated.ChunkSize))
 	}
 

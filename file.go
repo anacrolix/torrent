@@ -15,7 +15,6 @@ type File struct {
 	offset int64
 	length int64
 	fi     metainfo.FileInfo
-	// prio   piecePriority
 }
 
 // Torrent returns the associated torrent

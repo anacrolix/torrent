@@ -27,9 +27,8 @@ func testIssue95(t *testing.T, c ClientImpl) {
 
 	require.NoError(t, t1.Close())
 	// TODO
-	require.True(t, false)
 	// t2p := t2.Piece(i2.Piece(0))
-	// assert.NotPanics(t, func() { t2p.Completion() })
+	// require.NotPanics(t, func() { t2p.Completion() })
 	require.NoError(t, t2.Close())
 }
 

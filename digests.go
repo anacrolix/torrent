@@ -12,10 +12,30 @@ import (
 	"github.com/pkg/errors"
 )
 
+func newDigestsFromTorrent(t *torrent) digests {
+	return newDigests(
+		t.storage,
+		t.piece,
+		func(idx int, cause error) {
+			if t.chunks == nil {
+				panic("gorp")
+			}
+
+			// log.Printf("hashed %p %d / %d - %v", t.chunks, idx+1, t.numPieces(), cause)
+			t.chunks.Hashed(idx, cause)
+
+			t.event.Broadcast()
+			t.cln.event.Broadcast() // cause the client to detect completed torrents.
+		},
+	)
+}
+
 func newDigests(iora io.ReaderAt, retrieve func(int) *metainfo.Piece, complete func(int, error)) digests {
 	if iora == nil {
-		panic("MISSING STORAGE")
+		panic("digests require a storage implementation")
 	}
+
+	// log.Printf("new digest %T\n", iora)
 	return digests{
 		ReaderAt: iora,
 		retrieve: retrieve,
@@ -95,5 +115,6 @@ func (t *digests) compute(p *metainfo.Piece) (ret metainfo.Hash, err error) {
 	}
 
 	copy(ret[:], c.Sum(nil))
+
 	return ret, nil
 }

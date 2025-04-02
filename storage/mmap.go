@@ -30,8 +30,12 @@ func NewMMapWithCompletion(baseDir string, completion PieceCompletion) ClientImp
 }
 
 func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash) (t TorrentImpl, err error) {
+	if info == nil {
+		panic("can't open a storage for a nil torrent")
+	}
 	span, err := mMapTorrent(info, s.baseDir)
 	t = &mmapTorrentStorage{
+		info:     info,
 		infoHash: infoHash,
 		span:     span,
 		pc:       s.pc,

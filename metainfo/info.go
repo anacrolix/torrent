@@ -52,6 +52,12 @@ func NewFromReader(src io.Reader, options ...Option) (info *Info, err error) {
 	return info, nil
 }
 
+func NewInfo(options ...Option) *Info {
+	return langx.Autoptr(langx.Clone(Info{
+		PieceLength: bytesx.MiB,
+	}, options...))
+}
+
 func NewFromPath(root string, options ...Option) (info *Info, err error) {
 	info = langx.Autoptr(langx.Clone(Info{
 		Name:        filepath.Base(root),
@@ -217,6 +223,10 @@ func (info *Info) OffsetToIndex(offset int64) int64 {
 }
 
 func (info *Info) OffsetToLength(offset int64) (length int64) {
+	if info.PieceLength == 0 {
+		return 0
+	}
+
 	index := offset / info.PieceLength
 	if index == int64(info.NumPieces()) {
 		return info.TotalLength() % info.PieceLength

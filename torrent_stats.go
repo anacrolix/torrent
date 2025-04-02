@@ -11,6 +11,7 @@ type TorrentStats struct {
 	Missing     int
 	Outstanding int
 	Unverified  int
+	Failed      int
 	Completed   int
 
 	// Ordered by expected descending quantities (if all is well).

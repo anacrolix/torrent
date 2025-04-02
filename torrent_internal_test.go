@@ -91,15 +91,12 @@ func TestPieceHashFailed(t *testing.T) {
 	require.NoError(t, err)
 	tt.setChunkSize(2)
 	require.NoError(t, tt.setInfoBytes(mi.InfoBytes))
-	tt.lock()
-	tt.chunks.Validate(1)
-	require.True(t, tt.chunks.ChunksAvailable(1))
-	// tt.pieceHashed(1, fmt.Errorf("boom"))
+
+	tt.digests.check(1)
 
 	// the piece should be marked as a failure. this means the connections will
 	// retry the piece either during their write loop or during their cleanup phase.
 	require.True(t, tt.chunks.Failed(tt.chunks.failed).Contains(5))
-	tt.unlock()
 }
 
 // Check the behaviour of Torrent.Metainfo when metadata is not completed.

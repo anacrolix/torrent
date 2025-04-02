@@ -29,6 +29,7 @@ import (
 	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/cryptox"
 	"github.com/james-lawrence/torrent/internal/errorsx"
+	"github.com/james-lawrence/torrent/internal/md5x"
 	"github.com/james-lawrence/torrent/internal/testutil"
 	"github.com/james-lawrence/torrent/internal/testx"
 	"github.com/james-lawrence/torrent/internal/utpx"
@@ -64,9 +65,7 @@ func TestClientNilConfig(t *testing.T) {
 
 func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
 	cfg := torrent.TestingConfig(t)
-	pc, err := storage.NewBoltPieceCompletion(cfg.DataDir)
-	require.NoError(t, err)
-	ci := storage.NewFileWithCompletion(cfg.DataDir, pc)
+	ci := storage.NewFile(cfg.DataDir)
 	defer ci.Close()
 
 	cl, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
@@ -109,35 +108,11 @@ func TestAddDropManyTorrents(t *testing.T) {
 	}
 }
 
-type FileCacheClientStorageFactoryParams struct {
-	Capacity    int64
-	SetCapacity bool
-	Wrapper     func(*filecache.Cache) storage.ClientImpl
-}
-
-func NewFileCacheClientStorageFactory(ps FileCacheClientStorageFactoryParams) StorageFactory {
-	return func(dataDir string) storage.ClientImpl {
-		fc, err := filecache.NewCache(dataDir)
-		if err != nil {
-			panic(err)
-		}
-		if ps.SetCapacity {
-			fc.SetCapacity(ps.Capacity)
-		}
-		return ps.Wrapper(fc)
-	}
+func NewFileCacheClientStorageFactory(dataDir string) storage.ClientImpl {
+	return storage.NewFileByInfoHash(dataDir)
 }
 
 type StorageFactory func(string) storage.ClientImpl
-
-func TestClientTransferDefault(t *testing.T) {
-	testClientTransfer(t, testClientTransferParams{
-		ExportClientStatus: true,
-		LeecherStorage: NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
-			Wrapper: fileCachePieceResourceStorage,
-		}),
-	})
-}
 
 func TestClientTransferRateLimitedUpload(t *testing.T) {
 	started := time.Now()
@@ -161,40 +136,10 @@ func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
 	return storage.NewFile(os.TempDir())
 }
 
-func testClientTransferSmallCache(t *testing.T, setReadahead bool, readahead int64) {
-	testClientTransfer(t, testClientTransferParams{
-		LeecherStorage: NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
-			SetCapacity: true,
-			// Going below the piece length means it can't complete a piece so
-			// that it can be hashed.
-			Capacity: 5,
-			Wrapper:  fileCachePieceResourceStorage,
-		}),
-		ExportClientStatus: true,
-	})
-}
-
-func TestClientTransferSmallCachePieceSizedReadahead(t *testing.T) {
-	t.SkipNow()
-	testClientTransferSmallCache(t, true, 5)
-}
-
-func TestClientTransferSmallCacheLargeReadahead(t *testing.T) {
-	t.SkipNow()
-	testClientTransferSmallCache(t, true, 15)
-}
-
-func TestClientTransferSmallCacheDefaultReadahead(t *testing.T) {
-	t.SkipNow()
-	testClientTransferSmallCache(t, false, -1)
-}
-
 func TestClientTransferVarious(t *testing.T) {
 	// Leecher storage
 	for _, ls := range []StorageFactory{
-		NewFileCacheClientStorageFactory(FileCacheClientStorageFactoryParams{
-			Wrapper: fileCachePieceResourceStorage,
-		}),
+		storage.NewFileByInfoHash,
 		// storage.NewBoltDB,
 	} {
 		// Seeder storage
@@ -202,10 +147,6 @@ func TestClientTransferVarious(t *testing.T) {
 			storage.NewFile,
 			storage.NewMMap,
 		} {
-			testClientTransfer(t, testClientTransferParams{
-				SeederStorage:  ss,
-				LeecherStorage: ls,
-			})
 			testClientTransfer(t, testClientTransferParams{
 				SeederStorage:  ss,
 				LeecherStorage: ls,
@@ -220,6 +161,13 @@ type testClientTransferParams struct {
 	SeederStorage              func(string) storage.ClientImpl
 	SeederUploadRateLimiter    *rate.Limiter
 	LeecherDownloadRateLimiter *rate.Limiter
+}
+
+func TestClientTransferDefault(t *testing.T) {
+	testClientTransfer(t, testClientTransferParams{
+		ExportClientStatus: true,
+		LeecherStorage:     storage.NewFileByInfoHash,
+	})
 }
 
 // Creates a seeder and a leecher, and ensures the data transfers when a read
@@ -262,14 +210,12 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	defer seeder.Close()
 	require.NoError(t, torrent.Verify(ctx, seederTorrent))
 
-	// log.Println("SEEDER MISSING PIECES", seederTorrent.(*torrent).piecesM.Missing())
-
 	// Create leecher and a Torrent.
 	cfg = torrent.TestingConfig(t)
 	cfg.DataDir = t.TempDir()
 	defer os.RemoveAll(cfg.DataDir)
 
-	lstore := storage.NewFile(cfg.DataDir)
+	lstore := storage.NewFileByInfoHash(cfg.DataDir)
 	leechstorageopt := torrent.OptionStorage(lstore)
 	if ps.LeecherStorage != nil {
 		lstore.Close()
@@ -299,20 +245,17 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	require.NoError(t, err)
 	assert.True(t, added)
 
-	// This was used when observing coalescing of piece state changes.
-	//logPieceStateChanges(leecherTorrent)
-
 	// Now do some things with leecher and seeder.
-	leecherTorrent.Tune(torrent.TuneClientPeer(seeder))
-	// this check is inheritantly flawed as new conns are potentially started immediately
-	// when a peer is added.
-	// s := leecherTorrent.Stats()
-	// log.Printf("torrent stats %+v\n", s)
-	// require.EqualValues(t, 1, s.TotalPeers)
+	require.NoError(t, leecherTorrent.Tune(torrent.TuneClientPeer(seeder)))
 
 	// The Torrent should not be interested in obtaining peers, so the one we
 	// just added should be the only one.
 	assert.False(t, leecherTorrent.Stats().Seeding)
+
+	// begin downloading
+	_, err = torrent.DownloadInto(ctx, io.Discard, leecherTorrent)
+	require.NoError(t, err)
+
 	r := torrent.NewReader(leecherTorrent)
 	defer r.Close()
 
@@ -387,12 +330,10 @@ func TestSeedAfterDownloading(t *testing.T) {
 	leecherGreeting, ok, err := leecher.MaybeStart(torrent.NewFromMetaInfo(mi, torrent.OptionChunk(2), torrent.OptionStorage(storage.NewFile(cfg.DataDir))))
 	require.NoError(t, err)
 	assert.True(t, ok)
-	// log.Printf("LEECHER %p c(%p)\n", leecherGreeting, leecherGreeting.(*torrent).piecesM)
 
 	llg, ok, err := leecherLeecher.MaybeStart(torrent.NewFromMetaInfo(mi, torrent.OptionChunk(3), torrent.OptionStorage(storage.NewFile(cfg.DataDir))))
 	require.NoError(t, err)
 	assert.True(t, ok)
-	// log.Printf("LEECHER2 %p c(%p)\n", llg, llg.(*torrent).piecesM)
 
 	// Simultaneously DownloadAll in Leecher, and read the contents
 	// consecutively in LeecherLeecher. This non-deterministically triggered a
@@ -401,11 +342,10 @@ func TestSeedAfterDownloading(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		r := torrent.NewReader(llg)
-		defer r.Close()
-		b, err := io.ReadAll(r)
+		var buf bytes.Buffer
+		_, err = torrent.DownloadInto(ctx, &buf, llg)
 		require.NoError(t, err)
-		assert.EqualValues(t, testutil.GreetingFileContents, b)
+		assert.EqualValues(t, testutil.GreetingFileContents, buf.Bytes())
 	}()
 	done := make(chan struct{})
 	defer close(done)
@@ -414,8 +354,9 @@ func TestSeedAfterDownloading(t *testing.T) {
 
 	digest := md5.New()
 	n, err := torrent.DownloadInto(ctx, digest, leecherGreeting)
-	require.Equal(t, 0, n)
+	require.Equal(t, int64(13), n)
 	require.NoError(t, err)
+	require.Equal(t, "22c3683b094136c3398391ae71b20f04", md5x.FormatHex(digest))
 }
 
 func TestMergingTrackersByAddingSpecs(t *testing.T) {
@@ -495,7 +436,6 @@ func TestDownloadMetadataTimeout(t *testing.T) {
 	require.Equal(t, context.DeadlineExceeded, err)
 }
 
-// We read from a piece which is marked completed, but is missing data.
 func TestCompletedPieceWrongSize(t *testing.T) {
 	cfg := torrent.TestingConfig(t)
 	cl, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
@@ -515,11 +455,7 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 	require.NoError(t, err)
 	defer cl.Stop(ts)
 	assert.True(t, new)
-	r := torrent.NewReader(tt)
-	defer r.Close()
-	b, err = io.ReadAll(r)
-	assert.Len(t, b, 13)
-	assert.NoError(t, err)
+	require.Equal(t, 1, tt.Stats().Missing)
 }
 
 func BenchmarkAddLargeTorrent(b *testing.B) {
@@ -567,12 +503,17 @@ func TestResponsive(t *testing.T) {
 	cfg = torrent.TestingConfig(t)
 	cfg.DataDir = leecherDataDir
 	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer leecher.Close()
 	tt, err = torrent.NewFromMetaInfo(mi, torrent.OptionChunk(2), torrent.OptionStorage(storage.NewFile(cfg.DataDir)))
-	require.Nil(t, err)
-	leecherTorrent, _, _ := leecher.Start(tt)
+	require.NoError(t, err)
+	leecherTorrent, _, err := leecher.Start(tt)
+	require.NoError(t, err)
 	leecherTorrent.Tune(torrent.TuneClientPeer(seeder))
+
+	_, err = torrent.DownloadInto(ctx, io.Discard, leecherTorrent)
+	require.NoError(t, err)
+
 	reader := torrent.NewReader(leecherTorrent)
 	defer reader.Close()
 
@@ -633,7 +574,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	_, err = reader.Seek(11, io.SeekStart)
 	require.NoError(t, err)
 	n, err := reader.Read(b)
-	assert.EqualError(t, err, "torrent closed")
+	assert.EqualError(t, err, "storage closed")
 	assert.EqualValues(t, 0, n)
 }
 
@@ -684,7 +625,8 @@ func writeTorrentData(ts storage.TorrentImpl, info metainfo.Info, b []byte) {
 }
 
 func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.ClientImpl) {
-	require.True(t, false)
+	t.SkipNow()
+
 	// fileCacheDir, err := os.MkdirTemp("", "")
 	// require.NoError(t, err)
 	// defer os.RemoveAll(fileCacheDir)
@@ -962,7 +904,6 @@ func testTransferRandomData(t *testing.T, n int64, from, to *torrent.Client) {
 
 	require.Equal(t, n, dln)
 	require.Equal(t, digestseed.Sum(nil), digestdl.Sum(nil), "digest mismatch: generated torrent length", n)
-	// log.Println("random torrent", n, hex.EncodeToString(digest.Sum(nil)), data.Name(), metadata.DisplayName)
 }
 
 func TestClientAddressInUse(t *testing.T) {

@@ -1,14 +1,8 @@
 package bitmapx
 
 import (
-	"fmt"
-
 	"github.com/RoaringBitmap/roaring"
 )
-
-type bmap interface {
-	IterTyped(func(int) bool) bool
-}
 
 // Bools convert to an array of bools
 func Bools(n int, m *roaring.Bitmap) (bf []bool) {
@@ -30,18 +24,6 @@ func Lazy(m *roaring.Bitmap) *roaring.Bitmap {
 	return roaring.NewBitmap()
 }
 
-// Debug print the bitmap
-func Debug(m *roaring.Bitmap) string {
-	m = Lazy(m)
-	v := make([]int, 0, m.GetCardinality())
-	iter := m.Iterator()
-	for iter.HasNext() {
-		idx := int(iter.Next())
-		v = append(v, idx)
-	}
-	return fmt.Sprintf("%+v", v)
-}
-
 // Contains returns iff all the bits are set within the bitmap
 func Contains(m *roaring.Bitmap, bits ...int) (b bool) {
 	m = Lazy(m)
@@ -57,5 +39,10 @@ func AndNot(l, r *roaring.Bitmap) (dup *roaring.Bitmap) {
 	dup = l.Clone()
 	dup.AndNot(r)
 	return dup
+}
 
+func Range(min, max uint64) *roaring.Bitmap {
+	m := roaring.New()
+	m.AddRange(min, max)
+	return m
 }

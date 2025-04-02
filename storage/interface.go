@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"io"
 
 	"github.com/james-lawrence/torrent/metainfo"
@@ -22,4 +23,8 @@ type TorrentImpl interface {
 type Completion struct {
 	Complete bool
 	Ok       bool
+}
+
+func ErrClosed() error {
+	return errors.New("storage closed")
 }

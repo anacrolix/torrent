@@ -48,6 +48,7 @@ func testEmptyFilesAndZeroPieceLength(t *testing.T, cfg *torrent.ClientConfig, o
 	require.NoError(t, err)
 	fp := filepath.Join(cfg.DataDir, "empty")
 	os.Remove(fp)
+
 	assert.False(t, missinggo.FilePathExists(fp))
 	ts, err := torrent.NewFromMetaInfo(&metainfo.MetaInfo{
 		InfoBytes: ib,
@@ -59,7 +60,7 @@ func testEmptyFilesAndZeroPieceLength(t *testing.T, cfg *torrent.ClientConfig, o
 
 	n, err := torrent.DownloadInto(ctx, digest, tt)
 	require.NoError(t, err)
-	require.Equal(t, 0, n)
+	require.Equal(t, int64(0), n)
 	require.Equal(t, md5x.FormatHex(digest), testx.ReadMD5(fp))
 }
 

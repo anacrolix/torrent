@@ -1,7 +1,10 @@
 package torrent
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"os"
 	"testing"
@@ -13,6 +16,7 @@ import (
 	"github.com/james-lawrence/torrent/connections"
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/internal/testutil"
+	"github.com/james-lawrence/torrent/internal/testx"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/sockets"
 	"github.com/james-lawrence/torrent/storage"
@@ -85,7 +89,7 @@ func TestTorrentInitialState(t *testing.T) {
 
 	tt, err := New(
 		mi.HashInfoBytes(),
-		OptionStorage(storage.NewFileWithCompletion(t.TempDir(), storage.NewMapPieceCompletion())),
+		OptionStorage(storage.NewFile(t.TempDir())),
 		OptionChunk(2),
 		OptionInfo(mi.InfoBytes),
 	)
@@ -94,12 +98,14 @@ func TestTorrentInitialState(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 3, tor.numPieces())
-	// require.Len(t, tor.pieces, 3)
-	// tor.pendAllChunkSpecs(0)
 
-	// tor.lock()
-	// assert.EqualValues(t, 3, int(tor.pieceNumPendingChunks(0)))
-	// tor.unlock()
+	require.NoError(t, Verify(context.Background(), tor))
+	require.Equal(t, 3, tor.numPieces())
+
+	stats := tor.Stats()
+
+	require.Equal(t, 8, stats.Missing)
+	require.True(t, tor.chunks.ChunksMissing(0))
 	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
 }
 
@@ -130,68 +136,56 @@ func TestReducedDialTimeout(t *testing.T) {
 }
 
 type TestDownloadCancelParams struct {
-	SetLeecherStorageCapacity bool
-	LeecherStorageCapacity    int64
-	Cancel                    bool
+	LeecherStorageCapacity int64
+	Cancel                 bool
 }
 
 func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
-	require.True(t, false)
-	// greetingTempDir, mi := testutil.GreetingTestTorrent(t)
-	// defer os.RemoveAll(greetingTempDir)
-	// cfg := TestingConfig(t)
-	// cfg.Seed = true
-	// cfg.DataDir = greetingTempDir
-	// seeder, err := b.Bind(NewClient(cfg))
-	// require.NoError(t, err)
-	// defer seeder.Close()
-	// defer testutil.ExportStatusWriter(seeder, "s")()
-	// tt, err := NewFromMetaInfo(mi, OptionStorage(storage.NewFile(cfg.DataDir)))
-	// require.NoError(t, err)
-	// seederTorrent, _, _ := seeder.Start(tt)
-	// seederTorrent.VerifyData()
-	// leecherDataDir := t.TempDir()
-	// defer os.RemoveAll(leecherDataDir)
-	// fc, err := filecache.NewCache(leecherDataDir)
-	// require.NoError(t, err)
-	// if ps.SetLeecherStorageCapacity {
-	// 	fc.SetCapacity(ps.LeecherStorageCapacity)
-	// }
-	// cfg.DataDir = leecherDataDir
-	// leecher, err := b.Bind(NewClient(cfg))
-	// require.NoError(t, err)
-	// defer leecher.Close()
-	// defer testutil.ExportStatusWriter(leecher, "l")()
-	// t2, err := NewFromMetaInfo(mi, OptionChunk(2), OptionStorage(storage.NewResourcePieces(fc.AsResourceProvider())))
-	// require.NoError(t, err)
-	// leecherGreeting, added, err := leecher.Start(t2)
-	// require.NoError(t, err)
-	// assert.True(t, added)
-	// psc := leecherGreeting.SubscribePieceStateChanges()
-	// defer psc.Close()
+	ctx, _done := testx.Context(t)
+	defer _done()
 
-	// leecherGreeting.(*torrent).lock()
-	// leecherGreeting.(*torrent).downloadPiecesLocked(0, leecherGreeting.(*torrent).numPieces())
+	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
+	defer os.RemoveAll(greetingTempDir)
+	cfg := TestingConfig(t)
+	cfg.Seed = true
+	cfg.DataDir = greetingTempDir
+	seeder, err := b.Bind(NewClient(cfg))
+	require.NoError(t, err)
+	defer seeder.Close()
+	defer testutil.ExportStatusWriter(seeder, "s")()
+	tt, err := NewFromMetaInfo(mi, OptionStorage(storage.NewFile(cfg.DataDir)))
+	require.NoError(t, err)
+	seederTorrent, _, err := seeder.Start(tt)
+	require.NoError(t, err)
+	require.NoError(t, Verify(ctx, seederTorrent))
+
+	leecherDataDir := t.TempDir()
+	defer os.RemoveAll(leecherDataDir)
+
+	cfg.DataDir = leecherDataDir
+	leecher, err := b.Bind(NewClient(cfg))
+	require.NoError(t, err)
+	defer leecher.Close()
+	defer testutil.ExportStatusWriter(leecher, "l")()
+	t2, err := NewFromMetaInfo(mi, OptionChunk(2), OptionStorage(storage.NewFileByInfoHash(leecherDataDir)))
+	require.NoError(t, err)
+	leecherGreeting, added, err := leecher.Start(t2)
+	require.NoError(t, err)
+	assert.True(t, added)
+
 	// if ps.Cancel {
-	// 	leecherGreeting.(*torrent).cancelPiecesLocked(0, leecherGreeting.(*torrent).NumPieces())
+	// 	go func() {
+	// 		time.Sleep(5 * time.Millisecond)
+	// 		require.NoError(t, leecher.Stop(t2))
+	// 	}()
 	// }
-	// leecherGreeting.(*torrent).unlock()
+	_, err = DownloadInto(ctx, io.Discard, leecherGreeting, TuneClientPeer(seeder))
+	require.NoError(t, err)
 
-	// done := make(chan struct{})
-	// defer close(done)
-	// go leecherGreeting.Tune(TuneClientPeer(seeder))
-	// completes := make(map[int]bool, 3)
-	// expected := func() map[int]bool {
-	// 	if ps.Cancel {
-	// 		return map[int]bool{0: false, 1: false, 2: false}
-	// 	}
-	// 	return map[int]bool{0: true, 1: true, 2: true}
-	// }()
-	// for !reflect.DeepEqual(completes, expected) {
-	// 	_v := <-psc.Values
-	// 	v := _v.(PieceStateChange)
-	// 	completes[v.Index] = v.Complete
-	// }
+	min, max := leecherGreeting.(*torrent).chunks.Range(0)
+	log.Println("DERP DERP", min, max, leecherGreeting.(*torrent).chunks.missing.String(), leecherGreeting.(*torrent).chunks.completed.String())
+	// TODO: require.Equal(t, ps.Cancel, leecherGreeting.(*torrent).chunks.ChunksMissing(0))
+	require.Equal(t, false, leecherGreeting.(*torrent).chunks.ChunksMissing(0))
 }
 
 // Ensure that it's an error for a peer to send an invalid have message.

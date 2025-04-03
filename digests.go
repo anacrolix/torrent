@@ -17,10 +17,6 @@ func newDigestsFromTorrent(t *torrent) digests {
 		t.storage,
 		t.piece,
 		func(idx int, cause error) {
-			if t.chunks == nil {
-				panic("gorp")
-			}
-
 			// log.Printf("hashed %p %d / %d - %v", t.chunks, idx+1, t.numPieces(), cause)
 			t.chunks.Hashed(idx, cause)
 

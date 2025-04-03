@@ -151,11 +151,12 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		chunks:                  newChunks(langx.DefaultIfZero(16*bytesx.KiB, src.ChunkSize), metainfo.NewInfo(), chunkoptCond(chunkcond)),
 		pex:                     newPex(),
 		storage:                 storage.NewZero(),
+		digests:                 new(digests),
 	}
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
 	t.event = &sync.Cond{L: tlocker{torrent: t}}
 	t.setChunkSize(pp.Integer(langx.DefaultIfZero(16*bytesx.KiB, src.ChunkSize)))
-
+	*t.digests = newDigestsFromTorrent(t)
 	return t
 }
 
@@ -299,7 +300,7 @@ type torrent struct {
 	chunks *chunks
 
 	// digest management determines if pieces are valid.
-	digests digests
+	digests *digests
 
 	// peer exchange for the current torrent
 	pex *pex
@@ -316,7 +317,7 @@ type torrent struct {
 // Returns a Reader bound to the torrent's data. All read calls block until
 // the data requested is actually available.
 func (t *torrent) Storage() storage.TorrentImpl {
-	return newBlockingReader(t.storage, t.chunks)
+	return newBlockingReader(t.storage, t.chunks, t.digests)
 }
 
 // Metadata provides enough information to lookup the torrent again.
@@ -575,11 +576,9 @@ func (t *torrent) onSetInfo() {
 	}
 
 	t.chunks.missing.AddRange(0, uint64(t.chunks.cmaximum))
-
 	for i := 0; i < t.numPieces(); i++ {
 		t.digests.Enqueue(i)
 	}
-	t.digests.verify()
 
 	t.chunks.FailuresReset()
 
@@ -606,7 +605,7 @@ func (t *torrent) setInfoBytes(b []byte) error {
 
 	t.metadataBytes = b
 	t.metadataCompletedChunks = nil
-	t.digests = newDigestsFromTorrent(t)
+	*t.digests = newDigestsFromTorrent(t)
 
 	t.onSetInfo()
 
@@ -930,30 +929,6 @@ func (t *torrent) putPieceInclination(pi []int) {
 	t.connPieceInclinationPool.Put(&pi)
 	pieceInclinationsPut.Add(1)
 }
-
-// func (t *torrent) updatePieceCompletion(piece pieceIndex) bool {
-// 	p := t.piece(piece)
-// 	uncached := t.pieceCompleteUncached(piece)
-// 	cached := p.completion()
-// 	changed := cached != uncached
-// 	p.storageCompletionOk = uncached.Ok
-
-// 	if uncached.Complete && uncached.Ok {
-// 		// this completion is to satisfy the test TestCompletedPieceWrongSize
-// 		// its technically unneeded otherwise.... this is due to the fundmental
-// 		// issue where existing data isn't checksummed properly.
-// 		t.chunks.Complete(piece)
-// 		t.onPieceCompleted(piece)
-// 	} else {
-// 		t.onIncompletePiece(piece)
-// 	}
-
-// 	if changed {
-// 		t.config.debug().Printf("completition changed: piece(%d) %+v -> %+v", piece, cached, uncached)
-// 	}
-
-// 	return changed
-// }
 
 // Non-blocking read. Client lock is not required.
 func (t *torrent) readAt(b []byte, off int64) (n int, err error) {

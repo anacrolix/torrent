@@ -3,21 +3,25 @@ package torrent
 import (
 	"errors"
 	"io"
+	"log"
+	"sync"
 	"sync/atomic"
 
 	"github.com/james-lawrence/torrent/storage"
 )
 
-func newBlockingReader(imp storage.TorrentImpl, c *chunks) *blockingreader {
+func newBlockingReader(imp storage.TorrentImpl, c *chunks, d *digests) *blockingreader {
 	return &blockingreader{
 		TorrentImpl: imp,
 		c:           c,
+		d:           d,
 	}
 }
 
 type blockingreader struct {
 	storage.TorrentImpl
 	c *chunks
+	d *digests
 }
 
 func (t *blockingreader) ReadAt(p []byte, offset int64) (n int, err error) {
@@ -25,7 +29,16 @@ func (t *blockingreader) ReadAt(p []byte, offset int64) (n int, err error) {
 	// defer log.Println("blocking reading completed", offset)
 	var allowed int64
 	t.c.cond.L.Lock()
+	pid := int(t.c.meta.OffsetToIndex(offset))
+
+	once := sync.OnceFunc(func() {
+		log.Println("enqueuing chunk", pid, offset, t.c.missing.String(), t.c.unverified.String())
+		t.d.Enqueue(pid)
+	})
 	for allowed = t.c.DataAvailableForOffset(offset); allowed < 0; allowed = t.c.DataAvailableForOffset(offset) {
+		if t.c.ChunksAvailable(pid) {
+			once()
+		}
 		t.c.cond.Wait()
 	}
 	t.c.cond.L.Unlock()

@@ -109,7 +109,7 @@ func TestAddDropManyTorrents(t *testing.T) {
 }
 
 func NewFileCacheClientStorageFactory(dataDir string) storage.ClientImpl {
-	return storage.NewFile(dataDir, storage.FileOptionPathMakerInfohash)
+	return storage.NewFile(dataDir, storage.FileOptionPathMakerInfohashV0)
 }
 
 type StorageFactory func(string) storage.ClientImpl
@@ -139,12 +139,16 @@ func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
 func TestClientTransferVarious(t *testing.T) {
 	// Leecher storage
 	for _, ls := range []StorageFactory{
-		func(dir string) storage.ClientImpl { return storage.NewFile(dir, storage.FileOptionPathMakerInfohash) },
+		func(dir string) storage.ClientImpl {
+			return storage.NewFile(dir, storage.FileOptionPathMakerInfohashV0)
+		},
 		// storage.NewBoltDB,
 	} {
 		// Seeder storage
 		for _, ss := range []func(string) storage.ClientImpl{
-			func(dir string) storage.ClientImpl { return storage.NewFile(dir, storage.FileOptionPathMakerInfohash) },
+			func(dir string) storage.ClientImpl {
+				return storage.NewFile(dir)
+			},
 			storage.NewMMap,
 		} {
 			testClientTransfer(t, testClientTransferParams{
@@ -166,7 +170,9 @@ type testClientTransferParams struct {
 func TestClientTransferDefault(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
 		ExportClientStatus: true,
-		LeecherStorage:     func(dir string) storage.ClientImpl { return storage.NewFile(dir, storage.FileOptionPathMakerInfohash) },
+		LeecherStorage: func(dir string) storage.ClientImpl {
+			return storage.NewFile(dir, storage.FileOptionPathMakerInfohashV0)
+		},
 	})
 }
 
@@ -215,7 +221,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	cfg.DataDir = t.TempDir()
 	defer os.RemoveAll(cfg.DataDir)
 
-	lstore := storage.NewFile(cfg.DataDir, storage.FileOptionPathMakerInfohash)
+	lstore := storage.NewFile(cfg.DataDir, storage.FileOptionPathMakerInfohashV0)
 	leechstorageopt := torrent.OptionStorage(lstore)
 	if ps.LeecherStorage != nil {
 		lstore.Close()
@@ -885,7 +891,6 @@ func testTransferRandomData(t *testing.T, n int64, from, to *torrent.Client) {
 	dl, added, err := from.Start(metadata)
 	require.NoError(t, err)
 	require.True(t, added)
-	require.NoError(t, torrent.Verify(ctx, dl))
 
 	digestseed := md5.New()
 	_, err = torrent.DownloadInto(ctx, digestseed, dl)

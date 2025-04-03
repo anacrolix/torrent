@@ -23,6 +23,10 @@ func FileOptionPathMakerInfohash(fci *fileClientImpl) {
 	fci.pathMaker = infoHashPathMaker
 }
 
+func FileOptionPathMakerInfohashV0(fci *fileClientImpl) {
+	fci.pathMaker = infoHashPathMakerV0
+}
+
 // File-based storage for torrents, that isn't yet bound to a particular
 // torrent.
 type fileClientImpl struct {
@@ -37,6 +41,10 @@ func defaultPathMaker(baseDir string, infoHash metainfo.Hash, info *metainfo.Inf
 
 func infoHashPathMaker(baseDir string, infoHash metainfo.Hash, info *metainfo.Info, fi *metainfo.FileInfo) string {
 	return filepath.Join(baseDir, infoHash.HexString(), filepath.Join(langx.DerefOrZero(fi).Path...))
+}
+
+func infoHashPathMakerV0(baseDir string, infoHash metainfo.Hash, info *metainfo.Info, fi *metainfo.FileInfo) string {
+	return filepath.Join(baseDir, infoHash.HexString(), info.Name, filepath.Join(langx.DerefOrZero(fi).Path...))
 }
 
 // All Torrent data stored in this baseDir

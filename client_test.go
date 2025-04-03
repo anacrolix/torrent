@@ -109,7 +109,7 @@ func TestAddDropManyTorrents(t *testing.T) {
 }
 
 func NewFileCacheClientStorageFactory(dataDir string) storage.ClientImpl {
-	return storage.NewFileByInfoHash(dataDir)
+	return storage.NewFile(dataDir, storage.FileOptionPathMakerInfohash)
 }
 
 type StorageFactory func(string) storage.ClientImpl
@@ -139,12 +139,12 @@ func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
 func TestClientTransferVarious(t *testing.T) {
 	// Leecher storage
 	for _, ls := range []StorageFactory{
-		storage.NewFileByInfoHash,
+		func(dir string) storage.ClientImpl { return storage.NewFile(dir, storage.FileOptionPathMakerInfohash) },
 		// storage.NewBoltDB,
 	} {
 		// Seeder storage
 		for _, ss := range []func(string) storage.ClientImpl{
-			storage.NewFile,
+			func(dir string) storage.ClientImpl { return storage.NewFile(dir, storage.FileOptionPathMakerInfohash) },
 			storage.NewMMap,
 		} {
 			testClientTransfer(t, testClientTransferParams{
@@ -166,7 +166,7 @@ type testClientTransferParams struct {
 func TestClientTransferDefault(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
 		ExportClientStatus: true,
-		LeecherStorage:     storage.NewFileByInfoHash,
+		LeecherStorage:     func(dir string) storage.ClientImpl { return storage.NewFile(dir, storage.FileOptionPathMakerInfohash) },
 	})
 }
 
@@ -215,7 +215,7 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	cfg.DataDir = t.TempDir()
 	defer os.RemoveAll(cfg.DataDir)
 
-	lstore := storage.NewFileByInfoHash(cfg.DataDir)
+	lstore := storage.NewFile(cfg.DataDir, storage.FileOptionPathMakerInfohash)
 	leechstorageopt := torrent.OptionStorage(lstore)
 	if ps.LeecherStorage != nil {
 		lstore.Close()

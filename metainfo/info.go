@@ -219,6 +219,10 @@ func (info *Info) Piece(index int) Piece {
 }
 
 func (info *Info) OffsetToIndex(offset int64) int64 {
+	if info.PieceLength == 0 {
+		return 0
+	}
+
 	return offset / info.PieceLength
 }
 

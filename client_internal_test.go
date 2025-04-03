@@ -166,7 +166,7 @@ func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
 	require.NoError(t, err)
 	defer leecher.Close()
 	defer testutil.ExportStatusWriter(leecher, "l")()
-	t2, err := NewFromMetaInfo(mi, OptionChunk(2), OptionStorage(storage.NewFileByInfoHash(leecherDataDir)))
+	t2, err := NewFromMetaInfo(mi, OptionChunk(2), OptionStorage(storage.NewFile(leecherDataDir, storage.FileOptionPathMakerInfohashV0)))
 	require.NoError(t, err)
 	leecherGreeting, added, err := leecher.Start(t2)
 	require.NoError(t, err)

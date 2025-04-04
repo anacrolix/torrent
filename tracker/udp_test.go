@@ -7,13 +7,14 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/url"
 	"sync"
 	"testing"
 
+	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/internal/testx"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,6 +97,9 @@ func TestConvertInt16ToInt(t *testing.T) {
 }
 
 func TestAnnounceLocalhost(t *testing.T) {
+	ctx, done := testx.Context(t)
+	defer done()
+
 	t.Parallel()
 	srv := server{
 		t: map[[20]byte]torrent{
@@ -116,43 +120,49 @@ func TestAnnounceLocalhost(t *testing.T) {
 	go func() {
 		require.NoError(t, srv.serveOne())
 	}()
-	req := AnnounceRequest{
-		NumWant: -1,
-		Event:   Started,
-	}
-	rand.Read(req.PeerId[:])
-	copy(req.InfoHash[:], []uint8{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1})
+
+	req := NewAccounceRequest(
+		int160.Random(),
+		0,
+		int160.FromBytes([]byte{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1}),
+		AnnounceOptionEventStarted,
+	)
+
 	go func() {
 		require.NoError(t, srv.serveOne())
 	}()
 	ar, err := Announce{
 		TrackerUrl: fmt.Sprintf("udp://%s/announce", srv.pc.LocalAddr().String()),
-		Request:    req,
-	}.Do()
+	}.Do(ctx, req)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, ar.Seeders)
 	assert.EqualValues(t, 2, len(ar.Peers))
 }
 
 func TestUDPTracker(t *testing.T) {
+	ctx, done := testx.Context(t)
+	defer done()
+
 	t.Parallel()
 	if testing.Short() {
 		t.SkipNow()
 	}
 
-	req := AnnounceRequest{
-		NumWant: -1,
-	}
-	rand.Read(req.PeerId[:])
-	copy(req.InfoHash[:], []uint8{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1})
+	req := NewAccounceRequest(
+		int160.Random(),
+		0,
+		int160.FromBytes([]byte{0xa3, 0x56, 0x41, 0x43, 0x74, 0x23, 0xe6, 0x26, 0xd9, 0x38, 0x25, 0x4a, 0x6b, 0x80, 0x49, 0x10, 0xa6, 0x67, 0xa, 0xc1}),
+	)
+
 	ar, err := Announce{
 		TrackerUrl: trackers[0],
-		Request:    req,
-	}.Do()
+	}.Do(ctx, req)
+
 	// Skip any net errors as we don't control the server.
 	if _, ok := errors.Cause(err).(net.Error); ok {
 		t.Skip(err)
 	}
+
 	require.NoError(t, err)
 	t.Log(ar)
 }
@@ -180,9 +190,7 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 			defer wg.Done()
 			resp, err := Announce{
 				TrackerUrl: url,
-				Request:    req,
-				Context:    ctx,
-			}.Do()
+			}.Do(ctx, req)
 			if err != nil {
 				t.Logf("error announcing to %s: %s", url, err)
 				return
@@ -201,6 +209,9 @@ func TestAnnounceRandomInfoHashThirdParty(t *testing.T) {
 
 // Check that URLPath option is done correctly.
 func TestURLPathOption(t *testing.T) {
+	ctx, done := testx.Context(t)
+	defer done()
+
 	conn, err := net.ListenUDP("udp", nil)
 	if err != nil {
 		panic(err)
@@ -213,7 +224,7 @@ func TestURLPathOption(t *testing.T) {
 				Host:   conn.LocalAddr().String(),
 				Path:   "/announce",
 			}).String(),
-		}.Do()
+		}.Do(ctx, NewAccounceRequest(int160.Random(), 0, int160.Random()))
 		if err != nil {
 			defer conn.Close()
 		}
@@ -234,7 +245,7 @@ func TestURLPathOption(t *testing.T) {
 	r = bytes.NewReader(b[:n])
 	read(r, &h)
 	read(r, &AnnounceRequest{})
-	all, _ := ioutil.ReadAll(r)
+	all, _ := io.ReadAll(r)
 	if string(all) != "\x02\x09/announce" {
 		t.FailNow()
 	}

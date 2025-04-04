@@ -68,34 +68,26 @@ type AnnouncePeerOpts struct {
 }
 
 // Finish an Announce get_peers traversal with an announce of a local peer.
-func AnnouncePeer(opts AnnouncePeerOpts) AnnounceOpt {
+func AnnouncePeer(implied bool, port int) AnnounceOpt {
 	return func(a *Announce) {
-		a.announcePeerOpts = &opts
-	}
-}
+		if port == 0 && !implied {
+			return
+		}
 
-// Deprecated: Use Server.AnnounceTraversal.
-// Traverses the DHT graph toward nodes that store peers for the infohash, streaming them to the
-// caller, and announcing the local node to each responding node if port is non-zero or impliedPort
-// is true.
-func (s *Server) Announce(ctx context.Context, infoHash [20]byte, port int, impliedPort bool, opts ...AnnounceOpt) (_ *Announce, err error) {
-	if port != 0 || impliedPort {
-		opts = append([]AnnounceOpt{AnnouncePeer(AnnouncePeerOpts{
+		a.announcePeerOpts = &AnnouncePeerOpts{
 			Port:        port,
-			ImpliedPort: impliedPort,
-		})}, opts...)
+			ImpliedPort: implied,
+		}
 	}
-	return s.AnnounceTraversal(ctx, infoHash, opts...)
 }
 
 // Traverses the DHT graph toward nodes that store peers for the infohash, streaming them to the
 // caller.
 func (s *Server) AnnounceTraversal(ctx context.Context, infoHash [20]byte, opts ...AnnounceOpt) (_ *Announce, err error) {
-	infoHashInt160 := int160.FromByteArray(infoHash)
 	a := &Announce{
 		Peers:    make(chan PeersValues),
 		server:   s,
-		infoHash: infoHashInt160,
+		infoHash: int160.FromByteArray(infoHash),
 	}
 	for _, opt := range opts {
 		opt(a)

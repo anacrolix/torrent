@@ -98,6 +98,10 @@ func (me *T) IsZero() bool {
 	return true
 }
 
+func ByteArray(id T) [20]byte {
+	return id.bits
+}
+
 func FromBytes(b []byte) (ret T) {
 	ret.SetBytes(b)
 	return

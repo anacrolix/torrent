@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -62,7 +61,7 @@ func (cl *Client) Info(ctx context.Context, m Metadata, options ...Tuner) (i *me
 	if t, added, err = cl.start(m); err != nil {
 		return nil, err
 	} else if !added {
-		log.Println("torrent already started?", m.InfoHash, len(m.InfoBytes))
+		log.Println("torrent already started?", m.ID, len(m.InfoBytes))
 		return nil, fmt.Errorf("attempting to require the info for a torrent that is already running")
 	}
 	defer cl.Stop(m)
@@ -114,7 +113,7 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 	cl.eachDhtServer(func(s *dht.Server) {
 		go dlt.dhtAnnouncer(s)
 	})
-	cl.torrents[t.InfoHash] = dlt
+	cl.torrents[t.ID] = dlt
 
 	dlt.updateWantPeersEvent()
 
@@ -127,19 +126,18 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 // Stop the specified torrent, this halts all network activity around the torrent
 // for this client.
 func (cl *Client) Stop(t Metadata) (err error) {
-	return cl.dropTorrent(t.InfoHash)
+	return cl.dropTorrent(t.ID)
 }
 
 func (cl *Client) merge(old *torrent, updated Metadata) (err error) {
 	if updated.DisplayName != "" {
-		old.SetDisplayName(updated.DisplayName)
+		old.md.DisplayName = updated.DisplayName
 	}
 
-	if updated.ChunkSize != int(old.chunkSize) && updated.ChunkSize != 0 {
-		old.setChunkSize(pp.Integer(updated.ChunkSize))
+	if updated.ChunkSize != old.md.ChunkSize && updated.ChunkSize != 0 {
+		old.setChunkSize(updated.ChunkSize)
 	}
 
-	old.addTrackers(updated.Trackers)
 	old.openNewConns()
 	cl.event.Broadcast()
 
@@ -150,7 +148,7 @@ func (cl *Client) lookup(t Metadata) *torrent {
 	cl.lock()
 	defer cl.unlock()
 
-	if dl, ok := cl.torrents[t.InfoHash]; ok {
+	if dl, ok := cl.torrents[t.ID]; ok {
 		return dl
 	}
 
@@ -199,7 +197,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	defer w.Flush()
 	fmt.Fprintf(w, "Listen port: %d\n", cl.LocalPort())
 	fmt.Fprintf(w, "Peer ID: %+q\n", cl.PeerID())
-	fmt.Fprintf(w, "Announce key: %x\n", cl.announceKey())
+	fmt.Fprintf(w, "Announce key: %x\n", -1) // removed the method from the client didnt belong here.
 	cl.eachDhtServer(func(s *dht.Server) {
 		fmt.Fprintf(w, "%s DHT server at %s:\n", s.Addr().Network(), s.Addr().String())
 		writeDhtServerStatus(w, s)
@@ -208,7 +206,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.torrentsAsSlice()))
 	fmt.Fprintln(w)
 	for _, t := range slices.Sort(cl.torrentsAsSlice(), func(l, r Torrent) bool {
-		return l.Metadata().InfoHash.AsString() < r.Metadata().InfoHash.AsString()
+		return l.Metadata().ID.AsString() < r.Metadata().ID.AsString()
 	}).([]Torrent) {
 		metadata := t.Metadata()
 		if metadata.DisplayName == "" {
@@ -223,10 +221,6 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		}
 		fmt.Fprintln(w)
 	}
-}
-
-func (cl *Client) announceKey() int32 {
-	return int32(binary.BigEndian.Uint32(cl.peerID[16:20]))
 }
 
 // NewClient create a new client from the provided config. nil is acceptable.
@@ -588,7 +582,7 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr IpPor
 		err error
 	)
 
-	cl.config.info().Println("opening connection", t.infoHash)
+	cl.config.info().Println("opening connection", t.md.ID)
 	if err = cl.config.dialRateLimiter.Wait(ctx); err != nil {
 		log.Println("dial rate limit failed", err)
 		return
@@ -664,7 +658,7 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 		rw, c.cryptoMethod, err = pp.EncryptionHandshake{
 			Keys:           cl.forSkeys,
 			CryptoSelector: cl.config.CryptoSelector,
-		}.Outgoing(rw, t.infoHash[:], cl.config.CryptoProvides)
+		}.Outgoing(rw, t.md.ID[:], cl.config.CryptoProvides)
 
 		if err != nil {
 			return errors.Wrap(err, "encryption handshake failed")
@@ -675,7 +669,7 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 	ebits, info, err := pp.Handshake{
 		PeerID: cl.peerID,
 		Bits:   cl.extensionBytes,
-	}.Outgoing(c.rw(), t.infoHash)
+	}.Outgoing(c.rw(), t.md.ID)
 
 	if err != nil {
 		return errors.Wrap(err, "bittorrent protocol handshake failure")
@@ -799,7 +793,7 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent, _ error) {
 			return nil, err
 		}
 	}
-	t.addTrackers(src.Trackers)
+
 	cl.AddDHTNodes(src.DHTNodes)
 
 	return t, nil

@@ -51,6 +51,14 @@ func (t *ConnStats) Copy() (ret ConnStats) {
 	return
 }
 
+func (t ConnStats) ResetTransferMetrics() ConnStats {
+	t.BytesRead.n = 0
+	t.BytesReadData.n = 0
+	t.BytesWrittenData.n = 0
+	t.BytesWritten.n = 0
+	return t
+}
+
 type count struct {
 	n int64
 }
@@ -74,7 +82,6 @@ func (t *count) MarshalJSON() ([]byte, error) {
 }
 
 func (t *ConnStats) wroteMsg(msg *pp.Message) {
-	// TODO: Track messages and not just chunks.
 	switch msg.Type {
 	case pp.Piece:
 		t.ChunksWritten.Add(1)

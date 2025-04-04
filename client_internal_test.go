@@ -12,6 +12,7 @@ import (
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
+	"github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/connections"
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/internal/testutil"
@@ -32,7 +33,6 @@ func TestingConfig(t tt) *ClientConfig {
 	cfg := NewDefaultClientConfig(ClientConfigBootstrapGlobal)
 	cfg.NoDHT = true
 	cfg.DataDir = testutil.Autodir(t)
-	cfg.DisableTrackers = true
 	cfg.NoDefaultPortForwarding = true
 	cfg.DisableAcceptRateLimiting = true
 	// cfg.Debug = log.New(os.Stderr, "[debug] ", log.Flags())
@@ -67,14 +67,6 @@ func totalConns(tts []Torrent) (ret int) {
 	return
 }
 
-// DeprecatedAccounceList - used to reach into a torrent for tests.
-func DeprecatedAnnounceList(t Torrent) (map[string]*trackerScraper, bool) {
-	if tt, ok := t.(*torrent); ok {
-		return tt.trackerAnnouncers, ok
-	}
-	return make(map[string]*trackerScraper), false
-}
-
 // DeprecatedExtractClient - used to extract the underlying client.
 func DeprecatedExtractClient(t Torrent) *Client {
 	return t.(*torrent).cln
@@ -105,7 +97,7 @@ func TestTorrentInitialState(t *testing.T) {
 
 	require.Equal(t, 8, stats.Missing)
 	require.True(t, tor.chunks.ChunksMissing(0))
-	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
+	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), btprotocol.Integer(tor.md.ChunkSize)))
 }
 
 func TestReducedDialTimeout(t *testing.T) {

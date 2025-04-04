@@ -29,9 +29,8 @@ type ClientConfig struct {
 
 	NoDefaultPortForwarding bool
 	UpnpID                  string
-	// Don't announce to trackers. This only leaves DHT to discover peers.
-	DisableTrackers bool `long:"disable-trackers"`
-	DisablePEX      bool `long:"disable-pex"`
+
+	DisablePEX bool `long:"disable-pex"`
 
 	// Don't create a DHT.
 	NoDHT            bool `long:"disable-dht"`

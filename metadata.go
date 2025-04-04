@@ -70,7 +70,7 @@ func OptionNoop(t *Metadata) {}
 type Metadata struct {
 	// The tiered tracker URIs.
 	Trackers  [][]string
-	InfoHash  metainfo.Hash
+	ID        metainfo.Hash
 	InfoBytes []byte
 	// The name to use if the Name field from the Info isn't available.
 	DisplayName string
@@ -80,6 +80,17 @@ type Metadata struct {
 	// set.
 	ChunkSize int
 	Storage   storage.ClientImpl
+}
+
+// grabs first tracker avalable.
+func (t Metadata) Announce() string {
+	for _, tset := range t.Trackers {
+		for _, tr := range tset {
+			return tr
+		}
+	}
+
+	return ""
 }
 
 // Merge Metadata options into the current metadata.
@@ -94,7 +105,7 @@ func (t Metadata) Merge(options ...Option) Metadata {
 // New create a torrent from the metainfo.MetaInfo and any additional options.
 func New(info metainfo.Hash, options ...Option) (t Metadata, err error) {
 	t = Metadata{
-		InfoHash: info,
+		ID: info,
 	}.Merge(options...)
 
 	return t, nil
@@ -213,6 +224,6 @@ func (t Metadata) Metainfo() metainfo.MetaInfo {
 func NewMagnet(md Metadata) metainfo.Magnet {
 	return metainfo.Magnet{
 		DisplayName: md.DisplayName,
-		InfoHash:    md.InfoHash,
+		InfoHash:    md.ID,
 	}
 }

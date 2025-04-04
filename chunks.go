@@ -523,7 +523,7 @@ func (t *chunks) Missing() int {
 	return int(t.missing.GetCardinality())
 }
 
-func (t *chunks) Snapshot(s *TorrentStats) *TorrentStats {
+func (t *chunks) Snapshot(s *Stats) *Stats {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	s.Missing = int(t.missing.GetCardinality())

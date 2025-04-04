@@ -8,12 +8,10 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"text/tabwriter"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -23,15 +21,17 @@ import (
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/dht/int160"
+	"github.com/james-lawrence/torrent/dht/krpc"
 	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/langx"
+	"github.com/james-lawrence/torrent/tracker"
 
 	"github.com/james-lawrence/torrent/bencode"
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
-	"github.com/james-lawrence/torrent/tracker"
 )
 
 // Tuner runtime tuning of an actively running torrent.
@@ -51,6 +51,82 @@ func TunePeers(peers ...Peer) Tuner {
 	}
 }
 
+// Reset tracking data for tracker events
+func TuneResetTrackingStats(s *Stats) Tuner {
+	return func(t *torrent) {
+		t.rLock()
+		defer t.rUnlock()
+		*s = t.Stats()
+		t.stats = t.stats.ResetTransferMetrics()
+	}
+}
+
+// Extract the peer id from the torrent
+func TuneReadPeerID(id *int160.T) Tuner {
+	return func(t *torrent) {
+		t.rLock()
+		defer t.rUnlock()
+		*id = int160.FromByteArray(t.cln.peerID)
+	}
+}
+
+func TuneReadHashID(id *int160.T) Tuner {
+	return func(t *torrent) {
+		t.rLock()
+		defer t.rUnlock()
+		*id = int160.FromByteArray(t.infoHash)
+	}
+}
+
+func TuneReadUserAgent(v *string) Tuner {
+	return func(t *torrent) {
+		t.rLock()
+		defer t.rUnlock()
+		*v = t.config.HTTPUserAgent
+	}
+}
+
+func TuneReadPublicIPv4(v net.IP) Tuner {
+	return func(t *torrent) {
+		t.rLock()
+		defer t.rUnlock()
+
+		copy(v, t.config.PublicIP4)
+	}
+}
+
+func TuneReadPublicIPv6(v net.IP) Tuner {
+	return func(t *torrent) {
+		t.rLock()
+		defer t.rUnlock()
+
+		copy(v, t.config.PublicIP6)
+	}
+}
+
+func TuneReadPort(v *int) Tuner {
+	return func(t *torrent) {
+		t.rLock()
+		defer t.rUnlock()
+
+		*v = t.cln.incomingPeerPort()
+	}
+}
+
+func TuneReadAnnounce(v *tracker.Announce) Tuner {
+	return func(t *torrent) {
+		t.lock()
+		defer t.unlock()
+
+		*v = tracker.Announce{
+			UserAgent:  t.config.HTTPUserAgent,
+			TrackerUrl: t.metainfo.Announce,
+			ClientIp4:  krpc.NewNodeAddrFromIPPort(t.config.PublicIP4, 0),
+			ClientIp6:  krpc.NewNodeAddrFromIPPort(t.config.PublicIP6, 0),
+		}
+	}
+}
+
 // TuneClientPeer adds a trusted, pending peer for each of the Client's addresses.
 // used for tests.
 func TuneClientPeer(cl *Client) Tuner {
@@ -67,13 +143,6 @@ func TuneClientPeer(cl *Client) Tuner {
 	}
 }
 
-// add trackers to the torrent.
-func TuneTrackers(trackers ...[]string) Tuner {
-	return func(t *torrent) {
-		t.addTrackers(trackers)
-	}
-}
-
 // Torrent represents the state of a torrent within a client.
 // interface is currently being used to ease the transition of to a cleaner API.
 // Many methods should not be called before the info is available,
@@ -81,10 +150,9 @@ func TuneTrackers(trackers ...[]string) Tuner {
 type Torrent interface {
 	Metadata() Metadata
 	Tune(...Tuner) error
-	Name() string                 // TODO: remove, should be pulled from Metadata()
 	Metainfo() metainfo.MetaInfo  // TODO: remove, should be pulled from Metadata()
 	BytesCompleted() int64        // TODO: maybe should be pulled from torrent, it has a reference to the storage implementation. or maybe part of the Stats call?
-	Stats() TorrentStats          // TODO: rename TorrentStats, it stutters.
+	Stats() Stats                 // TODO: rename TorrentStats, it stutters.
 	Info() *metainfo.Info         // TODO: remove, this should be pulled from Metadata()
 	GotInfo() <-chan struct{}     // TODO: remove, torrents should never be returned if they don't have the meta info.
 	Storage() storage.TorrentImpl // temporary replacement for reader.
@@ -274,8 +342,6 @@ type torrent struct {
 	peers          peerPool
 	wantPeersEvent missinggo.Event
 
-	// An announcer for each tracker URL.
-	trackerAnnouncers map[string]*trackerScraper
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
@@ -703,26 +769,6 @@ func (t *torrent) writeStatus(w io.Writer) {
 		fmt.Fprintln(w)
 	}
 
-	fmt.Fprintf(w, "Enabled trackers:\n")
-	func() {
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		fmt.Fprintf(tw, "    URL\tNext announce\tLast announce\n")
-		for _, ta := range slices.Sort(slices.FromMapElems(t.trackerAnnouncers), func(l, r *trackerScraper) bool {
-			lu := l.u
-			ru := r.u
-			var luns, runs url.URL = lu, ru
-			luns.Scheme = ""
-			runs.Scheme = ""
-			var ml missinggo.MultiLess
-			ml.StrictNext(luns.String() == runs.String(), luns.String() < runs.String())
-			ml.StrictNext(lu.String() == ru.String(), lu.String() < ru.String())
-			return ml.Less()
-		}).([]*trackerScraper) {
-			fmt.Fprintf(tw, "    %s\n", ta.statusLine())
-		}
-		tw.Flush()
-	}()
-
 	fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
 
 	spew.NewDefaultConfig()
@@ -747,7 +793,7 @@ func (t *torrent) BytesMissing() int64 {
 }
 
 func (t *torrent) bytesLeft() (left int64) {
-	s := t.chunks.Snapshot(&TorrentStats{})
+	s := t.chunks.Snapshot(&Stats{})
 	return t.info.TotalLength() - ((int64(s.Unverified) * int64(t.chunks.clength)) + (int64(s.Completed) * int64(t.info.PieceLength)))
 }
 
@@ -870,12 +916,6 @@ func (t *torrent) worstBadConn() *connection {
 	return nil
 }
 
-func (t *torrent) maybeNewConns() {
-	// Tickle the accept routine.
-	t.cln.event.Broadcast()
-	t.openNewConns()
-}
-
 func (t *torrent) incrementReceivedConns(c *connection, delta int64) {
 	if c.Discovery == peerSourceIncoming {
 		atomic.AddInt64(&t.numReceivedConns, delta)
@@ -893,6 +933,12 @@ func (t *torrent) dropHalfOpen(addr string) {
 	t._halfOpenmu.Lock()
 	delete(t.halfOpen, addr)
 	t._halfOpenmu.Unlock()
+}
+
+func (t *torrent) maybeNewConns() {
+	// Tickle the accept routine.
+	t.cln.event.Broadcast()
+	t.openNewConns()
 }
 
 func (t *torrent) openNewConns() {
@@ -968,38 +1014,6 @@ func (t *torrent) needData() bool {
 	}
 
 	return t.chunks.Missing() != 0
-}
-
-func appendMissingStrings(old, new []string) (ret []string) {
-	ret = old
-new:
-	for _, n := range new {
-		for _, o := range old {
-			if o == n {
-				continue new
-			}
-		}
-		ret = append(ret, n)
-	}
-	return
-}
-
-func appendMissingTrackerTiers(existing [][]string, minNumTiers int) (ret [][]string) {
-	ret = existing
-	for minNumTiers > len(ret) {
-		ret = append(ret, nil)
-	}
-	return
-}
-
-func (t *torrent) addTrackers(announceList [][]string) {
-	fullAnnounceList := &t.metainfo.AnnounceList
-	t.metainfo.AnnounceList = appendMissingTrackerTiers(*fullAnnounceList, len(announceList))
-	for tierIndex, trackerURLs := range announceList {
-		(*fullAnnounceList)[tierIndex] = appendMissingStrings((*fullAnnounceList)[tierIndex], trackerURLs)
-	}
-	t.startMissingTrackerScrapers()
-	t.updateWantPeersEvent()
 }
 
 // Don't call this before the info is available.
@@ -1084,83 +1098,6 @@ func (t *torrent) seeding() bool {
 	return true
 }
 
-func (t *torrent) startScrapingTracker(_url string) {
-	if _url == "" {
-		return
-	}
-
-	u, err := url.Parse(_url)
-	if err != nil {
-		// URLs with a leading '*' appear to be a uTorrent convention to
-		// disable trackers.
-		if _url[0] != '*' {
-			t.config.info().Println("error parsing tracker url:", _url)
-		}
-		return
-	}
-
-	if u.Scheme == "udp" {
-		u.Scheme = "udp4"
-		t.startScrapingTracker(u.String())
-		u.Scheme = "udp6"
-		t.startScrapingTracker(u.String())
-		return
-	}
-
-	if _, ok := t.trackerAnnouncers[_url]; ok {
-		return
-	}
-
-	newAnnouncer := &trackerScraper{
-		u: *u,
-		t: t,
-	}
-
-	if t.trackerAnnouncers == nil {
-		t.trackerAnnouncers = make(map[string]*trackerScraper)
-	}
-	t.trackerAnnouncers[_url] = newAnnouncer
-	go newAnnouncer.Run()
-}
-
-// Adds and starts tracker scrapers for tracker URLs that aren't already
-// running.
-func (t *torrent) startMissingTrackerScrapers() {
-	if t.config.DisableTrackers {
-		return
-	}
-
-	t.startScrapingTracker(t.metainfo.Announce)
-
-	for _, tier := range t.metainfo.AnnounceList {
-		for _, url := range tier {
-			t.startScrapingTracker(url)
-		}
-	}
-}
-
-// Returns an AnnounceRequest with fields filled out to defaults and current
-// values.
-func (t *torrent) announceRequest(event tracker.AnnounceEvent) tracker.AnnounceRequest {
-	// Note that IPAddress is not set. It's set for UDP inside the tracker
-	// code, since it's dependent on the network in use.
-	return tracker.AnnounceRequest{
-		Event:    event,
-		NumWant:  -1,
-		Port:     uint16(t.cln.incomingPeerPort()),
-		PeerId:   t.cln.peerID,
-		InfoHash: t.infoHash,
-		Key:      t.cln.announceKey(),
-
-		// The following are vaguely described in BEP 3.
-
-		Left:     t.bytesLeftAnnounce(),
-		Uploaded: t.stats.BytesWrittenData.Int64(),
-		// There's no mention of wasted or unwanted download in the BEP.
-		Downloaded: t.stats.BytesReadUsefulData.Int64(),
-	}
-}
-
 // Adds peers revealed in an announce until the announce ends, or we have
 // enough peers.
 func (t *torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
@@ -1188,7 +1125,7 @@ func (t *torrent) announceToDht(impliedPort bool, s *dht.Server) error {
 	ctx, done := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer done()
 
-	ps, err := s.Announce(ctx, t.infoHash, t.cln.incomingPeerPort(), impliedPort)
+	ps, err := s.AnnounceTraversal(ctx, t.infoHash, dht.AnnouncePeer(impliedPort, t.cln.incomingPeerPort()))
 	if err != nil {
 		return err
 	}
@@ -1227,13 +1164,13 @@ func (t *torrent) addPeers(peers []Peer) {
 	}
 }
 
-func (t *torrent) Stats() TorrentStats {
+func (t *torrent) Stats() Stats {
 	t.rLock()
 	defer t.rUnlock()
 	return t.statsLocked()
 }
 
-func (t *torrent) statsLocked() (ret TorrentStats) {
+func (t *torrent) statsLocked() (ret Stats) {
 	ret.Seeding = t.seeding()
 	ret.ActivePeers = len(t.conns.list())
 	ret.HalfOpenPeers = len(t.halfOpen)
@@ -1388,59 +1325,6 @@ func (t *torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 	return oldMax
 }
 
-// func (t *torrent) pieceHashed(piece pieceIndex, failure error) error {
-// 	correct := failure == nil
-// 	t.config.debug().Printf("hashed piece %d passed=%t", piece, correct)
-
-// 	p := t.piece(piece)
-// 	p.numVerifies++
-
-// 	if t.closed.IsSet() {
-// 		return failure
-// 	}
-
-// 	// Don't score the first time a piece is hashed, it could be an
-// 	// initial check.
-// 	if p.storageCompletionOk {
-// 		if correct {
-// 			pieceHashedCorrect.Add(1)
-// 		} else {
-// 			pieceHashedNotCorrect.Add(1)
-// 		}
-// 	}
-
-// 	if correct {
-// 		// Don't increment stats above connection-level for every involved
-// 		// connection.
-// 		t.allStats((*ConnStats).incrementPiecesDirtiedGood)
-
-// 		if err := p.Storage().MarkComplete(); err != nil {
-// 			t.chunks.ChunksPend(piece)
-// 			t.chunks.ChunksRelease(piece)
-// 			return errors.Wrapf(err, "%T: error marking piece complete %d: %T - %s", t.storage, piece, err, err)
-// 		}
-// 		t.chunks.Complete(piece)
-// 	} else {
-// 		t.chunks.ChunksFailed(piece)
-
-// 		t.allStats((*ConnStats).incrementPiecesDirtiedBad)
-
-// 		p.Storage().MarkNotComplete()
-// 		t.onIncompletePiece(piece)
-// 	}
-
-// 	return failure
-// }
-
-func (t *torrent) cancelRequestsForPiece(piece pieceIndex) {
-	t.rLock()
-	defer t.rUnlock()
-	// TODO: Make faster
-	for _, cn := range t.conns.list() {
-		cn.updateRequests()
-	}
-}
-
 // Start the process of connecting to the given peer for the given torrent if
 // appropriate.
 func (t *torrent) initiateConn(ctx context.Context, peer Peer) {
@@ -1466,13 +1350,6 @@ func (t *torrent) noLongerHalfOpen(addr string) {
 	t.unlock()
 
 	t.openNewConns()
-}
-
-// All stats that include this Torrent. Useful when we want to increment
-// ConnStats but not for every connection.
-func (t *torrent) allStats(f func(*ConnStats)) {
-	f(&t.stats)
-	f(&t.cln.stats)
 }
 
 func (t *torrent) dialTimeout() time.Duration {
@@ -1562,12 +1439,6 @@ func (t *torrent) SetDisplayName(dn string) {
 	t.nameMu.Lock()
 	defer t.nameMu.Unlock()
 	t.displayName = dn
-}
-
-// The current working name for the torrent. Either the name in the info dict,
-// or a display name given such as by the dn value in a magnet link, or "".
-func (t *torrent) Name() string {
-	return t.name()
 }
 
 // The completed length of all the torrent data, in all its files. This is

@@ -365,28 +365,6 @@ func TestSeedAfterDownloading(t *testing.T) {
 	require.Equal(t, "22c3683b094136c3398391ae71b20f04", md5x.FormatHex(digest))
 }
 
-func TestMergingTrackersByAddingSpecs(t *testing.T) {
-	cl, err := autobind.NewLoopback().Bind(torrent.NewClient(torrent.TestingConfig(t)))
-	require.NoError(t, err)
-	defer cl.Close()
-	spec := torrent.Metadata{}
-	T, added, _ := cl.Start(spec)
-	if !added {
-		t.FailNow()
-	}
-	spec.Trackers = [][]string{{"http://a"}, {"udp://b"}}
-	_, added, _ = cl.Start(spec)
-	assert.False(t, added)
-	assert.EqualValues(t, [][]string{{"http://a"}, {"udp://b"}}, T.Metadata().Trackers)
-
-	if m, ok := torrent.DeprecatedAnnounceList(T); ok {
-		// Because trackers are disabled in TestingConfig.
-		assert.EqualValues(t, 0, len(m))
-	} else {
-		t.FailNow()
-	}
-}
-
 func TestDownload(t *testing.T) {
 	buf := bytes.NewBufferString("")
 
@@ -598,11 +576,11 @@ func TestAddTorrentMerging(t *testing.T) {
 	tt, added, err := cl.Start(ts)
 	require.NoError(t, err)
 	require.True(t, added)
-	assert.Equal(t, "foo", tt.Name())
+	assert.Equal(t, "foo", tt.Metadata().DisplayName)
 	_, added, err = cl.Start(ts.Merge(torrent.OptionDisplayName("bar")))
 	require.NoError(t, err)
 	require.False(t, added)
-	assert.Equal(t, "bar", tt.Name())
+	assert.Equal(t, "bar", tt.Metadata().DisplayName)
 }
 
 func TestTorrentDroppedBeforeGotInfo(t *testing.T) {

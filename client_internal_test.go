@@ -32,7 +32,6 @@ func TestingConfig(t tt) *ClientConfig {
 	cfg := NewDefaultClientConfig(ClientConfigBootstrapGlobal)
 	cfg.NoDHT = true
 	cfg.DataDir = testutil.Autodir(t)
-	cfg.DisableTrackers = true
 	cfg.NoDefaultPortForwarding = true
 	cfg.DisableAcceptRateLimiting = true
 	// cfg.Debug = log.New(os.Stderr, "[debug] ", log.Flags())
@@ -65,14 +64,6 @@ func totalConns(tts []Torrent) (ret int) {
 		ret += tt.Stats().ActivePeers
 	}
 	return
-}
-
-// DeprecatedAccounceList - used to reach into a torrent for tests.
-func DeprecatedAnnounceList(t Torrent) (map[string]*trackerScraper, bool) {
-	if tt, ok := t.(*torrent); ok {
-		return tt.trackerAnnouncers, ok
-	}
-	return make(map[string]*trackerScraper), false
 }
 
 // DeprecatedExtractClient - used to extract the underlying client.

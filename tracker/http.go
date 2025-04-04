@@ -2,17 +2,15 @@ package tracker
 
 import (
 	"bytes"
-	"crypto/tls"
+	"context"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 
-	"github.com/anacrolix/missinggo/httptoo"
 	"github.com/james-lawrence/torrent/dht/krpc"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -80,17 +78,14 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts Announce) {
 	// The AWS S3 tracker returns "400 Bad Request: left(-1) was not in the valid range 0 -
 	// 9223372036854775807" if left is out of range, or "500 Internal Server Error: Internal Server
 	// Error" if omitted entirely.
-	left := ar.Left
-	if left < 0 {
-		left = math.MaxInt64
-	}
-	q.Set("left", strconv.FormatInt(left, 10))
+	q.Set("left", strconv.FormatInt(ar.Left, 10))
 
 	if ar.Event != None {
 		q.Set("event", ar.Event.String())
 	}
 	// http://stackoverflow.com/questions/17418004/why-does-tracker-server-not-understand-my-request-bittorrent-protocol
 	q.Set("compact", "1")
+
 	// According to https://wiki.vuze.com/w/Message_Stream_Encryption. TODO:
 	// Take EncryptionPolicy or something like it as a parameter.
 	q.Set("supportcrypto", "1")
@@ -103,67 +98,60 @@ func setAnnounceParams(_url *url.URL, ar *AnnounceRequest, opts Announce) {
 	_url.RawQuery = q.Encode()
 }
 
-func announceHTTP(opt Announce, _url *url.URL) (ret AnnounceResponse, err error) {
-	_url = httptoo.CopyURL(_url)
-	setAnnounceParams(_url, &opt.Request, opt)
-	req, err := http.NewRequest("GET", _url.String(), nil)
-	req.Header.Set("User-Agent", opt.UserAgent)
-	req.Host = opt.HostHeader
-	if opt.Context != nil {
-		req = req.WithContext(opt.Context)
+func announceHTTP(ctx context.Context, _url *url.URL, ar AnnounceRequest, opt Announce) (ret AnnounceResponse, err error) {
+	dup, err := url.Parse(_url.String())
+	if err != nil {
+		return ret, err
 	}
+
+	setAnnounceParams(dup, &ar, opt)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, dup.String(), nil)
+	req.Header.Set("User-Agent", opt.UserAgent)
+
 	resp, err := (&http.Client{
 		Timeout: time.Second * 15,
 		Transport: &http.Transport{
 			Dial: (&net.Dialer{
 				Timeout: 15 * time.Second,
 			}).Dial,
-			Proxy:               opt.HTTPProxy,
+			Proxy:               http.ProxyFromEnvironment,
 			TLSHandshakeTimeout: 15 * time.Second,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-				ServerName:         opt.ServerName,
-			},
 		},
 	}).Do(req)
 	if err != nil {
-		return
+		return ret, err
 	}
 	defer resp.Body.Close()
 	var buf bytes.Buffer
-	io.Copy(&buf, resp.Body)
+	if _, err = io.Copy(&buf, resp.Body); err != nil {
+		return ret, err
+	}
+
 	if resp.StatusCode != 200 {
-		err = fmt.Errorf("response from tracker: %s: %s", resp.Status, buf.String())
-		return
+		return ret, fmt.Errorf("response from tracker: %s: %s", resp.Status, buf.String())
 	}
 	var trackerResponse HttpResponse
 	err = bencode.Unmarshal(buf.Bytes(), &trackerResponse)
 	if _, ok := err.(bencode.ErrUnusedTrailingBytes); ok {
 		err = nil
 	} else if err != nil {
-		err = fmt.Errorf("error decoding %q: %s", buf.Bytes(), err)
-		return
+		return ret, fmt.Errorf("error decoding %q: %s", buf.Bytes(), err)
 	}
 	if trackerResponse.FailureReason != "" {
-		err = fmt.Errorf("tracker gave failure reason: %q", trackerResponse.FailureReason)
-		return
+		return ret, fmt.Errorf("tracker gave failure reason: %q", trackerResponse.FailureReason)
 	}
-	vars.Add("successful http announces", 1)
+
 	ret.Interval = trackerResponse.Interval
 	ret.Leechers = trackerResponse.Incomplete
 	ret.Seeders = trackerResponse.Complete
-	if len(trackerResponse.Peers) != 0 {
-		vars.Add("http responses with nonempty peers key", 1)
-	}
 	ret.Peers = trackerResponse.Peers
-	if len(trackerResponse.Peers6) != 0 {
-		vars.Add("http responses with nonempty peers6 key", 1)
-	}
+
 	for _, na := range trackerResponse.Peers6 {
 		ret.Peers = append(ret.Peers, Peer{
 			IP:   na.Addr().AsSlice(),
 			Port: int(na.Port()),
 		})
 	}
-	return
+
+	return ret, nil
 }

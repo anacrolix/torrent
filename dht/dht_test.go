@@ -161,7 +161,7 @@ func TestAnnounceTimeout(t *testing.T) {
 	copy(ih[:], "12341234123412341234")
 	ctx, done := context.WithTimeout(t.Context(), 300*time.Millisecond)
 	defer done()
-	a, err := s.Announce(ctx, ih, 0, true)
+	a, err := s.AnnounceTraversal(ctx, ih, AnnouncePeer(true, 0))
 	assert.NoError(t, err)
 	<-a.Peers
 	a.Close()
@@ -262,7 +262,7 @@ func TestBadGetPeersResponse(t *testing.T) {
 		require.NoError(t, err)
 		pc.WriteTo(b, addr)
 	}()
-	a, err := s.Announce(t.Context(), [20]byte{}, 0, true)
+	a, err := s.AnnounceTraversal(t.Context(), [20]byte{}, AnnouncePeer(true, 0))
 	require.NoError(t, err)
 	// Drain the Announce until it closes.
 	for range a.Peers {

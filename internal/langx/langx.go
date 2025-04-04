@@ -62,3 +62,11 @@ func Clone[T any, Y ~func(*T)](v T, options ...Y) T {
 
 	return dup
 }
+
+func Compose[T any, Y ~func(*T)](options ...Y) Y {
+	return func(v *T) {
+		for _, opt := range options {
+			opt(v)
+		}
+	}
+}

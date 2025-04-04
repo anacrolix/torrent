@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -139,7 +138,6 @@ func (cl *Client) merge(old *torrent, updated Metadata) (err error) {
 		old.setChunkSize(pp.Integer(updated.ChunkSize))
 	}
 
-	old.addTrackers(updated.Trackers)
 	old.openNewConns()
 	cl.event.Broadcast()
 
@@ -199,7 +197,7 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	defer w.Flush()
 	fmt.Fprintf(w, "Listen port: %d\n", cl.LocalPort())
 	fmt.Fprintf(w, "Peer ID: %+q\n", cl.PeerID())
-	fmt.Fprintf(w, "Announce key: %x\n", cl.announceKey())
+	fmt.Fprintf(w, "Announce key: %x\n", -1) // removed the method from the client didnt belong here.
 	cl.eachDhtServer(func(s *dht.Server) {
 		fmt.Fprintf(w, "%s DHT server at %s:\n", s.Addr().Network(), s.Addr().String())
 		writeDhtServerStatus(w, s)
@@ -223,10 +221,6 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		}
 		fmt.Fprintln(w)
 	}
-}
-
-func (cl *Client) announceKey() int32 {
-	return int32(binary.BigEndian.Uint32(cl.peerID[16:20]))
 }
 
 // NewClient create a new client from the provided config. nil is acceptable.
@@ -799,7 +793,7 @@ func (cl *Client) newTorrent(src Metadata) (t *torrent, _ error) {
 			return nil, err
 		}
 	}
-	t.addTrackers(src.Trackers)
+
 	cl.AddDHTNodes(src.DHTNodes)
 
 	return t, nil

@@ -93,14 +93,11 @@ func (c *udpAnnounce) Close() error {
 }
 
 func (c *udpAnnounce) ipv6() bool {
-	if c.a.UdpNetwork == "udp6" {
-		return true
-	}
 	rip := missinggo.AddrIP(c.socket.RemoteAddr())
 	return rip.To16() != nil && rip.To4() == nil
 }
 
-func (c *udpAnnounce) Do(req AnnounceRequest) (res AnnounceResponse, err error) {
+func (c *udpAnnounce) Do(ctx context.Context, req AnnounceRequest) (res AnnounceResponse, err error) {
 	err = c.connect()
 	if err != nil {
 		return
@@ -206,10 +203,7 @@ func (c *udpAnnounce) request(action Action, args interface{}, options []byte) (
 			defer close(readDone)
 			n, readErr = c.socket.Read(b)
 		}()
-		ctx := c.a.Context
-		if ctx == nil {
-			ctx = context.Background()
-		}
+		ctx := context.Background()
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -257,9 +251,6 @@ func (c *udpAnnounce) connected() bool {
 }
 
 func (c *udpAnnounce) dialNetwork() string {
-	if c.a.UdpNetwork != "" {
-		return c.a.UdpNetwork
-	}
 	return "udp"
 }
 
@@ -296,11 +287,12 @@ func (c *udpAnnounce) connect() (err error) {
 
 // TODO: Split on IPv6, as BEP 15 says response peer decoding depends on
 // network in use.
-func announceUDP(opt Announce, _url *url.URL) (AnnounceResponse, error) {
+// ctx context.Context, _url *url.URL, ar AnnounceRequest, opt Announce
+func announceUDP(ctx context.Context, _url *url.URL, ar AnnounceRequest, opt Announce) (AnnounceResponse, error) {
 	ua := udpAnnounce{
 		url: *_url,
 		a:   &opt,
 	}
 	defer ua.Close()
-	return ua.Do(opt.Request)
+	return ua.Do(ctx, ar)
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
+	"github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/connections"
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/internal/testutil"
@@ -96,7 +97,7 @@ func TestTorrentInitialState(t *testing.T) {
 
 	require.Equal(t, 8, stats.Missing)
 	require.True(t, tor.chunks.ChunksMissing(0))
-	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), tor.chunkSize))
+	assert.EqualValues(t, chunkSpec{4, 1}, chunkIndexSpec(2, tor.pieceLength(0), btprotocol.Integer(tor.md.ChunkSize)))
 }
 
 func TestReducedDialTimeout(t *testing.T) {

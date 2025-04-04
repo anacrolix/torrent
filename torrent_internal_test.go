@@ -46,7 +46,7 @@ func TestTorrentRequest(t *testing.T) {
 
 func TestTorrentString(t *testing.T) {
 	tor := &torrent{}
-	s := tor.InfoHash().HexString()
+	s := tor.md.ID.HexString()
 	if s != "0000000000000000000000000000000000000000" {
 		t.FailNow()
 	}
@@ -117,7 +117,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	require.NoError(t, err)
 	tt, _, err := cl.Start(ts)
 	require.NoError(t, err)
-	assert.Nil(t, tt.(*torrent).Metainfo().InfoBytes)
+	assert.Nil(t, tt.(*torrent).Metadata().InfoBytes)
 	assert.False(t, tt.(*torrent).haveAllMetadataPieces())
 
 	nc, err := net.Dial("tcp", fmt.Sprintf(":%d", cl.LocalPort()))
@@ -162,5 +162,5 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	}()
 	assert.Equal(t, make([]byte, len(mi.InfoBytes)), tt.(*torrent).metadataBytes)
 	assert.False(t, tt.(*torrent).haveAllMetadataPieces())
-	assert.Nil(t, tt.(*torrent).Metainfo().InfoBytes)
+	assert.Nil(t, tt.(*torrent).Metadata().InfoBytes)
 }

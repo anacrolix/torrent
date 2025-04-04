@@ -1236,7 +1236,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			}
 		case pp.Piece:
 			if err = errors.Wrap(cn.receiveChunk(&msg), "failed to received chunk"); err == nil {
-				if len(msg.Piece) == int(cn.t.chunkSize) {
+				if len(msg.Piece) == cn.t.md.ChunkSize {
 					cn.t.chunkPool.Put(&msg.Piece)
 				}
 				cn.updateRequests()

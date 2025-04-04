@@ -100,7 +100,7 @@ func TestAddDropManyTorrents(t *testing.T) {
 	defer cl.Close()
 	for i := range iter.N(1000) {
 		var spec torrent.Metadata
-		binary.PutVarint((&spec).InfoHash[:], int64(i))
+		binary.PutVarint((&spec).ID[:], int64(i))
 		_, added, err := cl.Start(spec)
 		require.NoError(t, err)
 		assert.True(t, added)

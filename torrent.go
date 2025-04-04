@@ -74,7 +74,7 @@ func TuneReadHashID(id *int160.T) Tuner {
 	return func(t *torrent) {
 		t.rLock()
 		defer t.rUnlock()
-		*id = int160.FromByteArray(t.infoHash)
+		*id = int160.FromByteArray(t.md.ID)
 	}
 }
 
@@ -120,7 +120,7 @@ func TuneReadAnnounce(v *tracker.Announce) Tuner {
 
 		*v = tracker.Announce{
 			UserAgent:  t.config.HTTPUserAgent,
-			TrackerUrl: t.metainfo.Announce,
+			TrackerUrl: t.md.Announce(),
 			ClientIp4:  krpc.NewNodeAddrFromIPPort(t.config.PublicIP4, 0),
 			ClientIp6:  krpc.NewNodeAddrFromIPPort(t.config.PublicIP6, 0),
 		}
@@ -150,7 +150,6 @@ func TuneClientPeer(cl *Client) Tuner {
 type Torrent interface {
 	Metadata() Metadata
 	Tune(...Tuner) error
-	Metainfo() metainfo.MetaInfo  // TODO: remove, should be pulled from Metadata()
 	BytesCompleted() int64        // TODO: maybe should be pulled from torrent, it has a reference to the storage implementation. or maybe part of the Stats call?
 	Stats() Stats                 // TODO: rename TorrentStats, it stutters.
 	Info() *metainfo.Info         // TODO: remove, this should be pulled from Metadata()
@@ -199,11 +198,10 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 	m := &sync.RWMutex{}
 	chunkcond := sync.NewCond(&sync.Mutex{})
 	t := &torrent{
-		displayName: src.DisplayName,
-		infoHash:    src.InfoHash,
-		cln:         cl,
-		config:      cl.config,
-		_mu:         m,
+		md:     src,
+		cln:    cl,
+		config: cl.config,
+		_mu:    m,
 		peers: newPeerPool(32, func(p Peer) peerPriority {
 			return bep40PriorityIgnoreError(cl.publicAddr(p.IP), p.addr())
 		}),
@@ -223,7 +221,7 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 	}
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
 	t.event = &sync.Cond{L: tlocker{torrent: t}}
-	t.setChunkSize(pp.Integer(langx.DefaultIfZero(16*bytesx.KiB, src.ChunkSize)))
+	t.setChunkSize(langx.DefaultIfZero(16*bytesx.KiB, src.ChunkSize))
 	*t.digests = newDigestsFromTorrent(t)
 	return t
 }
@@ -289,24 +287,26 @@ type torrent struct {
 	// alignment. See #262.
 	stats ConnStats
 
+	md               Metadata
 	numReceivedConns int64
 
 	cln    *Client
 	config *ClientConfig
 	_mu    *sync.RWMutex
+	// Name used if the info name isn't available. Should be cleared when the
+	// Info does become available.
+	nameMu sync.RWMutex
 
 	networkingEnabled bool
 
 	// How long to avoid duplicating a pending request.
 	duplicateRequestTimeout time.Duration
 
-	closed   missinggo.Event
-	infoHash metainfo.Hash
+	closed missinggo.Event
+
 	// Values are the piece indices that changed.
 	pieceStateChanges *pubsub.PubSub
-	// The size of chunks to request from peers over the wire. This is
-	// normally 16KiB by convention these days.
-	chunkSize pp.Integer
+
 	chunkcond *sync.Cond
 	chunkPool *sync.Pool
 
@@ -316,9 +316,6 @@ type torrent struct {
 	storage storage.TorrentImpl
 	// Read-locked for using storage, and write-locked for Closing.
 	storageLock sync.RWMutex
-
-	// TODO: Only announce stuff is used?
-	metainfo metainfo.MetaInfo
 
 	// The info dict. nil if we don't have it (yet).
 	info  *metainfo.Info
@@ -344,11 +341,6 @@ type torrent struct {
 
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
-
-	// Name used if the info name isn't available. Should be cleared when the
-	// Info does become available.
-	nameMu      sync.RWMutex
-	displayName string
 
 	// The bencoded bytes of the info dict. This is actively manipulated if
 	// the info bytes aren't initially available, and we try to fetch them
@@ -388,13 +380,8 @@ func (t *torrent) Storage() storage.TorrentImpl {
 
 // Metadata provides enough information to lookup the torrent again.
 func (t *torrent) Metadata() Metadata {
-	return Metadata{
-		DisplayName: t.name(),
-		InfoHash:    t.infoHash,
-		ChunkSize:   int(t.chunkSize),
-		InfoBytes:   t.metadataBytes,
-		Trackers:    t.metainfo.AnnounceList,
-	}
+	dup := t.md
+	return dup
 }
 
 // Tune the settings of the torrent.
@@ -494,9 +481,9 @@ func (t *torrent) KnownSwarm() (ks []Peer) {
 	return ks
 }
 
-func (t *torrent) setChunkSize(size pp.Integer) {
-	t.chunkSize = size
-	*t.chunks = *newChunks(int(size), langx.DefaultIfZero(metainfo.NewInfo(), t.info), chunkoptCond(t.chunkcond))
+func (t *torrent) setChunkSize(size int) {
+	t.md.ChunkSize = size
+	*t.chunks = *newChunks(size, langx.DefaultIfZero(metainfo.NewInfo(), t.info), chunkoptCond(t.chunkcond))
 	t.chunkPool = &sync.Pool{
 		New: func() interface{} {
 			b := make([]byte, size)
@@ -616,7 +603,7 @@ func (t *torrent) setInfo(info *metainfo.Info) (err error) {
 	}
 
 	if t.storageOpener != nil {
-		t.storage, err = t.storageOpener.OpenTorrent(info, t.infoHash)
+		t.storage, err = t.storageOpener.OpenTorrent(info, t.md.ID)
 		if err != nil {
 			return fmt.Errorf("error opening torrent storage: %s", err)
 		}
@@ -624,7 +611,7 @@ func (t *torrent) setInfo(info *metainfo.Info) (err error) {
 
 	t.nameMu.Lock()
 	t.info = info
-	t.setChunkSize(t.chunkSize)
+	t.setChunkSize(t.md.ChunkSize)
 	t.nameMu.Unlock()
 
 	t.initFiles()
@@ -657,7 +644,7 @@ func (t *torrent) onSetInfo() {
 func (t *torrent) setInfoBytes(b []byte) error {
 	var info metainfo.Info
 
-	if metainfo.HashBytes(b) != t.infoHash {
+	if metainfo.HashBytes(b) != t.md.ID {
 		return errors.New("info bytes have wrong hash")
 	}
 
@@ -723,14 +710,6 @@ func (t *torrent) setMetadataSize(bytes int) (err error) {
 	return err
 }
 
-// The current working name for the torrent. Either the name in the info dict,
-// or a display name given such as by the dn value in a magnet link, or "".
-func (t *torrent) name() string {
-	t.nameMu.RLock()
-	defer t.nameMu.RUnlock()
-	return t.displayName
-}
-
 func (t *torrent) metadataPieceSize(piece int) int {
 	return metadataPieceSize(len(t.metadataBytes), piece)
 }
@@ -754,7 +733,7 @@ func (t *torrent) newMetadataExtensionMessage(c *connection, msgType int, piece 
 }
 
 func (t *torrent) writeStatus(w io.Writer) {
-	fmt.Fprintf(w, "Infohash: %s\n", t.infoHash.HexString())
+	fmt.Fprintf(w, "Infohash: %s\n", t.md.ID.HexString())
 	fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize())
 	if !t.haveInfo() {
 		fmt.Fprintf(w, "Metadata have: ")
@@ -1125,7 +1104,7 @@ func (t *torrent) announceToDht(impliedPort bool, s *dht.Server) error {
 	ctx, done := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer done()
 
-	ps, err := s.AnnounceTraversal(ctx, t.infoHash, dht.AnnouncePeer(impliedPort, t.cln.incomingPeerPort()))
+	ps, err := s.AnnounceTraversal(ctx, t.md.ID, dht.AnnouncePeer(impliedPort, t.cln.incomingPeerPort()))
 	if err != nil {
 		return err
 	}
@@ -1367,12 +1346,6 @@ func (t *torrent) piece(i int) *metainfo.Piece {
 	return &tmp
 }
 
-// The torrent's infohash. This is fixed and cannot change. It uniquely
-// identifies a torrent.
-func (t *torrent) InfoHash() metainfo.Hash {
-	return t.infoHash
-}
-
 // Returns a channel that is closed when the info (.Info()) for the torrent
 // has become available.
 func (t *torrent) GotInfo() <-chan struct{} {
@@ -1387,35 +1360,6 @@ func (t *torrent) Info() *metainfo.Info {
 	defer t.rUnlock()
 	return t.info
 }
-
-// // Returns the state of pieces of the torrent. They are grouped into runs of
-// // same state. The sum of the state run lengths is the number of pieces
-// // in the torrent.
-// func (t *torrent) PieceStateRuns() []PieceStateRun {
-// 	t.rLock()
-// 	defer t.rUnlock()
-// 	return t.pieceStateRuns()
-// }
-
-// func (t *torrent) PieceState(piece pieceIndex) PieceState {
-// 	t.rLock()
-// 	defer t.rUnlock()
-// 	return t.pieceState(piece)
-// }
-
-// // The number of pieces in the torrent. This requires that the info has been
-// // obtained first.
-// func (t *torrent) NumPieces() pieceIndex {
-// 	return t.numPieces()
-// }
-
-// // Get missing bytes count for specific piece.
-// func (t *torrent) PieceBytesMissing(piece int) int64 {
-// 	t.lock()
-// 	defer t.unlock()
-
-// 	return int64(t.pieces[piece].bytesLeft())
-// }
 
 // Number of bytes of the entire torrent we have completed. This is the sum of
 // completed pieces, and dirtied chunks of incomplete pieces. Do not use this
@@ -1433,27 +1377,10 @@ func (t *torrent) SubscribePieceStateChanges() *pubsub.Subscription {
 	return t.pieceStateChanges.Subscribe()
 }
 
-// Clobbers the torrent display name. The display name is used as the torrent
-// name if the metainfo is not available.
-func (t *torrent) SetDisplayName(dn string) {
-	t.nameMu.Lock()
-	defer t.nameMu.Unlock()
-	t.displayName = dn
-}
-
 // The completed length of all the torrent data, in all its files. This is
 // derived from the torrent info, when it is available.
 func (t *torrent) Length() int64 {
 	return t.info.TotalLength()
-}
-
-// Returns a run-time generated metainfo for the torrent that includes the
-// info bytes and announce-list as currently known to the client.
-func (t *torrent) Metainfo() metainfo.MetaInfo {
-	t.lock()
-	defer t.unlock()
-	dup := t.metainfo
-	return dup
 }
 
 func (t *torrent) initFiles() {
@@ -1489,23 +1416,13 @@ func (t *torrent) AddPeers(pp []Peer) {
 	t.addPeers(pp)
 }
 
-// // Marks the entire torrent for download. Requires the info first, see
-// // GotInfo. Sets piece priorities for historical reasons.
-// func (t *torrent) DownloadAll() {
-// 	t.DownloadPieces(0, t.numPieces())
-// }
-
 func (t *torrent) String() string {
-	if s := t.name(); s != "" {
+	if s := t.md.DisplayName; s != "" {
 		return strconv.Quote(s)
 	}
 
-	return t.infoHash.HexString()
+	return t.md.ID.HexString()
 }
-
-// func (t *torrent) Piece(i pieceIndex) *Piece {
-// 	return t.piece(i)
-// }
 
 func (t *torrent) ping(addr net.UDPAddr) {
 	t.cln.eachDhtServer(func(s *dht.Server) {

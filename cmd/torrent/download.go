@@ -98,6 +98,9 @@ func addTorrents(
 ) error {
 	testPeers := resolveTestPeers(flags.TestPeer)
 	for _, arg := range flags.Torrent {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		t, err := func() (*torrent.Torrent, error) {
 			if strings.HasPrefix(arg, "magnet:") {
 				t, err := client.AddMagnet(arg)
@@ -108,7 +111,7 @@ func addTorrents(
 			} else if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
 				response, err := http.Get(arg)
 				if err != nil {
-					return nil, fmt.Errorf("Error downloading torrent file: %s", err)
+					return nil, fmt.Errorf("error downloading torrent file: %w", err)
 				}
 
 				metaInfo, err := metainfo.Load(response.Body)
@@ -156,7 +159,7 @@ func addTorrents(
 			case <-t.GotInfo():
 			}
 			if flags.SaveMetainfos {
-				path := fmt.Sprintf("%v.torrent", t.InfoHash().HexString())
+				path := fmt.Sprintf("%s.torrent", t.InfoHash().HexString())
 				err := writeMetainfoToFile(t.Metainfo(), path)
 				if err == nil {
 					log.Printf("wrote %q", path)
@@ -296,7 +299,7 @@ func statsEnabled(flags downloadFlags) bool {
 	return flags.Stats
 }
 
-func downloadErr(flags downloadFlags) error {
+func downloadErr(ctx context.Context, flags downloadFlags) error {
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableWebseeds = flags.DisableWebseeds
 	clientConfig.DisableTCP = !flags.TcpPeers
@@ -347,7 +350,7 @@ func downloadErr(flags downloadFlags) error {
 		clientConfig.MaxUnverifiedBytes = flags.MaxUnverifiedBytes.Int64()
 	}
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	client, err := torrent.NewClient(clientConfig)

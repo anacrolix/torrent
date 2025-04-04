@@ -36,7 +36,11 @@ func shutdownTracerProvider(ctx context.Context, tp *trace.TracerProvider) {
 	started := time.Now()
 	err := tp.Shutdown(ctx)
 	elapsed := time.Since(started)
-	log.Levelf(log.Error, "shutting down tracer provider (took %v): %v", elapsed, err)
+	logger := log.Default.Slogger()
+	logger.Debug("shutting down tracer provider", "took", elapsed)
+	if err != nil && ctx.Err() == nil {
+		log.Default.Slogger().Error("error shutting down tracer provider", "err", err)
+	}
 }
 
 func main() {
@@ -51,7 +55,6 @@ func mainErr(ctx context.Context) error {
 		return fmt.Errorf("creating tracing exporter: %w", err)
 	}
 	tracerProvider := trace.NewTracerProvider(trace.WithBatcher(tracingExporter))
-	defer shutdownTracerProvider(ctx, tracerProvider)
 	otel.SetTracerProvider(tracerProvider)
 
 	main := bargle.Main{}
@@ -84,7 +87,7 @@ func mainErr(ctx context.Context) error {
 			var dlc DownloadCmd
 			cmd := bargle.FromStruct(&dlc)
 			cmd.DefaultAction = func() error {
-				return downloadErr(downloadFlags{
+				return downloadErr(ctx, downloadFlags{
 					Debug:       debug,
 					DownloadCmd: dlc,
 				})

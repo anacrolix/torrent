@@ -1377,7 +1377,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	}
 	t.smartBanCache.Init()
 	t.networkingEnabled.Set()
-	t.logger = cl.logger.WithDefaultLevel(log.Debug)
+	t.logger = cl.logger.WithDefaultLevel(log.Debug).WithNames(t.InfoHash().HexString())
 	t.sourcesLogger = t.logger.WithNames("sources")
 	if opts.ChunkSize == 0 {
 		opts.ChunkSize = defaultChunkSize

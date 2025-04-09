@@ -218,6 +218,12 @@ func addTorrents(
 					log.Printf("error writing %q: %v", path, err)
 				}
 			}
+			if flags.Verify {
+				err := t.VerifyDataContext(ctx)
+				if err != nil && ctx.Err() == nil {
+					log.Levelf(log.Error, "error verifying data: %v", err)
+				}
+			}
 			if len(flags.File) == 0 {
 				t.DownloadAll()
 				wg.Add(1)
@@ -311,21 +317,23 @@ type downloadFlags struct {
 }
 
 type DownloadCmd struct {
-	SaveMetainfos      bool
-	Mmap               bool           `help:"memory-map torrent data"`
-	Seed               bool           `help:"seed after download is complete"`
-	Addr               string         `help:"network listen addr"`
-	MaxUnverifiedBytes *tagflag.Bytes `help:"maximum number bytes to have pending verification"`
-	UploadRate         *tagflag.Bytes `help:"max piece bytes to send per second"`
-	DownloadRate       *tagflag.Bytes `help:"max bytes per second down from peers"`
-	PackedBlocklist    string
-	PublicIP           net.IP
-	Progress           bool `default:"true"`
-	PieceStates        bool `help:"Output piece state runs at progress intervals."`
-	Quiet              bool `help:"discard client logging"`
-	Stats              bool `help:"print stats at termination"`
-	Dht                bool `default:"true"`
-	PortForward        bool `default:"true"`
+	SaveMetainfos                  bool           `help:"save metainfo files when info is obtained"`
+	Mmap                           bool           `help:"memory-map torrent data"`
+	Seed                           bool           `help:"seed after download is complete"`
+	Addr                           string         `help:"network listen addr"`
+	MaxUnverifiedBytes             *tagflag.Bytes `help:"maximum number bytes to have pending verification"`
+	UploadRate                     *tagflag.Bytes `help:"max piece bytes to send per second"`
+	MaxAllocPeerRequestDataPerConn *tagflag.Bytes `help:"max bytes to allocate for peer request data per connection"`
+	DownloadRate                   *tagflag.Bytes `help:"max bytes per second down from peers"`
+	PackedBlocklist                string
+	PublicIP                       net.IP
+	Progress                       bool `default:"true"`
+	PieceStates                    bool `help:"Output piece state runs at progress intervals."`
+	Quiet                          bool `help:"discard client logging"`
+	Stats                          bool `help:"print stats at termination"`
+	Dht                            bool `default:"true"`
+	PortForward                    bool `default:"true"`
+	Verify                         bool `help:"verify data after adding torrent"`
 
 	TcpPeers        bool `default:"true"`
 	UtpPeers        bool `default:"true"`
@@ -366,6 +374,9 @@ func downloadErr(ctx context.Context, flags downloadFlags) error {
 	clientConfig.DisablePEX = !flags.Pex
 	clientConfig.DisableWebtorrent = !flags.Webtorrent
 	clientConfig.NoDefaultPortForwarding = !flags.PortForward
+	if flags.MaxAllocPeerRequestDataPerConn != nil {
+		clientConfig.MaxAllocPeerRequestDataPerConn = flags.MaxAllocPeerRequestDataPerConn.Int64()
+	}
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
 		if err != nil {
@@ -381,8 +392,14 @@ func downloadErr(ctx context.Context, flags downloadFlags) error {
 		clientConfig.SetListenAddr(flags.Addr)
 	}
 	if flags.UploadRate != nil {
-		// TODO: I think the upload rate limit could be much lower.
-		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(*flags.UploadRate), 256<<10)
+		clientConfig.UploadRateLimiter = rate.NewLimiter(
+			rate.Limit(*flags.UploadRate),
+			// Need to ensure the expected peer request length <= the upload
+			// burst. We can't really encode this logic into the ClientConfig as
+			// helper because it's quite specific. We're assuming the
+			// MaxAllocPeerRequestDataPerConn flag is being used to support
+			// this.
+			max(int(*flags.MaxAllocPeerRequestDataPerConn), 256<<10))
 	}
 	if flags.DownloadRate != nil {
 		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(*flags.DownloadRate), 1<<16)

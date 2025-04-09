@@ -25,6 +25,62 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
+func clientStatusWriter(ctx context.Context, cl *torrent.Client) {
+	start := time.Now()
+	lastStats := cl.Stats()
+	var lastLine string
+	var lastPrint time.Time
+	interval := 3 * time.Second
+	ticker := time.Tick(interval)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker:
+		}
+		stats := cl.Stats()
+		ts := cl.Torrents()
+		var completeBytes int64
+		var totalBytes int64
+		var infos int
+		for _, t := range ts {
+			if t.Info() != nil {
+				infos++
+				completeBytes += t.BytesCompleted()
+				totalBytes += t.Info().TotalLength()
+			}
+		}
+		getRate := func(a func(*torrent.ClientStats) *torrent.Count) int64 {
+			byteRate := int64(time.Second)
+			byteRate *= a(&stats).Int64() - a(&lastStats).Int64()
+			byteRate /= int64(interval)
+			return byteRate
+		}
+		uploadRate := getRate(func(s *torrent.ClientStats) *torrent.Count {
+			return &s.BytesWrittenData
+		})
+		downloadRate := getRate(func(s *torrent.ClientStats) *torrent.Count {
+			return &s.BytesReadUsefulData
+		})
+		line := fmt.Sprintf(
+			"%v torrents, %v infos, %s/%s ready, upload %s, download %s/s",
+			len(ts),
+			infos,
+			humanize.Bytes(uint64(completeBytes)),
+			humanize.Bytes(uint64(totalBytes)),
+			humanize.Bytes(uint64(uploadRate)),
+			humanize.Bytes(uint64(downloadRate)),
+		)
+		if line != lastLine || time.Since(lastPrint) >= time.Minute {
+			lastLine = line
+			lastPrint = time.Now()
+			fmt.Fprintf(os.Stdout, "%s: %s\n", time.Since(start), line)
+		}
+		lastStats = stats
+	}
+}
+
+// Keeping this for now for reference in case I do per-torrent deltas in client status updates.
 func torrentBar(t *torrent.Torrent, pieceStates bool) {
 	go func() {
 		start := time.Now()
@@ -144,9 +200,6 @@ func addTorrents(
 			err = fmt.Errorf("error writing chunk for %v: %w", t, err)
 			fatalErr(err)
 		})
-		if flags.Progress {
-			torrentBar(t, flags.PieceStates)
-		}
 		t.AddPeers(testPeers)
 		wg.Add(1)
 		go func() {
@@ -353,6 +406,10 @@ func downloadErr(ctx context.Context, flags downloadFlags) error {
 		return fmt.Errorf("creating client: %w", err)
 	}
 	defer client.Close()
+
+	if flags.Progress {
+		go clientStatusWriter(ctx, client)
+	}
 
 	// Write status on the root path on the default HTTP muxer. This will be bound to localhost
 	// somewhere if GOPPROF is set, thanks to the envpprof import.

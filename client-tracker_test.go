@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anacrolix/torrent/internal/testutil"
-	"github.com/anacrolix/torrent/tracker"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
+
+	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/tracker"
 )
 
 func TestClientInvalidTracker(t *testing.T) {

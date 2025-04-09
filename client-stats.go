@@ -20,7 +20,7 @@ type clientHolepunchAddrSets struct {
 }
 
 type ClientStats struct {
-	ConnStats
+	TorrentStats
 
 	// Ongoing outgoing dial attempts. There may be more than one dial going on per peer address due
 	// to hole-punch connect requests. The total may not match the sum of attempts for all Torrents
@@ -39,7 +39,12 @@ type ClientStats struct {
 }
 
 func (cl *Client) statsLocked() (stats ClientStats) {
-	stats.ConnStats = cl.connStats.Copy()
+	stats.ConnStats = copyCountFields(&cl.connStats)
+	stats.TorrentStatCounters = copyCountFields(&cl.counters)
+	for t := range cl.torrents {
+		stats.TorrentGauges.Add(t.gauges())
+	}
+
 	stats.ActiveHalfOpenAttempts = cl.numHalfOpen
 
 	stats.NumPeersUndialableWithoutHolepunch = len(cl.undialableWithoutHolepunch)

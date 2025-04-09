@@ -531,7 +531,7 @@ func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 // connection.
 func (cn *Peer) postHandshakeStats(f func(*ConnStats)) {
 	t := cn.t
-	f(&t.stats)
+	f(&t.connStats)
 	f(&t.cl.connStats)
 }
 

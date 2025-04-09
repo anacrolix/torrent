@@ -56,6 +56,7 @@ type Client struct {
 	// An aggregate of stats over all connections. First in struct to ensure 64-bit alignment of
 	// fields. See #262.
 	connStats ConnStats
+	counters  TorrentStatCounters
 
 	_mu    lockWithDeferreds
 	event  sync.Cond

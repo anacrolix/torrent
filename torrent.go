@@ -59,7 +59,9 @@ var errTorrentClosed = errors.New("torrent closed")
 type Torrent struct {
 	// Torrent-level aggregate statistics. First in struct to ensure 64-bit
 	// alignment. See #262.
-	stats  ConnStats
+	connStats ConnStats
+	counters  TorrentStatCounters
+
 	cl     *Client
 	logger log.Logger
 
@@ -1143,9 +1145,14 @@ func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex) *blockCheckingWr
 	}
 }
 
+func (t *Torrent) countBytesHashed(n int64) {
+	t.counters.BytesHashed.Add(n)
+	t.cl.counters.BytesHashed.Add(n)
+}
+
 func (t *Torrent) hashPiece(piece pieceIndex) (
 	correct bool,
-	// These are peers that sent us blocks that differ from what we hash here.
+// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
@@ -1159,6 +1166,9 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 			var sum metainfo.Hash
 			// log.Printf("A piece decided to self-hash: %d", piece)
 			sum, err = i.SelfHash()
+			if err == nil {
+				t.countBytesHashed(int64(p.length()))
+			}
 			correct = sum == *p.hash
 			// Can't do smart banning without reading the piece. The smartBanCache is still cleared
 			// in pieceHasher regardless.
@@ -1180,6 +1190,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 					err,
 				))
 			}
+			t.countBytesHashed(written)
 		}
 		var sum [20]byte
 		sumExactly(sum[:], h.Sum)
@@ -1215,7 +1226,7 @@ func sumExactly(dst []byte, sum func(b []byte) []byte) {
 }
 
 func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
-	// These are peers that sent us blocks that differ from what we hash here.
+// These are peers that sent us blocks that differ from what we hash here.
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
@@ -1233,6 +1244,7 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
 			// ban peers for all recorded blocks that weren't just written.
 			return
 		}
+		t.countBytesHashed(written)
 	}
 	// Flush before writing padding, since we would not have recorded the padding blocks.
 	smartBanWriter.Flush()
@@ -1256,8 +1268,8 @@ func (t *Torrent) havePiece(index pieceIndex) bool {
 }
 
 func (t *Torrent) maybeDropMutuallyCompletePeer(
-	// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
-	// okay?
+// I'm not sure about taking peer here, not all peer implementations actually drop. Maybe that's
+// okay?
 	p *PeerConn,
 ) {
 	if !t.cl.config.DropMutuallyCompletePeers {
@@ -2048,9 +2060,9 @@ func (t *Torrent) announceRequest(
 		// The following are vaguely described in BEP 3.
 
 		Left:     t.bytesLeftAnnounce(),
-		Uploaded: t.stats.BytesWrittenData.Int64(),
+		Uploaded: t.connStats.BytesWrittenData.Int64(),
 		// There's no mention of wasted or unwanted download in the BEP.
-		Downloaded: t.stats.BytesReadUsefulData.Int64(),
+		Downloaded: t.connStats.BytesReadUsefulData.Int64(),
 	}
 }
 
@@ -2201,7 +2213,7 @@ func (t *Torrent) Stats() TorrentStats {
 	return t.statsLocked()
 }
 
-func (t *Torrent) statsLocked() (ret TorrentStats) {
+func (t *Torrent) gauges() (ret TorrentGauges) {
 	ret.ActivePeers = len(t.conns)
 	ret.HalfOpenPeers = len(t.halfOpen)
 	ret.PendingPeers = t.peers.Len()
@@ -2212,8 +2224,14 @@ func (t *Torrent) statsLocked() (ret TorrentStats) {
 			ret.ConnectedSeeders++
 		}
 	}
-	ret.ConnStats = t.stats.Copy()
 	ret.PiecesComplete = t.numPiecesCompleted()
+	return
+}
+
+func (t *Torrent) statsLocked() (ret TorrentStats) {
+	ret.ConnStats = copyCountFields(&t.connStats)
+	ret.TorrentStatCounters = copyCountFields(&t.counters)
+	ret.TorrentGauges = t.gauges()
 	return
 }
 
@@ -2773,7 +2791,7 @@ func (t *Torrent) AddClientPeer(cl *Client) int {
 // All stats that include this Torrent. Useful when we want to increment ConnStats but not for every
 // connection.
 func (t *Torrent) allStats(f func(*ConnStats)) {
-	f(&t.stats)
+	f(&t.connStats)
 	f(&t.cl.connStats)
 }
 

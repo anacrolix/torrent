@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -15,6 +16,9 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
+// Why is it an int64?
+type pieceVerifyCount = int64
+
 type Piece struct {
 	// The completed piece SHA1 hash, from the metainfo "pieces" field. Nil if the info is not V1
 	// compatible.
@@ -26,7 +30,8 @@ type Piece struct {
 
 	readerCond chansync.BroadcastCond
 
-	numVerifies         int64
+	numVerifies         pieceVerifyCount
+	numVerifiesCond     chansync.BroadcastCond
 	hashing             bool
 	marking             bool
 	storageCompletionOk bool
@@ -177,23 +182,40 @@ func (p *Piece) bytesLeft() (ret pp.Integer) {
 }
 
 // Forces the piece data to be rehashed.
-func (p *Piece) VerifyData() {
-	p.t.cl.lock()
-	defer p.t.cl.unlock()
-	target := p.numVerifies + 1
-	if p.hashing {
-		target++
+func (p *Piece) VerifyData() error {
+	return p.VerifyDataContext(context.Background())
+}
+
+// Forces the piece data to be rehashed. This might be a temporary method until
+// an event-based one is created. Possibly this blocking style is more suited to
+// external control of hashing concurrency.
+func (p *Piece) VerifyDataContext(ctx context.Context) error {
+	locker := p.t.cl.locker()
+	locker.Lock()
+	target, err := p.t.queuePieceCheck(p.index)
+	locker.Unlock()
+	if err != nil {
+		return err
 	}
-	// log.Printf("target: %d", target)
-	p.t.queuePieceCheck(p.index)
+	//log.Printf("target: %d", target)
 	for {
-		// log.Printf("got %d verifies", p.numVerifies)
-		if p.numVerifies >= target {
-			break
+		locker.RLock()
+		done := p.numVerifies >= target
+		//log.Printf("got %d verifies", p.numVerifies)
+		numVerifiesChanged := p.numVerifiesCond.Signaled()
+		locker.RUnlock()
+		if done {
+			//log.Print("done")
+			return nil
 		}
-		p.t.cl.event.Wait()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-p.t.closed.Done():
+			return errTorrentClosed
+		case <-numVerifiesChanged:
+		}
 	}
-	// log.Print("done")
 }
 
 func (p *Piece) queuedForHash() bool {

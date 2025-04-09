@@ -1369,7 +1369,7 @@ func (t *Torrent) publishPieceStateChange(piece pieceIndex) {
 		if cur != p.publicPieceState {
 			p.publicPieceState = cur
 			t.pieceStateChanges.Publish(PieceStateChange{
-				int(piece),
+				piece,
 				cur,
 			})
 		}
@@ -2384,6 +2384,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	})
 	p := t.piece(piece)
 	p.numVerifies++
+	p.numVerifiesCond.Broadcast()
 	t.cl.event.Broadcast()
 	if t.closed.IsSet() {
 		return
@@ -2536,9 +2537,13 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	})
 }
 
-func (t *Torrent) tryCreateMorePieceHashers() {
-	for !t.closed.IsSet() && t.activePieceHashes < t.cl.config.PieceHashersPerTorrent && t.tryCreatePieceHasher() {
+func (t *Torrent) tryCreateMorePieceHashers() error {
+	if t.closed.IsSet() {
+		return errTorrentClosed
 	}
+	for t.activePieceHashes < t.cl.config.PieceHashersPerTorrent && t.tryCreatePieceHasher() {
+	}
+	return nil
 }
 
 func (t *Torrent) tryCreatePieceHasher() bool {
@@ -2649,10 +2654,15 @@ func (t *Torrent) queueInitialPieceCheck(i pieceIndex) {
 	}
 }
 
-func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
+func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) (targetVerifies pieceVerifyCount, err error) {
 	piece := t.piece(pieceIndex)
 	if !piece.haveHash() {
-		return
+		err = errors.New("piece hash unknown")
+	}
+	targetVerifies = piece.numVerifies + 1
+	if piece.hashing {
+		// The result of this queued piece check will be the one after the current one.
+		targetVerifies++
 	}
 	if piece.queuedForHash() {
 		return
@@ -2660,13 +2670,14 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 	t.piecesQueuedForHash.Add(bitmap.BitIndex(pieceIndex))
 	t.publishPieceStateChange(pieceIndex)
 	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck")
-	t.tryCreateMorePieceHashers()
+	err = t.tryCreateMorePieceHashers()
+	return
 }
 
 // Forces all the pieces to be re-hashed. See also Piece.VerifyData. This should not be called
 // before the Info is available.
 func (t *Torrent) VerifyData() {
-	for i := pieceIndex(0); i < t.NumPieces(); i++ {
+	for i := 0; i < t.NumPieces(); i++ {
 		t.Piece(i).VerifyData()
 	}
 }

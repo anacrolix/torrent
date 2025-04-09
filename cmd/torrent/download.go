@@ -8,10 +8,8 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/anacrolix/log"
@@ -349,9 +347,6 @@ func downloadErr(ctx context.Context, flags downloadFlags) error {
 	if flags.MaxUnverifiedBytes != nil {
 		clientConfig.MaxUnverifiedBytes = flags.MaxUnverifiedBytes.Int64()
 	}
-
-	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 
 	client, err := torrent.NewClient(clientConfig)
 	if err != nil {

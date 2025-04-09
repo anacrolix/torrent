@@ -127,23 +127,7 @@ func TestClientAnnounceFailure(t *testing.T) {
 	cfg := TestingConfig(t)
 	cfg.DisableTrackers = false
 
-	cl, err := NewClient(cfg)
-	require.NoError(t, err)
-	defer cl.Close()
-
-	cl.websocketTrackers.GetAnnounceRequest = func(event tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error) {
-		return tracker.AnnounceRequest{}, errors.New("test error")
-	}
-
-	dir, mi := testutil.GreetingTestTorrent()
-	defer os.RemoveAll(dir)
-
-	mi.AnnounceList = [][]string{
-		{trackerUrl},
-	}
-
-	to, err := cl.AddTorrent(mi)
-	require.NoError(t, err)
+	var to *Torrent
 
 	cfg.Callbacks.StatusUpdated = append(cfg.Callbacks.StatusUpdated, func(e StatusUpdatedEvent) {
 		if e.Event == TrackerConnected {
@@ -159,6 +143,24 @@ func TestClientAnnounceFailure(t *testing.T) {
 		}
 		receivedStatusUpdate <- true
 	})
+
+	cl, err := NewClient(cfg)
+	require.NoError(t, err)
+	defer cl.Close()
+
+	cl.websocketTrackers.GetAnnounceRequest = func(event tracker.AnnounceEvent, infoHash [20]byte) (tracker.AnnounceRequest, error) {
+		return tracker.AnnounceRequest{}, errors.New("test error")
+	}
+
+	dir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(dir)
+
+	mi.AnnounceList = [][]string{
+		{trackerUrl},
+	}
+
+	to, err = cl.AddTorrent(mi)
+	require.NoError(t, err)
 
 	select {
 	case <-timeout.C:
@@ -178,19 +180,7 @@ func TestClientAnnounceSuccess(t *testing.T) {
 	cfg := TestingConfig(t)
 	cfg.DisableTrackers = false
 
-	cl, err := NewClient(cfg)
-	require.NoError(t, err)
-	defer cl.Close()
-
-	dir, mi := testutil.GreetingTestTorrent()
-	defer os.RemoveAll(dir)
-
-	mi.AnnounceList = [][]string{
-		{trackerUrl},
-	}
-
-	to, err := cl.AddTorrent(mi)
-	require.NoError(t, err)
+	var to *Torrent
 
 	cfg.Callbacks.StatusUpdated = append(cfg.Callbacks.StatusUpdated, func(e StatusUpdatedEvent) {
 		if e.Event == TrackerConnected {
@@ -205,6 +195,20 @@ func TestClientAnnounceSuccess(t *testing.T) {
 		}
 		receivedStatusUpdate <- true
 	})
+
+	cl, err := NewClient(cfg)
+	require.NoError(t, err)
+	defer cl.Close()
+
+	dir, mi := testutil.GreetingTestTorrent()
+	defer os.RemoveAll(dir)
+
+	mi.AnnounceList = [][]string{
+		{trackerUrl},
+	}
+
+	to, err = cl.AddTorrent(mi)
+	require.NoError(t, err)
 
 	select {
 	case <-timeout.C:

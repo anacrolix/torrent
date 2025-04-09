@@ -52,6 +52,8 @@ import (
 	"github.com/anacrolix/torrent/webtorrent"
 )
 
+var errTorrentClosed = errors.New("torrent closed")
+
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
 // available, see .Info and .GotInfo.
 type Torrent struct {
@@ -2260,7 +2262,7 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 		}
 	}()
 	if t.closed.IsSet() {
-		return errors.New("torrent closed")
+		return errTorrentClosed
 	}
 	for c0 := range t.conns {
 		if c.PeerID != c0.PeerID {

@@ -19,8 +19,7 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/filecache"
-	"github.com/frankban/quicktest"
-	qt "github.com/frankban/quicktest"
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -195,7 +194,7 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 	assert.True(t, new)
 	r := tt.NewReader()
 	defer r.Close()
-	qt.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), qt.IsNil)
+	qt.Check(t, qt.IsNil(iotest.TestReader(r, []byte(testutil.GreetingFileContents))))
 }
 
 func BenchmarkAddLargeTorrent(b *testing.B) {
@@ -337,12 +336,11 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	require.NoError(t, err)
 	leecherTorrent.Drop()
 	n, err := reader.Read(b)
-	assert.EqualError(t, err, "torrent closed")
+	qt.Assert(t, qt.Equals(err, errTorrentClosed))
 	assert.EqualValues(t, 0, n)
 }
 
 func TestDhtInheritBlocklist(t *testing.T) {
-	c := qt.New(t)
 	ipl := iplist.New(nil)
 	require.NotNil(t, ipl)
 	cfg := TestingConfig(t)
@@ -357,7 +355,7 @@ func TestDhtInheritBlocklist(t *testing.T) {
 		assert.Equal(t, ipl, s.(AnacrolixDhtServerWrapper).Server.IPBlocklist())
 		numServers++
 	})
-	c.Assert(numServers, qt.Not(qt.Equals), 0)
+	qt.Assert(t, qt.Not(qt.Equals(numServers, 0)))
 }
 
 // Check that stuff is merged in subsequent AddTorrentSpec for the same
@@ -441,7 +439,7 @@ func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf
 	assert.Equal(t, alreadyCompleted, psrs[0].Complete)
 	if alreadyCompleted {
 		r := tt.NewReader()
-		quicktest.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), quicktest.IsNil)
+		qt.Check(t, qt.IsNil(iotest.TestReader(r, []byte(testutil.GreetingFileContents))))
 	}
 }
 
@@ -590,7 +588,6 @@ func TestPeerInvalidHave(t *testing.T) {
 }
 
 func TestPieceCompletedInStorageButNotClient(t *testing.T) {
-	c := qt.New(t)
 	greetingTempDir, greetingMetainfo := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(greetingTempDir)
 	cfg := TestingConfig(t)
@@ -602,8 +599,8 @@ func TestPieceCompletedInStorageButNotClient(t *testing.T) {
 		InfoBytes: greetingMetainfo.InfoBytes,
 		InfoHash:  greetingMetainfo.HashInfoBytes(),
 	})
-	c.Check(err, qt.IsNil)
-	c.Check(new, qt.IsTrue)
+	qt.Check(t, qt.IsNil(err))
+	qt.Check(t, qt.IsTrue(new))
 }
 
 // Check that when the listen port is 0, all the protocols listened on have
@@ -907,11 +904,10 @@ func TestBadPeerIpPort(t *testing.T) {
 func TestClientConfigSetHandlerNotIgnored(t *testing.T) {
 	cfg := TestingConfig(t)
 	cfg.Logger.SetHandlers(log.DiscardHandler)
-	c := qt.New(t)
 	cl, err := NewClient(cfg)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
-	c.Assert(cl.logger.Handlers, qt.HasLen, 1)
+	qt.Assert(t, qt.HasLen(cl.logger.Handlers, 1))
 	h := cl.logger.Handlers[0].(log.StreamHandler)
-	c.Check(h.W, qt.Equals, io.Discard)
+	qt.Check(t, qt.Equals(h.W, io.Discard))
 }

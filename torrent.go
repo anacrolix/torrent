@@ -2674,12 +2674,23 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) (targetVerifies pieceVe
 	return
 }
 
-// Forces all the pieces to be re-hashed. See also Piece.VerifyData. This should not be called
-// before the Info is available.
-func (t *Torrent) VerifyData() {
+// Deprecated: Use Torrent.VerifyDataContext.
+func (t *Torrent) VerifyData() error {
+	return t.VerifyDataContext(context.Background())
+}
+
+// Forces all the pieces to be re-hashed. See also Piece.VerifyDataContext. This
+// should not be called before the Info is available. TODO: Make this operate
+// concurrently within the configured piece hashers limit.
+func (t *Torrent) VerifyDataContext(ctx context.Context) error {
 	for i := 0; i < t.NumPieces(); i++ {
-		t.Piece(i).VerifyData()
+		err := t.Piece(i).VerifyDataContext(ctx)
+		if err != nil {
+			err = fmt.Errorf("verifying piece %v: %w", i, err)
+			return err
+		}
 	}
+	return nil
 }
 
 func (t *Torrent) connectingToPeerAddr(addrStr string) bool {

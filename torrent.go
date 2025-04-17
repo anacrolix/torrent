@@ -156,13 +156,16 @@ func TunePublicTrackers(trackers ...string) Tuner {
 	return func(t *torrent) {
 		go func() {
 			<-t.GotInfo()
+
 			if t.info.Private != nil && langx.Autoderef(t.info.Private) {
 				return
 			}
 
 			t.lock()
 			defer t.unlock()
+
 			t.md.Trackers = append(t.md.Trackers, trackers)
+			t.maybeNewConns()
 		}()
 	}
 }
@@ -589,7 +592,6 @@ func (t *torrent) AddPeer(p Peer) {
 
 func (t *torrent) addPeer(p Peer) {
 	peersAddedBySource.Add(string(p.Source), 1)
-
 	if t.closed.IsSet() {
 		log.Println("torrent.addPeer closed")
 		return

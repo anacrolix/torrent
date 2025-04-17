@@ -277,7 +277,7 @@ func TestHaveAllThenBitfield(t *testing.T) {
 		Peer: Peer{t: tt},
 	}
 	pc.initRequestState()
-	pc.peerImpl = &pc
+	pc.legacyPeerImpl = &pc
 	tt.conns[&pc] = struct{}{}
 	c.Assert(pc.onPeerSentHaveAll(), qt.IsNil)
 	c.Check(pc.t.connsWithAllPieces, qt.DeepEquals, map[*Peer]struct{}{&pc.Peer: {}})

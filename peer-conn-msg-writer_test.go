@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/dustin/go-humanize"
@@ -22,7 +21,7 @@ var benchmarkPieceLengths = []int{defaultChunkSize, 1 << 20, 4 << 20, 8 << 20}
 
 func runBenchmarkWriteToBuffer(b *testing.B, length int64) {
 	writer := &peerConnMsgWriter{
-		writeBuffer: &bytes.Buffer{},
+		writeBuffer: new(peerConnMsgWriterBuffer),
 	}
 	msg := PieceMsg(length)
 
@@ -53,7 +52,7 @@ func BenchmarkWritePieceMsg(b *testing.B) {
 
 func runBenchmarkMarshalBinaryWrite(b *testing.B, length int64) {
 	writer := &peerConnMsgWriter{
-		writeBuffer: &bytes.Buffer{},
+		writeBuffer: &peerConnMsgWriterBuffer{},
 	}
 	msg := PieceMsg(length)
 

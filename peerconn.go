@@ -98,6 +98,12 @@ type PeerConn struct {
 	receivedHashPieces map[[32]byte][][32]byte
 }
 
+func (cn *PeerConn) lastWriteUploadRate() float64 {
+	cn.messageWriter.mu.Lock()
+	defer cn.messageWriter.mu.Unlock()
+	return cn.messageWriter.dataUploadRate
+}
+
 func (cn *PeerConn) pexStatus() string {
 	if !cn.bitExtensionEnabled(pp.ExtensionBitLtep) {
 		return "extended protocol disabled"

@@ -580,7 +580,7 @@ func TestPeerInvalidHave(t *testing.T) {
 		callbacks: &cfg.Callbacks,
 	}}
 	tt.conns[cn] = struct{}{}
-	cn.peerImpl = cn
+	cn.legacyPeerImpl = cn
 	cl.lock()
 	defer cl.unlock()
 	assert.NoError(t, cn.peerSentHave(0))

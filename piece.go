@@ -30,9 +30,10 @@ type Piece struct {
 
 	readerCond chansync.BroadcastCond
 
-	numVerifies         pieceVerifyCount
-	numVerifiesCond     chansync.BroadcastCond
-	hashing             bool
+	numVerifies     pieceVerifyCount
+	numVerifiesCond chansync.BroadcastCond
+	hashing         bool
+	// The piece state may have changed, and is being synchronized with storage.
 	marking             bool
 	storageCompletionOk bool
 
@@ -268,7 +269,9 @@ func (p *Piece) effectivePriority() (ret PiecePriority) {
 }
 
 // Tells the Client to refetch the completion status from storage, updating priority etc. if
-// necessary. Might be useful if you know the state of the piece data has changed externally.
+// necessary. Might be useful if you know the state of the piece data has
+// changed externally. TODO: Document why this is public, maybe change name to
+// SyncCompletion or something.
 func (p *Piece) UpdateCompletion() {
 	p.t.cl.lock()
 	defer p.t.cl.unlock()

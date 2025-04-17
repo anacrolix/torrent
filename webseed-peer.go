@@ -29,7 +29,12 @@ type webseedPeer struct {
 	lastUnhandledErr time.Time
 }
 
-var _ peerImpl = (*webseedPeer)(nil)
+func (me *webseedPeer) lastWriteUploadRate() float64 {
+	// We never upload to webseeds.
+	return 0
+}
+
+var _ legacyPeerImpl = (*webseedPeer)(nil)
 
 func (me *webseedPeer) peerImplStatusLines() []string {
 	return []string{

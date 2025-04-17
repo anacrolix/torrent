@@ -1686,6 +1686,7 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 			c.bannableAddr = Some(netipAddrPort.Addr())
 		}
 	}
+	c.legacyPeerImpl = c
 	c.peerImpl = c
 	c.logger = cl.logger.WithDefaultLevel(log.Warning).WithContextText(fmt.Sprintf("%T %p", c, c))
 	c.protocolLogger = c.logger.WithNames(protocolLoggingName)

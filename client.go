@@ -99,6 +99,8 @@ type Client struct {
 	defaultLocalLtepProtocolMap LocalLtepProtocolMap
 
 	upnpMappings []*upnpMapping
+
+	lpd *LPDServer
 }
 
 type ipStr string
@@ -348,6 +350,12 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 			}
 			go t.onWebRtcConn(dc, dcc)
 		},
+	}
+
+	if cfg.LocalServiceDiscovery.Enabled {
+		cl.lpd = &LPDServer{}
+		cl.lpd.lpdStart(cl)
+		cl.onClose = append(cl.onClose, cl.lpd.lpdStop)
 	}
 
 	return
@@ -1434,14 +1442,15 @@ func (cl *Client) AddTorrentInfoHashWithStorage(
 func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	infoHash := opts.InfoHash
 	cl.lock()
-	defer cl.unlock()
 	t, ok := cl.torrentsByShortHash[infoHash]
 	if ok {
+		cl.unlock()
 		return
 	}
 	if opts.InfoHashV2.Ok {
 		t, ok = cl.torrentsByShortHash[*opts.InfoHashV2.Value.ToShort()]
 		if ok {
+			cl.unlock()
 			return
 		}
 	}
@@ -1460,6 +1469,13 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	t.updateWantPeersEvent()
 	// Tickle Client.waitAccept, new torrent may want conns.
 	cl.event.Broadcast()
+	cl.unlock()
+
+	if cl.lpd != nil {
+		cl.lpd.lpdPeers(t)
+		cl.lpd.lpdForce()
+	}
+
 	return
 }
 

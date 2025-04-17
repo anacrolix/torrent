@@ -152,6 +152,48 @@ func TuneTrackers(trackers ...[]string) Tuner {
 	}
 }
 
+func TunePublicTrackers(trackers ...string) Tuner {
+	return func(t *torrent) {
+		go func() {
+			<-t.GotInfo()
+			if t.info.Private != nil && langx.Autoderef(t.info.Private) {
+				return
+			}
+
+			t.lock()
+			defer t.unlock()
+			t.md.Trackers = append(t.md.Trackers, trackers)
+		}()
+	}
+}
+
+// force new connections to be found
+func TuneNewConns(t *torrent) {
+	t.maybeNewConns()
+}
+
+// used after info has been received to mark all chunks missing.
+// will only happen if missing and completed are zero.
+func TuneAutoDownload(t *torrent) {
+	if t.chunks.completed.GetCardinality()+t.chunks.missing.GetCardinality() > 0 {
+		return
+	}
+
+	t.chunks.missing.AddRange(0, uint64(t.chunks.cmaximum))
+}
+
+// Verify the entirety of the torrent. will block
+func TuneVerifyFull(t *torrent) {
+	for i := 0; i < t.numPieces(); i++ {
+		t.digests.Enqueue(i)
+	}
+
+	t.digests.Wait()
+
+	t.chunks.MergeIntoMissing(t.chunks.failed)
+	t.chunks.FailuresReset()
+}
+
 // Torrent represents the state of a torrent within a client.
 // interface is currently being used to ease the transition of to a cleaner API.
 // Many methods should not be called before the info is available,
@@ -159,8 +201,8 @@ func TuneTrackers(trackers ...[]string) Tuner {
 type Torrent interface {
 	Metadata() Metadata
 	Tune(...Tuner) error
+	Stats() Stats
 	BytesCompleted() int64        // TODO: maybe should be pulled from torrent, it has a reference to the storage implementation. or maybe part of the Stats call?
-	Stats() Stats                 // TODO: rename TorrentStats, it stutters.
 	Info() *metainfo.Info         // TODO: remove, this should be pulled from Metadata()
 	GotInfo() <-chan struct{}     // TODO: remove, torrents should never be returned if they don't have the meta info.
 	Storage() storage.TorrentImpl // temporary replacement for reader.
@@ -176,6 +218,10 @@ func DownloadInto(ctx context.Context, dst io.Writer, m Torrent, options ...Tune
 	case <-m.GotInfo():
 	case <-ctx.Done():
 		return 0, errorsx.Compact(context.Cause(ctx), ctx.Err())
+	}
+
+	if err = m.Tune(TuneAutoDownload, TuneNewConns); err != nil {
+		return 0, err
 	}
 
 	if n, err = io.Copy(dst, NewReader(m)); err != nil {
@@ -194,13 +240,7 @@ func Verify(ctx context.Context, t Torrent) error {
 		return errorsx.Compact(context.Cause(ctx), ctx.Err())
 	}
 
-	tmp := t.(*torrent)
-
-	for i := 0; i < tmp.numPieces(); i++ {
-		tmp.digests.Enqueue(i)
-	}
-
-	return nil
+	return t.Tune(TuneVerifyFull)
 }
 
 func newTorrent(cl *Client, src Metadata) *torrent {
@@ -351,6 +391,8 @@ type torrent struct {
 	// How many times we've initiated a DHT announce. TODO: Move into stats.
 	numDHTAnnounces int
 
+	metainfoAvailable atomic.Bool
+
 	// The bencoded bytes of the info dict. This is actively manipulated if
 	// the info bytes aren't initially available, and we try to fetch them
 	// from peers.
@@ -361,7 +403,6 @@ type torrent struct {
 	metadataChanged         sync.Cond
 
 	// Set when .Info is obtained.
-	gotMetainfo missinggo.Event
 
 	// chunks management tracks the current status of the different chunks
 	chunks *chunks
@@ -637,15 +678,8 @@ func (t *torrent) onSetInfo() {
 		}
 	}
 
-	t.chunks.missing.AddRange(0, uint64(t.chunks.cmaximum))
-	for i := 0; i < t.numPieces(); i++ {
-		t.digests.Enqueue(i)
-	}
-
-	t.chunks.FailuresReset()
-
+	t.metainfoAvailable.Store(true)
 	t.event.Broadcast()
-	t.gotMetainfo.Set()
 	t.updateWantPeersEvent()
 }
 
@@ -1170,15 +1204,17 @@ func (t *torrent) statsLocked() (ret Stats) {
 	// to compute the stats.
 	ret.MaximumAllowedPeers = t.config.EstablishedConnsPerTorrent
 	ret.TotalPeers = t.numTotalPeers()
-	ret.ConnectedSeeders = 0
-	for _, c := range t.conns.list() {
-		if all, ok := c.peerHasAllPieces(); all && ok {
-			ret.ConnectedSeeders++
-		}
-	}
+	// log.Println("checkpoint")
+	// ret.ConnectedSeeders = 0
+	// log.Println("checkpoint")
+	// for _, c := range t.conns.list() {
+	// 	if all, ok := c.peerHasAllPieces(); all && ok {
+	// 		ret.ConnectedSeeders++
+	// 	}
+	// }
 
 	ret.ConnStats = t.stats.Copy()
-	return
+	return ret
 }
 
 // The total number of peers in the torrent.
@@ -1360,7 +1396,16 @@ func (t *torrent) piece(i int) *metainfo.Piece {
 func (t *torrent) GotInfo() <-chan struct{} {
 	t.rLock()
 	defer t.rUnlock()
-	return t.gotMetainfo.C()
+	m := make(chan struct{})
+	go func() {
+		t.event.L.Lock()
+		for !t.metainfoAvailable.Load() {
+			t.event.Wait()
+		}
+		t.event.L.Unlock()
+		close(m)
+	}()
+	return m
 }
 
 // Returns the metainfo info dictionary, or nil if it's not yet available.

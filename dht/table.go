@@ -37,10 +37,8 @@ func (tbl *table) dropNode(n *node) {
 		delete(tbl.addrs, as)
 	}
 	b := tbl.bucketForID(n.Id)
-	if _, ok := b.nodes[n]; !ok {
-		panic("expected node in bucket")
-	}
-	delete(b.nodes, n)
+
+	b.Remove(n)
 }
 
 func (tbl *table) bucketForID(id int160.T) *bucket {

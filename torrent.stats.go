@@ -19,8 +19,8 @@ type Stats struct {
 	TotalPeers          int
 	PendingPeers        int
 	ActivePeers         int
-	ConnectedSeeders    int
 	HalfOpenPeers       int
+	// ConnectedSeeders    int
 
 	Seeding bool
 }

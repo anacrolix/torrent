@@ -18,6 +18,12 @@ type bitQueue struct {
 	RB *roaring.Bitmap
 }
 
+func (t bitQueue) Count() (i int) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return int(t.RB.GetCardinality())
+}
+
 func (t bitQueue) Pop() (i int, ok bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

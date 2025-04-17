@@ -79,18 +79,29 @@ func (cl *Client) Info(ctx context.Context, m Metadata, options ...Tuner) (i *me
 // Start the specified torrent.
 // Start adds starts up the torrent within the client downloading the missing pieces
 // as needed. if you want to wait until the torrent is completed use Download.
-func (cl *Client) Start(t Metadata) (dl Torrent, added bool, err error) {
-	return cl.start(t)
+func (cl *Client) Start(t Metadata, options ...Tuner) (dl Torrent, added bool, err error) {
+	dl, added, err = cl.start(t)
+	if err != nil {
+		return dl, added, err
+	}
+
+	return dl, added, dl.Tune(options...)
 }
 
 // MaybeStart is a convience method that consumes the return types of the torrent
 // creation methods: New, NewFromFile, etc. it is all respects identical to the Start
 // method.
-func (cl *Client) MaybeStart(t Metadata, failed error) (dl Torrent, added bool, err error) {
+func (cl *Client) MaybeStart(t Metadata, failed error, options ...Tuner) (dl Torrent, added bool, err error) {
 	if failed != nil {
 		return dl, false, failed
 	}
-	return cl.start(t)
+
+	dl, added, err = cl.start(t)
+	if err != nil {
+		return dl, added, err
+	}
+
+	return dl, added, dl.Tune(options...)
 }
 
 func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {

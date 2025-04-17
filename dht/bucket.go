@@ -65,3 +65,9 @@ func (b *bucket) GetNode(addr Addr, id int160.T) *node {
 	}
 	return nil
 }
+
+func (b *bucket) Remove(n *node) {
+	b._m.Lock()
+	defer b._m.Unlock()
+	delete(b.nodes, n)
+}

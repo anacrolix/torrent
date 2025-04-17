@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sync"
 	"sync/atomic"
 
 	"github.com/james-lawrence/torrent/metainfo"
@@ -37,6 +38,7 @@ func newDigests(iora io.ReaderAt, retrieve func(int) *metainfo.Piece, complete f
 		retrieve: retrieve,
 		complete: complete,
 		pending:  newBitQueue(),
+		c:        sync.NewCond(&sync.Mutex{}),
 	}
 }
 
@@ -49,12 +51,23 @@ type digests struct {
 	reaping int64
 	// cache of the pieces that need to be verified.
 	pending *bitQueue
+	c       *sync.Cond
 }
 
 // Enqueue a piece to check its completed digest.
 func (t *digests) Enqueue(idx int) {
 	t.pending.Push(idx)
 	t.verify()
+}
+
+// wait for the digests to be complete
+func (t *digests) Wait() {
+	t.c.L.Lock()
+	defer t.c.L.Unlock()
+
+	for c := t.pending.Count(); c > 0; c = t.pending.Count() {
+		t.c.Wait()
+	}
 }
 
 func (t *digests) verify() {
@@ -68,7 +81,9 @@ func (t *digests) verify() {
 			t.check(idx)
 		}
 
-		atomic.AddInt64(&t.reaping, -1)
+		if remaining := atomic.AddInt64(&t.reaping, -1); remaining == 0 {
+			t.c.Broadcast()
+		}
 	}()
 }
 

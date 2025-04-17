@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net"
@@ -73,6 +72,9 @@ func DeprecatedExtractClient(t Torrent) *Client {
 }
 
 func TestTorrentInitialState(t *testing.T) {
+	ctx, done := testx.Context(t)
+	defer done()
+
 	dir, mi := testutil.GreetingTestTorrent(t)
 	defer os.RemoveAll(dir)
 	cl, err := NewClient(TestingConfig(t))
@@ -90,7 +92,7 @@ func TestTorrentInitialState(t *testing.T) {
 
 	require.Equal(t, 3, tor.numPieces())
 
-	require.NoError(t, Verify(context.Background(), tor))
+	require.NoError(t, Verify(ctx, tor))
 	require.Equal(t, 3, tor.numPieces())
 
 	stats := tor.Stats()

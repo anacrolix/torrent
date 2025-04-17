@@ -258,6 +258,13 @@ func (t *chunks) ChunksMissing(pid int) bool {
 	return bitmapx.Range(t.Range(pid)).AndCardinality(t.missing) > 0
 }
 
+func (t *chunks) MergeIntoMissing(m *roaring.Bitmap) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.missing.Or(m)
+}
+
 // ChunksAvailable returns true iff all the chunks for the given piece are awaiting
 // digesting.
 func (t *chunks) ChunksAvailable(pid int) bool {

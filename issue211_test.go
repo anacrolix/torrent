@@ -37,6 +37,6 @@ func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 		cl.Stop(ts)
 	}()
-	_, err = torrent.DownloadInto(ctx, io.Discard, tt)
+	_, err = torrent.DownloadInto(ctx, io.Discard, tt, torrent.TuneVerifyFull)
 	require.NoError(t, err)
 }

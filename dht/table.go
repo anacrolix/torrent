@@ -3,6 +3,7 @@ package dht
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/james-lawrence/torrent/dht/int160"
 )
@@ -11,6 +12,7 @@ import (
 type table struct {
 	rootID  int160.T
 	k       int
+	m       *sync.Mutex
 	buckets [160]bucket
 	addrs   map[string]map[int160.T]struct{}
 }
@@ -118,6 +120,9 @@ func (tbl *table) addNode(n *node) error {
 	if tbl.addrs[as] == nil {
 		tbl.addrs[as] = make(map[int160.T]struct{}, 1)
 	}
+
+	tbl.m.Lock()
+	defer tbl.m.Unlock()
 	tbl.addrs[as][n.Id] = struct{}{}
 	return nil
 }

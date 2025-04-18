@@ -14,9 +14,9 @@ import (
 type Option func(*Metadata)
 
 // OptionTrackers set the trackers for the torrent.
-func OptionTrackers(trackers ...[]string) Option {
+func OptionTrackers(trackers ...string) Option {
 	return func(t *Metadata) {
-		t.Trackers = trackers
+		t.Trackers = append(t.Trackers, trackers...)
 	}
 }
 
@@ -69,7 +69,7 @@ func OptionNoop(t *Metadata) {}
 // There are helpers for magnet URIs and torrent metainfo files.
 type Metadata struct {
 	// The tiered tracker URIs.
-	Trackers  [][]string
+	Trackers  []string
 	ID        metainfo.Hash
 	InfoBytes []byte
 	// The name to use if the Name field from the Info isn't available.
@@ -84,10 +84,8 @@ type Metadata struct {
 
 // grabs first tracker avalable.
 func (t Metadata) Announce() string {
-	for _, tset := range t.Trackers {
-		for _, tr := range tset {
-			return tr
-		}
+	for _, tr := range t.Trackers {
+		return tr
 	}
 
 	return ""
@@ -174,7 +172,7 @@ func NewFromMagnet(uri string, options ...Option) (t Metadata, err error) {
 
 	options = append([]Option{
 		OptionDisplayName(m.DisplayName),
-		OptionTrackers(m.Trackers),
+		OptionTrackers(m.Trackers...),
 		OptionWebseeds(m.Params["ws"]),
 	},
 		options...,
@@ -196,10 +194,14 @@ func NewFromMetaInfo(mi *metainfo.MetaInfo, options ...Option) (t Metadata, err 
 		return t, err
 	}
 
+	trackers := make([]string, 0, 128)
+	for _, add := range mi.UpvertedAnnounceList() {
+		trackers = append(trackers, add...)
+	}
 	options = append([]Option{
 		OptionInfo(mi.InfoBytes),
 		OptionDisplayName(info.Name),
-		OptionTrackers(mi.UpvertedAnnounceList()...),
+		OptionTrackers(trackers...),
 		OptionWebseeds(mi.UrlList),
 		OptionNodes(mi.NodeList()...),
 	},
@@ -217,7 +219,7 @@ func (t Metadata) Metainfo() metainfo.MetaInfo {
 	return metainfo.MetaInfo{
 		InfoBytes:    t.InfoBytes,
 		CreationDate: time.Now().Unix(),
-		AnnounceList: metainfo.AnnounceList(t.Trackers),
+		AnnounceList: metainfo.AnnounceList([][]string{t.Trackers}),
 	}
 }
 

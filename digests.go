@@ -23,6 +23,7 @@ func newDigestsFromTorrent(t *torrent) digests {
 
 			t.event.Broadcast()
 			t.cln.event.Broadcast() // cause the client to detect completed torrents.
+			t.pieceStateChanges.Publish(idx)
 		},
 	)
 }

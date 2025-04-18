@@ -233,6 +233,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 		},
 		table: table{
 			k: c.BucketLimit,
+			m: &sync.Mutex{},
 		},
 		store: bep44.NewWrapper(c.Store, c.Exp),
 		mux:   DefaultMuxer(),
@@ -590,9 +591,11 @@ func (s *Server) addNode(n *node) error {
 			return errors.New("no room in bucket")
 		}
 	}
+
 	if err := s.table.addNode(n); err != nil {
 		return fmt.Errorf("expected to add node: %s", err)
 	}
+
 	return nil
 }
 

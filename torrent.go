@@ -113,6 +113,14 @@ func TuneReadPort(v *int) Tuner {
 	}
 }
 
+// The subscription emits as (int) the index of pieces as their state changes.
+// A state change is when the PieceState for a piece alters in value.
+func TuneSubscribe(sub *pubsub.Subscription) Tuner {
+	return func(t *torrent) {
+		*sub = *t.pieceStateChanges.Subscribe()
+	}
+}
+
 func TuneReadAnnounce(v *tracker.Announce) Tuner {
 	return func(t *torrent) {
 		t.lock()
@@ -144,7 +152,7 @@ func TuneClientPeer(cl *Client) Tuner {
 }
 
 // add trackers to the torrent.
-func TuneTrackers(trackers ...[]string) Tuner {
+func TuneTrackers(trackers ...string) Tuner {
 	return func(t *torrent) {
 		t.lock()
 		defer t.unlock()
@@ -164,7 +172,7 @@ func TunePublicTrackers(trackers ...string) Tuner {
 			t.lock()
 			defer t.unlock()
 
-			t.md.Trackers = append(t.md.Trackers, trackers)
+			t.md.Trackers = append(t.md.Trackers, trackers...)
 			t.maybeNewConns()
 		}()
 	}
@@ -237,6 +245,10 @@ func DownloadInto(ctx context.Context, dst io.Writer, m Torrent, options ...Tune
 }
 
 func Verify(ctx context.Context, t Torrent) error {
+	if err := t.Tune(TuneNewConns); err != nil {
+		return err
+	}
+
 	select {
 	case <-t.GotInfo():
 	case <-ctx.Done():
@@ -1081,7 +1093,6 @@ func (t *torrent) assertNoPendingRequests() {
 		for _, r := range outstanding {
 			t.config.errors().Printf("still expecting c(%p) d(%020d) r(%d,%d,%d)", t.chunks, r.Digest, r.Index, r.Begin, r.Length)
 		}
-		// panic(t.chunks.outstanding)
 	}
 }
 
@@ -1128,7 +1139,7 @@ func (t *torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 	// l := rate.NewLimiter(rate.Every(time.Minute), 1)
 	for v := range pvs {
 		// if len(v.Peers) > 0 || l.Allow() {
-		// 	log.Println("received peers", t.infoHash, len(v.Peers))
+		// 	log.Println("received peers", t.md.ID, len(v.Peers))
 		// }
 		for _, cp := range v.Peers {
 			if cp.Port() == 0 {
@@ -1425,12 +1436,6 @@ func (t *torrent) BytesCompleted() int64 {
 	t.rLock()
 	defer t.rUnlock()
 	return t.bytesCompleted()
-}
-
-// The subscription emits as (int) the index of pieces as their state changes.
-// A state change is when the PieceState for a piece alters in value.
-func (t *torrent) SubscribePieceStateChanges() *pubsub.Subscription {
-	return t.pieceStateChanges.Subscribe()
 }
 
 // The completed length of all the torrent data, in all its files. This is

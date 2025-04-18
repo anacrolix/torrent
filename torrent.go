@@ -193,6 +193,21 @@ func TuneAutoDownload(t *torrent) {
 	t.chunks.missing.AddRange(0, uint64(t.chunks.cmaximum))
 }
 
+// Announce to trackers looking for at least one successful request that returns peers.
+func TuneAnnounceOnce(t *torrent) {
+	go func() {
+		for {
+			peers, err := TrackerAnnounceOnce(context.Background(), t)
+			if err == nil {
+				t.addPeers(peers)
+				return
+			}
+
+			log.Println("announce failed", err)
+		}
+	}()
+}
+
 // Verify the entirety of the torrent. will block
 func TuneVerifyFull(t *torrent) {
 	for i := 0; i < t.numPieces(); i++ {

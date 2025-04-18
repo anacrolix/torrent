@@ -1153,7 +1153,7 @@ func (t *torrent) seeding() bool {
 func (t *torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 	// l := rate.NewLimiter(rate.Every(time.Minute), 1)
 	for v := range pvs {
-		// if len(v.Peers) > 0 || l.Allow() {
+		// if len(v.Peers) > 0 && l.Allow() {
 		// 	log.Println("received peers", t.md.ID, len(v.Peers))
 		// }
 		for _, cp := range v.Peers {

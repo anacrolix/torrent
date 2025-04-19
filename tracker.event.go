@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/james-lawrence/torrent/dht/int160"
@@ -14,7 +13,7 @@ import (
 
 const ErrNoPeers = errorsx.String("failed to locate any peers for torrent")
 
-func TrackerEvent(ctx context.Context, l Torrent) (ret *tracker.AnnounceResponse, err error) {
+func TrackerEvent(ctx context.Context, l Torrent, announceuri string) (ret *tracker.AnnounceResponse, err error) {
 	var (
 		announcer tracker.Announce
 		port      int
@@ -27,7 +26,7 @@ func TrackerEvent(ctx context.Context, l Torrent) (ret *tracker.AnnounceResponse
 		TuneResetTrackingStats(&s),
 		TuneReadPeerID(&id),
 		TuneReadHashID(&infoid),
-		TuneReadAnnounce(&announcer),
+		TuneReadAnnounce(&announcer, announceuri),
 		TuneReadPort(&port),
 	); err != nil {
 		return nil, err
@@ -43,23 +42,25 @@ func TrackerEvent(ctx context.Context, l Torrent) (ret *tracker.AnnounceResponse
 	)
 
 	res, err := announcer.Do(ctx, req)
-
-	return &res, errors.Wrapf(err, "announce failed: %s", announcer.TrackerUrl)
+	return &res, errors.Wrapf(err, "announce: %s", announcer.TrackerUrl)
 }
 
-func TrackerAnnounceOnce(ctx context.Context, l Torrent) (peers Peers, err error) {
+func TrackerAnnounceOnce(ctx context.Context, l Torrent, uri string) (delay time.Duration, peers Peers, err error) {
 	ctx, done := context.WithTimeout(ctx, 30*time.Second)
 	defer done()
 
-	announced, err := TrackerEvent(ctx, l)
+	announced, err := TrackerEvent(ctx, l, uri)
 	if err != nil {
-		log.Println("announce failed", err)
-		return nil, err
+		return delay, nil, err
+	}
+
+	if d := time.Duration(announced.Interval) * time.Second; delay < d {
+		delay = d
 	}
 
 	if len(announced.Peers) == 0 {
-		return nil, ErrNoPeers
+		return delay, nil, ErrNoPeers
 	}
 
-	return peers.AppendFromTracker(announced.Peers), nil
+	return delay, peers.AppendFromTracker(announced.Peers), nil
 }

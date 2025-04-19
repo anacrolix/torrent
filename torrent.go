@@ -121,14 +121,14 @@ func TuneSubscribe(sub *pubsub.Subscription) Tuner {
 	}
 }
 
-func TuneReadAnnounce(v *tracker.Announce) Tuner {
+func TuneReadAnnounce(v *tracker.Announce, uri string) Tuner {
 	return func(t *torrent) {
-		t.lock()
-		defer t.unlock()
+		t.rLock()
+		defer t.rUnlock()
 
 		*v = tracker.Announce{
 			UserAgent:  t.config.HTTPUserAgent,
-			TrackerUrl: t.md.Announce(),
+			TrackerUrl: uri,
 			ClientIp4:  krpc.NewNodeAddrFromIPPort(t.config.PublicIP4, 0),
 			ClientIp6:  krpc.NewNodeAddrFromIPPort(t.config.PublicIP6, 0),
 		}
@@ -196,26 +196,40 @@ func TuneAutoDownload(t *torrent) {
 // Announce to trackers looking for at least one successful request that returns peers.
 func TuneAnnounceOnce(t *torrent) {
 	go func() {
+		var delay time.Duration
+
 		ctx, done := context.WithTimeout(context.Background(), time.Minute)
 		defer done()
+		trackers := t.md.Trackers
 
 		for {
-			peers, err := TrackerAnnounceOnce(ctx, t)
-			if errors.Is(err, context.DeadlineExceeded) {
-				log.Println(err)
-				return
+			for _, uri := range trackers {
+				d, peers, err := TrackerAnnounceOnce(ctx, t, uri)
+				if errors.Is(err, context.DeadlineExceeded) {
+					log.Println(err)
+					return
+				}
+
+				if err == nil {
+					t.addPeers(peers)
+					return
+				}
+
+				if delay < d {
+					delay = d
+				}
+
+				if err == ErrNoPeers {
+					log.Println("announce succeeded, but there are no peers")
+					continue
+				}
+
+				log.Println("announce failed", err)
 			}
 
-			if err == ErrNoPeers {
-				log.Println("announce succeeded, but there are no peers")
-			}
-
-			if err == nil {
-				t.addPeers(peers)
-				return
-			}
-
-			log.Println("announce failed", err)
+			log.Println("announce sleeping for maximum delay", delay)
+			time.Sleep(delay)
+			delay = 0
 		}
 	}()
 }

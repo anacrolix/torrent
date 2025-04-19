@@ -96,6 +96,11 @@ type Announce struct {
 	ClientIp6 krpc.NodeAddr
 }
 
+func (me Announce) ForTracker(uri string) Announce {
+	me.TrackerUrl = uri
+	return me
+}
+
 func (me Announce) Do(ctx context.Context, req AnnounceRequest) (res AnnounceResponse, err error) {
 	_url, err := url.Parse(me.TrackerUrl)
 	if err != nil {

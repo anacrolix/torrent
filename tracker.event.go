@@ -7,6 +7,7 @@ import (
 
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/internal/errorsx"
+	"github.com/pkg/errors"
 
 	"github.com/james-lawrence/torrent/tracker"
 )
@@ -43,7 +44,7 @@ func TrackerEvent(ctx context.Context, l Torrent) (ret *tracker.AnnounceResponse
 
 	res, err := announcer.Do(ctx, req)
 
-	return &res, err
+	return &res, errors.Wrapf(err, "announce failed: %s", announcer.TrackerUrl)
 }
 
 func TrackerAnnounceOnce(ctx context.Context, l Torrent) (peers Peers, err error) {

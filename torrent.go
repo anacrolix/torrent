@@ -198,6 +198,10 @@ func TuneAnnounceOnce(t *torrent) {
 	go func() {
 		for {
 			peers, err := TrackerAnnounceOnce(context.Background(), t)
+			if err == ErrNoPeers {
+				log.Println("announce succeeded, but there are no peers")
+			}
+
 			if err == nil {
 				t.addPeers(peers)
 				return

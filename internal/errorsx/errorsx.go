@@ -56,3 +56,10 @@ func Is(err error, targets ...error) bool {
 
 	return false
 }
+
+// String useful wrapper for string constants as errors.
+type String string
+
+func (t String) Error() string {
+	return string(t)
+}

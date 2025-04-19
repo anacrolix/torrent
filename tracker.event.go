@@ -2,14 +2,16 @@ package torrent
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
 	"github.com/james-lawrence/torrent/dht/int160"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 
 	"github.com/james-lawrence/torrent/tracker"
 )
+
+const ErrNoPeers = errorsx.String("failed to locate any peers for torrent")
 
 func TrackerEvent(ctx context.Context, l Torrent) (ret *tracker.AnnounceResponse, err error) {
 	var (
@@ -55,7 +57,7 @@ func TrackerAnnounceOnce(ctx context.Context, l Torrent) (peers Peers, err error
 	}
 
 	if len(announced.Peers) == 0 {
-		return nil, fmt.Errorf("failed to locate any peers for torrent")
+		return nil, ErrNoPeers
 	}
 
 	return peers.AppendFromTracker(announced.Peers), nil

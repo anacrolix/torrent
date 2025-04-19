@@ -154,6 +154,14 @@ type ClientConfigOption func(*ClientConfig)
 // useful for default noop configurations.
 func ClientConfigNoop(c *ClientConfig) {}
 
+func ClientConfigCompose(options ...ClientConfigOption) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		for _, opt := range options {
+			opt(cc)
+		}
+	}
+}
+
 func ClientConfigDialRateLimit(l *rate.Limiter) ClientConfigOption {
 	return func(cc *ClientConfig) {
 		cc.dialRateLimiter = l

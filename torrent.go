@@ -1162,15 +1162,19 @@ func (t *torrent) seeding() bool {
 	if t.closed.IsSet() {
 		return false
 	}
+
 	if t.config.NoUpload {
 		return false
 	}
+
 	if !t.config.Seed {
 		return false
 	}
-	if t.config.DisableAggressiveUpload && t.needData() {
+
+	if t.needData() {
 		return false
 	}
+
 	return true
 }
 

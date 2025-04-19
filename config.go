@@ -37,8 +37,7 @@ type ClientConfig struct {
 	DhtStartingNodes func(network string) dht.StartingNodesGetter
 	// Never send chunks to peers.
 	NoUpload bool `long:"no-upload"`
-	// Disable uploading even when it isn't fair.
-	DisableAggressiveUpload bool `long:"disable-aggressive-upload"`
+
 	// Upload even after there's nothing in it for us. By default uploading is
 	// not altruistic, we'll only upload to encourage the peer to reciprocate.
 	Seed bool `long:"seed"`

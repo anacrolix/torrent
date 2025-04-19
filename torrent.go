@@ -196,8 +196,16 @@ func TuneAutoDownload(t *torrent) {
 // Announce to trackers looking for at least one successful request that returns peers.
 func TuneAnnounceOnce(t *torrent) {
 	go func() {
+		ctx, done := context.WithTimeout(context.Background(), time.Minute)
+		defer done()
+
 		for {
-			peers, err := TrackerAnnounceOnce(context.Background(), t)
+			peers, err := TrackerAnnounceOnce(ctx, t)
+			if errors.Is(err, context.DeadlineExceeded) {
+				log.Println(err)
+				return
+			}
+
 			if err == ErrNoPeers {
 				log.Println("announce succeeded, but there are no peers")
 			}

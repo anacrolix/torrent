@@ -121,16 +121,15 @@ func TuneSubscribe(sub *pubsub.Subscription) Tuner {
 	}
 }
 
-func TuneReadAnnounce(v *tracker.Announce, uri string) Tuner {
+func TuneReadAnnounce(v *tracker.Announce) Tuner {
 	return func(t *torrent) {
 		t.rLock()
 		defer t.rUnlock()
 
 		*v = tracker.Announce{
-			UserAgent:  t.config.HTTPUserAgent,
-			TrackerUrl: uri,
-			ClientIp4:  krpc.NewNodeAddrFromIPPort(t.config.PublicIP4, 0),
-			ClientIp6:  krpc.NewNodeAddrFromIPPort(t.config.PublicIP6, 0),
+			UserAgent: t.config.HTTPUserAgent,
+			ClientIp4: krpc.NewNodeAddrFromIPPort(t.config.PublicIP4, 0),
+			ClientIp6: krpc.NewNodeAddrFromIPPort(t.config.PublicIP6, 0),
 		}
 	}
 }
@@ -194,10 +193,12 @@ func TuneAutoDownload(t *torrent) {
 }
 
 // Announce to trackers looking for at least one successful request that returns peers.
-func TuneAnnounceOnce(t *torrent) {
-	go TrackerAnnounceUntil(context.Background(), t, func() bool {
-		return true
-	})
+func TuneAnnounceOnce(options ...tracker.AnnounceOption) Tuner {
+	return func(t *torrent) {
+		go TrackerAnnounceUntil(context.Background(), t, func() bool {
+			return true
+		}, options...)
+	}
 }
 
 func TuneAnnounceUntilComplete(t *torrent) {
@@ -240,11 +241,12 @@ func DownloadInto(ctx context.Context, dst io.Writer, m Torrent, options ...Tune
 
 	select {
 	case <-m.GotInfo():
+
 	case <-ctx.Done():
 		return 0, errorsx.Compact(context.Cause(ctx), ctx.Err())
 	}
 
-	if err = m.Tune(TuneAutoDownload, TuneNewConns); err != nil {
+	if err = m.Tune(TuneAutoDownload, TuneNewConns, TuneAnnounceOnce(tracker.AnnounceOptionEventStarted)); err != nil {
 		return 0, err
 	}
 
@@ -252,6 +254,10 @@ func DownloadInto(ctx context.Context, dst io.Writer, m Torrent, options ...Tune
 		return n, err
 	} else if n != m.Info().TotalLength() {
 		return n, errors.Errorf("download failed, missing data %d != %d", n, m.Info().TotalLength())
+	}
+
+	if err = m.Tune(TuneAnnounceOnce(tracker.AnnounceOptionEventCompleted)); err != nil {
+		log.Println("failed to announce completion", err)
 	}
 
 	return n, nil

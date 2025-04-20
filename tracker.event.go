@@ -7,6 +7,7 @@ import (
 
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/internal/errorsx"
+	"github.com/james-lawrence/torrent/internal/langx"
 	"github.com/pkg/errors"
 
 	"github.com/james-lawrence/torrent/tracker"
@@ -14,7 +15,7 @@ import (
 
 const ErrNoPeers = errorsx.String("failed to locate any peers for torrent")
 
-func TrackerEvent(ctx context.Context, l Torrent, announceuri string) (ret *tracker.AnnounceResponse, err error) {
+func TrackerEvent(ctx context.Context, l Torrent, announceuri string, options ...tracker.AnnounceOption) (ret *tracker.AnnounceResponse, err error) {
 	var (
 		announcer tracker.Announce
 		port      int
@@ -27,7 +28,7 @@ func TrackerEvent(ctx context.Context, l Torrent, announceuri string) (ret *trac
 		TuneResetTrackingStats(&s),
 		TuneReadPeerID(&id),
 		TuneReadHashID(&infoid),
-		TuneReadAnnounce(&announcer, announceuri),
+		TuneReadAnnounce(&announcer),
 		TuneReadPort(&port),
 	); err != nil {
 		return nil, err
@@ -40,17 +41,18 @@ func TrackerEvent(ctx context.Context, l Torrent, announceuri string) (ret *trac
 		tracker.AnnounceOptionKey,
 		tracker.AnnounceOptionDownloaded(s.BytesReadUsefulData.Int64()),
 		tracker.AnnounceOptionUploaded(s.BytesWrittenData.n),
+		langx.Compose(options...),
 	)
 
-	res, err := announcer.Do(ctx, req)
+	res, err := announcer.ForTracker(announceuri).Do(ctx, req)
 	return &res, errors.Wrapf(err, "announce: %s", announcer.TrackerUrl)
 }
 
-func TrackerAnnounceOnce(ctx context.Context, l Torrent, uri string) (delay time.Duration, peers Peers, err error) {
+func TrackerAnnounceOnce(ctx context.Context, l Torrent, uri string, options ...tracker.AnnounceOption) (delay time.Duration, peers Peers, err error) {
 	ctx, done := context.WithTimeout(ctx, 30*time.Second)
 	defer done()
 
-	announced, err := TrackerEvent(ctx, l, uri)
+	announced, err := TrackerEvent(ctx, l, uri, options...)
 	if err != nil {
 		return delay, nil, err
 	}
@@ -66,7 +68,7 @@ func TrackerAnnounceOnce(ctx context.Context, l Torrent, uri string) (delay time
 	return delay, peers.AppendFromTracker(announced.Peers), nil
 }
 
-func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool) {
+func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool, options ...tracker.AnnounceOption) {
 	var delay time.Duration
 
 	trackers := t.md.Trackers
@@ -74,7 +76,7 @@ func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool) {
 	for {
 		for _, uri := range trackers {
 			ctx, done := context.WithTimeout(context.Background(), time.Minute)
-			d, peers, err := TrackerAnnounceOnce(ctx, t, uri)
+			d, peers, err := TrackerAnnounceOnce(ctx, t, uri, options...)
 			done()
 			if errors.Is(err, context.DeadlineExceeded) {
 				log.Println(err)

@@ -12,6 +12,13 @@ import (
 	"github.com/james-lawrence/torrent/internal/langx"
 )
 
+const (
+	None      AnnounceEvent = iota
+	Completed               // The local peer just completed the torrent.
+	Started                 // The local peer has just resumed this torrent.
+	Stopped                 // The local peer is leaving the swarm.
+)
+
 type AnnounceOption func(*AnnounceRequest)
 
 func AnnounceOptionKey(ar *AnnounceRequest) {
@@ -32,6 +39,14 @@ func AnnounceOptionDownloaded(n int64) AnnounceOption {
 
 func AnnounceOptionEventStarted(ar *AnnounceRequest) {
 	ar.Event = Started
+}
+
+func AnnounceOptionEventStopped(ar *AnnounceRequest) {
+	ar.Event = Stopped
+}
+
+func AnnounceOptionEventCompleted(ar *AnnounceRequest) {
+	ar.Event = Completed
 }
 
 func NewAccounceRequest(id int160.T, port int, hash int160.T, options ...AnnounceOption) AnnounceRequest {
@@ -74,13 +89,6 @@ func (e AnnounceEvent) String() string {
 	// See BEP 3, "event".
 	return []string{"empty", "completed", "started", "stopped"}[e]
 }
-
-const (
-	None      AnnounceEvent = iota
-	Completed               // The local peer just completed the torrent.
-	Started                 // The local peer has just resumed this torrent.
-	Stopped                 // The local peer is leaving the swarm.
-)
 
 var (
 	ErrBadScheme = errors.New("unknown scheme")

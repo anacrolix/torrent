@@ -226,11 +226,6 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 			fmt.Fprint(w, metadata.DisplayName)
 		}
 		fmt.Fprint(w, "\n")
-
-		if t, ok := t.(*torrent); ok {
-			t.writeStatus(w)
-		}
-		fmt.Fprintln(w)
 	}
 }
 

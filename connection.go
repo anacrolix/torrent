@@ -385,7 +385,9 @@ func (cn *connection) Close() {
 	cn.pieceRequestOrder.Clear()
 
 	if cn.conn != nil {
-		go cn.conn.Close()
+		cpstats := cn.stats.Copy()
+		cn.conn.Close()
+		cn.t.cln.config.ConnectionClosed(cn.t, cpstats)
 	}
 }
 

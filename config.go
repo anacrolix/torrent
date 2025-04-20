@@ -129,6 +129,8 @@ type ClientConfig struct {
 	DHTOnQuery      func(query *krpc.Msg, source net.Addr) (propagate bool)
 	DHTAnnouncePeer func(ih metainfo.Hash, ip net.IP, port int, portOk bool)
 	DHTMuxer        dht.Muxer
+
+	ConnectionClosed func(t *torrent, stats ConnStats)
 }
 
 func (cfg *ClientConfig) errors() llog {
@@ -269,6 +271,9 @@ func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 		Debug:           discard{},
 		DHTAnnouncePeer: func(ih metainfo.Hash, ip net.IP, port int, portOk bool) {},
 		DHTMuxer:        dht.DefaultMuxer(),
+		ConnectionClosed: func(t *torrent, stats ConnStats) {
+			log.Println("connection closed", t.md.ID.HexString(), stats.BytesReadUsefulData.Int64(), stats.BytesWrittenData.Int64())
+		},
 		Handshaker: connections.NewHandshaker(
 			connections.AutoFirewall(),
 		),

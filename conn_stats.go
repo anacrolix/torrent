@@ -73,6 +73,10 @@ func (t *count) Int64() int64 {
 	return atomic.LoadInt64(&t.n)
 }
 
+func (t *count) Uint64() uint64 {
+	return uint64(atomic.LoadInt64(&t.n))
+}
+
 func (t *count) String() string {
 	return fmt.Sprintf("%v", t.Int64())
 }

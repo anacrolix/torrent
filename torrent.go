@@ -14,7 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
 
 	"github.com/anacrolix/missinggo/pubsub"
@@ -805,35 +804,6 @@ func (t *torrent) newMetadataExtensionMessage(c *connection, msgType int, piece 
 		Type:            pp.Extended,
 		ExtendedID:      c.PeerExtensionIDs[pp.ExtensionNameMetadata],
 		ExtendedPayload: append(p, data...),
-	}
-}
-
-func (t *torrent) writeStatus(w io.Writer) {
-	fmt.Fprintf(w, "Infohash: %s\n", t.md.ID.HexString())
-	fmt.Fprintf(w, "Metadata length: %d\n", t.metadataSize())
-	if !t.haveInfo() {
-		fmt.Fprintf(w, "Metadata have: ")
-		for _, h := range t.metadataCompletedChunks {
-			fmt.Fprintf(w, "%c", func() rune {
-				if h {
-					return 'H'
-				}
-				return '.'
-			}())
-		}
-		fmt.Fprintln(w)
-	}
-
-	fmt.Fprintf(w, "DHT Announces: %d\n", t.numDHTAnnounces)
-
-	spew.NewDefaultConfig()
-	spew.Fdump(w, t.statsLocked())
-
-	conns := t.conns.list()
-	slices.Sort(conns, worseConn)
-	for i, c := range conns {
-		fmt.Fprintf(w, "%2d. ", i+1)
-		c.WriteStatus(w, t)
 	}
 }
 

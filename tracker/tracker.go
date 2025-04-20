@@ -12,6 +12,8 @@ import (
 	"github.com/james-lawrence/torrent/internal/langx"
 )
 
+// https://www.bittorrent.org/beps/bep_0015.html
+
 const (
 	None      AnnounceEvent = iota
 	Completed               // The local peer just completed the torrent.
@@ -47,6 +49,10 @@ func AnnounceOptionEventStopped(ar *AnnounceRequest) {
 
 func AnnounceOptionEventCompleted(ar *AnnounceRequest) {
 	ar.Event = Completed
+}
+
+func AnnounceOptionSeeding(ar *AnnounceRequest) {
+	ar.Left = 0
 }
 
 func NewAccounceRequest(id int160.T, port int, hash int160.T, options ...AnnounceOption) AnnounceRequest {

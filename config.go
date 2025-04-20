@@ -19,7 +19,7 @@ import (
 )
 
 // DefaultHTTPUserAgent ...
-const DefaultHTTPUserAgent = "Go-Torrent/1.0"
+const DefaultHTTPUserAgent = "retrovibted/0.0"
 
 // ClientConfig not safe to modify this after it's given to a Client.
 type ClientConfig struct {

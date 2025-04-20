@@ -195,43 +195,15 @@ func TuneAutoDownload(t *torrent) {
 
 // Announce to trackers looking for at least one successful request that returns peers.
 func TuneAnnounceOnce(t *torrent) {
-	go func() {
-		var delay time.Duration
+	go TrackerAnnounceUntil(context.Background(), t, func() bool {
+		return true
+	})
+}
 
-		ctx, done := context.WithTimeout(context.Background(), time.Minute)
-		defer done()
-		trackers := t.md.Trackers
-
-		for {
-			for _, uri := range trackers {
-				d, peers, err := TrackerAnnounceOnce(ctx, t, uri)
-				if errors.Is(err, context.DeadlineExceeded) {
-					log.Println(err)
-					return
-				}
-
-				if err == nil {
-					t.addPeers(peers)
-					return
-				}
-
-				if delay < d {
-					delay = d
-				}
-
-				if err == ErrNoPeers {
-					log.Println("announce succeeded, but there are no peers")
-					continue
-				}
-
-				log.Println("announce failed", err)
-			}
-
-			log.Println("announce sleeping for maximum delay", delay)
-			time.Sleep(delay)
-			delay = 0
-		}
-	}()
+func TuneAnnounceUntilComplete(t *torrent) {
+	go TrackerAnnounceUntil(context.Background(), t, func() bool {
+		return !t.chunks.Incomplete()
+	})
 }
 
 // Verify the entirety of the torrent. will block

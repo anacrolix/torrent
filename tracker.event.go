@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/james-lawrence/torrent/dht/int160"
@@ -63,4 +64,47 @@ func TrackerAnnounceOnce(ctx context.Context, l Torrent, uri string) (delay time
 	}
 
 	return delay, peers.AppendFromTracker(announced.Peers), nil
+}
+
+func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool) {
+	var delay time.Duration
+
+	trackers := t.md.Trackers
+
+	for {
+		for _, uri := range trackers {
+			ctx, done := context.WithTimeout(context.Background(), time.Minute)
+			d, peers, err := TrackerAnnounceOnce(ctx, t, uri)
+			done()
+			if errors.Is(err, context.DeadlineExceeded) {
+				log.Println(err)
+				return
+			}
+
+			if err == nil {
+				t.addPeers(peers)
+				return
+			}
+
+			if delay < d {
+				delay = d
+			}
+
+			if err == ErrNoPeers {
+				log.Println("announce succeeded, but there are no peers")
+				continue
+			}
+
+			log.Println("announce failed", err)
+		}
+
+		log.Println("announce sleeping for maximum delay", t.Metadata().ID.HexString(), delay)
+		time.Sleep(delay)
+		delay = 0
+
+		if donefn() {
+			log.Println("announce completed", t.Metadata().ID.HexString())
+			return
+		}
+	}
 }

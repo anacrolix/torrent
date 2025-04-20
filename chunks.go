@@ -530,6 +530,13 @@ func (t *chunks) Missing() int {
 	return int(t.missing.GetCardinality())
 }
 
+// returns true if any chunks are in incomplete states (missing, oustanding, unverified)
+func (t *chunks) Incomplete() bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return (int(t.missing.GetCardinality()) + len(t.outstanding) + int(t.unverified.GetCardinality())) > 0
+}
+
 func (t *chunks) Snapshot(s *Stats) *Stats {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

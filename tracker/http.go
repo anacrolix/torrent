@@ -14,6 +14,11 @@ import (
 	"github.com/james-lawrence/torrent/dht/krpc"
 
 	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/internal/errorsx"
+)
+
+const (
+	ErrMissingInfoHash = errorsx.String("missing info hash")
 )
 
 type HttpResponse struct {
@@ -138,8 +143,14 @@ func announceHTTP(ctx context.Context, _url *url.URL, ar AnnounceRequest, opt An
 	} else if err != nil {
 		return ret, fmt.Errorf("error decoding %q: %s", buf.Bytes(), err)
 	}
+
 	if trackerResponse.FailureReason != "" {
-		return ret, fmt.Errorf("tracker gave failure reason: %q", trackerResponse.FailureReason)
+		switch trackerResponse.FailureReason {
+		case "InfoHash not found.", "Torrent has been deleted.":
+			return ret, ErrMissingInfoHash
+		default:
+			return ret, fmt.Errorf("tracker gave failure reason: %q", trackerResponse.FailureReason)
+		}
 	}
 
 	ret.Interval = trackerResponse.Interval

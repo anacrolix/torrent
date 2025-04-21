@@ -387,7 +387,7 @@ func (cn *connection) Close() {
 	if cn.conn != nil {
 		cpstats := cn.stats.Copy()
 		cn.conn.Close()
-		cn.t.cln.config.ConnectionClosed(cn.t, cpstats)
+		cn.t.cln.config.ConnectionClosed(cn.t.md.ID, cpstats)
 	}
 }
 

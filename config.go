@@ -130,7 +130,7 @@ type ClientConfig struct {
 	DHTAnnouncePeer func(ih metainfo.Hash, ip net.IP, port int, portOk bool)
 	DHTMuxer        dht.Muxer
 
-	ConnectionClosed func(t *torrent, stats ConnStats)
+	ConnectionClosed func(ih metainfo.Hash, stats ConnStats)
 }
 
 func (cfg *ClientConfig) errors() llog {
@@ -238,7 +238,7 @@ func ClientConfigHTTPUserAgent(s string) ClientConfigOption {
 	}
 }
 
-func ClientConfigConnectionClosed(fn func(t *torrent, stats ConnStats)) ClientConfigOption {
+func ClientConfigConnectionClosed(fn func(ih metainfo.Hash, stats ConnStats)) ClientConfigOption {
 	return func(cc *ClientConfig) {
 		cc.ConnectionClosed = fn
 	}
@@ -277,7 +277,7 @@ func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 		Debug:            discard{},
 		DHTAnnouncePeer:  func(ih metainfo.Hash, ip net.IP, port int, portOk bool) {},
 		DHTMuxer:         dht.DefaultMuxer(),
-		ConnectionClosed: func(t *torrent, stats ConnStats) {},
+		ConnectionClosed: func(t metainfo.Hash, stats ConnStats) {},
 		Handshaker: connections.NewHandshaker(
 			connections.AutoFirewall(),
 		),

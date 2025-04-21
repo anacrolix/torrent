@@ -238,6 +238,12 @@ func ClientConfigHTTPUserAgent(s string) ClientConfigOption {
 	}
 }
 
+func ClientConfigConnectionClosed(fn func(t *torrent, stats ConnStats)) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		cc.ConnectionClosed = fn
+	}
+}
+
 // NewDefaultClientConfig default client configuration.
 func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 	cc := &ClientConfig{
@@ -264,16 +270,14 @@ func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
 			Preferred:        true,
 			RequirePreferred: false,
 		},
-		CryptoSelector:  mse.DefaultCryptoSelector,
-		CryptoProvides:  mse.AllSupportedCrypto,
-		Logger:          log.New(io.Discard, "[torrent] ", log.Flags()),
-		Warn:            discard{},
-		Debug:           discard{},
-		DHTAnnouncePeer: func(ih metainfo.Hash, ip net.IP, port int, portOk bool) {},
-		DHTMuxer:        dht.DefaultMuxer(),
-		ConnectionClosed: func(t *torrent, stats ConnStats) {
-			log.Println("connection closed", t.md.ID.HexString(), stats.BytesReadUsefulData.Int64(), stats.BytesWrittenData.Int64())
-		},
+		CryptoSelector:   mse.DefaultCryptoSelector,
+		CryptoProvides:   mse.AllSupportedCrypto,
+		Logger:           log.New(io.Discard, "[torrent] ", log.Flags()),
+		Warn:             discard{},
+		Debug:            discard{},
+		DHTAnnouncePeer:  func(ih metainfo.Hash, ip net.IP, port int, portOk bool) {},
+		DHTMuxer:         dht.DefaultMuxer(),
+		ConnectionClosed: func(t *torrent, stats ConnStats) {},
 		Handshaker: connections.NewHandshaker(
 			connections.AutoFirewall(),
 		),

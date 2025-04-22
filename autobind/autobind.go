@@ -5,9 +5,8 @@ package autobind
 
 import (
 	"context"
-	"fmt"
 	"net"
-	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -15,13 +14,19 @@ import (
 	"github.com/james-lawrence/torrent"
 	"github.com/james-lawrence/torrent/internal/utpx"
 	"github.com/james-lawrence/torrent/sockets"
+	"github.com/james-lawrence/torrent/storage"
 	"github.com/pkg/errors"
 	"golang.org/x/net/proxy"
 )
 
 // NewDefaultClient setup a client and connect a using defaults settings.
 func NewDefaultClient() (c *torrent.Client, err error) {
-	return New().Bind(torrent.NewClient(torrent.NewDefaultClientConfig(torrent.ClientConfigBootstrapGlobal)))
+	rdir := os.TempDir()
+	return New().Bind(torrent.NewClient(torrent.NewDefaultClientConfig(
+		torrent.NewMetadataCache(rdir),
+		storage.NewFile(rdir),
+		torrent.ClientConfigBootstrapGlobal,
+	)))
 }
 
 // Option for configuring autobind.
@@ -120,7 +125,7 @@ func (t Autobind) Bind(cl *torrent.Client, err error) (*torrent.Client, error) {
 	config := cl.Config()
 	config.NoDHT = t.NoDHT // TODO: remove NoDHT from client config.
 
-	if sockets, err = listenAll(t.listenNetworks(), t.ListenHost, t.ListenPort, config.ProxyURL); err != nil {
+	if sockets, err = listenAll(t.listenNetworks(), t.ListenHost, t.ListenPort); err != nil {
 		return nil, err
 	}
 
@@ -137,15 +142,6 @@ func (t Autobind) Bind(cl *torrent.Client, err error) (*torrent.Client, error) {
 	}
 
 	return cl, nil
-}
-
-func (t Autobind) enabledPeerNetworks() (ns []network) {
-	for _, n := range allPeerNetworks {
-		if t.peerNetworkEnabled(n) {
-			ns = append(ns, n)
-		}
-	}
-	return
 }
 
 func (t Autobind) listenNetworks() (ns []network) {
@@ -193,35 +189,11 @@ func (t Autobind) peerNetworkEnabled(n network) bool {
 	return true
 }
 
-type firewallCallback func(net.Addr) bool
-
-type dialer interface {
-	Dial(ctx context.Context, addr string) (net.Conn, error)
+func getProxyDialer() proxy.ContextDialer {
+	return proxyContextDialer(proxy.FromEnvironment())
 }
 
-func getProxyDialer(proxyURL string) (proxy.ContextDialer, error) {
-	fixedURL, err := url.Parse(proxyURL)
-	if err != nil {
-		return nil, err
-	}
-
-	d, err := proxy.FromURL(fixedURL, proxy.Direct)
-	if err != nil {
-		return nil, err
-	}
-
-	return proxyContextDialer(d), nil
-}
-
-type disabledListener struct {
-	net.Listener
-}
-
-func (dl disabledListener) Accept() (net.Conn, error) {
-	return nil, fmt.Errorf("tcp listener disabled due to proxy")
-}
-
-func listenAll(networks []network, getHost func(string) string, port int, proxyURL string) ([]sockets.Socket, error) {
+func listenAll(networks []network, getHost func(string) string, port int) ([]sockets.Socket, error) {
 	if len(networks) == 0 {
 		return nil, nil
 	}
@@ -231,17 +203,17 @@ func listenAll(networks []network, getHost func(string) string, port int, proxyU
 	}
 
 	for {
-		ss, retry, err := listenAllRetry(nahs, port, proxyURL)
+		ss, retry, err := listenAllRetry(nahs, port)
 		if !retry {
 			return ss, err
 		}
 	}
 }
 
-func listenAllRetry(nahs []networkAndHost, port int, proxyURL string) (ss []sockets.Socket, retry bool, err error) {
+func listenAllRetry(nahs []networkAndHost, port int) (ss []sockets.Socket, retry bool, err error) {
 	ss = make([]sockets.Socket, 1, len(nahs))
 	portStr := strconv.FormatInt(int64(port), 10)
-	ss[0], err = listen(nahs[0].Network, net.JoinHostPort(nahs[0].Host, portStr), proxyURL)
+	ss[0], err = listen(nahs[0].Network, net.JoinHostPort(nahs[0].Host, portStr))
 	if err != nil {
 		return nil, false, errors.Wrap(err, "first listen")
 	}
@@ -255,7 +227,7 @@ func listenAllRetry(nahs []networkAndHost, port int, proxyURL string) (ss []sock
 	}()
 	portStr = strconv.FormatInt(int64(missinggo.AddrPort(ss[0].Addr())), 10)
 	for _, nah := range nahs[1:] {
-		s, err := listen(nah.Network, net.JoinHostPort(nah.Host, portStr), proxyURL)
+		s, err := listen(nah.Network, net.JoinHostPort(nah.Host, portStr))
 		if err != nil {
 			return ss,
 				missinggo.IsAddrInUse(err) && port == 0,
@@ -266,18 +238,18 @@ func listenAllRetry(nahs []networkAndHost, port int, proxyURL string) (ss []sock
 	return
 }
 
-func listen(n network, addr, proxyURL string) (sockets.Socket, error) {
+func listen(n network, addr string) (sockets.Socket, error) {
 	switch {
 	case n.TCP:
-		return listenTCP(n.String(), addr, proxyURL)
+		return listenTCP(n.String(), addr)
 	case n.UDP:
-		return listenUtp(n.String(), addr, proxyURL)
+		return listenUtp(n.String(), addr)
 	default:
 		panic(n)
 	}
 }
 
-func listenTCP(network, address, proxyURL string) (s sockets.Socket, err error) {
+func listenTCP(network, address string) (s sockets.Socket, err error) {
 	l, err := net.Listen(network, address)
 	if err != nil {
 		return nil, err
@@ -289,35 +261,14 @@ func listenTCP(network, address, proxyURL string) (s sockets.Socket, err error) 
 		}
 	}()
 
-	// If we don't need the proxy - then we should return default net.Dialer,
-	// otherwise, let's try to parse the proxyURL and return proxy.Dialer
-	if len(proxyURL) != 0 {
-		dl := disabledListener{l}
-		dialer, err := getProxyDialer(proxyURL)
-		if err != nil {
-			return nil, err
-		}
-
-		return sockets.New(dl, dialer), nil
-	}
-	dialer := &net.Dialer{}
+	dialer := getProxyDialer()
 	return sockets.New(l, dialer), nil
 }
 
-func listenUtp(network, addr, proxyURL string) (s sockets.Socket, err error) {
+func listenUtp(network, addr string) (s sockets.Socket, err error) {
 	us, err := utpx.New(network, addr)
 	if err != nil {
 		return
-	}
-
-	// If we don't need the proxy - then we should return default net.Dialer,
-	// otherwise, let's try to parse the proxyURL and return proxy.Dialer
-	if len(proxyURL) != 0 {
-		dialer, err := getProxyDialer(proxyURL)
-		if err != nil {
-			return nil, err
-		}
-		return sockets.New(disabledUtpSocket{us}, dialer), nil
 	}
 
 	dialer := &net.Dialer{}
@@ -362,12 +313,4 @@ func (t fakecontextdialer) DialContext(ctx context.Context, network, address str
 type networkAndHost struct {
 	Network network
 	Host    string
-}
-
-type disabledUtpSocket struct {
-	utpx.Socket
-}
-
-func (ds disabledUtpSocket) Accept() (net.Conn, error) {
-	return nil, fmt.Errorf("utp listener disabled due to proxy")
 }

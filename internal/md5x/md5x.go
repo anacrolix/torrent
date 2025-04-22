@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"hash"
+	"io"
 )
 
 // digest the provided contents and return the resulting hash.
@@ -20,6 +21,12 @@ func Digest[T string | []byte](bs ...T) hash.Hash {
 	}
 
 	return v
+}
+
+func IO(src io.Reader) (int64, hash.Hash, error) {
+	v := md5.New()
+	n, err := io.Copy(v, src)
+	return n, v, err
 }
 
 // format md5 hash to a hex encoded string

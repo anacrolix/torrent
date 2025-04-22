@@ -1,7 +1,6 @@
 package torrent
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -59,7 +58,7 @@ func smallpopulate(p *chunks) *chunks {
 func BenchmarkChunksPop(b *testing.B) {
 	info, err := fromFile("testdata/bootstrap.dat.torrent")
 	require.NoError(b, err)
-	p := quickpopulate(newChunks(defaultChunk, &info))
+	p := quickpopulate(newChunks(defaultChunkSize, &info))
 
 	n := p.Missing()
 	available := filledbmap(n)
@@ -197,8 +196,9 @@ func TestChunkFill(t *testing.T) {
 }
 
 func TestChunksRequests(t *testing.T) {
-	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(greetingTempDir)
+	greetingTempDir := t.TempDir()
+	mi := testutil.GreetingTestTorrent(greetingTempDir)
+
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
 	test := func(expected, r request, err error) {
@@ -240,8 +240,9 @@ func TestChunksRequests(t *testing.T) {
 }
 
 func TestChunksVariousCLength(t *testing.T) {
-	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(greetingTempDir)
+	greetingTempDir := t.TempDir()
+	mi := testutil.GreetingTestTorrent(greetingTempDir)
+
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
 
@@ -280,8 +281,8 @@ func TestRangeVariousCLength(t *testing.T) {
 		assert.Equal(t, cidn, max)
 	}
 
-	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(greetingTempDir)
+	greetingTempDir := t.TempDir()
+	mi := testutil.GreetingTestTorrent(greetingTempDir)
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
 
@@ -314,8 +315,9 @@ func TestRangeVariousCLength(t *testing.T) {
 }
 
 func TestChunksFailed(t *testing.T) {
-	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(greetingTempDir)
+	greetingTempDir := t.TempDir()
+	mi := testutil.GreetingTestTorrent(greetingTempDir)
+
 	info, err := mi.UnmarshalInfo()
 	require.NoError(t, err)
 
@@ -360,7 +362,7 @@ func TestChunksPop(t *testing.T) {
 func TestChunksGraceWindow(t *testing.T) {
 	info, err := fromFile("testdata/bootstrap.dat.torrent")
 	require.NoError(t, err)
-	p := smallpopulate(newChunks(defaultChunk, &info))
+	p := smallpopulate(newChunks(defaultChunkSize, &info))
 
 	// adjust grace period to be negative to force immediate
 	// recovering of outstanding requests.

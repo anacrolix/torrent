@@ -14,10 +14,17 @@ import (
 // Option for the torrent.
 type Option func(*Metadata)
 
-// OptionTrackers set the trackers for the torrent.
+// OptionTrackers add the trackers to the torrent.
 func OptionTrackers(trackers ...string) Option {
 	return func(t *Metadata) {
 		t.Trackers = append(t.Trackers, trackers...)
+	}
+}
+
+// OptionTrackers set the trackers for the torrent.
+func OptionResetTrackers(trackers ...string) Option {
+	return func(t *Metadata) {
+		t.Trackers = trackers
 	}
 }
 
@@ -105,7 +112,8 @@ func (t Metadata) Merge(options ...Option) Metadata {
 // New create a torrent from the metainfo.MetaInfo and any additional options.
 func New(info metainfo.Hash, options ...Option) (t Metadata, err error) {
 	t = Metadata{
-		ID: info,
+		ID:        info,
+		ChunkSize: defaultChunkSize,
 	}.Merge(options...)
 
 	return t, nil
@@ -147,7 +155,7 @@ func NewFromFile(path string, options ...Option) (t Metadata, err error) {
 }
 
 // NewFromInfo creates a torrent from metainfo.Info
-func NewFromInfo(i metainfo.Info, options ...Option) (t Metadata, err error) {
+func NewFromInfo(i *metainfo.Info, options ...Option) (t Metadata, err error) {
 	var (
 		encoded []byte
 	)

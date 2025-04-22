@@ -27,7 +27,7 @@ func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash
 	if info == nil {
 		panic("can't open a storage for a nil torrent")
 	}
-	span, err := mMapTorrent(info, s.baseDir)
+	span, err := mMapTorrent(filepath.Join(s.baseDir, infoHash.HexString()), info)
 	t = &mmapTorrentStorage{
 		info:     info,
 		infoHash: infoHash,
@@ -60,7 +60,7 @@ func (ts *mmapTorrentStorage) Close() error {
 	return ts.span.Close()
 }
 
-func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, err error) {
+func mMapTorrent(location string, md *metainfo.Info) (mms *mmap_span.MMapSpan, err error) {
 	mms = &mmap_span.MMapSpan{}
 	defer func() {
 		if err != nil {
@@ -68,7 +68,7 @@ func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, e
 		}
 	}()
 	for _, miFile := range md.UpvertedFiles() {
-		fileName := filepath.Join(append([]string{location, md.Name}, miFile.Path...)...)
+		fileName := filepath.Join(append([]string{location}, miFile.Path...)...)
 		var mm mmap.MMap
 		mm, err = mmapFile(fileName, miFile.Length)
 		if err != nil {

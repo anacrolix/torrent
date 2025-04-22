@@ -18,6 +18,14 @@ func Zero[T any](v T, err error) T {
 	return v
 }
 
+func Panic(err error) {
+	if err == nil {
+		return
+	}
+
+	panic(err)
+}
+
 func Must[T any](v T, err error) T {
 	if err == nil {
 		return v

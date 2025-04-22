@@ -33,7 +33,7 @@ type Encoder struct {
 	scratch [64]byte
 }
 
-func (e *Encoder) Encode(v interface{}) (err error) {
+func (e *Encoder) Encode(v any) (err error) {
 	if v == nil {
 		return
 	}
@@ -49,6 +49,7 @@ func (e *Encoder) Encode(v interface{}) (err error) {
 			}
 		}
 	}()
+
 	e.reflectValue(reflect.ValueOf(v))
 	return nil
 }
@@ -124,6 +125,8 @@ func (e *Encoder) reflectValue(v reflect.Value) {
 		e.writeString("e")
 		return
 	}
+
+	// log.Println("reflectValue type", v.Type(), v.Kind(), v.IsValid(), v.IsZero(), v)
 
 	switch v.Kind() {
 	case reflect.Bool:

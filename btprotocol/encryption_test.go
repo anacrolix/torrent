@@ -10,9 +10,10 @@ import (
 func TestEncryptionHandshakeRoundTrip(t *testing.T) {
 	c1, c2 := newConn()
 	key := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 0}
-	keys := func(callback func(skey []byte) (more bool)) {
-		callback(key)
-	}
+	keys := mse.StaticSecrets(key)
+	// keys := func(callback func(skey []byte) (more bool)) {
+	// 	callback(key)
+	// }
 	p1 := EncryptionHandshake{
 		Keys:           keys,
 		CryptoSelector: mse.DefaultCryptoSelector,

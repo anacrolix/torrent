@@ -87,8 +87,7 @@ func TestPieceHashFailed(t *testing.T) {
 	cl.config = TestingConfig(t)
 	ts, err := NewFromMetaInfo(mi, OptionStorage(testutil.NewBadStorage()))
 	require.NoError(t, err)
-	tt, err := cl.newTorrent(ts)
-	require.NoError(t, err)
+	tt := newTorrent(cl, ts)
 	tt.setChunkSize(2)
 	require.NoError(t, tt.setInfoBytes(mi.InfoBytes))
 

@@ -62,10 +62,15 @@ func mainErr() error {
 			return xerrors.Errorf("accepting: %w", err)
 		}
 		defer cn.Close()
-		rw, _, err := mse.ReceiveHandshake(cn, func(f func([]byte) bool) {
+
+		rw, _, err := mse.ReceiveHandshake(cn, func(f func(skey []byte) []byte) []byte {
 			for _, sk := range args.Listen.SecretKeys {
-				f([]byte(sk))
+				if f([]byte(sk)) != nil {
+					return []byte(sk)
+				}
 			}
+
+			return nil
 		}, mse.DefaultCryptoSelector)
 		if err != nil {
 			log.Fatalf("error receiving: %v", err)

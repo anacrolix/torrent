@@ -26,7 +26,8 @@ func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 	require.NoError(t, err)
 	defer cl.Close()
 
-	td, mi := testutil.GreetingTestTorrent(t)
+	td := t.TempDir()
+	mi := testutil.GreetingTestTorrent(td)
 	ts, err := torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewMMap(td)))
 	require.NoError(t, err)
 	tt, new, err := cl.Start(ts)

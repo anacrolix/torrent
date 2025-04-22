@@ -219,21 +219,6 @@ func (cn *connection) cumInterest() time.Duration {
 	return ret
 }
 
-func (cn *connection) peerHasAllPieces() (all bool, known bool) {
-	if cn.peerSentHaveAll {
-		return true, true
-	}
-
-	if !cn.t.haveInfo() {
-		return false, false
-	}
-
-	cn.cmu().Lock()
-	m := cn.claimed.GetCardinality()
-	cn.cmu().Unlock()
-	return cn.t.chunks.cmaximum == int64(m), true
-}
-
 func (cn *connection) cmu() sync.Locker {
 	return cn._mu
 }
@@ -246,22 +231,6 @@ func (cn *connection) supportsExtension(ext pp.ExtensionName) bool {
 	return cn.extension(ext) != 0
 }
 
-// The best guess at number of pieces in the torrent for this peer.
-func (cn *connection) bestPeerNumPieces() pieceIndex {
-	if cn.t.haveInfo() {
-		return cn.t.numPieces()
-	}
-	return cn.peerMinPieces
-}
-
-func (cn *connection) completedString() string {
-	have := pieceIndex(cn.claimed.GetCardinality())
-	if cn.peerSentHaveAll {
-		have = cn.bestPeerNumPieces()
-	}
-	return fmt.Sprintf("%d/%d", have, cn.t.chunks.cmaximum)
-}
-
 // Correct the PeerPieces slice length. Return false if the existing slice is
 // invalid, such as by receiving badly sized BITFIELD, or invalid HAVE
 // messages.
@@ -271,13 +240,6 @@ func (cn *connection) setNumPieces(num pieceIndex) error {
 	cn.cmu().Unlock()
 	cn.peerPiecesChanged()
 	return nil
-}
-
-func eventAgeString(t time.Time) string {
-	if t.IsZero() {
-		return "never"
-	}
-	return fmt.Sprintf("%.2fs ago", time.Since(t).Seconds())
 }
 
 func (cn *connection) connectionFlags() (ret string) {
@@ -300,65 +262,8 @@ func (cn *connection) utp() bool {
 	return strings.Contains(cn.network, "udp")
 }
 
-// Inspired by https://github.com/transmission/transmission/wiki/Peer-Status-Text.
-func (cn *connection) statusFlags() (ret string) {
-	c := func(b byte) {
-		ret += string([]byte{b})
-	}
-	if cn.Interested {
-		c('i')
-	}
-	if cn.Choked {
-		c('c')
-	}
-	c('-')
-	ret += cn.connectionFlags()
-	c('-')
-	if cn.PeerInterested {
-		c('i')
-	}
-	if cn.PeerChoked {
-		c('c')
-	}
-	return
-}
-
 func (cn *connection) downloadRate() float64 {
 	return float64(cn.stats.BytesReadUsefulData.Int64()) / cn.cumInterest().Seconds()
-}
-
-func (cn *connection) WriteStatus(w io.Writer, t *torrent) {
-	// \t isn't preserved in <pre> blocks?
-	fmt.Fprintf(w, "%+-55q %s %s-%s\n", cn.PeerID, cn.PeerExtensionBytes, cn.localAddr(), cn.remoteAddr)
-	fmt.Fprintf(w, "    last msg: %s, connected: %s, last helpful: %s, itime: %s, etime: %s\n",
-		eventAgeString(cn.lastMessageReceived),
-		eventAgeString(cn.completedHandshake),
-		eventAgeString(cn.lastHelpful()),
-		cn.cumInterest(),
-		cn.totalExpectingTime(),
-	)
-	fmt.Fprintf(w,
-		"    %s completed, good chunks: %v/%v-%v reqq: (%d,%d,%d]-%d, flags: %s, dr: %.1f KiB/s\n",
-		cn.completedString(),
-		&cn.stats.ChunksReadUseful,
-		&cn.stats.ChunksRead,
-		&cn.stats.ChunksWritten,
-		cn.requestsLowWater,
-		cn.numLocalRequests(),
-		cn.nominalMaxRequests(),
-		len(cn.PeerRequests),
-		cn.statusFlags(),
-		cn.downloadRate()/(1<<10),
-	)
-	// fmt.Fprintf(w, "    next pieces: %v%s\n",
-	// 	iter.ToSlice(iter.Head(10, cn.iterPendingPiecesUntyped)),
-	// 	func() string {
-	// 		if cn.shouldRequestWithoutBias() {
-	// 			return " (fastest)"
-	// 		} else {
-	// 			return ""
-	// 		}
-	// 	}())
 }
 
 func (cn *connection) Close() {
@@ -565,21 +470,6 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		available *roaring.Bitmap
 	)
 
-	if !cn.t.networkingEnabled {
-		if !cn.SetInterested(false, msg) {
-			return
-		}
-
-		if len(cn.requests) != 0 {
-			for _, r := range cn.dupRequests() {
-				cn.releaseRequest(r)
-				if !msg(makeCancelMessage(r)) {
-					return
-				}
-			}
-		}
-	}
-
 	// if we're choked and not allowed to fast track any chunks then there is nothing
 	// to do.
 	if cn.PeerChoked && cn.fastset.IsEmpty() {
@@ -636,7 +526,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 			return
 		}
 	} else if err != nil {
-		cn.t.config.warn().Printf("failed to request piece: %T - %v\n", err, err)
+		cn.t.cln.config.warn().Printf("failed to request piece: %T - %v\n", err, err)
 		return
 	}
 
@@ -676,8 +566,8 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 // activity elsewhere in the Client, and some is determined locally when the
 // connection is writable.
 func (cn *connection) writer(keepAliveTimeout time.Duration) {
-	cn.t.config.info().Printf("c(%p) writer initiated\n", cn)
-	defer cn.t.config.info().Printf("c(%p) writer completed\n", cn)
+	cn.t.cln.config.info().Printf("c(%p) writer initiated\n", cn)
+	defer cn.t.cln.config.info().Printf("c(%p) writer completed\n", cn)
 	defer cn.checkFailures()
 	defer cn.deleteAllRequests()
 
@@ -769,7 +659,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 		}
 
 		if n != len(buf) {
-			cn.t.config.warn().Printf("error: write failed written != len(buf) (%d != %d)\n", n, len(buf))
+			cn.t.cln.config.warn().Printf("error: write failed written != len(buf) (%d != %d)\n", n, len(buf))
 			cn.Close()
 			return
 		}
@@ -1204,7 +1094,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			return fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 		}
 
-		// log.Printf("(%d) c(%p) - RECEIVED MESSAGE: %s - pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, msg.Type, len(cn.requests), cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
+		// log.Printf("(%d) c(%p) seed(%t) - RECEIVED MESSAGE: %s - pending(%d) - missing(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, cn.t.cln.config.Seed, msg.Type, len(cn.requests), cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
 
 		switch msg.Type {
 		case pp.Choke:
@@ -1259,7 +1149,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			cn.t.ping(pingAddr)
 		case pp.Suggest:
 			metrics.Add("suggests received", 1)
-			cn.t.config.debug().Println("peer suggested piece", msg.Index)
+			cn.t.cln.config.debug().Println("peer suggested piece", msg.Index)
 		case pp.HaveAll:
 			if err = cn.onPeerSentHaveAll(); err == nil {
 				cn.updateRequests()
@@ -1280,7 +1170,7 @@ func (cn *connection) mainReadLoop() (err error) {
 			cn.cmu().Unlock()
 		case pp.AllowedFast:
 			metrics.Add("allowed fasts received", 1)
-			cn.t.config.debug().Println("peer allowed fast:", msg.Index)
+			cn.t.cln.config.debug().Println("peer allowed fast:", msg.Index)
 			for _, cidx := range cn.t.chunks.chunks(int(msg.Index)) {
 				cn.fastset.AddInt(cidx)
 			}
@@ -1305,7 +1195,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 	case pp.HandshakeExtendedID:
 		var d pp.ExtendedHandshakeMessage
 		if err := bencode.Unmarshal(payload, &d); err != nil {
-			cn.t.config.errors().Printf("error parsing extended handshake message %q: %s\n", payload, err)
+			cn.t.cln.config.errors().Printf("error parsing extended handshake message %q: %s\n", payload, err)
 			return errors.Wrap(err, "unmarshalling extended handshake payload")
 		}
 		if d.Reqq != 0 {
@@ -1341,7 +1231,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		}
 		return nil
 	case pexExtendedID:
-		if t.config.DisablePEX {
+		if t.cln.config.DisablePEX {
 			// TODO: Maybe close the connection. Check that we're not
 			// advertising that we support PEX if it's disabled.
 			return nil
@@ -1439,7 +1329,7 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 }
 
 func (cn *connection) uploadAllowed() bool {
-	if cn.t.config.NoUpload {
+	if cn.t.cln.config.NoUpload {
 		return false
 	}
 
@@ -1448,11 +1338,6 @@ func (cn *connection) uploadAllowed() bool {
 	}
 
 	if !cn.peerHasWantedPieces() {
-		return false
-	}
-
-	// Don't upload more than 100 KiB more than we download.
-	if cn.stats.BytesWrittenData.Int64() >= cn.stats.BytesReadData.Int64()+100<<10 {
 		return false
 	}
 
@@ -1491,9 +1376,9 @@ another:
 		}
 
 		for r := range cn.PeerRequests {
-			res := cn.t.config.UploadRateLimiter.ReserveN(time.Now(), int(r.Length))
+			res := cn.t.cln.config.UploadRateLimiter.ReserveN(time.Now(), int(r.Length))
 			if !res.OK() {
-				cn.t.config.errors().Printf("upload rate limiter burst size < %d\n", r.Length)
+				cn.t.cln.config.errors().Printf("upload rate limiter burst size < %d\n", r.Length)
 				go cn.ban(errors.Errorf("upload length is larger than rate limit: %d", r.Length)) // pan this IP address, we'll never be able to support them.
 				return false
 			}
@@ -1516,7 +1401,7 @@ another:
 				// 		break another
 				// 	}
 				// }
-				cn.t.config.warn().Println("error sending chunk to peer", err)
+				cn.t.cln.config.warn().Println("error sending chunk to peer", err)
 				// If we failed to send a chunk, choke the peer to ensure they
 				// flush all their requests. We've probably dropped a piece,
 				// but there's no way to communicate this to the peer. If they
@@ -1532,6 +1417,7 @@ another:
 			}
 			goto another
 		}
+
 		return true
 	}
 
@@ -1662,7 +1548,7 @@ func (cn *connection) sendChunk(r request, msg func(pp.Message) bool) (more bool
 
 func (cn *connection) setTorrent(t *torrent) {
 	if cn.t != nil {
-		cn.t.config.errors().Println("BUG: connection already associated with a torrent")
+		cn.t.cln.config.errors().Println("BUG: connection already associated with a torrent")
 		go cn.Close()
 	}
 	cn.t = t

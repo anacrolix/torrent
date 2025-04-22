@@ -18,7 +18,7 @@ func ignoreReadFromError(err error) bool {
 			windows.WSAECONNABORTED,
 			windows.WSAECONNREFUSED,
 			windows.WSAENETUNREACH,
-			windows.WSAETIMEDOUT: // Why does Go have braindead syntax?
+			windows.WSAETIMEDOUT:
 			return true
 		}
 	}

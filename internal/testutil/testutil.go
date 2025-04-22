@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"hash/fnv"
+	"iter"
 	"math/rand"
 	"os"
 
@@ -28,6 +29,10 @@ func NewBadStorage() storage.ClientImpl {
 }
 
 type badStorage struct{}
+
+func (fs badStorage) Exists() iter.Seq[[]byte] {
+	return func(yield func([]byte) bool) {}
+}
 
 func (bs badStorage) OpenTorrent(info *metainfo.Info, mihash metainfo.Hash) (storage.TorrentImpl, error) {
 	var f = fnv.New64a()

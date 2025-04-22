@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -36,7 +35,7 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 
 	if length == 0 {
 		msg.Keepalive = true
-		return
+		return nil
 	}
 
 	msg.Keepalive = false
@@ -53,25 +52,27 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 	msg.Keepalive = false
 	c, err := readByte(r)
 	if err != nil {
-		return
+		return err
 	}
 	msg.Type = MessageType(c)
 	switch msg.Type {
 	case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
-		return
+		return nil
 	case Have, AllowedFast, Suggest:
-		err = msg.Index.Read(r)
+		return msg.Index.Read(r)
 	case Request, Cancel, Reject:
 		for _, data := range []*Integer{&msg.Index, &msg.Begin, &msg.Length} {
 			err = data.Read(r)
 			if err != nil {
-				break
+				return err
 			}
 		}
+		return nil
 	case Bitfield:
 		b := make([]byte, length-1)
 		_, err = io.ReadFull(r, b)
 		msg.Bitfield = unmarshalBitfield(b)
+		return err
 	case Piece:
 		for _, pi := range []*Integer{&msg.Index, &msg.Begin} {
 			err := pi.Read(r)
@@ -86,22 +87,20 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 		}
 		msg.Piece = msg.Piece[:dataLen]
 		_, err := io.ReadFull(r, msg.Piece)
-		if err != nil {
-			return errors.Wrap(err, "reading piece data")
-		}
+		return errors.Wrap(err, "reading piece data")
 	case Extended:
 		b, err := readByte(r)
 		if err != nil {
-			break
+			return err
 		}
 		msg.ExtendedID = ExtensionNumber(b)
-		msg.ExtendedPayload, err = ioutil.ReadAll(r)
+		msg.ExtendedPayload, err = io.ReadAll(r)
+		return err
 	case Port:
-		err = binary.Read(r, binary.BigEndian, &msg.Port)
+		return binary.Read(r, binary.BigEndian, &msg.Port)
 	default:
-		err = fmt.Errorf("unknown message type %#v", c)
+		return fmt.Errorf("unknown message type %#v", c)
 	}
-	return
 }
 
 func readByte(r io.Reader) (b byte, err error) {
@@ -110,12 +109,8 @@ func readByte(r io.Reader) (b byte, err error) {
 	b = arr[0]
 	if n == 1 {
 		err = nil
-		return
 	}
-	if err == nil {
-		panic(err)
-	}
-	return
+	return b, err
 }
 
 func unmarshalBitfield(b []byte) (bf []bool) {

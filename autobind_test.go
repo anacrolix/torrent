@@ -10,7 +10,8 @@ import (
 )
 
 func TestSocketsBindSockets(t *testing.T) {
-	s, err := torrent.Autosocket(t).Bind(torrent.NewClient(TestingSeedConfig(t, testutil.Autodir(t))))
+	dir := t.TempDir()
+	s, err := torrent.Autosocket(t).Bind(torrent.NewClient(TestingSeedConfig(t, dir)))
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -18,5 +19,5 @@ func TestSocketsBindSockets(t *testing.T) {
 	require.NoError(t, err)
 	defer l.Close()
 
-	testTransferRandomData(t, bytesx.KiB, s, l)
+	testTransferRandomData(t, dir, bytesx.KiB, s, l)
 }

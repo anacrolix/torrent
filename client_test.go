@@ -38,16 +38,22 @@ import (
 )
 
 func TestingSeedConfig(t *testing.T, dir string) *torrent.ClientConfig {
-	cfg := torrent.TestingConfig(t)
-	cfg.Seed = true
-	cfg.DataDir = dir
+	cfg := torrent.TestingConfig(
+		t,
+		torrent.ClientConfigSeed(true),
+		torrent.ClientConfigStorageDir(dir),
+		torrent.ClientConfigDebugLogger(log.Default()),
+	)
 	return cfg
 }
 
 func TestingLeechConfig(t *testing.T, dir string) *torrent.ClientConfig {
-	cfg := torrent.TestingConfig(t)
-	cfg.Seed = true
-	cfg.DataDir = dir
+	cfg := torrent.TestingConfig(
+		t,
+		torrent.ClientConfigSeed(true),
+		torrent.ClientConfigStorageDir(dir),
+		torrent.ClientConfigDebugLogger(log.Default()),
+	)
 	return cfg
 }
 
@@ -65,8 +71,8 @@ func TestClientNilConfig(t *testing.T) {
 
 func TestBoltPieceCompletionClosedWhenClientClosed(t *testing.T) {
 	cfg := torrent.TestingConfig(t)
-	ci := storage.NewFile(cfg.DataDir)
-	defer ci.Close()
+	// ci := storage.NewFile(cfg.DataDir)
+	// defer ci.Close()
 
 	cl, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
@@ -81,8 +87,8 @@ func TestAddDropTorrent(t *testing.T) {
 	cl, err := autobind.NewLoopback().Bind(torrent.NewClient(torrent.TestingConfig(t)))
 	require.NoError(t, err)
 	defer cl.Close()
-	dir, mi := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
+	mi := testutil.GreetingTestTorrent(dir)
 
 	tt, added, err := cl.MaybeStart(torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewFile(dir))))
 	require.NoError(t, err)
@@ -109,7 +115,7 @@ func TestAddDropManyTorrents(t *testing.T) {
 }
 
 func NewFileCacheClientStorageFactory(dataDir string) storage.ClientImpl {
-	return storage.NewFile(dataDir, storage.FileOptionPathMakerInfohashV0)
+	return storage.NewFile(dataDir)
 }
 
 type StorageFactory func(string) storage.ClientImpl
@@ -140,9 +146,8 @@ func TestClientTransferVarious(t *testing.T) {
 	// Leecher storage
 	for _, ls := range []StorageFactory{
 		func(dir string) storage.ClientImpl {
-			return storage.NewFile(dir, storage.FileOptionPathMakerInfohashV0)
+			return storage.NewFile(dir)
 		},
-		// storage.NewBoltDB,
 	} {
 		// Seeder storage
 		for _, ss := range []func(string) storage.ClientImpl{
@@ -171,7 +176,7 @@ func TestClientTransferDefault(t *testing.T) {
 	testClientTransfer(t, testClientTransferParams{
 		ExportClientStatus: true,
 		LeecherStorage: func(dir string) storage.ClientImpl {
-			return storage.NewFile(dir, storage.FileOptionPathMakerInfohashV0)
+			return storage.NewFile(dir)
 		},
 	})
 }
@@ -182,12 +187,11 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	ctx, done := testx.Context(t)
 	defer done()
 
-	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(greetingTempDir)
+	greetingTempDir := t.TempDir()
+	mi := testutil.GreetingTestTorrent(greetingTempDir)
+
 	// Create seeder and a Torrent.
-	cfg := torrent.TestingConfig(t)
-	cfg.DataDir = greetingTempDir
-	cfg.Seed = true
+	cfg := torrent.TestingConfig(t, torrent.ClientConfigStorageDir(greetingTempDir), torrent.ClientConfigSeed(true))
 	if ps.SeederUploadRateLimiter != nil {
 		cfg.UploadRateLimiter = ps.SeederUploadRateLimiter
 	}
@@ -197,7 +201,6 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if ps.SeederStorage != nil {
 		sstore.Close()
 		store := ps.SeederStorage(greetingTempDir)
-		defer log.Println("closed seeder storage")
 		defer store.Close()
 		storageopt = torrent.OptionStorage(store)
 	}
@@ -211,24 +214,30 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	md, err := torrent.NewFromMetaInfo(mi, storageopt)
 	require.NoError(t, err)
 
-	seederTorrent, _, err := seeder.Start(md, torrent.TuneVerifyFull)
+	seederTorrent, _, err := seeder.Start(md)
 	require.NoError(t, err)
 	// Run a Stats right after Closing the Client. This will trigger the Stats
 	// panic in #214 caused by RemoteAddr on Closed uTP sockets.
 	defer seederTorrent.Stats()
 	defer seeder.Close()
+
 	require.NoError(t, torrent.Verify(ctx, seederTorrent))
+	_, err = torrent.DownloadInto(ctx, io.Discard, seederTorrent, torrent.TuneSeeding)
+	require.NoError(t, err)
 
+	leechdir := t.TempDir()
+	lstore := storage.NewFile(leechdir)
 	// Create leecher and a Torrent.
-	cfg = torrent.TestingConfig(t)
-	cfg.DataDir = t.TempDir()
-	defer os.RemoveAll(cfg.DataDir)
+	cfg = torrent.TestingConfig(
+		t,
+		torrent.ClientConfigStorage(lstore),
+		torrent.ClientConfigSeed(false),
+	)
 
-	lstore := storage.NewFile(cfg.DataDir, storage.FileOptionPathMakerInfohashV0)
 	leechstorageopt := torrent.OptionStorage(lstore)
 	if ps.LeecherStorage != nil {
 		lstore.Close()
-		lstore := ps.LeecherStorage(cfg.DataDir)
+		lstore := ps.LeecherStorage(leechdir)
 		defer lstore.Close()
 		leechstorageopt = torrent.OptionStorage(lstore)
 	}
@@ -236,7 +245,6 @@ func testClientTransfer(t *testing.T, ps testClientTransferParams) {
 	if ps.LeecherDownloadRateLimiter != nil {
 		cfg.DownloadRateLimiter = ps.LeecherDownloadRateLimiter
 	}
-	cfg.Seed = false
 
 	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
@@ -292,55 +300,119 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 	assert.EqualValues(t, testutil.GreetingFileContents, string(_greeting))
 }
 
+func TestClientSeedWithoutAdding(t *testing.T) {
+	const datan = 64 * bytesx.KiB
+
+	ctx, done := testx.Context(t)
+	defer done()
+
+	seedingdir := t.TempDir()
+	mds := torrent.NewMetadataCache(seedingdir)
+	sstore := storage.NewFile(seedingdir)
+	info, expected, err := testutil.RandomDataTorrent(seedingdir, datan)
+	require.NoError(t, err)
+
+	md, err := torrent.NewFromInfo(
+		info,
+		torrent.OptionDisplayName("test torrent"),
+		torrent.OptionChunk(bytesx.KiB),
+		torrent.OptionStorage(sstore),
+	)
+	require.NoError(t, err)
+	require.NoError(t, mds.Write(md))
+
+	// Create seeder and a Torrent.
+	cfg := torrent.TestingConfig(
+		t,
+		torrent.ClientConfigStorageDir(seedingdir),
+		torrent.ClientConfigSeed(true),
+	)
+
+	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
+	require.NoError(t, err)
+	defer seeder.Close()
+
+	// Create leecher and a Torrent.
+	cfg = torrent.TestingConfig(
+		t,
+		torrent.ClientConfigStorageDir(t.TempDir()),
+		torrent.ClientConfigSeed(false),
+	)
+
+	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
+	require.NoError(t, err)
+	defer leecher.Close()
+
+	leeched, added, err := leecher.Start(md, torrent.TuneClientPeer(seeder))
+	require.NoError(t, err)
+	assert.True(t, added)
+
+	// The Torrent should not be interested in obtaining peers, so the one we
+	// just added should be the only one.
+	require.False(t, leeched.Stats().Seeding)
+
+	// download
+	downloaded := md5.New()
+	n, err := torrent.DownloadInto(ctx, downloaded, leeched)
+	require.NoError(t, err)
+	require.Equal(t, int64(64*bytesx.KiB), n)
+	require.Equal(t, md5x.FormatHex(expected), md5x.FormatHex(downloaded))
+}
+
 // Check that after completing leeching, a leecher transitions to a seeding
 // correctly. Connected in a chain like so: Seeder <-> Leecher <-> LeecherLeecher.
 func TestSeedAfterDownloading(t *testing.T) {
 	ctx, _done := testx.Context(t)
 	defer _done()
 
-	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(greetingTempDir)
+	greetingTempDir := t.TempDir()
+	mi := testutil.GreetingTestTorrent(greetingTempDir)
 
-	cfg := torrent.TestingConfig(t)
-	cfg.Seed = true
-	cfg.DataDir = greetingTempDir
+	cfg := torrent.TestingConfig(
+		t,
+		torrent.ClientConfigSeed(true),
+		torrent.ClientConfigStorageDir(greetingTempDir),
+	)
+
 	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	defer seeder.Close()
 	defer testutil.ExportStatusWriter(seeder, "s")()
 
-	seederTorrent, ok, err := seeder.MaybeStart(torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewFile(cfg.DataDir))))
+	seederTorrent, ok, err := seeder.MaybeStart(torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewFile(greetingTempDir))))
 	require.NoError(t, err)
 	assert.True(t, ok)
 
-	// TODO: implement verify
-	require.NoError(t, torrent.Verify(ctx, seederTorrent))
-	require.True(t, seeder.WaitAll())
-	// log.Printf("SEEDER %p c(%p)\n", seederTorrent, seederTorrent.(*torrent).piecesM)
-
-	cfg = torrent.TestingConfig(t)
-	cfg.Seed = true
-	cfg.DataDir, err = os.MkdirTemp("", "")
+	_, err = torrent.DownloadInto(ctx, io.Discard, seederTorrent, torrent.TuneSeeding)
 	require.NoError(t, err)
-	defer os.RemoveAll(cfg.DataDir)
+
+	cfg = torrent.TestingConfig(
+		t,
+		torrent.ClientConfigStorageDir(t.TempDir()),
+		torrent.ClientConfigSeed(true),
+	)
+
 	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	defer leecher.Close()
 	defer testutil.ExportStatusWriter(leecher, "l")()
 
-	cfg = torrent.TestingConfig(t)
-	cfg.Seed = false
-	require.NoError(t, err)
-	defer os.RemoveAll(cfg.DataDir)
+	lleecherdir := t.TempDir()
+	cfg = torrent.TestingConfig(
+		t,
+		torrent.ClientConfigSeed(false),
+		torrent.ClientConfigStorageDir(lleecherdir),
+	)
+
 	leecherLeecher, _ := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	defer leecherLeecher.Close()
 	defer testutil.ExportStatusWriter(leecherLeecher, "ll")()
-	leecherGreeting, ok, err := leecher.MaybeStart(torrent.NewFromMetaInfo(mi, torrent.OptionChunk(2), torrent.OptionStorage(storage.NewFile(cfg.DataDir))))
+	leecherGreeting, ok, err := leecher.MaybeStart(torrent.NewFromMetaInfo(mi, torrent.OptionChunk(2)))
 	require.NoError(t, err)
 	assert.True(t, ok)
 
-	llg, ok, err := leecherLeecher.MaybeStart(torrent.NewFromMetaInfo(mi, torrent.OptionChunk(3), torrent.OptionStorage(storage.NewFile(cfg.DataDir))))
+	llg, ok, err := leecherLeecher.MaybeStart(torrent.NewFromMetaInfo(mi, torrent.OptionChunk(3)))
 	require.NoError(t, err)
 	assert.True(t, ok)
 
@@ -371,8 +443,9 @@ func TestSeedAfterDownloading(t *testing.T) {
 func TestDownload(t *testing.T) {
 	buf := bytes.NewBufferString("")
 
-	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(greetingTempDir)
+	greetingTempDir := t.TempDir()
+	mi := testutil.GreetingTestTorrent(greetingTempDir)
+
 	metadata, err := torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewFile(greetingTempDir)))
 	require.NoError(t, err)
 
@@ -390,7 +463,9 @@ func TestDownload(t *testing.T) {
 	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(lcfg))
 	require.NoError(t, err)
 	defer leecher.Close()
-	metadata, err = torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewFile(lcfg.DataDir)))
+
+	// metadata, err = torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewFile(lcfg.DataDir)))
+	metadata, err = torrent.NewFromMetaInfo(mi)
 	require.NoError(t, err)
 	ltor, added, err := leecher.Start(metadata)
 	require.NoError(t, err)
@@ -402,16 +477,13 @@ func TestDownload(t *testing.T) {
 
 func TestDownloadMetadataTimeout(t *testing.T) {
 	buf := bytes.NewBufferString("")
+	greetingTempDir := t.TempDir()
 
-	greetingTempDir, mi := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(greetingTempDir)
+	mi := testutil.GreetingTestTorrent(greetingTempDir)
 	metadata, err := torrent.New(mi.HashInfoBytes())
 	require.NoError(t, err)
 
 	cfg := torrent.TestingConfig(t)
-	cfg.DataDir, err = os.MkdirTemp("", "")
-	require.Nil(t, err)
-	defer os.RemoveAll(cfg.DataDir)
 	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	defer leecher.Close()
@@ -473,31 +545,31 @@ func TestResponsive(t *testing.T) {
 	ctx, done := testx.Context(t)
 	defer done()
 
-	seederDataDir, mi := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(seederDataDir)
-	cfg := torrent.TestingConfig(t)
-	cfg.Seed = true
-	cfg.DataDir = seederDataDir
+	seederDataDir := t.TempDir()
+	mi := testutil.GreetingTestTorrent(seederDataDir)
+	cfg := torrent.TestingConfig(
+		t,
+		torrent.ClientConfigSeed(true),
+		torrent.ClientConfigStorageDir(seederDataDir),
+	)
+
 	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
 	require.Nil(t, err)
 	defer seeder.Close()
-	tt, err := torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewFile(cfg.DataDir)))
+	tt, err := torrent.NewFromMetaInfo(mi)
+	// tt, err := torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewFile(cfg.DataDir)))
 	require.Nil(t, err)
 	seederTorrent, _, _ := seeder.Start(tt)
 	require.NoError(t, torrent.Verify(ctx, seederTorrent))
-	leecherDataDir, err := os.MkdirTemp("", "")
-	require.Nil(t, err)
-	defer os.RemoveAll(leecherDataDir)
+
 	cfg = torrent.TestingConfig(t)
-	cfg.DataDir = leecherDataDir
 	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	defer leecher.Close()
-	tt, err = torrent.NewFromMetaInfo(mi, torrent.OptionChunk(2), torrent.OptionStorage(storage.NewFile(cfg.DataDir)))
+	tt, err = torrent.NewFromMetaInfo(mi, torrent.OptionChunk(2))
 	require.NoError(t, err)
-	leecherTorrent, _, err := leecher.Start(tt)
+	leecherTorrent, _, err := leecher.Start(tt, torrent.TuneClientPeer(seeder))
 	require.NoError(t, err)
-	leecherTorrent.Tune(torrent.TuneClientPeer(seeder))
 
 	_, err = torrent.DownloadInto(ctx, io.Discard, leecherTorrent)
 	require.NoError(t, err)
@@ -520,29 +592,37 @@ func TestResponsive(t *testing.T) {
 }
 
 func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
-	seederDataDir, mi := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(seederDataDir)
-	cfg := torrent.TestingConfig(t)
-	cfg.Seed = true
-	cfg.DataDir = seederDataDir
+	seederDataDir := t.TempDir()
+	mi := testutil.GreetingTestTorrent(seederDataDir)
+
+	cfg := torrent.TestingConfig(
+		t,
+		torrent.ClientConfigSeed(true),
+		torrent.ClientConfigStorageDir(seederDataDir),
+	)
+
 	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer seeder.Close()
-	st, err := torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewFile(cfg.DataDir)))
-	require.Nil(t, err)
+	st, err := torrent.NewFromMetaInfo(mi)
+	require.NoError(t, err)
 
-	_, _, _ = seeder.Start(st, torrent.TuneVerifyFull)
+	_, _, err = seeder.Start(st, torrent.TuneVerifyFull)
+	require.NoError(t, err)
 
-	leecherDataDir, err := os.MkdirTemp("", "")
-	require.Nil(t, err)
-	defer os.RemoveAll(leecherDataDir)
-	cfg = torrent.TestingConfig(t)
-	cfg.DataDir = leecherDataDir
+	leecherDataDir := t.TempDir()
+	cfg = torrent.TestingConfig(
+		t,
+		torrent.ClientConfigStorageDir(leecherDataDir),
+	)
+
 	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	defer leecher.Close()
-	lt, err := torrent.NewFromMetaInfo(mi, torrent.OptionChunk(2), torrent.OptionStorage(storage.NewFile(cfg.DataDir)))
-	require.Nil(t, err)
+	lt, err := torrent.NewFromMetaInfo(mi, torrent.OptionChunk(2))
+	// lt, err := torrent.NewFromMetaInfo(mi, torrent.OptionChunk(2), torrent.OptionStorage(storage.NewFile(leecherDataDir)))
+	// lt, err := torrent.NewFromMetaInfo(mi, torrent.OptionChunk(2), torrent.OptionStorage(storage.NewFile(cfg.DataDir)))
+	require.NoError(t, err)
 	leecherTorrent, _, err := leecher.Start(lt, torrent.TuneAutoDownload, torrent.TuneClientPeer(seeder))
 	require.NoError(t, err)
 
@@ -569,7 +649,10 @@ func TestAddTorrentMerging(t *testing.T) {
 	cl, err := autobind.NewLoopback().Bind(torrent.NewClient(torrent.TestingConfig(t)))
 	require.NoError(t, err)
 	defer cl.Close()
-	dir, mi := testutil.GreetingTestTorrent(t)
+
+	dir := t.TempDir()
+
+	mi := testutil.GreetingTestTorrent(dir)
 	defer os.RemoveAll(dir)
 	ts, err := torrent.NewFromMetaInfo(mi, torrent.OptionDisplayName("foo"), torrent.OptionStorage(storage.NewFile(dir)))
 
@@ -585,16 +668,19 @@ func TestAddTorrentMerging(t *testing.T) {
 }
 
 func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
-	dir, mi := testutil.GreetingTestTorrent(t)
+	dir := t.TempDir()
+	mi := testutil.GreetingTestTorrent(dir)
 	os.RemoveAll(dir)
 	cl, err := autobind.NewLoopback().Bind(torrent.NewClient(torrent.TestingConfig(t)))
 	require.NoError(t, err)
 	defer cl.Close()
 	ts, err := torrent.New(mi.HashInfoBytes())
 	require.NoError(t, err)
-	tt, _, _ := cl.Start(ts)
+	tt, added, err := cl.Start(ts)
+	require.NoError(t, err)
+	require.True(t, added)
 	cl.Stop(ts)
-	assert.EqualValues(t, 0, len(cl.Torrents()))
+
 	select {
 	case <-tt.GotInfo():
 		t.FailNow()
@@ -675,15 +761,20 @@ func TestTorrentDownloadAllThenCancel(t *testing.T) {
 }
 
 func TestPieceCompletedInStorageButNotClient(t *testing.T) {
-	greetingTempDir, greetingMetainfo := testutil.GreetingTestTorrent(t)
-	defer os.RemoveAll(greetingTempDir)
-	cfg := torrent.TestingConfig(t)
-	cfg.DataDir = greetingTempDir
-	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(torrent.TestingConfig(t)))
+	greetingTempDir := t.TempDir()
+	greetingMetainfo := testutil.GreetingTestTorrent(greetingTempDir)
+
+	cfg := torrent.TestingConfig(
+		t,
+		torrent.ClientConfigStorageDir(greetingTempDir),
+	)
+
+	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	ts, err := torrent.NewFromMetaInfo(greetingMetainfo, torrent.OptionStorage(storage.NewFile(greetingTempDir)))
 	require.NoError(t, err)
-	seeder.Start(ts)
+	_, _, err = seeder.Start(ts)
+	require.NoError(t, err)
 }
 
 func TestClientDynamicListenTCPOnly(t *testing.T) {
@@ -706,9 +797,9 @@ func TestClientDynamicListenUTPOnly(t *testing.T) {
 	assert.NotEqual(t, 0, cl.LocalPort())
 }
 
-// Creates a file containing its own name as data. Make a metainfo from that, adds it to the given
+// Creates a file containing random data. Make a metainfo from that, adds it to the given
 // client, and returns a magnet link.
-func makeMagnet(t *testing.T, cl *torrent.Client, dir string, name string, store storage.ClientImpl) string {
+func makeMagnet(t *testing.T, cl *torrent.Client, dir string, name string) string {
 	ctx, done := testx.Context(t)
 	defer done()
 
@@ -717,19 +808,17 @@ func makeMagnet(t *testing.T, cl *torrent.Client, dir string, name string, store
 	require.NoError(t, err)
 	file.Write([]byte(name))
 	file.Close()
+	info, _, err := testutil.RandomDataTorrent(dir, bytesx.KiB)
+	require.NoError(t, err)
+
 	mi := metainfo.MetaInfo{}
 	mi.SetDefaults()
-	info, err := metainfo.NewFromPath(
-		filepath.Join(dir, name),
-		metainfo.OptionPieceLength(256*1024),
-	)
-	require.NoError(t, err)
 	mi.InfoBytes, err = bencode.Marshal(info)
 	require.NoError(t, err)
 	magnet := mi.Magnet(name, mi.HashInfoBytes()).String()
-	ts, err := torrent.NewFromMetaInfo(&mi, torrent.OptionStorage(store))
+	ts, err := torrent.NewFromMetaInfo(&mi)
 	require.NoError(t, err)
-	tr, _, err := cl.Start(ts)
+	tr, _, err := cl.Start(ts, torrent.TuneSeeding)
 	require.NoError(t, err)
 	require.True(t, tr.Stats().Seeding)
 	require.NoError(t, torrent.Verify(ctx, tr))
@@ -757,47 +846,55 @@ func testSeederLeecherPair(t *testing.T, seeder func(*torrent.ClientConfig), lee
 	ctx, done := testx.Context(t)
 	defer done()
 
-	cfg := torrent.TestingConfig(t)
-	cfg.Seed = true
-	cfg.DataDir = filepath.Join(cfg.DataDir, "server")
+	datadir := t.TempDir()
+
+	cfg := torrent.TestingConfig(
+		t,
+		torrent.ClientConfigSeed(true),
+		torrent.ClientConfigStorageDir(datadir),
+	)
+
 	cfg.Handshaker = connections.NewHandshaker(
 		connections.NewFirewall(),
 	)
-	os.Mkdir(cfg.DataDir, 0755)
+
 	seeder(cfg)
 	server, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	defer server.Close()
 	defer testutil.ExportStatusWriter(server, "s")()
-	store := storage.NewFile(cfg.DataDir)
-	magnet1 := makeMagnet(t, server, cfg.DataDir, "test1", store)
+
+	magnet1 := makeMagnet(t, server, datadir, "test1")
 	// Extra torrents are added to test the seeder having to match incoming obfuscated headers
 	// against more than one torrent. See issue #114
-	makeMagnet(t, server, cfg.DataDir, "test2", store)
+	makeMagnet(t, server, datadir, "test2")
+
 	for i := 0; i < 100; i++ {
-		makeMagnet(t, server, cfg.DataDir, fmt.Sprintf("test%d", i+2), store)
+		makeMagnet(t, server, datadir, fmt.Sprintf("test%d", i+2))
 	}
-	cfg = torrent.TestingConfig(t)
-	cfg.DataDir = filepath.Join(cfg.DataDir, "client")
+
+	cfg = torrent.TestingConfig(
+		t,
+		torrent.ClientConfigStorageDir(t.TempDir()),
+	)
 	cfg.Handshaker = connections.NewHandshaker(
 		connections.NewFirewall(),
 	)
+
 	leecher(cfg)
 	client, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
 	require.NoError(t, err)
 	defer client.Close()
 	defer testutil.ExportStatusWriter(client, "c")()
 
-	ts, err := torrent.NewFromMagnet(magnet1, torrent.OptionStorage(storage.NewFile(cfg.DataDir)))
+	ts, err := torrent.NewFromMagnet(magnet1)
+	// ts, err := torrent.NewFromMagnet(magnet1, torrent.OptionStorage(storage.NewFile(cfg.DataDir)))
 	require.NoError(t, err)
-	tr, _, err := client.Start(ts)
+	tr, _, err := client.Start(ts, torrent.TuneClientPeer(server))
 	require.NoError(t, err)
-
-	tr.Tune(torrent.TuneClientPeer(server))
 
 	_, err = torrent.DownloadInto(ctx, io.Discard, tr)
 	require.NoError(t, err)
-	client.WaitAll()
 }
 
 // This appears to be the situation with the S3 BitTorrent client.
@@ -832,8 +929,9 @@ func TestObfuscatedHeaderFallbackSeederRequiresLeecherPrefersNot(t *testing.T) {
 }
 
 func TestRandomSizedTorrents(t *testing.T) {
+	dir := t.TempDir()
 	n := rand.Int63n(128 * bytesx.KiB)
-	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(TestingSeedConfig(t, testutil.Autodir(t))))
+	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(TestingSeedConfig(t, dir)))
 	require.NoError(t, err)
 	defer seeder.Close()
 
@@ -841,11 +939,12 @@ func TestRandomSizedTorrents(t *testing.T) {
 	require.NoError(t, err)
 	defer leecher.Close()
 
-	testTransferRandomData(t, n, seeder, leecher)
+	testTransferRandomData(t, dir, n, seeder, leecher)
 }
 
 func Test128KBTorrent(t *testing.T) {
-	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(TestingSeedConfig(t, testutil.Autodir(t))))
+	dir := t.TempDir()
+	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(TestingSeedConfig(t, dir)))
 	require.NoError(t, err)
 	defer seeder.Close()
 
@@ -853,19 +952,23 @@ func Test128KBTorrent(t *testing.T) {
 	require.NoError(t, err)
 	defer leecher.Close()
 
-	testTransferRandomData(t, 128*bytesx.KiB, seeder, leecher)
+	testTransferRandomData(t, dir, 128*bytesx.KiB, seeder, leecher)
 }
 
-func testTransferRandomData(t *testing.T, n int64, from, to *torrent.Client) {
+func testTransferRandomData(t *testing.T, datadir string, n int64, from, to *torrent.Client) {
 	ctx, done := testx.Context(t)
 	defer done()
 
-	data, err := testutil.IOTorrent(from.Config().DataDir, cryptox.NewChaCha8(""), n)
+	data, err := testutil.IOTorrent(datadir, cryptox.NewChaCha8(""), n)
 	require.NoError(t, err)
 	defer os.Remove(data.Name())
 
-	metadata, err := torrent.NewFromFile(data.Name(), torrent.OptionStorage(storage.NewFile(from.Config().DataDir)))
+	metadata, err := torrent.NewFromFile(
+		data.Name(),
+		torrent.OptionStorage(storage.NewFile(datadir, storage.FileOptionPathMakerFixed(filepath.Base(data.Name())))),
+	)
 	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(datadir, metadata.ID.HexString()), 0700))
 
 	dl, added, err := from.Start(metadata, torrent.TuneVerifyFull)
 	require.NoError(t, err)
@@ -875,11 +978,11 @@ func testTransferRandomData(t *testing.T, n int64, from, to *torrent.Client) {
 	_, err = torrent.DownloadInto(ctx, digestseed, dl)
 	require.NoError(t, err)
 
-	metadata, err = torrent.NewFromFile(data.Name(), torrent.OptionStorage(storage.NewFile(to.Config().DataDir)))
+	metadata, err = torrent.NewFromFile(data.Name(), torrent.OptionStorage(storage.NewFile(t.TempDir())))
 	require.NoError(t, err)
 
 	digestdl := md5.New()
-	dl, added, err = to.Start(metadata, torrent.TuneClientPeer(from))
+	dl, added, err = to.Start(metadata, torrent.TuneClientPeer(from), torrent.TuneNewConns)
 	require.NoError(t, err)
 	require.True(t, added)
 

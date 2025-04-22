@@ -20,11 +20,6 @@ type TorrentImpl interface {
 	Close() error
 }
 
-type Completion struct {
-	Complete bool
-	Ok       bool
-}
-
 func ErrClosed() error {
 	return errors.New("storage closed")
 }

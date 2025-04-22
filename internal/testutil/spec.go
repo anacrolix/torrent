@@ -4,9 +4,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/anacrolix/missinggo/expect"
-
 	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/metainfo"
 )
 
@@ -49,7 +48,7 @@ func (t *Torrent) Info(pieceLength int64) metainfo.Info {
 	err := info.GeneratePieces(func(fi metainfo.FileInfo) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader(t.GetFile(strings.Join(fi.Path, "/")).Data)), nil
 	})
-	expect.Nil(err)
+	errorsx.Panic(err)
 	return info
 }
 
@@ -57,6 +56,6 @@ func (t *Torrent) Metainfo(pieceLength int64) *metainfo.MetaInfo {
 	mi := metainfo.MetaInfo{}
 	var err error
 	mi.InfoBytes, err = bencode.Marshal(t.Info(pieceLength))
-	expect.Nil(err)
+	errorsx.Panic(err)
 	return &mi
 }

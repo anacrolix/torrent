@@ -69,7 +69,8 @@ func TrackerAnnounceOnce(ctx context.Context, l Torrent, uri string, options ...
 }
 
 func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool, options ...tracker.AnnounceOption) {
-	var delay time.Duration
+	const mindelay = 100 * time.Millisecond
+	var delay time.Duration = mindelay
 
 	trackers := t.md.Trackers
 
@@ -100,12 +101,12 @@ func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool, o
 			log.Println("announce failed", err)
 		}
 
-		log.Println("announce sleeping for maximum delay", t.Metadata().ID.HexString(), delay)
+		// log.Println("announce sleeping for maximum delay", t.Metadata().ID.HexString(), delay)
 		time.Sleep(delay)
-		delay = 0
+		delay = mindelay
 
 		if donefn() {
-			log.Println("announce completed", t.Metadata().ID.HexString())
+			// log.Println("announce completed", t.Metadata().ID.HexString())
 			return
 		}
 	}

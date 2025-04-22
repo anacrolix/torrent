@@ -22,6 +22,7 @@ import (
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/dht/krpc"
 	"github.com/james-lawrence/torrent/internal/netx"
+	"github.com/james-lawrence/torrent/internal/testx"
 )
 
 func TestSetNilBigInt(t *testing.T) {
@@ -149,6 +150,9 @@ func TestServerCustomNodeId(t *testing.T) {
 }
 
 func TestAnnounceTimeout(t *testing.T) {
+	ctx, done0 := testx.Context(t)
+	defer done0()
+
 	s, err := NewServer(&ServerConfig{
 		StartingNodes: addrResolver("1.2.3.4:5"),
 		Conn:          mustListen(":0"),
@@ -159,7 +163,7 @@ func TestAnnounceTimeout(t *testing.T) {
 	require.NoError(t, err)
 	var ih [20]byte
 	copy(ih[:], "12341234123412341234")
-	ctx, done := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	ctx, done := context.WithTimeout(ctx, 300*time.Millisecond)
 	defer done()
 	a, err := s.AnnounceTraversal(ctx, ih, AnnouncePeer(true, 0))
 	assert.NoError(t, err)
@@ -237,6 +241,9 @@ func TestGlobalBootstrapAddrs(t *testing.T) {
 
 // https://github.com/anacrolix/dht/pull/19
 func TestBadGetPeersResponse(t *testing.T) {
+	ctx, done := testx.Context(t)
+	defer done()
+
 	pc, err := net.ListenPacket("udp", "localhost:0")
 	require.NoError(t, err)
 	defer pc.Close()
@@ -262,7 +269,7 @@ func TestBadGetPeersResponse(t *testing.T) {
 		require.NoError(t, err)
 		pc.WriteTo(b, addr)
 	}()
-	a, err := s.AnnounceTraversal(t.Context(), [20]byte{}, AnnouncePeer(true, 0))
+	a, err := s.AnnounceTraversal(ctx, [20]byte{}, AnnouncePeer(true, 0))
 	require.NoError(t, err)
 	// Drain the Announce until it closes.
 	for range a.Peers {
@@ -270,6 +277,9 @@ func TestBadGetPeersResponse(t *testing.T) {
 }
 
 func TestBootstrapRace(t *testing.T) {
+	ctx, done := testx.Context(t)
+	defer done()
+
 	remotePc, err := inproc.ListenPacket("", "localhost:0")
 	require.NoError(t, err)
 	defer remotePc.Close()
@@ -302,7 +312,7 @@ func TestBootstrapRace(t *testing.T) {
 		}
 		remotePc.WriteTo(rb, addr)
 	}()
-	ts, err := s.Bootstrap(t.Context())
+	ts, err := s.Bootstrap(ctx)
 	t.Logf("%#v", ts)
 	require.NoError(t, err)
 }
@@ -346,7 +356,6 @@ func (me *bootstrapRacePacketConn) WriteTo(b []byte, addr net.Addr) (int, error)
 	me.mu.Lock()
 	defer me.mu.Unlock()
 	me.writes++
-	log.Printf("wrote %d times", me.writes)
 	if me.writes == me.maxWrite {
 		var m krpc.Msg
 		bencode.Unmarshal(b[:], &m)

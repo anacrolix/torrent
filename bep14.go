@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -52,20 +52,21 @@ type lpdConn struct {
 	mcPublisher *net.UDPConn
 	host        string // bep14Host4 or bep14Host6
 	closed      bool
+	log			log.Logger
 }
 
 func setMulticastInterface(m *lpdConn, iface *net.Interface) error {
 	if m.network == "udp4" {
 		p := ipv4.NewPacketConn(m.mcPublisher)
 		if err := p.SetMulticastInterface(iface); err != nil {
-			log.Printf("Set multicast interface error: %v\n", err)
+			m.log.Printf("Set multicast interface error: %v\n", err)
 			return err
 		}
 	}
 	if m.network == "upd6" {
 		p := ipv6.NewPacketConn(m.mcPublisher)
 		if err := p.SetMulticastInterface(iface); err != nil {
-			log.Printf("Set multicast interface error: %v\n", err)
+			m.log.Printf("Set multicast interface error: %v\n", err)
 			return err
 		}
 	}
@@ -119,46 +120,46 @@ func lpdConnNew(network string, host string, lpd *LPDServer, config LocalService
 
 	m.addr, err = net.ResolveUDPAddr(m.network, m.host)
 	if err != nil {
-		log.Println("LPD unable to start", err)
+		m.log.Println("LPD unable to start", err)
 		return nil
 	}
 	m.mcListener, err = net.ListenMulticastUDP(m.network, nil, m.addr)
 	if err != nil {
-		log.Println("LPD unable to start", err)
+		m.log.Println("LPD unable to start", err)
 		return nil
 	}
 
 	m.mcPublisher, err = net.DialUDP(network, nil, m.addr)
 	if err != nil {
-		log.Println("Error dialing UDP:", err)
+		m.log.Println("Error dialing UDP:", err)
 		return nil
 	}
 
 	if config.Ifi != "" {
 		iface, err := net.InterfaceByName(config.Ifi)
 		if err != nil {
-			log.Printf("Interface error: %v\n", err)
+			m.log.Printf("Interface error: %v\n", err)
 			return nil
 		}
 		sourceUdpAddress, err := sourceUdpAddress(iface, network)
 		if err != nil {
-			log.Printf("could not get source udp address: %v\n", err)
+			m.log.Printf("could not get source udp address: %v\n", err)
 			return nil
 		}
 		m.mcPublisher, err = net.DialUDP(network, sourceUdpAddress, m.addr)
 		if err != nil {
-			log.Println("Error dialing multicast interface:", err)
+			m.log.Println("Error dialing multicast interface:", err)
 			return nil
 		}
 		err = setMulticastInterface(m, iface)
 		if err != nil {
-			log.Println("Error setting multicast interface:", err)
+			m.log.Println("Error setting multicast interface:", err)
 			return nil
 		}
 	} else {
 		m.mcPublisher, err = net.DialUDP(network, nil, m.addr)
 		if err != nil {
-			log.Println("Error dialing multicast interface:", err)
+			m.log.Println("Error dialing multicast interface:", err)
 			return nil
 		}
 	}
@@ -181,37 +182,37 @@ func (m *lpdConn) receiver(client *Client) {
 			if m.closed {
 				return
 			}
-			log.Println("receiver", err)
+			m.log.Println("receiver", err)
 			continue
 		}
 
 		req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(buf)))
 		if err != nil {
-			log.Println("receiver", err)
+			m.log.Println("receiver", err)
 			continue
 		}
 
 		if req.Method != "BT-SEARCH" {
-			log.Println("receiver", "Wrong request: ", req.Method)
+			m.log.Println("receiver", "Wrong request: ", req.Method)
 			continue
 		}
 
 		// BEP14 says here can be multiple response headers
 		ihs := req.Header[http.CanonicalHeaderKey("Infohash")]
 		if ihs == nil {
-			log.Println("receiver", "No Infohash")
+			m.log.Println("receiver", "No Infohash")
 			continue
 		}
 
 		port := req.Header.Get("Port")
 		if port == "" {
-			log.Println("receiver", "No port")
+			m.log.Println("receiver", "No port")
 			continue
 		}
 
 		addr, err := net.ResolveUDPAddr(m.network, net.JoinHostPort(from.IP.String(), port))
 		if err != nil {
-			log.Println("receiver", err)
+			m.log.Println("receiver", err)
 			continue
 		}
 
@@ -347,7 +348,7 @@ func (m *lpdConn) announcer(client *Client) {
 			//log.Println("LPD", string(old), len(old))
 			_, err := m.mcPublisher.Write(old)
 			if err != nil {
-				log.Println("announcer", err)
+				m.log.Println("announcer", err)
 			}
 		}
 

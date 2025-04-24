@@ -355,6 +355,9 @@ func (t *Torrent) addPeer(p PeerInfo) (added bool) {
 			torrent.Add("excess reserve peers discarded", 1)
 		}
 	}
+	if (added) {
+		cl.event.Broadcast()
+	}
 	return
 }
 
@@ -2232,6 +2235,7 @@ func (t *Torrent) numTotalPeers() int {
 	t.peers.Each(func(peer PeerInfo) {
 		peers[peer.Addr.String()] = struct{}{}
 	})
+	t.logger.Printf("%v peers", len(peers))
 	return len(peers)
 }
 

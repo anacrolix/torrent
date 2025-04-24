@@ -24,21 +24,21 @@ import (
 // TODO http://bittorrent.org/beps/bep_0026.html
 
 const (
-	bep14_host4    = "239.192.152.143:6771"
-	bep14_host6    = "[ff15::efc0:988f]:6771"
-	bep14_announce = "BT-SEARCH * HTTP/1.1\r\n" +
+	bep14Host4    = "239.192.152.143:6771"
+	bep14Host6    = "[ff15::efc0:988f]:6771"
+	bep14Announce = "BT-SEARCH * HTTP/1.1\r\n" +
 		"Host: %s\r\n" +
 		"Port: %s\r\n" +
 		"%s" +
 		"\r\n" +
 		"\r\n"
-	bep14_announce_infohash = "Infohash: %s\r\n"
-	bep14_long_timeout      = 1 * time.Minute
+	bep14AnnounceInfohash = "Infohash: %s\r\n"
+	bep14LongTimeout      = 1 * time.Minute
 	// bep14 - 1 minute. not practical. what if use start/stop another torrent? so make it 2 secs.
 	// TODO: Trigger this when torrents are added/removed instead, with a minimum delay (coalesce
 	// frequent changes).
 	bep14ShortTimeout = 2 * time.Second
-	bep14_max         = 0 // maximum hashes per request, 0 - only limited by udp packet size
+	bep14Max         = 0 // maximum hashes per request, 0 - only limited by udp packet size
 )
 
 type lpdConn struct {
@@ -50,7 +50,7 @@ type lpdConn struct {
 	addr        *net.UDPAddr
 	mcListener  *net.UDPConn
 	mcPublisher *net.UDPConn
-	host        string // bep14_host4 or bep14_host6
+	host        string // bep14Host4 or bep14Host6
 	closed      bool
 }
 
@@ -321,8 +321,8 @@ func (m *lpdConn) announcer(client *Client) {
 		client.rUnlock()
 		count := 0
 		for next != nil {
-			ihs += fmt.Sprintf(bep14_announce_infohash, strings.ToUpper(next.InfoHash().HexString()))
-			req := fmt.Sprintf(bep14_announce, m.host, strconv.Itoa(port), ihs)
+			ihs += fmt.Sprintf(bep14AnnounceInfohash, strings.ToUpper(next.InfoHash().HexString()))
+			req := fmt.Sprintf(bep14Announce, m.host, strconv.Itoa(port), ihs)
 			buf := []byte(req)
 			if len(buf) >= 1400 {
 				break
@@ -337,7 +337,7 @@ func (m *lpdConn) announcer(client *Client) {
 				}
 			}
 			count++
-			if bep14_max > 0 && count >= bep14_max {
+			if bep14Max > 0 && count >= bep14Max {
 				break
 			}
 		}
@@ -353,7 +353,7 @@ func (m *lpdConn) announcer(client *Client) {
 
 		refresh = bep14ShortTimeout
 		if next == nil { // restart queue
-			refresh = bep14_long_timeout
+			refresh = bep14LongTimeout
 		}
 	}
 }
@@ -369,14 +369,14 @@ type LPDServer struct {
 func (lpd *LPDServer) lpdStart(client *Client) {
 	lpd.peers = make(map[int64]string)
 
-	lpd.conn4 = lpdConnNew("udp4", bep14_host4, lpd, client.config.LocalServiceDiscovery)
+	lpd.conn4 = lpdConnNew("udp4", bep14Host4, lpd, client.config.LocalServiceDiscovery)
 	if lpd.conn4 != nil {
 		go lpd.conn4.receiver(client)
 		go lpd.conn4.announcer(client)
 	}
 
 	if client.config.LocalServiceDiscovery.Ip6 {
-		lpd.conn6 = lpdConnNew("udp6", bep14_host6, lpd, client.config.LocalServiceDiscovery)
+		lpd.conn6 = lpdConnNew("udp6", bep14Host6, lpd, client.config.LocalServiceDiscovery)
 		if lpd.conn6 != nil {
 			go lpd.conn6.receiver(client)
 			go lpd.conn6.announcer(client)
@@ -389,7 +389,7 @@ func (m *LPDServer) refresh() {
 	var remove []int64
 	for t := range m.peers {
 		// remove old peers who did not refresh for 2 * bep14_long_timeout
-		if t+(2*bep14_long_timeout).Nanoseconds() < now {
+		if t+(2*bep14LongTimeout).Nanoseconds() < now {
 			remove = append(remove, t)
 		}
 	}

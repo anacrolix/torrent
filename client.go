@@ -160,7 +160,13 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	})
 	dumpStats(w, cl.statsLocked())
 	torrentsSlice := cl.torrentsAsSlice()
-	fmt.Fprintf(w, "# Torrents: %d\n", len(torrentsSlice))
+	incomplete := 0
+	for _, t := range torrentsSlice {
+		if !t.Complete().Bool() {
+			incomplete++
+		}
+	}
+	fmt.Fprintf(w, "# Torrents: %d (%v incomplete)\n", len(torrentsSlice), incomplete)
 	fmt.Fprintln(w)
 	sort.Slice(torrentsSlice, func(l, r int) bool {
 		return torrentsSlice[l].canonicalShortInfohash().AsString() < torrentsSlice[r].canonicalShortInfohash().AsString()

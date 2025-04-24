@@ -33,7 +33,7 @@ const (
 		"\r\n" +
 		"\r\n"
 	bep14AnnounceInfohash = "Infohash: %s\r\n"
-	bep14LongTimeout      = 1 * time.Minute
+	bep14LongTimeout      = 10 * time.Second
 	// bep14 - 1 minute. not practical. what if use start/stop another torrent? so make it 2 secs.
 	// TODO: Trigger this when torrents are added/removed instead, with a minimum delay (coalesce
 	// frequent changes).
@@ -52,21 +52,21 @@ type lpdConn struct {
 	mcPublisher *net.UDPConn
 	host        string // bep14Host4 or bep14Host6
 	closed      bool
-	log			log.Logger
+	logger		log.Logger
 }
 
 func setMulticastInterface(m *lpdConn, iface *net.Interface) error {
 	if m.network == "udp4" {
 		p := ipv4.NewPacketConn(m.mcPublisher)
 		if err := p.SetMulticastInterface(iface); err != nil {
-			m.log.Printf("Set multicast interface error: %v\n", err)
+			m.logger.Printf("Set multicast interface error: %v\n", err)
 			return err
 		}
 	}
 	if m.network == "upd6" {
 		p := ipv6.NewPacketConn(m.mcPublisher)
 		if err := p.SetMulticastInterface(iface); err != nil {
-			m.log.Printf("Set multicast interface error: %v\n", err)
+			m.logger.Printf("Set multicast interface error: %v\n", err)
 			return err
 		}
 	}
@@ -115,51 +115,53 @@ func lpdConnNew(network string, host string, lpd *LPDServer, config LocalService
 	m.lpd = lpd
 	m.network = network
 	m.host = host
+	m.logger = log.Default
 
 	var err error
 
 	m.addr, err = net.ResolveUDPAddr(m.network, m.host)
 	if err != nil {
-		m.log.Println("LPD unable to start", err)
+		m.logger.Println("LPD unable to start", err)
 		return nil
 	}
 	m.mcListener, err = net.ListenMulticastUDP(m.network, nil, m.addr)
 	if err != nil {
-		m.log.Println("LPD unable to start", err)
+		m.logger.Println("LPD unable to start", err)
 		return nil
 	}
 
 	m.mcPublisher, err = net.DialUDP(network, nil, m.addr)
 	if err != nil {
-		m.log.Println("Error dialing UDP:", err)
+		m.logger.Println("Error dialing UDP:", err)
 		return nil
 	}
 
 	if config.Ifi != "" {
 		iface, err := net.InterfaceByName(config.Ifi)
 		if err != nil {
-			m.log.Printf("Interface error: %v\n", err)
+			m.logger.Printf("Interface error: %v\n", err)
 			return nil
 		}
 		sourceUdpAddress, err := sourceUdpAddress(iface, network)
 		if err != nil {
-			m.log.Printf("could not get source udp address: %v\n", err)
+			m.logger.Printf("could not get source udp address: %v\n", err)
 			return nil
 		}
 		m.mcPublisher, err = net.DialUDP(network, sourceUdpAddress, m.addr)
 		if err != nil {
-			m.log.Println("Error dialing multicast interface:", err)
+			m.logger.Println("Error dialing multicast interface:", err)
 			return nil
 		}
 		err = setMulticastInterface(m, iface)
 		if err != nil {
-			m.log.Println("Error setting multicast interface:", err)
+			m.logger.Println("Error setting multicast interface:", err)
 			return nil
 		}
 	} else {
 		m.mcPublisher, err = net.DialUDP(network, nil, m.addr)
+		m.logger.Printf("Multicasting on %v\n", m.mcPublisher.LocalAddr().String())
 		if err != nil {
-			m.log.Println("Error dialing multicast interface:", err)
+			m.logger.Println("Error dialing multicast interface:", err)
 			return nil
 		}
 	}
@@ -179,43 +181,45 @@ func (m *lpdConn) receiver(client *Client) {
 		buf := make([]byte, 2000)
 		_, from, err := m.mcListener.ReadFromUDP(buf)
 		if err != nil {
+			m.lpd.mu.RLock()
 			if m.closed {
+				m.lpd.mu.RUnlock()
 				return
 			}
-			m.log.Println("receiver", err)
+			m.lpd.mu.RUnlock()
+			m.logger.Println("receiver", err)
 			continue
 		}
 
 		req, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(buf)))
 		if err != nil {
-			m.log.Println("receiver", err)
+			m.logger.Println("receiver", err)
 			continue
 		}
 
 		if req.Method != "BT-SEARCH" {
-			m.log.Println("receiver", "Wrong request: ", req.Method)
+			m.logger.Println("receiver", "Wrong request: ", req.Method)
 			continue
 		}
 
 		// BEP14 says here can be multiple response headers
 		ihs := req.Header[http.CanonicalHeaderKey("Infohash")]
 		if ihs == nil {
-			m.log.Println("receiver", "No Infohash")
+			m.logger.Println("receiver", "No Infohash")
 			continue
 		}
 
 		port := req.Header.Get("Port")
 		if port == "" {
-			m.log.Println("receiver", "No port")
+			m.logger.Println("receiver", "No port")
 			continue
 		}
 
 		addr, err := net.ResolveUDPAddr(m.network, net.JoinHostPort(from.IP.String(), port))
 		if err != nil {
-			m.log.Println("receiver", err)
+			m.logger.Println("receiver", err)
 			continue
 		}
-
 		client.rLock()
 		if client.LocalPort() == addr.Port {
 			client.rUnlock()
@@ -261,7 +265,7 @@ func (m *lpdConn) receiver(client *Client) {
 }
 
 func (m *lpdConn) announcer(client *Client) {
-	var refresh time.Duration = 0
+	var refresh time.Duration = 100 * time.Millisecond
 	var next *Torrent
 	var queue []*Torrent
 
@@ -348,7 +352,7 @@ func (m *lpdConn) announcer(client *Client) {
 			//log.Println("LPD", string(old), len(old))
 			_, err := m.mcPublisher.Write(old)
 			if err != nil {
-				m.log.Println("announcer", err)
+				m.logger.Println("announcer", err)
 			}
 		}
 

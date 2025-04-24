@@ -43,12 +43,12 @@ func TestDiscovery(t *testing.T) {
 
 	client1, err := NewClient(config)
 	require.NoError(t, err)
-	defer client1.Close()
+	defer t.Cleanup(func() {client1.Close()})
 	testutil.ExportStatusWriter(client1, "1", t)
 
 	client2, err := NewClient(config)
 	require.NoError(t, err)
-	defer client2.Close()
+	defer t.Cleanup(func() { client2.Close() })
 	testutil.ExportStatusWriter(client2, "2", t)
 
 	greetingTempDir, mi := testutil.GreetingTestTorrent()
@@ -68,9 +68,6 @@ func TestDiscovery(t *testing.T) {
 	waitForPeers(leecherGreeting, numPeers)
 	require.Equal(t, numPeers, leecherGreeting.numTotalPeers())
 	require.Equal(t, numPeers, len(client2.lpd.peers))
-
-	t.Cleanup(func() { client1.Close() })
-	t.Cleanup(func() { client2.Close() })
 }
 
 func waitForPeers(t *Torrent, num int) {

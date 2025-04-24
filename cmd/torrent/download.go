@@ -375,7 +375,7 @@ func downloadErr(ctx context.Context, flags downloadFlags) error {
 	clientConfig.DisableWebtorrent = !flags.Webtorrent
 	clientConfig.NoDefaultPortForwarding = !flags.PortForward
 	if flags.MaxAllocPeerRequestDataPerConn != nil {
-		clientConfig.MaxAllocPeerRequestDataPerConn = flags.MaxAllocPeerRequestDataPerConn.Int64()
+		clientConfig.MaxAllocPeerRequestDataPerConn = int(flags.MaxAllocPeerRequestDataPerConn.Int64())
 	}
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)

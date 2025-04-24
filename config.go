@@ -152,7 +152,7 @@ type ClientConfig struct {
 	// to maintain.
 	KeepAliveTimeout time.Duration
 	// Maximum bytes to buffer per peer connection for peer request data before it is sent.
-	MaxAllocPeerRequestDataPerConn int64
+	MaxAllocPeerRequestDataPerConn int
 
 	// The IP addresses as our peers should see them. May differ from the
 	// local interfaces due to NAT or other network configurations.

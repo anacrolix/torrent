@@ -234,11 +234,14 @@ func (cl *Client) init(cfg *ClientConfig) {
 	cl.defaultLocalLtepProtocolMap = makeBuiltinLtepProtocols(!cfg.DisablePEX)
 }
 
+// Creates a new Client. Takes ownership of the ClientConfig. Create another one if you want another
+// Client.
 func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	if cfg == nil {
 		cfg = NewDefaultClientConfig()
 		cfg.ListenPort = 0
 	}
+	cfg.setRateLimiterBursts()
 	cl = &Client{}
 	cl.init(cfg)
 	go cl.acceptLimitClearer()

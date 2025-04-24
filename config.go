@@ -68,17 +68,16 @@ type ClientConfig struct {
 	// Upload even after there's nothing in it for us. By default uploading is
 	// not altruistic, we'll only upload to encourage the peer to reciprocate.
 	Seed bool `long:"seed"`
-	// Only applies to chunks uploaded to peers, to maintain responsiveness
-	// communicating local Client state to peers. Each limiter token
-	// represents one byte. The Limiter's burst must be large enough to fit a
-	// whole chunk, which is usually 16 KiB (see TorrentSpec.ChunkSize).
+	// Only applies to chunks uploaded to peers, to maintain responsiveness communicating local
+	// Client state to peers. Each limiter token represents one byte. The Limiter's burst must be
+	// large enough to fit a whole chunk, which is usually 16 KiB (see TorrentSpec.ChunkSize). If
+	// limit is not Inf, and burst is left at 0, the implementation will choose a suitable burst.
 	UploadRateLimiter *rate.Limiter
-	// Rate limits all reads from connections to peers. Each limiter token
-	// represents one byte. The Limiter's burst must be bigger than the
-	// largest Read performed on a the underlying rate-limiting io.Reader
-	// minus one. This is likely to be the larger of the main read loop buffer
-	// (~4096), and the requested chunk size (~16KiB, see
-	// TorrentSpec.ChunkSize).
+	// Rate limits all reads from connections to peers. Each limiter token represents one byte. The
+	// Limiter's burst must be bigger than the largest Read performed on the underlying
+	// rate-limiting io.Reader minus one. This is likely to be the larger of the main read loop
+	// buffer (~4096), and the requested chunk size (~16KiB, see TorrentSpec.ChunkSize). If limit is
+	// not Inf, and burst is left at 0, the implementation will choose a suitable burst.
 	DownloadRateLimiter *rate.Limiter
 	// Maximum unverified bytes across all torrents. Not used if zero.
 	MaxUnverifiedBytes int64
@@ -252,4 +251,18 @@ func NewDefaultClientConfig() *ClientConfig {
 type HeaderObfuscationPolicy struct {
 	RequirePreferred bool // Whether the value of Preferred is a strict requirement.
 	Preferred        bool // Whether header obfuscation is preferred.
+}
+
+func (cfg *ClientConfig) setRateLimiterBursts() {
+	// Create a helper for rate limiters to avoid mistakes? What if the limit is greater than what
+	// can be represented by int?
+	if cfg.UploadRateLimiter.Limit() != rate.Inf && cfg.UploadRateLimiter.Burst() == 0 {
+		// What about chunk size?
+		cfg.UploadRateLimiter.SetBurst(cfg.MaxAllocPeerRequestDataPerConn)
+	}
+	if cfg.DownloadRateLimiter.Limit() != rate.Inf && cfg.DownloadRateLimiter.Burst() == 0 {
+		// 64 KiB used to be a rough default buffer for sockets on Windows. I'm sure it's bigger
+		// these days. What about the read buffer size mentioned elsewhere?
+		cfg.DownloadRateLimiter.SetBurst(min(int(cfg.DownloadRateLimiter.Limit()), 1<<16))
+	}
 }

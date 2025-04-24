@@ -84,7 +84,7 @@ type Client struct {
 	// info has been obtained, there's no knowing if an infohash belongs to v1 or v2.
 	torrentsByShortHash map[InfoHash]*Torrent
 
-	pieceRequestOrder map[interface{}]*request_strategy.PieceRequestOrder
+	pieceRequestOrder map[clientPieceRequestOrderKeySumType]*request_strategy.PieceRequestOrder
 
 	acceptLimiter map[ipStr]int
 	numHalfOpen   int

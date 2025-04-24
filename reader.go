@@ -202,7 +202,7 @@ func (r *reader) waitAvailable(ctx context.Context, pos, wanted int64, wait bool
 		}
 		select {
 		case <-r.t.closed.Done():
-			err = errors.New("torrent closed")
+			err = errTorrentClosed
 			return
 		case <-ctx.Done():
 			err = ctx.Err()

@@ -1,11 +1,11 @@
 package torrent
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 
 	"github.com/anacrolix/log"
+	"github.com/stretchr/testify/require"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )

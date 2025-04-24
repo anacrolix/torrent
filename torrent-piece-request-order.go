@@ -4,6 +4,7 @@ import (
 	g "github.com/anacrolix/generics"
 
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
+	"github.com/anacrolix/torrent/storage"
 )
 
 func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) {
@@ -27,11 +28,11 @@ func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) {
 	}
 }
 
-func (t *Torrent) clientPieceRequestOrderKey() interface{} {
+func (t *Torrent) clientPieceRequestOrderKey() clientPieceRequestOrderKeySumType {
 	if t.storage.Capacity == nil {
-		return t
+		return clientPieceRequestOrderKey[*Torrent]{t}
 	}
-	return t.storage.Capacity
+	return clientPieceRequestOrderKey[storage.TorrentCapacity]{t.storage.Capacity}
 }
 
 func (t *Torrent) deletePieceRequestOrder() {

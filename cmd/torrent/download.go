@@ -8,10 +8,8 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/anacrolix/log"
@@ -27,6 +25,62 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
+func clientStatusWriter(ctx context.Context, cl *torrent.Client) {
+	start := time.Now()
+	lastStats := cl.Stats()
+	var lastLine string
+	var lastPrint time.Time
+	interval := 3 * time.Second
+	ticker := time.Tick(interval)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker:
+		}
+		stats := cl.Stats()
+		ts := cl.Torrents()
+		var completeBytes int64
+		var totalBytes int64
+		var infos int
+		for _, t := range ts {
+			if t.Info() != nil {
+				infos++
+				completeBytes += t.BytesCompleted()
+				totalBytes += t.Info().TotalLength()
+			}
+		}
+		getRate := func(a func(*torrent.ClientStats) *torrent.Count) int64 {
+			byteRate := int64(time.Second)
+			byteRate *= a(&stats).Int64() - a(&lastStats).Int64()
+			byteRate /= int64(interval)
+			return byteRate
+		}
+		uploadRate := getRate(func(s *torrent.ClientStats) *torrent.Count {
+			return &s.BytesWrittenData
+		})
+		downloadRate := getRate(func(s *torrent.ClientStats) *torrent.Count {
+			return &s.BytesReadUsefulData
+		})
+		line := fmt.Sprintf(
+			"%v torrents, %v infos, %s/%s ready, upload %s, download %s/s",
+			len(ts),
+			infos,
+			humanize.Bytes(uint64(completeBytes)),
+			humanize.Bytes(uint64(totalBytes)),
+			humanize.Bytes(uint64(uploadRate)),
+			humanize.Bytes(uint64(downloadRate)),
+		)
+		if line != lastLine || time.Since(lastPrint) >= time.Minute {
+			lastLine = line
+			lastPrint = time.Now()
+			fmt.Fprintf(os.Stdout, "%s: %s\n", time.Since(start), line)
+		}
+		lastStats = stats
+	}
+}
+
+// Keeping this for now for reference in case I do per-torrent deltas in client status updates.
 func torrentBar(t *torrent.Torrent, pieceStates bool) {
 	go func() {
 		start := time.Now()
@@ -98,6 +152,9 @@ func addTorrents(
 ) error {
 	testPeers := resolveTestPeers(flags.TestPeer)
 	for _, arg := range flags.Torrent {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		t, err := func() (*torrent.Torrent, error) {
 			if strings.HasPrefix(arg, "magnet:") {
 				t, err := client.AddMagnet(arg)
@@ -108,7 +165,7 @@ func addTorrents(
 			} else if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
 				response, err := http.Get(arg)
 				if err != nil {
-					return nil, fmt.Errorf("Error downloading torrent file: %s", err)
+					return nil, fmt.Errorf("error downloading torrent file: %w", err)
 				}
 
 				metaInfo, err := metainfo.Load(response.Body)
@@ -143,9 +200,6 @@ func addTorrents(
 			err = fmt.Errorf("error writing chunk for %v: %w", t, err)
 			fatalErr(err)
 		})
-		if flags.Progress {
-			torrentBar(t, flags.PieceStates)
-		}
 		t.AddPeers(testPeers)
 		wg.Add(1)
 		go func() {
@@ -156,12 +210,18 @@ func addTorrents(
 			case <-t.GotInfo():
 			}
 			if flags.SaveMetainfos {
-				path := fmt.Sprintf("%v.torrent", t.InfoHash().HexString())
+				path := fmt.Sprintf("%s.torrent", t.InfoHash().HexString())
 				err := writeMetainfoToFile(t.Metainfo(), path)
 				if err == nil {
 					log.Printf("wrote %q", path)
 				} else {
 					log.Printf("error writing %q: %v", path, err)
+				}
+			}
+			if flags.Verify {
+				err := t.VerifyDataContext(ctx)
+				if err != nil && ctx.Err() == nil {
+					log.Levelf(log.Error, "error verifying data: %v", err)
 				}
 			}
 			if len(flags.File) == 0 {
@@ -257,21 +317,23 @@ type downloadFlags struct {
 }
 
 type DownloadCmd struct {
-	SaveMetainfos      bool
-	Mmap               bool           `help:"memory-map torrent data"`
-	Seed               bool           `help:"seed after download is complete"`
-	Addr               string         `help:"network listen addr"`
-	MaxUnverifiedBytes *tagflag.Bytes `help:"maximum number bytes to have pending verification"`
-	UploadRate         *tagflag.Bytes `help:"max piece bytes to send per second"`
-	DownloadRate       *tagflag.Bytes `help:"max bytes per second down from peers"`
-	PackedBlocklist    string
-	PublicIP           net.IP
-	Progress           bool `default:"true"`
-	PieceStates        bool `help:"Output piece state runs at progress intervals."`
-	Quiet              bool `help:"discard client logging"`
-	Stats              bool `help:"print stats at termination"`
-	Dht                bool `default:"true"`
-	PortForward        bool `default:"true"`
+	SaveMetainfos                  bool           `help:"save metainfo files when info is obtained"`
+	Mmap                           bool           `help:"memory-map torrent data"`
+	Seed                           bool           `help:"seed after download is complete"`
+	Addr                           string         `help:"network listen addr"`
+	MaxUnverifiedBytes             *tagflag.Bytes `help:"maximum number bytes to have pending verification"`
+	UploadRate                     *tagflag.Bytes `help:"max piece bytes to send per second"`
+	MaxAllocPeerRequestDataPerConn *tagflag.Bytes `help:"max bytes to allocate for peer request data per connection"`
+	DownloadRate                   *tagflag.Bytes `help:"max bytes per second down from peers"`
+	PackedBlocklist                string
+	PublicIP                       net.IP
+	Progress                       bool `default:"true"`
+	PieceStates                    bool `help:"Output piece state runs at progress intervals."`
+	Quiet                          bool `help:"discard client logging"`
+	Stats                          bool `help:"print stats at termination"`
+	Dht                            bool `default:"true"`
+	PortForward                    bool `default:"true"`
+	Verify                         bool `help:"verify data after adding torrent"`
 
 	TcpPeers        bool `default:"true"`
 	UtpPeers        bool `default:"true"`
@@ -296,7 +358,7 @@ func statsEnabled(flags downloadFlags) bool {
 	return flags.Stats
 }
 
-func downloadErr(flags downloadFlags) error {
+func downloadErr(ctx context.Context, flags downloadFlags) error {
 	clientConfig := torrent.NewDefaultClientConfig()
 	clientConfig.DisableWebseeds = flags.DisableWebseeds
 	clientConfig.DisableTCP = !flags.TcpPeers
@@ -312,6 +374,9 @@ func downloadErr(flags downloadFlags) error {
 	clientConfig.DisablePEX = !flags.Pex
 	clientConfig.DisableWebtorrent = !flags.Webtorrent
 	clientConfig.NoDefaultPortForwarding = !flags.PortForward
+	if flags.MaxAllocPeerRequestDataPerConn != nil {
+		clientConfig.MaxAllocPeerRequestDataPerConn = int(flags.MaxAllocPeerRequestDataPerConn.Int64())
+	}
 	if flags.PackedBlocklist != "" {
 		blocklist, err := iplist.MMapPackedFile(flags.PackedBlocklist)
 		if err != nil {
@@ -327,8 +392,14 @@ func downloadErr(flags downloadFlags) error {
 		clientConfig.SetListenAddr(flags.Addr)
 	}
 	if flags.UploadRate != nil {
-		// TODO: I think the upload rate limit could be much lower.
-		clientConfig.UploadRateLimiter = rate.NewLimiter(rate.Limit(*flags.UploadRate), 256<<10)
+		clientConfig.UploadRateLimiter = rate.NewLimiter(
+			rate.Limit(*flags.UploadRate),
+			// Need to ensure the expected peer request length <= the upload
+			// burst. We can't really encode this logic into the ClientConfig as
+			// helper because it's quite specific. We're assuming the
+			// MaxAllocPeerRequestDataPerConn flag is being used to support
+			// this.
+			max(int(*flags.MaxAllocPeerRequestDataPerConn), 256<<10))
 	}
 	if flags.DownloadRate != nil {
 		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(*flags.DownloadRate), 1<<16)
@@ -347,14 +418,15 @@ func downloadErr(flags downloadFlags) error {
 		clientConfig.MaxUnverifiedBytes = flags.MaxUnverifiedBytes.Int64()
 	}
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
 	client, err := torrent.NewClient(clientConfig)
 	if err != nil {
 		return fmt.Errorf("creating client: %w", err)
 	}
 	defer client.Close()
+
+	if flags.Progress {
+		go clientStatusWriter(ctx, client)
+	}
 
 	// Write status on the root path on the default HTTP muxer. This will be bound to localhost
 	// somewhere if GOPPROF is set, thanks to the envpprof import.

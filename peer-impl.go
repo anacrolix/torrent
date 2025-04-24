@@ -7,9 +7,11 @@ import (
 )
 
 // Contains implementation details that differ between peer types, like Webseeds and regular
-// BitTorrent protocol connections. Some methods are underlined so as to avoid collisions with
-// legacy PeerConn methods.
-type peerImpl interface {
+// BitTorrent protocol connections. These methods are embedded in the child types of Peer for legacy
+// expectations that they exist on the child type. Some methods are underlined to avoid collisions
+// with legacy PeerConn methods. New methods and calls that are fixed up should be migrated over to
+// newHotPeerImpl.
+type legacyPeerImpl interface {
 	// Trigger the actual request state to get updated
 	handleUpdateRequests()
 	writeInterested(interested bool) bool
@@ -34,4 +36,9 @@ type peerImpl interface {
 	// message, then it's clear that they do.
 	peerHasAllPieces() (all, known bool)
 	peerPieces() *roaring.Bitmap
+}
+
+// Abstract methods implemented by subclasses of Peer.
+type newHotPeerImpl interface {
+	lastWriteUploadRate() float64
 }

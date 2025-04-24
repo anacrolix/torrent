@@ -31,7 +31,7 @@ func (pc *PeerConn) initMessageWriter() {
 			defer pc.locker().RUnlock()
 			return pc.useful()
 		},
-		writeBuffer: new(bytes.Buffer),
+		writeBuffer: new(peerConnMsgWriterBuffer),
 	}
 }
 
@@ -47,6 +47,13 @@ func (pc *PeerConn) messageWriterRunner() {
 	pc.messageWriter.run(pc.t.cl.config.KeepAliveTimeout)
 }
 
+type peerConnMsgWriterBuffer struct {
+	// The number of bytes in the buffer that are part of a piece message. When
+	// the whole buffer is written, we can count this many bytes.
+	pieceDataBytes int
+	bytes.Buffer
+}
+
 type peerConnMsgWriter struct {
 	// Must not be called with the local mutex held, as it will call back into the write method.
 	fillWriteBuffer func()
@@ -58,7 +65,12 @@ type peerConnMsgWriter struct {
 	mu        sync.Mutex
 	writeCond chansync.BroadcastCond
 	// Pointer so we can swap with the "front buffer".
-	writeBuffer *bytes.Buffer
+	writeBuffer *peerConnMsgWriterBuffer
+
+	totalWriteDuration    time.Duration
+	totalBytesWritten     int64
+	totalDataBytesWritten int64
+	dataUploadRate        float64
 }
 
 // Routine that writes to the peer. Some of what to write is buffered by
@@ -67,7 +79,7 @@ type peerConnMsgWriter struct {
 func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 	lastWrite := time.Now()
 	keepAliveTimer := time.NewTimer(keepAliveTimeout)
-	frontBuf := new(bytes.Buffer)
+	frontBuf := new(peerConnMsgWriterBuffer)
 	for {
 		if cn.closed.IsSet() {
 			return
@@ -96,6 +108,8 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 			panic("expected non-empty front buffer")
 		}
 		var err error
+		startedWriting := time.Now()
+		startingBufLen := frontBuf.Len()
 		for frontBuf.Len() != 0 {
 			next := frontBuf.Bytes()
 			var n int
@@ -112,6 +126,15 @@ func (cn *peerConnMsgWriter) run(keepAliveTimeout time.Duration) {
 			cn.logger.WithDefaultLevel(log.Debug).Printf("error writing: %v", err)
 			return
 		}
+		// Track what was sent and how long it took.
+		writeDuration := time.Since(startedWriting)
+		cn.mu.Lock()
+		cn.dataUploadRate = float64(frontBuf.pieceDataBytes) / writeDuration.Seconds()
+		cn.totalWriteDuration += writeDuration
+		cn.totalBytesWritten += int64(startingBufLen)
+		cn.totalDataBytesWritten += int64(frontBuf.pieceDataBytes)
+		cn.mu.Unlock()
+		frontBuf.pieceDataBytes = 0
 		lastWrite = time.Now()
 		keepAliveTimer.Reset(keepAliveTimeout)
 	}
@@ -125,7 +148,11 @@ func (cn *peerConnMsgWriter) writeToBuffer(msg pp.Message) (err error) {
 			cn.writeBuffer.Truncate(originalLen)
 		}
 	}()
-	return msg.WriteTo(cn.writeBuffer)
+	err = msg.WriteTo(cn.writeBuffer)
+	if err == nil {
+		cn.writeBuffer.pieceDataBytes += len(msg.Piece)
+	}
+	return
 }
 
 func (cn *peerConnMsgWriter) write(msg pp.Message) bool {

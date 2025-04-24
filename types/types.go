@@ -3,6 +3,8 @@
 package types
 
 import (
+	"fmt"
+
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
@@ -15,6 +17,10 @@ type ChunkSpec struct {
 type Request struct {
 	Index pp.Integer
 	ChunkSpec
+}
+
+func (r Request) String() string {
+	return fmt.Sprintf("piece %v, %v bytes at %v", r.Index, r.Length, r.Begin)
 }
 
 func (r Request) ToMsg(mt pp.MessageType) pp.Message {

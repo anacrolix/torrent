@@ -6,7 +6,13 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
-func dumpStats[T any](w io.Writer, stats T) {
-	spew.NewDefaultConfig()
-	spew.Fdump(w, stats)
+var spewConfig = spew.NewDefaultConfig()
+
+func init() {
+	//spewConfig.DisablePointerAddresses = true
+	//spewConfig.DisablePointerMethods = true
+}
+
+func dumpStats(w io.Writer, a ...any) {
+	spewConfig.Fdump(w, a...)
 }

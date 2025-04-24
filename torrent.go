@@ -52,12 +52,16 @@ import (
 	"github.com/anacrolix/torrent/webtorrent"
 )
 
+var errTorrentClosed = errors.New("torrent closed")
+
 // Maintains state of torrent within a Client. Many methods should not be called before the info is
 // available, see .Info and .GotInfo.
 type Torrent struct {
 	// Torrent-level aggregate statistics. First in struct to ensure 64-bit
 	// alignment. See #262.
-	stats  ConnStats
+	connStats ConnStats
+	counters  TorrentStatCounters
+
 	cl     *Client
 	logger log.Logger
 
@@ -1144,6 +1148,11 @@ func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex) *blockCheckingWr
 	}
 }
 
+func (t *Torrent) countBytesHashed(n int64) {
+	t.counters.BytesHashed.Add(n)
+	t.cl.counters.BytesHashed.Add(n)
+}
+
 func (t *Torrent) hashPiece(piece pieceIndex) (
 	correct bool,
 	// These are peers that sent us blocks that differ from what we hash here.
@@ -1160,6 +1169,9 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 			var sum metainfo.Hash
 			// log.Printf("A piece decided to self-hash: %d", piece)
 			sum, err = i.SelfHash()
+			if err == nil {
+				t.countBytesHashed(int64(p.length()))
+			}
 			correct = sum == *p.hash
 			// Can't do smart banning without reading the piece. The smartBanCache is still cleared
 			// in pieceHasher regardless.
@@ -1181,6 +1193,7 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 					err,
 				))
 			}
+			t.countBytesHashed(written)
 		}
 		var sum [20]byte
 		sumExactly(sum[:], h.Sum)
@@ -1234,6 +1247,7 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
 			// ban peers for all recorded blocks that weren't just written.
 			return
 		}
+		t.countBytesHashed(written)
 	}
 	// Flush before writing padding, since we would not have recorded the padding blocks.
 	smartBanWriter.Flush()
@@ -1370,7 +1384,7 @@ func (t *Torrent) publishPieceStateChange(piece pieceIndex) {
 		if cur != p.publicPieceState {
 			p.publicPieceState = cur
 			t.pieceStateChanges.Publish(PieceStateChange{
-				int(piece),
+				piece,
 				cur,
 			})
 		}
@@ -2049,9 +2063,9 @@ func (t *Torrent) announceRequest(
 		// The following are vaguely described in BEP 3.
 
 		Left:     t.bytesLeftAnnounce(),
-		Uploaded: t.stats.BytesWrittenData.Int64(),
+		Uploaded: t.connStats.BytesWrittenData.Int64(),
 		// There's no mention of wasted or unwanted download in the BEP.
-		Downloaded: t.stats.BytesReadUsefulData.Int64(),
+		Downloaded: t.connStats.BytesReadUsefulData.Int64(),
 	}
 }
 
@@ -2202,7 +2216,7 @@ func (t *Torrent) Stats() TorrentStats {
 	return t.statsLocked()
 }
 
-func (t *Torrent) statsLocked() (ret TorrentStats) {
+func (t *Torrent) gauges() (ret TorrentGauges) {
 	ret.ActivePeers = len(t.conns)
 	ret.HalfOpenPeers = len(t.halfOpen)
 	ret.PendingPeers = t.peers.Len()
@@ -2213,8 +2227,14 @@ func (t *Torrent) statsLocked() (ret TorrentStats) {
 			ret.ConnectedSeeders++
 		}
 	}
-	ret.ConnStats = t.stats.Copy()
 	ret.PiecesComplete = t.numPiecesCompleted()
+	return
+}
+
+func (t *Torrent) statsLocked() (ret TorrentStats) {
+	ret.ConnStats = copyCountFields(&t.connStats)
+	ret.TorrentStatCounters = copyCountFields(&t.counters)
+	ret.TorrentGauges = t.gauges()
 	return
 }
 
@@ -2264,7 +2284,7 @@ func (t *Torrent) addPeerConn(c *PeerConn) (err error) {
 		}
 	}()
 	if t.closed.IsSet() {
-		return errors.New("torrent closed")
+		return errTorrentClosed
 	}
 	for c0 := range t.conns {
 		if c.PeerID != c0.PeerID {
@@ -2386,6 +2406,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	})
 	p := t.piece(piece)
 	p.numVerifies++
+	p.numVerifiesCond.Broadcast()
 	t.cl.event.Broadcast()
 	if t.closed.IsSet() {
 		return
@@ -2538,9 +2559,13 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	})
 }
 
-func (t *Torrent) tryCreateMorePieceHashers() {
-	for !t.closed.IsSet() && t.activePieceHashes < t.cl.config.PieceHashersPerTorrent && t.tryCreatePieceHasher() {
+func (t *Torrent) tryCreateMorePieceHashers() error {
+	if t.closed.IsSet() {
+		return errTorrentClosed
 	}
+	for t.activePieceHashes < t.cl.config.PieceHashersPerTorrent && t.tryCreatePieceHasher() {
+	}
+	return nil
 }
 
 func (t *Torrent) tryCreatePieceHasher() bool {
@@ -2651,10 +2676,15 @@ func (t *Torrent) queueInitialPieceCheck(i pieceIndex) {
 	}
 }
 
-func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
+func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) (targetVerifies pieceVerifyCount, err error) {
 	piece := t.piece(pieceIndex)
 	if !piece.haveHash() {
-		return
+		err = errors.New("piece hash unknown")
+	}
+	targetVerifies = piece.numVerifies + 1
+	if piece.hashing {
+		// The result of this queued piece check will be the one after the current one.
+		targetVerifies++
 	}
 	if piece.queuedForHash() {
 		return
@@ -2662,15 +2692,27 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) {
 	t.piecesQueuedForHash.Add(bitmap.BitIndex(pieceIndex))
 	t.publishPieceStateChange(pieceIndex)
 	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck")
-	t.tryCreateMorePieceHashers()
+	err = t.tryCreateMorePieceHashers()
+	return
 }
 
-// Forces all the pieces to be re-hashed. See also Piece.VerifyData. This should not be called
-// before the Info is available.
-func (t *Torrent) VerifyData() {
-	for i := pieceIndex(0); i < t.NumPieces(); i++ {
-		t.Piece(i).VerifyData()
+// Deprecated: Use Torrent.VerifyDataContext.
+func (t *Torrent) VerifyData() error {
+	return t.VerifyDataContext(context.Background())
+}
+
+// Forces all the pieces to be re-hashed. See also Piece.VerifyDataContext. This
+// should not be called before the Info is available. TODO: Make this operate
+// concurrently within the configured piece hashers limit.
+func (t *Torrent) VerifyDataContext(ctx context.Context) error {
+	for i := 0; i < t.NumPieces(); i++ {
+		err := t.Piece(i).VerifyDataContext(ctx)
+		if err != nil {
+			err = fmt.Errorf("verifying piece %v: %w", i, err)
+			return err
+		}
 	}
+	return nil
 }
 
 func (t *Torrent) connectingToPeerAddr(addrStr string) bool {
@@ -2753,7 +2795,7 @@ func (t *Torrent) AddClientPeer(cl *Client) int {
 // All stats that include this Torrent. Useful when we want to increment ConnStats but not for every
 // connection.
 func (t *Torrent) allStats(f func(*ConnStats)) {
-	f(&t.stats)
+	f(&t.connStats)
 	f(&t.cl.connStats)
 }
 
@@ -2850,6 +2892,13 @@ func (t *Torrent) callbacks() *Callbacks {
 
 type AddWebSeedsOpt func(*webseed.Client)
 
+// Max concurrent requests to a WebSeed for a given torrent.
+func WebSeedTorrentMaxRequests(maxRequests int) AddWebSeedsOpt {
+	return func(c *webseed.Client) {
+		c.MaxRequests = maxRequests
+	}
+}
+
 // Sets the WebSeed trailing path escaper for a webseed.Client.
 func WebSeedPathEscaper(custom webseed.PathEscaper) AddWebSeedsOpt {
 	return func(c *webseed.Client) {
@@ -2865,37 +2914,34 @@ func (t *Torrent) AddWebSeeds(urls []string, opts ...AddWebSeedsOpt) {
 	}
 }
 
-func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
+// Returns true if the WebSeed was newly added with the provided configuration.
+func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	if t.cl.config.DisableWebseeds {
-		return
+		return false
 	}
 	if _, ok := t.webSeeds[url]; ok {
-		return
+		return false
 	}
 	// I don't think Go http supports pipelining requests. However, we can have more ready to go
 	// right away. This value should be some multiple of the number of connections to a host. I
 	// would expect that double maxRequests plus a bit would be appropriate. This value is based on
 	// downloading Sintel (08ada5a7a6183aae1e09d831df6748d566095a10) from
 	// "https://webtorrent.io/torrents/".
-	const maxRequests = 16
+	const defaultMaxRequests = 16
 	ws := webseedPeer{
 		peer: Peer{
 			t:                        t,
 			outgoing:                 true,
 			Network:                  "http",
 			reconciledHandshakeStats: true,
-			// This should affect how often we have to recompute requests for this peer. Note that
-			// because we can request more than 1 thing at a time over HTTP, we will hit the low
-			// requests mark more often, so recomputation is probably sooner than with regular peer
-			// conns. ~4x maxRequests would be about right.
-			PeerMaxRequests: 128,
 			// TODO: Set ban prefix?
 			RemoteAddr: remoteAddrFromUrl(url),
 			callbacks:  t.callbacks(),
 		},
 		client: webseed.Client{
-			HttpClient: t.cl.httpClient,
-			Url:        url,
+			HttpClient:  t.cl.httpClient,
+			Url:         url,
+			MaxRequests: defaultMaxRequests,
 			ResponseBodyWrapper: func(r io.Reader) io.Reader {
 				return &rateLimitedReader{
 					l: t.cl.config.DownloadRateLimiter,
@@ -2903,27 +2949,35 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) {
 				}
 			},
 		},
-		activeRequests: make(map[Request]webseed.Request, maxRequests),
 	}
 	ws.peer.initRequestState()
 	for _, opt := range opts {
 		opt(&ws.client)
 	}
+	g.MakeMapWithCap(&ws.activeRequests, ws.client.MaxRequests)
+	// This should affect how often we have to recompute requests for this peer. Note that
+	// because we can request more than 1 thing at a time over HTTP, we will hit the low
+	// requests mark more often, so recomputation is probably sooner than with regular peer
+	// conns. ~4x maxRequests would be about right.
+	ws.peer.PeerMaxRequests = 4 * ws.client.MaxRequests
 	ws.peer.initUpdateRequestsTimer()
 	ws.requesterCond.L = t.cl.locker()
-	for i := 0; i < maxRequests; i += 1 {
+	for i := 0; i < ws.client.MaxRequests; i += 1 {
 		go ws.requester(i)
 	}
 	for _, f := range t.callbacks().NewPeer {
 		f(&ws.peer)
 	}
 	ws.peer.logger = t.logger.WithContextValue(&ws).WithNames("webseed")
+	// TODO: Abstract out a common struct initializer for this...
+	ws.peer.legacyPeerImpl = &ws
 	ws.peer.peerImpl = &ws
 	if t.haveInfo() {
 		ws.onGotInfo(t.info)
 	}
 	t.webSeeds[url] = &ws.peer
 	ws.peer.updateRequests("Torrent.addWebSeed")
+	return true
 }
 
 func (t *Torrent) peerIsActive(p *Peer) (active bool) {
@@ -2952,6 +3006,7 @@ func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex) RequestIndex {
 }
 
 func (t *Torrent) updateComplete() {
+	// TODO: Announce complete to trackers?
 	t.complete.SetBool(t.haveAllPieces())
 }
 

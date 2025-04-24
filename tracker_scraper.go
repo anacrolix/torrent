@@ -25,6 +25,7 @@ type trackerScraper struct {
 	lastAnnounce    trackerAnnounceResult
 	lookupTrackerIp func(*url.URL) ([]net.IP, error)
 
+	// TODO: chansync
 	stopOnce sync.Once
 	stopCh   chan struct{}
 }
@@ -36,7 +37,7 @@ type torrentTrackerAnnouncer interface {
 	Stop()
 }
 
-func (me trackerScraper) URL() *url.URL {
+func (me *trackerScraper) URL() *url.URL {
 	return &me.u
 }
 
@@ -219,6 +220,7 @@ func (me *trackerScraper) Run() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	// TODO: Get rid of the need for this.
 	go func() {
 		defer cancel()
 		select {

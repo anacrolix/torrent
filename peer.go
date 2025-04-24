@@ -31,7 +31,8 @@ type (
 
 		t *Torrent
 
-		peerImpl
+		legacyPeerImpl
+		peerImpl  newHotPeerImpl
 		callbacks *Callbacks
 
 		outgoing   bool
@@ -143,6 +144,16 @@ func (p *Peer) Torrent() *Torrent {
 	return p.t
 }
 
+func (p *Peer) Stats() (ret PeerStats) {
+	p.locker().RLock()
+	defer p.locker().RUnlock()
+	ret.ConnStats = p._stats.Copy()
+	ret.DownloadRate = p.downloadRate()
+	ret.LastWriteUploadRate = p.peerImpl.lastWriteUploadRate()
+	ret.RemotePieceCount = p.remotePieceCount()
+	return
+}
+
 func (p *Peer) initRequestState() {
 	p.requestState.Requests = &peerRequests{}
 }
@@ -211,12 +222,17 @@ func (cn *Peer) bestPeerNumPieces() pieceIndex {
 	return cn.peerMinPieces
 }
 
-func (cn *Peer) completedString() string {
+// How many pieces we think the peer has.
+func (cn *Peer) remotePieceCount() pieceIndex {
 	have := pieceIndex(cn.peerPieces().GetCardinality())
 	if all, _ := cn.peerHasAllPieces(); all {
 		have = cn.bestPeerNumPieces()
 	}
-	return fmt.Sprintf("%d/%d", have, cn.bestPeerNumPieces())
+	return have
+}
+
+func (cn *Peer) completedString() string {
+	return fmt.Sprintf("%d/%d", cn.remotePieceCount(), cn.bestPeerNumPieces())
 }
 
 func eventAgeString(t time.Time) string {
@@ -257,11 +273,9 @@ func (cn *Peer) downloadRate() float64 {
 	return float64(num) / cn.totalExpectingTime().Seconds()
 }
 
+// Deprecated: Use Peer.Stats.
 func (p *Peer) DownloadRate() float64 {
-	p.locker().RLock()
-	defer p.locker().RUnlock()
-
-	return p.downloadRate()
+	return p.Stats().DownloadRate
 }
 
 func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int)) {
@@ -337,7 +351,7 @@ func (p *Peer) close() {
 	for _, prs := range p.peerRequests {
 		prs.allocReservation.Drop()
 	}
-	p.peerImpl.onClose()
+	p.legacyPeerImpl.onClose()
 	if p.t != nil {
 		p.t.decPeerPieceAvailability(p)
 	}
@@ -477,7 +491,7 @@ func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 	for _, f := range cn.callbacks.SentRequest {
 		f(PeerRequestEvent{cn, ppReq})
 	}
-	return cn.peerImpl._request(ppReq), nil
+	return cn.legacyPeerImpl._request(ppReq), nil
 }
 
 func (me *Peer) cancel(r RequestIndex) {
@@ -532,7 +546,7 @@ func iterBitmapsDistinct(skip *bitmap.Bitmap, bms ...bitmap.Bitmap) iter.Func {
 // connection.
 func (cn *Peer) postHandshakeStats(f func(*ConnStats)) {
 	t := cn.t
-	f(&t.stats)
+	f(&t.connStats)
 	f(&t.cl.connStats)
 }
 
@@ -878,7 +892,7 @@ func (cn *Peer) stats() *ConnStats {
 }
 
 func (p *Peer) TryAsPeerConn() (*PeerConn, bool) {
-	pc, ok := p.peerImpl.(*PeerConn)
+	pc, ok := p.legacyPeerImpl.(*PeerConn)
 	return pc, ok
 }
 

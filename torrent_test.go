@@ -238,7 +238,7 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	g.MakeMapIfNil(&tt.conns)
 	pc := PeerConn{}
 	pc.t = &tt
-	pc.peerImpl = &pc
+	pc.legacyPeerImpl = &pc
 	pc.initRequestState()
 	g.InitNew(&pc.callbacks)
 	tt.conns[&pc] = struct{}{}

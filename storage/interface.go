@@ -55,6 +55,7 @@ type PieceImpl interface {
 	Completion() Completion
 }
 
+// TODO: Yo where the fuck is the documentation.
 type Completion struct {
 	Complete bool
 	Ok       bool

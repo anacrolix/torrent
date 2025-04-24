@@ -1,11 +1,7 @@
 package torrent
 
 import (
-	"encoding/json"
-	"fmt"
 	"io"
-	"reflect"
-	"sync/atomic"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
@@ -41,33 +37,7 @@ type ConnStats struct {
 }
 
 func (me *ConnStats) Copy() (ret ConnStats) {
-	for i := 0; i < reflect.TypeOf(ConnStats{}).NumField(); i++ {
-		n := reflect.ValueOf(me).Elem().Field(i).Addr().Interface().(*Count).Int64()
-		reflect.ValueOf(&ret).Elem().Field(i).Addr().Interface().(*Count).Add(n)
-	}
-	return
-}
-
-type Count struct {
-	n int64
-}
-
-var _ fmt.Stringer = (*Count)(nil)
-
-func (me *Count) Add(n int64) {
-	atomic.AddInt64(&me.n, n)
-}
-
-func (me *Count) Int64() int64 {
-	return atomic.LoadInt64(&me.n)
-}
-
-func (me *Count) String() string {
-	return fmt.Sprintf("%v", me.Int64())
-}
-
-func (me *Count) MarshalJSON() ([]byte, error) {
-	return json.Marshal(me.n)
+	return copyCountFields(me)
 }
 
 func (cs *ConnStats) wroteMsg(msg *pp.Message) {

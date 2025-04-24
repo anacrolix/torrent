@@ -39,8 +39,11 @@ func (r Request) Cancel() {
 type Client struct {
 	HttpClient *http.Client
 	Url        string
-	fileIndex  segments.Index
-	info       *metainfo.Info
+	// Max concurrent requests to a WebSeed for a given torrent.
+	MaxRequests int
+
+	fileIndex segments.Index
+	info      *metainfo.Info
 	// The pieces we can request with the Url. We're more likely to ban/block at the file-level
 	// given that's how requests are mapped to webseeds, but the torrent.Client works at the piece
 	// level. We can map our file-level adjustments to the pieces here. This probably need to be

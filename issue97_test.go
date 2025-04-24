@@ -1,13 +1,13 @@
 package torrent
 
 import (
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/storage"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/anacrolix/torrent/internal/testutil"
+	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/storage"
 )
 
 func TestHashPieceAfterStorageClosed(t *testing.T) {

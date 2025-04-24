@@ -1,8 +1,9 @@
 package torrent
 
 import (
-	pp "github.com/anacrolix/torrent/peer_protocol"
 	"io"
+
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 // Various connection-level metrics. At the Torrent level these are aggregates. Chunks are messages

@@ -4,6 +4,7 @@ package types
 
 import (
 	"fmt"
+
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 

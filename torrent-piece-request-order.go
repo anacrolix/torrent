@@ -2,9 +2,9 @@ package torrent
 
 import (
 	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/torrent/storage"
 
 	request_strategy "github.com/anacrolix/torrent/request-strategy"
+	"github.com/anacrolix/torrent/storage"
 )
 
 func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) {

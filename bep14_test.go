@@ -3,7 +3,6 @@ package torrent
 import (
 	"bufio"
 	"bytes"
-	"log"
 	"net/http"
 	"os"
 	"testing"
@@ -69,6 +68,9 @@ func TestDiscovery(t *testing.T) {
 	waitForPeers(leecherGreeting, numPeers)
 	require.Equal(t, numPeers, leecherGreeting.numTotalPeers())
 	require.Equal(t, numPeers, len(client2.lpd.peers))
+
+	t.Cleanup(func() { client1.Close() })
+	t.Cleanup(func() { client2.Close() })
 }
 
 func waitForPeers(t *Torrent, num int) {

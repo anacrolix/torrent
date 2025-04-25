@@ -1,6 +1,8 @@
 package metainfo
 
 import (
+	"iter"
+
 	g "github.com/anacrolix/generics"
 )
 
@@ -16,19 +18,15 @@ func (p Piece) Length() int64 {
 		var offset int64
 		pieceLength := p.Info.PieceLength
 		lastFileEnd := int64(0)
-		done := false
-		p.Info.FileTree.upvertedFiles(pieceLength, func(fi FileInfo) {
-			if done {
-				return
-			}
+		for fi := range p.Info.FileTree.upvertedFiles(pieceLength) {
 			fileStartPiece := int(offset / pieceLength)
 			if fileStartPiece > p.i {
-				done = true
-				return
+				break
 			}
 			lastFileEnd = offset + fi.Length
 			offset = (lastFileEnd + pieceLength - 1) / pieceLength * pieceLength
-		})
+
+		}
 		ret := min(lastFileEnd-int64(p.i)*pieceLength, pieceLength)
 		if ret <= 0 {
 			panic(ret)
@@ -38,6 +36,13 @@ func (p Piece) Length() int64 {
 	return p.V1Length()
 }
 
+func iterLast[T any](i iter.Seq[T]) (last g.Option[T]) {
+	for t := range i {
+		last.Set(t)
+	}
+	return
+}
+
 func (p Piece) V1Length() int64 {
 	i := p.i
 	lastPiece := p.Info.NumPieces() - 1
@@ -45,8 +50,7 @@ func (p Piece) V1Length() int64 {
 	case 0 <= i && i < lastPiece:
 		return p.Info.PieceLength
 	case lastPiece >= 0 && i == lastPiece:
-		files := p.Info.UpvertedV1Files()
-		lastFile := files[len(files)-1]
+		lastFile := iterLast(p.Info.UpvertedV1Files()).Unwrap()
 		length := lastFile.TorrentOffset + lastFile.Length - int64(i)*p.Info.PieceLength
 		if length <= 0 || length > p.Info.PieceLength {
 			panic(length)

@@ -36,7 +36,7 @@ func (me *collectExtents) scanCallback(i int, e Extent) bool {
 
 type newLocater func(LengthIter) Locater
 
-func assertLocate(
+func checkContiguous(
 	t *testing.T,
 	nl newLocater,
 	ls []Length,
@@ -54,17 +54,17 @@ func assertLocate(
 }
 
 func testLocater(t *testing.T, newLocater newLocater) {
-	assertLocate(t, newLocater,
+	checkContiguous(t, newLocater,
 		[]Length{1, 0, 2, 0, 3},
 		Extent{2, 2},
 		2,
 		[]Extent{{1, 1}, {0, 0}, {0, 1}})
-	assertLocate(t, newLocater,
+	checkContiguous(t, newLocater,
 		[]Length{1, 0, 2, 0, 3},
 		Extent{6, 2},
 		2,
 		[]Extent{})
-	assertLocate(t, newLocater,
+	checkContiguous(t, newLocater,
 		[]Length{1652, 1514, 1554, 1618, 1546, 129241752, 1537}, // 128737588
 		Extent{0, 16384},
 		0,
@@ -76,7 +76,7 @@ func testLocater(t *testing.T, newLocater newLocater) {
 			{0, 1546},
 			{0, 8500},
 		})
-	assertLocate(t, newLocater,
+	checkContiguous(t, newLocater,
 		[]Length{1652, 1514, 1554, 1618, 1546, 129241752, 1537, 1536, 1551}, // 128737588
 		Extent{129236992, 16384},
 		5,

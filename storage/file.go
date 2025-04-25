@@ -11,7 +11,6 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 
-	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
 )
@@ -92,7 +91,7 @@ func (fs fileClientImpl) OpenTorrent(
 	}
 	t := &fileTorrentImpl{
 		files,
-		segments.NewIndexFromSegments(common.TorrentOffsetFileSegments(info)),
+		info.FileSegmentsIndex(),
 		infoHash,
 		fs.opts.PieceCompletion,
 	}
@@ -174,7 +173,7 @@ type fileTorrentImplIO struct {
 }
 
 // Returns EOF on short or missing file.
-func (fst *fileTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, err error) {
+func (fst fileTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, err error) {
 	f, err := os.Open(file.path)
 	if os.IsNotExist(err) {
 		// File missing is treated the same as a short file.

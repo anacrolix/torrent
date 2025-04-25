@@ -119,9 +119,17 @@ func fileBytesLeft(
 }
 
 func (f *File) bytesLeft() (left int64) {
-	return fileBytesLeft(int64(f.t.usualPieceSize()), f.BeginPieceIndex(), f.EndPieceIndex(), f.offset, f.length, &f.t._completedPieces, func(pieceIndex int) int64 {
-		return int64(f.t.piece(pieceIndex).numDirtyBytes())
-	})
+	return fileBytesLeft(
+		int64(f.t.usualPieceSize()),
+		f.BeginPieceIndex(),
+		f.EndPieceIndex(),
+		f.offset,
+		f.length,
+		&f.t._completedPieces,
+		func(pieceIndex int) int64 {
+			return int64(f.t.piece(pieceIndex).numDirtyBytes())
+		},
+	)
 }
 
 // The relative file path for a multi-file torrent, and the torrent name for a

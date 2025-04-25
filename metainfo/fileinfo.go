@@ -38,3 +38,17 @@ func (fi *FileInfo) BestPath() []string {
 	}
 	return fi.Path
 }
+
+func (fi *FileInfo) BeginPieceIndex(pieceLength int64) int {
+	if pieceLength == 0 {
+		return 0
+	}
+	return int(fi.TorrentOffset / pieceLength)
+}
+
+func (fi *FileInfo) EndPieceIndex(pieceLength int64) int {
+	if pieceLength == 0 {
+		return 0
+	}
+	return int((fi.TorrentOffset + fi.Length + pieceLength - 1) / pieceLength)
+}

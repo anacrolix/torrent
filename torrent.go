@@ -2485,7 +2485,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		}
 		err := p.Storage().MarkComplete()
 		if err != nil {
-			t.logger.Levelf(log.Warning, "%T: error marking piece complete %d: %s", t.storage, piece, err)
+			t.logger.Levelf(log.Error, "%T: error marking piece complete %d: %s", t.storage, piece, err)
 		}
 		t.cl.lock()
 

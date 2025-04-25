@@ -227,3 +227,5 @@ func (info *Info) FileSegmentsIndex() segments.Index {
 		}
 	}))
 }
+
+// TODO: Add NumFiles helper?

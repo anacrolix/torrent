@@ -32,11 +32,11 @@ func Scan(haystack LengthIter, needle Extent, callback Callback) bool {
 }
 
 // Returns true if callback returns false early, or all segments in the haystack for the needle are
-// found.
+// found. TODO: Does this handle discontiguous extents?
 func ScanConsecutive(haystack ConsecutiveExtentIter, needle Extent, callback Callback) bool {
 	i := 0
-	// Extents have been found in the haystack and we're waiting for the needle to end. This is kind
-	// of for backwards compatibility for some tests that expect to have zero-length extents.
+	// Extents have been found in the haystack, and we're waiting for the needle to end. This is
+	// kind of for backwards compatibility for some tests that expect to have zero-length extents.
 	startedNeedle := false
 	for needle.Length != 0 {
 		l, ok := haystack()

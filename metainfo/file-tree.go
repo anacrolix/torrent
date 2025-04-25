@@ -127,6 +127,7 @@ func (ft *FileTree) upvertedFilesInner(
 				PiecesRoot:    ft.PiecesRootAsByteArray(),
 				TorrentOffset: *offset,
 			})
+			// v2 files are piece aligned. This bumps up the offset to the next piece boundary.
 			*offset += (ft.File.Length + pieceLength - 1) / pieceLength * pieceLength
 		}
 

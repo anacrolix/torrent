@@ -106,13 +106,11 @@ func (sp mmapStoragePiece) Completion() Completion {
 }
 
 func (sp mmapStoragePiece) MarkComplete() error {
-	sp.pc.Set(sp.pieceKey(), true)
-	return nil
+	return sp.pc.Set(sp.pieceKey(), true)
 }
 
 func (sp mmapStoragePiece) MarkNotComplete() error {
-	sp.pc.Set(sp.pieceKey(), false)
-	return nil
+	return sp.pc.Set(sp.pieceKey(), false)
 }
 
 func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, err error) {

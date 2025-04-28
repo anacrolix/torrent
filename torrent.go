@@ -30,6 +30,7 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
@@ -1546,6 +1547,7 @@ func (t *Torrent) logPieceRequestOrder() {
 
 // Returns the range of pieces [begin, end) that contains the extent of bytes.
 func (t *Torrent) byteRegionPieces(off, size int64) (begin, end pieceIndex) {
+	fmt.Println("byteRegionPieces", off, size)
 	if off >= t.length() {
 		return
 	}
@@ -1687,18 +1689,9 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 
 // Non-blocking read. Client lock is not required.
 func (t *Torrent) readAt(b []byte, off int64) (n int, err error) {
-	for len(b) != 0 {
-		p := &t.pieces[off/t.info.PieceLength]
-		p.waitNoPendingWrites()
-		var n1 int
-		n1, err = p.Storage().ReadAt(b, off-p.Info().Offset())
-		if n1 == 0 {
-			break
-		}
-		off += int64(n1)
-		n += n1
-		b = b[n1:]
-	}
+	r := t.storageReader()
+	n, err = r.ReadAt(b, off)
+	panicif.Err(r.Close())
 	return
 }
 

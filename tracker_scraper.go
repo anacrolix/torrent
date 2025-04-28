@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/dht/v2/krpc"
+
 	"github.com/anacrolix/torrent/tracker"
 )
 

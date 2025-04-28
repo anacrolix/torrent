@@ -88,6 +88,10 @@ type ConsecutiveChunkReader interface {
 	ReadConsecutiveChunks(prefix string) (io.ReadCloser, error)
 }
 
+type ChunksReaderer interface {
+	ChunksReader(prefix string) (PieceReader, error)
+}
+
 type PrefixDeleter interface {
 	DeletePrefix(prefix string) error
 }
@@ -238,17 +242,14 @@ func (s piecePerResourcePiece) MarkNotComplete() error {
 	return s.completedInstance().Delete()
 }
 
-func (s piecePerResourcePiece) ReadAt(b []byte, off int64) (int, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.mustIsComplete() {
-		if s.hasMovePrefix() {
-			chunks := s.getChunks(s.completedDirPath())
-			return chunks.ReadAt(b, off)
-		}
-		return s.completedInstance().ReadAt(b, off)
+func (s piecePerResourcePiece) ReadAt(b []byte, off int64) (n int, err error) {
+	r, err := s.PieceReader()
+	if err != nil {
+		return
 	}
-	return s.getChunks(s.incompleteDirPath()).ReadAt(b, off)
+	defer r.Close()
+	n, err = r.ReadAt(b, off)
+	return
 }
 
 func (s piecePerResourcePiece) WriteAt(b []byte, off int64) (n int, err error) {
@@ -377,3 +378,40 @@ func (me piecePerResourcePiece) hasMovePrefix() bool {
 	_, ok := me.rp.(MovePrefixer)
 	return ok
 }
+
+func (s piecePerResourcePiece) getChunksReader(prefix string) (PieceReader, error) {
+	if opt, ok := s.rp.(ChunksReaderer); ok {
+		return opt.ChunksReader(prefix)
+	}
+	return chunkPieceReader{s.getChunks(prefix)}, nil
+}
+
+func (s piecePerResourcePiece) PieceReader() (PieceReader, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.mustIsComplete() {
+		if s.hasMovePrefix() {
+			return s.getChunksReader(s.completedDirPath())
+		}
+		return instancePieceReader{s.completedInstance()}, nil
+	}
+	return s.getChunksReader(s.incompleteDirPath())
+}
+
+type instancePieceReader struct {
+	resource.Instance
+}
+
+func (instancePieceReader) Close() error {
+	return nil
+}
+
+type chunkPieceReader struct {
+	chunks
+}
+
+func (chunkPieceReader) Close() error {
+	return nil
+}
+
+// TODO: Make an embedded Closer using reflect?

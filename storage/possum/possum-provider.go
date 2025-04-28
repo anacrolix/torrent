@@ -16,15 +16,98 @@ import (
 )
 
 // Extends possum resource.Provider with an efficient implementation of torrent
-// storage.ConsecutiveChunkReader. TODO: This doesn't expose Capacity. TODO: Add a MarkComplete
-// method that renames incomplete chunks rather than writing them to a single giant key and deleting
-// them.
+// storage.ConsecutiveChunkReader. TODO: This doesn't expose Capacity.
 type Provider struct {
 	possumResource.Provider
 	Logger log.Logger
 }
 
-var _ storage.ConsecutiveChunkReader = Provider{}
+var _ interface {
+	storage.ConsecutiveChunkReader
+	storage.ChunksReaderer
+} = Provider{}
+
+type chunkReader struct {
+	r      possum.Reader
+	values []consecutiveValue
+	keys   []int64
+}
+
+func (c chunkReader) ReadAt(p []byte, off int64) (n int, err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c chunkReader) Close() error {
+	//TODO implement me
+	panic("implement me")
+}
+
+type ChunkReader interface {
+	io.ReaderAt
+	io.Closer
+}
+
+// TODO: Should the parent ReadConsecutiveChunks method take the expected number of bytes to avoid
+// trying to read discontinuous or incomplete sequences of chunks?
+func (p Provider) ChunksReader(prefix string) (ret storage.PieceReader, err error) {
+	p.Logger.Levelf(log.Debug, "ChunkReader(%q)", prefix)
+	//debug.PrintStack()
+	pr, err := p.Handle.NewReader()
+	if err != nil {
+		return
+	}
+	defer func() {
+		if err != nil {
+			pr.End()
+		}
+	}()
+	items, err := pr.ListItems(prefix)
+	if err != nil {
+		return
+	}
+	keys := make([]int64, 0, len(items))
+	for _, item := range items {
+		var i int64
+		offsetStr := item.Key
+		i, err = strconv.ParseInt(offsetStr, 10, 64)
+		if err != nil {
+			err = fmt.Errorf("failed to parse offset %q: %w", offsetStr, err)
+			return
+		}
+		keys = append(keys, i)
+	}
+	sort.Sort(keySorter[possum.Item, int64]{items, keys})
+	offset := int64(0)
+	consValues := make([]consecutiveValue, 0, len(items))
+	for i, item := range items {
+		itemOffset := keys[i]
+		if itemOffset+item.Stat.Size() <= offset {
+			// This item isn't needed
+			continue
+		}
+		var v possum.Value
+		v, err = pr.Add(prefix + item.Key)
+		if err != nil {
+			return
+		}
+		consValues = append(consValues, consecutiveValue{
+			pv:     v,
+			offset: itemOffset,
+			size:   item.Stat.Size(),
+		})
+		offset = itemOffset + item.Stat.Size()
+	}
+	err = pr.Begin()
+	if err != nil {
+		return
+	}
+	ret = chunkReader{
+		r:      pr,
+		values: consValues,
+	}
+	return
+}
 
 // TODO: Should the parent ReadConsecutiveChunks method take the expected number of bytes to avoid
 // trying to read discontinuous or incomplete sequences of chunks?

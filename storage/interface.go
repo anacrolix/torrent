@@ -37,6 +37,8 @@ type TorrentImpl struct {
 	// to determine the storage for torrents sharing the same function pointer, and mutated in
 	// place.
 	Capacity TorrentCapacity
+
+	NewReader func() TorrentReader
 }
 
 // Interacts with torrent piece data. Optional interfaces to implement include:
@@ -72,4 +74,14 @@ type Completion struct {
 // Allows a storage backend to override hashing (i.e. if it can do it more efficiently than the torrent client can)
 type SelfHashing interface {
 	SelfHash() (metainfo.Hash, error)
+}
+
+// Piece supports dedicated reader.
+type PieceReaderer interface {
+	NewReader() PieceReader
+}
+
+type PieceReader interface {
+	io.ReaderAt
+	io.Closer
 }

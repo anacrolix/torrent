@@ -57,6 +57,8 @@ type reader struct {
 	// Adjust the read/seek window to handle Readers locked to File extents and the like.
 	offset, length int64
 
+	storageReader storageReader
+
 	// Function to dynamically calculate readahead. If nil, readahead is static.
 	readaheadFunc ReadaheadFunc
 
@@ -338,7 +340,7 @@ func (r *reader) Close() error {
 	r.t.cl.lock()
 	r.t.deleteReader(r)
 	r.t.cl.unlock()
-	return nil
+	return r.storageReader.Close()
 }
 
 func (r *reader) posChanged() {

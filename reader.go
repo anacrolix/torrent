@@ -15,6 +15,9 @@ import (
 // also drive Client behaviour. Not safe for concurrent use. There are Torrent, File and Piece
 // constructors for this.
 type Reader interface {
+	// Set the context for reads. When done, reads should get cancelled so they don't get stuck
+	// waiting for data.
+	SetContext(context.Context)
 	// Read/Seek and not ReadAt because we want to return data as soon as it's available, and
 	// because we want a single read head.
 	io.ReadSeekCloser
@@ -55,6 +58,10 @@ type reader struct {
 	// Function to dynamically calculate readahead. If nil, readahead is static.
 	readaheadFunc ReadaheadFunc
 
+	// This is not protected by a lock because you should be coordinating setting this. If you want
+	// different contexts, you should have different Readers.
+	ctx context.Context
+
 	// Required when modifying pos and readahead.
 	mu sync.Locker
 
@@ -70,6 +77,10 @@ type reader struct {
 	// after a seek or with a new reader at the starting position.
 	reading    bool
 	responsive bool
+}
+
+func (r *reader) SetContext(ctx context.Context) {
+	r.ctx = ctx
 }
 
 var _ io.ReadSeekCloser = (*reader)(nil)
@@ -151,10 +162,23 @@ func (r *reader) piecesUncached() (ret pieceRange) {
 }
 
 func (r *reader) Read(b []byte) (n int, err error) {
-	return r.ReadContext(context.Background(), b)
+	return r.read(b)
 }
 
+func (r *reader) read(b []byte) (n int, err error) {
+	return r.readContext(r.ctx, b)
+}
+
+// Deprecated: Use SetContext and Read. TODO: I've realised this breaks the ability to pass through
+// optional interfaces like io.WriterTo and io.ReaderFrom. Go sux. Context should be provided
+// somewhere else.
 func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
+	r.ctx = ctx
+	return r.Read(b)
+}
+
+// We still pass ctx here, although it's a reader field now.
+func (r *reader) readContext(ctx context.Context, b []byte) (n int, err error) {
 	if len(b) > 0 {
 		r.reading = true
 		// TODO: Rework reader piece priorities so we don't have to push updates in to the Client

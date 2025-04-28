@@ -5,25 +5,25 @@ import (
 )
 
 type tidwallBtree struct {
-	tree     *btree.BTreeG[pieceRequestOrderItem]
+	tree     *btree.BTreeG[PieceRequestOrderItem]
 	PathHint *btree.PathHint
 }
 
-func (me *tidwallBtree) Scan(f func(pieceRequestOrderItem) bool) {
+func (me *tidwallBtree) Scan(f func(PieceRequestOrderItem) bool) {
 	me.tree.Scan(f)
 }
 
 func NewTidwallBtree() *tidwallBtree {
 	return &tidwallBtree{
 		tree: btree.NewBTreeGOptions(
-			func(a, b pieceRequestOrderItem) bool {
+			func(a, b PieceRequestOrderItem) bool {
 				return a.Less(&b)
 			},
 			btree.Options{NoLocks: true, Degree: 64}),
 	}
 }
 
-func (me *tidwallBtree) Add(item pieceRequestOrderItem) {
+func (me *tidwallBtree) Add(item PieceRequestOrderItem) {
 	if _, ok := me.tree.SetHint(item, me.PathHint); ok {
 		panic("shouldn't already have this")
 	}
@@ -31,7 +31,7 @@ func (me *tidwallBtree) Add(item pieceRequestOrderItem) {
 
 type PieceRequestOrderPathHint = btree.PathHint
 
-func (me *tidwallBtree) Delete(item pieceRequestOrderItem) {
+func (me *tidwallBtree) Delete(item PieceRequestOrderItem) {
 	_, deleted := me.tree.DeleteHint(item, me.PathHint)
 	mustValue(deleted, item)
 }

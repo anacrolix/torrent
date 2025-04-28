@@ -12,9 +12,14 @@ import (
 )
 
 // Accesses Torrent data via a Client. Reads block until the data is available. Seeks and readahead
-// also drive Client behaviour. Not safe for concurrent use.
+// also drive Client behaviour. Not safe for concurrent use. There are Torrent, File and Piece
+// constructors for this.
 type Reader interface {
+	// Read/Seek and not ReadAt because we want to return data as soon as it's available, and
+	// because we want a single read head.
 	io.ReadSeekCloser
+	// Deprecated: This prevents type asserting for optional interfaces because a wrapper is
+	// required to adapt back to io.Reader.
 	missinggo.ReadContexter
 	// Configure the number of bytes ahead of a read that should also be prioritized in preparation
 	// for further reads. Overridden by non-nil readahead func, see SetReadaheadFunc.
@@ -24,7 +29,8 @@ type Reader interface {
 	// locked.
 	SetReadaheadFunc(ReadaheadFunc)
 	// Don't wait for pieces to complete and be verified. Read calls return as soon as they can when
-	// the underlying chunks become available.
+	// the underlying chunks become available. May be deprecated, although BitTorrent v2 will mean
+	// we can support this without piece hashing.
 	SetResponsive()
 }
 
@@ -220,7 +226,7 @@ func (r *reader) waitAvailable(ctx context.Context, pos, wanted int64, wait bool
 }
 
 // Adds the reader's torrent offset to the reader object offset (for example the reader might be
-// constrainted to a particular file within the torrent).
+// constrained to a particular file within the torrent).
 func (r *reader) torrentOffset(readerPos int64) int64 {
 	return r.offset + readerPos
 }

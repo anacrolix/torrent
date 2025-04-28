@@ -149,7 +149,8 @@ type Torrent struct {
 	_readerReadaheadPieces bitmap.Bitmap
 
 	// A cache of pieces we need to get. Calculated from various piece and file priorities and
-	// completion states elsewhere. Includes piece data and piece v2 hashes.
+	// completion states elsewhere. Includes piece data and piece v2 hashes. Used for efficient set
+	// logic with peer pieces.
 	_pendingPieces roaring.Bitmap
 	// A cache of completed piece indices.
 	_completedPieces roaring.Bitmap
@@ -1424,11 +1425,7 @@ func (t *Torrent) readerPosChanged(from, to pieceRange) {
 		t.updatePiecePriorities(h.begin, h.end, "Torrent.readerPosChanged")
 	} else {
 		// Ranges overlap.
-		end := l.end
-		if h.end > end {
-			end = h.end
-		}
-		t.updatePiecePriorities(l.begin, end, "Torrent.readerPosChanged")
+		t.updatePiecePriorities(l.begin, max(l.end, h.end), "Torrent.readerPosChanged")
 	}
 }
 
@@ -3040,6 +3037,7 @@ func (t *Torrent) numActivePeers() int {
 	return len(t.conns) + len(t.webSeeds)
 }
 
+// Specifically, whether we can expect data to vanish while trying to read.
 func (t *Torrent) hasStorageCap() bool {
 	f := t.storage.Capacity
 	if f == nil {

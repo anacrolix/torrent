@@ -323,7 +323,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	}())
 	leecherTorrent.AddClientPeer(seeder)
 	reader := leecherTorrent.NewReader()
-	defer reader.Close()
+	t.Cleanup(func() { reader.Close() })
 	reader.SetReadahead(0)
 	reader.SetResponsive()
 	b := make([]byte, 2)

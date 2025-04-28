@@ -19,6 +19,9 @@ type ClientImpl interface {
 	OpenTorrent(ctx context.Context, info *metainfo.Info, infoHash metainfo.Hash) (TorrentImpl, error)
 }
 
+// Returning a negative cap, can we indicate there's no specific cap? If this is not-nil we use it
+// as a key into piece request order. The capped bool also needs to be true to be truly capped
+// though.
 type TorrentCapacity *func() (cap int64, capped bool)
 
 // Data storage bound to a torrent.

@@ -1,8 +1,9 @@
 package requestStrategy
 
 import (
-	g "github.com/anacrolix/generics"
 	"iter"
+
+	g "github.com/anacrolix/generics"
 
 	"github.com/anacrolix/torrent/metainfo"
 )

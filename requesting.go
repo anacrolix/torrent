@@ -26,6 +26,7 @@ type (
 )
 
 func (t *Torrent) requestStrategyPieceOrderState(i int) requestStrategy.PieceRequestOrderState {
+	t.slogger().Debug("requestStrategyPieceOrderState", "pieceIndex", i)
 	return requestStrategy.PieceRequestOrderState{
 		Priority:     t.piece(i).purePriority(),
 		Partial:      t.piecePartiallyDownloaded(i),
@@ -185,6 +186,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 		requestIndexes: t.requestIndexes,
 	}
 	clear(requestHeap.pieceStates)
+	t.logPieceRequestOrder()
 	// Caller-provided allocation for roaring bitmap iteration.
 	var it typedRoaring.Iterator[RequestIndex]
 	requestStrategy.GetRequestablePieces(
@@ -242,6 +244,7 @@ func (p *Peer) maybeUpdateActualRequestState() {
 			panic(since)
 		}
 	}
+	p.logger.Slogger().Debug("updating requests", "reason", p.needRequestUpdate)
 	pprof.Do(
 		context.Background(),
 		pprof.Labels("update request", string(p.needRequestUpdate)),

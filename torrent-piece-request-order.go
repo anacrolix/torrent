@@ -7,24 +7,27 @@ import (
 	"github.com/anacrolix/torrent/storage"
 )
 
-func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) {
+// It's probably possible to track whether the piece moves around in the btree to be more efficient
+// about triggering request updates.
+func (t *Torrent) updatePieceRequestOrderPiece(pieceIndex int) (changed bool) {
 	if t.storage == nil {
-		return
+		return false
 	}
 	pro, ok := t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()]
 	if !ok {
-		return
+		return false
 	}
 	key := t.pieceRequestOrderKey(pieceIndex)
 	if t.hasStorageCap() {
-		pro.Update(key, t.requestStrategyPieceOrderState(pieceIndex))
-		return
+		return pro.Update(key, t.requestStrategyPieceOrderState(pieceIndex))
 	}
 	pending := !t.ignorePieceForRequests(pieceIndex)
 	if pending {
-		pro.Add(key, t.requestStrategyPieceOrderState(pieceIndex))
+		newState := t.requestStrategyPieceOrderState(pieceIndex)
+		old := pro.Add(key, newState)
+		return old.Ok && old.Value != newState
 	} else {
-		pro.Delete(key)
+		return pro.Delete(key)
 	}
 }
 

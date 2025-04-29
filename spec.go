@@ -39,6 +39,7 @@ type TorrentSpec struct {
 	// TODO: Move into a "new" Torrent opt type.
 	Storage storage.ClientImpl
 
+	// TODO: This should be on AddTorrentOpt too?
 	DisableInitialPieceCheck bool
 
 	// Whether to allow data download or upload

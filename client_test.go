@@ -745,7 +745,7 @@ func testSeederLeecherPair(t *testing.T, seeder, leecher func(*ClientConfig)) {
 	// against more than one torrent. See issue #114
 	makeMagnet(t, server, cfg.DataDir, "test2")
 	for i := 0; i < 100; i++ {
-		makeMagnet(t, server, cfg.DataDir, fmt.Sprintf("test%d", i+2))
+		makeMagnet(t, server, cfg.DataDir, fmt.Sprintf("test%d", i+3))
 	}
 	cfg = TestingConfig(t)
 	cfg.DataDir = filepath.Join(cfg.DataDir, "client")

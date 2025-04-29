@@ -144,7 +144,7 @@ func mmapFile(name string, size int64) (_ FileMapping, err error) {
 		return
 	}
 	var file *os.File
-	file, err = os.OpenFile(name, os.O_CREATE|os.O_RDWR, 0o666)
+	file, err = os.OpenFile(name, os.O_CREATE|os.O_RDWR, filePerm)
 	if err != nil {
 		return
 	}

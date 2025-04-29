@@ -2048,6 +2048,7 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, sh
 			t:               t,
 			lookupTrackerIp: t.cl.config.LookupTrackerIp,
 			stopCh:          make(chan struct{}),
+			logger:          t.logger.WithNames("tracker").Slogger().With("urlKey", u.String()),
 		}
 		go newAnnouncer.Run()
 		return newAnnouncer

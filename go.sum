@@ -91,8 +91,8 @@ github.com/anacrolix/log v0.6.0/go.mod h1:lWvLTqzAnCWPJA08T2HCstZi0L1y2Wyvm3FJgw
 github.com/anacrolix/log v0.13.1/go.mod h1:D4+CvN8SnruK6zIFS/xPoRJmtvtnxs+CSfDQ+BFxZ68=
 github.com/anacrolix/log v0.14.1/go.mod h1:1OmJESOtxQGNMlUO5rcv96Vpp9mfMqXXbe2RdinFLdY=
 github.com/anacrolix/log v0.14.2/go.mod h1:1OmJESOtxQGNMlUO5rcv96Vpp9mfMqXXbe2RdinFLdY=
-github.com/anacrolix/log v0.15.3-0.20240627045001-cd912c641d83 h1:9o/yVzzLzYaBDFx8B27yhkvBLhNnRAuSTK7Y+yZKVtU=
-github.com/anacrolix/log v0.15.3-0.20240627045001-cd912c641d83/go.mod h1:xvHjsYWWP7yO8PZwtuIp/k0DBlu07pSJqH4SEC78Vwc=
+github.com/anacrolix/log v0.16.1-0.20250429062012-9dd7c8a776c6 h1:kTcPGxQKMFbbwK9HO4TcvF3g3hH/GdPZxtF00tk7kmg=
+github.com/anacrolix/log v0.16.1-0.20250429062012-9dd7c8a776c6/go.mod h1:m0poRtlr41mriZlXBQ9SOVZ8yZBkLjOkDhd5Li5pITA=
 github.com/anacrolix/lsan v0.0.0-20211126052245-807000409a62 h1:P04VG6Td13FHMgS5ZBcJX23NPC/fiC4cp9bXwYujdYM=
 github.com/anacrolix/lsan v0.0.0-20211126052245-807000409a62/go.mod h1:66cFKPCO7Sl4vbFnAaSq7e4OXtdMhRSBagJGWgmpJbM=
 github.com/anacrolix/missinggo v0.0.0-20180725070939-60ef2fbf63df/go.mod h1:kwGiTUTZ0+p4vAz3VbAI5a30t2YbvemcmspjKwrAz5s=

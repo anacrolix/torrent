@@ -1,6 +1,7 @@
 package metainfo
 
 import (
+	"fmt"
 	"iter"
 
 	g "github.com/anacrolix/generics"
@@ -9,6 +10,10 @@ import (
 type Piece struct {
 	Info *Info // Can we embed the fields here instead, or is it something to do with saving memory?
 	i    pieceIndex
+}
+
+func (p Piece) String() string {
+	return fmt.Sprintf("metainfo.Piece(Info.Name=%q, i=%v)", p.Info.Name, p.i)
 }
 
 type pieceIndex = int

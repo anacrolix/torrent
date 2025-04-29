@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"iter"
 	"log/slog"
 	"os"
@@ -35,6 +36,7 @@ type NewFileClientOpts struct {
 	TorrentDirMaker TorrentDirFilePathMaker
 	PieceCompletion PieceCompletion
 	UsePartFiles    g.Option[bool]
+	Logger          *slog.Logger
 }
 
 // NewFileOpts creates a new ClientImplCloser that stores files using the OS native filesystem.
@@ -54,10 +56,13 @@ func NewFileOpts(opts NewFileClientOpts) ClientImplCloser {
 	if opts.PieceCompletion == nil {
 		opts.PieceCompletion = pieceCompletionForDir(opts.ClientBaseDir)
 	}
-	return fileClientImpl{opts}
+	if opts.Logger == nil {
+		opts.Logger = log.Default.Slogger()
+	}
+	return &fileClientImpl{opts}
 }
 
-func (me fileClientImpl) Close() error {
+func (me *fileClientImpl) Close() error {
 	return me.opts.PieceCompletion.Close()
 }
 
@@ -73,7 +78,7 @@ func enumIter[T any](i iter.Seq[T]) iter.Seq2[int, T] {
 	}
 }
 
-func (fs fileClientImpl) OpenTorrent(
+func (fs *fileClientImpl) OpenTorrent(
 	ctx context.Context,
 	info *metainfo.Info,
 	infoHash metainfo.Hash,
@@ -111,8 +116,7 @@ func (fs fileClientImpl) OpenTorrent(
 		files,
 		info.FileSegmentsIndex(),
 		infoHash,
-		fs.opts.PieceCompletion,
-		fs.opts.UsePartFiles.UnwrapOr(true),
+		fs,
 	}
 	return TorrentImpl{
 		Piece: t.Piece,
@@ -129,40 +133,32 @@ type file struct {
 	length          int64
 }
 
+func (f file) partFilePath() string {
+	return f.safeOsPath + ".part"
+}
+
 type fileTorrentImpl struct {
 	info           *metainfo.Info
 	files          []file
 	segmentLocater segments.Index
 	infoHash       metainfo.Hash
-	completion     PieceCompletion
-	partFiles      bool
+	// Save memory by pointing to the other data.
+	client *fileClientImpl
 }
 
-func (fts *fileTorrentImpl) promotePartFile(f file) (err error) {
-	//fmt.Printf("promoting %q\n", f.safeOsPath)
-	if fts.partFiles {
-		err = os.Rename(f.safeOsPath+".part", f.safeOsPath)
-		if err != nil {
-			err = fmt.Errorf("renaming part file: %w", err)
-			return
-		}
+func (fts *fileTorrentImpl) partFiles() bool {
+	return fts.client.opts.UsePartFiles.UnwrapOr(true)
+}
+
+func (fts *fileTorrentImpl) pathForWrite(f file) string {
+	if fts.partFiles() {
+		return f.partFilePath()
 	}
-	info, err := os.Stat(f.safeOsPath)
-	if err != nil {
-		err = fmt.Errorf("statting file: %w", err)
-		return
-	}
-	// Clear writability for the file.
-	err = os.Chmod(f.safeOsPath, info.Mode().Perm()&^0o222)
-	if err != nil {
-		err = fmt.Errorf("setting file to read-only: %w", err)
-		return
-	}
-	return
+	return f.safeOsPath
 }
 
 func (fts *fileTorrentImpl) getCompletion(piece int) Completion {
-	cmpl, err := fts.completion.Get(metainfo.PieceKey{
+	cmpl, err := fts.client.opts.PieceCompletion.Get(metainfo.PieceKey{
 		fts.infoHash, piece,
 	})
 	cmpl.Err = errors.Join(cmpl.Err, err)
@@ -186,11 +182,9 @@ func (fs *fileTorrentImpl) Close() error {
 }
 
 func fsync(filePath string) (err error) {
-	_ = os.MkdirAll(filepath.Dir(filePath), dirPerm)
-	var f *os.File
-	f, err = os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, filePerm)
-	if err != nil {
-		return err
+	f, err := os.OpenFile(filePath, os.O_WRONLY, filePerm)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return
 	}
 	defer f.Close()
 	if err = f.Sync(); err != nil {
@@ -201,7 +195,7 @@ func fsync(filePath string) (err error) {
 
 func (fts *fileTorrentImpl) Flush() error {
 	for _, f := range fts.files {
-		if err := fsync(f.safeOsPath); err != nil {
+		if err := fsync(fts.pathForWrite(f)); err != nil {
 			return err
 		}
 	}
@@ -229,8 +223,12 @@ type fileTorrentImplIO struct {
 // Returns EOF on short or missing file.
 func (fst fileTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, err error) {
 	f, err := os.Open(file.safeOsPath)
-	if os.IsNotExist(err) {
-		// File missing is treated the same as a short file.
+	if fst.fts.partFiles() && errors.Is(err, fs.ErrNotExist) {
+		f, err = os.Open(file.partFilePath())
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		// File missing is treated the same as a short file. Should we propagate this through the
+		// interface now that fs.ErrNotExist is a thing?
 		err = io.EOF
 		return
 	}
@@ -273,7 +271,7 @@ func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 	// log.Printf("write at %v: %v bytes", off, len(p))
 	fst.fts.segmentLocater.Locate(segments.Extent{off, int64(len(p))}, func(i int, e segments.Extent) bool {
-		name := fst.fts.files[i].safeOsPath
+		name := fst.fts.pathForWrite(fst.fts.files[i])
 		os.MkdirAll(filepath.Dir(name), dirPerm)
 		var f *os.File
 		f, err = os.OpenFile(name, os.O_WRONLY|os.O_CREATE, filePerm)

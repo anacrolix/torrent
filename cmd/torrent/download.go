@@ -478,7 +478,7 @@ func downloadErr(ctx context.Context, flags downloadFlags) error {
 		}
 	}
 	fmt.Printf("chunks received: %v\n", &torrent.ChunksReceived)
-	spew.Dump(client.ConnStats())
+	spew.Dump(client.Stats())
 	clStats := client.ConnStats()
 	sentOverhead := clStats.BytesWritten.Int64() - clStats.BytesWrittenData.Int64()
 	log.Printf(

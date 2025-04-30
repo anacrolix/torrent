@@ -609,7 +609,7 @@ func (c *PeerConn) onReadRequest(r Request, startFetch bool) error {
 	}
 	if opt := c.maximumPeerRequestChunkLength(); opt.Ok && int(r.Length) > opt.Value {
 		err := fmt.Errorf("peer requested chunk too long (%v)", r.Length)
-		c.protocolLogger.Levelf(log.Warning, err.Error())
+		c.protocolLogger.Levelf(log.Warning, "%s", err.Error())
 		if c.fastEnabled() {
 			c.reject(r)
 			return nil

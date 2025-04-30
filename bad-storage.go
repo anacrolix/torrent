@@ -20,8 +20,12 @@ func (bs badStorage) OpenTorrent(
 	*metainfo.Info,
 	metainfo.Hash,
 ) (storage.TorrentImpl, error) {
+	capFunc := func() (cap int64, capped bool) {
+		return -1, true
+	}
 	return storage.TorrentImpl{
-		Piece: bs.Piece,
+		Piece:    bs.Piece,
+		Capacity: &capFunc,
 	}, nil
 }
 

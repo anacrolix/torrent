@@ -31,11 +31,15 @@ func newFileCacheClientStorageFactory(ps fileCacheClientStorageFactoryParams) St
 		if err != nil {
 			panic(err)
 		}
-		var sharedCapacity *int64
+		var capFuncPtr storage.TorrentCapacity
 		if ps.SetCapacity {
-			sharedCapacity = &ps.Capacity
 			fc.SetCapacity(ps.Capacity)
+			f := func() (cap int64, capped bool) {
+				return ps.Capacity, ps.SetCapacity
+			}
+			capFuncPtr = &f
 		}
+
 		return struct {
 			storage.ClientImpl
 			io.Closer
@@ -43,7 +47,7 @@ func newFileCacheClientStorageFactory(ps fileCacheClientStorageFactoryParams) St
 			storage.NewResourcePiecesOpts(
 				fc.AsResourceProvider(),
 				storage.ResourcePiecesOpts{
-					Capacity: sharedCapacity,
+					Capacity: capFuncPtr,
 				}),
 			io.NopCloser(nil),
 		}

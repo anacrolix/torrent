@@ -108,7 +108,7 @@ func BenchmarkRequestStrategy(b *testing.B) {
 	peer.onPeerHasAllPiecesNoTriggers()
 	for i := 0; i < tor.numPieces(); i++ {
 		tor.pieces[i].priority.Raise(PiecePriorityNormal)
-		tor.updatePiecePriorityNoTriggers(i)
+		tor.updatePiecePriorityNoRequests(i)
 	}
 	peer.peerChoking = false
 	//b.StopTimer()

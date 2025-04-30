@@ -194,6 +194,7 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 	assert.True(t, new)
 	r := tt.NewReader()
 	defer r.Close()
+	r.SetContext(t.Context())
 	qt.Check(t, qt.IsNil(iotest.TestReader(r, []byte(testutil.GreetingFileContents))))
 }
 
@@ -323,7 +324,7 @@ func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
 	}())
 	leecherTorrent.AddClientPeer(seeder)
 	reader := leecherTorrent.NewReader()
-	defer reader.Close()
+	t.Cleanup(func() { reader.Close() })
 	reader.SetReadahead(0)
 	reader.SetResponsive()
 	b := make([]byte, 2)

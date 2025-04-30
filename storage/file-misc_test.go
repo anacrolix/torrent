@@ -5,9 +5,7 @@ import (
 
 	"github.com/go-quicktest/qt"
 
-	"github.com/anacrolix/torrent/common"
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/segments"
 )
 
 type requiredLength struct {
@@ -18,7 +16,7 @@ type requiredLength struct {
 // The required file indices and file lengths for the given extent to be "complete". This is the
 // outdated interface used by some tests.
 func extentCompleteRequiredLengths(info *metainfo.Info, off, n int64) (ret []requiredLength) {
-	index := segments.NewIndexFromSegments(common.TorrentOffsetFileSegments(info))
+	index := info.FileSegmentsIndex()
 	minFileLengthsForTorrentExtent(index, off, n, func(fileIndex int, length int64) bool {
 		ret = append(ret, requiredLength{fileIndex, length})
 		return true

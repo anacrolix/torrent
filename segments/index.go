@@ -40,7 +40,8 @@ func (me Index) iterSegments() func() (Extent, bool) {
 }
 
 // Returns true if the callback returns false early, or extents are found in the index for all parts
-// of the given extent.
+// of the given extent. TODO: This might not handle discontiguous extents. To be tested. Needed for
+// BitTorrent v2 possibly.
 func (me Index) Locate(e Extent, output Callback) bool {
 	first := sort.Search(len(me.segments), func(i int) bool {
 		_e := me.segments[i]

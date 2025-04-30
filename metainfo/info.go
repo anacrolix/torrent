@@ -4,11 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 
-	"github.com/anacrolix/missinggo/v2/slices"
+	"github.com/anacrolix/torrent/segments"
 )
 
 // The info dictionary. See BEP 3 and BEP 52.
@@ -77,7 +80,8 @@ func (info *Info) BuildFromFilePath(root string) (err error) {
 	if err != nil {
 		return
 	}
-	slices.Sort(info.Files, func(l, r FileInfo) bool {
+	sort.Slice(info.Files, func(i, j int) bool {
+		l, r := info.Files[i], info.Files[j]
 		return strings.Join(l.BestPath(), "/") < strings.Join(r.BestPath(), "/")
 	})
 	if info.PieceLength == 0 {
@@ -154,33 +158,41 @@ func (info *Info) IsDir() bool {
 // The files field, converted up from the old single-file in the parent info dict if necessary. This
 // is a helper to avoid having to conditionally handle single and multi-file torrent infos.
 func (info *Info) UpvertedFiles() (files []FileInfo) {
+	return slices.Collect(info.UpvertedFilesIter())
+}
+
+// The files field, converted up from the old single-file in the parent info dict if necessary. This
+// is a helper to avoid having to conditionally handle single and multi-file torrent infos.
+func (info *Info) UpvertedFilesIter() iter.Seq[FileInfo] {
 	if info.HasV2() {
-		info.FileTree.upvertedFiles(info.PieceLength, func(fi FileInfo) {
-			files = append(files, fi)
-		})
-		return
+		return info.FileTree.upvertedFiles(info.PieceLength)
 	}
 	return info.UpvertedV1Files()
 }
 
 // UpvertedFiles but specific to the files listed in the v1 info fields. This will include padding
 // files for example that wouldn't appear in v2 file trees.
-func (info *Info) UpvertedV1Files() (files []FileInfo) {
-	if len(info.Files) == 0 {
-		return []FileInfo{{
-			Length: info.Length,
-			// Callers should determine that Info.Name is the basename, and
-			// thus a regular file.
-			Path: nil,
-		}}
+func (info *Info) UpvertedV1Files() iter.Seq[FileInfo] {
+	return func(yield func(FileInfo) bool) {
+		if len(info.Files) == 0 {
+			yield(FileInfo{
+				Length: info.Length,
+				// Callers should determine that Info.Name is the basename, and
+				// thus a regular file.
+				Path: nil,
+			})
+		}
+		var offset int64
+		for _, fi := range info.Files {
+			fi.TorrentOffset = offset
+			offset += fi.Length
+			if !yield(fi) {
+				return
+			}
+		}
+		return
+
 	}
-	var offset int64
-	for _, fi := range info.Files {
-		fi.TorrentOffset = offset
-		offset += fi.Length
-		files = append(files, fi)
-	}
-	return
 }
 
 func (info *Info) Piece(index int) Piece {
@@ -206,4 +218,12 @@ func (info *Info) HasV1() bool {
 
 func (info *Info) FilesArePieceAligned() bool {
 	return info.HasV2()
+}
+
+func (info *Info) FileSegmentsIndex() segments.Index {
+	return segments.NewIndexFromSegments(slices.Collect(func(yield func(segments.Extent) bool) {
+		for fi := range info.UpvertedFilesIter() {
+			yield(segments.Extent{fi.TorrentOffset, fi.Length})
+		}
+	}))
 }

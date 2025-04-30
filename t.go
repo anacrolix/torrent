@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
@@ -43,6 +44,7 @@ func (t *Torrent) newReader(offset, length int64) Reader {
 		t:      t,
 		offset: offset,
 		length: length,
+		ctx:    context.Background(),
 	}
 	r.readaheadFunc = defaultReadaheadFunc
 	t.addReader(&r)

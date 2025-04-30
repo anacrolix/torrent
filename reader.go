@@ -5,16 +5,26 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"sync"
 
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/missinggo/v2/panicif"
 )
 
 // Accesses Torrent data via a Client. Reads block until the data is available. Seeks and readahead
-// also drive Client behaviour. Not safe for concurrent use.
+// also drive Client behaviour. Not safe for concurrent use. There are Torrent, File and Piece
+// constructors for this.
 type Reader interface {
+	// Set the context for reads. When done, reads should get cancelled so they don't get stuck
+	// waiting for data.
+	SetContext(context.Context)
+	// Read/Seek and not ReadAt because we want to return data as soon as it's available, and
+	// because we want a single read head.
 	io.ReadSeekCloser
+	// Deprecated: This prevents type asserting for optional interfaces because a wrapper is
+	// required to adapt back to io.Reader.
 	missinggo.ReadContexter
 	// Configure the number of bytes ahead of a read that should also be prioritized in preparation
 	// for further reads. Overridden by non-nil readahead func, see SetReadaheadFunc.
@@ -24,7 +34,8 @@ type Reader interface {
 	// locked.
 	SetReadaheadFunc(ReadaheadFunc)
 	// Don't wait for pieces to complete and be verified. Read calls return as soon as they can when
-	// the underlying chunks become available.
+	// the underlying chunks become available. May be deprecated, although BitTorrent v2 will mean
+	// we can support this without piece hashing.
 	SetResponsive()
 }
 
@@ -49,6 +60,10 @@ type reader struct {
 	// Function to dynamically calculate readahead. If nil, readahead is static.
 	readaheadFunc ReadaheadFunc
 
+	// This is not protected by a lock because you should be coordinating setting this. If you want
+	// different contexts, you should have different Readers.
+	ctx context.Context
+
 	// Required when modifying pos and readahead.
 	mu sync.Locker
 
@@ -64,6 +79,10 @@ type reader struct {
 	// after a seek or with a new reader at the starting position.
 	reading    bool
 	responsive bool
+}
+
+func (r *reader) SetContext(ctx context.Context) {
+	r.ctx = ctx
 }
 
 var _ io.ReadSeekCloser = (*reader)(nil)
@@ -145,10 +164,23 @@ func (r *reader) piecesUncached() (ret pieceRange) {
 }
 
 func (r *reader) Read(b []byte) (n int, err error) {
-	return r.ReadContext(context.Background(), b)
+	return r.read(b)
 }
 
+func (r *reader) read(b []byte) (n int, err error) {
+	return r.readContext(r.ctx, b)
+}
+
+// Deprecated: Use SetContext and Read. TODO: I've realised this breaks the ability to pass through
+// optional interfaces like io.WriterTo and io.ReaderFrom. Go sux. Context should be provided
+// somewhere else.
 func (r *reader) ReadContext(ctx context.Context, b []byte) (n int, err error) {
+	r.ctx = ctx
+	return r.Read(b)
+}
+
+// We still pass ctx here, although it's a reader field now.
+func (r *reader) readContext(ctx context.Context, b []byte) (n int, err error) {
 	if len(b) > 0 {
 		r.reading = true
 		// TODO: Rework reader piece priorities so we don't have to push updates in to the Client
@@ -220,7 +252,7 @@ func (r *reader) waitAvailable(ctx context.Context, pos, wanted int64, wait bool
 }
 
 // Adds the reader's torrent offset to the reader object offset (for example the reader might be
-// constrainted to a particular file within the torrent).
+// constrained to a particular file within the torrent).
 func (r *reader) torrentOffset(readerPos int64) int64 {
 	return r.offset + readerPos
 }
@@ -231,51 +263,73 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 		err = io.EOF
 		return
 	}
-	for {
-		var avail int64
-		avail, err = r.waitAvailable(ctx, pos, int64(len(b)), n == 0)
-		if avail == 0 {
-			return
-		}
-		firstPieceIndex := pieceIndex(r.torrentOffset(pos) / r.t.info.PieceLength)
-		firstPieceOffset := r.torrentOffset(pos) % r.t.info.PieceLength
-		b1 := missinggo.LimitLen(b, avail)
-		n, err = r.t.readAt(b1, r.torrentOffset(pos))
-		if n != 0 {
-			err = nil
-			return
-		}
-		if r.t.closed.IsSet() {
-			err = fmt.Errorf("reading from closed torrent: %w", err)
-			return
-		}
-		r.t.cl.lock()
-		// I think there's a panic here caused by the Client being closed before obtaining this
-		// lock. TestDropTorrentWithMmapStorageWhileHashing seems to tickle occasionally in CI.
-		func() {
-			// Just add exceptions already.
-			defer r.t.cl.unlock()
-			if r.t.closed.IsSet() {
-				// Can't update because Torrent's piece order is removed from Client.
-				return
-			}
-			// TODO: Just reset pieces in the readahead window. This might help
-			// prevent thrashing with small caches and file and piece priorities.
-			r.log(log.Fstr("error reading piece %d offset %d, %d bytes: %v",
-				firstPieceIndex, firstPieceOffset, len(b1), err))
-			if !r.t.updatePieceCompletion(firstPieceIndex) {
-				r.log(log.Fstr("piece %d completion unchanged", firstPieceIndex))
-			}
-			// Update the rest of the piece completions in the readahead window, without alerting to
-			// changes (since only the first piece, the one above, could have generated the read error
-			// we're currently handling).
-			if r.pieces.begin != firstPieceIndex {
-				panic(fmt.Sprint(r.pieces.begin, firstPieceIndex))
-			}
-			for index := r.pieces.begin + 1; index < r.pieces.end; index++ {
-				r.t.updatePieceCompletion(index)
-			}
-		}()
+	var avail int64
+	avail, err = r.waitAvailable(ctx, pos, int64(len(b)), n == 0)
+	if avail == 0 || err != nil {
+		return
+	}
+	firstPieceIndex := pieceIndex(r.torrentOffset(pos) / r.t.info.PieceLength)
+	firstPieceOffset := r.torrentOffset(pos) % r.t.info.PieceLength
+	b1 := b[:min(int64(len(b)), avail)]
+	// I think we can get EOF here due to the ReadAt contract. Previously we were forgetting to
+	// return an error so it wasn't noticed. We now try again if there's a storage cap otherwise
+	// convert it to io.UnexpectedEOF.
+	n, err = r.t.readAt(b1, r.torrentOffset(pos))
+	if n != 0 {
+		err = nil
+		return
+	}
+	panicif.Nil(err)
+	if r.t.closed.IsSet() {
+		err = fmt.Errorf("reading from closed torrent: %w", err)
+		return
+	}
+	attrs := [...]any{
+		"piece", firstPieceIndex,
+		"offset", firstPieceOffset,
+		"bytes", len(b1),
+		"err", err,
+	}
+	if r.t.hasStorageCap() {
+		r.slogger().Debug("error reading from capped storage", attrs[:]...)
+	} else {
+		r.slogger().Error("error reading", attrs[:]...)
+	}
+	r.afterReadError(firstPieceIndex)
+	if r.t.hasStorageCap() {
+		// Ensure params weren't modified (Go sux). Recurse to detect infinite loops.
+		return r.readOnceAt(ctx, b, pos)
+	}
+	// There should have been something available, avail != 0 here.
+	if err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
+	return
+}
+
+func (r *reader) afterReadError(firstPieceIndex int) {
+	r.t.cl.lock()
+	// I think there's a panic here caused by the Client being closed before obtaining this
+	// lock. TestDropTorrentWithMmapStorageWhileHashing seems to tickle occasionally in CI.
+	// Just add exceptions already.
+	defer r.t.cl.unlock()
+	if r.t.closed.IsSet() {
+		// Can't update because Torrent's piece order is removed from Client.
+		return
+	}
+	// TODO: Just reset pieces in the readahead window. This might help
+	// prevent thrashing with small caches and file and piece priorities.
+	if !r.t.updatePieceCompletion(firstPieceIndex) {
+		r.logger().Levelf(log.Debug, "piece %d completion unchanged", firstPieceIndex)
+	}
+	// Update the rest of the piece completions in the readahead window, without alerting to
+	// changes (since only the first piece, the one above, could have generated the read error
+	// we're currently handling).
+	if r.pieces.begin != firstPieceIndex {
+		panic(fmt.Sprint(r.pieces.begin, firstPieceIndex))
+	}
+	for index := r.pieces.begin + 1; index < r.pieces.end; index++ {
+		r.t.updatePieceCompletion(index)
 	}
 }
 
@@ -322,11 +376,15 @@ func (r *reader) Seek(off int64, whence int) (newPos int64, err error) {
 	return
 }
 
-func (r *reader) log(m log.Msg) {
-	r.t.logger.LogLevel(log.Debug, m.Skip(1))
+func (r *reader) logger() log.Logger {
+	return r.t.logger
 }
 
 // Implementation inspired by https://news.ycombinator.com/item?id=27019613.
 func defaultReadaheadFunc(r ReadaheadContext) int64 {
 	return r.CurrentPos - r.ContiguousReadStartPos
+}
+
+func (r *reader) slogger() *slog.Logger {
+	return r.t.slogger()
 }

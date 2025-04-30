@@ -19,22 +19,22 @@ type (
 	ChunkSpec = types.ChunkSpec
 )
 
-func pieceOrderLess(i, j *pieceRequestOrderItem) multiless.Computation {
+func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
 	return multiless.New().Int(
-		int(j.state.Priority), int(i.state.Priority),
+		int(j.State.Priority), int(i.State.Priority),
 		// TODO: Should we match on complete here to prevent churn when availability changes?
 	).Bool(
-		j.state.Partial, i.state.Partial,
+		j.State.Partial, i.State.Partial,
 	).Int(
 		// If this is done with relative availability, do we lose some determinism? If completeness
 		// is used, would that push this far enough down?
-		i.state.Availability, j.state.Availability,
+		i.State.Availability, j.State.Availability,
 	).Int(
-		i.key.Index, j.key.Index,
+		i.Key.Index, j.Key.Index,
 	).Lazy(func() multiless.Computation {
 		return multiless.New().Cmp(bytes.Compare(
-			i.key.InfoHash[:],
-			j.key.InfoHash[:],
+			i.Key.InfoHash[:],
+			j.Key.InfoHash[:],
 		))
 	})
 }
@@ -55,10 +55,10 @@ func GetRequestablePieces(
 		allTorrentsUnverifiedBytes int64
 		maxUnverifiedBytes         = input.MaxUnverifiedBytes()
 	)
-	pro.tree.Scan(func(item pieceRequestOrderItem) bool {
-		ih := item.key.InfoHash
+	pro.tree.Scan(func(item PieceRequestOrderItem) bool {
+		ih := item.Key.InfoHash
 		var t = input.Torrent(ih)
-		var piece = t.Piece(item.key.Index)
+		var piece = t.Piece(item.Key.Index)
 		pieceLength := t.PieceLength()
 		// Storage limits will always apply against requestable pieces, since we need to keep the
 		// highest priority pieces, even if they're complete or in an undesirable state.
@@ -69,7 +69,7 @@ func GetRequestablePieces(
 			*storageLeft -= pieceLength
 		}
 		if piece.Request() {
-			if !requestPiece(ih, item.key.Index, item.state) {
+			if !requestPiece(ih, item.Key.Index, item.State) {
 				// No blocks are being considered from this piece, so it won't result in unverified
 				// bytes.
 				return true

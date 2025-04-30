@@ -85,6 +85,8 @@ func (p Piece) WriteAt(b []byte, off int64) (n int, err error) {
 	return p.PieceImpl.WriteAt(b, off)
 }
 
+// If you're calling this you're probably doing something very inefficient. Consider WriteTo which
+// handles data spread across multiple objects in storage.
 func (p Piece) ReadAt(b []byte, off int64) (n int, err error) {
 	if off < 0 {
 		err = os.ErrInvalid

@@ -70,11 +70,7 @@ func (ts *mmapTorrentStorage) Piece(p metainfo.Piece) PieceImpl {
 }
 
 func (ts *mmapTorrentStorage) Close() error {
-	errs := ts.span.Close()
-	if len(errs) > 0 {
-		return errs[0]
-	}
-	return nil
+	return ts.span.Close()
 }
 
 func (ts *mmapTorrentStorage) Flush() error {
@@ -106,20 +102,20 @@ func (sp mmapStoragePiece) Completion() Completion {
 }
 
 func (sp mmapStoragePiece) MarkComplete() error {
-	sp.pc.Set(sp.pieceKey(), true)
-	return nil
+	return sp.pc.Set(sp.pieceKey(), true)
 }
 
 func (sp mmapStoragePiece) MarkNotComplete() error {
-	sp.pc.Set(sp.pieceKey(), false)
-	return nil
+	return sp.pc.Set(sp.pieceKey(), false)
 }
 
 func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, err error) {
-	mms = &mmap_span.MMapSpan{}
+	var mMaps []FileMapping
 	defer func() {
 		if err != nil {
-			mms.Close()
+			for _, mm := range mMaps {
+				err = errors.Join(err, mm.Unmap())
+			}
 		}
 	}()
 	for _, miFile := range md.UpvertedFiles() {
@@ -132,13 +128,12 @@ func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, e
 		var mm FileMapping
 		mm, err = mmapFile(fileName, miFile.Length)
 		if err != nil {
-			err = fmt.Errorf("file %q: %s", miFile.DisplayPath(md), err)
+			err = fmt.Errorf("file %q: %w", miFile.DisplayPath(md), err)
 			return
 		}
-		mms.Append(mm)
+		mMaps = append(mMaps, mm)
 	}
-	mms.InitIndex()
-	return
+	return mmap_span.New(mMaps, md.FileSegmentsIndex()), nil
 }
 
 func mmapFile(name string, size int64) (_ FileMapping, err error) {

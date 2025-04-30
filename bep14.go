@@ -482,7 +482,7 @@ func lpdPeer(t *Torrent, p string) {
 	ip := net.ParseIP(host)
 	peer := PeerInfo{
 		Addr:   &net.UDPAddr{IP: ip, Port: pi},
-		Source: peerSourceLPD,
+		Source: PeerSourceLPD,
 	}
 	t.AddPeers([]PeerInfo{peer})
 }

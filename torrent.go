@@ -2255,7 +2255,6 @@ func (t *Torrent) numTotalPeers() int {
 	t.peers.Each(func(peer PeerInfo) {
 		peers[peer.Addr.String()] = struct{}{}
 	})
-	t.logger.Printf("%v peers", len(peers))
 	return len(peers)
 }
 

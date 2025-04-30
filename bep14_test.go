@@ -39,11 +39,12 @@ cookie: name=value
 
 func TestDiscovery(t *testing.T) {
 	config := TestingConfig(t)
-	config.LocalServiceDiscovery = LocalServiceDiscoveryConfig{Enabled: true, Ip6: false}
+	config.DisableLocalServiceDiscovery = false
+	config.LocalServiceDiscoveryConfig = LocalServiceDiscoveryConfig{Ip6: false}
 
 	client1, err := NewClient(config)
 	require.NoError(t, err)
-	defer t.Cleanup(func() {client1.Close()})
+	defer t.Cleanup(func() { client1.Close() })
 	testutil.ExportStatusWriter(client1, "1", t)
 
 	client2, err := NewClient(config)

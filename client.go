@@ -361,7 +361,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		},
 	}
 
-	if cfg.LocalServiceDiscovery.Enabled {
+	if !cfg.DisableLocalServiceDiscovery {
 		cl.lpd = &LPDServer{}
 		cl.lpd.lpdStart(cl)
 		cl.onClose = append(cl.onClose, cl.lpd.lpdStop)

@@ -38,7 +38,7 @@ const (
 	// TODO: Trigger this when torrents are added/removed instead, with a minimum delay (coalesce
 	// frequent changes).
 	bep14ShortTimeout = 2 * time.Second
-	bep14Max         = 0 // maximum hashes per request, 0 - only limited by udp packet size
+	bep14Max          = 0 // maximum hashes per request, 0 - only limited by udp packet size
 )
 
 type lpdConn struct {
@@ -52,7 +52,7 @@ type lpdConn struct {
 	mcPublisher *net.UDPConn
 	host        string // bep14Host4 or bep14Host6
 	closed      bool
-	logger		log.Logger
+	logger      log.Logger
 }
 
 func setMulticastInterface(m *lpdConn, iface *net.Interface) error {
@@ -374,14 +374,14 @@ type LPDServer struct {
 func (lpd *LPDServer) lpdStart(client *Client) {
 	lpd.peers = make(map[int64]string)
 
-	lpd.conn4 = lpdConnNew("udp4", bep14Host4, lpd, client.config.LocalServiceDiscovery)
+	lpd.conn4 = lpdConnNew("udp4", bep14Host4, lpd, client.config.LocalServiceDiscoveryConfig)
 	if lpd.conn4 != nil {
 		go lpd.conn4.receiver(client)
 		go lpd.conn4.announcer(client)
 	}
 
-	if client.config.LocalServiceDiscovery.Ip6 {
-		lpd.conn6 = lpdConnNew("udp6", bep14Host6, lpd, client.config.LocalServiceDiscovery)
+	if client.config.LocalServiceDiscoveryConfig.Ip6 {
+		lpd.conn6 = lpdConnNew("udp6", bep14Host6, lpd, client.config.LocalServiceDiscoveryConfig)
 		if lpd.conn6 != nil {
 			go lpd.conn6.receiver(client)
 			go lpd.conn6.announcer(client)

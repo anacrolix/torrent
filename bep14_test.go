@@ -39,7 +39,7 @@ cookie: name=value
 
 func TestDiscovery(t *testing.T) {
 	config := TestingConfig(t)
-	config.DisableLocalServiceDiscovery = false
+	config.EnableLocalServiceDiscovery = true
 	config.LocalServiceDiscoveryConfig = LocalServiceDiscoveryConfig{Ip6: false}
 
 	client1, err := NewClient(config)

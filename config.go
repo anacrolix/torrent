@@ -203,8 +203,8 @@ type ClientConfig struct {
 	PieceHashersPerTorrent int // default: 2
 
 	// Discover peers in the local network. See BEP14
-	DisableLocalServiceDiscovery bool
-	LocalServiceDiscoveryConfig  LocalServiceDiscoveryConfig
+	EnableLocalServiceDiscovery bool
+	LocalServiceDiscoveryConfig LocalServiceDiscoveryConfig
 }
 
 func (cfg *ClientConfig) SetListenAddr(addr string) *ClientConfig {
@@ -242,15 +242,15 @@ func NewDefaultClientConfig() *ClientConfig {
 			Preferred:        true,
 			RequirePreferred: false,
 		},
-		CryptoSelector:               mse.DefaultCryptoSelector,
-		CryptoProvides:               mse.AllSupportedCrypto,
-		ListenPort:                   42069,
-		Extensions:                   defaultPeerExtensionBytes(),
-		AcceptPeerConnections:        true,
-		MaxUnverifiedBytes:           64 << 20,
-		DialRateLimiter:              rate.NewLimiter(10, 10),
-		PieceHashersPerTorrent:       2,
-		DisableLocalServiceDiscovery: true,
+		CryptoSelector:              mse.DefaultCryptoSelector,
+		CryptoProvides:              mse.AllSupportedCrypto,
+		ListenPort:                  42069,
+		Extensions:                  defaultPeerExtensionBytes(),
+		AcceptPeerConnections:       true,
+		MaxUnverifiedBytes:          64 << 20,
+		DialRateLimiter:             rate.NewLimiter(10, 10),
+		PieceHashersPerTorrent:      2,
+		EnableLocalServiceDiscovery: false,
 	}
 	cc.DhtStartingNodes = func(network string) dht.StartingNodesGetter {
 		return func() ([]dht.Addr, error) { return dht.GlobalBootstrapAddrs(network) }

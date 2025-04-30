@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: ./.github/actions/go-common
-    - run: go test -race -timeout 1m $(go list ./... | grep -v /fs | grep -v /possum)
+    - run: go test -race $(go list ./... | grep -v /fs | grep -v /possum)
       continue-on-error: true
     - run: go test -race -timeout 1m ./fs/...
       if: ${{ ! contains(matrix.os, 'windows') }}

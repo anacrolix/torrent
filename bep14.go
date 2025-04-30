@@ -63,7 +63,7 @@ func setMulticastInterface(m *lpdConn, iface *net.Interface) error {
 			return err
 		}
 	}
-	if m.network == "upd6" {
+	if m.network == "udp6" {
 		p := ipv6.NewPacketConn(m.mcPublisher)
 		if err := p.SetMulticastInterface(iface); err != nil {
 			m.logger.Printf("Set multicast interface error: %v\n", err)

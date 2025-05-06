@@ -64,9 +64,9 @@ func (me *filePieceImpl) Completion() Completion {
 		for i, extent := range me.t.segmentLocater.LocateIter(me.extent()) {
 			noFiles = false
 			file := me.t.files[i]
-			s, err := os.Stat(file.safeOsPath)
+			s, err := os.Stat(file.partFilePath())
 			if errors.Is(err, fs.ErrNotExist) {
-				s, err = os.Stat(file.partFilePath())
+				s, err = os.Stat(file.safeOsPath)
 			}
 			if err != nil {
 				me.logger().Warn(
@@ -185,7 +185,7 @@ func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
 	// Ensure the file is writable
 	err = os.Chmod(f.safeOsPath, info.Mode().Perm()|(filePerm&0o222))
 	if err != nil {
-		err = fmt.Errorf("setting file to read-only: %w", err)
+		err = fmt.Errorf("setting file writable: %w", err)
 		return
 	}
 	return

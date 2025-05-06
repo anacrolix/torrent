@@ -222,9 +222,12 @@ type fileTorrentImplIO struct {
 
 // Returns EOF on short or missing file.
 func (fst fileTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, err error) {
-	f, err := os.Open(file.safeOsPath)
-	if fst.fts.partFiles() && errors.Is(err, fs.ErrNotExist) {
+	var f *os.File
+	if fst.fts.partFiles() {
 		f, err = os.Open(file.partFilePath())
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		f, err = os.Open(file.safeOsPath)
 	}
 	if errors.Is(err, fs.ErrNotExist) {
 		// File missing is treated the same as a short file. Should we propagate this through the
@@ -268,13 +271,32 @@ func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 	return
 }
 
+func (fst fileTorrentImplIO) openForWrite(file file) (f *os.File, err error) {
+	p := fst.fts.pathForWrite(file)
+	f, err = os.OpenFile(p, os.O_WRONLY|os.O_CREATE, filePerm)
+	if err == nil {
+		return
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		err = os.MkdirAll(filepath.Dir(p), dirPerm)
+		if err != nil {
+			return
+		}
+	} else if errors.Is(err, fs.ErrPermission) {
+		err = os.Chmod(p, filePerm)
+		if err != nil {
+			return
+		}
+	}
+	f, err = os.OpenFile(p, os.O_WRONLY|os.O_CREATE, filePerm)
+	return
+}
+
 func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 	// log.Printf("write at %v: %v bytes", off, len(p))
 	fst.fts.segmentLocater.Locate(segments.Extent{off, int64(len(p))}, func(i int, e segments.Extent) bool {
-		name := fst.fts.pathForWrite(fst.fts.files[i])
-		os.MkdirAll(filepath.Dir(name), dirPerm)
 		var f *os.File
-		f, err = os.OpenFile(name, os.O_WRONLY|os.O_CREATE, filePerm)
+		f, err = fst.openForWrite(fst.fts.files[i])
 		if err != nil {
 			return false
 		}

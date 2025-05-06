@@ -3007,10 +3007,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	// conns. ~4x maxRequests would be about right.
 	ws.peer.PeerMaxRequests = 4 * ws.client.MaxRequests
 	ws.peer.initUpdateRequestsTimer()
-	ws.requesterCond.L = t.cl.locker()
-	for i := 0; i < ws.client.MaxRequests; i += 1 {
-		go ws.requester(i)
-	}
+	ws.locker = t.cl.locker()
 	for _, f := range t.callbacks().NewPeer {
 		f(&ws.peer)
 	}

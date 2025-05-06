@@ -19,6 +19,8 @@ type legacyPeerImpl interface {
 	// _cancel initiates cancellation of a request and returns acked if it expects the cancel to be
 	// handled by a follow-up event.
 	_cancel(RequestIndex) (acked bool)
+	// The final piece to actually commit to a request. Typically, this sends or begins handling the
+	// request.
 	_request(Request) bool
 	connectionFlags() string
 	onClose()

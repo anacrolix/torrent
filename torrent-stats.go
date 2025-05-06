@@ -31,7 +31,6 @@ func (me *TorrentGauges) Add(agg TorrentGauges) {
 	for i := 0; i < reflect.TypeFor[TorrentGauges]().NumField(); i++ {
 		*dst.Field(i).Addr().Interface().(*int) += src.Field(i).Interface().(int)
 	}
-	return
 }
 
 type TorrentStatCounters struct {

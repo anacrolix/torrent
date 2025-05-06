@@ -827,7 +827,6 @@ func (c *Peer) deleteAllRequests(reason updateRequestReason) {
 			p.updateRequests(reason)
 		}
 	})
-	return
 }
 
 func (c *Peer) assertNoRequests() {
@@ -842,7 +841,6 @@ func (c *Peer) cancelAllRequests() {
 		return true
 	})
 	c.assertNoRequests()
-	return
 }
 
 func (c *Peer) peerPriority() (peerPriority, error) {

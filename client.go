@@ -10,6 +10,7 @@ import (
 	"expvar"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net"
 	"net/http"
@@ -62,8 +63,9 @@ type Client struct {
 	event  sync.Cond
 	closed chansync.SetOnce
 
-	config *ClientConfig
-	logger log.Logger
+	config  *ClientConfig
+	logger  log.Logger
+	slogger *slog.Logger
 
 	peerID         PeerID
 	defaultStorage *storage.Client
@@ -203,6 +205,10 @@ func (cl *Client) initLogger() {
 		logger = logger.WithFilterLevel(log.Debug)
 	}
 	cl.logger = logger.WithValues(cl)
+	cl.slogger = cl.config.Slogger
+	if cl.slogger == nil {
+		cl.slogger = slog.Default()
+	}
 }
 
 func (cl *Client) announceKey() int32 {
@@ -1389,6 +1395,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	t.networkingEnabled.Set()
 	ihHex := t.InfoHash().HexString()
 	t.logger = cl.logger.WithDefaultLevel(log.Debug).WithNames(ihHex).WithContextText(ihHex)
+	t._slogger = cl.slogger
 	t.sourcesLogger = t.logger.WithNames("sources")
 	if opts.ChunkSize == 0 {
 		opts.ChunkSize = defaultChunkSize

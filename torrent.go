@@ -63,8 +63,9 @@ type Torrent struct {
 	connStats ConnStats
 	counters  TorrentStatCounters
 
-	cl     *Client
-	logger log.Logger
+	cl       *Client
+	logger   log.Logger
+	_slogger *slog.Logger
 
 	networkingEnabled      chansync.Flag
 	dataDownloadDisallowed chansync.Flag
@@ -2048,7 +2049,7 @@ func (t *Torrent) startScrapingTrackerWithInfohash(u *url.URL, urlStr string, sh
 			t:               t,
 			lookupTrackerIp: t.cl.config.LookupTrackerIp,
 			stopCh:          make(chan struct{}),
-			logger:          t.logger.WithNames("tracker").Slogger().With("urlKey", u.String()),
+			logger:          t.slogger().With("name", "tracker", "urlKey", u.String()),
 		}
 		go newAnnouncer.Run()
 		return newAnnouncer
@@ -3399,5 +3400,5 @@ func (t *Torrent) Complete() chansync.ReadOnlyFlag {
 }
 
 func (t *Torrent) slogger() *slog.Logger {
-	return t.logger.Slogger()
+	return t._slogger
 }

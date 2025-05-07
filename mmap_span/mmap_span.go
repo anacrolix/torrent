@@ -60,6 +60,7 @@ func (ms *MMapSpan) ReadAt(p []byte, off int64) (n int, err error) {
 	defer ms.mu.RUnlock()
 	if ms.closed {
 		err = fs.ErrClosed
+		return
 	}
 	n = ms.locateCopy(func(a, b []byte) (_, _ []byte) { return a, b }, p, off)
 	if n != len(p) {

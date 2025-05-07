@@ -9,10 +9,10 @@ import (
 	"path"
 	"sort"
 	"strconv"
+	"sync"
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/resource"
-	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -142,7 +142,7 @@ func (s piecePerResourcePiece) writeConsecutiveChunks(
 // Returns if the piece is complete. Ok should be true, because we are the definitive source of
 // truth here.
 func (s piecePerResourcePiece) mustIsComplete() bool {
-	completion := s.Completion()
+	completion := s.completionLocked()
 	if !completion.Ok {
 		panic("must know complete definitively")
 	}
@@ -150,11 +150,15 @@ func (s piecePerResourcePiece) mustIsComplete() bool {
 }
 
 func (s piecePerResourcePiece) Completion() (_ Completion) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.completionLocked()
+}
+
+func (s piecePerResourcePiece) completionLocked() (_ Completion) {
 	if !s.pieceHash.Ok {
 		return
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	fi, err := s.completedInstance().Stat()
 	if s.hasMovePrefix() {
 		return Completion{

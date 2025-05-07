@@ -1547,7 +1547,6 @@ func (t *Torrent) logPieceRequestOrder() {
 
 // Returns the range of pieces [begin, end) that contains the extent of bytes.
 func (t *Torrent) byteRegionPieces(off, size int64) (begin, end pieceIndex) {
-	fmt.Println("byteRegionPieces", off, size)
 	if off >= t.length() {
 		return
 	}
@@ -1560,8 +1559,8 @@ func (t *Torrent) byteRegionPieces(off, size int64) (begin, end pieceIndex) {
 	}
 	begin = pieceIndex(off / t.info.PieceLength)
 	end = pieceIndex((off + size + t.info.PieceLength - 1) / t.info.PieceLength)
-	if end > pieceIndex(t.info.NumPieces()) {
-		end = pieceIndex(t.info.NumPieces())
+	if end > t.info.NumPieces() {
+		end = t.info.NumPieces()
 	}
 	return
 }

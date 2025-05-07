@@ -36,22 +36,23 @@ type Torrent struct {
 }
 
 // Deprecated. Use PieceWithHash, as this doesn't work with pure v2 torrents.
-func (t Torrent) Piece(p metainfo.Piece) Piece {
+func (t *Torrent) Piece(p metainfo.Piece) Piece {
 	return t.PieceWithHash(p, g.Some(p.V1Hash().Unwrap().Bytes()))
 }
 
-func (t Torrent) PieceWithHash(p metainfo.Piece, pieceHash g.Option[[]byte]) Piece {
+func (t *Torrent) PieceWithHash(p metainfo.Piece, pieceHash g.Option[[]byte]) Piece {
 	var pieceImpl PieceImpl
 	if t.TorrentImpl.PieceWithHash != nil {
 		pieceImpl = t.TorrentImpl.PieceWithHash(p, pieceHash)
 	} else {
 		pieceImpl = t.TorrentImpl.Piece(p)
 	}
-	return Piece{pieceImpl, p}
+	return Piece{pieceImpl, t, p}
 }
 
 type Piece struct {
 	PieceImpl
+	t   *Torrent
 	mip metainfo.Piece
 }
 
@@ -119,4 +120,25 @@ func (p Piece) ReadAt(b []byte, off int64) (n int, err error) {
 	}
 
 	return
+}
+
+func (p Piece) NewReader() (PieceReader, error) {
+	pr, ok := p.PieceImpl.(PieceReaderer)
+	if ok {
+		return pr.NewReader()
+	}
+	// TODO: Make generic reflect wrapper for nop Closer.
+	return struct {
+		io.ReaderAt
+		io.Closer
+	}{
+		p,
+		nopCloser{},
+	}, nil
+}
+
+type nopCloser struct{}
+
+func (nopCloser) Close() error {
+	return nil
 }

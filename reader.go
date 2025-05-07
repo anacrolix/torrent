@@ -276,7 +276,8 @@ func (r *reader) readOnceAt(ctx context.Context, b []byte, pos int64) (n int, er
 	// I think we can get EOF here due to the ReadAt contract. Previously we were forgetting to
 	// return an error so it wasn't noticed. We now try again if there's a storage cap otherwise
 	// convert it to io.UnexpectedEOF.
-	n, err = r.t.readAt(b1, r.torrentOffset(pos))
+	n, err = r.storageReader.ReadAt(b1, r.torrentOffset(pos))
+	//n, err = r.t.readAt(b1, r.torrentOffset(pos))
 	if n != 0 {
 		err = nil
 		return

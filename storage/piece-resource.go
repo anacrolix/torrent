@@ -60,11 +60,12 @@ func (s piecePerResource) OpenTorrent(
 		s,
 		make([]sync.RWMutex, info.NumPieces()),
 	}
-	return TorrentImpl{
+	ret := TorrentImpl{
 		PieceWithHash: t.Piece,
 		Close:         t.Close,
 		Capacity:      s.opts.Capacity,
-	}, nil
+	}
+	return ret, nil
 }
 
 func (s piecePerResourceTorrentImpl) Piece(p metainfo.Piece, pieceHash g.Option[[]byte]) PieceImpl {
@@ -106,7 +107,10 @@ type piecePerResourcePiece struct {
 	mu *sync.RWMutex
 }
 
-var _ io.WriterTo = piecePerResourcePiece{}
+var _ interface {
+	io.WriterTo
+	PieceReaderer
+} = piecePerResourcePiece{}
 
 func (s piecePerResourcePiece) WriteTo(w io.Writer) (int64, error) {
 	s.mu.RLock()
@@ -243,7 +247,7 @@ func (s piecePerResourcePiece) MarkNotComplete() error {
 }
 
 func (s piecePerResourcePiece) ReadAt(b []byte, off int64) (n int, err error) {
-	r, err := s.PieceReader()
+	r, err := s.NewReader()
 	if err != nil {
 		return
 	}
@@ -358,6 +362,7 @@ func (s piecePerResourcePiece) completedInstance() resource.Instance {
 	return i
 }
 
+// TODO: Add DirPrefix methods that include the "/" because it's easy to forget and always required.
 func (s piecePerResourcePiece) incompleteDirPath() string {
 	return path.Join("incompleted", s.hashHex())
 }
@@ -386,16 +391,16 @@ func (s piecePerResourcePiece) getChunksReader(prefix string) (PieceReader, erro
 	return chunkPieceReader{s.getChunks(prefix)}, nil
 }
 
-func (s piecePerResourcePiece) PieceReader() (PieceReader, error) {
+func (s piecePerResourcePiece) NewReader() (PieceReader, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.mustIsComplete() {
 		if s.hasMovePrefix() {
-			return s.getChunksReader(s.completedDirPath())
+			return s.getChunksReader(s.completedDirPath() + "/")
 		}
 		return instancePieceReader{s.completedInstance()}, nil
 	}
-	return s.getChunksReader(s.incompleteDirPath())
+	return s.getChunksReader(s.incompleteDirPath() + "/")
 }
 
 type instancePieceReader struct {

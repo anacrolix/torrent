@@ -34,13 +34,19 @@ type chunkReader struct {
 }
 
 func (c chunkReader) ReadAt(p []byte, off int64) (n int, err error) {
-	//TODO implement me
-	panic("implement me")
+	vi := sort.Search(len(c.values), func(i int) bool {
+		return off < c.values[i].offset+c.values[i].size
+	})
+	if vi == len(c.values) {
+		err = io.ErrUnexpectedEOF
+		return
+	}
+	v := c.values[vi]
+	return v.pv.ReadAt(p, off-v.offset)
 }
 
 func (c chunkReader) Close() error {
-	//TODO implement me
-	panic("implement me")
+	return c.r.Close()
 }
 
 type ChunkReader interface {
@@ -51,7 +57,7 @@ type ChunkReader interface {
 // TODO: Should the parent ReadConsecutiveChunks method take the expected number of bytes to avoid
 // trying to read discontinuous or incomplete sequences of chunks?
 func (p Provider) ChunksReader(prefix string) (ret storage.PieceReader, err error) {
-	p.Logger.Levelf(log.Debug, "ChunkReader(%q)", prefix)
+	p.Logger.Levelf(log.Critical, "ChunkReader(%q)", prefix)
 	//debug.PrintStack()
 	pr, err := p.Handle.NewReader()
 	if err != nil {

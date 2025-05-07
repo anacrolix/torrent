@@ -90,7 +90,7 @@ type ConsecutiveChunkReader interface {
 }
 
 type ChunksReaderer interface {
-	ChunksReader(prefix string) (PieceReader, error)
+	ChunksReader(dir string) (PieceReader, error)
 }
 
 type PrefixDeleter interface {
@@ -384,11 +384,12 @@ func (me piecePerResourcePiece) hasMovePrefix() bool {
 	return ok
 }
 
-func (s piecePerResourcePiece) getChunksReader(prefix string) (PieceReader, error) {
+// Chunks are in dirs, we add the prefix ourselves.
+func (s piecePerResourcePiece) getChunksReader(dir string) (PieceReader, error) {
 	if opt, ok := s.rp.(ChunksReaderer); ok {
-		return opt.ChunksReader(prefix)
+		return opt.ChunksReader(dir)
 	}
-	return chunkPieceReader{s.getChunks(prefix)}, nil
+	return chunkPieceReader{s.getChunks(dir)}, nil
 }
 
 func (s piecePerResourcePiece) NewReader() (PieceReader, error) {
@@ -396,11 +397,11 @@ func (s piecePerResourcePiece) NewReader() (PieceReader, error) {
 	defer s.mu.RUnlock()
 	if s.mustIsComplete() {
 		if s.hasMovePrefix() {
-			return s.getChunksReader(s.completedDirPath() + "/")
+			return s.getChunksReader(s.completedDirPath())
 		}
 		return instancePieceReader{s.completedInstance()}, nil
 	}
-	return s.getChunksReader(s.incompleteDirPath() + "/")
+	return s.getChunksReader(s.incompleteDirPath())
 }
 
 type instancePieceReader struct {

@@ -56,7 +56,8 @@ type ChunkReader interface {
 
 // TODO: Should the parent ReadConsecutiveChunks method take the expected number of bytes to avoid
 // trying to read discontinuous or incomplete sequences of chunks?
-func (p Provider) ChunksReader(prefix string) (ret storage.PieceReader, err error) {
+func (p Provider) ChunksReader(dir string) (ret storage.PieceReader, err error) {
+	prefix := dir + "/"
 	p.Logger.Levelf(log.Critical, "ChunkReader(%q)", prefix)
 	//debug.PrintStack()
 	pr, err := p.Handle.NewReader()

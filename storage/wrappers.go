@@ -47,12 +47,11 @@ func (t *Torrent) PieceWithHash(p metainfo.Piece, pieceHash g.Option[[]byte]) Pi
 	} else {
 		pieceImpl = t.TorrentImpl.Piece(p)
 	}
-	return Piece{pieceImpl, t, p}
+	return Piece{pieceImpl, p}
 }
 
 type Piece struct {
 	PieceImpl
-	t   *Torrent
 	mip metainfo.Piece
 }
 

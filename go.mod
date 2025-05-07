@@ -20,7 +20,7 @@ require (
 	github.com/anacrolix/multiless v0.4.0
 	github.com/anacrolix/possum/go v0.3.2
 	github.com/anacrolix/squirrel v0.6.4
-	github.com/anacrolix/sync v0.5.1
+	github.com/anacrolix/sync v0.5.4
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/upnp v0.1.4
 	github.com/anacrolix/utp v0.1.0

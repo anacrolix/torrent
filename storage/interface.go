@@ -54,15 +54,19 @@ type PieceImpl interface {
 	// fit.
 	MarkComplete() error
 	MarkNotComplete() error
-	// Returns true if the piece is complete.
+	// Returns the state of a piece. Typically, this is implemented in some kind of storage to avoid
+	// rehashing, and cheap checks are performed here. (The implementation maintains a cache in
+	// Torrent).
 	Completion() Completion
 }
 
-// TODO: Yo where the fuck is the documentation.
+// Completion state of a piece.
 type Completion struct {
+	Err error
+	// The state is known or cached.
+	Ok bool
+	// If Ok, whether the data is correct.
 	Complete bool
-	Ok       bool
-	Err      error
 }
 
 // Allows a storage backend to override hashing (i.e. if it can do it more efficiently than the torrent client can)

@@ -23,12 +23,12 @@ type piecePerResource struct {
 }
 
 type ResourcePiecesOpts struct {
+	Capacity TorrentCapacity
 	// After marking a piece complete, don't bother deleting its incomplete blobs.
 	LeaveIncompleteChunks bool
 	// Sized puts require being able to stream from a statement executed on another connection.
 	// Without them, we buffer the entire read and then put that.
 	NoSizedPuts bool
-	Capacity    TorrentCapacity
 }
 
 func NewResourcePieces(p PieceProvider) ClientImpl {
@@ -269,8 +269,8 @@ func (s piecePerResourcePiece) WriteAt(b []byte, off int64) (n int, err error) {
 }
 
 type chunk struct {
-	offset   int64
 	instance resource.Instance
+	offset   int64
 }
 
 type chunks []chunk
@@ -327,7 +327,7 @@ func (s piecePerResourcePiece) getChunks(dir string) (chunks chunks) {
 		if err != nil {
 			panic(err)
 		}
-		chunks = append(chunks, chunk{offset, i})
+		chunks = append(chunks, chunk{i, offset})
 	}
 	sort.Slice(chunks, func(i, j int) bool {
 		return chunks[i].offset < chunks[j].offset

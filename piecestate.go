@@ -6,8 +6,8 @@ import (
 
 // The current state of a piece.
 type PieceState struct {
-	Priority PiecePriority
 	storage.Completion
+	Priority PiecePriority
 	// The piece is being hashed, or is queued for hash. Deprecated: Use those fields instead.
 	Checking bool
 

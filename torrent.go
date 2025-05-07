@@ -519,14 +519,14 @@ func (t *Torrent) cacheLength() {
 // separately.
 func (t *Torrent) setInfo(info *metainfo.Info) error {
 	if err := validateInfo(info); err != nil {
-		return fmt.Errorf("bad info: %s", err)
+		return fmt.Errorf("bad info: %w", err)
 	}
 	if t.storageOpener != nil {
 		var err error
 		ctx := log.ContextWithLogger(context.Background(), t.logger)
 		t.storage, err = t.storageOpener.OpenTorrent(ctx, info, *t.canonicalShortInfohash())
 		if err != nil {
-			return fmt.Errorf("error opening torrent storage: %s", err)
+			return fmt.Errorf("error opening torrent storage: %w", err)
 		}
 	}
 	t.nameMu.Lock()
@@ -637,8 +637,9 @@ func (t *Torrent) setInfoBytesLocked(b []byte) (err error) {
 	if t.info != nil {
 		return nil
 	}
-	if err := t.setInfo(&info); err != nil {
-		return err
+	err = t.setInfo(&info)
+	if err != nil {
+		return
 	}
 	t.onSetInfo()
 	return nil

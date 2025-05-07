@@ -74,7 +74,7 @@ func (me *filePieceImpl) Completion() Completion {
 					"piece", me.p,
 					"file", file.safeOsPath,
 					"err", err)
-			} else if s.Size() < extent.Start+extent.Length {
+			} else if s.Size() < extent.End() {
 				me.logger().Error(
 					"file too small for piece marked as complete",
 					"piece", me.p,

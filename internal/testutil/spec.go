@@ -15,6 +15,7 @@ type File struct {
 	Data string
 }
 
+// High-level description of a torrent for testing purposes.
 type Torrent struct {
 	Files []File
 	Name  string
@@ -58,10 +59,11 @@ func (t *Torrent) Info(pieceLength int64) metainfo.Info {
 	return info
 }
 
-func (t *Torrent) Metainfo(pieceLength int64) *metainfo.MetaInfo {
-	mi := metainfo.MetaInfo{}
+// Create an info and metainfo with bytes set for the torrent with the provided piece length.
+func (t *Torrent) Generate(pieceLength int64) (mi metainfo.MetaInfo, info metainfo.Info) {
 	var err error
-	mi.InfoBytes, err = bencode.Marshal(t.Info(pieceLength))
+	info = t.Info(pieceLength)
+	mi.InfoBytes, err = bencode.Marshal(info)
 	expect.Nil(err)
-	return &mi
+	return
 }

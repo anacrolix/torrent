@@ -1346,7 +1346,8 @@ func (cl *Client) newTorrent(ih metainfo.Hash, specStorage storage.ClientImpl) (
 	})
 }
 
-// Return a Torrent ready for insertion into a Client.
+// Return a Torrent ready for insertion into a Client. This is also the method to call to create
+// Torrents for testing.
 func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 	var v1InfoHash g.Option[infohash.T]
 	if !opts.InfoHash.IsZero() {
@@ -1383,6 +1384,7 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		webSeeds:     make(map[string]*Peer),
 		gotMetainfoC: make(chan struct{}),
 	}
+	t.closedCtx, t.closedCtxCancel = context.WithCancel(context.Background())
 	var salt [8]byte
 	rand.Read(salt[:])
 	t.smartBanCache.Hash = func(b []byte) uint64 {

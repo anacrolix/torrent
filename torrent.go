@@ -72,8 +72,12 @@ type Torrent struct {
 	dataUploadDisallowed   bool
 	userOnWriteChunkErr    func(error)
 
-	closed  chansync.SetOnce
-	onClose []func()
+	closed chansync.SetOnce
+	// A background Context cancelled when the Torrent is closed. Added to minimize extra goroutines
+	// in tracker handlers.
+	closedCtx       context.Context
+	closedCtxCancel func()
+	onClose         []func()
 
 	infoHash   g.Option[metainfo.Hash]
 	infoHashV2 g.Option[infohash_v2.T]
@@ -1031,6 +1035,7 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 		err = errors.New("already closed")
 		return
 	}
+	t.closedCtxCancel()
 	for _, f := range t.onClose {
 		f()
 	}

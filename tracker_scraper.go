@@ -219,22 +219,11 @@ func (me *trackerScraper) Stop() {
 func (me *trackerScraper) Run() {
 	defer me.announceStopped()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	// TODO: Get rid of the need for this.
-	go func() {
-		defer cancel()
-		select {
-		case <-ctx.Done():
-		case <-me.t.Closed():
-		}
-	}()
-
 	// make sure first announce is a "started"
 	e := tracker.Started
 
 	for {
-		ar := me.announce(ctx, e)
+		ar := me.announce(me.t.closedCtx, e)
 		// after first announce, get back to regular "none"
 		e = tracker.None
 		me.t.cl.lock()

@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	qt "github.com/frankban/quicktest"
@@ -226,25 +225,19 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	c := qt.New(t)
 	var err error
-	cl := Client{
-		config: TestingConfig(t),
-	}
-	tt := Torrent{
-		cl:           &cl,
-		logger:       log.Default,
-		gotMetainfoC: make(chan struct{}),
-	}
+	cl := newTestingClient(t)
+	mi, info := testutil.Greeting.Generate(5)
+	tt := cl.newTorrentOpt(AddTorrentOpts{InfoHash: mi.HashInfoBytes()})
 	tt.setChunkSize(2)
 	g.MakeMapIfNil(&tt.conns)
 	pc := PeerConn{}
-	pc.t = &tt
+	pc.t = tt
 	pc.legacyPeerImpl = &pc
 	pc.initRequestState()
 	g.InitNew(&pc.callbacks)
 	tt.conns[&pc] = struct{}{}
 	err = pc.peerSentHave(0)
 	c.Assert(err, qt.IsNil)
-	info := testutil.Greeting.Info(5)
 	err = tt.setInfo(&info)
 	c.Assert(err, qt.IsNil)
 	tt.onSetInfo()

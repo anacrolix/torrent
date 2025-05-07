@@ -33,7 +33,8 @@ func CreateDummyTorrentData(dirName string) string {
 }
 
 func GreetingMetaInfo() *metainfo.MetaInfo {
-	return Greeting.Metainfo(5)
+	mi, _ := Greeting.Generate(5)
+	return &mi
 }
 
 // Gives a temporary directory containing the completed "greeting" torrent,

@@ -1656,6 +1656,7 @@ func (t *Torrent) openNewConns() (initiated int) {
 	return
 }
 
+// Pulls piece completion state from storage and performs any state updates if it changes.
 func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	p := t.piece(piece)
 	uncached := t.pieceCompleteUncached(piece)

@@ -219,37 +219,40 @@ func init() {
 }
 
 // Wait until some data should be available to read. Tickles the client if it isn't. Returns how
-// much should be readable without blocking.
-func (r *reader) waitAvailable(ctx context.Context, pos, wanted int64, wait bool) (avail int64, err error) {
+// much should be readable without blocking. `block` is whether to block if nothing is available,
+// for successive reads for example.
+func (r *reader) waitAvailable(
+	ctx context.Context,
+	pos, wanted int64,
+	block bool,
+) (avail int64, err error) {
 	t := r.t
 	for {
-		r.t.cl.rLock()
+		t.cl.rLock()
 		avail = r.available(pos, wanted)
 		readerCond := t.piece(int((r.offset + pos) / t.info.PieceLength)).readerCond.Signaled()
-		r.t.cl.rUnlock()
+		t.cl.rUnlock()
 		if avail != 0 {
 			return
 		}
 		var dontWait <-chan struct{}
-		if !wait || wanted == 0 {
+		if !block || wanted == 0 {
 			dontWait = closedChan
 		}
 		select {
+		case <-readerCond:
+			continue
 		case <-r.t.closed.Done():
 			err = errTorrentClosed
-			return
 		case <-ctx.Done():
 			err = ctx.Err()
-			return
 		case <-r.t.dataDownloadDisallowed.On():
 			err = errors.New("torrent data downloading disabled")
 		case <-r.t.networkingEnabled.Off():
 			err = errors.New("torrent networking disabled")
-			return
 		case <-dontWait:
-			return
-		case <-readerCond:
 		}
+		return
 	}
 }
 

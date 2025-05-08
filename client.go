@@ -207,7 +207,7 @@ func (cl *Client) initLogger() {
 	cl.logger = logger.WithValues(cl)
 	cl.slogger = cl.config.Slogger
 	if cl.slogger == nil {
-		cl.slogger = slog.Default()
+		cl.slogger = cl.logger.Slogger()
 	}
 }
 

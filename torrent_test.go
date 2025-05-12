@@ -13,7 +13,7 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -223,7 +223,6 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 }
 
 func TestRelativeAvailabilityHaveNone(t *testing.T) {
-	c := qt.New(t)
 	var err error
 	cl := newTestingClient(t)
 	mi, info := testutil.Greeting.Generate(5)
@@ -237,12 +236,12 @@ func TestRelativeAvailabilityHaveNone(t *testing.T) {
 	g.InitNew(&pc.callbacks)
 	tt.conns[&pc] = struct{}{}
 	err = pc.peerSentHave(0)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	err = tt.setInfo(&info)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	tt.onSetInfo()
 	err = pc.peerSentHaveNone()
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	var wg sync.WaitGroup
 	tt.close(&wg)
 	tt.assertAllPiecesRelativeAvailabilityZero()

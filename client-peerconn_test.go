@@ -8,7 +8,7 @@ import (
 
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	"github.com/frankban/quicktest"
+	"github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
@@ -185,5 +185,5 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 	pos, err := r.Seek(0, io.SeekStart)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 0, pos)
-	quicktest.Check(t, iotest.TestReader(r, []byte(testutil.GreetingFileContents)), quicktest.IsNil)
+	qt.Check(t, qt.IsNil(iotest.TestReader(r, []byte(testutil.GreetingFileContents))))
 }

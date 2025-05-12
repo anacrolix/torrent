@@ -14,7 +14,7 @@ import (
 	"github.com/anacrolix/dht/v2/krpc"
 	_ "github.com/anacrolix/envpprof"
 	"github.com/anacrolix/missinggo/v2/iter"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,19 +88,18 @@ func TestConnClientLogDispatchUnknownTransactionId(t *testing.T) {
 	cc, err := NewConnClient(NewConnClientOpts{
 		Network: network,
 	})
-	c := qt.New(t)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer cc.Close()
 	pc, err := net.ListenPacket(network, ":0")
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer pc.Close()
 	ccAddr := *cc.LocalAddr().(*net.UDPAddr)
 	ipAddrs, err := net.DefaultResolver.LookupIPAddr(context.Background(), "localhost")
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	ccAddr.IP = ipAddrs[0].IP
 	ccAddr.Zone = ipAddrs[0].Zone
 	_, err = pc.WriteTo(make([]byte, 30), &ccAddr)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 }
 
 func TestConnectionIdMismatch(t *testing.T) {
@@ -112,8 +111,7 @@ func TestConnectionIdMismatch(t *testing.T) {
 		//Host:    "tracker.opentrackr.org:1337",
 		Network: "udp",
 	})
-	c := qt.New(t)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

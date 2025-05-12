@@ -42,7 +42,8 @@ func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
 // Calls f with requestable pieces in order.
 func GetRequestablePieces(
 	input Input, pro *PieceRequestOrder,
-	// Returns true if the piece should be considered against the unverified bytes limit.
+	// Returns true if the piece should be considered against the unverified bytes limit. This is
+	// based on whether the callee intends to request from the piece.
 	requestPiece func(ih metainfo.Hash, pieceIndex int, orderState PieceRequestOrderState) bool,
 ) {
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage

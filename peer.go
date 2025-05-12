@@ -458,7 +458,7 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 	return nil
 }
 
-func (cn *Peer) mustRequest(r RequestIndex) bool {
+func (cn *PeerConn) mustRequest(r RequestIndex) bool {
 	more, err := cn.request(r)
 	if err != nil {
 		panic(err)
@@ -466,7 +466,7 @@ func (cn *Peer) mustRequest(r RequestIndex) bool {
 	return more
 }
 
-func (cn *Peer) request(r RequestIndex) (more bool, err error) {
+func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 	if err := cn.shouldRequest(r); err != nil {
 		panic(err)
 	}
@@ -482,13 +482,13 @@ func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 	}
 	cn.validReceiveChunks[r]++
 	cn.t.requestState[r] = requestState{
-		peer: cn,
+		peer: &cn.Peer,
 		when: time.Now(),
 	}
 	cn.updateExpectingChunks()
 	ppReq := cn.t.requestIndexToRequest(r)
 	for _, f := range cn.callbacks.SentRequest {
-		f(PeerRequestEvent{cn, ppReq})
+		f(PeerRequestEvent{&cn.Peer, ppReq})
 	}
 	return cn.legacyPeerImpl._request(ppReq), nil
 }
@@ -505,17 +505,17 @@ func (me *Peer) cancel(r RequestIndex) {
 	}
 	me.decPeakRequests()
 	if me.isLowOnRequests() {
-		me.updateRequests(peerUpdateRequestsPeerCancelReason)
+		me.onNeedUpdateRequests(peerUpdateRequestsPeerCancelReason)
 	}
 }
 
 // Sets a reason to update requests, and if there wasn't already one, handle it.
-func (cn *Peer) updateRequests(reason updateRequestReason) {
+func (cn *Peer) onNeedUpdateRequests(reason updateRequestReason) {
 	if cn.needRequestUpdate != "" {
 		return
 	}
 	cn.needRequestUpdate = reason
-	cn.handleUpdateRequests()
+	cn.handleOnNeedUpdateRequests()
 }
 
 // Emits the indices in the Bitmaps bms in order, never repeating any index.
@@ -599,7 +599,7 @@ func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
 		return false
 	}
 	if c.isLowOnRequests() {
-		c.updateRequests(peerUpdateRequestsRemoteRejectReason)
+		c.onNeedUpdateRequests(peerUpdateRequestsRemoteRejectReason)
 	}
 	c.decExpectedChunkReceive(r)
 	return true
@@ -672,7 +672,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 				c._chunksReceivedWhileExpecting++
 			}
 			if c.isLowOnRequests() {
-				c.updateRequests("Peer.receiveChunk deleted request")
+				c.onNeedUpdateRequests("Peer.receiveChunk deleted request")
 			}
 		} else {
 			ChunksReceived.Add("unintended", 1)
@@ -740,7 +740,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// Necessary to pass TestReceiveChunkStorageFailureSeederFastExtensionDisabled. I think a
 		// request update runs while we're writing the chunk that just failed. Then we never do a
 		// fresh update after pending the failed request.
-		c.updateRequests("Peer.receiveChunk error writing chunk")
+		c.onNeedUpdateRequests("Peer.receiveChunk error writing chunk")
 		t.onWriteChunkErr(err)
 		return nil
 	}
@@ -805,7 +805,7 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 	delete(c.t.requestState, r)
 	// c.t.iterPeers(func(p *Peer) {
 	// 	if p.isLowOnRequests() {
-	// 		p.updateRequests("Peer.deleteRequest")
+	// 		p.onNeedUpdateRequests("Peer.deleteRequest")
 	// 	}
 	// })
 	return true
@@ -824,7 +824,7 @@ func (c *Peer) deleteAllRequests(reason updateRequestReason) {
 	c.assertNoRequests()
 	c.t.iterPeers(func(p *Peer) {
 		if p.isLowOnRequests() {
-			p.updateRequests(reason)
+			p.onNeedUpdateRequests(reason)
 		}
 	})
 }

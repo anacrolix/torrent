@@ -1197,7 +1197,7 @@ func (c *Peer) updateRequestsTimerFunc() {
 		torrent.Add("spurious timer requests updates", 1)
 		return
 	}
-	c.updateRequests(peerUpdateRequestsTimerReason)
+	c.onNeedUpdateRequests(peerUpdateRequestsTimerReason)
 }
 
 // Maximum pending requests we allow peers to send us. If peer requests are buffered on read, this

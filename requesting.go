@@ -168,7 +168,10 @@ type desiredRequestState struct {
 	Interested bool
 }
 
-func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
+// This gets the best-case request state. That means handling pieces limited by capacity, preferring
+// earlier pieces, low availability etc. It pays no attention to existing requests on the peer or
+// other peers. Those are handled later.
+func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 	t := p.t
 	if !t.haveInfo() {
 		return
@@ -181,7 +184,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	}
 	input := t.getRequestStrategyInput()
 	requestHeap := desiredPeerRequests{
-		peer:           p,
+		peer:           &p.Peer,
 		pieceStates:    t.requestPieceStates,
 		requestIndexes: t.requestIndexes,
 	}
@@ -249,11 +252,20 @@ func (p *Peer) maybeUpdateActualRequestState() {
 		context.Background(),
 		pprof.Labels("update request", string(p.needRequestUpdate)),
 		func(_ context.Context) {
-			next := p.getDesiredRequestState()
-			p.applyRequestState(next)
-			p.t.cacheNextRequestIndexesForReuse(next.Requests.requestIndexes)
+			p.updateRequests()
 		},
 	)
+	p.needRequestUpdate = ""
+	p.lastRequestUpdate = time.Now()
+	if enableUpdateRequestsTimer {
+		p.updateRequestsTimer.Reset(updateRequestsTimerDuration)
+	}
+}
+
+func (p *PeerConn) updateRequests() {
+	next := p.getDesiredRequestState()
+	p.applyRequestState(next)
+	p.t.cacheNextRequestIndexesForReuse(next.Requests.requestIndexes)
 }
 
 func (t *Torrent) cacheNextRequestIndexesForReuse(slice []RequestIndex) {
@@ -280,8 +292,9 @@ func (p *Peer) allowSendNotInterested() bool {
 	return roaring.AndNot(p.peerPieces(), &p.t._completedPieces).IsEmpty()
 }
 
-// Transmit/action the request state to the peer.
-func (p *Peer) applyRequestState(next desiredRequestState) {
+// Transmit/action the request state to the peer. This includes work-stealing from other peers and
+// some piece order randomization within the preferred state calculated earlier in next.
+func (p *PeerConn) applyRequestState(next desiredRequestState) {
 	current := &p.requestState
 	// Make interest sticky
 	if !next.Interested && p.requestState.Interested {
@@ -324,7 +337,7 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 		}
 
 		existing := t.requestingPeer(req)
-		if existing != nil && existing != p {
+		if existing != nil && existing != &p.Peer {
 			// don't steal on cancel - because this is triggered by t.cancelRequest below
 			// which means that the cancelled can immediately try to steal back a request
 			// it has lost which can lead to circular cancel/add processing
@@ -359,11 +372,6 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 	// 	"requests %v->%v (peak %v->%v) reason %q (peer %v)",
 	// 	originalRequestCount, current.Requests.GetCardinality(), p.peakRequests, newPeakRequests, p.needRequestUpdate, p)
 	p.peakRequests = newPeakRequests
-	p.needRequestUpdate = ""
-	p.lastRequestUpdate = time.Now()
-	if enableUpdateRequestsTimer {
-		p.updateRequestsTimer.Reset(updateRequestsTimerDuration)
-	}
 }
 
 // This could be set to 10s to match the unchoke/request update interval recommended by some

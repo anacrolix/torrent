@@ -391,7 +391,7 @@ func (cn *PeerConn) postBitfield() {
 	cn.sentHaves = bitmap.Bitmap{cn.t._completedPieces.Clone()}
 }
 
-func (cn *PeerConn) handleUpdateRequests() {
+func (cn *PeerConn) handleOnNeedUpdateRequests() {
 	// The writer determines the request state as needed when it can write.
 	cn.tickleWriter()
 }
@@ -415,7 +415,7 @@ func (cn *PeerConn) peerSentHave(piece pieceIndex) error {
 	}
 	cn._peerPieces.Add(uint32(piece))
 	if cn.t.wantPieceIndex(piece) {
-		cn.updateRequests("have")
+		cn.onNeedUpdateRequests("have")
 	}
 	cn.peerPiecesChanged()
 	return nil
@@ -471,7 +471,7 @@ func (cn *PeerConn) peerSentBitfield(bf []bool) error {
 	// as or.
 	cn._peerPieces.Xor(&bm)
 	if shouldUpdateRequests {
-		cn.updateRequests("bitfield")
+		cn.onNeedUpdateRequests("bitfield")
 	}
 	// We didn't guard this before, I see no reason to do it now.
 	cn.peerPiecesChanged()
@@ -498,7 +498,7 @@ func (cn *PeerConn) onPeerHasAllPieces() {
 
 func (cn *PeerConn) peerHasAllPiecesTriggers() {
 	if !cn.t._pendingPieces.IsEmpty() {
-		cn.updateRequests("Peer.onPeerHasAllPieces")
+		cn.onNeedUpdateRequests("Peer.onPeerHasAllPieces")
 	}
 	cn.peerPiecesChanged()
 }
@@ -825,7 +825,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 				torrent.Add("requestsPreservedThroughChoking", int64(preservedCount))
 			}
 			if !c.t._pendingPieces.IsEmpty() {
-				c.updateRequests("unchoked")
+				c.onNeedUpdateRequests("unchoked")
 			}
 			c.updateExpectingChunks()
 		case pp.Interested:
@@ -876,7 +876,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Suggest:
 			torrent.Add("suggests received", 1)
 			log.Fmsg("peer suggested piece %d", msg.Index).AddValues(c, msg.Index).LogLevel(log.Debug, c.t.logger)
-			c.updateRequests("suggested")
+			c.onNeedUpdateRequests("suggested")
 		case pp.HaveAll:
 			err = c.onPeerSentHaveAll()
 		case pp.HaveNone:
@@ -890,7 +890,7 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.AllowedFast:
 			torrent.Add("allowed fasts received", 1)
 			log.Fmsg("peer allowed fast: %d", msg.Index).AddValues(c).LogLevel(log.Debug, c.t.logger)
-			c.updateRequests("PeerConn.mainReadLoop allowed fast")
+			c.onNeedUpdateRequests("PeerConn.mainReadLoop allowed fast")
 		case pp.Extended:
 			err = c.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload)
 		case pp.Hashes:

@@ -13,8 +13,10 @@ import (
 // newHotPeerImpl.
 type legacyPeerImpl interface {
 	// Trigger the actual request state to get updated
-	handleUpdateRequests()
+	handleOnNeedUpdateRequests()
 	writeInterested(interested bool) bool
+	// Actually go ahead and modify the pending requests.
+	updateRequests()
 
 	// _cancel initiates cancellation of a request and returns acked if it expects the cancel to be
 	// handled by a follow-up event.

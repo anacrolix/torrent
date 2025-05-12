@@ -575,7 +575,7 @@ func (t *Torrent) onSetInfo() {
 	t.tryCreateMorePieceHashers()
 	t.iterPeers(func(p *Peer) {
 		p.onGotInfo(t.info)
-		p.updateRequests("onSetInfo")
+		p.onNeedUpdateRequests("onSetInfo")
 	})
 }
 
@@ -1464,7 +1464,7 @@ func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequ
 		if c.requestState.Interested && c.peerChoking && !c.peerAllowedFast.Contains(piece) {
 			return
 		}
-		c.updateRequests(reason)
+		c.onNeedUpdateRequests(reason)
 	})
 }
 
@@ -2597,7 +2597,7 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	// }
 	t.iterPeers(func(conn *Peer) {
 		if conn.peerHasPiece(piece) {
-			conn.updateRequests("piece incomplete")
+			conn.onNeedUpdateRequests("piece incomplete")
 		}
 	})
 }
@@ -2883,7 +2883,7 @@ func (t *Torrent) disallowDataDownloadLocked() {
 	t.dataDownloadDisallowed.Set()
 	t.iterPeers(func(p *Peer) {
 		// Could check if peer request state is empty/not interested?
-		p.updateRequests("disallow data download")
+		p.onNeedUpdateRequests("disallow data download")
 		p.cancelAllRequests()
 	})
 }
@@ -2893,7 +2893,7 @@ func (t *Torrent) AllowDataDownload() {
 	defer t.cl.unlock()
 	t.dataDownloadDisallowed.Clear()
 	t.iterPeers(func(p *Peer) {
-		p.updateRequests("allow data download")
+		p.onNeedUpdateRequests("allow data download")
 	})
 }
 
@@ -2903,7 +2903,7 @@ func (t *Torrent) AllowDataUpload() {
 	defer t.cl.unlock()
 	t.dataUploadDisallowed = false
 	t.iterPeers(func(p *Peer) {
-		p.updateRequests("allow data upload")
+		p.onNeedUpdateRequests("allow data upload")
 	})
 }
 
@@ -2914,7 +2914,7 @@ func (t *Torrent) DisallowDataUpload() {
 	t.dataUploadDisallowed = true
 	for c := range t.conns {
 		// TODO: This doesn't look right. Shouldn't we tickle writers to choke peers or something instead?
-		c.updateRequests("disallow data upload")
+		c.onNeedUpdateRequests("disallow data upload")
 	}
 }
 
@@ -3022,7 +3022,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 		ws.onGotInfo(t.info)
 	}
 	t.webSeeds[url] = &ws.peer
-	ws.peer.updateRequests("Torrent.addWebSeed")
+	ws.peer.onNeedUpdateRequests("Torrent.addWebSeed")
 	return true
 }
 

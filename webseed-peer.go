@@ -30,6 +30,11 @@ type webseedPeer struct {
 	lastUnhandledErr time.Time
 }
 
+func (me *webseedPeer) updateRequests() {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (me *webseedPeer) lastWriteUploadRate() float64 {
 	// We never upload to webseeds.
 	return 0
@@ -108,7 +113,7 @@ func (ws *webseedPeer) doRequest(r Request, webseedRequest webseed.Request) {
 	// Delete this entry after waiting above on an error, to prevent more requests.
 	delete(ws.activeRequests, r)
 	if err != nil {
-		ws.peer.updateRequests("webseedPeer request errored")
+		ws.peer.onNeedUpdateRequests("webseedPeer request errored")
 	}
 	ws.spawnRequests()
 	locker.Unlock()
@@ -151,7 +156,7 @@ func (cn *webseedPeer) ban() {
 	cn.peer.close()
 }
 
-func (ws *webseedPeer) handleUpdateRequests() {
+func (ws *webseedPeer) handleOnNeedUpdateRequests() {
 	// Because this is synchronous, webseed peers seem to get first dibs on newly prioritized
 	// pieces.
 	go func() {
@@ -167,7 +172,7 @@ func (ws *webseedPeer) onClose() {
 	ws.peer.cancelAllRequests()
 	ws.peer.t.iterPeers(func(p *Peer) {
 		if p.isLowOnRequests() {
-			p.updateRequests("webseedPeer.onClose")
+			p.onNeedUpdateRequests("webseedPeer.onClose")
 		}
 	})
 }

@@ -3,117 +3,34 @@ name: Go
 on: [push, pull_request]
 
 jobs:
-
   test:
-    timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go-version: [ '1.22' ]
+        go-version: ["1.22", "1.23", "1.24"]
         os: [windows-latest, macos-latest, ubuntu-latest]
-      fail-fast: false
     steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/go-common
-    - run: go test -race $(go list ./... | grep -v /fs | grep -v /possum)
-      continue-on-error: true
-    - run: go test -race -timeout 1m ./fs/...
-      if: ${{ ! contains(matrix.os, 'windows') }}
-      continue-on-error: true
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build possum
+        run: |
+          cd storage/possum/lib
+          cargo build --lib
+      - run: go test -race -bench . -benchtime 2x ./...
 
-  test-benchmarks:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: [ '1.22' ]
-      fail-fast: false
-    steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/go-common
-    - run: go test -race -run @ -bench . -benchtime 2x $(go list ./... | grep -v /possum)
-
-  bench:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: [ '1.22' ]
-      fail-fast: false
-    steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/go-common
-    - run: go test -run @ -bench . $(go list ./... | grep -v /possum)
-
-  test-386:
-    timeout-minutes: 5
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: [ '1.22' ]
-      fail-fast: false
-    steps:
-    - uses: actions/checkout@v2
-    - uses: ./.github/actions/go-common
-    - run: GOARCH=386 go test -run @ $(go list ./... | grep -v /possum)
-
-  build-wasm:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: [ '1.22' ]
-      fail-fast: false
-    steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/go-common
-    - name: Some packages compile for WebAssembly
-      run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
-
-  torrentfs-linux:
-    continue-on-error: true
-    timeout-minutes: 5
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        go-version: [ '1.22' ]
-        os: [ubuntu-latest]
-      fail-fast: false
-    steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/go-common
-        
-    - name: Install godo
-      run: |
-        # Need master for cross-compiling fix
-        go install -v -x github.com/anacrolix/godo@v1
-        echo $PATH
-
-    - name: Apt packages
-      run: sudo apt install pv fuse
-
-    - name: torrentfs end-to-end test
-      # Test on 386 for atomic alignment and other bad 64-bit assumptions
-      run: GOARCH=386 fs/test.sh
-    - run: mount
-
-# Github broke FUSE on MacOS, I'm not sure what the state is.
-
-#  torrentfs-macos:
-#    timeout-minutes: 15
-#    runs-on: ${{ matrix.os }}
-#    strategy:
-#      matrix:
-#        go-version: [ '1.20' ]
-#        os: [macos-latest]
-#      fail-fast: false
-#    steps:
-#    - uses: actions/checkout@v2
-#    - uses: ./.github/actions/go-common
-#
-#    - run: brew install macfuse pv md5sha1sum bash
-#
-#    - name: Install godo
-#      run: go install -v github.com/anacrolix/godo@master
-#
-#    - name: torrentfs end-to-end test
-#      run: fs/test.sh
-#      # Pretty sure macos on GitHub CI has issues with the fuse driver now.
-#      continue-on-error: true
+        # Test on 386 for atomic alignment and other bad 64-bit assumptions
+      - run: GOARCH=386 go test -run @ ./...
+      - name: Some packages compile for WebAssembly
+        run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
+      - run: |
+          brew install macfuse pv md5sha1sum bash
+      - run: |
+          # Need master for cross-compiling fix
+          go install -v -x github.com/anacrolix/godo@v1
+          echo $PATH
+          sudo apt install pv fuse
+          GOARCH=386 fs/test.sh
+          mount

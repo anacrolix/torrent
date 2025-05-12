@@ -71,8 +71,8 @@ func BenchmarkPieceMarkComplete(
 			qt.Assert(b, qt.Equals(pi.Completion(), storage.Completion{Complete: true, Ok: true}))
 			n, err := pi.WriteTo(bytes.NewBuffer(readData[:0]))
 			b.StopTimer()
+			qt.Check(b, qt.Equals(n, int64(len(data))))
 			qt.Assert(b, qt.IsNil(err))
-			qt.Assert(b, qt.Equals(n, int64(len(data))))
 			qt.Assert(b, qt.IsTrue(bytes.Equal(readData[:n], data)))
 		}
 	}

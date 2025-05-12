@@ -1535,13 +1535,16 @@ func (t *Torrent) logPieceRequestOrder() {
 		return
 	}
 	pro := t.getPieceRequestOrder()
-	if pro != nil {
-		for item := range pro.Iter() {
-			t.slogger().Debug(
-				"piece request order item", "infohash",
-				item.Key.InfoHash, "piece",
-				item.Key.Index, "state",
-				item.State)
+	// This might require some optimization around Record to avoid performance issues when
+	// benchmarking.
+	if false {
+		if pro != nil {
+			for item := range pro.Iter() {
+				t.slogger().Debug("piece request order item",
+					"infohash", item.Key.InfoHash,
+					"piece", item.Key.Index,
+					"state", item.State)
+			}
 		}
 	}
 }

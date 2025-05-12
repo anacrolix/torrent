@@ -226,7 +226,7 @@ func (fst fileTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, 
 	if fst.fts.partFiles() {
 		f, err = os.Open(file.partFilePath())
 	}
-	if errors.Is(err, fs.ErrNotExist) {
+	if err == nil && f == nil || errors.Is(err, fs.ErrNotExist) {
 		f, err = os.Open(file.safeOsPath)
 	}
 	if errors.Is(err, fs.ErrNotExist) {

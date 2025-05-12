@@ -13,7 +13,12 @@ func BenchmarkMarkComplete(b *testing.B) {
 			b, ci, test_storage.DefaultPieceSize, test_storage.DefaultNumPieces, 0)
 	}
 	b.Run("File", func(b *testing.B) {
-		ci := storage.NewFile(b.TempDir())
+		ci := storage.NewFileOpts(storage.NewFileClientOpts{
+			ClientBaseDir: b.TempDir(),
+			// TODO: Is the benchmark finding a bug?
+			//UsePartFiles: g.Some(false),
+		})
+		//ci := storage.NewFile(b.TempDir())
 		b.Cleanup(func() { ci.Close() })
 		bench(b, ci)
 	})

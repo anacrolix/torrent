@@ -107,7 +107,7 @@ func BenchmarkUpdatePiecePriorities(b *testing.B) {
 		t._completedPieces.Add(bitmap.BitIndex(i))
 	}
 	t.DownloadPieces(0, t.numPieces())
-	for i := 0; i < b.N; i += 1 {
+	for b.Loop() {
 		t.updateAllPiecePriorities("")
 	}
 }

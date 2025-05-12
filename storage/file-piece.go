@@ -115,6 +115,10 @@ nextFile:
 			_ = i
 			//fmt.Printf("%v %#v %v\n", i, f, p)
 			cmpl := me.t.getCompletion(p)
+			if cmpl.Err != nil {
+				err = fmt.Errorf("error getting completion for piece %d: %w", p, cmpl.Err)
+				return
+			}
 			if !cmpl.Ok || !cmpl.Complete {
 				continue nextFile
 			}
@@ -168,12 +172,26 @@ func (me *filePieceImpl) promotePartFile(f file) (err error) {
 	return
 }
 
+// Rename from if exists, and if so, to must not exist.
+func (me *filePieceImpl) exclRenameIfExists(from, to string) (err error) {
+	_, err = os.Stat(from)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	// We don't want anyone reading or writing to this until the rename completes.
+	f, err := os.OpenFile(to, os.O_CREATE|os.O_EXCL, 0)
+	if err != nil {
+		return fmt.Errorf("error creating destination file: %w", err)
+	}
+	f.Close()
+	return os.Rename(from, to)
+}
+
 func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
 	if me.partFiles() {
-		err = os.Rename(f.safeOsPath, f.partFilePath())
-		// If we get ENOENT, the file may already be in the final location.
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			err = fmt.Errorf("renaming incomplete file: %w", err)
+		err = me.exclRenameIfExists(f.safeOsPath, f.partFilePath())
+		if err != nil {
+			err = fmt.Errorf("restoring part file: %w", err)
 			return
 		}
 	}

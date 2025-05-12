@@ -77,5 +77,8 @@ func (t *Torrent) addRequestOrderPiece(i int) {
 }
 
 func (t *Torrent) getPieceRequestOrder() *request_strategy.PieceRequestOrder {
+	if t.storage == nil {
+		return nil
+	}
 	return t.cl.pieceRequestOrder[t.clientPieceRequestOrderKey()]
 }

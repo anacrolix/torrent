@@ -148,7 +148,8 @@ type Torrent struct {
 	metadataCompletedChunks []bool
 	metadataChanged         sync.Cond
 
-	// Closed when .Info is obtained.
+	// Closed when .Info is obtained. This could be chansync.SetOnce but we already have sync around
+	// IsSet from nameMu. Switching will probably only increase memory use.
 	gotMetainfoC chan struct{}
 
 	readers                map[*reader]struct{}

@@ -71,5 +71,5 @@ func TestSetAnnounceInfohashParamWithSpaces(t *testing.T) {
 	qt.Assert(t, qt.Equals(someUrl.Query().Get("info_hash"), string(ihBytes[:])))
 	qt.Check(t,
 		qt.StringContains(someUrl.String(),
-		"info_hash=%2Bv%0A%A1x%93%200%C8G%DC%DF%8E%AE%BFV%0A%1B%D1l"))
+			"info_hash=%2Bv%0A%A1x%93%200%C8G%DC%DF%8E%AE%BFV%0A%1B%D1l"))
 }

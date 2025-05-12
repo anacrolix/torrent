@@ -10,7 +10,7 @@ require (
 	github.com/anacrolix/chansync v0.6.0
 	github.com/anacrolix/dht/v2 v2.19.2-0.20221121215055-066ad8494444
 	github.com/anacrolix/envpprof v1.3.0
-	github.com/anacrolix/fuse v0.4.0
+	github.com/anacrolix/fuse v0.3.2-0.20250512073825-fd88dfdcd5fc
 	github.com/anacrolix/generics v0.0.3-0.20240902042256-7fb2702ef0ca
 	github.com/anacrolix/go-libutp v1.3.2
 	github.com/anacrolix/gostdapp v0.1.0

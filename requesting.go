@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/gob"
 	"fmt"
-	"github.com/anacrolix/torrent/metainfo"
 	"reflect"
 	"runtime/pprof"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
 
+	"github.com/anacrolix/torrent/metainfo"
 	requestStrategy "github.com/anacrolix/torrent/request-strategy"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )

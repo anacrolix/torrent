@@ -4,11 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
-
 	"github.com/anacrolix/chansync"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	"sync"
 
 	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/metainfo"
@@ -22,7 +21,8 @@ type pieceVerifyCount = int64
 type Piece struct {
 	// The completed piece SHA1 hash, from the metainfo "pieces" field. Nil if the info is not V1
 	// compatible.
-	hash   *metainfo.Hash
+	hash *metainfo.Hash
+	// Not easy to use unique.Handle because we need this as a slice sometimes.
 	hashV2 g.Option[[32]byte]
 	t      *Torrent
 	index  pieceIndex

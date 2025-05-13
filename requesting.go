@@ -74,6 +74,8 @@ func (p *peerId) GobDecode(b []byte) error {
 }
 
 type (
+	// A request index is a chunk indexed across the entire torrent. It's a single integer and can
+	// be converted to a protocol request.
 	RequestIndex   = requestStrategy.RequestIndex
 	chunkIndexType = requestStrategy.ChunkIndex
 )
@@ -194,7 +196,7 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 		return
 	}
 	requestHeap := desiredPeerRequests{
-		peer:           &p.Peer,
+		peer:           p,
 		pieceStates:    t.requestPieceStates,
 		requestIndexes: t.requestIndexes,
 	}
@@ -345,7 +347,7 @@ func (p *PeerConn) applyRequestState(next desiredRequestState) {
 		}
 
 		existing := t.requestingPeer(req)
-		if existing != nil && existing != &p.Peer {
+		if existing != nil && existing != p {
 			// don't steal on cancel - because this is triggered by t.cancelRequest below
 			// which means that the cancelled can immediately try to steal back a request
 			// it has lost which can lead to circular cancel/add processing

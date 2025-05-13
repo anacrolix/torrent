@@ -169,6 +169,7 @@ type Torrent struct {
 
 	connsWithAllPieces map[*Peer]struct{}
 
+	// Last active request for each chunks. TODO: Change to PeerConn specific?
 	requestState map[RequestIndex]requestState
 	// Chunks we've written to since the corresponding piece was last checked.
 	dirtyChunks typedRoaring.Bitmap[RequestIndex]
@@ -407,9 +408,11 @@ func (t *Torrent) makePieces() {
 				unsafe.SliceData(t.info.Pieces[i*sha1.Size : (i+1)*sha1.Size])))
 		}
 		files := *t.files
+		// TODO: This can be done more efficiently by retaining a file iterator between loops.
 		beginFile := pieceFirstFileIndex(piece.torrentBeginOffset(), files)
 		endFile := pieceEndFileIndex(piece.torrentEndOffset(), files)
-		piece.files = files[beginFile:endFile]
+		piece.beginFile = beginFile
+		piece.endFile = endFile
 	}
 }
 
@@ -1102,8 +1105,8 @@ func (t *Torrent) chunksPerRegularPiece() chunkIndexType {
 
 func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex) {
 	t.dirtyChunks.RemoveRange(
-		uint64(t.pieceRequestIndexOffset(pieceIndex)),
-		uint64(t.pieceRequestIndexOffset(pieceIndex+1)))
+		uint64(t.pieceRequestIndexBegin(pieceIndex)),
+		uint64(t.pieceRequestIndexBegin(pieceIndex+1)))
 }
 
 func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
@@ -1131,7 +1134,7 @@ func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
 func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex) *blockCheckingWriter {
 	return &blockCheckingWriter{
 		cache:        &t.smartBanCache,
-		requestIndex: t.pieceRequestIndexOffset(piece),
+		requestIndex: t.pieceRequestIndexBegin(piece),
 		chunkSize:    t.chunkSize.Int(),
 	}
 }
@@ -2537,7 +2540,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 }
 
 func (t *Torrent) cancelRequestsForPiece(piece pieceIndex) {
-	start := t.pieceRequestIndexOffset(piece)
+	start := t.pieceRequestIndexBegin(piece)
 	end := start + t.pieceNumChunks(piece)
 	for ri := start; ri < end; ri++ {
 		t.cancelRequest(ri)
@@ -2665,7 +2668,7 @@ func (t *Torrent) pieceHasher(index pieceIndex) {
 			t.logger.WithDefaultLevel(log.Debug).Printf("smart banned %v for piece %v", peer, index)
 		}
 		t.dropBannedPeers()
-		for ri := t.pieceRequestIndexOffset(index); ri < t.pieceRequestIndexOffset(index+1); ri++ {
+		for ri := t.pieceRequestIndexBegin(index); ri < t.pieceRequestIndexBegin(index+1); ri++ {
 			t.smartBanCache.ForgetBlock(ri)
 		}
 	}
@@ -3016,10 +3019,11 @@ func (t *Torrent) requestIndexToRequest(ri RequestIndex) Request {
 }
 
 func (t *Torrent) requestIndexFromRequest(r Request) RequestIndex {
-	return t.pieceRequestIndexOffset(pieceIndex(r.Index)) + RequestIndex(r.Begin/t.chunkSize)
+	return t.pieceRequestIndexBegin(pieceIndex(r.Index)) + RequestIndex(r.Begin/t.chunkSize)
 }
 
-func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex) RequestIndex {
+// The first request index for the piece.
+func (t *Torrent) pieceRequestIndexBegin(piece pieceIndex) RequestIndex {
 	return RequestIndex(piece) * t.chunksPerRegularPiece()
 }
 
@@ -3082,7 +3086,7 @@ func (t *Torrent) iterUndirtiedRequestIndexesInPiece(
 	f func(RequestIndex),
 ) {
 	reuseIter.Initialize(&t.dirtyChunks)
-	pieceRequestIndexOffset := t.pieceRequestIndexOffset(piece)
+	pieceRequestIndexOffset := t.pieceRequestIndexBegin(piece)
 	iterBitmapUnsetInRange(
 		reuseIter,
 		pieceRequestIndexOffset, pieceRequestIndexOffset+t.pieceNumChunks(piece),

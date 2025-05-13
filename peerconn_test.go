@@ -116,8 +116,8 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	})
 	qt.Assert(b, qt.IsTrue(cn.bannableAddr.Ok))
 	cn.setTorrent(t)
-	requestIndexBegin := t.pieceRequestIndexOffset(0)
-	requestIndexEnd := t.pieceRequestIndexOffset(1)
+	requestIndexBegin := t.pieceRequestIndexBegin(0)
+	requestIndexEnd := t.pieceRequestIndexBegin(1)
 	eachRequestIndex := func(f func(ri RequestIndex)) {
 		for ri := requestIndexBegin; ri < requestIndexEnd; ri++ {
 			f(ri)

@@ -184,8 +184,8 @@ func (cn *Peer) expectingChunks() bool {
 	cn.peerAllowedFast.Iterate(func(i pieceIndex) bool {
 		haveAllowedFastRequests = roaringBitmapRangeCardinality[RequestIndex](
 			cn.requestState.Requests,
-			cn.t.pieceRequestIndexOffset(i),
-			cn.t.pieceRequestIndexOffset(i+1),
+			cn.t.pieceRequestIndexBegin(i),
+			cn.t.pieceRequestIndexBegin(i+1),
 		) == 0
 		return !haveAllowedFastRequests
 	})

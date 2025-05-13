@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/anacrolix/missinggo/v2/panicif"
+	"iter"
+	"sync"
+
 	"github.com/anacrolix/chansync"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
-	"sync"
 
 	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/metainfo"
@@ -26,7 +29,8 @@ type Piece struct {
 	hashV2 g.Option[[32]byte]
 	t      *Torrent
 	index  pieceIndex
-	files  []*File
+	// First and one after the last file indexes.
+	beginFile, endFile int
 
 	readerCond chansync.BroadcastCond
 
@@ -95,18 +99,18 @@ func (p *Piece) hasDirtyChunks() bool {
 func (p *Piece) numDirtyChunks() chunkIndexType {
 	return chunkIndexType(roaringBitmapRangeCardinality[RequestIndex](
 		&p.t.dirtyChunks,
-		p.requestIndexOffset(),
-		p.t.pieceRequestIndexOffset(p.index+1)))
+		p.requestIndexBegin(),
+		p.requestIndexMaxEnd()))
 }
 
 func (p *Piece) unpendChunkIndex(i chunkIndexType) {
-	p.t.dirtyChunks.Add(p.requestIndexOffset() + i)
+	p.t.dirtyChunks.Add(p.requestIndexBegin() + i)
 	p.t.updatePieceRequestOrderPiece(p.index)
 	p.readerCond.Broadcast()
 }
 
 func (p *Piece) pendChunkIndex(i RequestIndex) {
-	p.t.dirtyChunks.Remove(p.requestIndexOffset() + i)
+	p.t.dirtyChunks.Remove(p.requestIndexBegin() + i)
 	p.t.updatePieceRequestOrderPiece(p.index)
 }
 
@@ -141,7 +145,7 @@ func (p *Piece) waitNoPendingWrites() {
 }
 
 func (p *Piece) chunkIndexDirty(chunk chunkIndexType) bool {
-	return p.t.dirtyChunks.Contains(p.requestIndexOffset() + chunk)
+	return p.t.dirtyChunks.Contains(p.requestIndexBegin() + chunk)
 }
 
 func (p *Piece) chunkIndexSpec(chunk chunkIndexType) ChunkSpec {
@@ -240,7 +244,7 @@ func (p *Piece) SetPriority(prio PiecePriority) {
 
 // This is priority based only on piece, file and reader priorities.
 func (p *Piece) purePriority() (ret PiecePriority) {
-	for _, f := range p.files {
+	for f := range p.files() {
 		ret.Raise(f.prio)
 	}
 	if p.t.readerNowPieces().Contains(bitmap.BitIndex(p.index)) {
@@ -292,8 +296,15 @@ func (p *Piece) State() PieceState {
 	return p.t.PieceState(p.index)
 }
 
-func (p *Piece) requestIndexOffset() RequestIndex {
-	return p.t.pieceRequestIndexOffset(p.index)
+// The first possible request index for the piece.
+func (p *Piece) requestIndexBegin() RequestIndex {
+	return p.t.pieceRequestIndexBegin(p.index)
+}
+
+// The maximum end request index for the piece. Some of the requests might not be valid, it's for
+// cleaning up arrays and bitmaps in broad strokes.
+func (p *Piece) requestIndexMaxEnd() RequestIndex {
+	return p.t.pieceRequestIndexBegin(p.index + 1)
 }
 
 // TODO: Make this peer-only?
@@ -304,10 +315,8 @@ func (p *Piece) availability() int {
 // For v2 torrents, files are aligned to pieces so there should always only be a single file for a
 // given piece.
 func (p *Piece) mustGetOnlyFile() *File {
-	if len(p.files) != 1 {
-		panic(len(p.files))
-	}
-	return p.files[0]
+	panicif.NotEq(p.numFiles(), 1)
+	return (*p.t.files)[p.beginFile]
 }
 
 // Sets the v2 piece hash, queuing initial piece checks if appropriate.
@@ -335,7 +344,7 @@ func (p *Piece) haveHash() bool {
 }
 
 func (p *Piece) hasPieceLayer() bool {
-	return len(p.files) == 1 && p.files[0].length > p.t.info.PieceLength
+	return p.numFiles() == 1 && p.mustGetOnlyFile().length > p.t.info.PieceLength
 }
 
 func (p *Piece) obtainHashV2() (hash [32]byte, err error) {
@@ -358,5 +367,27 @@ func (p *Piece) obtainHashV2() (hash [32]byte, err error) {
 		return
 	}
 	h.SumMinLength(hash[:0], int(p.t.info.PieceLength))
+	return
+}
+
+func (p *Piece) files() iter.Seq[*File] {
+	return func(yield func(*File) bool) {
+		for i := p.beginFile; i < p.endFile; i++ {
+			if !yield((*p.t.files)[i]) {
+				return
+			}
+		}
+	}
+}
+
+func (p *Piece) numFiles() int {
+	return p.endFile - p.beginFile
+}
+
+func (p *Piece) hasActivePeerConnRequests() (ret bool) {
+	for ri := p.requestIndexBegin(); ri < p.requestIndexMaxEnd(); ri++ {
+		_, ok := p.t.requestState[ri]
+		ret = ret || ok
+	}
 	return
 }

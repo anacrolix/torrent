@@ -192,10 +192,6 @@ func (cn *Peer) expectingChunks() bool {
 	return haveAllowedFastRequests
 }
 
-func (cn *Peer) remoteChokingPiece(piece pieceIndex) bool {
-	return cn.peerChoking && !cn.peerAllowedFast.Contains(piece)
-}
-
 func (cn *Peer) cumInterest() time.Duration {
 	ret := cn.priorInterest
 	if cn.requestState.Interested {

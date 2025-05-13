@@ -50,10 +50,5 @@ var (
 
 	messageTypesReceived = expvar.NewMap("messageTypesReceived")
 
-	// Track the effectiveness of Torrent.connPieceInclinationPool.
-	pieceInclinationsReused = expvar.NewInt("pieceInclinationsReused")
-	pieceInclinationsNew    = expvar.NewInt("pieceInclinationsNew")
-	pieceInclinationsPut    = expvar.NewInt("pieceInclinationsPut")
-
 	concurrentChunkWrites = expvar.NewInt("torrentConcurrentChunkWrites")
 )

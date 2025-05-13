@@ -30,7 +30,6 @@ var _ interface {
 type chunkReader struct {
 	r      possum.Reader
 	values []consecutiveValue
-	keys   []int64
 }
 
 func (c chunkReader) ReadAt(p []byte, off int64) (n int, err error) {

@@ -311,20 +311,6 @@ func (t *Torrent) pieceCompleteUncached(piece pieceIndex) storage.Completion {
 	return t.pieces[piece].Storage().Completion()
 }
 
-// There's a connection to that address already.
-func (t *Torrent) addrActive(addr string) bool {
-	if _, ok := t.halfOpen[addr]; ok {
-		return true
-	}
-	for c := range t.conns {
-		ra := c.RemoteAddr
-		if ra.String() == addr {
-			return true
-		}
-	}
-	return false
-}
-
 func (t *Torrent) appendUnclosedConns(ret []*PeerConn) []*PeerConn {
 	return t.appendConns(ret, func(conn *PeerConn) bool {
 		return !conn.closed.IsSet()
@@ -1112,13 +1098,6 @@ func (t *Torrent) pieceNumChunks(piece pieceIndex) chunkIndexType {
 
 func (t *Torrent) chunksPerRegularPiece() chunkIndexType {
 	return t._chunksPerRegularPiece
-}
-
-func (t *Torrent) numChunks() RequestIndex {
-	if t.numPieces() == 0 {
-		return 0
-	}
-	return RequestIndex(t.numPieces()-1)*t.chunksPerRegularPiece() + t.pieceNumChunks(t.numPieces()-1)
 }
 
 func (t *Torrent) pendAllChunkSpecs(pieceIndex pieceIndex) {
@@ -2706,13 +2685,6 @@ func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
 	}
 }
 
-func (t *Torrent) peersAsSlice() (ret []*Peer) {
-	t.iterPeers(func(p *Peer) {
-		ret = append(ret, p)
-	})
-	return
-}
-
 func (t *Torrent) queueInitialPieceCheck(i pieceIndex) {
 	if !t.initialPieceCheckDisabled && !t.piece(i).storageCompletionOk {
 		t.queuePieceCheck(i)
@@ -3315,13 +3287,6 @@ func (t *Torrent) trySendHolepunchRendezvous(addrPort netip.AddrPort) error {
 		return errors.New("no eligible relays")
 	}
 	return nil
-}
-
-func (t *Torrent) numHalfOpenAttempts() (num int) {
-	for _, attempts := range t.halfOpen {
-		num += len(attempts)
-	}
-	return
 }
 
 func (t *Torrent) getDialTimeoutUnlocked() time.Duration {

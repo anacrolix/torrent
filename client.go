@@ -667,11 +667,6 @@ func (cl *Client) dopplegangerAddr(addr string) bool {
 }
 
 // Returns a connection over UTP or TCP, whichever is first to connect.
-func (cl *Client) dialFirst(ctx context.Context, addr string) (res DialResult) {
-	return DialFirst(ctx, addr, cl.dialers)
-}
-
-// Returns a connection over UTP or TCP, whichever is first to connect.
 func DialFirst(ctx context.Context, addr string, dialers []Dialer) (res DialResult) {
 	pool := dialPool{
 		addr: addr,
@@ -711,13 +706,6 @@ func (cl *Client) noLongerHalfOpen(t *Torrent, addr string, attemptKey outgoingC
 	for t := range cl.torrents {
 		t.openNewConns()
 	}
-}
-
-func (cl *Client) countHalfOpenFromTorrents() (count int) {
-	for t := range cl.torrents {
-		count += t.numHalfOpenAttempts()
-	}
-	return
 }
 
 // Performs initiator handshakes and returns a connection. Returns nil *PeerConn if no connection

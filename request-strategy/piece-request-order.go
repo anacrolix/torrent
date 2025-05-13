@@ -73,13 +73,6 @@ func (me *PieceRequestOrder) Update(
 	return old.Value != state
 }
 
-func (me *PieceRequestOrder) existingItemForKey(key PieceRequestOrderKey) PieceRequestOrderItem {
-	return PieceRequestOrderItem{
-		Key:   key,
-		State: me.keys[key],
-	}
-}
-
 func (me *PieceRequestOrder) Delete(key PieceRequestOrderKey) (deleted bool) {
 	state, ok := me.keys[key]
 	if !ok {

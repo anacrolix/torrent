@@ -392,8 +392,8 @@ func TestUtpDirectDialMsg(t *testing.T) {
 			}
 			defer writer.Close()
 			reader, err := second.Accept()
-			defer reader.Close()
 			c.Assert(err, qt.IsNil)
+			defer reader.Close()
 			return writeAndReadMsg(reader, writer)
 		}()
 		if err == nil {

@@ -1,8 +1,0 @@
-linters-settings:
-  staticcheck:
-    go: "1.16"
-    checks: ["all", "-U1000"]
-
-  govet:
-    disable:
-      - composites

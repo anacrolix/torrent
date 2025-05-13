@@ -48,6 +48,10 @@ func NewSqlitePieceCompletion(dir string) (ret *sqlitePieceCompletion, err error
 func (me *sqlitePieceCompletion) Get(pk metainfo.PieceKey) (c Completion, err error) {
 	me.mu.Lock()
 	defer me.mu.Unlock()
+	if me.closed {
+		err = errors.New("closed")
+		return
+	}
 	err = sqlitex.Exec(
 		me.db, `select complete from piece_completion where infohash=? and "index"=?`,
 		func(stmt *sqlite.Stmt) error {

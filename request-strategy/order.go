@@ -19,6 +19,9 @@ type (
 	ChunkSpec = types.ChunkSpec
 )
 
+// Piece request ordering factoring in storage limits, user-assigned priority, network availability.
+// Is it missing the random piece affinity assigned per torrent? Can we do that deterministically
+// per-client?
 func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
 	return multiless.New().Int(
 		int(j.State.Priority), int(i.State.Priority),
@@ -39,12 +42,18 @@ func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
 	})
 }
 
+// Returns true if the piece should be considered against the unverified bytes limit. This is
+// based on whether the callee intends to request from the piece. Pieces submitted to this
+// callback passed Piece.Request and so are ready for immediate download.
+type RequestPieceFunc func(ih metainfo.Hash, pieceIndex int, orderState PieceRequestOrderState) bool
+
 // Calls f with requestable pieces in order.
 func GetRequestablePieces(
 	input Input, pro *PieceRequestOrder,
 	// Returns true if the piece should be considered against the unverified bytes limit. This is
-	// based on whether the callee intends to request from the piece.
-	requestPiece func(ih metainfo.Hash, pieceIndex int, orderState PieceRequestOrderState) bool,
+	// based on whether the callee intends to request from the piece. Pieces submitted to this
+	// callback passed Piece.Request and so are ready for immediate download.
+	requestPiece RequestPieceFunc,
 ) {
 	// Storage capacity left for this run, keyed by the storage capacity pointer on the storage
 	// TorrentImpl. A nil value means no capacity limit.

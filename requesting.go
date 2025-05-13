@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/gob"
 	"fmt"
+	"github.com/anacrolix/torrent/metainfo"
 	"reflect"
 	"runtime/pprof"
 	"time"
@@ -168,6 +169,16 @@ type desiredRequestState struct {
 	Interested bool
 }
 
+func (cl *Client) getRequestablePieces(key clientPieceRequestOrderKeySumType, f requestStrategy.RequestPieceFunc) {
+	input := key.getRequestStrategyInput(cl)
+	order := cl.pieceRequestOrder[key].pieces
+	requestStrategy.GetRequestablePieces(input, order, f)
+}
+
+func (t *Torrent) getRequestablePieces(f requestStrategy.RequestPieceFunc) {
+	t.cl.getRequestablePieces(t.clientPieceRequestOrderKey(), f)
+}
+
 // This gets the best-case request state. That means handling pieces limited by capacity, preferring
 // earlier pieces, low availability etc. It pays no attention to existing requests on the peer or
 // other peers. Those are handled later.
@@ -182,7 +193,6 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 	if t.dataDownloadDisallowed.Bool() {
 		return
 	}
-	input := t.getRequestStrategyInput()
 	requestHeap := desiredPeerRequests{
 		peer:           &p.Peer,
 		pieceStates:    t.requestPieceStates,
@@ -192,10 +202,8 @@ func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 	t.logPieceRequestOrder()
 	// Caller-provided allocation for roaring bitmap iteration.
 	var it typedRoaring.Iterator[RequestIndex]
-	requestStrategy.GetRequestablePieces(
-		input,
-		t.getPieceRequestOrder(),
-		func(ih InfoHash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) bool {
+	t.getRequestablePieces(
+		func(ih metainfo.Hash, pieceIndex int, pieceExtra requestStrategy.PieceRequestOrderState) bool {
 			if ih != *t.canonicalShortInfohash() {
 				return false
 			}

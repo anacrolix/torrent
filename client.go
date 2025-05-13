@@ -43,7 +43,6 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
 	"github.com/anacrolix/torrent/tracker"
 	"github.com/anacrolix/torrent/types/infohash"
@@ -86,7 +85,9 @@ type Client struct {
 	// info has been obtained, there's no knowing if an infohash belongs to v1 or v2.
 	torrentsByShortHash map[InfoHash]*Torrent
 
-	pieceRequestOrder map[clientPieceRequestOrderKeySumType]*request_strategy.PieceRequestOrder
+	// Piece request orderings grouped by storage. Value is value type because all fields are
+	// references.
+	pieceRequestOrder map[clientPieceRequestOrderKeySumType]clientPieceRequestOrderValue
 
 	acceptLimiter map[ipStr]int
 	numHalfOpen   int

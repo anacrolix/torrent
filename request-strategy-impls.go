@@ -30,6 +30,9 @@ func (r requestStrategyInputMultiTorrent) Capacity() (int64, bool) {
 	return (*r.capFunc)()
 }
 
+// I don't think we need this for correctness purposes, but it must be faster to look up the Torrent
+// input because it's locked to a given Torrent. It would be easy enough to drop in the
+// multi-torrent version in this place and compare.
 type requestStrategyInputSingleTorrent struct {
 	requestStrategyInputCommon
 	t *Torrent
@@ -45,31 +48,16 @@ func (r requestStrategyInputSingleTorrent) Capacity() (cap int64, capped bool) {
 
 var _ request_strategy.Input = requestStrategyInputSingleTorrent{}
 
+// getRequestStrategyInputCommon returns request strategy Input implementation common to all inputs.
 func (cl *Client) getRequestStrategyInputCommon() requestStrategyInputCommon {
 	return requestStrategyInputCommon{cl.config.MaxUnverifiedBytes}
 }
 
-// Returns what is necessary to run request_strategy.GetRequestablePieces for primaryTorrent.
-func (cl *Client) getRequestStrategyInput(primaryTorrent *Torrent) (input request_strategy.Input) {
-	if !primaryTorrent.hasStorageCap() {
-		return requestStrategyInputSingleTorrent{
-			requestStrategyInputCommon: cl.getRequestStrategyInputCommon(),
-			t:                          primaryTorrent,
-		}
-	} else {
-		return requestStrategyInputMultiTorrent{
-			requestStrategyInputCommon: cl.getRequestStrategyInputCommon(),
-			// TODO: Check this is an appropriate key
-			torrents: cl.torrentsByShortHash,
-			capFunc:  primaryTorrent.storage.Capacity,
-		}
-	}
-}
-
 func (t *Torrent) getRequestStrategyInput() request_strategy.Input {
-	return t.cl.getRequestStrategyInput(t)
+	return t.clientPieceRequestOrderKey().getRequestStrategyInput(t.cl)
 }
 
+// Wraps a Torrent to provide request-strategy.Torrent interface.
 type requestStrategyTorrent struct {
 	t *Torrent
 }

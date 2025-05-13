@@ -296,6 +296,7 @@ func (p *Piece) requestIndexOffset() RequestIndex {
 	return p.t.pieceRequestIndexOffset(p.index)
 }
 
+// TODO: Make this peer-only?
 func (p *Piece) availability() int {
 	return len(p.t.connsWithAllPieces) + p.relativeAvailability
 }

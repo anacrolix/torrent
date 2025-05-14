@@ -28,6 +28,8 @@ type trackerScraper struct {
 	// TODO: chansync
 	stopOnce sync.Once
 	stopCh   chan struct{}
+
+	complete bool
 }
 
 type torrentTrackerAnnouncer interface {
@@ -265,15 +267,30 @@ func (me *trackerScraper) Run() {
 			reconsider = wantPeers
 		}
 
-		select {
-		case <-me.stopCh:
-			return
-		case <-me.t.closed.Done():
-			return
-		case <-reconsider:
-			// Recalculate the interval.
-			goto recalculate
-		case <-time.After(time.Until(ar.Completed.Add(interval))):
+		if !me.complete {
+			select {
+			case <-me.stopCh:
+				return
+			case <-me.t.closed.Done():
+				return
+			case <-me.t.complete.On():
+				me.announceCompleted()
+			case <-reconsider:
+				// Recalculate the interval.
+				goto recalculate
+			case <-time.After(time.Until(ar.Completed.Add(interval))):
+			}
+		} else {
+			select {
+			case <-me.stopCh:
+				return
+			case <-me.t.closed.Done():
+				return
+			case <-reconsider:
+				// Recalculate the interval.
+				goto recalculate
+			case <-time.After(time.Until(ar.Completed.Add(interval))):
+			}
 		}
 	}
 }
@@ -282,4 +299,14 @@ func (me *trackerScraper) announceStopped() {
 	ctx, cancel := context.WithTimeout(context.Background(), tracker.DefaultTrackerAnnounceTimeout)
 	defer cancel()
 	me.announce(ctx, tracker.Stopped)
+}
+
+func (me *trackerScraper) announceCompleted() {
+	if me.complete {
+		return
+	}
+	me.complete = true
+	ctx, cancel := context.WithTimeout(context.Background(), tracker.DefaultTrackerAnnounceTimeout)
+	defer cancel()
+	me.announce(ctx, tracker.Completed)
 }

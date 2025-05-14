@@ -3050,7 +3050,7 @@ func (t *Torrent) pieceRequestIndexOffset(piece pieceIndex) RequestIndex {
 }
 
 func (t *Torrent) updateComplete() {
-	// TODO: Announce complete to trackers?
+	// Announce completed is called on the complete.On channel closed.
 	t.complete.SetBool(t.haveAllPieces())
 }
 

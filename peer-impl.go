@@ -18,9 +18,10 @@ type legacyPeerImpl interface {
 	// Actually go ahead and modify the pending requests.
 	updateRequests()
 
-	// _cancel initiates cancellation of a request and returns acked if it expects the cancel to be
-	// handled by a follow-up event.
-	_cancel(RequestIndex) (acked bool)
+	// handleCancel initiates cancellation of a request and returns acked if it expects the cancel
+	// to be handled by a follow-up event.
+	handleCancel(RequestIndex)
+	acksCancels() bool
 	// The final piece to actually commit to a request. Typically, this sends or begins handling the
 	// request.
 	_request(Request) bool

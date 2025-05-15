@@ -30,6 +30,10 @@ type webseedPeer struct {
 	lastUnhandledErr time.Time
 }
 
+func (me *webseedPeer) acksCancels() bool {
+	return false
+}
+
 func (me *webseedPeer) updateRequests() {
 	//TODO implement me
 	panic("implement me")

@@ -15,6 +15,7 @@ import (
 )
 
 type (
+	// TODO: Make this private. Use types.Request in the (one?) place it's exposed here.
 	Request       = types.Request
 	ChunkSpec     = types.ChunkSpec
 	PiecePriority = types.PiecePriority
@@ -104,7 +105,7 @@ func validateInfo(info *metainfo.Info) error {
 }
 
 func chunkIndexSpec(index, pieceLength, chunkSize pp.Integer) ChunkSpec {
-	ret := ChunkSpec{pp.Integer(index) * chunkSize, chunkSize}
+	ret := ChunkSpec{index * chunkSize, chunkSize}
 	if ret.Begin+ret.Length > pieceLength {
 		ret.Length = pieceLength - ret.Begin
 	}

@@ -75,7 +75,7 @@ func (p *peerId) GobDecode(b []byte) error {
 
 type (
 	// A request index is a chunk indexed across the entire torrent. It's a single integer and can
-	// be converted to a protocol request.
+	// be converted to a protocol request. TODO: This should be private.
 	RequestIndex   = requestStrategy.RequestIndex
 	chunkIndexType = requestStrategy.ChunkIndex
 )

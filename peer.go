@@ -388,7 +388,8 @@ var (
 
 // The actual value to use as the maximum outbound requests.
 func (cn *Peer) nominalMaxRequests() maxRequests {
-	return maxInt(1, minInt(cn.PeerMaxRequests, cn.peakRequests*2, maxLocalToRemoteRequests))
+	// TODO: This should differ for webseeds...
+	return max(1, min(cn.PeerMaxRequests, cn.peakRequests*2, maxLocalToRemoteRequests))
 }
 
 func (cn *Peer) totalExpectingTime() (ret time.Duration) {
@@ -592,6 +593,7 @@ func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
 	if c.deleteRequest(r) {
 		c.decPeakRequests()
 	} else if !c.requestState.Cancelled.CheckedRemove(r) {
+		// The request was already cancelled.
 		return false
 	}
 	if c.isLowOnRequests() {
@@ -616,7 +618,8 @@ func (c *Peer) doChunkReadStats(size int64) {
 	c.allStats(func(cs *ConnStats) { cs.receivedChunk(size) })
 }
 
-// Handle a received chunk from a peer.
+// Handle a received chunk from a peer. TODO: Break this out into non-wire protocol specific
+// handling. Avoid shoehorning into a pp.Message.
 func (c *Peer) receiveChunk(msg *pp.Message) error {
 	ChunksReceived.Add("total", 1)
 
@@ -795,6 +798,7 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 		f(PeerRequestEvent{c, c.t.requestIndexToRequest(r)})
 	}
 	c.updateExpectingChunks()
+	// TODO: Can't this happen if a request is stolen?
 	if c.t.requestingPeer(r) != c {
 		panic("only one peer should have a given request at a time")
 	}

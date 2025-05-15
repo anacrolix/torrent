@@ -3010,6 +3010,7 @@ func (t *Torrent) peerIsActive(p *Peer) (active bool) {
 	return
 }
 
+// TODO: It's more of a RequestStruct really.
 func (t *Torrent) requestIndexToRequest(ri RequestIndex) Request {
 	index := t.pieceIndexOfRequestIndex(ri)
 	return Request{

@@ -29,8 +29,8 @@ type Info struct {
 	Files  []FileInfo `bencode:"files,omitempty"` // BEP3, mutually exclusive with Length
 
 	// BEP 52 (BitTorrent v2)
-	MetaVersion int64    `bencode:"meta version,omitempty"`
-	FileTree    FileTree `bencode:"file tree,omitempty"`
+	MetaVersion int64     `bencode:"meta version,omitempty"`
+	FileTree    *FileTree `bencode:"file tree,omitempty"`
 }
 
 // The Info.Name field is "advisory". For multi-file torrents it's usually a suggested directory

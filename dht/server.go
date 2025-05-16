@@ -46,7 +46,7 @@ type Server struct {
 
 	mu           sync.RWMutex
 	transactions transactions.Dispatcher[*transaction]
-	table        table
+	table        *table
 	closed       missinggo.Event
 	ipBlockList  iplist.Ranger
 	tokenServer  tokenServer // Manages tokens we issue to our queriers.
@@ -231,10 +231,7 @@ func NewServer(c *ServerConfig) (s *Server, err error) {
 			interval:         5 * time.Minute,
 			secret:           make([]byte, 20),
 		},
-		table: table{
-			k: c.BucketLimit,
-			m: &sync.Mutex{},
-		},
+		table: newTable(c.BucketLimit),
 		store: bep44.NewWrapper(c.Store, c.Exp),
 		mux:   DefaultMuxer(),
 	}
@@ -356,7 +353,7 @@ func (s *Server) serve() error {
 			}
 			return err
 		}
-		expvars.Add("packets read", 1)
+
 		if n == len(b) {
 			logonce.Stderr.Printf("received dht packet exceeds buffer size")
 			continue

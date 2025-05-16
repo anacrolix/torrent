@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/rc4"
 	"io"
-	"io/ioutil"
 	"net"
 	"sync"
 	"testing"
@@ -14,16 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func sliceIter(skeys [][]byte) SecretKeyIter {
-	return func(callback func([]byte) bool) {
-		for _, sk := range skeys {
-			if !callback(sk) {
-				break
-			}
-		}
-	}
-}
 
 func TestReadUntil(t *testing.T) {
 	test := func(data, until string, leftover int, expectedErr error) {
@@ -78,7 +67,7 @@ func handshakeTest(t testing.TB, ia []byte, aData, bData string, cryptoProvides 
 	}()
 	go func() {
 		defer wg.Done()
-		b, cm, err := ReceiveHandshake(b, sliceIter([][]byte{[]byte("nope"), []byte("yep"), []byte("maybe")}), cryptoSelect)
+		b, cm, err := ReceiveHandshake(b, StaticSecrets([]byte("nope"), []byte("yep"), []byte("maybe")), cryptoSelect)
 		require.NoError(t, err)
 		assert.Equal(t, cryptoSelect(cryptoProvides), cm)
 		go b.Write([]byte(bData))
@@ -130,7 +119,7 @@ func (tr *trackReader) Read(b []byte) (n int, err error) {
 
 func TestReceiveRandomData(t *testing.T) {
 	tr := trackReader{rand.Reader, 0}
-	_, _, err := ReceiveHandshake(readWriter{&tr, ioutil.Discard}, nil, DefaultCryptoSelector)
+	_, _, err := ReceiveHandshake(readWriter{&tr, io.Discard}, nil, DefaultCryptoSelector)
 	// No skey matches
 	require.Error(t, err)
 	// Establishing S, and then reading the maximum padding for giving up on
@@ -185,7 +174,7 @@ func benchmarkStream(t *testing.B, crypto CryptoMethod) {
 		}()
 		func() {
 			defer bc.Close()
-			rw, _, err := ReceiveHandshake(bc, sliceIter([][]byte{[]byte("cats")}), func(CryptoMethod) CryptoMethod { return crypto })
+			rw, _, err := ReceiveHandshake(bc, StaticSecrets([]byte("cats")), func(CryptoMethod) CryptoMethod { return crypto })
 			require.NoError(t, err)
 			require.NoError(t, readAndWrite(rw, br, b))
 		}()

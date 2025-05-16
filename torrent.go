@@ -25,6 +25,7 @@ import (
 	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/langx"
+	"github.com/james-lawrence/torrent/internal/netx"
 	"github.com/james-lawrence/torrent/tracker"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -81,7 +82,7 @@ func TuneReadUserAgent(v *string) Tuner {
 	return func(t *torrent) {
 		t.rLock()
 		defer t.rUnlock()
-		*v = t.config.HTTPUserAgent
+		*v = t.cln.config.HTTPUserAgent
 	}
 }
 
@@ -90,7 +91,7 @@ func TuneReadPublicIPv4(v net.IP) Tuner {
 		t.rLock()
 		defer t.rUnlock()
 
-		copy(v, t.config.PublicIP4)
+		copy(v, t.cln.config.PublicIP4)
 	}
 }
 
@@ -99,7 +100,7 @@ func TuneReadPublicIPv6(v net.IP) Tuner {
 		t.rLock()
 		defer t.rUnlock()
 
-		copy(v, t.config.PublicIP6)
+		copy(v, t.cln.config.PublicIP6)
 	}
 }
 
@@ -126,9 +127,9 @@ func TuneReadAnnounce(v *tracker.Announce) Tuner {
 		defer t.rUnlock()
 
 		*v = tracker.Announce{
-			UserAgent: t.config.HTTPUserAgent,
-			ClientIp4: krpc.NewNodeAddrFromIPPort(t.config.PublicIP4, 0),
-			ClientIp6: krpc.NewNodeAddrFromIPPort(t.config.PublicIP6, 0),
+			UserAgent: t.cln.config.HTTPUserAgent,
+			ClientIp4: krpc.NewNodeAddrFromIPPort(t.cln.config.PublicIP4, 0),
+			ClientIp6: krpc.NewNodeAddrFromIPPort(t.cln.config.PublicIP6, 0),
 		}
 	}
 }
@@ -140,8 +141,8 @@ func TuneClientPeer(cl *Client) Tuner {
 		ps := []Peer{}
 		for _, la := range cl.ListenAddrs() {
 			ps = append(ps, Peer{
-				IP:      missinggo.AddrIP(la),
-				Port:    missinggo.AddrPort(la),
+				IP:      langx.Must(netx.NetIP(la)),
+				Port:    langx.Must(netx.NetPort(la)),
 				Trusted: true,
 			})
 		}
@@ -218,6 +219,22 @@ func TuneVerifyFull(t *torrent) {
 	t.chunks.FailuresReset()
 }
 
+func TuneSeeding(t *torrent) {
+	for i := 0; i < t.numPieces(); i++ {
+		t.chunks.Complete(i)
+	}
+}
+
+func tuneMerge(md Metadata) Tuner {
+	return func(t *torrent) {
+		t.md.DisplayName = langx.DefaultIfZero(t.md.DisplayName, md.DisplayName)
+
+		if md.ChunkSize != t.md.ChunkSize && md.ChunkSize != 0 {
+			t.setChunkSize(md.ChunkSize)
+		}
+	}
+}
+
 // Torrent represents the state of a torrent within a client.
 // interface is currently being used to ease the transition of to a cleaner API.
 // Many methods should not be called before the info is available,
@@ -277,26 +294,28 @@ func Verify(ctx context.Context, t Torrent) error {
 }
 
 func newTorrent(cl *Client, src Metadata) *torrent {
+	const (
+		maxEstablishedConns = 200
+	)
 	m := &sync.RWMutex{}
 	chunkcond := sync.NewCond(&sync.Mutex{})
+
 	t := &torrent{
-		md:     src,
-		cln:    cl,
-		config: cl.config,
-		_mu:    m,
+		md:  src,
+		cln: cl,
+		_mu: m,
 		peers: newPeerPool(32, func(p Peer) peerPriority {
 			return bep40PriorityIgnoreError(cl.publicAddr(p.IP), p.addr())
 		}),
-		conns:                   newconnset(2 * cl.config.EstablishedConnsPerTorrent),
+		conns:                   newconnset(2 * maxEstablishedConns),
 		halfOpen:                make(map[string]Peer),
 		_halfOpenmu:             &sync.RWMutex{},
 		pieceStateChanges:       pubsub.NewPubSub(),
-		storageOpener:           storage.NewClient(src.Storage),
-		maxEstablishedConns:     cl.config.EstablishedConnsPerTorrent,
-		networkingEnabled:       true,
+		storageOpener:           storage.NewClient(langx.DefaultIfZero(cl.config.defaultStorage, src.Storage)),
+		maxEstablishedConns:     maxEstablishedConns,
 		duplicateRequestTimeout: time.Second,
 		chunkcond:               chunkcond,
-		chunks:                  newChunks(langx.DefaultIfZero(16*bytesx.KiB, src.ChunkSize), metainfo.NewInfo(), chunkoptCond(chunkcond)),
+		chunks:                  newChunks(langx.DefaultIfZero(defaultChunkSize, src.ChunkSize), metainfo.NewInfo(), chunkoptCond(chunkcond)),
 		pex:                     newPex(),
 		storage:                 storage.NewZero(),
 		digests:                 new(digests),
@@ -305,6 +324,9 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 	t.event = &sync.Cond{L: tlocker{torrent: t}}
 	t.setChunkSize(langx.DefaultIfZero(16*bytesx.KiB, src.ChunkSize))
 	*t.digests = newDigestsFromTorrent(t)
+	if err := t.setInfoBytes(src.InfoBytes); err != nil {
+		log.Println("encountered an error setting info bytes", len(src.InfoBytes), err)
+	}
 	return t
 }
 
@@ -372,14 +394,11 @@ type torrent struct {
 	md               Metadata
 	numReceivedConns int64
 
-	cln    *Client
-	config *ClientConfig
-	_mu    *sync.RWMutex
+	cln *Client
+	_mu *sync.RWMutex
 	// Name used if the info name isn't available. Should be cleared when the
 	// Info does become available.
 	nameMu sync.RWMutex
-
-	networkingEnabled bool
 
 	// How long to avoid duplicating a pending request.
 	duplicateRequestTimeout time.Duration
@@ -420,9 +439,6 @@ type torrent struct {
 	// the swarm.
 	peers          peerPool
 	wantPeersEvent missinggo.Event
-
-	// How many times we've initiated a DHT announce. TODO: Move into stats.
-	numDHTAnnounces int
 
 	metainfoAvailable atomic.Bool
 
@@ -633,7 +649,7 @@ func (t *torrent) addPeer(p Peer) {
 
 	t.openNewConns()
 
-	for t.peers.Len() > t.config.TorrentPeersHighWater {
+	for t.peers.Len() > t.cln.config.TorrentPeersHighWater {
 		if _, ok := t.peers.DeleteMin(); ok {
 			metrics.Add("excess reserve peers discarded", 1)
 		}
@@ -655,7 +671,7 @@ func (t *torrent) saveMetadataPiece(index int, data []byte) {
 	}
 
 	if index >= len(t.metadataCompletedChunks) {
-		t.config.warn().Printf("%s: ignoring metadata piece %d\n", t, index)
+		t.cln.config.warn().Printf("%s: ignoring metadata piece %d\n", t, index)
 		return
 	}
 
@@ -687,7 +703,7 @@ func (t *torrent) setInfo(info *metainfo.Info) (err error) {
 	if t.storageOpener != nil {
 		t.storage, err = t.storageOpener.OpenTorrent(info, t.md.ID)
 		if err != nil {
-			return fmt.Errorf("error opening torrent storage: %s", err)
+			return fmt.Errorf("error opening torrent storage: %T - %s", t.storageOpener, err)
 		}
 	}
 
@@ -705,7 +721,7 @@ func (t *torrent) onSetInfo() {
 	// log.Println("set info initiated")
 	for _, conn := range t.conns.list() {
 		if err := conn.setNumPieces(t.numPieces()); err != nil {
-			t.config.info().Println(errors.Wrap(err, "closing connection"))
+			t.cln.config.info().Println(errors.Wrap(err, "closing connection"))
 			conn.Close()
 		}
 	}
@@ -718,6 +734,10 @@ func (t *torrent) onSetInfo() {
 // Called when metadata for a torrent becomes available.
 func (t *torrent) setInfoBytes(b []byte) error {
 	var info metainfo.Info
+
+	if len(b) == 0 {
+		return nil
+	}
 
 	if metainfo.HashBytes(b) != t.md.ID {
 		return errors.New("info bytes have wrong hash")
@@ -820,15 +840,6 @@ func (t *torrent) BytesMissing() int64 {
 func (t *torrent) bytesLeft() (left int64) {
 	s := t.chunks.Snapshot(&Stats{})
 	return t.info.TotalLength() - ((int64(s.Unverified) * int64(t.chunks.clength)) + (int64(s.Completed) * int64(t.info.PieceLength)))
-}
-
-// Bytes left to give in tracker announces.
-func (t *torrent) bytesLeftAnnounce() int64 {
-	if t.haveInfo() {
-		return t.bytesLeft()
-	}
-
-	return -1
 }
 
 func (t *torrent) usualPieceSize() int {
@@ -982,6 +993,7 @@ func (t *torrent) openNewConns() {
 			return
 		}
 
+		// log.Println("initiating connection to peer", p.IP, p.Port)
 		t.initiateConn(context.Background(), p)
 	}
 }
@@ -1024,7 +1036,7 @@ func (t *torrent) maybeCompleteMetadata() error {
 		return fmt.Errorf("error setting info bytes: %s", err)
 	}
 
-	t.config.debug().Printf("%s: got metadata from peers", t)
+	t.cln.config.debug().Printf("%s: got metadata from peers", t)
 
 	return nil
 }
@@ -1080,7 +1092,7 @@ func (t *torrent) deleteConnection(c *connection) (ret bool) {
 func (t *torrent) assertNoPendingRequests() {
 	if outstanding := t.chunks.Outstanding(); len(outstanding) != 0 {
 		for _, r := range outstanding {
-			t.config.errors().Printf("still expecting c(%p) d(%020d) r(%d,%d,%d)", t.chunks, r.Digest, r.Index, r.Begin, r.Length)
+			t.cln.config.errors().Printf("still expecting c(%p) d(%020d) r(%d,%d,%d)", t.chunks, r.Digest, r.Index, r.Begin, r.Length)
 		}
 	}
 }
@@ -1090,10 +1102,9 @@ func (t *torrent) wantPeers() bool {
 		return false
 	}
 
-	if t.peers.Len() > t.config.TorrentPeersLowWater {
+	if t.peers.Len() > t.cln.config.TorrentPeersLowWater {
 		return false
 	}
-
 	return t.needData() || t.seeding()
 }
 
@@ -1111,11 +1122,11 @@ func (t *torrent) seeding() bool {
 		return false
 	}
 
-	if t.config.NoUpload {
+	if t.cln.config.NoUpload {
 		return false
 	}
 
-	if !t.config.Seed {
+	if !t.cln.config.Seed {
 		return false
 	}
 
@@ -1180,7 +1191,7 @@ func (t *torrent) dhtAnnouncer(s *dht.Server) {
 		t.stats.DHTAnnounce.Add(1)
 
 		if err := t.announceToDht(true, s); err != nil {
-			t.config.info().Println(t, errors.Wrap(err, "error announcing to DHT"))
+			t.cln.config.info().Println(t, errors.Wrap(err, "error announcing to DHT"))
 			time.Sleep(time.Second)
 		}
 	}
@@ -1208,16 +1219,9 @@ func (t *torrent) statsLocked() (ret Stats) {
 	// TODO: these can be moved to the connections directly.
 	// moving it will reduce the need to iterate the connections
 	// to compute the stats.
-	ret.MaximumAllowedPeers = t.config.EstablishedConnsPerTorrent
+	ret.MaximumAllowedPeers = t.maxEstablishedConns
+
 	ret.TotalPeers = t.numTotalPeers()
-	// log.Println("checkpoint")
-	// ret.ConnectedSeeders = 0
-	// log.Println("checkpoint")
-	// for _, c := range t.conns.list() {
-	// 	if all, ok := c.peerHasAllPieces(); all && ok {
-	// 		ret.ConnectedSeeders++
-	// 	}
-	// }
 
 	ret.ConnStats = t.stats.Copy()
 	return ret
@@ -1288,7 +1292,7 @@ func (t *torrent) addConnection(c *connection) (err error) {
 			continue
 		}
 
-		if !t.config.dropDuplicatePeerIds {
+		if !t.cln.config.dropDuplicatePeerIds {
 			continue
 		}
 
@@ -1323,10 +1327,6 @@ func (t *torrent) addConnection(c *connection) (err error) {
 }
 
 func (t *torrent) wantConns() bool {
-	if !t.networkingEnabled {
-		return false
-	}
-
 	if t.closed.IsSet() {
 		return false
 	}
@@ -1385,7 +1385,7 @@ func (t *torrent) noLongerHalfOpen(addr string) {
 func (t *torrent) dialTimeout() time.Duration {
 	t.rLock()
 	defer t.rUnlock()
-	return reducedDialTimeout(t.config.MinDialTimeout, t.config.NominalDialTimeout, t.config.HalfOpenConnsPerTorrent, t.peers.Len())
+	return reducedDialTimeout(t.cln.config.MinDialTimeout, t.cln.config.NominalDialTimeout, t.cln.config.HalfOpenConnsPerTorrent, t.peers.Len())
 }
 
 func (t *torrent) piece(i int) *metainfo.Piece {

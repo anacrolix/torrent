@@ -8,6 +8,13 @@ import (
 	"github.com/james-lawrence/torrent/dht/int160"
 )
 
+func newTable(k int) *table {
+	return &table{
+		k: k,
+		m: &sync.Mutex{},
+	}
+}
+
 // Node table, with indexes on distance from root ID to bucket, and node addr.
 type table struct {
 	rootID  int160.T

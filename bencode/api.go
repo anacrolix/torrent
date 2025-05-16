@@ -115,7 +115,7 @@ type Unmarshaler interface {
 
 // Marshal the value 'v' to the bencode form, return the result as []byte and
 // an error if any.
-func Marshal(v interface{}) ([]byte, error) {
+func Marshal(v any) ([]byte, error) {
 	var buf bytes.Buffer
 	e := Encoder{w: &buf}
 	err := e.Encode(v)
@@ -125,7 +125,7 @@ func Marshal(v interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func MustMarshal(v interface{}) []byte {
+func MustMarshal(v any) []byte {
 	b, err := Marshal(v)
 	if err != nil {
 		panic(err)

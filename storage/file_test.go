@@ -15,25 +15,27 @@ import (
 )
 
 func TestShortFile(t *testing.T) {
-	td, err := os.MkdirTemp("", "")
-	require.NoError(t, err)
-	defer os.RemoveAll(td)
+	td := t.TempDir()
 	s := NewFile(td)
 	info := &metainfo.Info{
 		Name:        "a",
 		Length:      2,
 		PieceLength: bytesx.MiB,
 	}
+
+	require.NoError(t, os.MkdirAll(filepath.Dir(infoHashPathMaker(td, metainfo.Hash{}, info, nil)), 0700))
+	f, err := os.Create(infoHashPathMaker(td, metainfo.Hash{}, info, nil))
+	require.NoError(t, err)
+	require.NoError(t, f.Truncate(1))
+	f.Close()
+
 	ts, err := s.OpenTorrent(info, metainfo.Hash{})
 	assert.NoError(t, err)
-	f, err := os.Create(filepath.Join(td, "a"))
-	require.NoError(t, err)
-	err = f.Truncate(1)
-	require.NoError(t, err)
-	f.Close()
+
 	var buf bytes.Buffer
 	p := info.Piece(0)
+
 	n, err := io.Copy(&buf, io.NewSectionReader(ts, p.Offset(), p.Length()))
-	assert.EqualValues(t, 1, n)
-	assert.Equal(t, io.ErrUnexpectedEOF, err)
+	require.Equal(t, io.ErrUnexpectedEOF, err)
+	require.Equal(t, int64(1), n)
 }

@@ -10,7 +10,7 @@ import (
 
 // EncryptionHandshake encrypt a net.Conn
 type EncryptionHandshake struct {
-	Keys               mse.SecretKeyIter
+	Keys               mse.SecretKey
 	mse.CryptoSelector // available crypto algorithms
 }
 
@@ -22,6 +22,10 @@ func (t EncryptionHandshake) Incoming(rw io.ReadWriter) (updated io.ReadWriter, 
 		io.Reader
 		io.Writer
 	}
+	// log.Println("encryption handshake initiated")
+	// defer func() {
+	// 	log.Println("encryption handshake completed", err)
+	// }()
 
 	var (
 		buf = bytes.NewBuffer(make([]byte, 0, 68))

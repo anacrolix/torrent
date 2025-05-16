@@ -6,25 +6,27 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net"
-	"net/http"
-	"net/url"
+	"path/filepath"
 	stdsync "sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/james-lawrence/torrent/connections"
 	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/storage"
 
 	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/slices"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
 
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/errorsx"
+	"github.com/james-lawrence/torrent/internal/langx"
 	"github.com/james-lawrence/torrent/internal/stringsx"
 	"github.com/james-lawrence/torrent/metainfo"
 )
@@ -48,7 +50,7 @@ type Client struct {
 	dhtServers []*dht.Server
 
 	extensionBytes pp.ExtensionBits // Our BitTorrent protocol extension bytes, sent in our BT handshakes.
-	torrents       map[metainfo.Hash]*torrent
+	torrents       *memoryseeding
 }
 
 // Query torrent info from the dht
@@ -80,12 +82,12 @@ func (cl *Client) Info(ctx context.Context, m Metadata, options ...Tuner) (i *me
 // Start adds starts up the torrent within the client downloading the missing pieces
 // as needed. if you want to wait until the torrent is completed use Download.
 func (cl *Client) Start(t Metadata, options ...Tuner) (dl Torrent, added bool, err error) {
-	dl, added, err = cl.start(t)
+	dl, added, err = cl.start(t, options...)
 	if err != nil {
 		return dl, added, err
 	}
 
-	return dl, added, dl.Tune(options...)
+	return dl, added, nil
 }
 
 // MaybeStart is a convience method that consumes the return types of the torrent
@@ -96,27 +98,33 @@ func (cl *Client) MaybeStart(t Metadata, failed error, options ...Tuner) (dl Tor
 		return dl, false, failed
 	}
 
-	dl, added, err = cl.start(t)
+	dl, added, err = cl.start(t, options...)
 	if err != nil {
 		return dl, added, err
 	}
 
-	return dl, added, dl.Tune(options...)
+	return dl, added, nil
 }
 
-func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
-	if dlt = cl.lookup(t); dlt != nil {
-		return dlt, false, cl.merge(dlt, t)
-	}
-
-	cl.lock()
-	dlt, err = cl.newTorrent(t)
-	cl.unlock()
-	if err != nil {
+func (cl *Client) start(md Metadata, options ...Tuner) (dlt *torrent, added bool, err error) {
+	dlt, cached, err := cl.torrents.Load(cl, int160.FromByteArray(md.ID))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, false, err
 	}
 
-	cl.merge(dlt, t)
+	if cached {
+		return dlt, false, dlt.Tune(tuneMerge(md), langx.Compose(options...))
+	}
+
+	if dlt, err = cl.torrents.Insert(cl, md); err != nil {
+		return nil, false, err
+	}
+
+	if err = dlt.Tune(tuneMerge(md), langx.Compose(options...)); err != nil {
+		return nil, false, err
+	}
+
+	cl.AddDHTNodes(dlt.md.DHTNodes)
 
 	cl.lock()
 	defer cl.unlock()
@@ -124,7 +132,6 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 	cl.eachDhtServer(func(s *dht.Server) {
 		go dlt.dhtAnnouncer(s)
 	})
-	cl.torrents[t.ID] = dlt
 
 	dlt.updateWantPeersEvent()
 
@@ -137,33 +144,7 @@ func (cl *Client) start(t Metadata) (dlt *torrent, added bool, err error) {
 // Stop the specified torrent, this halts all network activity around the torrent
 // for this client.
 func (cl *Client) Stop(t Metadata) (err error) {
-	return cl.dropTorrent(t.ID)
-}
-
-func (cl *Client) merge(old *torrent, updated Metadata) (err error) {
-	if updated.DisplayName != "" {
-		old.md.DisplayName = updated.DisplayName
-	}
-
-	if updated.ChunkSize != old.md.ChunkSize && updated.ChunkSize != 0 {
-		old.setChunkSize(updated.ChunkSize)
-	}
-
-	old.openNewConns()
-	cl.event.Broadcast()
-
-	return nil
-}
-
-func (cl *Client) lookup(t Metadata) *torrent {
-	cl.lock()
-	defer cl.unlock()
-
-	if dl, ok := cl.torrents[t.ID]; ok {
-		return dl
-	}
-
-	return nil
+	return cl.torrents.Drop(int160.FromByteArray(t.ID))
 }
 
 // PeerID ...
@@ -214,37 +195,23 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 		writeDhtServerStatus(w, s)
 	})
 	spew.Fdump(w, &cl.stats)
-	fmt.Fprintf(w, "# Torrents: %d\n", len(cl.torrentsAsSlice()))
-	fmt.Fprintln(w)
-	for _, t := range slices.Sort(cl.torrentsAsSlice(), func(l, r Torrent) bool {
-		return l.Metadata().ID.AsString() < r.Metadata().ID.AsString()
-	}).([]Torrent) {
-		metadata := t.Metadata()
-		if metadata.DisplayName == "" {
-			fmt.Fprint(w, "<unknown name>")
-		} else {
-			fmt.Fprint(w, metadata.DisplayName)
-		}
-		fmt.Fprint(w, "\n")
-	}
 }
 
 // NewClient create a new client from the provided config. nil is acceptable.
 func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 	if cfg == nil {
-		cfg = NewDefaultClientConfig(ClientConfigBootstrapGlobal)
-	}
-
-	if cfg.HTTPProxy == nil && cfg.ProxyURL != "" {
-		if fixedURL, err := url.Parse(cfg.ProxyURL); err == nil {
-			cfg.HTTPProxy = http.ProxyURL(fixedURL)
-		}
+		rootdir := filepath.Join(".", "torrents")
+		cfg = NewDefaultClientConfig(
+			metadatafilestore{root: rootdir},
+			storage.NewFile(rootdir),
+			ClientConfigBootstrapGlobal,
+		)
 	}
 
 	cl := &Client{
 		config:   cfg,
 		closed:   make(chan struct{}),
-		torrents: make(map[metainfo.Hash]*torrent),
+		torrents: torrentCache(cfg.defaultMetadata),
 		_mu:      &stdsync.RWMutex{},
 	}
 
@@ -377,8 +344,9 @@ func (cl *Client) Close() {
 	cl.eachDhtServer(func(s *dht.Server) { s.Close() })
 	cl.closeSockets()
 
-	for _, t := range cl.torrents {
-		t.close()
+	if err := cl.torrents.Close(); err != nil {
+		log.Println("unable to shutdown torrents", err)
+		panic(err)
 	}
 
 	for _, f := range cl.onClose {
@@ -421,18 +389,6 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 	c := cl.newConnection(nc, false, missinggo.IpPortFromNetAddr(nc.RemoteAddr()))
 	c.Discovery = peerSourceIncoming
 	cl.runReceivedConn(c)
-}
-
-// Torrent returns a handle to the given torrent, if it's present in the client.
-func (cl *Client) Torrent(ih metainfo.Hash) (t Torrent, ok bool) {
-	cl.lock()
-	defer cl.unlock()
-	t, ok = cl.torrents[ih]
-	return
-}
-
-func (cl *Client) torrent(ih metainfo.Hash) *torrent {
-	return cl.torrents[ih]
 }
 
 func reducedDialTimeout(minDialTimeout, max time.Duration, halfOpenLimit int, pendingPeers int) (ret time.Duration) {
@@ -619,6 +575,7 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr IpPor
 	}
 
 	cl.runHandshookConn(c, t)
+
 	t.deleteConnection(c)
 	t.event.Broadcast()
 	cl.event.Broadcast()
@@ -631,27 +588,14 @@ func (cl *Client) incomingPeerPort() int {
 }
 
 // Calls f with any secret keys.
-func (cl *Client) forSkeys(f func([]byte) bool) {
-	cl.lock()
-	defer cl.unlock()
-	if false { // Emulate the bug from #114
-		var firstIh metainfo.Hash
-		for ih := range cl.torrents {
-			firstIh = ih
-			break
-		}
-		for range cl.torrents {
-			if !f(firstIh[:]) {
-				break
-			}
-		}
-		return
-	}
-	for ih := range cl.torrents {
-		if !f(ih[:]) {
-			break
+func (cl *Client) forSkeys(cb func(skey []byte) []byte) []byte {
+	for skey := range cl.torrents.Each() {
+		if b := skey.Bytes(); cb(b) != nil {
+			return b
 		}
 	}
+
+	return nil
 }
 
 func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
@@ -721,15 +665,8 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	c.PeerID = info.PeerID
 	c.completedHandshake = time.Now()
 
-	cl.lock()
-	t = cl.torrents[info.Hash]
-	cl.unlock()
-
-	if t == nil {
-		return nil, errors.New("received handshake for an unavailable torrent")
-	}
-
-	return t, nil
+	t, _, err = cl.torrents.Load(cl, int160.FromByteArray(info.Hash))
+	return t, err
 }
 
 func (cl *Client) runReceivedConn(c *connection) {
@@ -785,25 +722,13 @@ func (cl *Client) haveDhtServer() (ret bool) {
 	return
 }
 
-// Return a Torrent ready for insertion into a Client.
-func (cl *Client) newTorrent(src Metadata) (t *torrent, _ error) {
-	if src.ChunkSize == 0 {
-		src.ChunkSize = defaultChunkSize
-	}
+// // Return a Torrent ready for insertion into a Client.
+// func (cl *Client) newTorrent(src Metadata) (t *torrent, _ error) {
+// 	t = newTorrent(cl, src)
+// 	cl.AddDHTNodes(t.md.DHTNodes)
 
-	t = newTorrent(cl, src)
-
-	if len(src.InfoBytes) > 0 {
-		if err := t.setInfoBytes(src.InfoBytes); err != nil {
-			log.Println("encountered an error setting info bytes", len(src.InfoBytes))
-			return nil, err
-		}
-	}
-
-	cl.AddDHTNodes(src.DHTNodes)
-
-	return t, nil
-}
+// 	return t, nil
+// }
 
 // Handle a file-like handle to some torrent data resource.
 type Handle interface {
@@ -813,67 +738,50 @@ type Handle interface {
 	io.ReaderAt
 }
 
-func (cl *Client) dropTorrent(infoHash metainfo.Hash) (err error) {
-	cl.rLock()
-	t, ok := cl.torrents[infoHash]
-	cl.rUnlock()
+// func (cl *Client) allTorrentsCompleted() bool {
+// 	for _, t := range cl.torrents {
+// 		if !t.haveInfo() {
+// 			return false
+// 		}
+// 		if !t.haveAllPieces() {
+// 			return false
+// 		}
+// 	}
+// 	return true
+// }
 
-	if !ok {
-		// if there isnt a torrent there isnt a problem.
-		return nil
-	}
+// // WaitAll returns true when all torrents are completely downloaded and false if the
+// // client is stopped before that.
+// func (cl *Client) WaitAll() bool {
+// 	cl.lock()
+// 	defer cl.unlock()
 
-	cl.lock()
-	delete(cl.torrents, infoHash)
-	cl.unlock()
+// 	for !cl.allTorrentsCompleted() {
+// 		select {
+// 		case <-cl.closed:
+// 			return false
+// 		default:
+// 		}
 
-	return t.close()
-}
+// 		cl.event.Wait()
+// 	}
 
-func (cl *Client) allTorrentsCompleted() bool {
-	for _, t := range cl.torrents {
-		if !t.haveInfo() {
-			return false
-		}
-		if !t.haveAllPieces() {
-			return false
-		}
-	}
-	return true
-}
+// 	return true
+// }
 
-// WaitAll returns true when all torrents are completely downloaded and false if the
-// client is stopped before that.
-func (cl *Client) WaitAll() bool {
-	cl.lock()
-	defer cl.unlock()
+// // Torrents returns handles to all the torrents loaded in the Client.
+// func (cl *Client) Torrents() []Torrent {
+// 	cl.lock()
+// 	defer cl.unlock()
+// 	return cl.torrentsAsSlice()
+// }
 
-	for !cl.allTorrentsCompleted() {
-		select {
-		case <-cl.closed:
-			return false
-		default:
-		}
-
-		cl.event.Wait()
-	}
-
-	return true
-}
-
-// Torrents returns handles to all the torrents loaded in the Client.
-func (cl *Client) Torrents() []Torrent {
-	cl.lock()
-	defer cl.unlock()
-	return cl.torrentsAsSlice()
-}
-
-func (cl *Client) torrentsAsSlice() (ret []Torrent) {
-	for _, t := range cl.torrents {
-		ret = append(ret, t)
-	}
-	return
-}
+// func (cl *Client) torrentsAsSlice() (ret []Torrent) {
+// 	for _, t := range cl.torrents {
+// 		ret = append(ret, t)
+// 	}
+// 	return
+// }
 
 // DhtServers returns the set of DHT servers.
 func (cl *Client) DhtServers() []*dht.Server {
@@ -914,10 +822,13 @@ func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portO
 	cl.config.DHTAnnouncePeer(ih, ip, port, portOk)
 	cl.lock()
 	defer cl.unlock()
-	t := cl.torrent(ih)
-	if t == nil {
+
+	t, _, err := cl.torrents.Load(cl, int160.FromByteArray(ih))
+	if err != nil {
+		log.Println("unable to load torrent for peer announce", err)
 		return
 	}
+
 	t.addPeers([]Peer{{
 		IP:     ip,
 		Port:   port,

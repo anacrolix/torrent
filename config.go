@@ -12,6 +12,7 @@ import (
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/dht/krpc"
 	"github.com/james-lawrence/torrent/metainfo"
+	"github.com/james-lawrence/torrent/storage"
 	"github.com/james-lawrence/torrent/x/conntrack"
 	"golang.org/x/time/rate"
 
@@ -23,12 +24,11 @@ const DefaultHTTPUserAgent = "Go-Torrent/1.0"
 
 // ClientConfig not safe to modify this after it's given to a Client.
 type ClientConfig struct {
-	// Store torrent file data in this directory unless .DefaultStorage is
-	// specified.
-	DataDir string `long:"data-dir" description:"directory to store downloaded torrent data"`
+	defaultStorage  storage.ClientImpl
+	defaultMetadata MetadataStore
 
-	NoDefaultPortForwarding bool
-	UpnpID                  string
+	defaultPortForwarding bool
+	UpnpID                string
 
 	DisablePEX bool `long:"disable-pex"`
 
@@ -68,11 +68,6 @@ type ClientConfig struct {
 	// Chooses the crypto method to use when receiving connections with header obfuscation.
 	CryptoSelector mse.CryptoSelector
 
-	// Sets usage of Socks5 Proxy. Authentication should be included in the url if needed.
-	// Examples: socks5://demo:demo@192.168.99.100:1080
-	// 			 http://proxy.domain.com:3128
-	ProxyURL string
-
 	DisableIPv4Peers bool
 	Logger           logger // standard logging for errors, defaults to stderr
 	Warn             logger // warn logging
@@ -98,9 +93,8 @@ type ClientConfig struct {
 	// Peer dial timeout to use when there are limited peers.
 	NominalDialTimeout time.Duration
 	// Minimum peer dial timeout to use (even if we have lots of peers).
-	MinDialTimeout             time.Duration
-	EstablishedConnsPerTorrent int
-	HalfOpenConnsPerTorrent    int
+	MinDialTimeout          time.Duration
+	HalfOpenConnsPerTorrent int
 	// Maximum number of peer addresses in reserve.
 	TorrentPeersHighWater int
 	// Minumum number of peers before effort is made to obtain more peers.
@@ -116,7 +110,6 @@ type ClientConfig struct {
 	PublicIP4 net.IP
 	PublicIP6 net.IP
 
-	DisableAcceptRateLimiting bool
 	// Don't add connections that have the same peer ID as an existing
 	// connection for a given Torrent.
 	dropDuplicatePeerIds bool
@@ -163,6 +156,18 @@ func ClientConfigCompose(options ...ClientConfigOption) ClientConfigOption {
 	}
 }
 
+func ClientConfigDHTEnabled(b bool) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		cc.NoDHT = !b
+	}
+}
+
+func ClientConfigPortForward(b bool) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		cc.defaultPortForwarding = b
+	}
+}
+
 func ClientConfigDialRateLimit(l *rate.Limiter) ClientConfigOption {
 	return func(cc *ClientConfig) {
 		cc.dialRateLimiter = l
@@ -182,10 +187,29 @@ func ClientConfigInfoLogger(l *log.Logger) ClientConfigOption {
 	}
 }
 
+func ClientConfigDebugLogger(l *log.Logger) ClientConfigOption {
+	return func(c *ClientConfig) {
+		c.Debug = l
+	}
+}
+
 // ClientConfigSeed enable/disable seeding
 func ClientConfigSeed(b bool) ClientConfigOption {
 	return func(c *ClientConfig) {
 		c.Seed = b
+	}
+}
+
+func ClientConfigStorage(s storage.ClientImpl) ClientConfigOption {
+	return func(c *ClientConfig) {
+		c.defaultStorage = s
+	}
+}
+
+func ClientConfigStorageDir(dir string) ClientConfigOption {
+	return func(c *ClientConfig) {
+		c.defaultStorage = storage.NewFile(dir)
+		c.defaultMetadata = NewMetadataCache(dir)
 	}
 }
 
@@ -245,27 +269,28 @@ func ClientConfigConnectionClosed(fn func(ih metainfo.Hash, stats ConnStats)) Cl
 }
 
 // NewDefaultClientConfig default client configuration.
-func NewDefaultClientConfig(options ...ClientConfigOption) *ClientConfig {
+func NewDefaultClientConfig(mdstore MetadataStore, store storage.ClientImpl, options ...ClientConfigOption) *ClientConfig {
 	cc := &ClientConfig{
+		defaultMetadata:                mdstore,
+		defaultStorage:                 store,
 		HTTPUserAgent:                  DefaultHTTPUserAgent,
 		ExtendedHandshakeClientVersion: "go.torrent dev 20181121",
 		Bep20:                          "-GT0002-",
 		UpnpID:                         "james-lawrence/torrent",
 		NominalDialTimeout:             20 * time.Second,
 		MinDialTimeout:                 3 * time.Second,
-		EstablishedConnsPerTorrent:     200,
 		HalfOpenConnsPerTorrent:        25,
 		TorrentPeersHighWater:          500,
 		TorrentPeersLowWater:           50,
 		HandshakesTimeout:              4 * time.Second,
+		defaultPortForwarding:          true,
 		DhtStartingNodes: func(network string) dht.StartingNodesGetter {
 			return func() ([]dht.Addr, error) { return nil, nil }
 		},
-		UploadRateLimiter:         rate.NewLimiter(rate.Inf, 0),
-		DownloadRateLimiter:       rate.NewLimiter(rate.Inf, 0),
-		dialRateLimiter:           rate.NewLimiter(rate.Inf, 0),
-		ConnTracker:               conntrack.NewInstance(),
-		DisableAcceptRateLimiting: true,
+		UploadRateLimiter:   rate.NewLimiter(rate.Inf, 0),
+		DownloadRateLimiter: rate.NewLimiter(rate.Inf, 0),
+		dialRateLimiter:     rate.NewLimiter(rate.Inf, 0),
+		ConnTracker:         conntrack.NewInstance(),
 		HeaderObfuscationPolicy: HeaderObfuscationPolicy{
 			Preferred:        true,
 			RequirePreferred: false,

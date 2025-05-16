@@ -11,7 +11,7 @@ import (
 )
 
 func TestTable(t *testing.T) {
-	tbl := table{k: 8}
+	tbl := newTable(8)
 	var maxFar int160.T
 	maxFar.SetMax()
 	assert.Equal(t, 0, tbl.bucketIndex(maxFar))

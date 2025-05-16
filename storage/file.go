@@ -27,6 +27,12 @@ func FileOptionPathMakerInfohashV0(fci *fileClientImpl) {
 	fci.pathMaker = infoHashPathMakerV0
 }
 
+func FileOptionPathMakerFixed(s string) FileOption {
+	return func(fci *fileClientImpl) {
+		fci.pathMaker = fixedPathMaker(s)
+	}
+}
+
 // File-based storage for torrents, that isn't yet bound to a particular
 // torrent.
 type fileClientImpl struct {
@@ -34,24 +40,28 @@ type fileClientImpl struct {
 	pathMaker FilePathMaker
 }
 
-// The Default path maker just returns the current path
-func defaultPathMaker(baseDir string, infoHash metainfo.Hash, info *metainfo.Info, fi *metainfo.FileInfo) string {
-	return filepath.Join(baseDir, info.Name, filepath.Join(langx.DerefOrZero(fi).Path...))
+func fixedPathMaker(name string) FilePathMaker {
+	return func(baseDir string, infoHash metainfo.Hash, info *metainfo.Info, fi *metainfo.FileInfo) string {
+		s := filepath.Join(baseDir, name)
+		return s
+	}
 }
 
 func infoHashPathMaker(baseDir string, infoHash metainfo.Hash, info *metainfo.Info, fi *metainfo.FileInfo) string {
-	return filepath.Join(baseDir, infoHash.HexString(), filepath.Join(langx.DerefOrZero(fi).Path...))
+	// s := filepath.Join(baseDir, infoHash.HexString(), langx.DefaultIfZero(langx.DerefOrZero(info).Name, filepath.Join(langx.DerefOrZero(fi).Path...)))
+	s := filepath.Join(baseDir, infoHash.HexString(), filepath.Join(langx.DerefOrZero(fi).Path...))
+	return s
 }
 
 func infoHashPathMakerV0(baseDir string, infoHash metainfo.Hash, info *metainfo.Info, fi *metainfo.FileInfo) string {
-	return filepath.Join(baseDir, infoHash.HexString(), info.Name, filepath.Join(langx.DerefOrZero(fi).Path...))
+	return filepath.Join(baseDir, infoHash.HexString(), langx.DerefOrZero(info).Name, filepath.Join(langx.DerefOrZero(fi).Path...))
 }
 
 // All Torrent data stored in this baseDir
 func NewFile(baseDir string, options ...FileOption) *fileClientImpl {
 	return langx.Autoptr(langx.Clone(fileClientImpl{
 		baseDir:   baseDir,
-		pathMaker: defaultPathMaker,
+		pathMaker: infoHashPathMaker,
 	}, options...))
 }
 
@@ -85,7 +95,6 @@ func (fts *fileTorrentImpl) ReadAt(p []byte, off int64) (n int, err error) {
 	if fts.closed.Load() {
 		return 0, ErrClosed()
 	}
-	// log.Println("file storage ReadAt len", len(p), "offset", off)
 	return fileTorrentImplIO{fts}.ReadAt(p, off)
 }
 
@@ -137,7 +146,6 @@ type fileTorrentImplIO struct {
 // Returns EOF on short or missing file.
 func (fst *fileTorrentImplIO) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err error) {
 	filepath := fst.fts.pathMaker(fst.fts.dir, fst.fts.infoHash, fst.fts.info, &fi)
-	// log.Println("reading file", filepath, off)
 	f, err := os.Open(filepath)
 	if os.IsNotExist(err) {
 		// File missing is treated the same as a short file.
@@ -161,7 +169,8 @@ func (fst *fileTorrentImplIO) readFileAt(fi metainfo.FileInfo, b []byte, off int
 			break
 		}
 	}
-	return
+
+	return n, err
 }
 
 // Only returns EOF at the end of the torrent. Premature EOF is ErrUnexpectedEOF.

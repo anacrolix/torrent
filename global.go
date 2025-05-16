@@ -4,11 +4,12 @@ import (
 	"expvar"
 
 	pp "github.com/james-lawrence/torrent/btprotocol"
+	"github.com/james-lawrence/torrent/internal/bytesx"
 )
 
 const (
-	maxRequests      = 250    // Maximum pending requests we allow peers to send us.
-	defaultChunkSize = 0x4000 // 16KiB
+	maxRequests      = 250 // Maximum pending requests we allow peers to send us.
+	defaultChunkSize = 16 * bytesx.KiB
 )
 
 // These are our extended message IDs. Peers will use these values to

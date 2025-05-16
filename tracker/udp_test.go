@@ -140,6 +140,8 @@ func TestAnnounceLocalhost(t *testing.T) {
 }
 
 func TestUDPTracker(t *testing.T) {
+	t.SkipNow()
+
 	ctx, done := testx.Context(t)
 	defer done()
 

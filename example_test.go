@@ -5,11 +5,13 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 
 	"github.com/anacrolix/utp"
 	"github.com/james-lawrence/torrent"
 	"github.com/james-lawrence/torrent/autobind"
 	"github.com/james-lawrence/torrent/sockets"
+	"github.com/james-lawrence/torrent/storage"
 )
 
 func Example_download() {
@@ -54,7 +56,11 @@ func Example_customNetworkProtocols() {
 	defer l.Close()
 
 	s := sockets.New(l, &net.Dialer{LocalAddr: l.Addr()})
-	c, _ := torrent.NewSocketsBind(s).Bind(torrent.NewClient(torrent.NewDefaultClientConfig(torrent.ClientConfigBootstrapGlobal)))
+	c, _ := torrent.NewSocketsBind(s).Bind(torrent.NewClient(torrent.NewDefaultClientConfig(
+		torrent.NewMetadataCache(os.TempDir()),
+		storage.NewFile(os.TempDir()),
+		torrent.ClientConfigBootstrapGlobal,
+	)))
 	defer c.Close()
 
 	if metadata, err = torrent.NewFromMagnet("magnet:?xt=urn:btih:ZOCMZQIPFFW7OLLMIC5HUB6BPCSDEOQU"); err != nil {

@@ -20,7 +20,7 @@ func (cl *Client) addPortMapping(d upnp.Device, proto upnp.Protocol, internalPor
 }
 
 func (cl *Client) forwardPort() {
-	if cl.config.NoDefaultPortForwarding {
+	if !cl.config.defaultPortForwarding {
 		return
 	}
 

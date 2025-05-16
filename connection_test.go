@@ -21,12 +21,12 @@ import (
 // Have that would potentially alter it.
 func TestSendBitfieldThenHave(t *testing.T) {
 	t.SkipNow()
-	cl := Client{
+	cl := &Client{
 		config: TestingConfig(t),
 	}
 	ts, err := New(metainfo.Hash{})
 	require.NoError(t, err)
-	tt, err := cl.newTorrent(ts)
+	tt := newTorrent(cl, ts)
 	require.NoError(t, err)
 	tt.setInfo(&metainfo.Info{
 		Pieces:      make([]byte, metainfo.HashSize*3),
@@ -65,18 +65,6 @@ type torrentStorage struct {
 }
 
 func (me *torrentStorage) Close() error { return nil }
-
-func (me *torrentStorage) Completion() storage.Completion {
-	return storage.Completion{}
-}
-
-func (me *torrentStorage) MarkComplete() error {
-	return nil
-}
-
-func (me *torrentStorage) MarkNotComplete() error {
-	return nil
-}
 
 func (me *torrentStorage) ReadAt([]byte, int64) (int, error) {
 	panic("shouldn't be called")

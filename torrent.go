@@ -1074,6 +1074,16 @@ func (t *Torrent) assertAllPiecesRelativeAvailabilityZero() {
 	}
 }
 
+// The whole-torrent first byte position.
+func (t *Torrent) requestIndexBegin(r RequestIndex) int64 {
+	return t.requestOffset(t.requestIndexToRequest(r))
+}
+
+func (t *Torrent) requestIndexEnd(r RequestIndex) int64 {
+	req := t.requestIndexToRequest(r)
+	return t.requestOffset(req) + int64(req.Length)
+}
+
 func (t *Torrent) requestOffset(r Request) int64 {
 	return torrentRequestOffset(t.length(), int64(t.usualPieceSize()), r)
 }
@@ -3375,4 +3385,29 @@ func (t *Torrent) Complete() chansync.ReadOnlyFlag {
 
 func (t *Torrent) slogger() *slog.Logger {
 	return t._slogger
+}
+
+// Get a chunk buffer from the pool. It should be returned when it's no longer in use. Do we
+// waste an allocation if we throw away the pointer it was stored with?
+func (t *Torrent) getChunkBuffer() []byte {
+	return *t.chunkPool.Get().(*[]byte)
+}
+
+func (t *Torrent) putChunkBuffer(b []byte) {
+	panicif.NotEq(cap(b), t.chunkSize.Int())
+	// Does this allocate? Are we amortizing against the cost of a large buffer?
+	t.chunkPool.Put(&b)
+}
+
+func (t *Torrent) withSlogger(base *slog.Logger) *slog.Logger {
+	return base.With(slog.Group(
+		"torrent",
+		"name", lazyLogValuer(func() any {
+			opt := t.bestName()
+			if opt.Ok {
+				return opt.Value
+			}
+			return nil
+		}),
+		"ih", *t.canonicalShortInfohash()))
 }

@@ -129,7 +129,7 @@ func BenchmarkRequestStrategy(b *testing.B) {
 			tor.cacheNextRequestIndexesForReuse(rs.Requests.requestIndexes)
 			// End of part that should be timed.
 			remainingChunks := (numPieces - completed) * (pieceLength / chunkSize)
-			c.Assert(rs.Requests.requestIndexes, qt.HasLen, minInt(
+			c.Assert(rs.Requests.requestIndexes, qt.HasLen, min(
 				remainingChunks,
 				int(cl.config.MaxUnverifiedBytes/chunkSize)))
 		}

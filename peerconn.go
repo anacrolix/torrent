@@ -325,8 +325,11 @@ func (me *PeerConn) _request(r Request) bool {
 	})
 }
 
-func (me *PeerConn) _cancel(r RequestIndex) bool {
+func (me *PeerConn) handleCancel(r RequestIndex) {
 	me.write(makeCancelMessage(me.t.requestIndexToRequest(r)))
+}
+
+func (me *PeerConn) acksCancels() bool {
 	return me.remoteRejectsCancels()
 }
 
@@ -849,9 +852,8 @@ func (c *PeerConn) mainReadLoop() (err error) {
 		case pp.Piece:
 			c.doChunkReadStats(int64(len(msg.Piece)))
 			err = c.receiveChunk(&msg)
-			if len(msg.Piece) == int(t.chunkSize) {
-				t.chunkPool.Put(&msg.Piece)
-			}
+			t.putChunkBuffer(msg.Piece)
+			msg.Piece = nil
 			if err != nil {
 				err = fmt.Errorf("receiving chunk: %w", err)
 			}
@@ -1445,4 +1447,8 @@ func hashRequestFromMessage(m pp.Message) hashRequest {
 		length:      m.Length,
 		proofLayers: m.ProofLayers,
 	}
+}
+
+func (me *PeerConn) peerPtr() *Peer {
+	return &me.Peer
 }

@@ -184,7 +184,7 @@ func (t *Torrent) getRequestablePieces(f requestStrategy.RequestPieceFunc) {
 // This gets the best-case request state. That means handling pieces limited by capacity, preferring
 // earlier pieces, low availability etc. It pays no attention to existing requests on the peer or
 // other peers. Those are handled later.
-func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
+func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	t := p.t
 	if !t.haveInfo() {
 		return
@@ -257,7 +257,9 @@ func (p *Peer) maybeUpdateActualRequestState() {
 			panic(since)
 		}
 	}
-	p.logger.Slogger().Debug("updating requests", "reason", p.needRequestUpdate)
+	if p.t.cl.config.Debug {
+		p.logger.Slogger().Debug("updating requests", "reason", p.needRequestUpdate)
+	}
 	pprof.Do(
 		context.Background(),
 		pprof.Labels("update request", string(p.needRequestUpdate)),
@@ -304,7 +306,7 @@ func (p *Peer) allowSendNotInterested() bool {
 
 // Transmit/action the request state to the peer. This includes work-stealing from other peers and
 // some piece order randomization within the preferred state calculated earlier in next.
-func (p *PeerConn) applyRequestState(next desiredRequestState) {
+func (p *Peer) applyRequestState(next desiredRequestState) {
 	current := &p.requestState
 	// Make interest sticky
 	if !next.Interested && p.requestState.Interested {
@@ -330,7 +332,7 @@ func (p *PeerConn) applyRequestState(next desiredRequestState) {
 			break
 		}
 		numPending := maxRequests(current.Requests.GetCardinality() + current.Cancelled.GetCardinality())
-		if numPending >= p.nominalMaxRequests() {
+		if numPending >= p.peerImpl.nominalMaxRequests() {
 			break
 		}
 		req := heap.Pop(requestHeap)
@@ -338,8 +340,8 @@ func (p *PeerConn) applyRequestState(next desiredRequestState) {
 			panic("changed")
 		}
 
-		// don't add requests on reciept of a reject - because this causes request back
-		// to potentially permanently unresponive peers - which just adds network noise.  If
+		// don't add requests on receipt of a reject - because this causes request back
+		// to potentially permanently unresponsive peers - which just adds network noise.  If
 		// the peer can handle more requests it will send an "unchoked" message - which
 		// will cause it to get added back to the request queue
 		if p.needRequestUpdate == peerUpdateRequestsRemoteRejectReason {

@@ -1,7 +1,6 @@
 package webseed
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/RoaringBitmap/roaring"
+	"github.com/anacrolix/missinggo/v2/panicif"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
@@ -28,7 +28,9 @@ type requestPart struct {
 
 type Request struct {
 	cancel func()
-	Result chan RequestResult
+	// Closed in the machinery when cancelled?
+	Body io.Reader
+	err  chan error
 }
 
 func (r Request) Cancel() {
@@ -47,7 +49,8 @@ type Client struct {
 	// given that's how requests are mapped to webseeds, but the torrent.Client works at the piece
 	// level. We can map our file-level adjustments to the pieces here. This probably need to be
 	// private in the future, if Client ever starts removing pieces.
-	Pieces              roaring.Bitmap
+	Pieces roaring.Bitmap
+	// This wraps http.Response bodies, for example to limit the download rate.
 	ResponseBodyWrapper ResponseBodyWrapper
 	PathEscaper         PathEscaper
 }
@@ -95,16 +98,14 @@ func (ws *Client) StartNewRequest(r RequestSpec) Request {
 	}) {
 		panic("request out of file bounds")
 	}
+	body, w := io.Pipe()
 	req := Request{
 		cancel: cancel,
-		Result: make(chan RequestResult, 1),
+		Body:   body,
 	}
 	go func() {
-		b, err := readRequestPartResponses(ctx, requestParts)
-		req.Result <- RequestResult{
-			Bytes: b,
-			Err:   err,
-		}
+		err := readRequestPartResponses(ctx, w, requestParts)
+		panicif.Err(w.CloseWithError(err))
 	}()
 	return req
 }
@@ -118,7 +119,8 @@ func (me ErrBadResponse) Error() string {
 	return me.Msg
 }
 
-func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *http.Response) error {
+// Reads the part in full. All expected bytes must be returned or there will an error returned.
+func recvPartResult(ctx context.Context, w io.Writer, part requestPart, resp *http.Response) error {
 	defer resp.Body.Close()
 	var body io.Reader = resp.Body
 	if part.responseBodyWrapper != nil {
@@ -131,7 +133,7 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *
 	}
 	switch resp.StatusCode {
 	case http.StatusPartialContent:
-		copied, err := io.Copy(buf, body)
+		copied, err := io.Copy(w, body)
 		if err != nil {
 			return err
 		}
@@ -144,30 +146,33 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *
 		// https://archive.org/download/BloodyPitOfHorror/BloodyPitOfHorror.asr.srt. It seems that
 		// archive.org might be using a webserver implementation that refuses to do partial
 		// responses to small files.
-		if part.e.Start < 48<<10 {
-			if part.e.Start != 0 {
-				log.Printf("resp status ok but requested range [url=%q, range=%q]",
-					part.req.URL,
-					part.req.Header.Get("Range"))
-			}
-			// Instead of discarding, we could try receiving all the chunks present in the response
-			// body. I don't know how one would handle multiple chunk requests resulting in an OK
-			// response for the same file. The request algorithm might be need to be smarter for
-			// that.
-			discarded, _ := io.CopyN(io.Discard, body, part.e.Start)
-			if discarded != 0 {
-				log.Printf("discarded %v bytes in webseed request response part", discarded)
-			}
-			_, err := io.CopyN(buf, body, part.e.Length)
-			return err
-		} else {
+		discard := part.e.Start
+		if discard > 48<<10 {
 			return ErrBadResponse{"resp status ok but requested range", resp}
 		}
+		if discard != 0 {
+			log.Printf("resp status ok but requested range [url=%q, range=%q]",
+				part.req.URL,
+				part.req.Header.Get("Range"))
+		}
+		// Instead of discarding, we could try receiving all the chunks present in the response
+		// body. I don't know how one would handle multiple chunk requests resulting in an OK
+		// response for the same file. The request algorithm might be need to be smarter for that.
+		discarded, err := io.CopyN(io.Discard, body, discard)
+		if err != nil {
+			return fmt.Errorf("error discarding bytes from http ok response: %w", err)
+		}
+		panicif.NotEq(discarded, discard)
+		// Because the reply is not a partial aware response, we limit the body reader
+		// intentionally.
+		_, err = io.CopyN(w, body, part.e.Length)
+		return err
 	case http.StatusServiceUnavailable:
 		return ErrTooFast
 	default:
+		// TODO: Could we have a slog.Valuer or something to allow callers to unpack reasonable values?
 		return ErrBadResponse{
-			fmt.Sprintf("unhandled response status code (%v)", resp.StatusCode),
+			fmt.Sprintf("unhandled response status code (%v)", resp.Status),
 			resp,
 		}
 	}
@@ -175,20 +180,17 @@ func recvPartResult(ctx context.Context, buf io.Writer, part requestPart, resp *
 
 var ErrTooFast = errors.New("making requests too fast")
 
-func readRequestPartResponses(ctx context.Context, parts []requestPart) (_ []byte, err error) {
-	var buf bytes.Buffer
+func readRequestPartResponses(ctx context.Context, w io.Writer, parts []requestPart) (err error) {
 	for _, part := range parts {
 		var resp *http.Response
 		resp, err = part.do()
-
 		if err == nil {
-			err = recvPartResult(ctx, &buf, part, resp)
+			err = recvPartResult(ctx, w, part, resp)
 		}
-
 		if err != nil {
 			err = fmt.Errorf("reading %q at %q: %w", part.req.URL, part.req.Header.Get("Range"), err)
 			break
 		}
 	}
-	return buf.Bytes(), err
+	return
 }

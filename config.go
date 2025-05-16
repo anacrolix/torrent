@@ -152,7 +152,8 @@ type ClientConfig struct {
 	// How long between writes before sending a keep alive message on a peer connection that we want
 	// to maintain.
 	KeepAliveTimeout time.Duration
-	// Maximum bytes to buffer per peer connection for peer request data before it is sent.
+	// Maximum bytes to buffer per peer connection for peer request data before it is sent. This
+	// must be >= the request chunk size from peers.
 	MaxAllocPeerRequestDataPerConn int
 
 	// The IP addresses as our peers should see them. May differ from the

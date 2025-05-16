@@ -125,26 +125,6 @@ func connIsIpv6(nc interface {
 	return rip.To4() == nil && rip.To16() != nil
 }
 
-func maxInt(as ...int) int {
-	ret := as[0]
-	for _, a := range as[1:] {
-		if a > ret {
-			ret = a
-		}
-	}
-	return ret
-}
-
-func minInt(as ...int) int {
-	ret := as[0]
-	for _, a := range as[1:] {
-		if a < ret {
-			ret = a
-		}
-	}
-	return ret
-}
-
 var unlimited = rate.NewLimiter(rate.Inf, 0)
 
 type (

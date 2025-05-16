@@ -58,7 +58,8 @@ type (
 		lastChunkSent           time.Time
 
 		// Stuff controlled by the local peer.
-		needRequestUpdate    updateRequestReason
+		needRequestUpdate updateRequestReason
+		// TODO: How are pending cancels handled for webseed peers?
 		requestState         request_strategy.PeerRequestState
 		updateRequestsTimer  *time.Timer
 		lastRequestUpdate    time.Time
@@ -322,7 +323,7 @@ func (cn *Peer) writeStatus(w io.Writer) {
 		&cn._stats.ChunksWritten,
 		cn.requestState.Requests.GetCardinality(),
 		cn.requestState.Cancelled.GetCardinality(),
-		cn.nominalMaxRequests(),
+		cn.peerImpl.nominalMaxRequests(),
 		cn.PeerMaxRequests,
 		len(cn.peerRequests),
 		localClientReqq,
@@ -387,7 +388,7 @@ var (
 )
 
 // The actual value to use as the maximum outbound requests.
-func (cn *Peer) nominalMaxRequests() maxRequests {
+func (cn *PeerConn) nominalMaxRequests() maxRequests {
 	// TODO: This should differ for webseeds...
 	return max(1, min(cn.PeerMaxRequests, cn.peakRequests*2, maxLocalToRemoteRequests))
 }
@@ -455,7 +456,7 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 	return nil
 }
 
-func (cn *PeerConn) mustRequest(r RequestIndex) bool {
+func (cn *Peer) mustRequest(r RequestIndex) bool {
 	more, err := cn.request(r)
 	if err != nil {
 		panic(err)
@@ -463,14 +464,14 @@ func (cn *PeerConn) mustRequest(r RequestIndex) bool {
 	return more
 }
 
-func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
+func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 	if err := cn.shouldRequest(r); err != nil {
 		panic(err)
 	}
 	if cn.requestState.Requests.Contains(r) {
 		return true, nil
 	}
-	if maxRequests(cn.requestState.Requests.GetCardinality()) >= cn.nominalMaxRequests() {
+	if maxRequests(cn.requestState.Requests.GetCardinality()) >= cn.peerImpl.nominalMaxRequests() {
 		return true, errors.New("too many outstanding requests")
 	}
 	cn.requestState.Requests.Add(r)
@@ -479,13 +480,13 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 	}
 	cn.validReceiveChunks[r]++
 	cn.t.requestState[r] = requestState{
-		peer: &cn.Peer,
+		peer: cn,
 		when: time.Now(),
 	}
 	cn.updateExpectingChunks()
 	ppReq := cn.t.requestIndexToRequest(r)
 	for _, f := range cn.callbacks.SentRequest {
-		f(PeerRequestEvent{&cn.Peer, ppReq})
+		f(PeerRequestEvent{cn, ppReq})
 	}
 	return cn.legacyPeerImpl._request(ppReq), nil
 }

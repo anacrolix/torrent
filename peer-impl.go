@@ -6,7 +6,7 @@ import (
 	"github.com/anacrolix/torrent/metainfo"
 )
 
-// Contains implementation details that differ between peer types, like Webseeds and regular
+// Contains implementation details that differ between peer types, like WebSeeds and regular
 // BitTorrent protocol connections. These methods are embedded in the child types of Peer for legacy
 // expectations that they exist on the child type. Some methods are underlined to avoid collisions
 // with legacy PeerConn methods. New methods and calls that are fixed up should be migrated over to
@@ -46,4 +46,6 @@ type legacyPeerImpl interface {
 // Abstract methods implemented by subclasses of Peer.
 type newHotPeerImpl interface {
 	lastWriteUploadRate() float64
+	// How many requests should be assigned to the peer.
+	nominalMaxRequests() maxRequests
 }

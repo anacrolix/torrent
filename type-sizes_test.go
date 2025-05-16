@@ -1,10 +1,10 @@
 package torrent
 
 import (
-	"github.com/anacrolix/chansync"
 	"reflect"
 	"testing"
 
+	"github.com/anacrolix/chansync"
 	g "github.com/anacrolix/generics"
 	"github.com/go-quicktest/qt"
 )

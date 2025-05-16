@@ -672,18 +672,24 @@ func (t *Torrent) setMetadataSize(size int) (err error) {
 	return
 }
 
-// The current working name for the torrent. Either the name in the info dict,
-// or a display name given such as by the dn value in a magnet link, or "".
-func (t *Torrent) name() string {
+// Returns the best name for the torrent. This is either the name in the info dict, or a display
+// name if the info isn't known yet.
+func (t *Torrent) bestName() (_ g.Option[string]) {
 	t.nameMu.RLock()
 	defer t.nameMu.RUnlock()
 	if t.haveInfo() {
-		return t.info.BestName()
+		return g.Some(t.info.BestName())
 	}
 	if t.displayName != "" {
-		return t.displayName
+		return g.Some(t.displayName)
 	}
-	return "infohash:" + t.canonicalShortInfohash().HexString()
+	return
+}
+
+// The current working name for the torrent. Either the name in the info dict, or a display name
+// given such as by the dn value in a magnet link, or "".
+func (t *Torrent) name() string {
+	return t.bestName().UnwrapOr("infohash:" + t.canonicalShortInfohash().HexString())
 }
 
 func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {
@@ -2523,12 +2529,10 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 					// single peer for a piece, and we never progress that piece to completion, we
 					// will never smart-ban them. Discovered in
 					// https://github.com/anacrolix/torrent/issues/715.
-					t.logger.Levelf(
-						log.Warning,
-						"banning %v for being sole dirtier of piece %v after failed piece check",
-						c,
-						piece,
-					)
+					t.slogger().Warn(
+						"piece failed hash. banning peer",
+						"piece", piece,
+						"peer", c)
 					c.ban()
 				}
 			}

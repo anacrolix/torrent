@@ -113,7 +113,7 @@ type Torrent struct {
 
 	_chunksPerRegularPiece chunkIndexType
 
-	webSeeds map[string]*Peer
+	webSeeds map[string]*webseedPeer
 	// Active peer connections, running message stream loops. TODO: Make this
 	// open (not-closed) connections only.
 	conns               map[*PeerConn]struct{}
@@ -903,7 +903,14 @@ func (t *Torrent) writeStatus(w io.Writer) {
 	dumpStats(w, t.statsLocked())
 
 	fmt.Fprintf(w, "webseeds:\n")
-	t.writePeerStatuses(w, maps.Values(t.webSeeds))
+
+	t.writePeerStatuses(w, func(yield func(*Peer) bool) {
+		for _, ws := range t.webSeeds {
+			if !yield(&ws.peer) {
+				return
+			}
+		}
+	})
 
 	// Peers without priorities first, then those with. I'm undecided about how to order peers
 	// without priorities.
@@ -2920,7 +2927,7 @@ func (t *Torrent) iterPeers(f func(p *Peer)) {
 		f(&pc.Peer)
 	}
 	for _, ws := range t.webSeeds {
-		f(ws)
+		f(&ws.peer)
 	}
 }
 
@@ -2961,11 +2968,12 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 		return false
 	}
 	// I don't think Go http supports pipelining requests. However, we can have more ready to go
-	// right away. This value should be some multiple of the number of connections to a host. I
-	// would expect that double maxRequests plus a bit would be appropriate. This value is based on
-	// downloading Sintel (08ada5a7a6183aae1e09d831df6748d566095a10) from
-	// "https://webtorrent.io/torrents/".
-	const defaultMaxRequests = 16
+	// right away. This value should be some multiple of the number of connections to a host. This
+	// number is based on keeping at least one connection actively downloading while another request
+	// is fired off, and ensuring race detection works. Downloading Sintel
+	// (08ada5a7a6183aae1e09d831df6748d566095a10) from "https://webtorrent.io/torrents/" is a good
+	// test.
+	const defaultMaxRequests = 2
 	ws := webseedPeer{
 		peer: Peer{
 			t:                        t,
@@ -2993,11 +3001,9 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 		opt(&ws.client)
 	}
 	g.MakeMapWithCap(&ws.activeRequests, ws.client.MaxRequests)
-	// This should affect how often we have to recompute requests for this peer. Note that
-	// because we can request more than 1 thing at a time over HTTP, we will hit the low
-	// requests mark more often, so recomputation is probably sooner than with regular peer
-	// conns. ~4x maxRequests would be about right.
-	ws.peer.PeerMaxRequests = 4 * ws.client.MaxRequests
+	// TODO: Implement an algorithm that assigns this based on sharing chunks across peers. For now
+	// we just allow 2 MiB worth of requests. See newHotPeerImpl.nominalMaxRequests.
+	ws.peer.PeerMaxRequests = intCeilDiv(2<<20, ws.peer.t.chunkSize.Int())
 	ws.peer.initUpdateRequestsTimer()
 	ws.locker = t.cl.locker()
 	for _, f := range t.callbacks().NewPeer {
@@ -3010,7 +3016,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	if t.haveInfo() {
 		ws.onGotInfo(t.info)
 	}
-	t.webSeeds[url] = &ws.peer
+	t.webSeeds[url] = &ws
 	ws.peer.onNeedUpdateRequests("Torrent.addWebSeed")
 	return true
 }

@@ -295,7 +295,7 @@ func (t *Torrent) WebseedPeerConns() []*Peer {
 	defer t.cl.rUnlock()
 	ret := make([]*Peer, 0, len(t.conns))
 	for _, c := range t.webSeeds {
-		ret = append(ret, c)
+		ret = append(ret, &c.peer)
 	}
 	return ret
 }

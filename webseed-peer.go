@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
-	g "github.com/anacrolix/generics"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -31,14 +30,26 @@ type webseedPeer struct {
 func (me *webseedPeer) nominalMaxRequests() maxRequests {
 	// TODO: Implement an algorithm that assigns this based on sharing chunks across peers. For now
 	// we just allow 2 MiB worth of requests.
-	return intCeilDiv(2<<20, me.peer.t.chunkSize.Int())
+	return me.peer.PeerMaxRequests
 }
 
 func (me *webseedPeer) acksCancels() bool {
 	return false
 }
 
+func (me *webseedPeer) numRequests() int {
+	// What about unassigned requests? TODO: Don't allow those.
+	return len(me.activeRequests)
+}
+
+func (me *webseedPeer) shouldUpdateRequests() bool {
+	return me.peer.t.cl.underWebSeedHttpRequestLimit()
+}
+
 func (me *webseedPeer) updateRequests() {
+	if !me.shouldUpdateRequests() {
+		return
+	}
 	p := &me.peer
 	next := p.getDesiredRequestState()
 	p.applyRequestState(next)
@@ -159,14 +170,14 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	if err != nil {
 		ws.peer.onNeedUpdateRequests("webseedPeer request errored")
 	}
-	ws.spawnRequests()
+	ws.peer.t.cl.updateWebSeedRequests()
 	locker.Unlock()
 }
 
 func (ws *webseedPeer) spawnRequests() {
 	next, stop := iter.Pull(ws.inactiveRequests())
 	defer stop()
-	for len(ws.activeRequests) <= ws.client.MaxRequests {
+	for len(ws.activeRequests) < ws.client.MaxRequests && ws.peer.t.cl.underWebSeedHttpRequestLimit() {
 		req, ok := next()
 		if !ok {
 			break
@@ -239,13 +250,7 @@ func (cn *webseedPeer) ban() {
 }
 
 func (ws *webseedPeer) handleOnNeedUpdateRequests() {
-	// Because this is synchronous, webseed peers seem to get first dibs on newly prioritized
-	// pieces.
-	go func() {
-		ws.peer.t.cl.lock()
-		defer ws.peer.t.cl.unlock()
-		ws.peer.maybeUpdateActualRequestState()
-	}()
+	ws.peer.maybeUpdateActualRequestState()
 }
 
 func (ws *webseedPeer) onClose() {

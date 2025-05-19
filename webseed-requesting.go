@@ -10,8 +10,10 @@ import (
 - For each piece calculate files involved. Record each file not seen before and the piece index.
 - Cancel any outstanding requests that don't match a final file/piece-index pair.
 - Initiate missing requests that fit into the available limits.
+
+This was a globally aware webseed requestor algorithm that is probably going to be abandoned.
 */
-func (cl *Client) updateWebSeedRequests() {
+func (cl *Client) abandonedUpdateWebSeedRequests() {
 	for key, value := range cl.pieceRequestOrder {
 		input := key.getRequestStrategyInput(cl)
 		requestStrategy.GetRequestablePieces(
@@ -21,5 +23,13 @@ func (cl *Client) updateWebSeedRequests() {
 				return true
 			},
 		)
+	}
+}
+
+func (cl *Client) updateWebSeedRequests() {
+	for t := range cl.torrents {
+		for _, p := range t.webSeeds {
+			p.updateRequests()
+		}
 	}
 }

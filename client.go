@@ -1370,9 +1370,9 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		metadataChanged: sync.Cond{
 			L: cl.locker(),
 		},
-		webSeeds:     make(map[string]*Peer),
 		gotMetainfoC: make(chan struct{}),
 	}
+	g.MakeMap(&t.webSeeds)
 	t.closedCtx, t.closedCtxCancel = context.WithCancel(context.Background())
 	var salt [8]byte
 	rand.Read(salt[:])
@@ -1894,4 +1894,14 @@ func (cl *Client) Stats() ClientStats {
 	cl.rLock()
 	defer cl.rUnlock()
 	return cl.statsLocked()
+}
+
+func (cl *Client) underWebSeedHttpRequestLimit() bool {
+	num := 0
+	for t := range cl.torrents {
+		for _, p := range t.webSeeds {
+			num += p.numRequests()
+		}
+	}
+	return num < 10
 }

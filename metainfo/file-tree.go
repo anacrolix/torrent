@@ -8,6 +8,7 @@ import (
 	g "github.com/anacrolix/generics"
 
 	"github.com/anacrolix/torrent/bencode"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
 
 const FileTreePropertiesKey = ""
@@ -144,7 +145,7 @@ func (ft *FileTree) Walk(path []string, f func(path []string, ft *FileTree)) {
 	}
 }
 
-func (ft *FileTree) PiecesRootAsByteArray() (ret g.Option[[32]byte]) {
+func (ft *FileTree) PiecesRootAsByteArray() (ret g.Option[infohash_v2.T]) {
 	if ft.File.PiecesRoot == "" {
 		return
 	}

@@ -1,13 +1,12 @@
 package torrent
 
 import (
-	"crypto/sha256"
-
 	"github.com/RoaringBitmap/roaring"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
 	"github.com/anacrolix/torrent/metainfo"
+	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
 
 // Provides access to regions of torrent data that correspond to its files.
@@ -19,7 +18,7 @@ type File struct {
 	fi          metainfo.FileInfo
 	displayPath string
 	prio        PiecePriority
-	piecesRoot  g.Option[[sha256.Size]byte]
+	piecesRoot  g.Option[infohash_v2.T]
 }
 
 func (f *File) String() string {

@@ -387,12 +387,6 @@ var (
 	maxLocalToRemoteRequests = (writeBufferHighWaterLen - writeBufferLowWaterLen - interestedMsgLen) / requestMsgLen
 )
 
-// The actual value to use as the maximum outbound requests.
-func (cn *PeerConn) nominalMaxRequests() maxRequests {
-	// TODO: This should differ for webseeds...
-	return max(1, min(cn.PeerMaxRequests, cn.peakRequests*2, maxLocalToRemoteRequests))
-}
-
 func (cn *Peer) totalExpectingTime() (ret time.Duration) {
 	ret = cn.cumulativeExpectedToReceiveChunks
 	if !cn.lastStartedExpectingToReceiveChunks.IsZero() {

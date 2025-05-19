@@ -176,14 +176,6 @@ func (ws *webseedPeer) spawnRequests() {
 	}
 }
 
-// Returns Some of the last item in a iter.Seq, or None if the sequence is empty.
-func seqLast[V any](seq iter.Seq[V]) (last g.Option[V]) {
-	for item := range seq {
-		last.Set(item)
-	}
-	return
-}
-
 func (ws *webseedPeer) iterConsecutiveRequests(begin RequestIndex) iter.Seq[RequestIndex] {
 	return func(yield func(RequestIndex) bool) {
 		for {

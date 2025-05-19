@@ -1452,3 +1452,8 @@ func hashRequestFromMessage(m pp.Message) hashRequest {
 func (me *PeerConn) peerPtr() *Peer {
 	return &me.Peer
 }
+
+// The actual value to use as the maximum outbound requests.
+func (cn *PeerConn) nominalMaxRequests() maxRequests {
+	return max(1, min(cn.PeerMaxRequests, cn.peakRequests*2, maxLocalToRemoteRequests))
+}

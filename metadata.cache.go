@@ -3,6 +3,7 @@ package torrent
 import (
 	"fmt"
 	"iter"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -120,6 +121,10 @@ func (t *memoryseeding) Metadata(id int160.T) (md Metadata, err error) {
 }
 
 func NewMetadataCache(root string) metadatafilestore {
+	if err := os.MkdirAll(root, 0700); err != nil {
+		log.Println("unable to ensure metadata cache root directory", err)
+	}
+
 	return metadatafilestore{
 		root: root,
 	}

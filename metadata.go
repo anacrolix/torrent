@@ -21,6 +21,16 @@ func OptionTrackers(trackers ...string) Option {
 	}
 }
 
+func OptionPublicTrackers(private bool, trackers ...string) Option {
+	return func(t *Metadata) {
+		if private {
+			return
+		}
+
+		t.Trackers = append(t.Trackers, trackers...)
+	}
+}
+
 // OptionTrackers set the trackers for the torrent.
 func OptionResetTrackers(trackers ...string) Option {
 	return func(t *Metadata) {

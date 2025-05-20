@@ -963,7 +963,8 @@ func (t *torrent) dropHalfOpen(addr string) {
 	_, ok := t.halfOpen[addr]
 	t._halfOpenmu.RUnlock()
 	if !ok {
-		panic("invariant broken")
+		log.Println("warning: attempted to drop a half open connection that doesn't exist")
+		return
 	}
 
 	t._halfOpenmu.Lock()

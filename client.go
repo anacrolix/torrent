@@ -23,18 +23,20 @@ import (
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
-	. "github.com/anacrolix/generics"
-	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/log"
-	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/bitmap"
-	"github.com/anacrolix/missinggo/v2/pproffd"
-	"github.com/anacrolix/sync"
 	"github.com/cespare/xxhash"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
 	"github.com/pion/webrtc/v4"
+
+	"github.com/anacrolix/log"
+
+	. "github.com/anacrolix/generics"
+	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/missinggo/v2/pproffd"
+	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
@@ -197,19 +199,31 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 }
 
-func (cl *Client) initLogger() {
+func (cl *Client) getLoggers() (log.Logger, *slog.Logger) {
 	logger := cl.config.Logger
+	slogger := cl.config.Slogger
+	// Maintain old behaviour if ClientConfig.Slogger isn't provided. Pointer Slogger to Logger so it appears unmodified.
+	if slogger == nil {
+		if logger.IsZero() {
+			logger = log.Default
+		}
+		if cl.config.Debug {
+			logger = logger.WithFilterLevel(log.Debug)
+		}
+		logger = logger.WithValues(cl)
+		return logger, logger.Slogger()
+	}
+	// Point logger to slogger.
 	if logger.IsZero() {
-		logger = log.Default
+		logger = log.NewLogger()
+		logger.SetHandlers(log.SlogHandlerAsHandler{slogger.Handler()})
 	}
-	if cl.config.Debug {
-		logger = logger.WithFilterLevel(log.Debug)
-	}
-	cl.logger = logger.WithValues(cl)
-	cl.slogger = cl.config.Slogger
-	if cl.slogger == nil {
-		cl.slogger = cl.logger.Slogger()
-	}
+	// The unhandled case is that both logger and slogger are set. In this case, use them as normal.
+	return logger, slogger
+}
+
+func (cl *Client) initLogger() {
+	cl.logger, cl.slogger = cl.getLoggers()
 }
 
 func (cl *Client) announceKey() int32 {

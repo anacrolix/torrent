@@ -106,7 +106,7 @@ func (t *memoryseeding) Load(cl *Client, id int160.T) (_ *torrent, cached bool, 
 	t.torrents[id] = dlt
 
 	// TODO: we'll want an as needed verification
-	return dlt, false, dlt.Tune(TuneVerifyFull)
+	return dlt, false, dlt.Tune(TuneUnverified)
 }
 
 func (t *memoryseeding) Metadata(id int160.T) (md Metadata, err error) {

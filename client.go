@@ -94,7 +94,8 @@ type Client struct {
 	acceptLimiter map[ipStr]int
 	numHalfOpen   int
 
-	websocketTrackers websocketTrackers
+	websocketTrackers  websocketTrackers
+	numWebSeedRequests int
 
 	activeAnnounceLimiter limiter.Instance
 	httpClient            *http.Client
@@ -1911,11 +1912,14 @@ func (cl *Client) Stats() ClientStats {
 }
 
 func (cl *Client) underWebSeedHttpRequestLimit() bool {
-	num := 0
+	return cl.numWebSeedRequests < 10
+}
+
+func (cl *Client) countWebSeedHttpRequests() (num int) {
 	for t := range cl.torrents {
 		for _, p := range t.webSeeds {
 			num += p.numRequests()
 		}
 	}
-	return num < 10
+	return
 }

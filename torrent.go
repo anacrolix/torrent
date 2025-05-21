@@ -163,9 +163,8 @@ type Torrent struct {
 	// A cache of completed piece indices.
 	_completedPieces roaring.Bitmap
 	// Pieces that need to be hashed.
-	piecesQueuedForHash       bitmap.Bitmap
-	activePieceHashes         int
-	initialPieceCheckDisabled bool
+	piecesQueuedForHash bitmap.Bitmap
+	activePieceHashes   int
 
 	connsWithAllPieces map[*Peer]struct{}
 
@@ -191,6 +190,10 @@ type Torrent struct {
 
 	// Disable actions after updating piece priorities, for benchmarking.
 	disableTriggers bool
+	// See AddTorrentOpts.DisableInitialPieceCheck
+	initialPieceCheckDisabled bool
+	// See AddTorrentOpts.IgnoreUnverifiedPieceCompletion
+	ignoreUnverifiedPieceCompletion bool
 }
 
 type torrentTrackerAnnouncerKey struct {
@@ -305,11 +308,15 @@ func (t *Torrent) pieceComplete(piece pieceIndex) bool {
 	return t._completedPieces.Contains(bitmap.BitIndex(piece))
 }
 
-func (t *Torrent) pieceCompleteUncached(piece pieceIndex) storage.Completion {
+func (t *Torrent) pieceCompleteUncached(piece pieceIndex) (ret storage.Completion) {
+	p := t.piece(piece)
+	if t.ignoreUnverifiedPieceCompletion && p.numVerifies == 0 {
+		return
+	}
 	if t.storage == nil {
 		return storage.Completion{Complete: false, Ok: true}
 	}
-	return t.pieces[piece].Storage().Completion()
+	return p.Storage().Completion()
 }
 
 func (t *Torrent) appendUnclosedConns(ret []*PeerConn) []*PeerConn {
@@ -525,7 +532,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	t.nameMu.Unlock()
 	t._chunksPerRegularPiece = chunkIndexType(
 		(pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
-	t.updateComplete()
+	t.deferUpdateComplete()
 	t.displayName = "" // Save a few bytes lol.
 	t.initFiles()
 	t.cacheLength()
@@ -547,8 +554,8 @@ func (t *Torrent) onSetInfo() {
 	MakeSliceWithLength(&t.requestPieceStates, t.numPieces())
 	for i := range t.pieces {
 		p := &t.pieces[i]
-		// Need to add relativeAvailability before updating piece completion, as that may result in conns
-		// being dropped.
+		// Need to add relativeAvailability before updating piece completion, as that may result in
+		// conns being dropped.
 		if p.relativeAvailability != 0 {
 			panic(p.relativeAvailability)
 		}
@@ -700,7 +707,7 @@ func (t *Torrent) pieceState(index pieceIndex) (ret PieceState) {
 	ret.Hashing = p.hashing
 	ret.Checking = ret.QueuedForHash || ret.Hashing
 	ret.Marking = p.marking
-	if !ret.Complete && t.piecePartiallyDownloaded(index) {
+	if ret.Ok && !ret.Complete && t.piecePartiallyDownloaded(index) {
 		ret.Partial = true
 	}
 	if t.info.HasV2() && !p.hashV2.Ok && p.hasPieceLayer() {
@@ -798,7 +805,7 @@ func (psr PieceStateRun) String() (ret string) {
 	if psr.Partial {
 		ret += "P"
 	}
-	if psr.Complete {
+	if psr.Ok && psr.Complete {
 		ret += "C"
 	}
 	if !psr.Ok {
@@ -1671,7 +1678,7 @@ func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	uncached := t.pieceCompleteUncached(piece)
 	cached := p.completion()
 	changed := cached != uncached
-	complete := uncached.Complete
+	complete := uncached.Ok && uncached.Complete
 	p.storageCompletionOk = uncached.Ok
 	x := uint32(piece)
 	if complete {
@@ -2461,7 +2468,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	}
 
 	// Don't score the first time a piece is hashed, it could be an initial check.
-	if p.storageCompletionOk {
+	if p.numVerifies == 1 {
 		if passed {
 			pieceHashedCorrect.Add(1)
 		} else {
@@ -2624,6 +2631,7 @@ func (t *Torrent) tryCreatePieceHasher() bool {
 	}
 	p := t.piece(pi)
 	t.piecesQueuedForHash.Remove(bitmap.BitIndex(pi))
+	t.deferUpdateComplete()
 	p.hashing = true
 	t.publishPieceStateChange(pi)
 	t.updatePiecePriority(pi, "Torrent.tryCreatePieceHasher")
@@ -2709,26 +2717,39 @@ func (t *Torrent) clearPieceTouchers(pi pieceIndex) {
 	}
 }
 
+// Queue a check if one hasn't occurred before for the piece, and the completion state is unknown.
 func (t *Torrent) queueInitialPieceCheck(i pieceIndex) {
-	if !t.initialPieceCheckDisabled && !t.piece(i).storageCompletionOk {
-		t.queuePieceCheck(i)
+	if t.initialPieceCheckDisabled {
+		return
 	}
+	p := t.piece(i)
+	if p.numVerifies != 0 {
+		return
+	}
+	// If a hash is already occurring we've satisfied the initial piece check condition.
+	if p.hashing {
+		return
+	}
+	if p.storageCompletionOk {
+		return
+	}
+	// Should only get closed or missing hash errors here which are ok.
+	_, _ = t.queuePieceCheck(i)
 }
 
 func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) (targetVerifies pieceVerifyCount, err error) {
 	piece := t.piece(pieceIndex)
 	if !piece.haveHash() {
+		// Should we just queue the hash anyway?
 		err = errors.New("piece hash unknown")
+		return
 	}
-	targetVerifies = piece.numVerifies + 1
-	if piece.hashing {
-		// The result of this queued piece check will be the one after the current one.
-		targetVerifies++
-	}
+	targetVerifies = piece.nextNovelHashCount()
 	if piece.queuedForHash() {
 		return
 	}
 	t.piecesQueuedForHash.Add(bitmap.BitIndex(pieceIndex))
+	t.deferUpdateComplete()
 	t.publishPieceStateChange(pieceIndex)
 	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck")
 	err = t.tryCreateMorePieceHashers()
@@ -3046,6 +3067,11 @@ func (t *Torrent) requestIndexFromRequest(r Request) RequestIndex {
 // The first request index for the piece.
 func (t *Torrent) pieceRequestIndexBegin(piece pieceIndex) RequestIndex {
 	return RequestIndex(piece) * t.chunksPerRegularPiece()
+}
+
+// Run complete validation when lock is released.
+func (t *Torrent) deferUpdateComplete() {
+	t.cl._mu.DeferOnce(t.updateComplete)
 }
 
 func (t *Torrent) updateComplete() {

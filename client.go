@@ -23,20 +23,18 @@ import (
 	"github.com/anacrolix/chansync/events"
 	"github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/krpc"
+	. "github.com/anacrolix/generics"
+	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/log"
+	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/missinggo/v2/pproffd"
+	"github.com/anacrolix/sync"
 	"github.com/cespare/xxhash"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
 	"github.com/pion/webrtc/v4"
-
-	"github.com/anacrolix/log"
-
-	. "github.com/anacrolix/generics"
-	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/missinggo/v2"
-	"github.com/anacrolix/missinggo/v2/bitmap"
-	"github.com/anacrolix/missinggo/v2/pproffd"
-	"github.com/anacrolix/sync"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
@@ -1386,6 +1384,9 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 			L: cl.locker(),
 		},
 		gotMetainfoC: make(chan struct{}),
+
+		ignoreUnverifiedPieceCompletion: opts.IgnoreUnverifiedPieceCompletion,
+		initialPieceCheckDisabled:       opts.DisableInitialPieceCheck,
 	}
 	g.MakeMap(&t.webSeeds)
 	t.closedCtx, t.closedCtxCancel = context.WithCancel(context.Background())
@@ -1493,17 +1494,18 @@ type AddTorrentOpts struct {
 	Storage    storage.ClientImpl
 	ChunkSize  pp.Integer
 	InfoBytes  []byte
+	// Don't hash data if piece completion is missing. This is useful for very large torrents that
+	// are dropped in place from an external source and trigger a lot of initial piece checks.
+	DisableInitialPieceCheck bool
+	// Require pieces to be checked as soon as info is available. This is because we have no way to
+	// schedule an initial check only, and don't want to race against use of Torrent.Complete.
+	IgnoreUnverifiedPieceCompletion bool
 }
 
 // Add or merge a torrent spec. Returns new if the torrent wasn't already in the client. See also
 // Torrent.MergeSpec.
 func (cl *Client) AddTorrentSpec(spec *TorrentSpec) (t *Torrent, new bool, err error) {
-	t, new = cl.AddTorrentOpt(AddTorrentOpts{
-		InfoHash:   spec.InfoHash,
-		InfoHashV2: spec.InfoHashV2,
-		Storage:    spec.Storage,
-		ChunkSize:  spec.ChunkSize,
-	})
+	t, new = cl.AddTorrentOpt(spec.AddTorrentOpts)
 	modSpec := *spec
 	if new {
 		// ChunkSize was already applied by adding a new Torrent, and MergeSpec disallows changing
@@ -1533,9 +1535,9 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	cl := t.cl
 	cl.AddDhtNodes(spec.DhtNodes)
 	t.UseSources(spec.Sources)
+	// TODO: The lock should be moved earlier.
 	cl.lock()
 	defer cl.unlock()
-	t.initialPieceCheckDisabled = spec.DisableInitialPieceCheck
 	for _, url := range spec.Webseeds {
 		t.addWebSeed(url)
 	}

@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/RoaringBitmap/roaring"
-
 	"github.com/anacrolix/missinggo/v2/panicif"
 
 	"github.com/anacrolix/torrent/metainfo"

@@ -69,7 +69,7 @@ type Completion struct {
 	Err error
 	// The state is known or cached.
 	Ok bool
-	// If Ok, whether the data is correct.
+	// If Ok, whether the data is correct. TODO: Check all callsites test Ok first.
 	Complete bool
 }
 

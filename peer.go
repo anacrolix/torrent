@@ -11,12 +11,11 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
+	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/iter"
-	"github.com/anacrolix/multiless"
-
-	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/multiless"
 
 	"github.com/anacrolix/torrent/internal/alloclim"
 	"github.com/anacrolix/torrent/mse"

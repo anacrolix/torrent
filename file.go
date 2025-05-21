@@ -1,8 +1,9 @@
 package torrent
 
 import (
-	"github.com/RoaringBitmap/roaring"
+	"iter"
 
+	"github.com/RoaringBitmap/roaring"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
@@ -217,4 +218,25 @@ func (f *File) EndPieceIndex() int {
 
 func (f *File) numPieces() int {
 	return f.EndPieceIndex() - f.BeginPieceIndex()
+}
+
+func (f *File) PieceIndices() iter.Seq[int] {
+	return func(yield func(int) bool) {
+		for i := f.BeginPieceIndex(); i < f.EndPieceIndex(); i++ {
+			if !yield(i) {
+				break
+			}
+		}
+	}
+}
+
+func (f *File) Pieces() iter.Seq[*Piece] {
+	return func(yield func(*Piece) bool) {
+		for i := range f.PieceIndices() {
+			p := f.t.piece(i)
+			if !yield(p) {
+				break
+			}
+		}
+	}
 }

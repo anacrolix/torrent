@@ -133,10 +133,9 @@ func TestAddDropManyTorrents(t *testing.T) {
 	require.NoError(t, err)
 	defer cl.Close()
 	for i := range 1000 {
-		var spec TorrentSpec
-		binary.PutVarint(spec.InfoHash[:], int64(i+1))
-		tt, new, err := cl.AddTorrentSpec(&spec)
-		assert.NoError(t, err)
+		var opts AddTorrentOpts
+		binary.PutVarint(opts.InfoHash[:], int64(i+1))
+		tt, new := cl.AddTorrentOpt(opts)
 		assert.True(t, new)
 		defer tt.Drop()
 	}
@@ -185,11 +184,10 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 	}
 	b, err := bencode.Marshal(info)
 	require.NoError(t, err)
-	tt, new, err := cl.AddTorrentSpec(&TorrentSpec{
+	tt, new := cl.AddTorrentOpt(AddTorrentOpts{
 		InfoBytes: b,
 		InfoHash:  metainfo.HashBytes(b),
 	})
-	require.NoError(t, err)
 	defer tt.Drop()
 	assert.True(t, new)
 	r := tt.NewReader()
@@ -367,10 +365,9 @@ func TestAddTorrentSpecMerging(t *testing.T) {
 	defer cl.Close()
 	dir, mi := testutil.GreetingTestTorrent()
 	defer os.RemoveAll(dir)
-	tt, new, err := cl.AddTorrentSpec(&TorrentSpec{
+	tt, new := cl.AddTorrentOpt(AddTorrentOpts{
 		InfoHash: mi.HashInfoBytes(),
 	})
-	require.NoError(t, err)
 	require.True(t, new)
 	require.Nil(t, tt.Info())
 	_, new, err = cl.AddTorrentSpec(TorrentSpecFromMetaInfo(mi))
@@ -384,7 +381,7 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 	os.RemoveAll(dir)
 	cl, _ := NewClient(TestingConfig(t))
 	defer cl.Close()
-	tt, _, _ := cl.AddTorrentSpec(&TorrentSpec{
+	tt, _ := cl.AddTorrentOpt(AddTorrentOpts{
 		InfoHash: mi.HashInfoBytes(),
 	})
 	tt.Drop()
@@ -568,12 +565,11 @@ func TestPeerInvalidHave(t *testing.T) {
 	}
 	infoBytes, err := bencode.Marshal(info)
 	require.NoError(t, err)
-	tt, _new, err := cl.AddTorrentSpec(&TorrentSpec{
+	tt, _new := cl.AddTorrentOpt(AddTorrentOpts{
 		InfoBytes: infoBytes,
 		InfoHash:  metainfo.HashBytes(infoBytes),
 		Storage:   badStorage{},
 	})
-	require.NoError(t, err)
 	assert.True(t, _new)
 	defer tt.Drop()
 	cn := &PeerConn{Peer: Peer{
@@ -596,7 +592,7 @@ func TestPieceCompletedInStorageButNotClient(t *testing.T) {
 	seeder, err := NewClient(TestingConfig(t))
 	require.NoError(t, err)
 	defer seeder.Close()
-	_, new, err := seeder.AddTorrentSpec(&TorrentSpec{
+	_, new := seeder.AddTorrentOpt(AddTorrentOpts{
 		InfoBytes: greetingMetainfo.InfoBytes,
 		InfoHash:  greetingMetainfo.HashInfoBytes(),
 	})

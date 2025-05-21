@@ -36,10 +36,6 @@ type Piece struct {
 
 	numVerifies     pieceVerifyCount
 	numVerifiesCond chansync.BroadcastCond
-	hashing         bool
-	// The piece state may have changed, and is being synchronized with storage.
-	marking             bool
-	storageCompletionOk bool
 
 	publicPieceState PieceState
 	priority         PiecePriority
@@ -56,6 +52,13 @@ type Piece struct {
 	// Connections that have written data to this piece since its last check.
 	// This can include connections that have closed.
 	dirtiers map[*Peer]struct{}
+
+	// Currently being hashed.
+	hashing bool
+	// The piece state may have changed, and is being synchronized with storage.
+	marking bool
+	// The Completion.Ok field from the storage layer.
+	storageCompletionOk bool
 }
 
 func (p *Piece) String() string {
@@ -283,8 +286,10 @@ func (p *Piece) UpdateCompletion() {
 }
 
 func (p *Piece) completion() (ret storage.Completion) {
-	ret.Complete = p.t.pieceComplete(p.index)
 	ret.Ok = p.storageCompletionOk
+	if ret.Ok {
+		ret.Complete = p.t.pieceComplete(p.index)
+	}
 	return
 }
 
@@ -347,6 +352,8 @@ func (p *Piece) hasPieceLayer() bool {
 	return p.numFiles() == 1 && p.mustGetOnlyFile().length > p.t.info.PieceLength
 }
 
+// TODO: This looks inefficient. It will rehash everytime it is called. The hashes should be
+// generated once.
 func (p *Piece) obtainHashV2() (hash [32]byte, err error) {
 	if p.hashV2.Ok {
 		hash = p.hashV2.Value
@@ -357,7 +364,7 @@ func (p *Piece) obtainHashV2() (hash [32]byte, err error) {
 		return
 	}
 	storage := p.Storage()
-	if !storage.Completion().Complete {
+	if c := storage.Completion(); c.Ok && !c.Complete {
 		err = errors.New("piece incomplete")
 		return
 	}
@@ -388,6 +395,16 @@ func (p *Piece) hasActivePeerConnRequests() (ret bool) {
 	for ri := p.requestIndexBegin(); ri < p.requestIndexMaxEnd(); ri++ {
 		_, ok := p.t.requestState[ri]
 		ret = ret || ok
+	}
+	return
+}
+
+// The value of numVerifies after the next hashing operation that hasn't yet begun.
+func (p *Piece) nextNovelHashCount() (ret pieceVerifyCount) {
+	ret = p.numVerifies + 1
+	if p.hashing {
+		// The next novel hash will be the one after the current one.
+		ret++
 	}
 	return
 }

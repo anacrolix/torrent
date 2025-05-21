@@ -152,7 +152,9 @@ func TestPieceHashFailed(t *testing.T) {
 	cl := newTestingClient(t)
 	tt := cl.newTorrent(mi.HashInfoBytes(), badStorage{})
 	tt.setChunkSize(2)
+	tt.cl.lock()
 	require.NoError(t, tt.setInfoBytesLocked(mi.InfoBytes))
+	tt.cl.unlock()
 	tt.cl.lock()
 	tt.dirtyChunks.AddRange(
 		uint64(tt.pieceRequestIndexBegin(1)),

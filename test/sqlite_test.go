@@ -7,6 +7,7 @@
 package test
 
 import (
+	"errors"
 	"net"
 	"net/http"
 	"testing"
@@ -53,16 +54,16 @@ func TestSqliteStorageClosed(t *testing.T) {
 	defer s.Close()
 	go func() {
 		err := s.Serve(l)
-		if err != http.ErrServerClosed {
+		if !errors.Is(err, http.ErrServerClosed) {
 			panic(err)
 		}
 	}()
 	// Close storage prematurely.
 	storage.Close()
-	tor, _, err := cl.AddTorrentSpec(&torrent.TorrentSpec{
+	tor, _ := cl.AddTorrentOpt(torrent.AddTorrentOpts{
 		InfoHash: mi.HashInfoBytes(),
-		Sources:  []string{"http://" + l.Addr().String()},
 	})
+	tor.UseSources([]string{"http://" + l.Addr().String()})
 	c.Assert(err, qt.IsNil)
 	<-tor.GotInfo()
 }

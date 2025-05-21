@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
-
 	g "github.com/anacrolix/generics"
+
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/webseed"

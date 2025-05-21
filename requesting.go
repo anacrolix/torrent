@@ -10,11 +10,10 @@ import (
 	"unsafe"
 
 	"github.com/RoaringBitmap/roaring"
-	"github.com/anacrolix/log"
-	"github.com/anacrolix/multiless"
-
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
+	"github.com/anacrolix/log"
+	"github.com/anacrolix/multiless"
 
 	"github.com/anacrolix/torrent/metainfo"
 	requestStrategy "github.com/anacrolix/torrent/request-strategy"

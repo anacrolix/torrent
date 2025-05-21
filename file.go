@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"github.com/RoaringBitmap/roaring"
+
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 
@@ -39,7 +40,7 @@ func (f *File) FileInfo() metainfo.FileInfo {
 	return f.fi
 }
 
-// The file's path components joined by '/'.
+// The file's path components including the directory name joined by '/'.
 func (f *File) Path() string {
 	return f.path
 }

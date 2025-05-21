@@ -10,10 +10,11 @@ import (
 	"unsafe"
 
 	"github.com/RoaringBitmap/roaring"
-	g "github.com/anacrolix/generics"
-	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/multiless"
+
+	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/generics/heap"
 
 	"github.com/anacrolix/torrent/metainfo"
 	requestStrategy "github.com/anacrolix/torrent/request-strategy"
@@ -244,14 +245,21 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 	return
 }
 
+// Update requests if there's a reason assigned.
 func (p *Peer) maybeUpdateActualRequestState() {
-	if p.closed.IsSet() {
-		return
-	}
 	if p.needRequestUpdate == "" {
 		return
 	}
-	if p.needRequestUpdate == peerUpdateRequestsTimerReason {
+	p.updateRequestsWithReason(p.needRequestUpdate)
+}
+
+// Updates requests right now with the given reason. Clobbers any deferred reason if there was one.
+// Does all the necessary checks and includes profiler tags to assign the overhead.
+func (p *Peer) updateRequestsWithReason(reason updateRequestReason) {
+	if p.closed.IsSet() {
+		return
+	}
+	if reason == peerUpdateRequestsTimerReason {
 		since := time.Since(p.lastRequestUpdate)
 		if since < updateRequestsTimerDuration {
 			panic(since)
@@ -262,11 +270,13 @@ func (p *Peer) maybeUpdateActualRequestState() {
 	}
 	pprof.Do(
 		context.Background(),
-		pprof.Labels("update request", string(p.needRequestUpdate)),
+		pprof.Labels("update request", string(reason)),
 		func(_ context.Context) {
 			p.updateRequests()
 		},
 	)
+	// Is there any chance we should leave this to run again, and have the caller clear it if they
+	// called with this reason?
 	p.needRequestUpdate = ""
 	p.lastRequestUpdate = time.Now()
 	if enableUpdateRequestsTimer {

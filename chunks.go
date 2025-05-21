@@ -261,6 +261,13 @@ func (t *chunks) MergeIntoMissing(m *roaring.Bitmap) {
 	t.missing.Or(m)
 }
 
+func (t *chunks) MergeIntoUnverified(m *roaring.Bitmap) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.unverified.Or(m)
+}
+
 // ChunksAvailable returns true iff all the chunks for the given piece are awaiting
 // digesting.
 func (t *chunks) ChunksAvailable(pid int) bool {

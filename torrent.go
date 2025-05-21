@@ -26,6 +26,7 @@ import (
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/langx"
 	"github.com/james-lawrence/torrent/internal/netx"
+	"github.com/james-lawrence/torrent/internal/x/bitmapx"
 	"github.com/james-lawrence/torrent/tracker"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -217,6 +218,11 @@ func TuneVerifyFull(t *torrent) {
 
 	t.chunks.MergeIntoMissing(t.chunks.failed)
 	t.chunks.FailuresReset()
+}
+
+// Mark the entirety of the torrent as unverified. used when loading from disk
+func TuneUnverified(t *torrent) {
+	t.chunks.MergeIntoUnverified(bitmapx.Range(0, uint64(t.chunks.cmaximum)))
 }
 
 func TuneSeeding(t *torrent) {

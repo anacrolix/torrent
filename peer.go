@@ -11,11 +11,12 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
-	. "github.com/anacrolix/generics"
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/iter"
-	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
+
+	. "github.com/anacrolix/generics"
+	"github.com/anacrolix/missinggo/v2/bitmap"
 
 	"github.com/anacrolix/torrent/internal/alloclim"
 	"github.com/anacrolix/torrent/mse"
@@ -69,11 +70,8 @@ type (
 
 		lastStartedExpectingToReceiveChunks time.Time
 		cumulativeExpectedToReceiveChunks   time.Duration
-		_chunksReceivedWhileExpecting       int64
 
-		choking                                bool
-		piecesReceivedSinceLastRequestUpdate   maxRequests
-		maxPiecesReceivedBetweenRequestUpdates maxRequests
+		choking bool
 		// Chunks that we might reasonably expect to receive from the peer. Due to latency, buffering,
 		// and implementation differences, we may receive chunks that are no longer in the set of
 		// requests actually want. This could use a roaring.BSI if the memory use becomes noticeable.
@@ -508,7 +506,8 @@ func (cn *Peer) onNeedUpdateRequests(reason updateRequestReason) {
 		return
 	}
 	cn.needRequestUpdate = reason
-	cn.handleOnNeedUpdateRequests()
+	// Run this before the Client lock is released.
+	cn.locker().Defer(cn.handleOnNeedUpdateRequests)
 }
 
 // Emits the indices in the Bitmaps bms in order, never repeating any index.
@@ -663,9 +662,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		// Request has been satisfied.
 		if c.deleteRequest(req) || c.requestState.Cancelled.CheckedRemove(req) {
 			intended = true
-			if !c.peerChoking {
-				c._chunksReceivedWhileExpecting++
-			}
 			if c.isLowOnRequests() {
 				c.onNeedUpdateRequests("Peer.receiveChunk deleted request")
 			}
@@ -689,7 +685,6 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
 	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))
 	if intended {
-		c.piecesReceivedSinceLastRequestUpdate++
 		c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulIntendedData }))
 	}
 	for _, f := range c.t.cl.config.Callbacks.ReceivedUsefulData {
@@ -707,6 +702,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 	// Cancel pending requests for this chunk from *other* peers.
 	if p := t.requestingPeer(req); p != nil {
 		if p == c {
+			p.logger.Slogger().Error("received chunk but still pending request", "peer", p, "req", req)
 			panic("should not be pending request from conn that just received it")
 		}
 		p.cancel(req)

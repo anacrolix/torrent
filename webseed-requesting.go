@@ -26,10 +26,10 @@ func (cl *Client) abandonedUpdateWebSeedRequests() {
 	}
 }
 
-func (cl *Client) updateWebSeedRequests() {
+func (cl *Client) updateWebSeedRequests(reason updateRequestReason) {
 	for t := range cl.torrents {
 		for _, p := range t.webSeeds {
-			p.updateRequests()
+			p.peer.updateRequestsWithReason(reason)
 		}
 	}
 }

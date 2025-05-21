@@ -1,6 +1,10 @@
 package torrent
 
-import "github.com/anacrolix/sync"
+import (
+	"fmt"
+
+	"github.com/anacrolix/sync"
+)
 
 // Runs deferred actions on Unlock. Note that actions are assumed to be the results of changes that
 // would only occur with a write lock at present. The race detector should catch instances of defers
@@ -15,12 +19,15 @@ func (me *lockWithDeferreds) Lock() {
 }
 
 func (me *lockWithDeferreds) Unlock() {
-	unlockActions := me.unlockActions
-	for i := 0; i < len(unlockActions); i += 1 {
-		unlockActions[i]()
+	defer me.internal.Unlock()
+	startLen := len(me.unlockActions)
+	for i := range startLen {
+		me.unlockActions[i]()
 	}
-	me.unlockActions = unlockActions[:0]
-	me.internal.Unlock()
+	if len(me.unlockActions) != startLen {
+		panic(fmt.Sprintf("num deferred changed while running: %v -> %v", startLen, len(me.unlockActions)))
+	}
+	me.unlockActions = me.unlockActions[:0]
 }
 
 func (me *lockWithDeferreds) RLock() {

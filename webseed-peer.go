@@ -278,7 +278,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 	t := ws.peer.t
 	buf := t.getChunkBuffer()
 	defer t.putChunkBuffer(buf)
-	for ; wr.next < wr.end; wr.next++ {
+	for wr.next < wr.end {
 		reqSpec := t.requestIndexToRequest(wr.next)
 		chunkLen := reqSpec.Length.Int()
 		buf = buf[:chunkLen]
@@ -297,6 +297,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 			Index: reqSpec.Index,
 			Begin: reqSpec.Begin,
 		})
+		wr.next++
 		ws.peer.locker().Unlock()
 		if err != nil {
 			err = fmt.Errorf("processing chunk: %w", err)

@@ -39,6 +39,11 @@ type NewFileClientOpts struct {
 	Logger          *slog.Logger
 }
 
+// The specific part-files option or the default.
+func (me NewFileClientOpts) partFiles() bool {
+	return me.UsePartFiles.UnwrapOr(true)
+}
+
 // NewFileOpts creates a new ClientImplCloser that stores files using the OS native filesystem.
 func NewFileOpts(opts NewFileClientOpts) ClientImplCloser {
 	if opts.TorrentDirMaker == nil {
@@ -54,7 +59,11 @@ func NewFileOpts(opts NewFileClientOpts) ClientImplCloser {
 		}
 	}
 	if opts.PieceCompletion == nil {
-		opts.PieceCompletion = pieceCompletionForDir(opts.ClientBaseDir)
+		if opts.partFiles() {
+			opts.PieceCompletion = NewMapPieceCompletion()
+		} else {
+			opts.PieceCompletion = pieceCompletionForDir(opts.ClientBaseDir)
+		}
 	}
 	if opts.Logger == nil {
 		opts.Logger = log.Default.Slogger()
@@ -118,6 +127,13 @@ func (fs *fileClientImpl) OpenTorrent(
 		infoHash,
 		fs,
 	}
+	if t.partFiles() {
+		err = t.setCompletionFromPartFiles()
+		if err != nil {
+			err = fmt.Errorf("setting completion from part files: %w", err)
+			return
+		}
+	}
 	return TorrentImpl{
 		Piece: t.Piece,
 		Close: t.Close,
@@ -146,8 +162,57 @@ type fileTorrentImpl struct {
 	client *fileClientImpl
 }
 
+func (fts *fileTorrentImpl) logger() *slog.Logger {
+	return fts.client.opts.Logger
+}
+
+func (fts *fileTorrentImpl) pieceCompletion() PieceCompletion {
+	return fts.client.opts.PieceCompletion
+}
+
+func (fts *fileTorrentImpl) pieceCompletionKey(p int) metainfo.PieceKey {
+	return metainfo.PieceKey{
+		InfoHash: fts.infoHash,
+		Index:    p,
+	}
+}
+
+func (fts *fileTorrentImpl) setPieceCompletion(p int, complete bool) error {
+	return fts.pieceCompletion().Set(fts.pieceCompletionKey(p), complete)
+}
+
+// Set piece completions based on whether all files in each piece are not .part files.
+func (fts *fileTorrentImpl) setCompletionFromPartFiles() error {
+	notComplete := make([]bool, fts.info.NumPieces())
+	for _, f := range fts.files {
+		fi, err := os.Stat(f.safeOsPath)
+		if err == nil {
+			if fi.Size() == f.length {
+				continue
+			}
+			fts.logger().Warn("file has unexpected size", "file", f.safeOsPath, "size", fi.Size(), "expected", f.length)
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			fts.logger().Warn("error checking file size", "err", err)
+		}
+		for i := f.beginPieceIndex; i < f.endPieceIndex; i++ {
+			notComplete[i] = true
+		}
+	}
+	for i, nc := range notComplete {
+		if nc {
+			// Use whatever the piece completion has, or trigger a hash.
+			continue
+		}
+		err := fts.setPieceCompletion(i, true)
+		if err != nil {
+			return fmt.Errorf("setting piece %v completion: %w", i, err)
+		}
+	}
+	return nil
+}
+
 func (fts *fileTorrentImpl) partFiles() bool {
-	return fts.client.opts.UsePartFiles.UnwrapOr(true)
+	return fts.client.opts.partFiles()
 }
 
 func (fts *fileTorrentImpl) pathForWrite(f file) string {
@@ -158,9 +223,7 @@ func (fts *fileTorrentImpl) pathForWrite(f file) string {
 }
 
 func (fts *fileTorrentImpl) getCompletion(piece int) Completion {
-	cmpl, err := fts.client.opts.PieceCompletion.Get(metainfo.PieceKey{
-		fts.infoHash, piece,
-	})
+	cmpl, err := fts.pieceCompletion().Get(metainfo.PieceKey{fts.infoHash, piece})
 	cmpl.Err = errors.Join(cmpl.Err, err)
 	return cmpl
 }

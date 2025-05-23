@@ -49,7 +49,7 @@ func (me *filePieceImpl) pieceFiles() iter.Seq2[int, file] {
 }
 
 func (me *filePieceImpl) pieceCompletion() PieceCompletion {
-	return me.t.client.opts.PieceCompletion
+	return me.t.pieceCompletion()
 }
 
 func (me *filePieceImpl) Completion() Completion {

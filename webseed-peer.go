@@ -183,14 +183,14 @@ func (ws *webseedPeer) spawnRequests() {
 	next, stop := iter.Pull(ws.inactiveRequests())
 	defer stop()
 	for {
-		if len(ws.activeRequests) >= ws.client.MaxRequests {
+		if !ws.peer.t.cl.underWebSeedHttpRequestLimit() {
+			break
+		}
+		if ws.numRequests() >= ws.client.MaxRequests {
 			break
 		}
 		req, ok := next()
 		if !ok {
-			break
-		}
-		if !ws.peer.t.cl.underWebSeedHttpRequestLimit() {
 			break
 		}
 		end := seqLast(ws.iterConsecutiveInactiveRequests(req)).Unwrap()

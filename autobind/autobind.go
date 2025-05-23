@@ -144,6 +144,10 @@ func (t Autobind) Bind(cl *torrent.Client, err error) (*torrent.Client, error) {
 	return cl, nil
 }
 
+func (t Autobind) Close() error {
+	return nil
+}
+
 func (t Autobind) listenNetworks() (ns []network) {
 	for _, n := range allPeerNetworks {
 		if t.listenOnNetwork(n) {

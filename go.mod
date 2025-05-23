@@ -25,12 +25,12 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/edsrzf/mmap-go v1.2.0
 	github.com/frankban/quicktest v1.14.6
-	github.com/fsnotify/fsnotify v1.8.0
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.7.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/net v0.39.0
+	golang.org/x/net v0.40.0
 	golang.org/x/time v0.11.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
 )
@@ -38,7 +38,7 @@ require (
 require (
 	github.com/alecthomas/assert/v2 v2.11.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	golang.org/x/sync v0.13.0 // indirect
+	golang.org/x/sync v0.14.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
 
@@ -59,6 +59,6 @@ require (
 	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
-	golang.org/x/sys v0.32.0
+	golang.org/x/sys v0.33.0
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

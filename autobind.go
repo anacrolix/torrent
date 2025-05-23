@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 
+	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/pkg/errors"
 )
 
@@ -20,6 +21,7 @@ type socket interface {
 type Binder interface {
 	// Bind to the given client if err is nil.
 	Bind(cl *Client, err error) (*Client, error)
+	Close() error
 }
 
 // NewSocketsBind binds a set of sockets to the client.
@@ -50,4 +52,12 @@ func (t socketsBind) Bind(cl *Client, err error) (*Client, error) {
 	}
 
 	return cl, nil
+}
+
+func (t socketsBind) Close() (err error) {
+	for _, s := range t {
+		err = errorsx.Compact(err, s.Close())
+	}
+
+	return err
 }

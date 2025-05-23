@@ -227,7 +227,7 @@ func (p *Piece) VerifyDataContext(ctx context.Context) error {
 }
 
 func (p *Piece) queuedForHash() bool {
-	return p.t.piecesQueuedForHash.Get(bitmap.BitIndex(p.index))
+	return p.t.piecesQueuedForHash.Contains(p.index)
 }
 
 func (p *Piece) torrentBeginOffset() int64 {

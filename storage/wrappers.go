@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 
@@ -59,12 +60,20 @@ var _ io.WriterTo = Piece{}
 
 // Why do we have this wrapper? Well PieceImpl doesn't implement io.Reader, so we can't let io.Copy
 // and friends check for io.WriterTo and fallback for us since they expect an io.Reader.
-func (p Piece) WriteTo(w io.Writer) (int64, error) {
+func (p Piece) WriteTo(w io.Writer) (_ int64, err error) {
 	if i, ok := p.PieceImpl.(io.WriterTo); ok {
 		return i.WriteTo(w)
 	}
 	n := p.mip.Length()
-	r := io.NewSectionReader(p, 0, n)
+	// NewReader will do the next smartest thing which may allow more efficient resource use between
+	// ReadAt calls. Worst case it gives us a nopCloser+p.
+	rc, err := p.NewReader()
+	if err != nil {
+		err = fmt.Errorf("opening reader: %w", err)
+		return
+	}
+	defer rc.Close()
+	r := io.NewSectionReader(rc, 0, n)
 	return io.CopyN(w, r, n)
 }
 

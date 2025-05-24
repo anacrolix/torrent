@@ -220,6 +220,20 @@ func TuneVerifyFull(t *torrent) {
 	t.chunks.FailuresReset()
 }
 
+// Verify the contents asynchronously
+func TuneVerifyAsync(t *torrent) {
+	for i := 0; i < t.numPieces(); i++ {
+		t.digests.Enqueue(i)
+	}
+
+	go func() {
+		t.digests.Wait()
+
+		t.chunks.MergeIntoMissing(t.chunks.failed)
+		t.chunks.FailuresReset()
+	}()
+}
+
 // Mark the entirety of the torrent as unverified. used when loading from disk
 func TuneUnverified(t *torrent) {
 	t.chunks.MergeIntoUnverified(bitmapx.Range(0, uint64(t.chunks.cmaximum)))

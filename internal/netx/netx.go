@@ -15,6 +15,10 @@ type ContextDialer interface {
 
 // NetPort returns the port of the network address,
 func NetPort(addr net.Addr) (port int, err error) {
+	if addr == nil {
+		return 0, errors.New("NetPort: nil net.Addr received")
+	}
+
 	switch raw := addr.(type) {
 	case *net.UDPAddr:
 		return raw.Port, nil
@@ -40,6 +44,10 @@ func NetPort(addr net.Addr) (port int, err error) {
 
 // NetIP returns the IP address of the network address.
 func NetIP(addr net.Addr) (ip net.IP, err error) {
+	if addr == nil {
+		return nil, errors.New("NetIP: nil net.Addr received")
+	}
+
 	switch raw := addr.(type) {
 	case *net.UDPAddr:
 		return raw.IP, nil
@@ -64,6 +72,10 @@ func NetIP(addr net.Addr) (ip net.IP, err error) {
 
 // NetIPPort returns the IP and Port of the network address
 func NetIPPort(addr net.Addr) (ip net.IP, port int, err error) {
+	if addr == nil {
+		return nil, 0, errors.New("NetIPPort: nil net.Addr received")
+	}
+
 	switch raw := addr.(type) {
 	case *net.UDPAddr:
 		return raw.IP, raw.Port, nil

@@ -84,6 +84,11 @@ func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool, o
 				return
 			}
 
+			if errors.Is(err, tracker.ErrMissingInfoHash) {
+				log.Println(err)
+				return
+			}
+
 			if err == nil {
 				t.addPeers(peers)
 				return
@@ -98,7 +103,7 @@ func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool, o
 				continue
 			}
 
-			log.Println("announce failed", err)
+			log.Println("announce failed", t.info == nil, err)
 		}
 
 		// log.Println("announce sleeping for maximum delay", t.Metadata().ID.HexString(), delay)

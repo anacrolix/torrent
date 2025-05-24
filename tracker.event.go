@@ -45,7 +45,7 @@ func TrackerEvent(ctx context.Context, l Torrent, announceuri string, options ..
 	)
 
 	res, err := announcer.ForTracker(announceuri).Do(ctx, req)
-	return &res, errors.Wrapf(err, "announce: %s", announcer.TrackerUrl)
+	return &res, errors.Wrapf(err, "announce: %s", announceuri)
 }
 
 func TrackerAnnounceOnce(ctx context.Context, l Torrent, uri string, options ...tracker.AnnounceOption) (delay time.Duration, peers Peers, err error) {

@@ -197,6 +197,7 @@ func (m *lpdConn) receiver(client *Client) {
 			continue
 		}
 
+		m.logger.LevelPrint(log.Debug, "received, req: ", req)
 		if req.Method != "BT-SEARCH" {
 			m.logger.Println("receiver", "Wrong request: ", req.Method)
 			continue
@@ -210,12 +211,14 @@ func (m *lpdConn) receiver(client *Client) {
 		}
 
 		port := req.Header.Get("Port")
+		m.logger.LevelPrint(log.Debug, "received, port: ", port)
 		if port == "" {
 			m.logger.Println("receiver", "No port")
 			continue
 		}
 
 		addr, err := net.ResolveUDPAddr(m.network, net.JoinHostPort(from.IP.String(), port))
+		m.logger.LevelPrint(log.Debug, "received, addr: ", addr)
 		if err != nil {
 			m.logger.Println("receiver", err)
 			continue
@@ -237,9 +240,9 @@ func (m *lpdConn) receiver(client *Client) {
 		m.lpd.refresh()
 		m.lpd.mu.Unlock()
 
-		//log.Println("LPD", m.network, addr.String(), ih)
 		ignore := make(map[*Torrent]bool)
 		for _, ih := range ihs {
+			log.Default.LevelPrint(log.Debug, "LPD", m.network, addr.String(), ih)
 			hash := metainfo.NewHashFromHex(ih)
 			if t, ok := client.Torrent(hash); ok {
 				lpdPeer(t, addr.String())

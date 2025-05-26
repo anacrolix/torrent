@@ -1,6 +1,6 @@
 module github.com/anacrolix/torrent
 
-go 1.23
+go 1.24
 
 require (
 	github.com/RoaringBitmap/roaring v1.2.3
@@ -11,12 +11,12 @@ require (
 	github.com/anacrolix/dht/v2 v2.19.2-0.20221121215055-066ad8494444
 	github.com/anacrolix/envpprof v1.3.0
 	github.com/anacrolix/fuse v0.3.2-0.20250512073825-fd88dfdcd5fc
-	github.com/anacrolix/generics v0.0.3-0.20240902042256-7fb2702ef0ca
+	github.com/anacrolix/generics v0.0.3-0.20250526144502-593be7092deb
 	github.com/anacrolix/go-libutp v1.3.2
 	github.com/anacrolix/gostdapp v0.1.0
-	github.com/anacrolix/log v0.16.1-0.20250429062012-9dd7c8a776c6
+	github.com/anacrolix/log v0.16.1-0.20250526073428-5cb74e15092b
 	github.com/anacrolix/missinggo v1.3.0
-	github.com/anacrolix/missinggo/v2 v2.7.4
+	github.com/anacrolix/missinggo/v2 v2.8.0
 	github.com/anacrolix/multiless v0.4.0
 	github.com/anacrolix/possum/go v0.3.2
 	github.com/anacrolix/squirrel v0.6.4
@@ -53,6 +53,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.11.1
 	go.opentelemetry.io/otel/sdk v1.11.1
 	go.opentelemetry.io/otel/trace v1.11.1
+	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
 	golang.org/x/sync v0.8.0
 	golang.org/x/sys v0.26.0
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
@@ -136,7 +137,6 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.28.0 // indirect
-	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948 // indirect
 	golang.org/x/net v0.29.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect

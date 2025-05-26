@@ -27,6 +27,8 @@ type NewFileClientOpts struct {
 	ClientBaseDir   string
 	FilePathMaker   FilePathMaker
 	TorrentDirMaker TorrentDirFilePathMaker
+	// If part files are enabled, this will default to inferring completion from file names at
+	// startup, and keep the rest in memory.
 	PieceCompletion PieceCompletion
 	UsePartFiles    g.Option[bool]
 	Logger          *slog.Logger
@@ -59,7 +61,7 @@ func NewFileOpts(opts NewFileClientOpts) ClientImplCloser {
 		}
 	}
 	if opts.Logger == nil {
-		opts.Logger = log.Default.Slogger()
+		opts.Logger = slog.Default()
 	}
 	return &fileClientImpl{opts}
 }

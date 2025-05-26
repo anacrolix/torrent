@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
@@ -15,7 +16,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"sort"
+	"slices"
 	"strconv"
 	"time"
 
@@ -146,6 +147,16 @@ func writeDhtServerStatus(w io.Writer, s DhtServer) {
 	spew.Fdump(w, dhtStats)
 }
 
+func compareBool(a, b bool) int {
+	if a == b {
+		return 0
+	}
+	if b {
+		return -1
+	}
+	return 1
+}
+
 // Writes out a human readable status of the client, such as for writing to a
 // HTTP status page.
 func (cl *Client) WriteStatus(_w io.Writer) {
@@ -172,8 +183,12 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	}
 	fmt.Fprintf(w, "# Torrents: %d (%v incomplete)\n", len(torrentsSlice), incomplete)
 	fmt.Fprintln(w)
-	sort.Slice(torrentsSlice, func(l, r int) bool {
-		return torrentsSlice[l].canonicalShortInfohash().AsString() < torrentsSlice[r].canonicalShortInfohash().AsString()
+	slices.SortFunc(torrentsSlice, func(a, b *Torrent) int {
+		return cmp.Or(
+			compareBool(a.haveInfo(), b.haveInfo()),
+			-cmp.Compare(a.bytesLeft(), b.bytesLeft()),
+			cmp.Compare(a.canonicalShortInfohash().AsString(), b.canonicalShortInfohash().AsString()),
+		)
 	})
 	for _, t := range torrentsSlice {
 		if t.name() == "" {

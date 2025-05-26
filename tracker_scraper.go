@@ -183,7 +183,12 @@ func (me *trackerScraper) announce(
 		Logger:              me.t.logger,
 	}.Do()
 	if err != nil {
-		me.logger.Warn("announce failed", "err", err)
+		level := slog.LevelWarn
+		if ctx.Err() != nil {
+			level = slog.LevelDebug
+		}
+		// We log here because the caller only stores the error for tracking state.
+		me.logger.Log(ctx, level, "announce failed", "err", err)
 		ret.Err = fmt.Errorf("announcing: %w", err)
 		return
 	} else {

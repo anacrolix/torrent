@@ -9,6 +9,9 @@ import (
 	"log/slog"
 	"os"
 
+	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/missinggo/v2/panicif"
+
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
 )
@@ -113,19 +116,14 @@ func (me *filePieceImpl) MarkComplete() (err error) {
 	if err != nil {
 		return
 	}
-nextFile:
-	for i, f := range me.pieceFiles() {
-		for p := f.beginPieceIndex; p < f.endPieceIndex; p++ {
-			_ = i
-			//fmt.Printf("%v %#v %v\n", i, f, p)
-			cmpl := me.t.getCompletion(p)
-			if cmpl.Err != nil {
-				err = fmt.Errorf("error getting completion for piece %d: %w", p, cmpl.Err)
-				return
-			}
-			if !cmpl.Ok || !cmpl.Complete {
-				continue nextFile
-			}
+	for _, f := range me.pieceFiles() {
+		res := me.allFilePiecesComplete(f)
+		if res.Err != nil {
+			err = res.Err
+			return
+		}
+		if !res.Ok {
+			continue
 		}
 		err = me.promotePartFile(f)
 		if err != nil {
@@ -133,6 +131,31 @@ nextFile:
 			return
 		}
 	}
+	return
+}
+
+func (me *filePieceImpl) allFilePiecesComplete(f file) (ret g.Result[bool]) {
+	next, stop := iter.Pull(GetPieceCompletionRange(
+		me.t.pieceCompletion(),
+		me.t.infoHash,
+		f.beginPieceIndex,
+		f.endPieceIndex,
+	))
+	defer stop()
+	for p := f.beginPieceIndex; p < f.endPieceIndex; p++ {
+		cmpl, ok := next()
+		panicif.False(ok)
+		if cmpl.Err != nil {
+			ret.Err = fmt.Errorf("error getting completion for piece %d: %w", p, cmpl.Err)
+			return
+		}
+		if !cmpl.Ok || !cmpl.Complete {
+			return
+		}
+	}
+	_, ok := next()
+	panicif.True(ok)
+	ret.SetOk(true)
 	return
 }
 

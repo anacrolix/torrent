@@ -21,7 +21,10 @@ type filePieceImpl struct {
 	io.ReaderAt
 }
 
-var _ PieceImpl = (*filePieceImpl)(nil)
+var _ interface {
+	PieceImpl
+	//PieceReaderer
+} = (*filePieceImpl)(nil)
 
 func (me *filePieceImpl) logger() *slog.Logger {
 	return me.t.client.opts.Logger
@@ -66,6 +69,7 @@ func (me *filePieceImpl) Completion() Completion {
 			file := me.t.files[i]
 			s, err := os.Stat(file.partFilePath())
 			if errors.Is(err, fs.ErrNotExist) {
+				// Can we use shared files for this? Is it faster?
 				s, err = os.Stat(file.safeOsPath)
 			}
 			if err != nil {
@@ -151,10 +155,8 @@ func (me *filePieceImpl) MarkNotComplete() (err error) {
 
 func (me *filePieceImpl) promotePartFile(f file) (err error) {
 	if me.partFiles() {
-		err = os.Rename(f.partFilePath(), f.safeOsPath)
-		// If we get ENOENT, the file may already be in the final location.
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			err = fmt.Errorf("renaming part file: %w", err)
+		err = me.exclRenameIfExists(f.partFilePath(), f.safeOsPath)
+		if err != nil {
 			return
 		}
 	}
@@ -184,7 +186,11 @@ func (me *filePieceImpl) exclRenameIfExists(from, to string) (err error) {
 		return fmt.Errorf("error creating destination file: %w", err)
 	}
 	f.Close()
-	return os.Rename(from, to)
+	err = os.Rename(from, to)
+	if err == nil {
+		fmt.Printf("renamed %v -> %v\n", from, to)
+	}
+	return
 }
 
 func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
@@ -216,3 +222,9 @@ func (me *filePieceImpl) pathForWrite(f file) string {
 func (me *filePieceImpl) partFiles() bool {
 	return me.t.partFiles()
 }
+
+//
+//// TODO: Just implement StorageReader already.
+//func (me *filePieceImpl) NewReader() (PieceReader, error) {
+//
+//}

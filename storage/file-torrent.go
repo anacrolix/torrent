@@ -107,6 +107,7 @@ func (fs *fileTorrentImpl) Close() error {
 
 func (fts *fileTorrentImpl) Flush() error {
 	for _, f := range fts.files {
+		fts.logger().Debug("flushing", "file.safeOsPath", f.safeOsPath)
 		if err := fsync(fts.pathForWrite(f)); err != nil {
 			return err
 		}

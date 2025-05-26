@@ -8,7 +8,6 @@ import (
 	"iter"
 	"log/slog"
 	"math/rand"
-	"slices"
 	"sync"
 	"time"
 
@@ -234,10 +233,11 @@ func (ws *webseedPeer) inactiveRequestIndex(index RequestIndex) bool {
 
 func (ws *webseedPeer) inactiveRequests() iter.Seq[RequestIndex] {
 	return func(yield func(RequestIndex) bool) {
-		sorted := slices.Sorted(ws.peer.requestState.Requests.Iterator())
-		if len(sorted) != 0 {
-			fmt.Println("inactiveRequests", sorted)
-		}
+		// This is used to determine contiguity of requests.
+		//sorted := slices.Sorted(ws.peer.requestState.Requests.Iterator())
+		//if len(sorted) != 0 {
+		//	fmt.Println("inactiveRequests", sorted)
+		//}
 		for reqIndex := range ws.peer.requestState.Requests.Iterator() {
 			if !ws.inactiveRequestIndex(reqIndex) {
 				continue

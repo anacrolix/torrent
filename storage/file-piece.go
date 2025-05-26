@@ -188,7 +188,7 @@ func (me *filePieceImpl) exclRenameIfExists(from, to string) (err error) {
 	f.Close()
 	err = os.Rename(from, to)
 	if err == nil {
-		fmt.Printf("renamed %v -> %v\n", from, to)
+		me.logger().Debug("renamed file", "from", from, "to", to)
 	}
 	return
 }

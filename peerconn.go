@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/rand"
 	"net"
 	"net/netip"
@@ -1119,13 +1120,14 @@ func (c *PeerConn) sendChunk(r Request, msg func(pp.Message) bool, state *peerRe
 	})
 }
 
-func (c *Peer) setTorrent(t *Torrent) {
+func (c *PeerConn) setTorrent(t *Torrent) {
 	if c.t != nil {
 		panic("connection already associated with a torrent")
 	}
 	c.t = t
 	c.logger.WithDefaultLevel(log.Debug).Printf("set torrent=%v", t)
-	t.reconcileHandshakeStats(c)
+	c.setPeerLoggers(t.logger, t.slogger())
+	t.reconcileHandshakeStats(c.peerPtr())
 }
 
 func (c *PeerConn) pexPeerFlags() pp.PexPeerFlags {
@@ -1457,4 +1459,12 @@ func (me *PeerConn) peerPtr() *Peer {
 // The actual value to use as the maximum outbound requests.
 func (cn *PeerConn) nominalMaxRequests() maxRequests {
 	return max(1, min(cn.PeerMaxRequests, cn.peakRequests*2, maxLocalToRemoteRequests))
+}
+
+// Set the Peer loggers. This is given Client loggers, and later Torrent loggers when the Torrent is
+// set.
+func (me *PeerConn) setPeerLoggers(a log.Logger, s *slog.Logger) {
+	me.Peer.logger = a.WithDefaultLevel(log.Warning).WithContextText(fmt.Sprintf("%T %p", me, me))
+	me.Peer.slogger = s.With(fmt.Sprintf("%T", me), fmt.Sprintf("%p", me))
+	me.protocolLogger = me.logger.WithNames(protocolLoggingName)
 }

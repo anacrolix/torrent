@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"strings"
 	"sync"
@@ -95,7 +96,8 @@ type (
 
 		PeerMaxRequests maxRequests // Maximum pending requests the peer allows.
 
-		logger log.Logger
+		logger  log.Logger
+		slogger *slog.Logger
 	}
 
 	PeerSource string

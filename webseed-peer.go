@@ -134,7 +134,7 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
 	}
 	ws.activeRequests[&wsReq] = struct{}{}
 	ws.peer.t.cl.numWebSeedRequests++
-	ws.peer.logger.Slogger().Debug(
+	ws.slogger().Debug(
 		"starting webseed request",
 		"begin", begin,
 		"end", end,
@@ -362,5 +362,5 @@ func (cn *webseedPeer) peerHasAllPieces() (all, known bool) {
 }
 
 func (me *webseedPeer) slogger() *slog.Logger {
-	return me.peer.logger.Slogger()
+	return me.peer.slogger
 }

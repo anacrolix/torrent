@@ -186,7 +186,13 @@ func (cl *Client) WriteStatus(_w io.Writer) {
 	slices.SortFunc(torrentsSlice, func(a, b *Torrent) int {
 		return cmp.Or(
 			compareBool(a.haveInfo(), b.haveInfo()),
-			-cmp.Compare(a.bytesLeft(), b.bytesLeft()),
+			func() int {
+				if a.haveInfo() && b.haveInfo() {
+					return -cmp.Compare(a.bytesLeft(), b.bytesLeft())
+				} else {
+					return 0
+				}
+			}(),
 			cmp.Compare(a.canonicalShortInfohash().AsString(), b.canonicalShortInfohash().AsString()),
 		)
 	})

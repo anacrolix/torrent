@@ -63,7 +63,7 @@ func TestSqliteStorageClosed(t *testing.T) {
 	tor, _ := cl.AddTorrentOpt(torrent.AddTorrentOpts{
 		InfoHash: mi.HashInfoBytes(),
 	})
-	tor.UseSources([]string{"http://" + l.Addr().String()})
+	tor.AddSources([]string{"http://" + l.Addr().String()})
 	c.Assert(err, qt.IsNil)
 	<-tor.GotInfo()
 }

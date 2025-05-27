@@ -77,7 +77,7 @@ type Torrent struct {
 	// A background Context cancelled when the Torrent is closed. Added to minimize extra goroutines
 	// in tracker handlers.
 	closedCtx       context.Context
-	closedCtxCancel func()
+	closedCtxCancel context.CancelCauseFunc
 	onClose         []func()
 
 	infoHash   g.Option[metainfo.Hash]
@@ -108,8 +108,13 @@ type Torrent struct {
 	metainfo metainfo.MetaInfo
 
 	// The info dict. nil if we don't have it (yet).
-	info  *metainfo.Info
-	files *[]*File
+	info *metainfo.Info
+	// For scoping routines that depend on needing the info. Saves spinning up lots of helper
+	// routines. Cancelled when the Torrent is Closed too.
+	getInfoCtx context.Context
+	// Put a nice reason in :)
+	getInfoCtxCancel context.CancelCauseFunc
+	files            *[]*File
 
 	_chunksPerRegularPiece chunkIndexType
 
@@ -178,8 +183,11 @@ type Torrent struct {
 	// Is On when all pieces are complete.
 	complete chansync.Flag
 
-	// Torrent sources in use keyed by the source string.
+	// Torrent sources in use keyed by the source string. string -> error. If the slot is occupied
+	// there's a worker for it.
 	activeSources sync.Map
+	// One source fetch at a time. We use mutex in the original definition.
+	sourceMutex sync.Mutex
 
 	smartBanCache smartBanCache
 
@@ -528,6 +536,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	}
 	t.nameMu.Lock()
 	t.info = info
+	t.getInfoCtxCancel(errors.New("got info"))
 	t.nameMu.Unlock()
 	t._chunksPerRegularPiece = chunkIndexType(
 		(pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
@@ -1046,7 +1055,8 @@ func (t *Torrent) close(wg *sync.WaitGroup) (err error) {
 		err = errors.New("already closed")
 		return
 	}
-	t.closedCtxCancel()
+	t.closedCtxCancel(errTorrentClosed)
+	t.getInfoCtxCancel(errTorrentClosed)
 	for _, f := range t.onClose {
 		f()
 	}
@@ -1725,7 +1735,7 @@ func (t *Torrent) maybeCompleteMetadata() error {
 	err := t.setInfoBytesLocked(t.metadataBytes)
 	if err != nil {
 		t.invalidateMetadata()
-		return fmt.Errorf("error setting info bytes: %s", err)
+		return fmt.Errorf("error setting info bytes: %w", err)
 	}
 	if t.cl.config.Debug {
 		t.logger.Printf("%s: got metadata from peers", t)

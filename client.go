@@ -1410,7 +1410,8 @@ func (cl *Client) newTorrentOpt(opts AddTorrentOpts) (t *Torrent) {
 		initialPieceCheckDisabled:       opts.DisableInitialPieceCheck,
 	}
 	g.MakeMap(&t.webSeeds)
-	t.closedCtx, t.closedCtxCancel = context.WithCancel(context.Background())
+	t.closedCtx, t.closedCtxCancel = context.WithCancelCause(context.Background())
+	t.getInfoCtx, t.getInfoCtxCancel = context.WithCancelCause(t.closedCtx)
 	var salt [8]byte
 	rand.Read(salt[:])
 	t.smartBanCache.Hash = func(b []byte) uint64 {
@@ -1554,7 +1555,7 @@ func (t *Torrent) MergeSpec(spec *TorrentSpec) error {
 	}
 	cl := t.cl
 	cl.AddDhtNodes(spec.DhtNodes)
-	t.UseSources(spec.Sources)
+	t.AddSources(spec.Sources)
 	// TODO: The lock should be moved earlier.
 	cl.lock()
 	defer cl.unlock()

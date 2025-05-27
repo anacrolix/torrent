@@ -53,6 +53,8 @@ type Piece struct {
 	// This can include connections that have closed.
 	dirtiers map[*Peer]struct{}
 
+	// Value to twiddle to detect races.
+	race byte
 	// Currently being hashed.
 	hashing bool
 	// The piece state may have changed, and is being synchronized with storage.

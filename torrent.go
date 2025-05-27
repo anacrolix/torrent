@@ -2508,9 +2508,10 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 		if hasDirty {
 			p.Flush() // You can be synchronous here!
 		}
+		p.race++
 		err := p.Storage().MarkComplete()
 		if err != nil {
-			t.logger.Levelf(log.Error, "error marking piece %v complete: %s", piece, err)
+			t.slogger().Error("error marking piece complete", "piece", piece, "err", err)
 		}
 		t.cl.lock()
 
@@ -2673,7 +2674,8 @@ func (t *Torrent) startHash(pi pieceIndex) {
 
 func (t *Torrent) getPieceToHash() (_ g.Option[pieceIndex]) {
 	for i := range t.piecesQueuedForHash.Iterate {
-		if t.piece(i).hashing {
+		p := t.piece(i)
+		if p.hashing || p.marking {
 			continue
 		}
 		return g.Some(i)

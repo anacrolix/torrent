@@ -180,7 +180,6 @@ type Torrent struct {
 
 	// Torrent sources in use keyed by the source string.
 	activeSources sync.Map
-	sourcesLogger log.Logger
 
 	smartBanCache smartBanCache
 

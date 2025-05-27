@@ -538,8 +538,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	t.info = info
 	t.getInfoCtxCancel(errors.New("got info"))
 	t.nameMu.Unlock()
-	t._chunksPerRegularPiece = chunkIndexType(
-		(pp.Integer(t.usualPieceSize()) + t.chunkSize - 1) / t.chunkSize)
+	t._chunksPerRegularPiece = chunkIndexType(intCeilDiv(pp.Integer(t.usualPieceSize()), t.chunkSize))
 	t.deferUpdateComplete()
 	t.displayName = "" // Save a few bytes lol.
 	t.initFiles()
@@ -3053,7 +3052,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	g.MakeMapWithCap(&ws.activeRequests, ws.client.MaxRequests)
 	// TODO: Implement an algorithm that assigns this based on sharing chunks across peers. For now
 	// we just allow 2 MiB worth of requests. See newHotPeerImpl.nominalMaxRequests.
-	ws.peer.PeerMaxRequests = intCeilDiv(2<<20, ws.peer.t.chunkSize.Int())
+	ws.peer.PeerMaxRequests = maxRequests(intCeilDiv(8<<20, ws.peer.t.chunkSize.Uint32()))
 	ws.peer.initUpdateRequestsTimer()
 	ws.locker = t.cl.locker()
 	for _, f := range t.callbacks().NewPeer {

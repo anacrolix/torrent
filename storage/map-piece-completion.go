@@ -47,8 +47,8 @@ func (me *memoryTorrentJustComplete) Set(i int, complete bool) {
 
 func (me *memoryTorrentJustComplete) GetRange(begin, end int) iter.Seq[justComplete] {
 	me.mu.RLock()
-	defer me.mu.RUnlock()
 	return func(yield func(justComplete) bool) {
+		defer me.mu.RUnlock()
 		for i := begin; i < end; i++ {
 			if !yield(me.getLocked(i)) {
 				return

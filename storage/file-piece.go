@@ -199,20 +199,28 @@ func (me *filePieceImpl) promotePartFile(f file) (err error) {
 
 // Rename from if exists, and if so, to must not exist.
 func (me *filePieceImpl) exclRenameIfExists(from, to string) (err error) {
-	_, err = os.Stat(from)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
 	// We don't want anyone reading or writing to this until the rename completes.
 	f, err := os.OpenFile(to, os.O_CREATE|os.O_EXCL, 0)
+	if errors.Is(err, fs.ErrExist) {
+		_, err = os.Stat(from)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return
+		}
+		return errors.New("source and destination files both exist")
+	}
 	if err != nil {
-		return fmt.Errorf("error creating destination file: %w", err)
+		return
 	}
 	f.Close()
 	err = os.Rename(from, to)
-	if err == nil {
-		me.logger().Debug("renamed file", "from", from, "to", to)
+	if err != nil {
+		os.Remove(to)
+		return
 	}
+	me.logger().Debug("renamed file", "from", from, "to", to)
 	return
 }
 

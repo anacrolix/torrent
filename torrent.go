@@ -2570,8 +2570,20 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 				}
 			}
 		}
+
+		// This pattern is copied from MarkComplete above. Note the pattern.
+		t.cl.unlock()
+		p.race++
+		err := p.Storage().MarkNotComplete()
+		if err != nil {
+			t.slogger().Error("error marking piece not complete", "piece", piece, "err", err)
+		}
+		t.cl.lock()
+		if t.closed.IsSet() {
+			return
+		}
+
 		t.onIncompletePiece(piece)
-		p.Storage().MarkNotComplete()
 	}
 	t.updatePieceCompletion(piece)
 }

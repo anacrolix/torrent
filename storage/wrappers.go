@@ -123,6 +123,7 @@ func (p Piece) ReadAt(b []byte, off int64) (n int, err error) {
 	// to return if the data has been lost.
 	if off < p.mip.Length() {
 		if err == io.EOF {
+			// TODO: Hey, this guy over here isn't checking errors.
 			p.MarkNotComplete()
 		}
 	}

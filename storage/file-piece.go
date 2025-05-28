@@ -238,7 +238,7 @@ func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
 		return
 	}
 	// Ensure the file is writable
-	err = os.Chmod(f.safeOsPath, info.Mode().Perm()|(filePerm&0o222))
+	err = os.Chmod(me.pathForWrite(f), info.Mode().Perm()|(filePerm&0o222))
 	if err != nil {
 		err = fmt.Errorf("setting file writable: %w", err)
 		return

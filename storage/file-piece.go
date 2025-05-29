@@ -198,7 +198,17 @@ func (me *filePieceImpl) promotePartFile(f file) (err error) {
 }
 
 // Rename from if exists, and if so, to must not exist.
-func (me *filePieceImpl) exclRenameIfExists(from, to string) (err error) {
+func (me *filePieceImpl) exclRenameIfExists(from, to string) error {
+	if true {
+		// Might be cheaper to check source exists than to create destination regardless.
+		_, err := os.Stat(from)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
 	// We don't want anyone reading or writing to this until the rename completes.
 	f, err := os.OpenFile(to, os.O_CREATE|os.O_EXCL, 0)
 	if errors.Is(err, fs.ErrExist) {
@@ -207,21 +217,26 @@ func (me *filePieceImpl) exclRenameIfExists(from, to string) (err error) {
 			return nil
 		}
 		if err != nil {
-			return
+			return err
 		}
 		return errors.New("source and destination files both exist")
 	}
 	if err != nil {
-		return
+		return fmt.Errorf("exclusively creating destination file: %w", err)
 	}
 	f.Close()
 	err = os.Rename(from, to)
 	if err != nil {
-		os.Remove(to)
-		return
+		if errors.Is(err, fs.ErrNotExist) {
+			// Someone else has moved it already.
+			return nil
+		}
+		// If we can't rename it, remove the blocking destination file we made. Maybe the remove
+		// error should be logged separately since it's not actionable.
+		return errors.Join(err, os.Remove(to))
 	}
 	me.logger().Debug("renamed file", "from", from, "to", to)
-	return
+	return nil
 }
 
 func (me *filePieceImpl) onFileNotComplete(f file) (err error) {

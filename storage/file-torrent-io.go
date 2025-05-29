@@ -18,10 +18,7 @@ type fileTorrentImplIO struct {
 // Returns EOF on short or missing file.
 func (fst fileTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, err error) {
 	fst.fts.logger().Debug("readFileAt", "file.safeOsPath", file.safeOsPath)
-	var f interface {
-		io.ReaderAt
-		io.Closer
-	}
+	var f sharedFileIf
 	// Fine to open once under each name on a unix system. We could make the shared file keys more
 	// constrained but it shouldn't matter. TODO: Ensure at most one of the names exist.
 	if fst.fts.partFiles() {

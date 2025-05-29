@@ -14,30 +14,49 @@ import (
 )
 
 var (
-	sharedFiles = sharedFilesType{
-		m: make(map[string]*sharedFile),
-	}
+	sharedFiles sharedFilesInterface = regularFsSharedFiles{}
+
+	wipSharedFilesPool = sharedFilesType{m: make(map[string]*sharedFile)}
 )
+
+type regularFsSharedFiles struct{}
+
+func (r regularFsSharedFiles) Open(name string) (sharedFileIf, error) {
+	return os.Open(name)
+}
+
+type sharedFileIf interface {
+	io.ReaderAt
+	io.Closer
+}
+
+type sharedFilesInterface interface {
+	Open(name string) (sharedFileIf, error)
+}
 
 func init() {
 	http.HandleFunc("/debug/shared-files", func(w http.ResponseWriter, r *http.Request) {
-		sharedFiles.mu.Lock()
-		defer sharedFiles.mu.Unlock()
-		byRefs := slices.SortedFunc(maps.Keys(sharedFiles.m), func(a, b string) int {
-			return cmp.Or(
-				sharedFiles.m[b].refs-sharedFiles.m[a].refs,
-				cmp.Compare(a, b))
-		})
-		for _, key := range byRefs {
-			sf := sharedFiles.m[key]
-			fmt.Fprintf(w, "%v: refs=%v, name=%v\n", key, sf.refs, sf.f.Name())
-		}
+		wipSharedFilesPool.WriteDebug(w)
 	})
 }
 
 type sharedFilesType struct {
 	mu sync.Mutex
 	m  map[string]*sharedFile
+}
+
+func (sharedFiles *sharedFilesType) WriteDebug(w io.Writer) {
+	sharedFiles.mu.Lock()
+	defer sharedFiles.mu.Unlock()
+	byRefs := slices.SortedFunc(maps.Keys(sharedFiles.m), func(a, b string) int {
+		return cmp.Or(
+			sharedFiles.m[b].refs-sharedFiles.m[a].refs,
+			cmp.Compare(a, b))
+	})
+	for _, key := range byRefs {
+		sf := sharedFiles.m[key]
+		fmt.Fprintf(w, "%v: refs=%v, name=%v\n", key, sf.refs, sf.f.Name())
+	}
 }
 
 // How many opens wouldn't have been needed with singleflight.

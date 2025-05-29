@@ -248,6 +248,9 @@ func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
 		}
 	}
 	info, err := os.Stat(me.pathForWrite(f))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		err = fmt.Errorf("statting file: %w", err)
 		return

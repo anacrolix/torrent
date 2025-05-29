@@ -209,6 +209,7 @@ func (me *filePieceImpl) exclRenameIfExists(from, to string) error {
 			return err
 		}
 	}
+	panicif.Eq(from, to)
 	// We don't want anyone reading or writing to this until the rename completes.
 	f, err := os.OpenFile(to, os.O_CREATE|os.O_EXCL, 0)
 	if errors.Is(err, fs.ErrExist) {

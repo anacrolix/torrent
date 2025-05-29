@@ -436,6 +436,10 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 	if cn.t.hashingPiece(pi) {
 		panic("piece is being hashed")
 	}
+	p := cn.t.piece(pi)
+	if p.marking {
+		panic("piece is being marked")
+	}
 	if cn.t.pieceQueuedForHash(pi) {
 		panic("piece is queued for hash")
 	}

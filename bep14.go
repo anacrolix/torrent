@@ -224,6 +224,8 @@ func (m *lpdConn) receiver(client *Client) {
 			continue
 		}
 		client.rLock()
+
+		// Possible to receive own UDP multicast message, ignore it.
 		if client.LocalPort() == addr.Port {
 			client.rUnlock()
 			continue
@@ -487,6 +489,5 @@ func lpdPeer(t *Torrent, p string) {
 		Addr:   &net.UDPAddr{IP: ip, Port: pi},
 		Source: PeerSourceLPD,
 	}
-	t.cl.logger.Printf("Adding peer, ip: %v, port: %v\n", ip, pi)
 	t.AddPeers([]PeerInfo{peer})
 }

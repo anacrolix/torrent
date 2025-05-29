@@ -1,8 +1,8 @@
 module github.com/james-lawrence/torrent
 
-go 1.23.2
+go 1.24
 
-toolchain go1.24.2
+toolchain go1.24.3
 
 require (
 	filippo.io/edwards25519 v1.1.0

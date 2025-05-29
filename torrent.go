@@ -861,7 +861,12 @@ func (t *torrent) haveInfo() bool {
 }
 
 func (t *torrent) bytesLeft() (left int64) {
+	if !t.haveInfo() {
+		return -1
+	}
+
 	s := t.chunks.Snapshot(&Stats{})
+
 	return t.info.TotalLength() - ((int64(s.Unverified) * int64(t.chunks.clength)) + (int64(s.Completed) * int64(t.info.PieceLength)))
 }
 

@@ -114,6 +114,15 @@ func TuneReadPort(v *int) Tuner {
 	}
 }
 
+func TuneReadBytesRemaining(v *int64) Tuner {
+	return func(t *torrent) {
+		t.rLock()
+		defer t.rUnlock()
+
+		*v = t.bytesLeft()
+	}
+}
+
 // The subscription emits as (int) the index of pieces as their state changes.
 // A state change is when the PieceState for a piece alters in value.
 func TuneSubscribe(sub *pubsub.Subscription) Tuner {
@@ -849,12 +858,6 @@ func (t *torrent) newMetadataExtensionMessage(c *connection, msgType int, piece 
 
 func (t *torrent) haveInfo() bool {
 	return t.info != nil
-}
-
-func (t *torrent) BytesMissing() int64 {
-	t.rLock()
-	defer t.rUnlock()
-	return t.bytesLeft()
 }
 
 func (t *torrent) bytesLeft() (left int64) {

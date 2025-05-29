@@ -45,20 +45,20 @@ require (
 require (
 	github.com/alecthomas/atomic v0.1.0-alpha2 // indirect
 	github.com/alexflint/go-scalar v1.2.0 // indirect
-	github.com/anacrolix/generics v0.0.3-0.20240902042256-7fb2702ef0ca
+	github.com/anacrolix/generics v0.0.3-0.20250516050331-55beb7b24e76
 	github.com/anacrolix/missinggo/perf v1.0.0 // indirect
 	github.com/anacrolix/mmsg v1.0.1 // indirect
-	github.com/anacrolix/sync v0.5.3
+	github.com/anacrolix/sync v0.5.4
 	github.com/bits-and-blooms/bitset v1.22.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/rogpeppe/go-internal v1.13.1 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529
 	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
-	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
+	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6 // indirect
 	golang.org/x/sys v0.33.0
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

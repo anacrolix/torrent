@@ -22,6 +22,7 @@ func TrackerEvent(ctx context.Context, l Torrent, announceuri string, options ..
 		s         Stats
 		id        int160.T
 		infoid    int160.T
+		remaining int64
 	)
 
 	if err = l.Tune(
@@ -30,6 +31,7 @@ func TrackerEvent(ctx context.Context, l Torrent, announceuri string, options ..
 		TuneReadHashID(&infoid),
 		TuneReadAnnounce(&announcer),
 		TuneReadPort(&port),
+		TuneReadBytesRemaining(&remaining),
 	); err != nil {
 		return nil, err
 	}
@@ -41,6 +43,7 @@ func TrackerEvent(ctx context.Context, l Torrent, announceuri string, options ..
 		tracker.AnnounceOptionKey,
 		tracker.AnnounceOptionDownloaded(s.BytesReadUsefulData.Int64()),
 		tracker.AnnounceOptionUploaded(s.BytesWrittenData.n),
+		tracker.AnnounceOptionRemaining(remaining),
 		langx.Compose(options...),
 	)
 

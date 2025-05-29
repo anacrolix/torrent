@@ -39,6 +39,12 @@ func AnnounceOptionDownloaded(n int64) AnnounceOption {
 	}
 }
 
+func AnnounceOptionRemaining(n int64) AnnounceOption {
+	return func(ar *AnnounceRequest) {
+		ar.Left = n
+	}
+}
+
 func AnnounceOptionEventStarted(ar *AnnounceRequest) {
 	ar.Event = Started
 }

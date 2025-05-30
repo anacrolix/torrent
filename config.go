@@ -168,6 +168,26 @@ func ClientConfigPortForward(b bool) ClientConfigOption {
 	}
 }
 
+func ClientConfigIPv4(ip string) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		if len(ip) == 0 {
+			return
+		}
+
+		cc.PublicIP4 = net.ParseIP(ip)
+	}
+}
+
+func ClientConfigIPv6(ip string) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		if len(ip) == 0 {
+			return
+		}
+
+		cc.PublicIP6 = net.ParseIP(ip)
+	}
+}
+
 func ClientConfigDialRateLimit(l *rate.Limiter) ClientConfigOption {
 	return func(cc *ClientConfig) {
 		cc.dialRateLimiter = l

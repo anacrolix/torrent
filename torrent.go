@@ -120,6 +120,9 @@ func TuneReadBytesRemaining(v *int64) Tuner {
 		defer t.rUnlock()
 
 		*v = t.bytesLeft()
+		if *v < 0 {
+			*v = 0
+		}
 	}
 }
 

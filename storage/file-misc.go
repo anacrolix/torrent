@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/anacrolix/torrent/segments"
 )
@@ -51,13 +52,17 @@ func CreateNativeZeroLengthFile(name string) error {
 }
 
 type file struct {
+	// This protects high level OS file state like partial file name, permission mod, renaming etc.
+	mu sync.RWMutex
 	// The safe, OS-local file path.
 	safeOsPath      string
 	beginPieceIndex int
 	endPieceIndex   int
 	length          int64
+	// Utility value to help the race detector find issues for us.
+	race byte
 }
 
-func (f file) partFilePath() string {
+func (f *file) partFilePath() string {
 	return f.safeOsPath + ".part"
 }

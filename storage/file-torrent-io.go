@@ -16,9 +16,10 @@ type fileTorrentImplIO struct {
 }
 
 // Returns EOF on short or missing file.
-func (fst fileTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, err error) {
+func (fst fileTorrentImplIO) readFileAt(file *file, b []byte, off int64) (n int, err error) {
 	fst.fts.logger().Debug("readFileAt", "file.safeOsPath", file.safeOsPath)
 	var f sharedFileIf
+	file.mu.RLock()
 	// Fine to open once under each name on a unix system. We could make the shared file keys more
 	// constrained but it shouldn't matter. TODO: Ensure at most one of the names exist.
 	if fst.fts.partFiles() {
@@ -27,6 +28,7 @@ func (fst fileTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, 
 	if err == nil && f == nil || errors.Is(err, fs.ErrNotExist) {
 		f, err = sharedFiles.Open(file.safeOsPath)
 	}
+	file.mu.RUnlock()
 	if errors.Is(err, fs.ErrNotExist) {
 		// File missing is treated the same as a short file. Should we propagate this through the
 		// interface now that fs.ErrNotExist is a thing?
@@ -57,7 +59,7 @@ func (fst fileTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, 
 // Only returns EOF at the end of the torrent. Premature EOF is ErrUnexpectedEOF.
 func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 	fst.fts.segmentLocater.Locate(segments.Extent{off, int64(len(b))}, func(i int, e segments.Extent) bool {
-		n1, err1 := fst.readFileAt(fst.fts.files[i], b[:e.Length], e.Start)
+		n1, err1 := fst.readFileAt(&fst.fts.files[i], b[:e.Length], e.Start)
 		n += n1
 		b = b[n1:]
 		err = err1
@@ -69,7 +71,7 @@ func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 	return
 }
 
-func (fst fileTorrentImplIO) openForWrite(file file) (f *os.File, err error) {
+func (fst fileTorrentImplIO) openForWrite(file *file) (f *os.File, err error) {
 	// It might be possible to have a writable handle shared files cache if we need it.
 	fst.fts.logger().Debug("openForWrite", "file.safeOsPath", file.safeOsPath)
 	p := fst.fts.pathForWrite(file)
@@ -94,25 +96,27 @@ func (fst fileTorrentImplIO) openForWrite(file file) (f *os.File, err error) {
 
 func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 	// log.Printf("write at %v: %v bytes", off, len(p))
-	fst.fts.segmentLocater.Locate(segments.Extent{off, int64(len(p))}, func(i int, e segments.Extent) bool {
-		var f *os.File
-		f, err = fst.openForWrite(fst.fts.files[i])
-		if err != nil {
-			return false
-		}
-		var n1 int
-		n1, err = f.WriteAt(p[:e.Length], e.Start)
-		// log.Printf("%v %v wrote %v: %v", i, e, n1, err)
-		closeErr := f.Close()
-		n += n1
-		p = p[n1:]
-		if err == nil {
-			err = closeErr
-		}
-		if err == nil && int64(n1) != e.Length {
-			err = io.ErrShortWrite
-		}
-		return err == nil
-	})
+	fst.fts.segmentLocater.Locate(
+		segments.Extent{off, int64(len(p))},
+		func(i int, e segments.Extent) bool {
+			var f *os.File
+			f, err = fst.openForWrite(&fst.fts.files[i])
+			if err != nil {
+				return false
+			}
+			var n1 int
+			n1, err = f.WriteAt(p[:e.Length], e.Start)
+			// log.Printf("%v %v wrote %v: %v", i, e, n1, err)
+			closeErr := f.Close()
+			n += n1
+			p = p[n1:]
+			if err == nil {
+				err = closeErr
+			}
+			if err == nil && int64(n1) != e.Length {
+				err = io.ErrShortWrite
+			}
+			return err == nil
+		})
 	return
 }

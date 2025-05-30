@@ -44,10 +44,10 @@ func (me *filePieceImpl) extent() segments.Extent {
 	}
 }
 
-func (me *filePieceImpl) pieceFiles() iter.Seq2[int, file] {
-	return func(yield func(int, file) bool) {
+func (me *filePieceImpl) pieceFiles() iter.Seq2[int, *file] {
+	return func(yield func(int, *file) bool) {
 		for fileIndex := range me.t.segmentLocater.LocateIter(me.extent()) {
-			if !yield(fileIndex, me.t.files[fileIndex]) {
+			if !yield(fileIndex, &me.t.files[fileIndex]) {
 				return
 			}
 		}
@@ -69,12 +69,14 @@ func (me *filePieceImpl) Completion() Completion {
 		// If it's allegedly complete, check that its constituent files have the necessary length.
 		for i, extent := range me.t.segmentLocater.LocateIter(me.extent()) {
 			noFiles = false
-			file := me.t.files[i]
-			s, err := os.Stat(file.partFilePath())
-			if errors.Is(err, fs.ErrNotExist) {
+			file := &me.t.files[i]
+			file.mu.RLock()
+			s, err := os.Stat(file.safeOsPath)
+			if me.partFiles() && errors.Is(err, fs.ErrNotExist) {
 				// Can we use shared files for this? Is it faster?
-				s, err = os.Stat(file.safeOsPath)
+				s, err = os.Stat(file.partFilePath())
 			}
+			file.mu.RUnlock()
 			if err != nil {
 				me.logger().Warn(
 					"error checking file for piece marked as complete",
@@ -134,7 +136,7 @@ func (me *filePieceImpl) MarkComplete() (err error) {
 	return
 }
 
-func (me *filePieceImpl) allFilePiecesComplete(f file) (ret g.Result[bool]) {
+func (me *filePieceImpl) allFilePiecesComplete(f *file) (ret g.Result[bool]) {
 	next, stop := iter.Pull(GetPieceCompletionRange(
 		me.t.pieceCompletion(),
 		me.t.infoHash,
@@ -176,7 +178,10 @@ func (me *filePieceImpl) MarkNotComplete() (err error) {
 
 }
 
-func (me *filePieceImpl) promotePartFile(f file) (err error) {
+func (me *filePieceImpl) promotePartFile(f *file) (err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.race++
 	if me.partFiles() {
 		err = me.exclRenameIfExists(f.partFilePath(), f.safeOsPath)
 		if err != nil {
@@ -240,7 +245,10 @@ func (me *filePieceImpl) exclRenameIfExists(from, to string) error {
 	return nil
 }
 
-func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
+func (me *filePieceImpl) onFileNotComplete(f *file) (err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.race++
 	if me.partFiles() {
 		err = me.exclRenameIfExists(f.safeOsPath, f.partFilePath())
 		if err != nil {
@@ -265,7 +273,7 @@ func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
 	return
 }
 
-func (me *filePieceImpl) pathForWrite(f file) string {
+func (me *filePieceImpl) pathForWrite(f *file) string {
 	return me.t.pathForWrite(f)
 }
 

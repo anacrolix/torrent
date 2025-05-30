@@ -76,7 +76,7 @@ func (fts *fileTorrentImpl) partFiles() bool {
 	return fts.client.opts.partFiles()
 }
 
-func (fts *fileTorrentImpl) pathForWrite(f file) string {
+func (fts *fileTorrentImpl) pathForWrite(f *file) string {
 	if fts.partFiles() {
 		return f.partFilePath()
 	}
@@ -106,7 +106,8 @@ func (fs *fileTorrentImpl) Close() error {
 }
 
 func (fts *fileTorrentImpl) Flush() error {
-	for _, f := range fts.files {
+	for i := range fts.files {
+		f := &fts.files[i]
 		fts.logger().Debug("flushing", "file.safeOsPath", f.safeOsPath)
 		if err := fsync(fts.pathForWrite(f)); err != nil {
 			return err

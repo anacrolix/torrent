@@ -554,62 +554,63 @@ func (cl *Client) acceptConnections(l Listener) {
 					// debug.PrintStack()
 				}
 			}()
-		conn, err := l.Accept()
-		torrent.Add("client listener accepts", 1)
-		if err == nil {
-			holepunchAddr, holepunchErr := addrPortFromPeerRemoteAddr(conn.RemoteAddr())
-			if holepunchErr == nil {
-				cl.lock()
-				if g.MapContains(cl.undialableWithoutHolepunch, holepunchAddr) {
-					setAdd(&cl.accepted, holepunchAddr)
+			conn, err := l.Accept()
+			torrent.Add("client listener accepts", 1)
+			if err == nil {
+				holepunchAddr, holepunchErr := addrPortFromPeerRemoteAddr(conn.RemoteAddr())
+				if holepunchErr == nil {
+					cl.lock()
+					if g.MapContains(cl.undialableWithoutHolepunch, holepunchAddr) {
+						setAdd(&cl.accepted, holepunchAddr)
+					}
+					if g.MapContains(
+						cl.undialableWithoutHolepunchDialedAfterHolepunchConnect,
+						holepunchAddr,
+					) {
+						setAdd(&cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr)
+					}
+					cl.unlock()
 				}
-				if g.MapContains(
-					cl.undialableWithoutHolepunchDialedAfterHolepunchConnect,
-					holepunchAddr,
-				) {
-					setAdd(&cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr)
+			}
+			conn = pproffd.WrapNetConn(conn)
+			cl.rLock()
+			closed := cl.closed.IsSet()
+			var reject error
+			if !closed && conn != nil {
+				reject = cl.rejectAccepted(conn)
+			}
+			cl.rUnlock()
+			if closed {
+				if conn != nil {
+					conn.Close()
 				}
-				cl.unlock()
+				return
 			}
-		}
-		conn = pproffd.WrapNetConn(conn)
-		cl.rLock()
-		closed := cl.closed.IsSet()
-		var reject error
-		if !closed && conn != nil {
-			reject = cl.rejectAccepted(conn)
-		}
-		cl.rUnlock()
-		if closed {
-			if conn != nil {
-				conn.Close()
+			if err != nil {
+				log.Fmsg("error accepting connection: %s", err).LogLevel(log.Debug, cl.logger)
+				return
 			}
-			return
-		}
-		if err != nil {
-			log.Fmsg("error accepting connection: %s", err).LogLevel(log.Debug, cl.logger)
-			continue
-		}
-		go func() {
-			if reject != nil {
-				torrent.Add("rejected accepted connections", 1)
+			go func() {
+				if reject != nil {
+					torrent.Add("rejected accepted connections", 1)
+					cl.logger.LazyLog(log.Debug, func() log.Msg {
+						return log.Fmsg("rejecting accepted conn: %v", reject)
+					})
+					conn.Close()
+				} else {
+					go cl.incomingConnection(conn)
+				}
 				cl.logger.LazyLog(log.Debug, func() log.Msg {
-					return log.Fmsg("rejecting accepted conn: %v", reject)
+					return log.Fmsg("accepted %q connection at %q from %q",
+						l.Addr().Network(),
+						conn.LocalAddr(),
+						conn.RemoteAddr(),
+					)
 				})
-				conn.Close()
-			} else {
-				go cl.incomingConnection(conn)
-			}
-			cl.logger.LazyLog(log.Debug, func() log.Msg {
-				return log.Fmsg("accepted %q connection at %q from %q",
-					l.Addr().Network(),
-					conn.LocalAddr(),
-					conn.RemoteAddr(),
-				)
-			})
-			torrent.Add(fmt.Sprintf("accepted conn remote IP len=%d", len(addrIpOrNil(conn.RemoteAddr()))), 1)
-			torrent.Add(fmt.Sprintf("accepted conn network=%s", conn.RemoteAddr().Network()), 1)
-			torrent.Add(fmt.Sprintf("accepted on %s listener", l.Addr().Network()), 1)
+				torrent.Add(fmt.Sprintf("accepted conn remote IP len=%d", len(addrIpOrNil(conn.RemoteAddr()))), 1)
+				torrent.Add(fmt.Sprintf("accepted conn network=%s", conn.RemoteAddr().Network()), 1)
+				torrent.Add(fmt.Sprintf("accepted on %s listener", l.Addr().Network()), 1)
+			}()
 		}()
 	}
 }

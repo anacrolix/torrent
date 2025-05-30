@@ -545,6 +545,15 @@ func (cl *Client) rejectAccepted(conn net.Conn) error {
 
 func (cl *Client) acceptConnections(l Listener) {
 	for {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					cl.logger.Levelf(log.Error, "panic in Accept: %v (continuing accept loop)", r)
+					torrent.Add("accept panics recovered", 1)
+					// Optionally: print stack trace
+					// debug.PrintStack()
+				}
+			}()
 		conn, err := l.Accept()
 		torrent.Add("client listener accepts", 1)
 		if err == nil {

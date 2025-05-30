@@ -41,5 +41,5 @@ jobs:
           go install github.com/anacrolix/godo@v1
           echo $PATH
       - run: |
-          GOARCH=386 fs/test.sh
+          fs/test.sh
           mount

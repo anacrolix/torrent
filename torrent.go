@@ -143,6 +143,7 @@ func TuneReadAnnounce(v *tracker.Announce) Tuner {
 			UserAgent: t.cln.config.HTTPUserAgent,
 			ClientIp4: krpc.NewNodeAddrFromIPPort(t.cln.config.PublicIP4, 0),
 			ClientIp6: krpc.NewNodeAddrFromIPPort(t.cln.config.PublicIP6, 0),
+			Dialer:    t.cln.config.dialer,
 		}
 	}
 }

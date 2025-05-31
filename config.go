@@ -11,6 +11,7 @@ import (
 	"github.com/james-lawrence/torrent/connections"
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/internal/netx"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
 	"github.com/james-lawrence/torrent/x/conntrack"
@@ -105,6 +106,7 @@ type ClientConfig struct {
 	// are obtained with 60s timeout, and 5% of unsuccessful handshakes.
 	HandshakesTimeout time.Duration
 
+	dialer netx.Dialer
 	// The IP addresses as our peers should see them. May differ from the
 	// local interfaces due to NAT or other network configurations.
 	PublicIP4 net.IP
@@ -153,6 +155,12 @@ func ClientConfigCompose(options ...ClientConfigOption) ClientConfigOption {
 		for _, opt := range options {
 			opt(cc)
 		}
+	}
+}
+
+func ClientConfigDialer(d netx.Dialer) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		cc.dialer = d
 	}
 }
 

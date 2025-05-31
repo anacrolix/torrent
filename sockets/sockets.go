@@ -8,7 +8,7 @@ import (
 )
 
 // New creates a socket from a net listener and dialer.
-func New(l net.Listener, d netx.ContextDialer) Socket {
+func New(l net.Listener, d netx.Dialer) Socket {
 	if l, ok := l.(packetlistener); ok {
 		return packetconnSocket{packetlistener: l, dialer: d}
 	}
@@ -32,7 +32,7 @@ type packetlistener interface {
 
 type packetconnSocket struct {
 	packetlistener
-	dialer netx.ContextDialer
+	dialer netx.Dialer
 }
 
 // Dial remote peers from this socket.
@@ -42,7 +42,7 @@ func (t packetconnSocket) Dial(ctx context.Context, addr string) (conn net.Conn,
 
 type socket struct {
 	net.Listener
-	dialer netx.ContextDialer
+	dialer netx.Dialer
 }
 
 // Dial remote peers from this socket.

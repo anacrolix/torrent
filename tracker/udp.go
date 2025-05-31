@@ -98,9 +98,9 @@ func (c *udpAnnounce) ipv6() bool {
 }
 
 func (c *udpAnnounce) Do(ctx context.Context, req AnnounceRequest) (res AnnounceResponse, err error) {
-	err = c.connect()
+	err = c.connect(ctx)
 	if err != nil {
-		return
+		return res, err
 	}
 	reqURI := c.url.RequestURI()
 	if c.ipv6() {
@@ -114,7 +114,7 @@ func (c *udpAnnounce) Do(ctx context.Context, req AnnounceRequest) (res Announce
 	options := append([]byte{optionTypeURLData, byte(len(reqURI))}, []byte(reqURI)...)
 	b, err := c.request(ActionAnnounce, req, options)
 	if err != nil {
-		return
+		return res, err
 	}
 	var h AnnounceResponseHeader
 	err = readBody(b, &h)
@@ -123,7 +123,7 @@ func (c *udpAnnounce) Do(ctx context.Context, req AnnounceRequest) (res Announce
 			err = io.ErrUnexpectedEOF
 		}
 		err = fmt.Errorf("error parsing announce response: %s", err)
-		return
+		return res, err
 	}
 	res.Interval = h.Interval
 	res.Leechers = h.Leechers
@@ -254,7 +254,7 @@ func (c *udpAnnounce) dialNetwork() string {
 	return "udp"
 }
 
-func (c *udpAnnounce) connect() (err error) {
+func (c *udpAnnounce) connect(ctx context.Context) (err error) {
 	if c.connected() {
 		return nil
 	}
@@ -265,7 +265,7 @@ func (c *udpAnnounce) connect() (err error) {
 			hmp.NoPort = false
 			hmp.Port = 80
 		}
-		c.socket, err = net.Dial(c.dialNetwork(), hmp.String())
+		c.socket, err = c.a.Dialer.DialContext(ctx, c.dialNetwork(), hmp.String())
 		if err != nil {
 			return
 		}

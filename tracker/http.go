@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -117,9 +116,7 @@ func announceHTTP(ctx context.Context, _url *url.URL, ar AnnounceRequest, opt An
 	resp, err := (&http.Client{
 		Timeout: time.Second * 15,
 		Transport: &http.Transport{
-			Dial: (&net.Dialer{
-				Timeout: 15 * time.Second,
-			}).Dial,
+			DialContext:         opt.Dialer.DialContext,
 			Proxy:               http.ProxyFromEnvironment,
 			TLSHandshakeTimeout: 15 * time.Second,
 		},

@@ -8,8 +8,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ContextDialer missing interface from the net package.
-type ContextDialer interface {
+// Dialer missing interface from the net package.
+type Dialer interface {
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 }
 

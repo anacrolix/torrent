@@ -5,11 +5,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
+	"net"
 	"net/url"
+	"time"
 
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/dht/krpc"
 	"github.com/james-lawrence/torrent/internal/langx"
+	"github.com/james-lawrence/torrent/internal/netx"
 )
 
 // https://www.bittorrent.org/beps/bep_0015.html
@@ -114,6 +117,7 @@ type Announce struct {
 	ClientIp4 krpc.NodeAddr
 	// If the port is zero, it's assumed to be the same as the Request.Port.
 	ClientIp6 krpc.NodeAddr
+	Dialer    netx.Dialer
 }
 
 func (me Announce) ForTracker(uri string) Announce {
@@ -121,7 +125,18 @@ func (me Announce) ForTracker(uri string) Announce {
 	return me
 }
 
+func (me Announce) WithDialer(d netx.Dialer) Announce {
+	me.Dialer = d
+	return me
+}
+
 func (me Announce) Do(ctx context.Context, req AnnounceRequest) (res AnnounceResponse, err error) {
+	if me.Dialer == nil {
+		me.Dialer = &net.Dialer{
+			Timeout: 15 * time.Second,
+		}
+	}
+
 	_url, err := url.Parse(me.TrackerUrl)
 	if err != nil {
 		return res, err

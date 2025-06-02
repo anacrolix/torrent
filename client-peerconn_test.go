@@ -6,6 +6,7 @@ import (
 	"testing"
 	"testing/iotest"
 
+	"github.com/anacrolix/chansync"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/go-quicktest/qt"
@@ -21,7 +22,9 @@ func TestPeerConnEstablished(t *testing.T) {
 	missinggo.CopyExact(&expectedPeerId, "12345123451234512345")
 
 	gotPeerConnectedEvt := false
-	gotPeerDisconnectedEvt := false
+	// Disconnect occurs asynchronously to Client/Torrent lifetime.
+	var gotPeerDisconnectedEvt chansync.SetOnce
+
 	ps := testClientTransferParams{
 		ConfigureSeeder: ConfigureClient{
 			Config: func(cfg *ClientConfig) {
@@ -35,7 +38,8 @@ func TestPeerConnEstablished(t *testing.T) {
 				cfg.Debug = false
 				cfg.DisableTrackers = true
 				cfg.EstablishedConnsPerTorrent = 1
-				cfg.Callbacks.StatusUpdated = append(cfg.Callbacks.StatusUpdated,
+				cfg.Callbacks.StatusUpdated = append(
+					cfg.Callbacks.StatusUpdated,
 					func(e StatusUpdatedEvent) {
 						if e.Event == PeerConnected {
 							gotPeerConnectedEvt = true
@@ -45,9 +49,10 @@ func TestPeerConnEstablished(t *testing.T) {
 					},
 					func(e StatusUpdatedEvent) {
 						if e.Event == PeerDisconnected {
-							gotPeerDisconnectedEvt = true
 							require.Equal(t, expectedPeerId, e.PeerId)
 							require.NoError(t, e.Error)
+							// Signal after checking the values.
+							gotPeerDisconnectedEvt.Set()
 						}
 					},
 				)
@@ -58,7 +63,7 @@ func TestPeerConnEstablished(t *testing.T) {
 	testClientTransfer(t, ps)
 	// double check that the callbacks were called
 	require.True(t, gotPeerConnectedEvt)
-	require.True(t, gotPeerDisconnectedEvt)
+	<-gotPeerDisconnectedEvt.Done()
 }
 
 type ConfigureClient struct {

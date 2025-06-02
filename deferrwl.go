@@ -15,6 +15,8 @@ type lockWithDeferreds struct {
 	internal      sync.RWMutex
 	unlockActions []func()
 	m             map[uintptr]struct{}
+	// Currently unlocking, defers should not occur?
+	unlocking bool
 }
 
 func (me *lockWithDeferreds) Lock() {
@@ -23,6 +25,7 @@ func (me *lockWithDeferreds) Lock() {
 
 func (me *lockWithDeferreds) Unlock() {
 	defer me.internal.Unlock()
+	me.unlocking = true
 	startLen := len(me.unlockActions)
 	for i := range startLen {
 		me.unlockActions[i]()
@@ -32,6 +35,7 @@ func (me *lockWithDeferreds) Unlock() {
 	}
 	me.unlockActions = me.unlockActions[:0]
 	clear(me.unlockActions)
+	me.unlocking = false
 }
 
 func (me *lockWithDeferreds) RLock() {
@@ -43,6 +47,9 @@ func (me *lockWithDeferreds) RUnlock() {
 }
 
 func (me *lockWithDeferreds) Defer(action func()) {
+	if me.unlocking {
+		panic("defer called while unlocking")
+	}
 	me.unlockActions = append(me.unlockActions, action)
 }
 

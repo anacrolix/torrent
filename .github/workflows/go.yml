@@ -33,13 +33,7 @@ jobs:
         run: GOARCH=386 go test -run @ ./...
       - name: Some packages compile for WebAssembly
         run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
-      - run: brew install macfuse pv md5sha1sum bash
+      - run: brew install macfuse pv md5sha1sum bash fuse-t
         if: matrix.os == 'macos-latest'
       - run: sudo apt install pv fuse
         if: matrix.os == 'ubuntu-latest'
-      - run: |
-          go install github.com/anacrolix/godo@v1
-          echo $PATH
-      - run: |
-          fs/test.sh
-          mount

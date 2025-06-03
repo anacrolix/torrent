@@ -512,7 +512,7 @@ func (cn *Peer) onNeedUpdateRequests(reason updateRequestReason) {
 	}
 	cn.needRequestUpdate = reason
 	// Run this before the Client lock is released.
-	cn.locker().Defer(cn.handleOnNeedUpdateRequests)
+	cn.locker().DeferUniqueUnaryFunc(cn, cn.handleOnNeedUpdateRequests)
 }
 
 // Emits the indices in the Bitmaps bms in order, never repeating any index.
@@ -754,7 +754,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 	cl.event.Broadcast()
 	// We do this because we've written a chunk, and may change PieceState.Partial.
-	t.publishPieceStateChange(pieceIndex(ppReq.Index))
+	t.deferPublishPieceStateChange(pieceIndex(ppReq.Index))
 
 	return nil
 }

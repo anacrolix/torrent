@@ -1406,18 +1406,9 @@ type PieceStateChange struct {
 	PieceState
 }
 
-func (t *Torrent) publishPieceStateChange(piece pieceIndex) {
-	t.cl._mu.Defer(func() {
-		cur := t.pieceState(piece)
-		p := &t.pieces[piece]
-		if cur != p.publicPieceState {
-			p.publicPieceState = cur
-			t.pieceStateChanges.Publish(PieceStateChange{
-				piece,
-				cur,
-			})
-		}
-	})
+func (t *Torrent) deferPublishPieceStateChange(piece pieceIndex) {
+	p := t.piece(piece)
+	t.cl.locker().DeferUniqueUnaryFunc(p, p.publishStateChange)
 }
 
 func (t *Torrent) pieceNumPendingChunks(piece pieceIndex) pp.Integer {
@@ -1491,7 +1482,7 @@ func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequ
 // Stuff we don't want to run when the pending pieces change while benchmarking.
 func (t *Torrent) onPiecePendingTriggers(piece pieceIndex) {
 	t.maybeNewConns()
-	t.publishPieceStateChange(piece)
+	t.deferPublishPieceStateChange(piece)
 }
 
 // Pending pieces is an old bitmap of stuff we want. I think it's more nuanced than that now with
@@ -2488,10 +2479,10 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	}
 
 	p.marking = true
-	t.publishPieceStateChange(piece)
+	t.deferPublishPieceStateChange(piece)
 	defer func() {
 		p.marking = false
-		t.publishPieceStateChange(piece)
+		t.deferPublishPieceStateChange(piece)
 	}()
 
 	if passed {
@@ -2678,7 +2669,7 @@ func (t *Torrent) startHash(pi pieceIndex) {
 	t.piecesQueuedForHash.Remove(pi)
 	t.deferUpdateComplete()
 	p.hashing = true
-	t.publishPieceStateChange(pi)
+	t.deferPublishPieceStateChange(pi)
 	t.updatePiecePriority(pi, "Torrent.startPieceHasher")
 	t.storageLock.RLock()
 	t.activePieceHashes++
@@ -2792,7 +2783,7 @@ func (t *Torrent) queuePieceCheck(pieceIndex pieceIndex) (targetVerifies pieceVe
 	}
 	t.piecesQueuedForHash.Add(pieceIndex)
 	t.deferUpdateComplete()
-	t.publishPieceStateChange(pieceIndex)
+	t.deferPublishPieceStateChange(pieceIndex)
 	t.updatePiecePriority(pieceIndex, "Torrent.queuePieceCheck")
 	err = t.startPieceHashers()
 	return
@@ -3114,7 +3105,7 @@ func (t *Torrent) pieceRequestIndexBegin(piece pieceIndex) RequestIndex {
 
 // Run complete validation when lock is released.
 func (t *Torrent) deferUpdateComplete() {
-	t.cl._mu.DeferOnce(t.updateComplete)
+	t.cl._mu.DeferUniqueUnaryFunc(t, t.updateComplete)
 }
 
 func (t *Torrent) updateComplete() {

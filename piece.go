@@ -410,3 +410,16 @@ func (p *Piece) nextNovelHashCount() (ret pieceVerifyCount) {
 	}
 	return
 }
+
+// Here so it's zero-arity and we can use it in DeferOnce.
+func (p *Piece) publishStateChange() {
+	t := p.t
+	cur := t.pieceState(p.index)
+	if cur != p.publicPieceState {
+		p.publicPieceState = cur
+		t.pieceStateChanges.Publish(PieceStateChange{
+			p.index,
+			cur,
+		})
+	}
+}

@@ -13,13 +13,13 @@ popd
 #file="$debian_file"
 file=Sintel/Sintel.mp4
 
-GOPPROF=http godo -v -- "$repopath/fs/cmd/torrentfs" -mountDir=mnt -metainfoDir=torrents &
+GOPPROF=http godo -v -- "$repopath/fs/cmd/torrentfs" -mountDir=mnt -metainfoDir=torrents &> torrentfs.log &
 torrentfs_pid=$!
 trap 'kill "$torrentfs_pid"' EXIT
 
 check_file() {
 	while [ ! -e "mnt/$file" ]; do sleep 1; done
-	pv -f "mnt/$file" | md5sum -c <(cat <<-EOF
+	pv -f "mnt/$file" | gmd5sum -c <(cat <<-EOF
 	083e808d56aa7b146f513b3458658292  -
 	EOF
 	)

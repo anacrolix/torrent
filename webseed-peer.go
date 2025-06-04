@@ -2,7 +2,6 @@ package torrent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -13,7 +12,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	g "github.com/anacrolix/generics"
-
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
 	"github.com/anacrolix/torrent/webseed"
@@ -26,6 +25,7 @@ type webseedPeer struct {
 	activeRequests   map[*webseedRequest]struct{}
 	locker           sync.Locker
 	lastUnhandledErr time.Time
+	hostKey          webseedHostKeyHandle
 }
 
 func (me *webseedPeer) nominalMaxRequests() maxRequests {
@@ -44,7 +44,11 @@ func (me *webseedPeer) numRequests() int {
 }
 
 func (me *webseedPeer) shouldUpdateRequests() bool {
-	return me.numRequests() < me.client.MaxRequests && me.peer.t.cl.underWebSeedHttpRequestLimit()
+	return me.moreRequestsAllowed()
+}
+
+func (me *webseedPeer) moreRequestsAllowed() bool {
+	return me.numRequests() < me.client.MaxRequests && me.peer.t.cl.underWebSeedHttpRequestLimit(me.hostKey)
 }
 
 func (me *webseedPeer) updateRequests() {
@@ -133,7 +137,8 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
 		end:     end,
 	}
 	ws.activeRequests[&wsReq] = struct{}{}
-	ws.peer.t.cl.numWebSeedRequests++
+	panicif.Zero(ws.hostKey)
+	ws.peer.t.cl.numWebSeedRequests[ws.hostKey]++
 	ws.slogger().Debug(
 		"starting webseed request",
 		"begin", begin,
@@ -175,19 +180,13 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 
 func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
 	g.MustDelete(ws.activeRequests, wr)
-	ws.peer.t.cl.numWebSeedRequests--
+	ws.peer.t.cl.numWebSeedRequests[ws.hostKey]--
 }
 
 func (ws *webseedPeer) spawnRequests() {
 	next, stop := iter.Pull(ws.inactiveRequests())
 	defer stop()
-	for {
-		if !ws.peer.t.cl.underWebSeedHttpRequestLimit() {
-			break
-		}
-		if ws.numRequests() >= ws.client.MaxRequests {
-			break
-		}
+	for ws.moreRequestsAllowed() {
 		req, ok := next()
 		if !ok {
 			break

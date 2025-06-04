@@ -1,8 +1,15 @@
 package torrent
 
 import (
+	"unique"
+
 	"github.com/anacrolix/torrent/metainfo"
 	requestStrategy "github.com/anacrolix/torrent/request-strategy"
+)
+
+type (
+	webseedHostKey       string
+	webseedHostKeyHandle = unique.Handle[webseedHostKey]
 )
 
 /*

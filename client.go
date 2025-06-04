@@ -29,6 +29,7 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
 	"github.com/cespare/xxhash"
@@ -94,7 +95,7 @@ type Client struct {
 	numHalfOpen   int
 
 	websocketTrackers  websocketTrackers
-	numWebSeedRequests int
+	numWebSeedRequests map[webseedHostKeyHandle]int
 
 	activeAnnounceLimiter limiter.Instance
 	httpClient            *http.Client
@@ -1933,8 +1934,9 @@ func (cl *Client) Stats() ClientStats {
 	return cl.statsLocked()
 }
 
-func (cl *Client) underWebSeedHttpRequestLimit() bool {
-	return cl.numWebSeedRequests < 10
+func (cl *Client) underWebSeedHttpRequestLimit(key webseedHostKeyHandle) bool {
+	panicif.Zero(key)
+	return cl.numWebSeedRequests[key] < 5
 }
 
 func (cl *Client) countWebSeedHttpRequests() (num int) {

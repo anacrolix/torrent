@@ -19,6 +19,7 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
+	"unique"
 	"unsafe"
 
 	"github.com/RoaringBitmap/roaring"
@@ -3049,6 +3050,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 				}
 			},
 		},
+		hostKey: t.deriveWebSeedHostKey(url),
 	}
 	ws.peer.initRequestState()
 	for _, opt := range opts {
@@ -3074,6 +3076,15 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	t.webSeeds[url] = &ws
 	ws.peer.onNeedUpdateRequests("Torrent.addWebSeed")
 	return true
+}
+
+func (t *Torrent) deriveWebSeedHostKey(urlStr string) (ret webseedHostKeyHandle) {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		t.slogger().Warn("error parsing webseed URL", "url", urlStr, "err", err)
+		return unique.Make(webseedHostKey(urlStr))
+	}
+	return unique.Make(webseedHostKey(u.Hostname()))
 }
 
 func (t *Torrent) peerIsActive(p *Peer) (active bool) {

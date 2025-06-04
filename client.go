@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log"
 	"net"
+	"net/netip"
 	"path/filepath"
 	stdsync "sync"
 	"sync/atomic"
@@ -27,6 +28,7 @@ import (
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/langx"
+	"github.com/james-lawrence/torrent/internal/netx"
 	"github.com/james-lawrence/torrent/internal/stringsx"
 	"github.com/james-lawrence/torrent/metainfo"
 )
@@ -158,18 +160,21 @@ func (cl *Client) PeerID() PeerID {
 // listeners.
 func (cl *Client) LocalPort() (port int) {
 	cl.eachListener(func(l socket) bool {
-		_port := missinggo.AddrPort(l.Addr())
-		if _port == 0 {
+		addr, err := netx.AddrPort(l.Addr())
+		if err != nil {
+			log.Println("unable to determine port from listener", err)
+			return false
+		}
+		if addr.Port() == 0 {
 			panic(l)
 		}
 		if port == 0 {
-			port = _port
-		} else if port != _port {
-			panic("mismatched ports")
+			port = int(addr.Port())
 		}
 		return true
 	})
-	return
+
+	return port
 }
 
 func writeDhtServerStatus(w io.Writer, s *dht.Server) {
@@ -236,10 +241,10 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	cfg := dht.ServerConfig{
 		OnAnnouncePeer: cl.onDHTAnnouncePeer,
 		PublicIP: func() net.IP {
-			if connIsIpv6(conn) && cl.config.PublicIP6 != nil {
-				return cl.config.PublicIP6
+			if connIsIpv6(conn) && cl.config.publicIP6 != nil {
+				return cl.config.publicIP6
 			}
-			return cl.config.PublicIP4
+			return cl.config.publicIP4
 		}(),
 		StartingNodes: cl.config.DhtStartingNodes(conn.LocalAddr().Network()),
 		OnQuery:       cl.config.DHTOnQuery,
@@ -386,7 +391,13 @@ func (cl *Client) incomingConnection(nc net.Conn) {
 		tc.SetLinger(0)
 	}
 
-	c := cl.newConnection(nc, false, missinggo.IpPortFromNetAddr(nc.RemoteAddr()))
+	addrport, err := netx.AddrPort(nc.RemoteAddr())
+	if err != nil {
+		log.Println("ignoring incoming connection", err)
+		return
+	}
+
+	c := cl.newConnection(nc, false, addrport)
 	c.Discovery = peerSourceIncoming
 	cl.runReceivedConn(c)
 }
@@ -482,7 +493,7 @@ func (cl *Client) dial(ctx context.Context, d dialer, addr string) (c net.Conn, 
 
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
-func (cl *Client) establishOutgoingConnEx(ctx context.Context, t *torrent, addr IpPort, obfuscatedHeader bool) (c *connection, err error) {
+func (cl *Client) establishOutgoingConnEx(ctx context.Context, t *torrent, addr netip.AddrPort, obfuscatedHeader bool) (c *connection, err error) {
 	var (
 		nc net.Conn
 	)
@@ -516,7 +527,7 @@ func (cl *Client) establishOutgoingConnEx(ctx context.Context, t *torrent, addr 
 
 // Returns nil connection and nil error if no connection could be established
 // for valid reasons.
-func (cl *Client) establishOutgoingConn(ctx context.Context, t *torrent, addr IpPort) (c *connection, err error) {
+func (cl *Client) establishOutgoingConn(ctx context.Context, t *torrent, addr netip.AddrPort) (c *connection, err error) {
 	obfuscatedHeaderFirst := cl.config.HeaderObfuscationPolicy.Preferred
 	if c, err = cl.establishOutgoingConnEx(ctx, t, addr, obfuscatedHeaderFirst); err == nil {
 		return c, nil
@@ -538,7 +549,7 @@ func (cl *Client) establishOutgoingConn(ctx context.Context, t *torrent, addr Ip
 
 // Called to dial out and run a connection. The addr we're given is already
 // considered half-open.
-func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr IpPort, ps peerSource, trusted bool) {
+func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr netip.AddrPort, ps peerSource, trusted bool) {
 	var (
 		c   *connection
 		err error
@@ -807,7 +818,7 @@ func (cl *Client) AddDHTNodes(nodes []string) {
 	}
 }
 
-func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort) (c *connection) {
+func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr netip.AddrPort) (c *connection) {
 	c = newConnection(nc, outgoing, remoteAddr)
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
@@ -836,15 +847,6 @@ func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portO
 	}})
 }
 
-func firstNotNil(ips ...net.IP) net.IP {
-	for _, ip := range ips {
-		if ip != nil {
-			return ip
-		}
-	}
-	return nil
-}
-
 func (cl *Client) eachListener(f func(socket) bool) {
 	for _, s := range cl.conns {
 		if !f(s) {
@@ -861,36 +863,46 @@ func (cl *Client) findListener(f func(net.Listener) bool) (ret net.Listener) {
 	return
 }
 
-func (cl *Client) publicIP(peer net.IP) net.IP {
+func (cl *Client) publicIP(peer netip.Addr) netip.Addr {
 	// TODO: Use BEP 10 to determine how peers are seeing us.
-	if peer.To4() != nil {
-		return firstNotNil(
-			cl.config.PublicIP4,
-			cl.findListenerIP(func(ip net.IP) bool { return ip.To4() != nil }),
+	if peer.Is4() {
+		return netx.FirstAddrOrZero(
+			netx.AddrFromIP(cl.config.publicIP4),
+			cl.findListenerIP(func(ip netip.Addr) bool { return ip.Is4() }),
 		)
 	}
 
-	return firstNotNil(
-		cl.config.PublicIP6,
-		cl.findListenerIP(func(ip net.IP) bool { return ip.To4() == nil }),
+	return netx.FirstAddrOrZero(
+		netx.AddrFromIP(cl.config.publicIP6),
+		cl.findListenerIP(func(ip netip.Addr) bool { return ip.Is6() }),
 	)
 }
 
-func (cl *Client) findListenerIP(f func(net.IP) bool) net.IP {
+func (cl *Client) findListenerIP(f func(netip.Addr) bool) netip.Addr {
 	l := cl.findListener(func(l net.Listener) bool {
-		return f(missinggo.AddrIP(l.Addr()))
+		addr, err := netx.AddrPort(l.Addr())
+		if err != nil {
+			log.Println("invalid listener", err)
+			return false
+		}
+		return f(addr.Addr())
 	})
 
-	if l == nil {
-		return nil
+	addr, err := netx.AddrPort(l.Addr())
+	if err != nil {
+		log.Println("unable to determine listener address/port", err)
+		return netip.Addr{}
 	}
 
-	return missinggo.AddrIP(l.Addr())
+	return addr.Addr()
 }
 
 // Our IP as a peer should see it.
-func (cl *Client) publicAddr(peer net.IP) IpPort {
-	return IpPort{IP: cl.publicIP(peer), Port: uint16(cl.incomingPeerPort())}
+func (cl *Client) publicAddr(peer netip.AddrPort) netip.AddrPort {
+	return netip.AddrPortFrom(
+		cl.publicIP(peer.Addr()),
+		uint16(cl.incomingPeerPort()),
+	)
 }
 
 // ListenAddrs addresses currently being listened to.

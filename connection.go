@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,7 +39,7 @@ const (
 	peerSourcePex             = "X"
 )
 
-func newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort) (c *connection) {
+func newConnection(nc net.Conn, outgoing bool, remote netip.AddrPort) (c *connection) {
 	_mu := &sync.RWMutex{}
 
 	return &connection{
@@ -50,7 +51,7 @@ func newConnection(nc net.Conn, outgoing bool, remoteAddr IpPort) (c *connection
 		PeerChoked:       true,
 		PeerMaxRequests:  250,
 		writeBuffer:      new(bytes.Buffer),
-		remoteAddr:       remoteAddr,
+		remoteAddr:       remote,
 		touched:          roaring.NewBitmap(),
 		fastset:          roaring.NewBitmap(),
 		claimed:          roaring.NewBitmap(),
@@ -77,7 +78,7 @@ type connection struct {
 
 	outgoing   bool
 	network    string
-	remoteAddr IpPort
+	remoteAddr netip.AddrPort
 	// The Reader and Writer for this Conn, with hooks installed for stats,
 	// limiting, deadlines etc.
 	w io.Writer
@@ -187,11 +188,7 @@ func (cn *connection) expectingChunks() bool {
 
 // Returns true if the connection is over IPv6.
 func (cn *connection) ipv6() bool {
-	ip := cn.remoteAddr.IP
-	if ip.To4() != nil {
-		return false
-	}
-	return len(ip) == net.IPv6len
+	return cn.remoteAddr.Addr().Unmap().Is6()
 }
 
 // Returns true the dialer has the lower client peer ID. TODO: Find the
@@ -601,7 +598,7 @@ func (cn *connection) writer(keepAliveTimeout time.Duration) {
 
 		if !cn.lastMessageReceived.IsZero() && time.Since(cn.lastMessageReceived) > 2*keepAliveTimeout {
 			select {
-			case cn.drop <- fmt.Errorf("killing connection %v %v %v", cn.remoteIP(), time.Since(cn.lastMessageReceived), cn.lastMessageReceived):
+			case cn.drop <- fmt.Errorf("killing connection %s %v %v", cn.remoteAddr.String(), time.Since(cn.lastMessageReceived), cn.lastMessageReceived):
 				cn.Close()
 			default:
 			}
@@ -1138,8 +1135,8 @@ func (cn *connection) mainReadLoop() (err error) {
 			cn.onPeerSentCancel(req)
 		case pp.Port:
 			pingAddr := net.UDPAddr{
-				IP:   cn.remoteAddr.IP,
-				Port: int(cn.remoteAddr.Port),
+				IP:   cn.remoteAddr.Addr().AsSlice(),
+				Port: int(cn.remoteAddr.Port()),
 			}
 
 			if msg.Port != 0 {
@@ -1558,15 +1555,7 @@ func (cn *connection) setTorrent(t *torrent) {
 }
 
 func (cn *connection) peerPriority() peerPriority {
-	return bep40PriorityIgnoreError(cn.remoteIPPort(), cn.t.publicAddr(cn.remoteIP()))
-}
-
-func (cn *connection) remoteIP() net.IP {
-	return cn.remoteAddr.IP
-}
-
-func (cn *connection) remoteIPPort() IpPort {
-	return cn.remoteAddr
+	return bep40PriorityIgnoreError(cn.remoteAddr, cn.t.cln.publicAddr(cn.remoteAddr))
 }
 
 func (cn *connection) String() string {
@@ -1586,14 +1575,14 @@ func (cn *connection) sendInitialMessages(cl *Client, torrent *torrent) {
 					},
 					V:            cl.config.ExtendedHandshakeClientVersion,
 					Reqq:         64, // TODO: Really?
-					YourIp:       pp.CompactIp(cn.remoteAddr.IP),
+					YourIp:       pp.CompactIp(cn.remoteAddr.Addr().AsSlice()),
 					Encryption:   cl.config.HeaderObfuscationPolicy.Preferred || !cl.config.HeaderObfuscationPolicy.RequirePreferred,
 					Port:         cl.incomingPeerPort(),
 					MetadataSize: torrent.metadataSize(),
 					// TODO: We can figured these out specific to the socket
 					// used.
-					Ipv4: pp.CompactIp(cl.config.PublicIP4.To4()),
-					Ipv6: cl.config.PublicIP6.To16(),
+					Ipv4: pp.CompactIp(cl.config.publicIP4.To4()),
+					Ipv6: cl.config.publicIP6.To16(),
 				}
 				if !cl.config.DisablePEX {
 					msg.M[pp.ExtensionNamePex] = pexExtendedID

@@ -2,14 +2,17 @@ package torrent
 
 import (
 	"net"
+	"net/netip"
 	"testing"
 
+	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPrioritizedPeers(t *testing.T) {
 	pp := newPeerPool(3, func(p Peer) peerPriority {
-		return bep40PriorityIgnoreError(p.addr(), IpPort{IP: net.ParseIP("0.0.0.0")})
+		return bep40PriorityIgnoreError(p.addr(), errorsx.Must(netip.ParseAddrPort("0.0.0.0:0")))
 	})
 	_, ok := pp.DeleteMin()
 	assert.False(t, ok)
@@ -23,10 +26,10 @@ func TestPrioritizedPeers(t *testing.T) {
 		{IP: net.ParseIP(""), Trusted: true},
 	}
 	for i, p := range ps {
-		// t.Logf("peer %d priority: %08x trusted: %t\n", i, pp.getPrio(p), p.Trusted)
-		assert.False(t, pp.Add(p))
-		assert.True(t, pp.Add(p))
-		assert.Equal(t, i+1, pp.Len())
+		// log.Printf("peer %d priority: %08x trusted: %t - %v\n", i, pp.getPrio(p), p.Trusted, p.addr())
+		require.False(t, pp.Add(p))
+		require.True(t, pp.Add(p))
+		require.Equal(t, i+1, pp.Len())
 	}
 	pop := func(expected *Peer) {
 		if expected == nil {

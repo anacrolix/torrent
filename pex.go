@@ -30,9 +30,6 @@ func (t *pex) snapshot() *pp.PexMsg {
 	}
 
 	tx := &pp.PexMsg{}
-	nodeAddr := func(addr IpPort) krpc.NodeAddr {
-		return krpc.NewNodeAddrFromIPPort(addr.IP, int(addr.Port))
-	}
 
 	n := 0
 	for c := range t.conns {
@@ -40,13 +37,13 @@ func (t *pex) snapshot() *pp.PexMsg {
 			break
 		}
 
-		addr := c.remoteIPPort()
+		addr := c.remoteAddr
 		f := c.pexPeerFlags()
 		if c.ipv6() {
-			tx.Added6 = append(tx.Added6, nodeAddr(addr))
+			tx.Added6 = append(tx.Added6, krpc.NewNodeAddrFromAddrPort(addr))
 			tx.Added6Flags = append(tx.Added6Flags, f)
 		} else {
-			tx.Added = append(tx.Added, nodeAddr(addr))
+			tx.Added = append(tx.Added, krpc.NewNodeAddrFromAddrPort(addr))
 			tx.AddedFlags = append(tx.AddedFlags, f)
 		}
 

@@ -274,6 +274,7 @@ func (cl *Client) init(cfg *ClientConfig) {
 		}
 	}
 	cl.defaultLocalLtepProtocolMap = makeBuiltinLtepProtocols(!cfg.DisablePEX)
+	g.MakeMap(&cl.numWebSeedRequests)
 }
 
 // Creates a new Client. Takes ownership of the ClientConfig. Create another one if you want another

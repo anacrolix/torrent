@@ -97,7 +97,7 @@ func (ws *webseedPeer) writeInterested(interested bool) bool {
 
 func (ws *webseedPeer) handleCancel(r RequestIndex) {
 	for wr := range ws.activeRequestsForIndex(r) {
-		wr.request.Cancel()
+		wr.Cancel()
 	}
 }
 
@@ -152,13 +152,14 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	locker := ws.locker
 	err := ws.readChunks(webseedRequest)
 	// Ensure the body reader and response are closed.
-	webseedRequest.request.Cancel()
+	webseedRequest.Close()
 	if err != nil {
-		level := slog.LevelWarn
-		if errors.Is(err, context.Canceled) {
+		level := slog.LevelInfo
+		if webseedRequest.cancelled {
 			level = slog.LevelDebug
 		}
 		ws.slogger().Log(context.TODO(), level, "webseed request error", "err", err)
+		torrent.Add("webseed request error count", 1)
 		// This used to occur only on webseed.ErrTooFast but I think it makes sense to slow down any
 		// kind of error. Pausing here will starve the available requester slots which slows things
 		// down.

@@ -14,6 +14,7 @@ import (
 	"github.com/james-lawrence/torrent/internal/netx"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
+	"github.com/james-lawrence/torrent/tracker"
 	"github.com/james-lawrence/torrent/x/conntrack"
 	"golang.org/x/time/rate"
 
@@ -126,6 +127,15 @@ type ClientConfig struct {
 	DHTMuxer        dht.Muxer
 
 	ConnectionClosed func(ih metainfo.Hash, stats ConnStats)
+}
+
+func (cfg *ClientConfig) AnnounceRequest() tracker.Announce {
+	return tracker.Announce{
+		UserAgent: cfg.HTTPUserAgent,
+		ClientIp4: krpc.NewNodeAddrFromIPPort(cfg.publicIP4, 0),
+		ClientIp6: krpc.NewNodeAddrFromIPPort(cfg.publicIP6, 0),
+		Dialer:    cfg.dialer,
+	}
 }
 
 func (cfg *ClientConfig) errors() llog {

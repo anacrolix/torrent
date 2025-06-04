@@ -21,7 +21,6 @@ import (
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/dht/int160"
-	"github.com/james-lawrence/torrent/dht/krpc"
 	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/langx"
@@ -139,12 +138,7 @@ func TuneReadAnnounce(v *tracker.Announce) Tuner {
 		t.rLock()
 		defer t.rUnlock()
 
-		*v = tracker.Announce{
-			UserAgent: t.cln.config.HTTPUserAgent,
-			ClientIp4: krpc.NewNodeAddrFromIPPort(t.cln.config.publicIP4, 0),
-			ClientIp6: krpc.NewNodeAddrFromIPPort(t.cln.config.publicIP6, 0),
-			Dialer:    t.cln.config.dialer,
-		}
+		*v = t.cln.config.AnnounceRequest()
 	}
 }
 

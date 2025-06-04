@@ -125,11 +125,6 @@ func (me Announce) ForTracker(uri string) Announce {
 	return me
 }
 
-func (me Announce) WithDialer(d netx.Dialer) Announce {
-	me.Dialer = d
-	return me
-}
-
 func (me Announce) Do(ctx context.Context, req AnnounceRequest) (res AnnounceResponse, err error) {
 	if me.Dialer == nil {
 		me.Dialer = &net.Dialer{

@@ -129,6 +129,14 @@ type ClientConfig struct {
 	ConnectionClosed func(ih metainfo.Hash, stats ConnStats)
 }
 
+func (cfg *ClientConfig) PublicIP4() net.IP {
+	return cfg.publicIP4
+}
+
+func (cfg *ClientConfig) PublicIP6() net.IP {
+	return cfg.publicIP6
+}
+
 func (cfg *ClientConfig) AnnounceRequest() tracker.Announce {
 	return tracker.Announce{
 		UserAgent: cfg.HTTPUserAgent,

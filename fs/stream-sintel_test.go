@@ -43,8 +43,13 @@ func copyFile(src, dst string) (err error) {
 }
 
 func TestStreamSintelMagnet(t *testing.T) {
+	fileHashes := map[string]string{
+		"poster.jpg": "f9223791908131c505d7bdafa7a8aaf5",
+		"Sintel.mp4": "083e808d56aa7b146f513b3458658292",
+	}
+	targetFile := "Sintel.mp4"
 	if testing.Short() {
-		t.Skip("skipping test in short mode")
+		targetFile = "poster.jpg"
 	}
 	dir := t.TempDir()
 	t.Logf("temp dir: %v", dir)
@@ -99,7 +104,7 @@ func TestStreamSintelMagnet(t *testing.T) {
 		panicif.Err(err)
 	}()
 
-	f, err := openFileWhenExists(t, filepath.Join(mountDir, "Sintel", "Sintel.mp4"))
+	f, err := openFileWhenExists(t, filepath.Join(mountDir, "Sintel", targetFile))
 	panicif.Err(err)
 	t.Logf("opened %v", f.Name())
 	t.Cleanup(func() { f.Close() })
@@ -117,12 +122,17 @@ func TestStreamSintelMagnet(t *testing.T) {
 		},
 	}
 	h := md5.New()
+	go func() {
+		<-t.Context().Done()
+		t.Log("testing context done")
+		f.Close()
+	}()
 	_, err = f.WriteTo(io.MultiWriter(h, &w))
 	panicif.Err(err)
 	err = f.Close()
 	panicif.Err(err)
 
-	qt.Assert(t, qt.Equals(hex.EncodeToString(h.Sum(nil)), "083e808d56aa7b146f513b3458658292"))
+	qt.Assert(t, qt.Equals(hex.EncodeToString(h.Sum(nil)), fileHashes[targetFile]))
 
 	err = fuse.Unmount(mountDir)
 	panicif.Err(err)

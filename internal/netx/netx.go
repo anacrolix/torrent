@@ -2,7 +2,9 @@ package netx
 
 import (
 	"context"
+	"log"
 	"net"
+	"net/netip"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -70,6 +72,16 @@ func NetIP(addr net.Addr) (ip net.IP, err error) {
 	}
 }
 
+func NetIPOrNil(addr net.Addr) (ip net.IP) {
+	ip, err := NetIP(addr)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+
+	return ip
+}
+
 // NetIPPort returns the IP and Port of the network address
 func NetIPPort(addr net.Addr) (ip net.IP, port int, err error) {
 	if addr == nil {
@@ -102,4 +114,37 @@ func NetIPPort(addr net.Addr) (ip net.IP, port int, err error) {
 
 		return ip, int(i64), nil
 	}
+}
+
+func AddrPort(addr net.Addr) (_ netip.AddrPort, err error) {
+	if addr == nil {
+		return netip.AddrPort{}, errors.New("NetIPPort: nil net.Addr received")
+	}
+
+	switch raw := addr.(type) {
+	case *net.UDPAddr:
+		return raw.AddrPort(), nil
+	case *net.TCPAddr:
+		return raw.AddrPort(), nil
+	default:
+		return netip.ParseAddrPort(addr.String())
+	}
+}
+
+func AddrFromIP(ip net.IP) netip.Addr {
+	if ip == nil {
+		return netip.IPv6Unspecified().Unmap()
+	}
+	// log.Println("DERP DERP", ip, netip.Addr{}.IsValid())
+	return netip.AddrFrom16([16]byte(ip.To16())).Unmap()
+}
+
+func FirstAddrOrZero(addrs ...netip.Addr) netip.Addr {
+	for _, a := range addrs {
+		if a.IsValid() {
+			return a
+		}
+	}
+
+	return netip.Addr{}
 }

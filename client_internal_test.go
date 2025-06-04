@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/netip"
 	"os"
 	"testing"
 	"time"
@@ -214,7 +215,7 @@ func TestPeerInvalidHave(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, _added)
 	defer cl.Stop(ts)
-	cn := newConnection(nil, true, IpPort{})
+	cn := newConnection(nil, true, netip.AddrPort{})
 	cn.t = tt.(*torrent)
 	assert.NoError(t, cn.peerSentHave(0))
 	assert.Error(t, cn.peerSentHave(1))

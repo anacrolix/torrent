@@ -2,9 +2,11 @@ package torrent
 
 import (
 	"net"
+	"net/netip"
 
 	"github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/internal/netx"
 )
 
 // Peer connection info, handed about publicly.
@@ -32,6 +34,6 @@ func (me *Peer) FromPex(na krpc.NodeAddr, fs btprotocol.PexPeerFlags) {
 	me.PexPeerFlags = fs
 }
 
-func (me Peer) addr() IpPort {
-	return IpPort{IP: me.IP, Port: uint16(me.Port)}
+func (me Peer) addr() netip.AddrPort {
+	return netip.AddrPortFrom(netx.AddrFromIP(me.IP), uint16(me.Port))
 }

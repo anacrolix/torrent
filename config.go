@@ -109,8 +109,8 @@ type ClientConfig struct {
 	dialer netx.Dialer
 	// The IP addresses as our peers should see them. May differ from the
 	// local interfaces due to NAT or other network configurations.
-	PublicIP4 net.IP
-	PublicIP6 net.IP
+	publicIP4 net.IP
+	publicIP6 net.IP
 
 	// Don't add connections that have the same peer ID as an existing
 	// connection for a given Torrent.
@@ -182,7 +182,7 @@ func ClientConfigIPv4(ip string) ClientConfigOption {
 			return
 		}
 
-		cc.PublicIP4 = net.ParseIP(ip)
+		cc.publicIP4 = net.ParseIP(ip)
 	}
 }
 
@@ -192,7 +192,7 @@ func ClientConfigIPv6(ip string) ClientConfigOption {
 			return
 		}
 
-		cc.PublicIP6 = net.ParseIP(ip)
+		cc.publicIP6 = net.ParseIP(ip)
 	}
 }
 

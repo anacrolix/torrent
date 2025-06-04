@@ -17,7 +17,8 @@ type prioritizedPeer struct {
 func (me prioritizedPeer) Less(than btree.Item) bool {
 	other := than.(prioritizedPeer)
 	return multiless.New().Bool(
-		me.p.Trusted, other.p.Trusted).Uint32(
+		me.p.Trusted, other.p.Trusted,
+	).Uint32(
 		me.prio, other.prio,
 	).Less()
 }
@@ -51,7 +52,8 @@ func (t *peerPool) Len() int {
 func (t *peerPool) Add(p Peer) bool {
 	t.m.Lock()
 	defer t.m.Unlock()
-	return t.om.ReplaceOrInsert(prioritizedPeer{t.getPrio(p), p}) != nil
+	prio := t.getPrio(p)
+	return t.om.ReplaceOrInsert(prioritizedPeer{prio, p}) != nil
 }
 
 func (t *peerPool) DeleteMin() (ret prioritizedPeer, ok bool) {

@@ -5,7 +5,6 @@ package autobind
 
 import (
 	"context"
-	"log"
 	"net"
 	"os"
 	"strconv"
@@ -267,7 +266,6 @@ func listenTCP(network, address string) (s sockets.Socket, err error) {
 	}()
 
 	dialer := getProxyDialer()
-	log.Println("DERP DERP tcp")
 	return sockets.New(l, dialer), nil
 }
 
@@ -278,7 +276,6 @@ func listenUtp(network, addr string) (s sockets.Socket, err error) {
 	}
 
 	dialer := &net.Dialer{}
-	log.Println("DERP DERP utp")
 	return sockets.New(us, dialer), nil
 }
 

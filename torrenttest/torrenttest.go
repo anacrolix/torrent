@@ -47,43 +47,41 @@ func Random(dir string, n int64, options ...metainfo.Option) (info *metainfo.Inf
 	return info, digested, nil
 }
 
-func RandomMulti(dir string, n int, min int64, max int64, options ...metainfo.Option) (info *metainfo.Info, digested hash.Hash, err error) {
-	digested = md5.New()
-
+func RandomMulti(dir string, n int, min int64, max int64, options ...metainfo.Option) (info *metainfo.Info, err error) {
 	root, err := os.MkdirTemp(dir, "multi.torrent.*")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	addfile := func() error {
-		src, err := IOTorrent(root, io.TeeReader(rand.Reader, digested), mrand.Int64N(max-min)+min)
+		src, err := IOTorrent(root, rand.Reader, mrand.Int64N(max-min)+min)
 		return errorsx.Compact(err, src.Close())
 	}
 
 	for i := 0; i < n; i++ {
 		if err := addfile(); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
 	info, err = metainfo.NewFromPath(root, options...)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	encoded, err := metainfo.Encode(info)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	id := metainfo.HashBytes(encoded)
 
 	dstdir := filepath.Join(dir, id.HexString())
 	if err = os.Rename(root, dstdir); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return info, digested, nil
+	return info, nil
 }
 
 // RandomDataTorrent generates a torrent from the provided io.Reader

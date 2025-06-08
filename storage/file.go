@@ -20,7 +20,7 @@ func FileOptionPathMaker(m FilePathMaker) FileOption {
 }
 
 func FileOptionPathMakerInfohash(fci *fileClientImpl) {
-	fci.pathMaker = infoHashPathMaker
+	fci.pathMaker = InfoHashPathMaker
 }
 
 func FileOptionPathMakerInfohashV0(fci *fileClientImpl) {
@@ -47,7 +47,7 @@ func fixedPathMaker(name string) FilePathMaker {
 	}
 }
 
-func infoHashPathMaker(baseDir string, infoHash metainfo.Hash, info *metainfo.Info, fi *metainfo.FileInfo) string {
+func InfoHashPathMaker(baseDir string, infoHash metainfo.Hash, info *metainfo.Info, fi *metainfo.FileInfo) string {
 	// s := filepath.Join(baseDir, infoHash.HexString(), langx.DefaultIfZero(langx.DerefOrZero(info).Name, filepath.Join(langx.DerefOrZero(fi).Path...)))
 	s := filepath.Join(baseDir, infoHash.HexString(), filepath.Join(langx.DerefOrZero(fi).Path...))
 	return s
@@ -61,7 +61,7 @@ func infoHashPathMakerV0(baseDir string, infoHash metainfo.Hash, info *metainfo.
 func NewFile(baseDir string, options ...FileOption) *fileClientImpl {
 	return langx.Autoptr(langx.Clone(fileClientImpl{
 		baseDir:   baseDir,
-		pathMaker: infoHashPathMaker,
+		pathMaker: InfoHashPathMaker,
 	}, options...))
 }
 
@@ -103,7 +103,6 @@ func (fts *fileTorrentImpl) WriteAt(p []byte, off int64) (n int, err error) {
 	if fts.closed.Load() {
 		return 0, ErrClosed()
 	}
-	// log.Printf("file storage WriteAt %p len %d offset %d\n", fts.mu, len(p), off)
 	return fileTorrentImplIO{fts}.WriteAt(p, off)
 }
 
@@ -127,8 +126,7 @@ func CreateNativeZeroLengthFiles(dir string, infohash metainfo.Hash, info *metai
 		}
 
 		var f io.Closer
-
-		if f, err = os.Create(name); err != nil {
+		if f, err = os.OpenFile(name, os.O_RDONLY|os.O_CREATE, 0600); err != nil {
 			return err
 		}
 
@@ -138,46 +136,49 @@ func CreateNativeZeroLengthFiles(dir string, infohash metainfo.Hash, info *metai
 	return nil
 }
 
+type ioreadatclose interface {
+	io.ReaderAt
+	io.Closer
+}
+
 // Exposes file-based storage of a torrent, as one big ReadWriterAt.
 type fileTorrentImplIO struct {
 	fts *fileTorrentImpl
 }
 
-// Returns EOF on short or missing file.
-func (fst *fileTorrentImplIO) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err error) {
-	filepath := fst.fts.pathMaker(fst.fts.dir, fst.fts.infoHash, fst.fts.info, &fi)
-	f, err := os.Open(filepath)
-	if os.IsNotExist(err) {
-		// File missing is treated the same as a short file.
-		return 0, io.EOF
+func (t *fileTorrentImplIO) reader(path string) (ioreadatclose, error) {
+	if f, err := os.Open(path); err == nil {
+		return f, nil
+	} else if !os.IsNotExist(err) {
+		return nil, err
 	}
+
+	return nil, io.ErrUnexpectedEOF
+}
+
+// Returns EOF on short or missing file.
+func (t *fileTorrentImplIO) readFileAt(fi metainfo.FileInfo, b []byte, off int64) (n int, err error) {
+	filepath := t.fts.pathMaker(t.fts.dir, t.fts.infoHash, t.fts.info, &fi)
+
+	f, err := t.reader(filepath)
 	if err != nil {
 		return 0, err
 	}
 	defer f.Close()
+
 	// Limit the read to within the expected bounds of this file.
 	if int64(len(b)) > fi.Length-off {
 		b = b[:fi.Length-off]
 	}
-	for off < fi.Length && len(b) != 0 {
-		n1, err1 := f.ReadAt(b, off)
-		b = b[n1:]
-		n += n1
-		off += int64(n1)
-		if n1 == 0 {
-			err = err1
-			break
-		}
-	}
 
-	return n, err
+	return io.ReadFull(io.NewSectionReader(f, off, int64(len(b))), b)
 }
 
 // Only returns EOF at the end of the torrent. Premature EOF is ErrUnexpectedEOF.
-func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
-	for _, fi := range fst.fts.info.UpvertedFiles() {
+func (t fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
+	for _, fi := range t.fts.info.UpvertedFiles() {
 		for off < fi.Length {
-			n1, err1 := fst.readFileAt(fi, b, off)
+			n1, err1 := t.readFileAt(fi, b, off)
 			n += n1
 			off += int64(n1)
 			b = b[n1:]
@@ -202,8 +203,8 @@ func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 	return n, io.EOF
 }
 
-func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
-	for _, fi := range fst.fts.info.UpvertedFiles() {
+func (t fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
+	for _, fi := range t.fts.info.UpvertedFiles() {
 		if off >= fi.Length {
 			off -= fi.Length
 			continue
@@ -212,7 +213,7 @@ func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 		if int64(n1) > fi.Length-off {
 			n1 = int(fi.Length - off)
 		}
-		name := fst.fts.pathMaker(fst.fts.dir, fst.fts.infoHash, fst.fts.info, &fi)
+		name := t.fts.pathMaker(t.fts.dir, t.fts.infoHash, t.fts.info, &fi)
 		os.MkdirAll(filepath.Dir(name), 0777)
 		var f *os.File
 		f, err = os.OpenFile(name, os.O_WRONLY|os.O_CREATE, 0666)

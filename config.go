@@ -129,6 +129,10 @@ type ClientConfig struct {
 	ConnectionClosed func(ih metainfo.Hash, stats ConnStats)
 }
 
+func (cfg *ClientConfig) Storage() storage.ClientImpl {
+	return cfg.defaultStorage
+}
+
 func (cfg *ClientConfig) PublicIP4() net.IP {
 	return cfg.publicIP4
 }

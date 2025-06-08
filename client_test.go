@@ -28,7 +28,6 @@ import (
 	"github.com/james-lawrence/torrent/bencode"
 	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/cryptox"
-	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/md5x"
 	"github.com/james-lawrence/torrent/internal/testutil"
 	"github.com/james-lawrence/torrent/internal/testx"
@@ -464,7 +463,6 @@ func TestDownload(t *testing.T) {
 	require.NoError(t, err)
 	defer leecher.Close()
 
-	// metadata, err = torrent.NewFromMetaInfo(mi, torrent.OptionStorage(storage.NewFile(lcfg.DataDir)))
 	metadata, err = torrent.NewFromMetaInfo(mi)
 	require.NoError(t, err)
 	ltor, added, err := leecher.Start(metadata)
@@ -688,12 +686,12 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 	}
 }
 
-func writeTorrentData(ts storage.TorrentImpl, info metainfo.Info, b []byte) {
-	for i := range iter.N(info.NumPieces()) {
-		p := info.Piece(i)
-		_ = errorsx.Must(ts.WriteAt(b[p.Offset():p.Offset()+p.Length()], 0))
-	}
-}
+// func writeTorrentData(ts storage.TorrentImpl, info metainfo.Info, b []byte) {
+// 	for i := range iter.N(info.NumPieces()) {
+// 		p := info.Piece(i)
+// 		_ = errorsx.Must(ts.WriteAt(b[p.Offset():p.Offset()+p.Length()], 0))
+// 	}
+// }
 
 func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.ClientImpl) {
 	t.SkipNow()

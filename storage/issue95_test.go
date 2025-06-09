@@ -16,13 +16,13 @@ func testIssue95(t *testing.T, c ClientImpl) {
 		Files:  []metainfo.FileInfo{{Path: []string{"a"}}},
 		Pieces: make([]byte, 20),
 	}
-	t1, err := c.OpenTorrent(i1, metainfo.HashBytes([]byte("a")))
+	t1, err := c.OpenTorrent(i1, metainfo.NewHashFromBytes([]byte("a")))
 	require.NoError(t, err)
 	i2 := &metainfo.Info{
 		Files:  []metainfo.FileInfo{{Path: []string{"a"}}},
 		Pieces: make([]byte, 20),
 	}
-	t2, err := c.OpenTorrent(i2, metainfo.HashBytes([]byte("b")))
+	t2, err := c.OpenTorrent(i2, metainfo.NewHashFromBytes([]byte("b")))
 	require.NoError(t, err)
 
 	require.NoError(t, t1.Close())

@@ -157,7 +157,7 @@ func NewFromFile(path string, options ...Option) (t Metadata, err error) {
 		return t, errorsx.WithStack(err)
 	}
 
-	if t, err = New(metainfo.HashBytes(encoded), OptionInfo(encoded), OptionDisplayName(info.Name)); err != nil {
+	if t, err = New(metainfo.NewHashFromBytes(encoded), OptionInfo(encoded), OptionDisplayName(info.Name)); err != nil {
 		return t, errorsx.WithStack(err)
 	}
 
@@ -175,7 +175,7 @@ func NewFromInfo(i *metainfo.Info, options ...Option) (t Metadata, err error) {
 	}
 
 	return New(
-		metainfo.HashBytes(encoded),
+		metainfo.NewHashFromBytes(encoded),
 		append(options, OptionInfo(encoded), OptionDisplayName(i.Name))...,
 	)
 }

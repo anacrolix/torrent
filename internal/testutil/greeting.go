@@ -70,7 +70,7 @@ func RandomDataTorrent(dir string, n int64, options ...metainfo.Option) (info *m
 		return nil, nil, err
 	}
 
-	id := metainfo.HashBytes(encoded)
+	id := metainfo.NewHashFromBytes(encoded)
 
 	dstdir := filepath.Join(dir, id.HexString())
 	if err = os.MkdirAll(filepath.Dir(dstdir), 0700); err != nil {

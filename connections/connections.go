@@ -2,6 +2,7 @@ package connections
 
 import (
 	"errors"
+	"log"
 	"net"
 
 	"github.com/james-lawrence/torrent/internal/netx"
@@ -42,7 +43,9 @@ func (t handshaker) Accept(l net.Listener) (c net.Conn, err error) {
 			continue
 		}
 
+		log.Println("CONNECTION RECEIVED", rip, port)
 		if err = t.Firewall.Blocked(rip, port); err != nil {
+
 			conn.Close()
 			continue
 		}

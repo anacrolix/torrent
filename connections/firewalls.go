@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"log"
 	"net"
 	"time"
 
@@ -119,6 +120,8 @@ func (t composedfirewall) Blocked(ip net.IP, port int) error {
 }
 
 func (t composedfirewall) Inhibit(ip net.IP, port int, cause error) {
+	log.Println("composed.Inhibit", ip, port)
+	log.Println("composed.Inhibit", cause)
 	for _, fwall := range t.firewalls {
 		if fwall, ok := fwall.(FirewallStateful); ok {
 			fwall.Inhibit(ip, port, cause)

@@ -48,7 +48,7 @@ func (mi MetaInfo) UnmarshalInfo() (info Info, err error) {
 }
 
 func (mi MetaInfo) HashInfoBytes() (infoHash Hash) {
-	return HashBytes(mi.InfoBytes)
+	return NewHashFromBytes(mi.InfoBytes)
 }
 
 // Encode to bencoded form.

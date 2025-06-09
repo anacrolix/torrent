@@ -57,7 +57,7 @@ func TestReadAllData(t *testing.T) {
 	encoded, err := metainfo.Encode(info)
 	require.NoError(t, err)
 
-	ts, err := s.OpenTorrent(info, metainfo.HashBytes(encoded))
+	ts, err := s.OpenTorrent(info, metainfo.NewHashFromBytes(encoded))
 	require.NoError(t, err)
 
 	_, err = io.Copy(result, io.NewSectionReader(ts, 0, info.Length))
@@ -81,7 +81,7 @@ func RandomDataTorrent(dir string, n int64, options ...metainfo.Option) (info *m
 		return nil, nil, err
 	}
 
-	id := metainfo.HashBytes(encoded)
+	id := metainfo.NewHashFromBytes(encoded)
 
 	dstdir := filepath.Join(dir, id.HexString())
 	if err = os.MkdirAll(filepath.Dir(dstdir), 0700); err != nil {

@@ -50,7 +50,7 @@ func NewHashFromHex(s string) (h Hash) {
 	return
 }
 
-func HashBytes(b []byte) (ret Hash) {
+func NewHashFromBytes(b []byte) (ret Hash) {
 	hasher := sha1.New()
 	hasher.Write(b)
 	copy(ret[:], hasher.Sum(nil))

@@ -507,7 +507,7 @@ func TestCompletedPieceWrongSize(t *testing.T) {
 
 	b, err := bencode.Marshal(info)
 	require.NoError(t, err)
-	ts, err := torrent.New(metainfo.HashBytes(b), torrent.OptionInfo(b), torrent.OptionStorage(testutil.NewBadStorage()))
+	ts, err := torrent.New(metainfo.NewHashFromBytes(b), torrent.OptionInfo(b), torrent.OptionStorage(testutil.NewBadStorage()))
 	require.NoError(t, err)
 	tt, new, err := cl.Start(ts, torrent.TuneVerifyFull)
 	require.NoError(t, err)

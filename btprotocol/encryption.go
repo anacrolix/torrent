@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"io"
 
+	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/mse"
-	"github.com/pkg/errors"
 )
 
 // EncryptionHandshake encrypt a net.Conn
@@ -39,7 +39,7 @@ func (t EncryptionHandshake) Incoming(rw io.ReadWriter) (updated io.ReadWriter, 
 		return rw, buffered{
 			Reader: io.MultiReader(bytes.NewBuffer(buf.Bytes()), rw),
 			Writer: rw,
-		}, errors.New("unencrypted connection detected")
+		}, errorsx.New("unencrypted connection detected")
 	}
 
 	teed := io.MultiReader(bytes.NewBuffer(buf.Bytes()), rw)

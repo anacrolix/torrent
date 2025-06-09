@@ -7,7 +7,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/pkg/errors"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 )
 
 type Decoder struct {
@@ -26,11 +26,11 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 	}
 
 	if err != nil {
-		return errors.Wrap(err, "error reading message length:")
+		return errorsx.Wrap(err, "error reading message length:")
 	}
 
 	if length > d.MaxLength {
-		return errors.New("message too long")
+		return errorsx.New("message too long")
 	}
 
 	if length == 0 {
@@ -83,11 +83,11 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 		dataLen := r.N
 		msg.Piece = (*d.Pool.Get().(*[]byte))
 		if int64(cap(msg.Piece)) < dataLen {
-			return errors.New("piece data longer than expected")
+			return errorsx.New("piece data longer than expected")
 		}
 		msg.Piece = msg.Piece[:dataLen]
 		_, err := io.ReadFull(r, msg.Piece)
-		return errors.Wrap(err, "reading piece data")
+		return errorsx.Wrap(err, "reading piece data")
 	case Extended:
 		b, err := readByte(r)
 		if err != nil {

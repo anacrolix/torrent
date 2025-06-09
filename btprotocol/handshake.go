@@ -6,7 +6,7 @@ import (
 	"io"
 	"unicode"
 
-	"github.com/pkg/errors"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 )
 
 func debug(in []byte) (r string) {
@@ -69,11 +69,11 @@ func (t *HandshakeMessage) ReadFrom(src io.Reader) (n int64, err error) {
 	}
 
 	if read != len(buf) {
-		return int64(read), errors.Errorf("invalid handshake invalid length")
+		return int64(read), errorsx.Errorf("invalid handshake invalid length")
 	}
 
 	if !bytes.HasPrefix(buf, []byte(Protocol)) {
-		return int64(read), errors.Errorf("unexpected protocol string %s:%s", Protocol, string(buf))
+		return int64(read), errorsx.Errorf("unexpected protocol string %s:%s", Protocol, string(buf))
 	}
 
 	copy(t.Extensions[:], buf[20:])
@@ -111,7 +111,7 @@ func (t *HandshakeInfoMessage) ReadFrom(src io.Reader) (n int64, err error) {
 	}
 
 	if read != len(buf) {
-		return int64(read), errors.Errorf("invalid handshake invalid length")
+		return int64(read), errorsx.Errorf("invalid handshake invalid length")
 	}
 
 	copy(t.Hash[:], buf[:20])
@@ -203,7 +203,7 @@ func (t Handshake) Outgoing(sock io.ReadWriter, hash [20]byte) (resbits Extensio
 	}
 
 	if bytes.Compare(res.Hash[:], hash[:]) != 0 {
-		return resbits, res, errors.New("invalid handshake - mismatched hash")
+		return resbits, res, errorsx.New("invalid handshake - mismatched hash")
 	}
 
 	return msg.Extensions, res, err

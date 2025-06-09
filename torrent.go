@@ -14,8 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
 	"github.com/anacrolix/missinggo/v2"
@@ -296,7 +294,7 @@ func DownloadInto(ctx context.Context, dst io.Writer, m Torrent, options ...Tune
 	if n, err = io.Copy(dst, NewReader(m)); err != nil {
 		return n, err
 	} else if n != m.Info().TotalLength() {
-		return n, errors.Errorf("download failed, missing data %d != %d", n, m.Info().TotalLength())
+		return n, errorsx.Errorf("download failed, missing data %d != %d", n, m.Info().TotalLength())
 	}
 
 	if err = m.Tune(TuneAnnounceOnce(tracker.AnnounceOptionEventCompleted)); err != nil {
@@ -748,7 +746,7 @@ func (t *torrent) onSetInfo() {
 	// log.Println("set info initiated")
 	for _, conn := range t.conns.list() {
 		if err := conn.setNumPieces(t.numPieces()); err != nil {
-			t.cln.config.info().Println(errors.Wrap(err, "closing connection"))
+			t.cln.config.info().Println(errorsx.Wrap(err, "closing connection"))
 			conn.Close()
 		}
 	}
@@ -767,7 +765,7 @@ func (t *torrent) setInfoBytes(b []byte) error {
 	}
 
 	if metainfo.HashBytes(b) != t.md.ID {
-		return errors.New("info bytes have wrong hash")
+		return errorsx.New("info bytes have wrong hash")
 	}
 
 	if err := bencode.Unmarshal(b, &info); err != nil {
@@ -814,7 +812,7 @@ func (t *torrent) setMetadataSize(bytes int) (err error) {
 	}
 
 	if bytes <= 0 || bytes > 10*bytesx.MiB { // 10MB, pulled from my ass.
-		return errors.New("bad size")
+		return errorsx.New("bad size")
 	}
 
 	if t.metadataBytes != nil && len(t.metadataBytes) == int(bytes) {
@@ -1218,7 +1216,7 @@ func (t *torrent) dhtAnnouncer(s *dht.Server) {
 		t.stats.DHTAnnounce.Add(1)
 
 		if err := t.announceToDht(true, s); err != nil {
-			t.cln.config.info().Println(t, errors.Wrap(err, "error announcing to DHT"))
+			t.cln.config.info().Println(t, errorsx.Wrap(err, "error announcing to DHT"))
 			time.Sleep(time.Second)
 		}
 	}
@@ -1308,7 +1306,7 @@ func (t *torrent) addConnection(c *connection) (err error) {
 	)
 
 	if t.closed.IsSet() {
-		return errors.New("torrent closed")
+		return errorsx.New("torrent closed")
 	}
 
 	t.lock()
@@ -1326,14 +1324,14 @@ func (t *torrent) addConnection(c *connection) (err error) {
 		if left, ok := c.hasPreferredNetworkOver(c0); ok && left {
 			dropping = append(dropping, c0)
 		} else {
-			return errors.New("existing connection preferred")
+			return errorsx.New("existing connection preferred")
 		}
 	}
 
 	if t.conns.length() >= t.maxEstablishedConns {
 		c := t.worstBadConn()
 		if c == nil {
-			return errors.New("don't want conns")
+			return errorsx.New("don't want conns")
 		}
 
 		dropping = append(dropping, c)
@@ -1526,7 +1524,7 @@ func (t *torrent) gotMetadataExtensionMsg(payload []byte, c *connection) error {
 	}
 	msgType, ok := d["msg_type"]
 	if !ok {
-		return errors.New("missing msg_type field")
+		return errorsx.New("missing msg_type field")
 	}
 	piece := d["piece"]
 	switch msgType {
@@ -1555,7 +1553,7 @@ func (t *torrent) gotMetadataExtensionMsg(payload []byte, c *connection) error {
 	case pp.RejectMetadataExtensionMsgType:
 		return nil
 	default:
-		return errors.New("unknown msg_type value")
+		return errorsx.New("unknown msg_type value")
 	}
 }
 

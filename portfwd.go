@@ -5,13 +5,13 @@ import (
 
 	alog "github.com/anacrolix/log"
 	"github.com/anacrolix/upnp"
-	"github.com/pkg/errors"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 )
 
 func (cl *Client) addPortMapping(d upnp.Device, proto upnp.Protocol, internalPort int, upnpID string) {
 	externalPort, err := d.AddPortMapping(proto, internalPort, internalPort, upnpID, 0)
 	if err != nil {
-		cl.config.warn().Println(errors.Wrapf(err, "error adding %s port mapping", proto))
+		cl.config.warn().Println(errorsx.Wrapf(err, "error adding %s port mapping", proto))
 	} else if externalPort != internalPort {
 		cl.config.warn().Printf("external port %d does not match internal port %d in port mapping\n", externalPort, internalPort)
 	} else {

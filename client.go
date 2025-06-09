@@ -23,7 +23,6 @@ import (
 
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/pkg/errors"
 
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/errorsx"
@@ -110,7 +109,7 @@ func (cl *Client) MaybeStart(t Metadata, failed error, options ...Tuner) (dl Tor
 
 func (cl *Client) start(md Metadata, options ...Tuner) (dlt *torrent, added bool, err error) {
 	dlt, cached, err := cl.torrents.Load(cl, int160.FromByteArray(md.ID))
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err != nil && !errorsx.Is(err, fs.ErrNotExist) {
 		return nil, false, err
 	}
 
@@ -231,7 +230,7 @@ func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 
 	o := copy(cl.peerID[:], stringsx.Default(cfg.PeerID, cfg.Bep20))
 	if _, err = rand.Read(cl.peerID[o:]); err != nil {
-		return nil, errors.Wrap(err, "error generating peer id")
+		return nil, errorsx.Wrap(err, "error generating peer id")
 	}
 
 	return cl, nil
@@ -265,7 +264,7 @@ func (cl *Client) newDhtServer(conn net.PacketConn) (s *dht.Server, err error) {
 	go func() {
 		ts, err := s.Bootstrap(context.Background())
 		if err != nil {
-			cl.config.errors().Println(errors.Wrap(err, "error bootstrapping dht"))
+			cl.config.errors().Println(errorsx.Wrap(err, "error bootstrapping dht"))
 		}
 		cl.config.debug().Printf("%v completed bootstrap (%v)\n", s, ts)
 	}()
@@ -377,7 +376,7 @@ func (cl *Client) acceptConnections(l net.Listener) {
 		}
 
 		if conn, err = cl.config.Handshaker.Accept(l); err != nil {
-			cl.config.debug().Println(errors.Wrap(err, "error accepting connection"))
+			cl.config.debug().Println(errorsx.Wrap(err, "error accepting connection"))
 			continue
 		}
 
@@ -421,7 +420,7 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) (conn net.Conn, er
 	cl.unlock()
 
 	if len(conns) == 0 {
-		return nil, errors.Errorf("unable to dial due to no servers")
+		return nil, errorsx.Errorf("unable to dial due to no servers")
 	}
 
 	for _, s := range conns {
@@ -476,7 +475,7 @@ func (cl *Client) dial(ctx context.Context, d dialer, addr string) (c net.Conn, 
 	}
 
 	if c, err = d.Dial(ctx, addr); c == nil || err != nil {
-		return nil, errorsx.Compact(err, ctx.Err(), errors.New("net.Conn missing (nil)"))
+		return nil, errorsx.Compact(err, ctx.Err(), errorsx.New("net.Conn missing (nil)"))
 	}
 
 	// This is a bit optimistic, but it looks non-trivial to thread this through the proxy code. Set
@@ -563,7 +562,7 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr netip
 
 	if c, err = cl.establishOutgoingConn(ctx, t, addr); err != nil {
 		t.noLongerHalfOpen(addr.String())
-		cl.config.debug().Println(errors.Wrapf(err, "error establishing connection to %v", addr))
+		cl.config.debug().Println(errorsx.Wrapf(err, "error establishing connection to %v", addr))
 		return
 	}
 	t.noLongerHalfOpen(addr.String())
@@ -579,7 +578,7 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr netip
 			c.conn,
 			connections.BannedConnectionError(
 				c.conn,
-				errors.Errorf("detected connection to self - banning %s", c.conn.RemoteAddr().String()),
+				errorsx.Errorf("detected connection to self - banning %s", c.conn.RemoteAddr().String()),
 			),
 		)
 		return
@@ -622,7 +621,7 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 		}.Outgoing(rw, t.md.ID[:], cl.config.CryptoProvides)
 
 		if err != nil {
-			return errors.Wrap(err, "encryption handshake failed")
+			return errorsx.Wrap(err, "encryption handshake failed")
 		}
 	}
 	c.setRW(rw)
@@ -633,7 +632,7 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 	}.Outgoing(c.rw(), t.md.ID)
 
 	if err != nil {
-		return errors.Wrap(err, "bittorrent protocol handshake failure")
+		return errorsx.Wrap(err, "bittorrent protocol handshake failure")
 	}
 
 	c.PeerExtensionBytes = ebits
@@ -655,7 +654,7 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	}
 
 	if _, buffered, err = encryption.Incoming(c.rw()); err != nil && cl.config.HeaderObfuscationPolicy.RequirePreferred {
-		return t, errors.Wrap(err, "connection does not have the required header obfuscation")
+		return t, errorsx.Wrap(err, "connection does not have the required header obfuscation")
 	} else if err != nil && buffered == nil {
 		cl.config.debug().Println("encryption handshake failed", err)
 		return nil, err
@@ -669,7 +668,7 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	}.Incoming(buffered)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid handshake failed")
+		return nil, errorsx.Wrap(err, "invalid handshake failed")
 	}
 
 	c.PeerExtensionBytes = ebits
@@ -682,13 +681,13 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 
 func (cl *Client) runReceivedConn(c *connection) {
 	if err := c.conn.SetDeadline(time.Now().Add(cl.config.HandshakesTimeout)); err != nil {
-		cl.config.errors().Println(errors.Wrap(err, "failed setting handshake deadline"))
+		cl.config.errors().Println(errorsx.Wrap(err, "failed setting handshake deadline"))
 		return
 	}
 
 	t, err := cl.receiveHandshakes(c)
 	if err != nil {
-		cl.config.debug().Println(errors.Wrap(err, "error during handshake"))
+		cl.config.debug().Println(errorsx.Wrap(err, "error during handshake"))
 		cl.config.Handshaker.Release(c.conn, connections.BannedConnectionError(c.conn, err))
 		return
 	}
@@ -704,7 +703,7 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) {
 	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
 
 	if err := t.addConnection(c); err != nil {
-		cl.config.debug().Println(errors.Wrap(err, "error adding connection"))
+		cl.config.debug().Println(errorsx.Wrap(err, "error adding connection"))
 		return
 	}
 
@@ -715,7 +714,7 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) {
 
 	if err := c.mainReadLoop(); err != nil {
 		cl.config.Handshaker.Release(c.conn, err)
-		cl.config.debug().Println(errors.Wrap(err, "error during main read loop"))
+		cl.config.debug().Println(errorsx.Wrap(err, "error during main read loop"))
 	}
 }
 

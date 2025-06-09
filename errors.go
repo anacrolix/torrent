@@ -2,11 +2,10 @@ package torrent
 
 import (
 	"github.com/james-lawrence/torrent/internal/errorsx"
-	"github.com/pkg/errors"
 )
 
 func ErrTorrentClosed() error {
-	return errors.New("torrent closed")
+	return errorsx.New("torrent closed")
 }
 
 const (

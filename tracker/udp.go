@@ -15,7 +15,7 @@ import (
 	"github.com/anacrolix/missinggo/pproffd"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent/dht/krpc"
-	"github.com/pkg/errors"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 )
 
 type Action int32
@@ -180,7 +180,7 @@ func (c *udpAnnounce) write(h *RequestHeader, body interface{}, trailer []byte) 
 // following it, such as for BEP 41.
 func (c *udpAnnounce) request(action Action, args interface{}, options []byte) (*bytes.Buffer, error) {
 	tid := newTransactionId()
-	if err := errors.Wrap(
+	if err := errorsx.Wrap(
 		c.write(
 			&RequestHeader{
 				ConnectionId:  c.connectionId,
@@ -213,7 +213,7 @@ func (c *udpAnnounce) request(action Action, args interface{}, options []byte) (
 			c.contiguousTimeouts++
 		}
 		if readErr != nil {
-			return nil, errors.Wrap(readErr, "reading from socket")
+			return nil, errorsx.Wrap(readErr, "reading from socket")
 		}
 		buf := bytes.NewBuffer(b[:n])
 		var h ResponseHeader
@@ -230,7 +230,7 @@ func (c *udpAnnounce) request(action Action, args interface{}, options []byte) (
 		}
 		c.contiguousTimeouts = 0
 		if h.Action == ActionError {
-			err = errors.New(buf.String())
+			err = errorsx.New(buf.String())
 		}
 		return buf, err
 	}

@@ -28,7 +28,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.7.0
-	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/net v0.40.0
 	golang.org/x/time v0.11.0
@@ -38,6 +37,7 @@ require (
 require (
 	github.com/alecthomas/assert/v2 v2.11.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	golang.org/x/sync v0.14.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )

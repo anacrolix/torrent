@@ -8,7 +8,6 @@ import (
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/langx"
-	"github.com/pkg/errors"
 
 	"github.com/james-lawrence/torrent/tracker"
 )
@@ -48,7 +47,7 @@ func TrackerEvent(ctx context.Context, l Torrent, announceuri string, options ..
 	)
 
 	res, err := announcer.ForTracker(announceuri).Do(ctx, req)
-	return &res, errors.Wrapf(err, "announce: %s", announceuri)
+	return &res, errorsx.Wrapf(err, "announce: %s", announceuri)
 }
 
 func TrackerAnnounceOnce(ctx context.Context, l Torrent, uri string, options ...tracker.AnnounceOption) (delay time.Duration, peers Peers, err error) {
@@ -82,12 +81,12 @@ func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool, o
 			ctx, done := context.WithTimeout(context.Background(), time.Minute)
 			d, peers, err := TrackerAnnounceOnce(ctx, t, uri, options...)
 			done()
-			if errors.Is(err, context.DeadlineExceeded) {
+			if errorsx.Is(err, context.DeadlineExceeded) {
 				log.Println(err)
 				return
 			}
 
-			if errors.Is(err, tracker.ErrMissingInfoHash) {
+			if errorsx.Is(err, tracker.ErrMissingInfoHash) {
 				log.Println(err)
 				return
 			}

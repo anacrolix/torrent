@@ -12,10 +12,10 @@ import (
 
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/utpx"
 	"github.com/james-lawrence/torrent/sockets"
 	"github.com/james-lawrence/torrent/storage"
-	"github.com/pkg/errors"
 	"golang.org/x/net/proxy"
 )
 
@@ -219,7 +219,7 @@ func listenAllRetry(nahs []networkAndHost, port int) (ss []sockets.Socket, retry
 	portStr := strconv.FormatInt(int64(port), 10)
 	ss[0], err = listen(nahs[0].Network, net.JoinHostPort(nahs[0].Host, portStr))
 	if err != nil {
-		return nil, false, errors.Wrap(err, "first listen")
+		return nil, false, errorsx.Wrap(err, "first listen")
 	}
 	defer func() {
 		if err != nil || retry {
@@ -235,7 +235,7 @@ func listenAllRetry(nahs []networkAndHost, port int) (ss []sockets.Socket, retry
 		if err != nil {
 			return ss,
 				missinggo.IsAddrInUse(err) && port == 0,
-				errors.Wrap(err, "subsequent listen")
+				errorsx.Wrap(err, "subsequent listen")
 		}
 		ss = append(ss, s)
 	}

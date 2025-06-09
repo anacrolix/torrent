@@ -10,8 +10,8 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/metainfo"
-	"github.com/pkg/errors"
 
+	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/langx"
 	"github.com/james-lawrence/torrent/internal/x/bitmapx"
 )
@@ -238,7 +238,7 @@ func (t *chunks) peek(available *roaring.Bitmap) (cidx int, req request, err err
 
 	cidx = int(union.Minimum())
 	if req, err = t.request(int64(cidx), int(-1*(cidx+1))); err != nil {
-		return cidx, req, errors.Wrap(err, "invalid request")
+		return cidx, req, errorsx.Wrap(err, "invalid request")
 	}
 
 	return cidx, req, nil

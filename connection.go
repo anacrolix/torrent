@@ -3,7 +3,7 @@ package torrent
 import (
 	"bufio"
 	"bytes"
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -20,11 +20,11 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/missinggo/v2/prioritybitmap"
-	"github.com/pkg/errors"
 
 	"github.com/james-lawrence/torrent/bencode"
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/bytesx"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/x/bitmapx"
 	"github.com/james-lawrence/torrent/mse"
 )
@@ -505,7 +505,7 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	}
 
 	max := cn.nominalMaxRequests() - len(cn.requests)
-	if reqs, err = cn.t.chunks.Pop(max, bitmapx.AndNot(available, cn.blacklisted)); stderrors.As(err, &empty{}) {
+	if reqs, err = cn.t.chunks.Pop(max, bitmapx.AndNot(available, cn.blacklisted)); errors.As(err, &empty{}) {
 		// clear the blacklist when we run out of work to do.
 		cn.cmu().Lock()
 		cn.blacklisted.Clear()
@@ -689,7 +689,7 @@ func (cn *connection) checkFailures() {
 	}
 
 	if cn.stats.PiecesDirtiedBad.Int64() > 10 {
-		cn.ban(errors.New("too many bad pieces"))
+		cn.ban(errorsx.New("too many bad pieces"))
 	}
 }
 
@@ -811,7 +811,7 @@ func (cn *connection) raisePeerMinPieces(newMin pieceIndex) {
 func (cn *connection) peerSentHave(piece pieceIndex) error {
 	// l2.Printf("(%d) c(%p) - RECEIVED HAVE: r(%d,-,-)\n", os.Getpid(), cn, piece)
 	if cn.t.haveInfo() && piece >= cn.t.numPieces() || piece < 0 {
-		return errors.New("invalid piece")
+		return errorsx.New("invalid piece")
 	}
 
 	if cn.PeerHasPiece(piece) {
@@ -1028,7 +1028,7 @@ func (cn *connection) onReadRequest(r request) error {
 	if r.Begin+r.Length > cn.t.pieceLength(pieceIndex(r.Index)) {
 		// log.Printf("%p onReadRequest - request has invalid length: %d received (%d+%d), expected (%d)", cn, r.Index, r.Begin, r.Length, cn.t.pieceLength(pieceIndex(r.Index)))
 		metrics.Add("bad requests received", 1)
-		return errors.New("bad request")
+		return errorsx.New("bad request")
 	}
 
 	cn.cmu().Lock()
@@ -1124,7 +1124,7 @@ func (cn *connection) mainReadLoop() (err error) {
 				cn.updateRequests()
 			}
 		case pp.Piece:
-			if err = errors.Wrap(cn.receiveChunk(&msg), "failed to received chunk"); err == nil {
+			if err = errorsx.Wrap(cn.receiveChunk(&msg), "failed to received chunk"); err == nil {
 				if len(msg.Piece) == cn.t.md.ChunkSize {
 					cn.t.chunkPool.Put(&msg.Piece)
 				}
@@ -1177,7 +1177,7 @@ func (cn *connection) mainReadLoop() (err error) {
 				cn.updateRequests()
 			}
 		default:
-			err = errors.Errorf("received unknown message type: %#v", msg.Type)
+			err = errorsx.Errorf("received unknown message type: %#v", msg.Type)
 		}
 
 		if err != nil {
@@ -1193,7 +1193,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		var d pp.ExtendedHandshakeMessage
 		if err := bencode.Unmarshal(payload, &d); err != nil {
 			cn.t.cln.config.errors().Printf("error parsing extended handshake message %q: %s\n", payload, err)
-			return errors.Wrap(err, "unmarshalling extended handshake payload")
+			return errorsx.Wrap(err, "unmarshalling extended handshake payload")
 		}
 		if d.Reqq != 0 {
 			cn.PeerMaxRequests = d.Reqq
@@ -1212,7 +1212,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		if d.MetadataSize != 0 {
 			// log.Println("handshake", d.MetadataSize)
 			if err = t.setMetadataSize(d.MetadataSize); err != nil {
-				return errors.Wrapf(err, "setting metadata size to %d", d.MetadataSize)
+				return errorsx.Wrapf(err, "setting metadata size to %d", d.MetadataSize)
 			}
 		}
 
@@ -1224,7 +1224,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		// log.Println("metadata extension available")
 		err := t.gotMetadataExtensionMsg(payload, cn)
 		if err != nil {
-			return errors.Errorf("handling metadata extension message: %v", err)
+			return errorsx.Errorf("handling metadata extension message: %v", err)
 		}
 		return nil
 	case pexExtendedID:
@@ -1236,7 +1236,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		var pexMsg pp.PexMsg
 		err := bencode.Unmarshal(payload, &pexMsg)
 		if err != nil {
-			return errors.Errorf("error unmarshalling PEX message: %s", err)
+			return errorsx.Errorf("error unmarshalling PEX message: %s", err)
 		}
 		metrics.Add("pex added6 peers received", int64(len(pexMsg.Added6)))
 		var peers Peers
@@ -1245,7 +1245,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		t.AddPeers(peers)
 		return nil
 	default:
-		return errors.Errorf("unexpected extended message ID: %v", id)
+		return errorsx.Errorf("unexpected extended message ID: %v", id)
 	}
 }
 
@@ -1300,7 +1300,7 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 	cn.lastUsefulChunkReceived = time.Now()
 
 	if err := cn.t.writeChunk(int(msg.Index), int64(msg.Begin), msg.Piece); err != nil {
-		return errors.Wrap(err, "failed to write chunk")
+		return errorsx.Wrap(err, "failed to write chunk")
 	}
 
 	if err := cn.t.chunks.Verify(req); err != nil {
@@ -1376,7 +1376,7 @@ another:
 			res := cn.t.cln.config.UploadRateLimiter.ReserveN(time.Now(), int(r.Length))
 			if !res.OK() {
 				cn.t.cln.config.errors().Printf("upload rate limiter burst size < %d\n", r.Length)
-				go cn.ban(errors.Errorf("upload length is larger than rate limit: %d", r.Length)) // pan this IP address, we'll never be able to support them.
+				go cn.ban(errorsx.Errorf("upload length is larger than rate limit: %d", r.Length)) // pan this IP address, we'll never be able to support them.
 				return false
 			}
 

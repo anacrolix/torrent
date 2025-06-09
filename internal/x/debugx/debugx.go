@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 )
 
 // Compact returns the first error in the set, if any.
@@ -39,7 +39,7 @@ func genDst() (path string, dst io.WriteCloser) {
 	path = filepath.Join(os.TempDir(), fmt.Sprintf("%s-%s-%s.trace", filepath.Base(os.Args[0]), t.Format("2006-01-02"), ts))
 
 	if dst, err = os.Create(path); err != nil {
-		log.Println(errors.Wrapf(err, "failed to open file: %s", path))
+		log.Println(errorsx.Wrapf(err, "failed to open file: %s", path))
 		log.Println("routine dump falling back to stderr")
 		return "stderr", WriteNopCloser(os.Stderr)
 	}

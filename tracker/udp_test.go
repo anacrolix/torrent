@@ -14,8 +14,8 @@ import (
 
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/testx"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -161,7 +161,7 @@ func TestUDPTracker(t *testing.T) {
 	}.Do(ctx, req)
 
 	// Skip any net errors as we don't control the server.
-	if _, ok := errors.Cause(err).(net.Error); ok {
+	if _, ok := errorsx.Cause(err).(net.Error); ok {
 		t.Skip(err)
 	}
 

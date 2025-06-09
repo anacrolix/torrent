@@ -6,9 +6,9 @@ import (
 
 	"github.com/james-lawrence/torrent/bencode"
 	"github.com/james-lawrence/torrent/internal/bytesx"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
-	"github.com/pkg/errors"
 )
 
 // Option for the torrent.
@@ -150,15 +150,15 @@ func NewFromFile(path string, options ...Option) (t Metadata, err error) {
 
 	info, err := metainfo.NewFromPath(path, metainfo.OptionPieceLength(bytesx.MiB))
 	if err != nil {
-		return t, errors.WithStack(err)
+		return t, errorsx.WithStack(err)
 	}
 
 	if encoded, err = bencode.Marshal(info); err != nil {
-		return t, errors.WithStack(err)
+		return t, errorsx.WithStack(err)
 	}
 
 	if t, err = New(metainfo.HashBytes(encoded), OptionInfo(encoded), OptionDisplayName(info.Name)); err != nil {
-		return t, errors.WithStack(err)
+		return t, errorsx.WithStack(err)
 	}
 
 	return t.Merge(options...), nil
@@ -187,7 +187,7 @@ func NewFromMagnet(uri string, options ...Option) (t Metadata, err error) {
 	)
 
 	if m, err = metainfo.ParseMagnetURI(uri); err != nil {
-		return t, errors.WithStack(err)
+		return t, errorsx.WithStack(err)
 	}
 
 	options = append([]Option{

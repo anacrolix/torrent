@@ -5,7 +5,6 @@ import (
 	"net"
 
 	"github.com/james-lawrence/torrent/internal/errorsx"
-	"github.com/pkg/errors"
 )
 
 type dialer interface {
@@ -41,7 +40,7 @@ func (t socketsBind) Bind(cl *Client, err error) (*Client, error) {
 
 	if len(t) == 0 {
 		cl.Close()
-		return nil, errors.Errorf("at least one socket is required")
+		return nil, errorsx.Errorf("at least one socket is required")
 	}
 
 	for _, s := range t {

@@ -7,7 +7,7 @@ import (
 	"net/netip"
 	"strconv"
 
-	"github.com/pkg/errors"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 )
 
 // Dialer missing interface from the net package.
@@ -18,7 +18,7 @@ type Dialer interface {
 // NetPort returns the port of the network address,
 func NetPort(addr net.Addr) (port int, err error) {
 	if addr == nil {
-		return 0, errors.New("NetPort: nil net.Addr received")
+		return 0, errorsx.New("NetPort: nil net.Addr received")
 	}
 
 	switch raw := addr.(type) {
@@ -47,7 +47,7 @@ func NetPort(addr net.Addr) (port int, err error) {
 // NetIP returns the IP address of the network address.
 func NetIP(addr net.Addr) (ip net.IP, err error) {
 	if addr == nil {
-		return nil, errors.New("NetIP: nil net.Addr received")
+		return nil, errorsx.New("NetIP: nil net.Addr received")
 	}
 
 	switch raw := addr.(type) {
@@ -65,7 +65,7 @@ func NetIP(addr net.Addr) (ip net.IP, err error) {
 		}
 
 		if ip = net.ParseIP(host); ip == nil {
-			return nil, errors.Errorf("invalid IP: %s", host)
+			return nil, errorsx.Errorf("invalid IP: %s", host)
 		}
 
 		return ip, nil
@@ -85,7 +85,7 @@ func NetIPOrNil(addr net.Addr) (ip net.IP) {
 // NetIPPort returns the IP and Port of the network address
 func NetIPPort(addr net.Addr) (ip net.IP, port int, err error) {
 	if addr == nil {
-		return nil, 0, errors.New("NetIPPort: nil net.Addr received")
+		return nil, 0, errorsx.New("NetIPPort: nil net.Addr received")
 	}
 
 	switch raw := addr.(type) {
@@ -105,7 +105,7 @@ func NetIPPort(addr net.Addr) (ip net.IP, port int, err error) {
 		}
 
 		if ip = net.ParseIP(host); ip == nil {
-			return nil, -1, errors.Errorf("invalid IP: %s", host)
+			return nil, -1, errorsx.Errorf("invalid IP: %s", host)
 		}
 
 		if i64, err = strconv.ParseInt(sport, 0, 0); err != nil {
@@ -118,7 +118,7 @@ func NetIPPort(addr net.Addr) (ip net.IP, port int, err error) {
 
 func AddrPort(addr net.Addr) (_ netip.AddrPort, err error) {
 	if addr == nil {
-		return netip.AddrPort{}, errors.New("NetIPPort: nil net.Addr received")
+		return netip.AddrPort{}, errorsx.New("NetIPPort: nil net.Addr received")
 	}
 
 	switch raw := addr.(type) {

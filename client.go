@@ -654,11 +654,14 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	}
 
 	if _, buffered, err = encryption.Incoming(c.rw()); err != nil && cl.config.HeaderObfuscationPolicy.RequirePreferred {
+		log.Println("DERP 0")
 		return t, errorsx.Wrap(err, "connection does not have the required header obfuscation")
 	} else if err != nil && buffered == nil {
+		log.Println("DERP 1")
 		cl.config.debug().Println("encryption handshake failed", err)
 		return nil, err
 	} else if err != nil {
+		log.Println("DERP 2")
 		cl.config.debug().Println("encryption handshake failed", err)
 	}
 
@@ -668,6 +671,7 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	}.Incoming(buffered)
 
 	if err != nil {
+		log.Println("DERP 3")
 		return nil, errorsx.Wrap(err, "invalid handshake failed")
 	}
 
@@ -676,7 +680,12 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	c.completedHandshake = time.Now()
 
 	t, _, err = cl.torrents.Load(cl, int160.FromByteArray(info.Hash))
-	return t, err
+	if err != nil {
+		log.Println("DERP 4")
+		return nil, err
+	}
+
+	return t, nil
 }
 
 func (cl *Client) runReceivedConn(c *connection) {

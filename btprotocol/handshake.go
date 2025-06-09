@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"io"
+	"log"
 	"unicode"
 
 	"github.com/james-lawrence/torrent/internal/errorsx"
@@ -223,14 +224,17 @@ func (t Handshake) Incoming(sock io.ReadWriter) (pbits ExtensionBits, pinfo Hand
 	}
 
 	if _, err := pmsg.ReadFrom(sock); err != nil {
+		log.Printf("ZERP 0: %T\n", err)
 		return pbits, pinfo, err
 	}
 
 	if _, err := pinfo.ReadFrom(sock); err != nil {
+		log.Printf("ZERP 1: %T\n", err)
 		return pbits, pinfo, err
 	}
 
 	if _, err := msg.WriteTo(sock); err != nil {
+		log.Printf("ZERP 2: %T\n", err)
 		return pbits, pinfo, err
 	}
 
@@ -240,6 +244,7 @@ func (t Handshake) Incoming(sock io.ReadWriter) (pbits ExtensionBits, pinfo Hand
 	}
 
 	if _, err := peering.WriteTo(sock); err != nil {
+		log.Printf("ZERP 3: %T\n", err)
 		return pbits, pinfo, err
 	}
 

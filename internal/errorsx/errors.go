@@ -183,10 +183,10 @@ func (w *withStack) Format(s fmt.State, verb rune) {
 		}
 		fallthrough
 	case 's':
-		log.Println("BADz 2")
+		log.Printf("BADz 2 %T\n", w)
 		_, _ = io.WriteString(s, w.Error())
 	case 'q':
-		log.Println("BADz 3")
+		log.Printf("BADz 3 %T\n", w)
 		fmt.Fprintf(s, "%q", w.Error())
 	}
 }

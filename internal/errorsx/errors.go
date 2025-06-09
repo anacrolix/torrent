@@ -162,32 +162,32 @@ type withStack struct {
 }
 
 // provide compatibility with honeybadger stack tracing.
-func (w *withStack) Callers() []uintptr {
+func (w withStack) Callers() []uintptr {
 	return *w.stack
 }
 
-func (w *withStack) Cause() error { return w.error }
+func (w withStack) Cause() error { return w.error }
 
 // Unwrap provides compatibility for Go 1.13 error chains.
-func (w *withStack) Unwrap() error { return w.error }
+func (w withStack) Unwrap() error { return w.error }
 
-func (w *withStack) Format(s fmt.State, verb rune) {
+func (w withStack) Format(s fmt.State, verb rune) {
 	log.Println("BADz 0")
 	switch verb {
 	case 'v':
-		log.Println("BADz 1")
+		log.Println("BADz 1", s.Flag('+'))
 		if s.Flag('+') {
-			fmt.Fprintf(s, "%+v", w.Cause())
+			fmt.Fprintf(s, "%+v", w.Unwrap())
 			w.stack.Format(s, verb)
 			return
 		}
 		fallthrough
 	case 's':
-		log.Printf("BADz 2 %T\n", w)
-		_, _ = io.WriteString(s, w.Error())
+		log.Printf("BADz 2 %T - %T\n", w, w.Unwrap())
+		_, _ = io.WriteString(s, w.Unwrap().Error())
 	case 'q':
-		log.Printf("BADz 3 %T\n", w)
-		fmt.Fprintf(s, "%q", w.Error())
+		log.Printf("BADz 3 %T - %T\n", w, w.Unwrap())
+		fmt.Fprintf(s, "%q", w.Unwrap().Error())
 	}
 }
 

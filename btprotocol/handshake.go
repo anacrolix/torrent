@@ -66,15 +66,18 @@ func (t *HandshakeMessage) ReadFrom(src io.Reader) (n int64, err error) {
 	)
 
 	if read, err = io.ReadFull(src, buf); err != nil {
+		log.Println("BAR 0", err)
 		return int64(read), err
 	}
 
 	if read != len(buf) {
-		return int64(read), errorsx.Errorf("invalid handshake invalid length")
+		log.Println("BAR 1")
+		return int64(read), errorsx.New("invalid handshake invalid length")
 	}
 
 	if !bytes.HasPrefix(buf, []byte(Protocol)) {
-		return int64(read), errorsx.Errorf("unexpected protocol string %s:%s", Protocol, string(buf))
+		log.Println("missing prefix")
+		return int64(read), errorsx.Errorf("unexpected protocol string %s: %x", Protocol, buf)
 	}
 
 	copy(t.Extensions[:], buf[20:])
@@ -203,7 +206,7 @@ func (t Handshake) Outgoing(sock io.ReadWriter, hash [20]byte) (resbits Extensio
 		return resbits, res, err
 	}
 
-	if bytes.Compare(res.Hash[:], hash[:]) != 0 {
+	if !bytes.Equal(res.Hash[:], hash[:]) {
 		return resbits, res, errorsx.New("invalid handshake - mismatched hash")
 	}
 

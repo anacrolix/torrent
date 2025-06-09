@@ -661,7 +661,7 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 		cl.config.debug().Println("encryption handshake failed", err)
 		return nil, err
 	} else if err != nil {
-		log.Println("DERP 2")
+		log.Println("DERP 2", err)
 		cl.config.debug().Println("encryption handshake failed", err)
 	}
 

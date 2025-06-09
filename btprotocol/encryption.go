@@ -3,6 +3,7 @@ package btprotocol
 import (
 	"bytes"
 	"io"
+	"log"
 
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/mse"
@@ -22,10 +23,11 @@ func (t EncryptionHandshake) Incoming(rw io.ReadWriter) (updated io.ReadWriter, 
 		io.Reader
 		io.Writer
 	}
-	// log.Println("encryption handshake initiated")
-	// defer func() {
-	// 	log.Println("encryption handshake completed", err)
-	// }()
+
+	log.Println("encryption handshake initiated")
+	defer func() {
+		log.Println("encryption handshake completed", err)
+	}()
 
 	var (
 		buf = bytes.NewBuffer(make([]byte, 0, 68))
@@ -34,8 +36,10 @@ func (t EncryptionHandshake) Incoming(rw io.ReadWriter) (updated io.ReadWriter, 
 	// read the bittorrent protocol magic string initially
 	// in case this connection is not an encrypted connection.
 	if _, err := io.CopyN(buf, rw, 20); err != nil {
+		log.Println("failed to read protocol")
 		return nil, nil, err
 	} else if buf.String() == Protocol {
+		log.Println("unencrypted connection detected")
 		return rw, buffered{
 			Reader: io.MultiReader(bytes.NewBuffer(buf.Bytes()), rw),
 			Writer: rw,

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"io"
-	"log"
 	"unicode"
 
 	"github.com/james-lawrence/torrent/internal/errorsx"
@@ -66,17 +65,14 @@ func (t *HandshakeMessage) ReadFrom(src io.Reader) (n int64, err error) {
 	)
 
 	if read, err = io.ReadFull(src, buf); err != nil {
-		log.Println("BAR 0", err)
 		return int64(read), err
 	}
 
 	if read != len(buf) {
-		log.Println("BAR 1")
 		return int64(read), errorsx.New("invalid handshake invalid length")
 	}
 
 	if !bytes.HasPrefix(buf, []byte(Protocol)) {
-		log.Println("missing prefix")
 		return int64(read), errorsx.Errorf("unexpected protocol string %s: %x", Protocol, buf)
 	}
 
@@ -227,17 +223,14 @@ func (t Handshake) Incoming(sock io.ReadWriter) (pbits ExtensionBits, pinfo Hand
 	}
 
 	if _, err := pmsg.ReadFrom(sock); err != nil {
-		log.Printf("ZERP 0: %T\n", err)
 		return pbits, pinfo, err
 	}
 
 	if _, err := pinfo.ReadFrom(sock); err != nil {
-		log.Printf("ZERP 1: %T\n", err)
 		return pbits, pinfo, err
 	}
 
 	if _, err := msg.WriteTo(sock); err != nil {
-		log.Printf("ZERP 2: %T\n", err)
 		return pbits, pinfo, err
 	}
 
@@ -247,7 +240,6 @@ func (t Handshake) Incoming(sock io.ReadWriter) (pbits ExtensionBits, pinfo Hand
 	}
 
 	if _, err := peering.WriteTo(sock); err != nil {
-		log.Printf("ZERP 3: %T\n", err)
 		return pbits, pinfo, err
 	}
 

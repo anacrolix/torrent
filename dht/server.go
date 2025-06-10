@@ -1037,10 +1037,12 @@ func (s *Server) TraversalStartingNodes() (nodes []addrMaybeId, err error) {
 			nodes = append(nodes, addrMaybeId{Addr: a.KRPC()})
 		}
 	}
+
 	if len(nodes) == 0 {
-		err = errors.New("no initial nodes")
+		return nil, ErrDHTNoInitialNodes
 	}
-	return
+
+	return nodes, err
 }
 
 func (s *Server) AddNodesFromFile(fileName string) (added int, err error) {

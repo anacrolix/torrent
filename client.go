@@ -578,7 +578,7 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr netip
 			c.conn,
 			connections.BannedConnectionError(
 				c.conn,
-				errorsx.Errorf("detected connection to self - banning %s", c.conn.RemoteAddr().String()),
+				errorsx.Errorf("detected connection to self - banning %s vs %s - %s", int160.FromByteArray(c.PeerID), int160.FromByteArray(cl.peerID), c.conn.RemoteAddr().String()),
 			),
 		)
 		return
@@ -635,6 +635,8 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 		return errorsx.Wrap(err, "bittorrent protocol handshake failure")
 	}
 
+	cl.config.debug().Println("initiated outgoing connection", int160.FromByteArray(cl.peerID), "->", int160.FromByteArray(info.PeerID))
+
 	c.PeerExtensionBytes = ebits
 	c.PeerID = info.PeerID
 	c.completedHandshake = time.Now()
@@ -654,14 +656,11 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	}
 
 	if _, buffered, err = encryption.Incoming(c.rw()); err != nil && cl.config.HeaderObfuscationPolicy.RequirePreferred {
-		log.Println("DERP 0")
 		return t, errorsx.Wrap(err, "connection does not have the required header obfuscation")
 	} else if err != nil && buffered == nil {
-		log.Println("DERP 1")
 		cl.config.debug().Println("encryption handshake failed", err)
 		return nil, err
 	} else if err != nil {
-		log.Println("DERP 2", err)
 		cl.config.debug().Println("encryption handshake failed", err)
 	}
 
@@ -671,9 +670,10 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	}.Incoming(buffered)
 
 	if err != nil {
-		log.Println("DERP 3")
 		return nil, errorsx.Wrap(err, "invalid handshake failed")
 	}
+
+	cl.config.debug().Println("received incoming connection", int160.FromByteArray(info.PeerID), "->", int160.FromByteArray(cl.peerID), c.remoteAddr)
 
 	c.PeerExtensionBytes = ebits
 	c.PeerID = info.PeerID
@@ -681,7 +681,6 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 
 	t, _, err = cl.torrents.Load(cl, int160.FromByteArray(info.Hash))
 	if err != nil {
-		log.Println("DERP 4")
 		return nil, err
 	}
 
@@ -827,7 +826,7 @@ func (cl *Client) AddDHTNodes(nodes []string) {
 }
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr netip.AddrPort) (c *connection) {
-	c = newConnection(nc, outgoing, remoteAddr)
+	c = newConnection(cl.config, nc, outgoing, remoteAddr)
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
 		l: cl.config.DownloadRateLimiter,
@@ -895,6 +894,11 @@ func (cl *Client) findListenerIP(f func(netip.Addr) bool) netip.Addr {
 		}
 		return f(addr.Addr())
 	})
+
+	if l == nil {
+		log.Println("unable to determine listener address/port - no listener found")
+		return netip.Addr{}
+	}
 
 	addr, err := netx.AddrPort(l.Addr())
 	if err != nil {

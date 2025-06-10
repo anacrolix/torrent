@@ -43,9 +43,8 @@ func (t handshaker) Accept(l net.Listener) (c net.Conn, err error) {
 			continue
 		}
 
-		log.Println("CONNECTION RECEIVED", rip, port)
 		if err = t.Firewall.Blocked(rip, port); err != nil {
-
+			log.Println("connection blocked", rip, port, err)
 			conn.Close()
 			continue
 		}
@@ -65,6 +64,7 @@ func (t handshaker) Release(conn net.Conn, cause error) (err error) {
 	}
 
 	if banned := new(bannedConnection); errors.As(cause, banned) {
+		log.Println("banned connection", rip, port, cause)
 		t.Firewall.Inhibit(rip, port, cause)
 	}
 

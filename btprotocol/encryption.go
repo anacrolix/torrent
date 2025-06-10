@@ -24,10 +24,10 @@ func (t EncryptionHandshake) Incoming(rw io.ReadWriter) (updated io.ReadWriter, 
 		io.Writer
 	}
 
-	log.Println("encryption handshake initiated")
-	defer func() {
-		log.Println("encryption handshake completed", err)
-	}()
+	// log.Println("encryption handshake initiated")
+	// defer func() {
+	// 	log.Println("encryption handshake completed", err)
+	// }()
 
 	var (
 		buf = bytes.NewBuffer(make([]byte, 0, 68))
@@ -39,7 +39,6 @@ func (t EncryptionHandshake) Incoming(rw io.ReadWriter) (updated io.ReadWriter, 
 		log.Println("failed to read protocol")
 		return nil, nil, err
 	} else if buf.String() == Protocol {
-		log.Println("unencrypted connection detected")
 		return rw, buffered{
 			Reader: io.MultiReader(bytes.NewBuffer(buf.Bytes()), rw),
 			Writer: rw,

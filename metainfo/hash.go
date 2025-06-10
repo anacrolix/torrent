@@ -15,10 +15,6 @@ func (h Hash) Bytes() []byte {
 	return h[:]
 }
 
-func (h Hash) AsString() string {
-	return string(h[:])
-}
-
 func (h Hash) String() string {
 	return h.HexString()
 }

@@ -95,7 +95,6 @@ package errorsx
 import (
 	"fmt"
 	"io"
-	"log"
 )
 
 // New returns an error with the supplied message.
@@ -128,7 +127,6 @@ func (f fundamental) Error() string { return f.msg }
 func (f fundamental) Format(s fmt.State, verb rune) {
 	switch verb {
 	case 'v':
-		log.Println("BAD 0")
 		if s.Flag('+') {
 			_, _ = io.WriteString(s, f.msg)
 			f.stack.Format(s, verb)
@@ -136,10 +134,8 @@ func (f fundamental) Format(s fmt.State, verb rune) {
 		}
 		fallthrough
 	case 's':
-		log.Println("BAD 1")
 		_, _ = io.WriteString(s, f.msg)
 	case 'q':
-		log.Println("BAD 2")
 		fmt.Fprintf(s, "%q", f.msg)
 	}
 }
@@ -172,10 +168,8 @@ func (w withStack) Cause() error { return w.error }
 func (w withStack) Unwrap() error { return w.error }
 
 func (w withStack) Format(s fmt.State, verb rune) {
-	log.Println("BADz 0")
 	switch verb {
 	case 'v':
-		log.Println("BADz 1", s.Flag('+'))
 		if s.Flag('+') {
 			fmt.Fprintf(s, "%+v", w.Unwrap())
 			w.stack.Format(s, verb)
@@ -183,10 +177,8 @@ func (w withStack) Format(s fmt.State, verb rune) {
 		}
 		fallthrough
 	case 's':
-		log.Printf("BADz 2 %T - %T\n", w, w.Unwrap())
 		_, _ = io.WriteString(s, w.Unwrap().Error())
 	case 'q':
-		log.Printf("BADz 3 %T - %T\n", w, w.Unwrap())
 		fmt.Fprintf(s, "%q", w.Unwrap().Error())
 	}
 }

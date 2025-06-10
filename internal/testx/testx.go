@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/stretchr/testify/require"
@@ -14,6 +15,10 @@ import (
 
 func Context(t testing.TB) (context.Context, context.CancelFunc) {
 	return context.WithCancel(t.Context())
+}
+
+func ContextWithTimeout(t testing.TB, d time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(t.Context(), d)
 }
 
 // Must is a small language extension for panicing on the common
@@ -29,4 +34,9 @@ func ReadMD5(path ...string) string {
 	d := md5.New()
 	_ = errorsx.Must(d.Write(errorsx.Must(os.ReadFile(filepath.Join(path...)))))
 	return hex.EncodeToString(d.Sum(nil))
+}
+
+func Touch(path string) error {
+	dst, err := os.OpenFile(path, os.O_CREATE|os.O_RDONLY, 0600)
+	return errorsx.Compact(err, dst.Close())
 }

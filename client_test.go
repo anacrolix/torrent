@@ -358,6 +358,68 @@ func TestClientSeedWithoutAdding(t *testing.T) {
 	require.Equal(t, md5x.FormatHex(expected), md5x.FormatHex(downloaded))
 }
 
+func TestClientSeedWithoutAddingAndEncryption(t *testing.T) {
+	// this test ensures encryption works when torrents are not actively in memory.
+	const datan = 64 * bytesx.KiB
+
+	ctx, done := testx.Context(t)
+	defer done()
+
+	seedingdir := t.TempDir()
+	mds := torrent.NewMetadataCache(seedingdir)
+	sstore := storage.NewFile(seedingdir)
+	info, expected, err := testutil.RandomDataTorrent(seedingdir, datan)
+	require.NoError(t, err)
+
+	md, err := torrent.NewFromInfo(
+		info,
+		torrent.OptionDisplayName("test torrent"),
+		torrent.OptionChunk(bytesx.KiB),
+		torrent.OptionStorage(sstore),
+	)
+	require.NoError(t, err)
+	require.NoError(t, mds.Write(md))
+
+	// Create seeder and a Torrent.
+	cfg := torrent.TestingConfig(
+		t,
+		torrent.ClientConfigStorageDir(seedingdir),
+		torrent.ClientConfigSeed(true),
+		torrent.ClientConfigEnableEncryption,
+	)
+
+	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
+	require.NoError(t, err)
+	defer seeder.Close()
+
+	// Create leecher and a Torrent.
+	cfg = torrent.TestingConfig(
+		t,
+		torrent.ClientConfigStorageDir(t.TempDir()),
+		torrent.ClientConfigSeed(false),
+		torrent.ClientConfigEnableEncryption,
+	)
+
+	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
+	require.NoError(t, err)
+	defer leecher.Close()
+
+	leeched, added, err := leecher.Start(md, torrent.TuneClientPeer(seeder))
+	require.NoError(t, err)
+	assert.True(t, added)
+
+	// The Torrent should not be interested in obtaining peers, so the one we
+	// just added should be the only one.
+	require.False(t, leeched.Stats().Seeding)
+
+	// download
+	downloaded := md5.New()
+	n, err := torrent.DownloadInto(ctx, downloaded, leeched)
+	require.NoError(t, err)
+	require.Equal(t, int64(64*bytesx.KiB), n)
+	require.Equal(t, md5x.FormatHex(expected), md5x.FormatHex(downloaded))
+}
+
 // Check that after completing leeching, a leecher transitions to a seeding
 // correctly. Connected in a chain like so: Seeder <-> Leecher <-> LeecherLeecher.
 func TestSeedAfterDownloading(t *testing.T) {

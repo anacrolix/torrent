@@ -30,7 +30,7 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 	}
 
 	if length > d.MaxLength {
-		return errorsx.New("message too long")
+		return errorsx.Errorf("message too long %d > %d", length, d.MaxLength)
 	}
 
 	if length == 0 {

@@ -2,15 +2,11 @@ package connections
 
 import (
 	"fmt"
-	"log"
 	"net"
-	"runtime/debug"
 )
 
 // BannedConnectionError bans a connection.
 func BannedConnectionError(c net.Conn, cause error) error {
-	log.Printf("banned! %T", cause)
-	debug.PrintStack()
 	return bannedConnection{
 		conn:  c,
 		cause: cause,

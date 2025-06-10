@@ -9,10 +9,15 @@ import (
 	"time"
 
 	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 )
 
 var ErrTransactionTimeout = errors.New("transaction timed out")
 var ErrTokenInvalid = errors.New("invalid token")
+
+const (
+	ErrDHTNoInitialNodes = errorsx.String("no initial nodes")
+)
 
 // Transaction keeps track of a message exchange between nodes, such as a
 // query message and a response message.

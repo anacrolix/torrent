@@ -1,8 +1,8 @@
 package connections
 
 import (
-	"log"
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/bits-and-blooms/bloom/v3"
@@ -62,7 +62,11 @@ func (t *BloomBanIP) Inhibit(ip net.IP, port int, cause error) {
 		t.reset()
 	}
 
-	t.banned.Add(maskLower8Bits(ip))
+	if addr := netip.AddrFrom16([16]byte(ip.To16())); addr.IsPrivate() {
+		t.banned.Add(ip)
+	} else {
+		t.banned.Add(maskLower8Bits(ip))
+	}
 }
 
 // BanIPv6 ban IPv6 addresses
@@ -96,10 +100,20 @@ func (BanIPv4) Blocked(ip net.IP, port int) error {
 // BanInvalidPort blocks connections with invalid port values.
 type BanInvalidPort struct{}
 
-// Blocked prevents connections from ipv4 addresses.
 func (BanInvalidPort) Blocked(ip net.IP, port int) error {
 	if port <= 0 {
 		return errorsx.New("invalid port")
+	}
+
+	return nil
+}
+
+type Private struct{}
+
+func (t Private) Blocked(ip net.IP, port int) error {
+	addr := netip.AddrFrom16([16]byte(ip.To16()))
+	if !addr.IsPrivate() {
+		return errorsx.Errorf("public network %s - %s", ip, addr)
 	}
 
 	return nil
@@ -120,8 +134,6 @@ func (t composedfirewall) Blocked(ip net.IP, port int) error {
 }
 
 func (t composedfirewall) Inhibit(ip net.IP, port int, cause error) {
-	log.Println("composed.Inhibit", ip, port)
-	log.Println("composed.Inhibit", cause)
 	for _, fwall := range t.firewalls {
 		if fwall, ok := fwall.(FirewallStateful); ok {
 			fwall.Inhibit(ip, port, cause)

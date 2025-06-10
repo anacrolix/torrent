@@ -5,14 +5,17 @@ package autobind
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent"
 	"github.com/james-lawrence/torrent/internal/errorsx"
+	"github.com/james-lawrence/torrent/internal/langx"
 	"github.com/james-lawrence/torrent/internal/utpx"
 	"github.com/james-lawrence/torrent/sockets"
 	"github.com/james-lawrence/torrent/storage"
@@ -47,6 +50,10 @@ func DisableDHT(a *Autobind) {
 	a.NoDHT = true
 }
 
+func DisableIPv6(a *Autobind) {
+	a.DisableIPv6 = true
+}
+
 // Autobind manages automatically binding a client to available networks.
 type Autobind struct {
 	// The address to listen for new uTP and TCP bittorrent protocol
@@ -77,17 +84,19 @@ func New(options ...Option) Autobind {
 	return autobind
 }
 
+var incr int32
+
 // NewLoopback autobind to the loopback device.
 func NewLoopback(options ...Option) Autobind {
 	return New(func(a *Autobind) {
 		a.ListenHost = func(network string) string {
 			if strings.Contains(network, "4") {
-				return "127.0.0.1"
+				return fmt.Sprintf("127.0.0.%d", atomic.AddInt32(&incr, 1)%254+1)
 			}
 			return "::1"
 		}
 		a.ListenPort = 0
-	})
+	}, langx.Compose(options...))
 }
 
 // NewSpecified for use in testing only, panics if invalid host/port.

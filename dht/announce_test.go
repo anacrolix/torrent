@@ -22,7 +22,7 @@ func TestAnnounceNoStartingNodes(t *testing.T) {
 	var ih [20]byte
 	copy(ih[:], "blah")
 	_, err = s.AnnounceTraversal(t.Context(), ih, AnnouncePeer(true, 0))
-	require.EqualError(t, err, "no initial nodes")
+	require.ErrorIs(t, err, ErrDHTNoInitialNodes)
 }
 
 func randomInfohash() (ih [20]byte) {

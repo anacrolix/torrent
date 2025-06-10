@@ -43,6 +43,7 @@ type ClientConfig struct {
 	// Upload even after there's nothing in it for us. By default uploading is
 	// not altruistic, we'll only upload to encourage the peer to reciprocate.
 	Seed bool `long:"seed"`
+
 	// Only applies to chunks uploaded to peers, to maintain responsiveness
 	// communicating local Client state to peers. Each limiter token
 	// represents one byte. The Limiter's burst must be large enough to fit a
@@ -55,6 +56,8 @@ type ClientConfig struct {
 	// (~4096), and the requested chunk size (~16KiB, see
 	// TorrentSpec.ChunkSize).
 	DownloadRateLimiter *rate.Limiter
+
+	maximumOutstandingRequests int
 
 	// Rate limit connection dialing
 	dialRateLimiter *rate.Limiter
@@ -126,7 +129,7 @@ type ClientConfig struct {
 	DHTAnnouncePeer func(ih metainfo.Hash, ip net.IP, port int, portOk bool)
 	DHTMuxer        dht.Muxer
 
-	ConnectionClosed func(ih metainfo.Hash, stats ConnStats)
+	ConnectionClosed func(ih metainfo.Hash, stats ConnStats, remaining int)
 }
 
 func (cfg *ClientConfig) Storage() storage.ClientImpl {
@@ -312,9 +315,34 @@ func ClientConfigHTTPUserAgent(s string) ClientConfigOption {
 	}
 }
 
-func ClientConfigConnectionClosed(fn func(ih metainfo.Hash, stats ConnStats)) ClientConfigOption {
+func ClientConfigConnectionClosed(fn func(ih metainfo.Hash, stats ConnStats, remaining int)) ClientConfigOption {
 	return func(cc *ClientConfig) {
 		cc.ConnectionClosed = fn
+	}
+}
+
+func ClientConfigEnableEncryption(cc *ClientConfig) {
+	cc.HeaderObfuscationPolicy = HeaderObfuscationPolicy{
+		Preferred:        true,
+		RequirePreferred: false,
+	}
+}
+
+func ClientConfigFirewall(fw connections.FirewallStateful) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		cc.Handshaker = connections.NewHandshaker(fw)
+	}
+}
+
+func ClientConfigPEX(b bool) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		cc.DisablePEX = !b
+	}
+}
+
+func ClientConfigMaxOutstandingRequests(n int) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		cc.maximumOutstandingRequests = n
 	}
 }
 
@@ -327,6 +355,7 @@ func NewDefaultClientConfig(mdstore MetadataStore, store storage.ClientImpl, opt
 		ExtendedHandshakeClientVersion: "go.torrent dev 20181121",
 		Bep20:                          "-GT0002-",
 		UpnpID:                         "james-lawrence/torrent",
+		maximumOutstandingRequests:     256,
 		NominalDialTimeout:             20 * time.Second,
 		MinDialTimeout:                 3 * time.Second,
 		HalfOpenConnsPerTorrent:        25,
@@ -342,7 +371,7 @@ func NewDefaultClientConfig(mdstore MetadataStore, store storage.ClientImpl, opt
 		dialRateLimiter:     rate.NewLimiter(rate.Inf, 0),
 		ConnTracker:         conntrack.NewInstance(),
 		HeaderObfuscationPolicy: HeaderObfuscationPolicy{
-			Preferred:        true,
+			Preferred:        false,
 			RequirePreferred: false,
 		},
 		CryptoSelector:   mse.DefaultCryptoSelector,
@@ -352,7 +381,7 @@ func NewDefaultClientConfig(mdstore MetadataStore, store storage.ClientImpl, opt
 		Debug:            discard{},
 		DHTAnnouncePeer:  func(ih metainfo.Hash, ip net.IP, port int, portOk bool) {},
 		DHTMuxer:         dht.DefaultMuxer(),
-		ConnectionClosed: func(t metainfo.Hash, stats ConnStats) {},
+		ConnectionClosed: func(t metainfo.Hash, stats ConnStats, remaining int) {},
 		Handshaker: connections.NewHandshaker(
 			connections.AutoFirewall(),
 		),

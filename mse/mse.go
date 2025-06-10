@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/james-lawrence/torrent/dht/int160"
+	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/metainfo"
 
 	biter "github.com/bradfitz/iter"
@@ -55,6 +56,10 @@ func DirectoryNameSecrets(dir string) iter.Seq[int160.T] {
 
 			if !yield(int160.FromBytes(decoded)) {
 				return fs.SkipAll
+			}
+
+			if d.IsDir() {
+				return fs.SkipDir
 			}
 
 			return nil
@@ -414,6 +419,7 @@ func (h *handshake) newEncrypt(initer bool) *rc4.Cipher {
 }
 
 func (h *handshake) initerSteps() (ret io.ReadWriter, selected CryptoMethod, err error) {
+	// log.Println("TRANSMITTING", hex.EncodeToString(h.skey))
 	h.postWrite(hash(req1, h.s[:]))
 	h.postWrite(xor(hash(req2, h.skey), hash(req3, h.s[:])))
 	buf := &bytes.Buffer{}
@@ -464,7 +470,7 @@ func (h *handshake) initerSteps() (ret io.ReadWriter, selected CryptoMethod, err
 	}
 }
 
-var ErrNoSecretKeyMatch = errors.New("no skey matched")
+const ErrNoSecretKeyMatch = errorsx.String("no skey matched")
 
 func (h *handshake) receiverSteps() (ret io.ReadWriter, chosen CryptoMethod, err error) {
 	// There is up to 512 bytes of padding, then the 20 byte hash.
@@ -486,7 +492,7 @@ func (h *handshake) receiverSteps() (ret io.ReadWriter, chosen CryptoMethod, err
 		return skey
 	})
 	if h.skey == nil {
-		return ret, chosen, ErrNoSecretKeyMatch
+		return ret, chosen, errorsx.WithStack(ErrNoSecretKeyMatch)
 	}
 
 	r := newCipherReader(newEncrypt(true, h.s[:], h.skey), h.conn)

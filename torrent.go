@@ -3,6 +3,7 @@ package torrent
 import (
 	"container/heap"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -154,6 +155,12 @@ func TuneClientPeer(cl *Client) Tuner {
 		}
 		t.AddPeers(ps)
 	}
+}
+
+func TuneDisableTrackers(t *torrent) {
+	t.lock()
+	defer t.unlock()
+	t.md.Trackers = nil
 }
 
 // add trackers to the torrent.
@@ -700,7 +707,7 @@ func (t *torrent) saveMetadataPiece(index int, data []byte) {
 		return
 	}
 
-	copy(t.metadataBytes[(1<<14)*index:], data)
+	copy(t.metadataBytes[16*bytesx.KiB*index:], data)
 	t.metadataCompletedChunks[index] = true
 }
 
@@ -764,8 +771,8 @@ func (t *torrent) setInfoBytes(b []byte) error {
 		return nil
 	}
 
-	if metainfo.NewHashFromBytes(b) != t.md.ID {
-		return errorsx.New("info bytes have wrong hash")
+	if id := metainfo.NewHashFromBytes(b); id != t.md.ID {
+		return errorsx.Errorf("info bytes have wrong hash %d %s != %s", len(b), id.HexString(), t.md.ID.HexString())
 	}
 
 	if err := bencode.Unmarshal(b, &info); err != nil {
@@ -844,11 +851,11 @@ func (t *torrent) newMetadataExtensionMessage(c *connection, msgType int, piece 
 		d["total_size"] = len(t.metadataBytes)
 	}
 
-	p := bencode.MustMarshal(d)
+	p := append(bencode.MustMarshal(d), data...)
 	return pp.Message{
 		Type:            pp.Extended,
 		ExtendedID:      c.PeerExtensionIDs[pp.ExtensionNameMetadata],
-		ExtendedPayload: append(p, data...),
+		ExtendedPayload: p,
 	}
 }
 
@@ -1056,6 +1063,8 @@ func (t *torrent) maybeCompleteMetadata() error {
 		return nil
 	}
 
+	// log.Println("checkpoint", metainfo.NewHashFromBytes(t.metadataBytes))
+
 	if err := t.setInfoBytes(t.metadataBytes); err != nil {
 		t.invalidateMetadata()
 		return fmt.Errorf("error setting info bytes: %s", err)
@@ -1215,7 +1224,10 @@ func (t *torrent) dhtAnnouncer(s *dht.Server) {
 
 		t.stats.DHTAnnounce.Add(1)
 
-		if err := t.announceToDht(true, s); err != nil {
+		if err := t.announceToDht(true, s); errors.Is(err, dht.ErrDHTNoInitialNodes) {
+			t.cln.config.info().Println(t, err)
+			time.Sleep(time.Minute)
+		} else if err != nil {
 			t.cln.config.info().Println(t, errorsx.Wrap(err, "error announcing to DHT"))
 			time.Sleep(time.Second)
 		}
@@ -1328,10 +1340,10 @@ func (t *torrent) addConnection(c *connection) (err error) {
 		}
 	}
 
-	if t.conns.length() >= t.maxEstablishedConns {
+	if tot := t.conns.length(); tot >= t.maxEstablishedConns {
 		c := t.worstBadConn()
 		if c == nil {
-			return errorsx.New("don't want conns")
+			return errorsx.Errorf("don't want conns %d >= %d", tot, t.maxEstablishedConns)
 		}
 
 		dropping = append(dropping, c)
@@ -1373,9 +1385,12 @@ func (t *torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 
 	cset := t.conns.list()
 	wcs := slices.HeapInterface(cset, worseConn)
-	for len(cset) > t.maxEstablishedConns && wcs.Len() > 0 {
+	for drop := len(cset) - t.maxEstablishedConns; drop > -1 && wcs.Len() > 0; drop-- {
+		log.Println("dropping connection", drop, wcs.Len())
 		t.dropConnection(wcs.Pop().(*connection))
+		log.Println("dropped connection", drop, wcs.Len())
 	}
+	log.Println("done dropping connection")
 	t.openNewConns()
 	return oldMax
 }
@@ -1538,6 +1553,7 @@ func (t *torrent) gotMetadataExtensionMsg(payload []byte, c *connection) error {
 		if begin < 0 || begin >= len(payload) {
 			return fmt.Errorf("data has bad offset in payload: %d", begin)
 		}
+
 		t.saveMetadataPiece(piece, payload[begin:])
 		c.lastUsefulChunkReceived = time.Now()
 		return t.maybeCompleteMetadata()
@@ -1546,9 +1562,9 @@ func (t *torrent) gotMetadataExtensionMsg(payload []byte, c *connection) error {
 			c.Post(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
 			return nil
 		}
-		start := (1 << 14) * piece
-
-		c.Post(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:start+t.metadataPieceSize(piece)]))
+		start := 16 * bytesx.KiB * piece
+		end := start + t.metadataPieceSize(piece)
+		c.Post(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:end]))
 		return nil
 	case pp.RejectMetadataExtensionMsgType:
 		return nil

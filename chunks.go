@@ -87,7 +87,7 @@ func newChunks(clength int, m *metainfo.Info, options ...chunkopt) *chunks {
 		meta:        m,
 		cmaximum:    numChunks(m.TotalLength(), m.PieceLength, int64(clength)),
 		clength:     int64(clength),
-		gracePeriod: 4 * time.Second,
+		gracePeriod: 2 * time.Minute,
 		outstanding: make(map[uint64]request),
 		missing:     roaring.NewBitmap(),
 		unverified:  roaring.NewBitmap(),

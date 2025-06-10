@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	maxRequests      = 250 // Maximum pending requests we allow peers to send us.
+	maxRequestsGrace = 5 // grace requests above the limit before we start rejecting
 	defaultChunkSize = 16 * bytesx.KiB
 )
 

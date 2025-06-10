@@ -136,10 +136,14 @@ func NewFromMetaInfoFile(path string, options ...Option) (t Metadata, err error)
 	)
 
 	if mi, err = metainfo.LoadFromFile(path); err != nil {
-		return t, err
+		return t, errorsx.Wrapf(err, "unable to load metadata from %s", path)
 	}
 
-	return NewFromMetaInfo(mi, options...)
+	if t, err = NewFromMetaInfo(mi, options...); err != nil {
+		return t, errorsx.Wrapf(err, "unable to load metadata from %s", path)
+	}
+
+	return t, nil
 }
 
 // NewFromFile convience method to create a torrent directly from a file.
@@ -150,7 +154,7 @@ func NewFromFile(path string, options ...Option) (t Metadata, err error) {
 
 	info, err := metainfo.NewFromPath(path, metainfo.OptionPieceLength(bytesx.MiB))
 	if err != nil {
-		return t, errorsx.WithStack(err)
+		return t, errorsx.Wrapf(err, "unable to load metadata from %s", path)
 	}
 
 	if encoded, err = bencode.Marshal(info); err != nil {
@@ -247,5 +251,6 @@ func NewMagnet(md Metadata) metainfo.Magnet {
 	return metainfo.Magnet{
 		DisplayName: md.DisplayName,
 		InfoHash:    md.ID,
+		Trackers:    md.Trackers,
 	}
 }

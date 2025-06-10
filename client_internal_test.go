@@ -12,10 +12,10 @@ import (
 
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/utp"
-	"github.com/bradfitz/iter"
 	"github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/connections"
 	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/dht/krpc"
 	"github.com/james-lawrence/torrent/internal/langx"
 	"github.com/james-lawrence/torrent/internal/testutil"
 	"github.com/james-lawrence/torrent/internal/testx"
@@ -36,10 +36,11 @@ func TestingConfig(t tt, options ...ClientConfigOption) *ClientConfig {
 	return NewDefaultClientConfig(
 		metadatafilestore{root: rdir},
 		storage.NewFile(rdir),
+		ClientConfigPeerID(krpc.RandomID().String()),
 		ClientConfigBootstrapGlobal,
 		ClientConfigDHTEnabled(false),
 		ClientConfigPortForward(false),
-		// ClientConfigDebugLogger(log.New(os.Stderr, "[debug] ", log.Flags())),
+		ClientConfigDebugLogger(log.New(os.Stderr, "[debug] ", log.Flags())),
 		// ClientConfigDebugLogger(log.Default()),
 		ClientConfigCompose(options...),
 	)
@@ -215,7 +216,7 @@ func TestPeerInvalidHave(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, _added)
 	defer cl.Stop(ts)
-	cn := newConnection(nil, true, netip.AddrPort{})
+	cn := newConnection(cl.config, nil, true, netip.AddrPort{})
 	cn.t = tt.(*torrent)
 	assert.NoError(t, cn.peerSentHave(0))
 	assert.Error(t, cn.peerSentHave(1))
@@ -238,7 +239,7 @@ func TestClientDynamicListenPortAllProtocols(t *testing.T) {
 func TestSetMaxEstablishedConn(t *testing.T) {
 	var tts []Torrent
 	mi := testutil.GreetingMetaInfo()
-	for i := range iter.N(3) {
+	for i := range 3 {
 		cfg := TestingConfig(t, ClientConfigSeed(true))
 		cfg.dropDuplicatePeerIds = true
 		cfg.Handshaker = connections.NewHandshaker(
@@ -266,6 +267,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 	waitTotalConns := func(num int) {
 		for tot := totalConns(tts); tot != num; tot = totalConns(tts) {
 			addPeers()
+			log.Println("want", num, "have", tot)
 			time.Sleep(time.Millisecond)
 		}
 	}

@@ -11,7 +11,7 @@ import (
 	"net"
 	"net/netip"
 	"path/filepath"
-	stdsync "sync"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,8 +39,8 @@ type Client struct {
 	// 64-bit alignment of fields. See #262.
 	stats ConnStats
 
-	_mu    *stdsync.RWMutex
-	event  stdsync.Cond
+	_mu    *sync.RWMutex
+	event  sync.Cond
 	closed chan struct{}
 
 	config *ClientConfig
@@ -216,7 +216,7 @@ func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 		config:   cfg,
 		closed:   make(chan struct{}),
 		torrents: torrentCache(cfg.defaultMetadata),
-		_mu:      &stdsync.RWMutex{},
+		_mu:      &sync.RWMutex{},
 	}
 
 	defer func() {
@@ -958,7 +958,7 @@ func (cl *Client) unlock() {
 	// l2.Output(2, fmt.Sprintf("%p unlock completed - %d", cl, updated))
 }
 
-func (cl *Client) locker() stdsync.Locker {
+func (cl *Client) locker() sync.Locker {
 	return clientLocker{cl}
 }
 

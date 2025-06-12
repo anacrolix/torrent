@@ -772,7 +772,7 @@ func (t *torrent) setInfoBytes(b []byte) error {
 	}
 
 	if id := metainfo.NewHashFromBytes(b); id != t.md.ID {
-		return errorsx.Errorf("info bytes have wrong hash %d %s != %s", len(b), id.HexString(), t.md.ID.HexString())
+		return errorsx.Errorf("info bytes have wrong hash %d %s != %s", len(b), id.String(), t.md.ID.String())
 	}
 
 	if err := bencode.Unmarshal(b, &info); err != nil {
@@ -1519,7 +1519,7 @@ func (t *torrent) String() string {
 		return strconv.Quote(s)
 	}
 
-	return t.md.ID.HexString()
+	return t.md.ID.String()
 }
 
 func (t *torrent) ping(addr net.UDPAddr) {

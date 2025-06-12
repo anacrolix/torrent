@@ -50,7 +50,7 @@ func testEmptyFilesAndZeroPieceLength(t *testing.T, dir string, cfg *torrent.Cli
 	}, options...)
 	require.NoError(t, err)
 
-	fp := filepath.Join(dir, ts.ID.HexString())
+	fp := filepath.Join(dir, ts.ID.String())
 	assert.NoFileExists(t, fp)
 
 	tt, _, err := cl.Start(ts)

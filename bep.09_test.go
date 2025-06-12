@@ -36,7 +36,7 @@ func TestMetadataExtension(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, mds.Write(md))
-	require.NoError(t, testx.Touch(filepath.Join(seedingdir, md.ID.HexString())))
+	require.NoError(t, testx.Touch(filepath.Join(seedingdir, md.ID.String())))
 
 	// Create seeder and a Torrent.
 	cfg := torrent.TestingConfig(

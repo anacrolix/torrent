@@ -106,7 +106,7 @@ func (t *digests) check(idx int) {
 	}
 
 	if digest != p.Hash() {
-		t.complete(idx, fmt.Errorf("piece %d digest mismatch %s != %s", idx, hex.EncodeToString(digest[:]), p.Hash().HexString()))
+		t.complete(idx, fmt.Errorf("piece %d digest mismatch %s != %s", idx, hex.EncodeToString(digest[:]), p.Hash().String()))
 		return
 	}
 

@@ -38,7 +38,7 @@ func (m Magnet) String() string {
 	// implementation.
 	u := url.URL{
 		Scheme:   "magnet",
-		RawQuery: "xt=" + xtPrefix + m.InfoHash.HexString(),
+		RawQuery: "xt=" + xtPrefix + m.InfoHash.String(),
 	}
 	if len(vs) != 0 {
 		u.RawQuery += "&" + vs.Encode()

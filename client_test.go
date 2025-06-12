@@ -1028,7 +1028,7 @@ func testTransferRandomData(t *testing.T, datadir string, n int64, from, to *tor
 		torrent.OptionStorage(storage.NewFile(datadir, storage.FileOptionPathMakerFixed(filepath.Base(data.Name())))),
 	)
 	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Join(datadir, metadata.ID.HexString()), 0700))
+	require.NoError(t, os.MkdirAll(filepath.Join(datadir, metadata.ID.String()), 0700))
 
 	dl, added, err := from.Start(metadata, torrent.TuneVerifyFull)
 	require.NoError(t, err)

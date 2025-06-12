@@ -46,7 +46,7 @@ func TestTorrentRequest(t *testing.T) {
 
 func TestTorrentString(t *testing.T) {
 	tor := &torrent{}
-	s := tor.md.ID.HexString()
+	s := tor.md.ID.String()
 	if s != "0000000000000000000000000000000000000000" {
 		t.FailNow()
 	}

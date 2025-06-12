@@ -49,12 +49,12 @@ func fixedPathMaker(name string) FilePathMaker {
 
 func InfoHashPathMaker(baseDir string, infoHash metainfo.Hash, info *metainfo.Info, fi *metainfo.FileInfo) string {
 	// s := filepath.Join(baseDir, infoHash.HexString(), langx.DefaultIfZero(langx.DerefOrZero(info).Name, filepath.Join(langx.DerefOrZero(fi).Path...)))
-	s := filepath.Join(baseDir, infoHash.HexString(), filepath.Join(langx.DerefOrZero(fi).Path...))
+	s := filepath.Join(baseDir, infoHash.String(), filepath.Join(langx.DerefOrZero(fi).Path...))
 	return s
 }
 
 func infoHashPathMakerV0(baseDir string, infoHash metainfo.Hash, info *metainfo.Info, fi *metainfo.FileInfo) string {
-	return filepath.Join(baseDir, infoHash.HexString(), langx.DerefOrZero(info).Name, filepath.Join(langx.DerefOrZero(fi).Path...))
+	return filepath.Join(baseDir, infoHash.String(), langx.DerefOrZero(info).Name, filepath.Join(langx.DerefOrZero(fi).Path...))
 }
 
 // All Torrent data stored in this baseDir

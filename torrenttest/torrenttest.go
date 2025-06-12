@@ -35,7 +35,7 @@ func Random(dir string, n int64, options ...metainfo.Option) (info *metainfo.Inf
 
 	id := metainfo.NewHashFromBytes(encoded)
 
-	dstdir := filepath.Join(dir, id.HexString())
+	dstdir := filepath.Join(dir, id.String())
 	if err = os.MkdirAll(filepath.Dir(dstdir), 0700); err != nil {
 		return nil, nil, err
 	}
@@ -76,7 +76,7 @@ func RandomMulti(dir string, n int, min int64, max int64, options ...metainfo.Op
 
 	id := metainfo.NewHashFromBytes(encoded)
 
-	dstdir := filepath.Join(dir, id.HexString())
+	dstdir := filepath.Join(dir, id.String())
 	if err = os.Rename(root, dstdir); err != nil {
 		return nil, err
 	}

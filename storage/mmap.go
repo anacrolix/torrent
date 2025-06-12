@@ -27,7 +27,7 @@ func (s *mmapClientImpl) OpenTorrent(info *metainfo.Info, infoHash metainfo.Hash
 	if info == nil {
 		panic("can't open a storage for a nil torrent")
 	}
-	span, err := mMapTorrent(filepath.Join(s.baseDir, infoHash.HexString()), info)
+	span, err := mMapTorrent(filepath.Join(s.baseDir, infoHash.String()), info)
 	t = &mmapTorrentStorage{
 		info:     info,
 		infoHash: infoHash,

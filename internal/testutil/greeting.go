@@ -48,7 +48,7 @@ func GreetingMetaInfo() *metainfo.MetaInfo {
 // and a corresponding metainfo describing it.
 func GreetingTestTorrent(dir string) (metaInfo *metainfo.MetaInfo) {
 	info := GreetingMetaInfo()
-	dst := filepath.Join(dir, info.HashInfoBytes().HexString())
+	dst := filepath.Join(dir, info.HashInfoBytes().String())
 	CreateDummyTorrentData(dst)
 	return info
 }
@@ -72,7 +72,7 @@ func RandomDataTorrent(dir string, n int64, options ...metainfo.Option) (info *m
 
 	id := metainfo.NewHashFromBytes(encoded)
 
-	dstdir := filepath.Join(dir, id.HexString())
+	dstdir := filepath.Join(dir, id.String())
 	if err = os.MkdirAll(filepath.Dir(dstdir), 0700); err != nil {
 		return nil, nil, err
 	}

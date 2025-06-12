@@ -878,6 +878,10 @@ func (t *torrent) usualPieceSize() int {
 }
 
 func (t *torrent) numPieces() pieceIndex {
+	if !t.haveInfo() {
+		return -1
+	}
+
 	return pieceIndex(t.info.NumPieces())
 }
 

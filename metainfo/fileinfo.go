@@ -1,6 +1,14 @@
 package metainfo
 
-import "strings"
+import (
+	"strings"
+)
+
+type File struct {
+	Path   string
+	Offset uint64
+	Length uint64
+}
 
 // FileInfo information specific to a single file inside the MetaInfo structure.
 type FileInfo struct {

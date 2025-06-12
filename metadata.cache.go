@@ -148,7 +148,11 @@ func (t metadatafilestore) path(id int160.T) string {
 }
 
 func (t metadatafilestore) Read(id int160.T) (Metadata, error) {
-	return NewFromMetaInfoFile(t.path(id))
+	p := t.path(id)
+	if md, err := NewFromMetaInfoFile(p); err == nil {
+		return md, nil
+	}
+	return NewFromFile(p)
 }
 
 func (t metadatafilestore) Write(md Metadata) error {

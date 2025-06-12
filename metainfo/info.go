@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"os"
 	"path/filepath"
 	"strings"
@@ -253,4 +254,29 @@ func (t *readlength) Write(b []byte) (int, error) {
 	bn := len(b)
 	atomic.AddUint64((*uint64)(t), uint64(bn))
 	return bn, nil
+}
+
+func Files(info *Info) iter.Seq[File] {
+	return func(yield func(File) bool) {
+		if !info.IsDir() {
+			yield(File{
+				Path:   info.Name,
+				Offset: 0,
+				Length: uint64(info.TotalLength()),
+			})
+			return
+		}
+
+		for _, fd := range info.Files {
+			c := File{
+				Path:   fd.DisplayPath(info),
+				Offset: uint64(fd.Offset(info)),
+				Length: uint64(fd.Length),
+			}
+
+			if !yield(c) {
+				return
+			}
+		}
+	}
 }

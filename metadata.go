@@ -1,7 +1,9 @@
 package torrent
 
 import (
+	"io"
 	"math/rand/v2"
+	"os"
 	"time"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -131,16 +133,27 @@ func New(info metainfo.Hash, options ...Option) (t Metadata, err error) {
 
 // NewFromMetaInfoFile loads torrent metadata stored in a file.
 func NewFromMetaInfoFile(path string, options ...Option) (t Metadata, err error) {
+	src, err := os.Open(path)
+	if err != nil {
+		return t, errorsx.Wrapf(err, "unable to load metadata from %s", path)
+	}
+	defer src.Close()
+
+	t, err = NewFromMetaInfoReader(src)
+	return t, errorsx.Wrapf(err, "unable to load metadata from %s", path)
+}
+
+func NewFromMetaInfoReader(src io.Reader, options ...Option) (t Metadata, err error) {
 	var (
 		mi *metainfo.MetaInfo
 	)
 
-	if mi, err = metainfo.LoadFromFile(path); err != nil {
-		return t, errorsx.Wrapf(err, "unable to load metadata from %s", path)
+	if mi, err = metainfo.Load(src); err != nil {
+		return t, errorsx.Wrap(err, "unable to load metadata")
 	}
 
 	if t, err = NewFromMetaInfo(mi, options...); err != nil {
-		return t, errorsx.Wrapf(err, "unable to load metadata from %s", path)
+		return t, errorsx.Wrapf(err, "unable to load metadata")
 	}
 
 	return t, nil

@@ -48,7 +48,7 @@ func fixedPathMaker(name string) FilePathMaker {
 }
 
 func InfoHashPathMaker(baseDir string, infoHash metainfo.Hash, info *metainfo.Info, fi *metainfo.FileInfo) string {
-	// s := filepath.Join(baseDir, infoHash.HexString(), langx.DefaultIfZero(langx.DerefOrZero(info).Name, filepath.Join(langx.DerefOrZero(fi).Path...)))
+	// s := filepath.Join(baseDir, infoHash.String(), langx.DefaultIfZero(langx.DerefOrZero(info).Name, filepath.Join(langx.DerefOrZero(fi).Path...)))
 	s := filepath.Join(baseDir, infoHash.String(), filepath.Join(langx.DerefOrZero(fi).Path...))
 	return s
 }

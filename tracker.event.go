@@ -108,12 +108,12 @@ func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool, o
 			log.Println("announce failed", t.info == nil, err)
 		}
 
-		// log.Println("announce sleeping for maximum delay", t.Metadata().ID.HexString(), delay)
+		// log.Println("announce sleeping for maximum delay", t.Metadata().ID.String(), delay)
 		time.Sleep(delay)
 		delay = mindelay
 
 		if donefn() {
-			// log.Println("announce completed", t.Metadata().ID.HexString())
+			// log.Println("announce completed", t.Metadata().ID.String())
 			return
 		}
 	}

@@ -210,6 +210,10 @@ func ClientConfigPortForward(b bool) ClientConfigOption {
 	}
 }
 
+func ClientConfigDisableDynamicIP(cc *ClientConfig) {
+	cc.dynamicip = nil
+}
+
 func ClientConfigDynamicIP(fn func(ctx context.Context, c *Client) (iter.Seq[netip.AddrPort], error)) ClientConfigOption {
 	return func(cc *ClientConfig) {
 		cc.dynamicip = fn

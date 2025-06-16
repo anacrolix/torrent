@@ -3067,6 +3067,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	}
 	ws.peer.logger = t.logger.WithContextValue(&ws).WithNames("webseed")
 	ws.peer.slogger = t.slogger().With("webseed", url)
+	ws.client.Logger = ws.peer.slogger
 	// TODO: Abstract out a common struct initializer for this...
 	ws.peer.legacyPeerImpl = &ws
 	ws.peer.peerImpl = &ws

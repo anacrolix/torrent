@@ -1074,7 +1074,7 @@ func (t *torrent) maybeCompleteMetadata() error {
 		return fmt.Errorf("error setting info bytes: %s", err)
 	}
 
-	t.cln.config.debug().Printf("%s: got metadata from peers", t)
+	t.cln.config.debug().Printf("%s: received metadata from peers", t)
 
 	return nil
 }

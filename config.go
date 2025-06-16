@@ -1,10 +1,13 @@
 package torrent
 
 import (
+	"context"
 	"io"
+	"iter"
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"time"
 
@@ -30,7 +33,9 @@ type ClientConfig struct {
 	defaultMetadata MetadataStore
 
 	defaultPortForwarding bool
-	UpnpID                string
+	dynamicip             func(ctx context.Context, c *Client) (iter.Seq[netip.AddrPort], error)
+
+	UpnpID string
 
 	DisablePEX bool `long:"disable-pex"`
 
@@ -197,7 +202,17 @@ func ClientConfigDHTEnabled(b bool) ClientConfigOption {
 
 func ClientConfigPortForward(b bool) ClientConfigOption {
 	return func(cc *ClientConfig) {
-		cc.defaultPortForwarding = b
+		if b {
+			cc.dynamicip = UPnPDynamicIP
+		} else {
+			cc.dynamicip = nil
+		}
+	}
+}
+
+func ClientConfigDynamicIP(fn func(ctx context.Context, c *Client) (iter.Seq[netip.AddrPort], error)) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		cc.dynamicip = fn
 	}
 }
 

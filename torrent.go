@@ -146,6 +146,7 @@ func TuneReadAnnounce(v *tracker.Announce) Tuner {
 func TuneClientPeer(cl *Client) Tuner {
 	return func(t *torrent) {
 		ps := []Peer{}
+		log.Println("WAAAT", len(cl.ListenAddrs()))
 		for _, la := range cl.ListenAddrs() {
 			ps = append(ps, Peer{
 				IP:      langx.Must(netx.NetIP(la)),
@@ -222,7 +223,7 @@ func TuneAnnounceUntilComplete(t *torrent) {
 
 // Verify the entirety of the torrent. will block
 func TuneVerifyFull(t *torrent) {
-	for i := 0; i < t.numPieces(); i++ {
+	for i := uint64(0); i < t.chunks.pieces; i++ {
 		t.digests.Enqueue(i)
 	}
 
@@ -234,7 +235,7 @@ func TuneVerifyFull(t *torrent) {
 
 // Verify the contents asynchronously
 func TuneVerifyAsync(t *torrent) {
-	for i := 0; i < t.numPieces(); i++ {
+	for i := uint64(0); i < t.chunks.pieces; i++ {
 		t.digests.Enqueue(i)
 	}
 
@@ -252,7 +253,7 @@ func TuneUnverified(t *torrent) {
 }
 
 func TuneSeeding(t *torrent) {
-	for i := 0; i < t.numPieces(); i++ {
+	for i := uint64(0); i < t.chunks.pieces; i++ {
 		t.chunks.Complete(i)
 	}
 }
@@ -623,22 +624,6 @@ func (t *torrent) setChunkSize(size int) {
 	}
 }
 
-func (t *torrent) pieceComplete(piece pieceIndex) bool {
-	if t.chunks == nil {
-		return false
-	}
-
-	if t.chunks.completed.IsEmpty() {
-		return false
-	}
-
-	return t.chunks.ChunksComplete(piece)
-}
-
-// func (t *torrent) pieceCompleteUncached(piece pieceIndex) storage.Completion {
-// 	return t.pieces[piece].Storage().Completion()
-// }
-
 // There's a connection to that address already.
 func (t *torrent) addrActive(addr string) bool {
 	t._halfOpenmu.RLock()
@@ -659,7 +644,7 @@ func (t *torrent) addrActive(addr string) bool {
 }
 
 func (t *torrent) unclosedConnsAsSlice() (ret []*connection) {
-	return t.conns.filtered(func(c *connection) bool { return c.closed.IsSet() })
+	return t.conns.filtered(func(c *connection) bool { return c.closed.Load() })
 }
 
 func (t *torrent) AddPeer(p Peer) {
@@ -669,7 +654,6 @@ func (t *torrent) AddPeer(p Peer) {
 }
 
 func (t *torrent) addPeer(p Peer) {
-	peersAddedBySource.Add(string(p.Source), 1)
 	if t.closed.IsSet() {
 		log.Println("torrent.addPeer closed")
 		return
@@ -752,7 +736,7 @@ func (t *torrent) setInfo(info *metainfo.Info) (err error) {
 func (t *torrent) onSetInfo() {
 	// log.Println("set info initiated")
 	for _, conn := range t.conns.list() {
-		if err := conn.setNumPieces(t.numPieces()); err != nil {
+		if err := conn.setNumPieces(t.chunks.pieces); err != nil {
 			t.cln.config.info().Println(errorsx.Wrap(err, "closing connection"))
 			conn.Close()
 		}
@@ -877,14 +861,6 @@ func (t *torrent) usualPieceSize() int {
 	return int(t.info.PieceLength)
 }
 
-func (t *torrent) numPieces() pieceIndex {
-	if !t.haveInfo() {
-		return -1
-	}
-
-	return pieceIndex(t.info.NumPieces())
-}
-
 func (t *torrent) close() (err error) {
 	t.lock()
 	defer t.unlock()
@@ -930,13 +906,13 @@ func (t *torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
 	return err
 }
 
-func (t *torrent) pieceLength(piece pieceIndex) pp.Integer {
+func (t *torrent) pieceLength(piece uint64) pp.Integer {
 	if t.info.PieceLength == 0 {
 		// There will be no variance amongst pieces. Only pain.
 		return 0
 	}
 
-	if piece == t.numPieces()-1 {
+	if piece == t.chunks.pieces-1 {
 		ret := pp.Integer(t.info.TotalLength() % t.info.PieceLength)
 		if ret == 0 {
 			panic("invalid zero length for final piece")
@@ -947,20 +923,8 @@ func (t *torrent) pieceLength(piece pieceIndex) pp.Integer {
 	return pp.Integer(t.info.PieceLength)
 }
 
-func (t *torrent) haveAnyPieces() bool {
-	return t.chunks.completed.GetCardinality() != 0
-}
-
-func (t *torrent) haveAllPieces() bool {
-	if !t.haveInfo() {
-		return false
-	}
-
-	return int(t.chunks.completed.GetCardinality()) == t.numPieces()
-}
-
-func (t *torrent) havePiece(index pieceIndex) bool {
-	return t.haveInfo() && t.pieceComplete(index)
+func (t *torrent) havePiece(index uint64) bool {
+	return t.chunks.ChunksComplete(index)
 }
 
 // The worst connection is one that hasn't been sent, or sent anything useful
@@ -1029,7 +993,7 @@ func (t *torrent) openNewConns() {
 			return
 		}
 
-		// log.Println("initiating connection to peer", p.IP, p.Port)
+		// log.Printf("initiating connection to peer %p %x %s %d\n", t, p.ID, p.IP, p.Port)
 		t.initiateConn(context.Background(), p)
 	}
 }
@@ -1038,7 +1002,7 @@ func (t *torrent) getConnPieceInclination() []int {
 	_ret := t.connPieceInclinationPool.Get()
 	if _ret == nil {
 		pieceInclinationsNew.Add(1)
-		return rand.Perm(int(t.numPieces()))
+		return rand.Perm(int(t.chunks.pieces))
 	}
 	pieceInclinationsReused.Add(1)
 	return *_ret.(*[]int)
@@ -1189,6 +1153,7 @@ func (t *torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
 				continue
 			}
 
+			log.Println("adding peer", cp.AddrPort)
 			t.AddPeer(Peer{
 				IP:     cp.Addr().AsSlice(),
 				Port:   int(cp.Port()),
@@ -1523,14 +1488,14 @@ func (t *torrent) String() string {
 }
 
 func (t *torrent) ping(addr net.UDPAddr) {
-	t.cln.eachDhtServer(func(s *dht.Server) {
-		go func() {
-			ret := dht.Ping3S(context.Background(), s, dht.NewAddr(&addr), s.ID())
-			if errorsx.Ignore(ret.Err, context.DeadlineExceeded) != nil {
-				log.Println("failed to ping address", ret.Err)
-			}
-		}()
-	})
+	// t.cln.eachDhtServer(func(s *dht.Server) {
+	// 	go func() {
+	// 		ret := dht.Ping3S(context.Background(), s, dht.NewAddr(&addr), s.ID())
+	// 		if errorsx.Ignore(ret.Err, context.DeadlineExceeded) != nil {
+	// 			log.Println("failed to ping address", ret.Err)
+	// 		}
+	// 	}()
+	// })
 }
 
 // Process incoming ut_metadata message.

@@ -35,11 +35,9 @@ var (
 
 	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
 
-	receivedKeepalives = expvar.NewInt("receivedKeepalives")
-	postedKeepalives   = expvar.NewInt("postedKeepalives")
-	// Requests received for pieces we don't have.
-	requestsReceivedForMissingPieces = expvar.NewInt("requestsReceivedForMissingPieces")
-	requestedChunkLengths            = expvar.NewMap("requestedChunkLengths")
+	receivedKeepalives    = expvar.NewInt("receivedKeepalives")
+	postedKeepalives      = expvar.NewInt("postedKeepalives")
+	requestedChunkLengths = expvar.NewMap("requestedChunkLengths")
 
 	messageTypesReceived = expvar.NewMap("messageTypesReceived")
 

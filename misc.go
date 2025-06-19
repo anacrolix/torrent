@@ -139,6 +139,5 @@ func connIsIpv6(nc interface {
 }
 
 type (
-	pieceIndex = int
-	IpPort     = missinggo.IpPort
+	IpPort = missinggo.IpPort
 )

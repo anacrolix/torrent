@@ -8,14 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/metainfo"
-	"github.com/james-lawrence/torrent/storage"
 )
 
 // Ensure that no race exists between sending a bitfield, and a subsequent
@@ -40,7 +38,7 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	r, w := io.Pipe()
 	c.r = r
 	c.w = w
-	go c.writer(time.Minute)
+	go connwriterinit(t.Context(), c, time.Minute)
 	c.cmu().Lock()
 	c.t.chunks.completed.Add(1)
 	c.PostBitfield( /*[]bool{false, true, false}*/ )
@@ -50,10 +48,8 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	c.cmu().Unlock()
 	b := make([]byte, 15)
 	n, err := io.ReadFull(r, b)
-	c.cmu().Lock()
 	// This will cause connection.writer to terminate.
-	c.closed.Set()
-	c.cmu().Unlock()
+	c.closed.Store(true)
 	require.NoError(t, err)
 	require.EqualValues(t, 15, n)
 	// Here we see that the bitfield doesn't have piece 2 set, as that should
@@ -87,11 +83,8 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	}
 
 	ts := &torrentStorage{}
-	t := &torrent{
-		cln:               cl,
-		storage:           storage.NewTorrent(ts),
-		pieceStateChanges: pubsub.NewPubSub(),
-	}
+	t := newTorrent(cl, Metadata{ChunkSize: defaultChunkSize})
+	t.storage = ts
 	require.NoError(b, t.setInfo(&metainfo.Info{
 		Pieces:      make([]byte, 20),
 		Length:      1 << 20,
@@ -110,7 +103,7 @@ func BenchmarkConnectionMainReadLoop(b *testing.B) {
 	}
 	go func() {
 		cl.lock()
-		err := cn.mainReadLoop()
+		err := cn.mainReadLoop(b.Context())
 		if err != nil {
 			mrlErr <- err
 		}

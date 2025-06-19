@@ -276,7 +276,7 @@ func TestChunksVariousCLength(t *testing.T) {
 
 func TestRangeVariousCLength(t *testing.T) {
 	testrange := func(min, max uint64, c *chunks, pid int) {
-		cid0, cidn := c.Range(pid)
+		cid0, cidn := c.Range(uint64(pid))
 		assert.Equal(t, cid0, min)
 		assert.Equal(t, cidn, max)
 	}

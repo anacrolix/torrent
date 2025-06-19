@@ -56,8 +56,8 @@ func (f *File) bytesCompleted() int64 {
 
 func (f *File) bytesLeft() (left int64) {
 	pieceSize := int64(f.t.usualPieceSize())
-	firstPieceIndex := f.firstPieceIndex()
-	endPieceIndex := f.endPieceIndex() - 1
+	firstPieceIndex := int(f.firstPieceIndex())
+	endPieceIndex := int(f.endPieceIndex()) - 1
 
 	dup := bitmap.Bitmap{RB: f.t.chunks.completed.Clone()}
 	bitmap.Flip(dup, firstPieceIndex+1, endPieceIndex).IterTyped(func(piece int) bool {
@@ -69,10 +69,12 @@ func (f *File) bytesLeft() (left int64) {
 		}
 		return true
 	})
-	if !f.t.pieceComplete(firstPieceIndex) {
+
+	if !f.t.chunks.ChunksComplete(uint64(firstPieceIndex)) {
 		left += pieceSize - (f.offset % pieceSize)
 	}
-	if !f.t.pieceComplete(endPieceIndex) {
+
+	if !f.t.chunks.ChunksComplete(uint64(endPieceIndex)) {
 		left += (f.offset + f.length) % pieceSize
 	}
 	return
@@ -107,17 +109,17 @@ func (f *File) NewReader() Reader {
 }
 
 // Returns the index of the first piece containing data for the file.
-func (f *File) firstPieceIndex() pieceIndex {
+func (f *File) firstPieceIndex() uint64 {
 	if f.t.usualPieceSize() == 0 {
 		return 0
 	}
-	return pieceIndex(f.offset / int64(f.t.usualPieceSize()))
+	return uint64(f.offset / int64(f.t.usualPieceSize()))
 }
 
 // Returns the index of the piece after the last one containing data for the file.
-func (f *File) endPieceIndex() pieceIndex {
+func (f *File) endPieceIndex() uint64 {
 	if f.t.usualPieceSize() == 0 {
 		return 0
 	}
-	return pieceIndex((f.offset + f.length + int64(f.t.usualPieceSize()) - 1) / int64(f.t.usualPieceSize()))
+	return uint64((f.offset + f.length + int64(f.t.usualPieceSize()) - 1) / int64(f.t.usualPieceSize()))
 }

@@ -19,7 +19,7 @@ func newDigestsFromTorrent(t *torrent) digests {
 		t.piece,
 		func(idx int, cause error) {
 			// log.Printf("hashed %p %d / %d - %v", t.chunks, idx+1, t.numPieces(), cause)
-			t.chunks.Hashed(idx, cause)
+			t.chunks.Hashed(uint64(idx), cause)
 
 			t.event.Broadcast()
 			t.cln.event.Broadcast() // cause the client to detect completed torrents.
@@ -56,8 +56,8 @@ type digests struct {
 }
 
 // Enqueue a piece to check its completed digest.
-func (t *digests) Enqueue(idx int) {
-	t.pending.Push(idx)
+func (t *digests) Enqueue(idx uint64) {
+	t.pending.Push(int(idx))
 	t.verify()
 }
 

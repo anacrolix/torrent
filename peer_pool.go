@@ -26,7 +26,7 @@ func (me prioritizedPeer) Less(than btree.Item) bool {
 func newPeerPool(n int, prio func(Peer) peerPriority) peerPool {
 	return peerPool{
 		m:       &sync.Mutex{},
-		om:      btree.New(32),
+		om:      btree.New(n),
 		getPrio: prio,
 	}
 }

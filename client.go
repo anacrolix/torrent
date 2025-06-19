@@ -578,7 +578,7 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr netip
 			c.conn,
 			connections.BannedConnectionError(
 				c.conn,
-				errorsx.Errorf("detected connection to self - banning %s vs %s - %s", int160.FromByteArray(c.PeerID), int160.FromByteArray(cl.peerID), c.conn.RemoteAddr().String()),
+				errorsx.Errorf("detected connection to self - %s vs %s - %s", int160.FromByteArray(c.PeerID), int160.FromByteArray(cl.peerID), c.conn.RemoteAddr().String()),
 			),
 		)
 		return
@@ -635,7 +635,7 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 		return errorsx.Wrap(err, "bittorrent protocol handshake failure")
 	}
 
-	cl.config.debug().Println("initiated outgoing connection", int160.FromByteArray(cl.peerID), "->", int160.FromByteArray(info.PeerID))
+	// cl.config.debug().Println("initiated outgoing connection", int160.FromByteArray(cl.peerID), "->", int160.FromByteArray(info.PeerID))
 
 	c.PeerExtensionBytes = ebits
 	c.PeerID = info.PeerID
@@ -673,7 +673,7 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 		return nil, errorsx.Wrap(err, "invalid handshake failed")
 	}
 
-	cl.config.debug().Println("received incoming connection", int160.FromByteArray(info.PeerID), "->", int160.FromByteArray(cl.peerID), c.remoteAddr)
+	// cl.config.debug().Println("received incoming connection", int160.FromByteArray(info.PeerID), "->", int160.FromByteArray(cl.peerID), c.remoteAddr)
 
 	c.PeerExtensionBytes = ebits
 	c.PeerID = info.PeerID
@@ -710,17 +710,29 @@ func (cl *Client) runHandshookConn(c *connection, t *torrent) {
 	c.r = deadlineReader{c.conn, c.r}
 	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
 
+	defer t.event.Broadcast()
+	defer t.dropConnection(c)
+
 	if err := t.addConnection(c); err != nil {
-		cl.config.debug().Println(errorsx.Wrap(err, "error adding connection"))
+		cl.config.errors().Println(errorsx.Wrap(err, "error adding connection"))
 		return
 	}
 
-	defer t.event.Broadcast()
-	defer t.dropConnection(c)
-	c.sendInitialMessages(cl, t)
-	go c.writer(10 * time.Second)
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
 
-	if err := c.mainReadLoop(); err != nil {
+	log.Printf("%p exchanging extensions\n", c)
+	if err := ConnExtensions(ctx, c); err != nil {
+		cl.config.errors().Println(errorsx.Wrap(err, "error sending configuring connection"))
+		return
+	}
+
+	go func() {
+		defer c.Close()
+		cancel(connwriterinit(ctx, c, 10*time.Second))
+	}()
+
+	if err := c.mainReadLoop(ctx); err != nil {
 		cl.config.Handshaker.Release(c.conn, err)
 		cl.config.debug().Println(errorsx.Wrap(err, "error during main read loop"))
 	}
@@ -740,14 +752,6 @@ func (cl *Client) haveDhtServer() (ret bool) {
 	return
 }
 
-// // Return a Torrent ready for insertion into a Client.
-// func (cl *Client) newTorrent(src Metadata) (t *torrent, _ error) {
-// 	t = newTorrent(cl, src)
-// 	cl.AddDHTNodes(t.md.DHTNodes)
-
-// 	return t, nil
-// }
-
 // Handle a file-like handle to some torrent data resource.
 type Handle interface {
 	io.Reader
@@ -755,51 +759,6 @@ type Handle interface {
 	io.Closer
 	io.ReaderAt
 }
-
-// func (cl *Client) allTorrentsCompleted() bool {
-// 	for _, t := range cl.torrents {
-// 		if !t.haveInfo() {
-// 			return false
-// 		}
-// 		if !t.haveAllPieces() {
-// 			return false
-// 		}
-// 	}
-// 	return true
-// }
-
-// // WaitAll returns true when all torrents are completely downloaded and false if the
-// // client is stopped before that.
-// func (cl *Client) WaitAll() bool {
-// 	cl.lock()
-// 	defer cl.unlock()
-
-// 	for !cl.allTorrentsCompleted() {
-// 		select {
-// 		case <-cl.closed:
-// 			return false
-// 		default:
-// 		}
-
-// 		cl.event.Wait()
-// 	}
-
-// 	return true
-// }
-
-// // Torrents returns handles to all the torrents loaded in the Client.
-// func (cl *Client) Torrents() []Torrent {
-// 	cl.lock()
-// 	defer cl.unlock()
-// 	return cl.torrentsAsSlice()
-// }
-
-// func (cl *Client) torrentsAsSlice() (ret []Torrent) {
-// 	for _, t := range cl.torrents {
-// 		ret = append(ret, t)
-// 	}
-// 	return
-// }
 
 // DhtServers returns the set of DHT servers.
 func (cl *Client) DhtServers() []*dht.Server {

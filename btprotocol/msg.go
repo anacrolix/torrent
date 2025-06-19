@@ -55,12 +55,14 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 	if !msg.Keepalive {
 		err = buf.WriteByte(byte(msg.Type))
 		if err != nil {
-			return
+			return nil, err
 		}
 		switch msg.Type {
 		case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
-		case Have:
-			err = binary.Write(buf, binary.BigEndian, msg.Index)
+		case Have, AllowedFast, Suggest:
+			if err = binary.Write(buf, binary.BigEndian, msg.Index); err != nil {
+				return nil, err
+			}
 		case Request, Cancel, Reject:
 			for _, i := range []Integer{msg.Index, msg.Begin, msg.Length} {
 				err = binary.Write(buf, binary.BigEndian, i)
@@ -115,4 +117,11 @@ func marshalBitfield(bf []bool) (b []byte) {
 		b[i/8] = c
 	}
 	return
+}
+
+func NewAllowedFast(piece uint32) Message {
+	return Message{
+		Type:  AllowedFast,
+		Index: Integer(piece),
+	}
 }

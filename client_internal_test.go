@@ -37,11 +37,11 @@ func TestingConfig(t tt, options ...ClientConfigOption) *ClientConfig {
 		metadatafilestore{root: rdir},
 		storage.NewFile(rdir),
 		ClientConfigPeerID(krpc.RandomID().String()),
-		ClientConfigBootstrapGlobal,
+		// ClientConfigBootstrapGlobal,
 		ClientConfigDHTEnabled(false),
 		ClientConfigPortForward(false),
+		ClientConfigInfoLogger(log.New(os.Stderr, "[info] ", log.Flags())),
 		ClientConfigDebugLogger(log.New(os.Stderr, "[debug] ", log.Flags())),
-		// ClientConfigDebugLogger(log.Default()),
 		ClientConfigCompose(options...),
 	)
 }
@@ -97,10 +97,10 @@ func TestTorrentInitialState(t *testing.T) {
 	require.NoError(t, err)
 	tor := newTorrent(cl, tt)
 
-	require.Equal(t, 3, tor.numPieces())
+	require.Equal(t, uint64(3), tor.chunks.pieces)
 
 	require.NoError(t, Verify(ctx, tor))
-	require.Equal(t, 3, tor.numPieces())
+	require.Equal(t, uint64(3), tor.chunks.pieces)
 
 	stats := tor.Stats()
 

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"time"
 
+	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/connections"
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/dht/krpc"
@@ -36,8 +37,6 @@ type ClientConfig struct {
 	dynamicip             func(ctx context.Context, c *Client) (iter.Seq[netip.AddrPort], error)
 
 	UpnpID string
-
-	DisablePEX bool `long:"disable-pex"`
 
 	// Don't create a DHT.
 	NoDHT            bool `long:"disable-dht"`
@@ -135,6 +134,7 @@ type ClientConfig struct {
 	DHTMuxer        dht.Muxer
 
 	ConnectionClosed func(ih metainfo.Hash, stats ConnStats, remaining int)
+	extensions       map[pp.ExtensionName]pp.ExtensionNumber
 }
 
 func (cfg *ClientConfig) Storage() storage.ClientImpl {
@@ -355,7 +355,11 @@ func ClientConfigFirewall(fw connections.FirewallStateful) ClientConfigOption {
 
 func ClientConfigPEX(b bool) ClientConfigOption {
 	return func(cc *ClientConfig) {
-		cc.DisablePEX = !b
+		if b {
+			cc.extensions[pp.ExtensionNamePex] = pexExtendedID
+		} else {
+			delete(cc.extensions, pp.ExtensionNamePex)
+		}
 	}
 }
 
@@ -374,7 +378,7 @@ func NewDefaultClientConfig(mdstore MetadataStore, store storage.ClientImpl, opt
 		ExtendedHandshakeClientVersion: "go.torrent dev 20181121",
 		Bep20:                          "-GT0002-",
 		UpnpID:                         "james-lawrence/torrent",
-		maximumOutstandingRequests:     256,
+		maximumOutstandingRequests:     64,
 		NominalDialTimeout:             20 * time.Second,
 		MinDialTimeout:                 3 * time.Second,
 		HalfOpenConnsPerTorrent:        25,
@@ -404,6 +408,10 @@ func NewDefaultClientConfig(mdstore MetadataStore, store storage.ClientImpl, opt
 		Handshaker: connections.NewHandshaker(
 			connections.AutoFirewall(),
 		),
+		extensions: map[pp.ExtensionName]pp.ExtensionNumber{
+			pp.ExtensionNameMetadata: metadataExtendedID,
+			pp.ExtensionNamePex:      pexExtendedID,
+		},
 	}
 
 	for _, opt := range options {

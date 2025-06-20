@@ -65,7 +65,7 @@ func TuneReadPeerID(id *int160.T) Tuner {
 	return func(t *torrent) {
 		t.rLock()
 		defer t.rUnlock()
-		*id = int160.FromByteArray(t.cln.peerID)
+		*id = t.cln.peerID
 	}
 }
 
@@ -596,7 +596,7 @@ func (t *torrent) KnownSwarm() (ks []Peer) {
 	// Add active peers to the list
 	for _, conn := range t.conns.list() {
 		ks = append(ks, Peer{
-			ID:     conn.PeerID,
+			ID:     conn.PeerID.AsByteArray(),
 			IP:     conn.remoteAddr.Addr().AsSlice(),
 			Port:   int(conn.remoteAddr.Port()),
 			Source: conn.Discovery,
@@ -1367,7 +1367,7 @@ func (t *torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 // Start the process of connecting to the given peer for the given torrent if
 // appropriate.
 func (t *torrent) initiateConn(ctx context.Context, peer Peer) {
-	if peer.ID == t.cln.peerID {
+	if t.cln.peerID.Cmp(int160.FromByteArray(peer.ID)) == 0 {
 		return
 	}
 

@@ -3,7 +3,6 @@ package torrent
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
 	"fmt"
 	"io"
 	"io/fs"
@@ -45,7 +44,7 @@ type Client struct {
 
 	config *ClientConfig
 
-	peerID     PeerID
+	peerID     int160.T
 	onClose    []func()
 	conns      []socket
 	dhtServers []*dht.Server
@@ -149,7 +148,7 @@ func (cl *Client) Stop(t Metadata) (err error) {
 }
 
 // PeerID ...
-func (cl *Client) PeerID() PeerID {
+func (cl *Client) PeerID() int160.T {
 	return cl.peerID
 }
 
@@ -228,8 +227,7 @@ func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 	cl.extensionBytes = defaultPeerExtensionBytes()
 	cl.event.L = cl.locker()
 
-	o := copy(cl.peerID[:], stringsx.Default(cfg.PeerID, cfg.Bep20))
-	if _, err = rand.Read(cl.peerID[o:]); err != nil {
+	if cl.peerID, err = int160.RandomPrefixed(stringsx.Default(cfg.PeerID, cfg.Bep20)); err != nil {
 		return nil, errorsx.Wrap(err, "error generating peer id")
 	}
 
@@ -578,7 +576,7 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr netip
 			c.conn,
 			connections.BannedConnectionError(
 				c.conn,
-				errorsx.Errorf("detected connection to self - %s vs %s - %s", int160.FromByteArray(c.PeerID), int160.FromByteArray(cl.peerID), c.conn.RemoteAddr().String()),
+				errorsx.Errorf("detected connection to self - %s vs %s - %s", c.PeerID, cl.peerID, c.conn.RemoteAddr().String()),
 			),
 		)
 		return
@@ -627,7 +625,7 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 	c.setRW(rw)
 
 	ebits, info, err := pp.Handshake{
-		PeerID: cl.peerID,
+		PeerID: cl.peerID.AsByteArray(),
 		Bits:   cl.extensionBytes,
 	}.Outgoing(c.rw(), t.md.ID)
 
@@ -638,7 +636,7 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 	// cl.config.debug().Println("initiated outgoing connection", int160.FromByteArray(cl.peerID), "->", int160.FromByteArray(info.PeerID))
 
 	c.PeerExtensionBytes = ebits
-	c.PeerID = info.PeerID
+	c.PeerID = int160.FromByteArray(info.PeerID)
 	c.completedHandshake = time.Now()
 
 	return nil
@@ -665,7 +663,7 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	}
 
 	ebits, info, err := pp.Handshake{
-		PeerID: cl.peerID,
+		PeerID: cl.peerID.AsByteArray(),
 		Bits:   cl.extensionBytes,
 	}.Incoming(buffered)
 
@@ -676,7 +674,7 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	// cl.config.debug().Println("received incoming connection", int160.FromByteArray(info.PeerID), "->", int160.FromByteArray(cl.peerID), c.remoteAddr)
 
 	c.PeerExtensionBytes = ebits
-	c.PeerID = info.PeerID
+	c.PeerID = int160.FromByteArray(info.PeerID)
 	c.completedHandshake = time.Now()
 
 	t, _, err = cl.torrents.Load(cl, int160.FromByteArray(info.Hash))
@@ -792,7 +790,7 @@ func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr netip.Add
 		r: c.r,
 	}
 	cl.config.debug().Printf("initialized with remote %v (outgoing=%t)\n", remoteAddr, outgoing)
-	return
+	return c
 }
 
 func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portOk bool) {

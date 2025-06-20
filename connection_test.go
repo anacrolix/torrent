@@ -8,18 +8,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/anacrolix/utp"
 	"github.com/bradfitz/iter"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
 	pp "github.com/james-lawrence/torrent/btprotocol"
+	"github.com/james-lawrence/torrent/dht/int160"
+	"github.com/james-lawrence/torrent/internal/netx"
+	"github.com/james-lawrence/torrent/internal/testx"
 	"github.com/james-lawrence/torrent/metainfo"
 )
 
 // Ensure that no race exists between sending a bitfield, and a subsequent
 // Have that would potentially alter it.
 func TestSendBitfieldThenHave(t *testing.T) {
-	t.SkipNow()
+	// t.SkipNow()
 	cl := &Client{
 		config: TestingConfig(t),
 	}
@@ -55,6 +59,45 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	// Here we see that the bitfield doesn't have piece 2 set, as that should
 	// arrive in the following Have message.
 	require.EqualValues(t, "\x00\x00\x00\x02\x05@\x00\x00\x00\x05\x04\x00\x00\x00\x02", string(b))
+}
+
+func TestProtocolSequences(t *testing.T) {
+	t.Run("Plaintext allowed fast sequence", func(t *testing.T) {
+		var (
+			__pconn chan net.Conn = make(chan net.Conn, 1)
+			_perr   error
+		)
+
+		l, err := utp.Listen(":0")
+		require.NoError(t, err)
+		cfgs := TestingConfig(t)
+		cfgl := TestingConfig(t)
+
+		go func() {
+			var (
+				___pconn net.Conn
+			)
+			___pconn, _perr = utp.DialContext(t.Context(), l.Addr().String())
+			__pconn <- ___pconn
+		}()
+
+		c, err := l.Accept()
+		require.NoError(t, err)
+		_pconn := <-__pconn
+		require.NoError(t, _perr)
+		require.NotNil(t, _pconn)
+
+		pconn := newConnection(cfgl, _pconn, true, testx.Must(netx.AddrPort(_pconn.RemoteAddr()))(t))
+		pconn.PeerExtensionBytes = pp.NewExtensionBits(pp.ExtensionBitDHT, pp.ExtensionBitExtended, pp.ExtensionBitFast)
+		pconn.PeerID = int160.Random()
+		pconn.completedHandshake = time.Now()
+		require.NotNil(t, pconn)
+		sconn := newConnection(cfgs, c, false, testx.Must(netx.AddrPort(_pconn.LocalAddr()))(t))
+		sconn.PeerExtensionBytes = pp.NewExtensionBits(pp.ExtensionBitDHT, pp.ExtensionBitExtended, pp.ExtensionBitFast)
+		sconn.PeerID = int160.Random()
+		sconn.completedHandshake = time.Now()
+		require.NotNil(t, sconn)
+	})
 }
 
 type torrentStorage struct {

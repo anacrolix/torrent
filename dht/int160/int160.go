@@ -1,12 +1,32 @@
 package int160
 
 import (
+	"bytes"
 	"crypto/rand"
+	"crypto/sha1"
 	"encoding/hex"
 	"io"
 	"math"
 	"math/big"
+
+	"github.com/james-lawrence/torrent/internal/errorsx"
 )
+
+func New[Y string | []byte](b Y) (ret T) {
+	v := sha1.Sum([]byte(b))
+	copy(ret.bits[:], v[:])
+	return
+}
+
+func RandomPrefixed(b string) (ret T, err error) {
+	var buf [20]byte
+	o := copy(buf[:], b)
+	if _, err = rand.Read(buf[o:]); err != nil {
+		return ret, errorsx.Wrap(err, "error generating int160")
+	}
+
+	return FromByteArray(buf), nil
+}
 
 func Random() (id T) {
 	n, err := rand.Read(id.bits[:])
@@ -28,15 +48,15 @@ func (me T) String() string {
 	return hex.EncodeToString(me.bits[:])
 }
 
-func (me *T) AsByteArray() [20]byte {
+func (me T) AsByteArray() [20]byte {
 	return me.bits
 }
 
-func (me *T) ByteString() string {
+func (me T) ByteString() string {
 	return string(me.bits[:])
 }
 
-func (me *T) BitLen() int {
+func (me T) BitLen() int {
 	var a big.Int
 	a.SetBytes(me.bits[:])
 	return a.BitLen()
@@ -67,14 +87,7 @@ func (me T) Bytes() []byte {
 }
 
 func (l T) Cmp(r T) int {
-	for i := range l.bits {
-		if l.bits[i] < r.bits[i] {
-			return -1
-		} else if l.bits[i] > r.bits[i] {
-			return 1
-		}
-	}
-	return 0
+	return bytes.Compare(l.bits[:], r.bits[:])
 }
 
 func (me *T) SetMax() {

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/james-lawrence/torrent/connections"
+	"github.com/james-lawrence/torrent/dht/int160"
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo/v2/prioritybitmap"
@@ -124,7 +125,7 @@ type connection struct {
 	sentHaves        *roaring.Bitmap
 
 	// Stuff controlled by the remote peer.
-	PeerID                PeerID
+	PeerID                int160.T
 	PeerInterested        bool
 	PeerChoked            bool
 	PeerRequests          map[request]struct{}
@@ -190,7 +191,7 @@ func (cn *connection) ipv6() bool {
 // Returns true the dialer has the lower client peer ID. TODO: Find the
 // specification for this.
 func (cn *connection) isPreferredDirection() bool {
-	return bytes.Compare(cn.t.cln.peerID[:], cn.PeerID[:]) < 0 == cn.outgoing
+	return cn.t.cln.peerID.Cmp(cn.PeerID) < 0 == cn.outgoing
 }
 
 // Returns whether the left connection should be preferred over the right one,
@@ -512,109 +513,6 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 		cn.requestsLowWater = len(cn.requests) / 2
 	}
 }
-
-// Routine that writes to the peer. Some of what to write is buffered by
-// activity elsewhere in the Client, and some is determined locally when the
-// connection is writable.
-// func (cn *connection) writer(keepAliveTimeout time.Duration) {
-// 	cn.t.cln.config.info().Printf("c(%p) writer initiated\n", cn)
-// 	defer cn.t.cln.config.info().Printf("c(%p) writer completed\n", cn)
-// 	defer cn.checkFailures()
-// 	defer cn.deleteAllRequests()
-
-// 	var (
-// 		lastWrite      time.Time = time.Now()
-// 		keepAliveTimer *time.Timer
-// 	)
-
-// 	keepAliveTimer = time.AfterFunc(time.Second, func() {
-// 		if time.Since(lastWrite) >= keepAliveTimeout {
-// 			cn.updateRequests()
-// 		}
-// 		keepAliveTimer.Reset(keepAliveTimeout)
-// 	})
-
-// 	defer keepAliveTimer.Stop()
-
-// 	writer := func(msg pp.Message) bool {
-// 		cn.writeBuffer.Write(msg.MustMarshalBinary())
-// 		cn.wroteMsg(&msg)
-// 		return cn.writeBuffer.Len() < 64*bytesx.KiB
-// 	}
-
-// 	for attempts := 0; ; attempts++ {
-// 		cn.periodicUpdates()
-
-// 		if cn.closed.Load() {
-// 			return
-// 		}
-
-// 		if !cn.lastMessageReceived.IsZero() && time.Since(cn.lastMessageReceived) > 2*keepAliveTimeout {
-// 			select {
-// 			case cn.drop <- fmt.Errorf("killing connection %s %v %v", cn.remoteAddr.String(), time.Since(cn.lastMessageReceived), cn.lastMessageReceived):
-// 				cn.Close()
-// 			default:
-// 			}
-// 			return
-// 		}
-
-// 		if cn.writeBuffer.Len() == 0 {
-// 			cn.checkFailures()
-// 			cn.fillWriteBuffer(writer)
-// 			cn.upload(writer)
-// 		}
-
-// 		if cn.writeBuffer.Len() == 0 && time.Since(lastWrite) >= keepAliveTimeout {
-// 			cn.writeBuffer.Write(pp.Message{Keepalive: true}.MustMarshalBinary())
-// 			postedKeepalives.Add(1)
-// 		}
-
-// 		// TODO: Minimize wakeups....
-// 		if cn.writeBuffer.Len() == 0 {
-// 			// let the loop spin for a couple iterations when there is nothing to write.
-// 			// this helps prevent some stalls should be able to remove later.
-// 			if attempts < 50 {
-// 				time.Sleep(50 * time.Millisecond)
-// 				continue
-// 			}
-
-// 			cn.cmu().Lock()
-// 			// l2.Printf("c(%p) writer going to sleep: %d\n", cn, cn.writeBuffer.Len())
-// 			cn.writerCond.Wait()
-
-// 			// log.Printf("(%d) c(%p) - writer awake: pending(%d) - remaining(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, len(cn.requests), cn.t.chunks.missing.Len(), cn.t.piecesM.failed.GetCardinality(), len(cn.t.piecesM.outstanding), cn.t.piecesM.unverified.Len(), cn.t.piecesM.completed.Len())
-// 			cn.cmu().Unlock()
-// 			continue
-// 		}
-
-// 		// reset the attempts
-// 		attempts = 0
-
-// 		// l2.Printf("(%d) c(%p) - WRITING: attempt(%d) - remaining(%d) - unverified(%d) - failed(%d) - outstanding(%d) - completed(%d)\n", os.Getpid(), cn, attempts, cn.t.piecesM.Missing(), cn.t.piecesM.unverified.Len(), cn.t.piecesM.failed.GetCardinality(), len(cn.requests), cn.t.piecesM.completed.Len())
-
-// 		cn.cmu().Lock()
-// 		buf := cn.writeBuffer.Bytes()
-// 		cn.writeBuffer.Reset()
-// 		n, err := cn.w.Write(buf)
-// 		cn.cmu().Unlock()
-
-// 		if n != 0 {
-// 			lastWrite = time.Now()
-// 			keepAliveTimer.Reset(keepAliveTimeout)
-// 		}
-
-// 		if err != nil {
-// 			// cn.t.logger.Printf("c(%p) error writing requests: %v", cn, err)
-// 			return
-// 		}
-
-// 		if n != len(buf) {
-// 			cn.t.cln.config.errors().Printf("error: write failed written != len(buf) (%d != %d)\n", n, len(buf))
-// 			cn.Close()
-// 			return
-// 		}
-// 	}
-// }
 
 // connections check their own failures, this amortizes the cost of failures to
 // the connections themselves instead of bottlenecking at the torrent.

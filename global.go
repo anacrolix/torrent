@@ -31,12 +31,9 @@ func defaultPeerExtensionBytes() PeerExtensionBits {
 var (
 	metrics = expvar.NewMap("torrent")
 
-	peersAddedBySource = expvar.NewMap("peersAddedBySource")
-
 	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
 
 	receivedKeepalives    = expvar.NewInt("receivedKeepalives")
-	postedKeepalives      = expvar.NewInt("postedKeepalives")
 	requestedChunkLengths = expvar.NewMap("requestedChunkLengths")
 
 	messageTypesReceived = expvar.NewMap("messageTypesReceived")

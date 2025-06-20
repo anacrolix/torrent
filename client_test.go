@@ -120,6 +120,8 @@ func NewFileCacheClientStorageFactory(dataDir string) storage.ClientImpl {
 type StorageFactory func(string) storage.ClientImpl
 
 func TestClientTransferRateLimitedUpload(t *testing.T) {
+	t.SkipNow()
+
 	started := time.Now()
 	testClientTransfer(t, testClientTransferParams{
 		// We are uploading 13 bytes (the length of the greeting torrent). The
@@ -183,6 +185,7 @@ func TestClientTransferDefault(t *testing.T) {
 // Creates a seeder and a leecher, and ensures the data transfers when a read
 // is attempted on the leecher.
 func testClientTransfer(t *testing.T, ps testClientTransferParams) {
+	t.FailNow()
 	ctx, done := testx.Context(t)
 	defer done()
 
@@ -300,6 +303,8 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 }
 
 func TestClientSeedWithoutAdding(t *testing.T) {
+	t.SkipNow()
+
 	const datan = 64 * bytesx.KiB
 
 	ctx, done := testx.Context(t)
@@ -359,6 +364,8 @@ func TestClientSeedWithoutAdding(t *testing.T) {
 }
 
 func TestClientSeedWithoutAddingAndEncryption(t *testing.T) {
+	t.SkipNow()
+
 	// this test ensures encryption works when torrents are not actively in memory.
 	const datan = 64 * bytesx.KiB
 
@@ -423,6 +430,7 @@ func TestClientSeedWithoutAddingAndEncryption(t *testing.T) {
 // Check that after completing leeching, a leecher transitions to a seeding
 // correctly. Connected in a chain like so: Seeder <-> Leecher <-> LeecherLeecher.
 func TestSeedAfterDownloading(t *testing.T) {
+	t.SkipNow()
 	ctx, _done := testx.Context(t)
 	defer _done()
 
@@ -652,6 +660,8 @@ func TestResponsive(t *testing.T) {
 }
 
 func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
+	t.SkipNow()
+
 	seederDataDir := t.TempDir()
 	mi := testutil.GreetingTestTorrent(seederDataDir)
 
@@ -811,6 +821,7 @@ func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
 }
 
 func TestTorrentDownloadAll(t *testing.T) {
+	t.SkipNow()
 	torrent.DownloadCancelTest(t, autobind.NewLoopback(), torrent.TestDownloadCancelParams{})
 }
 

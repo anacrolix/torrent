@@ -7,11 +7,20 @@ import (
 	"io"
 	"sync"
 
+	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 )
 
+func NewDecoder(i io.Reader, p *sync.Pool) *Decoder {
+	return &Decoder{
+		R:         bufio.NewReaderSize(i, 128*bytesx.KiB),
+		MaxLength: 256 * bytesx.KiB,
+		Pool:      p,
+	}
+}
+
 type Decoder struct {
-	R         *bufio.Reader
+	R         io.Reader
 	Pool      *sync.Pool
 	MaxLength Integer // TODO: Should this include the length header or not?
 }
@@ -19,12 +28,15 @@ type Decoder struct {
 // io.EOF is returned if the source terminates cleanly on a message boundary.
 // TODO: Is that before or after the message?
 func (d *Decoder) Decode(msg *Message) (err error) {
+	// defer log.Println("decode checkpoint")
+	// defer func() {
+	// 	log.Println("decode completed", err)
+	// }()
 	var length Integer
 	err = binary.Read(d.R, binary.BigEndian, &length)
 	if err == io.EOF {
 		return err
 	}
-
 	if err != nil {
 		return errorsx.Wrap(err, "error reading message length:")
 	}
@@ -39,6 +51,7 @@ func (d *Decoder) Decode(msg *Message) (err error) {
 	}
 
 	msg.Keepalive = false
+
 	r := &io.LimitedReader{R: d.R, N: int64(length)}
 	// Check that all of r was utilized.
 	defer func() {

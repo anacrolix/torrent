@@ -1,6 +1,11 @@
 package torrent
 
 import (
+	"bytes"
+	"context"
+	"crypto/md5"
+	"encoding"
+	"hash"
 	"io"
 	"net"
 	"net/netip"
@@ -15,9 +20,13 @@ import (
 
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/dht/int160"
+	"github.com/james-lawrence/torrent/internal/bytesx"
+	"github.com/james-lawrence/torrent/internal/cryptox"
+	"github.com/james-lawrence/torrent/internal/md5x"
 	"github.com/james-lawrence/torrent/internal/netx"
 	"github.com/james-lawrence/torrent/internal/testx"
 	"github.com/james-lawrence/torrent/metainfo"
+	"github.com/james-lawrence/torrent/torrenttest"
 )
 
 // Ensure that no race exists between sending a bitfield, and a subsequent
@@ -43,13 +52,10 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	c.r = r
 	c.w = w
 	go connwriterinit(t.Context(), c, time.Minute)
-	c.cmu().Lock()
+
 	c.t.chunks.completed.Add(1)
 	c.PostBitfield( /*[]bool{false, true, false}*/ )
-	c.cmu().Unlock()
-	c.cmu().Lock()
 	c.Have(2)
-	c.cmu().Unlock()
 	b := make([]byte, 15)
 	n, err := io.ReadFull(r, b)
 	// This will cause connection.writer to terminate.
@@ -61,8 +67,10 @@ func TestSendBitfieldThenHave(t *testing.T) {
 	require.EqualValues(t, "\x00\x00\x00\x02\x05@\x00\x00\x00\x05\x04\x00\x00\x00\x02", string(b))
 }
 
-func TestProtocolSequences(t *testing.T) {
-	t.Run("Plaintext allowed fast sequence", func(t *testing.T) {
+func TestProtocolSequencesDownloading(t *testing.T) {
+	const iolimit int64 = 128 * bytesx.KiB
+
+	genconnection := func(t *testing.T, seed string, n uint64, pbits, sbits pp.ExtensionBits) (p *connection, s *connection, _ hash.Hash, _ Metadata) {
 		var (
 			__pconn chan net.Conn = make(chan net.Conn, 1)
 			_perr   error
@@ -70,8 +78,17 @@ func TestProtocolSequences(t *testing.T) {
 
 		l, err := utp.Listen(":0")
 		require.NoError(t, err)
-		cfgs := TestingConfig(t)
+		cfgs := TestingConfig(t, ClientConfigSeed(true))
+		sclient, err := NewClient(cfgs)
+		require.NoError(t, err)
+
 		cfgl := TestingConfig(t)
+		pclient, err := NewClient(cfgl)
+		require.NoError(t, err)
+		info, _md5, err := torrenttest.Seeded(t.TempDir(), n, cryptox.NewChaCha8(seed))
+		require.NoError(t, err)
+		meta, err := NewFromInfo(info)
+		require.NoError(t, err)
 
 		go func() {
 			var (
@@ -87,16 +104,237 @@ func TestProtocolSequences(t *testing.T) {
 		require.NoError(t, _perr)
 		require.NotNil(t, _pconn)
 
-		pconn := newConnection(cfgl, _pconn, true, testx.Must(netx.AddrPort(_pconn.RemoteAddr()))(t))
-		pconn.PeerExtensionBytes = pp.NewExtensionBits(pp.ExtensionBitDHT, pp.ExtensionBitExtended, pp.ExtensionBitFast)
+		snetip := testx.Must(netx.AddrPort(_pconn.RemoteAddr()))(t)
+		pnetip := testx.Must(netx.AddrPort(_pconn.LocalAddr()))(t)
+
+		pconn := newConnection(cfgl, _pconn, true, snetip, &pbits, pnetip.Port(), 0)
+		pconn.PeerExtensionBytes = sbits
 		pconn.PeerID = int160.Random()
 		pconn.completedHandshake = time.Now()
-		require.NotNil(t, pconn)
-		sconn := newConnection(cfgs, c, false, testx.Must(netx.AddrPort(_pconn.LocalAddr()))(t))
-		sconn.PeerExtensionBytes = pp.NewExtensionBits(pp.ExtensionBitDHT, pp.ExtensionBitExtended, pp.ExtensionBitFast)
+		pconn.t = newTorrent(pclient, meta)
+		pconn.t.chunks.fill(pconn.t.chunks.missing)
+
+		sconn := newConnection(cfgs, c, false, pnetip, &sbits, snetip.Port(), 0)
+		sconn.PeerExtensionBytes = pbits
 		sconn.PeerID = int160.Random()
 		sconn.completedHandshake = time.Now()
+		sconn.t = newTorrent(sclient, meta)
+		sconn.t.chunks.fill(sconn.t.chunks.completed)
+		require.True(t, sconn.t.seeding(), "seeding should be enabled")
+
+		return pconn, sconn, _md5, meta
+	}
+
+	t.Run("plaintext vanilla sequence", func(t *testing.T) {
+		pconn, sconn, expected, meta := genconnection(
+			t,
+			t.Name(),
+			uint64(iolimit),
+			pp.NewExtensionBits(pp.ExtensionBitExtended),
+			pp.NewExtensionBits(pp.ExtensionBitExtended),
+		)
+		_ = meta
+
+		require.NotNil(t, pconn)
 		require.NotNil(t, sconn)
+		n, err := pp.Write(pconn.writeBuffer)
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+
+		ctx, cancel := context.WithCancelCause(t.Context())
+		defer cancel(nil)
+		go func() {
+			pt := pconn.t
+			pconn.t = nil
+			cancel(RunHandshookConn(pconn, pt))
+		}()
+
+		d := pp.NewDecoder(sconn.conn, sconn.t.chunkPool)
+		deliver := func(dst *connection, msg ...encoding.BinaryMarshaler) (int, error) {
+			n1, err := pp.Write(dst.writeBuffer, msg...)
+			if err != nil {
+				return n1, err
+			}
+			n2, err := dst.Flush()
+			require.Equal(t, n1, n2)
+			return n2, err
+		}
+
+		// after sending bit field should receive:
+		// extend payload.
+		msg, err := sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Extended, msg.Type)
+		require.Equal(t, 138, len(msg.ExtendedPayload))
+
+		msg, err = sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Bitfield, msg.Type)
+
+		msg, err = sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Port, msg.Type)
+
+		require.NoError(t, ConnExtensions(ctx, sconn))
+		require.Equal(t, 0, sconn.writeBuffer.Len())
+
+		n, err = deliver(sconn, pp.NewInterested(false), pp.NewUnchoked())
+		require.NoError(t, err)
+		require.Equal(t, 10, n)
+
+		msg, err = sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Extended, msg.Type)
+
+		msg, err = sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Unchoke, msg.Type)
+
+		msg, err = sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Interested, msg.Type)
+
+		var (
+			buf      bytes.Buffer
+			regenned = md5.New()
+		)
+
+		n0, err := io.Copy(io.MultiWriter(&buf, regenned), io.LimitReader(cryptox.NewChaCha8(t.Name()), iolimit))
+		require.NoError(t, err)
+		require.Equal(t, iolimit, n0)
+		require.Equal(t, md5x.FormatHex(expected), md5x.FormatHex(regenned))
+		c := bytes.NewReader(buf.Bytes())
+		for range 8 {
+			msg, err = sconn.ReadOne(ctx, d)
+			require.NoError(t, err)
+			torrenttest.RequireMessageType(t, pp.Request, msg.Type)
+
+			p := sconn.t.piece(msg.Index.Int())
+			chunk, err := io.ReadAll(io.NewSectionReader(c, p.Offset()+int64(msg.Begin), int64(msg.Length)))
+			require.NoError(t, err)
+
+			_, err = deliver(sconn, pp.NewPiece(msg.Index, msg.Begin, chunk))
+			require.NoError(t, err)
+			require.Equal(t, msg.Length.Int(), len(chunk)) // message overhead
+		}
+
+		msg, err = sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Choke, msg.Type)
+
+		pconn.Close()
+
+		_, err = sconn.ReadOne(ctx, d)
+		require.ErrorIs(t, err, io.EOF)
+	})
+
+	t.Run("plaintext fastex enabled sequence", func(t *testing.T) {
+		pconn, sconn, expected, meta := genconnection(
+			t,
+			t.Name(),
+			uint64(iolimit),
+			pp.NewExtensionBits(pp.ExtensionBitExtended, pp.ExtensionBitFast),
+			pp.NewExtensionBits(pp.ExtensionBitExtended, pp.ExtensionBitFast),
+		)
+		_ = meta
+		require.Equal(t, md5x.FormatHex(expected), "d02c34adaba8570757dcd8efa9333cfe")
+		require.NotNil(t, pconn)
+		require.NotNil(t, sconn)
+		n, err := pp.Write(pconn.writeBuffer)
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+
+		ctx, cancel := context.WithCancelCause(t.Context())
+		defer cancel(nil)
+		go func() {
+			pt := pconn.t
+			pconn.t = nil
+			cancel(RunHandshookConn(pconn, pt))
+		}()
+
+		d := pp.NewDecoder(sconn.conn, sconn.t.chunkPool)
+		deliver := func(dst *connection, msg ...encoding.BinaryMarshaler) (int, error) {
+
+			pending := dst.writeBuffer.Len()
+			dst.cmu().Lock()
+			n1, err := pp.Write(dst.writeBuffer, msg...)
+			dst.cmu().Unlock()
+
+			if err != nil {
+				return n1, err
+			}
+			n2, err := dst.Flush()
+			require.Equal(t, pending+n1, n2, "unexpected misalignment for write and flush pending(%d) + write(%d) != flush(%d)", pending, n1, n2)
+			return n2, err
+		}
+
+		// after sending bit field should receive:
+		// extend payload.
+		msg, err := sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Extended, msg.Type)
+		require.Equal(t, 138, len(msg.ExtendedPayload))
+
+		// --------------------------------------- allow fast extension ----------------------------------------------
+		msg, err = sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.HaveNone, msg.Type)
+		// --------------------------------------- allow fast extension ----------------------------------------------
+
+		msg, err = sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Port, msg.Type)
+		// --------------------------------------- allow vanilla messages completed ----------------------------------
+
+		require.NoError(t, ConnExtensions(ctx, sconn))
+		require.Equal(t, 0, sconn.writeBuffer.Len())
+
+		require.Equal(t, []uint32{0}, sconn.peerfastset.ToArray())
+		n, err = deliver(sconn, pp.NewInterested(false), pp.NewAllowedFast(0))
+		require.NoError(t, err)
+		require.Equal(t, 14, n)
+
+		msg, err = sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Extended, msg.Type)
+
+		var (
+			buf      bytes.Buffer
+			regenned = md5.New()
+		)
+
+		n0, err := io.Copy(io.MultiWriter(&buf, regenned), io.LimitReader(cryptox.NewChaCha8(t.Name()), iolimit))
+		require.NoError(t, err)
+		require.Equal(t, iolimit, n0)
+		require.Equal(t, md5x.FormatHex(expected), md5x.FormatHex(regenned))
+		c := bytes.NewReader(buf.Bytes())
+		for i := 0; i < 8; {
+			msg, err = sconn.ReadOne(ctx, d)
+			require.NoError(t, err)
+			if msg.Type != pp.Request {
+				continue
+			} else {
+				i++
+			}
+			torrenttest.RequireMessageType(t, pp.Request, msg.Type)
+
+			p := sconn.t.piece(msg.Index.Int())
+			chunk, err := io.ReadAll(io.NewSectionReader(c, p.Offset()+int64(msg.Begin), int64(msg.Length.Int64())))
+			require.NoError(t, err)
+
+			_, err = deliver(sconn, pp.NewPiece(msg.Index, msg.Begin, chunk))
+			require.NoError(t, err)
+			require.Equal(t, msg.Length.Int(), len(chunk)) // message overhead
+		}
+
+		msg, err = sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Choke, msg.Type)
+
+		pconn.Close()
+
+		_, err = sconn.ReadOne(ctx, d)
+		require.ErrorIs(t, err, io.EOF)
 	})
 }
 

@@ -11,16 +11,19 @@ import (
 	mrand "math/rand/v2"
 	"os"
 	"path/filepath"
+	"testing"
 
+	"github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/metainfo"
+	"github.com/stretchr/testify/require"
 )
 
-// RandomDataTorrent generates a torrent from random data.
-func Random(dir string, n int64, options ...metainfo.Option) (info *metainfo.Info, digested hash.Hash, err error) {
+// Seeded returns the same torrent every time for the given reader.
+func Seeded(dir string, n uint64, r io.Reader, options ...metainfo.Option) (info *metainfo.Info, digested hash.Hash, err error) {
 	digested = md5.New()
 
-	src, err := IOTorrent(dir, io.TeeReader(rand.Reader, digested), n)
+	src, err := IOTorrent(dir, io.TeeReader(r, digested), n)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -47,6 +50,11 @@ func Random(dir string, n int64, options ...metainfo.Option) (info *metainfo.Inf
 	return info, digested, nil
 }
 
+// Random generates a torrent from random data.
+func Random(dir string, n uint64, options ...metainfo.Option) (info *metainfo.Info, digested hash.Hash, err error) {
+	return Seeded(dir, n, rand.Reader, options...)
+}
+
 func RandomMulti(dir string, n int, min int64, max int64, options ...metainfo.Option) (info *metainfo.Info, err error) {
 	root, err := os.MkdirTemp(dir, "multi.torrent.*")
 	if err != nil {
@@ -54,7 +62,7 @@ func RandomMulti(dir string, n int, min int64, max int64, options ...metainfo.Op
 	}
 
 	addfile := func() error {
-		src, err := IOTorrent(root, rand.Reader, mrand.Int64N(max-min)+min)
+		src, err := IOTorrent(root, rand.Reader, uint64(mrand.Int64N(max-min)+min))
 		return errorsx.Compact(err, src.Close())
 	}
 
@@ -85,7 +93,7 @@ func RandomMulti(dir string, n int, min int64, max int64, options ...metainfo.Op
 }
 
 // RandomDataTorrent generates a torrent from the provided io.Reader
-func IOTorrent(dir string, src io.Reader, n int64) (d *os.File, err error) {
+func IOTorrent(dir string, src io.Reader, n uint64) (d *os.File, err error) {
 	if d, err = os.CreateTemp(dir, "random.torrent.*.bin"); err != nil {
 		return d, err
 	}
@@ -95,7 +103,7 @@ func IOTorrent(dir string, src io.Reader, n int64) (d *os.File, err error) {
 		}
 	}()
 
-	if _, err = io.CopyN(d, src, n); err != nil {
+	if _, err = io.CopyN(d, src, int64(n)); err != nil {
 		return d, err
 	}
 
@@ -104,4 +112,8 @@ func IOTorrent(dir string, src io.Reader, n int64) (d *os.File, err error) {
 	}
 
 	return d, nil
+}
+
+func RequireMessageType(t testing.TB, expected, actual btprotocol.MessageType) {
+	require.Equal(t, expected, actual, "expected %s received %s", expected, actual)
 }

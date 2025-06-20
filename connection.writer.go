@@ -3,7 +3,6 @@ package torrent
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync/atomic"
 	"time"
 
@@ -17,29 +16,75 @@ import (
 	"github.com/james-lawrence/torrent/internal/langx"
 )
 
+func RunHandshookConn(c *connection, t *torrent) error {
+	c.setTorrent(t)
+
+	c.conn.SetWriteDeadline(time.Time{})
+	c.r = deadlineReader{c.conn, c.r}
+	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
+
+	defer t.event.Broadcast()
+	defer t.dropConnection(c)
+
+	if err := t.addConnection(c); err != nil {
+		return errorsx.Wrap(err, "error adding connection")
+	}
+
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+
+	c.cfg.debug().Printf("%p exchanging extensions\n", c)
+
+	if err := ConnExtensions(ctx, c); err != nil {
+		return errorsx.Wrap(err, "error sending configuring connection")
+	}
+
+	go func() {
+		defer c.Close()
+		cancel(connwriterinit(ctx, c, 10*time.Second))
+	}()
+
+	if err := c.mainReadLoop(ctx); err != nil {
+		c.cfg.Handshaker.Release(c.conn, err)
+		return errorsx.Wrap(err, "error during main read loop")
+	}
+
+	return nil
+}
+
 // See the order given in Transmission's tr_peerMsgsNew.
 func ConnExtensions(ctx context.Context, cn *connection) error {
-	return cstate.Run(ctx, connexinit(cn, connexfast(cn, connexdht(cn, nil))))
+	return cstate.Run(ctx, connexinit(cn, connexfast(cn, connexdht(cn, connexport(cn, connflush(cn, nil))))))
+}
+
+func connflush(cn *connection, n cstate.T) cstate.T {
+	return cstate.Fn(func(context.Context, *cstate.Shared) cstate.T {
+		_, err := cn.Flush()
+		if err != nil {
+			return cstate.Failure(errorsx.Wrap(err, "failed to send requests"))
+		}
+		return n
+	})
 }
 
 func connexinit(cn *connection, n cstate.T) cstate.T {
 	return cstate.Fn(func(context.Context, *cstate.Shared) cstate.T {
-		if !(cn.PeerExtensionBytes.SupportsExtended() && cn.t.cln.extensionBytes.SupportsExtended()) {
+		if !cn.extensions.Supported(cn.PeerExtensionBytes, pp.ExtensionBitExtended) {
 			return n
 		}
 
+		// TODO: We can figured the port and address out specific to the socket
+		// used.
 		msg := pp.ExtendedHandshakeMessage{
-			M:            cn.t.cln.config.extensions,
-			V:            cn.t.cln.config.ExtendedHandshakeClientVersion,
-			Reqq:         cn.t.cln.config.maximumOutstandingRequests,
+			M:            cn.cfg.extensions,
+			V:            cn.cfg.ExtendedHandshakeClientVersion,
+			Reqq:         cn.cfg.maximumOutstandingRequests,
 			YourIp:       pp.CompactIp(cn.remoteAddr.Addr().AsSlice()),
-			Encryption:   cn.t.cln.config.HeaderObfuscationPolicy.Preferred || !cn.t.cln.config.HeaderObfuscationPolicy.RequirePreferred,
-			Port:         cn.t.cln.incomingPeerPort(),
-			MetadataSize: cn.t.metadataSize(),
-			// TODO: We can figured these out specific to the socket
-			// used.
-			Ipv4: pp.CompactIp(cn.t.cln.config.publicIP4.To4()),
-			Ipv6: cn.t.cln.config.publicIP6.To16(),
+			Encryption:   cn.cfg.HeaderObfuscationPolicy.Preferred || !cn.cfg.HeaderObfuscationPolicy.RequirePreferred,
+			Port:         cn.localport,
+			MetadataSize: langx.Autoptr(langx.DerefOrZero(cn.t)).metadataSize(),
+			Ipv4:         pp.CompactIp(cn.cfg.publicIP4.To4()),
+			Ipv6:         cn.cfg.publicIP6.To16(),
 		}
 
 		encoded, err := bencode.Marshal(msg)
@@ -47,11 +92,7 @@ func connexinit(cn *connection, n cstate.T) cstate.T {
 			return cstate.Failure(errorsx.Wrapf(err, "unable to encode message %T", msg))
 		}
 
-		_, err = cn.Post(pp.Message{
-			Type:            pp.Extended,
-			ExtendedID:      pp.HandshakeExtendedID,
-			ExtendedPayload: encoded,
-		})
+		_, err = cn.PostImmediate(pp.NewExtendedHandshake(encoded))
 
 		if err != nil {
 			return cstate.Failure(errorsx.Wrapf(err, "unable to encode message %T", msg))
@@ -63,14 +104,17 @@ func connexinit(cn *connection, n cstate.T) cstate.T {
 
 func connexfast(cn *connection, n cstate.T) cstate.T {
 	return cstate.Fn(func(context.Context, *cstate.Shared) cstate.T {
-		if _, err := cn.PostBitfield(); err != nil {
-			return cstate.Failure(err)
-		}
+		cn.peerfastset = errorsx.Zero(bep0006.AllowedFastSet(cn.remoteAddr.Addr(), cn.t.md.ID, cn.t.chunks.pieces, min(32, cn.t.chunks.pieces)))
 
-		if !cn.fastEnabled() {
+		if !cn.supported(pp.ExtensionBitFast) {
+			// log.Println("posting bitfield", cn.conn.LocalAddr())
+			if _, err := cn.PostBitfield(); err != nil {
+				return cstate.Failure(err)
+			}
 			return n
 		}
 
+		// log.Println("posting allow fast", cn.conn.LocalAddr())
 		switch cn.t.chunks.completed.GetCardinality() {
 		case 0:
 			if _, err := cn.Post(pp.Message{Type: pp.HaveNone}); err != nil {
@@ -82,14 +126,21 @@ func connexfast(cn *connection, n cstate.T) cstate.T {
 			if _, err := cn.Post(pp.Message{Type: pp.HaveAll}); err != nil {
 				return cstate.Failure(err)
 			}
+
 			cn.sentHaves.AddRange(0, cn.t.chunks.pieces)
-			fastset := errorsx.Must(bep0006.AllowedFastSet(cn.remoteAddr.Addr(), cn.t.md.ID, cn.t.chunks.pieces, min(32, cn.t.chunks.pieces)))
-			for _, v := range fastset.ToArray() {
-				if _, err := cn.Post(pp.NewAllowedFast(v)); err != nil {
+
+			for _, v := range cn.peerfastset.ToArray() {
+				if _, err := cn.PostImmediate(pp.NewAllowedFast(v)); err != nil {
 					return cstate.Failure(err)
 				}
 			}
+
 			return n
+		default:
+			// log.Println("posting bitfield", cn.conn.LocalAddr())
+			if _, err := cn.PostBitfield(); err != nil {
+				return cstate.Failure(err)
+			}
 		}
 
 		return n
@@ -98,17 +149,24 @@ func connexfast(cn *connection, n cstate.T) cstate.T {
 
 func connexdht(cn *connection, n cstate.T) cstate.T {
 	return cstate.Fn(func(context.Context, *cstate.Shared) cstate.T {
-		if !(cn.PeerExtensionBytes.SupportsDHT() && cn.t.cln.extensionBytes.SupportsDHT() && cn.t.cln.haveDhtServer()) {
+		if !(cn.extensions.Supported(cn.PeerExtensionBytes, pp.ExtensionBitDHT) && cn.dhtport > 0) {
+			cn.cfg.debug().Println("posting dht not supported")
 			return n
 		}
 
-		_, err := cn.Post(pp.Message{
-			Type: pp.Port,
-			Port: cn.t.cln.dhtPort(),
-		})
+		// TODO: figure out the format for the DHT extension.
+
+		return n
+	})
+}
+
+func connexport(cn *connection, n cstate.T) cstate.T {
+	return cstate.Fn(func(context.Context, *cstate.Shared) cstate.T {
+		_, err := cn.PostImmediate(pp.NewPort(uint16(cn.localport)))
 		if err != nil {
 			return cstate.Failure(err)
 		}
+
 		return n
 	})
 }
@@ -117,8 +175,8 @@ func connexdht(cn *connection, n cstate.T) cstate.T {
 // activity elsewhere in the Client, and some is determined locally when the
 // connection is writable.
 func connwriterinit(ctx context.Context, cn *connection, to time.Duration) error {
-	cn.t.cln.config.info().Printf("c(%p) writer initiated\n", cn)
-	defer cn.t.cln.config.info().Printf("c(%p) writer completed\n", cn)
+	cn.cfg.info().Printf("c(%p) writer initiated\n", cn)
+	defer cn.cfg.info().Printf("c(%p) writer completed\n", cn)
 	defer cn.checkFailures()
 	defer cn.deleteAllRequests()
 
@@ -155,8 +213,12 @@ type _connWriterClosed struct {
 	next cstate.T
 }
 
-func (t _connWriterClosed) Update(ctx context.Context, _ *cstate.Shared) cstate.T {
-	defer log.Printf("c(%p) seed(%t) check shutdown completed\n", t.connection, t.t.seeding())
+func (t _connWriterClosed) Update(ctx context.Context, _ *cstate.Shared) (r cstate.T) {
+	// defer log.Println("checkpoint")
+	// defer func() {
+	// 	log.Printf("c(%p) seed(%t) %T completed - %T\n", t.connection, t.t.seeding(), t, r)
+	// }()
+
 	ws := t.writerstate
 
 	// delete requests that were requested beyond the timeout.
@@ -175,7 +237,7 @@ func (t _connWriterClosed) Update(ctx context.Context, _ *cstate.Shared) cstate.
 
 	// if we're choked and not allowed to fast track any chunks then there is nothing
 	// to do.
-	if ws.PeerChoked && ws.fastset.IsEmpty() {
+	if ws.PeerChoked && ws.peerfastset.IsEmpty() {
 		return connwriteridle(ws)
 	}
 
@@ -195,9 +257,13 @@ type _connWriterSyncChunks struct {
 	*writerstate
 }
 
-func (t _connWriterSyncChunks) Update(ctx context.Context, _ *cstate.Shared) cstate.T {
+func (t _connWriterSyncChunks) Update(ctx context.Context, _ *cstate.Shared) (r cstate.T) {
+	// defer log.Println("checkpoint")
+	// defer func() {
+	// 	log.Printf("c(%p) seed(%t) %T completed - %T\n", t.connection, t.t.seeding(), t, r)
+	// }()
 	ws := t.writerstate
-	next := connwriterRequests(ws)
+	next := connWriterSyncComplete(ws)
 
 	if ws.resync.Load().After(time.Now()) {
 		return next
@@ -205,6 +271,7 @@ func (t _connWriterSyncChunks) Update(ctx context.Context, _ *cstate.Shared) cst
 
 	dup := ws.t.chunks.completed.Clone()
 	dup.AndNot(ws.sentHaves)
+
 	for i := dup.Iterator(); i.HasNext(); {
 		piece := i.Next()
 		ws.cmu().Lock()
@@ -214,13 +281,33 @@ func (t _connWriterSyncChunks) Update(ctx context.Context, _ *cstate.Shared) cst
 			continue
 		}
 
-		_, err := ws.Post(pp.Message{
-			Type:  pp.Have,
-			Index: pp.Integer(piece),
-		})
+		_, err := ws.Post(pp.NewHavePiece(uint64(piece)))
 		if err != nil {
 			return cstate.Failure(err)
 		}
+	}
+
+	return next
+}
+
+func connWriterSyncComplete(ws *writerstate) cstate.T {
+	return _connWriterSyncComplete{writerstate: ws}
+}
+
+type _connWriterSyncComplete struct {
+	*writerstate
+}
+
+func (t _connWriterSyncComplete) Update(ctx context.Context, _ *cstate.Shared) (r cstate.T) {
+	ws := t.writerstate
+	next := connwriterRequests(ws)
+
+	if ws.t.chunks.Incomplete() {
+		return next
+	}
+
+	if _, err := ws.Post(pp.NewChoked()); err != nil {
+		return cstate.Failure(err)
 	}
 
 	return next
@@ -234,16 +321,26 @@ type _connwriterRequests struct {
 	*writerstate
 }
 
-func (t _connwriterRequests) Update(ctx context.Context, _ *cstate.Shared) cstate.T {
+func (t _connwriterRequests) Update(ctx context.Context, _ *cstate.Shared) (r cstate.T) {
+	// defer log.Println("checkpoint")
+	// defer func() {
+	// 	log.Printf("c(%p) seed(%t) %T completed - %T\n", t.connection, t.t.seeding(), t, r)
+	// }()
+
 	ws := t.writerstate
 	writer := func(msg pp.Message) bool {
+		if _, err := ws.writeBuffer.Write(msg.MustMarshalBinary()); err != nil {
+			ws.cfg.errors().Println(err)
+			return false
+		}
+
 		ws.wroteMsg(&msg)
 		return ws.writeBuffer.Len() < ws.bufferLimit
 	}
 
 	ws.checkFailures()
-	ws.fillWriteBuffer(writer)
 	ws.upload(writer)
+	ws.fillWriteBuffer(writer)
 
 	if ws.writeBuffer.Len() > 0 || time.Since(ws.lastwrite) < ws.keepAliveTimeout {
 		return connwriterFlush(ws)
@@ -287,20 +384,10 @@ func (t _connwriterFlush) Update(ctx context.Context, _ *cstate.Shared) cstate.T
 	)
 
 	ws := t.writerstate
-	ws.cmu().Lock()
-	buf := ws.writeBuffer.Bytes()
-	ws.writeBuffer.Reset()
-	n, err := ws.w.Write(buf)
-	ws.cmu().Unlock()
-
-	defer log.Printf("--------------------------------------------------------- flush completed %s - %d ---------------------------------------------------------\n", ws, len(buf))
+	n, err := ws.Flush()
 
 	if err != nil {
 		return cstate.Failure(errorsx.Wrap(err, "failed to send requests"))
-	}
-
-	if n != len(buf) {
-		return cstate.Failure(errorsx.Errorf("write failed written != len(buf) (%d != %d)", n, len(buf)))
 	}
 
 	if n != 0 {

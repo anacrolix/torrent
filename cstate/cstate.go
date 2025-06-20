@@ -40,13 +40,13 @@ func (t idle) Update(ctx context.Context, c *Shared) T {
 	t.cond.Wait()
 	t.cond.L.Unlock()
 
-	log.Printf("idle awake %s\n", t)
+	log.Printf("%s - awake\n", t)
 
 	return t.next
 }
 
 func (t idle) String() string {
-	return fmt.Sprintf("idle upcoming %T - %s", t.next, t.next)
+	return fmt.Sprintf("%T - %s - idle", t.next, t.next)
 }
 
 func Idle(next T, cond *sync.Cond, t time.Duration) idle {

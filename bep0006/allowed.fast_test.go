@@ -47,7 +47,7 @@ func TestAllowedFastSetGeneration(t *testing.T) {
 		bitmap, err := bep0006.AllowedFastSet(ip1, infohash.AsByteArray(), 0, 5)
 		require.Error(t, err, "Expected an error when numPieces is zero")
 		require.Contains(t, err.Error(), "numPieces cannot be zero", "Error message mismatch")
-		require.Nil(t, bitmap, "Expected a nil bitmap on error")
+		require.True(t, bitmap.IsEmpty(), "Expected a nil bitmap on error")
 	})
 
 	t.Run("Error Case - k is zero", func(t *testing.T) {
@@ -64,7 +64,7 @@ func TestAllowedFastSetGeneration(t *testing.T) {
 		bitmap, err := bep0006.AllowedFastSet(ip2, infohash.AsByteArray(), 10, 15)
 		require.Error(t, err, "Expected an error when k is greater than numPieces")
 		require.Contains(t, err.Error(), "k cannot be greater than numPieces", "Error message mismatch")
-		require.Nil(t, bitmap, "Expected a nil bitmap on error")
+		require.True(t, bitmap.IsEmpty(), "Expected a nil bitmap on error")
 	})
 
 	t.Run("Different IP and InfoHash", func(t *testing.T) {

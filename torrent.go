@@ -65,7 +65,7 @@ func TuneReadPeerID(id *int160.T) Tuner {
 	return func(t *torrent) {
 		t.rLock()
 		defer t.rUnlock()
-		*id = t.cln.peerID
+		*id = t.cln.config.localID
 	}
 }
 
@@ -108,7 +108,7 @@ func TuneReadPort(v *int) Tuner {
 		t.rLock()
 		defer t.rUnlock()
 
-		*v = t.cln.incomingPeerPort()
+		*v = t.cln.LocalPort()
 	}
 }
 
@@ -146,7 +146,6 @@ func TuneReadAnnounce(v *tracker.Announce) Tuner {
 func TuneClientPeer(cl *Client) Tuner {
 	return func(t *torrent) {
 		ps := []Peer{}
-		log.Println("WAAAT", len(cl.ListenAddrs()))
 		for _, la := range cl.ListenAddrs() {
 			ps = append(ps, Peer{
 				IP:      langx.Must(netx.NetIP(la)),
@@ -711,6 +710,14 @@ func (t *torrent) metadataSize() int {
 	return len(t.metadataBytes)
 }
 
+func (t *torrent) localport(fallback int) int {
+	if t.cln == nil {
+		return fallback
+	}
+
+	return t.cln.LocalPort()
+}
+
 func (t *torrent) setInfo(info *metainfo.Info) (err error) {
 	if err := validateInfo(info); err != nil {
 		return fmt.Errorf("bad info: %s", err)
@@ -836,11 +843,7 @@ func (t *torrent) newMetadataExtensionMessage(c *connection, msgType int, piece 
 	}
 
 	p := append(bencode.MustMarshal(d), data...)
-	return pp.Message{
-		Type:            pp.Extended,
-		ExtendedID:      c.PeerExtensionIDs[pp.ExtensionNameMetadata],
-		ExtendedPayload: p,
-	}
+	return pp.NewExtended(c.PeerExtensionIDs[pp.ExtensionNameMetadata], p)
 }
 
 func (t *torrent) haveInfo() bool {
@@ -1167,7 +1170,7 @@ func (t *torrent) announceToDht(impliedPort bool, s *dht.Server) error {
 	ctx, done := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer done()
 
-	ps, err := s.AnnounceTraversal(ctx, t.md.ID, dht.AnnouncePeer(impliedPort, t.cln.incomingPeerPort()))
+	ps, err := s.AnnounceTraversal(ctx, t.md.ID, dht.AnnouncePeer(impliedPort, t.cln.LocalPort()))
 	if err != nil {
 		return err
 	}
@@ -1367,7 +1370,7 @@ func (t *torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 // Start the process of connecting to the given peer for the given torrent if
 // appropriate.
 func (t *torrent) initiateConn(ctx context.Context, peer Peer) {
-	if t.cln.peerID.Cmp(int160.FromByteArray(peer.ID)) == 0 {
+	if t.cln.config.localID.Cmp(int160.FromByteArray(peer.ID)) == 0 {
 		return
 	}
 

@@ -27,11 +27,11 @@ import (
 // allowed fast set, and an error if input validation fails.
 func AllowedFastSet(ip netip.Addr, infoHash [20]byte, numPieces uint64, k uint64) (*roaring.Bitmap, error) {
 	if numPieces == 0 {
-		return nil, errors.New("numPieces cannot be zero")
+		return roaring.NewBitmap(), errors.New("numPieces cannot be zero")
 	}
 
 	if k > numPieces {
-		return nil, errors.New("k cannot be greater than numPieces")
+		return roaring.NewBitmap(), errors.New("k cannot be greater than numPieces")
 	}
 
 	// Validate input parameters

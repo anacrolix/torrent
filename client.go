@@ -44,7 +44,7 @@ type Client struct {
 
 	config *ClientConfig
 
-	peerID     int160.T
+	// peerID     int160.T
 	onClose    []func()
 	conns      []socket
 	dhtServers []*dht.Server
@@ -149,14 +149,14 @@ func (cl *Client) Stop(t Metadata) (err error) {
 
 // PeerID ...
 func (cl *Client) PeerID() int160.T {
-	return cl.peerID
+	return cl.config.localID
 }
 
-// LocalPort returns the local port being listened on.
+// LocalPort2 returns the local port being listened on.
 // WARNING: this method can panic.
 // this is method is odd given a client can be attached to multiple ports on different
 // listeners.
-func (cl *Client) LocalPort() (port int) {
+func (cl *Client) LocalPort16() (port uint16) {
 	cl.eachListener(func(l socket) bool {
 		addr, err := netx.AddrPort(l.Addr())
 		if err != nil {
@@ -167,12 +167,16 @@ func (cl *Client) LocalPort() (port int) {
 			panic(l)
 		}
 		if port == 0 {
-			port = int(addr.Port())
+			port = addr.Port()
 		}
 		return true
 	})
 
 	return port
+}
+
+func (cl *Client) LocalPort() (port int) {
+	return int(cl.LocalPort16())
 }
 
 func writeDhtServerStatus(w io.Writer, s *dht.Server) {
@@ -227,7 +231,7 @@ func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 	cl.extensionBytes = defaultPeerExtensionBytes()
 	cl.event.L = cl.locker()
 
-	if cl.peerID, err = int160.RandomPrefixed(stringsx.Default(cfg.PeerID, cfg.Bep20)); err != nil {
+	if cfg.localID, err = int160.RandomPrefixed(stringsx.Default(cfg.PeerID, cfg.Bep20)); err != nil {
 		return nil, errorsx.Wrap(err, "error generating peer id")
 	}
 
@@ -571,28 +575,22 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr netip
 	// Since the remote address is almost never the same as the local bind address
 	// due to network topologies (NAT, LAN, WAN) we have to detect this situation
 	// from the origin of the connection and ban the address we connected to.
-	if c.PeerID == cl.peerID {
+	if c.PeerID == cl.config.localID {
 		cl.config.Handshaker.Release(
 			c.conn,
 			connections.BannedConnectionError(
 				c.conn,
-				errorsx.Errorf("detected connection to self - %s vs %s - %s", c.PeerID, cl.peerID, c.conn.RemoteAddr().String()),
+				errorsx.Errorf("detected connection to self - %s vs %s - %s", c.PeerID, cl.config.localID, c.conn.RemoteAddr().String()),
 			),
 		)
 		return
 	}
 
-	cl.runHandshookConn(c, t)
+	RunHandshookConn(c, t)
 
 	t.deleteConnection(c)
 	t.event.Broadcast()
 	cl.event.Broadcast()
-}
-
-// The port number for incoming peer connections. 0 if the client isn't
-// listening.
-func (cl *Client) incomingPeerPort() int {
-	return cl.LocalPort()
 }
 
 // Calls f with any secret keys.
@@ -625,7 +623,7 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 	c.setRW(rw)
 
 	ebits, info, err := pp.Handshake{
-		PeerID: cl.peerID.AsByteArray(),
+		PeerID: cl.config.localID.AsByteArray(),
 		Bits:   cl.extensionBytes,
 	}.Outgoing(c.rw(), t.md.ID)
 
@@ -633,7 +631,7 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 		return errorsx.Wrap(err, "bittorrent protocol handshake failure")
 	}
 
-	// cl.config.debug().Println("initiated outgoing connection", int160.FromByteArray(cl.peerID), "->", int160.FromByteArray(info.PeerID))
+	// cl.config.debug().Println("initiated outgoing connection", int160.FromByteArray(cl.config.localID), "->", int160.FromByteArray(info.PeerID))
 
 	c.PeerExtensionBytes = ebits
 	c.PeerID = int160.FromByteArray(info.PeerID)
@@ -663,7 +661,7 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 	}
 
 	ebits, info, err := pp.Handshake{
-		PeerID: cl.peerID.AsByteArray(),
+		PeerID: cl.config.localID.AsByteArray(),
 		Bits:   cl.extensionBytes,
 	}.Incoming(buffered)
 
@@ -671,7 +669,7 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 		return nil, errorsx.Wrap(err, "invalid handshake failed")
 	}
 
-	// cl.config.debug().Println("received incoming connection", int160.FromByteArray(info.PeerID), "->", int160.FromByteArray(cl.peerID), c.remoteAddr)
+	// cl.config.debug().Println("received incoming connection", int160.FromByteArray(info.PeerID), "->", int160.FromByteArray(cl.config.localID), c.remoteAddr)
 
 	c.PeerExtensionBytes = ebits
 	c.PeerID = int160.FromByteArray(info.PeerID)
@@ -698,47 +696,12 @@ func (cl *Client) runReceivedConn(c *connection) {
 		return
 	}
 
-	cl.runHandshookConn(c, t)
-}
-
-func (cl *Client) runHandshookConn(c *connection, t *torrent) {
-	c.setTorrent(t)
-
-	c.conn.SetWriteDeadline(time.Time{})
-	c.r = deadlineReader{c.conn, c.r}
-	completedHandshakeConnectionFlags.Add(c.connectionFlags(), 1)
-
-	defer t.event.Broadcast()
-	defer t.dropConnection(c)
-
-	if err := t.addConnection(c); err != nil {
-		cl.config.errors().Println(errorsx.Wrap(err, "error adding connection"))
-		return
-	}
-
-	ctx, cancel := context.WithCancelCause(context.Background())
-	defer cancel(nil)
-
-	log.Printf("%p exchanging extensions\n", c)
-	if err := ConnExtensions(ctx, c); err != nil {
-		cl.config.errors().Println(errorsx.Wrap(err, "error sending configuring connection"))
-		return
-	}
-
-	go func() {
-		defer c.Close()
-		cancel(connwriterinit(ctx, c, 10*time.Second))
-	}()
-
-	if err := c.mainReadLoop(ctx); err != nil {
-		cl.config.Handshaker.Release(c.conn, err)
-		cl.config.debug().Println(errorsx.Wrap(err, "error during main read loop"))
-	}
+	RunHandshookConn(c, t)
 }
 
 func (cl *Client) dhtPort() (ret uint16) {
 	cl.eachDhtServer(func(s *dht.Server) {
-		ret = uint16(missinggo.AddrPort(s.Addr()))
+		ret = uint16(errorsx.Zero(netx.NetPort(s.Addr())))
 	})
 	return
 }
@@ -783,7 +746,7 @@ func (cl *Client) AddDHTNodes(nodes []string) {
 }
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr netip.AddrPort) (c *connection) {
-	c = newConnection(cl.config, nc, outgoing, remoteAddr)
+	c = newConnection(cl.config, nc, outgoing, remoteAddr, &cl.extensionBytes, cl.LocalPort16(), cl.dhtPort())
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
 		l: cl.config.DownloadRateLimiter,
@@ -870,7 +833,7 @@ func (cl *Client) findListenerIP(f func(netip.Addr) bool) netip.Addr {
 func (cl *Client) publicAddr(peer netip.AddrPort) netip.AddrPort {
 	return netip.AddrPortFrom(
 		cl.publicIP(peer.Addr()),
-		uint16(cl.incomingPeerPort()),
+		uint16(cl.LocalPort()),
 	)
 }
 

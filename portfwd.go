@@ -51,7 +51,7 @@ func UPnPDynamicIP(ctx context.Context, c *Client) (iter.Seq[netip.AddrPort], er
 		ds := upnp.Discover(0, 2*time.Second, alog.Default.WithValues(c).WithValues("upnp-discover"))
 		c.config.debug().Printf("discovered %d upnp devices\n", len(ds))
 		c.lock()
-		port := c.incomingPeerPort()
+		port := c.LocalPort()
 		id := c.config.UpnpID
 		c.unlock()
 

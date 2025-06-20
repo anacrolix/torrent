@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+
+	"github.com/RoaringBitmap/roaring"
+	"github.com/james-lawrence/torrent/internal/x/bitmapx"
 )
 
 // This is a lazy union representing all the possible fields for messages. Go doesn't have ADTs, and
@@ -123,5 +126,84 @@ func NewAllowedFast(piece uint32) Message {
 	return Message{
 		Type:  AllowedFast,
 		Index: Integer(piece),
+	}
+}
+
+func NewExtendedHandshake(encoded []byte) Message {
+	return NewExtended(HandshakeExtendedID, encoded)
+}
+
+func NewExtended(id ExtensionNumber, encoded []byte) Message {
+	return Message{
+		Type:            Extended,
+		ExtendedID:      id,
+		ExtendedPayload: encoded,
+	}
+}
+
+func NewHaveNone() Message {
+	return Message{Type: HaveNone}
+}
+
+func NewHaveAll() Message {
+	return Message{Type: HaveAll}
+}
+
+func NewBitField(n uint64, b *roaring.Bitmap) Message {
+	return Message{
+		Type:     Bitfield,
+		Bitfield: bitmapx.Bools(int(n), b),
+	}
+}
+
+func NewInterested(b bool) Message {
+	i := NotInterested
+	if b {
+		i = Interested
+	}
+	return Message{
+		Type: i,
+	}
+}
+
+func NewChoked() Message {
+	return Message{
+		Type: Choke,
+	}
+}
+
+func NewUnchoked() Message {
+	return Message{
+		Type: Unchoke,
+	}
+}
+
+func NewPort(p uint16) Message {
+	return Message{
+		Type: Port,
+		Port: p,
+	}
+}
+
+func NewDHTPort(p uint16) Message {
+	return Message{
+		Type: Port,
+		Port: p,
+	}
+}
+
+func NewPiece(index Integer, begin Integer, bin []byte) Message {
+	return Message{
+		Type:  Piece,
+		Index: index,
+		Begin: begin,
+		Piece: bin,
+	}
+}
+
+func NewHavePiece(p uint64) Message {
+	return Message{
+		Type:  Have,
+		Index: Integer(p),
 	}
 }

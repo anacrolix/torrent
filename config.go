@@ -14,6 +14,7 @@ import (
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/connections"
 	"github.com/james-lawrence/torrent/dht"
+	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/dht/krpc"
 	"github.com/james-lawrence/torrent/internal/netx"
 	"github.com/james-lawrence/torrent/metainfo"
@@ -135,6 +136,7 @@ type ClientConfig struct {
 
 	ConnectionClosed func(ih metainfo.Hash, stats ConnStats, remaining int)
 	extensions       map[pp.ExtensionName]pp.ExtensionNumber
+	localID          int160.T
 }
 
 func (cfg *ClientConfig) Storage() storage.ClientImpl {

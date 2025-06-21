@@ -306,10 +306,17 @@ func (t _connWriterSyncComplete) Update(ctx context.Context, _ *cstate.Shared) (
 		return next
 	}
 
-	if _, err := ws.Post(pp.NewChoked()); err != nil {
-		return cstate.Failure(err)
+	writer := func(msg pp.Message) bool {
+		if _, err := ws.writeBuffer.Write(msg.MustMarshalBinary()); err != nil {
+			ws.cfg.errors().Println(err)
+			return false
+		}
+
+		ws.wroteMsg(&msg)
+		return ws.writeBuffer.Len() < ws.bufferLimit
 	}
 
+	ws.SetInterested(false, writer)
 	return next
 }
 
@@ -328,6 +335,7 @@ func (t _connwriterRequests) Update(ctx context.Context, _ *cstate.Shared) (r cs
 	// }()
 
 	ws := t.writerstate
+
 	writer := func(msg pp.Message) bool {
 		if _, err := ws.writeBuffer.Write(msg.MustMarshalBinary()); err != nil {
 			ws.cfg.errors().Println(err)
@@ -339,11 +347,15 @@ func (t _connwriterRequests) Update(ctx context.Context, _ *cstate.Shared) (r cs
 	}
 
 	ws.checkFailures()
+	available := ws.determineInterest(writer)
 	ws.upload(writer)
-	ws.fillWriteBuffer(writer)
+	ws.fillWriteBuffer(available, writer)
 
-	if ws.writeBuffer.Len() > 0 || time.Since(ws.lastwrite) < ws.keepAliveTimeout {
-		return connwriterFlush(ws)
+	if ws.writeBuffer.Len() > 0 || ws.needsresponse.CompareAndSwap(true, false) {
+		return connwriterFlush(
+			connwriteractive(ws),
+			ws,
+		)
 	}
 
 	return connwriterKeepalive(ws)
@@ -363,18 +375,24 @@ func (t _connwriterKeepalive) Update(ctx context.Context, _ *cstate.Shared) csta
 	)
 
 	ws := t.writerstate
+
+	if time.Since(ws.lastwrite) < ws.keepAliveTimeout {
+		return connwriterFlush(connwriteridle(ws), ws)
+	}
+
 	if err = bencode.NewEncoder(ws.writeBuffer).Encode(pp.Message{Keepalive: true}); err != nil {
 		return cstate.Failure(errorsx.Wrap(err, "keepalive encoding failed"))
 	}
 
-	return connwriterFlush(ws)
+	return connwriterFlush(connwriteridle(ws), ws)
 }
 
-func connwriterFlush(ws *writerstate) cstate.T {
-	return _connwriterFlush{writerstate: ws}
+func connwriterFlush(n cstate.T, ws *writerstate) cstate.T {
+	return _connwriterFlush{next: n, writerstate: ws}
 }
 
 type _connwriterFlush struct {
+	next cstate.T
 	*writerstate
 }
 
@@ -395,9 +413,13 @@ func (t _connwriterFlush) Update(ctx context.Context, _ *cstate.Shared) cstate.T
 		ws.resync.Store(langx.Autoptr(ws.lastwrite.Add(ws.keepAliveTimeout)))
 	}
 
-	return connwriteridle(ws)
+	return t.next
 }
 
 func connwriteridle(ws *writerstate) cstate.T {
-	return cstate.Idle(connwriterclosed(ws, connWriterSyncChunks(ws)), ws.connection.writerCond, ws.keepAliveTimeout/2)
+	return cstate.Idle(connwriteractive(ws), ws.keepAliveTimeout/2, ws.connection.respond, ws.connection.t.chunks.cond)
+}
+
+func connwriteractive(ws *writerstate) cstate.T {
+	return connwriterclosed(ws, connWriterSyncChunks(ws))
 }

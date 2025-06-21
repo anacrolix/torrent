@@ -16,7 +16,6 @@ import (
 )
 
 func TestMetadataExtension(t *testing.T) {
-	t.SkipNow()
 	// ensure a client with just the magnet link can bootstrap the info data
 	const datan = 32 * bytesx.MiB
 

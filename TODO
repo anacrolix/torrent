@@ -12,6 +12,5 @@ TestClientSeedWithoutAddingAndEncryption
 TestClientTransferRateLimitedUpload
 TestTorrentDownloadAll
 TestSeedAfterDownloading
-TestMetadataExtension
 TestClientTransferVarious
 testClientTransfer

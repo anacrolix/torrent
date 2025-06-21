@@ -4,6 +4,7 @@
 package torrenttest
 
 import (
+	"context"
 	"crypto/md5"
 	"crypto/rand"
 	"hash"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/internal/errorsx"
+	"github.com/james-lawrence/torrent/internal/slicesx"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/stretchr/testify/require"
 )
@@ -116,4 +118,32 @@ func IOTorrent(dir string, src io.Reader, n uint64) (d *os.File, err error) {
 
 func RequireMessageType(t testing.TB, expected, actual btprotocol.MessageType) {
 	require.Equal(t, expected, actual, "expected %s received %s", expected, actual)
+}
+
+func FilterMessageType(mt btprotocol.MessageType, msgs ...btprotocol.Message) []btprotocol.Message {
+	return slicesx.Filter(func(m btprotocol.Message) bool {
+		return m.Type == mt
+	}, msgs...)
+}
+
+func ReadUntil(t testing.TB, m btprotocol.MessageType, reader func() (btprotocol.Message, error)) (result []btprotocol.Message, _ error) {
+	ctx := t.Context()
+	for {
+		msg, err := reader()
+		if err != nil {
+			return result, err
+		}
+
+		result = append(result, msg)
+
+		if msg.Type == m {
+			return result, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return result, context.Cause(ctx)
+		default:
+		}
+	}
 }

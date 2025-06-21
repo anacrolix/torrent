@@ -162,13 +162,12 @@ func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
 	defer seeder.Close()
 	defer testutil.ExportStatusWriter(seeder, "s")()
 	tt, err := NewFromMetaInfo(mi)
-	// tt, err := NewFromMetaInfo(mi, OptionStorage(storage.NewFile(greetingTempDir)))
-	// tt, err := NewFromMetaInfo(mi, OptionStorage(storage.NewFile(cfg.DataDir)))
 	require.NoError(t, err)
 	seederTorrent, _, err := seeder.Start(tt)
 	require.NoError(t, err)
 	require.NoError(t, Verify(ctx, seederTorrent))
 
+	log.Println("DERP DERP 0")
 	leecherDataDir := t.TempDir()
 	defer os.RemoveAll(leecherDataDir)
 
@@ -178,6 +177,7 @@ func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
 	defer leecher.Close()
 	defer testutil.ExportStatusWriter(leecher, "l")()
 
+	log.Println("DERP DERP 1")
 	t2, err := NewFromMetaInfo(mi, OptionChunk(2), OptionStorage(storage.NewFile(leecherDataDir)))
 	require.NoError(t, err)
 	leecherGreeting, added, err := leecher.Start(t2)
@@ -190,13 +190,12 @@ func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
 	// 		require.NoError(t, leecher.Stop(t2))
 	// 	}()
 	// }
+
+	log.Println("DERP DERP 2")
 	_, err = DownloadInto(ctx, io.Discard, leecherGreeting, TuneClientPeer(seeder))
 	require.NoError(t, err)
-
-	// min, max := leecherGreeting.(*torrent).chunks.Range(0)
-	// log.Println("DERP DERP", min, max, leecherGreeting.(*torrent).chunks.missing.String(), leecherGreeting.(*torrent).chunks.completed.String())
-	// TODO: require.Equal(t, ps.Cancel, leecherGreeting.(*torrent).chunks.ChunksMissing(0))
 	require.Equal(t, false, leecherGreeting.(*torrent).chunks.ChunksMissing(0))
+	log.Println("DERP DERP 3")
 }
 
 // Ensure that it's an error for a peer to send an invalid have message.

@@ -35,9 +35,11 @@ func Contains(m *roaring.Bitmap, bits ...int) (b bool) {
 }
 
 // AndNot returns the combination of the two bitmaps without modifying
-func AndNot(l, r *roaring.Bitmap) (dup *roaring.Bitmap) {
+func AndNot(l *roaring.Bitmap, rs ...*roaring.Bitmap) (dup *roaring.Bitmap) {
 	dup = l.Clone()
-	dup.AndNot(r)
+	for _, r := range rs {
+		dup.AndNot(r)
+	}
 	return dup
 }
 

@@ -26,7 +26,6 @@ type Decoder struct {
 }
 
 // io.EOF is returned if the source terminates cleanly on a message boundary.
-// TODO: Is that before or after the message?
 func (d *Decoder) Decode(msg *Message) (err error) {
 	// defer log.Println("decode checkpoint")
 	// defer func() {

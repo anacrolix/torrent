@@ -16,15 +16,46 @@ type T interface {
 	Update(context.Context, *Shared) T
 }
 
+func Idle(next T, t time.Duration, cond *sync.Cond, signals ...*sync.Cond) idle {
+	return idle{
+		timeout: t,
+		next:    next,
+		cond:    cond,
+		signals: signals,
+	}
+}
+
 type idle struct {
 	timeout time.Duration
 	next    T
 	cond    *sync.Cond
+	signals []*sync.Cond
 }
 
-func (t idle) Update(ctx context.Context, c *Shared) T {
+func (t idle) monitor(ctx context.Context, target *sync.Cond, signals ...*sync.Cond) {
 	ctx, done := context.WithCancel(ctx)
+	defer func() {
+		for _, s := range signals {
+			s.Broadcast()
+		}
+	}()
 	defer done()
+
+	for _, s := range signals {
+		go func() {
+			for {
+				s.L.Lock()
+				s.Wait()
+				s.L.Unlock()
+				target.Broadcast()
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+			}
+		}()
+	}
 
 	if t.timeout > 0 {
 		go func() {
@@ -36,9 +67,13 @@ func (t idle) Update(ctx context.Context, c *Shared) T {
 		}()
 	}
 
-	t.cond.L.Lock()
-	t.cond.Wait()
-	t.cond.L.Unlock()
+	target.L.Lock()
+	target.Wait()
+	target.L.Unlock()
+}
+
+func (t idle) Update(ctx context.Context, c *Shared) T {
+	t.monitor(ctx, t.cond, t.signals...)
 
 	log.Printf("%s - awake\n", t)
 
@@ -47,14 +82,6 @@ func (t idle) Update(ctx context.Context, c *Shared) T {
 
 func (t idle) String() string {
 	return fmt.Sprintf("%T - %s - idle", t.next, t.next)
-}
-
-func Idle(next T, cond *sync.Cond, t time.Duration) idle {
-	return idle{
-		timeout: t,
-		next:    next,
-		cond:    cond,
-	}
 }
 
 func Failure(cause error) failed {

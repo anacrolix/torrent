@@ -767,49 +767,6 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 
 func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.ClientImpl) {
 	t.SkipNow()
-
-	// fileCacheDir, err := os.MkdirTemp("", "")
-	// require.NoError(t, err)
-	// defer os.RemoveAll(fileCacheDir)
-	// fileCache, err := filecache.NewCache(fileCacheDir)
-	// require.NoError(t, err)
-	// greetingDataTempDir, greetingMetainfo := testutil.GreetingTestTorrent(t)
-	// defer os.RemoveAll(greetingDataTempDir)
-	// filePieceStore := csf(fileCache)
-	// defer filePieceStore.Close()
-	// info, err := greetingMetainfo.UnmarshalInfo()
-	// require.NoError(t, err)
-	// ih := greetingMetainfo.HashInfoBytes()
-	// greetingData, err := storage.NewClient(filePieceStore).OpenTorrent(&info, ih)
-	// require.NoError(t, err)
-	// writeTorrentData(greetingData, info, []byte(testutil.GreetingFileContents))
-	// for i := 0; i < info.NumPieces(); i++ {
-	// 	p := info.Piece(i)
-	// 	if alreadyCompleted {
-	// 		require.NoError(t, greetingData.Piece(p).MarkComplete())
-	// 	}
-	// }
-	// cfg := torrent.TestingConfig(t)
-	// cl, err := autobind.NewLoopback(
-	// 	autobind.DisableTCP,
-	// 	autobind.DisableUTP,
-	// ).Bind(torrent.NewClient(cfg))
-	// require.NoError(t, err)
-	// defer cl.Close()
-	// ts, err := torrent.NewFromMetaInfo(greetingMetainfo, torrent.OptionStorage(filePieceStore))
-	// require.NoError(t, err)
-	// tt, _, err := cl.Start(ts)
-	// require.NoError(t, err)
-	// psrs := tt.PieceStateRuns()
-	// assert.Len(t, psrs, 1)
-	// assert.EqualValues(t, 3, psrs[0].Length)
-	// assert.Equal(t, alreadyCompleted, psrs[0].Complete)
-	// if alreadyCompleted {
-	// 	r := tt.NewReader()
-	// 	b, err := io.ReadAll(r)
-	// 	assert.NoError(t, err)
-	// 	assert.EqualValues(t, testutil.GreetingFileContents, b)
-	// }
 }
 
 func TestAddTorrentPiecesAlreadyCompleted(t *testing.T) {
@@ -821,7 +778,6 @@ func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
 }
 
 func TestTorrentDownloadAll(t *testing.T) {
-	t.SkipNow()
 	torrent.DownloadCancelTest(t, autobind.NewLoopback(), torrent.TestDownloadCancelParams{})
 }
 

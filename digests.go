@@ -18,6 +18,7 @@ func newDigestsFromTorrent(t *torrent) digests {
 		t.storage,
 		t.piece,
 		func(idx int, cause error) {
+			// t.cln.config.debug().Printf("hashed %d - %v\n", idx, cause)
 			// log.Printf("hashed %p %d / %d - %v", t.chunks, idx+1, t.numPieces(), cause)
 			t.chunks.Hashed(uint64(idx), cause)
 

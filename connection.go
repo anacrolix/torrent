@@ -46,7 +46,7 @@ func newConnection(cfg *ClientConfig, nc net.Conn, outgoing bool, remote netip.A
 	ts := time.Now()
 	return &connection{
 		_mu:                     _mu,
-		writerCond:              sync.NewCond(_mu),
+		respond:                 sync.NewCond(_mu),
 		conn:                    nc,
 		outgoing:                outgoing,
 		Choked:                  true,
@@ -123,7 +123,7 @@ type connection struct {
 	cumulativeExpectedToReceiveChunks   time.Duration
 	chunksReceivedWhileExpecting        int64
 
-	Choked           bool
+	Choked           bool // we have preventing the peer from making requests
 	requests         map[uint64]request
 	requestsLowWater int
 
@@ -139,7 +139,7 @@ type connection struct {
 	// Stuff controlled by the remote peer.
 	PeerID                int160.T
 	PeerInterested        bool
-	PeerChoked            bool
+	PeerChoked            bool // peer has restricted us from making requests.
 	PeerRequests          map[request]struct{}
 	PeerExtensionBytes    pp.ExtensionBits
 	PeerPrefersEncryption bool // as indicated by 'e' field in extension handshake
@@ -172,9 +172,10 @@ type connection struct {
 	pieceInclination  []int
 	pieceRequestOrder prioritybitmap.PriorityBitmap
 
-	writeBuffer *bytes.Buffer
-	uploadTimer *time.Timer
-	writerCond  *sync.Cond
+	writeBuffer   *bytes.Buffer
+	uploadTimer   *time.Timer
+	respond       *sync.Cond
+	needsresponse atomic.Bool // used to track when responses need to be sent that might be missed by the respond condition.
 
 	drop chan error
 }
@@ -297,7 +298,7 @@ func (cn *connection) PeerHasPiece(piece uint64) bool {
 
 // Writes a message into the write buffer.
 func (cn *connection) Post(msg pp.Message) (n int, err error) {
-	// log.Output(2, fmt.Sprintf("c(%p) Post initiated: %s\n", cn, msg.Type))
+	log.Output(2, fmt.Sprintf("c(%p) Post initiated: %s\n", cn, msg.Type))
 	// defer log.Output(2, fmt.Sprintf("c(%p) Post completed: %s\n", cn, msg.Type))
 
 	encoded, err := msg.MarshalBinary()
@@ -392,8 +393,6 @@ func (cn *connection) Choke(msg messageWriter) (more bool) {
 		return true
 	}
 
-	// log.Printf("c(%p) seed(%t) SENDING CHOKE\n", cn, cn.t.seeding())
-	// debug.PrintStack()
 	cn.Choked = true
 	more = msg(pp.NewChoked())
 
@@ -410,16 +409,16 @@ func (cn *connection) Choke(msg messageWriter) (more bool) {
 
 func (cn *connection) Unchoke(msg func(pp.Message) bool) bool {
 	if !cn.Choked {
-		return true
+		return false
 	}
 	cn.Choked = false
 
-	return msg(pp.NewUnchoked())
+	return !msg(pp.NewUnchoked())
 }
 
 func (cn *connection) SetInterested(interested bool, msg func(pp.Message) bool) bool {
 	if cn.Interested == interested {
-		return true
+		return cn.Interested
 	}
 	cn.Interested = interested
 	if interested {
@@ -427,7 +426,7 @@ func (cn *connection) SetInterested(interested bool, msg func(pp.Message) bool) 
 	} else if !cn.lastBecameInterested.IsZero() {
 		cn.priorInterest += time.Since(cn.lastBecameInterested)
 	}
-	cn.updateExpectingChunks()
+	defer cn.updateExpectingChunks()
 
 	return msg(pp.NewInterested(interested))
 }
@@ -451,12 +450,41 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 	})
 }
 
-func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
+func (cn *connection) determineInterest(msg func(pp.Message) bool) (available *roaring.Bitmap) {
+	defer cn.cfg.debug().Printf("c(%p) seed(%t) interest completed\n", cn, cn.t.seeding())
+
+	if cn.uploadAllowed() {
+		if cn.Unchoke(msg) {
+			cn.cfg.debug().Printf("c(%p) seed(%t) allowing peer to make requests\n", cn, cn.t.seeding())
+		}
+	} else {
+		if cn.Choke(msg) {
+			cn.cfg.debug().Printf("c(%p) seed(%t) disallowing peer to make requests\n", cn, cn.t.seeding())
+		}
+	}
+
+	if cn.PeerChoked && !cn.fastset.IsEmpty() {
+		cn.cfg.debug().Printf("c(%p) seed(%t) allowing fastset %d\n", cn, cn.t.seeding(), cn.fastset.GetCardinality())
+		available = cn.fastset
+	} else {
+		cn.cfg.debug().Printf("c(%p) seed(%t) allowing claimed: %d\n", cn, cn.t.seeding(), cn.claimed.GetCardinality())
+		available = cn.claimed
+	}
+
+	available = bitmapx.AndNot(available, cn.blacklisted)
+
+	if !cn.SetInterested(!available.IsEmpty(), msg) {
+		cn.cfg.debug().Printf("c(%p) seed(%t) nothing available to request\n", cn, cn.t.seeding())
+	}
+
+	return available
+}
+
+func (cn *connection) fillWriteBuffer(available *roaring.Bitmap, msg func(pp.Message) bool) {
 	var (
-		err       error
-		reqs      []request
-		req       request
-		available *roaring.Bitmap
+		err  error
+		reqs []request
+		req  request
 	)
 
 	// cn.cfg.debug().Printf("c(%p) seed(%t) make requests initated\n", cn, cn.t.seeding())
@@ -465,33 +493,8 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	if len(cn.requests) > cn.requestsLowWater || cn.t.chunks.Missing() == 0 {
 		return
 	}
+
 	filledBuffer := false
-
-	if cn.PeerChoked && !cn.fastset.IsEmpty() {
-		cn.cfg.debug().Printf("c(%p) seed(%t) allowing fastset %d\n", cn, cn.t.seeding(), cn.fastset.GetCardinality())
-		available = cn.fastset.Clone()
-	} else {
-		cn.cfg.debug().Printf("c(%p) seed(%t) allowing claimed: %d\n", cn, cn.t.seeding(), cn.claimed.GetCardinality())
-		available = cn.claimed.Clone()
-	}
-
-	available = bitmapx.AndNot(available, cn.blacklisted)
-
-	if available.IsEmpty() {
-		cn.cfg.debug().Printf("c(%p) seed(%t) nothing available yet %d\n", cn, cn.t.seeding(), cn.fastset.GetCardinality())
-		return
-	}
-
-	if !cn.SetInterested(!available.IsEmpty(), msg) {
-		cn.cfg.debug().Printf("c(%p) seed(%t) nothing available to request\n", cn, cn.t.seeding())
-		return
-	}
-
-	// we want the peer to upload to us.
-	if !cn.Unchoke(msg) {
-		cn.cfg.debug().Printf("c(%p) seed(%t) nothing available to request\n", cn, cn.t.seeding())
-		return
-	}
 
 	max := max(0, cn.PeerMaxRequests-len(cn.requests))
 	if reqs, err = cn.t.chunks.Pop(max, available); errors.As(err, &empty{}) {
@@ -512,12 +515,12 @@ func (cn *connection) fillWriteBuffer(msg func(pp.Message) bool) {
 	cn.cfg.debug().Printf("%p seed(%t) filling buffer with requests %d - %d -> %d actual %d", cn, cn.t.seeding(), cn.PeerMaxRequests, len(cn.requests), max, len(reqs))
 
 	for max, req = range reqs {
-		// Choking is looked at here because our interest is dependent
-		// on whether we'd make requests in its absence.
-		if cid := cn.t.chunks.requestCID(req); cn.PeerChoked && !cn.fastset.ContainsInt(cid) {
-			cn.cfg.debug().Printf("c(%p) seed(%t) choked(%t) requested(%d) fastset(%v)\n", cn, cn.t.seeding(), cn.PeerChoked, cid, cn.fastset.ToArray())
-			continue
-		}
+		// // Choking is looked at here because our interest is dependent
+		// // on whether we'd make requests in its absence.
+		// if cid := cn.t.chunks.requestCID(req); cn.PeerChoked && !cn.fastset.ContainsInt(cid) {
+		// 	cn.cfg.debug().Printf("c(%p) seed(%t) choked(%t) requested(%d) fastset(%v)\n", cn, cn.t.seeding(), cn.PeerChoked, cid, cn.fastset.ToArray())
+		// 	continue
+		// }
 
 		if filledBuffer = !cn.request(req, msg); filledBuffer {
 			cn.cfg.debug().Printf("c(%p) seed(%t) done filling after(%d)\n", cn, cn.t.seeding(), max)
@@ -608,8 +611,9 @@ func (cn *connection) PostBitfield() (n int, err error) {
 }
 
 func (cn *connection) updateRequests() {
+	cn.needsresponse.Store(true)
 	// log.Printf("waking up c(%p) - seed(%t)\n", cn, cn.t.seeding())
-	cn.writerCond.Broadcast()
+	cn.respond.Broadcast()
 }
 
 // The connection should download highest priority pieces first, without any
@@ -727,7 +731,7 @@ func (cn *connection) peerSentBitfield(bf []bool) error {
 
 		cn.raisePeerMinPieces(uint64(i) + 1)
 		min, max := cn.t.chunks.Range(uint64(i))
-		log.Printf("c(%p) seed(%t) adding to claimed %d %d %d %t\n", cn, cn.t.seeding(), i, min, max, have)
+		cn.cfg.debug().Printf("c(%p) seed(%t) adding to claimed %d %d %d %t\n", cn, cn.t.seeding(), i, min, max, have)
 		cn.claimed.AddRange(cn.t.chunks.Range(uint64(i)))
 	}
 	cn.peerPiecesChanged()
@@ -918,13 +922,16 @@ func (cn *connection) onReadRequest(r request) error {
 	return nil
 }
 
-func (ws *connection) Flush() (int, error) {
-	ws.cmu().Lock()
-	defer ws.cmu().Unlock()
+func (cn *connection) Flush() (int, error) {
+	// defer func() {
+	// 	log.Printf("-------------------------------- flushed %d --------------------------------\n", cn.writeBuffer.Len())
+	// }()
+	cn.cmu().Lock()
+	defer cn.cmu().Unlock()
 
-	buf := ws.writeBuffer.Bytes()
-	ws.writeBuffer.Reset()
-	n, err := ws.w.Write(buf)
+	buf := cn.writeBuffer.Bytes()
+	cn.writeBuffer.Reset()
+	n, err := cn.w.Write(buf)
 	if err != nil {
 		return n, errorsx.Wrap(err, "failed to flush buffer")
 	}
@@ -1010,14 +1017,13 @@ func (cn *connection) ReadOne(ctx context.Context, decoder *pp.Decoder) (msg pp.
 		cn.updateRequests()
 		return msg, nil
 	case pp.Piece:
+		defer cn.updateRequests()
 		if err = errorsx.Wrap(cn.receiveChunk(&msg), "failed to received chunk"); err != nil {
 			return msg, err
 		}
 
-		if len(msg.Piece) == cn.t.md.ChunkSize {
-			cn.t.chunkPool.Put(&msg.Piece)
-		}
-		cn.updateRequests()
+		cn.t.chunkPool.Put(&msg.Piece)
+
 		return msg, nil
 	case pp.Cancel:
 		req := newRequestFromMessage(&msg)
@@ -1065,17 +1071,14 @@ func (cn *connection) ReadOne(ctx context.Context, decoder *pp.Decoder) (msg pp.
 		cn.cmu().Unlock()
 		return msg, nil
 	case pp.AllowedFast:
-		for _, cidx := range cn.t.chunks.chunks(uint64(msg.Index)) {
-			// cn.cfg.debug().Printf("c(%p) seed(%t) peer allowed fast: %d\n", cn, cn.t.seeding(), cidx)
-			cn.fastset.AddInt(cidx)
-		}
-		cn.updateRequests()
+		defer cn.updateRequests()
+		cn.fastset.AddRange(cn.t.chunks.Range(uint64(msg.Index)))
 		return msg, nil
 	case pp.Extended:
+		defer cn.updateRequests()
 		if err = cn.onReadExtendedMsg(msg.ExtendedID, msg.ExtendedPayload); err != nil {
 			return msg, err
 		}
-		cn.updateRequests()
 		return msg, nil
 	default:
 		return msg, errorsx.Errorf("received unknown message type: %#v", msg.Type)
@@ -1191,28 +1194,29 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 
 	// log.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
 
-	if cn.PeerChoked {
-		metrics.Add("chunks received while choked", 1)
-	}
+	// if cn.PeerChoked {
+	// 	metrics.Add("chunks received while choked", 1)
+	// }
 
-	if cn.PeerChoked && cn.peerfastset.ContainsInt(int(req.Index)) {
-		metrics.Add("chunks received due to allowed fast", 1)
-	}
+	// if cn.PeerChoked && cn.peerfastset.ContainsInt(int(req.Index)) {
+	// 	metrics.Add("chunks received due to allowed fast", 1)
+	// }
 
-	if cn.clearRequest(req) {
-		if cn.expectingChunks() {
-			cn.chunksReceivedWhileExpecting++
-		}
-	} else {
-		metrics.Add("chunks received unwanted", 1)
-	}
+	// if cn.clearRequest(req) {
+	// 	if cn.expectingChunks() {
+	// 		cn.chunksReceivedWhileExpecting++
+	// 	}
+	// } else {
+	// 	metrics.Add("chunks received unwanted", 1)
+	// }
+
+	cn.clearRequest(req)
 
 	// Do we actually want this chunk? if the chunk is already available, then we
 	// don't need it.
 	if cn.t.chunks.Available(req) {
 		cn.t.chunks.Release(req)
-		// l2.Printf("c(%p) - wasted chunk d(%020d) r(%d,%d,%d)\n", cn, req.Digest, req.Index, req.Begin, req.Length)
-		metrics.Add("chunks received wasted", 1)
+		cn.cfg.debug().Printf("c(%p) - wasted chunk d(%020d) r(%d,%d,%d)\n", cn, req.Digest, req.Index, req.Begin, req.Length)
 		cn.allStats(add(1, func(cs *ConnStats) *count { return &cs.ChunksReadWasted }))
 		return nil
 	}
@@ -1226,9 +1230,7 @@ func (cn *connection) receiveChunk(msg *pp.Message) error {
 	}
 
 	if err := cn.t.chunks.Verify(req); err != nil {
-		log.Println("unexpected chunks received")
-		// metrics.Add("chunks received unexpected", 1)
-		return err
+		return errorsx.Wrap(err, "failed to verify")
 	}
 
 	// It's important that the piece is potentially queued before we check if
@@ -1264,7 +1266,7 @@ func (cn *connection) uploadAllowed() bool {
 
 func (cn *connection) setRetryUploadTimer(delay time.Duration) {
 	if cn.uploadTimer == nil {
-		cn.uploadTimer = time.AfterFunc(delay, cn.writerCond.Broadcast)
+		cn.uploadTimer = time.AfterFunc(delay, cn.respond.Broadcast)
 	} else {
 		cn.uploadTimer.Reset(delay)
 	}
@@ -1283,11 +1285,11 @@ func (cn *connection) upload(msg func(pp.Message) bool) bool {
 		return cn.Choke(msg)
 	}
 
-	// We want to upload to the peer.
-	if !cn.Unchoke(msg) {
-		cn.cfg.debug().Printf("c(%p) seed(%t) upload restricted - buffer full\n", cn, cn.t.seeding())
-		return false
-	}
+	// // We want to upload to the peer.
+	// if !cn.Unchoke(msg) {
+	// 	cn.cfg.debug().Printf("c(%p) seed(%t) upload restricted - buffer full\n", cn, cn.t.seeding())
+	// 	return false
+	// }
 
 	// cn.cfg.debug().Printf("c(%p) seed(%t) upload allowed\n", cn, cn.t.seeding())
 
@@ -1343,7 +1345,6 @@ func (cn *connection) clearRequest(r request) bool {
 		return false
 	}
 
-	// l2.Printf("c(%p) - clearing request d(%020d) r(%d,%d,%d)\n", cn, r.Digest, r.Index, r.Begin, r.Length)
 	// add requests that have been released to the reject set to prevent them from
 	// being requested from this connection until rejected is reset.
 	cn.blacklisted.AddInt(cn.t.chunks.requestCID(r))

@@ -358,7 +358,7 @@ func ClientConfigFirewall(fw connections.FirewallStateful) ClientConfigOption {
 func ClientConfigPEX(b bool) ClientConfigOption {
 	return func(cc *ClientConfig) {
 		if b {
-			cc.extensions[pp.ExtensionNamePex] = pexExtendedID
+			cc.extensions[pp.ExtensionNamePex] = pp.PEXExtendedID
 		} else {
 			delete(cc.extensions, pp.ExtensionNamePex)
 		}
@@ -411,8 +411,8 @@ func NewDefaultClientConfig(mdstore MetadataStore, store storage.ClientImpl, opt
 			connections.AutoFirewall(),
 		),
 		extensions: map[pp.ExtensionName]pp.ExtensionNumber{
-			pp.ExtensionNameMetadata: metadataExtendedID,
-			pp.ExtensionNamePex:      pexExtendedID,
+			pp.ExtensionNameMetadata: pp.MetadataExtendedID,
+			pp.ExtensionNamePex:      pp.PEXExtendedID,
 		},
 	}
 

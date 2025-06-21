@@ -21,11 +21,12 @@ import (
 	"github.com/james-lawrence/torrent/dht/int160"
 
 	"github.com/RoaringBitmap/roaring"
-	"github.com/anacrolix/missinggo/v2/prioritybitmap"
 
 	"github.com/james-lawrence/torrent/bencode"
 	pp "github.com/james-lawrence/torrent/btprotocol"
+	"github.com/james-lawrence/torrent/internal/atomicx"
 	"github.com/james-lawrence/torrent/internal/errorsx"
+	"github.com/james-lawrence/torrent/internal/langx"
 	"github.com/james-lawrence/torrent/internal/x/bitmapx"
 	"github.com/james-lawrence/torrent/mse"
 )
@@ -67,7 +68,7 @@ func newConnection(cfg *ClientConfig, nc net.Conn, outgoing bool, remote netip.A
 		PeerRequests:            make(map[request]struct{}, cfg.maximumOutstandingRequests),
 		drop:                    make(chan error, 1),
 		PeerExtensionIDs:        make(map[pp.ExtensionName]pp.ExtensionNumber),
-		lastMessageReceived:     ts,
+		lastMessageReceived:     atomicx.Pointer(ts),
 		lastUsefulChunkReceived: ts,
 		extensions:              extensions,
 		cfg:                     cfg,
@@ -109,7 +110,7 @@ type connection struct {
 	// other ConnStat instances as determined when the *torrent became known.
 	reconciledHandshakeStats bool
 
-	lastMessageReceived     time.Time
+	lastMessageReceived     *atomic.Pointer[time.Time]
 	completedHandshake      time.Time
 	lastUsefulChunkReceived time.Time
 	lastChunkSent           time.Time
@@ -169,9 +170,6 @@ type connection struct {
 	PeerExtensionIDs   map[pp.ExtensionName]pp.ExtensionNumber
 	PeerClientName     string
 
-	pieceInclination  []int
-	pieceRequestOrder prioritybitmap.PriorityBitmap
-
 	writeBuffer   *bytes.Buffer
 	uploadTimer   *time.Timer
 	respond       *sync.Cond
@@ -217,14 +215,6 @@ func (cn *connection) hasPreferredNetworkOver(r *connection) (left, ok bool) {
 	ml.NextBool(!cn.utp(), !r.utp())
 	ml.NextBool(cn.ipv6(), r.ipv6())
 	return ml.FinalOk()
-}
-
-func (cn *connection) cumInterest() time.Duration {
-	ret := cn.priorInterest
-	if cn.Interested {
-		ret += time.Since(cn.lastBecameInterested)
-	}
-	return ret
 }
 
 func (cn *connection) cmu() sync.Locker {
@@ -281,9 +271,8 @@ func (cn *connection) Close() {
 	if cn.t != nil {
 		cn.t.incrementReceivedConns(cn, -1)
 	}
+
 	cn.updateRequests()
-	cn.discardPieceInclination()
-	cn.pieceRequestOrder.Clear()
 
 	if cn.conn != nil {
 		cpstats := cn.stats.Copy()
@@ -298,7 +287,7 @@ func (cn *connection) PeerHasPiece(piece uint64) bool {
 
 // Writes a message into the write buffer.
 func (cn *connection) Post(msg pp.Message) (n int, err error) {
-	log.Output(2, fmt.Sprintf("c(%p) Post initiated: %s\n", cn, msg.Type))
+	log.Output(2, fmt.Sprintf("c(%p) seed(%t) Post initiated: %s\n", cn, cn.t.seeding(), msg.Type))
 	// defer log.Output(2, fmt.Sprintf("c(%p) Post completed: %s\n", cn, msg.Type))
 
 	encoded, err := msg.MarshalBinary()
@@ -306,21 +295,20 @@ func (cn *connection) Post(msg pp.Message) (n int, err error) {
 		return n, errorsx.Wrapf(err, "failed to encode message %T", msg)
 	}
 
-	// We don't need to track bytes here because a connection.w Writer wrapper
-	// takes care of that (although there's some delay between us recording
-	// the message, and the connection writer flushing it out.).
-	cn.cmu().Lock()
-	n, err = cn.writeBuffer.Write(encoded)
-	cn.cmu().Unlock()
+	n, err = cn.Write(encoded)
 	if err != nil {
 		return n, errorsx.Wrapf(err, "failed to write message into buffer %T", msg)
 	}
 
-	// Last I checked only Piece messages affect stats, and we don't post
-	// those.
 	cn.wroteMsg(&msg)
 	cn.updateRequests()
 	return n, nil
+}
+
+func (cn *connection) Write(encoded []byte) (n int, err error) {
+	cn.cmu().Lock()
+	defer cn.cmu().Unlock()
+	return cn.writeBuffer.Write(encoded)
 }
 
 // Writes a message into the write buffer.
@@ -420,12 +408,15 @@ func (cn *connection) SetInterested(interested bool, msg func(pp.Message) bool) 
 	if cn.Interested == interested {
 		return cn.Interested
 	}
+
 	cn.Interested = interested
+
 	if interested {
 		cn.lastBecameInterested = time.Now()
 	} else if !cn.lastBecameInterested.IsZero() {
 		cn.priorInterest += time.Since(cn.lastBecameInterested)
 	}
+
 	defer cn.updateExpectingChunks()
 
 	return msg(pp.NewInterested(interested))
@@ -451,7 +442,7 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 }
 
 func (cn *connection) determineInterest(msg func(pp.Message) bool) (available *roaring.Bitmap) {
-	defer cn.cfg.debug().Printf("c(%p) seed(%t) interest completed\n", cn, cn.t.seeding())
+	defer cn.cfg.debug().Printf("%d c(%p) seed(%t) interest completed\n", os.Getpid(), cn, cn.t.seeding())
 
 	if cn.uploadAllowed() {
 		if cn.Unchoke(msg) {
@@ -515,19 +506,12 @@ func (cn *connection) fillWriteBuffer(available *roaring.Bitmap, msg func(pp.Mes
 	cn.cfg.debug().Printf("%p seed(%t) filling buffer with requests %d - %d -> %d actual %d", cn, cn.t.seeding(), cn.PeerMaxRequests, len(cn.requests), max, len(reqs))
 
 	for max, req = range reqs {
-		// // Choking is looked at here because our interest is dependent
-		// // on whether we'd make requests in its absence.
-		// if cid := cn.t.chunks.requestCID(req); cn.PeerChoked && !cn.fastset.ContainsInt(cid) {
-		// 	cn.cfg.debug().Printf("c(%p) seed(%t) choked(%t) requested(%d) fastset(%v)\n", cn, cn.t.seeding(), cn.PeerChoked, cid, cn.fastset.ToArray())
-		// 	continue
-		// }
-
 		if filledBuffer = !cn.request(req, msg); filledBuffer {
 			cn.cfg.debug().Printf("c(%p) seed(%t) done filling after(%d)\n", cn, cn.t.seeding(), max)
 			break
 		}
 
-		// cn.cfg.debug().Printf("c(%p) seed(%t) choked(%t) requested(%d, %d, %d)\n", cn, cn.t.seeding(), cn.PeerChoked, req.Index, req.Begin, req.Length)
+		cn.cfg.debug().Printf("c(%p) seed(%t) choked(%t) requested(%d, %d, %d)\n", cn, cn.t.seeding(), cn.PeerChoked, req.Index, req.Begin, req.Length)
 	}
 
 	// advance to just the unused chunks.
@@ -616,62 +600,9 @@ func (cn *connection) updateRequests() {
 	cn.respond.Broadcast()
 }
 
-// The connection should download highest priority pieces first, without any
-// inclination toward avoiding wastage. Generally we might do this if there's
-// a single connection, or this is the fastest connection (not implemented), and we have active
-// readers that signal an ordering preference. It's conceivable that the best
-// connection should do this, since it's least likely to waste our time if
-// assigned to the highest priority pieces, and assigning more than one this
-// role would cause significant wasted bandwidth.
-func (cn *connection) shouldRequestWithoutBias() bool {
-	return cn.t.conns.length() == 1 //|| cn.fastest
-}
-
-// This is distinct from Torrent piece priority, which is the user's
-// preference. Connection piece priority is specific to a connection and is
-// used to pseudorandomly avoid connections always requesting the same pieces
-// and thus wasting effort.
-func (cn *connection) updatePiecePriority(piece uint64) bool {
-	cn.cmu().Lock()
-	defer cn.cmu().Unlock()
-
-	// tpp := cn.t.piecePriority(piece)
-	// if !cn.PeerHasPiece(piece) {
-	// 	tpp = PiecePriorityNone
-	// }
-	// if tpp == PiecePriorityNone {
-	// 	return cn.stopRequestingPiece(piece)
-	// }
-	prio := cn.getPieceInclination()[piece]
-
-	return cn.pieceRequestOrder.Set(int(piece), prio) || cn.shouldRequestWithoutBias()
-}
-
-func (cn *connection) getPieceInclination() []int {
-	if cn.pieceInclination == nil {
-		cn.pieceInclination = cn.t.getConnPieceInclination()
-	}
-	return cn.pieceInclination
-}
-
-func (cn *connection) discardPieceInclination() {
-	if cn.pieceInclination == nil {
-		return
-	}
-	cn.t.putPieceInclination(cn.pieceInclination)
-	cn.pieceInclination = nil
-}
-
 func (cn *connection) peerPiecesChanged() {
 	if !cn.t.haveInfo() {
 		return
-	}
-
-	// prioritiesChanged := false
-	for i := uint64(0); i < cn.t.chunks.pieces; i++ {
-		if cn.updatePiecePriority(uint64(i)) {
-			// prioritiesChanged = true
-		}
 	}
 
 	cn.t.event.Broadcast()
@@ -702,10 +633,6 @@ func (cn *connection) peerSentHave(piece uint64) error {
 		cn.blacklisted.Remove(uint32(cidx))
 	}
 	cn.cmu().Unlock()
-
-	if cn.updatePiecePriority(piece) {
-		cn.updateRequests()
-	}
 
 	return nil
 }
@@ -831,16 +758,16 @@ func (cn *connection) useful() bool {
 	if cn.closed.Load() {
 		return false
 	}
+
 	if !t.haveInfo() {
 		return cn.supportsExtension("ut_metadata")
 	}
+
 	if t.seeding() && cn.PeerInterested {
 		return true
 	}
-	if cn.peerHasWantedPieces() {
-		return true
-	}
-	return false
+
+	return cn.peerHasWantedPieces()
 }
 
 func (cn *connection) lastHelpful() (ret time.Time) {
@@ -926,11 +853,12 @@ func (cn *connection) Flush() (int, error) {
 	// defer func() {
 	// 	log.Printf("-------------------------------- flushed %d --------------------------------\n", cn.writeBuffer.Len())
 	// }()
-	cn.cmu().Lock()
-	defer cn.cmu().Unlock()
 
+	cn.cmu().Lock()
 	buf := cn.writeBuffer.Bytes()
 	cn.writeBuffer.Reset()
+	cn.cmu().Unlock()
+
 	n, err := cn.w.Write(buf)
 	if err != nil {
 		return n, errorsx.Wrap(err, "failed to flush buffer")
@@ -961,7 +889,7 @@ func (cn *connection) ReadOne(ctx context.Context, decoder *pp.Decoder) (msg pp.
 	}
 
 	cn.readMsg(&msg)
-	cn.lastMessageReceived = time.Now()
+	cn.lastMessageReceived.Store(langx.Autoptr(time.Now()))
 
 	if msg.Keepalive {
 		cn.cfg.debug().Printf("(%d) c(%p) seed(%t) - RECEIVED KEEPALIVE - pending(%d) - missing(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, cn.cfg.Seed, len(cn.requests), cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
@@ -1088,18 +1016,10 @@ func (cn *connection) ReadOne(ctx context.Context, decoder *pp.Decoder) (msg pp.
 // Processes incoming BitTorrent wire-protocol messages. The client lock is held upon entry and
 // exit. Returning will end the connection.
 func (cn *connection) mainReadLoop(ctx context.Context) (err error) {
-	// l2.Printf("(%d) c(%p) mainReadLoop initiated\n", os.Getpid(), cn)
-	// defer l2.Printf("(%d) c(%p) mainReadLoop completed\n", os.Getpid(), cn)
+	cn.cfg.debug().Printf("c(%p) seed(%t) - read loop initiated\n", cn, cn.t.seeding())
+	defer cn.cfg.debug().Printf("(c(%p) seed(%t) - read loop completed\n", cn, cn.t.seeding())
 	defer cn.updateRequests() // tap the writer so it'll clean itself up.
-	defer func() {
-		if err != nil {
-			metrics.Add("connection.mainReadLoop returned with error", 1)
-		} else {
-			metrics.Add("connection.mainReadLoop returned with no error", 1)
-		}
-	}()
 
-	// limit := rate.NewLimiter(rate.Every(time.Second), 1)
 	decoder := pp.NewDecoder(cn.r, cn.t.chunkPool)
 
 	for {
@@ -1145,25 +1065,27 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		cn.sendInitialPEX()
 		// BUG no sending PEX updates yet
 		return nil
-	case metadataExtendedID:
+	case pp.MetadataExtendedID:
 		// log.Println("metadata extension available")
 		err := t.gotMetadataExtensionMsg(payload, cn)
 		if err != nil {
 			return errorsx.Errorf("handling metadata extension message: %v", err)
 		}
 		return nil
-	case pexExtendedID:
+	case pp.PEXExtendedID:
+
 		if _, ok := cn.cfg.extensions[pp.ExtensionNamePex]; !ok {
 			// TODO: Maybe close the connection.
 			return nil
 		}
-
+		log.Println("PEX SUPPORTED", cn.supported(pp.PEXExtendedID))
 		var pexMsg pp.PexMsg
 		err := bencode.Unmarshal(payload, &pexMsg)
 		if err != nil {
 			return errorsx.Errorf("error unmarshalling PEX message: %s", err)
 		}
 		metrics.Add("pex added6 peers received", int64(len(pexMsg.Added6)))
+
 		var peers Peers
 		peers.AppendFromPex(pexMsg.Added6, pexMsg.Added6Flags)
 		peers.AppendFromPex(pexMsg.Added, pexMsg.AddedFlags)
@@ -1257,11 +1179,7 @@ func (cn *connection) uploadAllowed() bool {
 		return true
 	}
 
-	if !cn.peerHasWantedPieces() {
-		return false
-	}
-
-	return true
+	return cn.peerHasWantedPieces()
 }
 
 func (cn *connection) setRetryUploadTimer(delay time.Duration) {
@@ -1275,23 +1193,17 @@ func (cn *connection) setRetryUploadTimer(delay time.Duration) {
 // Also handles choking and unchoking of the remote peer.
 func (cn *connection) upload(msg func(pp.Message) bool) bool {
 	// defer log.Printf("c(%p) seed(%t) upload completed", cn, cn.cfg.Seed)
-	cn.cmu().Lock()
-	defer cn.cmu().Unlock()
 
-	// Breaking or completing this loop means we don't want to upload to the
-	// peer anymore, and we choke them.
+	// if we dont want to upload to this peer then we choke them.
 	if !cn.uploadAllowed() {
 		cn.cfg.debug().Printf("c(%p) seed(%t) upload restricted - disallowed\n", cn, cn.t.seeding())
 		return cn.Choke(msg)
 	}
 
-	// // We want to upload to the peer.
-	// if !cn.Unchoke(msg) {
-	// 	cn.cfg.debug().Printf("c(%p) seed(%t) upload restricted - buffer full\n", cn, cn.t.seeding())
-	// 	return false
-	// }
-
 	// cn.cfg.debug().Printf("c(%p) seed(%t) upload allowed\n", cn, cn.t.seeding())
+
+	cn.cmu().Lock()
+	defer cn.cmu().Unlock()
 
 	uploaded := 0
 	for r := range cn.PeerRequests {
@@ -1309,7 +1221,9 @@ func (cn *connection) upload(msg func(pp.Message) bool) bool {
 			return true
 		}
 
+		cn.cmu().Unlock()
 		more, err := cn.sendChunk(r, msg)
+		cn.cmu().Lock()
 		if err != nil {
 			cn.cfg.errors().Println("error sending chunk to peer, choking peer", err)
 			// If we failed to send a chunk, choke the peer to ensure they
@@ -1334,7 +1248,7 @@ func (cn *connection) upload(msg func(pp.Message) bool) bool {
 }
 
 func (cn *connection) peerHasWantedPieces() bool {
-	return !cn.pieceRequestOrder.IsEmpty()
+	return !cn.claimed.IsEmpty() && bitmapx.AndNot(cn.claimed, cn.blacklisted).Intersects(cn.t.chunks.missing)
 }
 
 // clearRequest drops the request from the local connection.

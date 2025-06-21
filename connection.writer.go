@@ -3,6 +3,7 @@ package torrent
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync/atomic"
 	"time"
 
@@ -35,12 +36,12 @@ func RunHandshookConn(c *connection, t *torrent) error {
 
 	c.cfg.debug().Printf("%p exchanging extensions\n", c)
 
-	if err := ConnExtensions(ctx, c); err != nil {
-		return errorsx.Wrap(err, "error sending configuring connection")
-	}
-
 	go func() {
 		defer c.Close()
+		if err := ConnExtensions(ctx, c); err != nil {
+			cancel(errorsx.Wrap(err, "error sending configuring connection"))
+			return
+		}
 		cancel(connwriterinit(ctx, c, 10*time.Second))
 	}()
 
@@ -54,6 +55,8 @@ func RunHandshookConn(c *connection, t *torrent) error {
 
 // See the order given in Transmission's tr_peerMsgsNew.
 func ConnExtensions(ctx context.Context, cn *connection) error {
+	log.Println("conn extensions initiated")
+	defer log.Println("conn extensions completed")
 	return cstate.Run(ctx, connexinit(cn, connexfast(cn, connexdht(cn, connexport(cn, connflush(cn, nil))))))
 }
 
@@ -73,6 +76,7 @@ func connexinit(cn *connection, n cstate.T) cstate.T {
 			return n
 		}
 
+		defer log.Println("extended handshake extension completed")
 		// TODO: We can figured the port and address out specific to the socket
 		// used.
 		msg := pp.ExtendedHandshakeMessage{
@@ -82,7 +86,7 @@ func connexinit(cn *connection, n cstate.T) cstate.T {
 			YourIp:       pp.CompactIp(cn.remoteAddr.Addr().AsSlice()),
 			Encryption:   cn.cfg.HeaderObfuscationPolicy.Preferred || !cn.cfg.HeaderObfuscationPolicy.RequirePreferred,
 			Port:         cn.localport,
-			MetadataSize: langx.Autoptr(langx.DerefOrZero(cn.t)).metadataSize(),
+			MetadataSize: cn.t.metadataSize(),
 			Ipv4:         pp.CompactIp(cn.cfg.publicIP4.To4()),
 			Ipv6:         cn.cfg.publicIP6.To16(),
 		}
@@ -105,7 +109,7 @@ func connexinit(cn *connection, n cstate.T) cstate.T {
 func connexfast(cn *connection, n cstate.T) cstate.T {
 	return cstate.Fn(func(context.Context, *cstate.Shared) cstate.T {
 		cn.peerfastset = errorsx.Zero(bep0006.AllowedFastSet(cn.remoteAddr.Addr(), cn.t.md.ID, cn.t.chunks.pieces, min(32, cn.t.chunks.pieces)))
-
+		defer log.Println("fast extension completed")
 		if !cn.supported(pp.ExtensionBitFast) {
 			// log.Println("posting bitfield", cn.conn.LocalAddr())
 			if _, err := cn.PostBitfield(); err != nil {
@@ -117,22 +121,26 @@ func connexfast(cn *connection, n cstate.T) cstate.T {
 		// log.Println("posting allow fast", cn.conn.LocalAddr())
 		switch cn.t.chunks.completed.GetCardinality() {
 		case 0:
-			if _, err := cn.Post(pp.Message{Type: pp.HaveNone}); err != nil {
+			if _, err := cn.Post(pp.NewHaveNone()); err != nil {
 				return cstate.Failure(err)
 			}
 			cn.sentHaves.Clear()
 			return n
 		case cn.t.chunks.pieces:
-			if _, err := cn.Post(pp.Message{Type: pp.HaveAll}); err != nil {
+			if _, err := cn.Post(pp.NewHaveAll()); err != nil {
 				return cstate.Failure(err)
 			}
 
 			cn.sentHaves.AddRange(0, cn.t.chunks.pieces)
 
 			for _, v := range cn.peerfastset.ToArray() {
-				if _, err := cn.PostImmediate(pp.NewAllowedFast(v)); err != nil {
+				if _, err := cn.Post(pp.NewAllowedFast(v)); err != nil {
 					return cstate.Failure(err)
 				}
+			}
+
+			if _, err := cn.Flush(); err != nil {
+				return cstate.Failure(err)
 			}
 
 			return n
@@ -231,8 +239,8 @@ func (t _connWriterClosed) Update(ctx context.Context, _ *cstate.Shared) (r csta
 		return nil
 	}
 
-	if since := time.Since(ws.lastMessageReceived); since > 2*ws.keepAliveTimeout {
-		return cstate.Failure(fmt.Errorf("connection timed out %s %v %v", ws.remoteAddr.String(), since, ws.lastMessageReceived))
+	if ts := *ws.lastMessageReceived.Load(); time.Since(ts) > 2*ws.keepAliveTimeout {
+		return cstate.Failure(fmt.Errorf("connection timed out %s %v %v", ws.remoteAddr.String(), time.Since(ts), ts))
 	}
 
 	// if we're choked and not allowed to fast track any chunks then there is nothing
@@ -307,7 +315,7 @@ func (t _connWriterSyncComplete) Update(ctx context.Context, _ *cstate.Shared) (
 	}
 
 	writer := func(msg pp.Message) bool {
-		if _, err := ws.writeBuffer.Write(msg.MustMarshalBinary()); err != nil {
+		if _, err := ws.Write(msg.MustMarshalBinary()); err != nil {
 			ws.cfg.errors().Println(err)
 			return false
 		}
@@ -329,15 +337,10 @@ type _connwriterRequests struct {
 }
 
 func (t _connwriterRequests) Update(ctx context.Context, _ *cstate.Shared) (r cstate.T) {
-	// defer log.Println("checkpoint")
-	// defer func() {
-	// 	log.Printf("c(%p) seed(%t) %T completed - %T\n", t.connection, t.t.seeding(), t, r)
-	// }()
-
 	ws := t.writerstate
 
 	writer := func(msg pp.Message) bool {
-		if _, err := ws.writeBuffer.Write(msg.MustMarshalBinary()); err != nil {
+		if _, err := ws.Write(msg.MustMarshalBinary()); err != nil {
 			ws.cfg.errors().Println(err)
 			return false
 		}
@@ -351,6 +354,9 @@ func (t _connwriterRequests) Update(ctx context.Context, _ *cstate.Shared) (r cs
 	ws.upload(writer)
 	ws.fillWriteBuffer(available, writer)
 
+	// needresponse is tracking read that come in while we're in the critical section of this function
+	// to prevent the state machine from going idle just because we didnt write anything this cycle.
+	// needresponse tracks that a message can in that requires a message be sent.
 	if ws.writeBuffer.Len() > 0 || ws.needsresponse.CompareAndSwap(true, false) {
 		return connwriterFlush(
 			connwriteractive(ws),
@@ -380,7 +386,7 @@ func (t _connwriterKeepalive) Update(ctx context.Context, _ *cstate.Shared) csta
 		return connwriterFlush(connwriteridle(ws), ws)
 	}
 
-	if err = bencode.NewEncoder(ws.writeBuffer).Encode(pp.Message{Keepalive: true}); err != nil {
+	if _, err = ws.Post(pp.NewKeepAlive()); err != nil {
 		return cstate.Failure(errorsx.Wrap(err, "keepalive encoding failed"))
 	}
 

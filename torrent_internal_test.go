@@ -124,7 +124,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	require.NoError(t, err)
 	defer nc.Close()
 
-	var pex PeerExtensionBits
+	var pex pp.ExtensionBits
 	pex.SetBit(pp.ExtensionBitExtended)
 
 	ebits, info, err := pp.Handshake{

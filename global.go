@@ -12,17 +12,7 @@ const (
 	defaultChunkSize = 16 * bytesx.KiB
 )
 
-// These are our extended message IDs. Peers will use these values to
-// select which extension a message is intended for.
-const (
-	metadataExtendedID = iota + 1 // 0 is reserved for deleting keys
-	pexExtendedID
-)
-
-// PeerExtensionBits define what extensions are available.
-type PeerExtensionBits = pp.ExtensionBits
-
-func defaultPeerExtensionBytes() PeerExtensionBits {
+func defaultPeerExtensionBytes() pp.ExtensionBits {
 	return pp.NewExtensionBits(pp.ExtensionBitDHT, pp.ExtensionBitExtended, pp.ExtensionBitFast)
 }
 

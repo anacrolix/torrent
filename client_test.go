@@ -120,8 +120,6 @@ func NewFileCacheClientStorageFactory(dataDir string) storage.ClientImpl {
 type StorageFactory func(string) storage.ClientImpl
 
 func TestClientTransferRateLimitedUpload(t *testing.T) {
-	t.SkipNow()
-
 	started := time.Now()
 	testClientTransfer(t, testClientTransferParams{
 		// We are uploading 13 bytes (the length of the greeting torrent). The
@@ -185,7 +183,6 @@ func TestClientTransferDefault(t *testing.T) {
 // Creates a seeder and a leecher, and ensures the data transfers when a read
 // is attempted on the leecher.
 func testClientTransfer(t *testing.T, ps testClientTransferParams) {
-	t.FailNow()
 	ctx, done := testx.Context(t)
 	defer done()
 
@@ -430,7 +427,6 @@ func TestClientSeedWithoutAddingAndEncryption(t *testing.T) {
 // Check that after completing leeching, a leecher transitions to a seeding
 // correctly. Connected in a chain like so: Seeder <-> Leecher <-> LeecherLeecher.
 func TestSeedAfterDownloading(t *testing.T) {
-	t.SkipNow()
 	ctx, _done := testx.Context(t)
 	defer _done()
 
@@ -778,11 +774,11 @@ func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
 }
 
 func TestTorrentDownloadAll(t *testing.T) {
-	torrent.DownloadCancelTest(t, autobind.NewLoopback(), torrent.TestDownloadCancelParams{})
+	torrent.DownloadCancelTest(t, autobind.NewLoopback(), autobind.NewLoopback(), torrent.TestDownloadCancelParams{})
 }
 
 func TestTorrentDownloadAllThenCancel(t *testing.T) {
-	torrent.DownloadCancelTest(t, autobind.NewLoopback(), torrent.TestDownloadCancelParams{
+	torrent.DownloadCancelTest(t, autobind.NewLoopback(), autobind.NewLoopback(), torrent.TestDownloadCancelParams{
 		Cancel: true,
 	})
 }
@@ -875,18 +871,18 @@ func testSeederLeecherPair(t *testing.T, seeder func(*torrent.ClientConfig), lee
 
 	datadir := t.TempDir()
 
-	cfg := torrent.TestingConfig(
+	scfg := torrent.TestingConfig(
 		t,
 		torrent.ClientConfigSeed(true),
 		torrent.ClientConfigStorageDir(datadir),
 	)
 
-	cfg.Handshaker = connections.NewHandshaker(
+	scfg.Handshaker = connections.NewHandshaker(
 		connections.NewFirewall(),
 	)
 
-	seeder(cfg)
-	server, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
+	seeder(scfg)
+	server, err := autobind.NewLoopback().Bind(torrent.NewClient(scfg))
 	require.NoError(t, err)
 	defer server.Close()
 	defer testutil.ExportStatusWriter(server, "s")()
@@ -900,16 +896,16 @@ func testSeederLeecherPair(t *testing.T, seeder func(*torrent.ClientConfig), lee
 		makeMagnet(t, server, datadir, fmt.Sprintf("test%d", i+2))
 	}
 
-	cfg = torrent.TestingConfig(
+	lcfg := torrent.TestingConfig(
 		t,
 		torrent.ClientConfigStorageDir(t.TempDir()),
 	)
-	cfg.Handshaker = connections.NewHandshaker(
+	lcfg.Handshaker = connections.NewHandshaker(
 		connections.NewFirewall(),
 	)
 
-	leecher(cfg)
-	client, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
+	leecher(lcfg)
+	client, err := autobind.NewLoopback().Bind(torrent.NewClient(lcfg))
 	require.NoError(t, err)
 	defer client.Close()
 	defer testutil.ExportStatusWriter(client, "c")()

@@ -129,6 +129,7 @@ func (cl *Client) start(md Metadata, options ...Tuner) (dlt *torrent, added bool
 	cl.lock()
 	defer cl.unlock()
 
+	log.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
 	cl.eachDhtServer(func(s *dht.Server) {
 		go dlt.dhtAnnouncer(s)
 	})
@@ -336,7 +337,6 @@ func (cl *Client) closeSockets() {
 		l.Close()
 		return true
 	})
-	cl.conns = nil
 }
 
 // Close stops the client. All connections to peers are closed and all activity will
@@ -702,13 +702,6 @@ func (cl *Client) runReceivedConn(c *connection) {
 func (cl *Client) dhtPort() (ret uint16) {
 	cl.eachDhtServer(func(s *dht.Server) {
 		ret = uint16(errorsx.Zero(netx.NetPort(s.Addr())))
-	})
-	return
-}
-
-func (cl *Client) haveDhtServer() (ret bool) {
-	cl.eachDhtServer(func(_ *dht.Server) {
-		ret = true
 	})
 	return
 }

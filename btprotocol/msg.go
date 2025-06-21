@@ -129,6 +129,12 @@ func NewAllowedFast(piece uint32) Message {
 	}
 }
 
+func NewKeepAlive() Message {
+	return Message{
+		Keepalive: true,
+	}
+}
+
 func NewExtendedHandshake(encoded []byte) Message {
 	return NewExtended(HandshakeExtendedID, encoded)
 }

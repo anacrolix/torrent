@@ -40,7 +40,11 @@ const (
 
 const (
 	HandshakeExtendedID = 0
+	MetadataExtendedID  = 1
+	PEXExtendedID       = 2
+)
 
+const (
 	RequestMetadataExtensionMsgType = 0
 	DataMetadataExtensionMsgType    = 1
 	RejectMetadataExtensionMsgType  = 2

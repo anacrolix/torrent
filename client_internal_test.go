@@ -16,7 +16,6 @@ import (
 	"github.com/james-lawrence/torrent/connections"
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/dht/krpc"
-	"github.com/james-lawrence/torrent/internal/langx"
 	"github.com/james-lawrence/torrent/internal/testutil"
 	"github.com/james-lawrence/torrent/internal/testx"
 	"github.com/james-lawrence/torrent/metainfo"
@@ -145,7 +144,7 @@ type TestDownloadCancelParams struct {
 	Cancel                 bool
 }
 
-func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
+func DownloadCancelTest(t *testing.T, sb Binder, lb Binder, ps TestDownloadCancelParams) {
 	ctx, _done := testx.Context(t)
 	defer _done()
 
@@ -157,7 +156,7 @@ func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
 		ClientConfigSeed(true),
 		ClientConfigStorageDir(greetingTempDir),
 	)
-	seeder, err := b.Bind(NewClient(cfg))
+	seeder, err := sb.Bind(NewClient(cfg))
 	require.NoError(t, err)
 	defer seeder.Close()
 	defer testutil.ExportStatusWriter(seeder, "s")()
@@ -167,17 +166,18 @@ func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
 	require.NoError(t, err)
 	require.NoError(t, Verify(ctx, seederTorrent))
 
-	log.Println("DERP DERP 0")
 	leecherDataDir := t.TempDir()
 	defer os.RemoveAll(leecherDataDir)
 
-	lcfg := langx.Clone(*cfg, ClientConfigStorageDir(leecherDataDir))
-	leecher, err := b.Bind(NewClient(&lcfg))
+	lcfg := TestingConfig(
+		t,
+		ClientConfigStorageDir(leecherDataDir),
+	)
+	leecher, err := lb.Bind(NewClient(lcfg))
 	require.NoError(t, err)
 	defer leecher.Close()
 	defer testutil.ExportStatusWriter(leecher, "l")()
 
-	log.Println("DERP DERP 1")
 	t2, err := NewFromMetaInfo(mi, OptionChunk(2), OptionStorage(storage.NewFile(leecherDataDir)))
 	require.NoError(t, err)
 	leecherGreeting, added, err := leecher.Start(t2)

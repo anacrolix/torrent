@@ -17,7 +17,6 @@ import (
 
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
-	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/internal/bytesx"
@@ -45,6 +44,7 @@ func TuneMaxConnections(m int) Tuner {
 
 // TunePeers add peers to the torrent.
 func TunePeers(peers ...Peer) Tuner {
+	log.Println("ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZz")
 	return func(t *torrent) {
 		t.AddPeers(peers)
 	}
@@ -153,6 +153,7 @@ func TuneClientPeer(cl *Client) Tuner {
 				Trusted: true,
 			})
 		}
+
 		t.AddPeers(ps)
 	}
 }
@@ -351,6 +352,8 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		pex:                     newPex(),
 		storage:                 storage.NewZero(),
 		digests:                 new(digests),
+		wantPeersEvent:          make(chan struct{}, 1),
+		closed:                  make(chan struct{}),
 	}
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
 	t.event = &sync.Cond{L: tlocker{torrent: t}}
@@ -435,7 +438,8 @@ type torrent struct {
 	// How long to avoid duplicating a pending request.
 	duplicateRequestTimeout time.Duration
 
-	closed missinggo.Event
+	// closed         missinggo.Event
+	closed chan struct{}
 
 	// Values are the piece indices that changed.
 	pieceStateChanges *pubsub.PubSub
@@ -470,7 +474,7 @@ type torrent struct {
 	// them. That encourages us to reconnect to peers that are well known in
 	// the swarm.
 	peers          peerPool
-	wantPeersEvent missinggo.Event
+	wantPeersEvent chan struct{}
 
 	metainfoAvailable atomic.Bool
 
@@ -574,7 +578,7 @@ func (t *torrent) rUnlock() {
 
 // Returns a channel that is closed when the Torrent is closed.
 func (t *torrent) Closed() <-chan struct{} {
-	return t.closed.LockedChan(t.locker())
+	return t.closed
 }
 
 // KnownSwarm returns the known subset of the peers in the Torrent's swarm, including active,
@@ -653,9 +657,11 @@ func (t *torrent) AddPeer(p Peer) {
 }
 
 func (t *torrent) addPeer(p Peer) {
-	if t.closed.IsSet() {
-		log.Println("torrent.addPeer closed")
+	select {
+	case <-t.closed:
+		t.cln.config.debug().Printf("torrent.addPeer closed")
 		return
+	default:
 	}
 
 	if t.peers.Add(p) {
@@ -707,6 +713,9 @@ func (t *torrent) haveMetadataPiece(piece int) bool {
 }
 
 func (t *torrent) metadataSize() int {
+	if t == nil {
+		return 0
+	}
 	return len(t.metadataBytes)
 }
 
@@ -868,7 +877,7 @@ func (t *torrent) close() (err error) {
 	t.lock()
 	defer t.unlock()
 
-	t.closed.Set()
+	close(t.closed)
 
 	func() {
 		if t.storage == nil {
@@ -1047,8 +1056,10 @@ func (t *torrent) maybeCompleteMetadata() error {
 }
 
 func (t *torrent) needData() bool {
-	if t.closed.IsSet() {
+	select {
+	case <-t.closed:
 		return false
+	default:
 	}
 
 	if !t.haveInfo() {
@@ -1103,8 +1114,10 @@ func (t *torrent) assertNoPendingRequests() {
 }
 
 func (t *torrent) wantPeers() bool {
-	if t.closed.IsSet() {
+	select {
+	case <-t.closed:
 		return false
+	default:
 	}
 
 	if t.peers.Len() > t.cln.config.TorrentPeersLowWater {
@@ -1115,16 +1128,19 @@ func (t *torrent) wantPeers() bool {
 
 func (t *torrent) updateWantPeersEvent() {
 	if t.wantPeers() {
-		t.wantPeersEvent.Set()
-	} else {
-		t.wantPeersEvent.Clear()
+		select {
+		case t.wantPeersEvent <- struct{}{}:
+		default:
+		}
 	}
 }
 
 // Returns whether the client should make effort to seed the torrent.
 func (t *torrent) seeding() bool {
-	if t.closed.IsSet() {
+	select {
+	case <-t.closed:
 		return false
+	default:
 	}
 
 	if t.cln.config.NoUpload {
@@ -1144,24 +1160,26 @@ func (t *torrent) seeding() bool {
 
 // Adds peers revealed in an announce until the announce ends, or we have
 // enough peers.
-func (t *torrent) consumeDhtAnnouncePeers(pvs <-chan dht.PeersValues) {
+func (t *torrent) consumeDhtAnnouncePeers(ctx context.Context, pvs <-chan dht.PeersValues) {
 	// l := rate.NewLimiter(rate.Every(time.Minute), 1)
-	for v := range pvs {
-		// if len(v.Peers) > 0 && l.Allow() {
-		// 	log.Println("received peers", t.md.ID, len(v.Peers))
-		// }
-		for _, cp := range v.Peers {
-			if cp.Port() == 0 {
-				// Can't do anything with this.
-				continue
-			}
+	for {
+		select {
+		case v := <-pvs:
+			for _, cp := range v.Peers {
+				if cp.Port() == 0 {
+					// Can't do anything with this.
+					continue
+				}
 
-			log.Println("adding peer", cp.AddrPort)
-			t.AddPeer(Peer{
-				IP:     cp.Addr().AsSlice(),
-				Port:   int(cp.Port()),
-				Source: peerSourceDhtGetPeers,
-			})
+				log.Println("adding peer", cp.AddrPort)
+				t.AddPeer(Peer{
+					IP:     cp.Addr().AsSlice(),
+					Port:   int(cp.Port()),
+					Source: peerSourceDhtGetPeers,
+				})
+			}
+		case <-ctx.Done():
+			return
 		}
 	}
 }
@@ -1176,11 +1194,12 @@ func (t *torrent) announceToDht(impliedPort bool, s *dht.Server) error {
 	}
 
 	defer ps.Close()
-	go t.consumeDhtAnnouncePeers(ps.Peers)
+	go t.consumeDhtAnnouncePeers(ctx, ps.Peers)
 
 	select {
-	case <-t.closed.LockedChan(t.locker()):
+	case <-t.closed:
 	case <-ctx.Done():
+		return context.Cause(ctx)
 	}
 
 	return nil
@@ -1189,9 +1208,9 @@ func (t *torrent) announceToDht(impliedPort bool, s *dht.Server) error {
 func (t *torrent) dhtAnnouncer(s *dht.Server) {
 	for {
 		select {
-		case <-t.closed.LockedChan(t.locker()):
+		case <-t.closed:
 			return
-		case <-t.wantPeersEvent.LockedChan(t.locker()):
+		case <-t.wantPeersEvent:
 		}
 
 		t.stats.DHTAnnounce.Add(1)
@@ -1289,8 +1308,10 @@ func (t *torrent) addConnection(c *connection) (err error) {
 		dropping []*connection
 	)
 
-	if t.closed.IsSet() {
+	select {
+	case <-t.closed:
 		return errorsx.New("torrent closed")
+	default:
 	}
 
 	t.lock()
@@ -1336,8 +1357,10 @@ func (t *torrent) addConnection(c *connection) (err error) {
 }
 
 func (t *torrent) wantConns() bool {
-	if t.closed.IsSet() {
+	select {
+	case <-t.closed:
 		return false
+	default:
 	}
 
 	if !t.seeding() && !t.needData() {

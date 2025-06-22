@@ -442,12 +442,13 @@ func TestChunksReadable(t *testing.T) {
 		require.Equal(t, uint64(4), p.Readable())
 	})
 
-	t.Run("with total length smaller than chunk length and piece length", func(t *testing.T) {
-		p := newChunks(16*bytesx.KiB, torrentInfoN(bytesx.KiB, bytesx.MiB))
-		p.InitFromMissing(bitmapx.Lazy(nil))
+	t.Run("with total length smaller than chunk length and piece length and all pieces completed", func(t *testing.T) {
+		p := newChunks(16*bytesx.KiB, torrentInfoN(1024, bytesx.MiB))
+		p.completed = bitmapx.Fill(1)
+		p.pieces = 1
 		require.Equal(t, 0, p.Missing())
 		require.Equal(t, int64(1), p.cmaximum)
-		require.Equal(t, uint64(p.cmaximum), p.unverified.GetCardinality())
+		require.Equal(t, uint64(0), p.unverified.GetCardinality())
 		require.Equal(t, uint64(1), p.Readable())
 	})
 }

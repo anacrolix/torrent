@@ -112,7 +112,7 @@ func newChunks(clength int, m *metainfo.Info, options ...chunkopt) *chunks {
 		},
 	}, options...))
 
-	// log.Printf("%p - LENGTH %d NUMCHUNKS %d - CHUNK LENGTH %d - PIECE LEGNTH %d\n", p, p.meta.TotalLength(), p.cmaximum, p.clength, p.meta.PieceLength)
+	// log.Printf("%p - TOTAL LENGTH %d LENGTH %d NUMCHUNKS %d - CHUNK LENGTH %d - PIECE LEGNTH %d\n", p, p.meta.TotalLength(), p.meta.Length, p.cmaximum, p.clength, p.meta.PieceLength)
 	return p
 }
 

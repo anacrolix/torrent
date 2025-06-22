@@ -179,7 +179,9 @@ func (info *Info) TotalLength() (ret int64) {
 	if cached := atomic.LoadInt64(&info.cachedLength); cached > 0 {
 		return cached
 	}
-	defer atomic.StoreInt64(&info.cachedLength, ret)
+	defer func() {
+		atomic.StoreInt64(&info.cachedLength, ret)
+	}()
 
 	if !info.IsDir() {
 		return info.Length

@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/anacrolix/envpprof"
-
 	"github.com/anacrolix/missinggo/inproc"
 	"github.com/anacrolix/sync"
 	"github.com/james-lawrence/torrent/bencode"

@@ -2,7 +2,6 @@ package metainfo
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -69,7 +68,7 @@ func TestNumPieces(t *testing.T) {
 			PieceLength: _case.PieceLength,
 		}
 		err := info.GeneratePieces(func(fi FileInfo) (io.ReadCloser, error) {
-			return ioutil.NopCloser(missinggo.ZeroReader), nil
+			return io.NopCloser(missinggo.ZeroReader), nil
 		})
 		assert.NoError(t, err)
 		assert.EqualValues(t, _case.NumPieces, info.NumPieces())
@@ -86,7 +85,7 @@ func touchFile(path string) (err error) {
 }
 
 func TestBuildFromFilePathOrder(t *testing.T) {
-	td, err := ioutil.TempDir("", "anacrolix")
+	td, err := os.MkdirTemp("", "anacrolix")
 	require.NoError(t, err)
 	defer os.RemoveAll(td)
 	require.NoError(t, touchFile(filepath.Join(td, "b")))

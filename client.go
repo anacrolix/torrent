@@ -21,7 +21,6 @@ import (
 	"github.com/james-lawrence/torrent/sockets"
 	"github.com/james-lawrence/torrent/storage"
 
-	"github.com/anacrolix/missinggo/v2"
 	"github.com/davecgh/go-spew/spew"
 
 	pp "github.com/james-lawrence/torrent/btprotocol"
@@ -721,15 +720,14 @@ func (cl *Client) DhtServers() []*dht.Server {
 // AddDHTNodes adds nodes to the DHT servers.
 func (cl *Client) AddDHTNodes(nodes []string) {
 	for _, n := range nodes {
-		hmp := missinggo.SplitHostMaybePort(n)
-		ip := net.ParseIP(hmp.Host)
-		if ip == nil {
-			cl.config.info().Printf("refusing to add DHT node with invalid IP: %q\n", hmp.Host)
+		addrport, err := netip.ParseAddrPort(n)
+		if err != nil {
+			cl.config.info().Printf("refusing to add DHT node with invalid IP: %q - %v\n", addrport.Addr(), err)
 			continue
 		}
 
 		ni := krpc.NodeInfo{
-			Addr: krpc.NewNodeAddrFromIPPort(ip, hmp.Port),
+			Addr: krpc.NewNodeAddrFromAddrPort(addrport),
 		}
 		cl.eachDhtServer(func(s *dht.Server) {
 			s.AddNode(ni)

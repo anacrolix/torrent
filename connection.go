@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent/bep0006"
 	"github.com/james-lawrence/torrent/bep0009"
 	"github.com/james-lawrence/torrent/connections"
@@ -212,7 +213,7 @@ func (cn *connection) isPreferredDirection() bool {
 // considering only their networking properties. If ok is false, we can't
 // decide.
 func (cn *connection) hasPreferredNetworkOver(r *connection) (left, ok bool) {
-	var ml multiLess
+	var ml missinggo.MultiLess
 	ml.NextBool(cn.isPreferredDirection(), r.isPreferredDirection())
 	ml.NextBool(!cn.utp(), !r.utp())
 	ml.NextBool(cn.ipv6(), r.ipv6())

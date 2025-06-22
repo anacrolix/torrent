@@ -10,12 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/utp"
 	"github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/connections"
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/internal/errorsx"
+	"github.com/james-lawrence/torrent/internal/netx"
 	"github.com/james-lawrence/torrent/internal/testutil"
 	"github.com/james-lawrence/torrent/internal/testx"
 	"github.com/james-lawrence/torrent/metainfo"
@@ -225,7 +226,7 @@ func TestClientDynamicListenPortAllProtocols(t *testing.T) {
 	port := cl.LocalPort()
 	assert.NotEqual(t, 0, port)
 	cl.eachListener(func(s sockets.Socket) bool {
-		assert.Equal(t, port, missinggo.AddrPort(s.Addr()))
+		assert.Equal(t, uint16(port), errorsx.Must(netx.AddrPort(s.Addr())).Port())
 		return true
 	})
 }

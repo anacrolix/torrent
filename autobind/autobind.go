@@ -12,10 +12,10 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/anacrolix/missinggo/v2"
 	"github.com/james-lawrence/torrent"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/internal/langx"
+	"github.com/james-lawrence/torrent/internal/netx"
 	"github.com/james-lawrence/torrent/internal/utpx"
 	"github.com/james-lawrence/torrent/sockets"
 	"github.com/james-lawrence/torrent/storage"
@@ -244,12 +244,13 @@ func listenAllRetry(nahs []networkAndHost, port int) (ss []sockets.Socket, retry
 			ss = nil
 		}
 	}()
-	portStr = strconv.FormatInt(int64(missinggo.AddrPort(ss[0].Addr())), 10)
+
+	portStr = strconv.FormatInt(int64(errorsx.Zero(netx.AddrPort(ss[0].Addr())).Port()), 10)
 	for _, nah := range nahs[1:] {
 		s, err := listen(nah.Network, net.JoinHostPort(nah.Host, portStr))
 		if err != nil {
 			return ss,
-				missinggo.IsAddrInUse(err) && port == 0,
+				netx.IsAddrInUse(err) && port == 0,
 				errorsx.Wrap(err, "subsequent listen")
 		}
 		ss = append(ss, s)

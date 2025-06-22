@@ -20,7 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
-	"github.com/anacrolix/missinggo/v2/filecache"
 	"github.com/james-lawrence/torrent"
 	"github.com/james-lawrence/torrent/autobind"
 	"github.com/james-lawrence/torrent/connections"
@@ -137,7 +136,7 @@ func TestClientTransferRateLimitedDownload(t *testing.T) {
 	})
 }
 
-func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
+func fileCachePieceResourceStorage() storage.ClientImpl {
 	return storage.NewFile(os.TempDir())
 }
 
@@ -761,7 +760,7 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 // 	}
 // }
 
-func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.ClientImpl) {
+func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func() storage.ClientImpl) {
 	t.SkipNow()
 }
 

@@ -43,7 +43,10 @@ func RunHandshookConn(c *connection, t *torrent) error {
 			cancel(errorsx.Wrap(err, "error sending configuring connection"))
 			return
 		}
-		cancel(connwriterinit(ctx, c, 10*time.Second))
+
+		err := connwriterinit(ctx, c, 10*time.Second)
+		errorsx.Log(err)
+		cancel(err)
 	}()
 
 	if err := c.mainReadLoop(ctx); err != nil {

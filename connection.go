@@ -449,7 +449,7 @@ func (cn *connection) request(r request, mw messageWriter) bool {
 }
 
 func (cn *connection) determineInterest(msg func(pp.Message) bool) (available *roaring.Bitmap) {
-	defer cn.cfg.debug().Printf("%d c(%p) seed(%t) interest completed\n", os.Getpid(), cn, cn.t.seeding())
+	defer cn.cfg.debug().Printf("c(%p) seed(%t) interest completed\n", cn, cn.t.seeding())
 
 	if cn.uploadAllowed() {
 		if cn.Unchoke(msg) {

@@ -584,7 +584,12 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr netip
 		return
 	}
 
-	RunHandshookConn(c, t)
+	for {
+		if err := RunHandshookConn(c, t); err != nil {
+			log.Printf("outgoing connection failed %T - %v", err, err)
+			break
+		}
+	}
 
 	t.deleteConnection(c)
 	t.event.Broadcast()
@@ -694,7 +699,9 @@ func (cl *Client) runReceivedConn(c *connection) {
 		return
 	}
 
-	RunHandshookConn(c, t)
+	if err := RunHandshookConn(c, t); err != nil {
+		log.Printf("received connection failed %T - %v", err, err)
+	}
 }
 
 func (cl *Client) dhtPort() (ret uint16) {

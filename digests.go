@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/metainfo"
 )
@@ -28,14 +29,14 @@ func newDigestsFromTorrent(t *torrent) digests {
 			t.pieceStateChanges.Publish(idx)
 
 			return func() {
-				// if t.cln.torrents == nil {
-				// 	return
-				// }
+				if t.cln.torrents == nil {
+					return
+				}
 
-				// id := int160.FromByteArray(t.md.ID)
-				// if err := t.cln.torrents.bm.Write(id, t.chunks.missing.Clone()); err != nil {
-				// 	t.cln.config.errors().Printf("failed to record missing chunks bitmap: %s - %v\n", id, err)
-				// }
+				id := int160.FromByteArray(t.md.ID)
+				if err := t.cln.torrents.bm.Write(id, t.chunks.missing.Clone()); err != nil {
+					t.cln.config.errors().Printf("failed to record missing chunks bitmap: %s - %v\n", id, err)
+				}
 			}
 		},
 	)

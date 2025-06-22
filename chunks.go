@@ -112,7 +112,7 @@ func newChunks(clength int, m *metainfo.Info, options ...chunkopt) *chunks {
 		},
 	}, options...))
 
-	// log.Printf("%p - LENGTH %d NUMCHUNKS %d - CHUNK LENGTH %d - PIECE LEGNTH %d\n", p, p.meta.Length, p.cmaximum, p.clength, p.meta.PieceLength)
+	// log.Printf("%p - LENGTH %d NUMCHUNKS %d - CHUNK LENGTH %d - PIECE LEGNTH %d\n", p, p.meta.TotalLength(), p.cmaximum, p.clength, p.meta.PieceLength)
 	return p
 }
 
@@ -156,6 +156,7 @@ type chunks struct {
 	// next time to reap the outstanding requests
 	nextReap time.Time
 
+	// buffer pool for storing chunks
 	pool *sync.Pool
 
 	mu *sync.RWMutex
@@ -270,8 +271,6 @@ func (t *chunks) peek(available *roaring.Bitmap) (cidx int, req request, err err
 
 // ChunksMissing checks if the given piece has any missing chunks.
 func (t *chunks) ChunksMissing(pid uint64) bool {
-	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
-	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -288,15 +287,21 @@ func (t *chunks) MergeIntoMissing(m *roaring.Bitmap) {
 func (t *chunks) MergeIntoUnverified(m *roaring.Bitmap) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
 	t.unverified.Or(m)
+}
+
+func (t *chunks) InitFromMissing(m *roaring.Bitmap) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.missing.Or(m)
+	t.unverified = bitmapx.Fill(uint64(t.cmaximum))
+	t.unverified.AndNot(t.missing)
 }
 
 // ChunksAvailable returns true iff all the chunks for the given piece are awaiting
 // digesting.
 func (t *chunks) ChunksAvailable(pid uint64) bool {
-	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
-	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -306,8 +311,6 @@ func (t *chunks) ChunksAvailable(pid uint64) bool {
 
 // ChunksHashing return true iff any chunk for the given piece has been marked as unverified.
 func (t *chunks) ChunksHashing(pid uint64) bool {
-	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
-	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -316,12 +319,17 @@ func (t *chunks) ChunksHashing(pid uint64) bool {
 
 // ChunksComplete returns true iff all the chunks for the given piece has been marked as completed.
 func (t *chunks) ChunksComplete(pid uint64) (b bool) {
-	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
-	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
 	return t.completed.ContainsInt(int(pid))
+}
+
+func (t *chunks) ChunksReadable(pid uint64) (b bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	return t.completed.ContainsInt(int(pid)) || bitmapx.Range(t.Range(pid)).AndCardinality(t.unverified) > 0
 }
 
 // returns the number of bytes allowed to read for the given offset.
@@ -549,12 +557,32 @@ func (t *chunks) pend(r request) (changed bool) {
 
 // Missing returns the number of missing chunks
 func (t *chunks) Missing() int {
-	if t == nil {
-		panic("chunks should never be nil for chunks missings")
-	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return int(t.missing.GetCardinality())
+}
+
+// returns number of pieces that are readable.
+func (t *chunks) Readable() uint64 {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	cpp := chunksPerPiece(t.meta.PieceLength, t.clength)
+	return t.unverified.GetCardinality() + min((uint64(cpp)*t.completed.GetCardinality()), t.pieces)
+}
+
+func (t *chunks) ReadableBitmap() *roaring.Bitmap {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	bm := t.completed.Clone()
+
+	t.unverified.Iterate(func(x uint32) bool {
+		bm.Add(uint32(t.pindex(int(x))))
+		return true
+	})
+
+	return bm
 }
 
 // returns true if any chunks are in incomplete states (missing, oustanding, unverified)

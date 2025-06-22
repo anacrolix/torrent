@@ -17,6 +17,7 @@ import (
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/dht/krpc"
 	"github.com/james-lawrence/torrent/internal/netx"
+	"github.com/james-lawrence/torrent/internal/userx"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
 	"github.com/james-lawrence/torrent/tracker"
@@ -31,8 +32,9 @@ const DefaultHTTPUserAgent = "Go-Torrent/1.0"
 
 // ClientConfig not safe to modify this after it's given to a Client.
 type ClientConfig struct {
-	defaultStorage  storage.ClientImpl
-	defaultMetadata MetadataStore
+	defaultCacheDirectory string
+	defaultStorage        storage.ClientImpl
+	defaultMetadata       MetadataStore
 
 	// defaultPortForwarding bool
 	dynamicip func(ctx context.Context, c *Client) (iter.Seq[netip.AddrPort], error)
@@ -361,9 +363,16 @@ func ClientConfigMaxOutstandingRequests(n int) ClientConfigOption {
 	}
 }
 
+func ClientConfigCacheDirectory(s string) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		cc.defaultCacheDirectory = s
+	}
+}
+
 // NewDefaultClientConfig default client configuration.
 func NewDefaultClientConfig(mdstore MetadataStore, store storage.ClientImpl, options ...ClientConfigOption) *ClientConfig {
 	cc := &ClientConfig{
+		defaultCacheDirectory:          userx.DefaultCacheDirectory("torrents"),
 		defaultMetadata:                mdstore,
 		defaultStorage:                 store,
 		HTTPUserAgent:                  DefaultHTTPUserAgent,

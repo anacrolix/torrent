@@ -187,11 +187,9 @@ func DownloadCancelTest(t *testing.T, sb Binder, lb Binder, ps TestDownloadCance
 	// 	}()
 	// }
 
-	log.Println("DERP DERP 2")
 	_, err = DownloadInto(ctx, io.Discard, leecherGreeting, TuneClientPeer(seeder))
 	require.NoError(t, err)
 	require.Equal(t, false, leecherGreeting.(*torrent).chunks.ChunksMissing(0))
-	log.Println("DERP DERP 3")
 }
 
 // Ensure that it's an error for a peer to send an invalid have message.

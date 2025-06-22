@@ -1,6 +1,8 @@
 package bitmapx
 
 import (
+	"math/rand/v2"
+
 	"github.com/RoaringBitmap/roaring/v2"
 )
 
@@ -21,7 +23,7 @@ func Lazy(m *roaring.Bitmap) *roaring.Bitmap {
 		return m
 	}
 
-	return roaring.NewBitmap()
+	return roaring.New()
 }
 
 // Contains returns iff all the bits are set within the bitmap
@@ -58,4 +60,16 @@ func Zero(max uint64) *roaring.Bitmap {
 
 func Fill(max uint64) *roaring.Bitmap {
 	return Range(0, max)
+}
+
+func Random(max uint32, bits int, src rand.Source) *roaring.Bitmap {
+	r := rand.New(src)
+	m := roaring.New()
+
+	for range bits {
+		v := r.Uint32N(max)
+		m.Add(v)
+	}
+
+	return m
 }

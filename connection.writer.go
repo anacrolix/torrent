@@ -110,9 +110,8 @@ func connexinit(cn *connection, n cstate.T) cstate.T {
 
 func connexfast(cn *connection, n cstate.T) cstate.T {
 	return cstate.Fn(func(context.Context, *cstate.Shared) cstate.T {
-		defer log.Println("fast extension completed")
+		defer cn.cfg.debug().Printf("c(%p) seed(%t) fast extension completed\n", cn, cn.t.seeding())
 		if !cn.supported(pp.ExtensionBitFast) {
-			// log.Println("posting bitfield", cn.conn.LocalAddr())
 			if _, err := cn.PostBitfield(); err != nil {
 				return cstate.Failure(err)
 			}
@@ -123,15 +122,16 @@ func connexfast(cn *connection, n cstate.T) cstate.T {
 			cn.peerfastset = errorsx.Zero(bep0006.AllowedFastSet(cn.remoteAddr.Addr(), cn.t.md.ID, cn.t.chunks.pieces, min(32, cn.t.chunks.pieces)))
 		}
 
-		// log.Println("posting allow fast", cn.conn.LocalAddr())
-		switch cn.t.chunks.completed.GetCardinality() {
+		switch readable := cn.t.chunks.Readable(); readable {
 		case 0:
+			cn.cfg.debug().Printf("c(%p) seed(%t) posting allow fast have none: %d/%d\n", cn, cn.t.seeding(), readable, cn.t.chunks.cmaximum)
 			if _, err := cn.Post(pp.NewHaveNone()); err != nil {
 				return cstate.Failure(err)
 			}
 			cn.sentHaves.Clear()
 			return n
-		case cn.t.chunks.pieces:
+		case uint64(cn.t.chunks.cmaximum):
+			cn.cfg.debug().Printf("c(%p) seed(%t) posting allow fast have all: %d/%d\n", cn, cn.t.seeding(), readable, cn.t.chunks.cmaximum)
 			if _, err := cn.Post(pp.NewHaveAll()); err != nil {
 				return cstate.Failure(err)
 			}
@@ -146,7 +146,7 @@ func connexfast(cn *connection, n cstate.T) cstate.T {
 
 			return n
 		default:
-			// log.Println("posting bitfield", cn.conn.LocalAddr())
+			cn.cfg.debug().Printf("c(%p) seed(%t) posting  bitfield: %d/%d\n", cn, cn.t.seeding(), readable, cn.t.chunks.cmaximum)
 			if _, err := cn.PostBitfield(); err != nil {
 				return cstate.Failure(err)
 			}
@@ -206,7 +206,7 @@ type writerstate struct {
 }
 
 func (t *writerstate) String() string {
-	return fmt.Sprintf("%p seed(%t)", t.connection, t.connection.t.seeding())
+	return fmt.Sprintf("c(%p) seed(%t)", t.connection, t.connection.t.seeding())
 }
 
 func connwriterclosed(ws *writerstate, next cstate.T) cstate.T {

@@ -917,10 +917,6 @@ func (t *torrent) pieceLength(piece uint64) pp.Integer {
 	return pp.Integer(t.info.PieceLength)
 }
 
-func (t *torrent) havePiece(index uint64) bool {
-	return t.chunks.ChunksComplete(index)
-}
-
 // The worst connection is one that hasn't been sent, or sent anything useful
 // for the longest. A bad connection is one that usually sends us unwanted
 // pieces, or has been in worser half of the established connections for more
@@ -1476,14 +1472,14 @@ func (t *torrent) String() string {
 }
 
 func (t *torrent) ping(addr net.UDPAddr) {
-	// t.cln.eachDhtServer(func(s *dht.Server) {
-	// 	go func() {
-	// 		ret := dht.Ping3S(context.Background(), s, dht.NewAddr(&addr), s.ID())
-	// 		if errorsx.Ignore(ret.Err, context.DeadlineExceeded) != nil {
-	// 			log.Println("failed to ping address", ret.Err)
-	// 		}
-	// 	}()
-	// })
+	t.cln.eachDhtServer(func(s *dht.Server) {
+		go func() {
+			ret := dht.Ping3S(context.Background(), s, dht.NewAddr(&addr), s.ID())
+			if errorsx.Ignore(ret.Err, context.DeadlineExceeded) != nil {
+				log.Println("failed to ping address", ret.Err)
+			}
+		}()
+	})
 }
 
 // Process incoming ut_metadata message.

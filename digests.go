@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/metainfo"
@@ -17,7 +18,7 @@ func newDigestsFromTorrent(t *torrent) digests {
 	return newDigests(
 		t.storage,
 		t.piece,
-		func(idx int, cause error) {
+		func(idx int, cause error) func() {
 			// log.Printf("hashed %d - %v\n", idx, cause)
 			// log.Printf("hashed %p %d / %d - %v", t.chunks, idx+1, t.numPieces(), cause)
 			t.chunks.Hashed(uint64(idx), cause)
@@ -25,30 +26,43 @@ func newDigestsFromTorrent(t *torrent) digests {
 			t.event.Broadcast()
 			t.cln.event.Broadcast() // cause the client to detect completed torrents.
 			t.pieceStateChanges.Publish(idx)
+
+			return func() {
+				// if t.cln.torrents == nil {
+				// 	return
+				// }
+
+				// id := int160.FromByteArray(t.md.ID)
+				// if err := t.cln.torrents.bm.Write(id, t.chunks.missing.Clone()); err != nil {
+				// 	t.cln.config.errors().Printf("failed to record missing chunks bitmap: %s - %v\n", id, err)
+				// }
+			}
 		},
 	)
 }
 
-func newDigests(iora io.ReaderAt, retrieve func(int) *metainfo.Piece, complete func(int, error)) digests {
+func newDigests(iora io.ReaderAt, retrieve func(int) *metainfo.Piece, complete func(int, error) func()) digests {
 	if iora == nil {
 		panic("digests require a storage implementation")
 	}
 
 	// log.Printf("new digest %T\n", iora)
 	return digests{
-		ReaderAt: iora,
-		retrieve: retrieve,
-		complete: complete,
-		pending:  newBitQueue(),
-		c:        sync.NewCond(&sync.Mutex{}),
+		ReaderAt:  iora,
+		retrieve:  retrieve,
+		complete:  complete,
+		pending:   newBitQueue(),
+		c:         sync.NewCond(&sync.Mutex{}),
+		lastwrite: time.Now(),
 	}
 }
 
 // digests is responsible correctness of received data.
 type digests struct {
-	ReaderAt io.ReaderAt
-	retrieve func(int) *metainfo.Piece
-	complete func(int, error)
+	ReaderAt  io.ReaderAt
+	lastwrite time.Time
+	retrieve  func(int) *metainfo.Piece
+	complete  func(int, error) func()
 	// marks whether digest is actively processing.
 	reaping int64
 	// cache of the pieces that need to be verified.
@@ -111,7 +125,13 @@ func (t *digests) check(idx int) {
 		return
 	}
 
-	t.complete(idx, nil)
+	trackmissing := t.complete(idx, nil)
+
+	// persist missing chunks to disk
+	if ts := time.Now(); t.lastwrite.Before(ts.Add(time.Minute)) {
+		trackmissing()
+		t.lastwrite = ts
+	}
 }
 
 func (t *digests) compute(p *metainfo.Piece) (ret metainfo.Hash, err error) {

@@ -17,10 +17,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/james-lawrence/torrent/bep0006"
+	"github.com/james-lawrence/torrent/bep0009"
 	"github.com/james-lawrence/torrent/connections"
 	"github.com/james-lawrence/torrent/dht/int160"
 
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 
 	"github.com/james-lawrence/torrent/bencode"
 	pp "github.com/james-lawrence/torrent/btprotocol"
@@ -228,10 +230,18 @@ func (cn *connection) supportsExtension(ext pp.ExtensionName) bool {
 // Correct the PeerPieces slice length. Return false if the existing slice is
 // invalid, such as by receiving badly sized BITFIELD, or invalid HAVE
 // messages.
-func (cn *connection) setNumPieces(num uint64) error {
-	cn.cmu().Lock()
-	cn.claimed.RemoveRange(uint64(cn.t.chunks.cmaximum), cn.claimed.GetCardinality())
-	cn.cmu().Unlock()
+func (cn *connection) resetclaimed() error {
+	if cn.peerSentHaveAll {
+		cn.cmu().Lock()
+		cn.t.chunks.fill(cn.claimed)
+		cn.cmu().Unlock()
+	} else {
+		cn.cmu().Lock()
+		cn.t.chunks.fill(cn.claimed).Clear()
+		cn.cmu().Unlock()
+	}
+
+	cn.peerfastset = errorsx.Zero(bep0006.AllowedFastSet(cn.remoteAddr.Addr(), cn.t.md.ID, cn.t.chunks.pieces, min(32, cn.t.chunks.pieces)))
 	cn.peerPiecesChanged()
 	return nil
 }
@@ -321,29 +331,24 @@ func (cn *connection) PostImmediate(msg pp.Message) (n int, err error) {
 }
 
 func (cn *connection) requestMetadataPiece(index int) {
-	eID := cn.extension(pp.ExtensionNameMetadata)
-	if eID == 0 {
-		return
-	}
 
 	if index < len(cn.metadataRequests) && cn.metadataRequests[index] {
 		return
 	}
 
-	cn.Post(pp.Message{
-		Type:       pp.Extended,
-		ExtendedID: eID,
-		ExtendedPayload: func() []byte {
-			b, err := bencode.Marshal(map[string]int{
-				"msg_type": pp.RequestMetadataExtensionMsgType,
-				"piece":    index,
-			})
-			if err != nil {
-				panic(err)
-			}
-			return b
-		}(),
+	encoded, err := bencode.Marshal(bep0009.MetadataRequest{
+		Type:  pp.RequestMetadataExtensionMsgType,
+		Index: index,
 	})
+	if err != nil {
+		log.Println("able to encoded metadata request", err)
+		return
+	}
+
+	if _, err := cn.Post(pp.NewExtended(pp.MetadataExtendedID, encoded)); err != nil {
+		log.Println("able to post metadata request", err)
+		return
+	}
 
 	for index >= len(cn.metadataRequests) {
 		cn.metadataRequests = append(cn.metadataRequests, false)
@@ -409,6 +414,7 @@ func (cn *connection) SetInterested(interested bool, msg func(pp.Message) bool) 
 		return cn.Interested
 	}
 
+	cn.cfg.debug().Printf("c(%p) seed(%t) interest %t -> %t\n", cn, cn.t.seeding(), cn.Interested, interested)
 	cn.Interested = interested
 
 	if interested {
@@ -454,6 +460,10 @@ func (cn *connection) determineInterest(msg func(pp.Message) bool) (available *r
 		}
 	}
 
+	if !cn.SetInterested(cn.peerHasWantedPieces(), msg) {
+		cn.cfg.debug().Printf("c(%p) seed(%t) nothing available to request\n", cn, cn.t.seeding())
+	}
+
 	if cn.PeerChoked && !cn.fastset.IsEmpty() {
 		cn.cfg.debug().Printf("c(%p) seed(%t) allowing fastset %d\n", cn, cn.t.seeding(), cn.fastset.GetCardinality())
 		available = cn.fastset
@@ -462,16 +472,10 @@ func (cn *connection) determineInterest(msg func(pp.Message) bool) (available *r
 		available = cn.claimed
 	}
 
-	available = bitmapx.AndNot(available, cn.blacklisted)
-
-	if !cn.SetInterested(!available.IsEmpty(), msg) {
-		cn.cfg.debug().Printf("c(%p) seed(%t) nothing available to request\n", cn, cn.t.seeding())
-	}
-
-	return available
+	return bitmapx.AndNot(available, cn.blacklisted)
 }
 
-func (cn *connection) fillWriteBuffer(available *roaring.Bitmap, msg func(pp.Message) bool) {
+func (cn *connection) genrequests(available *roaring.Bitmap, msg func(pp.Message) bool) {
 	var (
 		err  error
 		reqs []request
@@ -697,11 +701,11 @@ func (cn *connection) requestPendingMetadata() {
 	}
 
 	if cn.t.haveInfo() {
-		cn.cfg.debug().Println("already have torrent")
+		cn.cfg.debug().Printf("c(%p) seed(%t) metadata ex: ignoring already have torrent\n", cn, cn.t.seeding())
 		return
 	}
 
-	cn.cfg.debug().Println("requesting metadata")
+	cn.cfg.debug().Println("metadata ex: requesting metadata")
 
 	// Request metadata pieces that we don't have in a random order.
 	var pending []int
@@ -851,15 +855,15 @@ func (cn *connection) onReadRequest(r request) error {
 
 func (cn *connection) Flush() (int, error) {
 	// defer func() {
-	// 	log.Printf("-------------------------------- flushed %d --------------------------------\n", cn.writeBuffer.Len())
+	// 	log.Printf("c(%p) seed(%t) -------------------------------- flushed %d --------------------------------\n", cn, cn.t.seeding(), cn.writeBuffer.Len())
 	// }()
 
 	cn.cmu().Lock()
 	buf := cn.writeBuffer.Bytes()
 	cn.writeBuffer.Reset()
+	n, err := cn.w.Write(buf)
 	cn.cmu().Unlock()
 
-	n, err := cn.w.Write(buf)
 	if err != nil {
 		return n, errorsx.Wrap(err, "failed to flush buffer")
 	}
@@ -950,7 +954,7 @@ func (cn *connection) ReadOne(ctx context.Context, decoder *pp.Decoder) (msg pp.
 			return msg, err
 		}
 
-		cn.t.chunkPool.Put(&msg.Piece)
+		cn.t.chunks.pool.Put(&msg.Piece)
 
 		return msg, nil
 	case pp.Cancel:
@@ -1017,10 +1021,10 @@ func (cn *connection) ReadOne(ctx context.Context, decoder *pp.Decoder) (msg pp.
 // exit. Returning will end the connection.
 func (cn *connection) mainReadLoop(ctx context.Context) (err error) {
 	cn.cfg.debug().Printf("c(%p) seed(%t) - read loop initiated\n", cn, cn.t.seeding())
-	defer cn.cfg.debug().Printf("(c(%p) seed(%t) - read loop completed\n", cn, cn.t.seeding())
+	defer cn.cfg.debug().Printf("c(%p) seed(%t) - read loop completed\n", cn, cn.t.seeding())
 	defer cn.updateRequests() // tap the writer so it'll clean itself up.
 
-	decoder := pp.NewDecoder(cn.r, cn.t.chunkPool)
+	decoder := pp.NewDecoder(cn.r, cn.t.chunks.pool)
 
 	for {
 		_, err := cn.ReadOne(ctx, decoder)
@@ -1038,7 +1042,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 	case pp.HandshakeExtendedID:
 		var d pp.ExtendedHandshakeMessage
 		if err := bencode.Unmarshal(payload, &d); err != nil {
-			cn.cfg.errors().Printf("error parsing extended handshake message %q: %s\n", payload, err)
+			cn.cfg.errors().Printf("c(%p) seed(%t) error parsing extended handshake message %d %q: %s\n", cn, cn.t.seeding(), id, payload, err)
 			return errorsx.Wrap(err, "unmarshalling extended handshake payload")
 		}
 
@@ -1063,22 +1067,18 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 
 		cn.requestPendingMetadata()
 		cn.sendInitialPEX()
+
 		// BUG no sending PEX updates yet
 		return nil
 	case pp.MetadataExtendedID:
 		// log.Println("metadata extension available")
-		err := t.gotMetadataExtensionMsg(payload, cn)
-		if err != nil {
-			return errorsx.Errorf("handling metadata extension message: %v", err)
-		}
-		return nil
+		return errorsx.Wrap(t.gotMetadataExtensionMsg(payload, cn), "handling metadata extension message")
 	case pp.PEXExtendedID:
-
 		if _, ok := cn.cfg.extensions[pp.ExtensionNamePex]; !ok {
 			// TODO: Maybe close the connection.
 			return nil
 		}
-		log.Println("PEX SUPPORTED", cn.supported(pp.PEXExtendedID))
+
 		var pexMsg pp.PexMsg
 		err := bencode.Unmarshal(payload, &pexMsg)
 		if err != nil {
@@ -1394,5 +1394,5 @@ func (cn *connection) sendInitialPEX() {
 		return
 	}
 
-	cn.Post(m.Message(eid))
+	cn.Post(pp.NewExtended(eid, bencode.MustMarshal(m)))
 }

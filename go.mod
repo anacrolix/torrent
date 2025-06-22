@@ -6,7 +6,7 @@ toolchain go1.24.3
 
 require (
 	filippo.io/edwards25519 v1.1.0
-	github.com/RoaringBitmap/roaring v1.9.4
+	github.com/RoaringBitmap/roaring/v2 v2.5.0
 	github.com/alexflint/go-arg v1.5.1
 	github.com/anacrolix/chansync v0.6.0
 	github.com/anacrolix/envpprof v1.3.0
@@ -29,8 +29,8 @@ require (
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.7.0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/net v0.40.0
-	golang.org/x/time v0.11.0
+	golang.org/x/net v0.41.0
+	golang.org/x/time v0.12.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
 )
 

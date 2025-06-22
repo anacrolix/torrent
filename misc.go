@@ -137,7 +137,3 @@ func connIsIpv6(nc interface {
 	rip := missinggo.AddrIP(ra)
 	return rip.To4() == nil && rip.To16() != nil
 }
-
-type (
-	IpPort = missinggo.IpPort
-)

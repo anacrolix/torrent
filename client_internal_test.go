@@ -25,19 +25,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type tt interface {
-	require.TestingT
-	TempDir() string
-}
-
-func TestingConfig(t tt, options ...ClientConfigOption) *ClientConfig {
+func TestingConfig(t testing.TB, options ...ClientConfigOption) *ClientConfig {
 	rdir := t.TempDir()
+
 	return NewDefaultClientConfig(
 		metadatafilestore{root: rdir},
 		storage.NewFile(rdir),
 		ClientConfigPeerID(krpc.RandomID().String()),
 		// ClientConfigBootstrapGlobal,
-		ClientConfigDHTEnabled(false),
 		ClientConfigPortForward(false),
 		ClientConfigInfoLogger(log.New(os.Stderr, "[info] ", log.Flags())),
 		ClientConfigDebugLogger(log.New(os.Stderr, "[debug] ", log.Flags())),
@@ -48,7 +43,7 @@ func TestingConfig(t tt, options ...ClientConfigOption) *ClientConfig {
 func Autosocket(t *testing.T) Binder {
 	var (
 		err      error
-		bindings []socket
+		bindings []sockets.Socket
 		tsocket  *utp.Socket
 	)
 
@@ -229,7 +224,7 @@ func TestClientDynamicListenPortAllProtocols(t *testing.T) {
 	defer cl.Close()
 	port := cl.LocalPort()
 	assert.NotEqual(t, 0, port)
-	cl.eachListener(func(s socket) bool {
+	cl.eachListener(func(s sockets.Socket) bool {
 		assert.Equal(t, port, missinggo.AddrPort(s.Addr()))
 		return true
 	})
@@ -289,7 +284,7 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	// ctx, done := testx.Context(t)
 	// defer done()
 
-	cfg := TestingConfig(t, ClientConfigDHTEnabled(true), ClientConfigSeed(true), ClientConfigDebugLogger(log.Default()))
+	cfg := TestingConfig(t, ClientConfigSeed(true), ClientConfigDebugLogger(log.Default()))
 	cfg.DhtStartingNodes = func(n string) dht.StartingNodesGetter { return func() ([]dht.Addr, error) { return nil, nil } }
 	// For now, we want to just jam the nodes into the table, without
 	// verifying them first. Also the DHT code doesn't support mixing secure

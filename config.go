@@ -39,8 +39,6 @@ type ClientConfig struct {
 
 	UpnpID string
 
-	// Don't create a DHT.
-	NoDHT            bool `long:"disable-dht"`
 	DhtStartingNodes func(network string) dht.StartingNodesGetter
 	// Never send chunks to peers.
 	NoUpload bool `long:"no-upload"`
@@ -193,12 +191,6 @@ func ClientConfigCompose(options ...ClientConfigOption) ClientConfigOption {
 func ClientConfigDialer(d netx.Dialer) ClientConfigOption {
 	return func(cc *ClientConfig) {
 		cc.dialer = d
-	}
-}
-
-func ClientConfigDHTEnabled(b bool) ClientConfigOption {
-	return func(cc *ClientConfig) {
-		cc.NoDHT = !b
 	}
 }
 

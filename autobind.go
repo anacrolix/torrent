@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/james-lawrence/torrent/internal/errorsx"
+	"github.com/james-lawrence/torrent/sockets"
 )
 
 type dialer interface {
@@ -25,11 +26,11 @@ type Binder interface {
 
 // NewSocketsBind binds a set of sockets to the client.
 // it bypasses any disable checks (tcp,udp, ip4/6) from the configuration.
-func NewSocketsBind(s ...socket) Binder {
+func NewSocketsBind(s ...sockets.Socket) Binder {
 	return socketsBind(s)
 }
 
-type socketsBind []socket
+type socketsBind []sockets.Socket
 
 // Bind the client to available networks. consumes the result of NewClient.
 func (t socketsBind) Bind(cl *Client, err error) (*Client, error) {

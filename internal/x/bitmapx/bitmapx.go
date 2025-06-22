@@ -1,7 +1,7 @@
 package bitmapx
 
 import (
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 )
 
 // Bools convert to an array of bools

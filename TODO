@@ -5,14 +5,3 @@
  * dht: Randomize triedAddrs bloom filter to allow different Addr sets on each Announce.
  * data/blob: Deleting incomplete data triggers io.ErrUnexpectedEOF that isn't recovered from.
  * Handle wanted pieces more efficiently, it's slow in in fillRequests, since the prioritization system was changed.
-
-
-TestClientSeedWithoutAdding
-TestClientSeedWithoutAddingAndEncryption
-TestClientTransferRateLimitedUpload
-TestTorrentDownloadAll
-TestSeedAfterDownloading
-TestClientTransferVarious
-testClientTransfer
-
-TestMultipleTorrentsWithEncryption

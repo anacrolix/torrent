@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net/netip"
 
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 )
 
 // AllowedFastSet computes the allowed fast set for a peer.

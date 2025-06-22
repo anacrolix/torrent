@@ -45,13 +45,18 @@ func DisableTCP(a *Autobind) {
 	a.DisableTCP = true
 }
 
-// DisableDHT disables DHT.
-func DisableDHT(a *Autobind) {
-	a.NoDHT = true
-}
-
 func DisableIPv6(a *Autobind) {
 	a.DisableIPv6 = true
+}
+
+// DisableDHT disables DHT. this is the default.
+func DisableDHT(a *Autobind) {
+	a.EnableDHT = false
+}
+
+// EnableDHT enables DHT.
+func EnableDHT(a *Autobind) {
+	a.EnableDHT = true
 }
 
 // Autobind manages automatically binding a client to available networks.
@@ -65,7 +70,7 @@ type Autobind struct {
 	DisableIPv6 bool
 	DisableTCP  bool
 	DisableUTP  bool
-	NoDHT       bool
+	EnableDHT   bool
 }
 
 // New used to automatically listen to available networks
@@ -132,20 +137,20 @@ func (t Autobind) Bind(cl *torrent.Client, err error) (*torrent.Client, error) {
 		return nil, err
 	}
 
-	config := cl.Config()
-	config.NoDHT = t.NoDHT // TODO: remove NoDHT from client config.
-
 	if sockets, err = listenAll(t.listenNetworks(), t.ListenHost, t.ListenPort); err != nil {
 		return nil, err
 	}
 
-	// Check for panics.
-	cl.LocalPort()
-
 	for _, s := range sockets {
-		if t.peerNetworkEnabled(parseNetworkString(s.Addr().Network())) {
+		n := parseNetworkString(s.Addr().Network())
+		if t.peerNetworkEnabled(n) {
 			if err = cl.Bind(s); err != nil {
-				cl.Close()
+				return nil, err
+			}
+		}
+
+		if n.UDP && t.EnableDHT {
+			if err = cl.BindDHT(s); err != nil {
 				return nil, err
 			}
 		}
@@ -164,10 +169,10 @@ func (t Autobind) listenNetworks() (ns []network) {
 			ns = append(ns, n)
 		}
 	}
-	return
+	return ns
 }
 
-func (t Autobind) listenOnNetwork(n network) bool {
+func (t Autobind) listenOnNetwork(n network) (b bool) {
 	if n.Ipv4 && t.DisableIPv4 {
 		return false
 	}
@@ -180,7 +185,7 @@ func (t Autobind) listenOnNetwork(n network) bool {
 		return false
 	}
 
-	if n.UDP && t.DisableUTP && t.NoDHT {
+	if n.UDP && t.DisableUTP && !t.EnableDHT {
 		return false
 	}
 

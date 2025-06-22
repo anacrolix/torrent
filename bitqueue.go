@@ -3,7 +3,7 @@ package torrent
 import (
 	"sync"
 
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 )
 
 func newBitQueue() *bitQueue {

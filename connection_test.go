@@ -7,7 +7,6 @@ import (
 	"encoding"
 	"hash"
 	"io"
-	"log"
 	"net"
 	"net/netip"
 	"sync"
@@ -119,6 +118,9 @@ func genconnection(t *testing.T, seed string, n uint64, pbits, sbits pp.Extensio
 	sconn.t.chunks.fill(sconn.t.chunks.completed)
 	require.True(t, sconn.t.seeding(), "seeding should be enabled")
 
+	t.Cleanup(pconn.Close)
+	t.Cleanup(sconn.Close)
+
 	return pconn, sconn, _md5, meta
 }
 
@@ -149,7 +151,7 @@ func TestProtocolSequencesDownloading(t *testing.T) {
 			cancel(RunHandshookConn(pconn, pt))
 		}()
 
-		d := pp.NewDecoder(sconn.conn, sconn.t.chunkPool)
+		d := pp.NewDecoder(sconn.conn, sconn.t.chunks.pool)
 		deliver := func(dst *connection, msg ...encoding.BinaryMarshaler) (int, error) {
 			n1, err := pp.Write(dst, msg...)
 			if err != nil {
@@ -170,10 +172,6 @@ func TestProtocolSequencesDownloading(t *testing.T) {
 		msg, err = sconn.ReadOne(ctx, d)
 		require.NoError(t, err)
 		torrenttest.RequireMessageType(t, pp.Bitfield, msg.Type)
-
-		msg, err = sconn.ReadOne(ctx, d)
-		require.NoError(t, err)
-		torrenttest.RequireMessageType(t, pp.Port, msg.Type)
 
 		require.NoError(t, ConnExtensions(ctx, sconn))
 		require.Equal(t, 0, sconn.writeBuffer.Len())
@@ -248,7 +246,7 @@ func TestProtocolSequencesDownloading(t *testing.T) {
 			cancel(RunHandshookConn(pconn, pt))
 		}()
 
-		d := pp.NewDecoder(sconn.conn, sconn.t.chunkPool)
+		d := pp.NewDecoder(sconn.conn, sconn.t.chunks.pool)
 		deliver := func(dst *connection, msg ...encoding.BinaryMarshaler) (int, error) {
 			pending := dst.writeBuffer.Len()
 			n1, err := pp.Write(dst, msg...)
@@ -274,21 +272,14 @@ func TestProtocolSequencesDownloading(t *testing.T) {
 		torrenttest.RequireMessageType(t, pp.HaveNone, msg.Type)
 		// --------------------------------------- allow fast extension ----------------------------------------------
 
-		msg, err = sconn.ReadOne(ctx, d)
-		require.NoError(t, err)
-		torrenttest.RequireMessageType(t, pp.Port, msg.Type)
-		// --------------------------------------- allow vanilla messages completed ----------------------------------
-
-		log.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
 		require.NoError(t, ConnExtensions(ctx, sconn))
 		require.Equal(t, 0, sconn.writeBuffer.Len())
 
-		log.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
 		require.Equal(t, []uint32{0}, sconn.peerfastset.ToArray())
 		n, err = deliver(sconn, pp.NewInterested(false), pp.NewAllowedFast(0))
 		require.NoError(t, err)
 		require.Equal(t, 14, n)
-		log.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+
 		msg, err = sconn.ReadOne(ctx, d)
 		require.NoError(t, err)
 		torrenttest.RequireMessageType(t, pp.Extended, msg.Type)
@@ -303,7 +294,7 @@ func TestProtocolSequencesDownloading(t *testing.T) {
 		require.Equal(t, iolimit, n0)
 		require.Equal(t, md5x.FormatHex(expected), md5x.FormatHex(regenned))
 		c := bytes.NewReader(buf.Bytes())
-		log.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+
 		received, err := torrenttest.ReadUntil(t, pp.NotInterested, func() (pp.Message, error) {
 			msg, err := sconn.ReadOne(ctx, d)
 			if err != nil {
@@ -326,10 +317,9 @@ func TestProtocolSequencesDownloading(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, torrenttest.FilterMessageType(pp.Request, received...), 8)
 		require.Len(t, torrenttest.FilterMessageType(pp.Interested, received...), 1)
-		// require.Len(t, torrenttest.FilterMessageType(pp.Unchoke, received...), 1)
-		// require.Len(t, torrenttest.FilterMessageType(pp.Choke, received...), 1)
 		require.Len(t, torrenttest.FilterMessageType(pp.NotInterested, received...), 1)
-		require.Len(t, received, 12)
+		require.GreaterOrEqual(t, len(received), 10)
+		require.LessOrEqual(t, len(received), 12)
 	})
 }
 

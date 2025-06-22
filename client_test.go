@@ -892,7 +892,7 @@ func testSeederLeecherPair(t *testing.T, seeder func(*torrent.ClientConfig), lee
 	// against more than one torrent. See issue #114
 	makeMagnet(t, server, datadir, "test2")
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		makeMagnet(t, server, datadir, fmt.Sprintf("test%d", i+2))
 	}
 
@@ -911,13 +911,13 @@ func testSeederLeecherPair(t *testing.T, seeder func(*torrent.ClientConfig), lee
 	defer testutil.ExportStatusWriter(client, "c")()
 
 	ts, err := torrent.NewFromMagnet(magnet1)
-	// ts, err := torrent.NewFromMagnet(magnet1, torrent.OptionStorage(storage.NewFile(cfg.DataDir)))
 	require.NoError(t, err)
 	tr, _, err := client.Start(ts, torrent.TuneClientPeer(server))
 	require.NoError(t, err)
 
-	_, err = torrent.DownloadInto(ctx, io.Discard, tr)
+	n, err := torrent.DownloadInto(ctx, io.Discard, tr)
 	require.NoError(t, err)
+	require.Equal(t, int64(1024), n)
 }
 
 // This appears to be the situation with the S3 BitTorrent client.
@@ -1030,6 +1030,7 @@ func TestClientHasDhtServersWhenUTPDisabled(t *testing.T) {
 	cc := torrent.TestingConfig(t)
 	cl, err := autobind.NewLoopback(
 		autobind.DisableUTP,
+		autobind.EnableDHT,
 	).Bind(torrent.NewClient(cc))
 	require.NoError(t, err)
 	defer cl.Close()

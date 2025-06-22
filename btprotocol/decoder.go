@@ -27,10 +27,6 @@ type Decoder struct {
 
 // io.EOF is returned if the source terminates cleanly on a message boundary.
 func (d *Decoder) Decode(msg *Message) (err error) {
-	// defer log.Println("decode checkpoint")
-	// defer func() {
-	// 	log.Println("decode completed", err)
-	// }()
 	var length Integer
 	err = binary.Read(d.R, binary.BigEndian, &length)
 	if err == io.EOF {

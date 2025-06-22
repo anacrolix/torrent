@@ -31,14 +31,15 @@ func RunHandshookConn(c *connection, t *torrent) error {
 		return errorsx.Wrap(err, "error adding connection")
 	}
 
+	defer c.Close()
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
 
 	c.cfg.debug().Printf("%p exchanging extensions\n", c)
 
 	go func() {
-		defer c.Close()
 		if err := ConnExtensions(ctx, c); err != nil {
+			errorsx.Log(err)
 			cancel(errorsx.Wrap(err, "error sending configuring connection"))
 			return
 		}
@@ -46,6 +47,7 @@ func RunHandshookConn(c *connection, t *torrent) error {
 	}()
 
 	if err := c.mainReadLoop(ctx); err != nil {
+		cancel(err)
 		c.cfg.Handshaker.Release(c.conn, err)
 		return errorsx.Wrap(err, "error during main read loop")
 	}
@@ -57,7 +59,7 @@ func RunHandshookConn(c *connection, t *torrent) error {
 func ConnExtensions(ctx context.Context, cn *connection) error {
 	log.Println("conn extensions initiated")
 	defer log.Println("conn extensions completed")
-	return cstate.Run(ctx, connexinit(cn, connexfast(cn, connexdht(cn, connexport(cn, connflush(cn, nil))))))
+	return cstate.Run(ctx, connexinit(cn, connexdht(cn, connexfast(cn, connflush(cn, nil)))))
 }
 
 func connflush(cn *connection, n cstate.T) cstate.T {
@@ -96,7 +98,7 @@ func connexinit(cn *connection, n cstate.T) cstate.T {
 			return cstate.Failure(errorsx.Wrapf(err, "unable to encode message %T", msg))
 		}
 
-		_, err = cn.PostImmediate(pp.NewExtendedHandshake(encoded))
+		_, err = cn.Post(pp.NewExtendedHandshake(encoded))
 
 		if err != nil {
 			return cstate.Failure(errorsx.Wrapf(err, "unable to encode message %T", msg))
@@ -108,7 +110,6 @@ func connexinit(cn *connection, n cstate.T) cstate.T {
 
 func connexfast(cn *connection, n cstate.T) cstate.T {
 	return cstate.Fn(func(context.Context, *cstate.Shared) cstate.T {
-		cn.peerfastset = errorsx.Zero(bep0006.AllowedFastSet(cn.remoteAddr.Addr(), cn.t.md.ID, cn.t.chunks.pieces, min(32, cn.t.chunks.pieces)))
 		defer log.Println("fast extension completed")
 		if !cn.supported(pp.ExtensionBitFast) {
 			// log.Println("posting bitfield", cn.conn.LocalAddr())
@@ -116,6 +117,10 @@ func connexfast(cn *connection, n cstate.T) cstate.T {
 				return cstate.Failure(err)
 			}
 			return n
+		}
+
+		if cn.t.haveInfo() {
+			cn.peerfastset = errorsx.Zero(bep0006.AllowedFastSet(cn.remoteAddr.Addr(), cn.t.md.ID, cn.t.chunks.pieces, min(32, cn.t.chunks.pieces)))
 		}
 
 		// log.Println("posting allow fast", cn.conn.LocalAddr())
@@ -139,10 +144,6 @@ func connexfast(cn *connection, n cstate.T) cstate.T {
 				}
 			}
 
-			if _, err := cn.Flush(); err != nil {
-				return cstate.Failure(err)
-			}
-
 			return n
 		default:
 			// log.Println("posting bitfield", cn.conn.LocalAddr())
@@ -162,15 +163,11 @@ func connexdht(cn *connection, n cstate.T) cstate.T {
 			return n
 		}
 
-		// TODO: figure out the format for the DHT extension.
+		defer log.Println("dht extension completed")
 
-		return n
-	})
-}
-
-func connexport(cn *connection, n cstate.T) cstate.T {
-	return cstate.Fn(func(context.Context, *cstate.Shared) cstate.T {
-		_, err := cn.PostImmediate(pp.NewPort(uint16(cn.localport)))
+		// TODO: this seems incorrect. we're posting identically the same message
+		// as the localport below.
+		_, err := cn.Post(pp.NewPort(uint16(cn.dhtport)))
 		if err != nil {
 			return cstate.Failure(err)
 		}
@@ -222,11 +219,6 @@ type _connWriterClosed struct {
 }
 
 func (t _connWriterClosed) Update(ctx context.Context, _ *cstate.Shared) (r cstate.T) {
-	// defer log.Println("checkpoint")
-	// defer func() {
-	// 	log.Printf("c(%p) seed(%t) %T completed - %T\n", t.connection, t.t.seeding(), t, r)
-	// }()
-
 	ws := t.writerstate
 
 	// delete requests that were requested beyond the timeout.
@@ -246,7 +238,7 @@ func (t _connWriterClosed) Update(ctx context.Context, _ *cstate.Shared) (r csta
 	// if we're choked and not allowed to fast track any chunks then there is nothing
 	// to do.
 	if ws.PeerChoked && ws.peerfastset.IsEmpty() {
-		return connwriteridle(ws)
+		return connwriterFlush(connwriteridle(ws), ws)
 	}
 
 	// detect effectively dead connections
@@ -266,10 +258,6 @@ type _connWriterSyncChunks struct {
 }
 
 func (t _connWriterSyncChunks) Update(ctx context.Context, _ *cstate.Shared) (r cstate.T) {
-	// defer log.Println("checkpoint")
-	// defer func() {
-	// 	log.Printf("c(%p) seed(%t) %T completed - %T\n", t.connection, t.t.seeding(), t, r)
-	// }()
 	ws := t.writerstate
 	next := connWriterSyncComplete(ws)
 
@@ -352,7 +340,7 @@ func (t _connwriterRequests) Update(ctx context.Context, _ *cstate.Shared) (r cs
 	ws.checkFailures()
 	available := ws.determineInterest(writer)
 	ws.upload(writer)
-	ws.fillWriteBuffer(available, writer)
+	ws.genrequests(available, writer)
 
 	// needresponse is tracking read that come in while we're in the critical section of this function
 	// to prevent the state machine from going idle just because we didnt write anything this cycle.

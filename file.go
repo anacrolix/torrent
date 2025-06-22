@@ -3,8 +3,6 @@ package torrent
 import (
 	"strings"
 
-	"github.com/anacrolix/missinggo/bitmap"
-
 	"github.com/james-lawrence/torrent/metainfo"
 )
 
@@ -56,15 +54,16 @@ func (f *File) bytesCompleted() int64 {
 
 func (f *File) bytesLeft() (left int64) {
 	pieceSize := int64(f.t.usualPieceSize())
-	firstPieceIndex := int(f.firstPieceIndex())
-	endPieceIndex := int(f.endPieceIndex()) - 1
+	firstPieceIndex := f.firstPieceIndex()
+	endPieceIndex := f.endPieceIndex() - 1
 
-	dup := bitmap.Bitmap{RB: f.t.chunks.completed.Clone()}
-	bitmap.Flip(dup, firstPieceIndex+1, endPieceIndex).IterTyped(func(piece int) bool {
-		if piece >= endPieceIndex {
+	dup := f.t.chunks.completed.Clone()
+	dup.Flip(firstPieceIndex+1, endPieceIndex)
+	dup.Iterate(func(piece uint32) bool {
+		if uint64(piece) >= endPieceIndex {
 			return false
 		}
-		if piece > firstPieceIndex {
+		if uint64(piece) > firstPieceIndex {
 			left += pieceSize
 		}
 		return true

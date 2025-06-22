@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/metainfo"
 
@@ -80,7 +80,17 @@ func chunkoptCond(cond *sync.Cond) chunkopt {
 	}
 }
 
+func chunkoptCompleted(completed *roaring.Bitmap) chunkopt {
+	return func(c *chunks) {
+		c.completed = completed
+	}
+}
+
 func newChunks(clength int, m *metainfo.Info, options ...chunkopt) *chunks {
+	if clength == 0 {
+		panic("chunksize cannot be zero")
+	}
+
 	p := langx.Autoptr(langx.Clone(chunks{
 		cond:        sync.NewCond(&sync.Mutex{}),
 		mu:          &sync.RWMutex{},
@@ -94,6 +104,12 @@ func newChunks(clength int, m *metainfo.Info, options ...chunkopt) *chunks {
 		unverified:  roaring.NewBitmap(),
 		failed:      roaring.NewBitmap(),
 		completed:   roaring.NewBitmap(),
+		pool: &sync.Pool{
+			New: func() interface{} {
+				b := make([]byte, clength)
+				return &b
+			},
+		},
 	}, options...))
 
 	// log.Printf("%p - LENGTH %d NUMCHUNKS %d - CHUNK LENGTH %d - PIECE LEGNTH %d\n", p, p.meta.Length, p.cmaximum, p.clength, p.meta.PieceLength)
@@ -140,15 +156,9 @@ type chunks struct {
 	// next time to reap the outstanding requests
 	nextReap time.Time
 
+	pool *sync.Pool
+
 	mu *sync.RWMutex
-}
-
-func (t *chunks) haveall() bool {
-	return t.completed.GetCardinality() == t.pieces
-}
-
-func (t *chunks) havenone() bool {
-	return t.completed.GetCardinality() == 0
 }
 
 func (t *chunks) reap(window time.Duration) {
@@ -236,16 +246,19 @@ func (t *chunks) pindex(cidx int) int {
 }
 
 func (t *chunks) fill(b *roaring.Bitmap) *roaring.Bitmap {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	b.AddRange(0, uint64(t.cmaximum))
 	return b
 }
 
 func (t *chunks) peek(available *roaring.Bitmap) (cidx int, req request, err error) {
-	if !t.missing.Intersects(available) {
-		return cidx, req, empty{Outstanding: len(t.outstanding), Missing: int(t.missing.GetCardinality())}
-	}
 	union := available.Clone()
 	union.And(t.missing)
+
+	if union.IsEmpty() {
+		return cidx, req, empty{Outstanding: len(t.outstanding), Missing: int(t.missing.GetCardinality())}
+	}
 
 	cidx = int(union.Minimum())
 	if req, err = t.request(int64(cidx), int(-1*(cidx+1))); err != nil {
@@ -303,9 +316,6 @@ func (t *chunks) ChunksHashing(pid uint64) bool {
 
 // ChunksComplete returns true iff all the chunks for the given piece has been marked as completed.
 func (t *chunks) ChunksComplete(pid uint64) (b bool) {
-	if t == nil {
-		return false
-	}
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
@@ -539,8 +549,9 @@ func (t *chunks) pend(r request) (changed bool) {
 
 // Missing returns the number of missing chunks
 func (t *chunks) Missing() int {
-	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
-	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
+	if t == nil {
+		panic("chunks should never be nil for chunks missings")
+	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return int(t.missing.GetCardinality())
@@ -548,6 +559,9 @@ func (t *chunks) Missing() int {
 
 // returns true if any chunks are in incomplete states (missing, oustanding, unverified)
 func (t *chunks) Incomplete() bool {
+	if t == nil {
+		panic("chunks should never be nil for chunks missings")
+	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return (int(t.missing.GetCardinality()) + len(t.outstanding) + int(t.unverified.GetCardinality())) > 0

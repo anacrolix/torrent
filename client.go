@@ -18,6 +18,7 @@ import (
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/sockets"
 	"github.com/james-lawrence/torrent/storage"
 
 	"github.com/anacrolix/missinggo/v2"
@@ -46,7 +47,7 @@ type Client struct {
 
 	// peerID     int160.T
 	onClose    []func()
-	conns      []socket
+	conns      []sockets.Socket
 	dhtServers []*dht.Server
 
 	extensionBytes pp.ExtensionBits // Our BitTorrent protocol extension bytes, sent in our BT handshakes.
@@ -129,7 +130,6 @@ func (cl *Client) start(md Metadata, options ...Tuner) (dlt *torrent, added bool
 	cl.lock()
 	defer cl.unlock()
 
-	log.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
 	cl.eachDhtServer(func(s *dht.Server) {
 		go dlt.dhtAnnouncer(s)
 	})
@@ -158,7 +158,7 @@ func (cl *Client) PeerID() int160.T {
 // this is method is odd given a client can be attached to multiple ports on different
 // listeners.
 func (cl *Client) LocalPort16() (port uint16) {
-	cl.eachListener(func(l socket) bool {
+	cl.eachListener(func(l sockets.Socket) bool {
 		addr, err := netx.AddrPort(l.Addr())
 		if err != nil {
 			log.Println("unable to determine port from listener", err)
@@ -280,10 +280,9 @@ func (cl *Client) Config() *ClientConfig {
 }
 
 // Bind the socket to this client.
-func (cl *Client) Bind(s socket) (err error) {
-	if err = cl.bindDHT(s); err != nil {
-		return err
-	}
+func (cl *Client) Bind(s sockets.Socket) (err error) {
+	// Check for panics.
+	cl.LocalPort()
 
 	go cl.forwardPort()
 	go cl.acceptConnections(s)
@@ -295,19 +294,18 @@ func (cl *Client) Bind(s socket) (err error) {
 	return nil
 }
 
-func (cl *Client) bindDHT(s socket) (err error) {
+func (cl *Client) BindDHT(s sockets.Socket) (err error) {
 	var (
 		ok bool
 		pc net.PacketConn
 	)
 
-	if cl.config.NoDHT {
+	if pc, ok = s.(net.PacketConn); !ok {
+		cl.config.debug().Println("dht servers disabled: not a packet conn")
 		return nil
 	}
 
-	if pc, ok = s.(net.PacketConn); !ok {
-		return nil
-	}
+	cl.config.debug().Println("dht servers enabled")
 
 	ds, err := cl.newDhtServer(pc)
 	if err != nil {
@@ -333,7 +331,7 @@ func (cl *Client) eachDhtServer(f func(*dht.Server)) {
 }
 
 func (cl *Client) closeSockets() {
-	cl.eachListener(func(l socket) bool {
+	cl.eachListener(func(l sockets.Socket) bool {
 		l.Close()
 		return true
 	})
@@ -341,7 +339,7 @@ func (cl *Client) closeSockets() {
 
 // Close stops the client. All connections to peers are closed and all activity will
 // come to a halt.
-func (cl *Client) Close() {
+func (cl *Client) Close() error {
 	select {
 	case <-cl.closed:
 	default:
@@ -351,14 +349,15 @@ func (cl *Client) Close() {
 	cl.closeSockets()
 
 	if err := cl.torrents.Close(); err != nil {
-		log.Println("unable to shutdown torrents", err)
-		panic(err)
+		return errorsx.Wrap(err, "unable to close torrents")
 	}
 
 	for _, f := range cl.onClose {
 		f()
 	}
 	cl.event.Broadcast()
+
+	return nil
 }
 
 func (cl *Client) acceptConnections(l net.Listener) {
@@ -417,7 +416,7 @@ func (cl *Client) dialFirst(ctx context.Context, addr string) (conn net.Conn, er
 	defer cancel()
 
 	cl.lock()
-	conns := make([]socket, len(cl.conns))
+	conns := make([]sockets.Socket, len(cl.conns))
 	copy(conns, cl.conns)
 	cl.unlock()
 
@@ -767,7 +766,7 @@ func (cl *Client) onDHTAnnouncePeer(ih metainfo.Hash, ip net.IP, port int, portO
 	}})
 }
 
-func (cl *Client) eachListener(f func(socket) bool) {
+func (cl *Client) eachListener(f func(sockets.Socket) bool) {
 	for _, s := range cl.conns {
 		if !f(s) {
 			break
@@ -776,7 +775,7 @@ func (cl *Client) eachListener(f func(socket) bool) {
 }
 
 func (cl *Client) findListener(f func(net.Listener) bool) (ret net.Listener) {
-	cl.eachListener(func(l socket) bool {
+	cl.eachListener(func(l sockets.Socket) bool {
 		ret = l
 		return !f(l)
 	})
@@ -834,7 +833,7 @@ func (cl *Client) publicAddr(peer netip.AddrPort) netip.AddrPort {
 func (cl *Client) ListenAddrs() (ret []net.Addr) {
 	cl.lock()
 	defer cl.unlock()
-	cl.eachListener(func(l socket) bool {
+	cl.eachListener(func(l sockets.Socket) bool {
 		ret = append(ret, l.Addr())
 		return true
 	})

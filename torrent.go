@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net"
 	"strconv"
 	"strings"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/anacrolix/missinggo/pubsub"
 	"github.com/anacrolix/missinggo/slices"
+	"github.com/james-lawrence/torrent/bep0009"
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/internal/bytesx"
@@ -44,7 +44,6 @@ func TuneMaxConnections(m int) Tuner {
 
 // TunePeers add peers to the torrent.
 func TunePeers(peers ...Peer) Tuner {
-	log.Println("ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZz")
 	return func(t *torrent) {
 		t.AddPeers(peers)
 	}
@@ -203,7 +202,7 @@ func TuneAutoDownload(t *torrent) {
 		return
 	}
 
-	t.chunks.missing.AddRange(0, uint64(t.chunks.cmaximum))
+	t.chunks.fill(t.chunks.missing)
 }
 
 // Announce to trackers looking for at least one successful request that returns peers.
@@ -347,7 +346,6 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 		storageOpener:           storage.NewClient(langx.DefaultIfZero(cl.config.defaultStorage, src.Storage)),
 		maxEstablishedConns:     maxEstablishedConns,
 		duplicateRequestTimeout: time.Second,
-		chunkcond:               chunkcond,
 		chunks:                  newChunks(langx.DefaultIfZero(defaultChunkSize, src.ChunkSize), metainfo.NewInfo(), chunkoptCond(chunkcond)),
 		pex:                     newPex(),
 		storage:                 storage.NewZero(),
@@ -357,7 +355,7 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 	}
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
 	t.event = &sync.Cond{L: tlocker{torrent: t}}
-	t.setChunkSize(langx.DefaultIfZero(16*bytesx.KiB, src.ChunkSize))
+	// t.setChunkSize(langx.DefaultIfZero(16*bytesx.KiB, src.ChunkSize))
 	*t.digests = newDigestsFromTorrent(t)
 	if err := t.setInfoBytes(src.InfoBytes); err != nil {
 		log.Println("encountered an error setting info bytes", len(src.InfoBytes), err)
@@ -444,9 +442,6 @@ type torrent struct {
 	// Values are the piece indices that changed.
 	pieceStateChanges *pubsub.PubSub
 
-	chunkcond *sync.Cond
-	chunkPool *sync.Pool
-
 	// The storage to open when the info dict becomes available.
 	storageOpener *storage.Client
 	// Storage for torrent data.
@@ -497,11 +492,6 @@ type torrent struct {
 
 	// peer exchange for the current torrent
 	pex *pex
-
-	// A pool of piece priorities []int for assignment to new connections.
-	// These "inclinations" are used to give connections preference for
-	// different pieces.
-	connPieceInclinationPool sync.Pool
 
 	// signal events on this torrent.
 	event *sync.Cond
@@ -618,13 +608,9 @@ func (t *torrent) KnownSwarm() (ks []Peer) {
 
 func (t *torrent) setChunkSize(size int) {
 	t.md.ChunkSize = size
-	*t.chunks = *newChunks(size, langx.DefaultIfZero(metainfo.NewInfo(), t.info), chunkoptCond(t.chunkcond))
-	t.chunkPool = &sync.Pool{
-		New: func() interface{} {
-			b := make([]byte, size)
-			return &b
-		},
-	}
+	// potential bug here us to be '*t.chunks = *newChunks(...)' change to straight assignment to deal with
+	// Unlock called on a non-locked mutex.
+	t.chunks = newChunks(size, langx.DefaultIfZero(metainfo.NewInfo(), t.info), chunkoptCond(t.chunks.cond), chunkoptCompleted(t.chunks.completed))
 }
 
 // There's a connection to that address already.
@@ -719,14 +705,6 @@ func (t *torrent) metadataSize() int {
 	return len(t.metadataBytes)
 }
 
-func (t *torrent) localport(fallback int) int {
-	if t.cln == nil {
-		return fallback
-	}
-
-	return t.cln.LocalPort()
-}
-
 func (t *torrent) setInfo(info *metainfo.Info) (err error) {
 	if err := validateInfo(info); err != nil {
 		return fmt.Errorf("bad info: %s", err)
@@ -741,7 +719,7 @@ func (t *torrent) setInfo(info *metainfo.Info) (err error) {
 
 	t.nameMu.Lock()
 	t.info = info
-	t.setChunkSize(t.md.ChunkSize)
+	t.setChunkSize(langx.DefaultIfZero(defaultChunkSize, t.md.ChunkSize))
 	t.nameMu.Unlock()
 
 	t.initFiles()
@@ -752,7 +730,7 @@ func (t *torrent) setInfo(info *metainfo.Info) (err error) {
 func (t *torrent) onSetInfo() {
 	// log.Println("set info initiated")
 	for _, conn := range t.conns.list() {
-		if err := conn.setNumPieces(t.chunks.pieces); err != nil {
+		if err := conn.resetclaimed(); err != nil {
 			t.cln.config.info().Println(errorsx.Wrap(err, "closing connection"))
 			conn.Close()
 		}
@@ -877,7 +855,11 @@ func (t *torrent) close() (err error) {
 	t.lock()
 	defer t.unlock()
 
-	close(t.closed)
+	select {
+	case <-t.closed:
+	default:
+		close(t.closed)
+	}
 
 	func() {
 		if t.storage == nil {
@@ -1010,21 +992,6 @@ func (t *torrent) openNewConns() {
 	}
 }
 
-func (t *torrent) getConnPieceInclination() []int {
-	_ret := t.connPieceInclinationPool.Get()
-	if _ret == nil {
-		pieceInclinationsNew.Add(1)
-		return rand.Perm(int(t.chunks.pieces))
-	}
-	pieceInclinationsReused.Add(1)
-	return *_ret.(*[]int)
-}
-
-func (t *torrent) putPieceInclination(pi []int) {
-	t.connPieceInclinationPool.Put(&pi)
-	pieceInclinationsPut.Add(1)
-}
-
 // Non-blocking read. Client lock is not required.
 func (t *torrent) readAt(b []byte, off int64) (n int, err error) {
 	return t.storage.ReadAt(b, off)
@@ -1032,25 +999,20 @@ func (t *torrent) readAt(b []byte, off int64) (n int, err error) {
 
 // Returns an error if the metadata was completed, but couldn't be set for
 // some reason. Blame it on the last peer to contribute.
-func (t *torrent) maybeCompleteMetadata() error {
-	if t.haveInfo() {
-		// Nothing to do.
-		return nil
-	}
-
+func (t *torrent) maybeCompleteMetadata(c *connection) error {
 	if !t.haveAllMetadataPieces() {
 		// Don't have enough metadata pieces.
+		t.cln.config.debug().Printf("seeding(%t) %s: missing metadata from peers\n", t.seeding(), t)
 		return nil
 	}
-
-	// log.Println("checkpoint", metainfo.NewHashFromBytes(t.metadataBytes))
 
 	if err := t.setInfoBytes(t.metadataBytes); err != nil {
 		t.invalidateMetadata()
 		return fmt.Errorf("error setting info bytes: %s", err)
 	}
 
-	t.cln.config.debug().Printf("%s: received metadata from peers", t)
+	t.chunks.fill(t.chunks.missing)
+	t.cln.config.debug().Printf("seeding(%t) %s: received metadata from peers\n", t.seeding(), t)
 
 	return nil
 }
@@ -1526,41 +1488,42 @@ func (t *torrent) ping(addr net.UDPAddr) {
 
 // Process incoming ut_metadata message.
 func (t *torrent) gotMetadataExtensionMsg(payload []byte, c *connection) error {
-	var d map[string]int
+	var d bep0009.MetadataResponse
 	err := bencode.Unmarshal(payload, &d)
 	if _, ok := err.(bencode.ErrUnusedTrailingBytes); ok {
 	} else if err != nil {
 		return fmt.Errorf("error unmarshalling bencode: %s", err)
 	}
-	msgType, ok := d["msg_type"]
-	if !ok {
-		return errorsx.New("missing msg_type field")
-	}
-	piece := d["piece"]
-	switch msgType {
-	case pp.DataMetadataExtensionMsgType:
-		c.allStats(add(1, func(cs *ConnStats) *count { return &cs.MetadataChunksRead }))
-		if !c.requestedMetadataPiece(piece) {
-			return fmt.Errorf("got unexpected piece %d", piece)
+
+	switch d.Type {
+	case pp.RequestMetadataExtensionMsgType:
+		// log.Printf("c(%p) seed(%t) SENDING METADATA %s\n", c, t.seeding(), spew.Sdump(d))
+		if !t.haveMetadataPiece(d.Index) {
+			c.Post(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d.Index, nil))
+			return nil
 		}
-		c.metadataRequests[piece] = false
-		begin := len(payload) - metadataPieceSize(d["total_size"], piece)
+		start := 16 * bytesx.KiB * d.Index
+		end := start + t.metadataPieceSize(d.Index)
+		c.Post(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, d.Index, t.metadataBytes[start:end]))
+		return nil
+	case pp.DataMetadataExtensionMsgType:
+		// log.Printf("c(%p) seed(%t) RECEIVED METADATA %s\n", c, t.seeding(), spew.Sdump(d))
+		c.allStats(add(1, func(cs *ConnStats) *count { return &cs.MetadataChunksRead }))
+		if !c.requestedMetadataPiece(d.Index) {
+			return fmt.Errorf("got unexpected piece %d", d.Index)
+		}
+		c.metadataRequests[d.Index] = false
+		begin := len(payload) - metadataPieceSize(d.Total, d.Index)
 		if begin < 0 || begin >= len(payload) {
 			return fmt.Errorf("data has bad offset in payload: %d", begin)
 		}
 
-		t.saveMetadataPiece(piece, payload[begin:])
+		// log.Printf("c(%p) seed(%t) METADATA SAVE INITIATED %s\n", c, t.seeding(), spew.Sdump(d))
+		// defer log.Printf("c(%p) seed(%t) METADATA SAVED %s\n", c, t.seeding(), spew.Sdump(d))
+
+		t.saveMetadataPiece(d.Index, payload[begin:])
 		c.lastUsefulChunkReceived = time.Now()
-		return t.maybeCompleteMetadata()
-	case pp.RequestMetadataExtensionMsgType:
-		if !t.haveMetadataPiece(piece) {
-			c.Post(t.newMetadataExtensionMessage(c, pp.RejectMetadataExtensionMsgType, d["piece"], nil))
-			return nil
-		}
-		start := 16 * bytesx.KiB * piece
-		end := start + t.metadataPieceSize(piece)
-		c.Post(t.newMetadataExtensionMessage(c, pp.DataMetadataExtensionMsgType, piece, t.metadataBytes[start:end]))
-		return nil
+		return t.maybeCompleteMetadata(c)
 	case pp.RejectMetadataExtensionMsgType:
 		return nil
 	default:

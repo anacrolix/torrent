@@ -28,12 +28,13 @@ func (t *blockingreader) ReadAt(p []byte, offset int64) (n int, err error) {
 	// defer log.Println("blocking reading completed", offset)
 	var allowed int64
 	t.c.cond.L.Lock()
-	pid := int(t.c.meta.OffsetToIndex(offset))
+	pid := uint64(t.c.meta.OffsetToIndex(offset))
 
 	once := sync.OnceFunc(func() {
 		// log.Println("enqueuing chunk", pid, offset, t.c.missing.String(), t.c.unverified.String())
 		t.d.Enqueue(pid)
 	})
+
 	for allowed = t.c.DataAvailableForOffset(offset); allowed < 0; allowed = t.c.DataAvailableForOffset(offset) {
 		if t.c.ChunksAvailable(pid) {
 			once()

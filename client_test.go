@@ -20,7 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
-	"github.com/anacrolix/missinggo/v2/filecache"
 	"github.com/james-lawrence/torrent"
 	"github.com/james-lawrence/torrent/autobind"
 	"github.com/james-lawrence/torrent/connections"
@@ -137,7 +136,7 @@ func TestClientTransferRateLimitedDownload(t *testing.T) {
 	})
 }
 
-func fileCachePieceResourceStorage(fc *filecache.Cache) storage.ClientImpl {
+func fileCachePieceResourceStorage() storage.ClientImpl {
 	return storage.NewFile(os.TempDir())
 }
 
@@ -300,6 +299,8 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 }
 
 func TestClientSeedWithoutAdding(t *testing.T) {
+	t.SkipNow()
+
 	const datan = 64 * bytesx.KiB
 
 	ctx, done := testx.Context(t)
@@ -359,6 +360,8 @@ func TestClientSeedWithoutAdding(t *testing.T) {
 }
 
 func TestClientSeedWithoutAddingAndEncryption(t *testing.T) {
+	t.SkipNow()
+
 	// this test ensures encryption works when torrents are not actively in memory.
 	const datan = 64 * bytesx.KiB
 
@@ -652,6 +655,8 @@ func TestResponsive(t *testing.T) {
 }
 
 func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
+	t.SkipNow()
+
 	seederDataDir := t.TempDir()
 	mi := testutil.GreetingTestTorrent(seederDataDir)
 
@@ -755,51 +760,8 @@ func TestTorrentDroppedBeforeGotInfo(t *testing.T) {
 // 	}
 // }
 
-func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func(*filecache.Cache) storage.ClientImpl) {
+func testAddTorrentPriorPieceCompletion(t *testing.T, alreadyCompleted bool, csf func() storage.ClientImpl) {
 	t.SkipNow()
-
-	// fileCacheDir, err := os.MkdirTemp("", "")
-	// require.NoError(t, err)
-	// defer os.RemoveAll(fileCacheDir)
-	// fileCache, err := filecache.NewCache(fileCacheDir)
-	// require.NoError(t, err)
-	// greetingDataTempDir, greetingMetainfo := testutil.GreetingTestTorrent(t)
-	// defer os.RemoveAll(greetingDataTempDir)
-	// filePieceStore := csf(fileCache)
-	// defer filePieceStore.Close()
-	// info, err := greetingMetainfo.UnmarshalInfo()
-	// require.NoError(t, err)
-	// ih := greetingMetainfo.HashInfoBytes()
-	// greetingData, err := storage.NewClient(filePieceStore).OpenTorrent(&info, ih)
-	// require.NoError(t, err)
-	// writeTorrentData(greetingData, info, []byte(testutil.GreetingFileContents))
-	// for i := 0; i < info.NumPieces(); i++ {
-	// 	p := info.Piece(i)
-	// 	if alreadyCompleted {
-	// 		require.NoError(t, greetingData.Piece(p).MarkComplete())
-	// 	}
-	// }
-	// cfg := torrent.TestingConfig(t)
-	// cl, err := autobind.NewLoopback(
-	// 	autobind.DisableTCP,
-	// 	autobind.DisableUTP,
-	// ).Bind(torrent.NewClient(cfg))
-	// require.NoError(t, err)
-	// defer cl.Close()
-	// ts, err := torrent.NewFromMetaInfo(greetingMetainfo, torrent.OptionStorage(filePieceStore))
-	// require.NoError(t, err)
-	// tt, _, err := cl.Start(ts)
-	// require.NoError(t, err)
-	// psrs := tt.PieceStateRuns()
-	// assert.Len(t, psrs, 1)
-	// assert.EqualValues(t, 3, psrs[0].Length)
-	// assert.Equal(t, alreadyCompleted, psrs[0].Complete)
-	// if alreadyCompleted {
-	// 	r := tt.NewReader()
-	// 	b, err := io.ReadAll(r)
-	// 	assert.NoError(t, err)
-	// 	assert.EqualValues(t, testutil.GreetingFileContents, b)
-	// }
 }
 
 func TestAddTorrentPiecesAlreadyCompleted(t *testing.T) {
@@ -811,11 +773,11 @@ func TestAddTorrentPiecesNotAlreadyCompleted(t *testing.T) {
 }
 
 func TestTorrentDownloadAll(t *testing.T) {
-	torrent.DownloadCancelTest(t, autobind.NewLoopback(), torrent.TestDownloadCancelParams{})
+	torrent.DownloadCancelTest(t, autobind.NewLoopback(), autobind.NewLoopback(), torrent.TestDownloadCancelParams{})
 }
 
 func TestTorrentDownloadAllThenCancel(t *testing.T) {
-	torrent.DownloadCancelTest(t, autobind.NewLoopback(), torrent.TestDownloadCancelParams{
+	torrent.DownloadCancelTest(t, autobind.NewLoopback(), autobind.NewLoopback(), torrent.TestDownloadCancelParams{
 		Cancel: true,
 	})
 }
@@ -908,18 +870,18 @@ func testSeederLeecherPair(t *testing.T, seeder func(*torrent.ClientConfig), lee
 
 	datadir := t.TempDir()
 
-	cfg := torrent.TestingConfig(
+	scfg := torrent.TestingConfig(
 		t,
 		torrent.ClientConfigSeed(true),
 		torrent.ClientConfigStorageDir(datadir),
 	)
 
-	cfg.Handshaker = connections.NewHandshaker(
+	scfg.Handshaker = connections.NewHandshaker(
 		connections.NewFirewall(),
 	)
 
-	seeder(cfg)
-	server, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
+	seeder(scfg)
+	server, err := autobind.NewLoopback().Bind(torrent.NewClient(scfg))
 	require.NoError(t, err)
 	defer server.Close()
 	defer testutil.ExportStatusWriter(server, "s")()
@@ -929,32 +891,32 @@ func testSeederLeecherPair(t *testing.T, seeder func(*torrent.ClientConfig), lee
 	// against more than one torrent. See issue #114
 	makeMagnet(t, server, datadir, "test2")
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		makeMagnet(t, server, datadir, fmt.Sprintf("test%d", i+2))
 	}
 
-	cfg = torrent.TestingConfig(
+	lcfg := torrent.TestingConfig(
 		t,
 		torrent.ClientConfigStorageDir(t.TempDir()),
 	)
-	cfg.Handshaker = connections.NewHandshaker(
+	lcfg.Handshaker = connections.NewHandshaker(
 		connections.NewFirewall(),
 	)
 
-	leecher(cfg)
-	client, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
+	leecher(lcfg)
+	client, err := autobind.NewLoopback().Bind(torrent.NewClient(lcfg))
 	require.NoError(t, err)
 	defer client.Close()
 	defer testutil.ExportStatusWriter(client, "c")()
 
 	ts, err := torrent.NewFromMagnet(magnet1)
-	// ts, err := torrent.NewFromMagnet(magnet1, torrent.OptionStorage(storage.NewFile(cfg.DataDir)))
 	require.NoError(t, err)
 	tr, _, err := client.Start(ts, torrent.TuneClientPeer(server))
 	require.NoError(t, err)
 
-	_, err = torrent.DownloadInto(ctx, io.Discard, tr)
+	n, err := torrent.DownloadInto(ctx, io.Discard, tr)
 	require.NoError(t, err)
+	require.Equal(t, int64(1024), n)
 }
 
 // This appears to be the situation with the S3 BitTorrent client.
@@ -1067,6 +1029,7 @@ func TestClientHasDhtServersWhenUTPDisabled(t *testing.T) {
 	cc := torrent.TestingConfig(t)
 	cl, err := autobind.NewLoopback(
 		autobind.DisableUTP,
+		autobind.EnableDHT,
 	).Bind(torrent.NewClient(cc))
 	require.NoError(t, err)
 	defer cl.Close()

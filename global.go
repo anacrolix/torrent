@@ -12,17 +12,7 @@ const (
 	defaultChunkSize = 16 * bytesx.KiB
 )
 
-// These are our extended message IDs. Peers will use these values to
-// select which extension a message is intended for.
-const (
-	metadataExtendedID = iota + 1 // 0 is reserved for deleting keys
-	pexExtendedID
-)
-
-// PeerExtensionBits define what extensions are available.
-type PeerExtensionBits = pp.ExtensionBits
-
-func defaultPeerExtensionBytes() PeerExtensionBits {
+func defaultPeerExtensionBytes() pp.ExtensionBits {
 	return pp.NewExtensionBits(pp.ExtensionBitDHT, pp.ExtensionBitExtended, pp.ExtensionBitFast)
 }
 
@@ -31,15 +21,10 @@ func defaultPeerExtensionBytes() PeerExtensionBits {
 var (
 	metrics = expvar.NewMap("torrent")
 
-	peersAddedBySource = expvar.NewMap("peersAddedBySource")
-
 	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
 
-	receivedKeepalives = expvar.NewInt("receivedKeepalives")
-	postedKeepalives   = expvar.NewInt("postedKeepalives")
-	// Requests received for pieces we don't have.
-	requestsReceivedForMissingPieces = expvar.NewInt("requestsReceivedForMissingPieces")
-	requestedChunkLengths            = expvar.NewMap("requestedChunkLengths")
+	receivedKeepalives    = expvar.NewInt("receivedKeepalives")
+	requestedChunkLengths = expvar.NewMap("requestedChunkLengths")
 
 	messageTypesReceived = expvar.NewMap("messageTypesReceived")
 

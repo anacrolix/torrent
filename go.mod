@@ -6,10 +6,9 @@ toolchain go1.24.3
 
 require (
 	filippo.io/edwards25519 v1.1.0
-	github.com/RoaringBitmap/roaring v1.9.4
+	github.com/RoaringBitmap/roaring/v2 v2.5.0
 	github.com/alexflint/go-arg v1.5.1
 	github.com/anacrolix/chansync v0.6.0
-	github.com/anacrolix/envpprof v1.3.0
 	github.com/anacrolix/go-libutp v1.3.2
 	github.com/anacrolix/log v0.16.0
 	github.com/anacrolix/missinggo v1.3.0
@@ -29,8 +28,8 @@ require (
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.7.0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/net v0.40.0
-	golang.org/x/time v0.11.0
+	golang.org/x/net v0.41.0
+	golang.org/x/time v0.12.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
 )
 
@@ -57,7 +56,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529
-	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6 // indirect
 	golang.org/x/sys v0.33.0
 	gopkg.in/yaml.v3 v3.0.1 // indirect

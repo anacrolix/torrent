@@ -3,8 +3,6 @@ package torrent
 import (
 	"strings"
 
-	"github.com/anacrolix/missinggo/bitmap"
-
 	"github.com/james-lawrence/torrent/metainfo"
 )
 
@@ -59,20 +57,23 @@ func (f *File) bytesLeft() (left int64) {
 	firstPieceIndex := f.firstPieceIndex()
 	endPieceIndex := f.endPieceIndex() - 1
 
-	dup := bitmap.Bitmap{RB: f.t.chunks.completed.Clone()}
-	bitmap.Flip(dup, firstPieceIndex+1, endPieceIndex).IterTyped(func(piece int) bool {
-		if piece >= endPieceIndex {
+	dup := f.t.chunks.completed.Clone()
+	dup.Flip(firstPieceIndex+1, endPieceIndex)
+	dup.Iterate(func(piece uint32) bool {
+		if uint64(piece) >= endPieceIndex {
 			return false
 		}
-		if piece > firstPieceIndex {
+		if uint64(piece) > firstPieceIndex {
 			left += pieceSize
 		}
 		return true
 	})
-	if !f.t.pieceComplete(firstPieceIndex) {
+
+	if !f.t.chunks.ChunksComplete(uint64(firstPieceIndex)) {
 		left += pieceSize - (f.offset % pieceSize)
 	}
-	if !f.t.pieceComplete(endPieceIndex) {
+
+	if !f.t.chunks.ChunksComplete(uint64(endPieceIndex)) {
 		left += (f.offset + f.length) % pieceSize
 	}
 	return
@@ -107,17 +108,17 @@ func (f *File) NewReader() Reader {
 }
 
 // Returns the index of the first piece containing data for the file.
-func (f *File) firstPieceIndex() pieceIndex {
+func (f *File) firstPieceIndex() uint64 {
 	if f.t.usualPieceSize() == 0 {
 		return 0
 	}
-	return pieceIndex(f.offset / int64(f.t.usualPieceSize()))
+	return uint64(f.offset / int64(f.t.usualPieceSize()))
 }
 
 // Returns the index of the piece after the last one containing data for the file.
-func (f *File) endPieceIndex() pieceIndex {
+func (f *File) endPieceIndex() uint64 {
 	if f.t.usualPieceSize() == 0 {
 		return 0
 	}
-	return pieceIndex((f.offset + f.length + int64(f.t.usualPieceSize()) - 1) / int64(f.t.usualPieceSize()))
+	return uint64((f.offset + f.length + int64(f.t.usualPieceSize()) - 1) / int64(f.t.usualPieceSize()))
 }

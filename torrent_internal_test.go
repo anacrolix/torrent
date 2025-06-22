@@ -7,6 +7,7 @@ import (
 
 	"github.com/james-lawrence/torrent/bencode"
 	pp "github.com/james-lawrence/torrent/btprotocol"
+	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -123,7 +124,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	require.NoError(t, err)
 	defer nc.Close()
 
-	var pex PeerExtensionBits
+	var pex pp.ExtensionBits
 	pex.SetBit(pp.ExtensionBitExtended)
 
 	ebits, info, err := pp.Handshake{
@@ -133,7 +134,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, ebits.GetBit(pp.ExtensionBitExtended))
-	assert.EqualValues(t, cl.PeerID(), info.PeerID)
+	assert.EqualValues(t, cl.PeerID(), int160.FromByteArray(info.PeerID))
 	assert.EqualValues(t, ih, info.Hash)
 	assert.EqualValues(t, 0, tt.(*torrent).metadataSize())
 

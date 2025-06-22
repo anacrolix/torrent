@@ -25,19 +25,22 @@ func (me prioritizedPeer) Less(than btree.Item) bool {
 
 func newPeerPool(n int, prio func(Peer) peerPriority) peerPool {
 	return peerPool{
-		m:       &sync.Mutex{},
-		om:      btree.New(32),
+		m:       &sync.RWMutex{},
+		om:      btree.New(n),
 		getPrio: prio,
 	}
 }
 
 type peerPool struct {
-	m       *sync.Mutex
+	m       *sync.RWMutex
 	om      *btree.BTree
 	getPrio func(Peer) peerPriority
 }
 
 func (t *peerPool) Each(f func(Peer)) {
+	t.m.RLock()
+	defer t.m.RUnlock()
+
 	t.om.Ascend(func(i btree.Item) bool {
 		f(i.(prioritizedPeer).p)
 		return true
@@ -45,6 +48,8 @@ func (t *peerPool) Each(f func(Peer)) {
 }
 
 func (t *peerPool) Len() int {
+	t.m.RLock()
+	defer t.m.RUnlock()
 	return t.om.Len()
 }
 

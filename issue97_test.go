@@ -16,7 +16,6 @@ func TestHashPieceAfterStorageClosed(t *testing.T) {
 	defer os.RemoveAll(td)
 	store := storage.NewFile(td)
 	tt := newTorrent(&Client{config: &ClientConfig{}}, Metadata{Storage: store})
-	// *tt.digests = newDigestsFromTorrent(tt)
 
 	mi := testutil.GreetingMetaInfo()
 	info, err := mi.UnmarshalInfo()

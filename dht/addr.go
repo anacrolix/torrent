@@ -4,9 +4,9 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/anacrolix/missinggo/v2"
-
 	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/internal/errorsx"
+	"github.com/james-lawrence/torrent/internal/netx"
 )
 
 // Used internally to refer to node network addresses. String() is called a
@@ -23,10 +23,9 @@ type Addr interface {
 
 // Speeds up some of the commonly called Addr methods.
 type cachedAddr struct {
-	raw  net.Addr
-	port int
-	ip   net.IP
-	s    string
+	v   netip.AddrPort
+	raw net.Addr
+	s   string
 }
 
 func (ca cachedAddr) String() string {
@@ -34,18 +33,17 @@ func (ca cachedAddr) String() string {
 }
 
 func (ca cachedAddr) KRPC() krpc.NodeAddr {
-	ip, _ := netip.AddrFromSlice(ca.ip)
 	return krpc.NodeAddr{
-		AddrPort: netip.AddrPortFrom(ip, uint16(ca.port)),
+		AddrPort: netip.AddrPortFrom(ca.v.Addr(), ca.v.Port()),
 	}
 }
 
 func (ca cachedAddr) IP() net.IP {
-	return ca.ip
+	return net.IP(ca.v.Addr().AsSlice())
 }
 
 func (ca cachedAddr) Port() int {
-	return ca.port
+	return int(ca.v.Port())
 }
 
 func (ca cachedAddr) Raw() net.Addr {
@@ -53,10 +51,11 @@ func (ca cachedAddr) Raw() net.Addr {
 }
 
 func NewAddr(raw net.Addr) Addr {
+	v := errorsx.Zero(netx.AddrPort(raw))
+
 	return cachedAddr{
-		raw:  raw,
-		s:    raw.String(),
-		ip:   missinggo.AddrIP(raw),
-		port: missinggo.AddrPort(raw),
+		raw: raw,
+		v:   v,
+		s:   raw.String(),
 	}
 }

@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+
+	"github.com/RoaringBitmap/roaring/v2"
+	"github.com/james-lawrence/torrent/internal/x/bitmapx"
 )
 
 // This is a lazy union representing all the possible fields for messages. Go doesn't have ADTs, and
@@ -55,12 +58,14 @@ func (msg Message) MarshalBinary() (data []byte, err error) {
 	if !msg.Keepalive {
 		err = buf.WriteByte(byte(msg.Type))
 		if err != nil {
-			return
+			return nil, err
 		}
 		switch msg.Type {
 		case Choke, Unchoke, Interested, NotInterested, HaveAll, HaveNone:
-		case Have:
-			err = binary.Write(buf, binary.BigEndian, msg.Index)
+		case Have, AllowedFast, Suggest:
+			if err = binary.Write(buf, binary.BigEndian, msg.Index); err != nil {
+				return nil, err
+			}
 		case Request, Cancel, Reject:
 			for _, i := range []Integer{msg.Index, msg.Begin, msg.Length} {
 				err = binary.Write(buf, binary.BigEndian, i)
@@ -115,4 +120,96 @@ func marshalBitfield(bf []bool) (b []byte) {
 		b[i/8] = c
 	}
 	return
+}
+
+func NewAllowedFast(piece uint32) Message {
+	return Message{
+		Type:  AllowedFast,
+		Index: Integer(piece),
+	}
+}
+
+func NewKeepAlive() Message {
+	return Message{
+		Keepalive: true,
+	}
+}
+
+func NewExtendedHandshake(encoded []byte) Message {
+	return NewExtended(HandshakeExtendedID, encoded)
+}
+
+func NewExtended(id ExtensionNumber, encoded []byte) Message {
+	return Message{
+		Type:            Extended,
+		ExtendedID:      id,
+		ExtendedPayload: encoded,
+	}
+}
+
+func NewHaveNone() Message {
+	return Message{Type: HaveNone}
+}
+
+func NewHaveAll() Message {
+	return Message{Type: HaveAll}
+}
+
+func NewBitField(n uint64, b *roaring.Bitmap) Message {
+	return Message{
+		Type:     Bitfield,
+		Bitfield: bitmapx.Bools(int(n), b),
+	}
+}
+
+func NewInterested(b bool) Message {
+	i := NotInterested
+	if b {
+		i = Interested
+	}
+	return Message{
+		Type: i,
+	}
+}
+
+func NewChoked() Message {
+	return Message{
+		Type: Choke,
+	}
+}
+
+func NewUnchoked() Message {
+	return Message{
+		Type: Unchoke,
+	}
+}
+
+func NewPort(p uint16) Message {
+	return Message{
+		Type: Port,
+		Port: p,
+	}
+}
+
+func NewDHTPort(p uint16) Message {
+	return Message{
+		Type: Port,
+		Port: p,
+	}
+}
+
+func NewPiece(index Integer, begin Integer, bin []byte) Message {
+	return Message{
+		Type:  Piece,
+		Index: index,
+		Begin: begin,
+		Piece: bin,
+	}
+}
+
+func NewHavePiece(p uint64) Message {
+	return Message{
+		Type:  Have,
+		Index: Integer(p),
+	}
 }

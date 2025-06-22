@@ -23,5 +23,5 @@ func (t bannedConnection) Unwrap() error {
 }
 
 func (t bannedConnection) Error() string {
-	return fmt.Sprintf("banned connection %s: %s", t.conn.RemoteAddr().String(), t.cause)
+	return fmt.Sprintf("banned connection %s - %s: %s", t.conn.LocalAddr().String(), t.conn.RemoteAddr().String(), t.cause)
 }

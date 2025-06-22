@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anacrolix/missinggo/v2"
 	"github.com/anacrolix/utp"
 	"github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/connections"
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/dht/krpc"
-	"github.com/james-lawrence/torrent/internal/langx"
+	"github.com/james-lawrence/torrent/internal/errorsx"
+	"github.com/james-lawrence/torrent/internal/netx"
 	"github.com/james-lawrence/torrent/internal/testutil"
 	"github.com/james-lawrence/torrent/internal/testx"
 	"github.com/james-lawrence/torrent/metainfo"
@@ -26,22 +26,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type tt interface {
-	require.TestingT
-	TempDir() string
-}
-
-func TestingConfig(t tt, options ...ClientConfigOption) *ClientConfig {
+func TestingConfig(t testing.TB, options ...ClientConfigOption) *ClientConfig {
 	rdir := t.TempDir()
+
 	return NewDefaultClientConfig(
 		metadatafilestore{root: rdir},
 		storage.NewFile(rdir),
 		ClientConfigPeerID(krpc.RandomID().String()),
-		ClientConfigBootstrapGlobal,
-		ClientConfigDHTEnabled(false),
+		// ClientConfigBootstrapGlobal,
 		ClientConfigPortForward(false),
+		ClientConfigInfoLogger(log.New(os.Stderr, "[info] ", log.Flags())),
 		ClientConfigDebugLogger(log.New(os.Stderr, "[debug] ", log.Flags())),
-		// ClientConfigDebugLogger(log.Default()),
 		ClientConfigCompose(options...),
 	)
 }
@@ -49,7 +44,7 @@ func TestingConfig(t tt, options ...ClientConfigOption) *ClientConfig {
 func Autosocket(t *testing.T) Binder {
 	var (
 		err      error
-		bindings []socket
+		bindings []sockets.Socket
 		tsocket  *utp.Socket
 	)
 
@@ -97,10 +92,10 @@ func TestTorrentInitialState(t *testing.T) {
 	require.NoError(t, err)
 	tor := newTorrent(cl, tt)
 
-	require.Equal(t, 3, tor.numPieces())
+	require.Equal(t, uint64(3), tor.chunks.pieces)
 
 	require.NoError(t, Verify(ctx, tor))
-	require.Equal(t, 3, tor.numPieces())
+	require.Equal(t, uint64(3), tor.chunks.pieces)
 
 	stats := tor.Stats()
 
@@ -145,7 +140,7 @@ type TestDownloadCancelParams struct {
 	Cancel                 bool
 }
 
-func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
+func DownloadCancelTest(t *testing.T, sb Binder, lb Binder, ps TestDownloadCancelParams) {
 	ctx, _done := testx.Context(t)
 	defer _done()
 
@@ -157,13 +152,11 @@ func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
 		ClientConfigSeed(true),
 		ClientConfigStorageDir(greetingTempDir),
 	)
-	seeder, err := b.Bind(NewClient(cfg))
+	seeder, err := sb.Bind(NewClient(cfg))
 	require.NoError(t, err)
 	defer seeder.Close()
 	defer testutil.ExportStatusWriter(seeder, "s")()
 	tt, err := NewFromMetaInfo(mi)
-	// tt, err := NewFromMetaInfo(mi, OptionStorage(storage.NewFile(greetingTempDir)))
-	// tt, err := NewFromMetaInfo(mi, OptionStorage(storage.NewFile(cfg.DataDir)))
 	require.NoError(t, err)
 	seederTorrent, _, err := seeder.Start(tt)
 	require.NoError(t, err)
@@ -172,8 +165,11 @@ func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
 	leecherDataDir := t.TempDir()
 	defer os.RemoveAll(leecherDataDir)
 
-	lcfg := langx.Clone(*cfg, ClientConfigStorageDir(leecherDataDir))
-	leecher, err := b.Bind(NewClient(&lcfg))
+	lcfg := TestingConfig(
+		t,
+		ClientConfigStorageDir(leecherDataDir),
+	)
+	leecher, err := lb.Bind(NewClient(lcfg))
 	require.NoError(t, err)
 	defer leecher.Close()
 	defer testutil.ExportStatusWriter(leecher, "l")()
@@ -190,13 +186,12 @@ func DownloadCancelTest(t *testing.T, b Binder, ps TestDownloadCancelParams) {
 	// 		require.NoError(t, leecher.Stop(t2))
 	// 	}()
 	// }
+
+	log.Println("DERP DERP 2")
 	_, err = DownloadInto(ctx, io.Discard, leecherGreeting, TuneClientPeer(seeder))
 	require.NoError(t, err)
-
-	// min, max := leecherGreeting.(*torrent).chunks.Range(0)
-	// log.Println("DERP DERP", min, max, leecherGreeting.(*torrent).chunks.missing.String(), leecherGreeting.(*torrent).chunks.completed.String())
-	// TODO: require.Equal(t, ps.Cancel, leecherGreeting.(*torrent).chunks.ChunksMissing(0))
 	require.Equal(t, false, leecherGreeting.(*torrent).chunks.ChunksMissing(0))
+	log.Println("DERP DERP 3")
 }
 
 // Ensure that it's an error for a peer to send an invalid have message.
@@ -216,7 +211,7 @@ func TestPeerInvalidHave(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, _added)
 	defer cl.Stop(ts)
-	cn := newConnection(cl.config, nil, true, netip.AddrPort{})
+	cn := newConnection(cl.config, nil, true, netip.AddrPort{}, &cl.extensionBytes, cl.LocalPort16(), cl.dhtPort())
 	cn.t = tt.(*torrent)
 	assert.NoError(t, cn.peerSentHave(0))
 	assert.Error(t, cn.peerSentHave(1))
@@ -230,8 +225,8 @@ func TestClientDynamicListenPortAllProtocols(t *testing.T) {
 	defer cl.Close()
 	port := cl.LocalPort()
 	assert.NotEqual(t, 0, port)
-	cl.eachListener(func(s socket) bool {
-		assert.Equal(t, port, missinggo.AddrPort(s.Addr()))
+	cl.eachListener(func(s sockets.Socket) bool {
+		assert.Equal(t, uint16(port), errorsx.Must(netx.AddrPort(s.Addr())).Port())
 		return true
 	})
 }
@@ -290,7 +285,7 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	// ctx, done := testx.Context(t)
 	// defer done()
 
-	cfg := TestingConfig(t, ClientConfigDHTEnabled(true), ClientConfigSeed(true), ClientConfigDebugLogger(log.Default()))
+	cfg := TestingConfig(t, ClientConfigSeed(true), ClientConfigDebugLogger(log.Default()))
 	cfg.DhtStartingNodes = func(n string) dht.StartingNodesGetter { return func() ([]dht.Addr, error) { return nil, nil } }
 	// For now, we want to just jam the nodes into the table, without
 	// verifying them first. Also the DHT code doesn't support mixing secure

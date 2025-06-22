@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 
 	"github.com/james-lawrence/torrent/internal/errorsx"
 )
@@ -147,4 +148,8 @@ func FirstAddrOrZero(addrs ...netip.Addr) netip.Addr {
 	}
 
 	return netip.Addr{}
+}
+
+func IsAddrInUse(err error) bool {
+	return strings.Contains(err.Error(), "address already in use")
 }

@@ -168,6 +168,16 @@ func (pex ExtensionBits) GetBit(bit uint) bool {
 	return pex[7-bit/8]&(1<<(bit%8)) != 0
 }
 
+func (pex ExtensionBits) Supported(rpex ExtensionBits, bits ...uint) bool {
+	for _, b := range bits {
+		if !(pex.GetBit(b) && rpex.GetBit(b)) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Handshake ...
 type Handshake struct {
 	Bits   ExtensionBits

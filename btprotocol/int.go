@@ -16,6 +16,10 @@ func (i Integer) Int() int {
 	return int(i)
 }
 
+func (i Integer) Int64() int64 {
+	return int64(i)
+}
+
 func (i Integer) Uint64() uint64 {
 	return uint64(i)
 }

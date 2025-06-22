@@ -1,7 +1,6 @@
 package btprotocol
 
 import (
-	"github.com/james-lawrence/torrent/bencode"
 	"github.com/james-lawrence/torrent/dht/krpc"
 )
 
@@ -13,16 +12,6 @@ type PexMsg struct {
 	Added6Flags []PexPeerFlags            `bencode:"added6.f"`
 	Dropped     krpc.CompactIPv4NodeAddrs `bencode:"dropped"`
 	Dropped6    krpc.CompactIPv6NodeAddrs `bencode:"dropped6"`
-}
-
-// Message describing the peer exchange.
-func (t *PexMsg) Message(eid ExtensionNumber) Message {
-	payload := bencode.MustMarshal(t)
-	return Message{
-		Type:            Extended,
-		ExtendedID:      eid,
-		ExtendedPayload: payload,
-	}
 }
 
 // PexPeerFlags flags describing peers supported functionality.

@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/RoaringBitmap/roaring"
+	"github.com/RoaringBitmap/roaring/v2"
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/metainfo"
 
@@ -72,7 +72,7 @@ func pindex(chunk, plength, clength int64) int64 {
 	return chunk / chunksPerPiece(plength, clength)
 }
 
-type chunkopt = func(*chunks)
+type chunkopt func(*chunks)
 
 func chunkoptCond(cond *sync.Cond) chunkopt {
 	return func(c *chunks) {
@@ -80,11 +80,22 @@ func chunkoptCond(cond *sync.Cond) chunkopt {
 	}
 }
 
+func chunkoptCompleted(completed *roaring.Bitmap) chunkopt {
+	return func(c *chunks) {
+		c.completed = completed
+	}
+}
+
 func newChunks(clength int, m *metainfo.Info, options ...chunkopt) *chunks {
+	if clength == 0 {
+		panic("chunksize cannot be zero")
+	}
+
 	p := langx.Autoptr(langx.Clone(chunks{
 		cond:        sync.NewCond(&sync.Mutex{}),
 		mu:          &sync.RWMutex{},
 		meta:        m,
+		pieces:      uint64(m.NumPieces()),
 		cmaximum:    numChunks(m.TotalLength(), m.PieceLength, int64(clength)),
 		clength:     int64(clength),
 		gracePeriod: 2 * time.Minute,
@@ -93,6 +104,12 @@ func newChunks(clength int, m *metainfo.Info, options ...chunkopt) *chunks {
 		unverified:  roaring.NewBitmap(),
 		failed:      roaring.NewBitmap(),
 		completed:   roaring.NewBitmap(),
+		pool: &sync.Pool{
+			New: func() interface{} {
+				b := make([]byte, clength)
+				return &b
+			},
+		},
 	}, options...))
 
 	// log.Printf("%p - LENGTH %d NUMCHUNKS %d - CHUNK LENGTH %d - PIECE LEGNTH %d\n", p, p.meta.Length, p.cmaximum, p.clength, p.meta.PieceLength)
@@ -105,6 +122,8 @@ func newChunks(clength int, m *metainfo.Info, options ...chunkopt) *chunks {
 type chunks struct {
 	cond *sync.Cond
 	meta *metainfo.Info
+
+	pieces uint64
 
 	// chunk length
 	clength int64
@@ -136,6 +155,8 @@ type chunks struct {
 
 	// next time to reap the outstanding requests
 	nextReap time.Time
+
+	pool *sync.Pool
 
 	mu *sync.RWMutex
 }
@@ -182,7 +203,7 @@ func (t *chunks) reap(window time.Duration) {
 
 // chunks returns the set of chunk id's for the given piece.
 // deprecated: use Range.
-func (t *chunks) chunks(pid int) (cidxs []int) {
+func (t *chunks) chunks(pid uint64) (cidxs []int) {
 	for cidx, cidn := t.Range(pid); cidx < cidn; cidx++ {
 		cidxs = append(cidxs, int(cidx))
 	}
@@ -191,9 +212,9 @@ func (t *chunks) chunks(pid int) (cidxs []int) {
 }
 
 // returns the range of chunks for the given piece id.
-func (t *chunks) Range(pid int) (_min, _max uint64) {
+func (t *chunks) Range(pid uint64) (_min, _max uint64) {
 	cpp := chunksPerPiece(t.meta.PieceLength, t.clength)
-	cid0 := uint64(pid * int(cpp))
+	cid0 := pid * uint64(cpp)
 	cidn := min(cid0+uint64(cpp), uint64(t.cmaximum))
 	// log.Println("range calc", t.meta.PieceLength, t.clength, cpp, t.cmaximum, "->", cid0, cidn, math.MaxUint32)
 	return cid0, cidn
@@ -225,16 +246,19 @@ func (t *chunks) pindex(cidx int) int {
 }
 
 func (t *chunks) fill(b *roaring.Bitmap) *roaring.Bitmap {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	b.AddRange(0, uint64(t.cmaximum))
 	return b
 }
 
 func (t *chunks) peek(available *roaring.Bitmap) (cidx int, req request, err error) {
-	if !t.missing.Intersects(available) {
-		return cidx, req, empty{Outstanding: len(t.outstanding), Missing: int(t.missing.GetCardinality())}
-	}
 	union := available.Clone()
 	union.And(t.missing)
+
+	if union.IsEmpty() {
+		return cidx, req, empty{Outstanding: len(t.outstanding), Missing: int(t.missing.GetCardinality())}
+	}
 
 	cidx = int(union.Minimum())
 	if req, err = t.request(int64(cidx), int(-1*(cidx+1))); err != nil {
@@ -245,7 +269,7 @@ func (t *chunks) peek(available *roaring.Bitmap) (cidx int, req request, err err
 }
 
 // ChunksMissing checks if the given piece has any missing chunks.
-func (t *chunks) ChunksMissing(pid int) bool {
+func (t *chunks) ChunksMissing(pid uint64) bool {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
@@ -270,7 +294,7 @@ func (t *chunks) MergeIntoUnverified(m *roaring.Bitmap) {
 
 // ChunksAvailable returns true iff all the chunks for the given piece are awaiting
 // digesting.
-func (t *chunks) ChunksAvailable(pid int) bool {
+func (t *chunks) ChunksAvailable(pid uint64) bool {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
@@ -281,7 +305,7 @@ func (t *chunks) ChunksAvailable(pid int) bool {
 }
 
 // ChunksHashing return true iff any chunk for the given piece has been marked as unverified.
-func (t *chunks) ChunksHashing(pid int) bool {
+func (t *chunks) ChunksHashing(pid uint64) bool {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
@@ -291,13 +315,13 @@ func (t *chunks) ChunksHashing(pid int) bool {
 }
 
 // ChunksComplete returns true iff all the chunks for the given piece has been marked as completed.
-func (t *chunks) ChunksComplete(pid int) (b bool) {
+func (t *chunks) ChunksComplete(pid uint64) (b bool) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	return t.completed.ContainsInt(pid)
+	return t.completed.ContainsInt(int(pid))
 }
 
 // returns the number of bytes allowed to read for the given offset.
@@ -307,22 +331,22 @@ func (t *chunks) DataAvailableForOffset(offset int64) (allowed int64) {
 		return 0
 	}
 
-	pid := t.meta.OffsetToIndex(offset)
-	if !t.ChunksComplete(int(pid)) {
+	pid := uint64(t.meta.OffsetToIndex(offset))
+	if !t.ChunksComplete(pid) {
 		return -1
 	}
 
-	for i := pid + 1; t.ChunksComplete(int(i)); i++ {
+	for i := pid + 1; t.ChunksComplete(i); i++ {
 		pid++
 	}
 
-	endoffset := (pid * t.meta.PieceLength) + t.meta.PieceLength
+	endoffset := (int64(pid) * t.meta.PieceLength) + t.meta.PieceLength
 
 	return endoffset - offset
 }
 
 // Chunks returns the chunk requests for the given piece.
-func (t *chunks) chunksRequests(idx int) (requests []request) {
+func (t *chunks) chunksRequests(idx uint64) (requests []request) {
 	for cidx, cidn := t.Range(idx); cidx < cidn; cidx++ {
 		req, _ := t.request(int64(cidx), -1*int(cidx+1))
 		requests = append(requests, req)
@@ -331,13 +355,13 @@ func (t *chunks) chunksRequests(idx int) (requests []request) {
 	return requests
 }
 
-func (t *chunks) ChunksAdjust(pid int) (changed bool) {
+func (t *chunks) ChunksAdjust(pid uint64) (changed bool) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.completed.ContainsInt(pid) {
+	if t.completed.ContainsInt(int(pid)) {
 		return false
 	}
 
@@ -355,7 +379,7 @@ func (t *chunks) ChunksAdjust(pid int) (changed bool) {
 
 // ChunksPend marks all the chunks for the given piece to the priority.
 // returns true if any changes were made.
-func (t *chunks) ChunksPend(idx int) (changed bool) {
+func (t *chunks) ChunksPend(idx uint64) (changed bool) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
@@ -371,7 +395,7 @@ func (t *chunks) ChunksPend(idx int) (changed bool) {
 
 // ChunksRelease releases all the chunks for the given piece back into the missing
 // pool.
-func (t *chunks) ChunksRelease(idx int) (changed bool) {
+func (t *chunks) ChunksRelease(idx uint64) (changed bool) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
@@ -387,7 +411,7 @@ func (t *chunks) ChunksRelease(idx int) (changed bool) {
 
 // ChunksRetry releases all the chunks for the given piece back into the missing
 // pool.
-func (t *chunks) ChunksRetry(idx int) {
+func (t *chunks) ChunksRetry(idx uint64) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
@@ -399,7 +423,7 @@ func (t *chunks) ChunksRetry(idx int) {
 }
 
 // Chunks returns the chunk requests for the given piece.
-func (t *chunks) Chunks(idx int) (requests []request) {
+func (t *chunks) Chunks(idx uint64) (requests []request) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
@@ -525,8 +549,9 @@ func (t *chunks) pend(r request) (changed bool) {
 
 // Missing returns the number of missing chunks
 func (t *chunks) Missing() int {
-	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
-	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
+	if t == nil {
+		panic("chunks should never be nil for chunks missings")
+	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return int(t.missing.GetCardinality())
@@ -534,6 +559,9 @@ func (t *chunks) Missing() int {
 
 // returns true if any chunks are in incomplete states (missing, oustanding, unverified)
 func (t *chunks) Incomplete() bool {
+	if t == nil {
+		panic("chunks should never be nil for chunks missings")
+	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return (int(t.missing.GetCardinality()) + len(t.outstanding) + int(t.unverified.GetCardinality())) > 0
@@ -641,7 +669,7 @@ func (t *chunks) Verify(r request) (err error) {
 }
 
 // Validate mark all the chunks of the given piece to be validated.
-func (t *chunks) Validate(pid int) {
+func (t *chunks) Validate(pid uint64) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
@@ -650,7 +678,7 @@ func (t *chunks) Validate(pid int) {
 	t.unverified.AddRange(t.Range(pid))
 }
 
-func (t *chunks) Hashed(pid int, cause error) {
+func (t *chunks) Hashed(pid uint64, cause error) {
 	if t == nil {
 		panic("chunks should never be nil for hashed function call")
 	}
@@ -663,7 +691,7 @@ func (t *chunks) Hashed(pid int, cause error) {
 	t.ChunksFailed(pid)
 }
 
-func (t *chunks) Complete(pid int) (changed bool) {
+func (t *chunks) Complete(pid uint64) (changed bool) {
 	// trace(fmt.Sprintf("initiated: %p", t.mu.(*DebugLock).m))
 	// defer trace(fmt.Sprintf("completed: %p", t.mu.(*DebugLock).m))
 	t.mu.Lock()
@@ -679,7 +707,7 @@ func (t *chunks) Complete(pid int) (changed bool) {
 		// log.Output(2, fmt.Sprintf("c(%p) marked completed: (%020d - %d) r(%d,%d,%d)\n", t, r.Digest, cidx, r.Index, r.Begin, r.Length))
 	}
 
-	t.completed.AddInt(pid)
+	t.completed.AddInt(int(pid))
 	t.cond.Broadcast() // wake anything waiting on completions
 	return changed
 }
@@ -709,7 +737,7 @@ func (t *chunks) Failed(touched *roaring.Bitmap) *roaring.Bitmap {
 }
 
 // ChunksFailed mark a piece by index as failed.
-func (t *chunks) ChunksFailed(pid int) {
+func (t *chunks) ChunksFailed(pid uint64) {
 	if t == nil {
 		panic("chunks should never be nil for chunks failed")
 	}

@@ -64,7 +64,7 @@ func (t handshaker) Release(conn net.Conn, cause error) (err error) {
 	}
 
 	if banned := new(bannedConnection); errors.As(cause, banned) {
-		log.Println("banned connection", rip, port, cause)
+		log.Println(cause)
 		t.Firewall.Inhibit(rip, port, cause)
 	}
 

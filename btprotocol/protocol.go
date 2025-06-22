@@ -31,14 +31,20 @@ const (
 	HaveNone    MessageType = 0x0f // 15
 	Reject      MessageType = 0x10 // 16
 	AllowedFast MessageType = 0x11 // 17
+	_                       = 0x12 // 18
+	_                       = 0x13 // 19
 
 	// BEP 10
-	Extended MessageType = 20
+	Extended MessageType = 0x14 // 20
 )
 
 const (
 	HandshakeExtendedID = 0
+	MetadataExtendedID  = 1
+	PEXExtendedID       = 2
+)
 
+const (
 	RequestMetadataExtensionMsgType = 0
 	DataMetadataExtensionMsgType    = 1
 	RejectMetadataExtensionMsgType  = 2

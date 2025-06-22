@@ -7,9 +7,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/anacrolix/missinggo/v2"
-
 	pp "github.com/james-lawrence/torrent/btprotocol"
+	"github.com/james-lawrence/torrent/internal/netx"
 	"github.com/james-lawrence/torrent/metainfo"
 )
 
@@ -134,11 +133,6 @@ func connIsIpv6(nc interface {
 	LocalAddr() net.Addr
 }) bool {
 	ra := nc.LocalAddr()
-	rip := missinggo.AddrIP(ra)
+	rip := netx.NetIPOrNil(ra)
 	return rip.To4() == nil && rip.To16() != nil
 }
-
-type (
-	pieceIndex = int
-	IpPort     = missinggo.IpPort
-)

@@ -16,7 +16,7 @@ func TestPEXSnapshot(t *testing.T) {
 
 	pex := newPex()
 	pex.added(c1)
-	tx := pex.snapshot()
+	tx := pex.snapshot(nil)
 	require.NotNil(t, tx)
 	require.EqualValues(t, 1, len(tx.Added))
 	if c1.remoteAddr.Addr() != tx.Added[0].Addr() {

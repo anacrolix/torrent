@@ -21,7 +21,7 @@ type pex struct {
 	conns map[*connection]time.Time
 }
 
-func (t *pex) snapshot() *pp.PexMsg {
+func (t *pex) snapshot(c0 *connection) *pp.PexMsg {
 	t.m.RLock()
 	defer t.m.RUnlock()
 
@@ -33,6 +33,10 @@ func (t *pex) snapshot() *pp.PexMsg {
 
 	n := 0
 	for c := range t.conns {
+		if c == c0 {
+			continue
+		}
+
 		if n > 25 {
 			break
 		}

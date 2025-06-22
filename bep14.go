@@ -226,7 +226,7 @@ func (m *lpdConn) receiver(client *Client) {
 		client.rLock()
 
 		// Possible to receive own UDP multicast message, ignore it.
-		if client.LocalPort() == addr.Port {
+		if client.LocalPort() == addr.Port && addr.IP.String() == m.host {
 			client.rUnlock()
 			continue
 		}

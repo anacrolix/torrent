@@ -99,6 +99,8 @@ type Client struct {
 	defaultLocalLtepProtocolMap LocalLtepProtocolMap
 
 	upnpMappings []*upnpMapping
+
+	lpd *LPDServer
 }
 
 type ipStr string
@@ -359,6 +361,12 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 		},
 	}
 
+	if cfg.EnableLocalServiceDiscovery {
+		cl.lpd = &LPDServer{}
+		cl.lpd.lpdStart(cl)
+		cl.onClose = append(cl.onClose, cl.lpd.lpdStop)
+	}
+
 	return
 }
 
@@ -537,62 +545,72 @@ func (cl *Client) rejectAccepted(conn net.Conn) error {
 
 func (cl *Client) acceptConnections(l Listener) {
 	for {
-		conn, err := l.Accept()
-		torrent.Add("client listener accepts", 1)
-		if err == nil {
-			holepunchAddr, holepunchErr := addrPortFromPeerRemoteAddr(conn.RemoteAddr())
-			if holepunchErr == nil {
-				cl.lock()
-				if g.MapContains(cl.undialableWithoutHolepunch, holepunchAddr) {
-					setAdd(&cl.accepted, holepunchAddr)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					cl.logger.Levelf(log.Error, "panic in Accept: %v (continuing accept loop)", r)
+					torrent.Add("accept panics recovered", 1)
+					// Optionally: print stack trace
+					// debug.PrintStack()
 				}
-				if g.MapContains(
-					cl.undialableWithoutHolepunchDialedAfterHolepunchConnect,
-					holepunchAddr,
-				) {
-					setAdd(&cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr)
+			}()
+			conn, err := l.Accept()
+			torrent.Add("client listener accepts", 1)
+			if err == nil {
+				holepunchAddr, holepunchErr := addrPortFromPeerRemoteAddr(conn.RemoteAddr())
+				if holepunchErr == nil {
+					cl.lock()
+					if g.MapContains(cl.undialableWithoutHolepunch, holepunchAddr) {
+						setAdd(&cl.accepted, holepunchAddr)
+					}
+					if g.MapContains(
+						cl.undialableWithoutHolepunchDialedAfterHolepunchConnect,
+						holepunchAddr,
+					) {
+						setAdd(&cl.probablyOnlyConnectedDueToHolepunch, holepunchAddr)
+					}
+					cl.unlock()
 				}
-				cl.unlock()
 			}
-		}
-		conn = pproffd.WrapNetConn(conn)
-		cl.rLock()
-		closed := cl.closed.IsSet()
-		var reject error
-		if !closed && conn != nil {
-			reject = cl.rejectAccepted(conn)
-		}
-		cl.rUnlock()
-		if closed {
-			if conn != nil {
-				conn.Close()
+			conn = pproffd.WrapNetConn(conn)
+			cl.rLock()
+			closed := cl.closed.IsSet()
+			var reject error
+			if !closed && conn != nil {
+				reject = cl.rejectAccepted(conn)
 			}
-			return
-		}
-		if err != nil {
-			log.Fmsg("error accepting connection: %s", err).LogLevel(log.Debug, cl.logger)
-			continue
-		}
-		go func() {
-			if reject != nil {
-				torrent.Add("rejected accepted connections", 1)
+			cl.rUnlock()
+			if closed {
+				if conn != nil {
+					conn.Close()
+				}
+				return
+			}
+			if err != nil {
+				log.Fmsg("error accepting connection: %s", err).LogLevel(log.Debug, cl.logger)
+				return
+			}
+			go func() {
+				if reject != nil {
+					torrent.Add("rejected accepted connections", 1)
+					cl.logger.LazyLog(log.Debug, func() log.Msg {
+						return log.Fmsg("rejecting accepted conn: %v", reject)
+					})
+					conn.Close()
+				} else {
+					go cl.incomingConnection(conn)
+				}
 				cl.logger.LazyLog(log.Debug, func() log.Msg {
-					return log.Fmsg("rejecting accepted conn: %v", reject)
+					return log.Fmsg("accepted %q connection at %q from %q",
+						l.Addr().Network(),
+						conn.LocalAddr(),
+						conn.RemoteAddr(),
+					)
 				})
-				conn.Close()
-			} else {
-				go cl.incomingConnection(conn)
-			}
-			cl.logger.LazyLog(log.Debug, func() log.Msg {
-				return log.Fmsg("accepted %q connection at %q from %q",
-					l.Addr().Network(),
-					conn.LocalAddr(),
-					conn.RemoteAddr(),
-				)
-			})
-			torrent.Add(fmt.Sprintf("accepted conn remote IP len=%d", len(addrIpOrNil(conn.RemoteAddr()))), 1)
-			torrent.Add(fmt.Sprintf("accepted conn network=%s", conn.RemoteAddr().Network()), 1)
-			torrent.Add(fmt.Sprintf("accepted on %s listener", l.Addr().Network()), 1)
+				torrent.Add(fmt.Sprintf("accepted conn remote IP len=%d", len(addrIpOrNil(conn.RemoteAddr()))), 1)
+				torrent.Add(fmt.Sprintf("accepted conn network=%s", conn.RemoteAddr().Network()), 1)
+				torrent.Add(fmt.Sprintf("accepted on %s listener", l.Addr().Network()), 1)
+			}()
 		}()
 	}
 }
@@ -1444,14 +1462,15 @@ func (cl *Client) AddTorrentInfoHashWithStorage(
 func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	infoHash := opts.InfoHash
 	cl.lock()
-	defer cl.unlock()
 	t, ok := cl.torrentsByShortHash[infoHash]
 	if ok {
+		cl.unlock()
 		return
 	}
 	if opts.InfoHashV2.Ok {
 		t, ok = cl.torrentsByShortHash[*opts.InfoHashV2.Value.ToShort()]
 		if ok {
+			cl.unlock()
 			return
 		}
 	}
@@ -1470,6 +1489,13 @@ func (cl *Client) AddTorrentOpt(opts AddTorrentOpts) (t *Torrent, new bool) {
 	t.updateWantPeersEvent()
 	// Tickle Client.waitAccept, new torrent may want conns.
 	cl.event.Broadcast()
+	cl.unlock()
+
+	if cl.lpd != nil {
+		cl.lpd.lpdPeers(t)
+		cl.lpd.lpdForce()
+	}
+
 	return
 }
 

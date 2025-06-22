@@ -98,6 +98,10 @@ func (t failed) Update(ctx context.Context, c *Shared) T {
 	return nil
 }
 
+func (t failed) String() string {
+	return fmt.Sprintf("%T - %s", t, t.cause)
+}
+
 func Fn(fn fn) fn {
 	return fn
 }

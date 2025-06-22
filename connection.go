@@ -516,7 +516,7 @@ func (cn *connection) genrequests(available *roaring.Bitmap, msg func(pp.Message
 			break
 		}
 
-		cn.cfg.debug().Printf("c(%p) seed(%t) choked(%t) requested(%d, %d, %d)\n", cn, cn.t.seeding(), cn.PeerChoked, req.Index, req.Begin, req.Length)
+		// cn.cfg.debug().Printf("c(%p) seed(%t) choked(%t) requested(%d, %d, %d)\n", cn, cn.t.seeding(), cn.PeerChoked, req.Index, req.Begin, req.Length)
 	}
 
 	// advance to just the unused chunks.
@@ -898,7 +898,7 @@ func (cn *connection) ReadOne(ctx context.Context, decoder *pp.Decoder) (msg pp.
 	cn.lastMessageReceived.Store(langx.Autoptr(time.Now()))
 
 	if msg.Keepalive {
-		cn.cfg.debug().Printf("(%d) c(%p) seed(%t) - RECEIVED KEEPALIVE - pending(%d) - missing(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, cn.cfg.Seed, len(cn.requests), cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
+		cn.cfg.debug().Printf("(%d) c(%p) seed(%t) - RECEIVED KEEPALIVE - missing(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, cn.cfg.Seed, cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
 		return
 	}
 
@@ -1239,7 +1239,7 @@ func (cn *connection) upload(msg func(pp.Message) bool) bool {
 		delete(cn.PeerRequests, r)
 
 		if !more {
-			log.Printf("(%d) c(%p) seed(%t) upload - %d", os.Getpid(), cn, cn.cfg.Seed, uploaded)
+			// log.Printf("(%d) c(%p) seed(%t) upload - %d", os.Getpid(), cn, cn.cfg.Seed, uploaded)
 			return false
 		}
 	}

@@ -3,11 +3,15 @@ package cstate
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 )
 
+type logger interface {
+	Println(v ...interface{})
+	Printf(format string, v ...interface{})
+	Print(v ...interface{})
+}
 type Shared struct {
 	done context.CancelCauseFunc
 }
@@ -74,9 +78,6 @@ func (t idle) monitor(ctx context.Context, target *sync.Cond, signals ...*sync.C
 
 func (t idle) Update(ctx context.Context, c *Shared) T {
 	t.monitor(ctx, t.cond, t.signals...)
-
-	log.Printf("%s - awake\n", t)
-
 	return t.next
 }
 
@@ -107,7 +108,7 @@ func (t fn) Update(ctx context.Context, s *Shared) T {
 	return t(ctx, s)
 }
 
-func Run(ctx context.Context, s T) error {
+func Run(ctx context.Context, s T, l logger) error {
 	ctx, cancelled := context.WithCancelCause(ctx)
 	var (
 		m = Shared{
@@ -120,7 +121,7 @@ func Run(ctx context.Context, s T) error {
 		case <-ctx.Done():
 			return context.Cause(ctx)
 		default:
-			// log.Printf("running %T %s\n", s, s)
+			l.Printf("running %T %s\n", s, s)
 			s = s.Update(ctx, &m)
 		}
 

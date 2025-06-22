@@ -5,24 +5,27 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring/v2"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/james-lawrence/torrent/internal/bytesx"
+	"github.com/james-lawrence/torrent/internal/cryptox"
 	"github.com/james-lawrence/torrent/internal/testutil"
+	"github.com/james-lawrence/torrent/internal/x/bitmapx"
 	"github.com/james-lawrence/torrent/metainfo"
 )
 
-var _ = spew.Sdump
-
 // returns a 16KiB torrent with 1 KiB pieces.
 func tinyTorrentInfo() *metainfo.Info {
-	return &metainfo.Info{
-		Length:      int64(16 * 1 << 10),
-		PieceLength: int64(1 << 10),
-	}
+	return torrentInfoN(16*bytesx.KiB, bytesx.KiB)
 }
 
+func torrentInfoN(n int64, pn int64) *metainfo.Info {
+	return &metainfo.Info{
+		Length:      n,
+		PieceLength: pn,
+	}
+}
 func filledbmap(n int) *roaring.Bitmap {
 	available := roaring.NewBitmap()
 	available.AddRange(0, uint64(n))
@@ -117,8 +120,10 @@ func TestNumChunks(t *testing.T) {
 	assert.Equal(t, int64(18), numChunks(47*1<<10, 8*1<<10, 3*1<<10))
 	// 48 KiB, 8 KiB, 3 KiB
 	assert.Equal(t, int64(18), numChunks(48*1<<10, 8*1<<10, 3*1<<10))
-	// real world example.
+	// real world example 1.
 	assert.Equal(t, int64(134509), numChunks(2203780254, 262144, 16384))
+	// real world example 2.
+	assert.Equal(t, int64(1), numChunks(1024, 1048576, 16384))
 }
 
 func TestChunkOffset(t *testing.T) {
@@ -189,7 +194,7 @@ func TestChunkLength(t *testing.T) {
 }
 
 func TestChunkFill(t *testing.T) {
-	c := newChunks(1<<8, tinyTorrentInfo())
+	c := newChunks(256, tinyTorrentInfo())
 	filled := c.fill(roaring.NewBitmap())
 	require.Equal(t, uint64(c.cmaximum), filled.GetCardinality())
 	require.Equal(t, uint64(c.cmaximum)-1, uint64(filled.Maximum()))
@@ -378,7 +383,7 @@ func TestChunksGraceWindow(t *testing.T) {
 }
 
 func TestChunksComplete(t *testing.T) {
-	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
+	p := quickpopulate(newChunks(256, tinyTorrentInfo()))
 
 	// we start out with 64 chunks missing.
 	require.Equal(t, 64, p.Missing())
@@ -406,7 +411,7 @@ func TestChunksComplete(t *testing.T) {
 }
 
 func TestChunksAvailable(t *testing.T) {
-	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
+	p := quickpopulate(newChunks(256, tinyTorrentInfo()))
 	require.Equal(t, 64, p.Missing())
 	for _, r := range p.chunksRequests(0) {
 		p.Verify(r)
@@ -415,14 +420,53 @@ func TestChunksAvailable(t *testing.T) {
 }
 
 func TestChunksPend(t *testing.T) {
-	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
+	p := quickpopulate(newChunks(256, tinyTorrentInfo()))
 	require.Equal(t, 64, p.Missing())
 	p.missing.Remove(0)
 	require.True(t, p.ChunksPend(0))
 }
 
 func TestChunksRelease(t *testing.T) {
-	p := quickpopulate(newChunks(1<<8, tinyTorrentInfo()))
+	p := quickpopulate(newChunks(256, tinyTorrentInfo()))
 	require.Equal(t, 64, p.Missing())
 	require.False(t, p.ChunksRelease(0))
+}
+
+func TestChunksReadable(t *testing.T) {
+	t.Run("with less data than a single chunk", func(t *testing.T) {
+		p := newChunks(16*bytesx.KiB, torrentInfoN(64*bytesx.KiB, bytesx.MiB))
+		p.InitFromMissing(bitmapx.Lazy(nil))
+		require.Equal(t, 0, p.Missing())
+		require.Equal(t, int64(4), p.cmaximum)
+		require.Equal(t, uint64(p.cmaximum), p.unverified.GetCardinality())
+		require.Equal(t, uint64(4), p.Readable())
+	})
+
+	t.Run("with total length smaller than chunk length and piece length", func(t *testing.T) {
+		p := newChunks(16*bytesx.KiB, torrentInfoN(bytesx.KiB, bytesx.MiB))
+		p.InitFromMissing(bitmapx.Lazy(nil))
+		require.Equal(t, 0, p.Missing())
+		require.Equal(t, int64(1), p.cmaximum)
+		require.Equal(t, uint64(p.cmaximum), p.unverified.GetCardinality())
+		require.Equal(t, uint64(1), p.Readable())
+	})
+}
+
+func TestChunksInitFromMissing(t *testing.T) {
+	t.Run("single piece torrent", func(t *testing.T) {
+		const chunksmissing = 8
+		p := newChunks(256, tinyTorrentInfo())
+		p.InitFromMissing(bitmapx.Random(uint32(p.cmaximum), chunksmissing, cryptox.NewChaCha8(t.Name())))
+		require.Equal(t, []uint32{0x5, 0xb, 0xf, 0x1e, 0x32, 0x34, 0x3d, 0x3e}, p.missing.ToArray())
+		require.Equal(t, chunksmissing, p.Missing())
+		require.Equal(t, uint64(p.cmaximum-chunksmissing), p.unverified.GetCardinality())
+	})
+
+	t.Run("with an empty missing bitmap (aka completed)", func(t *testing.T) {
+		p := newChunks(256, tinyTorrentInfo())
+		p.InitFromMissing(roaring.New())
+		require.Equal(t, []uint32{}, p.missing.ToArray())
+		require.Equal(t, 0, p.Missing())
+		require.Equal(t, uint64(p.cmaximum), p.unverified.GetCardinality())
+	})
 }

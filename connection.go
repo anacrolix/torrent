@@ -585,11 +585,12 @@ func (cn *connection) Have(piece uint64) (n int, err error) {
 }
 
 func (cn *connection) PostBitfield() (n int, err error) {
-	dup := cn.t.chunks.completed.Clone()
+	dup := cn.t.chunks.ReadableBitmap()
 	if dup.IsEmpty() {
 		dup = bitmapx.Zero(cn.t.chunks.pieces)
 	}
 
+	// cn.cfg.debug().Printf("c(%p) seed(%t) calculated bitfield: p(%d)/r(%d) - %v\n", cn, cn.t.seeding(), cn.t.chunks.pieces, dup.GetCardinality(), dup.ToArray())
 	n, err = cn.Post(pp.NewBitField(cn.t.chunks.pieces, dup))
 	if err != nil {
 		return n, err
@@ -833,7 +834,7 @@ func (cn *connection) onReadRequest(r request) error {
 		return nil
 	}
 
-	if !cn.t.havePiece(uint64(r.Index)) {
+	if !cn.t.chunks.ChunksReadable(uint64(r.Index)) {
 		// This isn't necessarily them screwing up. We can drop pieces
 		// from our storage, and can't communicate this to peers
 		// except by reconnecting.

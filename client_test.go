@@ -299,128 +299,126 @@ func assertReadAllGreeting(t *testing.T, r io.ReadSeeker) {
 }
 
 func TestClientSeedWithoutAdding(t *testing.T) {
-	t.SkipNow()
+	t.Run("no encryption", func(t *testing.T) {
+		const datan = 64 * bytesx.KiB
 
-	const datan = 64 * bytesx.KiB
+		ctx, done := testx.Context(t)
+		defer done()
 
-	ctx, done := testx.Context(t)
-	defer done()
+		seedingdir := t.TempDir()
+		mds := torrent.NewMetadataCache(seedingdir)
+		sstore := storage.NewFile(seedingdir)
+		info, expected, err := testutil.RandomDataTorrent(seedingdir, datan)
+		require.NoError(t, err)
 
-	seedingdir := t.TempDir()
-	mds := torrent.NewMetadataCache(seedingdir)
-	sstore := storage.NewFile(seedingdir)
-	info, expected, err := testutil.RandomDataTorrent(seedingdir, datan)
-	require.NoError(t, err)
+		md, err := torrent.NewFromInfo(
+			info,
+			torrent.OptionDisplayName("test torrent"),
+			torrent.OptionChunk(bytesx.KiB),
+			torrent.OptionStorage(sstore),
+		)
+		require.NoError(t, err)
+		require.NoError(t, mds.Write(md))
 
-	md, err := torrent.NewFromInfo(
-		info,
-		torrent.OptionDisplayName("test torrent"),
-		torrent.OptionChunk(bytesx.KiB),
-		torrent.OptionStorage(sstore),
-	)
-	require.NoError(t, err)
-	require.NoError(t, mds.Write(md))
+		// Create seeder and a Torrent.
+		cfg := torrent.TestingConfig(
+			t,
+			torrent.ClientConfigStorageDir(seedingdir),
+			torrent.ClientConfigSeed(true),
+		)
 
-	// Create seeder and a Torrent.
-	cfg := torrent.TestingConfig(
-		t,
-		torrent.ClientConfigStorageDir(seedingdir),
-		torrent.ClientConfigSeed(true),
-	)
+		seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
+		require.NoError(t, err)
+		defer seeder.Close()
 
-	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
-	require.NoError(t, err)
-	defer seeder.Close()
+		// Create leecher and a Torrent.
+		cfg = torrent.TestingConfig(
+			t,
+			torrent.ClientConfigStorageDir(t.TempDir()),
+			torrent.ClientConfigSeed(false),
+		)
 
-	// Create leecher and a Torrent.
-	cfg = torrent.TestingConfig(
-		t,
-		torrent.ClientConfigStorageDir(t.TempDir()),
-		torrent.ClientConfigSeed(false),
-	)
+		leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
+		require.NoError(t, err)
+		defer leecher.Close()
 
-	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
-	require.NoError(t, err)
-	defer leecher.Close()
+		leeched, added, err := leecher.Start(md, torrent.TuneClientPeer(seeder))
+		require.NoError(t, err)
+		assert.True(t, added)
 
-	leeched, added, err := leecher.Start(md, torrent.TuneClientPeer(seeder))
-	require.NoError(t, err)
-	assert.True(t, added)
+		// The Torrent should not be interested in obtaining peers, so the one we
+		// just added should be the only one.
+		require.False(t, leeched.Stats().Seeding)
 
-	// The Torrent should not be interested in obtaining peers, so the one we
-	// just added should be the only one.
-	require.False(t, leeched.Stats().Seeding)
+		// download
+		downloaded := md5.New()
+		n, err := torrent.DownloadInto(ctx, downloaded, leeched)
+		require.NoError(t, err)
+		require.Equal(t, int64(64*bytesx.KiB), n)
+		require.Equal(t, md5x.FormatHex(expected), md5x.FormatHex(downloaded))
+	})
 
-	// download
-	downloaded := md5.New()
-	n, err := torrent.DownloadInto(ctx, downloaded, leeched)
-	require.NoError(t, err)
-	require.Equal(t, int64(64*bytesx.KiB), n)
-	require.Equal(t, md5x.FormatHex(expected), md5x.FormatHex(downloaded))
-}
+	t.Run("with encryption", func(t *testing.T) {
+		// this test ensures encryption works when torrents are not actively in memory.
+		const datan = 64 * bytesx.KiB
 
-func TestClientSeedWithoutAddingAndEncryption(t *testing.T) {
-	t.SkipNow()
+		ctx, done := testx.Context(t)
+		defer done()
 
-	// this test ensures encryption works when torrents are not actively in memory.
-	const datan = 64 * bytesx.KiB
+		seedingdir := t.TempDir()
+		mds := torrent.NewMetadataCache(seedingdir)
+		sstore := storage.NewFile(seedingdir)
+		info, expected, err := testutil.RandomDataTorrent(seedingdir, datan)
+		require.NoError(t, err)
 
-	ctx, done := testx.Context(t)
-	defer done()
+		md, err := torrent.NewFromInfo(
+			info,
+			torrent.OptionDisplayName("test torrent"),
+			torrent.OptionChunk(bytesx.KiB),
+			torrent.OptionStorage(sstore),
+		)
+		require.NoError(t, err)
+		require.NoError(t, mds.Write(md))
 
-	seedingdir := t.TempDir()
-	mds := torrent.NewMetadataCache(seedingdir)
-	sstore := storage.NewFile(seedingdir)
-	info, expected, err := testutil.RandomDataTorrent(seedingdir, datan)
-	require.NoError(t, err)
+		// Create seeder and a Torrent.
+		cfg := torrent.TestingConfig(
+			t,
+			torrent.ClientConfigStorageDir(seedingdir),
+			torrent.ClientConfigSeed(true),
+			torrent.ClientConfigEnableEncryption,
+		)
 
-	md, err := torrent.NewFromInfo(
-		info,
-		torrent.OptionDisplayName("test torrent"),
-		torrent.OptionChunk(bytesx.KiB),
-		torrent.OptionStorage(sstore),
-	)
-	require.NoError(t, err)
-	require.NoError(t, mds.Write(md))
+		seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
+		require.NoError(t, err)
+		defer seeder.Close()
 
-	// Create seeder and a Torrent.
-	cfg := torrent.TestingConfig(
-		t,
-		torrent.ClientConfigStorageDir(seedingdir),
-		torrent.ClientConfigSeed(true),
-		torrent.ClientConfigEnableEncryption,
-	)
+		// Create leecher and a Torrent.
+		cfg = torrent.TestingConfig(
+			t,
+			torrent.ClientConfigStorageDir(t.TempDir()),
+			torrent.ClientConfigSeed(false),
+			torrent.ClientConfigEnableEncryption,
+		)
 
-	seeder, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
-	require.NoError(t, err)
-	defer seeder.Close()
+		leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
+		require.NoError(t, err)
+		defer leecher.Close()
 
-	// Create leecher and a Torrent.
-	cfg = torrent.TestingConfig(
-		t,
-		torrent.ClientConfigStorageDir(t.TempDir()),
-		torrent.ClientConfigSeed(false),
-		torrent.ClientConfigEnableEncryption,
-	)
+		leeched, added, err := leecher.Start(md, torrent.TuneClientPeer(seeder))
+		require.NoError(t, err)
+		assert.True(t, added)
 
-	leecher, err := autobind.NewLoopback().Bind(torrent.NewClient(cfg))
-	require.NoError(t, err)
-	defer leecher.Close()
+		// The Torrent should not be interested in obtaining peers, so the one we
+		// just added should be the only one.
+		require.False(t, leeched.Stats().Seeding)
 
-	leeched, added, err := leecher.Start(md, torrent.TuneClientPeer(seeder))
-	require.NoError(t, err)
-	assert.True(t, added)
-
-	// The Torrent should not be interested in obtaining peers, so the one we
-	// just added should be the only one.
-	require.False(t, leeched.Stats().Seeding)
-
-	// download
-	downloaded := md5.New()
-	n, err := torrent.DownloadInto(ctx, downloaded, leeched)
-	require.NoError(t, err)
-	require.Equal(t, int64(64*bytesx.KiB), n)
-	require.Equal(t, md5x.FormatHex(expected), md5x.FormatHex(downloaded))
+		// download
+		downloaded := md5.New()
+		n, err := torrent.DownloadInto(ctx, downloaded, leeched)
+		require.NoError(t, err)
+		require.Equal(t, int64(64*bytesx.KiB), n)
+		require.Equal(t, md5x.FormatHex(expected), md5x.FormatHex(downloaded))
+	})
 }
 
 // Check that after completing leeching, a leecher transitions to a seeding
@@ -655,8 +653,6 @@ func TestResponsive(t *testing.T) {
 }
 
 func TestTorrentDroppedDuringResponsiveRead(t *testing.T) {
-	t.SkipNow()
-
 	seederDataDir := t.TempDir()
 	mi := testutil.GreetingTestTorrent(seederDataDir)
 

@@ -23,13 +23,5 @@ var (
 
 	completedHandshakeConnectionFlags = expvar.NewMap("completedHandshakeConnectionFlags")
 
-	receivedKeepalives    = expvar.NewInt("receivedKeepalives")
 	requestedChunkLengths = expvar.NewMap("requestedChunkLengths")
-
-	messageTypesReceived = expvar.NewMap("messageTypesReceived")
-
-	// Track the effectiveness of Torrent.connPieceInclinationPool.
-	pieceInclinationsReused = expvar.NewInt("pieceInclinationsReused")
-	pieceInclinationsNew    = expvar.NewInt("pieceInclinationsNew")
-	pieceInclinationsPut    = expvar.NewInt("pieceInclinationsPut")
 )

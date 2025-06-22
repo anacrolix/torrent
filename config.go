@@ -34,8 +34,8 @@ type ClientConfig struct {
 	defaultStorage  storage.ClientImpl
 	defaultMetadata MetadataStore
 
-	defaultPortForwarding bool
-	dynamicip             func(ctx context.Context, c *Client) (iter.Seq[netip.AddrPort], error)
+	// defaultPortForwarding bool
+	dynamicip func(ctx context.Context, c *Client) (iter.Seq[netip.AddrPort], error)
 
 	UpnpID string
 
@@ -195,12 +195,10 @@ func ClientConfigDialer(d netx.Dialer) ClientConfigOption {
 }
 
 func ClientConfigPortForward(b bool) ClientConfigOption {
-	return func(cc *ClientConfig) {
-		if b {
-			cc.dynamicip = UPnPDynamicIP
-		} else {
-			cc.dynamicip = nil
-		}
+	if b {
+		return ClientConfigDynamicIP(UPnPPortForward)
+	} else {
+		return ClientConfigDisableDynamicIP
 	}
 }
 
@@ -379,7 +377,7 @@ func NewDefaultClientConfig(mdstore MetadataStore, store storage.ClientImpl, opt
 		TorrentPeersHighWater:          500,
 		TorrentPeersLowWater:           50,
 		HandshakesTimeout:              4 * time.Second,
-		defaultPortForwarding:          true,
+		dynamicip:                      UPnPPortForward,
 		DhtStartingNodes: func(network string) dht.StartingNodesGetter {
 			return func() ([]dht.Addr, error) { return nil, nil }
 		},

@@ -46,7 +46,7 @@ func (cl *Client) forwardPort() {
 	}
 }
 
-func UPnPDynamicIP(ctx context.Context, c *Client) (iter.Seq[netip.AddrPort], error) {
+func UPnPPortForward(ctx context.Context, c *Client) (iter.Seq[netip.AddrPort], error) {
 	return func(yield func(netip.AddrPort) bool) {
 		ds := upnp.Discover(0, 2*time.Second, alog.Default.WithValues(c).WithValues("upnp-discover"))
 		c.config.debug().Printf("discovered %d upnp devices\n", len(ds))

@@ -3,7 +3,7 @@ package torrent
 import (
 	g "github.com/anacrolix/generics"
 
-	request_strategy "github.com/anacrolix/torrent/request-strategy"
+	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
 )
 
 // It's probably possible to track whether the piece moves around in the btree to be more efficient
@@ -62,7 +62,7 @@ func (t *Torrent) initPieceRequestOrder() {
 	cpro := t.cl.pieceRequestOrder
 	if _, ok := cpro[key]; !ok {
 		value := clientPieceRequestOrderValue{
-			pieces: request_strategy.NewPieceOrder(request_strategy.NewAjwernerBtree(), t.numPieces()),
+			pieces: requestStrategy.NewPieceOrder(requestStrategy.NewAjwernerBtree(), t.numPieces()),
 		}
 		g.MakeMap(&value.torrents)
 		cpro[key] = value
@@ -81,7 +81,7 @@ func (t *Torrent) addRequestOrderPiece(i int) {
 	}
 }
 
-func (t *Torrent) getPieceRequestOrder() *request_strategy.PieceRequestOrder {
+func (t *Torrent) getPieceRequestOrder() *requestStrategy.PieceRequestOrder {
 	if t.storage == nil {
 		return nil
 	}

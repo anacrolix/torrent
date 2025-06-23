@@ -1,13 +1,14 @@
 package webseed_partial_seed
 
 import (
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/internal/testutil"
-	qt "github.com/go-quicktest/qt"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/internal/testutil"
+	qt "github.com/go-quicktest/qt"
 )
 
 func testSrcDir() string {

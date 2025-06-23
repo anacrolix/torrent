@@ -19,9 +19,9 @@ import (
 	"github.com/anacrolix/multiless"
 
 	"github.com/anacrolix/torrent/internal/alloclim"
+	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
 	"github.com/anacrolix/torrent/mse"
 	pp "github.com/anacrolix/torrent/peer_protocol"
-	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	typedRoaring "github.com/anacrolix/torrent/typed-roaring"
 )
 
@@ -61,7 +61,7 @@ type (
 		// Stuff controlled by the local peer.
 		needRequestUpdate updateRequestReason
 		// TODO: How are pending cancels handled for webseed peers?
-		requestState         request_strategy.PeerRequestState
+		requestState         requestStrategy.PeerRequestState
 		updateRequestsTimer  *time.Timer
 		lastRequestUpdate    time.Time
 		peakRequests         maxRequests
@@ -287,7 +287,7 @@ func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int))
 			count = 1
 		}
 	}
-	cn.requestState.Requests.Iterate(func(requestIndex request_strategy.RequestIndex) bool {
+	cn.requestState.Requests.Iterate(func(requestIndex requestStrategy.RequestIndex) bool {
 		next(Some(cn.t.pieceIndexOfRequestIndex(requestIndex)))
 		return true
 	})

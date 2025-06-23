@@ -9,15 +9,15 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/iter"
 	"github.com/davecgh/go-spew/spew"
-	qt "github.com/go-quicktest/qt"
+	"github.com/go-quicktest/qt"
 
+	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
 	"github.com/anacrolix/torrent/metainfo"
-	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 )
 
-func makeRequestStrategyPiece(t request_strategy.Torrent) request_strategy.Piece {
+func makeRequestStrategyPiece(t requestStrategy.Torrent) requestStrategy.Piece {
 	return t.Piece(0)
 }
 

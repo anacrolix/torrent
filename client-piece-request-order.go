@@ -1,7 +1,7 @@
 package torrent
 
 import (
-	requestStrategy "github.com/anacrolix/torrent/request-strategy"
+	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
 	"github.com/anacrolix/torrent/storage"
 )
 

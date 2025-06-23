@@ -3,8 +3,8 @@ package torrent
 import (
 	g "github.com/anacrolix/generics"
 
+	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
 	"github.com/anacrolix/torrent/metainfo"
-	request_strategy "github.com/anacrolix/torrent/request-strategy"
 	"github.com/anacrolix/torrent/storage"
 )
 
@@ -22,7 +22,7 @@ type requestStrategyInputMultiTorrent struct {
 	capFunc  storage.TorrentCapacity
 }
 
-func (r requestStrategyInputMultiTorrent) Torrent(ih metainfo.Hash) request_strategy.Torrent {
+func (r requestStrategyInputMultiTorrent) Torrent(ih metainfo.Hash) requestStrategy.Torrent {
 	return requestStrategyTorrent{g.MapMustGet(r.torrents, ih)}
 }
 
@@ -38,7 +38,7 @@ type requestStrategyInputSingleTorrent struct {
 	t *Torrent
 }
 
-func (r requestStrategyInputSingleTorrent) Torrent(_ metainfo.Hash) request_strategy.Torrent {
+func (r requestStrategyInputSingleTorrent) Torrent(_ metainfo.Hash) requestStrategy.Torrent {
 	return requestStrategyTorrent{r.t}
 }
 
@@ -46,14 +46,14 @@ func (r requestStrategyInputSingleTorrent) Capacity() (cap int64, capped bool) {
 	return 0, false
 }
 
-var _ request_strategy.Input = requestStrategyInputSingleTorrent{}
+var _ requestStrategy.Input = requestStrategyInputSingleTorrent{}
 
 // getRequestStrategyInputCommon returns request strategy Input implementation common to all inputs.
 func (cl *Client) getRequestStrategyInputCommon() requestStrategyInputCommon {
 	return requestStrategyInputCommon{cl.config.MaxUnverifiedBytes}
 }
 
-func (t *Torrent) getRequestStrategyInput() request_strategy.Input {
+func (t *Torrent) getRequestStrategyInput() requestStrategy.Input {
 	return t.clientPieceRequestOrderKey().getRequestStrategyInput(t.cl)
 }
 
@@ -62,7 +62,7 @@ type requestStrategyTorrent struct {
 	t *Torrent
 }
 
-func (r requestStrategyTorrent) Piece(i int) request_strategy.Piece {
+func (r requestStrategyTorrent) Piece(i int) requestStrategy.Piece {
 	return requestStrategyPiece{r.t.piece(i)}
 }
 
@@ -70,7 +70,7 @@ func (r requestStrategyTorrent) PieceLength() int64 {
 	return r.t.info.PieceLength
 }
 
-var _ request_strategy.Torrent = requestStrategyTorrent{}
+var _ requestStrategy.Torrent = requestStrategyTorrent{}
 
 type requestStrategyPiece struct {
 	p *Piece
@@ -84,4 +84,4 @@ func (r requestStrategyPiece) Request() bool {
 	return !r.p.ignoreForRequests() && r.p.purePriority() != PiecePriorityNone
 }
 
-var _ request_strategy.Piece = requestStrategyPiece{}
+var _ requestStrategy.Piece = requestStrategyPiece{}

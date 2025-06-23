@@ -3,8 +3,8 @@ package torrent
 import (
 	"unique"
 
+	requestStrategy2 "github.com/anacrolix/torrent/internal/request-strategy"
 	"github.com/anacrolix/torrent/metainfo"
-	requestStrategy "github.com/anacrolix/torrent/request-strategy"
 )
 
 type (
@@ -23,10 +23,10 @@ This was a globally aware webseed requestor algorithm that is probably going to 
 func (cl *Client) abandonedUpdateWebSeedRequests() {
 	for key, value := range cl.pieceRequestOrder {
 		input := key.getRequestStrategyInput(cl)
-		requestStrategy.GetRequestablePieces(
+		requestStrategy2.GetRequestablePieces(
 			input,
 			value.pieces,
-			func(ih metainfo.Hash, pieceIndex int, orderState requestStrategy.PieceRequestOrderState) bool {
+			func(ih metainfo.Hash, pieceIndex int, orderState requestStrategy2.PieceRequestOrderState) bool {
 				return true
 			},
 		)

@@ -1125,14 +1125,19 @@ func (t *torrent) consumeDhtAnnouncePeers(ctx context.Context, pvs <-chan dht.Pe
 	// l := rate.NewLimiter(rate.Every(time.Minute), 1)
 	for {
 		select {
-		case v := <-pvs:
+		case v, ok := <-pvs:
+			if !ok {
+				t.cln.config.debug().Println(int160.FromByteArray(t.md.ID), "peer events completed")
+				return
+			}
+
 			for _, cp := range v.Peers {
 				if cp.Port() == 0 {
 					// Can't do anything with this.
 					continue
 				}
 
-				log.Println("adding peer", cp.AddrPort)
+				t.cln.config.debug().Println("adding peer", cp.AddrPort)
 				t.AddPeer(Peer{
 					IP:     cp.Addr().AsSlice(),
 					Port:   int(cp.Port()),

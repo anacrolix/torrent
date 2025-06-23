@@ -3,6 +3,7 @@ package errorsx_test
 import (
 	"errors"
 	"fmt"
+	"syscall"
 	"testing"
 	"time"
 
@@ -28,11 +29,23 @@ func TestWithStackFormatting(t *testing.T) {
 }
 
 func TestTimedout(t *testing.T) {
-	var (
-		timedout errorsx.Timeout
-		err      = errorsx.Timedout(errorsx.String("timeout"), time.Minute)
-	)
+	t.Run("should work with errors.As and errors.Is", func(t *testing.T) {
+		var (
+			timedout errorsx.Timeout
+			err      = errorsx.Timedout(errorsx.String("timeout"), time.Minute)
+		)
 
-	require.True(t, errors.As(err, &timedout))
-	require.True(t, errorsx.Is(err, timedout))
+		require.True(t, errors.As(err, &timedout))
+		require.True(t, errorsx.Is(err, timedout))
+	})
+
+	t.Run("convert provided errors", func(t *testing.T) {
+		err := errorsx.StdlibTimeout(syscall.ECONNRESET, time.Second, syscall.ECONNRESET)
+		var (
+			timedout errorsx.Timeout
+		)
+
+		require.True(t, errors.As(err, &timedout))
+		require.True(t, errors.Is(err, timedout))
+	})
 }

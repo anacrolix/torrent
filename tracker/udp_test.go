@@ -161,7 +161,7 @@ func TestUDPTracker(t *testing.T) {
 	}.Do(ctx, req)
 
 	// Skip any net errors as we don't control the server.
-	if _, ok := errorsx.Cause(err).(net.Error); ok {
+	if _, ok := errorsx.Unwrap(err).(net.Error); ok {
 		t.Skip(err)
 	}
 

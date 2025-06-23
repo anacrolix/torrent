@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/james-lawrence/torrent/bencode"
@@ -45,7 +46,7 @@ func RunHandshookConn(c *connection, t *torrent) error {
 		}
 
 		err := connwriterinit(ctx, c, 10*time.Second)
-		err = errorsx.StdlibTimeout(err, 10*time.Second)
+		err = errorsx.StdlibTimeout(err, 10*time.Second, syscall.ECONNRESET)
 
 		errorsx.Log(err)
 		cancel(err)

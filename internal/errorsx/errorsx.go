@@ -106,7 +106,7 @@ func Timedout(cause error, d time.Duration) error {
 }
 
 // convert stdlib errors into timeout errors.
-func StdlibTimeout(err error, d time.Duration) error {
+func StdlibTimeout(err error, d time.Duration, additional ...error) error {
 	var timedout Timeout
 
 	// dont rewrap errors that are already marked as a Timeout
@@ -120,11 +120,17 @@ func StdlibTimeout(err error, d time.Duration) error {
 	}
 
 	var to timeout
-	if !errors.Is(err, to) {
-		return err
+	if errors.Is(err, to) {
+		return Timedout(err, d)
 	}
 
-	return Timedout(err, d)
+	for _, target := range additional {
+		if errors.Is(err, target) {
+			return Timedout(err, d)
+		}
+	}
+
+	return err
 }
 
 type timeout struct {

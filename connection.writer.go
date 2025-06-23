@@ -55,7 +55,7 @@ func RunHandshookConn(c *connection, t *torrent) error {
 		return errorsx.Wrap(err, "error during main read loop")
 	}
 
-	return nil
+	return context.Cause(ctx)
 }
 
 // See the order given in Transmission's tr_peerMsgsNew.

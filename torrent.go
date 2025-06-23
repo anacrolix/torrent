@@ -1371,15 +1371,16 @@ func (t *torrent) initiateConn(ctx context.Context, peer Peer) {
 			t._halfOpenmu.Unlock()
 
 			// outgoing connection has a dial rate limit
-			if err := t.cln.outgoingConnection(ctx, t, addr, peer.Source, peer.Trusted); errors.As(err, &timedout) {
+			if err := t.cln.outgoingConnection(ctx, t, addr, peer.Source, peer.Trusted); err == nil {
+				return
+			} else if errors.As(err, &timedout) {
 				log.Printf("timeout detected, reconnecting %T - %v - %s\n", err, err, timedout.Timedout())
 				time.Sleep(timedout.Timedout())
-			} else if err != nil {
-				log.Printf("outgoing connection failed %T - %v\n", err, err)
-				break
+			} else {
+				log.Printf("outgoing connection failed %T - %v\n", errorsx.Compact(errorsx.Unwrap(err), err), err)
+				return
 			}
 		}
-
 	}()
 }
 

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/bradfitz/iter"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 
 	pp "github.com/anacrolix/torrent/peer_protocol"
 )
@@ -35,12 +35,12 @@ func TestLogExampleRequestMapOrdering(t *testing.T) {
 func TestRequestMapOrderingPersistent(t *testing.T) {
 	m := makeTypicalRequests()
 	// Shows that map order is persistent across separate range statements.
-	qt.Assert(t, keysAsSlice(m), qt.ContentEquals, keysAsSlice(m))
+	qt.Assert(t, qt.ContentEquals(keysAsSlice(m), keysAsSlice(m)))
 }
 
 func TestRequestMapOrderAcrossInstances(t *testing.T) {
 	// This shows that different map instances with the same contents can have the same range order.
-	qt.Assert(t, keysAsSlice(makeTypicalRequests()), qt.ContentEquals, keysAsSlice(makeTypicalRequests()))
+	qt.Assert(t, qt.ContentEquals(keysAsSlice(makeTypicalRequests()), keysAsSlice(makeTypicalRequests())))
 }
 
 // Added for testing repeating loop iteration after shuffling in Peer.applyRequestState.
@@ -58,7 +58,7 @@ func TestForLoopRepeatItem(t *testing.T) {
 			}
 		}
 		// We can mutate i and it's observed by the loop. No special treatment of the loop var.
-		qt.Assert(t, seen, qt.DeepEquals, []int{0, 1, 2, 2, 3})
+		qt.Assert(t, qt.DeepEquals(seen, []int{0, 1, 2, 2, 3}))
 	})
 	t.Run("Range", func(t *testing.T) {
 		once := false
@@ -73,6 +73,6 @@ func TestForLoopRepeatItem(t *testing.T) {
 			}
 		}
 		// Range ignores any mutation to i.
-		qt.Assert(t, seen, qt.DeepEquals, []int{0, 1, 2, 3})
+		qt.Assert(t, qt.DeepEquals(seen, []int{0, 1, 2, 3}))
 	})
 }

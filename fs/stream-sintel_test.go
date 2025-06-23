@@ -16,12 +16,13 @@ import (
 	"github.com/anacrolix/fuse"
 	fusefs "github.com/anacrolix/fuse/fs"
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"github.com/go-quicktest/qt"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/anacrolix/torrent"
 	torrentfs "github.com/anacrolix/torrent/fs"
 	"github.com/anacrolix/torrent/internal/testutil"
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/go-quicktest/qt"
-	"golang.org/x/sync/errgroup"
 )
 
 func copyFile(src, dst string) (err error) {

@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/anacrolix/torrent v1.56.1
-	github.com/frankban/quicktest v1.14.6
+	github.com/go-quicktest/qt v1.101.0
 )
 
 require (

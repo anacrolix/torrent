@@ -3,12 +3,11 @@ package peer_protocol
 import (
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 )
 
 func TestV2BitLocation(t *testing.T) {
 	var bits PeerExtensionBits
 	bits.SetBit(ExtensionBitV2Upgrade, true)
-	c := qt.New(t)
-	c.Assert(bits[7], qt.Equals, byte(0x10))
+	qt.Assert(t, qt.Equals(bits[7], byte(0x10)))
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	g "github.com/anacrolix/generics"
+
 	"github.com/anacrolix/torrent/storage"
 	test_storage "github.com/anacrolix/torrent/storage/test"
 )

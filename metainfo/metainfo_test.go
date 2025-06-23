@@ -10,7 +10,7 @@ import (
 
 	"github.com/anacrolix/missinggo/v2"
 	"github.com/davecgh/go-spew/spew"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -49,8 +49,7 @@ func TestFile(t *testing.T) {
 	testFile(t, "testdata/23516C72685E8DB0C8F15553382A927F185C4F01.torrent")
 	testFile(t, "testdata/trackerless.torrent")
 	_, err := LoadFromFile("testdata/minimal-trailing-newline.torrent")
-	c := qt.New(t)
-	c.Check(err, qt.ErrorMatches, ".*expected EOF")
+	qt.Check(t, qt.ErrorMatches(err, ".*expected EOF"))
 }
 
 // Ensure that the correct number of pieces are generated when hashing files.
@@ -124,7 +123,7 @@ func TestMetainfoWithListURLList(t *testing.T) {
 	mi, err := LoadFromFile("testdata/SKODAOCTAVIA336x280_archive.torrent")
 	require.NoError(t, err)
 	assert.Len(t, mi.UrlList, 3)
-	qt.Assert(t, mi.Magnet(nil, nil).String(), qt.ContentEquals,
+	qt.Assert(t, qt.ContentEquals(mi.Magnet(nil, nil).String(),
 		strings.Join([]string{
 			"magnet:?xt=urn:btih:d4b197dff199aad447a9a352e31528adbbd97922",
 			"tr=http%3A%2F%2Fbt1.archive.org%3A6969%2Fannounce",
@@ -132,20 +131,20 @@ func TestMetainfoWithListURLList(t *testing.T) {
 			"ws=https%3A%2F%2Farchive.org%2Fdownload%2F",
 			"ws=http%3A%2F%2Fia601600.us.archive.org%2F26%2Fitems%2F",
 			"ws=http%3A%2F%2Fia801600.us.archive.org%2F26%2Fitems%2F",
-		}, "&"))
+		}, "&")))
 }
 
 func TestMetainfoWithStringURLList(t *testing.T) {
 	mi, err := LoadFromFile("testdata/flat-url-list.torrent")
 	require.NoError(t, err)
 	assert.Len(t, mi.UrlList, 1)
-	qt.Assert(t, mi.Magnet(nil, nil).String(), qt.ContentEquals,
+	qt.Assert(t, qt.ContentEquals(mi.Magnet(nil, nil).String(),
 		strings.Join([]string{
 			"magnet:?xt=urn:btih:9da24e606e4ed9c7b91c1772fb5bf98f82bd9687",
 			"tr=http%3A%2F%2Fbt1.archive.org%3A6969%2Fannounce",
 			"tr=http%3A%2F%2Fbt2.archive.org%3A6969%2Fannounce",
 			"ws=https%3A%2F%2Farchive.org%2Fdownload%2F",
-		}, "&"))
+		}, "&")))
 }
 
 // https://github.com/anacrolix/torrent/issues/247
@@ -160,19 +159,17 @@ func TestStringCreationDate(t *testing.T) {
 // See https://github.com/anacrolix/torrent/issues/843.
 func TestUnmarshalEmptyStringNodes(t *testing.T) {
 	var mi MetaInfo
-	c := qt.New(t)
 	err := bencode.Unmarshal([]byte("d5:nodes0:e"), &mi)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 }
 
 func TestUnmarshalV2Metainfo(t *testing.T) {
-	c := qt.New(t)
 	mi, err := LoadFromFile("../testdata/bittorrent-v2-test.torrent")
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	info, err := mi.UnmarshalInfo()
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	spew.Dump(info)
-	c.Check(info.NumPieces(), qt.Not(qt.Equals), 0)
+	qt.Check(t, qt.Not(qt.Equals(info.NumPieces(), 0)))
 	err = ValidatePieceLayers(mi.PieceLayers, &info.FileTree, info.PieceLength)
-	c.Check(err, qt.IsNil)
+	qt.Check(t, qt.IsNil(err))
 }

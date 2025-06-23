@@ -3,7 +3,7 @@ package segments
 import (
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 )
 
 func LengthIterFromSlice(ls []Length) LengthIter {
@@ -50,7 +50,7 @@ func checkContiguous(
 		expected.scanCallback(firstExpectedIndex+i, e)
 	}
 	nl(LengthIterFromSlice(ls))(needle, actual.scanCallback)
-	qt.Check(t, actual, qt.DeepEquals, expected)
+	qt.Check(t, qt.DeepEquals(actual, expected))
 }
 
 func testLocater(t *testing.T, newLocater newLocater) {

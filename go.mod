@@ -31,7 +31,6 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edsrzf/mmap-go v1.1.0
 	github.com/elliotchance/orderedmap v1.4.0
-	github.com/frankban/quicktest v1.14.6
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/go-llsqlite/adapter v0.0.0-20230927005056-7f5ce7f0c916
 	github.com/go-quicktest/qt v1.101.0
@@ -71,6 +70,7 @@ require (
 	github.com/bits-and-blooms/bitset v1.2.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/frankban/quicktest v1.14.6 // indirect
 	github.com/go-llsqlite/crawshaw v0.5.6-0.20250312230104-194977a03421 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect

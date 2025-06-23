@@ -4,13 +4,12 @@ import (
 	"net/url"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 )
 
 func TestDefaultPathEscaper(t *testing.T) {
-	c := qt.New(t)
 	test := func(unescaped string, parts ...string) {
-		assertPartsUnescape(c, unescaped, parts...)
+		assertPartsUnescape(t, unescaped, parts...)
 	}
 	for _, tc := range defaultPathEscapeTestCases {
 		test(tc.escaped, tc.parts...)
@@ -36,14 +35,14 @@ var defaultPathEscapeTestCases = []struct {
 	},
 }
 
-func assertPartsUnescape(c *qt.C, unescaped string, parts ...string) {
+func assertPartsUnescape(t *testing.T, unescaped string, parts ...string) {
 	escaped := defaultPathEscaper(parts)
 	pathUnescaped, err := url.PathUnescape(escaped)
-	c.Assert(err, qt.IsNil)
-	c.Assert(pathUnescaped, qt.Equals, unescaped)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(pathUnescaped, unescaped))
 	queryUnescaped, err := url.QueryUnescape(escaped)
-	c.Assert(err, qt.IsNil)
-	c.Assert(queryUnescaped, qt.Equals, unescaped)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(queryUnescaped, unescaped))
 }
 
 func FuzzDefaultPathEscaper(f *testing.F) {
@@ -55,6 +54,6 @@ func FuzzDefaultPathEscaper(f *testing.F) {
 	// I think a single separator is enough to test special handling around /. Also fuzzing doesn't
 	// let us take []string as an input.
 	f.Fuzz(func(t *testing.T, first, second string) {
-		assertPartsUnescape(qt.New(t), first+"/"+second, first, second)
+		assertPartsUnescape(t, first+"/"+second, first, second)
 	})
 }

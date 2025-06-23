@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -150,7 +150,7 @@ func TestIgnoreUnmarshalTypeError(t *testing.T) {
 	}{}
 	require.Error(t, Unmarshal([]byte("d6:Normal5:helloe"), &s))
 	assert.NoError(t, Unmarshal([]byte("d6:Ignore5:helloe"), &s))
-	qt.Assert(t, Unmarshal([]byte("d6:Ignorei42ee"), &s), qt.IsNil)
+	qt.Assert(t, qt.IsNil(Unmarshal([]byte("d6:Ignorei42ee"), &s)))
 	assert.EqualValues(t, 42, s.Ignore)
 }
 
@@ -183,19 +183,17 @@ func TestUnmarshalByteArray(t *testing.T) {
 func TestDecodeDictIntoUnsupported(t *testing.T) {
 	// Any type that a dict shouldn't be unmarshallable into.
 	var i int
-	c := qt.New(t)
 	err := Unmarshal([]byte("d1:a1:be"), &i)
 	t.Log(err)
-	c.Check(err, qt.IsNotNil)
+	qt.Check(t, qt.IsNotNil(err))
 }
 
 func TestUnmarshalDictKeyNotString(t *testing.T) {
 	// Any type that a dict shouldn't be unmarshallable into.
 	var i int
-	c := qt.New(t)
 	err := Unmarshal([]byte("di42e3:yese"), &i)
 	t.Log(err)
-	c.Check(err, qt.Not(qt.IsNil))
+	qt.Check(t, qt.IsNotNil(err))
 }
 
 type arbitraryReader struct{}
@@ -220,14 +218,13 @@ func decodeHugeString(t *testing.T, strLen int64, header, tail string, v interfa
 // Ensure that bencode strings in various places obey the Decoder.MaxStrLen field.
 func TestDecodeMaxStrLen(t *testing.T) {
 	t.Parallel()
-	c := qt.New(t)
 	test := func(header, tail string, v interface{}, maxStrLen MaxStrLen) {
 		strLen := maxStrLen
 		if strLen == 0 {
 			strLen = DefaultDecodeMaxStrLen
 		}
-		c.Assert(decodeHugeString(t, strLen, header, tail, v, maxStrLen), qt.IsNil)
-		c.Assert(decodeHugeString(t, strLen+1, header, tail, v, maxStrLen), qt.IsNotNil)
+		qt.Assert(t, qt.IsNil(decodeHugeString(t, strLen, header, tail, v, maxStrLen)))
+		qt.Assert(t, qt.IsNotNil(decodeHugeString(t, strLen+1, header, tail, v, maxStrLen)))
 	}
 	test("d%d:", "i0ee", new(interface{}), 0)
 	test("%d:", "", new(interface{}), DefaultDecodeMaxStrLen)
@@ -242,15 +239,14 @@ func TestDecodeStringIntoBoolPtr(t *testing.T) {
 	var m struct {
 		Private *bool `bencode:"private,omitempty"`
 	}
-	c := qt.New(t)
 	check := func(msg string, expectNil, expectTrue bool) {
 		m.Private = nil
-		c.Check(Unmarshal([]byte(msg), &m), qt.IsNil, qt.Commentf("%q", msg))
+		qt.Check(t, qt.IsNil(Unmarshal([]byte(msg), &m)), qt.Commentf("%q", msg))
 		if expectNil {
-			c.Check(m.Private, qt.IsNil)
+			qt.Check(t, qt.IsNil(m.Private))
 		} else {
-			if c.Check(m.Private, qt.IsNotNil, qt.Commentf("%q", msg)) {
-				c.Check(*m.Private, qt.Equals, expectTrue, qt.Commentf("%q", msg))
+			if qt.Check(t, qt.IsNotNil(m.Private), qt.Commentf("%q", msg)) {
+				qt.Check(t, qt.Equals(*m.Private, expectTrue), qt.Commentf("%q", msg))
 			}
 		}
 	}
@@ -270,7 +266,6 @@ func TestDecodeStringIntoBoolPtr(t *testing.T) {
 
 // To set expectations about how our Decoder should work.
 func TestJsonDecoderBehaviour(t *testing.T) {
-	c := qt.New(t)
 	test := func(input string, items int, finalErr error) {
 		d := json.NewDecoder(strings.NewReader(input))
 		actualItems := 0
@@ -283,8 +278,8 @@ func TestJsonDecoderBehaviour(t *testing.T) {
 			}
 			actualItems++
 		}
-		c.Check(firstErr, qt.Equals, finalErr)
-		c.Check(actualItems, qt.Equals, items)
+		qt.Check(t, qt.Equals(firstErr, finalErr))
+		qt.Check(t, qt.Equals(actualItems, items))
 	}
 	test("", 0, io.EOF)
 	test("{}", 1, io.EOF)

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/anacrolix/sync"
-	qt "github.com/frankban/quicktest"
+	qt "github.com/go-quicktest/qt"
 
 	. "github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/internal/testutil"
@@ -19,7 +19,7 @@ const (
 )
 
 func countHandler(
-	c *qt.C,
+	t *testing.T,
 	wg *sync.WaitGroup,
 	// Name of the endpoint that this handler is for, for logging.
 	handlerName string,
@@ -38,7 +38,7 @@ func countHandler(
 			return
 		}
 		name, builtin, err := event.PeerConn.LocalLtepProtocolMap.LookupId(event.ExtensionNumber)
-		c.Assert(err, qt.IsNil)
+		qt.Assert(t, qt.IsNil(err))
 		// Not a user protocol.
 		if builtin {
 			return
@@ -46,29 +46,27 @@ func countHandler(
 		switch name {
 		case answerToName:
 			u64, err := strconv.ParseUint(string(event.Payload), 10, 0)
-			c.Assert(err, qt.IsNil)
+			qt.Assert(t, qt.IsNil(err))
 			i := uint(u64)
-			c.Logf("%v got %d", handlerName, i)
+			t.Logf("%v got %d", handlerName, i)
 			if i == doneValue {
 				wg.Done()
 				return
 			}
-			c.Assert(i%2, qt.Equals, expectedMod2)
+			qt.Assert(t, qt.Equals(i%2, expectedMod2))
 			go func() {
-				c.Assert(
+				qt.Assert(t, qt.IsNil(
 					event.PeerConn.WriteExtendedMessage(
 						replyToName,
-						[]byte(strconv.FormatUint(uint64(i+1), 10))),
-					qt.IsNil)
+						[]byte(strconv.FormatUint(uint64(i+1), 10)))))
 			}()
 		default:
-			c.Fatalf("got unexpected extension name %q", name)
+			t.Fatalf("got unexpected extension name %q", name)
 		}
 	}
 }
 
 func TestUserLtep(t *testing.T) {
-	c := qt.New(t)
 	var wg sync.WaitGroup
 
 	makeCfg := func() *ClientConfig {
@@ -85,33 +83,33 @@ func TestUserLtep(t *testing.T) {
 		// separate goroutine.
 		go func() {
 			// Check sending an extended message for a protocol the peer doesn't support is an error.
-			c.Check(pc.WriteExtendedMessage("pm_me_floats", []byte("3.142")), qt.IsNotNil)
+			qt.Check(t, qt.IsNotNil(pc.WriteExtendedMessage("pm_me_floats", []byte("3.142"))))
 			// Kick things off by sending a 1.
-			c.Check(pc.WriteExtendedMessage(testRepliesToOddsExtensionName, []byte("1")), qt.IsNil)
+			qt.Check(t, qt.IsNil(pc.WriteExtendedMessage(testRepliesToOddsExtensionName, []byte("1"))))
 		}()
 	}
 	evensCfg.Callbacks.PeerConnReadExtensionMessage = append(
 		evensCfg.Callbacks.PeerConnReadExtensionMessage,
-		countHandler(c, &wg, "evens", 0, testRepliesToEvensExtensionName, testRepliesToOddsExtensionName, 100))
+		countHandler(t, &wg, "evens", 0, testRepliesToEvensExtensionName, testRepliesToOddsExtensionName, 100))
 	evensCfg.Callbacks.PeerConnAdded = append(evensCfg.Callbacks.PeerConnAdded, func(conn *PeerConn) {
 		conn.LocalLtepProtocolMap.AddUserProtocol(testRepliesToEvensExtensionName)
-		c.Assert(conn.LocalLtepProtocolMap.Index[conn.LocalLtepProtocolMap.NumBuiltin:], qt.HasLen, 1)
+		qt.Assert(t, qt.HasLen(conn.LocalLtepProtocolMap.Index[conn.LocalLtepProtocolMap.NumBuiltin:], 1))
 	})
 
 	oddsCfg := makeCfg()
 	oddsCfg.Callbacks.PeerConnAdded = append(oddsCfg.Callbacks.PeerConnAdded, func(conn *PeerConn) {
 		conn.LocalLtepProtocolMap.AddUserProtocol(testRepliesToOddsExtensionName)
-		c.Assert(conn.LocalLtepProtocolMap.Index[conn.LocalLtepProtocolMap.NumBuiltin:], qt.HasLen, 1)
+		qt.Assert(t, qt.HasLen(conn.LocalLtepProtocolMap.Index[conn.LocalLtepProtocolMap.NumBuiltin:], 1))
 	})
 	oddsCfg.Callbacks.PeerConnReadExtensionMessage = append(
 		oddsCfg.Callbacks.PeerConnReadExtensionMessage,
-		countHandler(c, &wg, "odds", 1, testRepliesToOddsExtensionName, testRepliesToEvensExtensionName, 100))
+		countHandler(t, &wg, "odds", 1, testRepliesToOddsExtensionName, testRepliesToEvensExtensionName, 100))
 
 	cl1, err := NewClient(oddsCfg)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl1.Close()
 	cl2, err := NewClient(evensCfg)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, qt.IsNil(err))
 	defer cl2.Close()
 	addOpts := AddTorrentOpts{}
 	rand.Read(addOpts.InfoHash[:])
@@ -123,7 +121,7 @@ func TestUserLtep(t *testing.T) {
 	wg.Add(1)
 	added := t1.AddClientPeer(cl2)
 	// Ensure some addresses for the other client were added.
-	c.Assert(added, qt.Not(qt.Equals), 0)
+	qt.Assert(t, qt.Not(qt.Equals(added, 0)))
 	wg.Wait()
 	_ = t2
 }

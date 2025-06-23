@@ -136,6 +136,7 @@ func Run(ctx context.Context, s T, l logger) error {
 	var (
 		m = Shared{
 			done: cancelled,
+			log:  l,
 		}
 	)
 

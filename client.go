@@ -690,8 +690,7 @@ func (cl *Client) runReceivedConn(c *connection) {
 
 	t, err := cl.receiveHandshakes(c)
 	if err != nil {
-		cl.config.debug().Println(errorsx.Wrap(err, "error during handshake"))
-		cl.config.Handshaker.Release(c.conn, connections.BannedConnectionError(c.conn, err))
+		cl.config.Handshaker.Release(c.conn, connections.BannedConnectionError(c.conn, errorsx.Wrap(err, "error during handshake")))
 		return
 	}
 

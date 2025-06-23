@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/james-lawrence/torrent/bencode"
+	"github.com/james-lawrence/torrent/dht/int160"
 )
 
 type MetaInfo struct {
@@ -45,6 +46,10 @@ func LoadFromFile(filename string) (*MetaInfo, error) {
 func (mi MetaInfo) UnmarshalInfo() (info Info, err error) {
 	err = bencode.Unmarshal(mi.InfoBytes, &info)
 	return
+}
+
+func (mi MetaInfo) ID() int160.T {
+	return int160.New([]byte(mi.InfoBytes))
 }
 
 func (mi MetaInfo) HashInfoBytes() (infoHash Hash) {

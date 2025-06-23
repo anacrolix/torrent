@@ -131,6 +131,23 @@ func New(info metainfo.Hash, options ...Option) (t Metadata, err error) {
 	return t, nil
 }
 
+// NewFromMetaInfoFile loads torrent info stored in a file.
+func NewFromInfoFile(path string, options ...Option) (t Metadata, err error) {
+	src, err := os.Open(path)
+	if err != nil {
+		return t, errorsx.Wrapf(err, "unable to load info from %s", path)
+	}
+	defer src.Close()
+
+	tinfo, err := metainfo.NewInfoFromReader(src)
+	if err != nil {
+		return t, errorsx.Wrapf(err, "unable to load info from %s", path)
+	}
+
+	t, err = NewFromInfo(tinfo, options...)
+	return t, errorsx.Wrapf(err, "unable to load info from %s", path)
+}
+
 // NewFromMetaInfoFile loads torrent metadata stored in a file.
 func NewFromMetaInfoFile(path string, options ...Option) (t Metadata, err error) {
 	src, err := os.Open(path)

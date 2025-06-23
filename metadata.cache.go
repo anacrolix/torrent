@@ -33,7 +33,7 @@ type metadatafilestore struct {
 }
 
 func (t metadatafilestore) path(id int160.T) string {
-	return filepath.Join(t.root, fmt.Sprintf("%s.torrent", id.String()))
+	return filepath.Join(t.root, fmt.Sprintf("%s.torrent", id))
 }
 
 func (t metadatafilestore) Read(id int160.T) (Metadata, error) {
@@ -41,7 +41,7 @@ func (t metadatafilestore) Read(id int160.T) (Metadata, error) {
 	if md, err := NewFromMetaInfoFile(p); err == nil {
 		return md, nil
 	}
-	return NewFromFile(p)
+	return NewFromInfoFile(p)
 }
 
 func (t metadatafilestore) Write(md Metadata) error {

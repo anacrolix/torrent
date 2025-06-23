@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/anacrolix/missinggo/slices"
+	"github.com/james-lawrence/torrent/bencode"
 	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/langx"
 )
@@ -57,6 +58,14 @@ func NewInfo(options ...Option) *Info {
 	return langx.Autoptr(langx.Clone(Info{
 		PieceLength: bytesx.MiB,
 	}, options...))
+}
+
+func NewInfoFromReader(r io.Reader, options ...Option) (_ *Info, err error) {
+	var info Info
+	if err = bencode.NewDecoder(r).Decode(&info); err != nil {
+		return nil, err
+	}
+	return &info, nil
 }
 
 func NewFromPath(root string, options ...Option) (info *Info, err error) {

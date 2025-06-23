@@ -78,22 +78,26 @@ func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool, o
 
 	for {
 		for _, uri := range trackers {
+			t.cln.config.debug().Println("announced initiated", t.md.DisplayName, t.Metadata().DisplayName, len(trackers), uri)
 			ctx, done := context.WithTimeout(context.Background(), time.Minute)
 			d, peers, err := TrackerAnnounceOnce(ctx, t, uri, options...)
 			done()
+			t.cln.config.debug().Println("announced completed", t.md.DisplayName, t.Metadata().DisplayName, len(trackers), uri)
+
 			if errorsx.Is(err, context.DeadlineExceeded) {
-				log.Println(err)
-				return
+				t.cln.config.errors().Println(err)
+				continue
 			}
 
 			if errorsx.Is(err, tracker.ErrMissingInfoHash) {
-				log.Println(err)
-				return
+				t.cln.config.errors().Println(err)
+				continue
 			}
 
 			if err == nil {
 				t.addPeers(peers)
-				return
+				go t.maybeNewConns()
+				continue
 			}
 
 			if delay < d {
@@ -108,7 +112,7 @@ func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool, o
 			log.Println("announce failed", t.info == nil, err)
 		}
 
-		// log.Println("announce sleeping for maximum delay", t.Metadata().ID.String(), delay)
+		t.cln.config.debug().Println("announce sleeping for maximum delay", t.Metadata().ID.String(), delay)
 		time.Sleep(delay)
 		delay = mindelay
 

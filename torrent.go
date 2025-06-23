@@ -260,6 +260,7 @@ func TuneSeeding(t *torrent) {
 func tuneMerge(md Metadata) Tuner {
 	return func(t *torrent) {
 		t.md.DisplayName = langx.DefaultIfZero(t.md.DisplayName, md.DisplayName)
+		t.md.Trackers = append(t.md.Trackers, md.Trackers...)
 
 		if md.ChunkSize != t.md.ChunkSize && md.ChunkSize != 0 {
 			t.setChunkSize(md.ChunkSize)
@@ -976,14 +977,16 @@ func (t *torrent) openNewConns() {
 	defer t.updateWantPeersEvent()
 	for {
 		if !t.wantConns() {
+			t.cln.config.debug().Println("openNewConns: connections not wanted")
 			return
 		}
 
 		if p, ok = t.peers.PopMax(); !ok {
+			t.cln.config.debug().Println("openNewConns: no peers")
 			return
 		}
 
-		// log.Printf("initiating connection to peer %p %x %s %d\n", t, p.ID, p.IP, p.Port)
+		t.cln.config.debug().Printf("initiating connection to peer %p %x %s %d\n", t, p.ID, p.IP, p.Port)
 		t.initiateConn(context.Background(), p)
 	}
 }

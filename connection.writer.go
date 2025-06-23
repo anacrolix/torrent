@@ -45,6 +45,8 @@ func RunHandshookConn(c *connection, t *torrent) error {
 		}
 
 		err := connwriterinit(ctx, c, 10*time.Second)
+		err = errorsx.StdlibTimeout(err, 10*time.Second)
+
 		errorsx.Log(err)
 		cancel(err)
 	}()

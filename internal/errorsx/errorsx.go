@@ -28,7 +28,7 @@ func Log(err error) {
 		return
 	}
 
-	if cause := log.Output(1, fmt.Sprintln(err)); cause != nil {
+	if cause := log.Output(2, fmt.Sprintln(err)); cause != nil {
 		log.Println(cause)
 	}
 }
@@ -96,12 +96,35 @@ type Timeout interface {
 	Timedout() time.Duration
 }
 
-// Timedout represents a timeout.
+// Timedout represents a timeout. the duration is a suggestion
+// on how long to wait before attempting again.
 func Timedout(cause error, d time.Duration) error {
 	return timeout{
 		error: cause,
 		d:     d,
 	}
+}
+
+// convert stdlib errors into timeout errors.
+func StdlibTimeout(err error, d time.Duration) error {
+	var timedout Timeout
+
+	// dont rewrap errors that are already marked as a Timeout
+	if errors.Is(err, timedout) {
+		return err
+	}
+
+	type timeout interface {
+		error
+		Timeout() bool
+	}
+
+	var to timeout
+	if !errors.Is(err, to) {
+		return err
+	}
+
+	return Timedout(err, d)
 }
 
 type timeout struct {
@@ -111,6 +134,10 @@ type timeout struct {
 
 func (t timeout) Timedout() time.Duration {
 	return t.d
+}
+
+func (t timeout) Timeout() bool {
+	return true
 }
 
 // Notification presents an error that will be displayed to the user

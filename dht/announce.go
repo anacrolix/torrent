@@ -110,7 +110,9 @@ func (s *Server) AnnounceTraversal(ctx context.Context, infoHash [20]byte, opts 
 	go func() {
 		select {
 		case <-a.traversal.Stalled():
+			log.Println("traversal stalled")
 		case <-ctx.Done():
+			log.Println("traversal", ctx.Err())
 		}
 
 		a.traversal.Stop()

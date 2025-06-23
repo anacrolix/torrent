@@ -548,23 +548,23 @@ func (cl *Client) establishOutgoingConn(ctx context.Context, t *torrent, addr ne
 
 // Called to dial out and run a connection. The addr we're given is already
 // considered half-open.
-func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr netip.AddrPort, ps peerSource, trusted bool) {
+func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr netip.AddrPort, ps peerSource, trusted bool) error {
 	var (
 		c   *connection
 		err error
 	)
 
 	cl.config.info().Println("opening connection", t.md.ID)
+
 	if err = cl.config.dialRateLimiter.Wait(ctx); err != nil {
-		log.Println("dial rate limit failed", err)
-		return
+		return errorsx.Wrap(err, "dial rate limit failed")
 	}
 
 	if c, err = cl.establishOutgoingConn(ctx, t, addr); err != nil {
 		t.noLongerHalfOpen(addr.String())
-		cl.config.debug().Println(errorsx.Wrapf(err, "error establishing connection to %v", addr))
-		return
+		return errorsx.Wrapf(err, "error establishing connection to %v", addr)
 	}
+
 	t.noLongerHalfOpen(addr.String())
 
 	c.Discovery = ps
@@ -574,26 +574,22 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr netip
 	// due to network topologies (NAT, LAN, WAN) we have to detect this situation
 	// from the origin of the connection and ban the address we connected to.
 	if c.PeerID == cl.config.localID {
+		cause := connections.BannedConnectionError(
+			c.conn,
+			errorsx.Errorf("detected connection to self - %s vs %s - %s", c.PeerID, cl.config.localID, c.conn.RemoteAddr().String()),
+		)
 		cl.config.Handshaker.Release(
 			c.conn,
-			connections.BannedConnectionError(
-				c.conn,
-				errorsx.Errorf("detected connection to self - %s vs %s - %s", c.PeerID, cl.config.localID, c.conn.RemoteAddr().String()),
-			),
+			cause,
 		)
-		return
+		return cause
 	}
 
-	for {
-		if err := RunHandshookConn(c, t); err != nil {
-			log.Printf("outgoing connection failed %T - %v", err, err)
-			break
-		}
-	}
+	defer t.deleteConnection(c)
+	defer t.event.Broadcast()
+	defer cl.event.Broadcast()
 
-	t.deleteConnection(c)
-	t.event.Broadcast()
-	cl.event.Broadcast()
+	return RunHandshookConn(c, t)
 }
 
 // Calls f with any secret keys.

@@ -14,6 +14,7 @@ type logger interface {
 }
 type Shared struct {
 	done context.CancelCauseFunc
+	log  logger
 }
 
 type T interface {
@@ -100,6 +101,24 @@ func (t failed) Update(ctx context.Context, c *Shared) T {
 
 func (t failed) String() string {
 	return fmt.Sprintf("%T - %s", t, t.cause)
+}
+
+func Warning(next T, cause error) warning {
+	return warning{next: next, cause: cause}
+}
+
+type warning struct {
+	cause error
+	next  T
+}
+
+func (t warning) Update(ctx context.Context, c *Shared) T {
+	c.log.Println("[warning]", t.cause)
+	return t.next
+}
+
+func (t warning) String() string {
+	return fmt.Sprintf("%T - %T", t, t.cause)
 }
 
 func Fn(fn fn) fn {

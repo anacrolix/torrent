@@ -235,7 +235,12 @@ func (t _connWriterClosed) Update(ctx context.Context, _ *cstate.Shared) (r csta
 	}
 
 	if ts := *ws.lastMessageReceived.Load(); time.Since(ts) > 2*ws.keepAliveTimeout {
-		return cstate.Failure(fmt.Errorf("connection timed out %s %v %v", ws.remoteAddr.String(), time.Since(ts), ts))
+		return cstate.Failure(
+			errorsx.Timedout(
+				fmt.Errorf("connection timed out %s %v %v", ws.remoteAddr.String(), time.Since(ts), ts),
+				10*time.Second,
+			),
+		)
 	}
 
 	// if we're choked and not allowed to fast track any chunks then there is nothing
@@ -246,7 +251,13 @@ func (t _connWriterClosed) Update(ctx context.Context, _ *cstate.Shared) (r csta
 
 	// detect effectively dead connections
 	if timedout(ws.connection, ws.t.chunks.gracePeriod) {
-		return cstate.Failure(errorsx.Errorf("c(%p) peer isnt sending chunks - space unavailable(%d > %d) missing(%t) last(%s)", ws, len(ws.requests), ws.requestsLowWater, ws.t.chunks.Missing() == 0, ws.lastUsefulChunkReceived))
+		return cstate.Warning(
+			t.next,
+			errorsx.Timedout(
+				errorsx.Errorf("c(%p) peer isnt sending chunks in a timely manner requests (%d > %d) last(%s)", ws, len(ws.requests), ws.requestsLowWater, ws.lastUsefulChunkReceived),
+				10*time.Second,
+			),
+		)
 	}
 
 	return t.next

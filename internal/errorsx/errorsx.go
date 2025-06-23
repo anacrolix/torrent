@@ -92,6 +92,7 @@ func (t unauthorized) Unauthorized() {
 
 // Timeout error.
 type Timeout interface {
+	error
 	Timedout() time.Duration
 }
 

@@ -1111,24 +1111,6 @@ func (cn *connection) rw() io.ReadWriter {
 func (cn *connection) receiveChunk(msg *pp.Message) error {
 	req := newRequestFromMessage(msg)
 
-	// log.Printf("(%d) c(%p) - RECEIVED CHUNK: r(%d,%d,%d)\n", os.Getpid(), cn, req.Index, req.Begin, req.Length)
-
-	// if cn.PeerChoked {
-	// 	metrics.Add("chunks received while choked", 1)
-	// }
-
-	// if cn.PeerChoked && cn.peerfastset.ContainsInt(int(req.Index)) {
-	// 	metrics.Add("chunks received due to allowed fast", 1)
-	// }
-
-	// if cn.clearRequest(req) {
-	// 	if cn.expectingChunks() {
-	// 		cn.chunksReceivedWhileExpecting++
-	// 	}
-	// } else {
-	// 	metrics.Add("chunks received unwanted", 1)
-	// }
-
 	cn.clearRequest(req)
 
 	// Do we actually want this chunk? if the chunk is already available, then we

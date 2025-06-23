@@ -1168,21 +1168,24 @@ func (t *torrent) announceToDht(impliedPort bool, s *dht.Server) error {
 
 func (t *torrent) dhtAnnouncer(s *dht.Server) {
 	for {
+		t.cln.config.debug().Println("dht ancouncer waiting for peers event", int160.FromByteArray(s.ID()))
 		select {
 		case <-t.closed:
 			return
 		case <-t.wantPeersEvent:
+			t.cln.config.debug().Println("dht ancouncing peers wanted event", int160.FromByteArray(s.ID()))
 		}
 
 		t.stats.DHTAnnounce.Add(1)
 
 		if err := t.announceToDht(true, s); errors.Is(err, dht.ErrDHTNoInitialNodes) {
-			t.cln.config.info().Println(t, err)
+			t.cln.config.errors().Println(t, err)
 			time.Sleep(time.Minute)
 		} else if err != nil {
-			t.cln.config.info().Println(t, errorsx.Wrap(err, "error announcing to DHT"))
+			t.cln.config.errors().Println(t, errorsx.Wrap(err, "error announcing to DHT"))
 			time.Sleep(time.Second)
 		}
+		t.cln.config.debug().Println("dht ancouncing completed", int160.FromByteArray(s.ID()))
 	}
 }
 

@@ -31,13 +31,20 @@ func (b *bucket) NodeIter() iter.Seq[*node] {
 
 // Returns true if f returns true for all nodes. Iteration stops if f returns false.
 func (b *bucket) EachNode(f func(*node) bool) bool {
-	b._m.RLock()
-	defer b._m.RUnlock()
-	for n := range b.NodeIter() {
-		if !f(n) {
+	next, stop := iter.Pull(b.NodeIter())
+	defer stop()
+	for c := true; c; {
+		b._m.RLock()
+		v, ok := next()
+		b._m.RUnlock()
+		if !ok {
+			return false
+		}
+		if !f(v) {
 			return false
 		}
 	}
+
 	return true
 }
 

@@ -161,7 +161,7 @@ func (a *Announce) announcePeer(ctx context.Context, peer dhtutil.Elem) error {
 
 func (a *Announce) getPeers(ctx context.Context, addr krpc.NodeAddr) traversal.QueryResult {
 	res := a.server.GetPeers(ctx, NewAddr(addr.UDP()), a.infoHash, a.scrape, QueryRateLimiting{})
-	if r := res.Reply.R; r != nil {
+	if r := res.Reply.R; r != nil && len(r.Values) > 0 {
 		peersValues := PeersValues{
 			Peers: r.Values,
 			NodeInfo: krpc.NodeInfo{

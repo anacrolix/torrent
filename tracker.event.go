@@ -71,7 +71,7 @@ func TrackerAnnounceOnce(ctx context.Context, l Torrent, uri string, options ...
 }
 
 func TrackerAnnounceUntil(ctx context.Context, t *torrent, donefn func() bool, options ...tracker.AnnounceOption) {
-	const mindelay = 100 * time.Millisecond
+	const mindelay = 1 * time.Minute
 	var delay time.Duration = mindelay
 
 	trackers := t.md.Trackers

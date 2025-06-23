@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/james-lawrence/torrent/bep0006"
 	"github.com/james-lawrence/torrent/bep0009"
 	"github.com/james-lawrence/torrent/connections"
@@ -332,7 +333,6 @@ func (cn *connection) PostImmediate(msg pp.Message) (n int, err error) {
 }
 
 func (cn *connection) requestMetadataPiece(index int) {
-
 	if index < len(cn.metadataRequests) && cn.metadataRequests[index] {
 		return
 	}
@@ -346,7 +346,7 @@ func (cn *connection) requestMetadataPiece(index int) {
 		return
 	}
 
-	if _, err := cn.Post(pp.NewExtended(pp.MetadataExtendedID, encoded)); err != nil {
+	if _, err := cn.Post(pp.NewExtended(cn.extension(pp.ExtensionNameMetadata), encoded)); err != nil {
 		log.Println("able to post metadata request", err)
 		return
 	}
@@ -698,7 +698,6 @@ func (cn *connection) extension(id pp.ExtensionName) pp.ExtensionNumber {
 func (cn *connection) requestPendingMetadata() {
 	if cn.extension(pp.ExtensionNameMetadata) == 0 {
 		cn.cfg.debug().Println("connection doesnt support metadata")
-		// Peer doesn't support this.
 		return
 	}
 
@@ -1053,12 +1052,8 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		}
 		cn.PeerClientName = d.V
 		cn.PeerPrefersEncryption = d.Encryption
-
-		for name, id := range d.M {
-			cn.cmu().Lock()
-			cn.PeerExtensionIDs[name] = id
-			cn.cmu().Unlock()
-		}
+		cn.PeerExtensionIDs = d.M
+		cn.cfg.debug().Printf("c(%p) seed(%t) extensions: %s\n", cn, cn.t.seeding(), spew.Sdump(d.M))
 
 		if d.MetadataSize != 0 {
 			// log.Println("handshake", d.MetadataSize)
@@ -1382,8 +1377,8 @@ func (cn *connection) pexPeerFlags() pp.PexPeerFlags {
 }
 
 func (cn *connection) sendInitialPEX() {
-	eid, ok := cn.PeerExtensionIDs[pp.ExtensionNamePex]
-	if !ok {
+	id := cn.extension(pp.ExtensionNamePex)
+	if id == 0 {
 		// peer did not advertise support for the PEX extension
 		cn.cfg.debug().Println("pex not supported")
 		return
@@ -1396,5 +1391,5 @@ func (cn *connection) sendInitialPEX() {
 		return
 	}
 
-	cn.Post(pp.NewExtended(eid, bencode.MustMarshal(m)))
+	cn.Post(pp.NewExtended(id, bencode.MustMarshal(m)))
 }

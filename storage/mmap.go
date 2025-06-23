@@ -15,7 +15,7 @@ import (
 	"github.com/edsrzf/mmap-go"
 
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/anacrolix/torrent/mmap_span"
+	mmapSpan "github.com/anacrolix/torrent/mmap-span"
 )
 
 type mmapClientImpl struct {
@@ -55,7 +55,7 @@ func (s *mmapClientImpl) Close() error {
 
 type mmapTorrentStorage struct {
 	infoHash metainfo.Hash
-	span     *mmap_span.MMapSpan
+	span     *mmapSpan.MMapSpan
 	pc       PieceCompletionGetSetter
 }
 
@@ -109,7 +109,7 @@ func (sp mmapStoragePiece) MarkNotComplete() error {
 	return sp.pc.Set(sp.pieceKey(), false)
 }
 
-func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, err error) {
+func mMapTorrent(md *metainfo.Info, location string) (mms *mmapSpan.MMapSpan, err error) {
 	var mMaps []FileMapping
 	defer func() {
 		if err != nil {
@@ -133,7 +133,7 @@ func mMapTorrent(md *metainfo.Info, location string) (mms *mmap_span.MMapSpan, e
 		}
 		mMaps = append(mMaps, mm)
 	}
-	return mmap_span.New(mMaps, md.FileSegmentsIndex()), nil
+	return mmapSpan.New(mMaps, md.FileSegmentsIndex()), nil
 }
 
 func mmapFile(name string, size int64) (_ FileMapping, err error) {
@@ -198,7 +198,7 @@ func WrapFileMapping(region mmap.MMap, file *os.File) FileMapping {
 	}
 }
 
-type FileMapping = mmap_span.Mmap
+type FileMapping = mmapSpan.Mmap
 
 // Handles closing the mmap's file handle (needed for Windows). Could be implemented differently by
 // OS.

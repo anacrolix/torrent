@@ -1,4 +1,4 @@
-package mmap_span
+package mmapSpan
 
 import (
 	"errors"

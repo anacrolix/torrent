@@ -19,6 +19,7 @@ import (
 )
 
 func RunHandshookConn(c *connection, t *torrent) error {
+	const retrydelay = 10 * time.Second
 	c.setTorrent(t)
 
 	c.conn.SetWriteDeadline(time.Time{})
@@ -46,13 +47,12 @@ func RunHandshookConn(c *connection, t *torrent) error {
 		}
 
 		err := connwriterinit(ctx, c, 10*time.Second)
-		err = errorsx.StdlibTimeout(err, 10*time.Second, syscall.ECONNRESET)
-
-		errorsx.Log(err)
+		err = errorsx.StdlibTimeout(err, retrydelay, syscall.ECONNRESET)
 		cancel(err)
 	}()
 
 	if err := c.mainReadLoop(ctx); err != nil {
+		err = errorsx.StdlibTimeout(err, retrydelay, syscall.ECONNRESET)
 		cancel(err)
 		c.cfg.Handshaker.Release(c.conn, err)
 		return errorsx.Wrap(err, "error during main read loop")

@@ -8,7 +8,7 @@ require (
 	github.com/alexflint/go-arg v1.4.3
 	github.com/anacrolix/bargle v0.0.0-20221014000746-4f2739072e9d
 	github.com/anacrolix/chansync v0.6.0
-	github.com/anacrolix/dht/v2 v2.19.2-0.20221121215055-066ad8494444
+	github.com/anacrolix/dht/v2 v2.22.2-0.20250623060212-d7b7d8a52b01
 	github.com/anacrolix/envpprof v1.3.0
 	github.com/anacrolix/fuse v0.3.2-0.20250512073825-fd88dfdcd5fc
 	github.com/anacrolix/generics v0.0.3-0.20250526144502-593be7092deb
@@ -64,8 +64,8 @@ require (
 	github.com/anacrolix/backtrace v0.0.0-20221205112523-22a61db8f82e // indirect
 	github.com/anacrolix/missinggo/perf v1.0.0 // indirect
 	github.com/anacrolix/mmsg v1.0.1 // indirect
-	github.com/anacrolix/stm v0.4.0 // indirect
-	github.com/benbjohnson/immutable v0.3.0 // indirect
+	github.com/anacrolix/stm v0.4.1-0.20221221005312-96d17df0e496 // indirect
+	github.com/benbjohnson/immutable v0.4.1-0.20221220213129-8932b999621d // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.2.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect

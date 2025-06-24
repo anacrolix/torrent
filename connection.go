@@ -1227,7 +1227,7 @@ func (cn *connection) upload(msg func(pp.Message) bool) bool {
 }
 
 func (cn *connection) peerHasWantedPieces() bool {
-	return !cn.claimed.IsEmpty() && bitmapx.AndNot(cn.claimed, cn.blacklisted).Intersects(cn.t.chunks.missing)
+	return !cn.claimed.IsEmpty() && bitmapx.AndNot(cn.claimed, cn.blacklisted).Intersects(cn.t.chunks.missing.Clone())
 }
 
 // clearRequest drops the request from the local connection.

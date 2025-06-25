@@ -22,6 +22,10 @@ jobs:
         run: |
           cd storage/possum/lib
           cargo build --lib
+      - run: brew install macfuse fuse-t
+        if: matrix.os == 'macos-latest'
+      - run: sudo apt install fuse
+        if: matrix.os == 'ubuntu-latest'
       # Separate to remove downloading spam and possible caching improvement.
       - run: go mod download
       - run: go test -race ./...
@@ -33,7 +37,3 @@ jobs:
         run: GOARCH=386 go test -run @ ./...
       - name: Some packages compile for WebAssembly
         run: GOOS=js GOARCH=wasm go build . ./storage ./tracker/...
-      - run: brew install macfuse pv md5sha1sum bash fuse-t
-        if: matrix.os == 'macos-latest'
-      - run: sudo apt install pv fuse
-        if: matrix.os == 'ubuntu-latest'

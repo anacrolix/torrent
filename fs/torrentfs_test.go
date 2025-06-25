@@ -16,6 +16,7 @@ import (
 	"github.com/anacrolix/fuse"
 	fusefs "github.com/anacrolix/fuse/fs"
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -98,13 +99,12 @@ func TestUnmountWedged(t *testing.T) {
 	fs := New(client)
 	fuseConn, err := fuse.Mount(layout.MountDir)
 	if err != nil {
-		switch err.Error() {
-		case "cannot locate OSXFUSE":
-			fallthrough
-		case "fusermount: exit status 1":
+		if err.Error() == "fusermount: exit status 1" {
 			t.Skip(err)
 		}
-		t.Fatal(err)
+		if !errors.Is(err, fuse.ErrOSXFUSENotFound) {
+			t.Fatal(err)
+		}
 	}
 	go func() {
 		server := fusefs.New(fuseConn, &fusefs.Config{

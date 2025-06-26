@@ -299,6 +299,12 @@ func (t *chunks) InitFromMissing(m *roaring.Bitmap) {
 	t.unverified.AndNot(t.missing)
 }
 
+func (t *chunks) Intersects(a, b *roaring.Bitmap) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return a.Intersects(b)
+}
+
 // ChunksAvailable returns true iff all the chunks for the given piece are awaiting
 // digesting.
 func (t *chunks) ChunksAvailable(pid uint64) bool {

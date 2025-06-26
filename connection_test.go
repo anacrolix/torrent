@@ -162,12 +162,11 @@ func TestProtocolSequencesDownloading(t *testing.T) {
 			return n2, err
 		}
 
-		// after sending bit field should receive:
-		// extend payload.
+		// after sending bit field should receive: extend payload.
 		msg, err := sconn.ReadOne(ctx, d)
 		require.NoError(t, err)
 		torrenttest.RequireMessageType(t, pp.Extended, msg.Type)
-		require.Equal(t, 138, len(msg.ExtendedPayload))
+		require.Equal(t, 132, len(msg.ExtendedPayload))
 
 		msg, err = sconn.ReadOne(ctx, d)
 		require.NoError(t, err)
@@ -264,7 +263,7 @@ func TestProtocolSequencesDownloading(t *testing.T) {
 		msg, err := sconn.ReadOne(ctx, d)
 		require.NoError(t, err)
 		torrenttest.RequireMessageType(t, pp.Extended, msg.Type)
-		require.Equal(t, 138, len(msg.ExtendedPayload))
+		require.Equal(t, 132, len(msg.ExtendedPayload))
 
 		// --------------------------------------- allow fast extension ----------------------------------------------
 		msg, err = sconn.ReadOne(ctx, d)
@@ -363,7 +362,7 @@ func TestProtocolSequencesDownloading(t *testing.T) {
 		msg, err := sconn.ReadOne(ctx, d)
 		require.NoError(t, err)
 		torrenttest.RequireMessageType(t, pp.Extended, msg.Type)
-		require.Equal(t, 138, len(msg.ExtendedPayload))
+		require.Equal(t, 132, len(msg.ExtendedPayload))
 
 		// --------------------------------------- allow fast extension ----------------------------------------------
 		msg, err = sconn.ReadOne(ctx, d)

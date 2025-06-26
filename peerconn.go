@@ -43,6 +43,14 @@ type PeerStatus struct {
 type PeerConn struct {
 	Peer
 
+	// Indexed by metadata piece, set to true if posted and pending a response.
+	metadataRequests []bool
+	sentHaves        bitmap.Bitmap
+	// Chunks that we might reasonably expect to receive from the peer. Due to latency, buffering,
+	// and implementation differences, we may receive chunks that are no longer in the set of
+	// requests actually want. This could use a roaring.BSI if the memory use becomes noticeable.
+	validReceiveChunks map[RequestIndex]int
+
 	// Move to PeerConn?
 	protocolLogger log.Logger
 
@@ -1467,4 +1475,13 @@ func (me *PeerConn) setPeerLoggers(a log.Logger, s *slog.Logger) {
 	me.Peer.logger = a.WithDefaultLevel(log.Warning).WithContextText(fmt.Sprintf("%T %p", me, me))
 	me.Peer.slogger = s.With(fmt.Sprintf("%T", me), fmt.Sprintf("%p", me))
 	me.protocolLogger = me.logger.WithNames(protocolLoggingName)
+}
+
+func (c *PeerConn) checkReceivedChunk(req RequestIndex) error {
+	if c.validReceiveChunks[req] <= 0 {
+		ChunksReceived.Add("unexpected", 1)
+		return errors.New("received unexpected chunk")
+	}
+	c.decExpectedChunkReceive(req)
+	return nil
 }

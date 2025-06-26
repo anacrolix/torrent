@@ -48,4 +48,5 @@ type newHotPeerImpl interface {
 	lastWriteUploadRate() float64
 	// How many requests should be assigned to the peer.
 	nominalMaxRequests() maxRequests
+	checkReceivedChunk(ri RequestIndex) error
 }

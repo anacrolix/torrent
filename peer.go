@@ -72,14 +72,6 @@ type (
 		cumulativeExpectedToReceiveChunks   time.Duration
 
 		choking bool
-		// Chunks that we might reasonably expect to receive from the peer. Due to latency, buffering,
-		// and implementation differences, we may receive chunks that are no longer in the set of
-		// requests actually want. This could use a roaring.BSI if the memory use becomes noticeable.
-		validReceiveChunks map[RequestIndex]int
-		// Indexed by metadata piece, set to true if posted and pending a
-		// response.
-		metadataRequests []bool
-		sentHaves        bitmap.Bitmap
 
 		// Stuff controlled by the remote peer.
 		peerInterested        bool
@@ -453,7 +445,7 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 	return nil
 }
 
-func (cn *Peer) mustRequest(r RequestIndex) bool {
+func (cn *PeerConn) mustRequest(r RequestIndex) bool {
 	more, err := cn.request(r)
 	if err != nil {
 		panic(err)
@@ -461,7 +453,7 @@ func (cn *Peer) mustRequest(r RequestIndex) bool {
 	return more
 }
 
-func (cn *Peer) request(r RequestIndex) (more bool, err error) {
+func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 	if err := cn.shouldRequest(r); err != nil {
 		panic(err)
 	}
@@ -477,13 +469,13 @@ func (cn *Peer) request(r RequestIndex) (more bool, err error) {
 	}
 	cn.validReceiveChunks[r]++
 	cn.t.requestState[r] = requestState{
-		peer: cn,
+		peer: cn.peerPtr(),
 		when: time.Now(),
 	}
 	cn.updateExpectingChunks()
 	ppReq := cn.t.requestIndexToRequest(r)
 	for _, f := range cn.callbacks.SentRequest {
-		f(PeerRequestEvent{cn, ppReq})
+		f(PeerRequestEvent{cn.peerPtr(), ppReq})
 	}
 	return cn.legacyPeerImpl._request(ppReq), nil
 }
@@ -589,7 +581,7 @@ func runSafeExtraneous(f func()) {
 }
 
 // Returns true if it was valid to reject the request.
-func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
+func (c *PeerConn) remoteRejectedRequest(r RequestIndex) bool {
 	if c.deleteRequest(r) {
 		c.decPeakRequests()
 	} else if !c.requestState.Cancelled.CheckedRemove(r) {
@@ -603,7 +595,7 @@ func (c *Peer) remoteRejectedRequest(r RequestIndex) bool {
 	return true
 }
 
-func (c *Peer) decExpectedChunkReceive(r RequestIndex) {
+func (c *PeerConn) decExpectedChunkReceive(r RequestIndex) {
 	count := c.validReceiveChunks[r]
 	if count == 1 {
 		delete(c.validReceiveChunks, r)
@@ -636,19 +628,18 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		c.recordBlockForSmartBan(req, msg.Piece)
 	})
 	// This needs to occur before we return, but we try to do it when the client is unlocked. It
-	// can't be done before checking if chunks are valid because they won't be deallocated by piece
-	// hashing if they're out of bounds.
+	// can't be done before checking if chunks are valid because they won't be deallocated from the
+	// smart ban cache by piece hashing if they're out of bounds.
 	defer recordBlockForSmartBan()
 
 	if c.peerChoking {
 		ChunksReceived.Add("while choked", 1)
 	}
 
-	if c.validReceiveChunks[req] <= 0 {
-		ChunksReceived.Add("unexpected", 1)
-		return errors.New("received unexpected chunk")
+	err = c.peerImpl.checkReceivedChunk(req)
+	if err != nil {
+		return err
 	}
-	c.decExpectedChunkReceive(req)
 
 	if c.peerChoking && c.peerAllowedFast.Contains(pieceIndex(ppReq.Index)) {
 		ChunksReceived.Add("due to allowed fast", 1)

@@ -29,6 +29,10 @@ type webseedPeer struct {
 	hostKey          webseedHostKeyHandle
 }
 
+func (me *webseedPeer) checkReceivedChunk(ri RequestIndex) error {
+	return nil
+}
+
 func (me *webseedPeer) nominalMaxRequests() maxRequests {
 	// TODO: Implement an algorithm that assigns this based on sharing chunks across peers. For now
 	// we just allow 2 MiB worth of requests.
@@ -54,15 +58,6 @@ func (me *webseedPeer) moreRequestsAllowed() bool {
 
 func (me *webseedPeer) updateRequests() {
 	return
-	if !me.shouldUpdateRequests() {
-		return
-	}
-	p := &me.peer
-	next := p.getDesiredRequestState()
-	p.applyRequestState(next)
-	p.t.cacheNextRequestIndexesForReuse(next.Requests.requestIndexes)
-	// Run this after all requests applied to the peer, so they can be batched up.
-	me.spawnRequests()
 }
 
 func (me *webseedPeer) lastWriteUploadRate() float64 {

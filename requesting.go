@@ -316,7 +316,7 @@ func (p *Peer) allowSendNotInterested() bool {
 // Transmit/action the request state to the peer. This includes work-stealing from other peers and
 // some piece order randomization within the preferred state calculated earlier in next. Cancels are
 // not done here, those are handled synchronously. We only track pending cancel acknowledgements.
-func (p *Peer) applyRequestState(next desiredRequestState) {
+func (p *PeerConn) applyRequestState(next desiredRequestState) {
 	current := &p.requestState
 	// Make interest sticky
 	if !next.Interested && p.requestState.Interested {
@@ -359,7 +359,7 @@ func (p *Peer) applyRequestState(next desiredRequestState) {
 		}
 
 		existing := t.requestingPeer(req)
-		if existing != nil && existing != p {
+		if existing != nil && existing != p.peerPtr() {
 			// don't steal on cancel - because this is triggered by t.cancelRequest below
 			// which means that the cancelled can immediately try to steal back a request
 			// it has lost which can lead to circular cancel/add processing

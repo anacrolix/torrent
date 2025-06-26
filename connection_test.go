@@ -162,15 +162,15 @@ func TestProtocolSequencesDownloading(t *testing.T) {
 			return n2, err
 		}
 
-		// after sending bit field should receive: extend payload.
 		msg, err := sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Bitfield, msg.Type)
+
+		// after sending bit field should receive: extend payload.
+		msg, err = sconn.ReadOne(ctx, d)
 		require.NoError(t, err)
 		torrenttest.RequireMessageType(t, pp.Extended, msg.Type)
 		require.Equal(t, 132, len(msg.ExtendedPayload))
-
-		msg, err = sconn.ReadOne(ctx, d)
-		require.NoError(t, err)
-		torrenttest.RequireMessageType(t, pp.Bitfield, msg.Type)
 
 		require.NoError(t, ConnExtensions(ctx, sconn))
 		require.Equal(t, 0, sconn.writeBuffer.Len())
@@ -258,18 +258,18 @@ func TestProtocolSequencesDownloading(t *testing.T) {
 			return n2, err
 		}
 
+		// --------------------------------------- allow fast extension ----------------------------------------------
+		msg, err := sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.HaveNone, msg.Type)
+
+		// --------------------------------------- allow fast extension ----------------------------------------------
 		// after sending bit field should receive:
 		// extend payload.
-		msg, err := sconn.ReadOne(ctx, d)
+		msg, err = sconn.ReadOne(ctx, d)
 		require.NoError(t, err)
 		torrenttest.RequireMessageType(t, pp.Extended, msg.Type)
 		require.Equal(t, 132, len(msg.ExtendedPayload))
-
-		// --------------------------------------- allow fast extension ----------------------------------------------
-		msg, err = sconn.ReadOne(ctx, d)
-		require.NoError(t, err)
-		torrenttest.RequireMessageType(t, pp.HaveNone, msg.Type)
-		// --------------------------------------- allow fast extension ----------------------------------------------
 
 		require.NoError(t, ConnExtensions(ctx, sconn))
 		require.Equal(t, 0, sconn.writeBuffer.Len())
@@ -357,18 +357,17 @@ func TestProtocolSequencesDownloading(t *testing.T) {
 			return n2, err
 		}
 
-		// after sending bit field should receive:
-		// extend payload.
-		msg, err := sconn.ReadOne(ctx, d)
-		require.NoError(t, err)
-		torrenttest.RequireMessageType(t, pp.Extended, msg.Type)
-		require.Equal(t, 132, len(msg.ExtendedPayload))
-
 		// --------------------------------------- allow fast extension ----------------------------------------------
-		msg, err = sconn.ReadOne(ctx, d)
+		msg, err := sconn.ReadOne(ctx, d)
 		require.NoError(t, err)
 		torrenttest.RequireMessageType(t, pp.HaveNone, msg.Type)
 		// --------------------------------------- allow fast extension ----------------------------------------------
+
+		// after sending bit field should receive: extend payload.
+		msg, err = sconn.ReadOne(ctx, d)
+		require.NoError(t, err)
+		torrenttest.RequireMessageType(t, pp.Extended, msg.Type)
+		require.Equal(t, 132, len(msg.ExtendedPayload))
 
 		// --------------------------------------- allow dht must come after the bit field / fast extension ----------------------------------------------
 		msg, err = sconn.ReadOne(ctx, d)

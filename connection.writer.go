@@ -66,7 +66,7 @@ func RunHandshookConn(c *connection, t *torrent) error {
 func ConnExtensions(ctx context.Context, cn *connection) error {
 	log.Println("conn extensions initiated")
 	defer log.Println("conn extensions completed")
-	return cstate.Run(ctx, connexinit(cn, connexfast(cn, connexdht(cn, connflush(cn, nil)))), cn.cfg.debug())
+	return cstate.Run(ctx, connexfast(cn, connexinit(cn, connexdht(cn, connflush(cn, nil)))), cn.cfg.debug())
 }
 
 func connflush(cn *connection, n cstate.T) cstate.T {
@@ -145,11 +145,11 @@ func connexfast(cn *connection, n cstate.T) cstate.T {
 
 			cn.sentHaves.AddRange(0, cn.t.chunks.pieces)
 
-			for _, v := range cn.peerfastset.ToArray() {
-				if _, err := cn.Post(pp.NewAllowedFast(v)); err != nil {
-					return cstate.Failure(err)
-				}
-			}
+			// for _, v := range cn.peerfastset.ToArray() {
+			// 	if _, err := cn.Post(pp.NewAllowedFast(v)); err != nil {
+			// 		return cstate.Failure(err)
+			// 	}
+			// }
 
 			return n
 		default:

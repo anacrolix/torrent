@@ -63,7 +63,7 @@ func BenchmarkChunksPop(b *testing.B) {
 	require.NoError(b, err)
 	p := quickpopulate(newChunks(defaultChunkSize, &info))
 
-	n := p.Missing()
+	n := p.Cardinality(p.missing)
 	available := filledbmap(n)
 
 	for i := 0; i < b.N && i < n; i++ {
@@ -252,31 +252,31 @@ func TestChunksVariousCLength(t *testing.T) {
 	require.NoError(t, err)
 
 	c := quickpopulate(newChunks(1, &info))
-	require.Equal(t, 13, c.Missing())
+	require.Equal(t, 13, c.Cardinality(c.missing))
 
 	c = quickpopulate(newChunks(2, &info))
 	assert.Equal(t, []int{0, 1, 2}, c.chunks(0))
 	assert.Equal(t, []int{3, 4, 5}, c.chunks(1))
 	assert.Equal(t, []int{6, 7}, c.chunks(2))
-	require.Equal(t, 8, c.Missing())
+	require.Equal(t, 8, c.Cardinality(c.missing))
 
 	c = quickpopulate(newChunks(3, &info))
 	assert.Equal(t, []int{0, 1}, c.chunks(0))
 	assert.Equal(t, []int{2, 3}, c.chunks(1))
 	assert.Equal(t, []int{4}, c.chunks(2))
-	require.Equal(t, 5, c.Missing())
+	require.Equal(t, 5, c.Cardinality(c.missing))
 
 	c = quickpopulate(newChunks(4, &info))
 	assert.Equal(t, []int{0, 1}, c.chunks(0))
 	assert.Equal(t, []int{2, 3}, c.chunks(1))
 	assert.Equal(t, []int{4}, c.chunks(2))
-	require.Equal(t, 5, c.Missing())
+	require.Equal(t, 5, c.Cardinality(c.missing))
 
 	c = quickpopulate(newChunks(5, &info))
 	assert.Equal(t, []int{0}, c.chunks(0))
 	assert.Equal(t, []int{1}, c.chunks(1))
 	assert.Equal(t, []int{2}, c.chunks(2))
-	require.Equal(t, 3, c.Missing())
+	require.Equal(t, 3, c.Cardinality(c.missing))
 }
 
 func TestRangeVariousCLength(t *testing.T) {
@@ -292,31 +292,31 @@ func TestRangeVariousCLength(t *testing.T) {
 	require.NoError(t, err)
 
 	c := quickpopulate(newChunks(1, &info))
-	require.Equal(t, 13, c.Missing())
+	require.Equal(t, 13, c.Cardinality(c.missing))
 
 	c = quickpopulate(newChunks(2, &info))
 	testrange(0, 3, c, 0)
 	testrange(3, 6, c, 1)
 	testrange(6, 8, c, 2)
-	require.Equal(t, 8, c.Missing())
+	require.Equal(t, 8, c.Cardinality(c.missing))
 
 	c = quickpopulate(newChunks(3, &info))
 	testrange(0, 2, c, 0)
 	testrange(2, 4, c, 1)
 	testrange(4, 5, c, 2)
-	require.Equal(t, 5, c.Missing())
+	require.Equal(t, 5, c.Cardinality(c.missing))
 
 	c = quickpopulate(newChunks(4, &info))
 	testrange(0, 2, c, 0)
 	testrange(2, 4, c, 1)
 	testrange(4, 5, c, 2)
-	require.Equal(t, 5, c.Missing())
+	require.Equal(t, 5, c.Cardinality(c.missing))
 
 	c = quickpopulate(newChunks(5, &info))
 	testrange(0, 1, c, 0)
 	testrange(1, 2, c, 1)
 	testrange(2, 3, c, 2)
-	require.Equal(t, 3, c.Missing())
+	require.Equal(t, 3, c.Cardinality(c.missing))
 }
 
 func TestChunksFailed(t *testing.T) {
@@ -329,7 +329,7 @@ func TestChunksFailed(t *testing.T) {
 	c := quickpopulate(newChunks(1, &info))
 	touched := roaring.NewBitmap()
 
-	require.Equal(t, 13, c.Missing())
+	require.Equal(t, 13, c.Cardinality(c.missing))
 
 	reqs, err := c.Pop(5, c.missing.Clone())
 	require.NoError(t, err)
@@ -386,7 +386,7 @@ func TestChunksComplete(t *testing.T) {
 	p := quickpopulate(newChunks(256, tinyTorrentInfo()))
 
 	// we start out with 64 chunks missing.
-	require.Equal(t, 64, p.Missing())
+	require.Equal(t, 64, p.Cardinality(p.missing))
 	require.True(t, p.ChunksMissing(0))
 
 	available := filledbmap(p.lastChunk(0) + 1)
@@ -407,12 +407,12 @@ func TestChunksComplete(t *testing.T) {
 	require.False(t, p.ChunksComplete(1))
 
 	// we finish with 60 chunks missing.
-	require.Equal(t, 60, p.Missing())
+	require.Equal(t, 60, p.Cardinality(p.missing))
 }
 
 func TestChunksAvailable(t *testing.T) {
 	p := quickpopulate(newChunks(256, tinyTorrentInfo()))
-	require.Equal(t, 64, p.Missing())
+	require.Equal(t, 64, p.Cardinality(p.missing))
 	for _, r := range p.chunksRequests(0) {
 		p.Verify(r)
 	}
@@ -421,14 +421,14 @@ func TestChunksAvailable(t *testing.T) {
 
 func TestChunksPend(t *testing.T) {
 	p := quickpopulate(newChunks(256, tinyTorrentInfo()))
-	require.Equal(t, 64, p.Missing())
+	require.Equal(t, 64, p.Cardinality(p.missing))
 	p.missing.Remove(0)
 	require.True(t, p.ChunksPend(0))
 }
 
 func TestChunksRelease(t *testing.T) {
 	p := quickpopulate(newChunks(256, tinyTorrentInfo()))
-	require.Equal(t, 64, p.Missing())
+	require.Equal(t, 64, p.Cardinality(p.missing))
 	require.False(t, p.ChunksRelease(0))
 }
 
@@ -436,7 +436,7 @@ func TestChunksReadable(t *testing.T) {
 	t.Run("with less data than a single chunk", func(t *testing.T) {
 		p := newChunks(16*bytesx.KiB, torrentInfoN(64*bytesx.KiB, bytesx.MiB))
 		p.InitFromMissing(bitmapx.Lazy(nil))
-		require.Equal(t, 0, p.Missing())
+		require.Equal(t, 0, p.Cardinality(p.missing))
 		require.Equal(t, int64(4), p.cmaximum)
 		require.Equal(t, uint64(p.cmaximum), p.unverified.GetCardinality())
 		require.Equal(t, uint64(4), p.Readable())
@@ -446,7 +446,7 @@ func TestChunksReadable(t *testing.T) {
 		p := newChunks(16*bytesx.KiB, torrentInfoN(1024, bytesx.MiB))
 		p.completed = bitmapx.Fill(1)
 		p.pieces = 1
-		require.Equal(t, 0, p.Missing())
+		require.Equal(t, 0, p.Cardinality(p.missing))
 		require.Equal(t, int64(1), p.cmaximum)
 		require.Equal(t, uint64(0), p.unverified.GetCardinality())
 		require.Equal(t, uint64(1), p.Readable())
@@ -459,7 +459,7 @@ func TestChunksInitFromMissing(t *testing.T) {
 		p := newChunks(256, tinyTorrentInfo())
 		p.InitFromMissing(bitmapx.Random(uint32(p.cmaximum), chunksmissing, cryptox.NewChaCha8(t.Name())))
 		require.Equal(t, []uint32{0x5, 0xb, 0xf, 0x1e, 0x32, 0x34, 0x3d, 0x3e}, p.missing.ToArray())
-		require.Equal(t, chunksmissing, p.Missing())
+		require.Equal(t, chunksmissing, p.Cardinality(p.missing))
 		require.Equal(t, uint64(p.cmaximum-chunksmissing), p.unverified.GetCardinality())
 	})
 
@@ -467,7 +467,7 @@ func TestChunksInitFromMissing(t *testing.T) {
 		p := newChunks(256, tinyTorrentInfo())
 		p.InitFromMissing(roaring.New())
 		require.Equal(t, []uint32{}, p.missing.ToArray())
-		require.Equal(t, 0, p.Missing())
+		require.Equal(t, 0, p.Cardinality(p.missing))
 		require.Equal(t, uint64(p.cmaximum), p.unverified.GetCardinality())
 	})
 }

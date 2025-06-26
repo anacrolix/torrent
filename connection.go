@@ -482,7 +482,7 @@ func (cn *connection) genrequests(available *roaring.Bitmap, msg func(pp.Message
 	// cn.cfg.debug().Printf("c(%p) seed(%t) make requests initated\n", cn, cn.t.seeding())
 	// defer cn.cfg.debug().Printf("c(%p) seed(%t) make requests completed\n", cn, cn.t.seeding())
 
-	if len(cn.requests) > cn.requestsLowWater || cn.t.chunks.Missing() == 0 {
+	if len(cn.requests) > cn.requestsLowWater || cn.t.chunks.Cardinality(cn.t.chunks.missing) == 0 {
 		return
 	}
 
@@ -901,7 +901,7 @@ func (cn *connection) ReadOne(ctx context.Context, decoder *pp.Decoder) (msg pp.
 	cn.lastMessageReceived.Store(langx.Autoptr(time.Now()))
 
 	if msg.Keepalive {
-		cn.cfg.debug().Printf("(%d) c(%p) seed(%t) - RECEIVED KEEPALIVE - missing(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, cn.cfg.Seed, cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
+		cn.cfg.debug().Printf("(%d) c(%p) seed(%t) - RECEIVED KEEPALIVE - missing(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, cn.cfg.Seed, cn.t.chunks.Cardinality(cn.t.chunks.missing), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
 		return
 	}
 
@@ -909,7 +909,7 @@ func (cn *connection) ReadOne(ctx context.Context, decoder *pp.Decoder) (msg pp.
 		return msg, fmt.Errorf("received fast extension message (type=%v) but extension is disabled", msg.Type)
 	}
 
-	cn.cfg.debug().Printf("(%d) c(%p) seed(%t) - RECEIVED MESSAGE: %s - pending(%d) - missing(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, cn.cfg.Seed, msg.Type, len(cn.requests), cn.t.chunks.Missing(), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
+	cn.cfg.debug().Printf("(%d) c(%p) seed(%t) - RECEIVED MESSAGE: %s - pending(%d) - missing(%d) - failed(%d) - outstanding(%d) - unverified(%d) - completed(%d)\n", os.Getpid(), cn, cn.cfg.Seed, msg.Type, len(cn.requests), cn.t.chunks.Cardinality(cn.t.chunks.missing), cn.t.chunks.failed.GetCardinality(), len(cn.t.chunks.outstanding), cn.t.chunks.unverified.GetCardinality(), cn.t.chunks.completed.GetCardinality())
 
 	switch msg.Type {
 	case pp.Choke:

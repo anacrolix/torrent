@@ -51,7 +51,7 @@ func (t *memoryseeding) Drop(id int160.T) error {
 
 	// only record if the info is there.
 	if c.haveInfo() {
-		if err := t.bm.Write(id, c.chunks.missing.Clone()); err != nil {
+		if err := t.bm.Write(id, c.chunks.Clone(c.chunks.missing)); err != nil {
 			return err
 		}
 	}
@@ -81,8 +81,8 @@ func (t *memoryseeding) Insert(cl *Client, md Metadata) (*torrent, error) {
 	t.torrents[id] = dlt
 	t._mu.Unlock()
 
-	if len(md.InfoBytes) > 0 {
-		if err := t.bm.Write(id, dlt.chunks.missing.Clone()); err != nil {
+	if len(md.InfoBytes) > 0 && dlt.chunks.Cardinality(dlt.chunks.missing) > 0 {
+		if err := t.bm.Write(id, dlt.chunks.Clone(dlt.chunks.missing)); err != nil {
 			return nil, err
 		}
 	}

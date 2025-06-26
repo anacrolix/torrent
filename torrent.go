@@ -1027,7 +1027,7 @@ func (t *torrent) needData() bool {
 		return true
 	}
 
-	return t.chunks.Missing() != 0
+	return t.chunks.Cardinality(t.chunks.missing) != 0
 }
 
 // Don't call this before the info is available.

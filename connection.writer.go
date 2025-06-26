@@ -231,7 +231,7 @@ func (t _connWriterClosed) Update(ctx context.Context, _ *cstate.Shared) (r csta
 	// delete requests that were requested beyond the timeout.
 	timedout := func(cn *connection, grace time.Duration) bool {
 		ts := time.Now()
-		return cn.lastUsefulChunkReceived.Add(grace).Before(ts) && cn.t.chunks.Missing() > 0
+		return cn.lastUsefulChunkReceived.Add(grace).Before(ts) && cn.t.chunks.Cardinality(cn.t.chunks.missing) > 0
 	}
 
 	if ws.closed.Load() {

@@ -305,6 +305,12 @@ func (t *chunks) Intersects(a, b *roaring.Bitmap) bool {
 	return a.Intersects(b)
 }
 
+func (t *chunks) Clone(a *roaring.Bitmap) *roaring.Bitmap {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return a.Clone()
+}
+
 // ChunksAvailable returns true iff all the chunks for the given piece are awaiting
 // digesting.
 func (t *chunks) ChunksAvailable(pid uint64) bool {
@@ -561,11 +567,10 @@ func (t *chunks) pend(r request) (changed bool) {
 	return changed
 }
 
-// Missing returns the number of missing chunks
-func (t *chunks) Missing() int {
+func (t *chunks) Cardinality(a *roaring.Bitmap) int {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return int(t.missing.GetCardinality())
+	return int(a.GetCardinality())
 }
 
 // returns number of pieces that are readable.

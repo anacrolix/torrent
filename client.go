@@ -49,8 +49,7 @@ type Client struct {
 	conns      []sockets.Socket
 	dhtServers []*dht.Server
 
-	extensionBytes pp.ExtensionBits // Our BitTorrent protocol extension bytes, sent in our BT handshakes.
-	torrents       *memoryseeding
+	torrents *memoryseeding
 }
 
 // Query torrent info from the dht
@@ -228,7 +227,6 @@ func NewClient(cfg *ClientConfig) (_ *Client, err error) {
 		}
 	}()
 
-	cl.extensionBytes = defaultPeerExtensionBytes()
 	cl.event.L = cl.locker()
 
 	if cfg.localID, err = int160.RandomPrefixed(stringsx.Default(cfg.PeerID, cfg.Bep20)); err != nil {
@@ -623,7 +621,7 @@ func (cl *Client) initiateHandshakes(c *connection, t *torrent) (err error) {
 
 	ebits, info, err := pp.Handshake{
 		PeerID: cl.config.localID.AsByteArray(),
-		Bits:   cl.extensionBytes,
+		Bits:   cl.config.extensionbits,
 	}.Outgoing(c.rw(), t.md.ID)
 
 	if err != nil {
@@ -661,7 +659,7 @@ func (cl *Client) receiveHandshakes(c *connection) (t *torrent, err error) {
 
 	ebits, info, err := pp.Handshake{
 		PeerID: cl.config.localID.AsByteArray(),
-		Bits:   cl.extensionBytes,
+		Bits:   cl.config.extensionbits,
 	}.Incoming(buffered)
 
 	if err != nil {
@@ -738,7 +736,7 @@ func (cl *Client) AddDHTNodes(nodes []string) {
 }
 
 func (cl *Client) newConnection(nc net.Conn, outgoing bool, remoteAddr netip.AddrPort) (c *connection) {
-	c = newConnection(cl.config, nc, outgoing, remoteAddr, &cl.extensionBytes, cl.LocalPort16(), cl.dhtPort())
+	c = newConnection(cl.config, nc, outgoing, remoteAddr, &cl.config.extensionbits, cl.LocalPort16(), cl.dhtPort())
 	c.setRW(connStatsReadWriter{nc, c})
 	c.r = &rateLimitedReader{
 		l: cl.config.DownloadRateLimiter,

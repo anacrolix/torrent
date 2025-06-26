@@ -35,6 +35,7 @@ type ClientConfig struct {
 	defaultCacheDirectory string
 	defaultStorage        storage.ClientImpl
 	defaultMetadata       MetadataStore
+	extensionbits         pp.ExtensionBits // Our BitTorrent protocol extension bytes, sent in the BT handshakes.
 
 	// defaultPortForwarding bool
 	dynamicip func(ctx context.Context, c *Client) (iter.Seq[netip.AddrPort], error)
@@ -371,6 +372,12 @@ func ClientConfigMetadata(b bool) ClientConfigOption {
 	}
 }
 
+// change what extension bits are set.
+func ClientConfigExtensionBits(bits ...uint) ClientConfigOption {
+	return func(cc *ClientConfig) {
+		cc.extensionbits = pp.NewExtensionBits(bits...)
+	}
+}
 func ClientConfigMaxOutstandingRequests(n int) ClientConfigOption {
 	return func(cc *ClientConfig) {
 		cc.maximumOutstandingRequests = n
@@ -389,6 +396,7 @@ func NewDefaultClientConfig(mdstore MetadataStore, store storage.ClientImpl, opt
 		defaultCacheDirectory:          userx.DefaultCacheDirectory("torrents"),
 		defaultMetadata:                mdstore,
 		defaultStorage:                 store,
+		extensionbits:                  defaultPeerExtensionBytes(),
 		HTTPUserAgent:                  DefaultHTTPUserAgent,
 		ExtendedHandshakeClientVersion: "go.torrent dev 20181121",
 		Bep20:                          "-GT0002-",

@@ -469,6 +469,8 @@ func (cn *connection) determineInterest(msg func(pp.Message) bool) (available *r
 		available = cn.claimed
 	}
 
+	cn._mu.RLock()
+	defer cn._mu.RUnlock()
 	return bitmapx.AndNot(available, cn.blacklisted)
 }
 

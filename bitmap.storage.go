@@ -35,7 +35,7 @@ type bitmapfilestore struct {
 
 // Delete implements BitmapStore.
 func (t bitmapfilestore) Delete(id int160.T) error {
-	return os.Remove(t.path(id))
+	return errorsx.Ignore(os.Remove(t.path(id)), fs.ErrNotExist)
 }
 
 func (t bitmapfilestore) path(id int160.T) string {

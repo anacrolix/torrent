@@ -275,6 +275,9 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 	t := ws.peer.t
 	buf := t.getChunkBuffer()
 	defer t.putChunkBuffer(buf)
+	msg := pp.Message{
+		Type: pp.Piece,
+	}
 	for wr.next < wr.end {
 		reqSpec := t.requestIndexToRequest(wr.next)
 		chunkLen := reqSpec.Length.Int()
@@ -287,13 +290,12 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 			return
 		}
 		ws.peer.doChunkReadStats(int64(chunkLen))
+		// TODO: Clean up the parameters for receiveChunk.
+		msg.Piece = buf
+		msg.Index = reqSpec.Index
+		msg.Begin = reqSpec.Begin
 		ws.peer.locker().Lock()
-		err = ws.peer.receiveChunk(&pp.Message{
-			Type:  pp.Piece,
-			Piece: buf,
-			Index: reqSpec.Index,
-			Begin: reqSpec.Begin,
-		})
+		err = ws.peer.receiveChunk(&msg)
 		wr.next++
 		ws.peer.locker().Unlock()
 		if err != nil {

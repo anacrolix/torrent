@@ -225,10 +225,6 @@ func (cn *connection) cmu() sync.Locker {
 	return cn._mu
 }
 
-func (cn *connection) supportsExtension(ext pp.ExtensionName) bool {
-	return cn.extension(ext) != 0
-}
-
 // Correct the PeerPieces slice length. Return false if the existing slice is
 // invalid, such as by receiving badly sized BITFIELD, or invalid HAVE
 // messages.
@@ -664,8 +660,8 @@ func (cn *connection) peerSentBitfield(bf []bool) error {
 
 		cn.raisePeerMinPieces(uint64(i) + 1)
 		min, max := cn.t.chunks.Range(uint64(i))
-		cn.cfg.debug().Printf("c(%p) seed(%t) adding to claimed %d %d %d %t\n", cn, cn.t.seeding(), i, min, max, have)
-		cn.claimed.AddRange(cn.t.chunks.Range(uint64(i)))
+		// cn.cfg.debug().Printf("c(%p) seed(%t) adding to claimed %d %d %d %t\n", cn, cn.t.seeding(), i, min, max, have)
+		cn.claimed.AddRange(min, max)
 	}
 	cn.peerPiecesChanged()
 	return nil
@@ -689,6 +685,12 @@ func (cn *connection) peerSentHaveNone() error {
 	return nil
 }
 
+func (cn *connection) extensionEnabled(id pp.ExtensionName) bool {
+	cn._mu.RLock()
+	defer cn._mu.RUnlock()
+	return cn.PeerExtensionIDs[id] != 0 && cn.cfg.extensions[id] != 0
+}
+
 func (cn *connection) extension(id pp.ExtensionName) pp.ExtensionNumber {
 	cn._mu.RLock()
 	defer cn._mu.RUnlock()
@@ -696,7 +698,7 @@ func (cn *connection) extension(id pp.ExtensionName) pp.ExtensionNumber {
 }
 
 func (cn *connection) requestPendingMetadata() {
-	if cn.extension(pp.ExtensionNameMetadata) == 0 {
+	if !cn.extensionEnabled(pp.ExtensionNameMetadata) {
 		cn.cfg.debug().Println("connection doesnt support metadata")
 		return
 	}
@@ -765,7 +767,7 @@ func (cn *connection) useful() bool {
 	}
 
 	if !t.haveInfo() {
-		return cn.supportsExtension("ut_metadata")
+		return cn.extensionEnabled(pp.ExtensionNameMetadata)
 	}
 
 	if t.seeding() && cn.PeerInterested {
@@ -1053,7 +1055,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		cn.PeerClientName = d.V
 		cn.PeerPrefersEncryption = d.Encryption
 		cn.PeerExtensionIDs = d.M
-		cn.cfg.debug().Printf("c(%p) seed(%t) extensions: %s\n", cn, cn.t.seeding(), spew.Sdump(d.M))
+		cn.cfg.debug().Printf("c(%p) seed(%t) extensions: %s\n", cn, cn.t.seeding(), spew.Sdump(d))
 
 		if d.MetadataSize != 0 {
 			// log.Println("handshake", d.MetadataSize)
@@ -1063,6 +1065,7 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		}
 
 		cn.requestPendingMetadata()
+
 		cn.sendInitialPEX()
 
 		// BUG no sending PEX updates yet
@@ -1361,10 +1364,9 @@ func (cn *connection) pexPeerFlags() pp.PexPeerFlags {
 }
 
 func (cn *connection) sendInitialPEX() {
-	id := cn.extension(pp.ExtensionNamePex)
-	if id == 0 {
+	if !cn.extensionEnabled(pp.ExtensionNamePex) {
 		// peer did not advertise support for the PEX extension
-		cn.cfg.debug().Println("pex not supported")
+		cn.cfg.debug().Printf("pex not supported peer extension enabled(%t) local extension enabled(%t)", cn.extension(pp.ExtensionNamePex) != 0, cn.cfg.extension(pp.ExtensionNamePex) != 0)
 		return
 	}
 
@@ -1375,5 +1377,5 @@ func (cn *connection) sendInitialPEX() {
 		return
 	}
 
-	cn.Post(pp.NewExtended(id, bencode.MustMarshal(m)))
+	cn.Post(pp.NewExtended(cn.extension(pp.ExtensionNamePex), bencode.MustMarshal(m)))
 }

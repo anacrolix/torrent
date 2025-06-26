@@ -139,6 +139,10 @@ type ClientConfig struct {
 	localID          int160.T
 }
 
+func (cfg *ClientConfig) extension(id pp.ExtensionName) pp.ExtensionNumber {
+	return cfg.extensions[id]
+}
+
 func (cfg *ClientConfig) Storage() storage.ClientImpl {
 	return cfg.defaultStorage
 }

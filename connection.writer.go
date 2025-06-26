@@ -39,13 +39,14 @@ func RunHandshookConn(c *connection, t *torrent) error {
 
 	c.cfg.debug().Printf("%p exchanging extensions\n", c)
 
-	go func() {
-		if err := ConnExtensions(ctx, c); err != nil {
-			errorsx.Log(err)
-			cancel(errorsx.Wrap(err, "error sending configuring connection"))
-			return
-		}
+	if err := ConnExtensions(ctx, c); err != nil {
+		errorsx.Log(err)
+		err = errorsx.Wrap(err, "error sending configuring connection")
+		cancel(err)
+		return err
+	}
 
+	go func() {
 		err := connwriterinit(ctx, c, 10*time.Second)
 		err = errorsx.StdlibTimeout(err, retrydelay, syscall.ECONNRESET)
 		cancel(err)
@@ -92,7 +93,7 @@ func connexinit(cn *connection, n cstate.T) cstate.T {
 			V:            cn.cfg.ExtendedHandshakeClientVersion,
 			Reqq:         cn.cfg.maximumOutstandingRequests,
 			YourIp:       pp.CompactIp(cn.remoteAddr.Addr().AsSlice()),
-			Encryption:   cn.cfg.HeaderObfuscationPolicy.Preferred || !cn.cfg.HeaderObfuscationPolicy.RequirePreferred,
+			Encryption:   cn.cfg.HeaderObfuscationPolicy.Preferred || cn.cfg.HeaderObfuscationPolicy.RequirePreferred,
 			Port:         cn.localport,
 			MetadataSize: cn.t.metadataSize(),
 			Ipv4:         pp.CompactIp(cn.cfg.publicIP4.To4()),

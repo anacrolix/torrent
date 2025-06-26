@@ -66,7 +66,7 @@ func RunHandshookConn(c *connection, t *torrent) error {
 func ConnExtensions(ctx context.Context, cn *connection) error {
 	log.Println("conn extensions initiated")
 	defer log.Println("conn extensions completed")
-	return cstate.Run(ctx, connexfast(cn, connexinit(cn, connexdht(cn, connflush(cn, nil)))), cn.cfg.debug())
+	return cstate.Run(ctx, connexinit(cn, connexfast(cn, connexdht(cn, connflush(cn, nil)))), cn.cfg.debug())
 }
 
 func connflush(cn *connection, n cstate.T) cstate.T {

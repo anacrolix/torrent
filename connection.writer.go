@@ -65,7 +65,7 @@ func RunHandshookConn(c *connection, t *torrent) error {
 func ConnExtensions(ctx context.Context, cn *connection) error {
 	log.Println("conn extensions initiated")
 	defer log.Println("conn extensions completed")
-	return cstate.Run(ctx, connexinit(cn, connexdht(cn, connexfast(cn, connflush(cn, nil)))), cn.cfg.debug())
+	return cstate.Run(ctx, connexinit(cn, connexfast(cn, connexdht(cn, connflush(cn, nil)))), cn.cfg.debug())
 }
 
 func connflush(cn *connection, n cstate.T) cstate.T {
@@ -165,7 +165,7 @@ func connexfast(cn *connection, n cstate.T) cstate.T {
 func connexdht(cn *connection, n cstate.T) cstate.T {
 	return cstate.Fn(func(context.Context, *cstate.Shared) cstate.T {
 		if !(cn.extensions.Supported(cn.PeerExtensionBytes, pp.ExtensionBitDHT) && cn.dhtport > 0) {
-			cn.cfg.debug().Println("posting dht not supported")
+			cn.cfg.debug().Printf("posting dht not supported %t - %d\n", cn.extensions.Supported(cn.PeerExtensionBytes, pp.ExtensionBitDHT), cn.dhtport)
 			return n
 		}
 

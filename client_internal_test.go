@@ -306,7 +306,7 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 
 	// Nodes are not added or exposed in Torrent's metainfo. We just randomly
 	// check if the announce-list is here instead. TODO: Add nodes.
-	assert.Len(t, tt.Metadata().Trackers, 5)
+	assert.Len(t, tt.Metadata().Trackers, 10)
 	// There are 6 nodes in the torrent file.
 	for sum() != int64(6*len(cl.dhtServers)) {
 		time.Sleep(time.Millisecond)

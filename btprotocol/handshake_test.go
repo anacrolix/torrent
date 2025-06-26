@@ -94,3 +94,44 @@ func TestHandshakeRoundTrip(t *testing.T) {
 	require.Equal(t, p2info.Hash, hash)
 	require.Equal(t, p2info.PeerID, p2.PeerID)
 }
+
+func TestExtensionBits(t *testing.T) {
+	t.Run("dht extension", func(t *testing.T) {
+		require.Equal(t, ExtensionBits([8]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1}), NewExtensionBits(ExtensionBitDHT))
+	})
+
+	t.Run("fast extension", func(t *testing.T) {
+		require.Equal(t, ExtensionBits([8]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x4}), NewExtensionBits(ExtensionBitFast))
+		require.True(t, NewExtensionBits(ExtensionBitFast).SupportsFast())
+		require.False(t, NewExtensionBits().SupportsFast())
+	})
+
+	t.Run("extended extension", func(t *testing.T) {
+		require.Equal(t, ExtensionBits([8]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x10, 0x0, 0x0}), NewExtensionBits(ExtensionBitExtended))
+		require.True(t, NewExtensionBits(ExtensionBitExtended).SupportsExtended())
+		require.False(t, NewExtensionBits().SupportsExtended())
+	})
+
+	t.Run("multiple extensions", func(t *testing.T) {
+		expected := ExtensionBits([8]byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x10, 0x0, 0x5}) // DHT (0x1) | Fast (0x4) in last byte, Extended (0x10) in 6th byte
+		actual := NewExtensionBits(ExtensionBitDHT, ExtensionBitFast, ExtensionBitExtended)
+		require.Equal(t, expected, actual)
+		require.True(t, actual.SupportsDHT())
+		require.True(t, actual.SupportsFast())
+		require.True(t, actual.SupportsExtended())
+	})
+
+	t.Run("supported", func(t *testing.T) {
+		peer1 := NewExtensionBits(ExtensionBitDHT, ExtensionBitFast)
+		peer2 := NewExtensionBits(ExtensionBitDHT, ExtensionBitExtended)
+		peer3 := NewExtensionBits(ExtensionBitFast)
+
+		require.True(t, peer1.Supported(peer2, ExtensionBitDHT))
+		require.False(t, peer1.Supported(peer2, ExtensionBitFast))
+		require.False(t, peer1.Supported(peer2, ExtensionBitExtended))
+		require.False(t, peer1.Supported(peer3, ExtensionBitExtended))
+		require.True(t, peer1.Supported(peer3, ExtensionBitFast))
+		require.True(t, peer1.Supported(peer1, ExtensionBitDHT, ExtensionBitFast))
+		require.False(t, peer1.Supported(peer2, ExtensionBitDHT, ExtensionBitFast))
+	})
+}

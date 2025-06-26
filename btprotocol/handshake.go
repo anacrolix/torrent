@@ -123,8 +123,8 @@ func (t *HandshakeInfoMessage) ReadFrom(src io.Reader) (n int64, err error) {
 // Extension bits for bittorrent protocol
 const (
 	ExtensionBitDHT      uint = 0  // http://www.bittorrent.org/beps/bep_0005.html
-	ExtensionBitExtended      = 20 // http://www.bittorrent.org/beps/bep_0010.html
-	ExtensionBitFast          = 2  // http://www.bittorrent.org/beps/bep_0006.html
+	ExtensionBitFast     uint = 2  // http://www.bittorrent.org/beps/bep_0006.html
+	ExtensionBitExtended uint = 20 // http://www.bittorrent.org/beps/bep_0010.html
 )
 
 // ExtensionBits used by the Handshake to determine capabilities of a peer.

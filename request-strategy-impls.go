@@ -81,7 +81,7 @@ func (r requestStrategyPiece) CountUnverified() bool {
 }
 
 func (r requestStrategyPiece) Request() bool {
-	return !r.p.ignoreForRequests() && r.p.purePriority() != PiecePriorityNone
+	return r.p.effectivePriority() > PiecePriorityNone
 }
 
 var _ requestStrategy.Piece = requestStrategyPiece{}

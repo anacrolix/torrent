@@ -53,6 +53,7 @@ func (me *webseedPeer) moreRequestsAllowed() bool {
 }
 
 func (me *webseedPeer) updateRequests() {
+	return
 	if !me.shouldUpdateRequests() {
 		return
 	}
@@ -307,49 +308,6 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 	}
 	return
 }
-
-//
-//func (ws *webseedPeer) requestResultHandler(wr *webseedRequest) (err error) {
-//	err = ws.readChunks(wr)
-//	switch {
-//	case err == nil:
-//	case ws.peer.closed.IsSet():
-//	case errors.Is(err, context.Canceled):
-//	case errors.Is(err, webseed.ErrTooFast):
-//	default:
-//
-//	}
-//	ws.peer.t.cl.lock()
-//	defer ws.peer.t.cl.unlock()
-//	if ws.peer.t.closed.IsSet() {
-//		return nil
-//	}
-//	if err != nil {
-//		switch {
-//		case errors.Is(err, context.Canceled):
-//		case errors.Is(err, webseed.ErrTooFast):
-//		case ws.peer.closed.IsSet():
-//		default:
-//			ws.peer.logger.Printf("Request %v rejected: %v", r, result.Err)
-//			// // Here lies my attempt to extract something concrete from Go's error system. RIP.
-//			// cfg := spew.NewDefaultConfig()
-//			// cfg.DisableMethods = true
-//			// cfg.Dump(result.Err)
-//
-//			if webseedPeerCloseOnUnhandledError {
-//				log.Printf("closing %v", ws)
-//				ws.peer.close()
-//			} else {
-//				ws.lastUnhandledErr = time.Now()
-//			}
-//		}
-//		if !ws.peer.remoteRejectedRequest(ws.peer.t.requestIndexFromRequest(r)) {
-//			panic("invalid reject")
-//		}
-//		return err
-//	}
-//	return err
-//}
 
 func (me *webseedPeer) peerPieces() *roaring.Bitmap {
 	return &me.client.Pieces

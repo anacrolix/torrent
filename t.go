@@ -205,7 +205,8 @@ func (t *Torrent) CancelPieces(begin, end pieceIndex) {
 
 func (t *Torrent) cancelPiecesLocked(begin, end pieceIndex, reason updateRequestReason) {
 	for i := begin; i < end; i++ {
-		p := &t.pieces[i]
+		p := t.piece(i)
+		// Intentionally cancelling only the piece-specific priority here.
 		if p.priority == PiecePriorityNone {
 			continue
 		}

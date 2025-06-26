@@ -119,9 +119,9 @@ type Torrent struct {
 
 	_chunksPerRegularPiece chunkIndexType
 
-	webSeeds map[string]*webseedPeer
-	// Active peer connections, running message stream loops. TODO: Make this
-	// open (not-closed) connections only.
+	webSeeds map[webseedUrlKey]*webseedPeer
+	// Active peer connections, running message stream loops. TODO: Make this open (not-closed)
+	// connections only.
 	conns               map[*PeerConn]struct{}
 	maxEstablishedConns int
 	// Set of addrs to which we're attempting to connect. Connections are
@@ -983,7 +983,7 @@ func (t *Torrent) newMetaInfo() metainfo.MetaInfo {
 		UrlList: func() []string {
 			ret := make([]string, 0, len(t.webSeeds))
 			for url := range t.webSeeds {
-				ret = append(ret, url)
+				ret = append(ret, string(url))
 			}
 			return ret
 		}(),
@@ -1115,6 +1115,12 @@ func (t *Torrent) requestOffset(r Request) int64 {
 // there is no such request.
 func (t *Torrent) offsetRequest(off int64) (req Request, ok bool) {
 	return torrentOffsetRequest(t.length(), t.info.PieceLength, int64(t.chunkSize), off)
+}
+
+func (t *Torrent) getRequestIndexContainingOffset(off int64) RequestIndex {
+	req, ok := t.offsetRequest(off)
+	panicif.False(ok)
+	return t.requestIndexFromRequest(req)
 }
 
 func (t *Torrent) writeChunk(piece int, begin int64, data []byte) (err error) {
@@ -3019,7 +3025,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	if t.cl.config.DisableWebseeds {
 		return false
 	}
-	if _, ok := t.webSeeds[url]; ok {
+	if _, ok := t.webSeeds[webseedUrlKey(url)]; ok {
 		return false
 	}
 	// I don't think Go http supports pipelining requests. However, we can have more ready to go
@@ -3074,7 +3080,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	if t.haveInfo() {
 		ws.onGotInfo(t.info)
 	}
-	t.webSeeds[url] = &ws
+	t.webSeeds[webseedUrlKey(url)] = &ws
 	ws.peer.onNeedUpdateRequests("Torrent.addWebSeed")
 	return true
 }
@@ -3488,4 +3494,10 @@ func (t *Torrent) withSlogger(base *slog.Logger) *slog.Logger {
 			return nil
 		}),
 		"ih", *t.canonicalShortInfohash()))
+}
+
+func (t *Torrent) endRequestIndexForFileIndex(fileIndex int) RequestIndex {
+	f := t.Files()[fileIndex]
+	end := intCeilDiv(uint64(f.offset)+uint64(f.length), t.chunkSize.Uint64())
+	return RequestIndex(end)
 }

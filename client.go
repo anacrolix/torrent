@@ -33,7 +33,6 @@ import (
 	"github.com/anacrolix/missinggo/v2/pproffd"
 	"github.com/anacrolix/sync"
 	"github.com/cespare/xxhash"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/dustin/go-humanize"
 	gbtree "github.com/google/btree"
 	"github.com/pion/webrtc/v4"
@@ -51,6 +50,8 @@ import (
 	infohash_v2 "github.com/anacrolix/torrent/types/infohash-v2"
 	"github.com/anacrolix/torrent/webtorrent"
 )
+
+const webseedRequestUpdateTimerInterval = time.Second
 
 // Clients contain zero or more Torrents. A Client manages a blocklist, the
 // TCP/UDP protocol ports, and DHT as desired.
@@ -105,6 +106,8 @@ type Client struct {
 	defaultLocalLtepProtocolMap LocalLtepProtocolMap
 
 	upnpMappings []*upnpMapping
+
+	webseedRequestTimer *time.Timer
 }
 
 type ipStr string
@@ -142,24 +145,7 @@ func (cl *Client) LocalPort() (port int) {
 	return
 }
 
-func writeDhtServerStatus(w io.Writer, s DhtServer) {
-	dhtStats := s.Stats()
-	fmt.Fprintf(w, " ID: %x\n", s.ID())
-	spew.Fdump(w, dhtStats)
-}
-
-func compareBool(a, b bool) int {
-	if a == b {
-		return 0
-	}
-	if b {
-		return -1
-	}
-	return 1
-}
-
-// Writes out a human readable status of the client, such as for writing to a
-// HTTP status page.
+// Writes out a human-readable status of the client, such as for writing to an HTTP status page.
 func (cl *Client) WriteStatus(_w io.Writer) {
 	cl.rLock()
 	defer cl.rUnlock()
@@ -401,6 +387,8 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 			go t.onWebRtcConn(dc, dcc)
 		},
 	}
+
+	cl.webseedRequestTimer = time.AfterFunc(webseedRequestUpdateTimerInterval, cl.updateWebseedRequestsTimerFunc)
 
 	return
 }
@@ -1937,7 +1925,7 @@ func (cl *Client) Stats() ClientStats {
 
 func (cl *Client) underWebSeedHttpRequestLimit(key webseedHostKeyHandle) bool {
 	panicif.Zero(key)
-	return cl.numWebSeedRequests[key] < 5
+	return cl.numWebSeedRequests[key] < defaultRequestsPerWebseedHost
 }
 
 func (cl *Client) countWebSeedHttpRequests() (num int) {

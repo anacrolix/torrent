@@ -30,7 +30,8 @@ func pieceOrderLess(i, j *PieceRequestOrderItem) multiless.Computation {
 		j.State.Partial, i.State.Partial,
 	).Int(
 		// If this is done with relative availability, do we lose some determinism? If completeness
-		// is used, would that push this far enough down?
+		// is used, would that push this far enough down? What happens if we have a piece in the
+		// order, but it has availability 0?
 		i.State.Availability, j.State.Availability,
 	).Int(
 		i.Key.Index, j.Key.Index,

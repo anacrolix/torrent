@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	g "github.com/anacrolix/generics"
+	"github.com/anacrolix/missinggo/v2/panicif"
 )
 
 func NewIndex(segments LengthIter) (ret Index) {
@@ -83,4 +84,25 @@ func (me Index) LocateIter(e Extent) iter.Seq2[int, Extent] {
 			return yield(i+first, e)
 		})
 	}
+}
+
+type IndexAndOffset struct {
+	Index  int
+	Offset int64
+}
+
+// Returns the Extent that contains the given extent, if it exists. Panics if Extents overlap on the
+// offset.
+func (me Index) LocateOffset(off int64) (ret g.Option[IndexAndOffset]) {
+	// I think an Extent needs to have a non-zero to match against it? That's what this method is
+	// defining.
+	for i, e := range me.LocateIter(Extent{off, 1}) {
+		panicif.True(ret.Ok)
+		panicif.NotEq(e.Length, 1)
+		ret.Set(IndexAndOffset{
+			Index:  i,
+			Offset: e.Start,
+		})
+	}
+	return
 }

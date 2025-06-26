@@ -11,6 +11,7 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"github.com/anacrolix/torrent/segments"
 
 	"github.com/anacrolix/torrent/merkle"
 	"github.com/anacrolix/torrent/metainfo"
@@ -38,7 +39,8 @@ type Piece struct {
 	numVerifiesCond chansync.BroadcastCond
 
 	publicPieceState PieceState
-	priority         PiecePriority
+	// Piece-specific priority. There are other priorities like File and Reader.
+	priority PiecePriority
 	// Availability adjustment for this piece relative to len(Torrent.connsWithAllPieces). This is
 	// incremented for any piece a peer has when a peer has a piece, Torrent.haveInfo is true, and
 	// the Peer isn't recorded in Torrent.connsWithAllPieces.
@@ -249,7 +251,7 @@ func (p *Piece) SetPriority(prio PiecePriority) {
 
 // This is priority based only on piece, file and reader priorities.
 func (p *Piece) purePriority() (ret PiecePriority) {
-	for f := range p.files() {
+	for _, f := range p.files() {
 		ret.Raise(f.prio)
 	}
 	if p.t.readerNowPieces().Contains(bitmap.BitIndex(p.index)) {
@@ -379,10 +381,10 @@ func (p *Piece) obtainHashV2() (hash [32]byte, err error) {
 	return
 }
 
-func (p *Piece) files() iter.Seq[*File] {
-	return func(yield func(*File) bool) {
+func (p *Piece) files() iter.Seq2[int, *File] {
+	return func(yield func(int, *File) bool) {
 		for i := p.beginFile; i < p.endFile; i++ {
-			if !yield((*p.t.files)[i]) {
+			if !yield(i, (*p.t.files)[i]) {
 				return
 			}
 		}
@@ -422,4 +424,11 @@ func (p *Piece) publishStateChange() {
 			cur,
 		})
 	}
+}
+
+func (p *Piece) fileExtents() iter.Seq2[int, segments.Extent] {
+	return p.t.info.FileSegmentsIndex().LocateIter(segments.Extent{
+		p.torrentBeginOffset(),
+		segments.Int(p.length()),
+	})
 }

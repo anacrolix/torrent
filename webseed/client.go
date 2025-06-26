@@ -75,6 +75,11 @@ type RequestResult struct {
 	Err   error
 }
 
+// Returns the URL for the given file index. This is assumed to be globally unique.
+func (ws *Client) UrlForFileIndex(fileIndex int) string {
+	return urlForFileIndex(ws.Url, fileIndex, ws.info, ws.PathEscaper)
+}
+
 func (ws *Client) StartNewRequest(r RequestSpec) Request {
 	ctx, cancel := context.WithCancel(context.TODO())
 	var requestParts []requestPart

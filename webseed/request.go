@@ -46,6 +46,21 @@ func trailingPath(
 }
 
 // Creates a request per BEP 19.
+func urlForFileIndex(
+	url_ string, fileIndex int,
+	info *metainfo.Info,
+	pathEscaper PathEscaper,
+) string {
+	fileInfo := info.UpvertedFiles()[fileIndex]
+	if strings.HasSuffix(url_, "/") {
+		// BEP specifies that we append the file path. We need to escape each component of the path
+		// for things like spaces and '#'.
+		url_ += trailingPath(info.BestName(), fileInfo.BestPath(), pathEscaper)
+	}
+	return url_
+}
+
+// Creates a request per BEP 19.
 func newRequest(
 	ctx context.Context,
 	url_ string, fileIndex int,
@@ -54,11 +69,7 @@ func newRequest(
 	pathEscaper PathEscaper,
 ) (*http.Request, error) {
 	fileInfo := info.UpvertedFiles()[fileIndex]
-	if strings.HasSuffix(url_, "/") {
-		// BEP specifies that we append the file path. We need to escape each component of the path
-		// for things like spaces and '#'.
-		url_ += trailingPath(info.BestName(), fileInfo.BestPath(), pathEscaper)
-	}
+	url_ = urlForFileIndex(url_, fileIndex, info, pathEscaper)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url_, nil)
 	if err != nil {
 		return nil, err

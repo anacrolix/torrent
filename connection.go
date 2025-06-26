@@ -661,7 +661,9 @@ func (cn *connection) peerSentBitfield(bf []bool) error {
 		cn.raisePeerMinPieces(uint64(i) + 1)
 		min, max := cn.t.chunks.Range(uint64(i))
 		// cn.cfg.debug().Printf("c(%p) seed(%t) adding to claimed %d %d %d %t\n", cn, cn.t.seeding(), i, min, max, have)
+		cn._mu.RLock()
 		cn.claimed.AddRange(min, max)
+		cn._mu.Unlock()
 	}
 	cn.peerPiecesChanged()
 	return nil

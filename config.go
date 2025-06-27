@@ -16,6 +16,7 @@ import (
 	"github.com/james-lawrence/torrent/dht"
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/dht/krpc"
+	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/netx"
 	"github.com/james-lawrence/torrent/internal/userx"
 	"github.com/james-lawrence/torrent/metainfo"
@@ -28,7 +29,7 @@ import (
 )
 
 // DefaultHTTPUserAgent ...
-const DefaultHTTPUserAgent = "Go-Torrent/1.0"
+const DefaultHTTPUserAgent = "Ghost-Torrent/1.0"
 
 // ClientConfig not safe to modify this after it's given to a Client.
 type ClientConfig struct {
@@ -398,23 +399,23 @@ func NewDefaultClientConfig(mdstore MetadataStore, store storage.ClientImpl, opt
 		defaultStorage:                 store,
 		extensionbits:                  defaultPeerExtensionBytes(),
 		HTTPUserAgent:                  DefaultHTTPUserAgent,
-		ExtendedHandshakeClientVersion: "go.torrent dev 20181121",
+		ExtendedHandshakeClientVersion: "ghost.torrent dev 2025",
 		Bep20:                          "-GT0002-",
-		UpnpID:                         "james-lawrence/torrent",
+		UpnpID:                         "ghost.torrent",
 		maximumOutstandingRequests:     64,
-		NominalDialTimeout:             20 * time.Second,
-		MinDialTimeout:                 3 * time.Second,
-		HalfOpenConnsPerTorrent:        25,
-		TorrentPeersHighWater:          500,
-		TorrentPeersLowWater:           50,
+		NominalDialTimeout:             8 * time.Second,
+		MinDialTimeout:                 1 * time.Second,
+		HalfOpenConnsPerTorrent:        32,
+		TorrentPeersHighWater:          512,
+		TorrentPeersLowWater:           128,
 		HandshakesTimeout:              4 * time.Second,
 		dynamicip:                      UPnPPortForward,
 		DhtStartingNodes: func(network string) dht.StartingNodesGetter {
 			return func() ([]dht.Addr, error) { return nil, nil }
 		},
-		UploadRateLimiter:   rate.NewLimiter(rate.Inf, 0),
-		DownloadRateLimiter: rate.NewLimiter(rate.Inf, 0),
-		dialRateLimiter:     rate.NewLimiter(rate.Inf, 0),
+		UploadRateLimiter:   rate.NewLimiter(rate.Limit(128*bytesx.MiB), 1),
+		DownloadRateLimiter: rate.NewLimiter(rate.Limit(256*bytesx.MiB), 1),
+		dialRateLimiter:     rate.NewLimiter(rate.Limit(128), 1),
 		ConnTracker:         conntrack.NewInstance(),
 		HeaderObfuscationPolicy: HeaderObfuscationPolicy{
 			Preferred:        false,

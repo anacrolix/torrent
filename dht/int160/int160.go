@@ -130,6 +130,14 @@ func FromByteString(s string) (ret T) {
 	return
 }
 
+func FromHexEncodedString(s string) (ret T, err error) {
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		return ret, err
+	}
+	return FromBytes(b), nil
+}
+
 func Distance(a, b T) (ret T) {
 	ret.Xor(&a, &b)
 	return

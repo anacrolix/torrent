@@ -11,6 +11,7 @@ import (
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/metainfo"
 	"github.com/james-lawrence/torrent/storage"
+	"golang.org/x/exp/constraints"
 )
 
 // Option for the torrent.
@@ -62,9 +63,9 @@ func OptionInfo(i []byte) Option {
 }
 
 // OptionChunk sets the size of the chunks to use for outbound requests
-func OptionChunk(s int) Option {
+func OptionChunk[T constraints.Integer](s T) Option {
 	return func(t *Metadata) {
-		t.ChunkSize = s
+		t.ChunkSize = uint64(s)
 	}
 }
 
@@ -98,7 +99,7 @@ type Metadata struct {
 	DHTNodes    []string
 	// The chunk size to use for outbound requests. Defaults to 16KiB if not
 	// set.
-	ChunkSize int
+	ChunkSize uint64
 	Storage   storage.ClientImpl
 }
 
@@ -121,7 +122,7 @@ func (t Metadata) Merge(options ...Option) Metadata {
 	return t
 }
 
-// New create a torrent from the metainfo.MetaInfo and any additional options.
+// New create a torrent from just a infohash and any additional options.
 func New(info metainfo.Hash, options ...Option) (t Metadata, err error) {
 	t = Metadata{
 		ID:        info,

@@ -26,12 +26,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestingConfig(t testing.TB, options ...ClientConfigOption) *ClientConfig {
-	rdir := t.TempDir()
-
+func TestingConfig(t testing.TB, dir string, options ...ClientConfigOption) *ClientConfig {
 	return NewDefaultClientConfig(
-		metadatafilestore{root: rdir},
-		storage.NewFile(rdir),
+		metadatafilestore{root: dir},
+		storage.NewFile(dir),
+		ClientConfigStorageDir(dir),
+		ClientConfigCacheDirectory(dir),
 		ClientConfigPeerID(krpc.RandomID().String()),
 		// ClientConfigBootstrapGlobal,
 		ClientConfigPortForward(false),
@@ -80,7 +80,7 @@ func TestTorrentInitialState(t *testing.T) {
 	dir := t.TempDir()
 	mi := testutil.GreetingTestTorrent(dir)
 
-	cl, err := NewClient(TestingConfig(t))
+	cl, err := NewClient(TestingConfig(t, dir))
 	require.NoError(t, err)
 
 	tt, err := New(
@@ -149,8 +149,8 @@ func DownloadCancelTest(t *testing.T, sb Binder, lb Binder, ps TestDownloadCance
 
 	cfg := TestingConfig(
 		t,
+		greetingTempDir,
 		ClientConfigSeed(true),
-		ClientConfigStorageDir(greetingTempDir),
 	)
 	seeder, err := sb.Bind(NewClient(cfg))
 	require.NoError(t, err)
@@ -167,7 +167,7 @@ func DownloadCancelTest(t *testing.T, sb Binder, lb Binder, ps TestDownloadCance
 
 	lcfg := TestingConfig(
 		t,
-		ClientConfigStorageDir(leecherDataDir),
+		leecherDataDir,
 	)
 	leecher, err := lb.Bind(NewClient(lcfg))
 	require.NoError(t, err)
@@ -194,7 +194,7 @@ func DownloadCancelTest(t *testing.T, sb Binder, lb Binder, ps TestDownloadCance
 
 // Ensure that it's an error for a peer to send an invalid have message.
 func TestPeerInvalidHave(t *testing.T) {
-	cl, err := Autosocket(t).Bind(NewClient(TestingConfig(t)))
+	cl, err := Autosocket(t).Bind(NewClient(TestingConfig(t, t.TempDir())))
 	require.NoError(t, err)
 	defer cl.Close()
 	info := &metainfo.Info{
@@ -218,7 +218,7 @@ func TestPeerInvalidHave(t *testing.T) {
 // Check that when the listen port is 0, all the protocols listened on have
 // the same port, and it isn't zero.
 func TestClientDynamicListenPortAllProtocols(t *testing.T) {
-	cl, err := Autosocket(t).Bind(NewClient(TestingConfig(t)))
+	cl, err := Autosocket(t).Bind(NewClient(TestingConfig(t, t.TempDir())))
 	require.NoError(t, err)
 	defer cl.Close()
 	port := cl.LocalPort()
@@ -233,7 +233,7 @@ func TestSetMaxEstablishedConn(t *testing.T) {
 	var tts []Torrent
 	mi := testutil.GreetingMetaInfo()
 	for i := range 3 {
-		cfg := TestingConfig(t, ClientConfigSeed(true))
+		cfg := TestingConfig(t, t.TempDir(), ClientConfigSeed(true))
 		cfg.dropDuplicatePeerIds = true
 		cfg.Handshaker = connections.NewHandshaker(
 			connections.NewFirewall(),
@@ -283,7 +283,7 @@ func TestAddMetainfoWithNodes(t *testing.T) {
 	// ctx, done := testx.Context(t)
 	// defer done()
 
-	cfg := TestingConfig(t, ClientConfigSeed(true), ClientConfigDebugLogger(log.Default()))
+	cfg := TestingConfig(t, t.TempDir(), ClientConfigSeed(true), ClientConfigDebugLogger(log.Default()))
 	cfg.DhtStartingNodes = func(n string) dht.StartingNodesGetter { return func() ([]dht.Addr, error) { return nil, nil } }
 	// For now, we want to just jam the nodes into the table, without
 	// verifying them first. Also the DHT code doesn't support mixing secure

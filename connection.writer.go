@@ -12,6 +12,7 @@ import (
 	"github.com/james-lawrence/torrent/bep0006"
 	pp "github.com/james-lawrence/torrent/btprotocol"
 	"github.com/james-lawrence/torrent/cstate"
+	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/internal/atomicx"
 	"github.com/james-lawrence/torrent/internal/bytesx"
 	"github.com/james-lawrence/torrent/internal/errorsx"
@@ -56,7 +57,7 @@ func RunHandshookConn(c *connection, t *torrent) error {
 		err = errorsx.StdlibTimeout(err, retrydelay, syscall.ECONNRESET)
 		cancel(err)
 		c.cfg.Handshaker.Release(c.conn, err)
-		return errorsx.Wrap(err, "error during main read loop")
+		return errorsx.Wrapf(err, "%s - %s: error during main read loop", c.PeerClientName, c.conn.RemoteAddr())
 	}
 
 	return context.Cause(ctx)
@@ -85,7 +86,7 @@ func connexinit(cn *connection, n cstate.T) cstate.T {
 			return n
 		}
 
-		defer log.Println("extended handshake extension completed")
+		defer log.Println("extended handshake extension completed", cn.localport, cn.dhtport)
 		// TODO: We can figured the port and address out specific to the socket
 		// used.
 		msg := pp.ExtendedHandshakeMessage{
@@ -95,7 +96,7 @@ func connexinit(cn *connection, n cstate.T) cstate.T {
 			YourIp:       pp.CompactIp(cn.remoteAddr.Addr().AsSlice()),
 			Encryption:   cn.cfg.HeaderObfuscationPolicy.Preferred || cn.cfg.HeaderObfuscationPolicy.RequirePreferred,
 			Port:         cn.localport,
-			MetadataSize: cn.t.metadataSize(),
+			MetadataSize: cn.t.metadatalen(),
 			Ipv4:         pp.CompactIp(cn.cfg.publicIP4.To4()),
 			Ipv6:         cn.cfg.publicIP6.To16(),
 		}
@@ -187,8 +188,8 @@ func connexdht(cn *connection, n cstate.T) cstate.T {
 // activity elsewhere in the Client, and some is determined locally when the
 // connection is writable.
 func connwriterinit(ctx context.Context, cn *connection, to time.Duration) error {
-	cn.cfg.info().Printf("c(%p) writer initiated\n", cn)
-	defer cn.cfg.info().Printf("c(%p) writer completed\n", cn)
+	cn.cfg.debug().Printf("c(%p) writer initiated\n", cn)
+	defer cn.cfg.debug().Printf("c(%p) writer completed\n", cn)
 	defer cn.checkFailures()
 	defer cn.deleteAllRequests()
 
@@ -198,6 +199,7 @@ func connwriterinit(ctx context.Context, cn *connection, to time.Duration) error
 		connection:       cn,
 		keepAliveTimeout: to,
 		lastwrite:        ts,
+		nextbitmap:       ts.Add(time.Minute),
 		resync:           atomicx.Pointer(ts.Add(to)),
 	}
 
@@ -209,6 +211,7 @@ type writerstate struct {
 	bufferLimit      int
 	keepAliveTimeout time.Duration
 	lastwrite        time.Time
+	nextbitmap       time.Time
 	resync           *atomic.Pointer[time.Time]
 }
 
@@ -230,8 +233,7 @@ func (t _connWriterClosed) Update(ctx context.Context, _ *cstate.Shared) (r csta
 
 	// delete requests that were requested beyond the timeout.
 	timedout := func(cn *connection, grace time.Duration) bool {
-		ts := time.Now()
-		return cn.lastUsefulChunkReceived.Add(grace).Before(ts) && cn.t.chunks.Cardinality(cn.t.chunks.missing) > 0
+		return len(ws.requests) > 0 && cn.lastUsefulChunkReceived.Add(grace).Before(time.Now()) && cn.t.chunks.Cardinality(cn.t.chunks.missing) > 0
 	}
 
 	if ws.closed.Load() {
@@ -255,10 +257,10 @@ func (t _connWriterClosed) Update(ctx context.Context, _ *cstate.Shared) (r csta
 
 	// detect effectively dead connections
 	if timedout(ws.connection, ws.t.chunks.gracePeriod) {
-		return cstate.Warning(
-			t.next,
+		ws.clearRequests(ws.dupRequests()...)
+		return cstate.Failure(
 			errorsx.Timedout(
-				errorsx.Errorf("c(%p) peer isnt sending chunks in a timely manner requests (%d > %d) last(%s)", ws, len(ws.requests), ws.requestsLowWater, ws.lastUsefulChunkReceived),
+				errorsx.Errorf("c(%p) peer isnt sending chunks in a timely manner requests (%d > %d) last(%s)", ws, len(ws.requests), ws.PeerMaxRequests, ws.lastUsefulChunkReceived),
 				10*time.Second,
 			),
 		)
@@ -428,6 +430,31 @@ func (t _connwriterFlush) Update(ctx context.Context, _ *cstate.Shared) cstate.T
 	return t.next
 }
 
+func connwriterBitmap(n cstate.T, ws *writerstate) cstate.T {
+	return _connwriterCommitBitmap{next: n, writerstate: ws}
+}
+
+type _connwriterCommitBitmap struct {
+	next cstate.T
+	*writerstate
+}
+
+func (t _connwriterCommitBitmap) Update(ctx context.Context, _ *cstate.Shared) cstate.T {
+	ws := t.writerstate
+	defer func() {
+		ws.nextbitmap = time.Now().Add(time.Minute)
+	}()
+
+	if ws.nextbitmap.After(time.Now()) {
+		return t.next
+	}
+
+	if err := ws.t.cln.torrents.Sync(int160.FromBytes(ws.t.md.ID.Bytes())); err != nil {
+		return cstate.Warning(t.next, errorsx.Wrap(err, "failed to sync bitmap to disk"))
+	}
+
+	return t.next
+}
 func connwriteridle(ws *writerstate) cstate.T {
 	return cstate.Idle(connwriteractive(ws), ws.keepAliveTimeout/2, ws.connection.respond, ws.connection.t.chunks.cond)
 }

@@ -85,7 +85,7 @@ func TestTorrentString(t *testing.T) {
 func TestPieceHashFailed(t *testing.T) {
 	mi := testutil.GreetingMetaInfo()
 	cl := new(Client)
-	cl.config = TestingConfig(t)
+	cl.config = TestingConfig(t, t.TempDir())
 	ts, err := NewFromMetaInfo(mi, OptionStorage(testutil.NewBadStorage()))
 	require.NoError(t, err)
 	tt := newTorrent(cl, ts)
@@ -101,7 +101,7 @@ func TestPieceHashFailed(t *testing.T) {
 
 // Check the behaviour of Torrent.Metainfo when metadata is not completed.
 func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
-	cfg := TestingConfig(t)
+	cfg := TestingConfig(t, t.TempDir())
 	// cfg.HeaderObfuscationPolicy = HeaderObfuscationPolicy{
 	// 	Preferred:        false,
 	// 	RequirePreferred: false,
@@ -136,7 +136,7 @@ func TestTorrentMetainfoIncompleteMetadata(t *testing.T) {
 	assert.True(t, ebits.GetBit(pp.ExtensionBitExtended))
 	assert.EqualValues(t, cl.PeerID(), int160.FromByteArray(info.PeerID))
 	assert.EqualValues(t, ih, info.Hash)
-	assert.EqualValues(t, 0, tt.(*torrent).metadataSize())
+	assert.EqualValues(t, 0, tt.(*torrent).metadatalen())
 
 	func() {
 		tt.(*torrent).lock()

@@ -44,7 +44,6 @@ type Client struct {
 
 	config *ClientConfig
 
-	// peerID     int160.T
 	onClose    []func()
 	conns      []sockets.Socket
 	dhtServers []*dht.Server
@@ -572,7 +571,7 @@ func (cl *Client) outgoingConnection(ctx context.Context, t *torrent, addr netip
 	// due to network topologies (NAT, LAN, WAN) we have to detect this situation
 	// from the origin of the connection and ban the address we connected to.
 	if c.PeerID == cl.config.localID {
-		cause := connections.BannedConnectionError(
+		cause := connections.NewBanned(
 			c.conn,
 			errorsx.Errorf("detected connection to self - %s vs %s - %s", c.PeerID, cl.config.localID, c.conn.RemoteAddr().String()),
 		)
@@ -688,7 +687,7 @@ func (cl *Client) runReceivedConn(c *connection) {
 
 	t, err := cl.receiveHandshakes(c)
 	if err != nil {
-		cl.config.Handshaker.Release(c.conn, connections.BannedConnectionError(c.conn, errorsx.Wrap(err, "error during handshake")))
+		cl.config.Handshaker.Release(c.conn, connections.NewBanned(c.conn, errorsx.Wrap(err, "error during handshake")))
 		return
 	}
 

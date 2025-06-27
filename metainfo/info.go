@@ -203,8 +203,8 @@ func (info *Info) TotalLength() (ret int64) {
 	return ret
 }
 
-func (info *Info) NumPieces() int {
-	return len(info.Pieces) / 20
+func (info *Info) NumPieces() uint64 {
+	return uint64(len(info.Pieces) / 20)
 }
 
 func (info *Info) IsDir() bool {

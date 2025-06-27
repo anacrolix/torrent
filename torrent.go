@@ -222,39 +222,44 @@ func TuneAnnounceUntilComplete(t *torrent) {
 
 // Verify the entirety of the torrent. will block
 func TuneVerifyFull(t *torrent) {
-	for i := uint64(0); i < t.chunks.pieces; i++ {
-		t.digests.Enqueue(i)
-	}
-
+	t.digests.EnqueueBitmap(bitmapx.Fill(t.chunks.pieces))
 	t.digests.Wait()
 
-	t.chunks.MergeIntoMissing(t.chunks.failed)
+	t.chunks.MergeInto(t.chunks.missing, t.chunks.failed)
 	t.chunks.FailuresReset()
 }
 
 // Verify the contents asynchronously
 func TuneVerifyAsync(t *torrent) {
-	for i := uint64(0); i < t.chunks.pieces; i++ {
-		t.digests.Enqueue(i)
-	}
+	t.digests.EnqueueBitmap(bitmapx.Fill(t.chunks.pieces))
 
 	go func() {
 		t.digests.Wait()
 
-		t.chunks.MergeIntoMissing(t.chunks.failed)
+		t.chunks.MergeInto(t.chunks.missing, t.chunks.failed)
 		t.chunks.FailuresReset()
 	}()
 }
 
-// Mark the entirety of the torrent as unverified. used when loading from disk
-func TuneUnverified(t *torrent) {
-	t.chunks.MergeIntoUnverified(bitmapx.Range(0, uint64(t.chunks.cmaximum)))
+// Verify a random selection of n pieces. will block until complete blocks.
+// if any of the sampled pieces failed it'll perform a full verify.
+// NOTE: torrents with a low completed rate will almost always performa full verify.
+// but since there will also be a smaller amount of data on disk this is a fair trade off.
+func TuneVerifySample(n uint64) Tuner {
+	return func(t *torrent) {
+		t.digests.EnqueueBitmap(bitmapx.Random(t.chunks.pieces, min(n, t.chunks.pieces)))
+		t.digests.Wait()
+
+		if t.chunks.failed.IsEmpty() {
+			return
+		}
+
+		TuneVerifyFull(t)
+	}
 }
 
 func TuneSeeding(t *torrent) {
-	for i := uint64(0); i < t.chunks.pieces; i++ {
-		t.chunks.Complete(i)
-	}
+	t.chunks.MergeInto(t.chunks.completed, bitmapx.Fill(t.chunks.pieces))
 }
 
 func tuneMerge(md Metadata) Tuner {
@@ -356,7 +361,6 @@ func newTorrent(cl *Client, src Metadata) *torrent {
 	}
 	t.metadataChanged = sync.Cond{L: tlocker{torrent: t}}
 	t.event = &sync.Cond{L: tlocker{torrent: t}}
-	// t.setChunkSize(langx.DefaultIfZero(16*bytesx.KiB, src.ChunkSize))
 	*t.digests = newDigestsFromTorrent(t)
 	if err := t.setInfoBytes(src.InfoBytes); err != nil {
 		log.Println("encountered an error setting info bytes", len(src.InfoBytes), err)
@@ -607,7 +611,7 @@ func (t *torrent) KnownSwarm() (ks []Peer) {
 	return ks
 }
 
-func (t *torrent) setChunkSize(size int) {
+func (t *torrent) setChunkSize(size uint64) {
 	t.md.ChunkSize = size
 	// potential bug here us to be '*t.chunks = *newChunks(...)' change to straight assignment to deal with
 	// Unlock called on a non-locked mutex.
@@ -699,7 +703,7 @@ func (t *torrent) haveMetadataPiece(piece int) bool {
 	return piece < len(t.metadataCompletedChunks) && t.metadataCompletedChunks[piece]
 }
 
-func (t *torrent) metadataSize() int {
+func (t *torrent) metadatalen() int {
 	if t == nil {
 		return 0
 	}
@@ -1385,9 +1389,10 @@ func (t *torrent) initiateConn(ctx context.Context, peer Peer) {
 			if err := t.cln.outgoingConnection(ctx, t, addr, peer.Source, peer.Trusted); err == nil {
 				return
 			} else if errors.As(err, &timedout) {
-				log.Printf("timeout detected, reconnecting %T - %v - %s\n", err, err, timedout.Timedout())
-				time.Sleep(timedout.Timedout())
-			} else {
+				log.Printf("timeout detected, placing back in peerset %T - %v - %s - %t\n", err, err, timedout.Timedout(), peer.Trusted)
+				t.addPeer(peer)
+				return
+			} else if errorsx.Ignore(err, context.DeadlineExceeded, context.Canceled) != nil {
 				log.Printf("outgoing connection failed %T - %v\n", errorsx.Compact(errorsx.Unwrap(err), err), err)
 				return
 			}

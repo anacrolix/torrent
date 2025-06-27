@@ -295,8 +295,7 @@ func (cn *connection) PeerHasPiece(piece uint64) bool {
 
 // Writes a message into the write buffer.
 func (cn *connection) Post(msg pp.Message) (n int, err error) {
-	log.Output(2, fmt.Sprintf("c(%p) seed(%t) Post initiated: %s\n", cn, cn.t.seeding(), msg.Type))
-	// defer log.Output(2, fmt.Sprintf("c(%p) Post completed: %s\n", cn, msg.Type))
+	cn.cfg.debug().Output(2, fmt.Sprintf("c(%p) seed(%t) Post initiated: %s -> %s\n", cn, cn.t.seeding(), cn.conn.RemoteAddr(), msg.Type))
 
 	encoded, err := msg.MarshalBinary()
 	if err != nil {
@@ -490,14 +489,15 @@ func (cn *connection) genrequests(available *roaring.Bitmap, msg func(pp.Message
 
 	filledBuffer := false
 
-	max := max(0, cn.PeerMaxRequests-len(cn.requests))
+	max := min(max(0, cn.PeerMaxRequests-len(cn.requests)), 64)
 	if reqs, err = cn.t.chunks.Pop(max, available); errors.As(err, &empty{}) {
-		// clear the blacklist when we run out of work to do.
-		cn.cmu().Lock()
-		cn.blacklisted.Clear()
-		cn.cmu().Unlock()
-
 		if len(reqs) == 0 {
+			// clear the blacklist when we run out of work to do.
+			cn.cmu().Lock()
+			cn.blacklisted.Clear()
+			cn.cmu().Unlock()
+			cn.t.chunks.MergeInto(cn.t.chunks.missing, cn.t.chunks.failed)
+			cn.t.chunks.FailuresReset()
 			cn.cfg.debug().Printf("c(%p) seed(%t) available(%t) no work available", cn, cn.t.seeding(), !available.IsEmpty())
 			return
 		}
@@ -545,16 +545,15 @@ func (cn *connection) checkFailures() {
 		return
 	}
 
-	// log.Output(2, fmt.Sprintf("c(%p) detected failed chunks: %s", cn, bitmapx.Debug(failed)))
-
-	iter := failed.ReverseIterator()
-	for prev, pid := -1, 0; iter.HasNext(); prev = pid {
+	for iter, prev, pid := failed.ReverseIterator(), -1, 0; iter.HasNext(); prev = pid {
 		pid = cn.t.chunks.pindex(int(iter.Next()))
-		if pid != prev {
-			cn.stats.incrementPiecesDirtiedBad()
-			if !cn.t.chunks.ChunksComplete(uint64(pid)) {
-				cn.t.chunks.ChunksRetry(uint64(pid))
-			}
+		if pid == prev {
+			continue
+		}
+
+		cn.stats.PiecesDirtiedBad.Add(1)
+		if !cn.t.chunks.ChunksComplete(uint64(pid)) {
+			cn.t.chunks.ChunksRetry(uint64(pid))
 		}
 	}
 
@@ -565,7 +564,7 @@ func (cn *connection) checkFailures() {
 
 func (cn *connection) ban(cause error) {
 	select {
-	case cn.drop <- connections.BannedConnectionError(cn.conn, cause):
+	case cn.drop <- connections.NewBanned(cn.conn, cause):
 		cn.Close()
 	default:
 	}
@@ -663,9 +662,9 @@ func (cn *connection) peerSentBitfield(bf []bool) error {
 		cn.raisePeerMinPieces(uint64(i) + 1)
 		min, max := cn.t.chunks.Range(uint64(i))
 		// cn.cfg.debug().Printf("c(%p) seed(%t) adding to claimed %d %d %d %t\n", cn, cn.t.seeding(), i, min, max, have)
-		cn._mu.RLock()
+		cn._mu.Lock()
 		cn.claimed.AddRange(min, max)
-		cn._mu.RUnlock()
+		cn._mu.Unlock()
 	}
 	cn.peerPiecesChanged()
 	return nil
@@ -998,16 +997,12 @@ func (cn *connection) ReadOne(ctx context.Context, decoder *pp.Decoder) (msg pp.
 		cn.updateRequests()
 		return msg, nil
 	case pp.Reject:
-		// cn.cfg.debug().Println("peer rejecting request")
 		req := newRequestFromMessage(&msg)
 		if !cn.supported(pp.ExtensionBitFast) {
 			return msg, fmt.Errorf("reject recevied, fast not enabled")
 		}
-		// log.Printf("(%d) c(%p) REJECTING d(%d) r(%d,%d,%d) cid(%d) cmax(%d) - total(%d) plength(%d) clength(%d)\n", os.Getpid(), cn, req.Digest, req.Index, req.Begin, req.Length, cn.t.info.TotalLength(), cn.t.info.PieceLength)
-		cn.releaseRequest(req)
-		cn.cmu().Lock()
-		cn.blacklisted.AddInt(cn.t.chunks.requestCID(req))
-		cn.cmu().Unlock()
+
+		cn.clearRequests(req)
 		return msg, nil
 	case pp.AllowedFast:
 		defer cn.updateRequests()
@@ -1044,7 +1039,6 @@ func (cn *connection) mainReadLoop(ctx context.Context) (err error) {
 func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (err error) {
 	t := cn.t
 
-	cn.cfg.debug().Println("received extension", id)
 	switch id {
 	case pp.HandshakeExtendedID:
 		var d pp.ExtendedHandshakeMessage
@@ -1062,7 +1056,6 @@ func (cn *connection) onReadExtendedMsg(id pp.ExtensionNumber, payload []byte) (
 		cn.cfg.debug().Printf("c(%p) seed(%t) extensions: %s\n", cn, cn.t.seeding(), spew.Sdump(d))
 
 		if d.MetadataSize != 0 {
-			// log.Println("handshake", d.MetadataSize)
 			if err = t.setMetadataSize(d.MetadataSize); err != nil {
 				return errorsx.Wrapf(err, "setting metadata size to %d", d.MetadataSize)
 			}
@@ -1118,7 +1111,7 @@ func (cn *connection) rw() io.ReadWriter {
 func (cn *connection) receiveChunk(msg *pp.Message) error {
 	req := newRequestFromMessage(msg)
 
-	cn.clearRequest(req)
+	cn.clearRequests(req)
 
 	// Do we actually want this chunk? if the chunk is already available, then we
 	// don't need it.
@@ -1161,11 +1154,7 @@ func (cn *connection) uploadAllowed() bool {
 		return false
 	}
 
-	if cn.t.seeding() {
-		return true
-	}
-
-	return cn.peerHasWantedPieces()
+	return cn.t.seeding()
 }
 
 func (cn *connection) setRetryUploadTimer(delay time.Duration) {
@@ -1236,27 +1225,37 @@ func (cn *connection) upload(msg func(pp.Message) bool) bool {
 func (cn *connection) peerHasWantedPieces() bool {
 	cn._mu.RLock()
 	defer cn._mu.RUnlock()
-
-	return cn.t.chunks.Intersects(bitmapx.AndNot(cn.claimed, cn.blacklisted), cn.t.chunks.missing)
-}
-
-// clearRequest drops the request from the local connection.
-func (cn *connection) clearRequest(r request) bool {
-	cn.cmu().Lock()
-	defer cn.cmu().Unlock()
-	if _, ok := cn.requests[r.Digest]; !ok {
+	if cn.claimed.IsEmpty() {
 		return false
 	}
 
-	// add requests that have been released to the reject set to prevent them from
-	// being requested from this connection until rejected is reset.
-	cn.blacklisted.AddInt(cn.t.chunks.requestCID(r))
-	delete(cn.requests, r.Digest)
+	return cn.t.chunks.Intersects(cn.claimed, cn.t.chunks.missing)
+}
+
+// clearRequests drops the requests from the local connection.
+func (cn *connection) clearRequests(reqs ...request) (ok bool) {
+	clearone := func(r request) bool {
+		cn.cmu().Lock()
+		defer cn.cmu().Unlock()
+		if _, ok := cn.requests[r.Digest]; !ok {
+			return false
+		}
+
+		// add requests that have been released to the reject set to prevent them from
+		// being requested from this connection until rejected is reset.
+		cn.blacklisted.AddInt(cn.t.chunks.requestCID(r))
+		delete(cn.requests, r.Digest)
+		return true
+	}
+
+	for _, r := range reqs {
+		ok = ok || clearone(r)
+	}
 
 	cn.updateExpectingChunks()
 	cn.updateRequests()
 
-	return true
+	return ok
 }
 
 // releaseRequest returns the request back to the pool.
@@ -1275,19 +1274,6 @@ func (cn *connection) releaseRequest(r request) (ok bool) {
 	cn.updateRequests()
 
 	return true
-}
-
-func (cn *connection) oldestRequest() (o request) {
-	cn._mu.RLock()
-	o.Reserved = time.Now()
-
-	for _, r := range cn.requests {
-		if o.Reserved.After(r.Reserved) {
-			o = r
-		}
-	}
-	cn._mu.RUnlock()
-	return o
 }
 
 func (cn *connection) dupRequests() (requests []request) {

@@ -67,7 +67,7 @@ func TestEmptyFilesAndZeroPieceLengthWithFileStorage(t *testing.T) {
 	dir := t.TempDir()
 	cfg := torrent.TestingConfig(
 		t,
-		torrent.ClientConfigStorageDir(dir),
+		dir,
 	)
 	ci := storage.NewFile(dir)
 	defer ci.Close()
@@ -78,7 +78,7 @@ func TestEmptyFilesAndZeroPieceLengthWithMMapStorage(t *testing.T) {
 	dir := t.TempDir()
 	cfg := torrent.TestingConfig(
 		t,
-		torrent.ClientConfigStorageDir(dir),
+		dir,
 	)
 	ci := storage.NewMMap(dir)
 	defer ci.Close()

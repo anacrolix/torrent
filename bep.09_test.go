@@ -41,7 +41,7 @@ func TestMetadataExtension(t *testing.T) {
 	// Create seeder and a Torrent.
 	cfg := torrent.TestingConfig(
 		t,
-		torrent.ClientConfigStorageDir(seedingdir),
+		seedingdir,
 		torrent.ClientConfigSeed(true),
 	)
 
@@ -52,7 +52,7 @@ func TestMetadataExtension(t *testing.T) {
 	// Create leecher and a Torrent.
 	cfg = torrent.TestingConfig(
 		t,
-		torrent.ClientConfigStorageDir(t.TempDir()),
+		t.TempDir(),
 		torrent.ClientConfigSeed(false),
 	)
 

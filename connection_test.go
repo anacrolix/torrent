@@ -33,7 +33,7 @@ import (
 // Have that would potentially alter it.
 func TestSendBitfieldThenHave(t *testing.T) {
 	cl := &Client{
-		config: TestingConfig(t),
+		config: TestingConfig(t, t.TempDir()),
 	}
 	ts, err := New(metainfo.Hash{})
 	require.NoError(t, err)
@@ -74,11 +74,11 @@ func genconnection(t *testing.T, seed string, n uint64, pbits, sbits pp.Extensio
 
 	l, err := utp.Listen(":0")
 	require.NoError(t, err)
-	cfgs := TestingConfig(t, ClientConfigSeed(true))
+	cfgs := TestingConfig(t, t.TempDir(), ClientConfigSeed(true))
 	sclient, err := NewClient(cfgs)
 	require.NoError(t, err)
 
-	cfgl := TestingConfig(t)
+	cfgl := TestingConfig(t, t.TempDir())
 	pclient, err := NewClient(cfgl)
 	require.NoError(t, err)
 	info, _md5, err := torrenttest.Seeded(t.TempDir(), n, cryptox.NewChaCha8(seed))

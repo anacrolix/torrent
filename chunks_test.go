@@ -26,11 +26,6 @@ func torrentInfoN(n int64, pn int64) *metainfo.Info {
 		PieceLength: pn,
 	}
 }
-func filledbmap(n int) *roaring.Bitmap {
-	available := roaring.NewBitmap()
-	available.AddRange(0, uint64(n))
-	return available
-}
 
 func fromFile(path string) (info metainfo.Info, err error) {
 	var (
@@ -64,7 +59,7 @@ func BenchmarkChunksPop(b *testing.B) {
 	p := quickpopulate(newChunks(defaultChunkSize, &info))
 
 	n := p.Cardinality(p.missing)
-	available := filledbmap(n)
+	available := bitmapx.Fill(n)
 
 	for i := 0; i < b.N && i < n; i++ {
 		_, err := p.Pop(1, available)
@@ -347,7 +342,7 @@ func TestChunksFailed(t *testing.T) {
 func TestChunksPop(t *testing.T) {
 	info, err := fromFile("testdata/bootstrap.dat.torrent")
 	require.NoError(t, err)
-	p := quickpopulate(newChunks(int(info.PieceLength), &info))
+	p := quickpopulate(newChunks(uint64(info.PieceLength), &info))
 
 	reqs, err := p.Pop(1, p.missing.Clone())
 	require.NoError(t, err)
@@ -389,7 +384,7 @@ func TestChunksComplete(t *testing.T) {
 	require.Equal(t, 64, p.Cardinality(p.missing))
 	require.True(t, p.ChunksMissing(0))
 
-	available := filledbmap(p.lastChunk(0) + 1)
+	available := bitmapx.Fill(p.lastChunk(0) + 1)
 	for rs, err := p.Pop(1, available); err == nil; rs, err = p.Pop(1, available) {
 		for _, r := range rs {
 			require.NoError(t, p.Verify(r))
@@ -435,7 +430,7 @@ func TestChunksRelease(t *testing.T) {
 func TestChunksReadable(t *testing.T) {
 	t.Run("with less data than a single chunk", func(t *testing.T) {
 		p := newChunks(16*bytesx.KiB, torrentInfoN(64*bytesx.KiB, bytesx.MiB))
-		p.InitFromMissing(bitmapx.Lazy(nil))
+		p.InitFromUnverified(bitmapx.Fill(uint64(p.cmaximum)))
 		require.Equal(t, 0, p.Cardinality(p.missing))
 		require.Equal(t, int64(4), p.cmaximum)
 		require.Equal(t, uint64(p.cmaximum), p.unverified.GetCardinality())
@@ -454,20 +449,21 @@ func TestChunksReadable(t *testing.T) {
 }
 
 func TestChunksInitFromMissing(t *testing.T) {
-	t.Run("single piece torrent", func(t *testing.T) {
+	t.Run("properly initialize unverified and missing from bitmap", func(t *testing.T) {
 		const chunksmissing = 8
 		p := newChunks(256, tinyTorrentInfo())
-		p.InitFromMissing(bitmapx.Random(uint32(p.cmaximum), chunksmissing, cryptox.NewChaCha8(t.Name())))
-		require.Equal(t, []uint32{0x5, 0xb, 0xf, 0x1e, 0x32, 0x34, 0x3d, 0x3e}, p.missing.ToArray())
-		require.Equal(t, chunksmissing, p.Cardinality(p.missing))
-		require.Equal(t, uint64(p.cmaximum-chunksmissing), p.unverified.GetCardinality())
+		chunksunverified := uint64(p.cmaximum - chunksmissing)
+		p.InitFromUnverified(bitmapx.RandomFromSource(uint64(p.cmaximum), chunksunverified, cryptox.NewChaCha8(t.Name())))
+		require.EqualValues(t, chunksunverified, p.unverified.GetCardinality())
+		require.EqualValues(t, chunksmissing, p.missing.GetCardinality())
+		require.Equal(t, []uint32{0x2, 0x7, 0x1c, 0x24, 0x29, 0x31, 0x38, 0x3a}, p.missing.ToArray())
 	})
 
-	t.Run("with an empty missing bitmap (aka completed)", func(t *testing.T) {
+	t.Run("with an empty missing bitmap", func(t *testing.T) {
 		p := newChunks(256, tinyTorrentInfo())
-		p.InitFromMissing(roaring.New())
-		require.Equal(t, []uint32{}, p.missing.ToArray())
-		require.Equal(t, 0, p.Cardinality(p.missing))
-		require.Equal(t, uint64(p.cmaximum), p.unverified.GetCardinality())
+		p.InitFromUnverified(roaring.New())
+		require.Equal(t, []uint32{}, p.unverified.ToArray())
+		require.Equal(t, uint64(p.cmaximum), p.missing.GetCardinality())
+		require.Equal(t, uint64(0), p.unverified.GetCardinality())
 	})
 }

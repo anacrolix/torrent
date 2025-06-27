@@ -86,7 +86,7 @@ func chunkoptCompleted(completed *roaring.Bitmap) chunkopt {
 	}
 }
 
-func newChunks(clength int, m *metainfo.Info, options ...chunkopt) *chunks {
+func newChunks(clength uint64, m *metainfo.Info, options ...chunkopt) *chunks {
 	if clength == 0 {
 		panic("chunksize cannot be zero")
 	}
@@ -277,26 +277,20 @@ func (t *chunks) ChunksMissing(pid uint64) bool {
 	return bitmapx.Range(t.Range(pid)).AndCardinality(t.missing) > 0
 }
 
-func (t *chunks) MergeIntoMissing(m *roaring.Bitmap) {
+func (t *chunks) MergeInto(d, m *roaring.Bitmap) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.missing.Or(m)
+	d.Or(m)
 }
 
-func (t *chunks) MergeIntoUnverified(m *roaring.Bitmap) {
+func (t *chunks) InitFromUnverified(m *roaring.Bitmap) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	t.unverified.Or(m)
-}
-
-func (t *chunks) InitFromMissing(m *roaring.Bitmap) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	t.missing.Or(m)
-	t.unverified = bitmapx.Fill(uint64(t.cmaximum))
-	t.unverified.AndNot(t.missing)
+	t.missing = bitmapx.Fill(uint64(t.cmaximum))
+	t.missing.AndNot(t.unverified)
 }
 
 func (t *chunks) Intersects(a, b *roaring.Bitmap) bool {
@@ -305,6 +299,7 @@ func (t *chunks) Intersects(a, b *roaring.Bitmap) bool {
 	return a.Intersects(b)
 }
 
+// used to clone bitmaps owned by chunks safely
 func (t *chunks) Clone(a *roaring.Bitmap) *roaring.Bitmap {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -586,10 +581,9 @@ func (t *chunks) ReadableBitmap() *roaring.Bitmap {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	bm := t.completed.Clone()
-
-	t.unverified.Iterate(func(x uint32) bool {
-		bm.Add(uint32(t.pindex(int(x))))
+	bm := t.unverified.Clone()
+	t.completed.Iterate(func(x uint32) bool {
+		bm.AddRange(t.Range(uint64(x)))
 		return true
 	})
 

@@ -103,14 +103,6 @@ func (t *ConnStats) readMsg(msg *pp.Message) {
 	}
 }
 
-func (t *ConnStats) incrementPiecesDirtiedGood() {
-	t.PiecesDirtiedGood.Add(1)
-}
-
-func (t *ConnStats) incrementPiecesDirtiedBad() {
-	t.PiecesDirtiedBad.Add(1)
-}
-
 func add(n int64, f func(*ConnStats) *count) func(*ConnStats) {
 	return func(cs *ConnStats) {
 		p := f(cs)

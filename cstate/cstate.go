@@ -3,6 +3,8 @@ package cstate
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -129,6 +131,13 @@ type fn func(context.Context, *Shared) T
 
 func (t fn) Update(ctx context.Context, s *Shared) T {
 	return t(ctx, s)
+}
+
+func (t fn) String() string {
+	pc := reflect.ValueOf(t).Pointer()
+	info := runtime.FuncForPC(pc)
+	fname, line := info.FileLine(pc)
+	return fmt.Sprintf("%s:%d", fname, line)
 }
 
 func Run(ctx context.Context, s T, l logger) error {

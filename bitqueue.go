@@ -44,3 +44,10 @@ func (t bitQueue) Push(i int) {
 
 	t.RB.AddInt(i)
 }
+
+func (t bitQueue) PushBitmap(o *roaring.Bitmap) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.RB.Or(o)
+}

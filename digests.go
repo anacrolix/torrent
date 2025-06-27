@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/RoaringBitmap/roaring/v2"
 	"github.com/james-lawrence/torrent/dht/int160"
 	"github.com/james-lawrence/torrent/internal/errorsx"
 	"github.com/james-lawrence/torrent/metainfo"
@@ -34,7 +35,7 @@ func newDigestsFromTorrent(t *torrent) digests {
 				}
 
 				id := int160.FromByteArray(t.md.ID)
-				if err := t.cln.torrents.bm.Write(id, t.chunks.missing.Clone()); err != nil {
+				if err := t.cln.torrents.bm.Write(id, t.chunks.ReadableBitmap()); err != nil {
 					t.cln.config.errors().Printf("failed to record missing chunks bitmap: %s - %v\n", id, err)
 				}
 			}
@@ -74,6 +75,11 @@ type digests struct {
 // Enqueue a piece to check its completed digest.
 func (t *digests) Enqueue(idx uint64) {
 	t.pending.Push(int(idx))
+	t.verify()
+}
+
+func (t *digests) EnqueueBitmap(o *roaring.Bitmap) {
+	t.pending.PushBitmap(o)
 	t.verify()
 }
 

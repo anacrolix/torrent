@@ -35,6 +35,26 @@ func (t *memoryseeding) Close() error {
 	return nil
 }
 
+// sync bitmap to disk
+func (t *memoryseeding) Sync(id int160.T) error {
+	t._mu.Lock()
+	defer t._mu.Unlock()
+
+	c, ok := t.torrents[id]
+
+	if !ok {
+		return nil
+	}
+
+	if c.haveInfo() {
+		if err := t.bm.Write(id, c.chunks.ReadableBitmap()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // clear torrent from memory
 func (t *memoryseeding) Drop(id int160.T) error {
 	t._mu.RLock()
@@ -51,14 +71,8 @@ func (t *memoryseeding) Drop(id int160.T) error {
 
 	// only record if the info is there.
 	if c.haveInfo() {
-		if c.chunks.Cardinality(c.chunks.missing) > 0 {
-			if err := t.bm.Write(id, c.chunks.Clone(c.chunks.missing)); err != nil {
-				return err
-			}
-		} else {
-			if err := t.bm.Delete(id); err != nil {
-				return err
-			}
+		if err := t.bm.Write(id, c.chunks.ReadableBitmap()); err != nil {
+			return err
 		}
 	}
 
@@ -82,22 +96,21 @@ func (t *memoryseeding) Insert(cl *Client, md Metadata) (*torrent, error) {
 		}
 	}
 
+	// if the bitmap cache exists read it to initialize
+	unverified, err := t.bm.Read(id)
+	if err != nil {
+		return nil, err
+	}
+
 	dlt := newTorrent(cl, md)
+	dlt.chunks.InitFromUnverified(unverified)
+	// lets randomly verify some of the data.
+	// will block until complete.
+	dlt.Tune(TuneVerifySample(8))
+
 	t._mu.Lock()
 	t.torrents[id] = dlt
 	t._mu.Unlock()
-
-	if len(md.InfoBytes) > 0 {
-		if dlt.chunks.Cardinality(dlt.chunks.missing) > 0 {
-			if err := t.bm.Write(id, dlt.chunks.Clone(dlt.chunks.missing)); err != nil {
-				return nil, err
-			}
-		} else {
-			if err := t.bm.Delete(id); err != nil {
-				return nil, err
-			}
-		}
-	}
 
 	return dlt, nil
 }
@@ -123,13 +136,16 @@ func (t *memoryseeding) Load(cl *Client, id int160.T) (_ *torrent, cached bool, 
 		return nil, false, err
 	}
 
-	missing, err := t.bm.Read(id)
+	unverified, err := t.bm.Read(id)
 	if err != nil {
 		return nil, false, err
 	}
 
 	dlt := newTorrent(cl, md)
-	dlt.chunks.InitFromMissing(missing)
+	dlt.chunks.InitFromUnverified(unverified)
+	// lets randomly verify some of the data.
+	// will block until complete.
+	dlt.Tune(TuneVerifySample(8))
 
 	t.torrents[id] = dlt
 

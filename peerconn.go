@@ -137,6 +137,16 @@ func (cn *PeerConn) peerImplStatusLines() []string {
 		fmt.Sprintf("extensions: %v", cn.PeerExtensionBytes),
 		fmt.Sprintf("ltep extensions: %v", cn.PeerExtensionIDs),
 		fmt.Sprintf("pex: %s", cn.pexStatus()),
+		fmt.Sprintf(
+			"reqq: %d+%v/(%d/%d):%d/%d, flags: %s",
+			cn.requestState.Requests.GetCardinality(),
+			cn.requestState.Cancelled.GetCardinality(),
+			cn.nominalMaxRequests(),
+			cn.PeerMaxRequests,
+			len(cn.peerRequests),
+			localClientReqq,
+			cn.statusFlags(),
+		),
 	}
 }
 
@@ -336,10 +346,12 @@ func (me *PeerConn) _request(r Request) bool {
 
 func (me *PeerConn) handleCancel(r RequestIndex) {
 	me.write(makeCancelMessage(me.t.requestIndexToRequest(r)))
-}
-
-func (me *PeerConn) acksCancels() bool {
-	return me.remoteRejectsCancels()
+	if me.remoteRejectsCancels() {
+		// Record that we expect to get a cancel ack.
+		if !me.requestState.Cancelled.CheckedAdd(r) {
+			panic("request already cancelled")
+		}
+	}
 }
 
 // Whether we should expect a reject message after sending a cancel.

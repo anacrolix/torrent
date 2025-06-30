@@ -1328,16 +1328,13 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 }
 
 func (t *Torrent) haveChunk(r Request) (ret bool) {
-	// defer func() {
-	// 	log.Println("have chunk", r, ret)
-	// }()
 	if !t.haveInfo() {
 		return false
 	}
 	if t.pieceComplete(pieceIndex(r.Index)) {
 		return true
 	}
-	p := &t.pieces[r.Index]
+	p := t.piece(int(r.Index))
 	return !p.pendingChunk(r.ChunkSpec, t.chunkSize)
 }
 
@@ -2997,6 +2994,8 @@ func (t *Torrent) callbacks() *Callbacks {
 }
 
 type AddWebSeedsOpt func(*webseed.Client)
+
+// TODO: Add a webseed http.Client option.
 
 // Max concurrent requests to a WebSeed for a given torrent.
 func WebSeedTorrentMaxRequests(maxRequests int) AddWebSeedsOpt {

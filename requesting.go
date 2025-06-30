@@ -342,7 +342,7 @@ func (p *PeerConn) applyRequestState(next desiredRequestState) {
 			break
 		}
 		numPending := maxRequests(current.Requests.GetCardinality() + current.Cancelled.GetCardinality())
-		if numPending >= p.peerImpl.nominalMaxRequests() {
+		if numPending >= p.nominalMaxRequests() {
 			break
 		}
 		req := heap.Pop(requestHeap)

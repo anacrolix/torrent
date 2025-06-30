@@ -26,6 +26,7 @@ import (
 )
 
 type (
+	// Generic Peer-like fields. Could be WebSeed, BitTorrent over TCP, uTP or WebRTC.
 	Peer struct {
 		// First to ensure 64-bit alignment for atomics. See #262.
 		_stats ConnStats
@@ -150,7 +151,7 @@ func (p *Peer) initRequestState() {
 }
 
 func (cn *Peer) updateExpectingChunks() {
-	if cn.expectingChunks() {
+	if cn.peerImpl.expectingChunks() {
 		if cn.lastStartedExpectingToReceiveChunks.IsZero() {
 			cn.lastStartedExpectingToReceiveChunks = time.Now()
 		}
@@ -162,7 +163,7 @@ func (cn *Peer) updateExpectingChunks() {
 	}
 }
 
-func (cn *Peer) expectingChunks() bool {
+func (cn *PeerConn) expectingChunks() bool {
 	if cn.requestState.Requests.IsEmpty() {
 		return false
 	}
@@ -306,19 +307,12 @@ func (cn *Peer) writeStatus(w io.Writer) {
 		cn.totalExpectingTime(),
 	)
 	fmt.Fprintf(w,
-		"%s completed, %d pieces touched, good chunks: %v/%v:%v reqq: %d+%v/(%d/%d):%d/%d, flags: %s, dr: %.1f KiB/s\n",
+		"%s completed, %d pieces touched, good chunks: %v/%v:%v dr: %.1f KiB/s\n",
 		cn.completedString(),
 		len(cn.peerTouchedPieces),
 		&cn._stats.ChunksReadUseful,
 		&cn._stats.ChunksRead,
 		&cn._stats.ChunksWritten,
-		cn.requestState.Requests.GetCardinality(),
-		cn.requestState.Cancelled.GetCardinality(),
-		cn.peerImpl.nominalMaxRequests(),
-		cn.PeerMaxRequests,
-		len(cn.peerRequests),
-		localClientReqq,
-		cn.statusFlags(),
 		cn.downloadRate()/(1<<10),
 	)
 	fmt.Fprintf(w, "requested pieces:")
@@ -460,7 +454,7 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 	if cn.requestState.Requests.Contains(r) {
 		return true, nil
 	}
-	if maxRequests(cn.requestState.Requests.GetCardinality()) >= cn.peerImpl.nominalMaxRequests() {
+	if maxRequests(cn.requestState.Requests.GetCardinality()) >= cn.nominalMaxRequests() {
 		return true, errors.New("too many outstanding requests")
 	}
 	cn.requestState.Requests.Add(r)
@@ -485,12 +479,6 @@ func (me *Peer) cancel(r RequestIndex) {
 		panic("request not existing should have been guarded")
 	}
 	me.handleCancel(r)
-	if me.acksCancels() {
-		// Record that we expect to get a cancel ack.
-		if !me.requestState.Cancelled.CheckedAdd(r) {
-			panic("request already cancelled")
-		}
-	}
 	me.decPeakRequests()
 	if me.isLowOnRequests() {
 		me.onNeedUpdateRequests(peerUpdateRequestsPeerCancelReason)
@@ -676,7 +664,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		return nil
 	}
 
-	piece := &t.pieces[ppReq.Index]
+	piece := t.piece(ppReq.Index.Int())
 
 	c.allStats(add(1, func(cs *ConnStats) *Count { return &cs.ChunksReadUseful }))
 	c.allStats(add(int64(len(msg.Piece)), func(cs *ConnStats) *Count { return &cs.BytesReadUsefulData }))

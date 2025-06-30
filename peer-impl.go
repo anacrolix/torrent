@@ -18,10 +18,8 @@ type legacyPeerImpl interface {
 	// Actually go ahead and modify the pending requests.
 	updateRequests()
 
-	// handleCancel initiates cancellation of a request and returns acked if it expects the cancel
-	// to be handled by a follow-up event.
+	// handleCancel initiates cancellation of a request
 	handleCancel(RequestIndex)
-	acksCancels() bool
 	// The final piece to actually commit to a request. Typically, this sends or begins handling the
 	// request.
 	_request(Request) bool
@@ -46,7 +44,6 @@ type legacyPeerImpl interface {
 // Abstract methods implemented by subclasses of Peer.
 type newHotPeerImpl interface {
 	lastWriteUploadRate() float64
-	// How many requests should be assigned to the peer.
-	nominalMaxRequests() maxRequests
 	checkReceivedChunk(ri RequestIndex) error
+	expectingChunks() bool
 }

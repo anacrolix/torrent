@@ -29,18 +29,12 @@ type webseedPeer struct {
 	hostKey          webseedHostKeyHandle
 }
 
+func (me *webseedPeer) expectingChunks() bool {
+	return len(me.activeRequests) > 0
+}
+
 func (me *webseedPeer) checkReceivedChunk(ri RequestIndex) error {
 	return nil
-}
-
-func (me *webseedPeer) nominalMaxRequests() maxRequests {
-	// TODO: Implement an algorithm that assigns this based on sharing chunks across peers. For now
-	// we just allow 2 MiB worth of requests.
-	return me.peer.PeerMaxRequests
-}
-
-func (me *webseedPeer) acksCancels() bool {
-	return false
 }
 
 func (me *webseedPeer) numRequests() int {
@@ -134,6 +128,7 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
 		end:     end,
 	}
 	ws.activeRequests[&wsReq] = struct{}{}
+	ws.peer.updateExpectingChunks()
 	panicif.Zero(ws.hostKey)
 	ws.peer.t.cl.numWebSeedRequests[ws.hostKey]++
 	ws.slogger().Debug(
@@ -159,7 +154,8 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 		torrent.Add("webseed request error count", 1)
 		// This used to occur only on webseed.ErrTooFast but I think it makes sense to slow down any
 		// kind of error. Pausing here will starve the available requester slots which slows things
-		// down.
+		// down. TODO: I don't think this will help anymore. Need to register a reduced concurrency
+		// available for a host/cost key.
 		select {
 		case <-ws.peer.closed.Done():
 		case <-time.After(time.Duration(rand.Int63n(int64(10 * time.Second)))):
@@ -179,6 +175,7 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
 	g.MustDelete(ws.activeRequests, wr)
 	ws.peer.t.cl.numWebSeedRequests[ws.hostKey]--
+	ws.peer.updateExpectingChunks()
 }
 
 func (ws *webseedPeer) spawnRequests() {

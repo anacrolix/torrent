@@ -106,3 +106,7 @@ func (me Index) LocateOffset(off int64) (ret g.Option[IndexAndOffset]) {
 	}
 	return
 }
+
+func (me Index) Index(i int) Extent {
+	return me.segments[i]
+}

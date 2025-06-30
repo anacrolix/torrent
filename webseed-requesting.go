@@ -27,10 +27,8 @@ type (
 - For each piece calculate files involved. Record each file not seen before and the piece index.
 - Cancel any outstanding requests that don't match a final file/piece-index pair.
 - Initiate missing requests that fit into the available limits.
-
-This was a globally aware webseed requestor algorithm that is probably going to be abandoned.
 */
-func (cl *Client) abandonedUpdateWebSeedRequests() {
+func (cl *Client) globalUpdateWebSeedRequests() {
 	type aprioriMapValue struct {
 		startOffset int64
 		webseedRequestOrderValue
@@ -38,6 +36,8 @@ func (cl *Client) abandonedUpdateWebSeedRequests() {
 	aprioriMap := make(map[aprioriWebseedRequestKey]aprioriMapValue)
 	for uniqueKey, value := range cl.iterWebseed() {
 		cur, ok := aprioriMap[uniqueKey.aprioriWebseedRequestKey]
+		// Set the webseed request if it doesn't exist, or if the new one has a higher priority or
+		// starts earlier in the file.
 		if !ok || cmp.Or(
 			cmp.Compare(value.priority, cur.priority),
 			cmp.Compare(cur.startOffset, uniqueKey.startOffset),
@@ -46,11 +46,8 @@ func (cl *Client) abandonedUpdateWebSeedRequests() {
 		}
 	}
 	existingRequests := maps.Collect(cl.iterCurrentWebseedRequests())
-	// TODO: Try maps.Clone here? We don't need the value but maybe cloning is just faster anyway?
-	unusedExistingRequests := make(map[webseedUniqueRequestKey]struct{}, len(existingRequests))
-	for key := range existingRequests {
-		unusedExistingRequests[key] = struct{}{}
-	}
+	// We don't need the value but maybe cloning is just faster anyway?
+	unusedExistingRequests := maps.Clone(existingRequests)
 	type heapElem struct {
 		webseedUniqueRequestKey
 		webseedRequestOrderValue
@@ -88,7 +85,7 @@ func (cl *Client) abandonedUpdateWebSeedRequests() {
 		func(l heapElem, r heapElem) bool {
 			// Prefer the highest priority, then existing requests, then longest remaining file extent.
 			return cmp.Or(
-				cmp.Compare(l.priority, r.priority),
+				-cmp.Compare(l.priority, r.priority),
 				// Existing requests are assigned the priority of the piece they're reading next.
 				compareBool(l.existingWebseedRequest == nil, r.existingWebseedRequest == nil),
 				// This won't thrash because we already preferred existing requests, so we'll finish out small extents.
@@ -103,6 +100,7 @@ func (cl *Client) abandonedUpdateWebSeedRequests() {
 
 	heap.Init(aprioriHeap)
 	var plan webseedRequestPlan
+	// Could also return early here if all known costKeys are fully assigned.
 	for aprioriHeap.Len() > 0 {
 		elem := heap.Pop(aprioriHeap)
 		// Pulling the pregenerated form avoids unique.Handle, and possible URL parsing and error
@@ -143,24 +141,27 @@ type webseedRequestPlan struct {
 	byCost map[webseedHostKeyHandle][]webseedUniqueRequestKey
 }
 
+// Distinct webseed request data when different offsets are not allowed.
 type aprioriWebseedRequestKey struct {
 	t         *Torrent
 	fileIndex int
 	url       webseedUrlKey
 }
 
-// To allow multiple requests to the object.
+// Distinct webseed request when different offsets to the same object are allowed.
 type webseedUniqueRequestKey struct {
 	aprioriWebseedRequestKey
 	startOffset int64
 }
 
+// Non-distinct proposed webseed request data.
 type webseedRequestOrderValue struct {
 	priority PiecePriority
-	// Used for cancellation if this is deprioritized. Also might be a faster way to sort for
-	// existing requests.
+	// Used for cancellation if this is deprioritized. Also, a faster way to sort for existing
+	// requests.
 	existingWebseedRequest *webseedRequest
-	costKey                webseedHostKeyHandle
+	// The associated webseed request per host limit.
+	costKey webseedHostKeyHandle
 }
 
 // Yields possible webseed requests by piece. Caller should filter and prioritize these. TODO:
@@ -174,8 +175,10 @@ func (cl *Client) iterWebseed() iter.Seq2[webseedUniqueRequestKey, webseedReques
 				value.pieces,
 				func(ih metainfo.Hash, pieceIndex int, orderState requestStrategy.PieceRequestOrderState) bool {
 					t := cl.torrentsByShortHash[ih]
-					for i, e := range cl.torrentsByShortHash[ih].piece(pieceIndex).fileExtents() {
+					for i, e := range t.piece(pieceIndex).fileExtents() {
 						for url, ws := range t.webSeeds {
+							// Return value from this function doesn't terminate, so don't pretend
+							// it does here either.
 							yield(
 								webseedUniqueRequestKey{
 									aprioriWebseedRequestKey{
@@ -202,11 +205,7 @@ func (cl *Client) iterWebseed() iter.Seq2[webseedUniqueRequestKey, webseedReques
 }
 
 func (cl *Client) updateWebSeedRequests(reason updateRequestReason) {
-	for t := range cl.torrents {
-		for _, p := range t.webSeeds {
-			p.peer.updateRequestsWithReason(reason)
-		}
-	}
+	cl.updateWebseedRequests()
 }
 
 func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey, webseedRequestOrderValue] {
@@ -244,7 +243,7 @@ func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey
 }
 
 func (cl *Client) updateWebseedRequests() {
-	cl.abandonedUpdateWebSeedRequests()
+	cl.globalUpdateWebSeedRequests()
 	// Should have already run to get here.
 	cl.webseedRequestTimer.Reset(webseedRequestUpdateTimerInterval)
 }

@@ -1327,7 +1327,11 @@ func (t *Torrent) maybeDropMutuallyCompletePeer(
 	p.drop()
 }
 
-func (t *Torrent) haveChunk(r Request) (ret bool) {
+func (t *Torrent) haveRequestIndexChunk(reqIndex RequestIndex) bool {
+	return t.haveChunk(t.requestIndexToRequest(reqIndex))
+}
+
+func (t *Torrent) haveChunk(r Request) bool {
 	if !t.haveInfo() {
 		return false
 	}
@@ -3499,4 +3503,15 @@ func (t *Torrent) endRequestIndexForFileIndex(fileIndex int) RequestIndex {
 	f := t.Files()[fileIndex]
 	end := intCeilDiv(uint64(f.offset)+uint64(f.length), t.chunkSize.Uint64())
 	return RequestIndex(end)
+}
+
+func (t *Torrent) wantReceiveChunk(reqIndex RequestIndex) bool {
+	pi := t.pieceIndexOfRequestIndex(reqIndex)
+	if !t.wantPieceIndex(pi) {
+		return false
+	}
+	if t.haveRequestIndexChunk(reqIndex) {
+		return false
+	}
+	return true
 }

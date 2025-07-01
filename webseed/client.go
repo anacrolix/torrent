@@ -12,10 +12,20 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"github.com/dustin/go-humanize"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
 )
+
+// How many consecutive bytes to allow discarding from responses. This number is based on
+// https://archive.org/download/BloodyPitOfHorror/BloodyPitOfHorror.asr.srt. It seems that
+// archive.org might be using a webserver implementation that refuses to do partial responses to
+// small files.
+const MaxDiscardBytes = 48 << 10
+
+// Output debug information to stdout.
+const PrintDebug = false
 
 type RequestSpec = segments.Extent
 
@@ -45,12 +55,14 @@ type Client struct {
 	// Max concurrent requests to a WebSeed for a given torrent.
 	MaxRequests int
 
+	// TODO: Share this with Torrent.
 	fileIndex segments.Index
 	info      *metainfo.Info
 	// The pieces we can request with the Url. We're more likely to ban/block at the file-level
 	// given that's how requests are mapped to webseeds, but the torrent.Client works at the piece
 	// level. We can map our file-level adjustments to the pieces here. This probably need to be
-	// private in the future, if Client ever starts removing pieces.
+	// private in the future, if Client ever starts removing pieces. TODO: This belongs in
+	// webseedPeer.
 	Pieces roaring.Bitmap
 	// This wraps http.Response bodies, for example to limit the download rate.
 	ResponseBodyWrapper ResponseBodyWrapper
@@ -98,6 +110,14 @@ func (ws *Client) StartNewRequest(r RequestSpec) Request {
 			responseBodyWrapper: ws.ResponseBodyWrapper,
 		}
 		part.do = func() (*http.Response, error) {
+			if PrintDebug {
+				fmt.Printf(
+					"doing request for %q (file size %v), Range: %q\n",
+					req.URL,
+					humanize.Bytes(uint64(ws.fileIndex.Index(i).Length)),
+					req.Header.Get("Range"),
+				)
+			}
 			return ws.HttpClient.Do(req)
 		}
 		requestParts = append(requestParts, part)
@@ -171,12 +191,8 @@ func (me *Client) recvPartResult(ctx context.Context, w io.Writer, part requestP
 	case http.StatusOK:
 		// The response is from the beginning.
 		me.checkContentLength(resp, part, part.e.End())
-		// This number is based on
-		// https://archive.org/download/BloodyPitOfHorror/BloodyPitOfHorror.asr.srt. It seems that
-		// archive.org might be using a webserver implementation that refuses to do partial
-		// responses to small files.
 		discard := part.e.Start
-		if discard > 48<<10 {
+		if discard > MaxDiscardBytes {
 			return ErrBadResponse{"resp status ok but requested range", resp}
 		}
 		if discard != 0 {

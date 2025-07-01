@@ -380,7 +380,7 @@ func (cn *Peer) totalExpectingTime() (ret time.Duration) {
 	return
 }
 
-func (cn *Peer) setInterested(interested bool) bool {
+func (cn *PeerConn) setInterested(interested bool) bool {
 	if cn.requestState.Interested == interested {
 		return true
 	}

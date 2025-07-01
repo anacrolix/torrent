@@ -14,7 +14,6 @@ import (
 type legacyPeerImpl interface {
 	// Trigger the actual request state to get updated
 	handleOnNeedUpdateRequests()
-	writeInterested(interested bool) bool
 	// Actually go ahead and modify the pending requests.
 	updateRequests()
 

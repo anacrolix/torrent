@@ -82,15 +82,8 @@ func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
 	})
 }
 
-func (ws *webseedPeer) writeInterested(interested bool) bool {
-	return true
-}
-
-func (ws *webseedPeer) handleCancel(r RequestIndex) {
-	for wr := range ws.activeRequestsForIndex(r) {
-		wr.Cancel()
-	}
-}
+// Webseeds check the next request is wanted before reading it.
+func (ws *webseedPeer) handleCancel(RequestIndex) {}
 
 func (ws *webseedPeer) activeRequestsForIndex(r RequestIndex) iter.Seq[*webseedRequest] {
 	return func(yield func(*webseedRequest) bool) {
@@ -268,6 +261,24 @@ func (ws *webseedPeer) onClose() {
 	})
 }
 
+// Do we want a chunk, assuming it's valid etc.
+func (ws *webseedPeer) wantChunk(ri RequestIndex) bool {
+	return ws.peer.t.wantReceiveChunk(ri)
+}
+
+func (ws *webseedPeer) maxChunkDiscard() RequestIndex {
+	return RequestIndex(int(intCeilDiv(webseed.MaxDiscardBytes, ws.peer.t.chunkSize)))
+}
+
+func (ws *webseedPeer) keepReading(wr *webseedRequest) bool {
+	for ri := wr.next; ri < wr.end && ri < wr.next+ws.maxChunkDiscard(); ri++ {
+		if ws.wantChunk(ri) {
+			return true
+		}
+	}
+	return false
+}
+
 func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 	t := ws.peer.t
 	buf := t.getChunkBuffer()
@@ -275,7 +286,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 	msg := pp.Message{
 		Type: pp.Piece,
 	}
-	for wr.next < wr.end {
+	for ws.keepReading(wr) {
 		reqSpec := t.requestIndexToRequest(wr.next)
 		chunkLen := reqSpec.Length.Int()
 		buf = buf[:chunkLen]

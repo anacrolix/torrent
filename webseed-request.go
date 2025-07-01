@@ -1,6 +1,8 @@
 package torrent
 
 import (
+	"fmt"
+
 	"github.com/anacrolix/torrent/webseed"
 )
 
@@ -23,6 +25,11 @@ func (me *webseedRequest) Close() {
 
 // Record that it was exceptionally cancelled.
 func (me *webseedRequest) Cancel() {
-	me.cancelled = true
 	me.request.Cancel()
+	if !me.cancelled {
+		me.cancelled = true
+		if webseed.PrintDebug {
+			fmt.Printf("cancelled webseed request\n")
+		}
+	}
 }

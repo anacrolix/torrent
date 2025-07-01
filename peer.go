@@ -37,9 +37,24 @@ type (
 		peerImpl  newHotPeerImpl
 		callbacks *Callbacks
 
-		outgoing   bool
-		Network    string
-		RemoteAddr PeerRemoteAddr
+		RemoteAddr              PeerRemoteAddr
+		Discovery               PeerSource
+		trusted                 bool
+		closed                  chansync.SetOnce
+		lastUsefulChunkReceived time.Time
+
+		lastStartedExpectingToReceiveChunks time.Time
+		cumulativeExpectedToReceiveChunks   time.Duration
+		// Pieces we've accepted chunks for from the peer.
+		peerTouchedPieces map[pieceIndex]struct{}
+
+		logger  log.Logger
+		slogger *slog.Logger
+
+		// Belongs in PeerConn:
+
+		outgoing bool
+		Network  string
 		// The local address as observed by the remote peer. WebRTC seems to get this right without needing hints from the
 		// config.
 		localPublicAddr peerLocalPublicAddr
@@ -47,17 +62,13 @@ type (
 		// True if the connection is operating over MSE obfuscation.
 		headerEncrypted bool
 		cryptoMethod    mse.CryptoMethod
-		Discovery       PeerSource
-		trusted         bool
-		closed          chansync.SetOnce
 		// Set true after we've added our ConnStats generated during handshake to
 		// other ConnStat instances as determined when the *Torrent became known.
 		reconciledHandshakeStats bool
 
-		lastMessageReceived     time.Time
-		completedHandshake      time.Time
-		lastUsefulChunkReceived time.Time
-		lastChunkSent           time.Time
+		lastMessageReceived time.Time
+		completedHandshake  time.Time
+		lastChunkSent       time.Time
 
 		// Stuff controlled by the local peer.
 		needRequestUpdate updateRequestReason
@@ -68,9 +79,6 @@ type (
 		peakRequests         maxRequests
 		lastBecameInterested time.Time
 		priorInterest        time.Duration
-
-		lastStartedExpectingToReceiveChunks time.Time
-		cumulativeExpectedToReceiveChunks   time.Duration
 
 		choking bool
 
@@ -83,14 +91,10 @@ type (
 		// communication with the peer. Generally only useful until we have the
 		// torrent info.
 		peerMinPieces pieceIndex
-		// Pieces we've accepted chunks for from the peer.
-		peerTouchedPieces map[pieceIndex]struct{}
-		peerAllowedFast   typedRoaring.Bitmap[pieceIndex]
+
+		peerAllowedFast typedRoaring.Bitmap[pieceIndex]
 
 		PeerMaxRequests maxRequests // Maximum pending requests the peer allows.
-
-		logger  log.Logger
-		slogger *slog.Logger
 	}
 
 	PeerSource string

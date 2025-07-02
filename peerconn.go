@@ -743,7 +743,7 @@ func (c *PeerConn) readPeerRequestData(r Request) ([]byte, error) {
 	p := c.t.info.Piece(int(r.Index))
 	n, err := c.t.readAt(b, p.Offset()+int64(r.Begin))
 	if n == len(b) {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = nil
 		}
 	} else {

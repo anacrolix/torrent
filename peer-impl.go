@@ -12,24 +12,20 @@ import (
 // with legacy PeerConn methods. New methods and calls that are fixed up should be migrated over to
 // newHotPeerImpl.
 type legacyPeerImpl interface {
-	// Trigger the actual request state to get updated
-	handleOnNeedUpdateRequests()
-	// Actually go ahead and modify the pending requests.
-	updateRequests()
+	// Notify that the peers requests should be updated for the provided reason.
+	onNeedUpdateRequests(reason updateRequestReason)
 
 	// handleCancel initiates cancellation of a request
-	handleCancel(RequestIndex)
-	// The final piece to actually commit to a request. Typically, this sends or begins handling the
-	// request.
-	_request(Request) bool
+	handleCancel(ri RequestIndex)
 	connectionFlags() string
 	onClose()
-	onGotInfo(*metainfo.Info)
+	onGotInfo(info *metainfo.Info)
 	// Drop connection. This may be a no-op if there is no connection.
 	drop()
 	// Rebuke the peer
 	ban()
 	String() string
+	// Per peer-impl lines for WriteStatus.
 	peerImplStatusLines() []string
 
 	// All if the peer should have everything, known if we know that for a fact. For example, we can
@@ -43,6 +39,9 @@ type legacyPeerImpl interface {
 // Abstract methods implemented by subclasses of Peer.
 type newHotPeerImpl interface {
 	lastWriteUploadRate() float64
+	// Bookkeeping for a chunk being received and any specific checks.
 	checkReceivedChunk(ri RequestIndex) error
+	// Whether we're expecting to receive chunks because we have outstanding requests. Used for
+	// example to calculate download rate.
 	expectingChunks() bool
 }

@@ -1471,9 +1471,6 @@ func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequ
 		return
 	}
 	t.iterPeers(func(c *Peer) {
-		// if c.requestState.Interested {
-		// 	return
-		// }
 		if !c.isLowOnRequests() {
 			return
 		}

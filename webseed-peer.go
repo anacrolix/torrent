@@ -29,6 +29,9 @@ type webseedPeer struct {
 	hostKey          webseedHostKeyHandle
 }
 
+// Webseed requests are issued globally so per-connection reasons or handling make no sense.
+func (me *webseedPeer) onNeedUpdateRequests(updateRequestReason) {}
+
 func (me *webseedPeer) expectingChunks() bool {
 	return len(me.activeRequests) > 0
 }
@@ -40,18 +43,6 @@ func (me *webseedPeer) checkReceivedChunk(ri RequestIndex) error {
 func (me *webseedPeer) numRequests() int {
 	// What about unassigned requests? TODO: Don't allow those.
 	return len(me.activeRequests)
-}
-
-func (me *webseedPeer) shouldUpdateRequests() bool {
-	return me.moreRequestsAllowed()
-}
-
-func (me *webseedPeer) moreRequestsAllowed() bool {
-	return me.numRequests() < me.client.MaxRequests && me.peer.t.cl.underWebSeedHttpRequestLimit(me.hostKey)
-}
-
-func (me *webseedPeer) updateRequests() {
-	return
 }
 
 func (me *webseedPeer) lastWriteUploadRate() float64 {
@@ -106,10 +97,6 @@ func (ws *webseedPeer) intoSpec(begin, end RequestIndex) webseed.RequestSpec {
 	start := t.requestIndexBegin(begin)
 	endOff := t.requestIndexEnd(end - 1)
 	return webseed.RequestSpec{start, endOff - start}
-}
-
-func (ws *webseedPeer) _request(r Request) bool {
-	return true
 }
 
 func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
@@ -173,19 +160,6 @@ func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
 	ws.peer.updateExpectingChunks()
 }
 
-func (ws *webseedPeer) spawnRequests() {
-	next, stop := iter.Pull(ws.inactiveRequests())
-	defer stop()
-	for ws.moreRequestsAllowed() {
-		req, ok := next()
-		if !ok {
-			break
-		}
-		end := seqLast(ws.iterConsecutiveInactiveRequests(req)).Unwrap()
-		ws.spawnRequest(req, end+1)
-	}
-}
-
 func (ws *webseedPeer) iterConsecutiveRequests(begin RequestIndex) iter.Seq[RequestIndex] {
 	return func(yield func(RequestIndex) bool) {
 		for {
@@ -247,10 +221,6 @@ func (ws *webseedPeer) drop() {}
 
 func (cn *webseedPeer) ban() {
 	cn.peer.close()
-}
-
-func (ws *webseedPeer) handleOnNeedUpdateRequests() {
-	ws.peer.maybeUpdateActualRequestState()
 }
 
 func (ws *webseedPeer) onClose() {

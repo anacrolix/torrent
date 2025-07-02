@@ -1927,12 +1927,3 @@ func (cl *Client) underWebSeedHttpRequestLimit(key webseedHostKeyHandle) bool {
 	panicif.Zero(key)
 	return cl.numWebSeedRequests[key] < defaultRequestsPerWebseedHost
 }
-
-func (cl *Client) countWebSeedHttpRequests() (num int) {
-	for t := range cl.torrents {
-		for _, p := range t.webSeeds {
-			num += p.numRequests()
-		}
-	}
-	return
-}

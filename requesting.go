@@ -246,7 +246,7 @@ func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
 }
 
 // Update requests if there's a reason assigned.
-func (p *Peer) maybeUpdateActualRequestState() {
+func (p *PeerConn) maybeUpdateActualRequestState() {
 	if p.needRequestUpdate == "" {
 		return
 	}
@@ -255,7 +255,7 @@ func (p *Peer) maybeUpdateActualRequestState() {
 
 // Updates requests right now with the given reason. Clobbers any deferred reason if there was one.
 // Does all the necessary checks and includes profiler tags to assign the overhead.
-func (p *Peer) updateRequestsWithReason(reason updateRequestReason) {
+func (p *PeerConn) updateRequestsWithReason(reason updateRequestReason) {
 	if p.closed.IsSet() {
 		return
 	}

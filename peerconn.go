@@ -335,6 +335,8 @@ func (pc *PeerConn) writeInterested(interested bool) bool {
 	})
 }
 
+// The final piece to actually commit to a request. Typically, this sends or begins handling the
+// request.
 func (me *PeerConn) _request(r Request) bool {
 	return me.write(pp.Message{
 		Type:   pp.Request,

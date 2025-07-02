@@ -475,7 +475,7 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 	for _, f := range cn.callbacks.SentRequest {
 		f(PeerRequestEvent{cn.peerPtr(), ppReq})
 	}
-	return cn.legacyPeerImpl._request(ppReq), nil
+	return cn._request(ppReq), nil
 }
 
 func (me *Peer) cancel(r RequestIndex) {
@@ -490,7 +490,7 @@ func (me *Peer) cancel(r RequestIndex) {
 }
 
 // Sets a reason to update requests, and if there wasn't already one, handle it.
-func (cn *Peer) onNeedUpdateRequests(reason updateRequestReason) {
+func (cn *PeerConn) onNeedUpdateRequests(reason updateRequestReason) {
 	if cn.needRequestUpdate != "" {
 		return
 	}

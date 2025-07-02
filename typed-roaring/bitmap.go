@@ -46,3 +46,5 @@ func (me *Bitmap[T]) Remove(x T) {
 func (Bitmap[T]) IteratorType() Iterator[T] {
 	return Iterator[T]{}
 }
+
+// TODO: Override Bitmap.Iterator.

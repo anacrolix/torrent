@@ -155,6 +155,19 @@ func (p *Piece) chunkIndexDirty(chunk chunkIndexType) bool {
 	return p.t.dirtyChunks.Contains(p.requestIndexBegin() + chunk)
 }
 
+func (p *Piece) firstCleanChunk() (_ g.Option[chunkIndexType]) {
+	it := p.t.dirtyChunks.Iterator()
+	begin := uint32(p.requestIndexBegin())
+	end := uint32(p.requestIndexMaxEnd())
+	it.AdvanceIfNeeded(begin)
+	for next := begin; next < end; next++ {
+		if !it.HasNext() || it.Next() != next {
+			return g.Some(chunkIndexType(next - begin))
+		}
+	}
+	return
+}
+
 func (p *Piece) chunkIndexSpec(chunk chunkIndexType) ChunkSpec {
 	return chunkIndexSpec(pp.Integer(chunk), p.length(), p.chunkSize())
 }
@@ -426,9 +439,9 @@ func (p *Piece) publishStateChange() {
 	}
 }
 
-func (p *Piece) fileExtents() iter.Seq2[int, segments.Extent] {
+func (p *Piece) fileExtents(offsetIntoPiece int64) iter.Seq2[int, segments.Extent] {
 	return p.t.info.FileSegmentsIndex().LocateIter(segments.Extent{
-		p.torrentBeginOffset(),
-		segments.Int(p.length()),
+		p.torrentBeginOffset() + offsetIntoPiece,
+		int64(p.length()) - offsetIntoPiece,
 	})
 }

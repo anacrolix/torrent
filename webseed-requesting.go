@@ -2,13 +2,17 @@ package torrent
 
 import (
 	"cmp"
+	"fmt"
 	"iter"
 	"maps"
+	"strings"
+	"sync"
 	"unique"
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"github.com/anacrolix/torrent/webseed"
 
 	"github.com/anacrolix/torrent/internal/request-strategy"
 	"github.com/anacrolix/torrent/metainfo"
@@ -118,9 +122,19 @@ func (cl *Client) globalUpdateWebSeedRequests() {
 
 	// Cancel any existing requests that are no longer wanted.
 	for key, value := range unwantedExistingRequests {
+		if webseed.PrintDebug {
+			fmt.Printf("cancelling deprioritized existing webseed request %v\n", key)
+		}
 		key.t.slogger().Debug("cancelling deprioritized existing webseed request", "webseedUrl", key.url, "fileIndex", key.fileIndex)
 		value.existingWebseedRequest.Cancel()
 	}
+
+	printPlan := sync.OnceFunc(func() {
+		if webseed.PrintDebug {
+			//fmt.Println(plan)
+			//fmt.Println(formatMap(existingRequests))
+		}
+	})
 
 	for costKey, requestKeys := range plan.byCost {
 		for _, requestKey := range requestKeys {
@@ -135,15 +149,30 @@ func (cl *Client) globalUpdateWebSeedRequests() {
 			t := requestKey.t
 			// Run the request to the end of the file for now. TODO: Set a reasonable end so the
 			// remote doesn't oversend.
-			t.webSeeds[requestKey.url].spawnRequest(
-				t.getRequestIndexContainingOffset(requestKey.startOffset),
-				t.endRequestIndexForFileIndex(requestKey.fileIndex))
+			peer := t.webSeeds[requestKey.url]
+			panicif.NotEq(peer.hostKey, costKey)
+			printPlan()
+			begin := t.getRequestIndexContainingOffset(requestKey.startOffset)
+			end := t.endRequestIndexForFileIndex(requestKey.fileIndex)
+			panicif.Eq(begin, end)
+			peer.spawnRequest(begin, end)
 		}
 	}
 }
 
 type webseedRequestPlan struct {
 	byCost map[webseedHostKeyHandle][]webseedUniqueRequestKey
+}
+
+func (me webseedRequestPlan) String() string {
+	var sb strings.Builder
+	for costKey, requestKeys := range me.byCost {
+		fmt.Fprintf(&sb, "%v\n", costKey.Value())
+		for _, requestKey := range requestKeys {
+			fmt.Fprintf(&sb, "\t%v\n", requestKey)
+		}
+	}
+	return strings.TrimSuffix(sb.String(), "\n")
 }
 
 // Distinct webseed request data when different offsets are not allowed.
@@ -153,10 +182,18 @@ type aprioriWebseedRequestKey struct {
 	url       webseedUrlKey
 }
 
+func (me aprioriWebseedRequestKey) String() string {
+	return fmt.Sprintf("%v from %v", me.t.Files()[me.fileIndex].Path(), me.url)
+}
+
 // Distinct webseed request when different offsets to the same object are allowed.
 type webseedUniqueRequestKey struct {
 	aprioriWebseedRequestKey
 	startOffset int64
+}
+
+func (me webseedUniqueRequestKey) String() string {
+	return me.aprioriWebseedRequestKey.String() + " at " + fmt.Sprintf("0x%x", me.startOffset)
 }
 
 // Non-distinct proposed webseed request data.
@@ -169,8 +206,11 @@ type webseedRequestOrderValue struct {
 	costKey webseedHostKeyHandle
 }
 
-// Yields possible webseed requests by piece. Caller should filter and prioritize these. TODO:
-// Doesn't handle dirty chunks.
+func (me webseedRequestOrderValue) String() string {
+	return fmt.Sprintf("%#v", me)
+}
+
+// Yields possible webseed requests by piece. Caller should filter and prioritize these.
 func (cl *Client) iterWebseed() iter.Seq2[webseedUniqueRequestKey, webseedRequestOrderValue] {
 	return func(yield func(webseedUniqueRequestKey, webseedRequestOrderValue) bool) {
 		for key, value := range cl.pieceRequestOrder {

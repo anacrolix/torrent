@@ -39,13 +39,15 @@ type requestPart struct {
 
 type Request struct {
 	cancel func()
-	// Closed in the machinery when cancelled?
-	Body io.Reader
-	err  chan error
+	Body   io.Reader
+	// Closed with error to unstick copy routine when context isn't checked.
+	bodyPipe *io.PipeReader
+	err      chan error
 }
 
 func (r Request) Cancel() {
 	r.cancel()
+	r.bodyPipe.CloseWithError(context.Canceled)
 }
 
 type Client struct {
@@ -127,8 +129,9 @@ func (ws *Client) StartNewRequest(r RequestSpec) Request {
 	}
 	body, w := io.Pipe()
 	req := Request{
-		cancel: cancel,
-		Body:   body,
+		cancel:   cancel,
+		Body:     body,
+		bodyPipe: body,
 	}
 	go func() {
 		err := ws.readRequestPartResponses(ctx, w, requestParts)

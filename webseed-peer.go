@@ -147,8 +147,7 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 		torrent.Add("webseed request error count", 1)
 		// This used to occur only on webseed.ErrTooFast but I think it makes sense to slow down any
 		// kind of error. Pausing here will starve the available requester slots which slows things
-		// down. TODO: I don't think this will help anymore. Need to register a reduced concurrency
-		// available for a host/cost key.
+		// down.
 		select {
 		case <-ws.peer.closed.Done():
 		case <-time.After(time.Duration(rand.Int63n(int64(10 * time.Second)))):
@@ -161,7 +160,7 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	if err != nil {
 		ws.peer.onNeedUpdateRequests("webseedPeer request errored")
 	}
-	ws.peer.t.cl.updateWebSeedRequests("webseedPeer request completed")
+	ws.peer.t.cl.updateWebseedRequestsWithReason("webseedPeer request completed")
 	locker.Unlock()
 }
 

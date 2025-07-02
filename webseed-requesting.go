@@ -122,8 +122,13 @@ func (cl *Client) globalUpdateWebSeedRequests() {
 		value.existingWebseedRequest.Cancel()
 	}
 
-	for _, requestKeys := range plan.byCost {
+	for costKey, requestKeys := range plan.byCost {
 		for _, requestKey := range requestKeys {
+			// This could happen if a request is cancelled but hasn't removed itself from the active
+			// list yet. This helps with backpressure as the requests can sleep to rate limit.
+			if !cl.underWebSeedHttpRequestLimit(costKey) {
+				break
+			}
 			if g.MapContains(existingRequests, requestKey) {
 				continue
 			}
@@ -204,7 +209,8 @@ func (cl *Client) iterWebseed() iter.Seq2[webseedUniqueRequestKey, webseedReques
 
 }
 
-func (cl *Client) updateWebSeedRequests(reason updateRequestReason) {
+func (cl *Client) updateWebseedRequestsWithReason(reason updateRequestReason) {
+	// Should we wrap this with pprof labels?
 	cl.updateWebseedRequests()
 }
 
@@ -244,7 +250,6 @@ func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey
 
 func (cl *Client) updateWebseedRequests() {
 	cl.globalUpdateWebSeedRequests()
-	// Should have already run to get here.
 	cl.webseedRequestTimer.Reset(webseedRequestUpdateTimerInterval)
 }
 

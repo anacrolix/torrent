@@ -136,6 +136,9 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
 func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	locker := ws.locker
 	err := ws.readChunks(webseedRequest)
+	if webseed.PrintDebug && webseedRequest.next < webseedRequest.end {
+		fmt.Printf("webseed peer stopped reading chunks early\n")
+	}
 	// Ensure the body reader and response are closed.
 	webseedRequest.Close()
 	if err != nil {
@@ -285,7 +288,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 	msg := pp.Message{
 		Type: pp.Piece,
 	}
-	for ws.keepReading(wr) {
+	for {
 		reqSpec := t.requestIndexToRequest(wr.next)
 		chunkLen := reqSpec.Length.Int()
 		buf = buf[:chunkLen]
@@ -301,16 +304,22 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		msg.Piece = buf
 		msg.Index = reqSpec.Index
 		msg.Begin = reqSpec.Begin
+
 		ws.peer.locker().Lock()
-		err = ws.peer.receiveChunk(&msg)
+		// Ensure the request is pointing to the next chunk before receiving the current one. If
+		// webseed requests are triggered, we want to ensure our existing request is up to date.
 		wr.next++
+		err = ws.peer.receiveChunk(&msg)
+		stop := err != nil || !ws.keepReading(wr)
 		ws.peer.locker().Unlock()
+
 		if err != nil {
 			err = fmt.Errorf("processing chunk: %w", err)
+		}
+		if stop {
 			return
 		}
 	}
-	return
 }
 
 func (me *webseedPeer) peerPieces() *roaring.Bitmap {

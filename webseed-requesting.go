@@ -269,6 +269,10 @@ func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey
 		for t := range cl.torrents {
 			for url, ws := range t.webSeeds {
 				for ar := range ws.activeRequests {
+					if ar.next >= ar.end {
+						// This request is done, so don't yield it.
+						continue
+					}
 					off := t.requestIndexBegin(ar.next)
 					opt := t.info.FileSegmentsIndex().LocateOffset(off)
 					if !opt.Ok {

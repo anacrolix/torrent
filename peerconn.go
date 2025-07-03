@@ -50,6 +50,7 @@ type PeerConn struct {
 	// and implementation differences, we may receive chunks that are no longer in the set of
 	// requests actually want. This could use a roaring.BSI if the memory use becomes noticeable.
 	validReceiveChunks map[RequestIndex]int
+	PeerMaxRequests    maxRequests // Maximum pending requests the peer allows.
 
 	// Move to PeerConn?
 	protocolLogger log.Logger

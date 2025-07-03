@@ -29,6 +29,11 @@ type webseedPeer struct {
 	hostKey          webseedHostKeyHandle
 }
 
+func (me *webseedPeer) isLowOnRequests() bool {
+	// Updates globally instead.
+	return false
+}
+
 // Webseed requests are issued globally so per-connection reasons or handling make no sense.
 func (me *webseedPeer) onNeedUpdateRequests(updateRequestReason) {}
 
@@ -224,8 +229,6 @@ func (cn *webseedPeer) ban() {
 }
 
 func (ws *webseedPeer) onClose() {
-	// Just deleting them means we would have to manually cancel active requests.
-	ws.peer.cancelAllRequests()
 	ws.peer.t.iterPeers(func(p *Peer) {
 		if p.isLowOnRequests() {
 			p.onNeedUpdateRequests("webseedPeer.onClose")

@@ -1181,7 +1181,7 @@ func (t *Torrent) runHandshookConn(pc *PeerConn) error {
 	return nil
 }
 
-func (p *Peer) initUpdateRequestsTimer() {
+func (p *PeerConn) initUpdateRequestsTimer() {
 	if check.Enabled {
 		if p.updateRequestsTimer != nil {
 			panic(p.updateRequestsTimer)
@@ -1194,7 +1194,7 @@ func (p *Peer) initUpdateRequestsTimer() {
 
 const peerUpdateRequestsTimerReason = "updateRequestsTimer"
 
-func (c *Peer) updateRequestsTimerFunc() {
+func (c *PeerConn) updateRequestsTimerFunc() {
 	c.locker().Lock()
 	defer c.locker().Unlock()
 	if c.closed.IsSet() {
@@ -1701,18 +1701,18 @@ func (cl *Client) newConnection(nc net.Conn, opts newConnectionOpts) (c *PeerCon
 	}
 	c = &PeerConn{
 		Peer: Peer{
-			outgoing:        opts.outgoing,
-			choking:         true,
-			peerChoking:     true,
-			PeerMaxRequests: 250,
+			outgoing:    opts.outgoing,
+			choking:     true,
+			peerChoking: true,
 
 			RemoteAddr:      opts.remoteAddr,
 			localPublicAddr: opts.localPublicAddr,
 			Network:         opts.network,
 			callbacks:       &cl.config.Callbacks,
 		},
-		connString: opts.connString,
-		conn:       nc,
+		PeerMaxRequests: 250,
+		connString:      opts.connString,
+		conn:            nc,
 	}
 	c.peerRequestDataAllocLimiter.Max = int64(cl.config.MaxAllocPeerRequestDataPerConn)
 	c.initRequestState()

@@ -12,6 +12,10 @@ import (
 // with legacy PeerConn methods. New methods and calls that are fixed up should be migrated over to
 // newHotPeerImpl.
 type legacyPeerImpl interface {
+	// Whether the peer should be told to update requests. Sometimes this is skipped if it's high
+	// priority adjustments to requests. This is kind of only relevant to PeerConn but hasn't been
+	// fully migrated over yet.
+	isLowOnRequests() bool
 	// Notify that the peers requests should be updated for the provided reason.
 	onNeedUpdateRequests(reason updateRequestReason)
 

@@ -3060,7 +3060,6 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 		},
 		hostKey: t.deriveWebSeedHostKey(url),
 	}
-	ws.peer.initRequestState()
 	for _, opt := range opts {
 		opt(&ws.client)
 	}
@@ -3071,10 +3070,6 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 		}
 	}
 	g.MakeMapWithCap(&ws.activeRequests, ws.client.MaxRequests)
-	// TODO: Implement an algorithm that assigns this based on sharing chunks across peers. For now
-	// we just allow 2 MiB worth of requests. See newHotPeerImpl.nominalMaxRequests.
-	ws.peer.PeerMaxRequests = maxRequests(intCeilDiv(8<<20, ws.peer.t.chunkSize.Uint32()))
-	ws.peer.initUpdateRequestsTimer()
 	ws.locker = t.cl.locker()
 	for _, f := range t.callbacks().NewPeer {
 		f(&ws.peer)

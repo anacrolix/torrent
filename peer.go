@@ -93,8 +93,6 @@ type (
 		peerMinPieces pieceIndex
 
 		peerAllowedFast typedRoaring.Bitmap[pieceIndex]
-
-		PeerMaxRequests maxRequests // Maximum pending requests the peer allows.
 	}
 
 	PeerSource string
@@ -879,7 +877,7 @@ func (p *Peer) uncancelledRequests() uint64 {
 
 type peerLocalPublicAddr = IpPort
 
-func (p *Peer) isLowOnRequests() bool {
+func (p *PeerConn) isLowOnRequests() bool {
 	return p.requestState.Requests.IsEmpty() && p.requestState.Cancelled.IsEmpty()
 }
 

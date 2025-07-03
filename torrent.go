@@ -2999,13 +2999,6 @@ type AddWebSeedsOpt func(*webseed.Client)
 
 // TODO: Add a webseed http.Client option.
 
-// Max concurrent requests to a WebSeed for a given torrent.
-func WebSeedTorrentMaxRequests(maxRequests int) AddWebSeedsOpt {
-	return func(c *webseed.Client) {
-		c.MaxRequests = maxRequests
-	}
-}
-
 // Sets the WebSeed trailing path escaper for a webseed.Client.
 func WebSeedPathEscaper(custom webseed.PathEscaper) AddWebSeedsOpt {
 	return func(c *webseed.Client) {
@@ -3040,7 +3033,8 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	// number is based on keeping at least one connection actively downloading while another request
 	// is fired off, and ensuring race detection works. Downloading Sintel
 	// (08ada5a7a6183aae1e09d831df6748d566095a10) from "https://webtorrent.io/torrents/" is a good
-	// test.
+	// test. Note since per-Torrent max requests for webseeds is not active, this doesn't do
+	// anything.
 	const defaultMaxRequests = 2
 	ws := webseedPeer{
 		peer: Peer{

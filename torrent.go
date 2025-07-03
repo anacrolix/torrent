@@ -37,6 +37,7 @@ import (
 	"github.com/anacrolix/sync"
 	"github.com/pion/webrtc/v4"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/internal/check"
@@ -3012,6 +3013,12 @@ func WebSeedPathEscaper(custom webseed.PathEscaper) AddWebSeedsOpt {
 	}
 }
 
+func WebSeedResponseBodyRateLimiter(rl *rate.Limiter) AddWebSeedsOpt {
+	return func(wc *webseed.Client) {
+		wc.ResponseBodyRateLimiter = rl
+	}
+}
+
 func (t *Torrent) AddWebSeeds(urls []string, opts ...AddWebSeedsOpt) {
 	t.cl.lock()
 	defer t.cl.unlock()
@@ -3046,21 +3053,22 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 			callbacks:  t.callbacks(),
 		},
 		client: webseed.Client{
-			HttpClient:  t.cl.httpClient,
-			Url:         url,
-			MaxRequests: defaultMaxRequests,
-			ResponseBodyWrapper: func(r io.Reader) io.Reader {
-				return &rateLimitedReader{
-					l: t.cl.config.DownloadRateLimiter,
-					r: r,
-				}
-			},
+			HttpClient:              t.cl.httpClient,
+			Url:                     url,
+			MaxRequests:             defaultMaxRequests,
+			ResponseBodyRateLimiter: t.cl.config.DownloadRateLimiter,
 		},
 		hostKey: t.deriveWebSeedHostKey(url),
 	}
 	ws.peer.initRequestState()
 	for _, opt := range opts {
 		opt(&ws.client)
+	}
+	ws.client.ResponseBodyWrapper = func(r io.Reader) io.Reader {
+		return &rateLimitedReader{
+			l: ws.client.ResponseBodyRateLimiter,
+			r: r,
+		}
 	}
 	g.MakeMapWithCap(&ws.activeRequests, ws.client.MaxRequests)
 	// TODO: Implement an algorithm that assigns this based on sharing chunks across peers. For now

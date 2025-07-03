@@ -13,6 +13,7 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/dustin/go-humanize"
+	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
@@ -67,8 +68,9 @@ type Client struct {
 	// webseedPeer.
 	Pieces roaring.Bitmap
 	// This wraps http.Response bodies, for example to limit the download rate.
-	ResponseBodyWrapper ResponseBodyWrapper
-	PathEscaper         PathEscaper
+	ResponseBodyWrapper     ResponseBodyWrapper
+	ResponseBodyRateLimiter *rate.Limiter
+	PathEscaper             PathEscaper
 }
 
 type ResponseBodyWrapper func(io.Reader) io.Reader

@@ -41,8 +41,8 @@ func (me *webseedPeer) expectingChunks() bool {
 	return len(me.activeRequests) > 0
 }
 
-func (me *webseedPeer) checkReceivedChunk(ri RequestIndex) error {
-	return nil
+func (me *webseedPeer) checkReceivedChunk(RequestIndex, *pp.Message, Request) (bool, error) {
+	return true, nil
 }
 
 func (me *webseedPeer) numRequests() int {
@@ -121,7 +121,7 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
 		"begin", begin,
 		"end", end,
 		"len", end-begin,
-		"avail", ws.peer.requestState.Requests.GetCardinality())
+	)
 	go ws.runRequest(&wsReq)
 }
 

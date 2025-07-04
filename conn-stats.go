@@ -8,9 +8,10 @@ import (
 
 // Various connection-level metrics. At the Torrent level these are aggregates. Chunks are messages
 // with data payloads. Data is actual torrent content without any overhead. Useful is something we
-// needed locally. Unwanted is something we didn't ask for (but may still be useful). Written is
-// things sent to the peer, and Read is stuff received from them. Due to the implementation of
-// Count, must be aligned on some platforms: See https://github.com/anacrolix/torrent/issues/262.
+// needed locally. Intended is something we were expecting (I think such as when we cancel a request
+// but it arrives anyway). Written is things sent to the peer, and Read is stuff received from them.
+// Due to the implementation of Count, must be aligned on some platforms: See
+// https://github.com/anacrolix/torrent/issues/262.
 type ConnStats struct {
 	// Total bytes on the wire. Includes handshakes and encryption.
 	BytesWritten     Count

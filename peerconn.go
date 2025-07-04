@@ -1492,11 +1492,36 @@ func (me *PeerConn) setPeerLoggers(a log.Logger, s *slog.Logger) {
 	me.protocolLogger = me.logger.WithNames(protocolLoggingName)
 }
 
-func (c *PeerConn) checkReceivedChunk(req RequestIndex) error {
+func (c *PeerConn) checkReceivedChunk(req RequestIndex, msg *pp.Message, ppReq Request) (intended bool, err error) {
 	if c.validReceiveChunks[req] <= 0 {
 		ChunksReceived.Add("unexpected", 1)
-		return errors.New("received unexpected chunk")
+		err = errors.New("received unexpected chunk")
+		return
 	}
 	c.decExpectedChunkReceive(req)
-	return nil
+
+	if c.peerChoking && c.peerAllowedFast.Contains(pieceIndex(ppReq.Index)) {
+		ChunksReceived.Add("due to allowed fast", 1)
+	}
+	// The request needs to be deleted immediately to prevent cancels occurring asynchronously when
+	// have actually already received the piece, while we have the Client unlocked to write the data
+	// out.
+	{
+		if c.requestState.Requests.Contains(req) {
+			for _, f := range c.callbacks.ReceivedRequested {
+				f(PeerMessageEvent{c.peerPtr(), msg})
+			}
+		}
+		// Request has been satisfied.
+		if c.deleteRequest(req) || c.requestState.Cancelled.CheckedRemove(req) {
+			intended = true
+			if c.isLowOnRequests() {
+				c.onNeedUpdateRequests("Peer.receiveChunk deleted request")
+			}
+		} else {
+			ChunksReceived.Add("unintended", 1)
+		}
+	}
+
+	return
 }

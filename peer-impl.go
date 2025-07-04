@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"github.com/RoaringBitmap/roaring"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 
 	"github.com/anacrolix/torrent/metainfo"
 )
@@ -44,7 +45,7 @@ type legacyPeerImpl interface {
 type newHotPeerImpl interface {
 	lastWriteUploadRate() float64
 	// Bookkeeping for a chunk being received and any specific checks.
-	checkReceivedChunk(ri RequestIndex) error
+	checkReceivedChunk(ri RequestIndex, msg *pp.Message, req Request) (intended bool, err error)
 	// Whether we're expecting to receive chunks because we have outstanding requests. Used for
 	// example to calculate download rate.
 	expectingChunks() bool

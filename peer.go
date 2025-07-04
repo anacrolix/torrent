@@ -626,34 +626,9 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 		ChunksReceived.Add("while choked", 1)
 	}
 
-	err = c.peerImpl.checkReceivedChunk(req)
+	intended, err := c.peerImpl.checkReceivedChunk(req, msg, ppReq)
 	if err != nil {
 		return err
-	}
-
-	if c.peerChoking && c.peerAllowedFast.Contains(pieceIndex(ppReq.Index)) {
-		ChunksReceived.Add("due to allowed fast", 1)
-	}
-
-	// The request needs to be deleted immediately to prevent cancels occurring asynchronously when
-	// have actually already received the piece, while we have the Client unlocked to write the data
-	// out.
-	intended := false
-	{
-		if c.requestState.Requests.Contains(req) {
-			for _, f := range c.callbacks.ReceivedRequested {
-				f(PeerMessageEvent{c, msg})
-			}
-		}
-		// Request has been satisfied.
-		if c.deleteRequest(req) || c.requestState.Cancelled.CheckedRemove(req) {
-			intended = true
-			if c.isLowOnRequests() {
-				c.onNeedUpdateRequests("Peer.receiveChunk deleted request")
-			}
-		} else {
-			ChunksReceived.Add("unintended", 1)
-		}
 	}
 
 	cl := t.cl

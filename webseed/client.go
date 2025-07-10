@@ -26,7 +26,7 @@ import (
 const MaxDiscardBytes = 48 << 10
 
 // Output debug information to stdout.
-const PrintDebug = false
+var PrintDebug = false
 
 type RequestSpec = segments.Extent
 

@@ -260,15 +260,11 @@ type HeaderObfuscationPolicy struct {
 }
 
 func (cfg *ClientConfig) setRateLimiterBursts() {
-	// Create a helper for rate limiters to avoid mistakes? What if the limit is greater than what
-	// can be represented by int?
-	if cfg.UploadRateLimiter.Limit() != rate.Inf && cfg.UploadRateLimiter.Burst() == 0 {
-		// What about chunk size?
-		cfg.UploadRateLimiter.SetBurst(cfg.MaxAllocPeerRequestDataPerConn)
-	}
-	if cfg.DownloadRateLimiter.Limit() != rate.Inf && cfg.DownloadRateLimiter.Burst() == 0 {
-		// 64 KiB used to be a rough default buffer for sockets on Windows. I'm sure it's bigger
-		// these days. What about the read buffer size mentioned elsewhere?
-		cfg.DownloadRateLimiter.SetBurst(min(int(cfg.DownloadRateLimiter.Limit()), 1<<16))
-	}
+	// What about chunk size?
+	setRateLimiterBurstIfZero(cfg.UploadRateLimiter, cfg.MaxAllocPeerRequestDataPerConn)
+	setRateLimiterBurstIfZero(
+		cfg.DownloadRateLimiter,
+		min(
+			int(cfg.DownloadRateLimiter.Limit()),
+			defaultDownloadRateLimiterBurst))
 }

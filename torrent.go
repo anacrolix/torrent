@@ -3057,6 +3057,7 @@ func (t *Torrent) addWebSeed(url string, opts ...AddWebSeedsOpt) bool {
 	for _, opt := range opts {
 		opt(&ws.client)
 	}
+	setRateLimiterBurstIfZero(ws.client.ResponseBodyRateLimiter, defaultDownloadRateLimiterBurst)
 	ws.client.ResponseBodyWrapper = func(r io.Reader) io.Reader {
 		return &rateLimitedReader{
 			l: ws.client.ResponseBodyRateLimiter,

@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/anacrolix/torrent/webseed"
 )
@@ -16,7 +17,7 @@ type webseedRequest struct {
 	next RequestIndex
 	// One greater than the end of the range.
 	end       RequestIndex
-	cancelled bool
+	cancelled atomic.Bool
 }
 
 func (me *webseedRequest) Close() {
@@ -26,8 +27,7 @@ func (me *webseedRequest) Close() {
 // Record that it was exceptionally cancelled.
 func (me *webseedRequest) Cancel() {
 	me.request.Cancel()
-	if !me.cancelled {
-		me.cancelled = true
+	if !me.cancelled.Swap(true) {
 		if webseed.PrintDebug {
 			fmt.Printf("cancelled webseed request\n")
 		}

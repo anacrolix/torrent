@@ -135,7 +135,7 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	webseedRequest.Close()
 	if err != nil {
 		level := slog.LevelInfo
-		if webseedRequest.cancelled {
+		if webseedRequest.cancelled.Load() {
 			level = slog.LevelDebug
 		}
 		ws.slogger().Log(context.TODO(), level, "webseed request error", "err", err)

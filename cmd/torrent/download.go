@@ -403,7 +403,7 @@ func downloadErr(ctx context.Context, flags downloadFlags) error {
 			max(int(*flags.MaxAllocPeerRequestDataPerConn), 256<<10))
 	}
 	if flags.DownloadRate != nil {
-		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(*flags.DownloadRate), 1<<16)
+		clientConfig.DownloadRateLimiter = rate.NewLimiter(rate.Limit(*flags.DownloadRate), 0)
 	}
 	{
 		logger := log.Default.WithNames("main", "client")

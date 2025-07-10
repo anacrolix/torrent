@@ -325,11 +325,12 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 	// Check for panics.
 	cl.LocalPort()
 
-	for _, _s := range sockets {
-		s := _s // Go is fucking retarded.
+	for _, s := range sockets {
 		cl.onClose = append(cl.onClose, func() { go s.Close() })
 		if peerNetworkEnabled(parseNetworkString(s.Addr().Network()), cl.config) {
-			cl.dialers = append(cl.dialers, s)
+			if cl.config.DialForPeerConns {
+				cl.dialers = append(cl.dialers, s)
+			}
 			cl.listeners = append(cl.listeners, s)
 			if cl.config.AcceptPeerConnections {
 				go cl.acceptConnections(s)
@@ -390,6 +391,7 @@ func NewClient(cfg *ClientConfig) (cl *Client, err error) {
 
 	cl.webseedRequestTimer = time.AfterFunc(webseedRequestUpdateTimerInterval, cl.updateWebseedRequestsTimerFunc)
 
+	err = cl.checkConfig()
 	return
 }
 
@@ -1926,4 +1928,17 @@ func (cl *Client) Stats() ClientStats {
 func (cl *Client) underWebSeedHttpRequestLimit(key webseedHostKeyHandle) bool {
 	panicif.Zero(key)
 	return cl.numWebSeedRequests[key] < defaultRequestsPerWebseedHost
+}
+
+// Check for bad arrangements. This is a candidate for an error state check method.
+func (cl *Client) checkConfig() error {
+	if cl.config.DownloadRateLimiter.Limit() == 0 {
+		if len(cl.dialers) != 0 {
+			return errors.New("download rate limit is zero, but dialers are set")
+		}
+		if len(cl.listeners) != 0 && cl.config.AcceptPeerConnections {
+			return errors.New("download rate limit is zero, but listening for peer connections")
+		}
+	}
+	return nil
 }

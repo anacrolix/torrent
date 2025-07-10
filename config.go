@@ -171,6 +171,8 @@ type ClientConfig struct {
 	// bit of a special case, since a peer could also be useless if they're just not interested, or
 	// we don't intend to obtain all of a torrent's data.
 	DropMutuallyCompletePeers bool
+	// Use dialers to obtain connections to regular peers.
+	DialForPeerConns bool
 	// Whether to accept peer connections at all.
 	AcceptPeerConnections bool
 	// Whether a Client should want conns without delegating to any attached Torrents. This is
@@ -239,6 +241,7 @@ func NewDefaultClientConfig() *ClientConfig {
 		CryptoProvides:         mse.AllSupportedCrypto,
 		ListenPort:             42069,
 		Extensions:             defaultPeerExtensionBytes(),
+		DialForPeerConns:       true,
 		AcceptPeerConnections:  true,
 		MaxUnverifiedBytes:     64 << 20,
 		DialRateLimiter:        rate.NewLimiter(10, 10),

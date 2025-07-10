@@ -12,10 +12,10 @@ import (
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/generics/heap"
 	"github.com/anacrolix/missinggo/v2/panicif"
-	"github.com/anacrolix/torrent/webseed"
 
 	"github.com/anacrolix/torrent/internal/request-strategy"
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/webseed"
 )
 
 const defaultRequestsPerWebseedHost = 5

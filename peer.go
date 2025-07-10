@@ -268,7 +268,7 @@ func (p *Peer) DownloadRate() float64 {
 	return p.Stats().DownloadRate
 }
 
-func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int)) {
+func (cn *PeerConn) iterContiguousPieceRequests(f func(piece pieceIndex, count int)) {
 	var last Option[pieceIndex]
 	var count int
 	next := func(item Option[pieceIndex]) {
@@ -289,12 +289,7 @@ func (cn *Peer) iterContiguousPieceRequests(f func(piece pieceIndex, count int))
 	next(None[pieceIndex]())
 }
 
-func (cn *Peer) writeStatus(w io.Writer) {
-	// \t isn't preserved in <pre> blocks?
-	if cn.closed.IsSet() {
-		fmt.Fprint(w, "CLOSED: ")
-	}
-	fmt.Fprintln(w, strings.Join(cn.peerImplStatusLines(), "\n"))
+func (cn *PeerConn) peerImplWriteStatus(w io.Writer) {
 	prio, err := cn.peerPriority()
 	prioStr := fmt.Sprintf("%08x", prio)
 	if err != nil {
@@ -309,18 +304,30 @@ func (cn *Peer) writeStatus(w io.Writer) {
 		cn.totalExpectingTime(),
 	)
 	fmt.Fprintf(w,
-		"%s completed, %d pieces touched, good chunks: %v/%v:%v dr: %.1f KiB/s\n",
+		"%s completed, chunks uploaded: %v\n",
 		cn.completedString(),
-		len(cn.peerTouchedPieces),
-		&cn._stats.ChunksReadUseful,
-		&cn._stats.ChunksRead,
 		&cn._stats.ChunksWritten,
-		cn.downloadRate()/(1<<10),
 	)
 	fmt.Fprintf(w, "requested pieces:")
 	cn.iterContiguousPieceRequests(func(piece pieceIndex, count int) {
 		fmt.Fprintf(w, " %v(%v)", piece, count)
 	})
+}
+
+func (cn *Peer) writeStatus(w io.Writer) {
+	// \t isn't preserved in <pre> blocks?
+	if cn.closed.IsSet() {
+		fmt.Fprint(w, "CLOSED: ")
+	}
+	fmt.Fprintln(w, strings.Join(cn.peerImplStatusLines(), "\n"))
+	cn.peerImplWriteStatus(w)
+	fmt.Fprintf(w,
+		"%d pieces touched, good chunks: %v/%v, dr: %.1f KiB/s\n",
+		len(cn.peerTouchedPieces),
+		&cn._stats.ChunksReadUseful,
+		&cn._stats.ChunksRead,
+		cn.downloadRate()/(1<<10),
+	)
 	fmt.Fprintf(w, "\n")
 }
 

@@ -7,6 +7,7 @@ import (
 	"iter"
 	"log/slog"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +29,8 @@ type webseedPeer struct {
 	lastUnhandledErr time.Time
 	hostKey          webseedHostKeyHandle
 }
+
+func (me *webseedPeer) peerImplWriteStatus(w io.Writer) {}
 
 func (me *webseedPeer) isLowOnRequests() bool {
 	// Updates globally instead.
@@ -58,10 +61,18 @@ func (me *webseedPeer) lastWriteUploadRate() float64 {
 var _ legacyPeerImpl = (*webseedPeer)(nil)
 
 func (me *webseedPeer) peerImplStatusLines() []string {
-	return []string{
+	lines := []string{
 		me.client.Url,
 		fmt.Sprintf("last unhandled error: %v", eventAgeString(me.lastUnhandledErr)),
 	}
+	if len(me.activeRequests) > 0 {
+		elems := make([]string, 0, len(me.activeRequests))
+		for wr := range me.activeRequests {
+			elems = append(elems, fmt.Sprintf("%v of [%v-%v)", wr.next, wr.begin, wr.end))
+		}
+		lines = append(lines, "active requests: "+strings.Join(elems, ", "))
+	}
+	return lines
 }
 
 func (ws *webseedPeer) String() string {
@@ -129,7 +140,7 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	locker := ws.locker
 	err := ws.readChunks(webseedRequest)
 	if webseed.PrintDebug && webseedRequest.next < webseedRequest.end {
-		fmt.Printf("webseed peer stopped reading chunks early\n")
+		fmt.Printf("webseed peer stopped reading chunks early: %v\n", err)
 	}
 	// Ensure the body reader and response are closed.
 	webseedRequest.Close()
@@ -142,7 +153,7 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 		torrent.Add("webseed request error count", 1)
 		// This used to occur only on webseed.ErrTooFast but I think it makes sense to slow down any
 		// kind of error. Pausing here will starve the available requester slots which slows things
-		// down.
+		// down. TODO: Use the Retry-After implementation from Erigon.
 		select {
 		case <-ws.peer.closed.Done():
 		case <-time.After(time.Duration(rand.Int63n(int64(10 * time.Second)))):

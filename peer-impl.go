@@ -1,10 +1,12 @@
 package torrent
 
 import (
+	"io"
+
 	"github.com/RoaringBitmap/roaring"
-	pp "github.com/anacrolix/torrent/peer_protocol"
 
 	"github.com/anacrolix/torrent/metainfo"
+	pp "github.com/anacrolix/torrent/peer_protocol"
 )
 
 // Contains implementation details that differ between peer types, like WebSeeds and regular
@@ -32,6 +34,7 @@ type legacyPeerImpl interface {
 	String() string
 	// Per peer-impl lines for WriteStatus.
 	peerImplStatusLines() []string
+	peerImplWriteStatus(w io.Writer)
 
 	// All if the peer should have everything, known if we know that for a fact. For example, we can
 	// guess at how many pieces are in a torrent, and assume they have all pieces based on them

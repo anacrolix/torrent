@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"expvar"
 	"fmt"
@@ -478,7 +479,9 @@ func downloadErr(ctx context.Context, flags downloadFlags) error {
 		}
 	}
 	fmt.Printf("chunks received: %v\n", &torrent.ChunksReceived)
-	spew.Dump(client.Stats())
+	var buf bytes.Buffer
+	spew.Fdump(&buf, client.Stats())
+	os.Stdout.Write(buf.Bytes())
 	clStats := client.ConnStats()
 	sentOverhead := clStats.BytesWritten.Int64() - clStats.BytesWrittenData.Int64()
 	log.Printf(

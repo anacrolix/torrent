@@ -45,6 +45,7 @@ type TrackerClient struct {
 	WebsocketTrackerHttpHeader func() http.Header
 	ICEServers                 []webrtc.ICEServer
 
+	// Used for stats only I think.
 	rtcPeerConns map[string]*wrappedPeerConnection
 
 	// callbacks
@@ -247,8 +248,11 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 	// save the leecher peer connections
 	tc.storePeerConnection(fmt.Sprintf("%x", randOfferId[:]), pc)
 
+	// Register handler in another package.
 	pc.OnClose(func() {
-		delete(tc.rtcPeerConns, offerIDBinary)
+		// Asynchronous because we might hold the current lock here, depending on where Close is
+		// called from.
+		go tc.removePeerConn(offerIDBinary)
 	})
 
 	tc.Logger.Levelf(log.Debug, "announcing offer")
@@ -266,6 +270,13 @@ func (tc *TrackerClient) Announce(event tracker.AnnounceEvent, infoHash [20]byte
 		pc.Close()
 	}
 	return err
+}
+
+// Remove peer conn so it doesn't come up in stats.
+func (tc *TrackerClient) removePeerConn(key string) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	delete(tc.rtcPeerConns, key)
 }
 
 func (tc *TrackerClient) announce(event tracker.AnnounceEvent, infoHash [20]byte, offers []outboundOffer) error {
@@ -441,8 +452,6 @@ func (tc *TrackerClient) handleAnswer(offerId string, answer webrtc.SessionDescr
 func (tc *TrackerClient) storePeerConnection(offerId string, pc *wrappedPeerConnection) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	if tc.rtcPeerConns == nil {
-		tc.rtcPeerConns = make(map[string]*wrappedPeerConnection)
-	}
+	g.MakeMapIfNil(&tc.rtcPeerConns)
 	tc.rtcPeerConns[offerId] = pc
 }

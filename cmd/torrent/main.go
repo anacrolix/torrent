@@ -19,8 +19,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -28,6 +26,7 @@ import (
 )
 
 func init() {
+	stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
 	prometheus.MustRegister(xprometheus.NewExpvarCollector())
 	http.Handle("/metrics", promhttp.Handler())
 }
@@ -48,18 +47,8 @@ func main() {
 }
 
 func mainErr(ctx context.Context) error {
-	defer stdLog.SetFlags(stdLog.Flags() | stdLog.Lshortfile)
-
-	tracingExporter, err := otlptracegrpc.New(ctx)
-	if err != nil {
-		return fmt.Errorf("creating tracing exporter: %w", err)
-	}
-	tracerProvider := trace.NewTracerProvider(trace.WithBatcher(tracingExporter))
-	otel.SetTracerProvider(tracerProvider)
-
 	main := bargle.Main{}
 	main.Defer(envpprof.Stop)
-	main.Defer(func() { shutdownTracerProvider(ctx, tracerProvider) })
 	debug := false
 	debugFlag := bargle.NewFlag(&debug)
 	debugFlag.AddLong("debug")

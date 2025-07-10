@@ -103,11 +103,13 @@ func (me *filePieceImpl) Completion() Completion {
 	}
 
 	if !verified {
-		// The completion was wrong, fix it.
+		// The completion was wrong, fix it. TODO: Fix all other affected pieces too so we don't
+		// spam log messages, or record that the file is known to be bad until it comes good again.
 		err := me.MarkNotComplete()
 		if err != nil {
 			c.Err = fmt.Errorf("error marking piece not complete: %w", err)
 		}
+		c.Complete = false
 	}
 
 	return c

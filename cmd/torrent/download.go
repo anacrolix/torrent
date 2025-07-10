@@ -395,11 +395,9 @@ func downloadErr(ctx context.Context, flags downloadFlags) error {
 	if flags.UploadRate != nil {
 		clientConfig.UploadRateLimiter = rate.NewLimiter(
 			rate.Limit(*flags.UploadRate),
-			// Need to ensure the expected peer request length <= the upload
-			// burst. We can't really encode this logic into the ClientConfig as
-			// helper because it's quite specific. We're assuming the
-			// MaxAllocPeerRequestDataPerConn flag is being used to support
-			// this.
+			// Need to ensure the expected peer request length <= the upload burst. We can't really
+			// encode this logic into the ClientConfig as helper because it's quite specific. We're
+			// assuming the MaxAllocPeerRequestDataPerConn flag is being used to support this.
 			max(int(*flags.MaxAllocPeerRequestDataPerConn), 256<<10))
 	}
 	if flags.DownloadRate != nil {

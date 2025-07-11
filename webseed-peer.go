@@ -2,6 +2,7 @@ package torrent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -14,6 +15,7 @@ import (
 	"github.com/RoaringBitmap/roaring"
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"golang.org/x/net/http2"
 
 	"github.com/anacrolix/torrent/metainfo"
 	pp "github.com/anacrolix/torrent/peer_protocol"
@@ -136,6 +138,21 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
 	go ws.runRequest(&wsReq)
 }
 
+func readChunksErrorLevel(err error, req *webseedRequest) slog.Level {
+	if req.cancelled.Load() {
+		return slog.LevelDebug
+	}
+	var h2e http2.GoAwayError
+	if errors.As(err, &h2e) {
+		if h2e.ErrCode == http2.ErrCodeEnhanceYourCalm {
+			// It's fine, we'll sleep for a bit. But it's still interesting.
+			return slog.LevelInfo
+		}
+	}
+	// Error if we aren't also using and/or have peers...?
+	return slog.LevelWarn
+}
+
 func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	locker := ws.locker
 	err := ws.readChunks(webseedRequest)
@@ -145,10 +162,7 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	// Ensure the body reader and response are closed.
 	webseedRequest.Close()
 	if err != nil {
-		level := slog.LevelInfo
-		if webseedRequest.cancelled.Load() {
-			level = slog.LevelDebug
-		}
+		level := readChunksErrorLevel(err, webseedRequest)
 		ws.slogger().Log(context.TODO(), level, "webseed request error", "err", err)
 		torrent.Add("webseed request error count", 1)
 		// This used to occur only on webseed.ErrTooFast but I think it makes sense to slow down any

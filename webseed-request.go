@@ -33,3 +33,11 @@ func (me *webseedRequest) Cancel() {
 		}
 	}
 }
+
+func (me *webseedRequest) String() string {
+	s := fmt.Sprintf("%v of [%v-%v)", me.next, me.begin, me.end)
+	if me.cancelled.Load() {
+		s += " (cancelled)"
+	}
+	return s
+}

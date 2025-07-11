@@ -155,15 +155,26 @@ func (p *Piece) chunkIndexDirty(chunk chunkIndexType) bool {
 	return p.t.dirtyChunks.Contains(p.requestIndexBegin() + chunk)
 }
 
-func (p *Piece) firstCleanChunk() (_ g.Option[chunkIndexType]) {
-	it := p.t.dirtyChunks.Iterator()
-	begin := uint32(p.requestIndexBegin())
-	end := uint32(p.requestIndexMaxEnd())
-	it.AdvanceIfNeeded(begin)
-	for next := begin; next < end; next++ {
-		if !it.HasNext() || it.Next() != next {
-			return g.Some(chunkIndexType(next - begin))
+func (p *Piece) iterCleanChunks() iter.Seq[chunkIndexType] {
+	return func(yield func(chunkIndexType) bool) {
+		it := p.t.dirtyChunks.Iterator()
+		begin := uint32(p.requestIndexBegin())
+		end := uint32(p.requestIndexMaxEnd())
+		it.AdvanceIfNeeded(begin)
+		for next := begin; next < end; next++ {
+			if !it.HasNext() || it.Next() != next {
+				if !yield(chunkIndexType(next - begin)) {
+					return
+				}
+			}
 		}
+		return
+	}
+}
+
+func (p *Piece) firstCleanChunk() (_ g.Option[chunkIndexType]) {
+	for some := range p.iterCleanChunks() {
+		return g.Some(some)
 	}
 	return
 }

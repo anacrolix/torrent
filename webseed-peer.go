@@ -125,6 +125,12 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
 		next:    begin,
 		end:     end,
 	}
+	if ws.hasOverlappingRequests(begin, end) {
+		if webseed.PrintDebug {
+			fmt.Printf("webseedPeer.spawnRequest: overlapping request for %v[%v-%v)\n", ws.peer.t.name(), begin, end)
+		}
+		ws.peer.t.cl.dumpCurrentWebseedRequests()
+	}
 	ws.activeRequests[&wsReq] = struct{}{}
 	ws.peer.updateExpectingChunks()
 	panicif.Zero(ws.hostKey)
@@ -136,6 +142,18 @@ func (ws *webseedPeer) spawnRequest(begin, end RequestIndex) {
 		"len", end-begin,
 	)
 	go ws.runRequest(&wsReq)
+}
+
+func (me *webseedPeer) hasOverlappingRequests(begin, end RequestIndex) bool {
+	for req := range me.activeRequests {
+		if req.cancelled.Load() {
+			continue
+		}
+		if begin < req.end && end >= req.begin {
+			return true
+		}
+	}
+	return false
 }
 
 func readChunksErrorLevel(err error, req *webseedRequest) slog.Level {
@@ -157,7 +175,13 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	locker := ws.locker
 	err := ws.readChunks(webseedRequest)
 	if webseed.PrintDebug && webseedRequest.next < webseedRequest.end {
-		fmt.Printf("webseed peer stopped reading chunks early: %v\n", err)
+		fmt.Printf("webseed peer request %v in %v stopped reading chunks early: %v\n", webseedRequest, ws.peer.t.name(), err)
+		if err != nil {
+			fmt.Printf("error type: %T\n", err)
+		}
+		if err == nil {
+			ws.peer.t.cl.dumpCurrentWebseedRequests()
+		}
 	}
 	// Ensure the body reader and response are closed.
 	webseedRequest.Close()
@@ -315,6 +339,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 			err = fmt.Errorf("processing chunk: %w", err)
 		}
 		if stop {
+			// TODO: Keep reading until the buffer is drained.
 			return
 		}
 	}

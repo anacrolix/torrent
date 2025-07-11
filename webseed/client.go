@@ -43,7 +43,6 @@ type Request struct {
 	Body   io.Reader
 	// Closed with error to unstick copy routine when context isn't checked.
 	bodyPipe *io.PipeReader
-	err      chan error
 }
 
 func (r Request) Cancel() {

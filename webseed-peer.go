@@ -271,7 +271,7 @@ func (ws *webseedPeer) maxChunkDiscard() RequestIndex {
 }
 
 func (ws *webseedPeer) keepReading(wr *webseedRequest) bool {
-	for ri := wr.next; ri < wr.end && ri < wr.next+ws.maxChunkDiscard(); ri++ {
+	for ri := wr.next; ri < wr.end && ri <= wr.next+ws.maxChunkDiscard(); ri++ {
 		if ws.wantChunk(ri) {
 			return true
 		}

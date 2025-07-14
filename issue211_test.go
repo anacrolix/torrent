@@ -21,6 +21,7 @@ func TestDropTorrentWithMmapStorageWhileHashing(t *testing.T) {
 	// over the network as the test runs.
 	cfg.DownloadRateLimiter = rate.NewLimiter(0, 0)
 	cfg.DialForPeerConns = false
+	cfg.AcceptPeerConnections = false
 	cl, err := NewClient(cfg)
 	require.NoError(t, err)
 	defer cl.Close()

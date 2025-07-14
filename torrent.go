@@ -1681,6 +1681,9 @@ func (t *Torrent) openNewConns() (initiated int) {
 func (t *Torrent) updatePieceCompletion(piece pieceIndex) bool {
 	p := t.piece(piece)
 	uncached := t.pieceCompleteUncached(piece)
+	// This isn't being handled. Here we should probably be storing Option[bool] for completion and
+	// filtering out errors. Also, errors should probably disable downloading here too.
+	panicif.Err(uncached.Err)
 	cached := p.completion()
 	changed := cached != uncached
 	complete := uncached.Ok && uncached.Complete

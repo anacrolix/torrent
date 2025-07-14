@@ -2559,11 +2559,12 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 					// single peer for a piece, and we never progress that piece to completion, we
 					// will never smart-ban them. Discovered in
 					// https://github.com/anacrolix/torrent/issues/715.
-					t.slogger().Warn(
+					t.slogger().Info(
 						"piece failed hash. banning peer",
 						"piece", piece,
 						"peer", c)
 					c.ban()
+					// TODO: Check if we now have no available peers for pieces we want.
 				}
 			}
 		}

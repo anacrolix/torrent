@@ -53,7 +53,7 @@ func (fts *fileTorrentImpl) setCompletionFromPartFiles() error {
 			if fi.Size() == f.length() {
 				continue
 			}
-			fts.logger().Warn("file has unexpected size", "file", f.safeOsPath, "size", fi.Size(), "expected", f.length)
+			fts.logger().Warn("file has unexpected size", "file", f.safeOsPath, "size", fi.Size(), "expected", f.length())
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			fts.logger().Warn("error checking file size", "err", err)
 		}

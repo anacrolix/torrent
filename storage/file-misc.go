@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
 )
 
@@ -51,18 +52,41 @@ func CreateNativeZeroLengthFile(name string) error {
 	return f.Close()
 }
 
+// Combines data from different locations required to handle files in file storage.
 type file struct {
+	// Required for piece length.
+	*metainfo.Info
+	// Enumerated when info is provided.
+	*metainfo.FileInfo
+	*fileExtra
+}
+
+func (f *file) beginPieceIndex() int {
+	return f.FileInfo.BeginPieceIndex(f.Info.PieceLength)
+}
+
+func (f *file) endPieceIndex() int {
+	return f.FileInfo.EndPieceIndex(f.Info.PieceLength)
+}
+
+func (f *file) length() int64 {
+	return f.FileInfo.Length
+}
+
+func (f *file) torrentOffset() int64 {
+	return f.FileInfo.TorrentOffset
+}
+
+// Extra state in the file storage for each file.
+type fileExtra struct {
 	// This protects high level OS file state like partial file name, permission mod, renaming etc.
 	mu sync.RWMutex
 	// The safe, OS-local file path.
-	safeOsPath      string
-	beginPieceIndex int
-	endPieceIndex   int
-	length          int64
+	safeOsPath string
 	// Utility value to help the race detector find issues for us.
 	race byte
 }
 
-func (f *file) partFilePath() string {
+func (f *fileExtra) partFilePath() string {
 	return f.safeOsPath + ".part"
 }

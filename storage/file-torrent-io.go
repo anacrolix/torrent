@@ -16,7 +16,7 @@ type fileTorrentImplIO struct {
 }
 
 // Returns EOF on short or missing file.
-func (fst fileTorrentImplIO) readFileAt(file *file, b []byte, off int64) (n int, err error) {
+func (fst fileTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, err error) {
 	fst.fts.logger().Debug("readFileAt", "file.safeOsPath", file.safeOsPath)
 	var f sharedFileIf
 	file.mu.RLock()
@@ -40,10 +40,10 @@ func (fst fileTorrentImplIO) readFileAt(file *file, b []byte, off int64) (n int,
 	}
 	defer f.Close()
 	// Limit the read to within the expected bounds of this file.
-	if int64(len(b)) > file.length-off {
-		b = b[:file.length-off]
+	if int64(len(b)) > file.length()-off {
+		b = b[:file.length()-off]
 	}
-	for off < file.length && len(b) != 0 {
+	for off < file.length() && len(b) != 0 {
 		n1, err1 := f.ReadAt(b, off)
 		b = b[n1:]
 		n += n1
@@ -59,7 +59,7 @@ func (fst fileTorrentImplIO) readFileAt(file *file, b []byte, off int64) (n int,
 // Only returns EOF at the end of the torrent. Premature EOF is ErrUnexpectedEOF.
 func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 	fst.fts.segmentLocater.Locate(segments.Extent{off, int64(len(b))}, func(i int, e segments.Extent) bool {
-		n1, err1 := fst.readFileAt(&fst.fts.files[i], b[:e.Length], e.Start)
+		n1, err1 := fst.readFileAt(fst.fts.file(i), b[:e.Length], e.Start)
 		n += n1
 		b = b[n1:]
 		err = err1
@@ -71,10 +71,10 @@ func (fst fileTorrentImplIO) ReadAt(b []byte, off int64) (n int, err error) {
 	return
 }
 
-func (fst fileTorrentImplIO) openForWrite(file *file) (f *os.File, err error) {
+func (fst fileTorrentImplIO) openForWrite(file file) (f *os.File, err error) {
 	// It might be possible to have a writable handle shared files cache if we need it.
 	fst.fts.logger().Debug("openForWrite", "file.safeOsPath", file.safeOsPath)
-	p := fst.fts.pathForWrite(file)
+	p := fst.fts.pathForWrite(&file)
 	f, err = os.OpenFile(p, os.O_WRONLY|os.O_CREATE, filePerm)
 	if err == nil {
 		return
@@ -100,7 +100,7 @@ func (fst fileTorrentImplIO) WriteAt(p []byte, off int64) (n int, err error) {
 		segments.Extent{off, int64(len(p))},
 		func(i int, e segments.Extent) bool {
 			var f *os.File
-			f, err = fst.openForWrite(&fst.fts.files[i])
+			f, err = fst.openForWrite(fst.fts.file(i))
 			if err != nil {
 				return false
 			}

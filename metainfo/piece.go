@@ -9,14 +9,14 @@ import (
 
 type Piece struct {
 	Info *Info // Can we embed the fields here instead, or is it something to do with saving memory?
-	i    pieceIndex
+	i    PieceIndex
 }
 
 func (p Piece) String() string {
 	return fmt.Sprintf("metainfo.Piece(Info.Name=%q, i=%v)", p.Info.Name, p.i)
 }
 
-type pieceIndex = int
+type PieceIndex = int
 
 func (p Piece) Length() int64 {
 	if p.Info.HasV2() {

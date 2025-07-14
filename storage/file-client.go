@@ -78,8 +78,9 @@ func (fs *fileClientImpl) OpenTorrent(
 	dir := fs.opts.TorrentDirMaker(fs.opts.ClientBaseDir, info, infoHash)
 	logger := log.ContextLogger(ctx).Slogger()
 	logger.DebugContext(ctx, "opened file torrent storage", slog.String("dir", dir))
-	var files []file
-	for i, fileInfo := range enumIter(info.UpvertedFilesIter()) {
+	metainfoFileInfos := info.UpvertedFiles()
+	files := make([]fileExtra, len(metainfoFileInfos))
+	for i, fileInfo := range metainfoFileInfos {
 		filePath := filepath.Join(dir, fs.opts.FilePathMaker(FilePathMakerOpts{
 			Info: info,
 			File: &fileInfo,
@@ -88,24 +89,19 @@ func (fs *fileClientImpl) OpenTorrent(
 			err = fmt.Errorf("file %v: path %q is not sub path of %q", i, filePath, dir)
 			return
 		}
-		f := file{
-			safeOsPath:      filePath,
-			length:          fileInfo.Length,
-			beginPieceIndex: fileInfo.BeginPieceIndex(info.PieceLength),
-			endPieceIndex:   fileInfo.EndPieceIndex(info.PieceLength),
-		}
-		if f.length == 0 {
-			err = CreateNativeZeroLengthFile(f.safeOsPath)
+		files[i].safeOsPath = filePath
+		if metainfoFileInfos[i].Length == 0 {
+			err = CreateNativeZeroLengthFile(filePath)
 			if err != nil {
 				err = fmt.Errorf("creating zero length file: %w", err)
 				return
 			}
 		}
-		files = append(files, f)
 	}
 	t := &fileTorrentImpl{
 		info,
 		files,
+		metainfoFileInfos,
 		info.FileSegmentsIndex(),
 		infoHash,
 		fs,

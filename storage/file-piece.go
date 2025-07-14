@@ -16,7 +16,7 @@ import (
 	"github.com/anacrolix/torrent/segments"
 )
 
-// Piece within File storage.
+// Piece within File storage. This is created on demand.
 type filePieceImpl struct {
 	t *fileTorrentImpl
 	p metainfo.Piece
@@ -44,10 +44,11 @@ func (me *filePieceImpl) extent() segments.Extent {
 	}
 }
 
-func (me *filePieceImpl) pieceFiles() iter.Seq2[int, *file] {
-	return func(yield func(int, *file) bool) {
+func (me *filePieceImpl) pieceFiles() iter.Seq[file] {
+	return func(yield func(file) bool) {
 		for fileIndex := range me.t.segmentLocater.LocateIter(me.extent()) {
-			if !yield(fileIndex, &me.t.files[fileIndex]) {
+			f := me.t.file(fileIndex)
+			if !yield(f) {
 				return
 			}
 		}
@@ -58,61 +59,93 @@ func (me *filePieceImpl) pieceCompletion() PieceCompletion {
 	return me.t.pieceCompletion()
 }
 
-func (me *filePieceImpl) Completion() Completion {
-	c := me.t.getCompletion(me.p.Index())
+func (me *filePieceImpl) Completion() (c Completion) {
+	c = me.t.getCompletion(me.p.Index())
 	if !c.Ok || c.Err != nil {
 		return c
 	}
-	verified := true
 	if c.Complete {
+		c = me.checkCompleteFileSizes()
+	}
+	return
+}
+
+func (me *filePieceImpl) iterFileSegments() iter.Seq2[int, segments.Extent] {
+	return func(yield func(int, segments.Extent) bool) {
 		noFiles := true
-		// If it's allegedly complete, check that its constituent files have the necessary length.
 		for i, extent := range me.t.segmentLocater.LocateIter(me.extent()) {
 			noFiles = false
-			file := &me.t.files[i]
-			file.mu.RLock()
-			s, err := os.Stat(file.safeOsPath)
-			if me.partFiles() && errors.Is(err, fs.ErrNotExist) {
-				// Can we use shared files for this? Is it faster?
-				s, err = os.Stat(file.partFilePath())
+			if !yield(i, extent) {
+				return
 			}
-			file.mu.RUnlock()
-			if err != nil {
-				me.logger().Warn(
-					"error checking file for piece marked as complete",
-					"piece", me.p,
-					"file", file.safeOsPath,
-					"err", err)
-			} else if s.Size() < extent.End() {
-				me.logger().Error(
-					"file too small for piece marked as complete",
-					"piece", me.p,
-					"file", file.safeOsPath,
-					"size", s.Size(),
-					"extent", extent)
-			} else {
-				continue
-			}
-			verified = false
-			break
 		}
-		// This probably belongs in a wrapper helper of some kind. I will retain the logic for now.
 		if noFiles {
 			panic("files do not cover piece extent")
 		}
 	}
+}
 
-	if !verified {
-		// The completion was wrong, fix it. TODO: Fix all other affected pieces too so we don't
-		// spam log messages, or record that the file is known to be bad until it comes good again.
-		err := me.MarkNotComplete()
-		if err != nil {
-			c.Err = fmt.Errorf("error marking piece not complete: %w", err)
+// If a piece is complete, check consituent files have the minimum required sizes.
+func (me *filePieceImpl) checkCompleteFileSizes() (c Completion) {
+	c.Complete = true
+	c.Ok = true
+	for i, extent := range me.iterFileSegments() {
+		file := me.t.file(i)
+		file.mu.RLock()
+		s, err := os.Stat(file.safeOsPath)
+		if me.partFiles() && errors.Is(err, fs.ErrNotExist) {
+			// Can we use shared files for this? Is it faster?
+			s, err = os.Stat(file.partFilePath())
 		}
-		c.Complete = false
+		file.mu.RUnlock()
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				me.logger().Warn(
+					"error checking file size for piece marked as complete",
+					"file", file.safeOsPath,
+					"piece", me.p.Index(),
+					"err", err)
+				c.Complete = false
+				me.markIncompletePieces(&file, 0)
+				return
+			}
+			c.Err = fmt.Errorf("checking file %v: %w", file.safeOsPath, err)
+			c.Complete = false
+			return
+		}
+		if s.Size() < extent.End() {
+			me.logger().Warn(
+				"file too small for piece marked as complete",
+				"piece", me.p.Index(),
+				"file", file.safeOsPath,
+				"size", s.Size(),
+				"extent", extent)
+			me.markIncompletePieces(&file, s.Size())
+			c.Complete = false
+			return
+		}
 	}
+	return
+}
 
-	return c
+func (me *filePieceImpl) markIncompletePieces(file *file, size int64) {
+	if size >= file.length() {
+		return
+	}
+	pieceLength := me.t.info.PieceLength
+	begin := metainfo.PieceIndex((file.torrentOffset() + size) / pieceLength)
+	end := metainfo.PieceIndex((file.torrentOffset() + file.length() + pieceLength - 1) / pieceLength)
+	for p := begin; p < end; p++ {
+		key := metainfo.PieceKey{
+			InfoHash: me.t.infoHash,
+			Index:    p,
+		}
+		err := me.pieceCompletion().Set(key, false)
+		if err != nil {
+			me.logger().Error("error marking piece not complete", "piece", p, "err", err)
+			return
+		}
+	}
 }
 
 func (me *filePieceImpl) MarkComplete() (err error) {
@@ -120,7 +153,7 @@ func (me *filePieceImpl) MarkComplete() (err error) {
 	if err != nil {
 		return
 	}
-	for _, f := range me.pieceFiles() {
+	for f := range me.pieceFiles() {
 		res := me.allFilePiecesComplete(f)
 		if res.Err != nil {
 			err = res.Err
@@ -138,15 +171,15 @@ func (me *filePieceImpl) MarkComplete() (err error) {
 	return
 }
 
-func (me *filePieceImpl) allFilePiecesComplete(f *file) (ret g.Result[bool]) {
+func (me *filePieceImpl) allFilePiecesComplete(f file) (ret g.Result[bool]) {
 	next, stop := iter.Pull(GetPieceCompletionRange(
 		me.t.pieceCompletion(),
 		me.t.infoHash,
-		f.beginPieceIndex,
-		f.endPieceIndex,
+		f.beginPieceIndex(),
+		f.endPieceIndex(),
 	))
 	defer stop()
-	for p := f.beginPieceIndex; p < f.endPieceIndex; p++ {
+	for p := f.beginPieceIndex(); p < f.endPieceIndex(); p++ {
 		cmpl, ok := next()
 		panicif.False(ok)
 		if cmpl.Err != nil {
@@ -168,8 +201,7 @@ func (me *filePieceImpl) MarkNotComplete() (err error) {
 	if err != nil {
 		return
 	}
-	for i, f := range me.pieceFiles() {
-		_ = i
+	for f := range me.pieceFiles() {
 		err = me.onFileNotComplete(f)
 		if err != nil {
 			err = fmt.Errorf("preparing incomplete file %q: %w", f.safeOsPath, err)
@@ -180,7 +212,7 @@ func (me *filePieceImpl) MarkNotComplete() (err error) {
 
 }
 
-func (me *filePieceImpl) promotePartFile(f *file) (err error) {
+func (me *filePieceImpl) promotePartFile(f file) (err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.race++
@@ -247,7 +279,7 @@ func (me *filePieceImpl) exclRenameIfExists(from, to string) error {
 	return nil
 }
 
-func (me *filePieceImpl) onFileNotComplete(f *file) (err error) {
+func (me *filePieceImpl) onFileNotComplete(f file) (err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.race++
@@ -258,7 +290,7 @@ func (me *filePieceImpl) onFileNotComplete(f *file) (err error) {
 			return
 		}
 	}
-	info, err := os.Stat(me.pathForWrite(f))
+	info, err := os.Stat(me.pathForWrite(&f))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
@@ -267,7 +299,7 @@ func (me *filePieceImpl) onFileNotComplete(f *file) (err error) {
 		return
 	}
 	// Ensure the file is writable
-	err = os.Chmod(me.pathForWrite(f), info.Mode().Perm()|(filePerm&0o222))
+	err = os.Chmod(me.pathForWrite(&f), info.Mode().Perm()|(filePerm&0o222))
 	if err != nil {
 		err = fmt.Errorf("setting file writable: %w", err)
 		return

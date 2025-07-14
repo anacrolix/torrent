@@ -15,10 +15,11 @@ import (
 )
 
 type fileTorrentImpl struct {
-	info           *metainfo.Info
-	files          []file
-	segmentLocater segments.Index
-	infoHash       metainfo.Hash
+	info              *metainfo.Info
+	files             []fileExtra
+	metainfoFileInfos []metainfo.FileInfo
+	segmentLocater    segments.Index
+	infoHash          metainfo.Hash
 	// Save memory by pointing to the other data.
 	client *fileClientImpl
 }
@@ -45,18 +46,19 @@ func (fts *fileTorrentImpl) setPieceCompletion(p int, complete bool) error {
 // Set piece completions based on whether all files in each piece are not .part files.
 func (fts *fileTorrentImpl) setCompletionFromPartFiles() error {
 	notComplete := make([]bool, fts.info.NumPieces())
-	for _, f := range fts.files {
+	for fileIndex := range fts.files {
+		f := fts.file(fileIndex)
 		fi, err := os.Stat(f.safeOsPath)
 		if err == nil {
-			if fi.Size() == f.length {
+			if fi.Size() == f.length() {
 				continue
 			}
 			fts.logger().Warn("file has unexpected size", "file", f.safeOsPath, "size", fi.Size(), "expected", f.length)
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			fts.logger().Warn("error checking file size", "err", err)
 		}
-		for i := f.beginPieceIndex; i < f.endPieceIndex; i++ {
-			notComplete[i] = true
+		for pieceIndex := f.beginPieceIndex(); pieceIndex < f.endPieceIndex(); pieceIndex++ {
+			notComplete[pieceIndex] = true
 		}
 	}
 	for i, nc := range notComplete {
@@ -107,11 +109,19 @@ func (fs *fileTorrentImpl) Close() error {
 
 func (fts *fileTorrentImpl) Flush() error {
 	for i := range fts.files {
-		f := &fts.files[i]
+		f := fts.file(i)
 		fts.logger().Debug("flushing", "file.safeOsPath", f.safeOsPath)
-		if err := fsync(fts.pathForWrite(f)); err != nil {
+		if err := fsync(fts.pathForWrite(&f)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (fts *fileTorrentImpl) file(index int) file {
+	return file{
+		Info:      fts.info,
+		FileInfo:  &fts.metainfoFileInfos[index],
+		fileExtra: &fts.files[index],
+	}
 }

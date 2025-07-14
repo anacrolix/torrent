@@ -176,9 +176,6 @@ func (ws *webseedPeer) runRequest(webseedRequest *webseedRequest) {
 	err := ws.readChunks(webseedRequest)
 	if webseed.PrintDebug && webseedRequest.next < webseedRequest.end {
 		fmt.Printf("webseed peer request %v in %v stopped reading chunks early: %v\n", webseedRequest, ws.peer.t.name(), err)
-		if err != nil {
-			fmt.Printf("error type: %T\n", err)
-		}
 		if err == nil {
 			ws.peer.t.cl.dumpCurrentWebseedRequests()
 		}

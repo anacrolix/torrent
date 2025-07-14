@@ -159,15 +159,30 @@ func (cl *Client) globalUpdateWebSeedRequests() {
 				continue
 			}
 			t := requestKey.t
-			// Run the request to the end of the file for now. TODO: Set a reasonable end so the
-			// remote doesn't oversend.
 			peer := t.webSeeds[requestKey.url]
 			panicif.NotEq(peer.hostKey, costKey)
 			printPlan()
 			begin := t.getRequestIndexContainingOffset(requestKey.startOffset)
-			// TODO: Find an actual end, so we don't lose lots of data when requests are cancelled.
-			end := t.endRequestIndexForFileIndex(requestKey.fileIndex)
-			panicif.Eq(begin, end)
+			fileEnd := t.endRequestIndexForFileIndex(requestKey.fileIndex)
+			last := begin
+			for {
+				if !t.wantReceiveChunk(last) {
+					break
+				}
+				if last >= fileEnd-1 {
+					break
+				}
+				last++
+			}
+			// Request shouldn't exist if this occurs.
+			panicif.LessThan(last, begin)
+			// Hello C++ my old friend.
+			end := last + 1
+			if webseed.PrintDebug {
+				fmt.Printf("shortened webseed request for %v: [%v-%v) to [%v-%v)\n",
+					requestKey.filePath(), begin, last+1, begin, end)
+			}
+			panicif.GreaterThan(end, fileEnd)
 			peer.spawnRequest(begin, end)
 		}
 	}

@@ -317,6 +317,9 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		var n int
 		n, err = io.ReadFull(wr.request.Body, buf)
 		ws.peer.readBytes(int64(n))
+		if webseed.PrintDebug && wr.cancelled.Load() {
+			fmt.Printf("webseed read error after cancellation: %v\n", err)
+		}
 		if err != nil {
 			err = fmt.Errorf("reading chunk: %w", err)
 			return
@@ -332,14 +335,18 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 		// webseed requests are triggered, we want to ensure our existing request is up to date.
 		wr.next++
 		err = ws.peer.receiveChunk(&msg)
-		stop := err != nil || !ws.keepReading(wr)
+		stop := err != nil || wr.next >= wr.end
+		if !stop {
+			if !ws.keepReading(wr) {
+				wr.Cancel()
+			}
+		}
 		ws.peer.locker().Unlock()
 
 		if err != nil {
 			err = fmt.Errorf("processing chunk: %w", err)
 		}
 		if stop {
-			// TODO: Keep reading until the buffer is drained.
 			return
 		}
 	}

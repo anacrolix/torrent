@@ -47,7 +47,12 @@ type Request struct {
 
 func (r Request) Cancel() {
 	r.cancel()
-	r.bodyPipe.CloseWithError(context.Canceled)
+}
+
+func (r Request) Close() {
+	// We aren't cancelling because we want to know if we can keep receiving buffered data after
+	// cancellation. PipeReader.Close always returns nil.
+	_ = r.bodyPipe.Close()
 }
 
 type Client struct {

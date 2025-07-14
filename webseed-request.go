@@ -21,7 +21,7 @@ type webseedRequest struct {
 }
 
 func (me *webseedRequest) Close() {
-	me.request.Cancel()
+	me.request.Close()
 }
 
 // Record that it was exceptionally cancelled.

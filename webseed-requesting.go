@@ -178,9 +178,9 @@ func (cl *Client) globalUpdateWebSeedRequests() {
 			panicif.LessThan(last, begin)
 			// Hello C++ my old friend.
 			end := last + 1
-			if webseed.PrintDebug {
+			if webseed.PrintDebug && end != fileEnd {
 				fmt.Printf("shortened webseed request for %v: [%v-%v) to [%v-%v)\n",
-					requestKey.filePath(), begin, last+1, begin, end)
+					requestKey.filePath(), begin, fileEnd, begin, end)
 			}
 			panicif.GreaterThan(end, fileEnd)
 			peer.spawnRequest(begin, end)

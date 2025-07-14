@@ -8,6 +8,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/RoaringBitmap/roaring"
@@ -27,6 +28,10 @@ const MaxDiscardBytes = 48 << 10
 
 // Output debug information to stdout.
 var PrintDebug = false
+
+func init() {
+	_, PrintDebug = os.LookupEnv("TORRENT_WEBSEED_DEBUG")
+}
 
 type RequestSpec = segments.Extent
 

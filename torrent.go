@@ -1471,18 +1471,21 @@ func (t *Torrent) updatePeerRequestsForPiece(piece pieceIndex, reason updateRequ
 		// Non-pending pieces are usually cancelled more synchronously.
 		return
 	}
-	t.iterPeers(func(c *Peer) {
-		if !c.isLowOnRequests() {
-			return
-		}
-		if !c.peerHasPiece(piece) {
-			return
-		}
-		if c.requestState.Interested && c.peerChoking && !c.peerAllowedFast.Contains(piece) {
-			return
-		}
-		c.onNeedUpdateRequests(reason)
-	})
+	for c := range t.conns {
+		// This is a lot of effort to avoid using continue...
+		func() {
+			if !c.isLowOnRequests() {
+				return
+			}
+			if !c.peerHasPiece(piece) {
+				return
+			}
+			if c.requestState.Interested && c.peerChoking && !c.peerAllowedFast.Contains(piece) {
+				return
+			}
+			c.onNeedUpdateRequests(reason)
+		}()
+	}
 }
 
 // Stuff we don't want to run when the pending pieces change while benchmarking.
@@ -3133,7 +3136,7 @@ func (t *Torrent) updateComplete() {
 	t.complete.SetBool(t.haveAllPieces())
 }
 
-func (t *Torrent) cancelRequest(r RequestIndex) *Peer {
+func (t *Torrent) cancelRequest(r RequestIndex) *PeerConn {
 	p := t.requestingPeer(r)
 	if p != nil {
 		p.cancel(r)
@@ -3146,7 +3149,7 @@ func (t *Torrent) cancelRequest(r RequestIndex) *Peer {
 	return p
 }
 
-func (t *Torrent) requestingPeer(r RequestIndex) *Peer {
+func (t *Torrent) requestingPeer(r RequestIndex) *PeerConn {
 	return t.requestState[r].peer
 }
 
@@ -3208,7 +3211,7 @@ func (t *Torrent) GetWebRtcPeerConnStats() map[string]webRtcStatsReports {
 }
 
 type requestState struct {
-	peer *Peer
+	peer *PeerConn
 	when time.Time
 }
 

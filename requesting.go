@@ -83,7 +83,7 @@ type (
 
 type desiredPeerRequests struct {
 	requestIndexes []RequestIndex
-	peer           *Peer
+	peer           *PeerConn
 	pieceStates    []g.Option[requestStrategy.PieceRequestOrderState]
 }
 
@@ -185,7 +185,7 @@ func (t *Torrent) getRequestablePieces(f requestStrategy.RequestPieceFunc) {
 // This gets the best-case request state. That means handling pieces limited by capacity, preferring
 // earlier pieces, low availability etc. It pays no attention to existing requests on the peer or
 // other peers. Those are handled later.
-func (p *Peer) getDesiredRequestState() (desired desiredRequestState) {
+func (p *PeerConn) getDesiredRequestState() (desired desiredRequestState) {
 	t := p.t
 	if !t.haveInfo() {
 		return
@@ -360,7 +360,7 @@ func (p *PeerConn) applyRequestState(next desiredRequestState) {
 		}
 
 		existing := t.requestingPeer(req)
-		if existing != nil && existing != p.peerPtr() {
+		if existing != nil && existing != p {
 			// don't steal on cancel - because this is triggered by t.cancelRequest below
 			// which means that the cancelled can immediately try to steal back a request
 			// it has lost which can lead to circular cancel/add processing

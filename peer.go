@@ -71,9 +71,7 @@ type (
 		lastChunkSent       time.Time
 
 		// Stuff controlled by the local peer.
-		needRequestUpdate updateRequestReason
-		// TODO: How are pending cancels handled for webseed peers?
-		requestState         requestStrategy.PeerRequestState
+		needRequestUpdate    updateRequestReason
 		updateRequestsTimer  *time.Timer
 		lastRequestUpdate    time.Time
 		peakRequests         maxRequests
@@ -148,7 +146,7 @@ func (p *Peer) Stats() (ret PeerStats) {
 	return
 }
 
-func (p *Peer) initRequestState() {
+func (p *PeerConn) initRequestState() {
 	p.requestState.Requests = &peerRequests{}
 }
 
@@ -187,7 +185,7 @@ func (cn *PeerConn) expectingChunks() bool {
 	return haveAllowedFastRequests
 }
 
-func (cn *Peer) cumInterest() time.Duration {
+func (cn *PeerConn) cumInterest() time.Duration {
 	ret := cn.priorInterest
 	if cn.requestState.Interested {
 		ret += time.Since(cn.lastBecameInterested)
@@ -233,7 +231,7 @@ func eventAgeString(t time.Time) string {
 }
 
 // Inspired by https://github.com/transmission/transmission/wiki/Peer-Status-Text.
-func (cn *Peer) statusFlags() (ret string) {
+func (cn *PeerConn) statusFlags() (ret string) {
 	c := func(b byte) {
 		ret += string([]byte{b})
 	}
@@ -410,7 +408,7 @@ type messageWriter func(pp.Message) bool
 
 // This function seems to only used by Peer.request. It's all logic checks, so maybe we can no-op it
 // when we want to go fast.
-func (cn *Peer) shouldRequest(r RequestIndex) error {
+func (cn *PeerConn) shouldRequest(r RequestIndex) error {
 	err := cn.t.checkValidReceiveChunk(cn.t.requestIndexToRequest(r))
 	if err != nil {
 		return err
@@ -422,7 +420,7 @@ func (cn *Peer) shouldRequest(r RequestIndex) error {
 	if !cn.peerHasPiece(pi) {
 		return errors.New("requesting piece peer doesn't have")
 	}
-	if !cn.t.peerIsActive(cn) {
+	if !cn.t.peerIsActive(cn.peerPtr()) {
 		panic("requesting but not in active conns")
 	}
 	if cn.closed.IsSet() {
@@ -472,7 +470,7 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 	}
 	cn.validReceiveChunks[r]++
 	cn.t.requestState[r] = requestState{
-		peer: cn.peerPtr(),
+		peer: cn,
 		when: time.Now(),
 	}
 	cn.updateExpectingChunks()
@@ -483,7 +481,7 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 	return cn._request(ppReq), nil
 }
 
-func (me *Peer) cancel(r RequestIndex) {
+func (me *PeerConn) cancel(r RequestIndex) {
 	if !me.deleteRequest(r) {
 		panic("request not existing should have been guarded")
 	}
@@ -669,7 +667,7 @@ func (c *Peer) receiveChunk(msg *pp.Message) error {
 
 	// Cancel pending requests for this chunk from *other* peers.
 	if p := t.requestingPeer(req); p != nil {
-		if p == c {
+		if p.peerPtr() == c {
 			p.logger.Slogger().Error("received chunk but still pending request", "peer", p, "req", req)
 			panic("should not be pending request from conn that just received it")
 		}
@@ -750,12 +748,12 @@ func (c *Peer) peerHasWantedPieces() bool {
 
 // Returns true if an outstanding request is removed. Cancelled requests should be handled
 // separately.
-func (c *Peer) deleteRequest(r RequestIndex) bool {
+func (c *PeerConn) deleteRequest(r RequestIndex) bool {
 	if !c.requestState.Requests.CheckedRemove(r) {
 		return false
 	}
 	for _, f := range c.callbacks.DeletedRequest {
-		f(PeerRequestEvent{c, c.t.requestIndexToRequest(r)})
+		f(PeerRequestEvent{c.peerPtr(), c.t.requestIndexToRequest(r)})
 	}
 	c.updateExpectingChunks()
 	// TODO: Can't this happen if a request is stolen?
@@ -771,7 +769,7 @@ func (c *Peer) deleteRequest(r RequestIndex) bool {
 	return true
 }
 
-func (c *Peer) deleteAllRequests(reason updateRequestReason) {
+func (c *PeerConn) deleteAllRequests(reason updateRequestReason) {
 	if c.requestState.Requests.IsEmpty() {
 		return
 	}
@@ -789,13 +787,13 @@ func (c *Peer) deleteAllRequests(reason updateRequestReason) {
 	})
 }
 
-func (c *Peer) assertNoRequests() {
+func (c *PeerConn) assertNoRequests() {
 	if !c.requestState.Requests.IsEmpty() {
 		panic(c.requestState.Requests.GetCardinality())
 	}
 }
 
-func (c *Peer) cancelAllRequests() {
+func (c *PeerConn) cancelAllRequests() {
 	c.requestState.Requests.IterateSnapshot(func(x RequestIndex) bool {
 		c.cancel(x)
 		return true
@@ -853,7 +851,7 @@ func (p *Peer) TryAsPeerConn() (*PeerConn, bool) {
 	return pc, ok
 }
 
-func (p *Peer) uncancelledRequests() uint64 {
+func (p *PeerConn) uncancelledRequests() uint64 {
 	return p.requestState.Requests.GetCardinality()
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/v2/bitmap"
 	"github.com/anacrolix/multiless"
+	requestStrategy "github.com/anacrolix/torrent/internal/request-strategy"
 	"golang.org/x/time/rate"
 
 	"github.com/anacrolix/torrent/bencode"
@@ -94,6 +95,9 @@ type PeerConn struct {
 	// The peer has everything. This can occur due to a special message, when
 	// we may not even know the number of pieces in the torrent yet.
 	peerSentHaveAll bool
+
+	// TODO: How are pending cancels handled for webseed peers?
+	requestState requestStrategy.PeerRequestState
 
 	peerRequestDataAllocLimiter alloclim.Limiter
 

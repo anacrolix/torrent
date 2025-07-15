@@ -32,6 +32,14 @@ type webseedPeer struct {
 	hostKey          webseedHostKeyHandle
 }
 
+func (me *webseedPeer) cancelAllRequests() {
+	// Is there any point to this? Won't we fail to receive a chunk and cancel anyway? Should we
+	// Close requests instead?
+	for req := range me.activeRequests {
+		req.Cancel()
+	}
+}
+
 func (me *webseedPeer) peerImplWriteStatus(w io.Writer) {}
 
 func (me *webseedPeer) isLowOnRequests() bool {
@@ -211,56 +219,11 @@ func (ws *webseedPeer) deleteActiveRequest(wr *webseedRequest) {
 	ws.peer.updateExpectingChunks()
 }
 
-func (ws *webseedPeer) iterConsecutiveRequests(begin RequestIndex) iter.Seq[RequestIndex] {
-	return func(yield func(RequestIndex) bool) {
-		for {
-			if !ws.peer.requestState.Requests.Contains(begin) {
-				return
-			}
-			if !yield(begin) {
-				return
-			}
-			begin++
-		}
-	}
-}
-
-func (ws *webseedPeer) iterConsecutiveInactiveRequests(begin RequestIndex) iter.Seq[RequestIndex] {
-	return func(yield func(RequestIndex) bool) {
-		for req := range ws.iterConsecutiveRequests(begin) {
-			if !ws.inactiveRequestIndex(req) {
-				return
-			}
-			if !yield(req) {
-				return
-			}
-		}
-	}
-}
-
 func (ws *webseedPeer) inactiveRequestIndex(index RequestIndex) bool {
 	for range ws.activeRequestsForIndex(index) {
 		return false
 	}
 	return true
-}
-
-func (ws *webseedPeer) inactiveRequests() iter.Seq[RequestIndex] {
-	return func(yield func(RequestIndex) bool) {
-		// This is used to determine contiguity of requests.
-		//sorted := slices.Sorted(ws.peer.requestState.Requests.Iterator())
-		//if len(sorted) != 0 {
-		//	fmt.Println("inactiveRequests", sorted)
-		//}
-		for reqIndex := range ws.peer.requestState.Requests.Iterator() {
-			if !ws.inactiveRequestIndex(reqIndex) {
-				continue
-			}
-			if !yield(reqIndex) {
-				return
-			}
-		}
-	}
 }
 
 func (ws *webseedPeer) connectionFlags() string {

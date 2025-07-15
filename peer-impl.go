@@ -24,6 +24,7 @@ type legacyPeerImpl interface {
 
 	// handleCancel initiates cancellation of a request
 	handleCancel(ri RequestIndex)
+	cancelAllRequests()
 	connectionFlags() string
 	onClose()
 	onGotInfo(info *metainfo.Info)

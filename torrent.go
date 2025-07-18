@@ -1827,6 +1827,10 @@ func (t *Torrent) bytesCompleted() int64 {
 func (t *Torrent) SetInfoBytes(b []byte) (err error) {
 	t.cl.lock()
 	defer t.cl.unlock()
+	err = t.getClosedErr()
+	if err != nil {
+		return
+	}
 	return t.setInfoBytesLocked(b)
 }
 
@@ -3520,4 +3524,11 @@ func (t *Torrent) wantReceiveChunk(reqIndex RequestIndex) bool {
 		return false
 	}
 	return true
+}
+
+func (t *Torrent) getClosedErr() error {
+	if t.closed.IsSet() {
+		return errTorrentClosed
+	}
+	return nil
 }

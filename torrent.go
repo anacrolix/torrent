@@ -35,6 +35,7 @@ import (
 	"github.com/anacrolix/missinggo/v2/pubsub"
 	"github.com/anacrolix/multiless"
 	"github.com/anacrolix/sync"
+	"github.com/anacrolix/torrent/segments"
 	"github.com/pion/webrtc/v4"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -115,8 +116,9 @@ type Torrent struct {
 	// routines. Cancelled when the Torrent is Closed too.
 	getInfoCtx context.Context
 	// Put a nice reason in :)
-	getInfoCtxCancel context.CancelCauseFunc
-	files            *[]*File
+	getInfoCtxCancel  context.CancelCauseFunc
+	files             *[]*File
+	fileSegmentsIndex g.Option[segments.Index]
 
 	_chunksPerRegularPiece chunkIndexType
 
@@ -380,7 +382,8 @@ func (t *Torrent) invalidateMetadata() {
 		t.metadataCompletedChunks[i] = false
 	}
 	t.nameMu.Lock()
-	t.info = nil
+	// Why the fuck would info be set?
+	panicif.NotNil(t.info)
 	t.nameMu.Unlock()
 }
 
@@ -538,6 +541,7 @@ func (t *Torrent) setInfo(info *metainfo.Info) error {
 	}
 	t.nameMu.Lock()
 	t.info = info
+	panicif.True(t.fileSegmentsIndex.Set(info.FileSegmentsIndex()).Ok)
 	t.getInfoCtxCancel(errors.New("got info"))
 	t.nameMu.Unlock()
 	t._chunksPerRegularPiece = chunkIndexType(intCeilDiv(pp.Integer(t.usualPieceSize()), t.chunkSize))

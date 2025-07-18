@@ -67,8 +67,7 @@ type Client struct {
 	// Max concurrent requests to a WebSeed for a given torrent.
 	MaxRequests int
 
-	// TODO: Share this with Torrent.
-	fileIndex segments.Index
+	fileIndex *segments.Index
 	info      *metainfo.Info
 	// The pieces we can request with the Url. We're more likely to ban/block at the file-level
 	// given that's how requests are mapped to webseeds, but the torrent.Client works at the piece
@@ -84,13 +83,13 @@ type Client struct {
 
 type ResponseBodyWrapper func(io.Reader) io.Reader
 
-func (me *Client) SetInfo(info *metainfo.Info) {
+func (me *Client) SetInfo(info *metainfo.Info, fileIndex *segments.Index) {
 	if !strings.HasSuffix(me.Url, "/") && info.IsDir() {
 		// In my experience, this is a non-conforming webseed. For example the
 		// http://ia600500.us.archive.org/1/items URLs in archive.org torrents.
 		return
 	}
-	me.fileIndex = info.FileSegmentsIndex()
+	me.fileIndex = fileIndex
 	me.info = info
 	me.Pieces.AddRange(0, uint64(info.NumPieces()))
 }

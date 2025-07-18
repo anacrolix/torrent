@@ -90,7 +90,7 @@ func (ws *webseedPeer) String() string {
 }
 
 func (ws *webseedPeer) onGotInfo(info *metainfo.Info) {
-	ws.client.SetInfo(info)
+	ws.client.SetInfo(info, ws.peer.t.fileSegmentsIndex.UnwrapPtr())
 	// There should be probably be a callback in Client instead, so it can remove pieces at its whim
 	// too.
 	ws.client.Pieces.Iterate(func(x uint32) bool {

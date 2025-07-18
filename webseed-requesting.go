@@ -32,7 +32,7 @@ type (
 - Cancel any outstanding requests that don't match a final file/piece-index pair.
 - Initiate missing requests that fit into the available limits.
 */
-func (cl *Client) globalUpdateWebSeedRequests() {
+func (cl *Client) updateWebseedRequests() {
 	type aprioriMapValue struct {
 		// Change to request index?
 		startOffset int64
@@ -302,7 +302,7 @@ func (cl *Client) iterPossibleWebseedRequests() iter.Seq2[webseedUniqueRequestKe
 
 func (cl *Client) updateWebseedRequestsWithReason(reason updateRequestReason) {
 	// Should we wrap this with pprof labels?
-	cl.updateWebseedRequests()
+	cl.scheduleImmediateWebseedRequestUpdate()
 }
 
 func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey, webseedRequestOrderValue] {
@@ -315,7 +315,7 @@ func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey
 						continue
 					}
 					off := t.requestIndexBegin(ar.next)
-					opt := t.info.FileSegmentsIndex().LocateOffset(off)
+					opt := t.fileSegmentsIndex.Unwrap().LocateOffset(off)
 					if !opt.Ok {
 						continue
 					}
@@ -343,13 +343,24 @@ func (cl *Client) iterCurrentWebseedRequests() iter.Seq2[webseedUniqueRequestKey
 	}
 }
 
-func (cl *Client) updateWebseedRequests() {
-	cl.globalUpdateWebSeedRequests()
-	cl.webseedRequestTimer.Reset(webseedRequestUpdateTimerInterval)
+func (cl *Client) scheduleImmediateWebseedRequestUpdate() {
+	if !cl.webseedRequestTimer.Stop() {
+		// Timer function already running, let it do its thing.
+		return
+	}
+	// Handle the update right now.
+	cl.updateWebseedRequestsAndResetTimer()
 }
 
 func (cl *Client) updateWebseedRequestsTimerFunc() {
 	cl.lock()
 	defer cl.unlock()
+	cl.updateWebseedRequestsAndResetTimer()
+}
+
+func (cl *Client) updateWebseedRequestsAndResetTimer() {
 	cl.updateWebseedRequests()
+	// Timer should always be stopped before the last call.
+	panicif.True(cl.webseedRequestTimer.Reset(webseedRequestUpdateTimerInterval))
+
 }

@@ -2498,7 +2498,7 @@ func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
 	}
 
 	// Don't score the first time a piece is hashed, it could be an initial check.
-	if p.numVerifies == 1 {
+	if t.initialPieceCheckDisabled || p.numVerifies != 1 {
 		if passed {
 			pieceHashedCorrect.Add(1)
 		} else {

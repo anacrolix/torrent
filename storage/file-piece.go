@@ -27,6 +27,7 @@ type filePieceImpl struct {
 var _ interface {
 	PieceImpl
 	//PieceReaderer
+	io.WriterTo
 } = (*filePieceImpl)(nil)
 
 func (me *filePieceImpl) logger() *slog.Logger {
@@ -85,7 +86,7 @@ func (me *filePieceImpl) iterFileSegments() iter.Seq2[int, segments.Extent] {
 	}
 }
 
-// If a piece is complete, check consituent files have the minimum required sizes.
+// If a piece is complete, check constituent files have the minimum required sizes.
 func (me *filePieceImpl) checkCompleteFileSizes() (c Completion) {
 	c.Complete = true
 	c.Ok = true
@@ -313,6 +314,26 @@ func (me *filePieceImpl) pathForWrite(f *file) string {
 
 func (me *filePieceImpl) partFiles() bool {
 	return me.t.partFiles()
+}
+
+func (me *filePieceImpl) WriteTo(w io.Writer) (n int64, err error) {
+	for fileIndex, extent := range me.iterFileSegments() {
+		file := me.t.file(fileIndex)
+		var f *os.File
+		f, err = me.t.openFile(file)
+		if err != nil {
+			return
+		}
+		f.Seek(extent.Start, io.SeekStart)
+		var n1 int64
+		n1, err = io.CopyN(w, f, extent.Length)
+		n += n1
+		f.Close()
+		if err != nil {
+			return
+		}
+	}
+	return
 }
 
 //

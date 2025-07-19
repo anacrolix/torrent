@@ -125,3 +125,33 @@ func (fts *fileTorrentImpl) file(index int) file {
 		fileExtra: &fts.files[index],
 	}
 }
+
+// Open file for reading.
+func (me *fileTorrentImpl) openSharedFile(file file) (f sharedFileIf, err error) {
+	file.mu.RLock()
+	// Fine to open once under each name on a unix system. We could make the shared file keys more
+	// constrained, but it shouldn't matter. TODO: Ensure at most one of the names exist.
+	if me.partFiles() {
+		f, err = sharedFiles.Open(file.partFilePath())
+	}
+	if err == nil && f == nil || errors.Is(err, fs.ErrNotExist) {
+		f, err = sharedFiles.Open(file.safeOsPath)
+	}
+	file.mu.RUnlock()
+	return
+}
+
+// Open file for reading.
+func (me *fileTorrentImpl) openFile(file file) (f *os.File, err error) {
+	file.mu.RLock()
+	// Fine to open once under each name on a unix system. We could make the shared file keys more
+	// constrained, but it shouldn't matter. TODO: Ensure at most one of the names exist.
+	if me.partFiles() {
+		f, err = os.Open(file.partFilePath())
+	}
+	if err == nil && f == nil || errors.Is(err, fs.ErrNotExist) {
+		f, err = os.Open(file.safeOsPath)
+	}
+	file.mu.RUnlock()
+	return
+}

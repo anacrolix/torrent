@@ -18,17 +18,7 @@ type fileTorrentImplIO struct {
 // Returns EOF on short or missing file.
 func (fst fileTorrentImplIO) readFileAt(file file, b []byte, off int64) (n int, err error) {
 	fst.fts.logger().Debug("readFileAt", "file.safeOsPath", file.safeOsPath)
-	var f sharedFileIf
-	file.mu.RLock()
-	// Fine to open once under each name on a unix system. We could make the shared file keys more
-	// constrained but it shouldn't matter. TODO: Ensure at most one of the names exist.
-	if fst.fts.partFiles() {
-		f, err = sharedFiles.Open(file.partFilePath())
-	}
-	if err == nil && f == nil || errors.Is(err, fs.ErrNotExist) {
-		f, err = sharedFiles.Open(file.safeOsPath)
-	}
-	file.mu.RUnlock()
+	f, err := fst.fts.openSharedFile(file)
 	if errors.Is(err, fs.ErrNotExist) {
 		// File missing is treated the same as a short file. Should we propagate this through the
 		// interface now that fs.ErrNotExist is a thing?

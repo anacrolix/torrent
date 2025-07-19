@@ -348,8 +348,10 @@ func (cl *Client) scheduleImmediateWebseedRequestUpdate() {
 		// Timer function already running, let it do its thing.
 		return
 	}
-	// Handle the update right now.
-	cl.updateWebseedRequestsAndResetTimer()
+	// Set the timer to fire right away (this will coalesce consecutive updates without forcing an
+	// update on every call to this method). Since we're holding the Client lock, and we cancelled
+	// the timer and it wasn't active, nobody else should have reset it before us.
+	panicif.True(cl.webseedRequestTimer.Reset(0))
 }
 
 func (cl *Client) updateWebseedRequestsTimerFunc() {

@@ -3,13 +3,16 @@ package torrent
 import (
 	"iter"
 
-	g "github.com/anacrolix/generics"
+	"golang.org/x/exp/constraints"
 )
 
-// Returns Some of the last item in a iter.Seq, or None if the sequence is empty.
-func seqLast[V any](seq iter.Seq[V]) (last g.Option[V]) {
-	for item := range seq {
-		last.Set(item)
+// Returns an iterator that yields integers from start (inclusive) to end (exclusive).
+func iterRange[T constraints.Integer](start, end T) iter.Seq[T] {
+	return func(yield func(T) bool) {
+		for i := start; i < end; i++ {
+			if !yield(i) {
+				return
+			}
+		}
 	}
-	return
 }

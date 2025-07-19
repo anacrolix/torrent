@@ -25,7 +25,8 @@ type blockCheckingWriter struct {
 func (me *blockCheckingWriter) checkBlock() {
 	b := me.blockBuffer.Next(me.chunkSize)
 	for _, peer := range me.cache.CheckBlock(me.requestIndex, b) {
-		g.MakeMapIfNilAndSet(&me.badPeers, peer, struct{}{})
+		g.MakeMapIfNil(&me.badPeers)
+		me.badPeers[peer] = struct{}{}
 	}
 	me.requestIndex++
 }

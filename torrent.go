@@ -1183,12 +1183,16 @@ func (t *Torrent) pieceLength(piece pieceIndex) pp.Integer {
 	return pp.Integer(t.info.PieceLength)
 }
 
-func (t *Torrent) smartBanBlockCheckingWriter(piece pieceIndex) *blockCheckingWriter {
-	return &blockCheckingWriter{
+func (t *Torrent) getBlockCheckingWriterForPiece(piece pieceIndex) blockCheckingWriter {
+	return blockCheckingWriter{
 		cache:        &t.smartBanCache,
 		requestIndex: t.pieceRequestIndexBegin(piece),
 		chunkSize:    t.chunkSize.Int(),
 	}
+}
+
+func (t *Torrent) hasSmartbanDataForPiece(piece pieceIndex) bool {
+	return t.smartBanCache.HasPeerForBlocks(iterRange(t.pieceRequestIndexBegin(piece), t.pieceRequestIndexBegin(piece+1)))
 }
 
 func (t *Torrent) countBytesHashed(n int64) {
@@ -1276,25 +1280,30 @@ func (t *Torrent) hashPieceWithSpecificHash(piece pieceIndex, h hash.Hash) (
 	differingPeers map[bannableAddr]struct{},
 	err error,
 ) {
+	var w io.Writer = h
+	if t.hasSmartbanDataForPiece(piece) {
+		smartBanWriter := t.getBlockCheckingWriterForPiece(piece)
+		w = io.MultiWriter(h, &smartBanWriter)
+		defer func() {
+			if err != nil {
+				// Skip smart banning since we can't blame them for storage issues. A short write would
+				// ban peers for all recorded blocks that weren't just written.
+				return
+			}
+			// Flush now, even though we may not have finished writing to the piece hash, since
+			// further data is padding only and should not have come from peers.
+			smartBanWriter.Flush()
+			differingPeers = smartBanWriter.badPeers
+		}()
+	}
 	p := t.piece(piece)
 	storagePiece := p.Storage()
-
-	smartBanWriter := t.smartBanBlockCheckingWriter(piece)
-	multiWriter := io.MultiWriter(h, smartBanWriter)
-	{
-		var written int64
-		written, err = storagePiece.WriteTo(multiWriter)
-		if err == nil && written != int64(p.length()) {
-			err = fmt.Errorf("wrote %v bytes from storage, piece has length %v", written, p.length())
-			// Skip smart banning since we can't blame them for storage issues. A short write would
-			// ban peers for all recorded blocks that weren't just written.
-			return
-		}
-		t.countBytesHashed(written)
+	var written int64
+	written, err = storagePiece.WriteTo(w)
+	if err == nil && written != int64(p.length()) {
+		err = fmt.Errorf("wrote %v bytes from storage, piece has length %v", written, p.length())
 	}
-	// Flush before writing padding, since we would not have recorded the padding blocks.
-	smartBanWriter.Flush()
-	differingPeers = smartBanWriter.badPeers
+	t.countBytesHashed(written)
 	return
 }
 
@@ -2754,9 +2763,7 @@ func (t *Torrent) finishHash(index pieceIndex) {
 			t.logger.WithDefaultLevel(log.Debug).Printf("smart banned %v for piece %v", peer, index)
 		}
 		t.dropBannedPeers()
-		for ri := t.pieceRequestIndexBegin(index); ri < t.pieceRequestIndexBegin(index+1); ri++ {
-			t.smartBanCache.ForgetBlock(ri)
-		}
+		t.smartBanCache.ForgetBlockSeq(iterRange(t.pieceRequestIndexBegin(index), t.pieceRequestIndexBegin(index+1)))
 	}
 	p.hashing = false
 	t.pieceHashed(index, correct, copyErr)

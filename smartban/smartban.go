@@ -1,6 +1,7 @@
 package smartban
 
 import (
+	"iter"
 	"sync"
 
 	g "github.com/anacrolix/generics"
@@ -9,6 +10,7 @@ import (
 type Cache[Peer, BlockKey, Hash comparable] struct {
 	Hash func([]byte) Hash
 
+	// Wonder if we should make this an atomic.
 	lock   sync.RWMutex
 	blocks map[BlockKey][]peerAndHash[Peer, Hash]
 }
@@ -48,10 +50,30 @@ func (me *Cache[Peer, BlockKey, Hash]) CheckBlock(key BlockKey, data []byte) (ba
 	return
 }
 
-func (me *Cache[Peer, BlockKey, Hash]) ForgetBlock(key BlockKey) {
+func (me *Cache[Peer, BlockKey, Hash]) ForgetBlockSeq(seq iter.Seq[BlockKey]) {
 	me.lock.Lock()
 	defer me.lock.Unlock()
-	delete(me.blocks, key)
+	if len(me.blocks) == 0 {
+		return
+	}
+	for key := range seq {
+		delete(me.blocks, key)
+	}
+}
+
+// Returns whether any block in the sequence has at least once peer recorded.
+func (me *Cache[Peer, BlockKey, Hash]) HasPeerForBlocks(seq iter.Seq[BlockKey]) bool {
+	me.lock.RLock()
+	defer me.lock.RUnlock()
+	if len(me.blocks) == 0 {
+		return false
+	}
+	for key := range seq {
+		if len(me.blocks[key]) != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (me *Cache[Peer, BlockKey, Hash]) HasBlocks() bool {

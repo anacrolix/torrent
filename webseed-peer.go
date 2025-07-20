@@ -284,7 +284,7 @@ func (ws *webseedPeer) readChunks(wr *webseedRequest) (err error) {
 			err = fmt.Errorf("reading chunk: %w", err)
 			return
 		}
-		ws.peer.doChunkReadStats(int64(chunkLen))
+		ws.peer.doChunkReadStats(int64(n))
 		// TODO: Clean up the parameters for receiveChunk.
 		msg.Piece = buf
 		msg.Index = reqSpec.Index

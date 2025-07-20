@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"testing"
 	"time"
@@ -44,6 +45,9 @@ func copyFile(src, dst string) (err error) {
 }
 
 func TestStreamSintelMagnet(t *testing.T) {
+	ctx := t.Context()
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+	defer cancel()
 	fileHashes := map[string]string{
 		"poster.jpg": "f9223791908131c505d7bdafa7a8aaf5",
 		"Sintel.mp4": "083e808d56aa7b146f513b3458658292",
@@ -124,11 +128,13 @@ func TestStreamSintelMagnet(t *testing.T) {
 	}
 	h := md5.New()
 	go func() {
-		<-t.Context().Done()
-		t.Log("testing context done")
+		<-ctx.Done()
 		f.Close()
 	}()
 	_, err = f.WriteTo(io.MultiWriter(h, &w))
+	if ctx.Err() != nil {
+		t.Fatal(ctx.Err())
+	}
 	panicif.Err(err)
 	err = f.Close()
 	panicif.Err(err)

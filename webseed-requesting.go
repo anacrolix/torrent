@@ -99,15 +99,16 @@ func (cl *Client) updateWebseedRequests() {
 	aprioriHeap := heap.InterfaceForSlice(
 		&heapSlice,
 		func(l heapElem, r heapElem) bool {
-			// Prefer the highest priority, then existing requests, then longest remaining file extent.
+			// Prefer the highest priority, then existing requests, then largest files.
 			return cmp.Or(
 				-cmp.Compare(l.priority, r.priority),
 				// Existing requests are assigned the priority of the piece they're reading next.
 				compareBool(l.existingWebseedRequest == nil, r.existingWebseedRequest == nil),
-				// This won't thrash because we already preferred existing requests, so we'll finish out small extents.
+				// Note this isn't correct if the starting piece is split across multiple files. But
+				// I plan to refactor to key on starting piece to handle this case.
 				-cmp.Compare(
-					l.t.Files()[l.fileIndex].length-l.startOffset,
-					r.t.Files()[r.fileIndex].length-r.startOffset),
+					l.t.Files()[l.fileIndex].length,
+					r.t.Files()[r.fileIndex].length),
 			) < 0
 		},
 	)

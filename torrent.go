@@ -179,7 +179,7 @@ type Torrent struct {
 
 	connsWithAllPieces map[*Peer]struct{}
 
-	// Last active request for each chunks. TODO: Change to PeerConn specific?
+	// Last active PeerConn request for each chunk.
 	requestState map[RequestIndex]requestState
 	// Chunks we've written to since the corresponding piece was last checked.
 	dirtyChunks typedRoaring.Bitmap[RequestIndex]

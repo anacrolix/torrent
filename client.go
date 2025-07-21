@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"runtime"
 	"slices"
 	"strconv"
 	"time"
@@ -108,6 +109,8 @@ type Client struct {
 	upnpMappings []*upnpMapping
 
 	webseedRequestTimer *time.Timer
+
+	activePieceHashers int
 }
 
 type ipStr string
@@ -1614,6 +1617,7 @@ func (cl *Client) Torrents() []*Torrent {
 }
 
 func (cl *Client) torrentsAsSlice() (ret []*Torrent) {
+	ret = make([]*Torrent, 0, len(cl.torrents))
 	for t := range cl.torrents {
 		ret = append(ret, t)
 	}
@@ -1940,4 +1944,39 @@ func (cl *Client) checkConfig() error {
 		}
 	}
 	return nil
+}
+
+func (cl *Client) maxActivePieceHashers() int {
+	return runtime.NumCPU()
+}
+
+func (cl *Client) belowMaxActivePieceHashers() bool {
+	return cl.activePieceHashers < cl.maxActivePieceHashers()
+}
+
+func (cl *Client) canStartPieceHashers() bool {
+	return cl.belowMaxActivePieceHashers()
+}
+
+func (cl *Client) startPieceHashers() {
+	if !cl.canStartPieceHashers() {
+		return
+	}
+	ts := make([]*Torrent, 0, len(cl.torrents))
+	for t := range cl.torrents {
+		if !t.considerStartingHashers() {
+			continue
+		}
+		ts = append(ts, t)
+	}
+	// Sort largest torrents first, as those are preferred by webseeds, and will cause less thrashing.
+	slices.SortFunc(ts, func(a, b *Torrent) int {
+		return -cmp.Compare(a.length(), b.length())
+	})
+	for _, t := range ts {
+		t.startPieceHashers()
+		if !cl.canStartPieceHashers() {
+			break
+		}
+	}
 }

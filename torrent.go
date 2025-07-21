@@ -2486,9 +2486,6 @@ func (t *Torrent) SetMaxEstablishedConns(max int) (oldMax int) {
 }
 
 func (t *Torrent) pieceHashed(piece pieceIndex, passed bool, hashIoErr error) {
-	t.logger.LazyLog(log.Debug, func() log.Msg {
-		return log.Fstr("hashed piece %d (passed=%t)", piece, passed)
-	})
 	p := t.piece(piece)
 	p.numVerifies++
 	p.numVerifiesCond.Broadcast()
@@ -2656,31 +2653,31 @@ func (t *Torrent) onIncompletePiece(piece pieceIndex) {
 	})
 }
 
+// Torrent piece hashers are sticky and will try to keep hashing pieces in the same Torrent to keep
+// the storage hot.
 func (t *Torrent) startPieceHashers() error {
 	if t.closed.IsSet() {
 		return errTorrentClosed
 	}
-	for t.startPieceHasher() {
+	for t.considerStartingHashers() {
+		if !t.startSinglePieceHasher() {
+			break
+		}
 	}
 	return nil
 }
 
-func (t *Torrent) startPieceHasher() bool {
-	if t.storage == nil {
-		return false
-	}
-	if t.activePieceHashes >= t.cl.config.PieceHashersPerTorrent {
-		return false
-	}
+func (t *Torrent) startSinglePieceHasher() bool {
 	pi := t.getPieceToHash()
-	if pi.Ok {
-		t.startHash(pi.Value)
-		go t.pieceHasher(pi.Value)
-		return true
+	if !pi.Ok {
+		return false
 	}
-	return false
+	t.startHash(pi.Value)
+	go t.pieceHasher(pi.Value)
+	return true
 }
 
+// Sticky to a Torrent. Might as well since that keeps the storage hot.
 func (t *Torrent) pieceHasher(initial pieceIndex) {
 	t.finishHash(initial)
 	for {
@@ -2693,6 +2690,7 @@ func (t *Torrent) pieceHasher(initial pieceIndex) {
 		t.cl.unlock()
 		t.finishHash(pi)
 	}
+	t.cl.startPieceHashers()
 	t.cl.unlock()
 }
 
@@ -2702,9 +2700,10 @@ func (t *Torrent) startHash(pi pieceIndex) {
 	t.deferUpdateComplete()
 	p.hashing = true
 	t.deferPublishPieceStateChange(pi)
-	t.updatePiecePriority(pi, "Torrent.startPieceHasher")
+	t.updatePiecePriority(pi, "Torrent.startHash")
 	t.storageLock.RLock()
 	t.activePieceHashes++
+	t.cl.activePieceHashers++
 }
 
 func (t *Torrent) getPieceToHash() (_ g.Option[pieceIndex]) {
@@ -2769,6 +2768,7 @@ func (t *Torrent) finishHash(index pieceIndex) {
 	t.pieceHashed(index, correct, copyErr)
 	t.updatePiecePriority(index, "Torrent.finishHash")
 	t.activePieceHashes--
+	t.cl.activePieceHashers--
 }
 
 // Return the connections that touched a piece, and clear the entries while doing it.
@@ -3540,4 +3540,20 @@ func (t *Torrent) getClosedErr() error {
 		return errTorrentClosed
 	}
 	return nil
+}
+
+func (t *Torrent) considerStartingHashers() bool {
+	if t.storage == nil {
+		return false
+	}
+	if t.activePieceHashes >= t.cl.config.PieceHashersPerTorrent {
+		return false
+	}
+	if !t.cl.canStartPieceHashers() {
+		return false
+	}
+	if t.piecesQueuedForHash.IsEmpty() {
+		return false
+	}
+	return true
 }

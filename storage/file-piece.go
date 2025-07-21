@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"expvar"
 	"fmt"
 	"io"
 	"io/fs"
@@ -11,6 +12,7 @@ import (
 
 	g "github.com/anacrolix/generics"
 	"github.com/anacrolix/missinggo/v2/panicif"
+	"golang.org/x/sys/unix"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
@@ -316,23 +318,69 @@ func (me *filePieceImpl) partFiles() bool {
 	return me.t.partFiles()
 }
 
+type zeroReader struct{}
+
+func (me zeroReader) Read(p []byte) (n int, err error) {
+	clear(p)
+	return len(p), nil
+}
+
 func (me *filePieceImpl) WriteTo(w io.Writer) (n int64, err error) {
 	for fileIndex, extent := range me.iterFileSegments() {
-		file := me.t.file(fileIndex)
-		var f *os.File
-		f, err = me.t.openFile(file)
-		if err != nil {
-			return
-		}
-		f.Seek(extent.Start, io.SeekStart)
 		var n1 int64
-		n1, err = io.CopyN(w, f, extent.Length)
+		n1, err = me.writeFileTo(w, fileIndex, extent)
 		n += n1
-		f.Close()
 		if err != nil {
 			return
 		}
+		panicif.NotEq(n1, extent.Length)
 	}
+	return
+}
+
+var (
+	packageExpvarMap = expvar.NewMap("torrentStorage")
+)
+
+func (me *filePieceImpl) writeFileTo(w io.Writer, fileIndex int, extent segments.Extent) (written int64, err error) {
+	if extent.Length == 0 {
+		return
+	}
+	file := me.t.file(fileIndex)
+	var f *os.File
+	f, err = me.t.openFile(file)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	panicif.GreaterThan(extent.End(), file.FileInfo.Length)
+	extentRemaining := extent.Length
+	var dataOffset int64
+	dataOffset, err = unix.Seek(int(f.Fd()), extent.Start, unix.SEEK_DATA)
+	if err == unix.ENXIO {
+		// File has no more data. Treat as short write like io.CopyN.
+		err = io.EOF
+		return
+	}
+	panicif.Err(err)
+	panicif.LessThan(dataOffset, extent.Start)
+	if dataOffset > extent.Start {
+		// Write zeroes until the end of the hole we're in.
+		var n1 int64
+		n := min(dataOffset-extent.Start, extent.Length)
+		n1, err = io.CopyN(w, zeroReader{}, n)
+		packageExpvarMap.Add("bytesReadSkippedHole", n1)
+		written += n1
+		if err != nil {
+			return
+		}
+		panicif.NotEq(n1, n)
+		extentRemaining -= n1
+	}
+	var n1 int64
+	n1, err = io.CopyN(w, f, extentRemaining)
+	packageExpvarMap.Add("bytesReadNotSkipped", n1)
+	written += n1
 	return
 }
 

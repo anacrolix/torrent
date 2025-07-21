@@ -1250,8 +1250,8 @@ func (t *Torrent) hashPiece(piece pieceIndex) (
 		differingPeers, err = t.hashPieceWithSpecificHash(piece, h)
 		var sum [32]byte
 		// What about the final piece in a torrent? From BEP 52: "The layer is chosen so that one
-		// hash covers piece length bytes.". Note that if a piece doesn't have a hash in piece
-		// layers it's because it's not larger than the piece length.
+		// hash covers piece length bytes". Note that if a piece doesn't have a hash in piece layers
+		// it's because it's not larger than the piece length.
 		sumExactly(sum[:], func(b []byte) []byte {
 			return h.SumMinLength(b, int(t.info.PieceLength))
 		})

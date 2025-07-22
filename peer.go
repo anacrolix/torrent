@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"github.com/anacrolix/log"
 	"github.com/anacrolix/missinggo/iter"
 	"github.com/anacrolix/missinggo/v2/bitmap"
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/anacrolix/multiless"
 
 	"github.com/anacrolix/torrent/internal/alloclim"
@@ -39,6 +41,8 @@ type (
 		Discovery               PeerSource
 		trusted                 bool
 		closed                  chansync.SetOnce
+		closedCtx               context.Context
+		closedCtxCancel         context.CancelFunc
 		lastUsefulChunkReceived time.Time
 
 		lastStartedExpectingToReceiveChunks time.Time
@@ -222,6 +226,10 @@ func (cn *Peer) writeStatus(w io.Writer) {
 func (p *Peer) close() {
 	if !p.closed.Set() {
 		return
+	}
+	// Not set until Torrent is known.
+	if p.closedCtx != nil {
+		p.closedCtxCancel()
 	}
 	if p.updateRequestsTimer != nil {
 		p.updateRequestsTimer.Stop()
@@ -565,4 +573,9 @@ func (p *Peer) recordBlockForSmartBan(req RequestIndex, blockData []byte) {
 	if p.bannableAddr.Ok {
 		p.t.smartBanCache.RecordBlock(p.bannableAddr.Value, req, blockData)
 	}
+}
+
+func (p *Peer) initClosedCtx() {
+	panicif.NotNil(p.closedCtx)
+	p.closedCtx, p.closedCtxCancel = context.WithCancel(p.t.closedCtx)
 }

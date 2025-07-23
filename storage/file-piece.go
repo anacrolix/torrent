@@ -252,31 +252,41 @@ func (me *filePieceImpl) exclRenameIfExists(from, to string) error {
 		}
 	}
 	panicif.Eq(from, to)
-	// We don't want anyone reading or writing to this until the rename completes.
+	// We don't want anyone reading or writing to this until the rename completes. The file is
+	// created with zero permissions to prevent this.
 	f, err := os.OpenFile(to, os.O_CREATE|os.O_EXCL, 0)
+	if err == nil {
+		f.Close()
+	}
 	if errors.Is(err, fs.ErrExist) {
 		_, err = os.Stat(from)
 		if errors.Is(err, fs.ErrNotExist) {
+			// Source file went missing. Assume rename occurred.
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		return errors.New("source and destination files both exist")
-	}
-	if err != nil {
+		me.logger().Warn("source and destination files both exist",
+			"src", from,
+			"dst", to)
+		// Continue to attempt rename as this will result in a single file.
+	} else if err != nil {
 		return fmt.Errorf("exclusively creating destination file: %w", err)
 	}
-	f.Close()
 	err = os.Rename(from, to)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			// Someone else has moved it already.
 			return nil
 		}
-		// If we can't rename it, remove the blocking destination file we made. Maybe the remove
-		// error should be logged separately since it's not actionable.
-		return errors.Join(err, os.Remove(to))
+		// If we can't rename it, remove the blocking destination file we made. Failing to remove
+		// this will put the storage in a bad state.
+		removeErr := os.Remove(to)
+		if removeErr != nil && !errors.Is(removeErr, fs.ErrNotExist) {
+			me.logger().Error("error removing destination file after failed rename", "name", to)
+		}
+		return err
 	}
 	me.logger().Debug("renamed file", "from", from, "to", to)
 	return nil

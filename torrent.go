@@ -21,6 +21,7 @@ import (
 	"time"
 	"unique"
 	"unsafe"
+	"weak"
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/chansync"
@@ -1863,6 +1864,9 @@ func (t *Torrent) deletePeerConn(c *PeerConn) (ret bool) {
 	}
 	torrent.Add("deleted connections", 1)
 	c.deleteAllRequests("Torrent.deletePeerConn")
+	if len(t.conns) == 0 {
+		panicif.NotZero(len(t.requestState))
+	}
 	t.assertPendingRequests()
 	if t.numActivePeers() == 0 && len(t.connsWithAllPieces) != 0 {
 		panic(t.connsWithAllPieces)
@@ -3167,8 +3171,10 @@ func (t *Torrent) cancelRequest(r RequestIndex) *PeerConn {
 	return p
 }
 
-func (t *Torrent) requestingPeer(r RequestIndex) *PeerConn {
-	return t.requestState[r].peer
+func (t *Torrent) requestingPeer(r RequestIndex) (ret *PeerConn) {
+	ret = t.requestState[r].peer.Value()
+	panicif.Nil(ret)
+	return
 }
 
 func (t *Torrent) addConnWithAllPieces(p *Peer) {
@@ -3229,7 +3235,7 @@ func (t *Torrent) GetWebRtcPeerConnStats() map[string]webRtcStatsReports {
 }
 
 type requestState struct {
-	peer *PeerConn
+	peer weak.Pointer[PeerConn]
 	when time.Time
 }
 
@@ -3557,4 +3563,32 @@ func (t *Torrent) considerStartingHashers() bool {
 		return false
 	}
 	return true
+}
+
+func (t *Torrent) getFile(fileIndex int) *File {
+	return (*t.files)[fileIndex]
+}
+
+func (t *Torrent) fileMightBePartial(fileIndex int) bool {
+	f := t.getFile(fileIndex)
+	beginPieceIndex := f.BeginPieceIndex()
+	endPieceIndex := f.EndPieceIndex()
+	if t.dirtyChunks.IntersectsWithInterval(
+		uint64(t.pieceRequestIndexBegin(beginPieceIndex)),
+		uint64(t.pieceRequestIndexBegin(endPieceIndex)),
+	) {
+		// We have dirty chunks. Even if the file is complete, this could mean a partial file has
+		// been started.
+		return true
+	}
+	var r roaring.Bitmap
+	r.AddRange(uint64(beginPieceIndex), uint64(endPieceIndex))
+	switch t._completedPieces.AndCardinality(&r) {
+	case 0, uint64(endPieceIndex - beginPieceIndex):
+		// We have either no pieces or all pieces and no dirty chunks.
+		return false
+	default:
+		// We're somewhere in-between.
+		return true
+	}
 }

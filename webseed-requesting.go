@@ -99,11 +99,15 @@ func (cl *Client) updateWebseedRequests() {
 	aprioriHeap := heap.InterfaceForSlice(
 		&heapSlice,
 		func(l heapElem, r heapElem) bool {
-			// Prefer the highest priority, then existing requests, then largest files.
 			return cmp.Or(
+				// Prefer highest priority
 				-cmp.Compare(l.priority, r.priority),
-				// Existing requests are assigned the priority of the piece they're reading next.
+				// Then existing requests
 				compareBool(l.existingWebseedRequest == nil, r.existingWebseedRequest == nil),
+				// Prefer not competing with active peer connections.
+				compareBool(len(l.t.conns) > 0, len(r.t.conns) > 0),
+				// Try to complete partial files first.
+				-compareBool(l.t.fileMightBePartial(l.fileIndex), r.t.fileMightBePartial(r.fileIndex)),
 				// Note this isn't correct if the starting piece is split across multiple files. But
 				// I plan to refactor to key on starting piece to handle this case.
 				-cmp.Compare(
@@ -351,7 +355,7 @@ func (cl *Client) scheduleImmediateWebseedRequestUpdate() {
 	}
 	// Set the timer to fire right away (this will coalesce consecutive updates without forcing an
 	// update on every call to this method). Since we're holding the Client lock, and we cancelled
-	// the timer and it wasn't active, nobody else should have reset it before us.
+	// the timer, and it wasn't active, nobody else should have reset it before us.
 	panicif.True(cl.webseedRequestTimer.Reset(0))
 }
 

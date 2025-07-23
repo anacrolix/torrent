@@ -127,8 +127,8 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 	}
 	leftRequestState := t.requestState[leftRequest]
 	rightRequestState := t.requestState[rightRequest]
-	leftPeer := leftRequestState.peer
-	rightPeer := rightRequestState.peer
+	leftPeer := leftRequestState.peer.Value()
+	rightPeer := rightRequestState.peer.Value()
 	// Prefer chunks already requested from this peer.
 	ml = ml.Bool(rightPeer == p.peer, leftPeer == p.peer)
 	// Prefer unrequested chunks.

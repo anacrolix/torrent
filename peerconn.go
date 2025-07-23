@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"weak"
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/anacrolix/generics"
@@ -98,7 +99,6 @@ type PeerConn struct {
 	// we may not even know the number of pieces in the torrent yet.
 	peerSentHaveAll bool
 
-	// TODO: How are pending cancels handled for webseed peers?
 	requestState requestStrategy.PeerRequestState
 
 	peerRequestDataAllocLimiter alloclim.Limiter
@@ -1716,7 +1716,7 @@ func (cn *PeerConn) request(r RequestIndex) (more bool, err error) {
 	}
 	cn.validReceiveChunks[r]++
 	cn.t.requestState[r] = requestState{
-		peer: cn,
+		peer: weak.Make(cn),
 		when: time.Now(),
 	}
 	cn.updateExpectingChunks()

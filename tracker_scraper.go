@@ -230,6 +230,9 @@ func (me *trackerScraper) Run() {
 
 	for {
 		ar := me.announce(me.t.closedCtx, e)
+		if ar.Err != nil {
+			return
+		}
 		// after first announce, get back to regular "none"
 		e = tracker.None
 		me.t.cl.lock()

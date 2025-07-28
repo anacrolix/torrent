@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"cmp"
 	"context"
 	"encoding/gob"
 	"fmt"
@@ -153,18 +154,32 @@ func (p *desiredPeerRequests) lessByValue(leftRequest, rightRequest RequestIndex
 		// it will be served and therefore is the best candidate to cancel.
 		ml = ml.CmpInt64(rightLast.Sub(leftLast).Nanoseconds())
 	}
-	ml = ml.Int(
-		leftPiece.Availability,
-		rightPiece.Availability)
-	if priority == PiecePriorityReadahead {
-		// TODO: For readahead in particular, it would be even better to consider distance from the
-		// reader position so that reads earlier in a torrent don't starve reads later in the
-		// torrent. This would probably require reconsideration of how readahead priority works.
-		ml = ml.Int(leftPieceIndex, rightPieceIndex)
+	// Just trigger on any webseed requests present on the Torrent. That suggests that the Torrent
+	// or files are prioritized enough to compete with PeerConn requests. Later we could filter on
+	// webseeds actually requesting or supporting requests for the pieces we're comparing.
+	if t.hasActiveWebseedRequests() {
+		// Prefer the highest possible request index, since webseeds prefer the lowest. Additionally,
+		// this should mean remote clients serve in reverse order so we meet webseeds responses in
+		// the middle.
+		ml = ml.Cmp(-cmp.Compare(leftRequest, rightRequest))
 	} else {
-		ml = ml.Int(t.pieceRequestOrder[leftPieceIndex], t.pieceRequestOrder[rightPieceIndex])
+		ml = ml.Int(
+			leftPiece.Availability,
+			rightPiece.Availability)
+		if priority == PiecePriorityReadahead {
+			// TODO: For readahead in particular, it would be even better to consider distance from the
+			// reader position so that reads earlier in a torrent don't starve reads later in the
+			// torrent. This would probably require reconsideration of how readahead priority works.
+			ml = ml.Int(leftPieceIndex, rightPieceIndex)
+		} else {
+			ml = ml.Int(t.pieceRequestOrder[leftPieceIndex], t.pieceRequestOrder[rightPieceIndex])
+		}
+		ml = multiless.EagerOrdered(ml, leftRequest, rightRequest)
 	}
-	return ml.Less()
+	// Prefer request indexes in order for storage write performance. Since the heap request heap
+	// does not contain duplicates, if we order at the request index level we should never have any
+	// ambiguity.
+	return ml.MustLess()
 }
 
 type desiredRequestState struct {

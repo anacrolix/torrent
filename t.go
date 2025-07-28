@@ -291,6 +291,7 @@ func (t *Torrent) PeerConns() []*PeerConn {
 	return ret
 }
 
+// TODO: Misleading method name. Webseed peers are not PeerConns.
 func (t *Torrent) WebseedPeerConns() []*Peer {
 	t.cl.rLock()
 	defer t.cl.rUnlock()

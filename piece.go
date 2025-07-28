@@ -340,7 +340,6 @@ func (p *Piece) requestIndexMaxEnd() RequestIndex {
 	return p.t.pieceRequestIndexBegin(p.index + 1)
 }
 
-// TODO: Make this peer-only?
 func (p *Piece) availability() int {
 	return len(p.t.connsWithAllPieces) + p.relativeAvailability
 }

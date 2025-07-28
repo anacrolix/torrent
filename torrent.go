@@ -247,7 +247,7 @@ func (t *Torrent) decPieceAvailability(i pieceIndex) {
 }
 
 func (t *Torrent) incPieceAvailability(i pieceIndex) {
-	// If we don't the info, this should be reconciled when we do.
+	// If we don't have the info, this should be reconciled when we do.
 	if t.haveInfo() {
 		p := t.piece(i)
 		p.relativeAvailability++
@@ -3191,6 +3191,8 @@ func (t *Torrent) deleteConnWithAllPieces(p *Peer) bool {
 }
 
 func (t *Torrent) numActivePeers() int {
+	// TODO: Webseeds are "active" if they can serve any data. That means we need to track what
+	// pieces they're able to provide.
 	return len(t.conns) + len(t.webSeeds)
 }
 

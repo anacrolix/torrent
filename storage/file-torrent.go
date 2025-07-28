@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/anacrolix/missinggo/v2"
+	"github.com/anacrolix/missinggo/v2/panicif"
 
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/segments"
@@ -57,18 +58,24 @@ func (fts *fileTorrentImpl) setCompletionFromPartFiles() error {
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			fts.logger().Warn("error checking file size", "err", err)
 		}
+		// Ensure all pieces associated with a file are not marked as complete (at most unknown).
 		for pieceIndex := f.beginPieceIndex(); pieceIndex < f.endPieceIndex(); pieceIndex++ {
 			notComplete[pieceIndex] = true
 		}
 	}
 	for i, nc := range notComplete {
 		if nc {
-			// Use whatever the piece completion has, or trigger a hash.
-			continue
-		}
-		err := fts.setPieceCompletion(i, true)
-		if err != nil {
-			return fmt.Errorf("setting piece %v completion: %w", i, err)
+			c := fts.getCompletion(i)
+			if c.Complete {
+				// TODO: We need to set unknown so that verification of the data we do have could
+				// occur naturally but that'll be a big change.
+				panicif.Err(fts.setPieceCompletion(i, false))
+			}
+		} else {
+			err := fts.setPieceCompletion(i, true)
+			if err != nil {
+				return fmt.Errorf("setting piece %v completion: %w", i, err)
+			}
 		}
 	}
 	return nil

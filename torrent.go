@@ -3172,7 +3172,11 @@ func (t *Torrent) cancelRequest(r RequestIndex) *PeerConn {
 }
 
 func (t *Torrent) requestingPeer(r RequestIndex) (ret *PeerConn) {
-	ret = t.requestState[r].peer.Value()
+	state, ok := t.requestState[r]
+	if !ok {
+		return nil
+	}
+	ret = state.peer.Value()
 	panicif.Nil(ret)
 	return
 }
